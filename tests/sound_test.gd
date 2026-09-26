@@ -201,7 +201,10 @@ func _run() -> void:
 	await _frames(2)
 
 	# M12 each footstep lands as the head comes down, walking or running; at
-	#    a run the gear knocks on one hip, every other step
+	#    a run the gear knocks on one hip, every other step. (This is the old
+	#    feel's own bob; the body under the new one is pinned by motion_test
+	#    Y2 and Y2i. It goes with the old feel.)
+	player.legacy_feel = true
 	player.global_position = Vector3(0, 1.05, 0)
 	player.rotation.y = 0.0
 	player.velocity = Vector3.ZERO
@@ -222,6 +225,7 @@ func _run() -> void:
 		return true
 	_check("M12 footsteps land as the head comes down; at a run the gear knocks on one hip", walked >= 3 and ran >= 4 and all_low.call(lows) and all_low.call(run_lows) and gear >= 1 and gear <= (run_steps + 1) / 2,
 		"walk steps %d bob at them %s; run steps %d bob %s; gear %d of %d steps" % [walked, _rounded(lows), ran, _rounded(run_lows), gear, run_steps])
+	player.legacy_feel = false
 	player.global_position = Vector3(0, 1.05, 0)
 	player.velocity = Vector3.ZERO
 	await _frames(5)

@@ -45,6 +45,7 @@ func _run() -> void:
 	await _momentum_checks()
 	await _camera_checks()
 	await _hand_checks()
+	await _switch_checks()
 
 
 # --------------------------------------------------------------------------
@@ -573,6 +574,68 @@ func _hand_checks() -> void:
 		shoulder_dip > 0.005 and hand_dip >= 0.8 * shoulder_dip and hand_dip <= 1.25 * shoulder_dip and absi(hand_low - shoulder_low) <= 2
 		and absf(hop_new) < 0.0001 and hop_old < -0.005,
 		"sword dips %.4f at frame %d, shoulders (in the view's miniature) %.4f at %d; hop new %.4f old %.4f" % [hand_dip, hand_low, shoulder_dip, shoulder_low, hop_new, hop_old])
+
+
+# --------------------------------------------------------------------------
+# F10: the old feel and the new, side by side
+# --------------------------------------------------------------------------
+
+func _switch_checks() -> void:
+	var hud: Node = player.hud
+	_place(Vector3(40, 1.05, 60), 0.0)
+	await _frames(10)
+
+	# Y18 F10 flips to the old feel and back, and says so
+	_press_f10()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var old_on: bool = bool(player.get("legacy_feel"))
+	var old_caption: String = hud._caption.text
+	var old_tag: bool = hud.legacy_tag_visible() if hud.has_method("legacy_tag_visible") else false
+	var old_steps: Array = await _walk_steps()
+	_press_f10()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var new_on: bool = bool(player.get("legacy_feel"))
+	var new_caption: String = hud._caption.text
+	var new_tag: bool = hud.legacy_tag_visible() if hud.has_method("legacy_tag_visible") else true
+	var new_steps: Array = await _walk_steps()
+	var old_stride: float = old_steps[1] / maxf(old_steps[0], 1.0)
+	var new_stride: float = new_steps[1] / maxf(new_steps[0], 1.0)
+	_check("Y18 F10 switches to the old feel (its strides, a caption, a corner tag) and back",
+		old_on and old_caption == "Movement: old" and old_tag and not new_on and new_caption == "Movement: new" and not new_tag
+		and absf(old_steps[1] / 1.6 - old_steps[0]) <= 1.0 and absf(new_steps[1] / 2.0 - new_steps[0]) <= 1.0,
+		"old: on %s caption '%s' tag %s stride %.2f; new: on %s caption '%s' tag %s stride %.2f" % [old_on, old_caption, old_tag, old_stride, new_on, new_caption, new_tag, new_stride])
+
+
+func _press_f10() -> void:
+	var key := InputEventKey.new()
+	key.keycode = KEY_F10
+	key.physical_keycode = KEY_F10
+	key.pressed = true
+	player._unhandled_input(key)
+
+
+## Walk two seconds: [footsteps taken, distance walked].
+func _walk_steps() -> Array:
+	_place(Vector3(40, 1.05, 60), 0.0)
+	await _frames(10)
+	var from := player.global_position
+	var steps := 0
+	var last: int = player._steps
+	Input.action_press("move_forward")
+
+	for i in 120:
+		await _frames(1)
+
+		if player._steps != last:
+			steps += 1
+			last = player._steps
+
+	_release()
+	var walked := from.distance_to(player.global_position)
+	await _frames(20)
+	return [steps, walked]
 
 
 ## A standing jump and its landing: how far the hands' old hop went.

@@ -43,6 +43,9 @@ var _prompt_alpha := 0.0
 var _gem: Gem
 var _caption: Label
 var _caption_timer := 0.0
+## "old movement" in the corner while the old feel is on (F10), until the
+## new one is signed off.
+var _legacy_tag: Label
 var _subtitle_panel: PanelContainer
 var _subtitle: RichTextLabel
 var _subtitle_timer := 0.0
@@ -372,6 +375,10 @@ func setup(p_player: CharacterBody3D) -> void:
 	_caption = _label(17, DIM, HORIZONTAL_ALIGNMENT_CENTER)
 	_caption.modulate.a = 0.0
 
+	_legacy_tag = _label(14, DIM, HORIZONTAL_ALIGNMENT_RIGHT)
+	_legacy_tag.text = "old movement · F10"
+	_legacy_tag.visible = false
+
 	_subtitle_panel = PanelContainer.new()
 	var band := StyleBoxFlat.new()
 	band.bg_color = Color(0, 0, 0, 0.45)
@@ -534,6 +541,9 @@ func _process(delta: float) -> void:
 	_caption_timer = maxf(_caption_timer - delta, 0.0)
 	_caption.modulate.a = clampf(_caption_timer / 0.4, 0.0, 1.0)
 	_place(_caption, Vector2(centre.x - 200, view.y - 118), Vector2(400, 24))
+
+	_legacy_tag.visible = bool(player.get("legacy_feel"))
+	_place(_legacy_tag, Vector2(view.x - 230, view.y - 34), Vector2(200, 20))
 
 	# Subtitles.
 	_subtitle_timer = maxf(_subtitle_timer - delta, 0.0)
@@ -791,6 +801,16 @@ func _on_alert(new_state: int, old_state: int, guard: Node3D) -> void:
 	elif new_state == 1 and now - _sting_at >= 3.0:
 		Sfx.play_flat(self, &"sting_suspicious")
 		_sting_at = now
+
+
+## A line under the lightgem for a moment: which movement feel is on.
+func show_caption(text: String, seconds: float) -> void:
+	_caption.text = text
+	_caption_timer = seconds
+
+
+func legacy_tag_visible() -> bool:
+	return _legacy_tag != null and _legacy_tag.visible
 
 
 func _on_item_selected(item: Dictionary) -> void:

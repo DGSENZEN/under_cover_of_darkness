@@ -533,6 +533,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			deg_to_rad(max_pitch_degrees)
 		)
 
+	elif (
+		event is InputEventKey
+		and (event as InputEventKey).pressed
+		and not (event as InputEventKey).echo
+		and (event as InputEventKey).keycode == KEY_F10
+		and OS.is_debug_build()
+	):
+		# Compare the movement feels (until the new one is signed off).
+		set_legacy_feel(not legacy_feel)
+		get_viewport().set_input_as_handled()
+
 	elif event.is_action_pressed("ui_cancel"):
 		# Esc pauses the game and lets the mouse go; the HUD's pause screen
 		# takes it back on a click.
@@ -557,6 +568,16 @@ func _unhandled_input(event: InputEvent) -> void:
 ## The click that takes the mouse back is only that. Mouse-button actions
 ## (the blackjack, throwing) ignore the next few frames.
 var _swallow_mouse_until := -1
+
+
+## The old movement feel on or off (F10): the body under the view starts
+## afresh, and the HUD says which feel you are on.
+func set_legacy_feel(on: bool) -> void:
+	legacy_feel = on
+	body_motion.reset()
+
+	if hud != null and hud.has_method("show_caption"):
+		hud.show_caption("Movement: old" if on else "Movement: new", 1.6)
 
 
 func _recapture_mouse() -> void:
