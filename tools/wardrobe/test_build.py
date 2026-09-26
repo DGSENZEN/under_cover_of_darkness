@@ -677,6 +677,25 @@ def case_male_parts():
     return messages
 
 
+def case_brute_arms():
+    """The committed brute's bare arms are whole: rays out of his upper arms
+    (his right below its pauldron; his left from 30%, below his mantle's
+    rim: the cap of his shoulder above it rides under the fur in every pose)
+    and his elbows (his bracers begin at 35% of his forearms) meet his skin
+    first, all round, toward his armpits too: no holes where the build cut
+    him, under his mantle's rest-pose overhang or round his bracers."""
+    bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / "brute.blend"))
+    outfit, arm = bpy.data.objects["Outfit"], bpy.data.objects["Armature"]
+    holes = []
+
+    for bone, at in (("upperarm_l", (0.3, 0.4, 0.5, 0.7)), ("upperarm_r", (0.6, 0.7)),
+                     ("lowerarm_l", (0.05, 0.15)), ("lowerarm_r", (0.05, 0.15))):
+        holes += ["%s %s" % (bone, h) for h in bare_holes(outfit, arm, bone, at)]
+
+    fresh()
+    return ["%d rays out of his bare arms meet no skin first (%s)" % (len(holes), holes[0])] if holes else []
+
+
 def head_skin():
     """Where the open file's detailed heads (High_*) sample their skin
     texture, the median colour (sRGB) of each: {head: (r, g, b)}."""
@@ -730,7 +749,7 @@ def case_skin():
 
 CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, "watchman": case_watchman,
          "hood": case_hood, "launcher": case_launcher, "bodies": case_bodies, "male_parts": case_male_parts,
-         "types2": case_types2, "skin": case_skin}
+         "types2": case_types2, "skin": case_skin, "brute_arms": case_brute_arms}
 
 
 def main():

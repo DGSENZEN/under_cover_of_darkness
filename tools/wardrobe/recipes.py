@@ -171,9 +171,11 @@ SWORDSMAN = {
     # swings as far (K4). Its joints keep 5 cm off his legs (the watchman's
     # 3): at 3 his overhead cut swung the front's hem up to 1.8 cm into his
     # right thigh (K5); at 6 a knockdown whipped it to 12.1 m/s (K6b).
+    # Stiffness 3 (from 2): at 2 a restart after some idle sways settled at
+    # 3.04 m/s (K12); at 4 a limp body flung it at 16 m/s (K6).
     "chains": {
-        "surcoat_front": {"stiffness": 2.0, "drag": 0.9, "gravity": 1.0, "radius": 0.05},
-        "surcoat_back": {"stiffness": 2.0, "drag": 0.9, "gravity": 1.0, "radius": 0.05},
+        "surcoat_front": {"stiffness": 3.0, "drag": 0.9, "gravity": 1.0, "radius": 0.05},
+        "surcoat_back": {"stiffness": 3.0, "drag": 0.9, "gravity": 1.0, "radius": 0.05},
     },
     "colliders": [
         {"bone": "thigh_l", "radius": 0.09}, {"bone": "thigh_r", "radius": 0.09},
@@ -373,7 +375,10 @@ BRUTE = {
     # (K5); riding his thighs their rest follows the leg, so at full gravity
     # a restart swung them 3.7 m/s back to hanging; at 0.6, 3.1 m/s in
     # metres at his size (1.25: K12 had read it in his scaled frame): 0.5.
-    "chains": {name: {"stiffness": 4.0, "drag": 0.95, "gravity": 0.5, "radius": 0.06}
+    # Stiffness 8 (from 4): through whole blows (windup, strike, recover)
+    # his sweep swung a hide 2.9 cm into the thigh it rides; at 8, 1-1.6
+    # (K5 allows him 2 cm); stiffer did no better.
+    "chains": {name: {"stiffness": 8.0, "drag": 0.95, "gravity": 0.5, "radius": 0.06}
                for name in ("hides_l", "hides_r", "hides_rear_l", "hides_rear_r")},
     "colliders": [
         {"bone": "thigh_l", "radius": 0.10}, {"bone": "thigh_r", "radius": 0.10},
@@ -443,10 +448,14 @@ DUELIST = {
          "at": 100, "back": 35, "size": (0.03, 0.018, 0.95), "fittings": {"fabric": "iron", "colour": GOLD},
          "bone": "pelvis"},
     ],
+    # Through whole blows (windup, strike, recover: the strike a quick
+    # 0.12 s) her skirt went 0.8 cm into a thigh (K5) and her cape 1.4 into
+    # her left arm (K27) at 2 and 3; at 4 and 6 (her cape's drag 0.8: at
+    # 0.6 her slow motion outran K4b's 0.4) both stay out.
     "chains": {
-        **{name: {"stiffness": 2.0, "drag": 0.7, "gravity": 1.0, "radius": 0.045}
+        **{name: {"stiffness": 4.0, "drag": 0.7, "gravity": 1.0, "radius": 0.045}
            for name in ("skirt_front", "skirt_back", "skirt_l", "skirt_r")},
-        **{"half_cape_%d" % n: {"stiffness": 3.0, "drag": 0.6, "gravity": 0.7, "radius": 0.06} for n in (1, 2, 3)},
+        **{"half_cape_%d" % n: {"stiffness": 6.0, "drag": 0.8, "gravity": 0.7, "radius": 0.06} for n in (1, 2, 3)},
     },
     # Sized to her: her waist and back are 6-10 cm deep of her spine (the
     # men's 14-16 cm put her skirt's roots and her cape inside them), her

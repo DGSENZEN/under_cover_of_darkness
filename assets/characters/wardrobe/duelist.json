@@ -1,6 +1,6 @@
 {
  "kind": "duelist",
- "body": "male",
+ "body": "female",
  "triangles": 2173,
  "cloth": [
   {
@@ -12,8 +12,8 @@
     "cloth_half_cape_1_3"
    ],
    "tip": 0.1488,
-   "stiffness": 3.0,
-   "drag": 0.6,
+   "stiffness": 6.0,
+   "drag": 0.8,
    "gravity": 0.7,
    "radius": 0.06
   },
@@ -26,8 +26,8 @@
     "cloth_half_cape_2_3"
    ],
    "tip": 0.1446,
-   "stiffness": 3.0,
-   "drag": 0.6,
+   "stiffness": 6.0,
+   "drag": 0.8,
    "gravity": 0.7,
    "radius": 0.06
   },
@@ -40,8 +40,8 @@
     "cloth_half_cape_3_3"
    ],
    "tip": 0.1455,
-   "stiffness": 3.0,
-   "drag": 0.6,
+   "stiffness": 6.0,
+   "drag": 0.8,
    "gravity": 0.7,
    "radius": 0.06
   },
@@ -52,7 +52,7 @@
     "cloth_skirt_back_1"
    ],
    "tip": 0.2199,
-   "stiffness": 2.0,
+   "stiffness": 4.0,
    "drag": 0.7,
    "gravity": 1.0,
    "radius": 0.045
@@ -64,7 +64,7 @@
     "cloth_skirt_front_1"
    ],
    "tip": 0.2164,
-   "stiffness": 2.0,
+   "stiffness": 4.0,
    "drag": 0.7,
    "gravity": 1.0,
    "radius": 0.045
@@ -76,7 +76,7 @@
     "cloth_skirt_l_1"
    ],
    "tip": 0.2361,
-   "stiffness": 2.0,
+   "stiffness": 4.0,
    "drag": 0.7,
    "gravity": 1.0,
    "radius": 0.045
@@ -88,7 +88,7 @@
     "cloth_skirt_r_1"
    ],
    "tip": 0.2361,
-   "stiffness": 2.0,
+   "stiffness": 4.0,
    "drag": 0.7,
    "gravity": 1.0,
    "radius": 0.045

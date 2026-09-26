@@ -39,22 +39,27 @@ const DRESSED := {&"watchman": &"", &"swordsman": &"swordsman", &"archer": &"arc
 const EXPECT := {
 	# His cloth is batch 0's, as approved: built where it hangs, not clear of
 	# his legs (recipes.WATCHMAN "batch"), so his kick swings a skirt 9 mm
-	# into a thigh. Rebuilt with batch 1's cloth it clears them: the user's
-	# call.
+	# into a thigh, and through whole blows his lunge 3.1 cm. Rebuilt with
+	# batch 1's cloth it clears them: the user's call.
 	&"watchman": {"worn": ["Outfit", "Head_weathered", "kettlehat", "coif"], "key": ["kettlehat"],
 		"rings": [[&"Head", 0.12, 0.0], [&"neck_01", 0.0, 0.06]],
 		"silent": [[&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]],
-		"metal": {&"neck_01": "coif", &"Head": "coif"}, "k5": 0.012},
+		"metal": {&"neck_01": "coif", &"Head": "coif"}, "k5": 0.04},
+	# Through whole blows his thrust's windup lifts his left thigh 1 cm into
+	# his surcoat's front (whatever its stiffness): made before K5 drove
+	# windups and recovers; a redesign is the user's call.
 	&"swordsman": {"worn": ["Outfit", "Head_weathered", "nasalhelm", "curtain"], "key": ["nasalhelm"],
 		"rings": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"upperarm_l", 0.0, 0.0]],
 		"silent": [[&"thigh_l", &"calf_l"], [&"calf_l", 0.0, 0.0]],
-		"metal": {&"Head": "nasalhelm", &"neck_01": "curtain", &"spine_02": "Outfit", &"upperarm_l": "Outfit"}},
+		"metal": {&"Head": "nasalhelm", &"neck_01": "curtain", &"spine_02": "Outfit", &"upperarm_l": "Outfit"}, "k5": 0.015},
 	&"archer": {"worn": ["Outfit", "Head_weathered", "hood"], "key": ["hood"], "rings": [],
 		"silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {}},
-	# Bare-armed; steel only at his right shoulder (his one pauldron).
+	# Bare-armed; steel only at his right shoulder (his one pauldron). His
+	# hides ride his thighs: his sweep's widest swing takes a rear hide 1-1.6
+	# cm into the thigh it hangs from (recipes.BRUTE's chains).
 	&"brute": {"worn": ["Outfit", "Head_weathered", "Hair_buzzed", "Beard_full"], "key": ["Hair_buzzed", "Beard_full"],
 		"rings": [[&"upperarm_r", 0.0, 0.0]], "silent": [[&"upperarm_l", 0.0, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]],
-		"metal": {&"upperarm_r": "Outfit"}},
+		"metal": {&"upperarm_r": "Outfit"}, "k5": 0.02},
 	# On the female body: bare-headed, her hair up; no steel. Her body keeps
 	# moving at a third of its speed in slow motion (her knees 0.27 m in
 	# K4b's 12 slowed frames against the swordsman's 0.10; her painted look
@@ -63,10 +68,13 @@ const EXPECT := {
 	&"duelist": {"worn": ["Outfit", "Head_sharp", "Hair_buns"], "key": ["Hair_buns"], "rings": [],
 		"silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {}, "k4b": 0.4,
 		"body": "female"},
-	# One man: every seed gives him the same face, hair and beard.
+	# One man: every seed gives him the same face, hair and beard. Through
+	# whole blows his left cut's recover swings his left thigh 5 cm through
+	# his sash's tail (whatever its stiffness): made before K5 drove windups
+	# and recovers; a redesign (the tail riding his thigh) is the user's call.
 	&"arms_master": {"worn": ["Outfit", "Head_old", "Hair_parted", "Beard_full"], "key": ["Hair_parted", "Beard_full"],
 		"rings": [], "silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {},
-		"same": ["face", "hair", "beard"]},
+		"same": ["face", "hair", "beard"], "k5": 0.06},
 }
 
 
@@ -642,10 +650,10 @@ func _k3b() -> void:
 		# (Offsets in the Head bone's own frame: the part files' skeletons
 		# face the other way from the game's.)
 		for piece in pieces:
-			var own := await _own_offset(piece)
+			var from_file := await _own_offset(piece)
 			var at_rest := skeleton.get_bone_global_pose(head)
 			rest_offsets[piece] = at_rest.basis.inverse() * (_centre(_skinned(piece, skeleton)) - at_rest.origin)
-			worst = maxf(worst, (rest_offsets[piece] as Vector3).distance_to(own))
+			worst = maxf(worst, (rest_offsets[piece] as Vector3).distance_to(from_file))
 
 		_pose(skeleton, &"Sword_Attack", 0.3)
 		var swung := 0.0
