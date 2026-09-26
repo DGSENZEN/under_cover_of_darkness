@@ -519,6 +519,18 @@ func cover(looker: Node3D) -> void:
 	_cover_left = COVER_MAX
 
 
+## Sent by the man set to watch to look at `where` (Guard._heard_look): his
+## to look into (the garrison knows: a noise there, the others cover him),
+## and he calls out what he finds.
+func sent_to_look(where: Vector3) -> void:
+	var garrison: RefCounted = _garrison()
+
+	if garrison != null:
+		garrison.look_into(where, guard)
+
+	_covered = true
+
+
 func covering() -> bool:
 	return _covering != null and _covering.get_ref() != null
 
@@ -536,13 +548,29 @@ func _update_cover(delta: float) -> void:
 	var looker: Node3D = _covering.get_ref() as Node3D
 	_cover_left -= delta
 
-	if int(guard.state) >= INVESTIGATING or _cover_left <= 0.0:
+	# His own eyes on you now: what he sees is his own business, not cover.
+	if int(guard.state) >= INVESTIGATING or _cover_left <= 0.0 or guard.can_see_target:
 		stop_covering()
 		return
 
 	if looker.get("_knocked_out") == true or not looker.is_inside_tree():
 		# He went to look and went quiet: this one goes now, and not easy.
+		# A man set to watch calls them all to it instead, and watches.
 		stop_covering()
+
+		if bool(guard.get("lookout")):
+			var said: String = guard._fighter.temper.line(&"quiet") if guard._fighter != null and guard._fighter.temper != null else "%s's gone quiet! To arms!"
+
+			if said.contains("%s"):
+				said = said % String(looker.get("given_name"))
+
+			guard.bark(said)
+			Comms.call_out(guard, &"alarm", guard.last_known_position)
+			var garrison: RefCounted = _garrison()
+
+			if garrison != null:
+				garrison.raise_alarm(0.35)
+
 		guard.notice(guard.last_known_position, &"call")
 		return
 

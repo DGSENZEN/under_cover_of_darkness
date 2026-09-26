@@ -24,9 +24,11 @@ extends RefCounted
 ## a turtle), rally, berserk (the brute, his captain cut down), hold (at the
 ## edge of your reach, guard up, calling for help: a man alone who will not
 ## face you, or the rearguard), flee (broken), desperate (a rash man broken:
-## all in), lookout (a man set to watch: he keeps his post and calls where you
-## are, and rings the bell), intercept (you running: he goes where you are
-## going while another comes straight after you).
+## all in), lookout (a man set to watch: he keeps his post, rings the bell and
+## calls where you are while the others have you in hand, and comes down to
+## them when he is needed: _keeps_post), intercept (you running: he goes where
+## you are going while another comes straight after you). Something thrown is
+## one man's turn at a time (may_throw).
 ##
 ## They read how you fight: turtle, spam, kite and bow as the plan's triggers;
 ## parry (you turn their blows aside: they feint more, hold blows back late,
@@ -115,6 +117,32 @@ const SPOT_EVERY := 2.4
 const SPOT_URGENT := 0.8
 ## A man running this fast (m/s) is cut off, not only chased.
 const RUNNING := 2.5
+## ...and has been this long (s) before a man is sent to cut you off; he keeps
+## at it until you have stopped for UNRUN.
+const RUN_FOR := 0.5
+const UNRUN := 0.8
+## The front man is kept unless another is this much better placed (the
+## score: metres, give or take): no swapping round every moment.
+const FRONT_KEEP := 1.0
+## A man set to watch (Guard.lookout) keeps his post while his friends have
+## you in hand: you further off him than LOOKOUT_NEAR, at least two of them at
+## you (or, for LOOKOUT_CALL after he first sees you, anyone within
+## LOOKOUT_CALLS of him to call in), their heart at LOOKOUT_HEART or more,
+## none of them cut down in the last LOOKOUT_GRIEF seconds, and you seen from
+## up there within LOOKOUT_BLIND. Otherwise he comes down (_keeps_post).
+const LOOKOUT_NEAR := 4.0
+const LOOKOUT_CALL := 8.0
+const LOOKOUT_CALLS := 30.0
+const LOOKOUT_HEART := 0.55
+const LOOKOUT_GRIEF := 20.0
+## A bell this near him to be rung: he rings it first (GuardFighter._keep_lookout).
+const LOOKOUT_BELL := 30.0
+## Not seen you for this long (s) from up there: he comes down.
+const LOOKOUT_BLIND := 4.0
+## Something thrown: one man at a time, at most one throw in THROW_GAP
+## seconds for the whole squad, and a turn to go for it lasts THROW_TURN.
+const THROW_GAP := 3.0
+const THROW_TURN := 5.0
 ## A watcher keeps his vantage this long (s), picked this far from where you
 ## were last seen.
 const WATCH_TIME := 25.0
@@ -143,6 +171,21 @@ var _roles := {}
 var _slots := {}
 var _leader: WeakRef = null
 var _leader_fell_at := -100.0
+## When the last of them was cut down (anyone, not just the leader).
+var _last_death_at := -100.0
+## The front man last think; when you started (and stopped) running; who was
+## sent to cut you off.
+var _front_ref: WeakRef = null
+var _running_since := INF
+var _stopped_since := -INF
+var _intercept_ref: WeakRef = null
+## When each man set to watch first had you in sight in this hunt (id ->
+## clock).
+var _post_seen_at := {}
+## Throwing: whose turn it is, until when, and when anyone may next throw.
+var _thrower: WeakRef = null
+var _thrower_until := -100.0
+var _next_throw_at := -100.0
 ## The brute's temper, once his captain has fallen.
 var _berserk_until := -100.0
 var _tactic_since := -100.0
@@ -309,7 +352,7 @@ func leave(guard: Node3D) -> void:
 	# his coming back is help arriving.
 	var id := guard.get_instance_id()
 
-	for kept in [_resolve, _broken, _ever_fought, _health_seen, _helper_cache, _fetched_once, _given_up_on]:
+	for kept in [_resolve, _broken, _ever_fought, _health_seen, _helper_cache, _fetched_once, _given_up_on, _post_seen_at]:
 		(kept as Dictionary).erase(id)
 
 
@@ -329,6 +372,7 @@ func member_died(guard: Node3D, killed := true) -> void:
 	leave(guard)
 	morale = maxf(morale - (0.45 if was_leader else 0.2), 0.0)
 	_last_harm_at = clock
+	_last_death_at = clock
 	_lost += 1
 
 	if killed and target() != null:
@@ -763,6 +807,14 @@ func _give_places(alive: Array, now: float) -> void:
 	var standing := 0
 
 	var lookouts := []
+	# Those of them at you who are not set to watch, and still have the heart.
+	var hands_on := 0
+
+	for member in alive:
+		var fighter = member.get("_fighter")
+
+		if fighter != null and not fighter.stays_put and not bool(member.get("lookout")) and will_of(member) != &"broken":
+			hands_on += 1
 
 	for member in alive:
 		var fighter = member.get("_fighter")
@@ -770,8 +822,9 @@ func _give_places(alive: Array, now: float) -> void:
 		if fighter == null or fighter.stays_put:
 			continue
 
-		# A man set to watch keeps his post, unless you are on top of him.
-		if bool(member.get("lookout")) and member.global_position.distance_to(enemy.global_position) > 4.0:
+		# A man set to watch keeps his post while his friends have you in
+		# hand; otherwise he comes down to them (_keeps_post).
+		if bool(member.get("lookout")) and _keeps_post(member, enemy, hands_on, now):
 			lookouts.append(member)
 		elif fighter.ranged:
 			archers.append(member)
@@ -888,6 +941,8 @@ func _give_places(alive: Array, now: float) -> void:
 	# the one; not a man worn down or near breaking while there are others.
 	if front == null:
 		var best := INF
+		var kept: Node3D = _front_ref.get_ref() as Node3D if _front_ref != null else null
+		var kept_score := INF
 
 		for man in melee:
 			var score: float = man.global_position.distance_to(enemy.global_position) + 1.5 * (0.5 - drive_of(man))
@@ -904,9 +959,19 @@ func _give_places(alive: Array, now: float) -> void:
 			if will_of(man) == &"wavering":
 				score += 2.0
 
+			if man == kept:
+				kept_score = score
+
 			if score < best:
 				best = score
 				front = man
+
+		# The man already in front stays there unless another is clearly
+		# better placed: no swapping round every moment.
+		if kept != null and kept_score <= best + FRONT_KEEP:
+			front = kept
+
+	_front_ref = weakref(front) if front != null else null
 
 	# Worn down in front: he steps back, and a fresher man takes his place.
 	if not breaking and now - _last_swap > 5.0 and melee.size() >= 2 and _health_of(front) < 0.3:
@@ -957,19 +1022,36 @@ func _give_places(alive: Array, now: float) -> void:
 	var going: Variant = enemy.get("velocity")
 	var run := Vector3((going as Vector3).x, 0.0, (going as Vector3).z) if going is Vector3 else Vector3.ZERO
 
-	if run.length() > RUNNING and not free.is_empty() and tactic != &"break":
-		var ahead_man: Node3D = null
-		var most_ahead := -INF
+	# Running for a moment, not a step: and whoever was sent keeps at it
+	# until you have stopped a while.
+	if run.length() > RUNNING:
+		_running_since = minf(_running_since, now)
+		_stopped_since = INF
+	else:
+		_stopped_since = minf(_stopped_since, now)
 
-		for man in free:
-			var ahead: float = (man.global_position - enemy.global_position).dot(run.normalized())
+		if now - _stopped_since >= UNRUN:
+			_running_since = INF
+			_intercept_ref = null
 
-			if ahead > most_ahead:
-				most_ahead = ahead
-				ahead_man = man
+	if now - _running_since >= RUN_FOR and not free.is_empty() and tactic != &"break":
+		var ahead_man: Node3D = _intercept_ref.get_ref() as Node3D if _intercept_ref != null else null
 
-		_roles[ahead_man.get_instance_id()] = &"intercept"
-		free.erase(ahead_man)
+		if not (ahead_man in free) and run.length() > 0.5:
+			var most_ahead := -INF
+			ahead_man = null
+
+			for man in free:
+				var ahead: float = (man.global_position - enemy.global_position).dot(run.normalized())
+
+				if ahead > most_ahead:
+					most_ahead = ahead
+					ahead_man = man
+
+		if ahead_man in free:
+			_intercept_ref = weakref(ahead_man)
+			_roles[ahead_man.get_instance_id()] = &"intercept"
+			free.erase(ahead_man)
 
 	var flank_angles := [100.0, -100.0, 170.0]
 
@@ -999,6 +1081,103 @@ func _give_places(alive: Array, now: float) -> void:
 ## His will to fight on, as it was last judged.
 func resolve_of(guard: Node3D) -> float:
 	return float(_resolve.get(guard.get_instance_id(), 1.0))
+
+
+## Whether `man`, set to watch, keeps his post against `enemy` (his view is
+## worth more to them than his blade): first to ring the bell if there is one
+## near to be rung, and for LOOKOUT_CALL after he has seen you to call the
+## others in (if there are any near); after that while his friends have you
+## in hand, `hands_on` of them (two or more) at you. Always: their heart
+## holding, none of them lately cut down, you not on top of him, and you in
+## his sight lately (a lookout who cannot see you is no use up there); but a
+## bell to ring comes before all that. Otherwise he comes down to help, and
+## stays down (Guard._left_post).
+func _keeps_post(man: Node3D, enemy: Node3D, hands_on: int, now: float) -> bool:
+	if bool(man.get("_left_post")):
+		return false
+
+	if _post_kept(man, enemy, hands_on, now):
+		return true
+
+	man.set("_left_post", true)
+	return false
+
+
+## _keeps_post's judgement, before he is sent down for good.
+func _post_kept(man: Node3D, enemy: Node3D, hands_on: int, now: float) -> bool:
+	var id := man.get_instance_id()
+
+	if not _post_seen_at.has(id):
+		_post_seen_at[id] = now
+
+	if man.global_position.distance_to(enemy.global_position) <= LOOKOUT_NEAR:
+		return false
+
+	# A bell near to be rung: that first, however it goes.
+	if Dangers.bell_near(man.get_tree(), man.global_position, LOOKOUT_BELL) != null:
+		return true
+
+	if float(man.get("_since_seen")) > LOOKOUT_BLIND:
+		return false
+
+	if morale < LOOKOUT_HEART or now - _last_death_at < LOOKOUT_GRIEF or tactic == &"fall_back" or tactic == &"rout":
+		return false
+
+	if hands_on >= 2:
+		return true
+
+	# Just seen you: he calls the others in first, if there are others to call.
+	return now - float(_post_seen_at[id]) < LOOKOUT_CALL and _friends_near(man, LOOKOUT_CALLS) >= 1
+
+
+## Awake men of theirs (not set to watch) within `reach` of `man`.
+func _friends_near(man: Node3D, reach: float) -> int:
+	var count := 0
+
+	for other in man.get_tree().get_nodes_in_group(&"guards"):
+		if other == man or not is_instance_valid(other) or other.get("_knocked_out") == true or bool(other.get("lookout")):
+			continue
+
+		if (other as Node3D).global_position.distance_to(man.global_position) <= reach:
+			count += 1
+
+	return count
+
+
+## Whether `guard` may go for something to throw now: nobody else of them at
+## it, and none thrown just now. Taken, the turn is his for THROW_TURN.
+func may_throw(guard: Node3D) -> bool:
+	if clock < _next_throw_at:
+		return false
+
+	var who: Node3D = _thrower.get_ref() as Node3D if _thrower != null else null
+
+	if who != null and who != guard and is_instance_valid(who) and clock < _thrower_until:
+		return false
+
+	if who != guard:
+		_thrower = weakref(guard)
+		_thrower_until = clock + THROW_TURN
+
+	return true
+
+
+## `guard` has given up the throw he went for: the turn is free.
+func not_throwing(guard: Node3D) -> void:
+	var who: Node3D = _thrower.get_ref() as Node3D if _thrower != null else null
+
+	if who == guard:
+		_thrower = null
+
+
+## `guard` has thrown: a moment before anyone throws again.
+func threw(guard: Node3D) -> void:
+	var who: Node3D = _thrower.get_ref() as Node3D if _thrower != null else null
+
+	if who == guard:
+		_thrower = null
+
+	_next_throw_at = clock + THROW_GAP
 
 
 ## "firm", "wavering" (close to breaking) or "broken".
@@ -1266,12 +1445,24 @@ func _announce(before: Dictionary) -> void:
 
 		var man := instance_from_id(id) as Node3D
 
-		if man == null or not is_instance_valid(man) or not man.has_method("bark") or float(man.get("_bark_timer")) > 0.0:
+		if man == null or not is_instance_valid(man) or not man.has_method("bark"):
 			continue
 
 		var t := _temper_of(man)
 
 		if t == null:
+			continue
+
+		# Down off his post to them: said over anything he was saying.
+		if before.get(id, &"") == &"lookout" and not (place in [&"flee", &"fetch", &"rally"]):
+			var down: String = t.line(&"descend")
+
+			if down != "":
+				man.bark(down)
+
+			continue
+
+		if float(man.get("_bark_timer")) > 0.0:
 			continue
 
 		var situation: StringName = &""
@@ -1379,7 +1570,9 @@ func search_point_for(guard: Node3D) -> Variant:
 ## him its watcher: three or more of them hunting (two, if one is an archer),
 ## and he the one to do it (an archer, else the man with the most guile and
 ## the least drive): a vantage near where you were last seen that sees the
-## place, higher and more open the better. null: he searches as the rest do.
+## place, higher and more open the better. null: he searches as the rest do
+## (and none, while a man set to watch is in the hunt on his post: that is
+## its eyes).
 func watch_point_for(guard: Node3D) -> Variant:
 	var hunters := members().filter(func(man: Node3D) -> bool: return status_of(man) == &"hunting")
 	var watcher: Node3D = _watcher.get_ref() as Node3D if _watcher != null else null
@@ -1389,6 +1582,12 @@ func watch_point_for(guard: Node3D) -> Variant:
 		_watcher = null
 
 	if watcher == null:
+		# A man set to watch among them keeps watch from his own post
+		# (Guard._next_search_point): nobody else need. (Come down to
+		# help, he searches as the rest do.)
+		if hunters.any(func(man: Node3D) -> bool: return bool(man.get("lookout")) and not bool(man.get("_left_post"))):
+			return null
+
 		var archer_among := hunters.any(func(man: Node3D) -> bool: return man.get("_fighter") != null and man._fighter.ranged)
 
 		if hunters.size() < 3 and not (archer_among and hunters.size() >= 2):

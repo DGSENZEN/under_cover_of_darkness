@@ -1,13 +1,15 @@
 # Enemy AI Overhaul: Design
 
 **Date:** 2026-09-26
-**Status:** built and tested (`tests/wits_test`, W1–W32); this document awaits the user's review.
+**Status:** built and tested (`tests/wits_test`, W1–W32; posts and places, section 4.8: `tests/posts_test`, P1–P12); this document awaits the user's review.
 
 ## 1. Goal
 
 Make the guards think, talk and fight like a garrison instead of a set of separate state machines. The user asked for better pathfinding, behaviour, group strategy, lookouts, use of the environment, communication between NPCs, combat skill and strategy, and picking things up. Mid-way they added: scared guards should plead for their lives, kneeling or standing, and run to their own when you walk away.
 
-The player-combat overhaul (Might and Magic, Chivalry 2, Sekiro: call and answer, parries, ripostes) is **deferred**. The user said to focus on enemy behaviour and AI for now. Nothing here changes how the player fights.
+The player-combat overhaul (Might and Magic, Chivalry 2, Sekiro: call and answer, parries, ripostes) was **deferred** while this was built (the user said to focus on enemy behaviour first); it has its own design since (`2026-09-26-player-combat-overhaul-design.md`). Nothing here changes how the player fights.
+
+A follow-up (section 4.8) came from playing it: men did not handle their places well. A watchman never came down from his tower to help or called the others; nobody picked things up and threw them when it would help them win; and some of what they did was disruptive (men standing idle in a fight, a cry of murder over every man who fell mid-fight).
 
 ## 2. Decisions
 
@@ -71,11 +73,39 @@ The player-combat overhaul (Might and Magic, Chivalry 2, Sekiro: call and answer
 - **Proud men do not beg:** nerve 0.65 or more (duelists, brutes, the arms master).
 - **Consequences:** the garrison remembers. Each man you cut down begging adds dread and lowers the chance the next man begs at all (`Garrison.mercy_hope`), unless you have spared as many. The men talk about both.
 
+### 4.8 Posts and places (follow-up)
+
+**A man set to watch** (`Guard.lookout`: `Guard._holds_post`, `Squad._keeps_post`):
+- **Watches from his post.** Word of you from his own, the bell, a noise: while he has friends within 30 m to do the walking, he looks from where he stands, turned to the place, and does not walk down to it.
+- **Sends a man.** Something he saw or heard himself, he calls the nearest friend at his ease by name ("Osric! Something by the well! Go and look!") and covers him from up there; the man says so when he finds nothing, and the lookout stands easy. One man out at a time.
+- **Calls them all out.** If the man he sent goes quiet (knocked senseless), he shouts it by name ("Osric's gone quiet! To arms!"): everyone who hears comes, the garrison is roused, and he keeps watching.
+- **Rings the bell.** His friends fighting below and a bell within 30 m to be rung: he rings it first, whatever else he hears on the way. In a fight, a bell near comes before anything else.
+- **Keeps his post in a fight** while two or more of them are at you (or, just after he has seen you, while there is anyone near to call in), calling where you are, and throwing down what is to hand on his own level.
+- **Comes down** (and says so: "Hold him! I'm coming down!") when he is needed: one of them cut down in the last 20 s, their heart below 0.55, falling back or routing, you within 4 m of him, or no sight of you for 4 s from up there (he is no use to them blind). Stirred and seeing nothing of it for 3 s while they fight below, he comes down too; and fetched by a runner, he comes. Once down he stays down until the hunt is over; then he goes back up.
+- In a hunt he is its eyes: he keeps watch from his post, and nobody else is sent to a vantage.
+
+**Places in a fight** (`GuardFighter._footwork`, `Squad._give_places`):
+- A man waiting his turn goes round to his place at a walk at least (a plain watchman stood frozen where he was).
+- At your side or back and you busy with another (swinging, blocking, drawing, facing away): he does not wait at the edge of reach, he steps in and punishes it, as the plan always meant.
+- The man in front stays in front unless another is clearly better placed (a metre, give or take): no swapping round every moment. A man is sent to cut you off only once you have been running for half a second, and keeps at it until you have stopped for 0.8 s.
+
+**Things thrown when it helps** (`GuardFighter._throw_worth`, `Squad.may_throw`):
+- Not only for want of a blade or a way to you: a man waiting his turn while another is at you, a lookout at his post, a man you keep out of reach of (5 m, for 2 s), or one you run from, goes for something within 6 m, and throws it. A sly man is likelier to.
+- One man of the squad at a time, and at most one throw in 3 s. Come at him while he has it and he drops it for his blade.
+- The gym's lookout has two crates up on his platform.
+
+**The dead** (`Guard._discover`):
+- The parts of one man (a head, an arm) are one find, not three.
+- A man cut down in front of his friends is no news to them: no cry of murder mid-fight, and no search begun over him.
+- Shouted at most every 15 s.
+
+**Covering a friend** no longer blinds a man: seeing you himself, he stops covering and it is his own business (`GuardLife._update_cover`).
+
 ## 5. Where to see it
 
 The NPC gym (`maps/npc_gym.tscn`):
 - **Bay 1:** a second watchman to talk and cover with, and a storeroom door to leave open.
-- **Bay 9 (guardhouse):** a lookout platform with a bell; landmarks they call you by; crates to throw; powder by the gate; off-duty men in the barracks; a craven swordsman who is first to break and beg.
+- **Bay 9 (guardhouse):** a lookout platform with a bell (and two crates up there for him to throw down); landmarks they call you by; crates to throw; powder by the gate; off-duty men in the barracks; a craven swordsman who is first to break and beg.
 
 F1 labels show what each man is doing, including "BEGGING FOR HIS LIFE" and "safe with his own". The panel shows men spared and men cut down begging.
 
@@ -83,8 +113,8 @@ F1 labels show what each man is doing, including "BEGGING FOR HIS LIFE" and "saf
 
 ## 6. Success criteria
 
-1. `tests/wits_test` passes W1–W32 (getting about, word between them, rounds, things out of place, hands and environment, blows, the hunt, mercy).
-2. Every other suite passes as before. Four checks already failed before this work and are unrelated to it: `smooth_test` S4, `life_test` L17, `wardrobe_test` K6 and K12.
+1. `tests/wits_test` passes W1–W32 (getting about, word between them, rounds, things out of place, hands and environment, blows, the hunt, mercy), and `tests/posts_test` P1–P12 (the lookout, things thrown, places, the dead).
+2. Every other suite passes, run as the project documents (`--fixed-fps 60`).
 3. In the gym, each behaviour above can be provoked and watched.
 
 ## 7. Known limits
@@ -92,3 +122,5 @@ F1 labels show what each man is doing, including "BEGGING FOR HIS LIFE" and "saf
 - Pleading poses reuse existing clips: `Fixing_Kneeling` held and rocked for kneeling, `Spell_Simple_Idle` (a hand held out) for standing. The kneeling man bows to the floor rather than looking up at you.
 - A haven is found by straight-line distance; a man whose path there stalls gives that haven up for a while and tries another.
 - Once sheltered, a man who does not see you for 12 s gives up the hunt and goes back to his rounds.
+- A lookout judges whether he can see the fight by whether he has seen you lately, not by where the fight is: in a dark yard he comes down after a few seconds even if you step into his light a moment later.
+- Things are thrown at where you will be, not round corners: no clear line to you, no throw.

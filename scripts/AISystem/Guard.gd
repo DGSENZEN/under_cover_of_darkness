@@ -21,7 +21,9 @@ extends CharacterBody3D
 ##               is out of place, misses a friend gone from his post, covers a
 ##               friend who goes to look at a noise, and lights a lantern in
 ##               the dark once the garrison is roused (GuardLife.gd). A lookout
-##               sweeps his ground and calls you out rather than come down.
+##               sweeps his ground; stirred, he watches from his post and
+##               sends a man down to look, rings the bell when they fight
+##               below, and comes down when he is needed (_holds_post).
 ##   HIS HANDS   what he holds and picks up: his weapon, lost and recovered;
 ##               things to throw; the bell rope; the lantern (GuardHands.gd).
 ##   GETTING     round men and things the navmesh does not know of, doors
@@ -59,6 +61,24 @@ const BIND_AFTER := 3.0
 const GORE_SEEN_RANGE := 14.0
 ## A lit fuse is heard this near (m), whichever way he faces.
 const FUSE_HEARD := 4.0
+## A man set to watch is on his post within POST_NEAR of it. There he keeps
+## it, while there are friends of his within POST_FRIENDS to do the walking:
+## what he sees or hears he watches from up there, and sends the nearest of
+## them at their ease to look into it (POST_SEND of him); something at his
+## post itself (POST_OWN) he looks into himself. His friends fighting below,
+## he rings the bell first if there is one within POST_BELL to be rung; and
+## seeing nothing of you from up there for POST_BLIND, he comes down to them,
+## and stays down until the hunt is over.
+const POST_NEAR := 6.0
+const POST_FRIENDS := 30.0
+const POST_SEND := 25.0
+const POST_OWN := 4.0
+const POST_BELL := 30.0
+const POST_BLIND := 3.0
+## The parts of one man (a head, an arm) lie this near each other: one find.
+const BODY_SAME := 2.5
+## He shouts about a find at most this often (s).
+const BODY_SHOUT_GAP := 15.0
 
 ## Off, cuts do not bleed (tests of exact damage).
 static var bleeding_on := true
@@ -109,8 +129,10 @@ signal bound_wounds
 @export var acceleration := 12.0
 @export var turn_speed := 5.0
 ## Set to watch (a tower, a wall walk): he keeps his post, sweeping his ground,
-## and sees further than most. Seeing you, he calls out where you are (and
-## runs to ring a bell, if there is one near) rather than come down after you.
+## and sees further than most. Stirred, he looks from his post and sends a
+## friend to look; seeing you, he calls out where you are (and runs to ring a
+## bell, if there is one near) while his friends have you in hand, and comes
+## down to them when they need him (POST_*, Squad._keeps_post).
 @export var lookout := false
 ## Searching somewhere dark once the garrison is roused, he lights a lantern.
 @export var carries_lantern := true
@@ -351,6 +373,17 @@ var _retry_timer := 0.0
 var _body_check_timer := 0.0
 var _body_notice := {}
 var _known_bodies := {}
+## When he last shouted about a body (_discover).
+var _body_shouted_at := -100.0
+## The man he last sent from his post to look (_send_to_look).
+var _sent: WeakRef = null
+## Set to watch: come down from his post to help (fetched, needed, or no use
+## up there), until the hunt is over; and how long, stirred, he has seen
+## nothing of you from it.
+var _left_post := false
+var _post_blind_for := 0.0
+## On his way to the bell (_ring_for_fight).
+var _to_bell := false
 ## Getting about, his life off duty, his hands, and his life at your mercy
 ## (GuardNav, GuardLife, GuardHands, GuardMercy).
 var _nav: RefCounted
@@ -803,6 +836,8 @@ func _hear_message(event: Dictionary) -> void:
 				alert = minf(alert, suspicious_at * 0.5)
 		&"alarm":
 			_heard_alarm(where)
+		&"look":
+			_heard_look(message, where)
 
 
 ## One of them calls where you are. In a fight he cannot see you in, the
@@ -833,7 +868,7 @@ func _heard_spotted(message: Dictionary, where: Vector3) -> void:
 	alert = maxf(alert, shout_alert + 10.0)
 
 	if state >= Alert.INVESTIGATING:
-		_go_to(where, true)
+		_go_to(_look_from(where), true)
 
 	say(&"ack", 0.5)
 
@@ -868,9 +903,40 @@ func _heard_alarm(where: Vector3) -> void:
 	alert = maxf(alert, investigate_at + 25.0)
 
 	if state >= Alert.INVESTIGATING:
-		_go_to(where, true)
+		_go_to(_look_from(where), true)
 
 	say(&"ack", 0.4)
+
+
+## The man set to watch calls down to one of them to go and look at
+## something he has seen from his post: that one goes; the others at their
+## ease hear it and keep an eye that way.
+func _heard_look(message: Dictionary, where: Vector3) -> void:
+	if state > Alert.SUSPICIOUS:
+		return
+
+	var to: Variant = message.get("to")
+	var sent: bool = to is WeakRef and (to as WeakRef).get_ref() == self
+	last_known_position = where
+	has_last_known = true
+	_since_stimulus = 0.0
+
+	if not sent:
+		_stimulus = &"noise"
+		alert = maxf(alert, suspicious_at + 5.0)
+
+		if state == Alert.RELAXED:
+			_set_state(Alert.SUSPICIOUS)
+
+		return
+
+	# Sent: his to look into (whoever else is near covers him), and he says
+	# so when he finds nothing.
+	_stimulus = &"sent"
+	alert = maxf(alert, investigate_at + 5.0)
+	_life.stop_covering()
+	_life.sent_to_look(where)
+	_set_state(Alert.INVESTIGATING)
 
 
 ## Something to look into at `where` (a thing out of place, a missing man, a
@@ -884,7 +950,7 @@ func notice(where: Vector3, why: StringName) -> void:
 
 	if state == Alert.INVESTIGATING or state == Alert.SEARCHING:
 		_look_timer = 0.0
-		_go_to(where, true)
+		_go_to(_look_from(where), true)
 
 
 ## Says the line his temperament has for `situation`, now and then (`chance`),
@@ -979,7 +1045,12 @@ func _sense_bodies(delta: float) -> void:
 			_discover(body)
 
 
+## Found lying there. The parts of one man (a head, an arm) are one find, and
+## a man found in the middle of a fight is no news to him: nothing more to it
+## than that he knows. Otherwise he looks about for whoever did it, and
+## shouts it (not every time: once in a while is enough).
 func _discover(body: Node3D) -> void:
+	var news := not _knows_body_near(body.global_position)
 	_known_bodies[body] = true
 	_body_notice.erase(body)
 	var first_to_find: bool = body.get("discovered") != true
@@ -988,6 +1059,9 @@ func _discover(body: Node3D) -> void:
 	# Word spreads: one more of theirs found lying where you left him.
 	if first_to_find and _target != null and is_instance_valid(_target):
 		GarrisonScript.of(_target).on_body_found()
+
+	if not news or state == Alert.COMBAT:
+		return
 
 	last_known_position = body.global_position
 	has_last_known = true
@@ -1002,11 +1076,36 @@ func _discover(body: Node3D) -> void:
 		_search_left = search_points
 		_look_timer = 0.0
 		_next_search_point()
-	elif state != Alert.COMBAT:
+	else:
 		_set_state(Alert.SEARCHING)
 
-	bark("He's dead! Murder!" if body.get("dead") == true else "A body! Someone's in here!")
-	shout()
+	if _game_time - _body_shouted_at >= BODY_SHOUT_GAP:
+		_body_shouted_at = _game_time
+		bark("He's dead! Murder!" if body.get("dead") == true else "A body! Someone's in here!")
+		shout()
+
+
+## Whether a body he already knows of lies within BODY_SAME of `point`.
+func _knows_body_near(point: Vector3) -> bool:
+	for known in _known_bodies:
+		if is_instance_valid(known) and (known as Node3D).global_position.distance_to(point) < BODY_SAME:
+			return true
+
+	return false
+
+
+## Those of his own in the fight who saw him fall know of his body: they do
+## not "find" it later.
+func _witnessed_by_friends(body: Node3D) -> void:
+	if body == null:
+		return
+
+	for other in get_tree().get_nodes_in_group(&"guards"):
+		if other == self or int(other.get("state")) != Alert.COMBAT:
+			continue
+
+		if (other as Node3D).global_position.distance_to(global_position) < 30.0:
+			other._known_bodies[body] = true
 
 
 func shout() -> void:
@@ -1030,6 +1129,9 @@ func join_hunt(where: Vector3) -> void:
 	_since_stimulus = 0.0
 	_stimulus = &"call"
 	alert = maxf(alert, investigate_at + 25.0)
+
+	# Fetched to it by one of his own: a man set to watch comes down too.
+	_left_post = true
 
 	if state < Alert.INVESTIGATING:
 		_set_state(Alert.INVESTIGATING)
@@ -1545,6 +1647,7 @@ func die(_attacker: Node3D) -> void:
 	visible = false
 
 	var body: RigidBody3D = GuardBodyScript.spawn(self, true, _last_blow)
+	_witnessed_by_friends(body)
 
 	# Cut apart by the blow that killed him: off along it, before he falls.
 	if not _sever.is_empty() and _rig.has_method("sever"):
@@ -1932,6 +2035,12 @@ static func _pin(part: PhysicalBone3D) -> void:
 # ---------------------------------------------------------------------------
 
 func _update_alert(delta: float) -> void:
+	# Set to watch and stirred, and nothing of you to be seen from up there.
+	if lookout and state >= Alert.INVESTIGATING and not can_see_target:
+		_post_blind_for += delta
+	else:
+		_post_blind_for = 0.0
+
 	# Relaxed and suspicious guards calm down on their own. The busier states
 	# end when their behaviour ends, not on a timer.
 	if state <= Alert.SUSPICIOUS and _since_stimulus > alert_hold_time:
@@ -1965,7 +2074,146 @@ func _investigate_or_cover() -> void:
 
 		return
 
+	# Set to watch, and on his post: something he saw or heard himself, he
+	# sends a friend to look into and covers him from up there. (Word from
+	# one of his own, or the bell, he watches from his post: _look_from.)
+	if _stimulus != &"call" and _stimulus != &"alarm" and _stimulus != &"sent" and _holds_post() and _send_to_look(last_known_position):
+		alert = minf(alert, investigate_at - 1.0)
+
+		if state == Alert.RELAXED:
+			_set_state(Alert.SUSPICIOUS)
+
+		return
+
 	_set_state(Alert.INVESTIGATING)
+
+
+## A man set to watch, on his post, with friends of his near enough to do the
+## walking for him (POST_NEAR, POST_FRIENDS): he keeps his post, and looks
+## into things from it, unless the thing is at his post itself (POST_OWN).
+func _holds_post() -> bool:
+	if not lookout or _left_post or global_position.distance_to(_home.origin) > POST_NEAR:
+		return false
+
+	if has_last_known and last_known_position.distance_to(_home.origin) < POST_OWN:
+		return false
+
+	# Seeing nothing of you from up there while they fight you below: he is
+	# no use to them up here.
+	if _post_blind_for > POST_BLIND and _fight_near():
+		return false
+
+	for other in get_tree().get_nodes_in_group(&"guards"):
+		if other == self or bool(other.get("lookout")) or other.get("_knocked_out") == true:
+			continue
+
+		if (other as Node3D).global_position.distance_to(global_position) <= POST_FRIENDS:
+			return true
+
+	return false
+
+
+## Where he goes to look into `point`: from his post if he keeps it
+## (_holds_post), else there.
+func _look_from(point: Vector3) -> Vector3:
+	return _home.origin if _holds_post() else point
+
+
+## One of his own within POST_FRIENDS of him is fighting.
+func _fight_near() -> bool:
+	for other in get_tree().get_nodes_in_group(&"guards"):
+		if other != self and int(other.get("state")) == Alert.COMBAT and (other as Node3D).global_position.distance_to(global_position) <= POST_FRIENDS:
+			return true
+
+	return false
+
+
+## Set to watch, and his friends fighting below: the bell first, if there is
+## one near to be rung (it brings everyone), then back to what he was about.
+## True while he is about it.
+func _ring_for_fight(delta: float) -> bool:
+	var bell: Node3D = Dangers.bell_near(get_tree(), global_position, POST_BELL) if lookout and _fight_near() else null
+
+	if bell == null:
+		# Rung (by him or another): to his post, or to them.
+		if _to_bell:
+			_to_bell = false
+			_go_to(_look_from(last_known_position), true)
+
+		return false
+
+	var rope: Vector3 = bell.rope_point()
+
+	if _flat_distance(rope) > 0.9:
+		if not _to_bell:
+			_to_bell = true
+			_look_timer = 0.0
+
+			if _fighter != null and _fighter.temper != null:
+				bark(_fighter.temper.line(&"bell"))
+
+		# Whatever word comes to him on the way: the bell first.
+		if _agent != null and _agent.target_position.distance_to(rope) > 0.3:
+			_go_to(rope, true)
+
+		_walk(chase_speed, delta)
+		return true
+
+	_stop(delta)
+	_face(bell.global_position - global_position, delta)
+	_hands.ring_bell(bell, last_known_position)
+	return true
+
+
+## Set to watch, stirred, and watching from his post seeing nothing of you
+## while they fight you below: down to them (and he stays down until the
+## hunt is over).
+func _come_down_if_blind() -> void:
+	if not lookout or _left_post or _post_blind_for <= POST_BLIND or not _fight_near():
+		return
+
+	_left_post = true
+	_look_timer = 0.0
+	_watching = false
+	_go_to(last_known_position, true)
+	say(&"descend")
+
+
+## From his post: calls the nearest friend of his at his ease (within
+## POST_SEND) by name to go and look at `where`, and covers him while he
+## does. True if the man heard him and went.
+func _send_to_look(where: Vector3) -> bool:
+	# One man out at a time: while the last is still looking, he watches.
+	var out: Node3D = _sent.get_ref() as Node3D if _sent != null else null
+
+	if out != null and is_instance_valid(out) and out.get("_knocked_out") != true and int(out.get("state")) >= Alert.INVESTIGATING:
+		return false
+
+	var friend: Node3D = null
+	var nearest := POST_SEND
+
+	for other in get_tree().get_nodes_in_group(&"guards"):
+		if other == self or bool(other.get("lookout")) or other.get("_knocked_out") == true or int(other.get("state")) > Alert.SUSPICIOUS:
+			continue
+
+		var d := (other as Node3D).global_position.distance_to(global_position)
+
+		if d < nearest:
+			nearest = d
+			friend = other
+
+	if friend == null:
+		return false
+
+	bark(Comms.send_line(where, self, String(friend.get("given_name"))))
+	Comms.call_out(self, &"look", where, {"to": weakref(friend)})
+
+	if int(friend.get("state")) < Alert.INVESTIGATING:
+		return false
+
+	_sent = weakref(friend)
+	_life.cover(friend)
+	return true
 
 
 func _set_state(new_state: int) -> void:
@@ -1994,7 +2242,11 @@ func _set_state(new_state: int) -> void:
 	if new_state == Alert.COMBAT and _hands != null:
 		_hands.drop_lantern()
 
-	# Back to his rounds: the hunt goes on without him.
+	# Back to his rounds (and his post): the hunt goes on without him.
+	if new_state == Alert.RELAXED:
+		_left_post = false
+		_to_bell = false
+
 	if new_state == Alert.RELAXED and _fighter != null and _fighter.squad != null:
 		_fighter.squad.stand_down(self)
 		_fighter.squad = null
@@ -2006,7 +2258,7 @@ func _set_state(new_state: int) -> void:
 		Alert.COMBAT:
 			shout()
 		Alert.INVESTIGATING:
-			_go_to(last_known_position, true)
+			_go_to(_look_from(last_known_position), true)
 		Alert.SEARCHING:
 			# A hunt searches longer than one man would.
 			_search_left = search_points + (2 if _fighter != null and _fighter.squad != null else 0)
@@ -2024,7 +2276,12 @@ func _bark_for(new_state: int, old_state: int) -> void:
 			else:
 				bark("Hm? What was that?")
 		Alert.INVESTIGATING:
-			if alert >= shout_alert and _since_seen > 1.0 and not can_see_target:
+			if _stimulus == &"sent" and _fighter != null and _fighter.temper != null:
+				bark(_fighter.temper.line(&"ack"))
+			elif _holds_post() and _fighter != null and _fighter.temper != null:
+				# Set to watch: he looks from where he is.
+				bark(_fighter.temper.line(&"watch"))
+			elif alert >= shout_alert and _since_seen > 1.0 and not can_see_target:
 				bark("I'm coming!")
 			else:
 				bark("I'd better take a look.")
@@ -2157,9 +2414,18 @@ func _do_suspicious(delta: float) -> void:
 
 
 func _do_investigate(delta: float) -> void:
-	# A fresher clue moves the goal.
+	if _ring_for_fight(delta):
+		return
+
+	_come_down_if_blind()
+
+	# A fresher clue moves the goal (or, looking from his post, his eyes).
 	if _since_stimulus < 0.1 and has_last_known:
-		_go_to(last_known_position)
+		var from := _look_from(last_known_position)
+		_go_to(from)
+
+		if from != last_known_position and _look_timer > 0.0:
+			_scan = _post_headings()
 
 	if _look_timer > 0.0:
 		if _look_around(delta):
@@ -2174,10 +2440,22 @@ func _do_investigate(delta: float) -> void:
 
 
 func _do_search(delta: float) -> void:
+	if _ring_for_fight(delta):
+		return
+
+	_come_down_if_blind()
+
 	# Heard or glimpsed something new mid-search: go there instead. (Not the
 	# hunt's watcher: his place is his vantage, whatever the others go to.)
-	if _since_stimulus < 0.1 and has_last_known and _look_timer <= 0.0 and not _watching:
-		_go_to(last_known_position)
+	if _since_stimulus < 0.1 and has_last_known and not _watching:
+		var from := _look_from(last_known_position)
+
+		# From his post: his eyes go to it, not his feet.
+		if from != last_known_position:
+			if _look_timer > 0.0:
+				_scan = _post_headings()
+		elif _look_timer <= 0.0:
+			_go_to(from)
 
 	if _look_timer > 0.0:
 		if _look_around(delta):
@@ -2278,8 +2556,9 @@ func _next_search_point() -> void:
 
 	_watching = false
 
-	# A man set to watch searches from his post.
-	if lookout:
+	# A man set to watch searches from his post (unless he has come down
+	# to help: then he searches as the others do).
+	if lookout and not _left_post:
 		_go_to(_home.origin, true)
 		return
 
@@ -2303,7 +2582,13 @@ func _start_looking() -> void:
 	_look_length = look_around_time * (4.0 if _watching or lookout else 1.0)
 	_look_timer = _look_length
 	_look_from_yaw = rotation.y
-	_scan = _watch_headings() if _watching else _scan_headings()
+
+	if _watching:
+		_scan = _watch_headings()
+	elif lookout and global_position.distance_to(_home.origin) <= POST_NEAR and has_last_known:
+		_scan = _post_headings()
+	else:
+		_scan = _scan_headings()
 
 
 ## Where he looks, in turn, when he stops to look about him: first the way
@@ -2337,6 +2622,13 @@ func _watch_headings() -> Array:
 	var to := seen - global_position
 	var toward := atan2(-to.x, -to.z) if Vector2(to.x, to.z).length() > 0.5 else rotation.y
 	return [toward, toward + 0.6, toward - 0.6, toward + 1.1, toward - 1.1, toward]
+
+
+## From his post: toward what he is looking into, and either side of it.
+func _post_headings() -> Array:
+	var to := last_known_position - global_position
+	var toward := atan2(-to.x, -to.z) if Vector2(to.x, to.z).length() > 0.5 else rotation.y
+	return [toward, toward + 0.5, toward - 0.5, toward + 1.0, toward - 1.0, toward]
 
 
 ## Which way you went, as far as he knows: the hunt's word if it is fresh and

@@ -127,6 +127,19 @@ const BACKSTEP_REACH := 0.9
 ## A throw: drawn back this long, and it carries this far.
 const THROW_WINDUP := 0.62
 const THROW_RANGE := 14.0
+## Something thrown when it helps, not only for want of a blade or a way to
+## you (_throw_worth): he goes for a thing this near him (a man at his post:
+## only on his own level; a man waiting his turn is not needed where he
+## stands), and once he has, means to throw it this long (s).
+## You further off him than KEEP_AWAY, for KEPT_AWAY seconds, or running off
+## from him faster than RUNNING_OFF (m/s), is worth a throw.
+const GRAB_NEAR := 6.0
+const THROW_MEANT := 6.0
+const KEEP_AWAY := 5.0
+const KEPT_AWAY := 2.0
+const RUNNING_OFF := 2.0
+## Waiting his turn, he goes round to his place at least this fast (m/s).
+const WAIT_WALK := 2.2
 ## Calling where you are to the others who cannot see you: at most this often
 ## for the whole squad (Squad.may_call), and a lookout this often.
 const SPOT_EVERY := 2.4
@@ -413,6 +426,10 @@ var _reach_check := 0.0
 var _fetching: Node3D = null
 var _gave_up_on := {}
 var _fetch_check := 0.0
+## Set on throwing something at you because it helps (_throw_worth): until
+## then (game time). And how long you have kept out of his reach.
+var _throw_meant_until := -100.0
+var _kept_away := 0.0
 ## Calling where you are: until the next call.
 var _spot_timer := 0.0
 ## How his last blow went: "landed", "blocked", "dodged", "missed", or "".
@@ -553,6 +570,12 @@ func fight(delta: float) -> void:
 	if sees:
 		_update_reach(delta, target, level)
 		_call_out_where(delta, target)
+
+	# Out of his reach, and keeping out of it.
+	if sees and dist > _reach(&"overhead") + 2.5:
+		_kept_away += delta
+	else:
+		_kept_away = 0.0
 
 	if guard._phase != &"":
 		_update_attack(delta, target, sees, to, dist, level)
@@ -1161,7 +1184,12 @@ func leave_combat() -> void:
 	_countering = false
 	_was_fighting = false
 	_scented = false
+
+	if _fetching != null and is_instance_valid(_fetching):
+		Dangers.unclaim(_fetching, guard)
+
 	_fetching = null
+	_throw_meant_until = -100.0
 	_shot_point = Vector3.INF
 	_boot_until = -10.0
 	release_token()
@@ -1367,7 +1395,11 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 	# his own among the others).
 	# A rash man at your side whose patience has run out does not wait.
 	var impatient: bool = place == &"flank" and squad != null and squad.impatient_now(guard)
-	var waiting := (strafe_speed > 0.0 and not _hold_token and _someone_else_swinging(target)) or ((place == &"flank" or place == &"reserve") and not _hold_token and not impatient)
+	# At your side or back, and you busy with another: he does not wait, he
+	# steps in to punish it (_consider_attack lets him in beside the man
+	# already swinging).
+	var punishing: bool = place == &"flank" and sees and squad != null and squad._committed_away_from(guard)
+	var waiting := (strafe_speed > 0.0 and not _hold_token and not punishing and _someone_else_swinging(target)) or ((place == &"flank" or place == &"reserve") and not _hold_token and not impatient and not punishing)
 	var want := reach + 0.9 if waiting else maxf(reach * 0.8, 1.1)
 	# A man rasher than his kind stands closer in; a warier one further off.
 	want = maxf(want - 0.6 * _dd(), 1.0)
@@ -1386,6 +1418,10 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 		&"pressing", &"desperate", &"enraged":
 			if not waiting:
 				want = maxf(reach * 0.65, 1.0)
+
+	# Something in his hand he means to throw: a throw's distance off.
+	if guard._hands.held != null and _throw_meant():
+		want = maxf(want, reach + 1.2)
 
 	# Holding you off: at the edge of his reach if he has the nerve for it,
 	# well out of it if not; guard up while you are close; calling for help.
@@ -1475,8 +1511,15 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 		var to_slot := slot - guard.global_position
 		to_slot.y = 0.0
 
+		# Round to it at a walk at least (a plain watchman has no footwork to
+		# speak of, but he still goes where he is put).
 		if to_slot.length() > 0.3:
-			wanted = to_slot.normalized() * minf(to_slot.length() * 3.0, strafe_speed * 2.4 * (1.0 + maxf(_dg(), 0.0)))
+			wanted = to_slot.normalized() * minf(to_slot.length() * 3.0, maxf(strafe_speed * 2.4, WAIT_WALK) * (1.0 + maxf(_dg(), 0.0)))
+
+		# Right on top of you, his place out of his way (a wall, a corner):
+		# he gives you room while he waits, not stands in your face.
+		if dist < want - 0.8:
+			wanted += toward * radial
 
 	if wanted.length() > 0.05 and not _safe_step(wanted):
 		_strafe = -_strafe
@@ -1811,17 +1854,25 @@ func _fetch_something(delta: float, target: Node3D, sees: bool, dist: float) -> 
 		guard._stop(delta)
 		return true
 
+	# Set on a throw, and you come at him: his blade, not the stool.
+	if _throw_meant() and sees and dist < _reach(&"overhead") + 0.5:
+		_give_up_throw()
+
 	# What he was going for, if it is still worth it: a blade while he has
 	# none; a thing to throw while his blade cannot get to you (or he has
-	# none) and his hands are empty; and nobody else's by now.
+	# none), or while he means to throw it, and his hands are empty; and
+	# nobody else's by now.
 	if _fetching != null:
 		var blade := is_instance_valid(_fetching) and _fetching.is_in_group(&"dropped_weapons")
 
-		if not is_instance_valid(_fetching) or Dangers.claimed(_fetching, guard) or (blade and hands.armed) or (not blade and (hands.held != null or (hands.armed and not _unreachable))):
+		if not is_instance_valid(_fetching) or Dangers.claimed(_fetching, guard) or (blade and hands.armed) or (not blade and (hands.held != null or (hands.armed and not _unreachable and not _throw_meant()))):
 			if is_instance_valid(_fetching):
 				Dangers.unclaim(_fetching, guard)
 
 			_fetching = null
+
+			if hands.held == null:
+				_give_up_throw()
 
 	_fetch_check -= delta
 
@@ -1831,8 +1882,16 @@ func _fetch_something(delta: float, target: Node3D, sees: bool, dist: float) -> 
 		if not hands.armed:
 			_fetching = _blade_to_fetch(target)
 
-		if _fetching == null and hands.held == null and sees and dist <= THROW_RANGE + 2.0 and (_unreachable or not hands.armed) and not ranged:
-			_fetching = _thing_to_throw()
+		if _fetching == null and hands.held == null and sees and dist <= THROW_RANGE + 2.0 and not ranged:
+			if _unreachable or not hands.armed:
+				_fetching = _thing_to_throw()
+			elif _throw_worth(target, dist):
+				# It helps them: something near to hand, and his turn for it.
+				var thing := _thing_to_throw(GRAB_NEAR, role() == &"lookout")
+
+				if thing != null and squad.may_throw(guard):
+					_fetching = thing
+					_throw_meant_until = guard._game_time + THROW_MEANT
 
 	if _fetching == null:
 		return false
@@ -1855,9 +1914,64 @@ func _fetch_something(delta: float, target: Node3D, sees: bool, dist: float) -> 
 		Dangers.unclaim(_fetching, guard)
 		_gave_up_on[_fetching] = true
 		_fetching = null
+		_give_up_throw()
 		return false
 
 	return true
+
+
+## Whether he is set on throwing something at you (because it helps).
+func _throw_meant() -> bool:
+	return guard._game_time < _throw_meant_until
+
+
+## No longer set on a throw: the squad's turn for it is free.
+func _give_up_throw() -> void:
+	if _throw_meant_until < 0.0:
+		return
+
+	_throw_meant_until = -100.0
+
+	if squad != null:
+		squad.not_throwing(guard)
+
+
+## Whether something thrown would help them now, more than his blade does
+## (his blade can get to you: _fetch_something covers the rest): you not on
+## top of him and within a throw, and he set to watch from his post, or
+## waiting his turn while another is at you, or you keeping out of his reach
+## (KEPT_AWAY) or running off from him. As likely as his reason is good, and
+## likelier the more guile he has.
+func _throw_worth(target: Node3D, dist: float) -> bool:
+	if squad == null or ranged or dist < 2.2 or dist > THROW_RANGE:
+		return false
+
+	var place := role()
+	var why := 0.0
+
+	# Set to watch: from his post (the bell rung first, if there is one).
+	if place == &"lookout":
+		why = 0.8 if Dangers.bell_near(guard.get_tree(), guard.global_position, SquadScript.LOOKOUT_BELL) == null else 0.0
+	elif place == &"flank" or place == &"reserve" or (not _hold_token and _someone_else_swinging(target)):
+		why = 0.25
+
+	var going: Variant = target.get("velocity")
+
+	if going is Vector3:
+		var off := target.global_position - guard.global_position
+		off.y = 0.0
+		var away := Vector3((going as Vector3).x, 0.0, (going as Vector3).z).dot(off.normalized()) if off.length() > 0.01 else 0.0
+
+		if away > RUNNING_OFF:
+			why = maxf(why, 0.6)
+		elif dist > KEEP_AWAY and _kept_away > KEPT_AWAY:
+			why = maxf(why, 0.45)
+
+	if why <= 0.0:
+		return false
+
+	var guile: float = float(temper.guile) if temper != null else 0.5
+	return randf() < why * (0.6 + 0.8 * guile)
 
 
 ## A blade he can fight with lying near, that he can get to, and that you
@@ -1882,9 +1996,13 @@ func _blade_to_fetch(target: Node3D) -> Node3D:
 	return null
 
 
-## Something within a few steps to throw at you.
-func _thing_to_throw() -> Node3D:
-	for thing in Dangers.throwables_near(guard, guard.global_position, 7.0):
+## Something within a few steps (`near`) to throw at you; `level`: only on
+## his own floor (a man at his post does not go down for it).
+func _thing_to_throw(near := 7.0, level := false) -> Node3D:
+	for thing in Dangers.throwables_near(guard, guard.global_position, near):
+		if level and absf(thing.global_position.y - guard.global_position.y) > 1.2:
+			continue
+
 		if not _gave_up_on.has(thing) and _can_walk_to(thing.global_position):
 			return thing
 
@@ -2113,10 +2231,12 @@ func _consider_attack(delta: float, target: Node3D, to: Vector3, dist: float, le
 		return
 
 	# Something in his hand to throw: at you, if his blade cannot get to you
-	# (or he has none); let fall, if you have come to him and his blade can.
+	# (or he has none), or he means to; let fall, if you have come to him and
+	# his blade can.
 	if guard._hands.held != null:
-		if not _unreachable and guard._hands.armed and dist < _reach(&"overhead") + 1.0:
+		if not _unreachable and guard._hands.armed and dist < _reach(&"overhead") + (0.2 if _throw_meant() else 1.0):
 			guard._hands.drop_held()
+			_give_up_throw()
 		else:
 			if dist <= THROW_RANGE and dist >= 1.5 and _clear_shot(target) and _take_shot(target):
 				_start(&"throw")
@@ -2866,6 +2986,10 @@ func _strike(target: Node3D) -> void:
 ## as you are (GuardHands).
 func _throw_at(target: Node3D) -> void:
 	_landed = false
+	_throw_meant_until = -100.0
+
+	if squad != null:
+		squad.threw(guard)
 
 	if target == null or not is_instance_valid(target):
 		guard._hands.drop_held()

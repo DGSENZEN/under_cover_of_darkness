@@ -79,7 +79,7 @@ const BAYS := [
 	["SQUAD", Vector3(17, 0, -26), 1, "A squad: swordmaster, swordsman, brute, archer. A leader and a plan:\nthey surround, strike while you are busy, break a turtle, press you hurt,\nfall back, break one by one when the leader dies. Watch the plan (top right)."],
 	["BODIES", Vector3(17, 0, -44), 1, "Weak men to send flying and cut apart. Kick them while they swing, or running.\nInto the spikes, off the ledge, onto the powder. A clean kill takes a limb or a head."],
 	["ARMS MASTER", Vector3(17, 0, -62), 1, "The arms master swings on a steady beat: parry just before it lands, or right on it\n(a perfect deflect). Answer his cut with a cut and his thrust with a thrust (a counter), or step into\nhis thrust (forward + Q). Straw men to cut; shielded ones to break. Sprint and swing: a running blow."],
-	["GUARDHOUSE", Vector3(0, 0, 24), 0, "The guardhouse. A squad in the yard; two men off duty in the barracks (east); a lookout\non the platform (far corner) who calls where you are and rings the bell. Break one and he runs\nfor help: catch him and he begs for his life. Walk away and he runs to his own; cut him down\nand the next will not beg. Lose them in the dark (west) and watch them split the search\nwhile one keeps watch. Crates get thrown; powder gets shot. F5: the garrison forgets you."],
+	["GUARDHOUSE", Vector3(0, 0, 24), 0, "The guardhouse. A squad in the yard; two men off duty in the barracks (east); a lookout\non the platform (far corner): he calls where you are, rings the bell, sends a man to look,\nthrows down what is to hand, and comes down when they need him. Break one and he runs\nfor help: catch him and he begs for his life. Walk away and he runs to his own; cut him down\nand the next will not beg. Lose them in the dark (west): they split the search, the lookout\nwatches. A man waiting his turn throws what is near; powder gets shot. F5: the garrison forgets you."],
 ]
 const BAY_SIZE := 14.0
 
@@ -377,9 +377,13 @@ func _start_bay(index: int) -> void:
 			# (not one of the squad in the yard until he does).
 			_posted.append(_spawn(&"", Vector3(-7.5, 2.5, 30.5), 0.0, true))
 
-			# Things to throw, and powder by the gate.
+			# Things to throw, and powder by the gate; and up on the platform,
+			# something for the lookout to throw down.
 			for at in [Vector3(6.0, 0.25, 18.0), Vector3(-6.0, 0.2, 21.0), Vector3(7.0, 0.25, 29.0)]:
 				Props.crate(self, at, 0.45, 2.5)
+
+			for at in [Vector3(-8.5, 2.7, 31.5), Vector3(-8.5, 2.7, 29.6)]:
+				Props.crate(self, at, 0.3, 1.5)
 
 			_barrel(Vector3(5.0, 0.4, 15.5))
 
@@ -701,7 +705,10 @@ func _about(g: Node) -> String:
 	var bits: Array[String] = [String(g.given_name)]
 
 	if g.lookout:
-		bits.append("lookout")
+		bits.append("lookout (come down)" if g._left_post else ("lookout, on his post" if g._holds_post() else "lookout"))
+
+	if g._fighter._throw_meant():
+		bits.append("going to throw something")
 
 	if not g._hands.armed:
 		bits.append("DISARMED")
