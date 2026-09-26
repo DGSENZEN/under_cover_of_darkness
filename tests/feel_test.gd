@@ -318,10 +318,18 @@ func _run() -> void:
 	# The shake is a sum of sines: take its largest swing over a few frames,
 	# not one instant that may fall where they cancel. It is mostly moved,
 	# a little turned (CameraJuice: rotation small, impact in translation).
+	# A few frames can fall on a quiet stretch too (5 mm at the least, 26 at
+	# the most), and the shake's clock has run for as many frames as came
+	# before, which depends on how long the navmesh bake's thread took:
+	# start it at zero, so every run measures the same stretch. The body's
+	# breath under the view keeps its own time: the swing is measured on top
+	# of it (BodyMotion head_offset).
+	player.juice._shake_time = 0.0
+
 	for i in 12:
 		await _frames(1)
 		camera_off = maxf(camera_off, player.camera.global_basis.z.angle_to(player.neck.global_basis.z))
-		moved = maxf(moved, player.juice.view_position.length())
+		moved = maxf(moved, (player.juice.view_position - player.juice.body_head.origin).length())
 		aim_true = aim_true and combat.aim().basis.z.is_equal_approx(player.neck.global_basis.orthonormalized().z)
 	player.juice.add_trauma(1.0)
 	await _tap("throw")
