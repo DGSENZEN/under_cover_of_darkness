@@ -161,6 +161,70 @@ def case_plates():
     return messages
 
 
+def case_fur():
+    """Fur: tufts about 1.5 cm across (along a line the shade changes far
+    faster than wool's), their tips catching the light (lighter facing up
+    than facing down)."""
+    import fabrics
+
+    x = np.linspace(0.0, 0.06, 600)
+    points = np.stack([x + 0.1, np.full_like(x, -0.12), np.full_like(x, 1.4)], axis=1)
+    base = np.full((len(x), 3), 0.5)
+
+    def shades(fabric, normal):
+        return fabrics.paint(np.full(len(x), fabric), points, np.tile(normal, (len(x), 1)), base)[:, 0]
+
+    fur, wool = (float(np.mean(np.abs(np.diff(shades(f, [0.0, -1.0, 0.0]))))) for f in (fabrics.FUR, fabrics.WOOL))
+    up, down = (float(shades(fabrics.FUR, n).mean()) for n in ([0.0, 0.0, 1.0], [0.0, 0.0, -1.0]))
+    ok = fur > 2.0 * wool and up > 1.1 * down
+    return [] if ok else ["fur: along 6 cm %.4f (wool %.4f); facing up %.3f, down %.3f" % (fur, wool, up, down)]
+
+
+def case_studs():
+    """A studded part (its build's notes): iron dots with a dark ring round
+    each, in rows `spacing` apart round his trunk, on that part alone."""
+    import fabrics
+
+    fresh()
+    obj = plate("Outfit")
+    obj["wr_details"] = common.dump({"studs": [{"part": 2, "spacing": 0.05, "centre_y": 0.0}]})
+    # Across his chest through a row of studs: the jerkin (part 2), then the
+    # same line on another part (3).
+    x = np.linspace(-0.1, 0.1, 800)
+    line = np.stack([x, np.full_like(x, -0.15), np.full_like(x, 1.30)], axis=1)
+    position = np.stack([line, line])
+    passes = {"position": position, "fabric": np.full(position.shape[:2], fabrics.LEATHER),
+              "part": np.stack([np.full(len(x), 2), np.full(len(x), 3)])}
+    out = bake.trim(obj, passes, np.full(position.shape, 0.5))[..., 0] / 0.5
+    ok = out[0].max() > 1.3 and out[0].min() < 0.8 and bool(np.all(np.abs(out[1] - 1.0) < 1e-6))
+    return [] if ok else ["studs: on the jerkin %.2f..%.2f; elsewhere %.2f..%.2f" % (out[0].min(), out[0].max(),
+                                                                                      out[1].min(), out[1].max())]
+
+
+def case_slashes():
+    """A puff's slashes (its build's notes): `count` stripes of the lining
+    round his arm between `from` and `to`, on that part alone (his right arm
+    too, mirrored), in the lining's colour and out of the dye."""
+    import fabrics
+
+    fresh()
+    obj = plate("Outfit")
+    gold = [0.78, 0.60, 0.22]
+    obj["wr_details"] = common.dump({"slashes": [{"part": 5, "joint": [0.2, 0.0, 1.45], "axis": [1.0, 0.0, 0.0],
+                                                  "from": 0.0, "to": 0.15, "count": 6, "colour": gold}]})
+    phi = np.linspace(0.0, 2.0 * np.pi, 720, endpoint=False)
+    ring = np.stack([np.full_like(phi, 0.27), 0.05 * np.sin(phi), 1.45 + 0.05 * np.cos(phi)], axis=1)
+    right = ring * np.array([-1.0, 1.0, 1.0])
+    position = np.stack([ring, right, ring])
+    passes = {"position": position, "fabric": np.full(position.shape[:2], fabrics.WOOL),
+              "part": np.stack([np.full(len(phi), 5), np.full(len(phi), 5), np.full(len(phi), 1)])}
+    slashed, lining = bake.slashes(obj, passes)
+    stripes = [int(np.count_nonzero(row & ~np.roll(row, 1))) for row in slashed]
+    coloured = np.allclose(lining[0][slashed[0]], bake.to_linear(np.array(gold)), atol=1e-4) if slashed[0].any() else False
+    ok = stripes == [6, 6, 0] and coloured
+    return [] if ok else ["slashes: stripes %s (want 6, 6, 0), lining coloured %s" % (stripes, coloured)]
+
+
 def case_tint():
     """Two faces' brows (copies sharing the Quaternius material) tinted each
     their own colour: one face's tint never reaches the other's."""
@@ -249,7 +313,7 @@ def case_cpu():
 
 CASES = {"cpu": case_cpu, "alone": case_alone, "others": case_others, "png": case_png, "json": case_json,
          "wrapped": case_wrapped, "hair": case_hair, "plates": case_plates, "tint": case_tint,
-         "gear_bones": case_gear_bones}
+         "gear_bones": case_gear_bones, "fur": case_fur, "studs": case_studs, "slashes": case_slashes}
 
 
 def main():

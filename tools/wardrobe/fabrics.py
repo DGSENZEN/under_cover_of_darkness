@@ -12,8 +12,9 @@ alone on a saved bake.
 
 import numpy as np
 
-# The order of recipes.FABRICS.
-SKIN, QUILTED, WOOL, LEATHER, MAIL, IRON, WRAPPED, HAIR = range(8)
+# The order of recipes.FABRICS (bake.py packs it as fabric / 8: fur, the
+# ninth, is the last it has room for).
+SKIN, QUILTED, WOOL, LEATHER, MAIL, IRON, WRAPPED, HAIR, FUR = range(9)
 
 # Which way hair grows (flows): down and back.
 FLOW = np.array([0.0, 0.5, -1.0]) / np.linalg.norm([0.0, 0.5, -1.0])
@@ -148,6 +149,18 @@ def paint(fabric, points, normals, base):
         fine = noise(np.stack([a / 0.0025, b / 0.03, np.zeros_like(a)], axis=1), 1.0, 71)
         clumps = noise(np.stack([a / 0.012, b / 0.08, np.zeros_like(a)], axis=1), 1.0, 72)
         shade[hair] = 0.6 + 0.3 * fine + 0.25 * clumps
+
+    fur = fabric == FUR
+    if fur.any():
+        # Fur (the brute's mantle and boot tops): tufts about 1.5 cm across,
+        # each dark at its root and light at its tip, and the tips catch the
+        # light where it faces the sky; a fine streak along each tuft.
+        q = p[fur]
+        up = normals[fur][:, 2]
+        tuft = noise(q, 70.0, 81)
+        streak = noise(q * np.array([1.0, 1.0, 0.25]), 300.0, 82)
+        tip = np.clip(0.5 + 0.5 * up, 0.0, 1.0)
+        shade[fur] = (0.45 + 0.75 * tuft ** 1.5) * (0.85 + 0.25 * streak) * (0.7 + 0.45 * tip)
 
     out = base * shade[:, None]
 

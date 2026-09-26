@@ -24,7 +24,7 @@ Garment types (build.py):
 
 # The fabrics a garment can be made of (the bake paints each its own way).
 # Their indices are baked into the parts (wr_fabric): new ones go at the end.
-FABRICS = ["skin", "quilted_linen", "wool", "leather", "mail", "iron", "wrapped", "hair"]
+FABRICS = ["skin", "quilted_linen", "wool", "leather", "mail", "iron", "wrapped", "hair", "fur"]
 
 TAN = (0.36, 0.29, 0.20)
 MUSTARD = (0.62, 0.52, 0.16)

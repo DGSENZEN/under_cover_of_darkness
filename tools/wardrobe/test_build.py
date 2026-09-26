@@ -227,6 +227,148 @@ def over_the_sash(outfit, recipe=TYPES):
     return wrong
 
 
+# Batch 2's garment types: on the male body (a padded gut, a studded
+# jerkin, fur-cuffed boots, a fur mantle, one pauldron, a rapier's hanger)
+# and the female (puffed sleeves, a half-cape).
+TYPES2 = {
+    "kind": "typetest2", "body": "male", "base_tris": 1300, "bare": ["head", "hand", "upper", "lower"],
+    "belt": ("spine_01", 0.0),
+    "garments": [
+        {"name": "gut", "type": "shell", "fabric": "quilted_linen", "colour": GREY, "regions": ["torso", "pelvis"],
+         "bottom": ("thigh_l", 0.05), "thickness": 0.014, "smooth": 4,
+         "pads": [{"from": ("pelvis", 0.0), "to": ("spine_02", 0.5), "amount": 0.05, "front": True}]},
+        {"name": "jerkin", "type": "shell", "fabric": "leather", "colour": GREY, "regions": ["torso"], "thickness": 0.012,
+         "smooth": 4, "studs": {"spacing": 0.05}},
+        {"name": "trousers", "type": "shell", "fabric": "wool", "colour": GREY, "regions": ["pelvis", "thigh", "calf"],
+         "bottom": ("calf_l", 0.6), "top": ("spine_01", 0.0), "thickness": 0.008, "smooth": 2},
+        {"name": "boots", "type": "boots", "fabric": "leather", "colour": GREY, "top": ("calf_l", 0.5), "thickness": 0.012,
+         "sole": 0.004, "cuff": 0.05, "cuff_fabric": "fur", "cuff_colour": GREY, "smooth": 3},
+        {"name": "hands", "type": "mittens", "fabric": "skin", "colour": (0.78, 0.6, 0.5), "cuff": 0},
+        {"name": "belt", "type": "belt", "fabric": "leather", "colour": GREY, "height": 0.09,
+         "buckle": {"fabric": "iron", "colour": GREY, "size": (0.07, 0.012, 0.06)}},
+        {"name": "mantle", "type": "mantle", "fabric": "fur", "colour": GREY, "over": "jerkin", "reach": 0.16,
+         "thickness": 0.05, "depth_front": 0.12, "depth_back": 0.18, "clear": 0.02},
+        {"name": "pauldron", "type": "pauldron", "fabric": "iron", "colour": GREY, "side": "right", "over": "jerkin",
+         "reach": 0.14, "drop": 0.12, "rings": 3, "clearance": 0.012, "roll": 0.01},
+        {"name": "hanger", "type": "prop", "shape": "hanger", "fabric": "leather", "colour": GREY, "at": 100, "back": 35,
+         "size": (0.03, 0.018, 0.95), "fittings": {"fabric": "iron", "colour": GREY}, "bone": "pelvis"},
+    ],
+    "chains": {}, "colliders": [], "metal": [], "options": {},
+}
+TYPES3 = {
+    "kind": "typetest3", "body": "female", "base_tris": 1300, "bare": ["head", "hand"], "belt": ("spine_01", 0.0),
+    "garments": [
+        {"name": "doublet", "type": "shell", "fabric": "wool", "colour": GREY, "dye": True,
+         "regions": ["torso", "pelvis", "upper", "lower"], "bottom": ("thigh_l", 0.05), "sleeve_end": ("hand_l", 0.0),
+         "sleeve_back": 0.016, "thickness": 0.012, "smooth": 6, "lips": ["sleeve", "bottom"]},
+        {"name": "breeches", "type": "shell", "fabric": "wool", "colour": GREY, "regions": ["pelvis", "thigh", "calf"],
+         "bottom": ("calf_l", 0.6), "top": ("spine_01", 0.0), "thickness": 0.008, "smooth": 2},
+        {"name": "boots", "type": "boots", "fabric": "leather", "colour": GREY, "top": ("calf_l", 0.5), "thickness": 0.012,
+         "sole": 0.004, "cuff": 0, "smooth": 3},
+        {"name": "gloves", "type": "mittens", "fabric": "leather", "colour": GREY, "cuff": 0.03},
+        {"name": "puffs", "type": "puff", "fabric": "wool", "colour": GREY, "dye": True, "from": 0.0, "to": 0.55,
+         "peak": 0.25, "puff": 0.035, "slashes": {"count": 6, "colour": (0.78, 0.60, 0.22)}},
+        {"name": "half_cape", "type": "half_cape", "fabric": "wool", "colour": GREY, "hem": ("spine_01", 0.0),
+         "clear": 0.02, "chains": 3, "bones": 3},
+    ],
+    "chains": {"half_cape_%d" % n: CLOTH for n in (1, 2, 3)},
+    "colliders": [{"bone": "spine_02", "radius": 0.14}, {"bone": "upperarm_l", "radius": 0.05}], "metal": [],
+    "options": {},
+}
+
+
+def fabrics_of(obj, part_name, recipe):
+    """The fabrics (recipes.FABRICS names) of one garment's faces."""
+    import recipes
+
+    part = 1 + [g["name"] for g in recipe["garments"]].index(part_name)
+    parts, fabric = obj.data.attributes["wr_part"].data, obj.data.attributes["wr_fabric"].data
+    return {recipes.FABRICS[fabric[p.index].value] for p in obj.data.polygons if parts[p.index].value == part}
+
+
+def stands_off(obj, part_name, recipe):
+    """How far one garment stands off everything else he wears, at most."""
+    part = 1 + [g["name"] for g in recipe["garments"]].index(part_name)
+    parts = obj.data.attributes["wr_part"].data
+    rest = [tuple(p.vertices) for p in obj.data.polygons if parts[p.index].value != part]
+    tree = BVHTree.FromPolygons([v.co.copy() for v in obj.data.vertices], rest)
+    return max(tree.find_nearest(obj.data.vertices[v].co)[3] for v in part_vertices(obj, part_name, recipe))
+
+
+def build_types(recipe):
+    """`recipe` built into a temporary folder: (outfit, armature, chains by
+    name, his body's joints)."""
+    import json
+    import tempfile
+    from pathlib import Path
+
+    import build
+
+    fresh()
+    source = common.WARDROBE / "source"
+    folder = Path(tempfile.mkdtemp(prefix="wardrobe_%s_" % recipe["kind"]))
+    common.SOURCE, common.BACKUP = folder, folder / "backup"
+    before = set(bpy.data.objects)
+    skeleton, _, _ = common.import_quaternius(recipe["body"])
+    joints = common.joints(skeleton)
+
+    for obj in [o for o in bpy.data.objects if o not in before]:
+        bpy.data.objects.remove(obj)
+
+    try:
+        build.build_kind(recipe, True)
+    finally:
+        common.SOURCE, common.BACKUP = source, source / "backup"
+
+    chains = {c["chain"]: c for c in json.loads(bpy.context.scene["wardrobe_chains"])}
+    return bpy.data.objects["Outfit"], bpy.data.objects["Armature"], chains, joints
+
+
+def case_types2():
+    """Batch 2's garment types build on both bodies, ride the bones and
+    chains they should, and pass every export rule against their own body's
+    skeleton."""
+    import build
+    import validate
+
+    messages = []
+    male, arm, chains, joints = build_types(TYPES2)
+    cloth = [bone for c in chains.values() for bone in c["bones"]]
+
+    if not faces_on(male, "mantle", TYPES2) <= set(build.CAPE_BONES) or fabrics_of(male, "mantle", TYPES2) != {"fur"}:
+        messages.append("mantle on %s, of %s" % (sorted(faces_on(male, "mantle", TYPES2)), fabrics_of(male, "mantle", TYPES2)))
+
+    pauldron = (faces_on(male, "pauldron", TYPES2, side=1.0), faces_on(male, "pauldron", TYPES2, side=-1.0))
+
+    if pauldron != (set(), {"upperarm_r"}):
+        messages.append("right pauldron on %s (left) and %s (right)" % tuple(sorted(p) for p in pauldron))
+
+    if "fur" not in fabrics_of(male, "boots", TYPES2):
+        messages.append("boots of %s: no fur cuff" % fabrics_of(male, "boots", TYPES2))
+
+    if hangs_off(male, "hanger", TYPES2) > 0.03:
+        messages.append("hanger hangs %.3f m off him" % hangs_off(male, "hanger", TYPES2))
+
+    messages += ["male: %s" % m for m in validate.check(male, armature=arm, reference_joints=joints, cloth_bones=cloth,
+                                                         bare=set(TYPES2["bare"]))]
+
+    female, arm, chains, joints = build_types(TYPES3)
+    cloth = [bone for c in chains.values() for bone in c["bones"]]
+
+    if faces_on(female, "puffs", TYPES3) != {"upperarm_l", "upperarm_r"} or stands_off(female, "puffs", TYPES3) < 0.02:
+        messages.append("puffs on %s, standing %.3f m off her sleeves" % (sorted(faces_on(female, "puffs", TYPES3)),
+                                                                          stands_off(female, "puffs", TYPES3)))
+
+    capes = [chains.get("half_cape_%d" % n, {}) for n in (1, 2, 3)]
+
+    if [len(c.get("bones", [])) for c in capes] != [3, 3, 3] or any(c.get("parent") != "spine_03" for c in capes):
+        messages.append("half-cape chains %s" % [(c.get("parent"), len(c.get("bones", []))) for c in capes])
+
+    messages += ["female: %s" % m for m in validate.check(female, armature=arm, reference_joints=joints, cloth_bones=cloth,
+                                                           bare=set(TYPES3["bare"]))]
+    return messages
+
+
 def weights_of(obj):
     """Each vertex's weights by bone name (the ones that count)."""
     names = {g.index: g.name for g in obj.vertex_groups}
@@ -459,7 +601,8 @@ def case_male_parts():
 
 
 CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, "watchman": case_watchman,
-         "hood": case_hood, "launcher": case_launcher, "bodies": case_bodies, "male_parts": case_male_parts}
+         "hood": case_hood, "launcher": case_launcher, "bodies": case_bodies, "male_parts": case_male_parts,
+         "types2": case_types2}
 
 
 def main():

@@ -205,6 +205,18 @@ def data_passes(obj, size, low, high):
         base.attribute_name = "wr_base"
         return base.outputs["Color"]
 
+    def part(nodes, links):
+        # Which garment (recipe order, from 1; 0 his body), as part / 64.
+        attribute = nodes.new("ShaderNodeAttribute")
+        attribute.attribute_name = "wr_part"
+        scale = nodes.new("ShaderNodeMath")
+        scale.operation = "DIVIDE"
+        scale.inputs[1].default_value = 64.0
+        links.new(attribute.outputs["Fac"], scale.inputs[0])
+        combine = nodes.new("ShaderNodeCombineXYZ")
+        links.new(scale.outputs["Value"], combine.inputs["X"])
+        return combine.outputs["Vector"]
+
     # Only its own shape shades it: the part itself, under the copy, would
     # black it out, and another part (a hat over a coif) is shaded by the
     # game's own shadows, not painted into a part that may be worn alone.
@@ -222,6 +234,8 @@ def data_passes(obj, size, low, high):
         passes["ids"] = bake(work, "EMIT", target)
         emit_material(work, target, colour)
         passes["colour"] = bake(work, "EMIT", target)
+        emit_material(work, target, part)
+        passes["part"] = bake(work, "EMIT", target)
         passes["normal"] = bake(work, "NORMAL", target, normal_space="OBJECT")
         passes["ao"] = bake(work, "AO", target)
     finally:
@@ -239,6 +253,7 @@ def data_passes(obj, size, low, high):
         "dye": passes["ids"][..., 1] > 0.5,
         "colour": passes["colour"][..., :3],
         "ao": passes["ao"][..., 0],
+        "part": np.rint(passes["part"][..., 0] * 64.0).astype(np.int64),
     }
 
 
@@ -374,6 +389,12 @@ def paint_part(obj, size, stripe=None):
     dye = passes["dye"] & covered
 
     albedo = trim(obj, passes, albedo)
+    slashed, lining = slashes(obj, passes)
+
+    if slashed.any():
+        # The lining's colour through the fabric's own pattern and light.
+        albedo[slashed] = albedo[slashed] / np.maximum(passes["colour"][slashed], 1e-4) * lining[slashed]
+        dye &= ~slashed
 
     if stripe is not None:
         band = dye & (np.abs(passes["position"][..., 0]) < stripe["half_width"])
@@ -401,6 +422,9 @@ def trim(obj, passes, albedo):
 
     for plate in notes.get("plates", []):
         shade *= plates(plate, p, passes["fabric"])
+
+    for row in notes.get("studs", []):
+        shade *= studs(row, p, passes["part"])
 
     if "centre" not in notes:
         return albedo * shade[..., None]
@@ -430,6 +454,55 @@ def trim(obj, passes, albedo):
         shade *= 1.0 + 1.1 * ((across > rim["radius"]) & (p[..., 2] < rim["below"]))
 
     return albedo * shade[..., None]
+
+
+def studs(note, p, part):
+    """A studded part's trim: iron studs (a bright head, a dark ring round
+    it) in rows `spacing` apart round his trunk, each row half a stud on
+    from the last, on that part alone."""
+    spacing = note["spacing"]
+    dx, dy = p[..., 0], p[..., 1] - note["centre_y"]
+    arc = np.arctan2(dx, -dy) * np.hypot(dx, dy)
+    row = np.round(p[..., 2] / spacing)
+    arc = arc + (row % 2) * spacing * 0.5
+    d = np.hypot(arc - np.round(arc / spacing) * spacing, p[..., 2] - row * spacing)
+    size = note.get("size", 0.006)
+    head = np.clip(1.0 - d / size, 0.0, 1.0)
+    ring = np.clip(1.0 - np.abs(d - size * 1.3) / (size * 0.45), 0.0, 1.0)
+    on = part == note["part"]
+    return np.where(on, (1.0 + 1.4 * np.sqrt(head)) * (1.0 - 0.5 * ring), 1.0)
+
+
+def slashes(obj, passes):
+    """Where a puff's slashes show its lining (its build's notes): `count`
+    stripes round its arm (his left, and mirrored his right) between `from`
+    and `to` along it (metres from the joint), on that part alone. Returns
+    (which texels, their lining colour, linear); the lining is never dyed."""
+    notes = json.loads(obj.get("wr_details", "{}")).get("slashes", [])
+    p = passes["position"]
+    slashed = np.zeros(p.shape[:2], dtype=bool)
+    lining = np.zeros(p.shape)
+
+    for note in notes:
+        q = p.copy()
+        q[..., 0] = np.abs(q[..., 0])
+        axis = np.array(note["axis"])
+        rel = q - np.array(note["joint"])
+        along = rel @ axis
+        off = rel - along[..., None] * axis
+        side = np.cross(axis, [0.0, 0.0, 1.0])
+        side = side / max(np.linalg.norm(side), 1e-6)
+        up = np.cross(side, axis)
+        angle = np.arctan2(off @ side, off @ up)
+        span = note["to"] - note["from"]
+        inside = (along > note["from"] + span * 0.15) & (along < note["to"] - span * 0.15)
+        # Each stripe a third of its share of the round.
+        turn = (angle / (2.0 * np.pi) * note["count"]) % 1.0
+        stripe = (np.abs(turn - 0.5) < 1.0 / 6.0) & inside & (passes["part"] == note["part"])
+        slashed |= stripe
+        lining[stripe] = to_linear(np.array(note["colour"]))
+
+    return slashed, lining
 
 
 def plates(plate, p, fabric):

@@ -37,7 +37,8 @@ import recipes  # noqa: E402
 # after the stager: at 256 px the quilting and the mail read at 2 m, and the
 # tabard's panels (1.3) keep their stripe's edges straight.
 DENSITY = {"base": 0.8, "shell": 1.0, "mittens": 0.8, "boots": 0.8, "collar": 0.8, "skirt": 1.0,
-           "tabard": 1.3, "panels": 1.0, "belt": 0.8, "sash": 1.0, "pauldron": 1.0, "bracer": 1.0, "prop": 0.6}
+           "tabard": 1.3, "panels": 1.0, "belt": 0.8, "sash": 1.0, "pauldron": 1.0, "bracer": 1.0, "prop": 0.6,
+           "mantle": 1.0, "puff": 1.0, "half_cape": 1.0}
 # What cloth hangs clear of (and what props stand off): every part made
 # before it of these types.
 WORN = ("shell", "boots", "skirt", "panels", "tabard")
@@ -176,6 +177,12 @@ def build_kind(recipe, force):
             common.mirror(obj)
             swap_sides(obj)
 
+    # One-sided garments (not props) hide the body under them now it is whole.
+    sided = [obj for obj in kind.props if kind.types[obj.name] != "prop"]
+
+    if sided:
+        hide_body(kind, sided)
+
     outfit = join([kind.base] + kind.parts + kind.props)
 
     if kind.details:
@@ -285,6 +292,11 @@ def shell(kind, g, part):
     bm.to_mesh(obj.data)
     bm.free()
     kind.add(obj, g, part, "shell")
+
+    if "studs" in g:
+        # Iron studs over it (a studded jerkin), left for the bake.
+        kind.details.setdefault("studs", []).append({"part": part, "spacing": g["studs"]["spacing"],
+                                                     "centre_y": kind.centre(kind.z(("spine_02", 0.0))).y})
 
 
 def offset_verts(kind, bm, amount, iterations=1):
@@ -549,7 +561,8 @@ def boots(kind, g, part):
 
     cuff = common.loft("boots_cuff", [ring0, ring1, ring2], closed=True)
     common.group(cuff, common.TRANSFER, 1.0)
-    kind.add(cuff, g, part, "boots", strip=True)
+    # In its own fabric if it has one (fur tops).
+    kind.add(cuff, g, part, "boots", strip=True, fabric=g.get("cuff_fabric"), colour=g.get("cuff_colour"))
 
 
 def collar(kind, g, part):
@@ -1036,13 +1049,201 @@ def pauldron(kind, g, part):
     cap = at(inside, 0.0)
     obj = common.loft(g["name"], [rolled] + rings[::-1], cap=cap)
     face_away(obj, joint, axis)
-    common.group(obj, "upperarm_l", 1.0)
-    # Mirroring moves a vertex to its side's group only if that group is
-    # there already: without it, his right pauldron rides his left arm.
-    obj.vertex_groups.new(name="upperarm_r")
-    kind.add(obj, g, part, "pauldron", strip=True)
+    side = g.get("side", "both")
+
+    if side == "right":
+        # His right alone: made over his left, turned over to his right.
+        for vertex in obj.data.vertices:
+            vertex.co.x = -vertex.co.x
+
+        obj.data.flip_normals()
+        obj.data.update()
+        common.group(obj, "upperarm_r", 1.0)
+    else:
+        common.group(obj, "upperarm_l", 1.0)
+
+    if side == "both":
+        # Mirroring moves a vertex to its side's group only if that group is
+        # there already: without it, his right pauldron rides his left arm.
+        obj.vertex_groups.new(name="upperarm_r")
+
+    # One side alone is whole: not mirrored (the plates' trim mirrors).
+    kind.add(obj, g, part, "pauldron", strip=True, whole=side != "both")
     kind.details.setdefault("plates", []).append({"joint": list(joint), "axis": list(axis), "reach": g["reach"],
                                                   "lames": [g["reach"] / 3.0, g["reach"] * 2.0 / 3.0]})
+
+
+def mantle(kind, g, part):
+    """A stiff fur roll over his shoulders, `thickness` thick (the brute's).
+    Its underside is a bell round his neck, as cape_shell hangs the coif's
+    cape: snug at his neck, then out and down, `depth_front` over his chest,
+    `depth_back` over his back, `reach` out over his shoulders (steep front
+    and back, flatter over the shoulders), standing `clear` of what he wears
+    there (`over`, the shells, his bare neck). Its top is the same bell
+    `thickness` over it; closed at his neck and round its rim. Made on his
+    left and mirrored; rigid on CAPE_BONES as the coif's cape rides (no
+    chains: stiff fur)."""
+    neck = kind.at(("neck_01", 0.0))
+    axis = Vector((0.0, neck.y, neck.z + g.get("rise", 0.02)))
+    tree = common.bvh([kind.base, kind.made[g["over"]]] + [obj for obj in kind.parts if kind.types[obj.name] == "shell"])
+    front_tilt, side_tilt = g.get("tilt_front", 70.0), g.get("tilt_side", 25.0)
+    under, normals = [[], [], []], []
+
+    for i in range(9):
+        theta = math.radians(i * 22.5)
+        side = math.sin(theta) ** 2
+        depth = g["depth_front"] if math.cos(theta) >= 0.0 else g["depth_back"]
+        length = depth + (g["reach"] - depth) * side
+        tilt = math.radians(front_tilt + (side_tilt - front_tilt) * side)
+        out = Vector((0.0 if i in (0, 8) else math.sin(theta), -math.cos(theta), 0.0))
+        down = Vector((out.x * math.cos(tilt), out.y * math.cos(tilt), -math.sin(tilt)))
+        start = axis + out * (reach_out(tree, axis, out, 0.07) + g["clear"])
+        under[0].append(start)
+        under[1].append(start + down * length * 0.5)
+        under[2].append(start + down * length)
+        # Square to the bell, away from him (up and out).
+        normals.append(Vector((out.x * math.sin(tilt), out.y * math.sin(tilt), math.cos(tilt))))
+
+    # Every point of the bell `clear` of what is under it.
+    for ring in under[1:]:
+        for i, point in enumerate(ring):
+            near, normal, _, _ = tree.find_nearest(point)
+            depth = (point - near).dot(normal) if near is not None else 1.0
+
+            if depth < g["clear"]:
+                ring[i] = point + normal * (g["clear"] - depth)
+
+            ring[i].x = 0.0 if i in (0, 8) else ring[i].x
+
+    over = [[p + n * g["thickness"] for p, n in zip(ring, normals)] for ring in under]
+
+    for ring in over:
+        for i in (0, 8):
+            ring[i].x = 0.0
+
+    # Round the roll: in at his neck, over the top, down to the rim, back
+    # under to his neck (the first ring again: welded shut).
+    obj = common.loft(g["name"], [under[0], over[0], over[1], over[2], under[2], under[1], under[0]])
+    common.weld(obj)
+    outward(obj)
+    weigh_part(obj, kind.ref)
+    ride(obj, 1e9, CAPE_BONES)
+    # (Mirroring moves weights only to a group that is there already.)
+    obj.vertex_groups.get("clavicle_r") or obj.vertex_groups.new(name="clavicle_r")
+    kind.add(obj, g, part, "mantle")
+
+
+def puff(kind, g, part):
+    """A puffed sleeve over his left upper arm (mirrored to his right): rings
+    of 8 round it from `from` to `to` of the bone, over the sleeve under them
+    (looking out from the bone) by a swell that grows to `puff` at `peak` and
+    back, both ends tucked 3 mm inside the sleeve, less toward his body (the
+    arm presses it flat there); wholly on upperarm_l. Its slashes (`slashes`:
+    count, colour) are left for the bake."""
+    bone = kind.arm.data.bones["upperarm_l"]
+    joint = bone.head_local.copy()
+    axis = bone.tail_local - joint
+    length = axis.length
+    axis = axis.normalized()
+    front, up = across(axis)
+    tree = common.bvh([obj for obj in kind.parts if kind.types[obj.name] == "shell"])
+    rows = []
+
+    for k in range(7):
+        t = g["from"] + (g["to"] - g["from"]) * k / 6.0
+        rise = (t - g["from"]) / max(g["peak"] - g["from"], 1e-6) if t <= g["peak"] \
+            else (g["to"] - t) / max(g["to"] - g["peak"], 1e-6)
+        swell = g["puff"] * math.sin(math.pi * 0.5 * min(max(rise, 0.0), 1.0))
+        centre = joint + axis * length * t
+        ring = []
+
+        for j in range(8):
+            a = 2.0 * math.pi * j / 8.0
+            d = up * math.cos(a) + front * math.sin(a)
+            hit = tree.ray_cast(centre, d, 0.15)[0]
+            sleeve = (hit - centre).length if hit is not None else 0.06
+            ring.append(centre + d * (sleeve - 0.003 + (swell + 0.003 if swell > 0.0 else 0.0) * (1.0 - 0.65 * max(0.0, -d.x))))
+
+        rows.append(ring)
+
+    obj = common.loft(g["name"], rows, closed=True)
+    face_away(obj, joint, axis)
+    common.group(obj, "upperarm_l", 1.0)
+    obj.vertex_groups.new(name="upperarm_r")
+    kind.add(obj, g, part, "puff")
+    kind.details.setdefault("slashes", []).append({
+        "part": part, "joint": list(joint), "axis": list(axis), "from": g["from"] * length, "to": g["to"] * length,
+        "count": g["slashes"]["count"], "colour": list(g["slashes"]["colour"])})
+
+
+def half_cape(kind, g, part):
+    """A short cape over her left shoulder (the duelist's): its top along
+    her shoulder line, from the back of her neck (spine_03) out to her left
+    shoulder point, over what she wears there; its rows down her back to
+    `hem`, each `clear` of what is under it (looking in from behind her).
+    Its `chains` chain columns swing on `<name>_<n>` of `bones` bones under
+    spine_03 (a column between two rides both), built clear of her colliders
+    (collider_push); its top row rides spine_03 at her neck and clavicle_l at
+    her shoulder. Drawn from both sides, facing out; whole (her left alone)."""
+    neck = kind.at(("neck_01", 0.0))
+    shoulder = kind.arm.data.bones["upperarm_l"].head_local
+    hem = kind.z(g["hem"])
+    tree = common.bvh([kind.base] + [obj for obj in kind.parts if kind.types[obj.name] in WORN])
+    columns = 2 * g["chains"] - 1
+    behind = Vector((0.0, 1.0, 0.0))
+    slope = Vector((0.0, 0.5, 1.0)).normalized()
+    top = []
+
+    for c in range(columns):
+        u = c / (columns - 1)
+        # Along her shoulder line, just over what she wears there.
+        at = Vector((0.03, neck.y, neck.z - 0.02)).lerp(Vector((shoulder.x, shoulder.y, shoulder.z + 0.02)), u)
+        hit = common.outer_hit(tree, at, slope, 0.3)
+        top.append((hit if hit is not None else at) + slope * g["clear"])
+
+    rows = [top]
+
+    for r in range(1, g["bones"] + 1):
+        z = top[0].z + (hem - top[0].z) * r / g["bones"]
+        row = []
+
+        for point in top:
+            level = Vector((point.x, kind.centre(z).y, z))
+            reach = reach_out(tree, level, behind, 0.12)
+            row.append(level + behind * (max(reach + g["clear"], point.y - level.y)))
+
+        rows.append(row)
+
+    # Its chains' joints rest clear of her colliders (the whole row goes
+    # out as far as its farthest chain column must).
+    for row in rows[1:]:
+        push = max(collider_push(kind, row[2 * k], behind, "%s_%d" % (g["name"], k + 1)) for k in range(g["chains"]))
+        row[:] = [p + behind * push for p in row]
+
+    obj = common.loft(g["name"], rows)
+    face_away(obj, Vector((0.0, kind.centre(hem).y, 0.0)), Vector((0.0, 0.0, 1.0)))
+
+    for c in range(columns):
+        u = c / (columns - 1)
+
+        if u < 1.0:
+            common.group(obj, "spine_03", 1.0 - u, [c])
+
+        if u > 0.0:
+            common.group(obj, "clavicle_l", u, [c])
+
+    for r in range(1, g["bones"] + 1):
+        for c in range(columns):
+            index = r * columns + c
+            chains = [c // 2] if c % 2 == 0 else [c // 2, c // 2 + 1]
+
+            for k in chains:
+                common.group(obj, "cloth_%s_%d_%d" % (g["name"], k + 1, r), 1.0 / len(chains), [index])
+
+    for k in range(g["chains"]):
+        kind.chains["%s_%d" % (g["name"], k + 1)] = {"parent": "spine_03", "points": [row[2 * k] for row in rows]}
+
+    kind.add(obj, g, part, "half_cape", strip=True, whole=True)
 
 
 def bracer(kind, g, part):
@@ -1105,11 +1306,14 @@ def prop(kind, g, part):
             hang = (-up + tangent * lean).normalized()
             made.append(common.box("key_%d" % k, centre - up * 0.02 + hang * 0.03, tangent.cross(hang).normalized(), radial, hang,
                                    (0.008, 0.004, 0.05)))
-    elif g["shape"] == "scabbard":
+    elif g["shape"] in ("scabbard", "hanger"):
         w, d, length = g["size"]
         down = Matrix.Rotation(math.radians(g["back"]) * side, 4, tangent) @ -up
         down = (down + radial * 0.1).normalized()
-        start = below + radial * 0.03
+        # A hanger (a rapier's) holds its scabbard on two straps, its throat
+        # a hand under the belt; a scabbard hangs from the belt itself.
+        belt_at = below + radial * 0.03
+        start = belt_at - up * (0.07 if g["shape"] == "hanger" else 0.0)
         across = radial.cross(down).normalized()
         cuts = [0.0, 0.07, 0.9, 1.0]
         widths = [(w, d), (w * 0.95, d * 0.95), (w * 0.72, d * 0.8), (w * 0.3, d * 0.5)]
@@ -1125,6 +1329,18 @@ def prop(kind, g, part):
             common.group(obj, g["bone"], 1.0)
 
         made = made[:1]
+
+        if g["shape"] == "hanger":
+            # Its straps: from the belt, a hand apart, to its throat and a
+            # little way down it.
+            for k, (lean, t) in enumerate(((1.0, 0.0), (-1.0, 0.14))):
+                high = belt_at + tangent * 0.02 * lean
+                low_end = start + down * length * t
+                z = (low_end - high).normalized()
+                x = radial.cross(z).normalized()
+                strap = common.box("%s_strap_%d" % (g["name"], k), (high + low_end) * 0.5, x, z.cross(x), z,
+                                   (0.012, 0.004, (low_end - high).length))
+                made.append(strap)
     elif g["shape"] == "quiver":
         quiver(kind, g, part, below, radial, tangent, side)
         made = []
@@ -1245,23 +1461,32 @@ def belt_first(kind, g, part):
 
 
 BUILDERS = {"shell": shell, "mittens": mittens, "boots": boots, "collar": collar, "skirt": skirt, "panels": panels,
-            "tabard": tabard, "belt": belt_first, "sash": sash, "pauldron": pauldron, "bracer": bracer, "prop": prop}
+            "tabard": tabard, "belt": belt_first, "sash": sash, "pauldron": pauldron, "bracer": bracer, "prop": prop,
+            "mantle": mantle, "puff": puff, "half_cape": half_cape}
 
 
 # ---------------------------------------------------------------------------
 # Putting him together
 # ---------------------------------------------------------------------------
 
-def hide_body(kind):
-    """The body faces a garment hides, gone (spec §6.3 step 4)."""
+def hide_body(kind, garments=None):
+    """The body faces a garment hides, gone (spec §6.3 step 4): under every
+    part, while he is his left half; or, given `garments` (one-sided pieces:
+    a right pauldron), under those once he is whole."""
     base = kind.base
     common.set_faces(base, 0, recipes.FABRICS.index("skin"), 0.0, False, False, SKIN)
-    garments = [obj for obj in kind.parts if kind.types[obj.name] != "base"]
+    whole = garments is not None
+    garments = garments if whole else [obj for obj in kind.parts if kind.types[obj.name] != "base"]
     trial = [base] + [obj.copy() for obj in garments]
 
     for copy in trial[1:]:
         copy.data = copy.data.copy()
         bpy.context.scene.collection.objects.link(copy)
+
+        # Whole, as he will wear them: a face by his middle may look across
+        # it, under the garment's other half (the mantle over his throat).
+        if not whole and len(copy.data.polygons) > 0:
+            common.mirror(copy)
 
     common.select_only(trial, active=trial[0])
     probe = base.copy()
@@ -1269,7 +1494,9 @@ def hide_body(kind):
     bpy.context.scene.collection.objects.link(probe)
     common.select_only([probe] + trial[1:], active=probe)
     bpy.ops.object.join()
-    hidden = set(common.hidden_faces(probe, reach=COVERED)) | kind.covered
+    # (The shells' covered faces count on his half only: their indices go
+    # stale once faces are gone.)
+    hidden = set(common.hidden_faces(probe, reach=COVERED)) | (set() if whole else kind.covered)
     bpy.data.objects.remove(probe)
     bm = bmesh.new()
     bm.from_mesh(base.data)
