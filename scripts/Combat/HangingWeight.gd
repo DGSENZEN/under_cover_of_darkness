@@ -28,6 +28,8 @@ var _crushed := {}
 
 
 func _ready() -> void:
+	# An archer who sees you under it knows what the rope is for.
+	add_to_group(&"hanging_weights")
 	# The rope: a thin cord, and a slightly fatter box for blades and arrows.
 	rope = StrikeableScript.new()
 	rope.name = "Rope"

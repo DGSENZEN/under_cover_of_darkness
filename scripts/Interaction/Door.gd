@@ -7,6 +7,10 @@ extends AnimatableBody3D
 ##
 ## Frob toggles it. It swings away from whoever frobs it, stops when it would
 ## push into a body, and can be locked with a key id the inventory must hold.
+##
+## It remembers who last opened it: a door that stood shut, opened by someone
+## who is not one of the guards and left open, is something a guard on his
+## rounds notices (GuardLife.gd), and shuts again.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -27,17 +31,22 @@ signal rattled
 @export var door_name := "door"
 
 var is_open := false
+## It stood shut when the level began.
+var was_shut := true
 var _target_angle := 0.0
 var _closed_yaw := 0.0
 var _shape: CollisionShape3D
+var _opened_by: WeakRef = null
 
 
 func _ready() -> void:
 	_closed_yaw = rotation.y
 	sync_to_physics = true
+	was_shut = not is_open
 
 	# A closed door must not cut the navmesh at its doorway.
 	add_to_group(&"nav_ignore")
+	add_to_group(&"doors")
 
 	for child in get_children():
 		if child is CollisionShape3D:
@@ -96,6 +105,50 @@ func frob(player: Node) -> void:
 
 	_target_angle = deg_to_rad(open_degrees) * sign
 	is_open = true
+	_opened_by = weakref(player) if player != null else null
+
+	# Opened again: whoever notices it this time, notices it afresh.
+	if has_meta(&"noticed"):
+		remove_meta(&"noticed")
+
+
+## Whoever opened it last, if they are still about.
+func opened_by() -> Node:
+	return _opened_by.get_ref() as Node if _opened_by != null else null
+
+
+## Open when it should be shut, and not by one of the guards: someone has
+## been through.
+func left_open() -> bool:
+	if not is_open or not was_shut:
+		return false
+
+	var who := opened_by()
+	return who == null or not who.is_in_group(&"guards") and who.get("_knocked_out") == null
+
+
+## The middle of the panel, wherever it has swung to.
+func panel_centre() -> Vector3:
+	return _shape.global_position if _shape != null else global_position + Vector3.UP
+
+
+## Which way the doorway faces (the shut panel's front), flat.
+func facing() -> Vector3:
+	var front := -(_closed_global_basis() * Vector3.BACK)
+	front.y = 0.0
+	return front.normalized() if front.length() > 0.01 else Vector3.FORWARD
+
+
+## The middle of the doorway, at the floor: where the panel stands when shut.
+func doorway() -> Vector3:
+	if _shape == null:
+		return global_position
+
+	var parent := get_parent_node_3d()
+	var parent_xform := parent.global_transform if parent != null else Transform3D.IDENTITY
+	var shut := parent_xform * Transform3D(Basis(Vector3.UP, _closed_yaw), position)
+	var middle := shut * _shape.position
+	return Vector3(middle.x, global_position.y, middle.z)
 
 
 func _physics_process(delta: float) -> void:

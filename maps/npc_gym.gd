@@ -7,7 +7,12 @@ extends Node3D
 ##   A corridor runs north from the hub, eight bays off it, each behind its
 ##   own walls (a fight in one is not heard in the next):
 ##   1 WATCHMAN   a patrol through light and dark, a noisy floor and a quiet
-##                one, a crate to throw: his alert, his sight, his search.
+##                one, a crate to throw: his alert, his sight, his search. A
+##                second man stands his post by the patrol's corner: they
+##                talk when the patrol stops there, and when one hears
+##                something he goes to look while the other covers him. The
+##                storeroom door: open it and leave it, and it is noticed.
+##                Shoot an arrow into a wall and it is found.
 ##   2 SWORDSMAN  guards, trades blows, reads a rhythm, kicks a turtle.
 ##   3 SWORDMASTER parries and answers, feints, steps out of long swings.
 ##   4 BRUTE      the blow no guard stops (dodge it: Q), cuts do not stop him.
@@ -19,8 +24,14 @@ extends Node3D
 ##   8 ARMS MASTER a steady beat to parry, and straw men to cut.
 ##   9 GUARDHOUSE through the hub's south wall: a squad in a lit yard, off-duty
 ##                men in a barracks down a passage (a man who breaks runs to
-##                fetch them), and a dark loop of corridors behind to lose
-##                them in and watch them hunt you.
+##                fetch them: catch him and he throws his blade down and begs
+##                for his life; walk away and he runs to his own), and a dark
+##                loop of corridors behind to lose them in and watch them hunt
+##                you. A lookout on a platform in
+##                the yard's far corner calls where you are and rings the bell
+##                (and the barracks wakes); crates to be thrown, powder to be
+##                shot; landmarks they call you by (the well, the gate, the
+##                barracks, the dark passage).
 ##
 ##   1-9  go to that bay and start it (again)     0  back to the hub
 ##   F1   what each of them is thinking, over his head: his temperament,
@@ -44,6 +55,7 @@ const LeverScript := preload("res://scripts/Interaction/Lever.gd")
 const DummyScript := preload("res://scripts/Combat/TrainingDummy.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
+const AlarmBellScript := preload("res://scripts/Interaction/AlarmBell.gd")
 
 const STONE := Color(0.4, 0.38, 0.36)
 const DARK := Color(0.2, 0.19, 0.21)
@@ -55,7 +67,7 @@ const STATE_COLOURS := [Color(0.55, 0.9, 0.5), Color(0.95, 0.9, 0.4), Color(1.0,
 ## The bays: [name, the middle of the bay, which side of the corridor it
 ## opens to (-1 west, 1 east), what the sign says].
 const BAYS := [
-	["WATCHMAN", Vector3(-17, 0, -8), -1, "A watchman on his rounds. Stay in the dark (the gem), walk on the carpet,\nnot the iron. Throw the crate to draw him off. F1: his alert, what he sees."],
+	["WATCHMAN", Vector3(-17, 0, -8), -1, "A watchman on his rounds, a second at his post. Stay in the dark (the gem), walk on the carpet,\nnot the iron. Throw the crate to draw them off: one looks, one covers. They talk when they stand together.\nLeave the storeroom door open, or an arrow in a wall: they notice. F1: what they think."],
 	["SWORDSMAN", Vector3(-17, 0, -26), -1, "A swordsman. He guards, trades blows, strings two together,\nreads a rhythm (vary it), kicks a turtle, lunges from range."],
 	["SWORDMASTER", Vector3(-17, 0, -44), -1, "The swordmaster. Parries careless blows and answers fast;\nfeints; steps out of long swings (thrusts reach him)."],
 	["BRUTE", Vector3(-17, 0, -62), -1, "The brute. Red glow and a roar: the blow no guard stops. DODGE (Q).\nCuts do not stop his swing. Only a running kick fells him, reeling."],
@@ -63,15 +75,17 @@ const BAYS := [
 	["SQUAD", Vector3(17, 0, -26), 1, "A squad: swordmaster, swordsman, brute, archer. A leader and a plan:\nthey surround, strike while you are busy, break a turtle, press you hurt,\nfall back, break one by one when the leader dies. Watch the plan (top right)."],
 	["BODIES", Vector3(17, 0, -44), 1, "Weak men to send flying and cut apart. Kick them while they swing, or running.\nInto the spikes, off the ledge, onto the powder. A clean kill takes a limb or a head."],
 	["ARMS MASTER", Vector3(17, 0, -62), 1, "The arms master swings on a steady beat: parry just before it lands.\nStraw men to cut; shielded ones to break."],
-	["GUARDHOUSE", Vector3(0, 0, 24), 0, "The guardhouse. A squad in the yard; two men off duty in the barracks (east).\nBreak one and he runs to fetch them: catch him first. Lose them in the dark\ncorridors (west) and watch them split the search. F5: the garrison forgets you."],
+	["GUARDHOUSE", Vector3(0, 0, 24), 0, "The guardhouse. A squad in the yard; two men off duty in the barracks (east); a lookout\non the platform (far corner) who calls where you are and rings the bell. Break one and he runs\nfor help: catch him and he begs for his life. Walk away and he runs to his own; cut him down\nand the next will not beg. Lose them in the dark (west) and watch them split the search\nwhile one keeps watch. Crates get thrown; powder gets shot. F5: the garrison forgets you."],
 ]
 const BAY_SIZE := 14.0
 
 var player: CharacterBody3D
 var _baker: NavigationRegion3D
 var _bay_guards := {}
-## The guardhouse's off-duty men: not in the fight until fetched.
+## The guardhouse's off-duty men: not in the fight until fetched; and its
+## lookout, not in it until he sees you.
 var _barracks: Array = []
+var _posted: Array = []
 var _labels_on := true
 var _frozen := false
 var _label_timer := 0.0
@@ -164,6 +178,16 @@ func _build_bay(index: int) -> void:
 			Props.block(self, centre + Vector3(2.5, 0.02, 0), Vector3(3.0, 0.04, 9.0), Color(0.35, 0.36, 0.4), "metal")
 			Props.block(self, centre + Vector3(-2.5, 0.02, 3.0), Vector3(3.0, 0.04, 4.0), Color(0.45, 0.2, 0.18), "carpet")
 			Props.block(self, centre + Vector3(0, 0.6, 0), Vector3(1.4, 1.2, 1.4), STONE)
+			# A storeroom in the lit corner, its door on the patrol's way.
+			var room := centre + Vector3(-4.8, 0, -5.6)
+			Props.block(self, room + Vector3(-1.9, 1.25, 0), Vector3(0.3, 2.5, 2.6), STONE)
+			Props.block(self, room + Vector3(0.0, 1.25, -1.15), Vector3(4.1, 2.5, 0.3), STONE)
+			Props.block(self, room + Vector3(-1.3, 1.25, 1.15), Vector3(1.5, 2.5, 0.3), STONE)
+			Props.block(self, room + Vector3(1.3, 1.25, 1.15), Vector3(1.5, 2.5, 0.3), STONE)
+			Props.block(self, room + Vector3(0.0, 2.35, 1.15), Vector3(1.1, 0.3, 0.3), STONE)
+			Props.block(self, room + Vector3(1.9, 1.25, 0), Vector3(0.3, 2.5, 2.6), STONE)
+			Props.block(self, room + Vector3(0.0, 2.6, 0), Vector3(4.1, 0.2, 2.6), STONE)
+			Props.door(self, room + Vector3(-0.55, 0, 1.15), 0.0, 1.1, 2.1, false, &"", "storeroom door")
 		4:
 			# Cover to shoot from, and to close in round.
 			Props.block(self, centre + Vector3(0, 0.6, -3.5), Vector3(4.0, 1.2, 0.5), STONE)
@@ -264,6 +288,23 @@ func _build_guardhouse() -> void:
 	for at in [Vector3(-13, 1.5, 16), Vector3(-13, 1.5, 38), Vector3(-27, 1.5, 44), Vector3(-4, 1.5, 42), Vector3(5, 1.5, 38)]:
 		Props.block(self, at, Vector3(0.8, 3.0, 0.8), STONE)
 
+	# The lookout's platform in the yard's far corner, stairs up its side, and
+	# the bell by it.
+	Props.block(self, Vector3(-7.5, 1.25, 30.5), Vector3(3.0, 2.5, 3.0), STONE)
+	_stairs(Vector3(-3.6, 0, 30.5), Vector3.LEFT, 8, 0.3125, 0.3, 1.4)
+	AlarmBellScript.build(self, Vector3(-8.5, 0, 26.3), 0.0)
+	# The well in the yard: something to call you by, and to hide behind.
+	Props.block(self, Vector3(2.5, 0.5, 20.5), Vector3(1.4, 1.0, 1.4), STONE)
+
+	# What they call places by.
+	for mark in [["well", Vector3(2.5, 0, 20.5)], ["gate", Vector3(0, 0, 12.5)], ["barracks", Vector3(18, 0, 42.5)],
+			["dark passage", Vector3(-10, 0, 25.5)], ["lookout post", Vector3(-7.5, 2.5, 30.5)], ["bell", Vector3(-8.5, 0, 26.3)]]:
+		var landmark := Marker3D.new()
+		landmark.set_meta(&"landmark", mark[0])
+		landmark.add_to_group(&"landmarks")
+		add_child(landmark)
+		landmark.global_position = mark[1]
+
 
 ## A wall 4.2 m high (to the roofs) running along z at `x`, from `z0` to `z1`.
 func _wall_along_z(x: float, z0: float, z1: float) -> void:
@@ -292,6 +333,9 @@ func _start_bay(index: int) -> void:
 	match index:
 		0:
 			guards.append(_patrol([centre + Vector3(-4, 0, -4), centre + Vector3(4, 0, -4), centre + Vector3(4, 0, 4), centre + Vector3(-4, 0, 4)]))
+			# His mate at his post by the patrol's corner: they talk when it
+			# stops there.
+			guards.append(_spawn(&"", centre + Vector3(5.6, 0, -5.2), PI * 0.25))
 			Props.crate(self, centre + Vector3(side * 5.0, 0.3, 3.0), 0.4, 2.0)
 		1:
 			guards.append(_spawn(&"swordsman", centre + Vector3(0, 0, -3), 0.0))
@@ -322,8 +366,18 @@ func _start_bay(index: int) -> void:
 		8:
 			guards.append(_spawn(&"duelist", Vector3(0, 0, 26), 0.0))
 			guards.append(_spawn(&"swordsman", Vector3(-2.5, 0, 27), 0.0))
-			guards.append(_spawn(&"swordsman", Vector3(2.5, 0, 27), 0.0))
+			# A craven one: the first to break, and to beg.
+			guards.append(_spawn(&"swordsman", Vector3(2.5, 0, 27), 0.0, false, &"craven"))
 			guards.append(_spawn(&"archer", Vector3(0, 0, 31), 0.0))
+			# Up on his platform, watching the yard: he has to see you first
+			# (not one of the squad in the yard until he does).
+			_posted.append(_spawn(&"", Vector3(-7.5, 2.5, 30.5), 0.0, true))
+
+			# Things to throw, and powder by the gate.
+			for at in [Vector3(6.0, 0.25, 18.0), Vector3(-6.0, 0.2, 21.0), Vector3(7.0, 0.25, 29.0)]:
+				Props.crate(self, at, 0.45, 2.5)
+
+			_barrel(Vector3(5.0, 0.4, 15.5))
 
 			# Off duty, and hard of hearing over their dice: only a man
 			# who comes to fetch them brings them.
@@ -350,7 +404,7 @@ func _start_bay(index: int) -> void:
 	_rest()
 	player.inventory.select_by_id(&"blackjack" if index == 0 else &"sword")
 
-	# The fights start at once; the watchman has to find you.
+	# The fights start at once; the watchmen have to find you.
 	if index != 0:
 		for g in guards:
 			g._engage(player)
@@ -376,7 +430,7 @@ func _clear_bay(index: int) -> void:
 
 	# The guardhouse: its off-duty men too, and the whole wing.
 	if index == 8:
-		for resting in _barracks:
+		for resting in _barracks + _posted:
 			if is_instance_valid(resting):
 				resting.remove_from_group(&"guards")
 				resting.set_physics_process(false)
@@ -384,6 +438,7 @@ func _clear_bay(index: int) -> void:
 				resting.queue_free()
 
 		_barracks.clear()
+		_posted.clear()
 		centre = Vector3(0, 0, 30.5)
 		half = Vector2(30.0, 18.5)
 
@@ -398,15 +453,28 @@ func _clear_bay(index: int) -> void:
 			thing.queue_free()
 
 	for child in get_children():
-		if String(child.name).begins_with("DroppedSword") and absf((child as Node3D).global_position.x - centre.x) < half.x and absf((child as Node3D).global_position.z - centre.z) < half.y:
+		var name := String(child.name)
+
+		if (name.begins_with("DroppedSword") or name.begins_with("DroppedLantern") or name.begins_with("crate")) and absf((child as Node3D).global_position.x - centre.x) < half.x and absf((child as Node3D).global_position.z - centre.z) < half.y:
 			child.queue_free()
+
+	for barrel in get_tree().get_nodes_in_group(&"explosives"):
+		var at: Vector3 = (barrel as Node3D).global_position
+
+		if index == 8 and absf(at.x - centre.x) < half.x and absf(at.z - centre.z) < half.y:
+			barrel.queue_free()
 
 	SquadScript.clear_all()
 
 
-func _spawn(archetype: StringName, at: Vector3, yaw: float) -> CharacterBody3D:
+func _spawn(archetype: StringName, at: Vector3, yaw: float, lookout := false, preset: StringName = &"") -> CharacterBody3D:
 	var g: CharacterBody3D = GUARD.instantiate()
 	g.archetype = archetype
+	g.lookout = lookout
+
+	if preset != &"":
+		g.temperament = preset
+
 	g.debug_ai = false
 	# Each bay its own: a fight in one is not heard in the next.
 	g.hearing_acuity = 0.4
@@ -567,6 +635,12 @@ func _update_labels() -> void:
 		elif g._rising > 0.0:
 			lines.append("getting up")
 		else:
+			# What he is about, off his own bat (GuardLife, GuardHands).
+			var about := _about(g)
+
+			if about != "":
+				lines.append(about)
+
 			# His part in the hunt, even alone: what he is doing, the plan,
 			# and how near he is to breaking.
 			var squad = fighter.squad if fighter != null else null
@@ -616,6 +690,48 @@ func _update_labels() -> void:
 		label.modulate = STATE_COLOURS[state]
 
 
+## What he is about besides fighting: talking, covering a friend, keeping
+## watch, going for a blade, holding something to throw, his lantern, getting
+## clear of powder, dealing with something out of place.
+func _about(g: Node) -> String:
+	var bits: Array[String] = [String(g.given_name)]
+
+	if g.lookout:
+		bits.append("lookout")
+
+	if not g._hands.armed:
+		bits.append("DISARMED")
+
+	var doing: StringName = g.activity()
+
+	if doing != &"":
+		bits.append(String(doing))
+
+	if g._life.covering():
+		bits.append("covering a friend")
+
+	if g._life.oddity() != null:
+		bits.append("something out of place")
+
+	if g._watching:
+		bits.append("keeping watch for the hunt")
+
+	if g._hands.lantern != null:
+		bits.append("lantern lit")
+
+	if g.is_evading():
+		bits.append("GETTING CLEAR OF POWDER")
+
+	if g._mercy.pleading:
+		bits.append("BEGGING FOR HIS LIFE")
+	elif g._mercy.sheltered():
+		bits.append("safe with his own")
+	elif g._mercy.refused:
+		bits.append("no mercy asked")
+
+	return "  ".join(bits)
+
+
 ## The hunt after you, in the corner, while there is one (even one man): its
 ## plan, its heart, what it reads of you, what the garrison knows and dreads,
 ## and each man's part.
@@ -633,8 +749,8 @@ func _update_panel() -> void:
 	var lead = squad.leader()
 	var garrison = GarrisonScript.of(player)
 	var text := "HUNT   plan %s   heart %.2f   leader %s%s\n" % [String(squad.tactic).to_upper(), squad.morale, String(lead.get("speaker_name")) if lead != null else "none", "   help coming" if squad.help_coming() else ""]
-	text += "they read you:  turtle %.2f  rhythm %.2f  keeping away %.2f  bow %.2f\n" % [squad.read[&"turtle"], squad.read[&"spam"], squad.read[&"kite"], squad.read[&"bow"]]
-	text += "garrison:  dread %.2f   %d dead   %d captains   known: turtle %.2f rhythm %.2f keeping away %.2f bow %.2f\n" % [garrison.dread, garrison.dead, garrison.captains, garrison.habits[&"turtle"], garrison.habits[&"spam"], garrison.habits[&"kite"], garrison.habits[&"bow"]]
+	text += "they read you:  turtle %.2f  rhythm %.2f  keeping away %.2f  bow %.2f  parry %.2f  dodge %.2f\n" % [squad.read[&"turtle"], squad.read[&"spam"], squad.read[&"kite"], squad.read[&"bow"], squad.read.get(&"parry", 0.0), squad.read.get(&"dodge", 0.0)]
+	text += "garrison:  dread %.2f   alarm %.2f   %d dead   %d captains   spared %d   cut down begging %d   known: turtle %.2f rhythm %.2f keeping away %.2f bow %.2f parry %.2f dodge %.2f\n" % [garrison.dread, garrison.alarm, garrison.dead, garrison.captains, garrison.spared.size(), garrison.slain_begging.size(), garrison.habits[&"turtle"], garrison.habits[&"spam"], garrison.habits[&"kite"], garrison.habits[&"bow"], garrison.habits.get(&"parry", 0.0), garrison.habits.get(&"dodge", 0.0)]
 	var places := []
 
 	for m in members:

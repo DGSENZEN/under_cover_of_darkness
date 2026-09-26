@@ -24,7 +24,17 @@ extends RefCounted
 ## a turtle), rally, berserk (the brute, his captain cut down), hold (at the
 ## edge of your reach, guard up, calling for help: a man alone who will not
 ## face you, or the rearguard), flee (broken), desperate (a rash man broken:
-## all in).
+## all in), lookout (a man set to watch: he keeps his post and calls where you
+## are, and rings the bell), intercept (you running: he goes where you are
+## going while another comes straight after you).
+##
+## They read how you fight: turtle, spam, kite and bow as the plan's triggers;
+## parry (you turn their blows aside: they feint more, hold blows back late,
+## and use the ones no parry is for) and dodge (you step out of them: they use
+## the blows that reach and go low). While they hunt you in numbers, one of
+## them keeps watch from a vantage near where you were last seen
+## (watch_point_for). Whoever sees you calls it to the ones who do not (at
+## most every SPOT_EVERY: may_call).
 ##
 ## Each man's resolve (`resolve_of`) is their heart as he feels it: less the
 ## fear the garrison's dread puts in a man short of nerve, less his wounds,
@@ -98,6 +108,20 @@ const CUT_OFF := 10.0
 ## wait for you to commit to another: he goes in once his patience is gone.
 const IMPATIENT_DRIVE := 0.65
 const PATIENT_GUILE := 0.65
+## Where you are, called to the others: at most this often (s).
+const SPOT_EVERY := 2.4
+## ...or as soon as this, when one of them who cannot see you is about to
+## give you up for lost.
+const SPOT_URGENT := 0.8
+## A man running this fast (m/s) is cut off, not only chased.
+const RUNNING := 2.5
+## A watcher keeps his vantage this long (s), picked this far from where you
+## were last seen.
+const WATCH_TIME := 25.0
+const WATCH_NEAR := 5.0
+const WATCH_FAR := 11.0
+
+const Dangers := preload("res://scripts/AISystem/Dangers.gd")
 
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 
@@ -106,8 +130,9 @@ static var _squads := {}
 var target_ref: WeakRef
 var tactic: StringName = &"envelop"
 ## What they have seen you do, each 0..1 and fading: turtle (a raised guard),
-## spam (blows on each other's heels), kite (keeping away), bow (shooting).
-var read := {&"turtle": 0.0, &"spam": 0.0, &"kite": 0.0, &"bow": 0.0}
+## spam (blows on each other's heels), kite (keeping away), bow (shooting),
+## parry (their blows turned aside), dodge (their blows stepped out of).
+var read := {&"turtle": 0.0, &"spam": 0.0, &"kite": 0.0, &"bow": 0.0, &"parry": 0.0, &"dodge": 0.0}
 ## Their heart, 0..1.
 var morale := 1.0
 ## The most of them there have been in this fight.
@@ -168,6 +193,12 @@ var _given_up_on := {}
 ## when half are elsewhere.
 var _lost := 0
 var _fell_back_at_lost := 0
+## When one of them last called where you are.
+var _last_spot_call := -100.0
+## The hunt's watcher, his vantage, and until when he keeps it.
+var _watcher: WeakRef = null
+var _watch_point := Vector3.INF
+var _watch_until := -100.0
 
 
 ## The hunt for `target`: the one under way, or a new one when the last is
@@ -188,6 +219,7 @@ static func of(target: Node3D) -> RefCounted:
 		squad.morale = garrison.opening_heart()
 		squad.read = (garrison.habits as Dictionary).duplicate()
 		_squads[key] = squad
+		squad._watch_you(target)
 
 	return squad
 
@@ -208,6 +240,40 @@ static func clear_all() -> void:
 
 func target() -> Node3D:
 	return target_ref.get_ref() as Node3D if target_ref != null else null
+
+
+## Every blow of theirs you turn aside, every one you step out of: they see
+## it (read "parry", "dodge").
+func _watch_you(enemy: Node3D) -> void:
+	var combat: Variant = enemy.get("combat")
+
+	if not (combat is Object):
+		return
+
+	if (combat as Object).has_signal(&"defended"):
+		(combat as Object).connect(&"defended", _on_defended)
+
+	if (combat as Object).has_signal(&"dodged"):
+		(combat as Object).connect(&"dodged", _on_dodged)
+
+
+func _on_defended(result: StringName) -> void:
+	if result == &"parry" and not fighting().is_empty():
+		read[&"parry"] = minf(float(read.get(&"parry", 0.0)) + 0.3, 1.0)
+
+
+func _on_dodged(_direction: Vector3) -> void:
+	if not fighting().is_empty():
+		read[&"dodge"] = minf(float(read.get(&"dodge", 0.0)) + 0.22, 1.0)
+
+
+## Whether one of them may call where you are now (not on top of the last).
+func may_call(urgent := false) -> bool:
+	return clock - _last_spot_call >= (SPOT_URGENT if urgent else SPOT_EVERY)
+
+
+func called() -> void:
+	_last_spot_call = clock
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +415,7 @@ func bonus(what: StringName) -> float:
 		&"kick":
 			return 0.4 * known(&"turtle") + (0.2 if tactic == &"break" else 0.0)
 		&"feint":
-			return 0.3 * known(&"turtle")
+			return 0.3 * known(&"turtle") + 0.3 * known(&"parry")
 		&"parry":
 			return 0.25 * known(&"spam")
 		&"guard":
@@ -358,6 +424,15 @@ func bonus(what: StringName) -> float:
 			return 0.35 * known(&"kite") + (0.2 if tactic == &"rush" else 0.0)
 		&"backstep":
 			return 0.2 * known(&"spam")
+		&"delay":
+			# You parry: they hold a follow-up back to catch it too soon.
+			return 0.35 * known(&"parry")
+		&"track":
+			# You dodge: the blows that reach and go low.
+			return 0.8 * known(&"dodge")
+		&"perilous":
+			# You parry: the blows no parry is for.
+			return 0.6 * known(&"parry")
 
 	return 0.0
 
@@ -390,8 +465,12 @@ func may_strike(guard: Node3D) -> bool:
 	var role := role_of(guard)
 
 	match role:
-		&"engage", &"breaker", &"berserk", &"bodyguard", &"desperate":
+		&"engage", &"breaker", &"berserk", &"bodyguard", &"desperate", &"intercept":
 			return true
+		&"lookout":
+			# Set to watch: only when you come to him.
+			var near := target()
+			return near != null and guard.global_position.distance_to(near.global_position) < float(guard._fighter._reach(&"overhead")) + 0.5
 		&"flank":
 			return _committed_away_from(guard) or impatient_now(guard)
 		&"hold":
@@ -675,13 +754,18 @@ func _give_places(alive: Array, now: float) -> void:
 	# Fighting you still (not broken, or broken into an all-in charge).
 	var standing := 0
 
+	var lookouts := []
+
 	for member in alive:
 		var fighter = member.get("_fighter")
 
 		if fighter == null or fighter.stays_put:
 			continue
 
-		if fighter.ranged:
+		# A man set to watch keeps his post, unless you are on top of him.
+		if bool(member.get("lookout")) and member.global_position.distance_to(enemy.global_position) > 4.0:
+			lookouts.append(member)
+		elif fighter.ranged:
 			archers.append(member)
 		else:
 			melee.append(member)
@@ -693,6 +777,9 @@ func _give_places(alive: Array, now: float) -> void:
 		return a.global_position.distance_to(enemy.global_position) < b.global_position.distance_to(enemy.global_position))
 	_roles.clear()
 	_slots.clear()
+
+	for watcher in lookouts:
+		_roles[watcher.get_instance_id()] = &"lookout"
 
 	# Already on his way for help: he keeps going until he has fetched him.
 	for man in melee.duplicate() + archers.duplicate():
@@ -857,6 +944,25 @@ func _give_places(alive: Array, now: float) -> void:
 
 		# Alike: the same order every think, so nobody swaps sides.
 		return a.get_instance_id() < b.get_instance_id())
+	# You running: the man best placed ahead of you goes to cut you off while
+	# the front man comes straight after you.
+	var going: Variant = enemy.get("velocity")
+	var run := Vector3((going as Vector3).x, 0.0, (going as Vector3).z) if going is Vector3 else Vector3.ZERO
+
+	if run.length() > RUNNING and not free.is_empty() and tactic != &"break":
+		var ahead_man: Node3D = null
+		var most_ahead := -INF
+
+		for man in free:
+			var ahead: float = (man.global_position - enemy.global_position).dot(run.normalized())
+
+			if ahead > most_ahead:
+				most_ahead = ahead
+				ahead_man = man
+
+		_roles[ahead_man.get_instance_id()] = &"intercept"
+		free.erase(ahead_man)
+
 	var flank_angles := [100.0, -100.0, 170.0]
 
 	if not free.is_empty() and _guile(free[0]) >= 0.65:
@@ -1027,7 +1133,8 @@ func helper_of(runner: Node3D) -> Node3D:
 
 ## Who `runner` would fetch: the nearest man along the navmesh (within
 ## HELPER_RANGE) who is not in the hunt, awake, not fighting, and not being
-## fetched already. Looked for again every 2 s at most.
+## fetched already; or an alarm bell (AlarmBell.gd) nearer than any of them,
+## to bring everyone at once. Looked for again every 2 s at most.
 func helper_for(runner: Node3D) -> Node3D:
 	var id := runner.get_instance_id()
 	var cached: Array = _helper_cache.get(id, [])
@@ -1058,6 +1165,11 @@ func helper_for(runner: Node3D) -> Node3D:
 			best_length = length
 			best = other
 
+	var bell: Node3D = Dangers.bell_near(runner.get_tree(), runner.global_position, best_length)
+
+	if bell != null and _can_fetch(bell, runner):
+		best = bell
+
 	_helper_cache[id] = [weakref(best) if best != null else null, clock]
 	return best
 
@@ -1065,6 +1177,17 @@ func helper_for(runner: Node3D) -> Node3D:
 func _can_fetch(other: Node, runner: Node3D) -> bool:
 	if other == runner or not is_instance_valid(other) or other.is_queued_for_deletion() or other.get("_knocked_out") == true:
 		return false
+
+	# A bell: while it can be rung, and nobody else is going for it.
+	if other.is_in_group(&"alarm_bells"):
+		if not other.can_ring():
+			return false
+
+		for key in _fetching:
+			if key != runner.get_instance_id() and (_fetching[key] as WeakRef).get_ref() == other:
+				return false
+
+		return true
 
 	var fighter = other.get("_fighter")
 
@@ -1103,6 +1226,15 @@ func rouse(helper: Node3D, runner: Node3D) -> void:
 	if helper == null or not is_instance_valid(helper):
 		return
 
+	# A bell: rung, and everyone comes to where you were last seen.
+	if helper.is_in_group(&"alarm_bells"):
+		if runner.get("_hands") != null:
+			runner._hands.ring_bell(helper, last_sighting["position"])
+
+		_help_until = clock + HELP_TIME
+		morale = minf(morale + 0.1, 1.0)
+		return
+
 	join(helper)
 
 	if helper.get("_fighter") != null:
@@ -1139,6 +1271,8 @@ func _announce(before: Dictionary) -> void:
 		match place:
 			&"flank":
 				situation = &"flank" if randf() < 0.5 else &""
+			&"intercept":
+				situation = &"intercept"
 			&"desperate":
 				situation = &"desperate"
 			&"flee", &"fetch":
@@ -1231,6 +1365,111 @@ func search_point_for(guard: Node3D) -> Variant:
 		_claims[id] = best
 
 	return best
+
+
+## Where `guard` keeps watch from while the others search, if the hunt makes
+## him its watcher: three or more of them hunting (two, if one is an archer),
+## and he the one to do it (an archer, else the man with the most guile and
+## the least drive): a vantage near where you were last seen that sees the
+## place, higher and more open the better. null: he searches as the rest do.
+func watch_point_for(guard: Node3D) -> Variant:
+	var hunters := members().filter(func(man: Node3D) -> bool: return status_of(man) == &"hunting")
+	var watcher: Node3D = _watcher.get_ref() as Node3D if _watcher != null else null
+
+	if watcher != null and (not (watcher in hunters) or clock > _watch_until):
+		watcher = null
+		_watcher = null
+
+	if watcher == null:
+		var archer_among := hunters.any(func(man: Node3D) -> bool: return man.get("_fighter") != null and man._fighter.ranged)
+
+		if hunters.size() < 3 and not (archer_among and hunters.size() >= 2):
+			return null
+
+		var best: Node3D = null
+		var best_score := -INF
+
+		for man in hunters:
+			var fighter = man.get("_fighter")
+			var score: float = (2.0 if fighter != null and fighter.ranged else 0.0) + _guile(man) - drive_of(man)
+
+			if score > best_score:
+				best_score = score
+				best = man
+
+		var point := _vantage(best)
+
+		if point == Vector3.INF:
+			return null
+
+		_watcher = weakref(best)
+		_watch_point = point
+		_watch_until = clock + WATCH_TIME
+		var t := _temper_of(best)
+
+		if t != null and best.has_method("bark") and float(best.get("_bark_timer")) <= 0.0:
+			best.bark(t.line(&"watch"))
+
+		# Another man it is: he is told, and goes at once.
+		if best != guard:
+			if best.has_method("keep_watch_at"):
+				best.keep_watch_at(point)
+
+			return null
+
+		return point
+
+	return _watch_point if watcher == guard else null
+
+
+## A place near where you were last seen, on the navmesh, that sees that
+## place: higher ground and open ground the better, and not too far for him.
+## INF if there is none.
+func _vantage(man: Node3D) -> Vector3:
+	var seen: Vector3 = last_sighting["position"]
+	var map: RID = man.get_world_3d().navigation_map
+	var space := man.get_world_3d().direct_space_state
+	var best := Vector3.INF
+	var best_score := -INF
+	# Only the world hides the place; you are no wall.
+	var enemy := target()
+	var exclude: Array[RID] = []
+
+	if enemy is CollisionObject3D:
+		exclude.append((enemy as CollisionObject3D).get_rid())
+
+	for i in 14:
+		var angle := TAU * float(i) / 14.0 + randf() * 0.3
+		var guess := seen + Vector3(cos(angle), 0.0, sin(angle)) * randf_range(WATCH_NEAR, WATCH_FAR)
+		var point := NavigationServer3D.map_get_closest_point(map, guess)
+
+		if _flat(point, guess) > 1.5:
+			continue
+
+		var eye := point + Vector3.UP * 1.65
+
+		if not space.intersect_ray(PhysicsRayQueryParameters3D.create(eye, seen + Vector3.UP * 0.8, 1, exclude)).is_empty():
+			continue
+
+		var open := 0
+
+		for k in 6:
+			var way := Vector3(cos(TAU * float(k) / 6.0), 0.0, sin(TAU * float(k) / 6.0))
+
+			if space.intersect_ray(PhysicsRayQueryParameters3D.create(eye, eye + way * 8.0, 1, exclude)).is_empty():
+				open += 1
+
+		var score := (point.y - seen.y) * 0.8 + float(open) * 0.15 - 0.05 * man.global_position.distance_to(point)
+
+		if score > best_score:
+			best_score = score
+			best = point
+
+	return best
+
+
+func watcher() -> Node3D:
+	return _watcher.get_ref() as Node3D if _watcher != null else null
 
 
 ## One of them has you again (`by`, just into the fight): the hunters near

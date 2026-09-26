@@ -183,6 +183,10 @@ func _hit(hit: Dictionary, direction: Vector3) -> void:
 	collision_layer = 4
 	SoundBus.emit_sound(point, stick_db, self, &"arrow")
 
+	# Yours, left in a wall: a guard who sees it knows someone is here.
+	if shooter != null and shooter.is_in_group(&"player"):
+		add_to_group(&"stray_arrows")
+
 	var normal: Vector3 = hit.get("normal", -direction)
 	var surface := "stone"
 

@@ -73,7 +73,30 @@ const SWINGS := {
 	# A bound in from out of reach: she closes with the blade already up, and
 	# brings it down as she arrives.
 	&"leap": {"clip": &"Sword_Attack", "from": 0.08, "cocked": 0.36, "contact": 0.5, "follow": 0.6, "done": 1.2, "release": 0.17, "weight": 0.86},
+	# Something picked up, drawn back overhead, and hurled (GuardHands).
+	&"throw": {"clip": &"OverhandThrow", "from": 0.05, "cocked": 0.28, "contact": 0.33, "follow": 0.5, "done": 1.0, "release": 0.08, "weight": 0.95},
+	# Bare-handed: the right fist driven across, the left jabbed out.
+	&"punch": {"clip": &"Punch_Cross", "from": 0.1, "cocked": 0.2, "contact": 0.3, "follow": 0.45, "done": 1.0, "release": 0.1, "weight": 0.9},
+	&"jab": {"clip": &"Punch_Jab", "from": 0.0, "cocked": 0.12, "contact": 0.3, "follow": 0.42, "done": 0.9, "release": 0.12, "weight": 0.9},
 }
+## What he is doing with his hands or himself (Guard.activity), as clips:
+## [clip, loops, fade in, weight].
+const ACTIVITIES := {
+	&"talk": [&"Idle_Talking", true, 0.3, 0.9],
+	&"listen": [&"Idle_FoldArms", true, 0.35, 0.85],
+	&"fold_arms": [&"Idle_FoldArms", true, 0.35, 0.9],
+	&"drink": [&"Consume", false, 0.2, 0.9],
+	&"lantern": [&"Idle_Torch", true, 0.3, 0.85],
+	&"call": [&"Idle_Rail_Call", false, 0.15, 0.9],
+}
+## Begging (GuardMercy): on his knees in this clip, down by PLEA_KNEEL_DOWN
+## seconds into it, rocking between PLEA_KNEEL_SWAY, getting up from
+## PLEA_KNEEL_UP; on his feet, a hand out to you, in PLEA_STAND.
+const PLEA_KNEEL := &"Fixing_Kneeling"
+const PLEA_KNEEL_DOWN := 1.35
+const PLEA_KNEEL_SWAY := Vector2(1.5, 4.8)
+const PLEA_KNEEL_UP := 5.3
+const PLEA_STAND := &"Spell_Simple_Idle"
 ## How much of a reaction clip is shown over his stance (as SWINGS' weight).
 const REACT_WEIGHT := 0.78
 ## His temperament (Temperament.gd's tag) in how he stands between blows: a
@@ -177,6 +200,13 @@ var _open_length := 1.0
 var _voice_pitch := 1.0
 ## A woman (the look says so): her voice is her own (Guard.voice).
 var female := false
+## The weapon in his hand now (GuardHands may have him pick up another).
+var _carried: StringName = &"sword"
+## Where a thing he picked up to throw sits in his hand (throwing_hand).
+var _held_point: Node3D = null
+## What he was last shown doing (Guard.activity), and since when.
+var _activity: StringName = &""
+var _activity_at := 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +241,7 @@ func setup(p_guard: CharacterBody3D) -> void:
 
 	size = float(look.get("scale", 1.0))
 	var carried: StringName = look.get("weapon", &"sword")
+	_carried = carried
 	_crossbow = carried == &"crossbow"
 
 	man = HumanoidScript.new()
@@ -340,7 +371,7 @@ func _update_telegraph(delta: float) -> void:
 	var phase: StringName = guard._phase
 	var kind: StringName = guard._attack
 	var committed := (phase == &"windup" and _phase_u() >= 0.64) or phase == &"strike"
-	var goal := 1.0 if committed and kind != &"kick" and kind != &"bash" else 0.0
+	var goal := 1.0 if committed and not (kind in [&"kick", &"bash", &"punch", &"jab", &"throw"]) else 0.0
 	_telegraph = move_toward(_telegraph, goal, delta * (12.0 if goal > _telegraph else 4.0))
 	var call: StringName = GuardFighterScript.CALLS.get(kind, &"cut") if phase != &"" else &"cut"
 	# A blow that cannot be caught, or goes under a guard, burns from the
@@ -584,8 +615,11 @@ func _events(phase: StringName) -> void:
 			guard.voice(&"roar" if heavy else &"grunt", 2.0 if heavy else 0.0)
 
 	# A glint: this one is coming, in the colour of what it asks of you. A
-	# kick or a fist gives none, only the knee or the fist drawn back.
-	if not _glinted and u >= 0.64 and kind != &"kick" and kind != &"bash":
+	# kick or a fist gives none, only the knee or the fist drawn back; nor
+	# does a thing drawn back to be thrown.
+	var bare: bool = kind in [&"kick", &"bash", &"punch", &"jab", &"throw"]
+
+	if not _glinted and u >= 0.64 and not bare:
 		_glinted = true
 		var tip := weapon.global_transform * _blade_tip
 		var colour := GuardFighterScript.call_colour(call).lerp(Color(1.0, 0.96, 0.85), 0.35 if call != &"cut" else 1.0)
@@ -595,11 +629,11 @@ func _events(phase: StringName) -> void:
 		Sfx.play(guard, &"ting", tip, 2.0 if heavy else 0.0, pitch)
 
 	# The rush of the blade, timed so its loudest moment is the blow.
-	if not _whooshed and u >= (0.85 if kind == &"kick" or kind == &"bash" else 0.9):
+	if not _whooshed and u >= (0.85 if bare else 0.9):
 		_whooshed = true
 		var pitch := 1.0 / sqrt(size)
 
-		if kind == &"kick" or kind == &"bash":
+		if bare:
 			Sfx.play(guard, &"whoosh_light", guard.global_position + Vector3.UP * 0.6, -2.0, 0.8)
 		else:
 			Sfx.play(guard, &"whoosh", weapon.global_position, 2.0 if heavy else 0.5, pitch * (0.78 if heavy else 0.92))
@@ -683,7 +717,110 @@ func _animate(ahead: float) -> void:
 		man.show_action(_flinch, since, 0.04, REACT_WEIGHT)
 		return
 
+	if not kicking and _show_activity(now):
+		return
+
 	man.clear_action(0.2 if not kicking else 0.1)
+
+
+## What he is doing with his hands or himself (Guard.activity): stooping for
+## something, pulling the bell rope, a thing held back to throw, begging for
+## his life, talking, arms folded, a pull from his flask, his lantern held
+## up. True if shown.
+func _show_activity(now: float) -> bool:
+	var doing: StringName = guard.activity() if guard.has_method("activity") else &""
+
+	if doing != _activity:
+		_activity = doing
+		_activity_at = now
+
+	var since := now - _activity_at
+	var hands: RefCounted = guard.get("_hands")
+
+	match doing:
+		&"":
+			return false
+		&"pickup":
+			# Down to the floor and back up (a reach to the ground).
+			man.show_action(&"Farm_Harvest", lerpf(0.15, 2.2, float(hands.pickup_progress())), 0.1)
+			return true
+		&"ring":
+			man.show_action(&"Interact", lerpf(0.3, 2.3, float(hands.ring_progress())), 0.1)
+			return true
+		&"hold":
+			# Drawn back at the shoulder, ready to throw; his legs his own.
+			man.set_leg_drive(clampf(_velocity.length() / size - 0.3, 0.0, 0.85))
+			man.show_action(&"OverhandThrow", 0.2, 0.15, 0.75)
+			return true
+		&"kneel", &"plead_kneel", &"rise_knees", &"plead_stand":
+			_show_plea(doing, since)
+			return true
+
+	var spec: Array = ACTIVITIES.get(doing, [])
+
+	if spec.is_empty():
+		return false
+
+	var clip: StringName = spec[0]
+	var length := maxf(man.action_length(clip), 0.1)
+	var t: float = fmod(since, length) if bool(spec[1]) else minf(since, length - 0.02)
+	man.show_action(clip, t, float(spec[2]), float(spec[3]))
+	return true
+
+
+## Begging for his life (GuardMercy): going down on his knees, bowed low on
+## them and rocking as he begs, getting up off them; or on his feet with a
+## hand held out to you.
+func _show_plea(doing: StringName, since: float) -> void:
+	var mercy: RefCounted = guard.get("_mercy")
+	var progress: float = float(mercy.progress()) if mercy != null else 1.0
+
+	match doing:
+		&"kneel":
+			man.show_action(PLEA_KNEEL, lerpf(0.0, PLEA_KNEEL_DOWN, progress), 0.12)
+		&"plead_kneel":
+			var sway := pingpong(since * 0.45, PLEA_KNEEL_SWAY.y - PLEA_KNEEL_SWAY.x)
+			man.show_action(PLEA_KNEEL, PLEA_KNEEL_SWAY.x + sway, 0.12)
+		&"rise_knees":
+			man.show_action(PLEA_KNEEL, lerpf(PLEA_KNEEL_UP, man.action_length(PLEA_KNEEL) - 0.05, progress), 0.08)
+		&"plead_stand":
+			man.show_action(PLEA_STAND, fmod(since, maxf(man.action_length(PLEA_STAND), 0.1)), 0.25, 0.9)
+
+
+## Where a thing he picks up to throw sits in his hand (GuardHands).
+func throwing_hand() -> Node3D:
+	if _held_point == null or not is_instance_valid(_held_point):
+		_held_point = Node3D.new()
+		_held_point.name = "Held"
+		man.attach(&"hand_r", _held_point)
+
+	return _held_point
+
+
+## His weapon in his hand again: his own, or one of `kind` picked up off the
+## floor (a sword where he had a rapier: it is what he fights with now).
+func take_weapon(kind: StringName) -> void:
+	if weapon == null:
+		return
+
+	if kind != _carried and not (kind == &"crossbow") and not _crossbow:
+		_carried = kind
+		weapon.mesh = WeaponScript.guard_weapon_mesh(kind)
+		weapon.transform = _grip
+
+		for i in range(weapon.get_surface_override_material_count()):
+			weapon.set_surface_override_material(i, null)
+
+		_steel.clear()
+		_readable()
+		_blade_base = weapon.mesh.get_meta(&"blade_base", BLADE_BASE)
+		_blade_tip = weapon.mesh.get_meta(&"blade_tip", BLADE_TIP)
+
+		if _blade_blood != null:
+			_blade_blood.set_shader_parameter("blade_base", _blade_base)
+			_blade_blood.set_shader_parameter("blade_tip", _blade_tip)
+
+	weapon.visible = true
 
 
 ## A reel's time in its animation: thrown back over `open`, held there, and

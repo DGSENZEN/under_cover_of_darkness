@@ -70,6 +70,63 @@ const LINES := {
 		&"desperate": ["Get away from me!"], &"hunt": ["M-maybe he's gone..."]},
 }
 
+## More of what he says, in his own way, as the garrison works together (a
+## call answered, a noise looked into, a blade lost and found, a door left
+## open, a man missing: GuardLife.gd, GuardHands.gd, Comms.gd; begging for
+## his life, let go or struck, safe among his own, his heart back:
+## GuardMercy.gd). "%s" in a "missing" line is the missing man's name.
+const MORE_LINES := {
+	&"steady": {&"ack": ["On my way!", "Coming!", "I hear you!"], &"noise_ask": ["Did you hear that?", "What was that?"],
+		&"noise_cover": ["Go on, I've got you.", "Careful."], &"clear": ["Nothing. Rats, likely.", "Nothing here."],
+		&"disarmed": ["My sword!", "Where's my blade?!"], &"rearmed": ["That's better.", "Now then."],
+		&"unreachable": ["Come down here!", "You can't stay up there forever!"], &"throw": ["Catch!", "Have this!"],
+		&"watch": ["I'll keep watch from here.", "I'll watch this way."], &"intercept": ["I'll cut him off!", "Head him off!"],
+		&"missing": ["Where's %s got to?", "%s? Where are you?"], &"odd_door": ["Who left this open?", "This was shut."],
+		&"odd_arrow": ["An arrow? Someone's here.", "That's not one of ours."], &"odd_weapon": ["That's a guard's sword...", "Whose blade is this?"],
+		&"lantern": ["Too dark. Let's have some light.", "Where's my lantern..."], &"bell": ["Ring the bell!", "Sound the alarm!"],
+		&"danger": ["Powder! Get back!"],
+		&"plead": ["Mercy! Mercy!", "Please - I yield! I yield!", "Don't kill me, I beg you!", "I've a wife... children... please!",
+			"I never saw you! I swear it!", "Take whatever you want - just let me live!", "Please... please..."],
+		&"spared": ["Thank you... thank you!", "Gods bless you...", "I'm going, I'm going!"],
+		&"struck": ["No! Please!", "I yielded, damn you!", "Help! He's killing me!"],
+		&"safe": ["He's after me! There!", "He nearly had me! That way!", "Stand with me - he's coming!"],
+		&"emboldened": ["Now we'll see!", "Not so brave now, are you?", "My turn."]},
+	&"rash": {&"ack": ["He's mine!", "Leave him to me!"], &"noise_ask": ["You hear that? I'll go."], &"noise_cover": ["Hurry up, then."],
+		&"clear": ["Nothing. Pity."], &"disarmed": ["I'll kill you with my bare hands!"], &"rearmed": ["Now you're dead!"],
+		&"unreachable": ["Come down and fight, coward!"], &"throw": ["Eat this!"], &"watch": ["Fine, I'll watch. Hurry up."],
+		&"intercept": ["He won't get past me!"], &"missing": ["%s! Get back here, you idler!"], &"odd_door": ["Who's been through here?!"],
+		&"odd_arrow": ["Someone's shooting at us! Show yourself!"], &"odd_weapon": ["Whose sword is this?!"], &"lantern": ["Light! Where are you hiding?"],
+		&"bell": ["Rouse them all!"], &"plead": ["Enough! Enough, you've won!", "Alright! I yield, curse you!"],
+		&"struck": ["Coward! I yielded!"], &"emboldened": ["Now you'll pay for that!"]},
+	&"sly": {&"ack": ["I'll come round the other way."], &"noise_ask": ["Hear that? Stay here."], &"noise_cover": ["I'll watch the shadows."],
+		&"clear": ["Nothing... for now."], &"disarmed": ["Careless of me."], &"rearmed": ["Where were we?"],
+		&"unreachable": ["We can wait."], &"throw": ["Heads up."], &"watch": ["I'll watch from here. Flush him out."],
+		&"intercept": ["I'll get ahead of him."], &"missing": ["No %s... that's not like him."], &"odd_door": ["Now who opened this?"],
+		&"odd_arrow": ["Someone's been shooting. Interesting."], &"odd_weapon": ["Somebody dropped this. Somebody dead."], &"lantern": ["Let's see you now."],
+		&"bell": ["To the bell."], &"plead": ["Wait - wait! I can be useful to you!", "Spare me and I'll tell you where the others are!", "Let's be sensible about this..."],
+		&"spared": ["You won't regret it.", "Wise. Very wise."], &"safe": ["He's there. Go on, then - get him."],
+		&"emboldened": ["Did you really think I meant it?"]},
+	&"stubborn": {&"ack": ["Hold him there!"], &"noise_ask": ["Something's out there. Wait here."], &"noise_cover": ["I'm right behind you."],
+		&"clear": ["Clear."], &"disarmed": ["I don't need a blade for you."], &"rearmed": ["Again."],
+		&"unreachable": ["I'll be right here when you come down."], &"throw": ["Here!"], &"watch": ["Nothing gets past me."],
+		&"intercept": ["Cut him off!"], &"missing": ["%s should be here."], &"odd_door": ["This stays shut."],
+		&"odd_arrow": ["Arrows. Everyone look sharp."], &"odd_weapon": ["A blade on the floor. Not good."], &"lantern": ["Light it up."],
+		&"bell": ["Sound the alarm!"]},
+	&"craven": {&"ack": ["C-coming..."], &"noise_ask": ["D-did you hear that?"], &"noise_cover": ["You go. I'll... watch."],
+		&"clear": ["N-nothing. Thank the gods."], &"disarmed": ["No, no, no - my sword!"], &"rearmed": ["Stay back! I'm armed!"],
+		&"unreachable": ["Someone get a bow!"], &"throw": ["Get away!"], &"watch": ["I'll... stay here and watch."],
+		&"intercept": ["Th-this way!"], &"missing": ["%s? This isn't funny..."], &"odd_door": ["This was shut... wasn't it?"],
+		&"odd_arrow": ["An arrow... gods."], &"odd_weapon": ["A sword... where's the man who carried it?"], &"lantern": ["I need light. I need light..."],
+		&"bell": ["The bell! Somebody ring the bell!"], &"plead": ["Please! Please! Don't hurt me!", "I don't want to die! Mercy!", "Mother... please... no...",
+			"I'll do anything! Anything!"], &"spared": ["Th-thank you... oh gods, thank you!"], &"struck": ["No! No, please, no!"],
+		&"safe": ["Help me! He's there! He's there!"]},
+}
+## What the garrison calls its men (a woman by NAMES_F), the same man the same
+## name every time the level loads (name_for).
+const NAMES := ["Aldric", "Hendrik", "Osric", "Wulfram", "Tobias", "Gerolt", "Brandt", "Emeric", "Conrad", "Leofric",
+	"Anselm", "Dietrich", "Harald", "Jory", "Merek", "Roderick", "Sigmund", "Tancred", "Ulric", "Wendel"]
+const NAMES_F := ["Adela", "Brunhild", "Elsbeth", "Griselda", "Hedwig", "Irmgard", "Kunigunde", "Margit", "Ottilie", "Ysolde"]
+
 ## Off, every man not pinned to a preset is exactly his class (tests).
 static var rolling := true
 
@@ -160,6 +217,18 @@ func line(situation: StringName) -> String:
 	var own: Array = (LINES.get(tag, {}) as Dictionary).get(situation, [])
 
 	if own.is_empty():
+		own = (MORE_LINES.get(tag, {}) as Dictionary).get(situation, [])
+
+	if own.is_empty():
 		own = (LINES[&"steady"] as Dictionary).get(situation, [])
 
+	if own.is_empty():
+		own = (MORE_LINES[&"steady"] as Dictionary).get(situation, [])
+
 	return String(own[randi() % own.size()]) if not own.is_empty() else ""
+
+
+## A name for the man whose look is `seed` (a woman's, if `female`).
+static func name_for(seed: int, female := false) -> String:
+	var names: Array = NAMES_F if female else NAMES
+	return String(names[posmod(seed, names.size())])

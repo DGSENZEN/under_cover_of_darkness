@@ -28,6 +28,8 @@ func into_speed(velocity: Vector3) -> float:
 
 
 func _ready() -> void:
+	# Guards know where it is: to keep off it, and to kick you onto it.
+	add_to_group(&"hazards")
 	collision_layer = 0
 	# Men, and men thrown limp (their limbs are on the bodies' layer).
 	collision_mask = 1 | 2 | 4

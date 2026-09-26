@@ -47,6 +47,8 @@ const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
+const Comms := preload("res://scripts/AISystem/Comms.gd")
+const Dangers := preload("res://scripts/AISystem/Dangers.gd")
 
 ## Guard.Alert.COMBAT.
 const COMBAT := 4
@@ -74,6 +76,13 @@ const ATTACKS := {
 	# A bound in from out of reach, the blade raised as he comes and brought
 	# down as he arrives.
 	&"leap": {"windup": 1.0, "reach": 2.3, "damage": 1.1, "arc": 50.0, "guard": 1.2, "recover": 1.3},
+	# Bare-handed (his weapon lost): the fist across, the jab. Quick, light,
+	# and caught on any guard.
+	&"punch": {"windup": 0.6, "reach": -0.5, "damage": 0.3, "arc": 70.0, "guard": 0.4, "recover": 0.8},
+	&"jab": {"windup": 0.45, "reach": -0.55, "damage": 0.2, "arc": 60.0, "guard": 0.3, "recover": 0.6},
+	# Something picked up and thrown (GuardHands): its windup is the draw back
+	# overhead (THROW_WINDUP), its reach THROW_RANGE.
+	&"throw": {"windup": 1.0, "reach": 0.0, "damage": 0.0, "arc": 0.0, "guard": 0.6, "recover": 0.9},
 }
 ## What each of his blows asks of you, as it is telegraphed (GuardRig's glow,
 ## the HUD's marks): "cut" a guard or a parry; "thrust" a parry or a step
@@ -110,6 +119,19 @@ const FETCH_STALL := 4.0
 ## before a blade that was about to land does.
 const BACKSTEP_SPEED := 8.0
 const BACKSTEP_REACH := 0.9
+## A throw: drawn back this long, and it carries this far.
+const THROW_WINDUP := 0.62
+const THROW_RANGE := 14.0
+## Calling where you are to the others who cannot see you: at most this often
+## for the whole squad (Squad.may_call), and a lookout this often.
+const SPOT_EVERY := 2.4
+## Behind you, spikes, fire or a drop: the boot is that much likelier. He
+## weighs it up this often (s), and his mind made up, means nothing else for
+## this long: he closes to a kick's reach for it instead of swinging from
+## where he stands.
+const HAZARD_KICK := 0.4
+const BOOT_EVERY := 1.2
+const BOOT_TIME := 1.6
 
 const ARCHETYPES := {
 	&"swordsman": {
@@ -121,7 +143,7 @@ const ARCHETYPES := {
 		"strafe_speed": 1.1, "counter_chance": 0.35, "stagger_time": 0.32, "combo_breaker": true,
 		"read_skill": 0.7, "backstep_chance": 0.25, "timing_variance": 0.25, "lunge_chance": 0.25,
 		"attacks": {&"overhead": 1.0, &"left": 1.0, &"right": 1.0, &"thrust": 0.6, &"sweep": 0.3},
-		"posture": 100.0, "delay_chance": 0.25,
+		"posture": 100.0, "delay_chance": 0.25, "grip_loss": 0.4, "spacing": 0.35,
 		"follow": {&"left": [&"right", &"right", &"bash", &"overhead"], &"right": [&"left", &"overhead", &"thrust"], &"overhead": [&"thrust", &"left"], &"thrust": [&"left", &"right"], &"sweep": [&"overhead"], &"bash": [&"overhead", &"thrust"]},
 		"look": {"scale": 1.0, "outfit": &"swordsman", "armour": [&"nasalhelm", &"pauldron_r", &"pauldron_l"], "weapon": &"sword"},
 	},
@@ -134,7 +156,7 @@ const ARCHETYPES := {
 		"strafe_speed": 1.7, "counter_chance": 0.5, "stagger_time": 0.26, "combo_breaker": true,
 		"read_skill": 1.0, "backstep_chance": 0.55, "timing_variance": 0.35, "lunge_chance": 0.45,
 		"attacks": {&"left": 1.0, &"right": 1.0, &"thrust": 1.4, &"overhead": 0.5, &"sweep": 0.35},
-		"posture": 85.0, "delay_chance": 0.35, "leap_chance": 0.35,
+		"posture": 85.0, "delay_chance": 0.35, "leap_chance": 0.35, "grip_loss": 0.3, "spacing": 0.55, "carries_lantern": false,
 		"follow": {&"thrust": [&"thrust", &"left", &"right", &"sweep"], &"left": [&"right", &"thrust"], &"right": [&"left", &"thrust", &"sweep"], &"leap": [&"thrust", &"left"], &"sweep": [&"thrust"]},
 		"look": {"scale": 0.94, "outfit": &"duelist", "female": true, "hair": [&"Hair_Buns"], "hair_tint": Color(0.35, 0.22, 0.14), "weapon": &"rapier"},
 	},
@@ -148,7 +170,7 @@ const ARCHETYPES := {
 		"stagger_time": 0.25, "parry_stun": 1.9, "knockdown_time": 0.6, "eye_height": 2.05, "combo_breaker": true,
 		"read_skill": 0.3, "timing_variance": 0.12,
 		"attacks": {&"heavy": 1.0, &"overhead": 0.7, &"left": 0.5, &"sweep": 0.45},
-		"posture": 190.0, "delay_chance": 0.15, "charge_chance": 0.3, "deathblows": 2,
+		"posture": 190.0, "delay_chance": 0.15, "charge_chance": 0.3, "deathblows": 2, "grip_loss": 0.0, "carries_lantern": false,
 		"follow": {&"overhead": [&"heavy", &"sweep"], &"left": [&"overhead", &"heavy"], &"sweep": [&"heavy"], &"charge": [&"heavy"]},
 		"look": {"scale": 1.25, "outfit": &"brute", "hair": [&"Hair_Buzzed", &"Hair_Beard"], "hair_tint": Color(0.25, 0.2, 0.18), "armour": [&"pauldron_r"], "weapon": &"maul"},
 	},
@@ -160,7 +182,7 @@ const ARCHETYPES := {
 		"dodge_chance": 0.4, "kick_chance": 0.0, "poise": 2.0, "guard_damage": 8.0,
 		"strafe_speed": 1.3, "counter_chance": 0.0, "stagger_time": 0.3,
 		"ranged": true, "draw_time": 0.95, "shot_speed": 30.0, "backstep_chance": 0.3,
-		"attacks": {&"kick": 1.0}, "posture": 60.0, "kick_range": 2.1,
+		"attacks": {&"kick": 1.0}, "posture": 60.0, "kick_range": 2.1, "grip_loss": 0.5,
 		"look": {"scale": 0.97, "outfit": &"archer", "armour": [&"hood"], "weapon": &"crossbow"},
 	},
 	&"trainer": {
@@ -169,7 +191,7 @@ const ARCHETYPES := {
 		"windup_time": 0.6, "recover_time": 0.5, "attack_cooldown": 1.2, "block_chance": 0.0,
 		"parry_chance": 0.0, "feint_chance": 0.0, "combo_max": 1, "reaction": 0.1,
 		"poise": 99.0, "guard_damage": 14.0, "strafe_speed": 0.0, "stays_put": true, "kick_resist": 0.0, "topple_scale": 0.0, "posture": 99999.0,
-		"timing_variance": 0.0,
+		"timing_variance": 0.0, "grip_loss": 0.0, "carries_lantern": false,
 		"attacks": {&"overhead": 1.0, &"left": 0.6, &"right": 0.6, &"thrust": 0.5},
 		"look": {"scale": 1.0, "outfit": &"trainer", "hair": [&"Hair_SimpleParted", &"Hair_Beard"], "hair_tint": Color(0.7, 0.68, 0.64), "weapon": &"sword"},
 	},
@@ -237,6 +259,11 @@ var backstep_chance := 0.0
 var timing_variance := 0.1
 ## From out of reach, the chance he lunges in rather than walks.
 var lunge_chance := 0.0
+## Thrown off his feet, the chance his weapon leaves his hand (GuardHands).
+var grip_loss := 0.6
+## How far (m) he drifts in and out of your reach between blows, footwork you
+## have to read (Chivalry's footsies): nothing for a plain watchman.
+var spacing := 0.0
 
 # --- what he is doing -----------------------------------------------------------
 ## Everyone fighting the same enemy (Squad.gd): the plan, and his place in it.
@@ -363,12 +390,51 @@ var _fetch_repathed := false
 var _was_fighting := false
 ## His patience at your side had run out (said so once).
 var _was_impatient := false
+## His footwork in and out of your reach (spacing): where in the swing he is,
+## and how quick this swing is.
+var _space_phase := 0.0
+var _space_rate := 1.3
+## Lost you: followed the way you went a few steps on (GuardNav.scent), from
+## where, and to where.
+var _scented := false
+var _scent_from := Vector3.INF
+var _scent_point := Vector3.ZERO
+## You are somewhere his feet cannot take him (up high, across a gap): looked
+## at twice a second.
+var _unreachable := false
+var _reach_check := 0.0
+## What he is going to pick up (a blade, or a thing to throw), and what he
+## gave up on (could not get to it).
+var _fetching: Node3D = null
+var _gave_up_on := {}
+var _fetch_check := 0.0
+## Calling where you are: until the next call.
+var _spot_timer := 0.0
+## How his last blow went: "landed", "blocked", "dodged", "missed", or "".
+var _outcome: StringName = &""
+## Taunted you for being out of reach (once a while).
+var _taunt_timer := 0.0
+## An archer: trying for a clear line to you, and how long he has had none.
+var _no_line := 0.0
+var _line_side := 1.0
+## An archer's mark when it is not you (powder, a rope): INF when it is you.
+var _shot_point := Vector3.INF
+## Whether something waits behind you (spikes, fire, a drop), and when he
+## last looked.
+var _hazard_there := false
+var _hazard_checked_at := -10.0
+## Set on booting you into it until then; when he last weighed it up.
+var _boot_until := -10.0
+var _boot_weighed := -10.0
 
 
 func _init(p_guard: CharacterBody3D) -> void:
 	guard = p_guard
 	_strafe = 1.0 if randf() < 0.5 else -1.0
 	_strafe_timer = randf_range(1.0, 2.5)
+	_space_phase = randf() * TAU
+	_space_rate = randf_range(1.0, 1.7)
+	_spot_timer = randf() * 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -385,7 +451,7 @@ func apply(archetype: StringName) -> void:
 
 	for key in ["max_health", "attack_damage", "attack_range", "chase_speed", "windup_time",
 			"recover_time", "attack_cooldown", "block_chance", "stagger_time", "parry_stun",
-			"knockdown_time", "eye_height"]:
+			"knockdown_time", "eye_height", "carries_lantern"]:
 		if a.has(key):
 			guard.set(key, a[key])
 
@@ -422,6 +488,8 @@ func apply(archetype: StringName) -> void:
 	backstep_chance = a.get("backstep_chance", backstep_chance)
 	timing_variance = a.get("timing_variance", timing_variance)
 	lunge_chance = a.get("lunge_chance", lunge_chance)
+	grip_loss = a.get("grip_loss", grip_loss)
+	spacing = a.get("spacing", spacing)
 	_poise = poise_max
 
 
@@ -477,8 +545,21 @@ func fight(delta: float) -> void:
 
 	_was_impatient = impatient
 
+	if sees:
+		_update_reach(delta, target, level)
+		_call_out_where(delta, target)
+
 	if guard._phase != &"":
 		_update_attack(delta, target, sees, to, dist, level)
+		return
+
+	# Broken, and you on him: he begs for his life; let go, he gets up and
+	# runs to his own (GuardMercy.gd). No guard, no blows, meanwhile.
+	var broken: bool = squad != null and squad.will_of(guard) == &"broken" and role() in [&"flee", &"fetch"]
+
+	if _dodge <= 0.0 and guard._mercy.update(delta, target, sees, broken):
+		guarding = false
+		_answer = &""
 		return
 
 	if sees:
@@ -645,7 +726,7 @@ func _reflex_defence(target: Node3D, dist: float) -> void:
 		_next_scale = 0.85
 	elif dodge_chance > 0.0 and dist < _reach(&"overhead") + 0.8:
 		_start_dodge(target)
-	elif _broken <= 0.0:
+	elif _broken <= 0.0 and guard._hands.armed:
 		guarding = true
 		_guard_hold = 0.5
 		_answer = &""
@@ -703,7 +784,7 @@ func _choose_answer(combat: Node = null, dist := 0.0) -> StringName:
 	# A man who knows what is coming can meet it: a parry if he has the skill,
 	# his guard up if not.
 	# (Reading raises the odds to a point; it never lowers a sure thing.)
-	if parry_chance > 0.0 and randf() < minf(parry_chance + _plan(&"parry") + read * 0.8, maxf(parry_chance, 0.92)):
+	if parry_chance > 0.0 and guard._hands.armed and randf() < minf(parry_chance + _plan(&"parry") + read * 0.8, maxf(parry_chance, 0.92)):
 		return &"parry"
 
 	# Shaken or hurt he hides behind his blade; desperate he barely does;
@@ -711,7 +792,7 @@ func _choose_answer(combat: Node = null, dist := 0.0) -> StringName:
 	var careful := 0.35 if mood == &"shaken" or mood == &"hurt" else (-0.2 if mood == &"desperate" else 0.0)
 	var reckless: bool = role() == &"berserk" or role() == &"desperate" or mood == &"enraged"
 
-	if _broken <= 0.0 and not reckless and randf() < minf(guard.block_chance + careful + (_plan(&"guard") if guard.block_chance > 0.0 else 0.0) + read * 0.9 + _guard_bias(), maxf(guard.block_chance + careful, 0.95)):
+	if _broken <= 0.0 and not reckless and guard._hands.armed and randf() < minf(guard.block_chance + careful + (_plan(&"guard") if guard.block_chance > 0.0 else 0.0) + read * 0.9 + _guard_bias(), maxf(guard.block_chance + careful, 0.95)):
 		return &"guard"
 
 	if dodge_chance > 0.0 and randf() < dodge_chance * 0.5:
@@ -804,8 +885,9 @@ func defend(kind: StringName, attacker: Node3D) -> StringName:
 
 	var now: float = guard._game_time
 
-	# In the middle of his own blow he has neither guard nor parry.
-	if guard._phase != &"":
+	# In the middle of his own blow he has neither guard nor parry; with no
+	# blade in his hand, neither at all.
+	if guard._phase != &"" or not guard._hands.armed:
 		return &""
 
 	if _parry_at > 0.0 and now >= _parry_open_at and now <= _parry_at + 0.14 and kind != &"thrown":
@@ -1035,9 +1117,22 @@ func riposted_by(attacker: Node3D) -> bool:
 
 
 ## His blow met your raised guard: it bounces, and he recovers from it a
-## little longer than from one that landed.
+## little longer than from one that landed. A man who reads a fight well, with
+## more of his string to come, turns it straight into the blow that beats a
+## guard instead (a pommel, a boot, a point, one under it).
 func recover_from_block() -> void:
 	var kind: StringName = guard._attack
+	_outcome = &"blocked"
+
+	if _combo_left > 0 and read_skill >= 0.5 and guard._hands.armed:
+		var breaker := _guard_breaker_after(kind)
+
+		if breaker != &"":
+			_combo_left -= 1
+			_late = false
+			_start(breaker, 0.8)
+			return
+
 	guard._phase = &"recover"
 	guard._phase_length = guard.recover_time * float(ATTACKS.get(kind, ATTACKS[&"overhead"])["recover"]) * 1.15
 	guard._phase_timer = guard._phase_length
@@ -1053,7 +1148,14 @@ func leave_combat() -> void:
 	_parry_open_at = -1.0
 	_countering = false
 	_was_fighting = false
+	_scented = false
+	_fetching = null
+	_shot_point = Vector3.INF
+	_boot_until = -10.0
 	release_token()
+
+	if guard._mercy != null:
+		guard._mercy.reset()
 
 
 ## In the squad fighting `target` (Squad.gd), and helping it make its plan.
@@ -1225,11 +1327,23 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 			# On foot, archer or not: to the man he is fetching.
 			_fetch(delta, target, sees, to)
 			return
+
+	# His weapon lost, or you where he cannot reach: something to pick up.
+	if _fetch_something(delta, target, sees, dist):
+		return
+
+	match place:
 		&"rally":
 			if _rally(delta, target, sees, to, dist):
 				return
 		&"bodyguard":
 			if _stand_guard(delta, target, sees, to, dist):
+				return
+		&"lookout":
+			if _keep_lookout(delta, sees, to, dist):
+				return
+		&"intercept":
+			if _intercept(delta, target, sees, dist):
 				return
 
 	if ranged:
@@ -1266,7 +1380,7 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 	if place == &"hold":
 		want = reach if temper != null and float(temper.nerve) >= 0.6 else reach + 2.0
 
-		if sees and dist < 4.0 and _broken <= 0.0:
+		if sees and dist < 4.0 and _broken <= 0.0 and guard._hands.armed:
 			guarding = true
 			_guard_hold = maxf(_guard_hold, 0.2)
 
@@ -1283,14 +1397,22 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 		_yielding -= delta
 		want += 1.5
 
+	# You where he cannot get to (up on a roof, across a gap): he keeps back
+	# where he can still see you (under the ledge he could not), to throw
+	# what he can at you, or to wait you out.
+	if _unreachable and not waiting and _hold_off(delta, target, sees, to, dist):
+		return
+
 	# Shaken, he lets you go while he finds his feet: he does not come after
 	# you while he can see you.
 	var holding: bool = mood == &"shaken" and sees and level <= guard.attack_reach_height
 
 	if not holding and (not sees or dist > want + 1.6 or level > guard.attack_reach_height):
-		# Closing in: along the navmesh to where he last saw you. Berserk,
-		# or told to rush you, he comes faster; hurt, slower.
-		guard._go_to(guard.last_known_position)
+		# Closing in: along the navmesh to where you will be if he can see
+		# you running, else where he last saw you (or was told), and a few
+		# steps on the way you went. Berserk, or told to rush you, he comes
+		# faster; hurt, slower.
+		guard._go_to(_chase_point(target, sees, dist))
 		var hurry := 1.3 if place == &"berserk" else (1.15 if squad != null and squad.tactic == &"rush" else 1.0)
 
 		if mood == &"hurt":
@@ -1306,6 +1428,23 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 
 		return
 
+	# Set on booting you into what is behind you: in to a kick's reach.
+	var booting: bool = not waiting and guard._game_time < _boot_until
+
+	if booting:
+		want = minf(want, maxf(_reach(&"kick") - 0.3, 0.9))
+
+	# Footwork you have to read: between blows he drifts in and out of the
+	# edge of your reach (spacing), never quite where you left him.
+	if spacing > 0.0 and not waiting and not booting and (place == &"engage" or place == &"breaker") and mood == &"steady":
+		_space_phase += delta * _space_rate
+
+		if _space_phase > TAU:
+			_space_phase -= TAU
+			_space_rate = randf_range(1.0, 1.7)
+
+		want = maxf(want + spacing * sin(_space_phase), 1.0)
+
 	# In the ring: square up, hold the distance; now and then a step aside.
 	# Waiting his turn he goes to his own place at your side or back, so a man
 	# who stands still is surrounded.
@@ -1313,7 +1452,7 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 	var radial := clampf((dist - want) * 3.0, -2.2, 2.6)
 	var side := Vector3.UP.cross(toward) * _strafe * strafe_speed * (1.0 if _reposition > 0.0 else 0.0)
 	var slow := 0.5 if guarding else 1.0
-	var wanted := (toward * radial + side) * slow
+	var wanted: Vector3 = (toward * radial + side) * slow + guard._nav.crowd() * 0.8
 
 	if waiting:
 		var slot := _flank_slot(target, want)
@@ -1375,8 +1514,9 @@ func _squad_slot(target: Node3D, want: float) -> Vector3:
 	return target.global_position + facing.rotated(Vector3.UP, deg_to_rad(squad.slot_angle(guard))) * want
 
 
-## Running for help: away from you, far enough to be out of it, then turned to
-## watch you from there (and back in if you come for him).
+## Broken and running: to the nearest of his own he would be safe with, and
+## behind them (GuardMercy.run_to_haven); with nobody to run to, away from
+## you, far enough to be out of it, then turned to watch you from there.
 func _flee(delta: float, target: Node3D, sees: bool, to: Vector3) -> void:
 	guarding = false
 
@@ -1390,6 +1530,10 @@ func _flee(delta: float, target: Node3D, sees: bool, to: Vector3) -> void:
 	if _fled_unseen > 12.0 and squad != null and squad.will_of(guard) == &"broken":
 		_fled_unseen = 0.0
 		guard._give_up()
+		return
+
+	# Not just away: to his own, where he would be safe (GuardMercy.gd).
+	if guard._mercy.run_to_haven(delta, target, sees, to):
 		return
 
 	var away: Vector3 = guard.global_position - target.global_position
@@ -1502,7 +1646,7 @@ func _rally(delta: float, target: Node3D, sees: bool, to: Vector3, dist: float) 
 	if sees:
 		guard._face(to, delta)
 
-	guarding = sees and dist < 5.0 and _broken <= 0.0
+	guarding = sees and dist < 5.0 and _broken <= 0.0 and guard._hands.armed
 	return true
 
 
@@ -1543,6 +1687,298 @@ func _stand_guard(delta: float, target: Node3D, sees: bool, to: Vector3, dist: f
 	return true
 
 
+## Where he runs to after you: where you will be, if he can see you running
+## (GuardNav.lead); where he last had you (seen, or called by his own) if not;
+## and, there and still nothing, a few steps on the way you went.
+func _chase_point(target: Node3D, sees: bool, dist: float) -> Vector3:
+	if sees:
+		_scented = false
+		_scent_from = Vector3.INF
+		return guard._nav.lead(target, guard._feet_of(target), dist, guard.chase_speed)
+
+	var lost_at: Vector3 = guard.last_known_position
+
+	# Word of you somewhere else: after that, not the old trail.
+	if _scented and _scent_from.distance_to(lost_at) > 2.0:
+		_scented = false
+
+	if not _scented and guard._flat_distance(lost_at) < 1.2:
+		_scented = true
+		_scent_from = lost_at
+		_scent_point = guard._nav.scent(lost_at, guard._seen_heading)
+
+	return _scent_point if _scented else lost_at
+
+
+## Twice a second: whether you are where his feet cannot take him (too high or
+## low, or no path gets there).
+func _update_reach(delta: float, target: Node3D, level: float) -> void:
+	_reach_check -= delta
+
+	if _reach_check > 0.0:
+		return
+
+	_reach_check = 0.5
+
+	if level > guard.attack_reach_height + 0.2:
+		_unreachable = true
+		return
+
+	var feet: Vector3 = guard._feet_of(target)
+	var map: RID = guard.get_world_3d().navigation_map
+	var path := NavigationServer3D.map_get_path(map, guard.global_position, feet, true)
+
+	if path.is_empty():
+		_unreachable = true
+		return
+
+	var end: Vector3 = path[path.size() - 1]
+	_unreachable = Vector2(end.x - feet.x, end.z - feet.z).length() > 1.6 or absf(end.y - feet.y) > guard.attack_reach_height
+
+
+func is_unreachable() -> bool:
+	return _unreachable
+
+
+## Where you are, called to the others of the hunt who cannot see you (at most
+## every SPOT_EVERY for the squad, sooner when one of them is about to give
+## you up for lost): they come to it. A lookout calls it every SPOT_EVERY
+## whoever else sees you.
+func _call_out_where(delta: float, target: Node3D) -> void:
+	_spot_timer -= delta
+
+	if _spot_timer > 0.0:
+		return
+
+	_spot_timer = 0.3
+	var watching := role() == &"lookout"
+
+	if squad == null:
+		return
+
+	if not watching:
+		# Someone who cannot see you, near enough to be told; sooner if he is
+		# about to give you up for lost.
+		var blind := false
+		var losing := false
+
+		for member in squad.members():
+			if member == guard or member.get("can_see_target") == true or member.global_position.distance_to(guard.global_position) >= 45.0:
+				continue
+
+			blind = true
+			var unseen := minf(float(member.get("_since_seen")), float(member.get("_since_heard_of")))
+
+			if unseen > float(member.get("lose_time")) - 1.5:
+				losing = true
+
+		if not blind or not squad.may_call(losing):
+			return
+
+	var feet: Vector3 = guard._feet_of(target)
+	var going: Variant = target.get("velocity")
+	Comms.call_out(guard, &"spotted", feet, {"heading": going if going is Vector3 else Vector3.ZERO})
+
+	# Calling you out is a lookout's whole work: he says it over anything.
+	if watching or guard._bark_timer <= 0.0:
+		guard.bark(Comms.spotted_line(feet, guard))
+
+	squad.called()
+
+	if watching:
+		_spot_timer = SPOT_EVERY
+
+
+## His weapon gone: back for it (or any blade near he can use), unless you
+## stand over it. You where he cannot reach, or he has no blade: something to
+## throw at you. True while he is about it.
+func _fetch_something(delta: float, target: Node3D, sees: bool, dist: float) -> bool:
+	var hands: RefCounted = guard._hands
+
+	if hands.busy():
+		guard._stop(delta)
+		return true
+
+	# What he was going for, if it is still worth it: a blade while he has
+	# none; a thing to throw while his blade cannot get to you (or he has
+	# none) and his hands are empty; and nobody else's by now.
+	if _fetching != null:
+		var blade := is_instance_valid(_fetching) and _fetching.is_in_group(&"dropped_weapons")
+
+		if not is_instance_valid(_fetching) or Dangers.claimed(_fetching, guard) or (blade and hands.armed) or (not blade and (hands.held != null or (hands.armed and not _unreachable))):
+			if is_instance_valid(_fetching):
+				Dangers.unclaim(_fetching, guard)
+
+			_fetching = null
+
+	_fetch_check -= delta
+
+	if _fetching == null and _fetch_check <= 0.0:
+		_fetch_check = 0.5
+
+		if not hands.armed:
+			_fetching = _blade_to_fetch(target)
+
+		if _fetching == null and hands.held == null and sees and dist <= THROW_RANGE + 2.0 and (_unreachable or not hands.armed) and not ranged:
+			_fetching = _thing_to_throw()
+
+	if _fetching == null:
+		return false
+
+	var what: StringName = &"weapon" if _fetching.is_in_group(&"dropped_weapons") else &"throwable"
+
+	# Close enough: down for it.
+	if hands.can_reach(_fetching):
+		guard._stop(delta)
+		hands.stoop_for(_fetching, what)
+		_fetching = null
+		return true
+
+	Dangers.claim(_fetching, guard)
+	guard._go_to(_fetching.global_position)
+
+	if guard._walk(guard.chase_speed, delta):
+		# As near as he can get and still out of reach (on a table, a ledge):
+		# not that one.
+		Dangers.unclaim(_fetching, guard)
+		_gave_up_on[_fetching] = true
+		_fetching = null
+		return false
+
+	return true
+
+
+## A blade he can fight with lying near, that he can get to, and that you
+## are not standing over.
+func _blade_to_fetch(target: Node3D) -> Node3D:
+	var feet: Vector3 = guard._feet_of(target) if target != null and is_instance_valid(target) else Vector3.INF
+
+	for blade in Dangers.weapons_near(guard.get_tree(), guard.global_position, 10.0, guard._hands.usable(), guard):
+		if _gave_up_on.has(blade):
+			continue
+
+		var mine := guard.global_position.distance_to(blade.global_position)
+		var yours := feet.distance_to(blade.global_position) if feet != Vector3.INF else INF
+
+		# You standing over it (and nearer it than he is): not worth his life.
+		if yours < 1.6 and yours < mine:
+			continue
+
+		if _can_walk_to(blade.global_position):
+			return blade
+
+	return null
+
+
+## Something within a few steps to throw at you.
+func _thing_to_throw() -> Node3D:
+	for thing in Dangers.throwables_near(guard, guard.global_position, 7.0):
+		if not _gave_up_on.has(thing) and _can_walk_to(thing.global_position):
+			return thing
+
+	return null
+
+
+## A path gets him within reach of `point`.
+func _can_walk_to(point: Vector3) -> bool:
+	var map: RID = guard.get_world_3d().navigation_map
+	var path := NavigationServer3D.map_get_path(map, guard.global_position, point, true)
+
+	if path.size() < 2:
+		return guard._flat_distance(point) < 2.0 and absf(point.y - guard.global_position.y) < 1.2
+
+	var end: Vector3 = path[path.size() - 1]
+	return Vector2(end.x - point.x, end.z - point.z).length() < 1.1 and point.y - end.y < 1.4 and end.y - point.y < 0.8
+
+
+## Out of his reach: far enough back to see up onto where you stand (a little
+## more than its height), facing you. True while he is about it; lost from
+## sight, he gives it up to the chase (and so goes round to find a way).
+func _hold_off(delta: float, target: Node3D, sees: bool, to: Vector3, dist: float) -> bool:
+	if not sees or target == null or not is_instance_valid(target):
+		return false
+
+	var rise: float = absf(guard._feet_of(target).y - guard.global_position.y)
+	var back := clampf(rise * 1.4 + 1.5, 3.0, 8.0)
+	var toward := to / maxf(dist, 0.001)
+	var wanted := Vector3.ZERO
+
+	if dist < back - 0.4:
+		wanted = -toward * minf((back - dist) * 3.0, 2.2)
+	elif dist > back + 2.5:
+		wanted = toward * minf((dist - back) * 2.0, guard.chase_speed)
+
+	if wanted.length() > 0.05 and not _safe_step(wanted):
+		wanted = Vector3.ZERO
+
+	var flat := Vector3(guard.velocity.x, 0.0, guard.velocity.z).move_toward(wanted, guard.acceleration * delta)
+	guard.velocity.x = flat.x
+	guard.velocity.z = flat.z
+	guard._face(to, delta)
+	return true
+
+
+## A lookout: to the bell first if one near can be rung (and he rings it,
+## calling everyone to where he saw you); then back to his post, watching you
+## and calling where you are. You come to him, he fights. True while he is
+## about it.
+func _keep_lookout(delta: float, sees: bool, to: Vector3, dist: float) -> bool:
+	guarding = false
+
+	if sees and dist < _reach(&"overhead") + 1.5:
+		return false
+
+	var bell: Node3D = Dangers.bell_near(guard.get_tree(), guard.global_position, 30.0)
+
+	if bell != null:
+		var rope: Vector3 = bell.rope_point()
+
+		if guard._flat_distance(rope) > 0.9:
+			guard._go_to(rope)
+			guard._walk(guard.chase_speed, delta)
+			return true
+
+		guard._stop(delta)
+		guard._face(bell.global_position - guard.global_position, delta)
+		guard._hands.ring_bell(bell, guard.last_known_position)
+		guard.say(&"bell")
+		return true
+
+	var post: Vector3 = guard._home.origin
+
+	if guard._flat_distance(post) > 0.8:
+		guard._go_to(post)
+		guard._walk(guard.chase_speed * 0.8, delta)
+	else:
+		guard._stop(delta)
+
+		if sees:
+			guard._face(to, delta)
+
+	return true
+
+
+## Sent to cut you off (you running, another coming straight after you):
+## where you are going, ahead of you. Near enough, he fights. True while he
+## is about it.
+func _intercept(delta: float, target: Node3D, sees: bool, dist: float) -> bool:
+	if not sees or dist < _reach(&"lunge"):
+		return false
+
+	var going: Variant = target.get("velocity")
+	var run := Vector3((going as Vector3).x, 0.0, (going as Vector3).z) if going is Vector3 else Vector3.ZERO
+
+	if run.length() < 1.5:
+		return false
+
+	var feet: Vector3 = guard._feet_of(target)
+	var ahead := feet + run.normalized() * clampf(dist * 0.9, 3.0, 10.0)
+	var map: RID = guard.get_world_3d().navigation_map
+	guard._go_to(NavigationServer3D.map_get_closest_point(map, ahead))
+	guard._walk(guard.chase_speed * 1.1, delta)
+	return true
+
+
 ## An archer's ground: far enough to draw in peace, near enough to hit.
 ## Too close and he backs off; out of sight or range and he comes on.
 func _footwork_ranged(delta: float, target: Node3D, sees: bool, to: Vector3, dist: float, level: float) -> void:
@@ -1564,7 +2000,23 @@ func _footwork_ranged(delta: float, target: Node3D, sees: bool, to: Vector3, dis
 		radial = -3.2
 
 	var circling := _reposition > 0.0 or (strafe_speed > 0.0 and _someone_else_shooting(target))
-	var side := Vector3.UP.cross(toward) * _strafe * strafe_speed * (1.0 if circling else 0.0)
+	var way := _strafe
+
+	# No clear line to you (a pillar, one of his own in the way): he works
+	# round for one, the other way if that one does not open up.
+	if strafe_speed > 0.0 and guard._hands.armed and not _clear_shot(target):
+		_no_line += delta
+
+		if _no_line > 1.6:
+			_no_line = 0.0
+			_line_side = -_line_side
+
+		circling = true
+		way = _line_side
+	else:
+		_no_line = 0.0
+
+	var side := Vector3.UP.cross(toward) * way * strafe_speed * (1.3 if circling and way == _line_side else 1.0) * (1.0 if circling else 0.0)
 	var wanted := toward * radial + side
 
 	if wanted.length() > 0.05 and not _safe_step(wanted):
@@ -1648,7 +2100,23 @@ func _consider_attack(delta: float, target: Node3D, to: Vector3, dist: float, le
 	if guard._attack_timer > 0.0 or guard._stagger > 0.0 or guard._knock > 0.0:
 		return
 
+	# Something in his hand to throw: at you, if his blade cannot get to you
+	# (or he has none); let fall, if you have come to him and his blade can.
+	if guard._hands.held != null:
+		if not _unreachable and guard._hands.armed and dist < _reach(&"overhead") + 1.0:
+			guard._hands.drop_held()
+		else:
+			if dist <= THROW_RANGE and dist >= 1.5 and _clear_shot(target) and _take_shot(target):
+				_start(&"throw")
+				guard.say(&"throw", 0.5)
+
+			return
+
 	if _parry_miss > 0.0 or _parry_at > 0.0 or level > guard.attack_reach_height:
+		# Up where his blade cannot reach: he says what he thinks of that.
+		if level > guard.attack_reach_height:
+			_taunt(delta)
+
 		return
 
 	# Shaken, he waits for his balance to come back: he strikes to punish
@@ -1666,18 +2134,33 @@ func _consider_attack(delta: float, target: Node3D, to: Vector3, dist: float, le
 	var kind := _choose_attack()
 
 	# An archer shoots from anywhere he can see you, and up close (at a sword's
-	# length) kicks you off him.
+	# length) kicks you off him. Better than you, if he sees it: the powder
+	# beside you, or the rope of the weight hung over you.
 	if ranged:
 		if dist <= _reach(&"kick"):
 			kind = &"kick"
+		elif not guard._hands.armed:
+			# His crossbow on the floor: nothing to shoot with.
+			return
 		else:
-			if dist >= maxf(_reach(&"kick"), 2.0) and _clear_shot(target) and _take_shot(target):
+			_shot_point = Vector3.INF
+			var mark := _environment_shot(target)
+
+			if mark != Vector3.INF and _take_shot(target):
+				_shot_point = mark
+				_start(&"shoot")
+			elif dist >= maxf(_reach(&"kick"), 2.0) and _clear_shot(target) and _take_shot(target):
 				_start(&"shoot")
 
 			return
 
+	# Across a gap, or somewhere no path goes: nothing he can swing at.
+	if _unreachable and dist > _reach(&"overhead"):
+		_taunt(delta)
+		return
+
 	# From out of reach: a swordmaster leaps in, a brute charges.
-	if not ranged and dist > _reach(&"thrust") + 0.3 and (squad == null or squad.may_strike(guard)) and _in_view_of(target):
+	if not ranged and guard._hands.armed and dist > _reach(&"thrust") + 0.3 and (squad == null or squad.may_strike(guard)) and _in_view_of(target):
 		if leap_chance > 0.0 and dist <= _reach(&"leap") and randf() < leap_chance * delta * 1.5 and _take_token(target):
 			_start(&"leap", _next_scale)
 			_next_scale = 1.0
@@ -1689,7 +2172,7 @@ func _consider_attack(delta: float, target: Node3D, to: Vector3, dist: float, le
 			return
 
 	# Out of reach and in the open: a lunge closes it at once.
-	if dist > _reach(kind) and lunge_chance > 0.0 and dist <= _reach(&"lunge") and dist > _reach(&"thrust") + 0.3 and (squad == null or squad.may_strike(guard)):
+	if dist > _reach(kind) and lunge_chance > 0.0 and guard._hands.armed and dist <= _reach(&"lunge") and dist > _reach(&"thrust") + 0.3 and (squad == null or squad.may_strike(guard)):
 		if randf() < (lunge_chance + _plan(&"lunge")) * delta * 2.0 and _in_view_of(target) and _take_token(target):
 			_start(&"lunge", _next_scale)
 			_next_scale = 1.0
@@ -1731,7 +2214,29 @@ func _consider_attack(delta: float, target: Node3D, to: Vector3, dist: float, le
 	_next_scale = 1.0
 
 
+## Out of his reach: now and then he tells you what he thinks of it.
+func _taunt(delta: float) -> void:
+	_taunt_timer -= delta
+
+	if _taunt_timer > 0.0:
+		return
+
+	_taunt_timer = randf_range(7.0, 12.0)
+	guard.say(&"unreachable", 0.8)
+
+
 func _choose_attack() -> StringName:
+	# No blade in his hand: his fists and his boots.
+	if not guard._hands.armed:
+		if kick_chance > 0.0 and randf() < 0.3:
+			return &"kick"
+
+		return &"jab" if randf() < 0.45 else &"punch"
+
+	# Your back to spikes, fire or a drop: the boot, to send you into it.
+	if kick_chance > 0.0 and _booting():
+		return &"kick"
+
 	# Shaken and crowded: shove you off him.
 	if mood == &"shaken" and randf() < 0.5:
 		if _knows(&"bash"):
@@ -1776,22 +2281,181 @@ func _knows(kind: StringName) -> bool:
 	return false
 
 
-## What he follows `last` with: one of the blows he likes after it, or any.
+## What he follows `last` with: one of the blows he likes after it (or any),
+## chosen by how the last went, the more so the better he reads a fight:
+## caught on your guard, the blow that beats a guard; stepped out of, the one
+## that reaches or goes low; landed, another quick one while you reel.
 func _follow_up(last: StringName) -> StringName:
 	var after: Array = follow.get(last, [])
 
-	if not after.is_empty():
-		return after[randi() % after.size()]
+	if after.is_empty():
+		return _choose_attack()
 
-	return _choose_attack()
+	var weights: Array = []
+	var total := 0.0
+
+	for kind in after:
+		var weight := 1.0 + read_skill * (_answer_weight(kind) - 1.0)
+		weights.append(weight)
+		total += weight
+
+	var pick := randf() * total
+
+	for i in range(after.size()):
+		pick -= float(weights[i])
+
+		if pick <= 0.0:
+			return after[i]
+
+	return after.back()
+
+
+## How well `kind` answers the way his last blow went.
+func _answer_weight(kind: StringName) -> float:
+	var call: StringName = CALLS.get(kind, &"cut")
+
+	match _outcome:
+		&"blocked":
+			if call == &"bash" or call == &"unblockable" or call == &"low":
+				return 3.0
+
+			return 2.0 if call == &"thrust" else 0.6
+		&"dodged", &"missed":
+			return 2.5 if kind in [&"thrust", &"lunge", &"sweep", &"leap"] else 0.8
+		&"landed":
+			return 1.8 if kind in [&"left", &"right", &"jab", &"punch"] else 1.0
+
+	return 1.0
+
+
+## Of the blows he follows `kind` with, the one that beats a raised guard
+## (a pommel, a boot, a blow no guard holds, one under it, a point): "" if he
+## has none.
+func _guard_breaker_after(kind: StringName) -> StringName:
+	var best: StringName = &""
+	var best_rank := 0
+
+	for after in follow.get(kind, []):
+		var rank: int = {&"bash": 4, &"unblockable": 4, &"low": 3, &"thrust": 2}.get(CALLS.get(after, &"cut"), 0)
+
+		if rank > best_rank or (rank == best_rank and rank > 0 and randf() < 0.5):
+			best_rank = rank
+			best = after
+
+	return best
+
+
+## Whether he means to boot you into what is behind you: weighed up now and
+## then (not every time he looks for a blow, or he would always come to it),
+## and once he means to, until he has, or it is no longer there.
+func _booting() -> bool:
+	var now: float = guard._game_time
+
+	if not _hazard_behind_you():
+		_boot_until = -10.0
+		return false
+
+	if now < _boot_until:
+		return true
+
+	if now - _boot_weighed < BOOT_EVERY:
+		return false
+
+	_boot_weighed = now
+
+	if randf() < kick_chance + HAZARD_KICK:
+		_boot_until = now + BOOT_TIME
+		return true
+
+	return false
+
+
+## Spikes, fire, lit powder or a drop behind you, as he faces you (looked at
+## a few times a second).
+func _hazard_behind_you() -> bool:
+	var now: float = guard._game_time
+
+	if now - _hazard_checked_at < 0.4:
+		return _hazard_there
+
+	_hazard_checked_at = now
+	var target: Node3D = guard._target
+
+	if target == null or not is_instance_valid(target):
+		_hazard_there = false
+		return false
+
+	var feet: Vector3 = guard._feet_of(target)
+	_hazard_there = Dangers.behind(guard, feet, feet - guard.global_position) != &""
+	return _hazard_there
+
+
+## A better mark than you, beside you: powder near your feet (none of his own
+## near it, and himself well clear), or the rope of a weight hung over you.
+## INF if there is none he can hit.
+func _environment_shot(target: Node3D) -> Vector3:
+	var feet: Vector3 = guard._feet_of(target)
+	var tree := guard.get_tree()
+
+	for barrel in Dangers.powder_near(tree, feet, 2.6):
+		var reach := Dangers.blast_reach(barrel)
+
+		if guard.global_position.distance_to(barrel.global_position) < reach + 1.5 or _friend_within(barrel.global_position, reach + 0.5):
+			continue
+
+		var mark := barrel.global_position + Vector3.UP * 0.1
+
+		if _clear_line(mark, barrel):
+			return mark
+
+	var weight: Node3D = Dangers.weight_over(tree, feet)
+
+	if weight != null:
+		var rope: Node3D = weight.get("rope")
+		var load: Node3D = weight.get("body")
+
+		if rope != null and is_instance_valid(rope) and load != null and not _friend_within(Vector3(load.global_position.x, feet.y, load.global_position.z), 1.2):
+			if _clear_line(rope.global_position, rope):
+				return rope.global_position
+
+	return Vector3.INF
+
+
+## One of his own (not himself) within `reach` of `point`.
+func _friend_within(point: Vector3, reach: float) -> bool:
+	for other in guard.get_tree().get_nodes_in_group(&"guards"):
+		if other != guard and (other as Node3D).global_position.distance_to(point) < reach:
+			return true
+
+	return false
+
+
+## Nothing solid (nor one of his own) between his eye and `point`, but `thing`
+## itself.
+func _clear_line(point: Vector3, thing: Object) -> bool:
+	var exclude: Array[RID] = [guard.get_rid()]
+
+	if thing is CollisionObject3D:
+		exclude.append((thing as CollisionObject3D).get_rid())
+
+	var query := PhysicsRayQueryParameters3D.create(guard.eye_position(), point, 1 | 2, exclude)
+	return guard.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 
 ## How likely a blow is: less so the same one again; the blow nothing stops,
 ## much more so when he is sent to break your guard, or has nothing to lose.
-## Hurt, he keeps to quick ones that leave him least open.
+## Hurt, he keeps to quick ones that leave him least open. Against a man they
+## know dodges, the blows that reach and go low; against one who parries
+## everything, the ones no parry is for.
 func _weight_of(kind: StringName) -> float:
 	var weight := float(attacks[kind]) * (0.25 if kind == _last_attack and _repeats >= 1 else 1.0)
 	var call: StringName = CALLS.get(kind, &"cut")
+
+	if kind in [&"thrust", &"lunge", &"sweep", &"leap"]:
+		weight *= 1.0 + _plan(&"track")
+
+	if call == &"unblockable" or call == &"low" or call == &"thrust":
+		weight *= 1.0 + _plan(&"perilous")
 
 	if kind == &"heavy" and (role() == &"breaker" or role() == &"berserk"):
 		weight *= 3.0
@@ -1909,15 +2573,20 @@ func _start(kind: StringName, scale := 1.0) -> void:
 
 	if kind == &"kick":
 		_turtle = 0.0
+		_boot_until = -10.0
+
 	var windup: float = KICK_WINDUP if kind == &"kick" else (BASH_WINDUP if kind == &"bash" else guard.windup_time * float(ATTACKS[kind]["windup"]))
 
 	if kind == &"shoot":
 		windup = draw_time
 
+	if kind == &"throw":
+		windup = THROW_WINDUP
+
 	_aim_locked = false
 
 	# No steady beat: a blow comes early or late (never a kick's rear-back).
-	if timing_variance > 0.0 and kind != &"kick" and kind != &"bash" and kind != &"shoot":
+	if timing_variance > 0.0 and kind != &"kick" and kind != &"bash" and kind != &"shoot" and kind != &"throw":
 		windup *= randf_range(1.0 - timing_variance * 0.35, 1.0 + timing_variance)
 
 	guard._phase_length = windup * scale
@@ -1957,7 +2626,7 @@ func _update_attack(delta: float, target: Node3D, sees: bool, to: Vector3, dist:
 
 	# A step in on the way up, if you are further than the blow reaches: his
 	# blows cover the ground they need to.
-	if phase == &"windup" and u > 0.3 and sees and not stays_put and kind in [&"left", &"right", &"overhead", &"sweep", &"bash", &"kick", &"thrust"]:
+	if phase == &"windup" and u > 0.3 and sees and not stays_put and kind in [&"left", &"right", &"overhead", &"sweep", &"bash", &"kick", &"thrust", &"punch", &"jab"]:
 		var short := dist - (_reach(kind) - 0.35)
 
 		if short > 0.0 and _safe_step(forward):
@@ -1986,13 +2655,26 @@ func _update_attack(delta: float, target: Node3D, sees: bool, to: Vector3, dist:
 	# He tracks you on the way up; once the blade falls it is committed, and a
 	# step aside can take you out of its path.
 	if sees:
-		var locked := 0.9 if kind == &"shoot" else 0.78
+		var locked := 0.9 if kind == &"shoot" else (0.85 if kind == &"throw" else 0.78)
 		var tracking := 1.0 if phase == &"windup" and u < locked else 0.22
-		guard._face(to, delta, tracking)
+		var facing := to
 
+		# A shot at powder or a rope: he faces his mark.
+		if kind == &"shoot" and _shot_point != Vector3.INF:
+			facing = _shot_point - guard.global_position
+
+		guard._face(facing, delta, tracking)
+
+		# His aim set a moment before he looses: where you will be if you keep
+		# going as you are (step out of it at the last and it goes past).
 		if kind == &"shoot" and phase == &"windup" and u >= locked and not _aim_locked:
 			_aim_locked = true
 			_locked_aim = target.global_position + Vector3.UP * 0.25
+			var going: Variant = target.get("velocity")
+
+			if going is Vector3:
+				var flight: float = guard.eye_position().distance_to(_locked_aim) / maxf(shot_speed, 1.0)
+				_locked_aim += Vector3((going as Vector3).x, 0.0, (going as Vector3).z) * flight * 0.8
 
 	guard._phase_timer -= delta
 
@@ -2014,8 +2696,9 @@ func _update_attack(delta: float, target: Node3D, sees: bool, to: Vector3, dist:
 			if _combo_left > 0 and sees and dist <= _reach(&"overhead") + 0.4 and guard._stagger <= 0.0:
 				_combo_left -= 1
 				# What he follows this blow with; now and then held back, late,
-				# to catch a parry thrown too soon.
-				_late = randf() < delay_chance
+				# to catch a parry thrown too soon (the more against a man
+				# known to parry).
+				_late = randf() < delay_chance + (_plan(&"delay") if delay_chance > 0.0 else 0.0)
 				_start(_follow_up(kind), 1.35 if _late else 0.72)
 			else:
 				_combo_left = 0
@@ -2045,6 +2728,9 @@ func _feint() -> void:
 func _reach(kind: StringName) -> float:
 	if kind == &"kick" and kick_range > 0.0:
 		return kick_range
+
+	if kind == &"throw":
+		return THROW_RANGE
 
 	return guard.attack_range + float(ATTACKS.get(kind, ATTACKS[&"overhead"])["reach"])
 
@@ -2077,7 +2763,7 @@ func attack_info() -> Dictionary:
 		"low": call == &"low",
 		# Partly through a guard: a point driven at you.
 		"thrust": call == &"thrust",
-		"ranged": kind == &"shoot",
+		"ranged": kind == &"shoot" or kind == &"throw",
 	}
 
 
@@ -2091,6 +2777,10 @@ func _strike(target: Node3D) -> void:
 
 	if kind == &"shoot":
 		_shoot(target)
+		return
+
+	if kind == &"throw":
+		_throw_at(target)
 		return
 
 	if target == null or not is_instance_valid(target):
@@ -2114,9 +2804,13 @@ func _strike(target: Node3D) -> void:
 		return
 
 	if not in_reach or not in_arc:
+		_outcome = &"missed"
+
 		# Out of it at the last moment: he is left overreaching. Out of a cut
 		# (which asked for your blade) he only overreaches a little.
 		if combat != null and combat.has_method("dodged_within") and combat.dodged_within(0.45) and to.length() < _hit_reach(kind) + 2.0:
+			_outcome = &"dodged"
+
 			if CALLS.get(kind, &"cut") == &"cut":
 				add_posture(14.0)
 			else:
@@ -2125,10 +2819,13 @@ func _strike(target: Node3D) -> void:
 		return
 
 	_landed = true
+	# (A raised guard in the way says otherwise: recover_from_block.)
+	_outcome = &"landed"
 	guard.caught_player.emit(target)
 
-	if kind == &"kick":
-		Sfx.play(guard, &"kick", feet + Vector3.UP * 1.0)
+	# A boot or a fist lands with a thud (a blade's cut is yours to hear).
+	if kind in [&"kick", &"punch", &"jab"]:
+		Sfx.play(guard, &"kick", feet + Vector3.UP * (1.0 if kind == &"kick" else 1.5), 0.0 if kind == &"kick" else -3.0, 1.0 if kind == &"kick" else 1.2)
 
 	var before: Variant = target.get("health")
 
@@ -2138,16 +2835,37 @@ func _strike(target: Node3D) -> void:
 	# Only a blow that got through is worth crowing about.
 	var hurt: bool = before != null and float(target.get("health")) < float(before)
 
-	if hurt and kind != &"kick" and guard._rig != null and guard._rig.has_method("bloody"):
+	var blade: bool = not (kind in [&"kick", &"punch", &"jab"])
+
+	if hurt and blade and guard._rig != null and guard._rig.has_method("bloody"):
 		guard._rig.bloody(0.3)
 
-	if hurt and guard._bark_timer <= 0.0 and kind != &"kick":
+	if hurt and guard._bark_timer <= 0.0 and blade:
 		guard.bark("Got you!")
+
+
+## Thrown at you: where you will be when it gets there, if you keep going
+## as you are (GuardHands).
+func _throw_at(target: Node3D) -> void:
+	_landed = false
+
+	if target == null or not is_instance_valid(target):
+		guard._hands.drop_held()
+		return
+
+	var chest := target.global_position + Vector3.UP * 0.15
+	var flight := clampf(guard.eye_position().distance_to(chest) / 12.0, 0.2, 1.3)
+	var going: Variant = target.get("velocity")
+
+	if going is Vector3:
+		chest += Vector3((going as Vector3).x, 0.0, (going as Vector3).z) * flight * 0.6
+
+	guard._hands.throw_held(chest, target)
 
 
 ## Loosed at you: from his eye, aimed at your chest with the drop allowed
 ## for, and a little of a man's unsteadiness. It hits whatever is in the way,
-## his friends included.
+## his friends included. At powder or a rope when that is his mark.
 func _shoot(target: Node3D) -> void:
 	_landed = false
 
@@ -2156,10 +2874,18 @@ func _shoot(target: Node3D) -> void:
 
 	var from: Vector3 = guard.eye_position() - guard.global_basis.z * 0.5
 	var chest: Vector3 = _locked_aim if _aim_locked else target.global_position + Vector3.UP * 0.25
+	var spread := deg_to_rad(1.1)
+
+	# A mark that is not you (a rope, a keg): still, and small, and he takes
+	# his time over it.
+	if _shot_point != Vector3.INF:
+		chest = _shot_point
+		_shot_point = Vector3.INF
+		spread *= 0.3
+
 	var distance := from.distance_to(chest)
 	var flight := distance / maxf(shot_speed, 1.0)
 	var aim := chest + Vector3.UP * 0.5 * 9.8 * flight * flight - from
-	var spread := deg_to_rad(1.1)
 	aim = aim.rotated(Vector3.UP, randf_range(-spread, spread))
 	aim = aim.rotated(aim.cross(Vector3.UP).normalized(), randf_range(-spread, spread) * 0.6)
 	var arrow: StaticBody3D = ArrowScript.new()

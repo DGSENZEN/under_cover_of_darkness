@@ -44,13 +44,38 @@ static func emit_sound(position: Vector3, db: float, source: Object, kind: Strin
 	if db <= 0.0:
 		return
 
-	var event := {
+	_emit({
 		"position": position,
 		"db": db,
 		"range": range_for(db),
 		"source": source,
 		"kind": kind,
-	}
+	}, also_skip)
+
+
+## A sound that says something: a guard calling out where you are, a bell
+## rung. It carries exactly as emit_sound does (so walls, distance and a
+## listener's hearing decide who gets it), and each listener finds what was
+## said in the event under "message" (Comms.gd).
+static func emit_message(position: Vector3, db: float, source: Object, kind: StringName, message: Dictionary) -> void:
+	if db <= 0.0:
+		return
+
+	_emit({
+		"position": position,
+		"db": db,
+		"range": range_for(db),
+		"source": source,
+		"kind": kind,
+		"message": message,
+	}, null)
+
+
+static func _emit(event: Dictionary, also_skip: Object) -> void:
+	var position: Vector3 = event["position"]
+	var kind: StringName = event["kind"]
+	var db: float = event["db"]
+	var source: Object = event["source"]
 
 	if debug:
 		DebugDraw3D.draw_sphere(position, 0.25, Color(0.4, 0.8, 1.0), 0.5)

@@ -17,6 +17,18 @@ extends CharacterBody3D
 ##   WHO HE IS   his temperament (`temperament`, Temperament.gd), and what the
 ##               whole garrison knows and dreads of you (Garrison.gd, ticked
 ##               by every guard).
+##   HIS LIFE    between fights he talks with the man beside him, notices what
+##               is out of place, misses a friend gone from his post, covers a
+##               friend who goes to look at a noise, and lights a lantern in
+##               the dark once the garrison is roused (GuardLife.gd). A lookout
+##               sweeps his ground and calls you out rather than come down.
+##   HIS HANDS   what he holds and picks up: his weapon, lost and recovered;
+##               things to throw; the bell rope; the lantern (GuardHands.gd).
+##   GETTING     round men and things the navmesh does not know of, doors
+##   ABOUT       opened as he reaches them, a runner led, a lost man's trail
+##               followed a few steps (GuardNav.gd); clear of lit powder.
+##   WORD        what they call to each other, out loud (Comms.gd): where you
+##               are, where you went, powder, a noise, all clear, the bell.
 ##
 ## The body origin is at the FEET. The capsule floats above step height and
 ## the body hovers on a ray, so stairs need no special handling.
@@ -32,6 +44,12 @@ const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const Comms := preload("res://scripts/AISystem/Comms.gd")
+const Dangers := preload("res://scripts/AISystem/Dangers.gd")
+const GuardNavScript := preload("res://scripts/AISystem/GuardNav.gd")
+const GuardLifeScript := preload("res://scripts/AISystem/GuardLife.gd")
+const GuardHandsScript := preload("res://scripts/AISystem/GuardHands.gd")
+const GuardMercyScript := preload("res://scripts/AISystem/GuardMercy.gd")
 ## Bleeding (bleeding): at most this much a second, never below this share of
 ## his health, and bound this long after he last saw you.
 const BLEED_MAX := 4.0
@@ -42,6 +60,9 @@ const GORE_SEEN_RANGE := 14.0
 
 ## Off, cuts do not bleed (tests of exact damage).
 static var bleeding_on := true
+## Off, a man thrown off his feet never loses his grip on his weapon (tests
+## of exact fights).
+static var grip_loss_on := true
 
 enum Alert {
 	RELAXED,
@@ -85,6 +106,14 @@ signal bound_wounds
 @export var chase_speed := 4.6
 @export var acceleration := 12.0
 @export var turn_speed := 5.0
+## Set to watch (a tower, a wall walk): he keeps his post, sweeping his ground,
+## and sees further than most. Seeing you, he calls out where you are (and
+## runs to ring a bell, if there is one near) rather than come down after you.
+@export var lookout := false
+## Searching somewhere dark once the garrison is roused, he lights a lantern.
+@export var carries_lantern := true
+## What the garrison calls him ("" picks one for him, the same every load).
+@export var given_name := ""
 
 
 @export_category("Vision")
@@ -320,6 +349,35 @@ var _retry_timer := 0.0
 var _body_check_timer := 0.0
 var _body_notice := {}
 var _known_bodies := {}
+## Getting about, his life off duty, his hands, and his life at your mercy
+## (GuardNav, GuardLife, GuardHands, GuardMercy).
+var _nav: RefCounted
+var _life: RefCounted
+var _hands: RefCounted
+var _mercy: RefCounted
+## When he came into the level (Comms.now): a man only misses those who were
+## there before him.
+var _born_at := 0.0
+## What last stirred him: "sight", "noise", "shout", "body", "call", "alarm",
+## "oddity", "missing" or "fight".
+var _stimulus: StringName = &""
+## When he last had word of you from one of his own (their call's time), and
+## how long ago that was: in a fight, word keeps him in it as sight does.
+var _heard_of_at := -100.0
+var _since_heard_of := 99.0
+## Which way you were going when he last saw you.
+var _seen_heading := Vector3.ZERO
+## Where he looks, in turn, when he stops to look about him, and for how long
+## this look lasts; keeping watch for the hunt from a vantage.
+var _scan: Array = []
+var _look_length := 3.0
+var _watching := false
+## Lit powder: seen this long, and running from it (from where, how far, how
+## much longer).
+var _powder_seen := 0.0
+var _evade_from := Vector3.ZERO
+var _evade_radius := 0.0
+var _evade_left := 0.0
 
 
 class GuardKeys:
@@ -367,6 +425,19 @@ func _ready() -> void:
 	_rig.setup(self)
 	_weapon = _rig.weapon
 	_body_mesh = _rig.body_mesh
+	_nav = GuardNavScript.new(self)
+	_life = GuardLifeScript.new(self)
+	_hands = GuardHandsScript.new(self, StringName(GuardFighterScript.look_of(archetype).get("weapon", &"sword")))
+	_mercy = GuardMercyScript.new(self)
+	_born_at = Comms.now()
+
+	if given_name == "":
+		given_name = TemperamentScript.name_for(look_seed if look_seed >= 0 else hash(String(get_path())), bool(_rig.get("female")))
+
+	# Set to watch: he sees further than a man on his rounds.
+	if lookout:
+		sight_min *= 1.3
+		sight_max *= 1.4
 
 	if not _waypoints.is_empty():
 		_waypoint_index = 0
@@ -408,6 +479,7 @@ func _physics_process(delta: float) -> void:
 	_attack_timer = maxf(_attack_timer - delta, 0.0)
 	_stagger = maxf(_stagger - delta, 0.0)
 	_block_flash = maxf(_block_flash - delta, 0.0)
+	_since_heard_of += delta
 
 	if bleeding > 0.0:
 		_bleed_tick(delta)
@@ -421,6 +493,9 @@ func _physics_process(delta: float) -> void:
 	_sense_vision(delta)
 	_sense_bodies(delta)
 	_update_alert(delta)
+	_hands.update(delta)
+	_life.update(delta)
+	_watch_for_powder(delta)
 
 	if _burning > 0.0:
 		_burn(delta)
@@ -442,6 +517,19 @@ func _physics_process(delta: float) -> void:
 
 		# Getting up, he looks nowhere but at the floor.
 		if state == Alert.COMBAT and _rising <= 0.0:
+			_fighter.watch(delta)
+	elif _evade_left > 0.0:
+		# Kept clear while it still fizzes; a moment more once it is gone.
+		if Dangers.lit_powder_near(get_tree(), _evade_from, -2.0) != null:
+			_evade_left = maxf(_evade_left, 0.3)
+
+		_evade_left -= delta
+		_run_from_powder(delta)
+	elif _hands.busy():
+		# Stooping, straightening, at the bell rope: nothing else until done.
+		_stop(delta)
+
+		if state == Alert.COMBAT:
 			_fighter.watch(delta)
 	else:
 		match state:
@@ -502,9 +590,16 @@ func _sense_vision(delta: float) -> void:
 
 	_since_seen = 0.0
 	_since_stimulus = 0.0
+	_stimulus = &"sight"
 	last_known_position = _target.global_position
 	has_last_known = true
 	alert = minf(alert + visibility * vision_gain * wariness * delta, combat_at)
+
+	# Which way you were going: where he looks first once he loses you.
+	var going: Variant = _target.get("velocity")
+
+	if going is Vector3 and Vector2((going as Vector3).x, (going as Vector3).z).length() > 0.8:
+		_seen_heading = Vector3((going as Vector3).x, 0.0, (going as Vector3).z)
 
 
 ## Light, distance, view cone and cover, multiplied together.
@@ -601,6 +696,11 @@ func hear_sound(event: Dictionary) -> void:
 	if _knocked_out:
 		return
 
+	# One of his own saying something (Comms.gd), or the bell.
+	if event.has("message"):
+		_hear_message(event)
+		return
+
 	var source: Object = event["source"]
 	var reach: float = event["range"] * hearing_acuity
 
@@ -622,6 +722,7 @@ func hear_sound(event: Dictionary) -> void:
 				has_last_known = true
 				alert = maxf(alert, shout_alert)
 				_since_stimulus = 0.0
+				_stimulus = &"shout"
 
 		return
 
@@ -640,6 +741,7 @@ func hear_sound(event: Dictionary) -> void:
 
 	alert = maxf(alert, minf(alert + amount, hearing_alert_cap))
 	_since_stimulus = 0.0
+	_stimulus = &"noise"
 
 	# Hearing is imprecise: the farther away, the vaguer the position.
 	var blur := distance * 0.08
@@ -667,6 +769,158 @@ func _sound_distance(position: Vector3) -> float:
 		length += path[i - 1].distance_to(path[i])
 
 	return maxf(length, straight)
+
+
+# ---------------------------------------------------------------------------
+# Word from his own (Comms.gd)
+# ---------------------------------------------------------------------------
+
+## Something called out (or the bell), heard if it carries this far round the
+## walls to him.
+func _hear_message(event: Dictionary) -> void:
+	var message: Dictionary = event["message"]
+	var from: Vector3 = event["position"]
+	var reach: float = float(event["range"]) * hearing_acuity
+
+	if global_position.distance_to(from) > reach or _sound_distance(from) > reach:
+		return
+
+	var where: Vector3 = message.get("where", from)
+
+	match message.get("what", &""):
+		&"spotted":
+			_heard_spotted(message, where)
+		&"danger":
+			if global_position.distance_to(where) < float(message.get("radius", 4.0)) + 1.5:
+				_start_evade(where, float(message.get("radius", 4.0)), false)
+		&"noise":
+			_heard_noise(message, where)
+		&"clear":
+			if _life.covering() and Comms.caller(message) == _life._covering.get_ref():
+				_life.stop_covering()
+				alert = minf(alert, suspicious_at * 0.5)
+		&"alarm":
+			_heard_alarm(where)
+
+
+## One of them calls where you are. In a fight he cannot see you in, the
+## fresher word is where he goes; at his post, he comes to look.
+func _heard_spotted(message: Dictionary, where: Vector3) -> void:
+	var fresh := float(message.get("time", 0.0))
+
+	if fresh <= _heard_of_at:
+		return
+
+	if state == Alert.COMBAT:
+		if can_see_target:
+			return
+
+		_heard_of_at = fresh
+		_since_heard_of = 0.0
+		last_known_position = where
+		has_last_known = true
+		_since_stimulus = 0.0
+		return
+
+	_heard_of_at = fresh
+	_since_heard_of = 0.0
+	last_known_position = where
+	has_last_known = true
+	_since_stimulus = 0.0
+	_stimulus = &"call"
+	alert = maxf(alert, shout_alert + 10.0)
+
+	if state >= Alert.INVESTIGATING:
+		_go_to(where, true)
+
+	say(&"ack", 0.5)
+
+
+## A friend heard something and is going to look: this one covers him.
+func _heard_noise(message: Dictionary, where: Vector3) -> void:
+	var caller := Comms.caller(message)
+
+	if state > Alert.SUSPICIOUS or caller == null or caller == self:
+		return
+
+	last_known_position = where
+	has_last_known = true
+	_since_stimulus = 0.0
+	_stimulus = &"noise"
+	alert = maxf(alert, suspicious_at + 5.0)
+	_life.cover(caller)
+
+	if state == Alert.RELAXED:
+		_set_state(Alert.SUSPICIOUS)
+
+
+## The bell: everyone comes, to where the man who rang it saw you.
+func _heard_alarm(where: Vector3) -> void:
+	if state == Alert.COMBAT:
+		return
+
+	last_known_position = where
+	has_last_known = true
+	_since_stimulus = 0.0
+	_stimulus = &"alarm"
+	alert = maxf(alert, investigate_at + 25.0)
+
+	if state >= Alert.INVESTIGATING:
+		_go_to(where, true)
+
+	say(&"ack", 0.4)
+
+
+## Something to look into at `where` (a thing out of place, a missing man, a
+## friend gone quiet): he goes.
+func notice(where: Vector3, why: StringName) -> void:
+	last_known_position = where
+	has_last_known = true
+	_since_stimulus = 0.0
+	_stimulus = why
+	alert = maxf(alert, investigate_at + 5.0)
+
+	if state == Alert.INVESTIGATING or state == Alert.SEARCHING:
+		_look_timer = 0.0
+		_go_to(where, true)
+
+
+## Says the line his temperament has for `situation`, now and then (`chance`),
+## and not over something he is already saying.
+func say(situation: StringName, chance := 1.0) -> void:
+	if _bark_timer > 0.0 or randf() >= chance or _fighter == null or _fighter.temper == null:
+		return
+
+	var said: String = _fighter.temper.line(situation)
+
+	if said != "":
+		bark(said)
+
+
+## What he is doing with his hands or himself, for the rig: "pickup", "ring",
+## "hold", begging ("kneel", "plead_kneel", "plead_stand", "rise",
+## "rise_knees": GuardMercy), "talk", "listen", "fold_arms", "drink",
+## "lantern", "call", or "".
+func activity() -> StringName:
+	var busy: StringName = _hands.activity() if _hands != null else &""
+
+	if busy != &"":
+		return busy
+
+	var begging: StringName = _mercy.activity() if _mercy != null else &""
+
+	if begging != &"":
+		return begging
+
+	var doing: StringName = _life.activity() if _life != null else &""
+
+	if doing != &"":
+		return doing
+
+	if _hands != null and _hands.lantern != null and state != Alert.COMBAT and Vector2(velocity.x, velocity.z).length() < 0.4:
+		return &"lantern"
+
+	return &""
 
 
 # ---------------------------------------------------------------------------
@@ -736,6 +990,7 @@ func _discover(body: Node3D) -> void:
 	last_known_position = body.global_position
 	has_last_known = true
 	_since_stimulus = 0.0
+	_stimulus = &"body"
 	alert = maxf(alert, hearing_alert_cap)
 	wariness = minf(wariness + body_wariness, wariness_max)
 	found_body.emit(body)
@@ -761,6 +1016,7 @@ func hear_call(where: Vector3) -> void:
 	last_known_position = where
 	has_last_known = true
 	_since_stimulus = 0.0
+	_stimulus = &"call"
 	alert = maxf(alert, shout_alert)
 
 
@@ -770,6 +1026,7 @@ func join_hunt(where: Vector3) -> void:
 	last_known_position = where
 	has_last_known = true
 	_since_stimulus = 0.0
+	_stimulus = &"call"
 	alert = maxf(alert, investigate_at + 25.0)
 
 	if state < Alert.INVESTIGATING:
@@ -813,6 +1070,7 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 	_last_blow = blow
 
 	if kind == &"backstab" or (kind == &"drop" and damage >= health):
+		_mercy.died()
 		_rig.react_hit(blow, 1.4)
 		_bleed(at, blow, 1.6)
 		_last_push = blow * 1.4 + (Vector3.DOWN * 2.0 if kind == &"drop" else Vector3.ZERO)
@@ -854,6 +1112,12 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 
 	health -= damage
 	hurt.emit(damage)
+
+	# Cut down on his knees, or cut and he gives up on your mercy.
+	if health <= 0.0:
+		_mercy.died()
+	else:
+		_mercy.struck(attacker)
 
 	# Cut, he is shaken: a heavy blow the more, a riposte most.
 	var riposte: bool = _fighter.riposted_by(attacker)
@@ -900,6 +1164,7 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 		# A hit interrupts his own blow; a heavy one rocks him longer. Then
 		# for a moment he looks to his guard before he swings again.
 		_phase = &""
+		_hands.interrupt()
 		_fighter.on_hit(true)
 		var rocked: float = _fighter.stagger_for(kind, stagger_time, riposte)
 
@@ -1025,6 +1290,83 @@ func _run_burning(delta: float) -> void:
 	_face(_flee, delta)
 
 
+## Lit powder near him that he knows of: he gets clear of it, and shouts it.
+## A man at his ease does not notice a fuse; one on his guard does, a moment
+## after he sees it fizz (as quick as he answers a blow, and a little more).
+func _watch_for_powder(delta: float) -> void:
+	if state < Alert.INVESTIGATING or _evade_left > 0.0:
+		_powder_seen = 0.0
+		return
+
+	var barrel := Dangers.lit_powder_near(get_tree(), global_position)
+
+	if barrel == null:
+		_powder_seen = 0.0
+		return
+
+	var at := barrel.global_position + Vector3.UP * 0.3
+	var eye := eye_position()
+
+	if _cone_factor(at - eye) <= 0.0 or not _line_of_sight(eye, at, barrel):
+		return
+
+	_powder_seen += delta
+
+	if _powder_seen < float(_fighter.reaction) + 0.3:
+		return
+
+	_powder_seen = 0.0
+	_start_evade(barrel.global_position, Dangers.blast_reach(barrel), true)
+
+
+## Away from `from` until he is `radius` and a little more clear of it,
+## dropping whatever he was about; shouting it, if he saw it himself.
+func _start_evade(from: Vector3, radius: float, shout: bool) -> void:
+	if _evade_left > 0.0 or _knocked_out:
+		return
+
+	_evade_from = from
+	_evade_radius = radius + 1.5
+	_evade_left = 2.5
+	_phase = &""
+
+	if _fighter != null:
+		_fighter.release_token()
+		_fighter.guarding = false
+
+	if shout:
+		bark(Comms.danger_line())
+		Comms.call_out(self, &"danger", from, {"radius": radius})
+
+
+func _run_from_powder(delta: float) -> void:
+	var away := global_position - _evade_from
+	away.y = 0.0
+
+	if away.length() >= _evade_radius:
+		_evade_left = 0.0
+		_stop(delta)
+		return
+
+	var direction := away.normalized() if away.length() > 0.05 else global_basis.z
+	# Along the navmesh: where that way runs out, he turns along it.
+	var ahead := global_position + direction * 0.8
+	var closest := NavigationServer3D.map_get_closest_point(get_world_3d().navigation_map, ahead)
+
+	if Vector2(closest.x - ahead.x, closest.z - ahead.z).length() > 0.3:
+		var side := Vector3.UP.cross(direction) * (1.0 if get_instance_id() % 2 == 0 else -1.0)
+		direction = (direction * 0.3 + side).normalized()
+
+	var flat := Vector3(velocity.x, 0.0, velocity.z).move_toward(direction * chase_speed * 1.1, acceleration * 1.5 * delta)
+	velocity.x = flat.x
+	velocity.z = flat.z
+	_face(direction, delta)
+
+
+func is_evading() -> bool:
+	return _evade_left > 0.0
+
+
 ## What his current blow is: its type, and what a block of it costs.
 func attack_info() -> Dictionary:
 	return _fighter.attack_info()
@@ -1052,6 +1394,8 @@ func _hit_sound(kind: StringName, at: Vector3, strength: float) -> void:
 func kick(push: Vector3, attacker: Node3D) -> void:
 	if _knocked_out:
 		return
+
+	_mercy.struck(attacker)
 
 	if _downed:
 		# A man on the floor, booted along it.
@@ -1083,6 +1427,7 @@ func kick(push: Vector3, attacker: Node3D) -> void:
 	_knock = knockdown_time
 	_knock_velocity = Vector3(push.x, 0.0, push.z) * float(_fighter.kick_resist)
 	_phase = &""
+	_hands.interrupt()
 	_last_blow = _knock_velocity
 	_fighter.on_kicked()
 	_rig.react_kick(_knock_velocity, knockdown_time)
@@ -1154,12 +1499,14 @@ func die(_attacker: Node3D) -> void:
 	if _knocked_out:
 		return
 
+	# Killed before anyone knew you were there: his post stands empty.
+	_leave_post()
 	_knocked_out = true
 	remove_from_group(&"guards")
 	SoundBus.remove_listener(self)
 	collision_layer = 0
 	_fighter.on_died()
-	_rig.drop_weapon()
+	_let_go()
 	visible = false
 
 	var body: RigidBody3D = GuardBodyScript.spawn(self, true, _last_blow)
@@ -1181,6 +1528,31 @@ func die(_attacker: Node3D) -> void:
 	queue_free()
 
 
+## Gone (killed or put to sleep) while nobody knew you were about, from a
+## post he stood: whoever knew him will miss him there (Garrison.fallen).
+func _leave_post() -> void:
+	if not _waypoints.is_empty() or state > Alert.SUSPICIOUS:
+		return
+
+	var target := _target if _target != null and is_instance_valid(_target) else get_tree().get_first_node_in_group(&"player") as Node3D
+
+	if target != null:
+		GarrisonScript.of(target).post_fell(_home.origin, given_name, Comms.now())
+
+
+## Everything in his hands falls: his weapon (for anyone to pick up), what he
+## held to throw, his lantern.
+func _let_go() -> void:
+	if _hands != null:
+		_hands.drop_held()
+		_hands.drop_lantern()
+
+	var dropped: RigidBody3D = _rig.drop_weapon()
+
+	if _hands != null:
+		GuardHandsScript.mark_dropped(dropped, _hands.kind)
+
+
 func _engage(attacker: Node3D) -> void:
 	if attacker == null or not is_instance_valid(attacker):
 		return
@@ -1198,6 +1570,7 @@ func _engage(attacker: Node3D) -> void:
 	has_last_known = true
 	_since_stimulus = 0.0
 	_since_seen = 0.0
+	_stimulus = &"fight"
 	alert = combat_at
 
 	if state != Alert.COMBAT:
@@ -1251,13 +1624,14 @@ func knock_out(attacker: Node3D, force := false) -> bool:
 
 	# Out of everything at once. queue_free waits for the end of the frame,
 	# and until then he must not see, hear, bark or be counted.
+	_leave_post()
 	_knocked_out = true
 	remove_from_group(&"guards")
 	SoundBus.remove_listener(self)
 	collision_layer = 0
 	# Out of the hunt, but not killed: no dread for a man put to sleep.
 	_fighter.on_died(false)
-	_rig.drop_weapon()
+	_let_go()
 	visible = false
 
 	# He crumples away from the blow.
@@ -1343,10 +1717,15 @@ func knock_down(push: Vector3, attacker: Node3D = null, at := Vector3.INF) -> vo
 
 	collision_layer = 0
 	_fighter.release_token()
+	_hands.interrupt()
 	_last_blow = push
 	_rig.go_limp(velocity, push, at)
 	_down_peak = _rig.man.ragdoll.centre().y
 	voice(&"pain", -2.0)
+
+	# Off his feet, his grip may go: his weapon clatters away.
+	if grip_loss_on and _hands != null and randf() < float(_fighter.grip_loss):
+		_hands.lose_weapon(push)
 
 	if attacker != null:
 		_engage(attacker)
@@ -1526,18 +1905,32 @@ func _update_alert(delta: float) -> void:
 	match state:
 		Alert.RELAXED:
 			if alert >= investigate_at and has_last_known:
-				_set_state(Alert.INVESTIGATING)
+				_investigate_or_cover()
 			elif alert >= suspicious_at:
 				_set_state(Alert.SUSPICIOUS)
 		Alert.SUSPICIOUS:
-			if alert >= investigate_at and has_last_known:
-				_set_state(Alert.INVESTIGATING)
+			if alert >= investigate_at and has_last_known and not _life.covering():
+				_investigate_or_cover()
 			elif alert < suspicious_at * 0.6:
 				_set_state(Alert.RELAXED)
 
 	# From anywhere below: sure of it, and looking right at them.
 	if state != Alert.COMBAT and alert >= combat_at and visibility >= combat_needs_visibility:
 		_set_state(Alert.COMBAT)
+
+
+## A noise worth a look: another man may already be looking into it (then
+## this one covers him from where he stands), or it is his to go and see.
+func _investigate_or_cover() -> void:
+	if _stimulus == &"noise" and _life.claim_or_cover(last_known_position):
+		alert = minf(alert, investigate_at - 1.0)
+
+		if state == Alert.RELAXED:
+			_set_state(Alert.SUSPICIOUS)
+
+		return
+
+	_set_state(Alert.INVESTIGATING)
 
 
 func _set_state(new_state: int) -> void:
@@ -1551,6 +1944,20 @@ func _set_state(new_state: int) -> void:
 
 	if old == Alert.COMBAT and _fighter != null:
 		_fighter.leave_combat()
+
+	if _life != null:
+		# Stirred: whatever he was saying or doing with himself is over.
+		if new_state != Alert.RELAXED and _life.talking():
+			_life.end_talk()
+
+		# Done looking (it was nothing, or he gave it up): he says so, and
+		# whoever covered him stands easy.
+		if new_state == Alert.RELAXED and (old == Alert.INVESTIGATING or old == Alert.SEARCHING):
+			_life.done_looking()
+
+	# Into a fight: his lantern goes to the floor, still burning.
+	if new_state == Alert.COMBAT and _hands != null:
+		_hands.drop_lantern()
 
 	# Back to his rounds: the hunt goes on without him.
 	if new_state == Alert.RELAXED and _fighter != null and _fighter.squad != null:
@@ -1576,7 +1983,11 @@ func _set_state(new_state: int) -> void:
 func _bark_for(new_state: int, old_state: int) -> void:
 	match new_state:
 		Alert.SUSPICIOUS:
-			bark("Hm? What was that?")
+			# Covering a friend who went to look: he says so.
+			if _life != null and _life.covering() and _fighter != null and _fighter.temper != null:
+				bark(_fighter.temper.line(&"noise_cover"))
+			else:
+				bark("Hm? What was that?")
 		Alert.INVESTIGATING:
 			if alert >= shout_alert and _since_seen > 1.0 and not can_see_target:
 				bark("I'm coming!")
@@ -1584,7 +1995,8 @@ func _bark_for(new_state: int, old_state: int) -> void:
 				bark("I'd better take a look.")
 		Alert.SEARCHING:
 			if old_state == Alert.COMBAT:
-				bark("Where did you go? Show yourself!")
+				# Which way you went, if he saw: the others hear it too.
+				bark(Comms.lost_line(last_known_position, _seen_heading, self) if _seen_heading.length() > 1.0 else "Where did you go? Show yourself!")
 			else:
 				bark("Someone's been here...")
 		Alert.COMBAT:
@@ -1620,10 +2032,29 @@ func _do_patrol(delta: float) -> void:
 				return
 
 		_stop(delta)
-		_face(-_home.basis.z, delta)
+		_life.at_rest(delta)
+
+		if _life.talking():
+			_face(_life.partner_direction(), delta)
+		elif lookout:
+			# Set to watch: he sweeps his ground, slowly.
+			var yaw: float = _life.watch_yaw(_home.basis.get_euler().y, delta)
+			_face(Vector3(-sin(yaw), 0.0, -cos(yaw)), delta, 0.5)
+		else:
+			_face(-_home.basis.z, delta)
+
 		return
 
 	if _wait_timer > 0.0:
+		_life.at_rest(delta)
+
+		# A word with the man beside him: his rounds wait for it.
+		if _life.talking():
+			_wait_timer = maxf(_wait_timer, 0.1)
+			_stop(delta)
+			_face(_life.partner_direction(), delta)
+			return
+
 		_wait_timer -= delta
 		_stop(delta)
 		_face(-_waypoints[_waypoint_index].global_transform.basis.z, delta)
@@ -1633,6 +2064,8 @@ func _do_patrol(delta: float) -> void:
 			_go_to(_waypoints[_waypoint_index].global_position, true)
 
 		return
+
+	_life.walking()
 
 	if not _walk(patrol_speed, delta):
 		return
@@ -1700,12 +2133,15 @@ func _do_investigate(delta: float) -> void:
 		return
 
 	if _walk(investigate_speed, delta):
+		# Come to something out of place: he deals with it, then looks about.
+		_life.deal_with_oddity()
 		_start_looking()
 
 
 func _do_search(delta: float) -> void:
-	# Heard or glimpsed something new mid-search: go there instead.
-	if _since_stimulus < 0.1 and has_last_known and _look_timer <= 0.0:
+	# Heard or glimpsed something new mid-search: go there instead. (Not the
+	# hunt's watcher: his place is his vantage, whatever the others go to.)
+	if _since_stimulus < 0.1 and has_last_known and _look_timer <= 0.0 and not _watching:
 		_go_to(last_known_position)
 
 	if _look_timer > 0.0:
@@ -1724,8 +2160,9 @@ func _do_search(delta: float) -> void:
 
 
 func _do_combat(delta: float) -> void:
-	# Out of sight too long, and not mid-blow: go looking.
-	if _phase == &"" and _since_seen > lose_time and not _fighter.keeps_running():
+	# Out of sight too long (and no word of you from his own), and not
+	# mid-blow: go looking.
+	if _phase == &"" and minf(_since_seen, _since_heard_of) > lose_time and not _fighter.keeps_running():
 		# The scare is counted once, when the search that follows is given up.
 		alert = investigate_at + 25.0
 		_set_state(Alert.SEARCHING)
@@ -1796,6 +2233,21 @@ func _scare() -> void:
 
 
 func _next_search_point() -> void:
+	# The hunt's watcher: to his vantage, for a long look from it.
+	var watch: Variant = _fighter.squad.watch_point_for(self) if _fighter != null and _fighter.squad != null else null
+
+	if watch is Vector3:
+		_watching = true
+		_go_to(watch, true)
+		return
+
+	_watching = false
+
+	# A man set to watch searches from his post.
+	if lookout:
+		_go_to(_home.origin, true)
+		return
+
 	# In a hunt, the squad shares the ground out: his own piece of it.
 	var shared: Variant = _fighter.squad.search_point_for(self) if _fighter != null and _fighter.squad != null else null
 
@@ -1812,17 +2264,77 @@ func _next_search_point() -> void:
 
 
 func _start_looking() -> void:
-	_look_timer = look_around_time
+	# Keeping watch for the hunt, or from his post: a long look.
+	_look_length = look_around_time * (4.0 if _watching or lookout else 1.0)
+	_look_timer = _look_length
 	_look_from_yaw = rotation.y
+	_scan = _watch_headings() if _watching else _scan_headings()
 
 
-## Turns a full circle over look_around_time. True when finished.
+## Where he looks, in turn, when he stops to look about him: first the way
+## you were going if he knows it (the hunt's last sighting, or his own), then
+## to either side of it, then behind him. Every way, but the likeliest first.
+func _scan_headings() -> Array:
+	var first := rotation.y
+	var heading := _likely_heading()
+
+	if heading != Vector3.ZERO:
+		first = atan2(-heading.x, -heading.z)
+
+	return [first, first + deg_to_rad(110.0), first - deg_to_rad(110.0), first + PI]
+
+
+## The hunt makes him its watcher (Squad.watch_point_for): to `point`, for a
+## long look from it.
+func keep_watch_at(point: Vector3) -> void:
+	if state != Alert.SEARCHING:
+		return
+
+	_watching = true
+	_look_timer = 0.0
+	_go_to(point, true)
+
+
+## Keeping watch: toward where you were last seen, and either side of it.
+func _watch_headings() -> Array:
+	var squad: RefCounted = _fighter.squad if _fighter != null else null
+	var seen: Vector3 = squad.last_sighting["position"] if squad != null else last_known_position
+	var to := seen - global_position
+	var toward := atan2(-to.x, -to.z) if Vector2(to.x, to.z).length() > 0.5 else rotation.y
+	return [toward, toward + 0.6, toward - 0.6, toward + 1.1, toward - 1.1, toward]
+
+
+## Which way you went, as far as he knows: the hunt's word if it is fresh and
+## about here, else what he saw himself.
+func _likely_heading() -> Vector3:
+	var squad: RefCounted = _fighter.squad if _fighter != null else null
+
+	if squad != null:
+		var sighting: Dictionary = squad.last_sighting
+		var going: Vector3 = sighting["velocity"]
+		var seen_at: Vector3 = sighting["position"]
+
+		if float(squad.clock) - float(sighting["time"]) < 12.0 and _flat_distance(seen_at) < 14.0 and Vector2(going.x, going.z).length() > 0.8:
+			return Vector3(going.x, 0.0, going.z)
+
+	if _since_seen < 15.0 and _seen_heading != Vector3.ZERO:
+		return _seen_heading
+
+	return Vector3.ZERO
+
+
+## Looks each way of his scan in turn over look_around_time. True when done.
 func _look_around(delta: float) -> bool:
 	_stop(delta)
 	_look_timer -= delta
 
-	var done := 1.0 - clampf(_look_timer / maxf(look_around_time, 0.01), 0.0, 1.0)
-	rotation.y = _look_from_yaw + done * TAU
+	var done := 1.0 - clampf(_look_timer / maxf(_look_length, 0.01), 0.0, 1.0)
+
+	if _scan.is_empty():
+		_scan = _scan_headings()
+
+	var goal: float = _scan[mini(int(done * float(_scan.size())), _scan.size() - 1)]
+	rotation.y = lerp_angle(rotation.y, goal, 1.0 - exp(-7.0 * delta))
 	return _look_timer <= 0.0
 
 
@@ -1845,6 +2357,9 @@ func _go_to(point: Vector3, force := false) -> void:
 	_agent.target_position = point
 	path_requests += 1
 
+	if _nav != null:
+		_nav.new_path()
+
 
 ## Walks along the current path. True on arrival.
 func _walk(speed: float, delta: float) -> bool:
@@ -1858,13 +2373,27 @@ func _walk(speed: float, delta: float) -> bool:
 		_last_walk_position = global_position
 		return false
 
+	# Stepping round something in the way.
+	if _nav.detouring():
+		_last_walk_position = global_position
+		_nav.walk_detour(speed, delta)
+		return false
+
+	var next := _agent.get_next_path_position()
+	var direction := Vector3(next.x - global_position.x, 0.0, next.z - global_position.z)
+
 	# Pushing on, going nowhere: something is in the way that the navmesh
-	# does not know about. As far as he can get is as far as he goes.
+	# does not know about. A way round it if there is one; if not, as far as
+	# he can get is as far as he goes.
 	var moved := _flat_distance(_last_walk_position)
 	_last_walk_position = global_position
 
 	if moved < speed * delta * 0.2:
 		_stuck_time += delta
+
+		if _stuck_time > GuardNavScript.DETOUR_AFTER and _nav.try_detour(direction):
+			_stuck_time = 0.0
+			return false
 
 		if _stuck_time > stuck_timeout:
 			_stuck_time = 0.0
@@ -1874,8 +2403,19 @@ func _walk(speed: float, delta: float) -> bool:
 	else:
 		_stuck_time = 0.0
 
-	var next := _agent.get_next_path_position()
-	var direction := Vector3(next.x - global_position.x, 0.0, next.z - global_position.z)
+	# A closed door just ahead: opened as he comes to it, not walked into.
+	var door: Node3D = _nav.door_ahead(next, delta)
+
+	if door != null:
+		_use_door(door)
+
+		if _path_blocked:
+			_stop(delta)
+			return true
+
+		if _door_wait > 0.0:
+			_stop(delta)
+			return false
 
 	if direction.length() < 0.01:
 		return false
@@ -1885,14 +2425,20 @@ func _walk(speed: float, delta: float) -> bool:
 	# Brake into the destination instead of noticing it on arrival: at chase
 	# speed that would overrun it by more than a metre.
 	var path := _agent.get_current_navigation_path()
+	var remaining := INF
 
 	if not path.is_empty():
 		# The agent calls it arrived at path_desired_distance short of the
 		# end, so that is where he has to have stopped.
-		var remaining := _flat_distance(path[path.size() - 1]) - _agent.path_desired_distance
+		remaining = _flat_distance(path[path.size() - 1]) - _agent.path_desired_distance
 		speed = minf(speed, maxf(sqrt(2.0 * acceleration * maxf(remaining, 0.0)), 0.6))
 
 	var wanted := direction * speed
+
+	# Easing round anyone too close, until he is nearly there.
+	if remaining > 1.0:
+		wanted += _nav.crowd(direction)
+
 	var flat := Vector3(velocity.x, 0.0, velocity.z).move_toward(wanted, acceleration * delta)
 	velocity.x = flat.x
 	velocity.z = flat.z
@@ -1953,22 +2499,28 @@ func _open_doors_in_the_way() -> void:
 		if collider.get("is_open") != false:
 			continue
 
-		var locked: bool = collider.get("locked") == true
-		var key_id: StringName = collider.get("key_id") if collider.get("key_id") != null else &""
+		_use_door(collider)
 
-		if locked and not inventory.has_key(key_id):
-			# Try the handle once, then treat it as the wall it is.
-			var now := _game_time
 
-			if now - float(_tried_doors.get(collider, -1000.0)) > locked_door_memory:
-				_tried_doors[collider] = now
-				collider.frob(self)
+## A closed door in his way: opened (and he waits a moment while it swings),
+## or, locked and no key for it, tried once and then taken for the wall it is.
+func _use_door(door: Object) -> void:
+	var locked: bool = door.get("locked") == true
+	var key_id: StringName = door.get("key_id") if door.get("key_id") != null else &""
 
-			_path_blocked = true
-			continue
+	if locked and not inventory.has_key(key_id):
+		# Try the handle once, then treat it as the wall it is.
+		var now := _game_time
 
-		collider.frob(self)
-		_door_wait = 0.9
+		if now - float(_tried_doors.get(door, -1000.0)) > locked_door_memory:
+			_tried_doors[door] = now
+			door.frob(self)
+
+		_path_blocked = true
+		return
+
+	door.frob(self)
+	_door_wait = 0.9
 
 
 # ---------------------------------------------------------------------------
@@ -1981,15 +2533,17 @@ func _update_head(delta: float) -> void:
 
 	match state:
 		Alert.RELAXED:
-			# An idle guard's gaze drifts.
-			_head_yaw_goal = sin(_idle_time * 0.6) * deg_to_rad(35.0)
+			# An idle guard's gaze drifts; a lookout's sweeps wider.
+			_head_yaw_goal = sin(_idle_time * (0.45 if lookout else 0.6)) * deg_to_rad(50.0 if lookout else 35.0)
 		Alert.SUSPICIOUS:
 			if has_last_known:
 				var to := last_known_position - global_position
 				var wanted := atan2(-to.x, -to.z)
 				_head_yaw_goal = clampf(wrapf(wanted - rotation.y, -PI, PI), -1.2, 1.2)
 		_:
-			_head_yaw_goal = 0.0
+			# Stopped to look about him: his eyes go either side of the way
+			# he faces.
+			_head_yaw_goal = sin(_look_timer * 4.5) * 0.55 if _look_timer > 0.0 and state != Alert.COMBAT else 0.0
 
 	_head.rotation.y = lerp_angle(_head.rotation.y, _head_yaw_goal, 1.0 - exp(-6.0 * delta))
 

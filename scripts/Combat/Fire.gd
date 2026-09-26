@@ -74,6 +74,8 @@ static func brazier(parent: Node, position: Vector3) -> Area3D:
 
 
 func _ready() -> void:
+	# Guards know where it is: to keep off it, and to kick you into it.
+	add_to_group(&"hazards")
 	collision_layer = 0
 	collision_mask = 1 | 2
 	monitoring = true

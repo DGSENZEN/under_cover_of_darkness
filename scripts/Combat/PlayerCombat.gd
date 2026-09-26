@@ -1486,8 +1486,8 @@ func _stagger(seconds: float, why: StringName) -> void:
 ## A blow got through to you: called by the player once it has landed.
 func on_hurt(amount: float, from: Node) -> void:
 	var info: Dictionary = from.attack_info() if from != null and from.has_method("attack_info") else {}
-	# A boot, a blast, a flame: it hurts, but nothing cut you.
-	var kick: bool = bool(info.get("unblockable", false)) or bool(info.get("hazard", false))
+	# A boot, a blast, a flame, a thrown crate: it hurts, but nothing cut you.
+	var kick: bool = bool(info.get("unblockable", false)) or bool(info.get("hazard", false)) or bool(info.get("blunt", false))
 
 	# Cut while winding up or drawing: that blow is lost.
 	if phase == Phase.WINDUP or phase == Phase.CHARGING or phase == Phase.DRAWING:
