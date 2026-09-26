@@ -5,13 +5,31 @@ extends Node3D
 ## controller does; the rest drive the player.
 
 const BodyMotionScript := preload("res://scripts/PlayerUtils/BodyMotion.gd")
+const PLAYER := preload("res://Player.tscn")
+const Props := preload("res://scripts/Interaction/Props.gd")
 
 const TICK := 1.0 / 60.0
 
 var results: Array[String] = []
+var player: CharacterBody3D
 
 
 func _ready() -> void:
+	Props.block(self, Vector3(0, -0.5, 0), Vector3(200, 1, 200))
+	# A 3 m drop, for landings.
+	Props.block(self, Vector3(-40, 1.5, 0), Vector3(6, 3, 6))
+
+	player = PLAYER.instantiate()
+	add_child(player)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	player.invulnerable = true
+	player.reload_on_death = false
+
+	if player.has_node("LightGem"):
+		player.get_node("LightGem").queue_free()
+
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(5)
 	await _run()
 
 	print("\n==== RESULTS ====")
@@ -23,6 +41,7 @@ func _ready() -> void:
 
 func _run() -> void:
 	_model_checks()
+	await _momentum_checks()
 
 
 # --------------------------------------------------------------------------
@@ -235,8 +254,242 @@ func _model_checks() -> void:
 
 
 # --------------------------------------------------------------------------
+# Momentum: the same speeds, with weight
+# --------------------------------------------------------------------------
+
+func _momentum_checks() -> void:
+	# Y7 a press answers at once and builds to walking pace; a sprint gathers
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(20)
+	Input.action_press("move_forward")
+	await _frames(1)
+	var first := _speed()
+	await _frames(5)
+	var sixth := _speed()
+	await _frames(18)
+	var walking := _speed()
+	await _frames(36)
+	Input.action_press("sprint")
+	var build := 0
+
+	while _speed() < 8.4 and build < 120:
+		await _frames(1)
+		build += 1
+
+	_release()
+	_check("Y7 a start answers on the first tick, is past half pace in 0.1 s and at pace by 0.4 s; a sprint gathers over 0.35-0.7 s",
+		first > 0.0 and sixth >= 3.25 and walking >= 6.175 and build >= 21 and build <= 42,
+		"tick 1 %.2f, tick 6 %.2f, tick 24 %.2f m/s; sprint reached 8.4 in %d ticks" % [first, sixth, walking, build])
+
+	# Y8 stops stay planted: no sliding, from a walk or a sprint; and letting
+	#    go of sprint eases back to walking pace instead of braking
+	var walk_stop: Array = await _stop_from(false)
+	var run_stop: Array = await _stop_from(true)
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(10)
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _frames(90)
+	Input.action_release("sprint")
+	var worst_drop := 0.0
+	var eased := -1
+	var last := _speed()
+
+	for i in 40:
+		await _frames(1)
+		worst_drop = maxf(worst_drop, last - _speed())
+		last = _speed()
+
+		if eased < 0 and last <= 6.6:
+			eased = i + 1
+
+	_release()
+	_check("Y8 a stop takes at most 0.2 s and 0.6 m from a walk, 0.3 s and 1.3 m from a sprint",
+		walk_stop[0] <= 12 and walk_stop[1] <= 0.6 and run_stop[0] <= 18 and run_stop[1] <= 1.3,
+		"walk %d ticks %.2f m; sprint %d ticks %.2f m" % [walk_stop[0], walk_stop[1], run_stop[0], run_stop[1]])
+	_check("Y8b letting go of sprint eases back to walking pace (at most 0.35 m/s a tick, there within 30 ticks)",
+		worst_drop <= 0.35 and eased > 0 and eased <= 30,
+		"worst drop %.3f m/s a tick, at 6.6 after %d ticks" % [worst_drop, eased])
+
+	# Y9 turning: a reversal is a stop and a start; at a sprint the old
+	#    direction goes more slowly than at a walk (a carve), a walking turn
+	#    is no slower than today's, and every turn finishes (no ice)
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(10)
+	Input.action_press("move_forward")
+	await _frames(60)
+	Input.action_release("move_forward")
+	Input.action_press("move_back")
+	var reversed := 0
+
+	while player.velocity.z < 5.85 and reversed < 90:
+		await _frames(1)
+		reversed += 1
+
+	_release()
+	var walk_turn: Array = await _turn_from(false)
+	var run_turn: Array = await _turn_from(true)
+	_check("Y9 a reversal takes at most 0.45 s; a sprint turn sheds its old heading at most 0.8x as fast as a walking one, which is no slower than today's; both finish",
+		reversed <= 27 and run_turn[0] <= 0.8 * walk_turn[0] and walk_turn[0] >= 31.0 and walk_turn[1] <= 27 and run_turn[1] <= 27,
+		"reversal %d ticks; old heading shed at %.1f m/s2 walking (gone in %d ticks), %.1f sprinting (gone in %d)" % [reversed, walk_turn[0], walk_turn[1], run_turn[0], run_turn[1]])
+
+	# Y10 the jump is untouched: it leaves when it always did and rises as high
+	var legacy_rise: Array = await _jump_rise(true)
+	var rise: Array = await _jump_rise(false)
+	_check("Y10 a jump leaves the ground on the same tick as before and rises as high as before",
+		rise[0] == legacy_rise[0] and rise[0] <= 2 and absf(rise[1] - legacy_rise[1]) <= 0.005 and rise[1] > 1.3,
+		"left after %d ticks (old %d), rose %.3f m (old %.3f)" % [rise[0], legacy_rise[0], rise[1], legacy_rise[1]])
+
+	# Y11b landing does not slow you: the weight is in the body, not the legs'
+	#    say over speed
+	_place(Vector3(0, 1.05, 30), 0.0)
+	await _frames(10)
+	Input.action_press("move_forward")
+	await _frames(60)
+	Input.action_press("jump")
+	await _frames(4)
+	Input.action_release("jump")
+	await _until(func(): return not player.is_on_floor(), 20)
+	var before_landing := _speed()
+
+	for i in 90:
+		if player.is_on_floor():
+			break
+
+		before_landing = _speed()
+		await _frames(1)
+
+	await _frames(5)
+	var after_landing := _speed()
+	_release()
+	_check("Y11b touching down after a jump does not cost speed", after_landing >= before_landing - 0.1,
+		"%.2f m/s before landing, %.2f five ticks after" % [before_landing, after_landing])
+
+	# The old feel is still there, as it was.
+	player.set("legacy_feel", true)
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(20)
+	Input.action_press("move_forward")
+	await _frames(6)
+	var old_sixth := _speed()
+	await _frames(3)
+	var old_ninth := _speed()
+	_release()
+	player.set("legacy_feel", false)
+	_check("Y7b the old feel still starts in a straight line to pace in 0.15 s", absf(old_sixth - 4.5) <= 0.05 and absf(old_ninth - 6.5) <= 0.01,
+		"tick 6 %.2f, tick 9 %.2f m/s" % [old_sixth, old_ninth])
+
+
+## Walk (or sprint) steadily, let go: [ticks to a standstill, distance].
+func _stop_from(sprinting: bool) -> Array:
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(10)
+	Input.action_press("move_forward")
+
+	if sprinting:
+		Input.action_press("sprint")
+
+	await _frames(90)
+	var from := player.global_position
+	_release()
+	var ticks := 0
+
+	while _speed() >= 0.05 and ticks < 60:
+		await _frames(1)
+		ticks += 1
+
+	var gone := from.distance_to(player.global_position)
+	return [ticks, gone]
+
+
+## Walk (or sprint) steadily ahead, then turn hard to the right: [how fast
+## the old heading's speed goes over the first three ticks (m/s²), ticks until
+## it is under 0.5 m/s].
+func _turn_from(sprinting: bool) -> Array:
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(10)
+	Input.action_press("move_forward")
+
+	if sprinting:
+		Input.action_press("sprint")
+
+	await _frames(90)
+	var ahead := -player.velocity.z
+	Input.action_release("move_forward")
+	Input.action_press("move_right")
+	await _frames(3)
+	var shed := (ahead - (-player.velocity.z)) / (3.0 * TICK)
+	var ticks := 3
+
+	while -player.velocity.z >= 0.5 and ticks < 90:
+		await _frames(1)
+		ticks += 1
+
+	_release()
+	return [shed, ticks]
+
+
+## Standing, a full jump (held past the top, so the jump cut never comes):
+## [ticks until the feet leave the ground, how high they rise].
+func _jump_rise(legacy: bool) -> Array:
+	player.set("legacy_feel", legacy)
+	_place(Vector3(20, 1.05, 60), 0.0)
+	await _frames(20)
+	var start: float = player.get_feet_position().y
+	Input.action_press("jump")
+	var left := 0
+
+	while player.get_feet_position().y <= start + 0.001 and left < 10:
+		await _frames(1)
+		left += 1
+
+	var top := start
+
+	for i in 60:
+		top = maxf(top, player.get_feet_position().y)
+		await _frames(1)
+
+	Input.action_release("jump")
+	await _frames(30)
+	player.set("legacy_feel", false)
+	return [left, top - start]
+
+
+# --------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------
+
+func _place(at: Vector3, yaw: float) -> void:
+	_release()
+	player.movement_state = 0
+	player.velocity = Vector3.ZERO
+	player.global_position = at
+	player.rotation.y = yaw
+	player.neck.rotation.x = 0.0
+	player.reset_physics_interpolation()
+
+
+func _release() -> void:
+	for a in ["move_forward", "move_back", "move_left", "move_right", "sprint", "crouch", "jump", "lean_left", "lean_right"]:
+		Input.action_release(a)
+
+
+func _speed() -> float:
+	return Vector2(player.velocity.x, player.velocity.z).length()
+
+
+func _frames(n: int) -> void:
+	for i in n:
+		await get_tree().physics_frame
+
+
+func _until(cond: Callable, max_frames: int) -> void:
+	for i in max_frames:
+		if cond.call():
+			return
+
+		await get_tree().physics_frame
+
 
 func _body() -> RefCounted:
 	var body: RefCounted = BodyMotionScript.new()

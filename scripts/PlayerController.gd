@@ -45,9 +45,27 @@ enum MoveState {
 @export var sprint_speed := 8.5
 @export var crouch_speed := 3.0
 
+## The old feel's straight-line starts and stops (legacy_feel), and the
+## death stop.
 @export var ground_acceleration := 45.0
 @export var ground_deceleration := 55.0
 @export var air_acceleration := 15.0
+
+## Momentum on the ground. Setting off, the push is hardest from a standstill
+## and eases off near the pace (this is its time constant, s); above walking
+## pace a sprint gathers more slowly.
+@export var start_time := 0.12
+@export var sprint_build_time := 0.2
+## Moving faster than asked (sprint let go, a guard raised): eased off.
+@export var slow_time := 0.15
+## A planted stop with no input, from walking pace and from a sprint (s).
+@export var stop_time_walk := 0.15
+@export var stop_time_sprint := 0.25
+## How fast speed across the way you want to go is taken away (m/s²): quick
+## at walking pace, lower at a sprint, so hard turns carve a little.
+@export var turn_acceleration_walk := 45.0
+@export var turn_acceleration_sprint := 28.0
+@export var max_ground_acceleration := 60.0
 
 @export var gravity := 24.0
 @export var fall_gravity_multiplier := 1.35
@@ -245,6 +263,10 @@ enum MoveState {
 ## The traversal overlay: state, obstacle readout, markers. Off by default,
 ## the HUD covers normal play; the gyms switch it on.
 @export var debug_traversal := false
+## The old movement feel, for comparing (F10 in debug builds): straight-line
+## starts and stops, the old strides, the old camera bob and hand motion.
+## Goes once the new feel is signed off.
+@export var legacy_feel := false
 
 
 @onready var collider: CollisionShape3D = $CollisionShape3D
@@ -908,7 +930,7 @@ func _apply_horizontal_movement(
 		velocity.z
 	)
 
-	if _on_floor_now() or _on_stairs:
+	if (_on_floor_now() or _on_stairs) and legacy_feel:
 		var acceleration := ground_acceleration
 
 		if wish_direction == Vector3.ZERO:
@@ -918,6 +940,9 @@ func _apply_horizontal_movement(
 			target_velocity,
 			acceleration * delta
 		)
+
+	elif _on_floor_now() or _on_stairs:
+		horizontal_velocity = _ground_velocity(horizontal_velocity, wish_direction, target_speed, delta)
 
 	elif wish_direction != Vector3.ZERO:
 		# With no air input, momentum is preserved.
@@ -929,6 +954,37 @@ func _apply_horizontal_movement(
 
 	velocity.x = horizontal_velocity.x
 	velocity.z = horizontal_velocity.z
+
+
+## Momentum on the ground, at the same speeds. Along the way you want to go,
+## the push closes the gap to `target_speed` in proportion to it (hardest from
+## a standstill, easing off near the pace; more slowly above walking pace, so
+## a sprint gathers); moving faster than asked eases off. Speed across the way
+## you want to go is taken away quickly at walking pace and less quickly at a
+## sprint, so a hard turn carves a little. With no input, a planted stop.
+func _ground_velocity(current: Vector3, wish: Vector3, target_speed: float, delta: float) -> Vector3:
+	var pace := clampf((current.length() - walk_speed) / maxf(sprint_speed - walk_speed, 0.01), 0.0, 1.0)
+
+	if wish == Vector3.ZERO:
+		var stop_time := lerpf(stop_time_walk, stop_time_sprint, pace)
+		var reference := lerpf(walk_speed, sprint_speed, pace)
+		return current.move_toward(Vector3.ZERO, reference / maxf(stop_time, 0.01) * delta)
+
+	var along := current.dot(wish)
+	var across := current - wish * along
+	var gap := target_speed - along
+
+	if gap > 0.0:
+		var build := start_time if along < walk_speed - 0.01 else sprint_build_time
+		var push := clampf(gap / maxf(build, 0.01), 2.0, max_ground_acceleration)
+		along = minf(along + push * delta, target_speed)
+	elif gap < 0.0:
+		var easing := clampf(-gap / maxf(slow_time, 0.01), 2.0, max_ground_acceleration)
+		along = maxf(along - easing * delta, target_speed)
+
+	var turn := lerpf(turn_acceleration_walk, turn_acceleration_sprint, pace)
+	across = across.move_toward(Vector3.ZERO, turn * delta)
+	return wish * along + across
 
 
 func _apply_vertical_movement(delta: float) -> void:
