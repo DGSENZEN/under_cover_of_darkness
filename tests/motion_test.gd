@@ -235,10 +235,12 @@ func _model_checks() -> void:
 	#    height a little and settles
 	var kneel := _stance(0.8)
 	var rise := _stance(0.0, 0.8)
-	_check("Y15 crouch and stand never trail the eye, pass the target by 0.2-2 cm, settle within 0.6 s",
-		kneel.trail <= 0.002 and kneel.past >= 0.002 and kneel.past <= 0.02 and kneel.after <= 0.0025
-		and rise.trail <= 0.002 and rise.past >= 0.002 and rise.past <= 0.02 and rise.after <= 0.0025,
-		"down: trails %.4f past %.4f after 0.6 s %.4f; up: trails %.4f past %.4f after %.4f" % [kneel.trail, kneel.past, kneel.after, rise.trail, rise.past, rise.after])
+	# (Nor may it race ahead: a crouch is the knees bending, not a faster
+	# crouch. At most 6 cm ahead of the eye on the way.)
+	_check("Y15 crouch and stand never trail the eye nor race it (6 cm), pass the target by 0.2-2 cm, settle within 0.6 s",
+		kneel.trail <= 0.002 and kneel.lead <= 0.06 and kneel.past >= 0.002 and kneel.past <= 0.02 and kneel.after <= 0.0025
+		and rise.trail <= 0.002 and rise.lead <= 0.06 and rise.past >= 0.002 and rise.past <= 0.02 and rise.after <= 0.0025,
+		"down: trails %.4f leads %.3f past %.4f after 0.6 s %.4f; up: trails %.4f leads %.3f past %.4f after %.4f" % [kneel.trail, kneel.lead, kneel.past, kneel.after, rise.trail, rise.lead, rise.past, rise.after])
 
 	# Y16 leaning out bends the body: a small dip that settles
 	var bender := _body()
@@ -475,6 +477,26 @@ func _camera_checks() -> void:
 
 	_check("Y17 aim and sight points are the same on the old and new feel", differ.is_empty(),
 		"differing states [crouched, leaning] %s" % [differ])
+
+	# Y15i a real crouch and stand: the view never races the gameplay eye (the
+	#    body's knee bend runs in step with the eye's own ease)
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(20)
+	var ahead := 0.0
+	Input.action_press("crouch")
+
+	for i in 50:
+		await _frames(1)
+		ahead = maxf(ahead, absf(player.juice.view_position.y))
+
+	Input.action_release("crouch")
+
+	for i in 50:
+		await _frames(1)
+		ahead = maxf(ahead, absf(player.juice.view_position.y))
+
+	_check("Y15i crouching and standing for real, the view stays within 6 cm of the gameplay eye", ahead <= 0.06,
+		"most %.3f m" % ahead)
 
 	# Y19 a teleport, a shove in a hit-stop, and the dial at 2 with a fall that
 	#    would break bones: never past the caps, and a teleport is not a jolt
@@ -981,6 +1003,7 @@ func _stance(target: float, start := 0.0) -> Dictionary:
 		body.step(TICK, f)
 
 	var trail := 0.0
+	var lead := 0.0
 	var past := 0.0
 	var after := 0.0
 	var down := target > start
@@ -995,15 +1018,17 @@ func _stance(target: float, start := 0.0) -> Dictionary:
 
 		if down:
 			trail = maxf(trail, eye - view)
+			lead = maxf(lead, view - eye)
 			past = maxf(past, view - target)
 		else:
 			trail = maxf(trail, view - eye)
+			lead = maxf(lead, eye - view)
 			past = maxf(past, target - view)
 
 		if i >= 36:
 			after = maxf(after, absf(view - target))
 
-	return {"trail": trail, "past": past, "after": after}
+	return {"trail": trail, "lead": lead, "past": past, "after": after}
 
 
 func _check(test_name: String, ok: bool, detail: String) -> void:

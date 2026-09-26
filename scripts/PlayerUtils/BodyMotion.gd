@@ -68,11 +68,12 @@ const JUMP_RISE := 0.02
 const LEAN_DIP := 0.01
 
 # The stance: the eyes' own spring into a crouch and back up. It sets off a
-# little faster than the gameplay eye eases, so the view is never behind it,
-# and passes the new height by about a centimetre before it settles.
-const STANCE_OMEGA := 14.0
-const STANCE_ZETA := 0.85
-const STANCE_LEAD := 1.1
+# touch faster than the gameplay eye eases, so the view is never behind it
+# (nor more than a few centimetres ahead), and passes the new height by
+# about a centimetre before it settles.
+const STANCE_OMEGA := 11.0
+const STANCE_ZETA := 0.9
+const STANCE_LEAD := 1.05
 
 ## The springs are moved in steps no longer than this, so they behave the
 ## same at any physics tick rate (one Euler step per tick over-damps them).
@@ -138,6 +139,10 @@ var _leg_omega := LEG_OMEGA
 var _stance := 0.0
 var _stance_v := 0.0
 var _stance_target := 0.0
+## The gameplay eye's drop, eased here the way the controller eases it, in
+## step with the spring: the controller eases its own after the tick, so its
+## value in the Frame is a tick behind.
+var _eye := 0.0
 
 var _arm := Vector3.ZERO
 var _arm_v := Vector3.ZERO
@@ -249,11 +254,13 @@ func step(delta: float, frame: Frame) -> void:
 			_stance_target = frame.eye_target_drop
 			_stance_v = STANCE_LEAD * _eye_rate * (_stance_target - _stance)
 
+		_eye = lerpf(_eye, _stance_target, 1.0 - exp(-_eye_rate * dt))
 		var knees := _spring1(Vector2(_stance, _stance_v), _stance_target, STANCE_OMEGA, STANCE_ZETA, dt)
 		_stance = knees.x
 		_stance_v = knees.y
-		stance_y = frame.eye_drop - _stance
+		stance_y = _eye - _stance
 	else:
+		_eye = frame.eye_drop
 		_stance = frame.eye_drop
 		_stance_v = 0.0
 		_stance_target = frame.eye_target_drop
@@ -332,6 +339,7 @@ func reset() -> void:
 	_stance = 0.0
 	_stance_v = 0.0
 	_stance_target = 0.0
+	_eye = 0.0
 	_arm = Vector3.ZERO
 	_arm_v = Vector3.ZERO
 	_head_y1 = 0.0
