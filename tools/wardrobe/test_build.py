@@ -6,6 +6,7 @@ Each case builds a little and checks what came out. Runs in a
 factory-fresh Blender, headless. Exit code 1 on any failure.
 """
 
+import math
 import os
 import sys
 
@@ -126,6 +127,26 @@ def hangs_off(obj, part_name, recipe=TYPES):
     return min(tree.find_nearest(obj.data.vertices[v].co)[3] for v in part_vertices(obj, part_name, recipe))
 
 
+def leans_back(obj, part_name, recipe, length, back):
+    """Whether a prop hung from his belt on his left leans `back` degrees
+    back, as its recipe says: its tip at least 80% of the way behind its top
+    that `length` leaning `back` makes (the bodies face -y), and no nearer
+    his middle than its top (not swung in across his legs). Its top and tip
+    are where its vertices within 5 cm of its highest and of its lowest
+    are, on average (a quiver's fletchings spread across its mouth). []
+    or what is wrong."""
+    points = [obj.data.vertices[v].co.copy() for v in part_vertices(obj, part_name, recipe)]
+    high, low = max(p.z for p in points), min(p.z for p in points)
+    top = sum((p for p in points if p.z > high - 0.05), Vector()) / sum(1 for p in points if p.z > high - 0.05)
+    tip = sum((p for p in points if p.z < low + 0.05), Vector()) / sum(1 for p in points if p.z < low + 0.05)
+
+    if tip.y - top.y < 0.8 * length * math.sin(math.radians(back)) or tip.x < top.x - 0.01:
+        return ["%s runs from %s down to %s, not back" % (part_name, tuple(round(c, 3) for c in top),
+                                                           tuple(round(c, 3) for c in tip))]
+
+    return []
+
+
 def case_types():
     """Every garment type batch 1 adds builds on the male body, rides the
     bones and chains it should, and passes every export rule."""
@@ -173,6 +194,9 @@ def case_types():
     for prop in ("quiver", "knife"):
         if hangs_off(outfit, prop) > 0.03:
             messages.append("%s hangs %.3f m off him" % (prop, hangs_off(outfit, prop)))
+
+    # Its `back` defaults to 12 degrees.
+    messages += leans_back(outfit, "quiver", TYPES, 0.42, 12)
 
     if faces_on(outfit, "bracer") != {"lowerarm_l"}:
         messages.append("bracer on %s" % sorted(faces_on(outfit, "bracer")))
@@ -348,6 +372,8 @@ def case_types2():
 
     if hangs_off(male, "hanger", TYPES2) > 0.03:
         messages.append("hanger hangs %.3f m off him" % hangs_off(male, "hanger", TYPES2))
+
+    messages += leans_back(male, "hanger", TYPES2, 0.95, 35)
 
     messages += ["male: %s" % m for m in validate.check(male, armature=arm, reference_joints=joints, cloth_bones=cloth,
                                                          bare=set(TYPES2["bare"]))]
@@ -600,9 +626,60 @@ def case_male_parts():
     return messages
 
 
+def head_skin():
+    """Where the open file's detailed heads (High_*) sample their skin
+    texture, the median colour (sRGB) of each: {head: (r, g, b)}."""
+    import numpy as np
+
+    out = {}
+
+    for obj in [o for o in bpy.data.objects if o.name.startswith("High_") and o.type == "MESH"]:
+        for slot, material in enumerate(obj.data.materials):
+            if material is None or not material.use_nodes or "Superhero" not in material.name:
+                continue
+
+            image = next(n.image for n in material.node_tree.nodes if n.type == "TEX_IMAGE" and n.image is not None
+                         and "Normal" not in n.image.name and "Roughness" not in n.image.name)
+            w, h = image.size
+            pixels = np.array(image.pixels[:], dtype=np.float32).reshape(h, w, 4)[..., :3]
+            uv = obj.data.uv_layers.active.data
+            samples = [pixels[min(int(uv[i].uv.y % 1.0 * h), h - 1), min(int(uv[i].uv.x % 1.0 * w), w - 1)]
+                       for p in obj.data.polygons if p.material_index == slot for i in p.loop_indices]
+            out[obj.name] = tuple(float(c) for c in np.median(np.array(samples), axis=0))
+            break
+
+    return out
+
+
+def case_skin():
+    """Bare skin (build.SKIN, the recipes' SKIN_COLOUR) is the colour of
+    the detailed heads' skin, on either body: each committed head's skin
+    texture, where its faces sample it, is within 0.03 of it (a bare arm
+    otherwise shows paler than his face, in every tone)."""
+    import build
+    import recipes
+
+    messages = [] if tuple(recipes.SKIN_COLOUR) == tuple(build.SKIN) else \
+        ["recipes.SKIN_COLOUR %s is not build.SKIN %s" % (recipes.SKIN_COLOUR, build.SKIN)]
+
+    for name in ("heads", "heads_female"):
+        bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / ("%s.blend" % name)))
+        heads = head_skin()
+
+        if not heads:
+            messages.append("%s: no detailed head with a skin texture" % name)
+
+        for head, median in heads.items():
+            if max(abs(a - b) for a, b in zip(median, build.SKIN)) > 0.03:
+                messages.append("%s's skin %s, bare skin %s" % (head, tuple(round(c, 3) for c in median), build.SKIN))
+
+    fresh()
+    return messages
+
+
 CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, "watchman": case_watchman,
          "hood": case_hood, "launcher": case_launcher, "bodies": case_bodies, "male_parts": case_male_parts,
-         "types2": case_types2}
+         "types2": case_types2, "skin": case_skin}
 
 
 def main():

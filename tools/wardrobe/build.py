@@ -42,7 +42,10 @@ DENSITY = {"base": 0.8, "shell": 1.0, "mittens": 0.8, "boots": 0.8, "collar": 0.
 # What cloth hangs clear of (and what props stand off): every part made
 # before it of these types.
 WORN = ("shell", "boots", "skirt", "panels", "tabard")
-SKIN = (0.78, 0.6, 0.5)
+# Bare skin: the detailed heads' skin (their texture where their faces
+# sample it: the male's (0.62, 0.41, 0.29), the female's (0.65, 0.44,
+# 0.31)), before his tone, so a bare arm is his face's colour.
+SKIN = (0.63, 0.42, 0.30)
 # How far under a garment a body face still counts as covered, when the
 # build cuts the hidden body away (validation is stricter: thickness + 5 mm).
 COVERED = 0.1
@@ -1334,8 +1337,7 @@ def prop(kind, g, part):
                                    (0.008, 0.004, 0.05)))
     elif g["shape"] in ("scabbard", "hanger"):
         w, d, length = g["size"]
-        down = Matrix.Rotation(math.radians(g["back"]) * side, 4, tangent) @ -up
-        down = (down + radial * 0.1).normalized()
+        down = hang_down(kind, g["back"], radial, tangent, side)
         # A hanger (a rapier's) holds its scabbard on two straps, its throat
         # a hand under the belt; a scabbard hangs from the belt itself.
         belt_at = below + radial * 0.03
@@ -1380,6 +1382,21 @@ def prop(kind, g, part):
         kind.add(obj, g, part, "prop", whole=True)
 
 
+def hang_down(kind, back, radial, tangent, side):
+    """Which way a prop hung from his belt runs down from where it hangs:
+    `back` degrees behind straight down (the bodies face -y), then a little
+    out from him. Batch 0's turns about the belt's tangent instead, as
+    approved: at his side that swings it in, across his legs."""
+    up = Vector((0.0, 0.0, 1.0))
+
+    if kind.recipe.get("batch") == 0:
+        down = Matrix.Rotation(math.radians(back) * side, 4, tangent) @ -up
+    else:
+        down = Matrix.Rotation(math.radians(back), 4, Vector((1.0, 0.0, 0.0))) @ -up
+
+    return (down + radial * 0.1).normalized()
+
+
 def quiver(kind, g, part, below, radial, tangent, side):
     """A quiver hung from the belt: a tapered leather box `length` long,
     leaning back, its mouth dark and a few arrows' fletchings standing out of
@@ -1388,7 +1405,7 @@ def quiver(kind, g, part, below, radial, tangent, side):
     up = Vector((0.0, 0.0, 1.0))
     w, d = g.get("size", (0.1, 0.07))
     length = g["length"]
-    down = (Matrix.Rotation(math.radians(g.get("back", 12)) * side, 4, tangent) @ -up + radial * 0.1).normalized()
+    down = hang_down(kind, g.get("back", 12), radial, tangent, side)
     start = below + radial * (d * 0.5 + 0.01)
     side_to_side = radial.cross(down).normalized()
     cuts = [0.0, 1.0 / 3.0, 1.0]

@@ -38,8 +38,8 @@ IRON = (0.34, 0.34, 0.36)
 MAIL = (0.36, 0.36, 0.38)
 # The archer's green (his tunic's and hood's first dye).
 ARCHER_GREEN = (0.20, 0.30, 0.14)
-# Bare skin: the Quaternius skin before his tone (build.SKIN's).
-SKIN_COLOUR = (0.78, 0.6, 0.5)
+# Bare skin: the detailed heads' skin before his tone (build.SKIN's).
+SKIN_COLOUR = (0.63, 0.42, 0.30)
 
 WATCHMAN = {
     "kind": "watchman",
