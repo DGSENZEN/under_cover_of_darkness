@@ -16,6 +16,7 @@ const PLAYER := preload("res://Player.tscn")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 
 const MALE := "res://assets/characters/base/Superhero_Male_FullBody.gltf"
+const FEMALE := "res://assets/characters/base/Superhero_Female_FullBody.gltf"
 
 var results: Array[String] = []
 
@@ -33,7 +34,8 @@ const DRESSED := {&"watchman": &"", &"swordsman": &"swordsman", &"archer": &"arc
 ##   k5: how far (m) a cloth joint may pass into a leg in his attacks
 ##     (default 0.005);
 ##   k4b: how much of its full-speed travel his cloth may still travel in
-##     slow motion (default 0.25).
+##     slow motion (default 0.25);
+##   body: the body he is dressed on (default "male").
 const EXPECT := {
 	# His cloth is batch 0's, as approved: built where it hangs, not clear of
 	# his legs (recipes.WATCHMAN "batch"), so his kick swings a skirt 9 mm
@@ -59,7 +61,8 @@ const EXPECT := {
 	# too: a body matter, its own task), and her cloth rides and is pushed
 	# by it: K4b allows her 0.4.
 	&"duelist": {"worn": ["Outfit", "Head_sharp", "Hair_buns"], "key": ["Hair_buns"], "rings": [],
-		"silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {}, "k4b": 0.4},
+		"silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {}, "k4b": 0.4,
+		"body": "female"},
 	# One man: every seed gives him the same face, hair and beard.
 	&"arms_master": {"worn": ["Outfit", "Head_old", "Hair_parted", "Beard_full"], "key": ["Hair_parted", "Beard_full"],
 		"rings": [], "silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {},
@@ -99,6 +102,7 @@ func _run() -> void:
 	_k13b()
 	_k15()
 	await _k3()
+	await _k3b()
 	await _dressed()
 	await _integration()
 
@@ -601,11 +605,100 @@ func _colour_count(img: Image) -> int:
 
 
 func _k3() -> void:
-	# K3 (spec K3, male body) every dressed kind's export re-binds exactly onto the game skeleton
+	# K3 (spec K3) every dressed kind's export re-binds exactly onto the game
+	# skeleton of its body
 	for kind in DRESSED:
 		var errs := await _probe_errors(kind)
 		_check("K3 %s: probes within 1 mm at rest, within 3 cm of the body mid-swing" % kind,
 			errs.count > 0 and errs.rest <= 0.001 and errs.pose <= 0.03, "rest %.4f pose %.4f over %d probes" % [errs.rest, errs.pose, errs.count])
+
+
+## K3b (Review Focus 1) every kind is dressed on his own body's skeleton
+## (EXPECT's, not his JSON's word for it: the duelist's head is 5 cm lower
+## than a man's), and K3c his face and hair sit on his head as their own
+## files put them there, at rest and mid-swing: a face or hair made for the
+## other body would sit at its head height.
+func _k3b() -> void:
+	var female := await _head_rest(FEMALE)
+	var male := await _head_rest(MALE)
+
+	for kind in DRESSED:
+		var want := String(EXPECT[kind].get("body", "male"))
+		var g := await _guard(31, DRESSED[kind])
+		g.set_physics_process(false)
+		var man = g._rig.man
+		var skeleton: Skeleton3D = man.skeleton
+		var head := skeleton.find_bone(&"Head")
+		var here := skeleton.get_bone_global_rest(head).origin
+		var own := female if want == "female" else male
+		var other := male if want == "female" else female
+		_check("K3b %s: dressed on the %s skeleton" % [kind, want], here.distance_to(own) <= 0.001 and here.distance_to(other) > 0.03,
+			"his head's rest %.4f m from the %s skeleton's, %.4f from the other's" % [here.distance_to(own), want, here.distance_to(other)])
+
+		var pieces: Array = man.worn().filter(func(m): return String(m.name).begins_with("Head_") or String(m.name).begins_with("Hair_"))
+		var worst := 0.0
+		var rest_offsets := {}
+
+		# (Offsets in the Head bone's own frame: the part files' skeletons
+		# face the other way from the game's.)
+		for piece in pieces:
+			var own := await _own_offset(piece)
+			var at_rest := skeleton.get_bone_global_pose(head)
+			rest_offsets[piece] = at_rest.basis.inverse() * (_centre(_skinned(piece, skeleton)) - at_rest.origin)
+			worst = maxf(worst, (rest_offsets[piece] as Vector3).distance_to(own))
+
+		_pose(skeleton, &"Sword_Attack", 0.3)
+		var swung := 0.0
+
+		for piece in pieces:
+			var pose := skeleton.get_bone_global_pose(head)
+			var offset: Vector3 = pose.basis.inverse() * (_centre(_skinned(piece, skeleton)) - pose.origin)
+			swung = maxf(swung, offset.distance_to(rest_offsets[piece]))
+
+		# Within a centimetre (the part files' Head joint turns a little from
+		# the game's; a face made for the male body sits 5 cm off).
+		_check("K3c %s: his face and hair sit on his head, at rest and mid-swing" % kind,
+			pieces.size() >= 1 and pieces.any(func(m): return String(m.name).begins_with("Head_")) and worst <= 0.01 and swung <= 0.01,
+			"%d pieces: %.4f m from where their files put them on his head; %.4f m off it mid-swing" % [pieces.size(), worst, swung])
+		g.queue_free()
+		await _frames(1)
+
+
+## The Head bone's rest (global, at the model's origin) of a body's glTF.
+func _head_rest(path: String) -> Vector3:
+	var scene: Node3D = (load(path) as PackedScene).instantiate()
+	add_child(scene)
+	var skeleton := scene.find_child("Skeleton3D", true, false) as Skeleton3D
+	var out := skeleton.get_bone_global_rest(skeleton.find_bone(&"Head")).origin
+	scene.queue_free()
+	await _frames(1)
+	return out
+
+
+## Where a worn head or hair piece's own file puts it: its vertices' centre
+## from its own skeleton's Head joint, at rest, in that joint's frame.
+func _own_offset(piece: MeshInstance3D) -> Vector3:
+	var root := Wardrobe.ROOT + ("heads/%s.glb" % String(piece.name).trim_prefix("Head_") if String(piece.name).begins_with("Head_")
+		else "hair/%s.glb" % String(piece.name).trim_prefix("Hair_"))
+	var scene: Node3D = (load(root) as PackedScene).instantiate()
+	add_child(scene)
+	var own_skeleton := scene.find_child("Skeleton3D", true, false) as Skeleton3D
+	var mesh := scene.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D
+	await _frames(1)
+	var joint := own_skeleton.get_bone_global_pose(own_skeleton.find_bone(&"Head"))
+	var out := joint.basis.inverse() * (_centre(_skinned(mesh, own_skeleton)) - joint.origin)
+	scene.queue_free()
+	await _frames(1)
+	return out
+
+
+func _centre(points: PackedVector3Array) -> Vector3:
+	var sum := Vector3.ZERO
+
+	for p in points:
+		sum += p
+
+	return sum / maxf(points.size(), 1.0)
 
 
 ## For each probe of `kind`'s JSON: how far the re-bound outfit's vertex sits
@@ -619,7 +712,8 @@ func _probe_errors(kind: StringName) -> Dictionary:
 	if data.is_empty() or not ResourceLoader.exists(path):
 		return out
 
-	var scene: Node3D = (load(MALE) as PackedScene).instantiate()
+	# On his own body's skeleton (the duelist's is the female one).
+	var scene: Node3D = (load(FEMALE if String(data.get("body", "male")) == "female" else MALE) as PackedScene).instantiate()
 	add_child(scene)
 	var skeleton := scene.find_child("Skeleton3D", true, false) as Skeleton3D
 	var body: MeshInstance3D = null
@@ -782,6 +876,21 @@ func _attacks_of(archetype: StringName) -> Array:
 		return [&"kick", &"lunge"]
 
 	return (GuardFighterScript.ARCHETYPES[archetype]["attacks"] as Dictionary).keys()
+
+
+## A blow as the game plays it (GuardFighter._start and its phases), by the
+## guard's own numbers: [[phase, seconds], ...], its windup, strike and
+## recover (a kick's or bash's windup is the fighter's own short one).
+func _blow(g: Node, attack: StringName) -> Array:
+	var info: Dictionary = GuardFighterScript.ATTACKS.get(attack, GuardFighterScript.ATTACKS[&"overhead"])
+	var windup: float = g.windup_time * float(info["windup"])
+
+	if attack == &"kick":
+		windup = GuardFighterScript.KICK_WINDUP
+	elif attack == &"bash":
+		windup = GuardFighterScript.BASH_WINDUP
+
+	return [[&"windup", windup], [&"strike", g.strike_time], [&"recover", g.recover_time * float(info["recover"])]]
 
 
 ## True when no two entries of `list` are the same object.
@@ -1076,12 +1185,13 @@ func _marker(skeleton: Skeleton3D, bone: String, offset: Vector3) -> Node3D:
 ## Each hem in the frame of the bone its chain hangs from (his pelvis; a
 ## hood's tail, his head): whatever he does (turn, fall, get up, whip his
 ## head round), a hem that simply rode with that bone would not move here;
-## only the cloth's own swing does.
+## only the cloth's own swing does. In metres whatever his size (the frame
+## turns and moves with the bone but is not scaled with him).
 func _hems(w: Dictionary) -> Dictionary:
 	var out := {}
 
 	for chain in w.tips:
-		var frame := (w.anchors.get(chain, w.pelvis) as Node3D).global_transform.affine_inverse()
+		var frame := (w.anchors.get(chain, w.pelvis) as Node3D).global_transform.orthonormalized().affine_inverse()
 		out[chain] = frame * (w.tips[chain] as Node3D).global_position
 
 	return out
@@ -1250,6 +1360,9 @@ func _mantle_and_arms(g: Node, man: Node) -> void:
 	var beard := _worn(man, "Beard_full")
 	var face := _worn(man, "Head_weathered")
 	var cuts := 0
+	# How far forward the top of his head leans while bowed (his head's up
+	# against the way he faces): a look down leans it forward.
+	var bowed := INF
 
 	for i in range(60):
 		g._phase = &"strike" if i < 30 else &""
@@ -1260,6 +1373,8 @@ func _mantle_and_arms(g: Node, man: Node) -> void:
 
 		if i >= 30:
 			_bow(man, 0.61)
+			var head_up := (skeleton.global_basis * skeleton.get_bone_global_pose(skeleton.find_bone(&"Head")).basis).y.normalized()
+			bowed = minf(bowed, head_up.dot(-man.global_basis.z.normalized()))
 
 		var outfit := _skinned(man.body, skeleton)
 
@@ -1268,8 +1383,9 @@ func _mantle_and_arms(g: Node, man: Node) -> void:
 				cuts += _cuts(outfit, mantle, _skinned(piece, skeleton), _faces_of(piece, PackedInt32Array()))
 
 	g._phase = &""
-	_check("K28 his mantle never cuts through his beard or face", not mantle.is_empty() and beard != null and face != null
-		and cuts == 0, "%d cuts (%d mantle triangles)" % [cuts, mantle.size() / 3])
+	_check("K28 his mantle never cuts through his beard or face, through his overhead and looking down", not mantle.is_empty()
+		and beard != null and face != null and bowed > 0.3 and cuts == 0,
+		"%d cuts (%d mantle triangles); bowed, his head leans %.2f forward" % [cuts, mantle.size() / 3, bowed])
 
 	# K29 (Review Focus 5) his bare left upper arm is skin in his mask (so it
 	# takes his rolled tone, as his face does)
@@ -1299,8 +1415,8 @@ func _mantle_and_arms(g: Node, man: Node) -> void:
 
 
 ## K27 (Review Focus 3), the duelist's half-cape: through a run and a stop,
-## then her own attacks after five idles (as K5 drives them), no joint of it
-## enters the capsules on her back and left arm.
+## then her own attacks after five idles (whole blows, as K5 drives them),
+## no joint of it enters the capsules on her back and left arm.
 func _cape_off_her() -> void:
 	var dt := 1.0 / 60.0
 	var colliders := {}
@@ -1335,13 +1451,18 @@ func _cape_off_her() -> void:
 				await _step(her, dt)
 
 			for attack in _attacks_of(&"duelist"):
-				for i in range(30):
-					her._phase = &"strike"
-					her._attack = attack
-					her._phase_length = 0.5
-					her._phase_timer = 0.5 * (1.0 - i / 29.0)
-					await _step(her, dt)
-					worst = _deeper(worst, _deepest(capes, bones, colliders), "%s frame %d after %d idle, seed %d" % [attack, i, idle, seed])
+				# The whole blow, as K5 drives it (a thrust's windup draws her
+				# arm back).
+				for part in _blow(her, attack):
+					var frames: int = roundi(float(part[1]) / dt)
+
+					for i in range(frames):
+						her._phase = part[0]
+						her._attack = attack
+						her._phase_length = part[1]
+						her._phase_timer = float(part[1]) * (1.0 - float(i + 1) / frames)
+						await _step(her, dt)
+						worst = _deeper(worst, _deepest(capes, bones, colliders), "%s %s frame %d after %d idle, seed %d" % [attack, part[0], i, idle, seed])
 
 		her._phase = &""
 		her.queue_free()
@@ -1357,13 +1478,15 @@ func _deepest(joints: Array, bones: Dictionary, colliders: Dictionary) -> Array:
 
 	for bone in bones:
 		var mark: Node3D = bones[bone]
+		# At her size, as K5 measures legs.
+		var size := mark.global_basis.get_scale().x
 		var a := mark.global_position
-		var b := a + mark.global_basis.y.normalized() * float(colliders[bone].height)
+		var b := a + mark.global_basis.y.normalized() * float(colliders[bone].height) * size
 
 		for joint in joints:
 			var p: Vector3 = (joint[1] as Node3D).global_position
 			var t := clampf((p - a).dot(b - a) / maxf((b - a).length_squared(), 1e-6), 0.0, 1.0)
-			var d := p.distance_to(a + (b - a) * t) - float(colliders[bone].radius)
+			var d := p.distance_to(a + (b - a) * t) - float(colliders[bone].radius) * size
 
 			if d < out[0]:
 				out = [d, "%s in %s" % [joint[0], bone]]
@@ -1375,8 +1498,9 @@ func _deeper(worst: Array, now: Array, when: String) -> Array:
 	return [now[0], "%s, %s" % [now[1], when]] if now[0] < worst[0] else worst
 
 
-## Bows his head: his neck and head turned down about his own right axis
-## (as Posture turns bones), `angle` radians in all, until the next frame.
+## Bows his head: his neck and head turned forward and down about his own
+## right axis, `angle` radians in all, until the next frame (a negative turn
+## about it: as Posture turns bones, a positive one leans him back).
 func _bow(man: Node, angle: float) -> void:
 	var skeleton: Skeleton3D = man.skeleton
 	var right: Vector3 = (skeleton.global_basis.inverse() * man.global_basis).orthonormalized() * Vector3.RIGHT
@@ -1385,7 +1509,7 @@ func _bow(man: Node, angle: float) -> void:
 		var index := skeleton.find_bone(pair[0])
 		var parent := skeleton.get_bone_parent(index)
 		var parent_basis := skeleton.get_bone_global_pose(parent).basis if parent >= 0 else Basis.IDENTITY
-		var turned := Basis(right.normalized(), angle * float(pair[1])) * skeleton.get_bone_global_pose(index).basis
+		var turned := Basis(right.normalized(), -angle * float(pair[1])) * skeleton.get_bone_global_pose(index).basis
 		skeleton.set_bone_pose_rotation(index, (parent_basis.inverse() * turned).orthonormalized().get_rotation_quaternion())
 
 
@@ -1684,29 +1808,37 @@ func _cloth_kind(kind: StringName, archetype: StringName) -> void:
 				await _step(fighter, dt)
 
 			for attack in _attacks_of(archetype):
-				for i in range(30):
-					fighter._phase = &"strike"
-					fighter._attack = attack
-					fighter._phase_length = 0.5
-					fighter._phase_timer = 0.5 * (1.0 - i / 29.0)
-					await _step(fighter, dt)
+				# The whole blow, as long as he takes over each part of it (a
+				# windup draws a leg back, a recover steps it home).
+				for part in _blow(fighter, attack):
+					var frames: int = roundi(float(part[1]) / dt)
 
-					for leg in fw.legs:
-						if not colliders.has(leg):
-							continue
+					for i in range(frames):
+						fighter._phase = part[0]
+						fighter._attack = attack
+						fighter._phase_length = part[1]
+						fighter._phase_timer = float(part[1]) * (1.0 - float(i + 1) / frames)
+						await _step(fighter, dt)
 
-						var mark: Node3D = fw.legs[leg]
-						var a := mark.global_position
-						var b := a + mark.global_basis.y.normalized() * float(colliders[leg].height)
+						for leg in fw.legs:
+							if not colliders.has(leg):
+								continue
 
-						for joint in fw.joints:
-							var p: Vector3 = (joint[1] as Node3D).global_position
-							var t := clampf((p - a).dot(b - a) / maxf((b - a).length_squared(), 1e-6), 0.0, 1.0)
-							var d := p.distance_to(a + (b - a) * t) - float(colliders[leg].radius)
+							var mark: Node3D = fw.legs[leg]
+							# His leg as drawn, at his size (the recipe's capsule is
+							# his unscaled leg's: a brute's is a quarter bigger).
+							var size := mark.global_basis.get_scale().x
+							var a := mark.global_position
+							var b := a + mark.global_basis.y.normalized() * float(colliders[leg].height) * size
 
-							if d < worst:
-								worst = d
-								where = "%s in %s, %s frame %d after %d idle, seed %d" % [joint[0], leg, attack, i, idle, seed]
+							for joint in fw.joints:
+								var p: Vector3 = (joint[1] as Node3D).global_position
+								var t := clampf((p - a).dot(b - a) / maxf((b - a).length_squared(), 1e-6), 0.0, 1.0)
+								var d := p.distance_to(a + (b - a) * t) - float(colliders[leg].radius) * size
+
+								if d < worst:
+									worst = d
+									where = "%s in %s, %s %s frame %d after %d idle, seed %d" % [joint[0], leg, attack, part[0], i, idle, seed]
 
 		fighter._phase = &""
 		fighter.queue_free()

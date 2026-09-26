@@ -371,8 +371,9 @@ BRUTE = {
     # Stiff hide, 6 cm off his legs: at 1.8/0.8/1.0/0.035 a restart
     # settled at 3.5 m/s (K12) and his blows swung them into his thighs
     # (K5); riding his thighs their rest follows the leg, so at full gravity
-    # a restart swung them 3.7 m/s back to hanging: 0.6.
-    "chains": {name: {"stiffness": 4.0, "drag": 0.95, "gravity": 0.6, "radius": 0.06}
+    # a restart swung them 3.7 m/s back to hanging; at 0.6, 3.1 m/s in
+    # metres at his size (1.25: K12 had read it in his scaled frame): 0.5.
+    "chains": {name: {"stiffness": 4.0, "drag": 0.95, "gravity": 0.5, "radius": 0.06}
                for name in ("hides_l", "hides_r", "hides_rear_l", "hides_rear_r")},
     "colliders": [
         {"bone": "thigh_l", "radius": 0.10}, {"bone": "thigh_r", "radius": 0.10},
