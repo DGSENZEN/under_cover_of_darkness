@@ -97,6 +97,11 @@ const CALLS := {
 }
 ## A pommel strike's own windup: short, and hard to see coming.
 const BASH_WINDUP := 0.3
+## Past this much of his windup (the glint: GuardRig) his blow is committed:
+## a quick cut marks him but does not stop it (Guard.take_hit). Before it,
+## you can beat him to it; after it, answer it (a parry, a counter, a dodge)
+## or trade blows.
+const COMMITTED := 0.64
 ## A blow that lands while he is open deals this many times its damage, and
 ## at least his whole health over `deathblows`.
 const DEATHBLOW := 2.5
@@ -906,8 +911,15 @@ func defend(kind: StringName, attacker: Node3D) -> StringName:
 		return &""
 
 	if kind == &"quick":
+		# How hard the blow presses his guard: a heavy cut, a running blow.
 		var combat := _combat_of(attacker)
-		var weight: float = float(combat._style()["poise"]) if combat != null and combat.has_method("_style") else 1.0
+		var weight := 1.0
+
+		if combat != null and combat.has_method("blow_poise"):
+			weight = float(combat.blow_poise())
+		elif combat != null and combat.has_method("_style"):
+			weight = float(combat._style()["poise"])
+
 		_poise -= weight
 		add_posture(8.0 * weight)
 
@@ -2609,6 +2621,12 @@ func _start(kind: StringName, scale := 1.0) -> void:
 func progress() -> float:
 	var length: float = guard._phase_length if guard._phase_length > 0.0 else guard.windup_time
 	return 1.0 - clampf(guard._phase_timer / maxf(length, 0.01), 0.0, 1.0)
+
+
+## His blade is let go (past the glint, COMMITTED): it comes whatever you do.
+## Not a shot or a throw, which a cut still spoils.
+func committed() -> bool:
+	return guard._phase == &"windup" and progress() >= COMMITTED and not (guard._attack in [&"shoot", &"throw"])
 
 
 func _update_attack(delta: float, target: Node3D, sees: bool, to: Vector3, dist: float, level: float) -> void:

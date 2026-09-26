@@ -258,8 +258,16 @@ func _watch_you(enemy: Node3D) -> void:
 
 
 func _on_defended(result: StringName) -> void:
-	if result == &"parry" and not fighting().is_empty():
-		read[&"parry"] = minf(float(read.get(&"parry", 0.0)) + 0.3, 1.0)
+	if fighting().is_empty():
+		return
+
+	# A counter is a parry with a blade; a Mikiri a step aside that is also
+	# one.
+	if result in [&"parry", &"counter", &"mikiri"]:
+		read[&"parry"] = minf(float(read.get(&"parry", 0.0)) + (0.3 if result != &"mikiri" else 0.15), 1.0)
+
+	if result == &"mikiri":
+		read[&"dodge"] = minf(float(read.get(&"dodge", 0.0)) + 0.22, 1.0)
 
 
 func _on_dodged(_direction: Vector3) -> void:

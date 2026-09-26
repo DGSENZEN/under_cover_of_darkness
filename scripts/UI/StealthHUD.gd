@@ -12,6 +12,9 @@ extends CanvasLayer
 ##   everywhere     a red vignette when hit, with an arc on the side the
 ##                  blow came from; the colour drains during a finisher; a
 ##                  fade to black when caught, and a pause screen on Esc
+##   over a man     fighting you: his balance (GuardFighter's posture), a bar
+##                  filling from the middle, amber to red, once it is shaken;
+##                  a red mark when he is open (the next blow a deathblow)
 ##
 ## Nothing here is read by gameplay. Hide the layer and the game is unchanged.
 
@@ -22,6 +25,8 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 
 const SUBTITLE_RANGE := 22.0
+## A man's balance is shown over him this near.
+const POSTURE_RANGE := 16.0
 const INK := Color(0.93, 0.88, 0.78)
 const DIM := Color(0.62, 0.58, 0.5)
 const AMBER := Color(1.0, 0.78, 0.36)
@@ -52,6 +57,7 @@ var _hurt_marks: HurtMarks
 var _warn_marks: HurtMarks
 ## Blood thrown across your eyes by a kill up close.
 var _splatter: Splatter
+var _posture_marks: PostureMarks
 var _grade: ColorRect
 var _grade_amount := 0.0
 var _last_real := -1.0
@@ -179,6 +185,36 @@ class HurtMarks:
 			draw_arc(c, r, from, from + 0.9, 18, colour, 6.0 + 6.0 * life, true)
 
 
+## Each man fighting you: his balance over his head, a bar that fills from the
+## middle outwards, amber to red, as he loses it (Sekiro's). Open, a red mark
+## instead: the next blow is a deathblow.
+class PostureMarks:
+	extends Control
+
+	## [screen position, fill 0..1, open]
+	var marks: Array = []
+
+	func _draw() -> void:
+		for m in marks:
+			var at: Vector2 = m[0]
+			var fill: float = m[1]
+
+			if bool(m[2]):
+				var r := 7.0
+				var points := PackedVector2Array([at + Vector2(0, -r), at + Vector2(r, 0), at + Vector2(0, r), at + Vector2(-r, 0)])
+				draw_colored_polygon(points, Color(0.82, 0.05, 0.03, 0.92))
+				points.append(points[0])
+				draw_polyline(points, Color(1.0, 0.78, 0.66, 0.9), 1.5, true)
+				continue
+
+			var w := 58.0
+			var h := 4.0
+			draw_rect(Rect2(at - Vector2(w * 0.5 + 1.0, h * 0.5 + 1.0), Vector2(w + 2.0, h + 2.0)), Color(0, 0, 0, 0.5))
+			var half := w * 0.5 * fill
+			var colour := AMBER.lerp(Color(0.95, 0.14, 0.07), smoothstep(0.5, 1.0, fill))
+			draw_rect(Rect2(at - Vector2(half, h * 0.5), Vector2(half * 2.0, h)), Color(colour.r, colour.g, colour.b, 0.92))
+
+
 ## Blood across your eyes: splashes at the edges of the view (each a blot
 ## with droplets flung round it, darker where it is thickest), the big ones
 ## running a little, all of them fading.
@@ -295,6 +331,11 @@ func setup(p_player: CharacterBody3D) -> void:
 	_warn_marks.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_warn_marks.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_warn_marks)
+
+	_posture_marks = PostureMarks.new()
+	_posture_marks.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_posture_marks.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_posture_marks)
 
 	_splatter = Splatter.new()
 	_splatter.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -553,6 +594,7 @@ func _process(delta: float) -> void:
 
 	_warn_marks.marks = _warn_marks.marks.filter(func(m): return float(m[1]) > 0.0)
 	_warn_marks.queue_redraw()
+	_update_posture_marks()
 
 	if not _splatter.drops.is_empty():
 		for d in _splatter.drops:
@@ -833,6 +875,47 @@ func splatter(amount: float) -> void:
 
 	_splatter.drops = _splatter.drops.slice(maxi(_splatter.drops.size() - 60, 0))
 	_splatter.queue_redraw()
+
+
+## The balance of each man fighting you, over his head (PostureMarks): once it
+## is shaken, or he is open; near enough, and in front of you.
+func _update_posture_marks() -> void:
+	var camera := get_viewport().get_camera_3d()
+	var marks: Array = []
+
+	if camera != null and not player.is_dead:
+		for node in get_tree().get_nodes_in_group(&"guards"):
+			var guard := node as Node3D
+
+			if guard == null or int(guard.get("state")) != 4 or guard.get("_target") != player or not guard.has_method("eye_position"):
+				continue
+
+			var fighter: Variant = guard.get("_fighter")
+
+			# The arms master's balance cannot go.
+			if fighter == null or float(fighter.posture_max) >= 9999.0:
+				continue
+
+			var open: bool = fighter.is_open()
+			var fill := clampf(float(fighter.posture) / maxf(float(fighter.posture_max), 1.0), 0.0, 1.0)
+
+			if fill < 0.03 and not open:
+				continue
+
+			var over: Vector3 = guard.eye_position() + Vector3.UP * 0.5
+
+			if over.distance_to(camera.global_position) > POSTURE_RANGE or camera.is_position_behind(over):
+				continue
+
+			marks.append([camera.unproject_position(over), fill, open])
+
+	_posture_marks.marks = marks
+	_posture_marks.queue_redraw()
+
+
+## The balance marks shown now: [screen position, fill, open] each (tests).
+func posture_marks() -> Array:
+	return _posture_marks.marks if _posture_marks != null else []
 
 
 func splatter_count() -> int:

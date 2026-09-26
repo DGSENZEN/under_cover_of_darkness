@@ -13,15 +13,19 @@ extends Node3D
 ##                something he goes to look while the other covers him. The
 ##                storeroom door: open it and leave it, and it is noticed.
 ##                Shoot an arrow into a wall and it is found.
-##   2 SWORDSMAN  guards, trades blows, reads a rhythm, kicks a turtle.
+##   2 SWORDSMAN  guards, trades blows, reads a rhythm, kicks a turtle. Parry
+##                right on his blow (a perfect deflect), or cut as his comes (a
+##                counter); after his glint a cut of yours no longer stops his.
 ##   3 SWORDMASTER parries and answers, feints, steps out of long swings.
+##                Step into her thrust as it comes (forward and Q): Mikiri.
 ##   4 BRUTE      the blow no guard stops (dodge it: Q), cuts do not stop him.
 ##   5 ARCHER     keeps his distance behind cover, shoots; kicks you off.
 ##   6 SQUAD      a swordmaster, a swordsman, a brute and an archer together:
 ##                a leader and a plan (Squad.gd), called out as it changes.
 ##   7 BODIES     weak men, spikes, powder, a hanging weight, a ledge: kick
 ##                them (running, or while they swing), cut them apart.
-##   8 ARMS MASTER a steady beat to parry, and straw men to cut.
+##   8 ARMS MASTER a steady beat to parry, deflect, counter and Mikiri, and
+##                straw men to cut.
 ##   9 GUARDHOUSE through the hub's south wall: a squad in a lit yard, off-duty
 ##                men in a barracks down a passage (a man who breaks runs to
 ##                fetch them: catch him and he throws his blade down and begs
@@ -68,13 +72,13 @@ const STATE_COLOURS := [Color(0.55, 0.9, 0.5), Color(0.95, 0.9, 0.4), Color(1.0,
 ## opens to (-1 west, 1 east), what the sign says].
 const BAYS := [
 	["WATCHMAN", Vector3(-17, 0, -8), -1, "A watchman on his rounds, a second at his post. Stay in the dark (the gem), walk on the carpet,\nnot the iron. Throw the crate to draw them off: one looks, one covers. They talk when they stand together.\nLeave the storeroom door open, or an arrow in a wall: they notice. F1: what they think."],
-	["SWORDSMAN", Vector3(-17, 0, -26), -1, "A swordsman. He guards, trades blows, strings two together,\nreads a rhythm (vary it), kicks a turtle, lunges from range."],
-	["SWORDMASTER", Vector3(-17, 0, -44), -1, "The swordmaster. Parries careless blows and answers fast;\nfeints; steps out of long swings (thrusts reach him)."],
+	["SWORDSMAN", Vector3(-17, 0, -26), -1, "A swordsman. He guards, trades blows, strings two together, reads a rhythm (vary it),\nkicks a turtle, lunges from range. Parry right on his blow: a perfect deflect. Cut as his blow\ncomes (a cut for a cut, a thrust for a thrust): a counter. After his glint, a cut will not stop him."],
+	["SWORDMASTER", Vector3(-17, 0, -44), -1, "The swordmaster. Parries careless blows and answers fast; feints; steps out of long\nswings (thrusts reach). Her thrust (blue): step into it as it comes (forward + Q) and pin it: Mikiri.\nWear her balance down (the bar over her) and the next blow is a deathblow."],
 	["BRUTE", Vector3(-17, 0, -62), -1, "The brute. Red glow and a roar: the blow no guard stops. DODGE (Q).\nCuts do not stop his swing. Only a running kick fells him, reeling."],
 	["ARCHER", Vector3(17, 0, -8), 1, "An archer behind cover. He keeps his distance and shoots:\nblock the arrow, or close in round the cover. Up close he kicks you off."],
 	["SQUAD", Vector3(17, 0, -26), 1, "A squad: swordmaster, swordsman, brute, archer. A leader and a plan:\nthey surround, strike while you are busy, break a turtle, press you hurt,\nfall back, break one by one when the leader dies. Watch the plan (top right)."],
 	["BODIES", Vector3(17, 0, -44), 1, "Weak men to send flying and cut apart. Kick them while they swing, or running.\nInto the spikes, off the ledge, onto the powder. A clean kill takes a limb or a head."],
-	["ARMS MASTER", Vector3(17, 0, -62), 1, "The arms master swings on a steady beat: parry just before it lands.\nStraw men to cut; shielded ones to break."],
+	["ARMS MASTER", Vector3(17, 0, -62), 1, "The arms master swings on a steady beat: parry just before it lands, or right on it\n(a perfect deflect). Answer his cut with a cut and his thrust with a thrust (a counter), or step into\nhis thrust (forward + Q). Straw men to cut; shielded ones to break. Sprint and swing: a running blow."],
 	["GUARDHOUSE", Vector3(0, 0, 24), 0, "The guardhouse. A squad in the yard; two men off duty in the barracks (east); a lookout\non the platform (far corner) who calls where you are and rings the bell. Break one and he runs\nfor help: catch him and he begs for his life. Walk away and he runs to his own; cut him down\nand the next will not beg. Lose them in the dark (west) and watch them split the search\nwhile one keeps watch. Crates get thrown; powder gets shot. F5: the garrison forgets you."],
 ]
 const BAY_SIZE := 14.0

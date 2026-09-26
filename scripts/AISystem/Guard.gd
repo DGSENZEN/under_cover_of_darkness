@@ -1144,8 +1144,10 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 		strength = maxf(strength, 1.3)
 
 	# A brute in the middle of a swing does not stop for quick cuts, arrows or
-	# thrown things: they mark him and he swings on.
-	var shrugged: bool = _fighter.hyper_armor and _phase != &"" and _phase != &"recover" and kind in [&"quick", &"arrow", &"thrown"] and health > 0.0
+	# thrown things: they mark him and he swings on. Nor does any man whose
+	# blade is already let go (past his glint: GuardFighter.COMMITTED) for a
+	# quick cut: it comes anyway, and you trade.
+	var shrugged: bool = health > 0.0 and ((_fighter.hyper_armor and _phase != &"" and _phase != &"recover" and kind in [&"quick", &"arrow", &"thrown"]) or (_fighter.committed() and kind == &"quick"))
 	_rig.react_hit(blow, strength * (0.35 if shrugged else 1.0))
 
 	if _downed:
@@ -1451,16 +1453,37 @@ func deathblow_damage(damage: float) -> float:
 	return _fighter.deathblow_damage(damage) if is_open() else damage
 
 
-func parried(_by: Node3D) -> void:
+## His blow turned aside: `strength` 1 for a parry, more for a perfect
+## deflect or a counter (PlayerCombat), which throw him further off balance.
+func parried(_by: Node3D, strength := 1.0) -> void:
 	# A point turned aside throws the man behind it off his feet more than a
 	# cut does.
 	var thrust: bool = _attack in [&"thrust", &"lunge", &"leap"]
 	_phase = &""
-	_stagger = parry_stun * (1.15 if thrust else 1.0)
+	_stagger = parry_stun * (1.15 if thrust else 1.0) * lerpf(1.0, 1.25, clampf(strength - 1.0, 0.0, 1.0))
 	_attack_timer = attack_cooldown
 	_fighter.on_parried()
 	_rig.react_parried(_stagger)
-	_fighter.add_posture(50.0 if thrust else 34.0)
+	_fighter.add_posture((50.0 if thrust else 34.0) * strength)
+
+
+## His blade met yours in the air (a clash: PlayerCombat): neither landed.
+## It bounces as off a raised guard, and shakes him a little more.
+func clashed(_by: Node3D) -> void:
+	_fighter.recover_from_block()
+	_rig.react_blocked()
+	_fighter.add_posture(12.0)
+
+
+## You stepped into his thrust and onto his blade (Mikiri: PlayerCombat): it
+## is pinned under your foot, and he is thrown hard off his balance.
+func mikiri(_by: Node3D) -> void:
+	_phase = &""
+	_stagger = parry_stun * 1.6
+	_attack_timer = attack_cooldown + 0.4
+	_fighter.on_parried()
+	_rig.react_parried(_stagger)
+	_fighter.add_posture(62.0)
 
 
 ## His blow met a raised guard.

@@ -855,9 +855,13 @@ func _run() -> void:
 	g36._fighter.backstep_chance = 1.0
 	g36._fighter.read_skill = 1.0
 	g36._fighter._strafe = 1.0
+	# Where a hop back takes him out of your reach (his footwork drifts him
+	# in and out of it: GuardFighter.spacing).
+	g36._fighter.spacing = 0.0
 	g36.health = 10000.0
 	_put_player(Vector3(0, 1.05, 0))
 	await _frames(20)
+	g36.global_position = Vector3(0, 0, -1.85)
 	outcomes.clear()
 	var punished := [false]
 	await _tap("throw")

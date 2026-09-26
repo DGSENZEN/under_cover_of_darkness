@@ -1,28 +1,55 @@
 extends Node
-## Fighting: Dark Messiah's weight, Chivalry's footsies, Dishonored's tricks.
-## Lives on the player as "Combat".
+## Fighting: Dark Messiah's weight, Chivalry's call and answer, Sekiro's
+## deflects and posture. Lives on the player as "Combat".
 ##
 ##   LMB        attack at once; keep holding to charge a power attack.
-##              Your movement picks the swing: strafe for a side slash,
-##              forward for a thrust, standing still for an overhead chop.
+##              The way you move the view as you swing picks the swing:
+##              across for a side cut, down for an overhead chop, up for a
+##              thrust (still: a forehand, and a chained one comes back from
+##              the other side).
 ##              Click again while a swing plays and the next one follows as
 ##              soon as it can: a combo, each wound up quicker than the last.
 ##   RMB        block (sword). Raise it just before a blow lands: a parry,
 ##              and the blow you answer with comes fast and hard (a riposte).
-##              Pressing it again straight away does not parry again: a
-##              parry is a commitment. Pressed during your own windup, the
-##              attack is abandoned: a feint, to draw out his parry.
+##              Right on the blow (perfect_window) it is a perfect deflect:
+##              free, and it throws him further off his balance, and your
+##              riposte is quicker still. Pressing it again straight away
+##              does not parry again: a parry is a commitment. Pressed
+##              during your own windup, the attack is abandoned: a feint.
 ##   Q          dodge: a quick step the way you are moving (back if still).
 ##   F          kick. Guards stagger back, off ledges and onto spikes, and a
 ##              raised guard is knocked aside; crates fly; doors burst open.
 ##   bow        hold LMB to draw, release to loose. Drawing slows you and
 ##              narrows the view; RMB lets the string down.
 ##   falling    onto a guard with LMB pressed: a drop attack.
+##
+## Every blow of his asks for an answer (its call, in the colour of his
+## blade: GuardFighter.CALLS), and once his blade is let go (the glint) a cut
+## of yours no longer stops it: answer it, or trade.
+##   parry      any cut or point (a point only partly on a held guard).
+##   counter    a blow of yours begun as his comes (counter_window), a cut
+##              against a cut, a point against a point: his is turned aside
+##              as by a parry, and yours goes on into him as a riposte.
+##   clash      yours already on its way when his arrives: the blades meet,
+##              neither lands, both are thrown back.
+##   Mikiri     his point: step into it (dodge toward him as it comes) and
+##              pin his blade. He is thrown hard off his balance.
+##   jump       his sweep at your legs. dodge  his great blow, his kick.
+##
+##   momentum   a blow thrown at a run is a running blow: you are carried
+##              into it, it hits harder and wears his guard like a heavy
+##              one, and a miss carries you on. One thrown backing away has
+##              less of your weight in it.
 ##   stamina    blocking a blow costs it (a brute's costs a lot), and so do
-##              dodges, kicks and swings. A blow on a guard with none left
-##              breaks through it. It comes back quickly when you stop.
+##              dodges, kicks and swings, and being parried (your balance
+##              thrown). A blow on a guard with none left breaks through it.
+##              It comes back quickly when you stop.
 ##   adrenaline fills as you fight. Full, your next power attack is a
 ##              slow-motion finisher.
+##
+## His balance (his posture, over his head: StealthHUD) fills as you parry,
+## counter, Mikiri and cut into his guard. Full, he is open: the next blow is
+## a deathblow.
 ##
 ## Weight comes from the moment of contact. A blow that lands freezes the
 ## world for a few hundredths of a second (hit-stop), the blade drags through
@@ -63,6 +90,12 @@ signal staggered(why: StringName)
 signal answered(how: StringName)
 ## A blow landed on a man thrown off his balance (his posture broken).
 signal deathblow_landed(target: Node3D)
+## A parry right on the blow.
+signal perfect_parry
+## His blow met by a blow of yours begun as it came: turned, and yours goes on.
+signal countered(from: Node)
+## Both blades in the air at once: neither landed.
+signal clashed(from: Node)
 
 enum Phase {
 	IDLE,
@@ -92,6 +125,11 @@ const STYLES := {
 
 @export_group("Defence")
 @export var parry_window := 0.25
+## Pressed this close to the blow's arrival: a perfect deflect, this many
+## times as hard on his balance, and a riposte this much quicker still.
+@export var perfect_window := 0.1
+@export var perfect_posture := 1.5
+@export_range(0.1, 1.0, 0.05) var perfect_riposte_windup := 0.3
 ## After a press opens a parry, this long must pass before another press can.
 @export var parry_cooldown := 0.35
 @export_range(0.0, 1.0, 0.05) var block_damage_scale := 0.2
@@ -138,6 +176,38 @@ const STYLES := {
 @export var dodge_speed := 7.5
 @export var dodge_time := 0.22
 @export var dodge_cooldown := 0.35
+
+@export_group("Answers")
+## Your blow begun this long before his arrives, and answering his call: a
+## counter. It turns his as a parry this hard.
+@export var counter_window := 0.2
+@export var counter_posture := 1.3
+## Yours in flight (within this share of its strike, before it has met him)
+## when his arrives: a clash.
+@export_range(0.0, 1.0, 0.05) var clash_until := 0.7
+## A step toward his point this long before it arrives: Mikiri.
+@export var mikiri_window := 0.35
+## What your balance pays when your blow is caught: parried, on his guard,
+## met in the air.
+@export var cost_parried := 10.0
+@export var cost_blocked := 3.0
+@export var cost_clash := 6.0
+
+@export_group("Momentum")
+## A blow thrown backing away (faster than a shuffle) this much softer, at
+## most: your weight is going the other way.
+@export var backing_penalty := 0.2
+## A running blow: this much harder, carried in at this speed (m/s) for this
+## long, as hard on a guard as this, and a miss carries you on this long.
+@export var running_damage := 1.35
+@export var running_lunge := 6.0
+@export var running_lunge_time := 0.2
+@export var running_poise := 2.5
+@export var running_miss_recovery := 0.25
+## Swinging slows you: winding up, cutting, coming back.
+@export_range(0.1, 1.0, 0.05) var windup_speed_scale := 0.85
+@export_range(0.1, 1.0, 0.05) var strike_speed_scale := 0.8
+@export_range(0.1, 1.0, 0.05) var recover_speed_scale := 0.9
 
 @export_group("Kick")
 @export var kick_reach := 1.7
@@ -267,6 +337,15 @@ var _block_pressed_at := -100.0
 var _parry_ready_at := 0.0
 var _block_held := false
 var _recover_from := Transform3D.IDENTITY
+## When the blow under way began (its windup), how far your weight was going
+## away from him (0..1), and whether it is a running blow.
+var _blow_started := -100.0
+var _backing := 0.0
+var _running := false
+## The riposte on offer comes from a perfect deflect: quicker still.
+var _perfect_riposte := false
+## Which way the last dodge went (flat, world).
+var _dodge_direction := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -472,18 +551,34 @@ func _begin_attack(chained: bool) -> void:
 	_riposte_until = -100.0
 	_direction = _swing_direction(true, chained)
 	_windup = weapon.windup * float(_style()["windup"])
+	_blow_started = _game_time
+	_weigh(chained)
 
 	if _riposte:
-		_windup *= riposte_windup_scale
+		_windup *= perfect_riposte_windup if _perfect_riposte else riposte_windup_scale
 		riposte_started.emit()
 		_hand(&"show_glint")
 	elif chained:
 		_windup *= chained_windup_scale
 
+	_perfect_riposte = false
+
 	_serial += 1
 	_enter(Phase.WINDUP)
 	# The head goes the other way first, then leads into the cut (on_swing).
 	player.juice.on_windup(_side_of(_direction), _direction, _riposte)
+
+
+## Your weight as a blow begins: going away from him (backing off faster than
+## a shuffle, up to a walk: `_backing`), or at a run into it (a running blow).
+func _weigh(chained: bool) -> void:
+	var forward := -player.global_basis.z
+	forward.y = 0.0
+	forward = forward.normalized()
+	var along := Vector3(player.velocity.x, 0.0, player.velocity.z).dot(forward)
+	var walk: float = float(player.get("walk_speed")) if player.get("walk_speed") != null else 6.5
+	_backing = clampf((-along - 1.5) / maxf(walk - 1.5, 0.1), 0.0, 1.0)
+	_running = not chained and not _riposte and weapon.kind == WeaponScript.Kind.MELEE and player.is_on_floor() and along > walk + 0.3
 
 
 func _update_recover(delta: float, buffered: bool, block_held: bool) -> void:
@@ -556,12 +651,14 @@ func _reset() -> void:
 	phase = Phase.IDLE
 	blocking = false
 	_riposte = false
+	_running = false
+	_backing = 0.0
 	_queued = false
 	_t = 0.0
 
 
-## Movement is slower with a raised guard, a charged blow, a drawn bow, or
-## while knocked off balance.
+## Movement is slower with a raised guard, a charged blow, a drawn bow, a
+## blow under way (not one thrown at a run), or while knocked off balance.
 func speed_scale() -> float:
 	if blocking:
 		return block_speed_scale
@@ -573,6 +670,13 @@ func speed_scale() -> float:
 			return draw_speed_scale
 		Phase.STAGGER:
 			return 0.6
+		# A blow has weight: it slows you, but for one thrown at a run.
+		Phase.WINDUP:
+			return 1.0 if _running else windup_speed_scale
+		Phase.STRIKE:
+			return 1.0 if _running else strike_speed_scale
+		Phase.RECOVER:
+			return recover_speed_scale if weapon != null and weapon.kind == WeaponScript.Kind.MELEE else 1.0
 
 	return 1.0
 
@@ -669,6 +773,18 @@ func is_riposte() -> bool:
 	return _riposte
 
 
+## How hard the blow under way presses a raised guard (GuardFighter.defend):
+## its style's weight, and a running blow's as a heavy one's.
+func blow_poise() -> float:
+	var weight := float(_style()["poise"])
+	return maxf(weight, running_poise) if _running else weight
+
+
+## Whether the blow under way is a running blow.
+func is_running_blow() -> bool:
+	return _running and (phase == Phase.WINDUP or phase == Phase.STRIKE or phase == Phase.RECOVER)
+
+
 ## The guard you would land on, if you are falling toward one with
 ## something to drop on him with.
 func drop_target() -> Node3D:
@@ -726,11 +842,15 @@ func _start_strike(power: bool) -> void:
 	SoundBus.emit_sound(player.global_position, weapon.swing_db + (4.0 if power else 0.0), player, &"swing")
 	swung.emit(power, _direction)
 
-	# A heavy blow carries you into it: a step forward.
-	if power and player.is_on_floor():
+	# A heavy blow carries you into it: a step forward. A running one, the run.
+	if (power or _running) and player.is_on_floor():
 		var forward := -player.global_basis.z
 		forward.y = 0.0
-		player.shove(forward.normalized() * (3.2 if _direction == &"thrust" else 2.4), 0.16)
+
+		if _running:
+			player.shove(forward.normalized() * running_lunge, running_lunge_time)
+		else:
+			player.shove(forward.normalized() * (3.2 if _direction == &"thrust" else 2.4), 0.16)
 
 	if _finisher:
 		adrenaline = 0.0
@@ -839,7 +959,8 @@ func _update_strike(delta: float) -> void:
 	_last_sweep = p
 
 	if phase == Phase.STRIKE and p >= 1.0:
-		_recovery = weapon.recovery
+		# A running blow that met nothing carries you on past.
+		_recovery = weapon.recovery + (running_miss_recovery if _running and _outcome == &"miss" else 0.0)
 		_enter(Phase.RECOVER)
 
 
@@ -1109,6 +1230,12 @@ func _strike_target(target: Node3D, point: Vector3, direction: Vector3) -> void:
 
 	dealt *= float(_style()["damage"])
 
+	# Your weight in it: a run behind it, or going the other way.
+	if _running:
+		dealt *= running_damage
+
+	dealt *= 1.0 - backing_penalty * _backing
+
 	# Only the damage that actually lands counts toward adrenaline: overkill
 	# does not, and a finisher spends adrenaline rather than refilling it.
 	var health_before: float = float(target.get("health")) if target.get("health") != null else dealt
@@ -1159,6 +1286,7 @@ func _strike_target(target: Node3D, point: Vector3, direction: Vector3) -> void:
 			_hand(&"impact", [&"blocked"])
 			_outcome = &"blocked"
 			combo = 0
+			_spend(cost_blocked)
 			_recovery = blocked_recovery
 			_enter(Phase.RECOVER)
 		&"parried":
@@ -1170,6 +1298,8 @@ func _strike_target(target: Node3D, point: Vector3, direction: Vector3) -> void:
 			_hand(&"impact", [&"blocked"])
 			_outcome = &"parried"
 			combo = 0
+			# Your balance thrown with your blade.
+			_spend(cost_parried)
 			_recovery = parried_recovery
 			_enter(Phase.RECOVER)
 		&"none":
@@ -1296,6 +1426,7 @@ func _try_dodge() -> void:
 
 	_reset()
 	_spend(cost_dodge)
+	_dodge_direction = direction
 	player.shove(direction * dodge_speed, dodge_time)
 	_dodge_cooldown = dodge_time + dodge_cooldown
 	_dodged_at = _game_time
@@ -1341,6 +1472,11 @@ func filter_incoming(amount: float, from: Node) -> float:
 	# Fire and the like: no guard for it, nothing to parry.
 	if bool(info.get("hazard", false)):
 		return amount
+
+	# Met by more than a raised guard: his point stepped into, his blow
+	# answered with one of yours, or yours already in the air (_answer_blow).
+	if from is Node3D and not bool(info.get("ranged", false)) and _answer_blow(from as Node3D, info) != &"":
+		return 0.0
 
 	if bool(info.get("unblockable", false)):
 		_kicked_by(from)
@@ -1388,25 +1524,37 @@ func filter_incoming(amount: float, from: Node) -> float:
 		return 0.0
 
 	if _game_time - _block_started <= parry_window:
-		Fx.sparks(player, clash, toward, 1.8)
-		Sfx.play(player, &"parry", clash)
+		# Right on the blow: a perfect deflect. It rings brighter, the moment
+		# hangs longer, and he is thrown further off his balance.
+		var perfect := _game_time - _block_started <= perfect_window
+		Fx.sparks(player, clash, toward, 2.4 if perfect else 1.8)
+		Sfx.play(player, &"parry", clash, 1.5 if perfect else 0.0, 1.06 if perfect else 1.0)
 		Sfx.play(player, &"clang", clash, -8.0, 1.1)
+
+		if perfect:
+			Sfx.play_flat(player, &"ting", -5.0, 1.5)
+
 		# The moment hangs: a freeze, then a breath of slow motion.
-		TimeFx.hitstop(get_tree(), 0.1, 0.03)
-		TimeFx.request(get_tree(), &"parry", 0.35, 0.35)
-		player.juice.add_trauma(0.3)
-		CombatView.jolt(get_tree(), 0.8)
+		TimeFx.hitstop(get_tree(), 0.11 if perfect else 0.08, 0.03)
+		TimeFx.request(get_tree(), &"parry", 0.4 if perfect else 0.55, 0.3 if perfect else 0.2)
+		player.juice.add_trauma(0.35 if perfect else 0.3)
+		CombatView.jolt(get_tree(), 0.9 if perfect else 0.7)
 		_hand(&"impact", [&"parry"])
 
 		if from.has_method("parried"):
-			from.parried(player)
+			from.parried(player, perfect_posture if perfect else 1.0)
 
-		adrenaline = minf(adrenaline + 10.0, adrenaline_max)
-		stamina = minf(stamina + parry_refund, stamina_max)
-		# Your answer comes fast and hard; and a combo's next blow can be
-		# parried again at once.
+		adrenaline = minf(adrenaline + (14.0 if perfect else 10.0), adrenaline_max)
+		stamina = minf(stamina + parry_refund * (1.5 if perfect else 1.0), stamina_max)
+		# Your answer comes fast and hard (faster still off a perfect one); and
+		# a combo's next blow can be parried again at once.
 		_riposte_until = _game_time + riposte_window
+		_perfect_riposte = perfect
 		_parry_ready_at = _game_time
+
+		if perfect:
+			perfect_parry.emit()
+
 		defended.emit(&"parry")
 		return 0.0
 
@@ -1451,6 +1599,155 @@ func filter_incoming(amount: float, from: Node) -> float:
 
 	defended.emit(&"block")
 	return amount * (0.4 if thrust else block_damage_scale)
+
+
+## His blow arriving now, met by more than a raised guard. "mikiri" (his
+## point stepped into), "counter" (a blow of yours begun as his came, that
+## answers its call), "clash" (yours already in the air, not yet in him), or
+## "" for none of them: then a guard or a parry has its say, or it lands.
+func _answer_blow(from: Node3D, info: Dictionary) -> StringName:
+	var call: StringName = info.get("call", &"cut")
+	var to_him := from.global_position - player.global_position
+	to_him.y = 0.0
+	var dist := to_him.length()
+	var toward := to_him / dist if dist > 0.01 else -player.global_basis.z
+
+	# Into his point as it came: onto his blade.
+	if call == &"thrust" and _game_time - _dodged_at <= mikiri_window and _dodge_direction.dot(toward) >= 0.5:
+		_mikiri(from)
+		return &"mikiri"
+
+	if weapon == null or weapon.kind != WeaponScript.Kind.MELEE:
+		return &""
+
+	var facing := -player.global_basis.z
+	facing.y = 0.0
+
+	if dist > 0.01 and facing.normalized().dot(toward) < 0.5:
+		return &""
+
+	# Yours begun as his came, and the answer to what it asks: a counter.
+	var fresh := _game_time - _blow_started <= counter_window
+	var yours_coming: bool = phase == Phase.WINDUP or phase == Phase.CHARGING or phase == Phase.STRIKE
+
+	if yours_coming and fresh and _answers(call):
+		_counter(from)
+		return &"counter"
+
+	# Yours already in the air, and not yet in him: the blades meet.
+	var p := _t / maxf(_strike_time, 0.01)
+
+	if phase == Phase.STRIKE and (call == &"cut" or call == &"thrust") and p <= clash_until and not _hit_this_swing.has(from) and dist <= threat_reach() + 0.6:
+		_clash(from)
+		return &"clash"
+
+	return &""
+
+
+## Whether the blow under way answers a blow that asks `call`: a cut meets a
+## cut, a point a point.
+func _answers(call: StringName) -> bool:
+	match call:
+		&"cut":
+			return _direction != &"thrust"
+		&"thrust":
+			return _direction == &"thrust"
+
+	return false
+
+
+## Where the blades meet: between his and yours, just in front of you.
+func _meeting_point(from: Node3D) -> Vector3:
+	var at := aim()
+	var mine := at.origin + at.basis * Vector3(0.05, -0.1, -0.7)
+	return mine.lerp(from.global_position + Vector3.UP * 1.35, 0.2)
+
+
+## His blow turned by a blow of yours begun as it came: he reels as from a
+## parry (harder), and yours goes on into him at once, as a riposte.
+func _counter(from: Node3D) -> void:
+	var at := _meeting_point(from)
+	var toward := (from.global_position + Vector3.UP * 1.3 - at).normalized()
+	Fx.sparks(player, at, toward, 2.0)
+	Sfx.play(player, &"parry", at, 1.0, 0.96)
+	Sfx.play(player, &"clang", at, -3.0, 0.9)
+	SoundBus.emit_sound(at, 58.0, player, &"clang")
+	TimeFx.hitstop(get_tree(), 0.09, 0.03)
+	TimeFx.request(get_tree(), &"counter", 0.45, 0.25)
+	player.juice.add_trauma(0.35)
+	CombatView.jolt(get_tree(), 0.8)
+	_hand(&"impact", [&"parry"])
+
+	if from.has_method("parried"):
+		from.parried(player, counter_posture)
+
+	adrenaline = minf(adrenaline + 12.0, adrenaline_max)
+	# Yours goes on, as hard as a riposte, and straight away.
+	_riposte = true
+	riposte_started.emit()
+
+	if phase == Phase.WINDUP or phase == Phase.CHARGING:
+		_start_strike(false)
+
+	countered.emit(from)
+	defended.emit(&"counter")
+
+
+## Your blade and his met in the air: neither lands; yours comes back as
+## off his guard, and his off yours.
+func _clash(from: Node3D) -> void:
+	var at := _meeting_point(from)
+	var toward := (from.global_position + Vector3.UP * 1.3 - at).normalized()
+	Fx.sparks(player, at, toward, 1.7)
+	Sfx.play(player, &"clang", at, 3.0, 0.88)
+	Sfx.play(player, &"parry", at, -6.0, 0.8)
+	SoundBus.emit_sound(at, 58.0, player, &"clang")
+	TimeFx.hitstop(get_tree(), 0.08, 0.04)
+	player.juice.add_trauma(0.45)
+	player.juice.punch(0.35, 0.0)
+	player.juice.on_impact(0.7)
+	CombatView.jolt(get_tree(), 0.5)
+	_hand(&"impact", [&"blocked"])
+
+	if from.has_method("clashed"):
+		from.clashed(player)
+
+	_spend(cost_clash)
+	_hand(&"set_trail", [false])
+	_outcome = &"clashed"
+	combo = 0
+	_recovery = blocked_recovery
+	_enter(Phase.RECOVER)
+	clashed.emit(from)
+	defended.emit(&"clash")
+
+
+## His point stepped into (Mikiri): it slides past, you are on his blade, and
+## he is thrown hard off his balance. Your answer comes fast and hard.
+func _mikiri(from: Node3D) -> void:
+	var at := _meeting_point(from)
+	var toward := (from.global_position + Vector3.UP * 1.0 - at).normalized()
+	Fx.sparks(player, at, toward, 1.6)
+	Sfx.play(player, &"parry", at, 2.0, 0.82)
+	Sfx.play(player, &"clang", at, -2.0, 0.7)
+	Sfx.play_flat(player, &"ting", -4.0, 1.3)
+	SoundBus.emit_sound(at, 58.0, player, &"clang")
+	TimeFx.hitstop(get_tree(), 0.12, 0.03)
+	TimeFx.request(get_tree(), &"mikiri", 0.35, 0.4)
+	player.juice.add_trauma(0.4)
+	player.juice.punch(-0.35, 0.0)
+	CombatView.jolt(get_tree(), 0.9)
+	_hand(&"impact", [&"parry"])
+
+	if from.has_method("mikiri"):
+		from.mikiri(player)
+
+	adrenaline = minf(adrenaline + 15.0, adrenaline_max)
+	stamina = minf(stamina + parry_refund, stamina_max)
+	_riposte_until = _game_time + riposte_window
+	_perfect_riposte = true
+	answered.emit(&"mikiri")
+	defended.emit(&"mikiri")
 
 
 ## His boot: through any guard, it shoves you back and knocks you off
@@ -1622,6 +1919,8 @@ func _drop_attack(target: Node3D) -> void:
 	_power = true
 	_finisher = false
 	_riposte = false
+	_running = false
+	_backing = 0.0
 	_hit_this_swing.clear()
 	_hit_this_swing[target] = true
 	_enter(Phase.STRIKE)

@@ -446,8 +446,10 @@ func _run() -> void:
 
 
 ## Waits for his next blow and parries it.
+## Parries his next blow: a plain parry, raised well before it lands (right on
+## it would be a perfect deflect: blade_test).
 func _parry_next(g: CharacterBody3D) -> void:
-	await _until(func(): return g._phase == &"windup" and g._phase_timer < 0.12, 240)
+	await _until(func(): return g._phase == &"windup" and g._phase_timer < 0.2, 240)
 	Input.action_press("block")
 	await _until(func(): return g._phase != &"windup", 60)
 	await _frames(4)
