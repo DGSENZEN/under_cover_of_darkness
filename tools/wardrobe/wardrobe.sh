@@ -54,7 +54,10 @@ case "$verb" in
     shift
 
     if [ "$target" = all ]; then
-      for each in heads hair headgear $(kinds); do
+      # Asked first: set -e never sees a substitution in a loop's list fail.
+      every=$(kinds)
+
+      for each in heads hair headgear $every; do
         run "$verb" "$each" "$@"
       done
     else

@@ -268,9 +268,14 @@ static func can_dress(kind: StringName) -> bool:
 		var wanted: Array = kind_data(kind).get("options", {}).get("headgear", [])
 		var options := usable_options(kind_data(kind).get("options", {}))
 		# Bare-headed by design ([] or [[]]) dresses; a kind whose every
-		# headgear set is missing does not (its silhouette would be gone).
+		# headgear set is missing does not (its silhouette would be gone),
+		# nor one whose every hair style, or every beard, is.
 		var bare := wanted.all(func(pieces): return pieces.is_empty())
 		ok = not options.get("faces", []).is_empty() and (bare or not options.get("headgear", []).is_empty())
+
+		for key in ["hair", "beards"]:
+			var styles: Array = kind_data(kind).get("options", {}).get(key, [])
+			ok = ok and (styles.is_empty() or not options.get(key, []).is_empty())
 
 	if not ok and not _warned.has(kind):
 		_warned[kind] = true
@@ -342,8 +347,13 @@ static func _warn_once(what: String) -> void:
 ## The mesh of the part at `path` (a GLB) and its skin, re-bound to
 ## `target`, after giving `target` the bones it lacks (cloth). Read once for
 ## each body kind; every man of that body shares the mesh and the skin.
+## Nothing for a file with no skinned mesh (remembered: one error, not one
+## a man).
 static func skinned(path: String, target: Skeleton3D, body: String) -> Array:
 	var key := "%s|%s" % [path, body]
+
+	if _skins.has(key) and (_skins[key] as Array).is_empty():
+		return []
 
 	if not _skins.has(key):
 		var scene: Node = (load(path) as PackedScene).instantiate()
@@ -358,6 +368,7 @@ static func skinned(path: String, target: Skeleton3D, body: String) -> Array:
 		if source == null or found == null:
 			scene.free()
 			push_error("Wardrobe: %s has no skinned mesh on a skeleton" % path)
+			_skins[key] = []
 			return []
 
 		var extra := PackedStringArray()

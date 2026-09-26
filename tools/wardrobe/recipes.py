@@ -253,8 +253,9 @@ DOUBLET = (0.62, 0.58, 0.50)
 
 # The arms master (the `trainer` archetype): one old man, grey-haired and
 # bearded, in a pale quilted doublet with a standing collar and a short
-# four-panel skirt, a dark sash knotted at his left with two tails, hose,
-# tall boots, gloves, his sword hung from the sash. No headgear, no dye.
+# four-panel skirt, a dark sash knotted at his front (10 degrees to his
+# left) with two tails, hose, ankle boots, gloves, his sword hung from the
+# sash. No headgear, no dye.
 ARMS_MASTER = {
     "kind": "arms_master",
     "body": "male",

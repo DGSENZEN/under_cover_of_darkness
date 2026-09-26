@@ -184,8 +184,63 @@ def case_tint():
     return [] if mixes == [1, 1] and not shared else ["tint: multiplies %s, one material %s" % (mixes, shared)]
 
 
+def case_gear_bones():
+    """A headgear piece's GLB carries its own cloth bones and no other
+    piece's (headgear.blend has one armature for every piece: a coif would
+    carry the hood's tail), and the export leaves the file as it found it."""
+    import json
+    import struct
+
+    fresh()
+    folder = pathlib.Path(tempfile.mkdtemp(prefix="wardrobe_gear_bones_"))
+    common.BACKUP = folder / "backup"
+    data = bpy.data.armatures.new("Armature")
+    arm = bpy.data.objects.new("Armature", data)
+    bpy.context.scene.collection.objects.link(arm)
+    common.select_only([arm], active=arm)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bones = {}
+
+    for name, head, tail, parent in (("root", (0, 0, 0), (0, 0, 0.1), None), ("Head", (0, 0, 1.6), (0, 0, 1.8), "root"),
+                                     ("cloth_hood_tail_1", (0, 0.1, 1.7), (0, 0.1, 1.5), "Head"),
+                                     ("cloth_other_1", (0.1, 0, 1.7), (0.1, 0, 1.5), "Head")):
+        bone = data.edit_bones.new(name)
+        bone.head, bone.tail = head, tail
+        bone.parent = bones.get(parent)
+        bones[name] = bone
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+    piece = plate("Gear_hood", z=1.7)
+    common.group(piece, "Head", 1.0)
+    piece.parent = arm
+    piece.modifiers.new("Armature", "ARMATURE").object = arm
+    path = folder / "hood.glb"
+    root, common.ROOT = common.ROOT, folder
+
+    try:
+        export.glb(piece, arm, path, cloth=["cloth_hood_tail_1"])
+    finally:
+        common.ROOT = root
+
+    blob = path.read_bytes()
+    doc = json.loads(blob[20:20 + struct.unpack_from("<I", blob, 12)[0]])
+    joints = {doc["nodes"][j]["name"] for skin in doc.get("skins", []) for j in skin["joints"]}
+    kept = sorted(b.name for b in arm.data.bones)
+    messages = []
+
+    if "cloth_other_1" in joints or not {"Head", "cloth_hood_tail_1"} <= joints:
+        messages.append("gear bones: the GLB's joints are %s" % sorted(joints))
+
+    if kept != ["Head", "cloth_hood_tail_1", "cloth_other_1", "root"] or piece.modifiers["Armature"].object != arm \
+            or piece.parent != arm or arm.name != "Armature":
+        messages.append("gear bones: the file was left changed (bones %s, rig %s)" % (kept, piece.modifiers["Armature"].object))
+
+    return messages
+
+
 CASES = {"alone": case_alone, "others": case_others, "png": case_png, "json": case_json,
-         "wrapped": case_wrapped, "hair": case_hair, "plates": case_plates, "tint": case_tint}
+         "wrapped": case_wrapped, "hair": case_hair, "plates": case_plates, "tint": case_tint,
+         "gear_bones": case_gear_bones}
 
 
 def main():

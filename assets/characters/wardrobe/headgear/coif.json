@@ -8,5 +8,9 @@
  "hides_hair": true,
  "allows_beard": true,
  "cloth": [],
- "colliders": []
+ "colliders": [],
+ "marks": {
+  "cape_top": 1.575,
+  "rigid_above": 1.68
+ }
 }

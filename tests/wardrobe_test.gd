@@ -386,15 +386,12 @@ func _heaviest(kind: StringName) -> int:
 		+ (beards.max() if not beards.is_empty() else 0) + (sets.max() if not sets.is_empty() else 0)
 
 
-## The coif's hood ends here (recipes.HEADGEAR.coif.cape.top_z); below it,
-## its cape.
-const CAPE_TOP := 1.575
-
-
 func _k13() -> void:
 	# K13 the cape rides his neck, chest and collarbones: weighed on his head
 	# or his arms, it swings into his gambeson when he looks round or lowers
-	# his arms
+	# his arms. The coif's hood ends at its JSON's "cape_top" mark (its
+	# recipe's cape top); below it, its cape.
+	var cape_top: float = Wardrobe.headgear_data(&"coif").get("marks", {}).get("cape_top", -INF)
 	var scene: Node = (load(Wardrobe.ROOT + "headgear/coif.glb") as PackedScene).instantiate()
 	var mi: MeshInstance3D = scene.find_children("*", "MeshInstance3D", true, false)[0]
 	var wrong := {}
@@ -409,7 +406,7 @@ func _k13() -> void:
 		var per := bones.size() / maxi(points.size(), 1)
 
 		for v in range(points.size()):
-			if points[v].y >= CAPE_TOP:
+			if points[v].y >= cape_top:
 				continue
 
 			cape += 1
@@ -422,28 +419,57 @@ func _k13() -> void:
 
 	scene.free()
 	_check("K13 the coif's cape rides his neck, chest and collarbones, not his head or arms", cape > 0 and wrong.is_empty(),
-		"cape vertices %d, on the wrong bones %s" % [cape, wrong])
-
-
-## The nasal helm's foot (recipes.HEADGEAR.nasalhelm: "base_z").
-const HELM_FOOT := 1.722
+		"cape below %.3f: %d vertices, on the wrong bones %s" % [cape_top, cape, wrong])
 
 
 func _k13b() -> void:
 	# K13b the curtain rides his head at its top and his neck and shoulders
-	# below: it hangs from his helm and drapes as he moves his head
-	var top := _weights_where(&"curtain", func(p): return p.y > HELM_FOOT - 0.01)
-	var low := _weights_where(&"curtain", func(p): return p.y < HELM_FOOT - 0.12)
+	# below: it hangs from his helm (its foot: the helm's JSON's "foot" mark)
+	# and drapes as he moves his head
+	var foot: float = Wardrobe.headgear_data(&"nasalhelm").get("marks", {}).get("foot", INF)
+	var top := _weights_where(&"curtain", func(p): return p.y > foot - 0.01)
+	var low := _weights_where(&"curtain", func(p): return p.y < foot - 0.12)
 	var top_on_head := top.all(func(w): return w.keys() == [&"Head"])
 	var low_off_head := low.all(func(w): return not w.has(&"Head"))
 	_check("K13b the curtain hangs from his helm and rides his neck below", not top.is_empty() and not low.is_empty()
 		and top_on_head and low_off_head, "top %d vertices (on his head alone %s), hem %d (off his head %s)"
 		% [top.size(), top_on_head, low.size(), low_off_head])
 
-	# K13c the hood's tail is its own chain under his head
+	# K13c the hood's tail is its own chain under his head, its bones in the
+	# hood's file and in no other piece's (a guard takes in every bone of
+	# what he wears)
 	var tail: Array = Wardrobe.headgear_data(&"hood").get("cloth", []).filter(func(c): return c.chain == "hood_tail")
-	_check("K13c the hood's tail swings on three bones under his head", tail.size() == 1 and tail[0].parent == "Head"
-		and tail[0].bones.size() == 3, str(tail))
+	var carried := {}
+
+	for piece in [&"hood", &"coif", &"kettlehat", &"nasalhelm", &"curtain"]:
+		carried[piece] = _cloth_binds(Wardrobe.ROOT + "headgear/%s.glb" % piece)
+
+	var own: bool = not tail.is_empty() and carried[&"hood"] == tail[0].bones \
+		and carried.keys().all(func(piece): return piece == &"hood" or carried[piece].is_empty())
+	_check("K13c the hood's tail swings on three bones under his head, carried by the hood alone", tail.size() == 1
+		and tail[0].parent == "Head" and tail[0].bones.size() == 3 and own, "%s; cloth bones by file %s" % [tail, carried])
+
+
+## The cloth bones a GLB's skin binds (sorted), none if it cannot be read.
+func _cloth_binds(path: String) -> Array:
+	if not ResourceLoader.exists(path):
+		return []
+
+	var scene: Node = (load(path) as PackedScene).instantiate()
+	var out := []
+
+	for mi in scene.find_children("*", "MeshInstance3D", true, false):
+		var skin: Skin = (mi as MeshInstance3D).skin
+
+		for i in range(skin.get_bind_count() if skin != null else 0):
+			var bone := String(skin.get_bind_name(i))
+
+			if bone.begins_with("cloth_") and not bone in out:
+				out.append(bone)
+
+	scene.free()
+	out.sort()
+	return out
 
 
 ## For each vertex of a headgear piece's GLB (every surface) that `pick`
@@ -481,15 +507,11 @@ func _weights_where(piece: StringName, pick: Callable) -> Array[Dictionary]:
 	return out
 
 
-## Above this the coif's hood rides his head alone (recipes.HEADGEAR.coif:
-## "rigid_above").
-const HOOD_RIGID := 1.68
-
-
 func _k15() -> void:
-	# K15 the hood above his ears rides his head alone: weighed partly on his
-	# neck, its big faces lag when he bows his head and his skull shows
-	# through them
+	# K15 the hood above his ears (the coif's JSON's "rigid_above" mark) rides
+	# his head alone: weighed partly on his neck, its big faces lag when he
+	# bows his head and his skull shows through them
+	var rigid: float = Wardrobe.headgear_data(&"coif").get("marks", {}).get("rigid_above", INF)
 	var scene: Node = (load(Wardrobe.ROOT + "headgear/coif.glb") as PackedScene).instantiate()
 	var mi: MeshInstance3D = scene.find_children("*", "MeshInstance3D", true, false)[0]
 	var wrong := {}
@@ -503,7 +525,7 @@ func _k15() -> void:
 		var per := bones.size() / maxi(points.size(), 1)
 
 		for v in range(points.size()):
-			if points[v].y < HOOD_RIGID:
+			if points[v].y < rigid:
 				continue
 
 			hood += 1
@@ -850,6 +872,33 @@ func _dressed() -> void:
 	_check("K18 his hair and beard are worn and tinted his hair colour", "Head_old" in _worn_names(aged) and tinted,
 		str(_worn_names(aged)))
 
+	# K24 a kind whose every hair style (or every beard) is missing is painted,
+	# as one whose every headgear set is: dressed bald or beardless, his
+	# silhouette would be gone (the arms master, one's files doctored away)
+	var fallen := {}
+
+	for style in [&"parted", &"full"]:
+		Wardrobe._json[Wardrobe.ROOT + "hair/%s.json" % style] = {}
+		var dresses := Wardrobe.can_dress(&"arms_master")
+		var shorn := await _guard(9, &"trainer")
+		fallen[style] = not dresses and shorn._rig.man.body.material_override is StandardMaterial3D
+		Wardrobe.forget()
+		shorn.queue_free()
+
+	_check("K24 a kind whose hair or beards are all missing is painted, as one without its headgear", not fallen.values().has(false),
+		str(fallen))
+
+	# K25 a hair file with no skinned mesh (a broken export; Wardrobe.skinned
+	# remembers it so) is left off: the rest of him still dresses, his beard
+	# and his cloth (the arms master)
+	Wardrobe._skins[Wardrobe.ROOT + "hair/parted.glb|male"] = []
+	var patchy := await _guard(9, &"trainer")
+	var patchy_names := _worn_names(patchy._rig.man)
+	Wardrobe.forget()
+	_check("K25 a hair file with no skinned mesh is left off; he still dresses, beard and cloth", patchy._rig.man.body.name == "Outfit"
+		and not ("Hair_parted" in patchy_names) and "Beard_full" in patchy_names and patchy._rig.man.cloth != null, str(patchy_names))
+	patchy.queue_free()
+
 	if DRESSED.has(&"archer"):
 		# K16b a squad of archers wears more than one colour, hood and tunic alike
 		var dyes := {}
@@ -907,16 +956,30 @@ func _dressed() -> void:
 		within and _distinct(shared) and _distinct(meshes), "%d kinds" % squad.size())
 
 	# K1b (Review Focus 2) one kind's files gone: that kind alone falls back to
-	# its own painted look
-	_doctor_missing(&"swordsman")
-	var sw := await _guard(53, &"swordsman")
-	var ar := await _guard(54, &"archer")
-	Wardrobe.forget()
-	_check("K1b a swordsman without files is painted, with his own helm; the archer still dresses",
-		sw._rig.man.body.material_override is StandardMaterial3D and sw._rig.man.armour.any(func(a): return a.name == "nasalhelm")
-		and ar._rig.man.body.name == "Outfit", "")
+	# its own painted look (every piece of its painted armour and hair on),
+	# and the next kind still dresses
+	var fallbacks := {}
+	var kinds: Array = DRESSED.keys()
 
-	for x in [g, painted, sw, ar]:
+	for kind in kinds:
+		_doctor_missing(kind)
+		var lost := await _guard(53, DRESSED[kind])
+		var next: StringName = kinds[(kinds.find(kind) + 1) % kinds.size()]
+		var still := await _guard(54, DRESSED[next])
+		Wardrobe.forget()
+		# (The plain watchman's painted look is batch 0's: his kettle hat.)
+		var own: Dictionary = GuardFighterScript.ARCHETYPES.get(DRESSED[kind], {}).get("look", {"armour": [&"kettlehat"]})
+		var wanted: Array = own.get("armour", []) + own.get("hair", [])
+		var names := _worn_names(lost._rig.man)
+		fallbacks[kind] = lost._rig.man.body.material_override is StandardMaterial3D and not wanted.is_empty() \
+			and wanted.all(func(piece): return String(piece) in names) and still._rig.man.body.name == "Outfit"
+		lost.queue_free()
+		still.queue_free()
+
+	_check("K1b each kind without its files is painted, all its own armour and hair on; the next kind still dresses",
+		not fallbacks.values().has(false), str(fallbacks))
+
+	for x in [g, painted]:
 		x.queue_free()
 
 	for child in get_children():
@@ -1057,10 +1120,16 @@ func _step(g: Node, dt: float) -> void:
 func _layers_and_plates(g: Node, w: Dictionary, man: Node) -> void:
 	var dt := 1.0 / 60.0
 	# K21 (Review Focus 3) the surcoat never swings through the mail skirt:
-	# through a run, a stop and a kick, where the mail skirt's front hem is (a
-	# vertex of it, where his skin puts it), the surcoat hangs in front of it
+	# through a run, a stop and a kick, all down the mail skirt's front (the
+	# vertices of its centre line, his JSON's "mail_skirt_front" mark, where
+	# his skin puts them, and between them: its rows ride surcoat bones
+	# apart), the surcoat hangs in front of it
 	var fwd: Vector3 = -g.global_basis.z
-	var hem := _vertex_on(man.body, man.skeleton, func(p): return absf(p.x) < 0.002 and p.z > 0.05, MAIL_SKIRT_HEM)
+	var rows: Array = []
+
+	for point in Wardrobe.kind_data(&"swordsman").get("marks", {}).get("mail_skirt_front", []):
+		rows.append(_vertex_at(man.body, man.skeleton, Vector3(point[0], point[1], point[2])))
+
 	var line := _chain_line(man, &"surcoat_front")
 	var worst_behind := -INF
 	var phases := {"run": -INF, "stop": -INF, "kick": -INF}
@@ -1079,20 +1148,33 @@ func _layers_and_plates(g: Node, w: Dictionary, man: Node) -> void:
 
 		await _step(g, dt)
 
-		if not hem.is_empty() and not line.is_empty():
-			var behind := _in_front_of(_skin_one(hem), line, fwd)
+		if rows.size() >= 2 and not line.is_empty():
+			var at: Array = rows.map(func(r): return _skin_one(r))
+			var behind := -INF
+
+			for k in range(at.size() - 1):
+				for t in [0.0, 0.25, 0.5, 0.75, 1.0]:
+					behind = maxf(behind, _in_front_of((at[k] as Vector3).lerp(at[k + 1], t), line, fwd))
+
 			var phase := "run" if i < 60 else ("stop" if i < 120 else "kick")
 			phases[phase] = maxf(phases[phase], behind)
 			worst_behind = maxf(worst_behind, behind)
 
 	g._phase = &""
-	_check("K21 through a run, a stop and a kick his surcoat stays over his mail skirt", not hem.is_empty() and not line.is_empty()
-		and worst_behind <= 0.01, "%.3f m (run %.3f stop %.3f kick %.3f)" % [worst_behind, phases.run, phases.stop, phases.kick])
+	_check("K21 through a run, a stop and a kick his surcoat stays over his mail skirt, all down its front", rows.size() >= 2
+		and not line.is_empty() and worst_behind <= 0.01, "%.3f m (run %.3f stop %.3f kick %.3f; %d rows)"
+		% [worst_behind, phases.run, phases.stop, phases.kick, rows.size()])
 
-	# K22 (Review Focus 4) overhead, his pauldrons stay out of his head
+	# K22 (Review Focus 4) overhead, his pauldrons stay out of his head and
+	# never cut into his mail curtain (no edge of one through a face of the
+	# other)
 	var plates := _pauldron_vertices(man.body)
+	var plate_faces := _faces_of(man.body, plates)
+	var curtain := _worn(man, "curtain")
+	var mail_faces := _faces_of(curtain, PackedInt32Array()) if curtain != null else PackedInt32Array()
 	var head: int = man.skeleton.find_bone(&"Head")
 	var nearest := INF
+	var cuts := 0
 
 	for i in range(30):
 		g._phase = &"strike"
@@ -1106,24 +1188,24 @@ func _layers_and_plates(g: Node, w: Dictionary, man: Node) -> void:
 		for index in plates:
 			nearest = minf(nearest, skinned[index].distance_to(at))
 
+		if curtain != null:
+			cuts += _cuts(skinned, plate_faces, _skinned(curtain, man.skeleton), mail_faces)
+
 	g._phase = &""
 	# (On the wardrobe's outfit: a painted body's own arms would pass.)
-	_check("K22 his pauldrons clear his head through an overhead strike", man.body.name == "Outfit" and not plates.is_empty()
-		and nearest >= 0.10, "%.3f m (%d plate vertices on %s)" % [nearest, plates.size(), man.body.name])
+	_check("K22 his pauldrons clear his head and never cut into his mail curtain through an overhead strike",
+		man.body.name == "Outfit" and not plates.is_empty() and nearest >= 0.10 and curtain != null and not plate_faces.is_empty()
+		and not mail_faces.is_empty() and cuts == 0, "%.3f m from his head; %d cuts through the curtain (%d plate vertices on %s)"
+		% [nearest, cuts, plates.size(), man.body.name])
 
 	for i in range(90):
 		await _step(g, dt)
 
 
-## The swordsman's mail skirt's hem (recipes.SWORDSMAN mail_skirt: calf_l
-## 0.05 down, in the game's frame).
-const MAIL_SKIRT_HEM := 0.519
-
-
-## One vertex of `mi` to follow as his skin moves it (_skin_one): of those
-## `pick` takes (by rest position), the one resting nearest height `y`. Its
-## bones are followed by attachments (bone reads miss the cloth's pose).
-func _vertex_on(mi: MeshInstance3D, skeleton: Skeleton3D, pick: Callable, y: float) -> Dictionary:
+## One vertex of `mi` to follow as his skin moves it (_skin_one): the one
+## resting nearest `point`. Its bones are followed by attachments (bone
+## reads miss the cloth's pose).
+func _vertex_at(mi: MeshInstance3D, skeleton: Skeleton3D, point: Vector3) -> Dictionary:
 	var best := {}
 	var gap := INF
 
@@ -1135,10 +1217,10 @@ func _vertex_on(mi: MeshInstance3D, skeleton: Skeleton3D, pick: Callable, y: flo
 		var per := bones.size() / maxi(vertices.size(), 1)
 
 		for v in range(vertices.size()):
-			if not pick.call(vertices[v]) or absf(vertices[v].y - y) >= gap:
+			if vertices[v].distance_to(point) >= gap:
 				continue
 
-			gap = absf(vertices[v].y - y)
+			gap = vertices[v].distance_to(point)
 			var binds := []
 
 			for k in range(per):
@@ -1157,7 +1239,7 @@ func _vertex_on(mi: MeshInstance3D, skeleton: Skeleton3D, pick: Callable, y: flo
 	return best
 
 
-## Where his skin puts a vertex from _vertex_on now (world).
+## Where his skin puts a vertex from _vertex_at now (world).
 func _skin_one(vertex: Dictionary) -> Vector3:
 	var at := Vector3.ZERO
 
@@ -1190,6 +1272,52 @@ func _in_front_of(point: Vector3, line: Array, fwd: Vector3) -> float:
 			return (point - a.lerp(b, (point.y - a.y) / (b.y - a.y))).dot(fwd)
 
 	return -INF
+
+
+## The triangles of `mi` whose three vertices are all in `keep` (all of
+## them if it is empty), as _skinned numbers vertices (flat, surface by
+## surface): three indices each.
+func _faces_of(mi: MeshInstance3D, keep: PackedInt32Array) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	var wanted := {}
+	var flat := 0
+
+	for index in keep:
+		wanted[index] = true
+
+	for s in range(mi.mesh.get_surface_count()):
+		var arrays := mi.mesh.surface_get_arrays(s)
+		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+
+		for t in range(0, indices.size(), 3):
+			var face := PackedInt32Array([flat + indices[t], flat + indices[t + 1], flat + indices[t + 2]])
+
+			if keep.is_empty() or (wanted.has(face[0]) and wanted.has(face[1]) and wanted.has(face[2])):
+				out.append_array(face)
+
+		flat += (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+
+	return out
+
+
+## How many edges of either set of faces pass through a face of the other.
+func _cuts(a: PackedVector3Array, a_faces: PackedInt32Array, b: PackedVector3Array, b_faces: PackedInt32Array) -> int:
+	return _edges_through(a, a_faces, b, b_faces) + _edges_through(b, b_faces, a, a_faces)
+
+
+func _edges_through(a: PackedVector3Array, a_faces: PackedInt32Array, b: PackedVector3Array, b_faces: PackedInt32Array) -> int:
+	var count := 0
+
+	for t in range(0, a_faces.size(), 3):
+		for e in range(3):
+			var from := a[a_faces[t + e]]
+			var to := a[a_faces[t + (e + 1) % 3]]
+
+			for u in range(0, b_faces.size(), 3):
+				if Geometry3D.segment_intersects_triangle(from, to, b[b_faces[u]], b[b_faces[u + 1]], b[b_faces[u + 2]]) != null:
+					count += 1
+
+	return count
 
 
 ## His pauldrons, as _skinned lists vertices (flat, surface by surface): the

@@ -8,5 +8,6 @@
  "hides_hair": true,
  "allows_beard": true,
  "cloth": [],
- "colliders": []
+ "colliders": [],
+ "marks": {}
 }

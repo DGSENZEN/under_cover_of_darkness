@@ -27,6 +27,10 @@
    "height": 0.1889
   }
  ],
+ "marks": {
+  "cape_top": 1.575,
+  "rigid_above": 1.68
+ },
  "dye_base": [
   0.2,
   0.302,

@@ -1177,6 +1177,11 @@ func dress(kind: StringName, seed: int, fighting_idle: StringName = &"Sword_Idle
 		var strands := _wear(root + "hair/%s.glb" % style, ("Beard_%s" if info.get("kind") == "beard" else "Hair_%s") % style,
 			load(root + "hair/%s.png" % style), load(root + "hair/%s_mask.png" % style), Color(hair_base[0], hair_base[1], hair_base[2]),
 			body_kind)
+
+		# A file with no skinned mesh (Wardrobe.skinned said so): left off.
+		if strands == null:
+			continue
+
 		strands.set_instance_shader_parameter(&"dye_colour", look.get("hair_colour", Color(0.3, 0.25, 0.2)))
 
 	for bone in data.get("metal", []):

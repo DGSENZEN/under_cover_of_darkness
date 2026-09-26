@@ -191,9 +191,32 @@ def export_kind(recipe):
         "skin_tones": recipes.TONES,
         "probe": json.loads(scene.get("wardrobe_probe", "[]")),
         "options": recipe["options"],
+        "marks": kind_marks(recipe, outfit),
     }
     write_json(common.WARDROBE / ("%s.json" % kind), data)
     print("wardrobe: exported %s: %d triangles, %d with head and headgear" % (kind, data["triangles"], combined))
+
+
+def kind_marks(recipe, outfit):
+    """Where his garments are, for the game's checks to find them rather
+    than hold recipe numbers: the front centre line (x = 0, his front) of
+    each garment riding another's chains, top to bottom, in the game's frame
+    (y up, his front +z)."""
+    names = [g["name"] for g in recipe["garments"]]
+    parts = outfit.data.attributes["wr_part"].data
+    vertices = outfit.data.vertices
+    marks = {}
+
+    for g in recipe["garments"]:
+        if "rides" not in g:
+            continue
+
+        part = 1 + names.index(g["name"])
+        line = {tuple(round(c, 4) for c in vertices[i].co) for p in outfit.data.polygons if parts[p.index].value == part
+                for i in p.vertices if abs(vertices[i].co.x) < 1e-4 and vertices[i].co.y < 0.0}
+        marks["%s_front" % g["name"]] = [[x, z, -y] for x, y, z in sorted(line, key=lambda c: -c[2])]
+
+    return marks
 
 
 def heaviest_parts(recipe):
@@ -264,7 +287,9 @@ def export_parts(prefix, folder):
 
     for obj in parts:
         name = obj.name[len(prefix):]
-        glb(obj, armature, common.WARDROBE / folder / ("%s.glb" % name))
+        # Its own cloth bones only (one armature carries every piece's).
+        glb(obj, armature, common.WARDROBE / folder / ("%s.glb" % name),
+            cloth=[b for c in chains if c.get("piece") == name for b in c["bones"]])
 
         for image in (common.WARDROBE / folder).glob("%s*.png" % name):
             lossless(image)
@@ -279,13 +304,18 @@ def export_parts(prefix, folder):
             # Skinned wholly to its bones: no rigid pieces (batch 1 decision 3).
             g = recipes.HEADGEAR[name]
             bones = {b.name: b for b in armature.data.bones}
-            chains = [{key: value for key, value in {**c, **g["chains"][c["chain"]]}.items() if key != "piece"}
-                      for c in json.loads(bpy.context.scene.get("wardrobe_chains", "[]")) if c.get("piece") == name]
+            own = [{key: value for key, value in {**c, **g["chains"][c["chain"]]}.items() if key != "piece"}
+                   for c in chains if c.get("piece") == name]
+            # Its recipe's heights, for the game's checks to find its parts
+            # by: a hood's cape top and the line above which it rides his
+            # head alone; a helm's foot.
+            marks = {"cape_top": g.get("cape", {}).get("top_z"), "rigid_above": g.get("rigid_above"), "foot": g.get("base_z")}
             data = {"piece": name, "triangles": common.tri_count(obj),
                     "metal": g["metal"], "hides_hair": g["hides_hair"], "allows_beard": g["allows_beard"],
-                    "cloth": chains,
+                    "cloth": own,
                     "colliders": [{"bone": c["bone"], "radius": c["radius"], "height": round(bones[c["bone"]].length, 4)}
-                                  for c in g.get("colliders", [])]}
+                                  for c in g.get("colliders", [])],
+                    "marks": {key: value for key, value in marks.items() if value is not None}}
             dyed = dye_base(obj)
 
             if dyed is not None:
@@ -295,22 +325,80 @@ def export_parts(prefix, folder):
         print("wardrobe: exported %s/%s: %d triangles" % (folder, name, data["triangles"]))
 
 
-def glb(obj, armature, path):
+def glb(obj, armature, path, cloth=None):
     """`obj` on its skeleton as a GLB: mesh, skin and named material slots
     (the game makes its own materials, choosing by name: WR_strips is drawn
     from both sides), no textures, no animation. Placeholder materials would
-    lose the names on Godot's import."""
+    lose the names on Godot's import. Given `cloth` (a piece's own cloth
+    bones), the skeleton leaves out every other cloth bone: headgear.blend's
+    one armature carries every piece's chains, and a guard takes in every
+    bone of what he wears."""
     path.parent.mkdir(parents=True, exist_ok=True)
     common.backup(path)
-    common.select_only([obj, armature], active=obj)
-    bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", use_selection=True, export_materials="EXPORT",
-                              export_image_format="NONE", export_animations=False, export_skins=True, export_yup=True,
-                              export_texcoords=True, export_normals=True, export_vertex_color="NONE", export_apply=False)
+    others = [b.name for b in armature.data.bones if b.name.startswith("cloth_") and b.name not in cloth] if cloth is not None else []
+    rig = stand_in(obj, armature, others) if others else armature
+
+    try:
+        common.select_only([obj, rig], active=obj)
+        bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", use_selection=True, export_materials="EXPORT",
+                                  export_image_format="NONE", export_animations=False, export_skins=True, export_yup=True,
+                                  export_texcoords=True, export_normals=True, export_vertex_color="NONE", export_apply=False)
+    finally:
+        if rig is not armature:
+            put_back(obj, armature, rig)
+
     settings = path.with_suffix(".glb.import")
 
     if not settings.exists():
         relative = "res://" + str(path.relative_to(common.ROOT)).replace(os.sep, "/")
         settings.write_text(IMPORT.format(source=relative))
+
+
+def stand_in(obj, armature, drop):
+    """A copy of `armature` without the bones `drop`, standing in for it
+    (under its name, as `obj`'s parent and its Armature modifier's object)
+    until put_back."""
+    rig = armature.copy()
+    rig.data = armature.data.copy()
+    bpy.context.scene.collection.objects.link(rig)
+    common.select_only([rig], active=rig)
+    bpy.ops.object.mode_set(mode="EDIT")
+
+    for name in drop:
+        rig.data.edit_bones.remove(rig.data.edit_bones[name])
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+    rig["wr_stands_for"] = armature.name
+    armature.name, rig.name = armature.name + "_all", armature.name
+
+    for modifier in obj.modifiers:
+        if modifier.type == "ARMATURE" and modifier.object == armature:
+            modifier.object = rig
+
+    if obj.parent == armature:
+        inverse = obj.matrix_parent_inverse.copy()
+        obj.parent = rig
+        obj.matrix_parent_inverse = inverse
+
+    return rig
+
+
+def put_back(obj, armature, rig):
+    """Undoes stand_in: `obj` on `armature` again, under its own name; the
+    stand-in gone."""
+    for modifier in obj.modifiers:
+        if modifier.type == "ARMATURE" and modifier.object == rig:
+            modifier.object = armature
+
+    if obj.parent == rig:
+        inverse = obj.matrix_parent_inverse.copy()
+        obj.parent = armature
+        obj.matrix_parent_inverse = inverse
+
+    name, data = rig["wr_stands_for"], rig.data
+    bpy.data.objects.remove(rig)
+    bpy.data.armatures.remove(data)
+    armature.name = name
 
 
 def write_json(path, data):

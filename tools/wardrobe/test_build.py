@@ -377,8 +377,26 @@ def case_hood():
     return [] if not inward else ["hood: %d of its %d one-sheet faces face in toward him (first at %s)" % (len(inward), sheet, inward[0])]
 
 
+def case_launcher():
+    """wardrobe.sh stops when it cannot tell the kinds (recipes.py broken, or
+    no Python): `check all` must not quietly check only heads, hair and
+    headgear and exit 0. Blender is stood in for by `true`."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    folder = Path(tempfile.mkdtemp(prefix="wardrobe_launcher_"))
+    broken = folder / "python3"
+    broken.write_text("#!/bin/sh\nexit 1\n")
+    broken.chmod(0o755)
+    env = dict(os.environ, PATH="%s:%s" % (folder, os.environ.get("PATH", "")), BLENDER="true")
+    script = Path(__file__).resolve().parent / "wardrobe.sh"
+    done = subprocess.run(["bash", str(script), "check", "all"], env=env, capture_output=True, text=True)
+    return [] if done.returncode != 0 else ["launcher: `check all` exited 0 though it could not tell the kinds"]
+
+
 CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, "watchman": case_watchman,
-         "hood": case_hood}
+         "hood": case_hood, "launcher": case_launcher}
 
 
 def main():
