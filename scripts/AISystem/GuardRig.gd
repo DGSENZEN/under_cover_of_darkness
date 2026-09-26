@@ -94,10 +94,11 @@ const DEATH := [&"Death01", 0.25, 1.45]
 const KNOCKOUT := [&"Death01", 0.3, 1.6]
 const IMPACT := 1.15
 ## What a guard with no archetype wears and carries.
-const DEFAULT_LOOK := {"outfit": &"watchman", "armour": [&"kettlehat"], "weapon": &"sword"}
+## The watchman: dressed from the wardrobe (Humanoid.dress), or painted with
+## his kettle hat if the wardrobe cannot dress him.
+const DEFAULT_LOOK := {"kind": &"watchman", "outfit": &"watchman", "armour": [&"kettlehat"], "weapon": &"sword"}
 ## Bones a wound or an arrow can ride on: the nearest takes it.
-const FLESH_BONES := [&"Head", &"neck_01", &"spine_03", &"spine_02", &"spine_01", &"pelvis",
-	&"upperarm_l", &"upperarm_r", &"lowerarm_l", &"lowerarm_r", &"thigh_l", &"thigh_r", &"calf_l", &"calf_r"]
+const FLESH_BONES := HumanoidScript.FLESH_BONES
 
 var guard: CharacterBody3D
 ## The man himself (Humanoid.gd).
@@ -215,20 +216,26 @@ func setup(p_guard: CharacterBody3D) -> void:
 	man = HumanoidScript.new()
 	man.name = "Man"
 	add_child(man)
-	man.build(look.get("outfit", &"watchman"), bool(look.get("female", false)), &"Pistol_Idle" if _crossbow else &"Sword_Idle")
+	var idle: StringName = &"Pistol_Idle" if _crossbow else &"Sword_Idle"
+	# From the wardrobe if his kind is there, else painted as before.
+	var dressed: bool = look.has("kind") and man.dress(look["kind"], _look_seed(), idle)
+
+	if not dressed:
+		man.build(look.get("outfit", &"watchman"), bool(look.get("female", false)), idle)
+
 	# His voice: a big man's lower, and each his own. A woman speaks in her
 	# own recordings (Guard.voice), at her own pitch.
 	female = bool(look.get("female", false))
 	_voice_pitch = (1.0 if female else 1.0 / sqrt(maxf(size, 0.5))) * randf_range(0.95, 1.05)
 	body_mesh = man.body
 
-	for style in look.get("hair", []):
+	for style in look.get("hair", []) if not dressed else []:
 		man.add_hair(style, look.get("hair_tint", Color.WHITE))
 
-	for piece in look.get("armour", []):
+	for piece in look.get("armour", []) if not dressed else []:
 		man.add_armour(piece)
 
-	if not bool(look.get("female", false)):
+	if not dressed and not bool(look.get("female", false)):
 		man.add_boots()
 
 	# The body he falls as (Ragdoll.gd): made now, while he stands in his rest
@@ -279,6 +286,14 @@ func setup(p_guard: CharacterBody3D) -> void:
 	_overlay = ShaderMaterial.new()
 	_overlay.shader = HIT_RIM
 	_apply()
+
+
+## Which of his kind he is (Humanoid.dress): the guard's own look_seed if
+## set, else his place in the tree, so each guard of a level is the same man
+## every time it loads.
+func _look_seed() -> int:
+	var chosen: Variant = guard.get("look_seed")
+	return int(chosen) if chosen != null and int(chosen) >= 0 else hash(String(guard.get_path()))
 
 
 ## Steel that shows in the dark: less of a mirror (the night has nothing to
@@ -513,12 +528,18 @@ func _apply() -> void:
 
 	weapon.transform = held
 
-	if body_mesh != null:
-		if _flash > 0.01:
+	# The hit flash, on everything he wears (his head and gear too).
+	if man != null:
+		var flashing := _flash > 0.01
+
+		if flashing:
 			_overlay.set_shader_parameter("amount", _flash * _flash)
-			body_mesh.material_overlay = _overlay
-		elif body_mesh.material_overlay != null:
-			body_mesh.material_overlay = null
+
+		for worn in man.worn():
+			if flashing:
+				worn.material_overlay = _overlay
+			elif worn.material_overlay == _overlay:
+				worn.material_overlay = null
 
 
 ## 0..1 through his current phase, `ahead` seconds from now.
@@ -999,8 +1020,10 @@ func _exit_tree() -> void:
 	if weapon != null:
 		weapon.material_overlay = null
 
-	if body_mesh != null and is_instance_valid(body_mesh) and body_mesh.material_overlay == _overlay:
-		body_mesh.material_overlay = null
+	if man != null and is_instance_valid(man):
+		for worn in man.worn():
+			if worn.material_overlay == _overlay:
+				worn.material_overlay = null
 
 
 ## His blade drew blood: it shows on the steel.

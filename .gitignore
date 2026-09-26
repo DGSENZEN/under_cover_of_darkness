@@ -8,3 +8,6 @@
 
 # Blender auto-backups
 *.blend1
+
+# Wardrobe build backups (tools/wardrobe)
+assets/characters/wardrobe/source/backup/

@@ -1,0 +1,15 @@
+{
+ "piece": "coif",
+ "triangles": 148,
+ "rigid": false,
+ "bone": "",
+ "offset": [],
+ "metal": [
+  "neck_01",
+  "Head"
+ ],
+ "hides_hair": true,
+ "allows_beard": true,
+ "cloth": [],
+ "colliders": []
+}

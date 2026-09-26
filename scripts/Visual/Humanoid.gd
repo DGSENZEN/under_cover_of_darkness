@@ -29,6 +29,9 @@ const PostureScript := preload("res://scripts/Visual/Posture.gd")
 const RagdollScript := preload("res://scripts/Visual/Ragdoll.gd")
 const SeveredScript := preload("res://scripts/Visual/Severed.gd")
 const SeveredPartScript := preload("res://scripts/Visual/SeveredPart.gd")
+const WardrobeScript := preload("res://scripts/Visual/Wardrobe.gd")
+const ClothScript := preload("res://scripts/Visual/Cloth.gd")
+const ClothResetScript := preload("res://scripts/Visual/ClothReset.gd")
 
 const MALE_SCENE := "res://assets/characters/base/Superhero_Male_FullBody.gltf"
 const FEMALE_SCENE := "res://assets/characters/base/Superhero_Female_FullBody.gltf"
@@ -64,6 +67,14 @@ var posture: SkeletonModifier3D
 var ragdoll: Node
 ## What has been cut off him (Severed.gd), once anything has.
 var severed: Node
+## What the wardrobe rolled for him (dress: Wardrobe.roll, then the hair
+## rules), empty if he wears a painted outfit.
+var look := {}
+## The metal he wears as part of his clothes, by the bone it covers (a
+## mail coif on his neck and head): bone -> the mesh.
+var metal := {}
+## What swings on him (Cloth.gd), if he wears any cloth that does.
+var cloth: Node
 
 var _root: AnimationNodeBlendTree
 ## Which action slot is in front (0 or 1), what each holds, and the blend.
@@ -439,8 +450,19 @@ func add_ragdoll(mass_scale := 1.0) -> Node:
 	skeleton.reset_bone_poses()
 	ragdoll = RagdollScript.new()
 	ragdoll.build(self, mass_scale)
-	# Last of the modifiers: physics has the final say.
+	# After the animation: physics has the final say over his bones.
 	skeleton.add_child(ragdoll)
+
+	# His cloth drapes over whatever physics does with him (Cloth.gd), its
+	# restarter just ahead of it.
+	if cloth != null:
+		var restart := skeleton.get_node_or_null("ClothReset")
+
+		if restart != null:
+			skeleton.move_child(restart, ragdoll.get_index() + 1)
+
+		skeleton.move_child(cloth, ragdoll.get_index() + 1)
+
 	return ragdoll
 
 
@@ -689,6 +711,13 @@ func _cut_piece(bone: StringName, taken: Array[int], poses: Dictionary, velocity
 		for surface in range(worn.get_surface_override_material_count()):
 			drawn.set_surface_override_material(surface, worn.get_surface_override_material(surface))
 
+		# His own dye, fading, skin and dirt (Wardrobe.apply_look) go with it.
+		for look_of in LOOK_UNIFORMS:
+			var value: Variant = worn.get_instance_shader_parameter(look_of)
+
+			if value != null:
+				drawn.set_instance_shader_parameter(look_of, value)
+
 		copy.add_child(drawn)
 		drawn.skeleton = NodePath("..")
 
@@ -800,6 +829,11 @@ const PIECES := {
 
 ## Pieces that are cloth, not metal: a blade on them sounds of flesh.
 const CLOTH_PIECES := [&"hood"]
+## The bones a blow can land on: the nearest names where it landed.
+const FLESH_BONES := [&"Head", &"neck_01", &"spine_03", &"spine_02", &"spine_01", &"pelvis",
+	&"upperarm_l", &"upperarm_r", &"lowerarm_l", &"lowerarm_r", &"thigh_l", &"thigh_r", &"calf_l", &"calf_r"]
+## What is his alone on each thing he wears (Wardrobe.apply_look).
+const LOOK_UNIFORMS := [&"dye_colour", &"dye_fade", &"skin_tone", &"grime"]
 
 static var _hair_meshes := {}
 static var _armour_meshes := {}
@@ -926,7 +960,32 @@ func armour_near(point: Vector3, reach := 0.12) -> MeshInstance3D:
 			best = distance
 			nearest = piece
 
+	# Mail and plate worn as part of his clothes or gear (a coif, a hauberk):
+	# steel where the blow lands on a bone they cover.
+	if nearest == null and not metal.is_empty():
+		var bone := nearest_flesh(point)
+		var worn_metal: Node = metal.get(bone)
+
+		if worn_metal != null and is_instance_valid(worn_metal) and is_ancestor_of(worn_metal):
+			return worn_metal as MeshInstance3D
+
 	return nearest
+
+
+## The bone of him a blow at `point` lands on (FLESH_BONES), or &"" if it
+## misses him by more than a hand.
+func nearest_flesh(point: Vector3) -> StringName:
+	var best: StringName = &""
+	var gap := 0.3
+
+	for bone in FLESH_BONES:
+		var distance := bone_global(bone).origin.distance_to(point)
+
+		if distance < gap:
+			gap = distance
+			best = bone
+
+	return best
 
 
 static func armour_mesh(file: StringName) -> Mesh:
@@ -992,3 +1051,125 @@ func bone_global(bone: StringName) -> Transform3D:
 func set_layers(layers: int) -> void:
 	for mesh in find_children("*", "MeshInstance3D", true, false):
 		(mesh as MeshInstance3D).layers = layers
+
+
+# ---------------------------------------------------------------------------
+# Dressed from the wardrobe
+# ---------------------------------------------------------------------------
+
+## Builds him as a low-poly PS2 character of `kind` (Wardrobe.gd, made by
+## tools/wardrobe): his outfit, a face, headgear, rolled from `seed` (the same
+## seed, the same man). False, with nothing built, if the kind cannot be
+## dressed: the caller builds him painted instead.
+func dress(kind: StringName, seed: int, fighting_idle: StringName = &"Sword_Idle") -> bool:
+	if not WardrobeScript.can_dress(kind):
+		return false
+
+	var data := WardrobeScript.kind_data(kind)
+	var options := WardrobeScript.usable_options(data.get("options", {}))
+	var body_kind := String(data.get("body", "male"))
+	build(&"", body_kind == "female", fighting_idle)
+
+	# The base character's own meshes go: his outfit, head and gear are it.
+	for child in skeleton.get_children():
+		if child is MeshInstance3D:
+			skeleton.remove_child(child)
+			child.free()
+
+	look = WardrobeScript.roll(options, data.get("skin_tones", {}), seed)
+
+	# Hair only where no headgear hides it; a beard only where all allow one.
+	for piece in look.headgear:
+		var info := WardrobeScript.headgear_data(piece)
+
+		if bool(info.get("hides_hair", false)):
+			look.hair = &""
+
+		if not bool(info.get("allows_beard", true)):
+			look.beard = &""
+
+	var root := WardrobeScript.ROOT
+	var dye: Array = options.get("dye", {}).get("colour", [1.0, 1.0, 1.0])
+	var dye_base := Color(dye[0], dye[1], dye[2])
+	body = _wear(root + "%s.glb" % kind, "Outfit", load(root + "%s.png" % kind), load(root + "%s_mask.png" % kind), dye_base, body_kind)
+	_wear(root + "heads/%s.glb" % look.face, "Head_%s" % look.face, load(root + "heads/%s_%s.png" % [look.face, look.tone]), null,
+		Color.WHITE, body_kind)
+
+	for bone in data.get("metal", []):
+		metal[StringName(bone)] = body
+
+	for piece in look.headgear:
+		var worn_piece := _wear(root + "headgear/%s.glb" % piece, String(piece), load(root + "headgear/%s.png" % piece), null,
+			Color.WHITE, body_kind)
+
+		for bone in WardrobeScript.headgear_data(piece).get("metal", []):
+			metal[StringName(bone)] = worn_piece
+
+	# What swings on him: the outfit's chains and his headgear's.
+	var chains: Array = data.get("cloth", []).duplicate()
+	var colliders: Array = data.get("colliders", []).duplicate()
+
+	for piece in look.headgear:
+		chains += WardrobeScript.headgear_data(piece).get("cloth", [])
+		colliders += WardrobeScript.headgear_data(piece).get("colliders", [])
+
+	if not chains.is_empty():
+		var restart := ClothResetScript.new()
+		restart.name = "ClothReset"
+		skeleton.add_child(restart)
+		cloth = ClothScript.new()
+		cloth.name = "Cloth"
+		skeleton.add_child(cloth)
+		cloth.setup(chains, colliders)
+		restart.cloth = cloth
+
+	# Taller or shorter than his kind: his look only (his reach, eyes and
+	# collision are the guard's own). On his model, not on him: whoever
+	# carries him may set his own transform.
+	model.scale = Vector3.ONE * float(look.height)
+	return true
+
+
+## One part worn on his skeleton: its skin re-bound, the kind's shared
+## material on each surface (strips drawn from both sides), his look.
+func _wear(path: String, part_name: String, albedo: Texture2D, mask: Texture2D, dye_base: Color, body_kind: String) -> MeshInstance3D:
+	var found := WardrobeScript.skinned(path, skeleton, body_kind)
+
+	if found.is_empty():
+		return null
+
+	var worn_mesh := MeshInstance3D.new()
+	worn_mesh.name = part_name
+	worn_mesh.mesh = found[0]
+	worn_mesh.skin = found[1]
+	skeleton.add_child(worn_mesh)
+	worn_mesh.skeleton = NodePath("..")
+	worn_mesh.layers = Layers.ACTORS
+
+	for surface in range(worn_mesh.mesh.get_surface_count()):
+		var original := worn_mesh.mesh.surface_get_material(surface)
+		var strips := original != null and String(original.resource_name).begins_with("WR_strips")
+		worn_mesh.set_surface_override_material(surface, WardrobeScript.material(albedo, mask, strips, dye_base))
+
+	WardrobeScript.apply_look(worn_mesh, look)
+	return worn_mesh
+
+
+## Everything he wears: every skinned mesh on him (his body or outfit, a
+## head, hair, boots, gear) and his rigid armour. Never the marks, stumps or
+## the weapon (they hang from bones).
+func worn() -> Array[MeshInstance3D]:
+	var out: Array[MeshInstance3D] = []
+
+	if skeleton == null:
+		return out
+
+	for child in skeleton.get_children():
+		if child is MeshInstance3D and (child as MeshInstance3D).skin != null:
+			out.append(child)
+
+	for piece in armour:
+		if is_instance_valid(piece) and is_ancestor_of(piece) and not out.has(piece):
+			out.append(piece)
+
+	return out

@@ -136,6 +136,10 @@ signal bound_wounds
 ## "swordsman", "duelist", "brute" or "trainer" (see GuardFighter.gd). Empty
 ## is the plain watchman. Set before he enters the tree.
 @export var archetype: StringName = &""
+## Which man of his kind he looks like (Wardrobe.roll: face, skin, fading,
+## dirt, height): -1 takes it from his place in the level, so he is the same
+## man every load. Set before he enters the tree.
+@export var look_seed := -1
 ## Who he is, under his class (Temperament.gd): "" rolls him afresh each
 ## time the level loads; "steady", "stubborn", "craven", "rash" or "sly"
 ## pins him.

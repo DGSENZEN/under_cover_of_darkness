@@ -1,0 +1,14 @@
+{
+ "piece": "kettlehat",
+ "triangles": 266,
+ "rigid": false,
+ "bone": "",
+ "offset": [],
+ "metal": [
+  "Head"
+ ],
+ "hides_hair": false,
+ "allows_beard": true,
+ "cloth": [],
+ "colliders": []
+}
