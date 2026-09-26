@@ -14,6 +14,8 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 
 var player: CharacterBody3D
 var baker: NavigationRegion3D
@@ -21,6 +23,8 @@ var results: Array[String] = []
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	# Exact damage is checked here: cuts do not go on bleeding.
 	GUARD_SCRIPT.bleeding_on = false
 	Sfx.enabled = true
@@ -308,19 +312,22 @@ func _run() -> void:
 	await _frames(20)
 	player.juice.add_trauma(1.0)
 	var camera_off := 0.0
+	var moved := 0.0
 	var aim_true := true
 
 	# The shake is a sum of sines: take its largest swing over a few frames,
-	# not one instant that may fall where they cancel.
+	# not one instant that may fall where they cancel. It is mostly moved,
+	# a little turned (CameraJuice: rotation small, impact in translation).
 	for i in 12:
 		await _frames(1)
 		camera_off = maxf(camera_off, player.camera.global_basis.z.angle_to(player.neck.global_basis.z))
+		moved = maxf(moved, player.juice.view_position.length())
 		aim_true = aim_true and combat.aim().basis.z.is_equal_approx(player.neck.global_basis.orthonormalized().z)
 	player.juice.add_trauma(1.0)
 	await _tap("throw")
 	await _frames(30)
-	_check("F10 camera shake moves the view, not the blow", camera_off > 0.01 and aim_true and g10.health < g10.max_health,
-		"camera off the aim by %.4f rad, aim from the head %s, hit %s" % [camera_off, aim_true, g10.health < g10.max_health])
+	_check("F10 camera shake moves the view, not the blow", camera_off > 0.004 and moved > 0.008 and aim_true and g10.health < g10.max_health,
+		"camera off the aim by %.4f rad, moved %.3f m, aim from the head %s, hit %s" % [camera_off, moved, aim_true, g10.health < g10.max_health])
 	g10.queue_free()
 
 	# F11 effects are bounded and go away
@@ -435,6 +442,8 @@ func _wield(weapon_id: StringName) -> void:
 ## A guard already fighting you, facing you, who will not strike first.
 ## Lit, so he can see who he is fighting.
 func _fighter(at: Vector3) -> CharacterBody3D:
+	# A new fight: no dread carried over from the last one's dead.
+	GarrisonScript.clear_all()
 	player.debug_light_level = 1.0
 	var g: CharacterBody3D = GUARD.instantiate()
 	g.debug_ai = false

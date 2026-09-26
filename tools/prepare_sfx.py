@@ -21,13 +21,21 @@ and torches are cut that way.
 The pack's ambience loops are copied whole to audio/ambience/ (they loop on
 their own; Ambience.gd plays them).
 
-The rest comes from free packs off the web (CC0 but for two, credited in
-CREDITS.md), unpacked under ~/Downloads/AUCOD Web SFX/ (WEB below), each in a
-folder named after its archive: Kenney's Impact Sounds and RPG Audio, and from
-OpenGameArt HaelDB's yelling sounds, artisticdude's swishes, qubodup's
+The rest comes from free packs off the web, unpacked under
+~/Downloads/AUCOD Web SFX/ (WEB below), each in a folder named after its
+archive (CC0 but for one, credited in CREDITS.md):
+Kenney's Impact Sounds and RPG Audio, and from OpenGameArt HaelDB's yelling
+sounds, artisticdude's swishes, qubodup's
 impacts, Zane Little's deep bone breaks, rubberduck's 80 RPG, 100 and
 breaking/falling packs, Julie Damsgaard's dull explosion, congusbongus's
-footsteps (CC-BY 3.0) and tcarisland's orchestral stinger (CC-BY 4.0).
+footsteps (CC-BY 3.0); for the duelist cicifyre's female voices and congusbongus's female screams; for the
+score Mixkit's cinematic effects (under Mixkit's free licence) and William
+Hector's war drums.
+
+The score (MUSIC below) is kept in stereo: its stings go to audio/sfx/ like
+any sound, its loops to audio/music/, each cut to whole bars of the drums'
+130 bpm (the heartbeat and the brass exactly one and two bars, the drums
+their own eight), so the layers stay in step however long they play.
 
 Needs ffmpeg and numpy.
 """
@@ -59,6 +67,11 @@ def W(path):
 
 
 KENNEY_IMPACT = "kenney_impact-sounds/Audio/"
+FEMALE = "RPG_Voice_Starter_Pack/RPG Voice Starter Pack/Type 3/"
+MIXKIT = "mixkit/"
+MUSIC_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audio", "music")
+# The drums' tempo: every loop of the score is whole bars of it.
+BAR = 4 * 60.0 / 130.0
 KENNEY_RPG = "kenney_rpg-audio/Audio/"
 YELLS = "yelling_sounds/yelling sounds/"
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audio", "sfx")
@@ -245,38 +258,90 @@ SOUNDS += [
     ("door_rattle_3", W("80-CC0-RPG-SFX/lock_03.ogg"), None, None, 0.05),
     # The powder barrel.
     ("explosion", W("single/dull_explosion.wav"), 0.0, 3.0, 0.6),
-    # Voices. Yours (the grunt of being cut); theirs: cut, dying, the
-    # brute's roar, the grunt of a low sweep.
+    # Voices. Yours is the third man's in the pack: the grunt of being cut,
+    # and of effort (a heavy blow, a kick, hauling yourself up). The guards
+    # speak with the others: cut, dying, the brute's roar, the grunt of a low
+    # sweep.
     ("hurt_1", W(YELLS + "3grunt3.wav"), None, None, 0.08),
     ("hurt_2", W(YELLS + "3grunt4.wav"), None, None, 0.08),
     ("hurt_3", W(YELLS + "3grunt5.wav"), None, None, 0.08),
+    ("effort_1", W(YELLS + "3grunt1.wav"), None, None, 0.08),
+    ("effort_2", W(YELLS + "3grunt2.wav"), None, None, 0.08),
+    ("effort_3", W(YELLS + "3grunt6.wav"), None, None, 0.1),
     ("pain_1", W(YELLS + "1yell13.wav"), None, None, 0.08),
     ("pain_2", W(YELLS + "1yell14.wav"), None, None, 0.08),
     ("pain_3", W(YELLS + "1yell9.wav"), None, None, 0.08),
     ("pain_4", W(YELLS + "1yell10.wav"), None, None, 0.08),
     ("pain_5", W(YELLS + "2yell10.wav"), None, None, 0.08),
-    ("pain_6", W(YELLS + "3yell3.wav"), None, None, 0.08),
-    ("death_1", W(YELLS + "3yell1.wav"), None, None, 0.25),
-    ("death_2", W(YELLS + "3yell9.wav"), None, None, 0.25),
-    ("death_3", W(YELLS + "3yell6.wav"), None, None, 0.25),
-    ("death_4", W(YELLS + "yell10.wav"), None, None, 0.25),
-    ("death_5", W(YELLS + "yell11.wav"), None, None, 0.25),
-    ("death_6", W(YELLS + "2yell4.wav"), None, None, 0.25),
+    ("pain_6", W(YELLS + "2yell1.wav"), None, None, 0.08),
+    ("death_1", W(YELLS + "yell10.wav"), None, None, 0.25),
+    ("death_2", W(YELLS + "yell11.wav"), None, None, 0.25),
+    ("death_3", W(YELLS + "2yell4.wav"), None, None, 0.25),
+    ("death_4", W(YELLS + "yell2.wav"), None, None, 0.25),
+    ("death_5", W(YELLS + "yell5.wav"), None, None, 0.25),
+    ("death_6", W(YELLS + "2yell11.wav"), None, None, 0.25),
     ("roar_1", W(YELLS + "yell4.wav"), None, None, 0.15),
     ("roar_2", W(YELLS + "yell7.wav"), None, None, 0.15),
-    ("roar_3", W(YELLS + "3yell14.wav"), None, None, 0.15),
-    ("grunt_1", W(YELLS + "3grunt1.wav"), None, None, 0.08),
-    ("grunt_2", W(YELLS + "2yell9.wav"), None, None, 0.08),
-    ("grunt_3", W(YELLS + "3yell4.wav"), None, None, 0.08),
-    # The music of being noticed: the stinger's low opening swell, and the
-    # chord it lands on.
-    ("sting_suspicious", W("single/orchestral_stinger_dramatic_entrance.wav"), 0.0, 1.35, 0.45),
-    ("sting_combat", W("single/orchestral_stinger_dramatic_entrance.wav"), 1.62, 3.3, 0.6),
+    ("roar_3", W(YELLS + "yell12.wav"), None, None, 0.12),
+    ("grunt_1", W(YELLS + "2yell9.wav"), None, None, 0.08),
+    ("grunt_2", W(YELLS + "1yell15.wav"), None, None, 0.08),
+    ("grunt_3", W(YELLS + "2yell3.wav"), None, None, 0.08),
+    # Your own heart, when you are near done (Sfx: faster and louder as your
+    # health goes): single beats out of the score's heartbeat.
+    ("heartbeat_1", W(MIXKIT + "2630_cinematic_mystery_heartbeat_transition.wav"), 1.66, 2.1, 0.08),
+    ("heartbeat_2", W(MIXKIT + "2630_cinematic_mystery_heartbeat_transition.wav"), 2.11, 2.6, 0.08),
+    ("heartbeat_3", W(MIXKIT + "2630_cinematic_mystery_heartbeat_transition.wav"), 2.6, 3.06, 0.08),
+    # What you carry, moving with you at a run: belt and buckle.
+    ("gear_1", W(KENNEY_RPG + "clothBelt.ogg"), None, None, 0.05),
+    ("gear_2", W(KENNEY_RPG + "clothBelt2.ogg"), None, None, 0.05),
+    ("gear_3", W(KENNEY_RPG + "metalClick.ogg"), None, None, 0.04),
+    # The duelist: a woman's voice (the pack's third, and lowest): the cry
+    # of a blow put in, of being cut; screams for her death.
+    ("grunt_f_1", W(FEMALE + "attack1.wav"), None, None, 0.06),
+    ("grunt_f_2", W(FEMALE + "attack2.wav"), None, None, 0.06),
+    ("grunt_f_3", W(FEMALE + "attack3.wav"), None, None, 0.06),
+    ("roar_f_1", W(FEMALE + "attack2.wav"), None, None, 0.06),
+    ("roar_f_2", W(FEMALE + "attack3.wav"), None, None, 0.06),
+    ("pain_f_1", W(FEMALE + "damaged1.wav"), None, None, 0.06),
+    ("pain_f_2", W(FEMALE + "damaged2.wav"), None, None, 0.06),
+    ("pain_f_3", W(FEMALE + "damaged3.wav"), None, None, 0.06),
+    ("death_f_1", W("female_screams/1.ogg"), None, None, 0.1),
+    ("death_f_2", W("female_screams/2.ogg"), None, None, 0.15),
+    ("death_f_3", W("female_screams/3.ogg"), None, None, 0.15),
+    ("death_f_4", W("female_screams/4.ogg"), None, None, 0.12),
+]
+
+# The score, in stereo (see above). Stings: (name, source, start, end,
+# fade-out, reversed). SCORE_LOOPS: (name, source, start, end, kind, argument):
+# "crossfade" a free loop, its ends overlapped by `argument` seconds;
+# "bars" cut from `start` and stretched or padded to `argument` whole bars.
+STINGS = [
+    # Noticed, and looking into it: a large swell (the hum rising to its
+    # height), or the terror sweep turned round to rise instead of fall.
+    ("sting_suspicious_1", W(MIXKIT + "2900_deep_cinematic_wind_hum.wav"), 0.0, 6.4, 1.6, False),
+    ("sting_suspicious_2", W(MIXKIT + "677_terror_sweep_of_darkness.wav"), 0.0, 4.4, 0.12, True),
+    # Seen: the rush sucked in to a hit, or the sweep of darkness falling.
+    ("sting_combat_1", W(MIXKIT + "1469_reverse_cinematic_impact_trailer.wav"), 0.0, 1.6, 0.3, False),
+    ("sting_combat_2", W(MIXKIT + "677_terror_sweep_of_darkness.wav"), 0.0, 4.6, 1.0, False),
+    # The fight turning for the worse.
+    ("sting_escalate_1", W(MIXKIT + "1287_big_cinematic_impact.wav"), 0.2, 4.8, 1.2, False),
+    ("sting_escalate_2", W(MIXKIT + "2353_cinematic_drama_riser.wav"), 0.4, 4.0, 1.2, False),
+]
+
+SCORE_LOOPS = [
+    ("music_drone", W(MIXKIT + "2900_deep_cinematic_wind_hum.wav"), 0.5, 8.4, "crossfade", 2.0),
+    # Four beats of the heartbeat, one bar of the drums.
+    ("music_pulse", W(MIXKIT + "2630_cinematic_mystery_heartbeat_transition.wav"), 1.674, 3.554, "beats", 1),
+    ("music_drums", W("single/horde_war_drums_by_william_hector.wav"), 0.0, None, "whole", 8),
+    # A brass stab on every other downbeat.
+    ("music_severe", W(MIXKIT + "1093_cinematic_transition_brass_hum.wav"), 0.31, 3.7, "bars", 2),
 ]
 
 # The places, as loops: indoors at night, a cave, a forest at night (and
 # each of them in rain).
 AMBIENCES = [
+    # A torch burning (Torch.gd: each one crackles where it is).
+    ("torch_loop", "OGG Files/SFX/Torch/Torch Loop.ogg"),
     ("interior_night", LOOPS + "Interior Night/Inside Night.ogg"),
     ("interior_night_rain", LOOPS + "Interior Night/Inside Night Rain.ogg"),
     ("cave", LOOPS + "Cave/Cave.ogg"),
@@ -387,6 +452,104 @@ def loudness(x):
     return max(values) if values else -99.0
 
 
+def decode_stereo(path, start, end):
+    raw = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", path, "-f", "f32le", "-ac", "2", "-ar", str(RATE), "-"],
+        capture_output=True, check=True,
+    ).stdout
+    x = np.frombuffer(raw, dtype=np.float32).reshape(-1, 2).astype(np.float64)
+    last = len(x) if end is None else int(end * RATE)
+    return x[int(start * RATE):last]
+
+
+def write_wav_stereo(path, x):
+    pcm = np.clip(np.round(x * 32767.0), -32768, 32767).astype("<i2")
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "s16le", "-ar", str(RATE), "-ac", "2", "-i", "-", path],
+        input=pcm.tobytes(), check=True,
+    )
+
+
+def stretch(x, samples):
+    """Resampled to exactly `samples` long (speed and pitch together)."""
+    old = np.linspace(0.0, 1.0, len(x))
+    new = np.linspace(0.0, 1.0, samples)
+    return np.stack([np.interp(new, old, x[:, c]) for c in range(2)], axis=1)
+
+
+def loudness_stereo(x):
+    return loudness(x.mean(axis=1))
+
+
+def peak_normalise(x, db=PEAK_LIMIT_DB):
+    return x * 10 ** (db / 20) / max(np.abs(x).max(), 1e-9)
+
+
+def make_loop(x, kind, argument):
+    """A seamless loop out of `x` (see LOOPS)."""
+    if kind == "crossfade":
+        n = int(argument * RATE)
+        body = x[:-n].copy()
+        t = np.linspace(0.0, np.pi * 0.5, n)[:, None]
+        # Equal power: the end fades out over the start fading in.
+        body[:n] = x[-n:] * np.cos(t) + x[:n] * np.sin(t)
+        return body
+
+    if kind == "beats":
+        # Each beat's slot evened out, then the lot stretched to whole bars.
+        slots = 4 * int(argument)
+        length = len(x) // slots
+        x = x[:length * slots].copy()
+        levels = [np.sqrt((x[i * length:(i + 1) * length] ** 2).mean()) for i in range(slots)]
+        target = float(np.mean(levels))
+
+        for i in range(slots):
+            x[i * length:(i + 1) * length] *= target / max(levels[i], 1e-9)
+
+        return stretch(x, int(round(argument * BAR * RATE)))
+
+    if kind == "bars":
+        want = int(round(argument * BAR * RATE))
+        x = fade_stereo(x[:want], 0.004, 0.4)
+        return np.concatenate([x, np.zeros((want - len(x), 2))]) if len(x) < want else x
+
+    # "whole": already a loop of `argument` bars.
+    return x
+
+
+def fade_stereo(x, fade_in, fade_out):
+    return np.stack([fade(x[:, c], fade_in, fade_out) for c in range(2)], axis=1)
+
+
+def prepare_score():
+    groups = {}
+
+    for name, source, start, end, fade_out, backwards in STINGS:
+        x = decode_stereo(source, start, end)
+
+        if backwards:
+            x = x[::-1].copy()
+
+        x = peak_normalise(fade_stereo(x, 0.01, fade_out))
+        groups.setdefault(re.sub(r"_\d+$", "", name), []).append([name, x, loudness_stereo(x)])
+
+    # A sting's takes match the quietest of them, like any sound's.
+    for group, members in groups.items():
+        level = min(m[2] for m in members)
+
+        for name, x, own in members:
+            write_wav_stereo(os.path.join(OUT, name + ".wav"), x * 10 ** ((level - own) / 20))
+
+        print("%-18s sting, %d take(s), %.1f LUFS" % (group, len(members), level))
+
+    os.makedirs(MUSIC_OUT, exist_ok=True)
+
+    for name, source, start, end, kind, argument in SCORE_LOOPS:
+        x = peak_normalise(make_loop(decode_stereo(source, start, end), kind, argument), -3.0)
+        write_wav_stereo(os.path.join(MUSIC_OUT, name + ".wav"), x)
+        print("%-18s loop, %.3f s (%.2f bars), %.1f LUFS" % (name, len(x) / RATE, len(x) / RATE / BAR, loudness_stereo(x)))
+
+
 def main():
     pack = sys.argv[1] if len(sys.argv) > 1 else PACK
     os.makedirs(OUT, exist_ok=True)
@@ -413,6 +576,7 @@ def main():
 
         print("%-12s %d file(s), %.1f LUFS" % (group, len(members), level))
 
+    prepare_score()
     os.makedirs(AMBIENCE_OUT, exist_ok=True)
 
     for name, source in AMBIENCES:

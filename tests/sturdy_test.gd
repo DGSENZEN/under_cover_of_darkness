@@ -9,6 +9,8 @@ const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const CameraJuice := preload("res://scripts/PlayerUtils/CameraJuice.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 
 var player: CharacterBody3D
 var results: Array[String] = []
@@ -25,6 +27,8 @@ class EarlyEffects:
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(200, 1, 200))
 	Props.block(self, Vector3(20, 1.5, -1.0), Vector3(4, 3, 0.3))        # a wall to shoot and kick against
 	Props.spikes(self, Vector3(40, 1.0, -3.0), 6.0, 2.0, Vector3.BACK)     # a spiked wall, face at z = -3
@@ -320,6 +324,8 @@ func _spikes() -> Node:
 
 
 func _guard(at: Vector3) -> CharacterBody3D:
+	# A new fight: no dread carried over from the last one's dead.
+	GarrisonScript.clear_all()
 	var g: CharacterBody3D = GUARD.instantiate()
 	g.position = at
 	g.rotation.y = PI

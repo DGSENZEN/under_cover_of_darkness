@@ -33,12 +33,21 @@ func _ready() -> void:
 	gym.player.camera.current = true
 	await _shot("b_hub")
 
-	for spec in [[0, 60, "c_watchman"], [5, 150, "d_squad"], [5, 150, "e_squad_later"], [6, 60, "f_bodies"], [3, 90, "g_brute"]]:
-		if spec[2] != "e_squad_later":
+	for spec in [[0, 60, "c_watchman"], [5, 150, "d_squad"], [5, 150, "e_squad_later"], [6, 60, "f_bodies"], [3, 90, "g_brute"],
+			[8, 120, "h_guardhouse"], [8, 240, "i_guardhouse_later"]]:
+		# A "_later" shot carries on the fight before it.
+		if not String(spec[2]).ends_with("_later"):
 			gym._start_bay(spec[0])
 
 		await _frames(spec[1])
 		await _shot(spec[2])
+
+	# Down the dark loop behind the guardhouse's yard: it should be dark.
+	gym.player.global_position = Vector3(-13, 1.05, 30)
+	gym.player.rotation.y = PI
+	gym.player.reset_physics_interpolation()
+	await _frames(20)
+	await _shot("j_guardhouse_dark")
 
 	get_tree().quit()
 

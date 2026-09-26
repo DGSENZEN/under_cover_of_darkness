@@ -13,6 +13,8 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const GuardBodyScript := preload("res://scripts/AISystem/GuardBody.gd")
 const SeveredPartScript := preload("res://scripts/Visual/SeveredPart.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 
 var player: CharacterBody3D
 var combat: Node
@@ -20,6 +22,8 @@ var results: Array[String] = []
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(160, 1, 160))
 
 	var baker := NavigationRegion3D.new()
@@ -174,6 +178,8 @@ func _run() -> void:
 # ---------------------------------------------------------------------------
 
 func _guard(archetype: StringName, at: Vector3) -> CharacterBody3D:
+	# A new fight: no dread carried over from the last one's dead.
+	GarrisonScript.clear_all()
 	var g: CharacterBody3D = GUARD.instantiate()
 	g.archetype = archetype
 	g.debug_ai = false

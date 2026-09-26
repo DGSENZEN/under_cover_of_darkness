@@ -14,6 +14,9 @@ const DEFAULT := "interior_night"
 const VOLUME_DB := -21.0
 ## Faded in over this long.
 const FADE_IN := 2.5
+## How far the place recedes (dB) as the fight's score rises to FIGHT_FULL.
+const FIGHT_DIP := -9.0
+const FIGHT_FULL := 0.6
 
 var loop_name := ""
 var _player: AudioStreamPlayer
@@ -58,6 +61,8 @@ func _ready() -> void:
 	_player = AudioStreamPlayer.new()
 	_player.stream = stream
 	_player.volume_db = -60.0
+	# Pressed down under the fight (Sfx's Ambience bus).
+	_player.bus = &"Ambience" if AudioServer.get_bus_index(&"Ambience") >= 0 else &"Master"
 	add_child(_player)
 	_player.play()
 
@@ -68,10 +73,26 @@ func _process(delta: float) -> void:
 
 	# Real time, not the game's: a hit-stop or slow motion does not dip it.
 	_fade = minf(_fade + delta / maxf(Engine.time_scale, 0.05) / FADE_IN, 1.0)
-	_player.volume_db = lerpf(-60.0, VOLUME_DB, sqrt(_fade))
+	_player.volume_db = lerpf(-60.0, VOLUME_DB, sqrt(_fade)) + dip_for(_fight())
 
 
-func _exit_tree() -> void:
+## How far the place recedes under a fight whose score is at `intensity`
+## (Music.gd): it falls away as the fight fills your ears.
+static func dip_for(intensity: float) -> float:
+	return FIGHT_DIP * smoothstep(0.0, FIGHT_FULL, intensity)
+
+
+func _fight() -> float:
+	var music := get_parent().get_node_or_null("Music") if get_parent() != null else null
+	return float(music.get("intensity")) if music != null and music.get("intensity") != null else 0.0
+
+
+## Stops it for good: its stream let go of (leaving the level, tests).
+func hush() -> void:
 	if _player != null:
 		_player.stop()
 		_player.stream = null
+
+
+func _exit_tree() -> void:
+	hush()

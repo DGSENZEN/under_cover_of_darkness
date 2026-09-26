@@ -6,10 +6,20 @@ extends Node3D
 ## A real light: guards see you by it (and see you flicker with it), and the
 ## lightgem reads it. Put the node where the flame is.
 ##
+## Heard as well: it crackles (audio/ambience/torch_loop.ogg), close by only,
+## muffled through a wall, a little different from every other torch. It only
+## plays while you are near enough to hear it.
+##
 ##   var torch := Torch.new(); torch.position = Vector3(0, 2.2, 0); add_child(torch)
 
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
+
+const CRACKLE := "res://audio/ambience/torch_loop.ogg"
+## How loud its crackle is (dB at a metre or so), and how far it carries.
+const CRACKLE_DB := -13.0
+const CRACKLE_REACH := 11.0
 
 @export var color := Color(1.0, 0.64, 0.32)
 @export var energy := 2.4
@@ -23,10 +33,14 @@ const Layers := preload("res://scripts/Visual/Layers.gd")
 
 var light: OmniLight3D
 var flame: MeshInstance3D
+## Its crackle (null with sound off).
+var crackle: AudioStreamPlayer3D
 
 var _flame_material: StandardMaterial3D
 var _time := 0.0
 var _phase := 0.0
+var _listen_in := 0.0
+var _crackle_db := CRACKLE_DB
 
 
 func _ready() -> void:
@@ -69,6 +83,26 @@ func _ready() -> void:
 	flame.material_override = _flame_material
 	add_child(flame)
 
+	if Sfx.enabled and ResourceLoader.exists(CRACKLE):
+		var loop := load(CRACKLE) as AudioStreamOggVorbis
+
+		if loop != null:
+			loop.loop = true
+			crackle = AudioStreamPlayer3D.new()
+			crackle.name = "Crackle"
+			crackle.stream = loop
+			crackle.bus = Sfx.BUS_WORLD
+			crackle.unit_size = 1.4
+			crackle.max_distance = CRACKLE_REACH
+			crackle.volume_db = CRACKLE_DB
+			crackle.max_db = 0.0
+			crackle.attenuation_filter_cutoff_hz = Sfx.AIR_CUTOFF
+			crackle.attenuation_filter_db = Sfx.AIR_DB
+			crackle.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
+			# No two torches burn alike.
+			crackle.pitch_scale = randf_range(0.9, 1.1)
+			add_child(crackle)
+
 
 func _process(delta: float) -> void:
 	_time += delta
@@ -85,3 +119,34 @@ func _process(delta: float) -> void:
 	var frame := int(floor(_time * frame_rate)) % 4
 	_flame_material.uv1_offset = Vector3(0.25 * frame, 0.0, 0.0)
 	flame.scale = Vector3.ONE * (1.0 + 0.08 * n)
+	_listen(delta)
+
+
+## Its crackle: started when you come near enough to hear it (somewhere in
+## the loop, never in step with another torch), stopped when you leave;
+## dulled and dropped through a wall, eased there so it never jumps.
+func _listen(delta: float) -> void:
+	if crackle == null:
+		return
+
+	var real := delta / maxf(Engine.time_scale, 0.05)
+	_listen_in -= real
+
+	if _listen_in <= 0.0:
+		_listen_in = 0.4 + randf() * 0.2
+		var camera := get_viewport().get_camera_3d()
+		var near := camera != null and camera.global_position.distance_to(global_position) < CRACKLE_REACH + 1.0
+
+		if near and not crackle.playing:
+			crackle.volume_db = -40.0
+			crackle.play(randf() * maxf(crackle.stream.get_length() - 1.0, 0.0))
+		elif not near and crackle.playing:
+			crackle.stop()
+
+		if crackle.playing:
+			var hidden := Sfx.occlusion_at(self, global_position)
+			_crackle_db = CRACKLE_DB + (Sfx.OCCLUDED_DB if hidden >= 1.0 else (Sfx.AROUND_DB if hidden > 0.0 else 0.0))
+			crackle.attenuation_filter_cutoff_hz = Sfx.OCCLUDED_CUTOFF if hidden >= 1.0 else (Sfx.AROUND_CUTOFF if hidden > 0.0 else Sfx.AIR_CUTOFF)
+
+	if crackle.playing:
+		crackle.volume_db = lerpf(crackle.volume_db, _crackle_db, 1.0 - exp(-4.0 * real))

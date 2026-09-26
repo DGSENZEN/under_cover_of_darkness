@@ -13,6 +13,8 @@ const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const RELAXED := 0
 const INVESTIGATING := 2
 const COMBAT := 4
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 
 
 class Ear:
@@ -29,6 +31,8 @@ var _barks := {}
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	# Exact damage is checked here: cuts do not go on bleeding.
 	GUARD_SCRIPT.bleeding_on = false
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(140, 1, 90))              # floor
@@ -417,6 +421,8 @@ func _charge_frames() -> int:
 ## A guard already fighting you, facing you, who will not strike first.
 ## Lit, so he can see who he is fighting.
 func _fighter(at: Vector3) -> CharacterBody3D:
+	# A new fight: no dread carried over from the last one's dead.
+	GarrisonScript.clear_all()
 	player.debug_light_level = 1.0
 	var g := _new_guard(at, 0.0)
 	g.block_chance = 0.0

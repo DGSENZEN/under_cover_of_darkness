@@ -15,6 +15,7 @@ const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const CLIMB := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 
 var player: CharacterBody3D
 var results: Array[String] = []
@@ -22,6 +23,8 @@ var _open_door: Node3D
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(200, 1, 200))
 	Props.block(self, Vector3(30, 0.02, 0), Vector3(6, 0.04, 30), Color(0.5, 0.35, 0.2), "wood")   # a wooden floor
 	Props.block(self, Vector3(-30, 1.5, 0), Vector3(4, 3, 4))                                        # a 3 m block to drop from

@@ -3,6 +3,7 @@ extends Node3D
 const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const GUARD := preload("res://Guard.tscn")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 
 var player: CharacterBody3D
 var results: Array[String] = []
@@ -20,6 +21,8 @@ var heavy: RigidBody3D
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	Props.block(self, Vector3(8, -0.5, -4), Vector3(40, 1, 30))         # floor, top at 0
 
 	door_a = Props.door(self, Vector3(-0.5, 0, -4.0))

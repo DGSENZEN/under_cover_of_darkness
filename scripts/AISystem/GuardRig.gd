@@ -76,6 +76,15 @@ const SWINGS := {
 }
 ## How much of a reaction clip is shown over his stance (as SWINGS' weight).
 const REACT_WEIGHT := 0.78
+## His temperament (Temperament.gd's tag) in how he stands between blows: a
+## rash man leans in (the top of him tips toward -Z, his front), a craven one
+## leans back and now and then looks over his shoulder for a way out, a sly
+## one keeps low.
+const STANCE_LEAN := {&"rash": -0.07, &"craven": 0.06}
+const STANCE_CROUCH := {&"sly": -0.05}
+## A craven man's glance back: how far his head turns, and for how long.
+const GLANCE_YAW := 1.1
+const GLANCE_TIME := 0.45
 ## Thrown off his balance (his posture broken, GuardFighter): down on one knee,
 ## his blade low. Open.
 const OPEN_CLIP := &"Fixing_Kneeling"
@@ -154,10 +163,19 @@ var _blood_on_blade := 0.0
 var _steel: Array[StandardMaterial3D] = []
 var _telegraph := 0.0
 var _crossbow := false
+## A craven man's glance over his shoulder (visual only: his eyes are the
+## logical head): the turn now, how far into it (<0: between glances), when
+## the next comes, and which way.
+var _glance := 0.0
+var _glance_t := -1.0
+var _glance_wait := 3.0
+var _glance_side := 1.0
 ## Open (his posture broken): how long is left of it, and how long it was.
 var _open_left := 0.0
 var _open_length := 1.0
 var _voice_pitch := 1.0
+## A woman (the look says so): her voice is her own (Guard.voice).
+var female := false
 
 
 # ---------------------------------------------------------------------------
@@ -198,8 +216,10 @@ func setup(p_guard: CharacterBody3D) -> void:
 	man.name = "Man"
 	add_child(man)
 	man.build(look.get("outfit", &"watchman"), bool(look.get("female", false)), &"Pistol_Idle" if _crossbow else &"Sword_Idle")
-	# His voice: a woman's higher, a big man's lower, and each man his own.
-	_voice_pitch = (1.22 if bool(look.get("female", false)) else 1.0) / sqrt(maxf(size, 0.5)) * randf_range(0.95, 1.05)
+	# His voice: a big man's lower, and each his own. A woman speaks in her
+	# own recordings (Guard.voice), at her own pitch.
+	female = bool(look.get("female", false))
+	_voice_pitch = (1.0 if female else 1.0 / sqrt(maxf(size, 0.5))) * randf_range(0.95, 1.05)
 	body_mesh = man.body
 
 	for style in look.get("hair", []):
@@ -386,12 +406,21 @@ func update(delta: float) -> void:
 	elif guard._stagger > 0.0 and _reel <= 0.0:
 		tilt_goal += _hurt_dir * 0.1
 
+	# Between blows, he stands as the man he is.
+	var standing := _in_stance()
+
+	if standing:
+		tilt_goal += Vector3(0.0, 0.0, stance_lean())
+
+	_update_glance(delta, standing)
+
 	# Heavy springs, nearly critically damped: a man with weight to him
 	# rocks and settles, he does not wobble. A big man is slower still.
 	var mass := maxf(size, 0.5)
 	_tilt_v += ((tilt_goal - _tilt) * 110.0 / mass - _tilt_v * 17.0 / sqrt(mass)) * dt
 	_tilt += _tilt_v * dt
-	_offset_v += ((Vector3.ZERO - _offset) * 100.0 / mass - _offset_v * 16.0 / sqrt(mass)) * dt
+	var rest := Vector3(0.0, stance_crouch(), 0.0) if standing else Vector3.ZERO
+	_offset_v += ((rest - _offset) * 100.0 / mass - _offset_v * 16.0 / sqrt(mass)) * dt
 	_offset += _offset_v * dt
 	_jolt_v += (-_jolt * 260.0 - _jolt_v * 22.0) * dt
 	_jolt += _jolt_v * dt
@@ -405,6 +434,58 @@ func update(delta: float) -> void:
 	_update_telegraph(delta)
 	_cutting = phase == &"strike" or (phase == &"windup" and _phase_u() > 0.85 and guard._attack != &"shoot" and guard._attack != &"kick")
 	_last_phase = phase
+
+
+## What shows most in him (Temperament.gd): steady, stubborn, craven, rash,
+## sly.
+func _tag() -> StringName:
+	var fighter: RefCounted = guard._fighter if guard != null else null
+	return fighter.temper.tag if fighter != null and fighter.temper != null else &"steady"
+
+
+## How far his stance tips him (toward -Z, his front, if negative).
+func stance_lean() -> float:
+	return float(STANCE_LEAN.get(_tag(), 0.0))
+
+
+## How much lower his stance keeps him.
+func stance_crouch() -> float:
+	return float(STANCE_CROUCH.get(_tag(), 0.0))
+
+
+## Fighting, and between blows: nothing else is being shown.
+func _in_stance() -> bool:
+	return int(guard.state) == 4 and guard._phase == &"" and _reel <= 0.0 and guard._stagger <= 0.0 and guard._knock <= 0.0 and _open_left <= 0.0
+
+
+## A craven man looks over his shoulder every few seconds, for a way out.
+func _update_glance(delta: float, standing: bool) -> void:
+	if _tag() != &"craven" or not standing:
+		_glance_t = -1.0
+		_glance = move_toward(_glance, 0.0, delta * 4.0)
+		return
+
+	if _glance_t < 0.0:
+		_glance = move_toward(_glance, 0.0, delta * 4.0)
+		_glance_wait -= delta
+
+		if _glance_wait <= 0.0:
+			_glance_t = 0.0
+			_glance_side = 1.0 if randf() < 0.5 else -1.0
+
+		return
+
+	_glance_t += delta
+	var u := _glance_t / GLANCE_TIME
+
+	if u >= 1.0:
+		_glance_t = -1.0
+		_glance_wait = randf_range(2.5, 4.0)
+		_glance = 0.0
+		return
+
+	# Out and back, eased.
+	_glance = _glance_side * GLANCE_YAW * sin(u * PI)
 
 
 ## His step in mail on the floor he walks, at a walk or at a run.
@@ -529,7 +610,7 @@ func _process(_delta: float) -> void:
 	# Between physics ticks, how far into the next one this frame is drawn.
 	var ahead := Engine.get_physics_interpolation_fraction() / float(maxi(Engine.physics_ticks_per_second, 1))
 	man.set_motion(_velocity / size, guard.state >= SEARCHING, _delta)
-	man.turn_head(_logical_head.rotation.y if _logical_head != null else 0.0)
+	man.turn_head((_logical_head.rotation.y if _logical_head != null else 0.0) + _glance)
 	_animate(ahead)
 
 	# The trail follows the blade where it is drawn this frame.

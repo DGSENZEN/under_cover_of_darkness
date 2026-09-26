@@ -222,6 +222,7 @@ var _look_known := false
 var _hit_this_swing := {}
 var _last_sweep := 0.0
 var _block_started := -100.0
+var _guard_sound_at := -100.0
 var _kick_cooldown := 0.0
 ## Running (or in the air) as the kick began: a flying kick.
 var _kick_momentum := false
@@ -441,6 +442,7 @@ func _update_idle(buffered: bool, attack_held: bool) -> void:
 
 	if blocking and not was_blocking:
 		_block_started = _block_pressed_at
+		_guard_sound()
 
 	if weapon == null or not buffered or blocking:
 		return
@@ -496,6 +498,7 @@ func _update_recover(delta: float, buffered: bool, block_held: bool) -> void:
 		_enter(Phase.IDLE)
 		blocking = true
 		_block_started = _block_pressed_at
+		_guard_sound()
 		return
 
 	# A click during the swing: the next one, as soon as this one allows.
@@ -711,6 +714,10 @@ func _start_strike(power: bool) -> void:
 	_spend((cost_power if power else cost_quick) * float(_style()["cost"]))
 
 	player.juice.on_swing(_side_of(_direction), power, _direction)
+
+	# A power blow is put into with the whole body, and heard.
+	if power and randf() < 0.45:
+		Sfx.play_flat(player, &"effort", -3.0 if _finisher else -6.0)
 	_hand(&"set_trail", [true, power or _riposte, _finisher])
 
 	var at := aim()
@@ -1193,6 +1200,17 @@ func _strike_target(target: Node3D, point: Vector3, direction: Vector3) -> void:
 	landed.emit(target, result, dealt)
 
 
+## Your guard coming up: the grip tightening in its leather and the blade
+## brought across, both close and quiet, never twice in a breath.
+func _guard_sound() -> void:
+	if _game_time - _guard_sound_at < 0.25:
+		return
+
+	_guard_sound_at = _game_time
+	Sfx.play_flat(player, &"grab", -9.0, randf_range(0.9, 1.0))
+	Sfx.play_flat(player, &"blade_draw", -19.0, 1.3)
+
+
 ## Steel into him: the recording, higher for a dagger, lower and with a
 ## heavy thump under it for a blow that means it. A straw man says what it
 ## sounds like instead.
@@ -1208,6 +1226,16 @@ func _cut_sound(target: Node, at: Vector3, heavy: bool, dagger: bool) -> void:
 
 	if heavy:
 		Sfx.play(player, &"flesh_heavy", at, -4.0 if dagger else 0.0)
+
+	# The blow's weight going into him: a body struck, under the cut.
+	if not target.has_meta(&"hit_sound"):
+		Sfx.play(player, &"kick", at, -9.0 if heavy else -14.0, 0.9 if heavy else 1.05)
+
+	# On his helmet or a shoulder plate, the edge rings on the iron as it
+	# bites.
+	if target.has_method("armoured_at") and target.armoured_at(at):
+		Sfx.play(player, &"ting", at, -1.0 if heavy else -4.0, 0.78 if heavy else 0.9)
+		Sfx.play(player, &"clang", at, -12.0 if heavy else -15.0, 0.7)
 
 
 ## The body the blade met pushes back on it: the view kicks against the cut,
@@ -1239,6 +1267,7 @@ func _feint() -> void:
 	if weapon != null and weapon.can_block and Input.is_action_pressed("block"):
 		blocking = true
 		_block_started = _block_pressed_at
+		_guard_sound()
 
 
 # ---------------------------------------------------------------------------
@@ -1408,6 +1437,8 @@ func filter_incoming(amount: float, from: Node) -> float:
 	_spend(cost)
 	Fx.sparks(player, clash, toward, 1.5 if heavy else 1.1)
 	Sfx.play(player, &"clang", clash, 3.0 if heavy else 0.0, 0.82 if heavy else 0.95)
+	# The weight of it through your arms: a dull knock under the ring.
+	Sfx.play(player, &"thud", clash, -4.0 if heavy else -9.0, 0.8)
 	TimeFx.hitstop(get_tree(), 0.08 if heavy else 0.06, 0.05)
 	player.juice.add_trauma(0.7 if heavy else 0.45)
 	player.juice.punch(0.5 if heavy else 0.3, 0.0)
@@ -1627,6 +1658,9 @@ func _start_kick() -> void:
 	_hand(&"play_kick")
 	player.juice.on_kick()
 	Sfx.play_flat(player, &"whoosh_light", -6.0, 0.8)
+
+	if randf() < 0.6:
+		Sfx.play_flat(player, &"effort", -6.0, 1.05)
 
 
 ## Whether the kick now landing had a run or a leap behind it (a man kicked so

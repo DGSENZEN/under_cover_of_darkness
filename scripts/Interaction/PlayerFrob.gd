@@ -539,9 +539,13 @@ func _throw() -> void:
 	body.linear_velocity = direction * throw_speed * factor + player.velocity
 	Sfx.play_flat(player, &"whoosh_light", -4.0, 0.85)
 
-	# The body goes into the throw, the head with it.
+	# The body goes into the throw, the head with it; a heavy thing takes a
+	# grunt to send.
 	if player.get("juice") != null:
 		player.juice.on_throw(clampf(body.mass / 4.0, 0.4, 1.5))
+
+	if body.mass >= 6.0 and randf() < 0.6:
+		Sfx.play_flat(player, &"effort", -5.0)
 	_arm_impact_noise(body)
 
 

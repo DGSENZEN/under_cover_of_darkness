@@ -15,6 +15,10 @@ var intensity := 1.0
 
 # Head bob
 var bob_cycle_distance := 3.2
+## The walk in steps (the controller's gait: a foot lands at each whole
+## step). Given, the bob follows it and the head is lowest as each foot lands;
+## negative, the bob keeps its own time by bob_cycle_distance.
+var gait := -1.0
 var bob_height := 0.035
 var bob_sway := 0.02
 
@@ -317,7 +321,10 @@ func update(
 
 	_bob_weight = lerpf(_bob_weight, target_weight, 1.0 - exp(-9.0 * delta))
 
-	if moving:
+	if gait >= -0.5:
+		# Lowest (sin 2φ = -1) on each whole step, when the foot lands.
+		_bob_phase = fmod(gait * PI + PI * 0.75 + TAU * 2.0, TAU * 2.0)
+	elif moving:
 		_bob_phase += horizontal_speed / maxf(bob_cycle_distance, 0.01) * TAU * delta
 		_bob_phase = fmod(_bob_phase, TAU * 2.0)
 

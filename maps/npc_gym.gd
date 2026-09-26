@@ -17,11 +17,18 @@ extends Node3D
 ##   7 BODIES     weak men, spikes, powder, a hanging weight, a ledge: kick
 ##                them (running, or while they swing), cut them apart.
 ##   8 ARMS MASTER a steady beat to parry, and straw men to cut.
+##   9 GUARDHOUSE through the hub's south wall: a squad in a lit yard, off-duty
+##                men in a barracks down a passage (a man who breaks runs to
+##                fetch them), and a dark loop of corridors behind to lose
+##                them in and watch them hunt you.
 ##
-##   1-8  go to that bay and start it (again)     0  back to the hub
-##   F1   what each of them is thinking, over his head
+##   1-9  go to that bay and start it (again)     0  back to the hub
+##   F1   what each of them is thinking, over his head: his temperament,
+##        his place, his resolve
 ##   F2   you cannot be hurt      F4  everyone freezes      R  rest
 ##   F3   sight cones (the debug overlays)
+##   F5   the garrison forgets you (starting a bay does not: what they
+##        learn of you, and their dread, carry from one bay to the next)
 ##
 ## A lever at each bay's mouth starts it too.
 
@@ -36,6 +43,7 @@ const HangingWeightScript := preload("res://scripts/Combat/HangingWeight.gd")
 const LeverScript := preload("res://scripts/Interaction/Lever.gd")
 const DummyScript := preload("res://scripts/Combat/TrainingDummy.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 
 const STONE := Color(0.4, 0.38, 0.36)
 const DARK := Color(0.2, 0.19, 0.21)
@@ -52,15 +60,18 @@ const BAYS := [
 	["SWORDMASTER", Vector3(-17, 0, -44), -1, "The swordmaster. Parries careless blows and answers fast;\nfeints; steps out of long swings (thrusts reach him)."],
 	["BRUTE", Vector3(-17, 0, -62), -1, "The brute. Red glow and a roar: the blow no guard stops. DODGE (Q).\nCuts do not stop his swing. Only a running kick fells him, reeling."],
 	["ARCHER", Vector3(17, 0, -8), 1, "An archer behind cover. He keeps his distance and shoots:\nblock the arrow, or close in round the cover. Up close he kicks you off."],
-	["SQUAD", Vector3(17, 0, -26), 1, "A squad: swordmaster, swordsman, brute, archer. A leader and a plan:\nthey surround, strike while you are busy, break a turtle, press you hurt,\nfall back, rout when the leader dies. Watch the plan (top right)."],
+	["SQUAD", Vector3(17, 0, -26), 1, "A squad: swordmaster, swordsman, brute, archer. A leader and a plan:\nthey surround, strike while you are busy, break a turtle, press you hurt,\nfall back, break one by one when the leader dies. Watch the plan (top right)."],
 	["BODIES", Vector3(17, 0, -44), 1, "Weak men to send flying and cut apart. Kick them while they swing, or running.\nInto the spikes, off the ledge, onto the powder. A clean kill takes a limb or a head."],
 	["ARMS MASTER", Vector3(17, 0, -62), 1, "The arms master swings on a steady beat: parry just before it lands.\nStraw men to cut; shielded ones to break."],
+	["GUARDHOUSE", Vector3(0, 0, 24), 0, "The guardhouse. A squad in the yard; two men off duty in the barracks (east).\nBreak one and he runs to fetch them: catch him first. Lose them in the dark\ncorridors (west) and watch them split the search. F5: the garrison forgets you."],
 ]
 const BAY_SIZE := 14.0
 
 var player: CharacterBody3D
 var _baker: NavigationRegion3D
 var _bay_guards := {}
+## The guardhouse's off-duty men: not in the fight until fetched.
+var _barracks: Array = []
 var _labels_on := true
 var _frozen := false
 var _label_timer := 0.0
@@ -106,16 +117,17 @@ func _hall() -> void:
 	# The hub, lit, with the notice.
 	_torch(Vector3(-4, 2.6, 6), false)
 	_torch(Vector3(4, 2.6, 6), false)
-	_sign(Vector3(0, 2.5, 2.5), "THE NPC GYM\n1-8 go to a bay and start it   0 back here\n" +
-		"F1 what they think   F2 no harm to you   F3 sight cones   F4 freeze them   R rest\n" +
+	_sign(Vector3(0, 2.5, 2.5), "THE NPC GYM\n1-9 go to a bay and start it   0 back here\n" +
+		"F1 what they think   F2 no harm to you   F3 sight cones   F4 freeze them   R rest   F5 they forget you\n" +
 		"LMB attack (your look picks the cut)   RMB block/parry   F kick   Q dodge", 28)
 	Props.block(self, Vector3(0, 0.4, 5.5), Vector3(2.0, 0.8, 0.9), WOOD, "wood")
 	Props.arrows(self, Vector3(-0.4, 0.9, 5.5), 20)
 	Props.arrows(self, Vector3(0.4, 0.9, 5.5), 20)
 	LeverScript.build(self, Vector3(3, 0, 5.5), PI, "Rest (R)", _rest)
 
-	# The outer walls.
-	Props.block(self, Vector3(0, 3, 12), Vector3(60, 6, 1), STONE)
+	# The outer walls; the south one with a way through into the guardhouse.
+	Props.block(self, Vector3(-15.75, 3, 12), Vector3(28.5, 6, 1), STONE)
+	Props.block(self, Vector3(15.75, 3, 12), Vector3(28.5, 6, 1), STONE)
 	Props.block(self, Vector3(0, 3, -72), Vector3(60, 6, 1), STONE)
 	Props.block(self, Vector3(-30, 3, -30), Vector3(1, 6, 84), STONE)
 	Props.block(self, Vector3(30, 3, -30), Vector3(1, 6, 84), STONE)
@@ -126,6 +138,10 @@ func _hall() -> void:
 
 ## A walled bay off the corridor, open on its corridor side by a gap.
 func _build_bay(index: int) -> void:
+	if index == 8:
+		_build_guardhouse()
+		return
+
 	var spec: Array = BAYS[index]
 	var centre: Vector3 = spec[1]
 	var side: float = spec[2]
@@ -182,6 +198,83 @@ func _build_bay(index: int) -> void:
 			_torch(centre + Vector3(0, 2.8, -4.5), false)
 
 
+## Bay 9, through the hub's south wall: a lit yard for the fight, a
+## barracks down a passage to the east where two men sit off duty, and a
+## roofed, dark loop of corridors to the west (and a dark hall south of the
+## yard) to break away into.
+##
+##        x -30          -10     0     10               30
+##   z 12  +--- hub wall --+-  gap  -+------------------+
+##         |  dark loop    |  YARD   |   (closed)       |
+##         |   +-------+   |  lit    |                  |
+##   z 24  |   | core  |  gap        |                  |
+##   z 27  |   |       |   |        gap z 30-33 -> passage
+##         |   |       |   +--------+ (yard's south wall, z 33)
+##         |   +-------+   dark hall |   passage   +----+ z 38
+##   z 49  +--------------------------+------------+barracks
+func _build_guardhouse() -> void:
+	var spec: Array = BAYS[8]
+	# The wing's floor and outer walls.
+	Props.block(self, Vector3(0, -0.5, 31), Vector3(60, 1, 36), DARK, "stone")
+	Props.block(self, Vector3(-30, 3, 31), Vector3(1, 6, 36), STONE)
+	Props.block(self, Vector3(30, 3, 31), Vector3(1, 6, 36), STONE)
+	Props.block(self, Vector3(0, 3, 49), Vector3(60, 6, 1), STONE)
+	_sign(Vector3(0, 3.4, 11.3), "9  %s" % spec[0], 40)
+	LeverScript.build(self, Vector3(3, 0, 10.6), PI, "Start %s" % spec[0], func(): _start_bay(8))
+
+	# The yard, lit: a gap west into the dark, one east (at its far corner)
+	# to the passage.
+	Props.block(self, Vector3(0, 0.02, 23), Vector3(20, 0.04, 20), SAND, "dirt")
+	_wall_along_z(-10.0, 12.5, 24.0)
+	_wall_along_z(-10.0, 27.0, 33.0)
+	_wall_along_z(10.0, 12.5, 30.0)
+	_wall_along_x(33.0, -10.0, 10.0)
+	Props.block(self, Vector3(-4, 1.5, 22), Vector3(0.8, 3.0, 0.8), STONE)
+	Props.block(self, Vector3(4, 1.5, 28), Vector3(0.8, 3.0, 0.8), STONE)
+	_torch(Vector3(-8, 2.8, 16), false)
+	_torch(Vector3(8, 2.8, 31), false)
+	_sign(Vector3(0, 3.0, 13.4), spec[3], 22)
+
+	# The passage to the barracks: walled from the dark hall to the west.
+	_wall_along_x(30.0, 10.0, 30.0)
+	_wall_along_z(10.0, 33.0, 49.0)
+
+	# The barracks: a roofed room with a door on the passage, dimly lit.
+	_wall_along_x(38.0, 18.0, 30.0)
+	_wall_along_z(18.0, 38.0, 41.4)
+	_wall_along_z(18.0, 42.6, 49.0)
+	Props.block(self, Vector3(24, 4.35, 43.5), Vector3(12, 0.3, 11), STONE)
+	Props.door(self, Vector3(18, 0, 42.55), PI * 0.5, 1.1, 2.1)
+	Props.block(self, Vector3(26, 0.4, 41), Vector3(1.6, 0.8, 1.0), WOOD, "wood")
+	_torch(Vector3(26.5, 2.4, 44), false, 0.9)
+
+	# The dark: a loop of corridors round a solid core, and the hall south
+	# of the yard, all roofed against the moon.
+	Props.block(self, Vector3(-20, 2.1, 31), Vector3(8, 4.2, 22), STONE)
+	Props.block(self, Vector3(-20, 4.35, 30.75), Vector3(20, 0.3, 36.5), STONE)
+	Props.block(self, Vector3(0, 4.35, 41), Vector3(20, 0.3, 16), STONE)
+	# A door across the west corridor, and one across the south.
+	_wall_along_x(31.0, -30.0, -27.55)
+	_wall_along_x(31.0, -26.45, -24.0)
+	Props.door(self, Vector3(-27.55, 0, 31), 0.0, 1.1, 2.1)
+	_wall_along_z(-20.0, 42.0, 45.4)
+	_wall_along_z(-20.0, 46.6, 49.0)
+	Props.door(self, Vector3(-20, 0, 46.6), PI * 0.5, 1.1, 2.1)
+
+	for at in [Vector3(-13, 1.5, 16), Vector3(-13, 1.5, 38), Vector3(-27, 1.5, 44), Vector3(-4, 1.5, 42), Vector3(5, 1.5, 38)]:
+		Props.block(self, at, Vector3(0.8, 3.0, 0.8), STONE)
+
+
+## A wall 4.2 m high (to the roofs) running along z at `x`, from `z0` to `z1`.
+func _wall_along_z(x: float, z0: float, z1: float) -> void:
+	Props.block(self, Vector3(x, 2.1, (z0 + z1) * 0.5), Vector3(0.6, 4.2, z1 - z0), STONE)
+
+
+## A wall 4.2 m high running along x at `z`, from `x0` to `x1`.
+func _wall_along_x(z: float, x0: float, x1: float) -> void:
+	Props.block(self, Vector3((x0 + x1) * 0.5, 2.1, z), Vector3(x1 - x0, 4.2, 0.6), STONE)
+
+
 # ---------------------------------------------------------------------------
 # Starting a bay
 # ---------------------------------------------------------------------------
@@ -226,6 +319,18 @@ func _start_bay(index: int) -> void:
 			master.chase_speed = 0.0
 			master._fighter.stays_put = true
 			guards.append(master)
+		8:
+			guards.append(_spawn(&"duelist", Vector3(0, 0, 26), 0.0))
+			guards.append(_spawn(&"swordsman", Vector3(-2.5, 0, 27), 0.0))
+			guards.append(_spawn(&"swordsman", Vector3(2.5, 0, 27), 0.0))
+			guards.append(_spawn(&"archer", Vector3(0, 0, 31), 0.0))
+
+			# Off duty, and hard of hearing over their dice: only a man
+			# who comes to fetch them brings them.
+			for spec_man in [[&"swordsman", Vector3(23, 0, 41), -PI * 0.5], [&"", Vector3(25, 0, 45), PI]]:
+				var resting := _spawn(spec_man[0], spec_man[1], spec_man[2])
+				resting.hearing_acuity = 0.15
+				_barracks.append(resting)
 
 	_bay_guards[index] = guards
 
@@ -235,6 +340,11 @@ func _start_bay(index: int) -> void:
 	player.velocity = Vector3.ZERO
 	# Into the bay: west bays open east, so you face west, and the other way.
 	player.rotation.y = -PI * 0.5 * side
+
+	# The guardhouse: in through the hub's south wall, facing the yard.
+	if index == 8:
+		player.global_position = Vector3(0, 1.05, 14.5)
+		player.rotation.y = PI
 	player.get_node("Neck").rotation.x = 0.0
 	player.reset_physics_interpolation()
 	_rest()
@@ -262,7 +372,20 @@ func _clear_bay(index: int) -> void:
 
 	_bay_guards.erase(index)
 	var centre: Vector3 = BAYS[index][1]
-	var half := BAY_SIZE * 0.5 + 1.0
+	var half := Vector2(BAY_SIZE * 0.5 + 1.0, BAY_SIZE * 0.5 + 1.0)
+
+	# The guardhouse: its off-duty men too, and the whole wing.
+	if index == 8:
+		for resting in _barracks:
+			if is_instance_valid(resting):
+				resting.remove_from_group(&"guards")
+				resting.set_physics_process(false)
+				resting.state = 0
+				resting.queue_free()
+
+		_barracks.clear()
+		centre = Vector3(0, 0, 30.5)
+		half = Vector2(30.0, 18.5)
 
 	for thing in get_tree().get_nodes_in_group(&"bodies"):
 		var at: Vector3 = (thing as Node3D).global_position
@@ -271,11 +394,11 @@ func _clear_bay(index: int) -> void:
 		if man != null and man.ragdoll != null and man.ragdoll.is_limp():
 			at = man.ragdoll.centre()
 
-		if absf(at.x - centre.x) < half and absf(at.z - centre.z) < half:
+		if absf(at.x - centre.x) < half.x and absf(at.z - centre.z) < half.y:
 			thing.queue_free()
 
 	for child in get_children():
-		if String(child.name).begins_with("DroppedSword") and absf((child as Node3D).global_position.x - centre.x) < half and absf((child as Node3D).global_position.z - centre.z) < half:
+		if String(child.name).begins_with("DroppedSword") and absf((child as Node3D).global_position.x - centre.x) < half.x and absf((child as Node3D).global_position.z - centre.z) < half.y:
 			child.queue_free()
 
 	SquadScript.clear_all()
@@ -312,6 +435,12 @@ func _patrol(points: Array) -> CharacterBody3D:
 	return g
 
 
+## F5: everything the garrison has learned of you, and its dread, gone.
+func _forget() -> void:
+	GarrisonScript.clear_all()
+	_say("The garrison forgets you")
+
+
 func _rest() -> void:
 	player.health = player.max_health
 	player.combat.stamina = player.combat.stamina_max
@@ -330,7 +459,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	var key := (event as InputEventKey).physical_keycode
 
-	if key >= KEY_1 and key <= KEY_8:
+	if key >= KEY_1 and key <= KEY_9:
 		_start_bay(key - KEY_1)
 		get_viewport().set_input_as_handled()
 		return
@@ -356,6 +485,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_R:
 			_rest()
 			_say("Rested: health, stamina, arrows")
+		KEY_F5:
+			_forget()
 		_:
 			return
 
@@ -426,56 +557,68 @@ func _update_labels() -> void:
 		var lines := ["%s  %s  %d/%d" % [kind.to_upper(), STATES[state], roundi(g.health), roundi(g.max_health)]]
 		var fighter = g._fighter
 
+		# Who he is.
+		if fighter != null and fighter.temper != null:
+			var t = fighter.temper
+			lines.append("%s  N%.2f D%.2f G%.2f" % [String(t.tag), t.nerve, t.drive, t.guile])
+
 		if g.is_downed():
 			lines.append("OFF HIS FEET")
 		elif g._rising > 0.0:
 			lines.append("getting up")
-		elif state == 4 and fighter != null:
-			var squad = fighter.squad
-
-			if squad != null and squad.members().size() > 1:
-				lines.append("%s  (plan %s)" % [String(fighter.role()).to_upper(), String(squad.tactic).to_upper()])
-
-			# How he is doing: his mood, his balance, his wounds.
-			var status := "OPEN - DEATHBLOW" if fighter.is_open() else String(fighter.mood).to_upper()
-
-			if fighter.posture_max < 9999.0:
-				status += "  balance %d/%d" % [roundi(fighter.posture), roundi(fighter.posture_max)]
-
-			if float(g.bleeding) > 0.05:
-				status += "  bleeding %.1f" % float(g.bleeding)
-
-			lines.append(status)
-
-			var doing := ""
-
-			if g._phase != &"":
-				doing = "%s %s" % [String(g._phase), String(g._attack)]
-
-				var call: StringName = fighter.attack_info().get("call", &"cut")
-
-				if call != &"cut":
-					doing += "  (%s)" % String(call).to_upper()
-			elif fighter.guarding:
-				doing = "guard up"
-			elif fighter.is_parrying():
-				doing = "parrying"
-			elif g._stagger > 0.0:
-				doing = "reeling"
-
-			if fighter._read_level > 0.05:
-				doing += "  reads you %.1f" % fighter._read_level
-
-			if doing != "":
-				lines.append(doing)
 		else:
-			lines.append("alert %d  sees you %.2f" % [roundi(g.alert), g.visibility])
+			# His part in the hunt, even alone: what he is doing, the plan,
+			# and how near he is to breaking.
+			var squad = fighter.squad if fighter != null else null
+
+			if squad != null:
+				var status: StringName = squad.status_of(g)
+				var doing_now: String = String(fighter.role()).to_upper() if status == &"fighting" or status == &"running" else String(status).to_upper()
+				lines.append("%s  (plan %s)  resolve %.2f %s" % [doing_now, String(squad.tactic).to_upper(), squad.resolve_of(g), String(squad.will_of(g))])
+
+			if state == 4 and fighter != null:
+				# How he is doing: his mood, his balance, his wounds.
+				var status := "OPEN - DEATHBLOW" if fighter.is_open() else String(fighter.mood).to_upper()
+
+				if fighter.posture_max < 9999.0:
+					status += "  balance %d/%d" % [roundi(fighter.posture), roundi(fighter.posture_max)]
+
+				if float(g.bleeding) > 0.05:
+					status += "  bleeding %.1f" % float(g.bleeding)
+
+				lines.append(status)
+
+				var doing := ""
+
+				if g._phase != &"":
+					doing = "%s %s" % [String(g._phase), String(g._attack)]
+
+					var call: StringName = fighter.attack_info().get("call", &"cut")
+
+					if call != &"cut":
+						doing += "  (%s)" % String(call).to_upper()
+				elif fighter.guarding:
+					doing = "guard up"
+				elif fighter.is_parrying():
+					doing = "parrying"
+				elif g._stagger > 0.0:
+					doing = "reeling"
+
+				if fighter._read_level > 0.05:
+					doing += "  reads you %.1f" % fighter._read_level
+
+				if doing != "":
+					lines.append(doing)
+			else:
+				lines.append("alert %d  sees you %.2f" % [roundi(g.alert), g.visibility])
 
 		label.text = "\n".join(lines)
 		label.modulate = STATE_COLOURS[state]
 
 
-## The squad after you, in the corner: its plan, its heart, what it has read.
+## The hunt after you, in the corner, while there is one (even one man): its
+## plan, its heart, what it reads of you, what the garrison knows and dreads,
+## and each man's part.
 func _update_panel() -> void:
 	if _panel == null:
 		return
@@ -483,17 +626,22 @@ func _update_panel() -> void:
 	var squad = SquadScript.of(player)
 	var members: Array = squad.members() if squad != null else []
 
-	if members.size() < 2:
+	if members.is_empty():
 		_panel.text = ""
 		return
 
 	var lead = squad.leader()
-	var text := "SQUAD   plan %s   heart %.2f   leader %s\n" % [String(squad.tactic).to_upper(), squad.morale, String(lead.get("speaker_name")) if lead != null else "none"]
+	var garrison = GarrisonScript.of(player)
+	var text := "HUNT   plan %s   heart %.2f   leader %s%s\n" % [String(squad.tactic).to_upper(), squad.morale, String(lead.get("speaker_name")) if lead != null else "none", "   help coming" if squad.help_coming() else ""]
 	text += "they read you:  turtle %.2f  rhythm %.2f  keeping away %.2f  bow %.2f\n" % [squad.read[&"turtle"], squad.read[&"spam"], squad.read[&"kite"], squad.read[&"bow"]]
+	text += "garrison:  dread %.2f   %d dead   %d captains   known: turtle %.2f rhythm %.2f keeping away %.2f bow %.2f\n" % [garrison.dread, garrison.dead, garrison.captains, garrison.habits[&"turtle"], garrison.habits[&"spam"], garrison.habits[&"kite"], garrison.habits[&"bow"]]
 	var places := []
 
 	for m in members:
-		places.append("%s: %s" % [String(m.get("speaker_name")), String(squad.role_of(m))])
+		var t = m._fighter.temper if m.get("_fighter") != null else null
+		var status: StringName = squad.status_of(m)
+		var part: String = String(squad.role_of(m)) if status == &"fighting" or status == &"running" else String(status)
+		places.append("%s (%s): %s" % [String(m.get("speaker_name")), String(t.tag) if t != null else "?", part])
 
 	_panel.text = text + "   ".join(places)
 
@@ -651,9 +799,9 @@ func _dummy(at: Vector3, shield: bool) -> void:
 	dummy.rotation.y = PI
 
 
-func _torch(at: Vector3, shadows := true) -> void:
+func _torch(at: Vector3, shadows := true, energy := 2.4) -> void:
 	var torch: Node3D = TorchScript.new()
-	torch.energy = 2.4
+	torch.energy = energy
 	torch.light_range = 10.0
 	torch.shadows = shadows
 	add_child(torch)

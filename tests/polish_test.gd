@@ -16,6 +16,7 @@ const SUSPICIOUS := 1
 const INVESTIGATING := 2
 const SEARCHING := 3
 const COMBAT := 4
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 
 
 class Ear:
@@ -33,6 +34,8 @@ var rattles := 0
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(120, 1, 80))           # floor, top at 0
 
 	# A: a wall with a LOCKED door, a patrol route through it.

@@ -12,6 +12,9 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const BarrelScript := preload("res://scripts/Combat/Barrel.gd")
 
 const COMBAT := 4
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
+const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 
 var player: CharacterBody3D
 var combat: Node
@@ -19,6 +22,8 @@ var results: Array[String] = []
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	Props.block(self, Vector3(40, -0.5, 0), Vector3(160, 1, 60))
 	# B6: a spiked wall.
 	Props.block(self, Vector3(40, 1.5, -3.3), Vector3(4, 3, 0.3))
@@ -58,7 +63,9 @@ func _run() -> void:
 	_wield(&"sword")
 
 	# B1 a killing blow: limp, thrown away from you, at rest
-	var g1 := _fighter(Vector3(0, 0, -1.5))
+	# Rash: alone and nearly dead he goes all in (a steady man would be careful
+	# and keep his guard up), so the blow that kills him lands.
+	var g1 := _fighter(Vector3(0, 0, -1.5), &"", &"rash")
 	g1.health = 10.0
 	_put_player(Vector3(0, 1.05, 0))
 	await _frames(20)
@@ -216,7 +223,8 @@ func _run() -> void:
 	await _frames(10)
 
 	# B9 a clean killing cut high takes his head off
-	var g9 := _fighter(Vector3(80, 0, -1.4))
+	# Rash, as in B1: nearly dead and all in, not guarding.
+	var g9 := _fighter(Vector3(80, 0, -1.4), &"", &"rash")
 	g9.health = 20.0
 	_put_player(Vector3(80, 1.05, 0))
 	await _frames(20)
@@ -302,8 +310,12 @@ func _last_body() -> Node3D:
 	return found
 
 
-func _fighter(at: Vector3, archetype: StringName = &"") -> CharacterBody3D:
-	var g := _new_guard(archetype, at, 0.0)
+func _fighter(at: Vector3, archetype: StringName = &"", preset: StringName = &"") -> CharacterBody3D:
+	# A new fight: no dread carried over from the last one's dead, and no hunt
+	# either (the men of earlier checks stay about, and a hunt outlives a lull).
+	GarrisonScript.clear_all()
+	SquadScript.clear_all()
+	var g := _new_guard(archetype, at, 0.0, preset)
 	g.block_chance = 0.0
 	g._fighter.parry_chance = 0.0
 	g._fighter.feint_chance = 0.0
@@ -321,9 +333,10 @@ func _fighter(at: Vector3, archetype: StringName = &"") -> CharacterBody3D:
 	return g
 
 
-func _new_guard(archetype: StringName, at: Vector3, yaw: float) -> CharacterBody3D:
+func _new_guard(archetype: StringName, at: Vector3, yaw: float, preset: StringName = &"") -> CharacterBody3D:
 	var g: CharacterBody3D = GUARD.instantiate()
 	g.archetype = archetype
+	g.temperament = preset
 	g.debug_ai = false
 	g.position = at
 	g.rotation.y = yaw

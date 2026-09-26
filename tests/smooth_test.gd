@@ -11,6 +11,7 @@ const Props := preload("res://scripts/Interaction/Props.gd")
 const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
 const OFF := Node.PHYSICS_INTERPOLATION_MODE_OFF
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 
 var player: CharacterBody3D
 var results: Array[String] = []
@@ -29,6 +30,8 @@ class Recorder:
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(200, 1, 200))
 	_staircase(Vector3(30, 0, 0), 10, 0.18, 0.32)
 

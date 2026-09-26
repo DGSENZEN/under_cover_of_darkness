@@ -8,7 +8,15 @@ extends CharacterBody3D
 ##               alone can never reach combat: that takes actually seeing you.
 ##   BEHAVIOUR   RELAXED patrols. SUSPICIOUS stops and looks. INVESTIGATING
 ##               walks to where the stimulus was. SEARCHING checks around it.
-##               COMBAT chases while it can see you.
+##               COMBAT fights you (GuardFighter.gd).
+##   THE HUNT    Once he has taken you on he is one of a hunt (Squad.gd) until
+##               he dies or gives the search up: losing sight of you, he
+##               searches the ground the hunt gives him; a friend who finds
+##               you again calls him in (hear_call), and a runner can fetch
+##               him to it from his post (join_hunt).
+##   WHO HE IS   his temperament (`temperament`, Temperament.gd), and what the
+##               whole garrison knows and dreads of you (Garrison.gd, ticked
+##               by every guard).
 ##
 ## The body origin is at the FEET. The capsule floats above step height and
 ## the body hovers on a ray, so stairs need no special handling.
@@ -19,6 +27,8 @@ const GuardBodyScript := preload("res://scripts/AISystem/GuardBody.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const GuardRigScript := preload("res://scripts/AISystem/GuardRig.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -126,6 +136,10 @@ signal bound_wounds
 ## "swordsman", "duelist", "brute" or "trainer" (see GuardFighter.gd). Empty
 ## is the plain watchman. Set before he enters the tree.
 @export var archetype: StringName = &""
+## Who he is, under his class (Temperament.gd): "" rolls him afresh each
+## time the level loads; "steady", "stubborn", "craven", "rash" or "sly"
+## pins him.
+@export var temperament: StringName = &""
 @export var attack_range := 1.7
 ## He cannot reach you on a ledge above him or below him.
 @export var attack_reach_height := 1.2
@@ -342,6 +356,7 @@ func _ready() -> void:
 
 	_fighter = GuardFighterScript.new(self)
 	_fighter.apply(archetype)
+	_fighter.temper = TemperamentScript.roll(archetype, temperament)
 	_fit_body_to_look()
 	health = max_health
 	_rig = GuardRigScript.new()
@@ -376,6 +391,16 @@ func _physics_process(delta: float) -> void:
 	_idle_time += delta
 
 	_game_time += delta
+
+	# The garrison's memory of you keeps its own time, whoever of them is about.
+	if _target != null and is_instance_valid(_target):
+		GarrisonScript.of(_target).tick(delta)
+
+	# In a hunt, whatever he is doing: it keeps thinking while any of them is
+	# in it, fighting or not.
+	if _fighter != null and _fighter.squad != null:
+		_fighter.squad.think(delta)
+
 	_attack_timer = maxf(_attack_timer - delta, 0.0)
 	_stagger = maxf(_stagger - delta, 0.0)
 	_block_flash = maxf(_block_flash - delta, 0.0)
@@ -697,7 +722,12 @@ func _sense_bodies(delta: float) -> void:
 func _discover(body: Node3D) -> void:
 	_known_bodies[body] = true
 	_body_notice.erase(body)
+	var first_to_find: bool = body.get("discovered") != true
 	body.set("discovered", true)
+
+	# Word spreads: one more of theirs found lying where you left him.
+	if first_to_find and _target != null and is_instance_valid(_target):
+		GarrisonScript.of(_target).on_body_found()
 
 	last_known_position = body.global_position
 	has_last_known = true
@@ -720,6 +750,33 @@ func _discover(body: Node3D) -> void:
 
 func shout() -> void:
 	SoundBus.emit_sound(eye_position(), shout_db, self, &"shout")
+
+
+## One of the hunt has found you again, near enough to hear: he goes there.
+func hear_call(where: Vector3) -> void:
+	last_known_position = where
+	has_last_known = true
+	_since_stimulus = 0.0
+	alert = maxf(alert, shout_alert)
+
+
+## Fetched to the hunt by one of his own (Squad.rouse): he knows where they
+## last saw you, and goes.
+func join_hunt(where: Vector3) -> void:
+	last_known_position = where
+	has_last_known = true
+	_since_stimulus = 0.0
+	alert = maxf(alert, investigate_at + 25.0)
+
+	if state < Alert.INVESTIGATING:
+		_set_state(Alert.INVESTIGATING)
+	else:
+		_go_to(where, true)
+
+	var said: String = _fighter.temper.line(&"rouse") if _fighter != null and _fighter.temper != null else ""
+
+	if said != "":
+		bark(said)
 
 
 # ---------------------------------------------------------------------------
@@ -1128,6 +1185,11 @@ func _engage(attacker: Node3D) -> void:
 	if attacker.is_in_group(&"guards"):
 		return
 
+	# Taken on before he has had a moment to look about him (a guard sent
+	# straight at you): whoever it is, is who he is after.
+	if _target == null or not is_instance_valid(_target):
+		_target = attacker
+
 	last_known_position = attacker.global_position
 	has_last_known = true
 	_since_stimulus = 0.0
@@ -1189,7 +1251,8 @@ func knock_out(attacker: Node3D, force := false) -> bool:
 	remove_from_group(&"guards")
 	SoundBus.remove_listener(self)
 	collision_layer = 0
-	_fighter.on_died()
+	# Out of the hunt, but not killed: no dread for a man put to sleep.
+	_fighter.on_died(false)
 	_rig.drop_weapon()
 	visible = false
 
@@ -1484,6 +1547,12 @@ func _set_state(new_state: int) -> void:
 
 	if old == Alert.COMBAT and _fighter != null:
 		_fighter.leave_combat()
+
+	# Back to his rounds: the hunt goes on without him.
+	if new_state == Alert.RELAXED and _fighter != null and _fighter.squad != null:
+		_fighter.squad.stand_down(self)
+		_fighter.squad = null
+
 	_bark_for(new_state, old)
 	alert_changed.emit(new_state, old)
 
@@ -1493,7 +1562,8 @@ func _set_state(new_state: int) -> void:
 		Alert.INVESTIGATING:
 			_go_to(last_known_position, true)
 		Alert.SEARCHING:
-			_search_left = search_points
+			# A hunt searches longer than one man would.
+			_search_left = search_points + (2 if _fighter != null and _fighter.squad != null else 0)
 			_next_search_point()
 		Alert.RELAXED:
 			_resume_patrol()
@@ -1514,7 +1584,8 @@ func _bark_for(new_state: int, old_state: int) -> void:
 			else:
 				bark("Someone's been here...")
 		Alert.COMBAT:
-			bark("You there! Stop!")
+			# In his own way: of their dead, if the dread in him has turned to anger.
+			bark(_fighter.engage_line() if _fighter != null else "You there! Stop!")
 		Alert.RELAXED:
 			if old_state == Alert.SEARCHING:
 				bark("Must have been rats.")
@@ -1650,7 +1721,7 @@ func _do_search(delta: float) -> void:
 
 func _do_combat(delta: float) -> void:
 	# Out of sight too long, and not mid-blow: go looking.
-	if _phase == &"" and _since_seen > lose_time:
+	if _phase == &"" and _since_seen > lose_time and not _fighter.keeps_running():
 		# The scare is counted once, when the search that follows is given up.
 		alert = investigate_at + 25.0
 		_set_state(Alert.SEARCHING)
@@ -1680,6 +1751,13 @@ func floor_surface() -> String:
 	return _floor_surface
 
 
+## Whether `point` is on the metal he wears (a helmet, a shoulder plate):
+## steel there rings as well as bites.
+func armoured_at(point: Vector3) -> bool:
+	var man: Node = _rig.get("man") if _rig != null else null
+	return man != null and man.has_method("armour_near") and man.armour_near(point) != null
+
+
 ## His voice: a cry of `kind` ("pain", "death", "roar", "grunt"), pitched to
 ## him (GuardRig.voice_pitch: a woman's higher, a big man's lower), and not
 ## on top of the last one (a dying cry always).
@@ -1689,7 +1767,9 @@ func voice(kind: StringName, volume := 0.0) -> void:
 
 	_voice_at = _game_time
 	var pitch: float = _rig.voice_pitch() if _rig != null and _rig.has_method("voice_pitch") else 1.0
-	Sfx.play(self, kind, eye_position(), volume, pitch, 0.03)
+	# A woman speaks with her own voice ("pain_f"...).
+	var spoken := StringName(String(kind) + "_f") if _rig != null and bool(_rig.get("female")) else kind
+	Sfx.play(self, spoken, eye_position(), volume, pitch, 0.03)
 
 
 ## Where a body's feet are. The player's origin is its capsule centre.
@@ -1712,6 +1792,13 @@ func _scare() -> void:
 
 
 func _next_search_point() -> void:
+	# In a hunt, the squad shares the ground out: his own piece of it.
+	var shared: Variant = _fighter.squad.search_point_for(self) if _fighter != null and _fighter.squad != null else null
+
+	if shared is Vector3:
+		_go_to(shared, true)
+		return
+
 	var map := get_world_3d().navigation_map
 	var center := last_known_position if has_last_known else global_position
 	var angle := randf() * TAU
@@ -2057,12 +2144,18 @@ func witness_gore(beheaded: bool, for_the_squad: bool) -> void:
 		return
 
 	if state == Alert.COMBAT:
-		_fighter.add_posture(28.0 if beheaded else 18.0)
+		# The less nerve he has, the harder it hits him.
+		var nerve: float = float(_fighter.temper.nerve) if _fighter.temper != null else 0.5
+		_fighter.add_posture((28.0 if beheaded else 18.0) * (1.4 - nerve))
 
 	var squad: RefCounted = _fighter.squad
 
 	if for_the_squad and squad != null:
 		squad.morale = maxf(float(squad.morale) - (0.15 if beheaded else 0.08), 0.0)
+
+	# And the whole garrison hears of it.
+	if for_the_squad and _target != null and is_instance_valid(_target):
+		GarrisonScript.of(_target).on_gore()
 
 	if _bark_timer <= 0.0:
 		bark(["Gods! His head!", "Oh gods...", "His HEAD!"][randi() % 3] if beheaded else ["Gods...", "Look at him!", "Butcher!"][randi() % 3])

@@ -339,7 +339,12 @@ var _kicks_this_airtime := 0
 ## Releasing jump early shortens a jump, but not a wall kick.
 var _jump_cut_allowed := false
 
-var _stride_travelled := 0.0
+## Where the walk is, in steps: a foot lands at each whole step. The
+## footsteps and the head bob both go by it, so every step is heard as the
+## head comes down on it. (It runs 0..2, a left and a right.)
+var gait := 0.0
+var _gait_before := 0.0
+var _steps := 0
 
 ## How fast the body is actually moving, whatever moves it. During a
 ## choreographed move velocity is zero, but a vault is still fast motion.
@@ -765,6 +770,11 @@ func _update_locomotion(delta: float) -> void:
 		_make_noise(landing_db, &"landing")
 		Sfx.play_flat(self, _land_sound(surface), Sfx.loudness(landing_db))
 
+		# Coming down hard: your whole weight in it.
+		if fall_speed > 7.0:
+			Sfx.play_flat(self, &"body_fall", Sfx.loudness(landing_db) - 8.0, 1.1)
+			Sfx.play_flat(self, &"cloth", Sfx.loudness(landing_db) - 6.0)
+
 		if fall_speed > 5.5:
 			Fx.dust(self, get_feet_position() + Vector3.UP * 0.05, Vector3.UP, clampf((fall_speed - 4.0) / 6.0, 0.3, 1.2), surface if surface != "" else "stone")
 
@@ -1000,13 +1010,16 @@ func _make_noise(db: float, kind: StringName) -> void:
 
 
 func _update_footsteps() -> void:
+	_gait_before = gait
+
 	if not (_on_floor_now() or _on_stairs):
 		return
 
 	var speed := Vector3(velocity.x, 0.0, velocity.z).length()
 
+	# Stopped, the walk waits where it is: the next foot comes down on the
+	# next whole step.
 	if speed < 0.4:
-		_stride_travelled = 0.0
 		return
 
 	var stride := stride_walk
@@ -1019,10 +1032,15 @@ func _update_footsteps() -> void:
 		stride = stride_sprint
 		db = footstep_db_sprint
 
-	_stride_travelled += speed * get_physics_process_delta_time()
+	gait += speed / stride * get_physics_process_delta_time()
 
-	if _stride_travelled >= stride:
-		_stride_travelled = 0.0
+	if gait >= float(_steps + 1):
+		_steps = int(floor(gait))
+
+		if _steps >= 2:
+			_steps -= 2
+			gait -= 2.0
+			_gait_before -= 2.0
 
 		if frob != null and frob.is_shouldering():
 			db += shoulder_noise_db
@@ -1033,6 +1051,15 @@ func _update_footsteps() -> void:
 		var step_db := db + float(surface_db.get(surface, 0.0))
 		_make_noise(step_db, &"footstep")
 		Sfx.play_flat(self, _step_sound(surface, stride == stride_sprint), Sfx.loudness(step_db))
+
+		# What you carry moves with you: cloth under the step, more of it at
+		# a run, none when you creep; at a run your gear knocks on the same
+		# hip every other step.
+		if not is_crouched and randf() < (0.7 if stride == stride_sprint else 0.35):
+			Sfx.play_flat(self, &"cloth", Sfx.loudness(step_db) - 9.0, randf_range(0.95, 1.1))
+
+		if stride == stride_sprint and _steps == 1 and randf() < 0.75:
+			Sfx.play_flat(self, &"gear", Sfx.loudness(step_db) - 7.0, randf_range(0.94, 1.06))
 
 
 ## What the floor under the feet is made of, as a loudness change in dB.
@@ -1091,6 +1118,8 @@ func take_damage(amount: float, from: Node) -> void:
 
 	health = maxf(health - amount, 0.0)
 	_hurt_at = _game_time
+	# A heavy one deadens your hearing for a moment.
+	Sfx.body_hit(amount)
 
 	# The blow's weight: a freeze, the head snapped away from it, a spray.
 	if combat != null and combat.has_method("on_hurt"):
@@ -1645,6 +1674,10 @@ func _move_sound(move: TraversalMove) -> void:
 		MoveVariantRes.Kind.MANTLE, TraversalPlanner.KIND_PULL_UP:
 			Sfx.play_flat(self, &"scuff", loud)
 			Sfx.play_flat(self, &"cloth", loud - 3.0)
+
+			# Hauling yourself up: now and then it takes a breath of effort.
+			if randf() < 0.35:
+				Sfx.play_flat(self, &"effort", loud - 6.0)
 		TraversalPlanner.KIND_LEAP:
 			Sfx.play_flat(self, &"cloth", loud)
 			Sfx.play_flat(self, &"whoosh_light", loud - 4.0, 0.8)
@@ -2674,6 +2707,9 @@ func _update_view(delta: float) -> void:
 			move_kind = 1
 
 	juice.intensity = camera_feel
+	# The walk as drawn: between the last two ticks, like the body.
+	var drawn_fraction := Engine.get_physics_interpolation_fraction() if get_tree().physics_interpolation else 1.0
+	juice.gait = lerpf(_gait_before, gait, drawn_fraction)
 	juice.grip_below = hand.grip_below(aim_transform()) if hand != null and hand.has_method("grip_below") else 0.0
 	juice.update(
 		delta,

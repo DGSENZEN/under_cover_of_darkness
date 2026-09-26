@@ -14,6 +14,8 @@ const HangingWeightScript := preload("res://scripts/Combat/HangingWeight.gd")
 const FireScript := preload("res://scripts/Combat/Fire.gd")
 const DummyScript := preload("res://scripts/Combat/TrainingDummy.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 
 var player: CharacterBody3D
 var combat: Node
@@ -21,6 +23,8 @@ var results: Array[String] = []
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	# Exact damage is checked here: cuts do not go on bleeding.
 	GUARD_SCRIPT.bleeding_on = false
 	Props.block(self, Vector3(60, -0.5, 30), Vector3(200, 1, 120))
@@ -650,7 +654,8 @@ func _run() -> void:
 		var ok_takes := not takes.is_empty() and Sfx.GAIN.has(sound)
 		for take in takes:
 			var wav := take as AudioStreamWAV
-			ok_takes = ok_takes and wav != null and not wav.stereo and wav.mix_rate == 44100
+			# (The score's stings are in stereo.)
+			ok_takes = ok_takes and wav != null and (not wav.stereo or sound in Sfx.MUSICAL) and wav.mix_rate == 44100
 		if not ok_takes:
 			unrecorded.append(sound)
 	_check("D26b every sound the game names is a levelled recording (mono, 44.1 kHz)", unrecorded.is_empty() and names.size() >= 75,
@@ -924,6 +929,8 @@ func _run() -> void:
 ## A guard already fighting you, facing you, who will not strike first and
 ## does not defend unless told to.
 func _fighter(archetype: StringName, at: Vector3) -> CharacterBody3D:
+	# A new fight: no dread carried over from the last one's dead.
+	GarrisonScript.clear_all()
 	var g := _new_guard(archetype, at, PI)
 	g.block_chance = 0.0
 	g._fighter.parry_chance = 0.0

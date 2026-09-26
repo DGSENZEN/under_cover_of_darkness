@@ -31,12 +31,22 @@ extends RefCounted
 ## own blows come on no steady beat, a swordsman or a duelist can lunge in
 ## from out of reach, and the brute's great blow cannot be caught at all:
 ## get out of its way.
+##
+## Who he is shapes it (`temper`, Temperament.gd): a man rasher than his kind
+## rests less between blows, guards less and stands closer in; a slyer one
+## feints more and circles to his place quicker; a stubborn one is planted.
+## The man his class describes fights exactly as ARCHETYPES says. The dread
+## the garrison holds of you turns to anger in a bold man (drive_now). And his
+## place in the hunt (Squad.gd) decides the rest: hold (at the edge of your
+## reach, guard up, calling for help), fetch (running for help), flee,
+## desperate (all in), and a rash flanker whose patience runs out.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 
 ## Guard.Alert.COMBAT.
 const COMBAT := 4
@@ -94,6 +104,8 @@ const SHAKEN_REST := 2.5
 const OPEN_TIME := 1.7
 ## A kick's windup is its own: he rears back for this long.
 const KICK_WINDUP := 0.4
+## Running for help and getting no nearer for this long: he gives that man up.
+const FETCH_STALL := 4.0
 ## A hop back out of a blow: how fast it starts, and how far it gets him
 ## before a blade that was about to land does.
 const BACKSTEP_SPEED := 8.0
@@ -229,6 +241,8 @@ var lunge_chance := 0.0
 # --- what he is doing -----------------------------------------------------------
 ## Everyone fighting the same enemy (Squad.gd): the plan, and his place in it.
 var squad: RefCounted = null
+## Who he is under his class (Temperament.gd): nerve, drive, guile.
+var temper: RefCounted = null
 
 ## His balance (Sekiro's posture), 0 up to posture_max. Parried, dodged,
 ## jumped, kicked, cut, or holding his guard against hard blows, it fills;
@@ -326,6 +340,29 @@ var _read_level := 0.0
 ## Stepped back out of a blow: until this game time he is set on punishing
 ## the miss.
 var _punish_until := -1.0
+## Holding you off alone: until his next call for help. His place last time
+## (a new place starts its calls afresh), and how long, broken and away, he
+## has not seen you.
+var _help_call := 0.0
+var _last_place: StringName = &""
+var _fled_unseen := 0.0
+## How long he has waited at his place at your side for his turn (a rash
+## man's patience runs out), and how long more he gives ground (craven).
+var _flank_waited := 0.0
+var _yielding := 0.0
+## Running for help: whether he has shouted to the man he is fetching yet,
+## and until his next cry on the way.
+var _shouted_for_help := false
+var _fetch_call := 0.0
+## Getting no nearer the man he is fetching: the nearest he has been, for how
+## long he has not got nearer, and whether he has tried a fresh path.
+var _fetch_best := INF
+var _fetch_stalled := 0.0
+var _fetch_repathed := false
+## In the fight since he last came into it (a new sighting calls the hunt).
+var _was_fighting := false
+## His patience at your side had run out (said so once).
+var _was_impatient := false
 
 
 func _init(p_guard: CharacterBody3D) -> void:
@@ -413,7 +450,32 @@ func fight(delta: float) -> void:
 
 	_tick(delta, now)
 	_with_squad(target, delta)
+
+	# Back on you after a search, or new to it: the others hear of it.
+	if not _was_fighting:
+		_was_fighting = true
+
+		if squad != null:
+			squad.sighted(guard)
+
 	_update_mood(delta, target)
+
+	# Waiting his turn at your side: a rash man's patience runs out.
+	if role() == &"flank" and not _hold_token and guard._phase == &"":
+		_flank_waited += delta
+	else:
+		_flank_waited = 0.0
+
+	# ...and he says so as he goes in.
+	var impatient: bool = role() == &"flank" and squad != null and squad.impatient_now(guard)
+
+	if impatient and not _was_impatient and temper != null and guard._bark_timer <= 0.0:
+		var said: String = temper.line(&"press")
+
+		if said != "":
+			guard.bark(said)
+
+	_was_impatient = impatient
 
 	if guard._phase != &"":
 		_update_attack(delta, target, sees, to, dist, level)
@@ -458,7 +520,7 @@ func _tick(delta: float, now: float) -> void:
 
 		# Now and then a step aside, not a constant circling: squared up to
 		# you, he is readable.
-		if strafe_speed > 0.0 and randf() < 0.5:
+		if strafe_speed > 0.0 and randf() < 0.5 * _step_factor():
 			_reposition = randf_range(0.4, 0.7)
 
 	if not guarding:
@@ -647,9 +709,9 @@ func _choose_answer(combat: Node = null, dist := 0.0) -> StringName:
 	# Shaken or hurt he hides behind his blade; desperate he barely does;
 	# berserk or enraged, not at all.
 	var careful := 0.35 if mood == &"shaken" or mood == &"hurt" else (-0.2 if mood == &"desperate" else 0.0)
-	var reckless: bool = role() == &"berserk" or mood == &"enraged"
+	var reckless: bool = role() == &"berserk" or role() == &"desperate" or mood == &"enraged"
 
-	if _broken <= 0.0 and not reckless and randf() < minf(guard.block_chance + careful + (_plan(&"guard") if guard.block_chance > 0.0 else 0.0) + read * 0.9, maxf(guard.block_chance + careful, 0.95)):
+	if _broken <= 0.0 and not reckless and randf() < minf(guard.block_chance + careful + (_plan(&"guard") if guard.block_chance > 0.0 else 0.0) + read * 0.9 + _guard_bias(), maxf(guard.block_chance + careful, 0.95)):
 		return &"guard"
 
 	if dodge_chance > 0.0 and randf() < dodge_chance * 0.5:
@@ -982,18 +1044,16 @@ func recover_from_block() -> void:
 	_combo_left = 0
 
 
-## Out of the fight (lost you, gave up): nothing held up, nothing pending.
+## Out of the fight (lost you): nothing held up, nothing pending. He is still
+## in the hunt (Squad.gd) until he gives it up.
 func leave_combat() -> void:
 	guarding = false
 	_answer = &""
 	_parry_at = -1.0
 	_parry_open_at = -1.0
 	_countering = false
+	_was_fighting = false
 	release_token()
-
-	if squad != null:
-		squad.leave(guard)
-		squad = null
 
 
 ## In the squad fighting `target` (Squad.gd), and helping it make its plan.
@@ -1021,6 +1081,71 @@ func role() -> StringName:
 ## The plan's push on one of his odds.
 func _plan(what: StringName) -> float:
 	return squad.bonus(what) if squad != null else 0.0
+
+
+## How hard he presses now: his drive, and the anger a bold man turns the
+## garrison's dread into.
+func drive_now() -> float:
+	if temper == null:
+		return 0.5
+
+	var target: Node3D = guard._target
+	var garrison: RefCounted = GarrisonScript.of(target) if target != null and is_instance_valid(target) else null
+	var anger: float = garrison.anger_of(float(temper.nerve)) if garrison != null else 0.0
+	return minf(float(temper.drive) + 0.3 * anger, 1.0)
+
+
+## What he says as he takes you on: of their dead, if the garrison's dread has
+## turned to anger in him; else in his own way.
+func engage_line() -> String:
+	var target: Node3D = guard._target
+	var garrison: RefCounted = GarrisonScript.of(target) if target != null and is_instance_valid(target) else null
+
+	if temper != null and garrison != null and garrison.anger_of(float(temper.nerve)) > 0.2:
+		var angry: String = temper.revenge_line(int(garrison.captains))
+
+		if angry != "":
+			return angry
+
+	var own: String = temper.line(&"engage") if temper != null else ""
+	return own if own != "" else "You there! Stop!"
+
+
+## How far he is from his own kind (Temperament.gd): this is what makes him
+## fight otherwise than his class does. Nothing, for the man his class is.
+func _dn() -> float:
+	return float(temper.nerve) - float(temper.base_nerve) if temper != null else 0.0
+
+
+func _dd() -> float:
+	return drive_now() - float(temper.base_drive) if temper != null else 0.0
+
+
+func _dg() -> float:
+	return float(temper.guile) - float(temper.base_guile) if temper != null else 0.0
+
+
+## A man rasher than his kind keeps his guard up less.
+func _guard_bias() -> float:
+	return -0.4 * _dd()
+
+
+## A slyer man feints more (if he feints at all).
+func _feint_bias() -> float:
+	return 0.3 * _dg() if feint_chance > 0.0 else 0.0
+
+
+## How often he takes a step aside: more the slyer or rasher, less the more
+## stubborn (planted).
+func _step_factor() -> float:
+	return clampf(1.0 + 1.5 * (_dg() + _dd()) - 1.5 * maxf(_dn(), 0.0), 0.3, 2.0)
+
+
+## Running for help, or broken and away: losing sight of you does not make
+## him go looking for you.
+func keeps_running() -> bool:
+	var place := role()
+	return place == &"fetch" or (place == &"flee" and squad != null and squad.will_of(guard) == &"broken")
 
 
 func on_parried() -> void:
@@ -1059,11 +1184,12 @@ func _call_in() -> void:
 		best._fighter._next_scale = minf(best._fighter._next_scale, 0.85)
 
 
-func on_died() -> void:
+## Gone from the fight: `killed`, or only knocked senseless.
+func on_died(killed := true) -> void:
 	release_token()
 
 	if squad != null:
-		squad.member_died(guard)
+		squad.member_died(guard, killed)
 		squad = null
 
 
@@ -1082,9 +1208,22 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 
 	var place := role()
 
+	if place != _last_place:
+		_last_place = place
+		_help_call = 0.0
+		_shouted_for_help = false
+		_fetch_call = 0.0
+		_fetch_best = INF
+		_fetch_stalled = 0.0
+		_fetch_repathed = false
+
 	match place:
 		&"flee":
 			_flee(delta, target, sees, to)
+			return
+		&"fetch":
+			# On foot, archer or not: to the man he is fetching.
+			_fetch(delta, target, sees, to)
 			return
 		&"rally":
 			if _rally(delta, target, sees, to, dist):
@@ -1100,11 +1239,16 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 	var reach := _reach(&"overhead")
 	# Waiting his turn: at his place at your side or back (the plan's, or
 	# his own among the others).
-	var waiting := (strafe_speed > 0.0 and not _hold_token and _someone_else_swinging(target)) or ((place == &"flank" or place == &"reserve") and not _hold_token)
+	# A rash man at your side whose patience has run out does not wait.
+	var impatient: bool = place == &"flank" and squad != null and squad.impatient_now(guard)
+	var waiting := (strafe_speed > 0.0 and not _hold_token and _someone_else_swinging(target)) or ((place == &"flank" or place == &"reserve") and not _hold_token and not impatient)
 	var want := reach + 0.9 if waiting else maxf(reach * 0.8, 1.1)
+	# A man rasher than his kind stands closer in; a warier one further off.
+	want = maxf(want - 0.6 * _dd(), 1.0)
 
 	if place == &"reserve":
-		want = reach + 2.4
+		# Waiting his turn, a rash man edges in.
+		want = reach + 2.4 - 1.2 * maxf(drive_now() - 0.5, 0.0)
 
 	# How he is doing: shaken he steps out of reach to find his feet, hurt he
 	# keeps to the edge of it; on top of you, he crowds you.
@@ -1116,6 +1260,28 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 		&"pressing", &"desperate", &"enraged":
 			if not waiting:
 				want = maxf(reach * 0.65, 1.0)
+
+	# Holding you off: at the edge of his reach if he has the nerve for it,
+	# well out of it if not; guard up while you are close; calling for help.
+	if place == &"hold":
+		want = reach if temper != null and float(temper.nerve) >= 0.6 else reach + 2.0
+
+		if sees and dist < 4.0 and _broken <= 0.0:
+			guarding = true
+			_guard_hold = maxf(_guard_hold, 0.2)
+
+		_call_for_help(delta)
+
+	# A craven man gives ground when you come at him.
+	if temper != null and temper.tag == &"craven" and sees and target is CharacterBody3D:
+		var closing: float = -(target as CharacterBody3D).velocity.dot(to / maxf(dist, 0.001))
+
+		if closing > 1.2:
+			_yielding = 0.6
+
+	if _yielding > 0.0:
+		_yielding -= delta
+		want += 1.5
 
 	# Shaken, he lets you go while he finds his feet: he does not come after
 	# you while he can see you.
@@ -1159,7 +1325,7 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 		to_slot.y = 0.0
 
 		if to_slot.length() > 0.3:
-			wanted = to_slot.normalized() * minf(to_slot.length() * 3.0, strafe_speed * 2.4)
+			wanted = to_slot.normalized() * minf(to_slot.length() * 3.0, strafe_speed * 2.4 * (1.0 + maxf(_dg(), 0.0)))
 
 	if wanted.length() > 0.05 and not _safe_step(wanted):
 		_strafe = -_strafe
@@ -1218,6 +1384,14 @@ func _flee(delta: float, target: Node3D, sees: bool, to: Vector3) -> void:
 		guard._stop(delta)
 		return
 
+	# Broken and away, and no sight of you for a good while: he gives it up.
+	_fled_unseen = 0.0 if sees else _fled_unseen + delta
+
+	if _fled_unseen > 12.0 and squad != null and squad.will_of(guard) == &"broken":
+		_fled_unseen = 0.0
+		guard._give_up()
+		return
+
 	var away: Vector3 = guard.global_position - target.global_position
 	away.y = 0.0
 	var far := away.length()
@@ -1237,6 +1411,74 @@ func _flee(delta: float, target: Node3D, sees: bool, to: Vector3) -> void:
 
 		if sees:
 			guard._face(to, delta)
+
+
+## Running for help: to the man he is fetching, crying out as he goes, a
+## shout when he is near enough to be heard; on him, he rouses him to the
+## hunt (Squad.rouse).
+func _fetch(delta: float, target: Node3D, sees: bool, to: Vector3) -> void:
+	guarding = false
+	var helper: Node3D = squad.helper_of(guard) if squad != null else null
+
+	if helper == null:
+		guard._stop(delta)
+
+		if sees:
+			guard._face(to, delta)
+
+		return
+
+	guard._go_to(helper.global_position)
+	var arrived: bool = guard._walk(guard.chase_speed * 1.1, delta)
+	var gap: float = guard.global_position.distance_to(helper.global_position)
+
+	# Getting no nearer (stuck, or the man where no path goes): a fresh path
+	# once, and if that does not bring him closer he gives that man up.
+	if gap < _fetch_best - 0.3:
+		_fetch_best = gap
+		_fetch_stalled = 0.0
+	else:
+		_fetch_stalled += delta
+
+	if arrived and gap > 2.5 and not _fetch_repathed:
+		_fetch_repathed = true
+		guard._go_to(helper.global_position, true)
+
+	if _fetch_stalled > FETCH_STALL:
+		squad.abandon_fetch(guard, helper)
+		_fetch_best = INF
+		_fetch_stalled = 0.0
+		_fetch_repathed = false
+		guard._stop(delta)
+		return
+
+	if gap <= 12.0 and not _shouted_for_help:
+		_shouted_for_help = true
+		guard.shout()
+
+	_fetch_call -= delta
+
+	if _fetch_call <= 0.0 and guard._bark_timer <= 0.0:
+		_fetch_call = 3.0
+		var said: String = temper.line(&"fetch") if temper != null else ""
+		guard.bark(said if said != "" else "Help! Over here!")
+
+	if gap <= 2.5:
+		_shouted_for_help = false
+		squad.rouse(helper, guard)
+
+
+## Holding you off alone: now and then a call for help, loud enough to carry.
+func _call_for_help(delta: float) -> void:
+	_help_call -= delta
+
+	if _help_call > 0.0 or guard._bark_timer > 0.0:
+		return
+
+	_help_call = 6.0
+	var said: String = temper.line(&"hold") if temper != null else ""
+	guard.bark(said if said != "" else "Help! Over here!")
+	guard.shout()
 
 
 ## Falling back: to the leader's side, close together, guard up. True while
@@ -1270,7 +1512,7 @@ func _stand_guard(delta: float, target: Node3D, sees: bool, to: Vector3, dist: f
 	var archer: Node3D = null
 	var nearest := INF
 
-	for member in squad.members():
+	for member in squad.fighting():
 		if member != guard and member.get("_fighter") != null and member._fighter.ranged:
 			var d: float = member.global_position.distance_to(target.global_position)
 
@@ -1462,13 +1704,15 @@ func _consider_attack(delta: float, target: Node3D, to: Vector3, dist: float, le
 	if squad != null and not squad.may_strike(guard):
 		return
 
-	var punishing: bool = squad != null and role() == &"flank"
+	# At your side and you busy with another: he punishes it, and is let in
+	# beside whoever is swinging. (A rash man going in out of turn is not.)
+	var punishing: bool = squad != null and role() == &"flank" and squad._committed_away_from(guard)
 
 	# Behind you, he waits his turn a little longer.
 	if not _in_view_of(target):
 		_flank_wait += delta
 
-		if _flank_wait < (0.5 if punishing else 0.8):
+		if _flank_wait < ((0.3 if temper != null and float(temper.guile) >= SquadScript.PATIENT_GUILE else 0.5) if punishing else 0.8):
 			return
 	else:
 		_flank_wait = 0.0
@@ -1593,6 +1837,10 @@ func _judge_mood(target: Node3D) -> StringName:
 	var whole: float = clampf(float(guard.health) / maxf(float(guard.max_health), 1.0), 0.0, 1.0)
 	var shaken: float = posture / maxf(posture_max, 1.0) if posture_max < 9999.0 else 0.0
 
+	# Broken, and rash: all in, whatever else.
+	if role() == &"desperate" and not is_open():
+		return &"desperate"
+
 	# His balance going (and it comes and goes: a margin either way), for a
 	# short spell at a time.
 	if not is_open() and not ranged and _shaken_rest <= 0.0 and (shaken >= SHAKEN_AT or (mood == &"shaken" and shaken > SHAKEN_UNTIL)):
@@ -1602,8 +1850,9 @@ func _judge_mood(target: Node3D) -> StringName:
 		if hyper_armor:
 			return &"enraged"
 
-		var friends: int = squad.members().size() if squad != null else 1
-		return &"desperate" if friends <= 1 and not ranged else &"hurt"
+		var friends: int = squad.fighting().size() if squad != null else 1
+		# Alone and badly cut, a rash man goes all in; anyone else is careful.
+		return &"desperate" if friends <= 1 and not ranged and drive_now() >= SquadScript.DESPERATE_DRIVE else &"hurt"
 
 	var yours: Variant = target.get("health") if target != null and is_instance_valid(target) else null
 	var most: Variant = target.get("max_health") if target != null and is_instance_valid(target) else null
@@ -1642,6 +1891,8 @@ func _start(kind: StringName, scale := 1.0) -> void:
 	# Berserk or enraged: quicker, and no feints about it.
 	if role() == &"berserk" or mood == &"enraged":
 		scale *= 0.8
+	elif role() == &"desperate":
+		scale *= 0.85
 
 	if kind == _last_attack:
 		_repeats += 1
@@ -1651,6 +1902,7 @@ func _start(kind: StringName, scale := 1.0) -> void:
 	_last_attack = kind
 	guard._attack = kind
 	guard._phase = &"windup"
+	_flank_waited = 0.0
 	_countering = false
 	_parry_at = -1.0
 	_parry_open_at = -1.0
@@ -1675,7 +1927,7 @@ func _start(kind: StringName, scale := 1.0) -> void:
 	_feint_at = -1.0
 
 	# A feint: only the first blow of a string, and never a kick or a slam.
-	if kind in [&"overhead", &"left", &"right", &"thrust"] and scale >= 0.99 and feint_chance > 0.0 and randf() < feint_chance + _plan(&"feint"):
+	if kind in [&"overhead", &"left", &"right", &"thrust"] and scale >= 0.99 and feint_chance > 0.0 and randf() < feint_chance + _plan(&"feint") + _feint_bias():
 		_feint_at = randf_range(0.36, 0.52)
 
 	var target: Node3D = guard._target
@@ -1984,6 +2236,11 @@ func _slam() -> void:
 ## How much sooner than usual he goes again: berserk much, an archer told to
 ## keep you from shooting somewhat.
 func _cooldown_scale() -> float:
+	# A man rasher than his kind rests less between blows; a warier one more.
+	return _cooldown_base() * (1.0 - 0.5 * _dd())
+
+
+func _cooldown_base() -> float:
 	if role() == &"berserk":
 		return 0.5
 

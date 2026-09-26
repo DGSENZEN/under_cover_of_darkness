@@ -5,6 +5,7 @@ extends Node
 
 const ARENA := preload("res://maps/combat_arena.tscn")
 const DummyScript := preload("res://scripts/Combat/TrainingDummy.gd")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 
 var arena: Node3D
 var player: CharacterBody3D
@@ -12,6 +13,8 @@ var results: Array[String] = []
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	arena = ARENA.instantiate()
 	add_child(arena)
 	player = arena.player

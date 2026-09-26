@@ -47,9 +47,11 @@ var _end := Transform3D.IDENTITY
 var _foot := Vector3.ZERO
 var _landed := false
 var _pool_at := -1.0
-# Limp: how fast his hips were falling last tick, thuds so far, how long he
-# has lain still, and whether he has bled his pool.
-var _last_fall := 0.0
+# Limp: the hardest his hips have come down since they last stopped (a man
+# crumpling slows as his legs give, so the thud is when the fall ends, as
+# hard as it was at its worst), thuds so far, how long he has lain still, and
+# whether he has bled his pool.
+var _fall_peak := 0.0
 var _thuds := 0
 var _since_thud := 1.0
 var _still := 0.0
@@ -155,7 +157,7 @@ func lay_down(rest: Transform3D) -> bool:
 	placed.origin = ground + Vector3.UP * 0.5 - placed.basis * Vector3(0.0, 0.0, 0.24)
 	who.global_transform = placed
 	rag.go_limp(Vector3.DOWN * 0.4)
-	_last_fall = 0.0
+	_fall_peak = 0.0
 	_thuds = 0
 	_still = 0.0
 	_limp_time = 0.0
@@ -261,13 +263,14 @@ func _physics_process(delta: float) -> void:
 	var fall: float = -rag.velocity().y
 	_since_thud += delta
 
-	if _last_fall > 2.2 and fall < 0.6 and _thuds < 3 and _since_thud > 0.25:
-		_thuds += 1
-		_since_thud = 0.0
-		Fx.dust(self, hips + Vector3.DOWN * 0.1, Vector3.UP, 0.9)
-		Sfx.play(self, &"body_fall", hips, 0.0 if _thuds == 1 else -6.0, randf_range(0.9, 1.05))
+	_fall_peak = maxf(_fall_peak, fall)
 
-	_last_fall = fall
+	if fall < 0.5:
+		var came_down := _fall_peak
+		_fall_peak = 0.0
+
+		if came_down > 1.8 and _thuds < 3 and _since_thud > 0.25:
+			_thud(hips, came_down)
 
 	# Once he lies still, a corpse bleeds his pool.
 	if rag.speed() < 0.2:
@@ -280,6 +283,22 @@ func _physics_process(delta: float) -> void:
 	if dead and not _pooled and _still > 0.6:
 		_pooled = true
 		Fx.pool(self, hips, 1.15, 6.0)
+
+
+## Coming down hard (`speed`, m/s): a thud, his gear with him the first time,
+## and dust where he met the floor.
+func _thud(hips: Vector3, speed: float) -> void:
+	_thuds += 1
+	_since_thud = 0.0
+	var floor_kind := _floor_under(hips)
+	Fx.dust(self, hips + Vector3.DOWN * 0.1, Vector3.UP, 0.9, floor_kind if floor_kind != "" else "stone")
+	var hard := clampf((speed - 1.8) / 3.0, 0.0, 1.0)
+	Sfx.play(self, &"body_fall", hips, lerpf(-4.0, 1.0, hard) if _thuds == 1 else -6.0, randf_range(0.9, 1.05))
+
+	# His mail and his gear hitting the floor with him: the floor he actually
+	# came down on (planks, flagstones, earth, a puddle).
+	if _thuds == 1:
+		Sfx.play(self, Sfx.step(floor_kind, false, "land", true), hips, lerpf(-6.0, -2.0, hard), randf_range(0.9, 1.0))
 
 
 # ---------------------------------------------------------------------------
@@ -339,12 +358,27 @@ func _process(delta: float) -> void:
 func _land() -> void:
 	_landed = true
 	var head_end := global_transform * (_end * -_foot)
-	Fx.dust(self, head_end + Vector3.DOWN * 0.2, Vector3.UP, 1.1)
-	Fx.dust(self, global_position + Vector3.DOWN * 0.2, Vector3.UP, 0.6)
+	var floor_kind := _floor_under(global_position)
+	var dust_kind := floor_kind if floor_kind != "" else "stone"
+	Fx.dust(self, head_end + Vector3.DOWN * 0.2, Vector3.UP, 1.1, dust_kind)
+	Fx.dust(self, global_position + Vector3.DOWN * 0.2, Vector3.UP, 0.6, dust_kind)
 	Sfx.play(self, &"body_fall", global_position, 0.0)
+	Sfx.play(self, Sfx.step(floor_kind, false, "land", true), global_position, -5.0, randf_range(0.9, 1.0))
 
 	if dead:
 		_pool_at = 0.35
+
+
+## What the floor under `at` is made of (its "surface" meta: "stone",
+## "wood"...), or "" when it does not say.
+func _floor_under(at: Vector3) -> String:
+	if not is_inside_tree():
+		return ""
+
+	var query := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.3, at + Vector3.DOWN * 1.2, 1)
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var floor_body: Object = hit.get("collider") if not hit.is_empty() else null
+	return String(floor_body.get_meta(&"surface")) if floor_body != null and floor_body.has_meta(&"surface") else ""
 
 
 func _visual_half_length() -> float:

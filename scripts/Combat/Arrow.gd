@@ -153,8 +153,12 @@ func _hit(hit: Dictionary, direction: Vector3) -> void:
 		var eye: float = target.get("eye_height") if target.get("eye_height") != null else 1.65
 		var headshot := point.y - target.global_position.y >= eye - 0.25
 		var dealt := damage * (headshot_multiplier if headshot else 1.0)
-		# Into him: the arrow's own sound (the guard voices nothing for it).
+		# Into him: the arrow's own sound (the guard voices nothing for it);
+		# through his helmet or a shoulder plate, the iron rings first.
 		Sfx.play(self, &"arrow_flesh", point, 0.0 if headshot else -1.5, 0.95 if headshot else 1.0)
+
+		if target.has_method("armoured_at") and target.armoured_at(point):
+			Sfx.play(self, &"ting", point, -3.0, 1.15)
 		collider.take_hit(dealt, shooter, &"arrow", point, direction)
 		struck.emit(collider, dealt, headshot)
 		queue_free()

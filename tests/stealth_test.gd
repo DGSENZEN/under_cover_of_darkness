@@ -19,6 +19,7 @@ const SUSPICIOUS := 1
 const INVESTIGATING := 2
 const SEARCHING := 3
 const COMBAT := 4
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 
 var player: CharacterBody3D
 var guard: CharacterBody3D
@@ -28,6 +29,8 @@ var barks: Array[String] = []
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(80, 1, 60))           # floor, top at 0
 	Props.block(self, Vector3(0, 1.5, -6), Vector3(4, 3, 0.4))           # tall wall, blocks sight
 	Props.block(self, Vector3(10, 0.5, -4), Vector3(3, 1.0, 0.3))        # low wall, partial cover

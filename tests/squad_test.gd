@@ -10,6 +10,7 @@ const GUARD := preload("res://Guard.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 
 var player: CharacterBody3D
 var combat: Node
@@ -17,6 +18,8 @@ var results: Array[String] = []
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(200, 1, 200))
 
 	var baker := NavigationRegion3D.new()

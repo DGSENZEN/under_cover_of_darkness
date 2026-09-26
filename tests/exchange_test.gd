@@ -13,6 +13,8 @@ const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 const GuardRigScript := preload("res://scripts/AISystem/GuardRig.gd")
 const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 
 var player: CharacterBody3D
 var combat: Node
@@ -23,6 +25,8 @@ var deathblows: Array = []
 
 
 func _ready() -> void:
+	# Every guard at his class's own temperament: these checks are exact.
+	TemperamentScript.rolling = false
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(120, 1, 120))
 
 	var baker := NavigationRegion3D.new()
@@ -373,16 +377,24 @@ func _run() -> void:
 	g16.queue_free()
 	await _frames(20)
 
-	# X17 badly hurt: with a friend at hand he is careful, alone desperate
-	var g17 := _fighter(&"swordsman", Vector3(0, 0, -2.2))
+	# X17 badly hurt: alone, a rash man is desperate and a steady one careful;
+	#     beside a friend, careful
+	var g17b := _fighter(&"swordsman", Vector3(0, 0, -2.2), &"steady")
+	g17b.health = g17b.max_health * 0.3
+	await _frames(30)
+	var alone_steady: StringName = g17b._fighter.mood
+	g17b.queue_free()
+	await _frames(20)
+	var g17 := _fighter(&"swordsman", Vector3(0, 0, -2.2), &"rash")
 	g17.health = g17.max_health * 0.3
 	await _frames(30)
 	var alone: StringName = g17._fighter.mood
 	var friend := _fighter(&"swordsman", Vector3(1.6, 0, -2.2))
 	await _frames(40)
 	var together: StringName = g17._fighter.mood
-	_check("X17 badly hurt, he is desperate alone and careful beside a friend", alone == &"desperate" and together == &"hurt" and g17._fighter._cooldown_scale() > 1.2,
-		"alone %s with a friend %s cooldown x%.2f" % [alone, together, g17._fighter._cooldown_scale()])
+	_check("X17 badly hurt: alone, a rash man is desperate and a steady man careful; beside a friend, careful",
+		alone == &"desperate" and alone_steady == &"hurt" and together == &"hurt" and g17._fighter._cooldown_scale() > 1.2,
+		"alone rash %s steady %s, with a friend %s, cooldown x%.2f" % [alone, alone_steady, together, g17._fighter._cooldown_scale()])
 	g17.queue_free()
 	friend.queue_free()
 	await _frames(20)
@@ -449,9 +461,12 @@ func _parry_next(g: CharacterBody3D) -> void:
 
 ## A guard already fighting you, facing you, who will not strike first and
 ## does not defend unless told to.
-func _fighter(archetype: StringName, at: Vector3) -> CharacterBody3D:
+func _fighter(archetype: StringName, at: Vector3, preset: StringName = &"") -> CharacterBody3D:
+	# A new fight: no dread carried over from the last one's dead.
+	GarrisonScript.clear_all()
 	var g: CharacterBody3D = GUARD.instantiate()
 	g.archetype = archetype
+	g.temperament = preset
 	g.debug_ai = false
 	g.position = at
 	g.rotation.y = PI

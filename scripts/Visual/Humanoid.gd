@@ -798,8 +798,14 @@ const PIECES := {
 	&"pauldron_l": [&"upperarm_l", Vector3(0.0, 0.02, 0.0), Basis(Vector3(0, 0, -1), Vector3(-1, 0, 0), Vector3(0, 1, 0))],
 }
 
+## Pieces that are cloth, not metal: a blade on them sounds of flesh.
+const CLOTH_PIECES := [&"hood"]
+
 static var _hair_meshes := {}
 static var _armour_meshes := {}
+
+## The armour he wears (add_armour).
+var armour: Array[MeshInstance3D] = []
 
 
 ## Boots on his feet, bound to this skeleton by bone name.
@@ -892,7 +898,35 @@ func add_armour(piece: StringName) -> MeshInstance3D:
 	node.mesh = mesh
 	node.layers = Layers.ACTORS
 	attach(spec[0], node, Transform3D(spec[2], spec[1]))
+	armour.append(node)
 	return node
+
+
+## The metal he wears nearest `point`, if it is within `reach` of it (a
+## helmet, a shoulder plate: not a hood, and not a piece cut off with its
+## limb); null if steel there would meet only him.
+func armour_near(point: Vector3, reach := 0.12) -> MeshInstance3D:
+	var nearest: MeshInstance3D = null
+	var best := reach
+
+	for piece in armour:
+		if not is_instance_valid(piece) or not piece.is_visible_in_tree() or StringName(piece.name) in CLOTH_PIECES:
+			continue
+
+		if piece.mesh == null or not is_ancestor_of(piece):
+			continue
+
+		# How far the point is from the piece's box, in the world.
+		var local := piece.global_transform.affine_inverse() * point
+		var box := piece.mesh.get_aabb()
+		var on_box := local.clamp(box.position, box.end)
+		var distance := (piece.global_transform * on_box).distance_to(point)
+
+		if distance <= best:
+			best = distance
+			nearest = piece
+
+	return nearest
 
 
 static func armour_mesh(file: StringName) -> Mesh:

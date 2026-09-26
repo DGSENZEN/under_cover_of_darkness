@@ -6,6 +6,9 @@ extends RefCounted
 ##
 ## Durations are real seconds: the timers ignore the time scale they set.
 
+## How much of a slow motion the sound follows (0 none, 1 all of it).
+const AUDIO_SLOWDOWN := 0.6
+
 static var _requests := {}
 static var _token := 0
 
@@ -68,3 +71,13 @@ static func _apply() -> void:
 		scale = minf(scale, float(entry["scale"]))
 
 	Engine.time_scale = scale
+
+	# Slow motion is heard too: the whole mix slows and drops, part of the
+	# way. (A hit-stop is too short to hear that way: it would only warble.)
+	var heard := 1.0
+
+	for id in _requests.keys():
+		if id != &"hitstop":
+			heard = minf(heard, lerpf(1.0, float(_requests[id]["scale"]), AUDIO_SLOWDOWN))
+
+	AudioServer.playback_speed_scale = maxf(heard, 0.45)
