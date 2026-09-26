@@ -315,7 +315,80 @@ ARMS_MASTER = {
     },
 }
 
-KINDS = {"watchman": WATCHMAN, "swordsman": SWORDSMAN, "archer": ARCHER, "arms_master": ARMS_MASTER}
+# The brute: huge fur shoulders, bare arms, strips at the waist (spec §8;
+# 3,500 triangles, common.BUDGETS). A shaved head and a full beard; bare
+# arms with bracers; a stiff fur mantle; a studded leather jerkin over a
+# padded gut; a wide belt; hide strips; one crude iron pauldron on his
+# right; fur-topped boots. Browns, dark leather, iron. No dye.
+BRUTE = {
+    "kind": "brute",
+    "body": "male",
+    "base_tris": 1400,
+    "bare": ["head", "upper", "lower", "hand"],
+    "belt": ("spine_01", 0.0),
+    "garments": [
+        {"name": "trousers", "type": "shell", "fabric": "wool", "colour": (0.24, 0.19, 0.14),
+         "regions": ["pelvis", "thigh", "calf"], "bottom": ("calf_l", 0.6), "top": ("spine_01", 0.0),
+         "thickness": 0.008, "smooth": 2},
+        {"name": "boots", "type": "boots", "fabric": "leather", "colour": (0.20, 0.14, 0.09), "top": ("calf_l", 0.5),
+         "thickness": 0.012, "sole": 0.004, "cuff": 0.05, "cuff_fabric": "fur", "cuff_colour": (0.36, 0.28, 0.20),
+         "smooth": 3},
+        {"name": "hands", "type": "mittens", "fabric": "skin", "colour": SKIN_COLOUR, "cuff": 0},
+        # His gut, padded out in front.
+        {"name": "gut", "type": "shell", "fabric": "quilted_linen", "colour": (0.40, 0.33, 0.24),
+         "regions": ["torso", "pelvis"], "bottom": ("thigh_l", 0.05), "thickness": 0.014, "smooth": 4,
+         "pads": [{"from": ("pelvis", 0.0), "to": ("spine_02", 0.5), "amount": 0.05, "front": True}]},
+        # Over the gut (shells stand off his body: thicker than the gut, and
+        # padded as it is, so it lies over it).
+        {"name": "jerkin", "type": "shell", "fabric": "leather", "colour": (0.24, 0.16, 0.10), "regions": ["torso"],
+         "thickness": 0.026, "smooth": 4, "studs": {"spacing": 0.05},
+         "pads": [{"from": ("pelvis", 0.0), "to": ("spine_02", 0.5), "amount": 0.05, "front": True}]},
+        {"name": "bracer_l", "type": "bracer", "fabric": "leather", "colour": (0.22, 0.15, 0.09),
+         "bone": "lowerarm_l", "from": 0.3, "to": 0.85, "thickness": 0.008},
+        {"name": "bracer_r", "type": "bracer", "fabric": "leather", "colour": (0.22, 0.15, 0.09),
+         "bone": "lowerarm_r", "from": 0.3, "to": 0.85, "thickness": 0.008},
+        # Four hide strips on his diagonals, over the fronts and backs of his
+        # thighs: none between his legs, where a sweeping thigh crosses (a
+        # strip there went 5.6 cm into it, K5). As two skirts (a skirt
+        # mirrors one side panel).
+        # Each rides its thigh (its chain hangs from it): hung from his
+        # pelvis, a strip's root sat where his thigh swings up in his blows,
+        # and its first joint could not get clear (9 cm into it, K5).
+        {"name": "hides", "type": "skirt", "fabric": "leather", "colour": (0.34, 0.26, 0.18), "hem": ("thigh_l", 0.45),
+         "flare": 1.3, "clearance": 0.03, "bones": 2, "ride": "thigh", "panels": {"left": [25, 75], "right": [-75, -25]}},
+        {"name": "hides_rear", "type": "skirt", "fabric": "leather", "colour": (0.34, 0.26, 0.18), "hem": ("thigh_l", 0.45),
+         "flare": 1.3, "clearance": 0.03, "bones": 2, "ride": "thigh",
+         "panels": {"left": [105, 155], "right": [-155, -105]}},
+        {"name": "belt", "type": "belt", "fabric": "leather", "colour": (0.16, 0.11, 0.07), "height": 0.09,
+         "buckle": {"fabric": "iron", "colour": IRON, "size": (0.07, 0.012, 0.06)}},
+        {"name": "mantle", "type": "mantle", "fabric": "fur", "colour": (0.30, 0.24, 0.18), "over": "jerkin",
+         "reach": 0.16, "thickness": 0.05, "depth_front": 0.12, "depth_back": 0.18, "clear": 0.02, "dip": 0.08},
+        {"name": "pauldron", "type": "pauldron", "fabric": "iron", "colour": (0.28, 0.27, 0.27), "side": "right",
+         "over": "jerkin", "reach": 0.14, "drop": 0.12, "rings": 3, "clearance": 0.012, "roll": 0.01},
+        {"name": "pouch", "type": "prop", "shape": "pouch", "fabric": "leather", "colour": BELT_BROWN,
+         "at": -100, "size": (0.12, 0.05, 0.10), "bone": "pelvis"},
+    ],
+    # Stiff hide, 6 cm off his legs: at 1.8/0.8/1.0/0.035 a restart
+    # settled at 3.5 m/s (K12) and his blows swung them into his thighs
+    # (K5); riding his thighs their rest follows the leg, so at full gravity
+    # a restart swung them 3.7 m/s back to hanging: 0.6.
+    "chains": {name: {"stiffness": 4.0, "drag": 0.95, "gravity": 0.6, "radius": 0.06}
+               for name in ("hides_l", "hides_r", "hides_rear_l", "hides_rear_r")},
+    "colliders": [
+        {"bone": "thigh_l", "radius": 0.10}, {"bone": "thigh_r", "radius": 0.10},
+        {"bone": "calf_l", "radius": 0.07}, {"bone": "calf_r", "radius": 0.07},
+        {"bone": "spine_01", "radius": 0.18},
+    ],
+    "metal": ["upperarm_r"],
+    "options": {
+        "faces": ["weathered"], "tones": ["light", "dark"], "hair": ["buzzed"], "beards": ["full"],
+        "hair_colours": [[0.25, 0.20, 0.18], [0.14, 0.11, 0.09], [0.45, 0.30, 0.18]],
+        "headgear": [[]],
+        "grime": [0.4, 1.0],
+    },
+}
+
+KINDS = {"watchman": WATCHMAN, "swordsman": SWORDSMAN, "archer": ARCHER, "arms_master": ARMS_MASTER, "brute": BRUTE}
 
 # Skin tones: the Quaternius skin times these (linear light). Heads are baked
 # in each; a kind's JSON carries them too, so his bare skin matches his face.

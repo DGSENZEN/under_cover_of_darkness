@@ -1,0 +1,239 @@
+{
+ "kind": "brute",
+ "body": "male",
+ "triangles": 1901,
+ "cloth": [
+  {
+   "chain": "hides_l",
+   "parent": "thigh_l",
+   "bones": [
+    "cloth_hides_l_1",
+    "cloth_hides_l_2"
+   ],
+   "tip": 0.1474,
+   "stiffness": 4.0,
+   "drag": 0.95,
+   "gravity": 0.6,
+   "radius": 0.06
+  },
+  {
+   "chain": "hides_r",
+   "parent": "thigh_r",
+   "bones": [
+    "cloth_hides_r_1",
+    "cloth_hides_r_2"
+   ],
+   "tip": 0.1474,
+   "stiffness": 4.0,
+   "drag": 0.95,
+   "gravity": 0.6,
+   "radius": 0.06
+  },
+  {
+   "chain": "hides_rear_l",
+   "parent": "thigh_l",
+   "bones": [
+    "cloth_hides_rear_l_1",
+    "cloth_hides_rear_l_2"
+   ],
+   "tip": 0.1469,
+   "stiffness": 4.0,
+   "drag": 0.95,
+   "gravity": 0.6,
+   "radius": 0.06
+  },
+  {
+   "chain": "hides_rear_r",
+   "parent": "thigh_r",
+   "bones": [
+    "cloth_hides_rear_r_1",
+    "cloth_hides_rear_r_2"
+   ],
+   "tip": 0.1469,
+   "stiffness": 4.0,
+   "drag": 0.95,
+   "gravity": 0.6,
+   "radius": 0.06
+  }
+ ],
+ "colliders": [
+  {
+   "bone": "thigh_l",
+   "radius": 0.1,
+   "height": 0.4288
+  },
+  {
+   "bone": "thigh_r",
+   "radius": 0.1,
+   "height": 0.4288
+  },
+  {
+   "bone": "calf_l",
+   "radius": 0.07,
+   "height": 0.4588
+  },
+  {
+   "bone": "calf_r",
+   "radius": 0.07,
+   "height": 0.4588
+  },
+  {
+   "bone": "spine_01",
+   "radius": 0.18,
+   "height": 0.1063
+  }
+ ],
+ "metal": [
+  "upperarm_r"
+ ],
+ "skin_tones": {
+  "light": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "dark": [
+   0.52,
+   0.4,
+   0.32
+  ]
+ },
+ "probe": [
+  {
+   "rest": [
+    0.077166,
+    1.355748,
+    0.163224
+   ],
+   "near_body": [
+    0.075033,
+    1.365234,
+    0.117123
+   ]
+  },
+  {
+   "rest": [
+    0.043206,
+    1.320315,
+    -0.172311
+   ],
+   "near_body": [
+    0.040682,
+    1.329452,
+    -0.1481
+   ]
+  },
+  {
+   "rest": [
+    0.308372,
+    1.491114,
+    -0.08401
+   ],
+   "near_body": [
+    0.305944,
+    1.487556,
+    -0.082137
+   ]
+  },
+  {
+   "rest": [
+    -0.308372,
+    1.491114,
+    -0.08401
+   ],
+   "near_body": [
+    -0.305944,
+    1.487556,
+    -0.082137
+   ]
+  },
+  {
+   "rest": [
+    0.536054,
+    1.4955,
+    -0.07072
+   ],
+   "near_body": [
+    0.537513,
+    1.499729,
+    -0.071364
+   ]
+  },
+  {
+   "rest": [
+    -0.536054,
+    1.4955,
+    -0.07072
+   ],
+   "near_body": [
+    -0.537513,
+    1.499729,
+    -0.071364
+   ]
+  },
+  {
+   "rest": [
+    0.12745,
+    0.814639,
+    0.077575
+   ],
+   "near_body": [
+    0.124552,
+    0.814584,
+    0.070119
+   ]
+  },
+  {
+   "rest": [
+    -0.12745,
+    0.814639,
+    0.077575
+   ],
+   "near_body": [
+    -0.124552,
+    0.814584,
+    0.070119
+   ]
+  }
+ ],
+ "options": {
+  "faces": [
+   "weathered"
+  ],
+  "tones": [
+   "light",
+   "dark"
+  ],
+  "hair": [
+   "buzzed"
+  ],
+  "beards": [
+   "full"
+  ],
+  "hair_colours": [
+   [
+    0.25,
+    0.2,
+    0.18
+   ],
+   [
+    0.14,
+    0.11,
+    0.09
+   ],
+   [
+    0.45,
+    0.3,
+    0.18
+   ]
+  ],
+  "headgear": [
+   []
+  ],
+  "grime": [
+   0.4,
+   1.0
+  ]
+ },
+ "marks": {}
+}

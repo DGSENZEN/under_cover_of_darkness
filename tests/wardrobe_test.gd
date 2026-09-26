@@ -21,7 +21,8 @@ var results: Array[String] = []
 
 ## Every kind the wardrobe dresses, and the archetype that is it (batch 1's
 ## Tasks 6-8 add theirs). Every per-kind check runs over it.
-const DRESSED := {&"watchman": &"", &"swordsman": &"swordsman", &"archer": &"archer", &"arms_master": &"trainer"}
+const DRESSED := {&"watchman": &"", &"swordsman": &"swordsman", &"archer": &"archer", &"arms_master": &"trainer",
+	&"brute": &"brute"}
 ## What each dressed kind must show:
 ##   worn: every mesh he wears (none of the base body's);
 ##   key: his silhouette, worn by every guard of his kind;
@@ -46,11 +47,20 @@ const EXPECT := {
 		"metal": {&"Head": "nasalhelm", &"neck_01": "curtain", &"spine_02": "Outfit", &"upperarm_l": "Outfit"}},
 	&"archer": {"worn": ["Outfit", "Head_weathered", "hood"], "key": ["hood"], "rings": [],
 		"silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {}},
+	# Bare-armed; steel only at his right shoulder (his one pauldron).
+	&"brute": {"worn": ["Outfit", "Head_weathered", "Hair_buzzed", "Beard_full"], "key": ["Hair_buzzed", "Beard_full"],
+		"rings": [[&"upperarm_r", 0.0, 0.0]], "silent": [[&"upperarm_l", 0.0, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]],
+		"metal": {&"upperarm_r": "Outfit"}},
 	# One man: every seed gives him the same face, hair and beard.
 	&"arms_master": {"worn": ["Outfit", "Head_old", "Hair_parted", "Beard_full"], "key": ["Hair_parted", "Beard_full"],
 		"rings": [], "silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {},
 		"same": ["face", "hair", "beard"]},
 }
+
+
+## How many triangles a kind may wear (§5): 3,000, the brute 3,500.
+func _budget(kind: StringName) -> int:
+	return 3500 if kind == &"brute" else 3000
 
 
 func _ready() -> void:
@@ -368,8 +378,8 @@ func _k2a() -> void:
 			why.append("%s %dx%d %d" % [f, img.get_width(), img.get_height(), colours])
 
 		var tris := _heaviest(kind)
-		_check("K2a %s: 256/128 textures held lossless, at most 64 colours, at most 3,000 triangles" % kind, ok and tris <= 3000,
-			"%s tris %d" % [why, tris])
+		_check("K2a %s: 256/128 textures held lossless, at most 64 colours, at most %d triangles" % [kind, _budget(kind)],
+			ok and tris <= _budget(kind), "%s tris %d" % [why, tris])
 
 
 ## The most triangles a guard of `kind` can wear: his outfit, and the
@@ -809,7 +819,7 @@ func _dressed() -> void:
 
 		# K2 every worn triangle counted
 		var tris: int = man.worn().reduce(func(n, m): return n + m.mesh.get_faces().size() / 3, 0)
-		_check("K2 %s: at most 3,000 triangles" % kind, tris <= 3000 and tris > 0, "tris %d" % tris)
+		_check("K2 %s: at most %d triangles" % [kind, _budget(kind)], tris <= _budget(kind) and tris > 0, "tris %d" % tris)
 
 		# K10 same seed, same man; four seeds, not four clones; his silhouette always
 		var twin := await _guard(3, archetype)
@@ -1218,6 +1228,111 @@ func _layers_and_plates(g: Node, w: Dictionary, man: Node) -> void:
 		await _step(g, dt)
 
 
+## K28 and K29, the brute's mantle and bare arms.
+func _mantle_and_arms(g: Node, man: Node) -> void:
+	var dt := 1.0 / 60.0
+	# K28 (Review Focus 4) through his overhead and with his head bowed, his
+	# fur mantle never cuts through his beard or his face (edges through
+	# faces, as K22). The mantle: the outfit's faces wholly on the cape's
+	# bones above his chest.
+	var skeleton: Skeleton3D = man.skeleton
+	var chest: float = skeleton.get_bone_global_rest(skeleton.find_bone(&"spine_02")).origin.y
+	var mantle := _faces_of(man.body, _vertices_on(man.body, [&"neck_01", &"spine_03", &"spine_02", &"clavicle_l", &"clavicle_r"], chest))
+	var beard := _worn(man, "Beard_full")
+	var face := _worn(man, "Head_weathered")
+	var cuts := 0
+
+	for i in range(60):
+		g._phase = &"strike" if i < 30 else &""
+		g._attack = &"overhead"
+		g._phase_length = 0.5
+		g._phase_timer = 0.5 * (1.0 - (i % 30) / 29.0)
+		await _step(g, dt)
+
+		if i >= 30:
+			_bow(man, 0.61)
+
+		var outfit := _skinned(man.body, skeleton)
+
+		for piece in [beard, face]:
+			if piece != null:
+				cuts += _cuts(outfit, mantle, _skinned(piece, skeleton), _faces_of(piece, PackedInt32Array()))
+
+	g._phase = &""
+	_check("K28 his mantle never cuts through his beard or face", not mantle.is_empty() and beard != null and face != null
+		and cuts == 0, "%d cuts (%d mantle triangles)" % [cuts, mantle.size() / 3])
+
+	# K29 (Review Focus 5) his bare left upper arm is skin in his mask (so it
+	# takes his rolled tone, as his face does)
+	var mask: Image = (load(Wardrobe.ROOT + "brute_mask.png") as Texture2D).get_image()
+	var arm := _vertices_on(man.body, [&"upperarm_l"], -INF, 0.5)
+	var skin := 0
+	var flat := 0
+	var wanted := {}
+
+	for index in arm:
+		wanted[index] = true
+
+	for s in range(man.body.mesh.get_surface_count()):
+		var arrays: Array = man.body.mesh.surface_get_arrays(s)
+		var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+
+		for v in range(uvs.size()):
+			if wanted.has(flat + v):
+				var texel := Vector2i(clampi(int(uvs[v].x * mask.get_width()), 0, mask.get_width() - 1),
+					clampi(int(uvs[v].y * mask.get_height()), 0, mask.get_height() - 1))
+				skin += 1 if mask.get_pixelv(texel).g >= 0.5 else 0
+
+		flat += uvs.size()
+
+	var share := float(skin) / maxf(arm.size(), 1.0)
+	_check("K29 his bare arms are skin", arm.size() > 0 and share >= 0.9, "%.2f of his left upper arm's %d vertices" % [share, arm.size()])
+
+
+## Bows his head: his neck and head turned down about his own right axis
+## (as Posture turns bones), `angle` radians in all, until the next frame.
+func _bow(man: Node, angle: float) -> void:
+	var skeleton: Skeleton3D = man.skeleton
+	var right: Vector3 = (skeleton.global_basis.inverse() * man.global_basis).orthonormalized() * Vector3.RIGHT
+
+	for pair in [[&"neck_01", 0.4], [&"Head", 0.6]]:
+		var index := skeleton.find_bone(pair[0])
+		var parent := skeleton.get_bone_parent(index)
+		var parent_basis := skeleton.get_bone_global_pose(parent).basis if parent >= 0 else Basis.IDENTITY
+		var turned := Basis(right.normalized(), angle * float(pair[1])) * skeleton.get_bone_global_pose(index).basis
+		skeleton.set_bone_pose_rotation(index, (parent_basis.inverse() * turned).orthonormalized().get_rotation_quaternion())
+
+
+## The vertices of `mi` (numbered as _skinned numbers them) whose weight on
+## `bones` is at least `share` (every bit of it, by default) and whose rest
+## height is over `above`.
+func _vertices_on(mi: MeshInstance3D, bones: Array, above: float, share := 0.999) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	var names := bones.map(func(b): return String(b))
+	var flat := 0
+
+	for s in range(mi.mesh.get_surface_count()):
+		var arrays := mi.mesh.surface_get_arrays(s)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var bone_ids: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+		var per := bone_ids.size() / maxi(vertices.size(), 1)
+
+		for v in range(vertices.size()):
+			var mine := 0.0
+
+			for k in range(per):
+				if String(mi.skin.get_bind_name(bone_ids[v * per + k])) in names:
+					mine += weights[v * per + k]
+
+			if vertices[v].y > above and mine >= share:
+				out.append(flat + v)
+
+		flat += vertices.size()
+
+	return out
+
+
 ## One vertex of `mi` to follow as his skin moves it (_skin_one): the one
 ## resting nearest `point`. Its bones are followed by attachments (bone
 ## reads miss the cloth's pose).
@@ -1517,6 +1632,9 @@ func _cloth_kind(kind: StringName, archetype: StringName) -> void:
 	if kind == &"swordsman":
 		await _layers_and_plates(g, w, man)
 
+	if kind == &"brute":
+		await _mantle_and_arms(g, man)
+
 	# K12 moved 20 m in one frame: no whip (once the kick's swing has died)
 	for i in range(90):
 		await _step(g, dt)
@@ -1719,7 +1837,19 @@ func _integration_kind(kind: StringName, archetype: StringName) -> void:
 	var in_leg := _piece_meshes(leg) if leg else []
 	var skeleton: Skeleton3D = man.skeleton
 	var under_leg: Array = man._bones_under(skeleton.find_bone(&"thigh_l")).map(func(b): return skeleton.get_bone_name(b))
-	var cloth_on_leg: bool = under_leg.any(func(n): return String(n).begins_with("cloth_"))
+	# Cloth hung from his body stays on him (§7.6); a strip riding the leg
+	# itself (the brute's, from his thigh) goes with it, as a tasset would.
+	var hung_from := {}
+
+	for chain in Wardrobe.kind_data(kind).get("cloth", []):
+		for bone in chain.bones:
+			hung_from[String(bone)] = StringName(chain.parent)
+
+	var cloth_on_leg := false
+
+	for n in under_leg:
+		if String(n).begins_with("cloth_") and not (hung_from.get(String(n), &"") in under_leg):
+			cloth_on_leg = true
 	var last_word: bool = man.severed != null and man.cloth != null and man.severed.get_index() > man.cloth.get_index()
 	var head_items: Array = expect.worn.filter(func(n): return n != "Outfit")
 	_check("K7 %s: a severed head takes his face and headgear; a leg its outfit; cloth stays on him; Severed runs last" % kind,
@@ -1766,6 +1896,12 @@ func _integration_kind(kind: StringName, archetype: StringName) -> void:
 	# K9b steel rings on his chest, back and shoulders; not on his calves
 	if kind == &"swordsman":
 		_check("K9b a swordsman's mail and pauldrons ring", _rings(h, &"spine_02") and _rings(h, &"upperarm_l") and not _rings(h, &"calf_l"), "")
+
+	# K9c (Review Focus 5) his right pauldron rings; his bare left arm and
+	# his leathers do not
+	if kind == &"brute":
+		_check("K9c a brute rings only at his pauldron", _rings(h, &"upperarm_r") and not _rings(h, &"upperarm_l")
+			and not _rings(h, &"spine_02"), "")
 
 	for x in [g, h]:
 		if is_instance_valid(x):

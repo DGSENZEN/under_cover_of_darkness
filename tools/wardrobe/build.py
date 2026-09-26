@@ -598,7 +598,10 @@ def skirt(kind, g, part):
     to the hem; each rides a chain of `bones` cloth bones (1 or 2). A panel
     across his front (0 degrees round from it) or his back (180) is whole
     and centred, on the chain `<name>_front` or `<name>_back`; a side panel
-    is built on his left and mirrored, on `<name>_l` and `<name>_r`."""
+    is built on his left and mirrored, on `<name>_l` and `<name>_r`. Its
+    chains hang from his pelvis; a side panel's, with `ride` "thigh", from
+    that side's thigh (a strip over it, as tassets ride: its root goes with
+    the leg, which would otherwise swing up round it)."""
     top, hem = kind.belt_z(), kind.z(g["hem"])
     mid = (top + hem) * 0.5
     bones = g.get("bones", 2)
@@ -665,10 +668,12 @@ def skirt(kind, g, part):
             common.group(obj, "cloth_%s_%d" % (chain, k), 1.0, range(k * count, (k + 1) * count))
 
         points = [row[c] for row in rows]
-        kind.chains[chain] = {"parent": "pelvis", "points": points}
+        sided = chain.endswith("_l") and g.get("ride") == "thigh"
+        kind.chains[chain] = {"parent": "thigh_l" if sided else "pelvis", "points": points}
 
         if chain.endswith("_l"):
-            kind.chains[chain[:-2] + "_r"] = {"parent": "pelvis", "points": [Vector((-p.x, p.y, p.z)) for p in points]}
+            kind.chains[chain[:-2] + "_r"] = {"parent": "thigh_r" if sided else "pelvis",
+                                              "points": [Vector((-p.x, p.y, p.z)) for p in points]}
 
         kind.add(obj, g, part, "skirt", strip=True)
 
@@ -1080,11 +1085,12 @@ def mantle(kind, g, part):
     `depth_back` over his back, `reach` out over his shoulders (steep front
     and back, flatter over the shoulders), standing `clear` of what he wears
     there (`over`, the shells, his bare neck). Its top is the same bell
-    `thickness` over it; closed at his neck and round its rim. Made on his
-    left and mirrored; rigid on CAPE_BONES as the coif's cape rides (no
-    chains: stiff fur)."""
+    `thickness` over it; closed at his neck and round its rim; `dip` lower
+    at his front (fading to nothing at his sides: his beard hangs over it).
+    Made on his left and mirrored; rigid on CAPE_BONES as the coif's cape
+    rides (no chains: stiff fur)."""
     neck = kind.at(("neck_01", 0.0))
-    axis = Vector((0.0, neck.y, neck.z + g.get("rise", 0.02)))
+    top = neck.z + g.get("rise", 0.02)
     tree = common.bvh([kind.base, kind.made[g["over"]]] + [obj for obj in kind.parts if kind.types[obj.name] == "shell"])
     front_tilt, side_tilt = g.get("tilt_front", 70.0), g.get("tilt_side", 25.0)
     under, normals = [[], [], []], []
@@ -1097,6 +1103,7 @@ def mantle(kind, g, part):
         tilt = math.radians(front_tilt + (side_tilt - front_tilt) * side)
         out = Vector((0.0 if i in (0, 8) else math.sin(theta), -math.cos(theta), 0.0))
         down = Vector((out.x * math.cos(tilt), out.y * math.cos(tilt), -math.sin(tilt)))
+        axis = Vector((0.0, neck.y, top - g.get("dip", 0.0) * max(0.0, math.cos(theta))))
         start = axis + out * (reach_out(tree, axis, out, 0.07) + g["clear"])
         under[0].append(start)
         under[1].append(start + down * length * 0.5)

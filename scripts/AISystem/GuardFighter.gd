@@ -191,7 +191,7 @@ const ARCHETYPES := {
 		"attacks": {&"heavy": 1.0, &"overhead": 0.7, &"left": 0.5, &"sweep": 0.45},
 		"posture": 190.0, "delay_chance": 0.15, "charge_chance": 0.3, "deathblows": 2, "grip_loss": 0.0, "carries_lantern": false,
 		"follow": {&"overhead": [&"heavy", &"sweep"], &"left": [&"overhead", &"heavy"], &"sweep": [&"heavy"], &"charge": [&"heavy"]},
-		"look": {"scale": 1.25, "outfit": &"brute", "hair": [&"Hair_Buzzed", &"Hair_Beard"], "hair_tint": Color(0.25, 0.2, 0.18), "armour": [&"pauldron_r"], "weapon": &"maul"},
+		"look": {"scale": 1.25, "kind": &"brute", "outfit": &"brute", "hair": [&"Hair_Buzzed", &"Hair_Beard"], "hair_tint": Color(0.25, 0.2, 0.18), "armour": [&"pauldron_r"], "weapon": &"maul"},
 	},
 	&"archer": {
 		"speaker": "Archer",
