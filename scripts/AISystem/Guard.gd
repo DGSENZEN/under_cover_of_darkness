@@ -65,6 +65,9 @@ static var bleeding_on := true
 ## Off, a man thrown off his feet never loses his grip on his weapon (tests
 ## of exact fights).
 static var grip_loss_on := true
+## Off, a man made does not randomize() the dice, so a test that seeds them
+## first gets the same man, and the same fight, every run.
+static var randomize_on := true
 
 enum Alert {
 	RELAXED,
@@ -401,7 +404,9 @@ func _ready() -> void:
 	_bark_label = get_node_or_null("Bark") as Label3D
 	_home = global_transform
 	inventory.ids = keys
-	randomize()
+
+	if randomize_on:
+		randomize()
 
 	if _agent != null:
 		_agent.path_desired_distance = 0.5

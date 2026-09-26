@@ -798,11 +798,20 @@ func _run() -> void:
 
 	# D34 blows mashed on each other's heels are read: a trained man starts
 	#     catching them even with no guard of his own to speak of
-	var g34 := _fighter(&"swordsman", Vector3(0, 0, -1.5))
+	# Catching a cut he has read is a roll (GuardFighter._choose_answer, 0.2
+	# to 0.8 a cut here): left to chance, now and then every cut landed. The
+	# dice are seeded, and he is made from them too (a man made reshuffles
+	# them: Guard.randomize_on); and he is fought on clear floor, not in the
+	# middle where the fights before leave bodies and blades lying. Seed 3 is
+	# the usual fight: two cuts land, three are caught, and his guard breaks.
+	GUARD_SCRIPT.randomize_on = false
+	seed(3)
+	var g34 := _fighter(&"swordsman", Vector3(0, 0, 68.5))
+	GUARD_SCRIPT.randomize_on = true
 	g34._fighter.read_skill = 0.9
 	g34._fighter.combo_breaker = false
 	g34.health = 10000.0
-	_put_player(Vector3(0, 1.05, 0))
+	_put_player(Vector3(0, 1.05, 70))
 	await _frames(20)
 	outcomes.clear()
 	for i in 150:
@@ -971,6 +980,8 @@ func _put_player(at: Vector3) -> void:
 	player.movement_state = 0
 	player.current_move = null
 	player.velocity = Vector3.ZERO
+	# Put down still: a kick or a dodge still carrying you ends here.
+	player.shove(Vector3.ZERO, 0.0)
 	player.global_position = at
 	player.rotation.y = 0.0
 	player.get_node("Neck").rotation.x = 0.0
