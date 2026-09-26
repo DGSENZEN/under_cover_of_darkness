@@ -49,6 +49,7 @@ const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const Comms := preload("res://scripts/AISystem/Comms.gd")
 const Dangers := preload("res://scripts/AISystem/Dangers.gd")
+const WaterScript := preload("res://scripts/Interaction/WaterVolume.gd")
 
 ## Guard.Alert.COMBAT.
 const COMBAT := 4
@@ -579,6 +580,13 @@ func fight(delta: float) -> void:
 
 	if guard._phase != &"":
 		_update_attack(delta, target, sees, to, dist, level)
+		return
+
+	# Afloat: no guard and no blows. He swims after you, or where you were.
+	if guard._water.swimming:
+		guarding = false
+		_answer = &""
+		_footwork(delta, target, sees, to, dist, level)
 		return
 
 	# Broken, and you on him: he begs for his life; let go, he gets up and
@@ -1765,21 +1773,24 @@ func _chase_point(target: Node3D, sees: bool, dist: float) -> Vector3:
 	return _scent_point if _scented else lost_at
 
 
-## Twice a second: whether you are where his feet cannot take him (too high or
-## low, or no path gets there).
-func _update_reach(delta: float, target: Node3D, level: float) -> void:
+## Twice a second: whether you are where his feet cannot take him: no path
+## gets there, climbing and dropping included (NavLinks), or it ends too far
+## below or above you. Up where he can climb to, he comes up after you.
+func _update_reach(delta: float, target: Node3D, _level: float) -> void:
 	_reach_check -= delta
 
 	if _reach_check > 0.0:
 		return
 
 	_reach_check = 0.5
-
-	if level > guard.attack_reach_height + 0.2:
-		_unreachable = true
-		return
-
 	var feet: Vector3 = guard._feet_of(target)
+
+	# Afloat, you are at the water's surface as its navmesh has it.
+	var water: Node3D = WaterScript.at(guard.get_tree(), feet + Vector3.UP * 0.05, 0.3)
+
+	if water != null and water.has_meta(&"swim_region"):
+		feet.y = maxf(feet.y, water.surface_y())
+
 	var map: RID = guard.get_world_3d().navigation_map
 	var path := NavigationServer3D.map_get_path(map, guard.global_position, feet, true)
 
@@ -1849,6 +1860,10 @@ func _call_out_where(delta: float, target: Node3D) -> void:
 ## throw at you. True while he is about it.
 func _fetch_something(delta: float, target: Node3D, sees: bool, dist: float) -> bool:
 	var hands: RefCounted = guard._hands
+
+	# Nothing is picked up swimming.
+	if guard._water.swimming:
+		return false
 
 	if hands.busy():
 		guard._stop(delta)
@@ -2167,7 +2182,9 @@ func _safe_step(velocity: Vector3) -> bool:
 	var map: RID = guard.get_world_3d().navigation_map
 	var probe: Vector3 = guard.global_position + velocity.normalized() * 0.7
 	var closest := NavigationServer3D.map_get_closest_point(map, probe)
-	return Vector2(closest.x - probe.x, closest.z - probe.z).length() < 0.3 and absf(closest.y - guard.global_position.y) < 0.45
+	# Afloat, the navmesh he is on is the water's surface, over his feet.
+	var level: float = guard.global_position.y + (guard._agent.path_height_offset if guard._agent != null else 0.0)
+	return Vector2(closest.x - probe.x, closest.z - probe.z).length() < 0.3 and absf(closest.y - level) < 0.45
 
 
 func _start_dodge(target: Node3D, straight_back := false) -> void:
@@ -2245,8 +2262,9 @@ func _consider_attack(delta: float, target: Node3D, to: Vector3, dist: float, le
 			return
 
 	if _parry_miss > 0.0 or _parry_at > 0.0 or level > guard.attack_reach_height:
-		# Up where his blade cannot reach: he says what he thinks of that.
-		if level > guard.attack_reach_height:
+		# Up where his blade cannot reach, nor his feet take him: he says what
+		# he thinks of that. (Where they can, he is on his way up.)
+		if level > guard.attack_reach_height and _unreachable:
 			_taunt(delta)
 
 		return

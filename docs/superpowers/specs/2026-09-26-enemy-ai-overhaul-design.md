@@ -106,6 +106,7 @@ A follow-up (section 4.8) came from playing it: men did not handle their places 
 The NPC gym (`maps/npc_gym.tscn`):
 - **Bay 1:** a second watchman to talk and cover with, and a storeroom door to leave open.
 - **Bay 9 (guardhouse):** a lookout platform with a bell (and two crates up there for him to throw down); landmarks they call you by; crates to throw; powder by the gate; off-duty men in the barracks; a craven swordsman who is first to break and beg.
+- **Bay 10 (climb & swim, the `-` key):** guards climbing, dropping, leaping, on ladders and swimming after you (`2026-09-26-climb-and-swim-design.md`).
 
 F1 labels show what each man is doing, including "BEGGING FOR HIS LIFE" and "safe with his own". The panel shows men spared and men cut down begging.
 

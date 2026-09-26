@@ -28,7 +28,9 @@ extends CharacterBody3D
 ##               things to throw; the bell rope; the lantern (GuardHands.gd).
 ##   GETTING     round men and things the navmesh does not know of, doors
 ##   ABOUT       opened as he reaches them, a runner led, a lost man's trail
-##               followed a few steps (GuardNav.gd); clear of lit powder.
+##               followed a few steps (GuardNav.gd); clear of lit powder. Up
+##               onto what he can reach, down off it, across gaps, up and down
+##               ladders, into water and out (GuardClimb.gd, NavLinks.gd).
 ##   WORD        what they call to each other, out loud (Comms.gd): where you
 ##               are, where you went, powder, a noise, all clear, the bell.
 ##
@@ -52,6 +54,8 @@ const GuardNavScript := preload("res://scripts/AISystem/GuardNav.gd")
 const GuardLifeScript := preload("res://scripts/AISystem/GuardLife.gd")
 const GuardHandsScript := preload("res://scripts/AISystem/GuardHands.gd")
 const GuardMercyScript := preload("res://scripts/AISystem/GuardMercy.gd")
+const GuardClimbScript := preload("res://scripts/AISystem/GuardClimb.gd")
+const GuardWaterScript := preload("res://scripts/AISystem/GuardWater.gd")
 ## Bleeding (bleeding): at most this much a second, never below this share of
 ## his health, and bound this long after he last saw you.
 const BLEED_MAX := 4.0
@@ -390,6 +394,11 @@ var _nav: RefCounted
 var _life: RefCounted
 var _hands: RefCounted
 var _mercy: RefCounted
+## Crossing what his path cannot walk: a climb, a drop, a leap, a ladder,
+## into or out of water (GuardClimb, NavLinks); in water, wading or swimming
+## (GuardWater).
+var _climb: RefCounted
+var _water: RefCounted
 ## When he came into the level (Comms.now): a man only misses those who were
 ## there before him.
 var _born_at := 0.0
@@ -464,6 +473,11 @@ func _ready() -> void:
 	_life = GuardLifeScript.new(self)
 	_hands = GuardHandsScript.new(self, StringName(GuardFighterScript.look_of(archetype).get("weapon", &"sword")))
 	_mercy = GuardMercyScript.new(self)
+	_climb = GuardClimbScript.new(self)
+	_water = GuardWaterScript.new(self)
+
+	if _agent != null:
+		_agent.link_reached.connect(_on_link_reached)
 	_born_at = Comms.now()
 
 	if given_name == "":
@@ -528,6 +542,7 @@ func _physics_process(delta: float) -> void:
 	_sense_vision(delta)
 	_sense_bodies(delta)
 	_update_alert(delta)
+	_water.update(delta)
 	_hands.update(delta)
 	_life.update(delta)
 	_watch_for_powder(delta)
@@ -538,7 +553,19 @@ func _physics_process(delta: float) -> void:
 		if _knocked_out:
 			return
 
-	if _knock > 0.0:
+	# Climbing, dropping, leaping: the move has him, and puts him where he
+	# goes (GuardClimb). A knock takes him off it first.
+	if _knock > 0.0 or _burning > 0.0:
+		_climb.interrupt()
+
+	var carried: bool = _climb.active()
+
+	if carried:
+		_climb.update(delta)
+
+		if state == Alert.COMBAT:
+			_fighter.watch(delta)
+	elif _knock > 0.0:
 		# Sent flying: no say in where he goes.
 		_knock -= delta
 		velocity.x = _knock_velocity.x
@@ -579,14 +606,21 @@ func _physics_process(delta: float) -> void:
 			Alert.COMBAT:
 				_do_combat(delta)
 
-	_apply_ground(delta)
+	if not carried:
+		# Afloat, the water holds him up; standing in it, it slows him.
+		if _water.swimming:
+			_water.float_him(delta)
+		else:
+			_apply_ground(delta)
+			_water.wade(delta)
 
 	if _knocked_out:
 		return
 
-	move_and_slide()
+	if not carried:
+		move_and_slide()
 
-	if _knock <= 0.0:
+	if _knock <= 0.0 and not carried:
 		_open_doors_in_the_way()
 
 	_update_head(delta)
@@ -965,11 +999,23 @@ func say(situation: StringName, chance := 1.0) -> void:
 		bark(said)
 
 
-## What he is doing with his hands or himself, for the rig: "pickup", "ring",
-## "hold", begging ("kneel", "plead_kneel", "plead_stand", "rise",
-## "rise_knees": GuardMercy), "talk", "listen", "fold_arms", "drink",
+## What he is doing with his hands or himself, for the rig: crossing a link
+## ("climb", "ladder", "hang", "gather", "fall", "leap", "land": GuardClimb),
+## swimming ("swim", "tread": GuardWater),
+## "pickup", "ring", "hold", begging ("kneel", "plead_kneel", "plead_stand",
+## "rise", "rise_knees": GuardMercy), "talk", "listen", "fold_arms", "drink",
 ## "lantern", "call", or "".
 func activity() -> StringName:
+	var crossing: StringName = _climb.activity() if _climb != null else &""
+
+	if crossing != &"":
+		return crossing
+
+	var afloat: StringName = _water.activity() if _water != null else &""
+
+	if afloat != &"":
+		return afloat
+
 	var busy: StringName = _hands.activity() if _hands != null else &""
 
 	if busy != &"":
@@ -1216,6 +1262,9 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 
 	health -= damage
 	hurt.emit(damage)
+
+	# Struck on a wall or a ladder: he loses his hold.
+	_climb.interrupt()
 
 	# Cut down on his knees, or cut and he gives up on your mercy.
 	if health <= 0.0:
@@ -1512,6 +1561,7 @@ func kick(push: Vector3, attacker: Node3D) -> void:
 		return
 
 	_mercy.struck(attacker)
+	_climb.interrupt()
 
 	if _downed:
 		# A man on the floor, booted along it.
@@ -1833,6 +1883,8 @@ func is_downed() -> bool:
 func knock_down(push: Vector3, attacker: Node3D = null, at := Vector3.INF) -> void:
 	if _knocked_out:
 		return
+
+	_climb.interrupt()
 
 	if _rig == null or _rig.man == null or _rig.man.ragdoll == null:
 		return
@@ -2494,6 +2546,10 @@ func _chain_land() -> StringName:
 ## What he stands on ("stone", "wood", ... as the floor's "surface" meta
 ## says; "" when it does not), looked up now and then as he goes.
 func floor_surface() -> String:
+	# Wading: it is water he steps in.
+	if _water != null and _water.water != null and _water.water.depth_of(global_position) > 0.1:
+		return "water"
+
 	if _game_time < _floor_checked_at + 0.3:
 		return _floor_surface
 
@@ -2688,8 +2744,20 @@ func _go_to(point: Vector3, force := false) -> void:
 		_nav.new_path()
 
 
+## His path has come to a way across it cannot walk (NavLinks): he makes the
+## move (GuardClimb), unless he cannot just now (on the floor, flying).
+func _on_link_reached(details: Dictionary) -> void:
+	if _climb.active() or _knock > 0.0 or _downed or _stagger > 0.0 or _knocked_out:
+		return
+
+	_climb.begin(details)
+
+
 ## Walks along the current path. True on arrival.
 func _walk(speed: float, delta: float) -> bool:
+	# In water, as fast as it lets him (swimming, wading).
+	speed *= _water.speed_scale()
+
 	if _agent == null or _agent.is_navigation_finished() or _path_blocked:
 		_stop(delta)
 		return true
@@ -2707,6 +2775,11 @@ func _walk(speed: float, delta: float) -> bool:
 		return false
 
 	var next := _agent.get_next_path_position()
+
+	# His path came to a way across it cannot walk: the move has him now.
+	if _climb.active():
+		return false
+
 	var direction := Vector3(next.x - global_position.x, 0.0, next.z - global_position.z)
 
 	# Pushing on, going nowhere: something is in the way that the navmesh
