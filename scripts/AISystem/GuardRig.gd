@@ -98,6 +98,10 @@ const CLIMB_CYCLE := 0.667
 const AIR_CLIP := &"Jump"
 const LAND_CLIP := &"Jump_Land"
 const SWIM_CLIP := &"Swim_Fwd"
+## Sneaking in a crouch (the showcase's intruder): SNEAK_CLIP on the move,
+## CROUCH_CLIP still.
+const SNEAK_CLIP := &"Crouch_Fwd"
+const CROUCH_CLIP := &"Crouch_Idle"
 const TREAD_CLIP := &"Swim_Idle"
 ## Begging (GuardMercy): on his knees in this clip, down by PLEA_KNEEL_DOWN
 ## seconds into it, rocking between PLEA_KNEEL_SWAY, getting up from
@@ -771,6 +775,19 @@ func _show_activity(now: float) -> bool:
 			return true
 		&"climb", &"ladder", &"hang", &"gather", &"fall", &"leap", &"land":
 			_show_crossing(doing)
+			return true
+		&"sneak":
+			# Crouched (the showcase's intruder): stepping low as he goes,
+			# still when he stops.
+			var low := maxf(man.action_length(SNEAK_CLIP), 0.1)
+			var still := maxf(man.action_length(CROUCH_CLIP), 0.1)
+			var pace := _velocity.length() / size
+
+			if pace > 0.2:
+				man.show_action(SNEAK_CLIP, fmod(since * clampf(pace / 1.3, 0.6, 1.4), low), 0.2)
+			else:
+				man.show_action(CROUCH_CLIP, fmod(since, still), 0.25)
+
 			return true
 		&"swim", &"tread":
 			# Stroke by stroke as he goes; treading water where he is.

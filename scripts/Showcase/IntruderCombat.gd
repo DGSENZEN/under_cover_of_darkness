@@ -417,7 +417,9 @@ func _land() -> void:
 	if _riposte:
 		damage *= RIPOSTE_DAMAGE
 
-	if victim == _victim:
+	# The knife in the back: only for a man who does not know he is there,
+	# from behind him (as yours: PlayerCombat); else it is a cut like any.
+	if victim == _victim and victim.has_method("is_unaware") and victim.is_unaware() and victim.is_behind(intruder):
 		kind = &"backstab"
 		damage = BACKSTAB_DAMAGE
 
@@ -471,6 +473,12 @@ func _shoved(from: Node, crushing: bool) -> void:
 		intruder._rig.react_kick(push, CRUSH_STAGGER if crushing else SHOVE_STAGGER)
 
 
+## On his knees, or on his feet with a hand out (GuardMercy): not cut.
+static func _begging(man: Node3D) -> bool:
+	var mercy: Variant = man.get("_mercy")
+	return mercy != null and bool((mercy as Object).get("pleading"))
+
+
 func _in_reach(man: Node3D) -> bool:
 	var to := man.global_position - intruder.global_position
 
@@ -494,7 +502,7 @@ func _nearest_in_reach() -> Node3D:
 	var best_distance := INF
 
 	for man in intruder.get_tree().get_nodes_in_group(&"guards"):
-		if not (man is Node3D) or not _in_reach(man as Node3D):
+		if not (man is Node3D) or not _in_reach(man as Node3D) or _begging(man as Node3D):
 			continue
 
 		var d := (man as Node3D).global_position.distance_to(intruder.global_position)

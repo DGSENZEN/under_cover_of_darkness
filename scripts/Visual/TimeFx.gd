@@ -11,6 +11,15 @@ const AUDIO_SLOWDOWN := 0.6
 
 static var _requests := {}
 static var _token := 0
+## The speed everything runs at when nothing slows it (the NPC showcase's
+## slow motion); requests slow it further.
+static var base := 1.0
+
+
+## Time at `scale` when nothing else slows it (1 is normal speed).
+static func set_base(scale: float) -> void:
+	base = clampf(scale, 0.01, 1.0)
+	_apply()
 
 
 ## Slow time to `scale` for `real_seconds`. A request with the same `id`
@@ -70,7 +79,7 @@ static func _apply() -> void:
 	for entry in _requests.values():
 		scale = minf(scale, float(entry["scale"]))
 
-	Engine.time_scale = scale
+	Engine.time_scale = scale * base
 
 	# Slow motion is heard too: the whole mix slows and drops, part of the
 	# way. (A hit-stop is too short to hear that way: it would only warble.)

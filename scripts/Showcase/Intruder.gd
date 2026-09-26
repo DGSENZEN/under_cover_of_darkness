@@ -14,6 +14,7 @@ extends "res://scripts/AISystem/Guard.gd"
 ## ARMOUR_FLOOR of his health.
 
 const IntruderCombatScript := preload("res://scripts/Showcase/IntruderCombat.gd")
+const IntruderBrainScript := preload("res://scripts/Showcase/IntruderBrain.gd")
 
 ## The least of his health he keeps while armoured.
 const ARMOUR_FLOOR := 0.3
@@ -45,6 +46,7 @@ func _ready() -> void:
 	super()
 	combat = IntruderCombatScript.new(self)
 	add_child(combat)
+	brain = IntruderBrainScript.new(self, combat)
 
 
 func _physics_process(delta: float) -> void:
@@ -59,6 +61,9 @@ func _physics_process(delta: float) -> void:
 
 
 func _puppet_drive(delta: float) -> void:
+	if brain != null:
+		brain.react(delta)
+
 	if combat != null and combat.move(delta):
 		return
 
@@ -139,6 +144,16 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 			return &"hit"
 
 	return super(damage, attacker, kind, point, direction)
+
+
+## For the rig: crossing, swimming and the rest as a guard's; else sneaking.
+func activity() -> StringName:
+	var own: StringName = super()
+
+	if own != &"" or brain == null:
+		return own
+
+	return brain.activity()
 
 
 ## A blow of theirs is coming: his brain decides what to do about it.

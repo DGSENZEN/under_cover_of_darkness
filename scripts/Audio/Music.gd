@@ -257,10 +257,7 @@ func _judge() -> float:
 		elif state == 2 or state == 3:
 			hunting += 1
 
-	var health := 1.0
-
-	if you.get("health") != null and you.get("max_health") != null:
-		health = clampf(float(you.get("health")) / maxf(float(you.get("max_health")), 1.0), 0.0, 1.0)
+	var health := Sfx.health_of(you, false)
 
 	if _last_health >= 0.0 and health < _last_health - 0.001:
 		_hurt_at = _clock

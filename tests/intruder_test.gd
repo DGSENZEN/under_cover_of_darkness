@@ -16,6 +16,8 @@ const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
 const RELAXED := 0
 const SUSPICIOUS := 1
@@ -42,6 +44,7 @@ func _ready() -> void:
 	await _frames(5)
 	await _run()
 
+	GuardScript.randomize_on = true
 	print("\n==== RESULTS ====")
 	for r in results:
 		print(r)
@@ -252,6 +255,119 @@ func _run() -> void:
 		"health %.1f -> %.1f" % [health13, i13.health])
 
 
+	# ------------------------------------------------------------------
+	# His brain (IntruderBrain), and the sound and time around him
+	# ------------------------------------------------------------------
+
+	# I14 he sneaks where he is sent
+	await _fresh()
+	var i14 := _intruder(Vector3(20, 0, 20))
+	await _frames(5)
+	var goal14 := Vector3(26, 0, 20)
+	i14.brain.go_to(goal14, &"sneak")
+	var sneaking14 := [false]
+	var crouched14 := [false]
+	await _until(func():
+		sneaking14[0] = sneaking14[0] or i14.activity() == &"sneak"
+		crouched14[0] = crouched14[0] or i14.crouched
+		return i14.brain.done(), 900)
+	_check("I14 go_to(sneak) arrives, crouched, showing \"sneak\"",
+		i14.brain.done() and _flat(i14.global_position, goal14) < 0.9 and sneaking14[0] and crouched14[0],
+		"done %s, %.2f m off, sneak shown %s, crouched %s" % [i14.brain.done(), _flat(i14.global_position, goal14), sneaking14[0], crouched14[0]])
+
+	# I15 a knife in the back of a man who does not know he is there
+	await _fresh()
+	var g15 := _guard(&"", Vector3(40, 0, 20), 0.0)
+	var i15 := _intruder(Vector3(40, 0, 26))
+	await _frames(10)
+	i15.brain.backstab(g15)
+	await _until(func(): return not is_instance_valid(g15) or g15._knocked_out, 900)
+	_check("I15 backstab kills an unaware guard from behind",
+		not is_instance_valid(g15) or g15._knocked_out,
+		"guard %s" % ("dead" if not is_instance_valid(g15) or g15._knocked_out else "alive, state %d" % g15.state))
+
+	# I16 trading with a swordsman, he meets most blows that reach him
+	await _fresh()
+	_light(Vector3(60, 3, 20))
+	var i16 := _intruder(Vector3(60, 0, 20))
+	var g16 := _guard(&"swordsman", Vector3(60, 0, 17.5), 0.0)
+	var met16 := [0]
+	var came16 := [0]
+	i16.combat.defended.connect(func(_r): met16[0] += 1)
+	var through16 := []
+	var reeling16 := [0]
+	g16.caught_player.connect(func(_p):
+		# Reeling (parried, booted) he can answer nothing: not counted.
+		if i16._stagger > 0.0 or i16._knock > 0.0:
+			reeling16[0] += 1
+			return
+		came16[0] += 1
+		if not i16.combat.blocking:
+			through16.append("%s(ph %d)" % [g16._attack, i16.combat.phase]))
+	g16._engage(i16)
+	i16.brain.fight(&"trade")
+	await _frames(1200)
+	_check("I16 in trade he meets most of a swordsman's blows that reach him while he can answer (20 s)",
+		came16[0] >= 3 and float(met16[0]) >= 0.6 * float(came16[0]),
+		"met %d of %d that reached him free to answer (%d more while reeling); unguarded: %s" % [met16[0], came16[0], reeling16[0], through16])
+
+	# I17 pressing, he never cuts a man on his knees
+	await _fresh()
+	_light(Vector3(80, 3, 20))
+	var i17 := _intruder(Vector3(80, 0, 20))
+	# The beggar right in front of him, nearer than the man he fights: a cut
+	# at the fighter would fall on him first if anything let it.
+	var beggar := _guard(&"", Vector3(80.0, 0, 19.0), PI, &"craven")
+	var fighter17 := _guard(&"", Vector3(80.6, 0, 18.4), 0.0)
+	var cut_beggar := [0]
+	var cut_fighter := [0]
+	beggar.struck_by.connect(func(_r, _k, _d): cut_beggar[0] += 1)
+	fighter17.struck_by.connect(func(_r, _k, _d): cut_fighter[0] += 1)
+	fighter17._engage(i17)
+	i17.brain.fight(&"press")
+	for f in 600:
+		if not is_instance_valid(beggar):
+			break
+		beggar._mercy.pleading = true
+		beggar._mercy.kneeling = true
+		# Kept a metre in front of him, in the way of any cut he makes.
+		if f > 30:
+			beggar.global_position = i17.global_position - i17.global_basis.z * 1.0
+		await _frames(1)
+	_check("I17 press never strikes a begging man, and does strike the man fighting",
+		cut_beggar[0] == 0 and cut_fighter[0] > 0,
+		"the beggar struck %d times, the fighter %d" % [cut_beggar[0], cut_fighter[0]])
+
+	# I18 his wounds are nobody's: the world's sound is not dulled by them
+	await _fresh()
+	var i18 := _intruder(Vector3(100, 0, 20))
+	var g18 := _guard(&"", Vector3(100, 0, 24), PI)
+	await _frames(5)
+	i18.take_damage(500.0, g18)
+	g18.health = 30.0
+	await _frames(2)
+	_check("I18 his hurt muffles nothing (Sfx.health_of: him 1, a hurt man 0.3)",
+		is_equal_approx(Sfx.health_of(i18), 1.0) and absf(Sfx.health_of(g18) - 0.3) < 0.01,
+		"him %.2f at %.0f health, a guard at 30 of 100 %.2f" % [Sfx.health_of(i18), i18.health, Sfx.health_of(g18)])
+
+	# I19 the show's slow motion, and a hit-stop inside it
+	TimeFx.clear()
+	TimeFx.set_base(0.5)
+	var halved := Engine.time_scale
+	TimeFx.hitstop(get_tree(), 0.1)
+	var stopped := Engine.time_scale
+	await _frames(30)
+	var after := Engine.time_scale
+	TimeFx.set_base(1.0)
+	_check("I19 TimeFx.set_base(0.5) halves time, and a hit-stop under it gives back 0.5 after",
+		is_equal_approx(halved, 0.5) and stopped < 0.1 and is_equal_approx(after, 0.5) and is_equal_approx(Engine.time_scale, 1.0),
+		"base %.2f, in the stop %.3f, after %.2f, reset %.2f" % [halved, stopped, after, Engine.time_scale])
+
+
+func _flat(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
 func _intruder(at: Vector3) -> CharacterBody3D:
 	var i: CharacterBody3D = INTRUDER.instantiate()
 	i.position = at
@@ -297,6 +413,9 @@ func _fresh() -> void:
 	GarrisonScript.clear_all()
 	LightProbe.invalidate()
 	await _frames(3)
+	# The same fight every run: no man reseeds the dice as he is made.
+	GuardScript.randomize_on = false
+	seed(1926)
 
 
 func _frames(n: int) -> void:

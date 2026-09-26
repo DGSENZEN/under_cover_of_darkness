@@ -727,6 +727,20 @@ func _listener_exclude() -> Array[RID]:
 	return exclude
 
 
+## How whole "you" are for what your hurt does to the sound (0 all but dead,
+## 1 unhurt): your health; unhurt when dead, when nobody is there, or when
+## the one they are after is not you (a puppet: the showcase's intruder).
+## `dead_is_whole` false: a dead man's health counts as it is (Music).
+static func health_of(you: Node, dead_is_whole := true) -> float:
+	if you == null or you.get("puppet") == true or you.get("health") == null or you.get("max_health") == null:
+		return 1.0
+
+	if dead_is_whole and you.get("is_dead") == true:
+		return 1.0
+
+	return clampf(float(you.get("health")) / maxf(float(you.get("max_health")), 1.0), 0.0, 1.0)
+
+
 ## Every frame: the room sounded out now and then and the reverb eased
 ## toward it; how dull your hurt makes the world; your heart.
 func _process(delta: float) -> void:
@@ -746,14 +760,7 @@ func _process(delta: float) -> void:
 			_room_shaped = _room_heard
 			shape_room(_room_heard)
 
-	var you := get_tree().get_first_node_in_group(&"player") as Node
-	var health := 1.0
-
-	if you != null and you.get("health") != null and you.get("max_health") != null:
-		health = clampf(float(you.get("health")) / maxf(float(you.get("max_health")), 1.0), 0.0, 1.0)
-
-		if bool(you.get("is_dead")):
-			health = 1.0
+	var health := health_of(get_tree().get_first_node_in_group(&"player"))
 
 	_ringing = maxf(_ringing - real / 0.8, 0.0)
 	var cutoff := world_cutoff_for(health, _ringing)
