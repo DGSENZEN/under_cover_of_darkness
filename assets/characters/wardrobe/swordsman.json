@@ -1,0 +1,213 @@
+{
+ "kind": "swordsman",
+ "body": "male",
+ "triangles": 2054,
+ "cloth": [
+  {
+   "chain": "surcoat_back",
+   "parent": "pelvis",
+   "bones": [
+    "cloth_surcoat_back_1",
+    "cloth_surcoat_back_2",
+    "cloth_surcoat_back_3"
+   ],
+   "tip": 0.1345,
+   "stiffness": 2.0,
+   "drag": 0.9,
+   "gravity": 1.0,
+   "radius": 0.05
+  },
+  {
+   "chain": "surcoat_front",
+   "parent": "pelvis",
+   "bones": [
+    "cloth_surcoat_front_1",
+    "cloth_surcoat_front_2",
+    "cloth_surcoat_front_3"
+   ],
+   "tip": 0.1345,
+   "stiffness": 2.0,
+   "drag": 0.9,
+   "gravity": 1.0,
+   "radius": 0.05
+  }
+ ],
+ "colliders": [
+  {
+   "bone": "thigh_l",
+   "radius": 0.09,
+   "height": 0.4288
+  },
+  {
+   "bone": "thigh_r",
+   "radius": 0.09,
+   "height": 0.4288
+  },
+  {
+   "bone": "calf_l",
+   "radius": 0.065,
+   "height": 0.4588
+  },
+  {
+   "bone": "calf_r",
+   "radius": 0.065,
+   "height": 0.4588
+  },
+  {
+   "bone": "spine_01",
+   "radius": 0.16,
+   "height": 0.1063
+  }
+ ],
+ "metal": [
+  "spine_01",
+  "spine_02",
+  "spine_03",
+  "pelvis",
+  "upperarm_l",
+  "upperarm_r"
+ ],
+ "skin_tones": {
+  "light": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "dark": [
+   0.52,
+   0.4,
+   0.32
+  ]
+ },
+ "probe": [
+  {
+   "rest": [
+    0.070388,
+    1.328942,
+    0.15786
+   ],
+   "near_body": [
+    0.065064,
+    1.327804,
+    0.120296
+   ]
+  },
+  {
+   "rest": [
+    0.039837,
+    1.397183,
+    -0.188391
+   ],
+   "near_body": [
+    0.045354,
+    1.399845,
+    -0.161163
+   ]
+  },
+  {
+   "rest": [
+    0.309779,
+    1.513699,
+    -0.082673
+   ],
+   "near_body": [
+    0.298405,
+    1.497033,
+    -0.073903
+   ]
+  },
+  {
+   "rest": [
+    -0.309779,
+    1.513699,
+    -0.082673
+   ],
+   "near_body": [
+    -0.298405,
+    1.497033,
+    -0.073903
+   ]
+  },
+  {
+   "rest": [
+    0.521514,
+    1.521708,
+    -0.043341
+   ],
+   "near_body": [
+    0.516806,
+    1.505864,
+    -0.05457
+   ]
+  },
+  {
+   "rest": [
+    -0.521514,
+    1.521708,
+    -0.043341
+   ],
+   "near_body": [
+    -0.516806,
+    1.505864,
+    -0.05457
+   ]
+  },
+  {
+   "rest": [
+    0.125635,
+    0.823522,
+    0.076069
+   ],
+   "near_body": [
+    0.123462,
+    0.823481,
+    0.070477
+   ]
+  },
+  {
+   "rest": [
+    -0.125635,
+    0.823522,
+    0.076069
+   ],
+   "near_body": [
+    -0.123462,
+    0.823481,
+    0.070477
+   ]
+  }
+ ],
+ "options": {
+  "faces": [
+   "weathered"
+  ],
+  "tones": [
+   "light",
+   "dark"
+  ],
+  "hair": [],
+  "beards": [],
+  "headgear": [
+   [
+    "nasalhelm",
+    "curtain"
+   ]
+  ],
+  "dye": {
+   "colour": [
+    0.52,
+    0.09,
+    0.07
+   ],
+   "shift": 0.02,
+   "fade": [
+    0.0,
+    0.3
+   ]
+  },
+  "grime": [
+   0.2,
+   0.9
+  ]
+ }
+}

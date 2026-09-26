@@ -1,0 +1,249 @@
+{
+ "kind": "arms_master",
+ "body": "male",
+ "triangles": 1498,
+ "cloth": [
+  {
+   "chain": "doublet_skirt_back",
+   "parent": "pelvis",
+   "bones": [
+    "cloth_doublet_skirt_back_1"
+   ],
+   "tip": 0.2549,
+   "stiffness": 2.4,
+   "drag": 0.7,
+   "gravity": 1.0,
+   "radius": 0.045
+  },
+  {
+   "chain": "doublet_skirt_front",
+   "parent": "pelvis",
+   "bones": [
+    "cloth_doublet_skirt_front_1"
+   ],
+   "tip": 0.2523,
+   "stiffness": 2.4,
+   "drag": 0.7,
+   "gravity": 1.0,
+   "radius": 0.045
+  },
+  {
+   "chain": "doublet_skirt_l",
+   "parent": "pelvis",
+   "bones": [
+    "cloth_doublet_skirt_l_1"
+   ],
+   "tip": 0.2749,
+   "stiffness": 2.4,
+   "drag": 0.7,
+   "gravity": 1.0,
+   "radius": 0.045
+  },
+  {
+   "chain": "doublet_skirt_r",
+   "parent": "pelvis",
+   "bones": [
+    "cloth_doublet_skirt_r_1"
+   ],
+   "tip": 0.2749,
+   "stiffness": 2.4,
+   "drag": 0.7,
+   "gravity": 1.0,
+   "radius": 0.045
+  },
+  {
+   "chain": "sash_1",
+   "parent": "pelvis",
+   "bones": [
+    "cloth_sash_1_1",
+    "cloth_sash_1_2",
+    "cloth_sash_1_3"
+   ],
+   "tip": 0.1168,
+   "stiffness": 1.5,
+   "drag": 0.7,
+   "gravity": 1.0,
+   "radius": 0.025
+  },
+  {
+   "chain": "sash_2",
+   "parent": "pelvis",
+   "bones": [
+    "cloth_sash_2_1",
+    "cloth_sash_2_2",
+    "cloth_sash_2_3"
+   ],
+   "tip": 0.1168,
+   "stiffness": 1.5,
+   "drag": 0.7,
+   "gravity": 1.0,
+   "radius": 0.025
+  }
+ ],
+ "colliders": [
+  {
+   "bone": "thigh_l",
+   "radius": 0.09,
+   "height": 0.4288
+  },
+  {
+   "bone": "thigh_r",
+   "radius": 0.09,
+   "height": 0.4288
+  },
+  {
+   "bone": "calf_l",
+   "radius": 0.065,
+   "height": 0.4588
+  },
+  {
+   "bone": "calf_r",
+   "radius": 0.065,
+   "height": 0.4588
+  },
+  {
+   "bone": "spine_01",
+   "radius": 0.16,
+   "height": 0.1063
+  }
+ ],
+ "metal": [],
+ "skin_tones": {
+  "light": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "dark": [
+   0.52,
+   0.4,
+   0.32
+  ]
+ },
+ "probe": [
+  {
+   "rest": [
+    0.066949,
+    1.328907,
+    0.144247
+   ],
+   "near_body": [
+    0.063583,
+    1.328188,
+    0.120495
+   ]
+  },
+  {
+   "rest": [
+    0.03971,
+    1.397116,
+    -0.176152
+   ],
+   "near_body": [
+    0.042873,
+    1.398641,
+    -0.160542
+   ]
+  },
+  {
+   "rest": [
+    0.301735,
+    1.513525,
+    -0.080598
+   ],
+   "near_body": [
+    0.28969,
+    1.503073,
+    -0.079315
+   ]
+  },
+  {
+   "rest": [
+    -0.301735,
+    1.513525,
+    -0.080598
+   ],
+   "near_body": [
+    -0.28969,
+    1.503073,
+    -0.079315
+   ]
+  },
+  {
+   "rest": [
+    0.567937,
+    1.50265,
+    -0.043698
+   ],
+   "near_body": [
+    0.563516,
+    1.489414,
+    -0.051527
+   ]
+  },
+  {
+   "rest": [
+    -0.567937,
+    1.50265,
+    -0.043698
+   ],
+   "near_body": [
+    -0.563516,
+    1.489414,
+    -0.051527
+   ]
+  },
+  {
+   "rest": [
+    0.125635,
+    0.823522,
+    0.076069
+   ],
+   "near_body": [
+    0.123462,
+    0.823481,
+    0.070477
+   ]
+  },
+  {
+   "rest": [
+    -0.125635,
+    0.823522,
+    0.076069
+   ],
+   "near_body": [
+    -0.123462,
+    0.823481,
+    0.070477
+   ]
+  }
+ ],
+ "options": {
+  "faces": [
+   "old"
+  ],
+  "tones": [
+   "light"
+  ],
+  "hair": [
+   "parted"
+  ],
+  "beards": [
+   "full"
+  ],
+  "hair_colours": [
+   [
+    0.72,
+    0.7,
+    0.66
+   ]
+  ],
+  "headgear": [
+   []
+  ],
+  "grime": [
+   0.1,
+   0.3
+  ]
+ }
+}

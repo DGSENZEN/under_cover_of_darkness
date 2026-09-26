@@ -8,18 +8,23 @@ from the old painted outfits (tools/dress_characters.py) so the kinds keep
 the colours they had.
 
 Garment types (build.py):
-  shell    body regions copied and pushed out by `thickness` (+ `pads`)
-  mittens  a mitten and thumb lofted along the finger bones
-  boots    the feet and lower calves, with a turned-down cuff
-  collar   a standing collar on a shell's neck edge
-  skirt    panels hanging from the belt, flaring to `hem`
-  tabard   painted onto `over` above the belt, panels below it to `hem`
-  belt     a band round the waist, with a buckle
-  prop     a pouch, a key ring, a scabbard: rigid on one bone
+  shell     body regions copied and pushed out by `thickness` (+ `pads`)
+  mittens   a mitten and thumb lofted along the finger bones (+ a `cuff`)
+  boots     the feet and lower calves, with a turned-down `cuff` (0: none)
+  collar    a standing collar on a shell's neck edge
+  skirt     panels hanging from the belt, flaring to `hem` (front, back, sides)
+  panels    front and back panels hanging from under the belt to `hem`
+  tabard    painted onto `over` above the belt, panels below it to `hem`
+  belt      a band round the waist, with a buckle
+  sash      a cloth band round the waist, and tails hanging from its knot
+  pauldron  a plate over the shoulder, on the upper arm
+  bracer    a leather ring round one forearm
+  prop      a pouch, a key ring, a scabbard, a quiver, a knife: on one bone
 """
 
 # The fabrics a garment can be made of (the bake paints each its own way).
-FABRICS = ["skin", "quilted_linen", "wool", "leather", "mail", "iron"]
+# Their indices are baked into the parts (wr_fabric): new ones go at the end.
+FABRICS = ["skin", "quilted_linen", "wool", "leather", "mail", "iron", "wrapped", "hair"]
 
 TAN = (0.36, 0.29, 0.20)
 MUSTARD = (0.62, 0.52, 0.16)
@@ -30,10 +35,21 @@ GLOVE_BROWN = (0.20, 0.13, 0.08)
 BELT_BROWN = (0.20, 0.12, 0.07)
 SCABBARD_BLACK = (0.10, 0.08, 0.07)
 IRON = (0.34, 0.34, 0.36)
+MAIL = (0.36, 0.36, 0.38)
+# The archer's green (his tunic's and hood's first dye).
+ARCHER_GREEN = (0.20, 0.30, 0.14)
+# Bare skin: the Quaternius skin before his tone (build.SKIN's).
+SKIN_COLOUR = (0.78, 0.6, 0.5)
 
 WATCHMAN = {
     "kind": "watchman",
     "body": "male",
+    # Built as the user approved him (batch 0): his belt sloped from ring to
+    # ring every 30 degrees, his cloth rows where they hang. Batch 1's
+    # upright belt and cloth built clear of his legs (build.band,
+    # build.collider_push) would move his belt, skirts, tabard and props;
+    # dropping this rebuilds (and rebakes) him with them: the user's call.
+    "batch": 0,
     # The body, headless, is cut to this many triangles before anything is
     # made from it (shells share its low-poly shape).
     "base_tris": 1300,
@@ -63,8 +79,8 @@ WATCHMAN = {
          "hem": ("thigh_l", 0.5), "flare": 1.35, "clearance": 0.03,
          # Side panels (degrees round from his front); his tabard covers the
          # front and back, so nothing is made there that would never show.
-         "panels": {"left": [40, 140], "right": [-140, -40]},
-         "chains": {"left": "skirt_l", "right": "skirt_r"}},
+         # Their chains are skirt_l and skirt_r (build.skirt names them).
+         "panels": {"left": [40, 140], "right": [-140, -40]}},
         # Painted onto his gambeson above the belt, swelling 6 mm; as wide
         # as his waist allows (0.33 m there, with the gambeson), so front
         # and back part at his sides and join only over his shoulders.
@@ -108,7 +124,197 @@ WATCHMAN = {
     },
 }
 
-KINDS = {"watchman": WATCHMAN}
+SWORD_RED = (0.52, 0.09, 0.07)
+
+# The swordsman (the `swordsman` archetype): a mail hauberk to the thigh over
+# quilted sleeves, its mail skirt hanging to the knee, a red surcoat over it
+# all to mid-shin with a pale stripe down it, leather gauntlets, iron
+# pauldrons, the watchman's belt and scabbard; a nasal helm and mail curtain.
+SWORDSMAN = {
+    "kind": "swordsman",
+    "body": "male",
+    "base_tris": 1300,
+    "bare": ["head"],
+    "belt": ("spine_01", 0.0),
+    "garments": [
+        {"name": "sleeves", "type": "shell", "fabric": "quilted_linen", "colour": (0.42, 0.40, 0.37),
+         "regions": ["lower"], "sleeve_end": ("hand_l", 0.0), "sleeve_back": 0.016, "thickness": 0.02, "lips": ["sleeve"]},
+        {"name": "hose", "type": "shell", "fabric": "wool", "colour": (0.24, 0.23, 0.22),
+         "regions": ["pelvis", "thigh", "calf"], "bottom": ("calf_l", 0.6), "top": ("spine_01", 0.0),
+         "thickness": 0.006, "smooth": 2},
+        {"name": "boots", "type": "boots", "fabric": "leather", "colour": BOOT_BROWN,
+         "top": ("calf_l", 0.45), "thickness": 0.012, "sole": 0.004, "cuff": 0.04, "smooth": 3},
+        {"name": "mail", "type": "shell", "fabric": "mail", "colour": MAIL,
+         "regions": ["torso", "pelvis", "upper"], "bottom": ("thigh_l", 0.2), "sleeve_end": ("lowerarm_l", 0.1),
+         "thickness": 0.022, "smooth": 8, "lips": ["sleeve", "bottom"],
+         "pads": [{"from": ("spine_02", 0.6), "to": ("spine_03", 0.9), "front": True, "amount": 0.01}]},
+        {"name": "gauntlets", "type": "mittens", "fabric": "leather", "colour": (0.22, 0.14, 0.08),
+         "cuff_into_sleeve": 0.045, "cuff": 0.035},
+        # Under the surcoat, riding its chains (build.ride_chains): two
+        # layers on their own chains swung through each other (K21).
+        {"name": "mail_skirt", "type": "panels", "fabric": "mail", "colour": MAIL,
+         "width": 0.36, "hem": ("calf_l", 0.05), "bones": 2, "rides": "surcoat"},
+        {"name": "surcoat", "type": "tabard", "fabric": "wool", "colour": SWORD_RED, "dye": True, "stripe": (0.86, 0.84, 0.78),
+         "over": "mail", "proud": 0.006, "tuck": 0.015, "hem": ("calf_l", 0.25), "width": 0.30, "bones": 3},
+        {"name": "belt", "type": "belt", "fabric": "leather", "colour": BELT_BROWN,
+         "height": 0.045, "buckle": {"fabric": "iron", "colour": IRON, "size": (0.055, 0.014, 0.05)}},
+        {"name": "pauldron", "type": "pauldron", "fabric": "iron", "colour": (0.30, 0.30, 0.32), "over": "mail",
+         "reach": 0.14, "drop": 0.12, "rings": 3, "clearance": 0.012, "roll": 0.01},
+        {"name": "scabbard", "type": "prop", "shape": "scabbard", "fabric": "leather", "colour": SCABBARD_BLACK,
+         "at": 100, "length": 0.9, "back": 25, "size": (0.05, 0.026, 0.9), "fittings": {"fabric": "iron", "colour": IRON},
+         "bone": "pelvis"},
+    ],
+    # The surcoat's chains carry the mail skirt under it too: stiffer and
+    # heavier-dragged than the watchman's tabard (three bones hang further
+    # from how they were made: at 1.2 a restart settled at 3.6 m/s, K12; at
+    # 2.2 and drag 0.6 a knockdown whipped the hem to 11.3 m/s, K6b); it
+    # swings as far (K4). Its joints keep 5 cm off his legs (the watchman's
+    # 3): at 3 his overhead cut swung the front's hem up to 1.8 cm into his
+    # right thigh (K5); at 6 a knockdown whipped it to 12.1 m/s (K6b).
+    "chains": {
+        "surcoat_front": {"stiffness": 2.0, "drag": 0.9, "gravity": 1.0, "radius": 0.05},
+        "surcoat_back": {"stiffness": 2.0, "drag": 0.9, "gravity": 1.0, "radius": 0.05},
+    },
+    "colliders": [
+        {"bone": "thigh_l", "radius": 0.09}, {"bone": "thigh_r", "radius": 0.09},
+        {"bone": "calf_l", "radius": 0.065}, {"bone": "calf_r", "radius": 0.065},
+        {"bone": "spine_01", "radius": 0.16},
+    ],
+    "metal": ["spine_01", "spine_02", "spine_03", "pelvis", "upperarm_l", "upperarm_r"],
+    "options": {
+        "faces": ["weathered"], "tones": ["light", "dark"], "hair": [], "beards": [],
+        "headgear": [["nasalhelm", "curtain"]],
+        "dye": {"colour": list(SWORD_RED), "shift": 0.02, "fade": [0.0, 0.3]},
+        "grime": [0.2, 0.9],
+    },
+}
+
+# The archer (the `archer` archetype): a dyed wool tunic (green, brown or
+# grey) to mid-thigh under a leather jerkin, hose, leg wraps and low boots,
+# bare hands, a bracer on his bow arm, belt, pouch, knife and a swinging
+# quiver; his hood dyed as his tunic.
+ARCHER = {
+    "kind": "archer",
+    "body": "male",
+    "base_tris": 1300,
+    "bare": ["head", "hand"],
+    "belt": ("spine_01", 0.0),
+    "garments": [
+        # To mid-thigh: its thighs are the shell's too (a hem needs them),
+        # and the hose starts where it ends.
+        {"name": "tunic", "type": "shell", "fabric": "wool", "colour": ARCHER_GREEN, "dye": True,
+         "regions": ["pelvis", "thigh", "upper", "lower"], "bottom": ("thigh_l", 0.35),
+         "sleeve_end": ("hand_l", 0.0), "sleeve_back": 0.016, "thickness": 0.008, "lips": ["sleeve", "bottom"]},
+        {"name": "jerkin", "type": "shell", "fabric": "leather", "colour": (0.26, 0.17, 0.10),
+         "regions": ["torso"], "thickness": 0.016, "smooth": 6},
+        # Down under his boots' tops (calf_l 0.72): no bare shin between.
+        {"name": "hose", "type": "shell", "fabric": "wool", "colour": (0.22, 0.20, 0.17),
+         "regions": ["pelvis", "thigh", "calf"], "top": ("thigh_l", 0.35), "bottom": ("calf_l", 0.8),
+         "thickness": 0.006, "smooth": 2},
+        {"name": "wraps", "type": "shell", "fabric": "wrapped", "colour": (0.46, 0.41, 0.33),
+         "regions": ["calf"], "top": ("calf_l", 0.05), "bottom": ("calf_l", 0.7), "thickness": 0.01, "smooth": 2},
+        {"name": "boots", "type": "boots", "fabric": "leather", "colour": (0.26, 0.18, 0.11),
+         "top": ("calf_l", 0.72), "thickness": 0.008, "sole": 0.004, "cuff": 0, "smooth": 3},
+        # Bare hands: mittens of his own skin (the game tones them as his face).
+        {"name": "hands", "type": "mittens", "fabric": "skin", "colour": SKIN_COLOUR, "cuff": 0},
+        {"name": "bracer", "type": "bracer", "fabric": "leather", "colour": (0.22, 0.14, 0.08),
+         "bone": "lowerarm_l", "from": 0.35, "to": 0.85, "thickness": 0.008},
+        {"name": "belt", "type": "belt", "fabric": "leather", "colour": BELT_BROWN,
+         "height": 0.045, "buckle": {"fabric": "iron", "colour": IRON, "size": (0.055, 0.014, 0.05)}},
+        {"name": "pouch", "type": "prop", "shape": "pouch", "fabric": "leather", "colour": BELT_BROWN,
+         "at": -110, "size": (0.12, 0.05, 0.10), "bone": "pelvis"},
+        {"name": "knife", "type": "prop", "shape": "knife", "fabric": "leather", "colour": (0.18, 0.11, 0.06),
+         "at": 30, "bone": "pelvis", "fittings": {"fabric": "iron", "colour": IRON}},
+        {"name": "quiver", "type": "prop", "shape": "quiver", "fabric": "leather", "colour": (0.30, 0.20, 0.12),
+         "at": 110, "length": 0.42, "bone": "pelvis"},
+    ],
+    # A heavy case of arrows: it swings lazily. Soft, so a body falling on
+    # it lets it go (stiff, it was held into the floor under him and then
+    # thrown out: 14.6 m/s at the plan's 2.0/0.8/1.2, K6).
+    "chains": {
+        "quiver": {"stiffness": 0.5, "drag": 0.95, "gravity": 0.8, "radius": 0.035},
+    },
+    "colliders": [
+        {"bone": "thigh_l", "radius": 0.09}, {"bone": "thigh_r", "radius": 0.09},
+        {"bone": "calf_l", "radius": 0.065}, {"bone": "calf_r", "radius": 0.065},
+        {"bone": "spine_01", "radius": 0.16},
+    ],
+    "metal": [],
+    "options": {
+        "faces": ["weathered"], "tones": ["light", "dark"], "hair": [], "beards": [],
+        "headgear": [["hood"]],
+        # His tunic and hood: green, brown or grey (baked in the first).
+        "dye": {"colours": [list(ARCHER_GREEN), [0.34, 0.25, 0.15], [0.37, 0.37, 0.35]], "shift": 0.02, "fade": [0.0, 0.35]},
+        "grime": [0.3, 1.0],
+    },
+}
+
+DOUBLET = (0.62, 0.58, 0.50)
+
+# The arms master (the `trainer` archetype): one old man, grey-haired and
+# bearded, in a pale quilted doublet with a standing collar and a short
+# four-panel skirt, a dark sash knotted at his left with two tails, hose,
+# tall boots, gloves, his sword hung from the sash. No headgear, no dye.
+ARMS_MASTER = {
+    "kind": "arms_master",
+    "body": "male",
+    "base_tris": 1300,
+    "bare": ["head"],
+    "belt": ("spine_01", 0.0),
+    "garments": [
+        # Down under his ankle boots' tops (calf_l 0.82).
+        {"name": "hose", "type": "shell", "fabric": "wool", "colour": (0.20, 0.19, 0.18),
+         "regions": ["pelvis", "thigh", "calf"], "bottom": ("calf_l", 0.9), "top": ("spine_01", 0.0),
+         "thickness": 0.006, "smooth": 2},
+        {"name": "boots", "type": "boots", "fabric": "leather", "colour": (0.24, 0.16, 0.10),
+         "top": ("calf_l", 0.82), "thickness": 0.01, "sole": 0.004, "cuff": 0, "smooth": 3},
+        {"name": "doublet", "type": "shell", "fabric": "quilted_linen", "colour": DOUBLET,
+         "regions": ["torso", "pelvis", "upper", "lower"], "bottom": ("thigh_l", 0.05), "sleeve_end": ("hand_l", 0.0),
+         "sleeve_back": 0.016, "thickness": 0.016, "smooth": 8, "lips": ["sleeve", "bottom"],
+         "pads": [{"from": ("spine_02", 0.6), "to": ("spine_03", 0.9), "front": True, "amount": 0.008}]},
+        {"name": "gloves", "type": "mittens", "fabric": "leather", "colour": (0.30, 0.22, 0.15), "cuff": 0.02},
+        # His bare neck's seam goes under it (check heads' seam rule).
+        {"name": "collar", "type": "collar", "fabric": "quilted_linen", "colour": DOUBLET,
+         "on": "doublet", "height": 0.045, "lean_in": 0.25},
+        {"name": "doublet_skirt", "type": "skirt", "fabric": "quilted_linen", "colour": DOUBLET,
+         "hem": ("thigh_l", 0.35), "flare": 1.25, "clearance": 0.02, "bones": 1,
+         "panels": {"front": [-40, 40], "back": [140, 220], "left": [45, 135]}},
+        {"name": "sash", "type": "sash", "fabric": "wool", "colour": (0.14, 0.12, 0.13),
+         "height": 0.07, "tails": 2, "at": 10, "length": 0.35, "bones": 3},
+        {"name": "scabbard", "type": "prop", "shape": "scabbard", "fabric": "leather", "colour": SCABBARD_BLACK,
+         "at": 100, "length": 0.9, "back": 25, "size": (0.05, 0.026, 0.9), "fittings": {"fabric": "iron", "colour": IRON},
+         "bone": "pelvis"},
+    ],
+    "chains": {
+        # 4.5 cm off his legs (the plan's 3: his attacks swung the skirt
+        # 1.1 cm into a thigh, K5), and stiffer than the plan's 1.6: at 1.6,
+        # stopped, his right hem sagged onto his right thigh and rode its
+        # sway (2.4 cm/s, K4); at 2.4 it holds its flare just off it.
+        "doublet_skirt_front": {"stiffness": 2.4, "drag": 0.7, "gravity": 1.0, "radius": 0.045},
+        "doublet_skirt_back": {"stiffness": 2.4, "drag": 0.7, "gravity": 1.0, "radius": 0.045},
+        "doublet_skirt_l": {"stiffness": 2.4, "drag": 0.7, "gravity": 1.0, "radius": 0.045},
+        "doublet_skirt_r": {"stiffness": 2.4, "drag": 0.7, "gravity": 1.0, "radius": 0.045},
+        # A little stiffer than the plan's 1.0/0.5: three bones hanging from
+        # his sash sagged far enough from how they were made that a restart
+        # (K12) settled at 3.0 m/s.
+        "sash_1": {"stiffness": 1.5, "drag": 0.7, "gravity": 1.0, "radius": 0.025},
+        "sash_2": {"stiffness": 1.5, "drag": 0.7, "gravity": 1.0, "radius": 0.025},
+    },
+    "colliders": [
+        {"bone": "thigh_l", "radius": 0.09}, {"bone": "thigh_r", "radius": 0.09},
+        {"bone": "calf_l", "radius": 0.065}, {"bone": "calf_r", "radius": 0.065},
+        {"bone": "spine_01", "radius": 0.16},
+    ],
+    "metal": [],
+    "options": {
+        "faces": ["old"], "tones": ["light"], "hair": ["parted"], "beards": ["full"],
+        "hair_colours": [[0.72, 0.70, 0.66]],
+        "headgear": [[]],
+        "grime": [0.1, 0.3],
+    },
+}
+
+KINDS = {"watchman": WATCHMAN, "swordsman": SWORDSMAN, "archer": ARCHER, "arms_master": ARMS_MASTER}
 
 # Skin tones: the Quaternius skin times these (linear light). Heads are baked
 # in each; a kind's JSON carries them too, so his bare skin matches his face.
@@ -138,9 +344,29 @@ HEADS = {
         "brows": (0.16, 0.11, 0.08),
         "tones": TONES,
     },
+    # The weathered face grown old (the arms master): cheeks sunk further,
+    # jowls dropped at the jaw's sides, a heavier brow; smaller eyes, deep
+    # bags and lines, a little grey stubble, grey brows.
+    "old": {
+        "body": "male",
+        "tris": 340,
+        "shape": [
+            {"at": (0.047, -0.07, 1.648), "radius": 0.028, "along_normal": -0.005},
+            {"at": (0.032, -0.088, 1.722), "radius": 0.03, "move": (0.0, -0.004, -0.003)},
+            {"at": (0.0, -0.09, 1.575), "radius": 0.04, "move": (0.0, -0.002, -0.004)},
+            # Older: the cheeks sunken, the jowls dropped, the brow heavier.
+            {"at": (0.047, -0.07, 1.648), "radius": 0.03, "along_normal": -0.007},
+            {"at": (0.052, -0.06, 1.595), "radius": 0.03, "move": (0.0, 0.0, -0.005)},
+            {"at": (0.032, -0.088, 1.725), "radius": 0.03, "move": (0.0, -0.003, -0.002)},
+        ],
+        "eyes": 0.8,
+        "grit": {"stubble": 0.35, "bags": 0.9, "lines": 1.0},
+        "brows": (0.62, 0.60, 0.57),
+        "tones": TONES,
+    },
 }
 
-MAIL = (0.36, 0.36, 0.38)
+
 # His hat's iron: the buckle's, a shade darker (a big plate reads lighter).
 IRON_HAT = (0.25, 0.25, 0.27)
 LEATHER = (0.20, 0.13, 0.08)
@@ -161,7 +387,7 @@ HEADGEAR = {
              # Every head it goes over at least this far under it (check.py).
              "covers_head": True, "inside": 0.006,
              # Above this (his ears) the hood rides his Head alone (K15).
-             "rigid_above": 1.68,
+             "rigid_above": 1.68, "limit": 240,
              "metal": ["neck_01", "Head"], "hides_hair": True, "allows_beard": True},
     # A kettle hat forged over the coif (build.kettle): a round bowl (a
     # ridge read as a peak from the front: a coolie hat), a leather band at
@@ -176,9 +402,58 @@ HEADGEAR = {
                   "comb": 0.0, "brim": 0.07, "droop": 0.036, "lip": 0.012, "rivets": 12,
                   "fabric": "iron", "colour": IRON_HAT, "band": ("leather", LEATHER),
                   "metal": ["Head"], "hides_hair": False, "allows_beard": True},
+    # The swordsman's nasal helm (build.helm): the kettle's bowl without a
+    # brim, set straight on his head (every head he may wear it on), its
+    # crown drawn up `point` to a point, an iron brow band `band` tall
+    # standing `proud` of it (riveted, in the bake) and a nasal bar down his
+    # nose. check.py holds it `clearance` to `rest` off every head along
+    # `fit_rays` (its sides: the drawn-up point stands further off by
+    # design).
+    "nasalhelm": {"type": "helm", "bone": "Head", "over": "head", "clearance": 0.006, "slack": 0.009, "rest": 0.035,
+                  "base_z": 1.722, "centre_y": 0.009, "drop": 0.05, "segments": 16, "elevations": [40, 68],
+                  "point": 0.03, "band": 0.028, "proud": 0.004, "rivets": 12,
+                  "nasal": {"width": 0.022, "length": 0.075, "proud": 0.008},
+                  "fit_rays": {"elevations": [15, 35, 55], "azimuths": list(range(0, 360, 30))},
+                  "fabric": "iron", "colour": IRON_HAT, "limit": 220,
+                  "metal": ["Head"], "hides_hair": True, "allows_beard": True},
+    # Mail hanging from the helm's foot ring round his sides and back
+    # (build.curtain), open at his face, laid clear of his neck and
+    # shoulders; its top rides his head, its hem his neck and chest (K13b).
+    "curtain": {"type": "curtain", "on": "nasalhelm", "tuck": 0.004, "open": 40, "length_side": 0.15,
+                "length_back": 0.19, "clear": 0.07, "fabric": "mail", "colour": MAIL, "thickness": 0.012, "limit": 140,
+                "metal": ["neck_01", "spine_03"], "hides_hair": True, "allows_beard": True},
+    # The archer's hood: the coif's grid and opening in wool, dyed as his
+    # tunic, a shorter cape, and a tail (a liripipe) down his back that
+    # swings on its own chain (K13c); a capsule on his upper back keeps it
+    # off him. Its cape faces out (`out`), so it is baked from above, as it
+    # is seen: the coif's still faces in, as approved in batch 0 (its
+    # outside is baked from underneath); turning it is the user's call.
+    "hood": {"type": "coif", "fabric": "wool", "colour": ARCHER_GREEN, "dye": True, "thickness": 0.012, "slack": 0.004,
+             "segments": 12, "rings": [-40, -12, 20, 48, 75], "open": 36,
+             "opening": {"x": 0.07, "from_z": 1.585, "to_z": 1.738},
+             "cape": {"top_z": 1.575, "clear": 0.06, "tilt_front": 62, "tilt_side": 45,
+                      "length_front": 0.13, "length_side": 0.14, "out": True},
+             "covers_head": True, "inside": 0.006, "rigid_above": 1.68,
+             "tail": {"length": 0.32, "width": 0.07, "bones": 3, "elevation": 40, "clear": 0.035},
+             "chains": {"hood_tail": {"stiffness": 1.0, "drag": 0.5, "gravity": 1.0, "radius": 0.025}},
+             "colliders": [{"bone": "spine_03", "radius": 0.12}], "limit": 280,
+             "metal": [], "hides_hair": True, "allows_beard": True},
 }
 
 
-# Hair and beards (build_hair): solid shells cut down from the Quaternius
-# styles, fitted over the heads they go on. Filled by batch 1's Task 5.
-HAIR = {}
+# Where check.py looks for a gap between hair and head (degrees round from
+# his front, and up from the middle of his head): over his crown, round his
+# jaw.
+CROWN = {"elevations": [25, 45, 65, 85], "azimuths": list(range(0, 360, 30))}
+JAW = {"elevations": [-60, -45, -30], "azimuths": [-75, -45, -15, 15, 45, 75]}
+
+# Hair and beards (build_hair): shells cut down from the Quaternius styles
+# to `tris` (evenly either side), pushed out until they clear every head
+# they may go on by `clearance`, weighed on his Head and neck, all of it
+# hair and dyed (a grey the game tints his hair's colour).
+HAIR = {
+    "parted": {"from": "assets/characters/hair/Hair_SimpleParted.gltf", "kind": "hair", "tris": 180, "clearance": 0.004,
+               "fit_rays": CROWN},
+    "full": {"from": "assets/characters/hair/Hair_Beard.gltf", "kind": "beard", "tris": 120, "clearance": 0.003,
+             "fit_rays": JAW},
+}

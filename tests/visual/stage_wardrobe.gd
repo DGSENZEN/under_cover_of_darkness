@@ -1,10 +1,11 @@
 extends Node3D
-## Visual check, not a test: the wardrobe's watchmen under the retro screen,
-## by day and by torchlight, beside the old painted one. Nothing is checked;
-## look at the pictures (sheet.png puts them side by side).
+## Visual check, not a test: each kind the wardrobe dresses, under the retro
+## screen, by day and by torchlight, beside his old painted self. Nothing is
+## checked; look at the pictures (sheet_<kind>.png puts a kind's side by
+## side, sheet.png every kind's lineup).
 ##
-##   perl -e 'alarm 240; exec @ARGV' Godot --fixed-fps 60 --resolution 1280x720 --path . \
-##       res://tests/visual/stage_wardrobe.tscn -- --out=/some/folder
+##   perl -e 'alarm 480; exec @ARGV' Godot --fixed-fps 60 --resolution 1280x720 --path . \
+##       res://tests/visual/stage_wardrobe.tscn -- --out=/some/folder [--kinds=watchman,archer]
 
 const GUARD := preload("res://Guard.tscn")
 const Wardrobe := preload("res://scripts/Visual/Wardrobe.gd")
@@ -13,13 +14,17 @@ const TorchScript := preload("res://scripts/Visual/Torch.gd")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
-## The old painted watchman, then four from the wardrobe (their look seeds).
+## The old painted man, then four from the wardrobe (their look seeds).
 const SEEDS := [-1, 1, 2, 3, 4]
 const SPACING := 1.5
+## Every kind the wardrobe dresses, and the archetype that is it.
+const KINDS := {&"watchman": &"", &"swordsman": &"swordsman", &"archer": &"archer", &"arms_master": &"trainer"}
 
 var out_dir := "user://wardrobe/"
 var guards: Array[CharacterBody3D] = []
 var shots: Array = []
+## Each kind's lineups, by day and by night (sheet.png).
+var lineups: Array = []
 var camera: Camera3D
 var world: WorldEnvironment
 var sun: DirectionalLight3D
@@ -27,9 +32,13 @@ var torch: Node3D
 
 
 func _ready() -> void:
+	var kinds: Array = KINDS.keys()
+
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
 			out_dir = arg.substr(6).trim_suffix("/") + "/"
+		elif arg.begins_with("--kinds="):
+			kinds = Array(arg.substr(8).split(",")).map(func(k): return StringName(k))
 
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(out_dir))
 	Sfx.volume_db = -60.0
@@ -48,23 +57,43 @@ func _ready() -> void:
 	add_child(camera)
 	camera.current = true
 
+	for kind in kinds:
+		await _stage(kind)
+
+	_lineup_sheet()
+	print("staged into ", ProjectSettings.globalize_path(out_dir))
+	Sfx.silence()
+	await _frames(3)
+	get_tree().quit()
+
+
+## One kind, by day and by torchlight: its own shots and sheet.
+func _stage(kind: StringName) -> void:
+	world.environment = _neutral()
+	sun.visible = true
+	shots = []
+
 	for i in range(SEEDS.size()):
-		guards.append(_guard(SEEDS[i], Vector3((i - 2) * SPACING, 0, 0)))
+		guards.append(_guard(SEEDS[i], Vector3((i - 2) * SPACING, 0, 0), KINDS.get(kind, &"")))
 
 	await _frames(45)
-	await _shoot_set("day")
+	await _shoot_set("%s_day" % kind)
 	world.environment = RetroScript.night_environment()
 	sun.visible = false
 	torch = TorchScript.new()
 	torch.position = Vector3(0.6, 2.1, 1.9)
 	add_child(torch)
 	await _frames(20)
-	await _shoot_set("night")
-	_sheet()
-	print("staged into ", ProjectSettings.globalize_path(out_dir))
-	Sfx.silence()
+	await _shoot_set("%s_night" % kind)
+	_sheet("sheet_%s.png" % kind)
+	lineups.append([shots[0][0], shots[1][0]])
+
+	for g in guards:
+		g.queue_free()
+
+	guards.clear()
+	torch.queue_free()
 	await _frames(3)
-	get_tree().quit()
 
 
 func _neutral() -> Environment:
@@ -78,14 +107,15 @@ func _neutral() -> Environment:
 	return e
 
 
-## A watchman facing the camera, still: from the wardrobe with `seed`, or
-## the old painted one (seed -1: the wardrobe hidden from him).
-func _guard(seed: int, at: Vector3) -> CharacterBody3D:
+## A guard of `archetype` facing the camera, still: from the wardrobe with
+## `seed`, or his old painted self (seed -1: the wardrobe hidden from him).
+func _guard(seed: int, at: Vector3, archetype: StringName) -> CharacterBody3D:
 	if seed < 0:
 		Wardrobe.ROOT = "user://no_wardrobe/"
 		Wardrobe.forget()
 
 	var g: CharacterBody3D = GUARD.instantiate()
+	g.archetype = archetype
 	g.set("look_seed", seed)
 	g.position = at
 	g.rotation.y = PI
@@ -99,12 +129,12 @@ func _guard(seed: int, at: Vector3) -> CharacterBody3D:
 	return g
 
 
-## The lineup at 8 m, the painted watchman beside a wardrobe one, one man
-## turned round at 2 m, and his face from under his brim.
+## The lineup at 8 m, his painted self beside a wardrobe one, one man
+## turned round at 2 m, and his face from under his headgear.
 func _shoot_set(label: String) -> void:
 	var row := []
 	await _shot("%s_lineup" % label, Vector3(0, 1.45, 8.0), Vector3(0, 1.0, 0), row)
-	# The old painted watchman beside a wardrobe one, both whole.
+	# His old painted self beside a wardrobe one, both whole.
 	var pair := (guards[0].position.x + guards[1].position.x) * 0.5
 	await _shot("%s_before_after" % label, Vector3(pair, 1.35, 3.2), Vector3(pair, 1.0, 0), row)
 	var him := guards[1]
@@ -120,7 +150,7 @@ func _shoot_set(label: String) -> void:
 	# His face as his pose holds it, from a little below: under the brim.
 	var head := _head(him)
 	await _shot("%s_face" % label, head + Vector3(0, -0.16, 0.7), head, row)
-	# And from behind: the back of his hat, his coif and his neck.
+	# And from behind: the back of his headgear (or hair) and his neck.
 	await _shot("%s_back" % label, head + Vector3(0, -0.05, -0.75), head, row)
 	shots.append(row)
 
@@ -145,8 +175,17 @@ func _shot(shot_name: String, from: Vector3, at: Vector3, row: Array) -> void:
 	row.append(image)
 
 
+## Every kind's lineup, by day and by night: a row a kind.
+func _lineup_sheet() -> void:
+	if lineups.is_empty():
+		return
+
+	shots = lineups
+	_sheet("sheet.png")
+
+
 ## Every shot at half size: a row a light.
-func _sheet() -> void:
+func _sheet(file: String) -> void:
 	if shots.is_empty() or shots[0].is_empty():
 		return
 
@@ -166,7 +205,7 @@ func _sheet() -> void:
 			small.resize(w, h, Image.INTERPOLATE_NEAREST)
 			sheet.blit_rect(small, Rect2i(0, 0, w, h), Vector2i(c * w, r * h))
 
-	sheet.save_png(out_dir + "sheet.png")
+	sheet.save_png(out_dir + file)
 
 
 func _frames(n: int) -> void:

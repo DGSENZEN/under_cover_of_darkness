@@ -1,0 +1,12 @@
+{
+ "piece": "curtain",
+ "triangles": 56,
+ "metal": [
+  "neck_01",
+  "spine_03"
+ ],
+ "hides_hair": true,
+ "allows_beard": true,
+ "cloth": [],
+ "colliders": []
+}

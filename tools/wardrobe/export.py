@@ -239,10 +239,12 @@ def export_parts(prefix, folder):
     armature = bpy.data.objects.get("Armature")
     parts = [o for o in bpy.data.objects if o.name.startswith(prefix) and o.type == "MESH"]
     joints = reference_joints("male")
+    chains = json.loads(bpy.context.scene.get("wardrobe_chains", "[]"))
     messages = []
 
     for obj in parts:
         name = obj.name[len(prefix):]
+        cloth = [b for c in chains if c.get("piece") == name for b in c["bones"]]
 
         if folder == "heads":
             images = [(str(common.WARDROBE / folder / ("%s_%s.png" % (name, tone))), (128, 128), True)
@@ -253,7 +255,7 @@ def export_parts(prefix, folder):
 
         cap = common.part_limit(folder, name)
 
-        found = validate.check(obj, armature=armature, reference_joints=joints, images=images,
+        found = validate.check(obj, armature=armature, reference_joints=joints, cloth_bones=cloth, images=images,
                                combined_tris=common.tri_count(obj), budget=cap)
         messages += ["%s %s" % (obj.name, m) for m in found]
 

@@ -37,7 +37,10 @@ import recipes  # noqa: E402
 # after the stager: at 256 px the quilting and the mail read at 2 m, and the
 # tabard's panels (1.3) keep their stripe's edges straight.
 DENSITY = {"base": 0.8, "shell": 1.0, "mittens": 0.8, "boots": 0.8, "collar": 0.8, "skirt": 1.0,
-           "tabard": 1.3, "belt": 0.8, "prop": 0.6}
+           "tabard": 1.3, "panels": 1.0, "belt": 0.8, "sash": 1.0, "pauldron": 1.0, "bracer": 1.0, "prop": 0.6}
+# What cloth hangs clear of (and what props stand off): every part made
+# before it of these types.
+WORN = ("shell", "boots", "skirt", "panels", "tabard")
 SKIN = (0.78, 0.6, 0.5)
 # How far under a garment a body face still counts as covered, when the
 # build cuts the hidden body away (validation is stricter: thickness + 5 mm).
@@ -102,6 +105,14 @@ class Kind:
         self.types = {}
         # The base's faces a shell was made from: under that shell, gone.
         self.covered = set()
+        # Trim for the bake to paint on the outfit (bake.trim): pauldrons'.
+        self.details = {}
+        # Headgear's chains, as the export reads them (each tagged with its
+        # piece).
+        self.gear_chains = []
+        # Panels that ride another garment's chain: (object, chain, first
+        # vertex below their hip row).
+        self.riders = []
 
     def at(self, spec):
         return common.point(self.arm, spec)
@@ -124,7 +135,12 @@ class Kind:
     def recipe_garment(self, name):
         return next(g for g in self.recipe["garments"] if g["name"] == name)
 
-    def add(self, obj, g, part, kind, strip=False, dye=False, fabric=None, colour=None, whole=False):
+    def add(self, obj, g, part, kind, strip=False, dye=None, fabric=None, colour=None, whole=False):
+        # Dyed as its recipe says (a dyed shell: the archer's tunic), unless
+        # its builder says otherwise; a piece of its own fabric or colour (a
+        # buckle, fittings, fletchings) is not the garment's cloth: undyed.
+        if dye is None:
+            dye = g.get("dye", False) and fabric is None and colour is None
         common.set_faces(obj, part, recipes.FABRICS.index(fabric or g["fabric"]), g.get("thickness", 0.004), strip, dye,
                          colour or g["colour"])
         self.types[obj.name] = kind
@@ -150,6 +166,7 @@ def build_kind(recipe, force):
     for part, g in enumerate(recipe["garments"], start=1):
         BUILDERS[g["type"]](kind, g, part)
 
+    ride_chains(kind)
     hide_body(kind)
     # A body wholly covered (the watchman's) leaves nothing to unwrap.
     everything = [obj for obj in [kind.base] + kind.parts + kind.props if len(obj.data.polygons) > 0]
@@ -161,6 +178,10 @@ def build_kind(recipe, force):
             swap_sides(obj)
 
     outfit = join([kind.base] + kind.parts + kind.props)
+
+    if kind.details:
+        outfit["wr_details"] = common.dump(kind.details)
+
     common.smooth(outfit, CREASE)
     materials(outfit)
     weigh(outfit, reference)
@@ -359,12 +380,13 @@ def pad(kind, g, co, normal):
 
 def mittens(kind, g, part):
     """A mitten and a thumb on his left hand, lofted along the finger bones
-    and sized off the full body's hand (the fingers as one)."""
+    and sized off the full body's hand (the fingers as one); with a `cuff`,
+    a gauntlet's cuff flaring back that far over his sleeve's end."""
     thick = 0.008
     wrist = kind.at(("hand_l", 0.0))
     knuckles = kind.at(("middle_01_l", 0.0))
     tips = kind.at(("middle_04_leaf_l", 1.0))
-    stations = [wrist.x - g["cuff_into_sleeve"], wrist.x, knuckles.x, tips.x - 0.006]
+    stations = [wrist.x - g.get("cuff_into_sleeve", 0.045), wrist.x, knuckles.x, tips.x - 0.006]
     names = {group.index: group.name for group in kind.ref.vertex_groups}
     rings = []
     last = (wrist.y, wrist.z, 0.03, 0.025)
@@ -388,6 +410,65 @@ def mittens(kind, g, part):
     outward(obj)
     common.group(obj, common.TRANSFER, 1.0)
     kind.add(obj, g, part, "mittens")
+
+    if g.get("cuff", 0.0) > 0.0:
+        gauntlet_cuff(kind, g, part, obj)
+
+
+def gauntlet_cuff(kind, g, part, mitten):
+    """A cuff round his wrist over the mitten's start, flaring back up his
+    forearm `cuff` over his sleeve's end: one sheet, drawn from both sides."""
+    bone = kind.arm.data.bones["lowerarm_l"]
+    axis = (bone.tail_local - bone.head_local).normalized()
+    u, v = across(axis)
+    tree = common.bvh([obj for obj in kind.parts if kind.types[obj.name] == "shell"] + [mitten])
+    wrist = kind.at(("hand_l", 0.0))
+    rings = []
+
+    for back, flare in ((-0.005, 0.0), (g["cuff"], g["cuff"] * 0.5)):
+        centre = wrist - axis * back
+        ring = []
+
+        for k in range(8):
+            d = u * math.cos(k * math.pi / 4.0) + v * math.sin(k * math.pi / 4.0)
+            ring.append(centre + d * (reach_out(tree, centre, d, 0.04) + 0.004 + flare))
+
+        rings.append(ring)
+
+    obj = common.loft("%s_cuff" % g["name"], rings, closed=True)
+    face_away(obj, bone.head_local, axis)
+    common.group(obj, common.TRANSFER, 1.0)
+    kind.add(obj, g, part, "mittens", strip=True)
+
+
+def across(axis):
+    """Two directions square to `axis` and to each other: the first level
+    (square to up too), the second as near up as it can be."""
+    u = axis.cross(Vector((0.0, 0.0, 1.0)))
+    u = u.normalized() if u.length > 1e-6 else Vector((1.0, 0.0, 0.0))
+    return u, u.cross(axis).normalized()
+
+
+def reach_out(tree, centre, d, fallback):
+    """How far out from `centre` along `d` the outermost surface of `tree`
+    is (`fallback` if none is met there)."""
+    hit = common.outer_hit(tree, centre, d, 0.3)
+    return (hit - centre).dot(d) if hit is not None and (hit - centre).dot(d) > 0.0 else fallback
+
+
+def face_away(obj, origin, axis):
+    """A sheet's or a tube's faces turned to face away from the line through
+    `origin` along `axis` (it is lit from outside)."""
+    outward(obj)
+    away = 0.0
+
+    for polygon in obj.data.polygons:
+        c = polygon.center
+        foot = origin + axis * (c - origin).dot(axis)
+        away += (c - foot).normalized().dot(polygon.normal)
+
+    if away < 0.0:
+        obj.data.flip_normals()
 
 
 def thumb_loft(kind):
@@ -440,6 +521,9 @@ def boots(kind, g, part):
     bm.to_mesh(obj.data)
     bm.free()
     kind.add(obj, g, part, "boots")
+
+    if not g["cuff"]:
+        return
 
     # The cuff, round the calf where the boot ends.
     # Over the whole rim (its jagged top included), so none of it shows.
@@ -499,9 +583,13 @@ def collar(kind, g, part):
 
 def skirt(kind, g, part):
     """Panels hanging from the belt, clear of what is under them, flaring
-    to the hem; each rides a chain of cloth bones."""
+    to the hem; each rides a chain of `bones` cloth bones (1 or 2). A panel
+    across his front (0 degrees round from it) or his back (180) is whole
+    and centred, on the chain `<name>_front` or `<name>_back`; a side panel
+    is built on his left and mirrored, on `<name>_l` and `<name>_r`."""
     top, hem = kind.belt_z(), kind.z(g["hem"])
     mid = (top + hem) * 0.5
+    bones = g.get("bones", 2)
     tree = common.bvh([obj for obj in kind.parts if kind.types[obj.name] in ("shell", "boots")])
 
     def radial(z, degrees):
@@ -510,14 +598,20 @@ def skirt(kind, g, part):
         hit = common.outer_hit(tree, centre, direction)
         return centre, direction, (Vector((hit.x, hit.y - centre.y, 0.0)).length if hit else None)
 
-    for name, (a0, a1) in g["panels"].items():
-        if a1 <= 0:
+    for a0, a1 in g["panels"].values():
+        if a0 < 0 < a1:
+            chain, a0, a1, c = "%s_front" % g["name"], 0, max(a1, -a0), 0
+        elif a0 < 180 < a1:
+            chain, a0, a1, c = "%s_back" % g["name"], min(a0, 360 - a1), 180, -1
+        elif a1 <= 0:
+            # His right: his left's mirror.
             continue
+        else:
+            chain, a0, a1, c = "%s_l" % g["name"], max(a0, 0), min(a1, 180), None
 
-        a0 = max(a0, 0)
-        a1 = min(a1, 180)
         steps = max(2, round((a1 - a0) / 19.0))
-        rows = [[], [], []]
+        c = steps // 2 if c is None else c
+        rows = [[], [], []] if bones == 2 else [[], []]
 
         for i in range(steps + 1):
             degrees = a0 + (a1 - a0) * i / steps
@@ -527,28 +621,42 @@ def skirt(kind, g, part):
             r_mid = max(r_mid or 0.0, r_top) + g["clearance"] * 0.5
             c_hem, _, r_hem = radial(hem, degrees)
             r_hem = max((r_hem or 0.0) + g["clearance"], r_top * g["flare"])
+            made = [(c_top, r_top, top), (c_mid, r_mid, mid), (c_hem, r_hem, hem)]
 
-            for row, (c, r, z) in enumerate(((c_top, r_top, top), (c_mid, r_mid, mid), (c_hem, r_hem, hem))):
-                p = Vector((0.0, c.y, z)) + d * r
+            if bones == 1:
+                # One bone: straight from the belt to the hem, so the hem
+                # stands out far enough that halfway down it clears him.
+                made = [made[0], (c_hem, max(r_hem, 2.0 * r_mid - r_top), hem)]
+
+            for row, (c_at, r, z) in enumerate(made):
+                p = Vector((0.0, c_at.y, z)) + d * r
                 p.x = 0.0 if degrees in (0, 180) else p.x
                 rows[row].append(p)
 
-        obj = common.loft("%s_%s" % (g["name"], name), rows)
+        # Its chain's joints must rest clear of the capsules the cloth keeps
+        # out of: each hanging row pushed out, each point along its own
+        # way out, as far as its chain's column must go.
+        for row in rows[1:]:
+            centre_y = kind.centre(row[c].z).y
+            push = collider_push(kind, row[c], Vector((row[c].x, row[c].y - centre_y, 0.0)).normalized(), chain)
+
+            for i, p in enumerate(row):
+                out = Vector((p.x, p.y - centre_y, 0.0)).normalized()
+                row[i] = p + out * push
+                row[i].x = 0.0 if abs(p.x) < 1e-6 else row[i].x
+
+        obj = common.loft("%s_%s" % (g["name"], chain), rows)
         count = steps + 1
         common.group(obj, common.TRANSFER, 1.0, range(0, count))
-        chain = g["chains"][name]
-        shared = chain.startswith("tabard")
-        common.group(obj, "cloth_%s_1" % chain, 1.0, range(count, 2 * count))
-        common.group(obj, "cloth_%s_%d" % (chain, 1 if shared else 2), 1.0, range(2 * count, 3 * count))
 
-        if not shared:
-            c = (steps // 2)
-            points = [rows[0][c], rows[1][c], rows[2][c]]
-            kind.chains[chain] = {"parent": "pelvis", "points": points}
-            mirrored = chain[:-2] + "_r" if chain.endswith("_l") else None
+        for k in range(1, len(rows)):
+            common.group(obj, "cloth_%s_%d" % (chain, k), 1.0, range(k * count, (k + 1) * count))
 
-            if mirrored:
-                kind.chains[mirrored] = {"parent": "pelvis", "points": [Vector((-p.x, p.y, p.z)) for p in points]}
+        points = [row[c] for row in rows]
+        kind.chains[chain] = {"parent": "pelvis", "points": points}
+
+        if chain.endswith("_l"):
+            kind.chains[chain[:-2] + "_r"] = {"parent": "pelvis", "points": [Vector((-p.x, p.y, p.z)) for p in points]}
 
         kind.add(obj, g, part, "skirt", strip=True)
 
@@ -558,10 +666,10 @@ def skirt(kind, g, part):
 def tabard(kind, g, part):
     """Above the belt, painted onto what he wears there (`over`), as PS2
     artists did, and swelling `proud` of it: front and back, joined over his
-    shoulders. Below the belt, front and back panels hang to `hem`, each on
-    its own chain."""
+    shoulders. Below the belt, front and back panels (see panels) hang to
+    `hem` on `bones` cloth bones each, dyed as the painted part is."""
     painted(kind, g, part)
-    hanging(kind, g, part)
+    panels(kind, g, part, "tabard", dye=True)
 
 
 def painted(kind, g, part):
@@ -604,14 +712,21 @@ def painted(kind, g, part):
     print("wardrobe: tabard painted on %d faces of %s" % (len(chosen), over.name))
 
 
-def hanging(kind, g, part):
-    """Front and back panels from under the belt to the hem: over the
-    furthest he stands out below the belt (belly, seat), a little A-line to
-    the skirt's hem, then straight, clear of his legs."""
+def panels(kind, g, part, made_as="panels", dye=None):
+    """Front and back panels from under the belt (`tuck` over it) to `hem`,
+    `width` wide: over the furthest he stands out below the belt (belly,
+    seat), a little A-line (`flare`) to the skirt's hem, then straight,
+    clear of everything made before them (shells, boots, skirts, earlier
+    panels). Each hangs on a chain of `bones` cloth bones (1-3) from its hip
+    row, its rows below that even to the hem (over a skirt, the first at the
+    skirt's hem): `<name>_front`, `<name>_back`. Under another garment's
+    panels (`rides`: its name), it rides that garment's chains instead
+    (ride_chains): layered cloth on one set of bones never swings apart."""
     belt, hem = kind.belt_z(), kind.z(g["hem"])
+    bones = g.get("bones", 2)
     skirt_hem = getattr(kind, "skirt_hem", (belt + hem) * 0.5)
     columns = [0.0, g["width"] * 0.25, g["width"] * 0.5]
-    body = common.bvh([obj for obj in kind.parts if kind.types[obj.name] in ("shell", "boots")])
+    body = common.bvh([obj for obj in kind.parts if kind.types[obj.name] in WORN])
 
     def extreme(z, sign, span=0.0):
         """How far out (y) he stands at height z (and span either side),
@@ -631,9 +746,16 @@ def hanging(kind, g, part):
     for side, sign in (("front", -1.0), ("back", 1.0)):
         # Where he stands out furthest in the top of the skirt: the panel
         # hangs over it (a straight drop from the belt would cut through).
-        below = [belt - 0.02 * k for k in range(2, 13) if belt - 0.02 * k > skirt_hem + 0.03]
+        below = [belt - 0.02 * k for k in range(2, 13) if belt - 0.02 * k > skirt_hem + 0.03] or [belt - 0.04]
         hip = max(below, key=lambda z: (extreme(z, sign) or 0.0) * sign)
-        heights = [belt + g["tuck"], hip, skirt_hem, hem]
+        drops = [hip + (hem - hip) * k / bones for k in range(1, bones + 1)]
+
+        # Over a skirt, the first of them at the skirt's hem (where the
+        # A-line ends, as the watchman's tabard was made), the rest even.
+        if bones > 1 and hasattr(kind, "skirt_hem") and hem < kind.skirt_hem < hip:
+            drops = [skirt_hem] + [skirt_hem + (hem - skirt_hem) * k / (bones - 1) for k in range(1, bones)]
+
+        heights = [belt + g.get("tuck", 0.015), hip] + drops
         rows = []
 
         for i, z in enumerate(heights):
@@ -650,23 +772,148 @@ def hanging(kind, g, part):
                 if out is not None and (out + sign * 0.03 - y) * sign > 0:
                     y = out + sign * 0.03
 
-            rows.append([Vector((x, y, z)) for x in columns])
+            row = [Vector((x, y, z)) for x in columns]
+
+            # Below the hip it swings: its chain's joints (the centre
+            # column) must rest clear of the capsules the cloth keeps out of.
+            if i >= 2:
+                push = collider_push(kind, row[0], Vector((0.0, sign, 0.0)), "%s_%s" % (g.get("rides", g["name"]), side))
+                row = [p + Vector((0.0, sign * push, 0.0)) for p in row]
+
+            rows.append(row)
 
         obj = common.loft("%s_%s" % (g["name"], side), rows)
         n = len(columns)
         # Belt and seat ride his body; below them it swings.
         common.group(obj, common.TRANSFER, 1.0, range(0, 2 * n))
-        chain = "tabard_%s" % side
-        common.group(obj, "cloth_%s_1" % chain, 1.0, range(2 * n, 3 * n))
-        common.group(obj, "cloth_%s_2" % chain, 1.0, range(3 * n, 4 * n))
-        kind.chains[chain] = {"parent": "pelvis", "points": [rows[1][0], rows[2][0], rows[3][0]]}
-        kind.add(obj, g, part, "tabard", strip=True, dye=True)
+        chain = "%s_%s" % (g["name"], side)
+
+        if "rides" in g:
+            kind.riders.append((obj, "%s_%s" % (g["rides"], side), 2 * n))
+        else:
+            for k in range(1, bones + 1):
+                common.group(obj, "cloth_%s_%d" % (chain, k), 1.0, range((k + 1) * n, (k + 2) * n))
+
+            kind.chains[chain] = {"parent": "pelvis", "points": [row[0] for row in rows[1:]]}
+
+        kind.add(obj, g, part, made_as, strip=True, dye=g.get("dye", False) if dye is None else dye)
+
+
+# How far a guard's stance moves his legs from the rest pose the cloth is
+# built in: a joint resting nearer a leg's capsule than this is inside it
+# as he stands (the arms master's sash tail was, 9 cm deep at its end).
+STANCE = 0.045
+
+
+def collider_push(kind, point, out, chain):
+    """How far `point` must move along `out` for a joint of `chain` there
+    (its recipe radius) to rest clear of every capsule the kind's cloth
+    keeps out of (its colliders), STANCE to spare. Built inside one (as he
+    stands), a joint is thrown out of it as soon as the cloth runs, and a
+    restart (a teleport) puts it straight back in: a jump every time."""
+    if kind.recipe.get("batch") == 0:
+        # Made before cloth was built clear of the legs, as approved.
+        return 0.0
+
+    radius = kind.recipe.get("chains", {}).get(chain, {}).get("radius", 0.03) + STANCE
+    capsules = [(kind.arm.data.bones[c["bone"]].head_local, kind.arm.data.bones[c["bone"]].tail_local, c["radius"])
+                for c in kind.recipe.get("colliders", [])]
+
+    def clear(p):
+        for a, b, r in capsules:
+            t = min(max((p - a).dot(b - a) / max((b - a).length_squared, 1e-9), 0.0), 1.0)
+
+            if (p - a.lerp(b, t)).length < r + radius:
+                return False
+
+        return True
+
+    push = 0.0
+
+    while push < 0.3 and not clear(point + out * push):
+        push += 0.0025
+
+    return push
+
+
+def ride_chains(kind):
+    """Each riding panel's vertices below its hip row on the bone of the
+    chain it rides that hangs beside them (by height): it swings with the
+    garment over it and never through it."""
+    for obj, chain, first in kind.riders:
+        if chain not in kind.chains:
+            common.fail("%s rides %s, which nothing made" % (obj.name, chain))
+
+        points = kind.chains[chain]["points"]
+
+        for vertex in list(obj.data.vertices)[first:]:
+            bone = next((i for i in range(1, len(points)) if vertex.co.z >= points[i].z), len(points) - 1)
+            common.group(obj, "cloth_%s_%d" % (chain, bone), 1.0, [vertex.index])
 
 
 def belt(kind, g, part):
     """A band round the waist over whatever is there, and its buckle."""
+    obj, low, high = band(kind, g)
+    kind.add(obj, g, part, "belt")
+    kind.belt_ring = (low, high)
+
+    b = g["buckle"]
+    front = (low[0] + high[0]) * 0.5
+    buckle = common.box("buckle", front + Vector((0.0, -b["size"][1] * 0.5, 0.0)), Vector((1, 0, 0)), Vector((0, 1, 0)),
+                        Vector((0, 0, 1)), b["size"])
+    common.keep_positive_x(buckle)
+    common.group(buckle, common.TRANSFER, 1.0)
+    kind.add(buckle, g, part, "belt", fabric=b["fabric"], colour=b["colour"])
+
+
+# A belt's or sash's columns: degrees round from his front, on his left.
+BAND_STEP = 15.0
+
+
+def band(kind, g):
+    """A band `height` tall round his waist at the belt, over whatever he
+    wears there, its top turned in: (the band, its low and high rings).
+    Upright: at each column (every BAND_STEP degrees) it stands 5 mm out
+    from the outermost of what is under it at its bottom, middle and top (a
+    band sloped from ring to ring, or sampled coarsely, cut inside a panel's
+    top and a curved back between them)."""
     z = kind.belt_z()
-    tree = common.bvh([obj for obj in kind.parts if kind.types[obj.name] in ("shell", "skirt", "tabard")])
+    tree = common.bvh([obj for obj in kind.parts if kind.types[obj.name] in ("shell", "skirt", "tabard", "panels")])
+    half = g["height"] * 0.5
+    axis = kind.centre(z)
+    low, high, inner = [], [], []
+
+    if kind.recipe.get("batch") == 0:
+        return sloped_band(kind, g, tree)
+
+    for i in range(int(round(180.0 / BAND_STEP)) + 1):
+        d = i * BAND_STEP
+        direction = Vector((math.sin(math.radians(d)), -math.cos(math.radians(d)), 0.0))
+        reach = 0.0
+
+        for dz in (-half, 0.0, half):
+            hit = common.outer_hit(tree, kind.centre(z + dz), direction)
+            reach = max(reach, Vector((hit.x, hit.y - axis.y, 0.0)).length if hit is not None else 0.17)
+
+        for ring, dz in ((low, -half), (high, half)):
+            p = Vector((0.0, axis.y, z + dz)) + direction * (reach + 0.005)
+            p.x = 0.0 if d in (0.0, 180.0) else p.x
+            ring.append(p)
+
+        top = high[-1]
+        flat = Vector((top.x, top.y - axis.y, 0.0))
+        inner.append(top - flat.normalized() * 0.012)
+
+    obj = common.loft(g["name"], [low, high, inner])
+    common.group(obj, common.TRANSFER, 1.0)
+    return obj, low, high
+
+
+def sloped_band(kind, g, tree):
+    """Batch 0's band (the approved watchman's belt): every 30 degrees, from
+    a ring 5 mm out from what is under its bottom to one 5 mm out from what
+    is under its top."""
+    z = kind.belt_z()
     low, high, inner = [], [], []
 
     for d in [i * 30.0 for i in range(7)]:
@@ -686,16 +933,146 @@ def belt(kind, g, part):
 
     obj = common.loft(g["name"], [low, high, inner])
     common.group(obj, common.TRANSFER, 1.0)
-    kind.add(obj, g, part, "belt")
-    kind.belt_ring = (low, high)
+    return obj, low, high
 
-    b = g["buckle"]
-    front = (low[0] + high[0]) * 0.5
-    buckle = common.box("buckle", front + Vector((0.0, -b["size"][1] * 0.5, 0.0)), Vector((1, 0, 0)), Vector((0, 1, 0)),
-                        Vector((0, 0, 1)), b["size"])
-    common.keep_positive_x(buckle)
-    common.group(buckle, common.TRANSFER, 1.0)
-    kind.add(buckle, g, part, "belt", fabric=b["fabric"], colour=b["colour"])
+
+def sash(kind, g, part):
+    """A cloth band round his waist (props hang from it, as from a belt) and
+    `tails` strips hanging side by side from its knot at `at` degrees round
+    from his front (negative: his right), each `length` long on a chain of
+    `bones` cloth bones (`<name>_1`, `<name>_2`...), hanging straight down,
+    clear of what they hang over: whole, not mirrored."""
+    kind.recipe_belt_height = g["height"] * 0.5
+    obj, low, high = band(kind, g)
+    kind.add(obj, g, part, "sash")
+    kind.belt_ring = (low, high)
+    tree = common.bvh([o for o in kind.parts if kind.types[o.name] in WORN + ("sash",)])
+    side = 1.0 if g["at"] >= 0 else -1.0
+    half = g.get("tail_width", 0.056) * 0.5
+    spread = math.degrees(2.0 * half / 0.17)
+    top = kind.belt_z() - g["height"] * 0.3
+
+    for n in range(1, g["tails"] + 1):
+        degrees = abs(g["at"]) + (n - 1 - (g["tails"] - 1) * 0.5) * spread
+        a = math.radians(degrees)
+        d = Vector((math.sin(a), -math.cos(a), 0.0))
+        tangent = Vector((0.0, 0.0, 1.0)).cross(d).normalized()
+        rows, radius = [], 0.0
+
+        for k in range(g["bones"] + 1):
+            z = top - g["length"] * k / g["bones"]
+            centre = kind.centre(z)
+            hit = common.outer_hit(tree, centre, d)
+            under = Vector((hit.x, hit.y - centre.y, 0.0)).length if hit is not None else 0.15
+            # Hanging, not hugging: never nearer him than the row above.
+            radius = max(radius, under + (0.008 if k == 0 else 0.02))
+            mid = Vector((0.0, centre.y, z)) + d * radius
+
+            # Its joints must rest clear of the capsules the cloth keeps out
+            # of (his waist's, his thigh's); hanging, never back in after.
+            if k > 0:
+                radius += collider_push(kind, mid, d, "%s_%d" % (g["name"], n))
+                mid = Vector((0.0, centre.y, z)) + d * radius
+            rows.append([mid - tangent * half, mid + tangent * half])
+
+        for row in rows:
+            for point in row:
+                point.x *= side
+
+        chain = "%s_%d" % (g["name"], n)
+        tail = common.loft("%s_tail_%d" % (g["name"], n), rows)
+        common.group(tail, common.TRANSFER, 1.0, range(0, 2))
+
+        for k in range(1, len(rows)):
+            common.group(tail, "cloth_%s_%d" % (chain, k), 1.0, range(2 * k, 2 * k + 2))
+
+        kind.chains[chain] = {"parent": "pelvis", "points": [(row[0] + row[1]) * 0.5 for row in rows]}
+        face_away(tail, Vector((0.0, kind.centre(top).y, 0.0)), Vector((0.0, 0.0, 1.0)))
+        kind.add(tail, g, part, "sash", strip=True, whole=True)
+
+
+def pauldron(kind, g, part):
+    """A plate over his left shoulder (mirrored to his right), forged the
+    PS2 way over what it goes on (`over`, and the shells under it): `rings`
+    rings of 6 points from over his shoulder joint out `reach` along his
+    upper arm, each an arc from his front over the top of his arm to his
+    back whose ends hang `drop` below its top, every point `clearance` off
+    what it covers (looking out from the arm's bone); closed toward his neck
+    by a cap from `inset` inside the joint (the top of the plate once his
+    arm is down); its outer edge rolled `roll` out. Wholly on upperarm_l.
+    Its trim (a bright rim, two painted lames) is left for the bake."""
+    bone = kind.arm.data.bones["upperarm_l"]
+    joint, axis = bone.head_local.copy(), (bone.tail_local - bone.head_local).normalized()
+    front, up = across(axis)
+    tree = common.bvh([kind.made[g["over"]]] + [obj for obj in kind.parts if kind.types[obj.name] == "shell"])
+    off = g["clearance"] + g.get("thickness", 0.004)
+
+    def at(centre, phi):
+        d = up * math.cos(phi) + front * math.sin(phi)
+        return centre + d * (reach_out(tree, centre, d, 0.07) + off)
+
+    def end(centre, top, sign):
+        """How far round (radians) from the top his arc runs, toward his
+        front (sign 1) or back (-1), before it hangs `drop` below the top."""
+        for step in range(1, 31):
+            phi = sign * math.radians(step * 5.0)
+
+            if top - at(centre, phi).z >= g["drop"]:
+                return phi
+
+        return sign * math.radians(150.0)
+
+    rings = []
+
+    for i in range(g["rings"]):
+        centre = joint + axis * (g["reach"] * i / (g["rings"] - 1))
+        top = at(centre, 0.0).z
+        first, last = end(centre, top, 1.0), end(centre, top, -1.0)
+        rings.append([at(centre, first + (last - first) * k / 5.0) for k in range(6)])
+
+    outer = joint + axis * g["reach"]
+    rolled = [p + (p - outer - axis * (p - outer).dot(axis)).normalized() * g["roll"] + axis * g["roll"] * 0.5
+              for p in rings[-1]]
+    inside = joint - axis * g.get("inset", 0.03)
+    cap = at(inside, 0.0)
+    obj = common.loft(g["name"], [rolled] + rings[::-1], cap=cap)
+    face_away(obj, joint, axis)
+    common.group(obj, "upperarm_l", 1.0)
+    # Mirroring moves a vertex to its side's group only if that group is
+    # there already: without it, his right pauldron rides his left arm.
+    obj.vertex_groups.new(name="upperarm_r")
+    kind.add(obj, g, part, "pauldron", strip=True)
+    kind.details.setdefault("plates", []).append({"joint": list(joint), "axis": list(axis), "reach": g["reach"],
+                                                  "lames": [g["reach"] / 3.0, g["reach"] * 2.0 / 3.0]})
+
+
+def bracer(kind, g, part):
+    """A leather ring round one forearm (`bone`, from `from` to `to` along
+    it), `thickness` over what he wears there, its ends turned in to it:
+    whole (not mirrored), wholly on its bone."""
+    bone = kind.arm.data.bones[g["bone"]]
+    head, tail = bone.head_local, bone.tail_local
+    axis = (tail - head).normalized()
+    u, v = across(axis)
+    tree = common.bvh([obj for obj in kind.parts if kind.types[obj.name] == "shell"])
+    rings = []
+
+    for t in (g["from"], g["to"]):
+        centre = head.lerp(tail, t)
+        under, over = [], []
+
+        for k in range(8):
+            d = u * math.cos(k * math.pi / 4.0) + v * math.sin(k * math.pi / 4.0)
+            r = reach_out(tree, centre, d, 0.04)
+            under.append(centre + d * r)
+            over.append(centre + d * (r + g["thickness"]))
+
+        rings.append((under, over))
+
+    obj = common.loft(g["name"], [rings[0][0], rings[0][1], rings[1][1], rings[1][0]], closed=True)
+    face_away(obj, head, axis)
+    common.group(obj, g["bone"], 1.0)
+    kind.add(obj, g, part, "bracer", whole=True)
 
 
 def prop(kind, g, part):
@@ -705,7 +1082,9 @@ def prop(kind, g, part):
     degrees = abs(g["at"])
     side = 1.0 if g["at"] >= 0 else -1.0
     low, high = kind.belt_ring
-    i = min(range(len(low)), key=lambda k: abs(k * 30.0 - degrees))
+    # The belt's column nearest `at` (its columns span his front to his back).
+    step = 180.0 / (len(low) - 1)
+    i = min(range(len(low)), key=lambda k: abs(k * step - degrees))
     anchor = (low[i] + high[i]) * 0.5
     anchor = Vector((anchor.x * side, anchor.y, anchor.z))
     radial = Vector((anchor.x, anchor.y - kind.centre(anchor.z).y, 0.0)).normalized()
@@ -747,6 +1126,12 @@ def prop(kind, g, part):
             common.group(obj, g["bone"], 1.0)
 
         made = made[:1]
+    elif g["shape"] == "quiver":
+        quiver(kind, g, part, below, radial, tangent, side)
+        made = []
+    elif g["shape"] == "knife":
+        knife(kind, g, part, below, radial, tangent, side)
+        made = []
 
     for obj in made:
         outward(obj) if g["shape"] != "keyring" else None
@@ -754,13 +1139,114 @@ def prop(kind, g, part):
         kind.add(obj, g, part, "prop", whole=True)
 
 
+def quiver(kind, g, part, below, radial, tangent, side):
+    """A quiver hung from the belt: a tapered leather box `length` long,
+    leaning back, its mouth dark and a few arrows' fletchings standing out of
+    it; its upper third on its bone, its lower two thirds on a one-bone chain
+    (`<name>`) that swings from there. Stood clear of what he wears."""
+    up = Vector((0.0, 0.0, 1.0))
+    w, d = g.get("size", (0.1, 0.07))
+    length = g["length"]
+    down = (Matrix.Rotation(math.radians(g.get("back", 12)) * side, 4, tangent) @ -up + radial * 0.1).normalized()
+    start = below + radial * (d * 0.5 + 0.01)
+    side_to_side = radial.cross(down).normalized()
+    cuts = [0.0, 1.0 / 3.0, 1.0]
+    widths = [(w, d), (w * 0.95, d * 0.95), (w * 0.75, d * 0.8)]
+    rings = [[start + down * length * t + side_to_side * a * sx * 0.5 + radial * b * sy * 0.5
+              for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))] for t, (a, b) in zip(cuts, widths)]
+    body = common.loft(g["name"], rings, closed=True, cap=start + down * (length + 0.006))
+    outward(body)
+    mouth = common.loft("%s_mouth" % g["name"], [rings[0][:2], rings[0][:1:-1]])
+    upward(mouth)
+    fletching = g.get("fletching", {"fabric": "wool", "colour": (0.76, 0.73, 0.66)})
+    feathers = []
+
+    for fx, fy, tall in ((-0.25, -0.2, 0.08), (0.22, -0.15, 0.07), (0.0, 0.22, 0.085), (-0.12, 0.25, 0.065), (0.28, 0.2, 0.075)):
+        foot = start + side_to_side * w * fx + radial * d * fy
+        for turn in (0.0, 90.0):
+            spin = Matrix.Rotation(math.radians(turn + 30.0 * fx), 4, down)
+            flat = (spin @ side_to_side).normalized()
+            feathers.append(common.loft("%s_fletching" % g["name"], [[foot - flat * 0.01, foot + flat * 0.01],
+                                                                   [foot - flat * 0.01 - down * tall, foot + flat * 0.01 - down * tall]]))
+
+    pieces = [body, mouth] + feathers
+    stand_clear(kind, pieces, radial, side)
+    hinge = (sum((v.co for v in body.data.vertices[4:8]), Vector())) / 4.0
+    bottom = (sum((v.co for v in body.data.vertices[8:12]), Vector())) / 4.0
+    kind.chains[g["name"]] = {"parent": g["bone"], "points": [hinge, bottom + (bottom - hinge).normalized() * 0.006]}
+    common.group(body, g["bone"], 1.0, range(0, 8))
+    common.group(body, "cloth_%s_1" % g["name"], 1.0, range(8, len(body.data.vertices)))
+    kind.add(body, g, part, "prop", whole=True)
+    common.group(mouth, g["bone"], 1.0)
+    kind.add(mouth, g, part, "prop", colour=tuple(c * 0.3 for c in g["colour"]), whole=True)
+
+    for feather in feathers:
+        common.group(feather, g["bone"], 1.0)
+        kind.add(feather, g, part, "prop", fabric=fletching["fabric"], colour=fletching["colour"], strip=True, whole=True)
+
+
+def knife(kind, g, part, below, radial, tangent, side):
+    """A knife in a small sheath on the belt, its grip standing above it (in
+    its `fittings`), leaning a little out from him: rigid on its bone, stood
+    clear of what he wears."""
+    up = Vector((0.0, 0.0, 1.0))
+    w, d = g.get("size", (0.04, 0.02))
+    length = g.get("length", 0.2)
+    down = (-up + radial * 0.12).normalized()
+    start = below + radial * (d * 0.5 + 0.006)
+    side_to_side = radial.cross(down).normalized()
+    cuts = [0.0, 0.8, 1.0]
+    widths = [(w, d), (w * 0.8, d * 0.8), (w * 0.3, d * 0.45)]
+    rings = [[start + down * length * t + side_to_side * a * sx * 0.5 + radial * b * sy * 0.5
+              for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))] for t, (a, b) in zip(cuts, widths)]
+    sheath = common.loft(g["name"], rings, closed=True, cap=start + down * (length + 0.008))
+    outward(sheath)
+    grip = common.box("%s_grip" % g["name"], start - down * 0.045, side_to_side, radial, -down, (0.022, 0.02, 0.09))
+    fit = g.get("fittings", {"fabric": g["fabric"], "colour": g["colour"]})
+    stand_clear(kind, [sheath, grip], radial, side)
+
+    for obj, fabric, colour in ((sheath, g["fabric"], g["colour"]), (grip, fit["fabric"], fit["colour"])):
+        common.group(obj, g["bone"], 1.0)
+        kind.add(obj, g, part, "prop", fabric=fabric, colour=colour, whole=True)
+
+
+def stand_clear(kind, pieces, radial, side, clearance=0.008):
+    """A prop's `pieces` moved out along `radial` together, just far enough
+    that every vertex stands `clearance` outside what he wears that is solid
+    (his shells, boots, belt or sash; not his cloth, which swings, nor a
+    skirt's flare, which would shove the prop off his belt). On his right,
+    measured on their left halves (the parts are mirrored later)."""
+    tree = common.bvh([o for o in kind.parts if kind.types[o.name] in ("shell", "boots", "belt", "sash")])
+    push = Vector((radial.x * side, radial.y, radial.z)).normalized()
+    shift = 0.0
+
+    for obj in pieces:
+        for vertex in obj.data.vertices:
+            co = Vector((vertex.co.x * side, vertex.co.y, vertex.co.z))
+            # Anything of his further out along the way it would move: it
+            # must move past it; else anything just under it: off it.
+            outside = tree.ray_cast(co + push * 0.5, -push, 0.5)
+
+            if outside[0] is not None:
+                shift = max(shift, (outside[0] - co).dot(push) + clearance)
+            else:
+                under = tree.ray_cast(co, -push, clearance)
+
+                if under[0] is not None:
+                    shift = max(shift, clearance - under[3])
+
+    for obj in pieces:
+        for vertex in obj.data.vertices:
+            vertex.co += radial * shift
+
+
 def belt_first(kind, g, part):
     kind.recipe_belt_height = g["height"] * 0.5
     belt(kind, g, part)
 
 
-BUILDERS = {"shell": shell, "mittens": mittens, "boots": boots, "collar": collar, "skirt": skirt,
-            "tabard": tabard, "belt": belt_first, "prop": prop}
+BUILDERS = {"shell": shell, "mittens": mittens, "boots": boots, "collar": collar, "skirt": skirt, "panels": panels,
+            "tabard": tabard, "belt": belt_first, "sash": sash, "pauldron": pauldron, "bracer": bracer, "prop": prop}
 
 
 # ---------------------------------------------------------------------------
@@ -1123,13 +1609,114 @@ def finish(path, made, reference):
 # ---------------------------------------------------------------------------
 
 def build_hair(force):
-    """Every hair and beard in recipes.HAIR into source/hair.blend (batch 1,
-    Task 5); nothing to do while there is none."""
+    """Every hair and beard in recipes.HAIR into source/hair.blend, each as
+    `Hair_<style>`: the Quaternius style cut down to `tris` (evenly either
+    side), pushed out until every head it may go on (heads.blend: build them
+    first) lies at least `clearance` under it, looking out from the middle
+    of his head (as check.fit looks); smooth, weighed on his Head and neck
+    alone, all of it hair and dyed (a grey the game tints his hair's
+    colour)."""
     if not recipes.HAIR:
         print("wardrobe: no hair in the recipes: nothing to build")
         return
 
-    common.fail("hair is not built yet")
+    path = common.SOURCE / "hair.blend"
+    guard(path, force)
+    armature, reference, extras = start("hair")
+
+    for extra in extras.values():
+        bpy.data.objects.remove(extra)
+
+    heads = head_points()
+
+    if not heads:
+        common.fail("no heads in source/heads.blend: build heads first")
+
+    centre = armature.data.bones["Head"].head_local + Vector((0.0, 0.0, 0.1))
+    made = []
+
+    for style, h in recipes.HAIR.items():
+        obj = quaternius_style(h["from"], "Hair_%s" % style)
+        common.weld(obj)
+        decimate = obj.modifiers.new("Decimate", "DECIMATE")
+        decimate.ratio = min(1.0, h["tris"] / max(common.tri_count(obj), 1))
+        decimate.use_collapse_triangulate = True
+        decimate.use_symmetry = True
+        decimate.symmetry_axis = "X"
+        common.select_only([obj])
+        bpy.ops.object.modifier_apply(modifier=decimate.name)
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        tree = BVHTree.FromBMesh(bm)
+        # The head it covers: every head vertex it lies over.
+        under = [p for p in heads if tree.ray_cast(centre, (p - centre).normalized(), 0.4)[0] is not None]
+        # A little over `clearance`, measured as check.fit measures: from
+        # inside out, its underside.
+        enclose(bm, under, centre, h["clearance"] + 0.001, from_inside=True)
+        bm.to_mesh(obj.data)
+        bm.free()
+        common.set_faces(obj, 1, recipes.FABRICS.index("hair"), 0.0, False, True, HAIR_GREY)
+        weigh_part(obj, reference)
+        ride(obj, 1e9, ("Head", "neck_01"))
+        common.unwrap([obj], {obj.name: 1.0})
+        common.smooth(obj, HEAD_CREASE)
+        materials(obj)
+        obj.parent = armature
+        obj.modifiers.new("Armature", "ARMATURE").object = armature
+        made.append(obj)
+        print("wardrobe: %s %s %d triangles over %d head vertices" % (h["kind"], style, common.tri_count(obj), len(under)))
+
+    finish(path, made, reference)
+
+
+# The grey hair is baked in (the game tints it: its JSON's dye_base).
+HAIR_GREY = (0.5, 0.5, 0.5)
+
+
+def head_points():
+    """Every vertex of every head in heads.blend (what hair must cover)."""
+    path = common.SOURCE / "heads.blend"
+
+    if not path.exists():
+        return []
+
+    with bpy.data.libraries.load(str(path)) as (source, target):
+        target.objects = [name for name in source.objects if name.startswith("Head_")]
+
+    points = []
+
+    for obj in [o for o in target.objects if o is not None and o.type == "MESH"]:
+        mesh = obj.data
+        points += [v.co.copy() for v in mesh.vertices]
+        bpy.data.objects.remove(obj)
+        bpy.data.meshes.remove(mesh)
+
+    return points
+
+
+def quaternius_style(relative, name):
+    """A Quaternius hair or beard (a glTF skinned to its own copy of the
+    skeleton) as a plain mesh called `name`, where it sits: its skeleton,
+    weights, materials and stray pieces dropped."""
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=str(common.ROOT / relative))
+    new = [o for o in bpy.data.objects if o not in before]
+    obj = max((o for o in new if o.type == "MESH" and o.vertex_groups), key=lambda o: len(o.data.polygons))
+    world = obj.matrix_world.copy()
+
+    for other in new:
+        if other is not obj:
+            bpy.data.objects.remove(other)
+
+    obj.parent = None
+    obj.modifiers.clear()
+    obj.data.transform(world)
+    obj.matrix_world = Matrix.Identity(4)
+    obj.vertex_groups.clear()
+    obj.data.materials.clear()
+    obj.name = name
+    obj.data.name = name
+    return obj
 
 
 def build_headgear(force):
@@ -1145,6 +1732,8 @@ def build_headgear(force):
 
     for piece, g in recipes.HEADGEAR.items():
         made[piece] = HEADGEAR_BUILDERS[g["type"]](kind, g, piece, made)
+
+    bpy.context.scene["wardrobe_chains"] = common.dump(kind.gear_chains)
 
     for obj in made.values():
         common.unwrap([obj], {obj.name: 1.0})
@@ -1338,10 +1927,17 @@ def coif(kind, g, piece, made=None):
     bm.to_mesh(obj.data)
     bm.free()
     fabric = recipes.FABRICS.index(g["fabric"])
-    common.set_faces(obj, 1, fabric, g["thickness"], False, False, g["colour"])
+    dye = g.get("dye", False)
+    common.set_faces(obj, 1, fabric, g["thickness"], False, dye, g["colour"])
     cape = cape_shell(kind, g)
+
+    if g["cape"].get("out"):
+        # Faces out from his neck: baked (and lit) from outside, where it is
+        # seen.
+        face_away(cape, Vector((0.0, kind.at(("neck_01", 0.0)).y, 0.0)), Vector((0.0, 0.0, 1.0)))
+
     # One sheet of mail: drawn from both sides.
-    common.set_faces(cape, 1, fabric, g["thickness"], True, False, g["colour"])
+    common.set_faces(cape, 1, fabric, g["thickness"], True, dye, g["colour"])
     obj = join_two(obj, cape, obj.name)
     common.group(obj, common.TRANSFER, 1.0)
     weigh_part(obj, kind.ref)
@@ -1350,8 +1946,54 @@ def coif(kind, g, piece, made=None):
     # Above his ears the hood moves with his head alone: partly on his neck,
     # its big faces lagged when he bowed his head and his skull showed.
     rigid(obj, g["rigid_above"], "Head")
-    print("wardrobe: coif %d triangles" % common.tri_count(obj))
+
+    if "tail" in g:
+        obj = join_two(obj, hood_tail(kind, g, piece, obj, middle), obj.name)
+
+    print("wardrobe: %s %d triangles" % (piece, common.tri_count(obj)))
     return obj
+
+
+def hood_tail(kind, g, piece, hood, middle):
+    """A hood's tail (a liripipe): a strip from the back of its crown
+    (`elevation` degrees up from the middle of his head), `width` wide and
+    tapering to a third, hanging `length` down his back, `clear` of what is
+    there (the hood, its cape, his back), on a chain of `bones` cloth bones
+    (`<piece>_tail`) under his Head; its top rides his Head. Dyed as the
+    hood; one sheet, drawn from both sides."""
+    t = g["tail"]
+    e = math.radians(t["elevation"])
+    d = Vector((0.0, math.cos(e), math.sin(e)))
+    top = middle + d * (reach_out(common.bvh([hood]), middle, d, 0.12) + 0.004)
+    behind = common.bvh([hood, kind.ref])
+    rows, points, y = [], [], top.y
+
+    for k in range(t["bones"] + 1):
+        z = top.z - t["length"] * k / t["bones"]
+
+        # Hanging, not hugging: never nearer him than the row above.
+        if k > 0:
+            back = common.outer_hit(behind, Vector((0.0, 0.0, z)), Vector((0.0, 1.0, 0.0)), 0.5)
+            y = max(y, (back.y if back is not None else y) + t["clear"])
+
+        half = t["width"] * 0.5 * (1.0 - 0.66 * k / t["bones"])
+        centre = Vector((0.0, y, z))
+        rows.append([centre + Vector((half, 0.0, 0.0)), centre - Vector((half, 0.0, 0.0))])
+        points.append(centre)
+
+    strip = common.loft("%s_tail" % piece, rows)
+    face_away(strip, Vector((0.0, 0.0, 0.0)), Vector((0.0, 0.0, 1.0)))
+    common.set_faces(strip, 1, recipes.FABRICS.index(g["fabric"]), g["thickness"], True, g.get("dye", False), g["colour"])
+    chain = "%s_tail" % piece
+    names = chain_bones(kind.arm, chain, "Head", points)
+    common.group(strip, "Head", 1.0, range(0, 2))
+
+    for k, name in enumerate(names, start=1):
+        common.group(strip, name, 1.0, range(2 * k, 2 * k + 2))
+
+    kind.gear_chains.append({"chain": chain, "parent": "Head", "bones": names,
+                             "tip": round((points[-1] - points[-2]).length, 4), "piece": piece})
+    return strip
 
 
 # What a coif's cape hangs from: his neck, chest and collarbones. Not his
@@ -1385,10 +2027,12 @@ def ride(obj, below, bones):
             group.add([vertex.index], weight / total, "REPLACE")
 
 
-def enclose(bm, points, centre, inside, rounds=8):
+def enclose(bm, points, centre, inside, rounds=8, from_inside=False):
     """A shell's vertices pushed out, along rays from `centre`, until every
     one of `points` lies at least `inside` under it: its flat faces sag
-    between their corners, and a head shows through a sag."""
+    between their corners, and a head shows through a sag. Under its
+    outermost surface, or (`from_inside`) its innermost: a shell of two
+    layers (hair) must clear the head with the one nearer it."""
     for _ in range(rounds):
         bm.faces.ensure_lookup_table()
         tree = BVHTree.FromBMesh(bm)
@@ -1396,7 +2040,7 @@ def enclose(bm, points, centre, inside, rounds=8):
 
         for p in points:
             d = (p - centre).normalized()
-            hit = tree.ray_cast(centre + d * 0.4, -d, 0.4)
+            hit = tree.ray_cast(centre, d, 0.4) if from_inside else tree.ray_cast(centre + d * 0.4, -d, 0.4)
 
             if hit[0] is None or (hit[0] - centre).dot(d) <= 0.0:
                 continue
@@ -1535,7 +2179,205 @@ def imported(kind, g, piece, made):
     return obj
 
 
-HEADGEAR_BUILDERS = {"coif": coif, "kettle": kettle, "import": imported}
+def heads_tree(kind):
+    """What a helm goes over, as one tree: his own head (the full body's)
+    and every low head in heads.blend (a low head strays a little outside
+    the full one)."""
+    objects = [head_region(kind.ref, "wr_helm_head")]
+    path = common.SOURCE / "heads.blend"
+
+    if path.exists():
+        with bpy.data.libraries.load(str(path)) as (source, target):
+            target.objects = [name for name in source.objects if name.startswith("Head_")]
+
+        objects += [o for o in target.objects if o is not None and o.type == "MESH"]
+
+    tree = common.bvh(objects)
+
+    for obj in objects:
+        mesh = obj.data
+        bpy.data.objects.remove(obj)
+        bpy.data.meshes.remove(mesh)
+
+    return tree
+
+
+def helm(kind, g, piece, made):
+    """A nasal helm forged the PS2 way, set straight on his head (every
+    head it may go on: heads_tree): a round bowl of `segments` round on the
+    head's outline at `base_z`, one ring per `elevations` (degrees round its
+    curve) up to a crown `point` higher than a round one (its upper rings
+    drawn up after it), never nearer his head than `clearance` + `slack`
+    (looking out from his head's middle, `drop` below the foot); a brow band
+    `band` tall at its foot standing `proud` of the bowl, its lower edge
+    turned in toward his brow; a nasal bar (`nasal`: `width` wide, `length`
+    down his nose, `proud` off his face). Wholly on his Head. Its foot ring
+    is kept for mail to hang from (kind.rims); its trim (rivets round the
+    band, a bright seam over the crown) is left for the bake."""
+    tree = heads_tree(kind)
+    centre = Vector((0.0, g["centre_y"], g["base_z"]))
+    n = g["segments"]
+    around = [2.0 * math.pi * i / n for i in range(n)]
+    off = g["clearance"] + g["slack"]
+
+    def flat(a):
+        return Vector((math.sin(a), -math.cos(a), 0.0))
+
+    def head_along(origin, d):
+        hit = common.outer_hit(tree, origin, d, 0.4)
+        return (hit - origin).length if hit is not None and (hit - origin).dot(d) > 0.0 else None
+
+    under = [head_along(centre, flat(a)) for a in around]
+    outline = [centre + flat(a) * r for a, r in zip(around, under) if r is not None]
+    half_x = max(abs(p.x) for p in outline) + off
+    front, back = min(p.y for p in outline) - off, max(p.y for p in outline) + off
+    middle_y, half_y = (front + back) * 0.5, (back - front) * 0.5
+    middle = centre - Vector((0.0, 0.0, g["drop"]))
+    crown = (head_along(middle, Vector((0.0, 0.0, 1.0))) or 0.13) + off - g["drop"]
+
+    def ring(elevation, rise=0.0, out=0.0):
+        phi = math.radians(elevation)
+        row = []
+
+        for a in around:
+            point = Vector((half_x * math.cos(phi) * math.sin(a), middle_y - half_y * math.cos(phi) * math.cos(a),
+                            centre.z + crown * math.sin(phi) + rise))
+            d = (point - middle).normalized()
+            need = head_along(middle, d)
+
+            if need is not None and (point - middle).length < need + off:
+                point = middle + d * (need + off)
+
+            row.append(point + flat(a) * out)
+
+        return row
+
+    band_top = math.degrees(math.asin(min(g["band"] / crown, 1.0)))
+    foot = ring(0.0, out=g["proud"])
+    # The band's lower edge turned in toward his brow: its thickness shows,
+    # and no one sees up into it.
+    lip = [c + (p - c) * 0.35 for p, c in
+           ((p, centre + flat(a) * (r if r is not None else (p - centre).length - off)) for p, a, r in zip(foot, around, under))]
+    rows = [lip, foot, ring(band_top, out=g["proud"]), ring(band_top)]
+    rows += [ring(e, rise=g["point"] * math.sin(math.radians(e)) ** 4) for e in g["elevations"]]
+    apex = Vector((0.0, middle_y, centre.z + crown + g["point"]))
+    skull = common.loft("helm_skull", rows, closed=True, cap=apex)
+    outward(skull)
+    iron = recipes.FABRICS.index(g["fabric"])
+    common.set_faces(skull, 1, iron, 0.004, False, False, g["colour"])
+    bar = nasal_bar(g, foot[0], tree)
+    common.set_faces(bar, 1, iron, 0.004, False, False, g["colour"])
+    obj = join_two(skull, bar, "Gear_%s" % piece)
+    common.group(obj, g["bone"], 1.0)
+    kind.rims[piece] = foot
+    obj["wr_details"] = common.dump({
+        "centre": list(centre),
+        "rivets": [{"z": g["base_z"] + g["band"] * 0.5, "count": g["rivets"], "size": 0.0045}],
+        # The seam where its halves were riveted, front to back.
+        "comb": {"width": 0.004, "above": g["base_z"] + g["band"] + 0.012},
+    })
+    print("wardrobe: %s %d triangles" % (piece, common.tri_count(obj)))
+    return obj
+
+
+def nasal_bar(g, front, tree):
+    """A helm's nasal bar: a strip of iron from up inside the band's front
+    (`front`, the foot ring there) straight down his nose `length`, `width`
+    wide, leaning out as far as it must to stand `proud` off his face all the
+    way down."""
+    nasal = g["nasal"]
+    thick = 0.004
+    y0 = front.y - thick * 0.5
+    z0 = g["base_z"]
+    y1 = y0
+
+    # Where his face is at each height down the bar (the most forward of it
+    # across the bar's width), the bar leans out just enough to clear it.
+    for step in range(1, 9):
+        t = step / 8.0
+        z = z0 - nasal["length"] * t
+        face = None
+
+        for x in (-nasal["width"] * 0.5, 0.0, nasal["width"] * 0.5):
+            hit = common.outer_hit(tree, Vector((x, 0.02, z)), Vector((0.0, -1.0, 0.0)), 0.4)
+
+            if hit is not None and (face is None or hit.y < face):
+                face = hit.y
+
+        if face is not None:
+            need = face - nasal["proud"] - thick * 0.5
+            y1 = min(y1, y0 + (need - y0) / t)
+
+    top = Vector((0.0, y0, z0 + 0.012))
+    bottom = Vector((0.0, y1, z0 - nasal["length"]))
+    along = (bottom - top).normalized()
+    across = Vector((1.0, 0.0, 0.0))
+    return common.box("helm_nasal", (top + bottom) * 0.5, across, across.cross(along).normalized(), along,
+                      (nasal["width"], thick, (bottom - top).length))
+
+
+def curtain(kind, g, piece, made):
+    """Mail hanging from a helm's foot ring (`on`), tucked `tuck` inside it,
+    round his sides and back (open `open` degrees either side of his face):
+    three rings, to a hem `length_side` below the foot at his sides and
+    `length_back` at his back, laid over him (smoothed and pushed out until
+    the hem stands `clear` of his head, neck, chest, back and collarbones,
+    the middle half that). Its top ring rides his Head (as the helm does),
+    the middle half his Head and half his neck, the hem his neck, chest and
+    collarbones. One sheet, drawn from both sides."""
+    foot = kind.rims[g["on"]]
+    n = len(foot)
+    trunk = trunk_tree(kind.ref)
+    count = 15
+    span = 360.0 - 2.0 * g["open"]
+    rows = [[], [], []]
+
+    for i in range(count):
+        a = math.radians(g["open"] + span * i / (count - 1))
+        out = Vector((math.sin(a), -math.cos(a), 0.0))
+        at = a / (2.0 * math.pi) * n
+        k = int(math.floor(at)) % n
+        top = foot[k].lerp(foot[(k + 1) % n], at - math.floor(at)) - out * g["tuck"]
+        length = g["length_side"] + (g["length_back"] - g["length_side"]) * max(0.0, -math.cos(a)) ** 2
+        rows[0].append(top)
+        rows[1].append(top - Vector((0.0, 0.0, length * 0.5)))
+        rows[2].append(top - Vector((0.0, 0.0, length)))
+
+    for _ in range(4):
+        for k, clear in ((1, g["clear"] * 0.5), (2, g["clear"])):
+            ring = rows[k]
+            smoothed = [ring[0]] + [(ring[i - 1] + ring[i] * 2.0 + ring[i + 1]) * 0.25 for i in range(1, count - 1)] + [ring[-1]]
+
+            for i, point in enumerate(smoothed):
+                near, normal, _, _ = trunk.find_nearest(point)
+                depth = (point - near).dot(normal) if near is not None else 1.0
+                ring[i] = point + normal * (clear - depth) if depth < clear else point
+
+    obj = common.loft("Gear_%s" % piece, rows)
+    face_away(obj, Vector((0.0, sum(p.y for p in foot) / n, 0.0)), Vector((0.0, 0.0, 1.0)))
+    common.set_faces(obj, 1, recipes.FABRICS.index(g["fabric"]), g["thickness"], True, False, g["colour"])
+    weigh_part(obj, kind.ref)
+    ride(obj, max(p.z for p in rows[2]) + 1e-4, CAPE_BONES)
+    only(obj, range(count, 2 * count), {"Head": 0.5, "neck_01": 0.5})
+    only(obj, range(0, count), {"Head": 1.0})
+    print("wardrobe: %s %d triangles" % (piece, common.tri_count(obj)))
+    return obj
+
+
+def only(obj, vertices, table):
+    """`vertices` of `obj` on the bones of `table` ({bone: weight}) alone."""
+    names = {group.index: group.name for group in obj.vertex_groups}
+
+    for index in vertices:
+        for name in [names[g.group] for g in obj.data.vertices[index].groups]:
+            obj.vertex_groups[name].remove([index])
+
+    for bone, weight in table.items():
+        group = obj.vertex_groups.get(bone) or obj.vertex_groups.new(name=bone)
+        group.add(list(vertices), weight, "REPLACE")
+
+
+HEADGEAR_BUILDERS = {"coif": coif, "kettle": kettle, "helm": helm, "curtain": curtain, "import": imported}
 
 
 def fit_over(obj, under, pivot, clearance):

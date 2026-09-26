@@ -393,17 +393,17 @@ def save(path):
 
 def part_limit(folder, name):
     """How many triangles a part may have (spec §5: ~400 a head; hair,
-    beard and headgear ~600 together): a head 450; headgear 300, the coif
-    240; hair 220, a beard 150."""
+    beard and headgear ~600 together): a head 450; headgear its recipe's
+    `limit` (the coif 240), else 300; hair 220, a beard 150."""
+    import recipes
+
     if folder == "heads":
         return 450
 
     if folder == "hair":
-        import recipes
-
         return 150 if recipes.HAIR.get(name, {}).get("kind") == "beard" else 220
 
-    return {"coif": 240}.get(name, 300)
+    return recipes.HEADGEAR.get(name, {}).get("limit", 300)
 
 
 def fail(message):

@@ -1,0 +1,11 @@
+{
+ "piece": "nasalhelm",
+ "triangles": 188,
+ "metal": [
+  "Head"
+ ],
+ "hides_hair": true,
+ "allows_beard": true,
+ "cloth": [],
+ "colliders": []
+}

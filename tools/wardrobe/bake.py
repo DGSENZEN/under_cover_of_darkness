@@ -56,6 +56,8 @@ def main():
         bake_heads()
     elif target == "headgear":
         bake_headgear()
+    elif target == "hair":
+        bake_hair()
     else:
         common.fail("nothing to bake called '%s'" % target)
 
@@ -380,19 +382,28 @@ def paint_part(obj, size, stripe=None):
 
 def trim(obj, passes, albedo):
     """The trim its build left notes of (obj["wr_details"]), painted as PS2
-    metal was: rivets (a bright head, a dark ring round it) in rings round
-    his head's middle, and bright edges along a ridge (comb) and a rim."""
+    metal was: on a helm, rivets (a bright head, a dark ring round it) in
+    rings round his head's middle, and bright edges along a ridge (comb) and
+    a rim; on a pauldron (plates), each lame's edge bright over the dark
+    line it shades, and its rolled rim bright."""
     notes = json.loads(obj.get("wr_details", "{}"))
 
     if not notes:
         return albedo
 
     p = passes["position"]
+    shade = np.ones(p.shape[:2])
+
+    for plate in notes.get("plates", []):
+        shade *= plates(plate, p, passes["fabric"])
+
+    if "centre" not in notes:
+        return albedo * shade[..., None]
+
     centre = notes["centre"]
     dx, dy = p[..., 0] - centre[0], p[..., 1] - centre[1]
     azimuth = np.arctan2(dx, -dy)
     across = np.hypot(dx, dy)
-    shade = np.ones(p.shape[:2])
 
     for ring in notes.get("rivets", []):
         step = 2.0 * np.pi / ring["count"]
@@ -414,6 +425,27 @@ def trim(obj, passes, albedo):
         shade *= 1.0 + 1.1 * ((across > rim["radius"]) & (p[..., 2] < rim["below"]))
 
     return albedo * shade[..., None]
+
+
+def plates(plate, p, fabric):
+    """A pauldron's trim: its iron within reach of the plate's joint (on his
+    left, and mirrored on his right), measured along its arm (`along`) from
+    the joint: bright just above each lame (the edge of the plate over it),
+    dark just below (its shadow), bright from the rolled rim on."""
+    q = p.copy()
+    q[..., 0] = np.abs(q[..., 0])
+    rel = q - np.array(plate["joint"])
+    axis = np.array(plate["axis"])
+    along = rel @ axis
+    off = np.linalg.norm(rel - along[..., None] * axis, axis=-1)
+    on = (fabric == fabrics.IRON) & (along > -0.08) & (along < plate["reach"] + 0.05) & (off < 0.2)
+    shade = np.ones(p.shape[:2])
+
+    for lame in plate["lames"]:
+        shade *= np.where(on & (along >= lame - 0.005) & (along < lame), 1.8, 1.0)
+        shade *= np.where(on & (along >= lame) & (along < lame + 0.006), 0.45, 1.0)
+
+    return shade * np.where(on & (along >= plate["reach"] - 0.002), 2.1, 1.0)
 
 
 # Palettes: common.PALETTE (64) colours an albedo. Tuned by eye: at 32 the
@@ -439,14 +471,28 @@ def bake_kind(recipe):
 
 
 def bake_headgear():
-    """Each piece's albedo, and its mask: no dye, no skin, the dirt (so how
-    dirty a guard rolled reaches his hat and coif too)."""
-    for obj in [o for o in bpy.data.objects if o.name.startswith("Gear_") and o.type == "MESH"]:
-        name = obj.name[len("Gear_"):]
+    """Each piece's albedo, and its mask: its dye (a hood's), no skin, the
+    dirt (so how dirty a guard rolled reaches his hat and coif too)."""
+    bake_parts("Gear_", "headgear")
+
+
+def bake_hair():
+    """Each hair and beard: grey strands, lit by its own shape, and its
+    mask: all dyed (the game tints it his hair's colour), no skin, its dirt."""
+    bake_parts("Hair_", "hair")
+
+
+def bake_parts(prefix, folder):
+    """Every `prefix` part in this file: `<folder>/<name>.png` and its mask
+    (dye, skin, dirt), 128 px."""
+    (common.WARDROBE / folder).mkdir(parents=True, exist_ok=True)
+
+    for obj in [o for o in bpy.data.objects if o.name.startswith(prefix) and o.type == "MESH"]:
+        name = obj.name[len(prefix):]
         lit, covered, dye, skin, dirt = paint_part(obj, 128)
-        finish(lit, covered, str(common.WARDROBE / "headgear" / ("%s.png" % name)))
+        finish(lit, covered, str(common.WARDROBE / folder / ("%s.png" % name)))
         mask = np.stack([dye, skin, dirt], axis=-1).astype(np.float64)
-        save_png(shrink(fill(mask, covered)), str(common.WARDROBE / "headgear" / ("%s_mask.png" % name)), colour=False)
+        save_png(shrink(fill(mask, covered)), str(common.WARDROBE / folder / ("%s_mask.png" % name)), colour=False)
 
 
 def bake_heads():
@@ -483,10 +529,15 @@ def bake_heads():
 
 def tint(source, colour):
     """A detailed part's texture multiplied by `colour` (sRGB): the brows, a
-    Quaternius hair card of pale grey strands, in his hair's colour."""
-    for material in source.data.materials:
+    Quaternius hair card of pale grey strands, in his hair's colour. On its
+    own copy of each material: every face's brows are copies of the same
+    Quaternius brows, sharing their material."""
+    for slot, material in enumerate(source.data.materials):
         if material is None or not material.use_nodes:
             continue
+
+        material = material.copy()
+        source.data.materials[slot] = material
 
         nodes, links = material.node_tree.nodes, material.node_tree.links
         principled = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)

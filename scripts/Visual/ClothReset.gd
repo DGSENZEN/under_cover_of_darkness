@@ -23,15 +23,6 @@ var ragdoll: Node
 
 ## What the floor is found on (the world, not his own bodies).
 const FLOOR_MASK := 1
-## A limp body slower than this (m/s) for SETTLE frames lies still: his
-## cloth stops swinging (Cloth.lie_still) until he moves again. Some falls
-## never sleep (their bodies creep a centimetre or two a second for ever),
-## and the cloth shivered on them.
-const STILL := 0.2
-const SETTLE := 30
-
-var _resting := 0
-var _still := false
 
 var _last := Vector3.INF
 var _owed := 0
@@ -55,7 +46,6 @@ func _process_modification() -> void:
 		cloth.reset()
 
 	_keep_floor(skeleton)
-	_keep_still()
 
 
 ## The cloth's floor at the floor under his hips while he lies limp (his
@@ -83,16 +73,3 @@ func _keep_floor(skeleton: Skeleton3D) -> void:
 ## him somewhere in one step (Humanoid.restart_cloth).
 func restart() -> void:
 	_owed = RESTARTS
-
-
-
-## His cloth lies still once his limp body has, and swings again the moment
-## he is moved or gets up.
-func _keep_still() -> void:
-	var resting: bool = ragdoll != null and ragdoll.is_limp() and ragdoll.speed() < STILL
-	_resting = _resting + 1 if resting else 0
-	var still := _resting >= SETTLE
-
-	if still != _still:
-		_still = still
-		cloth.lie_still(still)

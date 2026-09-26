@@ -1,0 +1,11 @@
+{
+ "style": "parted",
+ "kind": "hair",
+ "body": "male",
+ "triangles": 180,
+ "dye_base": [
+  0.502,
+  0.502,
+  0.502
+ ]
+}

@@ -90,6 +90,8 @@ def wear_bake(obj, target):
         path = common.WARDROBE / "heads" / ("%s_light.png" % obj.name[len("Head_"):])
     elif obj.name.startswith("Gear_"):
         path = common.WARDROBE / "headgear" / ("%s.png" % obj.name[len("Gear_"):])
+    elif obj.name.startswith("Hair_"):
+        path = common.WARDROBE / "hair" / ("%s.png" % obj.name[len("Hair_"):])
     else:
         return
 
@@ -118,7 +120,7 @@ def bring(name):
         return
 
     with bpy.data.libraries.load(str(path)) as (source, target):
-        target.objects = [n for n in source.objects if n.startswith(("Head_", "Gear_"))]
+        target.objects = [n for n in source.objects if n.startswith(("Head_", "Gear_", "Hair_"))]
 
     for obj in target.objects:
         if obj is not None:

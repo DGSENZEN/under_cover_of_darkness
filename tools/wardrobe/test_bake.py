@@ -92,7 +92,100 @@ def case_json():
     return kept(lambda path: export.write_json(path, {"piece": "test"}), "piece.json")
 
 
-CASES = {"alone": case_alone, "others": case_others, "png": case_png, "json": case_json}
+def case_wrapped():
+    """Leg wraps: bands wound on the diagonal, 3 cm apart (10 dark seams up
+    30 cm of shin)."""
+    import fabrics
+
+    z = np.linspace(0.3, 0.6, 1200)
+    points = np.stack([np.full_like(z, 0.1), np.full_like(z, -0.05), z], axis=1)
+    normals = np.tile([0.0, -1.0, 0.0], (len(z), 1))
+    shade = fabrics.paint(np.full(len(z), fabrics.WRAPPED), points, normals, np.full((len(z), 3), 0.5))[:, 0] / 0.5
+    dark = shade < np.percentile(shade, 15)
+    seams = int(np.count_nonzero(dark[1:] & ~dark[:-1]))
+    return [] if 9 <= seams <= 11 else ["wrapped: %d dark seams in 30 cm (want 10)" % seams]
+
+
+def case_hair():
+    """Hair: strands that run with it (down and back), so the shade changes
+    far faster across them than along them."""
+    import fabrics
+
+    flow = np.array([0.0, 0.5, -1.0]) / np.linalg.norm([0.0, 0.5, -1.0])
+    across = np.cross([1.0, 0.0, 0.0], flow)
+    start = np.array([0.08, 0.0, 1.72])
+    steps = np.linspace(0.0, 0.03, 600)[:, None]
+    normals = np.tile([1.0, 0.0, 0.0], (len(steps), 1))
+
+    def rough(points):
+        shade = fabrics.paint(np.full(len(points), fabrics.HAIR), points, normals, np.full((len(points), 3), 0.5))[:, 0]
+        return float(np.mean(np.abs(np.diff(shade))))
+
+    along, over = rough(start + steps * flow), rough(start + steps * across)
+    return [] if over > 3.0 * along and over > 0.0 else ["hair: across %.4f, along %.4f" % (over, along)]
+
+
+def case_plates():
+    """A pauldron's trim (its build's notes): each lame's edge bright over a
+    dark line, the rolled rim bright; only iron, only on the plate."""
+    import fabrics
+
+    fresh()
+    obj = plate("Outfit")
+    obj["wr_details"] = common.dump({"plates": [{"joint": [0.2, 0.0, 1.5], "axis": [1.0, 0.0, 0.0], "reach": 0.14,
+                                                 "lames": [0.05, 0.1]}]})
+    x = np.linspace(0.15, 0.4, 2500)
+    # Along his left arm, the same along his right (mirrored), and at his waist.
+    rows = [np.stack([x, np.zeros_like(x), np.full_like(x, 1.58)], axis=1),
+            np.stack([-x, np.zeros_like(x), np.full_like(x, 1.58)], axis=1),
+            np.stack([x, np.zeros_like(x), np.full_like(x, 1.0)], axis=1)]
+    position = np.stack(rows)
+    messages = []
+
+    for fabric, want in ((fabrics.IRON, True), (fabrics.MAIL, False)):
+        passes = {"position": position, "fabric": np.full(position.shape[:2], fabric)}
+        out = bake.trim(obj, passes, np.full(position.shape, 0.5))[..., 0] / 0.5
+
+        def at(row, along):
+            return out[row, int(np.argmin(np.abs(x - 0.2 - along)))]
+
+        painted = [at(r, 0.047) > 1.2 and at(r, 0.053) < 0.8 and at(r, 0.097) > 1.2 and at(r, 0.143) > 1.5
+                   and abs(at(r, 0.02) - 1.0) < 1e-6 for r in (0, 1)]
+        untouched = bool(np.all(np.abs(out[2] - 1.0) < 1e-6))
+
+        if want and not (all(painted) and untouched):
+            messages.append("plates: iron painted %s, waist untouched %s" % (painted, untouched))
+        elif not want and not np.all(np.abs(out - 1.0) < 1e-6):
+            messages.append("plates: mail was painted")
+
+    return messages
+
+
+def case_tint():
+    """Two faces' brows (copies sharing the Quaternius material) tinted each
+    their own colour: one face's tint never reaches the other's."""
+    fresh()
+    material = bpy.data.materials.new("Brows")
+    material.use_nodes = True
+    nodes, links = material.node_tree.nodes, material.node_tree.links
+    texture = nodes.new("ShaderNodeTexImage")
+    links.new(texture.outputs["Color"], nodes["Principled BSDF"].inputs["Base Color"])
+    brows = []
+
+    for name in ("High_a_brows", "High_b_brows"):
+        obj = plate(name)
+        obj.data.materials.append(material)
+        brows.append(obj)
+
+    bake.tint(brows[0], (0.16, 0.11, 0.08))
+    bake.tint(brows[1], (0.62, 0.60, 0.57))
+    mixes = [sum(1 for n in o.data.materials[0].node_tree.nodes if n.type == "MIX") for o in brows]
+    shared = brows[0].data.materials[0] == brows[1].data.materials[0]
+    return [] if mixes == [1, 1] and not shared else ["tint: multiplies %s, one material %s" % (mixes, shared)]
+
+
+CASES = {"alone": case_alone, "others": case_others, "png": case_png, "json": case_json,
+         "wrapped": case_wrapped, "hair": case_hair, "plates": case_plates, "tint": case_tint}
 
 
 def main():

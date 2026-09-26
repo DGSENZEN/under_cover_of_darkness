@@ -13,7 +13,10 @@ alone on a saved bake.
 import numpy as np
 
 # The order of recipes.FABRICS.
-SKIN, QUILTED, WOOL, LEATHER, MAIL, IRON = range(6)
+SKIN, QUILTED, WOOL, LEATHER, MAIL, IRON, WRAPPED, HAIR = range(8)
+
+# Which way hair grows (flows): down and back.
+FLOW = np.array([0.0, 0.5, -1.0]) / np.linalg.norm([0.0, 0.5, -1.0])
 
 
 # Rust's colour, linear (sRGB 0.27, 0.14, 0.07).
@@ -118,6 +121,33 @@ def paint(fabric, points, normals, base):
         hammered = 0.85 + 0.3 * fbm(q, 28.0, 51)
         scratched = lines(q[:, 0] * 0.8 + q[:, 2] * 0.6 + 0.01 * noise(q, 60.0, 52), 0.011, 0.0009) * (noise(q, 14.0, 53) > 0.6)
         shade[iron] = sky * hammered * (1.0 + 0.9 * scratched)
+
+    wrapped = fabric == WRAPPED
+    if wrapped.any():
+        # Leg wraps: a band wound on the diagonal, each turn 3 cm on from the
+        # last, rounded (lighter across its middle), with a dark seam where
+        # it tucks under the next; a coarse weave.
+        q = p[wrapped]
+        n = normals[wrapped]
+        across = np.where(np.abs(n[:, 0]) > np.abs(n[:, 1]), q[:, 1], q[:, 0])
+        wound = q[:, 2] + 0.5 * across
+        turn = (wound / 0.03) % 1.0
+        seam = lines(wound, 0.03, 0.0035)
+        shade[wrapped] = (0.84 + 0.16 * np.sin(np.pi * turn)) * (1.0 - 0.4 * seam) * (0.95 + 0.06 * noise(q, 160.0, 61))
+
+    hair = fabric == HAIR
+    if hair.any():
+        # Strands that run with the hair (FLOW, laid on the surface): fine
+        # ones a few millimetres across and clumps of them, long along it.
+        q = p[hair]
+        n = normals[hair]
+        along = FLOW - n * (n @ FLOW)[:, None]
+        along /= np.maximum(np.linalg.norm(along, axis=1), 1e-6)[:, None]
+        over = np.cross(n, along)
+        a, b = np.sum(q * over, axis=1), np.sum(q * along, axis=1)
+        fine = noise(np.stack([a / 0.0025, b / 0.03, np.zeros_like(a)], axis=1), 1.0, 71)
+        clumps = noise(np.stack([a / 0.012, b / 0.08, np.zeros_like(a)], axis=1), 1.0, 72)
+        shade[hair] = 0.6 + 0.3 * fine + 0.25 * clumps
 
     out = base * shade[:, None]
 

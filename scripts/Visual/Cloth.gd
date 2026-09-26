@@ -20,15 +20,9 @@ extends SpringBoneSimulator3D
 const PARKED := Vector3(0.0, -1000.0, 0.0)
 
 
-## His chains as the wardrobe's JSON gave them (to come back to after he
-## has lain still).
-var _chains: Array = []
-
-
 ## The chains ({bones, tip, stiffness, drag, gravity, radius}) and the
 ## capsules on his bones ({bone, radius, height}) from the wardrobe's JSON.
 func setup(chains: Array, colliders: Array) -> void:
-	_chains = chains
 	set_setting_count(chains.size())
 
 	for i in range(chains.size()):
@@ -71,13 +65,3 @@ func setup(chains: Array, colliders: Array) -> void:
 		add_child(capsule)
 
 
-
-## Still (true): his cloth stays where it lies, moved only by what it
-## touches (a body at rest on the floor may still creep a little, and his
-## cloth would shiver on it). False: it swings again.
-func lie_still(still: bool) -> void:
-	for i in range(_chains.size()):
-		var chain: Dictionary = _chains[i]
-		set_stiffness(i, 0.0 if still else float(chain.get("stiffness", 1.0)))
-		set_drag(i, 1.0 if still else float(chain.get("drag", 0.4)))
-		set_gravity(i, 0.0 if still else float(chain.get("gravity", 1.0)))

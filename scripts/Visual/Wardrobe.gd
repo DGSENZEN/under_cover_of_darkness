@@ -107,6 +107,15 @@ static func headgear_data(piece: StringName) -> Dictionary:
 	return _read("headgear/%s.json" % piece)
 
 
+## The colour a kind's outfit was baked in (its dyed faces): its dye's
+## `colour`, or the first of its `colours`; white with no dye.
+static func dye_base(options: Dictionary) -> Color:
+	var dye: Dictionary = options.get("dye", {})
+	var colours: Array = dye.get("colours", [])
+	var base: Array = colours[0] if not colours.is_empty() else dye.get("colour", [1.0, 1.0, 1.0])
+	return Color(base[0], base[1], base[2])
+
+
 static func hair_data(style: StringName) -> Dictionary:
 	return _read("hair/%s.json" % style)
 

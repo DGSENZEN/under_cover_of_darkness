@@ -1162,8 +1162,7 @@ func dress(kind: StringName, seed: int, fighting_idle: StringName = &"Sword_Idle
 			look.beard = &""
 
 	var root := WardrobeScript.ROOT
-	var dye: Array = options.get("dye", {}).get("colour", [1.0, 1.0, 1.0])
-	var dye_base := Color(dye[0], dye[1], dye[2])
+	var dye_base := WardrobeScript.dye_base(options)
 	body = _wear(root + "%s.glb" % kind, "Outfit", load(root + "%s.png" % kind), load(root + "%s_mask.png" % kind), dye_base, body_kind)
 	_wear(root + "heads/%s.glb" % look.face, "Head_%s" % look.face, load(root + "heads/%s_%s.png" % [look.face, look.tone]), null,
 		Color.WHITE, body_kind)

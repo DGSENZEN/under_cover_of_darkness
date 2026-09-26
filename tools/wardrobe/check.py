@@ -70,7 +70,7 @@ def check_kind(recipe):
     chains = json.loads(bpy.context.scene.get("wardrobe_chains", "[]"))
     cloth = [bone for chain in chains for bone in chain["bones"]]
     combined = common.tri_count(outfit) + parts_triangles(recipe)
-    print("wardrobe: %s outfit %d triangles, %d with head and headgear (limit %d)"
+    print("wardrobe: %s outfit %d triangles, %d with head, hair and headgear (limit %d)"
           % (recipe["kind"], common.tri_count(outfit), combined, common.budget_of(recipe["kind"])))
     return validate.check(outfit, armature=armature, reference_joints=reference_joints(recipe["body"]), cloth_bones=cloth,
                           combined_tris=combined, budget=common.budget_of(recipe["kind"]), bare=set(recipe["bare"]))
@@ -84,9 +84,18 @@ def check_parts(prefix, folder):
     messages = [] if parts else ["build: nothing called %s* in this file" % prefix]
     joints = reference_joints("male")
 
+    wanted = {"Head_": recipes.HEADS, "Gear_": recipes.HEADGEAR, "Hair_": recipes.HAIR}.get(prefix, {})
+    messages += ["build: no %s%s in this file (build %s again)" % (prefix, name, folder)
+                 for name in wanted if bpy.data.objects.get(prefix + name) is None]
+
+    chains = json.loads(bpy.context.scene.get("wardrobe_chains", "[]"))
+
     for obj in parts:
         cap = common.part_limit(folder, obj.name[len(prefix):])
-        found = validate.check(obj, armature=armature, reference_joints=joints, combined_tris=common.tri_count(obj), budget=cap)
+        # A piece's own cloth bones (a hood's tail) are its to be weighted to.
+        cloth = [b for c in chains if c.get("piece") == obj.name[len(prefix):] for b in c["bones"]]
+        found = validate.check(obj, armature=armature, reference_joints=joints, cloth_bones=cloth,
+                               combined_tris=common.tri_count(obj), budget=cap)
         messages += ["%s %s" % (obj.name, m) for m in found]
         print("wardrobe: %s %d triangles (limit %d)" % (obj.name, common.tri_count(obj), cap))
 
@@ -95,10 +104,26 @@ def check_parts(prefix, folder):
         if piece.get("covers_head"):
             messages += ["%s %s" % (obj.name, m) for m in encloses(obj, piece, armature.data.bones["Head"].head_local)]
 
-        if piece.get("over") and bpy.data.objects.get("Gear_" + piece["over"]) is not None:
-            under = bpy.data.objects["Gear_" + piece["over"]]
-            messages += ["%s %s" % (obj.name, m) for m in fit(obj, under, armature.data.bones["Head"].head_local,
-                                                              piece["clearance"], piece["rest"])]
+        pivot = armature.data.bones["Head"].head_local
+        style = recipes.HAIR.get(obj.name[len(prefix):], {}) if prefix == "Hair_" else {}
+
+        # Hair clears every head it may go on (how far it stands off is its
+        # own business: no `rest`).
+        if style:
+            under = heads()
+            messages += ["%s %s" % (obj.name, m) for m in fit(obj, under, pivot, style["clearance"], None,
+                                                              style.get("fit_rays"))] if under else []
+            forget(under)
+
+        if piece.get("over") == "head":
+            under = heads()
+            messages += ["%s %s" % (obj.name, m) for m in fit(obj, under, pivot, piece["clearance"], piece["rest"],
+                                                              piece.get("fit_rays"))] if under else []
+            forget(under)
+        elif piece.get("over") and bpy.data.objects.get("Gear_" + piece["over"]) is not None:
+            under = [bpy.data.objects["Gear_" + piece["over"]]]
+            messages += ["%s %s" % (obj.name, m) for m in fit(obj, under, pivot, piece["clearance"], piece["rest"],
+                                                              piece.get("fit_rays"))]
 
         if prefix == "Head_":
             lowest = min(v.co.z for v in obj.data.vertices)
@@ -113,12 +138,9 @@ def check_parts(prefix, folder):
     return messages
 
 
-def encloses(obj, piece, pivot):
-    """A hood must hold every head it can go over: each head vertex of his
-    skull (from just under `rigid_above`; its face opening aside) at least
-    `inside` (metres) under it, looking out from the middle of his head.
-    Flat faces of a hood cut too coarse sag through the head between their
-    corners."""
+def heads():
+    """Every head in heads.blend, brought into this file (forget() lets
+    them go): what hoods and helms go over."""
     path = common.SOURCE / "heads.blend"
 
     if not path.exists():
@@ -128,17 +150,33 @@ def encloses(obj, piece, pivot):
     with bpy.data.libraries.load(str(path)) as (source, target):
         target.objects = [name for name in source.objects if name.startswith("Head_")]
 
-    heads = [o for o in target.objects if o is not None and o.type == "MESH"]
+    return [o for o in target.objects if o is not None and o.type == "MESH"]
 
-    if not heads:
-        return ["encloses: no heads in heads.blend to check"]
+
+def forget(objects):
+    for obj in objects:
+        mesh = obj.data
+        bpy.data.objects.remove(obj)
+        bpy.data.meshes.remove(mesh)
+
+
+def encloses(obj, piece, pivot):
+    """A hood must hold every head it can go over: each head vertex of his
+    skull (from just under `rigid_above`; its face opening aside) at least
+    `inside` (metres) under it, looking out from the middle of his head.
+    Flat faces of a hood cut too coarse sag through the head between their
+    corners."""
+    found = heads()
+
+    if not found:
+        return ["encloses: no heads in heads.blend to check"] if (common.SOURCE / "heads.blend").exists() else []
 
     tree = common.bvh([obj])
     centre = pivot + Vector((0.0, 0.0, 0.1))
     hole = piece["opening"]
     worst, where = 1.0, None
 
-    for head in heads:
+    for head in found:
         mesh = head.data
 
         for vertex in mesh.vertices:
@@ -162,8 +200,7 @@ def encloses(obj, piece, pivot):
             if margin < worst:
                 worst, where = margin, p.copy()
 
-        bpy.data.objects.remove(head)
-        bpy.data.meshes.remove(mesh)
+    forget(found)
 
     if where is not None and worst < piece["inside"]:
         return ["encloses: the head comes %.1f mm from its surface at (%.3f, %.3f, %.3f) (at least %.1f mm under it)"
@@ -172,34 +209,40 @@ def encloses(obj, piece, pivot):
     return []
 
 
-def fit(obj, under, pivot, clearance, rest):
-    """How a piece sits on what it goes over: along rays from the middle of
-    his head over his crown (25-85 degrees up, every 30 degrees round), the
-    gap between them. Never under `clearance` (it would cut in), never over
-    `rest` (it would float, oversized)."""
-    outer, inner = common.bvh([obj]), common.bvh([under])
+def fit(obj, unders, pivot, clearance, rest, rays=None):
+    """How a piece sits on what it goes over (each of `unders` in turn: a
+    helm on every head it may be worn on): along rays from the middle of his
+    head (`rays`, {"elevations": [...], "azimuths": [...]} in degrees; by
+    default over his crown, 25-85 up, every 30 round), the gap between them.
+    Never under `clearance` (it would cut in), never over `rest` (it would
+    float, oversized)."""
+    rays = rays or {"elevations": [25, 45, 65, 85], "azimuths": list(range(0, 360, 30))}
+    outer = common.bvh([obj])
     centre = pivot + Vector((0.0, 0.0, 0.1))
-    gaps = []
-
-    for elevation in (25, 45, 65, 85):
-        for azimuth in range(0, 360, 30):
-            e, a = math.radians(elevation), math.radians(azimuth)
-            direction = Vector((math.cos(e) * math.sin(a), -math.cos(e) * math.cos(a), math.sin(e)))
-            over, below = outer.ray_cast(centre, direction, 0.5), inner.ray_cast(centre, direction, 0.5)
-
-            if over[0] is not None and below[0] is not None:
-                gaps.append(over[3] - below[3])
-
-    if not gaps:
-        return ["fit: never over %s" % under.name]
-
     messages = []
 
-    if min(gaps) < clearance - 0.001:
-        messages.append("fit: cuts into %s (gap %.1f mm, at least %.1f)" % (under.name, min(gaps) * 1000, clearance * 1000))
+    for under in unders:
+        inner = common.bvh([under])
+        gaps = []
 
-    if max(gaps) > rest:
-        messages.append("fit: stands %.1f cm off %s (at most %.1f)" % (max(gaps) * 100, under.name, rest * 100))
+        for elevation in rays["elevations"]:
+            for azimuth in rays["azimuths"]:
+                e, a = math.radians(elevation), math.radians(azimuth)
+                direction = Vector((math.cos(e) * math.sin(a), -math.cos(e) * math.cos(a), math.sin(e)))
+                over, below = outer.ray_cast(centre, direction, 0.5), inner.ray_cast(centre, direction, 0.5)
+
+                if over[0] is not None and below[0] is not None:
+                    gaps.append(over[3] - below[3])
+
+        if not gaps:
+            messages.append("fit: never over %s" % under.name)
+            continue
+
+        if min(gaps) < clearance - 0.001:
+            messages.append("fit: cuts into %s (gap %.1f mm, at least %.1f)" % (under.name, min(gaps) * 1000, clearance * 1000))
+
+        if rest is not None and max(gaps) > rest:
+            messages.append("fit: stands %.1f cm off %s (at most %.1f)" % (max(gaps) * 100, under.name, rest * 100))
 
     return messages
 
@@ -227,16 +270,20 @@ def collar_top(kind):
 
 
 def parts_triangles(recipe):
-    """The heaviest head plus the heaviest headgear set the kind can roll,
-    from their exported JSON (or their budget, until exported)."""
+    """The heaviest head, hair, beard and headgear set the kind can roll
+    (as export.heaviest_parts counts them), from their exported JSON (or
+    their budget, until exported)."""
     options = recipe["options"]
     heads = [read("heads/%s.json" % face) for face in options["faces"]]
+    hair = [read("hair/%s.json" % style) for style in options.get("hair", [])]
+    beards = [read("hair/%s.json" % style) for style in options.get("beards", [])]
     sets = [[read("headgear/%s.json" % piece) for piece in pieces] for pieces in options["headgear"]]
 
-    if any(h is None for h in heads) or any(p is None for s in sets for p in s):
+    if any(p is None for p in heads + hair + beards) or any(p is None for s in sets for p in s):
         return PARTS_UNTIL_EXPORTED
 
-    return max(h["triangles"] for h in heads) + max((sum(p["triangles"] for p in s) for s in sets), default=0)
+    return (max(h["triangles"] for h in heads) + max((h["triangles"] for h in hair), default=0)
+            + max((b["triangles"] for b in beards), default=0) + max((sum(p["triangles"] for p in s) for s in sets), default=0))
 
 
 def read(relative):

@@ -276,10 +276,12 @@ func _run() -> void:
 		return g.get("_rig").get("man")
 	var helm_at: Vector3 = man_of.call(mailed).bone_global(&"Head").origin + Vector3.UP * 0.12
 	var plate_at: Vector3 = man_of.call(mailed).bone_global(&"upperarm_r").origin
-	var belly_at: Vector3 = mailed.global_position + Vector3.UP * 1.0 + mailed.global_basis.z * -0.2
+	# A cloth belly: the archer's (the wardrobe's swordsman wears a mail
+	# hauberk, so his belly rings; the wardrobe suite's K9 pins where).
+	var belly_at: Vector3 = hooded.global_position + Vector3.UP * 1.0 + hooded.global_basis.z * -0.2
 	var hood_at: Vector3 = man_of.call(hooded).bone_global(&"Head").origin + Vector3.UP * 0.12
-	_check("M14 steel rings on a helmet or a shoulder plate, not on a hood or a belly", mailed.armoured_at(helm_at) and mailed.armoured_at(plate_at) and not mailed.armoured_at(belly_at) and not hooded.armoured_at(hood_at),
-		"helmet %s plate %s belly %s hood %s" % [mailed.armoured_at(helm_at), mailed.armoured_at(plate_at), mailed.armoured_at(belly_at), hooded.armoured_at(hood_at)])
+	_check("M14 steel rings on a helmet or a shoulder plate, not on a hood or a belly", mailed.armoured_at(helm_at) and mailed.armoured_at(plate_at) and not hooded.armoured_at(belly_at) and not hooded.armoured_at(hood_at),
+		"helmet %s plate %s belly %s hood %s" % [mailed.armoured_at(helm_at), mailed.armoured_at(plate_at), hooded.armoured_at(belly_at), hooded.armoured_at(hood_at)])
 	mailed.queue_free()
 	hooded.queue_free()
 	await _frames(3)

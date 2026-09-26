@@ -150,7 +150,7 @@ const ARCHETYPES := {
 		"attacks": {&"overhead": 1.0, &"left": 1.0, &"right": 1.0, &"thrust": 0.6, &"sweep": 0.3},
 		"posture": 100.0, "delay_chance": 0.25, "grip_loss": 0.4, "spacing": 0.35,
 		"follow": {&"left": [&"right", &"right", &"bash", &"overhead"], &"right": [&"left", &"overhead", &"thrust"], &"overhead": [&"thrust", &"left"], &"thrust": [&"left", &"right"], &"sweep": [&"overhead"], &"bash": [&"overhead", &"thrust"]},
-		"look": {"scale": 1.0, "outfit": &"swordsman", "armour": [&"nasalhelm", &"pauldron_r", &"pauldron_l"], "weapon": &"sword"},
+		"look": {"scale": 1.0, "kind": &"swordsman", "outfit": &"swordsman", "armour": [&"nasalhelm", &"pauldron_r", &"pauldron_l"], "weapon": &"sword"},
 	},
 	&"duelist": {
 		"speaker": "Duelist",
@@ -187,8 +187,13 @@ const ARCHETYPES := {
 		"dodge_chance": 0.4, "kick_chance": 0.0, "poise": 2.0, "guard_damage": 8.0,
 		"strafe_speed": 1.3, "counter_chance": 0.0, "stagger_time": 0.3,
 		"ranged": true, "draw_time": 0.95, "shot_speed": 30.0, "backstep_chance": 0.3,
+<<<<<<< HEAD
 		"attacks": {&"kick": 1.0}, "posture": 60.0, "kick_range": 2.1, "grip_loss": 0.5,
 		"look": {"scale": 0.97, "outfit": &"archer", "armour": [&"hood"], "weapon": &"crossbow"},
+=======
+		"attacks": {&"kick": 1.0}, "posture": 60.0, "kick_range": 2.1,
+		"look": {"scale": 0.97, "kind": &"archer", "outfit": &"archer", "armour": [&"hood"], "weapon": &"crossbow"},
+>>>>>>> 2e6a11d (feat(npc): PS2 look batch 1 — swordsman, archer, arms master)
 	},
 	&"trainer": {
 		"speaker": "Arms master",
@@ -198,7 +203,7 @@ const ARCHETYPES := {
 		"poise": 99.0, "guard_damage": 14.0, "strafe_speed": 0.0, "stays_put": true, "kick_resist": 0.0, "topple_scale": 0.0, "posture": 99999.0,
 		"timing_variance": 0.0, "grip_loss": 0.0, "carries_lantern": false,
 		"attacks": {&"overhead": 1.0, &"left": 0.6, &"right": 0.6, &"thrust": 0.5},
-		"look": {"scale": 1.0, "outfit": &"trainer", "hair": [&"Hair_SimpleParted", &"Hair_Beard"], "hair_tint": Color(0.7, 0.68, 0.64), "weapon": &"sword"},
+		"look": {"scale": 1.0, "kind": &"arms_master", "outfit": &"trainer", "hair": [&"Hair_SimpleParted", &"Hair_Beard"], "hair_tint": Color(0.7, 0.68, 0.64), "weapon": &"sword"},
 	},
 }
 
