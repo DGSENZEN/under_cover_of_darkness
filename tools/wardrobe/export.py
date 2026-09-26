@@ -110,8 +110,9 @@ def lossless(path):
 def main():
     target, _ = common.args()
 
-    if target == "hair" and not recipes.HAIR:
-        print("wardrobe: no hair in the recipes: nothing to export")
+    if target in common.PART_TARGETS and not common.parts_of(common.part_table(common.PART_TARGETS[target][0]),
+                                                              common.PART_TARGETS[target][1]):
+        print("wardrobe: no %s %s in the recipes: nothing to export" % common.PART_TARGETS[target][::-1])
         return
 
     path = common.SOURCE / ("%s.blend" % target)
@@ -121,10 +122,9 @@ def main():
 
     if target in recipes.KINDS:
         export_kind(recipes.KINDS[target])
-    elif target == "heads":
-        export_parts("Head_", "heads")
-    elif target == "hair":
-        export_parts("Hair_", "hair")
+    elif target in common.PART_TARGETS:
+        folder, body = common.PART_TARGETS[target]
+        export_parts("Head_" if folder == "heads" else "Hair_", folder, body)
     elif target == "headgear":
         export_parts("Gear_", "headgear")
     else:
@@ -256,12 +256,12 @@ def dye_base(obj):
     return None
 
 
-def export_parts(prefix, folder):
-    """Every head (or hair piece, or headgear piece) in this file, each its
-    own GLB."""
+def export_parts(prefix, folder, body="male"):
+    """Every head (or hair piece, or headgear piece) in this file, made for
+    `body`, each its own GLB on this file's skeleton (that body's)."""
     armature = bpy.data.objects.get("Armature")
     parts = [o for o in bpy.data.objects if o.name.startswith(prefix) and o.type == "MESH"]
-    joints = reference_joints("male")
+    joints = reference_joints(body)
     chains = json.loads(bpy.context.scene.get("wardrobe_chains", "[]"))
     messages = []
 

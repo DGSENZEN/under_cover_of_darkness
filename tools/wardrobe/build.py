@@ -59,10 +59,9 @@ def main():
 
     if target in recipes.KINDS:
         build_kind(recipes.KINDS[target], bool(options.get("force")))
-    elif target == "heads":
-        build_heads(bool(options.get("force")))
-    elif target == "hair":
-        build_hair(bool(options.get("force")))
+    elif target in common.PART_TARGETS:
+        folder, body = common.PART_TARGETS[target]
+        (build_heads if folder == "heads" else build_hair)(bool(options.get("force")), body)
     elif target == "headgear":
         build_headgear(bool(options.get("force")))
     else:
@@ -1527,14 +1526,24 @@ def head_uv(obj):
             layer.data[index].uv = (0.5 + math.copysign(reach, angle) * 0.49, 0.01 + (co.z - z0) / (z1 - z0) * 0.98)
 
 
-def build_heads(force):
-    path = common.SOURCE / "heads.blend"
+def build_heads(force, body="male"):
+    """The heads of `body` (recipes.HEADS) into its own file, on its own
+    skeleton: source/heads.blend (male), heads_female.blend (female)."""
+    faces = common.parts_of(recipes.HEADS, body)
+
+    if not faces:
+        print("wardrobe: no %s heads in the recipes: nothing to build" % body)
+        return
+
+    target = common.part_target("heads", body)
+    path = common.SOURCE / ("%s.blend" % target)
     guard(path, force)
-    armature, reference, extras = start("heads")
+    armature, reference, extras = start(target, body)
     kind = Kind({"belt": ("spine_01", 0.0), "garments": []}, armature, reference)
     made = []
 
-    for face, recipe in recipes.HEADS.items():
+    for face in faces:
+        recipe = recipes.HEADS[face]
         high = head_region(reference, "High_%s" % face)
         sources = [high]
 
@@ -1608,34 +1617,39 @@ def finish(path, made, reference):
 # Headgear
 # ---------------------------------------------------------------------------
 
-def build_hair(force):
-    """Every hair and beard in recipes.HAIR into source/hair.blend, each as
+def build_hair(force, body="male"):
+    """Every hair and beard of `body` (recipes.HAIR) into its own file, on its
+    own skeleton (source/hair.blend, hair_female.blend), each as
     `Hair_<style>`: the Quaternius style cut down to `tris` (evenly either
-    side), pushed out until every head it may go on (heads.blend: build them
+    side), pushed out until every head of that body it may go on (build them
     first) lies at least `clearance` under it, looking out from the middle
-    of his head (as check.fit looks); smooth, weighed on his Head and neck
-    alone, all of it hair and dyed (a grey the game tints his hair's
+    of the head (as check.fit looks); smooth, weighed on the Head and neck
+    alone, all of it hair and dyed (a grey the game tints the hair's
     colour)."""
-    if not recipes.HAIR:
-        print("wardrobe: no hair in the recipes: nothing to build")
+    styles = common.parts_of(recipes.HAIR, body)
+
+    if not styles:
+        print("wardrobe: no %s hair in the recipes: nothing to build" % body)
         return
 
-    path = common.SOURCE / "hair.blend"
+    target = common.part_target("hair", body)
+    path = common.SOURCE / ("%s.blend" % target)
     guard(path, force)
-    armature, reference, extras = start("hair")
+    armature, reference, extras = start(target, body)
 
     for extra in extras.values():
         bpy.data.objects.remove(extra)
 
-    heads = head_points()
+    heads = head_points(body)
 
     if not heads:
-        common.fail("no heads in source/heads.blend: build heads first")
+        common.fail("no heads in source/%s.blend: build them first" % common.part_target("heads", body))
 
     centre = armature.data.bones["Head"].head_local + Vector((0.0, 0.0, 0.1))
     made = []
 
-    for style, h in recipes.HAIR.items():
+    for style in styles:
+        h = recipes.HAIR[style]
         obj = quaternius_style(h["from"], "Hair_%s" % style)
         common.weld(obj)
         decimate = obj.modifiers.new("Decimate", "DECIMATE")
@@ -1673,9 +1687,10 @@ def build_hair(force):
 HAIR_GREY = (0.5, 0.5, 0.5)
 
 
-def head_points():
-    """Every vertex of every head in heads.blend (what hair must cover)."""
-    path = common.SOURCE / "heads.blend"
+def head_points(body="male"):
+    """Every vertex of every head of `body` (its heads file): what its hair
+    must cover."""
+    path = common.SOURCE / ("%s.blend" % common.part_target("heads", body))
 
     if not path.exists():
         return []

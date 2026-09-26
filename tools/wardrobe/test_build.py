@@ -227,6 +227,31 @@ def over_the_sash(outfit, recipe=TYPES):
     return wrong
 
 
+def weights_of(obj):
+    """Each vertex's weights by bone name (the ones that count)."""
+    names = {g.index: g.name for g in obj.vertex_groups}
+    return [{names[g.group]: g.weight for g in v.groups if g.weight > 1e-4} for v in obj.data.vertices]
+
+
+def strays(a, b):
+    """a's vertices with no vertex of b within 0.1 mm carrying the same
+    weights: two builds of one part compared by place, as their vertex order
+    varies run to run."""
+    from mathutils.kdtree import KDTree
+
+    def same(x, y):
+        return x.keys() == y.keys() and all(abs(x[k] - y[k]) < 1e-3 for k in x)
+
+    tree = KDTree(len(b.data.vertices))
+
+    for v in b.data.vertices:
+        tree.insert(v.co, v.index)
+
+    tree.balance()
+    wa, wb = weights_of(a), weights_of(b)
+    return [v.co.copy() for v in a.data.vertices if not any(same(wa[v.index], wb[i]) for _, i, _ in tree.find_range(v.co, 1e-4))]
+
+
 def case_watchman():
     """The watchman the user approved rebuilds as he was: today's pipeline,
     run on his recipe, gives back source/watchman.blend (the same triangles
@@ -236,8 +261,6 @@ def case_watchman():
     import json
     import tempfile
     from pathlib import Path
-
-    from mathutils.kdtree import KDTree
 
     import build
     import recipes
@@ -271,25 +294,6 @@ def case_watchman():
             out[parts[p.index].value] = out.get(parts[p.index].value, 0) + len(p.vertices) - 2
 
         return out
-
-    def weights(obj):
-        names = {g.index: g.name for g in obj.vertex_groups}
-        return [{names[g.group]: g.weight for g in v.groups if g.weight > 1e-4} for v in obj.data.vertices]
-
-    def same(a, b):
-        return a.keys() == b.keys() and all(abs(a[k] - b[k]) < 1e-3 for k in a)
-
-    def strays(a, b):
-        """a's vertices with no vertex of b within 0.1 mm carrying its weights."""
-        tree = KDTree(len(b.data.vertices))
-
-        for v in b.data.vertices:
-            tree.insert(v.co, v.index)
-
-        tree.balance()
-        wa, wb = weights(a), weights(b)
-        return [v.co.copy() for v in a.data.vertices
-                if not any(same(wa[v.index], wb[i]) for _, i, _ in tree.find_range(v.co, 1e-4))]
 
     def near(a, b):
         if isinstance(a, dict):
@@ -395,8 +399,67 @@ def case_launcher():
     return [] if done.returncode != 0 else ["launcher: `check all` exited 0 though it could not tell the kinds"]
 
 
+def case_bodies():
+    """Heads and hair are made per body, each body's in its own file on its
+    own skeleton: a female part is built on, and checked against, the
+    female skeleton (her head's joint sits 5 cm under his)."""
+    import build
+    import export
+
+    table = {"m": {"body": "male"}, "f": {"body": "female"}, "n": {}}
+    ok = common.parts_of(table, "female") == ["f"] and common.parts_of(table, "male") == ["m", "n"] \
+        and common.PART_TARGETS["heads_female"] == ("heads", "female") and common.PART_TARGETS["hair"] == ("hair", "male")
+    fresh()
+    head = build.start("heads_female", "female")[0].data.bones["Head"].head_local.z
+    ok = ok and abs(export.reference_joints("female")["Head"][2] - head) < 0.001 \
+        and abs(export.reference_joints("male")["Head"][2] - head) > 0.03
+    return [] if ok else ["bodies: parts by body, their targets, or the female skeleton's joints"]
+
+
+def case_male_parts():
+    """The male heads and hair rebuild as committed (every vertex by place
+    with its weights, as `watchman` compares): building per body changed
+    nothing for them."""
+    import tempfile
+    from pathlib import Path
+
+    import build
+
+    source = common.WARDROBE / "source"
+    folder = Path(tempfile.mkdtemp(prefix="wardrobe_male_parts_"))
+    messages = []
+
+    # The heads first: the hair is fitted over the heads it finds there.
+    for target, prefix, builder in (("heads", "Head_", build.build_heads), ("hair", "Hair_", build.build_hair)):
+        fresh()
+        common.SOURCE, common.BACKUP = folder, folder / "backup"
+
+        try:
+            builder(True)
+        finally:
+            common.SOURCE, common.BACKUP = source, source / "backup"
+
+        rebuilt = {o.name: o for o in bpy.data.objects if o.name.startswith(prefix) and o.type == "MESH"}
+
+        with bpy.data.libraries.load(str(source / ("%s.blend" % target))) as (src, dst):
+            dst.objects = [name for name in src.objects if name.startswith(prefix)]
+
+        for old in [o for o in dst.objects if o is not None and o.type == "MESH"]:
+            # (Loaded beside its rebuild, the committed one is renamed .001.)
+            name = old.name.split(".")[0]
+            new = rebuilt.get(name)
+
+            if new is None:
+                messages.append("%s: not rebuilt" % name)
+            elif common.tri_count(new) != common.tri_count(old) or strays(new, old) or strays(old, new):
+                messages.append("%s: %d triangles (committed %d), %d vertices moved, %d gone" % (
+                    name, common.tri_count(new), common.tri_count(old), len(strays(new, old)), len(strays(old, new))))
+
+    return messages
+
+
 CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, "watchman": case_watchman,
-         "hood": case_hood, "launcher": case_launcher}
+         "hood": case_hood, "launcher": case_launcher, "bodies": case_bodies, "male_parts": case_male_parts}
 
 
 def main():

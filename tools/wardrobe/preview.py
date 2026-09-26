@@ -32,8 +32,9 @@ DISTANCE = 3.6
 def main():
     target, options = common.args()
 
-    if target == "hair" and not recipes.HAIR:
-        print("wardrobe: no hair in the recipes: nothing to do")
+    if target in common.PART_TARGETS and not common.parts_of(common.part_table(common.PART_TARGETS[target][0]),
+                                                              common.PART_TARGETS[target][1]):
+        print("wardrobe: no %s %s in the recipes: nothing to do" % common.PART_TARGETS[target][::-1])
         return
 
     path = common.SOURCE / ("%s.blend" % target)

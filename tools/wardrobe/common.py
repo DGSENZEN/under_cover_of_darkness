@@ -391,6 +391,30 @@ def save(path):
     bpy.ops.wm.save_as_mainfile(filepath=str(path))
 
 
+# Each body's heads and hair in their own file, on their own skeleton: a
+# target names its folder and body ("heads" is the male body's heads).
+PART_TARGETS = {"heads": ("heads", "male"), "heads_female": ("heads", "female"),
+                "hair": ("hair", "male"), "hair_female": ("hair", "female")}
+
+
+def part_target(folder, body):
+    """The target (and source file) of `folder`'s parts for `body`."""
+    return next(target for target, made in PART_TARGETS.items() if made == (folder, body))
+
+
+def part_table(folder):
+    """The recipes of a folder's parts: recipes.HEADS or recipes.HAIR."""
+    import recipes
+
+    return recipes.HEADS if folder == "heads" else recipes.HAIR
+
+
+def parts_of(table, body):
+    """The names in `table` (recipes.HEADS or recipes.HAIR) made for `body`
+    (an entry naming none is the male body's), in the table's order."""
+    return [name for name, entry in table.items() if entry.get("body", "male") == body]
+
+
 def part_limit(folder, name):
     """How many triangles a part may have (spec §5: ~400 a head; hair,
     beard and headgear ~600 together): a head 450; headgear its recipe's

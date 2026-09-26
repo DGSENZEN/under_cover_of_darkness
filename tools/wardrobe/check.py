@@ -31,8 +31,9 @@ PARTS_UNTIL_EXPORTED = 1000
 def main():
     target, _ = common.args()
 
-    if target == "hair" and not recipes.HAIR:
-        print("wardrobe: no hair in the recipes: nothing to check")
+    if target in common.PART_TARGETS and not common.parts_of(common.part_table(common.PART_TARGETS[target][0]),
+                                                              common.PART_TARGETS[target][1]):
+        print("wardrobe: no %s %s in the recipes: nothing to check" % common.PART_TARGETS[target][::-1])
         return
 
     path = common.SOURCE / ("%s.blend" % target)
@@ -42,10 +43,9 @@ def main():
 
     if target in recipes.KINDS:
         messages = check_kind(recipes.KINDS[target])
-    elif target == "heads":
-        messages = check_parts("Head_", "heads")
-    elif target == "hair":
-        messages = check_parts("Hair_", "hair")
+    elif target in common.PART_TARGETS:
+        folder, body = common.PART_TARGETS[target]
+        messages = check_parts("Head_" if folder == "heads" else "Hair_", folder, body)
     elif target == "headgear":
         messages = check_parts("Gear_", "headgear")
     else:
@@ -76,15 +76,16 @@ def check_kind(recipe):
                           combined_tris=combined, budget=common.budget_of(recipe["kind"]), bare=set(recipe["bare"]))
 
 
-def check_parts(prefix, folder):
-    """Each head (or headgear piece) in this file: its budget, weights, UVs
-    and joints; a head's neck edge must sit under every collar it can wear."""
+def check_parts(prefix, folder, body="male"):
+    """Each head (or hair or headgear piece) in this file, made for `body`:
+    its budget, weights, UVs and joints (against that body's skeleton); a
+    head's neck edge must sit under every collar it can wear."""
     armature = bpy.data.objects.get("Armature")
     parts = [obj for obj in bpy.data.objects if obj.name.startswith(prefix) and obj.type == "MESH"]
     messages = [] if parts else ["build: nothing called %s* in this file" % prefix]
-    joints = reference_joints("male")
+    joints = reference_joints(body)
 
-    wanted = {"Head_": recipes.HEADS, "Gear_": recipes.HEADGEAR, "Hair_": recipes.HAIR}.get(prefix, {})
+    wanted = recipes.HEADGEAR if prefix == "Gear_" else common.parts_of(common.part_table(folder), body)
     messages += ["build: no %s%s in this file (build %s again)" % (prefix, name, folder)
                  for name in wanted if bpy.data.objects.get(prefix + name) is None]
 
@@ -110,7 +111,7 @@ def check_parts(prefix, folder):
         # Hair clears every head it may go on (how far it stands off is its
         # own business: no `rest`).
         if style:
-            under = heads()
+            under = heads(body)
             messages += ["%s %s" % (obj.name, m) for m in fit(obj, under, pivot, style["clearance"], None,
                                                               style.get("fit_rays"))] if under else []
             forget(under)
@@ -138,10 +139,10 @@ def check_parts(prefix, folder):
     return messages
 
 
-def heads():
-    """Every head in heads.blend, brought into this file (forget() lets
-    them go): what hoods and helms go over."""
-    path = common.SOURCE / "heads.blend"
+def heads(body="male"):
+    """Every head of `body` (its heads file), brought into this file
+    (forget() lets them go): what hair, hoods and helms go over."""
+    path = common.SOURCE / ("%s.blend" % common.part_target("heads", body))
 
     if not path.exists():
         return []

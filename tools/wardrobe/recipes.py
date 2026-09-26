@@ -453,8 +453,10 @@ JAW = {"elevations": [-60, -45, -30], "azimuths": [-75, -45, -15, 15, 45, 75]}
 # they may go on by `clearance`, weighed on his Head and neck, all of it
 # hair and dyed (a grey the game tints his hair's colour).
 HAIR = {
-    "parted": {"from": "assets/characters/hair/Hair_SimpleParted.gltf", "kind": "hair", "tris": 180, "clearance": 0.004,
+    "parted": {"from": "assets/characters/hair/Hair_SimpleParted.gltf", "body": "male", "kind": "hair", "tris": 180,
+               "clearance": 0.004,
                "fit_rays": CROWN},
-    "full": {"from": "assets/characters/hair/Hair_Beard.gltf", "kind": "beard", "tris": 120, "clearance": 0.003,
+    "full": {"from": "assets/characters/hair/Hair_Beard.gltf", "body": "male", "kind": "beard", "tris": 120,
+             "clearance": 0.003,
              "fit_rays": JAW},
 }

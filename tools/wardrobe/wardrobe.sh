@@ -9,9 +9,10 @@
 #   tools/wardrobe/wardrobe.sh test                       the validation rules', the bake's and the build's own tests
 #   tools/wardrobe/wardrobe.sh list                       the kinds the recipes make
 #
-# Targets: a kind (watchman...), heads, hair, headgear, or all (heads, hair,
-# headgear, then every kind: a kind's export reads its parts' triangle
-# counts).
+# Targets: a kind (watchman...), heads, heads_female, hair, hair_female,
+# headgear, or all (the heads and hair of each body, headgear, then every
+# kind: a kind's export reads its parts' triangle counts). Each body's heads
+# and hair are their own file, on their own skeleton.
 # Exits non-zero when a step fails.
 set -euo pipefail
 
@@ -50,14 +51,14 @@ case "$verb" in
     exec "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_build.py"
     ;;
   build|check|bake|export|preview)
-    target=${1:?"usage: wardrobe.sh $verb <kind|heads|hair|headgear|all> [options]"}
+    target=${1:?"usage: wardrobe.sh $verb <kind|heads|heads_female|hair|hair_female|headgear|all> [options]"}
     shift
 
     if [ "$target" = all ]; then
       # Asked first: set -e never sees a substitution in a loop's list fail.
       every=$(kinds)
 
-      for each in heads hair headgear $every; do
+      for each in heads heads_female hair hair_female headgear $every; do
         run "$verb" "$each" "$@"
       done
     else

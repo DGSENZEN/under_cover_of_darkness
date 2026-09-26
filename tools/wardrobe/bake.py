@@ -39,8 +39,9 @@ LUMA = np.array([0.299, 0.587, 0.114])
 def main():
     target, _ = common.args()
 
-    if target == "hair" and not recipes.HAIR:
-        print("wardrobe: no hair in the recipes: nothing to do")
+    if target in common.PART_TARGETS and not common.parts_of(common.part_table(common.PART_TARGETS[target][0]),
+                                                              common.PART_TARGETS[target][1]):
+        print("wardrobe: no %s %s in the recipes: nothing to do" % common.PART_TARGETS[target][::-1])
         return
 
     path = common.SOURCE / ("%s.blend" % target)
@@ -52,12 +53,11 @@ def main():
 
     if target in recipes.KINDS:
         bake_kind(recipes.KINDS[target])
-    elif target == "heads":
-        bake_heads()
+    elif target in common.PART_TARGETS:
+        # Whatever this file holds (its body's heads, or its hair).
+        bake_heads() if common.PART_TARGETS[target][0] == "heads" else bake_hair()
     elif target == "headgear":
         bake_headgear()
-    elif target == "hair":
-        bake_hair()
     else:
         common.fail("nothing to bake called '%s'" % target)
 
