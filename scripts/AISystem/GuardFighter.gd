@@ -187,13 +187,8 @@ const ARCHETYPES := {
 		"dodge_chance": 0.4, "kick_chance": 0.0, "poise": 2.0, "guard_damage": 8.0,
 		"strafe_speed": 1.3, "counter_chance": 0.0, "stagger_time": 0.3,
 		"ranged": true, "draw_time": 0.95, "shot_speed": 30.0, "backstep_chance": 0.3,
-<<<<<<< HEAD
 		"attacks": {&"kick": 1.0}, "posture": 60.0, "kick_range": 2.1, "grip_loss": 0.5,
-		"look": {"scale": 0.97, "outfit": &"archer", "armour": [&"hood"], "weapon": &"crossbow"},
-=======
-		"attacks": {&"kick": 1.0}, "posture": 60.0, "kick_range": 2.1,
 		"look": {"scale": 0.97, "kind": &"archer", "outfit": &"archer", "armour": [&"hood"], "weapon": &"crossbow"},
->>>>>>> 2e6a11d (feat(npc): PS2 look batch 1 — swordsman, archer, arms master)
 	},
 	&"trainer": {
 		"speaker": "Arms master",
