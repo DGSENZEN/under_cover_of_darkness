@@ -1,7 +1,7 @@
 # Climbing and Swimming: Design
 
 **Date:** 2026-09-26
-**Status:** built and tested (`tests/climb_swim_test`, L1–L2, G1–G7, W1–W5; `tests/gym_test` G8); this document awaits the user's review.
+**Status:** built and tested (`tests/climb_swim_test`, L1–L2, G1–G10, W1–W5; `tests/gym_test` G8); this document awaits the user's review. Section 4.7 came from playing it: in bay 10 the guards did not follow you up the ladder.
 
 ## 1. Goal
 
@@ -54,6 +54,7 @@ Links of one kind less than 1.4 m apart at both ends count as the same way. Anyt
 - **Into water:** from a bank 0.6 m over the surface or higher he jumps in and splashes. Lower banks he wades into. **Out of water:** he is hauled up the bank.
 - **During the move:** in a fight he keeps watching you, but he cannot guard or strike. It is heard: 44 dB climbing, 52 dB landing.
 - **Interrupted:** a blow, a kick, a knockdown or fire takes him off it. Off a wall or a ladder he falls, and the usual fall damage applies.
+- **One ladder, one body:** someone on the ladder just above him (below, going down) keeps him at its foot until there is room. On the ladder he stays a body's length (1.9 m) behind whoever is ahead of him. He never climbs into you or shoves you up it. Two guards going opposite ways pass each other.
 
 ### 4.3 Water (`WaterVolume.gd`)
 - **Deep:** more than 1.3 m from the surface to the floor under it. Anyone there swims.
@@ -78,6 +79,12 @@ Links of one kind less than 1.4 m apart at both ends count as the same way. Anyt
 ### 4.6 The bake (`NavBaker.gd`)
 The land mesh is baked with deep water cut out of it. Then a swim region is baked for each deep water, at its surface. Then the links are made. Then the navigation map is synced, so the next path asked for already uses them. Only then is `baked` emitted. In the gym (ten bays, 261 links) the whole bake takes about 1.1 s headless.
 
+### 4.7 Following you up (a follow-up)
+Playing bay 10, the user found that the guards did not follow them up the ladder. There were three causes, and each is fixed:
+- **You on the ladder counted as out of reach.** His path to your feet ended on the floor under you, so he stepped back to keep you in view and taunted you for a few seconds. Now, while you climb, hang off an edge or pull yourself over one, a guard goes for where that comes out (`PlayerController.climb_goal`, `Guard.goal_of`, `ClimbVolume.ends`): the top of the ladder going up, its foot going down. So he comes up behind you, waiting his turn as in 4.2.
+- **He could not look up.** His head only turned side to side, and he sees 45° up or down, so from the foot of a tower you on top were out of his sight, and he lost you. Now in a fight his eyes follow you up and down (up to about 63° from level).
+- **Losing you on the ladder stranded him on the floor.** Where he last saw you was up the ladder, and standing under it counted as having got there. Then he searched the floor. Now, if he last saw you on a ladder, hanging, going over an edge or in the air, he knows where you come out for up to 3 s after he loses you, until you are on your feet again (not under water: that is hiding). And coming to where he last had you counts height: under it is not there, unless his path can take him no nearer.
+
 ## 5. Where to see it
 
 The NPC gym (`maps/npc_gym.tscn`), **bay 10, CLIMB & SWIM**: press `-`, or walk to the corridor's north end and pull its lever. It has a block, two roofs with a 1.9 m gap between them, a 3.5 m tower with a ladder, and a pool 2.1 m deep. Two guards come after you wherever you go. F1 shows what each is doing ("climb", "ladder", "hang", "leap", "land", "swim", "tread"), and F4 freezes them so you can watch.
@@ -89,6 +96,7 @@ The NPC gym (`maps/npc_gym.tscn`), **bay 10, CLIMB & SWIM**: press `-`, or walk 
 1. `tests/climb_swim_test` passes all of its checks:
    - **L1–L2:** the ways across are found; water is swum at its surface; the way round is taken when it is short.
    - **G1–G7:** a guard climbs up after you, hops down, uses a ladder, hangs and drops unhurt, and leaps a gap. Struck on a ladder, he falls. Below a bare 3 m wall he does not try to climb it.
+   - **G8–G10:** from under a tower he looks up and sees you on it. In the dark, hearing nothing, he still comes up the ladder after you, having seen you start up it. When you stop partway up the ladder he waits his turn at its foot without shoving you, and follows you up when you go on.
    - **W1–W5:** you swim, dive and climb out; wading is slower; a guard swims after you but does not strike, and climbs out after you; a crate floats.
 2. `tests/gym_test` passes, G8 included: the bay 10 guards climb the ladder after you, and swim after you.
 3. Every other suite passes, run as the project documents (`--fixed-fps 60`).
@@ -101,4 +109,5 @@ The NPC gym (`maps/npc_gym.tscn`), **bay 10, CLIMB & SWIM**: press `-`, or walk 
 - **A wall over 2.3 m with no ladder is out of reach.** The guard below does what he did before: calls, throws, waits.
 - **Water is an axis-aligned box.** Turning the node does not turn the water.
 - **A rope is climbed like a ladder.** Guards do not swing on it.
+- **Waiting under you on a ladder, he cannot strike.** Your feet more than 1.2 m above his are out of his blade's reach. He waits for you at the foot, or on the ladder a body's length behind you.
 - **Wading is only slower.** A guard standing in water fights as he does on land.
