@@ -42,6 +42,7 @@ func _ready() -> void:
 func _run() -> void:
 	_model_checks()
 	await _momentum_checks()
+	await _camera_checks()
 
 
 # --------------------------------------------------------------------------
@@ -378,6 +379,219 @@ func _momentum_checks() -> void:
 	player.set("legacy_feel", false)
 	_check("Y7b the old feel still starts in a straight line to pace in 0.15 s", absf(old_sixth - 4.5) <= 0.05 and absf(old_ninth - 6.5) <= 0.01,
 		"tick 6 %.2f, tick 9 %.2f m/s" % [old_sixth, old_ninth])
+
+
+# --------------------------------------------------------------------------
+# The body carries the camera
+# --------------------------------------------------------------------------
+
+## Calls `read` after every node has done its _process this frame (the
+## smooth suite's recorder): what is drawn.
+class Recorder:
+	extends Node
+
+	var read: Callable
+	var seen: Array = []
+
+	func _process(_delta: float) -> void:
+		seen.append(read.call())
+
+
+func _camera_checks() -> void:
+	var body: RefCounted = player.get("body_motion")
+
+	# Y2i the real walk: every footstep lands as the head goes down
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(10)
+	Input.action_press("move_forward")
+	var walked := []
+	var last_steps: int = player._steps
+
+	for i in 180:
+		await _frames(1)
+		var y: float = body.head_offset(1.0).origin.y if body != null else 0.0
+		walked.append({"head": Transform3D(Basis.IDENTITY, Vector3(0.0, y, 0.0)), "step": player._steps != last_steps})
+		last_steps = player._steps
+
+	_release()
+	var real_misses := _footfall_misses(walked)
+	var real_steps := _count_steps(walked, 60)
+	_check("Y2i walking for real, every footstep lands as the head goes down", body != null and real_misses == 0 and real_steps >= 5,
+		"body %s; %d of %d steps off the beat" % [body != null, real_misses, real_steps])
+
+	# Y3i the view: about a centimetre of walk, no sprint widening; the old
+	#    feel's bob and FOV are still there behind the switch
+	var new_walk := await _view_span(false)
+	var old_walk := await _view_span(true)
+	var new_fov := await _sprint_fov(false)
+	var old_fov := await _sprint_fov(true)
+	var base_fov: float = player.juice.base_fov
+	_check("Y3i walking moves the view at most 2 cm (old: 5+), sprinting leaves the FOV alone (old: +6)",
+		new_walk <= 0.02 and old_walk >= 0.05 and absf(new_fov - base_fov) <= 0.01 and absf(old_fov - base_fov - 6.0) <= 0.3,
+		"view up and down %.4f m (old %.4f); sprint FOV %.2f (old %.2f, base %.2f)" % [new_walk, old_walk, new_fov, old_fov, base_fov])
+
+	# Y14 at 30 ticks a second against 60 frames, the head is drawn between
+	#    ticks: every frame shows it somewhere new
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(10)
+	Input.action_press("move_forward")
+	await _frames(40)
+	Engine.physics_ticks_per_second = 30
+	await _frames(4)
+	var recorder := Recorder.new()
+	recorder.process_priority = 1000
+	recorder.read = func():
+		return body.head_offset(Engine.get_physics_interpolation_fraction()).origin if body != null else Vector3.ZERO
+	add_child(recorder)
+
+	for i in 24:
+		await get_tree().process_frame
+
+	recorder.queue_free()
+	Engine.physics_ticks_per_second = 60
+	_release()
+	var frozen := 0
+
+	for i in range(1, recorder.seen.size()):
+		if (recorder.seen[i] as Vector3).distance_to(recorder.seen[i - 1]) <= 0.000001:
+			frozen += 1
+
+	_check("Y14i at two frames a tick the head moves every frame", body != null and frozen == 0 and recorder.seen.size() >= 20,
+		"%d of %d frames repeated the one before" % [frozen, recorder.seen.size() - 1])
+
+	# Y17 gameplay never sees the body: aim and sight are the same on either
+	#    feel, standing, crouched and leaning
+	var differ := []
+
+	for state in [[false, false], [true, false], [false, true]]:
+		var old_view: Array = await _gameplay_view(true, state[0], state[1])
+		var new_view: Array = await _gameplay_view(false, state[0], state[1])
+
+		if not _same_view(old_view, new_view):
+			differ.append(state)
+
+	_check("Y17 aim and sight points are the same on the old and new feel", differ.is_empty(),
+		"differing states [crouched, leaning] %s" % [differ])
+
+	# Y19 a teleport, a shove in a hit-stop, and the dial at 2 with a fall that
+	#    would break bones: never past the caps, and a teleport is not a jolt
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(10)
+	Input.action_press("move_forward")
+	await _frames(60)
+	player.global_position += Vector3(20, 0, 0)
+	player.velocity = Vector3.ZERO
+	var jolt := 0.0
+
+	for i in 30:
+		await _frames(1)
+		jolt = maxf(jolt, body.head_offset(1.0).origin.length() if body != null else 1.0)
+
+	_release()
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(20)
+	Engine.time_scale = 0.05
+	player.shove(Vector3(8, 0, 0), 0.3)
+	var held := true
+
+	for i in 30:
+		await _frames(1)
+		held = held and body != null and _inside_caps(body)
+
+	Engine.time_scale = 1.0
+	await _frames(30)
+	player.camera_feel = 2.0
+	await _frames(5)
+
+	if body != null:
+		body.on_land(40.0)
+
+	var peak := 0.0
+
+	for i in 45:
+		await _frames(1)
+		held = held and body != null and _inside_caps(body)
+		peak = maxf(peak, body.head_offset(1.0).origin.length() if body != null else 0.0)
+
+	player.camera_feel = 1.0
+	_check("Y19 a teleport is no jolt (2 cm at most); a hit-stop shove and a doubled dial stay inside the caps, which hold",
+		body != null and jolt <= 0.02 and held and peak >= BodyMotionScript.HEAD_CAP - 0.01,
+		"after the teleport %.4f m; inside caps %s; doubled landing peak %.3f m" % [jolt, held, peak])
+
+
+## Walk steadily a second, then the view's height span over the next second.
+func _view_span(legacy: bool) -> float:
+	player.set("legacy_feel", legacy)
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(10)
+	Input.action_press("move_forward")
+	await _frames(60)
+	var low := INF
+	var high := -INF
+
+	for i in 60:
+		await _frames(1)
+		low = minf(low, player.juice.view_position.y)
+		high = maxf(high, player.juice.view_position.y)
+
+	_release()
+	player.set("legacy_feel", false)
+	return high - low
+
+
+func _sprint_fov(legacy: bool) -> float:
+	player.set("legacy_feel", legacy)
+	_place(Vector3(0, 1.05, 60), 0.0)
+	await _frames(10)
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _frames(90)
+	var fov: float = player.camera.fov
+	_release()
+	await _frames(40)
+	player.set("legacy_feel", false)
+	return fov
+
+
+## Standing (or crouched, or leaning right), settled: the aim and the sight
+## points, in the body's own space.
+func _gameplay_view(legacy: bool, crouched: bool, leaning: bool) -> Array:
+	player.set("legacy_feel", legacy)
+	_place(Vector3(10, 1.05, 60), 0.0)
+	await _frames(10)
+
+	if crouched:
+		Input.action_press("crouch")
+
+	if leaning:
+		Input.action_press("lean_right")
+
+	await _frames(60)
+	var to_body := player.global_transform.affine_inverse()
+	var aim: Transform3D = to_body * player.aim_transform()
+	var sights: Array = player.get_sight_points().map(func(p): return to_body * p)
+	_release()
+	await _frames(40)
+	player.set("legacy_feel", false)
+	return [aim, sights]
+
+
+func _same_view(a: Array, b: Array) -> bool:
+	var aim_a: Transform3D = a[0]
+	var aim_b: Transform3D = b[0]
+
+	if aim_a.origin.distance_to(aim_b.origin) > 0.00001:
+		return false
+
+	for axis in 3:
+		if aim_a.basis[axis].distance_to(aim_b.basis[axis]) > 0.00001:
+			return false
+
+	for i in (a[1] as Array).size():
+		if (a[1][i] as Vector3).distance_to(b[1][i]) > 0.00001:
+			return false
+
+	return true
 
 
 ## Walk (or sprint) steadily, let go: [ticks to a standstill, distance].

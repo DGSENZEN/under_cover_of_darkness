@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://b50oh1hpcb7bl"]
+[gd_scene load_steps=11 format=3 uid="uid://b50oh1hpcb7bl"]
 
 [ext_resource type="Script" uid="uid://bkrl1t48w2w73" path="res://scripts/PlayerController.gd" id="1_xhfnw"]
 [ext_resource type="Script" uid="uid://dnuchpldsc3n6" path="res://light_gem.gd" id="2_kpjcp"]
@@ -21,9 +21,15 @@ rings = 1
 _data = [Vector2(0, 0), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
 point_count = 2
 
+[sub_resource type="Curve" id="Curve_footfall"]
+_limits = [-1.0, 1.0, 0.0, 1.0]
+_data = [Vector2(0, 0.3), 0.0, -7.0, 0, 0, Vector2(0.16, -1), 0.0, 0.0, 0, 0, Vector2(0.62, 1), 0.0, 0.0, 0, 0, Vector2(1, 0.3), -7.0, 0.0, 0, 0]
+point_count = 4
+
 [node name="CharacterBody3D" type="CharacterBody3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 script = ExtResource("1_xhfnw")
+footfall_curve = SubResource("Curve_footfall")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 shape = SubResource("CapsuleShape3D_kpjcp")

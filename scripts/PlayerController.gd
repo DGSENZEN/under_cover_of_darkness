@@ -23,6 +23,11 @@ const PlayerCombat := preload("res://scripts/Combat/PlayerCombat.gd")
 const GemEnvironment := preload("res://scripts/Visual/GemEnvironment.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
+const BodyMotionScript := preload("res://scripts/PlayerUtils/BodyMotion.gd")
+
+## The old feel's strides (legacy_feel): four steps a second at a walk.
+const LEGACY_STRIDE_WALK := 1.6
+const LEGACY_STRIDE_SPRINT := 1.9
 
 signal damaged(amount: float)
 signal died
@@ -198,9 +203,10 @@ enum MoveState {
 @export var footstep_db_walk := 48.0
 @export var footstep_db_sprint := 58.0
 @export var footstep_db_crouch := 32.0
-## Metres between footsteps.
-@export var stride_walk := 1.6
-@export var stride_sprint := 1.9
+## Metres between footsteps: fewer, heavier steps than a scurry (at a walk,
+## about three a second).
+@export var stride_walk := 2.0
+@export var stride_sprint := 2.4
 @export var stride_crouch := 1.1
 ## Landing: this, plus landing_db_per_speed for each m/s of the fall.
 @export var landing_db_base := 38.0
@@ -255,8 +261,12 @@ enum MoveState {
 
 
 @export_category("Camera Feel")
-## Master dial for bob, lean, landing dip and move arcs. 0 turns it all off.
+## Master dial for the body under the view (steps, landings, leans into
+## starts and stops), the move arcs and the hands' motion. 0 turns it all off.
 @export_range(0.0, 2.0, 0.05) var camera_feel := 1.0
+## One step's rise and fall under the view (BodyMotion.gd): x runs from a foot
+## landing (0) to the next landing (1); y from lowest (-1) to highest (1).
+@export var footfall_curve: Curve
 
 
 @export_category("Debug")
@@ -333,6 +343,11 @@ var rope_param := -1.0
 var scanner := TraversalScanner.new()
 var planner := TraversalPlanner.new()
 var juice := CameraJuice.new()
+
+## The body under the camera: the view and the hands ride it (BodyMotion.gd).
+var body_motion := BodyMotionScript.new()
+## What the body feels each tick, filled in by _step_body.
+var _body_frame := BodyMotionScript.Frame.new()
 
 ## The pose name and hand targets an arm rig should follow. See BodyPose.gd.
 var body_pose := BodyPose.new()
@@ -475,6 +490,7 @@ func _ready() -> void:
 	planner.scanner = scanner
 	planner.eye_height = _neck_stand_y
 	juice.setup(camera)
+	body_motion.setup(footfall_curve if footfall_curve != null else BodyMotionScript.default_footfall(), view_height_speed)
 
 	# Physics interpolation draws the body between physics ticks. The camera
 	# is placed by hand each frame instead (_place_camera): at the drawn body,
@@ -593,6 +609,7 @@ func _physics_process(delta: float) -> void:
 		if movement_state == MoveState.LOCOMOTION:
 			_stop_on_death(delta)
 
+		_step_body(delta)
 		return
 
 	_track_motion(delta)
@@ -621,10 +638,34 @@ func _physics_process(delta: float) -> void:
 	if debug_traversal:
 		_debug_draw()
 
+	_step_body(delta)
+
 
 func _process(delta: float) -> void:
 	_update_view(delta)
 	body_pose.update(self, delta)
+
+
+## The body under the camera feels this tick: how it moves, where the walk
+## is, the stance and the lean (BodyMotion.gd). (A teleport needs no care:
+## its one-tick jump in velocity is capped like any push, and one tick of
+## push barely moves the torso.)
+func _step_body(delta: float) -> void:
+	var frame := _body_frame
+	frame.velocity = velocity
+	frame.facing = global_basis
+	frame.grounded = _on_floor_now() or _on_stairs
+	frame.locomotion = movement_state == MoveState.LOCOMOTION and not is_dead
+	frame.crouched = is_crouched
+	frame.gait = gait
+	frame.lean = lean
+	frame.eye_drop = _neck_stand_y - _neck_base_y
+	frame.eye_target_drop = (_standing_height - crouch_height) if is_crouched else 0.0
+	frame.walk_speed = walk_speed
+	frame.sprint_speed = sprint_speed
+	frame.crouch_speed = crouch_speed
+	body_motion.intensity = camera_feel
+	body_motion.step(delta, frame)
 
 
 # ---------------------------------------------------------------------------
@@ -780,10 +821,14 @@ func _update_locomotion(delta: float) -> void:
 		combat.on_landed(fall_speed)
 
 	if is_on_floor() and not grounded and fall_speed > 3.0 and not _on_stairs:
-		juice.on_land(fall_speed)
+		if legacy_feel:
+			juice.on_land(fall_speed)
 
-		if hand != null and hand.has_method("land"):
-			hand.land(fall_speed)
+			if hand != null and hand.has_method("land"):
+				hand.land(fall_speed)
+		else:
+			# The legs take it (and the arms keep falling a moment): the body.
+			body_motion.on_land(fall_speed)
 
 		# What guards hear, you hear: the thud, the floor it was on, and on a
 		# hard landing a puff of whatever the floor is made of.
@@ -878,11 +923,15 @@ func _try_buffered_jump() -> void:
 	jump_buffer_timer = 0.0
 	coyote_timer = 0.0
 
-	juice.on_jump()
 	Sfx.play_flat(self, _jump_sound(_surface_name()), Sfx.loudness(footstep_db_walk + _surface_offset()))
 
-	if hand != null and hand.has_method("jump"):
-		hand.jump()
+	if legacy_feel:
+		juice.on_jump()
+
+		if hand != null and hand.has_method("jump"):
+			hand.jump()
+	else:
+		body_motion.on_jump()
 
 	if jump_assist and not is_crouched:
 		_try_jump_assist()
@@ -1078,15 +1127,17 @@ func _update_footsteps() -> void:
 	if speed < 0.4:
 		return
 
-	var stride := stride_walk
+	var stride := LEGACY_STRIDE_WALK if legacy_feel else stride_walk
 	var db := footstep_db_walk
+	var running := false
 
 	if is_crouched:
 		stride = stride_crouch
 		db = footstep_db_crouch
 	elif speed > walk_speed + 0.5:
-		stride = stride_sprint
+		stride = LEGACY_STRIDE_SPRINT if legacy_feel else stride_sprint
 		db = footstep_db_sprint
+		running = true
 
 	gait += speed / stride * get_physics_process_delta_time()
 
@@ -1106,15 +1157,15 @@ func _update_footsteps() -> void:
 		var surface := _surface_name()
 		var step_db := db + float(surface_db.get(surface, 0.0))
 		_make_noise(step_db, &"footstep")
-		Sfx.play_flat(self, _step_sound(surface, stride == stride_sprint), Sfx.loudness(step_db))
+		Sfx.play_flat(self, _step_sound(surface, running), Sfx.loudness(step_db))
 
 		# What you carry moves with you: cloth under the step, more of it at
 		# a run, none when you creep; at a run your gear knocks on the same
 		# hip every other step.
-		if not is_crouched and randf() < (0.7 if stride == stride_sprint else 0.35):
+		if not is_crouched and randf() < (0.7 if running else 0.35):
 			Sfx.play_flat(self, &"cloth", Sfx.loudness(step_db) - 9.0, randf_range(0.95, 1.1))
 
-		if stride == stride_sprint and _steps == 1 and randf() < 0.75:
+		if running and _steps == 1 and randf() < 0.75:
 			Sfx.play_flat(self, &"gear", Sfx.loudness(step_db) - 7.0, randf_range(0.94, 1.06))
 
 
@@ -1602,8 +1653,9 @@ func _set_crouched(crouched: bool) -> void:
 
 	is_crouched = crouched
 
-	# The weight settling as you drop, or pushing up as you rise.
-	if juice != null and juice.has_method("on_crouch"):
+	# The weight settling as you drop, or pushing up as you rise. (The body
+	# under the view does this itself, from the eye's new height.)
+	if legacy_feel and juice != null and juice.has_method("on_crouch"):
 		juice.on_crouch(crouched)
 
 	var height := crouch_height if crouched else _standing_height
@@ -2767,6 +2819,9 @@ func _update_view(delta: float) -> void:
 	var drawn_fraction := Engine.get_physics_interpolation_fraction() if get_tree().physics_interpolation else 1.0
 	juice.gait = lerpf(_gait_before, gait, drawn_fraction)
 	juice.grip_below = hand.grip_below(aim_transform()) if hand != null and hand.has_method("grip_below") else 0.0
+	# The body under the view carries the walk (the old feel: the juice's bob).
+	juice.locomotion_from_body = not legacy_feel
+	juice.body_head = body_motion.head_offset(drawn_fraction) if not legacy_feel else Transform3D.IDENTITY
 	juice.update(
 		delta,
 		horizontal_speed,

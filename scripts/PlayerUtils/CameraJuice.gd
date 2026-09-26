@@ -71,6 +71,12 @@ var _move_roll := 0.0
 ## gameplay view, not a flourish.
 var lean_offset := 0.0
 var lean_roll := 0.0
+## The body under the camera (BodyMotion.gd) carries the walk: when true, the
+## bob, the strafe roll and the sprint widening here are left out, and
+## body_head, the head's offset from the eye set by the controller each frame
+## (already scaled by the dial), is added to the view instead.
+var locomotion_from_body := false
+var body_head := Transform3D.IDENTITY
 ## The camera's offset from the eye, in the eye's space, this frame.
 var view_position := Vector3.ZERO
 var view_rotation := Vector3.ZERO
@@ -338,6 +344,14 @@ func update(
 	if sprinting and horizontal_speed > reference_speed:
 		target_fov = sprint_fov_add
 
+	# The body carries the walk instead: its steps, its lean into turns, and
+	# no widening (the run is felt in the stride, not the lens).
+	if locomotion_from_body:
+		bob_x = 0.0
+		bob_y = 0.0
+		target_roll = 0.0
+		target_fov = 0.0
+
 	# --- choreographed moves: one smooth arc over the whole move -----------
 	var arc := sin(clampf(move_s, 0.0, 1.0) * PI)
 	var move_dip := 0.0
@@ -388,6 +402,11 @@ func update(
 		(_roll + _move_roll + _roll_kick + shake_roll) * k + lean_roll
 	)
 	camera.fov = base_fov + (_fov_add + _fov_kick) * k
+
+	# The body the head rides on (already scaled by the dial).
+	if locomotion_from_body:
+		view_position += body_head.origin
+		view_rotation += body_head.basis.get_euler()
 
 	if death > 0.0:
 		var fall := death * death
