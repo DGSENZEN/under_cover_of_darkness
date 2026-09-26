@@ -1,7 +1,8 @@
-[gd_scene load_steps=11 format=3 uid="uid://bog87j6w44anw"]
+[gd_scene load_steps=9 format=3 uid="uid://bog87j6w44anw"]
 
 [ext_resource type="Shader" uid="uid://bmwlqcsdhgnk7" path="res://sky.gdshader" id="1_0xm2m"]
 [ext_resource type="PackedScene" uid="uid://b50oh1hpcb7bl" path="res://Player.tscn" id="1_ig7tw"]
+[ext_resource type="PackedScene" uid="uid://q3k8puabott" path="res://maps/test.tscn" id="3_h2yge"]
 
 [sub_resource type="FastNoiseLite" id="FastNoiseLite_0xm2m"]
 
@@ -13,58 +14,78 @@ in_3d_space = true
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_h2yge"]
 shader = ExtResource("1_0xm2m")
 shader_parameter/use_directional_light = false
-shader_parameter/sun_color = Color(0.9999998, 0.56258905, 0.28877848, 1)
+shader_parameter/sun_color = Color(0.031960454, 0.30723962, 0.5194337, 1)
 shader_parameter/sun_energy = 15.0
-shader_parameter/cloud_color = Color(0.5736397, 0.11006952, 0.1611098, 1)
-shader_parameter/cloud_density = 5.0
+shader_parameter/cloud_color = Color(0, 0, 0, 1)
+shader_parameter/cloud_density = 2.5
 shader_parameter/cloud_depth = 2.0
-shader_parameter/cloud_sag = 3.0
+shader_parameter/cloud_sag = 2.5
 shader_parameter/noise_texture = SubResource("NoiseTexture2D_0xm2m")
 shader_parameter/noise_tiling = Vector2(2, 2)
 shader_parameter/wind_speed = Vector2(0.5, 0.5)
-shader_parameter/ground_bottom_color = Color(0.2611696, 0.14168349, 0.013017852, 1)
+shader_parameter/ground_bottom_color = Color(0.2, 0.169, 0.133, 1)
 shader_parameter/ground_curve = 0.04
 shader_parameter/exposure = 1.0
 
 [sub_resource type="Sky" id="Sky_1bvp3"]
 sky_material = SubResource("ShaderMaterial_h2yge")
+radiance_size = 4
 
 [sub_resource type="Environment" id="Environment_lquwl"]
 background_mode = 2
 sky = SubResource("Sky_1bvp3")
+reflected_light_source = 2
+ssr_enabled = true
+ssao_enabled = true
+ssil_enabled = true
+glow_enabled = true
+glow_normalized = true
 fog_mode = 1
 fog_density = 1.0
-volumetric_fog_albedo = Color(0.2574758, 0.25747576, 0.25747573, 1)
-
-[sub_resource type="BoxMesh" id="BoxMesh_7dm0k"]
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0xm2m"]
-emission_enabled = true
-emission = Color(0.99999994, 0.34135154, 0.10878924, 1)
-emission_energy_multiplier = 16.0
-emission_on_uv2 = true
-
-[sub_resource type="SphereMesh" id="SphereMesh_h2yge"]
-material = SubResource("StandardMaterial3D_0xm2m")
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.0446
 
 [node name="World" type="Node3D"]
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_lquwl")
 
-[node name="CSGMesh3D" type="CSGMesh3D" parent="."]
-transform = Transform3D(50, 0, 0, 0, 0.5, 0, 0, 0, 50, 0, -0.30288434, 0)
-use_collision = true
-mesh = SubResource("BoxMesh_7dm0k")
-
 [node name="CharacterBody3D" parent="." instance=ExtResource("1_ig7tw")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.13744521, 0)
+mantle_reach = 1.2
+mantle_probe_height = 0.8
+mantle_duration = 1.2
 
 [node name="DirectionalLight3D2" type="DirectionalLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.49999997, 0.86602545, 0, -0.86602545, 0.49999997, -77.4939, 565, 0)
-light_color = Color(0.9992394, 0.75001836, 0.5568283, 1)
-light_energy = 2.278
-light_volumetric_fog_energy = 5.0
+light_color = Color(0.88355803, 0.9365611, 0.9999985, 1)
+light_energy = 0.124
+light_indirect_energy = 2.485
+light_volumetric_fog_energy = 0.175
+light_angular_distance = 6.03
+light_specular = 1.742
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="DirectionalLight3D2"]
-transform = Transform3D(25, 0, 0, 0, 25, 0, 0, 0, 25, 0, 0, 0)
-mesh = SubResource("SphereMesh_h2yge")
+[node name="test" parent="." instance=ExtResource("3_h2yge")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.536743e-07, 0.00018835068, 7.212162e-06)
+
+[node name="OmniLight3D" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0978421, 1.9529029, -10.725973)
+light_color = Color(0.9763127, 0.78658783, 0.47800767, 1)
+light_energy = 6.361
+light_indirect_energy = 7.22
+light_specular = 3.23
+
+[node name="OmniLight3D" type="OmniLight3D" parent="OmniLight3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5936728, -0.4097334, 21.320301)
+light_color = Color(0.9763127, 0.78658783, 0.47800767, 1)
+
+[node name="OmniLight3D2" type="OmniLight3D" parent="OmniLight3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.413062, 3.3073645, 9.9788885)
+light_color = Color(0.9763127, 0.78658783, 0.47800767, 1)
+light_energy = 6.361
+light_indirect_energy = 7.22
+light_specular = 3.23
+
+[node name="OmniLight3D" type="OmniLight3D" parent="OmniLight3D/OmniLight3D2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -11.169419, -1.394773, 0.3755345)
+light_color = Color(0.9763127, 0.78658783, 0.47800767, 1)

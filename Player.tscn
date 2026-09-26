@@ -1,8 +1,25 @@
-[gd_scene load_steps=3 format=3 uid="uid://b50oh1hpcb7bl"]
+[gd_scene load_steps=10 format=3 uid="uid://b50oh1hpcb7bl"]
 
-[ext_resource type="Script" uid="uid://bkrl1t48w2w73" path="res://PlayerController.gd" id="1_xhfnw"]
+[ext_resource type="Script" uid="uid://bkrl1t48w2w73" path="res://scripts/PlayerController.gd" id="1_xhfnw"]
+[ext_resource type="Script" uid="uid://dnuchpldsc3n6" path="res://light_gem.gd" id="2_kpjcp"]
+[ext_resource type="Script" path="res://scripts/Interaction/PlayerFrob.gd" id="3_frob"]
+[ext_resource type="Script" path="res://scripts/Interaction/Inventory.gd" id="4_inv"]
+[ext_resource type="Script" path="res://scripts/Interaction/HandSlot.gd" id="5_hand"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_kpjcp"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_xhfnw"]
+viewport_path = NodePath("SubViewport")
+
+[sub_resource type="SphereMesh" id="SphereMesh_xhfnw"]
+radius = 0.08
+height = 0.16
+radial_segments = 4
+rings = 1
+
+[sub_resource type="Curve" id="Curve_kpjcp"]
+_data = [Vector2(0, 0), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
+point_count = 2
 
 [node name="CharacterBody3D" type="CharacterBody3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
@@ -15,3 +32,65 @@ shape = SubResource("CapsuleShape3D_kpjcp")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
 
 [node name="Camera3D" type="Camera3D" parent="Neck"]
+cull_mask = 524287
+
+[node name="Hand" type="Node3D" parent="Neck/Camera3D"]
+script = ExtResource("5_hand")
+
+[node name="Frob" type="Node3D" parent="."]
+script = ExtResource("3_frob")
+
+[node name="Inventory" type="Node" parent="."]
+script = ExtResource("4_inv")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="TextureRect" type="TextureRect" parent="CanvasLayer"]
+offset_right = 40.0
+offset_bottom = 40.0
+texture = SubResource("ViewportTexture_xhfnw")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+layers = 524288
+cast_shadow = 0
+mesh = SubResource("SphereMesh_xhfnw")
+
+[node name="LightGem" type="Node3D" parent="." node_paths=PackedStringArray("viewport_top", "viewport_bottom")]
+script = ExtResource("2_kpjcp")
+viewport_top = NodePath("../SubViewport")
+viewport_bottom = NodePath("../SubViewport2")
+calibration_curve = SubResource("Curve_kpjcp")
+
+[node name="LightGemAnchor" type="RemoteTransform3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 0.79, 0)
+remote_path = NodePath("../SubViewport/Camera3D")
+
+[node name="LightGemAnchorBottom" type="RemoteTransform3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 0, -0.79, 0)
+remote_path = NodePath("../SubViewport2/Camera3D")
+
+[node name="SubViewport" type="SubViewport" parent="."]
+transparent_bg = true
+size = Vector2i(64, 64)
+render_target_update_mode = 4
+
+[node name="Camera3D" type="Camera3D" parent="SubViewport"]
+cull_mask = 655359
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 1.79, 0)
+projection = 1
+fov = 40.0
+size = 0.2
+far = 1.0
+
+[node name="SubViewport2" type="SubViewport" parent="."]
+transparent_bg = true
+size = Vector2i(64, 64)
+render_target_update_mode = 4
+
+[node name="Camera3D" type="Camera3D" parent="SubViewport2"]
+cull_mask = 655359
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0.20999998, 0)
+projection = 1
+fov = 40.0
+size = 0.2
+far = 1.0

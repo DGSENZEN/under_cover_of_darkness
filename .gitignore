@@ -5,3 +5,6 @@
 # Local operating system and temp files
 .DS_Store
 *.tmp
+
+# Blender auto-backups
+*.blend1

@@ -1,0 +1,3 @@
+Characters (Universal Base Characters) and animations (Universal Animation Library 1 and 2)
+by Quaternius - https://quaternius.com - CC0 1.0 Universal (public domain).
+Textures downscaled to 512 px for the retro look; the clothing is painted by tools/dress_characters.py.
