@@ -7,6 +7,7 @@ extends Node3D
 const BodyMotionScript := preload("res://scripts/PlayerUtils/BodyMotion.gd")
 const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
+const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 
 const TICK := 1.0 / 60.0
 
@@ -43,6 +44,7 @@ func _run() -> void:
 	_model_checks()
 	await _momentum_checks()
 	await _camera_checks()
+	await _hand_checks()
 
 
 # --------------------------------------------------------------------------
@@ -517,6 +519,78 @@ func _camera_checks() -> void:
 	_check("Y19 a teleport is no jolt (2 cm at most); a hit-stop shove and a doubled dial stay inside the caps, which hold",
 		body != null and jolt <= 0.02 and held and peak >= BodyMotionScript.HEAD_CAP - 0.01,
 		"after the teleport %.4f m; inside caps %s; doubled landing peak %.3f m" % [jolt, held, peak])
+
+
+# --------------------------------------------------------------------------
+# The hands ride the body
+# --------------------------------------------------------------------------
+
+func _hand_checks() -> void:
+	var body: RefCounted = player.get("body_motion")
+	var hand: Node = player.hand
+	Props.give_weapons(player)
+	player.inventory.select_by_id(&"sword")
+	_place(Vector3(30, 1.05, 60), 0.0)
+	await _frames(40)
+
+	# Y12i the hands show the shoulders: a landing drops the sword with them
+	var recorder := Recorder.new()
+	recorder.process_priority = 1000
+	recorder.read = func():
+		return [hand._main.position.y, body.shoulder_offset(Engine.get_physics_interpolation_fraction()).origin.y]
+	add_child(recorder)
+
+	# (process_frame comes before the frame's _process: two, to have one.)
+	for i in 2:
+		await get_tree().process_frame
+
+	var rest: float = recorder.seen[-1][0]
+	body.on_land(13.9)
+
+	for i in 40:
+		await get_tree().process_frame
+
+	recorder.queue_free()
+	var hand_low := 0
+	var shoulder_low := 0
+
+	for i in recorder.seen.size():
+		if recorder.seen[i][0] < recorder.seen[hand_low][0]:
+			hand_low = i
+
+		if recorder.seen[i][1] < recorder.seen[shoulder_low][1]:
+			shoulder_low = i
+
+	var hand_dip: float = rest - recorder.seen[hand_low][0]
+	# The hands live in the view's miniature (ViewArms, 0.62 about the eye):
+	# the same angle of motion is 0.62 of the distance there.
+	var shoulder_dip: float = -recorder.seen[shoulder_low][1] * ViewArmsScript.SCALE
+
+	# A real landing: the old hop is the old feel's; the body is the new's.
+	var hop_new: float = await _landing_hop(false)
+	var hop_old: float = await _landing_hop(true)
+	_check("Y12i a landing drops the sword with the shoulders; the old hop is only on the old feel",
+		shoulder_dip > 0.005 and hand_dip >= 0.8 * shoulder_dip and hand_dip <= 1.25 * shoulder_dip and absi(hand_low - shoulder_low) <= 2
+		and absf(hop_new) < 0.0001 and hop_old < -0.005,
+		"sword dips %.4f at frame %d, shoulders (in the view's miniature) %.4f at %d; hop new %.4f old %.4f" % [hand_dip, hand_low, shoulder_dip, shoulder_low, hop_new, hop_old])
+
+
+## A standing jump and its landing: how far the hands' old hop went.
+func _landing_hop(legacy: bool) -> float:
+	player.set("legacy_feel", legacy)
+	_place(Vector3(30, 1.05, 60), 0.0)
+	await _frames(20)
+	Input.action_press("jump")
+	var lowest := 0.0
+
+	for i in 70:
+		await _frames(1)
+		lowest = minf(lowest, player.hand._hop)
+
+	Input.action_release("jump")
+	await _frames(20)
+	player.set("legacy_feel", false)
+	return lowest
 
 
 ## Walk steadily a second, then the view's height span over the next second.

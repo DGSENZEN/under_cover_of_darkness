@@ -911,19 +911,35 @@ func _place_hands() -> void:
 	frame.origin += Vector3(0.05, -lowered_drop / ViewArmsScript.SCALE, 0.08) * low
 	frame.basis = Basis(Vector3.RIGHT, -0.9 * low) * frame.basis
 
-	# The body: lagging behind turns, in step with the walk, the hop of a
-	# landing or a jump, the lowered carry of a run.
-	var phase := 0.0
-	var weight := 0.0
+	# The body: lagging behind turns, and whatever the shoulders do under the
+	# view (BodyMotion.gd): a footfall a beat after the head, a landing further
+	# than the view, the push of a start and the carry of a stop, breathing,
+	# and the lowered carry of a run as the body leans into it. (The old feel:
+	# a bob of its own, a hop, a run carry at a fixed rate, an idle wobble.)
+	var body: RefCounted = player.get("body_motion") if player != null else null
+	var motion_position := Vector3(-_sway.x * 0.08, _sway.y * 0.06, 0.0)
+	var motion_rotation := Vector3(_sway.y * 0.5, _sway.x * 0.6, _sway.x * 0.35)
 
-	if player != null and player.get("juice") != null:
-		phase = player.juice.bob_phase()
-		weight = player.juice.bob_weight() * bob_amount
+	if body != null and not bool(player.get("legacy_feel")):
+		var shoulders: Transform3D = body.shoulder_offset(between)
+		var carry: float = body.sprint_lean()
+		sway = Vector3.ZERO
+		# The shoulders move in the world; the hands are drawn in the view's
+		# miniature, where the same angle is SCALE of the distance.
+		motion_position += shoulders.origin * ViewArmsScript.SCALE + Vector3(0.0, -0.035, 0.02) * carry
+		motion_rotation += shoulders.basis.get_euler() + Vector3(0.18, 0.0, 0.1) * carry
+	else:
+		var phase := 0.0
+		var weight := 0.0
 
-	var bob_position := Vector3(sin(phase) * 0.009, cos(phase * 2.0) * 0.006, 0.0) * weight
-	var bob_rotation := Vector3(0.0, 0.0, sin(phase) * 0.025) * weight
-	var motion_position := Vector3(-_sway.x * 0.08, _sway.y * 0.06 + _hop * 0.05, 0.0) + bob_position + Vector3(0.0, -0.035, 0.02) * _run
-	var motion_rotation := Vector3(_sway.y * 0.5, _sway.x * 0.6, _sway.x * 0.35) + bob_rotation + Vector3(0.18, 0.0, 0.1) * _run
+		if player != null and player.get("juice") != null:
+			phase = player.juice.bob_phase()
+			weight = player.juice.bob_weight() * bob_amount
+
+		var bob_position := Vector3(sin(phase) * 0.009, cos(phase * 2.0) * 0.006, 0.0) * weight
+		var bob_rotation := Vector3(0.0, 0.0, sin(phase) * 0.025) * weight
+		motion_position += Vector3(0.0, _hop * 0.05, 0.0) + bob_position + Vector3(0.0, -0.035, 0.02) * _run
+		motion_rotation += bob_rotation + Vector3(0.18, 0.0, 0.1) * _run
 
 	# Weight on top: recoils, and the shudder of steel biting.
 	var shake := _shudder * _shudder
