@@ -200,10 +200,19 @@ signal bound_wounds
 ## dirt, height): -1 takes it from his place in the level, so he is the same
 ## man every load. Set before he enters the tree.
 @export var look_seed := -1
+## Over his kind's look (GuardFighter.look_of): any of its keys ("weapon",
+## "armour", ...), and "dye", the colour his outfit is dyed. Set before he
+## enters the tree.
+@export var look_override: Dictionary = {}
 ## Who he is, under his class (Temperament.gd): "" rolls him afresh each
 ## time the level loads; "steady", "stubborn", "craven", "rash" or "sly"
 ## pins him.
 @export var temperament: StringName = &""
+## A guard's body without a guard's mind (the NPC showcase's intruder,
+## Intruder.gd): no senses, no alert, no life, no hunt and no garrison of his
+## own; he is one of the "player" group, the one the guards are after, and
+## _puppet_drive moves him instead. Set before he enters the tree.
+@export var puppet := false
 @export var attack_range := 1.7
 ## He cannot reach you on a ledge above him or below him.
 @export var attack_reach_height := 1.2
@@ -435,7 +444,7 @@ class GuardKeys:
 
 
 func _ready() -> void:
-	add_to_group(&"guards")
+	add_to_group(&"player" if puppet else &"guards")
 	# Whoever made him may place him after adding him: draw him from there.
 	reset_physics_interpolation.call_deferred()
 	collision_layer = 2
@@ -476,7 +485,7 @@ func _ready() -> void:
 	_body_mesh = _rig.body_mesh
 	_nav = GuardNavScript.new(self)
 	_life = GuardLifeScript.new(self)
-	_hands = GuardHandsScript.new(self, StringName(GuardFighterScript.look_of(archetype).get("weapon", &"sword")))
+	_hands = GuardHandsScript.new(self, StringName(look().get("weapon", &"sword")))
 	_mercy = GuardMercyScript.new(self)
 	_climb = GuardClimbScript.new(self)
 	_water = GuardWaterScript.new(self)
@@ -501,7 +510,8 @@ func _ready() -> void:
 ## Listening starts and stops with the tree, so a guard that is moved or
 ## re-added does not go deaf.
 func _enter_tree() -> void:
-	SoundBus.add_listener(self)
+	if not puppet:
+		SoundBus.add_listener(self)
 
 
 func _exit_tree() -> void:
@@ -512,7 +522,7 @@ func _physics_process(delta: float) -> void:
 	if _knocked_out:
 		return
 
-	if _target == null or not is_instance_valid(_target):
+	if not puppet and (_target == null or not is_instance_valid(_target)):
 		_target = get_tree().get_first_node_in_group(&"player") as Node3D
 
 	_since_stimulus += delta
@@ -522,12 +532,12 @@ func _physics_process(delta: float) -> void:
 	_game_time += delta
 
 	# The garrison's memory of you keeps its own time, whoever of them is about.
-	if _target != null and is_instance_valid(_target):
+	if not puppet and _target != null and is_instance_valid(_target):
 		GarrisonScript.of(_target).tick(delta)
 
 	# In a hunt, whatever he is doing: it keeps thinking while any of them is
 	# in it, fighting or not.
-	if _fighter != null and _fighter.squad != null:
+	if not puppet and _fighter != null and _fighter.squad != null:
 		_fighter.squad.think(delta)
 
 	_attack_timer = maxf(_attack_timer - delta, 0.0)
@@ -544,13 +554,17 @@ func _physics_process(delta: float) -> void:
 
 	_rising = maxf(_rising - delta, 0.0)
 
-	_sense_vision(delta)
-	_sense_bodies(delta)
-	_update_alert(delta)
+	if not puppet:
+		_sense_vision(delta)
+		_sense_bodies(delta)
+		_update_alert(delta)
+
 	_water.update(delta)
 	_hands.update(delta)
-	_life.update(delta)
-	_watch_for_powder(delta)
+
+	if not puppet:
+		_life.update(delta)
+		_watch_for_powder(delta)
 
 	if _burning > 0.0:
 		_burn(delta)
@@ -598,6 +612,8 @@ func _physics_process(delta: float) -> void:
 
 		if state == Alert.COMBAT:
 			_fighter.watch(delta)
+	elif puppet:
+		_puppet_drive(delta)
 	else:
 		match state:
 			Alert.RELAXED:
@@ -634,6 +650,19 @@ func _physics_process(delta: float) -> void:
 
 	if debug_ai:
 		_debug_draw()
+
+
+## What he wears and carries: his kind's look (GuardFighter.look_of), with
+## look_override over it.
+func look() -> Dictionary:
+	return (GuardFighterScript.look_of(archetype) as Dictionary).merged(look_override, true)
+
+
+## A puppet's every physics frame in place of the guard's behaviour (walking,
+## fighting, standing about): whatever drives him moves him. Nothing here for
+## a guard.
+func _puppet_drive(_delta: float) -> void:
+	pass
 
 
 # ---------------------------------------------------------------------------
@@ -1236,7 +1265,7 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 		return &"killed"
 
 	# He may see it coming: a parry, or a raised guard. Not from the floor.
-	var answer: StringName = &"" if _downed else _fighter.defend(kind, attacker)
+	var answer: StringName = &"" if _downed or puppet else _fighter.defend(kind, attacker)
 
 	if answer == &"parried":
 		_engage(attacker)
@@ -1258,7 +1287,7 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 		return &"blocked"
 
 	# Open (thrown off his balance): whatever lands is a deathblow.
-	var opened: bool = _fighter.is_open() and kind in [&"quick", &"power", &"drop", &"thrown"]
+	var opened: bool = not puppet and _fighter.is_open() and kind in [&"quick", &"power", &"drop", &"thrown"]
 
 	if opened:
 		damage = _fighter.deathblow_damage(damage)
@@ -1692,7 +1721,9 @@ func die(_attacker: Node3D) -> void:
 		return
 
 	# Killed before anyone knew you were there: his post stands empty.
-	_leave_post()
+	if not puppet:
+		_leave_post()
+
 	_knocked_out = true
 	remove_from_group(&"guards")
 	SoundBus.remove_listener(self)
@@ -1702,12 +1733,19 @@ func die(_attacker: Node3D) -> void:
 	visible = false
 
 	var body: RigidBody3D = GuardBodyScript.spawn(self, true, _last_blow)
+
+	# The man they were after, dead: nobody's friend to find.
+	if puppet:
+		body.remove_from_group(&"bodies")
+
 	_witnessed_by_friends(body)
 
 	# Cut apart by the blow that killed him: off along it, before he falls.
 	if not _sever.is_empty() and _rig.has_method("sever"):
 		_rig.sever(_sever, _last_push)
-		_horrify(_sever.has(&"neck_01"))
+
+		if not puppet:
+			_horrify(_sever.has(&"neck_01"))
 
 	# His last cry: none from a man whose head is gone.
 	if not _sever.has(&"neck_01"):
@@ -2359,6 +2397,9 @@ func _bark_for(new_state: int, old_state: int) -> void:
 
 
 func bark(text: String) -> void:
+	if puppet:
+		return
+
 	_bark_timer = 3.0
 	barked.emit(text)
 

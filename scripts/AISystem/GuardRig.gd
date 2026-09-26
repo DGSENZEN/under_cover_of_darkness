@@ -244,7 +244,7 @@ func setup(p_guard: CharacterBody3D) -> void:
 				_logical_head.remove_child(child)
 				child.free()
 
-	var look: Dictionary = GuardFighterScript.look_of(guard.archetype)
+	var look: Dictionary = guard.look() if guard.has_method("look") else GuardFighterScript.look_of(guard.archetype)
 
 	if not look.has("outfit"):
 		look = DEFAULT_LOOK.merged(look, true)
@@ -263,6 +263,10 @@ func setup(p_guard: CharacterBody3D) -> void:
 
 	if not dressed:
 		man.build(look.get("outfit", &"watchman"), bool(look.get("female", false)), idle)
+
+	# Dyed his own colour (Guard.look_override).
+	if dressed and look.has("dye"):
+		man.set_dye(look["dye"])
 
 	# His voice: a big man's lower, and each his own. A woman speaks in her
 	# own recordings (Guard.voice), at her own pitch.

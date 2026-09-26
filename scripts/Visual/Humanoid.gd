@@ -915,6 +915,18 @@ static var _armour_meshes := {}
 var armour: Array[MeshInstance3D] = []
 
 
+## His outfit dyed `colour` instead of what the wardrobe rolled him: every
+## thing he wears takes it (Wardrobe.apply_look). Only for a dressed man.
+func set_dye(colour: Color) -> void:
+	if look.is_empty() or skeleton == null:
+		return
+
+	look["dye"] = colour
+
+	for worn in skeleton.find_children("*", "GeometryInstance3D", true, false):
+		WardrobeScript.apply_look(worn as GeometryInstance3D, look)
+
+
 ## Boots on his feet, bound to this skeleton by bone name.
 func add_boots(file: StringName = &"Boots_Male") -> MeshInstance3D:
 	var found := _skinned_mesh(BOOTS % file)
