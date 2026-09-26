@@ -62,21 +62,26 @@ def main():
         common.fail("nothing to bake called '%s'" % target)
 
 
-def cycles():
+def cycles(gpu=True):
+    """Cycles for the bakes: on the Metal GPU (the real bakes), or the CPU
+    (gpu False: the tests' tiny scenes, which then never compile Metal
+    kernels; that compile crashed Blender now and then, Sept 26)."""
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
+    scene.cycles.device = "CPU"
 
-    try:
-        preferences = bpy.context.preferences.addons["cycles"].preferences
-        preferences.compute_device_type = "METAL"
-        preferences.get_devices()
+    if gpu:
+        try:
+            preferences = bpy.context.preferences.addons["cycles"].preferences
+            preferences.compute_device_type = "METAL"
+            preferences.get_devices()
 
-        for device in preferences.devices:
-            device.use = True
+            for device in preferences.devices:
+                device.use = True
 
-        scene.cycles.device = "GPU"
-    except Exception:
-        scene.cycles.device = "CPU"
+            scene.cycles.device = "GPU"
+        except Exception:
+            scene.cycles.device = "CPU"
 
     scene.cycles.samples = 16
     scene.render.bake.margin = 2 * SUPERSAMPLE

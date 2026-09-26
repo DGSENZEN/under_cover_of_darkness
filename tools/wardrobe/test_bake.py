@@ -28,9 +28,9 @@ import export  # noqa: E402
 
 
 def fresh():
-    """An empty scene, set up to bake."""
+    """An empty scene, set up to bake (on the CPU: case_cpu)."""
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bake.cycles()
+    bake.cycles(gpu=False)
 
 
 def plate(name, z=0.0):
@@ -238,7 +238,16 @@ def case_gear_bones():
     return messages
 
 
-CASES = {"alone": case_alone, "others": case_others, "png": case_png, "json": case_json,
+def case_cpu():
+    """The tests bake on the CPU: their scenes are tiny, and compiling the
+    Metal kernels in every fresh Blender now and then crashed it (Cycles'
+    shader cache, a double free: an abort and a crash report, Sept 26)."""
+    fresh()
+    device = bpy.context.scene.cycles.device
+    return [] if device == "CPU" else ["cpu: the tests bake on %s" % device]
+
+
+CASES = {"cpu": case_cpu, "alone": case_alone, "others": case_others, "png": case_png, "json": case_json,
          "wrapped": case_wrapped, "hair": case_hair, "plates": case_plates, "tint": case_tint,
          "gear_bones": case_gear_bones}
 
