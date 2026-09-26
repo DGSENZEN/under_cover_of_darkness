@@ -40,8 +40,13 @@ func get_rope_normal(from: Vector3) -> Vector3:
 
 ## Where it leads, as world points by them: [the floor at its foot, in front
 ## of it; over its top, on what it goes up to] (for a rope, straight below
-## and at its top). What a guard after a man on it goes for (Guard.goal_of).
+## and at its top): the ends of the way across the guards found up it
+## (NavLinks, "climb_ends"), else worked out from its box. What a guard after
+## a man on it goes for (Guard.goal_of).
 func ends() -> Array:
+	if has_meta(&"climb_ends"):
+		return get_meta(&"climb_ends")
+
 	var box := AABB()
 
 	for child in get_children():

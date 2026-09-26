@@ -9,6 +9,9 @@ extends SkeletonModifier3D
 
 ## Radians, positive to his left, followed smoothly.
 var head_yaw := 0.0
+## Radians, positive up (looking up at a wall top, at the sky), negative
+## down (asleep in his seat), followed smoothly.
+var head_pitch := 0.0
 ## The way his feet go, radians from straight ahead, positive to his left.
 ## The hips turn toward it and the spine turns back, so he keeps his face.
 var hips_yaw := 0.0
@@ -23,6 +26,7 @@ var lean := 0.0
 var man: Node3D
 
 var _head := 0.0
+var _pitch := 0.0
 var _hips := 0.0
 var _bones := {}
 
@@ -35,6 +39,7 @@ func _process_modification() -> void:
 
 	var delta := get_process_delta_time()
 	_head = lerp_angle(_head, head_yaw, 1.0 - exp(-8.0 * delta))
+	_pitch = lerp_angle(_pitch, head_pitch, 1.0 - exp(-5.0 * delta))
 	_hips = lerp_angle(_hips, hips_yaw, 1.0 - exp(-10.0 * delta))
 
 	if man == null:
@@ -53,6 +58,10 @@ func _process_modification() -> void:
 	if absf(_head) > 0.001:
 		_turn(skeleton, &"neck_01", up, _head * 0.35)
 		_turn(skeleton, &"Head", up, _head * 0.65)
+
+	if absf(_pitch) > 0.001:
+		_turn(skeleton, &"neck_01", right, _pitch * 0.4)
+		_turn(skeleton, &"Head", right, _pitch * 0.6)
 
 	if knee > 0.001:
 		var k := clampf(knee, 0.0, 1.0)

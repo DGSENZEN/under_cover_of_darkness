@@ -39,8 +39,9 @@ func _run() -> void:
 		var guards: Array = gym._bay_guards.get(i, [])
 		var alive := guards.filter(func(g): return is_instance_valid(g))
 		var fighting := alive.filter(func(g): return int(g.state) == 4).size()
-		# The watchman is on his rounds; everyone else is on you.
-		var ok := alive.size() == guards.size() and alive.size() > 0 and (fighting == 0 if i == 0 else fighting == alive.size())
+		# The watchman is on his rounds, the garrison at its ease; everyone
+		# else is on you.
+		var ok := alive.size() == guards.size() and alive.size() > 0 and (fighting == 0 if i in [0, 10] else fighting == alive.size())
 		all_ok = all_ok and ok
 		summary.append("%d:%d/%d%s" % [i + 1, fighting, alive.size(), "" if ok else "!"])
 
@@ -128,6 +129,28 @@ func _run() -> void:
 				break
 
 	_check("G8 bay 10: they climb the ladder onto the tower after you, and swim after you", up and swum, "up %s swum %s" % [up, swum])
+
+	# G9 bay 11: the garrison at its ease, each man about his own business
+	# (you out of the way in the dark by the door, as they do not know you
+	# are there)
+	gym.player.debug_light_level = 0.0
+	gym._start_bay(10)
+	await _frames(2)
+	gym.player.global_position = Vector3(-16.4, 1.05, -73.0)
+	gym.player.reset_physics_interpolation()
+	var life := {}
+
+	for i in 60 * 45:
+		await get_tree().physics_frame
+
+		for g in gym._bay_guards.get(10, []):
+			if is_instance_valid(g):
+				life[g.activity()] = true
+
+	var own := life.keys().filter(func(a): return a in [&"sit", &"sit_talk", &"doze", &"lean", &"chop", &"reach", &"eat", &"tend", &"carry", &"set_down", &"rail", &"fold_arms", &"drink", &"talk", &"listen", &"nod", &"shake"])
+	var calm: bool = gym._bay_guards.get(10, []).all(func(g): return is_instance_valid(g) and int(g.state) == 0)
+	_check("G9 bay 11: the garrison at its ease, each about his own business, lights on their rounds", life.has(&"carry_torch") and life.has(&"carry_lantern") and own.size() >= 5 and calm,
+		"did %s, all at ease %s" % [life.keys(), calm])
 
 
 func _frames(n: int) -> void:

@@ -317,8 +317,10 @@ func _plan_ladder(from: Vector3, a: Vector3, b: Vector3, volume: Node3D, rope: b
 	var out: Vector3 = volume.get_climb_normal() if volume.has_method("get_climb_normal") else _flat(a - b)
 	var line: Vector3 = volume.global_position + out * 0.35
 
+	# A rope hangs by its ledge: up it, and off it toward the ledge.
 	if rope:
 		line = volume.global_position + _flat(a - volume.global_position) * 0.25
+		out = _flat(line - b)
 
 	_facing = -out if not rope else _flat(volume.global_position - a)
 	_ladder_line = line

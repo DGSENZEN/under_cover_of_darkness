@@ -8,7 +8,9 @@ extends RefCounted
 ##           the edge and lets go. One way.
 ##   leap    across a gap (LEAP_MIN to LEAP_MAX) to about the same height.
 ##   ladder  up or down a ClimbVolume (a ladder, a vine wall), from the floor
-##           at its foot to the top it leads to; "rope" for a rope.
+##           at its foot to the top it leads to.
+##   rope    up or down a rope or a chain (VerletRope), from the floor under
+##           it to the highest ledge beside it that it reaches.
 ##   water   off a bank into deep water (WaterVolume, and the swim region
 ##           NavBaker bakes for it), and out again where the bank is low
 ##           enough to haul himself out (WATER_CLIMB). Deeper drops in, one way.
@@ -26,6 +28,8 @@ const LEAP_MIN := 1.0
 const LEAP_MAX := 2.6
 ## A leap lands this much higher or lower at most.
 const LEAP_RISE := 0.6
+## A rope's ledge: this far out from where it hangs, at most.
+const ROPE_REACH := [0.7, 1.0, 1.3]
 ## A bank this far over the water (at most) he can haul himself out onto;
 ## he goes in off one this high at most.
 const WATER_CLIMB := 1.1
@@ -283,6 +287,10 @@ static func _ladder(ctx: Dictionary, volume: Node) -> void:
 	if not (volume is Area3D) or not volume.has_method("get_climb_normal"):
 		return
 
+	if bool(volume.get("rope")):
+		_rope(ctx, volume as Area3D)
+		return
+
 	var box := _box_of(volume as Area3D)
 
 	if box.size == Vector3.ZERO:
@@ -310,8 +318,70 @@ static func _ladder(ctx: Dictionary, volume: Node) -> void:
 	if land == Vector3.INF or land.y - start.y < CLIMB_MIN:
 		return
 
-	var rope := bool(volume.get("rope"))
-	_add(ctx, &"rope" if rope else &"ladder", start, land, true, land.y - start.y, {"volume": volume})
+	_add(ctx, &"ladder", start, land, true, land.y - start.y, {"volume": volume})
+	# Where it leads, for a man after someone on it (ClimbVolume.ends).
+	volume.set_meta(&"climb_ends", [start, land])
+
+
+## A rope or a chain: from the floor under its end, up it, and off onto the
+## highest ledge beside it that it reaches (ROPE_REACH out from it, higher
+## than a man climbs without it).
+static func _rope(ctx: Dictionary, volume: Area3D) -> void:
+	var box := _box_of(volume)
+
+	if box.size == Vector3.ZERO:
+		return
+
+	var line := volume.global_position
+	var top := minf(box.end.y, line.y)
+	var foot := _ray(ctx, Vector3(line.x, box.position.y + 0.5, line.z), Vector3(line.x, box.position.y - 3.0, line.z))
+
+	if foot.is_empty():
+		return
+
+	var ground: float = (foot["position"] as Vector3).y
+	var start := Vector3.INF
+
+	# The floor at its foot (or a step off it, if right under it is off the
+	# navmesh).
+	for off in [Vector3.ZERO, Vector3(0.45, 0, 0), Vector3(-0.45, 0, 0), Vector3(0, 0, 0.45), Vector3(0, 0, -0.45)]:
+		start = _on_mesh(ctx, Vector3(line.x, 0.0, line.z) + off, ground)
+
+		if start != Vector3.INF:
+			break
+
+	if start == Vector3.INF:
+		return
+
+	# From the top down: the first (the highest) ledge beside it.
+	var h := top - 0.3
+
+	while h > ground + CLIMB_MAX:
+		for i in 8:
+			var out := Vector3(cos(TAU * float(i) / 8.0), 0.0, sin(TAU * float(i) / 8.0))
+
+			for reach in ROPE_REACH:
+				var probe := Vector3(line.x, h + 0.9, line.z) + out * float(reach)
+				var hit := _ray(ctx, probe, probe + Vector3.DOWN * 1.8)
+
+				if hit.is_empty():
+					continue
+
+				var y: float = (hit["position"] as Vector3).y
+
+				if y < ground + CLIMB_MAX or absf(y - h) > 0.9:
+					continue
+
+				var land := _on_mesh(ctx, (hit["position"] as Vector3) + out * 0.3, y)
+
+				if land == Vector3.INF:
+					continue
+
+				_add(ctx, &"rope", start, land, true, land.y - start.y, {"volume": volume})
+				volume.set_meta(&"climb_ends", [start, land])
+				return
+
+		h -= 0.4
 
 
 ## The world box of a climb volume's shape.
