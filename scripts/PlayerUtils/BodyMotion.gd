@@ -129,6 +129,7 @@ var _heading := Vector3.FORWARD
 var _lean := Vector3.ZERO
 var _lean_v := Vector3.ZERO
 var _sprint := 0.0
+var _posture := Vector3.ZERO
 var _weight := 0.0
 var _crouch := 0.0
 
@@ -222,8 +223,13 @@ func step(delta: float, frame: Frame) -> void:
 	if active and not frame.crouched:
 		sprint_target = clampf((speed - walk) / maxf(frame.sprint_speed - walk, 0.01), 0.0, 1.0)
 
-	_sprint = lerpf(_sprint, sprint_target, 1.0 - exp(-dt / 0.25))
-	var posture := _heading * SPRINT_FORWARD * _sprint + Vector3(0.0, -SPRINT_DOWN * _sprint, 0.0)
+	var blend := 1.0 - exp(-dt / 0.25)
+	_sprint = lerpf(_sprint, sprint_target, blend)
+	# The lean itself eases, not only how far into it you are: a flick of the
+	# view mid-sprint swings it round instead of jumping it sideways.
+	var posture_target := _heading * SPRINT_FORWARD * sprint_target + Vector3(0.0, -SPRINT_DOWN * sprint_target, 0.0)
+	_posture = _posture.lerp(posture_target, blend)
+	var posture := _posture
 
 	# The steps: as strong as the pace asks, walking, running or creeping.
 	_crouch = lerpf(_crouch, 1.0 if frame.crouched else 0.0, 1.0 - exp(-dt / 0.15))
@@ -260,9 +266,12 @@ func step(delta: float, frame: Frame) -> void:
 		_stance_v = knees.y
 		stance_y = _eye - _stance
 	else:
+		# Moving with the eye, at its speed: coming back (a drop from a
+		# peeking hang, the eye still easing down) the knees carry on with it
+		# instead of setting off from rest behind it.
 		_eye = frame.eye_drop
 		_stance = frame.eye_drop
-		_stance_v = 0.0
+		_stance_v = STANCE_LEAD * _eye_rate * (frame.eye_target_drop - frame.eye_drop)
 		_stance_target = frame.eye_target_drop
 
 	# Breathing, harder for a while after a sprint.
@@ -331,6 +340,7 @@ func reset() -> void:
 	_lean = Vector3.ZERO
 	_lean_v = Vector3.ZERO
 	_sprint = 0.0
+	_posture = Vector3.ZERO
 	_weight = 0.0
 	_crouch = 0.0
 	_leg = 0.0

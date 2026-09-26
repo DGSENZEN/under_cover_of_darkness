@@ -1052,9 +1052,16 @@ func _ground_velocity(current: Vector3, wish: Vector3, target_speed: float, delt
 		var easing := clampf(-gap / maxf(slow_time, 0.01), 2.0, max_ground_acceleration)
 		along = maxf(along - easing * delta, target_speed)
 
+	# Speed across the way you want to go goes in proportion, the way the
+	# push closes its gap, and never faster than the turn allows. (Against a
+	# wall that speed is the slide along it, made again every tick; taken
+	# away at a flat rate it braked the slide to a crawl.)
 	var turn := lerpf(turn_acceleration_walk, turn_acceleration_sprint, pace)
-	across = across.move_toward(Vector3.ZERO, turn * delta)
-	return wish * along + across
+	var shed := clampf(across.length() / maxf(start_time, 0.01), 2.0, turn)
+	across = across.move_toward(Vector3.ZERO, shed * delta)
+
+	# Never faster than the pace asked for, or than you already were.
+	return (wish * along + across).limit_length(maxf(target_speed, current.length()))
 
 
 func _apply_vertical_movement(delta: float) -> void:

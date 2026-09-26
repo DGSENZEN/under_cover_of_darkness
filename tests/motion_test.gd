@@ -19,6 +19,8 @@ func _ready() -> void:
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(200, 1, 200))
 	# A 3 m drop, for landings.
 	Props.block(self, Vector3(-40, 1.5, 0), Vector3(6, 3, 6))
+	# A long wall (its face at x = 80), for sliding along.
+	Props.block(self, Vector3(80.5, 1.5, 0), Vector3(1, 3, 180))
 
 	player = PLAYER.instantiate()
 	add_child(player)
@@ -258,6 +260,57 @@ func _model_checks() -> void:
 	_check("Y16 a full lean dips the head 0.5-1.5 cm and holds it there", bend[29] <= -0.005 and bend[29] >= -0.015 and hold.max() - hold.min() < 0.002,
 		"at 0.5 s %.4f; last 0.2 s varies %.4f" % [bend[29], hold.max() - hold.min()])
 
+	# Y15r back into plain locomotion while the eye is still easing (dropping
+	#      from a peeking hang): the view goes with the eye, never floating
+	#      above it nor racing it
+	var drop_off := _body()
+	var raised := -0.4
+	var floating := 0.0
+	var racing := 0.0
+
+	for i in 60:
+		raised += (0.0 - raised) * (1.0 - exp(-12.0 / 60.0))
+		var f := _frame(0.0, 0.0)
+		f.locomotion = i >= 5
+		f.eye_drop = raised
+		f.eye_target_drop = 0.0
+		drop_off.step(TICK, f)
+
+		if i >= 5:
+			var view: float = raised - drop_off.head_offset(1.0).origin.y
+			floating = maxf(floating, raised - view)
+			racing = maxf(racing, view - raised)
+
+	_check("Y15r back into locomotion with the eye still easing, the view never floats above it (2 mm) nor races it (6 cm)",
+		floating <= 0.002 and racing <= 0.06,
+		"floats %.4f m, races %.4f m" % [floating, racing])
+
+	# Y4b a flick of the view mid-sprint: the lean into the run swings round
+	#     with it instead of jumping (no more than 3 mm a tick beyond what a
+	#     sprint step moves the head anyway)
+	var flicker := _body()
+	var flick_gait := 0.0
+	var flick_last := Vector3.ZERO
+	var calm := 0.0
+	var flicked := 0.0
+
+	for i in 150:
+		flick_gait = fposmod(flick_gait + 8.5 / 2.4 * TICK, 2.0)
+		var f := _frame(8.5, flick_gait)
+		f.facing = Basis(Vector3.UP, clampf((i - 120) / 2.0, 0.0, 1.0) * PI * 0.5)
+		flicker.step(TICK, f)
+		var at: Vector3 = flicker.head_offset(1.0).origin
+
+		if i > 90 and i < 120:
+			calm = maxf(calm, at.distance_to(flick_last))
+		elif i >= 120:
+			flicked = maxf(flicked, at.distance_to(flick_last))
+
+		flick_last = at
+
+	_check("Y4b a 90 deg flick mid-sprint swings the lean round, no jump", flicked <= calm + 0.003,
+		"most a tick: sprinting %.4f m, flicking %.4f m" % [calm, flicked])
+
 
 # --------------------------------------------------------------------------
 # Momentum: the same speeds, with weight
@@ -384,6 +437,25 @@ func _momentum_checks() -> void:
 	player.set("legacy_feel", false)
 	_check("Y7b the old feel still starts in a straight line to pace in 0.15 s", absf(old_sixth - 4.5) <= 0.05 and absf(old_ninth - 6.5) <= 0.01,
 		"tick 6 %.2f, tick 9 %.2f m/s" % [old_sixth, old_ninth])
+
+	# Y20 walls are not sticky: leaning into a wall as you go, you slide along
+	#    it as fast as you did on the old feel (and never faster than the pace)
+	var slow := []
+	var slides := []
+
+	for gait in ["walk", "sprint", "crouch"]:
+		for degrees in [30.0, 45.0]:
+			var old_slide: float = await _wall_slide(true, degrees, gait)
+			var new_slide: float = await _wall_slide(false, degrees, gait)
+			slides.append("%s %d: %.2f -> %.2f" % [gait, int(degrees), old_slide, new_slide])
+
+			if new_slide < 0.95 * old_slide:
+				slow.append("%s %d" % [gait, int(degrees)])
+
+	var shallow: float = await _wall_slide(false, 10.0, "walk")
+	_check("Y20 sliding along a wall is as quick as on the old feel (95%+), and a shallow slide is no faster than the pace",
+		slow.is_empty() and shallow <= player.walk_speed + 0.02,
+		"old -> new m/s: %s; walk 10 deg %.2f; too slow: %s" % [", ".join(slides), shallow, slow])
 
 
 # --------------------------------------------------------------------------
@@ -751,6 +823,35 @@ func _same_view(a: Array, b: Array) -> bool:
 			return false
 
 	return true
+
+
+## Hold forward (sprinting, walking or crouched) with the view turned
+## `degrees` into the long wall on the right: the speed the slide settles at.
+func _wall_slide(legacy: bool, degrees: float, gait: String) -> float:
+	player.set("legacy_feel", legacy)
+	_place(Vector3(78.5, 1.05, 60), -deg_to_rad(degrees))
+	await _frames(10)
+
+	if gait == "crouch":
+		Input.action_press("crouch")
+		await _frames(20)
+
+	Input.action_press("move_forward")
+
+	if gait == "sprint":
+		Input.action_press("sprint")
+
+	await _frames(70)
+	var total := 0.0
+
+	for i in 20:
+		await _frames(1)
+		total += _speed()
+
+	_release()
+	await _frames(20)
+	player.set("legacy_feel", false)
+	return total / 20.0
 
 
 ## Walk (or sprint) steadily, let go: [ticks to a standstill, distance].
