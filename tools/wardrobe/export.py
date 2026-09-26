@@ -4,7 +4,7 @@
 
 Each part is checked first against every rule (validate.py), textures
 included; if anything fails, nothing is written and every failure is
-printed. Then: a GLB (mesh and skeleton, material slots only), its JSON, and
+printed. Whatever it writes over is kept first (source/backup). Then: a GLB (mesh and skeleton, material slots only), its JSON, and
 beside a new GLB an .import that turns Godot's automatic LODs off (PS2 meshes
 keep their silhouette at a distance). Each .blend gets an `export.py` text
 block too: after a hand edit, Text > Run Script sends it again.
@@ -15,6 +15,8 @@ can make, so `all` exports heads and headgear first.
 
 import json
 import os
+import pathlib
+import re
 import sys
 
 # No __pycache__ beside the tools (Blender would write one each run).
@@ -27,9 +29,6 @@ import common  # noqa: E402
 import recipes  # noqa: E402
 import validate  # noqa: E402
 
-HEAD_LIMIT = 450
-GEAR_LIMIT = {"coif": 200}
-GEAR_DEFAULT = 300
 # Godot's import settings for a wardrobe GLB (Boots_Male.glb's, LODs and
 # tangents off: no normal maps, and no automatic LODs eating silhouettes).
 IMPORT = """[remap]
@@ -74,8 +73,47 @@ gltf/embedded_image_handling=1
 """
 
 
+# A texture's import settings: lossless, mipmapped (the shader samples
+# nearest-mipmap), and never switched to VRAM compression when the editor
+# sees it on a 3D mesh: that would smear the palette.
+PNG_IMPORT = """[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+
+[deps]
+
+source_file="{source}"
+
+[params]
+
+compress/mode=0
+mipmaps/generate=true
+detect_3d/compress_to=0
+"""
+
+
+def lossless(path):
+    """`path`'s import settings held lossless (PNG_IMPORT's rules), written
+    beside it or put right in the ones Godot made."""
+    settings = path.parent / (path.name + ".import")
+
+    if settings.exists():
+        text = re.sub(r"compress/mode=\d+", "compress/mode=0", settings.read_text())
+        text = re.sub(r"detect_3d/compress_to=\d+", "detect_3d/compress_to=0", text)
+        settings.write_text(text)
+    else:
+        relative = "res://" + str(path.relative_to(common.ROOT)).replace(os.sep, "/")
+        settings.write_text(PNG_IMPORT.format(source=relative))
+
+
 def main():
     target, _ = common.args()
+
+    if target == "hair" and not recipes.HAIR:
+        print("wardrobe: no hair in the recipes: nothing to export")
+        return
+
     path = common.SOURCE / ("%s.blend" % target)
 
     if not path.exists() or bpy.data.filepath != str(path):
@@ -85,6 +123,8 @@ def main():
         export_kind(recipes.KINDS[target])
     elif target == "heads":
         export_parts("Head_", "heads")
+    elif target == "hair":
+        export_parts("Hair_", "hair")
     elif target == "headgear":
         export_parts("Gear_", "headgear")
     else:
@@ -135,6 +175,10 @@ def export_kind(recipe):
         refuse(messages)
 
     glb(outfit, armature, common.WARDROBE / ("%s.glb" % kind))
+
+    for image in (albedo, mask):
+        lossless(pathlib.Path(image))
+
     bones = {b.name: b for b in armature.data.bones}
     data = {
         "kind": kind,
@@ -153,14 +197,19 @@ def export_kind(recipe):
 
 
 def heaviest_parts(recipe):
+    """The heaviest head, hair, beard and headgear set the kind can roll
+    (from their exported JSON)."""
     options = recipe["options"]
     heads = [read("heads/%s.json" % face) for face in options["faces"]]
+    hair = [read("hair/%s.json" % style) for style in options.get("hair", [])]
+    beards = [read("hair/%s.json" % style) for style in options.get("beards", [])]
     sets = [[read("headgear/%s.json" % piece) for piece in pieces] for pieces in options["headgear"]]
 
-    if any(h is None for h in heads) or any(p is None for s in sets for p in s):
-        common.fail("export heads and headgear first: %s needs their triangle counts" % recipe["kind"])
+    if any(p is None for p in heads + hair + beards) or any(p is None for s in sets for p in s):
+        common.fail("export heads, hair and headgear first: %s needs their triangle counts" % recipe["kind"])
 
-    return max(h["triangles"] for h in heads) + max((sum(p["triangles"] for p in s) for s in sets), default=0)
+    return (max(h["triangles"] for h in heads) + max((h["triangles"] for h in hair), default=0)
+            + max((b["triangles"] for b in beards), default=0) + max((sum(p["triangles"] for p in s) for s in sets), default=0))
 
 
 def read(relative):
@@ -168,8 +217,25 @@ def read(relative):
     return json.loads(path.read_text()) if path.exists() else None
 
 
+def dye_base(obj):
+    """The colour a part's dyed faces were baked in (sRGB), or None."""
+    dyed = obj.data.attributes.get("wr_dye")
+    base = obj.data.color_attributes.get("wr_base")
+
+    if dyed is None or base is None:
+        return None
+
+    for polygon in obj.data.polygons:
+        if dyed.data[polygon.index].value:
+            colour = base.data[polygon.loop_indices[0]].color_srgb
+            return [round(colour[0], 4), round(colour[1], 4), round(colour[2], 4)]
+
+    return None
+
+
 def export_parts(prefix, folder):
-    """Every head (or headgear piece) in this file, each its own GLB."""
+    """Every head (or hair piece, or headgear piece) in this file, each its
+    own GLB."""
     armature = bpy.data.objects.get("Armature")
     parts = [o for o in bpy.data.objects if o.name.startswith(prefix) and o.type == "MESH"]
     joints = reference_joints("male")
@@ -181,10 +247,11 @@ def export_parts(prefix, folder):
         if folder == "heads":
             images = [(str(common.WARDROBE / folder / ("%s_%s.png" % (name, tone))), (128, 128), True)
                       for tone in recipes.HEADS[name]["tones"]]
-            cap = HEAD_LIMIT
         else:
-            images = [(str(common.WARDROBE / folder / ("%s.png" % name)), (128, 128), True)]
-            cap = GEAR_LIMIT.get(name, GEAR_DEFAULT)
+            images = [(str(common.WARDROBE / folder / ("%s.png" % name)), (128, 128), True),
+                      (str(common.WARDROBE / folder / ("%s_mask.png" % name)), (128, 128), False)]
+
+        cap = common.part_limit(folder, name)
 
         found = validate.check(obj, armature=armature, reference_joints=joints, images=images,
                                combined_tris=common.tri_count(obj), budget=cap)
@@ -197,13 +264,30 @@ def export_parts(prefix, folder):
         name = obj.name[len(prefix):]
         glb(obj, armature, common.WARDROBE / folder / ("%s.glb" % name))
 
+        for image in (common.WARDROBE / folder).glob("%s*.png" % name):
+            lossless(image)
+
         if folder == "heads":
             data = {"face": name, "body": recipes.HEADS[name]["body"], "triangles": common.tri_count(obj)}
+        elif folder == "hair":
+            h = recipes.HAIR[name]
+            data = {"style": name, "kind": h["kind"], "body": h.get("body", "male"), "triangles": common.tri_count(obj),
+                    "dye_base": dye_base(obj) or [0.5, 0.5, 0.5]}
         else:
+            # Skinned wholly to its bones: no rigid pieces (batch 1 decision 3).
             g = recipes.HEADGEAR[name]
-            data = {"piece": name, "triangles": common.tri_count(obj), "rigid": False, "bone": "", "offset": [],
+            bones = {b.name: b for b in armature.data.bones}
+            chains = [{key: value for key, value in {**c, **g["chains"][c["chain"]]}.items() if key != "piece"}
+                      for c in json.loads(bpy.context.scene.get("wardrobe_chains", "[]")) if c.get("piece") == name]
+            data = {"piece": name, "triangles": common.tri_count(obj),
                     "metal": g["metal"], "hides_hair": g["hides_hair"], "allows_beard": g["allows_beard"],
-                    "cloth": [], "colliders": []}
+                    "cloth": chains,
+                    "colliders": [{"bone": c["bone"], "radius": c["radius"], "height": round(bones[c["bone"]].length, 4)}
+                                  for c in g.get("colliders", [])]}
+            dyed = dye_base(obj)
+
+            if dyed is not None:
+                data["dye_base"] = dyed
 
         write_json(common.WARDROBE / folder / ("%s.json" % name), data)
         print("wardrobe: exported %s/%s: %d triangles" % (folder, name, data["triangles"]))
@@ -215,6 +299,7 @@ def glb(obj, armature, path):
     from both sides), no textures, no animation. Placeholder materials would
     lose the names on Godot's import."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    common.backup(path)
     common.select_only([obj, armature], active=obj)
     bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", use_selection=True, export_materials="EXPORT",
                               export_image_format="NONE", export_animations=False, export_skins=True, export_yup=True,
@@ -227,7 +312,9 @@ def glb(obj, armature, path):
 
 
 def write_json(path, data):
+    """`data` as `path`; the one there kept first (source/backup)."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    common.backup(path)
     path.write_text(json.dumps(data, indent=1) + "\n")
 
 
@@ -247,4 +334,5 @@ def add_button(target):
         common.save(common.SOURCE / ("%s.blend" % target))
 
 
-main()
+if __name__ == "__main__":
+    main()

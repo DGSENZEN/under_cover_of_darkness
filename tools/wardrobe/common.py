@@ -391,6 +391,21 @@ def save(path):
     bpy.ops.wm.save_as_mainfile(filepath=str(path))
 
 
+def part_limit(folder, name):
+    """How many triangles a part may have (spec §5: ~400 a head; hair,
+    beard and headgear ~600 together): a head 450; headgear 300, the coif
+    240; hair 220, a beard 150."""
+    if folder == "heads":
+        return 450
+
+    if folder == "hair":
+        import recipes
+
+        return 150 if recipes.HAIR.get(name, {}).get("kind") == "beard" else 220
+
+    return {"coif": 240}.get(name, 300)
+
+
 def fail(message):
     print("wardrobe: " + message)
     raise SystemExit(1)

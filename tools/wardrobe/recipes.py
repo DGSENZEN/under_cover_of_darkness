@@ -141,20 +141,44 @@ HEADS = {
 }
 
 MAIL = (0.36, 0.36, 0.38)
+# His hat's iron: the buckle's, a shade darker (a big plate reads lighter).
+IRON_HAT = (0.25, 0.25, 0.27)
 LEATHER = (0.20, 0.13, 0.08)
 
 # What goes on heads. Every piece is skinned (the hat wholly to his Head),
 # so the game binds them all one way and no bone frames are matched by hand.
 HEADGEAR = {
-    # A mail hood: the head's shape pushed out and smoothed, open from brow
-    # to chin, with a short cape over the neck and shoulders.
-    "coif": {"type": "coif", "fabric": "mail", "colour": MAIL, "thickness": 0.015, "smooth": 6, "tris": 110,
+    # A mail hood over his head, open from brow to chin, with a short cape
+    # over the neck and shoulders.
+    # Built as an even grid (build.coif): cut down from his head's own shape
+    # it spent its triangles on the face it then lost, and his skull showed
+    # through the few big faces left on the crown.
+    "coif": {"type": "coif", "fabric": "mail", "colour": MAIL, "thickness": 0.015, "slack": 0.004,
+             "segments": 12, "rings": [-40, -12, 20, 48, 75], "open": 36,
              "opening": {"x": 0.07, "from_z": 1.585, "to_z": 1.738},
              "cape": {"top_z": 1.575, "clear": 0.075, "tilt_front": 62, "tilt_side": 45,
                       "length_front": 0.17, "length_side": 0.17},
+             # Every head it goes over at least this far under it (check.py).
+             "covers_head": True, "inside": 0.006,
+             # Above this (his ears) the hood rides his Head alone (K15).
+             "rigid_above": 1.68,
              "metal": ["neck_01", "Head"], "hides_hair": True, "allows_beard": True},
-    # The kettle hat already in the game (assets/armour), fitted over the coif.
-    "kettlehat": {"type": "import", "from": "assets/armour/kettlehat.glb", "bone": "Head", "over": "coif",
-                  "clearance": 0.006, "fabrics": {"M_Iron": ("iron", (0.34, 0.34, 0.36)), "M_Leather": ("leather", LEATHER)},
+    # A kettle hat forged over the coif (build.kettle): a round bowl (a
+    # ridge read as a peak from the front: a coolie hat), a leather band at
+    # its foot (just above his brows and the coif's opening), a curved brim
+    # 7 cm wide turning down to a lip. Built here, not the old armour GLB (the user's look review,
+    # Sept 26: the hat must belong with the outfit). check.py holds it at
+    # least `clearance` and at most `rest` (its ridge included) off the coif
+    # over his crown; the build adds `slack` for its flat faces' sag
+    # between the points it measured.
+    "kettlehat": {"type": "kettle", "bone": "Head", "over": "coif", "clearance": 0.006, "slack": 0.009, "rest": 0.032,
+                  "base_z": 1.748, "centre_y": 0.02, "drop": 0.05, "segments": 16, "elevations": [15, 38, 60, 80],
+                  "comb": 0.0, "brim": 0.07, "droop": 0.036, "lip": 0.012, "rivets": 12,
+                  "fabric": "iron", "colour": IRON_HAT, "band": ("leather", LEATHER),
                   "metal": ["Head"], "hides_hair": False, "allows_beard": True},
 }
+
+
+# Hair and beards (build_hair): solid shells cut down from the Quaternius
+# styles, fitted over the heads they go on. Filled by batch 1's Task 5.
+HAIR = {}

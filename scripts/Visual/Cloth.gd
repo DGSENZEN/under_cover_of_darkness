@@ -16,9 +16,19 @@ extends SpringBoneSimulator3D
 ##   skeleton.add_child(cloth)
 ##   cloth.setup(kind_json.cloth, kind_json.colliders)
 
+## Where the floor plane waits while he stands (Cloth.gd's "Floor").
+const PARKED := Vector3(0.0, -1000.0, 0.0)
+
+
+## His chains as the wardrobe's JSON gave them (to come back to after he
+## has lain still).
+var _chains: Array = []
+
+
 ## The chains ({bones, tip, stiffness, drag, gravity, radius}) and the
 ## capsules on his bones ({bone, radius, height}) from the wardrobe's JSON.
 func setup(chains: Array, colliders: Array) -> void:
+	_chains = chains
 	set_setting_count(chains.size())
 
 	for i in range(chains.size()):
@@ -41,6 +51,13 @@ func setup(chains: Array, colliders: Array) -> void:
 		set_radius(i, float(chain.get("radius", 0.03)))
 		set_enable_all_child_collisions(i, true)
 
+	# A floor under him while he lies limp: ClothReset keeps it at the floor
+	# under his hips then, parked far below otherwise.
+	var ground := SpringBoneCollisionPlane3D.new()
+	ground.name = "Floor"
+	add_child(ground)
+	ground.global_position = PARKED
+
 	for spec in colliders:
 		var capsule := SpringBoneCollisionCapsule3D.new()
 		var radius := float(spec.get("radius", 0.08))
@@ -52,3 +69,15 @@ func setup(chains: Array, colliders: Array) -> void:
 		capsule.height = length + radius * 2.0
 		capsule.position_offset = Vector3(0.0, length * 0.5, 0.0)
 		add_child(capsule)
+
+
+
+## Still (true): his cloth stays where it lies, moved only by what it
+## touches (a body at rest on the floor may still creep a little, and his
+## cloth would shiver on it). False: it swings again.
+func lie_still(still: bool) -> void:
+	for i in range(_chains.size()):
+		var chain: Dictionary = _chains[i]
+		set_stiffness(i, 0.0 if still else float(chain.get("stiffness", 1.0)))
+		set_drag(i, 1.0 if still else float(chain.get("drag", 0.4)))
+		set_gravity(i, 0.0 if still else float(chain.get("gravity", 1.0)))

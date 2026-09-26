@@ -460,10 +460,20 @@ func add_ragdoll(mass_scale := 1.0) -> Node:
 
 		if restart != null:
 			skeleton.move_child(restart, ragdoll.get_index() + 1)
+			restart.ragdoll = ragdoll
 
 		skeleton.move_child(cloth, ragdoll.get_index() + 1)
 
 	return ragdoll
+
+
+## His cloth started afresh (ClothReset.gd), for whoever puts him somewhere
+## in one step: getting up, being laid down. Nothing if he wears none.
+func restart_cloth() -> void:
+	var restart := skeleton.get_node_or_null("ClothReset") if skeleton != null else null
+
+	if restart != null:
+		restart.restart()
 
 
 ## Physics has him from the pose he is in, all of him moving at `velocity`.
@@ -580,11 +590,80 @@ func sever(bone: StringName, velocity := Vector3.ZERO) -> RigidBody3D:
 
 	severed.bones.append(bone)
 
+	# What kept his cloth off the part goes with it: an invisible leg would
+	# still prop his skirts.
+	if cloth != null:
+		for name in names:
+			var keep := cloth.get_node_or_null("Keep_" + String(name))
+
+			if keep != null:
+				keep.queue_free()
+
 	if ragdoll != null:
 		ragdoll.drop_bodies(names)
 
 	_stump(bone)
 	return piece
+
+
+## The skinned meshes he wears that put weight on any of `bones` (skeleton
+## indices): what a part cut there takes with it (§7.6).
+func weighted_meshes(bones: PackedInt32Array) -> Array[MeshInstance3D]:
+	var wanted := {}
+
+	for index in bones:
+		wanted[skeleton.get_bone_name(index)] = true
+
+	var out: Array[MeshInstance3D] = []
+
+	for child in skeleton.get_children():
+		var worn := child as MeshInstance3D
+
+		if worn == null or worn.skin == null or worn.mesh == null:
+			continue
+
+		for name in _weighed_bones(worn):
+			if wanted.has(name):
+				out.append(worn)
+				break
+
+	return out
+
+
+## Which bones (by name) a skinned mesh puts any weight on: read once per
+## mesh and skin.
+static var _weighed := {}
+
+
+func _weighed_bones(worn: MeshInstance3D) -> Dictionary:
+	var key := "%d|%d" % [worn.mesh.get_instance_id(), worn.skin.get_instance_id()]
+
+	if _weighed.has(key):
+		return _weighed[key]
+
+	var binds := {}
+
+	for i in range(worn.skin.get_bind_count()):
+		var name := String(worn.skin.get_bind_name(i))
+		binds[i] = name if name != "" else String(skeleton.get_bone_name(worn.skin.get_bind_bone(i)))
+
+	var found := {}
+
+	for surface in range(worn.mesh.get_surface_count()):
+		var arrays := worn.mesh.surface_get_arrays(surface)
+
+		if arrays[Mesh.ARRAY_BONES] == null or arrays[Mesh.ARRAY_WEIGHTS] == null:
+			continue
+
+		var ids: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+
+		for k in range(mini(ids.size(), weights.size())):
+			if weights[k] > 0.0:
+				found[binds.get(ids[k], "")] = true
+
+	_weighed[key] = found
+	return found
 
 
 ## A bone and everything that hangs from it.
@@ -684,21 +763,15 @@ func _cut_piece(bone: StringName, taken: Array[int], poses: Dictionary, velocity
 	piece.add_child(copy)
 	copy.transform = piece_xform.affine_inverse() * to_world
 
-	# Dressed as he was: the body always, the head its hair and eyes, a leg
-	# its boot.
-	var head := bone == &"neck_01"
-	var leg := String(bone).begins_with("thigh") or String(bone).begins_with("calf")
+	# Dressed as he was: every mesh he wears that weighs on its bones (§7.6:
+	# a head its face, hair, beard and headgear; a leg its boot or its piece
+	# of the outfit).
+	var taking := weighted_meshes(PackedInt32Array(taken))
 
 	for child in skeleton.get_children():
 		var worn := child as MeshInstance3D
 
-		if worn == null or worn.skin == null:
-			continue
-
-		var is_body := worn == body
-		var is_boot := String(worn.name).begins_with("Boots")
-
-		if not (is_body or (head and not is_boot) or (leg and is_boot)):
+		if worn == null or worn.skin == null or not taking.has(worn):
 			continue
 
 		var drawn := MeshInstance3D.new()
@@ -1095,12 +1168,28 @@ func dress(kind: StringName, seed: int, fighting_idle: StringName = &"Sword_Idle
 	_wear(root + "heads/%s.glb" % look.face, "Head_%s" % look.face, load(root + "heads/%s_%s.png" % [look.face, look.tone]), null,
 		Color.WHITE, body_kind)
 
+	# His hair and beard: one grey texture each, dyed his hair colour.
+	for style in [look.get("hair", &""), look.get("beard", &"")]:
+		if style == &"":
+			continue
+
+		var info := WardrobeScript.hair_data(style)
+		var hair_base: Array = info.get("dye_base", [0.5, 0.5, 0.5])
+		var strands := _wear(root + "hair/%s.glb" % style, ("Beard_%s" if info.get("kind") == "beard" else "Hair_%s") % style,
+			load(root + "hair/%s.png" % style), load(root + "hair/%s_mask.png" % style), Color(hair_base[0], hair_base[1], hair_base[2]),
+			body_kind)
+		strands.set_instance_shader_parameter(&"dye_colour", look.get("hair_colour", Color(0.3, 0.25, 0.2)))
+
 	for bone in data.get("metal", []):
 		metal[StringName(bone)] = body
 
 	for piece in look.headgear:
-		var worn_piece := _wear(root + "headgear/%s.glb" % piece, String(piece), load(root + "headgear/%s.png" % piece), null,
-			Color.WHITE, body_kind)
+		# Its mask holds only dirt: how dirty he rolled reaches his hat too.
+		var gear_mask_path := root + "headgear/%s_mask.png" % piece
+		var gear_mask: Texture2D = load(gear_mask_path) if ResourceLoader.exists(gear_mask_path) else null
+		var gear_dye: Array = WardrobeScript.headgear_data(piece).get("dye_base", [1.0, 1.0, 1.0])
+		var worn_piece := _wear(root + "headgear/%s.glb" % piece, String(piece), load(root + "headgear/%s.png" % piece), gear_mask,
+			Color(gear_dye[0], gear_dye[1], gear_dye[2]), body_kind)
 
 		for bone in WardrobeScript.headgear_data(piece).get("metal", []):
 			metal[StringName(bone)] = worn_piece

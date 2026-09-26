@@ -6,10 +6,12 @@
 #   tools/wardrobe/wardrobe.sh bake watchman              textures, palettized
 #   tools/wardrobe/wardrobe.sh export watchman            validated GLB + PNG + JSON
 #   tools/wardrobe/wardrobe.sh preview watchman           pictures of it (--out=<dir>)
-#   tools/wardrobe/wardrobe.sh test                       the validation rules' and the bake's own tests
+#   tools/wardrobe/wardrobe.sh test                       the validation rules', the bake's and the build's own tests
+#   tools/wardrobe/wardrobe.sh list                       the kinds the recipes make
 #
-# Targets: a kind (watchman...), heads, headgear, or all (heads, headgear,
-# then every kind: a kind's export reads its parts' triangle counts).
+# Targets: a kind (watchman...), heads, hair, headgear, or all (heads, hair,
+# headgear, then every kind: a kind's export reads its parts' triangle
+# counts).
 # Exits non-zero when a step fails.
 set -euo pipefail
 
@@ -17,7 +19,10 @@ BLENDER=${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 SOURCE="$ROOT/assets/characters/wardrobe/source"
-KINDS=(watchman)
+# The kinds are the recipes' (recipes.py is plain data: any Python reads it).
+kinds() {
+  PYTHONDONTWRITEBYTECODE=1 python3 -c "import sys; sys.path.insert(0, '$HERE'); import recipes; print(' '.join(recipes.KINDS))"
+}
 
 verb=${1:-}
 shift || true
@@ -36,16 +41,20 @@ run() {
 }
 
 case "$verb" in
+  list)
+    kinds
+    ;;
   test)
     "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_validate.py"
-    exec "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_bake.py"
+    "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_bake.py"
+    exec "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_build.py"
     ;;
   build|check|bake|export|preview)
-    target=${1:?"usage: wardrobe.sh $verb <kind|heads|headgear|all> [options]"}
+    target=${1:?"usage: wardrobe.sh $verb <kind|heads|hair|headgear|all> [options]"}
     shift
 
     if [ "$target" = all ]; then
-      for each in heads headgear "${KINDS[@]}"; do
+      for each in heads hair headgear $(kinds); do
         run "$verb" "$each" "$@"
       done
     else
@@ -53,7 +62,7 @@ case "$verb" in
     fi
     ;;
   *)
-    echo "usage: wardrobe.sh <build|check|bake|export|preview|test> [target] [options]" >&2
+    echo "usage: wardrobe.sh <build|check|bake|export|preview|test|list> [target] [options]" >&2
     exit 2
     ;;
 esac

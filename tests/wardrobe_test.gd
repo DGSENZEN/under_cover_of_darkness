@@ -13,10 +13,28 @@ const GUARD := preload("res://Guard.tscn")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const PLAYER := preload("res://Player.tscn")
+const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 
 const MALE := "res://assets/characters/base/Superhero_Male_FullBody.gltf"
 
 var results: Array[String] = []
+
+## Every kind the wardrobe dresses, and the archetype that is it (batch 1's
+## Tasks 6-8 add theirs). Every per-kind check runs over it.
+const DRESSED := {&"watchman": &""}
+## What each dressed kind must show:
+##   worn: every mesh he wears (none of the base body's);
+##   key: his silhouette, worn by every guard of his kind;
+##   rings / silent: where steel rings and where it must not, each
+##     [bone, up, ahead] (metres from the bone's joint, in his frame) or
+##     [bone, bone] (half-way between two joints);
+##   metal: which worn piece answers for a metal bone.
+const EXPECT := {
+	&"watchman": {"worn": ["Outfit", "Head_weathered", "kettlehat", "coif"], "key": ["kettlehat"],
+		"rings": [[&"Head", 0.12, 0.0], [&"neck_01", 0.0, 0.06]],
+		"silent": [[&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]],
+		"metal": {&"neck_01": "coif", &"Head": "coif"}},
+}
 
 
 func _ready() -> void:
@@ -40,8 +58,9 @@ func _run() -> void:
 	_k10a()
 	_k2a()
 	_k13()
+	_k15()
 	await _k3()
-	await _k1_k2_k10()
+	await _dressed()
 	await _cloth()
 	await _integration()
 
@@ -251,9 +270,32 @@ func _k10a() -> void:
 	var names := mat.shader.get_shader_uniform_list().map(func(u): return u.name)
 	var two: ShaderMaterial = Wardrobe.material(load("res://icon.svg"), null, true, Color(0.62, 0.52, 0.16))
 	var sided := two.shader.resource_path.ends_with("wardrobe_two_sided.gdshader") and mat.shader.resource_path.ends_with("wardrobe.gdshader")
+	# Every look uniform Humanoid copies (and apply_look sets) is one the
+	# shader declares per instance: a renamed one would read back null.
+	var code := FileAccess.get_file_as_string("res://scripts/Visual/wardrobe.gdshaderinc")
+	var declared: bool = HumanoidScript.LOOK_UNIFORMS.all(func(u): return RegEx.create_from_string("instance uniform \\w+ %s\\b" % u).search(code) != null)
+	# K16 new draws never change the old ones; dye colours are picked from the list
+	# Only the new keys added: its shift and fade are o's, so every old draw
+	# must come out the same.
+	var o3 := o.duplicate(true)
+	o3["dye"]["colours"] = [[0.2, 0.3, 0.14], [0.34, 0.25, 0.15], [0.37, 0.37, 0.35]]
+	o3["hair_colours"] = [[0.72, 0.7, 0.66]]
+	var hues := {}
+	var kept := true
+
+	for s in range(1, 13):
+		var a: Dictionary = Wardrobe.roll(o, tones, s)
+		var b: Dictionary = Wardrobe.roll(o3, tones, s)
+		kept = kept and [a.face, a.tone, a.headgear, a.fade, a.grime, a.height] == [b.face, b.tone, b.headgear, b.fade, b.grime, b.height]
+		hues[snappedf((b.dye as Color).h, 0.01)] = true
+
+	var hair: Variant = Wardrobe.roll(o3, tones, 5).get("hair_colour")
+	_check("K16 the dye rolls from its colours, and new draws change no old look",
+		kept and hues.size() >= 2 and hair is Color and (hair as Color).is_equal_approx(Color(0.72, 0.7, 0.66)), str(hues.keys()))
+
 	_check("K10a the variety roll is repeatable, ranged and stable; the shader has its uniforms",
-		same and seen.size() >= 2 and ranged and steady and "albedo" in names and "mask" in names and "dye_base" in names and sided,
-		"same %s distinct %d ranged %s steady %s uniforms %s two-sided %s" % [same, seen.size(), ranged, steady, names, sided])
+		same and seen.size() >= 2 and ranged and steady and "albedo" in names and "mask" in names and "dye_base" in names and sided and declared,
+		"same %s distinct %d ranged %s steady %s uniforms %s two-sided %s instance %s" % [same, seen.size(), ranged, steady, names, sided, declared])
 
 
 # ---------------------------------------------------------------------------
@@ -261,29 +303,68 @@ func _k10a() -> void:
 # ---------------------------------------------------------------------------
 
 func _k2a() -> void:
-	# K2a the files keep the PS2 budgets
-	var sizes := {"watchman": 256, "watchman_mask": 256, "heads/weathered_light": 128, "heads/weathered_dark": 128,
-		"headgear/kettlehat": 128, "headgear/coif": 128}
-	var ok := true
-	var why := []
+	# K2a every dressed kind's files keep the PS2 budgets
+	for kind in DRESSED:
+		var data := Wardrobe.kind_data(kind)
+		var options: Dictionary = data.get("options", {})
+		var sizes := {String(kind): 256, "%s_mask" % kind: 256}
 
-	for f in sizes:
-		var path: String = Wardrobe.ROOT + f + ".png"
+		for face in options.get("faces", []):
+			for tone in options.get("tones", []):
+				sizes["heads/%s_%s" % [face, tone]] = 128
 
-		if not ResourceLoader.exists(path):
-			ok = false
-			why.append("%s missing" % f)
-			continue
+		for pieces in options.get("headgear", []):
+			for piece in pieces:
+				sizes["headgear/%s" % piece] = 128
+				sizes["headgear/%s_mask" % piece] = 128
 
-		var img: Image = (load(path) as Texture2D).get_image()
-		var colours := _colour_count(img)
-		var fits: bool = img.get_width() == sizes[f] and img.get_height() == sizes[f] and (f.ends_with("_mask") or colours <= 64)
-		ok = ok and fits
-		why.append("%s %dx%d %d" % [f, img.get_width(), img.get_height(), colours])
+		for style in options.get("hair", []) + options.get("beards", []):
+			sizes["hair/%s" % style] = 128
+			sizes["hair/%s_mask" % style] = 128
 
-	var tris := int(Wardrobe.kind_data(&"watchman").get("triangles", 99999)) + int(Wardrobe.head_data(&"weathered").get("triangles", 99999)) \
-		+ int(Wardrobe.headgear_data(&"kettlehat").get("triangles", 99999)) + int(Wardrobe.headgear_data(&"coif").get("triangles", 99999))
-	_check("K2a baked parts: 256/128 textures, at most 64 colours, at most 3,000 triangles", ok and tris <= 3000, "%s tris %d" % [why, tris])
+		var ok := true
+		var why := []
+
+		for f in sizes:
+			var path: String = Wardrobe.ROOT + f + ".png"
+
+			if not ResourceLoader.exists(path):
+				ok = false
+				why.append("%s missing" % f)
+				continue
+
+			var img: Image = (load(path) as Texture2D).get_image()
+			var colours := _colour_count(img)
+			# Imported lossless, and never switched to VRAM compression when the
+			# editor sees it on a 3D mesh (that would smear the palette).
+			var settings := FileAccess.get_file_as_string(path + ".import")
+			var lossless := settings.contains("compress/mode=0") and settings.contains("detect_3d/compress_to=0")
+			var fits: bool = img.get_width() == sizes[f] and img.get_height() == sizes[f] and (f.ends_with("_mask") or colours <= 64) \
+				and lossless
+
+			if not lossless:
+				why.append("%s not held lossless" % f)
+
+			ok = ok and fits
+			why.append("%s %dx%d %d" % [f, img.get_width(), img.get_height(), colours])
+
+		var tris := _heaviest(kind)
+		_check("K2a %s: 256/128 textures held lossless, at most 64 colours, at most 3,000 triangles" % kind, ok and tris <= 3000,
+			"%s tris %d" % [why, tris])
+
+
+## The most triangles a guard of `kind` can wear: his outfit, and the
+## heaviest face, hair, beard and headgear set he can roll.
+func _heaviest(kind: StringName) -> int:
+	var data := Wardrobe.kind_data(kind)
+	var options: Dictionary = data.get("options", {})
+	var faces: Array = options.get("faces", []).map(func(f): return int(Wardrobe.head_data(StringName(f)).get("triangles", 99999)))
+	var hair: Array = options.get("hair", []).map(func(h): return int(Wardrobe.hair_data(StringName(h)).get("triangles", 99999)))
+	var beards: Array = options.get("beards", []).map(func(b): return int(Wardrobe.hair_data(StringName(b)).get("triangles", 99999)))
+	var sets: Array = options.get("headgear", []).map(func(pieces): return pieces.reduce(
+		func(n, piece): return n + int(Wardrobe.headgear_data(StringName(piece)).get("triangles", 99999)), 0))
+	return int(data.get("triangles", 99999)) + (faces.max() if not faces.is_empty() else 0) + (hair.max() if not hair.is_empty() else 0) \
+		+ (beards.max() if not beards.is_empty() else 0) + (sets.max() if not sets.is_empty() else 0)
 
 
 ## The coif's hood ends here (recipes.HEADGEAR.coif.cape.top_z); below it,
@@ -297,29 +378,100 @@ func _k13() -> void:
 	# his arms
 	var scene: Node = (load(Wardrobe.ROOT + "headgear/coif.glb") as PackedScene).instantiate()
 	var mi: MeshInstance3D = scene.find_children("*", "MeshInstance3D", true, false)[0]
-	var arrays := mi.mesh.surface_get_arrays(0)
-	var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
-	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
-	var per := bones.size() / maxi(points.size(), 1)
 	var wrong := {}
 	var cape := 0
 
-	for v in range(points.size()):
-		if points[v].y >= CAPE_TOP:
-			continue
+	# Every surface: the cape is drawn from both sides, a surface of its own.
+	for surface in range(mi.mesh.get_surface_count()):
+		var arrays := mi.mesh.surface_get_arrays(surface)
+		var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+		var per := bones.size() / maxi(points.size(), 1)
 
-		cape += 1
+		for v in range(points.size()):
+			if points[v].y >= CAPE_TOP:
+				continue
 
-		for k in range(per):
-			var bone := String(mi.skin.get_bind_name(bones[v * per + k]))
+			cape += 1
 
-			if weights[v * per + k] > 0.0 and (bone == "Head" or bone.begins_with("upperarm")):
-				wrong[bone] = int(wrong.get(bone, 0)) + 1
+			for k in range(per):
+				var bone := String(mi.skin.get_bind_name(bones[v * per + k]))
+
+				if weights[v * per + k] > 0.0 and (bone == "Head" or bone.begins_with("upperarm")):
+					wrong[bone] = int(wrong.get(bone, 0)) + 1
 
 	scene.free()
 	_check("K13 the coif's cape rides his neck, chest and collarbones, not his head or arms", cape > 0 and wrong.is_empty(),
 		"cape vertices %d, on the wrong bones %s" % [cape, wrong])
+
+
+## Above this the coif's hood rides his head alone (recipes.HEADGEAR.coif:
+## "rigid_above").
+const HOOD_RIGID := 1.68
+
+
+func _k15() -> void:
+	# K15 the hood above his ears rides his head alone: weighed partly on his
+	# neck, its big faces lag when he bows his head and his skull shows
+	# through them
+	var scene: Node = (load(Wardrobe.ROOT + "headgear/coif.glb") as PackedScene).instantiate()
+	var mi: MeshInstance3D = scene.find_children("*", "MeshInstance3D", true, false)[0]
+	var wrong := {}
+	var hood := 0
+
+	for surface in range(mi.mesh.get_surface_count()):
+		var arrays := mi.mesh.surface_get_arrays(surface)
+		var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+		var per := bones.size() / maxi(points.size(), 1)
+
+		for v in range(points.size()):
+			if points[v].y < HOOD_RIGID:
+				continue
+
+			hood += 1
+
+			for k in range(per):
+				var bone := String(mi.skin.get_bind_name(bones[v * per + k]))
+
+				if weights[v * per + k] > 0.001 and bone != "Head":
+					wrong[bone] = int(wrong.get(bone, 0)) + 1
+
+	scene.free()
+	_check("K15 the coif's hood above his ears rides his head alone", hood > 0 and wrong.is_empty(),
+		"hood vertices %d, on other bones %s" % [hood, wrong])
+
+
+## Whether `mesh` carries `look`'s uniforms: each set (an unset one reads
+## back null, and null equals null) and equal to what was rolled.
+func _carries_look(mesh: GeometryInstance3D, look: Dictionary) -> bool:
+	if look.is_empty():
+		return false
+
+	var skin: Color = look.get("skin", Color.WHITE)
+	# Hair and beards are dyed his hair colour, not his dye.
+	var strands := String(mesh.name).begins_with("Hair_") or String(mesh.name).begins_with("Beard_")
+	var want := {&"dye_colour": look.get("hair_colour") if strands else look.get("dye"), &"dye_fade": look.get("fade"),
+		&"skin_tone": Vector3(skin.r, skin.g, skin.b), &"grime": look.get("grime")}
+
+	for p in want:
+		var got = mesh.get_instance_shader_parameter(p)
+
+		if got == null or want[p] == null:
+			return false
+
+		if got is Color and not (got as Color).is_equal_approx(want[p]):
+			return false
+
+		if got is Vector3 and not (got as Vector3).is_equal_approx(want[p]):
+			return false
+
+		if (got is float or got is int) and not is_equal_approx(float(got), float(want[p])):
+			return false
+
+	return true
 
 
 func _colour_count(img: Image) -> int:
@@ -333,10 +485,11 @@ func _colour_count(img: Image) -> int:
 
 
 func _k3() -> void:
-	# K3 (spec K3, male body) the exported watchman re-binds exactly onto the game skeleton
-	var errs := await _probe_errors(&"watchman")
-	_check("K3 exported watchman: probes within 1 mm at rest, within 3 cm of the body mid-swing",
-		errs.count > 0 and errs.rest <= 0.001 and errs.pose <= 0.03, "rest %.4f pose %.4f over %d probes" % [errs.rest, errs.pose, errs.count])
+	# K3 (spec K3, male body) every dressed kind's export re-binds exactly onto the game skeleton
+	for kind in DRESSED:
+		var errs := await _probe_errors(kind)
+		_check("K3 %s: probes within 1 mm at rest, within 3 cm of the body mid-swing" % kind,
+			errs.count > 0 and errs.rest <= 0.001 and errs.pose <= 0.03, "rest %.4f pose %.4f over %d probes" % [errs.rest, errs.pose, errs.count])
 
 
 ## For each probe of `kind`'s JSON: how far the re-bound outfit's vertex sits
@@ -444,11 +597,11 @@ func _pose(skeleton: Skeleton3D, animation: StringName, time: float) -> void:
 var _spawned := 0
 
 
-## A watchman (the default guard) with `seed` as his look, placed before he
-## enters the tree, given a few frames to dress.
-func _guard(seed: int) -> CharacterBody3D:
+## A guard of `archetype` (the plain watchman by default) with `seed` as his
+## look, placed before he enters the tree, given a few frames to dress.
+func _guard(seed: int, archetype: StringName = &"") -> CharacterBody3D:
 	var g: CharacterBody3D = GUARD.instantiate()
-	g.archetype = &""
+	g.archetype = archetype
 	g.set("look_seed", seed)
 	_spawned += 1
 	g.position = Vector3(-30 + (_spawned % 12) * 5.0, 0.0, -30 + (_spawned / 12) * 5.0)
@@ -461,35 +614,138 @@ func _worn_names(man: Node) -> Array:
 	return man.worn().map(func(m): return String(m.name))
 
 
-func _k1_k2_k10() -> void:
-	# K1 a watchman dresses in the wardrobe, nothing of the base body left
-	var g := await _guard(3)
+## The mesh he wears by that name, or null.
+func _worn(man: Node, piece: String) -> MeshInstance3D:
+	for m in man.worn():
+		if String(m.name) == piece:
+			return m
+
+	return null
+
+
+## The next guard of `kind` dresses from its JSON with `changes` merged into
+## its options (Wardrobe's JSON cache, keyed by full path, doctored);
+## Wardrobe.forget() undoes it. A GLB under user:// cannot be loaded
+## unimported, so fixtures doctor data, never files.
+func _doctor(kind: StringName, changes: Dictionary) -> void:
+	var data: Dictionary = Wardrobe.kind_data(kind).duplicate(true)
+	var options: Dictionary = data.get("options", {})
+	options.merge(changes, true)
+	data["options"] = options
+	Wardrobe._json[Wardrobe.ROOT + "%s.json" % kind] = data
+
+
+## As if `kind` had no files: it cannot be dressed until Wardrobe.forget().
+func _doctor_missing(kind: StringName) -> void:
+	Wardrobe._json[Wardrobe.ROOT + "%s.json" % kind] = {}
+
+
+## The bones from `bone` down, as the severed piece would take them.
+func _bones_under(g: Node, bone: StringName) -> PackedInt32Array:
 	var man = g._rig.man
-	var names := _worn_names(man)
-	var bare := names.any(func(n): return n in ["SuperHero_Male", "Eyes", "Eyebrows", "Boots"])
-	var layered: bool = man.worn().all(func(m): return m.layers == Layers.ACTORS)
-	_check("K1 the watchman is dressed: outfit, weathered head, coif, kettle hat; no base body",
-		man.body != null and man.body.name == "Outfit" and "Head_weathered" in names and "coif" in names and "kettlehat" in names
-		and not bare and layered, str(names))
+	return PackedInt32Array(man._bones_under(man.skeleton.find_bone(bone)))
 
-	# K2 every worn triangle counted
-	var tris: int = man.worn().reduce(func(n, m): return n + m.mesh.get_faces().size() / 3, 0)
-	_check("K2 a dressed watchman is at most 3,000 triangles", tris <= 3000 and tris > 0, "tris %d" % tris)
 
-	# K10 same seed, same man; four seeds, not four clones; the kettle hat always
-	var twin := await _guard(3)
-	var looks := {}
-	var hats := true
+## Whether steel answers a blow at `bone`'s joint (as K9 asks).
+func _rings(g: Node, bone: StringName) -> bool:
+	var man = g._rig.man
+	return man.armour_near(man.bone_global(bone).origin) != null
 
-	for s in [1, 2, 3, 4]:
-		var w := await _guard(s)
-		looks[str(w._rig.man.look)] = true
-		hats = hats and "kettlehat" in _worn_names(w._rig.man)
 
-	_check("K10 the same seed makes the same watchman, four seeds at least two looks, always the kettle hat",
-		not man.look.is_empty() and str(twin._rig.man.look) == str(man.look)
-		and twin._rig.man.body.get_instance_shader_parameter("dye_colour") == man.body.get_instance_shader_parameter("dye_colour")
-		and looks.size() >= 2 and hats, "distinct %d look %s" % [looks.size(), man.look])
+## A point of EXPECT's rings/silent lists on his body.
+func _point(man: Node, g: Node, spec: Array) -> Vector3:
+	if spec[1] is StringName:
+		return (man.bone_global(spec[0]).origin + man.bone_global(spec[1]).origin) * 0.5
+
+	return man.bone_global(spec[0]).origin + Vector3.UP * float(spec[1]) - g.global_basis.z * float(spec[2])
+
+
+## The attacks K5 drives for an archetype: its own (the watchman: kick and lunge).
+func _attacks_of(archetype: StringName) -> Array:
+	if archetype == &"":
+		return [&"kick", &"lunge"]
+
+	return (GuardFighterScript.ARCHETYPES[archetype]["attacks"] as Dictionary).keys()
+
+
+func _dressed() -> void:
+	var first := {}
+
+	for kind in DRESSED:
+		var archetype: StringName = DRESSED[kind]
+		var expect: Dictionary = EXPECT[kind]
+		# K1 he dresses in the wardrobe, nothing of the base body left
+		var g := await _guard(3, archetype)
+		var man = g._rig.man
+		first[kind] = g
+		var names := _worn_names(man)
+		var bare := names.any(func(n): return n in ["SuperHero_Male", "SuperHero_Female", "Eyes", "Eyebrows", "Boots"])
+		var layered: bool = man.worn().all(func(m): return m.layers == Layers.ACTORS)
+		_check("K1 %s: dressed in everything his kind wears; no base body" % kind,
+			man.body != null and man.body.name == "Outfit" and expect.worn.all(func(n): return n in names) and not bare and layered, str(names))
+
+		# K14 his headgear wears a dirt mask: how dirty he rolled reaches it
+		var masked := {}
+
+		for worn in man.worn():
+			if Wardrobe.headgear_data(StringName(worn.name)).is_empty():
+				continue
+
+			for surface in range(worn.mesh.get_surface_count()):
+				var mat := worn.get_surface_override_material(surface) as ShaderMaterial
+				var mask: Texture2D = mat.get_shader_parameter("mask") if mat != null else null
+				masked["%s/%d" % [worn.name, surface]] = mask != null and mask.get_width() > 1
+
+		if not Wardrobe.kind_data(kind).get("options", {}).get("headgear", [[]]).all(func(pieces): return pieces.is_empty()):
+			_check("K14 %s: his headgear wears a dirt mask, so his grime reaches it" % kind,
+				not masked.is_empty() and not masked.values().has(false), str(masked))
+
+		# K2 every worn triangle counted
+		var tris: int = man.worn().reduce(func(n, m): return n + m.mesh.get_faces().size() / 3, 0)
+		_check("K2 %s: at most 3,000 triangles" % kind, tris <= 3000 and tris > 0, "tris %d" % tris)
+
+		# K10 same seed, same man; four seeds, not four clones; his silhouette always
+		var twin := await _guard(3, archetype)
+		var looks := {}
+		var keyed := true
+
+		for s in [1, 2, 3, 4]:
+			var w := await _guard(s, archetype)
+			looks[str(w._rig.man.look)] = true
+			keyed = keyed and expect.key.all(func(n): return n in _worn_names(w._rig.man))
+
+		_check("K10 %s: the same seed makes the same man, four seeds at least two looks, his silhouette always" % kind,
+			not man.look.is_empty() and str(twin._rig.man.look) == str(man.look)
+			and _carries_look(man.body, man.look) and _carries_look(twin._rig.man.body, twin._rig.man.look)
+			and looks.size() >= 2 and keyed, "distinct %d look %s" % [looks.size(), man.look])
+
+		# K1d the strips are drawn from both sides, the rest culls
+		var shaders := []
+
+		for surface in range(man.body.mesh.get_surface_count()):
+			var worn := man.body.get_surface_override_material(surface) as ShaderMaterial
+			shaders.append(worn.shader.resource_path.get_file() if worn != null else "none")
+
+		_check("K1d %s: the outfit's cloth strips are drawn from both sides, its closed parts cull their backs" % kind,
+			shaders.has(Wardrobe.SHADER_TWO_SIDED.resource_path.get_file()) and shaders.has(Wardrobe.SHADER.resource_path.get_file()),
+			str(shaders))
+
+	# K17 a kind without headgear dresses, whether its options say one empty
+	# set ([[]]) or no sets at all ([]) (the watchman, doctored)
+	var bares := []
+
+	for none in [[[]], []]:
+		_doctor(&"watchman", {"headgear": none})
+		var bared := await _guard(3)
+		var bare_names := _worn_names(bared._rig.man)
+		Wardrobe.forget()
+		bares.append(bared._rig.man.body != null and bared._rig.man.body.name == "Outfit"
+			and bared._rig.man.look.get("headgear", [&"?"]).is_empty() and bare_names.all(func(n): return n in ["Outfit", "Head_weathered"]))
+
+	_check("K17 a kind with no headgear dresses ([[]] or [])", not bares.has(false), str(bares))
+
+	var g: CharacterBody3D = first[&"watchman"]
+	var man = g._rig.man
 
 	# K1b (Review Focus 3) a missing option is dropped; missing kind files: still a watchman, painted, kettle hat on
 	var kept: Dictionary = Wardrobe.usable_options({"faces": [&"weathered", &"nobody"], "tones": [&"light"], "hair": [], "beards": [],
@@ -514,18 +770,7 @@ func _k1_k2_k10() -> void:
 		oa.mesh == ob.mesh and oa.skin == ob.skin and oa.get_surface_override_material(0) != null
 		and oa.get_surface_override_material(0) == ob.get_surface_override_material(0), "")
 
-	# K1d the strips (tabard, skirts) are drawn from both sides, the rest culls
-	var shaders := []
-
-	for s in range(oa.mesh.get_surface_count()):
-		var worn := oa.get_surface_override_material(s) as ShaderMaterial
-		shaders.append(worn.shader.resource_path.get_file() if worn != null else "none")
-
-	_check("K1d the outfit's cloth strips are drawn from both sides, its closed parts cull their backs",
-		shaders.has(Wardrobe.SHADER_TWO_SIDED.resource_path.get_file()) and shaders.has(Wardrobe.SHADER.resource_path.get_file()),
-		str(shaders))
-
-	for x in [g, twin, painted, a, b]:
+	for x in [g, painted, a, b]:
 		x.queue_free()
 
 	for child in get_children():
@@ -542,11 +787,15 @@ func _k1_k2_k10() -> void:
 ## Markers that follow his bones as drawn (bone attachments see the cloth's
 ## simulation; plain bone reads do not): each chain's hem and moving joint,
 ## his pelvis, thighs and calves.
-func _watch(man: Node) -> Dictionary:
+func _watch(man: Node, kind: StringName = &"watchman") -> Dictionary:
 	var skeleton: Skeleton3D = man.skeleton
 	var out := {"tips": {}, "joints": [], "legs": {}}
+	var chains: Array = Wardrobe.kind_data(kind).get("cloth", []).duplicate()
 
-	for chain in Wardrobe.kind_data(&"watchman").get("cloth", []):
+	for piece in man.look.get("headgear", []):
+		chains += Wardrobe.headgear_data(piece).get("cloth", [])
+
+	for chain in chains:
 		var last := _marker(skeleton, chain.bones[-1], Vector3(0.0, float(chain.tip), 0.0))
 		out.tips[chain.chain] = last
 		out.joints.append(_marker(skeleton, chain.bones[-1], Vector3.ZERO))
@@ -603,29 +852,62 @@ func _popped(w: Dictionary, hips_before: Vector3, owed: int) -> int:
 	return maxi(owed - 1, 0)
 
 
+## How low his lowest hem is (world height).
+func _lowest(w: Dictionary) -> float:
+	var low := INF
+
+	for chain in w.tips:
+		low = minf(low, (w.tips[chain] as Node3D).global_position.y)
+
+	return low
+
+
 func _finite(h: Dictionary) -> bool:
 	return h.values().all(func(v): return v.is_finite())
 
 
 ## One frame of his own animation and cloth, `dt` of game time.
+## How far his hems travel in his own frame (summed over them) in `frames`
+## real frames, his rig kept at the game's pace.
+func _travel(g: Node, w: Dictionary, frames: int) -> float:
+	var total := 0.0
+	var last := _hems(w)
+
+	for i in range(frames):
+		await _step(g, Engine.time_scale / 60.0)
+		var now := _hems(w)
+
+		for chain in now:
+			total += (now[chain] - last[chain]).length()
+
+		last = now
+
+	return total
+
+
 func _step(g: Node, dt: float) -> void:
 	g._rig.update(dt)
 	await get_tree().process_frame
 
 
 func _cloth() -> void:
+	for kind in DRESSED:
+		await _cloth_kind(kind, DRESSED[kind])
+
+
+func _cloth_kind(kind: StringName, archetype: StringName) -> void:
 	var dt := 1.0 / 60.0
 
 	# K-order the modifiers: Posture, then Ragdoll, then Cloth
-	var g := await _guard(31)
+	var g := await _guard(31, archetype)
 	g.set_physics_process(false)
 	var man = g._rig.man
 	var order: bool = man.cloth != null and man.posture.get_index() < man.ragdoll.get_index() and man.ragdoll.get_index() < man.cloth.get_index()
-	_check("K-order his skeleton's modifiers run Posture, Ragdoll, Cloth", order,
+	_check("K-order %s: his skeleton's modifiers run Posture, Ragdoll, Cloth" % kind, order,
 		"posture %d ragdoll %d cloth %d" % [man.posture.get_index(), man.ragdoll.get_index(), man.cloth.get_index() if man.cloth else -1])
 
 	# K4 a run and a sudden stop: the skirts swing, then settle
-	var w := _watch(man)
+	var w := _watch(man, kind)
 
 	for i in range(60):
 		g.velocity = -g.global_basis.z * 3.2
@@ -650,10 +932,21 @@ func _cloth() -> void:
 		speed = _fastest(last, now, dt)
 		last = now
 
-	_check("K4 after a run and a sudden stop the skirts swing at least 5 cm and settle within 1.5 s",
+	_check("K4 %s: after a run and a sudden stop the skirts swing at least 5 cm and settle within 1.5 s" % kind,
 		finite and swing >= 0.05 and speed < 0.02, "swing %.3f end speed %.3f finite %s" % [swing, speed, finite])
 
-	# K4b (Review Focus 1) hit-stop mid-swing: nothing jumps when time resumes
+	# K4b (Review Focus 1) slow motion mid-swing: the cloth slows with the
+	# game (the same swing, in the same number of real frames, travels a
+	# fraction as far), and nothing jumps when time resumes
+	for i in range(30):
+		g.velocity = -g.global_basis.z * 3.2
+		g.global_position += g.velocity * dt
+		await _step(g, dt)
+
+	g.velocity = Vector3.ZERO
+	var played := await _travel(g, w, 12)
+	await _travel(g, w, 90)
+
 	for i in range(30):
 		g.velocity = -g.global_basis.z * 3.2
 		g.global_position += g.velocity * dt
@@ -661,7 +954,8 @@ func _cloth() -> void:
 
 	g.velocity = Vector3.ZERO
 	TimeFx.request(get_tree(), &"wardrobe_test", 0.05, 0.5)
-	var real := 0.0
+	var slowed := await _travel(g, w, 12)
+	var real := 12 * dt
 
 	while real < 0.6:
 		await _step(g, dt * Engine.time_scale)
@@ -677,17 +971,19 @@ func _cloth() -> void:
 		burst = maxf(burst, _fastest(last, now, dt))
 		last = now
 
-	_check("K4b after slow motion ends, no hem moves faster than 5 m/s", burst <= 5.0 and _finite(last), "fastest %.2f m/s" % burst)
+	_check("K4b %s: in slow motion the cloth slows with the game, and after it no hem moves faster than 5 m/s" % kind,
+		played > 0.02 and slowed < played * 0.25 and burst <= 5.0 and _finite(last),
+		"12 frames: played %.3f m slowed %.3f m; after %.2f m/s" % [played, slowed, burst])
 
-	# K5 a kick and a lunge: the cloth stays out of his legs
+	# K5 (Review Focus 5) his own attacks: the cloth stays out of his legs
 	var colliders := {}
 
-	for c in Wardrobe.kind_data(&"watchman").get("colliders", []):
+	for c in Wardrobe.kind_data(kind).get("colliders", []):
 		colliders[StringName(c.bone)] = c
 
 	var worst := INF
 
-	for attack in [&"kick", &"lunge"]:
+	for attack in _attacks_of(archetype):
 		for i in range(30):
 			g._phase = &"strike"
 			g._attack = attack
@@ -709,7 +1005,8 @@ func _cloth() -> void:
 					worst = minf(worst, p.distance_to(a + (b - a) * t) - float(colliders[leg].radius))
 
 	g._phase = &""
-	_check("K5 through a kick and a lunge no cloth joint enters a thigh or calf", worst >= -0.005, "closest %.3f past the surface" % worst)
+	_check("K5 %s: through his own attacks no cloth joint enters a thigh or calf" % kind, worst >= -0.005,
+		"closest %.3f past the surface (%s)" % [worst, _attacks_of(archetype)])
 
 	# K12 moved 20 m in one frame: no whip (once the kick's swing has died)
 	for i in range(90):
@@ -727,11 +1024,11 @@ func _cloth() -> void:
 
 	# A restart hangs the cloth back at its own pose: a few-centimetre settle
 	# in one frame. A whip is 60 m/s and more.
-	_check("K12 a guard moved 20 m in one frame does not whip his cloth (< 3 m/s)", jump < 3.0, "fastest %.2f m/s" % jump)
+	_check("K12 %s: moved 20 m in one frame, he does not whip his cloth (< 3 m/s)" % kind, jump < 3.0, "fastest %.2f m/s" % jump)
 
 	# K6 dead and limp: the tabard settles on his body without flying off
-	var dead := await _guard(32)
-	var dw := _watch(dead._rig.man)
+	var dead := await _guard(32, archetype)
+	var dw := _watch(dead._rig.man, kind)
 	# A guard that has stood a moment (his cloth hanging still), as any guard
 	# someone kills has: dying moves him to his body, which starts his cloth
 	# afresh where it hangs.
@@ -760,13 +1057,15 @@ func _cloth() -> void:
 		last = now
 
 	# A body hitting the floor swings its cloth at up to ~9 m/s for a few
-	# frames; flying apart is far faster (or NaN).
-	_check("K6 on a limp body the cloth never flies (<= 12 m/s) and settles (< 5 cm/s) within 2.5 s", wild <= 12.0 and speed < 0.05,
-		"fastest %.2f end %.3f" % [wild, speed])
+	# frames; flying apart is far faster (or NaN). Settled, it lies on the
+	# floor (the floor's top is y = 0 here), not through it.
+	var lowest := _lowest(dw)
+	_check("K6 %s: on a limp body the cloth never flies (<= 12 m/s), settles (< 5 cm/s) within 2.5 s, and lies on the floor" % kind,
+		wild <= 12.0 and speed < 0.05 and lowest >= -0.02, "fastest %.2f end %.3f lowest hem %.3f" % [wild, speed, lowest])
 
 	# K6b (Review Focus 2) knocked down and getting up: no whip, no NaN
-	var down := await _guard(33)
-	var kw := _watch(down._rig.man)
+	var down := await _guard(33, archetype)
+	var kw := _watch(down._rig.man, kind)
 	await _frames(2)
 	down.knock_down(down.global_basis.z * 4.0)
 	last = _hems(kw)
@@ -775,23 +1074,38 @@ func _cloth() -> void:
 	var frames := 0
 
 	hips = (kw.pelvis as Node3D).global_position
-	popped = 0
+	var pops := 0
+	var in_pops := 0.0
+	var floor_low := INF
 
+	# Every frame counts but the one his body itself is put elsewhere in
+	# (the rig's 2 m pop at getting up: its own task): the cloth goes with
+	# him then, and must not whip after.
 	while frames < 300 and (frames < 30 or down.get("_downed") or float(down.get("_rising")) > 0.0):
 		await get_tree().physics_frame
 		var now := _hems(kw)
 		finite = finite and _finite(now)
-		popped = _popped(kw, hips, popped)
+		var put := (kw.pelvis as Node3D).global_position.distance_to(hips) > 0.25
 		hips = (kw.pelvis as Node3D).global_position
+		var fastest := _fastest(last, now, dt)
 
-		if popped == 0:
-			wild = maxf(wild, _fastest(last, now, dt))
+		# Down a second (settled on the floor): his cloth lies on it.
+		if down.get("_downed") and frames > 60:
+			floor_low = minf(floor_low, _lowest(kw))
+
+		if put:
+			pops += 1
+			in_pops = maxf(in_pops, fastest)
+		else:
+			wild = maxf(wild, fastest)
 
 		last = now
 		frames += 1
 
-	_check("K6b knocked down and back up, his cloth stays sane (<= 12 m/s, no NaN)", finite and wild <= 12.0 and not down.get("_downed"),
-		"fastest %.2f frames %d still down %s" % [wild, frames, down.get("_downed")])
+	_check("K6b %s: knocked down and back up, his cloth stays sane (<= 12 m/s, no NaN), every frame after his body's pop too, on the floor while down" % kind,
+		finite and wild <= 12.0 and not down.get("_downed") and floor_low >= -0.02 and floor_low < INF,
+		"fastest %.2f (the pop frames themselves: %d, %.2f) lowest hem down %.3f frames %d still down %s"
+		% [wild, pops, in_pops, floor_low, frames, down.get("_downed")])
 
 	for x in [g, dead, down]:
 		if is_instance_valid(x):
@@ -815,62 +1129,25 @@ func _piece_meshes(piece: Node) -> Array:
 
 
 func _integration() -> void:
-	# K7 a dressed watchman cut apart: his head takes its face and gear, his leg its part of the outfit
-	var g := await _guard(41)
+	for kind in DRESSED:
+		await _integration_kind(kind, DRESSED[kind])
+
+	# K19 a severed part takes exactly the worn meshes weighted to its bones
+	var g := await _guard(43)
+	var weighted: Array = g._rig.man.weighted_meshes(_bones_under(g, &"thigh_l")).map(func(m): return String(m.name)) \
+		if g._rig.man.has_method("weighted_meshes") else ["(no weighted_meshes)"]
+	_check("K19 a leg takes what is weighted to it: his outfit, not his head or gear", weighted == ["Outfit"], str(weighted))
+
+	# K20 a severed leg's cloth capsules go with it (his man outlives the
+	# guard: dying hands him to his body)
 	var man = g._rig.man
 	g.die(null)
-	await _frames(10)
-	var head: Node = man.sever(&"neck_01", Vector3(0, 2, 1))
-	var leg: Node = man.sever(&"thigh_l", Vector3(1, 1, 0))
+	await _frames(5)
+	man.sever(&"thigh_l", Vector3.RIGHT)
 	await _frames(2)
-	var in_head := _piece_meshes(head) if head else []
-	var in_leg := _piece_meshes(leg) if leg else []
-	var skeleton: Skeleton3D = man.skeleton
-	var under_leg: Array = man._bones_under(skeleton.find_bone(&"thigh_l")).map(func(b): return skeleton.get_bone_name(b))
-	var cloth_on_leg: bool = under_leg.any(func(n): return String(n).begins_with("cloth_"))
-	var last_word: bool = man.severed != null and man.cloth != null and man.severed.get_index() > man.cloth.get_index()
-	_check("K7 a severed head takes his face, coif and hat; a leg its boot and outfit; cloth stays on him; Severed runs last",
-		"Head_weathered" in in_head and "coif" in in_head and "kettlehat" in in_head
-		and "Outfit" in in_leg and not ("Head_weathered" in in_leg) and not ("coif" in in_leg)
-		and not cloth_on_leg and man.severed != null and &"neck_01" in man.severed.bones and &"thigh_l" in man.severed.bones and last_word,
-		"head %s leg %s cloth on leg %s last %s" % [in_head, in_leg, cloth_on_leg, last_word])
-
-	# K7b (Review Focus 5) the severed leg keeps his colours
-	var same := false
-
-	if leg:
-		var copy: MeshInstance3D = leg.get_node("Skeleton3D").get_node_or_null("Outfit")
-		same = copy != null and [&"dye_colour", &"dye_fade", &"skin_tone", &"grime"].all(
-			func(p): return copy.get_instance_shader_parameter(p) == man.body.get_instance_shader_parameter(p))
-
-	_check("K7b a severed part keeps his dye, fading, skin and dirt", same, "")
-
-	# K8 the hit flash covers everything he wears
-	var h := await _guard(42)
-	var rig = h._rig
-	rig.react_hit(h.global_basis.z, 1.0)
-	rig.update(1.0 / 60.0)
-	var lit: bool = rig.man.worn().all(func(m): return m.material_overlay == rig._overlay)
-
-	for i in range(36):
-		rig.update(1.0 / 60.0)
-		await get_tree().physics_frame
-
-	var cleared: bool = rig.man.worn().all(func(m): return m.material_overlay != rig._overlay)
-	_check("K8 a hit flashes on every mesh he wears, and clears", lit and cleared, "lit %s cleared %s worn %d" % [lit, cleared, rig.man.worn().size()])
-
-	# K9 his helmet and mail ring; his gambeson and legs do not
-	var am = rig.man
-	var ahead: Vector3 = -h.global_basis.z
-	var coif: Node = am.worn().filter(func(m): return m.name == "coif").front() if am.worn().any(func(m): return m.name == "coif") else null
-	var helm: Vector3 = am.bone_global(&"Head").origin + Vector3.UP * 0.12
-	var neck: Vector3 = am.bone_global(&"neck_01").origin + ahead * 0.06
-	var belly: Vector3 = am.bone_global(&"spine_02").origin + ahead * 0.15
-	var thigh: Vector3 = (am.bone_global(&"thigh_l").origin + am.bone_global(&"calf_l").origin) * 0.5
-	_check("K9 steel rings on his hat and coif, not on his gambeson or legs",
-		coif != null and am.metal.get(&"neck_01") == coif and am.metal.get(&"Head") == coif
-		and am.armour_near(helm) != null and am.armour_near(neck) != null and am.armour_near(belly) == null and am.armour_near(thigh) == null,
-		"helm %s neck %s belly %s thigh %s" % [am.armour_near(helm) != null, am.armour_near(neck) != null, am.armour_near(belly) != null, am.armour_near(thigh) != null])
+	var left: Array = man.cloth.get_children().map(func(c): return String(c.name))
+	_check("K20 a severed leg no longer props his skirts", not ("Keep_thigh_l" in left) and not ("Keep_calf_l" in left) and "Keep_thigh_r" in left,
+		str(left))
 
 	# K11 your arms are untouched: painted, no cloth, no outfit
 	var player: Node = PLAYER.instantiate()
@@ -896,7 +1173,76 @@ func _integration() -> void:
 
 	_check("K11 your first-person arms stay painted, without cloth or an outfit", painted and bare, "arms %s painted %s bare %s" % [arms != null, painted, bare])
 
-	for x in [g, h, player]:
+	for x in [g, player]:
+		if is_instance_valid(x):
+			x.queue_free()
+
+	for child in get_children():
+		if child is CharacterBody3D or child is RigidBody3D:
+			child.queue_free()
+
+	await _frames(3)
+
+
+func _integration_kind(kind: StringName, archetype: StringName) -> void:
+	var expect: Dictionary = EXPECT[kind]
+	# K7 cut apart: his head takes its face and gear, his leg its part of the outfit
+	var g := await _guard(41, archetype)
+	var man = g._rig.man
+	g.die(null)
+	await _frames(10)
+	var head: Node = man.sever(&"neck_01", Vector3(0, 2, 1))
+	var leg: Node = man.sever(&"thigh_l", Vector3(1, 1, 0))
+	await _frames(2)
+	var in_head := _piece_meshes(head) if head else []
+	var in_leg := _piece_meshes(leg) if leg else []
+	var skeleton: Skeleton3D = man.skeleton
+	var under_leg: Array = man._bones_under(skeleton.find_bone(&"thigh_l")).map(func(b): return skeleton.get_bone_name(b))
+	var cloth_on_leg: bool = under_leg.any(func(n): return String(n).begins_with("cloth_"))
+	var last_word: bool = man.severed != null and man.cloth != null and man.severed.get_index() > man.cloth.get_index()
+	var head_items: Array = expect.worn.filter(func(n): return n != "Outfit")
+	_check("K7 %s: a severed head takes his face and headgear; a leg its outfit; cloth stays on him; Severed runs last" % kind,
+		head_items.all(func(n): return n in in_head)
+		and "Outfit" in in_leg and not head_items.any(func(n): return n in in_leg)
+		and not cloth_on_leg and man.severed != null and &"neck_01" in man.severed.bones and &"thigh_l" in man.severed.bones and last_word,
+		"head %s leg %s cloth on leg %s last %s" % [in_head, in_leg, cloth_on_leg, last_word])
+
+	# K7b (Review Focus 5) the severed leg and head keep his colours: every
+	# piece they carry has his look set, not merely equal to his (unset reads
+	# back null on both)
+	var copies := []
+
+	for piece in [leg, head]:
+		if piece:
+			copies += piece.get_node("Skeleton3D").get_children().filter(func(n): return n is MeshInstance3D)
+
+	var kept: Array = copies.map(func(c): return _carries_look(c, man.look))
+	_check("K7b %s: a severed part keeps his dye, fading, skin and dirt" % kind, copies.size() >= head_items.size() + 1 and not kept.has(false),
+		"%s" % [copies.map(func(c): return String(c.name))])
+
+	# K8 the hit flash covers everything he wears
+	var h := await _guard(42, archetype)
+	var rig = h._rig
+	rig.react_hit(h.global_basis.z, 1.0)
+	rig.update(1.0 / 60.0)
+	var lit: bool = rig.man.worn().all(func(m): return m.material_overlay == rig._overlay)
+
+	for i in range(36):
+		rig.update(1.0 / 60.0)
+		await get_tree().physics_frame
+
+	var cleared: bool = rig.man.worn().all(func(m): return m.material_overlay != rig._overlay)
+	_check("K8 %s: a hit flashes on every mesh he wears, and clears" % kind, lit and cleared, "lit %s cleared %s worn %d" % [lit, cleared, rig.man.worn().size()])
+
+	# K9 steel rings where he wears it, and nowhere else
+	var am = rig.man
+	var rings: Array = expect.rings.map(func(spec): return am.armour_near(_point(am, h, spec)) != null)
+	var silent: Array = expect.silent.map(func(spec): return am.armour_near(_point(am, h, spec)) == null)
+	var metal_ok: bool = expect.metal.keys().all(func(bone): return am.metal.get(bone) != null and String(am.metal[bone].name) == expect.metal[bone])
+	_check("K9 %s: steel rings where he wears it, and nowhere else" % kind, not rings.has(false) and not silent.has(false) and metal_ok,
+		"rings %s silent %s metal %s" % [rings, silent, metal_ok])
+
+	for x in [g, h]:
 		if is_instance_valid(x):
 			x.queue_free()
 

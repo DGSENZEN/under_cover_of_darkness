@@ -107,6 +107,10 @@ static func headgear_data(piece: StringName) -> Dictionary:
 	return _read("headgear/%s.json" % piece)
 
 
+static func hair_data(style: StringName) -> Dictionary:
+	return _read("hair/%s.json" % style)
+
+
 static func _read(relative: String) -> Dictionary:
 	var path := ROOT + relative
 
@@ -131,9 +135,11 @@ static func _read(relative: String) -> Dictionary:
 
 ## What this man wears and looks like, drawn from a kind's `options` (its
 ## JSON's): {face, tone, hair, beard, headgear, dye, fade, grime, height,
-## skin}. Nine draws, always all nine and in this order, so an option added
-## later never changes the rest of anyone's looks. Which hair a helmet hides
-## is the dresser's business (Humanoid.dress), not the roll's.
+## skin, hair_colour}. Eleven draws, always all eleven and in this order, so
+## an option added later never changes the rest of anyone's looks: the nine
+## of the spec (§7.5), then (batch 1) which dye colour of `dye.colours`, and
+## which of `hair_colours`. Which hair a helmet hides is the dresser's
+## business (Humanoid.dress), not the roll's.
 static func roll(options: Dictionary, skin_tones: Dictionary, seed: int) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
@@ -147,6 +153,8 @@ static func roll(options: Dictionary, skin_tones: Dictionary, seed: int) -> Dict
 	var fade_draw := rng.randf()
 	var grime_draw := rng.randf()
 	var height_draw := rng.randf() * 2.0 - 1.0
+	var colour_draw := rng.randf()
+	var hair_draw := rng.randf()
 
 	var headgear: Array[StringName] = []
 
@@ -155,7 +163,12 @@ static func roll(options: Dictionary, skin_tones: Dictionary, seed: int) -> Dict
 			headgear.append(StringName(piece))
 
 	var dye: Dictionary = options.get("dye", {})
-	var base := _colour(dye.get("colour", [1.0, 1.0, 1.0]))
+	var colours: Array = dye.get("colours", [])
+	var base := _colour(colours[mini(int(colour_draw * colours.size()), colours.size() - 1)] if not colours.is_empty()
+		else dye.get("colour", [1.0, 1.0, 1.0]))
+	var hair_colours: Array = options.get("hair_colours", [])
+	var hair_colour := _colour(hair_colours[mini(int(hair_draw * hair_colours.size()), hair_colours.size() - 1)]) \
+		if not hair_colours.is_empty() else Color(0.3, 0.25, 0.2)
 	var shift := float(dye.get("shift", 0.0))
 	var fades: Array = dye.get("fade", [0.0, 0.0])
 	var grimes: Array = options.get("grime", [0.0, 0.0])
@@ -171,6 +184,7 @@ static func roll(options: Dictionary, skin_tones: Dictionary, seed: int) -> Dict
 		"grime": lerpf(float(grimes[0]), float(grimes[1]), grime_draw),
 		"height": 1.0 + height_draw * HEIGHT_SPREAD,
 		"skin": _colour(skin_tones.get(String(tone), [1.0, 1.0, 1.0])),
+		"hair_colour": hair_colour,
 	}
 
 
@@ -242,8 +256,12 @@ static func can_dress(kind: StringName) -> bool:
 	var ok := own.all(func(path): return ResourceLoader.exists(path)) and not kind_data(kind).is_empty()
 
 	if ok:
+		var wanted: Array = kind_data(kind).get("options", {}).get("headgear", [])
 		var options := usable_options(kind_data(kind).get("options", {}))
-		ok = not options.get("faces", []).is_empty() and not options.get("headgear", []).is_empty()
+		# Bare-headed by design ([] or [[]]) dresses; a kind whose every
+		# headgear set is missing does not (its silhouette would be gone).
+		var bare := wanted.all(func(pieces): return pieces.is_empty())
+		ok = not options.get("faces", []).is_empty() and (bare or not options.get("headgear", []).is_empty())
 
 	if not ok and not _warned.has(kind):
 		_warned[kind] = true
@@ -252,8 +270,8 @@ static func can_dress(kind: StringName) -> bool:
 	return ok
 
 
-## `options` without the faces or headgear sets whose files are missing,
-## each dropped with a warning.
+## `options` without the faces, headgear sets, hair or beards whose files
+## are missing, each dropped with a warning.
 static func usable_options(options: Dictionary) -> Dictionary:
 	var kept := options.duplicate(true)
 	var faces := []
@@ -284,6 +302,20 @@ static func usable_options(options: Dictionary) -> Dictionary:
 
 	kept["faces"] = faces
 	kept["headgear"] = sets
+
+	for key in ["hair", "beards"]:
+		var styles := []
+
+		for style in options.get(key, []):
+			var files := [ROOT + "hair/%s.glb" % style, ROOT + "hair/%s.png" % style, ROOT + "hair/%s_mask.png" % style]
+
+			if files.all(func(path): return ResourceLoader.exists(path)) and not hair_data(StringName(style)).is_empty():
+				styles.append(StringName(style))
+			else:
+				_warn_once("hair %s" % style)
+
+		kept[key] = styles
+
 	return kept
 
 

@@ -1,9 +1,6 @@
 {
  "piece": "kettlehat",
- "triangles": 266,
- "rigid": false,
- "bone": "",
- "offset": [],
+ "triangles": 240,
  "metal": [
   "Head"
  ],

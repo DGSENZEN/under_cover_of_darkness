@@ -16,6 +16,10 @@ import numpy as np
 SKIN, QUILTED, WOOL, LEATHER, MAIL, IRON = range(6)
 
 
+# Rust's colour, linear (sRGB 0.27, 0.14, 0.07).
+RUST = np.array([0.0595, 0.0176, 0.0060])
+
+
 def _hash(ix, iy, iz, seed):
     """A repeatable random value in 0..1 for each integer lattice point."""
     h = (ix * 73856093) ^ (iy * 19349663) ^ (iz * 83492791) ^ (seed * 2654435761)
@@ -103,11 +107,28 @@ def paint(fabric, points, normals, base):
 
     iron = fabric == IRON
     if iron.any():
-        # Painted shine: what faces up catches the light, what faces down
-        # goes dark (the PS2 had no specular to do it).
-        # Dark round the sides, a bright crown: iron shows the sky.
+        # Painted metal (the PS2 had no specular): lighter where it faces
+        # the sky, dark round the sides and beneath; hammered blotches; a
+        # few bright scratches. Bright edges and rivets are the build's trim
+        # (bake.trim). Tuned by eye: a strong shine banded the old hat and
+        # made it the brightest thing on him.
+        q = p[iron]
         up = normals[iron][:, 2]
-        shine = np.clip((up - 0.35) / 0.6, 0.0, 1.0)
-        shade[iron] = (0.8 + 0.18 * fbm(p[iron], 16.0, 51)) * (0.6 + 2.8 * shine * shine)
+        sky = 0.65 + 0.85 * np.clip(0.5 + 0.5 * up, 0.0, 1.0) ** 3
+        hammered = 0.85 + 0.3 * fbm(q, 28.0, 51)
+        scratched = lines(q[:, 0] * 0.8 + q[:, 2] * 0.6 + 0.01 * noise(q, 60.0, 52), 0.011, 0.0009) * (noise(q, 14.0, 53) > 0.6)
+        shade[iron] = sky * hammered * (1.0 + 0.9 * scratched)
 
-    return base * shade[:, None]
+    out = base * shade[:, None]
+
+    if iron.any():
+        # Rust where water sits and runs: blotches on what faces sideways
+        # and down, hardly any on a crown the rain washes. Dark and brown,
+        # and never sky-lit (bright rust read as skin in daylight).
+        q = p[iron]
+        up = normals[iron][:, 2]
+        rust = np.clip((noise(q, 38.0, 54) - 0.64) / 0.16, 0.0, 1.0) * (0.12 + 0.88 * (up < 0.45))
+        red = RUST * np.minimum(shade[iron], 1.0)[:, None]
+        out[iron] = out[iron] * (1.0 - 0.7 * rust[:, None]) + red * 0.7 * rust[:, None]
+
+    return out

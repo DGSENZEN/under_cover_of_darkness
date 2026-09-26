@@ -1344,6 +1344,8 @@ func get_up(face_up: bool) -> float:
 
 	man.top_level = false
 	man.transform = Transform3D.IDENTITY
+	# He is put back in one step: his cloth starts afresh, not whipped after.
+	man.restart_cloth()
 	man.wake()
 
 	if face_up:

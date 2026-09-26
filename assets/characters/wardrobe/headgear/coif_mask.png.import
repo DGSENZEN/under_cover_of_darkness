@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dfhymli0ckppd"
-path="res://.godot/imported/watchman.png-9e67a1e5b529a669f9a80adc0ca54802.ctex"
+uid="uid://ckujdjoby0g7d"
+path="res://.godot/imported/coif_mask.png-795ab4c89b5ba508b65c94995dc5380b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/wardrobe/watchman.png"
-dest_files=["res://.godot/imported/watchman.png-9e67a1e5b529a669f9a80adc0ca54802.ctex"]
+source_file="res://assets/characters/wardrobe/headgear/coif_mask.png"
+dest_files=["res://.godot/imported/coif_mask.png-795ab4c89b5ba508b65c94995dc5380b.ctex"]
 
 [params]
 

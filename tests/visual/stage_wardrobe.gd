@@ -120,6 +120,8 @@ func _shoot_set(label: String) -> void:
 	# His face as his pose holds it, from a little below: under the brim.
 	var head := _head(him)
 	await _shot("%s_face" % label, head + Vector3(0, -0.16, 0.7), head, row)
+	# And from behind: the back of his hat, his coif and his neck.
+	await _shot("%s_back" % label, head + Vector3(0, -0.05, -0.75), head, row)
 	shots.append(row)
 
 

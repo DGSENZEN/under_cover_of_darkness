@@ -21,6 +21,7 @@ import bpy  # noqa: E402
 from mathutils import Vector  # noqa: E402
 
 import common  # noqa: E402
+import recipes  # noqa: E402
 
 TEXTURED = "--textured" in sys.argv
 VIEWS = {"front": -90.0, "three_quarter": -50.0, "side": 0.0, "back": 90.0}
@@ -30,6 +31,11 @@ DISTANCE = 3.6
 
 def main():
     target, options = common.args()
+
+    if target == "hair" and not recipes.HAIR:
+        print("wardrobe: no hair in the recipes: nothing to do")
+        return
+
     path = common.SOURCE / ("%s.blend" % target)
 
     if not path.exists() or bpy.data.filepath != str(path):

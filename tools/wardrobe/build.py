@@ -58,6 +58,8 @@ def main():
         build_kind(recipes.KINDS[target], bool(options.get("force")))
     elif target == "heads":
         build_heads(bool(options.get("force")))
+    elif target == "hair":
+        build_hair(bool(options.get("force")))
     elif target == "headgear":
         build_headgear(bool(options.get("force")))
     else:
@@ -861,31 +863,41 @@ def weigh(outfit, reference):
     bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
 
 
-def add_chains(kind):
-    """The cloth bones: two a chain, from where the cloth hangs to its hem."""
-    common.select_only([kind.arm])
+def chain_bones(arm, chain, parent, points):
+    """A chain's cloth bones on `arm`: one from each of `points` to the next
+    (`cloth_<chain>_1`..`_n`), each under the one before, the first under
+    `parent`; all deform. Their names, in order."""
+    common.select_only([arm])
     bpy.ops.object.mode_set(mode="EDIT")
-    bones = kind.arm.data.edit_bones
+    bones = arm.data.edit_bones
+    names = []
+    above = bones[parent]
+
+    for i, (head, tail) in enumerate(zip(points, points[1:]), start=1):
+        bone = bones.new("cloth_%s_%d" % (chain, i))
+        bone.head, bone.tail = head, tail
+        bone.parent = above
+        bone.use_deform = True
+        bone.use_connect = False
+        names.append(bone.name)
+        above = bone
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return names
+
+
+def add_chains(kind):
+    """The cloth bones: a chain from where the cloth hangs to its hem, as
+    many bones as it has points less one."""
     out = []
 
     for chain, spec in sorted(kind.chains.items()):
-        head, joint, tail = spec["points"]
-        first = bones.new("cloth_%s_1" % chain)
-        first.head, first.tail = head, joint
-        first.parent = bones[spec["parent"]]
-        second = bones.new("cloth_%s_2" % chain)
-        second.head, second.tail = joint, tail
-        second.parent = first
-
-        for bone in (first, second):
-            bone.use_deform = True
-            bone.use_connect = False
-
+        points = spec["points"]
+        names = chain_bones(kind.arm, chain, spec["parent"], points)
         settings = kind.recipe["chains"][chain]
-        out.append({"chain": chain, "parent": spec["parent"], "bones": [first.name, second.name],
-                    "tip": round((tail - joint).length, 4), **settings})
+        out.append({"chain": chain, "parent": spec["parent"], "bones": names,
+                    "tip": round((points[-1] - points[-2]).length, 4), **settings})
 
-    bpy.ops.object.mode_set(mode="OBJECT")
     return out
 
 
@@ -1110,6 +1122,16 @@ def finish(path, made, reference):
 # Headgear
 # ---------------------------------------------------------------------------
 
+def build_hair(force):
+    """Every hair and beard in recipes.HAIR into source/hair.blend (batch 1,
+    Task 5); nothing to do while there is none."""
+    if not recipes.HAIR:
+        print("wardrobe: no hair in the recipes: nothing to build")
+        return
+
+    common.fail("hair is not built yet")
+
+
 def build_headgear(force):
     path = common.SOURCE / "headgear.blend"
     guard(path, force)
@@ -1122,7 +1144,7 @@ def build_headgear(force):
     made = {}
 
     for piece, g in recipes.HEADGEAR.items():
-        made[piece] = coif(kind, g, piece) if g["type"] == "coif" else imported(kind, g, piece, made)
+        made[piece] = HEADGEAR_BUILDERS[g["type"]](kind, g, piece, made)
 
     for obj in made.values():
         common.unwrap([obj], {obj.name: 1.0})
@@ -1134,36 +1156,175 @@ def build_headgear(force):
     finish(path, list(made.values()), reference)
 
 
-def coif(kind, g, piece):
-    """A mail hood: his head's shape pushed out and smoothed, open from brow
-    to chin (the edge turned in), and a short cape from the neck over the
-    shoulders."""
-    obj = head_region(kind.ref, "Gear_%s" % piece)
-    decimate = obj.modifiers.new("Decimate", "DECIMATE")
-    decimate.ratio = min(1.0, g["tris"] / max(common.tri_count(obj), 1))
-    decimate.use_collapse_triangulate = True
-    decimate.use_symmetry = True
-    decimate.symmetry_axis = "X"
-    common.select_only([obj])
-    bpy.ops.object.modifier_apply(modifier=decimate.name)
+def kettle(kind, g, piece, made):
+    """A kettle hat forged the PS2 way, fitted over what it goes on (`over`):
+    a round bowl of `segments` round, its foot an ellipse at `base_z` on
+    the coif's outline there, one ring per `elevations` (degrees round its
+    curve) up to a crown over the coif's, never nearer the coif than
+    `clearance` + `slack` (looking out from his head's middle, `drop` below
+    the band); the band between its first two rings leather; a curved brim
+    `brim` wide turning `droop` down to a lip turned `lip` down. Wholly on
+    his Head. Its trim (rivets above the band, a bright seam over the crown
+    and a bright rim) is left for the bake (wr_details)."""
+    tree = common.bvh([made[g["over"]]])
+    centre = Vector((0.0, g["centre_y"], g["base_z"]))
+    n = g["segments"]
+    around = [2.0 * math.pi * i / n for i in range(n)]
+    off = g["clearance"] + g["slack"]
+
+    def flat(a):
+        return Vector((math.sin(a), -math.cos(a), 0.0))
+
+    def coif_along(d):
+        """How far out the coif is from `centre` along `d`: its outermost
+        surface (a ray through an opening, meeting his head's far side, is
+        None)."""
+        hit = common.outer_hit(tree, centre, d, 0.4)
+        return (hit - centre).length if hit is not None and (hit - centre).dot(d) > 0.0 else None
+
+    # The foot: the coif's outline at the band (a ray through the face
+    # opening meets his head's far side: none).
+    foot = [coif_along(flat(a)) for a in around]
+    outline = [centre + flat(a) * r for a, r in zip(around, foot) if r is not None]
+    # A round bowl the head sits in, not the head's shape (his crown is
+    # narrow: a hat that followed it came out a cone). An ellipsoid on the
+    # band's outline, `off` outside it, as tall as the coif's crown + `off`.
+    half_x = max(abs(p.x) for p in outline) + off
+    front, back = min(p.y for p in outline) - off, max(p.y for p in outline) + off
+    middle_y, half_y = (front + back) * 0.5, (back - front) * 0.5
+    middle = centre - Vector((0.0, 0.0, g["drop"]))
+
+    def along(d):
+        hit = common.outer_hit(tree, middle, d, 0.4)
+        return (hit - middle).length if hit is not None and (hit - middle).dot(d) > 0.0 else None
+
+    crown = (along(Vector((0.0, 0.0, 1.0))) or 0.13) + off - g["drop"]
+    rows = []
+
+    for elevation in [0.0] + list(g["elevations"]):
+        phi = math.radians(elevation)
+        row = []
+
+        for a in around:
+            point = Vector((half_x * math.cos(phi) * math.sin(a), middle_y - half_y * math.cos(phi) * math.cos(a),
+                            centre.z + crown * math.sin(phi)))
+            # Never nearer the coif than `off`, looking out from his head's
+            # middle.
+            d = (point - middle).normalized()
+            need = along(d)
+
+            if need is not None and (point - middle).length < need + off:
+                point = middle + d * (need + off)
+
+            row.append(point)
+
+        rows.append(row)
+
+    apex = Vector((0.0, middle_y, centre.z + crown))
+    skull = common.loft("kettle_skull", rows, closed=True, cap=apex)
+    outward(skull)
+
+    # Curved: nearly flat off the band, turning down toward the lip.
+    mid = [p + flat(a) * g["brim"] * 0.55 - Vector((0.0, 0.0, g["droop"] * 0.25)) for p, a in zip(rows[0], around)]
+    rim = [p + flat(a) * g["brim"] - Vector((0.0, 0.0, g["droop"])) for p, a in zip(rows[0], around)]
+    lip = [p + flat(a) * 0.003 - Vector((0.0, 0.0, g["lip"])) for p, a in zip(rim, around)]
+    brim = common.loft("kettle_brim", [rows[0], mid, rim, lip], closed=True)
+    upward(brim)
+
+    iron = recipes.FABRICS.index(g["fabric"])
+    common.set_faces(skull, 1, iron, 0.004, False, False, g["colour"])
+    band_fabric, band_colour = g["band"]
+    common.set_faces(skull, 1, recipes.FABRICS.index(band_fabric), 0.004, False, False, band_colour, range(n))
+    # One sheet: drawn from both sides (it is seen from below).
+    common.set_faces(brim, 1, iron, 0.004, True, False, g["colour"])
+    obj = join_two(skull, brim, "Gear_%s" % piece)
+    common.weld(obj)
+    common.group(obj, g["bone"], 1.0)
+
+    band_top = sum(p.z for p in rows[1]) / n
+    obj["wr_details"] = common.dump({
+        "centre": list(centre),
+        "rivets": [{"z": band_top + 0.009, "count": g["rivets"], "size": 0.0055}],
+        # The seam where its two halves were riveted, front to back.
+        "comb": {"width": 0.004, "above": band_top + 0.01},
+        "rim": {"radius": min(Vector((p.x - centre.x, p.y - centre.y, 0.0)).length for p in lip) - 0.004, "below": g["base_z"]},
+    })
+    print("wardrobe: %s %d triangles" % (piece, common.tri_count(obj)))
+    return obj
+
+
+def upward(obj):
+    """A sheet's faces turned to face up (its top is the side it shows)."""
+    outward(obj)
+
+    if sum(p.normal.z for p in obj.data.polygons) < 0.0:
+        obj.data.flip_normals()
+
+
+def coif(kind, g, piece, made=None):
+    """A mail hood built the PS2 way: `segments` round, a ring at its foot
+    round his neck (`cape.top_z`) and one per `rings` (degrees up from the
+    middle of his head), each point `thickness` + `slack` out from his head
+    along the way from its middle; the quads over his face (between `open`
+    degrees either side of his front, from his chin to his brow) left out,
+    the opening's edge turned in; a short cape from the neck over the
+    shoulders. It holds his whole skull at least `inside` under it."""
     hole = g["opening"]
 
     def in_opening(p):
         return abs(p.x) < hole["x"] + 0.01 and hole["from_z"] - 0.01 < p.z < hole["to_z"] + 0.01 and p.y < -0.02
 
+    head = common.bvh([head_region(kind.ref, "wr_coif_head")])
+    middle = kind.arm.data.bones["Head"].head_local + Vector((0.0, 0.0, 0.1))
+    n = g["segments"]
+    around = [2.0 * math.pi * i / n for i in range(n)]
+    off = g["thickness"] + g["slack"]
+
+    def reach(origin, d, fallback):
+        hit = common.outer_hit(head, origin, d, 0.4)
+        return (hit - origin).length if hit is not None and (hit - origin).dot(d) > 0.0 else fallback
+
+    foot = Vector((0.0, middle.y, g["cape"]["top_z"]))
+    rows = [[foot + Vector((math.sin(a), -math.cos(a), 0.0)) * (reach(foot, Vector((math.sin(a), -math.cos(a), 0.0)), 0.07) + off)
+             for a in around]]
+
+    for elevation in g["rings"]:
+        e = math.radians(elevation)
+        row = []
+
+        for a in around:
+            d = Vector((math.cos(e) * math.sin(a), -math.cos(e) * math.cos(a), math.sin(e)))
+            row.append(middle + d * (reach(middle, d, 0.1) + off))
+
+        rows.append(row)
+
+    crown = middle + Vector((0.0, 0.0, reach(middle, Vector((0.0, 0.0, 1.0)), 0.12) + off))
+    obj = common.loft("Gear_%s" % piece, rows, closed=True, cap=crown)
+    outward(obj)
+    bpy.data.objects.remove(bpy.data.objects["wr_coif_head"])
+
     bm = bmesh.new()
     bm.from_mesh(obj.data)
-    # Its lower edge cut level, just inside the cape's top: no notches, no
-    # spikes hanging into the cape.
-    geom = list(bm.verts) + list(bm.edges) + list(bm.faces)
-    bmesh.ops.bisect_plane(bm, geom=geom, plane_co=(0.0, 0.0, g["cape"]["top_z"]), plane_no=(0.0, 0.0, 1.0), clear_inner=True)
-    doomed = [f for f in bm.faces if abs(f.calc_center_median().x) < hole["x"] and hole["from_z"] < f.calc_center_median().z < hole["to_z"]
-              and f.normal.y < -0.3]
+    # The face: the quads within `open` degrees of his front, from his
+    # chin to his brow.
+    half = math.radians(g["open"])
+    doomed = []
+
+    for face in bm.faces:
+        c = face.calc_center_median()
+        a = math.atan2(c.x - middle.x, -(c.y - middle.y))
+
+        if abs(a) < half and hole["from_z"] - 0.02 < c.z < hole["to_z"] and len(face.verts) == 4:
+            doomed.append(face)
+
     bmesh.ops.delete(bm, geom=doomed, context="FACES")
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
-
-    offset_verts(kind, bm, lambda co, n: g["thickness"], g["smooth"])
-    opening = [e for e in bm.edges if e.is_boundary and in_opening((e.verts[0].co + e.verts[1].co) * 0.5)]
+    skull = [v.co.copy() for v in kind.ref.data.vertices
+             if v.co.z > g["rigid_above"] - 0.02 and not in_opening(v.co)]
+    # A little over `inside`: the game's low head strays a millimetre or two
+    # outside the full one this measures.
+    enclose(bm, skull, middle, g["inside"] + 0.004)
+    opening = [e for e in bm.edges if e.is_boundary and (e.verts[0].co.z + e.verts[1].co.z) * 0.5 > g["cape"]["top_z"] + 0.005]
 
     # Its face edge turned in to his face, so the mail shows its thickness.
     made = bmesh.ops.extrude_edge_only(bm, edges=opening)["geom"]
@@ -1186,6 +1347,9 @@ def coif(kind, g, piece):
     weigh_part(obj, kind.ref)
     # The cape (and the hood's edge round his neck, which it tucks into).
     ride(obj, g["cape"]["top_z"] + 0.015, CAPE_BONES)
+    # Above his ears the hood moves with his head alone: partly on his neck,
+    # its big faces lagged when he bowed his head and his skull showed.
+    rigid(obj, g["rigid_above"], "Head")
     print("wardrobe: coif %d triangles" % common.tri_count(obj))
     return obj
 
@@ -1219,6 +1383,52 @@ def ride(obj, below, bones):
         for name, weight in kept:
             group = obj.vertex_groups.get(name) or obj.vertex_groups.new(name=name)
             group.add([vertex.index], weight / total, "REPLACE")
+
+
+def enclose(bm, points, centre, inside, rounds=8):
+    """A shell's vertices pushed out, along rays from `centre`, until every
+    one of `points` lies at least `inside` under it: its flat faces sag
+    between their corners, and a head shows through a sag."""
+    for _ in range(rounds):
+        bm.faces.ensure_lookup_table()
+        tree = BVHTree.FromBMesh(bm)
+        short = {}
+
+        for p in points:
+            d = (p - centre).normalized()
+            hit = tree.ray_cast(centre + d * 0.4, -d, 0.4)
+
+            if hit[0] is None or (hit[0] - centre).dot(d) <= 0.0:
+                continue
+
+            need = inside - ((hit[0] - centre).dot(d) - (p - centre).length)
+
+            if need > 0.0:
+                for vertex in bm.faces[hit[2]].verts:
+                    short[vertex] = max(short.get(vertex, 0.0), need)
+
+        if not short:
+            return
+
+        for vertex, need in short.items():
+            seam = abs(vertex.co.x) < 1e-4
+            vertex.co += (vertex.co - centre).normalized() * need
+            vertex.co.x = 0.0 if seam else vertex.co.x
+
+
+def rigid(obj, above, bone):
+    """The vertices of `obj` over height `above` wholly on `bone`."""
+    names = {group.index: group.name for group in obj.vertex_groups}
+    target = obj.vertex_groups.get(bone) or obj.vertex_groups.new(name=bone)
+
+    for vertex in obj.data.vertices:
+        if vertex.co.z <= above:
+            continue
+
+        for name in [names[g.group] for g in vertex.groups if names[g.group] != bone]:
+            obj.vertex_groups[name].remove([vertex.index])
+
+        target.add([vertex.index], 1.0, "REPLACE")
 
 
 def cape_shell(kind, g):
@@ -1325,6 +1535,9 @@ def imported(kind, g, piece, made):
     return obj
 
 
+HEADGEAR_BUILDERS = {"coif": coif, "kettle": kettle, "import": imported}
+
+
 def fit_over(obj, under, pivot, clearance):
     """Scales `obj` about `pivot` until its inside clears `under` by
     `clearance` everywhere above his ears."""
@@ -1350,4 +1563,5 @@ def fit_over(obj, under, pivot, clearance):
     print("wardrobe: %s scaled %.3f to clear %s" % (obj.name, scale, under.name))
 
 
-main()
+if __name__ == "__main__":
+    main()

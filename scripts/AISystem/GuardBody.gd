@@ -156,6 +156,8 @@ func lay_down(rest: Transform3D) -> bool:
 	# The pose's hips lie a little behind its feet: centre the hips on the spot.
 	placed.origin = ground + Vector3.UP * 0.5 - placed.basis * Vector3(0.0, 0.0, 0.24)
 	who.global_transform = placed
+	# Put down in one step: his cloth starts afresh where he lies.
+	who.restart_cloth()
 	rag.go_limp(Vector3.DOWN * 0.4)
 	_fall_peak = 0.0
 	_thuds = 0

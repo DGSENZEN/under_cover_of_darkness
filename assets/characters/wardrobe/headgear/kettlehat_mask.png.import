@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dfhymli0ckppd"
-path="res://.godot/imported/watchman.png-9e67a1e5b529a669f9a80adc0ca54802.ctex"
+uid="uid://bqlngnn7j10u6"
+path="res://.godot/imported/kettlehat_mask.png-1768ee4fa7e3371f7bdb3cda903942db.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/wardrobe/watchman.png"
-dest_files=["res://.godot/imported/watchman.png-9e67a1e5b529a669f9a80adc0ca54802.ctex"]
+source_file="res://assets/characters/wardrobe/headgear/kettlehat_mask.png"
+dest_files=["res://.godot/imported/kettlehat_mask.png-1768ee4fa7e3371f7bdb3cda903942db.ctex"]
 
 [params]
 

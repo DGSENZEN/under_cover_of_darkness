@@ -8,6 +8,7 @@ Exit code 1 and every message when anything is wrong.
 """
 
 import json
+import math
 import os
 import sys
 
@@ -16,6 +17,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bpy  # noqa: E402
+from mathutils import Vector  # noqa: E402
 
 import common  # noqa: E402
 import recipes  # noqa: E402
@@ -24,14 +26,15 @@ import validate  # noqa: E402
 # Until a kind's head and headgear are exported, they are counted at their
 # budget: ~400 for a head, ~600 for hair, beard and headgear together.
 PARTS_UNTIL_EXPORTED = 1000
-# A head's triangles; each headgear piece's (the coif's is tighter).
-HEAD_LIMIT = 450
-GEAR_LIMIT = {"Gear_coif": 200}
-GEAR_DEFAULT = 300
 
 
 def main():
     target, _ = common.args()
+
+    if target == "hair" and not recipes.HAIR:
+        print("wardrobe: no hair in the recipes: nothing to check")
+        return
+
     path = common.SOURCE / ("%s.blend" % target)
 
     if not path.exists() or bpy.data.filepath != str(path):
@@ -40,9 +43,11 @@ def main():
     if target in recipes.KINDS:
         messages = check_kind(recipes.KINDS[target])
     elif target == "heads":
-        messages = check_parts("Head_", HEAD_LIMIT)
+        messages = check_parts("Head_", "heads")
+    elif target == "hair":
+        messages = check_parts("Hair_", "hair")
     elif target == "headgear":
-        messages = check_parts("Gear_", GEAR_LIMIT)
+        messages = check_parts("Gear_", "headgear")
     else:
         common.fail("no rules for '%s'" % target)
 
@@ -71,7 +76,7 @@ def check_kind(recipe):
                           combined_tris=combined, budget=common.budget_of(recipe["kind"]), bare=set(recipe["bare"]))
 
 
-def check_parts(prefix, limit):
+def check_parts(prefix, folder):
     """Each head (or headgear piece) in this file: its budget, weights, UVs
     and joints; a head's neck edge must sit under every collar it can wear."""
     armature = bpy.data.objects.get("Armature")
@@ -80,10 +85,20 @@ def check_parts(prefix, limit):
     joints = reference_joints("male")
 
     for obj in parts:
-        cap = limit if isinstance(limit, int) else limit.get(obj.name, GEAR_DEFAULT)
+        cap = common.part_limit(folder, obj.name[len(prefix):])
         found = validate.check(obj, armature=armature, reference_joints=joints, combined_tris=common.tri_count(obj), budget=cap)
         messages += ["%s %s" % (obj.name, m) for m in found]
         print("wardrobe: %s %d triangles (limit %d)" % (obj.name, common.tri_count(obj), cap))
+
+        piece = recipes.HEADGEAR.get(obj.name[len(prefix):], {}) if prefix == "Gear_" else {}
+
+        if piece.get("covers_head"):
+            messages += ["%s %s" % (obj.name, m) for m in encloses(obj, piece, armature.data.bones["Head"].head_local)]
+
+        if piece.get("over") and bpy.data.objects.get("Gear_" + piece["over"]) is not None:
+            under = bpy.data.objects["Gear_" + piece["over"]]
+            messages += ["%s %s" % (obj.name, m) for m in fit(obj, under, armature.data.bones["Head"].head_local,
+                                                              piece["clearance"], piece["rest"])]
 
         if prefix == "Head_":
             lowest = min(v.co.z for v in obj.data.vertices)
@@ -94,6 +109,97 @@ def check_parts(prefix, limit):
 
                     if top is not None and lowest > top - 0.01:
                         messages.append("seam: %s's neck edge (%.3f) is not under %s's collar (top %.3f)" % (obj.name, lowest, kind, top))
+
+    return messages
+
+
+def encloses(obj, piece, pivot):
+    """A hood must hold every head it can go over: each head vertex of his
+    skull (from just under `rigid_above`; its face opening aside) at least
+    `inside` (metres) under it, looking out from the middle of his head.
+    Flat faces of a hood cut too coarse sag through the head between their
+    corners."""
+    path = common.SOURCE / "heads.blend"
+
+    if not path.exists():
+        return []
+
+    # The heads by their objects' names (their meshes keep the body's).
+    with bpy.data.libraries.load(str(path)) as (source, target):
+        target.objects = [name for name in source.objects if name.startswith("Head_")]
+
+    heads = [o for o in target.objects if o is not None and o.type == "MESH"]
+
+    if not heads:
+        return ["encloses: no heads in heads.blend to check"]
+
+    tree = common.bvh([obj])
+    centre = pivot + Vector((0.0, 0.0, 0.1))
+    hole = piece["opening"]
+    worst, where = 1.0, None
+
+    for head in heads:
+        mesh = head.data
+
+        for vertex in mesh.vertices:
+            p = vertex.co
+
+            # His skull, from just under his ears up (lower down, his neck
+            # is the cape's to cover).
+            if p.z < piece["rigid_above"] - 0.02:
+                continue
+
+            if abs(p.x) < hole["x"] + 0.015 and hole["from_z"] - 0.015 < p.z < hole["to_z"] + 0.015 and p.y < -0.02:
+                continue
+
+            d = (p - centre).normalized()
+            hit = common.outer_hit(tree, centre, d, 0.4)
+            # Nothing on his head's side (only the far side, or nothing at
+            # all): the head is bare there.
+            reach = (hit - centre).dot(d) if hit is not None else -1.0
+            margin = reach - (p - centre).length
+
+            if margin < worst:
+                worst, where = margin, p.copy()
+
+        bpy.data.objects.remove(head)
+        bpy.data.meshes.remove(mesh)
+
+    if where is not None and worst < piece["inside"]:
+        return ["encloses: the head comes %.1f mm from its surface at (%.3f, %.3f, %.3f) (at least %.1f mm under it)"
+                % (worst * 1000, where.x, where.y, where.z, piece["inside"] * 1000)]
+
+    return []
+
+
+def fit(obj, under, pivot, clearance, rest):
+    """How a piece sits on what it goes over: along rays from the middle of
+    his head over his crown (25-85 degrees up, every 30 degrees round), the
+    gap between them. Never under `clearance` (it would cut in), never over
+    `rest` (it would float, oversized)."""
+    outer, inner = common.bvh([obj]), common.bvh([under])
+    centre = pivot + Vector((0.0, 0.0, 0.1))
+    gaps = []
+
+    for elevation in (25, 45, 65, 85):
+        for azimuth in range(0, 360, 30):
+            e, a = math.radians(elevation), math.radians(azimuth)
+            direction = Vector((math.cos(e) * math.sin(a), -math.cos(e) * math.cos(a), math.sin(e)))
+            over, below = outer.ray_cast(centre, direction, 0.5), inner.ray_cast(centre, direction, 0.5)
+
+            if over[0] is not None and below[0] is not None:
+                gaps.append(over[3] - below[3])
+
+    if not gaps:
+        return ["fit: never over %s" % under.name]
+
+    messages = []
+
+    if min(gaps) < clearance - 0.001:
+        messages.append("fit: cuts into %s (gap %.1f mm, at least %.1f)" % (under.name, min(gaps) * 1000, clearance * 1000))
+
+    if max(gaps) > rest:
+        messages.append("fit: stands %.1f cm off %s (at most %.1f)" % (max(gaps) * 100, under.name, rest * 100))
 
     return messages
 

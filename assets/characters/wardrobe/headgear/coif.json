@@ -1,9 +1,6 @@
 {
  "piece": "coif",
- "triangles": 164,
- "rigid": false,
- "bone": "",
- "offset": [],
+ "triangles": 200,
  "metal": [
   "neck_01",
   "Head"

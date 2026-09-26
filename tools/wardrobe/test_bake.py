@@ -1,9 +1,11 @@
-"""The bake's passes (bake.py), on tiny parts.
+"""The bake's passes (bake.py) on tiny parts, and what the bake and the
+export write over.
 
     tools/wardrobe/wardrobe.sh test
 
-Each case bakes a small clean part and checks what the bake saw. Runs in a
-factory-fresh Blender, headless (Cycles). Exit code 1 on any failure.
+Each case bakes a small clean part and checks what the bake saw, or writes
+over a file and checks what was kept. Runs in a factory-fresh Blender,
+headless (Cycles). Exit code 1 on any failure.
 """
 
 import os
@@ -15,8 +17,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bpy  # noqa: E402
 
+import pathlib  # noqa: E402
+import tempfile  # noqa: E402
+
+import numpy as np  # noqa: E402
+
 import bake  # noqa: E402
 import common  # noqa: E402
+import export  # noqa: E402
 
 
 def fresh():
@@ -59,7 +67,32 @@ def case_others():
     return [] if ao.size and ao.mean() > 0.95 else ["ao: another part darkened this one (mean %.2f)" % ao.mean()]
 
 
-CASES = {"alone": case_alone, "others": case_others}
+def kept(write, name):
+    """A file written over by `write`: its old bytes kept in the backup
+    folder (a repainted texture, a hand-edited JSON)."""
+    folder = pathlib.Path(tempfile.mkdtemp(prefix="wardrobe_kept_"))
+    common.BACKUP = folder / "backup"
+    path = folder / name
+    path.write_bytes(b"painted by hand")
+    write(path)
+    copies = list(common.BACKUP.glob("*")) if common.BACKUP.exists() else []
+    return [] if any(c.read_bytes() == b"painted by hand" for c in copies) else ["kept: %s written over, no copy kept" % name]
+
+
+def case_png():
+    """The bake writes over a texture: the one there (maybe repainted by
+    hand) is kept first."""
+    fresh()
+    return kept(lambda path: bake.save_png(np.zeros((4, 4, 3)), str(path)), "face.png")
+
+
+def case_json():
+    """The export writes over a part's JSON: the one there is kept first."""
+    fresh()
+    return kept(lambda path: export.write_json(path, {"piece": "test"}), "piece.json")
+
+
+CASES = {"alone": case_alone, "others": case_others, "png": case_png, "json": case_json}
 
 
 def main():

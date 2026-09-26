@@ -15,7 +15,9 @@ Writes into assets/characters/wardrobe; export.py validates and ships. The
 .blend itself is left as it was.
 """
 
+import json
 import os
+import pathlib
 import sys
 
 # No __pycache__ beside the tools (Blender would write one each run).
@@ -36,6 +38,11 @@ LUMA = np.array([0.299, 0.587, 0.114])
 
 def main():
     target, _ = common.args()
+
+    if target == "hair" and not recipes.HAIR:
+        print("wardrobe: no hair in the recipes: nothing to do")
+        return
+
     path = common.SOURCE / ("%s.blend" % target)
 
     if not path.exists() or bpy.data.filepath != str(path):
@@ -331,7 +338,9 @@ def palettize(srgb, colours=common.PALETTE, iterations=12):
 
 
 def save_png(rgb, path, colour=True):
-    """An 8-bit PNG of `rgb` (0..1; sRGB when `colour`)."""
+    """An 8-bit PNG of `rgb` (0..1; sRGB when `colour`). The PNG it writes
+    over is kept first (source/backup): it may have been repainted by hand."""
+    common.backup(pathlib.Path(path))
     h, w = rgb.shape[:2]
     made = bpy.data.images.new("wr_out", w, h, alpha=False, float_buffer=False)
     made.colorspace_settings.name = "sRGB" if colour else "Non-Color"
@@ -357,6 +366,8 @@ def paint_part(obj, size, stripe=None):
     albedo[flat] = fabrics.paint(passes["fabric"][flat], passes["position"][flat], passes["normal"][flat], passes["colour"][flat])
     dye = passes["dye"] & covered
 
+    albedo = trim(obj, passes, albedo)
+
     if stripe is not None:
         band = dye & (np.abs(passes["position"][..., 0]) < stripe["half_width"])
         albedo[band] = albedo[band] / np.maximum(passes["colour"][band], 1e-4) * to_linear(np.array(stripe["colour"]))
@@ -365,6 +376,44 @@ def paint_part(obj, size, stripe=None):
     dirt = grime(passes) * covered
     lit = light(albedo, passes) * (1.0 - 0.22 * dirt)[..., None]
     return lit, covered, dye, (passes["fabric"] == fabrics.SKIN) & covered, dirt
+
+
+def trim(obj, passes, albedo):
+    """The trim its build left notes of (obj["wr_details"]), painted as PS2
+    metal was: rivets (a bright head, a dark ring round it) in rings round
+    his head's middle, and bright edges along a ridge (comb) and a rim."""
+    notes = json.loads(obj.get("wr_details", "{}"))
+
+    if not notes:
+        return albedo
+
+    p = passes["position"]
+    centre = notes["centre"]
+    dx, dy = p[..., 0] - centre[0], p[..., 1] - centre[1]
+    azimuth = np.arctan2(dx, -dy)
+    across = np.hypot(dx, dy)
+    shade = np.ones(p.shape[:2])
+
+    for ring in notes.get("rivets", []):
+        step = 2.0 * np.pi / ring["count"]
+        arc = (azimuth - np.round(azimuth / step) * step) * across
+        d = np.hypot(arc, p[..., 2] - ring["z"])
+        head = np.clip(1.0 - d / ring["size"], 0.0, 1.0)
+        shadow = np.clip(1.0 - np.abs(d - ring["size"] * 1.25) / (ring["size"] * 0.45), 0.0, 1.0)
+        shade *= (1.0 + 1.4 * np.sqrt(head)) * (1.0 - 0.5 * shadow)
+
+    comb = notes.get("comb")
+
+    if comb:
+        on = (np.abs(dx) < comb["width"]) & (p[..., 2] > comb["above"])
+        shade *= 1.0 + 0.9 * on * (1.0 - np.abs(dx) / comb["width"])
+
+    rim = notes.get("rim")
+
+    if rim:
+        shade *= 1.0 + 1.1 * ((across > rim["radius"]) & (p[..., 2] < rim["below"]))
+
+    return albedo * shade[..., None]
 
 
 # Palettes: common.PALETTE (64) colours an albedo. Tuned by eye: at 32 the
@@ -390,9 +439,14 @@ def bake_kind(recipe):
 
 
 def bake_headgear():
+    """Each piece's albedo, and its mask: no dye, no skin, the dirt (so how
+    dirty a guard rolled reaches his hat and coif too)."""
     for obj in [o for o in bpy.data.objects if o.name.startswith("Gear_") and o.type == "MESH"]:
-        lit, covered, _, _, _ = paint_part(obj, 128)
-        finish(lit, covered, str(common.WARDROBE / "headgear" / ("%s.png" % obj.name[len("Gear_"):])))
+        name = obj.name[len("Gear_"):]
+        lit, covered, dye, skin, dirt = paint_part(obj, 128)
+        finish(lit, covered, str(common.WARDROBE / "headgear" / ("%s.png" % name)))
+        mask = np.stack([dye, skin, dirt], axis=-1).astype(np.float64)
+        save_png(shrink(fill(mask, covered)), str(common.WARDROBE / "headgear" / ("%s_mask.png" % name)), colour=False)
 
 
 def bake_heads():
