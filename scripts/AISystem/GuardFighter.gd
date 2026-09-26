@@ -177,7 +177,7 @@ const ARCHETYPES := {
 		"attacks": {&"left": 1.0, &"right": 1.0, &"thrust": 1.4, &"overhead": 0.5, &"sweep": 0.35},
 		"posture": 85.0, "delay_chance": 0.35, "leap_chance": 0.35, "grip_loss": 0.3, "spacing": 0.55, "carries_lantern": false,
 		"follow": {&"thrust": [&"thrust", &"left", &"right", &"sweep"], &"left": [&"right", &"thrust"], &"right": [&"left", &"thrust", &"sweep"], &"leap": [&"thrust", &"left"], &"sweep": [&"thrust"]},
-		"look": {"scale": 0.94, "outfit": &"duelist", "female": true, "hair": [&"Hair_Buns"], "hair_tint": Color(0.35, 0.22, 0.14), "weapon": &"rapier"},
+		"look": {"scale": 0.94, "kind": &"duelist", "outfit": &"duelist", "female": true, "hair": [&"Hair_Buns"], "hair_tint": Color(0.35, 0.22, 0.14), "weapon": &"rapier"},
 	},
 	&"brute": {
 		"speaker": "Brute",

@@ -388,7 +388,77 @@ BRUTE = {
     },
 }
 
-KINDS = {"watchman": WATCHMAN, "swordsman": SWORDSMAN, "archer": ARCHER, "arms_master": ARMS_MASTER, "brute": BRUTE}
+# The duelist, on the female body: puffed shoulders, a half-cape, tall boots
+# (spec §8). Bare-headed, her hair up; a fitted doublet with slashed, puffed
+# sleeves and a short skirt; the half-cape on her left shoulder; breeches;
+# folded thigh boots; her rapier on a hanger. Crimson and gold over black;
+# the doublet's shade varies (its dye).
+CRIMSON = (0.50, 0.06, 0.08)
+GOLD = (0.78, 0.60, 0.22)
+DUELIST = {
+    "kind": "duelist",
+    "body": "female",
+    "base_tris": 1300,
+    "bare": ["head"],
+    "belt": ("spine_01", 0.0),
+    "garments": [
+        {"name": "breeches", "type": "shell", "fabric": "wool", "colour": (0.10, 0.09, 0.10), "regions": ["pelvis", "thigh"],
+         "bottom": ("calf_l", 0.1), "top": ("spine_01", 0.0), "thickness": 0.008, "smooth": 2},
+        {"name": "boots", "type": "boots", "fabric": "leather", "colour": (0.12, 0.09, 0.07), "top": ("thigh_l", 0.35),
+         "thickness": 0.01, "sole": 0.004, "cuff": 0.06, "smooth": 3},
+        {"name": "doublet", "type": "shell", "fabric": "wool", "colour": CRIMSON, "dye": True,
+         "regions": ["torso", "pelvis", "upper", "lower"], "bottom": ("thigh_l", 0.05), "sleeve_end": ("hand_l", 0.0),
+         "sleeve_back": 0.016, "thickness": 0.012, "smooth": 8, "lips": ["sleeve", "bottom"]},
+        {"name": "puffs", "type": "puff", "fabric": "wool", "colour": CRIMSON, "dye": True, "from": 0.0, "to": 0.55,
+         "peak": 0.25, "puff": 0.035, "slashes": {"count": 6, "colour": GOLD}},
+        {"name": "gloves", "type": "mittens", "fabric": "leather", "colour": (0.10, 0.08, 0.07), "cuff": 0.03},
+        {"name": "collar", "type": "collar", "fabric": "wool", "colour": GOLD, "on": "doublet", "height": 0.035,
+         "lean_in": 0.25},
+        # Its side panels ride her thighs (as the brute's strips): hung from
+        # her pelvis, her lunging thigh went through the right one (K5).
+        {"name": "skirt", "type": "skirt", "fabric": "wool", "colour": CRIMSON, "dye": True, "hem": ("thigh_l", 0.25),
+         "flare": 1.25, "clearance": 0.02, "bones": 1, "ride": "thigh",
+         "panels": {"front": [-40, 40], "back": [140, 220], "left": [45, 135]}},
+        {"name": "belt", "type": "belt", "fabric": "leather", "colour": (0.10, 0.08, 0.07), "height": 0.04,
+         "buckle": {"fabric": "iron", "colour": GOLD, "size": (0.045, 0.01, 0.04)}},
+        # From her left shoulder across her upper back: its top line from
+        # her right shoulder blade (6 cm past her spine) to 5 cm inside her
+        # left shoulder point (over her upper arm, where her arm hangs and
+        # swings, it was thrown about: 10 m/s restarts, K12; into it, K27).
+        {"name": "half_cape", "type": "half_cape", "fabric": "wool", "colour": (0.10, 0.09, 0.11),
+         "hem": ("spine_01", -0.05), "clear": 0.02, "chains": 3, "bones": 3, "inner": -0.06, "reach": -0.05,
+         "stance": 0.01, "hang_from": "spine_02"},
+        {"name": "hanger", "type": "prop", "shape": "hanger", "fabric": "leather", "colour": (0.10, 0.08, 0.07),
+         "at": 100, "back": 35, "size": (0.03, 0.018, 0.95), "fittings": {"fabric": "iron", "colour": GOLD},
+         "bone": "pelvis"},
+    ],
+    "chains": {
+        **{name: {"stiffness": 2.0, "drag": 0.7, "gravity": 1.0, "radius": 0.045}
+           for name in ("skirt_front", "skirt_back", "skirt_l", "skirt_r")},
+        **{"half_cape_%d" % n: {"stiffness": 3.0, "drag": 0.6, "gravity": 0.7, "radius": 0.06} for n in (1, 2, 3)},
+    },
+    # Sized to her: her waist and back are 6-10 cm deep of her spine (the
+    # men's 14-16 cm put her skirt's roots and her cape inside them), her
+    # upper arm 4 cm off its bone and 6 with its puff (at 8, its round end
+    # at her shoulder took in her cape's roots there).
+    "colliders": [
+        {"bone": "thigh_l", "radius": 0.08}, {"bone": "thigh_r", "radius": 0.08},
+        {"bone": "calf_l", "radius": 0.06}, {"bone": "calf_r", "radius": 0.06},
+        {"bone": "spine_01", "radius": 0.09}, {"bone": "spine_02", "radius": 0.10},
+        {"bone": "upperarm_l", "radius": 0.06},
+    ],
+    "metal": [],
+    "options": {
+        "faces": ["sharp"], "tones": ["light", "dark"], "hair": ["buns"], "beards": [],
+        "hair_colours": [[0.35, 0.22, 0.14], [0.12, 0.09, 0.07], [0.55, 0.38, 0.20]],
+        "headgear": [[]],
+        "dye": {"colours": [list(CRIMSON), [0.40, 0.05, 0.10], [0.56, 0.12, 0.06]], "shift": 0.02, "fade": [0.0, 0.3]},
+        "grime": [0.1, 0.5],
+    },
+}
+
+KINDS = {"watchman": WATCHMAN, "swordsman": SWORDSMAN, "archer": ARCHER, "arms_master": ARMS_MASTER, "brute": BRUTE,
+         "duelist": DUELIST}
 
 # Skin tones: the Quaternius skin times these (linear light). Heads are baked
 # in each; a kind's JSON carries them too, so his bare skin matches his face.

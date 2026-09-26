@@ -1,0 +1,307 @@
+{
+ "kind": "duelist",
+ "body": "female",
+ "triangles": 2128,
+ "cloth": [
+  {
+   "chain": "half_cape_1",
+   "parent": "spine_02",
+   "bones": [
+    "cloth_half_cape_1_1",
+    "cloth_half_cape_1_2",
+    "cloth_half_cape_1_3"
+   ],
+   "tip": 0.1446,
+   "stiffness": 3.0,
+   "drag": 0.6,
+   "gravity": 0.7,
+   "radius": 0.06
+  },
+  {
+   "chain": "half_cape_2",
+   "parent": "spine_02",
+   "bones": [
+    "cloth_half_cape_2_1",
+    "cloth_half_cape_2_2",
+    "cloth_half_cape_2_3"
+   ],
+   "tip": 0.1446,
+   "stiffness": 3.0,
+   "drag": 0.6,
+   "gravity": 0.7,
+   "radius": 0.06
+  },
+  {
+   "chain": "half_cape_3",
+   "parent": "spine_02",
+   "bones": [
+    "cloth_half_cape_3_1",
+    "cloth_half_cape_3_2",
+    "cloth_half_cape_3_3"
+   ],
+   "tip": 0.1455,
+   "stiffness": 3.0,
+   "drag": 0.6,
+   "gravity": 0.7,
+   "radius": 0.06
+  },
+  {
+   "chain": "skirt_back",
+   "parent": "pelvis",
+   "bones": [
+    "cloth_skirt_back_1"
+   ],
+   "tip": 0.2199,
+   "stiffness": 2.0,
+   "drag": 0.7,
+   "gravity": 1.0,
+   "radius": 0.045
+  },
+  {
+   "chain": "skirt_front",
+   "parent": "pelvis",
+   "bones": [
+    "cloth_skirt_front_1"
+   ],
+   "tip": 0.2164,
+   "stiffness": 2.0,
+   "drag": 0.7,
+   "gravity": 1.0,
+   "radius": 0.045
+  },
+  {
+   "chain": "skirt_l",
+   "parent": "thigh_l",
+   "bones": [
+    "cloth_skirt_l_1"
+   ],
+   "tip": 0.2361,
+   "stiffness": 2.0,
+   "drag": 0.7,
+   "gravity": 1.0,
+   "radius": 0.045
+  },
+  {
+   "chain": "skirt_r",
+   "parent": "thigh_r",
+   "bones": [
+    "cloth_skirt_r_1"
+   ],
+   "tip": 0.2361,
+   "stiffness": 2.0,
+   "drag": 0.7,
+   "gravity": 1.0,
+   "radius": 0.045
+  }
+ ],
+ "colliders": [
+  {
+   "bone": "thigh_l",
+   "radius": 0.08,
+   "height": 0.4099
+  },
+  {
+   "bone": "thigh_r",
+   "radius": 0.08,
+   "height": 0.4099
+  },
+  {
+   "bone": "calf_l",
+   "radius": 0.06,
+   "height": 0.4661
+  },
+  {
+   "bone": "calf_r",
+   "radius": 0.06,
+   "height": 0.4661
+  },
+  {
+   "bone": "spine_01",
+   "radius": 0.09,
+   "height": 0.1103
+  },
+  {
+   "bone": "spine_02",
+   "radius": 0.1,
+   "height": 0.1264
+  },
+  {
+   "bone": "upperarm_l",
+   "radius": 0.06,
+   "height": 0.2403
+  }
+ ],
+ "metal": [],
+ "skin_tones": {
+  "light": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "dark": [
+   0.52,
+   0.4,
+   0.32
+  ]
+ },
+ "probe": [
+  {
+   "rest": [
+    0.054799,
+    1.335951,
+    0.145198
+   ],
+   "near_body": [
+    0.059773,
+    1.333994,
+    0.134455
+   ]
+  },
+  {
+   "rest": [
+    0.064906,
+    1.395445,
+    -0.137387
+   ],
+   "near_body": [
+    0.061568,
+    1.394498,
+    -0.125899
+   ]
+  },
+  {
+   "rest": [
+    0.351175,
+    1.464669,
+    -0.046012
+   ],
+   "near_body": [
+    0.354153,
+    1.453522,
+    -0.04931
+   ]
+  },
+  {
+   "rest": [
+    -0.351175,
+    1.464669,
+    -0.046012
+   ],
+   "near_body": [
+    -0.354153,
+    1.453522,
+    -0.04931
+   ]
+  },
+  {
+   "rest": [
+    0.571341,
+    1.454827,
+    -0.058283
+   ],
+   "near_body": [
+    0.570356,
+    1.442949,
+    -0.056891
+   ]
+  },
+  {
+   "rest": [
+    -0.571341,
+    1.454827,
+    -0.058283
+   ],
+   "near_body": [
+    -0.570356,
+    1.442949,
+    -0.056891
+   ]
+  },
+  {
+   "rest": [
+    0.158792,
+    0.848643,
+    0.084538
+   ],
+   "near_body": [
+    0.154526,
+    0.847969,
+    0.077804
+   ]
+  },
+  {
+   "rest": [
+    -0.158792,
+    0.848643,
+    0.084538
+   ],
+   "near_body": [
+    -0.154526,
+    0.847969,
+    0.077804
+   ]
+  }
+ ],
+ "options": {
+  "faces": [
+   "sharp"
+  ],
+  "tones": [
+   "light",
+   "dark"
+  ],
+  "hair": [
+   "buns"
+  ],
+  "beards": [],
+  "hair_colours": [
+   [
+    0.35,
+    0.22,
+    0.14
+   ],
+   [
+    0.12,
+    0.09,
+    0.07
+   ],
+   [
+    0.55,
+    0.38,
+    0.2
+   ]
+  ],
+  "headgear": [
+   []
+  ],
+  "dye": {
+   "colours": [
+    [
+     0.5,
+     0.06,
+     0.08
+    ],
+    [
+     0.4,
+     0.05,
+     0.1
+    ],
+    [
+     0.56,
+     0.12,
+     0.06
+    ]
+   ],
+   "shift": 0.02,
+   "fade": [
+    0.0,
+    0.3
+   ]
+  },
+  "grime": [
+   0.1,
+   0.5
+  ]
+ },
+ "marks": {}
+}

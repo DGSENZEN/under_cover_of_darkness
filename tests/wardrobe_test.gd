@@ -22,7 +22,7 @@ var results: Array[String] = []
 ## Every kind the wardrobe dresses, and the archetype that is it (batch 1's
 ## Tasks 6-8 add theirs). Every per-kind check runs over it.
 const DRESSED := {&"watchman": &"", &"swordsman": &"swordsman", &"archer": &"archer", &"arms_master": &"trainer",
-	&"brute": &"brute"}
+	&"brute": &"brute", &"duelist": &"duelist"}
 ## What each dressed kind must show:
 ##   worn: every mesh he wears (none of the base body's);
 ##   key: his silhouette, worn by every guard of his kind;
@@ -31,7 +31,9 @@ const DRESSED := {&"watchman": &"", &"swordsman": &"swordsman", &"archer": &"arc
 ##     [bone, bone] (half-way between two joints);
 ##   metal: which worn piece answers for a metal bone.
 ##   k5: how far (m) a cloth joint may pass into a leg in his attacks
-##     (default 0.005).
+##     (default 0.005);
+##   k4b: how much of its full-speed travel his cloth may still travel in
+##     slow motion (default 0.25).
 const EXPECT := {
 	# His cloth is batch 0's, as approved: built where it hangs, not clear of
 	# his legs (recipes.WATCHMAN "batch"), so his kick swings a skirt 9 mm
@@ -51,6 +53,13 @@ const EXPECT := {
 	&"brute": {"worn": ["Outfit", "Head_weathered", "Hair_buzzed", "Beard_full"], "key": ["Hair_buzzed", "Beard_full"],
 		"rings": [[&"upperarm_r", 0.0, 0.0]], "silent": [[&"upperarm_l", 0.0, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]],
 		"metal": {&"upperarm_r": "Outfit"}},
+	# On the female body: bare-headed, her hair up; no steel. Her body keeps
+	# moving at a third of its speed in slow motion (her knees 0.27 m in
+	# K4b's 12 slowed frames against the swordsman's 0.10; her painted look
+	# too: a body matter, its own task), and her cloth rides and is pushed
+	# by it: K4b allows her 0.4.
+	&"duelist": {"worn": ["Outfit", "Head_sharp", "Hair_buns"], "key": ["Hair_buns"], "rings": [],
+		"silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {}, "k4b": 0.4},
 	# One man: every seed gives him the same face, hair and beard.
 	&"arms_master": {"worn": ["Outfit", "Head_old", "Hair_parted", "Beard_full"], "key": ["Hair_parted", "Beard_full"],
 		"rings": [], "silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {},
@@ -1289,6 +1298,83 @@ func _mantle_and_arms(g: Node, man: Node) -> void:
 	_check("K29 his bare arms are skin", arm.size() > 0 and share >= 0.9, "%.2f of his left upper arm's %d vertices" % [share, arm.size()])
 
 
+## K27 (Review Focus 3), the duelist's half-cape: through a run and a stop,
+## then her own attacks after five idles (as K5 drives them), no joint of it
+## enters the capsules on her back and left arm.
+func _cape_off_her() -> void:
+	var dt := 1.0 / 60.0
+	var colliders := {}
+
+	for c in Wardrobe.kind_data(&"duelist").get("colliders", []):
+		colliders[StringName(c.bone)] = c
+
+	var worst := [INF, ""]
+
+	for seed in [31, 34]:
+		var her := await _guard(seed, &"duelist")
+		her.set_physics_process(false)
+		var man = her._rig.man
+		var capes: Array = _watch(man, &"duelist").joints.filter(func(j): return String(j[0]).begins_with("half_cape"))
+		var bones := {}
+
+		for bone in [&"spine_02", &"upperarm_l"]:
+			if colliders.has(bone):
+				bones[bone] = _marker(man.skeleton, bone, Vector3.ZERO)
+
+		for i in range(150):
+			her.velocity = -her.global_basis.z * 3.2 if i < 60 else Vector3.ZERO
+			her.global_position += her.velocity * dt
+			await _step(her, dt)
+			worst = _deeper(worst, _deepest(capes, bones, colliders), "run" if i < 60 else "stop")
+
+		for idle in [0, 23, 46, 69, 92]:
+			her._phase = &""
+			her._attack = &""
+
+			for i in range(idle):
+				await _step(her, dt)
+
+			for attack in _attacks_of(&"duelist"):
+				for i in range(30):
+					her._phase = &"strike"
+					her._attack = attack
+					her._phase_length = 0.5
+					her._phase_timer = 0.5 * (1.0 - i / 29.0)
+					await _step(her, dt)
+					worst = _deeper(worst, _deepest(capes, bones, colliders), "%s frame %d after %d idle, seed %d" % [attack, i, idle, seed])
+
+		her._phase = &""
+		her.queue_free()
+
+	_check("K27 her half-cape stays off her back and left arm", colliders.has(&"spine_02") and colliders.has(&"upperarm_l")
+		and worst[0] >= -0.005, "closest %.3f past the surface (%s)" % worst)
+
+
+## The deepest any of `joints` ([chain, marker]) sits inside the capsules on
+## `bones` (markers at their joints; `colliders` by bone): [depth, where].
+func _deepest(joints: Array, bones: Dictionary, colliders: Dictionary) -> Array:
+	var out := [INF, ""]
+
+	for bone in bones:
+		var mark: Node3D = bones[bone]
+		var a := mark.global_position
+		var b := a + mark.global_basis.y.normalized() * float(colliders[bone].height)
+
+		for joint in joints:
+			var p: Vector3 = (joint[1] as Node3D).global_position
+			var t := clampf((p - a).dot(b - a) / maxf((b - a).length_squared(), 1e-6), 0.0, 1.0)
+			var d := p.distance_to(a + (b - a) * t) - float(colliders[bone].radius)
+
+			if d < out[0]:
+				out = [d, "%s in %s" % [joint[0], bone]]
+
+	return out
+
+
+func _deeper(worst: Array, now: Array, when: String) -> Array:
+	return [now[0], "%s, %s" % [now[1], when]] if now[0] < worst[0] else worst
+
+
 ## Bows his head: his neck and head turned down about his own right axis
 ## (as Posture turns bones), `angle` radians in all, until the next frame.
 func _bow(man: Node, angle: float) -> void:
@@ -1558,7 +1644,7 @@ func _cloth_kind(kind: StringName, archetype: StringName) -> void:
 		last = now
 
 	_check("K4b %s: in slow motion the cloth slows with the game, and after it no hem moves faster than 5 m/s" % kind,
-		played > 0.02 and slowed < played * 0.25 and burst <= 5.0 and _finite(last),
+		played > 0.02 and slowed < played * float(EXPECT[kind].get("k4b", 0.25)) and burst <= 5.0 and _finite(last),
 		"12 frames: played %.3f m slowed %.3f m; after %.2f m/s" % [played, slowed, burst])
 
 	# K5 (Review Focus 5) his own attacks: the cloth stays out of his legs.
@@ -1634,6 +1720,9 @@ func _cloth_kind(kind: StringName, archetype: StringName) -> void:
 
 	if kind == &"brute":
 		await _mantle_and_arms(g, man)
+
+	if kind == &"duelist":
+		await _cape_off_her()
 
 	# K12 moved 20 m in one frame: no whip (once the kick's swing has died)
 	for i in range(90):

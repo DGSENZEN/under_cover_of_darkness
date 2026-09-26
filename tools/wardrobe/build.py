@@ -822,19 +822,22 @@ def panels(kind, g, part, made_as="panels", dye=None):
 STANCE = 0.045
 
 
-def collider_push(kind, point, out, chain):
+def collider_push(kind, point, out, chain, extra=(), stance=STANCE):
     """How far `point` must move along `out` for a joint of `chain` there
     (its recipe radius) to rest clear of every capsule the kind's cloth
-    keeps out of (its colliders), STANCE to spare. Built inside one (as he
-    stands), a joint is thrown out of it as soon as the cloth runs, and a
-    restart (a teleport) puts it straight back in: a jump every time."""
+    keeps out of (its colliders, and `extra` (head, tail, radius) capsules:
+    a limb where he stands, not where the rest pose holds it), `stance` to
+    spare (how far his stance moves what it hangs by from those capsules:
+    his legs, STANCE). Built inside one (as he stands), a joint is thrown out
+    of it as soon as the cloth runs, and a restart (a teleport) puts it
+    straight back in: a jump every time."""
     if kind.recipe.get("batch") == 0:
         # Made before cloth was built clear of the legs, as approved.
         return 0.0
 
-    radius = kind.recipe.get("chains", {}).get(chain, {}).get("radius", 0.03) + STANCE
+    radius = kind.recipe.get("chains", {}).get(chain, {}).get("radius", 0.03) + stance
     capsules = [(kind.arm.data.bones[c["bone"]].head_local, kind.arm.data.bones[c["bone"]].tail_local, c["radius"])
-                for c in kind.recipe.get("colliders", [])]
+                for c in kind.recipe.get("colliders", [])] + list(extra)
 
     def clear(p):
         for a, b, r in capsules:
@@ -1187,7 +1190,9 @@ def half_cape(kind, g, part):
     """A short cape over her left shoulder (the duelist's): its top along
     her shoulder line, from the back of her neck (spine_03) out to her left
     shoulder point, over what she wears there; its rows down her back to
-    `hem`, each `clear` of what is under it (looking in from behind her).
+    `hem`, each `clear` of what is under it (looking in from behind her);
+    its top line runs from `inner` (x, metres: past her spine, negative)
+    to `reach` past her shoulder point.
     Its `chains` chain columns swing on `<name>_<n>` of `bones` bones under
     spine_03 (a column between two rides both), built clear of her colliders
     (collider_push); its top row rides spine_03 at her neck and clavicle_l at
@@ -1204,7 +1209,8 @@ def half_cape(kind, g, part):
     for c in range(columns):
         u = c / (columns - 1)
         # Along her shoulder line, just over what she wears there.
-        at = Vector((0.03, neck.y, neck.z - 0.02)).lerp(Vector((shoulder.x, shoulder.y, shoulder.z + 0.02)), u)
+        at = Vector((g.get("inner", 0.03), neck.y, neck.z - 0.02)).lerp(
+            Vector((shoulder.x + g.get("reach", 0.0), shoulder.y, shoulder.z + 0.02)), u)
         hit = common.outer_hit(tree, at, slope, 0.3)
         top.append((hit if hit is not None else at) + slope * g["clear"])
 
@@ -1221,11 +1227,21 @@ def half_cape(kind, g, part):
 
         rows.append(row)
 
-    # Its chains' joints rest clear of her colliders (the whole row goes
-    # out as far as its farthest chain column must).
+    # Its chains' joints rest clear of her colliders, and of her left upper
+    # arm as she stands (hanging from her shoulder, not out as in the rest
+    # pose), each column as far as it must (a column between two chains as
+    # far as the farther), `stance` to spare: her spine and arm move little
+    # from where it hangs by (built flared out to a leg's margin, gravity
+    # swung it back at every restart).
+    arm = kind.arm.data.bones["upperarm_l"]
+    radius = next((c["radius"] for c in kind.recipe.get("colliders", []) if c["bone"] == "upperarm_l"), 0.05)
+    hanging = [(arm.head_local, arm.head_local - Vector((0.0, 0.0, arm.length)), radius)]
+
     for row in rows[1:]:
-        push = max(collider_push(kind, row[2 * k], behind, "%s_%d" % (g["name"], k + 1)) for k in range(g["chains"]))
-        row[:] = [p + behind * push for p in row]
+        pushes = [collider_push(kind, row[2 * k], behind, "%s_%d" % (g["name"], k + 1), hanging, g.get("stance", STANCE))
+                  for k in range(g["chains"])]
+        row[:] = [p + behind * (pushes[c // 2] if c % 2 == 0 else max(pushes[c // 2], pushes[c // 2 + 1]))
+                  for c, p in enumerate(row)]
 
     obj = common.loft(g["name"], rows)
     face_away(obj, Vector((0.0, kind.centre(hem).y, 0.0)), Vector((0.0, 0.0, 1.0)))
@@ -1247,8 +1263,11 @@ def half_cape(kind, g, part):
             for k in chains:
                 common.group(obj, "cloth_%s_%d_%d" % (g["name"], k + 1, r), 1.0 / len(chains), [index])
 
+    # Hung from the spine bone whose capsule it must clear (`hang_from`):
+    # from the one above it, every bend of her back swung that capsule
+    # through it.
     for k in range(g["chains"]):
-        kind.chains["%s_%d" % (g["name"], k + 1)] = {"parent": "spine_03", "points": [row[2 * k] for row in rows]}
+        kind.chains["%s_%d" % (g["name"], k + 1)] = {"parent": g.get("hang_from", "spine_03"), "points": [row[2 * k] for row in rows]}
 
     kind.add(obj, g, part, "half_cape", strip=True, whole=True)
 
