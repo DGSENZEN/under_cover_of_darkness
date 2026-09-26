@@ -65,6 +65,12 @@ const BIND_AFTER := 3.0
 const GORE_SEEN_RANGE := 14.0
 ## A lit fuse is heard this near (m), whichever way he faces.
 const FUSE_HEARD := 4.0
+## Seen going up a ladder, over an edge or through the air, and lost: for this
+## long (s) he knows where you come out (_follow_through).
+const FOLLOW_THROUGH := 3.0
+## In a fight his eyes go up and down after you (on a wall, up a ladder), up
+## to this far (rad) from level.
+const LOOK_PITCH := 1.1
 ## A man set to watch is on his post within POST_NEAR of it. There he keeps
 ## it, while there are friends of his within POST_FRIENDS to do the walking:
 ## what he sees or hears he watches from up there, and sends the nearest of
@@ -300,6 +306,9 @@ var _search_left := 0
 var _door_wait := 0.0
 var _bark_timer := 0.0
 var _head_yaw_goal := 0.0
+## Last seen off your feet (on a ladder, over an edge, in the air): followed
+## through to where you come out (_follow_through).
+var _seen_off_feet := false
 var _idle_time := 0.0
 var _attack_timer := 0.0
 
@@ -660,6 +669,7 @@ func _sense_vision(delta: float) -> void:
 	can_see_target = visibility > 0.02
 
 	if not can_see_target:
+		_follow_through()
 		return
 
 	_since_seen = 0.0
@@ -667,6 +677,7 @@ func _sense_vision(delta: float) -> void:
 	_stimulus = &"sight"
 	last_known_position = _target.global_position
 	has_last_known = true
+	_seen_off_feet = _target.has_method("is_off_feet") and _target.is_off_feet()
 	alert = minf(alert + visibility * vision_gain * wariness * delta, combat_at)
 
 	# Which way you were going: where he looks first once he loses you.
@@ -674,6 +685,22 @@ func _sense_vision(delta: float) -> void:
 
 	if going is Vector3 and Vector2((going as Vector3).x, (going as Vector3).z).length() > 0.8:
 		_seen_heading = Vector3((going as Vector3).x, 0.0, (going as Vector3).z)
+
+
+## Last seen on a ladder, hanging, going over an edge or in the air: which way
+## you were going is plain (up, over, down), so for a moment after he loses
+## you he knows where you come out, until you are on your feet again. Not
+## under water: that is hiding.
+func _follow_through() -> void:
+	if not _seen_off_feet:
+		return
+
+	if _target == null or not is_instance_valid(_target) or _since_seen > FOLLOW_THROUGH:
+		_seen_off_feet = false
+		return
+
+	last_known_position = _target.global_position
+	_seen_off_feet = _target.has_method("is_off_feet") and _target.is_off_feet()
 
 
 ## Light, distance, view cone and cover, multiplied together.
@@ -2595,6 +2622,23 @@ func _feet_of(node: Node3D) -> Vector3:
 	return node.global_position
 
 
+## Where to go to get at `node`: where his feet are; or, on a ladder, off an
+## edge or over one, where that comes out (the top he is going up to, the
+## foot going down), so a man after him goes up the ladder behind him instead
+## of waiting under it.
+func goal_of(node: Node3D) -> Vector3:
+	if node.has_method("climb_goal"):
+		var goal: Vector3 = node.climb_goal()
+
+		if goal != Vector3.INF:
+			var on := NavigationServer3D.map_get_closest_point(get_world_3d().navigation_map, goal)
+
+			if on.distance_to(goal) < 1.5:
+				return on
+
+	return _feet_of(node)
+
+
 func _give_up() -> void:
 	alert = suspicious_at * 0.5
 	has_last_known = false
@@ -2745,6 +2789,9 @@ func _go_to(point: Vector3, force := false) -> void:
 	_agent.target_position = point
 	path_requests += 1
 
+	if _climb != null:
+		_climb.forget_wait()
+
 	if _nav != null:
 		_nav.new_path()
 
@@ -2781,8 +2828,17 @@ func _walk(speed: float, delta: float) -> bool:
 
 	var next := _agent.get_next_path_position()
 
+	# At a ladder with someone on it: up it once it is clear.
+	_climb.retry()
+
 	# His path came to a way across it cannot walk: the move has him now.
 	if _climb.active():
+		return false
+
+	# Waiting at its foot meanwhile.
+	if _climb.waiting():
+		_stop(delta)
+		_last_walk_position = global_position
 		return false
 
 	var direction := Vector3(next.x - global_position.x, 0.0, next.z - global_position.z)
@@ -2951,6 +3007,17 @@ func _update_head(delta: float) -> void:
 			_head_yaw_goal = sin(_look_timer * 4.5) * 0.55 if _look_timer > 0.0 and state != Alert.COMBAT else 0.0
 
 	_head.rotation.y = lerp_angle(_head.rotation.y, _head_yaw_goal, 1.0 - exp(-6.0 * delta))
+
+	# In a fight he looks up (or down) at you, where he sees you or last had
+	# you: up a ladder, on a wall over him. Otherwise his eyes are level.
+	var pitch_goal := 0.0
+
+	if state == Alert.COMBAT and has_last_known:
+		var aim: Vector3 = _target.global_position if can_see_target and _target != null and is_instance_valid(_target) else last_known_position
+		var to := aim - eye_position()
+		pitch_goal = clampf(atan2(to.y, Vector2(to.x, to.z).length()), -LOOK_PITCH, LOOK_PITCH)
+
+	_head.rotation.x = lerp_angle(_head.rotation.x, pitch_goal, 1.0 - exp(-6.0 * delta))
 
 
 ## His sword and his body show what he is doing: GuardRig.gd.

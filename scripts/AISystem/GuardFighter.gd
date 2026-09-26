@@ -1754,10 +1754,11 @@ func _stand_guard(delta: float, target: Node3D, sees: bool, to: Vector3, dist: f
 ## (GuardNav.lead); where he last had you (seen, or called by his own) if not;
 ## and, there and still nothing, a few steps on the way you went.
 func _chase_point(target: Node3D, sees: bool, dist: float) -> Vector3:
+	# (Up a ladder or over an edge, where you come out: goal_of.)
 	if sees:
 		_scented = false
 		_scent_from = Vector3.INF
-		return guard._nav.lead(target, guard._feet_of(target), dist, guard.chase_speed)
+		return guard._nav.lead(target, guard.goal_of(target), dist, guard.chase_speed)
 
 	var lost_at: Vector3 = guard.last_known_position
 
@@ -1765,7 +1766,11 @@ func _chase_point(target: Node3D, sees: bool, dist: float) -> Vector3:
 	if _scented and _scent_from.distance_to(lost_at) > 2.0:
 		_scented = false
 
-	if not _scented and guard._flat_distance(lost_at) < 1.2:
+	# There is where he last had you, not under it (on a tower, up a
+	# ladder): unless his path can take him no nearer.
+	var level: bool = absf(lost_at.y - guard.global_position.y - 1.0) < 1.5 or guard._agent == null or guard._agent.is_navigation_finished()
+
+	if not _scented and guard._flat_distance(lost_at) < 1.2 and level:
 		_scented = true
 		_scent_from = lost_at
 		_scent_point = guard._nav.scent(lost_at, guard._seen_heading)
@@ -1783,7 +1788,8 @@ func _update_reach(delta: float, target: Node3D, _level: float) -> void:
 		return
 
 	_reach_check = 0.5
-	var feet: Vector3 = guard._feet_of(target)
+	# On a ladder or over an edge: where you come out.
+	var feet: Vector3 = guard.goal_of(target)
 
 	# Afloat, you are at the water's surface as its navmesh has it.
 	var water: Node3D = WaterScript.at(guard.get_tree(), feet + Vector3.UP * 0.05, 0.3)

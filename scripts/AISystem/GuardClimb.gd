@@ -11,6 +11,10 @@ extends RefCounted
 ## neither guards nor strikes. A blow or a boot takes him off it (interrupt):
 ## off a wall or a ladder, he falls. The rig shows it (activity) and it is
 ## heard: armour against stone, a landing.
+##
+## One ladder, one body at a time on each rung: a man on it just above him
+## (going up; below, going down) keeps him at its foot (waiting), and on it
+## a body's length behind (BODY), never climbing into him.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
@@ -32,6 +36,11 @@ const FLOAT := 1.3
 const JUMP_IN := 0.6
 ## The navmesh lies this far above the floor it was baked from.
 const NAV_LIFT := 0.2
+## On a ladder, he keeps this far (m, feet to feet) behind whoever is on it
+## ahead of him.
+const BODY := 1.9
+## How near a ladder's line (m, flat) a man counts as on it.
+const ON_LADDER := 0.9
 ## As the moves are heard (dB): a man climbing in mail, landing, a splash.
 const CLIMB_DB := 44.0
 const LAND_DB := 52.0
@@ -52,6 +61,12 @@ var _facing := Vector3.ZERO
 var _climbed := 0.0
 var _splash_at := -INF
 var _water: Node3D = null
+## Up or down a ladder: its line, and which way he goes along it.
+var _ladder_line := Vector3.INF
+var _going_up := true
+## A ladder he came to with a man on it in his way: tried again while he
+## stands at its foot (retry), forgotten when his path changes.
+var _waiting: Dictionary = {}
 
 
 func _init(p_guard: CharacterBody3D) -> void:
@@ -128,6 +143,13 @@ func begin(details: Dictionary) -> bool:
 				return false
 
 			_plan_ladder(from, a, b, volume, what == &"rope")
+
+			# Someone on it, just where he would climb: he waits his turn.
+			if _in_the_way(from.y):
+				_legs.clear()
+				_ladder_line = Vector3.INF
+				_waiting = details
+				return false
 		&"water":
 			if not _plan_water(from, a, b):
 				return false
@@ -141,9 +163,35 @@ func begin(details: Dictionary) -> bool:
 	_leg = 0
 	_leg_t = 0.0
 	_leg_from = from
+	_waiting = {}
 	guard.velocity = Vector3.ZERO
 	_noise(CLIMB_DB)
 	return true
+
+
+## Waiting at a ladder for whoever is on it: tried again (and he goes up if
+## it is clear), or given up once he is not at its foot any more.
+func retry() -> void:
+	if _waiting.is_empty() or active():
+		return
+
+	var entry: Vector3 = _waiting.get("link_entry_position", Vector3.INF)
+
+	if entry == Vector3.INF or Vector2(entry.x - guard.global_position.x, entry.z - guard.global_position.z).length() > 1.6:
+		_waiting = {}
+		return
+
+	begin(_waiting)
+
+
+## At a ladder's foot, waiting for the man on it.
+func waiting() -> bool:
+	return not _waiting.is_empty() and not active()
+
+
+## His path changed: whatever ladder he was waiting at is not his way now.
+func forget_wait() -> void:
+	_waiting = {}
 
 
 ## A blow, a boot: he loses his hold. Off a wall or a ladder he falls from
@@ -154,6 +202,7 @@ func interrupt() -> void:
 
 	kind = &""
 	_legs.clear()
+	_ladder_line = Vector3.INF
 	guard.velocity = Vector3(guard.velocity.x, minf(guard.velocity.y, 0.0), guard.velocity.z)
 
 
@@ -164,6 +213,12 @@ func update(delta: float) -> void:
 		return
 
 	var before := guard.global_position
+
+	# On a ladder with someone on it ahead of him: he holds where he is.
+	if _leg < _legs.size() and _legs[_leg][2] == &"ladder" and _in_the_way(guard.global_position.y):
+		guard.velocity = Vector3.ZERO
+		return
+
 	_leg_t += delta
 
 	while _leg < _legs.size() and _leg_t >= float(_legs[_leg][1]):
@@ -266,6 +321,8 @@ func _plan_ladder(from: Vector3, a: Vector3, b: Vector3, volume: Node3D, rope: b
 		line = volume.global_position + _flat(a - volume.global_position) * 0.25
 
 	_facing = -out if not rope else _flat(volume.global_position - a)
+	_ladder_line = line
+	_going_up = b.y >= a.y
 
 	if b.y >= a.y:
 		_legs.append([Vector3(line.x, from.y, line.z), 0.3, &"ladder", &"line"])
@@ -330,9 +387,50 @@ func _arrive(leg: Array) -> void:
 func _finish() -> void:
 	kind = &""
 	_legs.clear()
+	_ladder_line = Vector3.INF
 	guard._stuck_time = 0.0
 	guard._last_walk_position = guard.global_position
 	guard._fall_peak = 0.0
+
+
+## Someone on the ladder he climbs, in his way: ahead of him along it (above
+## him going up, below going down), nearer than a body's length, feet to feet
+## from `at_y`: you on it, or another of them on it going the same way (two
+## going opposite ways pass). Not anyone standing at its foot or its top.
+func _in_the_way(at_y: float) -> bool:
+	if _ladder_line == Vector3.INF:
+		return false
+
+	for other in guard.get_tree().get_nodes_in_group(&"guards"):
+		if other == guard or not is_instance_valid(other):
+			continue
+
+		var climb: Variant = other.get("_climb")
+
+		if climb == null or not climb.active() or climb._ladder_line == Vector3.INF or climb._going_up != _going_up:
+			continue
+
+		if Vector2(climb._ladder_line.x - _ladder_line.x, climb._ladder_line.z - _ladder_line.z).length() > 0.5:
+			continue
+
+		if _ahead(guard._feet_of(other).y, at_y):
+			return true
+
+	var target: Variant = guard.get("_target")
+
+	if target is Node3D and is_instance_valid(target) and target.has_method("is_off_feet") and target.is_off_feet():
+		var feet: Vector3 = guard._feet_of(target)
+
+		if Vector2(feet.x - _ladder_line.x, feet.z - _ladder_line.z).length() <= ON_LADDER and _ahead(feet.y, at_y):
+			return true
+
+	return false
+
+
+## Feet at `y` are ahead of feet at `at_y` along his way, nearer than BODY.
+func _ahead(y: float, at_y: float) -> bool:
+	var ahead := y - at_y if _going_up else at_y - y
+	return ahead > -0.3 and ahead < BODY
 
 
 func _noise(db: float) -> void:

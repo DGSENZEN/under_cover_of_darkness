@@ -23,6 +23,9 @@ const AWAY := Vector3(250, 1.05, 30)
 ## bank.
 const POOL := Vector3(334, 0, 0)
 const POOL_SURFACE := -0.5
+## How long a guard goes on after you unseen before he starts to search
+## (Guard.lose_time, as it comes).
+const GUARD_LOSE_TIME := 4.0
 
 var player: CharacterBody3D
 var baker: NavigationRegion3D
@@ -172,6 +175,74 @@ func _run() -> void:
 	await _frames(240)
 	_check("G7 you up a bare 3 m wall: he cannot get to you, and does not try to climb it", g7._fighter.is_unreachable() and g7.global_position.y < 0.5 and not g7._climb.active(),
 		"unreachable %s, at %s" % [g7._fighter.is_unreachable(), g7.global_position])
+
+	# G8 you on the tower at its edge, him close under it: in a fight he
+	#    looks up at you (steeper than his eyes see looking ahead), sees you,
+	#    and comes up after you
+	await _fresh()
+	_put_player(Vector3(40, 4.55, -4.9))
+	# Facing the tower, 2 m short of it: you are 54 degrees up. Held where he
+	# is a second, to see whether he sees you.
+	var looker := _guard(&"swordsman", Vector3(40, 0, -2.8), 0.0)
+	looker.lose_time = GUARD_LOSE_TIME
+	looker._fighter.stays_put = true
+	var saw_up := 0.0
+
+	for i in 60:
+		await _frames(1)
+		saw_up = maxf(saw_up, float(looker.visibility))
+
+	looker._fighter.stays_put = false
+	var did_look := await _watch(looker, func(): return looker.global_position.y > 3.3, 900)
+	_check("G8 you up on a tower at its edge, him close under it: he looks up, sees you, and comes up after you",
+		looker.global_position.y > 3.3 and did_look.has(&"ladder") and saw_up > 0.1,
+		"at %s, did %s, saw you from below %.2f, state %d" % [looker.global_position, did_look, saw_up, int(looker.state)])
+
+	# G9 the same in the dark, and he hears nothing of it: he saw you start
+	#    up the ladder, so he knows where you went, and comes up after you
+	await _fresh()
+	_put_player(Vector3(40, 1.05, -2.2))
+	# Well back, so it is dark before he is near enough to see you by touch.
+	var follower := _guard(&"swordsman", Vector3(40, 0, 9.0), PI)
+	follower.lose_time = GUARD_LOSE_TIME
+	follower.hearing_acuity = 0.0
+	await _climb_the_ladder(true)
+	var did_follow := await _watch(follower, func(): return follower.global_position.y > 3.3, 900)
+	_check("G9 up the ladder with him after you, the light goes and he hears nothing: he saw you go up, and comes up after you",
+		follower.global_position.y > 3.3 and did_follow.has(&"ladder"),
+		"at %s, did %s, state %d, last had you at %s" % [follower.global_position, did_follow, int(follower.state), follower.last_known_position])
+
+	# G10 you stop partway up the ladder, him after you: he waits his turn
+	#     (no climbing into you, no shoving you up it); you go on up, and he
+	#     comes up behind you
+	await _fresh()
+	_put_player(Vector3(40, 1.05, -2.2))
+	var waiter := _guard(&"swordsman", Vector3(40, 0, 3.5), PI)
+	waiter.lose_time = GUARD_LOSE_TIME
+	await _frames(20)
+	Input.action_press("move_forward")
+	await _until(func(): return player.movement_state == player.MoveState.CLIMBING and player.global_position.y > 2.6, 300)
+	_release_all()
+	var held_at: float = player.global_position.y
+	var closest := INF
+
+	for i in 240:
+		await _frames(1)
+
+		if waiter._climb.active():
+			closest = minf(closest, player.get_feet_position().y - waiter.global_position.y)
+
+	var stayed: bool = player.movement_state == player.MoveState.CLIMBING and absf(player.global_position.y - held_at) < 0.3
+	var waited_at: Vector3 = waiter.global_position
+	var waited: bool = waited_at.distance_to(Vector3(40, 0, -3.4)) < 1.6 and (closest == INF or closest > 1.7)
+	Input.action_press("move_forward")
+	await _until(func(): return player.movement_state == player.MoveState.LOCOMOTION and player.global_position.y > 4.3, 600)
+	await _until(func(): return player.global_position.z < -6.3, 60)
+	_release_all()
+	var did_wait := await _watch(waiter, func(): return waiter.global_position.y > 3.3, 900)
+	_check("G10 you stop partway up the ladder: he waits his turn at its foot, not into you; you go on up and he comes up behind you",
+		stayed and waited and waiter.global_position.y > 3.3 and did_wait.has(&"ladder"),
+		"you stayed %s, he waited %s (at %s, nearest below you %.2f), then at %s, did %s" % [stayed, waited, waited_at, closest, waiter.global_position, did_wait])
 
 	# ------------------------------------------------------------------
 	# Water
@@ -333,6 +404,22 @@ func _guard(archetype: StringName, at: Vector3, yaw := 0.0) -> CharacterBody3D:
 	g.lose_time = 999.0
 	g._engage(player)
 	return g
+
+
+## You, at the ladder's foot facing it: up it and onto the tower, and a step
+## back from the edge (out of the sight of anyone at its foot but for his
+## looking up). `dark`: the light goes once you are on the ladder.
+func _climb_the_ladder(dark := false) -> void:
+	await _frames(20)
+	Input.action_press("move_forward")
+	await _until(func(): return player.movement_state == player.MoveState.CLIMBING, 240)
+
+	if dark:
+		player.debug_light_level = 0.0
+
+	await _until(func(): return player.movement_state == player.MoveState.LOCOMOTION and player.global_position.y > 4.3, 600)
+	await _until(func(): return player.global_position.z < -6.3, 60)
+	_release_all()
 
 
 ## A clean start: nobody left, nothing remembered, you away in the dark.

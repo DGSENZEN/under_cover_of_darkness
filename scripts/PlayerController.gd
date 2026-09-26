@@ -1138,6 +1138,38 @@ func get_feet_position() -> Vector3:
 	return global_position - Vector3.UP * _standing_height * 0.5
 
 
+## Where your climb comes out, for a guard after you (Guard.goal_of): up a
+## ladder or a rope, its top (going down it, its foot); hanging off an edge,
+## over it; pulling yourself over one, where the move ends. INF on your feet
+## (or swimming).
+func climb_goal() -> Vector3:
+	match movement_state:
+		MoveState.CLIMBING:
+			if current_climb != null and is_instance_valid(current_climb) and current_climb.has_method("ends"):
+				var ends: Array = current_climb.ends()
+				return ends[0] if velocity.y < -0.3 else ends[1]
+		MoveState.HANGING:
+			return Vector3(global_position.x, hang_lip_y + 0.2, global_position.z) - hang_normal * 0.6
+		MoveState.MOVING:
+			if current_move != null and current_move.points.size() > 0:
+				return current_move.points[current_move.points.size() - 1] - Vector3.UP * _standing_height * 0.5
+
+	return Vector3.INF
+
+
+## Off your feet: on a ladder, hanging, mid-vault or mantle, or in the air
+## (not swimming). A guard who last saw you so knows where you come down
+## (Guard._follow_through).
+func is_off_feet() -> bool:
+	match movement_state:
+		MoveState.MOVING, MoveState.HANGING, MoveState.CLIMBING:
+			return true
+		MoveState.LOCOMOTION:
+			return not (_on_floor_now() or _on_stairs)
+
+	return false
+
+
 ## How lit the player is, 0..1: the lightgem when there is one.
 func get_light_level() -> float:
 	if light_gem != null and is_instance_valid(light_gem):
