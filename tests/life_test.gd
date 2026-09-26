@@ -6,7 +6,8 @@ extends Node3D
 ## bow raised to the eye, climbing, and a death that puts you on the floor.
 ##
 ## Sounds are checked by what is asked of the sound bank (Sfx.recording), so
-## this runs without an audio device.
+## this runs without an audio device. Run with --fixed-fps 60: some checks
+## look at what is drawn frame by frame (_paced says so if not).
 
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
@@ -23,6 +24,7 @@ var _open_door: Node3D
 
 
 func _ready() -> void:
+	var paced: bool = await _paced()
 	# Every guard at his class's own temperament: these checks are exact.
 	TemperamentScript.rolling = false
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(200, 1, 200))
@@ -76,6 +78,9 @@ func _ready() -> void:
 	Sfx.recording = false
 
 	print("\n==== RESULTS ====")
+
+	if not paced:
+		print("NOTE  frames are not paced: run with --fixed-fps 60 (checks here look at what is drawn frame by frame)")
 	for r in results:
 		print(r)
 
@@ -503,3 +508,17 @@ func _until(cond: Callable, max_frames: int) -> void:
 
 func _check(test_name: String, ok: bool, detail: String) -> void:
 	results.append("%s  %s   [%s]" % ["PASS" if ok else "FAIL", test_name, detail])
+
+
+## Whether every frame is a fixed 60th of a second (run with --fixed-fps 60,
+## as the suites are meant to be run). Some checks here look at what is drawn
+## frame by frame; without it the machine's own frame rate decides how many
+## physics ticks fall in a frame, and those checks do not hold.
+func _paced() -> bool:
+	for i in 3:
+		await get_tree().process_frame
+
+		if not is_equal_approx(get_process_delta_time(), 1.0 / 60.0):
+			return false
+
+	return true

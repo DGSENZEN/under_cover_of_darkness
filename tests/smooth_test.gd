@@ -3,7 +3,8 @@ extends Node3D
 ## faster screen draws between ticks, and anything moved on ticks must be
 ## drawn in between or it steps. These checks run the physics at 30 ticks a
 ## second against 60 frames, two frames to a tick, the way a 120 Hz screen
-## sees a 60 Hz game, and look at where things are DRAWN.
+## sees a 60 Hz game, and look at where things are DRAWN. Run with
+## --fixed-fps 60 (every frame a fixed 60th of a second): _paced says so if not.
 
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
@@ -30,6 +31,7 @@ class Recorder:
 
 
 func _ready() -> void:
+	var paced: bool = await _paced()
 	# Every guard at his class's own temperament: these checks are exact.
 	TemperamentScript.rolling = false
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(200, 1, 200))
@@ -57,6 +59,9 @@ func _ready() -> void:
 	Engine.physics_ticks_per_second = 60
 
 	print("\n==== RESULTS ====")
+
+	if not paced:
+		print("NOTE  frames are not paced: run with --fixed-fps 60 (checks here look at what is drawn frame by frame)")
 	for r in results:
 		print(r)
 
@@ -307,3 +312,17 @@ func _until(cond: Callable, max_frames: int) -> void:
 
 func _check(test_name: String, ok: bool, detail: String) -> void:
 	results.append("%s  %s   [%s]" % ["PASS" if ok else "FAIL", test_name, detail])
+
+
+## Whether every frame is a fixed 60th of a second (run with --fixed-fps 60,
+## as the suites are meant to be run). Some checks here look at what is drawn
+## frame by frame; without it the machine's own frame rate decides how many
+## physics ticks fall in a frame, and those checks do not hold.
+func _paced() -> bool:
+	for i in 3:
+		await get_tree().process_frame
+
+		if not is_equal_approx(get_process_delta_time(), 1.0 / 60.0):
+			return false
+
+	return true

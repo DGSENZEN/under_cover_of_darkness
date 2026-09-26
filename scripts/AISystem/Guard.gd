@@ -57,6 +57,8 @@ const BLEED_FLOOR := 0.12
 const BIND_AFTER := 3.0
 ## A man cut apart shakes whoever sees it from this far.
 const GORE_SEEN_RANGE := 14.0
+## A lit fuse is heard this near (m), whichever way he faces.
+const FUSE_HEARD := 4.0
 
 ## Off, cuts do not bleed (tests of exact damage).
 static var bleeding_on := true
@@ -372,8 +374,8 @@ var _seen_heading := Vector3.ZERO
 var _scan: Array = []
 var _look_length := 3.0
 var _watching := false
-## Lit powder: seen this long, and running from it (from where, how far, how
-## much longer).
+## Lit powder: seen (or heard) this long, and running from it (from where,
+## how far, how much longer).
 var _powder_seen := 0.0
 var _evade_from := Vector3.ZERO
 var _evade_radius := 0.0
@@ -1308,8 +1310,11 @@ func _watch_for_powder(delta: float) -> void:
 
 	var at := barrel.global_position + Vector3.UP * 0.3
 	var eye := eye_position()
+	# A fuse fizzing this near is heard, whichever way he faces (it is at his
+	# feet while he watches you); further off it has to be seen.
+	var heard := eye.distance_to(at) <= FUSE_HEARD
 
-	if _cone_factor(at - eye) <= 0.0 or not _line_of_sight(eye, at, barrel):
+	if not heard and (_cone_factor(at - eye) <= 0.0 or not _line_of_sight(eye, at, barrel)):
 		return
 
 	_powder_seen += delta
@@ -1346,8 +1351,15 @@ func _run_from_powder(delta: float) -> void:
 	away.y = 0.0
 
 	if away.length() >= _evade_radius:
-		_evade_left = 0.0
 		_stop(delta)
+
+		# Clear of it: he waits out the fuse there, watching the fight, and
+		# does not take a step back in until it has gone up.
+		if Dangers.lit_powder_near(get_tree(), _evade_from, -2.0) == null:
+			_evade_left = 0.0
+		elif _target != null and is_instance_valid(_target):
+			_face(_target.global_position - global_position, delta)
+
 		return
 
 	var direction := away.normalized() if away.length() > 0.05 else global_basis.z

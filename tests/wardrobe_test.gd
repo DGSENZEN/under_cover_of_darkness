@@ -3,7 +3,8 @@ extends Node3D
 ## characters from Blender-made parts. Skins re-bound to the game skeleton,
 ## the variety roll, the baked parts and their budgets, dressing, cloth,
 ## dismemberment, hit flash and armour. Headless; the look itself is judged
-## by eye in tests/visual/stage_wardrobe.tscn.
+## by eye in tests/visual/stage_wardrobe.tscn. Run with --fixed-fps 60: the
+## cloth is measured frame by frame (_paced says so if not).
 
 const Wardrobe := preload("res://scripts/Visual/Wardrobe.gd")
 const Props := preload("res://scripts/Interaction/Props.gd")
@@ -19,11 +20,15 @@ var results: Array[String] = []
 
 
 func _ready() -> void:
+	var paced: bool = await _paced()
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(80, 1, 80))
 	await _frames(5)
 	await _run()
 
 	print("\n==== RESULTS ====")
+
+	if not paced:
+		print("NOTE  frames are not paced: run with --fixed-fps 60 (checks here look at what is drawn frame by frame)")
 	for r in results:
 		print(r)
 
@@ -876,3 +881,17 @@ func _frames(n: int) -> void:
 
 func _check(test_name: String, ok: bool, detail: String) -> void:
 	results.append("%s  %s   [%s]" % ["PASS" if ok else "FAIL", test_name, detail])
+
+
+## Whether every frame is a fixed 60th of a second (run with --fixed-fps 60,
+## as the suites are meant to be run). Some checks here look at what is drawn
+## frame by frame; without it the machine's own frame rate decides how many
+## physics ticks fall in a frame, and those checks do not hold.
+func _paced() -> bool:
+	for i in 3:
+		await get_tree().process_frame
+
+		if not is_equal_approx(get_process_delta_time(), 1.0 / 60.0):
+			return false
+
+	return true
