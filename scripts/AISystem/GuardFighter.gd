@@ -2825,7 +2825,7 @@ func _update_attack(delta: float, target: Node3D, sees: bool, to: Vector3, dist:
 		# going as you are (step out of it at the last and it goes past).
 		if kind == &"shoot" and phase == &"windup" and u >= locked and not _aim_locked:
 			_aim_locked = true
-			_locked_aim = target.global_position + Vector3.UP * 0.25
+			_locked_aim = _aim_at(target, 0.25)
 			var going: Variant = target.get("velocity")
 
 			if going is Vector3:
@@ -2923,6 +2923,16 @@ func attack_info() -> Dictionary:
 	}
 
 
+## Where he aims a throw or a shot at you: `lift` above you (the player is
+## held at his middle), or where you say (get_aim_point: a man held at his
+## feet, the showcase's intruder).
+func _aim_at(target: Node3D, lift: float) -> Vector3:
+	if target.has_method("get_aim_point"):
+		return target.get_aim_point()
+
+	return target.global_position + Vector3.UP * lift
+
+
 ## The blow lands on whoever is in front of him, in reach, at his level.
 func _strike(target: Node3D) -> void:
 	var kind: StringName = guard._attack
@@ -3013,7 +3023,7 @@ func _throw_at(target: Node3D) -> void:
 		guard._hands.drop_held()
 		return
 
-	var chest := target.global_position + Vector3.UP * 0.15
+	var chest := _aim_at(target, 0.15)
 	var flight := clampf(guard.eye_position().distance_to(chest) / 12.0, 0.2, 1.3)
 	var going: Variant = target.get("velocity")
 
@@ -3033,7 +3043,7 @@ func _shoot(target: Node3D) -> void:
 		return
 
 	var from: Vector3 = guard.eye_position() - guard.global_basis.z * 0.5
-	var chest: Vector3 = _locked_aim if _aim_locked else target.global_position + Vector3.UP * 0.25
+	var chest: Vector3 = _locked_aim if _aim_locked else _aim_at(target, 0.25)
 	var spread := deg_to_rad(1.1)
 
 	# A mark that is not you (a rope, a keg): still, and small, and he takes
@@ -3058,7 +3068,7 @@ func _shoot(target: Node3D) -> void:
 ## Nothing solid between his eye and your chest.
 func _clear_shot(target: Node3D) -> bool:
 	var from: Vector3 = guard.eye_position()
-	var to: Vector3 = target.global_position + Vector3.UP * 0.25
+	var to: Vector3 = _aim_at(target, 0.25)
 	var exclude: Array[RID] = [guard.get_rid()]
 
 	if target is CollisionObject3D:
