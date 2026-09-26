@@ -6,7 +6,7 @@
 #   tools/wardrobe/wardrobe.sh bake watchman              textures, palettized
 #   tools/wardrobe/wardrobe.sh export watchman            validated GLB + PNG + JSON
 #   tools/wardrobe/wardrobe.sh preview watchman           pictures of it (--out=<dir>)
-#   tools/wardrobe/wardrobe.sh test                       the validation rules' own test
+#   tools/wardrobe/wardrobe.sh test                       the validation rules' and the bake's own tests
 #
 # Targets: a kind (watchman...), heads, headgear, or all (heads, headgear,
 # then every kind: a kind's export reads its parts' triangle counts).
@@ -37,7 +37,8 @@ run() {
 
 case "$verb" in
   test)
-    exec "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_validate.py"
+    "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_validate.py"
+    exec "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_bake.py"
     ;;
   build|check|bake|export|preview)
     target=${1:?"usage: wardrobe.sh $verb <kind|heads|headgear|all> [options]"}

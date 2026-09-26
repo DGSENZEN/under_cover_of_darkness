@@ -18,6 +18,8 @@ Writes into assets/characters/wardrobe; export.py validates and ships. The
 import os
 import sys
 
+# No __pycache__ beside the tools (Blender would write one each run).
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bpy  # noqa: E402
@@ -189,15 +191,29 @@ def data_passes(obj, size, low, high):
         base.attribute_name = "wr_base"
         return base.outputs["Color"]
 
+    # Only its own shape shades it: the part itself, under the copy, would
+    # black it out, and another part (a hat over a coif) is shaded by the
+    # game's own shadows, not painted into a part that may be worn alone.
+    others = [o for o in bpy.data.objects if o is not work and o.type == "MESH" and not o.hide_render]
+
+    for other in others:
+        other.hide_render = True
+
     passes = {}
-    emit_material(work, target, position)
-    passes["position"] = bake(work, "EMIT", target)
-    emit_material(work, target, ids)
-    passes["ids"] = bake(work, "EMIT", target)
-    emit_material(work, target, colour)
-    passes["colour"] = bake(work, "EMIT", target)
-    passes["normal"] = bake(work, "NORMAL", target, normal_space="OBJECT")
-    passes["ao"] = bake(work, "AO", target)
+
+    try:
+        emit_material(work, target, position)
+        passes["position"] = bake(work, "EMIT", target)
+        emit_material(work, target, ids)
+        passes["ids"] = bake(work, "EMIT", target)
+        emit_material(work, target, colour)
+        passes["colour"] = bake(work, "EMIT", target)
+        passes["normal"] = bake(work, "NORMAL", target, normal_space="OBJECT")
+        passes["ao"] = bake(work, "AO", target)
+    finally:
+        for other in others:
+            other.hide_render = False
+
     bpy.data.objects.remove(work)
 
     covered = passes["ids"][..., 2] > 0.5
@@ -227,16 +243,23 @@ def smoothstep(a, b, x):
 
 
 def light(albedo, passes):
-    """The light painted in: occlusion and a soft top light."""
+    """The light painted in: occlusion and a soft top light.
+
+    Tuned by eye (stage_wardrobe, Sept 25 2026): occlusion 0.35 + 0.65 ao
+    (0.5 + 0.5 flattened the gambeson's folds and underarms at 2 m: the
+    painted depth is the PS2 look); top light 0.78 + 0.22 n.z (the game's
+    own lights do the rest)."""
     return albedo * ((0.35 + 0.65 * passes["ao"]) * (0.78 + 0.22 * passes["normal"][..., 2]))[..., None]
 
 
 def grime(passes):
-    """Where dirt gathers: low on him (boots, hems) and in creases."""
+    """Where dirt gathers: low on him (boots, hems) and in creases. Up to
+    his knees (0.8 m): a watchman walks the mud, and a mask that stopped at
+    his shins left his hems clean however dirty the roll made him."""
     p = passes["position"]
     flat = p.reshape(-1, 3)
     speckle = fabrics.noise(fabrics.mirrored(flat), 25.0, 71).reshape(p.shape[:2])
-    low = 1.0 - smoothstep(0.1, 0.55, p[..., 2])
+    low = 1.0 - smoothstep(0.12, 0.8, p[..., 2])
     return np.clip(0.65 * low * (0.7 + 0.6 * speckle) + 0.45 * (1.0 - passes["ao"]), 0.0, 1.0)
 
 
@@ -344,6 +367,9 @@ def paint_part(obj, size, stripe=None):
     return lit, covered, dye, (passes["fabric"] == fabrics.SKIN) & covered, dirt
 
 
+# Palettes: common.PALETTE (64) colours an albedo. Tuned by eye: at 32 the
+# faces' skin bands on the brow and cheeks; the outfit and mail look the same
+# either way, and 64 is the spec's ceiling.
 def finish(lit, covered, path):
     rgb = to_srgb(shrink(fill(lit, covered)))
     save_png(palettize(rgb), path)
@@ -377,6 +403,11 @@ def bake_heads():
         lo, hi = bounds(low)
         passes = data_passes(low, size, lo, hi)
         sources = [o for o in bpy.data.objects if o.name.startswith("High_%s" % face)]
+
+        for source in sources:
+            if source.name.endswith("_brows"):
+                tint(source, recipe["brows"])
+
         skin = skin_image(sources)
         original = np.empty(skin.size[0] * skin.size[1] * 4, dtype=np.float32)
         skin.pixels.foreach_get(original)
@@ -394,6 +425,29 @@ def bake_heads():
             finish(lit, passes["covered"], str(common.WARDROBE / "heads" / ("%s_%s.png" % (face, tone))))
 
         skin.pixels.foreach_set(original)
+
+
+def tint(source, colour):
+    """A detailed part's texture multiplied by `colour` (sRGB): the brows, a
+    Quaternius hair card of pale grey strands, in his hair's colour."""
+    for material in source.data.materials:
+        if material is None or not material.use_nodes:
+            continue
+
+        nodes, links = material.node_tree.nodes, material.node_tree.links
+        principled = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
+
+        if principled is None or not principled.inputs["Base Color"].is_linked:
+            continue
+
+        feed = principled.inputs["Base Color"].links[0].from_socket
+        mix = nodes.new("ShaderNodeMix")
+        mix.data_type = "RGBA"
+        mix.blend_type = "MULTIPLY"
+        mix.inputs[0].default_value = 1.0
+        mix.inputs[7].default_value = (*to_linear(np.array(colour)), 1.0)
+        links.new(feed, mix.inputs[6])
+        links.new(mix.outputs[2], principled.inputs["Base Color"])
 
 
 def skin_image(sources):
@@ -473,4 +527,5 @@ def weather(albedo, passes, grit):
     return out
 
 
-main()
+if __name__ == "__main__":
+    main()

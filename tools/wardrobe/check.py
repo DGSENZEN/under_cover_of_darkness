@@ -11,6 +11,8 @@ import json
 import os
 import sys
 
+# No __pycache__ beside the tools (Blender would write one each run).
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bpy  # noqa: E402
@@ -66,7 +68,7 @@ def check_kind(recipe):
     print("wardrobe: %s outfit %d triangles, %d with head and headgear (limit %d)"
           % (recipe["kind"], common.tri_count(outfit), combined, common.budget_of(recipe["kind"])))
     return validate.check(outfit, armature=armature, reference_joints=reference_joints(recipe["body"]), cloth_bones=cloth,
-                          combined_tris=combined, budget=common.budget_of(recipe["kind"]))
+                          combined_tris=combined, budget=common.budget_of(recipe["kind"]), bare=set(recipe["bare"]))
 
 
 def check_parts(prefix, limit):

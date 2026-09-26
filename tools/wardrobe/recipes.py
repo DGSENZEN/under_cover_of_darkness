@@ -13,7 +13,7 @@ Garment types (build.py):
   boots    the feet and lower calves, with a turned-down cuff
   collar   a standing collar on a shell's neck edge
   skirt    panels hanging from the belt, flaring to `hem`
-  tabard   front and back panels from the shoulders to `hem`
+  tabard   painted onto `over` above the belt, panels below it to `hem`
   belt     a band round the waist, with a buckle
   prop     a pouch, a key ring, a scabbard: rigid on one bone
 """
@@ -37,11 +37,16 @@ WATCHMAN = {
     # The body, headless, is cut to this many triangles before anything is
     # made from it (shells share its low-poly shape).
     "base_tris": 1300,
+    # Where his skin may show (common.REGIONS): anywhere else is a hole.
+    "bare": ["head"],
     "belt": ("spine_01", 0.0),
     "garments": [
         {"name": "gambeson", "type": "shell", "fabric": "quilted_linen", "colour": TAN,
          "regions": ["torso", "pelvis", "upper", "lower"],
-         "bottom": ("thigh_l", 0.1), "top": ("neck_01", 0.0), "sleeve_end": ("hand_l", 0.0), "sleeve_back": 0.016,
+         # Up to his neck (the regions stop there): a height would cut the
+         # tops of his shoulders away, and his big trapezius rises above
+         # where his neck starts.
+         "bottom": ("thigh_l", 0.1), "sleeve_end": ("hand_l", 0.0), "sleeve_back": 0.016,
          "thickness": 0.03, "smooth": 10, "lips": ["sleeve", "bottom"],
          # Padding: fuller over the chest and the belly (front only).
          "pads": [{"from": ("spine_02", 0.6), "to": ("spine_03", 0.9), "front": True, "amount": 0.015},
@@ -60,8 +65,11 @@ WATCHMAN = {
          # front and back, so nothing is made there that would never show.
          "panels": {"left": [40, 140], "right": [-140, -40]},
          "chains": {"left": "skirt_l", "right": "skirt_r"}},
+        # Painted onto his gambeson above the belt, swelling 6 mm; as wide
+        # as his waist allows (0.33 m there, with the gambeson), so front
+        # and back part at his sides and join only over his shoulders.
         {"name": "tabard", "type": "tabard", "fabric": "wool", "colour": MUSTARD, "dye": True, "stripe": BLACK,
-         "hem": ("calf_l", 0.0), "width": 0.34, "top": ("spine_03", 0.95)},
+         "over": "gambeson", "proud": 0.006, "tuck": 0.015, "hem": ("calf_l", 0.0), "width": 0.30},
         {"name": "belt", "type": "belt", "fabric": "leather", "colour": BELT_BROWN,
          "height": 0.045, "buckle": {"fabric": "iron", "colour": IRON, "size": (0.055, 0.014, 0.05)}},
         {"name": "pouch", "type": "prop", "shape": "pouch", "fabric": "leather", "colour": BELT_BROWN,
@@ -72,7 +80,9 @@ WATCHMAN = {
          "at": 100, "length": 0.9, "back": 25, "size": (0.05, 0.026, 0.9), "fittings": {"fabric": "iron", "colour": IRON},
          "bone": "pelvis"},
     ],
-    # Cloth: two bones a chain. Starting values; tuned by eye in the stager.
+    # Cloth: two bones a chain. Kept after the stager (Sept 25 2026): stiff
+    # and heavily dragged, the panels hang like wool and settle in about a
+    # second (K4-K6 pin the swing, the settling and the speeds).
     "chains": {
         "tabard_front": {"stiffness": 1.4, "drag": 0.7, "gravity": 1.0, "radius": 0.03},
         "tabard_back": {"stiffness": 1.4, "drag": 0.7, "gravity": 1.0, "radius": 0.03},
@@ -89,8 +99,12 @@ WATCHMAN = {
     "options": {
         "faces": ["weathered"], "tones": ["light", "dark"], "hair": [], "beards": [],
         "headgear": [["kettlehat", "coif"]],
-        "dye": {"colour": list(MUSTARD), "shift": 0.04, "fade": [0.0, 0.35]},
-        "grime": [0.2, 0.8],
+        # A watch wears one livery: its hue moves a little, washing and dirt
+        # (fade, grime) do the rest.
+        "dye": {"colour": list(MUSTARD), "shift": 0.025, "fade": [0.0, 0.3]},
+        # How dirty he is (the shader's grime): from lately washed to
+        # never; below 0.25 the mud barely reads.
+        "grime": [0.25, 1.0],
     },
 }
 
@@ -120,11 +134,13 @@ HEADS = {
         # The eyeballs, smaller: painted eyes that read less wide.
         "eyes": 0.85,
         "grit": {"stubble": 0.6, "bags": 0.5, "lines": 0.5, "scar": "left_cheek"},
+        # His brows' colour (the Quaternius brows are pale grey strands).
+        "brows": (0.16, 0.11, 0.08),
         "tones": TONES,
     },
 }
 
-MAIL = (0.30, 0.30, 0.32)
+MAIL = (0.36, 0.36, 0.38)
 LEATHER = (0.20, 0.13, 0.08)
 
 # What goes on heads. Every piece is skinned (the hat wholly to his Head),
@@ -134,8 +150,8 @@ HEADGEAR = {
     # to chin, with a short cape over the neck and shoulders.
     "coif": {"type": "coif", "fabric": "mail", "colour": MAIL, "thickness": 0.015, "smooth": 6, "tris": 110,
              "opening": {"x": 0.07, "from_z": 1.585, "to_z": 1.738},
-             "cape": {"top_z": 1.575, "clear": 0.075, "tilt_front": 62, "tilt_side": 25,
-                      "length_front": 0.17, "length_side": 0.2},
+             "cape": {"top_z": 1.575, "clear": 0.075, "tilt_front": 62, "tilt_side": 45,
+                      "length_front": 0.17, "length_side": 0.17},
              "metal": ["neck_01", "Head"], "hides_hair": True, "allows_beard": True},
     # The kettle hat already in the game (assets/armour), fitted over the coif.
     "kettlehat": {"type": "import", "from": "assets/armour/kettlehat.glb", "bone": "Head", "over": "coif",

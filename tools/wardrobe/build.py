@@ -20,17 +20,22 @@ import math
 import os
 import sys
 
+# No __pycache__ beside the tools (Blender would write one each run).
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bmesh  # noqa: E402
 import bpy  # noqa: E402
 from mathutils import Matrix, Vector  # noqa: E402
+from mathutils.bvhtree import BVHTree  # noqa: E402
 from mathutils.kdtree import KDTree  # noqa: E402
 
 import common  # noqa: E402
 import recipes  # noqa: E402
 
-# Texels per metre, relative: more where the eye goes, less on soles.
+# Texels per metre, relative: more where the eye goes, less on soles. Kept
+# after the stager: at 256 px the quilting and the mail read at 2 m, and the
+# tabard's panels (1.3) keep their stripe's edges straight.
 DENSITY = {"base": 0.8, "shell": 1.0, "mittens": 0.8, "boots": 0.8, "collar": 0.8, "skirt": 1.0,
            "tabard": 1.3, "belt": 0.8, "prop": 0.6}
 SKIN = (0.78, 0.6, 0.5)
@@ -39,6 +44,11 @@ SKIN = (0.78, 0.6, 0.5)
 COVERED = 0.1
 # How far past its thickness a smoothed garment may stand.
 BULGE = 0.015
+# Where a part's shading turns hard (degrees between faces): belts, boxes,
+# brims and cuffs keep their edges; cloth and bodies are smooth. A head is
+# smooth all over (a low face with hard creases looks carved).
+CREASE = 45.0
+HEAD_CREASE = 180.0
 
 
 def main():
@@ -109,6 +119,9 @@ class Kind:
     def belt_z(self):
         return self.z(self.recipe["belt"])
 
+    def recipe_garment(self, name):
+        return next(g for g in self.recipe["garments"] if g["name"] == name)
+
     def add(self, obj, g, part, kind, strip=False, dye=False, fabric=None, colour=None, whole=False):
         common.set_faces(obj, part, recipes.FABRICS.index(fabric or g["fabric"]), g.get("thickness", 0.004), strip, dye,
                          colour or g["colour"])
@@ -146,6 +159,7 @@ def build_kind(recipe, force):
             swap_sides(obj)
 
     outfit = join([kind.base] + kind.parts + kind.props)
+    common.smooth(outfit, CREASE)
     materials(outfit)
     weigh(outfit, reference)
     chains = add_chains(kind)
@@ -540,53 +554,110 @@ def skirt(kind, g, part):
 
 
 def tabard(kind, g, part):
-    """Front and back panels from the shoulders over the belt and the skirt
-    to the knee, the lower part hanging on its own chain."""
-    top, belt, hem = kind.z(g["top"]), kind.belt_z(), kind.z(g["hem"])
+    """Above the belt, painted onto what he wears there (`over`), as PS2
+    artists did, and swelling `proud` of it: front and back, joined over his
+    shoulders. Below the belt, front and back panels hang to `hem`, each on
+    its own chain."""
+    painted(kind, g, part)
+    hanging(kind, g, part)
+
+
+def painted(kind, g, part):
+    """The tabard over his chest, back and shoulders: the faces of `over`
+    within `width` of his middle and above his belt, cut out along those
+    lines and made the tabard's. It swells to `proud` inside its edges, which
+    stay on `over`: no walls, no triangles but the cuts'."""
+    over = kind.made[g["over"]]
+    half, belt = g["width"] * 0.5, kind.belt_z()
+    bm = bmesh.new()
+    bm.from_mesh(over.data)
+    # Made before any face is held: a new layer lets go of every face.
+    mark = bm.faces.layers.int.new("wr_tabard")
+
+    # Cut only where the cuts are its edges, not all round him.
+    for co, no, near in (((half, 0.0, 0.0), (1.0, 0.0, 0.0), lambda c: c.z > belt - 0.05),
+                         ((0.0, 0.0, belt), (0.0, 0.0, 1.0), lambda c: c.x < half + 0.05)):
+        faces = [f for f in bm.faces if near(f.calc_center_median())]
+        geom = faces + list({e for f in faces for e in f.edges}) + list({v for f in faces for v in f.verts})
+        bmesh.ops.bisect_plane(bm, geom=geom, plane_co=co, plane_no=no)
+
+    region = {f for f in bm.faces if f.calc_center_median().x < half and f.calc_center_median().z > belt}
+
+    for vertex in {v for f in region for v in f.verts}:
+        if all(f in region for f in vertex.link_faces):
+            seam = abs(vertex.co.x) < 1e-4
+            vertex.co += sum((f.normal for f in vertex.link_faces), Vector()).normalized() * g["proud"]
+            vertex.co.x = 0.0 if seam else vertex.co.x
+
+    for face in region:
+        face[mark] = 1
+
+    bm.to_mesh(over.data)
+    bm.free()
+    layer = over.data.attributes["wr_tabard"].data
+    chosen = [p.index for p in over.data.polygons if layer[p.index].value]
+    over.data.attributes.remove(over.data.attributes["wr_tabard"])
+    thickness = kind.recipe_garment(g["over"]).get("thickness", 0.0) + g["proud"]
+    common.set_faces(over, part, recipes.FABRICS.index(g["fabric"]), thickness, False, True, g["colour"], chosen)
+    print("wardrobe: tabard painted on %d faces of %s" % (len(chosen), over.name))
+
+
+def hanging(kind, g, part):
+    """Front and back panels from under the belt to the hem: over the
+    furthest he stands out below the belt (belly, seat), a little A-line to
+    the skirt's hem, then straight, clear of his legs."""
+    belt, hem = kind.belt_z(), kind.z(g["hem"])
     skirt_hem = getattr(kind, "skirt_hem", (belt + hem) * 0.5)
-    heights = [top, top + (belt - top) * 0.4, top + (belt - top) * 0.75, belt, skirt_hem, hem]
     columns = [0.0, g["width"] * 0.25, g["width"] * 0.5]
     body = common.bvh([obj for obj in kind.parts if kind.types[obj.name] in ("shell", "boots")])
 
+    def extreme(z, sign, span=0.0):
+        """How far out (y) he stands at height z (and span either side),
+        across the panel's width; None where nothing is hit."""
+        found = None
+
+        for dz in ((-span, 0.0, span) if span else (0.0,)):
+            for k in range(9):
+                x = g["width"] * 0.5 * k / 8.0
+                hit = common.outer_hit(body, Vector((x, 0.02, z + dz)), Vector((0.0, sign, 0.0)), 0.8)
+
+                if hit is not None and (found is None or hit.y * sign > found * sign):
+                    found = hit.y
+
+        return found
+
     for side, sign in (("front", -1.0), ("back", 1.0)):
+        # Where he stands out furthest in the top of the skirt: the panel
+        # hangs over it (a straight drop from the belt would cut through).
+        below = [belt - 0.02 * k for k in range(2, 13) if belt - 0.02 * k > skirt_hem + 0.03]
+        hip = max(below, key=lambda z: (extreme(z, sign) or 0.0) * sign)
+        heights = [belt + g["tuck"], hip, skirt_hem, hem]
         rows = []
 
         for i, z in enumerate(heights):
-            # A tabard drapes flat: each row hangs just clear of whatever
-            # stands out furthest under it (across its width, and half-way
-            # to the rows either side), not tucked into every hollow.
-            span = 0.5 * min(abs(z - heights[max(i - 1, 0)]) or 0.1, abs(heights[min(i + 1, len(heights) - 1)] - z) or 0.1)
-            extreme = None
+            out = extreme(z, sign, 0.01)
 
-            for dz in (-span, 0.0, span):
-                for k in range(9):
-                    x = g["width"] * 0.5 * k / 8.0
-                    hit = common.outer_hit(body, Vector((x, 0.02, z + dz)), Vector((0.0, sign, 0.0)), 0.8)
-
-                    if hit is not None and (extreme is None or hit.y * sign > extreme * sign):
-                        extreme = hit.y
-
-            if z > belt - 1e-4:
-                y = (extreme if extreme is not None else 0.02 + sign * 0.14) + sign * 0.012
+            if i == 0:
+                y = (out if out is not None else 0.02 + sign * 0.14) + sign * 0.004
+            elif i == 1:
+                y = max((out if out is not None else rows[0][0].y) * sign + 0.012, rows[0][0].y * sign) * sign
             else:
-                # Below the belt it falls from where the belt holds it, a little
-                # A-line to the skirt's hem, then straight: clear of his legs.
-                held = rows[3][0].y
-                t = min((belt - z) / max(belt - skirt_hem, 1e-3), 1.0)
-                y = held + sign * g.get("flare", 0.035) * t
+                t = min((hip - z) / max(hip - skirt_hem, 1e-3), 1.0)
+                y = rows[1][0].y + sign * g.get("flare", 0.035) * t
 
-                if extreme is not None and (extreme + sign * 0.03 - y) * sign > 0:
-                    y = extreme + sign * 0.03
+                if out is not None and (out + sign * 0.03 - y) * sign > 0:
+                    y = out + sign * 0.03
 
             rows.append([Vector((x, y, z)) for x in columns])
 
         obj = common.loft("%s_%s" % (g["name"], side), rows)
         n = len(columns)
-        common.group(obj, common.TRANSFER, 1.0, range(0, 4 * n))
+        # Belt and seat ride his body; below them it swings.
+        common.group(obj, common.TRANSFER, 1.0, range(0, 2 * n))
         chain = "tabard_%s" % side
-        common.group(obj, "cloth_%s_1" % chain, 1.0, range(4 * n, 5 * n))
-        common.group(obj, "cloth_%s_2" % chain, 1.0, range(5 * n, 6 * n))
-        kind.chains[chain] = {"parent": "pelvis", "points": [rows[3][0], rows[4][0], rows[5][0]]}
+        common.group(obj, "cloth_%s_1" % chain, 1.0, range(2 * n, 3 * n))
+        common.group(obj, "cloth_%s_2" % chain, 1.0, range(3 * n, 4 * n))
+        kind.chains[chain] = {"parent": "pelvis", "points": [rows[1][0], rows[2][0], rows[3][0]]}
         kind.add(obj, g, part, "tabard", strip=True, dye=True)
 
 
@@ -996,6 +1067,7 @@ def build_heads(force):
         bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
         bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
         head_uv(low)
+        common.smooth(low, HEAD_CREASE)
         low.data.materials.clear()
         low.data.materials.append(bpy.data.materials.get("WR_closed") or bpy.data.materials.new("WR_closed"))
         common.set_faces(low, 1, recipes.FABRICS.index("skin"), 0.0, False, False, SKIN)
@@ -1054,8 +1126,8 @@ def build_headgear(force):
 
     for obj in made.values():
         common.unwrap([obj], {obj.name: 1.0})
-        obj.data.materials.clear()
-        obj.data.materials.append(bpy.data.materials.get("WR_closed") or bpy.data.materials.new("WR_closed"))
+        common.smooth(obj, CREASE)
+        materials(obj)
         obj.parent = armature
         obj.modifiers.new("Armature", "ARMATURE").object = armature
 
@@ -1104,27 +1176,68 @@ def coif(kind, g, piece):
 
     bm.to_mesh(obj.data)
     bm.free()
-    obj = join_two(obj, cape_shell(kind, g), obj.name)
+    fabric = recipes.FABRICS.index(g["fabric"])
+    common.set_faces(obj, 1, fabric, g["thickness"], False, False, g["colour"])
+    cape = cape_shell(kind, g)
+    # One sheet of mail: drawn from both sides.
+    common.set_faces(cape, 1, fabric, g["thickness"], True, False, g["colour"])
+    obj = join_two(obj, cape, obj.name)
     common.group(obj, common.TRANSFER, 1.0)
     weigh_part(obj, kind.ref)
-    common.set_faces(obj, 1, recipes.FABRICS.index(g["fabric"]), g["thickness"], False, False, g["colour"])
+    # The cape (and the hood's edge round his neck, which it tucks into).
+    ride(obj, g["cape"]["top_z"] + 0.015, CAPE_BONES)
     print("wardrobe: coif %d triangles" % common.tri_count(obj))
     return obj
+
+
+# What a coif's cape hangs from: his neck, chest and collarbones. Not his
+# head (looking round would swing it into his gambeson) or his arms
+# (lowering them would pull it in).
+CAPE_BONES = ("neck_01", "spine_03", "spine_02", "clavicle_l", "clavicle_r")
+
+
+def ride(obj, below, bones):
+    """The vertices of `obj` under height `below` weighed on `bones` only:
+    their other weights dropped, the rest scaled back up to one (none left:
+    wholly the first bone)."""
+    names = {group.index: group.name for group in obj.vertex_groups}
+
+    for vertex in obj.data.vertices:
+        if vertex.co.z >= below:
+            continue
+
+        kept = [(names[g.group], g.weight) for g in vertex.groups if names[g.group] in bones and g.weight > 0.0]
+
+        for name in [names[g.group] for g in vertex.groups if names[g.group] not in bones]:
+            obj.vertex_groups[name].remove([vertex.index])
+
+        total = sum(weight for _, weight in kept)
+
+        if total <= 0.0:
+            kept, total = [(bones[0], 1.0)], 1.0
+
+        for name, weight in kept:
+            group = obj.vertex_groups.get(name) or obj.vertex_groups.new(name=name)
+            group.add([vertex.index], weight / total, "REPLACE")
 
 
 def cape_shell(kind, g):
     """The coif's cape: a bell of three rings round his neck, snug under the
     hood at the top, hung out and down like a cone (steep over chest and
-    back, shallow over the shoulders), then smoothed and pushed out until it
-    stands `clear` of him everywhere: it drapes over whatever he wears."""
+    back, shallower over the shoulders), then smoothed and pushed out until
+    it stands `clear` of his trunk (neck, chest, back, collarbones): it
+    drapes over whatever he wears there. Not of his arms: raised in the
+    rest pose, they would lift it into a plate, where he stands in the game
+    with them down."""
     cape = g["cape"]
+    trunk = trunk_tree(kind.ref)
     neck = kind.at(("neck_01", 0.0))
     top = cape["top_z"] + 0.012
     axis = Vector((0.0, neck.y, top))
     rings = [[], [], []]
 
-    for d in range(0, 360, 30):
-        theta = math.radians(d)
+    for i in range(16):
+        theta = math.radians(i * 22.5)
         side = math.sin(theta) ** 2
         tilt = math.radians(cape["tilt_front"] + (cape["tilt_side"] - cape["tilt_front"]) * side)
         length = cape["length_front"] + (cape["length_side"] - cape["length_front"]) * side
@@ -1141,7 +1254,7 @@ def cape_shell(kind, g):
             smoothed = [(ring[i - 1] + ring[i] * 2.0 + ring[(i + 1) % len(ring)]) * 0.25 for i in range(len(ring))]
 
             for i, point in enumerate(smoothed):
-                near, normal, _, _ = kind.ref_tree.find_nearest(point)
+                near, normal, _, _ = trunk.find_nearest(point)
                 depth = (point - near).dot(normal) if near is not None else 1.0
 
                 if depth < cape["clear"]:
@@ -1150,6 +1263,15 @@ def cape_shell(kind, g):
                 ring[i] = point
 
     return common.loft("cape", rings, closed=True)
+
+
+def trunk_tree(reference):
+    """A tree of the faces of his neck, chest, back and collarbones."""
+    names = {group.index: group.name for group in reference.vertex_groups}
+    heaviest = [names[max(v.groups, key=lambda g: g.weight).group] if v.groups else "" for v in reference.data.vertices]
+    faces = [p for p in reference.data.polygons if majority([heaviest[i] for i in p.vertices]) in CAPE_BONES + ("Head", "pelvis")]
+    vertices = [v.co.copy() for v in reference.data.vertices]
+    return BVHTree.FromPolygons(vertices, [tuple(p.vertices) for p in faces])
 
 
 def weigh_part(obj, reference):
@@ -1183,7 +1305,9 @@ def imported(kind, g, piece, made):
         fit_over(obj, made[g["over"]], bone, g["clearance"])
 
     names = [m.name for m in obj.data.materials]
-    common.set_faces(obj, 1, 0, 0.004, False, False, (0.5, 0.5, 0.5))
+    # Drawn from both sides: made for the game's old look, its brim is one
+    # sheet, and when he bows his head the back of it shows its underside.
+    common.set_faces(obj, 1, 0, 0.004, True, False, (0.5, 0.5, 0.5))
     fabric = obj.data.attributes["wr_fabric"].data
     base = obj.data.color_attributes["wr_base"].data
 

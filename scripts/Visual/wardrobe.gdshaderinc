@@ -31,7 +31,8 @@ vec3 wardrobe_colour(vec2 uv) {
 	dyed = mix(dyed, vec3(dot(dyed, LUMA)), dye_fade);
 	c = mix(c, dyed, m.r);
 	c = mix(c, c * skin_tone, m.g);
-	// Dirt: darker, browner, where dirt gathers (hems, boots, creases).
-	c = mix(c, vec3(dot(c, LUMA)) * vec3(0.52, 0.46, 0.38), clamp(m.b * grime, 0.0, 1.0) * 0.6);
+	// Dirt: darker, browner, where dirt gathers (hems, boots, creases); at
+	// most 80% of the way (by eye: 60% hid it at a few metres).
+	c = mix(c, vec3(dot(c, LUMA)) * vec3(0.52, 0.46, 0.38), clamp(m.b * grime, 0.0, 1.0) * 0.8);
 	return c;
 }

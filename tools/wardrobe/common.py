@@ -215,26 +215,41 @@ def keep_positive_x(obj):
     bm.free()
 
 
-def set_faces(obj, part, fabric, thickness, strip, dye, colour):
-    """Every face of `obj` is garment `part` of `fabric`...: the attributes
-    the bake, the export and validation read."""
+def set_faces(obj, part, fabric, thickness, strip, dye, colour, faces=None):
+    """Every face of `obj` (or those indexed in `faces`) is garment `part` of
+    `fabric`...: the attributes the bake, the export and validation read."""
     mesh = obj.data
     values = {"wr_part": part, "wr_fabric": fabric, "wr_thickness": thickness, "wr_strip": strip, "wr_dye": dye}
+    chosen = range(len(mesh.polygons)) if faces is None else list(faces)
 
     for name, kind in FACE_ATTRIBUTES.items():
         attribute = mesh.attributes.get(name) or mesh.attributes.new(name, kind, "FACE")
 
-        for item in attribute.data:
-            item.value = values[name]
+        for index in chosen:
+            attribute.data[index].value = values[name]
 
     base = mesh.color_attributes.get("wr_base") or mesh.color_attributes.new("wr_base", "BYTE_COLOR", "CORNER")
 
     # The recipes' colours are sRGB; `color` would take them as linear.
-    for item in base.data:
-        item.color_srgb = (colour[0], colour[1], colour[2], 1.0)
+    for index in chosen:
+        for loop in mesh.polygons[index].loop_indices:
+            base.data[loop].color_srgb = (colour[0], colour[1], colour[2], 1.0)
 
     mesh.color_attributes.active_color = base
     mesh.attributes.render_color_index = mesh.color_attributes.find("wr_base")
+
+
+def smooth(obj, crease):
+    """Drawn smooth (Gouraud, as the PS2 drew), hard only where its faces
+    meet at more than `crease` degrees; the normals it came with (the
+    imported body's, stale once it is cut and pushed about) dropped."""
+    select_only([obj])
+
+    if obj.data.has_custom_normals:
+        bpy.ops.mesh.customdata_custom_splitnormals_clear()
+
+    obj.data.shade_smooth()
+    obj.data.set_sharp_from_angle(angle=math.radians(crease))
 
 
 def group(obj, name, weight, vertices=None):

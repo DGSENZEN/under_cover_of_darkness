@@ -17,6 +17,8 @@ import json
 import os
 import sys
 
+# No __pycache__ beside the tools (Blender would write one each run).
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bpy  # noqa: E402
@@ -127,7 +129,7 @@ def export_kind(recipe):
     messages = validate.check(outfit, armature=armature, reference_joints=reference_joints(recipe["body"]),
                               cloth_bones=[b for c in chains for b in c["bones"]],
                               images=[(albedo, (256, 256), True), (mask, (256, 256), False)],
-                              combined_tris=combined, budget=common.budget_of(kind))
+                              combined_tris=combined, budget=common.budget_of(kind), bare=set(recipe["bare"]))
 
     if messages:
         refuse(messages)

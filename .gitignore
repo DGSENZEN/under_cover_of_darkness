@@ -11,3 +11,6 @@
 
 # Wardrobe build backups (tools/wardrobe)
 assets/characters/wardrobe/source/backup/
+
+# Python bytecode (the wardrobe tools write none, but other runs may)
+__pycache__/

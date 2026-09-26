@@ -94,12 +94,20 @@ def paint(fabric, points, normals, base):
 
     mail = fabric == MAIL
     if mail.any():
+        # Rows of rings big enough to read at 128 px (a PS2 mail texture is
+        # bright ring tops over dark gaps, not true-size links).
         m = p[mail]
-        rings = lines(m[:, 2] * 1.0, 0.009, 0.0022) + lines(m[:, 0] + m[:, 1] * 0.5 + m[:, 2] * 0.5, 0.009, 0.0022)
-        shade[mail] = 0.78 + 0.34 * np.clip(rings, 0, 1) * (0.7 + 0.3 * noise(m, 200.0, 41)) - 0.1 * noise(m, 30.0, 42)
+        rows = lines(m[:, 2], 0.016, 0.004)
+        rings = lines(m[:, 0] + m[:, 1] + 0.5 * m[:, 2], 0.016, 0.004)
+        shade[mail] = 0.55 + 0.75 * np.clip(rings + rows, 0, 1) * (0.7 + 0.3 * noise(m, 200.0, 41)) - 0.1 * noise(m, 30.0, 42)
 
     iron = fabric == IRON
     if iron.any():
-        shade[iron] = 0.86 + 0.18 * fbm(p[iron], 16.0, 51)
+        # Painted shine: what faces up catches the light, what faces down
+        # goes dark (the PS2 had no specular to do it).
+        # Dark round the sides, a bright crown: iron shows the sky.
+        up = normals[iron][:, 2]
+        shine = np.clip((up - 0.35) / 0.6, 0.0, 1.0)
+        shade[iron] = (0.8 + 0.18 * fbm(p[iron], 16.0, 51)) * (0.6 + 2.8 * shine * shine)
 
     return base * shade[:, None]

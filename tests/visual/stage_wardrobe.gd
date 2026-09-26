@@ -99,10 +99,14 @@ func _guard(seed: int, at: Vector3) -> CharacterBody3D:
 	return g
 
 
-## The lineup at 8 m, one man turned round at 2 m, his face at 0.9 m.
+## The lineup at 8 m, the painted watchman beside a wardrobe one, one man
+## turned round at 2 m, and his face from under his brim.
 func _shoot_set(label: String) -> void:
 	var row := []
 	await _shot("%s_lineup" % label, Vector3(0, 1.45, 8.0), Vector3(0, 1.0, 0), row)
+	# The old painted watchman beside a wardrobe one, both whole.
+	var pair := (guards[0].position.x + guards[1].position.x) * 0.5
+	await _shot("%s_before_after" % label, Vector3(pair, 1.35, 3.2), Vector3(pair, 1.0, 0), row)
 	var him := guards[1]
 	var x := him.position.x
 
@@ -113,8 +117,20 @@ func _shoot_set(label: String) -> void:
 
 	him.rotation.y = PI
 	await _frames(2)
-	await _shot("%s_face" % label, Vector3(x, 1.68, 0.95), Vector3(x, 1.6, 0), row)
+	# His face as his pose holds it, from a little below: under the brim.
+	var head := _head(him)
+	await _shot("%s_face" % label, head + Vector3(0, -0.16, 0.7), head, row)
 	shots.append(row)
+
+
+func _head(guard: Node) -> Vector3:
+	var skeleton: Skeleton3D = guard._rig.man.skeleton
+	var bone := skeleton.find_bone("Head")
+
+	if bone < 0:
+		return guard.global_position + Vector3(0, 1.62, 0)
+
+	return (skeleton.global_transform * skeleton.get_bone_global_pose(bone)).origin + Vector3(0, 0.06, 0)
 
 
 func _shot(shot_name: String, from: Vector3, at: Vector3, row: Array) -> void:

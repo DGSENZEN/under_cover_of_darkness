@@ -39,6 +39,7 @@ func _run() -> void:
 	await _k3a()
 	_k10a()
 	_k2a()
+	_k13()
 	await _k3()
 	await _k1_k2_k10()
 	await _cloth()
@@ -283,6 +284,42 @@ func _k2a() -> void:
 	var tris := int(Wardrobe.kind_data(&"watchman").get("triangles", 99999)) + int(Wardrobe.head_data(&"weathered").get("triangles", 99999)) \
 		+ int(Wardrobe.headgear_data(&"kettlehat").get("triangles", 99999)) + int(Wardrobe.headgear_data(&"coif").get("triangles", 99999))
 	_check("K2a baked parts: 256/128 textures, at most 64 colours, at most 3,000 triangles", ok and tris <= 3000, "%s tris %d" % [why, tris])
+
+
+## The coif's hood ends here (recipes.HEADGEAR.coif.cape.top_z); below it,
+## its cape.
+const CAPE_TOP := 1.575
+
+
+func _k13() -> void:
+	# K13 the cape rides his neck, chest and collarbones: weighed on his head
+	# or his arms, it swings into his gambeson when he looks round or lowers
+	# his arms
+	var scene: Node = (load(Wardrobe.ROOT + "headgear/coif.glb") as PackedScene).instantiate()
+	var mi: MeshInstance3D = scene.find_children("*", "MeshInstance3D", true, false)[0]
+	var arrays := mi.mesh.surface_get_arrays(0)
+	var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+	var per := bones.size() / maxi(points.size(), 1)
+	var wrong := {}
+	var cape := 0
+
+	for v in range(points.size()):
+		if points[v].y >= CAPE_TOP:
+			continue
+
+		cape += 1
+
+		for k in range(per):
+			var bone := String(mi.skin.get_bind_name(bones[v * per + k]))
+
+			if weights[v * per + k] > 0.0 and (bone == "Head" or bone.begins_with("upperarm")):
+				wrong[bone] = int(wrong.get(bone, 0)) + 1
+
+	scene.free()
+	_check("K13 the coif's cape rides his neck, chest and collarbones, not his head or arms", cape > 0 and wrong.is_empty(),
+		"cape vertices %d, on the wrong bones %s" % [cape, wrong])
 
 
 func _colour_count(img: Image) -> int:

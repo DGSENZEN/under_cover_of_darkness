@@ -15,6 +15,8 @@ import tempfile
 import bpy
 import numpy as np
 
+# No __pycache__ beside the tools (Blender would write one each run).
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import common  # noqa: E402
@@ -60,6 +62,7 @@ def grid(name, tris, z=0.0, part=None, thickness=0.0):
     faces = faces[:tris] if tris >= 2 else faces[:1]
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(verts, [], faces)
+    mesh.shade_smooth()
     mesh.update()
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.scene.collection.objects.link(obj)
@@ -126,7 +129,7 @@ def clean(**overrides):
     mesh = grid("Part", 20)
     args = dict(armature=arm, reference_joints=reference, cloth_bones=(),
                 images=[(texture("albedo", (256, 256), 40), (256, 256), True)],
-                palette=64, combined_tris=None, budget=3000)
+                palette=64, combined_tris=None, budget=3000, bare={"head"})
     return mesh, arm, args
 
 
@@ -202,6 +205,30 @@ def case_hidden():
     return validate.check(part, **args)
 
 
+def case_bare():
+    """Bare skin on his pelvis, where only his head may show: a hole in
+    whatever should cover him there."""
+    mesh, _, args = clean()
+    bpy.data.objects.remove(mesh)
+    body = grid("Body", 2, z=0.0, part=0, thickness=0.0)
+    body.data.attributes.new("wr_fabric", "INT", "FACE")
+    return validate.check(body, **args)
+
+
+def case_flat():
+    """A face drawn flat: PS2 characters are drawn smooth."""
+    mesh, _, args = clean()
+    mesh.data.polygons[0].use_smooth = False
+    return validate.check(mesh, **args)
+
+
+def case_normals():
+    """Normals set by hand: the imported body's, stale once it is cut."""
+    mesh, _, args = clean()
+    mesh.data.normals_split_custom_set([(0.0, 1.0, 0.0)] * len(mesh.data.loops))
+    return validate.check(mesh, **args)
+
+
 def case_colour():
     """The recipes' colours are sRGB: a part's base colour is stored so the
     bake reads its linear value (not the sRGB number, a gamma step lighter)."""
@@ -224,6 +251,9 @@ CASES = {
     "palette": (case_palette, "palette:"),
     "joint": (case_joint, "joint:"),
     "hidden": (case_hidden, "hidden:"),
+    "bare": (case_bare, "bare:"),
+    "flat": (case_flat, "shading:"),
+    "normals": (case_normals, "shading:"),
     "colour": (case_colour, None),
 }
 
