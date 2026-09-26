@@ -1139,8 +1139,8 @@ func dress(kind: StringName, seed: int, fighting_idle: StringName = &"Sword_Idle
 		return false
 
 	var data := WardrobeScript.kind_data(kind)
-	var options := WardrobeScript.usable_options(data.get("options", {}))
 	var body_kind := String(data.get("body", "male"))
+	var options := WardrobeScript.usable_options(data.get("options", {}), body_kind)
 	build(&"", body_kind == "female", fighting_idle)
 
 	# The base character's own meshes go: his outfit, head and gear are it.

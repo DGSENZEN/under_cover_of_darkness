@@ -365,6 +365,23 @@ HEADS = {
         "brows": (0.62, 0.60, 0.57),
         "tones": TONES,
     },
+    # The duelist's face, on the female head (her face sits 4.2 cm under a
+    # man's and 0.5 cm further back): cheekbones higher and fuller, the jaw
+    # narrower at its sides, a straighter nose; no stubble, a little wear,
+    # a thin scar through her left brow.
+    "sharp": {
+        "body": "female",
+        "tris": 340,
+        "shape": [
+            {"at": (0.05, -0.063, 1.63), "radius": 0.025, "move": (0.002, -0.002, 0.004)},
+            {"at": (0.05, -0.045, 1.558), "radius": 0.03, "move": (-0.004, 0.0, 0.0)},
+            {"at": (0.0, -0.1, 1.633), "radius": 0.015, "along_normal": 0.002},
+        ],
+        "eyes": 0.85,
+        "grit": {"stubble": 0.0, "bags": 0.3, "lines": 0.3, "scar": "brow"},
+        "brows": (0.14, 0.10, 0.08),
+        "tones": TONES,
+    },
 }
 
 
@@ -456,6 +473,12 @@ HAIR = {
     "parted": {"from": "assets/characters/hair/Hair_SimpleParted.gltf", "body": "male", "kind": "hair", "tris": 180,
                "clearance": 0.004,
                "fit_rays": CROWN},
+    # The brute's shaved head: a shell close over the scalp.
+    "buzzed": {"from": "assets/characters/hair/Hair_Buzzed.gltf", "body": "male", "kind": "hair", "tris": 120,
+               "clearance": 0.002, "fit_rays": CROWN},
+    # The duelist's hair up.
+    "buns": {"from": "assets/characters/hair/Hair_Buns.gltf", "body": "female", "kind": "hair", "tris": 200,
+             "clearance": 0.004, "fit_rays": CROWN},
     "full": {"from": "assets/characters/hair/Hair_Beard.gltf", "body": "male", "kind": "beard", "tris": 120,
              "clearance": 0.003,
              "fit_rays": JAW},

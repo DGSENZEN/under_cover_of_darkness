@@ -266,7 +266,7 @@ static func can_dress(kind: StringName) -> bool:
 
 	if ok:
 		var wanted: Array = kind_data(kind).get("options", {}).get("headgear", [])
-		var options := usable_options(kind_data(kind).get("options", {}))
+		var options := usable_options(kind_data(kind).get("options", {}), String(kind_data(kind).get("body", "male")))
 		# Bare-headed by design ([] or [[]]) dresses; a kind whose every
 		# headgear set is missing does not (its silhouette would be gone),
 		# nor one whose every hair style, or every beard, is.
@@ -285,8 +285,10 @@ static func can_dress(kind: StringName) -> bool:
 
 
 ## `options` without the faces, headgear sets, hair or beards whose files
-## are missing, each dropped with a warning.
-static func usable_options(options: Dictionary) -> Dictionary:
+## are missing, or (faces, hair, beards) made for another body than `body`
+## (on this skeleton they would sit at the other body's head height), each
+## dropped with a warning.
+static func usable_options(options: Dictionary, body := "male") -> Dictionary:
 	var kept := options.duplicate(true)
 	var faces := []
 
@@ -296,10 +298,12 @@ static func usable_options(options: Dictionary) -> Dictionary:
 		for tone in options.get("tones", []):
 			files.append(ROOT + "heads/%s_%s.png" % [face, tone])
 
-		if files.all(func(path): return ResourceLoader.exists(path)) and not head_data(StringName(face)).is_empty():
-			faces.append(StringName(face))
-		else:
+		if not files.all(func(path): return ResourceLoader.exists(path)) or head_data(StringName(face)).is_empty():
 			_warn_once("face %s" % face)
+		elif String(head_data(StringName(face)).get("body", "male")) != body:
+			_warn_once("face %s" % face, "is made for the %s body, not the %s" % [head_data(StringName(face)).get("body"), body])
+		else:
+			faces.append(StringName(face))
 
 	var sets := []
 
@@ -323,10 +327,12 @@ static func usable_options(options: Dictionary) -> Dictionary:
 		for style in options.get(key, []):
 			var files := [ROOT + "hair/%s.glb" % style, ROOT + "hair/%s.png" % style, ROOT + "hair/%s_mask.png" % style]
 
-			if files.all(func(path): return ResourceLoader.exists(path)) and not hair_data(StringName(style)).is_empty():
-				styles.append(StringName(style))
-			else:
+			if not files.all(func(path): return ResourceLoader.exists(path)) or hair_data(StringName(style)).is_empty():
 				_warn_once("hair %s" % style)
+			elif String(hair_data(StringName(style)).get("body", "male")) != body:
+				_warn_once("hair %s" % style, "is made for the %s body, not the %s" % [hair_data(StringName(style)).get("body"), body])
+			else:
+				styles.append(StringName(style))
 
 		kept[key] = styles
 
@@ -338,10 +344,10 @@ static func _piece_ready(piece: StringName) -> bool:
 		and not headgear_data(piece).is_empty()
 
 
-static func _warn_once(what: String) -> void:
+static func _warn_once(what: String, why := "has missing files") -> void:
 	if not _warned.has(what):
 		_warned[what] = true
-		push_warning("Wardrobe: %s has missing files; dropped" % what)
+		push_warning("Wardrobe: %s %s; dropped" % [what, why])
 
 
 ## The mesh of the part at `path` (a GLB) and its skin, re-bound to

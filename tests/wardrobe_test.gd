@@ -888,6 +888,22 @@ func _dressed() -> void:
 	_check("K24 a kind whose hair or beards are all missing is painted, as one without its headgear", not fallen.values().has(false),
 		str(fallen))
 
+	# K26 a kind never wears a face or hair made for the other body (the
+	# watchman, doctored with the duelist's beside his own; with only hers
+	# he would have no hair to wear and be painted, K24): on his skeleton it
+	# would sit at her head's height
+	_doctor(&"watchman", {"faces": ["weathered", "sharp"], "hair": ["buns", "buzzed"], "headgear": [[]]})
+	var mixed := []
+
+	for s in range(1, 9):
+		var man_of_seed := await _guard(s)
+		mixed.append_array(_worn_names(man_of_seed._rig.man))
+		man_of_seed.queue_free()
+
+	Wardrobe.forget()
+	_check("K26 a kind never wears a face or hair of the other body", "Head_weathered" in mixed
+		and not ("Head_sharp" in mixed) and not ("Hair_buns" in mixed), str(mixed))
+
 	# K25 a hair file with no skinned mesh (a broken export; Wardrobe.skinned
 	# remembers it so) is left off: the rest of him still dresses, his beard
 	# and his cloth (the arms master)

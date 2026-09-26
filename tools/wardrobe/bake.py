@@ -598,7 +598,7 @@ def bake_heads():
             skin.pixels.foreach_set(toned.ravel())
             skin.update()
             albedo = skin_from(low, sources, size)
-            albedo = weather(albedo, passes, recipe["grit"]) * passes["covered"][..., None]
+            albedo = weather(albedo, passes, recipe["grit"], recipe.get("body", "male")) * passes["covered"][..., None]
             lit = light(albedo, passes)
             finish(lit, passes["covered"], str(common.WARDROBE / "heads" / ("%s_%s.png" % (face, tone))))
 
@@ -671,10 +671,17 @@ def skin_from(low, sources, size):
     return pixels.reshape(size, size, 4)[..., :3].astype(np.float64)
 
 
-def weather(albedo, passes, grit):
-    """A hard life on his face: stubble, bags under the eyes, lines on the
-    brow, a scar, and duller eyes (positions are the Quaternius head's)."""
-    p = passes["position"]
+# Where a body's face sits against the male head's, whose positions
+# weather() holds: the female head's features are 4.2 cm lower and 0.5 cm
+# further back (measured at the eyes, nose and crown).
+FACE_SHIFT = {"male": (0.0, 0.0, 0.0), "female": (0.0, 0.005, -0.042)}
+
+
+def weather(albedo, passes, grit, body="male"):
+    """A hard life on a face: stubble, bags under the eyes, lines on the
+    brow, a scar, and duller eyes (positions are the Quaternius male head's;
+    another body's face is moved onto them first, FACE_SHIFT)."""
+    p = passes["position"] - np.array(FACE_SHIFT[body])
     n = passes["normal"]
     ax = np.abs(p[..., 0])
     flat = p.reshape(-1, 3)
@@ -705,6 +712,14 @@ def weather(albedo, passes, grit):
         t = np.clip(((p - a) @ (b - a)) / ((b - a) @ (b - a)), 0.0, 1.0)
         distance = np.linalg.norm(p - (a + t[..., None] * (b - a)), axis=-1)
         scar = np.clip(1.0 - distance / 0.0022, 0.0, 1.0) * (p[..., 0] > 0)
+        out = out * (1.0 - scar[..., None]) + (out * np.array([1.25, 1.1, 1.08])) * scar[..., None]
+
+    # A thin scar down through her (his) left brow, into the lid.
+    if grit.get("scar") == "brow":
+        a, b = np.array([0.033, -0.084, 1.73]), np.array([0.041, -0.079, 1.702])
+        t = np.clip(((p - a) @ (b - a)) / ((b - a) @ (b - a)), 0.0, 1.0)
+        distance = np.linalg.norm(p - (a + t[..., None] * (b - a)), axis=-1)
+        scar = np.clip(1.0 - distance / 0.0018, 0.0, 1.0) * (p[..., 0] > 0)
         out = out * (1.0 - scar[..., None]) + (out * np.array([1.25, 1.1, 1.08])) * scar[..., None]
 
     return out

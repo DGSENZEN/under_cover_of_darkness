@@ -1889,8 +1889,10 @@ def build_hair(force, body="male"):
         bm = bmesh.new()
         bm.from_mesh(obj.data)
         tree = BVHTree.FromBMesh(bm)
-        # The head it covers: every head vertex it lies over.
-        under = [p for p in heads if tree.ray_cast(centre, (p - centre).normalized(), 0.4)[0] is not None]
+        # The head it covers: every head vertex it lies over, and where
+        # check.fit's rays (its `fit_rays`) meet the heads under it.
+        under = [p for p in heads + head_rays(body, centre, h.get("fit_rays") or CROWN_RAYS)
+                 if tree.ray_cast(centre, (p - centre).normalized(), 0.4)[0] is not None]
         # A little over `clearance`, measured as check.fit measures: from
         # inside out, its underside.
         enclose(bm, under, centre, h["clearance"] + 0.001, from_inside=True)
@@ -1912,6 +1914,41 @@ def build_hair(force, body="male"):
 
 # The grey hair is baked in (the game tints it: its JSON's dye_base).
 HAIR_GREY = (0.5, 0.5, 0.5)
+# check.fit's rays when a piece names none: over his crown.
+CROWN_RAYS = {"elevations": [25, 45, 65, 85], "azimuths": list(range(0, 360, 30))}
+
+
+def head_rays(body, centre, rays):
+    """Where rays out from the middle of the head (check.fit's: `rays`,
+    elevations and azimuths in degrees) meet each head of `body`: where a
+    piece over them must clear them, measured as the check measures (between
+    a head's vertices a coarse piece can sag nearer than at them)."""
+    path = common.SOURCE / ("%s.blend" % common.part_target("heads", body))
+
+    if not path.exists():
+        return []
+
+    with bpy.data.libraries.load(str(path)) as (source, target):
+        target.objects = [name for name in source.objects if name.startswith("Head_")]
+
+    found = []
+
+    for obj in [o for o in target.objects if o is not None and o.type == "MESH"]:
+        tree = common.bvh([obj])
+
+        for elevation in rays["elevations"]:
+            for azimuth in rays["azimuths"]:
+                e, a = math.radians(elevation), math.radians(azimuth)
+                hit = tree.ray_cast(centre, Vector((math.cos(e) * math.sin(a), -math.cos(e) * math.cos(a), math.sin(e))), 0.5)[0]
+
+                if hit is not None:
+                    found.append(hit)
+
+        mesh = obj.data
+        bpy.data.objects.remove(obj)
+        bpy.data.meshes.remove(mesh)
+
+    return found
 
 
 def head_points(body="male"):
