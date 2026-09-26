@@ -103,7 +103,8 @@ Data flow:
   the controller calls `body_motion.step(...)` with the real velocity, the facing, whether
   it is grounded, whether it is in plain locomotion, the stance, sprinting, the gait (the
   same step count that times the footstep sounds) and the lean.
-- Events arrive as they happen: `on_jump()`, `on_land(fall_speed)`, `on_crouch(down)`.
+- Events arrive as they happen: `on_jump()` and `on_land(fall_speed)`. Crouching needs no
+  event: the tick input carries the gameplay eye's height and where it is going.
 - The simulation runs on the fixed tick, so it is deterministic and a long frame cannot
   throw it. Its outputs are kept for the last two ticks and drawn between them, the way the
   body and the combat hand poses already are.
@@ -218,24 +219,33 @@ the world.
 `scripts/PlayerUtils/BodyMotion.gd`:
 
 ```
+class Frame:            # one tick of what the body feels, filled by the controller
+    velocity: Vector3, facing: Basis, grounded, locomotion, crouched: bool,
+    gait: float, lean: float,
+    eye_drop: float          # the gameplay eye's current drop below standing (m)
+    eye_target_drop: float   # where the gameplay eye is going (0 standing, 0.8 crouched)
+    walk_speed, sprint_speed: float
 var intensity := 1.0
-func setup(footfall_curve: Curve) -> void
-func step(delta, velocity: Vector3, facing: Basis, grounded: bool, locomotion: bool,
-          crouched: bool, sprinting: bool, gait: float, lean: float) -> void
+func setup(footfall_curve: Curve, eye_rate: float) -> void   # eye_rate = view_height_speed
+func step(delta: float, frame: Frame) -> void
 func on_jump() -> void
 func on_land(fall_speed: float) -> void
-func on_crouch(down: bool) -> void
 func reset() -> void
 func head_offset(fraction: float) -> Transform3D      # eye space, drawn between ticks
 func shoulder_offset(fraction: float) -> Transform3D  # camera space, relative to the head
 func sprint_lean() -> float                           # 0..1
+static func default_footfall() -> Curve
 ```
 
+The knee bend needs no crouch event: the body follows the gameplay eye's target with its
+own spring (starting at the gameplay ease's speed, so it is never slower) and outputs the
+difference, which passes the target a little and settles.
+
 `PlayerController`: `body_motion`, `legacy_feel`, `footfall_curve`, the new Locomotion
-exports; `step` after the state update in `_physics_process`; events from
-`_try_buffered_jump`, the landing block and `_set_crouched` (the old `juice.on_*` and
-`hand.land/jump` calls stay only on the old path); `_update_view` hands the head offset to
-`CameraJuice` each frame; F10 in `_unhandled_input`.
+exports; `step` at the end of every `_physics_process` (dead included); events from
+`_try_buffered_jump` and the landing block (the old `juice.on_*` and `hand.land/jump`
+calls, and `juice.on_crouch`, stay only on the old path); `_update_view` hands the head
+offset to `CameraJuice` each frame; F10 in `_unhandled_input`.
 
 `CameraJuice`: `locomotion_from_body` (default false, so standalone uses such as the sturdy
 suite keep today's behaviour) and `body_head`. When `locomotion_from_body` is true, the bob,
@@ -267,10 +277,11 @@ to fail before the code that satisfies it:
 | Y12 | Hands: the shoulders bottom out after the head on a footfall; on a landing the hands drop further than the view |
 | Y13 | A 250 ms step does not throw the body past its caps |
 | Y14 | At two frames per tick the head offset is drawn evenly between ticks |
-| Y15 | Crouch and stand: a dip past the crouched height and a rise past standing, both settled within 0.4 s |
+| Y15 | Crouch and stand: the view never trails the gameplay eye, passes the crouched height going down and the standing height coming up by 0.2 to 2 cm, and settles within 0.6 s |
 | Y16 | Lean: a small dip at full lean that settles; the gameplay lean is unchanged |
 | Y17 | Gameplay untouched: aim transform, sight points and the frob eye match between old and new at the same body state |
 | Y18 | F10: switching both ways works without errors, and the old path still gives the old results |
+| Y19 | A teleport while walking, a shove during a hit-stop, and `camera_feel` at its maximum of 2 never throw the head or shoulders past their caps |
 
 Existing suites stay green. The sound suite's "bob lowest on each footstep" check runs with
 `legacy_feel` on until the old path is deleted; Y2 covers the new path. The traversal stair
