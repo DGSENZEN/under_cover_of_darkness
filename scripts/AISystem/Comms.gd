@@ -12,7 +12,10 @@ extends RefCounted
 ##   noise    "Did you hear that?"  a man at his ease heard something: he goes
 ##            to look, and whoever hears him covers him from where he stands.
 ##   clear    "Nothing. Rats, likely."  the men covering him stand easy.
-##   alarm    the bell (AlarmBell.gd): every man who hears it comes.
+##   look     "Osric! Something by the well! Go and look!"  a man set to watch
+##            sends the friend he names; the others keep an eye that way.
+##   alarm    the bell (AlarmBell.gd): every man who hears it comes. A man set
+##            to watch whose friend went to look and went quiet calls it too.
 ## A place is named by a landmark near it if the level has one (a node in the
 ## "landmarks" group: its "landmark" meta, else its name), up high or down
 ## below, or the way it lies from the man calling it.
@@ -34,6 +37,8 @@ const SPOTTED := ["There! %s!", "He's %s!", "Over here! %s!", "I see him! %s!"]
 const LOST := ["Lost him! He went %s!", "He's gone %s!", "He slipped away %s!"]
 const LOST_HERE := ["Lost him!", "Where'd he go?", "He's gone again!"]
 const DANGER := ["Powder! Get back!", "It's going to blow! Move!", "Barrel! Get clear!"]
+## Sending a man to look: his name, then the place.
+const SEND := ["%s! Something %s! Go and look!", "%s! Movement %s! Have a look!", "%s! I saw something %s! Go and see!"]
 
 static var _serial := 0
 
@@ -149,6 +154,11 @@ static func lost_line(where: Vector3, heading: Vector3, from: Node3D) -> String:
 
 static func danger_line() -> String:
 	return DANGER[randi() % DANGER.size()]
+
+
+## What a man at his post calls down to `name`, to send him to look at `where`.
+static func send_line(where: Vector3, from: Node3D, name: String) -> String:
+	return SEND[randi() % SEND.size()] % [name if name != "" else "You", place(where, from)]
 
 
 ## "There! by the well!" reads "There! By the well!".

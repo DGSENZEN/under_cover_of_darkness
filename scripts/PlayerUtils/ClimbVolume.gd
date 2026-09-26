@@ -21,6 +21,8 @@ extends Area3D
 
 
 func _ready() -> void:
+	# Guards find ladders and ropes to climb by it (NavLinks).
+	add_to_group(&"climb_volumes")
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
 

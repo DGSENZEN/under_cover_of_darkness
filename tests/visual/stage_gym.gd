@@ -22,11 +22,11 @@ func _ready() -> void:
 	gym.player.invulnerable = true
 	await _frames(30)
 
-	# From above: the whole place.
+	# From above: the whole place, north to the right.
 	var above := Camera3D.new()
 	add_child(above)
-	above.global_position = Vector3(0, 70, -30)
-	above.rotation_degrees = Vector3(-90, 0, 0)
+	above.global_position = Vector3(0, 64, -26)
+	above.rotation_degrees = Vector3(-90, 90, 0)
 	above.fov = 70
 	above.current = true
 	await _shot("a_overview")
@@ -48,6 +48,36 @@ func _ready() -> void:
 	gym.player.reset_physics_interpolation()
 	await _frames(20)
 	await _shot("j_guardhouse_dark")
+
+	# Bay 10: in at its mouth; then up on the tower, and in the pool, with
+	# them coming after you.
+	gym._start_bay(9)
+	await _frames(40)
+	await _shot("k_climb_swim")
+	var side := Camera3D.new()
+	add_child(side)
+	# From the side: what they think and say would hide them.
+	gym._labels_on = false
+	gym._panel.visible = false
+	gym._log.visible = false
+
+	for spec in [[Vector3(11, 4.6, -95), Vector3(3.0, 3.2, -84.5), Vector3(11, 2.2, -93.5), 270, "l_climb_swim_tower"],
+			[Vector3(-8, -0.8, -88), Vector3(-2.0, 2.4, -82.0), Vector3(-8, -0.8, -88.5), 200, "m_climb_swim_pool"]]:
+		gym._start_bay(9)
+		await _frames(2)
+		gym.player.global_position = spec[0]
+		gym.player.velocity = Vector3.ZERO
+		gym.player.reset_physics_interpolation()
+		await _frames(1)
+
+		for g in gym._bay_guards[9]:
+			g._engage(gym.player)
+
+		side.global_position = spec[1]
+		side.look_at(spec[2])
+		side.current = true
+		await _frames(spec[3])
+		await _shot(spec[4])
 
 	get_tree().quit()
 

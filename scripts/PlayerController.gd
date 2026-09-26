@@ -6,6 +6,10 @@ extends CharacterBody3D
 ##             over an edge, or reaching for a hang. Position driven, no input.
 ## HANGING     holding a ledge. Shimmy, peek, pull up or drop.
 ## CLIMBING    attached to a ClimbVolume (ladder, vines). Velocity driven, no gravity.
+## SWIMMING    in water too deep to stand in (WaterVolume): afloat with the eyes
+##             over the surface, swimming the way you face, diving (crouch) and
+##             coming up (jump); jump at a bank low enough to climb out.
+##             Shallower water is waded: slower, and every step splashes.
 ##
 ## The traversal pipeline is: scan -> classify -> generate -> play.
 ## See scripts/PlayerUtils for each stage.
@@ -24,6 +28,7 @@ const GemEnvironment := preload("res://scripts/Visual/GemEnvironment.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const BodyMotionScript := preload("res://scripts/PlayerUtils/BodyMotion.gd")
+const WaterScript := preload("res://scripts/Interaction/WaterVolume.gd")
 
 ## The old feel's strides (legacy_feel): four steps a second at a walk.
 const LEGACY_STRIDE_WALK := 1.6
@@ -37,6 +42,7 @@ enum MoveState {
 	MOVING,
 	HANGING,
 	CLIMBING,
+	SWIMMING,
 }
 
 
@@ -81,6 +87,24 @@ enum MoveState {
 
 @export var coyote_time := 0.12
 @export var jump_buffer_time := 0.15
+
+
+@export_category("Water")
+## Swimming, and with sprint held; diving and coming up (m/s).
+@export var swim_speed := 3.0
+@export var swim_sprint_speed := 4.2
+@export var dive_speed := 2.2
+@export var swim_acceleration := 6.0
+## Afloat, the eyes this far over the surface.
+@export var float_eye := 0.12
+## Chest-deep and nothing to stand on (m of water over the feet): swimming.
+@export var swim_start_depth := 1.1
+## A stroke heard at the surface (dB), and under it. (Wading, each step is
+## as loud as on "water" in surface_db.)
+@export var swim_db := 46.0
+@export var swim_under_db := 30.0
+## Wading, at waist deep, this much of your speed.
+@export_range(0.1, 1.0, 0.05) var wade_speed_scale := 0.6
 
 
 @export_category("Stairs")
@@ -247,6 +271,7 @@ enum MoveState {
 	"stone": 0.0,
 	"tile": 4.0,
 	"metal": 8.0,
+	"water": 6.0,
 }
 
 
@@ -336,6 +361,9 @@ var _pending_drop_target := {}
 
 var current_climb: Area3D = null
 var climb_volumes: Array[Area3D] = []
+## The water you are in (WaterVolume), or null; the stroke count swimming.
+var water: Area3D = null
+var _strokes := 0.0
 
 ## Distance along a simulated rope where the hands are, or -1.
 var rope_param := -1.0
@@ -638,6 +666,7 @@ func _physics_process(delta: float) -> void:
 	_update_timers(delta)
 	_recover(delta)
 	_sync_scanner()
+	_update_water()
 
 	# A shove is spent on the ground; a climb or a hang ends it, rather than
 	# leaving it to push when the move is over.
@@ -651,6 +680,8 @@ func _physics_process(delta: float) -> void:
 			_update_hang(delta)
 		MoveState.CLIMBING:
 			_update_climb(delta)
+		MoveState.SWIMMING:
+			_update_swim(delta)
 		_:
 			_update_locomotion(delta)
 
@@ -977,6 +1008,9 @@ func _apply_horizontal_movement(
 	# A raised guard, a charged blow or a drawn bow: slower, and no sprinting.
 	target_speed *= fighting_scale
 
+	# Wading: the deeper, the slower.
+	target_speed *= wade_scale()
+
 	# Shoved (a dodge, a kick, a blast): carried along, easing off.
 	if _shove_time > 0.0:
 		var k := _shove_time / maxf(_shove_length, 0.001)
@@ -1119,6 +1153,11 @@ func get_exposure() -> float:
 	var speed := maxf(Vector3(velocity.x, 0.0, velocity.z).length(), _motion_speed)
 	var moving := clampf(speed / maxf(walk_speed, 0.01), 0.0, 1.3)
 	var stance := crouch_exposure if is_crouched else 1.0
+
+	# Afloat, only your head is out of the water; under it, you are murk.
+	if movement_state == MoveState.SWIMMING and water != null:
+		stance = float(water.clarity) if is_underwater() else 0.6
+
 	return clampf(light * stance * (1.0 + motion_exposure * moving), 0.0, 1.0)
 
 
@@ -1206,6 +1245,11 @@ func _surface_offset() -> float:
 ## or "" when it does not say.
 func _surface_name() -> String:
 	var feet := global_position - Vector3.UP * _standing_height * 0.5
+
+	# In water over the ankles, it is water you step in.
+	if water != null and water.depth_of(feet) > 0.1:
+		return "water"
+
 	var under := scanner.ray(feet + Vector3.UP * 0.2, feet - Vector3.UP * 0.4)
 
 	if under.is_empty():
@@ -2508,6 +2552,119 @@ func remove_climb_volume(volume: Area3D) -> void:
 
 func _is_carrying() -> bool:
 	return frob != null and frob.is_carrying()
+
+
+# ---------------------------------------------------------------------------
+# SWIMMING
+# ---------------------------------------------------------------------------
+
+## Into the water, out of it: chest deep with nothing to stand on, you swim;
+## where you can stand again, you wade.
+func _update_water() -> void:
+	var feet := get_feet_position()
+	water = WaterScript.at(get_tree(), feet + Vector3.UP * 0.05, 0.3)
+
+	if water == null:
+		if movement_state == MoveState.SWIMMING:
+			_leave_swim()
+
+		return
+
+	match movement_state:
+		MoveState.LOCOMOTION:
+			if water.depth_of(feet) > swim_start_depth and water.deep_at(feet):
+				_enter_swim()
+		MoveState.SWIMMING:
+			if not water.deep_at(feet) and water.depth_of(feet) < swim_start_depth + 0.3:
+				_leave_swim()
+
+
+func _enter_swim() -> void:
+	movement_state = MoveState.SWIMMING
+	_clear_ground_state()
+	current_climb = null
+
+	if is_crouched:
+		_set_crouched(false)
+
+	# Nothing held swims with you.
+	if frob != null:
+		frob.drop_held()
+
+	# The water takes the fall out of you.
+	velocity.y *= 0.3
+	_strokes = 0.0
+
+
+func _leave_swim() -> void:
+	movement_state = MoveState.LOCOMOTION
+	_floor_valid = false
+
+
+## The eyes are under the surface.
+func is_underwater() -> bool:
+	return water != null and global_position.y + _neck_base_y < water.surface_y() - 0.05
+
+
+## Wading: the share of your speed the water leaves you (1 out of it).
+func wade_scale() -> float:
+	if water == null or movement_state != MoveState.LOCOMOTION:
+		return 1.0
+
+	var deep := clampf(water.depth_of(get_feet_position()) / swim_start_depth, 0.0, 1.0)
+	return lerpf(1.0, wade_speed_scale, deep)
+
+
+## Afloat: the way you face, as fast as you can swim; down while you hold
+## crouch, up while you hold jump, and left alone you float up until your eyes
+## are over the surface. Jump at a bank low enough, and you climb out.
+func _update_swim(delta: float) -> void:
+	var afloat_y: float = water.surface_y() + float_eye - _neck_stand_y
+	var wish := _wish_direction()
+	var facing := _facing_direction()
+	var speed := swim_sprint_speed if Input.is_action_pressed("sprint") else swim_speed
+	var flat := Vector3(velocity.x, 0.0, velocity.z).move_toward(wish * speed, swim_acceleration * delta)
+	var at_top := global_position.y > afloat_y - 0.3
+
+	# Out onto a bank: at it, pushing toward it, and jump.
+	if at_top and Input.is_action_just_pressed("jump") and wish.dot(facing) > min_forward_input and not _is_carrying():
+		cached_profile = scanner.scan(facing, velocity, true)
+
+		if cached_profile != null and _try_traversal(cached_profile):
+			return
+
+	var want := clampf((afloat_y - global_position.y) * 3.0, -1.0, 0.9)
+
+	if Input.is_action_pressed("crouch"):
+		want = -dive_speed
+	elif Input.is_action_pressed("jump") and global_position.y < afloat_y - 0.05:
+		want = dive_speed
+
+	velocity.x = flat.x
+	velocity.z = flat.z
+	velocity.y = move_toward(velocity.y, want, 9.0 * delta)
+	floor_snap_length = 0.0
+	move_and_slide()
+	_swim_sounds(at_top)
+
+
+## A stroke every metre and a half or so: heard at the surface, hardly at
+## all under it.
+func _swim_sounds(at_top: bool) -> void:
+	var speed := Vector3(velocity.x, 0.0, velocity.z).length()
+
+	if speed < 0.4:
+		return
+
+	_strokes += speed * get_physics_process_delta_time() / 1.5
+
+	if _strokes < 1.0:
+		return
+
+	_strokes -= 1.0
+	var db := swim_db if at_top else swim_under_db
+	_make_noise(db, &"swim")
+	Sfx.play_flat(self, Sfx.step("water", speed > swim_speed + 0.3), Sfx.loudness(db))
 
 
 ## Pushes the body along `push` (m/s, horizontal) for `seconds`, easing off:

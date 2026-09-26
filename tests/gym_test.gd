@@ -99,6 +99,36 @@ func _run() -> void:
 	gym._forget()
 	_check("G7 starting a bay keeps what the garrison knows; F5 makes it forget", kept and GarrisonScript.of(gym.player).dread == 0.0, "kept %s" % kept)
 
+	# G8 bay 10: up the ladder onto the tower after you, and into the pool.
+	# (Lit: headless, the lightgem reads nothing.)
+	gym.player.light_gem = null
+	gym.player.debug_light_level = 1.0
+	var up := false
+	var swum := false
+
+	for spot in [Vector3(11, 4.6, -95), Vector3(-8, -0.8, -88)]:
+		gym._start_bay(9)
+		await _frames(2)
+		gym.player.global_position = spot
+		gym.player.velocity = Vector3.ZERO
+		gym.player.reset_physics_interpolation()
+		await _frames(1)
+
+		for g in gym._bay_guards[9]:
+			g._engage(gym.player)
+
+		for i in 600:
+			await get_tree().physics_frame
+
+			for g in gym._bay_guards[9]:
+				up = up or (spot.y > 0.0 and g.global_position.y > 3.3 and g.global_position.distance_to(Vector3(11, 3.5, -95)) < 2.0)
+				swum = swum or (spot.y < 0.0 and g.activity() == &"swim")
+
+			if (spot.y > 0.0 and up) or (spot.y < 0.0 and swum):
+				break
+
+	_check("G8 bay 10: they climb the ladder onto the tower after you, and swim after you", up and swum, "up %s swum %s" % [up, swum])
+
 
 func _frames(n: int) -> void:
 	for i in n:

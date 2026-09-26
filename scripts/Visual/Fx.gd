@@ -922,6 +922,10 @@ func _dust(at: Vector3, normal: Vector3, amount: float, surface: String) -> void
 		"carpet":
 			tone = Color(0.35, 0.25, 0.22, 0.4)
 			chip_tone = Color(0.4, 0.2, 0.18)
+		"water":
+			# Spray: pale, and the drops fall back in rather than bounce.
+			tone = Color(0.72, 0.8, 0.84, 0.45)
+			chip_tone = Color(0.66, 0.78, 0.86)
 		_:
 			tone = Color(0.47, 0.45, 0.42, 0.6)
 			chip_tone = Color(0.55, 0.53, 0.5)
@@ -949,7 +953,7 @@ func _dust(at: Vector3, normal: Vector3, amount: float, surface: String) -> void
 			randf_range(0.9, 1.5),
 			randf_range(0.012, 0.028),
 			Color(chip_tone.r * shade, chip_tone.g * shade, chip_tone.b * shade),
-			COLLIDE | BOUNCE | (LONG if splinters else 0),
+			0 if surface == "water" else COLLIDE | BOUNCE | (LONG if splinters else 0),
 			0.0,
 			randf_range(8.0, 22.0),
 			_rand_unit().normalized()

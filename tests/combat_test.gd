@@ -179,9 +179,12 @@ func _run() -> void:
 	player.invulnerable = true
 	await _frames(40)
 
-	# C8 fighting you, he catches quick blows; a power blow gets through
+	# C8 fighting you, he catches quick blows; a power blow gets through.
+	# (Quick to see it coming: a plain watchman's 0.12 s against a quick cut
+	# is a race to the frame, and this is about what he does, not how fast.)
 	var g8 := _fighter(Vector3(0, 0, -1.5))
 	g8.block_chance = 1.0
+	g8._fighter.reaction = 0.05
 	_put_player(Vector3(0, 1.05, 0))
 	await _frames(20)
 	landed.clear()

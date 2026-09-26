@@ -36,8 +36,15 @@ extends Node3D
 ##                (and the barracks wakes); crates to be thrown, powder to be
 ##                shot; landmarks they call you by (the well, the gate, the
 ##                barracks, the dark passage).
+##   10 CLIMB & SWIM at the corridor's north end: a block, a tower with a
+##                ladder, two roofs with a gap between, and a pool. Get up,
+##                across or into the water and they come after you: they
+##                climb, drop, leap, and swim (NavLinks, GuardClimb,
+##                GuardWater). Nobody strikes afloat: in the water they swim
+##                after you and wait for you to climb out. Hit a man on the
+##                ladder and he falls.
 ##
-##   1-9  go to that bay and start it (again)     0  back to the hub
+##   1-9  go to that bay and start it (again)     -  bay 10     0  back to the hub
 ##   F1   what each of them is thinking, over his head: his temperament,
 ##        his place, his resolve
 ##   F2   you cannot be hurt      F4  everyone freezes      R  rest
@@ -60,6 +67,8 @@ const DummyScript := preload("res://scripts/Combat/TrainingDummy.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const AlarmBellScript := preload("res://scripts/Interaction/AlarmBell.gd")
+const WaterScript := preload("res://scripts/Interaction/WaterVolume.gd")
+const ClimbScript := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
 
 const STONE := Color(0.4, 0.38, 0.36)
 const DARK := Color(0.2, 0.19, 0.21)
@@ -79,7 +88,8 @@ const BAYS := [
 	["SQUAD", Vector3(17, 0, -26), 1, "A squad: swordmaster, swordsman, brute, archer. A leader and a plan:\nthey surround, strike while you are busy, break a turtle, press you hurt,\nfall back, break one by one when the leader dies. Watch the plan (top right)."],
 	["BODIES", Vector3(17, 0, -44), 1, "Weak men to send flying and cut apart. Kick them while they swing, or running.\nInto the spikes, off the ledge, onto the powder. A clean kill takes a limb or a head."],
 	["ARMS MASTER", Vector3(17, 0, -62), 1, "The arms master swings on a steady beat: parry just before it lands, or right on it\n(a perfect deflect). Answer his cut with a cut and his thrust with a thrust (a counter), or step into\nhis thrust (forward + Q). Straw men to cut; shielded ones to break. Sprint and swing: a running blow."],
-	["GUARDHOUSE", Vector3(0, 0, 24), 0, "The guardhouse. A squad in the yard; two men off duty in the barracks (east); a lookout\non the platform (far corner) who calls where you are and rings the bell. Break one and he runs\nfor help: catch him and he begs for his life. Walk away and he runs to his own; cut him down\nand the next will not beg. Lose them in the dark (west) and watch them split the search\nwhile one keeps watch. Crates get thrown; powder gets shot. F5: the garrison forgets you."],
+	["GUARDHOUSE", Vector3(0, 0, 24), 0, "The guardhouse. A squad in the yard; two men off duty in the barracks (east); a lookout\non the platform (far corner): he calls where you are, rings the bell, sends a man to look,\nthrows down what is to hand, and comes down when they need him. Break one and he runs\nfor help: catch him and he begs for his life. Walk away and he runs to his own; cut him down\nand the next will not beg. Lose them in the dark (west): they split the search, the lookout\nwatches. A man waiting his turn throws what is near; powder gets shot. F5: the garrison forgets you."],
+	["CLIMB & SWIM", Vector3(0, 0, -86.5), 0, "Climb and swim. Get up on the block, up the ladder onto the tower, across the gap,\nor into the pool: they come after you, climbing, dropping, leaping and swimming.\nNobody strikes afloat: they swim after you and wait for you to climb out.\nHit a man on the ladder and he falls. F4 freezes them to watch."],
 ]
 const BAY_SIZE := 14.0
 
@@ -124,7 +134,7 @@ func _ready() -> void:
 	_build_overlay()
 
 	await _baker.baked
-	_say("The NPC gym. Press 1-8 (or pull a lever) to start a bay. F1 shows what they think.")
+	_say("The NPC gym. Press 1-9 or - (or pull a lever) to start a bay. F1 shows what they think.")
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +145,7 @@ func _hall() -> void:
 	# The hub, lit, with the notice.
 	_torch(Vector3(-4, 2.6, 6), false)
 	_torch(Vector3(4, 2.6, 6), false)
-	_sign(Vector3(0, 2.5, 2.5), "THE NPC GYM\n1-9 go to a bay and start it   0 back here\n" +
+	_sign(Vector3(0, 2.5, 2.5), "THE NPC GYM\n1-9 go to a bay and start it   - bay 10 (climb & swim)   0 back here\n" +
 		"F1 what they think   F2 no harm to you   F3 sight cones   F4 freeze them   R rest   F5 they forget you\n" +
 		"LMB attack (your look picks the cut)   RMB block/parry   F kick   Q dodge", 28)
 	Props.block(self, Vector3(0, 0.4, 5.5), Vector3(2.0, 0.8, 0.9), WOOD, "wood")
@@ -143,10 +153,12 @@ func _hall() -> void:
 	Props.arrows(self, Vector3(0.4, 0.9, 5.5), 20)
 	LeverScript.build(self, Vector3(3, 0, 5.5), PI, "Rest (R)", _rest)
 
-	# The outer walls; the south one with a way through into the guardhouse.
+	# The outer walls; the south one with a way through into the guardhouse,
+	# the north one at the corridor's end into bay 10.
 	Props.block(self, Vector3(-15.75, 3, 12), Vector3(28.5, 6, 1), STONE)
 	Props.block(self, Vector3(15.75, 3, 12), Vector3(28.5, 6, 1), STONE)
-	Props.block(self, Vector3(0, 3, -72), Vector3(60, 6, 1), STONE)
+	Props.block(self, Vector3(-16.0, 3, -72), Vector3(28.0, 6, 1), STONE)
+	Props.block(self, Vector3(16.0, 3, -72), Vector3(28.0, 6, 1), STONE)
 	Props.block(self, Vector3(-30, 3, -30), Vector3(1, 6, 84), STONE)
 	Props.block(self, Vector3(30, 3, -30), Vector3(1, 6, 84), STONE)
 
@@ -158,6 +170,10 @@ func _hall() -> void:
 func _build_bay(index: int) -> void:
 	if index == 8:
 		_build_guardhouse()
+		return
+
+	if index == 9:
+		_build_waterside()
 		return
 
 	var spec: Array = BAYS[index]
@@ -310,6 +326,83 @@ func _build_guardhouse() -> void:
 		landmark.global_position = mark[1]
 
 
+## Bay 10, through the corridor's north wall: things to get up on and a pool
+## to swim in, and nothing else. Its floor is thick to make the pool's sides.
+##
+##        x -15        -4   0      8   12  15
+##   z -72  +--- wall -+- gap -+----------+
+##          |               in    [block] |
+##   z -82  |  +------+                   |
+##          |  | POOL |     [roof][roof]  |   roofs 1.8 m, a 1.9 m gap
+##          |  |      |                   |
+##   z -94  |  +------+          [tower]  |   3.5 m, a ladder on its south face
+##          |       they start here       |
+##   z -101 +-----------------------------+
+func _build_waterside() -> void:
+	var spec: Array = BAYS[9]
+	_sign(Vector3(0, 3.4, -71.3), "10  %s" % spec[0], 40)
+	LeverScript.build(self, Vector3(3, 0, -70.9), 0.0, "Start %s" % spec[0], func(): _start_bay(9))
+
+	# The floor round the pool (x -12..-4, z -94..-82), and its bottom, 2.1 m
+	# under the water; the walls.
+	Props.block(self, Vector3(0, -1.5, -77.25), Vector3(30, 3, 9.5), DARK, "stone")
+	Props.block(self, Vector3(0, -1.5, -97.5), Vector3(30, 3, 7), DARK, "stone")
+	Props.block(self, Vector3(-13.5, -1.5, -88), Vector3(3, 3, 12), DARK, "stone")
+	Props.block(self, Vector3(5.5, -1.5, -88), Vector3(19, 3, 12), DARK, "stone")
+	Props.block(self, Vector3(-8, -3.1, -88), Vector3(8, 1, 12), DARK, "stone")
+	WaterScript.build(self, Vector3(-8, -1.55, -88), Vector3(8, 2.1, 12))
+	Props.block(self, Vector3(-15.5, 3, -86.75), Vector3(1, 6, 29.5), STONE)
+	Props.block(self, Vector3(15.5, 3, -86.75), Vector3(1, 6, 29.5), STONE)
+	Props.block(self, Vector3(0, 3, -101.5), Vector3(32, 6, 1), STONE)
+
+	# A block to get up on; two roofs with a gap to leap; a tower, up by its
+	# ladder only.
+	Props.block(self, Vector3(7.5, 0.6, -79), Vector3(3, 1.2, 2.5), STONE)
+	Props.block(self, Vector3(1.5, 0.9, -89), Vector3(3, 1.8, 3.5), WOOD, "wood")
+	Props.block(self, Vector3(6.4, 0.9, -89), Vector3(3, 1.8, 3.5), WOOD, "wood")
+	Props.block(self, Vector3(11, 1.75, -95), Vector3(3, 3.5, 3), STONE)
+	_ladder(Vector3(11, 1.7, -93.15), 3.4)
+
+	_sign(Vector3(-8, 3.2, -79.5), spec[3], 22)
+
+	# Lit all over, so they see where you go (the tower's top too).
+	for at in [Vector3(-14.9, 2.8, -79), Vector3(-14.9, 2.8, -93), Vector3(14.9, 2.8, -80), Vector3(14.9, 4.2, -93),
+			Vector3(-5, 2.8, -100.9), Vector3(6, 2.8, -100.9), Vector3(-7, 2.8, -72.6), Vector3(7, 2.8, -72.6)]:
+		_torch(at, false)
+
+	for mark in [["pool", Vector3(-8, -0.5, -88)], ["tower", Vector3(11, 3.5, -95)], ["roofs", Vector3(4, 1.8, -89)]]:
+		var landmark := Marker3D.new()
+		landmark.set_meta(&"landmark", mark[0])
+		landmark.add_to_group(&"landmarks")
+		add_child(landmark)
+		landmark.global_position = mark[1]
+
+
+## A ladder up a wall to the north of `centre` (a ClimbVolume, `height`
+## tall, centred there, and its rungs against the wall).
+func _ladder(centre: Vector3, height: float) -> void:
+	var volume := Area3D.new()
+	volume.set_script(ClimbScript)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(1.2, height, 0.7)
+	shape.shape = box
+	volume.add_child(shape)
+	add_child(volume)
+	volume.global_position = centre
+	var foot := centre.y - height * 0.5
+
+	for i in int(height / 0.3):
+		var rung := Props.mesh_box(Vector3(0.8, 0.05, 0.05), WOOD)
+		add_child(rung)
+		rung.global_position = Vector3(centre.x, foot + 0.3 * (i + 1), centre.z - 0.28)
+
+	for x in [-0.42, 0.42]:
+		var rail := Props.mesh_box(Vector3(0.06, height, 0.06), WOOD)
+		add_child(rail)
+		rail.global_position = Vector3(centre.x + x, centre.y, centre.z - 0.28)
+
+
 ## A wall 4.2 m high (to the roofs) running along z at `x`, from `z0` to `z1`.
 func _wall_along_z(x: float, z0: float, z1: float) -> void:
 	Props.block(self, Vector3(x, 2.1, (z0 + z1) * 0.5), Vector3(0.6, 4.2, z1 - z0), STONE)
@@ -377,9 +470,13 @@ func _start_bay(index: int) -> void:
 			# (not one of the squad in the yard until he does).
 			_posted.append(_spawn(&"", Vector3(-7.5, 2.5, 30.5), 0.0, true))
 
-			# Things to throw, and powder by the gate.
+			# Things to throw, and powder by the gate; and up on the platform,
+			# something for the lookout to throw down.
 			for at in [Vector3(6.0, 0.25, 18.0), Vector3(-6.0, 0.2, 21.0), Vector3(7.0, 0.25, 29.0)]:
 				Props.crate(self, at, 0.45, 2.5)
+
+			for at in [Vector3(-8.5, 2.7, 31.5), Vector3(-8.5, 2.7, 29.6)]:
+				Props.crate(self, at, 0.3, 1.5)
 
 			_barrel(Vector3(5.0, 0.4, 15.5))
 
@@ -389,6 +486,9 @@ func _start_bay(index: int) -> void:
 				var resting := _spawn(spec_man[0], spec_man[1], spec_man[2])
 				resting.hearing_acuity = 0.15
 				_barracks.append(resting)
+		9:
+			guards.append(_spawn(&"swordsman", Vector3(-2, 0, -97.5), PI))
+			guards.append(_spawn(&"", Vector3(2.5, 0, -98.5), PI))
 
 	_bay_guards[index] = guards
 
@@ -403,6 +503,10 @@ func _start_bay(index: int) -> void:
 	if index == 8:
 		player.global_position = Vector3(0, 1.05, 14.5)
 		player.rotation.y = PI
+	# Bay 10: in through the corridor's north wall.
+	elif index == 9:
+		player.global_position = Vector3(0, 1.05, -74.5)
+		player.rotation.y = 0.0
 	player.get_node("Neck").rotation.x = 0.0
 	player.reset_physics_interpolation()
 	_rest()
@@ -445,6 +549,8 @@ func _clear_bay(index: int) -> void:
 		_posted.clear()
 		centre = Vector3(0, 0, 30.5)
 		half = Vector2(30.0, 18.5)
+	elif index == 9:
+		half = Vector2(15.5, 15.0)
 
 	for thing in get_tree().get_nodes_in_group(&"bodies"):
 		var at: Vector3 = (thing as Node3D).global_position
@@ -537,6 +643,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	match key:
+		KEY_MINUS:
+			_start_bay(9)
 		KEY_0:
 			player.global_position = Vector3(0, 1.05, 8)
 			player.rotation.y = 0.0
@@ -701,7 +809,10 @@ func _about(g: Node) -> String:
 	var bits: Array[String] = [String(g.given_name)]
 
 	if g.lookout:
-		bits.append("lookout")
+		bits.append("lookout (come down)" if g._left_post else ("lookout, on his post" if g._holds_post() else "lookout"))
+
+	if g._fighter._throw_meant():
+		bits.append("going to throw something")
 
 	if not g._hands.armed:
 		bits.append("DISARMED")

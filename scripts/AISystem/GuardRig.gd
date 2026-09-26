@@ -89,6 +89,16 @@ const ACTIVITIES := {
 	&"lantern": [&"Idle_Torch", true, 0.3, 0.85],
 	&"call": [&"Idle_Rail_Call", false, 0.15, 0.9],
 }
+## Crossing what walking cannot (GuardClimb): hauling himself up in the
+## climbing clip (in place, a metre to each CLIMB_CYCLE seconds of it); in the
+## air in AIR_CLIP; gathering for a jump and landing from one in LAND_CLIP.
+## Swimming (GuardWater): SWIM_CLIP on the move, TREAD_CLIP still.
+const CLIMB_CLIP := &"ClimbUp_1m"
+const CLIMB_CYCLE := 0.667
+const AIR_CLIP := &"Jump"
+const LAND_CLIP := &"Jump_Land"
+const SWIM_CLIP := &"Swim_Fwd"
+const TREAD_CLIP := &"Swim_Idle"
 ## Begging (GuardMercy): on his knees in this clip, down by PLEA_KNEEL_DOWN
 ## seconds into it, rocking between PLEA_KNEEL_SWAY, getting up from
 ## PLEA_KNEEL_UP; on his feet, a hand out to you, in PLEA_STAND.
@@ -755,6 +765,20 @@ func _show_activity(now: float) -> bool:
 		&"kneel", &"plead_kneel", &"rise_knees", &"plead_stand":
 			_show_plea(doing, since)
 			return true
+		&"climb", &"ladder", &"hang", &"gather", &"fall", &"leap", &"land":
+			_show_crossing(doing)
+			return true
+		&"swim", &"tread":
+			# Stroke by stroke as he goes; treading water where he is.
+			var stroke := maxf(man.action_length(SWIM_CLIP), 0.1)
+			var tread := maxf(man.action_length(TREAD_CLIP), 0.1)
+
+			if doing == &"swim":
+				man.show_action(SWIM_CLIP, fmod(since * clampf(_velocity.length() / size / 1.6, 0.6, 1.4), stroke), 0.25)
+			else:
+				man.show_action(TREAD_CLIP, fmod(since, tread), 0.3)
+
+			return true
 
 	var spec: Array = ACTIVITIES.get(doing, [])
 
@@ -766,6 +790,27 @@ func _show_activity(now: float) -> bool:
 	var t: float = fmod(since, length) if bool(spec[1]) else minf(since, length - 0.02)
 	man.show_action(clip, t, float(spec[2]), float(spec[3]))
 	return true
+
+
+## Crossing what walking cannot (GuardClimb): hauling himself up (the
+## climbing clip, paced by how far he has climbed), hanging off an edge,
+## gathered for a jump, in the air, and landing.
+func _show_crossing(doing: StringName) -> void:
+	var climb: RefCounted = guard.get("_climb")
+	var u: float = float(climb.progress()) if climb != null else 0.0
+
+	match doing:
+		&"climb", &"ladder":
+			var metres: float = float(climb.climbed()) if climb != null else 0.0
+			man.show_action(CLIMB_CLIP, fmod(metres * CLIMB_CYCLE, CLIMB_CYCLE), 0.1)
+		&"hang":
+			man.show_action(CLIMB_CLIP, 0.13, 0.15)
+		&"gather":
+			man.show_action(LAND_CLIP, lerpf(0.95, 0.35, u), 0.08)
+		&"fall", &"leap":
+			man.show_action(AIR_CLIP, 0.6, 0.1)
+		&"land":
+			man.show_action(LAND_CLIP, lerpf(0.25, 0.9, u), 0.05)
 
 
 ## Begging for his life (GuardMercy): going down on his knees, bowed low on
