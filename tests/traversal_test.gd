@@ -421,6 +421,21 @@ func _run() -> void:
 	_check("T21 assisted jump", assisted and _near(_feet_y(), 2.0, 0.1) and player.global_position.z < -5.8,
 		"assisted %s feet %.2f z %.2f" % [assisted, _feet_y(), player.global_position.z])
 
+	# T21b the assist aims past the far edge itself, not past the first
+	#      quarter-metre sample to land: take-offs a few centimetres apart ask
+	#      for nearly the same jump (the sample grid used to move the aim by a
+	#      quarter metre, turning the assist on and off at random)
+	var aims := []
+
+	for take_off in [-1.567, -1.541]:
+		await _place(Vector3(92, 3.05, take_off), 0.0)
+		var aim: Dictionary = player.scanner.find_jump_target(Vector3(0, 0, -1), player.jump_assist_min_distance,
+			player.jump_assist_max_distance, player.jump_assist_max_rise, player.jump_assist_max_drop)
+		aims.append(float(aim.get("distance", -1.0)))
+
+	_check("T21b the jump assist aims at the edge, not the sample grid", aims[0] > 0.0 and aims[1] > 0.0 and absf(aims[1] - aims[0]) < 0.05,
+		"aim from 2.6 cm apart: %.3f and %.3f m" % [aims[0], aims[1]])
+
 	# T22 stairs 0.2 x 0.3, walking
 	await _place(Vector3(98, 1.05, 0.0), 0.0)
 	Input.action_press("move_forward")

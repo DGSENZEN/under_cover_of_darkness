@@ -385,6 +385,7 @@ func find_jump_target(
 	var seen_gap := false
 	var step_size := 0.25
 	var distance := 0.75
+	var last_gap := 0.0
 
 	while distance <= max_distance:
 		var sample := feet + direction * distance
@@ -412,8 +413,13 @@ func find_jump_target(
 				and rise <= max_rise
 				and hit_normal.y >= min_top_normal_y
 			):
-				# Aim a little past the edge so the whole capsule lands.
-				var inside := hit_point + direction * radius * 0.6
+				# Aim a little past the edge so the whole capsule lands: the edge
+				# itself, not this sample, which can be most of a step past it
+				# (the jump asked for would then move with where you happened
+				# to take off, and the assist come and go with it).
+				var edge := _landing_edge(feet, direction, last_gap, distance, max_rise, max_drop)
+				var inside := feet + direction * (edge + radius * 0.6)
+				inside.y = hit_point.y
 				var under := ray(inside + Vector3.UP * 0.3, inside - Vector3.UP * 0.3, false)
 
 				if not under.is_empty():
@@ -422,15 +428,41 @@ func find_jump_target(
 					if fits(origin_for_feet(landing), false):
 						return {
 							"point": landing,
-							"distance": distance + radius * 0.6,
+							"distance": edge + radius * 0.6,
 						}
 
 		if is_gap:
 			seen_gap = true
+			last_gap = distance
 
 		distance += step_size
 
 	return {}
+
+
+## Between a gap `gap_at` and a landing `land_at` (distances from `feet`
+## along `direction`), how far off the landing's edge is, to within a
+## centimetre.
+func _landing_edge(feet: Vector3, direction: Vector3, gap_at: float, land_at: float, max_rise: float, max_drop: float) -> float:
+	var short := gap_at
+	var far := land_at
+
+	for i in 5:
+		var middle := (short + far) * 0.5
+		var sample := feet + direction * middle
+		var hit := ray(sample + Vector3.UP * (max_rise + 0.2), sample - Vector3.UP * (max_drop + 0.2), false)
+		var lands := false
+
+		if not hit.is_empty():
+			var rise: float = (hit["position"] as Vector3).y - feet.y
+			lands = rise >= -max_drop and rise <= max_rise and (hit["normal"] as Vector3).y >= min_top_normal_y
+
+		if lands:
+			far = middle
+		else:
+			short = middle
+
+	return far
 
 
 # ---------------------------------------------------------------------------
