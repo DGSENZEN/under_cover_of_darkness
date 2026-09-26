@@ -215,6 +215,37 @@ def case_bare():
     return validate.check(body, **args)
 
 
+def limb(garment_bone):
+    """A strip of his bare upper arm (upperarm_l) with a garment 1 cm over
+    it riding `garment_bone`, checked unskinned with his upper arms bare."""
+    mesh, _, args = clean()
+    bpy.data.objects.remove(mesh)
+    body = grid("Body", 2, z=0.0, part=0, thickness=0.0)
+    garment = grid("Garment", 2, z=0.01, part=1, thickness=0.006)
+
+    for obj, bone in ((body, "upperarm_l"), (garment, garment_bone)):
+        obj.vertex_groups.clear()
+        obj.vertex_groups.new(name=bone).add(list(range(len(obj.data.vertices))), 1.0, "REPLACE")
+
+    part = join([body, garment], "Part")
+    args.update(armature=None, reference_joints=None, bare={"head", "upper"})
+    return validate.check(part, **args)
+
+
+def case_bare_limb():
+    """A bare limb under a garment riding his trunk (a mantle on his
+    collarbone over his upper arm, as he stands in the rest pose) is not
+    hidden: when his arm moves the garment stays, and a cut there would be
+    a hole in his arm."""
+    return limb("clavicle_l")
+
+
+def case_bare_own_bone():
+    """Under a garment riding that limb (a bracer on his forearm) a bare
+    limb is hidden as any body is."""
+    return limb("upperarm_l")
+
+
 def case_flat():
     """A face drawn flat: PS2 characters are drawn smooth."""
     mesh, _, args = clean()
@@ -252,6 +283,8 @@ CASES = {
     "joint": (case_joint, "joint:"),
     "hidden": (case_hidden, "hidden:"),
     "bare": (case_bare, "bare:"),
+    "bare_limb": (case_bare_limb, None),
+    "bare_own_bone": (case_bare_own_bone, "hidden:"),
     "flat": (case_flat, "shading:"),
     "normals": (case_normals, "shading:"),
     "colour": (case_colour, None),

@@ -404,7 +404,9 @@ DUELIST = {
     "garments": [
         {"name": "breeches", "type": "shell", "fabric": "wool", "colour": (0.10, 0.09, 0.10), "regions": ["pelvis", "thigh"],
          "bottom": ("calf_l", 0.1), "top": ("spine_01", 0.0), "thickness": 0.008, "smooth": 2},
-        {"name": "boots", "type": "boots", "fabric": "leather", "colour": (0.12, 0.09, 0.07), "top": ("thigh_l", 0.35),
+        # A warm brown: black on her black breeches, her tall boots were
+        # lost (Task 7's look).
+        {"name": "boots", "type": "boots", "fabric": "leather", "colour": (0.28, 0.18, 0.10), "top": ("thigh_l", 0.35),
          "thickness": 0.01, "sole": 0.004, "cuff": 0.06, "smooth": 3},
         {"name": "doublet", "type": "shell", "fabric": "wool", "colour": CRIMSON, "dye": True,
          "regions": ["torso", "pelvis", "upper", "lower"], "bottom": ("thigh_l", 0.05), "sleeve_end": ("hand_l", 0.0),
@@ -422,12 +424,20 @@ DUELIST = {
         {"name": "belt", "type": "belt", "fabric": "leather", "colour": (0.10, 0.08, 0.07), "height": 0.04,
          "buckle": {"fabric": "iron", "colour": GOLD, "size": (0.045, 0.01, 0.04)}},
         # From her left shoulder across her upper back: its top line from
-        # her right shoulder blade (6 cm past her spine) to 5 cm inside her
-        # left shoulder point (over her upper arm, where her arm hangs and
-        # swings, it was thrown about: 10 m/s restarts, K12; into it, K27).
+        # her right shoulder blade (14 cm past her spine: at 6 it read as a
+        # strap across her back, Task 7's look) to 5 cm inside her left
+        # shoulder point (over her upper arm, where her arm hangs and swings,
+        # it was thrown about: 10 m/s restarts, K12; into it, K27).
         {"name": "half_cape", "type": "half_cape", "fabric": "wool", "colour": (0.10, 0.09, 0.11),
-         "hem": ("spine_01", -0.05), "clear": 0.02, "chains": 3, "bones": 3, "inner": -0.06, "reach": -0.05,
+         "hem": ("spine_01", -0.05), "clear": 0.02, "chains": 3, "bones": 3, "inner": -0.14, "reach": -0.05,
          "stance": 0.01, "hang_from": "spine_02"},
+        # The half-cape over her left shoulder: its cloth on her shoulder and
+        # the top of her puff, riding her arm (the half-cape alone was a
+        # dark strip on her back, not seen from in front: Task 7's look);
+        # 2.5 cm off her puff (at 1 its round slashes came through the
+        # drape's flat facets).
+        {"name": "cape_shoulder", "type": "pauldron", "fabric": "wool", "colour": (0.10, 0.09, 0.11), "side": "left",
+         "over": "puffs", "reach": 0.15, "drop": 0.13, "rings": 4, "clearance": 0.025, "roll": 0.01},
         {"name": "hanger", "type": "prop", "shape": "hanger", "fabric": "leather", "colour": (0.10, 0.08, 0.07),
          "at": 100, "back": 35, "size": (0.03, 0.018, 0.95), "fittings": {"fabric": "iron", "colour": GOLD},
          "bone": "pelvis"},

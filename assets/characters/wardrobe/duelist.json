@@ -1,7 +1,7 @@
 {
  "kind": "duelist",
  "body": "female",
- "triangles": 2128,
+ "triangles": 2173,
  "cloth": [
   {
    "chain": "half_cape_1",
@@ -11,7 +11,7 @@
     "cloth_half_cape_1_2",
     "cloth_half_cape_1_3"
    ],
-   "tip": 0.1446,
+   "tip": 0.1488,
    "stiffness": 3.0,
    "drag": 0.6,
    "gravity": 0.7,

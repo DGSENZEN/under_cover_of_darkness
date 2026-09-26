@@ -147,6 +147,30 @@ def leans_back(obj, part_name, recipe, length, back):
     return []
 
 
+def bare_holes(obj, arm, bone, at=(0.3, 0.5, 0.7)):
+    """Rays out from `bone` (8 ways round it, `at` those fractions of its
+    length) that meet anything but his skin first: holes in a bare limb."""
+    tree = BVHTree.FromPolygons([v.co.copy() for v in obj.data.vertices], [tuple(p.vertices) for p in obj.data.polygons])
+    fabric = obj.data.attributes["wr_fabric"].data
+    b = arm.data.bones[bone]
+    axis = (b.tail_local - b.head_local).normalized()
+    u = axis.orthogonal().normalized()
+    v = axis.cross(u)
+    holes = []
+
+    for t in at:
+        centre = b.head_local.lerp(b.tail_local, t)
+
+        for k in range(8):
+            a = k * math.pi / 4.0
+            hit = tree.ray_cast(centre, u * math.cos(a) + v * math.sin(a), 0.3)
+
+            if hit[2] is None or fabric[hit[2]].value != 0:
+                holes.append("%.1f of it, %d deg" % (t, k * 45))
+
+    return holes
+
+
 def case_types():
     """Every garment type batch 1 adds builds on the male body, rides the
     bones and chains it should, and passes every export rule."""
@@ -276,6 +300,8 @@ TYPES2 = {
          "reach": 0.14, "drop": 0.12, "rings": 3, "clearance": 0.012, "roll": 0.01},
         {"name": "hanger", "type": "prop", "shape": "hanger", "fabric": "leather", "colour": GREY, "at": 100, "back": 35,
          "size": (0.03, 0.018, 0.95), "fittings": {"fabric": "iron", "colour": GREY}, "bone": "pelvis"},
+        {"name": "bracer", "type": "bracer", "fabric": "leather", "colour": GREY, "bone": "lowerarm_l", "from": 0.35,
+         "to": 0.85, "thickness": 0.008},
     ],
     "chains": {}, "colliders": [], "metal": [], "options": {},
 }
@@ -294,6 +320,8 @@ TYPES3 = {
          "peak": 0.25, "puff": 0.035, "slashes": {"count": 6, "colour": (0.78, 0.60, 0.22)}},
         {"name": "half_cape", "type": "half_cape", "fabric": "wool", "colour": GREY, "hem": ("spine_01", 0.0),
          "clear": 0.02, "chains": 3, "bones": 3},
+        {"name": "drape", "type": "pauldron", "fabric": "wool", "colour": GREY, "side": "left", "over": "puffs",
+         "reach": 0.12, "drop": 0.1, "rings": 3, "clearance": 0.01, "roll": 0.008},
     ],
     "chains": {"half_cape_%d" % n: CLOTH for n in (1, 2, 3)},
     "colliders": [{"bone": "spine_02", "radius": 0.14}, {"bone": "upperarm_l", "radius": 0.05}], "metal": [],
@@ -352,6 +380,8 @@ def case_types2():
     """Batch 2's garment types build on both bodies, ride the bones and
     chains they should, and pass every export rule against their own body's
     skeleton."""
+    import json
+
     import build
     import validate
 
@@ -374,6 +404,18 @@ def case_types2():
         messages.append("hanger hangs %.3f m off him" % hangs_off(male, "hanger", TYPES2))
 
     messages += leans_back(male, "hanger", TYPES2, 0.95, 35)
+    # His bare left upper arm is whole under the mantle's rim (on his
+    # collarbones, over his arm as he stands in the rest pose).
+    holes = bare_holes(male, arm, "upperarm_l")
+
+    if holes:
+        messages.append("his bare left upper arm: %d of 24 rays out of it meet no skin first (%s)" % (len(holes), holes[0]))
+
+    # And his elbow is whole beside his bracer (on his forearm, from 35%).
+    holes = bare_holes(male, arm, "lowerarm_l", at=(0.05, 0.15))
+
+    if holes:
+        messages.append("his bare left elbow: %d of 16 rays out of it meet no skin first (%s)" % (len(holes), holes[0]))
 
     messages += ["male: %s" % m for m in validate.check(male, armature=arm, reference_joints=joints, cloth_bones=cloth,
                                                          bare=set(TYPES2["bare"]))]
@@ -386,6 +428,15 @@ def case_types2():
                                                                           stands_off(female, "puffs", TYPES3)))
 
     capes = [chains.get("half_cape_%d" % n, {}) for n in (1, 2, 3)]
+    drape = (faces_on(female, "drape", TYPES3, side=1.0), faces_on(female, "drape", TYPES3, side=-1.0))
+
+    # A cloth pauldron (the half-cape over her left shoulder) is on her left
+    # alone, and carries no plate's trim (its bright rim and lames are iron's).
+    if drape != ({"upperarm_l"}, set()) or fabrics_of(female, "drape", TYPES3) != {"wool"} \
+            or json.loads(female.get("wr_details", "{}")).get("plates"):
+        messages.append("drape on %s (left) and %s (right), of %s, plates %s" % (
+            sorted(drape[0]), sorted(drape[1]), fabrics_of(female, "drape", TYPES3),
+            json.loads(female.get("wr_details", "{}")).get("plates")))
 
     if [len(c.get("bones", [])) for c in capes] != [3, 3, 3] or any(c.get("parent") != "spine_03" for c in capes):
         messages.append("half-cape chains %s" % [(c.get("parent"), len(c.get("bones", []))) for c in capes])

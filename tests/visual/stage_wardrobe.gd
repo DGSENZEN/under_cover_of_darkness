@@ -18,7 +18,8 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const SEEDS := [-1, 1, 2, 3, 4]
 const SPACING := 1.5
 ## Every kind the wardrobe dresses, and the archetype that is it.
-const KINDS := {&"watchman": &"", &"swordsman": &"swordsman", &"archer": &"archer", &"arms_master": &"trainer"}
+const KINDS := {&"watchman": &"", &"swordsman": &"swordsman", &"archer": &"archer", &"arms_master": &"trainer",
+	&"brute": &"brute", &"duelist": &"duelist"}
 
 var out_dir := "user://wardrobe/"
 var guards: Array[CharacterBody3D] = []

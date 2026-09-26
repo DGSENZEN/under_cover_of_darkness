@@ -42,7 +42,7 @@ def check(mesh, *, armature=None, reference_joints=None, cloth_bones=(), images=
     if armature is not None and reference_joints is not None:
         messages += _joints(armature, reference_joints)
 
-    messages += _hidden(mesh)
+    messages += _hidden(mesh, bare)
     messages += _shading(mesh)
 
     if bare is not None:
@@ -182,7 +182,8 @@ def _shading(mesh):
     return messages
 
 
-def _hidden(mesh):
-    """Body faces a garment covers, within its thickness + MARGIN."""
-    hidden = common.hidden_faces(mesh)
+def _hidden(mesh, bare=None):
+    """Body faces a garment covers, within its thickness + MARGIN (a `bare`
+    limb's only under a garment riding its own bone)."""
+    hidden = common.hidden_faces(mesh, bare=bare)
     return ["hidden: %d body faces under garments" % len(hidden)] if hidden else []

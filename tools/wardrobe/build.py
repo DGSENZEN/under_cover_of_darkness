@@ -1023,7 +1023,8 @@ def pauldron(kind, g, part):
     what it covers (looking out from the arm's bone); closed toward his neck
     by a cap from `inset` inside the joint (the top of the plate once his
     arm is down); its outer edge rolled `roll` out. Wholly on upperarm_l.
-    Its trim (a bright rim, two painted lames) is left for the bake."""
+    An iron one's trim (a bright rim, two painted lames) is left for the
+    bake."""
     bone = kind.arm.data.bones["upperarm_l"]
     joint, axis = bone.head_local.copy(), (bone.tail_local - bone.head_local).normalized()
     front, up = across(axis)
@@ -1080,8 +1081,12 @@ def pauldron(kind, g, part):
 
     # One side alone is whole: not mirrored (the plates' trim mirrors).
     kind.add(obj, g, part, "pauldron", strip=True, whole=side != "both")
-    kind.details.setdefault("plates", []).append({"joint": list(joint), "axis": list(axis), "reach": g["reach"],
-                                                  "lames": [g["reach"] / 3.0, g["reach"] * 2.0 / 3.0]})
+
+    # The trim is a plate's: a cloth one (the duelist's half-cape over her
+    # shoulder) has no bright rim or lames.
+    if g["fabric"] == "iron":
+        kind.details.setdefault("plates", []).append({"joint": list(joint), "axis": list(axis), "reach": g["reach"],
+                                                      "lames": [g["reach"] / 3.0, g["reach"] * 2.0 / 3.0]})
 
 
 def mantle(kind, g, part):
@@ -1539,7 +1544,8 @@ def hide_body(kind, garments=None):
     bpy.ops.object.join()
     # (The shells' covered faces count on his half only: their indices go
     # stale once faces are gone.)
-    hidden = set(common.hidden_faces(probe, reach=COVERED)) | (set() if whole else kind.covered)
+    hidden = set(common.hidden_faces(probe, reach=COVERED, bare=set(kind.recipe.get("bare", ())))) | \
+        (set() if whole else kind.covered)
     bpy.data.objects.remove(probe)
     bm = bmesh.new()
     bm.from_mesh(base.data)

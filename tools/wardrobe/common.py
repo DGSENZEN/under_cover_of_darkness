@@ -321,10 +321,18 @@ def mirror(obj):
     bpy.ops.object.modifier_apply(modifier=modifier.name)
 
 
-def hidden_faces(mesh_obj, reach=None):
+def hidden_faces(mesh_obj, reach=None, bare=None):
     """Body faces (wr_part 0) a garment covers: a ray out along the face's
     normal meets a garment face within its thickness + MARGIN (or within
-    `reach`, when given)."""
+    `reach`, when given). A face of a limb his recipe leaves `bare`
+    (common.REGIONS) counts only under a garment riding that limb (a bracer,
+    his mittens, a pauldron; a garment not yet weighted rides what it
+    covers), and only wholly under such garments (at its centre and near
+    each corner, within their thickness + MARGIN, even with `reach`): one
+    riding his trunk
+    (a mantle on his collarbones over his upper arm, as he stands in the
+    rest pose) stays put when the limb moves, and cutting the limb there, or
+    a big face half out of a bracer, leaves a hole in it."""
     data = mesh_obj.data
 
     if "wr_part" not in data.attributes or "wr_thickness" not in data.attributes:
@@ -339,7 +347,18 @@ def hidden_faces(mesh_obj, reach=None):
 
     tree = BVHTree.FromPolygons([vertex.co for vertex in data.vertices], [tuple(polygon.vertices) for polygon in garments])
     limit = reach if reach is not None else max(thickness[polygon.index] for polygon in garments) + MARGIN
+    bones = face_bones(mesh_obj) if bare else None
     hidden = []
+
+    def under(point, normal, limb):
+        """A garment riding `limb` (or not yet weighted) lies on `point`."""
+        found = tree.ray_cast(point + normal * 1e-5, normal, limit)
+
+        if found[2] is None or found[3] > thickness[garments[found[2]].index] + MARGIN:
+            return False
+
+        over = bones[garments[found[2]].index]
+        return not over or limb_of(over) == limb
 
     for polygon in data.polygons:
         if parts[polygon.index] != 0:
@@ -347,10 +366,55 @@ def hidden_faces(mesh_obj, reach=None):
 
         hit = tree.ray_cast(polygon.center + polygon.normal * 1e-5, polygon.normal, limit)
 
-        if hit[2] is not None and (reach is not None or hit[3] <= thickness[garments[hit[2]].index] + MARGIN):
-            hidden.append(polygon.index)
+        if hit[2] is None:
+            continue
+
+        near = hit[3] <= thickness[garments[hit[2]].index] + MARGIN
+
+        if reach is None and not near:
+            continue
+
+        if bones is not None and region_of_bone(bones[polygon.index]) in bare:
+            limb, over = limb_of(bones[polygon.index]), bones[garments[hit[2]].index]
+
+            if limb is not None and (not near or over and limb_of(over) != limb or not all(
+                    under(polygon.center.lerp(data.vertices[v].co, 0.9), polygon.normal, limb) for v in polygon.vertices)):
+                continue
+
+        hidden.append(polygon.index)
 
     return hidden
+
+
+def limb_of(bone):
+    """The limb a bone moves ("arm_l", "leg_r"...: an arm from the shoulder
+    down, not its collarbone), or None for his trunk and head."""
+    for limb, prefixes in (("arm", ("upperarm_", "lowerarm_", "hand_", "index_", "middle_", "pinky_", "ring_", "thumb_")),
+                           ("leg", ("thigh_", "calf_", "foot_", "ball_"))):
+        if bone.startswith(prefixes):
+            return limb + bone[-2:]
+
+    return None
+
+
+def face_bones(obj):
+    """Each face's bone: the commonest of its vertices' heaviest bones (ties
+    go the same way on every run); "" where none is weighted yet (a part
+    whose weights are copied later, TRANSFER, has none of its own)."""
+    names = {group.index: group.name for group in obj.vertex_groups}
+    heaviest = []
+
+    for vertex in obj.data.vertices:
+        best = max((g for g in vertex.groups if names[g.group] != TRANSFER), key=lambda g: g.weight, default=None)
+        heaviest.append(names[best.group] if best is not None else "")
+
+    out = []
+
+    for polygon in obj.data.polygons:
+        values = [heaviest[i] for i in polygon.vertices]
+        out.append(max(sorted(set(values)), key=values.count))
+
+    return out
 
 
 def to_gltf(v):
