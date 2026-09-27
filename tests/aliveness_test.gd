@@ -20,6 +20,8 @@ const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const GuardStationScript := preload("res://scripts/AISystem/GuardStation.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
+const FireScript := preload("res://scripts/Combat/Fire.gd")
+const NightRotaScript := preload("res://scripts/AISystem/NightRota.gd")
 
 const FIXTURES := """
 == talk_pair
@@ -57,6 +59,7 @@ func _run() -> void:
 	seed(2027)
 	GuardScript.randomize_on = false
 	await _expression()
+	await _pastimes()
 	GuardScript.randomize_on = true
 
 
@@ -245,6 +248,127 @@ func _expression() -> void:
 	var reacted: StringName = (n2._rig.man._root.get_node(&"upper_clip") as AnimationNodeAnimation).animation
 	_check("A10 a nod plays on his upper body and passes; the man to answer nods as the line ends",
 		clip == &"Yes" and gone and reacted == &"Yes" and n2._rig.man.upper_weight() > 0.2, "clip %s, gone %s, the listener %s (%.2f)" % [clip, gone, reacted, n2._rig.man.upper_weight()])
+
+
+# ---------------------------------------------------------------------------
+# Pastimes
+# ---------------------------------------------------------------------------
+
+func _pastimes() -> void:
+	# A11 never the same twice running, never three in five
+	await _fresh()
+	var picker := _guard(Vector3(80, 0, 0), 0.0)
+	picker._life._talk_rest = 99.0
+	var picks: Array = []
+
+	for i in 200:
+		picks.append(picker._life._pastimes.choose())
+
+	var twice := 0
+	var thrice := 0
+
+	for i in range(1, picks.size()):
+		if picks[i] == picks[i - 1]:
+			twice += 1
+
+	for i in range(0, picks.size() - 4):
+		var window: Array = picks.slice(i, i + 5)
+
+		for id in window:
+			if window.count(id) >= 3:
+				thrice += 1
+				break
+
+	_check("A11 his pastimes never repeat twice running, nor three times in five", twice == 0 and thrice == 0 and not picks.has(&""),
+		"twice %d, three in five %d, first %s" % [twice, thrice, picks.slice(0, 12)])
+
+	# A12 the most pressing first: cold, by a fire
+	await _fresh()
+	var rota: RefCounted = NightRotaScript.setup(self, 600.0)
+	var fire: Area3D = FireScript.brazier(self, Vector3(90, 0, 0))
+	var chilly := _guard(Vector3(92, 0, 0), PI * 0.5)
+	var far := _guard(Vector3(90, 0, 20), 0.0)
+	chilly._life._talk_rest = 99.0
+	far._life._talk_rest = 99.0
+	await _frames(5)
+	var warm_picks := []
+	var far_picks := []
+
+	for i in 20:
+		rota.set_need(chilly, &"cold", 0.8)
+		rota.set_need(far, &"cold", 0.8)
+		warm_picks.append(chilly._life._pastimes.choose())
+		far_picks.append(far._life._pastimes.choose())
+
+	var by_fire: bool = warm_picks.all(func(p): return p in [&"warm_hands", &"squat", &"stamp"])
+	var no_fire: bool = far_picks.all(func(p): return p != &"warm_hands" and p != &"squat")
+	_check("A12 cold, a man by the fire warms himself (or stamps); away from it he never warms his hands at nothing",
+		by_fire and no_fire and far_picks.has(&"stamp"), "by the fire %s; away %s" % [warm_picks.slice(0, 8), far_picks.slice(0, 8)])
+	fire.get_parent().queue_free()
+
+	# A13 no fire, no wall, blade put away: none of what needs them
+	await _fresh()
+	var bowl: Node3D = GuardStationScript.new()
+	bowl.kind = &"eat"
+	add_child(bowl)
+	bowl.global_position = Vector3(100, 0, 0)
+	var eater := _guard(Vector3(100, 0, 0.5), 0.0, &"steady", "", [bowl])
+	eater._life._talk_rest = 99.0
+	await _until(func(): return eater._rota.at_station(), 600)
+	var eat_picks := []
+
+	for i in 100:
+		eat_picks.append(eater._life._pastimes.choose())
+
+	var none: bool = not eat_picks.any(func(p): return p in [&"warm_hands", &"squat", &"lean", &"check_blade", &"pace"])
+	_check("A13 at his bowl, blade away, with no fire or wall near: nothing that needs them, and he does not wander off",
+		eater._rota.at_station() and none, "at station %s, picks %s" % [eater._rota.at_station(), eat_picks.slice(0, 10)])
+
+	# A14 temperament weighs the choice
+	await _fresh()
+	var stubborn := _guard(Vector3(110, 0, 0), 0.0, &"stubborn")
+	var steady := _guard(Vector3(114, 0, 0), 0.0, &"steady")
+	var shares := []
+
+	for g in [stubborn, steady]:
+		g._life._talk_rest = 99.0
+		var count := 0
+
+		for i in 300:
+			if g._life._pastimes.choose() == &"fold_arms":
+				count += 1
+
+		shares.append(count)
+
+	_check("A14 a stubborn man folds his arms more often than a steady one", shares[0] > shares[1], "stubborn %d, steady %d of 300" % shares)
+
+	# A15 standing his post, he passes the time
+	await _fresh()
+	var sentry := _guard(Vector3(120, 0, 0), 0.0)
+	sentry._life._talk_rest = 9999.0
+	var seen := {}
+	var furthest := [0.0]
+	await _until(func():
+		var doing: StringName = sentry.activity()
+		if doing != &"":
+			seen[doing] = true
+		furthest[0] = maxf(furthest[0], Vector2(sentry.global_position.x - 120, sentry.global_position.z).length())
+		return false, 3600)
+	await _until(func(): return sentry.activity() != &"pace", 600)
+	await _frames(120)
+	var back := Vector2(sentry.global_position.x - 120, sentry.global_position.z).length()
+	# And a pace, out and back.
+	sentry._life._pastimes._end()
+	sentry._life._pastimes._begin(&"pace")
+	var out := [0.0]
+	await _until(func():
+		out[0] = maxf(out[0], Vector2(sentry.global_position.x - 120, sentry.global_position.z).length())
+		return sentry.activity() != &"pace", 900)
+	await _frames(60)
+	var home := Vector2(sentry.global_position.x - 120, sentry.global_position.z).length()
+	_check("A15 standing his post a minute he passes the time three ways or more, never straying far; pacing, out a step or two and back",
+		seen.size() >= 3 and furthest[0] <= 2.2 and back < 0.8 and out[0] >= 1.0 and out[0] <= 2.2 and home < 0.8,
+		"did %s, furthest %.2f m, back to %.2f m; paced out %.2f m, home %.2f m" % [seen.keys(), furthest[0], back, out[0], home])
 
 
 # ---------------------------------------------------------------------------

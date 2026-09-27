@@ -21,7 +21,7 @@ const STATIONED := {"Piers": &"sit", "Col": &"eat", "Tam": &"sleep", "Gideon": &
 ## What each station's man shows at it.
 const SHOWS := {
 	&"sit": [&"sit", &"sit_talk", &"sit_down"],
-	&"eat": [&"eat", &"", &"talk", &"listen", &"fold_arms", &"drink"],
+	&"eat": [&"eat", &"", &"talk", &"listen", &"fold_arms", &"drink", &"scratch", &"spit", &"roll_shoulders", &"stamp", &"check_blade", &"look_up", &"warm_hands"],
 	&"sleep": [&"sleep", &"lie_down"],
 	&"rummage": [&"lid", &"rummage", &""],
 	&"carry": [&"carry", &"lift", &"set_down", &""],

@@ -4,8 +4,8 @@ extends RefCounted
 ##             conversations chosen to fit the moment (TalkDirector, the
 ##             files in data/talk). You can listen. Anything that stirs one
 ##             of them ends it.
-##   idle      standing his post a while, a man folds his arms, or takes a
-##             pull from his flask.
+##   idle      standing his post a while, a man passes the time: warms his
+##             hands, stamps his feet, leans on a wall, paces... (GuardPastimes).
 ##   oddities  a door you left open, your arrow in a wall: he notices it (it
 ##             takes light, and a look), goes to it and deals with it (shuts
 ##             the door, pulls the arrow out), then searches about it; the
@@ -20,6 +20,7 @@ extends RefCounted
 ##   lookout   a man set to watch (Guard.lookout) sweeps his ground slowly.
 
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
+const GuardPastimesScript := preload("res://scripts/AISystem/GuardPastimes.gd")
 const Comms := preload("res://scripts/AISystem/Comms.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 
@@ -35,8 +36,6 @@ const CHECK := 0.35
 ## night's rota, where a level has one.
 const TALK_DIRECTOR := "res://scripts/AISystem/Talk/TalkDirector.gd"
 const NIGHT_ROTA := "res://scripts/AISystem/NightRota.gd"
-## Standing still this long, a man finds something to do with himself.
-const IDLE_AFTER := 3.0
 ## Seeing something out of place: this long in view (weighted by how near the
 ## middle of his view it is) before it registers; how far off it can be; and
 ## the light it needs beyond arm's length.
@@ -67,11 +66,9 @@ static var _rota_script: GDScript = null
 var guard: CharacterBody3D
 ## After a conversation, this long before he talks again (TalkDirector).
 var _talk_rest := 0.0
-## Standing still, and what he is doing with himself.
+## Standing still this long, and what he does with himself (GuardPastimes).
 var _resting := 0.0
-var _idle: StringName = &""
-var _idle_left := 0.0
-var _idle_wait := 0.0
+var _pastimes: RefCounted
 ## Something out of place he is going to deal with.
 var _odd: Node3D = null
 var _odd_kind: StringName = &""
@@ -93,13 +90,14 @@ func _init(p_guard: CharacterBody3D) -> void:
 	guard = p_guard
 	_check = randf() * CHECK
 	_talk_rest = randf_range(6.0, 16.0)
-	_idle_wait = randf_range(3.0, 8.0)
+	_pastimes = GuardPastimesScript.new(p_guard)
 	_watch_time = randf() * LOOKOUT_PERIOD
 
 
 ## Every physics frame, while he is up and about.
 func update(delta: float) -> void:
 	_talk_rest = maxf(_talk_rest - delta, 0.0)
+	_pastimes.update(delta)
 	var talk := _director()
 
 	if talk != null:
@@ -128,63 +126,39 @@ func update(delta: float) -> void:
 		_look_for_missing(CHECK)
 
 
-## What he is doing with himself, for the rig: "talk", "listen", "fold_arms",
-## "drink", or "".
+## What he is doing with himself, for the rig: "talk", "listen", a pastime
+## (GuardPastimes: "fold_arms", "warm_hands", "pace"...), or "".
 func activity() -> StringName:
 	if talking():
 		return &"talk" if _director().speaking(guard) else &"listen"
 
-	# Fidgets are for a man at his ease: anything else and they are over.
+	# Pastimes are for a man at his ease: anything else and they are over.
 	if int(guard.state) != RELAXED:
-		_idle = &""
-		_idle_left = 0.0
+		_pastimes.walking()
+		return &""
 
-	return _idle
+	return _pastimes.activity()
 
 
 # ---------------------------------------------------------------------------
 # Standing about
 # ---------------------------------------------------------------------------
 
-## Standing still at his post or a waypoint.
+## Standing still at his post or a waypoint (or settled at a station).
 func at_rest(delta: float) -> void:
 	_resting += delta
-
-	if talking() or bool(guard.get("lookout")):
-		_idle = &""
-		return
-
-	if _idle_left > 0.0:
-		_idle_left -= delta
-
-		if _idle_left <= 0.0:
-			_idle = &""
-			_idle_wait = randf_range(5.0, 10.0)
-
-		return
-
-	if _resting < IDLE_AFTER:
-		return
-
-	_idle_wait -= delta
-
-	if _idle_wait > 0.0:
-		return
-
-	# A soldier's fidgets: arms folded a while, a pull from the flask.
-	if randf() < 0.6:
-		_idle = &"fold_arms"
-		_idle_left = randf_range(4.0, 7.0)
-	else:
-		_idle = &"drink"
-		_idle_left = 1.3
+	_pastimes.at_rest(delta)
 
 
 ## On the move: whatever he was doing standing still is over.
 func walking() -> void:
 	_resting = 0.0
-	_idle = &""
-	_idle_left = 0.0
+	_pastimes.walking()
+
+
+## Pacing (a pastime): where he walks to now; else null.
+func pastime_step() -> Variant:
+	return _pastimes.wants_step() if int(guard.state) == RELAXED else null
 
 
 ## A lookout at his post: the way he faces now, sweeping his ground.

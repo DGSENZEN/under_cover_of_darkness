@@ -94,6 +94,8 @@ const ACTIVITIES := {
 	&"rummage": [&"Crouch_Idle", true, 0.3, 1.0],
 	&"chop": [&"TreeChopping", true, 0.25, 1.0],
 	&"lean": [&"Idle_Rail", true, 0.35, 1.0],
+	# Passing the time (GuardPastimes): squatting by the fire.
+	&"squat": [&"Crouch_Idle", true, 0.3, 1.0],
 }
 ## Getting onto and off a station (GuardRota), each shown through its clip in
 ## its time: [clip, backwards, fade in].

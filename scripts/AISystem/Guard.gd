@@ -58,6 +58,7 @@ const GuardClimbScript := preload("res://scripts/AISystem/GuardClimb.gd")
 const GuardWaterScript := preload("res://scripts/AISystem/GuardWater.gd")
 const GuardRotaScript := preload("res://scripts/AISystem/GuardRota.gd")
 const GuardVoiceScript := preload("res://scripts/AISystem/GuardVoice.gd")
+const GuardPastimesScript := preload("res://scripts/AISystem/GuardPastimes.gd")
 ## Bleeding (bleeding): at most this much a second, never below this share of
 ## his health, and bound this long after he last saw you.
 const BLEED_MAX := 4.0
@@ -2543,6 +2544,15 @@ func _do_patrol(delta: float) -> void:
 		return
 
 	if _waypoints.is_empty():
+		# Pacing a few steps out and back (a pastime: GuardPastimes).
+		var step: Variant = _life.pastime_step()
+
+		if step is Vector3:
+			_life.at_rest(delta)
+			_go_to(step)
+			_walk(patrol_speed * GuardPastimesScript.PACE_SPEED, delta)
+			return
+
 		# No route: stand post, and walk back to it if something drew us away.
 		# As close as the navmesh allows counts as back.
 		if _flat_distance(_home.origin) > 0.8:
