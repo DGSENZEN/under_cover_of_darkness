@@ -1,0 +1,64 @@
+{
+ "fixture": "lamp_post",
+ "family": "lanterns",
+ "mount": "floor",
+ "tris": 466,
+ "slots": [
+  "horn_glow",
+  "iron",
+  "stone",
+  "wax",
+  "wood_old"
+ ],
+ "glow_parts": [
+  "lantern_panes"
+ ],
+ "shadow_parts": [],
+ "stretch": {},
+ "sockets": {
+  "flame": [
+   [
+    0.0,
+    2.3375,
+    0.6
+   ]
+  ],
+  "corona": [
+   [
+    0.0,
+    2.4125,
+    0.6
+   ]
+  ],
+  "mount": [
+   [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "small",
+  "ramp": "lamp",
+  "low_ramp": "gutter",
+  "flicker_kind": "lamp",
+  "flicker": 0.05,
+  "energy": 1.6,
+  "light_range": 9.0,
+  "shadows": true,
+  "color": "FFA645",
+  "corona_px": 28.0,
+  "ember_rate": 0.0,
+  "smoke_rate": 0.0,
+  "flame_size": 0.08,
+  "flame_layers": 1,
+  "core": false,
+  "loop": "",
+  "loop_db": -30.0,
+  "loop_reach": 0.0
+ },
+ "soot": false,
+ "cookie": true,
+ "hash": "81b32b654ed277e9634d7a558106f9de"
+}

@@ -72,6 +72,31 @@ static func carried_torch() -> Node3D:
 	return node
 
 
+## The guards' lantern (GuardHands): not added to anything; its flame is its origin.
+static func carried_lantern() -> Node3D:
+	var node: Node3D = LightFixtureScript.new()
+	node.name = "Lantern"
+	node.fixture = &"carried_lantern"
+	return node
+
+
+## A lantern hung `chain` metres below a hook at `hook_at`; it swings in the wind.
+static func hanging_lantern(parent: Node, hook_at: Vector3, chain := 0.6, overrides := {}) -> Node3D:
+	var settings := overrides.duplicate()
+	settings["hang_drop"] = chain
+	return make(parent, &"hanging_lantern", hook_at, 0.0, settings)
+
+
+## A box lantern on a bracket, its plate at `mount_at` on a wall facing `wall_normal`.
+static func wall_lantern(parent: Node, mount_at: Vector3, wall_normal: Vector3, overrides := {}) -> Node3D:
+	return make(parent, &"wall_lantern", mount_at, yaw_facing(wall_normal), overrides)
+
+
+## A lamp post standing on `foot_at`, its arm out along its +Z turned by `yaw`.
+static func lamp_post(parent: Node, foot_at: Vector3, yaw := 0.0, overrides := {}) -> Node3D:
+	return make(parent, &"lamp_post", foot_at, yaw, overrides)
+
+
 ## A cresset: "pole" standing on `at` (its foot), or "wall" on its bracket
 ## (`at` its plate, turned by `yaw`).
 static func cresset(parent: Node, at: Vector3, variant := &"pole", yaw := 0.0, overrides := {}) -> Node3D:

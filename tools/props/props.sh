@@ -2,6 +2,7 @@
 # The props (tools/props): light fixtures built in Blender, headless.
 #
 #   tools/props/props.sh flames               the effect sheets (assets/vfx/)
+#   tools/props/props.sh cookie               the hanging lantern's light cookie
 #   tools/props/props.sh build <fixture|all>  recipe -> assets/props/source/<fixture>.blend
 #   tools/props/props.sh check <fixture|all>  the rules, nothing written
 #   tools/props/props.sh bake <fixture|all>   ambient occlusion, grime, soot -> vertex colours
@@ -78,8 +79,11 @@ case "$verb" in
   flames)
     exec "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/flames.py" -- "${1:-all}"
     ;;
+  cookie)
+    exec "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/flames.py" -- cookie
+    ;;
   *)
-    sed -n '2,14p' "$0"
+    sed -n '2,15p' "$0"
     exit 1
     ;;
 esac

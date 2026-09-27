@@ -212,14 +212,20 @@ func _ready() -> void:
 	if shadows:
 		LightBudget.register(self)
 
+	_after_ready()
+
 
 func _exit_tree() -> void:
 	LightBudget.unregister(self)
 
 
 ## For what is built on a burner (LightFixture.gd): set the exports before
-## the burner builds itself from them.
+## the burner builds itself from them, and finish once it has.
 func _before_ready() -> void:
+	pass
+
+
+func _after_ready() -> void:
 	pass
 
 

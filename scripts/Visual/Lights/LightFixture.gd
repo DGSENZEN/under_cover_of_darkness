@@ -15,6 +15,15 @@ extends "res://scripts/Visual/Torch.gd"
 const Materials := preload("res://scripts/Visual/Materials.gd")
 const FOLDER := "res://assets/props/lights/"
 const SOOT := preload("res://assets/vfx/soot.png")
+const COOKIE := "res://assets/vfx/cookie_lantern.png"
+const CHAIN_LINK := "res://assets/props/lights/chain_link.glb"
+## A chain link's length along its chain.
+const LINK_PITCH := 0.054
+## A hung fixture's swing: gravity, damping, how hard the wind pushes it
+## (rad/s^2 at full wind), and the most it swings.
+const SWING_DAMPING := 1.5
+const SWING_WIND := 0.8
+const SWING_MOST := 0.5
 
 ## Which fixture (assets/props/lights/<fixture>.glb / .json).
 @export var fixture := &""
@@ -22,6 +31,8 @@ const SOOT := preload("res://assets/vfx/soot.png")
 var overrides := {}
 ## Metres its stretching part grows (a pole cresset fitted to its place).
 var stretch := 0.0
+## A hung fixture: metres of chain between its hook (its origin) and it.
+var hang_drop := 0.0
 
 var model: Node3D
 ## socket name -> its points in the fixture's space.
@@ -29,6 +40,10 @@ var sockets := {}
 var glow_meshes: Array[GeometryInstance3D] = []
 var soot: Decal
 var spec_data := {}
+var _tilt := Vector2.ZERO
+var _spin := Vector2.ZERO
+var _rest_basis := Basis.IDENTITY
+var _swinging := false
 
 static var _specs := {}
 var _bodies: Array[RID] = []
@@ -78,6 +93,7 @@ func _before_ready() -> void:
 	_apply_settings(overrides)
 	_build_model()
 	_stretch()
+	_hang()
 
 	if sockets.has(&"flame"):
 		flame_points = PackedVector3Array(sockets[&"flame"])
@@ -140,6 +156,59 @@ func _build_model() -> void:
 
 	for body in model.find_children("*", "CollisionObject3D", true, false):
 		_bodies.append((body as CollisionObject3D).get_rid())
+
+
+func _after_ready() -> void:
+	if spec_data.get("cookie", false) and ResourceLoader.exists(COOKIE):
+		# Its own frame's bars thrown round the walls.
+		light.light_projector = load(COOKIE)
+
+	_swinging = spec_data.get("mount", "") == "hang"
+	_rest_basis = transform.basis
+
+
+## A hung fixture hangs `hang_drop` below its hook on links of chain; it
+## swings about the hook.
+func _hang() -> void:
+	if spec_data.get("mount", "") != "hang" or model == null or hang_drop <= 0.0:
+		return
+
+	model.position.y -= hang_drop
+
+	for socket_name in [&"flame", &"corona"]:
+		if sockets.has(socket_name):
+			var lowered: Array = []
+
+			for point in sockets[socket_name]:
+				lowered.append(point - Vector3(0.0, hang_drop, 0.0))
+
+			sockets[socket_name] = lowered
+
+	if not ResourceLoader.exists(CHAIN_LINK):
+		return
+
+	var link_mesh: Mesh = null
+
+	for mesh in (load(CHAIN_LINK) as PackedScene).instantiate().find_children("*", "MeshInstance3D", true, false):
+		link_mesh = mesh.mesh
+
+	if link_mesh == null:
+		return
+
+	for i in int(hang_drop / LINK_PITCH):
+		var link := MeshInstance3D.new()
+		link.name = "Link%d" % i
+		link.mesh = link_mesh
+		link.material_override = Materials.surface(&"chain")
+		link.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(link)
+		link.position = Vector3(0.0, -LINK_PITCH * i, 0.0)
+		link.rotation.y = PI * 0.5 * (i % 2)
+
+
+## How fast a hung fixture swings (rad/s): its creak (LightFixture sounds).
+func swing_speed() -> float:
+	return _spin.length()
 
 
 ## A stretching part (a cresset's pole) grows by `stretch`; everything above
@@ -206,11 +275,26 @@ func _place_soot() -> void:
 func _process(delta: float) -> void:
 	super._process(delta)
 
+	if _swinging:
+		_swing(delta)
+
 	if lit and not glow_meshes.is_empty():
 		var ratio := clampf(light.light_energy / maxf(energy, 0.001), 0.0, 1.5)
 
 		for mesh in glow_meshes:
 			mesh.set_instance_shader_parameter(&"glow", ratio)
+
+
+## A pendulum from its hook, pushed by the wind.
+func _swing(delta: float) -> void:
+	# The hook to the flame (its sockets already hang below by the chain).
+	var length := maxf(absf(socket(&"flame").y), 0.2)
+	var push := Vector2(_lean.x, _lean.z) * SWING_WIND
+	var pull := -_tilt * (9.8 / length) + push - _spin * SWING_DAMPING
+	_spin += pull * delta
+	_tilt = (_tilt + _spin * delta).limit_length(SWING_MOST)
+	# Its foot swings downwind: about Z for x, about X (against) for z.
+	transform.basis = _rest_basis * Basis(Vector3.BACK, _tilt.x) * Basis(Vector3.RIGHT, -_tilt.y)
 
 
 func _show_lit(state: StringName) -> void:

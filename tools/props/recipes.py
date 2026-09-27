@@ -194,6 +194,128 @@ FIXTURES["cresset_wall"] = {
     "burner": dict(FIRE_BURNER),
 }
 
+# Lanterns: a tankard of horn panes in iron bars, a domed roof, a dish base,
+# a wick. Scaled for the bigger hanging lantern. The flame is its origin
+# (unless moved with `at`).
+LAMP_BURNER = {
+    "sheet": "small", "ramp": "lamp", "low_ramp": "gutter", "flicker_kind": "lamp", "flicker": 0.05,
+    "energy": 1.5, "light_range": 6.5, "shadows": False, "color": "FFA645", "corona_px": 28.0,
+    "ember_rate": 0.0, "smoke_rate": 0.0, "flame_size": 0.08, "flame_layers": 1, "core": False,
+    "loop": "", "loop_db": -30.0, "loop_reach": 0.0,
+}
+
+
+def _lantern(scale=1.0, at=(0.0, 0.0, 0.0), prefix=""):
+    x, y, z = at
+    r, h = 0.075 * scale, 0.2 * scale
+    return [
+        {"type": "panes", "name": prefix + "panes", "slot": "horn", "glow": True, "sides": 8, "radius": r, "height": h,
+         "bars": 0.005 * scale, "at": (x, y, z - h * 0.5)},
+        {"type": "lathe", "name": prefix + "roof", "slot": "iron", "segments": 8,
+         "profile": [(r * 1.08, 0.0), (r * 1.0, 0.02 * scale), (r * 0.68, 0.05 * scale), (r * 0.28, 0.068 * scale), (r * 0.2, 0.08 * scale), (0.0, 0.085 * scale)],
+         "at": (x, y, z + h * 0.5)},
+        {"type": "lathe", "name": prefix + "base", "slot": "iron", "segments": 8,
+         "profile": [(0.0, -0.025 * scale), (r * 1.06, -0.025 * scale), (r * 1.06, 0.0), (0.0, 0.0)], "at": (x, y, z - h * 0.5)},
+        {"type": "lathe", "name": prefix + "wick", "slot": "wax", "segments": 4,
+         "profile": [(0.0, 0.0), (0.012 * scale, 0.0), (0.01 * scale, 0.04 * scale), (0.0, 0.045 * scale)], "at": (x, y, z - h * 0.5)},
+    ]
+
+
+FIXTURES["carried_lantern"] = {
+    "family": "lanterns",
+    "mount": "carried",
+    "budget": 400,
+    "soot": False,
+    "cookie": False,
+    "parts": _lantern() + [
+        {"type": "tube", "name": "bail", "slot": "iron", "radius": 0.004, "sides": 3,
+         "points": [(-0.07, 0.0, 0.1), (-0.05, 0.0, 0.2), (0.0, 0.0, 0.23), (0.05, 0.0, 0.2), (0.07, 0.0, 0.1)]},
+    ],
+    "sockets": {"flame": [(0.0, 0.0, -0.05)], "corona": [(0.0, 0.0, 0.0)], "grip": [(0.0, 0.0, 0.23)]},
+    "burner": dict(LAMP_BURNER),
+}
+
+# The hanging lantern: half again as big, a ring on top to hang by (its chain
+# is added where it is hung: Lights.hanging_lantern). Its origin is its ring.
+_HL = 1.5
+_HL_BODY = (0.0, 0.0, -0.075 * _HL - 0.15 * _HL)
+
+FIXTURES["hanging_lantern"] = {
+    "family": "lanterns",
+    "mount": "hang",
+    "budget": 500,
+    "soot": False,
+    "cookie": True,
+    "parts": _lantern(_HL, _HL_BODY) + [
+        {"type": "ring", "name": "hang_ring", "slot": "iron", "radius": 0.02, "thickness": 0.006, "sides": 3, "segments": 6,
+         "axis": "Y", "at": (0.0, 0.0, -0.02)},
+    ],
+    "sockets": {"flame": [(0.0, 0.0, _HL_BODY[2] - 0.05 * _HL)], "corona": [(0.0, 0.0, _HL_BODY[2])], "hang": [(0.0, 0.0, 0.0)]},
+    "burner": dict(LAMP_BURNER, energy=1.4, light_range=7.0, shadows=True),
+}
+
+# A link of chain: hung lanterns and chandeliers repeat it (LightFixture).
+FIXTURES["chain_link"] = {
+    "family": "parts",
+    "mount": "",
+    "budget": 40,
+    "soot": False,
+    "cookie": False,
+    "parts": [{"type": "chain", "name": "link", "slot": "chain", "start": (0.0, 0.0, 0.0), "end": (0.0, 0.0, -0.054), "link": (0.07, 0.04, 0.008)}],
+    "sockets": {},
+    "burner": {},
+}
+
+# The wall lantern: a square box lantern hanging from an iron bracket.
+_WL_BODY = (0.0, -0.3, -0.05)
+
+FIXTURES["wall_lantern"] = {
+    "family": "lanterns",
+    "mount": "wall",
+    "budget": 450,
+    "soot": True,
+    "cookie": False,
+    "parts": [
+        {"type": "box", "name": "plate", "slot": "iron", "size": (0.08, 0.02, 0.16), "at": (0.0, -0.01, 0.12)},
+        {"type": "tube", "name": "bracket", "slot": "iron", "radius": 0.008, "sides": 4,
+         "points": [(0.0, -0.02, 0.14), (0.0, -0.18, 0.17), (0.0, -0.3, 0.16), (0.0, -0.3, 0.12)]},
+        {"type": "tube", "name": "brace", "slot": "iron", "radius": 0.006, "sides": 4, "points": [(0.0, -0.02, 0.06), (0.0, -0.17, 0.165)]},
+        {"type": "panes", "name": "panes", "slot": "horn", "glow": True, "sides": 4, "radius": 0.113, "height": 0.24, "bars": 0.007,
+         "at": (0.0, -0.3, -0.17)},
+        {"type": "lathe", "name": "roof", "slot": "iron", "segments": 4,
+         "profile": [(0.125, 0.0), (0.11, 0.02), (0.02, 0.1), (0.0, 0.11)], "rotate": (0.0, 0.0, 45.0), "at": (0.0, -0.3, 0.07)},
+        {"type": "lathe", "name": "base", "slot": "iron", "segments": 4,
+         "profile": [(0.0, -0.02), (0.12, -0.02), (0.12, 0.0), (0.0, 0.0)], "rotate": (0.0, 0.0, 45.0), "at": (0.0, -0.3, -0.17)},
+        {"type": "lathe", "name": "wick", "slot": "wax", "segments": 4,
+         "profile": [(0.0, 0.0), (0.015, 0.0), (0.012, 0.05), (0.0, 0.055)], "at": (0.0, -0.3, -0.17)},
+    ],
+    "sockets": {"flame": [(0.0, -0.3, -0.1)], "corona": [(0.0, -0.3, -0.05)], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(LAMP_BURNER, energy=1.2, light_range=6.0, shadows=False),
+}
+
+# The lamp post: a timber post on a stone foot, an iron crook arm, and the
+# hanging lantern's make hung from it.
+_LP_LANTERN = (0.0, -0.6, 2.75 - 0.075 * _HL - 0.15 * _HL)
+
+FIXTURES["lamp_post"] = {
+    "family": "lanterns",
+    "mount": "floor",
+    "budget": 700,
+    "soot": False,
+    "cookie": True,
+    "parts": [
+        {"type": "box", "name": "foot", "slot": "stone", "size": (0.32, 0.32, 0.22), "at": (0.0, 0.0, 0.11)},
+        {"type": "tube", "name": "post", "slot": "wood_old", "radius": 0.085, "sides": 4, "points": [(0.0, 0.0, 0.2), (0.0, 0.0, 3.0)]},
+        {"type": "tube", "name": "arm", "slot": "iron", "radius": 0.014, "sides": 4,
+         "points": [(0.0, -0.05, 2.82), (0.0, -0.3, 2.92), (0.0, -0.6, 2.9), (0.0, -0.6, 2.78)]},
+        {"type": "tube", "name": "brace", "slot": "iron", "radius": 0.01, "sides": 4, "points": [(0.0, -0.05, 2.5), (0.0, -0.32, 2.9)]},
+        {"type": "ring", "name": "hook", "slot": "iron", "radius": 0.02, "thickness": 0.006, "sides": 3, "segments": 6, "axis": "Y",
+         "at": (0.0, -0.6, 2.76)},
+    ] + _lantern(_HL, _LP_LANTERN, "lantern_"),
+    "sockets": {"flame": [(0.0, -0.6, _LP_LANTERN[2] - 0.05 * _HL)], "corona": [(0.0, -0.6, _LP_LANTERN[2])], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(LAMP_BURNER, energy=1.6, light_range=9.0, shadows=True),
+}
+
 KINDS = list(FIXTURES)
 
 

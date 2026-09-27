@@ -57,6 +57,7 @@ func _run() -> void:
 	await _budget()
 	await _fixture()
 	await _torches()
+	await _lanterns()
 
 
 # ---------------------------------------------------------------------------
@@ -806,6 +807,42 @@ func _torches() -> void:
 		if node.is_in_group(&"torches"):
 			node.queue_free()
 
+	camera.queue_free()
+	await _frames(3)
+
+
+# ---------------------------------------------------------------------------
+# Lanterns and lamps
+# ---------------------------------------------------------------------------
+
+func _lanterns() -> void:
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.8, 810)
+	camera.current = true
+
+	# L35 a hung lantern throws its bars, casts shadows, and swings in the wind
+	var hung: Node3D = Lights.hanging_lantern(self, Vector3(0, 3, 800), 0.6)
+	await _frames(3)
+	hung.lean(Vector3(1, 0, 0))
+	await _frames(120)
+	var tilt: float = hung.global_basis.y.angle_to(Vector3.UP)
+	_check("L35 a hanging lantern throws its frame's bars, casts shadows, and swings in the wind",
+		hung.light.light_projector != null and hung.light.shadow_enabled and tilt > 0.05,
+		"projector %s shadows %s tilted %.3f rad" % [hung.light.light_projector != null, hung.light.shadow_enabled, tilt])
+	hung.queue_free()
+
+	# L36 a carried lantern throws none; a lamp post does, its flame at head height and more
+	var carried: Node3D = Lights.carried_lantern()
+	add_child(carried)
+	var post: Node3D = Lights.lamp_post(self, Vector3(6, 0, 800))
+	await _frames(3)
+	var flame_height: float = (post.global_transform * post.flame_points[0]).y - post.global_position.y
+	_check("L36 a carried lantern has no cookie and no shadows; a lamp post has its cookie, its flame 2.2-2.6 m up",
+		carried.light.light_projector == null and not carried.light.shadow_enabled and post.light.light_projector != null and flame_height > 2.2 and flame_height < 2.6,
+		"carried cookie %s shadows %s; post cookie %s flame at %.2f m" % [carried.light.light_projector != null, carried.light.shadow_enabled, post.light.light_projector != null, flame_height])
+	carried.queue_free()
+	post.queue_free()
 	camera.queue_free()
 	await _frames(3)
 

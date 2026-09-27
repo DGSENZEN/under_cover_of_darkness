@@ -1,0 +1,17 @@
+{
+ "fixture": "chain_link",
+ "family": "parts",
+ "mount": "",
+ "tris": 36,
+ "slots": [
+  "chain"
+ ],
+ "glow_parts": [],
+ "shadow_parts": [],
+ "stretch": {},
+ "sockets": {},
+ "burner": {},
+ "soot": false,
+ "cookie": false,
+ "hash": "e19b9873b675fad52b426a2c4236e3e6"
+}

@@ -51,7 +51,8 @@ def check(name, recipe):
         broken.add("budget")
 
     sockets = sockets_in_scene()
-    needed = ["flame"]
+    # A part of other fixtures (a chain link) has no flame of its own.
+    needed = [] if recipe.get("family") == "parts" else ["flame"]
 
     if "flame" in sockets:
         needed.append("corona")

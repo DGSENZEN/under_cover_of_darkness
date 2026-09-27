@@ -1,0 +1,62 @@
+{
+ "fixture": "carried_lantern",
+ "family": "lanterns",
+ "mount": "carried",
+ "tris": 392,
+ "slots": [
+  "horn_glow",
+  "iron",
+  "wax"
+ ],
+ "glow_parts": [
+  "panes"
+ ],
+ "shadow_parts": [],
+ "stretch": {},
+ "sockets": {
+  "flame": [
+   [
+    0.0,
+    -0.05,
+    -0.0
+   ]
+  ],
+  "corona": [
+   [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  ],
+  "grip": [
+   [
+    0.0,
+    0.23,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "small",
+  "ramp": "lamp",
+  "low_ramp": "gutter",
+  "flicker_kind": "lamp",
+  "flicker": 0.05,
+  "energy": 1.5,
+  "light_range": 6.5,
+  "shadows": false,
+  "color": "FFA645",
+  "corona_px": 28.0,
+  "ember_rate": 0.0,
+  "smoke_rate": 0.0,
+  "flame_size": 0.08,
+  "flame_layers": 1,
+  "core": false,
+  "loop": "",
+  "loop_db": -30.0,
+  "loop_reach": 0.0
+ },
+ "soot": false,
+ "cookie": false,
+ "hash": "d917cc51407daee344dd1a784bd78e50"
+}

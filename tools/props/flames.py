@@ -372,7 +372,74 @@ def main(argv):
 
 
 def make_cookie():
-    raise SystemExit("the lantern cookie is rendered once the hanging lantern exists (props.sh cookie)")
+    """The hanging lantern's light cookie: what its flame sees all round it
+    (an equirectangular panorama from the flame socket), the frame and roof
+    black, the horn panes letting the light through."""
+    import bpy
+
+    source = ROOT / "assets" / "props" / "source" / "hanging_lantern.blend"
+
+    if not source.exists():
+        raise SystemExit("build the hanging lantern first (props.sh all hanging_lantern)")
+
+    bpy.ops.wm.open_mainfile(filepath=str(source))
+    scene = bpy.context.scene
+    flame = bpy.data.objects["socket:flame:0"].location.copy()
+
+    for material in bpy.data.materials:
+        material.use_nodes = True
+        nodes = material.node_tree.nodes
+        links = material.node_tree.links
+        nodes.clear()
+        out = nodes.new("ShaderNodeOutputMaterial")
+
+        if material.name.startswith("horn"):
+            shader = nodes.new("ShaderNodeBsdfTransparent")
+            shader.inputs["Color"].default_value = (0.75, 0.75, 0.75, 1.0)
+        else:
+            # Not quite black: a little light gets round the iron (bounce),
+            # or the floor under a lantern would be pitch dark.
+            shader = nodes.new("ShaderNodeEmission")
+            shader.inputs["Strength"].default_value = 0.12
+
+        links.new(shader.outputs[0], out.inputs["Surface"])
+
+    for obj in scene.objects:
+        if obj.type == "MESH" and obj.name.endswith("wick"):
+            obj.hide_render = True
+
+    world = bpy.data.worlds.new("White")
+    world.use_nodes = True
+    world.node_tree.nodes["Background"].inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
+    world.node_tree.nodes["Background"].inputs["Strength"].default_value = 1.0
+    scene.world = world
+    scene.render.engine = "CYCLES"
+    scene.cycles.device = "CPU"
+    scene.cycles.samples = 16
+    scene.cycles.use_denoising = False
+    scene.render.resolution_x = 512
+    scene.render.resolution_y = 256
+    scene.render.resolution_percentage = 100
+    scene.render.image_settings.file_format = "OPEN_EXR"
+    scene.view_settings.view_transform = "Standard"
+    camera_data = bpy.data.cameras.new("Cookie")
+    camera_data.type = "PANO"
+    camera_data.panorama_type = "EQUIRECTANGULAR"
+    camera = bpy.data.objects.new("Cookie", camera_data)
+    camera.location = flame
+    camera.rotation_euler = (math.pi * 0.5, 0.0, 0.0)
+    scene.collection.objects.link(camera)
+    scene.camera = camera
+
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, "cookie.exr")
+        scene.render.filepath = path
+        bpy.ops.render.render(write_still=True)
+        image = bpy.data.images.load(path, check_existing=False)
+        pixels = np.array(image.pixels[:], dtype=np.float64).reshape(256, 512, 4)[::-1, :, 0]
+
+    write_png(VFX / "cookie_lantern.png", np.round(np.clip(pixels, 0.0, 1.0) * 255.0).astype(np.uint8))
+    print("cookie_lantern: 512x256")
 
 
 if __name__ == "__main__":

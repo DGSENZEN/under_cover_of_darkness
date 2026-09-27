@@ -9,6 +9,10 @@ uniform sampler2D albedo_texture : source_color, filter_nearest_mipmap, repeat_e
 uniform bool has_texture = false;
 uniform vec4 albedo : source_color = vec4(1.0);
 uniform vec4 char_colour : source_color = vec4(0.11, 0.09, 0.08, 1.0);
+// How much of the flame's own colour is in its glow (hot pitch and coals
+// deep red-orange, horn panes the flame's amber), and how bright it is.
+uniform float flame_share = 0.35;
+uniform float brightness = 0.55;
 
 instance uniform float glow = 0.0;
 instance uniform float charred = 0.0;
@@ -20,8 +24,6 @@ void fragment() {
 	base = mix(base, char_colour.rgb, clamp(charred, 0.0, 1.0));
 	ALBEDO = base;
 	ROUGHNESS = 0.9;
-	// Hot pitch and coals glow deep red-orange, only a little of the flame's
-	// own colour in them.
-	vec3 ember = mix(vec3(0.85, 0.22, 0.04), heat_tint.rgb, 0.35);
-	EMISSION = ember * clamp(glow, 0.0, 1.5) * 0.55;
+	vec3 ember = mix(vec3(0.85, 0.22, 0.04), heat_tint.rgb, flame_share);
+	EMISSION = ember * clamp(glow, 0.0, 1.5) * brightness;
 }
