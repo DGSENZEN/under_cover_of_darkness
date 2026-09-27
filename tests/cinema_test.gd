@@ -20,6 +20,7 @@ const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const CineShot := preload("res://scripts/Cinema/CineShot.gd")
 const CineVantage := preload("res://scripts/Cinema/CineVantage.gd")
+const CineScreen := preload("res://scripts/Cinema/CineScreen.gd")
 
 const COMBAT := 4
 const SEARCHING := 3
@@ -56,6 +57,7 @@ func _ready() -> void:
 	await _ramps()
 	await _framing()
 	await _vantages()
+	await _screen()
 	print("\n==== RESULTS ====")
 
 	for r in results:
@@ -413,6 +415,59 @@ func _vantages() -> void:
 
 	for d in dressing:
 		d.queue_free()
+
+
+# ---------------------------------------------------------------------------
+# S: the letterbox and the wipe
+# ---------------------------------------------------------------------------
+
+func _screen() -> void:
+	var screen: CanvasLayer = CineScreen.new()
+	add_child(screen)
+	var size := get_viewport().get_visible_rect().size
+
+	# S1 the bars leave a 2.39:1 band, whatever the screen, eased in
+	var bands := []
+
+	for dims in [Vector2(1920, 1080), Vector2(1280, 960)]:
+		var bar: float = CineScreen.bar_for(dims)
+		bands.append(dims.x / (dims.y - 2.0 * bar))
+
+	var empty_before: bool = screen.subtitle_band() == Rect2()
+	screen.letterbox(true)
+	await _real(0.5)
+	var early: float = screen.bar_height()
+	await _real(1.1)
+	var full: float = screen.bar_height()
+	var target: float = CineScreen.bar_for(size)
+	_check("S1 the letterbox leaves a 2.39:1 band on any screen, eased in over 1.5 s",
+		bands.all(func(b): return absf(b - 2.39) < 0.01) and early < target * 0.5 and early > 0.0 and absf(full - target) < 0.5,
+		"bands %s; at 0.5 s %.1f, at 1.6 s %.1f of %.1f" % [bands, early, full, target])
+
+	# S3 the subtitles' place: the lower bar, once it shows
+	var band: Rect2 = screen.subtitle_band()
+	_check("S3 the subtitles' band is empty without the letterbox and the lower bar with it",
+		empty_before and absf(band.position.y - (size.y - full)) < 0.5 and absf(band.size.y - full) < 0.5 and absf(band.size.x - size.x) < 0.5,
+		"before %s, after %s (screen %s)" % [empty_before, band, size])
+
+	# S2 a wipe crosses the screen in 0.6 s and lets its frame go; cleared, at once
+	var image := Image.create(16, 16, false, Image.FORMAT_RGB8)
+	image.fill(Color.RED)
+	var texture := ImageTexture.create_from_image(image)
+	screen.wipe(texture)
+	var during: bool = screen.wiping()
+	await _real(0.3)
+	var edge_mid: float = screen.wipe_edge()
+	await _real(0.4)
+	var over: bool = not screen.wiping() and screen.wipe_texture() == null
+	screen.wipe(texture)
+	await _real(0.1)
+	screen.clear()
+	var cleared: bool = not screen.wiping() and screen.wipe_texture() == null
+	_check("S2 a wipe crosses the screen over 0.6 s and lets its frame go; cleared, it stops at once",
+		during and edge_mid > 0.3 and edge_mid < 0.7 and over and cleared,
+		"during %s, edge at 0.3 s %.2f, over %s, cleared %s" % [during, edge_mid, over, cleared])
+	screen.queue_free()
 
 
 func _marker(at: Vector3) -> Marker3D:
