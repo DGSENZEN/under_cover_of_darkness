@@ -2548,9 +2548,12 @@ func _do_patrol(delta: float) -> void:
 		var step: Variant = _life.pastime_step()
 
 		if step is Vector3:
+			# A step or two out and back, still facing the way he keeps
+			# watch: he does not turn his back on his ground.
 			_life.at_rest(delta)
 			_go_to(step)
-			_walk(patrol_speed * GuardPastimesScript.PACE_SPEED, delta)
+			_walk(patrol_speed * GuardPastimesScript.PACE_SPEED, delta, false)
+			_face(-_home.basis.z, delta)
 			return
 
 		# No route: stand post, and walk back to it if something drew us away.
@@ -2945,7 +2948,7 @@ func _on_link_reached(details: Dictionary) -> void:
 
 
 ## Walks along the current path. True on arrival.
-func _walk(speed: float, delta: float) -> bool:
+func _walk(speed: float, delta: float, face := true) -> bool:
 	# In water, as fast as it lets him (swimming, wading).
 	speed *= _water.speed_scale()
 
@@ -3033,7 +3036,10 @@ func _walk(speed: float, delta: float) -> bool:
 	var flat := Vector3(velocity.x, 0.0, velocity.z).move_toward(wanted, acceleration * delta)
 	velocity.x = flat.x
 	velocity.z = flat.z
-	_face(direction, delta)
+
+	if face:
+		_face(direction, delta)
+
 	return false
 
 

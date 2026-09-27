@@ -31,6 +31,9 @@ const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
 const TalkFacts := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
 const GuardLifeScript := preload("res://scripts/AISystem/GuardLife.gd")
 
+## The things they do together (reached at run time: it reads this script).
+const GATHERING := "res://scripts/AISystem/Gathering.gd"
+
 ## How often it looks for men to talk; within how far of each other, and how
 ## many at most to a conversation.
 const CHOOSE_EVERY := 2.0
@@ -68,6 +71,7 @@ const REACT_OTHERWISE := 0.15
 const REACTIONS := ["nods", "shakes"]
 
 static var _directors := {}
+static var _gathering_script: GDScript = null
 
 ## Its own time: game seconds since it was made.
 var clock := 0.0
@@ -232,6 +236,55 @@ func play(conv_id: String, cast: Dictionary, extra := {}) -> bool:
 	return true
 
 
+## A conversation belonging to `place` (a gathering: "dice", "story"...),
+## cast from exactly these men, now. False if none fits.
+func play_place(members: Array, place: StringName) -> bool:
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+	var here := members.filter(func(m): return m != null and is_instance_valid(m) and _talk_of(m).is_empty())
+
+	if tree == null or here.size() < members.size():
+		return false
+
+	here.sort_custom(func(x: Node, y: Node) -> bool:
+		return float(_last_spoke.get(x.get_instance_id(), -INF)) < float(_last_spoke.get(y.get_instance_id(), -INF)))
+	var sheet: Dictionary = _conversations_lib().get("cast", {})
+	var men: Array = here.map(func(g: Node) -> Dictionary: return _facts_of(g, sheet))
+
+	for m in men:
+		m["station"] = place
+
+	var world := TalkFacts.world(here, tree, {"place": [place]})
+	world["at_ease"] = true
+	var candidates := []
+
+	for conv in _conversations_lib().get("conversations", []):
+		if StringName(conv["place"]) != place or _required(conv) > here.size():
+			continue
+
+		if not _available(conv) or not _when_holds(conv, world):
+			continue
+
+		var cast := TalkFacts.cast_parts(conv, men, world, _allowed_for(conv))
+
+		if not cast.is_empty():
+			candidates.append({"conv": conv, "cast": cast, "spec": TalkFacts.specificity(conv, cast), "priority": int(conv["priority"])})
+
+	if candidates.is_empty():
+		return false
+
+	var best_priority: int = candidates.map(func(c): return int(c["priority"])).max()
+	var top := candidates.filter(func(c): return int(c["priority"]) >= best_priority)
+	var best_spec: int = top.map(func(c): return int(c["spec"])).max()
+	var pick := _weighted(top.filter(func(c): return int(c["spec"]) >= best_spec - 1))
+	var nodes := {}
+
+	for part in pick["cast"]:
+		nodes[part] = (pick["cast"][part] as Dictionary)["node"]
+
+	_start(pick["conv"], nodes, {"place": [place]})
+	return true
+
+
 ## The conversations going on, for tests and the showcase.
 func talks() -> Array:
 	return _talks.map(func(t: Dictionary) -> Dictionary: return {
@@ -314,7 +367,7 @@ func _free(man: Node) -> bool:
 	if not is_instance_valid(man) or man.is_queued_for_deletion() or man.get("puppet") == true:
 		return false
 
-	if not GuardLifeScript.at_ease(man) or bool(man.get("lookout")) or not _talk_of(man).is_empty():
+	if not GuardLifeScript.at_ease(man) or bool(man.get("lookout")) or not _talk_of(man).is_empty() or _gathering(man):
 		return false
 
 	var life: RefCounted = man.get("_life")
@@ -839,6 +892,16 @@ func _join() -> void:
 				break
 
 
+## In one of the things they do together (Gathering): not free for talk
+## but its own.
+func _gathering(man: Node) -> bool:
+	if _gathering_script == null:
+		_gathering_script = load(GATHERING)
+
+	var gatherings: RefCounted = _gathering_script.of(man)
+	return gatherings != null and not gatherings.member_of(man).is_empty()
+
+
 func _near_any(man: Node3D, members: Array) -> bool:
 	for other in members:
 		if other != null and is_instance_valid(other) and (other as Node3D).global_position.distance_to(man.global_position) <= TALK_RANGE:
@@ -855,7 +918,7 @@ func _remark(tree: SceneTree) -> void:
 	var sheet: Dictionary = _conversations_lib().get("cast", {})
 
 	for man in guards:
-		if not is_instance_valid(man) or man.get("puppet") == true or not GuardLifeScript.at_ease(man) or not _talk_of(man).is_empty():
+		if not is_instance_valid(man) or man.get("puppet") == true or not GuardLifeScript.at_ease(man) or not _talk_of(man).is_empty() or _gathering(man):
 			continue
 
 		var id: int = man.get_instance_id()

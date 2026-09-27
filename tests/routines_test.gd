@@ -18,6 +18,9 @@ const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const NightRotaScript := preload("res://scripts/AISystem/NightRota.gd")
 const GuardStationScript := preload("res://scripts/AISystem/GuardStation.gd")
+const GatheringScript := preload("res://scripts/AISystem/Gathering.gd")
+const TalkDirector := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
+const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 
 var results: Array[String] = []
 var player: CharacterBody3D
@@ -40,6 +43,7 @@ func _ready() -> void:
 func _run() -> void:
 	await _fire()
 	await _rota()
+	await _gatherings()
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +170,156 @@ func _rota() -> void:
 	_check("R7 a duty moves a man: he walks the round he is given, then stands the post",
 		rounded and posted and rota.duty_of(walker) == &"post", "rounded %s posted %s at %s, duty %s" % [rounded, posted, walker.global_position, rota.duty_of(walker)])
 	route.queue_free()
+
+
+# ---------------------------------------------------------------------------
+# Gatherings
+# ---------------------------------------------------------------------------
+
+func _gatherings() -> void:
+	# R8 dice: gathered, played, and broken up by a noise
+	await _fresh()
+	var dice := _place(&"dice", Vector3(0, 0, 0), [[Vector3(-0.8, 0, 0.6), &"squat", &"any"], [Vector3(0.8, 0, 0.6), &"squat", &"any"], [Vector3(0, 0, -0.9), &"squat", &"any"]])
+	var men := [_guard(Vector3(-3, 0, 6), 0.0), _guard(Vector3(0, 0, 6), 0.0), _guard(Vector3(3, 0, 6), 0.0)]
+	for g in men:
+		g._life._talk_rest = 0.0
+	var gatherings: RefCounted = GatheringScript.of(self)
+	var director: RefCounted = TalkDirector.of(self)
+	gatherings.request(&"dice")
+	await _until(func(): return _gathered(gatherings, &"dice", 3), 900)
+	var spots_ok := _gathered(gatherings, &"dice", 3)
+	await _until(func(): return director.played().any(func(id): return String(id).begins_with("dice_")), 2400)
+	var played: bool = director.played().any(func(id): return String(id).begins_with("dice_"))
+	SoundBus.emit_sound(men[0].global_position + Vector3(2, 0, 0), 60.0, self, &"test")
+	await _frames(120)
+	var over: bool = gatherings.live().is_empty() and not men.any(func(g): return g._rota.on_loan())
+	_check("R8 dice: three men gather at the crate, play, and a noise breaks it up",
+		spots_ok and played and over, "gathered %s, played %s, over %s (%s)" % [spots_ok, played, over, director.played()])
+	dice.queue_free()
+
+	# R9 the flask between two
+	await _fresh()
+	var a := _guard(Vector3(20, 0, 0), -PI * 0.5)
+	var b := _guard(Vector3(22, 0, 0), PI * 0.5)
+	for g in [a, b]:
+		g._life._talk_rest = 0.0
+	gatherings = GatheringScript.of(self)
+	director = TalkDirector.of(self)
+	gatherings.request(&"flask")
+	await _until(func(): return director.played().any(func(id): return String(id).begins_with("flask_")), 1500)
+	var flask_talk: Array = director.played().filter(func(id): return String(id).begins_with("flask_"))
+	await _until(func(): return gatherings.live().is_empty() and not a._rota.on_loan() and not b._rota.on_loan(), 1500)
+	_check("R9 the flask passes between two men, and they go back to what they were at",
+		not flask_talk.is_empty() and gatherings.live().is_empty() and not a._rota.on_loan() and not b._rota.on_loan() and gatherings.history().has(&"flask"),
+		"played %s, live %d, history %s" % [director.played(), gatherings.live().size(), gatherings.history()])
+
+	# R10 a story at the fire: the teller, and listeners turned to him
+	await _fresh()
+	var fire: Area3D = FireScript.brazier(self, Vector3(40, 0, 0))
+	var story := _place(&"story", Vector3(40, 0, 0), [[Vector3(0, 0, -1.9), &"stand", &"teller"], [Vector3(1.6, 0, 1.0), &"squat", &"listener"], [Vector3(-1.6, 0, 1.0), &"squat", &"listener"], [Vector3(0, 0, 1.9), &"stand", &"listener"]])
+	var teller := _guard(Vector3(36, 0, 6), 0.0, &"rash", "Brand")
+	var listeners := [_guard(Vector3(39, 0, 6), 0.0), _guard(Vector3(42, 0, 6), 0.0), _guard(Vector3(44, 0, 6), 0.0)]
+	for g in [teller] + listeners:
+		g._life._talk_rest = 0.0
+	gatherings = GatheringScript.of(self)
+	director = TalkDirector.of(self)
+	gatherings.request(&"story")
+	await _until(func():
+		for t in director.talks():
+			if String(t["id"]).begins_with("story_") and director.speaking(teller):
+				return true
+		return false, 3000)
+	await _frames(30)
+	var told: Dictionary = {}
+
+	for t in director.talks():
+		if String(t["id"]).begins_with("story_"):
+			told = t
+
+	var turned := 0
+	var angles := []
+
+	for g in listeners:
+		if not (told.get("members", []) as Array).has(g):
+			continue
+
+		var pose: Dictionary = await _posed_global(g, [&"Head"])
+		var facing: Vector3 = ((pose[&"Head"] as Transform3D).basis * _rest_forward_axis(g)).normalized()
+		var to_him: Vector3 = (teller.eye_position() - (pose[&"Head"] as Transform3D).origin).normalized()
+		var angle := rad_to_deg(acos(clampf(Vector2(facing.x, facing.z).normalized().dot(Vector2(to_him.x, to_him.z).normalized()), -1.0, 1.0)))
+		angles.append(int(angle))
+
+		# His eyes on the teller (his head as well as a squat lets it).
+		if director.speaker_near(g) == teller and angle < 50.0:
+			turned += 1
+
+	_check("R10 a story at the fire: the storyteller tells it, and the men listening turn to him",
+		not told.is_empty() and told["cast"].get("A") == teller and turned >= 2 and turned == angles.size(),
+		"story %s, teller cast %s, listeners' heads %s deg off him" % [told.get("id", "none"), told.get("cast", {}).get("A") == teller, angles])
+	story.queue_free()
+	fire.get_parent().queue_free()
+
+
+## A gathering place of `kind` at `at`: spots [offset, activity, role], each
+## facing the middle.
+func _place(kind: StringName, at: Vector3, spots: Array) -> Node3D:
+	var place := Marker3D.new()
+	place.set_meta(&"gathering", kind)
+	place.add_to_group(&"gathering_places")
+	add_child(place)
+	place.global_position = at
+
+	for spot in spots:
+		var marker := Marker3D.new()
+		marker.set_meta(&"activity", spot[1])
+		marker.set_meta(&"role", spot[2])
+		place.add_child(marker)
+		marker.global_position = at + (spot[0] as Vector3)
+		var inward: Vector3 = -(spot[0] as Vector3)
+		marker.global_basis = Basis.looking_at(Vector3(inward.x, 0, inward.z).normalized(), Vector3.UP)
+
+	return place
+
+
+## A gathering of `kind` with `count` men, each settled at his spot.
+func _gathered(gatherings: RefCounted, kind: StringName, count: int) -> bool:
+	for g in gatherings.live():
+		if g["kind"] == kind and (g["members"] as Array).size() == count:
+			return (g["members"] as Array).all(func(m): return m._rota.at_station())
+
+	return false
+
+
+## A man's Head axis that points to his front when he stands at rest.
+func _rest_forward_axis(guard: Node3D) -> Vector3:
+	var man: Node3D = guard._rig.man
+	var rest: Transform3D = man.skeleton.global_transform * man.skeleton.get_bone_global_rest(man.skeleton.find_bone(&"Head"))
+	var front := -guard.global_basis.z
+	var best := Vector3.ZERO
+	var best_dot := -INF
+
+	for axis in [Vector3.RIGHT, Vector3.LEFT, Vector3.UP, Vector3.DOWN, Vector3.FORWARD, Vector3.BACK]:
+		var dot: float = (rest.basis * axis).normalized().dot(front)
+
+		if dot > best_dot:
+			best_dot = dot
+			best = axis
+
+	return best
+
+
+## `bones` of a guard's man in the world as posed this frame.
+func _posed_global(guard: Node3D, bones: Array) -> Dictionary:
+	var man: Node3D = guard._rig.man
+	var got := {}
+	man.skeleton.skeleton_updated.connect(func():
+		for bone in bones:
+			got[bone] = man.bone_global(bone), CONNECT_ONE_SHOT)
+
+	while got.is_empty():
+		await get_tree().process_frame
+
+	return got
 
 
 # ---------------------------------------------------------------------------

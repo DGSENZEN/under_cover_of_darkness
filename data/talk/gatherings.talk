@@ -7,3 +7,134 @@ cast: A = captain; B = name(Tam)
 cooldown: once
 A [kicks]: On your feet. The Moon-Glass doesn't guard itself.
 B: I was listening, Captain. With my eyes shut.
+
+# Asking the others first (played by the gathering itself, never chosen).
+
+== invite_dice
+place: invite
+cast: A = any; B = any
+cooldown: 0s
+again: yes
+A: Dice?
+B: Go on, then.
+
+== invite_flask
+place: invite
+cast: A = any; B = any
+cooldown: 0s
+again: yes
+A [nods]: Something to keep the cold out?
+B: I thought you'd never ask.
+
+== invite_story
+place: invite
+cast: A = any; B = any
+cooldown: 0s
+again: yes
+A: Sit down, you lot. I'll tell you one.
+B: Not the one about the eel-wife.
+
+# Dice at the crate by the bench.
+
+== dice_cold_hands
+place: dice
+group: dice
+cast: A = any; B = any; C? = any
+cooldown: 10m
+A [throws]: Come on, come on...
+B [laughs]: Two ones. The dog's eyes.
+A: My hands are too cold to throw.
+C: They were warm enough for the pie.
+B: Throw again, then. I'll wait.
+
+== dice_col_wins
+place: dice
+group: dice
+cast: A = lucky; B = any; C? = any
+cooldown: 10m
+A [throws]: Sixes. Both of them.
+B: Again? Let me see those bones.
+A [shrugs]: Same bones as yours.
+C [laughs]: Nobody's luck lasts like {A}'s.
+B {if craven}: I'm not betting the rest. Not against him.
+B: One more. Double or nothing.
+
+== dice_debt
+place: dice
+group: dice
+cast: A = any; B = owes(A); C? = any
+cooldown: 10m
+A: You still owe me four pennies for the dice.
+B: Three. I won the last throw.
+A: You knocked the cup over. That's not winning, that's clumsy.
+B [shrugs]: It's a kind of winning.
+C [laughs]: Pay the man, {B}.
+
+# The flask, passed between two.
+
+== flask_brother
+place: flask
+cast: A = any; B = any
+cooldown: 5m
+A: Here. Against the cold.
+B [drinks]: Gods, what is that?
+A: My brother-in-law makes it.
+B: Tell him to stop.
+A [laughs]: Give it back, then.
+
+== flask_just_one
+place: flask
+cast: A = any; B = any
+cooldown: 5m
+A [drinks]: Want some?
+B: If the captain smells it on me...
+A: She'll smell the cold on you first.
+B [drinks]: Just the one.
+A: That's what you said last night.
+
+# A story round the fire.
+
+== story_sewer_thing
+place: story
+cast: A = storyteller|rank>=2; B = any; C? = any; D? = any
+cooldown: once
+A: When I caught rats in the Undertown, we had a saying.
+B: Don't fall in?
+A: Don't count the eyes.
+C: What eyes?
+A [points:the well]: Down there, a lantern shows you eyes. Rats. Hundreds.
+A: One night I counted. And one pair didn't blink.
+D {if craven}: {A}, stop it.
+B: What was it?
+A [shrugs]: Never found out. I stopped counting.
+C [laughs]: He stopped catching rats, too.
+A [laughs]: That I did.
+
+== story_captain_hask
+place: story
+cast: A = storyteller|rank>=2; B = any; C? = any; D? = any
+cooldown: once
+A: Before this captain we had old Hask. You remember Hask?
+B: Only the stories.
+A: He slept in his armour. Said a man should be ready.
+C: Was he?
+A: The night the Low Bridge burned, he stood up so fast he fell down the stairs.
+B [laughs]: In his armour?
+A: Rolled all the way to the gate. Loudest thing that night.
+D: What happened to him?
+A [shrugs]: A farm, out past the walls. Wears the armour to the privy, I hear.
+C [laughs]: Ready for anything.
+
+== story_drowned_lantern
+place: story
+cast: A = storyteller|rank>=2; B = any; C? = any; D? = any
+cooldown: once
+A: You know why they call it the Drowned Lantern?
+B: Because the beer's water?
+A [laughs]: Besides that. Forty years back, the canal rose in one night.
+A: The keeper stayed at his post with the lantern, for the boats.
+C: And drowned?
+A: They found the lantern still burning on the roof. Never found him.
+B [whispers]: They say it's still lit, some nights.
+A: They say you owe me a drink for the story, too.
+D [laughs]: Now that's a ghost story.

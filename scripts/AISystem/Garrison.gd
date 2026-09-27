@@ -98,11 +98,12 @@ static func of(target: Node3D) -> RefCounted:
 
 
 ## Forget everything (a new level, a test, the gym's F5): and with it who
-## was talking to whom, and the night's rota.
+## was talking to whom, the night's rota and what they were doing together.
 static func clear_all() -> void:
 	_garrisons.clear()
 	(load("res://scripts/AISystem/Talk/TalkDirector.gd") as GDScript).call(&"clear_all")
 	(load("res://scripts/AISystem/NightRota.gd") as GDScript).call(&"clear_all")
+	(load("res://scripts/AISystem/Gathering.gd") as GDScript).call(&"clear_all")
 
 
 ## Whoever it remembered is gone (a level reloaded): let it go.

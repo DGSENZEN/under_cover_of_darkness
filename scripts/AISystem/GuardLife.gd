@@ -36,6 +36,7 @@ const CHECK := 0.35
 ## night's rota, where a level has one.
 const TALK_DIRECTOR := "res://scripts/AISystem/Talk/TalkDirector.gd"
 const NIGHT_ROTA := "res://scripts/AISystem/NightRota.gd"
+const GATHERING := "res://scripts/AISystem/Gathering.gd"
 ## Seeing something out of place: this long in view (weighted by how near the
 ## middle of his view it is) before it registers; how far off it can be; and
 ## the light it needs beyond arm's length.
@@ -62,6 +63,7 @@ const LOOKOUT_PERIOD := 12.0
 
 static var _talk_script: GDScript = null
 static var _rota_script: GDScript = null
+static var _gathering_script: GDScript = null
 
 var guard: CharacterBody3D
 ## After a conversation, this long before he talks again (TalkDirector).
@@ -110,6 +112,14 @@ func update(delta: float) -> void:
 
 	if night != null:
 		night.tick(delta)
+
+	if _gathering_script == null:
+		_gathering_script = load(GATHERING)
+
+	var together: RefCounted = _gathering_script.of(guard)
+
+	if together != null:
+		together.tick(delta)
 
 	_update_cover(delta)
 	_update_lantern(delta)
