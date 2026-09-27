@@ -181,6 +181,7 @@ func _run() -> void:
 	await _director()
 	await _memory()
 	await _voice()
+	await _fight_talk()
 	GuardScript.randomize_on = true
 
 
@@ -567,6 +568,138 @@ func _voice() -> void:
 	Sfx.recording = false
 	_check("T27 each line is murmured, a whisper well under a shout",
 		murmurs.size() == 2 and float(murmurs[0][1]) <= float(murmurs[1][1]) - 12.0, "murmurs %s" % [murmurs])
+
+
+# ---------------------------------------------------------------------------
+# In the fight, and grief
+# ---------------------------------------------------------------------------
+
+func _fight_talk() -> void:
+	var lib: Dictionary = TalkScript.library()
+
+	# T28 a status check, answered by the man hurt
+	await _fresh()
+	_use_files()
+	var leader := _guard(Vector3(190, 0, 0), 0.0, &"steady", "", &"swordsman")
+	var cut := _guard(Vector3(192.5, 0, 0), 0.0)
+	player.debug_light_level = 1.0
+	player.global_position = Vector3(191, 1.05, -7)
+	for g in [leader, cut]:
+		g._engage(player)
+	await _frames(30)
+	cut.health = cut.max_health * 0.5
+	var director: RefCounted = TalkDirector.of(self)
+	var asked: bool = director.call_pair(&"status", leader)
+	var answers := _choices_of(lib, "status_check", "B")
+	await _until(func(): return _barks_of(cut).any(func(t): return answers.has(t)), 300)
+	var answered: bool = _barks_of(cut).any(func(t): return answers.has(t))
+	var order_ok := false
+
+	for i in _said.size():
+		if _said[i][0] == cut and answers.has(_said[i][1]):
+			order_ok = _said.slice(0, i).any(func(e): return e[0] == leader)
+			break
+
+	_check("T28 in the fight a man asks another if he stands, and the man hurt answers in his own way", asked and answered and order_ok,
+		"asked %s, answered %s after %s (%s)" % [asked, answered, order_ok, _said.map(func(e): return e[1])])
+
+	# T29 no pair when nobody can answer
+	await _fresh()
+	_use_files()
+	var alone := _guard(Vector3(200, 0, 0), 0.0, &"steady", "", &"swordsman")
+	var far := _guard(Vector3(200, 0, 45), 0.0)
+	alone._engage(player)
+	far._engage(player)
+	far.health = far.max_health * 0.4
+	await _frames(10)
+	director = TalkDirector.of(self)
+	var none: bool = not director.call_pair(&"status", alone)
+	_check("T29 a call waits for an answer only from a man who can give one: none in earshot, no pair", none, "pair started %s" % [not none])
+	player.debug_light_level = 0.0
+	player.global_position = Vector3(100, 1.05, 28)
+
+	# T30 grief by name
+	await _fresh()
+	_use_files()
+	var osric := _guard(Vector3(210, 0, 0), 0.0, &"steady", "Osric", &"swordsman")
+	var jory := _guard(Vector3(210, 0, -6), PI, &"steady", "Jory")
+	osric._life._talk_rest = 99.0
+	jory._life._talk_rest = 99.0
+	await _frames(20)
+	jory.die(player)
+	await _until(func(): return _barks_of(osric).any(func(t): return String(t).contains("Jory")), 240)
+	_check("T30 a man who sees his brother die calls his name, and grieves",
+		_barks_of(osric).any(func(t): return String(t).contains("Jory")) and float(osric.grief) >= 0.9, "Osric said %s, grief %.2f" % [_barks_of(osric), osric.grief])
+
+	# T31 grief breaks a craven man and enrages a rash one
+	await _fresh()
+	_use_files()
+	player.debug_light_level = 1.0
+	player.global_position = Vector3(221, 1.05, -8)
+	# The two craven men stand alike to everyone but the dead man's tie.
+	var piers := _guard(Vector3(218, 0, 0), 0.0, &"craven", "Piers")
+	var other := _guard(Vector3(222, 0, 0), 0.0, &"craven", "Gideon")
+	var col := _guard(Vector3(220, 0, -3), 0.0, &"steady", "Col")
+	var brother := _guard(Vector3(220, 0, 4), 0.0, &"rash", "Osric", &"swordsman")
+	var kin := _guard(Vector3(220, 0, 6), 0.0, &"steady", "Jory")
+	for g in [piers, other, col, brother, kin]:
+		g._engage(player)
+	await _frames(60)
+	var squad: RefCounted = SquadScript.of(player)
+	var before := [squad.resolve_of(piers), squad.resolve_of(other)]
+	col.die(player)
+	kin.die(player)
+	await _frames(40)
+	# Both lost the same men; only Piers lost his friend.
+	var shaken: float = (float(before[0]) - squad.resolve_of(piers)) - (float(before[1]) - squad.resolve_of(other))
+	_check("T31 grief breaks a craven man's heart and enrages a rash one",
+		squad.will_of(piers) == &"broken" and squad.will_of(other) != &"broken" and shaken > 0.1 and brother._fighter.mood == &"enraged", "Piers %.2f -> %.2f (%s), Gideon %.2f -> %.2f (%s), grief's share %.2f, Osric's mood %s" % [before[0], squad.resolve_of(piers), squad.will_of(piers), before[1], squad.resolve_of(other), squad.will_of(other), shaken, brother._fighter.mood])
+	player.debug_light_level = 0.0
+	player.global_position = Vector3(100, 1.05, 28)
+
+	# T32 a man missing from his post, called by name
+	await _fresh()
+	_use_files()
+	var looker := _guard(Vector3(230, 0, 0), 0.0)
+	looker._life._talk_rest = 99.0
+	await _frames(10)
+	GarrisonScript.of(player).post_fell(Vector3(230, 0, -3.5), "Hendrik", Comms.now())
+	await _until(func(): return _barks_of(looker).any(func(t): return String(t).contains("Hendrik")), 600)
+	_check("T32 a man who finds a post empty calls the missing man by name", _barks_of(looker).any(func(t): return String(t).contains("Hendrik")),
+		"said %s" % [_barks_of(looker)])
+
+	# T33 the lookout sends a man, and he answers
+	await _fresh()
+	_use_files()
+	var watcher := _guard(Vector3(240, 0, 0), 0.0)
+	watcher.lookout = true
+	var sent := _guard(Vector3(244, 0, 3), 0.0)
+	sent._life._talk_rest = 99.0
+	await _frames(10)
+	watcher._send_to_look(Vector3(244, 0, -10))
+	var replies := _choices_of(lib, "send_look", "B")
+	await _until(func(): return _barks_of(sent).any(func(t): return replies.has(t)), 240)
+	_check("T33 the lookout sends a man by name to look, and he answers in his own way", _barks_of(sent).any(func(t): return replies.has(t)),
+		"lookout said %s, the man said %s" % [_barks_of(watcher), _barks_of(sent)])
+
+
+## The files' conversations for the director (not the fixtures).
+func _use_files() -> void:
+	TalkDirector.of(self).use_library({})
+
+
+## Every way part `part` of conversation `id` may say its lines.
+func _choices_of(lib: Dictionary, id: String, part: String) -> Array:
+	var texts := []
+
+	for c in lib["conversations"]:
+		if c["id"] == id:
+			for turn in c["lines"]:
+				if turn["part"] == part:
+					for choice in turn["choices"]:
+						texts.append(String(choice["text"]))
+
+	return texts
 
 
 ## `seconds` of the director's time, the men's rest cut short after each

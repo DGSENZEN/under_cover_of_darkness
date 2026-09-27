@@ -382,12 +382,15 @@ func _look_for_missing(step: float) -> void:
 		if float(_missing[i]) >= MISS_NOTICE:
 			post["noticed"] = true
 			_missing.erase(i)
-			var said: String = guard._fighter.temper.line(&"missing") if guard._fighter != null and guard._fighter.temper != null else "Where's %s got to?"
+			# Asked after by name (TalkDirector), else in his own way.
+			if not _director().play_missing(guard, String(post["name"])):
+				var said: String = guard._fighter.temper.line(&"missing") if guard._fighter != null and guard._fighter.temper != null else "Where's %s got to?"
 
-			if said.contains("%s"):
-				said = said % String(post["name"])
+				if said.contains("%s"):
+					said = said % String(post["name"])
 
-			guard.bark(said)
+				guard.bark(said)
+
 			garrison.raise_alarm(0.35)
 			guard.notice(post["where"], &"missing")
 			return

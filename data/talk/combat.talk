@@ -1,16 +1,131 @@
-# In the fight: a call, and a man who answers it.
+# In the fight: a call, and a man who answers it. Chosen after the squad has
+# decided (Squad), each by its situation.
 
 == status_check
-when: combat
+when: combat, situation:status
 cast: A = rank>=2; B = hurt
 cooldown: 20s
+again: yes
 A [shouts]: {B}! Are you standing?
 B {if hurt>0.6}: He's cut me! I'm still here!
+B {if craven}: I'm bleeding! Gods, I'm bleeding!
 B: Standing! Come on!
 
 == not_there
-when: combat, dead>=1
+when: combat, dead>=1, situation:excuse
 cast: A = rank>=2; B = craven
 cooldown: 1m
 A [shouts]: {B}, round his left!
 B: Not there! That's where {dead} fell!
+
+== no_way_round
+when: combat, situation:excuse
+cast: A = any; B = craven
+cooldown: 1m
+A [shouts]: {B}! Get behind him!
+B: There's no way round! He'll have me!
+
+== spotted_ask
+when: situation:spotted_ask
+cast: A = any; B = any
+cooldown: 30s
+again: yes
+A [shouts]: Anyone see him?
+B {if craven}: Don't ask me! I'm not looking!
+B: He went {place}!
+
+== spotted_ask_quiet
+when: situation:spotted_ask
+cast: A = any; B = sly
+cooldown: 30s
+again: yes
+A [shouts]: Where is he? Anyone?
+B: Last I saw, {place}. Quietly now.
+
+== man_down
+when: situation:man_down
+cast: A = any; B = any
+cooldown: 20s
+again: yes
+A [shouts]: Man down! {dead}'s down!
+B {if craven}: That's two! That's two of us!
+B: Keep together! Don't let him pick us off!
+
+== man_down_rage
+when: situation:man_down
+cast: A = any; B = rash
+cooldown: 20s
+again: yes
+A [shouts]: He got {dead}!
+B: Then I'll have his head for it!
+
+== tactic_envelop
+when: situation:tactic_envelop
+cast: A = any; B = any
+cooldown: 30s
+again: yes
+A [shouts]: Surround him! Box him in!
+B {if craven}: You go round! I'll hold here!
+B: Going round!
+
+== tactic_press
+when: situation:tactic_press
+cast: A = any; B = any
+cooldown: 30s
+again: yes
+A [shouts]: He's bleeding! Press him!
+B {if rash}: Leave him to me!
+B: Now! All of us!
+
+== tactic_break
+when: situation:tactic_break
+cast: A = any; B = any
+cooldown: 30s
+again: yes
+A [shouts]: He's hiding behind his blade! Break it!
+B {if kind(brute)}: Out of my way.
+B: Smash his guard!
+
+== tactic_rush
+when: situation:tactic_rush
+cast: A = any; B = any
+cooldown: 30s
+again: yes
+A [shouts]: Close in! Don't let him shoot!
+B: Rushing him!
+
+== tactic_fall_back
+when: situation:tactic_fall_back
+cast: A = any; B = any
+cooldown: 30s
+again: yes
+A [shouts]: Fall back! To me!
+B {if rash}: Fall back yourself!
+B: Coming!
+
+== tactic_rout
+when: situation:tactic_rout
+cast: A = any; B = any
+cooldown: 30s
+again: yes
+A [shouts]: Run! Get help!
+B: Every man for himself!
+
+== last_man
+when: situation:last_man
+cast: A = any; B? = any
+cooldown: 1m
+again: yes
+A [shouts]: I'll fetch the others!
+B: Go! I'll hold him!
+
+== send_look
+when: situation:send
+cast: A = any; B = any
+cooldown: 0s
+again: yes
+A [shouts]: {B}! Something {place}! Go and look!
+B {if craven}: Me? Why always me?
+B {if sly}: Going. Quietly.
+B {if rash}: I'll have a look. And whatever's there.
+B: Going!

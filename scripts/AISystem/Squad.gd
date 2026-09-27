@@ -78,6 +78,13 @@ const CALLS := {
 ## RECOVER_MARGIN above it. A man of UNBREAKABLE_NERVE never breaks; one of
 ## DESPERATE_DRIVE breaks into an all-in charge, not away.
 const BREAK_BASE := 0.55
+## Grief for a man he knew weighs on a craven man's resolve this much (x his
+## grief); craven is nerve under CRAVEN_NERVE (Temperament.CRAVEN_AT).
+const GRIEF_WEIGHT := 0.4
+const CRAVEN_NERVE := 0.3
+## A man under STATUS_HURT of his health is asked after, once in STATUS_EVERY.
+const STATUS_HURT := 0.6
+const STATUS_EVERY := 20.0
 const BREAK_PER_NERVE := 0.5
 const WAVER_MARGIN := 0.2
 const RECOVER_MARGIN := 0.25
@@ -152,6 +159,9 @@ const WATCH_FAR := 11.0
 const Dangers := preload("res://scripts/AISystem/Dangers.gd")
 
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
+const Comms := preload("res://scripts/AISystem/Comms.gd")
+## Calls answered, by the talk (a second man answers: TalkDirector).
+const TALK_DIRECTOR := "res://scripts/AISystem/Talk/TalkDirector.gd"
 
 static var _squads := {}
 
@@ -235,6 +245,11 @@ var _given_up_on := {}
 ## down when they last fell back: they fall back when half are down, not
 ## when half are elsewhere.
 var _lost := 0
+## Where their men fell, and who ({where, name}); the men who have refused a
+## place there; when a man cut was last asked if he stands.
+var _fallen: Array = []
+var _excused := {}
+var _status_at := -100.0
 var _fell_back_at_lost := 0
 ## When one of them last called where you are.
 var _last_spot_call := -100.0
@@ -369,6 +384,8 @@ func stand_down(guard: Node3D) -> void:
 ## the leader's fall most of all. A killing the whole garrison hears of.
 func member_died(guard: Node3D, killed := true) -> void:
 	var was_leader: bool = _leader != null and _leader.get_ref() == guard
+	var called := String(guard.get("given_name")) if guard.get("given_name") != null else ""
+	_fallen.append({"where": guard.global_position, "name": called})
 	leave(guard)
 	morale = maxf(morale - (0.45 if was_leader else 0.2), 0.0)
 	_last_harm_at = clock
@@ -387,6 +404,13 @@ func member_died(guard: Node3D, killed := true) -> void:
 	for member in members():
 		if _kind(member) == &"brute":
 			member.bark("RAAAGH!")
+
+	# "Man down!", and a man counts them.
+	if killed:
+		var near: Array = fighting()
+
+		if not near.is_empty():
+			_call_pair(&"man_down", near[0], {"dead_name": called})
 
 
 ## Everyone in the hunt, whatever he is doing now.
@@ -609,6 +633,7 @@ func think(delta: float) -> void:
 	var before := _roles.duplicate()
 	_give_places(alive, now)
 	_announce(before)
+	_ask_after_the_cut(alive, now)
 
 
 ## Help arriving puts heart into them; a lull with nobody cut lets them catch
@@ -782,7 +807,12 @@ func _choose_tactic(alive: Array, now: float) -> void:
 			lines = ["The captain's down! Run!"]
 
 		if not lines.is_empty():
-			caller.bark(lines[randi() % lines.size()])
+			# A second man answers the call if he can (TalkDirector).
+			var answered: bool = not (tactic == &"rout" and now - _leader_fell_at < 10.0) and _call_pair(StringName("tactic_" + String(tactic)), caller)
+
+			if not answered:
+				caller.bark(lines[randi() % lines.size()])
+
 			_last_call = now
 
 	if caller != null and for_help and caller.has_method("shout"):
@@ -1223,6 +1253,10 @@ func _judge_wills(alive: Array) -> void:
 		var resolve := morale
 		resolve -= FEAR_WEIGHT * (garrison.fear_of(_nerve(man)) if garrison != null else 0.0)
 		resolve -= WOUND_WEIGHT * (1.0 - clampf(_health_of(man), 0.0, 1.0))
+
+		# A craven man's grief for a man he knew takes the heart out of him.
+		if _nerve(man) < CRAVEN_NERVE:
+			resolve -= GRIEF_WEIGHT * float(man.get("grief") if man.get("grief") != null else 0.0)
 		var friends := 0
 
 		for other in alive:
@@ -1479,11 +1513,51 @@ func _announce(before: Dictionary) -> void:
 			&"engage":
 				situation = &"press" if tactic == &"fall_back" else &""
 
+		# Sent where a friend of his fell: a craven man will not go.
+		if place == &"flank" and not _fallen.is_empty() and _nerve(man) < CRAVEN_NERVE and not _excused.has(id):
+			var giver: Node3D = leader()
+
+			if giver != null and giver != man and _call_pair(&"excuse", giver, {"b": man, "dead_name": String(_fallen[-1]["name"])}):
+				_excused[id] = true
+				continue
+
+		# The last of them: off for the others.
+		if (place == &"flee" or place == &"fetch") and fighting().size() <= 1 and _call_pair(&"last_man", man):
+			continue
+
 		if situation != &"":
 			var said: String = t.line(situation)
 
 			if said != "":
 				man.bark(said)
+
+
+## A man cut badly: now and then his leader asks if he stands, and he
+## answers how he is.
+func _ask_after_the_cut(alive: Array, now: float) -> void:
+	if now - _status_at < STATUS_EVERY:
+		return
+
+	var giver: Node3D = leader()
+
+	if giver == null:
+		return
+
+	for man in alive:
+		if man != giver and _health_of(man) < STATUS_HURT:
+			if _call_pair(&"status", giver, {"b": man}):
+				_status_at = now
+
+			return
+
+
+## A call and its answer (TalkDirector.call_pair). False if nobody answered.
+func _call_pair(situation: StringName, caller: Node3D, facts := {}) -> bool:
+	if caller == null or not is_instance_valid(caller) or not caller.is_inside_tree() or not ResourceLoader.exists(TALK_DIRECTOR):
+		return false
+
+	var talk: RefCounted = (load(TALK_DIRECTOR) as GDScript).call(&"of", caller)
+	return talk != null and talk.call_pair(situation, caller, facts)
 
 
 ## Help is on its way.
@@ -1519,7 +1593,9 @@ func search_point_for(guard: Node3D) -> Variant:
 			var t := _temper_of(guard)
 
 			if t != null and guard.get("_bark_timer") != null and float(guard._bark_timer) <= 0.0 and guard.has_method("bark"):
-				guard.bark(t.line(&"hunt"))
+				# "Anyone see him?" and a man who did names the place.
+				if not _call_pair(&"spotted_ask", guard, {"place_name": Comms.place(seen, guard)}):
+					guard.bark(t.line(&"hunt"))
 
 			return cut_off
 

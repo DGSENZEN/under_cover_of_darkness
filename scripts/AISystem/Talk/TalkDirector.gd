@@ -26,6 +26,15 @@ extends RefCounted
 ## with an empty part that fits him takes it. A man alone says something to
 ## himself now and then (a remark: a conversation of one part, fitting his
 ## station), never on top of another within earshot.
+##
+## In a fight, a call is answered (`call_pair`: chosen after the squad has
+## decided what to do): a man asks if another stands and the man cut answers
+## how he is, "Anyone see him?" and a man names the place, a man ordered
+## where his friend fell refuses. A man who sees his kin or his friend die,
+## or finds him, calls his name (`grieve`); a man who finds a post empty
+## asks after the man by name (`play_missing`). These are called out: they
+## do not wait for anyone to be at his ease, and nothing short of a man gone
+## breaks them.
 
 const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
 const TalkFacts := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
@@ -64,11 +73,17 @@ const SOLO_EARSHOT := 15.0
 const SOLO_QUIET := 8.0
 ## How often it looks for men to join conversations with an empty part.
 const JOIN_EVERY := 0.5
+## A call is answered only by a man this near (s/he heard it).
+const EARSHOT_CALL := 25.0
+## A missing man asked after with whoever is this near.
+const MISSING_COMPANY := 6.0
 ## At the end of a line one man listening may nod or shake his head: the
 ## chance, by his temperament (a nod, but a rash man shakes his).
 const REACT_CHANCE := {&"steady": 0.35, &"stubborn": 0.35, &"rash": 0.25}
 const REACT_OTHERWISE := 0.15
 const REACTIONS := ["nods", "shakes"]
+## A rash man's grief turns to rage for this long (s).
+const RAGE_FOR := 20.0
 
 static var _directors := {}
 static var _gathering_script: GDScript = null
@@ -99,6 +114,8 @@ var _aired := {}
 var _remarks: Array = []
 var _solo_next := {}
 var _join_in := 0.0
+## Who has grieved whom ("id:name").
+var _grieved := {}
 
 
 ## The director for `node`'s tree (made the first time it is asked for).
@@ -162,10 +179,11 @@ func tick(delta: float) -> void:
 # Asking
 # ---------------------------------------------------------------------------
 
-## In a conversation (a remark to himself is not one).
+## In a conversation (a remark to himself is not one, nor a call and its
+## answer in a fight: those are called out, not talked).
 func in_talk(man: Node) -> bool:
 	var talk := _talk_of(man)
-	return not talk.is_empty() and not bool(talk["solo"])
+	return not talk.is_empty() and not bool(talk["solo"]) and not (talk["extra"] as Dictionary).has("call")
 
 
 ## His line is being said now.
@@ -302,6 +320,95 @@ func _pinned(allowed: Callable, fixed: Dictionary) -> Callable:
 			return false
 
 		return allowed.is_null() or allowed.call(man, part)
+
+
+## A call and its answer in a fight (or a lookout's send): a conversation
+## whose `when:` names `situation:<situation>`, the caller its A and a man
+## who can answer (alive, not crying out, in earshot) its B. `facts` adds
+## what the caller knows (place_name, dead_name) and may pin B ("b": a man).
+## Said at once, shouted. False if nobody can answer.
+func call_pair(situation: StringName, caller: Node, facts := {}) -> bool:
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+
+	if tree == null or not _can_speak(caller) or not _voice_free(caller):
+		return false
+
+	var extra: Dictionary = facts.duplicate()
+	extra["situation"] = situation
+	extra["call"] = true
+	var fixed := {"A": caller}
+
+	if facts.get("b") != null:
+		fixed["B"] = facts["b"]
+
+	var near: Array = [caller]
+
+	for other in tree.get_nodes_in_group(&"guards"):
+		if other != caller and _can_speak(other) and _voice_free(other) and (other as Node3D).global_position.distance_to((caller as Node3D).global_position) <= EARSHOT_CALL:
+			near.append(other)
+
+	return _urgent(near, extra, fixed, func(conv: Dictionary) -> bool:
+		return (conv["when"] as Array).any(func(term): return (term as Array).has("situation:%s" % situation)))
+
+
+## `man` calls the name of the dead man he knew (kin or friend), and grieves:
+## kin for the night, a friend for a while; a rash man is enraged by it.
+## False if he did not know him, or has already.
+func grieve(man: Node, dead_name: String) -> bool:
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+
+	if tree == null or not _can_speak(man) or dead_name == "":
+		return false
+
+	var sheet: Dictionary = _conversations_lib().get("cast", {})
+	var me := _facts_of(man, sheet)
+	var ties: Dictionary = me["ties"]
+	var kin := (ties.get("kin", []) as Array).has(dead_name)
+
+	if not kin and not (ties.get("friend", []) as Array).has(dead_name):
+		return false
+
+	var key := "%d:%s" % [man.get_instance_id(), dead_name]
+
+	if _grieved.has(key):
+		return false
+
+	_grieved[key] = true
+	man.set("grief", 1.0 if kin else 0.6)
+	man.set("grief_fades", not kin)
+	var fighter: RefCounted = man.get("_fighter")
+
+	if fighter != null and fighter.temper != null and fighter.temper.tag == &"rash":
+		fighter.rage_until = float(man.get("_game_time")) + RAGE_FOR
+
+	var near: Array = [man]
+
+	for other in tree.get_nodes_in_group(&"guards"):
+		if other != man and _can_speak(other) and (other as Node3D).global_position.distance_to((man as Node3D).global_position) <= EARSHOT_CALL:
+			near.append(other)
+
+	var named := "dead(%s)" % dead_name
+	return _urgent(near, {"dead_name": dead_name, "call": true}, {"A": man}, func(conv: Dictionary) -> bool:
+		return (conv["when"] as Array).any(func(term): return (term as Array).has(named)))
+
+
+## A man who finds a post empty asks after the man by name (with whoever is
+## near to answer). False if nothing fits.
+func play_missing(man: Node, missing_name: String) -> bool:
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+
+	if tree == null or not _can_speak(man) or not _talk_of(man).is_empty():
+		return false
+
+	var near: Array = [man]
+
+	for other in tree.get_nodes_in_group(&"guards"):
+		if other != man and _free(other) and (other as Node3D).global_position.distance_to((man as Node3D).global_position) <= MISSING_COMPANY:
+			near.append(other)
+
+	var named := "missing(%s)" % missing_name
+	return _urgent(near, {"dead_name": missing_name, "call": true}, {"A": man}, func(conv: Dictionary) -> bool:
+		return (conv["when"] as Array).any(func(term): return (term as Array).has(named) or (term as Array).has("missing")))
 
 
 ## The conversations going on, for tests and the showcase.
@@ -593,7 +700,7 @@ func _start(conv: Dictionary, cast: Dictionary, extra: Dictionary, solo := false
 	var id := String(conv["id"])
 	_talks.append({
 		"conv": conv, "id": id, "cast": cast.duplicate(), "members": members, "turn": 0,
-		"timer": OPENING if not solo else 0.0, "speaker": null, "speaking_until": -1.0, "started_at": clock,
+		"timer": OPENING if not solo and not extra.has("call") else 0.0, "speaker": null, "speaking_until": -1.0, "started_at": clock,
 		"place": StringName(conv["place"]), "extra": extra.duplicate(), "solo": solo,
 	})
 	_played_at[id] = clock
@@ -669,16 +776,21 @@ func _advance(talk: Dictionary, delta: float) -> void:
 	_end(talk)
 
 
-## Still part of it: here, at his ease, and near the others.
+## Still part of it: here, at his ease, and near the others (called out in a
+## fight: here, and in earshot).
 func _can_stay(man: Variant, talk: Dictionary) -> bool:
 	if man == null or not is_instance_valid(man) or (man as Node).is_queued_for_deletion() or man.get("_knocked_out") == true:
 		return false
 
-	if not GuardLifeScript.at_ease(man):
+	var called := (talk["extra"] as Dictionary).has("call")
+
+	if not called and not GuardLifeScript.at_ease(man):
 		return false
 
+	var reach := EARSHOT_CALL if called else LEAVE_RANGE
+
 	for other in talk["members"]:
-		if other != man and other != null and is_instance_valid(other) and (other as Node3D).global_position.distance_to((man as Node3D).global_position) <= LEAVE_RANGE:
+		if other != man and other != null and is_instance_valid(other) and (other as Node3D).global_position.distance_to((man as Node3D).global_position) <= reach:
 			return true
 
 	return (talk["members"] as Array).size() < 2
@@ -716,6 +828,10 @@ func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary
 	if delivery == &"" and bool(talk.get("solo", false)):
 		# To himself: under his breath.
 		delivery = &"murmur"
+
+	if delivery == &"" and (talk["extra"] as Dictionary).has("call"):
+		# Called out.
+		delivery = &"shout"
 
 	if delivery == &"":
 		var voice: Variant = speaker.get("_voice")
@@ -909,6 +1025,59 @@ func _join() -> void:
 				talk["members"].append(man)
 				free.erase(man)
 				break
+
+
+## A conversation chosen among those `fits` accepts, cast from `near` with
+## `fixed` parts pinned, and started at once (called out). The men of it
+## leave anything they were saying.
+func _urgent(near: Array, extra: Dictionary, fixed: Dictionary, fits: Callable) -> bool:
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+	var sheet: Dictionary = _conversations_lib().get("cast", {})
+	var men: Array = near.map(func(g: Node) -> Dictionary: return _facts_of(g, sheet))
+	var world := TalkFacts.world([near[0]], tree, extra)
+	var candidates := []
+
+	for conv in _conversations_lib().get("conversations", []):
+		if not fits.call(conv) or not _available(conv) or not _when_holds(conv, world):
+			continue
+
+		var cast := TalkFacts.cast_parts(conv, men, world, _pinned(_allowed_for(conv), fixed))
+
+		if cast.is_empty() or not fixed.keys().all(func(k): return cast.has(k)):
+			continue
+
+		# A call needs its answer: the second part filled.
+		if (conv["cast"] as Array).size() >= 2 and not bool((conv["cast"] as Array)[1]["optional"]) and not cast.has("B"):
+			continue
+
+		candidates.append({"conv": conv, "cast": cast, "spec": TalkFacts.specificity(conv, cast), "priority": int(conv["priority"])})
+
+	if candidates.is_empty():
+		return false
+
+	var best_priority: int = candidates.map(func(c): return int(c["priority"])).max()
+	var top := candidates.filter(func(c): return int(c["priority"]) >= best_priority)
+	var best_spec: int = top.map(func(c): return int(c["spec"])).max()
+	var pick := _weighted(top.filter(func(c): return int(c["spec"]) >= best_spec - 1))
+	var nodes := {}
+
+	for part in pick["cast"]:
+		var man: Node = (pick["cast"][part] as Dictionary)["node"]
+		var was := _talk_of(man)
+
+		if not was.is_empty():
+			_end(was)
+
+		nodes[part] = man
+
+	_start(pick["conv"], nodes, extra)
+	return true
+
+
+## Not crying out in pain (a louder thing than talk).
+func _voice_free(man: Node) -> bool:
+	var voice: Variant = man.get("_voice")
+	return voice == null or int(voice.sounding()) < 3
 
 
 ## In one of the things they do together (Gathering): not free for talk

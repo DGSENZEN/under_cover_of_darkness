@@ -34,6 +34,8 @@ const LIMB_ENDS := {
 }
 
 var discovered := false
+## Whose body it is (his given name): a friend who finds it calls it.
+var called := ""
 ## Killed, rather than knocked out. Found either way; spoken of differently.
 var dead := false
 ## A stand-in for a man who has gone limp (see above).
@@ -432,6 +434,7 @@ static func spawn(guard: Node3D, killed := false, fall := Vector3.ZERO) -> Rigid
 	var body := RigidBody3D.new()
 	body.set_script(load("res://scripts/AISystem/GuardBody.gd"))
 	body.name = "Body"
+	body.set("called", String(guard.get("given_name")) if guard.get("given_name") != null else "")
 
 	# A bigger man leaves a bigger body, in his own colours.
 	var rig: Node = guard.get_node_or_null("Rig")

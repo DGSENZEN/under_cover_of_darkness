@@ -59,6 +59,9 @@ const GuardWaterScript := preload("res://scripts/AISystem/GuardWater.gd")
 const GuardRotaScript := preload("res://scripts/AISystem/GuardRota.gd")
 const GuardVoiceScript := preload("res://scripts/AISystem/GuardVoice.gd")
 const GuardPastimesScript := preload("res://scripts/AISystem/GuardPastimes.gd")
+const TalkDirectorScript := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
+## A friend or kinsman this near who sees him die calls his name.
+const MOURN_SIGHT := 20.0
 ## Bleeding (bleeding): at most this much a second, never below this share of
 ## his health, and bound this long after he last saw you.
 const BLEED_MAX := 4.0
@@ -154,6 +157,10 @@ signal bound_wounds
 ## How his last line was said: "whisper", "murmur", "shout" or "" (the
 ## subtitles show it).
 var last_delivery: StringName = &""
+## His grief (0..1) for a kinsman or friend he saw die or found dead
+## (TalkDirector.grieve), and whether it eases (a friend's does, kin's not).
+var grief := 0.0
+var grief_fades := true
 
 
 @export_category("Vision")
@@ -1176,6 +1183,13 @@ func _discover(body: Node3D) -> void:
 	var news := not _knows_body_near(body.global_position)
 	_known_bodies[body] = true
 	_body_notice.erase(body)
+
+	# A man he knew: he calls his name (TalkDirector.grieve does nothing if
+	# he did not know him).
+	var called := String(body.get("called")) if body.get("called") != null else ""
+
+	if called != "":
+		TalkDirectorScript.of(self).grieve(self, called)
 	var first_to_find: bool = body.get("discovered") != true
 	body.set("discovered", true)
 
@@ -1219,6 +1233,20 @@ func _knows_body_near(point: Vector3) -> bool:
 
 ## Those of his own in the fight who saw him fall know of his body: they do
 ## not "find" it later.
+## Dying where his kin or his friends could see: each calls his name
+## (TalkDirector.grieve).
+func _mourned() -> void:
+	for other in get_tree().get_nodes_in_group(&"guards"):
+		if other == self or other.get("_knocked_out") == true or not other.has_method("eye_position"):
+			continue
+
+		if (other as Node3D).global_position.distance_to(global_position) > MOURN_SIGHT:
+			continue
+
+		if other._line_of_sight(other.eye_position(), eye_position(), self):
+			TalkDirectorScript.of(self).grieve(other, given_name)
+
+
 func _witnessed_by_friends(body: Node3D) -> void:
 	if body == null:
 		return
@@ -1782,6 +1810,10 @@ func die(_attacker: Node3D) -> void:
 		body.remove_from_group(&"bodies")
 
 	_witnessed_by_friends(body)
+
+	# His kin and his friends who saw it call his name.
+	if not puppet:
+		_mourned()
 
 	# Cut apart by the blow that killed him: off along it, before he falls.
 	if not _sever.is_empty() and _rig.has_method("sever"):
@@ -2347,7 +2379,11 @@ func _send_to_look(where: Vector3) -> bool:
 	if friend == null:
 		return false
 
-	bark(Comms.send_line(where, self, String(friend.get("given_name"))))
+	# Called by name; he answers in his own way (TalkDirector), else the
+	# call alone.
+	if not TalkDirectorScript.of(self).call_pair(&"send", self, {"place_name": Comms.place(where, self), "b": friend}):
+		bark(Comms.send_line(where, self, String(friend.get("given_name"))))
+
 	Comms.call_out(self, &"look", where, {"to": weakref(friend)})
 
 	if int(friend.get("state")) < Alert.INVESTIGATING:

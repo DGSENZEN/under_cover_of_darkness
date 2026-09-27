@@ -7,8 +7,18 @@ cooldown: once
 A: Jory? Jory, this isn't funny.
 B [whispers]: Stay behind me.
 
+== missing_where
+when: missing
+cast: A = any; B? = any
+cooldown: 1m
+again: yes
+A: Where's {dead} got to?
+B: Asleep in the shed, likely. Go and look.
+
+# Grief by name, for each tie (TalkDirector.grieve): A the man who knew him.
+
 == grief_jory_osric
-when: dead(Jory), body_found
+when: dead(Jory)
 cast: A = kin(Jory); B? = any
 cooldown: once
 priority: 10
@@ -16,3 +26,60 @@ A [shouts]: Jory! No. No, no, no...
 B: Osric, come away. He's gone.
 A {if rash}: I'll open him like a sack!
 A: Find him. Find him for me.
+
+== grief_osric_jory
+when: dead(Osric)
+cast: A = kin(Osric); B? = any
+cooldown: once
+priority: 10
+A [shouts]: Osric! Get up! Get up, damn you!
+B: He's gone, lad. Stay down.
+
+== grief_col_piers
+when: dead(Col)
+cast: A = friend(Col); B? = any
+cooldown: once
+priority: 10
+A [shouts]: Col? Col! Oh gods, oh gods...
+B: Quiet! You want to be next?
+
+== grief_piers_col
+when: dead(Piers)
+cast: A = friend(Piers); B? = any
+cooldown: once
+priority: 10
+A: Piers... you owed me three pennies, you fool.
+B: Leave him. Leave him!
+
+== grief_ned_hendrik
+when: dead(Ned)
+cast: A = friend(Ned); B? = any
+cooldown: once
+priority: 10
+A [shouts]: Ned! Two weeks in. Two weeks!
+B: Hendrik, he's gone.
+
+== grief_hendrik_ned
+when: dead(Hendrik)
+cast: A = friend(Hendrik); B? = any
+cooldown: once
+priority: 10
+A [shouts]: Hendrik? No... who'll tell his girl?
+B: We will. After. Get up.
+
+# Fear.
+
+== fear_count_heads
+when: dread>=0.35
+cast: A = any; B = any
+cooldown: 3m
+group: dread
+A [whispers]: Count heads. Who's still here?
+B: Not enough of us.
+
+== fear_lantern_out
+when: dread>=0.35, alarm>=0.45
+cast: A = craven; B = any
+cooldown: 3m
+A [whispers]: Keep the lantern up. Please.
+B: It's up. It's up. Breathe.

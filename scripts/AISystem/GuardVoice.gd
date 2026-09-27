@@ -62,6 +62,8 @@ const FADE_IN := 0.06
 const FADE_OUT := 0.15
 ## From here on, a line comes out shouted if nothing says how.
 const SHOUT_AT := 125.0
+## A friend's death eases off this much a second (kin's does not).
+const GRIEF_FADE := 0.01
 ## Afraid (the dread on his nerve past this): frightened breathing.
 const AFRAID_AT := 0.3
 ## A conversation's line lasts this long (TalkDirector's measure), for the
@@ -107,6 +109,11 @@ func _init(p_guard: CharacterBody3D) -> void:
 ## Every physics frame.
 func update(delta: float) -> void:
 	clock += delta
+
+	# A friend's death weighs on him a while; kin, all night.
+	if float(guard.get("grief")) > 0.0 and bool(guard.get("grief_fades")):
+		guard.set("grief", maxf(float(guard.get("grief")) - GRIEF_FADE * delta, 0.0))
+
 	_update_heart(delta)
 	_update_breath(delta)
 	_update_murmur()

@@ -199,6 +199,10 @@ static func world(men: Array, tree: SceneTree, extra := {}) -> Dictionary:
 		if float(garrison.alarm) >= 0.2:
 			facts["uneasy"] = true
 
+	# The man they speak of is dead to them, whatever the garrison knows yet.
+	if facts["dead_name"] != "" and not (facts["dead_names"] as Array).has(facts["dead_name"]):
+		(facts["dead_names"] as Array).append(facts["dead_name"])
+
 	for bell in tree.get_nodes_in_group(&"alarm_bells"):
 		if float(bell.get("_since_rung")) < BELL_FOR:
 			facts["bell_rung"] = true

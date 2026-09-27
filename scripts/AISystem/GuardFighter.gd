@@ -305,6 +305,9 @@ var deathblows := 1
 ## "pressing" (you are the one in trouble: he comes on, longer strings);
 ## "desperate" (hurt and alone: all in).
 var mood: StringName = &"steady"
+## Grief turned to rage (a rash man who saw his kin or friend die:
+## TalkDirector.grieve): enraged until then (his game time).
+var rage_until := -1.0
 var _mood_timer := 0.0
 ## How long this spell of being shaken has lasted, and how long before
 ## another may come.
@@ -2661,6 +2664,10 @@ func _judge_mood(target: Node3D) -> StringName:
 	# Broken, and rash: all in, whatever else.
 	if role() == &"desperate" and not is_open():
 		return &"desperate"
+
+	# His grief turned to rage.
+	if float(guard.get("_game_time")) < rage_until and not is_open():
+		return &"enraged"
 
 	# His balance going (and it comes and goes: a margin either way), for a
 	# short spell at a time.
