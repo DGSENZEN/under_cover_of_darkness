@@ -140,6 +140,11 @@ const FLASK_AT := 0.12
 ## the first this long in.
 const STOKE_EVERY := 3.3
 const STOKE_FIRST := 1.2
+## Wary (Guard.wary: a hunt not long since, the garrison roused), nothing
+## that takes his hands or his eyes off his ground: a few steps, a look about,
+## a word to himself.
+const WARY_HABITS := [&"pace", &"fidget"]
+const WARY_FIDGETS := [&"look_about", &"mutter"]
 ## Poses that leave his head free to look round at someone (GuardLife: a
 ## man going by, a greeting, the man he talks with).
 const HEAD_FREE := [&"", &"sit", &"lean", &"rail", &"fold_arms", &"eat", &"carry"]
@@ -268,7 +273,9 @@ func update(delta: float) -> void:
 		if _clearing > CLEAR_TIME or Vector2(off.x, off.z).length() > CLEAR_BY:
 			_unexcept()
 
-	if habit != &"" and not _at_ease():
+	# Stirred, or plainly not at ease: whatever it was is over. A little on
+	# his mind, short of suspicious, and he carries on.
+	if habit != &"" and not _at_ease(true):
 		interrupt()
 
 	if _dozing:
@@ -404,12 +411,21 @@ func wake(startled := true) -> void:
 func _choose(on_rounds: bool) -> void:
 	var hands: RefCounted = guard.get("_hands")
 	var lit: bool = hands != null and hands.lantern != null
+	var wary: bool = guard.has_method("wary") and guard.wary()
 	var home: Vector3 = guard.global_position if on_rounds else guard._home.origin
 	var reach := 4.5 if on_rounds else float(guard.get("habit_range"))
 	var options := {}
 
 	for each in HABITS:
 		var pull: float = float(leanings.get(each, 0.0))
+
+		# Wary: nothing that takes him off his guard. A man given to none of
+		# what is left still looks about him.
+		if wary and not (each in WARY_HABITS):
+			continue
+
+		if wary and each == &"fidget":
+			pull = maxf(pull, 0.5)
 
 		if pull <= 0.0:
 			continue
@@ -429,7 +445,7 @@ func _choose(on_rounds: bool) -> void:
 		var each: StringName = _pick(options)
 		options.erase(each)
 
-		if _start(each, home, reach, lit):
+		if _start(each, home, reach, lit, wary):
 			return
 
 
@@ -452,7 +468,7 @@ static func _pick(options: Dictionary) -> StringName:
 
 
 ## Starts `each` near `home` (within `reach`) if it can be done there.
-func _start(each: StringName, home: Vector3, reach: float, lit: bool) -> bool:
+func _start(each: StringName, home: Vector3, reach: float, lit: bool, wary := false) -> bool:
 	var tree := guard.get_tree()
 
 	match each:
@@ -503,23 +519,30 @@ func _start(each: StringName, home: Vector3, reach: float, lit: bool) -> bool:
 			_begin(each, [{"do": &"go", "to": to}, {"do": &"pose", "pose": &"", "time": 2.0, "look": &"about"}])
 			return true
 		&"fidget":
-			return _start_fidget(lit)
+			return _start_fidget(lit, wary)
 
 	return false
 
 
-func _start_fidget(lit: bool) -> bool:
+func _start_fidget(lit: bool, wary := false) -> bool:
 	var options := {}
 
 	for each in fidgets.keys():
-		# A light in his hand: his head only.
+		# A light in his hand: his head only. Wary: his eyes on his ground.
 		if lit and not (each in [&"look_about", &"look_up", &"mutter"]):
+			continue
+
+		if wary and not (each in WARY_FIDGETS):
 			continue
 
 		options[each] = fidgets[each]
 
-	# A merry man dances, when nobody is by.
-	if quirk == &"merry" and not lit and _alone(10.0):
+	# Wary, whatever his leanings: a look about him.
+	if wary and options.is_empty():
+		options[&"look_about"] = 1.0
+
+	# A merry man dances, when nobody is by (and nothing is afoot).
+	if quirk == &"merry" and not lit and not wary and _alone(10.0):
 		options[&"dance"] = 2.0
 
 	if options.is_empty():
@@ -544,7 +567,8 @@ func _start_fidget(lit: bool) -> bool:
 			_begin(&"fidget", [{"do": &"pose", "pose": &"dance", "time": 3.75}])
 		&"mutter":
 			guard.say(&"mutter")
-			_begin(&"fidget", [{"do": &"pose", "pose": &"" if lit else &"fold_arms", "time": 3.0, "look": &"about" if lit else &"", "rest": true}])
+			var head_only := lit or wary
+			_begin(&"fidget", [{"do": &"pose", "pose": &"" if head_only else &"fold_arms", "time": 3.0, "look": &"about" if head_only else &"", "rest": true}])
 
 	return true
 
@@ -1036,9 +1060,9 @@ func _unexcept() -> void:
 	_excepted.clear()
 
 
-func _at_ease() -> bool:
+func _at_ease(still := false) -> bool:
 	var life: RefCounted = guard.get("_life")
-	return int(guard.state) == RELAXED and (life == null or life.at_ease(guard))
+	return int(guard.state) == RELAXED and (life == null or life.at_ease(guard, still))
 
 
 func _dozy() -> bool:
@@ -1099,32 +1123,15 @@ func _wall_behind() -> Dictionary:
 # Things in his hands
 # ---------------------------------------------------------------------------
 
-## His blade put by while his hands are busy (and back after): heard going
-## into its scabbard, and out.
+## His hands wanted for his ways at ease (a seat, the axe, bread, a crate,
+## kneeling at his work): his blade put by for them if it was out, and free
+## for it again after (GuardRig shows it, and is heard).
 func _sheathe() -> void:
-	var rig: Node = guard.get("_rig")
-
-	if rig != null and rig.get("weapon") != null:
-		if rig.weapon.visible:
-			Sfx.play(guard, &"sheath", guard.global_position + Vector3.UP * 0.9, -9.0)
-
-		rig.weapon.visible = false
-		_sheathed = true
+	_sheathed = true
 
 
 func _unsheathe() -> void:
-	if not _sheathed:
-		return
-
 	_sheathed = false
-	var rig: Node = guard.get("_rig")
-	var hands: RefCounted = guard.get("_hands")
-
-	if rig != null and rig.get("weapon") != null and hands != null:
-		rig.weapon.visible = hands.armed and hands.held == null and not (hands.lantern != null and hands.light_kind == &"lantern")
-
-		if rig.weapon.visible:
-			Sfx.play(guard, &"sheath", guard.global_position + Vector3.UP * 0.9, -9.0, 1.15)
 
 
 ## Down onto the seat: his blade put by, his clothes rustling as he goes.

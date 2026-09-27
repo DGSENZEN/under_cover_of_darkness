@@ -1,7 +1,7 @@
 # Enemy AI Overhaul: Design
 
 **Date:** 2026-09-26
-**Status:** built and tested (`tests/wits_test`, W1–W32; posts and places, section 4.8: `tests/posts_test`, P1–P12); this document awaits the user's review.
+**Status:** built and tested (`tests/wits_test`, W1–W35; posts and places, section 4.8: `tests/posts_test`, P1–P12; states, blades, chases and routs, section 4.9: `tests/hunt_test` H10e, H17–H22, `tests/habits_test` H28–H29, `tests/stealth_test` D1–D4); this document awaits the user's review.
 
 ## 1. Goal
 
@@ -101,6 +101,36 @@ A follow-up (section 4.8) came from playing it: men did not handle their places 
 
 **Covering a friend** no longer blinds a man: seeing you himself, he stops covering and it is his own business (`GuardLife._update_cover`).
 
+### 4.9 States, blades, chases and routs (follow-up)
+
+From playing it: their states mixed (a man chatting while he walked back to his post, bread and a flask seconds after a fight, a thrown stool carried about the hunt), they spoke over one another, chasers gave you up too easily and routed men did foolish things; blades were always out; and the player could not tell who was noticing him, or how fast.
+
+**One state at a time** (`Guard._set_state`, `GuardLife`, `GuardHabits`):
+- Stirred, whatever he was saying or doing with himself ends: talk, a look he was covering for a friend (a fight shouted, the bell, a call of where you are, or a noise somewhere else take him off it), the evidence he was stooping for, a lantern (dropped into a fight). Things out of place are noticed only at his ease, or, suspicious, near what stirred him; a missing man only at his ease.
+- **On edge** (`Guard.wary`: hunting you in the last 60 s, or the garrison's alarm at 0.45 or more): no sitting, eating, dancing or gossip; only pacing and a look about him; his greetings are wary ones ("Seen anything, Osric?"), and his blade stays out.
+- Knocked bladeless, he goes back for a blade near (15 m) before his rounds. A thing picked up to throw is let fall when the fight ends; one let go unthrown is not picked up again for 8 s.
+- **What they say:** what many would say at once ("I'm coming!", "Hm? What was that?", "Lost him!", "Probably nothing.") is said by the first man near (`Comms.may_voice`, 18 m, 2.5 s); a state's line waits a moment (0.35 s) in case he is sure of it the next instant, and goes unsaid if his state has moved on; he does not say the same sort of thing again within 8 s. "Must have been rats." only if he never saw you and the garrison is not roused; otherwise something that knows better ("He's gone. Keep your eyes open."). The hunt's watcher says so once. Where you are is called to men who would come to it (off searching, not fighting at your side who lost you a moment), and said aloud now and then, not at every call.
+
+**Blades** (`GuardRig._update_blade`, `Guard.wants_blade`):
+- At his ease his blade is **in its scabbard**: the hilt at his hip over the scabbard his outfit wears (the watchman's, the swordsman's, the arms master's; the duelist's rapier in her hanger); a maul slung across a brute's back, a crossbow upright between an archer's shoulders.
+- He **draws it** looking into something, hunting or fighting you, or on edge: his hand crosses to the hilt (two-bone IK, `ArmReach.gd`, the elbow out in front), the blade comes up out of the scabbard along it with a ring (`blade_draw`), and swings free. In a fight it is out at once, his hand whipping up from the hip with it. At his ease again he **puts it away**: down into the scabbard along it, a slide (`sheath`), his hand back. Anything else his arms are busy with (a blow, a stagger, a pose), or a weapon on his back: out or away with no reach, still heard.
+- Put by while his sword hand is wanted (a thing to throw, his rounds lantern, the axe, bread, a seat, arms folded, a rung, swimming).
+- Killed with it in its scabbard, it stays on him; knocked down, a sheathed blade does not fly; begging, he draws it and throws it down.
+
+**Chasing** (`Guard._trail_point`, `_do_search`, `GuardFighter._chase_point`, `Squad`):
+- Lost sight of you, he keeps on the way you went a few steps at a time while you are fresh in his eye (4 s), not stood at the end of it.
+- **The trail:** lost you on the move, the search starts by running on after you the way you went, as far as you could have got since (up to 18 m), each man a little to one side (not in single file); there he looks about him.
+- Word or a sound of you mid-search breaks off his look and sends him to it at a run for 5 s, and he does not give up while it keeps coming. Called to a fight (a shout, a call of where you are, the bell) he runs; a noise to look into, he walks.
+- The hunt's watcher keeps one watch for each place you were last seen (25 s), then searches with the rest.
+- A flanker at your back strikes after a moment (1 s), busy or not; a patient man waits for his moment 7 s at most.
+
+**Routs** (`GuardMercy`, `GuardFighter._flee`, `Squad.helper_for`):
+- One man begs you at a time: with another begging within 8 m, he runs while he can (unless too hurt to).
+- Running, he goes where the ground takes him away from you (seven ways looked at, never back past you within 2 m), kept a moment so he does not dither. With you on his heels (7 m) he hears you: he does not give up the flight. With nobody to run to, he makes for a bell within 35 m he can reach without going past you, and rings it; else, clear of you (18 m, 3 s unseen) he goes back to his post rather than standing about.
+- A man is not sent for help to a man he would have to run past you to reach.
+
+**Signs of being noticed** (`StealthHUD.AwarenessMarks`): over each man noticing you (45 m), a ring that fills with his alert as he makes you out (to `combat_at`: then he has you), notched where he grows suspicious and where he comes to look. Inside it an eye (its lids opening) while he looks at you, a "?" when he has only heard something or is looking for you (broken ring: hunting), a red "!" once he has you, bursting as he calls it, and the first of them to have you named under it (3 s). The ring's edge glows and a halo beats while it climbs, faster the faster he is making you out; the man nearest to having you is drawn biggest. Off the screen, his mark sits at its edge, pointing the way he is (behind you: the bottom). A man at you with his balance bar over him loses his mark once he has called it.
+
 ## 5. Where to see it
 
 The NPC gym (`maps/npc_gym.tscn`):
@@ -110,11 +140,11 @@ The NPC gym (`maps/npc_gym.tscn`):
 
 F1 labels show what each man is doing, including "BEGGING FOR HIS LIFE" and "safe with his own". The panel shows men spared and men cut down begging.
 
-`tests/visual/stage_mercy.tscn` films men begging, kneeling and standing, and getting up when let go.
+`tests/visual/stage_mercy.tscn` films men begging, kneeling and standing, and getting up when let go. `tests/visual/stage_sheath.tscn` films each kind of guard with his weapon put by, drawing it and putting it away; `tests/visual/stage_detect.tscn` films the signs of being noticed.
 
 ## 6. Success criteria
 
-1. `tests/wits_test` passes W1–W32 (getting about, word between them, rounds, things out of place, hands and environment, blows, the hunt, mercy), and `tests/posts_test` P1–P12 (the lookout, things thrown, places, the dead).
+1. `tests/wits_test` passes W1–W35 (getting about, word between them, rounds, things out of place, hands and environment, blows, the hunt, mercy, routs), `tests/posts_test` P1–P12 (the lookout, things thrown, places, the dead), `tests/hunt_test` (chases: H17–H22; not sent past you: H10e), `tests/habits_test` H28–H29 (blades) and `tests/stealth_test` D1–D4 (signs of being noticed).
 2. Every other suite passes, run as the project documents (`--fixed-fps 60`).
 3. In the gym, each behaviour above can be provoked and watched.
 
@@ -122,6 +152,8 @@ F1 labels show what each man is doing, including "BEGGING FOR HIS LIFE" and "saf
 
 - Pleading poses reuse existing clips: `Fixing_Kneeling` held and rocked for kneeling, `Spell_Simple_Idle` (a hand held out) for standing. The kneeling man bows to the floor rather than looking up at you.
 - A haven is found by straight-line distance; a man whose path there stalls gives that haven up for a while and tries another.
-- Once sheltered, a man who does not see you for 12 s gives up the hunt and goes back to his rounds.
+- Running from you, a man who neither sees nor hears you for 12 s (3 s once 18 m clear) gives up the flight and goes back to his rounds; once sheltered with his own he stays where he reached them until you come near.
+- The trail is a guess along the way you were going: turn a corner out of his sight and he runs on past it.
+- The draw is procedural (a reach and a swap, no draw clip in the library): the blade can pass close to a leg as it swings free. A maul or a crossbow comes off the back with no reach.
 - A lookout judges whether he can see the fight by whether he has seen you lately, not by where the fight is: in a dark yard he comes down after a few seconds even if you step into his light a moment later.
 - Things are thrown at where you will be, not round corners: no clear line to you, no throw.

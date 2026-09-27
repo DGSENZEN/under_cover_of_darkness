@@ -15,6 +15,16 @@ extends CanvasLayer
 ##   over a man     fighting you: his balance (GuardFighter's posture), a bar
 ##                  filling from the middle, amber to red, once it is shaken;
 ##                  a red mark when he is open (the next blow a deathblow)
+##   over a man     noticing you: a ring that fills as he makes you out
+##                  (Guard.alert, to Guard.combat_at: then he has you),
+##                  notched where he grows suspicious and where he comes to
+##                  look, round an eye while he is looking at you, a "?"
+##                  while he has only heard something or is looking for you,
+##                  and a red "!" once he has you, bursting as he calls it
+##                  (the first of them to have you named under it). The man
+##                  nearest to having you is drawn biggest; the ring's edge
+##                  glows while it is rising, so you see how fast. Off the
+##                  screen, his mark sits at its edge, the way he is.
 ##
 ## Nothing here is read by gameplay. Hide the layer and the game is unchanged.
 
@@ -25,6 +35,15 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 
 const SUBTITLE_RANGE := 22.0
+## A man noticing you is marked this near (m). One fighting you this near
+## (his balance over him instead) only for AWARE_FIGHT_TIME (s) after he
+## has you; the first of them to have you is named for AWARE_NAME_TIME (s).
+const AWARE_RANGE := 45.0
+const AWARE_FIGHT_NEAR := 7.0
+const AWARE_FIGHT_TIME := 1.6
+const AWARE_NAME_TIME := 3.0
+## How far over his eyes the mark sits (m): above his balance bar.
+const AWARE_OVER := 0.85
 ## A man's balance is shown over him this near.
 const POSTURE_RANGE := 16.0
 const INK := Color(0.93, 0.88, 0.78)
@@ -61,6 +80,10 @@ var _warn_marks: HurtMarks
 ## Blood thrown across your eyes by a kill up close.
 var _splatter: Splatter
 var _posture_marks: PostureMarks
+var _awareness: AwarenessMarks
+## Per guard noticing you (by instance id): how his mark is being shown
+## (Dictionary: fill, last, rise, alpha, flash, since, name_until).
+var _aware := {}
 var _grade: ColorRect
 var _grade_amount := 0.0
 var _last_real := -1.0
@@ -218,6 +241,141 @@ class PostureMarks:
 			draw_rect(Rect2(at - Vector2(half, h * 0.5), Vector2(half * 2.0, h)), Color(colour.r, colour.g, colour.b, 0.92))
 
 
+## Each man noticing you (see the header): his ring, his mark, and the burst
+## as his state rises.
+class AwarenessMarks:
+	extends Control
+
+	var font: Font
+	## Each a Dictionary: id (the man's instance id), at (screen), edge (off
+	## the screen: at its edge),
+	## out (at the edge, the way to him), fill 0..1, rise 0..1, icon ("eye",
+	## "heard", "look", "hunt", "fight"), lead (nearest to having you), flash
+	## 1..0, alpha, name ("" or who had you first), notches (0..1 each).
+	var marks: Array = []
+	var clock := 0.0
+
+	func _draw() -> void:
+		for m in marks:
+			_mark(m)
+
+	func _mark(m: Dictionary) -> void:
+		var at: Vector2 = m["at"]
+		var alpha: float = m["alpha"]
+		var edge: bool = m["edge"]
+		var lead: bool = m["lead"]
+		var fill: float = m["fill"]
+		var rise: float = m["rise"]
+		var icon: StringName = m["icon"]
+		var r := (15.0 if lead else 11.5) * (0.85 if edge else 1.0)
+		var hue := AwarenessMarks.hue_of(fill, icon)
+		var top := -PI * 0.5
+
+		# Off the screen: a notch pointing out, the way he is.
+		if edge:
+			var out: Vector2 = m["out"]
+			var side := Vector2(-out.y, out.x)
+			var tip := at + out * (r + 9.0)
+			draw_colored_polygon(PackedVector2Array([tip, at + out * (r + 3.0) + side * 4.5, at + out * (r + 3.0) - side * 4.5]), Color(hue.r, hue.g, hue.b, 0.9 * alpha))
+
+		# Rising: a soft halo, beating faster the faster it climbs.
+		if rise > 0.05:
+			var beat := 0.5 + 0.5 * sin(clock * (6.0 + 10.0 * rise))
+			draw_arc(at, r + 4.0 + 1.5 * beat, 0.0, TAU, 32, Color(hue.r, hue.g, hue.b, 0.3 * rise * alpha), 2.0, true)
+
+		# The ring: dark all round, filled clockwise from the top.
+		draw_circle(at, r + 2.5, Color(0, 0, 0, 0.42 * alpha))
+		draw_arc(at, r, 0.0, TAU, 32, Color(0, 0, 0, 0.55 * alpha), 3.4, true)
+
+		if icon == &"hunt":
+			# Hunting you, and lost you: the ring whole but broken.
+			for i in 8:
+				var from := top + TAU * float(i) / 8.0 + clock * 0.6
+				draw_arc(at, r, from, from + TAU / 8.0 * 0.62, 6, Color(hue.r, hue.g, hue.b, alpha), 2.6, true)
+		elif fill > 0.004:
+			draw_arc(at, r, top, top + TAU * fill, 32, Color(hue.r, hue.g, hue.b, alpha), 3.0 if lead else 2.4, true)
+
+			# Its leading edge, bright while it climbs.
+			if fill < 0.999:
+				var lip := at + Vector2.from_angle(top + TAU * fill) * r
+				draw_circle(lip, 1.5 + 1.8 * rise, Color(1.0, 0.95, 0.85, (0.35 + 0.65 * rise) * alpha))
+
+		# Where he grows suspicious, and where he comes to look.
+		for n in m["notches"]:
+			var way := Vector2.from_angle(top + TAU * float(n))
+			draw_line(at + way * (r - 3.0), at + way * (r + 3.0), Color(INK.r, INK.g, INK.b, 0.6 * alpha), 1.2, true)
+
+		match icon:
+			&"eye":
+				_eye(at, r * 0.66, hue, alpha, fill)
+			&"fight":
+				_glyph(at, "!", r, hue, alpha)
+			_:
+				_glyph(at, "?", r, hue if icon != &"heard" else INK.lerp(hue, 0.5), alpha)
+
+		# The burst as his state rises: a ring flung out from it.
+		var flash: float = m["flash"]
+
+		if flash > 0.0:
+			var burst := r * (1.2 + 1.8 * (1.0 - flash))
+			draw_arc(at, burst, 0.0, TAU, 40, Color(hue.r, hue.g, hue.b, flash * alpha), 1.0 + 3.0 * flash, true)
+
+		# The first of them to have you, named.
+		var who: String = m["name"]
+
+		if who != "" and font != null:
+			var width := 180.0
+			var below := at + Vector2(-width * 0.5, r + 18.0)
+			draw_string_outline(font, below, who, HORIZONTAL_ALIGNMENT_CENTER, width, 14, 4, Color(0, 0, 0, 0.8 * alpha))
+			draw_string(font, below, who, HORIZONTAL_ALIGNMENT_CENTER, width, 14, Color(1.0, 0.82, 0.75, alpha))
+
+	## An eye, its lids opening as he makes you out; its iris in `hue`.
+	func _eye(c: Vector2, w: float, hue: Color, alpha: float, open: float) -> void:
+		var h := w * lerpf(0.3, 0.62, open)
+		var lids := PackedVector2Array()
+
+		for i in 13:
+			var t := -1.0 + 2.0 * float(i) / 12.0
+			lids.append(c + Vector2(t * w, -h * (1.0 - t * t)))
+
+		for i in range(11, 0, -1):
+			var t := -1.0 + 2.0 * float(i) / 12.0
+			lids.append(c + Vector2(t * w, h * (1.0 - t * t)))
+
+		draw_colored_polygon(lids, Color(0.08, 0.07, 0.06, 0.85 * alpha))
+		var iris := minf(h * 0.9, w * 0.46)
+		draw_circle(c, iris, Color(hue.r, hue.g, hue.b, 0.95 * alpha))
+		draw_circle(c, iris * 0.42, Color(0.04, 0.03, 0.02, alpha))
+		lids.append(lids[0])
+		draw_polyline(lids, Color(INK.r, INK.g, INK.b, 0.9 * alpha), 1.4, true)
+
+	## A mark in the ring ("?", "!"), in `hue`.
+	func _glyph(c: Vector2, text: String, r: float, hue: Color, alpha: float) -> void:
+		if font == null:
+			return
+
+		var px := int(round(r * 1.7))
+		var extent := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, px)
+		var at := c + Vector2(-extent.x * 0.5, font.get_ascent(px) * 0.5 - px * 0.06)
+		draw_string_outline(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, 3, Color(0, 0, 0, 0.85 * alpha))
+		draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, px, Color(hue.r, hue.g, hue.b, alpha))
+
+	## The ring's colour: pale while he is only stirring, amber as he grows
+	## sure, red as he is about to have you; red once he has, a hot amber
+	## while he hunts you.
+	static func hue_of(fill: float, icon: StringName) -> Color:
+		if icon == &"fight":
+			return Color(0.95, 0.14, 0.07)
+
+		if icon == &"hunt":
+			return Color(1.0, 0.5, 0.18)
+
+		if fill < 0.45:
+			return INK.lerp(AMBER, smoothstep(0.0, 0.45, fill))
+
+		return AMBER.lerp(Color(0.95, 0.16, 0.07), smoothstep(0.45, 1.0, fill))
+
+
 ## Blood across your eyes: splashes at the edges of the view (each a blot
 ## with droplets flung round it, darker where it is thickest), the big ones
 ## running a little, all of them fading.
@@ -339,6 +497,12 @@ func setup(p_player: CharacterBody3D) -> void:
 	_posture_marks.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_posture_marks.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_posture_marks)
+
+	_awareness = AwarenessMarks.new()
+	_awareness.font = _font
+	_awareness.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_awareness.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_awareness)
 
 	_splatter = Splatter.new()
 	_splatter.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -605,6 +769,7 @@ func _process(delta: float) -> void:
 	_warn_marks.marks = _warn_marks.marks.filter(func(m): return float(m[1]) > 0.0)
 	_warn_marks.queue_redraw()
 	_update_posture_marks()
+	_update_awareness(delta)
 
 	if not _splatter.drops.is_empty():
 		for d in _splatter.drops:
@@ -784,6 +949,8 @@ func _on_alert(new_state: int, old_state: int, guard: Node3D) -> void:
 	if not is_instance_valid(guard) or not is_instance_valid(player) or new_state <= old_state:
 		return
 
+	_mark_rise(guard, new_state)
+
 	if guard.global_position.distance_to(player.global_position) > SUBTITLE_RANGE:
 		return
 
@@ -801,6 +968,162 @@ func _on_alert(new_state: int, old_state: int, guard: Node3D) -> void:
 	elif new_state == 1 and now - _sting_at >= 3.0:
 		Sfx.play_flat(self, &"sting_suspicious")
 		_sting_at = now
+
+
+## His state rose (`to`): his mark bursts; the first of them to have you
+## (nobody else fighting you yet) is named under it.
+func _mark_rise(guard: Node3D, to: int) -> void:
+	var record := _aware_record(guard)
+	record["flash"] = 1.0
+	var now := TimeFx.real_time()
+
+	if to < 4:
+		return
+
+	record["since"] = now
+
+	for other in get_tree().get_nodes_in_group(&"guards"):
+		if other != guard and is_instance_valid(other) and int(other.get("state")) == 4 and other.get("_target") == player:
+			return
+
+	record["name_until"] = now + AWARE_NAME_TIME
+
+
+func _aware_record(guard: Node3D) -> Dictionary:
+	var id := guard.get_instance_id()
+
+	if not _aware.has(id):
+		_aware[id] = {"fill": 0.0, "last": float(guard.get("alert")), "rise": 0.0, "alpha": 0.0, "flash": 0.0, "since": -100.0, "name_until": -100.0}
+
+	return _aware[id]
+
+
+## Every frame: each man noticing you, and how his mark shows (see the header,
+## and AwarenessMarks).
+func _update_awareness(delta: float) -> void:
+	var camera := get_viewport().get_camera_3d()
+	var marks: Array = []
+	var kept := {}
+	_awareness.clock += delta
+
+	if camera != null and not player.is_dead:
+		var view := _awareness.size if _awareness.size.x > 1.0 else get_viewport().get_visible_rect().size
+		var now := TimeFx.real_time()
+		var lead: Dictionary = {}
+		var lead_fill := 0.03
+
+		for node in get_tree().get_nodes_in_group(&"guards"):
+			var guard := node as Node3D
+
+			if guard == null or not is_instance_valid(guard) or not guard.has_method("eye_position") or guard.get("_knocked_out") == true:
+				continue
+
+			# Someone else's quarrel is not yours.
+			var quarry: Variant = guard.get("_target")
+
+			if quarry != null and quarry != player:
+				continue
+
+			var id := guard.get_instance_id()
+			var record := _aware_record(guard)
+			kept[id] = true
+			var state := int(guard.get("state"))
+			var alert := float(guard.get("alert"))
+			var full := maxf(float(guard.get("combat_at")) if guard.get("combat_at") != null else 100.0, 1.0)
+			var over: Vector3 = guard.eye_position() + Vector3.UP * AWARE_OVER
+			var far := over.distance_to(camera.global_position)
+			# How fast it climbs (of the whole ring, per second).
+			var rate := (alert - float(record["last"])) / maxf(delta, 0.0001) / full
+			record["last"] = alert
+			record["rise"] = lerpf(float(record["rise"]), clampf(rate * 1.2, 0.0, 1.0), 1.0 - exp(-6.0 * delta))
+			var goal := 1.0 if state >= 3 else clampf(alert / full, 0.0, 1.0)
+			record["fill"] = lerpf(float(record["fill"]), goal, 1.0 - exp(-14.0 * delta))
+			record["flash"] = maxf(float(record["flash"]) - delta / 0.55, 0.0)
+			# A man at you with his balance over him: no mark, once he has
+			# called it.
+			var at_you: bool = state == 4 and far < AWARE_FIGHT_NEAR and now - float(record["since"]) > AWARE_FIGHT_TIME
+			var wanted: bool = far < AWARE_RANGE and (state >= 1 or alert > 1.0) and not at_you
+			record["alpha"] = move_toward(float(record["alpha"]), 1.0 if wanted else 0.0, delta * (5.0 if wanted else 2.5))
+
+			if float(record["alpha"]) <= 0.01:
+				continue
+
+			var sees: bool = guard.get("can_see_target") == true
+			var icon: StringName = &"eye" if sees else &"heard"
+
+			match state:
+				2:
+					icon = &"eye" if sees else &"look"
+				3:
+					icon = &"eye" if sees else &"hunt"
+				4:
+					icon = &"fight"
+
+			var mark := {"id": id, "fill": float(record["fill"]), "rise": float(record["rise"]), "icon": icon, "lead": false,
+				"flash": float(record["flash"]), "alpha": float(record["alpha"]), "edge": false, "out": Vector2.ZERO,
+				"name": _name_of(guard) if now < float(record["name_until"]) else "",
+				"notches": [float(guard.get("suspicious_at")) / full, float(guard.get("investigate_at")) / full] if state < 3 else []}
+			_place_mark(mark, over, camera, view)
+			marks.append(mark)
+
+			if state < 4 and float(record["fill"]) > lead_fill:
+				lead_fill = float(record["fill"])
+				lead = mark
+
+		if not lead.is_empty():
+			lead["lead"] = true
+
+	for id in _aware.keys():
+		if not kept.has(id):
+			_aware.erase(id)
+
+	_awareness.marks = marks
+	_awareness.queue_redraw()
+
+
+## Where a mark goes: over him, or off the screen at its edge the way he is:
+## off to a side or above, where he would be; behind you, round the bottom
+## of it (ahead is up, behind is down, as the marks of blows).
+func _place_mark(mark: Dictionary, over: Vector3, camera: Camera3D, view: Vector2) -> void:
+	var margin := minf(38.0, minf(view.x, view.y) * 0.1)
+	var centre := view * 0.5
+	var behind := camera.is_position_behind(over)
+	var at := camera.unproject_position(over) if not behind else centre
+
+	if not behind and at.x > margin and at.x < view.x - margin and at.y > margin and at.y < view.y - margin:
+		mark["at"] = at
+		return
+
+	var way := at - centre
+
+	if behind:
+		var local: Vector3 = camera.global_basis.inverse() * (over - camera.global_position)
+		var turn := atan2(local.x, -local.z)
+		way = Vector2(sin(turn), -cos(turn))
+
+	way = way.normalized()
+	var rx := view.x * 0.5 - margin
+	var ry := view.y * 0.5 - margin
+	var reach := 1.0 / sqrt((way.x * way.x) / (rx * rx) + (way.y * way.y) / (ry * ry))
+	var edge := centre + way * reach
+
+	# Not on top of the lightgem, low in the middle: just above it.
+	if view.y > 300.0 and absf(edge.x - centre.x) < 44.0 and edge.y > view.y - 104.0:
+		edge.y = view.y - 104.0
+
+	mark["at"] = edge
+	mark["edge"] = true
+	mark["out"] = way
+
+
+func _name_of(guard: Node3D) -> String:
+	var given: Variant = guard.get("given_name")
+	return String(given) if given != null and String(given) != "" else String(guard.get("speaker_name"))
+
+
+## The awareness marks shown now (tests).
+func awareness_marks() -> Array:
+	return _awareness.marks if _awareness != null else []
 
 
 ## A line under the lightgem for a moment: which movement feel is on.

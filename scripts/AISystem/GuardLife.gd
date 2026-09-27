@@ -52,6 +52,10 @@ const NOTICE := 0.9
 const DOOR_RANGE := 11.0
 const ARROW_RANGE := 7.0
 const ODD_LIGHT := 0.08
+## He deals with it only once he is this near it (m); stirred by a noise, he
+## notices only what is this near where he heard it.
+const ODD_REACH := 2.8
+const ODD_NEAR := 5.0
 ## A missing man: his post in view this long, within this far.
 const MISS_NOTICE := 2.5
 const MISS_RANGE := 16.0
@@ -162,9 +166,14 @@ func update(delta: float) -> void:
 	_check = CHECK
 	var state := int(guard.state)
 
-	if state == RELAXED or state == SUSPICIOUS:
+	# Things out of place, men missing: noticed at his ease (suspicious, only
+	# what might be what stirred him: something by where he heard it), and
+	# not while he covers a friend's look.
+	if (state == RELAXED or state == SUSPICIOUS) and not covering():
 		_look_for_oddities(CHECK)
-		_look_for_missing(CHECK)
+
+		if state == RELAXED:
+			_look_for_missing(CHECK)
 
 	if state == RELAXED:
 		_look_for_company()
@@ -221,12 +230,25 @@ func partner_direction() -> Vector3:
 	return partner.global_position - guard.global_position if talking() else Vector3.ZERO
 
 
-## At his ease: nothing on his mind, nothing wrong with him.
-static func at_ease(man: Node) -> bool:
+## Wary (Guard.wary): a hunt not long since, the garrison roused.
+static func _wary(man: Node) -> bool:
+	return man.has_method("wary") and bool(man.wary())
+
+
+## Walking somewhere, not standing about.
+static func _on_the_move(man: Node) -> bool:
+	var body := man as CharacterBody3D
+	return body != null and Vector2(body.velocity.x, body.velocity.z).length() > 1.0
+
+
+## At his ease: nothing on his mind, nothing wrong with him. `still`: to go
+## on with what he is at (a word, a seat) a man may have a little more on his
+## mind than to start it; short of suspicious, it can wait.
+static func at_ease(man: Node, still := false) -> bool:
 	if man == null or not is_instance_valid(man) or man.get("_knocked_out") == true:
 		return false
 
-	if int(man.state) != RELAXED or float(man.alert) >= float(man.suspicious_at) * 0.5:
+	if int(man.state) != RELAXED or float(man.alert) >= float(man.suspicious_at) * (1.0 if still else 0.5):
 		return false
 
 	if man.is_downed() or float(man._burning) > 0.0 or float(man._stagger) > 0.0:
@@ -290,8 +312,9 @@ func _update_talk(delta: float) -> void:
 	if not talking():
 		return
 
-	# Anything that stirs either of them ends it.
-	if not at_ease(guard) or not at_ease(partner) or partner._life.partner != guard:
+	# Anything that stirs either of them ends it; and so does either walking
+	# off (no talking over his shoulder as he goes).
+	if not at_ease(guard, true) or not at_ease(partner, true) or partner._life.partner != guard or _on_the_move(guard) or _on_the_move(partner):
 		end_talk()
 		return
 
@@ -413,7 +436,7 @@ func _update_greeting(delta: float) -> void:
 	_reply_in = -1.0
 
 	if at_ease(guard) and not talking():
-		guard.say(&"greet_back")
+		guard.say(&"greet_back_wary" if _wary(guard) else &"greet_back")
 
 
 ## Whether `man`'s head is his own to turn (his habits leave it free).
@@ -514,7 +537,9 @@ func _greet_passing() -> void:
 			theirs.regard(guard, randf_range(1.2, 2.0))
 			return
 
-		var said: String = guard._fighter.temper.line(&"greet") if guard._fighter != null and guard._fighter.temper != null else "Evening."
+		# Wary (a hunt not long since, the garrison roused): no evenings, only
+		# whether he has seen anything.
+		var said: String = guard._fighter.temper.line(&"greet_wary" if _wary(guard) else &"greet") if guard._fighter != null and guard._fighter.temper != null else "Evening."
 
 		if said.contains("%s"):
 			said = said % String(other.get("given_name"))
@@ -532,10 +557,15 @@ func _greet_passing() -> void:
 func _look_for_oddities(step: float) -> void:
 	var tree := guard.get_tree()
 	var eye: Vector3 = guard.eye_position()
+	# Stirred: only what is near what stirred him.
+	var near: Vector3 = guard.last_known_position if int(guard.state) == SUSPICIOUS else Vector3.INF
 
 	for door in tree.get_nodes_in_group(&"doors"):
 		if door.has_method("left_open") and door.left_open() and not door.has_meta(&"noticed"):
 			var way: Vector3 = door.doorway() if door.has_method("doorway") else door.global_position
+
+			if near != Vector3.INF and way.distance_to(near) > ODD_NEAR:
+				continue
 
 			# The panel standing open, or the gap where it should be: a door
 			# swung back behind its wall still leaves its doorway gaping.
@@ -547,6 +577,9 @@ func _look_for_oddities(step: float) -> void:
 
 	for arrow in tree.get_nodes_in_group(&"stray_arrows"):
 		if arrow.is_queued_for_deletion() or arrow.has_meta(&"noticed"):
+			continue
+
+		if near != Vector3.INF and (arrow as Node3D).global_position.distance_to(near) > ODD_NEAR:
 			continue
 
 		if _watch_for(arrow, [(arrow as Node3D).global_position], ARROW_RANGE, eye, step):
@@ -616,12 +649,19 @@ func _notice(thing: Node3D, kind: StringName, where: Vector3) -> void:
 
 
 ## Arrived at what he noticed: he deals with it. True if there was anything
-## (he then looks about him as usual).
+## (he then looks about him as usual). Only there: if he is somewhere else
+## (sent off elsewhere on the way), it is left for whoever notices it next.
 func deal_with_oddity() -> bool:
 	var thing := _odd
 	_odd = null
 
 	if thing == null or not is_instance_valid(thing):
+		return false
+
+	var at: Vector3 = thing.doorway() if _odd_kind == &"door" and thing.has_method("doorway") else thing.global_position
+
+	if Vector2(at.x - guard.global_position.x, at.z - guard.global_position.z).length() > ODD_REACH:
+		thing.remove_meta(&"noticed")
 		return false
 
 	match _odd_kind:
@@ -637,6 +677,22 @@ func deal_with_oddity() -> bool:
 ## The oddity he is on his way to (for tests and the gym's labels).
 func oddity() -> Node3D:
 	return _odd if _odd != null and is_instance_valid(_odd) else null
+
+
+## Into a fight: whatever he was going to see to is left for whoever notices
+## it next; the look he had claimed is free; and nobody is covering him now,
+## so there is no "clear" to call after.
+func stirred_to_fight() -> void:
+	if _odd != null and is_instance_valid(_odd):
+		_odd.remove_meta(&"noticed")
+
+	_odd = null
+	_covered = false
+	stop_covering()
+	var garrison: RefCounted = _garrison()
+
+	if garrison != null:
+		garrison.looked(guard)
 
 
 # ---------------------------------------------------------------------------
@@ -748,6 +804,12 @@ func sent_to_look(where: Vector3) -> void:
 
 func covering() -> bool:
 	return _covering != null and _covering.get_ref() != null
+
+
+## The place the friend he covers went to look at (INF when he covers nobody).
+func covered_place() -> Vector3:
+	var looker: Node3D = _covering.get_ref() as Node3D if _covering != null else null
+	return looker.last_known_position if looker != null and bool(looker.get("has_last_known")) else Vector3.INF
 
 
 func stop_covering() -> void:
