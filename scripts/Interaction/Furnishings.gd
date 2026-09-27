@@ -114,10 +114,14 @@ static func table(parent: Node, at: Vector3, yaw: float, size := Vector2(1.6, 0.
 			# Behind the chair's seat the man's back; he faces the table.
 			var seat := at + turn * Vector3(x, 0, side * (size.y * 0.5 + 0.42))
 			var seated_at := chair(parent, seat, yaw + (0.0 if side > 0.0 else PI))
-			# Sitting down he goes in under the table's edge too.
+			# Sat, he goes in under the table's edge too; the chair is drawn
+			# out and in again (GuardHabits), and kept in, where it stands.
+			seated_at.set_meta(&"home", seated_at.global_transform)
+
 			for spot in parent.get_tree().get_nodes_in_group(&"idle_spots"):
 				if spot.get_meta(&"bodies", []).has(seated_at):
 					spot.set_meta(&"bodies", [seated_at, body])
+					spot.set_meta(&"tuck", seated_at)
 
 			placed += 1
 

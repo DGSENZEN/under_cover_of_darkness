@@ -73,6 +73,11 @@ const GO_TIMEOUT := 25.0
 ## Closer than this to it, the last of the way is a step into place.
 const SETTLE_FROM := 1.4
 const SETTLE_TIME := 0.35
+## At a table: he draws the chair out this far (m) to sit down and to get
+## up, clear of the table's edge, and in to the table once he is sat, taking
+## this long (s) over it.
+const PULL_OUT := 0.25
+const SCOOT_TIME := 0.6
 ## How long at each, (s).
 const SIT_TIME := Vector2(15.0, 40.0)
 const LEAN_TIME := Vector2(8.0, 22.0)
@@ -152,6 +157,12 @@ var _among := false
 ## this far from where he got up, or this long after.
 var _clear_of := Vector3.ZERO
 var _clearing := 0.0
+## What a step moves along with him (a chair drawn out or in), from where.
+var _moved_from := Vector3.ZERO
+## Sat in to a table: its chair, where he and it go to get out from under
+## its edge; and, up in a hurry, how far through that shove he is.
+var _tucked: Dictionary = {}
+var _shove: Dictionary = {}
 var _friend: Node3D = null
 var _talked := false
 var _look_yaw := 0.0
@@ -218,6 +229,7 @@ func roll() -> void:
 func update(delta: float) -> void:
 	_standing = maxf(_standing - delta, 0.0)
 	_keep_light(delta)
+	_shove_back(delta)
 
 	if habit == &"" and not _excepted.is_empty():
 		_clearing += delta
@@ -313,6 +325,14 @@ func interrupt() -> void:
 
 	if _pose in [&"sit_down", &"sit", &"doze", &"stand_up"] or _dozing:
 		_standing = STAND_QUICK
+
+	# Sat in to the table: he shoves himself and his chair back as he gets
+	# up, out from under its edge.
+	if not _tucked.is_empty():
+		_shove = _tucked.duplicate()
+		_shove["from"] = guard.global_position
+		_shove["chair_from"] = (_tucked["chair"] as Node3D).global_position if is_instance_valid(_tucked["chair"]) else Vector3.ZERO
+		_shove["t"] = 0.0
 
 	_dozing = false
 	_drop_crate()
@@ -494,6 +514,11 @@ func _plan(each: StringName) -> Array:
 
 	match each:
 		&"sit":
+			var chair: Node3D = spot.get_meta(&"tuck", null)
+
+			if chair != null and is_instance_valid(chair) and chair.has_meta(&"home"):
+				return _plan_at_table(at, facing, chair)
+
 			var steps: Array = [
 				{"do": &"go", "to": at},
 				{"do": &"settle", "to": at, "face": facing, "bodies": spot.get_meta(&"bodies", [])},
@@ -546,6 +571,48 @@ func _plan(each: StringName) -> Array:
 			]
 
 	return []
+
+
+## Sitting at a table: the chair drawn out, down onto it, in to the table
+## with it; out again with it to get up, and it pushed back in as he goes.
+## Sitting down and getting up he leans well forward, and the table's edge
+## would go through him.
+func _plan_at_table(at: Vector3, facing: Vector3, chair: Node3D) -> Array:
+	var back := -facing
+	var home: Vector3 = (chair.get_meta(&"home") as Transform3D).origin
+	var out_at := at + back * PULL_OUT
+	var chair_out := home + back * PULL_OUT
+	var tuck := {"chair": chair, "out": out_at, "chair_out": chair_out}
+	_doze_in = randf_range(DOZE_AFTER.x, DOZE_AFTER.y)
+	return [
+		{"do": &"go", "to": out_at},
+		{"do": &"settle", "to": out_at, "face": facing, "bodies": spot.get_meta(&"bodies", []), "move": [chair, chair_out]},
+		{"do": &"pose", "pose": &"sit_down", "time": 1.6, "face": facing, "enter": _sheathe},
+		{"do": &"settle", "to": at, "face": facing, "pose": &"sit", "move": [chair, home], "time": SCOOT_TIME, "tuck": tuck},
+		{"do": &"pose", "pose": &"sit", "time": randf_range(SIT_TIME.x, SIT_TIME.y), "rest": true, "doze": true, "face": facing},
+		{"do": &"settle", "to": out_at, "face": facing, "pose": &"sit", "move": [chair, chair_out], "time": SCOOT_TIME, "untuck": true},
+		{"do": &"pose", "pose": &"stand_up", "time": 1.25, "face": facing},
+		{"do": &"settle", "back": true, "face": facing, "move": [chair, home]},
+	]
+
+
+## Up in a hurry from the table (interrupt): he and his chair shoved back,
+## out from under its edge, before he is up.
+func _shove_back(delta: float) -> void:
+	if _shove.is_empty():
+		return
+
+	_shove["t"] = float(_shove["t"]) + delta
+	var u := smoothstep(0.0, 1.0, clampf(float(_shove["t"]) / SETTLE_TIME, 0.0, 1.0))
+	var to: Vector3 = (_shove["from"] as Vector3).lerp(_shove["out"], u)
+	guard.global_position = Vector3(to.x, guard.global_position.y, to.z)
+	var chair: Node3D = _shove["chair"]
+
+	if is_instance_valid(chair):
+		chair.global_position = (_shove["chair_from"] as Vector3).lerp(_shove["chair_out"], u)
+
+	if u >= 1.0:
+		_shove = {}
 
 
 ## A crate from the pile that has more of them to the one with fewer (even,
@@ -685,11 +752,13 @@ func _go(step: Dictionary, delta: float) -> void:
 ## where he stepped in from.
 func _settle(step: Dictionary, delta: float) -> void:
 	var back: bool = step.get("back", false)
+	var moved: Array = step.get("move", [])
 
 	if _t <= delta:
 		_settle_from = guard.global_position
 
-		if not back:
+		# (Stepping in among the furniture: where he steps out to again.)
+		if step.has("bodies"):
 			_came_from = guard.global_position
 
 		for body in step.get("bodies", []):
@@ -698,17 +767,31 @@ func _settle(step: Dictionary, delta: float) -> void:
 				_excepted.append(body)
 				_among = true
 
+		if not moved.is_empty() and is_instance_valid(moved[0]):
+			_moved_from = (moved[0] as Node3D).global_position
+
+		if step.has("tuck"):
+			_tucked = step["tuck"]
+
 	_pose = step.get("pose", &"")
 	var to: Vector3 = _came_from if back else step["to"]
-	var u := clampf(_t / SETTLE_TIME, 0.0, 1.0)
-	var at := _settle_from.lerp(to, smoothstep(0.0, 1.0, u))
+	var u := clampf(_t / float(step.get("time", SETTLE_TIME)), 0.0, 1.0)
+	var eased := smoothstep(0.0, 1.0, u)
+	var at := _settle_from.lerp(to, eased)
 	guard.global_position = Vector3(at.x, guard.global_position.y, at.z)
 	guard.velocity = Vector3(0.0, guard.velocity.y, 0.0)
 	guard._face(step["face"], delta, 2.5)
 
+	# What he moves as he goes (a chair drawn out or in).
+	if not moved.is_empty() and is_instance_valid(moved[0]):
+		(moved[0] as Node3D).global_position = _moved_from.lerp(moved[1], eased)
+
 	if u >= 1.0:
 		if back:
 			_among = false
+
+		if step.get("untuck", false):
+			_tucked = {}
 
 		_next()
 
@@ -856,6 +939,7 @@ func _done() -> void:
 	_look_yaw = 0.0
 	_look_pitch = 0.0
 	_dozing = false
+	_tucked = {}
 	_let_go()
 	_unsheathe()
 	_rested = 0.0

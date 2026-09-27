@@ -1,7 +1,7 @@
 # A Garrison at Its Ease: Design
 
 **Date:** 2026-09-26
-**Status:** built and tested (`tests/habits_test`, H1–H18; `tests/gym_test` G1 and G9); this document awaits the user's review.
+**Status:** built and tested (`tests/habits_test`, H1–H19; `tests/gym_test` G1 and G9); this document awaits the user's review.
 
 ## 1. Goal
 
@@ -68,6 +68,7 @@ After 3 s at rest he picks something, by pull, from what can be done within his 
 
 ### 4.3 The habits
 - **sit:** to the seat and in among it (the chair and table let him through as he steps into place). His blade is put by, and he sits 15–40 s. Then he gets up and steps back out to where he came in from. Two men sat within 3.8 m of each other talk where they sit.
+  - **At a table** he draws the chair out 0.25 m as he steps in front of it, sits down clear of the table's edge, and draws himself and the chair in to the table (0.6 s), his knees under it. To get up he draws out again first, and pushes the chair back in as he steps away. Sitting down and getting up he leans well forward, and the table's edge would otherwise go through his thighs and hands.
 - **doze:** a dozy man sat in the dark (under 0.25 light) nods off after 6–12 s, and a man with the "dozes" quirk nods off anywhere. His head goes down. He sees nothing unless you touch him. He hears at a third of his usual reach, and he sleeps 20–45 s. A noise, a shout or a blow wakes him with a start and a word ("woken" lines), and he is up at once.
 - **lean:** back against a "lean" place, or against the wall right behind his post if there is one (a ray 1.3 m back). 8–22 s, arms folded.
 - **rail:** forearms on the rail, looking out and down over it, 8–22 s.
@@ -95,7 +96,7 @@ After each bake, NavLinks looks up each rope or chain (`VerletRope`, a `ClimbVol
 
 ### 4.7 Stirred
 Anything that stirs him (a noise, you seen, a blow, a kick, a knockdown) ends whatever he was at in that frame:
-- **Seated or asleep:** up at once, in a hurry.
+- **Seated or asleep:** up at once, in a hurry. Sat in to a table, he shoves himself and the chair back from it as he jumps up, and the chair stays out where he left it.
 - **Carrying:** the crate falls.
 - **Holding something:** the axe or bread is gone, and his blade is back in his hand.
 - **Spot:** freed for someone else.
@@ -128,6 +129,7 @@ A rope goes up to a tower and a chain up to the walkway. F1 shows each man's tem
    - **H15–H16:** torch and lantern rounds: up stairs, dropped into a fight, lit again after.
    - **H17:** up a rope and a chain.
    - **H18:** the navmesh keeps off low furniture.
+   - **H19:** at a table, the chair drawn out to sit down and get up, tucked in once sat; stirred there, he shoves back from it.
 2. `tests/gym_test` passes: bay 11 starts at its ease (G1), and over 45 s its men carry a torch and a lantern and do at least five of their own things, all at their ease (G9).
 3. Every other suite passes, run as the project documents (`--fixed-fps 60`).
 
