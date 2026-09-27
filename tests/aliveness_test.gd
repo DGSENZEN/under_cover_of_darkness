@@ -364,7 +364,9 @@ func _pastimes() -> void:
 	await _until(func(): return sentry.activity() != &"pace", 600)
 	await _frames(120)
 	var back := Vector2(sentry.global_position.x - 120, sentry.global_position.z).length()
-	# And a pace, out and back.
+	# And a pace, out and back (once he is between habits of his own, which
+	# stop a pastime: GuardLife.at_rest).
+	await _until(func(): return not sentry._habits.busy(), 600)
 	sentry._life._pastimes._end()
 	sentry._life._pastimes._begin(&"pace")
 	var out := [0.0]
