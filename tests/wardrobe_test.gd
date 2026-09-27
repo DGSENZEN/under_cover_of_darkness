@@ -743,9 +743,9 @@ func _set_head_pose(skeleton: Skeleton3D, pose: Array) -> void:
 ## chest (the brute's), the foot of his head's neck is the colour of the
 ## skin of his outfit under it, in each tone (the albedo each shows, his
 ## outfit's times his tone): each face, the lowest centimetre of its own
-## neck (not the sleeve inside it) against his outfit's bare skin within
-## 6 cm of it and below it (what
-## shows: his neck kept up under his head does not), on average within 15%
+## neck (not the sleeve inside it) against his outfit's bare skin where it
+## meets it (within 5 mm: both are cut on one seam, common.NECK_CUT; 6 cm
+## round it took in his upper chest, lit brighter from above), on average within 15%
 ## of the brighter (the chest lies in his mantle's shadow, the head was
 ## baked alone), and none of that skin dark (under 60% of the neck's
 ## brightness: his body's stub under his jaw showed between the teeth of
@@ -771,8 +771,7 @@ func _k34() -> void:
 						edge_low = minf(edge_low, p.y)
 
 			var neck := _surface_colour(head, func(p, _low): return p.y > 1.51 and p.y < edge_low + 0.01, [])
-			var edge: float = neck[1].reduce(func(lowest, q): return minf(lowest, q.y), INF)
-			var outfit := _surface_colour(man.body, func(p, _low): return p.y < edge and neck[1].any(func(q): return p.distance_to(q) < 0.06),
+			var outfit := _surface_colour(man.body, func(p, _low): return neck[1].any(func(q): return p.distance_to(q) < 0.005),
 				[], true)
 			var tone_colour: Color = man.look.skin
 			var body := Color(outfit[0].r * tone_colour.r, outfit[0].g * tone_colour.g, outfit[0].b * tone_colour.b) if outfit[2] > 0 else Color.BLACK
@@ -1465,6 +1464,37 @@ func _dressed() -> void:
 		and beard.get_instance_shader_parameter(&"dye_colour").is_equal_approx(aged.look.hair_colour)
 	_check("K18 his hair and beard are worn and tinted his hair colour", "Head_old" in _worn_names(aged) and tinted,
 		str(_worn_names(aged)))
+
+	# K35 an old face has grey hair: his face's own hair colours (its JSON's
+	# "hair_colours") over his kind's browns, which would have put brown
+	# hair under his grey brows; another face keeps his kind's colours, and
+	# the same seed the same colour; the arms master, already grey (one man),
+	# keeps his one colour
+	var greys: Array = Wardrobe.head_data(&"old").get("hair_colours", [])
+	var browns: Array = Wardrobe.kind_data(&"watchman").get("options", {}).get("hair_colours", [])
+	var in_list := func(c: Color, list: Array) -> bool:
+		return list.any(func(rgb): return c.is_equal_approx(Color(rgb[0], rgb[1], rgb[2])))
+	var aged_ok := true
+	var others_ok := true
+
+	for s in range(1, 9):
+		for face in ["old", "weathered"]:
+			_doctor(&"watchman", {"faces": [face], "hair": ["parted"], "beards": ["full"], "headgear": [["kettlehat_bare"]]})
+			var looked: Dictionary = _roll(&"watchman", s)
+			Wardrobe.forget()
+
+			if face == "old":
+				aged_ok = aged_ok and not greys.is_empty() and in_list.call(looked.hair_colour, greys)
+			else:
+				others_ok = others_ok and in_list.call(looked.hair_colour, browns)
+
+	var his := {}
+
+	for s in range(1, 9):
+		his[str(_roll(&"arms_master", s).hair_colour)] = true
+
+	_check("K35 an old face has grey hair; other faces keep their kind's colours; the arms master keeps his",
+		aged_ok and others_ok and his.size() == 1, "greys %s, old ok %s, others ok %s, the arms master's %s" % [greys, aged_ok, others_ok, his.keys()])
 
 	# K24 a kind whose every hair style (or every beard) is missing is the
 	# plain base body, as one whose every headgear set is: dressed bald or

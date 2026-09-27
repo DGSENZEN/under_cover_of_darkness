@@ -549,12 +549,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		and not is_dead
 	):
 		var mouse_event := event as InputEventMouseMotion
+		# In screen pixels: the same turn for the same hand movement whatever
+		# size the window is (relative shrinks as the HUD is scaled up).
+		var turn := mouse_event.screen_relative
 
 		# The body handles horizontal rotation.
-		rotate_y(-mouse_event.relative.x * mouse_sensitivity)
+		rotate_y(-turn.x * mouse_sensitivity)
 
 		# The neck handles vertical rotation.
-		neck.rotate_x(-mouse_event.relative.y * mouse_sensitivity)
+		neck.rotate_x(-turn.y * mouse_sensitivity)
 		neck.rotation.x = clamp(
 			neck.rotation.x,
 			-deg_to_rad(max_pitch_degrees),

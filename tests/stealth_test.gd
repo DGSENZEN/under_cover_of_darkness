@@ -8,6 +8,7 @@ const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const SettingsScript := preload("res://scripts/UI/Settings.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const HudScript := preload("res://scripts/UI/StealthHUD.gd")
 
 
 class Ear:
@@ -442,6 +443,10 @@ func _signs_checks() -> void:
 	var over_him := false
 	var in_sight := true
 	var ticks_from := int(hud.ticks)
+	# D9: the words beside his mark, while he makes you out.
+	var said := {}
+	var beside := true
+	var worded := false
 
 	for i in 150:
 		await _frames(1)
@@ -449,6 +454,13 @@ func _signs_checks() -> void:
 
 		if mark.is_empty() or int(easy.state) == COMBAT:
 			continue
+
+		if float(mark.get("words", 0.0)) > 0.5:
+			worded = true
+			said["%s %s" % [mark["name"], mark["says"]]] = true
+			var box: Rect2 = mark["words_rect"]
+			var ring: Vector2 = mark["at"]
+			beside = beside and Rect2(Vector2.ZERO, view).encloses(box) and (box.position.x > ring.x + 10.0 or box.end.x < ring.x - 10.0) and absf(box.get_center().y - ring.y) < 6.0
 
 		in_sight = in_sight and not bool(mark["walled"])
 
@@ -460,7 +472,10 @@ func _signs_checks() -> void:
 		climbing = climbing or float(mark["rise"]) > 0.15
 		lead = lead or bool(mark["lead"])
 		var head: Vector2 = get_viewport().get_camera_3d().unproject_position(easy.eye_position())
-		over_him = over_him or (not bool(mark["edge"]) and (mark["at"] as Vector2).distance_to(head) < 60.0 and (mark["at"] as Vector2).y < head.y)
+		# Over his head: in line with him, a little above (the screen's own
+		# measure: the HUD is scaled with the window).
+		var mark_at: Vector2 = mark["at"]
+		over_him = over_him or (not bool(mark["edge"]) and absf(mark_at.x - head.x) < view.x * 0.05 and mark_at.y < head.y and head.y - mark_at.y < view.y * 0.25)
 
 	_check("D1 a man at his ease and unaware of you has no mark", unmarked, "marked %s" % [not unmarked])
 	_check("D2 a man making you out: an eye over him in a ring that fills as he does, glowing while it climbs, and drawn biggest",
@@ -469,6 +484,25 @@ func _signs_checks() -> void:
 	var ticked := int(hud.ticks) - ticks_from
 	_check("D5 a tick sounds while a man makes you out (none while nobody does)", ticked_unaware == 0 and ticked >= 3,
 		"%d ticks unaware, %d while he made you out" % [ticked_unaware, ticked])
+	# What a man is doing about you, as the words put it.
+	var phrases := [
+		[HudScript.doing(COMBAT, true, &"sight", false), "has you"],
+		[HudScript.doing(SUSPICIOUS, true, &"sight", false), "sees you"],
+		[HudScript.doing(RELAXED, true, &"sight", false), "sees something"],
+		[HudScript.doing(SUSPICIOUS, false, &"noise", false), "is suspicious"],
+		[HudScript.doing(RELAXED, false, &"noise", false), "heard something"],
+		[HudScript.doing(INVESTIGATING, false, &"noise", false), "is coming to look"],
+		[HudScript.doing(SEARCHING, false, &"sight", false), "is searching"],
+		[HudScript.doing(SUSPICIOUS, false, &"noise", true), "is giving up"],
+		[HudScript.doing(SEARCHING, false, &"body", false), "found a body"],
+		[HudScript.doing(INVESTIGATING, false, &"alarm", false), "heard the alarm"],
+		[HudScript.doing(INVESTIGATING, false, &"call", false), "was called"],
+		[HudScript.doing(INVESTIGATING, false, &"flash", false, true), "is blinded"],
+	]
+	var wrong := phrases.filter(func(p): return p[0] != p[1])
+	_check("D9 beside the biggest mark, in a few words, what he is doing about you (\"Merek sees you\"), level with the ring and on the screen; the words fit what he does",
+		worded and beside and easy.given_name != "" and said.keys().any(func(w): return String(w).begins_with(easy.given_name + " sees ")) and wrong.is_empty(),
+		"words %s %s beside %s; wrong phrases %s" % [worded, said.keys(), beside, wrong])
 
 	# D3 the first to have you: a red "!", bursting, and his name; the next
 	#    man after him, no name
@@ -479,9 +513,10 @@ func _signs_checks() -> void:
 	await _until(func(): return int(other.state) == COMBAT, 240)
 	await _frames(2)
 	var next: Dictionary = _mark_of(hud, other)
-	_check("D3 the first to have you: a red \"!\" bursting, his name under it; the next man, no name",
+	_check("D3 the first to have you: a red \"!\" bursting, \"<his name> has you\" beside it; the next man, no words",
 		not had.is_empty() and had["icon"] == &"fight" and float(had["flash"]) > 0.5 and had["name"] == easy.given_name and easy.given_name != ""
-			and not next.is_empty() and next["icon"] == &"fight" and next["name"] == "",
+			and had["says"] == "has you" and float(had["words"]) > 0.0
+			and not next.is_empty() and next["icon"] == &"fight" and next["name"] == "" and float(next["words"]) == 0.0,
 		"first %s, next (state %d) %s" % [had, int(other.state), next])
 	easy.queue_free()
 	other.queue_free()
@@ -562,9 +597,9 @@ func _signs_checks() -> void:
 
 		if not mark8.is_empty():
 			marked = true
-			quiet8 = quiet8 and mark8["icon"] == &"odd" and not bool(mark8["lead"])
+			quiet8 = quiet8 and mark8["icon"] == &"odd" and not bool(mark8["lead"]) and float(mark8["words"]) == 0.0
 
-	_check("D8 a man stirred by something not you (a torch out) has a small grey mark, never the biggest, and no tick",
+	_check("D8 a man stirred by something not you (a torch out) has a small grey mark, never the biggest, no words and no tick",
 		int(looker.state) >= INVESTIGATING and marked and quiet8 and int(hud.ticks) == ticks8,
 		"state %d marked %s quiet %s ticks %d" % [int(looker.state), marked, quiet8, int(hud.ticks) - ticks8])
 	looker.queue_free()

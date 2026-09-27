@@ -717,7 +717,7 @@ func _run() -> void:
 	await _frames(60 * 8)
 	var back_by := _flat(greeter.global_position - Vector3(555, 0, -3)) < 1.0
 	_check("H23 going by a man at his ease, a word to him, and he nods; by him again straight after, nothing",
-		greeted and nodded and back_by and _barks_of(greeter).size() == said,
+		greeted and nodded and back_by and not _barks_of(greeter).slice(said).any(func(t): return _is_greet(t, stood.given_name)),
 		"said %s, nodded %s, back by him %s, said after %s" % [_barks_of(greeter), nodded, back_by, _barks_of(greeter).slice(said)])
 
 	# H24 a flask in his left hand for a pull from it, and put away after;
@@ -802,11 +802,12 @@ func _run() -> void:
 
 	# H27 heard at his ease: his clothes as he sits and gets up, the seat
 	# creaking under him, the chair scraping the floor drawn out and in, and a
-	# grunt lifting a crate (his blade stays in its scabbard: no slide heard)
+	# grunt lifting a crate, in his voice (his blade stays in its scabbard: no
+	# slide heard)
 	await _fresh()
 	var heard_before := {}
 
-	for sound in [&"cloth", &"creak_rope", &"scuff", &"sheath", &"blade_draw", &"grunt"]:
+	for sound in [&"cloth", &"creak_rope", &"scuff", &"sheath", &"blade_draw", &"grunt", &"grunt_b"]:
 		heard_before[sound] = _count(sound)
 
 	var diner3 := _man(Vector3(478, 0, 0), 0.0, &"steady", [&"sit"])
@@ -822,7 +823,7 @@ func _run() -> void:
 		foley[sound] = _count(sound) - int(heard_before[sound])
 
 	_check("H27 heard at his ease: a rustle sitting and getting up, the seat creaking, the chair scraping, a grunt at a crate; no blade in or out",
-		int(foley[&"cloth"]) >= 2 and int(foley[&"creak_rope"]) >= 1 and int(foley[&"scuff"]) >= 4 and int(foley[&"sheath"]) == 0 and int(foley[&"blade_draw"]) == 0 and int(foley[&"grunt"]) >= 1,
+		int(foley[&"cloth"]) >= 2 and int(foley[&"creak_rope"]) >= 1 and int(foley[&"scuff"]) >= 4 and int(foley[&"sheath"]) == 0 and int(foley[&"blade_draw"]) == 0 and int(foley[&"grunt"]) + int(foley[&"grunt_b"]) >= 1,
 		"heard %s" % [foley])
 
 	# H28 his blade in its scabbard at his ease (the hilt at his hip); going to

@@ -5,7 +5,9 @@ extends CanvasLayer
 ##   the screen   drawn on a coarse grid of big pixels (virtual_height lines),
 ##                each a flat block of colour, quantised to color_levels a
 ##                channel with an ordered 4x4 dither: the PS1's crunch. The
-##                HUD sits above it and stays sharp.
+##                HUD sits above it and stays sharp, and so do the words over
+##                men's heads: drawn just above the grid (CrispText), so the
+##                big pixels never break them into blocks.
 ##   textures     every material in the tree samples its textures nearest-
 ##                neighbour, with mipmaps, so texels are crisp squares and
 ##                distant walls do not crawl.
@@ -27,6 +29,7 @@ extends CanvasLayer
 ##   F8  dither on / off
 
 const SCREEN_SHADER := preload("res://scripts/Visual/retro_screen.gdshader")
+const CrispTextScript := preload("res://scripts/Visual/CrispText.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 
 ## Lines on screen. 240 is a PS1, 448 a PS2; 0 turns the grid off.
@@ -65,6 +68,8 @@ var enabled := true:
 
 var _rect: ColorRect
 var _material: ShaderMaterial
+## The words over men's heads, sharp over the grid while it is on.
+var _crisp: Control
 ## Converted materials, by instance id: the material and its own filter.
 var _seen := {}
 var _scene: Node = null
@@ -86,6 +91,10 @@ func _ready() -> void:
 	_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(_rect)
+	# After the grid, so drawn over it (and not read into it).
+	_crisp = CrispTextScript.new()
+	_crisp.name = "CrispText"
+	add_child(_crisp)
 
 	get_tree().node_added.connect(_on_node_added)
 	get_viewport().size_changed.connect(_fit)
@@ -154,15 +163,17 @@ func _fit() -> void:
 
 	var on := enabled and virtual_height > 0
 	_rect.visible = on
-	var window := Vector2(get_viewport().get_visible_rect().size)
+	_crisp.active = on
 	var cells := virtual_size()
 	_material.set_shader_parameter("virtual_size", cells)
 	_material.set_shader_parameter("levels", color_levels)
 	_material.set_shader_parameter("dither_strength", dither)
 
 	# Two rendered pixels to each cell is plenty: the rest would be averaged
-	# away.
+	# away. Pixels of the window itself: the visible rect is in the HUD's
+	# units, scaled with the window (project stretch, canvas_items).
 	var root := get_tree().root
+	var window := Vector2(root.size)
 	var scale := 1.0
 
 	if on and auto_render_scale and window.y > 0.0:

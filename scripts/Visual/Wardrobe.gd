@@ -147,7 +147,8 @@ static func _read(relative: String) -> Dictionary:
 ## skin, hair_colour}. Eleven draws, always all eleven and in this order, so
 ## an option added later never changes the rest of anyone's looks: the nine
 ## of the spec (§7.5), then (batch 1) which dye colour of `dye.colours`, and
-## which of `hair_colours`. Which hair a helmet hides is the dresser's
+## which of `hair_colours` (his face's own, if it has any: the old face's greys).
+## Which hair a helmet hides is the dresser's
 ## business (Humanoid.dress), not the roll's.
 static func roll(options: Dictionary, skin_tones: Dictionary, seed: int) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
@@ -175,7 +176,14 @@ static func roll(options: Dictionary, skin_tones: Dictionary, seed: int) -> Dict
 	var colours: Array = dye.get("colours", [])
 	var base := _colour(colours[mini(int(colour_draw * colours.size()), colours.size() - 1)] if not colours.is_empty()
 		else dye.get("colour", [1.0, 1.0, 1.0]))
+	# A face with hair colours of its own (the old face's greys) over his
+	# kind's, unless his kind's are already among them (the arms master,
+	# one grey man, keeps his one).
 	var hair_colours: Array = options.get("hair_colours", [])
+	var own: Array = head_data(face).get("hair_colours", [])
+
+	if not own.is_empty() and not (not hair_colours.is_empty() and hair_colours.all(func(c): return own.has(c))):
+		hair_colours = own
 	var hair_colour := _colour(hair_colours[mini(int(hair_draw * hair_colours.size()), hair_colours.size() - 1)]) \
 		if not hair_colours.is_empty() else Color(0.3, 0.25, 0.2)
 	var shift := float(dye.get("shift", 0.0))

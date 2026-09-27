@@ -142,8 +142,10 @@ func _ready() -> void:
 	build()
 
 	# Its sound: the recordings loaded, the ambience, the stone's acoustics,
-	# the score (Sfx.warm: what the player's arrival does in a level).
+	# the score (Sfx.warm: what the player's arrival does in a level); a cold
+	# night, heard on the men's breath (GuardVoice).
 	set_meta(&"acoustics", "stone")
+	set_meta(&"cold", true)
 	Sfx.warm(self)
 	await _baker.baked
 	LightProbe.invalidate()
@@ -158,11 +160,9 @@ func _ready() -> void:
 	GuardScript.randomize_on = true
 	_night()
 	_overview()
-	var reporting := Array(OS.get_cmdline_user_args()).any(func(arg): return String(arg).begins_with("--fps-report="))
-
 	# The director is there when the showcase says it is ready; it begins
 	# once whoever waits for that has heard it.
-	if run_show and not reporting and ResourceLoader.exists(STORY):
+	if run_show and ResourceLoader.exists(STORY):
 		director = DirectorScript.new()
 		director.read_args(OS.get_cmdline_user_args())
 		add_child(director)
@@ -172,7 +172,7 @@ func _ready() -> void:
 		add_child(camera)
 		camera.setup(self, story)
 		camera.make_current()
-		director.beat_started.connect(func(_beat: StringName, shot: Dictionary) -> void: camera.want(shot))
+		director.beat_started.connect(func(_beat: StringName, scene: Dictionary) -> void: camera.want(scene))
 
 		var overview := get_node_or_null("Overview")
 
@@ -198,6 +198,11 @@ func _ready() -> void:
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--fps-report="):
+			# Measured with the show running: the night as it is filmed (the
+			# Cinema camera, its focus and all).
+			if director != null:
+				director.run()
+
 			_fps_report(float(arg.trim_prefix("--fps-report=")))
 			return
 
@@ -217,6 +222,7 @@ func build() -> void:
 	_outside()
 	_stations_and_props()
 	_marks()
+	_vantages()
 	_lights()
 	_baker = NavigationRegion3D.new()
 	_baker.set_script(NavBakerScript)
@@ -703,7 +709,20 @@ func _overview() -> void:
 	camera.make_current()
 
 
-## The frame rate over `seconds` of the yard at rest, then quit.
+## Places the camera may watch from, half hidden (CineVantage): behind the
+## woodpile, the wall-walk, by the gate, the tower's top, the shed's mouth,
+## behind the store's crates, the mouth of the alley.
+func _vantages() -> void:
+	for at in [Vector3(-15.5, 1.5, 13.8), Vector3(-12.0, WALK_HEIGHT + 1.6, -14.5), Vector3(9.0, WALK_HEIGHT + 1.6, -14.5),
+			Vector3(2.8, 2.2, 14.8), Vector3(17.3, TOWER_HEIGHT + 1.6, -12.3), Vector3(-15.8, 1.6, -3.5),
+			Vector3(11.5, 1.3, 5.5), Vector3(19.8, 1.6, 6.0)]:
+		var mark := Marker3D.new()
+		add_child(mark)
+		mark.global_position = at
+		mark.add_to_group(&"cine_vantage")
+
+
+## The frame rate over `seconds` of the night from its start, then quit.
 func _fps_report(seconds: float) -> void:
 	var samples: Array[float] = []
 
@@ -719,5 +738,5 @@ func _fps_report(seconds: float) -> void:
 		lowest = minf(lowest, s)
 
 	var counted := maxi(samples.size() - 2, 1)
-	print("[fps] %d guards: average %.1f, lowest %.1f over %d s" % [cast.size(), total / counted, lowest, counted])
+	print("[fps] %d guards, the show running: average %.1f, lowest %.1f over %d s" % [cast.size(), total / counted, lowest, counted])
 	get_tree().quit()

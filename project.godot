@@ -23,6 +23,13 @@ Retro="*res://scripts/Visual/Retro.gd"
 
 settings/addon_root_folder="res://addons/debug_draw_3d"
 
+[display]
+
+window/size/viewport_width=1152
+window/size/viewport_height=648
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/func_godot/plugin.cfg")

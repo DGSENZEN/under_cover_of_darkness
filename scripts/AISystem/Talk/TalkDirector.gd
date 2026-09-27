@@ -850,7 +850,17 @@ func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary
 		if voice != null and voice.has_method("delivery_for"):
 			delivery = voice.delivery_for(&"", bool(world.get("uneasy", false)))
 
-	speaker.speak(text, delivery)
+	var length := LINE_BASE + LINE_PER_CHAR * text.length()
+
+	match delivery:
+		&"whisper":
+			length *= WHISPER_SLOW
+		&"shout":
+			length *= SHOUT_FAST
+
+	# To the others in it (the camera cuts to them: CineEvents "line").
+	var listeners: Array = (talk["members"] as Array).filter(func(m): return m != speaker and m != null and is_instance_valid(m))
+	speaker.speak(text, delivery, listeners, length)
 
 	for emote in choice["emotes"]:
 		# A nod he already gave as the last line ended is not given twice.
@@ -867,14 +877,6 @@ func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary
 
 	_lines[id].append(String(choice["text"]))
 	_last_spoke[id] = clock
-	var length := LINE_BASE + LINE_PER_CHAR * text.length()
-
-	match delivery:
-		&"whisper":
-			length *= WHISPER_SLOW
-		&"shout":
-			length *= SHOUT_FAST
-
 	return length
 
 

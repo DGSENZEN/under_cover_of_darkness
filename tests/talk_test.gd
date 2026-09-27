@@ -182,6 +182,7 @@ func _run() -> void:
 	await _director()
 	await _memory()
 	await _voice()
+	await _voices_of_men()
 	await _fight_talk()
 	await _review_fixes()
 	GuardScript.randomize_on = true
@@ -641,7 +642,7 @@ func _voice() -> void:
 	Sfx.recording = true
 	Sfx.recorded.clear()
 	await _frames(600)
-	var calm_breaths := Sfx.recorded.filter(func(r): return r[0] == &"breath_heavy" or r[0] == &"breath_scared").size()
+	var calm_breaths := Sfx.recorded.filter(func(r): return String(r[0]).begins_with("breath_heavy") or String(r[0]).begins_with("breath_scared")).size()
 	breather._voice.hold_heart(150.0)
 	Sfx.recorded.clear()
 	var rises: Array = []
@@ -652,7 +653,7 @@ func _voice() -> void:
 			rises.append(breather._voice.clock)
 		was_out[0] = now_out
 		return false, 600)
-	var hard_breaths := Sfx.recorded.filter(func(r): return r[0] == &"breath_heavy" or r[0] == &"breath_scared").size()
+	var hard_breaths := Sfx.recorded.filter(func(r): return String(r[0]).begins_with("breath_heavy") or String(r[0]).begins_with("breath_scared")).size()
 	Sfx.recording = false
 	var period := (float(rises[-1]) - float(rises[0])) / float(rises.size() - 1) if rises.size() >= 2 else 0.0
 	var expected: float = 1.0 / breather._voice.breath_rate()
@@ -675,6 +676,113 @@ func _voice() -> void:
 	Sfx.recording = false
 	_check("T27 each line is murmured, a whisper well under a shout",
 		murmurs.size() == 2 and float(murmurs[0][1]) <= float(murmurs[1][1]) - 12.0, "murmurs %s" % [murmurs])
+
+
+# ---------------------------------------------------------------------------
+# Whose voice: the two men and the woman of NOX's Voices Essentials
+# ---------------------------------------------------------------------------
+
+func _voices_of_men() -> void:
+	# T44 each keeps his own voice: the big man the deep one, a lighter man
+	# the other ("_b"), the woman hers ("_f"); a sound the lighter man never
+	# recorded (a sigh) is the other's
+	await _fresh()
+	_use([])
+	var deep := _guard(Vector3(250, 0, 0), 0.0, &"steady", "", &"brute")
+	var light := _guard(Vector3(254, 0, 0), 0.0)
+	var woman := _guard(Vector3(258, 0, 0), 0.0, &"steady", "", &"duelist")
+	light._voice.actor = GuardVoiceScript.LIGHT
+	Sfx.recording = true
+	Sfx.recorded.clear()
+	for g in [deep, light, woman]:
+		g._life._talk_rest = 99.0
+		g._voice.emote("laughs")
+		g._voice.cry(&"pain")
+	var heard44: Array = Sfx.recorded.map(func(r): return r[0])
+	Sfx.recording = false
+	_check("T44 each man keeps his own voice, the woman hers; what one never recorded is the other man's",
+		heard44 == [&"laugh", &"pain", &"laugh_b", &"pain_b", &"laugh_f", &"pain_f"] and deep._voice.actor == GuardVoiceScript.DEEP
+			and light._voice.voiced(&"sigh") == &"sigh" and woman._voice.voiced(&"sigh") == &"sigh_f",
+		"heard %s, the big man's voice %d, the lighter man sighs as %s" % [heard44, deep._voice.actor, light._voice.voiced(&"sigh")])
+
+	# T45 a line is heard as his nods and "hm"s, whole takes one after
+	# another, the last done by the time the line is
+	await _fresh()
+	_use([])
+	var talker := _guard(Vector3(262, 0, 0), 0.0)
+	talker._life._talk_rest = 99.0
+	talker._voice.actor = GuardVoiceScript.LIGHT
+	var line45 := "Cold tonight, colder than last winter down by the river gate."
+	var length45: float = GuardVoiceScript.LINE_BASE + GuardVoiceScript.LINE_PER_CHAR * line45.length()
+	var began45: float = talker._voice.clock
+	talker._voice.utter(GuardVoiceScript.CHATTER, line45, &"")
+	await _frames(int(ceil(length45 * 60.0)) + 30)
+	var takes45: Array = talker._voice.murmur_takes.duplicate()
+	var in_turn := takes45.size() >= 3
+	for i in takes45.size():
+		in_turn = in_turn and String(takes45[i][2]) == "murmur_b" and (i == 0 or float(takes45[i][0]) >= float(takes45[i - 1][1]))
+	_check("T45 a line is his nods and hms, whole takes in turn, over by the line's end",
+		in_turn and absf(float(takes45[0][0]) - began45) < 0.05 and float(takes45[-1][1]) <= began45 + length45 + 0.05,
+		"%d takes over a %.1f s line: %s" % [takes45.size(), length45, takes45.map(func(t): return "%.2f-%.2f" % [float(t[0]) - began45, float(t[1]) - began45])])
+
+	# T46 the man listening nods, and is heard to: "mm"
+	Sfx.recording = true
+	Sfx.recorded.clear()
+	talker.emote("nods")
+	var heard46: Array = Sfx.recorded.map(func(r): return r[0])
+	Sfx.recording = false
+	_check("T46 a listener's nod is heard", heard46 == [&"nod_b"], "heard %s" % [heard46])
+
+	# T47 at his ease a man sighs now and then; roused, never
+	await _fresh()
+	_use([])
+	var idle := _guard(Vector3(266, 0, 0), 0.0)
+	var roused := _guard(Vector3(270, 0, 0), 0.0)
+	for g in [idle, roused]:
+		g._life._talk_rest = 99.0
+		g.set_physics_process(false)
+	roused.state = GuardScript.Alert.INVESTIGATING
+	var sighs47 := []
+	for g in [idle, roused]:
+		Sfx.recording = true
+		Sfx.recorded.clear()
+		for i in 60 * 180:
+			g._voice.update(1.0 / 60.0)
+		sighs47.append(Sfx.recorded.filter(func(r): return String(r[0]).begins_with("sigh")).size())
+		Sfx.recording = false
+	var idle_sighs: int = sighs47[0]
+	var roused_sighs: int = sighs47[1]
+	_check("T47 a man at his ease sighs now and then, one roused never", idle_sighs >= 2 and idle_sighs <= 7 and roused_sighs == 0,
+		"at ease %d sighs in 3 min, roused %d" % [idle_sighs, roused_sighs])
+
+	# T48 in the cold his breath is heard, softly, now and then; not in a
+	# warm place
+	await _fresh()
+	_use([])
+	var shiver := _guard(Vector3(274, 0, 0), 0.0)
+	shiver._life._talk_rest = 99.0
+	shiver.set_physics_process(false)
+	shiver._voice.hold_heart(72.0)
+	var colds := [0, 0]
+	var loudest := -99.0
+	for cold in [true, false]:
+		if cold:
+			set_meta(&"cold", true)
+		else:
+			remove_meta(&"cold")
+		Sfx.recording = true
+		Sfx.recorded.clear()
+		for i in 60 * 60:
+			shiver._voice.update(1.0 / 60.0)
+		for r in Sfx.recorded:
+			if String(r[0]).begins_with("breath_cold"):
+				colds[0 if cold else 1] += 1
+				loudest = maxf(loudest, float(r[1]))
+		Sfx.recording = false
+	shiver._voice.hold_heart(-1.0)
+	_check("T48 in the cold a man's breath is heard now and then, softly; in the warm it is not",
+		colds[0] >= 3 and colds[1] == 0 and loudest <= -6.0,
+		"cold %d breaths a minute (loudest %+.0f dB), warm %d" % [colds[0], loudest, colds[1]])
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import bmesh  # noqa: E402
 import bpy  # noqa: E402
 from mathutils import Vector  # noqa: E402
 from mathutils.bvhtree import BVHTree  # noqa: E402
@@ -678,6 +679,43 @@ def case_male_parts():
     return messages
 
 
+def case_archer_rebuilds():
+    """The archer rebuilds as committed (the same triangles, every vertex by
+    place with its weights, as `watchman` compares): his jerkin takes the
+    faces of his tunic it lies over (build.one_owner), and it took them by
+    their place in the tunic's faces, whose order changed from build to
+    build (bmesh fills the gaps a cut leaves with the lips' faces): he came
+    out with 1,349 to 1,369 triangles, other faces of his tunic gone each
+    time."""
+    import build
+    import recipes
+
+    source = common.WARDROBE / "source"
+    fresh()
+    folder = testkit.scratch_dir("wardrobe_archer_")
+    common.SOURCE, common.BACKUP = folder, folder / "backup"
+
+    try:
+        build.build_kind(recipes.KINDS["archer"], True)
+    finally:
+        common.SOURCE, common.BACKUP = source, source / "backup"
+
+    new = bpy.data.objects["Outfit"]
+
+    with bpy.data.libraries.load(str(source / "archer.blend")) as (_, dst):
+        dst.objects = ["Outfit"]
+
+    old = dst.objects[0]
+    messages = []
+
+    if common.tri_count(new) != common.tri_count(old) or strays(new, old) or strays(old, new):
+        messages.append("%d triangles (committed %d), %d vertices moved, %d gone" % (
+            common.tri_count(new), common.tri_count(old), len(strays(new, old)), len(strays(old, new))))
+
+    fresh()
+    return messages
+
+
 def case_brute_arms():
     """The committed brute's bare arms are whole: rays out of his upper arms
     (his right below its pauldron; his left from 30%, below his mantle's
@@ -907,6 +945,228 @@ def case_neck_seams():
 
     fresh()
     return ["see-through rays at the neck: %s" % holes] if holes else []
+
+
+def on_seam(co, body, neck_y, tree, within=0.001):
+    """Whether a point lies on the seam round his neck (common.NECK_CUT) and
+    on the full body's surface (`tree`), within `within`."""
+    return abs(co.z - common.neck_cut_z(body, co, neck_y)) < within and tree.find_nearest(co)[3] < within
+
+
+def open_edges(me, parts, keep):
+    """The open edges of the faces of `me` whose part (wr_part) is in
+    `parts`, that `keep((a, b))` passes: [(a, b)], their ends' places."""
+    part = me.attributes["wr_part"].data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    edges = [(e.verts[0].co.copy(), e.verts[1].co.copy()) for e in bm.edges
+             if e.is_boundary and part[e.link_faces[0].index].value in parts and keep((e.verts[0].co, e.verts[1].co))]
+    bm.free()
+    return edges
+
+
+def to_segment(p, a, b):
+    ab = b - a
+    t = 0.0 if ab.length_squared < 1e-12 else min(max((p - a).dot(ab) / ab.length_squared, 0.0), 1.0)
+    return (a + ab * t - p).length
+
+
+def case_neck_cut():
+    """Where his head meets his body there is one seam, not two rows of
+    teeth (his neck looked sawn off: cut at the bone weights and decimated
+    apart, head and collar each ended in teeth). Every committed head's neck
+    edge lies on common.NECK_CUT and on the full body's surface (within
+    1 mm); so does every open edge of each kind's body and shells round his
+    neck (his body's alone where his neck is bare: the brute's), unless
+    another garment lies over it (a thinner shell's edge under a thicker
+    one) or it is where one shell meets another (within 1.5 cm); and where
+    his neck is bare each head's edge lies along his body's (within 2 mm). The watchman's batch 0 outfit
+    is his own (never rebuilt: the user's call)."""
+    import recipes
+
+    off = []
+    edges_of = {}
+
+    for body, target in (("male", "heads"), ("female", "heads_female")):
+        bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / ("%s.blend" % target)))
+        ny = bpy.data.objects["Armature"].data.bones["neck_01"].head_local.y
+        tree = common.bvh([bpy.data.objects["Reference"]])
+
+        for obj in sorted((o for o in bpy.data.objects if o.name.startswith("Head_")), key=lambda o: o.name):
+            edges = open_edges(obj.data, {1}, lambda e: max(e[0].z, e[1].z) < common.NECK_EDGE_BELOW[body])
+            bad = {tuple(p) for e in edges for p in e if not on_seam(p, body, ny, tree)}
+            edges_of[obj.name] = edges
+
+            if bad:
+                off.append("%s: %d vertices" % (obj.name, len(bad)))
+
+    for kind, recipe in recipes.KINDS.items():
+        if recipe.get("batch") == 0:
+            continue
+
+        body = recipe["body"]
+        bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / ("%s.blend" % kind)))
+        me = bpy.data.objects["Outfit"].data
+        neck = bpy.data.objects["Armature"].data.bones["neck_01"].head_local
+        tree = common.bvh([bpy.data.objects["Reference"]])
+        part = me.attributes["wr_part"].data
+        # (A bare neck's shells are not grown up to the seam: his skin is.)
+        shells = {0} | ({i + 1 for i, g in enumerate(recipe["garments"]) if g["type"] == "shell"}
+                        if not recipe.get("bare_neck") else set())
+        verts = [v.co.copy() for v in me.vertices]
+        others = {k: BVHTree.FromPolygons(verts, [tuple(p.vertices) for p in me.polygons if part[p.index].value == k])
+                  for k in range(0, len(recipe["garments"]) + 1)}
+
+        # (Round his neck, within 3 cm of the seam: a garment's own opening
+        # lower down, the archer's jerkin's V, is its own.)
+        def round_neck(e):
+            return all(math.hypot(p.x, p.y - neck.y) < 0.16 and abs(p.z - common.neck_cut_z(body, p, neck.y)) < 0.03 for p in e)
+
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bad = set()
+        seam = []
+
+        for e in bm.edges:
+            ends = (e.verts[0].co, e.verts[1].co)
+
+            if not e.is_boundary or part[e.link_faces[0].index].value not in shells or not round_neck(ends):
+                continue
+
+            own = part[e.link_faces[0].index].value
+
+            if own == 0 and all(on_seam(p, body, neck.y, tree) for p in ends):
+                seam.append((ends[0].copy(), ends[1].copy()))
+
+            mid = (ends[0] + ends[1]) * 0.5
+            out = Vector((mid.x, mid.y - neck.y, 0.0)).normalized()
+
+            if any(others[k].ray_cast(mid + out * 0.001, out, 0.06)[0] is not None for k in others if k != own):
+                continue
+
+            # (Where a thin shell meets a thicker one it steps up to it, at
+            # his neck as across his chest: shell_edges' business.)
+            if any(others[k].find_nearest(p, 0.015)[0] is not None for k in shells if k not in (0, own) for p in ends):
+                continue
+
+            bad |= {tuple(p) for p in ends if not on_seam(p, body, neck.y, tree)}
+
+        bm.free()
+
+        if bad:
+            off.append("%s's body or shells: %d vertices" % (kind, len(bad)))
+
+        if recipe.get("bare_neck"):
+            for face in recipe["options"]["faces"]:
+                far = [p for e in edges_of.get("Head_" + face, []) for p in e
+                       if not seam or min(to_segment(p, a, b) for a, b in seam) > 0.002]
+
+                if far:
+                    off.append("%s's head %s: %d vertices off his body's edge" % (kind, face, len(far)))
+
+    fresh()
+    return ["off the seam round his neck: %s" % off] if off else []
+
+
+def case_strips_face_out():
+    """Every committed kind's hanging cloth (strips, below his chest) faces
+    away from him: the bake paints both sides of a strip from the side its
+    faces point to, and a skirt facing his legs baked their shadow (the
+    swordsman's surcoat front read dark and muddy under his belt). The
+    watchman's batch 0 outfit is his own (never rebuilt: the user's call)."""
+    import recipes
+    from mathutils import Vector
+
+    inward = []
+
+    for kind in recipes.KINDS:
+        if recipes.KINDS[kind].get("batch") == 0:
+            continue
+
+        bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / ("%s.blend" % kind)))
+        outfit, arm = bpy.data.objects["Outfit"], bpy.data.objects["Armature"]
+        chest = arm.data.bones["spine_02"].head_local.z
+        axis_y = arm.data.bones["spine_01"].head_local.y
+        strips = outfit.data.attributes["wr_strip"].data
+        n = 0
+
+        for p in outfit.data.polygons:
+            if strips[p.index].value and p.center.z < chest:
+                out = Vector((p.center.x, p.center.y - axis_y, 0.0))
+
+                if out.length > 0.01 and p.normal.dot(out.normalized()) < -0.2:
+                    n += 1
+
+        if n:
+            inward.append("%s %d" % (kind, n))
+
+    fresh()
+    return ["hanging strips facing him: %s" % inward] if inward else []
+
+
+def case_shell_edges():
+    """Every committed kind's shells (garments cut from his body's regions)
+    meet each other in clean edges: no face of one with two or more open
+    edges (a single triangle sticking out of its edge) where that edge lies
+    against another shell (within 1.5 cm of it) and no other garment lies
+    over the face (a thinner shell's edge under a thicker one is hidden),
+    across his chest and back (from spine_02 up to the foot of his neck,
+    within 20 cm of his middle): the archer's jerkin met his tunic there in
+    a row of teeth. (His waist, legs, arms and neck lie under his belt,
+    boots, pauldrons, hood or collar.) The watchman's batch 0 outfit is his
+    own (never rebuilt: the user's call)."""
+    from mathutils.bvhtree import BVHTree
+
+    import recipes
+
+    teeth = []
+
+    for kind in recipes.KINDS:
+        recipe = recipes.KINDS[kind]
+
+        if recipe.get("batch") == 0:
+            continue
+
+        bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / ("%s.blend" % kind)))
+        me = bpy.data.objects["Outfit"].data
+        parts = me.attributes["wr_part"].data
+        shells = {i + 1 for i, g in enumerate(recipe["garments"]) if g["type"] == "shell"}
+        verts = [v.co.copy() for v in me.vertices]
+        trees = {k: BVHTree.FromPolygons(verts, [tuple(p.vertices) for p in me.polygons if parts[p.index].value == k])
+                 for k in shells}
+        garments = {k: BVHTree.FromPolygons(verts, [tuple(p.vertices) for p in me.polygons if parts[p.index].value == k])
+                    for k in range(1, len(recipe["garments"]) + 1)}
+        arm = bpy.data.objects["Armature"].data.bones
+        chest, neck = arm["spine_02"].head_local.z, arm["neck_01"].head_local.z
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        n = 0
+
+        for f in bm.faces:
+            own = parts[f.index].value
+            open_edges = [e for e in f.edges if e.is_boundary]
+            where = f.calc_center_median()
+
+            if own not in shells or len(open_edges) < 2 or not chest <= where.z <= neck or abs(where.x) > 0.2:
+                continue
+
+            mids = [(e.verts[0].co + e.verts[1].co) * 0.5 for e in open_edges]
+            c = f.calc_center_median()
+
+            if any(garments[k].ray_cast(c + f.normal * 0.001, f.normal, 0.03)[0] is not None for k in garments if k != own):
+                continue
+
+            if any(trees[k].find_nearest(m)[3] is not None and trees[k].find_nearest(m)[3] < 0.015
+                   for k in shells if k != own for m in mids):
+                n += 1
+
+        bm.free()
+
+        if n:
+            teeth.append("%s %d" % (kind, n))
+
+    fresh()
+    return ["shell faces sticking out where shells meet: %s" % teeth] if teeth else []
 
 
 def width_at(tree, y, z):
@@ -1263,7 +1523,9 @@ CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, 
          "bare_hat": case_bare_hat, "coif_beards": case_coif_beards,
          "brute_neck": case_brute_neck, "duelist_cape": case_duelist_cape,
          "brute_bracers": case_brute_bracers, "hoods_hold_faces": case_hoods_hold_faces,
-         "neck_seams": case_neck_seams}
+         "neck_seams": case_neck_seams, "strips_face_out": case_strips_face_out,
+         "shell_edges": case_shell_edges, "neck_cut": case_neck_cut,
+         "archer_rebuilds": case_archer_rebuilds}
 
 
 def main():
