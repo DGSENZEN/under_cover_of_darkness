@@ -19,6 +19,7 @@ const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Comms := preload("res://scripts/AISystem/Comms.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
+const GuardStationScript := preload("res://scripts/AISystem/GuardStation.gd")
 
 ## Conversations for the director's own checks, so they do not hang on the
 ## writing.
@@ -51,6 +52,105 @@ A: Too quiet.
 B: Stop saying that.
 -- interrupt
 B: Hush. What was that?
+
+== cool_a
+cast: A = any; B = any
+cooldown: 60s
+A: Cool a, one.
+B: Cool a, two.
+
+== once_conv
+cast: A = any; B = any
+cooldown: once
+priority: 5
+A: Only once tonight.
+B: Just the once.
+
+== plain
+cast: A = any; B = any
+cooldown: 0s
+A: Plain, one.
+B: Plain, two.
+
+== plain2
+cast: A = any; B = any
+cooldown: 0s
+A: Plain again, one.
+B: Plain again, two.
+
+== g1
+cast: A = any; B = any
+cooldown: 0s
+group: g
+A: Group one.
+B: Aye, one.
+
+== g2
+cast: A = any; B = any
+cooldown: 0s
+group: g
+A: Group two.
+B: Aye, two.
+
+== g3
+cast: A = any; B = any
+cooldown: 0s
+group: g
+A: Group three.
+B: Aye, three.
+
+== cold_1
+cast: A = name(Frost); B = any
+cooldown: 0s
+A: Cold again.
+B: Always is.
+
+== cold_2
+cast: A = name(Frost); B = any
+cooldown: 0s
+A: Cold again.
+B: You said.
+
+== temper_check
+cast: A = any; B = any
+cooldown: 0s
+A: What do we do?
+B {if rash}: I'll gut him.
+B: Let it be.
+
+== join_me
+cast: A = any; B = any; C? = any
+cooldown: 0s
+A: A long first line, to give him the time to walk over and join us.
+B: A long second line, still waiting on the third man to come over.
+A: A third line, for the time it takes.
+B: And a fourth, for good measure.
+C: I'm here now.
+A: Good.
+
+== chop_curse_1
+place: chop
+cast: A = any
+cooldown: 0s
+A: Come on, you knotted thing.
+
+== chop_curse_2
+place: chop
+cast: A = any
+cooldown: 0s
+A: Split, damn you.
+
+== muse_1
+cast: A = any
+cooldown: 0s
+again: yes
+A: Long night.
+
+== muse_2
+cast: A = any
+cooldown: 0s
+again: yes
+A: Cold one.
 """
 
 var results: Array[String] = []
@@ -77,6 +177,7 @@ func _run() -> void:
 	seed(2026)
 	GuardScript.randomize_on = false
 	await _director()
+	await _memory()
 	GuardScript.randomize_on = true
 
 
@@ -262,6 +363,137 @@ func _director() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Memory, late joiners, remarks
+# ---------------------------------------------------------------------------
+
+func _memory() -> void:
+	# T16 a conversation waits out its cooldown, whoever would play it
+	await _fresh()
+	_use(["cool_a"])
+	var director: RefCounted = TalkDirector.of(self)
+	var p1 := [_guard(Vector3(0, 0, 10), -PI * 0.5), _guard(Vector3(2.6, 0, 10), PI * 0.5)]
+	var p2 := [_guard(Vector3(14, 0, 10), -PI * 0.5), _guard(Vector3(16.6, 0, 10), PI * 0.5)]
+	await _until(func(): return director.played().size() >= 1, 900)
+	var first_at: float = director.clock
+	var early := [false]
+	await _until(func():
+		if director.clock - first_at < 55.0 and director.played().size() >= 2:
+			early[0] = true
+		for g in p1 + p2:
+			if not g._life.talking():
+				g._life._talk_rest = 0.0
+		return director.clock - first_at >= 75.0, 75 * 60 + 60)
+	_check("T16 a conversation waits out its cooldown before anyone plays it again, then plays",
+		not early[0] and director.played().size() >= 2, "played %s, early %s" % [director.played(), early[0]])
+
+	# T17 once a night
+	await _fresh()
+	_use(["once_conv", "plain", "plain2"])
+	director = TalkDirector.of(self)
+	var p17 := [_guard(Vector3(30, 0, 10), -PI * 0.5), _guard(Vector3(32.6, 0, 10), PI * 0.5)]
+	await _rested_for(p17, 180.0)
+	var onces: int = director.played().filter(func(id): return id == "once_conv").size()
+	_check("T17 a conversation marked once is played once a night", onces == 1 and director.played().size() >= 3, "played %s" % [director.played()])
+
+	# T18 a group used up before any repeats
+	await _fresh()
+	_use(["g1", "g2", "g3"])
+	director = TalkDirector.of(self)
+	var p18 := [_guard(Vector3(44, 0, 10), -PI * 0.5), _guard(Vector3(46.6, 0, 10), PI * 0.5)]
+	await _until(func():
+		for g in p18:
+			if not g._life.talking():
+				g._life._talk_rest = 0.0
+		return director.played().size() >= 3, 3600)
+	var three: Array = director.played().slice(0, 3)
+	_check("T18 every conversation of a group is played before any is played again",
+		three.size() == 3 and three.has("g1") and three.has("g2") and three.has("g3"), "played %s" % [director.played()])
+
+	# T19 no man says the same line twice
+	await _fresh()
+	_use(["cold_1", "cold_2"])
+	director = TalkDirector.of(self)
+	var frost := _guard(Vector3(58, 0, 10), -PI * 0.5, &"steady", "Frost")
+	var p19 := [frost, _guard(Vector3(60.6, 0, 10), PI * 0.5)]
+	await _rested_for(p19, 120.0)
+	var colds: int = _barks_of(frost).filter(func(t): return t == "Cold again.").size()
+	_check("T19 no man says the same line twice in a night", colds == 1, "Frost said %s" % [_barks_of(frost)])
+
+	# T20 a turn said his way
+	await _fresh()
+	_use(["temper_check"])
+	director = TalkDirector.of(self)
+	var steady := _guard(Vector3(72, 0, 10), -PI * 0.5)
+	var rash := _guard(Vector3(74.6, 0, 10), PI * 0.5, &"rash")
+	var steady2 := _guard(Vector3(72, 0, 16), -PI * 0.5)
+	var steady3 := _guard(Vector3(74.6, 0, 16), PI * 0.5)
+	for g in [steady, rash, steady2, steady3]:
+		g._life._talk_rest = 99.0
+	var started: bool = director.play("temper_check", {"A": steady, "B": rash}) and director.play("temper_check", {"A": steady2, "B": steady3})
+	await _until(func(): return _barks_of(rash).size() >= 1 and _barks_of(steady3).size() >= 1, 900)
+	_check("T20 a turn with an {if} is said the way that fits the man", started and _barks_of(rash).has("I'll gut him.") and _barks_of(steady3).has("Let it be."),
+		"rash said %s, steady said %s" % [_barks_of(rash), _barks_of(steady3)])
+
+	# T21 a man who walks up takes the empty part
+	await _fresh()
+	_use(["join_me"])
+	director = TalkDirector.of(self)
+	var a21 := _guard(Vector3(86, 0, 10), -PI * 0.5)
+	var b21 := _guard(Vector3(88.6, 0, 10), PI * 0.5)
+	var c21 := _guard(Vector3(87.3, 0, 20), PI)
+	c21._life._talk_rest = 99.0
+	await _until(func(): return director.in_talk(a21), 900)
+	c21._life._talk_rest = 0.0
+	c21._home = Transform3D(c21._home.basis, Vector3(87.3, 0, 11.9))
+	await _until(func(): return _barks_of(c21).has("I'm here now.") or not director.in_talk(a21), 2400)
+	_check("T21 a man who walks up to a conversation with an empty part takes it", _barks_of(c21).has("I'm here now."),
+		"said %s" % [_said.map(func(e): return e[1])])
+
+	# T22 a man alone says something to himself, now and then
+	await _fresh()
+	_use(["chop_curse_1", "chop_curse_2", "muse_1", "muse_2"])
+	director = TalkDirector.of(self)
+	var block: Node3D = GuardStationScript.new()
+	block.kind = &"chop"
+	add_child(block)
+	block.global_position = Vector3(100, 0, 10)
+	var chopper := _guard(Vector3(100, 0, 11), 0.0, &"steady", "", &"", [block])
+	var loner_a := _guard(Vector3(120, 0, 10), 0.0)
+	var loner_b := _guard(Vector3(130, 0, 10), 0.0)
+	await _frames(100 * 60)
+	var his: Array = director.remarks().filter(func(r): return r["man"] == chopper)
+	var spaced := true
+
+	for i in range(1, his.size()):
+		if float(his[i]["at"]) - float(his[i - 1]["at"]) < TalkDirector.SOLO_GAP - 0.1:
+			spaced = false
+
+	var chop_first: bool = not his.is_empty() and String(his[0]["id"]).begins_with("chop_curse") and float(his[0]["at"]) < 60.0
+	var pair: Array = director.remarks().filter(func(r): return r["man"] == loner_a or r["man"] == loner_b)
+	var quiet := true
+
+	for i in range(1, pair.size()):
+		if pair[i]["man"] != pair[i - 1]["man"] and float(pair[i]["at"]) - float(pair[i - 1]["at"]) < TalkDirector.SOLO_QUIET - 0.1:
+			quiet = false
+
+	_check("T22 a man alone at his station says a remark of that station, not too often, and two within earshot never speak on each other",
+		chop_first and spaced and his.size() >= 2 and pair.size() >= 2 and quiet,
+		"chopper %s, loners %s" % [his.map(func(r): return "%s@%.0f" % [r["id"], r["at"]]), pair.map(func(r): return "%s@%.0f" % [r["id"], r["at"]])])
+
+
+## `seconds` of the director's time, the men's rest cut short after each
+## conversation (so they talk as often as they may).
+func _rested_for(men: Array, seconds: float) -> void:
+	var director: RefCounted = TalkDirector.of(self)
+	var until: float = director.clock + seconds
+	await _until(func():
+		for g in men:
+			if is_instance_valid(g) and not g._life.talking():
+				g._life._talk_rest = 0.0
+		return director.clock >= until, int(seconds * 60) + 60)
+
+
+# ---------------------------------------------------------------------------
 # The yard
 # ---------------------------------------------------------------------------
 
@@ -294,9 +526,18 @@ func _use(ids: Array) -> void:
 	TalkDirector.of(self).use_library(lib)
 
 
-func _guard(at: Vector3, yaw := 0.0, preset: StringName = &"steady", name := "", archetype: StringName = &"") -> CharacterBody3D:
+func _guard(at: Vector3, yaw := 0.0, preset: StringName = &"steady", name := "", archetype: StringName = &"", stations := []) -> CharacterBody3D:
 	var g: CharacterBody3D = GUARD.instantiate()
 	g.archetype = archetype
+
+	if not stations.is_empty():
+		var paths: Array[NodePath] = []
+
+		for station in stations:
+			paths.append((station as Node).get_path())
+
+		g.stations = paths
+
 	g.temperament = preset
 	g.debug_ai = false
 	g.given_name = name
@@ -319,7 +560,7 @@ func _fresh() -> void:
 		g.set_physics_process(false)
 		g.queue_free()
 
-	for group in [&"bodies", &"dropped_weapons", &"dropped_lights", &"stray_arrows"]:
+	for group in [&"bodies", &"dropped_weapons", &"dropped_lights", &"stray_arrows", &"guard_stations"]:
 		for thing in get_tree().get_nodes_in_group(group):
 			thing.queue_free()
 

@@ -18,6 +18,14 @@ extends RefCounted
 ##
 ## Each line comes out of the man's mouth as Guard.speak (the subtitle, his
 ## murmur) and his emotes as Guard.emote (a gesture, a laugh).
+##
+## It remembers: a conversation waits out its cooldown (or is once a
+## night); every conversation of a group is played before any again; no man
+## says the same line twice in a night (unless it is marked `again`); two
+## men do not air the same topic twice. A man who walks up to a conversation
+## with an empty part that fits him takes it. A man alone says something to
+## himself now and then (a remark: a conversation of one part, fitting his
+## station), never on top of another within earshot.
 
 const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
 const TalkFacts := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
@@ -45,6 +53,14 @@ const DELIVERIES := {"whispers": &"whisper", "shouts": &"shout", "murmurs": &"mu
 const SEATED := [&"sit", &"sit_talk", &"eat", &"lean"]
 ## The first line comes this long after a conversation starts.
 const OPENING := 0.4
+## Remarks: this long between a man's (the first after SOLO_FIRST); none
+## within SOLO_EARSHOT of another said less than SOLO_QUIET ago.
+const SOLO_GAP := 40.0
+const SOLO_FIRST := Vector2(5.0, 40.0)
+const SOLO_EARSHOT := 15.0
+const SOLO_QUIET := 8.0
+## How often it looks for men to join conversations with an empty part.
+const JOIN_EVERY := 0.5
 
 static var _directors := {}
 
@@ -63,6 +79,17 @@ var _last_for := {}
 ## By man (instance id): what he has said tonight, and when he last spoke.
 var _lines := {}
 var _last_spoke := {}
+## Memory: when each conversation was last started; those played once; for
+## each group, those played since it was last used up; for each pair of men,
+## the topics they have aired.
+var _played_at := {}
+var _once := {}
+var _group_used := {}
+var _aired := {}
+## Remarks: [{id, man, at, where}], and when each man may make his next.
+var _remarks: Array = []
+var _solo_next := {}
+var _join_in := 0.0
 
 
 ## The director for `node`'s tree (made the first time it is asked for).
@@ -109,6 +136,12 @@ func tick(delta: float) -> void:
 		if _talks.has(talk):
 			_advance(talk, delta)
 
+	_join_in -= delta
+
+	if _join_in <= 0.0:
+		_join_in = JOIN_EVERY
+		_join()
+
 	_choose_in -= delta
 
 	if _choose_in <= 0.0:
@@ -120,8 +153,10 @@ func tick(delta: float) -> void:
 # Asking
 # ---------------------------------------------------------------------------
 
+## In a conversation (a remark to himself is not one).
 func in_talk(man: Node) -> bool:
-	return not _talk_of(man).is_empty()
+	var talk := _talk_of(man)
+	return not talk.is_empty() and not bool(talk["solo"])
 
 
 ## His line is being said now.
@@ -199,9 +234,14 @@ func talks() -> Array:
 		"started_at": t["started_at"], "place": t["place"]})
 
 
-## Every conversation started tonight, in order.
+## Every conversation started tonight, in order (remarks are in `remarks`).
 func played() -> Array[String]:
 	return _played
+
+
+## Every remark tonight: [{id, man, at}].
+func remarks() -> Array:
+	return _remarks.map(func(r: Dictionary) -> Dictionary: return {"id": r["id"], "man": r["man"], "at": r["at"]})
 
 
 ## What he has said tonight.
@@ -221,6 +261,8 @@ func _choose() -> void:
 
 	for group in _groups(tree):
 		_choose_for(group, tree)
+
+	_remark(tree)
 
 
 ## Men free to talk, in sight and in reach of each other: each group two or
@@ -267,7 +309,7 @@ func _free(man: Node) -> bool:
 	if not is_instance_valid(man) or man.is_queued_for_deletion() or man.get("puppet") == true:
 		return false
 
-	if not GuardLifeScript.at_ease(man) or bool(man.get("lookout")) or in_talk(man):
+	if not GuardLifeScript.at_ease(man) or bool(man.get("lookout")) or not _talk_of(man).is_empty():
 		return false
 
 	var life: RefCounted = man.get("_life")
@@ -313,7 +355,7 @@ func _choose_for(group: Array, tree: SceneTree) -> void:
 
 		var cast := TalkFacts.cast_parts(conv, men, world, _allowed_for(conv))
 
-		if cast.is_empty():
+		if cast.is_empty() or _aired_by(conv, cast):
 			continue
 
 		candidates.append({"conv": conv, "cast": cast, "spec": TalkFacts.specificity(conv, cast), "priority": int(conv["priority"])})
@@ -334,14 +376,93 @@ func _choose_for(group: Array, tree: SceneTree) -> void:
 	_start(pick["conv"], nodes, {})
 
 
-## Whether a conversation may be chosen now (its cooldown, once a night...).
-func _available(_conv: Dictionary) -> bool:
-	return true
+## Whether a conversation may be chosen now: its cooldown waited out (or,
+## once a night, not yet played), and its group not waiting to be used up.
+func _available(conv: Dictionary) -> bool:
+	var id := String(conv["id"])
+
+	if float(conv["cooldown"]) == TalkScript.ONCE:
+		if _once.has(id):
+			return false
+	elif _played_at.has(id) and clock - float(_played_at[id]) < float(conv["cooldown"]):
+		return false
+
+	var group := StringName(conv["group"])
+
+	if group == &"":
+		return true
+
+	var used: Dictionary = _group_used.get(group, {})
+
+	if not used.has(id):
+		return true
+
+	# All of the group played: it starts again.
+	var size := (_conversations_lib().get("conversations", []) as Array).filter(func(c): return StringName(c["group"]) == group).size()
+
+	if used.size() >= size:
+		used.clear()
+		return true
+
+	return false
 
 
-## Who may take which part (the men's memory of what they have said).
-func _allowed_for(_conv: Dictionary) -> Callable:
-	return Callable()
+## Who may take which part: not a man who has said one of its lines tonight
+## (unless the conversation says he may).
+func _allowed_for(conv: Dictionary) -> Callable:
+	if bool(conv["again"]):
+		return Callable()
+
+	var texts := {}
+
+	for turn in conv["lines"]:
+		for choice in turn["choices"]:
+			if not texts.has(turn["part"]):
+				texts[turn["part"]] = []
+
+			texts[turn["part"]].append(String(choice["text"]))
+
+	return func(man: Dictionary, part: String) -> bool:
+		var node: Variant = man.get("node")
+
+		if node == null or not is_instance_valid(node):
+			return true
+
+		var said: Array = _lines.get((node as Node).get_instance_id(), [])
+		return not (texts.get(part, []) as Array).any(func(t): return said.has(t))
+
+
+## These men have aired this topic between them before. Only talk at no
+## particular place counts.
+func _aired_by(conv: Dictionary, cast: Dictionary) -> bool:
+	if StringName(conv["place"]) != &"":
+		return false
+
+	var topic := _topic_of(conv)
+
+	for pair in _pairs_of(cast.values().map(func(m): return m.get("node") if m is Dictionary else m)):
+		if (_aired.get(pair, {}) as Dictionary).has(topic):
+			return true
+
+	return false
+
+
+## What they talked of: the conversation itself (a group is many topics:
+## small talk, dice).
+func _topic_of(conv: Dictionary) -> String:
+	return String(conv["id"])
+
+
+## Every pair of these men, as keys.
+func _pairs_of(men: Array) -> Array:
+	var keys := []
+	var valid := men.filter(func(m): return m != null and is_instance_valid(m))
+
+	for i in valid.size():
+		for j in range(i + 1, valid.size()):
+			keys.append(_key_of([valid[i], valid[j]]))
+
+	return keys
 
 
 func _when_holds(conv: Dictionary, world: Dictionary) -> bool:
@@ -377,20 +498,42 @@ func _weighted(pool: Array) -> Dictionary:
 # Playing
 # ---------------------------------------------------------------------------
 
-func _start(conv: Dictionary, cast: Dictionary, extra: Dictionary) -> void:
+func _start(conv: Dictionary, cast: Dictionary, extra: Dictionary, solo := false) -> void:
 	var members := []
 
 	for part in cast:
 		if not members.has(cast[part]):
 			members.append(cast[part])
 
+	var id := String(conv["id"])
 	_talks.append({
-		"conv": conv, "id": String(conv["id"]), "cast": cast.duplicate(), "members": members, "turn": 0,
-		"timer": OPENING, "speaker": null, "speaking_until": -1.0, "started_at": clock,
-		"place": StringName(conv["place"]), "extra": extra.duplicate(),
+		"conv": conv, "id": id, "cast": cast.duplicate(), "members": members, "turn": 0,
+		"timer": OPENING if not solo else 0.0, "speaker": null, "speaking_until": -1.0, "started_at": clock,
+		"place": StringName(conv["place"]), "extra": extra.duplicate(), "solo": solo,
 	})
-	_played.append(String(conv["id"]))
-	_last_for[_key_of(members)] = String(conv["id"])
+	_played_at[id] = clock
+
+	if float(conv["cooldown"]) == TalkScript.ONCE:
+		_once[id] = true
+
+	if StringName(conv["group"]) != &"":
+		if not _group_used.has(StringName(conv["group"])):
+			_group_used[StringName(conv["group"])] = {}
+
+		_group_used[StringName(conv["group"])][id] = true
+
+	if solo:
+		return
+
+	_played.append(id)
+	_last_for[_key_of(members)] = id
+
+	if StringName(conv["place"]) == &"":
+		for pair in _pairs_of(members):
+			if not _aired.has(pair):
+				_aired[pair] = {}
+
+			_aired[pair][_topic_of(conv)] = true
 
 
 func _advance(talk: Dictionary, delta: float) -> void:
@@ -479,6 +622,10 @@ func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary
 	for emote in choice["emotes"]:
 		if DELIVERIES.has(emote):
 			delivery = DELIVERIES[emote]
+
+	if delivery == &"" and bool(talk.get("solo", false)):
+		# To himself: under his breath.
+		delivery = &"murmur"
 
 	if delivery == &"":
 		var voice: Variant = speaker.get("_voice")
@@ -584,6 +731,128 @@ func _end(talk: Dictionary) -> void:
 
 func _can_speak(man: Variant) -> bool:
 	return man != null and is_instance_valid(man) and not (man as Node).is_queued_for_deletion() and man.get("_knocked_out") != true
+
+
+# ---------------------------------------------------------------------------
+# Late joiners and remarks
+# ---------------------------------------------------------------------------
+
+## A man free and near a conversation with an empty part he fits: he takes
+## it.
+func _join() -> void:
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+
+	if tree == null:
+		return
+
+	var free: Array = []
+
+	for talk in _talks:
+		if bool(talk["solo"]):
+			continue
+
+		var empty := (talk["conv"]["cast"] as Array).filter(func(p): return bool(p["optional"]) and not talk["cast"].has(p["key"]))
+
+		if empty.is_empty():
+			continue
+
+		if free.is_empty():
+			free = tree.get_nodes_in_group(&"guards").filter(_free)
+
+		var sheet: Dictionary = _conversations_lib().get("cast", {})
+
+		for part in empty:
+			for man in free:
+				if (talk["members"] as Array).has(man) or not _near_any(man, talk["members"]):
+					continue
+
+				var cast_facts := {}
+
+				for key in talk["cast"]:
+					if is_instance_valid(talk["cast"][key]):
+						cast_facts[key] = _facts_of(talk["cast"][key], sheet)
+
+				var me := _facts_of(man, sheet)
+
+				if not TalkFacts._fits(me, part["reqs"], cast_facts, _world_of(talk)):
+					continue
+
+				if not _allowed_for(talk["conv"]).is_null() and not _allowed_for(talk["conv"]).call(me, String(part["key"])):
+					continue
+
+				talk["cast"][part["key"]] = man
+				talk["members"].append(man)
+				free.erase(man)
+				break
+
+
+func _near_any(man: Node3D, members: Array) -> bool:
+	for other in members:
+		if other != null and is_instance_valid(other) and (other as Node3D).global_position.distance_to(man.global_position) <= TALK_RANGE:
+			return true
+
+	return false
+
+
+## A man alone, at his ease, his time come: a remark fitting his station (or
+## none in particular), unless another has just been made near him.
+func _remark(tree: SceneTree) -> void:
+	var guards: Array = tree.get_nodes_in_group(&"guards")
+	var free: Array = guards.filter(_free)
+	var sheet: Dictionary = _conversations_lib().get("cast", {})
+
+	for man in guards:
+		if not is_instance_valid(man) or man.get("puppet") == true or not GuardLifeScript.at_ease(man) or not _talk_of(man).is_empty():
+			continue
+
+		var id: int = man.get_instance_id()
+
+		if not _solo_next.has(id):
+			_solo_next[id] = clock + randf_range(SOLO_FIRST.x, SOLO_FIRST.y)
+
+		if clock < float(_solo_next[id]):
+			continue
+
+		# Someone to talk to is company, not solitude.
+		if free.any(func(other): return other != man and (other as Node3D).global_position.distance_to((man as Node3D).global_position) <= TALK_RANGE):
+			continue
+
+		if _remarks.any(func(r): return clock - float(r["at"]) < SOLO_QUIET and (r["where"] as Vector3).distance_to((man as Node3D).global_position) <= SOLO_EARSHOT):
+			continue
+
+		var me := _facts_of(man, sheet)
+		var world := TalkFacts.world([man], tree, {"place": [me["station"]]})
+		var candidates := []
+
+		for conv in _conversations_lib().get("conversations", []):
+			if (conv["cast"] as Array).size() != 1:
+				continue
+
+			var place := StringName(conv["place"])
+
+			# A sleeper only talks in his sleep.
+			if (place != &"" and place != StringName(me["station"])) or (bool(me["states"]["asleep"]) and place != &"sleep"):
+				continue
+
+			if not _available(conv) or not _when_holds(conv, world):
+				continue
+
+			var cast := TalkFacts.cast_parts(conv, [me], world, _allowed_for(conv))
+
+			if not cast.is_empty():
+				candidates.append({"conv": conv, "cast": cast, "spec": TalkFacts.specificity(conv, cast), "priority": int(conv["priority"])})
+
+		if candidates.is_empty():
+			continue
+
+		var best_priority: int = candidates.map(func(c): return int(c["priority"])).max()
+		var top := candidates.filter(func(c): return int(c["priority"]) >= best_priority)
+		var best_spec: int = top.map(func(c): return int(c["spec"])).max()
+		var pick := _weighted(top.filter(func(c): return int(c["spec"]) >= best_spec - 1))
+		var part := String((pick["conv"]["cast"] as Array)[0]["key"])
+		_start(pick["conv"], {part: man}, {}, true)
+		_solo_next[id] = clock + SOLO_GAP
+		_remarks.append({"id": String(pick["conv"]["id"]), "man": man, "at": clock, "where": (man as Node3D).global_position})
 
 
 # ---------------------------------------------------------------------------
