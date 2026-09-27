@@ -172,6 +172,9 @@ func _ready() -> void:
 	# What the guards' light arithmetic takes it to be, whatever the shadow
 	# budget does to what is drawn (LightProbe, LightBudget).
 	light.set_meta(&"casts_shadow", shadows)
+	# A fixture's glowing parts shine by themselves; this light, right over
+	# them, would only blow them out.
+	light.light_cull_mask = 0xFFFFF & ~Layers.GLOWING
 	light.position = _light_base
 	add_child(light)
 

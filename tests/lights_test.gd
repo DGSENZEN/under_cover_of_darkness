@@ -56,6 +56,7 @@ func _run() -> void:
 	await _lit_and_out()
 	await _budget()
 	await _fixture()
+	await _torches()
 
 
 # ---------------------------------------------------------------------------
@@ -727,6 +728,115 @@ func _fixture() -> void:
 	lost.queue_free()
 	camera.queue_free()
 	await _frames(3)
+
+
+# ---------------------------------------------------------------------------
+# The torch family and torch_at
+# ---------------------------------------------------------------------------
+
+func _torches() -> void:
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.8, 710)
+	camera.current = true
+	Props.block(self, Vector3(40, -0.5, 705), Vector3(100, 1, 30))
+	Props.block(self, Vector3(0, 2, 700), Vector3(6, 4, 0.3))
+
+	# L33a beside a wall it becomes a wall torch on it
+	var a: Node3D = Lights.torch_at(self, Vector3(0, 2.6, 700.45), 2.2, 9.0, true)
+	var lit_every_frame := true
+
+	for i in 4:
+		await get_tree().physics_frame
+		lit_every_frame = lit_every_frame and _lit_near(Vector3(0, 2.6, 700.45))
+
+	var walled := _fixture_near(Vector3(0, 2.6, 700.6))
+	_check("L33a a torch placed by a wall becomes a wall torch on it, lit throughout",
+		walled != null and walled.fixture == &"wall_torch" and is_equal_approx(walled.energy, 2.2) and lit_every_frame,
+		"became %s, energy %s, lit every frame %s" % [walled.fixture if walled else "nothing", walled.energy if walled else 0.0, lit_every_frame])
+
+	# L33b in the open over a floor it becomes a pole cresset reaching its flame
+	var b: Node3D = Lights.torch_at(self, Vector3(20, 2.6, 705), 2.4, 9.0, true)
+	await _frames(3)
+	var pole := _fixture_near(Vector3(20, 1.3, 705), 2.0)
+	var reach := INF
+
+	if pole != null:
+		reach = (pole.global_transform * pole.flame_points[0]).distance_to(Vector3(20, 2.6, 705))
+
+	_check("L33b a torch in the open over a floor becomes a pole cresset whose flame is where it was",
+		pole != null and pole.fixture == &"cresset_pole" and reach < 0.03, "became %s, flame off by %.3f m" % [pole.fixture if pole else "nothing", reach])
+
+	# L33c over nothing it stays a bare flame
+	var c: Node3D = Lights.torch_at(self, Vector3(40, 30, 705), 2.4, 9.0, true)
+	await _frames(1)
+	await _frames(3)
+	var bare := _burner_near(Vector3(40, 30, 705))
+	_check("L33c a torch with nothing to stand on stays a bare flame", bare != null and bare.get("fixture") == null,
+		"%s" % [bare])
+
+	# L33d never mounted on a door, nor on a man
+	var door: Node3D = Props.door(self, Vector3(60, 0, 705), 0.0)
+	await _frames(2)
+	Lights.torch_at(self, Vector3(60.5, 2.0, 705.3), 2.4, 9.0, true)
+	var guard: Node3D = GUARD.instantiate()
+	add_child(guard)
+	guard.global_position = Vector3(70, 0, 705)
+	await _frames(2)
+	Lights.torch_at(self, Vector3(70, 1.2, 705.4), 2.4, 9.0, true)
+	await _frames(3)
+	var by_door := _fixture_near(Vector3(60.5, 1.0, 705.3), 2.0)
+	var by_man := _fixture_near(Vector3(70, 0.6, 705.4), 2.0)
+	_check("L33d a torch by a door or a man is never mounted on them",
+		(by_door == null or by_door.fixture != &"wall_torch") and (by_man == null or by_man.fixture != &"wall_torch"),
+		"by the door %s, by the man %s" % [by_door.fixture if by_door else "bare", by_man.fixture if by_man else "bare"])
+	guard.queue_free()
+	door.queue_free()
+
+	# L34 the carried torch is held by its flame, the hand below
+	var held: Node3D = Lights.carried_torch()
+	add_child(held)
+	await _frames(2)
+	_check("L34 a carried torch's flame is its origin and its grip is 0.36 m below",
+		held.socket(&"flame") == Vector3.ZERO and absf(held.socket(&"grip").y + 0.36) < 0.01,
+		"flame %s grip %s" % [held.socket(&"flame"), held.socket(&"grip")])
+	held.queue_free()
+
+	for node in get_children():
+		if node.is_in_group(&"torches"):
+			node.queue_free()
+
+	camera.queue_free()
+	await _frames(3)
+
+
+## The fixture (a LightFixture) nearest `at` within `reach`.
+func _fixture_near(at: Vector3, reach := 1.0) -> Node3D:
+	var best: Node3D = null
+
+	for node in get_tree().get_nodes_in_group(&"torches"):
+		if node.get("fixture") != null and String(node.fixture) != "" and node.global_position.distance_to(at) < reach:
+			if best == null or node.global_position.distance_to(at) < best.global_position.distance_to(at):
+				best = node
+
+	return best
+
+
+func _burner_near(at: Vector3, reach := 0.2) -> Node3D:
+	for node in get_tree().get_nodes_in_group(&"torches"):
+		if node.global_position.distance_to(at) < reach:
+			return node
+
+	return null
+
+
+## Some burner's light near `at` is lit.
+func _lit_near(at: Vector3) -> bool:
+	for node in get_tree().get_nodes_in_group(&"torches"):
+		if not node.is_queued_for_deletion() and node.light != null and node.light.visible and node.light.light_energy > 0.0 and node.light.global_position.distance_to(at) < 1.0:
+			return true
+
+	return false
 
 
 func _v(a) -> Vector3:

@@ -20,6 +20,8 @@ const SOOT := preload("res://assets/vfx/soot.png")
 @export var fixture := &""
 ## Burner settings laid over the fixture's own (export name -> value).
 var overrides := {}
+## Metres its stretching part grows (a pole cresset fitted to its place).
+var stretch := 0.0
 
 var model: Node3D
 ## socket name -> its points in the fixture's space.
@@ -74,14 +76,14 @@ func _before_ready() -> void:
 
 	_apply_settings(spec_data.get("burner", {}))
 	_apply_settings(overrides)
+	_build_model()
+	_stretch()
 
 	if sockets.has(&"flame"):
 		flame_points = PackedVector3Array(sockets[&"flame"])
 
 	if sockets.has(&"corona"):
 		corona_point = socket(&"corona")
-
-	_build_model()
 
 	if spec_data.get("soot", false) and spec_data.get("mount", "") == "wall":
 		_place_soot.call_deferred()
@@ -131,11 +133,40 @@ func _build_model() -> void:
 
 				if not glow_meshes.has(drawn):
 					glow_meshes.append(drawn)
+					# Lit by its glow, not by its burner (Layers.GLOWING).
+					drawn.layers = Layers.GLOWING
 			else:
 				drawn.set_surface_override_material(i, Materials.surface(StringName(slot)))
 
 	for body in model.find_children("*", "CollisionObject3D", true, false):
 		_bodies.append((body as CollisionObject3D).get_rid())
+
+
+## A stretching part (a cresset's pole) grows by `stretch`; everything above
+## it, flames and halo too, rises with it; what stays on the floor stays.
+func _stretch() -> void:
+	var rule: Dictionary = spec_data.get("stretch", {})
+
+	if is_zero_approx(stretch) or rule.is_empty() or model == null:
+		return
+
+	var length := float(rule.get("length", 1.0))
+	var keep: Array = rule.get("keep", [])
+
+	for mesh in model.find_children("*", "MeshInstance3D", true, false):
+		if String(mesh.name) == String(rule.get("part", "")):
+			mesh.scale.y *= (length + stretch) / length
+		elif not keep.has(String(mesh.name)):
+			mesh.position.y += stretch
+
+	for socket_name in [&"flame", &"corona"]:
+		if sockets.has(socket_name):
+			var raised: Array = []
+
+			for point in sockets[socket_name]:
+				raised.append(point + Vector3(0.0, stretch, 0.0))
+
+			sockets[socket_name] = raised
 
 
 ## Soot up the wall above the flame (Arx Fatalis did this and it grounds a

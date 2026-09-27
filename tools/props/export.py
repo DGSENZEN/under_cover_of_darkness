@@ -82,6 +82,7 @@ def spec(name, recipe):
         "slots": slots,
         "glow_parts": [p["name"] for p in recipe["parts"] if p.get("glow")],
         "shadow_parts": list(recipe.get("shadow_parts", [])),
+        "stretch": recipe.get("stretch", {}),
         "sockets": {k: [point for _, point in sorted(v)] for k, v in sockets.items()},
         "burner": recipe.get("burner", {}),
         "soot": recipe.get("soot", False),

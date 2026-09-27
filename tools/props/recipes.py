@@ -101,6 +101,99 @@ FIXTURES = {
     },
 }
 
+# The carried torch: the same stick and tow head, its flame at its origin
+# (it is held by the node where the flame is: GuardHands), a hand 0.36 m down.
+_HEAD_PROFILE = [(0.0, 0.0), (0.026, 0.0), (0.034, 0.03), (0.046, 0.08), (0.044, 0.11), (0.03, 0.13), (0.0, 0.135)]
+
+FIXTURES["carried_torch"] = {
+    "family": "torches",
+    "mount": "carried",
+    "budget": 120,
+    "soot": False,
+    "cookie": False,
+    "parts": [
+        {"type": "lathe", "name": "stick", "slot": "bark", "segments": 5,
+         "profile": [(0.0, 0.0), (0.021, 0.0), (0.024, 0.3), (0.026, 0.56), (0.0, 0.56)], "at": (0.0, 0.0, -0.64)},
+        {"type": "blob", "name": "head", "slot": "pitch", "glow": True, "segments": 6, "noise": 0.005, "seed": 5,
+         "profile": _HEAD_PROFILE, "at": (0.0, 0.0, -0.12)},
+    ],
+    "sockets": {"flame": [(0.0, 0.0, 0.0)], "corona": [(0.0, 0.0, 0.06)], "grip": [(0.0, 0.0, -0.36)]},
+    "burner": dict(TORCH_BURNER, energy=2.1, light_range=7.5, shadows=False, flicker=0.22, flame_size=0.3),
+}
+
+
+def _basket(at, top_radius=0.16, low_radius=0.06, height=0.22, bars=6):
+    """A cresset's iron basket standing at `at`, and pitch rope burning in it."""
+    x, y, z = at
+    parts = [
+        {"type": "ring", "name": "basket_rim", "slot": "iron", "radius": top_radius, "thickness": 0.014, "sides": 3, "segments": 8,
+         "axis": "Z", "at": (x, y, z + height)},
+        {"type": "ring", "name": "basket_collar", "slot": "iron", "radius": low_radius, "thickness": 0.016, "sides": 3, "segments": 6,
+         "axis": "Z", "at": (x, y, z)},
+        {"type": "blob", "name": "rope", "slot": "pitch", "glow": True, "segments": 8, "noise": 0.012, "seed": 11,
+         "profile": [(0.0, 0.03), (0.07, 0.03), (0.12, 0.09), (0.13, 0.15), (0.09, 0.18), (0.0, 0.19)], "at": (x, y, z)},
+    ]
+
+    for i in range(bars):
+        a = 360.0 * i / bars
+        low = _round((x, y, z), low_radius, a)
+        mid = _round((x, y, z + height * 0.55), (low_radius + top_radius) * 0.62, a + 8.0)
+        top = _round((x, y, z + height), top_radius, a)
+        parts.append({"type": "tube", "name": "basket_bar_%d" % i, "slot": "iron", "radius": 0.006, "sides": 3, "points": [low, mid, top]})
+
+    return parts
+
+
+FIRE_BURNER = {
+    "sheet": "fire", "ramp": "fire", "low_ramp": "dying", "flicker_kind": "cresset", "flicker": 0.12,
+    "energy": 2.8, "light_range": 10.0, "shadows": True, "color": "FF9829", "corona_px": 60.0,
+    "ember_rate": 10.0, "smoke_rate": 5.0, "flame_size": 0.55, "flame_layers": 2, "core": True,
+    "loop": "fire_small", "loop_db": -12.0, "loop_reach": 12.0,
+}
+
+# The cresset on its pole: a square iron pole on three feet, the basket on
+# top (the pole stretches to put the flame where it is wanted: "stretch").
+_POLE_TOP = 2.4
+
+FIXTURES["cresset_pole"] = {
+    "family": "torches",
+    "mount": "floor",
+    "budget": 600,
+    "soot": False,
+    "cookie": False,
+    "parts": [
+        {"type": "tube", "name": "pole", "slot": "iron", "radius": 0.022, "sides": 4, "points": [(0.0, 0.0, 0.0), (0.0, 0.0, _POLE_TOP)]},
+        {"type": "ring", "name": "pole_collar", "slot": "iron", "radius": 0.03, "thickness": 0.02, "sides": 3, "segments": 6,
+         "axis": "Z", "at": (0.0, 0.0, 0.3)},
+    ] + [
+        {"type": "tube", "name": "foot_%d" % i, "slot": "iron", "radius": 0.012, "sides": 3,
+         "points": [(0.0, 0.0, 0.3), _round((0.0, 0.0, 0.08), 0.22, a), _round((0.0, 0.0, 0.0), 0.28, a)]}
+        for i, a in enumerate((90.0, 210.0, 330.0))
+    ] + _basket((0.0, 0.0, _POLE_TOP)),
+    "sockets": {"flame": [(0.0, 0.0, _POLE_TOP + 0.17)], "corona": [(0.0, 0.0, _POLE_TOP + 0.23)], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(FIRE_BURNER),
+    # How the pole stretches: its part, its length as built, and what stays on the floor.
+    "stretch": {"part": "pole", "length": _POLE_TOP, "keep": ["pole_collar", "foot_0", "foot_1", "foot_2"]},
+}
+
+# The cresset on a wall bracket: a plate, a bar out with a brace under it.
+_BRACKET = (0.0, -0.45, 0.12)
+
+FIXTURES["cresset_wall"] = {
+    "family": "torches",
+    "mount": "wall",
+    "budget": 600,
+    "soot": True,
+    "cookie": False,
+    "parts": [
+        {"type": "box", "name": "plate", "slot": "iron", "size": (0.1, 0.02, 0.36), "at": (0.0, -0.01, 0.0)},
+        {"type": "tube", "name": "bracket", "slot": "iron", "radius": 0.012, "sides": 4, "points": [(0.0, -0.02, 0.12), _BRACKET]},
+        {"type": "tube", "name": "brace", "slot": "iron", "radius": 0.009, "sides": 4, "points": [(0.0, -0.02, -0.14), (0.0, -0.3, 0.12)]},
+    ] + _basket(_BRACKET),
+    "sockets": {"flame": [(0.0, -0.45, 0.29)], "corona": [(0.0, -0.45, 0.35)], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(FIRE_BURNER),
+}
+
 KINDS = list(FIXTURES)
 
 

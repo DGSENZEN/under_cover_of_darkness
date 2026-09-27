@@ -6,6 +6,13 @@ extends RefCounted
 ##   Lights.wall_torch(self, flame_at, wall_normal)
 
 const LightFixtureScript := preload("res://scripts/Visual/Lights/LightFixture.gd")
+const TorchScript := preload("res://scripts/Visual/Torch.gd")
+
+## How far from a torch's flame torch_at looks for a wall, and down for a floor.
+const WALL_REACH := 0.5
+const FLOOR_REACH := 3.2
+## A pole cresset's pole is never shorter than this.
+const SHORTEST_POLE := 0.6
 
 
 ## Any fixture, its origin at `at`, turned `yaw` about up.
@@ -32,6 +39,134 @@ static func on_wall(parent: Node, fixture: StringName, flame_at: Vector3, wall_n
 	var yaw := yaw_facing(wall_normal)
 	var flame_local := _socket(fixture, "flame")
 	return make(parent, fixture, flame_at - Basis(Vector3.UP, yaw) * flame_local, yaw, overrides)
+
+
+## A torch where a level had a bare one: lit at once where its flame was
+## (the returned burner), and on its second physics tick, once the level's
+## walls are in the physics space, made into a fixture that fits the place:
+## a wall torch on a wall within WALL_REACH (its plate on the wall, so its
+## flame stands out by the sconce's reach), else a pole cresset on a floor
+## within FLOOR_REACH below (its pole fitted to put the flame where it was),
+## else it stays a bare flame and says so. Only static world geometry
+## counts: never a door, a man or another light.
+static func torch_at(parent: Node, flame_at: Vector3, energy := 2.4, light_range := 9.0, shadows := true) -> Node3D:
+	var bare: Node3D = TorchScript.new()
+	bare.energy = energy
+	bare.light_range = light_range
+	bare.shadows = shadows
+	parent.add_child(bare)
+	bare.global_position = flame_at
+	var resolver := Resolver.new()
+	resolver.bare = bare
+	resolver.flame_at = flame_at
+	resolver.settings = {"energy": energy, "light_range": light_range, "shadows": shadows}
+	bare.add_child(resolver)
+	return bare
+
+
+## The guards' torch (GuardHands): not added to anything; its flame is its origin.
+static func carried_torch() -> Node3D:
+	var node: Node3D = LightFixtureScript.new()
+	node.name = "RoundsLight"
+	node.fixture = &"carried_torch"
+	return node
+
+
+## A cresset: "pole" standing on `at` (its foot), or "wall" on its bracket
+## (`at` its plate, turned by `yaw`).
+static func cresset(parent: Node, at: Vector3, variant := &"pole", yaw := 0.0, overrides := {}) -> Node3D:
+	return make(parent, StringName("cresset_%s" % variant), at, yaw, overrides)
+
+
+## torch_at's work, on the bare torch's first physics tick.
+class Resolver:
+	extends Node
+
+	const FixtureScript := preload("res://scripts/Visual/Lights/LightFixture.gd")
+
+	var bare: Node3D
+	var flame_at := Vector3.ZERO
+	var settings := {}
+	## Bodies added this frame are only in the physics space once it has
+	## stepped: wait this many ticks.
+	var _wait := 2
+
+	func _physics_process(_delta: float) -> void:
+		_wait -= 1
+
+		if _wait > 0:
+			return
+
+		set_physics_process(false)
+		var parent := bare.get_parent()
+		var space := bare.get_world_3d().direct_space_state
+		var wall := _wall(space)
+		var built: Node3D = null
+
+		if not wall.is_empty():
+			var normal: Vector3 = wall["normal"]
+			normal = Vector3(normal.x, 0.0, normal.z).normalized()
+			var yaw := atan2(normal.x, normal.z)
+			var flame_local := _socket(&"wall_torch", "flame")
+			built = _make(parent, &"wall_torch", Vector3(wall["position"].x, flame_at.y - flame_local.y, wall["position"].z), yaw, settings)
+		else:
+			var floor := _floor(space)
+			var high := _socket(&"cresset_pole", "flame").y
+
+			if not floor.is_empty() and flame_at.y - floor["position"].y - high > SHORTEST_POLE - 2.4:
+				var fitted := settings.duplicate()
+				fitted["stretch"] = flame_at.y - floor["position"].y - high
+				built = _make(parent, &"cresset_pole", floor["position"], 0.0, fitted)
+			else:
+				push_warning("Lights.torch_at: nothing to stand a torch on at %s: a bare flame" % flame_at)
+
+		if built != null:
+			bare.queue_free()
+
+		queue_free()
+
+	func _wall(space: PhysicsDirectSpaceState3D) -> Dictionary:
+		var best := {}
+		var nearest := INF
+
+		for k in 8:
+			var angle := TAU * k / 8.0
+			var query := PhysicsRayQueryParameters3D.create(flame_at, flame_at + Vector3(cos(angle), 0.0, sin(angle)) * WALL_REACH, 1)
+			query.collide_with_areas = false
+			var hit := space.intersect_ray(query)
+
+			if not hit.is_empty() and _is_ground(hit["collider"]):
+				var distance := flame_at.distance_to(hit["position"])
+
+				if distance < nearest:
+					nearest = distance
+					best = hit
+
+		return best
+
+	func _floor(space: PhysicsDirectSpaceState3D) -> Dictionary:
+		var query := PhysicsRayQueryParameters3D.create(flame_at, flame_at + Vector3.DOWN * FLOOR_REACH, 1)
+		query.collide_with_areas = false
+		var hit := space.intersect_ray(query)
+		return hit if not hit.is_empty() and _is_ground(hit["collider"]) else {}
+
+	## Static world: not a door (they move), a man or a light.
+	func _is_ground(body: Object) -> bool:
+		return body is StaticBody3D and not body is AnimatableBody3D and not (body as Node).is_in_group(&"doors") and not (body as Node).is_in_group(&"guards")
+
+	func _socket(fixture: StringName, socket_name: String) -> Vector3:
+		var points: Array = FixtureScript.spec(fixture).get("sockets", {}).get(socket_name, [])
+		return Vector3(float(points[0][0]), float(points[0][1]), float(points[0][2])) if not points.is_empty() else Vector3.ZERO
+
+	func _make(parent: Node, fixture: StringName, at: Vector3, yaw: float, overrides: Dictionary) -> Node3D:
+		var node: Node3D = FixtureScript.new()
+		node.name = String(fixture).to_pascal_case()
+		node.fixture = fixture
+		node.overrides = overrides
+		parent.add_child(node)
+		node.global_position = at
+		node.global_rotation = Vector3(0.0, yaw, 0.0)
+		return node
 
 
 ## The yaw that turns a fixture's +Z (out of its wall) along `normal`.

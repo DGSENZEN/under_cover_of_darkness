@@ -23,5 +23,5 @@ void fragment() {
 	// Hot pitch and coals glow deep red-orange, only a little of the flame's
 	// own colour in them.
 	vec3 ember = mix(vec3(0.85, 0.22, 0.04), heat_tint.rgb, 0.35);
-	EMISSION = ember * clamp(glow, 0.0, 1.5) * 1.2;
+	EMISSION = ember * clamp(glow, 0.0, 1.5) * 0.55;
 }
