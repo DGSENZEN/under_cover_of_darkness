@@ -11,6 +11,8 @@ const TorchScript := preload("res://scripts/Visual/Torch.gd")
 ## How far from a torch's flame torch_at looks for a wall, and down for a floor.
 const WALL_REACH := 0.5
 const FLOOR_REACH := 3.2
+## A little further than FLOOR_REACH, so a floor just at it is found.
+const FLOOR_MARGIN := 0.05
 ## A pole cresset's pole is never shorter than this.
 const SHORTEST_POLE := 0.6
 
@@ -219,7 +221,7 @@ class Resolver:
 		return best
 
 	func _floor(space: PhysicsDirectSpaceState3D) -> Dictionary:
-		var query := PhysicsRayQueryParameters3D.create(flame_at, flame_at + Vector3.DOWN * FLOOR_REACH, 1)
+		var query := PhysicsRayQueryParameters3D.create(flame_at, flame_at + Vector3.DOWN * (FLOOR_REACH + FLOOR_MARGIN), 1)
 		query.collide_with_areas = false
 		var hit := space.intersect_ray(query)
 		return hit if not hit.is_empty() and _is_ground(hit["collider"]) else {}
@@ -237,6 +239,8 @@ class Resolver:
 		node.name = String(fixture).to_pascal_case()
 		node.fixture = fixture
 		node.overrides = overrides
+		# It carries on the bare torch's clock: no second roll of the dice.
+		node.clock_from = bare._time
 		parent.add_child(node)
 		node.global_position = at
 		node.global_rotation = Vector3(0.0, yaw, 0.0)

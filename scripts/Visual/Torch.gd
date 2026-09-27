@@ -67,6 +67,8 @@ const LIGHT_TIME := 0.5
 const SNUFF_TIME := 0.1
 const SMOKE_THREAD := 2.5
 const COOL_TIME := 3.0
+## How loud it goes out.
+const OUT_DB := {&"snuff": -8.0, &"douse": -4.0}
 
 ## Lit or put out (told at the end of the frame, once per real change).
 signal lit_changed(lit: bool)
@@ -167,6 +169,15 @@ var _winks: Array[float] = []
 ## again whenever it enters the tree.
 var _carriers: Array[RID] = []
 var _carriers_known := false
+## Its energy as made: its halo and glowing parts shine by its light over
+## this, so a light let down (a dropped lantern guttering) dims them too.
+var _made_energy := 1.0
+## The sound of its going out, played at the end of the frame if it is
+## still out then (lit, put out and lit again at once makes none).
+var _out_sound: StringName = &""
+## A clock to carry on instead of a roll of the dice (a torch built in
+## another's place: torch_at), -1 for none.
+var clock_from := -1.0
 
 
 func _ready() -> void:
@@ -174,7 +185,7 @@ func _ready() -> void:
 	add_to_group(&"torches")
 	# Its clock starts somewhere of its own. (One draw from the global dice,
 	# as torches always made: seeded suites roll the same numbers after it.)
-	_time = randf() * 100.0
+	_time = clock_from if clock_from >= 0.0 else randf() * 100.0
 	# The light wavers and the flame changes every drawn frame: drawn as set.
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 
@@ -188,6 +199,7 @@ func _ready() -> void:
 
 	middle /= float(flame_points.size())
 	_light_base = middle + Vector3(0.0, light_above, 0.0)
+	_made_energy = maxf(energy, 0.001)
 
 	light = OmniLight3D.new()
 	light.name = "Light"
@@ -246,6 +258,10 @@ func _ready() -> void:
 
 func _enter_tree() -> void:
 	_carriers_known = false
+
+	# Back in the tree after being taken out (_ready registers the first time).
+	if is_node_ready() and shadows:
+		LightBudget.register(self)
 
 
 func _exit_tree() -> void:
@@ -426,7 +442,7 @@ func _flame_top(up: float) -> Vector3:
 
 func _physics_process(delta: float) -> void:
 	if corona != null:
-		var glow := light.light_energy / maxf(energy, 0.001) if light.visible else 0.0
+		var glow := light.light_energy / _made_energy if light.visible else 0.0
 		if not _carriers_known:
 			_carriers_known = true
 			_carriers.clear()
@@ -453,6 +469,7 @@ func _corona_exclude() -> Array[RID]:
 func kindle(instant := false) -> void:
 	var was_out := _lit_target < 1.0 or _lit_level < 1.0
 	lit = true
+	_out_sound = &""
 	_winks.clear()
 	_lit_target = 1.0
 	_lit_rate = 1.0 / LIGHT_TIME
@@ -482,6 +499,9 @@ func put_out(how := &"snuff", instant := false) -> void:
 	if instant:
 		_lit_level = 0.0
 		_cool = 0.0
+		_smoke_left = 0.0
+		_winks.clear()
+		_out_sound = &""
 		_show_lit(&"out")
 	elif how == &"douse":
 		_lit_level = 0.0
@@ -498,7 +518,7 @@ func put_out(how := &"snuff", instant := false) -> void:
 			for point in flame_points:
 				FireParticles.emit(self, &"steam", global_transform * (point + Vector3.UP * flame_size * 0.4), 6, _lean, Color.WHITE, flame_size * 0.5)
 
-			Sfx.play(self, &"douse", global_position, -4.0)
+			_out_sound = &"douse"
 
 		_show_lit(&"cooling")
 	else:
@@ -507,8 +527,7 @@ func put_out(how := &"snuff", instant := false) -> void:
 		if was_lit:
 			_smoke_left = SMOKE_THREAD
 
-			if is_inside_tree():
-				Sfx.play(self, &"snuff", global_position, -8.0)
+			_out_sound = &"snuff"
 
 		_show_lit(&"out")
 
@@ -545,6 +564,12 @@ func _step_lit(delta: float) -> void:
 		_told = lit
 		LightProbe.invalidate()
 		lit_changed.emit(lit)
+
+	if _out_sound != &"":
+		if not lit and is_inside_tree():
+			Sfx.play(self, _out_sound, global_position, OUT_DB[_out_sound])
+
+		_out_sound = &""
 
 
 func _apply_lit() -> void:

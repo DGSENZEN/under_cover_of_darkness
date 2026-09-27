@@ -55,17 +55,33 @@ static func _world_for(context: Node) -> Node:
 	if context == null or not context.is_inside_tree():
 		return null
 
+	var carried: Array = []
+
 	if _world != null and is_instance_valid(_world) and not _world.is_queued_for_deletion():
-		return _world
+		if _world.is_inside_tree() or _joining(_world):
+			return _world
+
+		# Its level went before it could join it: start again, keeping the
+		# lights it was told of.
+		carried = _world._burners
+		_world.free()
 
 	var tree := context.get_tree()
 	var parent: Node = tree.current_scene if tree.current_scene != null else tree.root
 	var world: Node = (load("res://scripts/Visual/Lights/LightBudget.gd") as GDScript).new()
 	world.name = "LightBudget"
+	world._burners = carried
+	world.set_meta(&"joining", parent.get_instance_id())
 	_world = world
 	warned = false
 	parent.add_child.call_deferred(world)
 	return world
+
+
+## Whether a manager not yet in the tree still has a level to join.
+static func _joining(world: Node) -> bool:
+	var parent := instance_from_id(int(world.get_meta(&"joining", 0)))
+	return parent is Node and not (parent as Node).is_queued_for_deletion()
 
 
 func _exit_tree() -> void:

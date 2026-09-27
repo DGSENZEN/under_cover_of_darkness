@@ -69,6 +69,7 @@ func _run() -> void:
 	await _maps()
 	await _gallery()
 	await _reviewed()
+	await _minors()
 
 
 # ---------------------------------------------------------------------------
@@ -1414,6 +1415,185 @@ func _reviewed() -> void:
 	_check("L52 a carried lantern's halo is not hidden by the man carrying it", seen > 0.5, "halo %.2f" % seen)
 	man.queue_free()
 
+	camera.queue_free()
+	await _frames(3)
+
+
+## L54-L64: the final review's minor findings.
+func _minors() -> void:
+	Props.block(self, Vector3(0, -0.5, 1400), Vector3(120, 1, 60))
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.6, 1406)
+	camera.current = true
+
+	# L54 a lantern whose light is let down (a dropped one guttering) dims its halo and horn with it
+	var dimmed: Node3D = Lights.carried_lantern()
+	add_child(dimmed)
+	dimmed.global_position = Vector3(0, 1.6, 1403)
+	await _frames(20)
+	dimmed.energy = dimmed.energy * 0.2
+	await _frames(20)
+	var horn: float = dimmed.glow_meshes[0].get_instance_shader_parameter(&"glow") if not dimmed.glow_meshes.is_empty() else -1.0
+	var halo: float = dimmed.corona.quad.get_instance_shader_parameter(&"amount")
+	_check("L54 a lantern let down to a fifth of its light dims its horn panes and its halo with it",
+		horn > 0.1 and horn < 0.3 and halo < 0.35 and dimmed.corona.visibility > 0.9, "horn %.2f, halo %.2f (seen %.2f)" % [horn, halo, dimmed.corona.visibility])
+	dimmed.queue_free()
+
+	# L55 a hung fixture keeps the way it was turned, and swings downwind whichever way it faces
+	var lamp: Node3D = Lights.oil_lamp(self, Vector3(4, 3, 1400), &"hanging", PI * 0.5, 0.5)
+	await _frames(10)
+	var facing: Vector3 = lamp.global_basis.z
+	lamp.lean(Vector3(1, 0, 0))
+	await _frames(90)
+	var flame: Vector3 = lamp.global_transform * lamp.flame_points[0]
+	_check("L55 a hung lamp turned a quarter keeps its turn and swings downwind",
+		facing.distance_to(Vector3(1, 0, 0)) < 0.05 and flame.x - 4.0 > 0.02, "facing %s, flame %.3f m downwind" % [facing, flame.x - 4.0])
+	lamp.queue_free()
+	await _frames(2)
+
+	# L56 a hung fixture leaves no nodes behind when freed
+	var orphans_before := int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))
+	var hung: Node3D = Lights.hanging_lantern(self, Vector3(8, 3, 1400), 0.6)
+	await _frames(3)
+	hung.queue_free()
+	await _frames(3)
+	var orphans_after := int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))
+	_check("L56 a hanging lantern leaves no stray nodes once freed", orphans_after <= orphans_before,
+		"orphan nodes %d -> %d" % [orphans_before, orphans_after])
+
+	# L57 the budget and the particles, started just as their level goes, start again in the next with every light kept
+	for manager in [FireParticles.world_node(), LightBudget._world]:
+		if manager != null and is_instance_valid(manager):
+			manager.free()
+
+	var doomed := Node3D.new()
+	get_tree().root.add_child(doomed)
+	# Built before the switch (nothing may be added to the tree while the
+	# doomed level is the scene: the Retro pass would sweep it once freed).
+	var early: Node3D = TorchScript.new()
+	early.shadows = false
+	add_child(early)
+	early.global_position = Vector3(12, 2, 1400)
+	await _frames(2)
+	var own_scene := get_tree().current_scene
+	get_tree().current_scene = doomed
+	LightBudget.register(early)
+	FireParticles.emit(self, &"ember", Vector3(12, 2, 1400), 1)
+	doomed.free()
+	get_tree().current_scene = own_scene
+	var late: Node3D = TorchScript.new()
+	add_child(late)
+	late.global_position = Vector3(14, 2, 1400)
+	FireParticles.emit(self, &"ember", Vector3(14, 2, 1400), 1)
+	await _frames(5)
+	var particles_world := FireParticles.world_node()
+	var budget_world: Node = LightBudget._world
+	var budget_ok: bool = budget_world != null and is_instance_valid(budget_world) and budget_world.is_inside_tree() and budget_world._burners.has(early) and budget_world._burners.has(late)
+	_check("L57 managers begun as their level is freed begin again in the next, every light still counted",
+		particles_world != null and particles_world.is_inside_tree() and budget_ok,
+		"particles in the tree %s, budget in the tree %s" % [particles_world != null and particles_world.is_inside_tree(), budget_ok])
+
+	# L58 a shadowed light taken out of the tree and put back is still in the budget
+	remove_child(late)
+	add_child(late)
+	await _frames(2)
+	_check("L58 a shadowed light taken out and put back is still counted by the budget",
+		LightBudget._world != null and LightBudget._world._burners.has(late), "counted %s" % [LightBudget._world != null and LightBudget._world._burners.has(late)])
+	early.queue_free()
+	late.queue_free()
+
+	# L59 a torch just past 3.2 m over a floor still finds it
+	Lights.torch_at(self, Vector3(20, 3.21, 1400), 2.4, 9.0, false)
+	await _frames(5)
+	var stand := _fixture_near(Vector3(20, 1.5, 1400), 2.5)
+	_check("L59 a torch 3.21 m over a floor stands on a cresset, not in the air",
+		stand != null and stand.fixture == &"cresset_pole", "became %s" % [stand.fixture if stand != null else "a bare flame"])
+
+	if stand != null:
+		stand.queue_free()
+	else:
+		var left := _burner_near(Vector3(20, 3.21, 1400), 0.3)
+
+		if left != null:
+			left.queue_free()
+
+	# L60 its snuff and douse sounds only when it really goes out
+	var quiet: Node3D = TorchScript.new()
+	add_child(quiet)
+	quiet.global_position = Vector3(24, 2, 1400)
+	await _frames(5)
+	Sfx.recording = true
+	Sfx.recorded.clear()
+	quiet.kindle()
+	quiet.put_out(&"snuff")
+	quiet.kindle()
+	quiet.put_out(&"douse")
+	quiet.kindle()
+	await _frames(5)
+	var heard_early := Sfx.recorded.filter(func(e): return e[0] == &"snuff" or e[0] == &"douse").size()
+	quiet.put_out(&"snuff")
+	await _frames(5)
+	var heard_snuff := Sfx.recorded.filter(func(e): return e[0] == &"snuff").size()
+	Sfx.recording = false
+	_check("L60 lit, put out and lit again in one frame makes no snuff or douse sound; put out for good, one snuff",
+		heard_early == 0 and heard_snuff == 1, "sounds for a flame that never went out %d, snuffs %d" % [heard_early, heard_snuff])
+	quiet.queue_free()
+
+	# L61 put out at once, it leaves no smoke thread or winking coals behind
+	var coals: Node3D = Lights.brazier(self, Vector3(28, 0, 1402))
+	camera.global_position = Vector3(28, 1.6, 1406)
+	await _frames(10)
+	coals.put_out(&"douse")
+	coals.put_out(&"snuff", true)
+	var embers_before := FireParticles.emitted(&"ember")
+	var smoke_before := FireParticles.emitted(&"smoke")
+	await _frames(22 * 60)
+	_check("L61 doused then put out at once, a brazier winks no embers and trails no smoke",
+		FireParticles.emitted(&"ember") == embers_before and FireParticles.emitted(&"smoke") == smoke_before,
+		"embers %d, smoke %d after" % [FireParticles.emitted(&"ember") - embers_before, FireParticles.emitted(&"smoke") - smoke_before])
+	coals.queue_free()
+	camera.global_position = Vector3(0, 1.6, 1406)
+
+	# L62 a wall fixture built in the same frame as its walls finds the ceiling for its soot
+	Props.block(self, Vector3(40, 2, 1399.8), Vector3(4, 4, 0.4))
+	Props.block(self, Vector3(40, 3.6, 1400.5), Vector3(4, 0.4, 2))
+	var reach := float(LightFixture.spec(&"wall_torch")["sockets"]["flame"][0][2])
+	var sooty: Node3D = Lights.wall_torch(self, Vector3(40, 2.4, 1400 + reach), Vector3.BACK)
+	await _frames(10)
+	var soot_height: float = sooty.soot.size.z if sooty.soot != null else -1.0
+	_check("L62 a sconce built with its walls reaches its soot up to the ceiling a metre above its flame", soot_height > 1.0,
+		"soot %.2f m high" % soot_height)
+	sooty.queue_free()
+
+	# L63 torch_at rolls the global dice no more than a bare torch does
+	seed(12345)
+	randf()
+	var second := randf()
+	seed(12345)
+	Lights.torch_at(self, Vector3(50, 2.2, 1400), 2.4, 9.0, false)
+	await _frames(5)
+	var next := randf()
+	_check("L63 a torch fitted by torch_at draws from the global dice only as a bare torch did", is_equal_approx(next, second),
+		"next draw %.5f (a bare torch's %.5f)" % [next, second])
+	var fitted := _fixture_near(Vector3(50, 1.5, 1400), 2.5)
+
+	if fitted != null:
+		fitted.queue_free()
+
+	# L64 every fixture's .json carries every key
+	var keys := ["burner", "sockets", "stretch", "shadow_parts", "soot", "cookie", "family", "mount"]
+	var lacking: Array[String] = []
+
+	for file in DirAccess.get_files_at("res://assets/props/lights/"):
+		if file.ends_with(".json"):
+			var data := LightFixture.spec(StringName(file.get_basename()))
+
+			for key in keys:
+				if not data.has(key):
+					lacking.append("%s:%s" % [file.get_basename(), key])
+
+	_check("L64 every fixture's .json carries every key the game reads", lacking.is_empty(), "lacking %s" % [lacking])
 	camera.queue_free()
 	await _frames(3)
 

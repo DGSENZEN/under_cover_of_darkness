@@ -69,7 +69,13 @@ var chimney_path := ""
 var spec_data := {}
 var _tilt := Vector2.ZERO
 var _spin := Vector2.ZERO
+## Its turn as placed, found on its first swing (builders place it after
+## adding it), in the world's frame: the wind tilts it about world axes.
 var _rest_basis := Basis.IDENTITY
+var _rest_known := false
+## Physics ticks until its soot goes up (its walls may be built this frame,
+## and are only in the physics space once it has stepped), -1 for none.
+var _soot_in := -1
 var _swinging := false
 var _draft_clock := 0.0
 var _door_angles := {}
@@ -77,6 +83,7 @@ var _creak_wait := 0.0
 var _was_fast := false
 
 static var _specs := {}
+static var _link_mesh: Mesh = null
 var _bodies: Array[RID] = []
 
 
@@ -133,7 +140,7 @@ func _before_ready() -> void:
 		corona_point = socket(&"corona")
 
 	if spec_data.get("soot", false) and spec_data.get("mount", "") == "wall":
-		_place_soot.call_deferred()
+		_soot_in = 2
 
 
 ## Burner settings from the recipe: exports by name; "color" as hex, "loop"
@@ -219,7 +226,6 @@ func _after_ready() -> void:
 		light.light_projector = load(COOKIE)
 
 	_swinging = spec_data.get("mount", "") == "hang"
-	_rest_basis = transform.basis
 
 	if spec_data.get("family", "") == "fires":
 		_make_haze()
@@ -316,10 +322,7 @@ func _hang() -> void:
 	if not ResourceLoader.exists(CHAIN_LINK):
 		return
 
-	var link_mesh: Mesh = null
-
-	for mesh in (load(CHAIN_LINK) as PackedScene).instantiate().find_children("*", "MeshInstance3D", true, false):
-		link_mesh = mesh.mesh
+	var link_mesh := _chain_link_mesh()
 
 	if link_mesh == null:
 		return
@@ -333,6 +336,19 @@ func _hang() -> void:
 		add_child(link)
 		link.position = Vector3(0.0, -LINK_PITCH * i, 0.0)
 		link.rotation.y = PI * 0.5 * (i % 2)
+
+
+## The chain link's mesh, read once (its scene freed straight after).
+static func _chain_link_mesh() -> Mesh:
+	if _link_mesh == null and ResourceLoader.exists(CHAIN_LINK):
+		var scene := (load(CHAIN_LINK) as PackedScene).instantiate()
+
+		for mesh in scene.find_children("*", "MeshInstance3D", true, false):
+			_link_mesh = (mesh as MeshInstance3D).mesh
+
+		scene.free()
+
+	return _link_mesh
 
 
 ## How fast a hung fixture swings (rad/s): its creak (LightFixture sounds).
@@ -401,6 +417,16 @@ func _place_soot() -> void:
 	soot.global_position = Vector3(wall.x, flame_world.y + height * 0.5 - 0.05, wall.z)
 
 
+func _physics_process(delta: float) -> void:
+	super._physics_process(delta)
+
+	if _soot_in > 0:
+		_soot_in -= 1
+
+		if _soot_in == 0:
+			_place_soot()
+
+
 func _process(delta: float) -> void:
 	super._process(delta)
 
@@ -418,7 +444,7 @@ func _process(delta: float) -> void:
 		haze.visible = lit and camera != null and camera.global_position.distance_to(global_position) < HAZE_REACH
 
 	if lit and not glow_meshes.is_empty():
-		var ratio := clampf(light.light_energy / maxf(energy, 0.001), 0.0, 1.5)
+		var ratio := clampf(light.light_energy / _made_energy, 0.0, 1.5)
 
 		for mesh in glow_meshes:
 			mesh.set_instance_shader_parameter(&"glow", ratio)
@@ -456,14 +482,19 @@ func _watch_drafts(delta: float) -> void:
 
 ## A pendulum from its hook, pushed by the wind.
 func _swing(delta: float) -> void:
+	if not _rest_known:
+		_rest_known = true
+		_rest_basis = global_basis
+
 	# The hook to the flame (its sockets already hang below by the chain).
 	var length := maxf(absf(socket(&"flame").y), 0.2)
 	var push := Vector2(_lean.x, _lean.z) * SWING_WIND
 	var pull := -_tilt * (9.8 / length) + push - _spin * SWING_DAMPING
 	_spin += pull * delta
 	_tilt = (_tilt + _spin * delta).limit_length(SWING_MOST)
-	# Its foot swings downwind: about Z for x, about X (against) for z.
-	transform.basis = _rest_basis * Basis(Vector3.BACK, _tilt.x) * Basis(Vector3.RIGHT, -_tilt.y)
+	# Its foot swings downwind (about Z for x, about X, against, for z),
+	# whichever way it was turned.
+	global_basis = Basis(Vector3.BACK, _tilt.x) * Basis(Vector3.RIGHT, -_tilt.y) * _rest_basis
 	# A gust that sets it swinging: its chain creaks.
 	_creak_wait = maxf(_creak_wait - delta, 0.0)
 	var fast := swing_speed() > CREAK_SPEED
