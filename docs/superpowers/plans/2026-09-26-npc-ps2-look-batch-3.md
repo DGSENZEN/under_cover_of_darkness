@@ -241,16 +241,21 @@ _check("K1b each kind without its files is the plain base body", fallen.values()
 - [ ] **Step 4: Run** the wardrobe suite (K11 still PASS: your arms painted) and every suite in `tests/*.tscn`. Expected: all PASS.
 - [ ] **Step 5: Commit:** `feat(guards): the painted outfits leave the guard path`
 
-### Task 7: Crowd sheets and the look pass
+### Task 7: Crowd sheets and a polish pass on every kind
 
 **Files:**
 - Modify: `tests/visual/stage_wardrobe.gd` (`--crowd`); while tuning, `recipes.py` values (each change commented with why)
 
 - [ ] **Step 1: Implement** `--crowd`: per kind, seeds 1–12 in two rows of six, 1.2 m apart, shot at 6 m by day and by torchlight, and a strip of the twelve faces at 0.7 m (`crowd_<kind>_day.png`, `crowd_<kind>_night.png`, `faces_<kind>.png`). Run: `perl -e 'alarm 900; exec @ARGV' $GODOT --fixed-fps 60 --resolution 1280x720 --path . res://tests/visual/stage_wardrobe.tscn -- --crowd --out=<dir>`.
 - [ ] **Step 2: Look and fix by eye**, in this order: each kind still reads as itself in a crowd at night (§4.1: its silhouette key); no two faces in a row look like one face; beards and hair sit on every face (the moustache on the heavy face); nothing clips under the bare hat; colours of hair and beards against the other kinds. Re-run after each change.
+- [ ] **Step 2b: Polish every kind's model** (the user, at the handoff: "we need to polish and better the models a bit more"). By eye at 2 m and 8 m, day and torch, and in `stage_guards`' poses, with each change pinned by the test that covers it (or a new one) and within the budgets. Start from what batch 2 left:
+  - the duelist's half-cape reads as a sash from behind: make it read as a cape (its hem wider than its top, clear of her hanging arm);
+  - ragged skin at the brute's bracer rims; the weathered head's neck seam under his mantle's front dip (M9);
+  - then whatever the crowd sheets and poses show on any kind: silhouettes that blur at night, garments that read flat or plastic, seams, clipping, textures without wear.
+  The watchman's outfit stays batch 0's (his rebuild is the user's call).
 - [ ] **Step 3: Run** the wardrobe suite. Expected: all PASS.
 - [ ] **Step 4: Send the user** the crowd sheets and face strips (`SendUserFile`, `render`) and ask for the batch 3 review, including whether to delete the painted guard textures.
-- [ ] **Step 5: Commit:** `feat(wardrobe): crowd sheets, tuned`
+- [ ] **Step 5: Commit:** `feat(wardrobe): crowd sheets, a polish pass` (a commit per kind polished is fine)
 
 ### Task 8: Full regression and hand-off
 
