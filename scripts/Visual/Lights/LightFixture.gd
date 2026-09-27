@@ -33,6 +33,9 @@ const DRAFT_EVERY := 0.25
 ## Candles and oil lamps fade out between these distances (their light).
 const SMALL_FADE_FROM := 20.0
 const SMALL_FADE_OVER := 5.0
+const HAZE_SHADER := preload("res://scripts/Visual/Lights/haze.gdshader")
+## Heat haze only within this of the camera.
+const HAZE_REACH := 15.0
 
 ## Which fixture (assets/props/lights/<fixture>.glb / .json).
 @export var fixture := &""
@@ -48,6 +51,8 @@ var model: Node3D
 var sockets := {}
 var glow_meshes: Array[GeometryInstance3D] = []
 var soot: Decal
+## A big fire's heat haze (null for other fixtures).
+var haze: MeshInstance3D
 var spec_data := {}
 var _tilt := Vector2.ZERO
 var _spin := Vector2.ZERO
@@ -129,6 +134,14 @@ func _apply_settings(settings: Dictionary) -> void:
 				loop_path = "" if String(value).is_empty() else "res://audio/ambience/%s.ogg" % value
 			_:
 				if key in self:
+					var current = get(key)
+
+					# JSON has lists where the burner has vectors.
+					if value is Array and current is Vector2:
+						value = Vector2(float(value[0]), float(value[1]))
+					elif value is Array and current is Vector3:
+						value = Vector3(float(value[0]), float(value[1]), float(value[2]))
+
 					set(key, value)
 
 
@@ -177,10 +190,29 @@ func _after_ready() -> void:
 	_swinging = spec_data.get("mount", "") == "hang"
 	_rest_basis = transform.basis
 
+	if spec_data.get("family", "") == "fires":
+		_make_haze()
+
 	if spec_data.get("family", "") == "candles":
 		light.distance_fade_enabled = true
 		light.distance_fade_begin = SMALL_FADE_FROM
 		light.distance_fade_length = SMALL_FADE_OVER
+
+
+func _make_haze() -> void:
+	haze = MeshInstance3D.new()
+	haze.name = "Haze"
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.6, 0.9)
+	haze.mesh = quad
+	var look := ShaderMaterial.new()
+	look.shader = HAZE_SHADER
+	haze.material_override = look
+	haze.layers = Layers.FX
+	haze.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(haze)
+	haze.position = flame_points[0] + Vector3(0.0, flame_size + 0.45, 0.0)
+	haze.visible = false
 
 
 ## A hung fixture hangs `hang_drop` below its hook on links of chain; it
@@ -296,6 +328,10 @@ func _process(delta: float) -> void:
 
 	if flicker_kind == &"candle":
 		_watch_drafts(delta)
+
+	if haze != null:
+		var camera := get_viewport().get_camera_3d()
+		haze.visible = lit and camera != null and camera.global_position.distance_to(global_position) < HAZE_REACH
 
 	if lit and not glow_meshes.is_empty():
 		var ratio := clampf(light.light_energy / maxf(energy, 0.001), 0.0, 1.5)

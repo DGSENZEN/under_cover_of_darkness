@@ -493,6 +493,100 @@ FIXTURES["oil_lamp_hanging"] = {
     "burner": dict(OIL_BURNER),
 }
 
+# Open fires. Their light keeps today's height (light_above), their flames
+# sit on their fuel.
+BRAZIER_BURNER = {
+    "sheet": "brazier", "ramp": "brazier", "low_ramp": "dying", "flicker_kind": "brazier", "flicker": 0.12,
+    "energy": 2.6, "light_range": 8.0, "shadows": True, "color": "FF9829", "corona_px": 72.0,
+    "ember_rate": 15.0, "smoke_rate": 6.0, "flame_size": 0.8, "flame_layers": 2, "core": True,
+    "loop": "fire_medium", "loop_db": -11.0, "loop_reach": 14.0, "event_every": (15.0, 30.0),
+}
+
+FIXTURES["brazier"] = {
+    "family": "fires",
+    "mount": "floor",
+    "budget": 700,
+    "soot": False,
+    "cookie": False,
+    "parts": [
+        {"type": "lathe", "name": "bowl", "slot": "iron", "segments": 10,
+         "profile": [(0.0, 0.8), (0.18, 0.8), (0.34, 0.95), (0.42, 1.1), (0.45, 1.115), (0.4, 1.105), (0.3, 0.99), (0.0, 0.96)]},
+        {"type": "blob", "name": "coals", "slot": "coal", "glow": True, "segments": 10, "noise": 0.014, "seed": 21,
+         "profile": [(0.0, 0.97), (0.33, 0.99), (0.32, 1.05), (0.18, 1.1), (0.0, 1.12)]},
+        {"type": "logs", "name": "sticks", "slot": "bark", "sides": 5,
+         "logs": [((-0.22, 0.02, 1.04), (0.2, -0.04, 1.16), 0.028), ((0.08, -0.22, 1.05), (-0.04, 0.2, 1.15), 0.026),
+                  ((0.18, 0.15, 1.05), (-0.16, -0.12, 1.13), 0.024)]},
+        {"type": "ring", "name": "band", "slot": "iron", "radius": 0.37, "thickness": 0.02, "sides": 3, "segments": 10, "axis": "Z",
+         "at": (0.0, 0.0, 0.98)},
+    ] + [
+        {"type": "tube", "name": "leg_%d" % i, "slot": "iron", "radius": 0.018, "sides": 4,
+         "points": [_round((0.0, 0.0, 0.86), 0.2, a), _round((0.0, 0.0, 0.45), 0.3, a), _round((0.0, 0.0, 0.06), 0.36, a), _round((0.0, 0.0, 0.0), 0.42, a)]}
+        for i, a in enumerate((90.0, 210.0, 330.0))
+    ],
+    "sockets": {"flame": [(0.0, 0.0, 1.1)], "corona": [(0.0, 0.0, 1.45)], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(BRAZIER_BURNER, light_above=0.37),
+}
+
+FIXTURES["campfire"] = {
+    "family": "fires",
+    "mount": "floor",
+    "budget": 600,
+    "soot": False,
+    "cookie": False,
+    "parts": [
+        {"type": "stones", "name": "ring", "slot": "stone", "count": 8, "radius": 0.3, "size": (0.14, 0.12, 0.12), "jitter": 0.25, "seed": 4},
+        {"type": "blob", "name": "embers", "slot": "coal", "glow": True, "segments": 10, "noise": 0.012, "seed": 8,
+         "profile": [(0.0, 0.0), (0.22, 0.005), (0.21, 0.04), (0.1, 0.065), (0.0, 0.07)]},
+        {"type": "logs", "name": "logs", "slot": "bark", "sides": 6,
+         "logs": [((-0.28, 0.0, 0.03), (0.16, 0.04, 0.17), 0.036), ((0.26, 0.1, 0.03), (-0.1, -0.06, 0.18), 0.034),
+                  ((0.05, -0.27, 0.03), (0.0, 0.12, 0.19), 0.035), ((-0.12, 0.25, 0.03), (0.06, -0.05, 0.16), 0.03),
+                  ((0.22, -0.2, 0.02), (-0.12, 0.1, 0.12), 0.028)]},
+    ],
+    "sockets": {"flame": [(0.0, 0.0, 0.08)], "corona": [(0.0, 0.0, 0.4)], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(BRAZIER_BURNER, sheet="fire", ramp="fire", flicker_kind="fire", flicker=0.18, energy=2.2, light_range=7.0,
+                   flame_size=0.5, ember_rate=20.0, smoke_rate=6.0, event_every=(20.0, 40.0), light_above=0.26),
+}
+
+# The hearth: an ashlar fireplace against a wall (its back on the wall at
+# y = 0, opening toward -Y), a hood tapering up into a chimney breast,
+# firedogs and logs on a hearth stone. Its masonry casts shadows (its own
+# fire lights only the room in front) and is solid.
+FIXTURES["hearth"] = {
+    "family": "fires",
+    "mount": "wall",
+    "budget": 1500,
+    "soot": False,
+    "cookie": False,
+    "shadow_parts": ["cheek_l", "cheek_r", "back", "hood", "breast", "mantel"],
+    "parts": [
+        {"type": "box", "name": "back", "slot": "ashlar", "size": (1.6, 0.12, 1.1), "at": (0.0, -0.06, 0.55)},
+        {"type": "box", "name": "cheek_l", "slot": "ashlar", "size": (0.3, 0.62, 1.1), "at": (-0.65, -0.43, 0.55)},
+        {"type": "box", "name": "cheek_r", "slot": "ashlar", "size": (0.3, 0.62, 1.1), "at": (0.65, -0.43, 0.55)},
+        {"type": "box", "name": "mantel", "slot": "ashlar", "size": (1.8, 0.8, 0.14), "at": (0.0, -0.4, 1.17)},
+        {"type": "lathe", "name": "hood", "slot": "ashlar", "segments": 4, "profile": [(1.0, 0.0), (0.62, 0.9), (0.0, 0.9)],
+         "rotate": (0.0, 0.0, 45.0), "at": (0.0, -0.35, 1.24)},
+        {"type": "box", "name": "breast", "slot": "ashlar", "size": (0.9, 0.5, 0.9), "at": (0.0, -0.25, 2.55)},
+        {"type": "box", "name": "hearthstone", "slot": "stone", "size": (1.9, 1.0, 0.06), "at": (0.0, -0.5, 0.03)},
+        {"type": "blob", "name": "embers", "slot": "coal", "glow": True, "segments": 10, "noise": 0.012, "seed": 9,
+         "profile": [(0.0, 0.06), (0.4, 0.065), (0.38, 0.09), (0.15, 0.11), (0.0, 0.115)], "at": (0.0, -0.4, 0.0)},
+        {"type": "logs", "name": "logs", "slot": "bark", "sides": 6,
+         "logs": [((-0.45, -0.38, 0.18), (0.45, -0.4, 0.2), 0.05), ((-0.4, -0.5, 0.16), (0.42, -0.3, 0.26), 0.045),
+                  ((-0.3, -0.25, 0.14), (0.35, -0.5, 0.3), 0.04)]},
+        {"type": "collider", "name": "wall_back", "slot": "", "size": (1.6, 0.12, 1.1), "at": (0.0, -0.06, 0.55)},
+        {"type": "collider", "name": "wall_left", "slot": "", "size": (0.3, 0.62, 1.1), "at": (-0.65, -0.43, 0.55)},
+        {"type": "collider", "name": "wall_right", "slot": "", "size": (0.3, 0.62, 1.1), "at": (0.65, -0.43, 0.55)},
+        {"type": "collider", "name": "wall_hood", "slot": "", "size": (1.8, 0.8, 0.6), "at": (0.0, -0.4, 1.4)},
+        {"type": "collider", "name": "wall_breast", "slot": "", "size": (0.9, 0.5, 1.4), "at": (0.0, -0.25, 2.4)},
+    ] + [
+        {"type": "tube", "name": "firedog_%d" % i, "slot": "iron", "radius": 0.014, "sides": 4,
+         "points": [(x, -0.15, 0.1), (x, -0.62, 0.1), (x, -0.66, 0.16), (x, -0.64, 0.3)]}
+        for i, x in enumerate((-0.32, 0.32))
+    ],
+    "sockets": {"flame": [(0.0, -0.4, 0.22)], "corona": [(0.0, -0.45, 0.5)], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(BRAZIER_BURNER, sheet="fire", ramp="fire", flicker_kind="fire", flicker=0.18, energy=2.6, light_range=9.0,
+                   flame_size=0.6, ember_rate=20.0, smoke_rate=4.0, loop="fire_big", loop_db=-14.0, event_every=(20.0, 40.0), light_above=0.2),
+}
+
 KINDS = list(FIXTURES)
 
 

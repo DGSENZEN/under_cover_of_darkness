@@ -59,6 +59,7 @@ func _run() -> void:
 	await _torches()
 	await _lanterns()
 	await _candles()
+	await _fires()
 
 
 # ---------------------------------------------------------------------------
@@ -912,6 +913,84 @@ func _candles() -> void:
 	door.queue_free()
 	five.queue_free()
 	lone.queue_free()
+	camera.queue_free()
+	await _frames(3)
+
+
+# ---------------------------------------------------------------------------
+# Open fires
+# ---------------------------------------------------------------------------
+
+func _fires() -> void:
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.8, 1005)
+	camera.current = true
+	Props.block(self, Vector3(0, -0.5, 1000), Vector3(80, 1, 40))
+
+	# L39 heat haze over a campfire near you, none far off
+	var camp: Node3D = Lights.campfire(self, Vector3(0, 0, 1000))
+	await _frames(5)
+	var haze_near: bool = camp.get("haze") != null and camp.haze.visible
+	camera.global_position = Vector3(0, 1.8, 1020)
+	await _frames(3)
+	var haze_far: bool = camp.get("haze") != null and camp.haze.visible
+	_check("L39 a campfire's heat haze shows near you and not 20 m off", haze_near and not haze_far,
+		"near %s far %s" % [haze_near, haze_far])
+	camera.global_position = Vector3(0, 1.8, 1005)
+
+	# L40 settling logs make the flames jump, never the light
+	var from_recipe: Vector2 = camp.event_every
+	camp.event_every = Vector2(0.5, 0.6)
+	var low := INF
+	var high := -INF
+	var jumps := 0
+	var was_high := false
+
+	for i in 20 * 60:
+		await get_tree().process_frame
+		var e: float = camp.light.light_energy
+		low = minf(low, e)
+		high = maxf(high, e)
+		var up: bool = camp._jump > 0.9
+
+		if up and not was_high:
+			jumps += 1
+
+		was_high = up
+
+	_check("L40 settling logs make a campfire's flames jump, and its light stays in its band",
+		from_recipe == Vector2(20, 40) and low >= camp.energy * (1.0 - camp.flicker) - 0.01 and high <= camp.energy * (1.0 + camp.flicker) + 0.01 and jumps >= 10,
+		"its recipe's events %s, light %.2f..%.2f (band %.2f..%.2f), jumps %d" % [from_recipe, low, high, camp.energy * (1.0 - camp.flicker), camp.energy * (1.0 + camp.flicker), jumps])
+	camp.queue_free()
+
+	# L40b a doused brazier's coals wink out: a few embers over 20 s, then none
+	var brazier: Node3D = Lights.brazier(self, Vector3(6, 0, 1000))
+	await _frames(10)
+	brazier.put_out(&"douse")
+	var before: int = FireParticles.emitted(&"ember")
+	await _frames(20 * 60)
+	var winks: int = FireParticles.emitted(&"ember") - before
+	await _frames(10 * 60)
+	var after: int = FireParticles.emitted(&"ember") - before - winks
+	_check("L40b doused, a brazier's coals wink out: 3 to 5 embers over 20 s, then none",
+		winks >= 3 and winks <= 5 and after == 0, "winks %d, after %d" % [winks, after])
+	brazier.queue_free()
+
+	# L41 a hearth is solid masonry
+	var hearth: Node3D = Lights.hearth(self, Vector3(20, 0, 999), 0.0)
+	await _frames(5)
+	var bodies: int = hearth.find_children("*", "StaticBody3D", true, false).size()
+	var hood_hit := {}
+
+	if bodies > 0:
+		var space := get_world_3d().direct_space_state
+		var query := PhysicsRayQueryParameters3D.create(Vector3(20, 1.25, 1002), Vector3(20, 1.25, 998), 1)
+		hood_hit = space.intersect_ray(query)
+
+	_check("L41 a hearth has its masonry as static bodies, and its hood stops a ray", bodies >= 4 and not hood_hit.is_empty(),
+		"bodies %d, hood hit %s" % [bodies, not hood_hit.is_empty()])
+	hearth.queue_free()
 	camera.queue_free()
 	await _frames(3)
 

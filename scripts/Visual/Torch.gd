@@ -47,6 +47,10 @@ const LEAN_REACH := 0.07
 const LIGHT_ABOVE := 0.12
 ## Embers and smoke only within this of the camera.
 const PARTICLE_REACH := 30.0
+## A fire's surge or settling log: its flames jump and ease back over this.
+const JUMP_TIME := 1.5
+## Doused, a fire's coals give their last embers over this long.
+const WINK_TIME := 20.0
 ## Lit, a flame grows over LIGHT_TIME; snuffed, it pinches out over
 ## SNUFF_TIME and smokes a thread for SMOKE_THREAD; doused, its head (or its
 ## coals) cools over COOL_TIME.
@@ -93,6 +97,8 @@ signal lit_changed(lit: bool)
 @export var smoke_rate := 3.0
 ## A fire's events (surges, settling logs) every x..y seconds; zero for none.
 @export var event_every := Vector2.ZERO
+## How far above its flames its light sits (a fire's keeps where it was).
+@export var light_above := LIGHT_ABOVE
 
 var light: OmniLight3D
 ## The main flame sprite.
@@ -140,6 +146,10 @@ var _thread_due := 0.0
 var _told := true
 ## Seconds since a draft reached it (a candle shivers for Flicker.DRAFT_TIME).
 var _draft_since := INF
+## To its next surge or settling log (event_every).
+var _event_in := -1.0
+## A doused fire's coals winking out: when each last ember goes (s from now).
+var _winks: Array[float] = []
 
 
 func _ready() -> void:
@@ -160,7 +170,7 @@ func _ready() -> void:
 		middle += point
 
 	middle /= float(flame_points.size())
-	_light_base = middle + Vector3(0.0, LIGHT_ABOVE, 0.0)
+	_light_base = middle + Vector3(0.0, light_above, 0.0)
 
 	light = OmniLight3D.new()
 	light.name = "Light"
@@ -205,7 +215,7 @@ func _ready() -> void:
 		corona.size_px = corona_px
 		corona.tint = color
 		add_child(corona)
-		corona.position = corona_point if corona_point != Vector3.INF else _light_base - Vector3(0.0, LIGHT_ABOVE - 0.06, 0.0)
+		corona.position = corona_point if corona_point != Vector3.INF else _light_base - Vector3(0.0, light_above - 0.06, 0.0)
 
 	_make_loop()
 	_show_lit(&"lit" if lit else &"out")
@@ -254,7 +264,7 @@ func _make_loop() -> void:
 	crackle.attenuation_filter_cutoff_hz = Sfx.AIR_CUTOFF
 	crackle.attenuation_filter_db = Sfx.AIR_DB
 	crackle.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
-	crackle.position = _light_base - Vector3(0.0, LIGHT_ABOVE, 0.0)
+	crackle.position = _light_base - Vector3(0.0, light_above, 0.0)
 	# No two torches burn alike.
 	crackle.pitch_scale = randf_range(0.9, 1.1)
 	_crackle_db = loop_db
@@ -271,6 +281,8 @@ func _process(delta: float) -> void:
 
 	_time += delta
 	_flare = move_toward(_flare, 0.0, delta / FLARE_TIME)
+	_jump = move_toward(_jump, 0.0, delta / JUMP_TIME)
+	_events(delta)
 	var flared := _flare * _flare
 	var waver := Flicker.value(flicker_kind, _time, _salt)
 
@@ -296,6 +308,41 @@ func _process(delta: float) -> void:
 
 	_shed(delta)
 	_listen(delta)
+
+
+## A fire's surges and settling logs (event_every): its flames jump, embers
+## burst, it pops or cracks. Never its light (the gameplay reads that). And a
+## doused fire's coals winking their last embers out.
+func _events(delta: float) -> void:
+	if not _winks.is_empty():
+		for i in range(_winks.size() - 1, -1, -1):
+			_winks[i] -= delta
+
+			if _winks[i] <= 0.0:
+				_winks.remove_at(i)
+
+				if _near_camera():
+					FireParticles.emit(self, &"ember", _flame_top(0.05), 1, _lean, color)
+
+	if event_every == Vector2.ZERO or not lit:
+		return
+
+	if _event_in < 0.0 or _event_in > event_every.y:
+		# First, or its range has just been shortened.
+		_event_in = rng.randf_range(event_every.x, event_every.y)
+
+	_event_in -= delta
+
+	if _event_in <= 0.0:
+		_event_in = rng.randf_range(event_every.x, event_every.y)
+		_jump = 1.0
+
+		if _near_camera() and not _atmosphere_embers():
+			for i in 16:
+				FireParticles.emit(self, &"ember", _flame_top(0.4), 1, _lean, color)
+
+		if is_inside_tree():
+			Sfx.play(self, &"log_settle" if flicker_kind == &"fire" else &"coal_pop", global_position, -4.0)
 
 
 ## Embers and smoke off its flames, at their rates, while you are near (and a
@@ -365,6 +412,7 @@ func _corona_exclude() -> Array[RID]:
 func kindle(instant := false) -> void:
 	var was_out := _lit_target < 1.0 or _lit_level < 1.0
 	lit = true
+	_winks.clear()
 	_lit_target = 1.0
 	_lit_rate = 1.0 / LIGHT_TIME
 	_cool = 0.0
@@ -397,6 +445,13 @@ func put_out(how := &"snuff", instant := false) -> void:
 	elif how == &"douse":
 		_lit_level = 0.0
 		_cool = 1.0 if was_lit else _cool
+
+		if was_lit and (sheet == &"brazier" or sheet == &"fire"):
+			# Its coals give a few last embers as they go dark.
+			_winks.clear()
+
+			for i in rng.randi_range(3, 5):
+				_winks.append(rng.randf_range(0.5, WINK_TIME))
 
 		if was_lit and is_inside_tree():
 			for point in flame_points:

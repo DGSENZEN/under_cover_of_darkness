@@ -26,6 +26,8 @@ const EMBER_COOL := Color("C83010")
 
 static var _world: Node = null
 static var _rng := RandomNumberGenerator.new()
+## kind -> how many were ever emitted (the suite counts a doused fire's winks).
+static var _emitted := {}
 
 var _pools := {}
 
@@ -90,8 +92,14 @@ static func emit(context: Node, kind: StringName, at: Vector3, count: int, wind 
 	if world == null or not world._pools.has(kind):
 		return
 
+	_emitted[kind] = int(_emitted.get(kind, 0)) + count
+
 	for i in count:
 		world._spawn(world._pools[kind], at, wind, tint, size)
+
+
+static func emitted(kind: StringName) -> int:
+	return int(_emitted.get(kind, 0))
 
 
 static func live(kind: StringName) -> int:

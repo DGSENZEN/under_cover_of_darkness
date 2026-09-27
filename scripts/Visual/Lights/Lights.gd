@@ -130,6 +130,22 @@ static func oil_lamp(parent: Node, at: Vector3, variant := &"clay", yaw := 0.0, 
 	return make(parent, StringName("oil_lamp_%s" % variant), at, yaw, settings)
 
 
+## A tripod brazier standing on `at` (the look alone: Fire.brazier makes the
+## hazard round one).
+static func brazier(parent: Node, at: Vector3, overrides := {}) -> Node3D:
+	return make(parent, &"brazier", at, 0.0, overrides)
+
+
+## A campfire in its ring of stones on `at`.
+static func campfire(parent: Node, at: Vector3, overrides := {}) -> Node3D:
+	return make(parent, &"campfire", at, 0.0, overrides)
+
+
+## A stone hearth, its back on a wall at `at`, opening along its +Z turned by `yaw`.
+static func hearth(parent: Node, at: Vector3, yaw := 0.0, overrides := {}) -> Node3D:
+	return make(parent, &"hearth", at, yaw, overrides)
+
+
 ## A cresset: "pole" standing on `at` (its foot), or "wall" on its bracket
 ## (`at` its plate, turned by `yaw`).
 static func cresset(parent: Node, at: Vector3, variant := &"pole", yaw := 0.0, overrides := {}) -> Node3D:
