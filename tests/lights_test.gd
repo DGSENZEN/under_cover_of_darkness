@@ -19,6 +19,8 @@ const Layers := preload("res://scripts/Visual/Layers.gd")
 const CoronaScript := preload("res://scripts/Visual/Lights/Corona.gd")
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
+const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
+const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
 
 ## LightProbe 2 m from a bare torch, the brazier and the campfire (each
 ## flame's flicker held still), read on main before any of this work: the
@@ -47,6 +49,7 @@ func _run() -> void:
 	await _flames()
 	await _burner()
 	await _coronas()
+	await _particles()
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +351,96 @@ func _coronas() -> void:
 	torch.queue_free()
 	camera.queue_free()
 	await _frames(3)
+
+
+# ---------------------------------------------------------------------------
+# Embers and smoke
+# ---------------------------------------------------------------------------
+
+func _particles() -> void:
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.6, 300)
+	camera.current = true
+
+	# L15 a torch near you sheds embers at its rate; far off it sheds none
+	var torch: Node3D = TorchScript.new()
+	torch.ember_rate = 6.0
+	torch.smoke_rate = 0.0
+	add_child(torch)
+	torch.global_position = Vector3(0, 1.6, 297)
+	FireParticles.clear()
+	await _frames(120)
+	var near: int = FireParticles.live(&"ember")
+	torch.global_position = Vector3(0, 1.6, 260)
+	await _frames(2)
+	FireParticles.clear()
+	await _frames(120)
+	var far: int = FireParticles.live(&"ember")
+	_check("L15 a torch near you sheds embers at its rate, a far one none", near >= 3 and near <= 12 and far == 0,
+		"embers alive near %d, far %d" % [near, far])
+	torch.queue_free()
+
+	# L16 a puff of smoke grows and is gone within its life
+	FireParticles.clear()
+	FireParticles.emit(self, &"smoke", Vector3(0, 1, 295), 1, Vector3.ZERO, Color.WHITE, 0.2)
+	await _frames(1)
+	var pool = FireParticles.world_node()._pools[&"smoke"] if FireParticles.world_node() != null else null
+	var start: float = pool.size[0] if pool != null and pool.count > 0 else 0.0
+	var biggest := start
+
+	for i in 185:
+		await get_tree().process_frame
+
+		if pool != null and pool.count > 0:
+			biggest = maxf(biggest, pool.size[0])
+
+	_check("L16 a puff of smoke grows to over twice its size and is gone by 3.1 s", start > 0.0 and biggest >= 2.0 * start and FireParticles.live(&"smoke") == 0,
+		"size %.3f -> %.3f, alive after 3.1 s %d" % [start, biggest, FireParticles.live(&"smoke")])
+
+	# L17 where the Atmosphere makes a fire's embers, the fire makes none
+	var air: Node3D = AtmosphereScript.new()
+	add_child(air)
+	var fire: Node3D = TorchScript.new()
+	fire.set("embers_by_atmosphere", true)
+	fire.smoke_rate = 0.0
+	add_child(fire)
+	fire.global_position = Vector3(0, 1.6, 297)
+	FireParticles.clear()
+	await _frames(120)
+	var doubled: int = FireParticles.live(&"ember")
+	_check("L17 a fire the Atmosphere already sheds embers for sheds none of its own", doubled == 0, "embers %d" % doubled)
+	fire.queue_free()
+	air.queue_free()
+	await _frames(2)
+
+	# L18 drawn on FX, and slow motion slows them
+	var on_fx := FireParticles.world_node() != null
+
+	if on_fx:
+		for draw in FireParticles.world_node().find_children("*", "MultiMeshInstance3D", true, false):
+			on_fx = on_fx and draw.layers == Layers.FX
+
+	var rises: Array[float] = []
+
+	for scale in [1.0, 0.5]:
+		FireParticles.clear()
+		FireParticles.reseed(7)
+		Engine.time_scale = scale
+		FireParticles.emit(self, &"ember", Vector3(0, 1, 295), 1)
+		await get_tree().process_frame
+		var from: float = FireParticles.world_node()._pools[&"ember"].pos[0].y
+		for i in 20:
+			await get_tree().process_frame
+		rises.append(FireParticles.world_node()._pools[&"ember"].pos[0].y - from)
+
+	Engine.time_scale = 1.0
+	var share := rises[1] / maxf(rises[0], 0.0001)
+	_check("L18 embers and smoke are drawn on FX, and at half speed an ember rises about half as far",
+		on_fx and share >= 0.4 and share <= 0.6, "on FX %s, rose %.3f then %.3f m (%.2f)" % [on_fx, rises[0], rises[1], share])
+	FireParticles.clear()
+	camera.queue_free()
+	await _frames(2)
 
 
 ## The frequency (Hz) with the most energy in 8 s of a flicker sampled at 60 Hz.

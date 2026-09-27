@@ -28,6 +28,7 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Flicker := preload("res://scripts/Visual/Lights/Flicker.gd")
 const FlameFxScript := preload("res://scripts/Visual/Lights/FlameFx.gd")
 const CoronaScript := preload("res://scripts/Visual/Lights/Corona.gd")
+const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
 
 const CRACKLE := "res://audio/ambience/torch_loop.ogg"
 ## How loud its crackle is (dB at a metre or so), and how far it carries.
@@ -42,6 +43,8 @@ const FLARE_TIME := 0.9
 const LEAN_REACH := 0.07
 ## The light sits this far above its flames, so they never shadow it.
 const LIGHT_ABOVE := 0.12
+## Embers and smoke only within this of the camera.
+const PARTICLE_REACH := 30.0
 
 @export var color := Color("FF9829")
 @export var energy := 2.4
@@ -89,6 +92,9 @@ var flames: Array = []
 var rng := RandomNumberGenerator.new()
 ## Its halo (null with corona_px 0).
 var corona: Node3D
+## The Atmosphere makes this fire's embers already (Fire.brazier): none of
+## its own while there is one.
+var embers_by_atmosphere := false
 ## The main flame's flipbook frame.
 var frame: int:
 	get:
@@ -107,6 +113,8 @@ var _flare := 0.0
 ## A fire's surge or settling log, 0..1: the flames only, never the light.
 var _jump := 0.0
 var _light_base := Vector3.ZERO
+var _ember_due := 0.0
+var _smoke_due := 0.0
 
 
 func _ready() -> void:
@@ -231,7 +239,48 @@ func _process(delta: float) -> void:
 	for fx in flames:
 		fx.shape(waver, _strength, _lean, _flare, _jump)
 
+	_shed(delta)
 	_listen(delta)
+
+
+## Embers and smoke off its flames, at their rates, while you are near.
+func _shed(delta: float) -> void:
+	if not _near_camera():
+		_ember_due = 0.0
+		_smoke_due = 0.0
+		return
+
+	var flames_count := float(flame_points.size())
+
+	if ember_rate > 0.0 and not _atmosphere_embers():
+		_ember_due += ember_rate * flames_count * delta
+
+	if smoke_rate > 0.0:
+		_smoke_due += smoke_rate * flames_count * delta
+
+	while _ember_due >= 1.0:
+		_ember_due -= 1.0
+		FireParticles.emit(self, &"ember", _flame_top(0.6), 1, _lean, color)
+
+	while _smoke_due >= 1.0:
+		_smoke_due -= 1.0
+		FireParticles.emit(self, &"smoke", _flame_top(1.0), 1, _lean, color, flame_size * 0.6)
+
+
+func _near_camera() -> bool:
+	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	return camera != null and camera.global_position.distance_to(global_position) <= PARTICLE_REACH
+
+
+func _atmosphere_embers() -> bool:
+	return embers_by_atmosphere and get_tree().get_first_node_in_group(&"atmosphere") != null
+
+
+## A point up one of its flames (`up` of its height), picked by its dice.
+func _flame_top(up: float) -> Vector3:
+	var point := flame_points[rng.randi_range(0, flame_points.size() - 1)]
+	var jitter := Vector3(rng.randf_range(-0.3, 0.3), 0.0, rng.randf_range(-0.3, 0.3)) * flame_size * 0.3
+	return global_transform * (point + jitter + Vector3.UP * flame_size * up)
 
 
 func _physics_process(delta: float) -> void:
@@ -260,6 +309,10 @@ func set_strength(k: float) -> void:
 ## back as it was over FLARE_TIME.
 func flare(amount := 1.0) -> void:
 	_flare = maxf(_flare, clampf(amount, 0.0, 1.0))
+
+	if is_inside_tree() and ember_rate > 0.0 and _near_camera() and not _atmosphere_embers():
+		for i in int(12.0 + 8.0 * clampf(amount, 0.0, 1.0)):
+			FireParticles.emit(self, &"ember", _flame_top(0.5), 1, _lean, color)
 
 
 ## Its crackle: started when you come near enough to hear it (somewhere in
