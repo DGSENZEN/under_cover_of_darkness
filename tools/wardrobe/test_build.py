@@ -785,6 +785,39 @@ def case_brute_bracers():
     return ["%d rays meet his skin before his bracer (%s)" % (len(through), through[:4])] if through else []
 
 
+def case_hoods_hold_faces():
+    """The committed coif and hood hold every male face (Review Focus 2):
+    along the ray from the middle of his head through each vertex of each
+    head over its cape's top (lower down the cape covers from outside),
+    the piece is not met before the vertex (a face beyond its rim: the
+    heavy jaw came 5.9 mm through the hood's)."""
+    import recipes
+
+    import check
+
+    source = common.WARDROBE / "source"
+    bpy.ops.wm.open_mainfile(filepath=str(source / "headgear.blend"))
+    centre = bpy.data.objects["Armature"].data.bones["Head"].head_local + Vector((0.0, 0.0, 0.1))
+    heads = check.heads("male")
+    through = []
+
+    for piece in ("coif", "hood"):
+        tree = common.bvh([bpy.data.objects["Gear_" + piece]])
+        above = recipes.HEADGEAR[piece]["cape"]["top_z"] + 0.01
+
+        for head in heads:
+            for v in (v for v in head.data.vertices if v.co.z > above):
+                d = v.co - centre
+                hit = tree.ray_cast(centre, d.normalized(), d.length)
+
+                if hit[0] is not None and d.length - hit[3] > 0.0005:
+                    through.append("%s %s %.1f mm at (%.3f, %.3f, %.3f)" % (piece, head.name, (d.length - hit[3]) * 1000, *v.co))
+
+    check.forget(heads)
+    fresh()
+    return ["%d face vertices beyond the coif or hood: %s" % (len(through), through[:8])] if through else []
+
+
 def width_at(tree, y, z):
     """How far out to his left a surface stands at (y, z): its outermost
     hit coming in along x (a low-poly head has few vertices near any one
@@ -1138,7 +1171,7 @@ CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, 
          "faces": case_faces, "beards_and_tails": case_beards_and_tails,
          "bare_hat": case_bare_hat, "coif_beards": case_coif_beards,
          "brute_neck": case_brute_neck, "duelist_cape": case_duelist_cape,
-         "brute_bracers": case_brute_bracers}
+         "brute_bracers": case_brute_bracers, "hoods_hold_faces": case_hoods_hold_faces}
 
 
 def main():

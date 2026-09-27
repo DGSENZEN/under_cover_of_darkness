@@ -2421,7 +2421,10 @@ def coif(kind, g, piece, made=None):
     def in_opening(p):
         return abs(p.x) < hole["x"] + 0.01 and hole["from_z"] - 0.01 < p.z < hole["to_z"] + 0.01 and p.y < -0.02
 
-    head = common.bvh([head_region(kind.ref, "wr_coif_head")])
+    # Every head it may go over (heads_tree: his own and each low head):
+    # fitted to his own alone, the heavy face's jaw came through the hood's
+    # rim.
+    head = heads_tree(kind)
     # The beards it is worn over (`over_beards`): they hang below his chin
     # in front of his throat, where it closes round his neck.
     beard_points, beards = hair_points(g.get("over_beards", ()), grow=g.get("beard_margin", 0.0))
@@ -2451,7 +2454,6 @@ def coif(kind, g, piece, made=None):
     crown = middle + Vector((0.0, 0.0, reach(middle, Vector((0.0, 0.0, 1.0)), 0.12) + off))
     obj = common.loft("Gear_%s" % piece, rows, closed=True, cap=crown)
     outward(obj)
-    bpy.data.objects.remove(bpy.data.objects["wr_coif_head"])
 
     bm = bmesh.new()
     bm.from_mesh(obj.data)
@@ -2476,12 +2478,12 @@ def coif(kind, g, piece, made=None):
     enclose(bm, skull, middle, g["inside"] + 0.004)
     opening = [e for e in bm.edges if e.is_boundary and (e.verts[0].co.z + e.verts[1].co.z) * 0.5 > g["cape"]["top_z"] + 0.005]
 
-    # Its face edge turned in to his face (resting on a beard it goes over,
+    # Its face edge turned in to the faces (resting on a beard it goes over,
     # where one is in its way), so the mail shows its thickness.
     made = bmesh.ops.extrude_edge_only(bm, edges=opening)["geom"]
 
     for vertex in (item for item in made if isinstance(item, bmesh.types.BMVert)):
-        near = kind.ref_tree.find_nearest(vertex.co)[0]
+        near = head.find_nearest(vertex.co)[0]
 
         if near is None:
             continue
@@ -2497,6 +2499,10 @@ def coif(kind, g, piece, made=None):
 
     bm.to_mesh(obj.data)
     bm.free()
+    # No face it goes over through it over its cape's top (its turned-in
+    # edge lay inside the heavy face's jaw corner, 6 mm).
+    over_cape = g["cape"]["top_z"] + 0.01
+    clear_through(obj, heads_tree(kind, keep=lambda o, p: p.center.z > over_cape), lambda p: middle)
     fabric = recipes.FABRICS.index(g["fabric"])
     dye = g.get("dye", False)
     common.set_faces(obj, 1, fabric, g["thickness"], False, dye, g["colour"])
@@ -2804,10 +2810,11 @@ def imported(kind, g, piece, made):
     return obj
 
 
-def heads_tree(kind, hair=()):
+def heads_tree(kind, hair=(), keep=None):
     """What a helm goes over, as one tree: his own head (the full body's),
     every low head in heads.blend (a low head strays a little outside the
-    full one) and the `hair` styles (hair.blend) it is worn over."""
+    full one) and the `hair` styles (hair.blend) it is worn over; only the
+    faces `keep(obj, polygon)` passes, given."""
     objects = [head_region(kind.ref, "wr_helm_head")]
 
     for path, names in ((common.SOURCE / "heads.blend", None), (common.SOURCE / "hair.blend", ["Hair_%s" % h for h in hair])):
@@ -2819,7 +2826,7 @@ def heads_tree(kind, hair=()):
 
         objects += [o for o in target.objects if o is not None and o.type == "MESH"]
 
-    tree = common.bvh(objects)
+    tree = common.bvh(objects, keep=keep)
 
     for obj in objects:
         mesh = obj.data
