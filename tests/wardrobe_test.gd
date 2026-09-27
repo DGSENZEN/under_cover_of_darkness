@@ -147,6 +147,7 @@ func _run() -> void:
 	_k15()
 	await _k3()
 	await _k3b()
+	await _k15b()
 	await _dressed()
 	await _integration()
 
@@ -592,6 +593,59 @@ func _k15() -> void:
 	scene.free()
 	_check("K15 the coif's hood above his ears rides his head alone", hood > 0 and wrong.is_empty(),
 		"hood vertices %d, on other bones %s" % [hood, wrong])
+
+
+## K15b (Review Focus 2) the new faces sit in what closes round them as the
+## approved ones do: the watchman's coif, the swordsman's helm and curtain,
+## the archer's hood, on each face they may roll (their options doctored to
+## it), at rest and bowed. A hood hugs a face: its rim meets the approved
+## faces at the chin line (edges through faces, as K22: about 20-45 there),
+## so each new face may cut no more than the approved faces' worst x 1.25
+## + 10 under the same headgear.
+func _k15b() -> void:
+	var counts := {}
+
+	for pair in [[&"watchman", &"", [["kettlehat", "coif"]]], [&"swordsman", &"swordsman", [["nasalhelm", "curtain"]]],
+			[&"archer", &"archer", [["hood"]]]]:
+		counts[pair[0]] = {}
+
+		for face in ["weathered", "old", "young", "heavy"]:
+			_doctor(pair[0], {"faces": [face], "headgear": pair[2]})
+			var g := await _guard(7, pair[1])
+			g.set_physics_process(false)
+			var man = g._rig.man
+			var head := _worn(man, "Head_" + face)
+
+			if head == null:
+				counts[pair[0]][face] = -1
+			else:
+				var head_faces := _faces_of(head, PackedInt32Array())
+				var cuts := 0
+
+				for bowed in [false, true]:
+					if bowed:
+						_bow(man, 0.61)
+
+					var skinned_head := _skinned(head, man.skeleton)
+
+					for gear in man.worn().filter(func(m): return String(m.name) in ["coif", "nasalhelm", "curtain", "hood"]):
+						cuts += _cuts(skinned_head, head_faces, _skinned(gear, man.skeleton), _faces_of(gear, PackedInt32Array()))
+
+				counts[pair[0]][face] = cuts
+
+			Wardrobe.forget()
+			g.queue_free()
+			await _frames(1)
+
+	var fits := true
+
+	for kind in counts:
+		var approved := maxi(int(counts[kind]["weathered"]), int(counts[kind]["old"]))
+
+		for face in ["young", "heavy"]:
+			fits = fits and approved >= 0 and int(counts[kind][face]) >= 0 and int(counts[kind][face]) <= int(approved * 1.25) + 10
+
+	_check("K15b the new faces sit in the coif, helm, curtain and hood as the approved faces do", fits, str(counts))
 
 
 ## Whether `mesh` carries `look`'s uniforms: each set (an unset one reads

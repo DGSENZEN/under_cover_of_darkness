@@ -696,6 +696,78 @@ def case_brute_arms():
     return ["%d rays out of his bare arms meet no skin first (%s)" % (len(holes), holes[0])] if holes else []
 
 
+def width_at(tree, y, z):
+    """How far out to his left a surface stands at (y, z): its outermost
+    hit coming in along x (a low-poly head has few vertices near any one
+    point: its surface is measured, not its vertices)."""
+    hit = common.outer_hit(tree, Vector((0.0, y, z)), Vector((1.0, 0.0, 0.0)), 0.3)
+    return hit.x if hit is not None else 0.0
+
+
+def depth_at(tree, point):
+    """How far a surface stands out from the head's middle (the vertical
+    axis) toward `point`: its outermost hit along that way."""
+    centre = Vector((0.0, 0.0, point[2]))
+    way = (Vector(point) - centre).normalized()
+    hit = common.outer_hit(tree, centre, way, 0.3)
+    return (hit - centre).length if hit is not None else 0.0
+
+
+def case_faces():
+    """Batch 3's faces (§8): male young, weathered, heavy and old, female
+    sharp and soft. Each built face differs from its neighbour where its
+    recipe moves it (the heavy jaw wider, the young cheek not hollowed, the
+    soft jaw rounder than the sharp), within the head budget."""
+    import tempfile
+    from pathlib import Path
+
+    import build
+    import recipes
+
+    male, female = common.parts_of(recipes.HEADS, "male"), common.parts_of(recipes.HEADS, "female")
+
+    if not {"young", "weathered", "heavy", "old"} <= set(male) or not {"sharp", "soft"} <= set(female):
+        return ["faces: male %s, female %s" % (male, female)]
+
+    source = common.WARDROBE / "source"
+    folder = Path(tempfile.mkdtemp(prefix="wardrobe_faces_"))
+    heads = {}
+
+    for body in ("male", "female"):
+        fresh()
+        common.SOURCE, common.BACKUP = folder, folder / "backup"
+
+        try:
+            build.build_heads(True, body)
+        finally:
+            common.SOURCE, common.BACKUP = source, source / "backup"
+
+        for obj in [o for o in bpy.data.objects if o.name.startswith("Head_") and o.type == "MESH"]:
+            points = [v.co.copy() for v in obj.data.vertices]
+            tree = BVHTree.FromPolygons(points, [tuple(p.vertices) for p in obj.data.polygons])
+            heads[obj.name[len("Head_"):]] = (points, tree, common.tri_count(obj))
+
+    fresh()
+    messages = []
+    cheek = (0.047, -0.07, 1.648)
+
+    heavy, weathered = width_at(heads["heavy"][1], -0.04, 1.60), width_at(heads["weathered"][1], -0.04, 1.60)
+
+    if heavy < weathered + 0.004:
+        messages.append("heavy jaw %.4f, weathered %.4f" % (heavy, weathered))
+
+    if depth_at(heads["young"][1], cheek) < depth_at(heads["weathered"][1], cheek) + 0.005:
+        messages.append("young cheek %.4f, weathered %.4f" % (depth_at(heads["young"][1], cheek), depth_at(heads["weathered"][1], cheek)))
+
+    soft, sharp = width_at(heads["soft"][1], -0.045, 1.56), width_at(heads["sharp"][1], -0.045, 1.56)
+
+    if soft < sharp + 0.003:
+        messages.append("soft jaw %.4f, sharp %.4f" % (soft, sharp))
+
+    messages += ["%s %d triangles (limit 450)" % (name, h[2]) for name, h in heads.items() if h[2] > 450]
+    return messages
+
+
 def case_foreign_parts():
     """A kind whose options name a part of the other body is refused
     (check.foreign_parts); the heaviest combination counts "" as none and
@@ -791,7 +863,8 @@ def case_skin():
 
 CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, "watchman": case_watchman,
          "hood": case_hood, "launcher": case_launcher, "bodies": case_bodies, "male_parts": case_male_parts,
-         "types2": case_types2, "skin": case_skin, "brute_arms": case_brute_arms, "foreign_parts": case_foreign_parts}
+         "types2": case_types2, "skin": case_skin, "brute_arms": case_brute_arms, "foreign_parts": case_foreign_parts,
+         "faces": case_faces}
 
 
 def main():

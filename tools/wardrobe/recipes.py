@@ -528,6 +528,45 @@ HEADS = {
         "brows": (0.62, 0.60, 0.57),
         "tones": TONES,
     },
+    # A young man (batch 3): cheeks full where the weathered face is hollow,
+    # a shorter jaw, a lighter brow; a little stubble, no wear yet.
+    "young": {
+        "body": "male",
+        "tris": 340,
+        "shape": [
+            {"at": (0.047, -0.07, 1.648), "radius": 0.03, "along_normal": 0.005},
+            # A narrower, lighter jaw (its side is at x ~0.04 at y -0.04,
+            # z 1.60). (A smaller chin, pushed in at y -0.087, took his lower
+            # lip into the detailed head's mouth: the bake painted a dark
+            # streak from its corner.)
+            {"at": (0.04, -0.04, 1.60), "radius": 0.03, "move": (-0.003, 0.0, 0.0)},
+            {"at": (0.032, -0.088, 1.722), "radius": 0.03, "move": (0.0, 0.002, 0.002)},
+        ],
+        "eyes": 0.95,
+        "grit": {"stubble": 0.1, "bags": 0.05, "lines": 0.05},
+        "brows": (0.20, 0.14, 0.09),
+        "tones": TONES,
+    },
+    # A heavy man (batch 3; the brute's other face): the jaw's sides wider,
+    # full jowls, a broad nose, a low heavy brow; dark stubble. (Anchored on
+    # his head's surface as measured: the jaw's side is at x 0.037-0.044
+    # at y -0.04, z 1.60; the nose's tip at z 1.665.)
+    "heavy": {
+        "body": "male",
+        "tris": 340,
+        "shape": [
+            {"at": (0.04, -0.04, 1.60), "radius": 0.03, "move": (0.012, 0.0, 0.0)},
+            {"at": (0.044, -0.015, 1.60), "radius": 0.03, "move": (0.008, 0.0, 0.0)},
+            {"at": (0.036, -0.058, 1.61), "radius": 0.025, "along_normal": 0.008},
+            {"at": (0.0, -0.087, 1.598), "radius": 0.025, "move": (0.0, -0.004, -0.002)},
+            {"at": (0.012, -0.1, 1.65), "radius": 0.012, "move": (0.004, 0.0, 0.0)},
+            {"at": (0.032, -0.088, 1.722), "radius": 0.03, "move": (0.0, -0.006, -0.003)},
+        ],
+        "eyes": 0.8,
+        "grit": {"stubble": 1.0, "bags": 0.5, "lines": 0.4},
+        "brows": (0.12, 0.09, 0.07),
+        "tones": TONES,
+    },
     # The duelist's face, on the female head (her face sits 4.2 cm under a
     # man's and 0.5 cm further back): cheekbones higher and fuller, the jaw
     # narrower at its sides, a straighter nose; no stubble, a little wear,
@@ -543,6 +582,22 @@ HEADS = {
         "eyes": 0.85,
         "grit": {"stubble": 0.0, "bags": 0.3, "lines": 0.3, "scar": "brow"},
         "brows": (0.14, 0.10, 0.08),
+        "tones": TONES,
+    },
+    # Her other face (batch 3): fuller low cheeks, a rounder jaw, a smaller
+    # nose; hardly any wear. (Her jaw's side is at x ~0.03 at y -0.045,
+    # z 1.56; her nose's front at y -0.107.)
+    "soft": {
+        "body": "female",
+        "tris": 340,
+        "shape": [
+            {"at": (0.05, -0.063, 1.61), "radius": 0.028, "along_normal": 0.006},
+            {"at": (0.03, -0.045, 1.56), "radius": 0.028, "move": (0.006, 0.0, 0.002)},
+            {"at": (0.0, -0.105, 1.628), "radius": 0.012, "along_normal": -0.002},
+        ],
+        "eyes": 0.9,
+        "grit": {"stubble": 0.0, "bags": 0.15, "lines": 0.1},
+        "brows": (0.25, 0.17, 0.10),
         "tones": TONES,
     },
 }
