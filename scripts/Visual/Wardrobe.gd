@@ -290,7 +290,7 @@ static func can_dress(kind: StringName) -> bool:
 
 	if not ok and not _warned.has(kind):
 		_warned[kind] = true
-		push_warning("Wardrobe: %s cannot be dressed from %s (%s: each dropped part says why); painted instead" % [kind, ROOT, why])
+		push_warning("Wardrobe: %s cannot be dressed from %s (%s: each dropped part says why); the plain base body instead" % [kind, ROOT, why])
 
 	return ok
 
