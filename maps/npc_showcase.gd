@@ -39,6 +39,7 @@ const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const DirectorScript := preload("res://scripts/Showcase/ShowDirector.gd")
+const CameraScript := preload("res://scripts/Showcase/ShowCamera.gd")
 ## The night's story (acts and beats), for the director.
 const STORY := "res://scripts/Showcase/ShowNight.gd"
 
@@ -86,6 +87,8 @@ var intruder: CharacterBody3D = null
 ## The director, when the show runs, and the night it plays.
 var director: Node = null
 var story: RefCounted = null
+## The show camera, when the show runs.
+var camera: Camera3D = null
 
 var _baker: NavigationRegion3D
 var _stations := {}
@@ -118,6 +121,16 @@ func _ready() -> void:
 		add_child(director)
 		story = (load(STORY) as GDScript).new(self)
 		director.setup(self, story)
+		camera = CameraScript.new()
+		add_child(camera)
+		camera.setup(self, story)
+		camera.make_current()
+		director.beat_started.connect(func(_beat: StringName, shot: Dictionary) -> void: camera.want(shot))
+
+		var overview := get_node_or_null("Overview")
+
+		if overview != null:
+			overview.queue_free()
 
 	ready_to_show.emit()
 

@@ -526,7 +526,7 @@ static func look_of(archetype: StringName) -> Dictionary:
 
 func fight(delta: float) -> void:
 	var now: float = guard._game_time
-	var target: Node3D = guard._target
+	var target: Node3D = _target_now()
 	var sees: bool = guard.can_see_target and target != null and is_instance_valid(target)
 	var to := Vector3.ZERO
 	var dist := INF
@@ -670,7 +670,7 @@ func watch(delta: float) -> void:
 	var now: float = guard._game_time
 	_tick(delta, now)
 	guarding = false
-	var target: Node3D = guard._target
+	var target: Node3D = _target_now()
 
 	if not guard.can_see_target or target == null or not is_instance_valid(target):
 		return
@@ -1233,13 +1233,20 @@ func _plan(what: StringName) -> float:
 	return squad.bonus(what) if squad != null else 0.0
 
 
+## Whom he is after, if they are still there (a target can be freed: the
+## showcase's intruder, killed).
+func _target_now() -> Node3D:
+	var target: Variant = guard._target
+	return target as Node3D if target != null and is_instance_valid(target) else null
+
+
 ## How hard he presses now: his drive, and the anger a bold man turns the
 ## garrison's dread into.
 func drive_now() -> float:
 	if temper == null:
 		return 0.5
 
-	var target: Node3D = guard._target
+	var target: Node3D = _target_now()
 	var garrison: RefCounted = GarrisonScript.of(target) if target != null and is_instance_valid(target) else null
 	var anger: float = garrison.anger_of(float(temper.nerve)) if garrison != null else 0.0
 	return minf(float(temper.drive) + 0.3 * anger, 1.0)
@@ -1248,7 +1255,7 @@ func drive_now() -> float:
 ## What he says as he takes you on: of their dead, if the garrison's dread has
 ## turned to anger in him; else in his own way.
 func engage_line() -> String:
-	var target: Node3D = guard._target
+	var target: Node3D = _target_now()
 	var garrison: RefCounted = GarrisonScript.of(target) if target != null and is_instance_valid(target) else null
 
 	if temper != null and garrison != null and garrison.anger_of(float(temper.nerve)) > 0.2:
@@ -1308,7 +1315,7 @@ func on_parried() -> void:
 ## Busy with me? Then another of us goes for you: the nearest friend fighting
 ## you, not already swinging, comes in quickly.
 func _call_in() -> void:
-	var target: Node3D = guard._target
+	var target: Node3D = _target_now()
 
 	if target == null or not is_instance_valid(target) or not guard.is_inside_tree():
 		return
@@ -2216,7 +2223,7 @@ func _update_dodge(delta: float) -> void:
 	guard.velocity.x = _dodge_velocity.x * k
 	guard.velocity.z = _dodge_velocity.z * k
 
-	var target: Node3D = guard._target
+	var target: Node3D = _target_now()
 
 	if target != null and is_instance_valid(target):
 		guard._face(target.global_position - guard.global_position, delta)
@@ -2529,7 +2536,7 @@ func _hazard_behind_you() -> bool:
 		return _hazard_there
 
 	_hazard_checked_at = now
-	var target: Node3D = guard._target
+	var target: Node3D = _target_now()
 
 	if target == null or not is_instance_valid(target):
 		_hazard_there = false
@@ -2749,7 +2756,7 @@ func _start(kind: StringName, scale := 1.0) -> void:
 	if kind in [&"overhead", &"left", &"right", &"thrust"] and scale >= 0.99 and feint_chance > 0.0 and randf() < feint_chance + _plan(&"feint") + _feint_bias():
 		_feint_at = randf_range(0.36, 0.52)
 
-	var target: Node3D = guard._target
+	var target: Node3D = _target_now()
 
 	if target != null and is_instance_valid(target) and target.has_method("warn_attack"):
 		target.warn_attack(guard)
@@ -3116,7 +3123,7 @@ func _slam() -> void:
 	Fx.dust(guard, at, Vector3.UP, 1.2, "stone")
 	Sfx.play(guard, &"thud", at, 2.0, 0.7)
 	SoundBus.emit_sound(at, 58.0, guard, &"impact")
-	var target: Node3D = guard._target
+	var target: Node3D = _target_now()
 
 	if target != null and is_instance_valid(target) and target.get("juice") != null:
 		var near: float = target.global_position.distance_to(at)

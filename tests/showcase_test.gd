@@ -12,6 +12,7 @@ const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const DirectorScript := preload("res://scripts/Showcase/ShowDirector.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
+const CameraScript := preload("res://scripts/Showcase/ShowCamera.gd")
 
 ## Who is at which kind of station at the start of the night.
 const STATIONED := {"Piers": &"sit", "Col": &"eat", "Tam": &"sleep", "Gideon": &"rummage", "Ned": &"carry", "Brand": &"chop"}
@@ -163,6 +164,62 @@ func _run() -> void:
 		"paused %s, now paused %s, time after %.3f" % [paused11, get_tree().paused, after11])
 	director11.queue_free()
 	await _unload(_loaded)
+
+	# ------------------------------------------------------------------
+	# The camera
+	# ------------------------------------------------------------------
+
+	var map13 := await _map(false)
+	var camera: Camera3D = CameraScript.new()
+	add_child(camera)
+	camera.setup(map13, null)
+	camera.make_current()
+
+	# D13 following a man who dies
+	var col: Node3D = map13.cast["Col"]
+	camera.follow(col)
+	await _frames(60)
+	var fell_at := col.global_position
+	col.take_hit(999.0, map13.cast["Osric"], &"power", col.global_position + Vector3.UP, Vector3.FORWARD)
+	await _frames(30)
+	var framing13: Vector3 = camera.focus_point()
+	var held13: bool = framing13.distance_to(fell_at) < 2.5 and camera.mode == CameraScript.Mode.FOLLOW
+	await _until(func(): return camera.mode == CameraScript.Mode.DIRECTOR, 240)
+	_check("D13 following a man who dies, the camera frames where he fell, then returns to DIRECTOR within 3 s, with no errors",
+		held13 and camera.mode == CameraScript.Mode.DIRECTOR,
+		"held on where he fell %s (%.1f m off), mode now %d" % [held13, framing13.distance_to(fell_at), camera.mode])
+
+	# D14 a close shot puts his head in the middle of the frame
+	var osric: Node3D = map13.cast["Osric"]
+	camera.want({"type": &"close", "subjects": [osric]})
+	await _frames(300)
+	var head: Vector3 = osric.global_position + Vector3.UP * 1.6
+	var size := get_viewport().get_visible_rect().size
+	var on_screen := camera.unproject_position(head)
+	var middle: bool = on_screen.x > size.x / 3.0 and on_screen.x < size.x * 2.0 / 3.0 and on_screen.y > size.y / 3.0 and on_screen.y < size.y * 2.0 / 3.0 and not camera.is_position_behind(head)
+	_check("D14 a \"close\" shot on a guard ends with his head in the middle third of the view",
+		middle and camera.global_position.distance_to(head) < 4.0,
+		"head at %s of %s, %.1f m off; camera %s looking at %s, aiming at %s, forward to head %.2f, mode %d, osric moved %s" % [on_screen, size, camera.global_position.distance_to(head), camera.global_position, camera._look_at, camera._goal_look, (-camera.global_basis.z).dot((head - camera.global_position).normalized()), camera.mode, osric.velocity])
+
+	# D15 flying while paused
+	camera.mode = CameraScript.Mode.FREE
+	get_tree().paused = true
+	var before15 := camera.global_position
+	var press := InputEventKey.new()
+	press.physical_keycode = KEY_W
+	press.pressed = true
+	Input.parse_input_event(press)
+	await _frames(30)
+	var release := InputEventKey.new()
+	release.physical_keycode = KEY_W
+	release.pressed = false
+	Input.parse_input_event(release)
+	get_tree().paused = false
+	_check("D15 moving in FREE mode while paused changes the camera position",
+		camera.global_position.distance_to(before15) > 0.5,
+		"moved %.2f m" % camera.global_position.distance_to(before15))
+	camera.queue_free()
+	await _unload(map13)
 
 	# ------------------------------------------------------------------
 	# The night (ShowNight), act by act from each act's own start
