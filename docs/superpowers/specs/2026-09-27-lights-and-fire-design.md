@@ -25,7 +25,7 @@ Looks and sound only. No gameplay changes: lights keep their current brightness 
 | Which lights | **All four families:** torches, lanterns and lamps, candles and oil lamps, open fires (section 8). |
 | Lights going out | **The look of both states, no gameplay.** Every light has a lit and an out state, with lighting, snuffing and dousing effects and sounds. Snuffing by hand, water arrows and guards relighting stay in the canal-quarter tools sub-project, which will only have to switch states. |
 | Fixture textures | **The user's textures.com photos**, converted by `ps2ify.py` and kept out of git (the repository is public). Fresh clones fall back to flat colours shaded by baked vertex colours (section 6.2). |
-| Base branch | **Branch from main.** The unmerged `npc-showcase` branch also changes `Torch.gd` and `Fire.gd`; the new `Torch.gd` adopts its interface so that merge stays simple (section 10.3). |
+| Base branch | **Branch from main.** npc-showcase (fuel, flare, wind lean, `Atmosphere`) has since been merged into main, so this branch starts with it; `Torch.gd` keeps its interface (section 10.3). |
 | How fixtures are made | **A scripted Blender pipeline, `tools/props`,** built like the wardrobe: recipes to headless Blender to baked GLB. |
 | Glow | **Thief: Deadly Shadows coronas:** a halo per fixture, constant size on screen, hidden by walls and people with a 0.15 s fade. Flame cores cross the glow threshold. |
 | Flames | **Blender heat flipbooks:** looping procedural flames rendered as greyscale heat, coloured per light type by a ramp, hard alpha, layered Thief-style with a core, embers, lit smoke and soot. |
@@ -156,7 +156,7 @@ Every file here is rendered or drawn by the project and committed:
 
 | File | Job |
 |---|---|
-| `LightFixture.gd` | Node3D. Instances a fixture's GLB, swaps its materials, reads its JSON sockets, and puts a `FlameFx` at every flame socket. Owns one `OmniLight3D`, the corona, the soot decal, the sound, the flicker and the lit/out state. |
+| `LightFixture.gd` | **Extends `Torch.gd`.** Instances a fixture's GLB, swaps its materials, reads its JSON sockets, gives the burner a flame point per flame socket, puts the corona at the `corona` socket, places the soot decal, switches the model's out-state look, and runs drafts and the fire's one-shots. |
 | `FlameFx.gd` | Everything drawn at one flame socket: two flame sprites, the core, emitters for embers and smoke, and the heat haze. |
 | `Corona.gd` | The halo: its quad, its occlusion rays and its fade. |
 | `FireParticles.gd` | Static manager for embers and smoke: CPU simulation, one `MultiMesh` per kind under `Fx.world_node()`, like `Fx.gd`. |
@@ -169,7 +169,7 @@ Every file here is rendered or drawn by the project and committed:
 | `haze.gdshader` | Screen texture offset by 1 px of scrolling noise. |
 | `glow.gdshader` | A slot's surface that shines from inside (horn panes, coal beds, a cooling torch head): photo or flat colour plus flickering emission (section 8.1). |
 
-`scripts/Visual/Torch.gd` stays and keeps its public interface. It becomes a thin wrapper: a `FlameFx` and a light, with no model (section 10.3).
+`scripts/Visual/Torch.gd` stays and keeps its public interface. It becomes **the burner** every fixture extends: the light, its flicker, a `FlameFx` at each flame point, the corona, the lit/out state and the loop sound. A bare `Torch.new()` is a burner with no model, as today. Because every fixture is a `Torch`, the code that already holds torches (the brazier's fuel in `Fire.gd`, the campfire's idle spots, the guards' hands and their dropped-light tween of `energy`) works on fixtures unchanged (section 10.3).
 
 ## 7. Flames, glow and smoke
 
@@ -201,8 +201,10 @@ Each fixture has one `OmniLight3D`; a candelabra or chandelier has one light for
 | `lamp` (oil lamps, lanterns) | 4.5 Hz | ±5% | a hanging lantern also swings with its sway |
 | `torch` | 5 Hz | ±12% | the light jitters 1–3 cm, so shadows shimmer |
 | `cresset` | 3.5 Hz | ±12% | |
-| `brazier` | 2.4 Hz | ±12% | a surge to +20% every 15–30 s |
-| `fire` (campfire, hearth) | 1.7 Hz | ±18% | a log settles every 20–40 s: +30% easing back over 1.5 s, an ember burst and a crack |
+| `brazier` | 2.4 Hz | ±12% | a surge every 15–30 s: the flames grow 25% and embers burst, easing back over 1.5 s |
+| `fire` (campfire, hearth) | 1.7 Hz | ±18% | a log settles every 20–40 s: a crack, an ember burst, and the flames jump 30%, easing back over 1.5 s |
+
+Surges and settling logs change the flames, embers and sound only. The light never leaves energy × strength × (1 ± swing) × (1 + 0.6 × flare²), today's formula, so the gameplay reads what it reads today (the routines suite already holds the brazier's light to it).
 
 The flame sprites' size follows the same value, so light and flame agree. Each fixture starts at a random phase, seeded from its position so headless runs repeat.
 
@@ -277,7 +279,8 @@ The hanging lantern and the lamp post (whose lantern is the same model) carry `c
 
 ### 8.2 Performance
 
-- **Shadow budget:** `LightBudget` looks four times a second at every shadow-casting fixture light and gives `shadow_enabled` only to the 6 nearest the camera. A light may change state only while it is farther than 12 m from the camera, so no shadow pops up close. If more than 6 shadow-casting lights sit within 12 m of one spot, that spot is over budget: `LightBudget` pushes a warning once per level, and the gallery and maps are laid out to stay under.
+- **Shadow budget:** `LightBudget` looks four times a second at every burner made with `shadows` on and gives `shadow_enabled` only to the 6 nearest the camera. A light may change state only while it is farther from the camera than both 12 m and its own range + 1 m, so no shadow pops up close and the light cannot be touching the player (the lightgem reads what it always read). If more than 6 shadow-casting lights sit within 12 m of one spot, that spot is over budget: `LightBudget` pushes a warning once per level, and the gallery and maps are laid out to stay under.
+- **Gameplay keeps its shadows:** `LightProbe` casts a shadow ray only for lights with `shadow_enabled`, so a light the budget turned off would light a body through a wall. Every burner marks its light with meta `casts_shadow` (its `shadows` export), and `LightProbe` reads that meta instead of `shadow_enabled` when it is present.
 - **Distance:** candles and oil lamps fade their light and corona out between 20 and 25 m (`distance_fade`). Embers, smoke and haze run only within 30 m (haze 15 m).
 - **Fill:** at most two flame sprites and one core per flame socket; candelabra and chandelier candles draw one sprite each and no core.
 
@@ -297,7 +300,7 @@ All sounds are cut and layered by `tools/prepare_sfx.py` from recordings the use
 
 **One-shots:**
 - **Crackles and pops:** `crackle` (4–6 takes) and `coal_pop` (3–4 takes), cut from the crackle transients inside the NOX fire loops. Each fire plays them over its loop at irregular times: a Poisson process at 0.6/s for torches, 1/s for braziers and campfires, 0.5/s for the hearth, never on a grid.
-- **`log_settle`:** a low wooden crack, plus an ember burst and the light surge of section 7.2.
+- **`log_settle`:** a low wooden crack, with the ember burst and the flame jump of section 7.2.
 - **`ignite_torch`:** a cloth whoosh (the existing `whoosh_light` family's source) layered with the attack of TomMusic's `Firebuff` or `Fireball` spells, cut short and low-passed so it reads as pitch catching rather than magic.
 - **`snuff`:** a short breath puff and a thin hiss tail.
 - **`douse`:** a water splash and a steam hiss.
@@ -310,7 +313,7 @@ If a source for any one-shot turns out unusable in the user's packs, that sound 
 
 ### 10.1 Maps
 
-The maps that place a `Torch` today (`retro_showcase`, `stealth_gym`, `combat_gym`, `combat_arena`, `npc_gym`, `interaction_gym`) switch to `Lights.torch_at(parent, flame_at)`. It looks horizontally within 0.5 m of the flame for a wall: if it finds one, it builds a `wall_torch` against it with the flame where the old flame was; otherwise it builds a pole `cresset` standing under it. Braziers and campfires come in through `Fire.brazier` and `Furnishings.campfire` (section 10.2). No map gains new lights, so each level's balance is unchanged.
+The maps that place a `Torch` today (`retro_showcase`, `stealth_gym`, `combat_gym`, `combat_arena`, `npc_gym`, `npc_showcase`) switch to `Lights.torch_at(parent, flame_at, …)` inside their own `_torch` helpers. The burner is lit at once where the old flame was; on its first physics tick (once the level's walls are in the physics space) it looks horizontally within 0.5 m of the flame for a wall. If it finds one, it builds a `wall_torch` model against it; otherwise, if there is floor within 3.2 m below, a pole `cresset` fitted to reach it; otherwise it stays a bare burner (today's look) and pushes a warning naming the spot. `retro_showcase`'s own `_bracket` model goes, since the sconce replaces it. Braziers and campfires come in through `Fire.brazier` and `Furnishings.campfire` (section 10.2). No map gains new lights, so each level's balance is unchanged.
 
 ### 10.2 Guards, brazier and campfire
 
@@ -328,9 +331,11 @@ The maps that place a `Torch` today (`retro_showcase`, `stealth_gym`, `combat_gy
 - `flare(amount := 1.0)`, easing back over 0.9 s;
 - membership of the `torches` group.
 
-`LightFixture` offers the same three methods and joins `torches` too. Fires join `fires`, as npc-showcase does. When npc-showcase merges, its `Atmosphere` and `Fire` fuel code call these methods unchanged, and the `Torch.gd` conflict resolves to this branch's version.
+`LightFixture` extends `Torch`, so it has all of them and joins `torches` too; `Fire` areas stay in `fires`. The members the suites read keep their meaning: `flame.position` moves with the wind (aliveness A19), `_flare` rises when stoked (habits H25), `crackle` and `_crackle_db` (sound M13), and the light stays within energy × strength × (1 ± flicker) (routines R2).
 
-`Torch.flame` stays a `MeshInstance3D` (the primary flame sprite), because tests read it.
+`Torch.flame` stays a `MeshInstance3D` (the primary flame sprite of the first flame point). Its material becomes a shader material, so the flipbook frame is read from a new `Torch.frame` (int) instead of the material's `uv1_offset`.
+
+`Atmosphere` already makes embers for every node in `fires`. The brazier's fixture sets `embers_by_atmosphere`, and `FireParticles` skips its embers whenever an `Atmosphere` is in the scene, so no fire gets two sets.
 
 ### 10.4 The lights gallery
 
@@ -373,7 +378,7 @@ Each bay also has one guard carrying a lantern and one carrying a torch on a sho
 
 ### 11.2 Existing suites
 
-All 32 suites in `tests/` run with `--fixed-fps 60` and must pass unchanged. Suites that build `Torch` (life, retro, stealth, combat, wits, interaction, polish, smooth, sound) are the ones most at risk; section 10.3 keeps their interface.
+All 32 suites in `tests/` run with `--fixed-fps 60` and must pass. Their assertions do not change. One check reads an internal that this work replaces: retro R6 reads the flame's frame from `material_override.uv1_offset`; it switches to `Torch.frame` with the same assertion (at least 3 frames seen). The suites that hold torches (retro, smooth, sound, aliveness, habits, routines, life, stealth, combat, wits, polish, showcase) are the ones most at risk; section 10.3 keeps their interface.
 
 ### 11.3 Review by the user
 
