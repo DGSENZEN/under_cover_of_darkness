@@ -32,9 +32,12 @@ extends RefCounted
 ##                             stairs, over, off the roofs and into the canal,
 ##                             and they come after him).
 ##
-## A shot: {"type": wide | two | close | track | reveal, "subjects": [men]}.
-## A subject is a cast name, "intruder", "nearest", "@talk" (the men of the
-## latest conversation) or "@gathering:<kind>" (the men of that gathering).
+## A scene (for the camera, CineEditor): {"mode": observe | drama, "subjects":
+## [names], "pin": {kind, seconds}}. Act I is observed; from the knife it is
+## drama; each ending's last beat is observed again. A subject is a cast
+## name, "intruder", "nearest", "@talk" (the men of the latest conversation),
+## "@gathering:<kind>" (the men of that gathering) or "@hunt" (the men
+## searching or fighting).
 
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const TalkDirectorScript := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
@@ -134,21 +137,21 @@ func _act_one() -> Dictionary:
 				if man != null:
 					man._life._talk_rest = randf_range(0.0, 3.0),
 		"beats": [
-			_look(&"establish", 8.0, &"wide", []),
-			{"name": &"fire_talk", "shot": _shot(&"two", ["@talk"]), "min": 10.0, "enough": 22.0, "timeout": 40.0,
+			_look(&"establish", 8.0, &"observe", ["Mirelle", "Osric", "Piers", "Col"], {"kind": &"roving", "seconds": 8.0}),
+			{"name": &"fire_talk", "scene": _scene(&"observe", ["@talk"]), "min": 10.0, "enough": 22.0, "timeout": 40.0,
 				"do": _mark_talk,
 				"until": func() -> bool: return _talk_ended_since()},
-			{"name": &"dice", "shot": _shot(&"two", ["@gathering:dice"]), "min": 12.0, "enough": 30.0, "timeout": 60.0,
+			{"name": &"dice", "scene": _scene(&"observe", ["@gathering:dice"]), "min": 12.0, "enough": 30.0, "timeout": 60.0,
 				"do": func() -> void:
 					_mark_talk()
 					_gatherings().request(&"dice"),
 				"until": func() -> bool: return _played_since("dice_")},
-			{"name": &"round", "shot": _shot(&"track", ["Mirelle"]), "min": 10.0, "enough": 30.0, "timeout": 60.0,
+			{"name": &"round", "scene": _scene(&"observe", ["Mirelle"]), "min": 10.0, "enough": 30.0, "timeout": 60.0,
 				"do": func() -> void:
 					_rounds_at_beat = _round_visits()
 					_gatherings().request(&"round", ["Mirelle"]),
 				"until": func() -> bool: return _round_visits() - _rounds_at_beat >= ROUND_ENOUGH},
-			{"name": &"fire_fed", "shot": _shot(&"close", ["@gathering:fire"]), "min": 4.0, "timeout": 50.0,
+			{"name": &"fire_fed", "scene": _scene(&"observe", ["@gathering:fire"]), "min": 4.0, "timeout": 50.0,
 				"do": func() -> void:
 					# The fire has burnt low: someone sees to it.
 					var fire: Variant = map.get("fire")
@@ -158,19 +161,19 @@ func _act_one() -> Dictionary:
 				"until": func() -> bool:
 					var fire: Variant = map.get("fire")
 					return fire == null or not is_instance_valid(fire) or float(fire.fuel) > FIRE_FED},
-			{"name": &"story", "shot": _shot(&"two", ["@gathering:story"]), "min": 15.0, "enough": 45.0, "timeout": 70.0,
+			{"name": &"story", "scene": _scene(&"observe", ["@gathering:story"]), "min": 15.0, "enough": 45.0, "timeout": 70.0,
 				"do": func() -> void:
 					_mark_talk()
 					_gatherings().request(&"story"),
 				"until": func() -> bool: return _played_since("story_") and not _talking_in("story_")},
-			{"name": &"watch_change", "shot": _shot(&"two", ["Jory", "Hendrik"]), "min": 6.0, "timeout": 60.0,
+			{"name": &"watch_change", "scene": _scene(&"observe", ["Jory", "Hendrik"]), "min": 6.0, "timeout": 60.0,
 				"do": func() -> void: _gatherings().request(&"watch_change", ["Jory", "Hendrik"]),
 				"until": func() -> bool:
 					var jory := _man("Jory")
 					var rota: Variant = map.get("rota")
 					return jory != null and rota != null and rota.duty_of(jory) == &"postern" and _flat(jory.global_position, map.marks["postern_post"]) < 1.0},
-			_look(&"wall", 8.0, &"track", ["Wat"]),
-			_look(&"lookout", 7.0, &"close", ["Aldous"]),
+			_look(&"wall", 8.0, &"observe", ["Wat"]),
+			_look(&"lookout", 7.0, &"observe", ["Aldous"]),
 		],
 	}
 
@@ -271,15 +274,15 @@ func _act_two() -> Dictionary:
 			i.exposure_scale = SNEAK_EXPOSURE
 			i.crouched = true,
 		"beats": [
-			{"name": &"drop_in", "shot": _shot(&"track", ["intruder"]), "timeout": 25.0,
+			{"name": &"drop_in", "scene": _scene(&"observe", ["intruder"]), "timeout": 25.0,
 				"do": func() -> void: _verb(&"go_to", [map.marks["alley_wait"], &"sneak"]),
 				"until": func() -> bool: return _brain() != null and _brain().done()},
-			{"name": &"his_moment", "shot": _shot(&"two", ["intruder", "Wat"]), "min": 1.0, "timeout": 30.0,
+			{"name": &"his_moment", "scene": _scene(&"observe", ["intruder", "Wat"]), "min": 1.0, "timeout": 30.0,
 				"until": _his_moment},
-			{"name": &"the_knife", "shot": _shot(&"track", ["intruder", "Jory"]), "timeout": 20.0,
+			{"name": &"the_knife", "scene": _scene(&"drama", ["intruder", "Jory"], {"kind": &"track", "seconds": 4.0}), "timeout": 20.0,
 				"do": func() -> void: _verb(&"backstab", [_man("Jory")]),
 				"until": func() -> bool: return _dead("Jory")},
-			{"name": &"the_witness", "shot": _shot(&"close", ["Ned"]), "min": OVER_THE_BODY, "timeout": 12.0,
+			{"name": &"the_witness", "scene": _scene(&"drama", ["Ned"]), "min": OVER_THE_BODY, "timeout": 12.0,
 				"do": func() -> void:
 					var i := _intruder()
 					if i != null:
@@ -288,7 +291,7 @@ func _act_two() -> Dictionary:
 					_verb(&"face", [_man_position("Ned")]),
 				"until": func() -> bool: return _state("Ned") >= SEARCHING or _has_said("Ned", "Murder")},
 			# His brother knew the voice of that cry.
-			{"name": &"grief", "shot": _shot(&"close", ["Osric"]), "min": 3.0, "timeout": 20.0,
+			{"name": &"grief", "scene": _scene(&"drama", ["Osric"]), "min": 3.0, "timeout": 20.0,
 				"until": func() -> bool: return _has_said("Osric", "Jory") or _man("Osric") == null},
 		],
 	}
@@ -332,17 +335,17 @@ func _act_three() -> Dictionary:
 				ned.last_known_position = i.global_position
 				ned.has_last_known = true,
 		"beats": [
-			{"name": &"the_cry", "shot": _shot(&"reveal", ["Ned"]), "timeout": 20.0,
+			{"name": &"the_cry", "scene": _scene(&"drama", ["Ned"]), "timeout": 20.0,
 				"do": func() -> void:
 					var i := _intruder()
 					if i != null:
 						i.exposure_scale = 1.0
 					_verb(&"go_to", [map.marks["hide"], &"run"]),
 				"until": func() -> bool: return _out_of_rest(["Mirelle", "Osric", "Piers", "Brand", "Tam"]) and (_brain() == null or _brain().done())},
-			{"name": &"lost_him", "shot": _shot(&"track", ["intruder"]), "timeout": 20.0,
+			{"name": &"lost_him", "scene": _scene(&"drama", ["intruder"]), "timeout": 20.0,
 				"do": func() -> void: _verb(&"hide_at", [map.marks["hide"]]),
 				"until": _lost_him},
-			{"name": &"the_hunt", "shot": _shot(&"wide", []), "min": 4.0, "timeout": 30.0,
+			{"name": &"the_hunt", "scene": _scene(&"drama", ["@hunt"]), "min": 4.0, "timeout": 30.0,
 				"until": func() -> bool: return _searching() >= 2 and _lanterns() >= 1},
 		],
 	}
@@ -357,31 +360,31 @@ func _act_four() -> Dictionary:
 		"title": "IV. Steel",
 		"stage": _stage_fight.bind(false),
 		"beats": [
-			{"name": &"found", "shot": _shot(&"two", ["intruder", "Osric"]), "timeout": 25.0,
+			{"name": &"found", "scene": _scene(&"drama", ["intruder", "Osric"]), "timeout": 25.0,
 				"do": func() -> void:
 					var i := _intruder()
 					if i != null:
 						i.exposure_scale = 1.0
 					_verb(&"go_to", [map.marks["found"], &"walk"]),
 				"until": func() -> bool: return _fighting() >= 2},
-			{"name": &"trade", "shot": _shot(&"two", ["intruder", "Osric"]), "min": 8.0, "enough": TRADE_ENOUGH, "timeout": 30.0,
+			{"name": &"trade", "scene": _scene(&"drama", ["intruder", "Osric"]), "min": 8.0, "enough": TRADE_ENOUGH, "timeout": 30.0,
 				"do": func() -> void: _verb(&"fight", [&"trade"]),
 				"until": func() -> bool: return _flankers() >= FLANKERS},
-			{"name": &"turtle", "shot": _shot(&"two", ["intruder", "Brand"]), "timeout": 25.0,
+			{"name": &"turtle", "scene": _scene(&"drama", ["intruder", "Brand"]), "timeout": 25.0,
 				"do": func() -> void: _verb(&"fight", [&"turtle"]),
 				"until": _breaking},
 			# Whoever stands in front of him: his blows turned aside and
 			# answered, until one is cut down (thrown open and given the
 			# deathblow, or felled by a riposte).
-			{"name": &"parry", "shot": _shot(&"two", ["intruder", "nearest"]), "timeout": 60.0,
+			{"name": &"parry", "scene": _scene(&"drama", ["intruder", "nearest"]), "timeout": 60.0,
 				"do": func() -> void:
 					_parry_mark = _deathblows + _riposte_kills
 					_verb(&"fight", [&"parry"]),
 				"until": func() -> bool: return _deathblows + _riposte_kills > _parry_mark},
-			{"name": &"focus", "shot": _shot(&"two", ["intruder", "Mirelle"]), "timeout": 60.0,
+			{"name": &"focus", "scene": _scene(&"drama", ["intruder", "Mirelle"]), "timeout": 60.0,
 				"do": func() -> void: _verb(&"fight", [&"focus", _man("Mirelle")]),
 				"until": func() -> bool: return _dead("Mirelle")},
-			{"name": &"press", "shot": _shot(&"wide", []), "timeout": 40.0,
+			{"name": &"press", "scene": _scene(&"drama", ["intruder", "@hunt"]), "timeout": 40.0,
 				"do": func() -> void: _verb(&"fight", [&"press"]),
 				"until": func() -> bool: return _pleader() != null},
 		],
@@ -453,28 +456,28 @@ func _ending_beats(ending: StringName) -> Array:
 	match ending:
 		&"overwhelmed":
 			return [
-				{"name": &"overwhelmed", "shot": _shot(&"two", ["intruder"]), "timeout": 75.0,
+				{"name": &"overwhelmed", "scene": _scene(&"drama", ["intruder", "@hunt"]), "timeout": 75.0,
 					"do": func() -> void:
 						var i := _intruder()
 						if i != null:
 							i.fall()
 						_verb(&"fight", [&"trade"]),
 					"until": func() -> bool: return _intruder() == null},
-				_look(&"silence", 5.0, &"wide", []),
+				_look(&"silence", 5.0, &"observe", ["@hunt"]),
 			]
 		&"victor":
 			return [
-				{"name": &"break_them", "shot": _shot(&"wide", []), "timeout": 40.0,
+				{"name": &"break_them", "scene": _scene(&"drama", ["intruder", "@hunt"]), "timeout": 40.0,
 					"do": func() -> void: _verb(&"fight", [&"press"]),
 					"until": func() -> bool: return _pleader() != null},
-				{"name": &"spare", "shot": _shot(&"two", ["intruder"]), "timeout": 40.0,
+				{"name": &"spare", "scene": _scene(&"drama", ["intruder", "nearest"]), "timeout": 40.0,
 					"do": func() -> void:
 						_spared = _pleader()
 						_spared_at = _spared.global_position if _spared != null else Vector3.ZERO
 						_verb(&"fight", [&"spare"]),
 					# (Nobody begging, nobody to spare: on to his walk out.)
 					"until": func() -> bool: return _spared == null or _spared_ran()},
-				{"name": &"walk_out", "shot": _shot(&"track", ["intruder"]), "timeout": 30.0,
+				{"name": &"walk_out", "scene": _scene(&"observe", ["intruder"]), "timeout": 30.0,
 					"do": func() -> void: _verb(&"go_to", [map.marks["gate"], &"walk"]),
 					"until": func() -> bool: return _brain() == null or _brain().done()},
 			]
@@ -483,10 +486,10 @@ func _ending_beats(ending: StringName) -> Array:
 	# roofs and into the canal.
 	var route: Array[Vector3] = [map.marks["east_stairs"], map.marks["walk_east"], map.marks["over_wall"], map.marks["roofs"], map.marks["bank"], map.marks["canal"]]
 	return [
-		{"name": &"break_off", "shot": _shot(&"track", ["intruder"]), "timeout": 75.0,
+		{"name": &"break_off", "scene": _scene(&"drama", ["intruder", "@hunt"]), "timeout": 75.0,
 			"do": func() -> void: _verb(&"flee_by", [route]),
 			"until": _escaped},
-		_look(&"gone", 5.0, &"wide", []),
+		_look(&"gone", 5.0, &"observe", ["@hunt"]),
 	]
 
 
@@ -558,24 +561,35 @@ func _lost_him() -> bool:
 # Beats, shots, and what is true
 # ---------------------------------------------------------------------------
 
-## A beat that only looks: `length` s on its shot.
-func _look(beat_name: StringName, length: float, type: StringName, names: Array) -> Dictionary:
-	return {"name": beat_name, "min": length, "shot": _shot(type, names)}
+## A beat that only looks: `length` s of its scene.
+func _look(beat_name: StringName, length: float, mode: StringName, names: Array, pin := {}) -> Dictionary:
+	return {"name": beat_name, "min": length, "scene": _scene(mode, names, pin)}
 
 
-## A shot of `names` (cast names, or "intruder"), found when the shot is
-## taken (the intruder is made in Act II).
-func _shot(type: StringName, names: Array) -> Dictionary:
-	return {"type": type, "subjects": names.map(func(n): return n)}
+## A scene for the camera: watched (`mode` "observe" or "drama") are the men
+## `names` names (cast names, "intruder", "@talk"..., found as the camera
+## asks: the intruder is made in Act II); `pin`, a shot held first ({kind,
+## seconds}, on the same men).
+func _scene(mode: StringName, names: Array, pin := {}) -> Dictionary:
+	var scene := {"mode": mode, "subjects": names.duplicate()}
+
+	if not pin.is_empty():
+		scene["pin"] = pin.duplicate()
+
+	return scene
 
 
-## The men a shot names, as nodes (ShowCamera asks through this).
-func subjects(shot: Dictionary) -> Array:
+## The men a scene names, as nodes (ShowCamera asks through this).
+func subjects(scene: Dictionary) -> Array:
 	var found := []
 
-	for name in shot.get("subjects", []):
+	for name in scene.get("subjects", []):
 		if String(name) == "@talk":
 			found.append_array(_talkers())
+			continue
+
+		if String(name) == "@hunt":
+			found.append_array(_hunters())
 			continue
 
 		if String(name).begins_with("@gathering:"):
@@ -588,6 +602,25 @@ func subjects(shot: Dictionary) -> Array:
 			found.append(node)
 
 	return found
+
+
+## The men searching or fighting (the nearest few to the intruder first, if
+## he is about); all of the cast standing if none are.
+func _hunters() -> Array:
+	var men := []
+
+	for name in map.cast:
+		var man := _man(name)
+
+		if man != null and int(man.state) >= SEARCHING:
+			men.append(man)
+
+	var intruder := _intruder()
+
+	if intruder != null:
+		men.sort_custom(func(a, b): return a.global_position.distance_to(intruder.global_position) < b.global_position.distance_to(intruder.global_position))
+
+	return men.slice(0, 4) if not men.is_empty() else map.cast.keys().map(func(n): return _man(n)).filter(func(m): return m != null).slice(0, 4)
 
 
 ## The men of the latest conversation going on (not a call in a fight); the

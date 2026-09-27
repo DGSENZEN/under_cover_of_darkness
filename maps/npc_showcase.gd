@@ -172,7 +172,7 @@ func _ready() -> void:
 		add_child(camera)
 		camera.setup(self, story)
 		camera.make_current()
-		director.beat_started.connect(func(_beat: StringName, shot: Dictionary) -> void: camera.want(shot))
+		director.beat_started.connect(func(_beat: StringName, scene: Dictionary) -> void: camera.want(scene))
 
 		var overview := get_node_or_null("Overview")
 
@@ -217,6 +217,7 @@ func build() -> void:
 	_outside()
 	_stations_and_props()
 	_marks()
+	_vantages()
 	_lights()
 	_baker = NavigationRegion3D.new()
 	_baker.set_script(NavBakerScript)
@@ -701,6 +702,19 @@ func _overview() -> void:
 	camera.global_position = Vector3(16, 24, 26)
 	camera.look_at(Vector3(-1, 0, -2), Vector3.UP)
 	camera.make_current()
+
+
+## Places the camera may watch from, half hidden (CineVantage): behind the
+## woodpile, the wall-walk, by the gate, the tower's top, the shed's mouth,
+## behind the store's crates, the mouth of the alley.
+func _vantages() -> void:
+	for at in [Vector3(-15.5, 1.5, 13.8), Vector3(-12.0, WALK_HEIGHT + 1.6, -14.5), Vector3(9.0, WALK_HEIGHT + 1.6, -14.5),
+			Vector3(2.8, 2.2, 14.8), Vector3(17.3, TOWER_HEIGHT + 1.6, -12.3), Vector3(-15.8, 1.6, -3.5),
+			Vector3(11.5, 1.3, 5.5), Vector3(19.8, 1.6, 6.0)]:
+		var mark := Marker3D.new()
+		add_child(mark)
+		mark.global_position = at
+		mark.add_to_group(&"cine_vantage")
 
 
 ## The frame rate over `seconds` of the yard at rest, then quit.

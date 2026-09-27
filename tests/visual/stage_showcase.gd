@@ -76,7 +76,7 @@ func _night(act: int, ending: StringName) -> void:
 	add_child(map)
 	await map.ready_to_show
 	var pending := []
-	map.director.beat_started.connect(func(beat: StringName, _shot: Dictionary) -> void:
+	map.director.beat_started.connect(func(beat: StringName, _scene: Dictionary) -> void:
 		pending.append([map.director.act_index, beat, 0.0]))
 	var ended := [false]
 	map.director.show_ended.connect(func() -> void: ended[0] = true)

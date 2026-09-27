@@ -5,15 +5,17 @@ extends Camera3D
 ##   FOLLOW    a man clicked on (or Tab through the cast): it orbits him, the
 ##             scroll wheel for how far off, the right mouse button to go
 ##             round him.
-##   DIRECTOR  each beat of the night asks for a shot (ShowDirector's
-##             beat_started) and it glides to it, or cuts when that is too far
-##             to glide. With nothing asked, it frames whoever last changed his
-##             mind about something.
+##   DIRECTOR  the night filmed by the Cinema editor (scripts/Cinema): each
+##             beat hands it a scene (ShowNight: whom to watch, observed or
+##             dramatic) and it chooses and cuts the shots itself, told what
+##             happens by the men.
 ## A fly key or looking with the mouse takes it from the director; C gives it
 ## back. It moves on real time (TimeFx.real_time): paused or slowed, you can
 ## still fly round the moment.
 
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
+const CineEditorScript := preload("res://scripts/Cinema/CineEditor.gd")
+const CineShot := preload("res://scripts/Cinema/CineShot.gd")
 
 ## Following someone (for the overlay's name card), or nobody.
 signal following(man: Node3D)
@@ -31,57 +33,32 @@ const ORBIT := Vector2(2.0, 20.0)
 const ORBIT_HEIGHT := 1.7
 ## A followed man gone: his last place held this long, then the director.
 const LOST_HOLD := 2.0
-## Gliding: the half-life of the gap to the shot (s), and of where it looks
-## (quicker: the subject stays in frame); further than this and it cuts.
+## Following: the half-life of the gap to its place (s), and of where it
+## looks (quicker: he stays in frame).
 const GLIDE := 0.6
 const GLIDE_LOOK := 0.25
-## A close shot keeps the side it began on, turning with its man only this
-## slowly (half-life, s), not with every turn of his head.
-const CLOSE_TURN := 3.0
-const CUT_BEYOND := 25.0
-## The shots: the crane's distance, height and drift; a close shot's distance;
-## a tracking shot's place behind and above; a reveal's pull-back time.
-const CRANE := Vector3(30.0, 18.0, 0.03)
-const CLOSE := 1.6
-const TRACK := Vector2(4.0, 4.5)
-const REVEAL := 5.0
-## The yard's middle, for the crane.
+## Where it starts, over the yard, before the first scene.
 const YARD := Vector3(0, 0.5, -1.0)
-## A two-shot of men far apart: no further off than this, higher the more
-## they are spread.
-const TWO_FAR := 14.0
-const TWO_RISE := 0.5
-## Where a man's head is, by what he is doing (lying, kneeling), over his
-## feet (times his size).
-const HEAD_LYING := 0.35
-const HEAD_KNEELING := 0.95
-const HEAD_STANDING := 1.6
-## A wall between the camera and what it frames: it rises over it by these
-## steps (m), or else comes in to just short of it.
-const CLEAR_STEPS := [1.5, 3.0, 5.0, 8.0, 12.0]
-## The last resort: from above, a little to the south.
-const OVERHEAD := Vector3(0.0, 14.0, 3.0)
-## With nothing asked, a man whose state changed this recently is framed.
-const RECENT := 10.0
+const START := Vector3(18.0, 18.0, 24.0)
 
-var mode := Mode.DIRECTOR
+## Who has it: flown, following a man, or the director (who is held while
+## the others have it).
+var mode := Mode.DIRECTOR:
+	set(value):
+		mode = value
+
+		if _editor != null:
+			_editor.hold(value != Mode.DIRECTOR)
 var map: Node3D = null
 var story: RefCounted = null
 
+var _editor: Node = null
 var _speed := 6.0
 var _yaw := 0.0
 var _pitch := -0.5
 var _looking := false
-var _clock := 0.0
 var _last := -1.0
-## The director's shot and when it began; the men it names.
-var _shot: Dictionary = {}
-var _shot_at := 0.0
-var _subjects: Array = []
-## Where it looks now, and where the shot wants it (position, look-at).
 var _look_at := YARD
-var _goal_position := Vector3.ZERO
-var _goal_look := YARD
 ## Following: whom, how far, round him; where he last was, and since when gone.
 var _followed: Node3D = null
 var _orbit := 5.0
@@ -90,12 +67,6 @@ var _orbit_pitch := -0.35
 var _last_seen := Vector3.ZERO
 var _gone_for := -1.0
 var _follow_index := -1
-## The way a close shot looks at its man from (unset: INF).
-var _close_from := Vector3.INF
-var _dt := 0.0
-## The last man to change his mind about something, and when.
-var _recent: Node3D = null
-var _recent_at := -100.0
 
 
 func _init() -> void:
@@ -111,32 +82,45 @@ func setup(p_map: Node3D, p_story: RefCounted) -> void:
 	map = p_map
 	story = p_story
 
-	if map != null:
-		for name in map.cast:
-			var man: Node = map.cast[name]
-			man.alert_changed.connect(_on_alert_changed.bind(man))
-
 
 func _ready() -> void:
-	global_position = YARD + Vector3(CRANE.x * 0.6, CRANE.y, CRANE.x * 0.8)
+	global_position = START
 	look_at(YARD, Vector3.UP)
 	_yaw = rotation.y
 	_pitch = rotation.x
+	_editor = CineEditorScript.new()
+	add_child(_editor)
+	_editor.take_over(self)
+	_editor.hold(mode != Mode.DIRECTOR)
 
 
-## The director's shot for the beat: {"type", "subjects"} (subjects cast
-## names, "intruder", or men).
-func want(shot: Dictionary) -> void:
-	_shot = shot
-	_shot_at = _clock
-	_subjects = _resolve(shot)
-	_close_from = Vector3.INF
+## The beat's scene for the director: {mode, subjects, pin, letterbox}, its
+## subjects cast names, "intruder", "@talk"... (found through the story, a
+## second at a time) or men.
+func want(intent: Dictionary) -> void:
+	if _editor == null:
+		return
 
-	if mode == Mode.DIRECTOR:
-		_aim(0.0)
+	var scene := intent.duplicate(true)
+	scene["subjects"] = _subjects_of(intent.get("subjects", []))
+	var pin: Dictionary = intent.get("pin", {})
 
-		if global_position.distance_to(_goal_position) > CUT_BEYOND:
-			_cut()
+	if not pin.is_empty():
+		var pinned := pin.duplicate()
+		pinned["subjects"] = _subjects_of(pin.get("subjects", intent.get("subjects", [])))
+		scene["pin"] = pinned
+
+	_editor.scene(scene)
+
+
+## The director (for the overlay, the stills and the checks).
+func cinema_editor() -> Node:
+	return _editor
+
+
+## The director's screen (the letterbox: the overlay puts subtitles in it).
+func cinema_screen() -> CanvasLayer:
+	return _editor.screen() if _editor != null else null
 
 
 func follow(man: Node3D) -> void:
@@ -145,6 +129,7 @@ func follow(man: Node3D) -> void:
 
 	_followed = man
 	_gone_for = -1.0
+	_look_at = global_position - global_basis.z * 10.0
 	mode = Mode.FOLLOW
 	following.emit(man)
 
@@ -165,11 +150,17 @@ func next_follow() -> void:
 			return
 
 
-## What it frames now: the followed man, the shot's subjects, or where it
+## What it frames now: the followed man, the director's man, or where it
 ## looks.
 func focus_point() -> Vector3:
 	if mode == Mode.FOLLOW:
 		return _last_seen if _followed == null or not is_instance_valid(_followed) else _followed.global_position
+
+	if mode == Mode.DIRECTOR and _editor != null:
+		var on: Array = (_editor.current().get("subjects", []) as Array).filter(func(m): return m != null and is_instance_valid(m))
+
+		if not on.is_empty():
+			return CineShot.head_of(on[0])
 
 	return _look_at
 
@@ -263,8 +254,6 @@ func _process(_delta: float) -> void:
 	var now := TimeFx.real_time()
 	var dt := clampf(now - _last, 0.0, 0.1) if _last >= 0.0 else 0.0
 	_last = now
-	_clock += dt
-
 	var wish := _fly_input()
 
 	if wish != Vector3.ZERO and mode != Mode.FREE:
@@ -275,8 +264,6 @@ func _process(_delta: float) -> void:
 			_fly(wish, dt)
 		Mode.FOLLOW:
 			_follow(dt)
-		Mode.DIRECTOR:
-			_direct(dt)
 
 
 func _fly(wish: Vector3, dt: float) -> void:
@@ -307,176 +294,6 @@ func _follow(dt: float) -> void:
 	_glide(target + offset, target, dt)
 
 
-func _direct(dt: float) -> void:
-	_aim(dt)
-
-	# A wall across the way there: a cut, not a glide through it.
-	if global_position.distance_to(_goal_position) > 1.0 and is_inside_tree() and not _ray(get_world_3d().direct_space_state, global_position, _goal_position).is_empty():
-		_cut()
-		return
-
-	_glide(_goal_position, _goal_look, dt)
-
-
-## Where the shot wants the camera now (_goal_position, _goal_look).
-func _aim(_dt: float) -> void:
-	self._dt = _dt
-	var type: StringName = _shot.get("type", &"")
-	var men := _subjects.filter(func(m): return m != null and is_instance_valid(m) and not (m as Node3D)._knocked_out)
-
-	# Nothing asked, or nobody left in it: whoever last changed his mind.
-	if men.is_empty() and type != &"wide":
-		if _recent != null and is_instance_valid(_recent) and _clock - _recent_at < RECENT:
-			men = [_recent]
-			type = &"two"
-		else:
-			type = &"wide"
-
-	match type:
-		&"close":
-			_frame_close(men[0], _dt)
-		&"track":
-			_frame_track(men)
-		&"reveal":
-			var t := clampf((_clock - _shot_at) / REVEAL, 0.0, 1.0)
-
-			if t < 0.25:
-				_frame_close(men[0], _dt)
-			else:
-				var close_position := _goal_position
-				var close_look := _goal_look
-				_frame_wide()
-				_goal_position = close_position.lerp(_goal_position, smoothstep(0.25, 1.0, t))
-				_goal_look = close_look.lerp(_goal_look, smoothstep(0.25, 1.0, t))
-		&"two":
-			_frame_two(men)
-		_:
-			_frame_wide()
-
-	# Nothing solid between it and what it frames.
-	_goal_position = _clear_view(_goal_look, _goal_position)
-
-
-func _frame_wide() -> void:
-	var yaw := 0.65 + _clock * CRANE.z
-	_goal_position = YARD + Vector3(sin(yaw) * CRANE.x, CRANE.y, cos(yaw) * CRANE.x)
-	_goal_look = YARD
-
-
-func _frame_close(man: Node3D, dt := 0.0) -> void:
-	var head := man.global_position + Vector3.UP * _head_height(man)
-	var ahead := -man.global_basis.z
-	ahead.y = 0.0
-	ahead = ahead.normalized() if ahead.length() > 0.01 else Vector3.FORWARD
-
-	# From the side it began on, turning only slowly with him.
-	if _close_from == Vector3.INF:
-		_close_from = ahead
-	else:
-		_close_from = _close_from.slerp(ahead, 1.0 - pow(0.5, dt / CLOSE_TURN) if dt > 0.0 else 0.0).normalized()
-
-	var side := Vector3.UP.cross(_close_from).normalized()
-	_goal_position = head + _close_from * CLOSE + side * 0.35 + Vector3.UP * 0.1
-	_goal_look = head
-
-
-func _frame_track(men: Array) -> void:
-	var man: Node3D = men[0]
-	var going: Vector3 = man.velocity if man.get("velocity") is Vector3 else Vector3.ZERO
-	going.y = 0.0
-
-	if going.length() < 0.5:
-		going = -man.global_basis.z
-		going.y = 0.0
-
-	going = going.normalized() if going.length() > 0.01 else Vector3.FORWARD
-	var at := _centre(men)
-	_goal_position = at - going * TRACK.x + Vector3.UP * TRACK.y
-	_goal_look = at + going * 2.0 + Vector3.UP * 0.6
-
-
-func _frame_two(men: Array) -> void:
-	var at := _centre(men)
-	var spread := 0.0
-
-	for a in men:
-		for b in men:
-			spread = maxf(spread, (a as Node3D).global_position.distance_to((b as Node3D).global_position))
-
-	var across := Vector3.RIGHT
-
-	if men.size() >= 2:
-		var line: Vector3 = (men[1] as Node3D).global_position - (men[0] as Node3D).global_position
-		line.y = 0.0
-
-		if line.length() > 0.05:
-			across = Vector3.UP.cross(line.normalized())
-
-	# The side of the pair the camera is on already (no flip across them).
-	if across.dot(global_position - at) < 0.0:
-		across = -across
-
-	_goal_position = at + across * minf(2.2 * spread + 3.0, TWO_FAR) + Vector3.UP * (1.2 + spread * TWO_RISE)
-	_goal_look = at
-
-
-func _centre(men: Array) -> Vector3:
-	var sum := Vector3.ZERO
-
-	for m in men:
-		sum += (m as Node3D).global_position
-
-	return sum / float(men.size()) + Vector3.UP * 1.3
-
-
-func _head_height(man: Node3D) -> float:
-	var doing: StringName = man.activity() if man.has_method("activity") else &""
-
-	if doing in [&"sleep", &"lie_down", &"wake"]:
-		return HEAD_LYING
-
-	if doing in [&"kneel", &"plead_kneel", &"rise_knees", &"rummage", &"sit", &"sit_talk", &"sit_down", &"sneak"]:
-		return HEAD_KNEELING * _size(man)
-
-	return HEAD_STANDING * _size(man)
-
-
-func _size(man: Node3D) -> float:
-	var rig: Variant = man.get("_rig")
-	return float(rig.get("size")) if rig != null and rig.get("size") != null else 1.0
-
-
-## `want`, or, if a wall stands between it and `look`, the lowest of the
-## CLEAR_STEPS over it with a clear view; then the same from the other side
-## of `look`; failing all, straight down on it from high up (the yard has no
-## roofs over it).
-func _clear_view(look: Vector3, want: Vector3) -> Vector3:
-	if not is_inside_tree():
-		return want
-
-	var space := get_world_3d().direct_space_state
-
-	if _ray(space, look, want).is_empty():
-		return want
-
-	var across := look + Vector3(look.x - want.x, want.y - look.y, look.z - want.z)
-
-	for side in [want, across]:
-		for step in CLEAR_STEPS:
-			var higher: Vector3 = side + Vector3.UP * float(step)
-
-			if _ray(space, look, higher).is_empty():
-				return higher
-
-	return look + OVERHEAD
-
-
-func _ray(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3) -> Dictionary:
-	var query := PhysicsRayQueryParameters3D.create(from, to, 1)
-	query.collide_with_areas = false
-	return space.intersect_ray(query)
-
-
 ## Toward `where`, looking at `look`: a glide with a half-life of GLIDE.
 func _glide(where: Vector3, look: Vector3, dt: float) -> void:
 	var k := 1.0 - pow(0.5, dt / GLIDE) if dt > 0.0 else 0.0
@@ -488,24 +305,11 @@ func _glide(where: Vector3, look: Vector3, dt: float) -> void:
 		look_at(_look_at, Vector3.UP)
 
 
-func _cut() -> void:
-	global_position = _goal_position
-	_look_at = _goal_look
-	look_at(_look_at, Vector3.UP)
+## The men `names` names: men as they are, else found through the story when
+## the director asks.
+func _subjects_of(names: Array) -> Variant:
+	if names.all(func(n): return n is Node3D):
+		return names
 
-
-func _resolve(shot: Dictionary) -> Array:
-	var found := []
-
-	for subject in shot.get("subjects", []):
-		if subject is Node3D:
-			found.append(subject)
-		elif story != null and story.has_method("subjects"):
-			found.append_array(story.subjects({"subjects": [subject]}))
-
-	return found
-
-
-func _on_alert_changed(_new_state: int, _old_state: int, man: Node) -> void:
-	_recent = man as Node3D
-	_recent_at = _clock
+	var told := story
+	return func() -> Array: return told.subjects({"subjects": names}) if told != null else []

@@ -13,7 +13,8 @@ extends Node
 ## ending's act is only known then).
 ## A beat: {"name", "do", "until" (true when done), "min" (s at least; alone,
 ## the beat's length), "enough" (s: done by then whatever, not skipped),
-## "timeout" (s: let go, logged), "shot" (for ShowCamera)}.
+## "timeout" (s: let go, logged), "scene" (for ShowCamera: whom to watch, and
+## how)}.
 ##
 ## Keys: 1-5 start from that act, N the next beat, V Act V's ending (E is
 ## the camera's: fly up), R the start again, Space pause, [ ] slow motion
@@ -26,7 +27,7 @@ const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 
 signal act_started(index: int, title: String)
-signal beat_started(beat_name: StringName, shot: Dictionary)
+signal beat_started(beat_name: StringName, scene: Dictionary)
 signal beat_skipped(beat_name: StringName)
 signal show_ended
 ## The ending changed (E), or the show speed ([ ]): for the overlay.
@@ -228,7 +229,7 @@ func _play_act(index: int, act: Dictionary, first: bool) -> void:
 
 func _play_beat(beat: Dictionary) -> void:
 	beat_name = StringName(beat.get("name", &""))
-	beat_started.emit(beat_name, beat.get("shot", {}))
+	beat_started.emit(beat_name, beat.get("scene", {}))
 
 	if beat.has("do"):
 		(beat["do"] as Callable).call()

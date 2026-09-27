@@ -67,6 +67,12 @@ const RESOLVE_EVERY := 1.0
 ## (m/s), this many of them, is a hunt.
 const SHOT := Vector2(2.0, 7.0)
 const AXIAL_EVERY := 0.6
+## An axial cut-in once for a man in a scene, and one in this long (s) at
+## most (a whole garrison stirred is not a dozen cut-ins).
+const AXIAL_REST := 10.0
+## A listener's face after a hard line once in this long (s) at most (a
+## fight is all shouting).
+const REACTION_REST := 6.0
 const FACE_OFF_NEAR := 4.0
 const FACE_OFF_FACING := 45.0
 const FACE_OFF_QUIET := 1.0
@@ -111,12 +117,15 @@ var _rove_next := false
 ## coverage turned through.
 var _pending: Dictionary = {}
 var _axial: Dictionary = {}
+var _axial_at := -INF
+var _axial_men: Array = []
 var _slowed_at := -INF
 var _last_blow := -INF
 var _exchange: Array = []
 var _line_pair: Array = []
 var _line_side := Vector3.ZERO
 var _reaction: Dictionary = {}
+var _reacted_at := -INF
 var _scene_men: Array = []
 var _cycle := 0
 
@@ -163,6 +172,17 @@ func _exit_tree() -> void:
 	CineEvents.remove_listener(self)
 
 
+## Held: the camera is someone else's for now (flown, following a man); the
+## scene is kept and events still heard, and it takes up again as it was.
+func hold(held: bool) -> void:
+	var how := Node.PROCESS_MODE_DISABLED if held else Node.PROCESS_MODE_PAUSABLE
+	process_mode = how
+
+	if _operator != null:
+		_operator.process_mode = Node.PROCESS_MODE_INHERIT
+		_last = -1.0
+
+
 ## A new scene: `intent` {mode "observe"|"drama", subjects (men, or a Callable
 ## giving them), pin {kind, subjects, seconds}, letterbox}. Its first shot at
 ## once.
@@ -178,6 +198,7 @@ func scene(intent: Dictionary) -> void:
 	_interest = {}
 	_pending = {}
 	_axial = {}
+	_axial_men = []
 	_reaction = {}
 	_quiet_since = _clock
 	# Into a scene of other men in drama: a wipe.
@@ -195,8 +216,20 @@ func scene(intent: Dictionary) -> void:
 
 	if not pin.is_empty() and _camera != null:
 		var men := _men_of(pin.get("subjects", _subjects))
-		_pin_until = _clock + float(pin.get("seconds", 5.0))
-		_start(StringName(pin.get("kind", &"medium")), men, &"pin", &"wipe" if wipe else &"cut", {"side": _side_of(_principals())}, float(pin.get("seconds", 5.0)))
+		var seconds := float(pin.get("seconds", 5.0))
+		var kind := StringName(pin.get("kind", &"medium"))
+		var side := _side_of(_principals())
+		_pin_until = _clock + seconds
+
+		# The shot asked for, from whichever side sees; else as near to it as
+		# sees him.
+		if men.is_empty():
+			_start(kind, men, &"pin", &"wipe" if wipe else &"cut", {"side": side}, seconds)
+		else:
+			var across := side if side != Vector3.ZERO else Vector3.UP.cross(CineShot.facing(men[0]))
+			_pick([[kind, men, {"side": across}], [kind, men, {"side": -across}], [&"medium", men.slice(0, 1)], [&"close", men.slice(0, 1)]],
+				&"pin", side, seconds, false, &"wipe" if wipe else &"cut")
+
 		return
 
 	_pin_until = -INF
@@ -204,8 +237,27 @@ func scene(intent: Dictionary) -> void:
 	if _camera != null:
 		if _mode == &"drama":
 			_drama_next(&"scene", &"wipe" if wipe else &"cut")
-		else:
+		elif not _carry_on():
 			_fresh_take(&"scene")
+
+
+## Observing, a new scene whose men the take already sees: the take goes on,
+## its eye drifting to them (Tarkovsky's long take), rather than a cut.
+func _carry_on() -> bool:
+	if _shot.is_empty() or _shot.get("mode") != &"observe" or not (_shot["kind"] in [&"roving", &"observe"]) or _subjects.is_empty():
+		return false
+
+	if _clock - float(_shot["at"]) >= float(_shot.get("planned", TAKE.y)):
+		return false
+
+	var space := _camera.get_world_3d().direct_space_state
+
+	if not CineVantage.sees(space, _camera.global_position, _subjects) or _camera.global_position.distance_to(CineShot.centre_of(_subjects)) > 30.0:
+		return false
+
+	_shot["subjects"] = _subjects.duplicate()
+	_shot["offset"] = Vector3.ZERO
+	return true
 
 
 func mode() -> StringName:
@@ -363,8 +415,15 @@ func _fresh_take(cause: StringName) -> void:
 		_start(kind, men, cause, plan["how"], plan["context"], length)
 		return
 
-	# Nothing fresh to be had: a take from far off all the same.
-	_start(&"observe", men, cause, &"cut", {"from": _high_over(CineShot.centre_of(men))}, length)
+	# Nothing fresh to be had: from wherever they can be seen, all the same.
+	for lens in [&"long", &"medium"]:
+		var from := CineVantage.best(get_tree(), men, lens, Vector3.ZERO, space)
+
+		if from != Vector3.INF:
+			_start(&"observe", men, cause, &"cut", {"from": from}, length)
+			return
+
+	_start(&"overhead", men, cause, &"cut", {}, length)
 
 
 ## Where a take of `kind` comes from: {how, context, position, size}; empty if
@@ -379,7 +438,7 @@ func _observe_plan(kind: StringName, men: Array, space: PhysicsDirectSpaceState3
 			return {}
 
 		var framing := CineShot.frame(&"observe", men, {"from": from, "aspect": _aspect()})
-		var how := _how_to(from)
+		var how := _how_to(from, men)
 		var context := {"from": from}
 
 		if how == &"path":
@@ -412,7 +471,7 @@ func _observe_plan(kind: StringName, men: Array, space: PhysicsDirectSpaceState3
 		if not clear:
 			continue
 
-		var how := _how_to(points[0])
+		var how := _how_to(points[0], men)
 		var path := points
 
 		if how == &"path":
@@ -421,16 +480,18 @@ func _observe_plan(kind: StringName, men: Array, space: PhysicsDirectSpaceState3
 		else:
 			how = &"path"
 
-		return {"how": how, "context": {"path": path, "from": points[0]}, "position": points[0], "size": &"medium", "cut_first": _how_to(points[0]) != &"path"}
+		return {"how": how, "context": {"path": path, "from": points[0]}, "position": points[0], "size": &"medium", "cut_first": path[0] == points[0]}
 
 	return {}
 
 
-## A move there if it is near and the way is clear; else a cut.
-func _how_to(position: Vector3) -> StringName:
+## A move there if it is near, the way is clear, and `men` are seen from
+## where it is now (a move that begins blind is a cut); else a cut.
+func _how_to(position: Vector3, men: Array) -> StringName:
 	var here := _camera.global_position
+	var space := _camera.get_world_3d().direct_space_state
 
-	if here.distance_to(position) <= MOVE_WITHIN and not _operator.blocked(here, position):
+	if here.distance_to(position) <= MOVE_WITHIN and not _operator.blocked(here, position) and CineVantage.sees(space, here, men):
 		return &"path" if _mode == &"observe" else &"glide"
 
 	return &"cut"
@@ -551,15 +612,16 @@ func _drama_step(age: float) -> void:
 	if not _pending.is_empty() and float(_pending["at"]) >= float(_shot["at"]):
 		var breaks_face_off: bool = _shot.get("cause") == &"face_off" and _pending["kind"] == &"blow"
 
-		if _pending["kind"] in [&"death", &"knife", &"alert", &"spotted"] or breaks_face_off or age >= float(_shot.get("planned", SHOT.y)):
+		if _pending["kind"] in [&"death", &"knife", &"alert"] or breaks_face_off or age >= float(_shot.get("planned", SHOT.y)):
 			_on_pending()
 			return
 
-	if not _reaction.is_empty() and _clock >= float(_reaction["at"]):
+	if not _reaction.is_empty() and _clock >= float(_reaction["at"]) and age >= SHOT.x:
 		var listener: Variant = _reaction["man"]
 		_reaction = {}
 
-		if _valid(listener) and _subjects.has(listener):
+		if _valid(listener) and _subjects.has(listener) and _clock - _reacted_at >= REACTION_REST:
+			_reacted_at = _clock
 			_start(&"reaction", [listener], &"reaction", &"cut", {"side": _side_of(_principals())}, randf_range(SHOT.x, SHOT.y))
 			return
 
@@ -602,11 +664,15 @@ func _on_pending() -> void:
 				_drama_next(kind, &"cut")
 		&"alert":
 			var man: Variant = data.get("man")
+			var from := _camera.global_position
 
-			if _valid(man):
-				var from := _camera.global_position
+			if _valid(man) and not _axial_men.has(man) and _clock - _axial_at >= AXIAL_REST and _axial_clear(man, from):
+				_axial_men.append(man)
+				_axial_at = _clock
 				_axial = {"man": man, "step": 0, "next_at": _clock + AXIAL_EVERY, "from": from}
 				_start(&"axial", [man], &"alert", &"cut", {"from": from, "step": 0}, AXIAL_EVERY)
+			elif _valid(man):
+				_pick([[&"medium", [man]], [&"close", [man]]], &"alert", side, length, false)
 			else:
 				_drama_next(kind, &"cut")
 		&"line":
@@ -621,6 +687,19 @@ func _on_pending() -> void:
 				_drama_next(kind, &"cut")
 		_:
 			_drama_next(kind, &"cut")
+
+
+## Whether each of the three steps in on `man` from `from` sees him.
+func _axial_clear(man: Node3D, from: Vector3) -> bool:
+	var space := _camera.get_world_3d().direct_space_state
+
+	for step in 3:
+		var framing := CineShot.frame(&"axial", [man], {"from": from, "step": step, "aspect": _aspect()})
+
+		if not CineVantage.sees(space, framing["position"], [man]):
+			return false
+
+	return true
 
 
 ## The next piece of coverage: the pair from the side of their line (two,
@@ -667,10 +746,12 @@ func _drama_next(cause: StringName, how: StringName) -> void:
 	_pick(turned, cause, side, length, true, how)
 
 
-## The first of `options` ([kind, men, context?]) that is no jump cut (and,
-## if `new_size`, of another size than the shot now), taken; else the first.
+## The first of `options` ([kind, men, context?]) that sees its man and is
+## no jump cut (and, if `new_size`, of another size than the shot now),
+## taken; else the first that sees him; else from wherever he can be seen.
 func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_size: bool, how: StringName = &"cut") -> void:
 	var chosen: Array = []
+	var space := _camera.get_world_3d().direct_space_state
 
 	for option in options:
 		var men: Array = (option[1] as Array).filter(_valid)
@@ -679,9 +760,14 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 			continue
 
 		var context: Dictionary = (option[2] as Dictionary).duplicate() if option.size() > 2 else {}
-		context["side"] = side
+		if not context.has("side"):
+			context["side"] = side
+
 		context["aspect"] = _aspect()
 		var framing := CineShot.frame(option[0], men, context)
+
+		if not CineVantage.sees(space, framing["position"], [men[0]]):
+			continue
 
 		if chosen.is_empty():
 			chosen = [option[0], men, context]
@@ -697,6 +783,14 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 
 	if not chosen.is_empty():
 		_start(chosen[0], chosen[1], cause, how, chosen[2], length)
+		return
+
+	# Nothing near sees him: from wherever he can be seen, on a long lens.
+	var men: Array = (options[0][1] as Array).filter(_valid) if not options.is_empty() else []
+	var from := CineVantage.best(get_tree(), men, &"long", side, space) if not men.is_empty() else Vector3.INF
+
+	if from != Vector3.INF:
+		_start(&"observe", men, cause, how, {"from": from, "side": side}, length)
 	else:
 		_start(&"establishing", [], cause, how, {"from": _high_over(_place), "place": _place}, length)
 
@@ -835,7 +929,7 @@ func _start(kind: StringName, men: Array, cause: StringName, how: StringName, co
 				_operator.show(first, &"cut")
 
 	_operator.show(framing, how)
-	_shot = {"kind": kind, "size": framing["size"], "subjects": men.duplicate(), "cause": cause, "how": how, "at": _clock,
+	_shot = {"kind": kind, "size": framing["size"], "subjects": men.duplicate(), "cause": cause, "how": how, "at": _clock, "mode": _mode,
 		"real_at": TimeFx.real_time(), "framing": framing, "context": ctx, "planned": planned,
 		"offset": (framing["look"] as Vector3) - (framing["subject"] as Vector3)}
 	_history.append(_shot)

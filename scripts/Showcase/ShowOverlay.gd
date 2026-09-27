@@ -2,7 +2,9 @@ extends CanvasLayer
 ## What the viewer of the NPC showcase reads, over the picture:
 ##   subtitles   what the men say (their barks, their gossip), over the
 ##               speaker's head, with his name: only men in view and near, at
-##               most three at once, each fading after a few seconds.
+##               most three at once, each fading after a few seconds. With
+##               the letterbox up (the camera's drama), in the lower bar, as
+##               a film's are.
 ##   marks       over a man whose mind changes, for a moment: "?" suspicious,
 ##               an eye looking (investigating, searching), "!" when he sees
 ##               the intruder; a white flag while he begs.
@@ -195,6 +197,17 @@ func _update_shown() -> void:
 				_shown_marks.append([man, "flag"])
 
 
+## The camera's lower letterbox bar, while it shows (else empty).
+func _band() -> Rect2:
+	var camera: Variant = map.get("camera") if map != null else null
+
+	if camera == null or not is_instance_valid(camera) or not camera.has_method("cinema_screen"):
+		return Rect2()
+
+	var screen: CanvasLayer = camera.cinema_screen()
+	return screen.subtitle_band() if screen != null else Rect2()
+
+
 func _in_view(camera: Camera3D, man: Node3D, above: float) -> bool:
 	if not is_instance_valid(man):
 		return false
@@ -228,6 +241,8 @@ func _draw_canvas() -> void:
 	var font := ThemeDB.fallback_font
 	var size := get_viewport().get_visible_rect().size
 	var stacked := {}
+	var band := _band()
+	var in_band := 0
 
 	for i in range(_said.size() - 1, -1, -1):
 		var entry: Dictionary = _said[i]
@@ -248,6 +263,14 @@ func _draw_canvas() -> void:
 		var ink := WHISPER_INK if delivery == &"whisper" else Color(0.96, 0.92, 0.82)
 		var width := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 		var spot := Vector2(clampf(at.x - width * 0.5, MARGIN, size.x - width - MARGIN), clampf(at.y - row * (SAY_SIZE + 4), MARGIN + font_size, size.y - MARGIN))
+
+		# In the letterbox: centred in the lower bar, the newest lowest.
+		if band.size.y > 0.0:
+			var rows := mini(_shown_subtitles.size(), SAY_MAX)
+			var step := float(SAY_SIZE + 6)
+			var top := band.position.y + (band.size.y - step * float(rows)) * 0.5
+			spot = Vector2((size.x - width) * 0.5, top + step * float(rows - 1 - in_band) + font_size)
+			in_band += 1
 		font.draw_string_outline(_canvas.get_canvas_item(), spot, line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 5, Color(0, 0, 0, 0.85 * alpha))
 		font.draw_string(_canvas.get_canvas_item(), spot, line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(ink.r, ink.g, ink.b, alpha))
 

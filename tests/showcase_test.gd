@@ -19,6 +19,10 @@ const TalkDirector := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
 const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
 const GatheringScript := preload("res://scripts/AISystem/Gathering.gd")
 const NightRotaScript := preload("res://scripts/AISystem/NightRota.gd")
+const CineEvents := preload("res://scripts/Cinema/CineEvents.gd")
+const CineShot := preload("res://scripts/Cinema/CineShot.gd")
+const CineVantage := preload("res://scripts/Cinema/CineVantage.gd")
+const CineScreen := preload("res://scripts/Cinema/CineScreen.gd")
 
 ## Who is at which kind of station at the start of the night.
 const STATIONED := {"Piers": &"sit", "Col": &"eat", "Tam": &"sleep", "Gideon": &"rummage", "Ned": &"carry", "Brand": &"chop"}
@@ -33,6 +37,19 @@ const SHOWS := {
 }
 
 var results: Array[String] = []
+## Every Cinema event over the runs (D39): [kind, outcome or state].
+var _heard: Array = []
+
+
+## Hears the Cinema events for D39.
+class Ears:
+	var into: Array
+
+	func _init(p_into: Array) -> void:
+		into = p_into
+
+	func cine_event(kind: StringName, data: Dictionary) -> void:
+		into.append([kind, data.get("outcome", data.get("state", &""))])
 ## The showcase now loaded (a reload swaps it: _reload).
 var _loaded: Node = null
 
@@ -55,7 +72,10 @@ class TestStory:
 
 
 func _ready() -> void:
+	var ears := Ears.new(_heard)
+	CineEvents.add_listener(ears)
 	await _run()
+	CineEvents.remove_listener(ears)
 	GuardScript.randomize_on = true
 	print("\n==== RESULTS ====")
 	for r in results:
@@ -236,18 +256,19 @@ func _run() -> void:
 	camera.setup(map13, null)
 	camera.make_current()
 
-	# D14 a close shot puts his head in the middle of the frame (a man at
-	# his ease: before D13 sets the yard running)
+	# D14 a pinned close shot puts his head on a third, his eyes high (a man
+	# at his ease: before D13 sets the yard running)
 	var osric: Node3D = map13.cast["Osric"]
-	camera.want({"type": &"close", "subjects": [osric]})
+	camera.want({"mode": &"observe", "subjects": [osric], "pin": {"kind": &"close", "subjects": [osric], "seconds": 30.0}})
 	await _frames(300)
-	var head: Vector3 = osric.global_position + Vector3.UP * 1.6
+	var head: Vector3 = CineShot.head_of(osric)
 	var size := get_viewport().get_visible_rect().size
 	var on_screen := camera.unproject_position(head)
-	var middle: bool = on_screen.x > size.x / 3.0 and on_screen.x < size.x * 2.0 / 3.0 and on_screen.y > size.y / 3.0 and on_screen.y < size.y * 2.0 / 3.0 and not camera.is_position_behind(head)
-	_check("D14 a \"close\" shot on a guard ends with his head in the middle third of the view",
-		middle and camera.global_position.distance_to(head) < 4.0,
-		"head at %s of %s, %.1f m off; camera %s looking at %s, aiming at %s, forward to head %.2f, mode %d, osric moved %s" % [on_screen, size, camera.global_position.distance_to(head), camera.global_position, camera._look_at, camera._goal_look, (-camera.global_basis.z).dot((head - camera.global_position).normalized()), camera.mode, osric.velocity])
+	var on_third: bool = (absf(on_screen.x - size.x / 3.0) < 0.08 * size.x or absf(on_screen.x - size.x * 2.0 / 3.0) < 0.08 * size.x) \
+		and on_screen.y >= 0.2 * size.y and on_screen.y <= 0.45 * size.y and not camera.is_position_behind(head)
+	_check("D14 a pinned close shot on a guard puts his head on a third, his eyes in the upper third",
+		on_third and camera.global_position.distance_to(head) < 4.0,
+		"head at %s of %s, %.1f m off; camera %s, mode %d, osric moved %s" % [on_screen, size, camera.global_position.distance_to(head), camera.global_position, camera.mode, osric.velocity])
 
 	# D13 following a man who dies
 	var col: Node3D = map13.cast["Col"]
@@ -455,6 +476,19 @@ func _run() -> void:
 	_check("D35 in the showcase a man's own ways keep him at his mark: fidgets and the wall behind him, never off to a friend",
 		free4.is_empty() and habits4.keys().all(func(h): return h in [&"fidget", &"lean"]),
 		"free to wander %s, did %s" % [free4, habits4.keys()])
+
+	# D36 Act I is watched, in long takes
+	var shots4: Array = map4.camera.cinema_editor().history()
+	var modes4: Array = shots4.map(func(sh): return sh.get("mode", &"observe"))
+	var total4 := 0.0
+
+	for i in range(shots4.size() - 1):
+		total4 += float(shots4[i + 1]["at"]) - float(shots4[i]["at"])
+
+	var mean4 := total4 / float(maxi(shots4.size() - 1, 1))
+	_check("D36 Act I is watched (observe throughout), its takes 15 s long on average or more",
+		map4.camera.cinema_editor().mode() == &"observe" and not modes4.has(&"drama") and mean4 >= 15.0 and shots4.size() >= 2,
+		"%d shots, mean %.1f s, kinds %s" % [shots4.size(), mean4, shots4.map(func(sh): return sh["kind"])])
 	clock4.queue_free()
 	await _unload(map4)
 
@@ -589,17 +623,84 @@ func _run() -> void:
 	var map9 := await _map(true)
 	var ended9 := [false]
 	var frames9 := [0]
+	var knife_at := [-1.0]
+	var coda_at := [-1.0]
+	var bars9 := []
+	var seen9 := [0, 0]
+	var blind9 := []
+	var editor9: Node = map9.camera.cinema_editor()
+	var checked9 := [0]
 	map9.director.show_ended.connect(func(): ended9[0] = true)
+	map9.director.beat_started.connect(func(beat: StringName, _scene: Dictionary) -> void:
+		if beat == &"the_knife":
+			knife_at[0] = float(editor9._clock)
+		if beat in [&"silence", &"walk_out", &"gone"] and coda_at[0] < 0.0:
+			coda_at[0] = float(editor9._clock))
 	await _until(func():
 		frames9[0] += 1
+		# Each new shot: does the camera see the man it is on?
+		var history: Array = editor9.history()
+		while checked9[0] < history.size() - 1 or (checked9[0] < history.size() and frames9[0] % 2 == 0):
+			var shot: Dictionary = history[checked9[0]]
+			checked9[0] += 1
+			var on: Array = (shot["subjects"] as Array).filter(func(m): return m != null and is_instance_valid(m))
+			if not on.is_empty():
+				seen9[0] += 1
+				var saw: bool = CineVantage.sees(map9.get_world_3d().direct_space_state, map9.camera.global_position, [on[0]])
+				seen9[1] += 1 if saw else 0
+				if not saw:
+					blind9.append([shot["kind"], shot["cause"], shot["how"], String(on[0].get("given_name")), snappedf((on[0] as Node3D).global_position.x, 0.1), snappedf((on[0] as Node3D).global_position.z, 0.1)])
+		if knife_at[0] >= 0.0 and float(editor9._clock) - knife_at[0] > 2.0:
+			bars9.append(editor9.screen().bar_height())
 		return ended9[0], 25200)
 	_check("D9 the whole night from Act I plays to its end in under 7 minutes of game time",
 		ended9[0] and frames9[0] < 25200,
 		"ended %s after %.0f s, beats skipped %s" % [ended9[0], frames9[0] / 60.0, map9.director.log_lines])
+
+	# D37 from the knife on: the letterbox up and the shots short
+	var drama9: Array = editor9.history().filter(func(sh): return float(sh["at"]) >= knife_at[0] and (coda_at[0] < 0.0 or float(sh["at"]) < coda_at[0]))
+	var total9 := 0.0
+
+	for i in range(drama9.size() - 1):
+		total9 += float(drama9[i + 1]["at"]) - float(drama9[i]["at"])
+
+	var mean9 := total9 / float(maxi(drama9.size() - 1, 1))
+	var target9: float = CineScreen.bar_for(get_viewport().get_visible_rect().size)
+	var bars_up: bool = not bars9.is_empty() and bars9.slice(int(90)).all(func(b): return b >= 0.9 * target9)
+	_check("D37 from the knife on the letterbox is up and the shots are short (7 s or less on average)",
+		knife_at[0] >= 0.0 and bars_up and drama9.size() >= 5 and mean9 <= 7.0,
+		"knife at %.1f, %d shots, mean %.1f s, bar %s of %.1f; causes %s" % [knife_at[0], drama9.size(), mean9, bars9.slice(bars9.size() - 1) if not bars9.is_empty() else [], target9, _tally(drama9.map(func(sh): return String(sh["kind"]) + "/" + String(sh["cause"])))])
+
+	# D38 every shot sees the man it is on when it starts (1 in 20 may not)
+	_check("D38 every shot sees the man it is on as it begins (at most 1 in 20 not)",
+		seen9[0] >= 10 and float(seen9[1]) >= 0.95 * float(seen9[0]), "%d of %d shots saw their man; blind %s" % [seen9[1], seen9[0], blind9])
+
+	# D39 the world told the camera everything it needed
+	var kinds39 := {}
+
+	for e in _heard:
+		kinds39[e[0]] = true
+
+	var blows39 := _heard.filter(func(e): return e[0] == &"blow").map(func(e): return e[1])
+	var gathered39 := _heard.filter(func(e): return e[0] == &"gathering").map(func(e): return e[1])
+	var all39: bool = [&"line", &"gathering", &"alert", &"spotted", &"blow", &"death", &"knife"].all(func(k): return kinds39.has(k)) \
+		and blows39.has(&"landed") and (blows39.has(&"blocked") or blows39.has(&"parried")) and gathered39.has(&"started") and gathered39.has(&"ended")
+	_check("D39 over the night the camera heard lines, gatherings begun and ended, alerts, spottings, blows landed and turned, deaths and the knife",
+		all39, "kinds %s, blows %s, gatherings %s" % [kinds39.keys(), blows39.slice(0, 8), gathered39.slice(0, 6)])
 	await _unload(map9)
 	DirectorScript.start_act = 1
 	DirectorScript.ending = &"random"
 	await _other_nights()
+
+
+## How many of each in `items`.
+func _tally(items: Array) -> Dictionary:
+	var counts := {}
+
+	for item in items:
+		counts[item] = int(counts.get(item, 0)) + 1
+
+	return counts
 
 
 ## The director's reload for a test: the showcase freed and loaded afresh
