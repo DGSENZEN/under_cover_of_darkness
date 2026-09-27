@@ -75,6 +75,12 @@ static func ramp(tree: SceneTree, id: StringName, scale: float, ease_in: float, 
 			_apply())
 
 
+## Request `id` over at once (a ramp too).
+static func cancel(id: StringName) -> void:
+	if _requests.erase(id):
+		_apply()
+
+
 ## A short freeze on impact. Heavier blows freeze longer.
 static func hitstop(tree: SceneTree, real_seconds: float, scale := 0.05) -> void:
 	request(tree, &"hitstop", scale, real_seconds)

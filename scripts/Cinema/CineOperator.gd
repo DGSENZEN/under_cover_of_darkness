@@ -112,7 +112,7 @@ func show(framing: Dictionary, how: StringName) -> void:
 
 	match how:
 		&"glide":
-			if _blocked(_base, _goal):
+			if blocked(_base, _goal):
 				_cut()
 		&"path":
 			var points: PackedVector3Array = framing.get("path", PackedVector3Array())
@@ -324,7 +324,7 @@ func _cut() -> void:
 
 
 ## Whether a sphere moved from `from` to `to` meets a wall.
-func _blocked(from: Vector3, to: Vector3) -> bool:
+func blocked(from: Vector3, to: Vector3) -> bool:
 	if not is_inside_tree() or from.distance_to(to) < 0.01:
 		return false
 

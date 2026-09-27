@@ -25,7 +25,7 @@ extends RefCounted
 ##
 ## The context: `aspect` (width over height, 16:9 if not given); `side` (off
 ## the line between men[0] and men[1], toward the camera); `from` (a vantage);
-## `step` (axial); `target` (insert).
+## `step` (axial); `target` (insert); `place` (where to look with nobody).
 
 ## Where a man's head is, by what he is doing, over his feet (times his size).
 const HEAD_LYING := 0.35
@@ -61,7 +61,7 @@ static func frame(kind: StringName, men: Array, context: Dictionary) -> Dictiona
 	var side: Vector3 = context.get("side", Vector3.ZERO)
 	var man: Node3D = men[0] if not men.is_empty() else null
 	var head := head_of(man) if man != null else Vector3.ZERO
-	var centre := centre_of(men)
+	var centre: Vector3 = centre_of(men) if not men.is_empty() else context.get("place", Vector3.ZERO)
 
 	match kind:
 		&"close", &"reaction":

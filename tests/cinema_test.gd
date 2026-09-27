@@ -22,6 +22,7 @@ const CineShot := preload("res://scripts/Cinema/CineShot.gd")
 const CineVantage := preload("res://scripts/Cinema/CineVantage.gd")
 const CineScreen := preload("res://scripts/Cinema/CineScreen.gd")
 const CineOperator := preload("res://scripts/Cinema/CineOperator.gd")
+const CineEditor := preload("res://scripts/Cinema/CineEditor.gd")
 
 const COMBAT := 4
 const SEARCHING := 3
@@ -60,6 +61,7 @@ func _ready() -> void:
 	await _vantages()
 	await _screen()
 	await _operator()
+	await _observing()
 	print("\n==== RESULTS ====")
 
 	for r in results:
@@ -626,6 +628,155 @@ func _operator() -> void:
 	op.queue_free()
 	screen.queue_free()
 	camera.queue_free()
+
+
+# ---------------------------------------------------------------------------
+# E: the editor, observing
+# ---------------------------------------------------------------------------
+
+func _observing() -> void:
+	seed(1932)
+	var camera := Camera3D.new()
+	add_child(camera)
+	var editor: Node = CineEditor.new()
+	add_child(editor)
+	editor.take_over(camera)
+	var shots: Array = []
+	editor.shot_started.connect(func(shot: Dictionary) -> void: shots.append(shot))
+
+	# E1 one man standing, nothing said: long takes, 15 to 45 s each
+	var man := _man(Vector3(700, 0, 0), 0.0)
+	editor.scene({"mode": &"observe", "subjects": [man]})
+	await _real(200.0)
+	var lengths := _lengths(shots)
+	_check("E1 watched, a man standing still gets long takes: three or more, each 15 to 45 s",
+		shots.size() >= 3 and lengths.all(func(l): return l >= 14.9 and l <= 45.1),
+		"%d shots, lengths %s" % [shots.size(), lengths])
+
+	# E2 no cut while a line is being said
+	var other := _man(Vector3(701.5, 0, 0.5), PI)
+	editor.scene({"mode": &"observe", "subjects": [man, other]})
+	await _real(2.0)
+	shots.clear()
+	var during := [0]
+	var speaking_until := [0.0]
+
+	for i in 10:
+		var speaker := man if i % 2 == 0 else other
+		CineEvents.emit(&"line", {"speaker": speaker, "listeners": [other if speaker == man else man], "seconds": 4.0, "delivery": &"", "text": "...", "where": speaker.global_position})
+		speaking_until[0] = TimeFx.real_time() + 4.0
+		var start := shots.size()
+		await _real(4.0)
+		during[0] += shots.size() - start
+		await _real(2.0)
+
+	_check("E2 no cut falls while a line is being said", during[0] == 0, "%d shots began during lines" % during[0])
+
+	# E3 a long talk: the lens narrows as it goes on
+	await _real(5.0)
+	editor.scene({"mode": &"observe", "subjects": [man, other]})
+	await _real(1.0)
+	var shot3: Dictionary = editor.current()
+	var lens_start: float = float(shot3["framing"]["fov"])
+	var talked := TimeFx.real_time()
+
+	while TimeFx.real_time() - talked < 25.0:
+		CineEvents.emit(&"line", {"speaker": man, "listeners": [other], "seconds": 4.0, "delivery": &"", "text": "...", "where": man.global_position})
+		await _real(4.5)
+
+	var lens_end: float = camera.fov
+	_check("E3 over a talk of 25 s the lens narrows to 0.72 of its width or less (the same take throughout)",
+		lens_end <= lens_start * 0.72 and editor.current() == shot3, "%.1f -> %.1f, same take %s" % [lens_start, lens_end, editor.current() == shot3])
+
+	# E4 after the last line, it holds 3 s at least before the next shot
+	var ended := TimeFx.real_time() + 4.0
+	CineEvents.emit(&"line", {"speaker": man, "listeners": [other], "seconds": 4.0, "delivery": &"", "text": "...", "where": man.global_position})
+	shots.clear()
+	await _real(60.0)
+	var began_real: float = float(shots[0]["real_at"]) if not shots.is_empty() else INF
+	_check("E4 after the last line it holds 3 s or more before the next shot", began_real - ended >= 2.95,
+		"next shot %.2f s after the line ended" % (began_real - ended))
+
+	# E5 a long quiet: it drifts to the fire
+	var fire := Node3D.new()
+	add_child(fire)
+	fire.global_position = Vector3(705, 0.5, 3)
+	fire.add_to_group(&"fires")
+	editor.scene({"mode": &"observe", "subjects": [man]})
+	shots.clear()
+	await _real(95.0)
+	var insert5 := shots.filter(func(sh): return sh["kind"] == &"insert")
+	_check("E5 after a long quiet it drifts to the fire (an insert)", not insert5.is_empty(), "shots %s" % [shots.map(func(sh): return sh["kind"])])
+	fire.remove_from_group(&"fires")
+	fire.queue_free()
+
+	# E6 hidden behind a wall, a new shot within a second
+	editor.scene({"mode": &"observe", "subjects": [man]})
+	await _real(3.0)
+	shots.clear()
+	var eye := camera.global_position
+	var head6 := CineShot.head_of(man)
+	var mid := (eye + head6) * 0.5
+	var wall := Props.block(self, mid, Vector3(3.0, 5.0, 3.0))
+	await _real(1.0)
+	var hid6 := shots.filter(func(sh): return sh["cause"] == &"hidden")
+	_check("E6 his head hidden behind a wall: a new shot within a second", not hid6.is_empty(), "shots %s" % [shots.map(func(sh): return sh["cause"])])
+	wall.queue_free()
+	await _frames(2)
+
+	# E7 a pin holds under a flood of lines
+	editor.scene({"mode": &"observe", "subjects": [man, other], "pin": {"kind": &"close", "subjects": [man], "seconds": 10.0}})
+	var kinds7 := {}
+	var pinned_at := TimeFx.real_time()
+
+	while TimeFx.real_time() - pinned_at < 9.5:
+		CineEvents.emit(&"line", {"speaker": other, "listeners": [man], "seconds": 1.0, "delivery": &"shout", "text": "!", "where": other.global_position})
+		await _real(0.5)
+		kinds7[editor.current().get("kind")] = true
+
+	_check("E7 a pinned close shot holds for its 10 s whatever is said", kinds7.keys() == [&"close"], "%s" % [kinds7.keys()])
+
+	# E8 the man freed in the middle of a shot, then nobody: a new shot, then
+	# the place from on high
+	await _real(11.0)
+	editor.scene({"mode": &"observe", "subjects": [man, other]})
+	await _real(3.0)
+	shots.clear()
+	other.queue_free()
+	await _real(2.0)
+	man.queue_free()
+	await _real(3.0)
+	_check("E8 a man freed mid-shot brings a new shot; with nobody left, the place from on high",
+		not shots.is_empty() and editor.current().get("kind") == &"establishing", "shots %s" % [shots.map(func(sh): return [sh["kind"], sh["cause"]])])
+
+	# E19 paused, nothing is cut; unpaused, it goes on
+	var man19 := _man(Vector3(740, 0, 0), 0.0)
+	editor.scene({"mode": &"observe", "subjects": [man19]})
+	await _real(2.0)
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	get_tree().paused = true
+	shots.clear()
+	await _real(50.0)
+	var while_paused := shots.size()
+	get_tree().paused = false
+	await _real(50.0)
+	process_mode = Node.PROCESS_MODE_INHERIT
+	_check("E19 paused, nothing is cut; unpaused, the takes go on", while_paused == 0 and shots.size() >= 1,
+		"%d while paused, %d after" % [while_paused, shots.size()])
+	man19.queue_free()
+	editor.release()
+	editor.queue_free()
+	camera.queue_free()
+
+
+## How long each shot of `shots` ran, all but the last (editor seconds).
+func _lengths(shots: Array) -> Array:
+	var lengths := []
+
+	for i in range(shots.size() - 1):
+		lengths.append(snappedf(float(shots[i + 1]["at"]) - float(shots[i]["at"]), 0.01))
+
+	return lengths
 
 
 ## A framing as CineShot gives one, with its subject's head.
