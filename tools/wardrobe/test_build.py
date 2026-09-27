@@ -696,6 +696,34 @@ def case_brute_arms():
     return ["%d rays out of his bare arms meet no skin first (%s)" % (len(holes), holes[0])] if holes else []
 
 
+def case_brute_neck():
+    """The committed brute's throat and the tops of his shoulders are whole
+    under his mantle's inner rim: rays out of the foot of his neck (3 cm
+    under its joint; round his front, to 60 degrees either side, level, a
+    little down and a little up) meet his skin before his fur or his gut.
+    (Steeper up they leave by his neck, which his head fills; further round
+    they skim his shoulders to his mantle's rim hanging over them.)
+    (Cut away under the roll, the skin left a ragged edge there, and his
+    mantle's unlit underside showed through it as black shards.)"""
+    bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / "brute.blend"))
+    outfit, arm = bpy.data.objects["Outfit"], bpy.data.objects["Armature"]
+    tree = BVHTree.FromPolygons([v.co.copy() for v in outfit.data.vertices], [tuple(p.vertices) for p in outfit.data.polygons])
+    fabric = outfit.data.attributes["wr_fabric"].data
+    centre = arm.data.bones["neck_01"].head_local - Vector((0.0, 0.0, 0.03))
+    holes = []
+
+    for elevation in (-15.0, 0.0, 15.0):
+        for azimuth in range(-60, 61, 15):
+            e, a = math.radians(elevation), math.radians(azimuth)
+            hit = tree.ray_cast(centre, Vector((math.cos(e) * math.sin(a), -math.cos(e) * math.cos(a), math.sin(e))), 0.4)
+
+            if hit[2] is None or fabric[hit[2]].value != 0:
+                holes.append("%d up, %d round" % (elevation, azimuth))
+
+    fresh()
+    return ["%d rays out of his neck meet no skin first (%s)" % (len(holes), holes[:4])] if holes else []
+
+
 def width_at(tree, y, z):
     """How far out to his left a surface stands at (y, z): its outermost
     hit coming in along x (a low-poly head has few vertices near any one
@@ -1047,7 +1075,8 @@ CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, 
          "hood": case_hood, "launcher": case_launcher, "bodies": case_bodies, "male_parts": case_male_parts,
          "types2": case_types2, "skin": case_skin, "brute_arms": case_brute_arms, "foreign_parts": case_foreign_parts,
          "faces": case_faces, "beards_and_tails": case_beards_and_tails,
-         "bare_hat": case_bare_hat, "coif_beards": case_coif_beards}
+         "bare_hat": case_bare_hat, "coif_beards": case_coif_beards,
+         "brute_neck": case_brute_neck}
 
 
 def main():

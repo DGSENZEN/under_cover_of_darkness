@@ -108,6 +108,12 @@ class Kind:
         self.types = {}
         # The base's faces a shell was made from: under that shell, gone.
         self.covered = set()
+        # Garments that leave the body under them (`"hides": False`: they
+        # stand clear of it, and it shows under their rims).
+        self.open_over = set()
+        # The faces of his neck kept up under his head (low_poly_base,
+        # `neck_under`), by their centres.
+        self.neck_faces = set()
         # Trim for the bake to paint on the outfit (bake.trim): pauldrons'.
         self.details = {}
         # Headgear's chains, as the export reads them (each tagged with its
@@ -144,9 +150,15 @@ class Kind:
         # buckle, fittings, fletchings) is not the garment's cloth: undyed.
         if dye is None:
             dye = g.get("dye", False) and fabric is None and colour is None
-        common.set_faces(obj, part, recipes.FABRICS.index(fabric or g["fabric"]), g.get("thickness", 0.004), strip, dye,
-                         colour or g["colour"])
+        # (Its faces' thickness says how far under them the body is hidden:
+        # none under a garment that stands clear.)
+        common.set_faces(obj, part, recipes.FABRICS.index(fabric or g["fabric"]),
+                         g.get("thickness", 0.004) if g.get("hides", True) else 0.0, strip, dye, colour or g["colour"])
         self.types[obj.name] = kind
+
+        if not g.get("hides", True):
+            self.open_over.add(obj.name)
+
         (self.props if whole else self.parts).append(obj)
         self.made.setdefault(g["name"], obj)
         return obj
@@ -213,7 +225,11 @@ def build_kind(recipe, force):
 
 def low_poly_base(kind):
     """His left half, without the head (a part of its own) or the hands if
-    mittens replace them, cut to half the recipe's triangles."""
+    mittens replace them, cut to half the recipe's triangles. With
+    `neck_under` (a bare neck: the brute's), his neck is kept up to its
+    `up_to` height, sunk `tuck` under the head's from its `from` height up:
+    between the teeth of the head's edge his neck shows, not the dark
+    underside of a stub cut at the head's bone weights."""
     base = kind.ref.copy()
     base.data = kind.ref.data.copy()
     base.name = "Base"
@@ -226,10 +242,21 @@ def low_poly_base(kind):
     regions = common.vertex_regions(base)
     bm = bmesh.new()
     bm.from_mesh(base.data)
-    doomed = [face for face in bm.faces if majority([regions[v.index] for v in face.verts]) in dropped]
+    neck = kind.recipe.get("neck_under")
+    kept_neck = [face for face in bm.faces if neck and face.calc_center_median().z < neck["up_to"]
+                 and majority([regions[v.index] for v in face.verts]) == "head"]
+    doomed = [face for face in bm.faces if majority([regions[v.index] for v in face.verts]) in dropped
+              and face not in kept_neck]
+    marked = sorted({v.index for face in kept_neck for v in face.verts})
     bmesh.ops.delete(bm, geom=doomed, context="FACES")
     bm.to_mesh(base.data)
     bm.free()
+
+    # (Its vertices marked through the decimation: the neck kept, and only
+    # it, is sunk, and the garments measure past it.)
+    if marked:
+        base.vertex_groups.new(name="wr_neck").add(marked, 1.0, "REPLACE")
+
     decimate = base.modifiers.new("Decimate", "DECIMATE")
     decimate.ratio = min(1.0, kind.recipe["base_tris"] * 0.5 / max(common.tri_count(base), 1))
     decimate.use_collapse_triangulate = True
@@ -249,8 +276,30 @@ def low_poly_base(kind):
     bmesh.ops.delete(bm, geom=flat, context="FACES")
     bmesh.ops.dissolve_degenerate(bm, dist=1e-5, edges=bm.edges[:])
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+
+    group = base.vertex_groups.get("wr_neck")
+    on_neck = set()
+
+    if group is not None:
+        deform = bm.verts.layers.deform.verify()
+        on_neck = {vertex for vertex in bm.verts if vertex[deform].get(group.index, 0.0) > 0.5}
+
+        # Sunk under the head's neck (along the full body's own surface
+        # normal), easing in over a centimetre from where the head's begins.
+        for vertex in on_neck:
+            ease = smoothstep(neck["from"], neck["from"] + 0.01, vertex.co.z)
+            seam = vertex.co.x == 0.0
+            vertex.co -= kind.normal_at(vertex.co) * neck["tuck"] * ease
+            vertex.co.x = 0.0 if seam else vertex.co.x
+
+    kind.neck_faces = {tuple(round(c, 5) for c in f.calc_center_median()) for f in bm.faces
+                       if all(v in on_neck for v in f.verts)}
     bm.to_mesh(base.data)
     bm.free()
+
+    if group is not None:
+        base.vertex_groups.remove(group)
+
     kind.types[base.name] = "base"
     return base
 
@@ -1102,7 +1151,13 @@ def mantle(kind, g, part):
     rides (no chains: stiff fur)."""
     neck = kind.at(("neck_01", 0.0))
     top = neck.z + g.get("rise", 0.02)
-    tree = common.bvh([kind.base, kind.made[g["over"]]] + [obj for obj in kind.parts if kind.types[obj.name] == "shell"])
+    # (Measured from his body without the neck kept up under his head,
+    # `neck_under`: it sits where it sat on the body cut at his head.)
+    def not_neck(obj, polygon):
+        return obj is not kind.base or tuple(round(c, 5) for c in polygon.center) not in kind.neck_faces
+
+    tree = common.bvh([kind.base, kind.made[g["over"]]] + [obj for obj in kind.parts if kind.types[obj.name] == "shell"],
+                      keep=not_neck)
     front_tilt, side_tilt = g.get("tilt_front", 70.0), g.get("tilt_side", 25.0)
     under, normals = [[], [], []], []
 
@@ -1520,33 +1575,19 @@ BUILDERS = {"shell": shell, "mittens": mittens, "boots": boots, "collar": collar
 def hide_body(kind, garments=None):
     """The body faces a garment hides, gone (spec §6.3 step 4): under every
     part, while he is his left half; or, given `garments` (one-sided pieces:
-    a right pauldron), under those once he is whole."""
+    a right pauldron), under those once he is whole. Within COVERED of a
+    garment; of one standing clear of him (`"hides": False`: the brute's
+    mantle, the body showing under its rim), only where it touches him."""
     base = kind.base
     common.set_faces(base, 0, recipes.FABRICS.index("skin"), 0.0, False, False, SKIN)
     whole = garments is not None
     garments = garments if whole else [obj for obj in kind.parts if kind.types[obj.name] != "base"]
-    trial = [base] + [obj.copy() for obj in garments]
-
-    for copy in trial[1:]:
-        copy.data = copy.data.copy()
-        bpy.context.scene.collection.objects.link(copy)
-
-        # Whole, as he will wear them: a face by his middle may look across
-        # it, under the garment's other half (the mantle over his throat).
-        if not whole and len(copy.data.polygons) > 0:
-            common.mirror(copy)
-
-    common.select_only(trial, active=trial[0])
-    probe = base.copy()
-    probe.data = base.data.copy()
-    bpy.context.scene.collection.objects.link(probe)
-    common.select_only([probe] + trial[1:], active=probe)
-    bpy.ops.object.join()
+    closed = [obj for obj in garments if obj.name not in kind.open_over]
+    opened = [obj for obj in garments if obj.name in kind.open_over]
     # (The shells' covered faces count on his half only: their indices go
     # stale once faces are gone.)
-    hidden = set(common.hidden_faces(probe, reach=COVERED, bare=set(kind.recipe.get("bare", ())))) | \
+    hidden = covered_by(kind, closed, whole, COVERED) | covered_by(kind, opened, whole, None) | \
         (set() if whole else kind.covered)
-    bpy.data.objects.remove(probe)
     bm = bmesh.new()
     bm.from_mesh(base.data)
     bm.faces.ensure_lookup_table()
@@ -1555,6 +1596,34 @@ def hide_body(kind, garments=None):
     bm.to_mesh(base.data)
     bm.free()
     print("wardrobe: %d body faces hidden, %d left" % (len(hidden), len(base.data.polygons)))
+
+
+def covered_by(kind, garments, whole, reach):
+    """The base's faces `garments` cover (common.hidden_faces: within
+    `reach` of them, or with None within their faces' thickness), as he
+    will wear them."""
+    if not garments:
+        return set()
+
+    copies = [obj.copy() for obj in garments]
+
+    for copy in copies:
+        copy.data = copy.data.copy()
+        bpy.context.scene.collection.objects.link(copy)
+
+        # Whole, as he will wear them: a face by his middle may look across
+        # it, under the garment's other half (the mantle over his throat).
+        if not whole and len(copy.data.polygons) > 0:
+            common.mirror(copy)
+
+    probe = kind.base.copy()
+    probe.data = kind.base.data.copy()
+    bpy.context.scene.collection.objects.link(probe)
+    common.select_only([probe] + copies, active=probe)
+    bpy.ops.object.join()
+    hidden = set(common.hidden_faces(probe, reach=reach, bare=set(kind.recipe.get("bare", ()))))
+    bpy.data.objects.remove(probe)
+    return hidden
 
 
 def swap_sides(obj):

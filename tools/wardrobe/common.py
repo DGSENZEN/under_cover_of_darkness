@@ -132,14 +132,16 @@ def dominant_bone(obj, vertex):
     return names[best.group] if best is not None else ""
 
 
-def bvh(objects):
-    """One tree over several objects' faces (all at the origin, unrotated)."""
+def bvh(objects, keep=None):
+    """One tree over several objects' faces (all at the origin, unrotated);
+    only those `keep(obj, polygon)` passes, given."""
     vertices, polygons = [], []
 
     for obj in objects:
         start = len(vertices)
         vertices += [vertex.co.copy() for vertex in obj.data.vertices]
-        polygons += [tuple(start + i for i in polygon.vertices) for polygon in obj.data.polygons]
+        polygons += [tuple(start + i for i in polygon.vertices) for polygon in obj.data.polygons
+                     if keep is None or keep(obj, polygon)]
 
     return BVHTree.FromPolygons(vertices, polygons)
 

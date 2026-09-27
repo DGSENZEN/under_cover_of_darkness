@@ -329,7 +329,15 @@ ARMS_MASTER = {
 BRUTE = {
     "kind": "brute",
     "body": "male",
-    "base_tris": 1400,
+    # (1,400 before his neck was kept: the neck's faces came out of his
+    # shoulders', and big faces touching his mantle left holes there.)
+    "base_tris": 1500,
+    # His bare neck kept up under his head (build.low_poly_base): cut at the
+    # head's bone weights, its dark stub showed between the teeth of the
+    # head's edge (K34).
+    # (Up to just over the head's edge, 1.567 at its highest: higher, it
+    # reached under his jaw, and his beard cut it.)
+    "neck_under": {"up_to": 1.572, "from": 1.515, "tuck": 0.005},
     "bare": ["head", "upper", "lower", "hand"],
     "belt": ("spine_01", 0.0),
     "garments": [
@@ -367,8 +375,12 @@ BRUTE = {
          "panels": {"left": [105, 155], "right": [-155, -105]}},
         {"name": "belt", "type": "belt", "fabric": "leather", "colour": (0.16, 0.11, 0.07), "height": 0.09,
          "buckle": {"fabric": "iron", "colour": IRON, "size": (0.07, 0.012, 0.06)}},
+        # It stands clear of him: the skin under it stays (cut away, its
+        # ragged edge let the roll's unlit underside show as black shards
+        # round his throat).
         {"name": "mantle", "type": "mantle", "fabric": "fur", "colour": (0.30, 0.24, 0.18), "over": "jerkin",
-         "reach": 0.16, "thickness": 0.05, "depth_front": 0.12, "depth_back": 0.18, "clear": 0.02, "dip": 0.08},
+         "reach": 0.16, "thickness": 0.05, "depth_front": 0.12, "depth_back": 0.18, "clear": 0.02, "dip": 0.08,
+         "hides": False},
         {"name": "pauldron", "type": "pauldron", "fabric": "iron", "colour": (0.28, 0.27, 0.27), "side": "right",
          "over": "jerkin", "reach": 0.14, "drop": 0.12, "rings": 3, "clearance": 0.012, "roll": 0.01},
         {"name": "pouch", "type": "prop", "shape": "pouch", "fabric": "leather", "colour": BELT_BROWN,

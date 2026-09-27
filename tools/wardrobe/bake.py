@@ -24,6 +24,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import bmesh  # noqa: E402
 import bpy  # noqa: E402
 import numpy as np  # noqa: E402
 
@@ -598,7 +599,8 @@ def bake_heads():
             skin.pixels.foreach_set(toned.ravel())
             skin.update()
             albedo = skin_from(low, sources, size)
-            albedo = weather(albedo, passes, recipe["grit"], recipe.get("body", "male")) * passes["covered"][..., None]
+            albedo = weather(albedo, passes, recipe["grit"], recipe.get("body", "male"))
+            albedo = neck_fade(albedo, passes, multiplier, low, recipe.get("body", "male")) * passes["covered"][..., None]
             lit = light(albedo, passes)
             finish(lit, passes["covered"], str(common.WARDROBE / "heads" / ("%s_%s.png" % (face, tone))))
 
@@ -669,6 +671,47 @@ def skin_from(low, sources, size):
     target.pixels.foreach_get(pixels)
     bpy.data.objects.remove(work)
     return pixels.reshape(size, size, 4)[..., :3].astype(np.float64)
+
+
+# The foot of a head's neck fades into the skin of the outfit under it
+# (recipes.SKIN_COLOUR in his tone): wholly the body's within the first
+# distance of its open edge (the neck's edge, under this height: a head has
+# no other), wholly its own beyond the second.
+NECK_FADE = (0.008, 0.03)
+NECK_EDGE_BELOW = {"male": 1.6, "female": 1.54}
+
+
+def neck_fade(albedo, passes, multiplier, low, body="male"):
+    """`albedo` (linear) fading to the body's bare skin near the open edge
+    of `low`'s neck: a bare neck (the brute's) met his chest in a seam of
+    two colours, zigzagging along the edge."""
+    bm = bmesh.new()
+    bm.from_mesh(low.data)
+    edge = []
+
+    for e in bm.edges:
+        if e.is_boundary and max(v.co.z for v in e.verts) < NECK_EDGE_BELOW[body]:
+            a, b = e.verts[0].co, e.verts[1].co
+            steps = max(1, int((b - a).length / 0.004))
+            edge += [tuple(a.lerp(b, k / steps)) for k in range(steps + 1)]
+
+    bm.free()
+
+    if not edge:
+        return albedo
+
+    points = np.array(edge)
+    flat = passes["position"].reshape(-1, 3)
+    near = np.full(flat.shape[0], np.inf)
+
+    for start in range(0, flat.shape[0], 4096):
+        chunk = flat[start:start + 4096]
+        near[start:start + 4096] = np.sqrt(((chunk[:, None, :] - points[None, :, :]) ** 2).sum(-1)).min(1)
+
+    inner, outer = NECK_FADE
+    t = smoothstep(outer, inner, near.reshape(albedo.shape[:2]))[..., None]
+    skin = to_linear(np.array(recipes.SKIN_COLOUR)) * np.array(multiplier)
+    return albedo * (1.0 - t) + skin * t
 
 
 # Where a body's face sits against the male head's, whose positions

@@ -158,6 +158,7 @@ func _run() -> void:
 	await _k15b()
 	await _k31()
 	await _k33()
+	await _k34()
 	await _dressed()
 	await _integration()
 
@@ -700,6 +701,95 @@ func _k33() -> void:
 		"%s over %d guards" % [cuts, dressed])
 
 
+## K34 the seam at his neck: where a bare-necked kind's face meets his
+## chest (the brute's), the foot of his head's neck is the colour of the
+## skin of his outfit under it, in each tone (the albedo each shows, his
+## outfit's times his tone): each face, its lowest centimetre of neck
+## against his outfit's bare skin within 6 cm of it and below it (what
+## shows: his neck kept up under his head does not), on average within 15%
+## of the brighter (the chest lies in his mantle's shadow, the head was
+## baked alone), and none of that skin dark (under 60% of the neck's
+## brightness: his body's stub under his jaw showed between the teeth of
+## his head's edge as dark notches).
+func _k34() -> void:
+	var worst := 0.0
+	var darkest := INF
+	var seen := {}
+
+	for face in EXPECT[&"brute"].roll.faces:
+		for tone in ["light", "dark"]:
+			_doctor(&"brute", {"faces": [face], "tones": [tone]})
+			var g := await _guard(7, &"brute")
+			g.set_physics_process(false)
+			var man = g._rig.man
+			var head := _worn(man, "Head_" + face)
+			var neck := _surface_colour(head, func(p, low): return p.y < low + 0.01, [])
+			var edge: float = neck[1].reduce(func(lowest, q): return minf(lowest, q.y), INF)
+			var outfit := _surface_colour(man.body, func(p, _low): return p.y < edge and neck[1].any(func(q): return p.distance_to(q) < 0.06),
+				[], true)
+			var tone_colour: Color = man.look.skin
+			var body := Color(outfit[0].r * tone_colour.r, outfit[0].g * tone_colour.g, outfit[0].b * tone_colour.b) if outfit[2] > 0 else Color.BLACK
+			var off := 0.0
+
+			for c in range(3):
+				off = maxf(off, absf(body[c] - neck[0][c]) / maxf(maxf(body[c], neck[0][c]), 0.001))
+
+			var dark: float = outfit[3] * tone_colour.get_luminance() / maxf(neck[0].get_luminance(), 0.001)
+			worst = maxf(worst, off if neck[2] > 0 and outfit[2] > 0 else 1.0)
+			darkest = minf(darkest, dark)
+			seen["%s %s" % [face, tone]] = "neck %s body %s darkest %.2f" % [neck[0], body, dark]
+			Wardrobe.forget()
+			g.queue_free()
+			await _frames(1)
+
+	_check("K34 the foot of his neck is the skin of his chest (the brute: each face, each tone)", worst <= 0.15 and darkest >= 0.6,
+		"worst %.3f darkest %.2f %s" % [worst, darkest, seen])
+
+
+## The mean albedo (linear) of `mi`'s vertices whose rest position passes
+## `pick` (called with it and the mesh's lowest height), with the
+## positions and the darkest of them: [colour, points, count, luminance].
+## `skin_only`: only where its mask says bare skin.
+func _surface_colour(mi: MeshInstance3D, pick: Callable, _unused: Array, skin_only := false) -> Array:
+	var mat := mi.get_surface_override_material(0) as ShaderMaterial
+	var albedo: Image = (mat.get_shader_parameter(&"albedo") as Texture2D).get_image()
+	var mask_texture = mat.get_shader_parameter(&"mask")
+	var mask: Image = (mask_texture as Texture2D).get_image() if mask_texture is Texture2D and skin_only else null
+	var points := []
+	var sum := Vector3.ZERO
+	var count := 0
+	var low := INF
+	var dimmest := INF
+
+	for surface in range(mi.mesh.get_surface_count()):
+		for p in (mi.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+			low = minf(low, p.y)
+
+	for surface in range(mi.mesh.get_surface_count()):
+		var arrays := mi.mesh.surface_get_arrays(surface)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+
+		for v in range(vertices.size()):
+			if not pick.call(vertices[v], low):
+				continue
+
+			var at := Vector2i(clampi(int(uvs[v].x * albedo.get_width()), 0, albedo.get_width() - 1),
+				clampi(int(uvs[v].y * albedo.get_height()), 0, albedo.get_height() - 1))
+
+			if mask != null and mask.get_pixelv(at).g < 0.5:
+				continue
+
+			var c := albedo.get_pixelv(at).srgb_to_linear()
+			dimmest = minf(dimmest, c.get_luminance())
+			sum += Vector3(c.r, c.g, c.b)
+			count += 1
+			points.append(vertices[v])
+
+	var mean := sum / maxf(count, 1)
+	return [Color(mean.x, mean.y, mean.z), points, count, dimmest]
+
+
 ## K15b (Review Focus 2) the new faces sit in what closes round them as the
 ## approved ones do: the watchman's coif, the swordsman's helm and curtain,
 ## the archer's hood, on each face they may roll (their options doctored to
@@ -1067,6 +1157,27 @@ func _plain(man: Node, female: bool) -> bool:
 	# (Her base mesh is Superhero_Female, his SuperHero_Male.)
 	return not painted and man.armour.is_empty() and names.any(func(n): return n.to_lower() == ("superhero_female" if female else "superhero_male")) \
 		and not names.any(func(n): return n.begins_with("Hair") or n == "Boots" or n == "Outfit")
+
+
+## Those of `vertices` (numbered as _skinned numbers them) its mask does not
+## call bare skin.
+func _not_skin(mi: MeshInstance3D, vertices: PackedInt32Array) -> PackedInt32Array:
+	var mask: Image = ((mi.get_surface_override_material(0) as ShaderMaterial).get_shader_parameter(&"mask") as Texture2D).get_image()
+	var uvs := PackedVector2Array()
+
+	for surface in range(mi.mesh.get_surface_count()):
+		uvs.append_array(mi.mesh.surface_get_arrays(surface)[Mesh.ARRAY_TEX_UV])
+
+	var out := PackedInt32Array()
+
+	for v in vertices:
+		var at := Vector2i(clampi(int(uvs[v].x * mask.get_width()), 0, mask.get_width() - 1),
+			clampi(int(uvs[v].y * mask.get_height()), 0, mask.get_height() - 1))
+
+		if mask.get_pixelv(at).g < 0.5:
+			out.append(v)
+
+	return out
 
 
 ## The first seed from `from` whose roll for `kind` `wants`.
@@ -1684,10 +1795,12 @@ func _mantle_and_arms(g: Node, man: Node) -> void:
 	# K28 (Review Focus 4) through his overhead and with his head bowed, his
 	# fur mantle never cuts through his beard or his face (edges through
 	# faces, as K22). The mantle: the outfit's faces wholly on the cape's
-	# bones above his chest.
+	# bones above his chest, not bare skin (his neck, kept up under his
+	# head, rides them too).
 	var skeleton: Skeleton3D = man.skeleton
 	var chest: float = skeleton.get_bone_global_rest(skeleton.find_bone(&"spine_02")).origin.y
-	var mantle := _faces_of(man.body, _vertices_on(man.body, [&"neck_01", &"spine_03", &"spine_02", &"clavicle_l", &"clavicle_r"], chest))
+	var on_cape := _vertices_on(man.body, [&"neck_01", &"spine_03", &"spine_02", &"clavicle_l", &"clavicle_r"], chest)
+	var mantle := _faces_of(man.body, _not_skin(man.body, on_cape))
 	var beard := _worn(man, "Beard_%s" % man.look.beard)
 	var face := _worn(man, "Head_%s" % man.look.face)
 	var cuts := 0
