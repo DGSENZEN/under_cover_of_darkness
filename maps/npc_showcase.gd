@@ -142,8 +142,10 @@ func _ready() -> void:
 	build()
 
 	# Its sound: the recordings loaded, the ambience, the stone's acoustics,
-	# the score (Sfx.warm: what the player's arrival does in a level).
+	# the score (Sfx.warm: what the player's arrival does in a level); a cold
+	# night, heard on the men's breath (GuardVoice).
 	set_meta(&"acoustics", "stone")
+	set_meta(&"cold", true)
 	Sfx.warm(self)
 	await _baker.baked
 	LightProbe.invalidate()

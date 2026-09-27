@@ -456,18 +456,29 @@ func _run() -> void:
 	swordsman.voice(&"pain")
 	var spoken := SfxScript.recorded.map(func(entry): return entry[0])
 	SfxScript.recording = false
-	_check("M8 the duelist cries out in a woman's voice, a man in his", spoken.has(&"pain_f") and spoken.has(&"pain") and SfxScript._load_files(&"pain_f").size() >= 3 and SfxScript._load_files(&"death_f").size() >= 3,
+	_check("M8 the duelist cries out in a woman's voice, a man in his", (spoken.has(&"pain_f")) and spoken.any(func(s): return s == &"pain" or s == &"pain_b") and SfxScript._load_files(&"pain_f").size() >= 3 and SfxScript._load_files(&"death_f").size() >= 3,
 		"heard %s" % [spoken])
 	duelist.queue_free()
 	swordsman.queue_free()
 
-	# M19 the guards' voices are recordings: the murmur of talk in several
-	# takes, and every emote, breath and snore at least one
-	var voices := [&"murmur", &"laugh", &"sigh", &"sigh_f", &"cough", &"spit", &"grunt_effort", &"hm", &"breath_heavy", &"breath_scared", &"yawn", &"snore", &"gasp"]
-	var silent := voices.filter(func(v): return SfxScript._load_files(v).is_empty())
-	_check("M19 the guards' talk, emotes and breathing are recordings: the murmur in four takes or more, every other at least one",
-		SfxScript._load_files(&"murmur").size() >= 4 and SfxScript._load_files(&"laugh").size() >= 2 and silent.is_empty(),
-		"murmur %d takes, laugh %d, silent %s" % [SfxScript._load_files(&"murmur").size(), SfxScript._load_files(&"laugh").size(), silent])
+	# M19 the voices are NOX's Voices Essentials: two men (the deep one plain,
+	# the lighter "_b") and a woman ("_f"), each with their talk (nods and
+	# "hm"s), a nod, laughs, the cold on their breath, coughs, clearing the
+	# throat, effort, "hm?", a gasp, breathing hard, frightened and asleep,
+	# and the cries of a fight; the sigh is the lighter man's and the woman's
+	# only. The old packs' groups are gone.
+	var kinds := [&"murmur", &"nod", &"laugh", &"breath_cold", &"cough", &"throat", &"grunt_effort", &"hm", &"gasp",
+		&"breath_heavy", &"breath_scared", &"breath_sleep", &"pain", &"death", &"roar", &"grunt"]
+	var voices: Array = [&"sigh", &"sigh_f", &"hurt", &"effort"]
+	for kind in kinds:
+		for suffix in ["", "_b", "_f"]:
+			voices.append(StringName(String(kind) + suffix))
+	var silent := voices.filter(func(v): return SfxScript._load_files(v).is_empty() or not SfxScript.GAIN.has(v))
+	var leftover := [&"yawn", &"snore", &"spit"].filter(func(v): return not SfxScript._load_files(v).is_empty() or SfxScript.GAIN.has(v))
+	_check("M19 the voices are two men's and a woman's, every kind of sound in each; the old packs' groups are gone",
+		SfxScript._load_files(&"murmur_b").size() >= 8 and SfxScript._load_files(&"murmur_f").size() >= 8 and silent.is_empty() and leftover.is_empty(),
+		"murmur %d/%d/%d takes, silent %s, left over %s" % [SfxScript._load_files(&"murmur").size(), SfxScript._load_files(&"murmur_b").size(),
+			SfxScript._load_files(&"murmur_f").size(), silent, leftover])
 
 
 ## Walks (or runs) the player forward and, at every footstep, how low the

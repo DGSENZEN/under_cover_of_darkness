@@ -275,9 +275,12 @@ func _leave_station() -> void:
 	if kind == &"sit" and (_step == Step.ENTER or _step == Step.DOING):
 		_begin(Step.EXIT, &"stand_up", STAND_UP)
 	elif kind == &"sleep" and (_step == Step.ENTER or _step == Step.DOING):
-		# Got up at nobody's alarm: he yawns.
+		# Got up at nobody's alarm: he sighs, waking.
 		_begin(Step.EXIT, &"wake", WAKE)
-		Sfx.play(guard, &"yawn", guard.eye_position(), -2.0)
+		var voice: RefCounted = guard.get("_voice")
+
+		if voice != null:
+			voice.emote("sighs")
 	else:
 		_step = Step.NONE
 		_activity = &""

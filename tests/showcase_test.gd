@@ -99,6 +99,20 @@ func _run() -> void:
 		missing.is_empty() and wrong.is_empty() and posted and benched and path.size() > 1 and length < straight * 1.6,
 		"missing %s, not at their stations %s, Hendrik at the postern %s, Jory on the bench %s, gate to postern %.1f m walked for %.1f m straight" % [missing, wrong, posted, benched, length, straight])
 
+	# D36 a cold night: the men's breath is heard on it; and their voices are
+	# shared out, the captain hers, the brute the deep man's, both men's
+	# voices among the rest
+	var voices36 := {}
+	for name in MapScript.CAST_NAMES:
+		var man36: Node = map.cast.get(name)
+		if man36 != null and is_instance_valid(man36):
+			voices36[name] = String(man36._voice.voiced(&"pain"))
+	var others36: Array = voices36.keys().filter(func(n): return n != "Mirelle" and n != "Brand").map(func(n): return voices36[n])
+	_check("D36 the yard is a cold night, and the cast's voices are shared out: the captain hers, the brute the deep man's, both men's among the rest",
+		bool(map.get_meta(&"cold", false)) and voices36.get("Mirelle") == "pain_f" and voices36.get("Brand") == "pain"
+			and others36.count("pain") >= 4 and others36.count("pain_b") >= 4,
+		"cold %s, voices %s" % [map.get_meta(&"cold", false), voices36])
+
 	# D1b the carrier really carries: crates from the cart to the store
 	var drop: Vector3 = map.get_node("CratesDrop").global_position
 	await _until(func(): return _crates_near(drop, 2.2) >= 1, 3600)

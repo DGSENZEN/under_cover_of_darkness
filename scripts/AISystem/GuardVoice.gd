@@ -7,16 +7,24 @@ extends RefCounted
 ##             (exhaustion, three steps, each raising where it settles).
 ##   breath    how fast he breathes follows his heart; racing, you hear it,
 ##             each breath out (frightened breathing if he is afraid). A
-##             sleeper snores. Expression.gd lifts his chest with it and
-##             Atmosphere.gd shows it on the cold air.
+##             sleeper breathes slow and soft. Where the level is cold (its
+##             `cold` meta), now and then a breath out is heard on the cold
+##             air, softly, under everything else. Expression.gd lifts his
+##             chest with it and Atmosphere.gd shows it on the cold air.
+##   at ease   now and then he sighs.
 ##   the ladder  breath < chatter < call-out < pain < death: a louder thing
 ##             stops a quieter one on the same man, and nothing quieter
 ##             starts over a louder one until it has passed.
-##   murmur    a line of a conversation is heard as a murmur of speech, sized
-##             to the line (a stretch of a longer recording, faded in and
-##             out), pitched to him, softer whispered, harder shouted, from
-##             his head; the subtitle carries the words.
-##   emotes    a laugh, a sigh, a cough, a spit, a grunt: their own sounds.
+##   murmur    a line of a conversation is heard as his nods and "hm"s,
+##             whole takes one after another with a breath between, as many
+##             as fit the line; pitched to him, softer whispered, harder
+##             shouted, from his head; the subtitle carries the words.
+##   emotes    a laugh, a sigh, a cough, a spit (the throat cleared), a
+##             grunt, a nod: their own sounds.
+##   whose     every voice is one of NOX's Voices Essentials: a big man the
+##             deep one (plain names), others the deep one or the lighter
+##             ("_b") by his seed, a woman hers ("_f"); `voiced`. What one
+##             never recorded he says in the other man's voice.
 ##
 ## Every sound is a recording (Sfx): with none for a name, it is silent, and
 ## the rest works the same.
@@ -54,11 +62,10 @@ const AUDIBLE_AT := 118.0
 ## How long a call or a cry holds the ladder (s).
 const HOLD := {CALL: 1.2, PAIN: 0.7}
 ## How loud a line's murmur is, by how it is said, over its level (Sfx.GAIN's
-## "murmur" once the recordings are in; MURMUR_DB till then).
+## for his "murmur"; MURMUR_DB without one).
 const DELIVERY_DB := {&"": 0.0, &"whisper": -10.0, &"murmur": -5.0, &"shout": 7.0}
 const MURMUR_DB := -8.0
-## A line's murmur fades in and out over these (s).
-const FADE_IN := 0.06
+## A take still sounding as its line ends fades over this (s).
 const FADE_OUT := 0.15
 ## From here on, a line comes out shouted if nothing says how.
 const SHOUT_AT := 125.0
@@ -71,12 +78,31 @@ const AFRAID_AT := 0.3
 const LINE_BASE := 0.9
 const LINE_PER_CHAR := 0.055
 ## Emotes and the sounds they make.
-const EMOTE_SOUNDS := {"laughs": &"laugh", "sighs": &"sigh", "coughs": &"cough", "spits": &"spit", "kicks": &"grunt_effort", "throws": &"grunt_effort",
-	"looks": &"hm"}
-## Emote sounds a woman makes in her own recordings.
-const OWN_VOICE := [&"laugh", &"sigh"]
+const EMOTE_SOUNDS := {"laughs": &"laugh", "sighs": &"sigh", "coughs": &"cough", "spits": &"throat", "kicks": &"grunt_effort", "throws": &"grunt_effort",
+	"looks": &"hm", "nods": &"nod"}
+## A line's takes: a breath between one and the next (s).
+const TAKE_GAP := Vector2(0.08, 0.3)
+## Whose voice a man has: the deep man's or the lighter man's. From this
+## size up he is the deep one.
+const DEEP := 0
+const LIGHT := 1
+const BIG := 1.1
+## At his ease he sighs about this often (s, between).
+const SIGH_EVERY := Vector2(30.0, 80.0)
+## Due to sigh while talking, busy or roused, he waits this much longer.
+const SIGH_PUT_OFF := Vector2(5.0, 15.0)
+## In the cold, this share of his breaths out are heard, this soft (dB,
+## either way by COLD_SPREAD) over their level.
+const COLD_SHARE := 0.35
+const COLD_DB := -8.0
+const COLD_SPREAD := 2.0
 
 var guard: CharacterBody3D
+## DEEP or LIGHT; -1 until his voice is first asked for (then by his size
+## and seed). A woman's voice is her own whatever this says.
+var actor := -1
+## The current line's takes: [start, end (his clock), sound].
+var murmur_takes: Array = []
 var heart := 72.0
 var exhaustion := 0
 ## His breathing's own rate against the rest of him (Expression's variation).
@@ -96,15 +122,27 @@ var _mouth: AudioStreamPlayer3D
 var _murmur_start := -1.0
 var _murmur_length := 0.0
 var _murmur_db := 0.0
+var _murmur_sound: StringName = &"murmur"
+var _line_pitch := 1.0
+var _next_take_at := INF
+var _last_take: AudioStream
+var _sigh_in := 0.0
+## Which man's voice he has if he is not a big man (his seed's).
+var _actor_roll := 0
+## His own dice: his voice, his pauses, when he sighs.
+var _dice := RandomNumberGenerator.new()
 
 
 func _init(p_guard: CharacterBody3D) -> void:
 	guard = p_guard
-	var dice := RandomNumberGenerator.new()
 	var seed_of: int = int(guard.get("look_seed")) if int(guard.get("look_seed")) >= 0 else hash(String(guard.name))
-	dice.seed = hash(seed_of * 7919 + 13)
-	_recovery = dice.randf_range(0.04, 0.08)
-	_phase = dice.randf()
+	_dice.seed = hash(seed_of * 7919 + 13)
+	_recovery = _dice.randf_range(0.04, 0.08)
+	_phase = _dice.randf()
+	_sigh_in = _dice.randf_range(SIGH_EVERY.x, SIGH_EVERY.y)
+	# An odd seed the deep man, an even one the lighter, so a cast seeded in
+	# a row shares them out.
+	_actor_roll = DEEP if posmod(seed_of, 2) == 1 else LIGHT
 
 
 ## Every physics frame.
@@ -116,6 +154,10 @@ func update(delta: float) -> void:
 		guard.set("grief", maxf(float(guard.get("grief")) - GRIEF_FADE * delta, 0.0))
 
 	_update_heart(delta)
+
+	if int(guard.get("state")) == 0:
+		_sigh_in -= delta
+
 	_update_breath(delta)
 	_update_murmur()
 
@@ -174,10 +216,7 @@ func cry(kind: StringName, volume := 0.0) -> void:
 	_stop_murmur()
 	_rung = rung
 	_rung_until = INF if rung == DEATH else clock + float(HOLD[PAIN])
-	var pitch := _pitch()
-	# A woman speaks with her own voice ("pain_f"...).
-	var spoken := StringName(String(kind) + "_f") if _female() else kind
-	Sfx.play(guard, spoken, guard.eye_position(), volume, pitch, 0.03)
+	Sfx.play(guard, voiced(kind), guard.eye_position(), volume, _pitch(), 0.03)
 
 
 ## The sound of an emote, if it has one ("laughs", "sighs", ...).
@@ -187,10 +226,7 @@ func emote(what: String) -> void:
 	if sound == &"" or sounding() > CHATTER:
 		return
 
-	if _female() and OWN_VOICE.has(sound):
-		sound = StringName(String(sound) + "_f")
-
-	Sfx.play(guard, sound, guard.eye_position(), 0.0, _pitch(), 0.03)
+	Sfx.play(guard, voiced(sound), guard.eye_position(), 0.0, _pitch(), 0.03)
 
 
 ## A catch of the breath: the moment he knows (a friend dead).
@@ -198,7 +234,23 @@ func gasp() -> void:
 	if sounding() > CHATTER:
 		return
 
-	Sfx.play(guard, &"gasp", guard.eye_position(), 0.0, _pitch(), 0.03)
+	Sfx.play(guard, voiced(&"gasp"), guard.eye_position(), 0.0, _pitch(), 0.03)
+
+
+## The recording of `kind` in his voice: the woman's "_f", the lighter man's
+## "_b", the deep man's plain; what his voice never recorded, the other's.
+func voiced(kind: StringName) -> StringName:
+	var own := String(kind) + ("_f" if _female() else ("_b" if _actor() == LIGHT else ""))
+	return StringName(own) if Sfx.GAIN.has(StringName(own)) else kind
+
+
+func _actor() -> int:
+	if actor < 0:
+		var rig: Variant = guard.get("_rig")
+		var size: float = float(rig.get("size")) if rig != null else 1.0
+		actor = DEEP if size >= BIG else _actor_roll
+
+	return actor
 
 
 ## The rung sounding now; -1 if nothing.
@@ -306,20 +358,58 @@ func _breathe_out() -> void:
 	if sounding() > BREATH or not guard.is_inside_tree():
 		return
 
-	var rota: RefCounted = guard.get("_rota")
-
-	if rota != null and rota.asleep():
+	if _asleep():
 		if _breaths % 2 == 0:
-			Sfx.play(guard, &"snore", guard.eye_position(), -2.0, _pitch(), 0.05)
+			Sfx.play(guard, voiced(&"breath_sleep"), guard.eye_position(), -2.0, _pitch(), 0.05)
 
 		return
 
 	if heart < AUDIBLE_AT and exhaustion < 1:
+		# At his ease: a sigh when one is due, else now and then the cold on
+		# his breath.
+		if _sigh_in <= 0.0:
+			if _at_ease():
+				_sigh_in = _dice.randf_range(SIGH_EVERY.x, SIGH_EVERY.y)
+				Sfx.play(guard, voiced(&"sigh"), guard.eye_position(), 0.0, _pitch(), 0.03)
+				return
+
+			_sigh_in = _dice.randf_range(SIGH_PUT_OFF.x, SIGH_PUT_OFF.y)
+
+		if _cold() and _dice.randf() < COLD_SHARE:
+			Sfx.play(guard, voiced(&"breath_cold"), guard.eye_position(),
+				COLD_DB + _dice.randf_range(-COLD_SPREAD, COLD_SPREAD), _pitch(), 0.05)
+
 		return
 
 	var afraid := _fear() > AFRAID_AT
-	Sfx.play(guard, &"breath_scared" if afraid else &"breath_heavy", guard.eye_position(),
+	Sfx.play(guard, voiced(&"breath_scared" if afraid else &"breath_heavy"), guard.eye_position(),
 		lerpf(-14.0, -4.0, clampf((heart - AUDIBLE_AT) / (HEART_MAX - AUDIBLE_AT), 0.0, 1.0)), _pitch(), 0.05)
+
+
+## Asleep at his station, or nodded off in his seat.
+func _asleep() -> bool:
+	var rota: RefCounted = guard.get("_rota")
+	var habits: RefCounted = guard.get("_habits")
+	return (rota != null and bool(rota.asleep())) or (habits != null and habits.has_method("dozing") and bool(habits.dozing()))
+
+
+## Nothing on his mind and nothing to do: relaxed, quiet, not talking, not
+## hurt, not the intruder.
+func _at_ease() -> bool:
+	if int(guard.get("state")) != 0 or sounding() >= 0 or murmuring() or bool(guard.get("puppet")):
+		return false
+
+	if float(guard.get("health")) < float(guard.get("max_health")):
+		return false
+
+	var life: RefCounted = guard.get("_life")
+	return life == null or not life.has_method("talking") or not bool(life.talking())
+
+
+## Whether the level is a cold one (its `cold` meta).
+func _cold() -> bool:
+	var level: Node = Sfx._level_of(guard)
+	return level != null and bool(level.get_meta(&"cold", false))
 
 
 # ---------------------------------------------------------------------------
@@ -329,14 +419,54 @@ func _breathe_out() -> void:
 func _murmur(length: float, delivery: StringName) -> void:
 	_murmur_start = clock
 	_murmur_length = length
-	_murmur_db = float(Sfx.GAIN.get(&"murmur", MURMUR_DB)) + float(DELIVERY_DB.get(delivery, 0.0))
+	_murmur_sound = voiced(&"murmur")
+	_murmur_db = float(Sfx.GAIN.get(_murmur_sound, MURMUR_DB)) + float(DELIVERY_DB.get(delivery, 0.0))
+	_line_pitch = _pitch() * _dice.randf_range(0.97, 1.03)
+	murmur_takes.clear()
 
 	if Sfx.recording:
 		Sfx.recorded.append([&"murmur", _murmur_db, true])
 
-	var stream := Sfx.stream(&"murmur_f" if _female() else &"murmur")
+	_next_take_at = clock
+	_next_take()
 
-	if stream == null or not Sfx.enabled or not guard.is_inside_tree():
+
+func _update_murmur() -> void:
+	if not murmuring():
+		if _mouth != null and is_instance_valid(_mouth) and _mouth.playing:
+			_mouth.stop()
+
+		return
+
+	if clock >= _next_take_at:
+		_next_take()
+
+	if _mouth != null and is_instance_valid(_mouth) and _mouth.playing:
+		var left := _murmur_start + _murmur_length - clock
+		_mouth.volume_db = _murmur_db + linear_to_db(maxf(clampf(left / FADE_OUT, 0.0, 1.0), 0.001))
+
+
+## The line's next take: one that is over before the line is (a line too
+## short for any gets his shortest), not the one just said; then a breath.
+func _next_take() -> void:
+	_next_take_at = INF
+	var left := _murmur_start + _murmur_length - clock
+	var takes := Sfx.takes(_murmur_sound)
+	var fits := takes.filter(func(t): return t.get_length() / _line_pitch <= left and t != _last_take)
+
+	if fits.is_empty() and murmur_takes.is_empty() and not takes.is_empty():
+		fits = [takes.reduce(func(a, b): return a if a.get_length() <= b.get_length() else b)]
+
+	if fits.is_empty():
+		return
+
+	var take: AudioStream = fits[_dice.randi() % fits.size()]
+	var spoken := take.get_length() / _line_pitch
+	_last_take = take
+	murmur_takes.append([clock, clock + spoken, _murmur_sound])
+	_next_take_at = clock + spoken + _dice.randf_range(TAKE_GAP.x, TAKE_GAP.y)
+
+	if not Sfx.enabled or not guard.is_inside_tree():
 		return
 
 	if _mouth == null or not is_instance_valid(_mouth):
@@ -348,29 +478,15 @@ func _murmur(length: float, delivery: StringName) -> void:
 		var head := guard.get_node_or_null("Head")
 		(head if head != null else guard).add_child(_mouth)
 
-	_mouth.stream = stream
-	_mouth.pitch_scale = _pitch() * randf_range(0.97, 1.03)
-	_mouth.volume_db = _murmur_db - 30.0
-	var from := randf_range(0.0, maxf(stream.get_length() - length, 0.0))
-	_mouth.play(from)
-
-
-func _update_murmur() -> void:
-	if _mouth == null or not is_instance_valid(_mouth) or not _mouth.playing:
-		return
-
-	var t := clock - _murmur_start
-
-	if t >= _murmur_length:
-		_mouth.stop()
-		return
-
-	var gain := clampf(t / FADE_IN, 0.0, 1.0) * clampf((_murmur_length - t) / FADE_OUT, 0.0, 1.0)
-	_mouth.volume_db = _murmur_db + linear_to_db(maxf(gain, 0.001))
+	_mouth.stream = take
+	_mouth.pitch_scale = _line_pitch
+	_mouth.volume_db = _murmur_db
+	_mouth.play()
 
 
 func _stop_murmur() -> void:
 	_murmur_start = -1.0
+	_next_take_at = INF
 
 	if _mouth != null and is_instance_valid(_mouth):
 		_mouth.stop()
