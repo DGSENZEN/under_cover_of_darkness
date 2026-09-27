@@ -6,6 +6,7 @@ const Props := preload("res://scripts/Interaction/Props.gd")
 const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
+const SettingsScript := preload("res://scripts/UI/Settings.gd")
 
 
 class Ear:
@@ -406,18 +407,24 @@ func _run(door: Node3D) -> void:
 
 
 ## Signs of being noticed (StealthHUD's awareness marks): over a man making
-## you out, an eye in a ring that fills as he does; behind you, his mark at
-## the bottom of the screen; the first to have you, a red "!" and his name.
+## you out, an eye in a ring that fills as he does, and a tick; behind you,
+## his mark at the bottom of the screen; the first to have you, a red "!"
+## and his name; behind a wall, fainter; none of it once hidden.
 func _signs_checks() -> void:
 	var hud: Node = player.hud
 	var view: Vector2 = get_viewport().get_visible_rect().size
+	# Settings of the test's own: the player's are left alone.
+	SettingsScript.path = "user://settings_stealth_test.cfg"
+	SettingsScript.reload()
 
 	# D1 at his ease and unaware of you: no mark
 	var easy := _new_guard(Vector3(-32, 0, 0), 0.0)
 	player.debug_light_level = 0.0
 	_put_player(Vector3(-32, 1.05, 7))
+	var ticked_before := int(hud.ticks)
 	await _frames(30)
 	var unmarked: bool = _mark_of(hud, easy).is_empty()
+	var ticked_unaware := int(hud.ticks) - ticked_before
 
 	# D2 lit a little in front of him: an eye over him, its ring filling as he
 	#    makes you out, the edge of it glowing while it climbs; the man
@@ -432,6 +439,8 @@ func _signs_checks() -> void:
 	var climbing := false
 	var lead := false
 	var over_him := false
+	var in_sight := true
+	var ticks_from := int(hud.ticks)
 
 	for i in 150:
 		await _frames(1)
@@ -439,6 +448,8 @@ func _signs_checks() -> void:
 
 		if mark.is_empty() or int(easy.state) == COMBAT:
 			continue
+
+		in_sight = in_sight and not bool(mark["walled"])
 
 		if first_fill < 0.0:
 			first_fill = float(mark["fill"])
@@ -454,6 +465,9 @@ func _signs_checks() -> void:
 	_check("D2 a man making you out: an eye over him in a ring that fills as he does, glowing while it climbs, and drawn biggest",
 		eye and over_him and first_fill >= 0.0 and last_fill > first_fill + 0.2 and climbing and lead,
 		"eye %s over him %s fill %.2f -> %.2f climbing %s biggest %s" % [eye, over_him, first_fill, last_fill, climbing, lead])
+	var ticked := int(hud.ticks) - ticks_from
+	_check("D5 a tick sounds while a man makes you out (none while nobody does)", ticked_unaware == 0 and ticked >= 3,
+		"%d ticks unaware, %d while he made you out" % [ticked_unaware, ticked])
 
 	# D3 the first to have you: a red "!", bursting, and his name; the next
 	#    man after him, no name
@@ -486,6 +500,45 @@ func _signs_checks() -> void:
 		int(heard_by.state) >= SUSPICIOUS and not behind.is_empty() and bool(behind["edge"]) and (behind["at"] as Vector2).y > view.y * 0.5 and (behind["out"] as Vector2).y > 0.7,
 		"state %d mark %s in %s" % [int(heard_by.state), behind, view])
 	heard_by.queue_free()
+	await _frames(3)
+
+	# D6 a man noticing you from behind a wall: his mark fainter (the man in
+	#    plain sight before, never)
+	Props.block(self, Vector3(-32, 1.5, -3), Vector3(5, 3, 0.4))
+	var walled := _new_guard(Vector3(-32, 0, -9), PI)
+	_put_player(Vector3(-32, 1.05, 3))
+	player.rotation.y = 0.0
+	await _frames(10)
+	walled.last_known_position = Vector3(-32, 0, -14)
+	walled.has_last_known = true
+	walled._since_stimulus = 0.0
+	walled.alert = 30.0
+	await _frames(40)
+	var faint: Dictionary = _mark_of(hud, walled)
+	_check("D6 a man noticing you from behind a wall is marked fainter (one in plain sight is not)",
+		in_sight and not faint.is_empty() and bool(faint["walled"]) and float(faint["alpha"]) < 0.6,
+		"in sight %s, behind the wall %s" % [in_sight, faint])
+
+	# D7 hidden (the pause screen's setting): no marks, no ticks, and kept
+	var ticks_shown := int(hud.ticks)
+	SettingsScript.set_awareness_marks(false)
+	walled.alert = 45.0
+	await _frames(30)
+	var none: bool = hud.awareness_marks().is_empty()
+	var quiet: bool = int(hud.ticks) == ticks_shown
+	var kept := ConfigFile.new()
+	var read: bool = kept.load(SettingsScript.path) == OK and kept.get_value("hud", "awareness_marks", true) == false
+	SettingsScript.reload()
+	var stays: bool = not SettingsScript.awareness_marks()
+	SettingsScript.set_awareness_marks(true)
+	await _frames(20)
+	var back: bool = not _mark_of(hud, walled).is_empty()
+	_check("D7 hidden, no marks and no ticks; the setting is kept for next time, and shown again they come back",
+		none and quiet and read and stays and back, "none %s quiet %s written %s read back %s back %s" % [none, quiet, read, stays, back])
+	walled.queue_free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SettingsScript.path))
+	SettingsScript.path = "user://settings.cfg"
+	SettingsScript.reload()
 	await _frames(3)
 
 

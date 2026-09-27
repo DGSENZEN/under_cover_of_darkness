@@ -4,7 +4,10 @@ extends Node3D
 ## colours (Humanoid.gd), moved by the animation library: he walks, runs and
 ## backs off, squares up with his guard held, winds up and cuts, catches your
 ## blade, reels when parried, flinches, staggers when kicked, and falls when
-## he dies. Springs on top add the jolt of every blow.
+## he dies. Springs on top add the jolt of every blow. His arms are put where
+## they are wanted over all that (ArmReach): his sword hand to its hilt to
+## draw or rest on it, his light held out to what he is searching, his hand up
+## to a torch he lights again.
 ##
 ## Pure presentation: the AI reads nothing from here, so none of it can
 ## change a fight. His vision still comes from his logical "Head". Each
@@ -143,7 +146,7 @@ const SHEATHES := {
 ## crossbow upright between his shoulder blades, its prod across them.
 const SLUNG := {
 	&"maul": Transform3D(Basis(Vector3(0.89, 0.45, 0.0), Vector3(-0.45, 0.89, 0.0), Vector3(0.0, 0.0, 1.0)), Vector3(0.2, 0.84, 0.2)),
-	&"crossbow": Transform3D(Basis(Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 1.0), Vector3(0.0, -1.0, 0.0)), Vector3(0.0, 1.13, 0.21)),
+	&"crossbow": Transform3D(Basis(Vector3(0.89, 0.45, 0.0), Vector3(0.0, 0.0, 1.0), Vector3(0.45, -0.89, 0.0)), Vector3(0.2, 1.0, 0.22)),
 	&"blade": Transform3D(Basis(Vector3(0.8, -0.6, 0.0), Vector3(0.6, 0.8, 0.0), Vector3(0.0, 0.0, 1.0)), Vector3(-0.18, 0.95, 0.19)),
 }
 ## Drawing it: his hand to the hilt at his hip (DRAW_REACH, s), the blade out
@@ -153,15 +156,45 @@ const SLUNG := {
 ## whipping up from the hip with it (QUICK_DRAW). Anything else his arms are
 ## busy with, or a weapon slung on his back: out or away with no reach.
 const DRAW_REACH := 0.32
-const DRAW_BACK := 0.4
-const SHEATHE_REACH := 0.5
+const DRAW_BACK := 0.55
+const SHEATHE_REACH := 0.6
 const SHEATHE_BACK := 0.3
-const QUICK_DRAW := 0.28
+const QUICK_DRAW := 0.34
+## Reaching behind him for what is slung on his back takes this long (s).
+const SLUNG_REACH := 0.4
 ## His sword arm's elbow reaching across to the hilt (his space, as
 ## ArmReach.ELBOW_HINT): out in front of him and to his right. How far the
 ## blade comes up out of the scabbard along it before it swings free (m).
 const DRAW_ELBOW := Vector3(0.8, -0.6, -0.8)
 const DRAW_PULL := 0.34
+## Free of the scabbard (or off his back), it goes up before him first, so it
+## never swings down through his legs: held upright at his right, chest high
+## (his space: the grip there, the blade up and a little forward); a crossbow
+## levelled there, a maul held up by its haft. Put away, it goes by the same
+## way.
+const RAISE_AT := Vector3(0.22, 1.2, -0.38)
+const RAISE_AT_MAUL := Vector3(0.22, 0.95, -0.35)
+const RAISE_AT_BOW := Vector3(0.2, 1.15, -0.32)
+const RAISE_UP := Vector3(-0.12, 0.94, -0.32)
+## Stirred (suspicious), his hand goes to the hilt at his hip and rests
+## there, over the top of the grip (REST_GRIP of DRAW_PULL up it), taking
+## REST_TIME (s) to get there or back.
+const REST_GRIP := 0.15
+const REST_TIME := 0.3
+## Guard.Alert.SUSPICIOUS.
+const SUSPICIOUS := 1
+## Searching a place with a light in his other hand (the lantern he lit to
+## search by, or a torch), he holds it out to what he is looking into
+## (Guard.peer_point): his left hand LIGHT_REACH (m, his size) out from his
+## shoulder toward it, never behind him (at least LIGHT_AHEAD of the way
+## forward), nor straight up or down (LIGHT_TILT); LIGHT_TIME (s) to put it
+## out or bring it back. Lighting a torch on the wall again (GuardHands), the
+## same hand goes up to it, as high as RELIGHT_TILT.
+const LIGHT_REACH := 0.55
+const LIGHT_AHEAD := 0.35
+const LIGHT_TILT := 0.7
+const LIGHT_TIME := 0.45
+const RELIGHT_TILT := 1.25
 ## His head tipped up or down no more than this (rad) for the eye.
 const HEAD_PITCH_MAX := 0.7
 ## Turning where he stands, from this quick a turn (rad/s): his feet shuffle
@@ -326,8 +359,13 @@ var _sheath_holder: Node3D
 var _slung := false
 ## His outfit's kind (Wardrobe.gd), if he was dressed from it.
 var _dressed_kind: StringName = &""
-## His arm put to the hilt (ArmReach.gd), made the first time he draws.
+## His arm put to the hilt (ArmReach.gd), made the first time he draws; and
+## how far his hand rests on the hilt, stirred (REST_ON_HILT).
 var _reach: SkeletonModifier3D
+var _rest := 0.0
+## How far his light is held out to what he searches (LIGHT_*), and to where.
+var _light_out := 0.0
+var _light_at := Vector3.ZERO
 ## His weapon dropped or thrown away (drop_weapon), until he has one again.
 var _lost := false
 ## Which way he faced last tick, how fast he is turning (rad/s, positive to
@@ -572,6 +610,7 @@ func update(delta: float) -> void:
 	var pose: StringName = guard.activity() if guard.has_method("activity") else &""
 	_doing = pose
 	_update_blade(delta)
+	_update_light_reach(delta)
 
 	# Stepping into place at his ease (GuardHabits): he is put there, and his
 	# legs go by how fast.
@@ -1062,14 +1101,16 @@ func _update_blade(delta: float) -> void:
 
 	if not armed:
 		_end_draw()
+		_rest = 0.0
 		_blade_out = false
 	elif _drawing != &"":
 		_step_draw(delta, want)
 	elif want != _blade_out and not man.is_limp() and _rising <= 0.0:
-		if _slung or not _arms_idle():
-			# His arms busy with something else (or it hangs on his back):
-			# out or away as he goes, heard.
+		if not _arms_idle():
+			# His arms busy with something else: out or away as he goes,
+			# heard.
 			_swap(want)
+			_rest = 0.0
 		else:
 			_drawing = (&"quick" if int(guard.state) == COMBAT else &"draw") if want else &"sheathe"
 			_draw_t = 0.0
@@ -1079,8 +1120,22 @@ func _update_blade(delta: float) -> void:
 			if _drawing == &"quick":
 				_swap(true)
 				_swapped = true
+			elif _drawing == &"draw" and _rest > 0.0:
+				# His hand already on the hilt: from there.
+				_draw_t = DRAW_REACH * _rest
 
+			_rest = 0.0
 			_step_draw(0.0, want)
+	else:
+		# Stirred and at his ease still: a hand on the hilt, ready.
+		var ready: bool = armed and not _blade_out and not _slung and int(guard.state) == SUSPICIOUS and _hand_free() and _arms_idle()
+		var was := _rest
+		_rest = move_toward(_rest, 1.0 if ready else 0.0, delta / REST_TIME)
+
+		if _rest > 0.0:
+			_hand_to(smoothstep(0.0, 1.0, _rest), _hilt_pose(REST_GRIP))
+		elif was > 0.0:
+			_end_draw()
 
 	weapon.visible = armed and _blade_out
 	_sheath.visible = armed and not _blade_out
@@ -1110,9 +1165,10 @@ func _arms_idle() -> bool:
 
 
 ## A draw or a sheathing, `delta` further on: his hand to the hilt, the
-## blade changing hands, his hand back. Cut short (the blade where it is
-## going, at once) if something else takes his arms, or he changes his mind
-## before it has changed hands.
+## blade changing hands, up out of the scabbard along it and up before him,
+## and his hand back to its own pose (a sheathing the same way back). Cut
+## short (the blade where it is going, at once) if something else takes his
+## arms, or he changes his mind before it has changed hands.
 func _step_draw(delta: float, want: bool) -> void:
 	_draw_t += delta
 	var drawing := _drawing != &"sheathe"
@@ -1128,27 +1184,35 @@ func _step_draw(delta: float, want: bool) -> void:
 		_end_draw()
 		return
 
-	var reach := 0.0 if _drawing == &"quick" else (DRAW_REACH if drawing else SHEATHE_REACH)
+	var reach := 0.0 if _drawing == &"quick" else (SLUNG_REACH if _slung else (DRAW_REACH if drawing else SHEATHE_REACH))
 	var back := QUICK_DRAW if _drawing == &"quick" else (DRAW_BACK if drawing else SHEATHE_BACK)
 
 	if _draw_t >= reach + back:
 		_end_draw()
 		return
 
-	# How far to the hilt his hand has gone, and how far out of the scabbard
-	# along it (the blade drawn up out of it before it swings free; brought
-	# down into it along it).
 	var weight := 1.0
-	var pull := 0.0
+	var pose := Transform3D.IDENTITY
 
 	if _draw_t < reach:
 		var u := _draw_t / reach
 
 		if drawing:
 			weight = smoothstep(0.0, 1.0, u)
+			pose = _hilt_pose(0.0)
+		elif _slung:
+			# Up before him, then round to his back.
+			weight = smoothstep(0.0, 0.45, u)
+			pose = _raised_pose().interpolate_with(_hilt_pose(0.0), smoothstep(0.45, 1.0, u))
 		else:
-			weight = smoothstep(0.0, 1.0, u / 0.6)
-			pull = 1.0 - smoothstep(0.6, 1.0, u)
+			# Up before him, over the throat of the scabbard, and down into
+			# it along it.
+			weight = smoothstep(0.0, 0.35, u)
+
+			if u < 0.7:
+				pose = _raised_pose().interpolate_with(_hilt_pose(1.0), smoothstep(0.35, 0.7, u))
+			else:
+				pose = _hilt_pose(1.0 - smoothstep(0.7, 1.0, u))
 	else:
 		if not _swapped:
 			_swapped = true
@@ -1156,35 +1220,69 @@ func _step_draw(delta: float, want: bool) -> void:
 
 		var u := (_draw_t - reach) / back
 
-		if drawing:
-			pull = smoothstep(0.0, 0.4, u)
-			weight = 1.0 - smoothstep(0.4, 1.0, u)
-		else:
+		if not drawing:
 			weight = 1.0 - smoothstep(0.0, 1.0, u)
+			pose = _hilt_pose(0.0)
+		elif _slung:
+			# Off his back and up before him, then his own.
+			pose = _hilt_pose(0.0).interpolate_with(_raised_pose(), smoothstep(0.0, 0.5, u))
+			weight = 1.0 - smoothstep(0.5, 1.0, u)
+		else:
+			# Up out of the scabbard along it, up before him, then his own.
+			if u < 0.3:
+				pose = _hilt_pose(smoothstep(0.0, 0.3, u))
+			else:
+				pose = _hilt_pose(1.0).interpolate_with(_raised_pose(), smoothstep(0.3, 0.65, u))
 
-	_hand_to_hilt(weight, pull)
+			weight = 1.0 - smoothstep(0.65, 1.0, u)
+
+	_hand_to(weight, pose)
 
 
-## His right hand put `weight` of the way to the hilt of the blade at his hip
-## (where it sits in the scabbard: so the blade in his hand, sheathing, goes
-## down into it), `pull` of DRAW_PULL up out of it along it, his fist closed
-## on it.
-func _hand_to_hilt(weight: float, pull := 0.0) -> void:
+## Where the weapon is put by, in the world: over the scabbard, `pull` of
+## DRAW_PULL up out of it along it (on his back, where it hangs).
+func _hilt_pose(pull: float) -> Transform3D:
+	if _slung:
+		return _sheath.global_transform
+
+	return _sheath.global_transform.translated_local(Vector3(0.0, -DRAW_PULL * pull, 0.0))
+
+
+## The weapon held up before him (RAISE_*), in the world.
+func _raised_pose() -> Transform3D:
+	if _crossbow:
+		return man.global_transform * Transform3D(Basis(Vector3.RIGHT, 0.2), RAISE_AT_BOW)
+
+	var up := RAISE_UP.normalized()
+	var across := (Vector3.RIGHT - up * Vector3.RIGHT.dot(up)).normalized()
+	var at := RAISE_AT_MAUL if _carried == &"maul" else RAISE_AT
+	return man.global_transform * Transform3D(Basis(across, up, across.cross(up)), at)
+
+
+## His right hand put `weight` of the way to where it holds the weapon when
+## the weapon is at `pose` (in the world), his fist closed on it. Reaching
+## across to his hip, the elbow goes out before him; back for what is slung,
+## out to his side.
+func _hand_to(weight: float, pose: Transform3D) -> void:
+	var arms := _arms()
+	arms.elbow_hints[1] = ArmReachScript.ELBOW_HINT[1] if _slung else DRAW_ELBOW
+	var hand := man.global_transform.affine_inverse() * (pose * _grip.affine_inverse())
+	arms.targets[1] = hand.orthonormalized()
+	arms.weights[1] = weight
+	arms.curls[1] = 1.0
+	arms.active = true
+
+
+## His arms put where they are wanted (ArmReach.gd): made the first time.
+func _arms() -> SkeletonModifier3D:
 	if _reach == null:
 		_reach = ArmReachScript.new()
 		_reach.name = "Draw"
 		_reach.set("man", man)
 		_reach.set("curl_only_reaching", true)
-		# Across his front to the far hip: the elbow out before him.
-		_reach.elbow_hints[1] = DRAW_ELBOW
 		man.skeleton.add_child(_reach)
 
-	var hilt := _sheath.global_transform.translated_local(Vector3(0.0, -DRAW_PULL * pull, 0.0))
-	var hand := man.global_transform.affine_inverse() * (hilt * _grip.affine_inverse())
-	_reach.targets[1] = hand.orthonormalized()
-	_reach.weights[1] = weight
-	_reach.curls[1] = 1.0
-	_reach.active = true
+	return _reach
 
 
 func _end_draw() -> void:
@@ -1194,7 +1292,65 @@ func _end_draw() -> void:
 
 	if _reach != null:
 		_reach.weights[1] = 0.0
-		_reach.active = false
+		_reach.active = _reach.weights[0] > 0.0
+
+
+## Searching a place (Guard.peer_point) with a light in his left hand: it
+## held out to it (LIGHT_*), and back to his side as he moves on; lighting a
+## torch on the wall again, that hand up to it. Not while anything else has
+## his arms.
+func _update_light_reach(delta: float) -> void:
+	var hands: RefCounted = guard.get("_hands")
+	var peer: Vector3 = guard.peer_point() if guard.has_method("peer_point") else Vector3.INF
+	var torch: Node3D = hands.relighting() if hands != null and hands.has_method("relighting") else null
+	var lit: bool = hands != null and hands.lantern != null and is_instance_valid(hands.lantern) and hands.light_kind != &"lantern"
+	var free: bool = int(guard.state) != COMBAT and guard._phase == &"" and not man.is_limp() and _rising <= 0.0
+	var want: bool = free and (torch != null or (lit and peer != Vector3.INF and (_doing == &"" or _doing == &"lantern" or _doing == &"carry_torch")))
+	var was := _light_out
+	_light_out = move_toward(_light_out, 1.0 if want else 0.0, delta / LIGHT_TIME)
+
+	if torch != null:
+		_light_at = torch.global_position
+	elif peer != Vector3.INF:
+		_light_at = peer
+
+	if _light_out <= 0.0:
+		if was > 0.0:
+			_drop_light_reach()
+
+		return
+
+	# From his shoulder toward it: before him, not straight up or down.
+	var inverse: Transform3D = man.global_transform.affine_inverse()
+	var shoulder: Vector3 = inverse * (man.bone_global(&"upperarm_l") as Transform3D).origin
+	var way: Vector3 = inverse * _light_at - shoulder
+	var flat := Vector2(way.x, way.z)
+
+	if flat.length() < 0.01:
+		flat = Vector2(0.0, -1.0)
+
+	flat = flat.normalized()
+	flat.y = minf(flat.y, -LIGHT_AHEAD)
+	flat = flat.normalized()
+	var tilt := RELIGHT_TILT if torch != null else LIGHT_TILT
+	var rise := clampf(atan2(way.y, Vector2(way.x, way.z).length()), -tilt, tilt)
+	var out := Vector3(flat.x * cos(rise), sin(rise), flat.y * cos(rise))
+	# His hand turned as the animation has it (the lantern hangs; the torch
+	# stands up).
+	var hand: Transform3D = inverse * (man.bone_global(&"hand_l") as Transform3D)
+	var arms := _arms()
+	arms.targets[0] = Transform3D(hand.basis.orthonormalized(), shoulder + out * LIGHT_REACH)
+	arms.weights[0] = smoothstep(0.0, 1.0, _light_out)
+	arms.curls[0] = 1.0
+	arms.active = true
+
+
+func _drop_light_reach() -> void:
+	_light_out = 0.0
+
+	if _reach != null:
+		_reach.weights[0] = 0.0
+		_reach.active = _reach.weights[1] > 0.0
 
 
 ## The blade into his hand (`out`) or put by: heard, a ring drawn and a
@@ -1836,8 +1992,10 @@ func transfer_to(corpse: Node3D, push := Vector3.ZERO, at := Vector3.INF) -> voi
 		stand_in.visible = false
 
 	_rising = 0.0
-	# Whatever his arm was reaching for (his hilt), it is limp now.
+	# Whatever his arms were reaching for (his hilt, a place to light), they
+	# are limp now.
 	_end_draw()
+	_drop_light_reach()
 	var world := man.global_transform
 	remove_child(man)
 	corpse.add_child(man)
@@ -1897,6 +2055,7 @@ func go_limp(velocity: Vector3, push := Vector3.ZERO, at := Vector3.INF) -> void
 	_rising = 0.0
 	_cutting = false
 	_end_draw()
+	_drop_light_reach()
 	trail.clear()
 	man.go_limp(velocity)
 

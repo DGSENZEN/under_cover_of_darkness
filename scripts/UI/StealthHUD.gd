@@ -7,7 +7,7 @@ extends CanvasLayer
 ##                  keys and what they do: [E] Open door   [LMB] Throw
 ##   bottom centre  the lightgem, a cut jewel: dark when hidden, amber when
 ##                  lit; its rim brightens with exposure (stance, movement)
-##   above the gem  who is speaking and what they said
+##   above the gem  who is speaking (by name) and what they said
 ##   bottom left    health, as shields that only show when you are hurt
 ##   everywhere     a red vignette when hit, with an arc on the side the
 ##                  blow came from; the colour drains during a finisher; a
@@ -23,8 +23,11 @@ extends CanvasLayer
 ##                  and a red "!" once he has you, bursting as he calls it
 ##                  (the first of them to have you named under it). The man
 ##                  nearest to having you is drawn biggest; the ring's edge
-##                  glows while it is rising, so you see how fast. Off the
-##                  screen, his mark sits at its edge, the way he is.
+##                  glows while it is rising, so you see how fast, and a
+##                  tick sounds, quicker and higher as it fills. Off the
+##                  screen, his mark sits at its edge, the way he is; a man
+##                  behind a wall is marked fainter. The pause screen can
+##                  hide them all (Settings).
 ##
 ## Nothing here is read by gameplay. Hide the layer and the game is unchanged.
 
@@ -33,6 +36,7 @@ const AdrenalineViewScript := preload("res://scripts/Visual/AdrenalineView.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
+const SettingsScript := preload("res://scripts/UI/Settings.gd")
 
 const SUBTITLE_RANGE := 22.0
 ## A man noticing you is marked this near (m). One fighting you this near
@@ -42,8 +46,25 @@ const AWARE_RANGE := 45.0
 const AWARE_FIGHT_NEAR := 7.0
 const AWARE_FIGHT_TIME := 1.6
 const AWARE_NAME_TIME := 3.0
-## How far over his eyes the mark sits (m): above his balance bar.
+## How far over his eyes the mark sits (m): above his balance bar; and on
+## the screen, at least AWARE_CLEAR (px) above the top of the words over his
+## head (BARK_TOP, m, over the label's middle).
 const AWARE_OVER := 0.85
+const AWARE_CLEAR := 19.0
+const BARK_TOP := 0.13
+## A man with a wall between your eyes and his: his mark this faint (of
+## its alpha), looked for every WALLED_EVERY (s).
+const WALLED_ALPHA := 0.42
+const WALLED_EVERY := 0.12
+## While a man makes you out (his ring climbing: rise over TICK_RISE), a
+## tick: as often as he is quick about it (every TICK_EVERY s, slow to
+## quick as his rise goes to TICK_QUICK), higher (TICK_PITCH) and louder
+## (TICK_DB) the nearer he is to having you.
+const TICK_RISE := 0.04
+const TICK_QUICK := 0.6
+const TICK_EVERY := Vector2(0.62, 0.14)
+const TICK_PITCH := Vector2(1.2, 2.0)
+const TICK_DB := Vector2(-19.0, -10.0)
 ## A man's balance is shown over him this near.
 const POSTURE_RANGE := 16.0
 const INK := Color(0.93, 0.88, 0.78)
@@ -82,8 +103,13 @@ var _splatter: Splatter
 var _posture_marks: PostureMarks
 var _awareness: AwarenessMarks
 ## Per guard noticing you (by instance id): how his mark is being shown
-## (Dictionary: fill, last, rise, alpha, flash, since, name_until).
+## (Dictionary: fill, last, rise, alpha, flash, since, name_until, walled,
+## open, look_at).
 var _aware := {}
+var _tick_at := -100.0
+## Tests: how many ticks have sounded.
+var ticks := 0
+var _marks_toggle: Button
 var _grade: ColorRect
 var _grade_amount := 0.0
 var _last_real := -1.0
@@ -251,7 +277,8 @@ class AwarenessMarks:
 	## the screen: at its edge),
 	## out (at the edge, the way to him), fill 0..1, rise 0..1, icon ("eye",
 	## "heard", "look", "hunt", "fight"), lead (nearest to having you), flash
-	## 1..0, alpha, name ("" or who had you first), notches (0..1 each).
+	## 1..0, alpha (fainter while walled: a wall between you), name ("" or
+	## who had you first), notches (0..1 each).
 	var marks: Array = []
 	var clock := 0.0
 
@@ -610,6 +637,9 @@ func _build_pause() -> void:
 	_pause.mouse_filter = Control.MOUSE_FILTER_STOP
 	_pause.visible = false
 	_root.add_child(_pause)
+	# It takes the click, so the click resumes here (anywhere but on a
+	# setting).
+	_pause.gui_input.connect(_on_pause_input)
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.02, 0.02, 0.04, 0.72)
@@ -639,8 +669,53 @@ func _build_pause() -> void:
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(hint)
 
-	column.position = Vector2(-120, -50)
-	column.size = Vector2(240, 100)
+	# Your settings under it: a click on one changes it, and does not resume.
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 22)
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(gap)
+	_marks_toggle = Button.new()
+	_marks_toggle.flat = true
+	_marks_toggle.focus_mode = Control.FOCUS_NONE
+	_marks_toggle.add_theme_font_override("font", _font)
+	_marks_toggle.add_theme_font_size_override("font_size", 17)
+	_marks_toggle.add_theme_color_override("font_color", DIM)
+	_marks_toggle.add_theme_color_override("font_hover_color", INK)
+	_marks_toggle.add_theme_color_override("font_pressed_color", AMBER)
+	_marks_toggle.add_theme_color_override("font_hover_pressed_color", AMBER)
+	_marks_toggle.pressed.connect(toggle_awareness_marks)
+	column.add_child(_marks_toggle)
+	_show_settings()
+
+	# In the middle of the screen, whatever its size: offsets from the
+	# centre (a position would be from the corner).
+	column.set_anchors_preset(Control.PRESET_CENTER)
+	column.offset_left = -170.0
+	column.offset_right = 170.0
+	column.offset_top = -86.0
+	column.offset_bottom = 86.0
+
+
+## The marks over men noticing you, shown or hidden (the pause screen).
+func toggle_awareness_marks() -> void:
+	SettingsScript.set_awareness_marks(not SettingsScript.awareness_marks())
+	_show_settings()
+
+
+func _show_settings() -> void:
+	_marks_toggle.text = "Marks over guards:  %s" % ("shown" if SettingsScript.awareness_marks() else "hidden")
+
+
+func _on_pause_input(event: InputEvent) -> void:
+	if get_tree().paused and _is_click(event):
+		resume()
+		_pause.accept_event()
+
+
+## A mouse button pressed (not the wheel).
+static func _is_click(event: InputEvent) -> bool:
+	var button := event as InputEventMouseButton
+	return button != null and button.pressed and button.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE]
 
 
 func _label(font_size: int, colour: Color, align: HorizontalAlignment) -> Label:
@@ -938,8 +1013,7 @@ func _on_bark(text: String, guard: Node3D) -> void:
 	if guard.global_position.distance_to(player.global_position) > SUBTITLE_RANGE:
 		return
 
-	var speaker: String = guard.get("speaker_name") if guard.get("speaker_name") != null else "Guard"
-	_subtitle.text = "[color=#%s]%s[/color]   %s" % [DIM.to_html(false), speaker, text]
+	_subtitle.text = "[color=#%s]%s[/color]   %s" % [DIM.to_html(false), speaker_of(guard), text]
 	_subtitle_timer = 3.2
 
 
@@ -993,24 +1067,29 @@ func _aware_record(guard: Node3D) -> Dictionary:
 	var id := guard.get_instance_id()
 
 	if not _aware.has(id):
-		_aware[id] = {"fill": 0.0, "last": float(guard.get("alert")), "rise": 0.0, "alpha": 0.0, "flash": 0.0, "since": -100.0, "name_until": -100.0}
+		_aware[id] = {"fill": 0.0, "last": float(guard.get("alert")), "rise": 0.0, "alpha": 0.0, "flash": 0.0, "since": -100.0, "name_until": -100.0,
+			"walled": false, "open": 1.0, "look_at": -100.0}
 
 	return _aware[id]
 
 
 ## Every frame: each man noticing you, and how his mark shows (see the header,
-## and AwarenessMarks).
+## and AwarenessMarks); the tick while one makes you out. None of it while
+## the marks are hidden (Settings).
 func _update_awareness(delta: float) -> void:
 	var camera := get_viewport().get_camera_3d()
 	var marks: Array = []
 	var kept := {}
 	_awareness.clock += delta
 
-	if camera != null and not player.is_dead:
+	if camera != null and not player.is_dead and SettingsScript.awareness_marks():
 		var view := _awareness.size if _awareness.size.x > 1.0 else get_viewport().get_visible_rect().size
 		var now := TimeFx.real_time()
 		var lead: Dictionary = {}
 		var lead_fill := 0.03
+		# The ring climbing quickest (its rise, and how full it is).
+		var climbing := 0.0
+		var climbed := 0.0
 
 		for node in get_tree().get_nodes_in_group(&"guards"):
 			var guard := node as Node3D
@@ -1048,6 +1127,12 @@ func _update_awareness(delta: float) -> void:
 			if float(record["alpha"]) <= 0.01:
 				continue
 
+			# A wall between your eyes and his: fainter.
+			if now >= float(record["look_at"]):
+				record["look_at"] = now + WALLED_EVERY
+				record["walled"] = _walled_off(camera, guard)
+
+			record["open"] = move_toward(float(record["open"]), 0.0 if record["walled"] else 1.0, delta * 3.0)
 			var sees: bool = guard.get("can_see_target") == true
 			var icon: StringName = &"eye" if sees else &"heard"
 
@@ -1060,18 +1145,31 @@ func _update_awareness(delta: float) -> void:
 					icon = &"fight"
 
 			var mark := {"id": id, "fill": float(record["fill"]), "rise": float(record["rise"]), "icon": icon, "lead": false,
-				"flash": float(record["flash"]), "alpha": float(record["alpha"]), "edge": false, "out": Vector2.ZERO,
+				"flash": float(record["flash"]), "alpha": float(record["alpha"]) * lerpf(WALLED_ALPHA, 1.0, float(record["open"])),
+				"walled": bool(record["walled"]), "edge": false, "out": Vector2.ZERO,
 				"name": _name_of(guard) if now < float(record["name_until"]) else "",
 				"notches": [float(guard.get("suspicious_at")) / full, float(guard.get("investigate_at")) / full] if state < 3 else []}
-			_place_mark(mark, over, camera, view)
+			var words: Node3D = guard.get_node_or_null("Bark") as Node3D
+			_place_mark(mark, over, camera, view, words.global_position if words != null else Vector3.INF)
 			marks.append(mark)
 
 			if state < 4 and float(record["fill"]) > lead_fill:
 				lead_fill = float(record["fill"])
 				lead = mark
 
+			if state < 4 and float(record["rise"]) > maxf(climbing, TICK_RISE):
+				climbing = float(record["rise"])
+				climbed = float(record["fill"])
+
 		if not lead.is_empty():
 			lead["lead"] = true
+
+		# He is making you out: a tick, as quick as he is, higher the nearer
+		# he is to having you.
+		if climbing > 0.0 and now - _tick_at >= lerpf(TICK_EVERY.x, TICK_EVERY.y, clampf(climbing / TICK_QUICK, 0.0, 1.0)):
+			_tick_at = now
+			ticks += 1
+			Sfx.play_flat(self, &"ting", lerpf(TICK_DB.x, TICK_DB.y, climbed), lerpf(TICK_PITCH.x, TICK_PITCH.y, climbed), 0.01)
 
 	for id in _aware.keys():
 		if not kept.has(id):
@@ -1081,16 +1179,41 @@ func _update_awareness(delta: float) -> void:
 	_awareness.queue_redraw()
 
 
+## Whether something solid (the level, a closed door) stands between your
+## eye and his.
+func _walled_off(camera: Camera3D, guard: Node3D) -> bool:
+	var exclude: Array[RID] = [player.get_rid()]
+
+	if guard is CollisionObject3D:
+		exclude.append((guard as CollisionObject3D).get_rid())
+
+	# Not what you carry in front of your eyes.
+	var held: Variant = player.frob.get("held") if player.frob != null else null
+
+	if held is CollisionObject3D and is_instance_valid(held):
+		exclude.append((held as CollisionObject3D).get_rid())
+
+	var query := PhysicsRayQueryParameters3D.create(camera.global_position, guard.eye_position(), 1, exclude)
+	query.collide_with_areas = false
+	return not camera.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+
 ## Where a mark goes: over him, or off the screen at its edge the way he is:
 ## off to a side or above, where he would be; behind you, round the bottom
 ## of it (ahead is up, behind is down, as the marks of blows).
-func _place_mark(mark: Dictionary, over: Vector3, camera: Camera3D, view: Vector2) -> void:
+func _place_mark(mark: Dictionary, over: Vector3, camera: Camera3D, view: Vector2, words := Vector3.INF) -> void:
 	var margin := minf(38.0, minf(view.x, view.y) * 0.1)
 	var centre := view * 0.5
 	var behind := camera.is_position_behind(over)
 	var at := camera.unproject_position(over) if not behind else centre
 
 	if not behind and at.x > margin and at.x < view.x - margin and at.y > margin and at.y < view.y - margin:
+		# Above what he says over his head (Guard's "Bark"), never over it:
+		# however far off he is, the ring clears the top of his words.
+		if words != Vector3.INF and not camera.is_position_behind(words):
+			var top := camera.unproject_position(words + Vector3.UP * BARK_TOP)
+			at.y = minf(at.y, top.y - AWARE_CLEAR)
+
 		mark["at"] = at
 		return
 
@@ -1119,6 +1242,22 @@ func _place_mark(mark: Dictionary, over: Vector3, camera: Camera3D, view: Vector
 func _name_of(guard: Node3D) -> String:
 	var given: Variant = guard.get("given_name")
 	return String(given) if given != null and String(given) != "" else String(guard.get("speaker_name"))
+
+
+## Who is speaking, as the subtitles name him: his own name, and what he is
+## if he is more than a guard ("Roderick", "Isolde, duelist"). The same name
+## as his mark carries once he has you.
+static func speaker_of(guard: Node) -> String:
+	var given: Variant = guard.get("given_name")
+	var what: String = String(guard.get("speaker_name")) if guard.get("speaker_name") != null else "Guard"
+
+	if given == null or String(given) == "":
+		return what
+
+	if what == "" or what == "Guard":
+		return String(given)
+
+	return "%s, %s" % [String(given), what.to_lower()]
 
 
 ## The awareness marks shown now (tests).
@@ -1294,14 +1433,12 @@ void fragment() {
 """
 
 
-## Esc paused the game; any click resumes it.
+## Esc paused the game; Esc again, or a click (_on_pause_input), resumes it.
 func _unhandled_input(event: InputEvent) -> void:
 	if not get_tree().paused:
 		return
 
-	var click := event is InputEventMouseButton and (event as InputEventMouseButton).pressed
-
-	if click or event.is_action_pressed("ui_cancel"):
+	if _is_click(event) or event.is_action_pressed("ui_cancel"):
 		resume()
 		get_viewport().set_input_as_handled()
 

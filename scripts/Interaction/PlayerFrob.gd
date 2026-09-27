@@ -237,7 +237,8 @@ func _set_target(new_target: Node) -> void:
 
 
 func _apply_highlight(node: Node, on: bool) -> void:
-	if node is GeometryInstance3D:
+	# Not a flame (a torch's: a glow over its quad would show as a box).
+	if node is GeometryInstance3D and not node.has_meta(&"no_highlight"):
 		(node as GeometryInstance3D).material_overlay = _highlight_material if on else null
 
 	for child in node.get_children():

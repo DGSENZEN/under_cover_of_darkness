@@ -1,7 +1,8 @@
 ## Visual check, not a test: the marks over men noticing you (StealthHUD's
 ## awareness marks). One ahead makes you out (his eye opening, the ring
 ## filling, then his "!" and his name), one off to the left comes to look (a
-## "?" at the edge), one behind you heard something (at the bottom edge).
+## "?" at the edge), one behind you heard something (at the bottom edge), one
+## behind a wall ahead (marked fainter). Last, the pause screen.
 ##   Godot --fixed-fps 60 --resolution 960x540 --path . res://tests/visual/stage_detect.tscn -- --out=/some/folder
 extends Node3D
 
@@ -27,6 +28,8 @@ func _ready() -> void:
 	TemperamentScript.rolling = false
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(80, 1, 80), Color(0.3, 0.29, 0.28))
 	Props.block(self, Vector3(0, 2, -24), Vector3(30, 4, 0.4), Color(0.42, 0.4, 0.38))
+	# A wall with a man behind it, ahead and to the left.
+	Props.block(self, Vector3(-6, 1.5, -10), Vector3(5, 3, 0.4), Color(0.42, 0.4, 0.38))
 
 	for at in [Vector3(-4, 3.0, -12), Vector3(4, 3.0, -12), Vector3(0, 3.0, 2)]:
 		var lamp := OmniLight3D.new()
@@ -62,7 +65,13 @@ func _ready() -> void:
 	var ahead := _man(Vector3(1.5, 0, -9), PI)
 	var left := _man(Vector3(-17, 0, -3), -PI * 0.5)
 	var behind := _man(Vector3(2, 0, 11), 0.0)
+	var walled := _man(Vector3(-7, 0, -14), PI * 0.8)
 	await _frames(30)
+	walled.last_known_position = Vector3(-4, 0, -4)
+	walled.has_last_known = true
+	walled._stimulus = &"noise"
+	walled._since_stimulus = 0.0
+	walled.alert = 30.0
 	left.last_known_position = Vector3(-2, 0, -1)
 	left.has_last_known = true
 	left._stimulus = &"noise"
@@ -75,6 +84,7 @@ func _ready() -> void:
 	for i in 16:
 		await _frames(8)
 		await _shot("detect_%02d" % i)
+		print("  %02d ticks %d ahead fill %.2f rise %.2f" % [i, player.hud.ticks, float(player.hud._aware.get(ahead.get_instance_id(), {}).get("fill", 0.0)), float(player.hud._aware.get(ahead.get_instance_id(), {}).get("rise", 0.0))])
 
 	# Had: his "!", his name.
 	await _until(func(): return int(ahead.state) == 4, 240)
@@ -86,7 +96,14 @@ func _ready() -> void:
 	player.rotation.y = PI * 0.6
 	await _frames(10)
 	await _shot("detect_turned")
-	print("detect: ahead %d (%.0f) left %d (%.0f) behind %d (%.0f)" % [int(ahead.state), ahead.alert, int(left.state), left.alert, int(behind.state), behind.alert])
+	print("detect: ahead %d (%.0f) left %d (%.0f) behind %d (%.0f) ticks %d" % [int(ahead.state), ahead.alert, int(left.state), left.alert, int(behind.state), behind.alert, player.hud.ticks])
+	# The pause screen.
+	var esc := InputEventAction.new()
+	esc.action = &"ui_cancel"
+	esc.pressed = true
+	player._unhandled_input(esc)
+	await _frames(3)
+	await _shot("detect_paused")
 	Sfx.silence()
 	await _frames(3)
 	get_tree().quit()

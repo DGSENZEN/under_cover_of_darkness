@@ -126,6 +126,8 @@ func _torch(at: Vector3) -> void:
 	var torch: Node3D = TorchScript.new()
 	torch.energy = 2.2
 	torch.light_range = 9.0
+	# One of the level's own: you can put it out (the guards light it again).
+	torch.can_douse = true
 	add_child(torch)
 	torch.global_position = at
 

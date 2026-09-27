@@ -16,6 +16,8 @@ extends RefCounted
 ##           one of your arrows in a wall, a body, a fight, the bell. It holds
 ##           a while once raised, then settles. Roused, men take lanterns into
 ##           the dark and talk of nothing else (GuardLife.gd).
+##   lights  the torches found put out (light_found_out): one is a draught;
+##           several not long apart is someone at work in the dark.
 ##   fallen  the posts of men you took quietly (knocked out, or killed before
 ##           anyone knew you were there): a man who knew one, looking at his
 ##           post, misses him.
@@ -53,6 +55,10 @@ const ALARM_FADE := 1.0 / 240.0
 ## A look into something is his for this long, and covers this much ground.
 const LOOK_HOLD := 15.0
 const LOOK_REACH := 5.0
+## Torches found put out this near together (s) count as one night's work:
+## from LIGHTS_WORK of them, somebody is putting them out.
+const LIGHTS_TOGETHER := 150.0
+const LIGHTS_WORK := 2
 ## What men at their ease talk about, [said, answered], by what is on their
 ## minds (gossip).
 const SMALL_TALK := [
@@ -78,6 +84,10 @@ const TALK_OF_CAPTAIN := [["They killed the captain.", "Then we make them pay fo
 const TALK_OF_ALARM := [
 	["Eyes open. He's still in here somewhere.", "I know, I know."],
 	["Stay where I can see you.", "Likewise."],
+]
+const TALK_OF_LIGHTS := [
+	["The torches keep going out.", "That's no draught. Someone's putting them out."],
+	["Another light out on the east side.", "Then keep your lantern lit."],
 ]
 const TALK_OF_HABITS := {
 	&"turtle": ["They say he hides behind his blade.", "Then put a boot through it."],
@@ -120,6 +130,8 @@ var _last_dread_at := -100.0
 var _alarm_at := -100.0
 ## [{where, by (weakref), at}]: who is looking into what.
 var _looks := []
+## When each torch found put out was found (clock), by the torch.
+var _lights_out := {}
 
 
 ## The garrison's memory of `target` (made the first time it is asked for).
@@ -240,6 +252,23 @@ func raise_alarm(level: float) -> void:
 	_alarm_at = clock
 
 
+## `torch` has been found put out: how many torches have been, this one
+## with them, within LIGHTS_TOGETHER (s) (each torch counted once, however
+## often it is found).
+func light_found_out(torch: Object) -> int:
+	_lights_out[torch.get_instance_id()] = clock
+	return lights_out()
+
+
+## Torches found put out not long since (LIGHTS_TOGETHER).
+func lights_out() -> int:
+	for id in _lights_out.keys():
+		if clock - float(_lights_out[id]) >= LIGHTS_TOGETHER:
+			_lights_out.erase(id)
+
+	return _lights_out.size()
+
+
 ## A man taken quietly from his post at `where` (knocked out, or killed while
 ## nobody knew you were there): whoever knew him will miss him there.
 func post_fell(where: Vector3, called: String, at: float) -> void:
@@ -296,6 +325,9 @@ func gossip() -> Array:
 
 	if alarm > 0.45:
 		topics.append_array(TALK_OF_ALARM)
+
+	if lights_out() >= LIGHTS_WORK:
+		topics.append_array(TALK_OF_LIGHTS)
 
 	for habit in TALK_OF_HABITS:
 		if float(habits.get(habit, 0.0)) > 0.35:

@@ -76,9 +76,10 @@ const LINES := {
 ## GuardLife.gd, GuardHands.gd, Comms.gd, Squad.gd; begging for his life, let
 ## go or struck, safe among his own, his heart back: GuardMercy.gd; to himself
 ## at his ease, and woken from a doze: GuardHabits.gd; a greeting going by, and
-## one back: GuardLife.gd; the hunt given up, after he saw you: Guard.gd). "%s"
-## in a "missing" or "quiet" line is the man's name; in a "greet", the name of
-## the man greeted.
+## one back: GuardLife.gd; the hunt given up, after he saw you; searching, a
+## look into somewhere to hide, up at a ledge, into a room, and a door held
+## for the man going in: Guard.gd). "%s" in a "missing" or "quiet" line is
+## the man's name; in a "greet", the name of the man greeted.
 const MORE_LINES := {
 	&"steady": {&"ack": ["On my way!", "Coming!", "I hear you!"], &"noise_ask": ["Did you hear that?", "What was that?"],
 		&"noise_cover": ["Go on, I've got you.", "Careful."], &"clear": ["Nothing. Rats, likely.", "Nothing here."],
@@ -87,8 +88,12 @@ const MORE_LINES := {
 		&"watch": ["I'll keep watch from here.", "I'll watch this way."], &"intercept": ["I'll cut him off!", "Head him off!"],
 		&"missing": ["Where's %s got to?", "%s? Where are you?"], &"odd_door": ["Who left this open?", "This was shut."],
 		&"odd_arrow": ["An arrow? Someone's here.", "That's not one of ours."], &"odd_weapon": ["That's a guard's sword...", "Whose blade is this?"],
+		&"odd_light": ["The torch has gone out.", "Blasted draught."], &"odd_lights": ["Another light out? Someone's putting them out!", "That's no draught. Someone's in here."],
 		&"lantern": ["Too dark. Let's have some light.", "Where's my lantern..."], &"bell": ["Ring the bell!", "Sound the alarm!"],
 		&"danger": ["Powder! Get back!"],
+		&"peer": ["Anyone in there?", "Let's have a look in here.", "Check the corners."],
+		&"peer_up": ["Up there, are you?", "Check up high."], &"room": ["Anyone in here?", "Checking in here."],
+		&"hold_door": ["Go in. I've got the door.", "I'll hold the door."],
 		&"descend": ["I'm coming down!", "Hold on, I'm coming!", "Hold him! I'm coming down!"],
 		&"quiet": ["%s's gone quiet! To arms!", "Something's got %s! Up, all of you!"],
 		&"plead": ["Mercy! Mercy!", "Please - I yield! I yield!", "Don't kill me, I beg you!", "I've a wife... children... please!",
@@ -106,8 +111,11 @@ const MORE_LINES := {
 	&"rash": {&"ack": ["He's mine!", "Leave him to me!"], &"noise_ask": ["You hear that? I'll go."], &"noise_cover": ["Hurry up, then."],
 		&"clear": ["Nothing. Pity."], &"disarmed": ["I'll kill you with my bare hands!"], &"rearmed": ["Now you're dead!"],
 		&"unreachable": ["Come down and fight, coward!"], &"throw": ["Eat this!"], &"watch": ["Fine, I'll watch. Hurry up."],
+		&"peer": ["Come out of there!", "I know you're in there!"], &"peer_up": ["Come down from there!"],
+		&"room": ["In here, are you?!"], &"hold_door": ["Go on, flush him out!"],
 		&"intercept": ["He won't get past me!"], &"missing": ["%s! Get back here, you idler!"], &"odd_door": ["Who's been through here?!"],
 		&"odd_arrow": ["Someone's shooting at us! Show yourself!"], &"odd_weapon": ["Whose sword is this?!"], &"lantern": ["Light! Where are you hiding?"],
+		&"odd_light": ["Who put the light out?!"], &"odd_lights": ["Somebody's creeping about in the dark! Show yourself!"],
 		&"bell": ["Rouse them all!"], &"descend": ["Leave him to me!", "Enough watching!"], &"plead": ["Enough! Enough, you've won!", "Alright! I yield, curse you!"],
 		&"struck": ["Coward! I yielded!"], &"emboldened": ["Now you'll pay for that!"],
 		&"mutter": ["Nothing ever happens here.", "I'd give a month's pay for a fight.", "Bored. Bored, bored, bored."], &"woken": ["Who dares?!", "What? Who's there?!"],
@@ -117,8 +125,11 @@ const MORE_LINES := {
 	&"sly": {&"ack": ["I'll come round the other way."], &"noise_ask": ["Hear that? Stay here."], &"noise_cover": ["I'll watch the shadows."],
 		&"clear": ["Nothing... for now."], &"disarmed": ["Careless of me."], &"rearmed": ["Where were we?"],
 		&"unreachable": ["We can wait."], &"throw": ["Heads up."], &"watch": ["I'll watch from here. Flush him out."],
+		&"peer": ["Hiding in the dark, are we?", "Let's see what's in here..."], &"peer_up": ["Up high, perhaps..."],
+		&"room": ["A room. Plenty of places to hide."], &"hold_door": ["I'll wait by the door. He'll come to me."],
 		&"intercept": ["I'll get ahead of him."], &"missing": ["No %s... that's not like him."], &"odd_door": ["Now who opened this?"],
 		&"odd_arrow": ["Someone's been shooting. Interesting."], &"odd_weapon": ["Somebody dropped this. Somebody dead."], &"lantern": ["Let's see you now."],
+		&"odd_light": ["Now who put that out?"], &"odd_lights": ["Someone likes the dark. So do I."],
 		&"bell": ["To the bell."], &"descend": ["Time I took a hand."], &"plead": ["Wait - wait! I can be useful to you!", "Spare me and I'll tell you where the others are!", "Let's be sensible about this..."],
 		&"spared": ["You won't regret it.", "Wise. Very wise."], &"safe": ["He's there. Go on, then - get him."],
 		&"emboldened": ["Did you really think I meant it?"],
@@ -129,8 +140,11 @@ const MORE_LINES := {
 	&"stubborn": {&"ack": ["Hold him there!"], &"noise_ask": ["Something's out there. Wait here."], &"noise_cover": ["I'm right behind you."],
 		&"clear": ["Clear."], &"disarmed": ["I don't need a blade for you."], &"rearmed": ["Again."],
 		&"unreachable": ["I'll be right here when you come down."], &"throw": ["Here!"], &"watch": ["Nothing gets past me."],
+		&"peer": ["Corner. Clear it.", "Checking here."], &"peer_up": ["Check the ledges."],
+		&"room": ["Clearing the room."], &"hold_door": ["Nobody leaves. I've got the door."],
 		&"intercept": ["Cut him off!"], &"missing": ["%s should be here."], &"odd_door": ["This stays shut."],
 		&"odd_arrow": ["Arrows. Everyone look sharp."], &"odd_weapon": ["A blade on the floor. Not good."], &"lantern": ["Light it up."],
+		&"odd_light": ["That torch should be lit."], &"odd_lights": ["Another one out. Stay sharp, all of you."],
 		&"bell": ["Sound the alarm!"], &"descend": ["Hold the line! I'm coming!"],
 		&"mutter": ["Stay sharp.", "Not on my watch.", "Eyes open."], &"woken": ["On my feet! On my feet!"],
 		&"greet": ["%s.", "All well?", "Eyes open, %s."], &"greet_back": ["All well.", "Aye."],
@@ -139,8 +153,11 @@ const MORE_LINES := {
 	&"craven": {&"ack": ["C-coming..."], &"noise_ask": ["D-did you hear that?"], &"noise_cover": ["You go. I'll... watch."],
 		&"clear": ["N-nothing. Thank the gods."], &"disarmed": ["No, no, no - my sword!"], &"rearmed": ["Stay back! I'm armed!"],
 		&"unreachable": ["Someone get a bow!"], &"throw": ["Get away!"], &"watch": ["I'll... stay here and watch."],
+		&"peer": ["P-please be empty...", "Is s-someone in there?"], &"peer_up": ["Is he... up there?"],
+		&"room": ["I don't like this..."], &"hold_door": ["I'll... I'll watch the door."],
 		&"intercept": ["Th-this way!"], &"missing": ["%s? This isn't funny..."], &"odd_door": ["This was shut... wasn't it?"],
 		&"odd_arrow": ["An arrow... gods."], &"odd_weapon": ["A sword... where's the man who carried it?"], &"lantern": ["I need light. I need light..."],
+		&"odd_light": ["The light's gone out... why's the light gone out?"], &"odd_lights": ["They're putting the lights out... gods, they're in here..."],
 		&"bell": ["The bell! Somebody ring the bell!"], &"descend": ["Oh gods... I'm coming, I'm coming!"], &"plead": ["Please! Please! Don't hurt me!", "I don't want to die! Mercy!", "Mother... please... no...",
 			"I'll do anything! Anything!"], &"spared": ["Th-thank you... oh gods, thank you!"], &"struck": ["No! No, please, no!"],
 		&"safe": ["Help me! He's there! He's there!"],

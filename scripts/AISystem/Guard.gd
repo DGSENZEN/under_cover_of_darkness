@@ -11,9 +11,10 @@ extends CharacterBody3D
 ##               COMBAT fights you (GuardFighter.gd).
 ##   THE HUNT    Once he has taken you on he is one of a hunt (Squad.gd) until
 ##               he dies or gives the search up: losing sight of you, he
-##               searches the ground the hunt gives him; a friend who finds
-##               you again calls him in (hear_call), and a runner can fetch
-##               him to it from his post (join_hunt).
+##               searches the ground the hunt gives him (where you could be
+##               hiding: SearchSpots.gd); a friend who finds you again calls
+##               him in (hear_call), and a runner can fetch him to it from his
+##               post (join_hunt).
 ##   WHO HE IS   his temperament (`temperament`, Temperament.gd), and what the
 ##               whole garrison knows and dreads of you (Garrison.gd, ticked
 ##               by every guard).
@@ -61,6 +62,7 @@ const GuardMercyScript := preload("res://scripts/AISystem/GuardMercy.gd")
 const GuardClimbScript := preload("res://scripts/AISystem/GuardClimb.gd")
 const GuardWaterScript := preload("res://scripts/AISystem/GuardWater.gd")
 const GuardHabitsScript := preload("res://scripts/AISystem/GuardHabits.gd")
+const SearchSpotsScript := preload("res://scripts/AISystem/SearchSpots.gd")
 ## Bleeding (bleeding): at most this much a second, never below this share of
 ## his health, and bound this long after he last saw you.
 const BLEED_MAX := 4.0
@@ -104,9 +106,31 @@ const BODY_SHOUT_GAP := 15.0
 const TRAIL_FRESH := 6.0
 const TRAIL_MAX := 18.0
 const TRAIL_SPREAD := 2.5
+## A tracker (guile at least TRACKER_GUILE, or an archer's eye) reads the
+## ground instead: the trail goes the way the floor goes on from where he lost
+## you, round a corner or through a doorway, not only straight on until a
+## wall. The turns of it he tries (rad, off the way you were going: the
+## straightest first), and how roundabout a way may be (its length over the
+## straight line) and still be the way you went.
+const TRACKER_GUILE := 0.65
+const TRACK_TURNS := [0.0, 0.45, -0.45, 0.9, -0.9, 1.35, -1.35]
+const TRACK_ROUNDABOUT := 1.6
 const HOT_TIME := 5.0
 const HOT_PACE := 0.85
 const HOT_POINTS := 2
+## Searching a place where you could be hiding (SearchSpots): he looks into it
+## as he comes up to it (from this near, m), and for this share of his look
+## about him there; a door he holds for a man gone through it, all his look,
+## HOLD_LOOK times as long. What he says going to it, now and then (this
+## share of the time); a place he has searched is left alone SEARCHED_FOR (s),
+## unless you are seen again.
+const PEER_NEAR := 6.0
+const PEER_SHARE := 0.45
+const HOLD_LOOK := 2.0
+const SPOT_LINE := 0.35
+const SEARCHED_FOR := 60.0
+## The lines for going to each kind of place.
+const SPOT_LINES := {&"nook": &"peer", &"dark": &"peer", &"room": &"room", &"ledge": &"peer_up", &"hold": &"hold_door"}
 ## Called to a fight (a shout, a call of where you are, the bell): he goes at
 ## a run, not a walk.
 const URGENT := [&"shout", &"call", &"alarm"]
@@ -333,6 +357,10 @@ var _hunted_at := -1000.0
 ## fresh word of you until then (HOT_TIME).
 var _trailing := false
 var _hot_until := -100.0
+## The place he is searching (SearchSpots: stand, peer, kind), {} if none;
+## the places he has searched himself ([point, game time]).
+var _spot := {}
+var _searched: Array = []
 var _standing_still := true
 ## A line waiting its moment: [text, kind, when (game time), the state it is
 ## for, voices]; and when he last said each kind of line (_chorus).
@@ -2520,6 +2548,7 @@ func _set_state(new_state: int) -> void:
 	state = new_state as Alert
 	_wait_timer = 0.0
 	_look_timer = 0.0
+	_spot = {}
 	# A line he had yet to say for the state he was in goes unsaid.
 	_pending_line = []
 
@@ -2541,6 +2570,7 @@ func _set_state(new_state: int) -> void:
 	# claimed to look into, is left (GuardLife.stirred_to_fight).
 	if new_state == Alert.COMBAT and _hands != null:
 		_hands.drop_lantern()
+		_hands.stop_relighting()
 
 		if _hands.stooping_for() == &"evidence":
 			_hands.interrupt()
@@ -2870,12 +2900,14 @@ func _do_search(delta: float) -> void:
 				_scan = _post_headings()
 		else:
 			_trailing = false
+			_spot = {}
 			_hot_until = _game_time + HOT_TIME
 			_look_timer = 0.0
 			_go_to(from)
 
 	if _look_timer > 0.0:
 		if _look_around(delta):
+			_searched_here()
 			_search_left -= 1
 
 			if _search_left <= 0:
@@ -2995,6 +3027,7 @@ func _scare() -> void:
 
 
 func _next_search_point() -> void:
+	_spot = {}
 	# The hunt's watcher: to his vantage, for a long look from it.
 	var watch: Variant = _fighter.squad.watch_point_for(self) if _fighter != null and _fighter.squad != null else null
 
@@ -3011,27 +3044,99 @@ func _next_search_point() -> void:
 		_go_to(_home.origin, true)
 		return
 
-	# In a hunt, the squad shares the ground out: his own piece of it.
-	var shared: Variant = _fighter.squad.search_point_for(self) if _fighter != null and _fighter.squad != null else null
+	# In a hunt, the squad shares the ground out: his own piece of it, and
+	# the likeliest place in it to hide.
+	var shared: Dictionary = _fighter.squad.search_spot_for(self) if _fighter != null and _fighter.squad != null else {}
 
-	if shared is Vector3:
-		_go_to(shared, true)
+	if not shared.is_empty():
+		_search_at(shared)
+		return
+
+	# Alone: the likeliest place round where he thinks you are.
+	var center := last_known_position if has_last_known else global_position
+	var heading := _likely_heading()
+	var own := SearchSpotsScript.pick(self, center, Vector3(heading.x, 0.0, heading.z), search_radius, [], 0.0, _searched_points())
+
+	if not own.is_empty():
+		_search_at(own)
 		return
 
 	var map := get_world_3d().navigation_map
-	var center := last_known_position if has_last_known else global_position
 	var angle := randf() * TAU
 	var reach := randf_range(search_radius * 0.4, search_radius)
 	var guess := center + Vector3(cos(angle), 0.0, sin(angle)) * reach
 	_go_to(NavigationServer3D.map_get_closest_point(map, guess), true)
 
 
+## To search `spot` (SearchSpots, or the hunt's share of the ground): there,
+## looking into it as he comes; saying where, now and then (a door he holds,
+## always: the man going through should know).
+func _search_at(spot: Dictionary) -> void:
+	_spot = spot
+	_go_to(spot["stand"], true)
+	var kind: StringName = spot.get("kind", &"")
+	var line: StringName = SPOT_LINES.get(kind, &"")
+
+	if line != &"" and _fighter != null and _fighter.temper != null and (kind == &"hold" or randf() < SPOT_LINE):
+		_chorus(line, _fighter.temper.line(line))
+
+
+## He has looked about him at the place he searched: it is searched (his own
+## to leave alone, and the hunt's).
+func _searched_here() -> void:
+	if _spot.is_empty():
+		return
+
+	var point: Vector3 = _spot["stand"]
+	_searched.append([point, _game_time])
+
+	if _searched.size() > 12:
+		_searched.pop_front()
+
+	if _fighter != null and _fighter.squad != null:
+		_fighter.squad.searched(point)
+
+	_spot = {}
+
+
+## The places he has searched himself, not long since.
+func _searched_points() -> Array:
+	var points := []
+
+	for done in _searched:
+		if _game_time - float(done[1]) < SEARCHED_FOR:
+			points.append(done[0])
+
+	return points
+
+
+## What he is looking into as he searches (the place's "peer": SearchSpots):
+## coming up to it, and the first part of his look about him there (a door
+## he holds, all of it). INF if nothing: none, or it is where he stands.
+func peer_point() -> Vector3:
+	if _spot.is_empty() or state != Alert.SEARCHING or _trailing:
+		return Vector3.INF
+
+	var peer: Vector3 = _spot.get("peer", Vector3.INF)
+
+	if peer == Vector3.INF or (_flat_distance(peer) < 1.2 and absf(peer.y - eye_position().y) < 1.0):
+		return Vector3.INF
+
+	if _look_timer > 0.0:
+		var done := 1.0 - _look_timer / maxf(_look_length, 0.01)
+		return peer if _spot.get("kind", &"") == &"hold" or done < PEER_SHARE else Vector3.INF
+
+	return peer if _flat_distance(_spot["stand"]) < PEER_NEAR else Vector3.INF
+
+
 ## Where the trail of you, just lost, leads: on from where he last had you
 ## the way you were going, as far as you could have got since at your pace
-## (TRAIL_MAX at most), as far as the ground goes that way, and to one side
-## of it by his own lot (so they do not all run in single file). INF if there
-## is no trail: you were standing, it has gone cold, or no ground goes that
-## way (or it is near enough that he may as well look about him here).
+## (TRAIL_MAX at most), as far as the ground goes that way (to a wall across
+## it), and to one side of it by his own lot (so they do not all run in
+## single file); a tracker's, the way the floor goes on (_tracked_trail).
+## INF if there is no trail: you were standing, it has gone cold, or no
+## ground goes that way (or it is near enough that he may as well look about
+## him here).
 func _trail_point() -> Vector3:
 	var heading := _likely_heading()
 
@@ -3041,8 +3146,21 @@ func _trail_point() -> Vector3:
 	var way := Vector3(heading.x, 0.0, heading.z).normalized()
 	var pace := clampf(Vector2(heading.x, heading.z).length(), 3.0, 7.0)
 	var reach := clampf(pace * (_since_seen + 1.0), 6.0, TRAIL_MAX)
+
+	if tracker():
+		var tracked := _tracked_trail(way, reach)
+
+		if tracked != Vector3.INF:
+			return tracked
+
 	var aside := Vector3.UP.cross(way) * randf_range(-TRAIL_SPREAD, TRAIL_SPREAD)
 	var map := get_world_3d().navigation_map
+	var space := get_world_3d().direct_space_state
+	var exclude: Array[RID] = [get_rid()]
+
+	if _target is CollisionObject3D:
+		exclude.append((_target as CollisionObject3D).get_rid())
+
 	var best := Vector3.INF
 	var along := 2.0
 
@@ -3051,6 +3169,13 @@ func _trail_point() -> Vector3:
 		var on := NavigationServer3D.map_get_closest_point(map, guess)
 
 		if Vector2(on.x - guess.x, on.z - guess.z).length() > 1.2 or absf(on.y - guess.y) > 2.5:
+			break
+
+		# A wall across it (or a shut door): the trail ends there, not on the
+		# floor beyond. Chest high: a crate in the way is only in the way.
+		var chest := Vector3.UP * 1.3
+
+		if best != Vector3.INF and not space.intersect_ray(PhysicsRayQueryParameters3D.create(best + chest, on + chest, 1, exclude)).is_empty():
 			break
 
 		best = on
@@ -3062,18 +3187,106 @@ func _trail_point() -> Vector3:
 	return best
 
 
+## Whether he reads a trail as a tracker does (TRACKER_GUILE): the sly, and
+## archers.
+func tracker() -> bool:
+	return _fighter != null and (bool(_fighter.ranged) or (_fighter.temper != null and float(_fighter.temper.guile) >= TRACKER_GUILE))
+
+
+## A tracker's trail: where the floor leads on from where he lost you, the
+## way you were going or the least turn off it that goes on (round a corner,
+## through a doorway), as far along it as you could have got (`reach`). INF if
+## no way goes on from there (or it is near enough to look about him here).
+func _tracked_trail(way: Vector3, reach: float) -> Vector3:
+	var map := get_world_3d().navigation_map
+	var from := NavigationServer3D.map_get_closest_point(map, last_known_position)
+	var best := Vector3.INF
+	var best_score := -INF
+
+	for turn: float in TRACK_TURNS:
+		var guess := from + way.rotated(Vector3.UP, turn) * reach
+		var goal := NavigationServer3D.map_get_closest_point(map, guess)
+		var straight := _flat(from, goal)
+
+		# The floor gives out soon that way, or it is another level.
+		if straight < reach * 0.5 or absf(goal.y - from.y) > 2.5:
+			continue
+
+		var path := NavigationServer3D.map_get_path(map, from, goal, true)
+
+		if path.size() < 2 or _flat(path[path.size() - 1], goal) > 0.5:
+			continue
+
+		var length := 0.0
+
+		for i in range(1, path.size()):
+			length += path[i - 1].distance_to(path[i])
+
+		# A long way round is not the way anyone went.
+		if length > straight * TRACK_ROUNDABOUT + 2.0:
+			continue
+
+		# Straight on if it goes as far; a turn off it if that goes further.
+		var score := cos(turn) + 2.0 * minf(length, reach) / reach
+
+		if score > best_score:
+			best_score = score
+			best = _along(path, minf(reach, length))
+
+	if best == Vector3.INF or _flat_distance(best) < 3.0:
+		return Vector3.INF
+
+	return best
+
+
+static func _flat(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
+## The point `far` (m) along `path`.
+static func _along(path: PackedVector3Array, far: float) -> Vector3:
+	var left := far
+
+	for i in range(1, path.size()):
+		var leg := path[i - 1].distance_to(path[i])
+
+		if leg >= left:
+			return path[i - 1].lerp(path[i], left / maxf(leg, 0.0001))
+
+		left -= leg
+
+	return path[path.size() - 1]
+
+
 func _start_looking() -> void:
-	# Keeping watch for the hunt, or from his post: a long look.
-	_look_length = look_around_time * (4.0 if _watching or lookout else 1.0)
+	# Keeping watch for the hunt, or from his post: a long look. Holding a
+	# door for a man gone through: longer.
+	_look_length = look_around_time * (4.0 if _watching or lookout else HOLD_LOOK if _spot.get("kind", &"") == &"hold" else 1.0)
 	_look_timer = _look_length
 	_look_from_yaw = rotation.y
+	var peer := peer_point()
 
 	if _watching:
 		_scan = _watch_headings()
 	elif lookout and global_position.distance_to(_home.origin) <= POST_NEAR and has_last_known:
 		_scan = _post_headings()
+	elif peer != Vector3.INF:
+		_scan = _peer_headings(peer)
 	else:
 		_scan = _scan_headings()
+
+
+## Searching a place: into it first, across it either side, then about him
+## (the way you were going first); a door he holds, only it.
+func _peer_headings(peer: Vector3) -> Array:
+	var to := peer - global_position
+	var toward := atan2(-to.x, -to.z)
+
+	if _spot.get("kind", &"") == &"hold":
+		return [toward, toward + 0.3, toward, toward - 0.3, toward]
+
+	var about := _scan_headings()
+	return [toward, toward + 0.4, toward - 0.4, about[0], about[1], about[3]]
 
 
 ## Where he looks, in turn, when he stops to look about him: first the way
@@ -3380,6 +3593,9 @@ func _update_head(delta: float) -> void:
 	if _head == null:
 		return
 
+	# Searching a place, what he looks into (INF: nothing in particular).
+	var peer := peer_point()
+
 	match state:
 		Alert.RELAXED:
 			# An idle guard's gaze drifts; a lookout's sweeps wider. About
@@ -3403,8 +3619,13 @@ func _update_head(delta: float) -> void:
 				_head_yaw_goal = clampf(wrapf(wanted - rotation.y, -PI, PI), -1.2, 1.2)
 		_:
 			# Stopped to look about him: his eyes go either side of the way
-			# he faces.
+			# he faces. Searching a place: to it, as he comes and first thing
+			# there.
 			_head_yaw_goal = sin(_look_timer * 4.5) * 0.55 if _look_timer > 0.0 and state != Alert.COMBAT else 0.0
+
+			if peer != Vector3.INF:
+				var to := peer - global_position
+				_head_yaw_goal = clampf(wrapf(atan2(-to.x, -to.z) - rotation.y, -PI, PI), -1.2, 1.2) + sin(_game_time * 1.7) * 0.12
 
 	_head.rotation.y = lerp_angle(_head.rotation.y, _head_yaw_goal, 1.0 - exp(-6.0 * delta))
 
@@ -3419,6 +3640,10 @@ func _update_head(delta: float) -> void:
 	elif state == Alert.RELAXED and _habits != null:
 		# Up at the sky, out over a rail, down asleep.
 		pitch_goal = _habits.head().y
+	elif peer != Vector3.INF:
+		# Up at a ledge, down into a corner.
+		var into := peer - eye_position()
+		pitch_goal = clampf(atan2(into.y, Vector2(into.x, into.z).length()), -LOOK_PITCH, LOOK_PITCH)
 
 	_head.rotation.x = lerp_angle(_head.rotation.x, pitch_goal, 1.0 - exp(-6.0 * delta))
 
