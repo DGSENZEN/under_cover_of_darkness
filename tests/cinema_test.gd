@@ -782,6 +782,12 @@ func _observing() -> void:
 	_check("E35 watched, a new take that does not drift there comes in on a dissolve",
 		not still35.is_empty() and still35.all(func(sh): return sh["how"] == &"dissolve"), "%s" % [shots.map(func(sh): return [sh["kind"], sh["how"]])])
 
+	# E45 a drifting take never snaps: it sets off from where the camera is,
+	# or comes in on a dissolve to where it sets off from
+	var drifts45 := shots.filter(func(sh): return sh["how"] == &"path")
+	_check("E45 watched, a drifting take sets off from where the camera is or dissolves to its start",
+		not drifts45.is_empty() and drifts45.all(func(sh): return sh.get("enter") in [&"path", &"dissolve"]), "%s" % [drifts45.map(func(sh): return sh.get("enter"))])
+
 	# E2 no cut while a line is being said (lines not between the scene's
 	# men: a conversation's portraits cut inside lines, E27-E33)
 	var other := _man(Vector3(701.5, 0, 0.5), PI)
@@ -898,6 +904,21 @@ func _observing() -> void:
 	process_mode = Node.PROCESS_MODE_INHERIT
 	_check("E19 paused, nothing is cut; unpaused, the takes go on", while_paused == 0 and shots.size() >= 1,
 		"%d while paused, %d after" % [while_paused, shots.size()])
+
+	# E43 watched scenes asked through black, one after another: each opens
+	# through black, a take that would drift there too (the takes turn about
+	# between drifting and standing off)
+	var fades43 := []
+
+	for i in 4:
+		await _real(2.0)
+		shots.clear()
+		editor.scene({"mode": &"observe", "subjects": [man19], "transition": &"fade"})
+		await _real(0.5)
+		fades43.append([shots[0]["kind"], shots[0]["how"]] if not shots.is_empty() else [&"none", &"none"])
+
+	_check("E43 watched scenes asked through black each open through black, drifting takes too",
+		fades43.all(func(f): return f[1] == &"fade"), "%s" % [fades43])
 	man19.queue_free()
 	editor.release()
 	editor.queue_free()
@@ -1428,6 +1449,61 @@ func _drama() -> void:
 	await _real(5.9)
 	_check("E37 after two shots under 4 s the next runs 6 s or more",
 		editor.current() == shot37 and float(shot37["planned"]) >= 6.0, "planned %.1f, still on it %s" % [float(shot37["planned"]), editor.current() == shot37])
+
+	# E40 lines traded while blows fall: a fight, not a conversation
+	await _real(4.0)
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(2.0)
+	shots.clear()
+
+	for i in 8:
+		CineEvents.emit(&"blow", {"attacker": a, "victim": b, "weight": &"light", "outcome": &"blocked", "where": b.global_position})
+		_say(a if i % 2 == 0 else b, b if i % 2 == 0 else a, 1.5)
+		await _real(2.0)
+
+	var talked40 := shots.filter(func(sh): return sh["cause"] in [&"portrait", &"reestablish", &"two"])
+	_check("E40 lines traded while blows fall are a fight: no portraits",
+		talked40.is_empty() and shots.size() >= 2, "%s" % [shots.map(func(sh): return [sh["kind"], sh["cause"]])])
+
+	# E41 men walking as they talk: no portraits
+	await _real(6.0)
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(2.0)
+	a.velocity = Vector3(1.4, 0, 0)
+	b.velocity = Vector3(1.4, 0, 0)
+	shots.clear()
+
+	for i in 6:
+		_say(a if i % 2 == 0 else b, b if i % 2 == 0 else a, 2.0)
+		await _real(2.5)
+
+	a.velocity = Vector3.ZERO
+	b.velocity = Vector3.ZERO
+	var talked41 := shots.filter(func(sh): return sh["cause"] in [&"portrait", &"reestablish", &"two"])
+	_check("E41 men walking as they talk: no portraits",
+		talked41.is_empty(), "%s" % [shots.map(func(sh): return [sh["kind"], sh["cause"]])])
+
+	# E44 a talk whose speaker's portrait place is walled: his portrait from
+	# further round him, not a close
+	await _real(6.0)
+	# (he stands side on to the other: his close stands well away from it)
+	var yaw44 := b.rotation.y
+	b.rotation.y = 0.0
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(2.0)
+	var planned44 := CineShot.frame(&"portrait", [b], {"toward": CineShot.head_of(a), "side": editor._side_of([b, a]), "aspect": editor._aspect()})
+	var wall44 := Props.block(self, planned44["position"], Vector3(0.8, 4.0, 0.8))
+	await _frames(3)
+	shots.clear()
+	_say(a, b, 2.0)
+	await _real(2.5)
+	_say(b, a, 2.0)
+	await _real(1.0)
+	var of_b44 := shots.filter(func(sh): return sh["cause"] == &"portrait" and sh["subjects"] == [b])
+	_check("E44 a talk whose portrait place is walled: his portrait from further round him, not a close",
+		not of_b44.is_empty() and of_b44[0]["kind"] == &"portrait", "%s" % [shots.map(func(sh): return [sh["kind"], sh["cause"]])])
+	wall44.queue_free()
+	b.rotation.y = yaw44
 
 	# E18 released in the middle of a slowing and a wipe: time back at once, the screen cleared
 	editor.scene({"mode": &"drama", "subjects": [a, b]})

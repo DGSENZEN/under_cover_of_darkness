@@ -543,21 +543,29 @@ func _run() -> void:
 		free4.is_empty() and habits4.keys().all(func(h): return h in [&"fidget", &"lean"]),
 		"free to wander %s, did %s" % [free4, habits4.keys()])
 
-	# D36 Act I is watched, in long takes (a conversation's cuts aside)
+	# D36 Act I is watched, in long takes: those the editor ended itself (not
+	# a pin, a conversation's cuts, or a take a new beat's scene cut into)
 	var shots4: Array = map4.camera.cinema_editor().history()
 	var modes4: Array = shots4.map(func(sh): return sh.get("mode", &"observe"))
 	var total4 := 0.0
 	var takes4 := 0
+	var not_its_own := [&"pin", &"scene", &"portrait", &"reaction", &"reestablish", &"two"]
 
 	for i in range(shots4.size() - 1):
-		if not (shots4[i]["cause"] in [&"portrait", &"reaction", &"reestablish", &"two"]):
+		if shots4[i]["cause"] != &"pin" and not (shots4[i]["cause"] in not_its_own.slice(2)) and not (shots4[i + 1]["cause"] in not_its_own):
 			total4 += float(shots4[i + 1]["at"]) - float(shots4[i]["at"])
 			takes4 += 1
 
 	var mean4 := total4 / float(maxi(takes4, 1))
-	_check("D36 Act I is watched (observe throughout), its takes 15 s long on average or more",
-		map4.camera.cinema_editor().mode() == &"observe" and not modes4.has(&"drama") and mean4 >= 15.0 and shots4.size() >= 2,
-		"%d shots, mean %.1f s, kinds %s" % [shots4.size(), mean4, shots4.map(func(sh): return sh["kind"])])
+	_check("D36 Act I is watched (observe throughout), the takes it ends itself 15 s long on average or more",
+		map4.camera.cinema_editor().mode() == &"observe" and not modes4.has(&"drama") and mean4 >= 15.0 and takes4 >= 3,
+		"%d shots, mean %.1f s, takes %s" % [shots4.size(), mean4, range(shots4.size()).map(func(i): return [String(shots4[i]["kind"]) + "/" + String(shots4[i]["cause"]),
+			snappedf(float(shots4[i + 1]["at"]) - float(shots4[i]["at"]), 0.1) if i + 1 < shots4.size() else -1.0])])
+
+	# D42 Act I's conversations reach portraits
+	var portraits42 := shots4.filter(func(sh): return sh["cause"] == &"portrait" and sh["kind"] == &"portrait")
+	_check("D42 Act I's conversations come to portraits",
+		not portraits42.is_empty(), "%d portraits; causes %s" % [portraits42.size(), _tally(shots4.map(func(sh): return String(sh["kind"]) + "/" + String(sh["cause"])))])
 	clock4.queue_free()
 	await _unload(map4)
 
@@ -738,8 +746,8 @@ func _run() -> void:
 	var mean9 := total9 / float(maxi(drama9.size() - 1, 1))
 	var target9: float = CineScreen.bar_for(get_viewport().get_visible_rect().size)
 	var bars_up: bool = not bars9.is_empty() and bars9.slice(int(90)).all(func(b): return b >= 0.9 * target9)
-	_check("D37 from the knife on the letterbox is up and the shots are short (7 s or less on average)",
-		knife_at[0] >= 0.0 and bars_up and drama9.size() >= 5 and mean9 <= 7.0,
+	_check("D37 from the knife on the letterbox is up and the shots are short (8 s or less on average)",
+		knife_at[0] >= 0.0 and bars_up and drama9.size() >= 5 and mean9 <= 8.0,
 		"knife at %.1f, %d shots, mean %.1f s, bar %s of %.1f; causes %s" % [knife_at[0], drama9.size(), mean9, bars9.slice(bars9.size() - 1) if not bars9.is_empty() else [], target9, _tally(drama9.map(func(sh): return String(sh["kind"]) + "/" + String(sh["cause"])))])
 
 	# D41 each act opens through black

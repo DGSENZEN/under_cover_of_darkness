@@ -22,8 +22,10 @@ const REST_SHOTS := [
 	["cart", Vector3(4.5, 3.5, 5.0), Vector3(9.0, 0.8, 9.5)],
 	["postern", Vector3(13.5, 4.5, -3.0), Vector3(19.5, 0.8, -9.0)],
 ]
-## How long into a shot its still is taken (s).
+## How long into a shot its still is taken (s); one that comes in on a
+## dissolve or through black, once that is over.
 const INTO_SHOT := 0.6
+const CLEAR_AFTER := 1.3
 ## The sheet: each still this big, this many across.
 const THUMB := Vector2i(240, 135)
 const ACROSS := 8
@@ -93,7 +95,7 @@ func _night(act: int, ending: StringName) -> void:
 
 			# Still the shot being taken: a still of it (a shot cut away from
 			# sooner is passed over).
-			if p[3] >= INTO_SHOT:
+			if p[3] >= (CLEAR_AFTER if p[2]["how"] in [&"dissolve", &"fade"] else INTO_SHOT):
 				pending.erase(p)
 
 				if editor.current() == p[2]:

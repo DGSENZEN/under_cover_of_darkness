@@ -92,6 +92,10 @@ const SPEAKER_CUT := 0.3
 const REACTION_EVERY := 8.0
 const REESTABLISH_EVERY := 4
 const STILL_WITHIN := 0.3
+## A conversation is men standing: none going faster than this (m/s), and no
+## blow for this long (s); lines traded in a fight or on the move are not.
+const TALK_STILL := 1.0
+const FIGHT_QUIET := 5.0
 const FACE_OFF_NEAR := 4.0
 const FACE_OFF_FACING := 45.0
 const FACE_OFF_QUIET := 1.0
@@ -140,8 +144,10 @@ var _axial_at := -INF
 var _axial_men: Array = []
 var _slowed_at := -INF
 var _last_blow := -INF
-## When the last beat fell: a line begun, a blow, a death.
+## When the last beat fell: a line begun, a blow, a death; the last blow
+## (in any mode).
 var _beat_at := -INF
+var _fought_at := -INF
 var _exchange: Array = []
 var _line_pair: Array = []
 var _line_side := Vector3.ZERO
@@ -404,6 +410,9 @@ func cine_event(kind: StringName, data: Dictionary) -> void:
 	if kind in [&"line", &"blow", &"death"]:
 		_beat_at = _clock
 
+	if kind == &"blow":
+		_fought_at = _clock
+
 	if kind == &"line":
 		if _clock > _talk_until + TALK_GAP:
 			_talk_since = _clock
@@ -543,7 +552,9 @@ func _fresh_take(cause: StringName, how: StringName = &"dissolve") -> void:
 		if plan.is_empty() or _jump_cut(plan):
 			continue
 
-		_start(kind, men, cause, how if plan["how"] == &"cut" else plan["how"], plan["context"], length)
+		# Through black it is there when the picture comes up (a drift waits
+		# at its first point); else it drifts or glides there, or comes in `how`.
+		_start(kind, men, cause, how if how == &"fade" or plan["how"] == &"cut" else plan["how"], plan["context"], length)
 		return
 
 	# Nothing fresh to be had: from wherever they can be seen, all the same.
@@ -675,18 +686,28 @@ func _element() -> Node3D:
 # ---------------------------------------------------------------------------
 
 ## The listener a line is spoken to, if the line is between two of the
-## scene's men (a line of a conversation); else null.
+## scene's men standing, and no fight on (a line of a conversation); else
+## null.
 func _talk_of(data: Dictionary) -> Variant:
 	var speaker: Variant = data.get("speaker")
 
-	if not _valid(speaker) or not _subjects.has(speaker):
+	if not _valid(speaker) or not _subjects.has(speaker) or not _talk_calm([speaker]):
 		return null
 
 	for listener in data.get("listeners", []):
-		if _valid(listener) and _subjects.has(listener) and listener != speaker:
+		if _valid(listener) and _subjects.has(listener) and listener != speaker and _talk_calm([listener]):
 			return listener
 
 	return null
+
+
+## Whether `men` can be in a conversation: standing (none faster than
+## TALK_STILL), no blow in FIGHT_QUIET.
+func _talk_calm(men: Array) -> bool:
+	if _clock - _fought_at < FIGHT_QUIET:
+		return false
+
+	return men.filter(_valid).all(func(m): return _flat_speed(m) <= TALK_STILL)
 
 
 ## A line of a conversation: what the talk cuts to next. It builds (drama: a
@@ -746,7 +767,8 @@ func _talk_step(age: float) -> bool:
 	if _talk.is_empty():
 		return false
 
-	if _clock > float(_talk["end"]) + TALK_GAP:
+	# Over, or no longer men standing talking (a blow, or one walks off).
+	if _clock > float(_talk["end"]) + TALK_GAP or not _talk_calm([_talk["speaker"], _talk["listener"]]):
 		_talk = {}
 		return false
 
@@ -826,7 +848,9 @@ func _talk_cut(next: Dictionary, cause: StringName) -> void:
 
 			var context := {"toward": CineShot.head_of(toward)} if _valid(toward) else {}
 			var side := _side_of([man, toward]) if _valid(toward) else Vector3.ZERO
-			_pick([[&"portrait", [man], context], [&"close", [man]], [&"medium", [man]]], cause, side, SHOT.y, false, &"cut", false)
+			# His portrait from anywhere round him before a close of him.
+			if not _pick([[&"portrait", [man], context]], cause, side, SHOT.y, false, &"cut", false, true):
+				_pick([[&"close", [man]], [&"medium", [man]]], cause, side, SHOT.y, false, &"cut", false)
 
 
 # ---------------------------------------------------------------------------
@@ -1067,7 +1091,8 @@ func _setup(man: Node3D, kind: StringName, space: PhysicsDirectSpaceState3D) -> 
 ## The first of `options` ([kind, men, context?]) that sees its man and is
 ## no jump cut (and, if `new_size`, of another size than the shot now),
 ## taken; else the first that sees him; else from wherever he can be seen.
-func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_size: bool, how: StringName = &"cut", check_jump := true) -> void:
+## `strict`: only one of `options` (false if none can be taken).
+func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_size: bool, how: StringName = &"cut", check_jump := true, strict := false) -> bool:
 	var chosen: Array = []
 	var space := _camera.get_world_3d().direct_space_state
 
@@ -1126,11 +1151,14 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 				_setups["%d:%s" % [men[0].get_instance_id(), option[0]]] = {"position": at, "fov": framing["fov"], "side": context["side"], "head": CineShot.head_of(men[0])}
 
 			_start(option[0], men, cause, how, context, length)
-			return
+			return true
 
 	if not chosen.is_empty():
 		_start(chosen[0], chosen[1], cause, how, chosen[2], length)
-		return
+		return true
+
+	if strict:
+		return false
 
 	# Nothing near sees him: from wherever he can be seen, on a long lens.
 	var men: Array = (options[0][1] as Array).filter(_valid) if not options.is_empty() else []
@@ -1140,6 +1168,8 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 		_start(&"observe", men, cause, how, {"from": from, "side": side}, length)
 	else:
 		_start(&"establishing", [], cause, how, {"from": _high_over(_place), "place": _place}, length)
+
+	return true
 
 
 ## A face-off: from well off to the side of their line, on a long lens, still.
@@ -1277,24 +1307,30 @@ func _start(kind: StringName, men: Array, cause: StringName, how: StringName, co
 	var ctx := context.duplicate()
 	ctx["aspect"] = _aspect()
 	var framing := CineShot.frame(kind, men, ctx)
+	# How the take's first frame comes (a drift may have to be somewhere
+	# else first).
+	var enter := how
 
 	if how == &"path":
 		var path: PackedVector3Array = ctx.get("path", PackedVector3Array())
 
 		if path.size() < 2:
 			how = &"cut"
+			enter = how
 		else:
 			framing["position"] = path[path.size() - 1]
 			framing["path"] = path
 
-			# The first point is somewhere else altogether: be there first.
+			# The first point is somewhere else altogether: be there first
+			# (watching, dissolved to, as any new take).
 			if _camera.global_position.distance_to(path[0]) > 0.5:
 				var first := framing.duplicate()
 				first["position"] = path[0]
-				_operator.show(first, &"cut")
+				enter = &"dissolve" if _mode == &"observe" else &"cut"
+				_operator.show(first, enter)
 
 	_operator.show(framing, how)
-	_shot = {"kind": kind, "size": framing["size"], "subjects": men.duplicate(), "cause": cause, "how": how, "at": _clock, "mode": _mode,
+	_shot = {"kind": kind, "size": framing["size"], "subjects": men.duplicate(), "cause": cause, "how": how, "enter": enter, "at": _clock, "mode": _mode,
 		"real_at": TimeFx.real_time(), "framing": framing, "context": ctx, "planned": planned,
 		"offset": (framing["look"] as Vector3) - (framing["subject"] as Vector3)}
 	_history.append(_shot)
