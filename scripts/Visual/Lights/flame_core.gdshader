@@ -1,19 +1,21 @@
-// A flame's hot heart: only its hottest heat, solid, and brighter than white
-// so it crosses the glow threshold and blooms.
+// A flame drawn solid: its main layer (every pixel inside the flame, a little
+// brighter than its ramp so it holds its shape over a lit wall) or its hot
+// heart (only its hottest heat, brighter than white, so it blooms).
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_opaque, cull_disabled, fog_disabled, shadows_disabled;
 
 #include "res://scripts/Visual/Lights/flame.gdshaderinc"
 
-uniform float core_cut = 0.8;
-uniform float brightness = 2.5;
+// Heat below this is cut; 0 cuts where the ramp starts.
+uniform float core_cut = 0.0;
+uniform float brightness = 1.3;
 
 void fragment() {
-	float h = flame_heat(UV);
+	vec4 colour = flame_colour(UV);
 
-	if (h < core_cut) {
+	if (colour.a < 0.5 || flame_heat(UV) < core_cut) {
 		discard;
 	}
 
-	ALBEDO = flame_colour(UV).rgb * brightness;
+	ALBEDO = colour.rgb * brightness;
 }

@@ -16,6 +16,9 @@ const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const Flicker := preload("res://scripts/Visual/Lights/Flicker.gd")
 const FlameFx := preload("res://scripts/Visual/Lights/FlameFx.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
+const CoronaScript := preload("res://scripts/Visual/Lights/Corona.gd")
+const PLAYER := preload("res://Player.tscn")
+const GUARD := preload("res://Guard.tscn")
 
 ## LightProbe 2 m from a bare torch, the brazier and the campfire (each
 ## flame's flicker held still), read on main before any of this work: the
@@ -43,6 +46,7 @@ func _run() -> void:
 	_flicker()
 	await _flames()
 	await _burner()
+	await _coronas()
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +285,69 @@ func _burner() -> void:
 		"kept %s drawn %s marked %s frames %d energy %.2f..%.2f band %s dim %s flare %.2f faded %s" % [kept, drawn, marked, frames_seen.size(), low, high, band, dim, flared, faded])
 	torch.queue_free()
 	await _frames(2)
+
+
+# ---------------------------------------------------------------------------
+# Coronas
+# ---------------------------------------------------------------------------
+
+func _coronas() -> void:
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.6, 200)
+	camera.current = true
+	var torch: Node3D = TorchScript.new()
+	add_child(torch)
+	torch.global_position = Vector3(0, 1.5, 194)
+	await _frames(15)
+	var open_before: float = torch.corona.visibility if torch.get("corona") != null else -1.0
+
+	# L12 a wall hides it within a moment, and it comes back
+	var wall: StaticBody3D = Props.block(self, Vector3(0, 1.6, 197), Vector3(4, 4, 0.3))
+	await _frames(12)
+	var walled: float = torch.corona.visibility if torch.get("corona") != null else -1.0
+	wall.queue_free()
+	await _frames(12)
+	var back: float = torch.corona.visibility if torch.get("corona") != null else -1.0
+	_check("L12 a corona shines in the open, a wall hides it within 0.2 s, and it comes back",
+		open_before > 0.9 and walled >= 0.0 and walled < 0.05 and back > 0.9,
+		"open %.2f walled %.2f back %.2f" % [open_before, walled, back])
+
+	# L13 a man hides it; a thin post over one ray hides a part of it
+	var guard: Node3D = GUARD.instantiate()
+	add_child(guard)
+	guard.global_position = Vector3(0, 0, 196)
+	await _frames(12)
+	var manned: float = torch.corona.visibility if torch.get("corona") != null else -1.0
+	guard.queue_free()
+	await _frames(15)
+	var offset: float = torch.corona.world_radius(camera) * 0.25 if torch.get("corona") != null else 0.0
+	var post: StaticBody3D = Props.block(self, Vector3(offset * 0.8, 1.55, 194.6), Vector3(0.04, 0.5, 0.04))
+	await _frames(15)
+	var partly: float = torch.corona.visibility if torch.get("corona") != null else -1.0
+	post.queue_free()
+	_check("L13 a man in the way hides the corona; a thin post over one of its rays hides a part",
+		manned >= 0.0 and manned < 0.05 and partly > 0.2 and partly < 0.9,
+		"behind a man %.2f, behind a post %.2f (ray offset %.3f m)" % [manned, partly, offset])
+
+	# L14 it fades with distance, it is an effect, and the lightgem cannot see effects
+	var fx_layer: bool = torch.get("corona") != null and torch.corona.quad.layers == Layers.FX
+	var gem_clear := true
+	var gems := 0
+	var player: Node = PLAYER.instantiate()
+
+	for cam in player.find_children("*", "Camera3D", true, false):
+		if cam.cull_mask & Layers.GEM_PROBE:
+			gems += 1
+			gem_clear = gem_clear and (cam.cull_mask & Layers.FX) == 0
+
+	player.free()
+	_check("L14 a corona fades out between 1.5 and 3 times its light's reach, is drawn on FX, and the lightgem's cameras do not see FX",
+		CoronaScript.distance_fade(7.0, 5.0) == 1.0 and CoronaScript.distance_fade(15.0, 5.0) == 0.0 and CoronaScript.distance_fade(11.5, 5.0) > 0.0 and CoronaScript.distance_fade(11.5, 5.0) < 1.0 and fx_layer and gems >= 1 and gem_clear,
+		"fade at 7/11.5/15 m: %.2f/%.2f/%.2f, on FX %s, gem cameras %d clear %s" % [CoronaScript.distance_fade(7.0, 5.0), CoronaScript.distance_fade(11.5, 5.0), CoronaScript.distance_fade(15.0, 5.0), fx_layer, gems, gem_clear])
+	torch.queue_free()
+	camera.queue_free()
+	await _frames(3)
 
 
 ## The frequency (Hz) with the most energy in 8 s of a flicker sampled at 60 Hz.

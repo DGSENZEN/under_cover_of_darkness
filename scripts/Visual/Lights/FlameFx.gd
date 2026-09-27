@@ -1,7 +1,7 @@
 extends Node3D
-## A flame at one point: two flipbook sprites (one mirrored, half a loop
-## behind the other, both added onto the scene) and a small solid hot heart
-## that blooms. Drawn from a heat sheet through a colour ramp
+## A flame at one point: two flipbook sprites (the main one solid, so its
+## shape holds over a lit wall; the other mirrored, half a loop behind and
+## added on as shimmer) and a small hot heart that blooms. Drawn from a heat sheet through a colour ramp
 ## (flame.gdshaderinc), on the effects layer, so the lightgem never sees it.
 ##
 ## The flipbook runs on its own clock in _process, which Engine.time_scale
@@ -64,10 +64,11 @@ func _ready() -> void:
 	quad.center_offset = Vector3(0.0, size * 0.5, 0.0)
 
 	for i in maxi(layers, 1):
-		sprites.append(_sprite(quad, material(sheet, ramp, low_ramp, false), "Flame%d" % i))
+		# The first solid (its shape holds over any wall), the rest added on.
+		sprites.append(_sprite(quad, material(sheet, ramp, low_ramp, &"solid" if i == 0 else &"add"), "Flame%d" % i))
 
 	if core:
-		sprites.append(_sprite(quad, material(sheet, ramp, low_ramp, true), "Heart"))
+		sprites.append(_sprite(quad, material(sheet, ramp, low_ramp, &"core"), "Heart"))
 
 	_apply()
 
@@ -139,15 +140,23 @@ func _sprite(quad: QuadMesh, look: ShaderMaterial, sprite_name: String) -> MeshI
 	return sprite
 
 
-## The shared material for a sheet, its ramps, and whether it is the heart.
-static func material(sheet_name: StringName, ramp_name: StringName, low_name: StringName, core_pass: bool) -> ShaderMaterial:
-	var key := "%s/%s/%s/%s" % [sheet_name, ramp_name, low_name, core_pass]
+## The shared material for a sheet, its ramps, and its pass: "solid" (the
+## main layer), "add" (the shimmer) or "core" (the hot heart).
+static func material(sheet_name: StringName, ramp_name: StringName, low_name: StringName, pass_name: StringName) -> ShaderMaterial:
+	var key := "%s/%s/%s/%s" % [sheet_name, ramp_name, low_name, pass_name]
 
 	if _materials.has(key):
 		return _materials[key]
 
 	var look := ShaderMaterial.new()
-	look.shader = FLAME_CORE if core_pass else FLAME
+	look.shader = FLAME if pass_name == &"add" else FLAME_CORE
+
+	if pass_name == &"core":
+		look.set_shader_parameter(&"core_cut", 0.8)
+		look.set_shader_parameter(&"brightness", 2.5)
+	elif pass_name == &"solid":
+		look.set_shader_parameter(&"core_cut", 0.0)
+		look.set_shader_parameter(&"brightness", 1.3)
 	var info: Array = SHEETS.get(sheet_name, SHEETS[&"torch"])
 	var path := "res://assets/vfx/flame_%s.png" % sheet_name
 

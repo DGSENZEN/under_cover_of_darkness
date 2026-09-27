@@ -27,6 +27,7 @@ const Layers := preload("res://scripts/Visual/Layers.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Flicker := preload("res://scripts/Visual/Lights/Flicker.gd")
 const FlameFxScript := preload("res://scripts/Visual/Lights/FlameFx.gd")
+const CoronaScript := preload("res://scripts/Visual/Lights/Corona.gd")
 
 const CRACKLE := "res://audio/ambience/torch_loop.ogg"
 ## How loud its crackle is (dB at a metre or so), and how far it carries.
@@ -86,6 +87,8 @@ var crackle: AudioStreamPlayer3D
 var flames: Array = []
 ## Its own dice: drawn from where it stands, so every run is the same.
 var rng := RandomNumberGenerator.new()
+## Its halo (null with corona_px 0).
+var corona: Node3D
 ## The main flame's flipbook frame.
 var frame: int:
 	get:
@@ -156,6 +159,15 @@ func _ready() -> void:
 		flames.append(fx)
 
 	flame = flames[0].sprites[0]
+
+	if corona_px > 0.0:
+		corona = CoronaScript.new()
+		corona.name = "Corona"
+		corona.size_px = corona_px
+		corona.tint = color
+		add_child(corona)
+		corona.position = _light_base - Vector3(0.0, LIGHT_ABOVE - 0.06, 0.0)
+
 	_make_loop()
 
 
@@ -220,6 +232,17 @@ func _process(delta: float) -> void:
 		fx.shape(waver, _strength, _lean, _flare, _jump)
 
 	_listen(delta)
+
+
+func _physics_process(delta: float) -> void:
+	if corona != null:
+		var glow := light.light_energy / maxf(energy, 0.001) if light.visible else 0.0
+		corona.tick(get_viewport().get_camera_3d(), glow, light_range, _corona_exclude(), delta)
+
+
+## Bodies of its own that must not hide its halo (a fixture's).
+func _corona_exclude() -> Array[RID]:
+	return []
 
 
 ## The wind on it (Atmosphere.wind): which way and how hard.
