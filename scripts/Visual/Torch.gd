@@ -29,6 +29,7 @@ const Flicker := preload("res://scripts/Visual/Lights/Flicker.gd")
 const FlameFxScript := preload("res://scripts/Visual/Lights/FlameFx.gd")
 const CoronaScript := preload("res://scripts/Visual/Lights/Corona.gd")
 const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
+const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 
 const CRACKLE := "res://audio/ambience/torch_loop.ogg"
 ## How loud its crackle is (dB at a metre or so), and how far it carries.
@@ -45,6 +46,16 @@ const LEAN_REACH := 0.07
 const LIGHT_ABOVE := 0.12
 ## Embers and smoke only within this of the camera.
 const PARTICLE_REACH := 30.0
+## Lit, a flame grows over LIGHT_TIME; snuffed, it pinches out over
+## SNUFF_TIME and smokes a thread for SMOKE_THREAD; doused, its head (or its
+## coals) cools over COOL_TIME.
+const LIGHT_TIME := 0.5
+const SNUFF_TIME := 0.1
+const SMOKE_THREAD := 2.5
+const COOL_TIME := 3.0
+
+## Lit or put out (told at the end of the frame, once per real change).
+signal lit_changed(lit: bool)
 
 @export var color := Color("FF9829")
 @export var energy := 2.4
@@ -115,6 +126,15 @@ var _jump := 0.0
 var _light_base := Vector3.ZERO
 var _ember_due := 0.0
 var _smoke_due := 0.0
+## 0..1: how far lit it is (the light and flames follow it).
+var _lit_level := 1.0
+var _lit_target := 1.0
+var _lit_rate := 1.0 / LIGHT_TIME
+## 1 just doused, cooling to 0 over COOL_TIME.
+var _cool := 0.0
+var _smoke_left := 0.0
+var _thread_due := 0.0
+var _told := true
 
 
 func _ready() -> void:
@@ -167,6 +187,9 @@ func _ready() -> void:
 		flames.append(fx)
 
 	flame = flames[0].sprites[0]
+	_lit_level = 1.0 if lit else 0.0
+	_lit_target = _lit_level
+	_told = lit
 
 	if corona_px > 0.0:
 		corona = CoronaScript.new()
@@ -177,6 +200,8 @@ func _ready() -> void:
 		corona.position = _light_base - Vector3(0.0, LIGHT_ABOVE - 0.06, 0.0)
 
 	_make_loop()
+	_show_lit(&"lit" if lit else &"out")
+	_apply_lit()
 
 
 ## For what is built on a burner (LightFixture.gd): set the exports before
@@ -227,8 +252,11 @@ func _process(delta: float) -> void:
 	_flare = move_toward(_flare, 0.0, delta / FLARE_TIME)
 	var flared := _flare * _flare
 	var waver := Flicker.value(flicker_kind, _time, _salt)
+	_step_lit(delta)
+	# Eased as it lights: fast at first, settling into its flame.
+	var shown := 1.0 - (1.0 - _lit_level) * (1.0 - _lit_level)
 	light.light_color = color
-	light.light_energy = energy * _strength * (1.0 + flicker * waver) * (1.0 + FLARE_LIGHT * flared)
+	light.light_energy = energy * _strength * (1.0 + flicker * waver) * (1.0 + FLARE_LIGHT * flared) * shown
 	light.omni_range = light_range * lerpf(0.55, 1.0, clampf(_strength, 0.0, 1.0))
 	light.position = _light_base
 
@@ -243,9 +271,20 @@ func _process(delta: float) -> void:
 	_listen(delta)
 
 
-## Embers and smoke off its flames, at their rates, while you are near.
+## Embers and smoke off its flames, at their rates, while you are near (and a
+## snuffed flame's smoke thread).
 func _shed(delta: float) -> void:
-	if not _near_camera():
+	if _smoke_left > 0.0:
+		_smoke_left -= delta
+
+		if _near_camera():
+			_thread_due += 3.0 * float(flame_points.size()) * delta
+
+			while _thread_due >= 1.0:
+				_thread_due -= 1.0
+				FireParticles.emit(self, &"smoke", _flame_top(0.3), 1, _lean, Color.BLACK, flame_size * 0.3)
+
+	if _lit_level < 0.5 or not _near_camera():
 		_ember_due = 0.0
 		_smoke_due = 0.0
 		return
@@ -292,6 +331,102 @@ func _physics_process(delta: float) -> void:
 ## Bodies of its own that must not hide its halo (a fixture's).
 func _corona_exclude() -> Array[RID]:
 	return []
+
+
+## Lights it: the flame grows from nothing over LIGHT_TIME with a spray of
+## sparks (`instant`: lit at once, silently).
+func kindle(instant := false) -> void:
+	var was_out := _lit_target < 1.0 or _lit_level < 1.0
+	lit = true
+	_lit_target = 1.0
+	_lit_rate = 1.0 / LIGHT_TIME
+	_cool = 0.0
+	_smoke_left = 0.0
+
+	if instant:
+		_lit_level = 1.0
+	elif was_out and _lit_level < 0.5 and is_inside_tree():
+		for point in flame_points:
+			FireParticles.emit(self, &"spark", global_transform * point, 8, _lean, color)
+
+		var big := sheet == &"torch" or sheet == &"brazier" or sheet == &"fire"
+		Sfx.play(self, &"ignite_torch" if big else &"ignite", global_position, -6.0)
+
+	_show_lit(&"lit")
+	_apply_lit()
+
+
+## Puts it out: `how` "snuff" (pinched out, a thread of smoke) or "douse"
+## (out at once, a burst of steam, the head cooling). `instant`: out, silently.
+func put_out(how := &"snuff", instant := false) -> void:
+	var was_lit := _lit_target > 0.0
+	lit = false
+	_lit_target = 0.0
+
+	if instant:
+		_lit_level = 0.0
+		_cool = 0.0
+		_show_lit(&"out")
+	elif how == &"douse":
+		_lit_level = 0.0
+		_cool = 1.0 if was_lit else _cool
+
+		if was_lit and is_inside_tree():
+			for point in flame_points:
+				FireParticles.emit(self, &"steam", global_transform * (point + Vector3.UP * flame_size * 0.4), 6, _lean, Color.WHITE, flame_size * 0.5)
+
+			Sfx.play(self, &"douse", global_position, -4.0)
+
+		_show_lit(&"cooling")
+	else:
+		_lit_rate = 1.0 / SNUFF_TIME
+
+		if was_lit:
+			_smoke_left = SMOKE_THREAD
+
+			if is_inside_tree():
+				Sfx.play(self, &"snuff", global_position, -8.0)
+
+		_show_lit(&"out")
+
+	_apply_lit()
+
+
+func is_lit() -> bool:
+	return lit
+
+
+## What is built on a burner shows its lit, cooling and out states here
+## (LightFixture: glowing heads and coals, charred when cold).
+func _show_lit(_state: StringName) -> void:
+	pass
+
+
+func _step_lit(delta: float) -> void:
+	var before := _lit_level
+	_lit_level = move_toward(_lit_level, _lit_target, _lit_rate * delta)
+
+	if _cool > 0.0:
+		_cool = move_toward(_cool, 0.0, delta / COOL_TIME)
+		_show_lit(&"cooling" if _cool > 0.0 else &"out")
+
+	if _lit_level != before:
+		_apply_lit()
+
+	if lit != _told:
+		_told = lit
+		LightProbe.invalidate()
+		lit_changed.emit(lit)
+
+
+func _apply_lit() -> void:
+	if light == null:
+		return
+
+	light.visible = _lit_level > 0.0
+
+	for fx in flames:
+		fx.set_shown(_lit_level)
 
 
 ## The wind on it (Atmosphere.wind): which way and how hard.

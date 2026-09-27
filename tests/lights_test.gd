@@ -50,6 +50,7 @@ func _run() -> void:
 	await _burner()
 	await _coronas()
 	await _particles()
+	await _lit_and_out()
 
 
 # ---------------------------------------------------------------------------
@@ -439,6 +440,86 @@ func _particles() -> void:
 	_check("L18 embers and smoke are drawn on FX, and at half speed an ember rises about half as far",
 		on_fx and share >= 0.4 and share <= 0.6, "on FX %s, rose %.3f then %.3f m (%.2f)" % [on_fx, rises[0], rises[1], share])
 	FireParticles.clear()
+	camera.queue_free()
+	await _frames(2)
+
+
+# ---------------------------------------------------------------------------
+# Lit and out
+# ---------------------------------------------------------------------------
+
+func _lit_and_out() -> void:
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.6, 400)
+	camera.current = true
+	var torch: Node3D = TorchScript.new()
+	add_child(torch)
+	torch.global_position = Vector3(0, 1.6, 396)
+	await _frames(10)
+	var told: Array = []
+	torch.lit_changed.connect(func(on: bool) -> void: told.append(on))
+
+	# L19 snuffed, relit, doused, on their timings, told once each
+	var lit_probe := LightProbe.light_at(self, Vector3(2, 1.2, 396))
+	FireParticles.clear()
+	torch.put_out(&"snuff")
+	var snuffed_in := -1
+
+	for i in 8:
+		await get_tree().process_frame
+
+		if snuffed_in < 0 and torch.light.light_energy <= 0.01 or (snuffed_in < 0 and not torch.light.visible):
+			snuffed_in = i + 1
+
+	await _frames(20)
+	var smoke_after: int = FireParticles.live(&"smoke")
+	var out_probe := LightProbe.light_at(self, Vector3(2, 1.2, 396))
+	var told_out := told.duplicate()
+	torch.kindle()
+	var relit_in := -1
+
+	for i in 40:
+		await get_tree().process_frame
+		var e: float = torch.light.light_energy
+
+		if relit_in < 0 and torch.light.visible and e >= torch.energy * (1.0 - torch.flicker) - 0.01:
+			relit_in = i + 1
+
+	var told_back := told.duplicate()
+	torch.put_out(&"douse")
+	await get_tree().process_frame
+	var doused_dark: bool = not torch.light.visible or torch.light.light_energy <= 0.01
+	var cool_start: float = torch._cool
+	await _frames(int(3.2 * 60.0))
+	var cool_end: float = torch._cool
+	_check("L19 snuffed it goes out in a tenth of a second and smokes; relit in half a second; doused at once, cooling over 3 s; each change told once",
+		snuffed_in > 0 and snuffed_in <= 8 and smoke_after > 0 and told_out == [false] and relit_in > 0 and relit_in <= 35 and told_back == [false, true] and doused_dark and cool_start > 0.95 and cool_end < 0.05,
+		"snuffed in %d frames, smoke %d, told %s, relit in %d, told %s, doused dark %s, cool %.2f -> %.2f" % [snuffed_in, smoke_after, told_out, relit_in, told_back, doused_dark, cool_start, cool_end])
+
+	# L20 out, it lights nobody up
+	_check("L20 put out, the probe beside it drops by 80% or more, and comes back when lit",
+		out_probe <= 0.2 * lit_probe, "lit %.3f, out %.3f" % [lit_probe, out_probe])
+
+	# L21 lit, out and lit again in one frame: it stays lit and says nothing
+	torch.kindle(true)
+	await _frames(5)
+	told.clear()
+	torch.kindle()
+	torch.put_out()
+	torch.kindle()
+	await _frames(40)
+	var in_band: bool = torch.light.visible and torch.light.light_energy >= torch.energy * (1.0 - torch.flicker) - 0.01
+	_check("L21 lit, put out and lit again in one frame, it burns on and tells nothing", in_band and told.is_empty() and torch.is_lit(),
+		"burning %s, told %s" % [in_band, told])
+
+	# L22 freed while it cools: nothing left behind, nothing broken
+	torch.put_out(&"douse")
+	await get_tree().process_frame
+	torch.queue_free()
+	await _frames(240)
+	_check("L22 a doused flame freed the next frame leaves nothing behind", FireParticles.live(&"steam") == 0 and not is_instance_valid(torch),
+		"steam %d, freed %s" % [FireParticles.live(&"steam"), not is_instance_valid(torch)])
 	camera.queue_free()
 	await _frames(2)
 
