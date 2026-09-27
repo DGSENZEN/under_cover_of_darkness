@@ -15,10 +15,26 @@ extends Node3D
 ##   Outside the north wall: lean-to roofs, then a canal. Every building is
 ##   open above (rafters, no roof), so a camera overhead sees into it.
 ##
+## Keys (ShowDirector, ShowCamera, ShowOverlay):
+##   1-5 start from that act       N the next beat       E the ending
+##   R from the start again        Space pause           [ ] slow motion
+##   C the camera to the director  Tab follow the next man, or click on one
+##   WASD Q/E fly (right mouse held to look, Shift fast, the wheel for speed)
+##   H hide the subtitles, marks and titles      F6-F8 the retro look
+##
+## After -- on the command line:
+##   --act=N          start at act N (1-5)
+##   --ending=X       overwhelmed, victor or escape (else one at random)
+##   --auto           nobody at the controls: the director has the camera
+##   --quit-at-end    quit a few seconds after the night is over
+##   --seed=N         another night than the usual one (the same N, the same
+##                    night)
 ##   --fps-report=N   the yard at rest for N seconds, then its frame rate
 ##                    (average and lowest), and quit.
-##   --seed=N         another night than the usual one (the same N, the same
-##                    night).
+##
+## To record the whole night to a video, frame by frame whatever the machine
+## can draw (Godot's Movie Maker):
+##   Godot --path . --write-movie showcase.avi --fixed-fps 60 --resolution 1920x1080 res://maps/npc_showcase.tscn -- --auto --ending=escape --quit-at-end
 
 ## Built, baked and peopled: the director (or a test) can begin.
 signal ready_to_show

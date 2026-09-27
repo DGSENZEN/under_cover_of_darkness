@@ -43,10 +43,24 @@ const CUT_BEYOND := 25.0
 ## a tracking shot's place behind and above; a reveal's pull-back time.
 const CRANE := Vector3(30.0, 18.0, 0.03)
 const CLOSE := 1.6
-const TRACK := Vector2(4.0, 2.0)
+const TRACK := Vector2(4.0, 4.5)
 const REVEAL := 5.0
 ## The yard's middle, for the crane.
 const YARD := Vector3(0, 0.5, -1.0)
+## A two-shot of men far apart: no further off than this, higher the more
+## they are spread.
+const TWO_FAR := 14.0
+const TWO_RISE := 0.5
+## Where a man's head is, by what he is doing (lying, kneeling), over his
+## feet (times his size).
+const HEAD_LYING := 0.35
+const HEAD_KNEELING := 0.95
+const HEAD_STANDING := 1.6
+## A wall between the camera and what it frames: it rises over it by these
+## steps (m), or else comes in to just short of it.
+const CLEAR_STEPS := [1.5, 3.0, 5.0, 8.0, 12.0]
+## The last resort: from above, a little to the south.
+const OVERHEAD := Vector3(0.0, 14.0, 3.0)
 ## With nothing asked, a man whose state changed this recently is framed.
 const RECENT := 10.0
 
@@ -292,6 +306,12 @@ func _follow(dt: float) -> void:
 
 func _direct(dt: float) -> void:
 	_aim(dt)
+
+	# A wall across the way there: a cut, not a glide through it.
+	if global_position.distance_to(_goal_position) > 1.0 and is_inside_tree() and not _ray(get_world_3d().direct_space_state, global_position, _goal_position).is_empty():
+		_cut()
+		return
+
 	_glide(_goal_position, _goal_look, dt)
 
 
@@ -330,6 +350,9 @@ func _aim(_dt: float) -> void:
 		_:
 			_frame_wide()
 
+	# Nothing solid between it and what it frames.
+	_goal_position = _clear_view(_goal_look, _goal_position)
+
 
 func _frame_wide() -> void:
 	var yaw := 0.65 + _clock * CRANE.z
@@ -338,7 +361,7 @@ func _frame_wide() -> void:
 
 
 func _frame_close(man: Node3D, dt := 0.0) -> void:
-	var head := man.global_position + Vector3.UP * 1.6 * _size(man)
+	var head := man.global_position + Vector3.UP * _head_height(man)
 	var ahead := -man.global_basis.z
 	ahead.y = 0.0
 	ahead = ahead.normalized() if ahead.length() > 0.01 else Vector3.FORWARD
@@ -390,7 +413,7 @@ func _frame_two(men: Array) -> void:
 	if across.dot(global_position - at) < 0.0:
 		across = -across
 
-	_goal_position = at + across * (2.2 * spread + 3.0) + Vector3.UP * 1.2
+	_goal_position = at + across * minf(2.2 * spread + 3.0, TWO_FAR) + Vector3.UP * (1.2 + spread * TWO_RISE)
 	_goal_look = at
 
 
@@ -403,9 +426,52 @@ func _centre(men: Array) -> Vector3:
 	return sum / float(men.size()) + Vector3.UP * 1.3
 
 
+func _head_height(man: Node3D) -> float:
+	var doing: StringName = man.activity() if man.has_method("activity") else &""
+
+	if doing in [&"sleep", &"lie_down", &"wake"]:
+		return HEAD_LYING
+
+	if doing in [&"kneel", &"plead_kneel", &"rise_knees", &"rummage", &"sit", &"sit_talk", &"sit_down", &"sneak"]:
+		return HEAD_KNEELING * _size(man)
+
+	return HEAD_STANDING * _size(man)
+
+
 func _size(man: Node3D) -> float:
 	var rig: Variant = man.get("_rig")
 	return float(rig.get("size")) if rig != null and rig.get("size") != null else 1.0
+
+
+## `want`, or, if a wall stands between it and `look`, the lowest of the
+## CLEAR_STEPS over it with a clear view; then the same from the other side
+## of `look`; failing all, straight down on it from high up (the yard has no
+## roofs over it).
+func _clear_view(look: Vector3, want: Vector3) -> Vector3:
+	if not is_inside_tree():
+		return want
+
+	var space := get_world_3d().direct_space_state
+
+	if _ray(space, look, want).is_empty():
+		return want
+
+	var across := look + Vector3(look.x - want.x, want.y - look.y, look.z - want.z)
+
+	for side in [want, across]:
+		for step in CLEAR_STEPS:
+			var higher: Vector3 = side + Vector3.UP * float(step)
+
+			if _ray(space, look, higher).is_empty():
+				return higher
+
+	return look + OVERHEAD
+
+
+func _ray(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3) -> Dictionary:
+	var query := PhysicsRayQueryParameters3D.create(from, to, 1)
+	query.collide_with_areas = false
+	return space.intersect_ray(query)
 
 
 ## Toward `where`, looking at `look`: a glide with a half-life of GLIDE.

@@ -392,6 +392,33 @@ func _run() -> void:
 			"ended %s, skipped %s, outcome %s" % [ended8[0], skipped8, outcome8])
 		await _unload(map8)
 
+	# D12 the intruder cut down mid-act, and the next beats' verbs skipped
+	# through (N): nothing asked of him, nothing breaks, the show goes on
+	DirectorScript.start_act = 4
+	DirectorScript.ending = &"escape"
+	var map12 := await _map(true)
+	await _until(func(): return map12.director.beat_name == &"trade", 1800)
+	var intruder12: Node3D = map12.intruder
+	var in_trade: bool = map12.director.beat_name == &"trade" and intruder12 != null
+	if intruder12 != null:
+		intruder12.fall()
+		intruder12.take_hit(9999.0, map12.cast["Brand"], &"power", intruder12.global_position + Vector3.UP, Vector3.FORWARD)
+	await _frames(10)
+	var beats12 := [map12.director.beat_name]
+	for code in [KEY_N, KEY_N, KEY_N]:
+		var key12 := InputEventKey.new()
+		key12.physical_keycode = code
+		key12.pressed = true
+		Input.parse_input_event(key12)
+		await _frames(60)
+		beats12.append(map12.director.beat_name)
+	var brainless12: bool = map12.story._brain() == null and map12.story._intruder() == null
+	_check("D12 with the intruder cut down mid-act and the next beats skipped through (N x3), nothing is asked of him, nothing breaks, and the show goes on",
+		in_trade and brainless12 and beats12.size() == 4 and beats12[3] != beats12[0],
+		"in trade %s, nothing asked %s, beats %s" % [in_trade, brainless12, beats12])
+	await _unload(map12)
+	DirectorScript.ending = &"random"
+
 	# D9 the whole night, unattended, from the first act to the end
 	DirectorScript.start_act = 1
 	DirectorScript.ending = &"escape"
