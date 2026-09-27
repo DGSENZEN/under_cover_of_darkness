@@ -219,10 +219,9 @@ const OPEN_CLIP := &"Fixing_Kneeling"
 const DEATH := [&"Death01", 0.25, 1.45]
 const KNOCKOUT := [&"Death01", 0.3, 1.6]
 const IMPACT := 1.15
-## What a guard with no archetype wears and carries.
-## The watchman: dressed from the wardrobe (Humanoid.dress), or painted with
-## his kettle hat if the wardrobe cannot dress him.
-const DEFAULT_LOOK := {"kind": &"watchman", "outfit": &"watchman", "armour": [&"kettlehat"], "weapon": &"sword"}
+## What a guard with no archetype wears and carries: the watchman, dressed
+## from the wardrobe (Humanoid.dress).
+const DEFAULT_LOOK := {"kind": &"watchman", "weapon": &"sword"}
 ## Bones a wound or an arrow can ride on: the nearest takes it.
 const FLESH_BONES := HumanoidScript.FLESH_BONES
 
@@ -370,7 +369,7 @@ func setup(p_guard: CharacterBody3D) -> void:
 
 	var look: Dictionary = GuardFighterScript.look_of(guard.archetype)
 
-	if not look.has("outfit"):
+	if not look.has("kind"):
 		look = DEFAULT_LOOK.merged(look, true)
 
 	size = float(look.get("scale", 1.0))
@@ -382,11 +381,12 @@ func setup(p_guard: CharacterBody3D) -> void:
 	man.name = "Man"
 	add_child(man)
 	var idle: StringName = &"Pistol_Idle" if _crossbow else &"Sword_Idle"
-	# From the wardrobe if his kind is there, else painted as before.
-	var dressed: bool = look.has("kind") and man.dress(look["kind"], _look_seed(), idle)
+	# From the wardrobe; a kind it cannot dress (warned once) is the plain
+	# base body of his sex.
+	var dressed: bool = man.dress(look["kind"], _look_seed(), idle)
 
 	if not dressed:
-		man.build(look.get("outfit", &"watchman"), bool(look.get("female", false)), idle)
+		man.build(&"", bool(look.get("female", false)), idle)
 	else:
 		_dressed_kind = look["kind"]
 
@@ -395,15 +395,6 @@ func setup(p_guard: CharacterBody3D) -> void:
 	female = bool(look.get("female", false))
 	_voice_pitch = (1.0 if female else 1.0 / sqrt(maxf(size, 0.5))) * randf_range(0.95, 1.05)
 	body_mesh = man.body
-
-	for style in look.get("hair", []) if not dressed else []:
-		man.add_hair(style, look.get("hair_tint", Color.WHITE))
-
-	for piece in look.get("armour", []) if not dressed else []:
-		man.add_armour(piece)
-
-	if not dressed and not bool(look.get("female", false)):
-		man.add_boots()
 
 	# The body he falls as (Ragdoll.gd): made now, while he stands in his rest
 	# pose and at his own size, which its joints are measured in.

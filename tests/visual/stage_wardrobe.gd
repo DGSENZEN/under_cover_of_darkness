@@ -1,21 +1,20 @@
 extends Node3D
 ## Visual check, not a test: each kind the wardrobe dresses, under the retro
-## screen, by day and by torchlight, beside his old painted self. Nothing is
-## checked; look at the pictures (sheet_<kind>.png puts a kind's side by
-## side, sheet.png every kind's lineup).
+## screen, by day and by torchlight. Nothing is checked; look at the
+## pictures (sheet_<kind>.png puts a kind's side by side, sheet.png every
+## kind's lineup).
 ##
 ##   perl -e 'alarm 480; exec @ARGV' Godot --fixed-fps 60 --resolution 1280x720 --path . \
 ##       res://tests/visual/stage_wardrobe.tscn -- --out=/some/folder [--kinds=watchman,archer]
 
 const GUARD := preload("res://Guard.tscn")
-const Wardrobe := preload("res://scripts/Visual/Wardrobe.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
-## The old painted man, then four from the wardrobe (their look seeds).
-const SEEDS := [-1, 1, 2, 3, 4]
+## Five from the wardrobe (their look seeds).
+const SEEDS := [1, 2, 3, 4, 5]
 const SPACING := 1.5
 ## Every kind the wardrobe dresses, and the archetype that is it.
 const KINDS := {&"watchman": &"", &"swordsman": &"swordsman", &"archer": &"archer", &"arms_master": &"trainer",
@@ -108,13 +107,9 @@ func _neutral() -> Environment:
 	return e
 
 
-## A guard of `archetype` facing the camera, still: from the wardrobe with
-## `seed`, or his old painted self (seed -1: the wardrobe hidden from him).
+## A guard of `archetype` facing the camera, still, from the wardrobe with
+## `seed`.
 func _guard(seed: int, at: Vector3, archetype: StringName) -> CharacterBody3D:
-	if seed < 0:
-		Wardrobe.ROOT = "user://no_wardrobe/"
-		Wardrobe.forget()
-
 	var g: CharacterBody3D = GUARD.instantiate()
 	g.archetype = archetype
 	g.set("look_seed", seed)
@@ -122,22 +117,14 @@ func _guard(seed: int, at: Vector3, archetype: StringName) -> CharacterBody3D:
 	g.rotation.y = PI
 	add_child(g)
 	g.set_physics_process(false)
-
-	if seed < 0:
-		Wardrobe.ROOT = "res://assets/characters/wardrobe/"
-		Wardrobe.forget()
-
 	return g
 
 
-## The lineup at 8 m, his painted self beside a wardrobe one, one man
-## turned round at 2 m, and his face from under his headgear.
+## The lineup at 8 m, one man turned round at 2 m, and his face from under
+## his headgear.
 func _shoot_set(label: String) -> void:
 	var row := []
 	await _shot("%s_lineup" % label, Vector3(0, 1.45, 8.0), Vector3(0, 1.0, 0), row)
-	# His old painted self beside a wardrobe one, both whole.
-	var pair := (guards[0].position.x + guards[1].position.x) * 0.5
-	await _shot("%s_before_after" % label, Vector3(pair, 1.35, 3.2), Vector3(pair, 1.0, 0), row)
 	var him := guards[1]
 	var x := him.position.x
 

@@ -1064,7 +1064,8 @@ func _plain(man: Node, female: bool) -> bool:
 		if worn_material != null and worn_material.albedo_texture != null and worn_material.albedo_texture.resource_path.contains("outfits/T_"):
 			painted = true
 
-	return not painted and man.armour.is_empty() and ("SuperHero_Female" if female else "SuperHero_Male") in names \
+	# (Her base mesh is Superhero_Female, his SuperHero_Male.)
+	return not painted and man.armour.is_empty() and names.any(func(n): return n.to_lower() == ("superhero_female" if female else "superhero_male")) \
 		and not names.any(func(n): return n.begins_with("Hair") or n == "Boots" or n == "Outfit")
 
 
@@ -1170,7 +1171,7 @@ func _dressed() -> void:
 		first[kind] = g
 		var names := _worn_names(man)
 		var rolled := _rolled(_roll(kind, 3))
-		var bare := names.any(func(n): return n in ["SuperHero_Male", "SuperHero_Female", "Eyes", "Eyebrows", "Boots"])
+		var bare := names.any(func(n): return n.to_lower() in ["superhero_male", "superhero_female", "eyes", "eyebrows", "boots"])
 		var layered: bool = man.worn().all(func(m): return m.layers == Layers.ACTORS)
 		_check("K1 %s dresses as rolled; no base body" % kind,
 			man.body != null and man.body.name == "Outfit" and _same_names(names, rolled) and not bare and layered,

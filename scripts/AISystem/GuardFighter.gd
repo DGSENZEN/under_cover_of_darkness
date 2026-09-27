@@ -190,7 +190,7 @@ const ARCHETYPES := {
 		"attacks": {&"overhead": 1.0, &"left": 1.0, &"right": 1.0, &"thrust": 0.6, &"sweep": 0.3},
 		"posture": 100.0, "delay_chance": 0.25, "grip_loss": 0.4, "spacing": 0.35,
 		"follow": {&"left": [&"right", &"right", &"bash", &"overhead"], &"right": [&"left", &"overhead", &"thrust"], &"overhead": [&"thrust", &"left"], &"thrust": [&"left", &"right"], &"sweep": [&"overhead"], &"bash": [&"overhead", &"thrust"]},
-		"look": {"scale": 1.0, "kind": &"swordsman", "outfit": &"swordsman", "armour": [&"nasalhelm", &"pauldron_r", &"pauldron_l"], "weapon": &"sword"},
+		"look": {"scale": 1.0, "kind": &"swordsman", "weapon": &"sword"},
 	},
 	&"duelist": {
 		"speaker": "Duelist",
@@ -203,7 +203,7 @@ const ARCHETYPES := {
 		"attacks": {&"left": 1.0, &"right": 1.0, &"thrust": 1.4, &"overhead": 0.5, &"sweep": 0.35},
 		"posture": 85.0, "delay_chance": 0.35, "leap_chance": 0.35, "grip_loss": 0.3, "spacing": 0.55, "carries_lantern": false,
 		"follow": {&"thrust": [&"thrust", &"left", &"right", &"sweep"], &"left": [&"right", &"thrust"], &"right": [&"left", &"thrust", &"sweep"], &"leap": [&"thrust", &"left"], &"sweep": [&"thrust"]},
-		"look": {"scale": 0.94, "kind": &"duelist", "outfit": &"duelist", "female": true, "hair": [&"Hair_Buns"], "hair_tint": Color(0.35, 0.22, 0.14), "weapon": &"rapier"},
+		"look": {"scale": 0.94, "kind": &"duelist", "female": true, "weapon": &"rapier"},
 	},
 	&"brute": {
 		"speaker": "Brute",
@@ -217,7 +217,7 @@ const ARCHETYPES := {
 		"attacks": {&"heavy": 1.0, &"overhead": 0.7, &"left": 0.5, &"sweep": 0.45},
 		"posture": 190.0, "delay_chance": 0.15, "charge_chance": 0.3, "deathblows": 2, "grip_loss": 0.0, "carries_lantern": false,
 		"follow": {&"overhead": [&"heavy", &"sweep"], &"left": [&"overhead", &"heavy"], &"sweep": [&"heavy"], &"charge": [&"heavy"]},
-		"look": {"scale": 1.25, "kind": &"brute", "outfit": &"brute", "hair": [&"Hair_Buzzed", &"Hair_Beard"], "hair_tint": Color(0.25, 0.2, 0.18), "armour": [&"pauldron_r"], "weapon": &"maul"},
+		"look": {"scale": 1.25, "kind": &"brute", "weapon": &"maul"},
 	},
 	&"archer": {
 		"speaker": "Archer",
@@ -228,7 +228,7 @@ const ARCHETYPES := {
 		"strafe_speed": 1.3, "counter_chance": 0.0, "stagger_time": 0.3,
 		"ranged": true, "draw_time": 0.95, "shot_speed": 30.0, "backstep_chance": 0.3,
 		"attacks": {&"kick": 1.0}, "posture": 60.0, "kick_range": 2.1, "grip_loss": 0.5,
-		"look": {"scale": 0.97, "kind": &"archer", "outfit": &"archer", "armour": [&"hood"], "weapon": &"crossbow"},
+		"look": {"scale": 0.97, "kind": &"archer", "weapon": &"crossbow"},
 	},
 	&"trainer": {
 		"speaker": "Arms master",
@@ -238,7 +238,7 @@ const ARCHETYPES := {
 		"poise": 99.0, "guard_damage": 14.0, "strafe_speed": 0.0, "stays_put": true, "kick_resist": 0.0, "topple_scale": 0.0, "posture": 99999.0,
 		"timing_variance": 0.0, "grip_loss": 0.0, "carries_lantern": false,
 		"attacks": {&"overhead": 1.0, &"left": 0.6, &"right": 0.6, &"thrust": 0.5},
-		"look": {"scale": 1.0, "kind": &"arms_master", "outfit": &"trainer", "hair": [&"Hair_SimpleParted", &"Hair_Beard"], "hair_tint": Color(0.7, 0.68, 0.64), "weapon": &"sword"},
+		"look": {"scale": 1.0, "kind": &"arms_master", "weapon": &"sword"},
 	},
 }
 
