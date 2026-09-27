@@ -112,7 +112,8 @@ class Kind:
         # stand clear of it, and it shows under their rims).
         self.open_over = set()
         # The faces of his neck kept up under his head (low_poly_base,
-        # `neck_under`), by their centres.
+        # `neck_under`), by index (the base keeps its faces' numbers until
+        # hide_body).
         self.neck_faces = set()
         # Trim for the bake to paint on the outfit (bake.trim): pauldrons'.
         self.details = {}
@@ -295,8 +296,8 @@ def low_poly_base(kind):
             vertex.co -= kind.normal_at(vertex.co) * neck["tuck"] * ease
             vertex.co.x = 0.0 if seam else vertex.co.x
 
-    kind.neck_faces = {tuple(round(c, 5) for c in f.calc_center_median()) for f in bm.faces
-                       if all(v in on_neck for v in f.verts)}
+    bm.faces.index_update()
+    kind.neck_faces = {f.index for f in bm.faces if all(v in on_neck for v in f.verts)}
     bm.to_mesh(base.data)
     bm.free()
 
@@ -1157,7 +1158,7 @@ def mantle(kind, g, part):
     # (Measured from his body without the neck kept up under his head,
     # `neck_under`: it sits where it sat on the body cut at his head.)
     def not_neck(obj, polygon):
-        return obj is not kind.base or tuple(round(c, 5) for c in polygon.center) not in kind.neck_faces
+        return obj is not kind.base or polygon.index not in kind.neck_faces
 
     tree = common.bvh([kind.base, kind.made[g["over"]]] + [obj for obj in kind.parts if kind.types[obj.name] == "shell"],
                       keep=not_neck)
