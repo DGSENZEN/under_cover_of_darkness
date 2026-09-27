@@ -463,7 +463,39 @@ PART_TARGETS = {"heads": ("heads", "male"), "heads_female": ("heads", "female"),
 
 def part_target(folder, body):
     """The target (and source file) of `folder`'s parts for `body`."""
-    return next(target for target, made in PART_TARGETS.items() if made == (folder, body))
+    target = next((target for target, made in PART_TARGETS.items() if made == (folder, body)), None)
+
+    if target is None:
+        fail("no %s for the %s body" % (folder, body))
+
+    return target
+
+
+def heaviest_combination(options, read):
+    """The most triangles a kind's options can put on a man besides his
+    outfit: over each headgear set, his heaviest face, his heaviest hair
+    unless a piece of the set hides it, his heaviest beard unless one
+    forbids it, and the set. `read(relative)` gives a part's exported JSON
+    (heads/<face>.json, hair/<style>.json, headgear/<piece>.json) or None;
+    "" is none. None if any part named has no JSON yet."""
+    def most(folder, names):
+        found = [read("%s/%s.json" % (folder, name)) for name in names if name != ""]
+        return None if any(f is None for f in found) else max((f["triangles"] for f in found), default=0)
+
+    face, hair, beard = most("heads", options["faces"]), most("hair", options.get("hair", [])), most("hair", options.get("beards", []))
+    top = 0
+
+    for pieces in options.get("headgear", [[]]) or [[]]:
+        gear = [read("headgear/%s.json" % piece) for piece in pieces]
+
+        if None in (face, hair, beard) or any(g is None for g in gear):
+            return None
+
+        hides = any(g.get("hides_hair", False) for g in gear)
+        forbids = any(not g.get("allows_beard", True) for g in gear)
+        top = max(top, face + (0 if hides else hair) + (0 if forbids else beard) + sum(g["triangles"] for g in gear))
+
+    return top
 
 
 def part_table(folder):

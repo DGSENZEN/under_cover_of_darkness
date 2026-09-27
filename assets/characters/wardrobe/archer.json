@@ -2,6 +2,7 @@
  "kind": "archer",
  "body": "male",
  "triangles": 1575,
+ "budget": 3000,
  "cloth": [
   {
    "chain": "quiver",

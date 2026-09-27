@@ -83,6 +83,42 @@ func _budget(kind: StringName) -> int:
 	return 3500 if kind == &"brute" else 3000
 
 
+## The heaviest man `kind`'s options allow: his outfit, then over each
+## headgear set his heaviest face, hair (unless a piece hides it), beard
+## (unless one forbids it) and the set, from their JSONs; "" is none.
+func _heaviest(kind: StringName) -> int:
+	var data := Wardrobe.kind_data(kind)
+	var options: Dictionary = data.get("options", {})
+	var tris := func(folder: String, names: Array) -> int:
+		var top := 0
+
+		for name in names:
+			if String(name) != "":
+				top = maxi(top, int(Wardrobe._read("%s/%s.json" % [folder, name]).get("triangles", 100000)))
+
+		return top
+
+	var face: int = tris.call("heads", options.get("faces", []))
+	var hair: int = tris.call("hair", options.get("hair", []))
+	var beard: int = tris.call("hair", options.get("beards", []))
+	var top := 0
+
+	for pieces in options.get("headgear", [[]]):
+		var gear := 0
+		var hides := false
+		var forbids := false
+
+		for piece in pieces:
+			var info := Wardrobe.headgear_data(StringName(piece))
+			gear += int(info.get("triangles", 100000))
+			hides = hides or bool(info.get("hides_hair", false))
+			forbids = forbids or not bool(info.get("allows_beard", true))
+
+		top = maxi(top, face + (0 if hides else hair) + (0 if forbids else beard) + gear)
+
+	return int(data.get("triangles", 0)) + top
+
+
 func _ready() -> void:
 	var paced: bool = await _paced()
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(80, 1, 80))
@@ -401,20 +437,6 @@ func _k2a() -> void:
 		var tris := _heaviest(kind)
 		_check("K2a %s: 256/128 textures held lossless, at most 64 colours, at most %d triangles" % [kind, _budget(kind)],
 			ok and tris <= _budget(kind), "%s tris %d" % [why, tris])
-
-
-## The most triangles a guard of `kind` can wear: his outfit, and the
-## heaviest face, hair, beard and headgear set he can roll.
-func _heaviest(kind: StringName) -> int:
-	var data := Wardrobe.kind_data(kind)
-	var options: Dictionary = data.get("options", {})
-	var faces: Array = options.get("faces", []).map(func(f): return int(Wardrobe.head_data(StringName(f)).get("triangles", 99999)))
-	var hair: Array = options.get("hair", []).map(func(h): return int(Wardrobe.hair_data(StringName(h)).get("triangles", 99999)))
-	var beards: Array = options.get("beards", []).map(func(b): return int(Wardrobe.hair_data(StringName(b)).get("triangles", 99999)))
-	var sets: Array = options.get("headgear", []).map(func(pieces): return pieces.reduce(
-		func(n, piece): return n + int(Wardrobe.headgear_data(StringName(piece)).get("triangles", 99999)), 0))
-	return int(data.get("triangles", 99999)) + (faces.max() if not faces.is_empty() else 0) + (hair.max() if not hair.is_empty() else 0) \
-		+ (beards.max() if not beards.is_empty() else 0) + (sets.max() if not sets.is_empty() else 0)
 
 
 func _k13() -> void:
@@ -943,9 +965,13 @@ func _dressed() -> void:
 			_check("K14 %s: his headgear wears a dirt mask, so his grime reaches it" % kind,
 				not masked.is_empty() and not masked.values().has(false), str(masked))
 
-		# K2 every worn triangle counted
-		var tris: int = man.worn().reduce(func(n, m): return n + m.mesh.get_faces().size() / 3, 0)
-		_check("K2 %s: at most %d triangles" % [kind, _budget(kind)], tris <= _budget(kind) and tris > 0, "tris %d" % tris)
+		# K2 every combination his options allow, from the JSONs' triangle
+		# counts (hair a set hides and beards it forbids not counted; "" is
+		# none), within the budget his JSON carries (the spec's: _budget)
+		var heaviest := _heaviest(kind)
+		var carried := int(Wardrobe.kind_data(kind).get("budget", -1))
+		_check("K2 %s: every combination within %d triangles" % [kind, _budget(kind)],
+			heaviest > 0 and heaviest <= _budget(kind) and carried == _budget(kind), "heaviest %d, JSON budget %d" % [heaviest, carried])
 
 		# K10 same seed, same man; four seeds, not four clones; his silhouette always
 		var twin := await _guard(3, archetype)
@@ -1040,6 +1066,37 @@ func _dressed() -> void:
 	_check("K26 a kind never wears a face or hair of the other body", "Head_weathered" in mixed
 		and not ("Head_sharp" in mixed) and not ("Hair_buns" in mixed), str(mixed))
 
+	# K30 "" in a kind's hair or beards is none, not a missing file: a
+	# watchman doctored bare-headed with beards ["", "full"] rolls clean
+	# chins and full beards, and "" survives usable_options
+	_doctor(&"watchman", {"beards": ["", "full"], "headgear": [[]]})
+	var chins := {}
+
+	for s in range(1, 13):
+		var chin := await _guard(s)
+		chins[chin._rig.man.look.get("beard")] = "Beard_full" in _worn_names(chin._rig.man)
+		chin.queue_free()
+
+	Wardrobe.forget()
+	var kept30 := Wardrobe.usable_options({"faces": [], "tones": [], "headgear": [], "hair": [], "beards": ["", "full"]}, "male")
+	_check("K30 an empty style is none, not a missing file", chins.has(&"") and chins[&""] == false and chins.get(&"full", false)
+		and kept30.beards.has(&""), "%s kept %s" % [chins, kept30.beards])
+
+	# K32 headgear made for another body is dropped: the duelist doctored
+	# with the watchman's kettle hat and coif (made on the male body) beside
+	# her bare head never wears them
+	_doctor(&"duelist", {"headgear": [[], ["kettlehat", "coif"]]})
+	var hers := []
+
+	for s in range(1, 9):
+		var her := await _guard(s, &"duelist")
+		hers.append_array(_worn_names(her._rig.man))
+		her.queue_free()
+
+	Wardrobe.forget()
+	_check("K32 a kind never wears headgear made for the other body", "Outfit" in hers and not ("kettlehat" in hers)
+		and not ("coif" in hers), str(hers))
+
 	# K25 a hair file with no skinned mesh (a broken export; Wardrobe.skinned
 	# remembers it so) is left off: the rest of him still dresses, his beard
 	# and his cloth (the arms master)
@@ -1082,7 +1139,7 @@ func _dressed() -> void:
 	# K1b (Review Focus 3) a missing option is dropped; missing kind files: still a watchman, painted, kettle hat on
 	var kept: Dictionary = Wardrobe.usable_options({"faces": [&"weathered", &"nobody"], "tones": [&"light"], "hair": [], "beards": [],
 		"headgear": [[&"kettlehat", &"coif"], [&"nothing"]], "dye": {"colour": [0.62, 0.52, 0.16], "shift": 0.04, "fade": [0.0, 0.35]},
-		"grime": [0.2, 0.8]})
+		"grime": [0.2, 0.8]}, "male")
 	Wardrobe.ROOT = "user://no_wardrobe/"
 	Wardrobe.forget()
 	var painted := await _guard(5)
@@ -1852,8 +1909,10 @@ func _cloth_kind(kind: StringName, archetype: StringName) -> void:
 		fighter.queue_free()
 
 	var allowed: float = EXPECT[kind].get("k5", 0.005)
+	# (Only with capsules on both thighs: without them nothing is measured.)
+	var legged: bool = Wardrobe.kind_data(kind).get("colliders", []).filter(func(c): return String(c.bone) in ["thigh_l", "thigh_r"]).size() == 2
 	_check("K5 %s: through his own attacks, again and again, no cloth joint enters a thigh or calf more than %.0f mm"
-		% [kind, allowed * 1000.0], worst >= -allowed, "closest %.3f past the surface (%s)" % [worst, where])
+		% [kind, allowed * 1000.0], legged and worst >= -allowed, "closest %.3f past the surface (%s)" % [worst, where])
 
 	if kind == &"swordsman":
 		await _layers_and_plates(g, w, man)

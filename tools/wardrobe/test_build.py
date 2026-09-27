@@ -696,6 +696,48 @@ def case_brute_arms():
     return ["%d rays out of his bare arms meet no skin first (%s)" % (len(holes), holes[0])] if holes else []
 
 
+def case_foreign_parts():
+    """A kind whose options name a part of the other body is refused
+    (check.foreign_parts); the heaviest combination counts "" as none and
+    leaves out hair a set hides and beards it forbids
+    (common.heaviest_combination); an unknown body stops with a message."""
+    import contextlib
+    import io
+
+    import check
+
+    messages = []
+    recipe = {"kind": "x", "body": "male",
+              "options": {"faces": ["weathered", "sharp"], "hair": ["", "buns"], "beards": [], "headgear": [[]]}}
+    found = check.foreign_parts(recipe)
+
+    if found != ["options: sharp is made for the female body", "options: buns is made for the female body"]:
+        messages.append("foreign parts %s" % found)
+
+    counts = {"heads/a.json": {"triangles": 400}, "hair/h.json": {"triangles": 200}, "hair/b.json": {"triangles": 100},
+              "headgear/hides.json": {"triangles": 300, "hides_hair": True, "allows_beard": False},
+              "headgear/open.json": {"triangles": 250, "hides_hair": False, "allows_beard": True}}
+    options = {"faces": ["a"], "hair": ["", "h"], "beards": ["", "b"], "headgear": [["hides"], ["open"]]}
+    heaviest = common.heaviest_combination(options, counts.get)
+
+    # The open set: 400 + 200 + 100 + 250; the hiding set only 400 + 300.
+    if heaviest != 950:
+        messages.append("heaviest %s (want 950)" % heaviest)
+
+    out = io.StringIO()
+
+    try:
+        with contextlib.redirect_stdout(out):
+            common.part_target("heads", "elf")
+
+        messages.append("part_target(heads, elf) did not stop")
+    except SystemExit:
+        if "no heads for the elf body" not in out.getvalue():
+            messages.append("part_target said %r" % out.getvalue())
+
+    return messages
+
+
 def head_skin():
     """Where the open file's detailed heads (High_*) sample their skin
     texture, the median colour (sRGB) of each: {head: (r, g, b)}."""
@@ -749,7 +791,7 @@ def case_skin():
 
 CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, "watchman": case_watchman,
          "hood": case_hood, "launcher": case_launcher, "bodies": case_bodies, "male_parts": case_male_parts,
-         "types2": case_types2, "skin": case_skin, "brute_arms": case_brute_arms}
+         "types2": case_types2, "skin": case_skin, "brute_arms": case_brute_arms, "foreign_parts": case_foreign_parts}
 
 
 def main():

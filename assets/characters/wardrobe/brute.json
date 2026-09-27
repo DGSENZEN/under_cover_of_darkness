@@ -2,6 +2,7 @@
  "kind": "brute",
  "body": "male",
  "triangles": 1968,
+ "budget": 3500,
  "cloth": [
   {
    "chain": "hides_l",

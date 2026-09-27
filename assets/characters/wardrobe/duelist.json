@@ -2,6 +2,7 @@
  "kind": "duelist",
  "body": "female",
  "triangles": 2173,
+ "budget": 3000,
  "cloth": [
   {
    "chain": "half_cape_1",
