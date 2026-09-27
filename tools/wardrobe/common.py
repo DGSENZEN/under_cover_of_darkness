@@ -18,6 +18,7 @@ import bmesh
 import bpy
 from mathutils import Vector  # noqa: F401 (the builders' vectors)
 from mathutils.bvhtree import BVHTree
+from mathutils.kdtree import KDTree
 
 ROOT = Path(__file__).resolve().parents[2]
 WARDROBE = ROOT / "assets" / "characters" / "wardrobe"
@@ -511,6 +512,66 @@ def parts_of(table, body):
     """The names in `table` (recipes.HEADS or recipes.HAIR) made for `body`
     (an entry naming none is the male body's), in the table's order."""
     return [name for name, entry in table.items() if entry.get("body", "male") == body]
+
+
+# How far round a garment's open edge at his neck its faces are drawn from
+# both sides (open_necklines), and how far from his neck's middle an edge
+# counts as round it.
+NECKLINE = 0.06
+NECK_REACH = 0.14
+
+
+def open_necklines(outfit, armature):
+    """A garment's faces round his neckline drawn from both sides, as its
+    strips are: a garment stands off his neck, and from three-quarters the
+    far side of its opening shows its inside, which a closed part culls:
+    the background showed through beside the bare-hat watchman's neck (his
+    tabard), the arms master's (his doublet) and the duelist's. The faces
+    with a vertex within NECKLINE of a garment's open edge within NECK_REACH
+    of his neck's middle, over the foot of his neck. Idempotent (export
+    applies it to every kind, the watchman's batch 0 outfit too); returns
+    how many faces it opened."""
+    neck = armature.data.bones["neck_01"].head_local
+    data = outfit.data
+    parts = data.attributes["wr_part"].data
+    strips = data.attributes["wr_strip"].data
+    bm = bmesh.new()
+    bm.from_mesh(data)
+    bm.faces.ensure_lookup_table()
+    edge = []
+
+    for e in bm.edges:
+        if not e.is_boundary or any(parts[f.index].value == 0 for f in e.link_faces):
+            continue
+
+        mid = (e.verts[0].co + e.verts[1].co) * 0.5
+
+        if mid.z > neck.z - 0.1 and math.hypot(mid.x, mid.y - neck.y) < NECK_REACH:
+            edge += [e.verts[0].co.copy(), e.verts[1].co.copy()]
+
+    opened = 0
+
+    if edge:
+        tree = KDTree(len(edge))
+
+        for i, p in enumerate(edge):
+            tree.insert(p, i)
+
+        tree.balance()
+
+        for f in bm.faces:
+            if parts[f.index].value > 0 and not strips[f.index].value \
+                    and any(tree.find(v.co)[2] < NECKLINE for v in f.verts):
+                strips[f.index].value = True
+                data.polygons[f.index].material_index = 1
+                opened += 1
+
+    bm.free()
+    return opened
+
+
+# Under this height a head of the body has no open edge but its neck's.
+NECK_EDGE_BELOW = {"male": 1.6, "female": 1.54}
 
 
 def part_limit(folder, name):

@@ -655,9 +655,11 @@ func _k31() -> void:
 
 ## K33 his hair and beard never cut what he wears over or round them:
 ## each hair and beard each kind may roll, in each of his headgear sets
-## (his options doctored to each), at rest, against his headgear and his
-## outfit above his chest (edges through faces, as K22). (A face's neck
-## meets its collar and hood by design: K15b.)
+## (his options doctored to each), at rest, dozing (his head bowed 0.5, as
+## GuardHabits dozes him) and looking up (0.55, his look-up habit), each
+## pose from rest, against his headgear and his outfit above his chest
+## (edges through faces, as K22). (A face's neck meets its collar and hood
+## by design: K15b.)
 func _k33() -> void:
 	var cuts := {}
 	var dressed := 0
@@ -683,15 +685,29 @@ func _k33() -> void:
 				for gear in man.worn().filter(func(m): return String(m.name) in pieces):
 					round_him.append([_skinned(gear, skeleton), _faces_of(gear, PackedInt32Array()), String(gear.name)])
 
-				for strands in man.worn().filter(func(m): return String(m.name).begins_with("Hair_") or String(m.name).begins_with("Beard_")):
-					var at := _skinned(strands, skeleton)
-					var faces := _faces_of(strands, PackedInt32Array())
+				var strands_worn: Array = man.worn().filter(func(m): return String(m.name).begins_with("Hair_") or String(m.name).begins_with("Beard_"))
+				var rest_pose := _head_pose(skeleton)
 
-					for other in round_him:
-						var c := _cuts(at, faces, other[0], other[1])
+				for pose in [[&"rest", 0.0], [&"dozing", 0.5], [&"looking up", -0.55]]:
+					_set_head_pose(skeleton, rest_pose)
 
-						if c > 0:
-							cuts["%s %s through %s" % [kind, strands.name, other[2]]] = c
+					if pose[1] != 0.0:
+						_bow(man, pose[1])
+
+					var posed := [[_skinned(man.body, skeleton), round_him[0][1], "outfit"]]
+
+					for other in round_him.slice(1):
+						posed.append([_skinned(_worn(man, other[2]), skeleton), other[1], other[2]])
+
+					for strands in strands_worn:
+						var at := _skinned(strands, skeleton)
+						var faces := _faces_of(strands, PackedInt32Array())
+
+						for other in posed:
+							var c := _cuts(at, faces, other[0], other[1])
+
+							if c > 0:
+								cuts["%s %s through %s, %s" % [kind, strands.name, other[2], pose[0]]] = c
 
 				Wardrobe.forget()
 				g.queue_free()
@@ -701,11 +717,23 @@ func _k33() -> void:
 		"%s over %d guards" % [cuts, dressed])
 
 
+## His neck's and head's pose rotations (to put him back at rest: _bow
+## turns from where he is).
+func _head_pose(skeleton: Skeleton3D) -> Array:
+	return [&"neck_01", &"Head"].map(func(b): return skeleton.get_bone_pose_rotation(skeleton.find_bone(b)))
+
+
+func _set_head_pose(skeleton: Skeleton3D, pose: Array) -> void:
+	for i in range(2):
+		skeleton.set_bone_pose_rotation(skeleton.find_bone([&"neck_01", &"Head"][i]), pose[i])
+
+
 ## K34 the seam at his neck: where a bare-necked kind's face meets his
 ## chest (the brute's), the foot of his head's neck is the colour of the
 ## skin of his outfit under it, in each tone (the albedo each shows, his
-## outfit's times his tone): each face, its lowest centimetre of neck
-## against his outfit's bare skin within 6 cm of it and below it (what
+## outfit's times his tone): each face, the lowest centimetre of its own
+## neck (not the sleeve inside it) against his outfit's bare skin within
+## 6 cm of it and below it (what
 ## shows: his neck kept up under his head does not), on average within 15%
 ## of the brighter (the chest lies in his mantle's shadow, the head was
 ## baked alone), and none of that skin dark (under 60% of the neck's
@@ -723,7 +751,15 @@ func _k34() -> void:
 			g.set_physics_process(false)
 			var man = g._rig.man
 			var head := _worn(man, "Head_" + face)
-			var neck := _surface_colour(head, func(p, low): return p.y < low + 0.01, [])
+			# (Its own neck: over its sleeve, which ends at 1.505 inside him.)
+			var edge_low := INF
+
+			for surface in range(head.mesh.get_surface_count()):
+				for p in (head.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+					if p.y > 1.51:
+						edge_low = minf(edge_low, p.y)
+
+			var neck := _surface_colour(head, func(p, _low): return p.y > 1.51 and p.y < edge_low + 0.01, [])
 			var edge: float = neck[1].reduce(func(lowest, q): return minf(lowest, q.y), INF)
 			var outfit := _surface_colour(man.body, func(p, _low): return p.y < edge and neck[1].any(func(q): return p.distance_to(q) < 0.06),
 				[], true)

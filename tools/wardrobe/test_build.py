@@ -818,6 +818,97 @@ def case_hoods_hold_faces():
     return ["%d face vertices beyond the coif or hood: %s" % (len(through), through[:8])] if through else []
 
 
+def see_through(objects, cameras, window):
+    """How many rays from `cameras` into `window` (points) meet a surface
+    but none that faces them (a closed part culls its backs; a strip,
+    wr_strip, draws both): holes where the background shows through him."""
+    vertices, polygons, two = [], [], []
+
+    for obj in objects:
+        start = len(vertices)
+        vertices += [v.co.copy() for v in obj.data.vertices]
+        strip = obj.data.attributes.get("wr_strip")
+
+        for p in obj.data.polygons:
+            polygons.append(tuple(start + i for i in p.vertices))
+            two.append(bool(strip.data[p.index].value) if strip is not None else False)
+
+    tree = BVHTree.FromPolygons(vertices, polygons)
+    holes = 0
+
+    for camera in cameras:
+        for target in window:
+            d = (target - camera).normalized()
+            at = camera.copy()
+
+            if tree.ray_cast(camera, d, 3.0)[0] is None:
+                continue
+
+            for _ in range(12):
+                hit = tree.ray_cast(at, d, 3.0)
+
+                if hit[0] is None:
+                    holes += 1
+                    break
+
+                if hit[1].dot(d) < 0.0 or two[hit[2]]:
+                    break
+
+                at = hit[0] + d * 1e-4
+
+    return holes
+
+
+def case_neck_seams():
+    """No background shows through the seam where a bare neck meets its
+    collar (the bare-hat watchman, the brute, the duelist, the arms
+    master), with every face each may roll and the headgear he wears then:
+    rays from in front of him and from each side at three-quarters, into
+    the band round the foot of his neck. (Under the bare hat the
+    watchman's batch 0 gambeson let the wall through beside his neck.)"""
+    import check
+    import recipes
+
+    source = common.WARDROBE / "source"
+    holes = []
+
+    for kind in ("watchman", "brute", "duelist", "arms_master"):
+        recipe = recipes.KINDS[kind]
+        body = recipe["body"]
+        options = recipe["options"]
+        bare_sets = [s for s in options["headgear"] if not any(recipes.HEADGEAR[p].get("covers_head") or p == "curtain" for p in s)]
+
+        for pieces in bare_sets:
+            with bpy.data.libraries.load(str(source / ("%s.blend" % kind))) as (_, target):
+                target.objects = ["Outfit"]
+
+            outfit = target.objects[0]
+            gear = []
+
+            if pieces:
+                with bpy.data.libraries.load(str(source / "headgear.blend")) as (_, target):
+                    target.objects = ["Gear_%s" % p for p in pieces]
+
+                gear = [o for o in target.objects if o is not None]
+
+            heads = {o.name: o for o in check.heads(body)}
+            low = 1.40 if body == "female" else 1.44
+
+            for face in options["faces"]:
+                head = heads.get("Head_" + face)
+                window = [Vector((x * 0.008, -0.02, low + z * 0.008)) for x in range(-15, 16) for z in range(21)]
+                cameras = [Vector((0.0, -0.7, low + 0.06)), Vector((0.45, -0.55, low + 0.06)), Vector((-0.45, -0.55, low + 0.06))]
+                n = see_through([outfit, head] + gear, cameras, window) if head is not None else -1
+
+                if n != 0:
+                    holes.append("%s %s %s: %d" % (kind, "+".join(pieces) or "bare", face, n))
+
+            check.forget(list(heads.values()) + gear + [outfit])
+
+    fresh()
+    return ["see-through rays at the neck: %s" % holes] if holes else []
+
+
 def width_at(tree, y, z):
     """How far out to his left a surface stands at (y, z): its outermost
     hit coming in along x (a low-poly head has few vertices near any one
@@ -1171,7 +1262,8 @@ CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, 
          "faces": case_faces, "beards_and_tails": case_beards_and_tails,
          "bare_hat": case_bare_hat, "coif_beards": case_coif_beards,
          "brute_neck": case_brute_neck, "duelist_cape": case_duelist_cape,
-         "brute_bracers": case_brute_bracers, "hoods_hold_faces": case_hoods_hold_faces}
+         "brute_bracers": case_brute_bracers, "hoods_hold_faces": case_hoods_hold_faces,
+         "neck_seams": case_neck_seams}
 
 
 def main():
