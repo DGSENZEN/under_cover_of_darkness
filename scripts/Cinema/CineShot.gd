@@ -1,10 +1,10 @@
 extends RefCounted
 ## Where a camera stands for a kind of shot, where it looks, and through what
 ## lens: framing, and nothing else (no scene tree beyond the men's places).
-## `frame` gives {kind, size, position, look, fov, focus, near_blur}:
+## `frame` gives {kind, size, position, look, fov, focus, subject, near_blur}:
 ##   size       wide, medium or close (the editor's cutting rules).
 ##   fov        the vertical field of view, degrees.
-##   focus      metres from the camera to what it is on.
+##   focus      metres from the camera to what it is on (`subject`).
 ##   near_blur  whether what is nearest (a shoulder) goes soft.
 ## The kinds:
 ##   establishing  the whole place from high, from a vantage.
@@ -82,7 +82,7 @@ static func frame(kind: StringName, men: Array, context: Dictionary) -> Dictiona
 			var at := target.global_position if target != null else centre
 			var toward := _away(at, side, Vector3(0.0, 0.0, 1.0))
 			var position := at + toward * 2.0 + Vector3.UP * 0.8
-			return _result(kind, &"close", position, at, INSERT, position.distance_to(at), false)
+			return _result(kind, &"close", position, at, INSERT, at, false)
 		&"track":
 			return _track(man, head, side, aspect)
 		&"observe", &"group", &"establishing":
@@ -90,7 +90,7 @@ static func frame(kind: StringName, men: Array, context: Dictionary) -> Dictiona
 			var vantage: Vector3 = from if from is Vector3 else centre + _away(centre, side, Vector3(0.6, 0.0, 0.8)) * 18.0 + Vector3.UP * 3.5
 
 			if kind == &"establishing":
-				return _result(kind, &"wide", vantage, centre, ESTABLISHING, vantage.distance_to(centre), false)
+				return _result(kind, &"wide", vantage, centre, ESTABLISHING, centre, false)
 
 			return _from(kind, men, vantage, -1.0, 0.0, aspect, &"")
 		&"axial":
@@ -102,10 +102,10 @@ static func frame(kind: StringName, men: Array, context: Dictionary) -> Dictiona
 			var height: float = [WIDE_HEIGHT, MEDIUM_HEIGHT, CLOSE_HEIGHT][step]
 			var position := head + axis * _distance(height, fov)
 			var look := _composed(position, head, facing(man), fov, aspect)
-			return _result(kind, [&"wide", &"medium", &"close"][step], position, look, fov, position.distance_to(head), false)
+			return _result(kind, [&"wide", &"medium", &"close"][step], position, look, fov, head, false)
 		&"overhead":
 			var position := centre + ABOVE
-			return _result(kind, &"wide", position, centre, OVERHEAD, position.distance_to(centre), false)
+			return _result(kind, &"wide", position, centre, OVERHEAD, centre, false)
 
 	return _single(&"medium", man, head, MEDIUM_HEIGHT, NORMAL, &"medium", side, aspect)
 
@@ -175,7 +175,7 @@ static func _single(kind: StringName, man: Node3D, head: Vector3, height: float,
 
 	var position := head + round * _distance(height, fov)
 	var look := _composed(position, head, ahead, fov, aspect)
-	return _result(kind, size, position, look, fov, position.distance_to(head), false)
+	return _result(kind, size, position, look, fov, head, false)
 
 
 ## Both men from the side of their line (the side given, else the one to
@@ -196,7 +196,7 @@ static func _two(men: Array, side: Vector3, aspect: float) -> Dictionary:
 	var distance := maxf(wide, _distance(MEDIUM_HEIGHT, NORMAL))
 	var position := centre + across * distance + Vector3.UP * 0.2
 	var look := centre + Vector3.DOWN * distance * half / 3.0
-	return _result(&"two", &"medium", position, look, NORMAL, position.distance_to(centre), false)
+	return _result(&"two", &"medium", position, look, NORMAL, centre, false)
 
 
 ## Behind the listener's head (men[1]) and out to the side, onto the speaker
@@ -218,7 +218,7 @@ static func _over_shoulder(men: Array, side: Vector3, aspect: float) -> Dictiona
 	# The listener shows on the side the camera stepped away from; the
 	# speaker goes to the other third.
 	var look := _composed(position, s, -out, NORMAL, aspect)
-	return _result(&"over_shoulder", &"close", position, look, NORMAL, position.distance_to(s), true)
+	return _result(&"over_shoulder", &"close", position, look, NORMAL, s, true)
 
 
 ## Alongside him, well off to his side, a long lens, room ahead of him.
@@ -232,7 +232,7 @@ static func _track(man: Node3D, head: Vector3, side: Vector3, aspect: float) -> 
 	var fov := 22.0
 	var position := head + out * TRACK_OFF + Vector3.DOWN * 0.1
 	var look := _composed(position, head, going, fov, aspect)
-	return _result(&"track", &"medium", position, look, fov, position.distance_to(head), false)
+	return _result(&"track", &"medium", position, look, fov, head, false)
 
 
 ## From `vantage`, the lens fitted to the men (a long one when `fov` < 0),
@@ -266,7 +266,7 @@ static func _from(kind: StringName, men: Array, vantage: Vector3, fov: float, he
 	if live.size() == 1 or kind == &"group":
 		look = _composed(vantage, head_of(nearest), facing(nearest), fov, aspect) if nearest != null else centre
 
-	return _result(kind, size, vantage, look, fov, vantage.distance_to(head_of(nearest) if nearest != null else centre), false)
+	return _result(kind, size, vantage, look, fov, head_of(nearest) if nearest != null else centre, false)
 
 
 # ---------------------------------------------------------------------------
@@ -310,5 +310,6 @@ static func _away(at: Vector3, side: Vector3, default: Vector3) -> Vector3:
 	return way.normalized() if way.length() > 0.01 else Vector3.BACK
 
 
-static func _result(kind: StringName, size: StringName, position: Vector3, look: Vector3, fov: float, focus: float, near_blur: bool) -> Dictionary:
-	return {"kind": kind, "size": size, "position": position, "look": look, "fov": fov, "focus": focus, "near_blur": near_blur}
+static func _result(kind: StringName, size: StringName, position: Vector3, look: Vector3, fov: float, subject: Vector3, near_blur: bool) -> Dictionary:
+	return {"kind": kind, "size": size, "position": position, "look": look, "fov": fov, "focus": position.distance_to(subject),
+		"subject": subject, "near_blur": near_blur}

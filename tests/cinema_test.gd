@@ -21,6 +21,7 @@ const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const CineShot := preload("res://scripts/Cinema/CineShot.gd")
 const CineVantage := preload("res://scripts/Cinema/CineVantage.gd")
 const CineScreen := preload("res://scripts/Cinema/CineScreen.gd")
+const CineOperator := preload("res://scripts/Cinema/CineOperator.gd")
 
 const COMBAT := 4
 const SEARCHING := 3
@@ -58,6 +59,7 @@ func _ready() -> void:
 	await _framing()
 	await _vantages()
 	await _screen()
+	await _operator()
 	print("\n==== RESULTS ====")
 
 	for r in results:
@@ -468,6 +470,168 @@ func _screen() -> void:
 		during and edge_mid > 0.3 and edge_mid < 0.7 and over and cleared,
 		"during %s, edge at 0.3 s %.2f, over %s, cleared %s" % [during, edge_mid, over, cleared])
 	screen.queue_free()
+
+
+# ---------------------------------------------------------------------------
+# O: the operator
+# ---------------------------------------------------------------------------
+
+func _operator() -> void:
+	var camera := Camera3D.new()
+	add_child(camera)
+	var screen: CanvasLayer = CineScreen.new()
+	add_child(screen)
+	var op: Node = CineOperator.new()
+	add_child(op)
+	op.attach(camera, screen)
+	var head := Vector3(600, 1.6, 0)
+
+	# O9 the camera is drawn where it is put
+	_check("O9 the operator's camera is not interpolated between physics ticks",
+		camera.physics_interpolation_mode == Node.PHYSICS_INTERPOLATION_MODE_OFF, "mode %d" % camera.physics_interpolation_mode)
+
+	# O1 a drama glide settles without overshooting
+	op.set_mode(&"drama")
+	op.show(_frame_at(Vector3(600, 1.6, 4), head, 40.0, &"medium"), &"cut")
+	await _frames(2)
+	var goal1 := Vector3(605, 1.6, 4)
+	op.show(_frame_at(goal1, head, 40.0, &"medium"), &"glide")
+	var closer := true
+	var last := INF
+	var grew := []
+
+	for f in 180:
+		await get_tree().process_frame
+		var gap := camera.global_position.distance_to(goal1)
+
+		if gap > last + 0.0001 and grew.size() < 6:
+			grew.append([f, snappedf(last, 0.0001), snappedf(gap, 0.0001), camera.global_position])
+
+		closer = closer and gap <= last + 0.0001
+		last = gap
+
+	_check("O1 a glide in drama settles on its mark without overshooting", closer and last < 0.01, "never further %s, off by %.4f m; grew %s" % [closer, last, grew])
+
+	# O2 an observe glide keeps to 0.4 m/s
+	op.set_mode(&"observe")
+	op.show(_frame_at(Vector3(600, 1.6, 10), head, 24.0, &"medium"), &"cut")
+	await _frames(2)
+	op.show(_frame_at(Vector3(610, 1.6, 10), head, 24.0, &"medium"), &"glide")
+	var fastest := 0.0
+	var was := camera.global_position
+
+	for f in 240:
+		await get_tree().process_frame
+		fastest = maxf(fastest, camera.global_position.distance_to(was) * 60.0)
+		was = camera.global_position
+
+	_check("O2 in observe the camera dollies no faster than 0.4 m/s", fastest <= 0.42 and fastest > 0.1, "fastest %.3f m/s" % fastest)
+
+	# O3 a glide through a wall is a cut
+	var wall := Props.block(self, Vector3(600, 2.0, 20), Vector3(8, 4, 0.4))
+	await _frames(3)
+	op.set_mode(&"drama")
+	op.show(_frame_at(Vector3(600, 1.6, 17), head, 40.0, &"medium"), &"cut")
+	await _frames(2)
+	var beyond := Vector3(600, 1.6, 23)
+	op.show(_frame_at(beyond, head, 40.0, &"medium"), &"glide")
+	await _frames(2)
+	_check("O3 a glide whose way crosses a wall becomes a cut", camera.global_position.distance_to(beyond) < 0.01, "at %s" % camera.global_position)
+	wall.queue_free()
+
+	# O4 a path through four points, in order
+	op.set_mode(&"drama")
+	var points := PackedVector3Array([Vector3(600, 1.6, -4), Vector3(602, 1.8, -5), Vector3(604, 1.8, -5), Vector3(606, 1.6, -4)])
+	var path_framing := _frame_at(points[0], head, 40.0, &"medium")
+	path_framing["path"] = points
+	op.show(_frame_at(points[0], head, 40.0, &"medium"), &"cut")
+	await _frames(2)
+	op.show(path_framing, &"path")
+	var nearest := [INF, INF, INF, INF]
+	var order := []
+
+	for f in 600:
+		await get_tree().process_frame
+
+		for i in 4:
+			var d := camera.global_position.distance_to(points[i])
+			nearest[i] = minf(nearest[i], d)
+
+			if d < 0.3 and not order.has(i):
+				order.append(i)
+
+	_check("O4 a path passes each of its points in order", order == [0, 1, 2, 3], "nearest %s, order %s" % [nearest, order])
+
+	# O5 the lens eases
+	op.show(_frame_at(Vector3(600, 1.6, 4), head, 40.0, &"close"), &"cut")
+	await _frames(2)
+	op.show(_frame_at(Vector3(600, 1.6, 4), head, 28.0, &"close"), &"glide")
+	var biggest := 0.0
+	var was_fov: float = camera.fov
+
+	for f in 180:
+		await get_tree().process_frame
+		biggest = maxf(biggest, absf(camera.fov - was_fov))
+		was_fov = camera.fov
+
+	_check("O5 the lens eases from 40 to 28, never more than a degree a frame", biggest <= 1.0 and absf(camera.fov - 28.0) < 0.1,
+		"biggest step %.2f, now %.2f" % [biggest, camera.fov])
+
+	# O6 focus on his head, the blur held down, the near blur only over a shoulder
+	op.show(_frame_at(Vector3(600, 1.6, 3), head, 40.0, &"close"), &"cut")
+	await _real(0.5)
+	var attributes: CameraAttributesPractical = camera.attributes as CameraAttributesPractical
+	var focus_ok: bool = attributes != null and absf(op.focus_distance() - camera.global_position.distance_to(head)) < 0.1 \
+		and attributes.dof_blur_amount <= 0.12 and attributes.dof_blur_far_enabled and not attributes.dof_blur_near_enabled
+	var shoulder := _frame_at(Vector3(600, 1.6, 3), head, 40.0, &"close")
+	shoulder["near_blur"] = true
+	op.show(shoulder, &"cut")
+	await _frames(2)
+	_check("O6 focus is on his head, the blur no more than 0.12, the near blur only over a shoulder",
+		focus_ok and (camera.attributes as CameraAttributesPractical).dof_blur_near_enabled,
+		"focus %.2f vs %.2f, attributes %s" % [op.focus_distance(), camera.global_position.distance_to(head), attributes])
+
+	# O7 handheld: a drama close shot within 0.3 deg; observe within 0.05
+	var sway := {}
+
+	for mode in [&"drama", &"observe"]:
+		op.set_mode(mode)
+		op.show(_frame_at(Vector3(600, 1.6, 3), head, 40.0, &"close"), &"cut")
+		var worst := 0.0
+
+		for f in 240:
+			await get_tree().process_frame
+			var aim: Vector3 = (op.look_point() - camera.global_position).normalized()
+			worst = maxf(worst, rad_to_deg((-camera.global_basis.z).angle_to(aim)))
+
+		sway[mode] = worst
+
+	_check("O7 handheld sways a drama close shot no more than 0.3 deg, an observed one no more than 0.05",
+		sway[&"drama"] <= 0.3 and sway[&"drama"] > 0.02 and sway[&"observe"] <= 0.05, "%s" % [sway])
+
+	# O8 a shake: never over 2.5 deg, gone in 0.6 s
+	op.set_mode(&"observe")
+	op.show(_frame_at(Vector3(600, 1.6, 3), head, 40.0, &"medium"), &"cut")
+	await _frames(2)
+	op.shake(0.8)
+	var worst8 := 0.0
+
+	for f in 36:
+		await get_tree().process_frame
+		var aim8: Vector3 = (op.look_point() - camera.global_position).normalized()
+		worst8 = maxf(worst8, rad_to_deg((-camera.global_basis.z).angle_to(aim8)))
+
+	_check("O8 a shake never turns the camera more than 2.5 deg and dies away within 0.6 s",
+		worst8 <= 2.5 and worst8 > 0.2 and float(op.trauma) < 0.01, "worst %.2f deg, trauma %.3f" % [worst8, op.trauma])
+	op.queue_free()
+	screen.queue_free()
+	camera.queue_free()
+
+
+## A framing as CineShot gives one, with its subject's head.
+func _frame_at(position: Vector3, subject: Vector3, fov: float, size: StringName) -> Dictionary:
+	return {"kind": &"test", "size": size, "position": position, "look": subject, "fov": fov,
+		"focus": position.distance_to(subject), "subject": subject, "near_blur": false}
 
 
 func _marker(at: Vector3) -> Marker3D:
