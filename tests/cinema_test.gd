@@ -17,6 +17,7 @@ const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
 const COMBAT := 4
 const SEARCHING := 3
@@ -50,6 +51,7 @@ func _ready() -> void:
 	CineEvents.add_listener(ears)
 	await _events()
 	CineEvents.remove_listener(ears)
+	await _ramps()
 	print("\n==== RESULTS ====")
 
 	for r in results:
@@ -159,6 +161,60 @@ func _events() -> void:
 class _NodeEars extends Node:
 	func cine_event(_kind: StringName, _data: Dictionary) -> void:
 		pass
+
+
+# ---------------------------------------------------------------------------
+# R: eased slow motion
+# ---------------------------------------------------------------------------
+
+func _ramps() -> void:
+	await _fresh()
+	TimeFx.clear()
+	TimeFx.set_base(1.0)
+
+	# R1 eased down to 0.3, held, eased back, gone
+	TimeFx.ramp(get_tree(), &"cinema", 0.3, 0.2, 1.2, 0.5)
+	await _real(0.5)
+	var held1 := Engine.time_scale
+	await _real(1.7)
+	_check("R1 a ramp eases time down to 0.3, holds it, and eases it back to 1, then is gone",
+		absf(held1 - 0.3) < 0.02 and absf(Engine.time_scale - 1.0) < 0.001 and not TimeFx.is_active(&"cinema"),
+		"held %.3f, after %.3f, active %s" % [held1, Engine.time_scale, TimeFx.is_active(&"cinema")])
+
+	# R2 it stacks: on a base of 0.5, 0.15 held; a hit-stop inside it slows
+	# further, then gives it back
+	TimeFx.set_base(0.5)
+	TimeFx.ramp(get_tree(), &"cinema", 0.3, 0.2, 1.2, 0.5)
+	await _real(0.5)
+	var held2 := Engine.time_scale
+	TimeFx.hitstop(get_tree(), 0.1)
+	await _real(0.03)
+	var stopped2 := Engine.time_scale
+	await _real(0.2)
+	var after2 := Engine.time_scale
+	await _real(1.5)
+	TimeFx.set_base(1.0)
+	_check("R2 a ramp stacks with the show's speed and a hit-stop: 0.15 on a base of 0.5, 0.025 in a hit-stop, 0.15 after",
+		absf(held2 - 0.15) < 0.01 and absf(stopped2 - 0.025) < 0.005 and absf(after2 - 0.15) < 0.01,
+		"held %.3f, in the hit-stop %.3f, after %.3f" % [held2, stopped2, after2])
+
+	# R3 cleared in the middle: back at once, and it stays back
+	TimeFx.ramp(get_tree(), &"cinema", 0.3, 0.2, 1.2, 0.5)
+	await _real(0.5)
+	TimeFx.clear()
+	var cleared3 := Engine.time_scale
+	await _real(1.8)
+	_check("R3 cleared in the middle of a ramp, time is back at once and stays back",
+		absf(cleared3 - 1.0) < 0.001 and absf(Engine.time_scale - 1.0) < 0.001 and not TimeFx.is_active(&"cinema"),
+		"cleared %.3f, later %.3f" % [cleared3, Engine.time_scale])
+
+
+## `seconds` of real time (physics ticks are real seconds: TimeFx.real_time).
+func _real(seconds: float) -> void:
+	var until := TimeFx.real_time() + seconds
+
+	while TimeFx.real_time() < until:
+		await get_tree().physics_frame
 
 
 # ---------------------------------------------------------------------------

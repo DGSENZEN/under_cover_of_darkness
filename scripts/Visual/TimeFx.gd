@@ -43,6 +43,38 @@ static func request(tree: SceneTree, id: StringName, scale: float, real_seconds:
 	)
 
 
+## Slow time to `scale` over `ease_in`, hold it `hold`, and ease it back to
+## 1 over `ease_out` (real seconds each); then the request is gone. The same
+## `id` begins again; clear() ends it. Paused or slowed, it keeps real time.
+static func ramp(tree: SceneTree, id: StringName, scale: float, ease_in: float, hold: float, ease_out: float) -> void:
+	if tree == null:
+		return
+
+	_token += 1
+	var token := _token
+	var low := clampf(scale, 0.01, 1.0)
+	_requests[id] = { "scale": 1.0, "token": token }
+	var set_scale := func(value: float) -> void:
+		var entry: Dictionary = _requests.get(id, {})
+
+		if not entry.is_empty() and int(entry["token"]) == token:
+			entry["scale"] = value
+			_apply()
+
+	var tween := tree.create_tween()
+	tween.set_ignore_time_scale(true)
+	tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	tween.tween_method(set_scale, 1.0, low, maxf(ease_in, 0.001)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_interval(maxf(hold, 0.0))
+	tween.tween_method(set_scale, low, 1.0, maxf(ease_out, 0.001)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_callback(func() -> void:
+		var entry: Dictionary = _requests.get(id, {})
+
+		if not entry.is_empty() and int(entry["token"]) == token:
+			_requests.erase(id)
+			_apply())
+
+
 ## A short freeze on impact. Heavier blows freeze longer.
 static func hitstop(tree: SceneTree, real_seconds: float, scale := 0.05) -> void:
 	request(tree, &"hitstop", scale, real_seconds)
