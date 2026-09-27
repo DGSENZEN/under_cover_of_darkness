@@ -746,7 +746,8 @@ func _observing() -> void:
 		shots.size() >= 3 and lengths.all(func(l): return l >= 14.9 and l <= 45.1),
 		"%d shots, lengths %s" % [shots.size(), lengths])
 
-	# E2 no cut while a line is being said
+	# E2 no cut while a line is being said (lines not between the scene's
+	# men: a conversation's portraits cut inside lines, E27-E33)
 	var other := _man(Vector3(701.5, 0, 0.5), PI)
 	editor.scene({"mode": &"observe", "subjects": [man, other]})
 	await _real(2.0)
@@ -756,7 +757,7 @@ func _observing() -> void:
 
 	for i in 10:
 		var speaker := man if i % 2 == 0 else other
-		CineEvents.emit(&"line", {"speaker": speaker, "listeners": [other if speaker == man else man], "seconds": 4.0, "delivery": &"", "text": "...", "where": speaker.global_position})
+		CineEvents.emit(&"line", {"speaker": speaker, "listeners": [], "seconds": 4.0, "delivery": &"", "text": "...", "where": speaker.global_position})
 		speaking_until[0] = TimeFx.real_time() + 4.0
 		var start := shots.size()
 		await _real(4.0)
@@ -773,8 +774,9 @@ func _observing() -> void:
 	var lens_start: float = float(shot3["framing"]["fov"])
 	var talked := TimeFx.real_time()
 
+	# (spoken to no one in the scene: a conversation goes to portraits, E28)
 	while TimeFx.real_time() - talked < 25.0:
-		CineEvents.emit(&"line", {"speaker": man, "listeners": [other], "seconds": 4.0, "delivery": &"", "text": "...", "where": man.global_position})
+		CineEvents.emit(&"line", {"speaker": man, "listeners": [], "seconds": 4.0, "delivery": &"", "text": "...", "where": man.global_position})
 		await _real(4.5)
 
 	var lens_end: float = camera.fov
@@ -934,7 +936,8 @@ func _drama() -> void:
 		var p: Dictionary = shots[i - 1]
 		var q: Dictionary = shots[i]
 
-		if p["size"] == q["size"] and q["kind"] != &"axial":
+		# (one man's portrait to the other's is shot and reverse shot)
+		if p["size"] == q["size"] and q["kind"] != &"axial" and p["subjects"] == q["subjects"]:
 			var u: Vector3 = (p["framing"]["position"] as Vector3) - centre11
 			var v: Vector3 = (q["framing"]["position"] as Vector3) - centre11
 			u.y = 0.0
@@ -1173,6 +1176,176 @@ func _drama() -> void:
 		CineVantage.clear(space26, took26) and CineVantage.sees(space26, took26, [a]), "took %s (planned %s, %s)" % [took26, planned26["position"], editor.current()["kind"]])
 	wall26.queue_free()
 
+	# E27 a drama talk: a two-shot until the second line, then portraits,
+	# each cut 0.3 s into the new speaker's line; the same man again keeps his
+	a._target = null
+	b._target = null
+	b.rotation.y = PI * 0.5
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(2.0)
+	shots.clear()
+	var said27 := []
+	said27.append(_say(a, b, 2.0))
+	await _real(2.4)
+	var two27: StringName = editor.current()["kind"]
+	await _real(0.1)
+	said27.append(_say(b, a, 2.0))
+	await _real(2.5)
+	var before_again := shots.size()
+	said27.append(_say(b, a, 2.0))
+	await _real(2.5)
+	var kept27 := shots.size() == before_again
+	said27.append(_say(a, b, 2.0))
+	await _real(1.0)
+	var portraits27 := shots.filter(func(sh): return sh["cause"] == &"portrait")
+	var lags27 := []
+
+	for sh in portraits27:
+		var who: Node3D = sh["subjects"][0]
+		var line_at: float = said27[1] if who == b else said27[3]
+		lags27.append(snappedf(float(sh["real_at"]) - line_at, 0.01))
+
+	_check("E27 a drama talk: a two-shot until the second line, then portraits 0.3 s into each new speaker's line; the same man again keeps his",
+		two27 == &"two" and portraits27.size() == 2 and portraits27[0]["subjects"][0] == b and portraits27[1]["subjects"][0] == a \
+			and lags27.all(func(l): return absf(l - 0.3) <= 0.1) and kept27,
+		"after the first line %s; portraits %s at %s s into their lines; the same man again kept %s" % [two27, portraits27.map(func(sh): return sh["subjects"][0] == a), lags27, kept27])
+
+	# E34 portraits hold still while he stands
+	var at34 := camera.global_position
+	var aim34 := -camera.global_basis.z
+	var moved34 := 0.0
+	var turned34 := 0.0
+
+	for f in 150:
+		await get_tree().process_frame
+		moved34 = maxf(moved34, camera.global_position.distance_to(at34))
+		turned34 = maxf(turned34, rad_to_deg((-camera.global_basis.z).angle_to(aim34)))
+
+	_check("E34 a portrait holds still while he stands: the camera neither moves nor turns",
+		editor.current()["kind"] == &"portrait" and moved34 < 0.01 and turned34 < 0.1, "%s, moved %.4f m, turned %.3f deg" % [editor.current()["kind"], moved34, turned34])
+
+	# E29 a shouted line: the listener's portrait as it ends; another 4 s on: no second one
+	await _real(4.0)
+	shots.clear()
+	_say(a, b, 2.0, &"shout")
+	await _real(4.0)
+	_say(a, b, 2.0, &"shout")
+	await _real(3.0)
+	var reactions29 := shots.filter(func(sh): return sh["cause"] == &"reaction")
+	_check("E29 a hard line brings the listener's portrait as it ends; a second one 4 s later does not",
+		reactions29.size() == 1 and reactions29[0]["subjects"][0] == b, "%s" % [shots.map(func(sh): return [sh["cause"], sh["subjects"][0] == b])])
+
+	# E30 the fourth change of speaker: back to a two-shot for one line, then portraits
+	await _real(4.0)
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(2.0)
+	shots.clear()
+
+	for i in 7:
+		_say(a if i % 2 == 0 else b, b if i % 2 == 0 else a, 2.0)
+		await _real(2.5)
+
+	var causes30 := shots.map(func(sh): return sh["cause"])
+	var re30 := causes30.find(&"reestablish")
+	_check("E30 on the fourth change of speaker it goes back to a two-shot for a line, then to portraits",
+		re30 >= 0 and re30 < causes30.size() - 1 and causes30[re30 + 1] == &"portrait", "%s" % [causes30])
+
+	# E28 an observe talk: the take goes on until the third line, then portraits
+	await _real(4.0)
+	editor.scene({"mode": &"observe", "subjects": [a, b]})
+	await _real(2.0)
+	shots.clear()
+	_say(a, b, 2.0)
+	await _real(2.5)
+	_say(b, a, 2.0)
+	await _real(2.5)
+	var early28 := shots.filter(func(sh): return sh["cause"] == &"portrait").size()
+	_say(a, b, 2.0)
+	await _real(1.0)
+	var late28 := shots.filter(func(sh): return sh["cause"] == &"portrait")
+	_check("E28 an observed talk stays in its take for two lines, and goes to portraits on the third",
+		early28 == 0 and late28.size() == 1 and late28[0]["subjects"][0] == a, "%s" % [shots.map(func(sh): return sh["cause"])])
+
+	# E32 (RF2) three men talking in turn: portraits of each, never two cuts
+	# under 1.5 s apart, a group shot when the third speaks
+	await _real(4.0)
+	var c3 := _man(Vector3(801.5, 0, 2.5), PI)
+	editor.scene({"mode": &"drama", "subjects": [a, b, c3]})
+	await _real(2.0)
+	shots.clear()
+	var order32 := [[a, b], [b, a], [a, b], [c3, a], [b, c3], [c3, b], [a, c3]]
+
+	for pair in order32:
+		_say(pair[0], pair[1], 2.0)
+		await _real(2.4)
+
+	var gaps32 := []
+
+	for i in range(1, shots.size()):
+		gaps32.append(float(shots[i]["real_at"]) - float(shots[i - 1]["real_at"]))
+
+	var who32 := {}
+
+	for sh in shots.filter(func(sh): return sh["cause"] == &"portrait"):
+		who32[sh["subjects"][0]] = true
+
+	_check("E32 three men talking: portraits of each, a group shot when the third speaks, no two cuts under 1.5 s apart",
+		who32.size() == 3 and shots.any(func(sh): return sh["cause"] == &"reestablish") and gaps32.all(func(g): return g >= 1.45),
+		"portraits of %d men, causes %s, gaps %s" % [who32.size(), shots.map(func(sh): return sh["cause"]), gaps32.map(func(g): return snappedf(g, 0.01))])
+
+	# E31 (RF1) the man in a portrait freed mid-line: a new shot, no error
+	await _real(3.0)
+	editor.scene({"mode": &"drama", "subjects": [a, c3]})
+	await _real(2.0)
+	_say(a, c3, 2.0)
+	await _real(2.5)
+	_say(c3, a, 3.0)
+	await _real(2.0)
+	var on31: Node3D = editor.current()["subjects"][0] if not (editor.current()["subjects"] as Array).is_empty() else null
+	shots.clear()
+	var freed31 := TimeFx.real_time()
+	c3.queue_free()
+	await _real(0.3)
+	_check("E31 the man in a portrait freed mid-line: a new shot at once",
+		on31 == c3 and not shots.is_empty() and float(shots[0]["real_at"]) - freed31 <= 0.2, "portrait of c3 %s, then %s" % [on31 == c3, shots.map(func(sh): return [sh["kind"], snappedf(float(sh["real_at"]) - freed31, 0.01)])])
+
+	# E33 (RF3) a talk begun during a pin: the pin holds, portraits after
+	await _real(3.0)
+	editor.scene({"mode": &"drama", "subjects": [a, b], "pin": {"kind": &"close", "subjects": [a], "seconds": 6.0}})
+	await _until(func(): return editor.current().get("cause") == &"pin", 120)
+	var pinned33 := TimeFx.real_time()
+	var held33 := true
+
+	for i in 5:
+		_say(a if i % 2 == 0 else b, b if i % 2 == 0 else a, 2.0)
+
+		for f in 150:
+			await get_tree().process_frame
+
+			if TimeFx.real_time() - pinned33 < 5.9:
+				held33 = held33 and editor.current().get("cause") == &"pin"
+
+	_check("E33 a talk begun during a pin leaves the pin its time; the portraits come after",
+		held33 and editor.history().any(func(sh): return sh["cause"] == &"portrait" and float(sh["real_at"]) >= pinned33 + 5.9), "held %s, now %s" % [held33, editor.current().get("cause")])
+
+	# E38 a man stirred in the middle of a drama talk: the three cuts in on
+	# him all run, the talk after
+	await _real(4.0)
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(2.0)
+
+	for i in 3:
+		_say(a if i % 2 == 0 else b, b if i % 2 == 0 else a, 2.0)
+		await _real(2.5)
+
+	shots.clear()
+	CineEvents.emit(&"alert", {"man": b, "from": 0, "to": SEARCHING, "where": b.global_position})
+	_say(a, b, 2.0)
+	await _real(2.5)
+	var axial38 := shots.filter(func(sh): return sh["kind"] == &"axial")
+	_check("E38 a man stirred during a drama talk: the three cuts straight in on him all run",
+		axial38.size() == 3, "%s" % [shots.map(func(sh): return [sh["kind"], sh["cause"]])])
+
 	# E18 released in the middle of a slowing and a wipe: time back at once, the screen cleared
 	editor.scene({"mode": &"drama", "subjects": [a, b]})
 	await _real(9.0)
@@ -1192,6 +1365,13 @@ func _drama() -> void:
 	editor.queue_free()
 	camera.queue_free()
 	TimeFx.clear()
+
+
+## A line from `speaker` to `listener`, `seconds` long, as the talk director
+## tells it; when it began (TimeFx.real_time).
+func _say(speaker: Node3D, listener: Node3D, seconds: float, delivery: StringName = &"") -> float:
+	CineEvents.emit(&"line", {"speaker": speaker, "listeners": [listener], "seconds": seconds, "delivery": delivery, "text": "...", "where": speaker.global_position})
+	return TimeFx.real_time()
 
 
 ## How long each shot of `shots` ran, all but the last (editor seconds).

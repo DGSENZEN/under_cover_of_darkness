@@ -77,6 +77,15 @@ const REACTION_REST := 6.0
 ## near (m) where it was made.
 const SETUP_KINDS := [&"close", &"medium", &"reaction", &"portrait"]
 const SETUP_WITHIN := 1.5
+## A conversation: portraits from this line (by mode); a new speaker's
+## portrait this long into his line (s); a listener's face after a hard line
+## once in this long (s); back to the two of them every this many changes of
+## speaker; a portrait re-aims only if his head moves this far (m).
+const PORTRAIT_FROM := {&"observe": 3, &"drama": 2}
+const SPEAKER_CUT := 0.3
+const REACTION_EVERY := 8.0
+const REESTABLISH_EVERY := 4
+const STILL_WITHIN := 0.3
 const FACE_OFF_NEAR := 4.0
 const FACE_OFF_FACING := 45.0
 const FACE_OFF_QUIET := 1.0
@@ -139,6 +148,10 @@ var _held := false
 ## The scene's setups: by man and kind ("id:kind"), where the camera stood for
 ## him, through what lens, on what side, and where his head was.
 var _setups := {}
+## A conversation among the scene's men: {lines, speaker, listener, speakers,
+## changes, portraits, end, portrait_of, next (the cut due), react (the
+## listener's face due), reestablishing}.
+var _talk := {}
 var _scene_due := -INF
 var _scene_wipe := false
 var _scene_asked := -INF
@@ -221,6 +234,7 @@ func hold(held: bool) -> void:
 	_pending = {}
 	_reaction = {}
 	_axial = {}
+	_talk = {}
 	_scene_due = -INF
 
 	if _operator != null:
@@ -242,6 +256,7 @@ func scene(intent: Dictionary) -> void:
 
 	_resolve()
 	_talk_until = -INF
+	_talk = {}
 	_interest = {}
 	_pending = {}
 	_axial = {}
@@ -373,6 +388,9 @@ func cine_event(kind: StringName, data: Dictionary) -> void:
 		_talk_until = maxf(_talk_until, _clock + float(data.get("seconds", 1.0)))
 		_speaker = data.get("speaker") as Node3D
 
+		if not _held:
+			_talk_line(data)
+
 	var priority := int(PRIORITY.get(kind, 0))
 
 	if _interest.is_empty() or float(_interest["at"]) < _clock or priority >= int(_interest["priority"]):
@@ -427,6 +445,9 @@ func _process(_delta: float) -> void:
 		return
 
 	if pinned or _scene_due > -INF:
+		return
+
+	if _talk_step(age):
 		return
 
 	if _mode == &"drama":
@@ -626,6 +647,165 @@ func _element() -> Node3D:
 
 
 # ---------------------------------------------------------------------------
+# Conversations
+# ---------------------------------------------------------------------------
+
+## The listener a line is spoken to, if the line is between two of the
+## scene's men (a line of a conversation); else null.
+func _talk_of(data: Dictionary) -> Variant:
+	var speaker: Variant = data.get("speaker")
+
+	if not _valid(speaker) or not _subjects.has(speaker):
+		return null
+
+	for listener in data.get("listeners", []):
+		if _valid(listener) and _subjects.has(listener) and listener != speaker:
+			return listener
+
+	return null
+
+
+## A line of a conversation: what the talk cuts to next. It builds (drama: a
+## two-shot of them), goes to portraits of whoever speaks, 0.3 s into his line
+## (the same man again keeps his), goes back to the two of them every
+## REESTABLISH_EVERY changes of speaker or when a third man speaks, and after
+## a hard line gives the listener's face as it ends.
+func _talk_line(data: Dictionary) -> void:
+	var listener: Variant = _talk_of(data)
+
+	if listener == null:
+		return
+
+	var speaker: Node3D = data["speaker"]
+	var seconds := float(data.get("seconds", 1.0))
+
+	if _talk.is_empty() or _clock > float(_talk["end"]) + TALK_GAP:
+		_talk = {"lines": 0, "speaker": null, "listener": null, "speakers": [], "changes": 0, "portraits": false, "end": _clock,
+			"portrait_of": null, "next": {}, "react": {}, "reestablishing": false}
+
+	var changed: bool = _talk["speaker"] != null and _talk["speaker"] != speaker
+	var third: bool = (_talk["speakers"] as Array).size() >= 2 and not (_talk["speakers"] as Array).has(speaker)
+	_talk["lines"] = int(_talk["lines"]) + 1
+	_talk["changes"] = int(_talk["changes"]) + (1 if changed else 0)
+
+	if not (_talk["speakers"] as Array).has(speaker):
+		(_talk["speakers"] as Array).append(speaker)
+
+	_talk["speaker"] = speaker
+	_talk["listener"] = listener
+	_talk["end"] = maxf(float(_talk["end"]), _clock + seconds)
+	var at := _clock + SPEAKER_CUT
+	var due_again: bool = changed and int(_talk["changes"]) % REESTABLISH_EVERY == 0
+
+	if int(_talk["lines"]) == 1 and _mode == &"drama":
+		_talk["next"] = {"kind": &"two", "at": at}
+	elif (third or due_again) and _shot.get("cause") != &"reestablish":
+		_talk["next"] = {"kind": &"reestablish", "at": at}
+		_talk["reestablishing"] = true
+	elif not bool(_talk["portraits"]) and int(_talk["lines"]) >= int(PORTRAIT_FROM.get(_mode, 3)):
+		_talk["portraits"] = true
+		_talk["next"] = {"kind": &"portrait", "man": speaker, "toward": listener, "at": at}
+	elif bool(_talk["portraits"]) and (bool(_talk["reestablishing"]) or speaker != _talk["portrait_of"]):
+		_talk["reestablishing"] = false
+		_talk["next"] = {"kind": &"portrait", "man": speaker, "toward": listener, "at": at}
+
+	var grieving: bool = float(speaker.get("grief") if speaker.get("grief") != null else 0.0) > 0.5
+
+	if (data.get("delivery") == &"shout" or grieving) and _clock - _reacted_at >= REACTION_EVERY:
+		_talk["react"] = {"man": listener, "toward": speaker, "at": _clock + seconds}
+
+
+## The talk's cuts, when they are due (after FLOOR). True while the talk has
+## the camera (portraits, or the drama build-up); a death, the knife or a man
+## stirred still cut through it.
+func _talk_step(age: float) -> bool:
+	if _talk.is_empty():
+		return false
+
+	if _clock > float(_talk["end"]) + TALK_GAP:
+		_talk = {}
+		return false
+
+	if _mode == &"drama" and not _pending.is_empty() and float(_pending["at"]) >= float(_shot["at"]) and _pending["kind"] in [&"death", &"knife", &"alert"]:
+		return false
+
+	# The three cuts in on a man stirred run their course.
+	if not _axial.is_empty():
+		return false
+
+	var react: Dictionary = _talk["react"]
+
+	if not react.is_empty() and _clock >= float(react["at"]) and age >= FLOOR:
+		_talk["react"] = {}
+		_reacted_at = _clock
+		_talk_cut({"kind": &"portrait", "man": react["man"], "toward": react["toward"]}, &"reaction")
+		return true
+
+	var next: Dictionary = _talk["next"]
+
+	if not next.is_empty() and _clock >= float(next["at"]) and age >= FLOOR:
+		_talk["next"] = {}
+		_talk_cut(next, next["kind"])
+		return true
+
+	return bool(_talk["portraits"]) or _mode == &"drama"
+
+
+## One of the talk's cuts: the two of them, the group, or a man's portrait
+## (his setup, facing the man he speaks to).
+func _talk_cut(next: Dictionary, cause: StringName) -> void:
+	var speaker: Variant = _talk["speaker"]
+	var listener: Variant = _talk["listener"]
+	var pair := [speaker, listener].filter(_valid)
+
+	match next["kind"]:
+		&"two":
+			# Already on the two of them: nothing to cut.
+			if _shot.get("kind") == &"two" and pair.all(func(m): return (_shot["subjects"] as Array).has(m)):
+				return
+
+			if pair.size() == 2:
+				_pick([[&"two", pair]], cause, _side_of(pair), SHOT.y, false, &"cut", false)
+		&"reestablish":
+			var men: Array = (_talk["speakers"] as Array).duplicate()
+
+			if _valid(listener) and not men.has(listener):
+				men.append(listener)
+
+			men = men.filter(_valid)
+			var options: Array = []
+
+			if men.size() >= 3:
+				var space := _camera.get_world_3d().direct_space_state
+				var from := CineVantage.best(get_tree(), men, &"medium", Vector3.ZERO, space)
+
+				if from != Vector3.INF:
+					options.append([&"group", men, {"from": from}])
+
+			if pair.size() == 2:
+				options.append([&"two", pair])
+
+			if not options.is_empty():
+				_pick(options, cause, _side_of(pair), SHOT.y, false, &"cut", false)
+		&"portrait":
+			var man: Variant = next["man"]
+			var toward: Variant = next["toward"]
+
+			if not _valid(man):
+				return
+
+			_talk["portrait_of"] = man
+
+			# His portrait already on screen: he keeps it.
+			if _shot.get("kind") == &"portrait" and _shot["subjects"] == [man]:
+				return
+
+			var context := {"toward": CineShot.head_of(toward)} if _valid(toward) else {}
+			var side := _side_of([man, toward]) if _valid(toward) else Vector3.ZERO
+			_pick([[&"portrait", [man], context], [&"close", [man]], [&"medium", [man]]], cause, side, SHOT.y, false, &"cut", false)
+
+
+# ---------------------------------------------------------------------------
 # Drama
 # ---------------------------------------------------------------------------
 
@@ -651,6 +831,11 @@ func _drama_event(kind: StringName, data: Dictionary, priority: int) -> void:
 			var listeners: Array = data.get("listeners", [])
 			var listener: Variant = listeners[0] if not listeners.is_empty() else null
 			_exchange_of(data.get("speaker"), listener)
+
+			# A line of a conversation is the talk's to cut (_talk_step).
+			if _talk_of(data) != null:
+				return
+
 			var speaker: Variant = data.get("speaker")
 			var grieving: bool = speaker != null and is_instance_valid(speaker) and float(speaker.get("grief") if speaker.get("grief") != null else 0.0) > 0.5
 
@@ -852,7 +1037,7 @@ func _setup(man: Node3D, kind: StringName, space: PhysicsDirectSpaceState3D) -> 
 ## The first of `options` ([kind, men, context?]) that sees its man and is
 ## no jump cut (and, if `new_size`, of another size than the shot now),
 ## taken; else the first that sees him; else from wherever he can be seen.
-func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_size: bool, how: StringName = &"cut") -> void:
+func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_size: bool, how: StringName = &"cut", check_jump := true) -> void:
 	var chosen: Array = []
 	var space := _camera.get_world_3d().direct_space_state
 
@@ -904,7 +1089,7 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 			if new_size and not _shot.is_empty() and framing["size"] == _shot.get("size"):
 				continue
 
-			if _jump_cut({"how": &"cut", "size": framing["size"], "position": at}):
+			if check_jump and _jump_cut({"how": &"cut", "size": framing["size"], "position": at}):
 				continue
 
 			if one and not context.has("from"):
@@ -1092,6 +1277,19 @@ func _follow(live: Array) -> void:
 
 	if kind == &"roving":
 		ctx["from"] = _camera.global_position
+
+	# A portrait holds still: it turns to him only once his head has moved.
+	if kind == &"portrait":
+		var head := CineShot.head_of(live[0])
+
+		if not _shot.has("still_head"):
+			_shot["still_head"] = head
+			return
+
+		if head.distance_to(_shot["still_head"]) < STILL_WITHIN:
+			return
+
+		_shot["still_head"] = head
 
 	var framing := CineShot.frame(kind, live, ctx)
 
