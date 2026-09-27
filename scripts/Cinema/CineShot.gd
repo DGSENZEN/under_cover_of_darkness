@@ -74,17 +74,18 @@ static func frame(kind: StringName, men: Array, context: Dictionary) -> Dictiona
 
 	match kind:
 		&"close", &"reaction":
-			return _single(kind, man, head, CLOSE_HEIGHT, NORMAL, &"close", side, aspect, float(context.get("turn", 0.0)))
+			return _held(_single(kind, man, head, CLOSE_HEIGHT, NORMAL, &"close", side, aspect, float(context.get("turn", 0.0))), context, man, head, aspect)
 		&"medium", &"roving":
 			var from: Variant = context.get("from")
 
 			if kind == &"roving" and from is Vector3:
 				return _from(kind, men, from, NORMAL, MEDIUM_HEIGHT, aspect, &"medium")
 
-			return _single(kind, man, head, MEDIUM_HEIGHT, NORMAL, &"medium", side, aspect, float(context.get("turn", 0.0)))
+			return _held(_single(kind, man, head, MEDIUM_HEIGHT, NORMAL, &"medium", side, aspect, float(context.get("turn", 0.0))), context, man, head, aspect)
 		&"portrait":
 			var toward: Variant = context.get("toward")
-			return _portrait(man, head, toward if toward is Vector3 else head + facing(man), side, aspect)
+			var to: Vector3 = toward if toward is Vector3 else head + facing(man)
+			return _held(_portrait(man, head, to, side, aspect, float(context.get("turn", 0.0))), context, man, head, aspect, to - head)
 		&"two":
 			return _two(men, side, aspect)
 		&"over_shoulder":
@@ -198,9 +199,25 @@ static func _single(kind: StringName, man: Node3D, head: Vector3, height: float,
 	return _result(kind, size, position, look, fov, head, false)
 
 
+## `framing` taken from context.from instead, if given (a remembered setup):
+## the camera there, turned to set him as the framing did (`ahead`: the way
+## his room is, his facing if not given).
+static func _held(framing: Dictionary, context: Dictionary, man: Node3D, head: Vector3, aspect: float, ahead := Vector3.ZERO) -> Dictionary:
+	var from: Variant = context.get("from")
+
+	if not (from is Vector3):
+		return framing
+
+	var fov := float(framing["fov"])
+	framing["position"] = from
+	framing["look"] = _composed(from, head, ahead if ahead != Vector3.ZERO else facing(man), fov, aspect)
+	framing["focus"] = (from as Vector3).distance_to(head)
+	return framing
+
+
 ## A man talking, chest up, at his eye height, the camera PORTRAIT_OFF off his
 ## line to `toward` (on `side`), on the third that leaves room toward him.
-static func _portrait(man: Node3D, head: Vector3, toward: Vector3, side: Vector3, aspect: float) -> Dictionary:
+static func _portrait(man: Node3D, head: Vector3, toward: Vector3, side: Vector3, aspect: float, turn := 0.0) -> Dictionary:
 	var to := toward - head
 	to.y = 0.0
 	to = to.normalized() if to.length() > 0.05 else facing(man)
@@ -209,6 +226,8 @@ static func _portrait(man: Node3D, head: Vector3, toward: Vector3, side: Vector3
 	if side != Vector3.ZERO and off.dot(side) < 0.0:
 		off = to.rotated(Vector3.UP, -deg_to_rad(PORTRAIT_OFF))
 
+	# Further round him (context.turn) when that place is walled in.
+	off = off.rotated(Vector3.UP, deg_to_rad(turn))
 	var position := head + off * _distance(PORTRAIT_HEIGHT, PORTRAIT)
 	var look := _composed(position, head, to, PORTRAIT, aspect)
 	return _result(&"portrait", &"close", position, look, PORTRAIT, head, false)

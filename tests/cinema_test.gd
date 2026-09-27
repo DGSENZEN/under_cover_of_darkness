@@ -1133,6 +1133,46 @@ func _drama() -> void:
 	for m in [d, e, runner]:
 		m.queue_free()
 
+	# E24 a cut back to a man finds him where he was: the same place, the same lens
+	b.rotation.y = PI * 0.5
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(1.6)
+	editor.cut_to(&"close", [a])
+	var first24: Dictionary = editor.current()["framing"]
+	await _real(1.6)
+	editor.cut_to(&"medium", [b])
+	await _real(1.6)
+	editor.cut_to(&"close", [a])
+	var back24: Dictionary = editor.current()["framing"]
+	_check("E24 a cut back to a man returns to the same setup: the same place and lens",
+		(back24["position"] as Vector3).distance_to(first24["position"]) < 0.1 and is_equal_approx(float(back24["fov"]), float(first24["fov"])),
+		"%.3f m apart, lenses %s / %s" % [(back24["position"] as Vector3).distance_to(first24["position"]), first24["fov"], back24["fov"]])
+
+	# E25 moved 2 m since: a new setup
+	await _real(1.6)
+	editor.cut_to(&"medium", [b])
+	a.global_position += Vector3(0, 0, 2.0)
+	await _real(1.6)
+	editor.cut_to(&"close", [a])
+	var moved25: Dictionary = editor.current()["framing"]
+	_check("E25 a man who has moved 2 m gets a new setup", (moved25["position"] as Vector3).distance_to(first24["position"]) > 0.5,
+		"%.2f m from the old setup" % (moved25["position"] as Vector3).distance_to(first24["position"]))
+	a.global_position -= Vector3(0, 0, 2.0)
+
+	# E26 a portrait whose place is in a wall: the shot taken stands clear and sees him
+	await _real(1.6)
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(1.6)
+	var planned26 := CineShot.frame(&"portrait", [a], {"toward": CineShot.head_of(b), "side": editor._side_of([a, b])})
+	var wall26 := Props.block(self, planned26["position"], Vector3(1.2, 4.0, 1.2))
+	await _frames(3)
+	editor.cut_to(&"portrait", [a], {"toward": CineShot.head_of(b)})
+	var took26: Vector3 = editor.current()["framing"]["position"]
+	var space26 := get_world_3d().direct_space_state
+	_check("E26 a portrait whose place is in a wall is taken from somewhere clear that sees him",
+		CineVantage.clear(space26, took26) and CineVantage.sees(space26, took26, [a]), "took %s (planned %s, %s)" % [took26, planned26["position"], editor.current()["kind"]])
+	wall26.queue_free()
+
 	# E18 released in the middle of a slowing and a wipe: time back at once, the screen cleared
 	editor.scene({"mode": &"drama", "subjects": [a, b]})
 	await _real(9.0)

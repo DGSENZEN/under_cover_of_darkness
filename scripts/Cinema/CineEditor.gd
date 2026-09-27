@@ -73,6 +73,10 @@ const AXIAL_REST := 10.0
 ## A listener's face after a hard line once in this long (s) at most (a
 ## fight is all shouting).
 const REACTION_REST := 6.0
+## Setups: remembered for these kinds of one man; kept while he stays this
+## near (m) where it was made.
+const SETUP_KINDS := [&"close", &"medium", &"reaction", &"portrait"]
+const SETUP_WITHIN := 1.5
 const FACE_OFF_NEAR := 4.0
 const FACE_OFF_FACING := 45.0
 const FACE_OFF_QUIET := 1.0
@@ -132,6 +136,9 @@ var _cycle := 0
 ## floor (when, with a wipe or not, asked when); a face-off nowhere could see
 ## tried again after this.
 var _held := false
+## The scene's setups: by man and kind ("id:kind"), where the camera stood for
+## him, through what lens, on what side, and where his head was.
+var _setups := {}
 var _scene_due := -INF
 var _scene_wipe := false
 var _scene_asked := -INF
@@ -271,6 +278,7 @@ func scene(intent: Dictionary) -> void:
 ## The scene's first shot: its pin (what is left of it), or the mode's own.
 func _open_scene(wipe: bool) -> void:
 	_scene_due = -INF
+	_setups.clear()
 	var pin: Dictionary = _intent.get("pin", {})
 
 	if not pin.is_empty():
@@ -314,6 +322,23 @@ func _carry_on() -> bool:
 	_shot["subjects"] = _subjects.duplicate()
 	_shot["offset"] = Vector3.ZERO
 	return true
+
+
+## A shot asked for now, in the scene as it is: `kind` of `men` (`context` as
+## CineShot's: "toward" for a portrait), from its setup if it has one; else
+## the nearest to it that stands clear and sees him.
+func cut_to(kind: StringName, men: Array, context := {}) -> void:
+	var live := men.filter(_valid)
+
+	if live.is_empty() or _camera == null:
+		return
+
+	var options := [[kind, live, context]]
+
+	if live.size() == 1 and kind != &"medium":
+		options.append([&"medium", live, {}])
+
+	_pick(options, &"asked", _side_of(_principals()), randf_range(SHOT.x, SHOT.y), false)
 
 
 func mode() -> StringName:
@@ -810,6 +835,20 @@ func _drama_next(cause: StringName, how: StringName) -> void:
 	_pick(turned, cause, side, length, true, how)
 
 
+## `man`'s setup for `kind` in this scene, if he is within SETUP_WITHIN of
+## where it was made and it stands clear and sees him; else nothing.
+func _setup(man: Node3D, kind: StringName, space: PhysicsDirectSpaceState3D) -> Dictionary:
+	var kept: Dictionary = _setups.get("%d:%s" % [man.get_instance_id(), kind], {})
+
+	if kept.is_empty():
+		return {}
+
+	if CineShot.head_of(man).distance_to(kept["head"]) > SETUP_WITHIN or not CineVantage.clear(space, kept["position"]) or not CineVantage.sees(space, kept["position"], [man]):
+		return {}
+
+	return kept
+
+
 ## The first of `options` ([kind, men, context?]) that sees its man and is
 ## no jump cut (and, if `new_size`, of another size than the shot now),
 ## taken; else the first that sees him; else from wherever he can be seen.
@@ -824,7 +863,7 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 		for option in options:
 			var men: Array = (option[1] as Array).filter(_valid)
 
-			if men.is_empty() or (turn != 0.0 and not (option[0] in [&"close", &"medium", &"reaction"] and men.size() == 1)):
+			if men.is_empty() or (turn != 0.0 and not (option[0] in [&"close", &"medium", &"reaction", &"portrait"] and men.size() == 1)):
 				continue
 
 			var context: Dictionary = (option[2] as Dictionary).duplicate() if option.size() > 2 else {}
@@ -834,6 +873,18 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 
 			context["aspect"] = _aspect()
 			context["turn"] = turn
+			var one: bool = men.size() == 1 and option[0] in SETUP_KINDS
+
+			# A man's setup in this scene, if he is still near where it was made
+			# and it still sees him: the same place and lens again.
+			if one:
+				var kept: Dictionary = _setup(men[0], option[0], space)
+
+				if not kept.is_empty():
+					if turn != 0.0:
+						continue
+
+					context["from"] = kept["position"]
 			var framing := CineShot.frame(option[0], men, context)
 			var at: Vector3 = framing["position"]
 			var line_side: Vector3 = context["side"]
@@ -855,6 +906,9 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 
 			if _jump_cut({"how": &"cut", "size": framing["size"], "position": at}):
 				continue
+
+			if one and not context.has("from"):
+				_setups["%d:%s" % [men[0].get_instance_id(), option[0]]] = {"position": at, "fov": framing["fov"], "side": context["side"], "head": CineShot.head_of(men[0])}
 
 			_start(option[0], men, cause, how, context, length)
 			return
