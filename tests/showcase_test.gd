@@ -449,6 +449,8 @@ func _run() -> void:
 	var osric5: Node3D = map5.cast["Osric"]
 	var osric_barks := []
 	osric5.barked.connect(func(t): osric_barks.append(t))
+	# Held weakly: once he is dead the check must not touch him.
+	var jory_held: WeakRef = weakref(jory5)
 	var damped5 := [false]
 	var killed_at := [-1]
 	var frame5 := [0]
@@ -456,7 +458,8 @@ func _run() -> void:
 		frame5[0] += 1
 		if map5.intruder != null and is_instance_valid(map5.intruder) and map5.intruder.exposure_scale < 0.5:
 			damped5[0] = true
-		if killed_at[0] < 0 and (not is_instance_valid(jory5) or jory5._knocked_out):
+		var jory_now: Variant = jory_held.get_ref()
+		if killed_at[0] < 0 and (jory_now == null or not is_instance_valid(jory_now) or jory_now._knocked_out):
 			killed_at[0] = frame5[0]
 		return killed_at[0] >= 0 and frame5[0] > killed_at[0] + 720, 9000)
 	var undamped5: bool = map5.intruder != null and is_instance_valid(map5.intruder) and is_equal_approx(map5.intruder.exposure_scale, 1.0)

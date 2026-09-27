@@ -239,12 +239,16 @@ func _after_the_watch_change() -> void:
 		rota.assign(jory, &"postern")
 		# Put there once Hendrik has gone from it in the physics too (else
 		# he lands on Hendrik and is carried off with him).
+		var held: WeakRef = weakref(jory)
+		var post: Vector3 = map.marks["postern_post"]
 		map.get_tree().create_timer(0.1, true, true).timeout.connect(func() -> void:
-			if is_instance_valid(jory) and not jory._knocked_out:
-				jory.global_position = map.marks["postern_post"]
-				jory.rotation.y = -PI * 0.5
-				jory.velocity = Vector3.ZERO
-				jory.reset_physics_interpolation())
+			var man := held.get_ref() as Node3D
+
+			if man != null and is_instance_valid(man) and not man._knocked_out:
+				man.global_position = post
+				man.rotation.y = -PI * 0.5
+				man.velocity = Vector3.ZERO
+				man.reset_physics_interpolation())
 
 
 # ---------------------------------------------------------------------------
@@ -591,11 +595,26 @@ func _talkers() -> Array:
 	return [_man("Mirelle"), _man("Osric")].filter(func(m): return m != null)
 
 
-## The men of the gathering of `kind` going on; else whoever it would be.
+## The men of the gathering of `kind` going on; else whoever it would be
+## (for the fire, the man nearest it).
 func _gathered(kind: StringName) -> Array:
 	for g in _gatherings().live():
 		if g["kind"] == kind:
 			return (g["members"] as Array).filter(func(m): return m != null and is_instance_valid(m))
+
+	var fire: Variant = map.get("fire")
+
+	if kind == &"fire" and fire != null and is_instance_valid(fire):
+		var best: Node3D = null
+
+		for name in map.cast:
+			var man := _man(name)
+
+			if man != null and (best == null or man.global_position.distance_to((fire as Node3D).global_position) < best.global_position.distance_to((fire as Node3D).global_position)):
+				best = man
+
+		if best != null:
+			return [best]
 
 	return _talkers()
 

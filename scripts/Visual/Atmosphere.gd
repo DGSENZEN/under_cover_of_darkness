@@ -43,9 +43,10 @@ const SCAN_EVERY := 1.0
 ## The yard, where the level says nothing (x by z, m).
 const YARD := Vector2(40.0, 30.0)
 ## Each kind of mote: [size at birth, size at death, colour at birth, colour
-## at death, life (s), most at once].
+## at death, life (s), most at once]. Breath is drawn as Fx's soft puff; the
+## rest as plain chunky squares.
 const KINDS := {
-	&"breath": [0.05, 0.16, Color(0.86, 0.9, 0.97, 0.32), Color(0.86, 0.9, 0.97, 0.0), 0.9, 160],
+	&"breath": [0.035, 0.11, Color(0.86, 0.9, 0.97, 0.24), Color(0.86, 0.9, 0.97, 0.0), 0.9, 160],
 	&"ember": [0.035, 0.02, Color(1.0, 0.6, 0.2, 1.0), Color(0.9, 0.2, 0.05, 0.0), 1.6, 160],
 	&"leaf": [0.09, 0.09, Color(0.32, 0.24, 0.12, 1.0), Color(0.28, 0.2, 0.1, 0.0), 3.0, 40],
 }
@@ -101,6 +102,8 @@ static func chips_at(context: Node, at: Vector3) -> void:
 
 
 func _ready() -> void:
+	# Moved every drawn frame, not every physics tick: drawn as set (as Fx.gd).
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_to_group(&"atmosphere")
 	SoundBus.add_listener(self)
 	_noise.seed = 1926
@@ -469,6 +472,11 @@ func _make_draw(kind: StringName) -> MultiMeshInstance3D:
 	look.vertex_color_use_as_albedo = true
 	look.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	look.disable_fog = kind == &"ember"
+
+	if kind == &"breath":
+		look.albedo_texture = Fx.texture(&"puff")
+		look.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+
 	quad.material = look
 	var multi := MultiMesh.new()
 	multi.transform_format = MultiMesh.TRANSFORM_3D
