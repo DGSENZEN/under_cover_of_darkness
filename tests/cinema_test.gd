@@ -523,6 +523,37 @@ func _screen() -> void:
 	_check("S2 a wipe crosses the screen over 0.6 s and lets its frame go; cleared, it stops at once",
 		during and edge_mid > 0.3 and edge_mid < 0.7 and over and cleared,
 		"during %s, edge at 0.3 s %.2f, over %s, cleared %s" % [during, edge_mid, over, cleared])
+
+	# S4 a dissolve: the held frame fades out over 1.2 s and is let go
+	screen.dissolve(texture)
+	var dissolving4: bool = screen.dissolving()
+	await _real(0.6)
+	var alpha4: float = screen.dissolve_alpha()
+	await _real(0.7)
+	var over4: bool = not screen.dissolving() and screen.dissolve_texture() == null
+	_check("S4 a dissolve fades its frame out over 1.2 s and lets it go",
+		dissolving4 and absf(alpha4 - 0.5) <= 0.1 and over4, "dissolving %s, alpha at 0.6 s %.2f, over by 1.3 s %s" % [dissolving4, alpha4, over4])
+
+	# S5 through black: down over 0.5 s, held, up over 0.5 s
+	screen.fade_through(0.4)
+	await _real(0.55)
+	var down5: float = screen.black()
+	await _real(0.3)
+	var held5: float = screen.black()
+	await _real(0.65)
+	var up5: float = screen.black()
+	_check("S5 a fade goes to black over 0.5 s, holds, and comes back up over 0.5 s",
+		down5 >= 0.99 and held5 >= 0.99 and up5 <= 0.01, "at 0.55 s %.2f, 0.85 s %.2f, 1.5 s %.2f" % [down5, held5, up5])
+
+	# S6 (RF4) cleared in the middle of a fade and a dissolve: gone at once
+	screen.fade_through(1.0)
+	screen.dissolve(texture)
+	await _real(0.3)
+	screen.clear()
+	var black6: float = screen.black()
+	_check("S6 cleared in the middle of a fade and a dissolve: no black and no held frame at once",
+		black6 == 0.0 and not screen.dissolving() and screen.dissolve_texture() == null and not screen.fading(),
+		"black %.2f, dissolving %s" % [black6, screen.dissolving()])
 	screen.queue_free()
 
 
@@ -746,6 +777,11 @@ func _observing() -> void:
 		shots.size() >= 3 and lengths.all(func(l): return l >= 14.9 and l <= 45.1),
 		"%d shots, lengths %s" % [shots.size(), lengths])
 
+	# E35 observe: a new take that does not drift there comes in on a dissolve
+	var still35 := shots.filter(func(sh): return sh["how"] != &"path")
+	_check("E35 watched, a new take that does not drift there comes in on a dissolve",
+		not still35.is_empty() and still35.all(func(sh): return sh["how"] == &"dissolve"), "%s" % [shots.map(func(sh): return [sh["kind"], sh["how"]])])
+
 	# E2 no cut while a line is being said (lines not between the scene's
 	# men: a conversation's portraits cut inside lines, E27-E33)
 	var other := _man(Vector3(701.5, 0, 0.5), PI)
@@ -812,7 +848,9 @@ func _observing() -> void:
 	var eye := camera.global_position
 	var head6 := CineShot.head_of(man)
 	var mid := (eye + head6) * 0.5
-	var wall := Props.block(self, mid, Vector3(3.0, 5.0, 3.0))
+	# (as wide as a third of the way to him, up to 3 m: never round the camera)
+	var across6 := minf(3.0, eye.distance_to(head6) * 0.3)
+	var wall := Props.block(self, mid, Vector3(across6, 5.0, across6))
 	await _real(1.0)
 	var hid6 := shots.filter(func(sh): return sh["cause"] == &"hidden")
 	_check("E6 his head hidden behind a wall: a new shot within a second", not hid6.is_empty(), "shots %s" % [shots.map(func(sh): return sh["cause"])])
@@ -1345,6 +1383,19 @@ func _drama() -> void:
 	var axial38 := shots.filter(func(sh): return sh["kind"] == &"axial")
 	_check("E38 a man stirred during a drama talk: the three cuts straight in on him all run",
 		axial38.size() == 3, "%s" % [shots.map(func(sh): return [sh["kind"], sh["cause"]])])
+
+	# E39 an act's scene asked through black while the last shot has its
+	# floor, and another scene asked before it opens: it opens through black
+	await _real(4.0)
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(0.2)
+	shots.clear()
+	editor.scene({"mode": &"drama", "subjects": [a, b], "transition": &"fade"})
+	await _real(0.3)
+	editor.scene({"mode": &"drama", "subjects": [b, a]})
+	await _real(1.5)
+	_check("E39 a fade asked, then another scene before either opens: the scene opens through black",
+		not shots.is_empty() and shots[0]["how"] == &"fade", "%s" % [shots.map(func(sh): return [sh["kind"], sh["how"]])])
 
 	# E18 released in the middle of a slowing and a wipe: time back at once, the screen cleared
 	editor.scene({"mode": &"drama", "subjects": [a, b]})

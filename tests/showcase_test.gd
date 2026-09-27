@@ -543,15 +543,18 @@ func _run() -> void:
 		free4.is_empty() and habits4.keys().all(func(h): return h in [&"fidget", &"lean"]),
 		"free to wander %s, did %s" % [free4, habits4.keys()])
 
-	# D36 Act I is watched, in long takes
+	# D36 Act I is watched, in long takes (a conversation's cuts aside)
 	var shots4: Array = map4.camera.cinema_editor().history()
 	var modes4: Array = shots4.map(func(sh): return sh.get("mode", &"observe"))
 	var total4 := 0.0
+	var takes4 := 0
 
 	for i in range(shots4.size() - 1):
-		total4 += float(shots4[i + 1]["at"]) - float(shots4[i]["at"])
+		if not (shots4[i]["cause"] in [&"portrait", &"reaction", &"reestablish", &"two"]):
+			total4 += float(shots4[i + 1]["at"]) - float(shots4[i]["at"])
+			takes4 += 1
 
-	var mean4 := total4 / float(maxi(shots4.size() - 1, 1))
+	var mean4 := total4 / float(maxi(takes4, 1))
 	_check("D36 Act I is watched (observe throughout), its takes 15 s long on average or more",
 		map4.camera.cinema_editor().mode() == &"observe" and not modes4.has(&"drama") and mean4 >= 15.0 and shots4.size() >= 2,
 		"%d shots, mean %.1f s, kinds %s" % [shots4.size(), mean4, shots4.map(func(sh): return sh["kind"])])
@@ -697,6 +700,8 @@ func _run() -> void:
 	var editor9: Node = map9.camera.cinema_editor()
 	var checked9 := [0]
 	map9.director.show_ended.connect(func(): ended9[0] = true)
+	var acts9 := []
+	map9.director.act_started.connect(func(index: int, _title: String) -> void: acts9.append([index, editor9.history().size()]))
 	map9.director.beat_started.connect(func(beat: StringName, _scene: Dictionary) -> void:
 		if beat == &"the_knife":
 			knife_at[0] = float(editor9._clock)
@@ -736,6 +741,11 @@ func _run() -> void:
 	_check("D37 from the knife on the letterbox is up and the shots are short (7 s or less on average)",
 		knife_at[0] >= 0.0 and bars_up and drama9.size() >= 5 and mean9 <= 7.0,
 		"knife at %.1f, %d shots, mean %.1f s, bar %s of %.1f; causes %s" % [knife_at[0], drama9.size(), mean9, bars9.slice(bars9.size() - 1) if not bars9.is_empty() else [], target9, _tally(drama9.map(func(sh): return String(sh["kind"]) + "/" + String(sh["cause"])))])
+
+	# D41 each act opens through black
+	var opened41 := acts9.map(func(act): return [act[0], editor9.history()[act[1]]["how"] if editor9.history().size() > act[1] else &"none"])
+	_check("D41 each act's first shot comes up through black",
+		acts9.size() >= 3 and opened41.all(func(o): return o[1] == &"fade"), "%s" % [opened41])
 
 	# D38 every shot sees the man it is on when it starts (1 in 20 may not)
 	_check("D38 every shot sees the man it is on as it begins (at most 1 in 20 not)",

@@ -145,6 +145,9 @@ var _cycle := 0
 ## floor (when, with a wipe or not, asked when); a face-off nowhere could see
 ## tried again after this.
 var _held := false
+var _rng := RandomNumberGenerator.new()
+## An act's scene to open through black, kept until a scene opens.
+var _fade_due := false
 ## The scene's setups: by man and kind ("id:kind"), where the camera stood for
 ## him, through what lens, on what side, and where his head was.
 var _setups := {}
@@ -160,6 +163,9 @@ var _face_off_retry := -INF
 
 func _init() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE
+	# Its own dice (seeded from the world's once): what the camera chooses
+	# never changes what happens in the world.
+	_rng.seed = randi()
 
 
 ## Takes `camera`: an operator and a screen of its own, and it listens.
@@ -172,7 +178,7 @@ func take_over(camera: Camera3D) -> void:
 	_operator.attach(camera, _screen)
 	_operator.set_mode(_mode)
 	CineEvents.add_listener(self)
-	_element_in = randf_range(ELEMENT_AFTER.x, ELEMENT_AFTER.y)
+	_element_in = _rng.randf_range(ELEMENT_AFTER.x, ELEMENT_AFTER.y)
 	_quiet_since = _clock
 	_last = -1.0
 
@@ -257,6 +263,7 @@ func scene(intent: Dictionary) -> void:
 	_resolve()
 	_talk_until = -INF
 	_talk = {}
+	_fade_due = _fade_due or StringName(intent.get("transition", &"")) == &"fade"
 	_interest = {}
 	_pending = {}
 	_axial = {}
@@ -290,11 +297,16 @@ func scene(intent: Dictionary) -> void:
 	_open_scene(wipe)
 
 
-## The scene's first shot: its pin (what is left of it), or the mode's own.
+## The scene's first shot: its pin (what is left of it), or the mode's own;
+## through black if the intent's transition is "fade", else wiped (`wipe`)
+## or cut to.
 func _open_scene(wipe: bool) -> void:
 	_scene_due = -INF
 	_setups.clear()
 	var pin: Dictionary = _intent.get("pin", {})
+	var fade := _fade_due
+	_fade_due = false
+	var how: StringName = &"fade" if fade else (&"wipe" if wipe else &"cut")
 
 	if not pin.is_empty():
 		var men := _men_of(pin.get("subjects", _subjects))
@@ -306,18 +318,18 @@ func _open_scene(wipe: bool) -> void:
 		# The shot asked for, from whichever side sees; else as near to it as
 		# sees him.
 		if men.is_empty():
-			_start(kind, men, &"pin", &"wipe" if wipe else &"cut", {"side": side}, seconds)
+			_start(kind, men, &"pin", how, {"side": side}, seconds)
 		else:
 			var across := side if side != Vector3.ZERO else Vector3.UP.cross(CineShot.facing(men[0]))
 			_pick([[kind, men, {"side": across}], [kind, men, {"side": -across}], [&"medium", men.slice(0, 1)], [&"close", men.slice(0, 1)]],
-				&"pin", side, seconds, false, &"wipe" if wipe else &"cut")
+				&"pin", side, seconds, false, how)
 
 		return
 
 	if _mode == &"drama":
-		_drama_next(&"scene", &"wipe" if wipe else &"cut")
-	elif not _carry_on():
-		_fresh_take(&"scene")
+		_drama_next(&"scene", how)
+	elif fade or not _carry_on():
+		_fresh_take(&"scene", &"fade" if fade else &"dissolve")
 
 
 ## Observing, a new scene whose men the take already sees: the take goes on,
@@ -353,7 +365,7 @@ func cut_to(kind: StringName, men: Array, context := {}) -> void:
 	if live.size() == 1 and kind != &"medium":
 		options.append([&"medium", live, {}])
 
-	_pick(options, &"asked", _side_of(_principals()), randf_range(SHOT.x, SHOT.y), false)
+	_pick(options, &"asked", _side_of(_principals()), _rng.randf_range(SHOT.x, SHOT.y), false)
 
 
 func mode() -> StringName:
@@ -490,23 +502,24 @@ func _observe_step(age: float) -> void:
 
 ## The next take: the fire or a torch in a long quiet; else, turn about, from
 ## far off on a long lens or drifting round the men; the place from on high
-## with nobody to watch.
-func _fresh_take(cause: StringName) -> void:
+## with nobody to watch. One that does not drift there comes in `how` (a
+## dissolve, or a fade opening an act).
+func _fresh_take(cause: StringName, how: StringName = &"dissolve") -> void:
 	var men := _subjects.filter(_valid)
 
 	if men.is_empty():
-		_start(&"establishing", [], &"nobody" if cause != &"scene" else cause, &"cut", {"from": _high_over(_place), "place": _place}, TAKE.y)
+		_start(&"establishing", [], &"nobody" if cause != &"scene" else cause, how, {"from": _high_over(_place), "place": _place}, TAKE.y)
 		return
 
-	var length := randf_range(TAKE.x, TAKE.y)
+	var length := _rng.randf_range(TAKE.x, TAKE.y)
 
 	if _element_due():
 		var element := _element()
 
 		if element != null:
-			_element_in = randf_range(ELEMENT_AFTER.x, ELEMENT_AFTER.y)
+			_element_in = _rng.randf_range(ELEMENT_AFTER.x, ELEMENT_AFTER.y)
 			_quiet_since = _clock
-			_start(&"insert", [], &"element", &"cut", {"target": element}, length)
+			_start(&"insert", [], &"element", how, {"target": element}, length)
 			return
 
 	var space := _camera.get_world_3d().direct_space_state
@@ -519,7 +532,7 @@ func _fresh_take(cause: StringName) -> void:
 		if plan.is_empty() or _jump_cut(plan):
 			continue
 
-		_start(kind, men, cause, plan["how"], plan["context"], length)
+		_start(kind, men, cause, how if plan["how"] == &"cut" else plan["how"], plan["context"], length)
 		return
 
 	# Nothing fresh to be had: from wherever they can be seen, all the same.
@@ -527,10 +540,10 @@ func _fresh_take(cause: StringName) -> void:
 		var from := CineVantage.best(get_tree(), men, lens, Vector3.ZERO, space)
 
 		if from != Vector3.INF:
-			_start(&"observe", men, cause, &"cut", {"from": from}, length)
+			_start(&"observe", men, cause, how, {"from": from}, length)
 			return
 
-	_start(&"overhead", men, cause, &"cut", {}, length)
+	_start(&"overhead", men, cause, how, {}, length)
 
 
 ## Where a take of `kind` comes from: {how, context, position, size}; empty if
@@ -559,7 +572,7 @@ func _observe_plan(kind: StringName, men: Array, space: PhysicsDirectSpaceState3
 	start_dir.y = 0.0
 	start_dir = start_dir.normalized() if start_dir.length() > 0.1 else Vector3.BACK
 	var span := minf(length * float(CineOperator.MODES[&"observe"]["speed"]) * 0.8 / ROVE_RADIUS, ROVE_MOST)
-	var turn := 1.0 if randf() < 0.5 else -1.0
+	var turn := 1.0 if _rng.randf() < 0.5 else -1.0
 
 	for attempt in [0.0, PI * 0.5, -PI * 0.5, PI]:
 		var points := PackedVector3Array()
@@ -893,7 +906,7 @@ func _drama_step(age: float) -> void:
 
 		if _valid(listener) and _subjects.has(listener) and _clock - _reacted_at >= REACTION_REST:
 			_reacted_at = _clock
-			_start(&"reaction", [listener], &"reaction", &"cut", {"side": _side_of(_principals())}, randf_range(SHOT.x, SHOT.y))
+			_start(&"reaction", [listener], &"reaction", &"cut", {"side": _side_of(_principals())}, _rng.randf_range(SHOT.x, SHOT.y))
 			return
 
 	if not face.is_empty() and _shot.get("cause") != &"face_off" and _clock >= _face_off_retry:
@@ -912,7 +925,7 @@ func _on_pending() -> void:
 	var kind: StringName = _pending["kind"]
 	var data: Dictionary = _pending["data"]
 	_pending = {}
-	var length := randf_range(SHOT.x, SHOT.y)
+	var length := _rng.randf_range(SHOT.x, SHOT.y)
 	var side := _side_of(_principals())
 
 	match kind:
@@ -986,7 +999,7 @@ func _drama_next(cause: StringName, how: StringName) -> void:
 		_start(&"establishing", [], &"nobody", how, {"from": _high_over(_place), "place": _place}, SHOT.y)
 		return
 
-	var length := randf_range(SHOT.x, SHOT.y)
+	var length := _rng.randf_range(SHOT.x, SHOT.y)
 	var runners := men.filter(func(m): return _flat_speed(m) > RUNNING)
 
 	if runners.size() >= HUNTERS:

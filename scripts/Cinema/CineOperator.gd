@@ -41,6 +41,8 @@ const NEAR_SOFT := 1.0
 const NEAR_TRANSITION := 0.6
 ## A glide that would pass through a wall (a sphere of this radius) is a cut.
 const CLEARANCE := 0.3
+## Held black this long once there, for the cut to settle (real s).
+const BLACK_HOLD := 0.15
 
 ## How shaken it is (0..1; the shake is its square).
 var trauma := 0.0
@@ -64,6 +66,8 @@ var _clock := 0.0
 var _noise := FastNoiseLite.new()
 var _attributes: CameraAttributesPractical
 ## The camera's own lens and attributes, given back whenever it is not ours.
+## A shot waiting for the screen to go black (a fade) before it is cut to.
+var _after_black: Dictionary = {}
 var _own_fov := 75.0
 var _own_attributes: CameraAttributes = null
 
@@ -100,6 +104,7 @@ func attach(camera: Camera3D, screen: CanvasLayer) -> void:
 ## lens and attributes, no shake left in it.
 func stand_down() -> void:
 	trauma = 0.0
+	_after_black = {}
 
 	if _camera != null and is_instance_valid(_camera):
 		_camera.fov = _own_fov
@@ -121,9 +126,18 @@ func set_mode(mode: StringName) -> void:
 
 ## A new shot, `how`: "cut" (there at once), "glide" (moved there; a cut if
 ## a wall is in the way), "path" (along framing.path, at the mode's speed),
-## or "wipe" (the last frame wiped away over the new shot, cut to).
+## "wipe" (the last frame wiped away over the new shot, cut to), "dissolve"
+## (the last frame fading out over it) or "fade" (down to black, cut to
+## there, and up). Headless, the last three are plain cuts.
 func show(framing: Dictionary, how: StringName) -> void:
 	if _camera == null:
+		return
+
+	_after_black = {}
+
+	if how == &"fade" and _screen != null and _screen.has_method("fade_through") and DisplayServer.get_name() != "headless":
+		_screen.fade_through(BLACK_HOLD)
+		_after_black = framing
 		return
 
 	_framing = framing
@@ -148,6 +162,13 @@ func show(framing: Dictionary, how: StringName) -> void:
 		&"wipe":
 			_wipe_away()
 			_cut()
+		&"dissolve":
+			var frame := _last_frame()
+
+			if frame != null and _screen.has_method("dissolve"):
+				_screen.dissolve(frame)
+
+			_cut()
 		_:
 			_cut()
 
@@ -155,6 +176,11 @@ func show(framing: Dictionary, how: StringName) -> void:
 ## The same shot, its marks moved (the man it is on has moved): the goal,
 ## the aim, the lens and the focus follow; a path keeps to its path.
 func follow(framing: Dictionary) -> void:
+	# Still going down to black: the shot to cut to has moved.
+	if not _after_black.is_empty():
+		_after_black = framing
+		return
+
 	var keep: Variant = _framing.get("path")
 	_framing = framing
 
@@ -191,6 +217,10 @@ func moving() -> bool:
 func _process(_delta: float) -> void:
 	var dt := TimeFx.real_since(_last) if _last >= 0.0 else 0.0
 	_last = TimeFx.real_time()
+
+	# Black (or the fade cleared): the shot waiting is cut to.
+	if not _after_black.is_empty() and (_screen == null or not _screen.fading() or _screen.black() >= 1.0):
+		show(_after_black, &"cut")
 
 	if _camera == null or not is_instance_valid(_camera) or _framing.is_empty():
 		return
@@ -398,12 +428,20 @@ func blocked(from: Vector3, to: Vector3) -> bool:
 ## The frame just drawn, handed to the screen to wipe away (not headless:
 ## there is no frame to take there, and it is a plain cut).
 func _wipe_away() -> void:
-	if _screen == null or not _screen.has_method("wipe") or DisplayServer.get_name() == "headless":
-		return
+	var frame := _last_frame()
+
+	if frame != null and _screen.has_method("wipe"):
+		_screen.wipe(frame)
+
+
+## The frame just drawn (null headless or with no screen to hold it on).
+func _last_frame() -> Texture2D:
+	if _screen == null or DisplayServer.get_name() == "headless":
+		return null
 
 	var image := _camera.get_viewport().get_texture().get_image()
 
 	if image == null or image.is_empty():
-		return
+		return null
 
-	_screen.wipe(ImageTexture.create_from_image(image))
+	return ImageTexture.create_from_image(image)

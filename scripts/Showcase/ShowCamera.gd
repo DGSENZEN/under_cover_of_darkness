@@ -53,6 +53,7 @@ var map: Node3D = null
 var story: RefCounted = null
 
 var _editor: Node = null
+var _fade_next := false
 var _speed := 6.0
 var _yaw := 0.0
 var _pitch := -0.5
@@ -103,6 +104,11 @@ func want(intent: Dictionary) -> void:
 
 	var scene := intent.duplicate(true)
 	scene["subjects"] = _subjects_of(intent.get("subjects", []))
+
+	if _fade_next:
+		_fade_next = false
+		scene["transition"] = &"fade"
+
 	var pin: Dictionary = intent.get("pin", {})
 
 	if not pin.is_empty():
@@ -111,6 +117,11 @@ func want(intent: Dictionary) -> void:
 		scene["pin"] = pinned
 
 	_editor.scene(scene)
+
+
+## The next scene wanted opens through black (an act begins).
+func fade_next() -> void:
+	_fade_next = true
 
 
 ## The director (for the overlay, the stills and the checks).

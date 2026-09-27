@@ -183,6 +183,8 @@ func _ready() -> void:
 		add_child(overlay)
 		overlay.setup(self)
 		director.act_started.connect(func(_index: int, act_title: String) -> void: overlay.title(act_title))
+		# Each act opens through black.
+		director.act_started.connect(func(_index: int, _title: String) -> void: camera.fade_next())
 		camera.following.connect(overlay.name_card)
 		director.ending_chosen.connect(func(ending: StringName) -> void: overlay.toast("Ending: %s" % String(ending)))
 		director.speed_changed.connect(func(scale: float) -> void: overlay.toast("Speed x%s" % String.num(scale, 2)))
