@@ -297,8 +297,16 @@ func _hand() -> void:
 	var shaken := deg_to_rad(SHAKE_MOST) * trauma * trauma
 	var t := _clock * SWAY_RATE
 	var s := _clock * SHAKE_RATE
-	var yaw := sway * _noise.get_noise_2d(t, 0.0) + shaken * _noise.get_noise_2d(s, 50.0)
-	var pitch := sway * _noise.get_noise_2d(t, 100.0) + shaken * _noise.get_noise_2d(s, 150.0)
+	var tilt := Vector2(sway * _noise.get_noise_2d(t, 0.0) + shaken * _noise.get_noise_2d(s, 50.0),
+		sway * _noise.get_noise_2d(t, 100.0) + shaken * _noise.get_noise_2d(s, 150.0))
+	var most := deg_to_rad(SHAKE_MOST)
+
+	# However hard it shakes, never further off its aim than SHAKE_MOST.
+	if tilt.length() > most:
+		tilt = tilt.normalized() * most
+
+	var yaw := tilt.x
+	var pitch := tilt.y
 	var roll := sway * 0.5 * _noise.get_noise_2d(t, 200.0) + shaken * 0.5 * _noise.get_noise_2d(s, 250.0)
 	_camera.rotate_object_local(Vector3.UP, yaw)
 	_camera.rotate_object_local(Vector3.RIGHT, pitch)

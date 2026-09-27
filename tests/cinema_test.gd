@@ -62,6 +62,7 @@ func _ready() -> void:
 	await _screen()
 	await _operator()
 	await _observing()
+	await _drama()
 	print("\n==== RESULTS ====")
 
 	for r in results:
@@ -767,6 +768,222 @@ func _observing() -> void:
 	editor.release()
 	editor.queue_free()
 	camera.queue_free()
+
+
+# ---------------------------------------------------------------------------
+# E: the editor, in drama
+# ---------------------------------------------------------------------------
+
+func _drama() -> void:
+	seed(1954)
+	TimeFx.clear()
+	TimeFx.set_base(1.0)
+	var camera := Camera3D.new()
+	add_child(camera)
+	var editor: Node = CineEditor.new()
+	add_child(editor)
+	editor.take_over(camera)
+	var shots: Array = []
+	editor.shot_started.connect(func(shot: Dictionary) -> void: shots.append(shot))
+	var a := _man(Vector3(800, 0, 0), -PI * 0.5)
+	var b := _man(Vector3(803, 0, 0), PI * 0.5)
+
+	# E17 a drama scene brings the letterbox (checked below, once it is in)
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	var screen: CanvasLayer = editor.screen()
+	await _real(1.6)
+	var bar17: float = screen.bar_height()
+	var target17: float = CineScreen.bar_for(get_viewport().get_visible_rect().size)
+
+	# E9 lines and blows: short shots, 2 to 7 s
+	shots.clear()
+	var t9 := TimeFx.real_time()
+	var n := 0
+
+	while TimeFx.real_time() - t9 < 40.0:
+		if n % 3 == 0:
+			CineEvents.emit(&"line", {"speaker": a if n % 2 == 0 else b, "listeners": [b if n % 2 == 0 else a], "seconds": 2.0, "delivery": &"", "text": "...", "where": a.global_position})
+		if n % 2 == 0:
+			CineEvents.emit(&"blow", {"attacker": a, "victim": b, "weight": &"light", "outcome": &"blocked", "where": b.global_position})
+		n += 1
+		await _real(1.0)
+
+	var lengths9 := _lengths(shots.filter(func(sh): return sh["kind"] != &"axial"))
+	var sorted9 := lengths9.duplicate()
+	sorted9.sort()
+	var median9: float = sorted9[sorted9.size() / 2] if not sorted9.is_empty() else 0.0
+	_check("E9 in drama the shots are short: each 1.5 to 7.5 s, the middle one 2 to 7",
+		not lengths9.is_empty() and lengths9.all(func(l): return l >= 1.45 and l <= 7.55) and median9 >= 2.0 and median9 <= 7.0,
+		"%d shots, lengths %s" % [shots.size(), lengths9])
+
+	# E10 two men trading lines: the camera keeps to one side of their line
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(2.0)
+	shots.clear()
+
+	for i in 10:
+		var speaker := a if i % 2 == 0 else b
+		CineEvents.emit(&"line", {"speaker": speaker, "listeners": [b if speaker == a else a], "seconds": 2.5, "delivery": &"shout" if i % 3 == 0 else &"", "text": "...", "where": speaker.global_position})
+		await _real(3.0)
+
+	var sides := shots.filter(func(sh): return sh["cause"] != &"neutral").map(func(sh): return signf(((sh["framing"]["position"] as Vector3) - Vector3(801.5, 0, 0)).z))
+	_check("E10 two men trading lines: every shot from one side of their line (neutral ones aside)",
+		sides.size() >= 4 and (sides.all(func(x): return x > 0.0) or sides.all(func(x): return x < 0.0)),
+		"%d shots, sides %s" % [shots.size(), sides])
+
+	# E11 no jump cuts
+	var jumps := 0
+	var centre11 := Vector3(801.5, 1.6, 0)
+
+	for i in range(1, shots.size()):
+		var p: Dictionary = shots[i - 1]
+		var q: Dictionary = shots[i]
+
+		if p["size"] == q["size"] and q["kind"] != &"axial":
+			var u: Vector3 = (p["framing"]["position"] as Vector3) - centre11
+			var v: Vector3 = (q["framing"]["position"] as Vector3) - centre11
+			u.y = 0.0
+			v.y = 0.0
+
+			if rad_to_deg(u.angle_to(v)) < 30.0:
+				jumps += 1
+
+	_check("E11 no two shots in a row of one size from within 30 deg", jumps == 0, "%d jump cuts in %d shots" % [jumps, shots.size()])
+
+	# E12 a man stirred to searching: three cuts straight in on him
+	await _real(2.0)
+	shots.clear()
+	CineEvents.emit(&"alert", {"man": a, "from": 0, "to": SEARCHING, "where": a.global_position})
+	await _real(3.0)
+	var axial := shots.filter(func(sh): return sh["kind"] == &"axial")
+	var gaps := []
+	var one_line := true
+
+	for i in range(1, axial.size()):
+		gaps.append(snappedf(float(axial[i]["real_at"]) - float(axial[i - 1]["real_at"]), 0.01))
+		var d0: Vector3 = ((axial[0]["framing"]["position"] as Vector3) - CineShot.head_of(a)).normalized()
+		var di: Vector3 = ((axial[i]["framing"]["position"] as Vector3) - CineShot.head_of(a)).normalized()
+		one_line = one_line and rad_to_deg(d0.angle_to(di)) < 5.0
+
+	var lenses12 := axial.map(func(sh): return roundi(sh["framing"]["fov"]))
+	_check("E12 a man stirred to searching: three cuts straight in on him, 0.6 s apart, the lens narrowing",
+		axial.size() == 3 and gaps.all(func(g): return absf(g - 0.6) <= 0.1) and one_line and lenses12 == [40, 30, 22],
+		"%d axial, gaps %s, one line %s, lenses %s" % [axial.size(), gaps, one_line, lenses12])
+
+	# E13 a face-off held still, side on, long; the first blow cuts in
+	await _real(8.0)
+	shots.clear()
+	await _real(4.0)
+	var face: Dictionary = editor.current()
+	var still := [0.0]
+	var was13 := camera.global_position
+
+	for f in 60:
+		await get_tree().process_frame
+		still[0] = maxf(still[0], camera.global_position.distance_to(was13) * 60.0)
+		was13 = camera.global_position
+
+	var face_ok: bool = face.get("cause") == &"face_off" and float(face["framing"]["fov"]) <= 28.0 and still[0] < 0.05
+	var before13 := shots.size()
+	CineEvents.emit(&"blow", {"attacker": b, "victim": a, "weight": &"heavy", "outcome": &"landed", "where": a.global_position})
+	await _real(0.3)
+	var after13: Dictionary = editor.current()
+	_check("E13 a face-off is held still, side on, on a long lens; the first blow cuts to a medium shot of the striker",
+		face_ok and shots.size() > before13 and after13["size"] == &"medium" and after13["subjects"].size() == 1 and after13["subjects"][0] == b,
+		"face-off %s (cause %s, fov %s, moving %.3f m/s); then %s on %s" % [face_ok, face.get("cause"), face.get("framing", {}).get("fov"), still[0], after13.get("kind"), after13.get("subjects")])
+
+	# E14 the knife slows time; a death 3 s after does not, one 9 s after does
+	await _real(9.0)
+	CineEvents.emit(&"knife", {"attacker": a, "victim": b, "where": b.global_position})
+	await _real(0.3)
+	var slowed14 := Engine.time_scale
+	await _real(1.8)
+	var back14 := Engine.time_scale
+	await _real(1.0)
+	CineEvents.emit(&"death", {"man": b, "killer": a, "where": b.global_position})
+	await _real(0.4)
+	var third14 := Engine.time_scale
+	await _real(5.6)
+	CineEvents.emit(&"death", {"man": a, "killer": b, "where": a.global_position})
+	await _real(0.4)
+	var ninth14 := Engine.time_scale
+	await _real(2.5)
+	_check("E14 the knife slows time to 0.3 and back by 2.1 s; a death 3 s later does not slow it, one 9 s later does",
+		slowed14 <= 0.32 and absf(back14 - 1.0) < 0.01 and absf(third14 - 1.0) < 0.01 and ninth14 <= 0.32,
+		"knife %.2f, after %.2f, 3 s on %.2f, 9 s on %.2f" % [slowed14, back14, third14, ninth14])
+
+	# E15 a melee's flood: no cut under 1.5 s apart, the shake held, one slowing at most
+	await _real(9.0)
+	shots.clear()
+	var ramps := [0]
+	var worst15 := [0.0]
+	var t15 := TimeFx.real_time()
+	var slow_before := false
+
+	for i in 30:
+		CineEvents.emit(&"blow", {"attacker": a if i % 2 == 0 else b, "victim": b if i % 2 == 0 else a, "weight": &"heavy", "outcome": &"parried" if i % 5 == 0 else &"landed", "where": a.global_position})
+		var slow_now: bool = Engine.time_scale < 0.99
+		ramps[0] += 1 if slow_now and not slow_before else 0
+		slow_before = slow_now
+		var aim: Vector3 = (editor._operator.look_point() - camera.global_position).normalized()
+		worst15[0] = maxf(worst15[0], rad_to_deg((-camera.global_basis.z).angle_to(aim)))
+		await _real(2.0 / 30.0)
+
+	await _real(3.0)
+	var gaps15 := []
+
+	for i in range(1, shots.size()):
+		if shots[i]["kind"] != &"axial":
+			gaps15.append(float(shots[i]["real_at"]) - float(shots[i - 1]["real_at"]))
+
+	_check("E15 a flood of blows: no two cuts under 1.5 s apart, the shake never past 2.5 deg, one slowing at most",
+		gaps15.all(func(g): return g >= 1.45) and worst15[0] <= 2.5 and ramps[0] <= 1,
+		"gaps %s, worst %.2f deg, slowings %d" % [gaps15, worst15[0], ramps[0]])
+
+	# E16 a new scene of other men: a wipe
+	await _real(9.0)
+	var c := _man(Vector3(820, 0, 0), 0.0)
+	editor.scene({"mode": &"drama", "subjects": [c]})
+	_check("E16 a drama scene of men not in the last one opens with a wipe", editor.current().get("how") == &"wipe", "how %s" % editor.current().get("how"))
+
+	# E17 the letterbox: in with drama, kept through observe, down when asked
+	editor.scene({"mode": &"observe", "subjects": [c]})
+	await _real(2.0)
+	var kept17: float = screen.bar_height()
+	editor.scene({"mode": &"observe", "subjects": [c], "letterbox": false})
+	await _real(2.0)
+	var gone17: float = screen.bar_height()
+	_check("E17 drama brings the letterbox in within 1.6 s; a later observe scene keeps it; letterbox false takes it down",
+		absf(bar17 - target17) < 0.5 and absf(kept17 - target17) < 0.5 and gone17 < 0.5, "in %.1f of %.1f, kept %.1f, then %.1f" % [bar17, target17, kept17, gone17])
+
+	# E20 a line and a death at once: the death's shot (b turned away: no
+	# face-off to cut to first)
+	b.rotation.y = -PI * 0.5
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(2.0)
+	CineEvents.emit(&"line", {"speaker": a, "listeners": [b], "seconds": 2.0, "delivery": &"", "text": "...", "where": a.global_position})
+	CineEvents.emit(&"death", {"man": b, "killer": a, "where": b.global_position})
+	await _real(0.2)
+	_check("E20 a line and a death in one moment: the death is cut to", editor.current().get("cause") == &"death", "cause %s" % editor.current().get("cause"))
+
+	# E18 released in the middle of a slowing and a wipe: time back at once, the screen cleared
+	await _real(9.0)
+	CineEvents.emit(&"knife", {"attacker": a, "victim": b, "where": b.global_position})
+	var image := Image.create(8, 8, false, Image.FORMAT_RGB8)
+	screen.wipe(ImageTexture.create_from_image(image))
+	await _real(0.3)
+	var slowed18 := Engine.time_scale
+	editor.release()
+	_check("E18 released in the middle of a slowing and a wipe: time is back at once and the screen cleared",
+		slowed18 < 0.99 and absf(Engine.time_scale - 1.0) < 0.001 and screen.wipe_texture() == null,
+		"slowed %.2f, now %.2f, wipe %s" % [slowed18, Engine.time_scale, screen.wipe_texture()])
+
+	for m in [a, b, c]:
+		m.queue_free()
+
+	editor.queue_free()
+	camera.queue_free()
+	TimeFx.clear()
 
 
 ## How long each shot of `shots` ran, all but the last (editor seconds).

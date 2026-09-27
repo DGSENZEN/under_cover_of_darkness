@@ -173,6 +173,11 @@ static func _single(kind: StringName, man: Node3D, head: Vector3, height: float,
 	if side != Vector3.ZERO and round.dot(side) < 0.0:
 		round = ahead.rotated(Vector3.UP, -deg_to_rad(THREE_QUARTER))
 
+	# Facing away from the side it must stay on: from that side, a little
+	# toward his front.
+	if side != Vector3.ZERO and round.dot(side) <= 0.0:
+		round = (side.normalized() + ahead * 0.3).normalized()
+
 	var position := head + round * _distance(height, fov)
 	var look := _composed(position, head, ahead, fov, aspect)
 	return _result(kind, size, position, look, fov, head, false)
