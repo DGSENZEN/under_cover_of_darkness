@@ -6,6 +6,16 @@ extends RefCounted
 ##   flask   two men: a hand held out, a pull, handed back.
 ##   story   a teller and his listeners round the fire: the longest talk,
 ##           a laugh at the end.
+##   watch_change  the relief walks over to the man on a post: "Anything?"
+##           "Nothing but the cold." Their duties swap (NightRota).
+##   round   the captain goes from man to man, a word for each by who he is;
+##           men straighten as she passes; a sleeper gets a boot.
+##   wake    a man nudges a sleeper awake to take his turn; up he gets,
+##           grumbling.
+##   fire    the fire burning low, a man fetches a log from the woodpile,
+##           kneels and feeds it; it flares.
+## And the rota's other wants: a hungry man goes to eat, a cold one to the
+## fire, a tired one to bed.
 ## A gathering starts when it is asked for (`request`) or, where the level
 ## keeps a night rota (NightRota), when its men are free and near. It asks
 ## them first ("Dice?" "Go on then."), lends each a station at his spot
@@ -44,6 +54,32 @@ const KINDS := {
 	&"flask": {"size": Vector2i(2, 2), "place": &"", "length": Vector2(12.0, 20.0), "convs": 1, "cooldown": 90.0, "reach": 5.0},
 	&"story": {"size": Vector2i(3, 4), "place": &"story", "length": Vector2(60.0, 150.0), "convs": 1, "cooldown": 180.0, "reach": 14.0},
 }
+## The kinds with a shape of their own, and the rest before another.
+const SPECIAL := {&"watch_change": 0.0, &"round": 240.0, &"wake": 0.0, &"fire": 20.0}
+## The relief stands this far from the man on the post; the captain this far
+## from each man; the waker this far from the sleeper.
+const RELIEF_APART := 1.1
+const ROUND_APART := 1.2
+const WAKER_APART := 0.9
+## The round: this many men at most; a man straightens with her this near.
+const ROUND_VISITS := 6
+const STRAIGHTEN_NEAR := 4.0
+## Waking: a nudge, then this long before he stirs.
+const NUDGE := 1.5
+## The fire: a man comes to it from this far; takes a log this long, from
+## this near the pile; kneels to feed it this long, this near; how much.
+const FIRE_REACH := 25.0
+const PICK_LOG := 1.0
+const PILE_NEAR := 0.8
+const FEED := 2.5
+const FIRE_NEAR := 0.9
+const LOG_FUEL := 0.6
+## A man near the fire when it is fed has a word about it.
+const FIRE_COMPANY := 4.0
+## Needs: a meal this long, warming at the fire this long, this far from it.
+const MEAL := 30.0
+const WARMING := 25.0
+const WARM_APART := 1.6
 
 static var _directors := {}
 static var _talk_script: GDScript = null
@@ -108,8 +144,17 @@ func member_of(man: Node) -> Dictionary:
 
 
 ## On her round, the captain is within reach of him (Expression: he
-## straightens). None until the round is made (the second part of this).
-func captain_near(_man: Node) -> bool:
+## straightens).
+func captain_near(man: Node) -> bool:
+	for g in _live:
+		if g["kind"] != &"round":
+			continue
+
+		var captain: Variant = g["roles"].get("captain")
+
+		if captain != null and is_instance_valid(captain) and captain != man and (captain as Node3D).global_position.distance_to((man as Node3D).global_position) <= STRAIGHTEN_NEAR:
+			return true
+
 	return false
 
 
@@ -138,13 +183,22 @@ func tick(delta: float) -> void:
 	if rota != null and rota.suspended():
 		return
 
+	# The rota's wants: the relief for a post, a meal, the fire, bed.
+	if rota != null:
+		for want in rota.take_wanted():
+			_see_to(want, rota)
+
+	# A fire burning low is fed.
+	if _feed_a_fire():
+		return
+
 	if not _queue.is_empty():
 		var asked: Dictionary = _queue.pop_front()
 
 		if not _start(StringName(asked["kind"]), asked["names"]):
 			# Not now: again in a moment, unless there is no such thing.
-			if KINDS.has(asked["kind"]):
-				_queue.push_front(asked)
+			if KINDS.has(asked["kind"]) or SPECIAL.has(asked["kind"]):
+				_queue.append(asked)
 
 		return
 
@@ -162,6 +216,9 @@ func tick(delta: float) -> void:
 # ---------------------------------------------------------------------------
 
 func _start(kind: StringName, names: Array) -> bool:
+	if SPECIAL.has(kind):
+		return _start_special(kind, names)
+
 	var spec: Dictionary = KINDS.get(kind, {})
 	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
 
@@ -344,6 +401,23 @@ func _lend(g: Dictionary) -> void:
 # ---------------------------------------------------------------------------
 
 func _advance(g: Dictionary) -> void:
+	match g["kind"]:
+		&"watch_change":
+			_advance_watch(g)
+			return
+		&"round":
+			_advance_round(g)
+			return
+		&"wake":
+			_advance_wake(g)
+			return
+		&"fire":
+			_advance_fire(g)
+			return
+		&"rest":
+			_advance_rest(g)
+			return
+
 	for m in g["members"]:
 		if m == null or not is_instance_valid(m) or m.get("_knocked_out") == true or not GuardLifeScript.at_ease(m):
 			_end(g)
@@ -386,7 +460,14 @@ func _advance(g: Dictionary) -> void:
 
 func _end(g: Dictionary) -> void:
 	_live.erase(g)
-	_cooling[g["kind"]] = clock + float(KINDS[g["kind"]]["cooldown"])
+	_cooling[g["kind"]] = clock + float(KINDS[g["kind"]]["cooldown"] if KINDS.has(g["kind"]) else SPECIAL.get(g["kind"], 0.0))
+
+	if g.has("log") and is_instance_valid(g["log"]):
+		g["log"].queue_free()
+
+	for m in g["members"]:
+		if m != null and is_instance_valid(m) and m.has_meta(&"carry_log"):
+			m.remove_meta(&"carry_log")
 
 	for m in g["members"]:
 		if m == null or not is_instance_valid(m):
@@ -400,6 +481,549 @@ func _end(g: Dictionary) -> void:
 	for station in g["stations"]:
 		if is_instance_valid(station):
 			station.queue_free()
+
+
+# ---------------------------------------------------------------------------
+# The watch, the round, the sleeper, the fire
+# ---------------------------------------------------------------------------
+
+func _start_special(kind: StringName, names: Array) -> bool:
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+
+	if tree == null:
+		return false
+
+	var named: Array = tree.get_nodes_in_group(&"guards").filter(func(m): return names.has(String(m.get("given_name"))))
+
+	match kind:
+		&"watch_change":
+			var rota := _rota()
+			var on_post: Node = null
+			var relief: Node = null
+
+			for m in named:
+				if rota != null and rota.kind_of(rota.duty_of(m)) == &"post":
+					on_post = m
+				else:
+					relief = m
+
+			return on_post != null and _start_watch(on_post, relief)
+		&"round":
+			var captain: Node = named[0] if not named.is_empty() else null
+
+			if captain == null:
+				for m in tree.get_nodes_in_group(&"guards"):
+					if _free(m) and _is_captain(m):
+						captain = m
+						break
+
+			return captain != null and _start_round(captain)
+		&"wake":
+			for m in tree.get_nodes_in_group(&"guards"):
+				var rota: RefCounted = m.get("_rota")
+
+				if rota != null and rota.asleep() and member_of(m).is_empty():
+					return _start_wake(m, null, null)
+
+			return false
+		&"fire":
+			return _feed_a_fire()
+
+	return false
+
+
+## A want of the rota's seen to.
+func _see_to(want: Dictionary, rota: RefCounted) -> void:
+	var man: Variant = want.get("man")
+
+	if man == null or not is_instance_valid(man):
+		return
+
+	if want["kind"] == &"relief":
+		if not _start_watch(man, null):
+			# Nobody to send yet: asked again next time.
+			_queue.append({"kind": &"watch_change", "names": [String(man.get("given_name"))], "man": man})
+
+		return
+
+	if not member_of(man).is_empty():
+		return
+
+	match StringName(want.get("need", &"")):
+		&"tired":
+			var bed: StringName = rota.free_duty(&"bed")
+
+			if bed == &"":
+				bed = rota.free_duty(&"bench")
+
+			if bed != &"":
+				rota.assign(man, bed)
+		&"hungry":
+			var bowl := _free_station(&"eat", man)
+
+			if bowl != null:
+				_rest(man, bowl, MEAL, false)
+		&"cold":
+			var fire := _nearest_fire((man as Node3D).global_position, INF)
+
+			if fire != null:
+				var at := _beside(fire.global_position, (man as Node3D).global_position, WARM_APART)
+				_rest(man, _make_station(&"warm_hands", at, fire.global_position), WARMING, true)
+
+
+## The relief sent to the man on his post (or, the only one free asleep,
+## woken first).
+func _start_watch(on_post: Node, relief: Node) -> bool:
+	for g in _live:
+		if g["kind"] == &"watch_change" and (g["members"] as Array).has(on_post):
+			return true
+
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+
+	if tree == null:
+		return false
+
+	if relief == null:
+		var rota := _rota()
+		var free: Array = tree.get_nodes_in_group(&"guards").filter(func(m): return m != on_post and _free(m))
+		free.sort_custom(func(x: Node, y: Node) -> bool:
+			return float(rota.needs_of(x)["tired"]) < float(rota.needs_of(y)["tired"]) if rota != null else false)
+
+		if not free.is_empty():
+			relief = free[0]
+		else:
+			# Only a sleeper to send: woken first.
+			for m in tree.get_nodes_in_group(&"guards"):
+				var stations: RefCounted = m.get("_rota")
+
+				if m != on_post and stations != null and stations.asleep() and member_of(m).is_empty():
+					return _start_wake(m, null, on_post)
+
+			return false
+
+	if not member_of(relief).is_empty() or not member_of(on_post).is_empty():
+		return false
+
+	var post: Vector3 = on_post._home.origin
+	var at := _beside(post, (relief as Node3D).global_position, RELIEF_APART)
+	var g := {"kind": &"watch_change", "members": [on_post, relief], "roles": {"post": on_post, "relief": relief},
+		"stations": [], "state": &"going", "t": clock}
+	_live.append(g)
+	var station := _make_station(&"stand", at, post)
+	g["stations"].append(station)
+	relief._rota.lend(station)
+	return true
+
+
+func _advance_watch(g: Dictionary) -> void:
+	var on_post: Variant = g["roles"]["post"]
+	var relief: Variant = g["roles"]["relief"]
+
+	if not _here(on_post) or not _here(relief):
+		_end(g)
+		return
+
+	var talk := _talk()
+
+	match g["state"]:
+		&"going":
+			var post: Vector3 = on_post._home.origin
+			var at_post := Vector2(on_post.global_position.x - post.x, on_post.global_position.z - post.z).length() < 2.0
+
+			if relief._rota.at_station() and at_post and not talk.in_talk(on_post) and not talk.in_talk(relief):
+				g["state"] = &"talking"
+				_history.append(&"watch_change")
+
+				if not talk.play_place([on_post, relief], &"watch_change", {"A": on_post, "B": relief}):
+					_hand_over(g)
+			elif clock - float(g["t"]) > GATHER_FOR * 2.0:
+				_end(g)
+		&"talking":
+			if not talk.in_talk(on_post) and not talk.in_talk(relief):
+				_hand_over(g)
+
+
+## Their duties swap; the man relieved goes to bed if he is worn out.
+func _hand_over(g: Dictionary) -> void:
+	var on_post: Node = g["roles"]["post"]
+	var relief: Node = g["roles"]["relief"]
+	var rota := _rota()
+
+	if rota != null:
+		rota.swap(on_post, relief)
+
+		if float(rota.needs_of(on_post)["tired"]) >= 0.8:
+			var bed: StringName = rota.free_duty(&"bed")
+
+			if bed != &"":
+				rota.assign(on_post, bed)
+
+	_end(g)
+
+
+func _start_round(captain: Node) -> bool:
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+
+	if tree == null or not member_of(captain).is_empty():
+		return false
+
+	var visits: Array = tree.get_nodes_in_group(&"guards").filter(func(m):
+		return m != captain and _here(m) and GuardLifeScript.at_ease(m) and not bool(m.get("lookout")) and member_of(m).is_empty())
+	visits.sort_custom(func(x: Node3D, y: Node3D) -> bool:
+		return x.global_position.distance_to((captain as Node3D).global_position) < y.global_position.distance_to((captain as Node3D).global_position))
+	visits = visits.slice(0, ROUND_VISITS)
+
+	if visits.is_empty():
+		return false
+
+	var g := {"kind": &"round", "members": [captain], "roles": {"captain": captain}, "stations": [],
+		"visits": visits, "visit": -1, "state": &"next", "t": clock}
+	_live.append(g)
+	return true
+
+
+func _advance_round(g: Dictionary) -> void:
+	var captain: Variant = g["roles"]["captain"]
+
+	if not _here(captain) or not GuardLifeScript.at_ease(captain):
+		_end(g)
+		return
+
+	var talk := _talk()
+	var visits: Array = g["visits"]
+	var him: Variant = visits[int(g["visit"])] if int(g["visit"]) >= 0 and int(g["visit"]) < visits.size() else null
+
+	match g["state"]:
+		&"next":
+			g["visit"] = int(g["visit"]) + 1
+
+			if int(g["visit"]) >= visits.size():
+				_end(g)
+				return
+
+			him = visits[int(g["visit"])]
+
+			if not _here(him) or not member_of(him).is_empty():
+				return
+
+			g["members"] = [captain, him]
+			var at := _beside((him as Node3D).global_position, (captain as Node3D).global_position, ROUND_APART)
+			var station := _make_station(&"stand", at, (him as Node3D).global_position)
+			g["stations"].append(station)
+			captain._rota.lend(station)
+			g["state"] = &"going"
+			g["t"] = clock
+		&"going":
+			if not _here(him):
+				g["state"] = &"next"
+			elif captain._rota.at_station():
+				if not talk.in_talk(him) and talk.play_place([captain, him], &"round", {"A": captain, "B": him}):
+					g["state"] = &"talking"
+
+					if not _history.has(&"round") or _history[-1] != &"round":
+						_history.append(&"round")
+				elif clock - float(g["t"]) > 6.0:
+					g["state"] = &"next"
+			elif clock - float(g["t"]) > GATHER_FOR:
+				g["state"] = &"next"
+		&"talking":
+			if not talk.in_talk(captain):
+				# A sleeper booted awake gets up, and goes to the bench if
+				# there is one to go to.
+				if _here(him) and him._rota.asleep():
+					var rota := _rota()
+					var bench: StringName = rota.free_duty(&"bench") if rota != null else &""
+
+					if bench != &"":
+						rota.assign(him, bench)
+					else:
+						him._rota.stir()
+
+				g["members"] = [captain]
+				g["state"] = &"next"
+
+
+## A sleeper nudged awake by the nearest man up (or the man on the post who
+## wants him); then, if a post wants him, the watch changes.
+func _start_wake(sleeper: Node, waker: Node, then_relieve: Node) -> bool:
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+
+	if tree == null:
+		return false
+
+	if waker == null:
+		var awake: Array = tree.get_nodes_in_group(&"guards").filter(func(m): return m != sleeper and _free(m))
+		awake.sort_custom(func(x: Node3D, y: Node3D) -> bool:
+			return x.global_position.distance_to((sleeper as Node3D).global_position) < y.global_position.distance_to((sleeper as Node3D).global_position))
+		waker = awake[0] if not awake.is_empty() else then_relieve
+
+	if waker == null or not member_of(waker).is_empty():
+		return false
+
+	var g := {"kind": &"wake", "members": [waker, sleeper], "roles": {"waker": waker, "sleeper": sleeper, "then": then_relieve},
+		"stations": [], "state": &"going", "t": clock}
+	_live.append(g)
+	var at := _beside((sleeper as Node3D).global_position, (waker as Node3D).global_position, WAKER_APART)
+	var station := _make_station(&"stand", at, (sleeper as Node3D).global_position)
+	g["stations"].append(station)
+	waker._rota.lend(station)
+	return true
+
+
+func _advance_wake(g: Dictionary) -> void:
+	var waker: Variant = g["roles"]["waker"]
+	var sleeper: Variant = g["roles"]["sleeper"]
+
+	if not _here(waker) or not _here(sleeper) or not GuardLifeScript.at_ease(waker):
+		_end(g)
+		return
+
+	var talk := _talk()
+
+	match g["state"]:
+		&"going":
+			if waker._rota.at_station():
+				waker.emote("nudges")
+				g["state"] = &"nudging"
+				g["t"] = clock
+			elif clock - float(g["t"]) > GATHER_FOR:
+				_end(g)
+		&"nudging":
+			if clock - float(g["t"]) >= NUDGE:
+				# Up he gets, and faces the man who woke him.
+				var at := _beside((waker as Node3D).global_position, (sleeper as Node3D).global_position, 1.0)
+				var station := _make_station(&"stand", at, (waker as Node3D).global_position)
+				g["stations"].append(station)
+				sleeper._rota.lend(station)
+				g["state"] = &"rising"
+				g["t"] = clock
+		&"rising":
+			if sleeper._rota.at_station():
+				g["state"] = &"talking"
+				_history.append(&"wake")
+
+				if not talk.play_place([waker, sleeper], &"wake", {"A": waker, "B": sleeper}):
+					_woken(g)
+			elif clock - float(g["t"]) > GATHER_FOR:
+				_woken(g)
+		&"talking":
+			if not talk.in_talk(waker) and not talk.in_talk(sleeper):
+				_woken(g)
+
+
+func _woken(g: Dictionary) -> void:
+	var then: Variant = g["roles"].get("then")
+	var sleeper: Node = g["roles"]["sleeper"]
+	_end(g)
+
+	if then != null and is_instance_valid(then):
+		_start_watch(then, sleeper)
+
+
+## A fire burning low, and a man free to feed it: he goes. True if one went.
+func _feed_a_fire() -> bool:
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+
+	if tree == null or clock < float(_cooling.get(&"fire", -INF)):
+		return false
+
+	for fire in tree.get_nodes_in_group(&"fires"):
+		if not fire.has_method("low") or not fire.low():
+			continue
+
+		if _live.any(func(g): return g["kind"] == &"fire" and g["fire"] == fire):
+			continue
+
+		var at: Vector3 = (fire as Node3D).global_position
+		var free: Array = tree.get_nodes_in_group(&"guards").filter(func(m): return _free(m) and (m as Node3D).global_position.distance_to(at) <= FIRE_REACH)
+
+		if free.is_empty():
+			continue
+
+		free.sort_custom(func(x: Node3D, y: Node3D) -> bool: return x.global_position.distance_to(at) < y.global_position.distance_to(at))
+		var feeder: Node3D = free[0]
+		var g := {"kind": &"fire", "members": [feeder], "roles": {"feeder": feeder}, "fire": fire, "stations": [],
+			"state": &"fetching", "t": clock}
+		_live.append(g)
+		var pile := _nearest_in(tree, &"woodpiles", feeder.global_position)
+
+		if pile != null:
+			var spot := _beside(pile.global_position, feeder.global_position, PILE_NEAR)
+			var station := _make_station(&"pick_log", spot, pile.global_position)
+			g["stations"].append(station)
+			feeder._rota.lend(station)
+		else:
+			_carry_to_fire(g)
+
+		return true
+
+	return false
+
+
+func _carry_to_fire(g: Dictionary) -> void:
+	var feeder: Node3D = g["roles"]["feeder"]
+	var fire: Node3D = g["fire"]
+	var ground := Vector3(fire.global_position.x, feeder.global_position.y, fire.global_position.z)
+	var station := _make_station(&"feed_fire", _beside(ground, feeder.global_position, FIRE_NEAR), ground)
+	g["stations"].append(station)
+	feeder.set_meta(&"carry_log", true)
+	# A log across his arms.
+	var log := MeshInstance3D.new()
+	log.name = "Log"
+	var round := CylinderMesh.new()
+	round.top_radius = 0.09
+	round.bottom_radius = 0.1
+	round.height = 0.75
+	var bark := StandardMaterial3D.new()
+	bark.albedo_color = Color(0.36, 0.25, 0.15)
+	round.material = bark
+	log.mesh = round
+	feeder.add_child(log)
+	log.position = Vector3(0.0, 1.0, -0.38)
+	log.rotation = Vector3(0.0, 0.0, PI * 0.5)
+	g["log"] = log
+	feeder._rota.lend(station)
+	g["state"] = &"carrying"
+	g["t"] = clock
+
+
+func _advance_fire(g: Dictionary) -> void:
+	var feeder: Variant = g["roles"]["feeder"]
+	var fire: Variant = g["fire"]
+
+	if not _here(feeder) or fire == null or not is_instance_valid(fire) or not GuardLifeScript.at_ease(feeder):
+		_end(g)
+		return
+
+	var talk := _talk()
+
+	match g["state"]:
+		&"fetching":
+			if feeder._rota.at_station():
+				g["state"] = &"picking"
+				g["t"] = clock
+			elif clock - float(g["t"]) > GATHER_FOR:
+				_end(g)
+		&"picking":
+			if clock - float(g["t"]) >= PICK_LOG:
+				_carry_to_fire(g)
+		&"carrying":
+			if feeder._rota.at_station():
+				feeder.remove_meta(&"carry_log")
+				g["state"] = &"feeding"
+				g["t"] = clock
+			elif clock - float(g["t"]) > GATHER_FOR:
+				_end(g)
+		&"feeding":
+			if clock - float(g["t"]) >= FEED:
+				fire.feed(LOG_FUEL)
+
+				if g.has("log") and is_instance_valid(g["log"]):
+					g["log"].queue_free()
+
+				_history.append(&"fire")
+				var company: Array = [feeder]
+				var tree: SceneTree = _tree.get_ref() as SceneTree
+
+				for m in tree.get_nodes_in_group(&"guards"):
+					if m != feeder and _free(m) and (m as Node3D).global_position.distance_to((feeder as Node3D).global_position) <= FIRE_COMPANY:
+						company.append(m)
+
+				g["state"] = &"talking"
+
+				if not talk.play_place(company.slice(0, 2), &"fire", {"A": feeder}):
+					_end(g)
+		&"talking":
+			if not talk.in_talk(feeder):
+				_end(g)
+
+
+## A man lent `station` for `seconds` (a meal, warming at the fire).
+func _rest(man: Node, station: Node3D, seconds: float, made: bool) -> void:
+	var g := {"kind": &"rest", "members": [man], "roles": {}, "stations": [station] if made else [], "until": clock + seconds}
+	_live.append(g)
+	man._rota.lend(station)
+
+
+func _advance_rest(g: Dictionary) -> void:
+	var man: Variant = g["members"][0]
+
+	if not _here(man) or not GuardLifeScript.at_ease(man) or clock >= float(g["until"]):
+		_end(g)
+
+
+# ---------------------------------------------------------------------------
+# Places
+# ---------------------------------------------------------------------------
+
+## A station for a while (freed with the gathering), at `at` facing `look`.
+func _make_station(kind: StringName, at: Vector3, look: Vector3) -> Node3D:
+	var tree: SceneTree = _tree.get_ref() as SceneTree
+	var station: Node3D = GuardStationScript.new()
+	station.name = "Gathering_%s" % kind
+	station.kind = kind
+	var home: Node = tree.current_scene if tree.current_scene != null else tree.root
+	home.add_child(station)
+	station.global_position = at
+	var to := Vector3(look.x - at.x, 0.0, look.z - at.z)
+
+	if to.length() > 0.01:
+		station.global_basis = Basis.looking_at(to.normalized(), Vector3.UP)
+
+	return station
+
+
+## `apart` from `centre`, on the side `from` is on.
+func _beside(centre: Vector3, from: Vector3, apart: float) -> Vector3:
+	var side := Vector3(from.x - centre.x, 0.0, from.z - centre.z)
+	side = side.normalized() if side.length() > 0.05 else Vector3.BACK
+	return Vector3(centre.x, from.y, centre.z) + side * apart
+
+
+func _nearest_fire(from: Vector3, reach: float) -> Node3D:
+	var tree: SceneTree = _tree.get_ref() as SceneTree
+	return _nearest_in(tree, &"fires", from, reach)
+
+
+func _nearest_in(tree: SceneTree, group: StringName, from: Vector3, reach := INF) -> Node3D:
+	var best: Node3D = null
+	var near := reach
+
+	for node in tree.get_nodes_in_group(group):
+		var d := (node as Node3D).global_position.distance_to(from)
+
+		if d < near:
+			near = d
+			best = node
+
+	return best
+
+
+## An `kind` station nobody holds, the nearest to `man`.
+func _free_station(kind: StringName, man: Node) -> Node3D:
+	var best: Node3D = null
+	var near := INF
+
+	for station in (_tree.get_ref() as SceneTree).get_nodes_in_group(&"guard_stations"):
+		if StringName(station.kind) != kind or (station.holder != null and is_instance_valid(station.holder)):
+			continue
+
+		var d := (station as Node3D).global_position.distance_to((man as Node3D).global_position)
+
+		if d < near:
+			near = d
+			best = station
+
+	return best
+
+
+func _here(man: Variant) -> bool:
+	return man != null and is_instance_valid(man) and not (man as Node).is_queued_for_deletion() and man.get("_knocked_out") != true
+
+
+func _is_captain(man: Node) -> bool:
+	var sheet: Dictionary = TalkScript.library().get("cast", {})
+	return TalkFacts.meets(TalkFacts.man(man, sheet), "captain", {}, {})
 
 
 func _talk() -> RefCounted:

@@ -44,6 +44,7 @@ func _run() -> void:
 	await _fire()
 	await _rota()
 	await _gatherings()
+	await _duties()
 
 
 # ---------------------------------------------------------------------------
@@ -126,9 +127,9 @@ func _rota() -> void:
 	var sentry := _guard(Vector3(60, 0, 0), 0.0)
 	rota.assign(sentry, &"gate")
 	await _frames(18 * 60)
-	var early: bool = rota.wanted().any(func(w): return w["man"] == sentry)
+	var early: bool = rota.asked(sentry, &"relief")
 	await _frames(3 * 60)
-	var wants: bool = rota.wanted().any(func(w): return w["man"] == sentry and w["kind"] == &"relief")
+	var wants: bool = rota.asked(sentry, &"relief")
 	_check("R5 a man on a post too long wants relieving, not before", not early and wants, "at 18 s %s, at 21 s %s" % [early, wants])
 
 	# R6 the alarm suspends the rota
@@ -140,10 +141,10 @@ func _rota() -> void:
 	var held: bool = rota.suspended()
 	rota.set_need(hungry, &"hungry", 0.99)
 	await _frames(120)
-	var nothing: bool = rota.wanted().is_empty() and float(rota.needs_of(hungry)["hungry"]) >= 0.99
+	var nothing: bool = not rota.asked(hungry, &"hungry") and float(rota.needs_of(hungry)["hungry"]) >= 0.99
 	GarrisonScript.of(player).alarm = 0.0
 	await _frames(60)
-	var resumed: bool = not rota.suspended() and rota.wanted().any(func(w): return w["man"] == hungry and w["need"] == &"hungry")
+	var resumed: bool = not rota.suspended() and rota.asked(hungry, &"hungry")
 	_check("R6 the alarm holds the rota: needs still grow, nobody is moved; at ease again it goes on",
 		held and nothing and resumed, "held %s, nothing wanted %s, resumed %s (%s)" % [held, nothing, resumed, rota.wanted()])
 
@@ -260,6 +261,126 @@ func _gatherings() -> void:
 	fire.get_parent().queue_free()
 
 
+# ---------------------------------------------------------------------------
+# The watch, the round, the sleeper, the fire, and needs
+# ---------------------------------------------------------------------------
+
+func _duties() -> void:
+	# R11 the watch changes: a walk-over, a word, and the duties swap
+	await _fresh()
+	var rota: RefCounted = NightRotaScript.setup(self, 600.0)
+	rota.post_turn = 10.0
+	var bench: Node3D = _station(&"sit", Vector3(0, 0, 12), PI)
+	rota.add_duty(&"post", &"post", {"transform": Transform3D(Basis.IDENTITY, Vector3(0, 0, -8))})
+	rota.add_duty(&"bench", &"bench", {"paths": [bench.get_path()]})
+	var on_post := _guard(Vector3(0, 0, -8), 0.0)
+	var relief := _guard(Vector3(0, 0, 11), PI)
+	rota.assign(on_post, &"post")
+	rota.assign(relief, &"bench")
+	var director: RefCounted = TalkDirector.of(self)
+	var gatherings: RefCounted = GatheringScript.of(self)
+	var walked := [false]
+	await _until(func():
+		if relief.global_position.distance_to(Vector3(0, 0, -8)) < 1.5:
+			walked[0] = true
+		return rota.duty_of(relief) == &"post", 2400)
+	var talked: bool = director.played().any(func(id): return String(id).begins_with("watch_"))
+	var swapped: bool = rota.duty_of(relief) == &"post" and rota.duty_of(on_post) == &"bench"
+	await _frames(600)
+	var left_post: bool = on_post.global_position.distance_to(Vector3(0, 0, -8)) > 3.0
+	var standing: bool = Vector2(relief.global_position.x, relief.global_position.z + 8).length() < 0.8
+	_check("R11 the watch changes: the relief walks over, a word between them, and their duties swap",
+		walked[0] and talked and swapped and left_post and standing,
+		"walked %s talked %s swapped %s, the relieved man gone %s, the relief at the post %s (%s)" % [walked[0], talked, swapped, left_post, standing, director.played()])
+
+	# R12 the captain's round reaches every man, and boots the sleeper
+	await _fresh()
+	var bed: Node3D = _station(&"sleep", Vector3(24, 0, 8), 0.0)
+	var captain := _guard(Vector3(20, 0, 0), 0.0, &"steady", "Mirelle", [], &"duelist")
+	var sleeper := _guard(Vector3(24.5, 0, 8), 0.0, &"steady", "", [bed])
+	var men := [_guard(Vector3(16, 0, 4), 0.0), _guard(Vector3(26, 0, -3), 0.0, &"craven"), _guard(Vector3(18, 0, -6), 0.0, &"rash"), sleeper]
+	await _until(func(): return sleeper._rota.asleep(), 900)
+	director = TalkDirector.of(self)
+	gatherings = GatheringScript.of(self)
+	gatherings.request(&"round")
+	var visited := {}
+	await _until(func():
+		for t in director.talks():
+			if t["place"] == &"round" and t["cast"].has("B"):
+				visited[t["cast"]["B"]] = true
+		return visited.size() >= men.size() and gatherings.live().is_empty(), 7200)
+	_check("R12 the captain's round reaches every man, and the sleeper is booted awake",
+		men.all(func(m): return visited.has(m)) and not sleeper._rota.asleep() and gatherings.history().has(&"round"),
+		"visited %d of %d, sleeper asleep %s, history %s" % [visited.size(), men.size(), sleeper._rota.asleep(), gatherings.history()])
+
+	# R13 the relief is asleep: he is woken, then takes the post
+	await _fresh()
+	rota = NightRotaScript.setup(self, 600.0)
+	rota.post_turn = 10.0
+	var cot: Node3D = _station(&"sleep", Vector3(40, 0, 10), 0.0)
+	rota.add_duty(&"post", &"post", {"transform": Transform3D(Basis.IDENTITY, Vector3(40, 0, -8))})
+	rota.add_duty(&"cot", &"bed", {"paths": [cot.get_path()]})
+	var guard_post := _guard(Vector3(40, 0, -8), 0.0)
+	var dozer := _guard(Vector3(40.5, 0, 10), 0.0)
+	rota.assign(guard_post, &"post")
+	rota.assign(dozer, &"cot")
+	await _until(func(): return dozer._rota.asleep(), 900)
+	director = TalkDirector.of(self)
+	gatherings = GatheringScript.of(self)
+	await _until(func(): return rota.duty_of(dozer) == &"post", 3600)
+	var woken: bool = gatherings.history().has(&"wake") and director.played().any(func(id): return String(id).begins_with("wake_"))
+	_check("R13 a sleeper wanted for the watch is woken, grumbles, and takes the post",
+		woken and rota.duty_of(dozer) == &"post" and not dozer._rota.asleep(), "history %s, played %s, duty %s" % [gatherings.history(), director.played(), rota.duty_of(dozer)])
+
+	# R14 the fire burns low: a man fetches a log and feeds it
+	await _fresh()
+	var fire: Area3D = FireScript.brazier(self, Vector3(60, 0, 0))
+	fire.fuel = 0.3
+	fire.fuel_seconds = 100000.0
+	var pile := Marker3D.new()
+	pile.add_to_group(&"woodpiles")
+	add_child(pile)
+	pile.global_position = Vector3(60, 0, 6)
+	var tender := _guard(Vector3(63, 0, 3), 0.0)
+	var shown := {}
+	await _until(func():
+		shown[tender.activity()] = true
+		return fire.fuel > 0.8, 2400)
+	_check("R14 the fire burns low: a man fetches a log from the woodpile and feeds it",
+		shown.has(&"pick_log") and shown.has(&"feed_fire") and fire.fuel > 0.8, "did %s, fuel %.2f" % [shown.keys(), fire.fuel])
+	fire.get_parent().queue_free()
+	pile.queue_free()
+
+	# R15 needs move men
+	await _fresh()
+	rota = NightRotaScript.setup(self, 600.0)
+	var hearth: Area3D = FireScript.brazier(self, Vector3(80, 0, 0))
+	var bowl: Node3D = _station(&"eat", Vector3(80, 0, 12), 0.0)
+	var pallet: Node3D = _station(&"sleep", Vector3(92, 0, 12), 0.0)
+	var seat: Node3D = _station(&"sit", Vector3(92, 0, 0), 0.0)
+	rota.add_duty(&"pallet", &"bed", {"paths": [pallet.get_path()]})
+	rota.add_duty(&"seat", &"bench", {"paths": [seat.get_path()]})
+	var eater := _guard(Vector3(84, 0, 12), 0.0)
+	var cold := _guard(Vector3(80, 0, -12), 0.0)
+	var tired := _guard(Vector3(92, 0, 1), 0.0)
+	rota.assign(tired, &"seat")
+	await _frames(30)
+	rota.set_need(eater, &"hungry", 1.0)
+	rota.set_need(cold, &"cold", 1.0)
+	rota.set_need(tired, &"tired", 1.0)
+	var ate := [false]
+	var warmed := [false]
+	await _until(func():
+		if eater.activity() == &"eat":
+			ate[0] = true
+		if cold.activity() == &"warm_hands" and Vector2(cold.global_position.x - 80, cold.global_position.z).length() < 2.0:
+			warmed[0] = true
+		return ate[0] and warmed[0] and rota.kind_of(rota.duty_of(tired)) == &"bed", 1200)
+	_check("R15 needs move men: the hungry to eat, the cold to the fire, the tired to bed",
+		ate[0] and warmed[0] and rota.kind_of(rota.duty_of(tired)) == &"bed", "ate %s warmed %s, tired man's duty %s" % [ate[0], warmed[0], rota.duty_of(tired)])
+	hearth.get_parent().queue_free()
+
+
 ## A gathering place of `kind` at `at`: spots [offset, activity, role], each
 ## facing the middle.
 func _place(kind: StringName, at: Vector3, spots: Array) -> Node3D:
@@ -348,8 +469,9 @@ func _yard() -> void:
 	await _frames(5)
 
 
-func _guard(at: Vector3, yaw := 0.0, preset: StringName = &"steady", name := "", stations := []) -> CharacterBody3D:
+func _guard(at: Vector3, yaw := 0.0, preset: StringName = &"steady", name := "", stations := [], archetype: StringName = &"") -> CharacterBody3D:
 	var g: CharacterBody3D = GUARD.instantiate()
+	g.archetype = archetype
 	g.temperament = preset
 	g.debug_ai = false
 	g.given_name = name
@@ -386,7 +508,7 @@ func _fresh() -> void:
 		g.set_physics_process(false)
 		g.queue_free()
 
-	for group in [&"bodies", &"dropped_weapons", &"dropped_lights", &"stray_arrows", &"guard_stations", &"gathering_places"]:
+	for group in [&"bodies", &"dropped_weapons", &"dropped_lights", &"stray_arrows", &"guard_stations", &"gathering_places", &"woodpiles"]:
 		for thing in get_tree().get_nodes_in_group(group):
 			thing.queue_free()
 

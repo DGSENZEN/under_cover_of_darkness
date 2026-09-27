@@ -96,6 +96,10 @@ const ACTIVITIES := {
 	&"lean": [&"Idle_Rail", true, 0.35, 1.0],
 	# Passing the time (GuardPastimes): squatting by the fire.
 	&"squat": [&"Crouch_Idle", true, 0.3, 1.0],
+	# Feeding the fire (Gathering): a log taken up from the pile, then
+	# kneeling at the brazier.
+	&"pick_log": [&"Farm_Harvest", false, 0.15, 1.0],
+	&"feed_fire": [&"Fixing_Kneeling", false, 0.2, 1.0],
 }
 ## Getting onto and off a station (GuardRota), each shown through its clip in
 ## its time: [clip, backwards, fade in].

@@ -142,6 +142,10 @@ func activity() -> StringName:
 	if talking():
 		return &"talk" if _director().speaking(guard) else &"listen"
 
+	# A log in his arms for the fire (Gathering).
+	if guard.has_meta(&"carry_log"):
+		return &"carry_log"
+
 	# Pastimes are for a man at his ease: anything else and they are over.
 	if int(guard.state) != RELAXED:
 		_pastimes.walking()

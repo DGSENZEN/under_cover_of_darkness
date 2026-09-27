@@ -216,6 +216,12 @@ func suspended() -> bool:
 	return false
 
 
+## Whether he has asked for `what` ("relief", or a need: "tired", "hungry",
+## "cold") and it has not eased since (whoever took it up).
+func asked(man: Node, what: StringName) -> bool:
+	return _asked.has("%d:%s" % [man.get_instance_id(), what])
+
+
 ## What is waiting to be seen to (a peek).
 func wanted() -> Array:
 	return _wanted

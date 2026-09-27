@@ -237,8 +237,9 @@ func play(conv_id: String, cast: Dictionary, extra := {}) -> bool:
 
 
 ## A conversation belonging to `place` (a gathering: "dice", "story"...),
-## cast from exactly these men, now. False if none fits.
-func play_place(members: Array, place: StringName) -> bool:
+## cast from exactly these men (`fixed` pins parts to men: {"A": captain}),
+## now. False if none fits.
+func play_place(members: Array, place: StringName, fixed := {}) -> bool:
 	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
 	var here := members.filter(func(m): return m != null and is_instance_valid(m) and _talk_of(m).is_empty())
 
@@ -264,9 +265,9 @@ func play_place(members: Array, place: StringName) -> bool:
 		if not _available(conv) or not _when_holds(conv, world):
 			continue
 
-		var cast := TalkFacts.cast_parts(conv, men, world, _allowed_for(conv))
+		var cast := TalkFacts.cast_parts(conv, men, world, _pinned(_allowed_for(conv), fixed))
 
-		if not cast.is_empty():
+		if not cast.is_empty() and fixed.keys().all(func(k): return cast.has(k)):
 			candidates.append({"conv": conv, "cast": cast, "spec": TalkFacts.specificity(conv, cast), "priority": int(conv["priority"])})
 
 	if candidates.is_empty():
@@ -283,6 +284,24 @@ func play_place(members: Array, place: StringName) -> bool:
 
 	_start(pick["conv"], nodes, {"place": [place]})
 	return true
+
+
+## `allowed`, with some parts pinned to their men (and those men kept out of
+## the rest).
+func _pinned(allowed: Callable, fixed: Dictionary) -> Callable:
+	if fixed.is_empty():
+		return allowed
+
+	return func(man: Dictionary, part: String) -> bool:
+		var node: Variant = man.get("node")
+
+		if fixed.has(part):
+			if node != fixed[part]:
+				return false
+		elif fixed.values().has(node):
+			return false
+
+		return allowed.is_null() or allowed.call(man, part)
 
 
 ## The conversations going on, for tests and the showcase.

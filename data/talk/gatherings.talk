@@ -138,3 +138,209 @@ A: They found the lantern still burning on the roof. Never found him.
 B [whispers]: They say it's still lit, some nights.
 A: They say you owe me a drink for the story, too.
 D [laughs]: Now that's a ghost story.
+
+# The watch changing: A the man on the post, B his relief.
+
+== watch_anything
+place: watch_change
+cast: A = any; B = any
+cooldown: 0s
+again: yes
+B: Anything?
+A: Nothing but the cold.
+B [nods]: Off you go, then.
+
+== watch_feet
+place: watch_change
+cast: A = any; B = any
+cooldown: 0s
+again: yes
+B: Your turn's up.
+A: About time. I can't feel my feet.
+B: Anything I should know?
+A [shrugs]: A cat on the wall. Twice.
+
+== watch_orders
+place: watch_change
+cast: A = any; B = any
+cooldown: 0s
+again: yes
+B: Relief. Captain's orders.
+A: She can have my feet as well. They're no use to me.
+B [laughs]: Go and get warm.
+
+== watch_dark
+place: watch_change
+cast: A = any; B = any
+cooldown: 0s
+again: yes
+A [whispers]: Keep an eye on the dark behind the store.
+B: Why? What's there?
+A: Nothing. That's what I don't like.
+
+# The captain's round: A the captain, B the man she stops at.
+
+== round_tam_boot
+place: round
+cast: A = captain; B = name(Tam)
+cooldown: once
+priority: 5
+A [kicks]: Up. You'll sleep when you're dead, and sooner if I catch you again.
+B: Captain. I was resting my eyes.
+
+== round_osric
+place: round
+cast: A = captain; B = name(Osric)
+cooldown: once
+A: Keep your brother off the dice tonight.
+B [nods]: I'll try, Captain.
+
+== round_jory
+place: round
+cast: A = captain; B = name(Jory)
+cooldown: once
+A: You're daydreaming again. The Lantern will keep.
+B: Yes, Captain.
+
+== round_brand
+place: round
+cast: A = captain; B = name(Brand)
+cooldown: once
+A: Chop the wood, Brand. Not the block.
+B [laughs]: The block started it.
+
+== round_wat
+place: round
+cast: A = captain; B = name(Wat)
+cooldown: once
+A: Eyes on the water, Wat. Not on the storehouse.
+B [shrugs]: Can't I do both?
+
+== round_aldous
+place: round
+cast: A = captain; B = name(Aldous)
+cooldown: once
+A: How are the knees tonight?
+B: Older than you, Captain. Like the rest of me.
+
+== round_hendrik
+place: round
+cast: A = captain; B = name(Hendrik)
+cooldown: once
+A: How's your girl?
+B [sighs]: Better, they say. Thank you for asking.
+
+== round_piers
+place: round
+cast: A = captain; B = name(Piers)
+cooldown: once
+A: Sit up straight. You look like a sack of turnips.
+B: I feel like one, Captain.
+
+== round_col
+place: round
+cast: A = captain; B = name(Col)
+cooldown: once
+A: Is that your second supper?
+B: Third, Captain. The cook likes me.
+
+== round_gideon
+place: round
+cast: A = captain; B = name(Gideon)
+cooldown: once
+A: The ledger balance yet?
+B: It would, if the lamp oil stayed where I put it.
+
+== round_ned
+place: round
+cast: A = captain; B = name(Ned)
+cooldown: once
+A: Two weeks, Ned. You'll do.
+B [nods]: Thank you, Captain.
+
+== round_steady
+place: round
+cast: A = captain; B = steady
+cooldown: 0s
+again: yes
+A: All quiet?
+B [nods]: All quiet, Captain.
+
+== round_steady_cold
+place: round
+cast: A = captain; B = steady
+cooldown: 0s
+again: yes
+A: Keep moving. The cold gets in if you stand.
+B: Aye, Captain.
+
+== round_rash
+place: round
+cast: A = captain; B = rash
+cooldown: 0s
+again: yes
+A: Easy. Save it for someone who deserves it.
+B: If anyone comes, they'll get it.
+
+== round_craven
+place: round
+cast: A = captain; B = craven
+cooldown: 0s
+again: yes
+A: Stop jumping at shadows.
+B: They jump first, Captain.
+
+== round_stubborn
+place: round
+cast: A = captain; B = stubborn
+cooldown: 0s
+again: yes
+A: Still standing?
+B: Till I'm told otherwise.
+
+== round_sly
+place: round
+cast: A = captain; B = sly
+cooldown: 0s
+again: yes
+A: Whatever you're thinking, don't.
+B [shrugs]: Thinking's free, Captain.
+
+# Waking the sleeper: A the man who wakes him, B the sleeper.
+
+== wake_turn
+place: wake
+cast: A = any; B = any
+cooldown: 0s
+again: yes
+A: Up. It's your turn.
+B: Five more minutes.
+A: You've had five hours.
+B [sighs]: Coming, coming.
+
+== wake_tam
+place: wake
+cast: A = any; B = name(Tam)
+cooldown: once
+A: Tam. Tam! The watch.
+B: I wasn't asleep. I was thinking.
+A: With your mouth open?
+B: I think better that way.
+
+# The fire fed: A the man who fed it, B anyone near.
+
+== fire_till_dawn
+place: fire
+cast: A = any; B? = any
+cooldown: 0s
+again: yes
+A: There. That'll keep till dawn.
+B: It'll keep till you turn your back.
+
+== fire_wet_wood
+place: fire
+cast: A = any; B? = any
+cooldown: 0s
+again: yes
+A [sighs]: The wood's wet again.
+B: Then blow on it.
