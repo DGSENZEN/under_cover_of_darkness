@@ -97,8 +97,8 @@ var _upper_goal := 0.0
 var _upper_in := 0.15
 var _upper_out := 0.25
 var _upper_clip: StringName = &""
-## His stride: under 1, short quick steps; over 1, long ones (the pace the
-## walk is played at follows).
+## His stride at a walk: under 1, short quick steps; over 1, long ones (the
+## pace the walk is played at follows). At a jog and faster, everyone's is 1.
 var stride := 1.0
 ## An action playing itself out (play_once), how far in, and how fast.
 var _once: StringName = &""
@@ -365,7 +365,9 @@ func set_motion(velocity: Vector3, fighting: bool, delta: float) -> void:
 	elif position > WALK_SPEED:
 		natural = lerpf(WALK_SPEED, JOG_SPEED, (position - WALK_SPEED) / (JOG_SPEED - WALK_SPEED))
 
-	var pace := 1.0 if position < 0.3 else clampf(position / (natural * maxf(stride, 0.1)), 0.6, 1.6) * reverse
+	# His own stride is his walk's; at a jog and faster every man runs alike.
+	var own_stride := lerpf(maxf(stride, 0.1), 1.0, clampf((position - WALK_SPEED) / (JOG_SPEED - WALK_SPEED), 0.0, 1.0))
+	var pace := 1.0 if position < 0.3 else clampf(position / (natural * own_stride), 0.6, 1.6) * reverse
 	mixer.set(&"parameters/pace/scale", pace)
 	mixer.set(&"parameters/legs_pace/scale", pace)
 

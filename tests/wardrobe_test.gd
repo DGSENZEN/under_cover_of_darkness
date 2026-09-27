@@ -824,6 +824,10 @@ func _guard(seed: int, archetype: StringName = &"") -> CharacterBody3D:
 	_spawned += 1
 	g.position = Vector3(-30 + (_spawned % 12) * 5.0, 0.0, -30 + (_spawned / 12) * 5.0)
 	add_child(g)
+	# His life at his ease (Expression: his weight shifting, his breath, his
+	# eyes) moves his skirts; these checks measure his clothes on a man who
+	# stands still.
+	g._rig.expression = null
 	await _frames(5)
 	return g
 
