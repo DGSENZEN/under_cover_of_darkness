@@ -30,6 +30,7 @@ const FlameFxScript := preload("res://scripts/Visual/Lights/FlameFx.gd")
 const CoronaScript := preload("res://scripts/Visual/Lights/Corona.gd")
 const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
+const LightBudget := preload("res://scripts/Visual/Lights/LightBudget.gd")
 
 const CRACKLE := "res://audio/ambience/torch_loop.ogg"
 ## How loud its crackle is (dB at a metre or so), and how far it carries.
@@ -202,6 +203,13 @@ func _ready() -> void:
 	_make_loop()
 	_show_lit(&"lit" if lit else &"out")
 	_apply_lit()
+
+	if shadows:
+		LightBudget.register(self)
+
+
+func _exit_tree() -> void:
+	LightBudget.unregister(self)
 
 
 ## For what is built on a burner (LightFixture.gd): set the exports before

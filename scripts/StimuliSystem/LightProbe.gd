@@ -61,8 +61,9 @@ static func light_at(asker: Node3D, point: Vector3, exclude: Array[RID] = []) ->
 		if strength <= 0.001:
 			continue
 
-		# In shadow? One ray from the point toward the light.
-		if light.shadow_enabled:
+		# In shadow? One ray from the point toward the light. A light is taken
+		# as made (its "casts_shadow"), not as the shadow budget draws it.
+		if light.get_meta(&"casts_shadow", light.shadow_enabled):
 			var from := point + toward * 0.05
 			var query := PhysicsRayQueryParameters3D.create(from, point + toward * reach, 1, exclude)
 			query.collide_with_areas = false

@@ -21,6 +21,7 @@ const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
 const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
 const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
+const LightBudget := preload("res://scripts/Visual/Lights/LightBudget.gd")
 
 ## LightProbe 2 m from a bare torch, the brazier and the campfire (each
 ## flame's flicker held still), read on main before any of this work: the
@@ -51,6 +52,7 @@ func _run() -> void:
 	await _coronas()
 	await _particles()
 	await _lit_and_out()
+	await _budget()
 
 
 # ---------------------------------------------------------------------------
@@ -522,6 +524,136 @@ func _lit_and_out() -> void:
 		"steam %d, freed %s" % [FireParticles.live(&"steam"), not is_instance_valid(torch)])
 	camera.queue_free()
 	await _frames(2)
+
+
+# ---------------------------------------------------------------------------
+# The shadow budget
+# ---------------------------------------------------------------------------
+
+func _budget() -> void:
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.6, 500)
+	camera.current = true
+
+	# L23 six shadows at most, and never switched close to you
+	var line: Array = []
+
+	for i in 10:
+		var torch: Node3D = TorchScript.new()
+		add_child(torch)
+		torch.global_position = Vector3(0, 2, 486 - 2.0 * i)
+		line.append(torch)
+
+	await _frames(60)
+	var at_most_six: int = LightBudget.shadowed()
+	var popped_close := []
+	var before := {}
+
+	for torch in line:
+		before[torch] = torch.light.shadow_enabled
+
+	for step in 120:
+		camera.global_position.z -= 0.25
+		await get_tree().process_frame
+
+		for torch in line:
+			if torch.light.shadow_enabled != before[torch]:
+				var d: float = camera.global_position.distance_to(torch.global_position)
+
+				if d <= maxf(LightBudget.NEAR, torch.light_range + 1.0):
+					popped_close.append("%.1f m" % d)
+
+				before[torch] = torch.light.shadow_enabled
+
+	_check("L23 at most six lights cast shadows, and none switches within max(12 m, its reach + 1) of you",
+		at_most_six <= 6 and at_most_six > 0 and popped_close.is_empty(),
+		"shadowed %d, switched close %s, shadowed at the end %d" % [at_most_six, popped_close, LightBudget.shadowed()])
+
+	for torch in line:
+		torch.queue_free()
+
+	await _frames(3)
+
+	# L24 a light the budget drew without shadows still casts them for the guards
+	var lamp: Node3D = TorchScript.new()
+	add_child(lamp)
+	lamp.global_position = Vector3(10, 1.5, 520)
+	Props.block(self, Vector3(10, 1.5, 518), Vector3(3, 3, 0.3))
+	await _frames(3)
+	lamp.flicker = 0.0
+	await _frames(2)
+	var behind := Vector3(10, 1.2, 516.5)
+	var shadowed_read := LightProbe.light_at(self, behind)
+	lamp.light.shadow_enabled = false
+	LightProbe.invalidate()
+	var budgeted_read := LightProbe.light_at(self, behind)
+	lamp.light.shadow_enabled = true
+	_check("L24 behind a wall, a light drawn without shadows still reads as shadowed to the guards",
+		absf(budgeted_read - shadowed_read) <= 0.05 * maxf(shadowed_read, 0.02),
+		"behind the wall: %.3f with shadows, %.3f drawn without" % [shadowed_read, budgeted_read])
+	lamp.queue_free()
+
+	# L25 too many shadows in one place: warned, once
+	LightBudget.warned = false
+	var crowd: Array = []
+
+	for i in 8:
+		var torch: Node3D = TorchScript.new()
+		add_child(torch)
+		torch.global_position = camera.global_position + Vector3(float(i) - 3.5, 0.5, -4.0)
+		crowd.append(torch)
+
+	await _frames(30)
+	_check("L25 eight shadow lights within 12 m of you: the budget warns", LightBudget.warned, "warned %s" % LightBudget.warned)
+
+	for torch in crowd:
+		torch.queue_free()
+
+	await _frames(3)
+
+	# L26 a level freed and another built: the budget and particles start clean
+	var level := Node3D.new()
+	add_child(level)
+
+	for i in 4:
+		var torch: Node3D = TorchScript.new()
+		level.add_child(torch)
+		torch.global_position = camera.global_position + Vector3(float(i), 0.5, -30.0)
+
+	await _frames(20)
+	level.queue_free()
+	await _frames(3)
+	var fresh: Array = []
+
+	for i in 3:
+		var torch: Node3D = TorchScript.new()
+		add_child(torch)
+		torch.global_position = camera.global_position + Vector3(float(i) * 3.0 - 3.0, 0.5, -20.0)
+		fresh.append(torch)
+
+	FireParticles.clear()
+	await _frames(90)
+	_check("L26 after a level is freed the budget and embers work on the new lights alone",
+		LightBudget.shadowed() == 3 and FireParticles.live(&"ember") > 0,
+		"shadowed %d, embers %d" % [LightBudget.shadowed(), FireParticles.live(&"ember")])
+
+	# L27 no camera at all: nothing breaks, nothing shows
+	camera.current = false
+	await get_tree().process_frame
+	var no_camera := get_viewport().get_camera_3d() == null
+	FireParticles.clear()
+	var shadows_before: bool = fresh[0].light.shadow_enabled
+	await _frames(60)
+	_check("L27 with no camera the lights burn on: no halo, no embers, shadows left as they are",
+		no_camera and fresh[0].corona.visibility == 0.0 and FireParticles.live(&"ember") == 0 and fresh[0].light.shadow_enabled == shadows_before,
+		"no camera %s, halo %.2f, embers %d, shadows kept %s" % [no_camera, fresh[0].corona.visibility, FireParticles.live(&"ember"), fresh[0].light.shadow_enabled == shadows_before])
+
+	for torch in fresh:
+		torch.queue_free()
+
+	camera.queue_free()
+	await _frames(3)
 
 
 ## The frequency (Hz) with the most energy in 8 s of a flicker sampled at 60 Hz.
