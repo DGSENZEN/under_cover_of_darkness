@@ -5,12 +5,28 @@ extends Node3D
 ##
 ## Also carries physics objects: frob a RigidBody3D to pick it up, frob again
 ## to set it down, throw to hurl it. Carrying blocks climbing.
+##
+## What is in your hand is used with the attack button: the blackjack swung; a
+## flash bomb or a water flask thrown (ThrownTool.gd), one off the belt each
+## time. A lock you have no key for, with a lockpick on your belt, is picked:
+## a few seconds at it, the pick clicking (heard close by), undone if you
+## move off or look away.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const GuardBodyScript := preload("res://scripts/AISystem/GuardBody.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
+const ThrownToolScript := preload("res://scripts/Combat/ThrownTool.gd")
+
+## The tools thrown from your hand (ThrownTool.kind).
+const THROWN_TOOLS := [&"flashbomb", &"waterflask"]
+## Picking a lock: this long at it (s), a click every PICK_CLICK (s) heard this
+## loud (SoundBus, dB); moving faster than PICK_STILL (m/s) undoes it.
+const PICK_TIME := 3.2
+const PICK_CLICK := 0.4
+const PICK_DB := 28.0
+const PICK_STILL := 0.8
 
 signal frobbed(target: Node)
 signal picked_up(body: RigidBody3D)
@@ -25,6 +41,11 @@ signal released(body: RigidBody3D, thrown: bool)
 ## The swing lands this long after the click.
 @export var blackjack_windup := 0.18
 @export var blackjack_cooldown := 0.7
+
+@export_group("Tools")
+## A tool leaves your hand this long after the click; none again for this long.
+@export var tool_windup := 0.16
+@export var tool_cooldown := 0.7
 
 @export_group("Carry")
 @export var max_carry_mass := 30.0
@@ -51,6 +72,15 @@ var _shouldered_mask := 0
 
 var _swing_windup := -1.0
 var _swing_cooldown := 0.0
+## A tool on its way out of your hand: seconds to its release (-1: none), which,
+## and what it looks like.
+var _tool_windup := -1.0
+var _tool_kind: StringName = &""
+var _tool_mesh: Mesh = null
+## The lock being picked (null: none), how far along (s), and the next click.
+var _picking: Node = null
+var _pick_t := 0.0
+var _pick_click := 0.0
 
 ## Where the frob ray met the target: a lock, for the key to go to.
 var _target_point := Vector3.ZERO
@@ -137,6 +167,15 @@ func _physics_process(delta: float) -> void:
 
 		if _swing_windup < 0.0:
 			_blackjack_lands()
+
+	if _tool_windup >= 0.0:
+		_tool_windup -= delta
+
+		if _tool_windup < 0.0:
+			_release_tool()
+
+	if _picking != null:
+		_update_picking(delta)
 
 	if Input.is_action_just_pressed("frob") and not _unlocking:
 		_on_frob()
@@ -275,6 +314,10 @@ func current_actions() -> Array:
 	if _unlocking:
 		return []
 
+	# At a lock with the pick: what you are doing, not a key to press.
+	if _picking != null:
+		return [[&"", "Picking the lock"]]
+
 	if held != null:
 		return [[&"frob", "Set down"], [&"throw", "Throw"]]
 
@@ -327,6 +370,13 @@ func _on_frob() -> void:
 	# only then does it open.
 	if target.get("locked") == true and target.has_method("can_unlock") and target.can_unlock(player):
 		_turn_key_in(target)
+		return
+
+	# Locked, no key, a lockpick on your belt: you set to work on it.
+	if target.get("locked") == true and can_pick():
+		if _picking != target:
+			_pick_lock(target)
+
 		return
 
 	var pickup := _pickup_visual(target)
@@ -744,6 +794,10 @@ func _use_item() -> void:
 
 	var item: Dictionary = player.inventory.selected_item()
 
+	if not item.is_empty() and item["id"] in THROWN_TOOLS:
+		_throw_tool(item)
+		return
+
 	if item.is_empty() or item["id"] != &"blackjack":
 		return
 
@@ -754,6 +808,85 @@ func _use_item() -> void:
 
 	if player.hand != null and player.hand.has_method("play_swing"):
 		player.hand.play_swing()
+
+
+## A tool from your hand (a flash bomb, a water flask): drawn back and thrown,
+## leaving your hand a moment into the throw (_release_tool).
+func _throw_tool(item: Dictionary) -> void:
+	_tool_kind = item["id"]
+	_tool_mesh = item.get("mesh")
+	_tool_windup = tool_windup
+	_swing_cooldown = tool_cooldown
+	player.spend_attack_press()
+	Sfx.play_flat(player, &"whoosh_light", -8.0, 1.15)
+
+	if player.hand != null and player.hand.has_method("play_throw"):
+		player.hand.play_throw()
+
+
+## Out of your hand along your aim, and one fewer on your belt.
+func _release_tool() -> void:
+	if _tool_kind == &"" or player.inventory.count_of(_tool_kind) <= 0:
+		return
+
+	var eye := _eye()
+	var tool: Node3D = ThrownToolScript.new()
+	tool.kind = _tool_kind
+	player.get_parent().add_child(tool)
+	# From in front of your face, a little to the right (the throwing hand).
+	tool.launch(eye.origin - eye.basis.z * 0.35 + eye.basis.x * 0.15 - eye.basis.y * 0.05, -eye.basis.z, _tool_mesh, player)
+	player.inventory.take_one(_tool_kind)
+	_tool_kind = &""
+
+
+## Whether a lock you have no key for can be picked: a lockpick on your belt.
+func can_pick() -> bool:
+	return player.inventory.count_of(&"lockpick") > 0
+
+
+## Picking `lock`: the lockpick to hand, then at it until it gives
+## (_update_picking).
+func _pick_lock(lock: Node) -> void:
+	_picking = lock
+	_pick_t = 0.0
+	_pick_click = 0.0
+	player.inventory.select_by_id(&"lockpick")
+
+
+## At the lock: clicks, heard close by; still looking at it and not moving
+## off, it gives (unlocked, and turned like a key); else it is left.
+func _update_picking(delta: float) -> void:
+	var lock := _picking
+
+	if not is_instance_valid(lock) or lock.get("locked") != true or target != lock or Vector2(player.velocity.x, player.velocity.z).length() > PICK_STILL or not _hands_free():
+		_picking = null
+		return
+
+	_pick_t += delta
+	_pick_click -= delta
+
+	if _pick_click <= 0.0:
+		_pick_click = PICK_CLICK * randf_range(0.7, 1.3)
+		Sfx.play(player, &"keys", _target_point, -12.0, randf_range(1.6, 2.1))
+		SoundBus.emit_sound(_target_point, PICK_DB, player, &"pick")
+
+	if _pick_t < PICK_TIME:
+		return
+
+	_picking = null
+	lock.set("locked", false)
+	SoundBus.emit_sound(_target_point, 30.0, player, &"unlock")
+	Sfx.play(player, &"unlock", _target_point)
+	frobbed.emit(lock)
+
+
+## Picking a lock now, and how far through it (0..1): for the HUD.
+func picking() -> bool:
+	return _picking != null
+
+
+func pick_progress() -> float:
+	return clampf(_pick_t / PICK_TIME, 0.0, 1.0) if _picking != null else 0.0
 
 
 func _blackjack_lands() -> void:

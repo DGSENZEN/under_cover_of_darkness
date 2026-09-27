@@ -11,7 +11,9 @@ extends CanvasLayer
 ##   bottom left    health, as shields that only show when you are hurt
 ##   everywhere     a red vignette when hit, with an arc on the side the
 ##                  blow came from; the colour drains during a finisher; a
+##                  white-out when a flash goes off in your eyes (dazzle); a
 ##                  fade to black when caught, and a pause screen on Esc
+##   centre         picking a lock: the crosshair's ring closing as it gives
 ##   over a man     fighting you: his balance (GuardFighter's posture), a bar
 ##                  filling from the middle, amber to red, once it is shaken;
 ##                  a red mark when he is open (the next blow a deathblow)
@@ -26,7 +28,10 @@ extends CanvasLayer
 ##                  glows while it is rising, so you see how fast, and a
 ##                  tick sounds, quicker and higher as it fills. Off the
 ##                  screen, his mark sits at its edge, the way he is; a man
-##                  behind a wall is marked fainter. The pause screen can
+##                  behind a wall is marked fainter. A man stirred by
+##                  something not you (a door left open, a torch out, a man
+##                  missing) and who has not seen you since gets only a small
+##                  grey "?": never the biggest, no tick. The pause screen can
 ##                  hide them all (Settings).
 ##
 ## Nothing here is read by gameplay. Hide the layer and the game is unchanged.
@@ -65,8 +70,13 @@ const TICK_QUICK := 0.6
 const TICK_EVERY := Vector2(0.62, 0.14)
 const TICK_PITCH := Vector2(1.2, 2.0)
 const TICK_DB := Vector2(-19.0, -10.0)
+## What stirs a man that is not you (Guard._stimulus): something out of place,
+## a man missing from his post.
+const NOT_YOU := [&"oddity", &"missing"]
 ## A man's balance is shown over him this near.
 const POSTURE_RANGE := 16.0
+## A flash in your eyes fades out over this long (s, at its fullest).
+const WHITE_FADE := 1.6
 const INK := Color(0.93, 0.88, 0.78)
 const DIM := Color(0.62, 0.58, 0.5)
 const AMBER := Color(1.0, 0.78, 0.36)
@@ -112,6 +122,9 @@ var ticks := 0
 var _marks_toggle: Button
 var _grade: ColorRect
 var _grade_amount := 0.0
+## A flash in your eyes: the white over everything, fading (dazzle).
+var _white: ColorRect
+var _white_amount := 0.0
 var _last_real := -1.0
 var _fade: ColorRect
 var _death: Label
@@ -278,7 +291,8 @@ class AwarenessMarks:
 	## out (at the edge, the way to him), fill 0..1, rise 0..1, icon ("eye",
 	## "heard", "look", "hunt", "fight"), lead (nearest to having you), flash
 	## 1..0, alpha (fainter while walled: a wall between you), name ("" or
-	## who had you first), notches (0..1 each).
+	## who had you first), notches (0..1 each). Icon "odd": stirred by
+	## something not you, drawn small and grey.
 	var marks: Array = []
 	var clock := 0.0
 
@@ -297,6 +311,20 @@ class AwarenessMarks:
 		var r := (15.0 if lead else 11.5) * (0.85 if edge else 1.0)
 		var hue := AwarenessMarks.hue_of(fill, icon)
 		var top := -PI * 0.5
+
+		# Stirred by something not you: small and grey, a "?" in a plain ring.
+		if icon == &"odd":
+			r = 8.0 * (0.85 if edge else 1.0)
+
+			if edge:
+				var away: Vector2 = m["out"]
+				var aside := Vector2(-away.y, away.x)
+				draw_colored_polygon(PackedVector2Array([at + away * (r + 7.0), at + away * (r + 2.0) + aside * 3.5, at + away * (r + 2.0) - aside * 3.5]), Color(hue.r, hue.g, hue.b, 0.6 * alpha))
+
+			draw_circle(at, r + 2.0, Color(0, 0, 0, 0.32 * alpha))
+			draw_arc(at, r, 0.0, TAU, 24, Color(hue.r, hue.g, hue.b, 0.7 * alpha), 1.4, true)
+			_glyph(at, "?", r, hue, 0.8 * alpha)
+			return
 
 		# Off the screen: a notch pointing out, the way he is.
 		if edge:
@@ -391,6 +419,9 @@ class AwarenessMarks:
 	## sure, red as he is about to have you; red once he has, a hot amber
 	## while he hunts you.
 	static func hue_of(fill: float, icon: StringName) -> Color:
+		if icon == &"odd":
+			return DIM
+
 		if icon == &"fight":
 			return Color(0.95, 0.14, 0.07)
 
@@ -548,6 +579,14 @@ func setup(p_player: CharacterBody3D) -> void:
 	_grade.visible = false
 	_root.add_child(_grade)
 	_root.move_child(_grade, 0)
+
+	# A flash in your eyes: white over everything, fading.
+	_white = ColorRect.new()
+	_white.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_white.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_white.color = Color(1.0, 0.98, 0.94, 0.0)
+	_white.visible = false
+	_root.add_child(_white)
 
 	_crosshair = Crosshair.new()
 	_crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -817,8 +856,12 @@ func _process(delta: float) -> void:
 		_adrenaline.size = Vector2(90, 4)
 		_adrenaline.queue_redraw()
 
-		# A drawn bow tightens the crosshair into a ring that closes.
+		# A drawn bow tightens the crosshair into a ring that closes; so does
+		# a lock giving to the pick.
 		_crosshair.draw_amount = combat.draw if combat.phase == combat.Phase.DRAWING else 0.0
+
+		if player.frob != null and player.frob.has_method("picking") and player.frob.picking():
+			_crosshair.draw_amount = player.frob.pick_progress()
 
 		# Stamina, only while it is not full.
 		var s: float = combat.stamina / maxf(combat.stamina_max, 1.0)
@@ -859,6 +902,9 @@ func _process(delta: float) -> void:
 
 	_grade_amount = move_toward(_grade_amount, 0.0, real_delta / 0.9)
 	_grade.visible = _grade_amount > 0.01
+	_white_amount = move_toward(_white_amount, 0.0, real_delta / WHITE_FADE)
+	_white.visible = _white_amount > 0.01
+	_white.color.a = 0.96 * smoothstep(0.0, 0.6, _white_amount)
 
 	if _grade.visible:
 		(_grade.material as ShaderMaterial).set_shader_parameter("amount", smoothstep(0.0, 0.35, _grade_amount))
@@ -1144,14 +1190,23 @@ func _update_awareness(delta: float) -> void:
 				4:
 					icon = &"fight"
 
+			# Stirred by something not you, and he has not seen you since.
+			var stirred_by: Variant = guard.get("_stimulus")
+
+			if state < 4 and not sees and guard.get("_saw_you") != true and stirred_by is StringName and stirred_by in NOT_YOU:
+				icon = &"odd"
+
 			var mark := {"id": id, "fill": float(record["fill"]), "rise": float(record["rise"]), "icon": icon, "lead": false,
 				"flash": float(record["flash"]), "alpha": float(record["alpha"]) * lerpf(WALLED_ALPHA, 1.0, float(record["open"])),
 				"walled": bool(record["walled"]), "edge": false, "out": Vector2.ZERO,
 				"name": _name_of(guard) if now < float(record["name_until"]) else "",
-				"notches": [float(guard.get("suspicious_at")) / full, float(guard.get("investigate_at")) / full] if state < 3 else []}
+				"notches": [float(guard.get("suspicious_at")) / full, float(guard.get("investigate_at")) / full] if state < 3 and icon != &"odd" else []}
 			var words: Node3D = guard.get_node_or_null("Bark") as Node3D
 			_place_mark(mark, over, camera, view, words.global_position if words != null else Vector3.INF)
 			marks.append(mark)
+
+			if icon == &"odd":
+				continue
 
 			if state < 4 and float(record["fill"]) > lead_fill:
 				lead_fill = float(record["fill"])
@@ -1283,6 +1338,16 @@ func _on_item_selected(item: Dictionary) -> void:
 		_caption_timer = 1.4
 
 	_last_item_name = item_name
+
+
+## A flash went off in your eyes (ThrownTool.flash), `amount` of it (0..1):
+## white over everything, fading over WHITE_FADE (s).
+func dazzle(amount: float) -> void:
+	_white_amount = maxf(_white_amount, clampf(amount, 0.0, 1.0))
+
+
+func white_amount() -> float:
+	return _white_amount
 
 
 func _on_damaged(_amount: float) -> void:

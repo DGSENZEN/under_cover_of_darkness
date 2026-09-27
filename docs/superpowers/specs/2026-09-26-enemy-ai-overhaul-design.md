@@ -153,6 +153,18 @@ From playing it: their states mixed (a man chatting while he walked back to his 
 - A guard at his ease (or stirred, near what stirred him) who sees a torch **dark where it should burn** (14 m; its not burning is the tell, so it takes no light to see) says so ("The torch has gone out."), goes to the floor under it, and **lights it again**: facing it, his left hand up to it (2.2 s, lit 1.5 s in); then searches about it as for anything out of place.
 - One torch out is a draught (the garrison's alarm to 0.15). **A second out within 150 s** of the first is somebody at work in the dark: "Another light out? Someone's putting them out!", and the alarm to 0.45, so men searching the dark take lanterns with them. The garrison talks of it at their ease ("The torches keep going out.").
 
+### 4.11 Your tools, and a cleaner navmesh (follow-up)
+
+The flash bomb, lockpick and holy water on your belt did nothing when used. Now (`PlayerFrob`, `ThrownTool.gd`, `Props.give_tools`; the NPC and stealth gyms put three flash bombs, three water flasks and a lockpick on your belt):
+
+- **Flash bomb:** the attack button throws it (an overhand from your hand, a new one coming up from your belt while any are left). It flies under gravity (a ray each step, as an arrow) and bursts where it lands: a flash of white fire and a bang (heard 72 dB). A guard who has it in his eyes (in his view cone, nothing between, within 11 m; within 2 m, whichever way he faced) is **blinded** (`Guard.dazzle`): up to 5 s, less the further off and the less squarely he looked, staggered a moment, crying out ("Argh! My eyes!"); blind, he sees nothing, stands with a hand over his eyes and his head down (`GuardRig`), and knows where it burst. Your own view whites out if you were looking at it (`StealthHUD.dazzle`, fading over 1.6 s).
+- **Water flask** (the holy water): thrown the same way, it breaks with a splash (heard 44 dB); a torch whose flame is within 1.4 m of where it broke (or that it hit) goes out, put out by you, so the guards treat it as one you put out by hand (§4.10).
+- **Lockpick:** a locked door or chest you have no key for offers "Pick the lock". At it for 3.2 s, the crosshair's ring closing as it gives, the pick clicking now and then (heard 28 dB, close by); looking away or moving off leaves it, and it starts again from nothing; given, it is unlocked (open it as any door).
+
+**Marks about you only** (`StealthHUD`): a man stirred by something that is not you (a door left open, a torch out, your arrow, a man missing from his post: `Guard._stimulus` "oddity" or "missing") and who has not seen you since gets a small grey "?" in a plain ring: never drawn biggest, no tick. The "?" in the amber ring now always means you.
+
+**No floor sealed in blocks** (`NavBaker._drop_sealed`): the baker leaves a scrap of floor inside any block taller than a man (it sees the block's faces, not that it is solid). After the bake, every polygon with a static body 0.45 m over its middle is dropped (doors, left out of the bake, do not count). Anything asking the navmesh for the floor nearest a point now gets real floor.
+
 ## 5. Where to see it
 
 The NPC gym (`maps/npc_gym.tscn`):
@@ -162,13 +174,13 @@ The NPC gym (`maps/npc_gym.tscn`):
 
 F1 labels show what each man is doing, including "BEGGING FOR HIS LIFE" and "safe with his own". The panel shows men spared and men cut down begging.
 
-`tests/visual/stage_mercy.tscn` films men begging, kneeling and standing, and getting up when let go. `tests/visual/stage_sheath.tscn` films each kind of guard with his weapon put by, drawing it and putting it away; `tests/visual/stage_detect.tscn` films the signs of being noticed (and a man behind a wall, and the pause screen); `tests/visual/stage_search.tscn` films a man searching a room with a lantern (a nook between crates, a side room through its door, a ledge, dark corners); `tests/visual/stage_lights.tscn` films a torch put out, noticed, and lit again.
+`tests/visual/stage_mercy.tscn` films men begging, kneeling and standing, and getting up when let go. `tests/visual/stage_sheath.tscn` films each kind of guard with his weapon put by, drawing it and putting it away; `tests/visual/stage_detect.tscn` films the signs of being noticed (and a man behind a wall, and the pause screen); `tests/visual/stage_search.tscn` films a man searching a room with a lantern (a nook between crates, a side room through its door, a ledge, dark corners); `tests/visual/stage_lights.tscn` films a torch put out, noticed, and lit again; `tests/visual/stage_tools.tscn` films the tools through your own eyes (a flash bomb thrown at a guard, the white-out, him blinded from the side; a water flask at a torch; a lock picked).
 
-In any gym, the torches on the walls can be put out.
+In any gym, the torches on the walls can be put out. In the NPC and stealth gyms you carry flash bombs, water flasks and a lockpick; the interaction gym has them on a table.
 
 ## 6. Success criteria
 
-1. `tests/wits_test` passes W1–W37 (getting about, word between them, rounds, things out of place, hands and environment, blows, the hunt, mercy, routs; torches put out: W36–W37), `tests/posts_test` P1–P12 (the lookout, things thrown, places, the dead), `tests/hunt_test` (chases: H17–H22; not sent past you: H10e; searching and tracking: H23–H26), `tests/habits_test` H28–H29 (blades), `tests/stealth_test` D1–D7 (signs of being noticed, the tick, a man behind a wall, the setting) and `tests/interaction_test` U7, U11, U13–U14 (the pause screen and its setting, named subtitles, a torch put out).
+1. `tests/wits_test` passes W1–W37 (getting about, word between them, rounds, things out of place, hands and environment, blows, the hunt, mercy, routs; torches put out: W36–W37), `tests/posts_test` P1–P12 (the lookout, things thrown, places, the dead), `tests/hunt_test` (chases: H17–H22; not sent past you: H10e; searching and tracking: H23–H26; no floor sealed in a block: H27), `tests/habits_test` H28–H29 (blades), `tests/stealth_test` D1–D8 (signs of being noticed, the tick, a man behind a wall, the setting, marks about you only) and `tests/interaction_test` U7, U11, U13–U14 (the pause screen and its setting, named subtitles, a torch put out) and I15–I17 (the flash bomb, the water flask, the lockpick).
 2. Every other suite passes, run as the project documents (`--fixed-fps 60`).
 3. In the gym, each behaviour above can be provoked and watched.
 
@@ -178,7 +190,8 @@ In any gym, the torches on the walls can be put out.
 - A haven is found by straight-line distance; a man whose path there stalls gives that haven up for a while and tries another.
 - Running from you, a man who neither sees nor hears you for 12 s (3 s once 18 m clear) gives up the flight and goes back to his rounds; once sheltered with his own he stays where he reached them until you come near.
 - The trail is a guess along the way you were going: turn a corner out of his sight and a plain man stops at the wall (a tracker takes the corner, but only the likeliest turn of the floor, not the one you took).
-- The navmesh keeps scraps of floor sealed inside tall blocks (the baker sees their faces, not that they are solid); a search place there is passed over (no way to it), but anything else that snaps a point to the navmesh can still land on one.
+- Scraps of floor sealed inside tall blocks are dropped where the block is a convex shape (a box, a brush); inside a trimesh (a concave collision shape) the physics cannot tell inside from out, so a scrap there stays (a search place there is still passed over: no way to it).
+- A blinded man stands still until he can see; he does not swing blindly at you. A flash does not blind through a wall, or a man with his back to it more than 2 m off.
 - A torch is lit again from the floor with a hand raised to it: one hung higher than he can reach is lit from as high as his hand goes. You can reach torches up to about 3 m (the reach you use things with, 2.2 m from your eye); a torch put out by a guard (none do yet) would not count as out of place.
 - Braziers, campfires and guards' own lights cannot be put out.
 - The draw is procedural (a reach and a swap, no draw clip in the library): the blade can pass close to a leg as it swings free. A maul or a crossbow comes off the back with no reach.

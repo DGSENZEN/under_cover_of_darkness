@@ -7,6 +7,7 @@ const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const SettingsScript := preload("res://scripts/UI/Settings.gd")
+const TorchScript := preload("res://scripts/Visual/Torch.gd")
 
 
 class Ear:
@@ -536,6 +537,38 @@ func _signs_checks() -> void:
 	_check("D7 hidden, no marks and no ticks; the setting is kept for next time, and shown again they come back",
 		none and quiet and read and stays and back, "none %s quiet %s written %s read back %s back %s" % [none, quiet, read, stays, back])
 	walled.queue_free()
+	await _frames(3)
+
+	# D8 a man stirred by something not you (a torch put out, seen dark): a
+	#    small grey mark, never the biggest, no tick
+	var torch8: Node3D = TorchScript.new()
+	torch8.can_douse = true
+	add_child(torch8)
+	torch8.global_position = Vector3(-26, 2.3, -14)
+	var looker := _new_guard(Vector3(-26, 0, -8), 0.0)
+	looker.hearing_acuity = 0.0
+	player.debug_light_level = 0.0
+	_put_player(Vector3(-32, 1.05, 3))
+	await _frames(20)
+	torch8.put_out(player)
+	await _until(func(): return int(looker.state) >= INVESTIGATING, 240)
+	var ticks8 := int(hud.ticks)
+	var quiet8 := true
+	var marked := false
+
+	for i in 60:
+		await _frames(1)
+		var mark8: Dictionary = _mark_of(hud, looker)
+
+		if not mark8.is_empty():
+			marked = true
+			quiet8 = quiet8 and mark8["icon"] == &"odd" and not bool(mark8["lead"])
+
+	_check("D8 a man stirred by something not you (a torch out) has a small grey mark, never the biggest, and no tick",
+		int(looker.state) >= INVESTIGATING and marked and quiet8 and int(hud.ticks) == ticks8,
+		"state %d marked %s quiet %s ticks %d" % [int(looker.state), marked, quiet8, int(hud.ticks) - ticks8])
+	looker.queue_free()
+	torch8.queue_free()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SettingsScript.path))
 	SettingsScript.path = "user://settings.cfg"
 	SettingsScript.reload()

@@ -207,7 +207,7 @@ func update(delta: float) -> void:
 	# Things out of place, men missing: noticed at his ease (suspicious, only
 	# what might be what stirred him: something by where he heard it), and
 	# not while he covers a friend's look.
-	if (state == RELAXED or state == SUSPICIOUS) and not covering():
+	if (state == RELAXED or state == SUSPICIOUS) and not covering() and not (guard.has_method("blinded") and guard.blinded()):
 		_look_for_oddities(CHECK)
 
 		if state == RELAXED:

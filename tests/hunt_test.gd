@@ -19,9 +19,12 @@ const SearchSpotsScript := preload("res://scripts/AISystem/SearchSpots.gd")
 const CORNER_AT := Vector3(-45, 0, 0)
 const ROOM_AT := Vector3(-25, 0, 0)
 const BEND_AT := Vector3(380, 0, 0)
+## A tall block, 3 m every way, standing on the floor here (H27).
+const SEALED_AT := Vector3(-35, 0, 22)
 
 var player: CharacterBody3D
 var results: Array[String] = []
+var _baker: NavigationRegion3D
 
 
 func _ready() -> void:
@@ -34,6 +37,7 @@ func _ready() -> void:
 	var baker := NavigationRegion3D.new()
 	baker.set_script(NavBakerScript)
 	add_child(baker)
+	_baker = baker
 
 	player = PLAYER.instantiate()
 	add_child(player)
@@ -1048,6 +1052,14 @@ func _search_checks() -> void:
 			and to_the_wall.call(plain[1]) and to_the_wall.call(plain[2]) and to_the_wall.call(plain[3]),
 		"tracker %s: %s; plain %s: %s" % [tracked[0], tracked.slice(1), plain[0], plain.slice(1)])
 
+	# H27 no floor sealed inside a block taller than a man: the floor nearest
+	#     its middle is outside it (the baker dropped the scrap it left there)
+	var map := get_world_3d().navigation_map
+	var nearest := NavigationServer3D.map_get_closest_point(map, SEALED_AT)
+	var outside: bool = absf(nearest.x - SEALED_AT.x) > 1.5 or absf(nearest.z - SEALED_AT.z) > 1.5 or nearest.y > 2.5
+	_check("H27 no floor is left sealed inside a block taller than a man",
+		outside and int(_baker.sealed_count) > 0, "nearest floor to its middle %s, scraps dropped %d" % [nearest, int(_baker.sealed_count)])
+
 
 ## The ground the searching checks need (baked with the rest): a dark corner
 ## by lit open floor; a room through a door; a passage with a bend.
@@ -1069,6 +1081,9 @@ func _build_search_ground() -> void:
 	Props.block(self, r + Vector3(-3, 1.5, -7), Vector3(0.3, 3, 6))
 	Props.block(self, r + Vector3(3, 1.5, -7), Vector3(0.3, 3, 6))
 	Props.door(self, r + Vector3(-0.5, 0, -4), 0.0)
+
+	# A block taller than a man, standing alone (H27).
+	Props.block(self, SEALED_AT + Vector3(0, 1.5, 0), Vector3(3, 3, 3))
 
 	# In from the west along z = 0, the passage turns north at x + 4.
 	var b := BEND_AT

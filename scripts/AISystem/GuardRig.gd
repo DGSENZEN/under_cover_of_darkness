@@ -213,6 +213,9 @@ const LIGHT_AHEAD := 0.35
 const LIGHT_TILT := 0.7
 const LIGHT_TIME := 0.45
 const RELIGHT_TILT := 1.25
+## Blinded by a flash (Guard.dazzle): the same hand up over his eyes, here in
+## his space (at his own full size), open.
+const BLIND_HAND := Vector3(-0.03, 1.6, -0.13)
 ## His head tipped up or down no more than this (rad) for the eye.
 const HEAD_PITCH_MAX := 0.7
 ## Turning where he stands, from this quick a turn (rad/s): his feet shuffle
@@ -1394,8 +1397,9 @@ func _update_light_reach(delta: float) -> void:
 	var peer: Vector3 = guard.peer_point() if guard.has_method("peer_point") else Vector3.INF
 	var torch: Node3D = hands.relighting() if hands != null and hands.has_method("relighting") else null
 	var lit: bool = hands != null and hands.lantern != null and is_instance_valid(hands.lantern) and hands.light_kind != &"lantern"
+	var blind: bool = guard.has_method("blinded") and guard.blinded() and not man.is_limp()
 	var free: bool = int(guard.state) != COMBAT and guard._phase == &"" and not man.is_limp() and _rising <= 0.0
-	var want: bool = free and (torch != null or (lit and peer != Vector3.INF and (_doing == &"" or _doing == &"lantern" or _doing == &"carry_torch")))
+	var want: bool = blind or (free and (torch != null or (lit and peer != Vector3.INF and (_doing == &"" or _doing == &"lantern" or _doing == &"carry_torch"))))
 	var was := _light_out
 	_light_out = move_toward(_light_out, 1.0 if want else 0.0, delta / LIGHT_TIME)
 
@@ -1410,8 +1414,19 @@ func _update_light_reach(delta: float) -> void:
 
 		return
 
-	# From his shoulder toward it: before him, not straight up or down.
 	var inverse: Transform3D = man.global_transform.affine_inverse()
+	var hand: Transform3D = inverse * (man.bone_global(&"hand_l") as Transform3D)
+	var arms := _arms()
+
+	# Blinded: his hand over his eyes, open.
+	if blind:
+		arms.targets[0] = Transform3D(hand.basis.orthonormalized(), BLIND_HAND)
+		arms.weights[0] = smoothstep(0.0, 1.0, _light_out)
+		arms.curls[0] = 0.2
+		arms.active = true
+		return
+
+	# From his shoulder toward it: before him, not straight up or down.
 	var shoulder: Vector3 = inverse * (man.bone_global(&"upperarm_l") as Transform3D).origin
 	var way: Vector3 = inverse * _light_at - shoulder
 	var flat := Vector2(way.x, way.z)
@@ -1427,8 +1442,6 @@ func _update_light_reach(delta: float) -> void:
 	var out := Vector3(flat.x * cos(rise), sin(rise), flat.y * cos(rise))
 	# His hand turned as the animation has it (the lantern hangs; the torch
 	# stands up).
-	var hand: Transform3D = inverse * (man.bone_global(&"hand_l") as Transform3D)
-	var arms := _arms()
 	arms.targets[0] = Transform3D(hand.basis.orthonormalized(), shoulder + out * LIGHT_REACH)
 	arms.weights[0] = smoothstep(0.0, 1.0, _light_out)
 	arms.curls[0] = 1.0

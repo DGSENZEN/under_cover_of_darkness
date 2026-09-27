@@ -71,6 +71,12 @@ const SearchSpotsScript := preload("res://scripts/AISystem/SearchSpots.gd")
 ## he knows the voice of his dying cry.
 const MOURN_SIGHT := 20.0
 const MOURN_HEAR := 35.0
+## A flash in his eyes (a flash bomb: dazzle): blind this long at most (s),
+## less as he had it less in his eyes; staggered this long by it; a dazzle
+## less than DAZZLE_LEAST (s) is only a blink.
+const BLIND_TIME := 5.0
+const DAZZLE_STAGGER := 0.9
+const DAZZLE_LEAST := 0.4
 ## Bleeding (bleeding): at most this much a second, never below this share of
 ## his health, and bound this long after he last saw you.
 const BLEED_MAX := 4.0
@@ -454,6 +460,8 @@ var _flames: Node3D
 var _flee := Vector3.ZERO
 var _flee_timer := 0.0
 var _stagger := 0.0
+## Blinded by a flash: seconds before he can see again (dazzle).
+var _blind := 0.0
 var _knock := 0.0
 var _knock_velocity := Vector3.ZERO
 var _block_flash := 0.0
@@ -768,6 +776,7 @@ func _physics_process(delta: float) -> void:
 
 	_attack_timer = maxf(_attack_timer - delta, 0.0)
 	_stagger = maxf(_stagger - delta, 0.0)
+	_blind = maxf(_blind - delta, 0.0)
 	_block_flash = maxf(_block_flash - delta, 0.0)
 	_since_heard_of += delta
 
@@ -828,6 +837,9 @@ func _physics_process(delta: float) -> void:
 		# Getting up, he looks nowhere but at the floor.
 		if state == Alert.COMBAT and _rising <= 0.0:
 			_fighter.watch(delta)
+	elif _blind > 0.0:
+		# Blinded: he stands where he is, a hand over his eyes.
+		_stop(delta)
 	elif _evade_left > 0.0:
 		# Kept clear while it still fizzes; a moment more once it is gone.
 		if Dangers.lit_powder_near(get_tree(), _evade_from, -2.0) != null:
@@ -920,8 +932,9 @@ func _sense_vision(delta: float) -> void:
 		can_see_target = false
 		return
 
-	# A body on the floor, the player's included, is not someone to chase.
-	if _target != null and _target.get("is_dead") == true:
+	# A body on the floor, the player's included, is not someone to chase;
+	# blinded by a flash, he sees nothing at all.
+	if (_target != null and _target.get("is_dead") == true) or _blind > 0.0:
 		visibility = 0.0
 		can_see_target = false
 		return
@@ -1304,6 +1317,47 @@ func notice(where: Vector3, why: StringName) -> void:
 		_go_to(_look_from(where), true)
 
 
+## A flash in his eyes (a flash bomb bursting at `at`: ThrownTool), `amount`
+## of it (0..1: how near, how squarely he looked at it): blind for up to
+## BLIND_TIME, staggered a moment, crying out; and he knows where it was, and
+## that it was thrown at them.
+func dazzle(at: Vector3, amount: float) -> void:
+	if _knocked_out or _downed:
+		return
+
+	var took := BLIND_TIME * clampf(amount, 0.0, 1.0)
+
+	if took < DAZZLE_LEAST:
+		return
+
+	var fresh := _blind <= 0.0
+	_blind = maxf(_blind, took)
+	_stagger = maxf(_stagger, DAZZLE_STAGGER * clampf(amount * 1.5, 0.4, 1.0))
+	visibility = 0.0
+	can_see_target = false
+	last_known_position = at
+	has_last_known = true
+	_since_stimulus = 0.0
+	_stimulus = &"flash"
+	alert = maxf(alert, investigate_at + 10.0)
+
+	# Whatever he had in his hands to do, he leaves it.
+	if _hands != null:
+		_hands.interrupt()
+		_hands.stop_relighting()
+
+	if fresh:
+		voice(&"pain", -6.0)
+
+		if _fighter != null and _fighter.temper != null:
+			bark(_fighter.temper.line(&"blinded"))
+
+
+## Blinded by a flash, still (dazzle).
+func blinded() -> bool:
+	return _blind > 0.0
+
+
 ## Says the line his temperament has for `situation`, now and then (`chance`),
 ## and not over something he is already saying.
 func say(situation: StringName, chance := 1.0) -> void:
@@ -1381,7 +1435,8 @@ func activity() -> StringName:
 func _sense_bodies(delta: float) -> void:
 	_body_check_timer -= delta
 
-	if _body_check_timer > 0.0:
+	# Blinded by a flash, he sees no body either.
+	if _body_check_timer > 0.0 or _blind > 0.0:
 		return
 
 	var interval := 0.15
@@ -3869,7 +3924,10 @@ func _update_head(delta: float) -> void:
 	# you: up a ladder, on a wall over him. Otherwise his eyes are level.
 	var pitch_goal := 0.0
 
-	if state == Alert.COMBAT and has_last_known:
+	if _blind > 0.0:
+		# Blinded: his head down behind his hand.
+		pitch_goal = -0.45
+	elif state == Alert.COMBAT and has_last_known:
 		var aim: Vector3 = _target.global_position if can_see_target and _target != null and is_instance_valid(_target) else last_known_position
 		var to := aim - eye_position()
 		pitch_goal = clampf(atan2(to.y, Vector2(to.x, to.z).length()), -LOOK_PITCH, LOOK_PITCH)

@@ -12,6 +12,12 @@ extends NavigationRegion3D
 ## seat, a stump; Furnishings) is kept off, with room round it, instead of
 ## being walked over.
 ##
+## The baker sees the faces of what it bakes, not that a block is solid: a
+## block taller than a man leaves a scrap of floor sealed inside it, which
+## anything asking for the floor nearest a point could be sent to. Every
+## polygon with something solid just over it (a static body, SEALED_PROBE m
+## above its middle) is dropped.
+##
 ## Deep water (WaterVolume) is cut out of the mesh, and baked as a swim region
 ## of its own, dearer to cross (SWIM_COST). Then the ways across that walking
 ## cannot take are found and linked (NavLinks: climbing, dropping, leaping,
@@ -23,6 +29,9 @@ const NavLinksScript := preload("res://scripts/AISystem/NavLinks.gd")
 ## costs more: NavLinks.COSTS). A guard swims only where the way round is a
 ## good deal longer.
 const SWIM_COST := 4.0
+## How far over a polygon's middle it is tested for being inside something
+## solid (m): under a man's knee, over any step.
+const SEALED_PROBE := 0.45
 
 signal baked
 
@@ -49,8 +58,10 @@ signal baked
 @export var traversal_links := true
 
 var is_baked := false
-## How many ways across were linked in the last bake.
+## How many ways across were linked in the last bake; how many scraps of
+## floor sealed inside blocks were dropped from it.
 var link_count := 0
+var sealed_count := 0
 var _source: NavigationMeshSourceGeometryData3D
 
 
@@ -149,6 +160,7 @@ func bake() -> void:
 
 
 func _on_baked(mesh: NavigationMesh) -> void:
+	sealed_count = _drop_sealed(mesh)
 	navigation_mesh = mesh
 
 	# The map picks the new mesh up on one of its next syncs: wait until a
@@ -185,6 +197,50 @@ func _map_synced() -> void:
 
 		if NavigationServer3D.map_get_iteration_id(map) != before and i >= 1:
 			return
+
+
+## Drops from `mesh` every polygon sealed inside something solid (see the
+## header): a static body just over its middle, not one left out of the bake
+## (a door: nav_ignore). How many were dropped.
+func _drop_sealed(mesh: NavigationMesh) -> int:
+	var space := get_world_3d().direct_space_state
+	var vertices := mesh.get_vertices()
+	var kept: Array[PackedInt32Array] = []
+	var query := PhysicsPointQueryParameters3D.new()
+	query.collision_mask = collision_mask
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+
+	for i in mesh.get_polygon_count():
+		var polygon := mesh.get_polygon(i)
+		var middle := Vector3.ZERO
+
+		for index in polygon:
+			middle += vertices[index]
+
+		middle /= float(maxi(polygon.size(), 1))
+		query.position = global_transform * middle + Vector3.UP * SEALED_PROBE
+		var sealed := false
+
+		for hit in space.intersect_point(query, 8):
+			var body: Object = hit.get("collider")
+
+			if body is StaticBody3D and not (body as Node).is_in_group(&"nav_ignore"):
+				sealed = true
+				break
+
+		if not sealed:
+			kept.append(polygon)
+
+	var dropped := mesh.get_polygon_count() - kept.size()
+
+	if dropped > 0:
+		mesh.clear_polygons()
+
+		for polygon in kept:
+			mesh.add_polygon(polygon)
+
+	return dropped
 
 
 ## The water deep enough to swim in (WaterVolume.deep_at, anywhere in it).

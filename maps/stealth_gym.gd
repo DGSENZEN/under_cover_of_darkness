@@ -116,6 +116,7 @@ func _ready() -> void:
 	add_child(player)
 	player.global_position = Vector3(0, 1.05, 19)
 	Props.give_blackjack(player)
+	Props.give_tools(player)
 
 	await baker.baked
 	patrol._go_to(route.get_child(1).global_position)

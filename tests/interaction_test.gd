@@ -250,6 +250,119 @@ func _run() -> void:
 	await _ui_checks()
 
 	_check("I11 wheel includes empty hands", seen == ["lockpick", "empty", "cellar key"], "seen %s" % [seen])
+	await _tool_checks()
+
+
+## The tools on your belt: a flash bomb thrown at a guard blinds him (and
+## you, looking at it); a water flask thrown at a torch puts it out; a lock
+## with no key given a lockpick; the last of a thing thrown leaves your hand
+## empty.
+func _tool_checks() -> void:
+	var hud: CanvasLayer = player.hud
+	Props.give_tools(player, 2, 1, false)
+
+	# I15 a flash bomb thrown at a guard facing you blinds him; you too,
+	#     looking at it; one fewer on your belt
+	var watcher: CharacterBody3D = GUARD.instantiate()
+	watcher.debug_ai = false
+	watcher.position = Vector3(24.0, 0.0, -6.0)
+	watcher.rotation.y = PI
+	add_child(watcher)
+	watcher.hearing_acuity = 0.0
+	var cried := [false]
+	watcher.barked.connect(func(t: String) -> void:
+		for tag in TemperamentScript.MORE_LINES:
+			if t in (TemperamentScript.MORE_LINES[tag] as Dictionary).get(&"blinded", []):
+				cried[0] = true)
+	await _place(Vector3(24.0, 1.05, 1.0), 0.0)
+	player.inventory.select_by_id(&"flashbomb")
+	await _frames(40)
+	_aim(watcher.global_position + Vector3(0.0, 0.2, 1.2))
+	await _frames(2)
+	var bombs_before: int = player.inventory.count_of(&"flashbomb")
+	await _tap("throw")
+	var blinded := false
+	var whited := 0.0
+
+	for i in 90:
+		await _frames(1)
+		blinded = blinded or watcher.blinded()
+		whited = maxf(whited, hud.white_amount())
+
+	var sees_again: bool = false
+
+	for i in 360:
+		await _frames(1)
+
+		if not watcher.blinded():
+			sees_again = true
+			break
+
+	_check("I15 a flash bomb blinds the guard who has it in his eyes (a while, crying out), whites out yours, and is used up",
+		blinded and cried[0] and sees_again and whited > 0.3 and player.inventory.count_of(&"flashbomb") == bombs_before - 1,
+		"blinded %s cried %s sees again %s white %.2f bombs %d -> %d" % [blinded, cried[0], sees_again, whited, bombs_before, player.inventory.count_of(&"flashbomb")])
+	watcher.queue_free()
+
+	# I16 a water flask thrown at a torch on a wall puts it out (put out by
+	#     you, for the guards); the last flask gone, your hand is empty
+	Props.block(self, Vector3(27.6, 1.5, 4.0), Vector3(0.3, 3.0, 3.0))
+	var torch: Node3D = TorchScript.new()
+	torch.can_douse = true
+	add_child(torch)
+	torch.global_position = Vector3(27.2, 2.3, 4.0)
+	await _place(Vector3(22.5, 1.05, 4.0), 0.0)
+	player.inventory.select_by_id(&"waterflask")
+	await _frames(40)
+	_aim(torch.global_position)
+	await _frames(2)
+	await _tap("throw")
+
+	for i in 90:
+		await _frames(1)
+
+		if not torch.lit:
+			break
+
+	await _frames(30)
+	_check("I16 a water flask thrown at a torch puts it out, as if by your hand; the last one gone, your hand is empty",
+		not torch.lit and torch.left_out() and player.inventory.count_of(&"waterflask") == 0 and player.inventory.selected_item().is_empty(),
+		"lit %s left out %s flasks %d in hand '%s'" % [torch.lit, torch.left_out(), player.inventory.count_of(&"waterflask"), player.inventory.selected_item().get("name", "")])
+	torch.queue_free()
+
+	# I17 a lock with no key, and a lockpick: picked, the ring closing as it
+	#     gives; looking away leaves it, and it is picked from the start
+	var box := Props.chest(self, Vector3(24.0, 0.0, 8.0), 0.0, Vector3(0.9, 0.55, 0.55), true, &"", "strongbox")
+	await _frames(5)
+	# (Its node is the lid's hinge: aim at the box itself.)
+	var middle := Vector3(24.0, 0.3, 8.0)
+	await _place(Vector3(24.0, 1.05, 9.3), 0.0)
+	_aim(middle)
+	await _frames(5)
+	var offered: String = player.frob.current_prompt()
+	await _tap("frob")
+	await _frames(30)
+	var ring_part: float = hud._crosshair.draw_amount
+	var picking: bool = player.frob.picking()
+	# Away, then back to it.
+	_aim(middle + Vector3(3.0, 0.0, 0.0))
+	await _frames(5)
+	var left_off: bool = not player.frob.picking() and box.locked
+	_aim(middle)
+	await _frames(5)
+	await _tap("frob")
+	var took := 0
+
+	for i in 400:
+		await _frames(1)
+		took += 1
+
+		if not box.locked:
+			break
+
+	_check("I17 a lockpick picks a lock you have no key for, the ring closing as it gives; looking away leaves it",
+		offered == "Pick the lock" and picking and ring_part > 0.05 and left_off and not box.locked and took >= 150,
+		"offered '%s' picking %s ring %.2f left off %s unlocked %s after %d frames" % [offered, picking, ring_part, left_off, not box.locked, took])
+	box.queue_free()
 
 
 # --------------------------------------------------------------------------

@@ -142,6 +142,7 @@ func _ready() -> void:
 	player.global_position = Vector3(0, 1.05, 8)
 	Props.give_weapons(player, 30)
 	Props.give_blackjack(player)
+	Props.give_tools(player)
 	player.inventory.select_by_id(&"sword")
 	_hook_player()
 	_build_overlay()

@@ -431,7 +431,9 @@ func _atmosphere() -> void:
 	SoundBus.emit_sound(Vector3(150, 1, 6), 70.0, self, &"test")
 	await _frames(12)
 	var flew: bool = air.crows()[0]["state"] == &"flying"
-	await _until(func(): return air.crows()[0]["state"] == &"perched", 2700)
+	# Back by the longest they can be gone (Atmosphere: CROW_FLY, the most of
+	# CROW_AWAY, CROW_RETURN: 46 s), and a little over.
+	await _until(func(): return air.crows()[0]["state"] == &"perched", 3000)
 	_check("A18 crows on the wall take off at a shout, and settle again later", flew and air.crows()[0]["state"] == &"perched",
 		"flew %s, now %s" % [flew, air.crows()[0]["state"]])
 
