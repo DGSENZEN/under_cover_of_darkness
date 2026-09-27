@@ -65,7 +65,13 @@ const RESOLVE_EVERY := 1.0
 ## this near the man a shot is on shakes it, by weight; slow motion (to, in,
 ## held, out: s), once in this long (s) at most; men running this fast
 ## (m/s), this many of them, is a hunt.
-const SHOT := Vector2(2.0, 7.0)
+const SHOT := Vector2(3.0, 8.0)
+## A drama cut due waits this long for a beat to land on (a line begun, a
+## blow, a death); after two shots shorter than SHORT the next is planned
+## LONG_AFTER.
+const BEAT_WAIT := 1.5
+const SHORT := 4.0
+const LONG_AFTER := Vector2(6.0, 8.0)
 const AXIAL_EVERY := 0.6
 ## An axial cut-in once for a man in a scene, and one in this long (s) at
 ## most (a whole garrison stirred is not a dozen cut-ins).
@@ -134,6 +140,8 @@ var _axial_at := -INF
 var _axial_men: Array = []
 var _slowed_at := -INF
 var _last_blow := -INF
+## When the last beat fell: a line begun, a blow, a death.
+var _beat_at := -INF
 var _exchange: Array = []
 var _line_pair: Array = []
 var _line_side := Vector3.ZERO
@@ -392,6 +400,9 @@ func cine_event(kind: StringName, data: Dictionary) -> void:
 		return
 
 	_quiet_since = _clock
+
+	if kind in [&"line", &"blow", &"death"]:
+		_beat_at = _clock
 
 	if kind == &"line":
 		if _clock > _talk_until + TALK_GAP:
@@ -891,12 +902,18 @@ func _drama_step(age: float) -> void:
 	if age < FLOOR:
 		return
 
+	# The shot's time up, the cut waits for a beat to land on, up to
+	# BEAT_WAIT; then it cuts all the same.
+	var planned := float(_shot.get("planned", SHOT.y))
+	var on_beat := age >= planned and _beat_at >= float(_shot["at"]) + planned
+	var due := on_beat or age >= planned + BEAT_WAIT
+
 	# A death, the knife, a man stirred or seeing you: cut to at once. A line
-	# or a blow is action to cut on when the shot has had its time.
+	# or a blow is action to cut on when the cut is due.
 	if not _pending.is_empty() and float(_pending["at"]) >= float(_shot["at"]):
 		var breaks_face_off: bool = _shot.get("cause") == &"face_off" and _pending["kind"] == &"blow"
 
-		if _pending["kind"] in [&"death", &"knife", &"alert"] or breaks_face_off or age >= float(_shot.get("planned", SHOT.y)):
+		if _pending["kind"] in [&"death", &"knife", &"alert"] or breaks_face_off or due:
 			_on_pending()
 			return
 
@@ -916,7 +933,7 @@ func _drama_step(age: float) -> void:
 		# Nowhere sees it: not again for a while, and the shots go on.
 		_face_off_retry = _clock + 2.0
 
-	if age >= float(_shot.get("planned", SHOT.y)):
+	if due:
 		_drama_next(&"rhythm", &"cut")
 
 
@@ -1248,6 +1265,15 @@ func _flat_speed(man: Node3D) -> float:
 ## Begins the shot `kind` of `men`, taken `how` ("cut", "glide", "path",
 ## "wipe"), planned to run `planned` s; tells whoever listens.
 func _start(kind: StringName, men: Array, cause: StringName, how: StringName, context: Dictionary, planned: float) -> void:
+	# In drama, after two short shots a long one (the three cuts in and a pin
+	# keep their own time).
+	if _mode == &"drama" and kind != &"axial" and cause != &"pin" and _history.size() >= 2:
+		var last := _clock - float(_history[-1]["at"])
+		var before := float(_history[-1]["at"]) - float(_history[-2]["at"])
+
+		if last < SHORT and before < SHORT:
+			planned = maxf(planned, _rng.randf_range(LONG_AFTER.x, LONG_AFTER.y))
+
 	var ctx := context.duplicate()
 	ctx["aspect"] = _aspect()
 	var framing := CineShot.frame(kind, men, ctx)

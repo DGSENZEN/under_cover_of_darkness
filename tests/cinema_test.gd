@@ -929,14 +929,15 @@ func _drama() -> void:
 	var bar17: float = screen.bar_height()
 	var target17: float = CineScreen.bar_for(get_viewport().get_visible_rect().size)
 
-	# E9 lines and blows: short shots, 2 to 7 s
+	# E9 shouts and blows: shots of 3 to 8 s, each ending on a beat or 1.5 s
+	# after it fell due (shouts to no one: a fight's barks, not a talk)
 	shots.clear()
 	var t9 := TimeFx.real_time()
 	var n := 0
 
 	while TimeFx.real_time() - t9 < 40.0:
 		if n % 3 == 0:
-			CineEvents.emit(&"line", {"speaker": a if n % 2 == 0 else b, "listeners": [b if n % 2 == 0 else a], "seconds": 2.0, "delivery": &"", "text": "...", "where": a.global_position})
+			CineEvents.emit(&"line", {"speaker": a if n % 2 == 0 else b, "listeners": [], "seconds": 2.0, "delivery": &"shout", "text": "...", "where": a.global_position})
 		if n % 2 == 0:
 			CineEvents.emit(&"blow", {"attacker": a, "victim": b, "weight": &"light", "outcome": &"blocked", "where": b.global_position})
 		n += 1
@@ -946,8 +947,8 @@ func _drama() -> void:
 	var sorted9 := lengths9.duplicate()
 	sorted9.sort()
 	var median9: float = sorted9[sorted9.size() / 2] if not sorted9.is_empty() else 0.0
-	_check("E9 in drama the shots are short: each 1.5 to 7.5 s, the middle one 2 to 7",
-		not lengths9.is_empty() and lengths9.all(func(l): return l >= 1.45 and l <= 7.55) and median9 >= 2.0 and median9 <= 7.0,
+	_check("E9 in drama the shots run 3 to 9.5 s (8 and a wait for a beat), the middle one 3 to 8",
+		lengths9.size() >= 4 and lengths9.all(func(l): return l >= 2.95 and l <= 9.55) and median9 >= 2.95 and median9 <= 8.05,
 		"%d shots, lengths %s" % [shots.size(), lengths9])
 
 	# E10 two men trading lines: the camera keeps to one side of their line
@@ -1178,6 +1179,9 @@ func _drama() -> void:
 	b.rotation.y = PI * 0.5
 	editor.scene({"mode": &"drama", "subjects": [a, b]})
 	await _real(1.6)
+	# (from a shot of the other man: the scene may open on a close of him)
+	editor.cut_to(&"medium", [b])
+	await _real(1.6)
 	editor.cut_to(&"close", [a])
 	var first24: Dictionary = editor.current()["framing"]
 	await _real(1.6)
@@ -1396,6 +1400,34 @@ func _drama() -> void:
 	await _real(1.5)
 	_check("E39 a fade asked, then another scene before either opens: the scene opens through black",
 		not shots.is_empty() and shots[0]["how"] == &"fade", "%s" % [shots.map(func(sh): return [sh["kind"], sh["how"]])])
+
+	# E36 a drama shot past its length waits for a beat and cuts on it
+	await _real(4.0)
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(2.0)
+	editor.cut_to(&"medium", [a])
+	var shot36: Dictionary = editor.current()
+	await _real(float(shot36["planned"]) + 0.8)
+	var held36: bool = editor.current() == shot36
+	CineEvents.emit(&"blow", {"attacker": a, "victim": b, "weight": &"light", "outcome": &"blocked", "where": b.global_position})
+	var blow36 := TimeFx.real_time()
+	await _real(0.2)
+	var after36: Dictionary = editor.current()
+	_check("E36 a drama shot past its length waits for a beat: a blow 0.8 s after, and the cut lands on it",
+		held36 and after36 != shot36 and absf(float(after36["real_at"]) - blow36) <= 0.1,
+		"held %s, cut %.2f s after the blow" % [held36, float(after36["real_at"]) - blow36])
+
+	# E37 after two short shots, a long one
+	await _real(2.0)
+	editor.cut_to(&"medium", [a])
+	await _real(1.6)
+	editor.cut_to(&"close", [b])
+	await _real(1.6)
+	editor.cut_to(&"medium", [b])
+	var shot37: Dictionary = editor.current()
+	await _real(5.9)
+	_check("E37 after two shots under 4 s the next runs 6 s or more",
+		editor.current() == shot37 and float(shot37["planned"]) >= 6.0, "planned %.1f, still on it %s" % [float(shot37["planned"]), editor.current() == shot37])
 
 	# E18 released in the middle of a slowing and a wipe: time back at once, the screen cleared
 	editor.scene({"mode": &"drama", "subjects": [a, b]})
