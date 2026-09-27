@@ -698,6 +698,9 @@ func _run() -> void:
 	var greeter := _man(Vector3(555, 0, -3), -PI * 0.5, &"steady", [&"fidget"])
 	greeter._habits._wait = 999.0
 	greeter._life.greet_chance = 1.0
+	# (No remark to himself on the way: the talk director gives a man alone
+	# one 5 to 40 s in, which would count as a word said.)
+	greeter._life._director()._solo_next[greeter.get_instance_id()] = INF
 	await _frames(30)
 	greeter._home.origin = Vector3(566, 0, -3)
 	var nodded := false
