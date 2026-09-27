@@ -692,16 +692,26 @@ func _build_overlay() -> void:
 	layer.layer = 6
 	add_child(layer)
 	_log = Label.new()
-	_log.position = Vector2(20, 20)
+	# As wide as the screen allows: a line too long is cut short.
+	_log.anchor_right = 1.0
+	_log.offset_left = 20.0
+	_log.offset_top = 20.0
+	_log.offset_right = -20.0
+	_log.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_log.add_theme_font_size_override("font_size", 17)
 	_log.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_log.add_theme_constant_override("outline_size", 5)
 	_log.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(_log)
 	_banner = Label.new()
-	_banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	_banner.position = Vector2(-300, 90)
-	_banner.size = Vector2(600, 60)
+	# Across the top of the screen, centred, whatever its size; wrapped if
+	# it is too long for one line.
+	_banner.anchor_right = 1.0
+	_banner.offset_left = 24.0
+	_banner.offset_right = -24.0
+	_banner.offset_top = 90.0
+	_banner.offset_bottom = 150.0
+	_banner.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_banner.add_theme_font_size_override("font_size", 44)
 	_banner.add_theme_color_override("font_color", Color(1.0, 0.85, 0.5))
@@ -788,6 +798,8 @@ func _torch(at: Vector3, shadows := true) -> void:
 	torch.energy = 2.4
 	torch.light_range = 10.0
 	torch.shadows = shadows
+	# One of the level's own: you can put it out (the guards light it again).
+	torch.can_douse = true
 	add_child(torch)
 	torch.global_position = at
 

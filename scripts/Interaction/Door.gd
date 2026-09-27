@@ -59,9 +59,18 @@ func get_prompt(player: Node) -> String:
 		if can_unlock(player):
 			return "Unlock the " + door_name
 
+		if can_pick(player):
+			return "Pick the lock"
+
 		return "Locked"
 
 	return ("Close " if is_open else "Open ") + door_name
+
+
+## No key, but a lockpick (PlayerFrob.can_pick): it can be picked.
+static func can_pick(player: Node) -> bool:
+	var hands: Variant = player.get("frob") if player != null else null
+	return hands != null and hands.has_method("can_pick") and hands.can_pick()
 
 
 ## Does this frobber carry the key?

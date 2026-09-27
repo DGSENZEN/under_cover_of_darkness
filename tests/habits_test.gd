@@ -698,6 +698,9 @@ func _run() -> void:
 	var greeter := _man(Vector3(555, 0, -3), -PI * 0.5, &"steady", [&"fidget"])
 	greeter._habits._wait = 999.0
 	greeter._life.greet_chance = 1.0
+	# (No remark to himself on the way: the talk director gives a man alone
+	# one 5 to 40 s in, which would count as a word said.)
+	greeter._life._director()._solo_next[greeter.get_instance_id()] = INF
 	await _frames(30)
 	greeter._home.origin = Vector3(566, 0, -3)
 	var nodded := false
@@ -799,11 +802,12 @@ func _run() -> void:
 
 	# H27 heard at his ease: his clothes as he sits and gets up, the seat
 	# creaking under him, the chair scraping the floor drawn out and in, and a
-	# grunt lifting a crate (his blade stays in its scabbard: no slide heard)
+	# grunt lifting a crate, in his voice (his blade stays in its scabbard: no
+	# slide heard)
 	await _fresh()
 	var heard_before := {}
 
-	for sound in [&"cloth", &"creak_rope", &"scuff", &"sheath", &"blade_draw", &"grunt"]:
+	for sound in [&"cloth", &"creak_rope", &"scuff", &"sheath", &"blade_draw", &"grunt", &"grunt_b"]:
 		heard_before[sound] = _count(sound)
 
 	var diner3 := _man(Vector3(478, 0, 0), 0.0, &"steady", [&"sit"])
@@ -819,7 +823,7 @@ func _run() -> void:
 		foley[sound] = _count(sound) - int(heard_before[sound])
 
 	_check("H27 heard at his ease: a rustle sitting and getting up, the seat creaking, the chair scraping, a grunt at a crate; no blade in or out",
-		int(foley[&"cloth"]) >= 2 and int(foley[&"creak_rope"]) >= 1 and int(foley[&"scuff"]) >= 4 and int(foley[&"sheath"]) == 0 and int(foley[&"blade_draw"]) == 0 and int(foley[&"grunt"]) >= 1,
+		int(foley[&"cloth"]) >= 2 and int(foley[&"creak_rope"]) >= 1 and int(foley[&"scuff"]) >= 4 and int(foley[&"sheath"]) == 0 and int(foley[&"blade_draw"]) == 0 and int(foley[&"grunt"]) + int(foley[&"grunt_b"]) >= 1,
 		"heard %s" % [foley])
 
 	# H28 his blade in its scabbard at his ease (the hilt at his hip); going to

@@ -43,7 +43,8 @@ func _run() -> void:
 
 	# R1 the screen: under the HUD, a square grid, the 3D drawn only as sharp
 	#    as the grid needs
-	var window := Vector2(get_viewport().get_visible_rect().size)
+	# The window's own pixels (the visible rect is in the HUD's scaled units).
+	var window := Vector2(get_tree().root.size)
 	var height_before: int = retro.virtual_height if retro != null else 0
 	var grid := Vector2.ZERO
 	var scale := 0.0
@@ -249,6 +250,8 @@ func _run() -> void:
 	_check("R9 at two frames a physics tick the view moves every frame, evenly", smallest > 0.0 and largest < smallest * 1.6,
 		"per-frame steps %.4f..%.4f m" % [smallest, largest])
 
+	await _crisp_checks(retro, player)
+
 	# R8 the showcase loads and runs clean
 	player.queue_free()
 	await _frames(3)
@@ -267,6 +270,69 @@ func _run() -> void:
 		"torch lights %d moon %d mist %d" % [torches, shafts, mist])
 	showcase.queue_free()
 	await _frames(3)
+
+
+## R11 words over a man's head are drawn sharp over the grid, not through it
+## (CrispText): where they are on the screen, big enough to read, with the 3D
+## label kept off the render; hidden behind a wall; too far off to read in
+## the world, not drawn; with the grid off, the 3D label back and nothing
+## drawn over it. A guard's own words are among them.
+func _crisp_checks(retro: CanvasLayer, player: CharacterBody3D) -> void:
+	var crisp: Node = retro.get_node_or_null("CrispText") if retro != null else null
+	var eye: Camera3D = player.camera
+	var ahead := -eye.global_basis.z
+	var words := Label3D.new()
+	words.text = "Who goes there?"
+	words.font_size = 36
+	words.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	words.add_to_group(&"crisp_text")
+	add_child(words)
+	words.global_position = eye.global_position + ahead * 9.0
+	await _frames(10)
+	var ours := func() -> Array:
+		return crisp.shown().filter(func(entry): return entry["label"] == words) if crisp != null else []
+	var drawn: Array = ours.call()
+	var placed: bool = drawn.size() == 1 and (drawn[0]["at"] as Vector2).distance_to(eye.unproject_position(words.global_position)) < 1.0 \
+		and int(drawn[0]["px"]) >= 12 and float(drawn[0]["presence"]) > 0.9
+	var off_render: bool = words.layers == 0
+
+	# A wall between.
+	var wall := Props.block(self, eye.global_position + ahead * 4.0, Vector3(8, 8, 0.4))
+	await _frames(20)
+	var walled: bool = (ours.call() as Array).is_empty()
+	wall.queue_free()
+	await _frames(20)
+	var back_in_view: bool = (ours.call() as Array).size() == 1
+
+	# Too far off to read in the world.
+	words.global_position = eye.global_position + ahead * 60.0
+	await _frames(5)
+	var far_gone: bool = (ours.call() as Array).is_empty()
+	words.global_position = eye.global_position + ahead * 9.0
+
+	# The grid off: the 3D label is back, nothing drawn over it; on again.
+	var height: int = retro.virtual_height
+	retro.virtual_height = 0
+	await _frames(3)
+	var restored: bool = words.layers == 1 and crisp.shown().is_empty()
+	retro.virtual_height = height
+	await _frames(3)
+	var held_again: bool = words.layers == 0 and (ours.call() as Array).size() == 1
+	words.queue_free()
+
+	# A guard's words.
+	var guard: Node3D = load("res://Guard.tscn").instantiate()
+	guard.set("debug_ai", false)
+	add_child(guard)
+	guard.global_position = Vector3(30, 0, 30)
+	await _frames(2)
+	var bark: Node = guard.get_node_or_null("Bark")
+	var his: bool = bark != null and bark.is_in_group(&"crisp_text")
+	guard.queue_free()
+	await _frames(2)
+	_check("R11 words over a man's head are drawn sharp over the grid (not through it), hidden behind walls and when too far to read; the grid off, the 3D label is back",
+		crisp != null and placed and off_render and walled and back_in_view and far_gone and restored and held_again and his,
+		"drawn %s placed %s off the render %s, walled %s back %s, far %s, grid off: restored %s, on again %s, a guard's %s" % [drawn, placed, off_render, walled, back_in_view, far_gone, restored, held_again, his])
 
 
 func _frames(n: int) -> void:

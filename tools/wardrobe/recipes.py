@@ -545,6 +545,10 @@ HEADS = {
         "eyes": 0.8,
         "grit": {"stubble": 0.35, "bags": 0.9, "lines": 1.0},
         "brows": (0.62, 0.60, 0.57),
+        # His hair and beard grey as his brows, whatever his kind rolls for a
+        # younger man (a watchman's browns under grey brows); the game's roll
+        # takes these over his kind's colours (Wardrobe.roll).
+        "hair_colours": [[0.72, 0.70, 0.66], [0.58, 0.56, 0.53], [0.66, 0.64, 0.60]],
         "tones": TONES,
     },
     # A young man (batch 3): cheeks full where the weathered face is hollow,
@@ -622,6 +626,19 @@ HEADS = {
 }
 
 
+# A sleeve of skin inside every head's neck (build.neck_sleeve), down under
+# the collars: where the teeth of a low head's edge met a collar standing off
+# the neck, the background showed through (the bare-hat watchman's, the
+# duelist's, the arms master's). Sunk deeper than the brute's kept neck
+# (his neck_under's 5 mm), so his shows over it. 12 round: 24 triangles, a head
+# stays within its 450.
+# It spans the band the head's edge zigzags through (male 1.518-1.567,
+# female 1.472-1.5) and a little under: one ring of faces, straight between
+# its rings, cut inside the neck's flare when it ran down to 1.47.
+NECK_SLEEVE = {"male": {"bottom": 1.505, "tuck": 0.005, "segments": 12},
+               "female": {"bottom": 1.46, "tuck": 0.005, "segments": 12}}
+
+
 # His hat's iron: the buckle's, a shade darker (a big plate reads lighter).
 IRON_HAT = (0.25, 0.25, 0.27)
 LEATHER = (0.20, 0.13, 0.08)
@@ -648,7 +665,7 @@ HEADGEAR = {
              # nowhere nearer than `beard_margin` (his head turns on his neck
              # in his idle: a beard on his head moves against mail on his
              # neck).
-             "over_beards": ["short", "moustache", "full"], "beard_clear": 0.006, "beard_margin": 0.01,
+             "over_beards": ["short", "moustache", "full"], "beard_clear": 0.006, "beard_margin": 0.014,
              "metal": ["neck_01", "Head"], "hides_hair": True, "allows_beard": True},
     # A kettle hat forged over the coif (build.kettle): a round bowl (a
     # ridge read as a peak from the front: a coolie hat), a leather band at
@@ -738,8 +755,11 @@ HAIR = {
     # The duelist's hair up.
     "buns": {"from": "assets/characters/hair/Hair_Buns.gltf", "body": "female", "kind": "hair", "tris": 200,
              "clearance": 0.004, "fit_rays": CROWN},
+    # A beard's hem (under his chin) rests on his throat: its neck's share
+    # grows to 70% at its tip (build.rest_on_neck); borne by his head alone
+    # it went through the watchman's collar when he dozed (K33).
     "full": {"from": "assets/characters/hair/Hair_Beard.gltf", "body": "male", "kind": "beard", "tris": 120,
-             "clearance": 0.003,
+             "clearance": 0.003, "hem": {"from": 1.585, "to": 1.54, "neck": 0.7},
              "fit_rays": JAW},
     # Batch 3. The Quaternius pack has no short beard, moustache or tied
     # hair: they are cut from its styles (`keep`, `trim`) and tied (`tail`).
@@ -747,7 +767,7 @@ HAIR = {
     # ends at the chin as the full one does, 1.55: its shortness is no
     # cheeks and no moustache), close to his skin.
     "short": {"from": "assets/characters/hair/Hair_Beard.gltf", "body": "male", "kind": "beard", "tris": 70,
-              "keep": {"box": [[-0.2, -0.2, 1.50], [0.2, 0.2, 1.612]]}, "clearance": 0.002, "fit_rays": JAW},
+              "keep": {"box": [[-0.2, -0.2, 1.50], [0.2, 0.2, 1.612]]}, "clearance": 0.002, "hem": {"from": 1.585, "to": 1.54, "neck": 0.7}, "fit_rays": JAW},
     # His upper lip alone (his mouth's line is at z 1.623, bake.weather; his
     # nose's base above 1.645); the check's rays aimed there from his head's
     # middle (about 36 degrees down).

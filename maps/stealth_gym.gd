@@ -116,6 +116,7 @@ func _ready() -> void:
 	add_child(player)
 	player.global_position = Vector3(0, 1.05, 19)
 	Props.give_blackjack(player)
+	Props.give_tools(player)
 
 	await baker.baked
 	patrol._go_to(route.get_child(1).global_position)
@@ -126,6 +127,8 @@ func _torch(at: Vector3) -> void:
 	var torch: Node3D = TorchScript.new()
 	torch.energy = 2.2
 	torch.light_range = 9.0
+	# One of the level's own: you can put it out (the guards light it again).
+	torch.can_douse = true
 	add_child(torch)
 	torch.global_position = at
 

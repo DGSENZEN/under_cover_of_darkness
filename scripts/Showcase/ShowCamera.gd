@@ -188,7 +188,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			if man != null:
 				follow(man)
 	elif event is InputEventMouseMotion and _looking:
-		var motion := (event as InputEventMouseMotion).relative
+		# In screen pixels, whatever size the window is.
+		var motion := (event as InputEventMouseMotion).screen_relative
 
 		if mode == Mode.FOLLOW:
 			_orbit_yaw -= motion.x * LOOK

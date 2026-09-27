@@ -364,7 +364,9 @@ func _pastimes() -> void:
 	await _until(func(): return sentry.activity() != &"pace", 600)
 	await _frames(120)
 	var back := Vector2(sentry.global_position.x - 120, sentry.global_position.z).length()
-	# And a pace, out and back.
+	# And a pace, out and back (once he is between habits of his own, which
+	# stop a pastime: GuardLife.at_rest).
+	await _until(func(): return not sentry._habits.busy(), 600)
 	sentry._life._pastimes._end()
 	sentry._life._pastimes._begin(&"pace")
 	var out := [0.0]
@@ -431,7 +433,9 @@ func _atmosphere() -> void:
 	SoundBus.emit_sound(Vector3(150, 1, 6), 70.0, self, &"test")
 	await _frames(12)
 	var flew: bool = air.crows()[0]["state"] == &"flying"
-	await _until(func(): return air.crows()[0]["state"] == &"perched", 2700)
+	# Back by the longest they can be gone (Atmosphere: CROW_FLY, the most of
+	# CROW_AWAY, CROW_RETURN: 46 s), and a little over.
+	await _until(func(): return air.crows()[0]["state"] == &"perched", 3000)
 	_check("A18 crows on the wall take off at a shout, and settle again later", flew and air.crows()[0]["state"] == &"perched",
 		"flew %s, now %s" % [flew, air.crows()[0]["state"]])
 

@@ -92,3 +92,34 @@ func holster() -> void:
 
 func is_key_item(id: StringName) -> bool:
 	return keys.has(id)
+
+
+## How many of `id` are on the belt (0: none).
+func count_of(id: StringName) -> int:
+	for entry in belt:
+		if entry["id"] == id:
+			return int(entry["count"])
+
+	return 0
+
+
+## One of `id` used up (a tool thrown): gone from the belt with the last of
+## them, your hand then empty.
+func take_one(id: StringName) -> void:
+	for i in range(belt.size()):
+		if belt[i]["id"] != id:
+			continue
+
+		belt[i]["count"] = int(belt[i]["count"]) - 1
+
+		if int(belt[i]["count"]) <= 0:
+			belt.remove_at(i)
+
+			if belt_index == i:
+				belt_index = -1
+				belt_selection_changed.emit({})
+			elif belt_index > i:
+				belt_index -= 1
+
+		changed.emit()
+		return

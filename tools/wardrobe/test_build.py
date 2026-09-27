@@ -14,11 +14,13 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import bmesh  # noqa: E402
 import bpy  # noqa: E402
 from mathutils import Vector  # noqa: E402
 from mathutils.bvhtree import BVHTree  # noqa: E402
 
 import common  # noqa: E402
+import testkit  # noqa: E402
 
 
 def fresh():
@@ -182,7 +184,7 @@ def case_types():
     import validate
 
     fresh()
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_types_"))
+    folder = testkit.scratch_dir("wardrobe_types_")
     common.SOURCE, common.BACKUP = folder, folder / "backup"
     before = set(bpy.data.objects)
     skeleton, _, _ = common.import_quaternius("male")
@@ -358,7 +360,7 @@ def build_types(recipe):
 
     fresh()
     source = common.WARDROBE / "source"
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_%s_" % recipe["kind"]))
+    folder = testkit.scratch_dir("wardrobe_%s_" % recipe["kind"])
     common.SOURCE, common.BACKUP = folder, folder / "backup"
     before = set(bpy.data.objects)
     skeleton, _, _ = common.import_quaternius(recipe["body"])
@@ -487,7 +489,7 @@ def case_watchman():
     source = common.WARDROBE / "source"
     approved = source / "watchman.blend"
     fresh()
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_watchman_"))
+    folder = testkit.scratch_dir("wardrobe_watchman_")
     common.SOURCE, common.BACKUP = folder, folder / "backup"
 
     try:
@@ -608,7 +610,7 @@ def case_launcher():
     import tempfile
     from pathlib import Path
 
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_launcher_"))
+    folder = testkit.scratch_dir("wardrobe_launcher_")
     broken = folder / "python3"
     broken.write_text("#!/bin/sh\nexit 1\n")
     broken.chmod(0o755)
@@ -645,7 +647,7 @@ def case_male_parts():
     import build
 
     source = common.WARDROBE / "source"
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_male_parts_"))
+    folder = testkit.scratch_dir("wardrobe_male_parts_")
     messages = []
 
     # The heads first: the hair is fitted over the heads it finds there.
@@ -784,6 +786,231 @@ def case_brute_bracers():
     return ["%d rays meet his skin before his bracer (%s)" % (len(through), through[:4])] if through else []
 
 
+def case_hoods_hold_faces():
+    """The committed coif and hood hold every male face (Review Focus 2):
+    along the ray from the middle of his head through each vertex of each
+    head over its cape's top (lower down the cape covers from outside),
+    the piece is not met before the vertex (a face beyond its rim: the
+    heavy jaw came 5.9 mm through the hood's)."""
+    import recipes
+
+    import check
+
+    source = common.WARDROBE / "source"
+    bpy.ops.wm.open_mainfile(filepath=str(source / "headgear.blend"))
+    centre = bpy.data.objects["Armature"].data.bones["Head"].head_local + Vector((0.0, 0.0, 0.1))
+    heads = check.heads("male")
+    through = []
+
+    for piece in ("coif", "hood"):
+        tree = common.bvh([bpy.data.objects["Gear_" + piece]])
+        above = recipes.HEADGEAR[piece]["cape"]["top_z"] + 0.01
+
+        for head in heads:
+            for v in (v for v in head.data.vertices if v.co.z > above):
+                d = v.co - centre
+                hit = tree.ray_cast(centre, d.normalized(), d.length)
+
+                if hit[0] is not None and d.length - hit[3] > 0.0005:
+                    through.append("%s %s %.1f mm at (%.3f, %.3f, %.3f)" % (piece, head.name, (d.length - hit[3]) * 1000, *v.co))
+
+    check.forget(heads)
+    fresh()
+    return ["%d face vertices beyond the coif or hood: %s" % (len(through), through[:8])] if through else []
+
+
+def see_through(objects, cameras, window):
+    """How many rays from `cameras` into `window` (points) meet a surface
+    but none that faces them (a closed part culls its backs; a strip,
+    wr_strip, draws both): holes where the background shows through him."""
+    vertices, polygons, two = [], [], []
+
+    for obj in objects:
+        start = len(vertices)
+        vertices += [v.co.copy() for v in obj.data.vertices]
+        strip = obj.data.attributes.get("wr_strip")
+
+        for p in obj.data.polygons:
+            polygons.append(tuple(start + i for i in p.vertices))
+            two.append(bool(strip.data[p.index].value) if strip is not None else False)
+
+    tree = BVHTree.FromPolygons(vertices, polygons)
+    holes = 0
+
+    for camera in cameras:
+        for target in window:
+            d = (target - camera).normalized()
+            at = camera.copy()
+
+            if tree.ray_cast(camera, d, 3.0)[0] is None:
+                continue
+
+            for _ in range(12):
+                hit = tree.ray_cast(at, d, 3.0)
+
+                if hit[0] is None:
+                    holes += 1
+                    break
+
+                if hit[1].dot(d) < 0.0 or two[hit[2]]:
+                    break
+
+                at = hit[0] + d * 1e-4
+
+    return holes
+
+
+def case_neck_seams():
+    """No background shows through the seam where a bare neck meets its
+    collar (the bare-hat watchman, the brute, the duelist, the arms
+    master), with every face each may roll and the headgear he wears then:
+    rays from in front of him and from each side at three-quarters, into
+    the band round the foot of his neck. (Under the bare hat the
+    watchman's batch 0 gambeson let the wall through beside his neck.)"""
+    import check
+    import recipes
+
+    source = common.WARDROBE / "source"
+    holes = []
+
+    for kind in ("watchman", "brute", "duelist", "arms_master"):
+        recipe = recipes.KINDS[kind]
+        body = recipe["body"]
+        options = recipe["options"]
+        bare_sets = [s for s in options["headgear"] if not any(recipes.HEADGEAR[p].get("covers_head") or p == "curtain" for p in s)]
+
+        for pieces in bare_sets:
+            with bpy.data.libraries.load(str(source / ("%s.blend" % kind))) as (_, target):
+                target.objects = ["Outfit"]
+
+            outfit = target.objects[0]
+            gear = []
+
+            if pieces:
+                with bpy.data.libraries.load(str(source / "headgear.blend")) as (_, target):
+                    target.objects = ["Gear_%s" % p for p in pieces]
+
+                gear = [o for o in target.objects if o is not None]
+
+            heads = {o.name: o for o in check.heads(body)}
+            low = 1.40 if body == "female" else 1.44
+
+            for face in options["faces"]:
+                head = heads.get("Head_" + face)
+                window = [Vector((x * 0.008, -0.02, low + z * 0.008)) for x in range(-15, 16) for z in range(21)]
+                cameras = [Vector((0.0, -0.7, low + 0.06)), Vector((0.45, -0.55, low + 0.06)), Vector((-0.45, -0.55, low + 0.06))]
+                n = see_through([outfit, head] + gear, cameras, window) if head is not None else -1
+
+                if n != 0:
+                    holes.append("%s %s %s: %d" % (kind, "+".join(pieces) or "bare", face, n))
+
+            check.forget(list(heads.values()) + gear + [outfit])
+
+    fresh()
+    return ["see-through rays at the neck: %s" % holes] if holes else []
+
+
+def case_strips_face_out():
+    """Every committed kind's hanging cloth (strips, below his chest) faces
+    away from him: the bake paints both sides of a strip from the side its
+    faces point to, and a skirt facing his legs baked their shadow (the
+    swordsman's surcoat front read dark and muddy under his belt). The
+    watchman's batch 0 outfit is his own (never rebuilt: the user's call)."""
+    import recipes
+    from mathutils import Vector
+
+    inward = []
+
+    for kind in recipes.KINDS:
+        if recipes.KINDS[kind].get("batch") == 0:
+            continue
+
+        bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / ("%s.blend" % kind)))
+        outfit, arm = bpy.data.objects["Outfit"], bpy.data.objects["Armature"]
+        chest = arm.data.bones["spine_02"].head_local.z
+        axis_y = arm.data.bones["spine_01"].head_local.y
+        strips = outfit.data.attributes["wr_strip"].data
+        n = 0
+
+        for p in outfit.data.polygons:
+            if strips[p.index].value and p.center.z < chest:
+                out = Vector((p.center.x, p.center.y - axis_y, 0.0))
+
+                if out.length > 0.01 and p.normal.dot(out.normalized()) < -0.2:
+                    n += 1
+
+        if n:
+            inward.append("%s %d" % (kind, n))
+
+    fresh()
+    return ["hanging strips facing him: %s" % inward] if inward else []
+
+
+def case_shell_edges():
+    """Every committed kind's shells (garments cut from his body's regions)
+    meet each other in clean edges: no face of one with two or more open
+    edges (a single triangle sticking out of its edge) where that edge lies
+    against another shell (within 1.5 cm of it) and no other garment lies
+    over the face (a thinner shell's edge under a thicker one is hidden),
+    across his chest and back (from spine_02 up to the foot of his neck,
+    within 20 cm of his middle): the archer's jerkin met his tunic there in
+    a row of teeth. (His waist, legs, arms and neck lie under his belt,
+    boots, pauldrons, hood or collar.) The watchman's batch 0 outfit is his
+    own (never rebuilt: the user's call)."""
+    from mathutils.bvhtree import BVHTree
+
+    import recipes
+
+    teeth = []
+
+    for kind in recipes.KINDS:
+        recipe = recipes.KINDS[kind]
+
+        if recipe.get("batch") == 0:
+            continue
+
+        bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / ("%s.blend" % kind)))
+        me = bpy.data.objects["Outfit"].data
+        parts = me.attributes["wr_part"].data
+        shells = {i + 1 for i, g in enumerate(recipe["garments"]) if g["type"] == "shell"}
+        verts = [v.co.copy() for v in me.vertices]
+        trees = {k: BVHTree.FromPolygons(verts, [tuple(p.vertices) for p in me.polygons if parts[p.index].value == k])
+                 for k in shells}
+        garments = {k: BVHTree.FromPolygons(verts, [tuple(p.vertices) for p in me.polygons if parts[p.index].value == k])
+                    for k in range(1, len(recipe["garments"]) + 1)}
+        arm = bpy.data.objects["Armature"].data.bones
+        chest, neck = arm["spine_02"].head_local.z, arm["neck_01"].head_local.z
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        n = 0
+
+        for f in bm.faces:
+            own = parts[f.index].value
+            open_edges = [e for e in f.edges if e.is_boundary]
+            where = f.calc_center_median()
+
+            if own not in shells or len(open_edges) < 2 or not chest <= where.z <= neck or abs(where.x) > 0.2:
+                continue
+
+            mids = [(e.verts[0].co + e.verts[1].co) * 0.5 for e in open_edges]
+            c = f.calc_center_median()
+
+            if any(garments[k].ray_cast(c + f.normal * 0.001, f.normal, 0.03)[0] is not None for k in garments if k != own):
+                continue
+
+            if any(trees[k].find_nearest(m)[3] is not None and trees[k].find_nearest(m)[3] < 0.015
+                   for k in shells if k != own for m in mids):
+                n += 1
+
+        bm.free()
+
+        if n:
+            teeth.append("%s %d" % (kind, n))
+
+    fresh()
+    return ["shell faces sticking out where shells meet: %s" % teeth] if teeth else []
+
+
 def width_at(tree, y, z):
     """How far out to his left a surface stands at (y, z): its outermost
     hit coming in along x (a low-poly head has few vertices near any one
@@ -818,7 +1045,7 @@ def case_faces():
         return ["faces: male %s, female %s" % (male, female)]
 
     source = common.WARDROBE / "source"
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_faces_"))
+    folder = testkit.scratch_dir("wardrobe_faces_")
     heads = {}
 
     for body in ("male", "female"):
@@ -906,7 +1133,7 @@ def case_beards_and_tails():
     if missing:
         return ["no recipe for %s" % missing]
 
-    hair = build_hair_into(Path(tempfile.mkdtemp(prefix="wardrobe_beards_")))
+    hair = build_hair_into(testkit.scratch_dir("wardrobe_beards_"))
     messages = []
     short, moustache, tied, tail = (hair[s][0] for s in ("short", "moustache", "tied", "tail"))
 
@@ -950,7 +1177,7 @@ def case_bare_hat():
         return ["no kettlehat_bare recipe"]
 
     source = common.WARDROBE / "source"
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_bare_hat_"))
+    folder = testkit.scratch_dir("wardrobe_bare_hat_")
 
     for name in ("heads.blend", "hair.blend"):
         shutil.copy(source / name, folder / name)
@@ -1005,7 +1232,7 @@ def case_coif_beards():
     import recipes
 
     source = common.WARDROBE / "source"
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_coif_beards_"))
+    folder = testkit.scratch_dir("wardrobe_coif_beards_")
 
     for name in ("heads.blend", "hair.blend"):
         shutil.copy(source / name, folder / name)
@@ -1137,7 +1364,9 @@ CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, 
          "faces": case_faces, "beards_and_tails": case_beards_and_tails,
          "bare_hat": case_bare_hat, "coif_beards": case_coif_beards,
          "brute_neck": case_brute_neck, "duelist_cape": case_duelist_cape,
-         "brute_bracers": case_brute_bracers}
+         "brute_bracers": case_brute_bracers, "hoods_hold_faces": case_hoods_hold_faces,
+         "neck_seams": case_neck_seams, "strips_face_out": case_strips_face_out,
+         "shell_edges": case_shell_edges}
 
 
 def main():
@@ -1152,7 +1381,14 @@ def main():
         print("%s %s%s" % ("PASS" if not messages else "FAIL", name, "" if not messages else ": %s" % messages))
         failed += 1 if messages else 0
 
-    print("build: %d/%d" % (len(CASES) - failed, len(CASES)))
+    testkit.tidy()
+    left = testkit.leaked()
+
+    if left:
+        print("FAIL leak: %d scratch folders left in the temp folder (%s)" % (len(left), left[:2]))
+        failed += 1
+
+    print("build: %d/%d" % (len(CASES) + 1 - failed, len(CASES) + 1))
     sys.exit(1 if failed else 0)
 
 

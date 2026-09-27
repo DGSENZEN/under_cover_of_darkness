@@ -75,14 +75,20 @@ func _ready() -> void:
 	_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_canvas.draw.connect(_draw_canvas)
 	add_child(_canvas)
+	# Each held to the edges or the middle of the screen by its anchors and
+	# offsets from them, so it stays put whatever size the window is.
 	_title = _label(38, HORIZONTAL_ALIGNMENT_CENTER)
-	_title.set_anchors_preset(Control.PRESET_CENTER)
+	_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_title.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_hold(_title, Rect2(0.0, 0.5, 1.0, 0.5), Rect2(24.0, -40.0, -24.0, 40.0))
 	_title.modulate.a = 0.0
 	_card = _label(18, HORIZONTAL_ALIGNMENT_LEFT)
-	_card.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	_card.position = Vector2(24, -56)
+	_card.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_hold(_card, Rect2(0.0, 1.0, 1.0, 1.0), Rect2(24.0, -56.0, -24.0, -30.0))
 	_toast = _label(16, HORIZONTAL_ALIGNMENT_RIGHT)
-	_toast.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_toast.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_hold(_toast, Rect2(0.0, 0.0, 1.0, 0.0), Rect2(24.0, 20.0, -24.0, 44.0))
 	_toast.modulate.a = 0.0
 
 
@@ -104,8 +110,6 @@ func watch(man: Node3D, role: String) -> void:
 func title(text: String) -> void:
 	_title.text = text
 	_title_at = _clock
-	_title.reset_size()
-	_title.position = -_title.size * 0.5
 
 
 ## Who the camera follows ("Aldous, lookout"), or none (null).
@@ -122,8 +126,6 @@ func name_card(man: Node3D) -> void:
 func toast(text: String) -> void:
 	_toast.text = text
 	_toast_at = _clock
-	_toast.reset_size()
-	_toast.position = Vector2(-_toast.size.x - 24.0, 20.0)
 
 
 ## The subtitles on screen this frame ("Name: line"), and the marks
@@ -365,6 +367,24 @@ func _fade(label: Label, at: float, fade_in: float, hold: float, fade_out: float
 		alpha = 1.0 - (age - fade_in - hold) / fade_out
 
 	label.modulate.a = clampf(alpha, 0.0, 1.0)
+
+
+## `control` held by its anchors (left, top, right, bottom: fractions of the
+## screen) and offsets from them (px).
+static func _hold(control: Control, anchors: Rect2, offsets: Rect2) -> void:
+	control.anchor_left = anchors.position.x
+	control.anchor_top = anchors.position.y
+	control.anchor_right = anchors.size.x
+	control.anchor_bottom = anchors.size.y
+	control.offset_left = offsets.position.x
+	control.offset_top = offsets.position.y
+	control.offset_right = offsets.size.x
+	control.offset_bottom = offsets.size.y
+
+
+## Where the title, the name card and the toast are on the screen (tests).
+func label_rects() -> Dictionary:
+	return {"title": _title.get_global_rect(), "card": _card.get_global_rect(), "toast": _toast.get_global_rect()}
 
 
 func _label(size: int, align: HorizontalAlignment) -> Label:

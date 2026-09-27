@@ -142,6 +142,7 @@ func _ready() -> void:
 	player.global_position = Vector3(0, 1.05, 8)
 	Props.give_weapons(player, 30)
 	Props.give_blackjack(player)
+	Props.give_tools(player)
 	player.inventory.select_by_id(&"sword")
 	_hook_player()
 	_build_overlay()
@@ -814,6 +815,8 @@ func _info_label(g: CharacterBody3D) -> void:
 	label.no_depth_test = true
 	label.shaded = false
 	label.fixed_size = true
+	# Sharp over the retro screen, not broken up by its big pixels.
+	label.add_to_group(&"crisp_text")
 	g.add_child(label)
 	label.position = Vector3(0, float(g.get("eye_height")) + 0.75, 0)
 
@@ -1088,9 +1091,14 @@ func _build_overlay() -> void:
 	_panel.add_theme_color_override("font_color", Color(1.0, 0.85, 0.6))
 	layer.add_child(_panel)
 	_banner = Label.new()
-	_banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	_banner.position = Vector2(-300, 90)
-	_banner.size = Vector2(600, 60)
+	# Across the top of the screen, centred, whatever its size; wrapped if
+	# it is too long for one line.
+	_banner.anchor_right = 1.0
+	_banner.offset_left = 24.0
+	_banner.offset_right = -24.0
+	_banner.offset_top = 90.0
+	_banner.offset_bottom = 150.0
+	_banner.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_banner.add_theme_font_size_override("font_size", 44)
 	_banner.add_theme_color_override("font_color", Color(1.0, 0.85, 0.5))
@@ -1101,9 +1109,15 @@ func _build_overlay() -> void:
 	layer.add_child(_banner)
 
 
+## Text at `at` from the top left, as wide as the screen allows: a line too
+## long for it is cut short, not run off the screen.
 func _text_label(at: Vector2, size: int) -> Label:
 	var label := Label.new()
-	label.position = at
+	label.anchor_right = 1.0
+	label.offset_left = at.x
+	label.offset_top = at.y
+	label.offset_right = -at.x
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	label.add_theme_constant_override("outline_size", 5)
@@ -1168,6 +1182,8 @@ func _torch(at: Vector3, shadows := true, energy := 2.4) -> void:
 	torch.energy = energy
 	torch.light_range = 10.0
 	torch.shadows = shadows
+	# One of the level's own: you can put it out (the guards light it again).
+	torch.can_douse = true
 	add_child(torch)
 	torch.global_position = at
 

@@ -610,20 +610,25 @@ func _k15() -> void:
 
 
 ## K31 (Review Focus 1) a bare-headed watchman's hat never cuts his hair or
-## head: every face and hair he may wear under it (his options doctored to
-## each pair), at rest, bowed (_bow 0.61) and looking up (-0.4) (he has no
-## overhead); edges through faces, as K22.
+## head: every face and hair he may roll (his options doctored to each
+## pair), at rest, bowed and looking up as far as the game turns his head
+## (GuardRig.HEAD_PITCH_MAX 0.7), each pose from rest (_bow turns from where
+## he is); edges through faces, as K22. Each pose must really lean his
+## head: forward bowed, back looking up.
 func _k31() -> void:
 	var cuts := 0
 	var pairs := 0
 	var where := []
+	var leaned := true
+	var roll: Dictionary = EXPECT[&"watchman"].roll
 
-	for face in ["young", "weathered", "heavy", "old"]:
-		for style in ["parted", "buzzed", "tied"]:
+	for face in roll.faces:
+		for style in roll.hair:
 			_doctor(&"watchman", {"faces": [face], "hair": [style], "beards": [], "headgear": [["kettlehat_bare"]]})
 			var g := await _guard(7)
 			g.set_physics_process(false)
 			var man = g._rig.man
+			var skeleton: Skeleton3D = man.skeleton
 			var hat := _worn(man, "kettlehat_bare")
 			var head := _worn(man, "Head_" + face)
 			var hair := _worn(man, "Hair_" + style)
@@ -631,15 +636,21 @@ func _k31() -> void:
 			if hat != null and head != null and hair != null:
 				pairs += 1
 				var hat_faces := _faces_of(hat, PackedInt32Array())
+				var rest_pose := _head_pose(skeleton)
 
-				for angle in [0.0, 0.61, -0.4]:
+				for angle in [0.0, 0.7, -0.7]:
+					_set_head_pose(skeleton, rest_pose)
+
 					if angle != 0.0:
 						_bow(man, angle)
+						var head_up := (skeleton.global_basis * skeleton.get_bone_global_pose(skeleton.find_bone(&"Head")).basis).y.normalized()
+						var ahead := head_up.dot(-man.global_basis.z.normalized())
+						leaned = leaned and (ahead > 0.3 if angle > 0.0 else ahead < -0.3)
 
-					var skinned_hat := _skinned(hat, man.skeleton)
+					var skinned_hat := _skinned(hat, skeleton)
 
 					for piece in [head, hair]:
-						var n := _cuts(skinned_hat, hat_faces, _skinned(piece, man.skeleton), _faces_of(piece, PackedInt32Array()))
+						var n := _cuts(skinned_hat, hat_faces, _skinned(piece, skeleton), _faces_of(piece, PackedInt32Array()))
 
 						if n > 0:
 							cuts += n
@@ -649,15 +660,17 @@ func _k31() -> void:
 			g.queue_free()
 			await _frames(1)
 
-	_check("K31 the bare kettle hat never cuts his hair or head", cuts == 0 and pairs == 12,
-		"%d cuts over %d face-hair pairs %s" % [cuts, pairs, where])
+	_check("K31 the bare kettle hat never cuts his hair or head, bowed or looking up", cuts == 0 and leaned
+		and pairs == roll.faces.size() * roll.hair.size(), "%d cuts over %d face-hair pairs, leaned %s %s" % [cuts, pairs, leaned, where])
 
 
 ## K33 his hair and beard never cut what he wears over or round them:
 ## each hair and beard each kind may roll, in each of his headgear sets
-## (his options doctored to each), at rest, against his headgear and his
-## outfit above his chest (edges through faces, as K22). (A face's neck
-## meets its collar and hood by design: K15b.)
+## (his options doctored to each), at rest, dozing (his head bowed 0.5, as
+## GuardHabits dozes him) and looking up (0.55, his look-up habit), each
+## pose from rest, against his headgear and his outfit above his chest
+## (edges through faces, as K22). (A face's neck meets its collar and hood
+## by design: K15b.)
 func _k33() -> void:
 	var cuts := {}
 	var dressed := 0
@@ -683,15 +696,29 @@ func _k33() -> void:
 				for gear in man.worn().filter(func(m): return String(m.name) in pieces):
 					round_him.append([_skinned(gear, skeleton), _faces_of(gear, PackedInt32Array()), String(gear.name)])
 
-				for strands in man.worn().filter(func(m): return String(m.name).begins_with("Hair_") or String(m.name).begins_with("Beard_")):
-					var at := _skinned(strands, skeleton)
-					var faces := _faces_of(strands, PackedInt32Array())
+				var strands_worn: Array = man.worn().filter(func(m): return String(m.name).begins_with("Hair_") or String(m.name).begins_with("Beard_"))
+				var rest_pose := _head_pose(skeleton)
 
-					for other in round_him:
-						var c := _cuts(at, faces, other[0], other[1])
+				for pose in [[&"rest", 0.0], [&"dozing", 0.5], [&"looking up", -0.55]]:
+					_set_head_pose(skeleton, rest_pose)
 
-						if c > 0:
-							cuts["%s %s through %s" % [kind, strands.name, other[2]]] = c
+					if pose[1] != 0.0:
+						_bow(man, pose[1])
+
+					var posed := [[_skinned(man.body, skeleton), round_him[0][1], "outfit"]]
+
+					for other in round_him.slice(1):
+						posed.append([_skinned(_worn(man, other[2]), skeleton), other[1], other[2]])
+
+					for strands in strands_worn:
+						var at := _skinned(strands, skeleton)
+						var faces := _faces_of(strands, PackedInt32Array())
+
+						for other in posed:
+							var c := _cuts(at, faces, other[0], other[1])
+
+							if c > 0:
+								cuts["%s %s through %s, %s" % [kind, strands.name, other[2], pose[0]]] = c
 
 				Wardrobe.forget()
 				g.queue_free()
@@ -701,11 +728,23 @@ func _k33() -> void:
 		"%s over %d guards" % [cuts, dressed])
 
 
+## His neck's and head's pose rotations (to put him back at rest: _bow
+## turns from where he is).
+func _head_pose(skeleton: Skeleton3D) -> Array:
+	return [&"neck_01", &"Head"].map(func(b): return skeleton.get_bone_pose_rotation(skeleton.find_bone(b)))
+
+
+func _set_head_pose(skeleton: Skeleton3D, pose: Array) -> void:
+	for i in range(2):
+		skeleton.set_bone_pose_rotation(skeleton.find_bone([&"neck_01", &"Head"][i]), pose[i])
+
+
 ## K34 the seam at his neck: where a bare-necked kind's face meets his
 ## chest (the brute's), the foot of his head's neck is the colour of the
 ## skin of his outfit under it, in each tone (the albedo each shows, his
-## outfit's times his tone): each face, its lowest centimetre of neck
-## against his outfit's bare skin within 6 cm of it and below it (what
+## outfit's times his tone): each face, the lowest centimetre of its own
+## neck (not the sleeve inside it) against his outfit's bare skin within
+## 6 cm of it and below it (what
 ## shows: his neck kept up under his head does not), on average within 15%
 ## of the brighter (the chest lies in his mantle's shadow, the head was
 ## baked alone), and none of that skin dark (under 60% of the neck's
@@ -723,7 +762,15 @@ func _k34() -> void:
 			g.set_physics_process(false)
 			var man = g._rig.man
 			var head := _worn(man, "Head_" + face)
-			var neck := _surface_colour(head, func(p, low): return p.y < low + 0.01, [])
+			# (Its own neck: over its sleeve, which ends at 1.505 inside him.)
+			var edge_low := INF
+
+			for surface in range(head.mesh.get_surface_count()):
+				for p in (head.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+					if p.y > 1.51:
+						edge_low = minf(edge_low, p.y)
+
+			var neck := _surface_colour(head, func(p, _low): return p.y > 1.51 and p.y < edge_low + 0.01, [])
 			var edge: float = neck[1].reduce(func(lowest, q): return minf(lowest, q.y), INF)
 			var outfit := _surface_colour(man.body, func(p, _low): return p.y < edge and neck[1].any(func(q): return p.distance_to(q) < 0.06),
 				[], true)
@@ -1418,6 +1465,37 @@ func _dressed() -> void:
 		and beard.get_instance_shader_parameter(&"dye_colour").is_equal_approx(aged.look.hair_colour)
 	_check("K18 his hair and beard are worn and tinted his hair colour", "Head_old" in _worn_names(aged) and tinted,
 		str(_worn_names(aged)))
+
+	# K35 an old face has grey hair: his face's own hair colours (its JSON's
+	# "hair_colours") over his kind's browns, which would have put brown
+	# hair under his grey brows; another face keeps his kind's colours, and
+	# the same seed the same colour; the arms master, already grey (one man),
+	# keeps his one colour
+	var greys: Array = Wardrobe.head_data(&"old").get("hair_colours", [])
+	var browns: Array = Wardrobe.kind_data(&"watchman").get("options", {}).get("hair_colours", [])
+	var in_list := func(c: Color, list: Array) -> bool:
+		return list.any(func(rgb): return c.is_equal_approx(Color(rgb[0], rgb[1], rgb[2])))
+	var aged_ok := true
+	var others_ok := true
+
+	for s in range(1, 9):
+		for face in ["old", "weathered"]:
+			_doctor(&"watchman", {"faces": [face], "hair": ["parted"], "beards": ["full"], "headgear": [["kettlehat_bare"]]})
+			var looked: Dictionary = _roll(&"watchman", s)
+			Wardrobe.forget()
+
+			if face == "old":
+				aged_ok = aged_ok and not greys.is_empty() and in_list.call(looked.hair_colour, greys)
+			else:
+				others_ok = others_ok and in_list.call(looked.hair_colour, browns)
+
+	var his := {}
+
+	for s in range(1, 9):
+		his[str(_roll(&"arms_master", s).hair_colour)] = true
+
+	_check("K35 an old face has grey hair; other faces keep their kind's colours; the arms master keeps his",
+		aged_ok and others_ok and his.size() == 1, "greys %s, old ok %s, others ok %s, the arms master's %s" % [greys, aged_ok, others_ok, his.keys()])
 
 	# K24 a kind whose every hair style (or every beard) is missing is the
 	# plain base body, as one whose every headgear set is: dressed bald or

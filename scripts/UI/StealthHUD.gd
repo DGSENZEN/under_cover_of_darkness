@@ -7,11 +7,13 @@ extends CanvasLayer
 ##                  keys and what they do: [E] Open door   [LMB] Throw
 ##   bottom centre  the lightgem, a cut jewel: dark when hidden, amber when
 ##                  lit; its rim brightens with exposure (stance, movement)
-##   above the gem  who is speaking and what they said
+##   above the gem  who is speaking (by name) and what they said
 ##   bottom left    health, as shields that only show when you are hurt
 ##   everywhere     a red vignette when hit, with an arc on the side the
 ##                  blow came from; the colour drains during a finisher; a
+##                  white-out when a flash goes off in your eyes (dazzle); a
 ##                  fade to black when caught, and a pause screen on Esc
+##   centre         picking a lock: the crosshair's ring closing as it gives
 ##   over a man     fighting you: his balance (GuardFighter's posture), a bar
 ##                  filling from the middle, amber to red, once it is shaken;
 ##                  a red mark when he is open (the next blow a deathblow)
@@ -20,11 +22,29 @@ extends CanvasLayer
 ##                  notched where he grows suspicious and where he comes to
 ##                  look, round an eye while he is looking at you, a "?"
 ##                  while he has only heard something or is looking for you,
-##                  and a red "!" once he has you, bursting as he calls it
-##                  (the first of them to have you named under it). The man
-##                  nearest to having you is drawn biggest; the ring's edge
-##                  glows while it is rising, so you see how fast. Off the
-##                  screen, his mark sits at its edge, the way he is.
+##                  and a red "!" once he has you, bursting as he calls it.
+##                  The man nearest to having you is drawn biggest, and
+##                  beside his mark, for a few seconds after it changes (and
+##                  while his ring climbs), what he is doing about you, in a
+##                  few words: "Merek sees you", "Merek heard something",
+##                  "Merek is coming to look", "Merek is searching", "Merek
+##                  is giving up" (doing()); the first of them to have you,
+##                  "Merek has you". The ring's edge glows while it is
+##                  rising, so you see how fast, and a tick sounds, quicker
+##                  and higher as it fills. Off the screen, his mark sits at
+##                  its edge, the way he is; a man behind a wall is marked
+##                  fainter. A man stirred by something not you (a door left
+##                  open, a torch out, a man missing) and who has not seen
+##                  you since gets only a small grey "?": never the biggest,
+##                  no words, no tick. The pause screen can hide them all
+##                  (Settings).
+##
+## Any size of window: the project stretches the 2D (display/window/stretch,
+## canvas_items, expand) from 1152x648, so everything here is laid out in
+## those units, at least 1152 wide and 648 high, and drawn as sharp as the
+## window is. Every piece is placed from the edges or the middle of the
+## screen as it is now, text that could run long is cut short or wrapped,
+## and nothing is placed outside the screen (layout_rects, for tests).
 ##
 ## Nothing here is read by gameplay. Hide the layer and the game is unchanged.
 
@@ -33,6 +53,8 @@ const AdrenalineViewScript := preload("res://scripts/Visual/AdrenalineView.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
+const SettingsScript := preload("res://scripts/UI/Settings.gd")
+const CrispTextScript := preload("res://scripts/Visual/CrispText.gd")
 
 const SUBTITLE_RANGE := 22.0
 ## A man noticing you is marked this near (m). One fighting you this near
@@ -42,10 +64,56 @@ const AWARE_RANGE := 45.0
 const AWARE_FIGHT_NEAR := 7.0
 const AWARE_FIGHT_TIME := 1.6
 const AWARE_NAME_TIME := 3.0
-## How far over his eyes the mark sits (m): above his balance bar.
+## How far over his eyes the mark sits (m): above his balance bar; and on
+## the screen, at least AWARE_CLEAR (px) above the top of the words over his
+## head (as drawn sharp over the retro screen: CrispText; drawn in the world,
+## BARK_TOP, m, over the label's middle).
 const AWARE_OVER := 0.85
+const AWARE_CLEAR := 19.0
+const BARK_TOP := 0.13
+## A mark at the bottom edge is kept this far to the side of the lightgem's
+## middle (px).
+const GEM_CLEAR := 48.0
+## A man with a wall between your eyes and his: his mark this faint (of
+## its alpha), looked for every WALLED_EVERY (s).
+const WALLED_ALPHA := 0.42
+const WALLED_EVERY := 0.12
+## While a man makes you out (his ring climbing: rise over TICK_RISE), a
+## tick: as often as he is quick about it (every TICK_EVERY s, slow to
+## quick as his rise goes to TICK_QUICK), higher (TICK_PITCH) and louder
+## (TICK_DB) the nearer he is to having you.
+const TICK_RISE := 0.04
+const TICK_QUICK := 0.6
+const TICK_EVERY := Vector2(0.62, 0.14)
+const TICK_PITCH := Vector2(1.2, 2.0)
+const TICK_DB := Vector2(-19.0, -10.0)
+## What stirs a man that is not you (Guard._stimulus): something out of place,
+## a man missing from his post.
+const NOT_YOU := [&"oddity", &"missing"]
 ## A man's balance is shown over him this near.
 const POSTURE_RANGE := 16.0
+## A flash in your eyes fades out over this long (s, at its fullest).
+const WHITE_FADE := 1.6
+## The words beside the mark that matters most ("Merek sees you"): this big
+## (px), shown for WORDS_HOLD (s) after they change, and while his ring
+## climbs, then faded. He is giving up once his alert has been falling for
+## GIVING_UP_AFTER (s).
+const WORDS_SIZE := 14
+const WORDS_HOLD := 3.5
+const GIVING_UP_AFTER := 1.0
+## New words (or words for another man) wait this long (s) before they are
+## shown, so a man at the edge of seeing you does not flicker between two.
+const WORDS_SETTLE := 0.3
+## Everything is kept this far inside the edges of the screen (px, in the
+## HUD's units).
+const EDGE := 12.0
+## Subtitles: the text size; on one line if they fit in SUBTITLE_WIDTH of the
+## screen (and SUBTITLE_MOST px), wrapped if not; the bottom of their band
+## this far over the bottom of the screen, growing upwards.
+const SUBTITLE_SIZE := 21
+const SUBTITLE_WIDTH := 0.72
+const SUBTITLE_MOST := 860.0
+const SUBTITLE_BOTTOM := 130.0
 const INK := Color(0.93, 0.88, 0.78)
 const DIM := Color(0.62, 0.58, 0.5)
 const AMBER := Color(1.0, 0.78, 0.36)
@@ -54,6 +122,8 @@ const BLOOD := Color(0.62, 0.08, 0.06)
 var player: CharacterBody3D
 
 var _root: Control
+## Everything but the pause screen (hidden while it is up).
+var _play: Control
 var _font: SystemFont
 var _crosshair: Crosshair
 var _prompts: HBoxContainer
@@ -68,6 +138,8 @@ var _legacy_tag: Label
 var _subtitle_panel: PanelContainer
 var _subtitle: RichTextLabel
 var _subtitle_timer := 0.0
+## The subtitle's width on one line (px).
+var _subtitle_width := 0.0
 var _shields: Shields
 var _shield_timer := 0.0
 var _adrenaline: Adrenaline
@@ -82,10 +154,29 @@ var _splatter: Splatter
 var _posture_marks: PostureMarks
 var _awareness: AwarenessMarks
 ## Per guard noticing you (by instance id): how his mark is being shown
-## (Dictionary: fill, last, rise, alpha, flash, since, name_until).
+## (Dictionary: fill, last, rise, alpha, flash, since, name_until, walled,
+## open, look_at, big, fall_for).
 var _aware := {}
+## The words beside a mark: whose mark (instance id), what they say
+## (_words_name, _words_says), since when unchanged, how far faded in; the
+## words waiting to take their place, and since when.
+var _words_key := ""
+var _words_id := 0
+var _words_name := ""
+var _words_says := ""
+var _words_since := -100.0
+var _words_alpha := 0.0
+var _words_next := ""
+var _words_next_at := -100.0
+var _tick_at := -100.0
+## Tests: how many ticks have sounded.
+var ticks := 0
+var _marks_toggle: Button
 var _grade: ColorRect
 var _grade_amount := 0.0
+## A flash in your eyes: the white over everything, fading (dazzle).
+var _white: ColorRect
+var _white_amount := 0.0
 var _last_real := -1.0
 var _fade: ColorRect
 var _death: Label
@@ -250,8 +341,13 @@ class AwarenessMarks:
 	## Each a Dictionary: id (the man's instance id), at (screen), edge (off
 	## the screen: at its edge),
 	## out (at the edge, the way to him), fill 0..1, rise 0..1, icon ("eye",
-	## "heard", "look", "hunt", "fight"), lead (nearest to having you), flash
-	## 1..0, alpha, name ("" or who had you first), notches (0..1 each).
+	## "heard", "look", "hunt", "fight"), lead (nearest to having you), big
+	## (1..0: how far drawn as the lead, eased), grow (0..1 as it appears),
+	## flash 1..0, alpha (fainter while walled: a wall between you), says
+	## (what he is doing about you: doing()), name, words (0..1: how far
+	## the words beside it are shown; name "" unless they are) and
+	## words_rect (where), notches (0..1 each). Icon "odd": stirred by
+	## something not you, drawn small and grey.
 	var marks: Array = []
 	var clock := 0.0
 
@@ -267,9 +363,21 @@ class AwarenessMarks:
 		var fill: float = m["fill"]
 		var rise: float = m["rise"]
 		var icon: StringName = m["icon"]
-		var r := (15.0 if lead else 11.5) * (0.85 if edge else 1.0)
+		var r := AwarenessMarks.radius_of(m)
 		var hue := AwarenessMarks.hue_of(fill, icon)
 		var top := -PI * 0.5
+
+		# Stirred by something not you: small and grey, a "?" in a plain ring.
+		if icon == &"odd":
+			if edge:
+				var away: Vector2 = m["out"]
+				var aside := Vector2(-away.y, away.x)
+				draw_colored_polygon(PackedVector2Array([at + away * (r + 7.0), at + away * (r + 2.0) + aside * 3.5, at + away * (r + 2.0) - aside * 3.5]), Color(hue.r, hue.g, hue.b, 0.6 * alpha))
+
+			draw_circle(at, r + 2.0, Color(0, 0, 0, 0.32 * alpha))
+			draw_arc(at, r, 0.0, TAU, 24, Color(hue.r, hue.g, hue.b, 0.7 * alpha), 1.4, true)
+			_glyph(at, "?", r, hue, 0.8 * alpha)
+			return
 
 		# Off the screen: a notch pointing out, the way he is.
 		if edge:
@@ -320,14 +428,33 @@ class AwarenessMarks:
 			var burst := r * (1.2 + 1.8 * (1.0 - flash))
 			draw_arc(at, burst, 0.0, TAU, 40, Color(hue.r, hue.g, hue.b, flash * alpha), 1.0 + 3.0 * flash, true)
 
-		# The first of them to have you, named.
-		var who: String = m["name"]
+		# What he is doing about you, beside it: his name, and in the ring's
+		# colour what he is at.
+		var words: float = m.get("words", 0.0)
 
-		if who != "" and font != null:
-			var width := 180.0
-			var below := at + Vector2(-width * 0.5, r + 18.0)
-			draw_string_outline(font, below, who, HORIZONTAL_ALIGNMENT_CENTER, width, 14, 4, Color(0, 0, 0, 0.8 * alpha))
-			draw_string(font, below, who, HORIZONTAL_ALIGNMENT_CENTER, width, 14, Color(1.0, 0.82, 0.75, alpha))
+		if words > 0.01 and font != null and m.has("words_rect"):
+			var box: Rect2 = m["words_rect"]
+			var who: String = m["name"] + " " if m["name"] != "" else ""
+			var says: String = m["says"]
+			var line := box.position + Vector2(0.0, font.get_ascent(WORDS_SIZE))
+			var fade := alpha * words
+			draw_string_outline(font, line, who + says, HORIZONTAL_ALIGNMENT_LEFT, -1, WORDS_SIZE, 4, Color(0, 0, 0, 0.8 * fade))
+			draw_string(font, line, who, HORIZONTAL_ALIGNMENT_LEFT, -1, WORDS_SIZE, Color(DIM.r, DIM.g, DIM.b, fade))
+			var after := font.get_string_size(who, HORIZONTAL_ALIGNMENT_LEFT, -1, WORDS_SIZE).x
+			draw_string(font, line + Vector2(after, 0.0), says, HORIZONTAL_ALIGNMENT_LEFT, -1, WORDS_SIZE, Color(hue.r, hue.g, hue.b, fade))
+
+	## How big a mark's ring is (px): biggest for the man nearest to having
+	## you (eased as the lead passes between men), smaller at the edge of
+	## the screen and for a man stirred by something not you, growing in as
+	## it appears.
+	static func radius_of(m: Dictionary) -> float:
+		var r := lerpf(11.5, 15.0, float(m.get("big", 1.0 if m.get("lead", false) else 0.0)))
+
+		if m["icon"] == &"odd":
+			r = 8.0
+
+		r *= 0.85 if m["edge"] else 1.0
+		return r * lerpf(0.6, 1.0, smoothstep(0.0, 1.0, float(m.get("grow", 1.0))))
 
 	## An eye, its lids opening as he makes you out; its iris in `hue`.
 	func _eye(c: Vector2, w: float, hue: Color, alpha: float, open: float) -> void:
@@ -364,6 +491,9 @@ class AwarenessMarks:
 	## sure, red as he is about to have you; red once he has, a hot amber
 	## while he hunts you.
 	static func hue_of(fill: float, icon: StringName) -> Color:
+		if icon == &"odd":
+			return DIM
+
 		if icon == &"fight":
 			return Color(0.95, 0.14, 0.07)
 
@@ -464,6 +594,13 @@ func setup(p_player: CharacterBody3D) -> void:
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_root)
+	# Everything shown while you play, under one parent: hidden while the
+	# pause screen is up, so nothing shows through it.
+	_play = Control.new()
+	_play.name = "Play"
+	_play.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_play.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_play)
 
 	_vignette = TextureRect.new()
 	var gradient := Gradient.new()
@@ -480,34 +617,34 @@ func setup(p_player: CharacterBody3D) -> void:
 	_vignette.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_vignette.modulate.a = 0.0
-	_root.add_child(_vignette)
+	_play.add_child(_vignette)
 
 	_hurt_marks = HurtMarks.new()
 	_hurt_marks.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_hurt_marks.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_hurt_marks)
+	_play.add_child(_hurt_marks)
 
 	_warn_marks = HurtMarks.new()
 	_warn_marks.tint = AMBER
 	_warn_marks.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_warn_marks.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_warn_marks)
+	_play.add_child(_warn_marks)
 
 	_posture_marks = PostureMarks.new()
 	_posture_marks.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_posture_marks.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_posture_marks)
+	_play.add_child(_posture_marks)
 
 	_awareness = AwarenessMarks.new()
 	_awareness.font = _font
 	_awareness.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_awareness.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_awareness)
+	_play.add_child(_awareness)
 
 	_splatter = Splatter.new()
 	_splatter.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_splatter.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_splatter)
+	_play.add_child(_splatter)
 
 	# The finisher's grade: colour drains, the edges darken to red.
 	_grade = ColorRect.new()
@@ -519,22 +656,30 @@ func setup(p_player: CharacterBody3D) -> void:
 	grade_material.shader = grade_shader
 	_grade.material = grade_material
 	_grade.visible = false
-	_root.add_child(_grade)
-	_root.move_child(_grade, 0)
+	_play.add_child(_grade)
+	_play.move_child(_grade, 0)
+
+	# A flash in your eyes: white over everything, fading.
+	_white = ColorRect.new()
+	_white.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_white.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_white.color = Color(1.0, 0.98, 0.94, 0.0)
+	_white.visible = false
+	_play.add_child(_white)
 
 	_crosshair = Crosshair.new()
 	_crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_crosshair)
+	_play.add_child(_crosshair)
 
 	_prompts = HBoxContainer.new()
 	_prompts.alignment = BoxContainer.ALIGNMENT_CENTER
 	_prompts.add_theme_constant_override("separation", 22)
 	_prompts.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_prompts)
+	_play.add_child(_prompts)
 
 	_gem = Gem.new()
 	_gem.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_gem)
+	_play.add_child(_gem)
 
 	_caption = _label(17, DIM, HORIZONTAL_ALIGNMENT_CENTER)
 	_caption.modulate.a = 0.0
@@ -554,26 +699,28 @@ func setup(p_player: CharacterBody3D) -> void:
 	_subtitle_panel.add_theme_stylebox_override("panel", band)
 	_subtitle_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_subtitle_panel.modulate.a = 0.0
-	_root.add_child(_subtitle_panel)
+	_play.add_child(_subtitle_panel)
 	_subtitle = RichTextLabel.new()
 	_subtitle.bbcode_enabled = true
 	_subtitle.fit_content = true
-	_subtitle.autowrap_mode = TextServer.AUTOWRAP_OFF
+	# As wide as the line, up to a share of the screen; wrapped past it
+	# (_process).
+	_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_subtitle.scroll_active = false
 	_subtitle.add_theme_font_override("normal_font", _font)
-	_subtitle.add_theme_font_size_override("normal_font_size", 21)
+	_subtitle.add_theme_font_size_override("normal_font_size", SUBTITLE_SIZE)
 	_subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_subtitle_panel.add_child(_subtitle)
 
 	_shields = Shields.new()
 	_shields.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_shields.modulate.a = 0.0
-	_root.add_child(_shields)
+	_play.add_child(_shields)
 
 	_adrenaline = Adrenaline.new()
 	_adrenaline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_adrenaline.modulate.a = 0.0
-	_root.add_child(_adrenaline)
+	_play.add_child(_adrenaline)
 	_adrenaline_view = AdrenalineViewScript.new()
 	_adrenaline_view.name = "AdrenalineView"
 	add_child(_adrenaline_view)
@@ -582,7 +729,7 @@ func setup(p_player: CharacterBody3D) -> void:
 	_fade.color = Color(0, 0, 0, 0)
 	_fade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(_fade)
+	_play.add_child(_fade)
 
 	_death = _label(40, INK, HORIZONTAL_ALIGNMENT_CENTER)
 	_death.modulate.a = 0.0
@@ -610,6 +757,9 @@ func _build_pause() -> void:
 	_pause.mouse_filter = Control.MOUSE_FILTER_STOP
 	_pause.visible = false
 	_root.add_child(_pause)
+	# It takes the click, so the click resumes here (anywhere but on a
+	# setting).
+	_pause.gui_input.connect(_on_pause_input)
 
 	var dim := ColorRect.new()
 	dim.color = Color(0.02, 0.02, 0.04, 0.72)
@@ -639,8 +789,56 @@ func _build_pause() -> void:
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(hint)
 
-	column.position = Vector2(-120, -50)
-	column.size = Vector2(240, 100)
+	# Your settings under it: a click on one changes it, and does not resume.
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 22)
+	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(gap)
+	_marks_toggle = Button.new()
+	_marks_toggle.flat = true
+	_marks_toggle.focus_mode = Control.FOCUS_NONE
+	_marks_toggle.add_theme_font_override("font", _font)
+	_marks_toggle.add_theme_font_size_override("font_size", 17)
+	_marks_toggle.add_theme_color_override("font_color", DIM)
+	_marks_toggle.add_theme_color_override("font_hover_color", INK)
+	_marks_toggle.add_theme_color_override("font_pressed_color", AMBER)
+	_marks_toggle.add_theme_color_override("font_hover_pressed_color", AMBER)
+	_marks_toggle.pressed.connect(toggle_awareness_marks)
+	column.add_child(_marks_toggle)
+	_show_settings()
+
+	# In the middle of the screen, whatever its size: offsets from the
+	# centre (a position would be from the corner), growing both ways if
+	# it needs more room.
+	column.set_anchors_preset(Control.PRESET_CENTER)
+	column.offset_left = -170.0
+	column.offset_right = 170.0
+	column.offset_top = -86.0
+	column.offset_bottom = 86.0
+	column.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	column.grow_vertical = Control.GROW_DIRECTION_BOTH
+
+
+## The marks over men noticing you, shown or hidden (the pause screen).
+func toggle_awareness_marks() -> void:
+	SettingsScript.set_awareness_marks(not SettingsScript.awareness_marks())
+	_show_settings()
+
+
+func _show_settings() -> void:
+	_marks_toggle.text = "Marks over guards:  %s" % ("shown" if SettingsScript.awareness_marks() else "hidden")
+
+
+func _on_pause_input(event: InputEvent) -> void:
+	if get_tree().paused and _is_click(event):
+		resume()
+		_pause.accept_event()
+
+
+## A mouse button pressed (not the wheel).
+static func _is_click(event: InputEvent) -> bool:
+	var button := event as InputEventMouseButton
+	return button != null and button.pressed and button.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE]
 
 
 func _label(font_size: int, colour: Color, align: HorizontalAlignment) -> Label:
@@ -651,8 +849,10 @@ func _label(font_size: int, colour: Color, align: HorizontalAlignment) -> Label:
 	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	label.add_theme_constant_override("outline_size", 6)
 	label.horizontal_alignment = align
+	# Too long for its place: cut short, never pushed off the screen.
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_root.add_child(label)
+	_play.add_child(label)
 	return label
 
 
@@ -665,6 +865,7 @@ func _process(delta: float) -> void:
 		return
 
 	_pause.visible = get_tree().paused
+	_play.visible = not get_tree().paused
 
 	if get_tree().paused:
 		return
@@ -689,8 +890,10 @@ func _process(delta: float) -> void:
 	_crosshair.size = Vector2(52, 52)
 	_crosshair.position = centre - _crosshair.size * 0.5
 	_crosshair.queue_redraw()
-	_prompts.position = Vector2(centre.x - 400, centre.y + 26)
-	_prompts.size = Vector2(800, 30)
+	# Centred under it however many there are, and kept on the screen.
+	var row := _prompts.get_combined_minimum_size()
+	_prompts.size = row
+	_prompts.position = Vector2(clampf(centre.x - row.x * 0.5, EDGE, maxf(view.x - EDGE - row.x, EDGE)), centre.y + 26)
 	_prompts.modulate.a = _prompt_alpha
 
 	# The lightgem.
@@ -704,17 +907,19 @@ func _process(delta: float) -> void:
 	# What just came into your hand, briefly.
 	_caption_timer = maxf(_caption_timer - delta, 0.0)
 	_caption.modulate.a = clampf(_caption_timer / 0.4, 0.0, 1.0)
-	_place(_caption, Vector2(centre.x - 200, view.y - 118), Vector2(400, 24))
+	_place(_caption, Vector2(EDGE, view.y - 118), Vector2(view.x - EDGE * 2.0, 24))
 
 	_legacy_tag.visible = bool(player.get("legacy_feel"))
-	_place(_legacy_tag, Vector2(view.x - 230, view.y - 34), Vector2(200, 20))
+	_place(_legacy_tag, Vector2(view.x - 330, view.y - 34), Vector2(300, 20))
 
-	# Subtitles.
+	# Subtitles: on one line if they fit, wrapped if not; over the caption,
+	# growing upwards.
 	_subtitle_timer = maxf(_subtitle_timer - delta, 0.0)
 	_subtitle_panel.modulate.a = clampf(_subtitle_timer / 0.35, 0.0, 1.0)
+	_subtitle.custom_minimum_size.x = minf(_subtitle_width, minf(view.x * SUBTITLE_WIDTH, SUBTITLE_MOST))
 	var sub_size := _subtitle_panel.get_combined_minimum_size()
 	_subtitle_panel.size = sub_size
-	_subtitle_panel.position = Vector2(centre.x - sub_size.x * 0.5, view.y - 170)
+	_subtitle_panel.position = Vector2(centre.x - sub_size.x * 0.5, view.y - SUBTITLE_BOTTOM - sub_size.y)
 
 	# Health: shields, only while hurt or just after a hit.
 	var fraction := clampf(float(player.health) / maxf(float(player.max_health), 1.0), 0.0, 1.0)
@@ -742,8 +947,12 @@ func _process(delta: float) -> void:
 		_adrenaline.size = Vector2(90, 4)
 		_adrenaline.queue_redraw()
 
-		# A drawn bow tightens the crosshair into a ring that closes.
+		# A drawn bow tightens the crosshair into a ring that closes; so does
+		# a lock giving to the pick.
 		_crosshair.draw_amount = combat.draw if combat.phase == combat.Phase.DRAWING else 0.0
+
+		if player.frob != null and player.frob.has_method("picking") and player.frob.picking():
+			_crosshair.draw_amount = player.frob.pick_progress()
 
 		# Stamina, only while it is not full.
 		var s: float = combat.stamina / maxf(combat.stamina_max, 1.0)
@@ -784,6 +993,9 @@ func _process(delta: float) -> void:
 
 	_grade_amount = move_toward(_grade_amount, 0.0, real_delta / 0.9)
 	_grade.visible = _grade_amount > 0.01
+	_white_amount = move_toward(_white_amount, 0.0, real_delta / WHITE_FADE)
+	_white.visible = _white_amount > 0.01
+	_white.color.a = 0.96 * smoothstep(0.0, 0.6, _white_amount)
 
 	if _grade.visible:
 		(_grade.material as ShaderMaterial).set_shader_parameter("amount", smoothstep(0.0, 0.35, _grade_amount))
@@ -792,7 +1004,7 @@ func _process(delta: float) -> void:
 		_fade.color.a = move_toward(_fade.color.a, 0.92, delta * 0.8)
 		_death.modulate.a = move_toward(_death.modulate.a, 1.0, delta * 1.2)
 
-	_place(_death, Vector2(centre.x - 400, centre.y - 40), Vector2(800, 60))
+	_place(_death, Vector2(EDGE, centre.y - 40), Vector2(view.x - EDGE * 2.0, 60))
 
 	# Find guards to listen to.
 	_scan_timer -= delta
@@ -938,8 +1150,10 @@ func _on_bark(text: String, guard: Node3D) -> void:
 	if guard.global_position.distance_to(player.global_position) > SUBTITLE_RANGE:
 		return
 
-	var speaker: String = guard.get("speaker_name") if guard.get("speaker_name") != null else "Guard"
-	_subtitle.text = "[color=#%s]%s[/color]   %s" % [DIM.to_html(false), speaker, text]
+	var who := speaker_of(guard)
+	_subtitle.text = "[color=#%s]%s[/color]   %s" % [DIM.to_html(false), who, text]
+	# Its width on one line (wrapped past a share of the screen: _process).
+	_subtitle_width = _font.get_string_size("%s   %s" % [who, text], HORIZONTAL_ALIGNMENT_LEFT, -1, SUBTITLE_SIZE).x + 6.0
 	_subtitle_timer = 3.2
 
 
@@ -993,24 +1207,30 @@ func _aware_record(guard: Node3D) -> Dictionary:
 	var id := guard.get_instance_id()
 
 	if not _aware.has(id):
-		_aware[id] = {"fill": 0.0, "last": float(guard.get("alert")), "rise": 0.0, "alpha": 0.0, "flash": 0.0, "since": -100.0, "name_until": -100.0}
+		_aware[id] = {"fill": 0.0, "last": float(guard.get("alert")), "rise": 0.0, "alpha": 0.0, "flash": 0.0, "since": -100.0, "name_until": -100.0,
+			"walled": false, "open": 1.0, "look_at": -100.0, "big": 0.0, "fall_for": 0.0}
 
 	return _aware[id]
 
 
 ## Every frame: each man noticing you, and how his mark shows (see the header,
-## and AwarenessMarks).
+## and AwarenessMarks); the words beside the one that matters most; the tick
+## while one makes you out. None of it while the marks are hidden (Settings).
 func _update_awareness(delta: float) -> void:
 	var camera := get_viewport().get_camera_3d()
 	var marks: Array = []
 	var kept := {}
+	var now := TimeFx.real_time()
+	var speaker: Dictionary = {}
 	_awareness.clock += delta
 
-	if camera != null and not player.is_dead:
+	if camera != null and not player.is_dead and SettingsScript.awareness_marks():
 		var view := _awareness.size if _awareness.size.x > 1.0 else get_viewport().get_visible_rect().size
-		var now := TimeFx.real_time()
 		var lead: Dictionary = {}
 		var lead_fill := 0.03
+		# The ring climbing quickest (its rise, and how full it is).
+		var climbing := 0.0
+		var climbed := 0.0
 
 		for node in get_tree().get_nodes_in_group(&"guards"):
 			var guard := node as Node3D
@@ -1036,6 +1256,8 @@ func _update_awareness(delta: float) -> void:
 			var rate := (alert - float(record["last"])) / maxf(delta, 0.0001) / full
 			record["last"] = alert
 			record["rise"] = lerpf(float(record["rise"]), clampf(rate * 1.2, 0.0, 1.0), 1.0 - exp(-6.0 * delta))
+			# Draining steadily (not a sudden drop): he is giving up.
+			record["fall_for"] = float(record["fall_for"]) + delta if rate < -0.01 else 0.0
 			var goal := 1.0 if state >= 3 else clampf(alert / full, 0.0, 1.0)
 			record["fill"] = lerpf(float(record["fill"]), goal, 1.0 - exp(-14.0 * delta))
 			record["flash"] = maxf(float(record["flash"]) - delta / 0.55, 0.0)
@@ -1048,6 +1270,12 @@ func _update_awareness(delta: float) -> void:
 			if float(record["alpha"]) <= 0.01:
 				continue
 
+			# A wall between your eyes and his: fainter.
+			if now >= float(record["look_at"]):
+				record["look_at"] = now + WALLED_EVERY
+				record["walled"] = _walled_off(camera, guard)
+
+			record["open"] = move_toward(float(record["open"]), 0.0 if record["walled"] else 1.0, delta * 3.0)
 			var sees: bool = guard.get("can_see_target") == true
 			var icon: StringName = &"eye" if sees else &"heard"
 
@@ -1059,38 +1287,215 @@ func _update_awareness(delta: float) -> void:
 				4:
 					icon = &"fight"
 
-			var mark := {"id": id, "fill": float(record["fill"]), "rise": float(record["rise"]), "icon": icon, "lead": false,
-				"flash": float(record["flash"]), "alpha": float(record["alpha"]), "edge": false, "out": Vector2.ZERO,
-				"name": _name_of(guard) if now < float(record["name_until"]) else "",
-				"notches": [float(guard.get("suspicious_at")) / full, float(guard.get("investigate_at")) / full] if state < 3 else []}
-			_place_mark(mark, over, camera, view)
+			# Stirred by something not you, and he has not seen you since.
+			var stirred_by: Variant = guard.get("_stimulus")
+
+			if state < 4 and not sees and guard.get("_saw_you") != true and stirred_by is StringName and stirred_by in NOT_YOU:
+				icon = &"odd"
+
+			var blind: bool = guard.has_method("blinded") and guard.blinded()
+			var mark := {"id": id, "fill": float(record["fill"]), "rise": float(record["rise"]), "icon": icon, "lead": false, "big": float(record["big"]),
+				"grow": float(record["alpha"]), "flash": float(record["flash"]),
+				"alpha": float(record["alpha"]) * lerpf(WALLED_ALPHA, 1.0, float(record["open"])),
+				"walled": bool(record["walled"]), "edge": false, "out": Vector2.ZERO, "name": "", "words": 0.0,
+				"says": doing(state, sees, stirred_by if stirred_by is StringName else &"", float(record["fall_for"]) >= GIVING_UP_AFTER, blind),
+				"first": now < float(record["name_until"]),
+				"notches": [float(guard.get("suspicious_at")) / full, float(guard.get("investigate_at")) / full] if state < 3 and icon != &"odd" else []}
+			_place_mark(mark, over, camera, view, guard.get_node_or_null("Bark") as Label3D)
 			marks.append(mark)
+
+			if icon == &"odd":
+				continue
 
 			if state < 4 and float(record["fill"]) > lead_fill:
 				lead_fill = float(record["fill"])
 				lead = mark
 
+			if state < 4 and float(record["rise"]) > maxf(climbing, TICK_RISE):
+				climbing = float(record["rise"])
+				climbed = float(record["fill"])
+
 		if not lead.is_empty():
 			lead["lead"] = true
+
+		# The lead passes from man to man smoothly: his ring grows as it
+		# comes to him, the last one's shrinks.
+		for mark in marks:
+			var record: Dictionary = _aware[mark["id"]]
+			record["big"] = move_toward(float(record["big"]), 1.0 if mark["lead"] else 0.0, delta * 5.0)
+			mark["big"] = float(record["big"])
+
+		# The words go beside the first of them to have you, for a while; else
+		# beside the man nearest to having you.
+		for mark in marks:
+			if mark["first"] and mark["icon"] == &"fight":
+				speaker = mark
+
+		if speaker.is_empty():
+			speaker = lead
+
+		# He is making you out: a tick, as quick as he is, higher the nearer
+		# he is to having you.
+		if climbing > 0.0 and now - _tick_at >= lerpf(TICK_EVERY.x, TICK_EVERY.y, clampf(climbing / TICK_QUICK, 0.0, 1.0)):
+			_tick_at = now
+			ticks += 1
+			Sfx.play_flat(self, &"ting", lerpf(TICK_DB.x, TICK_DB.y, climbed), lerpf(TICK_PITCH.x, TICK_PITCH.y, climbed), 0.01)
 
 	for id in _aware.keys():
 		if not kept.has(id):
 			_aware.erase(id)
 
+	_update_words(marks, speaker, now, delta)
 	_awareness.marks = marks
 	_awareness.queue_redraw()
+
+
+## The words beside a mark (see the header): what they say changes with what
+## the man does about you (or whose they are), once the change has lasted
+## WORDS_SETTLE (at once for the first of them to have you, or with nothing
+## shown); they show for WORDS_HOLD after (longer while his ring climbs, or
+## while he is the first to have you), then fade; faded in again when they
+## change.
+func _update_words(marks: Array, speaker: Dictionary, now: float, delta: float) -> void:
+	if not speaker.is_empty():
+		var key := "%d %s" % [int(speaker["id"]), speaker["says"]]
+
+		if key == _words_key:
+			_words_next = ""
+		else:
+			if key != _words_next:
+				_words_next = key
+				_words_next_at = now
+
+			if speaker["first"] or _words_alpha <= 0.01 or now - _words_next_at >= WORDS_SETTLE:
+				if int(speaker["id"]) != _words_id:
+					_words_alpha = 0.0
+
+				_words_key = key
+				_words_next = ""
+				_words_id = int(speaker["id"])
+				_words_says = speaker["says"]
+				var guard := instance_from_id(_words_id) as Node3D
+				_words_name = _name_of(guard) if guard != null else ""
+				_words_since = now
+
+		if key == _words_key and (float(speaker["rise"]) > TICK_RISE or speaker["first"]):
+			_words_since = now
+
+	var showing := not speaker.is_empty() and int(speaker["id"]) == _words_id and now - _words_since < WORDS_HOLD
+	_words_alpha = move_toward(_words_alpha, 1.0 if showing else 0.0, delta * (6.0 if showing else 1.5))
+
+	if _words_alpha <= 0.01:
+		# Faded out with nobody to show them for: the next ones start afresh.
+		if speaker.is_empty():
+			_words_key = ""
+
+		return
+
+	for mark in marks:
+		if int(mark["id"]) != _words_id:
+			continue
+
+		mark["name"] = _words_name
+		mark["says"] = _words_says
+		mark["words"] = _words_alpha
+		mark["words_rect"] = _words_rect(mark, "%s %s" % [_words_name, _words_says] if _words_name != "" else _words_says)
+
+
+## Where the words go beside a mark: to the right of its ring, level with
+## it; to the left if they would run off the screen or onto the lightgem;
+## always on the screen.
+func _words_rect(mark: Dictionary, text: String) -> Rect2:
+	var view := _awareness.size if _awareness.size.x > 1.0 else get_viewport().get_visible_rect().size
+	var extent := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, WORDS_SIZE)
+	extent.y = maxf(extent.y, _font.get_height(WORDS_SIZE))
+	var r := AwarenessMarks.radius_of(mark)
+	var at: Vector2 = mark["at"]
+	var y := clampf(at.y - extent.y * 0.5, EDGE, maxf(view.y - EDGE - extent.y, EDGE))
+	var box := Rect2(Vector2(at.x + r + 8.0, y), extent)
+	var gem := Rect2(view.x * 0.5 - 30.0, view.y - 92.0, 60.0, 92.0)
+
+	if box.end.x > view.x - EDGE or box.intersects(gem):
+		box.position.x = at.x - r - 8.0 - extent.x
+
+	box.position.x = clampf(box.position.x, EDGE, maxf(view.x - EDGE - extent.x, EDGE))
+	return box
+
+
+## What a man is doing about you, in a few words (beside his mark, after his
+## name): he has you; he sees you (or something, before he is sure); he is
+## blinded; he is giving up (his alert draining away); he found a body; he
+## is searching; he heard the alarm, or was called; he is coming to look;
+## he is suspicious; he heard something.
+static func doing(state: int, sees: bool, stimulus: StringName, falling: bool, blind := false) -> String:
+	if state >= 4:
+		return "has you"
+
+	if blind:
+		return "is blinded"
+
+	if sees:
+		return "sees you" if state >= 1 else "sees something"
+
+	if falling:
+		return "is giving up"
+
+	if stimulus == &"body":
+		return "found a body"
+
+	if state >= 3:
+		return "is searching"
+
+	match stimulus:
+		&"alarm":
+			return "heard the alarm"
+		&"call", &"shout", &"sent":
+			return "was called"
+
+	match state:
+		2:
+			return "is coming to look"
+		1:
+			return "is suspicious"
+
+	return "heard something"
+
+
+## Whether something solid (the level, a closed door) stands between your
+## eye and his.
+func _walled_off(camera: Camera3D, guard: Node3D) -> bool:
+	var exclude: Array[RID] = [player.get_rid()]
+
+	if guard is CollisionObject3D:
+		exclude.append((guard as CollisionObject3D).get_rid())
+
+	# Not what you carry in front of your eyes.
+	var held: Variant = player.frob.get("held") if player.frob != null else null
+
+	if held is CollisionObject3D and is_instance_valid(held):
+		exclude.append((held as CollisionObject3D).get_rid())
+
+	var query := PhysicsRayQueryParameters3D.create(camera.global_position, guard.eye_position(), 1, exclude)
+	query.collide_with_areas = false
+	return not camera.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 
 ## Where a mark goes: over him, or off the screen at its edge the way he is:
 ## off to a side or above, where he would be; behind you, round the bottom
 ## of it (ahead is up, behind is down, as the marks of blows).
-func _place_mark(mark: Dictionary, over: Vector3, camera: Camera3D, view: Vector2) -> void:
+func _place_mark(mark: Dictionary, over: Vector3, camera: Camera3D, view: Vector2, words: Label3D = null) -> void:
 	var margin := minf(38.0, minf(view.x, view.y) * 0.1)
 	var centre := view * 0.5
 	var behind := camera.is_position_behind(over)
 	var at := camera.unproject_position(over) if not behind else centre
 
 	if not behind and at.x > margin and at.x < view.x - margin and at.y > margin and at.y < view.y - margin:
+		# Above what he says over his head (Guard's "Bark"), never over it:
+		# however far off he is, the ring clears the top of his words.
+		if words != null and not camera.is_position_behind(words.global_position):
+			# Never lifted off the top of the screen, though.
+			at.y = maxf(minf(at.y, _words_top(words, camera, view) - AWARE_CLEAR), margin)
+
 		mark["at"] = at
 		return
 
@@ -1107,13 +1512,24 @@ func _place_mark(mark: Dictionary, over: Vector3, camera: Camera3D, view: Vector
 	var reach := 1.0 / sqrt((way.x * way.x) / (rx * rx) + (way.y * way.y) / (ry * ry))
 	var edge := centre + way * reach
 
-	# Not on top of the lightgem, low in the middle: just above it.
-	if view.y > 300.0 and absf(edge.x - centre.x) < 44.0 and edge.y > view.y - 104.0:
-		edge.y = view.y - 104.0
+	# Not on top of the lightgem, low in the middle (nor on the words over
+	# it): beside it, on the side he is.
+	if view.y > 300.0 and absf(edge.x - centre.x) < GEM_CLEAR and edge.y > view.y - 110.0:
+		edge.x = centre.x + (GEM_CLEAR if way.x >= 0.0 else -GEM_CLEAR)
 
 	mark["at"] = edge
 	mark["edge"] = true
 	mark["out"] = way
+
+
+## The top of the words over his head on the screen: as drawn sharp over
+## the retro screen (CrispText), or else in the world (BARK_TOP over the
+## label's middle).
+func _words_top(words: Label3D, camera: Camera3D, view: Vector2) -> float:
+	if CrispTextScript.drawing and words.is_in_group(CrispTextScript.GROUP):
+		return CrispTextScript.top_of(words, camera, view)
+
+	return camera.unproject_position(words.global_position + Vector3.UP * BARK_TOP).y
 
 
 func _name_of(guard: Node3D) -> String:
@@ -1121,9 +1537,52 @@ func _name_of(guard: Node3D) -> String:
 	return String(given) if given != null and String(given) != "" else String(guard.get("speaker_name"))
 
 
+## Who is speaking, as the subtitles name him: his own name, and what he is
+## if he is more than a guard ("Roderick", "Isolde, duelist"). The same name
+## as his mark carries once he has you.
+static func speaker_of(guard: Node) -> String:
+	var given: Variant = guard.get("given_name")
+	var what: String = String(guard.get("speaker_name")) if guard.get("speaker_name") != null else "Guard"
+
+	if given == null or String(given) == "":
+		return what
+
+	if what == "" or what == "Guard":
+		return String(given)
+
+	return "%s, %s" % [String(given), what.to_lower()]
+
+
 ## The awareness marks shown now (tests).
 func awareness_marks() -> Array:
 	return _awareness.marks if _awareness != null else []
+
+
+## Where each piece of the HUD is on the screen now, by name, while it shows:
+## the prompts, the lightgem, the subtitles, the words beside a mark... (tests:
+## all of it on the screen, whatever the size of the window).
+func layout_rects() -> Dictionary:
+	var rects := {}
+	var pieces := {"crosshair": _crosshair, "prompts": _prompts, "gem": _gem, "caption": _caption, "subtitles": _subtitle_panel,
+		"shields": _shields, "adrenaline": _adrenaline, "legacy": _legacy_tag, "death": _death}
+
+	for key in pieces:
+		var piece: Control = pieces[key]
+
+		if piece.is_visible_in_tree() and piece.modulate.a > 0.01:
+			rects[key] = piece.get_global_rect()
+
+	if _pause.visible:
+		rects["pause"] = (_pause.get_child(1) as Control).get_global_rect()
+
+	for mark in _awareness.marks if _awareness.is_visible_in_tree() else []:
+		var r := AwarenessMarks.radius_of(mark)
+		rects["mark %d" % int(mark["id"])] = Rect2(mark["at"] - Vector2(r, r), Vector2(r, r) * 2.0)
+
+		if float(mark.get("words", 0.0)) > 0.01:
+			rects["words %d" % int(mark["id"])] = mark["words_rect"]
+
+	return rects
 
 
 ## A line under the lightgem for a moment: which movement feel is on.
@@ -1144,6 +1603,16 @@ func _on_item_selected(item: Dictionary) -> void:
 		_caption_timer = 1.4
 
 	_last_item_name = item_name
+
+
+## A flash went off in your eyes (ThrownTool.flash), `amount` of it (0..1):
+## white over everything, fading over WHITE_FADE (s).
+func dazzle(amount: float) -> void:
+	_white_amount = maxf(_white_amount, clampf(amount, 0.0, 1.0))
+
+
+func white_amount() -> float:
+	return _white_amount
 
 
 func _on_damaged(_amount: float) -> void:
@@ -1294,14 +1763,12 @@ void fragment() {
 """
 
 
-## Esc paused the game; any click resumes it.
+## Esc paused the game; Esc again, or a click (_on_pause_input), resumes it.
 func _unhandled_input(event: InputEvent) -> void:
 	if not get_tree().paused:
 		return
 
-	var click := event is InputEventMouseButton and (event as InputEventMouseButton).pressed
-
-	if click or event.is_action_pressed("ui_cancel"):
+	if _is_click(event) or event.is_action_pressed("ui_cancel"):
 		resume()
 		get_viewport().set_input_as_handled()
 

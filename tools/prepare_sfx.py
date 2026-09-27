@@ -24,27 +24,23 @@ their own; Ambience.gd plays them).
 The rest comes from free packs off the web, unpacked under
 ~/Downloads/AUCOD Web SFX/ (WEB below), each in a folder named after its
 archive (CC0 but for one, credited in CREDITS.md):
-Kenney's Impact Sounds and RPG Audio, and from OpenGameArt HaelDB's yelling
-sounds, artisticdude's swishes, qubodup's
-impacts, Zane Little's deep bone breaks, rubberduck's 80 RPG, 100 and
-breaking/falling packs, Julie Damsgaard's dull explosion, congusbongus's
-footsteps (CC-BY 3.0); for the duelist cicifyre's female voices and congusbongus's female screams; for the
-score Mixkit's cinematic effects (under Mixkit's free licence) and William
-Hector's war drums.
+Kenney's Impact Sounds and RPG Audio, and from OpenGameArt artisticdude's
+swishes, qubodup's impacts, Zane Little's deep bone breaks, rubberduck's 80
+RPG, 100 and breaking/falling packs, Julie Damsgaard's dull explosion,
+congusbongus's footsteps (CC-BY 3.0); for the score Mixkit's cinematic
+effects (under Mixkit's free licence) and William Hector's war drums.
 
 The score (MUSIC below) is kept in stereo: its stings go to audio/sfx/ like
 any sound, its loops to audio/music/, each cut to whole bars of the drums'
 130 bpm (the heartbeat and the brass exactly one and two bars, the drums
 their own eight), so the layers stay in step however long they play.
 
-The guards' voices (VOICES below: their murmur of talk, laughs, sighs,
-coughs, grunts, breathing, snores, a gasp) come from the Sonniss GDC bundles
-and free packs under ~/Downloads/AUCOD Web SFX/voices/ (credited in
-CREDITS.md). A voice entry is cut one of four ways: "whole" (each file from
-where its sound starts to where it dies away), "split" (the separate sounds in
-one take: single breaths, snores, coughs), "stretch" (long stretches of talk
-the game plays a part of: GuardVoice's murmur), or "join" (short phrases put
-one after another into one stretch of talk).
+Every voice (VOICES below: the guards' talk, nods, laughs, sighs, the cold on
+their breath, coughs, grunts, breathing, their cries in a fight, and yours)
+is NOX Sound's Voices Essentials (CC0), in ~/Downloads/Essentials_Series_NOX_SOUND/:
+two men and a woman. A voice entry is cut one of two ways: "whole" (each
+file from where its sound starts to where it dies away) or "split" (the
+separate sounds in one take: single breaths out of a sequence).
 
     python3 tools/prepare_sfx.py --only=murmur,laugh,...
 
@@ -53,6 +49,7 @@ cuts only those groups and leaves every other file as it is.
 Needs ffmpeg and numpy.
 """
 
+import glob
 import os
 import re
 import subprocess
@@ -80,13 +77,11 @@ def W(path):
 
 
 KENNEY_IMPACT = "kenney_impact-sounds/Audio/"
-FEMALE = "RPG_Voice_Starter_Pack/RPG Voice Starter Pack/Type 3/"
 MIXKIT = "mixkit/"
 MUSIC_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audio", "music")
 # The drums' tempo: every loop of the score is whole bars of it.
 BAR = 4 * 60.0 / 130.0
 KENNEY_RPG = "kenney_rpg-audio/Audio/"
-YELLS = "yelling_sounds/yelling sounds/"
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audio", "sfx")
 AMBIENCE_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audio", "ambience")
 PEAK_LIMIT_DB = -1.0
@@ -271,34 +266,6 @@ SOUNDS += [
     ("door_rattle_3", W("80-CC0-RPG-SFX/lock_03.ogg"), None, None, 0.05),
     # The powder barrel.
     ("explosion", W("single/dull_explosion.wav"), 0.0, 3.0, 0.6),
-    # Voices. Yours is the third man's in the pack: the grunt of being cut,
-    # and of effort (a heavy blow, a kick, hauling yourself up). The guards
-    # speak with the others: cut, dying, the brute's roar, the grunt of a low
-    # sweep.
-    ("hurt_1", W(YELLS + "3grunt3.wav"), None, None, 0.08),
-    ("hurt_2", W(YELLS + "3grunt4.wav"), None, None, 0.08),
-    ("hurt_3", W(YELLS + "3grunt5.wav"), None, None, 0.08),
-    ("effort_1", W(YELLS + "3grunt1.wav"), None, None, 0.08),
-    ("effort_2", W(YELLS + "3grunt2.wav"), None, None, 0.08),
-    ("effort_3", W(YELLS + "3grunt6.wav"), None, None, 0.1),
-    ("pain_1", W(YELLS + "1yell13.wav"), None, None, 0.08),
-    ("pain_2", W(YELLS + "1yell14.wav"), None, None, 0.08),
-    ("pain_3", W(YELLS + "1yell9.wav"), None, None, 0.08),
-    ("pain_4", W(YELLS + "1yell10.wav"), None, None, 0.08),
-    ("pain_5", W(YELLS + "2yell10.wav"), None, None, 0.08),
-    ("pain_6", W(YELLS + "2yell1.wav"), None, None, 0.08),
-    ("death_1", W(YELLS + "yell10.wav"), None, None, 0.25),
-    ("death_2", W(YELLS + "yell11.wav"), None, None, 0.25),
-    ("death_3", W(YELLS + "2yell4.wav"), None, None, 0.25),
-    ("death_4", W(YELLS + "yell2.wav"), None, None, 0.25),
-    ("death_5", W(YELLS + "yell5.wav"), None, None, 0.25),
-    ("death_6", W(YELLS + "2yell11.wav"), None, None, 0.25),
-    ("roar_1", W(YELLS + "yell4.wav"), None, None, 0.15),
-    ("roar_2", W(YELLS + "yell7.wav"), None, None, 0.15),
-    ("roar_3", W(YELLS + "yell12.wav"), None, None, 0.12),
-    ("grunt_1", W(YELLS + "2yell9.wav"), None, None, 0.08),
-    ("grunt_2", W(YELLS + "1yell15.wav"), None, None, 0.08),
-    ("grunt_3", W(YELLS + "2yell3.wav"), None, None, 0.08),
     # Your own heart, when you are near done (Sfx: faster and louder as your
     # health goes): single beats out of the score's heartbeat.
     ("heartbeat_1", W(MIXKIT + "2630_cinematic_mystery_heartbeat_transition.wav"), 1.66, 2.1, 0.08),
@@ -308,63 +275,99 @@ SOUNDS += [
     ("gear_1", W(KENNEY_RPG + "clothBelt.ogg"), None, None, 0.05),
     ("gear_2", W(KENNEY_RPG + "clothBelt2.ogg"), None, None, 0.05),
     ("gear_3", W(KENNEY_RPG + "metalClick.ogg"), None, None, 0.04),
-    # The duelist: a woman's voice (the pack's third, and lowest): the cry
-    # of a blow put in, of being cut; screams for her death.
-    ("grunt_f_1", W(FEMALE + "attack1.wav"), None, None, 0.06),
-    ("grunt_f_2", W(FEMALE + "attack2.wav"), None, None, 0.06),
-    ("grunt_f_3", W(FEMALE + "attack3.wav"), None, None, 0.06),
-    ("roar_f_1", W(FEMALE + "attack2.wav"), None, None, 0.06),
-    ("roar_f_2", W(FEMALE + "attack3.wav"), None, None, 0.06),
-    ("pain_f_1", W(FEMALE + "damaged1.wav"), None, None, 0.06),
-    ("pain_f_2", W(FEMALE + "damaged2.wav"), None, None, 0.06),
-    ("pain_f_3", W(FEMALE + "damaged3.wav"), None, None, 0.06),
-    ("death_f_1", W("female_screams/1.ogg"), None, None, 0.1),
-    ("death_f_2", W("female_screams/2.ogg"), None, None, 0.15),
-    ("death_f_3", W("female_screams/3.ogg"), None, None, 0.15),
-    ("death_f_4", W("female_screams/4.ogg"), None, None, 0.12),
 ]
 
-# The guards' voices (GuardVoice): (group, [files under WEB], mode, count,
-# fade-out). For "split" the count is how many sounds to take from each file;
-# for "stretch" it is the stretch's length in seconds.
-ALBA = "voices/oga_alba_mac/alba_mac_universalspurts/"
-SONNISS = "voices/sonniss/"
-PROTO = "voices/oga_misc/proto-germanic-voices/"
+# Every voice (GuardVoice, Guard.voice, yours): NOX Sound's Voices Essentials
+# (CC0), two men and a woman. The deep man (V1) plays under the plain name,
+# the lighter one (V2) under "_b", the woman (V1) under "_f"; GuardVoice gives
+# each man one of them. Entries are (group, [files], mode, count, fade-out):
+# for "split" the count is how many sounds to take from each file.
+NOX = os.path.expanduser("~/Downloads/Essentials_Series_NOX_SOUND/Voices_Essentials_NOX_SOUND/")
+# The game reads this many takes of a sound at most (Sfx.TAKES).
+TAKES = 24
+
+
+def nox(sex, *kinds):
+    """NOX's takes of each of `kinds` ("V1_Nod", "V2_Hit_Short"...), for
+    "Male" or "Female", in order."""
+    files = []
+
+    for kind in kinds:
+        files += sorted(glob.glob(os.path.join(NOX, "Voice_Essential_" + sex, "*", "Voice_%s_%s*.wav" % (sex, kind))))
+
+    return files
+
+
+M = "Male"
+F = "Female"
 VOICES = [
-    # Talk heard as a murmur under the subtitles: a small group speaking in
-    # tongues, a man in a made-up tongue, a man in Proto-Germanic.
-    ("murmur", [SONNISS + "SH101_Human_SpeakingInTongues_SmallGroup_Fienup_002.wav"], "stretch", 6.0, 0.3),
-    ("murmur", [SONNISS + "cartoon voices male made up language 8.wav"], "whole", 0, 0.15),
-    ("murmur", [PROTO + n for n in ["acknowledge_01.wav", "acknowledge_02.wav", "ready.wav", "acknowledge_03.wav", "selected_01.wav", "acknowledge_04.wav"]], "join", 0, 0.15),
-    ("murmur", [PROTO + n for n in ["annoyed_01.wav", "attack_01.wav", "selected_02.wav", "annoyed_02.wav", "work_complete.wav", "attack_02.wav"]], "join", 0, 0.15),
-    ("laugh", [ALBA + "(laugh)_0%d.wav" % i for i in range(1, 5)], "whole", 0, 0.1),
-    ("laugh", [SONNISS + "Kieuk,laughter,male,60s,OhioCarolina,heeing,restrained,chuckle,mouthclicks.wav",
-               SONNISS + "VOICE of God - Game Phrase - 'Laugh' (intense) 02, DRY.wav",
-               SONNISS + "voice_fun_man_character_deep_laugh_11.wav"], "whole", 0, 0.12),
-    # A sigh: a long breath out.
-    ("sigh", [ALBA + "Phew_0%d.wav" % i for i in range(1, 5)] + [ALBA + "Haa_01.wav"], "whole", 0, 0.12),
-    ("sigh_f", ["voices/oga_female/silly_me.ogg"], "whole", 0, 0.12),
-    ("cough", [ALBA + "(cough)_0%d.wav" % i for i in range(1, 5)], "whole", 0, 0.08),
-    ("cough", ["voices/oga_misc/old-man-cough.flac", "voices/oga_misc/sickness.wav"], "split", 2, 0.08),
-    ("spit", [SONNISS + "ALE SPIT HIT FACE_02*.wav"], "split", 2, 0.08),
-    ("grunt_effort", [ALBA + "(grunt)_0%d.wav" % i for i in range(1, 5)], "whole", 0, 0.08),
-    ("grunt_effort", [SONNISS + "Hand-to-Hand Combat - Vocal Excursion - Male - Powering Up 14.wav",
-                      SONNISS + "EMOTE Joshua, Man, Pain Hurt Grunt Big 03.wav",
-                      "voices/oga_qubodup/slightscreams/slightscream-01.flac",
-                      "voices/oga_qubodup/slightscreams/slightscream-02.flac"], "whole", 0, 0.08),
-    # "Hm?": a man's eye caught.
-    ("hm", [ALBA + "Hmm_0%d.wav" % i for i in range(1, 5)] + [ALBA + "Huh_01.wav", SONNISS + "EMOTE Robert, Man, Curiosity 09, Mic A.wav"], "whole", 0, 0.08),
-    # Breathing hard: single breaths out; frightened ones.
-    ("breath_heavy", [ALBA + "(breath out)_0%d.wav" % i for i in range(1, 7)], "whole", 0, 0.1),
-    ("breath_scared", [SONNISS + "HUMAN BREATH Male_Mouth Inhale and Exhale Like Got Frightened Intermittent _C.wav"], "split", 4, 0.1),
-    ("breath_scared", [SONNISS + "scared breath 12.wav"], "whole", 0, 0.1),
-    ("breath_scared", [ALBA + "(breathing)_panicked.wav"], "split", 3, 0.1),
-    ("yawn", [ALBA + "(yawn)_0%d.wav" % i for i in range(1, 5)], "whole", 0, 0.2),
-    ("yawn", [SONNISS + "HUMAN BREATH Male_ Sleepy Yawn_E.wav"], "split", 2, 0.2),
-    ("snore", [SONNISS + "Snooring_Man_Close_Voice_Sleep_Human.WAV"], "split", 6, 0.2),
-    # A catch of the breath: the moment a man knows.
-    ("gasp", [ALBA + "(gasp)_0%d.wav" % i for i in range(1, 5)] + [SONNISS + "VOXScrm_Male in Shock 4_344 Audio_Screaming.wav"], "whole", 0, 0.08),
-    ("gasp", [SONNISS + "Scream,Male,Mid Thirties,Mouth Covered,Gasps,Fast,Shriek,Panic.wav"], "split", 2, 0.08),
+    # Talk: a line of a conversation is heard as his nods and "hm"s, mouth
+    # open and closed, one after another (GuardVoice's murmur); a listener's
+    # nod on its own.
+    ("murmur", nox(M, "V1_Nod", "V1_Reflexion_Mouth_Open", "V1_Reflexion_Mouth_Close"), "whole", 0, 0.05),
+    ("murmur_b", nox(M, "V2_Nod", "V2_Reflexion_Mouth_Open", "V2_Reflexion_Mouth_Close"), "whole", 0, 0.05),
+    ("murmur_f", nox(F, "V1_Nod", "V1_Reflexion_Mouth_Open", "V1_Reflexion_Mouth_Close"), "whole", 0, 0.05),
+    ("nod", nox(M, "V1_Nod"), "whole", 0, 0.05),
+    ("nod_b", nox(M, "V2_Nod"), "whole", 0, 0.05),
+    ("nod_f", nox(F, "V1_Nod"), "whole", 0, 0.05),
+    ("laugh", nox(M, "V1_Laugh_Short", "V1_Laugh_Long"), "whole", 0, 0.1),
+    ("laugh_b", nox(M, "V2_Laugh_Short", "V2_Laugh_Long"), "whole", 0, 0.1),
+    ("laugh_f", nox(F, "V1_Laugh_Short", "V1_Laugh_Long"), "whole", 0, 0.1),
+    # At his ease, a sigh now and then (the deep man recorded none: he sighs
+    # with the other's).
+    ("sigh", nox(M, "V2_Sigh"), "whole", 0, 0.12),
+    ("sigh_f", nox(F, "V1_Sigh"), "whole", 0, 0.12),
+    # The cold on his breath, single breaths out of the frozen sequences.
+    ("breath_cold", nox(M, "V1_Breath_Frozen"), "split", 12, 0.1),
+    ("breath_cold_b", nox(M, "V2_Breath_Frozen"), "split", 8, 0.1),
+    ("breath_cold_f", nox(F, "V1_Breath_Frozen"), "split", 12, 0.1),
+    ("cough", nox(M, "V1_Cough"), "whole", 0, 0.08),
+    ("cough_b", nox(M, "V2_Cough"), "whole", 0, 0.08),
+    ("cough_f", nox(F, "V1_Cough"), "whole", 0, 0.08),
+    # A spit is heard as the throat cleared for it.
+    ("throat", nox(M, "V1_Throat_Cleaning"), "whole", 0, 0.08),
+    ("throat_b", nox(M, "V2_Throat_Cleaning"), "whole", 0, 0.08),
+    ("throat_f", nox(F, "V1_Throat_Cleaning"), "whole", 0, 0.08),
+    # A kick, a throw.
+    ("grunt_effort", nox(M, "V1_Effort"), "whole", 0, 0.08),
+    ("grunt_effort_b", nox(M, "V2_Effort"), "whole", 0, 0.08),
+    ("grunt_effort_f", nox(F, "V1_Effort"), "whole", 0, 0.08),
+    # "Hm?": his eye caught.
+    ("hm", nox(M, "V1_Reflexion_Mouth_Close"), "whole", 0, 0.05),
+    ("hm_b", nox(M, "V2_Reflexion_Mouth_Close"), "whole", 0, 0.05),
+    ("hm_f", nox(F, "V1_Reflexion_Mouth_Close"), "whole", 0, 0.05),
+    # A catch of the breath: the moment he knows.
+    ("gasp", nox(M, "V1_Breath_Shocked"), "whole", 0, 0.08),
+    ("gasp_b", nox(M, "V2_Breath_Shocked"), "whole", 0, 0.08),
+    ("gasp_f", nox(F, "V1_Breath_Shocked"), "whole", 0, 0.08),
+    # Breathing hard; frightened; asleep (through the nose, or the lighter
+    # man's slow breaths played softly).
+    ("breath_heavy", nox(M, "V1_Breath_Mouth_Moderate_Sequence", "V1_Breath_Mouth_Sequence"), "split", 6, 0.1),
+    ("breath_heavy_b", nox(M, "V2_Breath_Mouth_Moderate_Sequence"), "split", 8, 0.1),
+    ("breath_heavy_f", nox(F, "V1_Breath_Moderate_Sequence"), "split", 3, 0.1),
+    ("breath_scared", nox(M, "V1_Breath_Mouth_Fast_Sequence"), "split", 8, 0.1),
+    ("breath_scared_b", nox(M, "V2_Breath_Gasp"), "whole", 0, 0.1),
+    ("breath_scared_f", nox(F, "V1_Breath_Strong_Sequence", "V1_Breath_Nose_Fast_Sequence"), "split", 6, 0.1),
+    ("breath_sleep", nox(M, "V1_Breath_Nose_Sequence", "V1_Breath_Nose_Moderate_Sequence"), "split", 6, 0.2),
+    ("breath_sleep_b", nox(M, "V2_Breath_Mouth_Moderate_Sequence"), "split", 6, 0.2),
+    ("breath_sleep_f", nox(F, "V1_Breath_Nose_Single"), "split", 2, 0.2),
+    # The fight: cut, dying, the heavy blow's roar, the low sweep's grunt.
+    ("pain", nox(M, "V1_Hit_Mono", "V1_Hit_Short"), "whole", 0, 0.08),
+    ("pain_b", nox(M, "V2_Hit_Mono", "V2_Hit_Short"), "whole", 0, 0.08),
+    ("pain_f", nox(F, "V1_Hit_Mono", "V1_Hit_Short"), "whole", 0, 0.08),
+    ("death", nox(M, "V1_Pain"), "whole", 0, 0.25),
+    ("death_b", nox(M, "V2_Pain"), "whole", 0, 0.25),
+    ("death_f", nox(F, "V1_Pain"), "whole", 0, 0.25),
+    ("roar", nox(M, "V1_Attack_Mono"), "whole", 0, 0.12),
+    ("roar_b", nox(M, "V2_Attack_Mono"), "whole", 0, 0.12),
+    ("roar_f", nox(F, "V1_Attack"), "whole", 0, 0.12),
+    ("grunt", nox(M, "V1_Attack_Short"), "whole", 0, 0.08),
+    ("grunt_b", nox(M, "V2_Attack_Short"), "whole", 0, 0.08),
+    ("grunt_f", nox(F, "V1_Attack"), "whole", 0, 0.08),
+    # Yours (flat, on the Body bus): the lighter man, cut; and his effort (a
+    # heavy blow, a kick, hauling yourself up).
+    ("hurt", nox(M, "V2_Hit_Short"), "whole", 0, 0.08),
+    ("effort", nox(M, "V2_Effort"), "whole", 0, 0.08),
 ]
 
 # The score, in stereo (see above). Stings: (name, source, start, end,
@@ -484,17 +487,6 @@ def voice_slices(sources, mode, count, fade_out):
     """The slices of a VOICES entry."""
     out = []
 
-    if mode == "join":
-        pieces = []
-
-        for source in sources:
-            if os.path.exists(W(source)):
-                whole = decode(W(source), 0.0, 1e9)
-                first, last = auto_bounds(whole)
-                pieces += [whole[first:last], np.zeros(int(0.18 * RATE))]
-
-        return [fade(np.concatenate(pieces), 0.02, fade_out)] if pieces else []
-
     for source in sources:
         path = W(source)
 
@@ -510,16 +502,6 @@ def voice_slices(sources, mode, count, fade_out):
         elif mode == "split":
             for start, end in split_events(whole, count):
                 out.append(fade(whole[int(start * RATE):int(end * RATE)], 0.006, fade_out))
-        elif mode == "stretch":
-            first, last = auto_bounds(whole)
-            body = whole[first:last]
-            step = int(count * RATE)
-
-            for at in range(0, max(len(body) - step // 2, 1), step):
-                piece = body[at:at + step]
-
-                if len(piece) > RATE:
-                    out.append(fade(piece, 0.08, fade_out))
 
     return out
 
@@ -706,8 +688,7 @@ def main():
             continue
 
         for x in voice_slices(sources, mode, count, fade_out):
-            # The game reads eight takes of a sound at most.
-            if len(groups.get(group, [])) >= 8:
+            if len(groups.get(group, [])) >= TAKES:
                 break
 
             name = "%s_%d" % (group, len(groups.get(group, [])) + 1)

@@ -13,13 +13,26 @@ extends Node3D
 ## A log pushed into it (flare) and it flares up a moment, brighter and
 ## taller.
 ##
+## A level's own torch on a wall (`can_douse`) can be put out: by you, up close
+## (use it: pinched out with a hiss and a wisp of smoke), and that place is
+## dark. It was burning when the level began, so a guard who sees it dark
+## knows someone has been at it (left_out: GuardLife), and lights it again
+## (relight: GuardHands).
+##
 ##   var torch := Torch.new(); torch.position = Vector3(0, 2.2, 0); add_child(torch)
 
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 
 const CRACKLE := "res://audio/ambience/torch_loop.ogg"
+## Put out: heard this loud (SoundBus, dB), close by only. The ray you use
+## things with finds it on this physics layer (PlayerFrob.frob_mask), within
+## REACH_RADIUS (m) of the flame.
+const HISS_DB := 30.0
+const REACH_LAYER := 4
+const REACH_RADIUS := 0.3
 ## How loud its crackle is (dB at a metre or so), and how far it carries.
 const CRACKLE_DB := -13.0
 const CRACKLE_REACH := 11.0
@@ -37,6 +50,10 @@ const FLARE_TIME := 0.9
 ## Flame frames per second.
 @export var frame_rate := 9.0
 @export var flame_size := 0.34
+## A level's own torch, that you can put out (see the header); and what it is
+## called ("Put out the torch").
+@export var can_douse := false
+@export var light_name := "torch"
 
 var light: OmniLight3D
 var flame: MeshInstance3D
@@ -56,6 +73,11 @@ var _lean := Vector3.ZERO
 const LEAN_REACH := 0.07
 ## Flaring up (a log pushed in): 1 at once, fading.
 var _flare := 0.0
+## Burning; and whether it was when the level began (a light they expect).
+var lit := true
+var was_lit := true
+var _put_out_by: WeakRef = null
+var _reach: Area3D
 
 
 func _ready() -> void:
@@ -119,8 +141,29 @@ func _ready() -> void:
 			crackle.pitch_scale = randf_range(0.9, 1.1)
 			add_child(crackle)
 
+	# A level's own torch: found by the ray you use things with, and known to
+	# the guards.
+	if can_douse:
+		was_lit = lit
+		add_to_group(&"lights")
+		flame.set_meta(&"no_highlight", true)
+		_reach = Area3D.new()
+		_reach.name = "Reach"
+		_reach.collision_layer = REACH_LAYER
+		_reach.collision_mask = 0
+		_reach.monitoring = false
+		var shape := CollisionShape3D.new()
+		var sphere := SphereShape3D.new()
+		sphere.radius = REACH_RADIUS
+		shape.shape = sphere
+		_reach.add_child(shape)
+		add_child(_reach)
+
 
 func _process(delta: float) -> void:
+	if not lit:
+		return
+
 	_time += delta
 
 	# A slow breath, a quicker waver and a nervous flutter.
@@ -154,6 +197,69 @@ func lean(v: Vector3) -> void:
 ## less burning down, more flaring).
 func set_strength(k: float) -> void:
 	_strength = maxf(k, 0.0)
+
+
+## What using it does (PlayerFrob): put it out, while it burns.
+func get_prompt(_by: Node) -> String:
+	return "Put out the %s" % light_name if lit and can_douse else ""
+
+
+func frob(by: Node) -> void:
+	if lit and can_douse:
+		put_out(by)
+
+
+## Out: dark and quiet, with a hiss and a wisp of smoke; who put it out is
+## remembered (left_out).
+func put_out(by: Node = null) -> void:
+	if not lit:
+		return
+
+	lit = false
+	_put_out_by = weakref(by) if by != null else null
+	light.visible = false
+	flame.visible = false
+
+	if crackle != null:
+		crackle.stop()
+
+	if _reach != null:
+		_reach.collision_layer = 0
+
+	Sfx.play(self, &"cloth", global_position, -6.0, 0.75)
+	Fx.dust(self, global_position + Vector3.UP * 0.12, Vector3.UP, 0.5)
+	SoundBus.emit_sound(global_position, HISS_DB, by if by != null else self, &"hiss")
+
+
+## Lit again (a guard with his tinder): burning, flaring up a moment.
+func relight(_by: Node = null) -> void:
+	if lit:
+		return
+
+	lit = true
+	_put_out_by = null
+	light.visible = true
+	flame.visible = true
+
+	if _reach != null:
+		_reach.collision_layer = REACH_LAYER
+
+	if has_meta(&"noticed"):
+		remove_meta(&"noticed")
+
+	_listen_in = 0.0
+	Sfx.play(self, &"ignite", global_position, -4.0)
+	flare(0.8)
+
+
+## Out when it should be burning, and not by one of the guards: someone has
+## been at it.
+func left_out() -> bool:
+	if lit or not was_lit:
+		return false
+
+	var who: Object = _put_out_by.get_ref() if _put_out_by != null else null
+	return who == null or not (who as Node).is_in_group(&"guards")
 
 
 ## Flares up a moment (a log pushed into a fire): brighter and taller, then
