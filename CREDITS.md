@@ -18,7 +18,35 @@ Every sound in the game is a recording, cut and levelled from the packs below by
   "screams_03" by **pushkin**, "WomanScream" by **Archeos**, all from freesound;
   the collection is credited here with thanks).
 
+- **The guards' laughs, sighs, coughs, grunts, "hm"s, breaths, yawns and
+  gasps** (`laugh`, `sigh`, `cough`, `grunt_effort`, `hm`, `breath_heavy`,
+  `breath_scared`, `yawn`, `gasp`): "Voice Pack│Universal Spurts" by **Alba
+  MacKenna** (Alba_Mac), [OpenGameArt](https://opengameart.org/content/voice-pack%E2%94%82universal-spurts),
+  licensed [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/). Cut and
+  levelled by tools/prepare_sfx.py.
+
 ### Free to use (no attribution required, credited with thanks)
+
+- **The guards' voices from the Sonniss GDC Game Audio Bundles** (royalty-free,
+  for use in productions; via the gamesounds.xyz mirror): the murmur of talk
+  (`murmur`: Soundopolis "Halloween 101" speaking in tongues, Soundholder
+  "Cartoon Voices" made-up language), laughs (Eiravaein Works "Kieuk",
+  Articulated Sounds "Voice of God", Gamemaster Audio "Fun Character Voices"),
+  a spit (Joshua Reinhardt "Ultimate Eats and Drinks"), grunts (The Chris Alan
+  "Hand-to-Hand Combat", Articulated Sounds "Fight Vocalizations"), a "hm?"
+  (Articulated Sounds "Universal Emotes"), frightened breathing and a yawn
+  (Articulated Sounds "Human Male Breathe", JC Audio "Breathing In Hell"), a
+  sleeper's snoring (Soundreorganized "Everything So Far"), gasps (Airborne
+  Sound "Human", 344 Audio "Screaming"). Edited into the game's sounds only.
+- **More of the murmur** (`murmur`): "Proto-Germanic Voices" by Manuel Senfft
+  for Wyrmsun, posted by **Andrettin**, [OpenGameArt](https://opengameart.org/content/proto-germanic-voices), CC0.
+- **Strain grunts** (`grunt_effort`): "15 vocal male strain/hurt/pain/jump
+  sounds" by **qubodup**, [OpenGameArt](https://opengameart.org/content/15-vocal-male-strainhurtpainjump-sounds), CC0.
+- **Coughs** (`cough`): "Old Man Cough" by **Jordan Irwin (AntumDeluge)**,
+  [OpenGameArt](https://opengameart.org/content/old-man-cough), CC0; "Sick
+  Noises" by **frosty ham**, [OpenGameArt](https://opengameart.org/content/sick-noises), CC0.
+- **The captain's sigh** (`sigh_f`): "Silly me" by **Nocturnal_Vanguard**
+  (AuraVoice), [OpenGameArt](https://opengameart.org/content/silly-me), CC0.
 
 - **The score's stings and layers, and your heartbeat when badly hurt**
   (`sting_suspicious`, `sting_combat`, `sting_escalate`, `music_drone`,

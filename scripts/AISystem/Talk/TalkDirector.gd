@@ -381,6 +381,11 @@ func grieve(man: Node, dead_name: String) -> bool:
 		return false
 
 	_grieved[key] = true
+	var voice: Variant = man.get("_voice")
+
+	if voice != null and voice.has_method("gasp"):
+		voice.gasp()
+
 	man.set("grief", 1.0 if kin else 0.6)
 	man.set("grief_fades", not kin)
 	var fighter: RefCounted = man.get("_fighter")

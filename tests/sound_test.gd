@@ -461,6 +461,14 @@ func _run() -> void:
 	duelist.queue_free()
 	swordsman.queue_free()
 
+	# M19 the guards' voices are recordings: the murmur of talk in several
+	# takes, and every emote, breath and snore at least one
+	var voices := [&"murmur", &"laugh", &"sigh", &"sigh_f", &"cough", &"spit", &"grunt_effort", &"hm", &"breath_heavy", &"breath_scared", &"yawn", &"snore", &"gasp"]
+	var silent := voices.filter(func(v): return SfxScript._load_files(v).is_empty())
+	_check("M19 the guards' talk, emotes and breathing are recordings: the murmur in four takes or more, every other at least one",
+		SfxScript._load_files(&"murmur").size() >= 4 and SfxScript._load_files(&"laugh").size() >= 2 and silent.is_empty(),
+		"murmur %d takes, laugh %d, silent %s" % [SfxScript._load_files(&"murmur").size(), SfxScript._load_files(&"laugh").size(), silent])
+
 
 ## Walks (or runs) the player forward and, at every footstep, how low the
 ## head bob is then (sin 2φ: -1 at the bottom) into `lows`. The steps taken.

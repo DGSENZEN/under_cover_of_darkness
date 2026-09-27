@@ -37,6 +37,19 @@ any sound, its loops to audio/music/, each cut to whole bars of the drums'
 130 bpm (the heartbeat and the brass exactly one and two bars, the drums
 their own eight), so the layers stay in step however long they play.
 
+The guards' voices (VOICES below: their murmur of talk, laughs, sighs,
+coughs, grunts, breathing, snores, a gasp) come from the Sonniss GDC bundles
+and free packs under ~/Downloads/AUCOD Web SFX/voices/ (credited in
+CREDITS.md). A voice entry is cut one of four ways: "whole" (each file from
+where its sound starts to where it dies away), "split" (the separate sounds in
+one take: single breaths, snores, coughs), "stretch" (long stretches of talk
+the game plays a part of: GuardVoice's murmur), or "join" (short phrases put
+one after another into one stretch of talk).
+
+    python3 tools/prepare_sfx.py --only=murmur,laugh,...
+
+cuts only those groups and leaves every other file as it is.
+
 Needs ffmpeg and numpy.
 """
 
@@ -311,6 +324,49 @@ SOUNDS += [
     ("death_f_4", W("female_screams/4.ogg"), None, None, 0.12),
 ]
 
+# The guards' voices (GuardVoice): (group, [files under WEB], mode, count,
+# fade-out). For "split" the count is how many sounds to take from each file;
+# for "stretch" it is the stretch's length in seconds.
+ALBA = "voices/oga_alba_mac/alba_mac_universalspurts/"
+SONNISS = "voices/sonniss/"
+PROTO = "voices/oga_misc/proto-germanic-voices/"
+VOICES = [
+    # Talk heard as a murmur under the subtitles: a small group speaking in
+    # tongues, a man in a made-up tongue, a man in Proto-Germanic.
+    ("murmur", [SONNISS + "SH101_Human_SpeakingInTongues_SmallGroup_Fienup_002.wav"], "stretch", 6.0, 0.3),
+    ("murmur", [SONNISS + "cartoon voices male made up language 8.wav"], "whole", 0, 0.15),
+    ("murmur", [PROTO + n for n in ["acknowledge_01.wav", "acknowledge_02.wav", "ready.wav", "acknowledge_03.wav", "selected_01.wav", "acknowledge_04.wav"]], "join", 0, 0.15),
+    ("murmur", [PROTO + n for n in ["annoyed_01.wav", "attack_01.wav", "selected_02.wav", "annoyed_02.wav", "work_complete.wav", "attack_02.wav"]], "join", 0, 0.15),
+    ("laugh", [ALBA + "(laugh)_0%d.wav" % i for i in range(1, 5)], "whole", 0, 0.1),
+    ("laugh", [SONNISS + "Kieuk,laughter,male,60s,OhioCarolina,heeing,restrained,chuckle,mouthclicks.wav",
+               SONNISS + "VOICE of God - Game Phrase - 'Laugh' (intense) 02, DRY.wav",
+               SONNISS + "voice_fun_man_character_deep_laugh_11.wav"], "whole", 0, 0.12),
+    # A sigh: a long breath out.
+    ("sigh", [ALBA + "Phew_0%d.wav" % i for i in range(1, 5)] + [ALBA + "Haa_01.wav"], "whole", 0, 0.12),
+    ("sigh_f", ["voices/oga_female/silly_me.ogg"], "whole", 0, 0.12),
+    ("cough", [ALBA + "(cough)_0%d.wav" % i for i in range(1, 5)], "whole", 0, 0.08),
+    ("cough", ["voices/oga_misc/old-man-cough.flac", "voices/oga_misc/sickness.wav"], "split", 2, 0.08),
+    ("spit", [SONNISS + "ALE SPIT HIT FACE_02*.wav"], "split", 2, 0.08),
+    ("grunt_effort", [ALBA + "(grunt)_0%d.wav" % i for i in range(1, 5)], "whole", 0, 0.08),
+    ("grunt_effort", [SONNISS + "Hand-to-Hand Combat - Vocal Excursion - Male - Powering Up 14.wav",
+                      SONNISS + "EMOTE Joshua, Man, Pain Hurt Grunt Big 03.wav",
+                      "voices/oga_qubodup/slightscreams/slightscream-01.flac",
+                      "voices/oga_qubodup/slightscreams/slightscream-02.flac"], "whole", 0, 0.08),
+    # "Hm?": a man's eye caught.
+    ("hm", [ALBA + "Hmm_0%d.wav" % i for i in range(1, 5)] + [ALBA + "Huh_01.wav", SONNISS + "EMOTE Robert, Man, Curiosity 09, Mic A.wav"], "whole", 0, 0.08),
+    # Breathing hard: single breaths out; frightened ones.
+    ("breath_heavy", [ALBA + "(breath out)_0%d.wav" % i for i in range(1, 7)], "whole", 0, 0.1),
+    ("breath_scared", [SONNISS + "HUMAN BREATH Male_Mouth Inhale and Exhale Like Got Frightened Intermittent _C.wav"], "split", 4, 0.1),
+    ("breath_scared", [SONNISS + "scared breath 12.wav"], "whole", 0, 0.1),
+    ("breath_scared", [ALBA + "(breathing)_panicked.wav"], "split", 3, 0.1),
+    ("yawn", [ALBA + "(yawn)_0%d.wav" % i for i in range(1, 5)], "whole", 0, 0.2),
+    ("yawn", [SONNISS + "HUMAN BREATH Male_ Sleepy Yawn_E.wav"], "split", 2, 0.2),
+    ("snore", [SONNISS + "Snooring_Man_Close_Voice_Sleep_Human.WAV"], "split", 6, 0.2),
+    # A catch of the breath: the moment a man knows.
+    ("gasp", [ALBA + "(gasp)_0%d.wav" % i for i in range(1, 5)] + [SONNISS + "VOXScrm_Male in Shock 4_344 Audio_Screaming.wav"], "whole", 0, 0.08),
+    ("gasp", [SONNISS + "Scream,Male,Mid Thirties,Mouth Covered,Gasps,Fast,Shriek,Panic.wav"], "split", 2, 0.08),
+]
+
 # The score, in stereo (see above). Stings: (name, source, start, end,
 # fade-out, reversed). SCORE_LOOPS: (name, source, start, end, kind, argument):
 # "crossfade" a free loop, its ends overlapped by `argument` seconds;
@@ -385,6 +441,87 @@ def auto_bounds(x, lead=0.004, tail=0.04, onset_db=-30.0, floor_db=-42.0):
     above = np.where(env > peak * 10 ** (floor_db / 20))[0]
     last = int(above[-1]) if len(above) else len(x) - 1
     return max(onset - int(lead * RATE), 0), min(last + int(tail * RATE), len(x))
+
+
+def split_events(x, count, gap=0.18, threshold_db=-26.0, shortest=0.08, longest=2.5, lead=0.02, tail=0.12):
+    """The separate sounds in `x` (seconds, [start, end]): runs where its 20 ms
+    envelope stands above `threshold_db` of the peak, parted by at least `gap`
+    of quiet, each `shortest` to `longest` long; the loudest `count`, in
+    order."""
+    a = np.abs(x)
+    peak = max(a.max(), 1e-9)
+    w = max(int(0.02 * RATE), 1)
+    env = np.convolve(a, np.ones(w) / w, mode="same")
+    loud = env > peak * 10 ** (threshold_db / 20)
+    events = []
+    i = 0
+    n = len(x)
+
+    while i < n:
+        if not loud[i]:
+            i += 1
+            continue
+
+        start = i
+        quiet = 0
+
+        while i < n and quiet < int(gap * RATE):
+            quiet = 0 if loud[i] else quiet + 1
+            i += 1
+
+        end = i - quiet
+        length = (end - start) / RATE
+
+        if shortest <= length <= longest:
+            events.append([max(start / RATE - lead, 0.0), min(end / RATE + tail, n / RATE), float(env[start:end].max())])
+
+    events.sort(key=lambda e: -e[2])
+    chosen = sorted(events[:count], key=lambda e: e[0])
+    return [[e[0], e[1]] for e in chosen]
+
+
+def voice_slices(sources, mode, count, fade_out):
+    """The slices of a VOICES entry."""
+    out = []
+
+    if mode == "join":
+        pieces = []
+
+        for source in sources:
+            if os.path.exists(W(source)):
+                whole = decode(W(source), 0.0, 1e9)
+                first, last = auto_bounds(whole)
+                pieces += [whole[first:last], np.zeros(int(0.18 * RATE))]
+
+        return [fade(np.concatenate(pieces), 0.02, fade_out)] if pieces else []
+
+    for source in sources:
+        path = W(source)
+
+        if not os.path.exists(path):
+            print("  (missing: %s)" % source)
+            continue
+
+        whole = decode(path, 0.0, 1e9)
+
+        if mode == "whole":
+            first, last = auto_bounds(whole)
+            out.append(fade(whole[first:last], 0.006, fade_out))
+        elif mode == "split":
+            for start, end in split_events(whole, count):
+                out.append(fade(whole[int(start * RATE):int(end * RATE)], 0.006, fade_out))
+        elif mode == "stretch":
+            first, last = auto_bounds(whole)
+            body = whole[first:last]
+            step = int(count * RATE)
+
+            for at in range(0, max(len(body) - step // 2, 1), step):
+                piece = body[at:at + step]
+
+                if len(piece) > RATE:
+                    out.append(fade(piece, 0.08, fade_out))
+
+    return out
 
 
 def fade(x, fade_in, fade_out):
@@ -551,13 +688,39 @@ def prepare_score():
 
 
 def main():
-    pack = sys.argv[1] if len(sys.argv) > 1 else PACK
+    only = None
+    args = []
+
+    for a in sys.argv[1:]:
+        if a.startswith("--only="):
+            only = set(a.split("=", 1)[1].split(","))
+        else:
+            args.append(a)
+
+    pack = args[0] if args else PACK
     os.makedirs(OUT, exist_ok=True)
     groups = {}
 
+    for group, sources, mode, count, fade_out in VOICES:
+        if only is not None and group not in only:
+            continue
+
+        for x in voice_slices(sources, mode, count, fade_out):
+            # The game reads eight takes of a sound at most.
+            if len(groups.get(group, [])) >= 8:
+                break
+
+            name = "%s_%d" % (group, len(groups.get(group, [])) + 1)
+            x = x * 10 ** (PEAK_LIMIT_DB / 20) / max(np.abs(x).max(), 1e-9)
+            groups.setdefault(group, []).append([name, x, loudness(x)])
+
     for name, source, start, end, fade_out in SOUNDS:
-        x = fade(decode(os.path.join(pack, source), start, end), 0.006, fade_out)
         group = re.sub(r"_\d+$", "", name)
+
+        if only is not None and group not in only:
+            continue
+
+        x = fade(decode(os.path.join(pack, source), start, end), 0.006, fade_out)
         # Every slice as loud as it can be without clipping, then measured.
         x *= 10 ** (PEAK_LIMIT_DB / 20) / max(np.abs(x).max(), 1e-9)
 
@@ -575,6 +738,9 @@ def main():
             write_wav(os.path.join(OUT, name + ".wav"), x * 10 ** ((level - own) / 20))
 
         print("%-12s %d file(s), %.1f LUFS" % (group, len(members), level))
+
+    if only is not None:
+        return
 
     prepare_score()
     os.makedirs(AMBIENCE_OUT, exist_ok=True)

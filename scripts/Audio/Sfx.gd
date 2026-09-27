@@ -128,6 +128,24 @@ const GAIN := {
 	&"death_f": -10.1,
 	&"grunt_f": -5.4,
 	&"roar_f": -3.7,
+	# Their talk and their breath (GuardVoice), levelled against the cries
+	# above (about -25 LUFS as heard): the murmur of talk well under them
+	# (-32; a shout's delivery brings it up to them), laughs and grunts a
+	# little under (-28), sighs, "hm"s and breaths quieter still, a sleeper's
+	# snore quietest (-34).
+	&"murmur": -12.1,
+	&"laugh": -7.9,
+	&"sigh": -16.9,
+	&"sigh_f": -15.4,
+	&"cough": -6.4,
+	&"spit": -16.0,
+	&"grunt_effort": -6.2,
+	&"hm": -15.2,
+	&"breath_heavy": -16.6,
+	&"breath_scared": -9.7,
+	&"yawn": -13.4,
+	&"snore": -12.1,
+	&"gasp": -7.1,
 	# The world: feet, hands, doors, what you pick up. Recordings are
 	# levelled against a loudness each kind of sound is meant to have (their
 	# measured LUFS, tools/prepare_sfx.py): your steps about 8 dB under a

@@ -71,7 +71,8 @@ const AFRAID_AT := 0.3
 const LINE_BASE := 0.9
 const LINE_PER_CHAR := 0.055
 ## Emotes and the sounds they make.
-const EMOTE_SOUNDS := {"laughs": &"laugh", "sighs": &"sigh", "coughs": &"cough", "spits": &"spit", "kicks": &"grunt_effort", "throws": &"grunt_effort"}
+const EMOTE_SOUNDS := {"laughs": &"laugh", "sighs": &"sigh", "coughs": &"cough", "spits": &"spit", "kicks": &"grunt_effort", "throws": &"grunt_effort",
+	"looks": &"hm"}
 ## Emote sounds a woman makes in her own recordings.
 const OWN_VOICE := [&"laugh", &"sigh"]
 
@@ -181,7 +182,7 @@ func cry(kind: StringName, volume := 0.0) -> void:
 
 ## The sound of an emote, if it has one ("laughs", "sighs", ...).
 func emote(what: String) -> void:
-	var sound: StringName = EMOTE_SOUNDS.get(what, &"")
+	var sound: StringName = EMOTE_SOUNDS.get(what.get_slice(":", 0), &"")
 
 	if sound == &"" or sounding() > CHATTER:
 		return
@@ -190,6 +191,14 @@ func emote(what: String) -> void:
 		sound = StringName(String(sound) + "_f")
 
 	Sfx.play(guard, sound, guard.eye_position(), 0.0, _pitch(), 0.03)
+
+
+## A catch of the breath: the moment he knows (a friend dead).
+func gasp() -> void:
+	if sounding() > CHATTER:
+		return
+
+	Sfx.play(guard, &"gasp", guard.eye_position(), 0.0, _pitch(), 0.03)
 
 
 ## The rung sounding now; -1 if nothing.
