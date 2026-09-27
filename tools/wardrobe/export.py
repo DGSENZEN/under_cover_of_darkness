@@ -165,6 +165,13 @@ def export_kind(recipe):
     chains = [{**c, **recipe["chains"][c["chain"]]} for c in json.loads(scene.get("wardrobe_chains", "[]"))]
     albedo = str(common.WARDROBE / ("%s.png" % kind))
     mask = str(common.WARDROBE / ("%s_mask.png" % kind))
+    # (Built before the rule, the watchman's batch 0 outfit takes it here.)
+    opened = common.open_necklines(outfit, armature)
+
+    if opened:
+        print("wardrobe: %s: %d faces round his neckline drawn from both sides" % (kind, opened))
+        common.save(common.SOURCE / ("%s.blend" % kind))
+
     combined = common.tri_count(outfit) + heaviest_parts(recipe)
     messages = validate.check(outfit, armature=armature, reference_joints=reference_joints(recipe["body"]),
                               cloth_bones=[b for c in chains for b in c["bones"]],
@@ -292,6 +299,9 @@ def export_parts(prefix, folder, body="male"):
 
         if folder == "heads":
             data = {"face": name, "body": recipes.HEADS[name]["body"], "triangles": common.tri_count(obj)}
+
+            if "hair_colours" in recipes.HEADS[name]:
+                data["hair_colours"] = recipes.HEADS[name]["hair_colours"]
         elif folder == "hair":
             h = recipes.HAIR[name]
             data = {"style": name, "kind": h["kind"], "body": h.get("body", "male"), "triangles": common.tri_count(obj),

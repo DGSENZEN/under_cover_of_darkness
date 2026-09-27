@@ -13,10 +13,13 @@ extends RefCounted
 ##             own ways (GuardHabits.gd), and between them he passes the time
 ##             where he stands: warms his hands, stamps his feet, paces...
 ##             (GuardPastimes).
-##   oddities  a door you left open, your arrow in a wall: he notices it (it
-##             takes light, and a look), goes to it and deals with it (shuts
-##             the door, pulls the arrow out), then searches about it; the
-##             garrison is roused a little.
+##   oddities  a door you left open, your arrow in a wall, a torch you put
+##             out: he notices it (it takes light, and a look; a torch dark
+##             where it should burn takes only the look), goes to it and deals
+##             with it (shuts the door, pulls the arrow out, lights the torch
+##             again), then searches about it; the garrison is roused a little,
+##             and more by a second torch out not long after the first (it is
+##             no draught: Garrison.light_found_out).
 ##   missing   a man who knew another looks at his post and he is not there
 ##             (Garrison.fallen): "Where's Hendrik got to?", and he goes to see.
 ##   noises    a man who hears something with a friend at hand says so, and
@@ -54,7 +57,17 @@ const REACT := 1.6
 const NOTICE := 0.9
 const DOOR_RANGE := 11.0
 const ARROW_RANGE := 7.0
+const TORCH_RANGE := 14.0
 const ODD_LIGHT := 0.08
+## How much each rouses the garrison: a door, an arrow, a torch out, and a
+## torch out with others not long before it.
+const DOOR_ALARM := 0.2
+const ARROW_ALARM := 0.35
+const TORCH_ALARM := 0.15
+const TORCHES_ALARM := 0.45
+## A torch he could not get near enough to light again is left alone this
+## long (s).
+const OUT_OF_REACH := 120.0
 ## He deals with it only once he is this near it (m); stirred by a noise, he
 ## notices only what is this near where he heard it.
 const ODD_REACH := 2.8
@@ -194,7 +207,7 @@ func update(delta: float) -> void:
 	# Things out of place, men missing: noticed at his ease (suspicious, only
 	# what might be what stirred him: something by where he heard it), and
 	# not while he covers a friend's look.
-	if (state == RELAXED or state == SUSPICIOUS) and not covering():
+	if (state == RELAXED or state == SUSPICIOUS) and not covering() and not (guard.has_method("blinded") and guard.blinded()):
 		_look_for_oddities(CHECK)
 
 		if state == RELAXED:
@@ -559,6 +572,23 @@ func _look_for_oddities(step: float) -> void:
 		else:
 			_noticing.erase(door)
 
+	# A torch dark where it should be burning: its not burning is what he
+	# sees, so it takes no light to see it.
+	for torch in tree.get_nodes_in_group(&"lights"):
+		if torch.has_method("left_out") and torch.left_out() and not torch.has_meta(&"noticed") and Comms.now() >= float(torch.get_meta(&"out_of_reach_until", -1.0)):
+			# Its flame, where it should be burning (a fixture's origin is on the
+			# wall behind it, or on the floor under its basket).
+			var at: Vector3 = torch.flame_position() if torch.has_method("flame_position") else (torch as Node3D).global_position
+
+			if near != Vector3.INF and at.distance_to(near) > ODD_NEAR:
+				continue
+
+			if _watch_for(torch, [at], TORCH_RANGE, eye, step, false):
+				_notice(torch, &"torch", at)
+				return
+		else:
+			_noticing.erase(torch)
+
 	for arrow in tree.get_nodes_in_group(&"stray_arrows"):
 		if arrow.is_queued_for_deletion() or arrow.has_meta(&"noticed"):
 			continue
@@ -572,9 +602,9 @@ func _look_for_oddities(step: float) -> void:
 
 
 ## Whether `thing`, seen at any of `points`, looked at a while, has
-## registered (in reach, in view, lit enough or near). Counts the time it has
-## been seen, by the best view of it.
-func _watch_for(thing: Node3D, points: Array, reach: float, eye: Vector3, step: float) -> bool:
+## registered (in reach, in view, lit enough or near: `lit_to_see`). Counts
+## the time it has been seen, by the best view of it.
+func _watch_for(thing: Node3D, points: Array, reach: float, eye: Vector3, step: float, lit_to_see := true) -> bool:
 	var best := 0.0
 
 	for at: Vector3 in points:
@@ -588,7 +618,7 @@ func _watch_for(thing: Node3D, points: Array, reach: float, eye: Vector3, step: 
 		if cone < 0.5 or cone <= best or not guard._line_of_sight(eye, at, thing):
 			continue
 
-		if to.length() > 3.0:
+		if to.length() > 3.0 and lit_to_see:
 			var exclude: Array[RID] = []
 
 			if thing is CollisionObject3D:
@@ -613,13 +643,28 @@ func _notice(thing: Node3D, kind: StringName, where: Vector3) -> void:
 	_noticing.erase(thing)
 	_odd = thing
 	_odd_kind = kind
-	guard.say(&"odd_door" if kind == &"door" else &"odd_arrow")
 	var garrison: RefCounted = _garrison()
 
-	if garrison != null:
-		garrison.raise_alarm(0.2 if kind == &"door" else 0.35)
+	match kind:
+		&"door":
+			guard.say(&"odd_door")
+		&"arrow":
+			guard.say(&"odd_arrow")
 
-	# To the doorway, from his own side of it (clear of its swing); to the arrow.
+	if garrison != null:
+		match kind:
+			&"door":
+				garrison.raise_alarm(DOOR_ALARM)
+			&"arrow":
+				garrison.raise_alarm(ARROW_ALARM)
+			&"torch":
+				# One out is a draught; another not long after is somebody.
+				var out: int = garrison.light_found_out(thing)
+				garrison.raise_alarm(TORCHES_ALARM if out >= GarrisonScript.LIGHTS_WORK else TORCH_ALARM)
+				guard.say(&"odd_lights" if out >= GarrisonScript.LIGHTS_WORK else &"odd_light")
+
+	# To the doorway, from his own side of it (clear of its swing); to the
+	# arrow; to the floor under the torch.
 	var go := where
 
 	if kind == &"door":
@@ -628,6 +673,8 @@ func _notice(thing: Node3D, kind: StringName, where: Vector3) -> void:
 
 		if side.length() > 0.1:
 			go = where + side.normalized() * 1.1
+	elif kind == &"torch":
+		go = NavigationServer3D.map_get_closest_point(guard.get_world_3d().navigation_map, where + Vector3.DOWN * 2.0)
 
 	guard.notice(go, &"oddity")
 
@@ -646,6 +693,11 @@ func deal_with_oddity() -> bool:
 
 	if Vector2(at.x - guard.global_position.x, at.z - guard.global_position.z).length() > ODD_REACH:
 		thing.remove_meta(&"noticed")
+
+		# A torch he could not get near enough to light: left a while.
+		if _odd_kind == &"torch":
+			thing.set_meta(&"out_of_reach_until", Comms.now() + OUT_OF_REACH)
+
 		return false
 
 	match _odd_kind:
@@ -654,6 +706,9 @@ func deal_with_oddity() -> bool:
 				thing.frob(guard)
 		&"arrow":
 			guard._hands.stoop_for(thing, &"evidence")
+		&"torch":
+			if thing.get("lit") == false:
+				guard._hands.relight(thing)
 
 	return true
 

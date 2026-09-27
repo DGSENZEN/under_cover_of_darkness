@@ -574,11 +574,30 @@ def bake_parts(prefix, folder):
         save_png(shrink(fill(mask, covered)), str(common.WARDROBE / folder / ("%s_mask.png" % name)), colour=False)
 
 
+def head_alone(low):
+    """A copy of a low head without the sleeve inside its neck (part 2,
+    build.neck_sleeve): baked with it, the sleeve showing under the head's
+    edge shaded the foot of its neck (occlusion) darker than his chest. The
+    sleeve samples the map's bottom row, the head's own."""
+    alone = working_copy(low)
+    alone.name = low.name + "_alone"
+    part = alone.data.attributes["wr_part"].data
+    bm = bmesh.new()
+    bm.from_mesh(alone.data)
+    bm.faces.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if part[f.index].value == 2], context="FACES")
+    bm.to_mesh(alone.data)
+    bm.free()
+    return alone
+
+
 def bake_heads():
-    for low in [o for o in bpy.data.objects if o.name.startswith("Head_") and o.type == "MESH"]:
-        face = low.name[len("Head_"):]
+    for whole in [o for o in bpy.data.objects if o.name.startswith("Head_") and o.type == "MESH"]:
+        face = whole.name[len("Head_"):]
         recipe = recipes.HEADS[face]
         size = 128 * SUPERSAMPLE
+        low = head_alone(whole)
+        whole.hide_render = True
         lo, hi = bounds(low)
         passes = data_passes(low, size, lo, hi)
         sources = [o for o in bpy.data.objects if o.name.startswith("High_%s" % face)]
@@ -605,6 +624,10 @@ def bake_heads():
             finish(lit, passes["covered"], str(common.WARDROBE / "heads" / ("%s_%s.png" % (face, tone))))
 
         skin.pixels.foreach_set(original)
+        whole.hide_render = False
+        mesh = low.data
+        bpy.data.objects.remove(low)
+        bpy.data.meshes.remove(mesh)
 
 
 def tint(source, colour):
@@ -678,7 +701,6 @@ def skin_from(low, sources, size):
 # distance of its open edge (the neck's edge, under this height: a head has
 # no other), wholly its own beyond the second.
 NECK_FADE = (0.008, 0.03)
-NECK_EDGE_BELOW = {"male": 1.6, "female": 1.54}
 
 
 def neck_fade(albedo, passes, multiplier, low, body="male"):
@@ -687,10 +709,13 @@ def neck_fade(albedo, passes, multiplier, low, body="male"):
     two colours, zigzagging along the edge."""
     bm = bmesh.new()
     bm.from_mesh(low.data)
+    part = bm.faces.layers.int.get("wr_part")
     edge = []
 
+    # (The head's own edge: not its sleeve's, part 2.)
     for e in bm.edges:
-        if e.is_boundary and max(v.co.z for v in e.verts) < NECK_EDGE_BELOW[body]:
+        if e.is_boundary and max(v.co.z for v in e.verts) < common.NECK_EDGE_BELOW[body] \
+                and (part is None or all(f[part] == 1 for f in e.link_faces)):
             a, b = e.verts[0].co, e.verts[1].co
             steps = max(1, int((b - a).length / 0.004))
             edge += [tuple(a.lerp(b, k / steps)) for k in range(steps + 1)]

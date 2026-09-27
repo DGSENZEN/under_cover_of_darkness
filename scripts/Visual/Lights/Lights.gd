@@ -50,18 +50,24 @@ static func on_wall(parent: Node, fixture: StringName, flame_at: Vector3, wall_n
 ## flame stands out by the sconce's reach), else a pole cresset on a floor
 ## within FLOOR_REACH below (its pole fitted to put the flame where it was),
 ## else it stays a bare flame and says so. Only static world geometry
-## counts: never a door, a man or another light.
-static func torch_at(parent: Node, flame_at: Vector3, energy := 2.4, light_range := 9.0, shadows := true) -> Node3D:
+## counts: never a door, a man or another light. `overrides` are more burner
+## settings, on both (a level's own torch: {"can_douse": true}).
+static func torch_at(parent: Node, flame_at: Vector3, energy := 2.4, light_range := 9.0, shadows := true, overrides := {}) -> Node3D:
 	var bare: Node3D = TorchScript.new()
 	bare.energy = energy
 	bare.light_range = light_range
 	bare.shadows = shadows
+
+	for key in overrides:
+		bare.set(key, overrides[key])
+
 	parent.add_child(bare)
 	bare.global_position = flame_at
 	var resolver := Resolver.new()
 	resolver.bare = bare
 	resolver.flame_at = flame_at
 	resolver.settings = {"energy": energy, "light_range": light_range, "shadows": shadows}
+	resolver.settings.merge(overrides, true)
 	bare.add_child(resolver)
 	return bare
 

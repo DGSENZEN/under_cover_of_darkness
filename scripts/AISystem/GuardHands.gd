@@ -11,6 +11,8 @@ extends RefCounted
 ##               a man he cannot reach. It hurts (Thrown.gd), and a raised
 ##               guard knocks it aside.
 ##   the bell    a pull on its rope (AlarmBell.gd).
+##   a torch     gone out on its wall (Torch.gd): he reaches up to it with his
+##               tinder and lights it again (relight).
 ##   a lantern   searching somewhere dark with the garrison roused, he lights
 ##               one and holds it up, hanging from his fist by its bail
 ##               (Hanging.gd); it lights you (and a body in a corner) as any
@@ -44,6 +46,9 @@ const REACH := 1.25
 ## A pull on the bell rope: this long, the bell rung this far into it.
 const RING_TIME := 1.6
 const RING_AT := 0.55
+## Lighting a torch again: this long at it, lit this far into it.
+const RELIGHT_TIME := 2.2
+const RELIGHT_AT := 1.5
 ## How hard he throws (m/s), and the most he spends in the air (s).
 const THROW_SPEED := 12.0
 const THROW_FLIGHT_MAX := 1.3
@@ -77,6 +82,11 @@ var _item: Node3D = null
 ## What the thing he stoops for is to him: "weapon", "throwable", "evidence".
 var _item_kind: StringName = &""
 var _ringing := 0.0
+## A torch he is lighting again, how long he has left at it, and whether it
+## is lit yet.
+var _relight: Node3D = null
+var _relighting := 0.0
+var _relit := false
 var _bell: Node3D = null
 var _bell_where := Vector3.ZERO
 var _rung := false
@@ -114,10 +124,26 @@ func update(delta: float) -> void:
 		if _ringing <= 0.0:
 			_bell = null
 
+	if _relighting > 0.0:
+		_relighting -= delta
 
-## Stooping, straightening or at the bell rope: he can do nothing else.
+		if _relight != null and is_instance_valid(_relight):
+			# Facing it as he works.
+			var to: Vector3 = (_relight.flame_position() if _relight.has_method("flame_position") else _relight.global_position) - guard.global_position
+			guard.rotation.y = lerp_angle(guard.rotation.y, atan2(-to.x, -to.z), 1.0 - exp(-8.0 * delta))
+
+			if not _relit and RELIGHT_TIME - _relighting >= RELIGHT_AT:
+				_relit = true
+				_relight.relight(guard)
+
+		if _relighting <= 0.0:
+			_relight = null
+
+
+## Stooping, straightening, at the bell rope or lighting a torch: he can do
+## nothing else.
 func busy() -> bool:
-	return _stoop > 0.0 or _rise > 0.0 or _ringing > 0.0
+	return _stoop > 0.0 or _rise > 0.0 or _ringing > 0.0 or _relighting > 0.0
 
 
 ## Anything in his hands to show (GuardRig): "pickup", "ring", "hold" (a thing
@@ -129,6 +155,9 @@ func activity() -> StringName:
 
 	if _ringing > 0.0:
 		return &"ring"
+
+	if _relighting > 0.0:
+		return &"relight"
 
 	if held != null:
 		return &"hold"
@@ -153,6 +182,16 @@ func pickup_progress() -> float:
 ## 0..1 through a pull on the rope.
 func ring_progress() -> float:
 	return clampf(1.0 - _ringing / RING_TIME, 0.0, 1.0)
+
+
+## The torch he is lighting again (for the rig: his hand goes up to it), and
+## how far through it he is (0..1).
+func relighting() -> Node3D:
+	return _relight if _relighting > 0.0 and _relight != null and is_instance_valid(_relight) else null
+
+
+func relight_progress() -> float:
+	return clampf(1.0 - _relighting / RELIGHT_TIME, 0.0, 1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +230,8 @@ func interrupt() -> void:
 	if not _rung:
 		_ringing = 0.0
 		_bell = null
+
+	stop_relighting()
 
 
 ## Within reach of `item` (flat, and not far above or below his feet).
@@ -380,6 +421,32 @@ static func mark_dropped(dropped: RigidBody3D, weapon_kind: StringName) -> void:
 # ---------------------------------------------------------------------------
 
 ## A pull on `bell`'s rope, calling everyone to `where`.
+## Lighting a torch again, left off (struck, or into a fight): not lit yet,
+## it stays out for whoever notices it next.
+func stop_relighting() -> void:
+	if _relighting <= 0.0:
+		return
+
+	if not _relit and _relight != null and is_instance_valid(_relight) and _relight.has_meta(&"noticed"):
+		_relight.remove_meta(&"noticed")
+
+	_relighting = 0.0
+	_relight = null
+
+
+## Lights `light` (a torch gone out) again: at it RELIGHT_TIME, lit
+## RELIGHT_AT into it.
+func relight(light: Node3D) -> void:
+	if busy() or light == null or not is_instance_valid(light):
+		return
+
+	_relight = light
+	_relighting = RELIGHT_TIME
+	_relit = false
+	guard.velocity.x = 0.0
+	guard.velocity.z = 0.0
+
+
 func ring_bell(bell: Node3D, where: Vector3) -> void:
 	if busy() or bell == null:
 		return

@@ -20,9 +20,10 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import common  # noqa: E402
+import testkit  # noqa: E402
 import validate  # noqa: E402
 
-TMP = tempfile.mkdtemp(prefix="wardrobe_test_")
+TMP = str(testkit.scratch_dir("wardrobe_test_"))
 
 
 def fresh():
@@ -304,7 +305,14 @@ def main():
         print("%s %s%s" % ("PASS" if ok else "FAIL", name, "" if ok else ": %s" % messages))
         failed += 0 if ok else 1
 
-    print("validate: %d/%d" % (len(CASES) - failed, len(CASES)))
+    testkit.tidy()
+    left = testkit.leaked()
+
+    if left:
+        print("FAIL leak: %d scratch folders left in the temp folder (%s)" % (len(left), left[:2]))
+        failed += 1
+
+    print("validate: %d/%d" % (len(CASES) + 1 - failed, len(CASES) + 1))
     sys.exit(1 if failed else 0)
 
 

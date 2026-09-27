@@ -18,6 +18,7 @@ import bmesh
 import bpy
 from mathutils import Vector  # noqa: F401 (the builders' vectors)
 from mathutils.bvhtree import BVHTree
+from mathutils.kdtree import KDTree
 
 ROOT = Path(__file__).resolve().parents[2]
 WARDROBE = ROOT / "assets" / "characters" / "wardrobe"
@@ -115,12 +116,13 @@ def mesh_object(name, bm):
 
 
 def vertex_regions(obj):
-    """The region of each vertex: its heaviest bone's."""
+    """The region of each vertex: its heaviest bone's (TRANSFER, the mark on
+    a vertex whose weights are copied later, is no bone)."""
     names = {group.index: group.name for group in obj.vertex_groups}
     regions = []
 
     for vertex in obj.data.vertices:
-        best = max(vertex.groups, key=lambda g: g.weight, default=None)
+        best = max((g for g in vertex.groups if names[g.group] != TRANSFER), key=lambda g: g.weight, default=None)
         regions.append(region_of_bone(names[best.group]) if best is not None else "torso")
 
     return regions
@@ -511,6 +513,215 @@ def parts_of(table, body):
     """The names in `table` (recipes.HEADS or recipes.HAIR) made for `body`
     (an entry naming none is the male body's), in the table's order."""
     return [name for name, entry in table.items() if entry.get("body", "male") == body]
+
+
+# How far round a garment's open edge at his neck its faces are drawn from
+# both sides (open_necklines), and how far from his neck's middle an edge
+# counts as round it.
+NECKLINE = 0.06
+NECK_REACH = 0.14
+
+
+def open_necklines(outfit, armature):
+    """A garment's faces round his neckline drawn from both sides, as its
+    strips are: a garment stands off his neck, and from three-quarters the
+    far side of its opening shows its inside, which a closed part culls:
+    the background showed through beside the bare-hat watchman's neck (his
+    tabard), the arms master's (his doublet) and the duelist's. The faces
+    with a vertex within NECKLINE of a garment's open edge within NECK_REACH
+    of his neck's middle, over the foot of his neck. Idempotent (export
+    applies it to every kind, the watchman's batch 0 outfit too); returns
+    how many faces it opened."""
+    neck = armature.data.bones["neck_01"].head_local
+    data = outfit.data
+    parts = data.attributes["wr_part"].data
+    strips = data.attributes["wr_strip"].data
+    bm = bmesh.new()
+    bm.from_mesh(data)
+    bm.faces.ensure_lookup_table()
+    edge = []
+
+    for e in bm.edges:
+        if not e.is_boundary or any(parts[f.index].value == 0 for f in e.link_faces):
+            continue
+
+        mid = (e.verts[0].co + e.verts[1].co) * 0.5
+
+        if mid.z > neck.z - 0.1 and math.hypot(mid.x, mid.y - neck.y) < NECK_REACH:
+            edge += [e.verts[0].co.copy(), e.verts[1].co.copy()]
+
+    opened = 0
+
+    if edge:
+        tree = KDTree(len(edge))
+
+        for i, p in enumerate(edge):
+            tree.insert(p, i)
+
+        tree.balance()
+
+        for f in bm.faces:
+            if parts[f.index].value > 0 and not strips[f.index].value \
+                    and any(tree.find(v.co)[2] < NECKLINE for v in f.verts):
+                strips[f.index].value = True
+                data.polygons[f.index].material_index = 1
+                opened += 1
+
+    bm.free()
+    return opened
+
+
+# Under this height a head of the body has no open edge but its neck's.
+NECK_EDGE_BELOW = {"male": 1.6, "female": 1.54}
+
+# Where his head meets his body: one seam round the foot of his neck
+# (cut_at_neck), the head above it, his body and the shells that reach
+# his neck below, each cut on it and laid on the full body's surface there.
+# Its heights in front, at his sides and behind are where the full body's
+# bone weights part (between the head region's lowest vertex and the rest's
+# highest), and it runs smooth between them. Cut at the bone weights and
+# decimated apart, head and collar each ended in a row of teeth, and his
+# neck looked sawn off.
+NECK_CUT = {"male": {"front": 1.515, "side": 1.562, "back": 1.537},
+            "female": {"front": 1.477, "side": 1.491, "back": 1.493}}
+
+
+def neck_cut_z(body, co, neck_y):
+    """The seam's height at co's bearing round his neck (its middle at y =
+    neck_y, on x = 0): a0 + a1 cos(t) + a2 cos(2t), t 0 in front, through
+    NECK_CUT's three heights."""
+    cut = NECK_CUT[body]
+    t = math.atan2(abs(co.x), -(co.y - neck_y))
+    a1 = (cut["front"] - cut["back"]) * 0.5
+    a0 = ((cut["front"] + cut["back"]) * 0.5 + cut["side"]) * 0.5
+    a2 = (cut["front"] + cut["back"]) * 0.5 - a0
+    return a0 + a1 * math.cos(t) + a2 * math.cos(2.0 * t)
+
+
+# The seam's points round his neck: every 360 / NECK_RING degrees, in front
+# (0) and behind (180) among them. Head and body are cut apart, so each
+# keeps exactly these on its edge and no others: laid on the full body, the
+# two edges are one line (with their own points, a long edge of one passed
+# inside a point of the other and left a slit).
+NECK_RING = 24
+
+
+def bearing(co, neck_y):
+    """Degrees round his neck from the front, positive to his left (+x)."""
+    return math.degrees(math.atan2(co.x, -(co.y - neck_y)))
+
+
+def cut_at_neck(obj, body, neck_y, keep_above, tree, snap=0.002, half=False):
+    """`obj` cut on the seam round his neck (NECK_CUT): what lies above it
+    kept (`keep_above`, a head) or what lies below (his body). Bent flat
+    (each vertex lowered by the seam's height at its bearing), bisected,
+    and bent back: a vertex within `snap` of the seam goes onto it (no
+    sliver of a face beside the cut). Its edge then has the seam's points
+    (NECK_RING) and only those: each edge split where it passes one, each
+    other vertex on it merged into its neighbour along it; every point laid
+    on the full body's surface (`tree`), out from his neck's middle. On a
+    `half` (his left, mirrored later), a face the merging laid in the mirror
+    plane goes: a wall inside him once mirrored. Returns the seam's vertex
+    indices."""
+    step = 360.0 / NECK_RING
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    # (Vertices at one place welded first: a decimated half left some on
+    # its mirror plane, and each copy got a seam of its own.)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-6)
+
+    for vertex in bm.verts:
+        vertex.co.z -= neck_cut_z(body, vertex.co, neck_y)
+
+    geom = list(bm.verts) + list(bm.edges) + list(bm.faces)
+    bmesh.ops.bisect_plane(bm, geom=geom, dist=snap, plane_co=(0.0, 0.0, 0.0), plane_no=(0.0, 0.0, 1.0),
+                           clear_inner=keep_above, clear_outer=not keep_above)
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    seam = {vertex for vertex in bm.verts if abs(vertex.co.z) <= snap and vertex.is_boundary}
+
+    for vertex in seam:
+        vertex.co.z = 0.0
+
+    def along(e):
+        return e.is_boundary and all(v in seam for v in e.verts)
+
+    def point(v):
+        """The seam point v is (a whole number of steps round), or None."""
+        k = round(bearing(v.co, neck_y) / step)
+        return k if abs(bearing(v.co, neck_y) - k * step) < 0.01 else None
+
+    # Split where an edge passes a point (its bearings unwrapped behind him).
+    for e in [e for e in bm.edges if along(e)]:
+        a, b = e.verts
+        ba, bb = bearing(a.co, neck_y), bearing(b.co, neck_y)
+
+        if abs(bb - ba) > 180.0:
+            bb += 360.0 if bb < ba else -360.0
+
+        lo, hi = min(ba, bb), max(ba, bb)
+        ks = [k for k in range(math.ceil(lo / step - 1e-3), math.floor(hi / step + 1e-3) + 1)
+              if lo + 0.5 < k * step < hi - 0.5]
+
+        # (Farthest first along a to b: each split leaves `e` from a.)
+        for k in sorted(ks, key=lambda k: -abs(k * step - ba)):
+            c = math.radians(k * step)
+            d = Vector((math.sin(c), -math.cos(c)))
+            o = Vector((0.0, neck_y))
+            pa, pb = a.co.xy - o, e.other_vert(a).co.xy - o
+            den = (pb - pa).cross(d)
+            fac = min(max(-pa.cross(d) / den, 0.0), 1.0) if abs(den) > 1e-12 else 0.5
+            _, made = bmesh.utils.edge_split(e, a, fac)
+            # At the point's bearing (and laid on the body below).
+            r = (made.co.xy - o).length
+            made.co = Vector((o.x + d.x * r, o.y + d.y * r, 0.0))
+            seam.add(made)
+            e = next(x for x in a.link_edges if made in x.verts)
+
+    # Every other vertex on it merged into its neighbour along it, the
+    # nearer by bearing, until only points are left (round from his front,
+    # the same way every build: a set's order is not).
+    while True:
+        loose = [v for v in seam if v.is_valid and point(v) is None]
+
+        if not loose:
+            break
+
+        v = min(loose, key=lambda v: (bearing(v.co, neck_y), v.co.x, v.co.y))
+        neighbours = [e.other_vert(v) for e in v.link_edges if along(e)]
+
+        if not neighbours:
+            seam.discard(v)
+            continue
+
+        target = min(neighbours, key=lambda n: abs((bearing(n.co, neck_y) - bearing(v.co, neck_y) + 180.0) % 360.0 - 180.0))
+        bmesh.ops.weld_verts(bm, targetmap={v: target})
+        seam.discard(v)
+
+    bmesh.ops.dissolve_degenerate(bm, dist=1e-6, edges=bm.edges[:])
+
+    if half:
+        bmesh.ops.delete(bm, geom=[f for f in bm.faces if all(v.co.x == 0.0 for v in f.verts)], context="FACES")
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+
+    seam = {v for v in seam if v.is_valid}
+
+    for vertex in bm.verts:
+        vertex.co.z += neck_cut_z(body, vertex.co, neck_y)
+
+    for vertex in seam:
+        c = math.radians(point(vertex) * step)
+        d = Vector((math.sin(c), -math.cos(c), 0.0))
+        z = neck_cut_z(body, Vector((d.x, neck_y + d.y, 0.0)), neck_y)
+        hit = tree.ray_cast(Vector((0.0, neck_y, z)), d, 0.4)
+
+        if hit[0] is not None:
+            vertex.co = Vector((0.0 if abs(d.x) < 1e-9 else hit[0].x, hit[0].y, z))
+
+    bm.verts.index_update()
+    indices = [vertex.index for vertex in seam if vertex.is_valid]
+    bm.to_mesh(obj.data)
+    bm.free()
+    return indices
 
 
 def part_limit(folder, name):

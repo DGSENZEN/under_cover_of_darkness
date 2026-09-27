@@ -24,6 +24,7 @@ import numpy as np  # noqa: E402
 
 import bake  # noqa: E402
 import common  # noqa: E402
+import testkit  # noqa: E402
 import export  # noqa: E402
 
 
@@ -70,7 +71,7 @@ def case_others():
 def kept(write, name):
     """A file written over by `write`: its old bytes kept in the backup
     folder (a repainted texture, a hand-edited JSON)."""
-    folder = pathlib.Path(tempfile.mkdtemp(prefix="wardrobe_kept_"))
+    folder = testkit.scratch_dir("wardrobe_kept_")
     common.BACKUP = folder / "backup"
     path = folder / name
     path.write_bytes(b"painted by hand")
@@ -256,7 +257,7 @@ def case_gear_bones():
     import struct
 
     fresh()
-    folder = pathlib.Path(tempfile.mkdtemp(prefix="wardrobe_gear_bones_"))
+    folder = testkit.scratch_dir("wardrobe_gear_bones_")
     common.BACKUP = folder / "backup"
     data = bpy.data.armatures.new("Armature")
     arm = bpy.data.objects.new("Armature", data)
@@ -328,7 +329,14 @@ def main():
         print("%s %s%s" % ("PASS" if not messages else "FAIL", name, "" if not messages else ": %s" % messages))
         failed += 1 if messages else 0
 
-    print("bake: %d/%d" % (len(CASES) - failed, len(CASES)))
+    testkit.tidy()
+    left = testkit.leaked()
+
+    if left:
+        print("FAIL leak: %d scratch folders left in the temp folder (%s)" % (len(left), left[:2]))
+        failed += 1
+
+    print("bake: %d/%d" % (len(CASES) + 1 - failed, len(CASES) + 1))
     sys.exit(1 if failed else 0)
 
 

@@ -13,9 +13,18 @@ const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
+const SearchSpotsScript := preload("res://scripts/AISystem/SearchSpots.gd")
+## Where the searching checks stand: a dark corner by lit open floor; a room
+## through a door; a passage that turns a corner (the tracker's trail).
+const CORNER_AT := Vector3(-45, 0, 0)
+const ROOM_AT := Vector3(-25, 0, 0)
+const BEND_AT := Vector3(380, 0, 0)
+## A tall block, 3 m every way, standing on the floor here (H27).
+const SEALED_AT := Vector3(-35, 0, 22)
 
 var player: CharacterBody3D
 var results: Array[String] = []
+var _baker: NavigationRegion3D
 
 
 func _ready() -> void:
@@ -23,10 +32,12 @@ func _ready() -> void:
 	TemperamentScript.rolling = false
 	# The checks sit side by side along x.
 	Props.block(self, Vector3(260, -0.5, 5), Vector3(640, 1, 70))
+	_build_search_ground()
 
 	var baker := NavigationRegion3D.new()
 	baker.set_script(NavBakerScript)
 	add_child(baker)
+	_baker = baker
 
 	player = PLAYER.instantiate()
 	add_child(player)
@@ -725,6 +736,7 @@ func _run() -> void:
 		"will %s place %s fetching %s, the man beyond %d" % [se2.will_of(crav_e), se2.role_of(crav_e), se2.helper_of(crav_e), beyond.state])
 
 	await _chase_checks()
+	await _search_checks()
 
 
 ## Chasing: on after you when you are lost running, to fresh word of you at a
@@ -906,6 +918,179 @@ func _chase_checks() -> void:
 	_check("H22 a man at your back strikes, busy or not; at your side he waits for his moment",
 		s22.role_of(back22) == &"flank" and not_at_once and at_back and not at_side,
 		"role %s, at once %s, after a moment at your back %s, at your side %s" % [s22.role_of(back22), not not_at_once, at_back, at_side])
+
+
+## Searching: where you could be hiding (SearchSpots), looked into as he
+## comes (his lantern held out to it); a room through a door, and a man to
+## hold the door; a place searched left alone; a tracker's trail round a
+## corner.
+func _search_checks() -> void:
+	# H23 alone, he searches the dark corner, not the lit open floor, and
+	#     looks into it as he comes, his lantern held out to it
+	await _fresh()
+	_put_player(Vector3(-45, 1.05, 30))
+	player.debug_light_level = 0.0
+	var seeker := _guard(&"", CORNER_AT + Vector3(0, 0, 3), &"steady", false, PI)
+	seeker.hearing_acuity = 0.0
+	await _frames(20)
+	var corner := CORNER_AT + Vector3(-3.2, 0, -3.2)
+	var in_corner := 0
+	var lit_picked := 0
+
+	for trial in 12:
+		var spot: Dictionary = SearchSpotsScript.pick(seeker, CORNER_AT, Vector3.ZERO, seeker.search_radius, [], 0.0, [])
+
+		if spot.is_empty():
+			continue
+
+		var stand: Vector3 = spot["stand"]
+
+		if Vector2(stand.x - corner.x, stand.z - corner.z).length() < 1.8 and spot["kind"] == &"nook":
+			in_corner += 1
+
+		if stand.x > CORNER_AT.x + 1.0 and stand.z > CORNER_AT.z + 1.0:
+			lit_picked += 1
+
+	seeker._hands.light_lantern()
+	seeker.last_known_position = CORNER_AT
+	seeker.has_last_known = true
+	seeker.alert = 70.0
+	seeker._set_state(3)
+	seeker._look_timer = 0.0
+	seeker._search_at(SearchSpotsScript.pick(seeker, CORNER_AT, Vector3.ZERO, seeker.search_radius, [], 0.0, []))
+	var going: Dictionary = seeker._spot
+	var peered := false
+	var head_to_it := false
+	var held_out := false
+	var looked := false
+
+	for i in 480:
+		await _frames(1)
+		var peer: Vector3 = seeker.peer_point()
+
+		if peer != Vector3.INF:
+			peered = true
+			var to := peer - seeker.global_position
+			var wanted := wrapf(atan2(-to.x, -to.z) - seeker.rotation.y, -PI, PI)
+			head_to_it = head_to_it or absf(wrapf(seeker._head.rotation.y - clampf(wanted, -1.2, 1.2), -PI, PI)) < 0.35
+			held_out = held_out or float(seeker._rig._light_out) > 0.9
+
+		if seeker._look_timer > 0.0 and not going.is_empty() and Vector2(seeker.global_position.x - going["stand"].x, seeker.global_position.z - going["stand"].z).length() < 1.2:
+			looked = true
+			break
+
+	_check("H23 alone, he searches the dark corner, not the lit floor, looking into it as he comes, his lantern held out to it",
+		in_corner >= 9 and lit_picked == 0 and peered and head_to_it and held_out and looked,
+		"corner %d of 12, lit %d; looked into it %s (head %s, lantern out %s), got there and looked about %s" % [in_corner, lit_picked, peered, head_to_it, held_out, looked])
+
+	# H24 a place searched is left alone
+	var again := 0
+
+	for trial in 10:
+		var spot: Dictionary = SearchSpotsScript.pick(seeker, CORNER_AT, Vector3.ZERO, seeker.search_radius, [], 0.0, [corner])
+
+		if not spot.is_empty() and Vector2(spot["stand"].x - corner.x, spot["stand"].z - corner.z).length() < SearchSpotsScript.SEARCHED_NEAR:
+			again += 1
+
+	_check("H24 a place searched is left alone", again == 0, "searched again %d of 10 times" % again)
+
+	# H25 a room through a door near where you were: one goes in, another
+	#     holds the door
+	await _fresh()
+	_put_player(ROOM_AT + Vector3(0, 1.05, 3))
+	var first := _guard(&"swordsman", ROOM_AT + Vector3(-1.5, 0, 5.5))
+	var second := _guard(&"swordsman", ROOM_AT + Vector3(1.5, 0, 5.5))
+	await _frames(30)
+	player.debug_light_level = 0.0
+	_put_player(Vector3(-25, 1.05, 34))
+	var s25 = first._fighter.squad
+	s25.last_sighting = {"position": ROOM_AT, "time": s25.clock, "velocity": Vector3.ZERO}
+
+	for one in [first, second]:
+		one.last_known_position = ROOM_AT
+		one.has_last_known = true
+		one._since_seen = 99.0
+		one.alert = 70.0
+		one._set_state(3)
+
+	s25._claims.clear()
+	s25._rooms.clear()
+	var in_room: Dictionary = s25.search_spot_for(first)
+	var holding: Dictionary = s25.search_spot_for(second)
+	var doorway := ROOM_AT + Vector3(0, 0, -4)
+	var held_near: bool = not holding.is_empty() and holding["stand"].z > doorway.z + 0.5 and Vector2(holding["stand"].x - doorway.x, holding["stand"].z - doorway.z).length() < 3.0
+	_check("H25 a room through a door near where you were: one goes in, another holds the door",
+		not in_room.is_empty() and in_room["kind"] == &"room" and in_room["stand"].z < doorway.z and not holding.is_empty() and holding["kind"] == &"hold" and held_near,
+		"first %s, second %s" % [in_room, holding])
+
+	# H26 lost on the run at a bend: a tracker follows the way the passage
+	#     goes, round the corner; a plain man runs on to the wall
+	var trails := {}
+
+	for kind in [&"sly", &"steady"]:
+		await _fresh()
+		_put_player(BEND_AT + Vector3(0, 1.05, 0))
+		var man := _guard(&"swordsman", BEND_AT + Vector3(-5, 0, 0), kind, true, -PI * 0.5)
+		await _frames(30)
+		player.debug_light_level = 0.0
+		_put_player(Vector3(380, 1.05, 34))
+		var squad = man._fighter.squad
+		var lost_at := BEND_AT + Vector3(1, 0, 0)
+		squad.last_sighting = {"position": lost_at, "time": squad.clock - man.lose_time, "velocity": Vector3(6, 0, 0)}
+		man.last_known_position = lost_at
+		man.has_last_known = true
+		man._seen_heading = Vector3(6, 0, 0)
+		man._since_seen = man.lose_time + 0.1
+		trails[kind] = [man.tracker(), man._trail_point(), man._trail_point(), man._trail_point()]
+
+	var tracked: Array = trails[&"sly"]
+	var plain: Array = trails[&"steady"]
+	var round_the_bend := func(point: Vector3) -> bool: return point.z < BEND_AT.z - 3.0 and point.x > BEND_AT.x + 4.0 and point.x < BEND_AT.x + 11.0
+	var to_the_wall := func(point: Vector3) -> bool: return point != Vector3.INF and point.z > BEND_AT.z - 2.5 and point.x < BEND_AT.x + 11.2
+	_check("H26 lost on the run at a bend: a tracker follows the passage round the corner; a plain man runs on to the wall",
+		bool(tracked[0]) and not bool(plain[0]) and round_the_bend.call(tracked[1]) and round_the_bend.call(tracked[2])
+			and to_the_wall.call(plain[1]) and to_the_wall.call(plain[2]) and to_the_wall.call(plain[3]),
+		"tracker %s: %s; plain %s: %s" % [tracked[0], tracked.slice(1), plain[0], plain.slice(1)])
+
+	# H27 no floor sealed inside a block taller than a man: the floor nearest
+	#     its middle is outside it (the baker dropped the scrap it left there)
+	var map := get_world_3d().navigation_map
+	var nearest := NavigationServer3D.map_get_closest_point(map, SEALED_AT)
+	var outside: bool = absf(nearest.x - SEALED_AT.x) > 1.5 or absf(nearest.z - SEALED_AT.z) > 1.5 or nearest.y > 2.5
+	_check("H27 no floor is left sealed inside a block taller than a man",
+		outside and int(_baker.sealed_count) > 0, "nearest floor to its middle %s, scraps dropped %d" % [nearest, int(_baker.sealed_count)])
+
+
+## The ground the searching checks need (baked with the rest): a dark corner
+## by lit open floor; a room through a door; a passage with a bend.
+func _build_search_ground() -> void:
+	var c := CORNER_AT
+	Props.block(self, c + Vector3(-2.4, 1.5, -3.9), Vector3(3.0, 3, 0.3))
+	Props.block(self, c + Vector3(-3.9, 1.5, -2.4), Vector3(0.3, 3, 3.0))
+	var lamp := OmniLight3D.new()
+	lamp.omni_range = 8.0
+	lamp.light_energy = 2.0
+	add_child(lamp)
+	lamp.global_position = c + Vector3(3, 3, 3)
+
+	var r := ROOM_AT
+	Props.block(self, r + Vector3(-1.75, 1.5, -4), Vector3(2.5, 3, 0.3))
+	Props.block(self, r + Vector3(1.75, 1.5, -4), Vector3(2.5, 3, 0.3))
+	Props.block(self, r + Vector3(0, 2.55, -4), Vector3(1.0, 0.9, 0.3))
+	Props.block(self, r + Vector3(0, 1.5, -10), Vector3(6.3, 3, 0.3))
+	Props.block(self, r + Vector3(-3, 1.5, -7), Vector3(0.3, 3, 6))
+	Props.block(self, r + Vector3(3, 1.5, -7), Vector3(0.3, 3, 6))
+	Props.door(self, r + Vector3(-0.5, 0, -4), 0.0)
+
+	# A block taller than a man, standing alone (H27).
+	Props.block(self, SEALED_AT + Vector3(0, 1.5, 0), Vector3(3, 3, 3))
+
+	# In from the west along z = 0, the passage turns north at x + 4.
+	var b := BEND_AT
+	Props.block(self, b + Vector3(1.6, 1.5, 2.35), Vector3(19.6, 3, 0.3))
+	Props.block(self, b + Vector3(-2, 1.5, -2.35), Vector3(12, 3, 0.3))
+	Props.block(self, b + Vector3(11.35, 1.5, -6.9), Vector3(0.3, 3, 18.8))
+	Props.block(self, b + Vector3(3.85, 1.5, -9.2), Vector3(0.3, 3, 14))
 
 
 # --------------------------------------------------------------------------

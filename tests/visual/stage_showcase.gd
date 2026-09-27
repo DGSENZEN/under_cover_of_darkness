@@ -1,8 +1,9 @@
 extends Node
-## Windowed staging of the NPC showcase: a still of every beat of the night
-## as the auto-director frames it (the whole night with the escape ending,
-## then Act V again for the other two endings), or the yard at rest (--rest);
-## all put together in sheet.png, each still labelled with its act and beat.
+## Windowed staging of the NPC showcase: a still of every shot of the night
+## as the Cinema editor takes it, 0.6 s in (the whole night with the escape
+## ending, then Act V again for the other two endings), or the yard at rest
+## (--rest); all put together in sheet.png, each still labelled with its act,
+## its beat, its kind of shot and what cut to it.
 ## Not a test (nothing is checked): look at the pictures.
 ##   Godot --fixed-fps 60 --resolution 1280x720 --path . res://tests/visual/stage_showcase.tscn -- --out=<dir> [--rest]
 
@@ -21,11 +22,11 @@ const REST_SHOTS := [
 	["cart", Vector3(4.5, 3.5, 5.0), Vector3(9.0, 0.8, 9.5)],
 	["postern", Vector3(13.5, 4.5, -3.0), Vector3(19.5, 0.8, -9.0)],
 ]
-## How long into a beat its still is taken (the camera has glided there).
-const INTO_BEAT := 2.5
+## How long into a shot its still is taken (s).
+const INTO_SHOT := 0.6
 ## The sheet: each still this big, this many across.
-const THUMB := Vector2i(320, 180)
-const ACROSS := 5
+const THUMB := Vector2i(240, 135)
+const ACROSS := 8
 const ROMAN := ["", "I", "II", "III", "IV", "V"]
 
 var _out := "user://stage_showcase/"
@@ -76,8 +77,11 @@ func _night(act: int, ending: StringName) -> void:
 	add_child(map)
 	await map.ready_to_show
 	var pending := []
-	map.director.beat_started.connect(func(beat: StringName, _shot: Dictionary) -> void:
-		pending.append([map.director.act_index, beat, 0.0]))
+	var beat := [&""]
+	var editor: Node = map.camera.cinema_editor()
+	map.director.beat_started.connect(func(name: StringName, _scene: Dictionary) -> void: beat[0] = name)
+	editor.shot_started.connect(func(shot: Dictionary) -> void:
+		pending.append([map.director.act_index, beat[0], shot, 0.0]))
 	var ended := [false]
 	map.director.show_ended.connect(func() -> void: ended[0] = true)
 
@@ -85,11 +89,15 @@ func _night(act: int, ending: StringName) -> void:
 		await get_tree().physics_frame
 
 		for p in pending.duplicate():
-			p[2] += 1.0 / 60.0
+			p[3] += 1.0 / 60.0
 
-			if p[2] >= INTO_BEAT:
+			# Still the shot being taken: a still of it (a shot cut away from
+			# sooner is passed over).
+			if p[3] >= INTO_SHOT:
 				pending.erase(p)
-				await _still("%s %s%s" % [ROMAN[p[0]], p[1], " (%s)" % ending if p[0] == 5 else ""])
+
+				if editor.current() == p[2]:
+					await _still("%s %s: %s (%s)%s" % [ROMAN[p[0]], p[1], p[2]["kind"], p[2]["cause"], " [%s]" % ending if p[0] == 5 else ""])
 
 	map.queue_free()
 

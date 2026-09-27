@@ -1,5 +1,6 @@
 extends Node3D
-## A person: one of the Universal Base Characters in a painted outfit, moved by
+## A person: one of the Universal Base Characters, dressed from the wardrobe
+## (a guard) or in a painted outfit (your arms), moved by
 ## the Universal Animation Library (both Quaternius, CC0). Guards are made of
 ## this, and so are your own arms. Presentation only: nothing here decides
 ## anything.
@@ -75,7 +76,7 @@ var ragdoll: Node
 ## What has been cut off him (Severed.gd), once anything has.
 var severed: Node
 ## What the wardrobe rolled for him (dress: Wardrobe.roll, then the hair
-## rules), empty if he wears a painted outfit.
+## rules), empty if he was not dressed from it.
 var look := {}
 ## The metal he wears as part of his clothes, by the bone it covers (a
 ## mail coif on his neck and head): bone -> the mesh.
@@ -1231,7 +1232,7 @@ func set_layers(layers: int) -> void:
 ## Builds him as a low-poly PS2 character of `kind` (Wardrobe.gd, made by
 ## tools/wardrobe): his outfit, a face, headgear, rolled from `seed` (the same
 ## seed, the same man). False, with nothing built, if the kind cannot be
-## dressed: the caller builds him painted instead.
+## dressed: the caller builds him as the plain base body instead (GuardRig).
 func dress(kind: StringName, seed: int, fighting_idle: StringName = &"Sword_Idle") -> bool:
 	if not WardrobeScript.can_dress(kind):
 		return false

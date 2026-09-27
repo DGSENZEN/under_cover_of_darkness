@@ -190,29 +190,8 @@ static func tool(
 	body.count = count
 	body.mass = 0.3
 
-	var mesh: Mesh
-	var size := Vector3(0.1, 0.1, 0.1)
-
-	match shape:
-		"rod":
-			var rod := CylinderMesh.new()
-			rod.top_radius = 0.008
-			rod.bottom_radius = 0.008
-			rod.height = 0.16
-			mesh = rod
-			size = Vector3(0.03, 0.16, 0.03)
-		"box":
-			var box := BoxMesh.new()
-			box.size = Vector3(0.08, 0.12, 0.04)
-			mesh = box
-			size = box.size
-		_:
-			var ball := SphereMesh.new()
-			ball.radius = 0.05
-			ball.height = 0.1
-			mesh = ball
-
-	mesh.material = material(color, 0.3)
+	var mesh := tool_mesh(shape, color)
+	var size := mesh.get_aabb().size
 	body.add_child(shape_box(size))
 
 	var visual := MeshInstance3D.new()
@@ -224,6 +203,51 @@ static func tool(
 	body.global_position = position
 	body.reset_physics_interpolation()
 	return body
+
+
+## A tool's look: "rod" (a lockpick), "box", "flask" (a stoppered bottle), or
+## a ball (a flash bomb).
+static func tool_mesh(shape: String, color: Color) -> Mesh:
+	var mesh: Mesh
+
+	match shape:
+		"rod":
+			var rod := CylinderMesh.new()
+			rod.top_radius = 0.008
+			rod.bottom_radius = 0.008
+			rod.height = 0.16
+			mesh = rod
+		"box":
+			var box := BoxMesh.new()
+			box.size = Vector3(0.08, 0.12, 0.04)
+			mesh = box
+		"flask":
+			var flask := CylinderMesh.new()
+			flask.top_radius = 0.018
+			flask.bottom_radius = 0.04
+			flask.height = 0.13
+			mesh = flask
+		_:
+			var ball := SphereMesh.new()
+			ball.radius = 0.05
+			ball.height = 0.1
+			mesh = ball
+
+	mesh.material = material(color, 0.3)
+	return mesh
+
+
+## Tools straight onto a player's belt: flash bombs, water flasks, a lockpick
+## (PlayerFrob: what each does).
+static func give_tools(player: Node, flash_bombs := 3, flasks := 3, lockpick := true) -> void:
+	if flash_bombs > 0:
+		player.inventory.add_belt_item(&"flashbomb", "flash bomb", tool_mesh("ball", Color(0.3, 0.28, 0.26)), flash_bombs)
+
+	if flasks > 0:
+		player.inventory.add_belt_item(&"waterflask", "water flask", tool_mesh("flask", Color(0.4, 0.6, 0.9)), flasks)
+
+	if lockpick:
+		player.inventory.add_belt_item(&"lockpick", "lockpick", tool_mesh("rod", Color(0.6, 0.6, 0.65)))
 
 
 static func crate(parent: Node, position: Vector3, size := 0.5, mass := 5.0, color := Color(0.55, 0.42, 0.25)) -> RigidBody3D:

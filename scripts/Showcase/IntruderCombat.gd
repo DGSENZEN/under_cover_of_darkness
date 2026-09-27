@@ -14,6 +14,7 @@ extends Node
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
+const CineEvents := preload("res://scripts/Cinema/CineEvents.gd")
 
 ## A blow of his turned aside, or taken on his guard: "parry", "block". Squad
 ## reads it (read "parry").
@@ -312,6 +313,12 @@ func is_parrying() -> bool:
 
 ## How much of an incoming blow gets through: all of a boot or a low cut (and
 ## the boot shoves him); none of a blow parried; a little of one blocked.
+## A blow on his blade, told to the camera (CineEvents "blow").
+func _told(outcome: StringName, from: Node, heavy: bool) -> void:
+	CineEvents.emit(&"blow", {"attacker": from if is_instance_valid(from) else null, "victim": intruder,
+		"weight": &"heavy" if heavy else &"light", "outcome": outcome, "where": intruder.global_position})
+
+
 func filter_incoming(amount: float, from: Node) -> float:
 	var info: Dictionary = from.attack_info() if from != null and from.has_method("attack_info") else {}
 
@@ -341,6 +348,7 @@ func filter_incoming(amount: float, from: Node) -> float:
 		Fx.sparks(intruder, clash, toward, 0.9)
 		Sfx.play(intruder, &"clang", clash, -4.0, 1.35)
 		defended.emit(&"block")
+		_told(&"blocked", from, false)
 		return 0.0
 
 	if _clock - _block_started <= PARRY_WINDOW:
@@ -358,6 +366,7 @@ func filter_incoming(amount: float, from: Node) -> float:
 
 		_riposte_until = _clock + RIPOSTE_WINDOW
 		defended.emit(&"parry")
+		_told(&"parried", from, bool(info.get("heavy", false)))
 		return 0.0
 
 	var thrust: bool = bool(info.get("thrust", false))
@@ -373,6 +382,7 @@ func filter_incoming(amount: float, from: Node) -> float:
 
 	intruder._block_flash = 0.3
 	defended.emit(&"block")
+	_told(&"blocked", from, heavy)
 	return amount * (0.4 if thrust else 0.25)
 
 

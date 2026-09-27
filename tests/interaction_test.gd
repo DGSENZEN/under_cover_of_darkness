@@ -4,6 +4,8 @@ const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const GUARD := preload("res://Guard.tscn")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const SettingsScript := preload("res://scripts/UI/Settings.gd")
+const TorchScript := preload("res://scripts/Visual/Torch.gd")
 
 var player: CharacterBody3D
 var results: Array[String] = []
@@ -248,6 +250,119 @@ func _run() -> void:
 	await _ui_checks()
 
 	_check("I11 wheel includes empty hands", seen == ["lockpick", "empty", "cellar key"], "seen %s" % [seen])
+	await _tool_checks()
+
+
+## The tools on your belt: a flash bomb thrown at a guard blinds him (and
+## you, looking at it); a water flask thrown at a torch puts it out; a lock
+## with no key given a lockpick; the last of a thing thrown leaves your hand
+## empty.
+func _tool_checks() -> void:
+	var hud: CanvasLayer = player.hud
+	Props.give_tools(player, 2, 1, false)
+
+	# I15 a flash bomb thrown at a guard facing you blinds him; you too,
+	#     looking at it; one fewer on your belt
+	var watcher: CharacterBody3D = GUARD.instantiate()
+	watcher.debug_ai = false
+	watcher.position = Vector3(24.0, 0.0, -6.0)
+	watcher.rotation.y = PI
+	add_child(watcher)
+	watcher.hearing_acuity = 0.0
+	var cried := [false]
+	watcher.barked.connect(func(t: String) -> void:
+		for tag in TemperamentScript.MORE_LINES:
+			if t in (TemperamentScript.MORE_LINES[tag] as Dictionary).get(&"blinded", []):
+				cried[0] = true)
+	await _place(Vector3(24.0, 1.05, 1.0), 0.0)
+	player.inventory.select_by_id(&"flashbomb")
+	await _frames(40)
+	_aim(watcher.global_position + Vector3(0.0, 0.2, 1.2))
+	await _frames(2)
+	var bombs_before: int = player.inventory.count_of(&"flashbomb")
+	await _tap("throw")
+	var blinded := false
+	var whited := 0.0
+
+	for i in 90:
+		await _frames(1)
+		blinded = blinded or watcher.blinded()
+		whited = maxf(whited, hud.white_amount())
+
+	var sees_again: bool = false
+
+	for i in 360:
+		await _frames(1)
+
+		if not watcher.blinded():
+			sees_again = true
+			break
+
+	_check("I15 a flash bomb blinds the guard who has it in his eyes (a while, crying out), whites out yours, and is used up",
+		blinded and cried[0] and sees_again and whited > 0.3 and player.inventory.count_of(&"flashbomb") == bombs_before - 1,
+		"blinded %s cried %s sees again %s white %.2f bombs %d -> %d" % [blinded, cried[0], sees_again, whited, bombs_before, player.inventory.count_of(&"flashbomb")])
+	watcher.queue_free()
+
+	# I16 a water flask thrown at a torch on a wall puts it out (put out by
+	#     you, for the guards); the last flask gone, your hand is empty
+	Props.block(self, Vector3(27.6, 1.5, 4.0), Vector3(0.3, 3.0, 3.0))
+	var torch: Node3D = TorchScript.new()
+	torch.can_douse = true
+	add_child(torch)
+	torch.global_position = Vector3(27.2, 2.3, 4.0)
+	await _place(Vector3(22.5, 1.05, 4.0), 0.0)
+	player.inventory.select_by_id(&"waterflask")
+	await _frames(40)
+	_aim(torch.global_position)
+	await _frames(2)
+	await _tap("throw")
+
+	for i in 90:
+		await _frames(1)
+
+		if not torch.lit:
+			break
+
+	await _frames(30)
+	_check("I16 a water flask thrown at a torch puts it out, as if by your hand; the last one gone, your hand is empty",
+		not torch.lit and torch.left_out() and player.inventory.count_of(&"waterflask") == 0 and player.inventory.selected_item().is_empty(),
+		"lit %s left out %s flasks %d in hand '%s'" % [torch.lit, torch.left_out(), player.inventory.count_of(&"waterflask"), player.inventory.selected_item().get("name", "")])
+	torch.queue_free()
+
+	# I17 a lock with no key, and a lockpick: picked, the ring closing as it
+	#     gives; looking away leaves it, and it is picked from the start
+	var box := Props.chest(self, Vector3(24.0, 0.0, 8.0), 0.0, Vector3(0.9, 0.55, 0.55), true, &"", "strongbox")
+	await _frames(5)
+	# (Its node is the lid's hinge: aim at the box itself.)
+	var middle := Vector3(24.0, 0.3, 8.0)
+	await _place(Vector3(24.0, 1.05, 9.3), 0.0)
+	_aim(middle)
+	await _frames(5)
+	var offered: String = player.frob.current_prompt()
+	await _tap("frob")
+	await _frames(30)
+	var ring_part: float = hud._crosshair.draw_amount
+	var picking: bool = player.frob.picking()
+	# Away, then back to it.
+	_aim(middle + Vector3(3.0, 0.0, 0.0))
+	await _frames(5)
+	var left_off: bool = not player.frob.picking() and box.locked
+	_aim(middle)
+	await _frames(5)
+	await _tap("frob")
+	var took := 0
+
+	for i in 400:
+		await _frames(1)
+		took += 1
+
+		if not box.locked:
+			break
+
+	_check("I17 a lockpick picks a lock you have no key for, the ring closing as it gives; looking away leaves it",
+		offered == "Pick the lock" and picking and ring_part > 0.05 and left_off and not box.locked and took >= 150,
+		"offered '%s' picking %s ring %.2f left off %s unlocked %s after %d frames" % [offered, picking, ring_part, left_off, not box.locked, took])
+	box.queue_free()
 
 
 # --------------------------------------------------------------------------
@@ -363,8 +478,8 @@ func _ui_checks() -> void:
 	g.bark("Who's there?")
 	await _frames(3)
 	var subtitle: String = hud._subtitle.get_parsed_text()
-	_check("U11 subtitles name the speaker", subtitle.contains("Guard") and subtitle.contains("Who's there?") and hud._subtitle_panel.modulate.a > 0.5,
-		"'%s' alpha %.2f" % [subtitle, hud._subtitle_panel.modulate.a])
+	_check("U11 subtitles name the speaker", g.given_name != "" and subtitle.begins_with(g.given_name) and subtitle.contains("Who's there?") and hud._subtitle_panel.modulate.a > 0.5,
+		"'%s' (he is %s) alpha %.2f" % [subtitle, g.given_name, hud._subtitle_panel.modulate.a])
 	g.queue_free()
 
 	# U10 health shields only show when you are hurt
@@ -376,8 +491,9 @@ func _ui_checks() -> void:
 	_check("U10 health shows only when hurt", hidden_full and hud._shields.modulate.a > 0.9 and hud._vignette.modulate.a > 0.1,
 		"hidden at full %s shields %.2f vignette %.2f" % [hidden_full, hud._shields.modulate.a, hud._vignette.modulate.a])
 
-	# U7 Esc pauses, a click resumes. The handlers are called directly:
-	# injected input can arrive twice in a headless run, and Esc toggles.
+	# U7 Esc pauses, a click resumes. Esc's handler is called directly
+	# (injected input can arrive twice in a headless run, and Esc toggles);
+	# the click is a real one, on the pause screen.
 	var esc := InputEventAction.new()
 	esc.action = &"ui_cancel"
 	esc.pressed = true
@@ -385,14 +501,61 @@ func _ui_checks() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var paused: bool = get_tree().paused and hud._pause.visible
+	var middle: Rect2 = hud._pause.get_child(1).get_global_rect()
+	var view: Rect2 = get_viewport().get_visible_rect()
+	var centred: bool = absf(middle.get_center().x - view.get_center().x) < 2.0 and absf(middle.get_center().y - view.get_center().y) < 2.0
+
+	# U13 the pause screen's setting: a click on it changes it (and is kept),
+	# and does not resume
+	SettingsScript.path = "user://settings_interaction_test.cfg"
+	SettingsScript.reload()
+	hud._marks_toggle.pressed.emit()
+	await get_tree().process_frame
+	var turned: bool = not SettingsScript.awareness_marks() and hud._marks_toggle.text.contains("hidden") and get_tree().paused
+	var kept := ConfigFile.new()
+	var written: bool = kept.load(SettingsScript.path) == OK and kept.get_value("hud", "awareness_marks", true) == false
+	hud._marks_toggle.pressed.emit()
+	await get_tree().process_frame
+	var turned_back: bool = SettingsScript.awareness_marks() and hud._marks_toggle.text.contains("shown")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SettingsScript.path))
+	SettingsScript.path = "user://settings.cfg"
+	SettingsScript.reload()
+	_check("U13 the pause screen's setting changes with a click, is kept, and does not resume", turned and written and turned_back,
+		"hidden and still paused %s written %s shown again %s" % [turned, written, turned_back])
+
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
-	hud._unhandled_input(click)
+	click.position = Vector2(2, 2)
+	click.global_position = click.position
+	get_viewport().push_input(click)
+	var up: InputEventMouseButton = click.duplicate()
+	up.pressed = false
+	get_viewport().push_input(up)
 	await get_tree().process_frame
 	await _frames(3)
-	_check("U7 Esc pauses and shows the pause screen; a click resumes", paused and not get_tree().paused and not hud._pause.visible,
-		"paused with screen %s now paused %s screen %s" % [paused, get_tree().paused, hud._pause.visible])
+	_check("U7 Esc pauses and shows the pause screen (in the middle); a click on it resumes", paused and centred and not get_tree().paused and not hud._pause.visible,
+		"paused with screen %s centred %s now paused %s screen %s" % [paused, centred, get_tree().paused, hud._pause.visible])
+
+	# U14 a torch on the wall: [E] Put out the torch, and it is out (dark,
+	#     nothing more to do with it)
+	var torch: Node3D = TorchScript.new()
+	torch.can_douse = true
+	add_child(torch)
+	torch.global_position = Vector3(20.0, 2.2, 4.6)
+	await _place(Vector3(20.0, 1.05, 5.9), 0.0)
+	_aim(torch.global_position)
+	await _frames(5)
+	var offered: String = player.frob.current_prompt()
+	await _tap("frob")
+	# Pinched out, it dies over a tenth of a second (Torch.SNUFF_TIME).
+	await _frames(10)
+	var after: String = player.frob.current_prompt()
+	_check("U14 a torch on the wall offers to be put out, and goes dark when you do", offered == "Put out the torch" and not torch.lit and not torch.light.visible and after == "",
+		"offered '%s', lit %s light %s, then '%s'" % [offered, torch.lit, torch.light.visible, after])
+	torch.queue_free()
+
+	await _fit_checks()
 
 	# U9 caught: the screen fades to black
 	player.take_damage(1000.0, null)
@@ -405,6 +568,97 @@ func _ui_checks() -> void:
 	hud._fade.color.a = 0.0
 	player.hand.set_suppressed(false)
 	chest_b.queue_free()
+
+
+## U15 the HUD at any size of window: small, square, wide, tall, 4K. The 2D
+## is scaled with the window (project stretch, from 1152x648), and every
+## piece is on the screen: the prompt centred under the crosshair, a long
+## line of subtitle wrapped over the caption, the caption over the
+## lightgem, none of them on another; the pause screen in the middle, and
+## nothing else showing through it.
+func _fit_checks() -> void:
+	var hud: Node = player.hud
+	var torch: Node3D = TorchScript.new()
+	torch.can_douse = true
+	add_child(torch)
+	torch.global_position = Vector3(20.0, 2.2, 4.6)
+	await _place(Vector3(20.0, 1.05, 5.9), 0.0)
+	_aim(torch.global_position)
+	var speaker := Node3D.new()
+	add_child(speaker)
+	speaker.global_position = player.global_position
+	var legacy: bool = bool(player.get("legacy_feel"))
+	player.set("legacy_feel", true)
+	var window := get_tree().root.size
+	var failures: Array[String] = []
+	var sizes := [Vector2i(800, 600), Vector2i(1280, 1024), Vector2i(1920, 1080), Vector2i(2560, 1080), Vector2i(3840, 2160), Vector2i(1080, 1920)]
+
+	for size in sizes:
+		get_tree().root.size = size
+		hud._on_bark("Did you hear that? Something moved down by the old well, past the cart and the barrels. Go and have a look, and take a light.", speaker)
+		hud.show_caption("Water flask (3)", 30.0)
+		hud._shield_timer = 30.0
+		hud._death.text = "You were caught."
+		await _frames(6)
+		hud._death.modulate.a = 1.0
+		await get_tree().process_frame
+		var view: Rect2 = get_viewport().get_visible_rect()
+		var rects: Dictionary = hud.layout_rects()
+		var scale: float = get_tree().root.get_final_transform().x.x
+		var want := minf(size.x / 1152.0, size.y / 648.0)
+
+		if absf(scale - want) > 0.01 or view.size.x < 1151.0 or view.size.y < 647.0:
+			failures.append("%s scaled %.3f (want %.3f), view %s" % [size, scale, want, view.size])
+
+		for key in ["prompts", "subtitles", "caption", "gem", "legacy", "death", "shields"]:
+			if not rects.has(key):
+				failures.append("%s %s not shown" % [size, key])
+
+		for key in rects:
+			if not view.grow(0.5).encloses(rects[key]):
+				failures.append("%s %s off the screen: %s in %s" % [size, key, rects[key], view.size])
+
+		for pair in [["subtitles", "caption"], ["subtitles", "gem"], ["caption", "gem"], ["prompts", "subtitles"], ["prompts", "crosshair"]]:
+			if rects.has(pair[0]) and rects.has(pair[1]) and (rects[pair[0]] as Rect2).intersects(rects[pair[1]]):
+				failures.append("%s %s over %s" % [size, pair[0], pair[1]])
+
+		if rects.has("prompts") and absf((rects["prompts"] as Rect2).get_center().x - view.get_center().x) > 2.0:
+			failures.append("%s prompts not centred: %s" % [size, rects["prompts"]])
+
+		if rects.has("subtitles") and (rects["subtitles"] as Rect2).size.x > view.size.x * hud.SUBTITLE_WIDTH + 40.0:
+			failures.append("%s subtitles not wrapped: %s" % [size, rects["subtitles"]])
+
+		# The pause screen, in the middle.
+		var esc := InputEventAction.new()
+		esc.action = &"ui_cancel"
+		esc.pressed = true
+		player._unhandled_input(esc)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var paused_rects: Dictionary = hud.layout_rects()
+		var column: Rect2 = paused_rects.get("pause", Rect2())
+
+		if column.size == Vector2.ZERO or not view.encloses(column) or column.get_center().distance_to(view.get_center()) > 2.0:
+			failures.append("%s pause screen at %s in %s" % [size, column, view.size])
+
+		# Nothing of the play HUD through it.
+		if paused_rects.size() != 1:
+			failures.append("%s shown under the pause screen: %s" % [size, paused_rects.keys()])
+
+		hud.resume()
+		await get_tree().process_frame
+
+	get_tree().root.size = window
+	player.set("legacy_feel", legacy)
+	hud._death.modulate.a = 0.0
+	hud._death.text = ""
+	hud._shield_timer = 0.0
+	hud.show_caption("", 0.0)
+	speaker.queue_free()
+	torch.queue_free()
+	await _frames(3)
+	_check("U15 at any size of window the HUD is scaled with it and all on the screen, the prompt centred, a long subtitle wrapped, nothing over anything (nor under the pause screen)",
+		failures.is_empty(), "; ".join(failures) if not failures.is_empty() else "%d sizes" % sizes.size())
 
 
 func _release_all() -> void:

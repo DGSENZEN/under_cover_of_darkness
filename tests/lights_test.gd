@@ -25,6 +25,7 @@ const LightBudget := preload("res://scripts/Visual/Lights/LightBudget.gd")
 const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const HangingScript := preload("res://scripts/Visual/Hanging.gd")
+const ThrownTool := preload("res://scripts/Combat/ThrownTool.gd")
 const LightFixture := preload("res://scripts/Visual/Lights/LightFixture.gd")
 
 ## LightProbe 2 m from a bare torch, the brazier and the campfire (each
@@ -70,6 +71,7 @@ func _run() -> void:
 	await _gallery()
 	await _reviewed()
 	await _minors()
+	await _douseable()
 
 
 # ---------------------------------------------------------------------------
@@ -1613,6 +1615,46 @@ func _minors() -> void:
 					lacking.append("%s:%s" % [file.get_basename(), key])
 
 	_check("L64 every fixture's .json carries every key the game reads", lacking.is_empty(), "lacking %s" % [lacking])
+	camera.queue_free()
+	await _frames(3)
+
+
+## L65 a level's own torch (you may put it out; the guards light it again),
+## fitted to its wall as a sconce.
+func _douseable() -> void:
+	Props.block(self, Vector3(0, -0.5, 1500), Vector3(40, 1, 20))
+	Props.block(self, Vector3(0, 2, 1499.7), Vector3(4, 4, 0.4))
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.6, 1506)
+	camera.current = true
+	var flame_at := Vector3(0, 2.2, 1500.0)
+	Lights.torch_at(self, flame_at, 2.4, 9.0, false, {"can_douse": true})
+	await _frames(5)
+	var sconce := _fixture_near(flame_at, 1.0)
+
+	if sconce == null:
+		_check("L65 a level's own torch as a sconce: reached at its flame, left out when you put it out, relit, doused by a flask", false, "no sconce")
+		camera.queue_free()
+		return
+
+	var own: bool = sconce.fixture == &"wall_torch" and sconce.can_douse and sconce.is_in_group(&"lights")
+	var reached: bool = sconce._reach != null and sconce._reach.global_position.distance_to(sconce.flame_position()) < 0.01
+	var someone := Node3D.new()
+	add_child(someone)
+	sconce.put_out(someone)
+	await _frames(10)
+	var left: bool = not sconce.lit and sconce.left_out() and sconce._reach.collision_layer == 0
+	sconce.relight(null)
+	await _frames(40)
+	var relit: bool = sconce.lit and not sconce.left_out() and sconce._reach.collision_layer == TorchScript.REACH_LAYER
+	ThrownTool.splash(self, sconce.flame_position() + Vector3(0, 0, 0.1), Vector3.BACK, null)
+	await _frames(3)
+	var doused: bool = not sconce.lit and sconce._cool > 0.5
+	_check("L65 a level's own torch as a sconce: reached at its flame, left out when you put it out, relit, doused by a flask",
+		own and reached and left and relit and doused, "its own %s, reached at the flame %s, left out %s, relit %s, doused %s" % [own, reached, left, relit, doused])
+	someone.queue_free()
+	sconce.queue_free()
 	camera.queue_free()
 	await _frames(3)
 

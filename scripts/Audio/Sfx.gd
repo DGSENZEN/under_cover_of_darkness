@@ -39,6 +39,9 @@ const AmbienceScript := preload("res://scripts/Audio/Ambience.gd")
 const MusicScript := preload("res://scripts/Audio/Music.gd")
 
 const FOLDER := "res://audio/sfx/"
+## The most takes of one sound read (name_1 .. name_24, numbered without a
+## gap; tools/prepare_sfx.py's TAKES).
+const TAKES := 24
 ## A sound counts as loaded once this many of its variations are.
 const VARIANTS := 1
 ## Nearer than this to the listener, a sound plays as if it were this far,
@@ -114,38 +117,70 @@ const GAIN := {
 	&"burning": 0.9,
 	&"rope_snap": 4.0,
 	&"guard_break": 3.0,
-	# Voices: yours when you are cut; theirs cut, dying, roaring, grunting.
-	&"hurt": -7.5,
-	&"pain": -6.6,
-	&"death": -4.0,
-	&"roar": -9.1,
-	&"grunt": -5.4,
-	&"effort": -8.4,
+	# Voices, all NOX Sound's Voices Essentials: two men and a woman. The deep
+	# man plays under the plain name, the lighter one under "_b", the woman
+	# under "_f" (GuardVoice.voiced gives each man his). Their cries: cut,
+	# dying, roaring, grunting (about -24 LUFS as heard); yours when you are cut
+	# and your effort (the lighter man's).
+	&"pain": -3.9,
+	&"pain_b": -6.2,
+	&"pain_f": -5.8,
+	&"death": -2.6,
+	&"death_b": -8.8,
+	&"death_f": -7.2,
+	&"roar": -8.0,
+	&"roar_b": -8.4,
+	&"roar_f": -7.8,
+	&"grunt": -5.7,
+	&"grunt_b": -7.2,
+	&"grunt_f": -9.8,
+	&"hurt": -7.2,
+	&"effort": -8.6,
 	&"heartbeat": -9.6,
 	&"gear": -11.4,
-	# The duelist's own voice (a woman's).
-	&"pain_f": -5.2,
-	&"death_f": -10.1,
-	&"grunt_f": -5.4,
-	&"roar_f": -3.7,
 	# Their talk and their breath (GuardVoice), levelled against the cries
-	# above (about -25 LUFS as heard): the murmur of talk well under them
-	# (-32; a shout's delivery brings it up to them), laughs and grunts a
-	# little under (-28), sighs, "hm"s and breaths quieter still, a sleeper's
-	# snore quietest (-34).
-	&"murmur": -12.1,
-	&"laugh": -7.9,
-	&"sigh": -16.9,
-	&"sigh_f": -15.4,
-	&"cough": -6.4,
-	&"spit": -16.0,
-	&"grunt_effort": -6.2,
-	&"hm": -15.2,
+	# above: talk (nods and "hm"s) well under them (-32; a shout's delivery
+	# brings it up to them), laughs, coughs and grunts a little under (-28),
+	# sighs, "hm"s and breaths quieter still, a sleeper's breath quieter
+	# (-36), the cold on a man's breath quietest (-38), under everything.
+	&"murmur": -8.0,
+	&"murmur_b": -13.1,
+	&"murmur_f": -14.4,
+	&"nod": -9.0,
+	&"nod_b": -14.1,
+	&"nod_f": -15.4,
+	&"laugh": -7.2,
+	&"laugh_b": -8.2,
+	&"laugh_f": -8.8,
+	&"sigh": -12.3,
+	&"sigh_f": -17.1,
+	&"cough": -8.5,
+	&"cough_b": -9.9,
+	&"cough_f": -6.3,
+	&"throat": -12.1,
+	&"throat_b": -16.0,
+	&"throat_f": -15.5,
+	&"grunt_effort": -8.2,
+	&"grunt_effort_b": -9.6,
+	&"grunt_effort_f": -12.0,
+	&"hm": -16.5,
+	&"hm_b": -17.9,
+	&"hm_f": -17.3,
+	&"gasp": -11.2,
+	&"gasp_b": -11.4,
+	&"gasp_f": -5.2,
 	&"breath_heavy": -16.6,
+	&"breath_heavy_b": -14.8,
+	&"breath_heavy_f": -16.1,
 	&"breath_scared": -9.7,
-	&"yawn": -13.4,
-	&"snore": -12.1,
-	&"gasp": -7.1,
+	&"breath_scared_b": -9.4,
+	&"breath_scared_f": -12.0,
+	&"breath_sleep": -22.0,
+	&"breath_sleep_b": -18.7,
+	&"breath_sleep_f": -21.1,
+	&"breath_cold": -21.3,
+	&"breath_cold_b": -18.9,
+	&"breath_cold_f": -23.0,
 	# The world: feet, hands, doors, what you pick up. Recordings are
 	# levelled against a loudness each kind of sound is meant to have (their
 	# measured LUFS, tools/prepare_sfx.py): your steps about 8 dB under a
@@ -337,8 +372,8 @@ static func warm(context: Node) -> void:
 		MusicScript.begin(context)
 
 
-## A variation of a sound, picked at random; null if it has no recording.
-static func stream(sound: StringName) -> AudioStream:
+## Every take of a sound (empty if it has no recording).
+static func takes(sound: StringName) -> Array:
 	_mutex.lock()
 	var variants: Array = _bank.get(sound, [])
 	_mutex.unlock()
@@ -347,7 +382,7 @@ static func stream(sound: StringName) -> AudioStream:
 		variants = _load_files(sound)
 
 		if variants.is_empty():
-			return null
+			return []
 
 		_mutex.lock()
 
@@ -356,6 +391,16 @@ static func stream(sound: StringName) -> AudioStream:
 
 		variants = _bank[sound]
 		_mutex.unlock()
+
+	return variants
+
+
+## A variation of a sound, picked at random; null if it has no recording.
+static func stream(sound: StringName) -> AudioStream:
+	var variants := takes(sound)
+
+	if variants.is_empty():
+		return null
 
 	# Never the same take twice running.
 	var pick := randi() % variants.size()
@@ -925,10 +970,12 @@ static func _load_files(sound: StringName) -> Array:
 		if ResourceLoader.exists(single):
 			found.append(load(single))
 
-		for i in range(1, 9):
+		for i in range(1, TAKES + 1):
 			var numbered := "%s%s_%d.%s" % [FOLDER, sound, i, extension]
 
-			if ResourceLoader.exists(numbered):
-				found.append(load(numbered))
+			if not ResourceLoader.exists(numbered):
+				break
+
+			found.append(load(numbered))
 
 	return found

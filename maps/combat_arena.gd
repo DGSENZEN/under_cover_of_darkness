@@ -193,7 +193,7 @@ func _ring_yard() -> void:
 	# A lantern on a long chain from the beam, over the middle of the ring
 	# (a torch hung in the air there before), as bright as the torches and,
 	# without its bars, lighting the ring below as the torch did.
-	Lights.hanging_lantern(self, Vector3(0.2, 7.12, -12), 2.7, {"energy": 2.4, "light_range": 10.0, "cookie": false})
+	Lights.hanging_lantern(self, Vector3(0.2, 7.12, -12), 2.7, {"energy": 2.4, "light_range": 10.0, "cookie": false, "can_douse": true})
 
 	# The pen they come from, behind the north gate, and its portcullis.
 	Props.block(self, Vector3(-4.5, 1.8, -30), Vector3(0.5, 3.6, 8), STONE)
@@ -695,16 +695,26 @@ func _build_overlay() -> void:
 	layer.layer = 6
 	add_child(layer)
 	_log = Label.new()
-	_log.position = Vector2(20, 20)
+	# As wide as the screen allows: a line too long is cut short.
+	_log.anchor_right = 1.0
+	_log.offset_left = 20.0
+	_log.offset_top = 20.0
+	_log.offset_right = -20.0
+	_log.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_log.add_theme_font_size_override("font_size", 17)
 	_log.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	_log.add_theme_constant_override("outline_size", 5)
 	_log.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(_log)
 	_banner = Label.new()
-	_banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	_banner.position = Vector2(-300, 90)
-	_banner.size = Vector2(600, 60)
+	# Across the top of the screen, centred, whatever its size; wrapped if
+	# it is too long for one line.
+	_banner.anchor_right = 1.0
+	_banner.offset_left = 24.0
+	_banner.offset_right = -24.0
+	_banner.offset_top = 90.0
+	_banner.offset_bottom = 150.0
+	_banner.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_banner.add_theme_font_size_override("font_size", 44)
 	_banner.add_theme_color_override("font_color", Color(1.0, 0.85, 0.5))
@@ -787,7 +797,8 @@ func _mark(at: Vector3, radius: float) -> void:
 ## `shadows` off for the lesser lights: every guard who moves near a
 ## shadowed light has it drawn over again.
 func _torch(at: Vector3, shadows := true) -> void:
-	Lights.torch_at(self, at, 2.4, 10.0, shadows)
+	# One of the level's own: you can put it out (the guards light it again).
+	Lights.torch_at(self, at, 2.4, 10.0, shadows, {"can_douse": true})
 
 
 func _sign(at: Vector3, text: String, size := 32) -> void:

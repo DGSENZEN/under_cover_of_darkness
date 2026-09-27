@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3 uid="uid://b50oh1hpcb7bl"]
+[gd_scene load_steps=10 format=3 uid="uid://b50oh1hpcb7bl"]
 
 [ext_resource type="Script" uid="uid://bkrl1t48w2w73" path="res://scripts/PlayerController.gd" id="1_xhfnw"]
 [ext_resource type="Script" uid="uid://dnuchpldsc3n6" path="res://light_gem.gd" id="2_kpjcp"]
@@ -7,9 +7,6 @@
 [ext_resource type="Script" path="res://scripts/Interaction/HandSlot.gd" id="5_hand"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_kpjcp"]
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_xhfnw"]
-viewport_path = NodePath("SubViewport")
 
 [sub_resource type="SphereMesh" id="SphereMesh_xhfnw"]
 radius = 0.08
@@ -48,13 +45,6 @@ script = ExtResource("3_frob")
 
 [node name="Inventory" type="Node" parent="."]
 script = ExtResource("4_inv")
-
-[node name="CanvasLayer" type="CanvasLayer" parent="."]
-
-[node name="TextureRect" type="TextureRect" parent="CanvasLayer"]
-offset_right = 40.0
-offset_bottom = 40.0
-texture = SubResource("ViewportTexture_xhfnw")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 layers = 524288

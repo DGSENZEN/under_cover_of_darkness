@@ -49,11 +49,11 @@ func _ready() -> void:
 	Props.block(self, Vector3(20.0, 0.6, -8.0), Vector3(3.0, 1.2, 2.0), Color(0.5, 0.5, 0.52))
 
 	# --- tools ---------------------------------------------------------------
-	_sign(Vector3(-7.0, 1.9, 2.0), "YOUR HANDS\ntake the tools: they come to your off hand, then away\nmouse wheel: lower one, raise the next (or empty hands)\nloot goes into your purse; its tag tallies the total\nhold Tab to hold up your purse and key ring\na locked door you have the key for: the key turns first")
+	_sign(Vector3(-7.0, 1.9, 2.0), "YOUR HANDS\ntake the tools: they come to your off hand, then away\nmouse wheel: lower one, raise the next (or empty hands)\nloot goes into your purse; its tag tallies the total\nhold Tab to hold up your purse and key ring\na locked door you have the key for: the key turns first\nno key, but a lockpick: pick it (stay put a few seconds)\nclick: throw a flash bomb (blinds guards) or a water flask (puts out torches)")
 	Props.block(self, Vector3(-7.0, 0.45, -3.0), Vector3(2.0, 0.9, 0.7), Color(0.4, 0.3, 0.2))
-	Props.tool(self, Vector3(-7.6, 0.96, -3.0), &"flashbomb", "flash bomb", Color(0.85, 0.85, 0.8))
+	Props.tool(self, Vector3(-7.6, 0.96, -3.0), &"flashbomb", "flash bomb", Color(0.3, 0.28, 0.26))
 	Props.tool(self, Vector3(-7.0, 0.99, -3.0), &"lockpick", "lockpick", Color(0.6, 0.6, 0.65), "rod")
-	Props.tool(self, Vector3(-6.4, 0.97, -3.0), &"holywater", "holy water", Color(0.4, 0.6, 0.9), "box", 3)
+	Props.tool(self, Vector3(-6.4, 0.97, -3.0), &"waterflask", "water flask", Color(0.4, 0.6, 0.9), "flask", 3)
 
 	var player := PLAYER.instantiate()
 	player.debug_traversal = true

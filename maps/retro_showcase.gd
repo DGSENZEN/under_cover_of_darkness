@@ -115,7 +115,7 @@ func _lights() -> void:
 
 	# Torches along the west wall and on the pillars facing the middle.
 	for at in [Vector3(-7.7, 2.5, -9.0), Vector3(-7.7, 2.5, -3.0), Vector3(-7.7, 2.5, 3.0), Vector3(-3.0, 2.3, -2.0), Vector3(3.0, 2.3, -8.0)]:
-		Lights.torch_at(self, at)
+		Lights.torch_at(self, at, 2.4, 9.0, true, {"can_douse": true})
 
 	# Mist lying in the south-west corner.
 	var mist := FogVolume.new()

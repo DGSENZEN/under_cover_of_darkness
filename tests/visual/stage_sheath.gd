@@ -67,6 +67,18 @@ func _ready() -> void:
 		# or his back.
 		await _shoot(g, "%s_0_put_by_side" % tag, _left(g, 1.7) if not slung else _behind(g, 2.0))
 		await _shoot(g, "%s_0_put_by_front" % tag, _front(g, 2.2))
+		# Stirred: a hand on the hilt.
+		g.last_known_position = g.global_position - g.global_basis.z * 6.0
+		g.has_last_known = true
+		g.alert = 30.0
+		g._since_stimulus = 0.0
+		g._set_state(1)
+		await _ticks(40)
+		await _shoot(g, "%s_0_hand_on_hilt" % tag, _front(g, 1.9))
+		g.alert = 0.0
+		g.has_last_known = false
+		g._set_state(0)
+		await _ticks(40)
 		# Drawn (wary: on edge after a hunt), then put away again: from in
 		# front, his sword hand crossing to his hip.
 		g._hunted_at = g._game_time

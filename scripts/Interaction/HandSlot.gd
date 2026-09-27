@@ -90,6 +90,8 @@ var _switching := false
 var _main_lower := 1.0
 var _suppressed := false
 var _swing := 0.0
+## Throwing what is in the hand: it goes partway through the swing.
+var _throwing := false
 
 var _off: Node3D
 var _purse: MeshInstance3D
@@ -362,6 +364,13 @@ func play_swing() -> void:
 	_swing = 1.0
 
 
+## Thrown (a flash bomb, a water flask): the same overhand, the thing leaving
+## your hand partway, and the next one (if any) coming up from your belt.
+func play_throw() -> void:
+	_swing = 1.0
+	_throwing = true
+
+
 ## Both hands are busy (a crate, a body): the item goes out of sight.
 func set_suppressed(suppressed: bool) -> void:
 	_suppressed = suppressed
@@ -542,6 +551,17 @@ func _update_main(delta: float) -> void:
 		_main_lower = move_toward(_main_lower, 0.0 if want_up else 1.0, step)
 
 	_swing = move_toward(_swing, 0.0, delta * 3.2)
+
+	# Thrown: gone from the hand at the release; the swing done, the next one
+	# comes up from below.
+	if _throwing:
+		if _swing < 0.62:
+			_main_mesh.visible = false
+
+		if _swing <= 0.0:
+			_throwing = false
+			_main_lower = 1.0
+			_main_mesh.visible = true
 
 
 func _set_main_item(mesh: Mesh) -> void:

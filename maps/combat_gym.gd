@@ -89,7 +89,8 @@ func _guard(at: Vector3, yaw: float, speaker: String, archetype: StringName = &"
 ## A torch, its flame at `at`: in a sconce on the wall there, or on a pole
 ## cresset (Lights.torch_at).
 func _torch(at: Vector3) -> void:
-	Lights.torch_at(self, at, 2.4, 10.0)
+	# One of the level's own: you can put it out (the guards light it again).
+	Lights.torch_at(self, at, 2.4, 10.0, true, {"can_douse": true})
 
 
 func _sign(at: Vector3, text: String) -> void:

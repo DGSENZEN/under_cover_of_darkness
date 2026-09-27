@@ -698,6 +698,9 @@ func _run() -> void:
 	var greeter := _man(Vector3(555, 0, -3), -PI * 0.5, &"steady", [&"fidget"])
 	greeter._habits._wait = 999.0
 	greeter._life.greet_chance = 1.0
+	# (No remark to himself on the way: the talk director gives a man alone
+	# one 5 to 40 s in, which would count as a word said.)
+	greeter._life._director()._solo_next[greeter.get_instance_id()] = INF
 	await _frames(30)
 	greeter._home.origin = Vector3(566, 0, -3)
 	var nodded := false
@@ -714,7 +717,7 @@ func _run() -> void:
 	await _frames(60 * 8)
 	var back_by := _flat(greeter.global_position - Vector3(555, 0, -3)) < 1.0
 	_check("H23 going by a man at his ease, a word to him, and he nods; by him again straight after, nothing",
-		greeted and nodded and back_by and _barks_of(greeter).size() == said,
+		greeted and nodded and back_by and not _barks_of(greeter).slice(said).any(func(t): return _is_greet(t, stood.given_name)),
 		"said %s, nodded %s, back by him %s, said after %s" % [_barks_of(greeter), nodded, back_by, _barks_of(greeter).slice(said)])
 
 	# H24 a flask in his left hand for a pull from it, and put away after;
@@ -799,11 +802,12 @@ func _run() -> void:
 
 	# H27 heard at his ease: his clothes as he sits and gets up, the seat
 	# creaking under him, the chair scraping the floor drawn out and in, and a
-	# grunt lifting a crate (his blade stays in its scabbard: no slide heard)
+	# grunt lifting a crate, in his voice (his blade stays in its scabbard: no
+	# slide heard)
 	await _fresh()
 	var heard_before := {}
 
-	for sound in [&"cloth", &"creak_rope", &"scuff", &"sheath", &"blade_draw", &"grunt"]:
+	for sound in [&"cloth", &"creak_rope", &"scuff", &"sheath", &"blade_draw", &"grunt", &"grunt_b"]:
 		heard_before[sound] = _count(sound)
 
 	var diner3 := _man(Vector3(478, 0, 0), 0.0, &"steady", [&"sit"])
@@ -819,7 +823,7 @@ func _run() -> void:
 		foley[sound] = _count(sound) - int(heard_before[sound])
 
 	_check("H27 heard at his ease: a rustle sitting and getting up, the seat creaking, the chair scraping, a grunt at a crate; no blade in or out",
-		int(foley[&"cloth"]) >= 2 and int(foley[&"creak_rope"]) >= 1 and int(foley[&"scuff"]) >= 4 and int(foley[&"sheath"]) == 0 and int(foley[&"blade_draw"]) == 0 and int(foley[&"grunt"]) >= 1,
+		int(foley[&"cloth"]) >= 2 and int(foley[&"creak_rope"]) >= 1 and int(foley[&"scuff"]) >= 4 and int(foley[&"sheath"]) == 0 and int(foley[&"blade_draw"]) == 0 and int(foley[&"grunt"]) + int(foley[&"grunt_b"]) >= 1,
 		"heard %s" % [foley])
 
 	# H28 his blade in its scabbard at his ease (the hilt at his hip); going to
@@ -869,6 +873,36 @@ func _run() -> void:
 	_check("H29 killed with his blade in its scabbard, it stays on him",
 		left_lying == 0 and is_instance_valid(scabbard) and scabbard.is_visible_in_tree(),
 		"dropped %d, still at his hip %s" % [left_lying, is_instance_valid(scabbard) and scabbard.is_visible_in_tree()])
+
+	# H30 a friend coming over for a word is company: each man's remark to
+	# himself comes due as he sets out, and neither says one on the way (the
+	# word is coming); they talk
+	await _fresh()
+	var caller := _man(Vector3(240, 0, 0), 0.0, &"steady", [&"visit"])
+	var host := _man(Vector3(240, 0, -7), PI, &"rash", [&"chop"])
+	caller._life._talk_rest = 0.0
+	host._life._talk_rest = 0.0
+	var director: RefCounted = caller._life._director()
+	await _until(func(): return caller._habits.habit == &"visit", 60 * 10)
+	director._solo_next[caller.get_instance_id()] = 0.0
+	director._solo_next[host.get_instance_id()] = 0.0
+	var muttered := []
+	var together := false
+
+	for i in 60 * 20:
+		await _frames(1)
+
+		if caller._habits.habit == &"visit":
+			muttered = director.remarks().filter(func(r): return r["man"] == caller or r["man"] == host).map(func(r): return r["id"])
+
+		together = together or (caller._life.talking() and host._life.talking())
+
+		if together and not caller._life.talking():
+			break
+
+	_check("H30 a friend coming over for a word is company: neither he nor the man he goes to says anything to himself meanwhile, and they talk",
+		muttered.is_empty() and together,
+		"remarks on the way %s, talked %s" % [muttered, together])
 
 
 # ---------------------------------------------------------------------------
