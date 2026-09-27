@@ -13,6 +13,7 @@ const DirectorScript := preload("res://scripts/Showcase/ShowDirector.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const CameraScript := preload("res://scripts/Showcase/ShowCamera.gd")
+const OverlayScript := preload("res://scripts/Showcase/ShowOverlay.gd")
 
 ## Who is at which kind of station at the start of the night.
 const STATIONED := {"Piers": &"sit", "Col": &"eat", "Tam": &"sleep", "Gideon": &"rummage", "Ned": &"carry", "Brand": &"chop"}
@@ -222,6 +223,64 @@ func _run() -> void:
 	await _unload(map13)
 
 	# ------------------------------------------------------------------
+	# The overlay
+	# ------------------------------------------------------------------
+
+	var map16 := await _map(false)
+	var eye := Camera3D.new()
+	add_child(eye)
+	var osric16: Node3D = map16.cast["Osric"]
+	eye.global_position = osric16.global_position + Vector3(0, 1.8, 6.0)
+	eye.look_at(osric16.global_position + Vector3.UP * 1.5, Vector3.UP)
+	eye.make_current()
+	var overlay: CanvasLayer = OverlayScript.new()
+	add_child(overlay)
+	overlay.setup(map16)
+
+	# D16 what a man in view says is shown, with his name; not one behind you
+	var behind: Node3D = map16.cast["Aldous"]
+	osric16.bark("A test line.")
+	behind.bark("Unseen line.")
+	await _frames(3)
+	var shown16: Array = overlay.shown_subtitles()
+	_check("D16 a bark from a guard in view shows as a subtitle with his name; one behind the camera does not",
+		shown16.has("Osric: A test line.") and not shown16.any(func(t): return String(t).contains("Unseen")),
+		"shown %s" % [shown16])
+
+	# D17 into a fight: "!" over him for about 2 s
+	osric16.alert_changed.emit(4, 0)
+	await _frames(3)
+	var marked17: bool = overlay.shown_marks().has([osric16, "!"])
+	await _frames(150)
+	var gone17: bool = not overlay.shown_marks().has([osric16, "!"])
+	_check("D17 a man going to COMBAT shows \"!\" over him for about 2 s",
+		marked17 and gone17,
+		"marked %s, gone after 2.5 s %s" % [marked17, gone17])
+
+	# D18 H hides it all, and shows it again
+	overlay.title("II. A Knife in the Dark")
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_H
+	key.pressed = true
+	Input.parse_input_event(key)
+	await _frames(2)
+	var hidden18: bool = not overlay.visible
+	osric16.bark("Said while hidden.")
+	await _frames(2)
+	var none18: bool = overlay.shown_subtitles().is_empty()
+	var key2 := InputEventKey.new()
+	key2.physical_keycode = KEY_H
+	key2.pressed = true
+	Input.parse_input_event(key2)
+	await _frames(2)
+	_check("D18 H hides every subtitle, mark and title (and shows them again)",
+		hidden18 and none18 and overlay.visible,
+		"hidden %s, nothing shown %s, back %s" % [hidden18, none18, overlay.visible])
+	overlay.queue_free()
+	eye.queue_free()
+	await _unload(map16)
+
+	# ------------------------------------------------------------------
 	# The night (ShowNight), act by act from each act's own start
 	# ------------------------------------------------------------------
 
@@ -311,11 +370,11 @@ func _run() -> void:
 		return map7.director.act_index >= 5 or map7.director.log_lines.size() >= 3, 12000)
 	var skipped7: Array = map7.director.log_lines
 	var needed7 := skipped7.filter(func(l): return l.contains("turtle") or l.contains(" parry ") or l.contains("focus"))
-	var osric_dead: bool = map7.story._dead("Osric")
+	var deathblows7: int = map7.story.deathblows() + map7.story.riposte_kills()
 	var mirelle_dead: bool = map7.story._dead("Mirelle")
-	_check("D7 Act IV: turtle brings the squad's break plan with Brand as breaker; parry leaves Osric dead; focus leaves Mirelle dead and Brand berserk; press brings a plea",
-		needed7.is_empty() and osric_dead and mirelle_dead and berserk7[0] and map7.director.act_index >= 5,
-		"skipped %s, Osric dead %s, Mirelle dead %s, Brand berserk %s, a plea %s, act now %d" % [skipped7, osric_dead, mirelle_dead, berserk7[0], plea7[0], map7.director.act_index])
+	_check("D7 Act IV: turtle brings the squad's break plan with Brand as breaker; parry cuts a man down (deathblow or riposte); focus leaves Mirelle dead and Brand berserk; press brings a plea",
+		needed7.is_empty() and deathblows7 >= 1 and mirelle_dead and berserk7[0] and map7.director.act_index >= 5,
+		"skipped %s, deathblows and riposte kills %d, Mirelle dead %s, Brand berserk %s, a plea %s, act now %d" % [skipped7, deathblows7, mirelle_dead, berserk7[0], plea7[0], map7.director.act_index])
 	await _unload(map7)
 
 	# D8 each ending, from Act V's own start
@@ -383,6 +442,16 @@ func _map(show: bool) -> Node:
 
 func _unload(map: Node) -> void:
 	map.queue_free()
+
+	# What the fight left under the scene's root, not the map's (cut-off limbs,
+	# blood): the next check's yard would find them.
+	for child in get_children():
+		child.queue_free()
+
+	for group in [&"bodies", &"dropped_weapons", &"dropped_lights", &"stray_arrows"]:
+		for thing in get_tree().get_nodes_in_group(group):
+			thing.queue_free()
+
 	await _frames(3)
 	SquadScript.clear_all()
 	GarrisonScript.clear_all()

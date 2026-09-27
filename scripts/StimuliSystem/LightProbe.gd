@@ -103,7 +103,7 @@ static func _luminance(color: Color) -> float:
 ## removed from the tree, on a new scene (a level reload leaves the old lists
 ## pointing at freed lights), and at the latest every REFRESH_SECONDS.
 static func _refresh(asker: Node3D) -> void:
-	var now := Time.get_ticks_msec() / 1000.0
+	var now := float(Engine.get_physics_frames()) / float(maxi(Engine.physics_ticks_per_second, 1))
 	var tree := asker.get_tree()
 	var scene := tree.current_scene
 	var scene_id := scene.get_instance_id() if scene != null else 0

@@ -17,8 +17,8 @@ extends RefCounted
 ##   IV.  Steel               he steps into the firelight and fights them,
 ##                             drawing out the squad: a steady exchange (they
 ##                             take their places round him), a turtle (they
-##                             send the brute to break it), parries (the
-##                             swordsman thrown open and cut down), the captain
+##                             send the brute to break it), parries (the man in
+##                             front of him thrown open and cut down), the captain
 ##                             (the brute goes berserk), then the wavering
 ##                             (a man throws down his blade and begs).
 ##   V.   The ending          overwhelmed (his armour lifted, they cut him
@@ -65,6 +65,11 @@ var map: Node3D
 var _said := {}
 var _bell_rung := false
 var _unseen := 0.0
+## Deathblows struck (a man thrown open and cut down: Guard.deathblow), and
+## men cut down by his ripostes (a parry answered): the parry beat's end.
+var _deathblows := 0
+var _riposte_kills := 0
+var _parry_mark := 0
 ## The ending being played; the man spared and where he begged.
 var _ending: StringName = &""
 var _spared: Node3D = null
@@ -80,9 +85,15 @@ func _init(p_map: Node3D) -> void:
 		var man: Node = map.cast[name]
 		_said[name] = []
 		man.barked.connect(_heard.bind(name))
+		man.deathblow.connect(func() -> void: _deathblows += 1)
 
 	for bell in map.get_tree().get_nodes_in_group(&"alarm_bells"):
 		bell.rung.connect(func(_by: Node) -> void: _bell_rung = true)
+
+	map.intruder_spawned.connect(func(i: CharacterBody3D) -> void:
+		i.combat.felled.connect(func(_man: Node3D, riposte: bool) -> void:
+			if riposte:
+				_riposte_kills += 1))
 
 
 func acts() -> Array:
@@ -223,9 +234,14 @@ func _act_four() -> Dictionary:
 			{"name": &"turtle", "shot": _shot(&"two", ["intruder", "Brand"]), "timeout": 25.0,
 				"do": func() -> void: _verb(&"fight", [&"turtle"]),
 				"until": _breaking},
-			{"name": &"parry", "shot": _shot(&"two", ["intruder", "Osric"]), "timeout": 60.0,
-				"do": func() -> void: _verb(&"fight", [&"parry", _man("Osric")]),
-				"until": func() -> bool: return _dead("Osric")},
+			# Whoever stands in front of him: his blows turned aside and
+			# answered, until one is cut down (thrown open and given the
+			# deathblow, or felled by a riposte).
+			{"name": &"parry", "shot": _shot(&"two", ["intruder", "nearest"]), "timeout": 60.0,
+				"do": func() -> void:
+					_parry_mark = _deathblows + _riposte_kills
+					_verb(&"fight", [&"parry"]),
+				"until": func() -> bool: return _deathblows + _riposte_kills > _parry_mark},
 			{"name": &"focus", "shot": _shot(&"two", ["intruder", "Mirelle"]), "timeout": 60.0,
 				"do": func() -> void: _verb(&"fight", [&"focus", _man("Mirelle")]),
 				"until": func() -> bool: return _dead("Mirelle")},
@@ -421,7 +437,7 @@ func subjects(shot: Dictionary) -> Array:
 	var found := []
 
 	for name in shot.get("subjects", []):
-		var node: Node3D = _intruder() if name == "intruder" else _man(name)
+		var node: Node3D = _intruder() if name == "intruder" else (_nearest() if name == "nearest" else _man(name))
 
 		if node != null:
 			found.append(node)
@@ -436,6 +452,34 @@ func _man(name: String) -> Node3D:
 		return null
 
 	return man as Node3D
+
+
+## The man nearest the intruder (the one in front of him).
+func _nearest() -> Node3D:
+	var i := _intruder()
+
+	if i == null:
+		return null
+
+	var best: Node3D = null
+	var best_distance := INF
+
+	for man in map.get_tree().get_nodes_in_group(&"guards"):
+		var d := (man as Node3D).global_position.distance_to(i.global_position)
+
+		if d < best_distance and not man._knocked_out:
+			best_distance = d
+			best = man as Node3D
+
+	return best
+
+
+func deathblows() -> int:
+	return _deathblows
+
+
+func riposte_kills() -> int:
+	return _riposte_kills
 
 
 func _man_position(name: String) -> Vector3:

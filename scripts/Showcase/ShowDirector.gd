@@ -31,6 +31,7 @@ signal show_ended
 ## The ending changed (E), or the show speed ([ ]): for the overlay.
 signal ending_chosen(ending: StringName)
 signal speed_changed(scale: float)
+signal paused_changed(paused: bool)
 
 ## The show speeds [ and ] step through.
 const SPEEDS := [0.25, 0.5, 1.0]
@@ -186,6 +187,7 @@ func cycle_ending() -> void:
 
 func toggle_pause() -> void:
 	get_tree().paused = not get_tree().paused
+	paused_changed.emit(get_tree().paused)
 
 
 ## The show speed, by index into SPEEDS.

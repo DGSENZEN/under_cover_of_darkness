@@ -329,6 +329,16 @@ func _drive_fight(delta: float) -> void:
 	to.y = 0.0
 	var dist := to.length()
 
+	# A man thrown open within reach: whatever the tactic, the deathblow.
+	var opened := _opened_near()
+
+	if opened != null and not combat.busy():
+		var at := opened.global_position
+		intruder.look_at(Vector3(at.x, intruder.global_position.y, at.z), Vector3.UP)
+		combat.guard_up(false)
+		combat.swing(&"overhead", opened)
+		return
+
 	# Footwork: to his distance and no nearer, always facing his man.
 	if dist > KEEP + CLOSE_BEYOND:
 		intruder._go_to(man.global_position)
@@ -395,6 +405,11 @@ func _pick_man() -> Node3D:
 
 		var score := dist
 
+		# Parrying: the man most easily thrown open (the least posture to
+		# fill), then the nearest.
+		if tactic == &"parry" and man.get("_fighter") != null:
+			score = float(man._fighter.posture_max) / 10.0 + dist
+
 		if tactic == &"press":
 			var squad: RefCounted = man.get("_fighter").get("squad") if man.get("_fighter") != null else null
 			score = float(squad.resolve_of(man)) * 10.0 + dist * 0.1 if squad != null else 10.0 + dist
@@ -428,10 +443,10 @@ func _cut(at: Node3D = null) -> void:
 
 	# A man behind his guard: the heavy blow, which breaks it.
 	if fighter != null and bool(fighter.get("guarding")) and tactic in [&"parry", &"focus", &"trade"]:
-		combat.swing(&"heavy")
+		combat.swing(&"heavy", man)
 		return
 
-	combat.swing(CUTS[_cut_index % CUTS.size()])
+	combat.swing(CUTS[_cut_index % CUTS.size()], man)
 	_cut_index += 1
 
 
@@ -564,6 +579,15 @@ static func _standing(man: Node3D) -> bool:
 		return false
 
 	return not (man.has_method("is_downed") and man.is_downed())
+
+
+## A man thrown open within his reach, if any.
+func _opened_near() -> Node3D:
+	for man in intruder.get_tree().get_nodes_in_group(&"guards"):
+		if man is Node3D and _standing(man as Node3D) and not _begging(man as Node3D) and _opened(man as Node3D) and _flat(intruder.global_position, (man as Node3D).global_position) <= CUT_REACH:
+			return man as Node3D
+
+	return null
 
 
 ## Thrown off his balance (GuardFighter: OPEN): any blade blow is his death.

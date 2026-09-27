@@ -23,6 +23,8 @@ signal dodged(direction: Vector3)
 ## One of his blows met someone: take_hit's result ("hit", "killed",
 ## "blocked", "parried").
 signal landed(target: Node3D, result: StringName)
+## A man he cut down, and whether it was a riposte (a parry answered).
+signal felled(target: Node3D, riposte: bool)
 
 ## In PlayerCombat.Phase's order: Squad reads `phase` as that number.
 enum Phase { IDLE, WINDUP, CHARGING, STRIKE, RECOVER, DRAWING, KICK, DODGE, STAGGER }
@@ -94,6 +96,8 @@ var _victim: Node3D = null
 var _outcome: StringName = &""
 ## The last man whose blow he turned aside (his riposte's man).
 var last_parried: Node3D = null
+## The man the blow under way is meant for.
+var _meant_for: Node3D = null
 
 
 func _init(p_intruder: CharacterBody3D = null) -> void:
@@ -167,9 +171,10 @@ func busy() -> bool:
 # What he does (his brain calls these)
 # ---------------------------------------------------------------------------
 
-## A blow where he faces: "overhead", "left", "right", "thrust" or "heavy".
-## Only from standing ready (or recovering: a string). False if not begun.
-func swing(direction: StringName) -> bool:
+## A blow where he faces: "overhead", "left", "right", "thrust" or "heavy",
+## at `at` if he is in reach when it falls (else whoever is). Only from
+## standing ready (or recovering: a string). False if not begun.
+func swing(direction: StringName, at: Node3D = null) -> bool:
 	if phase != Phase.IDLE and phase != Phase.RECOVER:
 		return false
 
@@ -183,6 +188,7 @@ func swing(direction: StringName) -> bool:
 	_outcome = &""
 	_serial += 1
 	var windup := WINDUP * (1.5 if _direction == &"heavy" else 1.0) * (RIPOSTE_WINDUP if _riposte else 1.0)
+	_meant_for = at
 	_enter(Phase.WINDUP, windup)
 	return true
 
@@ -409,7 +415,16 @@ func _end_blow() -> void:
 
 ## The blade falls: on whoever is in front of him, in reach, at his level.
 func _land() -> void:
-	var victim := _victim if _victim != null and is_instance_valid(_victim) and _in_reach(_victim) else _nearest_in_reach()
+	var victim: Node3D = null
+
+	if _victim != null and is_instance_valid(_victim) and _in_reach(_victim):
+		victim = _victim
+	elif _meant_for != null and is_instance_valid(_meant_for) and not _meant_for._knocked_out and _in_reach(_meant_for) and not _begging(_meant_for):
+		victim = _meant_for
+	else:
+		victim = _nearest_in_reach()
+
+	_meant_for = null
 
 	if victim == null or not victim.has_method("take_hit"):
 		_outcome = &"miss"
@@ -432,6 +447,9 @@ func _land() -> void:
 	var direction := to.normalized() if to.length() > 0.01 else -intruder.global_basis.z
 	var result: StringName = victim.take_hit(damage, intruder, kind, victim.global_position + Vector3.UP * 1.2, direction)
 	_outcome = result
+
+	if result == &"killed":
+		felled.emit(victim, _riposte)
 
 	match result:
 		&"parried":

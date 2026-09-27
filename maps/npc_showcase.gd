@@ -22,6 +22,8 @@ extends Node3D
 
 ## Built, baked and peopled: the director (or a test) can begin.
 signal ready_to_show
+## The intruder is made (the story hears what he does through him).
+signal intruder_spawned(intruder: CharacterBody3D)
 
 const GUARD := preload("res://Guard.tscn")
 const INTRUDER := preload("res://Intruder.tscn")
@@ -40,6 +42,7 @@ const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const DirectorScript := preload("res://scripts/Showcase/ShowDirector.gd")
 const CameraScript := preload("res://scripts/Showcase/ShowCamera.gd")
+const OverlayScript := preload("res://scripts/Showcase/ShowOverlay.gd")
 ## The night's story (acts and beats), for the director.
 const STORY := "res://scripts/Showcase/ShowNight.gd"
 
@@ -87,8 +90,9 @@ var intruder: CharacterBody3D = null
 ## The director, when the show runs, and the night it plays.
 var director: Node = null
 var story: RefCounted = null
-## The show camera, when the show runs.
+## The show camera and the viewer's overlay, when the show runs.
 var camera: Camera3D = null
+var overlay: CanvasLayer = null
 
 var _baker: NavigationRegion3D
 var _stations := {}
@@ -132,6 +136,21 @@ func _ready() -> void:
 		if overview != null:
 			overview.queue_free()
 
+		overlay = OverlayScript.new()
+		add_child(overlay)
+		overlay.setup(self)
+		director.act_started.connect(func(_index: int, act_title: String) -> void: overlay.title(act_title))
+		camera.following.connect(overlay.name_card)
+		director.ending_chosen.connect(func(ending: StringName) -> void: overlay.toast("Ending: %s" % String(ending)))
+		director.speed_changed.connect(func(scale: float) -> void: overlay.toast("Speed x%s" % String.num(scale, 2)))
+		director.paused_changed.connect(func(paused: bool) -> void: overlay.toast("Paused" if paused else "Playing"))
+		director.show_ended.connect(func() -> void:
+			overlay.title("The night is over")
+			overlay.toast("R to watch it again"))
+
+		# The intruder's name card too, once he is made.
+		intruder_spawned.connect(func(i: CharacterBody3D) -> void: overlay.watch(i, "the intruder"))
+
 	ready_to_show.emit()
 
 	for arg in OS.get_cmdline_user_args():
@@ -170,6 +189,7 @@ func spawn_intruder(at: Vector3, yaw := 0.0) -> CharacterBody3D:
 	intruder.position = at
 	intruder.rotation.y = yaw
 	add_child(intruder)
+	intruder_spawned.emit(intruder)
 	return intruder
 
 
