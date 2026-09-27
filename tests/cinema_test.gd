@@ -291,7 +291,7 @@ func _framing() -> void:
 	for kind in [&"establishing", &"observe", &"roving", &"group", &"medium", &"close", &"over_shoulder", &"two", &"reaction", &"insert", &"track", &"overhead"]:
 		lenses[kind] = float(CineShot.frame(kind, [man, other], {"from": Vector3(120, 4, 10), "target": man})["fov"])
 
-	var lens_ok: bool = [&"observe", &"group", &"track"].all(func(k): return lenses[k] >= 18.0 and lenses[k] <= 28.0) \
+	var lens_ok: bool = [&"observe", &"group", &"track"].all(func(k): return lenses[k] >= 26.0 and lenses[k] <= 32.0) \
 		and [&"close", &"over_shoulder", &"reaction"].all(func(k): return lenses[k] >= 35.0 and lenses[k] <= 45.0) \
 		and [&"medium", &"two", &"roving"].all(func(k): return is_equal_approx(lenses[k], 40.0)) \
 		and lenses[&"establishing"] >= 30.0 and lenses[&"establishing"] <= 40.0 and is_equal_approx(lenses[&"overhead"], 50.0) and is_equal_approx(lenses[&"insert"], 32.0)
@@ -320,8 +320,8 @@ func _framing() -> void:
 	var dirs := axial.map(func(f): return ((f["position"] as Vector3) - head5).normalized())
 	var dists := axial.map(func(f): return (f["position"] as Vector3).distance_to(head5))
 	var one_axis: bool = rad_to_deg((dirs[0] as Vector3).angle_to(dirs[1])) < 2.0 and rad_to_deg((dirs[0] as Vector3).angle_to(dirs[2])) < 2.0
-	_check("F5 an axial cut-in keeps one axis, comes nearer each step, and narrows the lens 40, 30, 22",
-		one_axis and dists[0] > dists[1] and dists[1] > dists[2] and axial.map(func(f): return roundi(f["fov"])) == [40, 30, 22] \
+	_check("F5 an axial cut-in keeps one axis, comes nearer each step, and narrows the lens 40, 34, 28",
+		one_axis and dists[0] > dists[1] and dists[1] > dists[2] and axial.map(func(f): return roundi(f["fov"])) == [40, 34, 28] \
 			and axial.map(func(f): return f["size"]) == [&"wide", &"medium", &"close"],
 		"dirs %s, distances %s, lenses %s" % [dirs, dists, axial.map(func(f): return f["fov"])])
 
@@ -616,10 +616,14 @@ func _operator() -> void:
 		"fastest %.2f m/s, end %.2f m from the last point" % [fastest10, camera.global_position.distance_to(arc[3])])
 	op.set_mode(&"drama")
 
-	# O5 the lens eases
+	# O5 a new shot sets its lens at once, a glide too; within a shot (a
+	# push-in) the lens eases
 	op.show(_frame_at(Vector3(600, 1.6, 4), head, 40.0, &"close"), &"cut")
 	await _frames(2)
-	op.show(_frame_at(Vector3(600, 1.6, 4), head, 28.0, &"close"), &"glide")
+	op.show(_frame_at(Vector3(600, 1.6, 4.5), head, 28.0, &"close"), &"glide")
+	await _frames(1)
+	var set5: float = camera.fov
+	op.follow(_frame_at(Vector3(600, 1.6, 4.5), head, 34.0, &"close"))
 	var biggest := 0.0
 	var was_fov: float = camera.fov
 
@@ -628,24 +632,26 @@ func _operator() -> void:
 		biggest = maxf(biggest, absf(camera.fov - was_fov))
 		was_fov = camera.fov
 
-	_check("O5 the lens eases from 40 to 28, never more than a degree a frame", biggest <= 1.0 and absf(camera.fov - 28.0) < 0.1,
-		"biggest step %.2f, now %.2f" % [biggest, camera.fov])
+	_check("O5 a new shot's lens is set at once (a glide's too); a push-in within the shot eases, never a degree a frame",
+		absf(set5 - 28.0) < 0.01 and biggest <= 1.0 and biggest > 0.0 and absf(camera.fov - 34.0) < 0.1,
+		"glide set %.2f, biggest step easing %.2f, now %.2f" % [set5, biggest, camera.fov])
 
 	# O6 focus on his head, the blur held down, the near blur only over a shoulder
 	op.show(_frame_at(Vector3(600, 1.6, 3), head, 40.0, &"close"), &"cut")
 	await _real(0.5)
 	var attributes: CameraAttributesPractical = camera.attributes as CameraAttributesPractical
 	var focus_ok: bool = attributes != null and absf(op.focus_distance() - camera.global_position.distance_to(head)) < 0.1 \
-		and attributes.dof_blur_amount <= 0.12 and attributes.dof_blur_far_enabled and not attributes.dof_blur_near_enabled
+		and absf(attributes.dof_blur_amount - 0.04) < 0.001 and absf(attributes.dof_blur_far_distance - op.focus_distance() - 4.0) < 0.1 \
+		and attributes.dof_blur_far_enabled and not attributes.dof_blur_near_enabled
 	var shoulder := _frame_at(Vector3(600, 1.6, 3), head, 40.0, &"close")
 	shoulder["near_blur"] = true
 	op.show(shoulder, &"cut")
 	await _frames(2)
-	_check("O6 focus is on his head, the blur no more than 0.12, the near blur only over a shoulder",
+	_check("O6 focus is on his head, the blur a gentle 0.04 beginning 4 m behind him, the near blur only over a shoulder",
 		focus_ok and (camera.attributes as CameraAttributesPractical).dof_blur_near_enabled,
 		"focus %.2f vs %.2f, attributes %s" % [op.focus_distance(), camera.global_position.distance_to(head), attributes])
 
-	# O7 handheld: a drama close shot within 0.3 deg; observe within 0.05
+	# O7 handheld: a drama close shot within 0.15 deg; observe still
 	var sway := {}
 
 	for mode in [&"drama", &"observe"]:
@@ -660,8 +666,19 @@ func _operator() -> void:
 
 		sway[mode] = worst
 
-	_check("O7 handheld sways a drama close shot no more than 0.3 deg, an observed one no more than 0.05",
-		sway[&"drama"] <= 0.3 and sway[&"drama"] > 0.02 and sway[&"observe"] <= 0.05, "%s" % [sway])
+	_check("O7 handheld sways a drama close shot no more than 0.15 deg; an observed one is still",
+		sway[&"drama"] <= 0.15 and sway[&"drama"] > 0.01 and sway[&"observe"] < 0.001, "%s" % [sway])
+
+	# O11 no blur on a medium or a wide shot
+	var blurless := true
+
+	for size in [&"medium", &"wide"]:
+		op.show(_frame_at(Vector3(600, 1.6, 6), head, 30.0, size), &"cut")
+		await _frames(2)
+		var att := camera.attributes as CameraAttributesPractical
+		blurless = blurless and (att == null or (not att.dof_blur_far_enabled and not att.dof_blur_near_enabled))
+
+	_check("O11 a medium or a wide shot has no blur at all", blurless, "blur off %s" % blurless)
 
 	# O8 a shake: never over 2.5 deg, gone in 0.6 s
 	op.set_mode(&"observe")
@@ -737,8 +754,8 @@ func _observing() -> void:
 		await _real(4.5)
 
 	var lens_end: float = camera.fov
-	_check("E3 over a talk of 25 s the lens narrows to 0.72 of its width or less (the same take throughout)",
-		lens_end <= lens_start * 0.72 and editor.current() == shot3, "%.1f -> %.1f, same take %s" % [lens_start, lens_end, editor.current() == shot3])
+	_check("E3 over a talk of 25 s the lens narrows to 0.82 of its width or less (the same take throughout)",
+		lens_end <= lens_start * 0.82 and editor.current() == shot3, "%.1f -> %.1f, same take %s" % [lens_start, lens_end, editor.current() == shot3])
 
 	# E4 after the last line, it holds 3 s at least before the next shot
 	var ended := TimeFx.real_time() + 4.0
@@ -922,7 +939,7 @@ func _drama() -> void:
 
 	var lenses12 := axial.map(func(sh): return roundi(sh["framing"]["fov"]))
 	_check("E12 a man stirred to searching: three cuts straight in on him, 0.6 s apart, the lens narrowing",
-		axial.size() == 3 and gaps.all(func(g): return absf(g - 0.6) <= 0.1) and one_line and lenses12 == [40, 30, 22],
+		axial.size() == 3 and gaps.all(func(g): return absf(g - 0.6) <= 0.1) and one_line and lenses12 == [40, 34, 28],
 		"%d axial, gaps %s, one line %s, lenses %s" % [axial.size(), gaps, one_line, lenses12])
 
 	# E13 a face-off held still, side on, long; the first blow cuts in (two
@@ -941,7 +958,7 @@ func _drama() -> void:
 		still[0] = maxf(still[0], camera.global_position.distance_to(was13) * 60.0)
 		was13 = camera.global_position
 
-	var face_ok: bool = face.get("cause") == &"face_off" and float(face["framing"]["fov"]) <= 28.0 and still[0] < 0.05
+	var face_ok: bool = face.get("cause") == &"face_off" and float(face["framing"]["fov"]) <= 32.0 and still[0] < 0.05
 	var before13 := shots.size()
 	CineEvents.emit(&"blow", {"attacker": b, "victim": a, "weight": &"heavy", "outcome": &"landed", "where": a.global_position})
 	await _real(0.3)

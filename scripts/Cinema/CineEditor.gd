@@ -36,7 +36,7 @@ const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 ## (s, no line for QUIET) it drifts to a fire or a torch this near (m).
 const TAKE := Vector2(15.0, 45.0)
 const MOVE_WITHIN := 12.0
-const PUSH_TO := 0.7
+const PUSH_TO := 0.8
 const PUSH_OVER := 20.0
 const LINGER := 3.0
 const ELEMENT_AFTER := Vector2(60.0, 90.0)

@@ -16,13 +16,12 @@ const DEPTH_OF_FIELD := true
 ## takes to settle (s), and the handheld sway on a close shot and otherwise
 ## (deg).
 const MODES := {
-	&"observe": {"speed": 0.4, "turn": 8.0, "settle": 1.2, "close_sway": 0.05, "sway": 0.05},
-	&"drama": {"speed": 6.0, "turn": 90.0, "settle": 0.35, "close_sway": 0.3, "sway": 0.1},
+	&"observe": {"speed": 0.4, "turn": 8.0, "settle": 1.2, "close_sway": 0.0, "sway": 0.0, "drift": 0.0},
+	&"drama": {"speed": 6.0, "turn": 90.0, "settle": 0.35, "close_sway": 0.15, "sway": 0.0, "drift": 0.005},
 }
-## The handheld's slow drift: how fast (Hz), and how far the camera itself
-## moves (m).
+## The handheld's slow drift: how fast (Hz) (how far the camera itself
+## moves: MODES "drift", m).
 const SWAY_RATE := 0.35
-const SWAY_MOVE := 0.01
 ## Shake: its most (deg, at trauma 1, as trauma squared), how fast it
 ## wanders (Hz), and how fast trauma dies (a second).
 const SHAKE_MOST := 2.5
@@ -32,15 +31,13 @@ const SHAKE_DECAY := 1.5
 ## long (s).
 const LENS_RATE := 12.0
 const FOCUS_PULL := 0.4
-## Depth of field: far blur begins this far behind the subject (m) on a long
-## lens (this wide or narrower, deg) and on any other; its amount at most.
-const FAR_BEHIND_LONG := 1.5
-const FAR_BEHIND := 3.0
-const LONG_LENS := 28.0
-const BLUR_MOST := 0.12
+## Depth of field, only on a close shot or a portrait: far blur begins this
+## far behind the subject (m), this soft. Nothing else is blurred.
+const FAR_BEHIND := 4.0
+const BLUR_AMOUNT := 0.04
 const FAR_TRANSITION := 2.0
 ## Over a shoulder, what is nearer than this (m) goes soft.
-const NEAR_SOFT := 1.4
+const NEAR_SOFT := 1.0
 const NEAR_TRANSITION := 0.6
 ## A glide that would pass through a wall (a sphere of this radius) is a cut.
 const CLEARANCE := 0.3
@@ -132,6 +129,9 @@ func show(framing: Dictionary, how: StringName) -> void:
 	_framing = framing
 	_goal = framing.get("position", _goal)
 	_path = PackedVector3Array()
+	# A new shot's lens is its own at once (a push-in within it is follow's).
+	_fov = float(framing.get("fov", _fov))
+	_camera.fov = _fov
 
 	match how:
 		&"glide":
@@ -318,10 +318,12 @@ func _lens(dt: float) -> void:
 	if _attributes == null:
 		return
 
-	_attributes.dof_blur_far_enabled = true
-	_attributes.dof_blur_far_distance = _focus + (FAR_BEHIND_LONG if _fov <= LONG_LENS else FAR_BEHIND)
-	_attributes.dof_blur_amount = BLUR_MOST
-	_attributes.dof_blur_near_enabled = bool(_framing.get("near_blur", false))
+	# Only up close: a close shot or a portrait.
+	var up_close: bool = StringName(_framing.get("size", &"")) == &"close" or StringName(_framing.get("kind", &"")) == &"portrait"
+	_attributes.dof_blur_far_enabled = up_close
+	_attributes.dof_blur_far_distance = _focus + FAR_BEHIND
+	_attributes.dof_blur_amount = BLUR_AMOUNT
+	_attributes.dof_blur_near_enabled = up_close and bool(_framing.get("near_blur", false))
 	_attributes.dof_blur_near_distance = NEAR_SOFT
 
 
@@ -336,8 +338,9 @@ func _hand() -> void:
 
 	_camera.look_at(_look, Vector3.UP)
 	var close := StringName(_framing.get("size", &"")) == &"close"
-	var drifts: bool = close and _mode == MODES[&"drama"]
-	var sway := deg_to_rad(float(_mode["close_sway"] if close else _mode["sway"]))
+	var portrait := StringName(_framing.get("kind", &"")) == &"portrait"
+	var drifts: bool = close and not portrait and float(_mode["drift"]) > 0.0
+	var sway := 0.0 if portrait else deg_to_rad(float(_mode["close_sway"] if close else _mode["sway"]))
 	var shaken := deg_to_rad(SHAKE_MOST) * trauma * trauma
 	var t := _clock * SWAY_RATE
 	var s := _clock * SHAKE_RATE
@@ -357,7 +360,7 @@ func _hand() -> void:
 	_camera.rotate_object_local(Vector3.FORWARD, roll)
 
 	if drifts:
-		_camera.global_position = from + _camera.global_basis * Vector3(_noise.get_noise_2d(t, 300.0), _noise.get_noise_2d(t, 400.0), 0.0) * SWAY_MOVE
+		_camera.global_position = from + _camera.global_basis * Vector3(_noise.get_noise_2d(t, 300.0), _noise.get_noise_2d(t, 400.0), 0.0) * float(_mode["drift"])
 
 
 func _cut() -> void:

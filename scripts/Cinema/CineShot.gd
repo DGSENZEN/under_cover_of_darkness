@@ -37,12 +37,14 @@ const CLOSE_HEIGHT := 0.9
 const MEDIUM_HEIGHT := 1.6
 const WIDE_HEIGHT := 6.0
 ## Lenses (vertical degrees).
-const LONG := Vector2(18.0, 28.0)
+const LONG := Vector2(26.0, 32.0)
 const NORMAL := 40.0
 const ESTABLISHING := 35.0
 const INSERT := 32.0
 const OVERHEAD := 50.0
-const AXIAL := [40.0, 30.0, 22.0]
+const AXIAL := [40.0, 34.0, 28.0]
+## A conversation's portraits: both men through one lens.
+const PORTRAIT := 32.0
 ## A single man is seen from this far round from his front (degrees).
 const THREE_QUARTER := 30.0
 ## Over the shoulder: behind the listener's head, and out to the side (m).
@@ -238,7 +240,7 @@ static func _track(man: Node3D, head: Vector3, side: Vector3, aspect: float) -> 
 	if side != Vector3.ZERO and out.dot(side) < 0.0:
 		out = -out
 
-	var fov := 22.0
+	var fov := 28.0
 	var position := head + out * TRACK_OFF + Vector3.DOWN * 0.1
 	var look := _composed(position, head, going, fov, aspect)
 	return _result(&"track", &"medium", position, look, fov, head, false)
