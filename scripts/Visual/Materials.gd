@@ -29,11 +29,12 @@ const SLOTS := {
 }
 
 const GLOW := preload("res://scripts/Visual/Lights/glow.gdshader")
-## How a glowing slot glows: [the flame's share of its colour, brightness].
+## How a glowing slot glows: [the flame's share of its colour, brightness,
+## how much in hot spots rather than evenly].
 const GLOW_LOOK := {
-	&"horn": [0.9, 1.1],
-	&"pitch": [0.35, 0.55],
-	&"coal": [0.3, 0.8],
+	&"horn": [0.9, 1.1, 0.0],
+	&"pitch": [0.05, 0.6, 1.0],
+	&"coal": [0.1, 0.7, 0.9],
 }
 
 ## A slot nobody knows is drawn this loud, so it is noticed.
@@ -94,9 +95,10 @@ static func glowing(slot: StringName) -> ShaderMaterial:
 		material.set_shader_parameter(&"albedo_texture", texture)
 
 	material.set_shader_parameter(&"albedo", SLOTS.get(slot, {"colour": UNKNOWN})["colour"])
-	var look: Array = GLOW_LOOK.get(slot, [0.35, 0.55])
+	var look: Array = GLOW_LOOK.get(slot, [0.35, 0.55, 0.0])
 	material.set_shader_parameter(&"flame_share", look[0])
 	material.set_shader_parameter(&"brightness", look[1])
+	material.set_shader_parameter(&"mottle", look[2])
 	_glowing[slot] = material
 	return material
 
