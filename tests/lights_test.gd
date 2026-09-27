@@ -13,6 +13,7 @@ const FireScript := preload("res://scripts/Combat/Fire.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
 const Materials := preload("res://scripts/Visual/Materials.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
+const Flicker := preload("res://scripts/Visual/Lights/Flicker.gd")
 
 ## LightProbe 2 m from a bare torch, the brazier and the campfire (each
 ## flame's flicker held still), read on main before any of this work: the
@@ -37,6 +38,7 @@ func _ready() -> void:
 func _run() -> void:
 	await _materials()
 	await _baselines()
+	_flicker()
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +116,86 @@ func _baselines() -> void:
 		node.queue_free()
 
 	await _frames(3)
+
+
+# ---------------------------------------------------------------------------
+# Flicker
+# ---------------------------------------------------------------------------
+
+func _flicker() -> void:
+	# L4 every kind stays within -1..1
+	var widest := 0.0
+
+	for kind in Flicker.KINDS:
+		for salt in [1, 77, 90210]:
+			for i in 600:
+				widest = maxf(widest, absf(Flicker.value(kind, i / 60.0, salt)))
+
+	_check("L4 every kind of flicker stays within its swing (-1..1)", widest <= 1.0, "widest %.3f" % widest)
+
+	# L5 each puffs at its own rate: the strongest frequency over 8 s
+	var off := []
+
+	for kind in Flicker.KINDS:
+		var rate: float = Flicker.KINDS[kind]
+
+		if rate <= 0.0:
+			continue
+
+		var peak := _peak_frequency(kind, 5)
+
+		if absf(peak - rate) > 0.2 * rate:
+			off.append("%s %.2f Hz (rate %.2f)" % [kind, peak, rate])
+
+	_check("L5 each flicker's strongest frequency is its puff rate (within 20%)", off.is_empty(), "off: %s" % [off])
+
+	# L6 a candle is still until a draft, which shivers and settles in a second
+	var still := true
+
+	for i in 600:
+		still = still and Flicker.value(&"candle", i / 60.0, 3) == 0.0
+
+	var tail := 0.0
+	var early := 0.0
+
+	for i in 12:
+		tail = maxf(tail, absf(Flicker.draft(0.8 + i / 60.0)))
+
+	for i in 18:
+		early = maxf(early, absf(Flicker.draft(i / 60.0)))
+
+	_check("L6 a candle burns still, a draft makes it shiver and it settles within a second",
+		still and early > 0.3 and Flicker.draft(1.0) == 0.0 and tail < 0.05,
+		"still %s, strongest in the first 0.3 s %.3f, at 1 s %.3f, last fifth %.3f" % [still, early, Flicker.draft(1.0), tail])
+
+
+## The frequency (Hz) with the most energy in 8 s of a flicker sampled at 60 Hz.
+func _peak_frequency(kind: StringName, salt: int) -> float:
+	var samples := PackedFloat64Array()
+
+	for i in 480:
+		samples.append(Flicker.value(kind, i / 60.0, salt))
+
+	var best := 0.0
+	var best_power := -1.0
+
+	for k in range(1, 241):
+		var frequency := k / 8.0
+		var re := 0.0
+		var im := 0.0
+
+		for i in 480:
+			var angle := TAU * frequency * i / 60.0
+			re += samples[i] * cos(angle)
+			im -= samples[i] * sin(angle)
+
+		var power := re * re + im * im
+
+		if power > best_power:
+			best_power = power
+			best = frequency
+
+	return best
 
 
 ## The burner (anything in "torches") at or under `node`.
