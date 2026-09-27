@@ -22,6 +22,9 @@ const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 const HumanoidScript := preload("res://scripts/Visual/Humanoid.gd")
 const ExpressionScript := preload("res://scripts/Visual/Expression.gd")
+const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
+## The axe bites this far into each loop of the chopping clip (s).
+const CHOP_BITE := 0.55
 
 ## Guard.Alert.SEARCHING and COMBAT: hunting, his guard is up.
 const SEARCHING := 3
@@ -165,6 +168,7 @@ var guard: CharacterBody3D
 var man: Node3D
 ## What he shows of himself at his ease (Expression.gd).
 var expression: RefCounted
+var _chop_t := 0.0
 var body_mesh: MeshInstance3D
 var weapon: MeshInstance3D
 var trail: MeshInstance3D
@@ -864,6 +868,14 @@ func _show_activity(now: float) -> bool:
 	var length := maxf(man.action_length(clip), 0.1)
 	var t: float = fmod(since, length) if bool(spec[1]) else minf(since, length - 0.02)
 	man.show_action(clip, t, float(spec[2]), float(spec[3]))
+
+	# Each blow of the axe sends chips off the block (Atmosphere).
+	if doing == &"chop":
+		if t >= CHOP_BITE and _chop_t < CHOP_BITE:
+			AtmosphereScript.chips_at(guard, weapon.global_transform * _blade_tip)
+
+		_chop_t = t
+
 	return true
 
 

@@ -30,6 +30,8 @@ const FLARE_TIME := 2.0
 
 ## 0..1: what it has left to burn.
 var fuel := 1.0
+## Fed a log (Atmosphere: a burst of embers).
+signal fed
 ## Its flame and light (Torch.gd), made by `brazier`.
 var torch: Node3D
 var _flare_left := 0.0
@@ -133,6 +135,7 @@ func _physics_process(delta: float) -> void:
 func feed(amount := 0.6) -> void:
 	fuel = minf(fuel + amount, 1.0)
 	_flare_left = FLARE_TIME
+	fed.emit()
 
 
 func low() -> bool:

@@ -22,6 +22,9 @@ const GuardStationScript := preload("res://scripts/AISystem/GuardStation.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const FireScript := preload("res://scripts/Combat/Fire.gd")
 const NightRotaScript := preload("res://scripts/AISystem/NightRota.gd")
+const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
+const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 
 const FIXTURES := """
 == talk_pair
@@ -60,6 +63,7 @@ func _run() -> void:
 	GuardScript.randomize_on = false
 	await _expression()
 	await _pastimes()
+	await _atmosphere()
 	GuardScript.randomize_on = true
 
 
@@ -369,6 +373,87 @@ func _pastimes() -> void:
 	_check("A15 standing his post a minute he passes the time three ways or more, never straying far; pacing, out a step or two and back",
 		seen.size() >= 3 and furthest[0] <= 2.2 and back < 0.8 and out[0] >= 1.0 and out[0] <= 2.2 and home < 0.8,
 		"did %s, furthest %.2f m, back to %.2f m; paced out %.2f m, home %.2f m" % [seen.keys(), furthest[0], back, out[0], home])
+
+
+# ---------------------------------------------------------------------------
+# Atmosphere
+# ---------------------------------------------------------------------------
+
+func _atmosphere() -> void:
+	await _fresh()
+	var air: Node3D = AtmosphereScript.new()
+	add_child(air)
+
+	# A16 breath on the cold air, with his breathing
+	var breather := _guard(Vector3(130, 0, 0), 0.0)
+	breather._life._talk_rest = 99.0
+	await _frames(30)
+	var matched := [0]
+
+	for f in 120:
+		var puffs: Object = air.breath_of(breather)
+		if puffs != null and bool(puffs.emitting) == breather._voice.out_breath():
+			matched[0] += 1
+		await get_tree().physics_frame
+
+	breather._voice.hold_heart(72.0)
+	await _frames(10)
+	var calm: float = air.breath_of(breather).amount_ratio
+	breather._voice.hold_heart(150.0)
+	await _frames(10)
+	var hard: float = air.breath_of(breather).amount_ratio
+	breather._voice.hold_heart(-1.0)
+	_check("A16 his breath shows on the out-breath, thicker when his heart races",
+		matched[0] >= 108 and hard > calm, "in time %d of 120 frames, puffs %.2f calm, %.2f racing" % [matched[0], calm, hard])
+
+	# A17 embers with the fire
+	var fire: Area3D = FireScript.brazier(self, Vector3(140, 0, 0))
+	# (It looks about it once a second.)
+	await _frames(70)
+	fire.fuel = 1.0
+	await _frames(3)
+	var full: float = air.embers_of(fire)[0].amount_ratio
+	fire.fuel = 0.2
+	await _frames(3)
+	var low: float = air.embers_of(fire)[0].amount_ratio
+	fire.feed()
+	await _frames(2)
+	var burst: bool = air.embers_of(fire)[1].emitting
+	_check("A17 embers rise with the fire: fewer burning low, a burst when it is fed", low < full and burst, "embers %.2f full, %.2f low, burst %s" % [full, low, burst])
+	fire.get_parent().queue_free()
+
+	# A18 crows on the wall take off at a shout, and come back
+	air.add_crows([Vector3(150, 3, 0)])
+	await _frames(5)
+	SoundBus.emit_sound(Vector3(150, 1, 6), 70.0, self, &"test")
+	await _frames(12)
+	var flew: bool = air.crows()[0]["state"] == &"flying"
+	await _until(func(): return air.crows()[0]["state"] == &"perched", 2700)
+	_check("A18 crows on the wall take off at a shout, and settle again later", flew and air.crows()[0]["state"] == &"perched",
+		"flew %s, now %s" % [flew, air.crows()[0]["state"]])
+
+	# A19 the wind leans the flames
+	var torch: Node3D = TorchScript.new()
+	add_child(torch)
+	torch.global_position = Vector3(160, 2, 0)
+	air.force_wind(Vector3(1, 0, 0))
+	await _frames(70)
+	var leaned: float = torch.flame.position.x
+	air.force_wind(null)
+	_check("A19 the wind leans the flames its way", leaned > 0.01, "flame leaned %.3f m" % leaned)
+
+	# A20 thinned for the frame rate: moths first, then leaves
+	air.quality = 1
+	await _frames(3)
+	var moths_hidden: bool = air.moths().all(func(m): return not m.visible)
+	var leaves_on: bool = air.leaves().emitting
+	air.quality = 0
+	await _frames(3)
+	var leaves_off: bool = not air.leaves().emitting
+	_check("A20 thinned, the moths go first, then the leaves", not air.moths().is_empty() and moths_hidden and leaves_on and leaves_off,
+		"moths %d hidden %s, leaves at 1 %s, at 0 off %s" % [air.moths().size(), moths_hidden, leaves_on, leaves_off])
+	torch.queue_free()
+	air.queue_free()
 
 
 # ---------------------------------------------------------------------------

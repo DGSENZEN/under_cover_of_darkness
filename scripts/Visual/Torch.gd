@@ -43,9 +43,14 @@ var _listen_in := 0.0
 var _crackle_db := CRACKLE_DB
 ## How brightly it burns (a brazier burning down: Fire.gd); 1 as made.
 var _strength := 1.0
+## The wind on it (Atmosphere): the flame leans its way.
+var _lean := Vector3.ZERO
+## How far the top of the flame goes with a full wind (m, at its made size).
+const LEAN_REACH := 0.07
 
 
 func _ready() -> void:
+	add_to_group(&"torches")
 	# The light wavers and the flame changes every drawn frame: drawn as set.
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_phase = randf() * 100.0
@@ -122,7 +127,16 @@ func _process(delta: float) -> void:
 	var frame := int(floor(_time * frame_rate)) % 4
 	_flame_material.uv1_offset = Vector3(0.25 * frame, 0.0, 0.0)
 	flame.scale = Vector3.ONE * lerpf(0.35, 1.0, clampf(_strength, 0.0, 1.5)) * (1.0 + 0.08 * n)
+	# Leaning with the wind: the flame goes its way and flattens a little.
+	var gust := Vector3(_lean.x, 0.0, _lean.z)
+	flame.position = gust * LEAN_REACH * (flame_size / 0.34)
+	flame.scale.y *= 1.0 - 0.15 * clampf(gust.length(), 0.0, 1.0)
 	_listen(delta)
+
+
+## The wind on it (Atmosphere.wind): which way and how hard.
+func lean(v: Vector3) -> void:
+	_lean = v
 
 
 ## How brightly it burns: its light, its reach and its flame (1 as made;
