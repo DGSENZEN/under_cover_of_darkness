@@ -216,7 +216,8 @@ func _torches(x: float) -> void:
 func _lanterns(x: float) -> void:
 	Lights.hanging_lantern(self, Vector3(x - 2.5, 6.0, -3.0), 2.4)
 	Lights.wall_lantern(self, Vector3(x + 2.5, 2.3, -6.0), Vector3.BACK)
-	Lights.lamp_post(self, Vector3(x + 2.0, 0, 0.5), PI)
+	# Its arm out sideways, so the walk sees its lantern beside the post.
+	Lights.lamp_post(self, Vector3(x + 1.5, 0, 0.5), PI * 0.5)
 
 
 func _candles(x: float) -> void:
@@ -224,15 +225,16 @@ func _candles(x: float) -> void:
 	var top := 0.9
 	var table := Props.block(self, Vector3(x - 1.8, top * 0.5, -4.6), Vector3(4.4, top, 1.0), Color(0.3, 0.2, 0.12), "wood")
 	table.name = "Table"
+	# All clear of the pillar's line, to be seen from the walk.
 	var along := x - 3.7
 	Lights.candle(self, Vector3(along, top, -4.6), 6)
-	Lights.candle(self, Vector3(along + 0.35, top, -4.6), 10)
-	Lights.candle(self, Vector3(along + 0.7, top, -4.6), 16)
-	Lights.candlestick(self, Vector3(along + 1.15, top, -4.6), &"iron")
-	Lights.candlestick(self, Vector3(along + 1.6, top, -4.6), &"brass")
-	Lights.candelabra(self, Vector3(along + 2.2, top, -4.6), 3)
-	Lights.candelabra(self, Vector3(along + 3.0, top, -4.6), 5)
-	Lights.oil_lamp(self, Vector3(along + 3.7, top, -4.6), &"clay")
+	Lights.candle(self, Vector3(along + 0.3, top, -4.6), 10)
+	Lights.candle(self, Vector3(along + 0.6, top, -4.6), 16)
+	Lights.candlestick(self, Vector3(along + 1.0, top, -4.6), &"iron")
+	Lights.candlestick(self, Vector3(along + 1.4, top, -4.6), &"brass")
+	Lights.candelabra(self, Vector3(along + 1.9, top, -4.6), 3)
+	Lights.candelabra(self, Vector3(along + 2.65, top, -4.6), 5)
+	Lights.oil_lamp(self, Vector3(along + 3.2, top, -4.6), &"clay")
 	# The chandeliers either side of the pillar, a lamp hung by the wall.
 	Lights.chandelier(self, Vector3(x - 2.5, 6.0, -1.5), 6, 1.6)
 	Lights.chandelier(self, Vector3(x + 2.5, 6.0, -1.5), 8, 1.6)
@@ -240,10 +242,12 @@ func _candles(x: float) -> void:
 
 
 func _fires(x: float) -> void:
-	Lights.brazier(self, Vector3(x - 2.5, 0, -2.5))
-	Lights.campfire(self, Vector3(x + 0.5, 0, -0.2))
+	# The brazier and the hearth either side of the pillar, the campfire
+	# nearer the walk, none in front of another.
+	Lights.brazier(self, Vector3(x - 2.5, 0, -2.0))
+	Lights.campfire(self, Vector3(x - 0.5, 0, 0.5))
 	# Set into the end wall.
-	Lights.hearth(self, Vector3(20.0, 0, -3.0), Lights.yaw_facing(Vector3.LEFT))
+	Lights.hearth(self, Vector3(20.0, 0, -3.5), Lights.yaw_facing(Vector3.LEFT))
 
 
 ## One watchman with a lantern and one with a torch, walking the bay's walk.
