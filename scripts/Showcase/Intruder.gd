@@ -16,8 +16,10 @@ extends "res://scripts/AISystem/Guard.gd"
 const IntruderCombatScript := preload("res://scripts/Showcase/IntruderCombat.gd")
 const IntruderBrainScript := preload("res://scripts/Showcase/IntruderBrain.gd")
 
-## The least of his health he keeps while armoured.
-const ARMOUR_FLOOR := 0.3
+## The least of his health he keeps while armoured. (Over the 35% at which a
+## squad would think him all but done and do nothing but press him:
+## Squad's "press" plan.)
+const ARMOUR_FLOOR := 0.4
 ## How lit he is, as the player's light gem would read it, is taken at this
 ## height; crouched, his exposure is this much of it (the player's); moving,
 ## it grows by up to this much (the player's motion_exposure) at this speed.

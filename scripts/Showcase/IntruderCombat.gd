@@ -92,6 +92,8 @@ var _riposte_until := -100.0
 var _riposte := false
 var _victim: Node3D = null
 var _outcome: StringName = &""
+## The last man whose blow he turned aside (his riposte's man).
+var last_parried: Node3D = null
 
 
 func _init(p_intruder: CharacterBody3D = null) -> void:
@@ -342,6 +344,8 @@ func filter_incoming(amount: float, from: Node) -> float:
 
 		if from.has_method("parried"):
 			from.parried(intruder, 1.0)
+
+		last_parried = from as Node3D
 
 		if intruder._rig != null:
 			intruder._rig.react_parry_success()

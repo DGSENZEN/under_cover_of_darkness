@@ -17,6 +17,8 @@ extends Node3D
 ##
 ##   --fps-report=N   the yard at rest for N seconds, then its frame rate
 ##                    (average and lowest), and quit.
+##   --seed=N         another night than the usual one (the same N, the same
+##                    night).
 
 ## Built, baked and peopled: the director (or a test) can begin.
 signal ready_to_show
@@ -81,8 +83,9 @@ var roles := {}
 ## Named places for the story (Vector3): see _marks.
 var marks := {}
 var intruder: CharacterBody3D = null
-## The director, when the show runs.
+## The director, when the show runs, and the night it plays.
 var director: Node = null
+var story: RefCounted = null
 
 var _baker: NavigationRegion3D
 var _stations := {}
@@ -101,7 +104,7 @@ func _ready() -> void:
 
 	# The same night every run: nobody reseeds the dice as he is made.
 	GuardScript.randomize_on = false
-	seed(SEED)
+	seed(_seed())
 	_spawn_cast()
 	GuardScript.randomize_on = true
 	_overview()
@@ -113,7 +116,8 @@ func _ready() -> void:
 		director = DirectorScript.new()
 		director.read_args(OS.get_cmdline_user_args())
 		add_child(director)
-		director.setup(self, (load(STORY) as GDScript).new(self))
+		story = (load(STORY) as GDScript).new(self)
+		director.setup(self, story)
 
 	ready_to_show.emit()
 
@@ -215,7 +219,7 @@ func _shed() -> void:
 func _store() -> void:
 	# The quartermaster's store on the east side: its back wall, posts,
 	# rafters; the alley behind it along the east wall, unlit.
-	_brush(Vector3(16.6, 1.5, -0.5), Vector3(0.3, 3.0, 11.2), WOOD, 1.5, "wood")
+	_brush(Vector3(16.6, 2.0, -0.5), Vector3(0.3, 4.0, 11.2), WOOD, 1.5, "wood")
 
 	for corner in [Vector2(11.5, -6.0), Vector2(11.5, 5.0), Vector2(16.4, -6.0), Vector2(16.4, 5.0)]:
 		_brush(Vector3(corner.x, 1.5, corner.y), Vector3(0.25, 3.0, 0.25), WOOD, 1.0, "wood")
@@ -249,6 +253,12 @@ func _middle() -> void:
 		add_child(log)
 		log.global_position = Vector3(-14.4 + (i % 3) * 0.34, 0.16 + (i / 3) * 0.3, 11.2 + (i / 3) * 0.17)
 		log.rotation = Vector3(0, 0, PI * 0.5)
+
+	# A tall stack of cut wood in the south-east corner, and a fence on from
+	# the store's back wall to it: the moon (from the north-west) leaves the
+	# whole alley and the nook east of the stack in shadow.
+	_brush(Vector3(17.8, 1.6, 12.4), Vector3(1.2, 3.2, 3.2), WOOD, 0.8, "wood")
+	_brush(Vector3(16.6, 2.0, 7.95), Vector3(0.2, 4.0, 5.7), WOOD, 1.5, "wood")
 
 	# The cart: a bed on four blocks for wheels.
 	_brush(Vector3(9, 0.75, 10.2), Vector3(2.8, 0.15, 1.5), WOOD, 1.0, "wood")
@@ -317,7 +327,9 @@ func _marks() -> void:
 		# where he waits for the archer to pass, and where he hides.
 		"drop_in": Vector3(19.4, 0, 9.0),
 		"alley_wait": Vector3(18.9, 0, -4.2),
-		"hide": Vector3(19.2, 0, 4.0),
+		# Where he goes to ground: the far, unlit end of the alley, in the
+		# yard's south-east corner.
+		"hide": Vector3(19.6, 0, 14.2),
 		"found": Vector3(2.5, 0, 2.5),
 		"east_stairs": Vector3(15.0, 0, -9.2),
 		"walk_east": Vector3(12.5, WALK_HEIGHT, -14.5),
@@ -513,6 +525,15 @@ func _route(route_name: String, points: Array) -> Node3D:
 		point.rotation.y = p[1]
 
 	return route
+
+
+## The night's seed: --seed=N, else SEED.
+func _seed() -> int:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--seed="):
+			return int(arg.trim_prefix("--seed="))
+
+	return SEED
 
 
 ## A camera high over the south-east corner that sees the whole yard (the

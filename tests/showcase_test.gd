@@ -237,7 +237,61 @@ func _run() -> void:
 		stirred6.size() >= map6.cast.size() - 1 and rung6[0] and searching6[0] >= 2,
 		"stirred %d of %d, bell %s, most searching at once %d; highest states %s; beats skipped %s" % [stirred6.size(), map6.cast.size(), rung6[0], searching6[0], states6, map6.director.log_lines])
 	await _unload(map6)
+
+	# D7 Act IV: steel, beat by beat
+	DirectorScript.start_act = 4
+	DirectorScript.ending = &"victor"
+	var map7 := await _map(true)
+	var berserk7 := [false]
+	var plea7 := [false]
+	await _until(func():
+		var brand: Variant = map7.cast.get("Brand")
+		if brand != null and is_instance_valid(brand) and (brand as Node)._fighter.squad != null and (brand as Node)._fighter.squad.role_of(brand) == &"berserk":
+			berserk7[0] = true
+		for man in get_tree().get_nodes_in_group(&"guards"):
+			if man._mercy.pleading:
+				plea7[0] = true
+		return map7.director.act_index >= 5 or map7.director.log_lines.size() >= 3, 12000)
+	var skipped7: Array = map7.director.log_lines
+	var needed7 := skipped7.filter(func(l): return l.contains("turtle") or l.contains(" parry ") or l.contains("focus"))
+	var osric_dead: bool = map7.story._dead("Osric")
+	var mirelle_dead: bool = map7.story._dead("Mirelle")
+	_check("D7 Act IV: turtle brings the squad's break plan with Brand as breaker; parry leaves Osric dead; focus leaves Mirelle dead and Brand berserk; press brings a plea",
+		needed7.is_empty() and osric_dead and mirelle_dead and berserk7[0] and map7.director.act_index >= 5,
+		"skipped %s, Osric dead %s, Mirelle dead %s, Brand berserk %s, a plea %s, act now %d" % [skipped7, osric_dead, mirelle_dead, berserk7[0], plea7[0], map7.director.act_index])
+	await _unload(map7)
+
+	# D8 each ending, from Act V's own start
+	for ending in [&"overwhelmed", &"victor", &"escape"]:
+		DirectorScript.start_act = 5
+		DirectorScript.ending = ending
+		var map8 := await _map(true)
+		var ended8 := [false]
+		map8.director.show_ended.connect(func(): ended8[0] = true)
+		await _until(func(): return ended8[0], 7200)
+		var skipped8: Array = map8.director.log_lines
+		var outcome8: String = map8.story.ending_outcome()
+		_check("D8 the %s ending finishes before its timeout (%s)" % [ending, outcome8],
+			ended8[0] and skipped8.is_empty() and map8.story.ending_done(),
+			"ended %s, skipped %s, outcome %s" % [ended8[0], skipped8, outcome8])
+		await _unload(map8)
+
+	# D9 the whole night, unattended, from the first act to the end
 	DirectorScript.start_act = 1
+	DirectorScript.ending = &"escape"
+	var map9 := await _map(true)
+	var ended9 := [false]
+	var frames9 := [0]
+	map9.director.show_ended.connect(func(): ended9[0] = true)
+	await _until(func():
+		frames9[0] += 1
+		return ended9[0], 25200)
+	_check("D9 the whole night from Act I plays to its end in under 7 minutes of game time",
+		ended9[0] and frames9[0] < 25200,
+		"ended %s after %.0f s, beats skipped %s" % [ended9[0], frames9[0] / 60.0, map9.director.log_lines])
+	await _unload(map9)
+	DirectorScript.start_act = 1
+	DirectorScript.ending = &"random"
 
 
 ## The director's reload for a test: the showcase freed and loaded afresh

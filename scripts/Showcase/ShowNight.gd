@@ -10,12 +10,26 @@ extends RefCounted
 ##                             and the carrier to be coming round the store,
 ##                             then the knife in the back of the man at the
 ##                             postern, and the carrier sees him over the body.
-##   III. The Cry             the camp rouses and he goes to ground: the bell,
-##                             the lanterns, the hunt.
-##   IV.  Steel               (ShowNight's fight: see _act_four)
-##   V.   The ending          (see _act_five)
+##   III. The Cry             the camp rouses; he sprints down the dark alley
+##                             (faster than they run), goes to ground in its
+##                             far corner, and is lost to them: the bell, the
+##                             lanterns, the hunt.
+##   IV.  Steel               he steps into the firelight and fights them,
+##                             drawing out the squad: a steady exchange (they
+##                             take their places round him), a turtle (they
+##                             send the brute to break it), parries (the
+##                             swordsman thrown open and cut down), the captain
+##                             (the brute goes berserk), then the wavering
+##                             (a man throws down his blade and begs).
+##   V.   The ending          overwhelmed (his armour lifted, they cut him
+##                             down), the victor (he spares the man begging him
+##                             and walks away), or over the wall (up the
+##                             stairs, over, off the roofs and into the canal,
+##                             and they come after him).
 ##
 ## A shot: {"type": wide | two | close | track | reveal, "subjects": [men]}.
+
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 
 ## Guard.Alert.
 const RELAXED := 0
@@ -35,6 +49,15 @@ const CARRIER_COMING := Vector2(4.0, 9.0)
 const OVER_THE_BODY := 1.6
 ## Act III: nobody has seen him for this long: he is lost to them.
 const LOST_FOR := 3.0
+## Act IV: the exchange ends with this many men at his flanks (or at
+## TRADE_ENOUGH s).
+const FLANKERS := 2
+const TRADE_ENOUGH := 20.0
+## The victor: the man he spares is up off his knees and this far from where
+## he begged (running to his friends: GuardMercy's "spared").
+const SPARED_RAN := 4.0
+## The ending's titles.
+const ENDING_TITLES := {&"overwhelmed": "V. Overwhelmed", &"victor": "V. The Victor", &"escape": "V. Over the Wall"}
 
 var map: Node3D
 
@@ -42,6 +65,12 @@ var map: Node3D
 var _said := {}
 var _bell_rung := false
 var _unseen := 0.0
+## The ending being played; the man spared and where he begged.
+var _ending: StringName = &""
+var _spared: Node3D = null
+var _spared_at := Vector3.ZERO
+## The ending came true (it stays true: the spared man may come back).
+var _ending_came := false
 
 
 func _init(p_map: Node3D) -> void:
@@ -57,7 +86,7 @@ func _init(p_map: Node3D) -> void:
 
 
 func acts() -> Array:
-	return [_act_one(), _act_two(), _act_three()]
+	return [_act_one(), _act_two(), _act_three(), _act_four(), _act_five()]
 
 
 # ---------------------------------------------------------------------------
@@ -100,20 +129,20 @@ func _act_two() -> Dictionary:
 			i.crouched = true,
 		"beats": [
 			{"name": &"drop_in", "shot": _shot(&"track", ["intruder"]), "timeout": 25.0,
-				"do": func() -> void: _brain().go_to(map.marks["alley_wait"], &"sneak"),
+				"do": func() -> void: _verb(&"go_to", [map.marks["alley_wait"], &"sneak"]),
 				"until": func() -> bool: return _brain() != null and _brain().done()},
 			{"name": &"his_moment", "shot": _shot(&"two", ["intruder", "Wat"]), "min": 1.0, "timeout": 30.0,
 				"until": _his_moment},
 			{"name": &"the_knife", "shot": _shot(&"track", ["intruder", "Jory"]), "timeout": 20.0,
-				"do": func() -> void: _brain().backstab(_man("Jory")),
+				"do": func() -> void: _verb(&"backstab", [_man("Jory")]),
 				"until": func() -> bool: return _dead("Jory")},
 			{"name": &"the_witness", "shot": _shot(&"close", ["Ned"]), "min": OVER_THE_BODY, "timeout": 12.0,
 				"do": func() -> void:
 					var i := _intruder()
 					if i != null:
 						i.exposure_scale = 1.0
-						_brain().stand()
-						_brain().face(_man_position("Ned")),
+					_verb(&"stand", [])
+					_verb(&"face", [_man_position("Ned")]),
 				"until": func() -> bool: return _state("Ned") >= SEARCHING or _has_said("Ned", "Murder")},
 		],
 	}
@@ -161,15 +190,203 @@ func _act_three() -> Dictionary:
 					var i := _intruder()
 					if i != null:
 						i.exposure_scale = 1.0
-						_brain().go_to(map.marks["hide"], &"run"),
-				"until": func() -> bool: return _out_of_rest(["Mirelle", "Osric", "Piers", "Brand", "Tam"])},
+					_verb(&"go_to", [map.marks["hide"], &"run"]),
+				"until": func() -> bool: return _out_of_rest(["Mirelle", "Osric", "Piers", "Brand", "Tam"]) and (_brain() == null or _brain().done())},
 			{"name": &"lost_him", "shot": _shot(&"track", ["intruder"]), "timeout": 20.0,
-				"do": func() -> void: _brain().hide_at(map.marks["hide"]),
+				"do": func() -> void: _verb(&"hide_at", [map.marks["hide"]]),
 				"until": _lost_him},
 			{"name": &"the_hunt", "shot": _shot(&"wide", []), "min": 4.0, "timeout": 30.0,
 				"until": func() -> bool: return _searching() >= 2 and _lanterns() >= 1},
 		],
 	}
+
+
+# ---------------------------------------------------------------------------
+# IV. Steel
+# ---------------------------------------------------------------------------
+
+func _act_four() -> Dictionary:
+	return {
+		"title": "IV. Steel",
+		"stage": _stage_fight.bind(false),
+		"beats": [
+			{"name": &"found", "shot": _shot(&"two", ["intruder", "Osric"]), "timeout": 25.0,
+				"do": func() -> void:
+					var i := _intruder()
+					if i != null:
+						i.exposure_scale = 1.0
+					_verb(&"go_to", [map.marks["found"], &"walk"]),
+				"until": func() -> bool: return _fighting() >= 2},
+			{"name": &"trade", "shot": _shot(&"two", ["intruder", "Osric"]), "min": 8.0, "enough": TRADE_ENOUGH, "timeout": 30.0,
+				"do": func() -> void: _verb(&"fight", [&"trade"]),
+				"until": func() -> bool: return _flankers() >= FLANKERS},
+			{"name": &"turtle", "shot": _shot(&"two", ["intruder", "Brand"]), "timeout": 25.0,
+				"do": func() -> void: _verb(&"fight", [&"turtle"]),
+				"until": _breaking},
+			{"name": &"parry", "shot": _shot(&"two", ["intruder", "Osric"]), "timeout": 60.0,
+				"do": func() -> void: _verb(&"fight", [&"parry", _man("Osric")]),
+				"until": func() -> bool: return _dead("Osric")},
+			{"name": &"focus", "shot": _shot(&"two", ["intruder", "Mirelle"]), "timeout": 60.0,
+				"do": func() -> void: _verb(&"fight", [&"focus", _man("Mirelle")]),
+				"until": func() -> bool: return _dead("Mirelle")},
+			{"name": &"press", "shot": _shot(&"wide", []), "timeout": 40.0,
+				"do": func() -> void: _verb(&"fight", [&"press"]),
+				"until": func() -> bool: return _pleader() != null},
+		],
+	}
+
+
+## Jumped to: the man at the postern dead, the intruder at the fire, the
+## fighters on him and everyone else roused; for the ending, the swordsman
+## and the captain dead too.
+func _stage_fight(for_the_end: bool) -> void:
+	var i: Node3D = map.spawn_intruder(map.marks["found"], PI * 0.75)
+	i.exposure_scale = 1.0
+	var dead := ["Jory", "Osric", "Mirelle"] if for_the_end else ["Jory"]
+
+	for name in dead:
+		var man := _man(name)
+
+		if man != null:
+			man.take_hit(999.0, i, &"backstab" if name == "Jory" else &"power", man.global_position + Vector3.UP * 1.2, Vector3.FORWARD)
+
+			# (Dead before any hunt: the garrison hears of it as the hunt would
+			# have told it: Squad.member_died.)
+			GarrisonScript.of(i).on_death(name == "Mirelle", name)
+
+	# Late in the fight, the two craven men have been cut badly: they are the
+	# wavering.
+	if for_the_end:
+		for name in ["Piers", "Ned"]:
+			var man := _man(name)
+
+			if man != null:
+				man.health = man.max_health * 0.22
+
+	for name in map.cast:
+		var man := _man(name)
+
+		if man == null:
+			continue
+
+		if for_the_end or name in ["Mirelle", "Osric", "Brand", "Wat"]:
+			man._engage(i)
+		else:
+			man.alert = maxf(float(man.alert), 60.0)
+			man.last_known_position = i.global_position
+			man.has_last_known = true
+
+
+# ---------------------------------------------------------------------------
+# V. The ending
+# ---------------------------------------------------------------------------
+
+func _act_five() -> Dictionary:
+	return {
+		"title": func() -> String: return ENDING_TITLES.get(_ending_now(), "V."),
+		"stage": _stage_fight.bind(true),
+		"beats": func() -> Array: return _ending_beats(_ending_now()),
+	}
+
+
+func _ending_now() -> StringName:
+	if _ending == &"":
+		_ending = map.director.chosen_ending() if map.get("director") != null else &"escape"
+
+	return _ending
+
+
+func _ending_beats(ending: StringName) -> Array:
+	match ending:
+		&"overwhelmed":
+			return [
+				{"name": &"overwhelmed", "shot": _shot(&"two", ["intruder"]), "timeout": 75.0,
+					"do": func() -> void:
+						var i := _intruder()
+						if i != null:
+							i.fall()
+						_verb(&"fight", [&"trade"]),
+					"until": func() -> bool: return _intruder() == null},
+				_look(&"silence", 5.0, &"wide", []),
+			]
+		&"victor":
+			return [
+				{"name": &"break_them", "shot": _shot(&"wide", []), "timeout": 40.0,
+					"do": func() -> void: _verb(&"fight", [&"press"]),
+					"until": func() -> bool: return _pleader() != null},
+				{"name": &"spare", "shot": _shot(&"two", ["intruder"]), "timeout": 40.0,
+					"do": func() -> void:
+						_spared = _pleader()
+						_spared_at = _spared.global_position if _spared != null else Vector3.ZERO
+						_verb(&"fight", [&"spare"]),
+					# (Nobody begging, nobody to spare: on to his walk out.)
+					"until": func() -> bool: return _spared == null or _spared_ran()},
+				{"name": &"walk_out", "shot": _shot(&"track", ["intruder"]), "timeout": 30.0,
+					"do": func() -> void: _verb(&"go_to", [map.marks["gate"], &"walk"]),
+					"until": func() -> bool: return _brain() == null or _brain().done()},
+			]
+
+	# Over the wall: up the stairs, along the wall-walk, over it, off the
+	# roofs and into the canal.
+	var route: Array[Vector3] = [map.marks["east_stairs"], map.marks["walk_east"], map.marks["over_wall"], map.marks["roofs"], map.marks["bank"], map.marks["canal"]]
+	return [
+		{"name": &"break_off", "shot": _shot(&"track", ["intruder"]), "timeout": 75.0,
+			"do": func() -> void: _verb(&"flee_by", [route]),
+			"until": _escaped},
+		_look(&"gone", 5.0, &"wide", []),
+	]
+
+
+## Whether the ending came true, and what came of it (for the checks).
+func ending_done() -> bool:
+	match _ending:
+		&"overwhelmed":
+			return _intruder() == null
+		&"victor":
+			return _spared_ran()
+		&"escape":
+			return _escaped()
+
+	return false
+
+
+func ending_outcome() -> String:
+	match _ending:
+		&"overwhelmed":
+			return "the intruder %s" % ("dead" if _intruder() == null else "standing")
+		&"victor":
+			return "spared %s, %.1f m away" % [_spared.given_name if _spared != null and is_instance_valid(_spared) else "nobody", _flat(_spared.global_position, _spared_at) if _spared != null and is_instance_valid(_spared) else 0.0]
+		&"escape":
+			var i := _intruder()
+			return "the intruder %s, followed %s" % ["afloat" if i != null and i._water.swimming else "not afloat", _followed()]
+
+	return "no ending"
+
+
+func _spared_ran() -> bool:
+	if _ending_came:
+		return true
+
+	if _spared == null or not is_instance_valid(_spared) or _spared._knocked_out:
+		return false
+
+	_ending_came = not bool(_spared._mercy.pleading) and _flat(_spared.global_position, _spared_at) >= SPARED_RAN
+	return _ending_came
+
+
+func _escaped() -> bool:
+	var i := _intruder()
+	_ending_came = _ending_came or (i != null and bool(i._water.swimming) and _followed())
+	return _ending_came
+
+
+## A guard gone after him over the wall: outside it, or in the water.
+func _followed() -> bool:
+	for man in map.get_tree().get_nodes_in_group(&"guards"):
+		if (man as Node3D).global_position.z < -16.6 or bool(man._water.swimming):
+			return true
+
+	return false
 
 
 func _lost_him() -> bool:
@@ -240,6 +457,14 @@ func _brain() -> RefCounted:
 	return i.brain if i != null else null
 
 
+## One of the intruder's verbs (IntruderBrain), if he is still up to it.
+func _verb(verb: StringName, args: Array) -> void:
+	var brain := _brain()
+
+	if brain != null:
+		brain.callv(verb, args)
+
+
 func _dead(name: String) -> bool:
 	return _man(name) == null
 
@@ -257,6 +482,58 @@ func _out_of_rest(names: Array) -> bool:
 			return false
 
 	return true
+
+
+func _fighting() -> int:
+	var count := 0
+
+	for man in map.get_tree().get_nodes_in_group(&"guards"):
+		if int(man.state) == COMBAT:
+			count += 1
+
+	return count
+
+
+## The hunt after him (Squad), if there is one yet.
+func _squad() -> RefCounted:
+	for man in map.get_tree().get_nodes_in_group(&"guards"):
+		var fighter: RefCounted = man.get("_fighter")
+
+		if fighter != null and fighter.squad != null:
+			return fighter.squad
+
+	return null
+
+
+func _flankers() -> int:
+	var squad := _squad()
+
+	if squad == null:
+		return 0
+
+	var count := 0
+
+	for man in squad.members():
+		if squad.role_of(man) == &"flank":
+			count += 1
+
+	return count
+
+
+## The squad reads his turtle: it plans to break it, and sends the brute.
+func _breaking() -> bool:
+	var squad := _squad()
+	var brand := _man("Brand")
+	return squad != null and squad.tactic == &"break" and (brand == null or squad.role_of(brand) == &"breaker")
+
+
+## A man begging for his life, if any.
+func _pleader() -> Node3D:
+	for man in map.get_tree().get_nodes_in_group(&"guards"):
+		if man.get("_mercy") != null and man._mercy.pleading:
+			return man as Node3D
+
+	return null
 
 
 func _searching() -> int:

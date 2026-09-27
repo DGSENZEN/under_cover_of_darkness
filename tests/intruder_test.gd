@@ -238,8 +238,8 @@ func _run() -> void:
 	i12.fall()
 	i12.take_damage(500.0, g12)
 	await _frames(5)
-	_check("I12 plot armour: blows cannot take him under 30%; after fall() they kill him",
-		absf(floor_health - 0.3 * max12) < 0.5 and (not is_instance_valid(i12) or i12.is_dead),
+	_check("I12 plot armour: blows cannot take him under his floor (40%); after fall() they kill him",
+		absf(floor_health - 0.4 * max12) < 0.5 and (not is_instance_valid(i12) or i12.is_dead),
 		"health after the first %.1f of %.1f, dead after fall %s" % [floor_health, max12, not is_instance_valid(i12) or i12.is_dead])
 
 	# I13b an archer's arrow finds him (it is aimed at his chest, not his feet)

@@ -9,8 +9,11 @@ extends Node
 ##
 ## An act: {"title", "enter" (run as it starts, always), "stage" (run only
 ## when the show starts at it: the world put in the state it needs), "beats"}.
+## The title and the beats may be Callables, asked for as the act starts (the
+## ending's act is only known then).
 ## A beat: {"name", "do", "until" (true when done), "min" (s at least; alone,
-## the beat's length), "timeout" (s), "shot" (for ShowCamera)}.
+## the beat's length), "enough" (s: done by then whatever, not skipped),
+## "timeout" (s: let go, logged), "shot" (for ShowCamera)}.
 ##
 ## Keys: 1-5 start from that act, N the next beat, E the ending, R the start
 ## again, Space pause, [ ] slow motion (1/4, 1/2, 1). The command line (after
@@ -209,9 +212,11 @@ func _play_act(index: int, act: Dictionary, first: bool) -> void:
 	if act.has("enter"):
 		(act["enter"] as Callable).call()
 
-	act_started.emit(index, String(act.get("title", "")))
+	var title: Variant = act.get("title", "")
+	var beats: Variant = act.get("beats", [])
+	act_started.emit(index, String((title as Callable).call() if title is Callable else title))
 
-	for beat in act.get("beats", []):
+	for beat in ((beats as Callable).call() if beats is Callable else beats):
 		if not is_inside_tree():
 			return
 
@@ -228,6 +233,7 @@ func _play_beat(beat: Dictionary) -> void:
 	var until: Callable = beat.get("until", Callable())
 	var least := float(beat.get("min", 0.0))
 	var timeout := float(beat.get("timeout", DEFAULT_TIMEOUT))
+	var enough := float(beat.get("enough", INF))
 	var elapsed := 0.0
 	_skip = false
 
@@ -244,7 +250,7 @@ func _play_beat(beat: Dictionary) -> void:
 			_skip = false
 			return
 
-		if elapsed >= least and (not until.is_valid() or bool(until.call())):
+		if elapsed >= least and (not until.is_valid() or bool(until.call()) or elapsed >= enough):
 			return
 
 		if elapsed >= timeout:

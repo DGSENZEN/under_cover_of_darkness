@@ -11,9 +11,10 @@ extends RefCounted
 ##   turtle  his guard up and held (raised again when a boot knocks it
 ##           down), a blow only now and then: the squad reads it and sends
 ##           the man who breaks guards.
-##   parry   he waits for their blows and turns them aside, and answers each
-##           parry with a riposte; nothing else.
-##   focus   he goes for one man (`focus`) and cuts only at him.
+##   parry   he fights his man (`focus`) and turns nearly every blow aside,
+##           answering each parry with a riposte on the man he parried.
+##   focus   he goes for one man (`focus`) and cuts only at him, parrying
+##           most blows and answering with ripostes.
 ##   press   he goes for the man whose heart is failing (Squad.resolve_of).
 ##   spare   he faces the man begging him, then walks away.
 ## He never cuts a man on his knees (GuardMercy), and never sets out to.
@@ -25,7 +26,9 @@ const COMBAT := 4
 ## How fast each gait goes (m/s).
 const SNEAK_SPEED := 1.3
 const WALK_SPEED := 1.6
-const RUN_SPEED := 4.6
+## (Running he outpaces them, as a thief does: they chase at 4.6, the
+## player sprints at 8.5.)
+const RUN_SPEED := 7.5
 ## Close enough to where he was going.
 const ARRIVE := 0.7
 ## A knife in the back from this near, from this far behind the man.
@@ -34,10 +37,11 @@ const STAB_BEHIND := 0.9
 ## Within this of the spot behind him, he steps straight in.
 const CLOSE_IN := 2.5
 ## Where he stands to fight: at this distance from his man, closing if he is
-## further than CLOSE_BEYOND past it, backing off inside BACK_WITHIN of it.
-const KEEP := 1.6
-const CLOSE_BEYOND := 0.45
-const BACK_WITHIN := 0.5
+## further than CLOSE_BEYOND past it (never out of CUT_REACH), backing off
+## inside BACK_WITHIN of it.
+const KEEP := 1.45
+const CLOSE_BEYOND := 0.3
+const BACK_WITHIN := 0.45
 const BACK_SPEED := 1.2
 ## His blade's reach for choosing to cut (IntruderCombat reaches a little
 ## further).
@@ -53,6 +57,9 @@ const TURTLE_CUT_EVERY := 4.0
 ## Parrying: the odds of a parry (else his guard), and the riposte's delay.
 const PARRY_ODDS := 0.85
 const RIPOSTE_AFTER := 0.12
+## Going for one man: the odds of a parry (else his guard): the parries and
+## their ripostes are what open a skilled man.
+const FOCUS_PARRY := 0.7
 ## Pressing: how often he cuts.
 const PRESS_EVERY := 1.0
 ## Sparing: how long he looks at the man begging him, how far he walks off.
@@ -342,18 +349,25 @@ func _drive_fight(delta: float) -> void:
 				_cut_at = _clock + TURTLE_CUT_EVERY
 			elif not combat.busy() or combat.phase == combat.Phase.RECOVER:
 				combat.guard_up(true)
-		&"parry":
-			if _riposte_on != null and is_instance_valid(_riposte_on) and _clock >= _riposte_at and dist <= CUT_REACH:
-				_riposte_on = null
-				_cut()
 		&"press":
 			if _clock >= _cut_at and dist <= CUT_REACH and not _blow_coming():
 				_cut()
 				_cut_at = _clock + PRESS_EVERY
 		_:
-			# trade, focus: a cut on his rhythm, and at once when his man is
-			# recovering from a blow of his own (the moment to punish).
-			var punish: bool = man.get("_phase") == &"recover" and float(man.get("_phase_timer")) < float(man.get("_phase_length")) - PUNISH_AFTER
+			# trade, focus, parry: a cut on his rhythm (at his man: he faces
+			# him), and at once when his man is recovering from a blow of his
+			# own or thrown open (the moment to punish). Parrying, first the
+			# riposte, on the man he parried.
+			if tactic in [&"parry", &"focus"] and _riposte_on != null and is_instance_valid(_riposte_on) and _clock >= _riposte_at:
+				var at := _riposte_on.global_position
+
+				if _flat(intruder.global_position, at) <= CUT_REACH and not combat.busy():
+					intruder.look_at(Vector3(at.x, intruder.global_position.y, at.z), Vector3.UP)
+					_riposte_on = null
+					_cut()
+					return
+
+			var punish: bool = _opened(man) or (man.get("_phase") == &"recover" and float(man.get("_phase_timer")) < float(man.get("_phase_length")) - PUNISH_AFTER)
 
 			if dist <= CUT_REACH and not _blow_coming() and (punish or _clock >= _cut_at):
 				_cut()
@@ -407,8 +421,16 @@ func _blow_coming() -> bool:
 	return false
 
 
-func _cut() -> void:
+func _cut(at: Node3D = null) -> void:
 	combat.guard_up(false)
+	var man: Node3D = at if at != null else _pick_man()
+	var fighter: RefCounted = man.get("_fighter") if man != null else null
+
+	# A man behind his guard: the heavy blow, which breaks it.
+	if fighter != null and bool(fighter.get("guarding")) and tactic in [&"parry", &"focus", &"trade"]:
+		combat.swing(&"heavy")
+		return
+
 	combat.swing(CUTS[_cut_index % CUTS.size()])
 	_cut_index += 1
 
@@ -466,6 +488,8 @@ func _answer_for(from: Node3D) -> StringName:
 			return &"block"
 		&"parry":
 			return &"parry" if randf() < PARRY_ODDS else &"block"
+		&"focus":
+			return &"parry" if randf() < FOCUS_PARRY else &"block"
 
 	var roll := randf()
 
@@ -525,9 +549,9 @@ func _defend() -> void:
 
 
 func _on_defended(result: StringName) -> void:
-	if result == &"parry" and _verb == Verb.FIGHT and tactic == &"parry":
+	if result == &"parry" and _verb == Verb.FIGHT and tactic in [&"parry", &"focus"]:
 		_riposte_at = _clock + RIPOSTE_AFTER
-		_riposte_on = _pick_man()
+		_riposte_on = combat.last_parried if combat.last_parried != null and is_instance_valid(combat.last_parried) else _pick_man()
 
 
 func _face_look(delta: float) -> void:
@@ -540,6 +564,11 @@ static func _standing(man: Node3D) -> bool:
 		return false
 
 	return not (man.has_method("is_downed") and man.is_downed())
+
+
+## Thrown off his balance (GuardFighter: OPEN): any blade blow is his death.
+static func _opened(man: Node3D) -> bool:
+	return man.has_method("is_open") and bool(man.is_open())
 
 
 static func _begging(man: Node3D) -> bool:
