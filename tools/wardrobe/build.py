@@ -206,6 +206,7 @@ def build_kind(recipe, force):
     if kind.details:
         outfit["wr_details"] = common.dump(kind.details)
 
+    strips_face_out(outfit, armature)
     common.smooth(outfit, CREASE)
     materials(outfit)
     common.open_necklines(outfit, armature)
@@ -1633,6 +1634,33 @@ def hide_body(kind, garments=None):
     bm.to_mesh(base.data)
     bm.free()
     print("wardrobe: %d body faces hidden, %d left" % (len(hidden), len(base.data.polygons)))
+
+
+def strips_face_out(outfit, armature):
+    """His hanging cloth (strips below his chest) turned to face away from
+    him: the bake paints both sides of a strip from the side its faces point
+    to, and a skirt facing his legs baked their shadow onto its front (the
+    swordsman's surcoat read dark and muddy under his belt)."""
+    chest = armature.data.bones["spine_02"].head_local.z
+    axis_y = armature.data.bones["spine_01"].head_local.y
+    strips = outfit.data.attributes["wr_strip"].data
+    bm = bmesh.new()
+    bm.from_mesh(outfit.data)
+    bm.faces.ensure_lookup_table()
+    turned = []
+
+    for f in bm.faces:
+        c = f.calc_center_median()
+
+        if strips[f.index].value and c.z < chest:
+            out = Vector((c.x, c.y - axis_y, 0.0))
+
+            if out.length > 0.01 and f.normal.dot(out.normalized()) < -0.2:
+                turned.append(f)
+
+    bmesh.ops.reverse_faces(bm, faces=turned)
+    bm.to_mesh(outfit.data)
+    bm.free()
 
 
 def covered_by(kind, garments, whole, reach):

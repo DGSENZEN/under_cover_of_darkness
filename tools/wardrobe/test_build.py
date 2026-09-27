@@ -909,6 +909,42 @@ def case_neck_seams():
     return ["see-through rays at the neck: %s" % holes] if holes else []
 
 
+def case_strips_face_out():
+    """Every committed kind's hanging cloth (strips, below his chest) faces
+    away from him: the bake paints both sides of a strip from the side its
+    faces point to, and a skirt facing his legs baked their shadow (the
+    swordsman's surcoat front read dark and muddy under his belt). The
+    watchman's batch 0 outfit is his own (never rebuilt: the user's call)."""
+    import recipes
+    from mathutils import Vector
+
+    inward = []
+
+    for kind in recipes.KINDS:
+        if recipes.KINDS[kind].get("batch") == 0:
+            continue
+
+        bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / ("%s.blend" % kind)))
+        outfit, arm = bpy.data.objects["Outfit"], bpy.data.objects["Armature"]
+        chest = arm.data.bones["spine_02"].head_local.z
+        axis_y = arm.data.bones["spine_01"].head_local.y
+        strips = outfit.data.attributes["wr_strip"].data
+        n = 0
+
+        for p in outfit.data.polygons:
+            if strips[p.index].value and p.center.z < chest:
+                out = Vector((p.center.x, p.center.y - axis_y, 0.0))
+
+                if out.length > 0.01 and p.normal.dot(out.normalized()) < -0.2:
+                    n += 1
+
+        if n:
+            inward.append("%s %d" % (kind, n))
+
+    fresh()
+    return ["hanging strips facing him: %s" % inward] if inward else []
+
+
 def width_at(tree, y, z):
     """How far out to his left a surface stands at (y, z): its outermost
     hit coming in along x (a low-poly head has few vertices near any one
@@ -1263,7 +1299,7 @@ CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, 
          "bare_hat": case_bare_hat, "coif_beards": case_coif_beards,
          "brute_neck": case_brute_neck, "duelist_cape": case_duelist_cape,
          "brute_bracers": case_brute_bracers, "hoods_hold_faces": case_hoods_hold_faces,
-         "neck_seams": case_neck_seams}
+         "neck_seams": case_neck_seams, "strips_face_out": case_strips_face_out}
 
 
 def main():
