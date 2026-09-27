@@ -743,9 +743,9 @@ func _set_head_pose(skeleton: Skeleton3D, pose: Array) -> void:
 ## chest (the brute's), the foot of his head's neck is the colour of the
 ## skin of his outfit under it, in each tone (the albedo each shows, his
 ## outfit's times his tone): each face, the lowest centimetre of its own
-## neck (not the sleeve inside it) against his outfit's bare skin within
-## 6 cm of it and below it (what
-## shows: his neck kept up under his head does not), on average within 15%
+## neck (not the sleeve inside it) against his outfit's bare skin where it
+## meets it (within 5 mm: both are cut on one seam, common.NECK_CUT; 6 cm
+## round it took in his upper chest, lit brighter from above), on average within 15%
 ## of the brighter (the chest lies in his mantle's shadow, the head was
 ## baked alone), and none of that skin dark (under 60% of the neck's
 ## brightness: his body's stub under his jaw showed between the teeth of
@@ -771,8 +771,7 @@ func _k34() -> void:
 						edge_low = minf(edge_low, p.y)
 
 			var neck := _surface_colour(head, func(p, _low): return p.y > 1.51 and p.y < edge_low + 0.01, [])
-			var edge: float = neck[1].reduce(func(lowest, q): return minf(lowest, q.y), INF)
-			var outfit := _surface_colour(man.body, func(p, _low): return p.y < edge and neck[1].any(func(q): return p.distance_to(q) < 0.06),
+			var outfit := _surface_colour(man.body, func(p, _low): return neck[1].any(func(q): return p.distance_to(q) < 0.005),
 				[], true)
 			var tone_colour: Color = man.look.skin
 			var body := Color(outfit[0].r * tone_colour.r, outfit[0].g * tone_colour.g, outfit[0].b * tone_colour.b) if outfit[2] > 0 else Color.BLACK
