@@ -511,11 +511,10 @@ func _free(man: Node) -> bool:
 	if life == null or float(life._talk_rest) > 0.0:
 		return false
 
-	var rota: RefCounted = man.get("_rota")
-
-	if rota != null and rota.asleep():
+	if TalkFacts.asleep(man):
 		return false
 
+	var rota: RefCounted = man.get("_rota")
 	var doing: StringName = rota.activity() if rota != null else &""
 	return float(life._resting) >= 1.0 or SEATED.has(doing)
 

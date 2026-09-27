@@ -57,6 +57,13 @@ const SITUATIONS := ["status", "excuse", "spotted_ask", "man_down", "last_man", 
 # Gathering
 # ---------------------------------------------------------------------------
 
+## Asleep: on his bed (GuardRota), or nodded off in his seat (GuardHabits).
+static func asleep(guard: Node) -> bool:
+	var stations: RefCounted = guard.get("_rota")
+	var habits: RefCounted = guard.get("_habits")
+	return (stations != null and bool(stations.asleep())) or (habits != null and bool(habits.dozing()))
+
+
 ## A man in the yard, as the talk sees him.
 static func man(guard: Node, sheet: Dictionary) -> Dictionary:
 	var name := String(guard.get("given_name"))
@@ -76,8 +83,8 @@ static func man(guard: Node, sheet: Dictionary) -> Dictionary:
 	var most := maxf(float(guard.get("max_health")), 1.0)
 	states["hurt"] = clampf(1.0 - float(guard.get("health")) / most, 0.0, 1.0)
 	states["grieving"] = float(guard.get("grief") if guard.get("grief") != null else 0.0) > 0.5
+	states["asleep"] = asleep(guard)
 	var stations: RefCounted = guard.get("_rota")
-	states["asleep"] = stations != null and bool(stations.asleep())
 	var garrison := _garrison(guard.get_tree())
 
 	if garrison != null and fighter != null and fighter.temper != null:
@@ -186,9 +193,7 @@ static func world(men: Array, tree: SceneTree, extra := {}) -> Dictionary:
 		if fighter != null and fighter.squad != null:
 			facts["hunt"] = true
 
-		var stations: RefCounted = guard.get("_rota")
-
-		if stations != null and stations.asleep():
+		if asleep(guard):
 			facts["asleep"].append(String(guard.get("given_name")))
 
 	var garrison := _garrison(tree)

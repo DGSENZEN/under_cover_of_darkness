@@ -888,6 +888,26 @@ A: Hm.
 	_check("T42 the director belongs to the level: a reloaded scene gets its own", before42 != after42 and back42 == before42,
 		"new level new director %s, same level same %s" % [before42 != after42, back42 == before42])
 
+	# T43 a man nodded off in his seat (GuardHabits) is asleep: no remark to
+	# himself, nobody draws him into a talk
+	await _fresh()
+	_use(["muse_1", "talk_pair"])
+	director = TalkDirector.of(self)
+	var dozer := _guard(Vector3(230, 0, 20), 0.0)
+	var awake43 := _guard(Vector3(231.5, 0, 20), PI)
+	dozer._habits._dozing = true
+	dozer._habits._doze_left = 9999.0
+	dozer._life._talk_rest = 0.0
+	awake43._life._talk_rest = 0.0
+	var asleep43: bool = TalkFacts.man(dozer, {})["states"]["asleep"]
+	var spoke43 := [false]
+	await _until(func():
+		spoke43[0] = spoke43[0] or director.speaking(dozer) or director.in_talk(dozer)
+		return false, 60 * 60)
+	_check("T43 a man dozing in his seat is asleep: he says nothing to himself and is drawn into no talk",
+		asleep43 and not spoke43[0] and not director.remarks().any(func(r): return r["man"] == dozer),
+		"asleep %s, spoke %s, remarks %s" % [asleep43, spoke43[0], director.remarks().map(func(r): return r["id"])])
+
 
 ## The file a conversation comes from ("at_ease", "unease"...).
 func _file_of(lib: Dictionary, id: String) -> String:
