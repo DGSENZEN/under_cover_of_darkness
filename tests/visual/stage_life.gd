@@ -1,10 +1,11 @@
 ## Visual check, not a test: a garrison at its ease (GuardHabits). Each man
 ## set to one thing, filmed from the side and the front once he is at it: sat
 ## on a chair and getting up, asleep on a bench, back against a wall, bread
-## at the provisions, the axe at the block, on his knees at the fire, a crate
-## carried and set down, forearms on a rail, talk at the table, a word with a
-## friend, a torch and a lantern on their rounds (walking, and standing), up
-## a rope.
+## at the provisions, the axe at the block, on his knees at the fire (and as
+## he stokes it), a crate carried and set down, forearms on a rail, talk at
+## the table, a word with a friend, a torch and a lantern on their rounds
+## (walking, and standing), up a rope, a pull from his flask, and a nod to a
+## man who greets him going by.
 ##   Godot --fixed-fps 60 --resolution 960x540 --path . res://tests/visual/stage_life.tscn -- --out=/some/folder
 extends Node3D
 
@@ -15,6 +16,7 @@ const Furnishings := preload("res://scripts/Interaction/Furnishings.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const RopeScript := preload("res://scripts/PlayerUtils/VerletRope.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const GuardHabitsScript := preload("res://scripts/AISystem/GuardHabits.gd")
 
 var out_dir := "user://life/"
 var camera: Camera3D
@@ -82,13 +84,25 @@ func _ready() -> void:
 	var climber := _man(Vector3(28, 0, 23), 0.0, [&"chop"])
 	climber._home.origin = Vector3(28, 4.0, 18)
 	men["rope"] = climber
+	var drinker := _man(Vector3(-36, 0, -8), 0.0, [&"fidget"])
+	drinker._habits.roll()
+	drinker._habits.fidgets = {&"drink": 1.0}
+	men["drink"] = drinker
+	# One stood at his post, another going by him with a word.
+	var greeted := _man(Vector3(-32, 0, 28.5), 0.0, [&"fidget"])
+	greeted._habits._wait = 999.0
+	men["greet"] = greeted
+	var greeter := _man(Vector3(-38, 0, 26), -PI * 0.5, [&"fidget"])
+	greeter._habits._wait = 999.0
+	greeter._life.greet_chance = 1.0
+	greeter._home.origin = Vector3(-24, 0, 26)
 
 	for key in [&"visit", &"friend"]:
 		men[key]._life._talk_rest = 0.0
 
 	var want := {"sit": [&"sit_down", &"sit", &"stand_up"], "doze": [&"doze"], "lean": [&"lean"], "chop": [&"chop"], "eat": [&"reach", &"eat"],
 		"tend": [&"kneel_down", &"tend"], "carry": [&"reach", &"carry", &"set_down"], "rail": [&"rail"], "table": [&"sit_talk"], "visit": [&"talk", &"listen", &"nod", &"shake"],
-		"torch": [&"carry_torch"], "lantern": [&"carry_lantern"], "rope": [&"ladder"]}
+		"torch": [&"carry_torch"], "lantern": [&"carry_lantern"], "rope": [&"ladder"], "drink": [&"drink"], "greet": [&""]}
 	var shot := {}
 	# What each is doing, and since when (s).
 	var doing_now := {}
@@ -121,6 +135,27 @@ func _ready() -> void:
 
 				if tag.ends_with("_") or held_for < 1.5:
 					continue
+
+			# Stoking the fire: just as the log goes in.
+			if key == "tend" and doing == &"tend" and not shot.has("tend_stoke") and absf(fmod(g._habits._t - GuardHabitsScript.STOKE_FIRST, GuardHabitsScript.STOKE_EVERY) - 0.08) < 0.01:
+				shot["tend_stoke"] = true
+				await _film(g, "tend_stoke")
+
+			# Greeted: in the midst of his nod.
+			if key == "greet":
+				if g._life.nod() < -0.2 and not shot.has("greet_nod"):
+					shot["greet_nod"] = true
+					await _film(g, "greet_nod")
+
+				continue
+
+			# The flask at his lips.
+			if key == "drink":
+				if doing == &"drink" and g._habits._t > 0.6 and not shot.has("drink_flask"):
+					shot["drink_flask"] = true
+					await _film(g, "drink_flask")
+
+				continue
 
 			if doing in want[key] and not shot.has(tag) and (g._habits._t > 0.6 or doing in [&"ladder", &"talk", &"listen", &"nod", &"shake", &"carry_torch", &"carry_lantern"]):
 				shot[tag] = true

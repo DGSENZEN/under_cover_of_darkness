@@ -2994,7 +2994,15 @@ func _face(direction: Vector3, delta: float, rate := 1.0) -> void:
 func _apply_ground(delta: float) -> void:
 	var from := global_position + Vector3.UP * 0.6
 	var to := global_position - Vector3.UP * 0.6
-	var query := PhysicsRayQueryParameters3D.create(from, to, 1, [get_rid()])
+	# What he may pass through (a chair he steps in among to sit) is not
+	# ground to him: stepping over its seat he would be lifted onto it.
+	var exclude: Array[RID] = [get_rid()]
+
+	for body in get_collision_exceptions():
+		if is_instance_valid(body):
+			exclude.append(body.get_rid())
+
+	var query := PhysicsRayQueryParameters3D.create(from, to, 1, exclude)
 	query.collide_with_areas = false
 
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
@@ -3064,6 +3072,14 @@ func _update_head(delta: float) -> void:
 
 			if _habits != null and (_habits.busy() or _habits.dozing()):
 				_head_yaw_goal = _habits.head().x
+
+			# Round at someone (GuardLife): the man he talks with, one going
+			# by, one greeting him; as far as his head turns.
+			var regard: Vector3 = _life.regard_direction() if _life != null else Vector3.ZERO
+
+			if regard != Vector3.ZERO and (_habits == null or _habits.head_free()):
+				var toward := atan2(-regard.x, -regard.z)
+				_head_yaw_goal = clampf(wrapf(toward - rotation.y, -PI, PI), -GuardLifeScript.REGARD_MAX, GuardLifeScript.REGARD_MAX)
 		Alert.SUSPICIOUS:
 			if has_last_known:
 				var to := last_known_position - global_position

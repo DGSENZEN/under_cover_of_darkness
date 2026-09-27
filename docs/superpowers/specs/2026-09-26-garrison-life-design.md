@@ -1,7 +1,7 @@
 # A Garrison at Its Ease: Design
 
 **Date:** 2026-09-26
-**Status:** built and tested (`tests/habits_test`, H1–H19; `tests/gym_test` G1 and G9); this document awaits the user's review.
+**Status:** built and tested (`tests/habits_test`, H1–H27; `tests/gym_test` G1 and G9); this document awaits the user's review.
 
 ## 1. Goal
 
@@ -67,22 +67,24 @@ A quirk makes one habit or fidget three times likelier, plus a bit (sit, lean, e
 After 3 s at rest he picks something, by pull, from what can be done within his reach (`Guard.habit_range`, 10 m of his post). Then he waits 3–9 s before the next. At a waypoint of his rounds he picks only what is at hand and quick: a seat, the wall, the rail, a bite, a fidget.
 
 ### 4.3 The habits
-- **sit:** to the seat and in among it (the chair and table let him through as he steps into place). His blade is put by, and he sits 15–40 s. Then he gets up and steps back out to where he came in from. Two men sat within 3.8 m of each other talk where they sit.
-  - **At a table** he draws the chair out 0.25 m as he steps in front of it, sits down clear of the table's edge, and draws himself and the chair in to the table (0.6 s), his knees under it. To get up he draws out again first, and pushes the chair back in as he steps away. Sitting down and getting up he leans well forward, and the table's edge would otherwise go through his thighs and hands.
+- **sit:** to the seat and in among it (the chair and table let him through as he steps into place). His blade is put by, and he sits 15–40 s. Then he gets up and steps back out to where he came in from. Two men sat within 3.8 m of each other talk where they sit. Heard: his clothes rustle as he sits and as he gets up, the seat creaks as his weight comes onto it (0.95 s into sitting down), and his blade goes into its scabbard and out again.
+  - **At a table** he draws the chair out 0.25 m as he steps in front of it, sits down clear of the table's edge, and draws himself and the chair in to the table (0.6 s), his knees under it. To get up he draws out again first, and pushes the chair back in as he steps away. Sitting down and getting up he leans well forward, and the table's edge would otherwise go through his thighs and hands. Each time the chair moves it scrapes the floor.
 - **doze:** a dozy man sat in the dark (under 0.25 light) nods off after 6–12 s, and a man with the "dozes" quirk nods off anywhere. His head goes down. He sees nothing unless you touch him. He hears at a third of his usual reach, and he sleeps 20–45 s. A noise, a shout or a blow wakes him with a start and a word ("woken" lines), and he is up at once.
 - **lean:** back against a "lean" place, or against the wall right behind his post if there is one (a ray 1.3 m back). 8–22 s, arms folded.
 - **rail:** forearms on the rail, looking out and down over it, 8–22 s.
-- **eat:** to the provisions: reaches for bread, takes it in the palm of his left hand, eats it there. Blade put by.
+- **eat:** to the provisions: reaches for bread, takes it in the palm of his left hand, eats it there, a bite out of it with each mouthful (30% of what is left). Blade put by.
 - **chop:** takes up an axe (blade put by) and splits logs, 8–16 blows, one every 1.18 s. He holds the axe as he holds his sword: the haft through his right fist, the head out of the thumb's side, the edge leading. Each blow is the guards' own overhead blow (`Sword_Attack`, as the heavy blow uses it): the axe pulled out of the log and lifted back over his head, held a breath, brought down level onto the log standing on the block, and left in it a moment. He stands 1.2 m back from the log and a little to its right, where the blow lands (a bigger man stands further back). Each blow is a wood thud with chips flying from the log, heard 18 m off (`SoundBus` "chop", 52 dB): a sound the rest of the guards hear and know.
-- **tend:** down on his knees at the fire (or at a cart's wheel), working at it 10–20 s, and up again.
-- **carry:** a crate from the fuller pile, held at his chest, walked to the other pile and set down there. Next time, back the other way.
+- **tend:** down on his knees at the fire (or at a cart's wheel), working at it 10–20 s, and up again. At a fire he pushes a log in every 3.3 s (the first 1.2 s in): a burst of sparks, a crackle, and the flame flares up brighter and taller for most of a second (`Torch.flare`).
+- **carry:** a crate from the fuller pile, held at his chest (with a grunt as he lifts it), walked to the other pile and set down there. Next time, back the other way.
 - **visit:** over to a friend at his ease within 12 m. He stands 1.4 m off him and they talk (GuardLife), and he goes back once they are done.
 - **pace:** a few steps to one side of his post, a look about, and back.
-- **fidget:** where he stands: arms folded, a drink, a look about, a look up at the sky, a nod or a shake of the head, a mutter, a dance.
+- **fidget:** where he stands: arms folded, a pull from a leather flask (upright in his left fist, its neck up at his mouth as his hand comes to it), a look about, a look up at the sky, a nod or a shake of the head, a mutter, a dance.
 - **mutter:** alone and at rest, now and then (every 45–110 s, twice as often for the quirk) he says something to himself.
 
-### 4.4 Talk (GuardLife)
-The talk itself is GuardLife's: lines turn and turn about, 2.6 s apart. The listener's head answers each line: an easy man (steady, craven, sly) nods 60% of the time and shakes 10%; a hard man (rash, stubborn) shakes 40% and nods 20%. His blade is put by while he talks or listens.
+### 4.4 Talk, glances and greetings (GuardLife)
+The talk itself is GuardLife's: lines turn and turn about, 2.6 s apart. The listener's head answers each line: an easy man (steady, craven, sly) nods 60% of the time and shakes 10%; a hard man (rash, stubborn) shakes 40% and nods 20%. His blade is put by while he talks or listens. Talking, each turns his head to the other (up to 1.2 rad), stood or sat side by side at a table.
+- **Glances:** a man at his ease whose head is free (stood, sat, leaning, at the rail, eating; not asleep, at work or drinking) looks round at another man going by on the move within 7 m, before him or beside him (or close behind), for 1.5–3 s, and not again for 4–10 s. It is his logical head that turns, so while he looks at a friend he is not looking for you. A lookout keeps his eyes on his ground.
+- **Greetings:** a man walking at his ease who comes up on another at his ease (within 4 m, ahead of him, in sight) has a word for him ("Evening, Hendrik.", "All quiet?", by his temperament: `Temperament.MORE_LINES` "greet"). How often, by his temperament: craven 85%, steady 70%, rash 60%, sly and stubborn 45%; otherwise only a look passes between them. The other looks round at him and nods (his drawn head dipped 0.32 rad and back over 0.7 s; his eyes stay where they were), and half the time answers ("greet_back") a second later. Not the same two again for 150 s, and neither greets anyone for 15–30 s after. Not to a man he is going over to anyway (visit), nor one talking, asleep or at work.
 
 ### 4.5 Lights on rounds (`GuardHands.carry_light`)
 Everything held goes through the fist, the way the sword does (`Humanoid.FIST_R`, `FIST_L`).
@@ -94,7 +96,12 @@ Everything held goes through the fist, the way the sword does (`Humanoid.FIST_R`
 ### 4.6 Ropes, chains and stairs
 After each bake, NavLinks looks up each rope or chain (`VerletRope`, a `ClimbVolume` with `rope` on). It finds the highest ledge within 1.3 m of the line and links the floor at its foot to the top of that ledge. A guard takes it hand over hand, as he takes a ladder. Stairs (0.3125 m risers) are within the navmesh's climb, so he walks them.
 
-### 4.7 Stirred
+### 4.7 How he moves about it
+- **The last of the way is walked.** Stepping into place (to a seat, the wall, the rail, the block, the fire, a pile) he carries on at the pace he came at and slows into it (a Hermite ease from his walking velocity, over the distance at 0.9 m/s, never under 0.35 s), and his legs are shown walking it (`GuardHabits.stepping`, which the rig adds to his velocity). Before, he stopped dead, then slid the last metre with his legs still. The ground ray ignores what he may pass through, so stepping over a chair's seat no longer lifts him onto it.
+- **A turn on the spot is stepped round.** Turning faster than 0.9 rad/s where he stands, with nothing shown over his legs, his feet shuffle round (a slow walk, 0.55–0.9 m/s shown, hips turned 0.7 rad into the turn). It lasts one step at the least however short the turn, and stops once the turn is nearly done. In a fight too, between blows.
+- **Asleep he breathes:** a slow breath every 4.4 s, his chest lifting (a lean back at the waist, 0.035 rad) and his head with it.
+
+### 4.8 Stirred
 Anything that stirs him (a noise, you seen, a blow, a kick, a knockdown) ends whatever he was at in that frame:
 - **Seated or asleep:** up at once, in a hurry. Sat in to a table, he shoves himself and the chair back from it as he jumps up, and the chair stays out where he left it.
 - **Carrying:** the crate falls.
@@ -116,7 +123,7 @@ The NPC gym (`maps/npc_gym.tscn`), **bay 11, GARRISON**: press `=`, or go throug
 
 A rope goes up to a tower and a chain up to the walkway. F1 shows each man's temperament, quirk, and "ASLEEP".
 
-`tests/visual/stage_life.tscn` films each habit from the side and the front.
+`tests/visual/stage_life.tscn` films each habit from the side and the front, including the fire as it is stoked, the flask at his mouth, and a man nodding to another who greets him going by.
 
 ## 6. Success criteria
 
@@ -124,12 +131,19 @@ A rope goes up to a tower and a chain up to the walkway. F1 shows each man's tem
    - **H1:** temperaments lean their own ways, and two men of one temperament, rolled, differ.
    - **H2–H3:** he sits and gets up, and steps back out of the chair. Stirred, he is up at once.
    - **H4–H9:** he leans on the wall behind him, eats, chops (heard 18 m off), tends the fire, and carries a crate. Stirred, he lets it fall.
-   - **H10–H12:** he visits a friend and they talk; an easy man nods, a hard one shakes his head; two sat at a table talk.
+   - **H10–H12:** he visits a friend and they talk; an easy man nods, a hard one shakes his head; two sat at a table talk, each with his head turned to the other.
    - **H13–H14:** forearms on the rail. The dozer is blind to you in the light and woken by a noise.
    - **H15–H16:** torch and lantern rounds: up stairs, dropped into a fight, lit again after.
    - **H17:** up a rope and a chain.
    - **H18:** the navmesh keeps off low furniture.
    - **H19:** at a table, the chair drawn out to sit down and get up, tucked in once sat; stirred there, he shoves back from it.
+   - **H20:** the last of the way to a seat is walked: he sets off into it at the pace he came at (at least 0.6 of it), his legs shown going halfway in, and his feet stay on the floor as he steps in among the chair.
+   - **H21:** turned about where he stands, his feet shuffle round under him, and are still once he has turned.
+   - **H22–H23:** he looks round at a man going by; going by a man at his ease, a word to him and a nod back, and not again straight after.
+   - **H24:** a flask in his left hand for a drink, put away after; the bread bitten down to under 0.6 of itself.
+   - **H25:** at the fire he stokes it: the flame flares and crackles.
+   - **H26:** asleep, he breathes.
+   - **H27:** heard: a rustle sitting and getting up, the seat creaking, the chair scraping each of four times, the blade put by and back, a grunt at a crate.
 2. `tests/gym_test` passes: bay 11 starts at its ease (G1), and over 45 s its men carry a torch and a lantern and do at least five of their own things, all at their ease (G9).
 3. Every other suite passes, run as the project documents (`--fixed-fps 60`).
 
@@ -143,3 +157,7 @@ A rope goes up to a tower and a chain up to the walkway. F1 shows each man's tem
 - **A man with a light only looks about and mutters** on his rounds; he does not sit or lean until he puts it down.
 - **He dozes only sitting.** Without the quirk, he dozes only when leanings are rolled (a quarter of steady and sly men, in the dark).
 - **A rope is climbed like a ladder.** Nobody swings on it.
+- **A turn on the spot is the walking cycle,** hips turned into it; the library has no turning clips.
+- **The drink is the eating clip.** The hand comes to the mouth; it does not tip the flask back.
+- **A greeting is one line and a nod,** and the answer one line; they do not stop to talk (a visit is for that).
+- **Glancing at friends costs him his watch:** while his head is turned to a man going by, you are out of the middle of his view. It is short, and rare, but it is real.

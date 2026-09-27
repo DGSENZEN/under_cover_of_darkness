@@ -168,8 +168,10 @@ static func campfire(parent: Node, at: Vector3, spots := 3) -> Node3D:
 	for i in spots:
 		var angle := TAU * float(i) / float(spots) + 0.4
 		var out := Vector3(cos(angle), 0, sin(angle))
-		# Kneeling, his hands are half a metre ahead of him: on the fire.
-		_spot_facing(parent, &"fire", at + out * 0.78, -out)
+		# Kneeling, his hands are half a metre ahead of him: on the fire
+		# (which he stokes: GuardHabits).
+		var place := _spot_facing(parent, &"fire", at + out * 0.78, -out)
+		place.set_meta(&"fire", flame)
 
 	return body
 

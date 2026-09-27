@@ -5,7 +5,11 @@ extends RefCounted
 ##             dead, their fear, what they have heard of how you fight, or the
 ##             cold. The one listening nods along, or shakes his head (by his
 ##             temperament). You can listen. Anything that stirs either of
-##             them ends it.
+##             them ends it. Talking, each looks at the other, sat or stood.
+##   glances   at his ease, he looks round at a man going by, a moment.
+##   greeting  going by a man at his ease, a word to him now and then
+##             ("Evening, Hendrik."); he looks round and nods, and may say
+##             something back. Not the same two again for a good while.
 ##   idle      what he does with himself standing about, sat, leaning:
 ##             GuardHabits.gd.
 ##   oddities  a door you left open, your arrow in a wall: he notices it (it
@@ -64,6 +68,28 @@ const DOUSE_AFTER := 8.0
 ## this many seconds.
 const LOOKOUT_ARC := 70.0
 const LOOKOUT_PERIOD := 12.0
+## Glances: a man going by within this far (m) and on the move, looked round
+## at this long (s); none again for this long after (s). His head turns no
+## further than this (rad) to anyone.
+const GLANCE_RANGE := 7.0
+const GLANCE_MOVING := 0.6
+const GLANCE_TIME := Vector2(1.5, 3.0)
+const GLANCE_REST := Vector2(4.0, 10.0)
+const REGARD_MAX := 1.2
+## Greetings: going by within this far (m) of a man at his ease, ahead of
+## him, a word this often (by his temperament: a craven man glad of the
+## company, a sly or a stubborn one keeping himself to himself); the other
+## says something back this often, this long after (s). Not the same two again
+## for this long (s), nor either greeting anyone else for this long.
+const GREET_RANGE := 4.0
+const GREET_CHANCE := {&"steady": 0.7, &"craven": 0.85, &"rash": 0.6, &"sly": 0.45, &"stubborn": 0.45}
+const GREET_BACK := 0.5
+const GREET_BACK_AFTER := Vector2(0.8, 1.3)
+const GREET_AGAIN := 150.0
+const GREET_REST := Vector2(15.0, 30.0)
+## A nod: his head dipped this far (rad), down and up again in this long (s).
+const NOD_DIP := 0.32
+const NOD_TIME := 0.7
 
 var guard: CharacterBody3D
 ## Talking with, and whether he leads it (says when each line comes).
@@ -94,6 +120,21 @@ var _covered := false
 var _easy := 0.0
 var _lantern_check := 0.0
 var _watch_time := 0.0
+## Someone he looks round at (a man going by, one who greets him), for how
+## much longer, and how long before he looks round at anyone again.
+var _regard: Node3D = null
+var _regard_left := 0.0
+var _glance_rest := 0.0
+## Greetings: whom he last passed a word with and when (instance id -> s),
+## how long before he greets anyone again, a word back yet to be said (in
+## this long; below zero, none), and when he last nodded (Comms.now).
+var _greeted := {}
+## How likely he is to say anything going by (GREET_CHANCE by his
+## temperament, once it is known; below zero until then).
+var greet_chance := -1.0
+var _greet_rest := 0.0
+var _reply_in := -1.0
+var _nod_at := -10.0
 
 
 func _init(p_guard: CharacterBody3D) -> void:
@@ -106,7 +147,11 @@ func _init(p_guard: CharacterBody3D) -> void:
 ## Every physics frame, while he is up and about.
 func update(delta: float) -> void:
 	_talk_rest = maxf(_talk_rest - delta, 0.0)
+	_glance_rest = maxf(_glance_rest - delta, 0.0)
+	_greet_rest = maxf(_greet_rest - delta, 0.0)
 	_update_talk(delta)
+	_update_regard(delta)
+	_update_greeting(delta)
 	_update_cover(delta)
 	_update_lantern(delta)
 	_check -= delta
@@ -123,6 +168,8 @@ func update(delta: float) -> void:
 
 	if state == RELAXED:
 		_look_for_company()
+		_greet_passing()
+		_look_round()
 
 
 ## What he is doing with himself, for the rig: "talk", "listen" ("nod" or
@@ -295,6 +342,187 @@ func end_talk() -> void:
 		other._life.partner = null
 		other._life._lead = false
 		other._life._talk_rest = randf_range(TALK_REST.x, TALK_REST.y)
+
+
+# ---------------------------------------------------------------------------
+# Glances and greetings
+# ---------------------------------------------------------------------------
+
+## Which way the man he looks at is (Guard._update_head turns his head to
+## him): the man he talks with, one going by, one who greets him. Zero when
+## nobody.
+func regard_direction() -> Vector3:
+	var who: Node3D = partner if talking() else _regard
+
+	if who == null or not is_instance_valid(who):
+		return Vector3.ZERO
+
+	var to := who.global_position - guard.global_position
+	to.y = 0.0
+	return to
+
+
+## Looks round at `who` for `seconds`.
+func regard(who: Node3D, seconds: float) -> void:
+	_regard = who
+	_regard_left = seconds
+
+
+## His head dipped in a nod just now (rad, down negative), for the rig: none
+## (0) but just after a greeting.
+func nod() -> float:
+	var t := Comms.now() - _nod_at
+
+	if t < 0.0 or t > NOD_TIME:
+		return 0.0
+
+	return -NOD_DIP * sin(PI * t / NOD_TIME)
+
+
+## Greeted by `man` going by: he looks round at him and nods, and now and
+## then says something back.
+func greeted_by(man: Node3D) -> void:
+	regard(man, randf_range(2.0, 3.0))
+	_nod_at = Comms.now() + 0.3
+	_greet_rest = maxf(_greet_rest, randf_range(GREET_REST.x, GREET_REST.y))
+	_greeted[man.get_instance_id()] = Comms.now()
+	_reply_in = randf_range(GREET_BACK_AFTER.x, GREET_BACK_AFTER.y) if randf() < GREET_BACK else -1.0
+
+
+func _update_regard(delta: float) -> void:
+	if _regard == null:
+		return
+
+	_regard_left -= delta
+	var gone: bool = not is_instance_valid(_regard) or not _regard.is_inside_tree()
+
+	if gone or _regard_left <= 0.0 or int(guard.state) != RELAXED or guard.global_position.distance_to(_regard.global_position) > GLANCE_RANGE + 2.0:
+		_regard = null
+		_glance_rest = randf_range(GLANCE_REST.x, GLANCE_REST.y)
+
+
+func _update_greeting(delta: float) -> void:
+	if _reply_in < 0.0:
+		return
+
+	_reply_in -= delta
+
+	if _reply_in > 0.0:
+		return
+
+	_reply_in = -1.0
+
+	if at_ease(guard) and not talking():
+		guard.say(&"greet_back")
+
+
+## Whether `man`'s head is his own to turn (his habits leave it free).
+static func _head_free(man: Node) -> bool:
+	var habits: RefCounted = man.get("_habits")
+	return habits == null or not habits.has_method("head_free") or habits.head_free()
+
+
+## At his ease, he looks round at a man going by (not a lookout: he watches
+## his ground).
+func _look_round() -> void:
+	if _regard != null or _glance_rest > 0.0 or talking() or bool(guard.get("lookout")) or not at_ease(guard) or not _head_free(guard):
+		return
+
+	var eye: Vector3 = guard.eye_position()
+	var ahead := -guard.global_basis.z
+	var best: Node3D = null
+	var nearest := GLANCE_RANGE
+
+	for other in guard.get_tree().get_nodes_in_group(&"guards"):
+		if other == guard or not (other is CharacterBody3D) or other.get("_knocked_out") == true:
+			continue
+
+		var body := other as CharacterBody3D
+
+		if Vector2(body.velocity.x, body.velocity.z).length() < GLANCE_MOVING:
+			continue
+
+		var to := body.global_position - guard.global_position
+		var distance := to.length()
+
+		if distance >= nearest:
+			continue
+
+		# Before him or beside him (seen), or close behind (heard).
+		if Vector2(to.x, to.z).normalized().dot(Vector2(ahead.x, ahead.z)) < -0.3 and distance > 2.5:
+			continue
+
+		if not guard._line_of_sight(eye, body.eye_position(), body):
+			continue
+
+		best = body
+		nearest = distance
+
+	if best != null:
+		regard(best, randf_range(GLANCE_TIME.x, GLANCE_TIME.y))
+
+
+## On the move at his ease, coming up to a man at his: a word to him, now and
+## then. Not to a man he is going over to anyway (GuardHabits "visit"), nor
+## one talking, asleep or at work.
+func _greet_passing() -> void:
+	if _greet_rest > 0.0 or talking() or bool(guard.get("lookout")) or not at_ease(guard) or float(guard.get("_bark_timer")) > 0.0:
+		return
+
+	if Vector2(guard.velocity.x, guard.velocity.z).length() < GLANCE_MOVING:
+		return
+
+	var habits: RefCounted = guard.get("_habits")
+
+	if habits != null and habits.get("habit") == &"visit":
+		return
+
+	var eye: Vector3 = guard.eye_position()
+	var ahead := -guard.global_basis.z
+	var now := Comms.now()
+
+	for other in guard.get_tree().get_nodes_in_group(&"guards"):
+		if other == guard or other.get("_life") == null or bool(other.get("lookout")):
+			continue
+
+		var theirs: RefCounted = other._life
+
+		if theirs.talking() or float(theirs._greet_rest) > 0.0 or not at_ease(other) or not _head_free(other):
+			continue
+
+		var to: Vector3 = other.global_position - guard.global_position
+
+		if to.length() > GREET_RANGE or Vector2(to.x, to.z).normalized().dot(Vector2(ahead.x, ahead.z)) < 0.2:
+			continue
+
+		if now - float(_greeted.get(other.get_instance_id(), -INF)) < GREET_AGAIN:
+			continue
+
+		if not guard._line_of_sight(eye, other.eye_position(), other):
+			continue
+
+		_greeted[other.get_instance_id()] = now
+		_greet_rest = randf_range(GREET_REST.x, GREET_REST.y)
+		regard(other, randf_range(1.5, 2.5))
+
+		# Now and then only a look between them as he goes by.
+		if greet_chance < 0.0:
+			greet_chance = float(GREET_CHANCE.get(_tag(), GREET_CHANCE[&"steady"]))
+
+		if randf() >= greet_chance:
+			theirs._greeted[guard.get_instance_id()] = now
+			theirs.regard(guard, randf_range(1.2, 2.0))
+			return
+
+		var said: String = guard._fighter.temper.line(&"greet") if guard._fighter != null and guard._fighter.temper != null else "Evening."
+
+		if said.contains("%s"):
+			said = said % String(other.get("given_name"))
+
+		guard.bark(said)
+		_nod_at = now
+		theirs.greeted_by(guard)
+		return
 
 
 # ---------------------------------------------------------------------------
@@ -627,6 +855,12 @@ func _update_lantern(delta: float) -> void:
 
 	hands.light_lantern()
 	guard.say(&"lantern", 0.35)
+
+
+## What shows most in him (Temperament.gd's tag).
+func _tag() -> StringName:
+	var fighter: RefCounted = guard.get("_fighter")
+	return fighter.temper.tag if fighter != null and fighter.temper != null else &"steady"
 
 
 func _garrison() -> RefCounted:

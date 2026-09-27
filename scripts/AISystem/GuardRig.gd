@@ -126,6 +126,24 @@ const CHOP_BITE := 0.56
 const STOW_POSES := [&"fold_arms", &"listen", &"talk", &"lean", &"rail", &"nod", &"shake", &"drink", &"climb", &"ladder", &"hang"]
 ## His head tipped up or down no more than this (rad) for the eye.
 const HEAD_PITCH_MAX := 0.7
+## Turning where he stands, from this quick a turn (rad/s): his feet shuffle
+## round under him (a slow walk shown, its hips turned into the turn by
+## SHUFFLE_HIPS), rather than him spinning on the spot like a statue on a
+## plinth. So fast (m/s shown) for each rad/s, at least and at most, and each
+## shuffle a step long at the least (s), however short the turn.
+const SHUFFLE_FROM := 0.9
+const SHUFFLE_PACE := 0.25
+const SHUFFLE_SPEED := Vector2(0.55, 0.9)
+const SHUFFLE_HIPS := 0.7
+const SHUFFLE_HOLD := 0.6
+## What he may be showing and still shuffle round: nothing, or a light held
+## on his rounds (his legs his own under it).
+const SHUFFLE_POSES := [&"", &"carry_torch", &"carry_lantern"]
+## Asleep in his seat: a slow breath in and out every this long (s), his
+## chest lifting (a lean back, rad) and his head with it.
+const BREATH := 4.4
+const BREATH_LEAN := 0.035
+const BREATH_HEAD := 0.06
 ## Crossing what walking cannot (GuardClimb): hauling himself up in the
 ## climbing clip (in place, a metre to each CLIMB_CYCLE seconds of it); in the
 ## air in AIR_CLIP; gathering for a jump and landing from one in LAND_CLIP.
@@ -256,6 +274,17 @@ var _activity: StringName = &""
 var _activity_at := 0.0
 ## His blade put by for the pose he is in (_stow).
 var _stowed := false
+## Which way he faced last tick, how fast he is turning (rad/s, positive to
+## his left), and the shuffle his feet are making of it (his own space, as
+## _velocity) and how long it has left at the least.
+var _yaw := 0.0
+var _turn := 0.0
+var _shuffle := Vector3.ZERO
+var _shuffle_left := 0.0
+var _shuffle_side := 1.0
+var _shuffling := false
+## What he was doing at the last physics tick (Guard.activity).
+var _doing: StringName = &""
 
 
 # ---------------------------------------------------------------------------
@@ -365,6 +394,7 @@ func setup(p_guard: CharacterBody3D) -> void:
 
 	_overlay = ShaderMaterial.new()
 	_overlay.shader = HIT_RIM
+	_yaw = guard.global_rotation.y
 	_apply()
 
 
@@ -478,10 +508,23 @@ func update(delta: float) -> void:
 	if phase != &"recover" and phase != &"strike":
 		_bounced = false
 
-	var local_velocity: Vector3 = guard.global_basis.inverse() * guard.velocity
+	# What he is doing with himself (Guard.activity), this tick.
+	var pose: StringName = guard.activity() if guard.has_method("activity") else &""
+	_doing = pose
+
+	# Stepping into place at his ease (GuardHabits): he is put there, and his
+	# legs go by how fast.
+	var moving: Vector3 = guard.velocity
+	var habits: RefCounted = guard.get("_habits")
+
+	if habits != null:
+		moving += habits.stepping()
+
+	var local_velocity: Vector3 = guard.global_basis.inverse() * moving
 	local_velocity.y = 0.0
 	_velocity = _velocity.lerp(local_velocity, 1.0 - exp(-12.0 * dt))
 	var speed := local_velocity.length()
+	_update_shuffle(delta, dt, speed, pose)
 
 	# Each foot coming down, heard in mail and boots: you hear him coming.
 	_walk_phase += speed * dt * PI / (0.75 * size)
@@ -508,7 +551,6 @@ func update(delta: float) -> void:
 		tilt_goal += Vector3(0.0, 0.0, stance_lean())
 
 	# Leaning back on a wall, over a rail (GuardHabits).
-	var pose: StringName = guard.activity() if guard.has_method("activity") else &""
 	tilt_goal += POSE_TILT.get(pose, Vector3.ZERO)
 
 	_update_glance(delta, standing)
@@ -556,6 +598,39 @@ func stance_crouch() -> float:
 ## Fighting, and between blows: nothing else is being shown.
 func _in_stance() -> bool:
 	return int(guard.state) == 4 and guard._phase == &"" and _reel <= 0.0 and guard._stagger <= 0.0 and guard._knock <= 0.0 and _open_left <= 0.0
+
+
+## Turning where he stands: his feet shuffle round under him, a step at the
+## least, the hips into the turn. Only standing (not on the move, nothing shown
+## over his legs but a light on his rounds, no blow, not reeling).
+func _update_shuffle(delta: float, dt: float, speed: float, pose: StringName) -> void:
+	var yaw := guard.global_rotation.y
+	var turning := clampf(wrapf(yaw - _yaw, -PI, PI) / maxf(delta, 0.0001), -12.0, 12.0)
+	_yaw = yaw
+	_turn = lerpf(_turn, turning, 1.0 - exp(-14.0 * dt))
+	_shuffle_left = maxf(_shuffle_left - delta, 0.0)
+	var standing: bool = speed < 0.3 and guard._phase == &"" and _reel <= 0.0 and _flail <= 0.0 and _open_left <= 0.0 \
+		and guard._knock <= 0.0 and guard._stagger <= 0.0 and pose in SHUFFLE_POSES
+	var goal := Vector3.ZERO
+
+	# A turn begun: a step at the least, however short the turn.
+	if standing and absf(_turn) > SHUFFLE_FROM and not _shuffling:
+		_shuffling = true
+		_shuffle_left = SHUFFLE_HOLD
+
+	# Done once the turn is (nearly) over and that step is taken.
+	if not standing or (absf(_turn) < SHUFFLE_FROM * 0.7 and _shuffle_left <= 0.0):
+		_shuffling = false
+
+	if _shuffling:
+		if absf(_turn) > SHUFFLE_FROM * 0.7:
+			_shuffle_side = signf(_turn)
+
+		var pace := clampf(absf(_turn) * SHUFFLE_PACE, SHUFFLE_SPEED.x, SHUFFLE_SPEED.y)
+		var hips := SHUFFLE_HIPS * _shuffle_side
+		goal = Vector3(-sin(hips), 0.0, -cos(hips)) * pace
+
+	_shuffle = _shuffle.lerp(goal, 1.0 - exp(-10.0 * dt))
 
 
 ## A craven man looks over his shoulder every few seconds, for a way out.
@@ -718,13 +793,25 @@ func _process(_delta: float) -> void:
 
 	# Between physics ticks, how far into the next one this frame is drawn.
 	var ahead := Engine.get_physics_interpolation_fraction() / float(maxi(Engine.physics_ticks_per_second, 1))
-	man.set_motion(_velocity / size, guard.state >= SEARCHING, _delta)
+	man.set_motion((_velocity + _shuffle) / size, guard.state >= SEARCHING, _delta)
 	man.turn_head((_logical_head.rotation.y if _logical_head != null else 0.0) + _glance)
+	# Asleep in his seat, he breathes slow and deep: his chest lifts, and his
+	# head with it.
+	var breath := 0.0
+
+	if _doing == &"doze":
+		breath = 0.5 + 0.5 * sin(TAU * _time / BREATH)
+
+	if man.has_method("lean_back"):
+		man.lean_back(BREATH_LEAN * breath)
 
 	# Up at you on a wall, up at the sky, down asleep: where his eyes go
-	# (Guard._update_head), his head goes.
+	# (Guard._update_head), his head goes; and a nod to a man who greets him
+	# (GuardLife), his eyes where they were.
 	if man.has_method("pitch_head"):
-		man.pitch_head(clampf(_logical_head.rotation.x if _logical_head != null else 0.0, -HEAD_PITCH_MAX, HEAD_PITCH_MAX))
+		var life: RefCounted = guard.get("_life")
+		var nodding: float = life.nod() if life != null and life.has_method("nod") else 0.0
+		man.pitch_head(clampf((_logical_head.rotation.x if _logical_head != null else 0.0) + nodding + BREATH_HEAD * breath, -HEAD_PITCH_MAX, HEAD_PITCH_MAX))
 	_animate(ahead)
 
 	# The trail follows the blade where it is drawn this frame.
@@ -848,7 +935,7 @@ func _show_activity(now: float) -> bool:
 		&"carry", &"carry_lantern", &"carry_torch":
 			# The load (or the light) held before him, his legs his own.
 			var clip: StringName = {&"carry": &"Walk_Carry", &"carry_lantern": &"Idle_Lantern", &"carry_torch": &"Idle_Torch"}[doing]
-			man.set_leg_drive(clampf(_velocity.length() / size - 0.2, 0.0, 1.0) if doing != &"carry" else 1.0)
+			man.set_leg_drive(clampf((_velocity + _shuffle).length() / size - 0.2, 0.0, 1.0) if doing != &"carry" else 1.0)
 			man.show_action(clip, fmod(since, maxf(man.action_length(clip), 0.1)) if doing != &"carry" else fmod(_walk_phase / PI * 0.5 * man.action_length(clip), maxf(man.action_length(clip), 0.1)), 0.25, 0.9)
 			return true
 		&"swim", &"tread":
