@@ -14,6 +14,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import bmesh  # noqa: E402
 import bpy  # noqa: E402
 from mathutils import Vector  # noqa: E402
 from mathutils.bvhtree import BVHTree  # noqa: E402
@@ -945,6 +946,71 @@ def case_strips_face_out():
     return ["hanging strips facing him: %s" % inward] if inward else []
 
 
+def case_shell_edges():
+    """Every committed kind's shells (garments cut from his body's regions)
+    meet each other in clean edges: no face of one with two or more open
+    edges (a single triangle sticking out of its edge) where that edge lies
+    against another shell (within 1.5 cm of it) and no other garment lies
+    over the face (a thinner shell's edge under a thicker one is hidden),
+    across his chest and back (from spine_02 up to the foot of his neck,
+    within 20 cm of his middle): the archer's jerkin met his tunic there in
+    a row of teeth. (His waist, legs, arms and neck lie under his belt,
+    boots, pauldrons, hood or collar.) The watchman's batch 0 outfit is his
+    own (never rebuilt: the user's call)."""
+    from mathutils.bvhtree import BVHTree
+
+    import recipes
+
+    teeth = []
+
+    for kind in recipes.KINDS:
+        recipe = recipes.KINDS[kind]
+
+        if recipe.get("batch") == 0:
+            continue
+
+        bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / ("%s.blend" % kind)))
+        me = bpy.data.objects["Outfit"].data
+        parts = me.attributes["wr_part"].data
+        shells = {i + 1 for i, g in enumerate(recipe["garments"]) if g["type"] == "shell"}
+        verts = [v.co.copy() for v in me.vertices]
+        trees = {k: BVHTree.FromPolygons(verts, [tuple(p.vertices) for p in me.polygons if parts[p.index].value == k])
+                 for k in shells}
+        garments = {k: BVHTree.FromPolygons(verts, [tuple(p.vertices) for p in me.polygons if parts[p.index].value == k])
+                    for k in range(1, len(recipe["garments"]) + 1)}
+        arm = bpy.data.objects["Armature"].data.bones
+        chest, neck = arm["spine_02"].head_local.z, arm["neck_01"].head_local.z
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        n = 0
+
+        for f in bm.faces:
+            own = parts[f.index].value
+            open_edges = [e for e in f.edges if e.is_boundary]
+            where = f.calc_center_median()
+
+            if own not in shells or len(open_edges) < 2 or not chest <= where.z <= neck or abs(where.x) > 0.2:
+                continue
+
+            mids = [(e.verts[0].co + e.verts[1].co) * 0.5 for e in open_edges]
+            c = f.calc_center_median()
+
+            if any(garments[k].ray_cast(c + f.normal * 0.001, f.normal, 0.03)[0] is not None for k in garments if k != own):
+                continue
+
+            if any(trees[k].find_nearest(m)[3] is not None and trees[k].find_nearest(m)[3] < 0.015
+                   for k in shells if k != own for m in mids):
+                n += 1
+
+        bm.free()
+
+        if n:
+            teeth.append("%s %d" % (kind, n))
+
+    fresh()
+    return ["shell faces sticking out where shells meet: %s" % teeth] if teeth else []
+
+
 def width_at(tree, y, z):
     """How far out to his left a surface stands at (y, z): its outermost
     hit coming in along x (a low-poly head has few vertices near any one
@@ -1299,7 +1365,8 @@ CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, 
          "bare_hat": case_bare_hat, "coif_beards": case_coif_beards,
          "brute_neck": case_brute_neck, "duelist_cape": case_duelist_cape,
          "brute_bracers": case_brute_bracers, "hoods_hold_faces": case_hoods_hold_faces,
-         "neck_seams": case_neck_seams, "strips_face_out": case_strips_face_out}
+         "neck_seams": case_neck_seams, "strips_face_out": case_strips_face_out,
+         "shell_edges": case_shell_edges}
 
 
 def main():

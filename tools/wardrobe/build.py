@@ -108,6 +108,8 @@ class Kind:
         self.types = {}
         # The base's faces a shell was made from: under that shell, gone.
         self.covered = set()
+        # Each shell's base faces, in its object's order (one_owner).
+        self.shell_faces = {}
         # Garments that leave the body under them (`"hides": False`: they
         # stand clear of it, and it shows under their rims).
         self.open_over = set()
@@ -206,7 +208,9 @@ def build_kind(recipe, force):
     if kind.details:
         outfit["wr_details"] = common.dump(kind.details)
 
-    strips_face_out(outfit, armature)
+    if recipe.get("batch") != 0:
+        strips_face_out(outfit, armature)
+
     common.smooth(outfit, CREASE)
     materials(outfit)
     common.open_necklines(outfit, armature)
@@ -338,9 +342,34 @@ def shell(kind, g, part):
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     wanted = set(g["regions"])
-    doomed = [f for f in bm.faces if not (majority([regions[v.index] for v in f.verts]) in wanted
-                                          and z_lo <= f.calc_center_median().z <= z_hi and f.calc_center_median().x <= x_hi)]
+
+    def within(f):
+        c = f.calc_center_median()
+        return z_lo <= c.z <= z_hi and c.x <= x_hi
+
+    # Regions another of his shells is cut from: where two garments meet (a
+    # notch is filled only there: at bare skin, his skin stays as it was).
+    others = {r for other in kind.recipe["garments"] if other["type"] == "shell" and other["name"] != g["name"]
+              for r in other["regions"]}
+
+    def near(f):
+        """Within 2.5 cm of its cuts, where another shell meets it: a notch
+        at a hem is filled past it (cut at face centres, a hem ran in
+        teeth)."""
+        c = f.calc_center_median()
+        return z_lo - 0.025 <= c.z <= z_hi + 0.025 and c.x <= x_hi + 0.025 \
+            and majority([regions[v.index] for v in f.verts]) in others
+
+    chosen = {f for f in bm.faces if majority([regions[v.index] for v in f.verts]) in wanted and within(f)}
+
+    # (Batch 0's watchman is built as approved: recipes.WATCHMAN "batch".)
+    if kind.recipe.get("batch") != 0:
+        clean_edge(chosen, near)
+        one_owner(kind, g, chosen)
+
+    doomed = [f for f in bm.faces if f not in chosen]
     kind.covered |= {f.index for f in bm.faces} - {f.index for f in doomed}
+    kind.shell_faces[g["name"]] = sorted(f.index for f in chosen)
     bmesh.ops.delete(bm, geom=doomed, context="FACES")
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
     offset_verts(kind, bm, lambda co, n: g["thickness"] + pad(kind, g, co, n), g.get("smooth", 1))
@@ -354,6 +383,71 @@ def shell(kind, g, part):
         # Iron studs over it (a studded jerkin), left for the bake.
         kind.details.setdefault("studs", []).append({"part": part, "spacing": g["studs"]["spacing"],
                                                      "centre_y": kind.centre(kind.z(("spine_02", 0.0))).y})
+
+
+def one_owner(kind, g, chosen):
+    """Each face of his body in one shell only, the thickest that chose it:
+    a thinner shell under a thicker one there is hidden, and where the
+    thicker's smoothing pulled it in the thinner came through (the archer's
+    tunic through his jerkin at his chest). Faces a thicker shell made
+    earlier holds leave `chosen`; faces a thinner shell made earlier holds
+    leave it (its object loses them)."""
+    mine = {f.index for f in chosen}
+
+    for name, kept in list(kind.shell_faces.items()):
+        shared = mine & set(kept)
+
+        if not shared:
+            continue
+
+        if kind.recipe_garment(name).get("thickness", 0.0) >= g["thickness"]:
+            chosen -= {f for f in chosen if f.index in shared}
+            mine -= shared
+            continue
+
+        # (Its object's first faces are the base faces it kept, in order:
+        # lips come after them.)
+        other = next(obj for obj in kind.parts if obj.name == name)
+        bm = bmesh.new()
+        bm.from_mesh(other.data)
+        bm.faces.ensure_lookup_table()
+        bmesh.ops.delete(bm, geom=[bm.faces[i] for i, base in enumerate(kept) if base in shared], context="FACES")
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+        bm.to_mesh(other.data)
+        bm.free()
+        kind.shell_faces[name] = [base for base in kept if base not in shared]
+
+
+def clean_edge(chosen, allowed, rounds=6):
+    """The faces a shell is cut from (`chosen`, bmesh faces of his left half)
+    with a cleaner edge: each notch in it (a face with two chosen neighbours
+    or more, `allowed` by the recipe's cuts) filled, until none is left,
+    which also gives a face sticking out of it neighbours. Cut at his bone
+    weights, a shell's edge ran along his body's triangles in a row of teeth
+    (the archer's jerkin at his chest). Faces are only ever added: a face
+    dropped left his skin under it bare, which no other garment was cut to
+    cover. An edge on the mirror plane (x = 0) joins a chosen face to its own
+    mirror image."""
+    def neighbours(f):
+        n = 0
+
+        for e in f.edges:
+            if all(v.co.x == 0.0 for v in e.verts):
+                n += 1 if f in chosen else 0
+                continue
+
+            n += sum(1 for other in e.link_faces if other is not f and other in chosen)
+
+        return n
+
+    for _ in range(rounds):
+        notches = {other for f in chosen for e in f.edges for other in e.link_faces
+                   if other not in chosen and allowed(other) and neighbours(other) >= 2}
+
+        if not notches:
+            return
+
+        chosen |= notches
 
 
 def offset_verts(kind, bm, amount, iterations=1):
