@@ -9,7 +9,8 @@ extends Node3D
 ## on a rail; asleep on a bench, blind to you and woken by a noise; rounds
 ## walked with a torch or a lantern (the blade at his belt), up the stairs
 ## with it, dropped into a fight and lit again after; up a rope and a chain to
-## the ledges beside them; and the navmesh keeping them off the furniture.
+## the ledges beside them; the navmesh keeping them off the furniture; and a
+## chair drawn out from the table to sit and tucked in once sat.
 ##
 ## Each station stands on its own, 40 m from the next, and each man is set
 ## to the one thing checked (Guard.habits) and starts on it at once.
@@ -517,6 +518,63 @@ func _run() -> void:
 	_check("H18 the navmesh keeps them off the furniture: none walked over, room round each",
 		kept.all(func(k): return k > 0.4) and across.size() > 2 and highest - floor_y < 0.15,
 		"nearest walkable to each top %s m off; across the chair %d points, highest %.2f over the floor" % [kept, across.size(), highest - floor_y])
+
+	# H19 at the table: the chair drawn out to sit down (clear of its edge),
+	# in to the table once sat, out again to get up and pushed back in; and
+	# stirred while sat in to it, he shoves back from it as he jumps up
+	await _fresh()
+	var diner2 := _man(Vector3(478, 0, 0), 0.0, &"steady", [&"sit"])
+	var chair2: Node3D = null
+	var seat2: Node3D = null
+	var down_off := -1.0
+	var in_off := -1.0
+	var chair_in := -1.0
+	var up_off := -1.0
+	var pushed_in := -1.0
+
+	for i in 60 * 40:
+		await _frames(1)
+		var h: RefCounted = diner2._habits
+
+		if seat2 == null and h.spot != null:
+			seat2 = h.spot
+			chair2 = seat2.get_meta(&"tuck", null)
+
+		if seat2 == null or chair2 == null:
+			continue
+
+		var home: Vector3 = (chair2.get_meta(&"home") as Transform3D).origin
+		var doing: StringName = diner2.activity()
+
+		if doing == &"sit_down" and down_off < 0.0 and h._t > 0.5:
+			down_off = _flat(diner2.global_position - seat2.global_position)
+		elif doing == &"sit" and h._step == 4 and in_off < 0.0 and h._t > 0.2:
+			in_off = _flat(diner2.global_position - seat2.global_position)
+			chair_in = _flat(chair2.global_position - home)
+			# Up the sooner.
+			h._t = float(h._steps[4]["time"]) - 0.5
+		elif doing == &"stand_up" and up_off < 0.0 and h._t > 0.5:
+			up_off = _flat(diner2.global_position - seat2.global_position)
+
+		if up_off >= 0.0 and h.habit == &"":
+			pushed_in = _flat(chair2.global_position - home)
+			break
+
+	var pull: float = GuardHabitsScript.PULL_OUT
+	var drawn_ok := absf(down_off - pull) < 0.05 and in_off >= 0.0 and in_off < 0.05 and chair_in < 0.01 and absf(up_off - pull) < 0.05 and pushed_in >= 0.0 and pushed_in < 0.01
+	# Sat in again, and a noise.
+	await _frames(20)
+	diner2._habits._rested = GuardHabitsScript.IDLE_AFTER
+	diner2._habits._wait = 0.0
+	await _until(func(): return diner2._habits._step == 4 and diner2.activity() == &"sit" and diner2._habits._t > 0.3, 60 * 20)
+	var was_in := _flat(diner2.global_position - seat2.global_position) if seat2 != null else -1.0
+	SoundBus.emit_sound(diner2.global_position + Vector3(0, 0, 6), 55.0, self, &"test")
+	await _frames(40)
+	var shoved := _flat(diner2.global_position - seat2.global_position) if seat2 != null else -1.0
+	var chair_shoved := _flat(chair2.global_position - (chair2.get_meta(&"home") as Transform3D).origin) if chair2 != null else -1.0
+	_check("H19 at the table he draws the chair out to sit, in to the table once sat, out to get up; stirred there, he shoves back from it",
+		drawn_ok and was_in < 0.05 and absf(shoved - pull) < 0.08 and absf(chair_shoved - pull) < 0.05 and int(diner2.state) >= SUSPICIOUS,
+		"sitting down %.2f m out, sat %.2f (chair %.2f off its place), getting up %.2f out, chair back %.2f; stirred: from %.2f to %.2f out, chair %.2f out, state %d" % [down_off, in_off, chair_in, up_off, pushed_in, was_in, shoved, chair_shoved, int(diner2.state)])
 
 
 # ---------------------------------------------------------------------------
