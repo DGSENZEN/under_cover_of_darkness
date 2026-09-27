@@ -1255,7 +1255,8 @@ def half_cape(kind, g, part):
     shoulder point, over what she wears there; its rows down her back to
     `hem`, each `clear` of what is under it (looking in from behind her);
     its top line runs from `inner` (x, metres: past her spine, negative)
-    to `reach` past her shoulder point.
+    to `reach` past her shoulder point, and its hem flares `flare` further
+    each way (inner, outer: hanging straight down it read as a sash).
     Its `chains` chain columns swing on `<name>_<n>` of `bones` bones under
     spine_03 (a column between two rides both), built clear of her colliders
     (collider_push); its top row rides spine_03 at her neck and clavicle_l at
@@ -1279,12 +1280,15 @@ def half_cape(kind, g, part):
 
     rows = [top]
 
+    inner_flare, outer_flare = g.get("flare", (0.0, 0.0))
+
     for r in range(1, g["bones"] + 1):
         z = top[0].z + (hem - top[0].z) * r / g["bones"]
         row = []
 
-        for point in top:
-            level = Vector((point.x, kind.centre(z).y, z))
+        for c, point in enumerate(top):
+            u = c / (columns - 1)
+            level = Vector((point.x + (outer_flare * u - inner_flare * (1.0 - u)) * r / g["bones"], kind.centre(z).y, z))
             reach = reach_out(tree, level, behind, 0.12)
             row.append(level + behind * (max(reach + g["clear"], point.y - level.y)))
 

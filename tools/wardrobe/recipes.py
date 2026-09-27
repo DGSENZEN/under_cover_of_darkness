@@ -450,9 +450,12 @@ DUELIST = {
         # strap across her back, Task 7's look) to 5 cm inside her left
         # shoulder point (over her upper arm, where her arm hangs and swings,
         # it was thrown about: 10 m/s restarts, K12; into it, K27).
+        # Its hem flares 9 cm across her back toward her right: hung straight
+        # it read as a sash from behind (batch 3's crowd sheets); flared over
+        # her left arm too, its corner stood off her arm in a stiff point.
         {"name": "half_cape", "type": "half_cape", "fabric": "wool", "colour": (0.10, 0.09, 0.11),
          "hem": ("spine_01", -0.05), "clear": 0.02, "chains": 3, "bones": 3, "inner": -0.14, "reach": -0.05,
-         "stance": 0.01, "hang_from": "spine_02"},
+         "flare": (0.09, 0.0), "stance": 0.01, "hang_from": "spine_02"},
         # The half-cape over her left shoulder: its cloth on her shoulder and
         # the top of her puff, riding her arm (the half-cape alone was a
         # dark strip on her back, not seen from in front: Task 7's look);

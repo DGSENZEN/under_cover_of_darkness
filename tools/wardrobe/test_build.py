@@ -724,6 +724,27 @@ def case_brute_neck():
     return ["%d rays out of his neck meet no skin first (%s)" % (len(holes), holes[:4])] if holes else []
 
 
+def case_duelist_cape():
+    """The committed duelist's half-cape reads as a cape, not a sash: its
+    hem at least 8 cm wider than its top (across her back, x)."""
+    import recipes
+
+    bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / "duelist.blend"))
+    outfit = bpy.data.objects["Outfit"]
+    part = [g["name"] for g in recipes.DUELIST["garments"]].index("half_cape") + 1
+    parts = outfit.data.attributes["wr_part"].data
+    points = [outfit.data.vertices[i].co.copy() for p in outfit.data.polygons if parts[p.index].value == part for i in p.vertices]
+    fresh()
+
+    if not points:
+        return ["no half-cape in the duelist's outfit"]
+
+    top, low = max(p.z for p in points), min(p.z for p in points)
+    width = lambda near: (lambda xs: max(xs) - min(xs))([p.x for p in points if abs(p.z - near) < 0.03])
+    upper, hem = width(top - 0.02), width(low + 0.02)
+    return [] if hem >= upper + 0.08 else ["its hem is %.1f cm across, its top %.1f: a strip, not a cape" % (hem * 100, upper * 100)]
+
+
 def width_at(tree, y, z):
     """How far out to his left a surface stands at (y, z): its outermost
     hit coming in along x (a low-poly head has few vertices near any one
@@ -1076,7 +1097,7 @@ CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, 
          "types2": case_types2, "skin": case_skin, "brute_arms": case_brute_arms, "foreign_parts": case_foreign_parts,
          "faces": case_faces, "beards_and_tails": case_beards_and_tails,
          "bare_hat": case_bare_hat, "coif_beards": case_coif_beards,
-         "brute_neck": case_brute_neck}
+         "brute_neck": case_brute_neck, "duelist_cape": case_duelist_cape}
 
 
 def main():
