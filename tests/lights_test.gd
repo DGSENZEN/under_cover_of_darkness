@@ -68,6 +68,7 @@ func _run() -> void:
 	await _switched()
 	await _maps()
 	await _gallery()
+	await _reviewed()
 
 
 # ---------------------------------------------------------------------------
@@ -1255,6 +1256,7 @@ func _maps() -> void:
 	await _frames(2)
 	var bare_in := {}
 	var fixtures := 0
+	var ring_cookies: Array = []
 
 	for map_name in ["retro_showcase", "stealth_gym", "combat_gym", "combat_arena", "npc_gym", "npc_showcase"]:
 		var map: Node = load("res://maps/%s.tscn" % map_name).instantiate()
@@ -1274,12 +1276,28 @@ func _maps() -> void:
 		if not bare.is_empty():
 			bare_in[map_name] = bare
 
+		if map_name == "combat_arena":
+			for burner in map.find_children("*", "", true, false):
+				if burner.get("fixture") == &"hanging_lantern":
+					ring_cookies.append(burner.light.light_projector != null)
+
 		map.queue_free()
 		await _frames(10)
 
 	_ground.collision_layer = 1
 	_check("L47 every torch in the six maps is a fixture (sconce, cresset, brazier, campfire...), none a bare flame",
 		bare_in.is_empty() and fixtures > 0, "fixtures %d, bare %s" % [fixtures, bare_in])
+
+	# L49 a fixture's bars can be taken off; the arena ring's lantern throws none
+	var plain: Node3D = Lights.hanging_lantern(self, Vector3(0, 3, 1300), 0.6, {"cookie": false})
+	var barred: Node3D = Lights.hanging_lantern(self, Vector3(3, 3, 1300), 0.6)
+	await _frames(3)
+	_check("L49 overrides can take a lantern's bars off, and combat_arena's ring lantern throws none (its light reaches the ring)",
+		plain.light.light_projector == null and barred.light.light_projector != null and ring_cookies == [false],
+		"plain barred %s, barred %s, ring lantern barred %s" % [plain.light.light_projector != null, barred.light.light_projector != null, ring_cookies])
+	plain.queue_free()
+	barred.queue_free()
+	await _frames(2)
 
 
 ## L48 the gallery shows every fixture lit; its L key's cycle puts them all
@@ -1326,6 +1344,78 @@ func _gallery() -> void:
 	gallery.queue_free()
 	await _frames(10)
 	_ground.collision_layer = 1
+
+
+## L50-L52: what the final review found.
+func _reviewed() -> void:
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.8, 1316)
+	camera.current = true
+
+	# L50 flames built in the same frame do not burn in step
+	var a: Node3D = TorchScript.new()
+	add_child(a)
+	a.global_position = Vector3(0, 2, 1310)
+	var b: Node3D = TorchScript.new()
+	add_child(b)
+	b.global_position = Vector3(4, 2, 1310)
+	var hoop: Node3D = Lights.chandelier(self, Vector3(10, 4, 1310), 6, 1.0)
+	await _frames(5)
+	var torches_apart := 0
+	var candles_apart := 0
+
+	for i in 60:
+		await get_tree().process_frame
+
+		if a.frame != b.frame:
+			torches_apart += 1
+
+		var shown := {}
+
+		for fx in hoop.flames:
+			shown[fx.frame] = true
+
+		if shown.size() > 1:
+			candles_apart += 1
+
+	_check("L50 two torches built together, and a chandelier's candles, burn out of step",
+		torches_apart > 30 and candles_apart > 30, "torches apart %d of 60 frames, candles %d" % [torches_apart, candles_apart])
+	a.queue_free()
+	b.queue_free()
+	hoop.queue_free()
+
+	# L51 Godot leaves the props' Blender sources alone
+	var imports := Array(DirAccess.get_files_at("res://assets/props/source/")).filter(func(f): return String(f).ends_with(".import"))
+	var ignored := FileAccess.file_exists("res://assets/props/source/.gdignore")
+	_check("L51 the props' Blender sources are not imported by Godot", ignored and imports.is_empty(),
+		".gdignore %s, imports %d" % [ignored, imports.size()])
+
+	# L52 a carried lantern's halo is not hidden by the man carrying it
+	var man := CharacterBody3D.new()
+	man.collision_layer = 2
+	var body := CollisionShape3D.new()
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.35
+	capsule.height = 1.8
+	body.shape = capsule
+	body.position.y = 0.9
+	man.add_child(body)
+	add_child(man)
+	man.global_position = Vector3(0, 0, 1320)
+	var lamp: Node3D = Lights.carried_lantern()
+	man.add_child(lamp)
+	# Held close, in his shape; you on the far side of him.
+	lamp.position = Vector3(0.2, 1.0, 0.0)
+	camera.global_position = Vector3(-3.0, 1.0, 1320)
+	camera.look_at(lamp.global_position)
+	await _frames(30)
+	var seen: float = lamp.corona.visibility if lamp.corona != null else -1.0
+	_check("L52 a carried lantern's halo is not hidden by the man carrying it", seen > 0.5, "halo %.2f" % seen)
+	man.queue_free()
+
+	camera.queue_free()
+	await _frames(3)
 
 
 ## Whether `node` hangs from a Hanging (a lantern swinging from a fist).

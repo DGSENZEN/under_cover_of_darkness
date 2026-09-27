@@ -162,6 +162,11 @@ var _draft_since := INF
 var _event_in := -1.0
 ## A doused fire's coals winking out: when each last ember goes (s from now).
 var _winks: Array[float] = []
+## The bodies it is carried by or stands on (a guard, a brazier's stand),
+## and its own (_corona_exclude): never in the way of its own halo. Found
+## again whenever it enters the tree.
+var _carriers: Array[RID] = []
+var _carriers_known := false
 
 
 func _ready() -> void:
@@ -239,6 +244,10 @@ func _ready() -> void:
 	_after_ready()
 
 
+func _enter_tree() -> void:
+	_carriers_known = false
+
+
 func _exit_tree() -> void:
 	LightBudget.unregister(self)
 
@@ -290,6 +299,12 @@ func _process(delta: float) -> void:
 		_seeded = true
 		_salt = Flicker.seed_of(global_position)
 		rng.seed = _salt
+
+		# Each flame somewhere in its own loop (never in step with a torch
+		# built the same frame, nor its neighbours on a chandelier), from
+		# where it stands: no dice drawn.
+		for i in flames.size():
+			flames[i].start_at(float(posmod(_salt + i * 7919, 10000)) / 100.0)
 
 	_time += delta
 	_flare = move_toward(_flare, 0.0, delta / FLARE_TIME)
@@ -412,7 +427,20 @@ func _flame_top(up: float) -> Vector3:
 func _physics_process(delta: float) -> void:
 	if corona != null:
 		var glow := light.light_energy / maxf(energy, 0.001) if light.visible else 0.0
-		corona.tick(get_viewport().get_camera_3d(), glow, light_range, _corona_exclude(), delta)
+		if not _carriers_known:
+			_carriers_known = true
+			_carriers.clear()
+			var up := get_parent()
+
+			while up != null:
+				if up is CollisionObject3D:
+					_carriers.append((up as CollisionObject3D).get_rid())
+
+				up = up.get_parent()
+
+			_carriers.append_array(_corona_exclude())
+
+		corona.tick(get_viewport().get_camera_3d(), glow, light_range, _carriers, delta)
 
 
 ## Bodies of its own that must not hide its halo (a fixture's).

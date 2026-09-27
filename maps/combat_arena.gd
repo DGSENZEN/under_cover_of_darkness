@@ -191,8 +191,9 @@ func _ring_yard() -> void:
 			_torch(Vector3(x, 3.0, z))
 
 	# A lantern on a long chain from the beam, over the middle of the ring
-	# (a torch hung in the air there before), as bright as the torches.
-	Lights.hanging_lantern(self, Vector3(0.2, 7.12, -12), 2.7, {"energy": 2.4, "light_range": 10.0})
+	# (a torch hung in the air there before), as bright as the torches and,
+	# without its bars, lighting the ring below as the torch did.
+	Lights.hanging_lantern(self, Vector3(0.2, 7.12, -12), 2.7, {"energy": 2.4, "light_range": 10.0, "cookie": false})
 
 	# The pen they come from, behind the north gate, and its portcullis.
 	Props.block(self, Vector3(-4.5, 1.8, -30), Vector3(0.5, 3.6, 8), STONE)

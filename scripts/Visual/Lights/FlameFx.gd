@@ -88,6 +88,11 @@ func _process(delta: float) -> void:
 		_apply()
 
 
+## Starts its loop `t` seconds in (the burner spreads its flames' phases).
+func start_at(t: float) -> void:
+	_time = t
+
+
 ## How it burns this frame: `wobble` its flicker (-1..1), `strength` 1 as
 ## made (less burning down), `lean` the wind, `flare` a stoked flare (0..1),
 ## `jump` a fire's surge or settling log (0..1, flames only).

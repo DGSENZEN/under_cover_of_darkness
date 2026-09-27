@@ -51,6 +51,9 @@ var overrides := {}
 var stretch := 0.0
 ## A hung fixture: metres of chain between its hook (its origin) and it.
 var hang_drop := 0.0
+## A fixture made with a cookie throws its frame's bars; false (in its
+## overrides) takes them off, its light then reaching all round.
+var cookie := true
 
 var model: Node3D
 ## socket name -> its points in the fixture's space.
@@ -211,7 +214,7 @@ func _build_model() -> void:
 
 
 func _after_ready() -> void:
-	if spec_data.get("cookie", false) and ResourceLoader.exists(COOKIE):
+	if spec_data.get("cookie", false) and cookie and ResourceLoader.exists(COOKIE):
 		# Its own frame's bars thrown round the walls.
 		light.light_projector = load(COOKIE)
 
