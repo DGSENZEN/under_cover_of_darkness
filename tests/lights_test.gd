@@ -33,10 +33,12 @@ const LightFixture := preload("res://scripts/Visual/Lights/LightFixture.gd")
 const PROBE_BASELINE := [0.6870, 0.5878, 0.8089, 0.7449, 0.6229, 0.6943]
 
 var results: Array[String] = []
+## The suite's own floor (L47 takes it away while a map stands on it).
+var _ground: StaticBody3D
 
 
 func _ready() -> void:
-	Props.block(self, Vector3(0, -0.5, 0), Vector3(400, 1, 400))
+	_ground = Props.block(self, Vector3(0, -0.5, 0), Vector3(400, 1, 400))
 	await _frames(5)
 	await _run()
 
@@ -64,6 +66,7 @@ func _run() -> void:
 	await _fires()
 	await _sounds()
 	await _switched()
+	await _maps()
 
 
 # ---------------------------------------------------------------------------
@@ -1219,6 +1222,40 @@ func _switched() -> void:
 	camp.queue_free()
 	camera.queue_free()
 	await _frames(3)
+
+
+## L47 every map's torches are fixtures: none left a bare flame.
+func _maps() -> void:
+	# The maps stand on their own floors, not the suite's.
+	_ground.collision_layer = 0
+	await _frames(2)
+	var bare_in := {}
+	var fixtures := 0
+
+	for map_name in ["retro_showcase", "stealth_gym", "combat_gym", "combat_arena", "npc_gym", "npc_showcase"]:
+		var map: Node = load("res://maps/%s.tscn" % map_name).instantiate()
+		add_child(map)
+		await _frames(120)
+		var bare: Array[String] = []
+
+		for burner in map.find_children("*", "", true, false):
+			if not burner.is_in_group(&"torches"):
+				continue
+
+			if burner.get("fixture") == null or burner.fixture == &"":
+				bare.append("%.1f,%.1f,%.1f" % [burner.global_position.x, burner.global_position.y, burner.global_position.z])
+			else:
+				fixtures += 1
+
+		if not bare.is_empty():
+			bare_in[map_name] = bare
+
+		map.queue_free()
+		await _frames(10)
+
+	_ground.collision_layer = 1
+	_check("L47 every torch in the six maps is a fixture (sconce, cresset, brazier, campfire...), none a bare flame",
+		bare_in.is_empty() and fixtures > 0, "fixtures %d, bare %s" % [fixtures, bare_in])
 
 
 ## Whether `node` hangs from a Hanging (a lantern swinging from a fist).

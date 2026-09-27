@@ -66,7 +66,7 @@ const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
-const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const BarrelScript := preload("res://scripts/Combat/Barrel.gd")
 const HangingWeightScript := preload("res://scripts/Combat/HangingWeight.gd")
@@ -1164,12 +1164,7 @@ func _dummy(at: Vector3, shield: bool) -> void:
 
 
 func _torch(at: Vector3, shadows := true, energy := 2.4) -> void:
-	var torch: Node3D = TorchScript.new()
-	torch.energy = energy
-	torch.light_range = 10.0
-	torch.shadows = shadows
-	add_child(torch)
-	torch.global_position = at
+	Lights.torch_at(self, at, energy, 10.0, shadows)
 
 
 func _sign(at: Vector3, text: String, size := 32) -> void:

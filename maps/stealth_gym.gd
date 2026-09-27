@@ -13,7 +13,7 @@ const GUARD := preload("res://Guard.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
-const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 
 const STONE := Color(0.36, 0.36, 0.4)
 const DARK := Color(0.2, 0.2, 0.23)
@@ -121,13 +121,10 @@ func _ready() -> void:
 	patrol._go_to(route.get_child(1).global_position)
 
 
-## A torch: a flickering light with a pixel flame (scripts/Visual/Torch.gd).
+## A torch, its flame at `at`: in a sconce on the wall there, or on a pole
+## cresset (Lights.torch_at).
 func _torch(at: Vector3) -> void:
-	var torch: Node3D = TorchScript.new()
-	torch.energy = 2.2
-	torch.light_range = 9.0
-	add_child(torch)
-	torch.global_position = at
+	Lights.torch_at(self, at, 2.2, 9.0)
 
 
 func _sign(at: Vector3, text: String) -> void:

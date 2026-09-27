@@ -45,7 +45,7 @@ const GUARD := preload("res://Guard.tscn")
 const INTRUDER := preload("res://Intruder.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
-const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const FireScript := preload("res://scripts/Combat/Fire.gd")
 const AlarmBellScript := preload("res://scripts/Interaction/AlarmBell.gd")
@@ -642,12 +642,7 @@ func _mesh_beam(at: Vector3, size: Vector3) -> void:
 
 
 func _torch(at: Vector3, energy: float) -> void:
-	var torch: Node3D = TorchScript.new()
-	torch.energy = energy
-	torch.light_range = 9.0
-	torch.shadows = energy > 1.0
-	add_child(torch)
-	torch.global_position = at
+	Lights.torch_at(self, at, energy, 9.0, energy > 1.0)
 
 
 func _station(key: String, kind: StringName, at: Vector3, yaw: float) -> Marker3D:
