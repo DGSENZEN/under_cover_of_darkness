@@ -1,5 +1,6 @@
 # When something is wrong: their dead, their fear, what they have heard of
-# how you fight, the men you spared and the men you cut down begging.
+# how you fight, the men you spared and the men you cut down begging, the
+# torches going out.
 
 == how_many_now
 priority: 1
@@ -89,6 +90,24 @@ cooldown: 3m
 group: alarm
 A: Stay where I can see you.
 B: Likewise.
+
+== torches_keep_going_out
+priority: 1
+when: lights_out>=2
+cast: A = any; B = any
+cooldown: 3m
+group: lights
+A: The torches keep going out.
+B: That's no draught. Someone's putting them out.
+
+== another_light_out
+priority: 1
+when: lights_out>=2
+cast: A = any; B = any
+cooldown: 3m
+group: lights
+A: Another light out.
+B: Then keep your lantern lit.
 
 == habit_turtle
 priority: 1

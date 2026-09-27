@@ -22,6 +22,8 @@ const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Comms := preload("res://scripts/AISystem/Comms.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
+const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const LifeScript := preload("res://scripts/AISystem/GuardLife.gd")
 
 const RELAXED := 0
 const SUSPICIOUS := 1
@@ -67,6 +69,9 @@ func _ready() -> void:
 	Props.block(self, Vector3(720, 1.5, -2.8), Vector3(6, 3, 0.4))
 	# W22 a wall between one of them and you.
 	Props.block(self, Vector3(766, 1.5, 5), Vector3(16, 3, 0.4))
+	# W36, W37 walls with torches on them.
+	Props.block(self, Vector3(800, 1.5, -4.2), Vector3(6, 3, 0.4))
+	Props.block(self, Vector3(1000, 1.5, -4.2), Vector3(16, 3, 0.4))
 
 	var baker := NavigationRegion3D.new()
 	baker.set_script(NavBakerScript)
@@ -764,6 +769,62 @@ func _run() -> void:
 	_check("W35 run from with you on his heels in the dark (heard, not seen), he does not give up the flight",
 		not dropped_it[0] and hounded._fighter.squad != null and hounded._fighter.squad.will_of(hounded) == &"broken",
 		"gave up %s, will %s" % [dropped_it[0], hounded._fighter.squad.will_of(hounded) if hounded._fighter.squad != null else &"-"])
+
+	# W36 a torch you put out is noticed, gone to and lit again (his hand up
+	#     to it); the garrison stirs
+	await _fresh()
+	_put_player(Vector3(800, 1.05, 30))
+	player.debug_light_level = 0.0
+	var torch36 := _wall_torch(Vector3(800, 2.4, -3.75))
+	var keeper := _guard(&"", Vector3(800, 0, 4), 0.0, &"steady", false)
+	keeper.hearing_acuity = 0.0
+	await _frames(20)
+	torch36.put_out(player)
+	var reached_up := [false]
+	await _until(func():
+		reached_up[0] = reached_up[0] or float(keeper._rig._light_out) > 0.6
+		return torch36.lit, 1500)
+	var odd36: bool = _barks_of(keeper).any(func(t): return _is_line(t, &"odd_light"))
+	_check("W36 a torch you put out is noticed, gone to and lit again, his hand up to it; the garrison stirs",
+		torch36.lit and odd36 and reached_up[0] and GarrisonScript.of(player).alarm >= LifeScript.TORCH_ALARM - 0.001,
+		"lit again %s said so %s reached up %s alarm %.2f" % [torch36.lit, odd36, reached_up[0], GarrisonScript.of(player).alarm])
+
+	# W37 a second torch out not long after the first: no draught; someone is
+	#     putting them out, and the garrison is roused
+	await _fresh()
+	_put_player(Vector3(1000, 1.05, 30))
+	player.debug_light_level = 0.0
+	var torch_a := _wall_torch(Vector3(995, 2.4, -3.75))
+	var torch_b := _wall_torch(Vector3(1005, 2.4, -3.75))
+	var first37 := _guard(&"", Vector3(995, 0, 3), 0.0, &"steady", false)
+	var second37 := _guard(&"", Vector3(1005, 0, 3), 0.0, &"steady", false)
+
+	for man in [first37, second37]:
+		man.hearing_acuity = 0.0
+
+	await _frames(20)
+	torch_a.put_out(player)
+	await _until(func(): return torch_a.lit, 1500)
+	torch_b.put_out(player)
+	await _until(func(): return torch_b.has_meta(&"noticed"), 600)
+	await _frames(5)
+	var said_lights := _barks_of(first37).any(func(t): return _is_line(t, &"odd_lights")) or _barks_of(second37).any(func(t): return _is_line(t, &"odd_lights"))
+	_check("W37 a second torch out not long after the first: someone is putting them out, and the garrison is roused",
+		torch_a.lit and torch_b.has_meta(&"noticed") and said_lights and GarrisonScript.of(player).alarm >= LifeScript.TORCHES_ALARM - 0.001,
+		"first lit again %s, second noticed %s, said so %s, alarm %.2f" % [torch_a.lit, torch_b.has_meta(&"noticed"), said_lights, GarrisonScript.of(player).alarm])
+	torch36.queue_free()
+	torch_a.queue_free()
+	torch_b.queue_free()
+
+
+## A torch on a wall, one of the level's own (you can put it out).
+func _wall_torch(at: Vector3) -> Node3D:
+	var torch: Node3D = TorchScript.new()
+	torch.can_douse = true
+	add_child(torch)
+	torch.global_position = at
+	LightProbe.invalidate()
+	return torch
 
 
 # --------------------------------------------------------------------------

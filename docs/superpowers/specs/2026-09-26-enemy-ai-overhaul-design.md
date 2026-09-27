@@ -44,7 +44,7 @@ A follow-up (section 4.8) came from playing it: men did not handle their places 
 ### 4.3 Their rounds (`GuardLife.gd`)
 - Men at ease talk in turn about what is on the garrison's mind (`Garrison.gossip`): the dead, the dread, your habits, the men you spared or cut down begging. Anything that stirs them ends it.
 - Idles: arms folded, a pull from the flask.
-- **Things out of place:** a door you left open (seen by its panel or by the gaping doorway), your arrow in a wall. He notices it, goes to it, deals with it, and searches round it; the garrison stirs.
+- **Things out of place:** a door you left open (seen by its panel or by the gaping doorway), your arrow in a wall, a torch you put out (§4.10). He notices it, goes to it, deals with it, and searches round it; the garrison stirs.
 - **A missing man:** someone who knew him looks at his post, says his name, and goes to see.
 - **Lanterns:** searching the dark with the garrison roused, he lights one (and it lights him).
 - **Lookouts** sweep their ground from a post, and run to ring the bell (`AlarmBell.gd`).
@@ -131,6 +131,28 @@ From playing it: their states mixed (a man chatting while he walked back to his 
 
 **Signs of being noticed** (`StealthHUD.AwarenessMarks`): over each man noticing you (45 m), a ring that fills with his alert as he makes you out (to `combat_at`: then he has you), notched where he grows suspicious and where he comes to look. Inside it an eye (its lids opening) while he looks at you, a "?" when he has only heard something or is looking for you (broken ring: hunting), a red "!" once he has you, bursting as he calls it, and the first of them to have you named under it (3 s). The ring's edge glows and a halo beats while it climbs, faster the faster he is making you out; the man nearest to having you is drawn biggest. Off the screen, his mark sits at its edge, pointing the way he is (behind you: the bottom). A man at you with his balance bar over him loses his mark once he has called it.
 
+### 4.10 Hunting you, and the lights (follow-up)
+
+**What the player sees and hears of being noticed** (`StealthHUD`, `Settings.gd`):
+- While a man is making you out (his ring climbing), a **tick**: as often as he is quick about it (every 0.62 s slowly, 0.14 s at a rush), higher and louder the nearer he is to having you. None while nobody is climbing.
+- A man noticing you from **behind a wall** (a ray from your eye to his, every 0.12 s) is marked at 42% of his mark's strength.
+- The **pause screen** has a setting, "Marks over guards: shown/hidden", kept between games in `user://settings.cfg`; hidden, there are no marks and no ticks. The pause screen is now in the middle of the screen (it was mostly off its top-left corner), and a click on it resumes (the screen used to swallow the click).
+- The subtitles name who is speaking ("Isolde, duelist"), as the mark over the first man to have you does.
+
+**Searching where you could hide** (`SearchSpots.gd`, `Guard._next_search_point`, `Squad.search_spot_for`):
+- The places round where he thinks you are (rings every 1.6 m out to his reach: 6 m alone, 8 m for the hunt) are weighed up: **dark** (LightProbe), **shut in** (walls or crates close round it on eight sides: a corner, between crates, an alcove; a spot by a wall is also tried a step further in, into the corner if there is one), **out of his sight** from where he stands, and **the way you were going**. And two kinds of place more: a **room** through a door near it, on the far side from where you were (he goes 2.5 m in and looks round it), and a **ledge** over it you could have climbed to (he stands back from its foot and looks up over its lip). A place he has no way to by the navmesh is passed over.
+- He goes to it **looking into it** (his head and his eyes, so what he sees follows: into a corner, up at a ledge, into a room), and first thing when he gets there; then about him, the way you were going first. With a **light in his left hand** (the lantern he lit to search by, or a torch) he **holds it out** to what he is looking into (`GuardRig`, two-bone IK), and it lights it as any light does.
+- A place searched, by him or by the hunt, is left alone 60 s (unless you are seen again).
+- The hunt shares the ground out as before (4 m apart, leaning the way you went, the sly man cutting you off); now a man going through a **door into a room** has another hold it: back 2.2 m from it on this side, watching the doorway, his look twice as long.
+- Going to a place, now and then he says so ("Check the corners.", "Up there, are you?", "Anyone in here?"); the man holding the door always ("Go in. I've got the door.").
+
+**Trackers** (`Guard.tracker`, `Guard._tracked_trail`): the sly (guile 0.65 or more) and archers read the ground. Lost you on the run, their trail goes the way the floor goes on from where they lost you: straight on if it goes as far, else the least turn off it that does (round a corner, through a doorway), as far along it as you could have got; never a way that is a long way round. Everyone else's trail runs straight on, and now **ends at a wall** across it (it used to carry on to the floor beyond).
+
+**The lights** (`Torch.gd`, `GuardLife`, `GuardHands.relight`, `Garrison`):
+- The levels' own torches on the walls (`Torch.can_douse`: set by each map's `_torch`) can be **put out**: look at one within reach, [E] "Put out the torch": dark, a hiss (heard 30 dB, close by only) and a wisp of smoke.
+- A guard at his ease (or stirred, near what stirred him) who sees a torch **dark where it should burn** (14 m; its not burning is the tell, so it takes no light to see) says so ("The torch has gone out."), goes to the floor under it, and **lights it again**: facing it, his left hand up to it (2.2 s, lit 1.5 s in); then searches about it as for anything out of place.
+- One torch out is a draught (the garrison's alarm to 0.15). **A second out within 150 s** of the first is somebody at work in the dark: "Another light out? Someone's putting them out!", and the alarm to 0.45, so men searching the dark take lanterns with them. The garrison talks of it at their ease ("The torches keep going out.").
+
 ## 5. Where to see it
 
 The NPC gym (`maps/npc_gym.tscn`):
@@ -140,11 +162,13 @@ The NPC gym (`maps/npc_gym.tscn`):
 
 F1 labels show what each man is doing, including "BEGGING FOR HIS LIFE" and "safe with his own". The panel shows men spared and men cut down begging.
 
-`tests/visual/stage_mercy.tscn` films men begging, kneeling and standing, and getting up when let go. `tests/visual/stage_sheath.tscn` films each kind of guard with his weapon put by, drawing it and putting it away; `tests/visual/stage_detect.tscn` films the signs of being noticed.
+`tests/visual/stage_mercy.tscn` films men begging, kneeling and standing, and getting up when let go. `tests/visual/stage_sheath.tscn` films each kind of guard with his weapon put by, drawing it and putting it away; `tests/visual/stage_detect.tscn` films the signs of being noticed (and a man behind a wall, and the pause screen); `tests/visual/stage_search.tscn` films a man searching a room with a lantern (a nook between crates, a side room through its door, a ledge, dark corners); `tests/visual/stage_lights.tscn` films a torch put out, noticed, and lit again.
+
+In any gym, the torches on the walls can be put out.
 
 ## 6. Success criteria
 
-1. `tests/wits_test` passes W1–W35 (getting about, word between them, rounds, things out of place, hands and environment, blows, the hunt, mercy, routs), `tests/posts_test` P1–P12 (the lookout, things thrown, places, the dead), `tests/hunt_test` (chases: H17–H22; not sent past you: H10e), `tests/habits_test` H28–H29 (blades) and `tests/stealth_test` D1–D4 (signs of being noticed).
+1. `tests/wits_test` passes W1–W37 (getting about, word between them, rounds, things out of place, hands and environment, blows, the hunt, mercy, routs; torches put out: W36–W37), `tests/posts_test` P1–P12 (the lookout, things thrown, places, the dead), `tests/hunt_test` (chases: H17–H22; not sent past you: H10e; searching and tracking: H23–H26), `tests/habits_test` H28–H29 (blades), `tests/stealth_test` D1–D7 (signs of being noticed, the tick, a man behind a wall, the setting) and `tests/interaction_test` U7, U11, U13–U14 (the pause screen and its setting, named subtitles, a torch put out).
 2. Every other suite passes, run as the project documents (`--fixed-fps 60`).
 3. In the gym, each behaviour above can be provoked and watched.
 
@@ -153,7 +177,10 @@ F1 labels show what each man is doing, including "BEGGING FOR HIS LIFE" and "saf
 - Pleading poses reuse existing clips: `Fixing_Kneeling` held and rocked for kneeling, `Spell_Simple_Idle` (a hand held out) for standing. The kneeling man bows to the floor rather than looking up at you.
 - A haven is found by straight-line distance; a man whose path there stalls gives that haven up for a while and tries another.
 - Running from you, a man who neither sees nor hears you for 12 s (3 s once 18 m clear) gives up the flight and goes back to his rounds; once sheltered with his own he stays where he reached them until you come near.
-- The trail is a guess along the way you were going: turn a corner out of his sight and he runs on past it.
+- The trail is a guess along the way you were going: turn a corner out of his sight and a plain man stops at the wall (a tracker takes the corner, but only the likeliest turn of the floor, not the one you took).
+- The navmesh keeps scraps of floor sealed inside tall blocks (the baker sees their faces, not that they are solid); a search place there is passed over (no way to it), but anything else that snaps a point to the navmesh can still land on one.
+- A torch is lit again from the floor with a hand raised to it: one hung higher than he can reach is lit from as high as his hand goes. You can reach torches up to about 3 m (the reach you use things with, 2.2 m from your eye); a torch put out by a guard (none do yet) would not count as out of place.
+- Braziers, campfires and guards' own lights cannot be put out.
 - The draw is procedural (a reach and a swap, no draw clip in the library): the blade can pass close to a leg as it swings free. A maul or a crossbow comes off the back with no reach.
 - A lookout judges whether he can see the fight by whether he has seen you lately, not by where the fight is: in a dark yard he comes down after a few seconds even if you step into his light a moment later.
 - Things are thrown at where you will be, not round corners: no clear line to you, no throw.

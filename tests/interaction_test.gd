@@ -4,6 +4,8 @@ const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const GUARD := preload("res://Guard.tscn")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const SettingsScript := preload("res://scripts/UI/Settings.gd")
+const TorchScript := preload("res://scripts/Visual/Torch.gd")
 
 var player: CharacterBody3D
 var results: Array[String] = []
@@ -363,8 +365,8 @@ func _ui_checks() -> void:
 	g.bark("Who's there?")
 	await _frames(3)
 	var subtitle: String = hud._subtitle.get_parsed_text()
-	_check("U11 subtitles name the speaker", subtitle.contains("Guard") and subtitle.contains("Who's there?") and hud._subtitle_panel.modulate.a > 0.5,
-		"'%s' alpha %.2f" % [subtitle, hud._subtitle_panel.modulate.a])
+	_check("U11 subtitles name the speaker", g.given_name != "" and subtitle.begins_with(g.given_name) and subtitle.contains("Who's there?") and hud._subtitle_panel.modulate.a > 0.5,
+		"'%s' (he is %s) alpha %.2f" % [subtitle, g.given_name, hud._subtitle_panel.modulate.a])
 	g.queue_free()
 
 	# U10 health shields only show when you are hurt
@@ -376,8 +378,9 @@ func _ui_checks() -> void:
 	_check("U10 health shows only when hurt", hidden_full and hud._shields.modulate.a > 0.9 and hud._vignette.modulate.a > 0.1,
 		"hidden at full %s shields %.2f vignette %.2f" % [hidden_full, hud._shields.modulate.a, hud._vignette.modulate.a])
 
-	# U7 Esc pauses, a click resumes. The handlers are called directly:
-	# injected input can arrive twice in a headless run, and Esc toggles.
+	# U7 Esc pauses, a click resumes. Esc's handler is called directly
+	# (injected input can arrive twice in a headless run, and Esc toggles);
+	# the click is a real one, on the pause screen.
 	var esc := InputEventAction.new()
 	esc.action = &"ui_cancel"
 	esc.pressed = true
@@ -385,14 +388,58 @@ func _ui_checks() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var paused: bool = get_tree().paused and hud._pause.visible
+	var middle: Rect2 = hud._pause.get_child(1).get_global_rect()
+	var view: Rect2 = get_viewport().get_visible_rect()
+	var centred: bool = absf(middle.get_center().x - view.get_center().x) < 2.0 and absf(middle.get_center().y - view.get_center().y) < 2.0
+
+	# U13 the pause screen's setting: a click on it changes it (and is kept),
+	# and does not resume
+	SettingsScript.path = "user://settings_interaction_test.cfg"
+	SettingsScript.reload()
+	hud._marks_toggle.pressed.emit()
+	await get_tree().process_frame
+	var turned: bool = not SettingsScript.awareness_marks() and hud._marks_toggle.text.contains("hidden") and get_tree().paused
+	var kept := ConfigFile.new()
+	var written: bool = kept.load(SettingsScript.path) == OK and kept.get_value("hud", "awareness_marks", true) == false
+	hud._marks_toggle.pressed.emit()
+	await get_tree().process_frame
+	var turned_back: bool = SettingsScript.awareness_marks() and hud._marks_toggle.text.contains("shown")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SettingsScript.path))
+	SettingsScript.path = "user://settings.cfg"
+	SettingsScript.reload()
+	_check("U13 the pause screen's setting changes with a click, is kept, and does not resume", turned and written and turned_back,
+		"hidden and still paused %s written %s shown again %s" % [turned, written, turned_back])
+
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
-	hud._unhandled_input(click)
+	click.position = Vector2(2, 2)
+	click.global_position = click.position
+	get_viewport().push_input(click)
+	var up: InputEventMouseButton = click.duplicate()
+	up.pressed = false
+	get_viewport().push_input(up)
 	await get_tree().process_frame
 	await _frames(3)
-	_check("U7 Esc pauses and shows the pause screen; a click resumes", paused and not get_tree().paused and not hud._pause.visible,
-		"paused with screen %s now paused %s screen %s" % [paused, get_tree().paused, hud._pause.visible])
+	_check("U7 Esc pauses and shows the pause screen (in the middle); a click on it resumes", paused and centred and not get_tree().paused and not hud._pause.visible,
+		"paused with screen %s centred %s now paused %s screen %s" % [paused, centred, get_tree().paused, hud._pause.visible])
+
+	# U14 a torch on the wall: [E] Put out the torch, and it is out (dark,
+	#     nothing more to do with it)
+	var torch: Node3D = TorchScript.new()
+	torch.can_douse = true
+	add_child(torch)
+	torch.global_position = Vector3(20.0, 2.2, 4.6)
+	await _place(Vector3(20.0, 1.05, 5.9), 0.0)
+	_aim(torch.global_position)
+	await _frames(5)
+	var offered: String = player.frob.current_prompt()
+	await _tap("frob")
+	await _frames(5)
+	var after: String = player.frob.current_prompt()
+	_check("U14 a torch on the wall offers to be put out, and goes dark when you do", offered == "Put out the torch" and not torch.lit and not torch.light.visible and after == "",
+		"offered '%s', lit %s light %s, then '%s'" % [offered, torch.lit, torch.light.visible, after])
+	torch.queue_free()
 
 	# U9 caught: the screen fades to black
 	player.take_damage(1000.0, null)

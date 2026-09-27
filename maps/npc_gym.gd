@@ -1168,6 +1168,8 @@ func _torch(at: Vector3, shadows := true, energy := 2.4) -> void:
 	torch.energy = energy
 	torch.light_range = 10.0
 	torch.shadows = shadows
+	# One of the level's own: you can put it out (the guards light it again).
+	torch.can_douse = true
 	add_child(torch)
 	torch.global_position = at
 

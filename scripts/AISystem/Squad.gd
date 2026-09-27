@@ -113,6 +113,16 @@ const HELP_BONUS := 0.2
 const CALL_RANGE := 35.0
 const SEARCH_SPREAD := 4.0
 const CUT_OFF := 10.0
+## The ground the hunt shares out: this far round where one thinks you are
+## (m). A place searched is left alone this long (s), unless you are seen
+## again. A man going through a door into a room: one more of them, this
+## near the door (m), holds it, HOLD_BACK (m) back from it on this side,
+## while he is in there (for ROOM_HOLD s at most).
+const SEARCH_FAR := 8.0
+const SEARCHED_FOR := 60.0
+const HOLD_NEAR := 16.0
+const HOLD_BACK := 2.2
+const ROOM_HOLD := 14.0
 ## A flanker with this much drive (and less guile than PATIENT_GUILE) will not
 ## wait for you to commit to another: he goes in once his patience is gone.
 ## A patient man waits longer (PATIENT_WAIT, s), not for ever. At your back
@@ -165,6 +175,7 @@ const WATCH_NEAR := 5.0
 const WATCH_FAR := 11.0
 
 const Dangers := preload("res://scripts/AISystem/Dangers.gd")
+const SearchSpotsScript := preload("res://scripts/AISystem/SearchSpots.gd")
 const Comms := preload("res://scripts/AISystem/Comms.gd")
 
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
@@ -243,8 +254,12 @@ var _helper_cache := {}
 var _help_until := -100.0
 var _sent_for_help := false
 ## Where each hunter is searching (by instance id), so no two search the same
-## ground.
+## ground; the places searched ([point, clock]); the rooms men have gone into
+## through a door (by his instance id: door (weakref), where he went, until
+## when, who holds the door (instance id, 0: nobody)).
 var _claims := {}
+var _searched: Array = []
+var _rooms := {}
 ## Runners who have fetched their man (one errand each), and the men each
 ## runner could not get to.
 var _fetched_once := {}
@@ -373,6 +388,7 @@ func leave(guard: Node3D) -> void:
 	# Gone before he got there: nobody is fetching that man now.
 	_fetching.erase(guard.get_instance_id())
 	_claims.erase(guard.get_instance_id())
+	_rooms.erase(guard.get_instance_id())
 	# And nothing of his own kept: back in the hunt, he is judged afresh and
 	# his coming back is help arriving.
 	var id := guard.get_instance_id()
@@ -1622,11 +1638,16 @@ func help_coming() -> bool:
 
 ## Where `guard` searches next, as the hunt shares the ground out: his own
 ## piece round where he thinks you are (at least SEARCH_SPREAD from anyone
-## else's), leaning the way you were going; a sly man is sent on ahead of you
-## to cut you off. null: nowhere of the hunt's, search on his own.
-func search_point_for(guard: Node3D) -> Variant:
+## else's, and not where one of them has searched since you were last seen),
+## the likeliest place in it to be hiding (SearchSpots: somewhere dark, shut
+## in, out of sight, a room through a door, a ledge), leaning the way you
+## were going; a sly man is sent on ahead of you to cut you off; a door a man
+## has just gone through, another holds. A place (as SearchSpots), or {}:
+## nowhere of the hunt's, search on his own.
+func search_spot_for(guard: Node3D) -> Dictionary:
 	var id := guard.get_instance_id()
 	_claims.erase(id)
+	_rooms.erase(id)
 	var seen: Vector3 = last_sighting["position"]
 	var centre: Vector3 = guard.last_known_position if guard.get("has_last_known") == true else seen
 	var going: Vector3 = last_sighting["velocity"]
@@ -1648,49 +1669,110 @@ func search_point_for(guard: Node3D) -> Variant:
 				if not _call_pair(&"spotted_ask", guard, {"place_name": Comms.place(seen, guard)}):
 					guard.bark(t.line(&"hunt"))
 
-			return cut_off
+			return {"stand": cut_off, "peer": Vector3.INF, "kind": &"cut_off"}
 
-	var best: Variant = null
-	var best_score := -INF
+	# A door one of them has gone through: he holds it.
+	var hold := _door_to_hold(guard)
+
+	if not hold.is_empty():
+		_claims[id] = hold["stand"]
+		return hold
+
+	var taken := []
+
+	for other in _claims:
+		if other != id:
+			taken.append(_claims[other])
+
+	var searched := _searched_since_seen()
+	var spot := {}
 	# Knowing which way you went, he looks in the ground ahead of it first,
 	# and anywhere round only if none of that is free.
 	var passes: Array = [true, false] if heading != Vector3.ZERO else [false]
-	var ahead_angle := atan2(heading.z, heading.x)
 
 	for ahead_only in passes:
-		for i in 10:
-			var angle: float = ahead_angle + randf_range(-0.4 * PI, 0.4 * PI) if ahead_only else randf() * TAU
-			var guess := centre + Vector3(cos(angle), 0.0, sin(angle)) * randf_range(2.5, 8.0)
-			var point := NavigationServer3D.map_get_closest_point(map, guess)
+		spot = SearchSpotsScript.pick(guard, centre, heading, SEARCH_FAR, taken, SEARCH_SPREAD, searched, ahead_only)
 
-			if _flat(point, guess) > 1.0:
-				continue
-
-			var taken := false
-
-			for other in _claims:
-				if other != id and _flat(_claims[other], point) < SEARCH_SPREAD:
-					taken = true
-					break
-
-			if taken:
-				continue
-
-			var away := point - centre
-			away.y = 0.0
-			var score := (heading.dot(away.normalized()) if heading != Vector3.ZERO and away.length() > 0.01 else 0.0) - 0.02 * guard.global_position.distance_to(point)
-
-			if score > best_score:
-				best_score = score
-				best = point
-
-		if best != null:
+		if not spot.is_empty():
 			break
 
-	if best != null:
-		_claims[id] = best
+	if spot.is_empty():
+		return {}
 
-	return best
+	_claims[id] = spot["stand"]
+
+	if spot["kind"] == &"room":
+		_rooms[id] = {"door": weakref(spot["door"]), "stand": spot["stand"], "until": clock + ROOM_HOLD, "held_by": 0}
+
+	return spot
+
+
+## Where `guard` searches next (search_spot_for): where he goes, or null.
+func search_point_for(guard: Node3D) -> Variant:
+	var spot := search_spot_for(guard)
+	return spot["stand"] if not spot.is_empty() else null
+
+
+## One of them has searched `point`: the rest leave it alone a while.
+func searched(point: Vector3) -> void:
+	_searched.append([point, clock])
+
+	if _searched.size() > 24:
+		_searched.pop_front()
+
+
+## The places searched since you were last seen (and not too long ago).
+func _searched_since_seen() -> Array:
+	var since := float(last_sighting.get("time", -100.0))
+	var points := []
+
+	for done in _searched:
+		if float(done[1]) >= since and clock - float(done[1]) < SEARCHED_FOR:
+			points.append(done[0])
+
+	return points
+
+
+## A door one of the hunt has just gone through into a room, near `guard`
+## and nobody holding it: he holds it, back from it on his side, watching the
+## doorway (you do not slip out past the man in there). {} if none.
+func _door_to_hold(guard: Node3D) -> Dictionary:
+	var own := guard.get_instance_id()
+	var map: RID = guard.get_world_3d().navigation_map
+
+	for id in _rooms.keys():
+		var room: Dictionary = _rooms[id]
+		var door := (room["door"] as WeakRef).get_ref() as Node3D
+		var man := instance_from_id(id) as Node3D
+
+		if door == null or man == null or not is_instance_valid(man) or clock > float(room["until"]) or status_of(man) != &"hunting":
+			_rooms.erase(id)
+			continue
+
+		if id == own or int(room["held_by"]) != 0:
+			continue
+
+		var doorway: Vector3 = door.doorway()
+
+		if _flat(guard.global_position, doorway) > HOLD_NEAR:
+			continue
+
+		var into: Vector3 = room["stand"] - doorway
+		into.y = 0.0
+
+		if into.length() < 0.1:
+			continue
+
+		var guess := doorway - into.normalized() * HOLD_BACK
+		var stand := NavigationServer3D.map_get_closest_point(map, guess)
+
+		if _flat(stand, guess) > 1.0:
+			continue
+
+		room["held_by"] = own
+		return {"stand": stand, "peer": doorway + Vector3.UP * 1.0, "kind": &"hold", "door": door}
+
+	return {}
 
 
 ## Where `guard` keeps watch from while the others search, if the hunt makes
