@@ -3,7 +3,8 @@
 ## on a chair and getting up, asleep on a bench, back against a wall, bread
 ## at the provisions, the axe at the block, on his knees at the fire, a crate
 ## carried and set down, forearms on a rail, talk at the table, a word with a
-## friend, a torch and a lantern on their rounds, up a rope.
+## friend, a torch and a lantern on their rounds (walking, and standing), up
+## a rope.
 ##   Godot --fixed-fps 60 --resolution 960x540 --path . res://tests/visual/stage_life.tscn -- --out=/some/folder
 extends Node3D
 
@@ -76,12 +77,8 @@ func _ready() -> void:
 	men["table_b"] = _man(Vector3(-19, 0, 3), 0.0, [&"sit"])
 	men["visit"] = _man(Vector3(-30, 0, 20), 0.0, [&"visit"])
 	men["friend"] = _man(Vector3(-30, 0, 12), PI, [&"chop"], &"", &"rash")
-	var torch := _man(Vector3(-15, 0, 15), 0.0, [&"fidget"])
-	torch.rounds_light = &"torch"
-	men["torch"] = torch
-	var lantern := _man(Vector3(20, 0, 18), 0.0, [&"fidget"])
-	lantern.rounds_light = &"lantern"
-	men["lantern"] = lantern
+	men["torch"] = _rounds([Vector3(-15, 0, 15), Vector3(-15, 0, 24)], &"torch")
+	men["lantern"] = _rounds([Vector3(20, 0, 14), Vector3(20, 0, 24)], &"lantern")
 	var climber := _man(Vector3(28, 0, 23), 0.0, [&"chop"])
 	climber._home.origin = Vector3(28, 4.0, 18)
 	men["rope"] = climber
@@ -93,6 +90,9 @@ func _ready() -> void:
 		"tend": [&"kneel_down", &"tend"], "carry": [&"reach", &"carry", &"set_down"], "rail": [&"rail"], "table": [&"sit_talk"], "visit": [&"talk", &"listen", &"nod", &"shake"],
 		"torch": [&"carry_torch"], "lantern": [&"carry_lantern"], "rope": [&"ladder"]}
 	var shot := {}
+	# What each is doing, and since when (s).
+	var doing_now := {}
+	var since := {}
 
 	for i in 60 * 70:
 		await get_tree().physics_frame
@@ -105,7 +105,22 @@ func _ready() -> void:
 		for key in want.keys():
 			var g: Node3D = men[key]
 			var doing: StringName = g.activity()
+
+			if doing_now.get(key, &"-") != doing:
+				doing_now[key] = doing
+				since[key] = float(i) / 60.0
+
+			var held_for: float = float(i) / 60.0 - float(since[key])
 			var tag := "%s_%s" % [key, doing]
+
+			# A light on his rounds: once the pose has settled, walking and
+			# standing.
+			if doing in [&"carry_torch", &"carry_lantern"]:
+				var speed := Vector2(g.velocity.x, g.velocity.z).length()
+				tag += "_walking" if speed > 0.8 else ("_still" if speed < 0.05 else "_")
+
+				if tag.ends_with("_") or held_for < 1.5:
+					continue
 
 			if doing in want[key] and not shot.has(tag) and (g._habits._t > 0.6 or doing in [&"ladder", &"talk", &"listen", &"nod", &"shake", &"carry_torch", &"carry_lantern"]):
 				shot[tag] = true
@@ -125,6 +140,26 @@ func _film(g: Node3D, tag: String) -> void:
 		await get_tree().process_frame
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(out_dir + "%s_%s.png" % [tag, view[0]])
+
+
+## A man walking his rounds between `points` with his `light`.
+func _rounds(points: Array, light: StringName) -> CharacterBody3D:
+	var route := Node3D.new()
+	add_child(route)
+
+	for point in points:
+		var marker := Marker3D.new()
+		route.add_child(marker)
+		marker.global_position = point
+
+	var g := _man(points[0], 0.0, [&"fidget"])
+	g.rounds_light = light
+	g.patrol_wait = 3.0
+	g.patrol_route = g.get_path_to(route)
+	g._waypoints.assign(route.get_children())
+	g._waypoint_index = 1
+	g._go_to(points[1], true)
+	return g
 
 
 func _man(at: Vector3, yaw: float, habits: Array, quirk: StringName = &"", tag: StringName = &"steady") -> CharacterBody3D:

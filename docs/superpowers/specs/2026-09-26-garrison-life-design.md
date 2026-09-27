@@ -71,8 +71,8 @@ After 3 s at rest he picks something, by pull, from what can be done within his 
 - **doze:** a dozy man sat in the dark (under 0.25 light) nods off after 6–12 s, and a man with the "dozes" quirk nods off anywhere. His head goes down. He sees nothing unless you touch him. He hears at a third of his usual reach, and he sleeps 20–45 s. A noise, a shout or a blow wakes him with a start and a word ("woken" lines), and he is up at once.
 - **lean:** back against a "lean" place, or against the wall right behind his post if there is one (a ray 1.3 m back). 8–22 s, arms folded.
 - **rail:** forearms on the rail, looking out and down over it, 8–22 s.
-- **eat:** to the provisions: reaches for bread, takes it in his left hand, eats it there. Blade put by.
-- **chop:** takes up an axe (blade put by) and splits logs, 8–16 blows, one every 0.97 s. Each blow is a wood thud and chips flying, heard 18 m off (`SoundBus` "chop", 52 dB): a sound the rest of the guards hear and know.
+- **eat:** to the provisions: reaches for bread, takes it in the palm of his left hand, eats it there. Blade put by.
+- **chop:** takes up an axe (blade put by) and splits logs, 8–16 blows, one every 0.97 s. He stands before the block and a little to its right. The haft goes through his right fist, the head out of the little finger's side, so the chop clip brings it down from over his head onto the log standing on the block. Each blow is a wood thud with chips flying from the log, heard 18 m off (`SoundBus` "chop", 52 dB): a sound the rest of the guards hear and know.
 - **tend:** down on his knees at the fire (or at a cart's wheel), working at it 10–20 s, and up again.
 - **carry:** a crate from the fuller pile, held at his chest, walked to the other pile and set down there. Next time, back the other way.
 - **visit:** over to a friend at his ease within 12 m. He stands 1.4 m off him and they talk (GuardLife), and he goes back once they are done.
@@ -84,9 +84,10 @@ After 3 s at rest he picks something, by pull, from what can be done within his 
 The talk itself is GuardLife's: lines turn and turn about, 2.6 s apart. The listener's head answers each line: an easy man (steady, craven, sly) nods 60% of the time and shakes 10%; a hard man (rash, stubborn) shakes 40% and nods 20%. His blade is put by while he talks or listens.
 
 ### 4.5 Lights on rounds (`GuardHands.carry_light`)
-- **Torch:** raised in his left hand, 2.1 energy, 7.5 m. His blade stays in his right.
-- **Lantern:** held out in his right hand, 1.5 energy, 6.5 m, and his blade at his belt.
-- **Into a fight:** it drops, still burning (a lantern man's blade comes out).
+Everything held goes through the fist, the way the sword does (`Humanoid.FIST_R`, `FIST_L`).
+- **Torch:** raised in his left fist (the `Idle_Torch` clip holds it up), 2.1 energy, 7.5 m. The stick passes through his fist, with a head of pitch-soaked rag and the flame on top. His blade stays in his right.
+- **Lantern:** held out in his right fist (`Idle_Lantern`), 1.5 energy, 6.5 m, and his blade at his belt. It hangs straight down by its bail whichever way his hand turns, and swings a little as he walks and stops (`Hanging.gd`, a pendulum 0.22 m long). The lantern a searching man lights hangs the same way from his raised left fist.
+- **Into a fight:** it drops, still burning. A lantern stands on its base; a torch lies on its side, the flame at one end. A lantern man's blade comes out.
 - **After:** 3 s after the fight he lights it again, unless he is climbing or swimming.
 
 ### 4.6 Ropes, chains and stairs
@@ -133,6 +134,7 @@ A rope goes up to a tower and a chain up to the walkway. F1 shows each man's tem
 ## 7. Known limits
 
 - **Leaning on a wall is the folded-arms idle, tilted back.** The library has no wall lean. Tending a fire and mending a wheel share the kneeling-repair clip, and eating is the drinking clip with bread in the hand.
+- **The axe is held one-handed, the head out of the little finger's side.** The library's only chop (`TreeChopping`) swings one-handed and ends with the fist at chest height; held that way, the head lands on the log.
 - **Places are where furniture is.** Without any, a man only leans on the wall behind his post, paces and fidgets. A level gets the rest by building with `Furnishings` or placing `IdleSpot`s.
 - **One man to a place,** and crates go between two piles only.
 - **Only furniture built by `Furnishings` (or put in "nav_blocks") is kept off.** A hand-made low box is still a step to the baker.

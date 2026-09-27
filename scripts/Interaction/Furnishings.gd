@@ -5,7 +5,8 @@ extends RefCounted
 ##   table                   a table to sit at: chairs round it, facing it
 ##   provisions              a counter with bread on it ("table")
 ##   campfire                a ring of stones and a fire, to tend ("fire")
-##   chopping_block          a stump and a pile of logs ("chop")
+##   chopping_block          a stump with a log on end on it and a pile of
+##                           logs ("chop")
 ##   crate_piles             two piles of crates with a way between, each a
 ##                           "pile": crates are carried from one to the other
 ##                           (restack puts them all back on the first)
@@ -41,6 +42,9 @@ const LEAN_OUT := 0.36
 ## stump, the fire's ring) and send men over: the baker is told to keep the
 ## way round it instead (NavBaker, "nav_blocks").
 const LOW := 0.7
+## Where a man stands to chop at a chopping block, from it (its space): his
+## axe comes down on the log on it (GuardHabits.CHOP_AT).
+const CHOP_FROM := Vector3(0.25, 0.0, 0.48)
 
 
 ## A chair (a stool if `stool`): its seat centred on `at`, and a man on it
@@ -180,8 +184,18 @@ static func chopping_block(parent: Node, at: Vector3, yaw: float) -> StaticBody3
 	body.add_child(drawn)
 	drawn.position = Vector3(0, 0.225, 0)
 	_shape(body, Vector3(0, 0.225, 0), Vector3(0.55, 0.45, 0.55))
+	# The log to be split, on end on it.
+	var standing := CylinderMesh.new()
+	standing.top_radius = 0.1
+	standing.bottom_radius = 0.1
+	standing.height = 0.26
+	var split := MeshInstance3D.new()
+	split.mesh = standing
+	split.material_override = Props.material(WOOD)
+	body.add_child(split)
+	split.position = Vector3(0, 0.58, 0)
 
-	# The pile beside it.
+	# The pile beside it, on the side away from where he stands.
 	for i in 5:
 		var log_mesh := CylinderMesh.new()
 		log_mesh.top_radius = 0.09
@@ -191,12 +205,13 @@ static func chopping_block(parent: Node, at: Vector3, yaw: float) -> StaticBody3
 		wood.mesh = log_mesh
 		wood.material_override = Props.material(WOOD)
 		body.add_child(wood)
-		wood.position = Vector3(0.75 + (i % 3) * 0.19 - 0.19, 0.09 + float(i / 3) * 0.17, 0.1 + float(i / 3) * 0.1)
+		wood.position = Vector3(-0.75 - (i % 3) * 0.19 + 0.19, 0.09 + float(i / 3) * 0.17, 0.1 + float(i / 3) * 0.1)
 		wood.rotation = Vector3(PI * 0.5, 0.0, 0.0)
 
-	_shape(body, Vector3(0.75, 0.2, 0.15), Vector3(0.6, 0.4, 0.6))
-	# The blow lands 0.7 m ahead of him.
-	IdleSpotScript.build(parent, &"chop", at + Basis(Vector3.UP, yaw) * Vector3(0, 0, 0.72), yaw)
+	_shape(body, Vector3(-0.75, 0.2, 0.15), Vector3(0.6, 0.4, 0.6))
+	# Before it and a little to its right: his blow (GuardHabits.CHOP_AT)
+	# comes down on the log.
+	IdleSpotScript.build(parent, &"chop", at + Basis(Vector3.UP, yaw) * CHOP_FROM, yaw)
 	return body
 
 

@@ -83,6 +83,9 @@ const CHOP_CYCLE := 0.97
 ## The axe meets the log this far into each swing (TreeChopping).
 const CHOP_HIT := 0.32
 const CHOP_DB := 52.0
+## Where the axe meets the log, from where he stands (the log on the block
+## before him and a little to his left: Furnishings.chopping_block).
+const CHOP_AT := Vector3(-0.25, 0.62, -0.48)
 ## Sat this long, a dozy man in the dark may nod off; he sleeps this long if
 ## nothing wakes him; asleep he hears this share of what he would awake.
 const DOZE_AFTER := Vector2(6.0, 12.0)
@@ -101,6 +104,13 @@ const MUTTER_EVERY := Vector2(45.0, 110.0)
 const VISIT_RANGE := 12.0
 ## Relit after a fight, this long after.
 const RELIGHT := 3.0
+## The axe through his right fist near the end of its haft (hand bone space,
+## as Humanoid.FIST_R), its head out of the little finger's side and its edge
+## the way his knuckles go: his chop (TreeChopping) brings it down from over
+## his head onto the log on the block before him.
+const AXE_GRIP := Transform3D(Basis(Vector3(-1, 0, 0), Vector3(0, 0, -1), Vector3(0, -1, 0)), Vector3(-0.03, 0.08, 0.0))
+## Bread in the palm of his left hand, along his fist.
+const BREAD_GRIP := Transform3D(Basis.IDENTITY, Vector3(0.035, 0.07, 0.03))
 
 var guard: CharacterBody3D
 ## His leanings (habit -> pull), his fidgets (fidget -> pull), his quirk.
@@ -943,12 +953,12 @@ func _unsheathe() -> void:
 
 
 func _take_bread() -> void:
-	_hold_thing(&"hand_l", _bread(), Transform3D(Basis.IDENTITY, Vector3(0.0, 0.08, 0.04)))
+	_hold_thing(&"hand_l", _bread(), BREAD_GRIP)
 
 
 func _take_axe() -> void:
 	_sheathe()
-	_hold_thing(&"hand_r", _axe(), Transform3D(Basis.IDENTITY, Vector3(0.0, 0.1, 0.0)))
+	_hold_thing(&"hand_r", _axe(), AXE_GRIP)
 
 
 ## Something put in his hand (on `bone`), until he lets go of it.
@@ -973,7 +983,7 @@ func _let_go() -> void:
 
 ## A blow of the axe on the log: heard well off, chips flying.
 func _chop() -> void:
-	var at: Vector3 = guard.global_position + guard.global_basis * Vector3(0.0, 0.5, -0.7)
+	var at: Vector3 = guard.global_position + guard.global_basis * CHOP_AT
 	Sfx.play(guard, &"thud_wood", at, 2.0, randf_range(0.9, 1.1))
 	Fx.dust(guard, at, Vector3.UP, 0.35, "wood")
 	SoundBus.emit_sound(at, CHOP_DB, guard, &"chop")
