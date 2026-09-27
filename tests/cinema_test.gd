@@ -415,7 +415,33 @@ func _vantages() -> void:
 	var got5 := CineVantage.best(get_tree(), [man5], &"long", Vector3.ZERO, space)
 	_check("V5 a man shut in by four walls has no place to be watched from", got5 == Vector3.INF, "chose %s" % [got5])
 
-	for m in [man1, man2, man3, man4, man5]:
+	# V6 a place inside a wall (a ray from inside it sees out) is never taken
+	var man6 := _man(Vector3(900, 0, 0), 0.0)
+	var buried := _marker(Vector3(918, 1.6, 0))
+	var clear6 := _marker(Vector3(882, 1.6, 0))
+	dressing.append(Props.block(self, Vector3(918, 2.0, 0), Vector3(2, 4, 2)))
+	await _frames(3)
+	var got6 := CineVantage.best(get_tree(), [man6], &"long", Vector3.ZERO, space)
+	_check("V6 a place inside a wall is never chosen, however well it seems to see", got6.distance_to(clear6.global_position) < 0.1,
+		"chose %s (inside the wall at %s)" % [got6, buried.global_position])
+	buried.queue_free()
+	clear6.queue_free()
+
+	# V7 a frame walled in close on both sides is not open; out in the yard it is
+	var man7 := _man(Vector3(960, 0, 0), 0.0)
+	dressing.append(Props.block(self, Vector3(960, 2.0, 3.6), Vector3(12, 4, 0.3)))
+	dressing.append(Props.block(self, Vector3(960, 2.0, -3.6), Vector3(12, 4, 0.3)))
+	dressing.append(Props.block(self, Vector3(957, 2.0, 0.6), Vector3(8, 4, 0.2)))
+	dressing.append(Props.block(self, Vector3(957, 2.0, -0.6), Vector3(8, 4, 0.2)))
+	await _frames(3)
+	var head7 := CineShot.head_of(man7)
+	var corridor: bool = CineVantage.open(space, Vector3(957, 1.6, 0), head7, 40.0, 16.0 / 9.0, [])
+	var yard: bool = CineVantage.open(space, Vector3(960, 1.6, 20), CineShot.head_of(_man(Vector3(960, 0, 17), 0.0)), 40.0, 16.0 / 9.0, [])
+	var inside: bool = CineVantage.clear(space, Vector3(957, 2.0, 0.6))
+	_check("V7 a frame walled in on both sides is not open, one in the open is; a place in a wall is not clear",
+		not corridor and yard and not inside, "corridor open %s, yard open %s, in the wall clear %s" % [corridor, yard, inside])
+
+	for m in [man1, man2, man3, man4, man5, man6, man7]:
 		m.queue_free()
 
 	for d in dressing:
@@ -833,6 +859,7 @@ func _drama() -> void:
 
 	# E11 no jump cuts
 	var jumps := 0
+	var jumped := []
 	var centre11 := Vector3(801.5, 1.6, 0)
 
 	for i in range(1, shots.size()):
@@ -847,8 +874,9 @@ func _drama() -> void:
 
 			if rad_to_deg(u.angle_to(v)) < 30.0:
 				jumps += 1
+				jumped.append([p["kind"], p["cause"], p["subjects"].size(), q["kind"], q["cause"], q["subjects"].size(), roundi(rad_to_deg(u.angle_to(v)))])
 
-	_check("E11 no two shots in a row of one size from within 30 deg", jumps == 0, "%d jump cuts in %d shots" % [jumps, shots.size()])
+	_check("E11 no two shots in a row of one size from within 30 deg", jumps == 0, "%d jump cuts in %d shots %s" % [jumps, shots.size(), jumped])
 
 	# E12 a man stirred to searching: three cuts straight in on him
 	await _real(2.0)

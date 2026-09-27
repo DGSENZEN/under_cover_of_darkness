@@ -3,9 +3,10 @@ extends RefCounted
 ## "cine_vantage", with metadata `lens` "long" or "medium" if they are only
 ## good for one), and, where none serves, places sampled on rings round the
 ## men. A place must see every man's head, stand on the side it is asked to,
-## and be about as far off as the lens wants; one with something half in
-## the way (a post, a crate's corner: watched from hiding) is better, and a
-## marked one better still.
+## and be about as far off as the lens wants, standing clear of any wall (a
+## ray from inside one sees out through it); one with something half in the
+## way (a post, a crate's corner: watched from hiding) is better, a marked one
+## better still, and one whose frame a wall fills worse.
 
 const CineShot := preload("res://scripts/Cinema/CineShot.gd")
 
@@ -20,6 +21,12 @@ const MARKER_REACH := 30.0
 const FOREGROUND := 0.8
 const FOREGROUND_BONUS := 0.3
 const MARKER_BONUS := 0.5
+## Nothing this near a camera (m).
+const CLEARANCE := 0.4
+## A frame walled in (open() false) counts this much against a place.
+const WALLED := 0.6
+## How much of the frame's half-width out its sight lines go.
+const FRAME_OUT := 2.0 / 3.0
 
 
 ## The best place to watch `men` from through `lens` (&"long", &"medium"), on
@@ -42,10 +49,13 @@ static func best(tree: SceneTree, men: Array, lens: StringName, side: Vector3, s
 		if side != Vector3.ZERO and flat.dot(side) <= 0.0:
 			continue
 
-		if not sees(space, at, live):
+		if not clear(space, at) or not sees(space, at, live):
 			continue
 
 		var score := maxf(1.0 - absf(flat.length() - ideal) / ideal, 0.0)
+
+		if not open(space, at, centre, rad_to_deg(2.0 * atan(3.0 / (2.0 * maxf(at.distance_to(centre), 1.0)))) * 1.5, 16.0 / 9.0, _rids(live)):
+			score -= WALLED
 
 		if _half_hidden(space, at, centre, live):
 			score += FOREGROUND_BONUS
@@ -76,6 +86,47 @@ static func sees(space: PhysicsDirectSpaceState3D, at: Vector3, men: Array) -> b
 			return false
 
 	return true
+
+
+## Whether a camera at `at` stands clear of every wall (nothing within
+## CLEARANCE).
+static func clear(space: PhysicsDirectSpaceState3D, at: Vector3) -> bool:
+	var query := PhysicsShapeQueryParameters3D.new()
+	var ball := SphereShape3D.new()
+	ball.radius = CLEARANCE
+	query.shape = ball
+	query.transform = Transform3D(Basis.IDENTITY, at)
+	query.collision_mask = 1
+	return space.intersect_shape(query, 1).is_empty()
+
+
+## Whether the frame from `at` onto `head` (through `fov`, `aspect`) is open:
+## of four sight lines two thirds out across it (left, right, up, down) at
+## his depth, no more than one meets a wall nearer than halfway to him.
+static func open(space: PhysicsDirectSpaceState3D, at: Vector3, head: Vector3, fov: float, aspect: float, exclude: Array[RID]) -> bool:
+	var view := head - at
+	var distance := view.length()
+
+	if distance < 0.1:
+		return false
+
+	var forward := view / distance
+	var right := forward.cross(Vector3.UP)
+	right = right.normalized() if right.length() > 0.01 else Vector3.RIGHT
+	var up := right.cross(forward).normalized()
+	var half_v := tan(deg_to_rad(fov) * 0.5) * distance * FRAME_OUT
+	var half_h := half_v * aspect
+	var walled := 0
+
+	for point in [head + right * half_h, head - right * half_h, head + up * half_v, head - up * half_v]:
+		var query := PhysicsRayQueryParameters3D.create(at, point, 1, exclude)
+		query.collide_with_areas = false
+		var hit := space.intersect_ray(query)
+
+		if not hit.is_empty() and at.distance_to(hit["position"]) < distance * 0.5:
+			walled += 1
+
+	return walled <= 1
 
 
 ## [place, marked], markers first.

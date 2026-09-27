@@ -462,7 +462,7 @@ func _observe_plan(kind: StringName, men: Array, space: PhysicsDirectSpaceState3
 			var angle := float(attempt) + turn * span * float(i) / float(ROVE_POINTS - 1)
 			var point := Vector3(centre.x, 0.0, centre.z) + start_dir.rotated(Vector3.UP, angle) * ROVE_RADIUS + Vector3.UP * ROVE_HEIGHT
 
-			if not CineVantage.sees(space, point, men):
+			if not CineVantage.clear(space, point) or not CineVantage.sees(space, point, men):
 				clear = false
 				break
 
@@ -696,7 +696,7 @@ func _axial_clear(man: Node3D, from: Vector3) -> bool:
 	for step in 3:
 		var framing := CineShot.frame(&"axial", [man], {"from": from, "step": step, "aspect": _aspect()})
 
-		if not CineVantage.sees(space, framing["position"], [man]):
+		if not CineVantage.clear(space, framing["position"]) or not CineVantage.sees(space, framing["position"], [man]):
 			return false
 
 	return true
@@ -753,33 +753,47 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 	var chosen: Array = []
 	var space := _camera.get_world_3d().direct_space_state
 
-	for option in options:
-		var men: Array = (option[1] as Array).filter(_valid)
+	# Every option as it comes first; only then a single man taken from
+	# further round him (on the same side of the line), for when those are
+	# walled in: a new size before a new angle on the same size.
+	for turn in [0.0, 30.0, -30.0, 60.0, -60.0, 120.0, -120.0]:
+		for option in options:
+			var men: Array = (option[1] as Array).filter(_valid)
 
-		if men.is_empty():
-			continue
+			if men.is_empty() or (turn != 0.0 and not (option[0] in [&"close", &"medium", &"reaction"] and men.size() == 1)):
+				continue
 
-		var context: Dictionary = (option[2] as Dictionary).duplicate() if option.size() > 2 else {}
-		if not context.has("side"):
-			context["side"] = side
+			var context: Dictionary = (option[2] as Dictionary).duplicate() if option.size() > 2 else {}
 
-		context["aspect"] = _aspect()
-		var framing := CineShot.frame(option[0], men, context)
+			if not context.has("side"):
+				context["side"] = side
 
-		if not CineVantage.sees(space, framing["position"], [men[0]]):
-			continue
+			context["aspect"] = _aspect()
+			context["turn"] = turn
+			var framing := CineShot.frame(option[0], men, context)
+			var at: Vector3 = framing["position"]
+			var line_side: Vector3 = context["side"]
 
-		if chosen.is_empty():
-			chosen = [option[0], men, context]
+			if turn != 0.0 and line_side != Vector3.ZERO and (at - CineShot.head_of(men[0])).dot(line_side) < 0.0:
+				continue
 
-		if new_size and not _shot.is_empty() and framing["size"] == _shot.get("size"):
-			continue
+			if not CineVantage.clear(space, at) or not CineVantage.sees(space, at, [men[0]]):
+				continue
 
-		if _jump_cut({"how": &"cut", "size": framing["size"], "position": framing["position"]}):
-			continue
+			if not CineVantage.open(space, at, framing["subject"], float(framing["fov"]), _aspect(), _rids_of(men)):
+				continue
 
-		_start(option[0], men, cause, how, context, length)
-		return
+			if chosen.is_empty():
+				chosen = [option[0], men, context]
+
+			if new_size and not _shot.is_empty() and framing["size"] == _shot.get("size"):
+				continue
+
+			if _jump_cut({"how": &"cut", "size": framing["size"], "position": at}):
+				continue
+
+			_start(option[0], men, cause, how, context, length)
+			return
 
 	if not chosen.is_empty():
 		_start(chosen[0], chosen[1], cause, how, chosen[2], length)
@@ -802,7 +816,7 @@ func _face_off_shot(pair: Array) -> void:
 	var from := centre + side * FACE_OFF_OFF
 	var space := _camera.get_world_3d().direct_space_state
 
-	if not CineVantage.sees(space, from, pair):
+	if not CineVantage.clear(space, from) or not CineVantage.sees(space, from, pair) or not CineVantage.open(space, from, centre, 28.0, _aspect(), _rids_of(pair)):
 		from = CineVantage.best(get_tree(), pair, &"long", side, space)
 
 	if from == Vector3.INF:
@@ -1022,6 +1036,16 @@ func _relevant(data: Dictionary) -> bool:
 				return true
 
 	return false
+
+
+func _rids_of(men: Array) -> Array[RID]:
+	var rids: Array[RID] = []
+
+	for m in men:
+		if m is CollisionObject3D and is_instance_valid(m):
+			rids.append((m as CollisionObject3D).get_rid())
+
+	return rids
 
 
 func _aspect() -> float:

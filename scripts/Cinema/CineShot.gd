@@ -25,7 +25,8 @@ extends RefCounted
 ##
 ## The context: `aspect` (width over height, 16:9 if not given); `side` (off
 ## the line between men[0] and men[1], toward the camera); `from` (a vantage);
-## `step` (axial); `target` (insert); `place` (where to look with nobody).
+## `step` (axial); `target` (insert); `place` (where to look with nobody);
+## `turn` (deg: a single man's shot taken further round him).
 
 ## Where a man's head is, by what he is doing, over his feet (times his size).
 const HEAD_LYING := 0.35
@@ -65,14 +66,14 @@ static func frame(kind: StringName, men: Array, context: Dictionary) -> Dictiona
 
 	match kind:
 		&"close", &"reaction":
-			return _single(kind, man, head, CLOSE_HEIGHT, NORMAL, &"close", side, aspect)
+			return _single(kind, man, head, CLOSE_HEIGHT, NORMAL, &"close", side, aspect, float(context.get("turn", 0.0)))
 		&"medium", &"roving":
 			var from: Variant = context.get("from")
 
 			if kind == &"roving" and from is Vector3:
 				return _from(kind, men, from, NORMAL, MEDIUM_HEIGHT, aspect, &"medium")
 
-			return _single(kind, man, head, MEDIUM_HEIGHT, NORMAL, &"medium", side, aspect)
+			return _single(kind, man, head, MEDIUM_HEIGHT, NORMAL, &"medium", side, aspect, float(context.get("turn", 0.0)))
 		&"two":
 			return _two(men, side, aspect)
 		&"over_shoulder":
@@ -166,7 +167,7 @@ static func centre_of(men: Array) -> Vector3:
 
 ## One man, from three-quarters round his front (on `side` if given), far
 ## enough for `height` of him through `fov`.
-static func _single(kind: StringName, man: Node3D, head: Vector3, height: float, fov: float, size: StringName, side: Vector3, aspect: float) -> Dictionary:
+static func _single(kind: StringName, man: Node3D, head: Vector3, height: float, fov: float, size: StringName, side: Vector3, aspect: float, turn := 0.0) -> Dictionary:
 	var ahead := facing(man)
 	var round := ahead.rotated(Vector3.UP, deg_to_rad(THREE_QUARTER))
 
@@ -178,6 +179,9 @@ static func _single(kind: StringName, man: Node3D, head: Vector3, height: float,
 	if side != Vector3.ZERO and round.dot(side) <= 0.0:
 		round = (side.normalized() + ahead * 0.3).normalized()
 
+	# Turned further round him (context.turn, deg: another angle on him when
+	# this one is walled in).
+	round = round.rotated(Vector3.UP, deg_to_rad(turn))
 	var position := head + round * _distance(height, fov)
 	var look := _composed(position, head, ahead, fov, aspect)
 	return _result(kind, size, position, look, fov, head, false)

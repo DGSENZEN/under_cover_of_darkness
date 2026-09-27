@@ -158,11 +158,9 @@ func _ready() -> void:
 	GuardScript.randomize_on = true
 	_night()
 	_overview()
-	var reporting := Array(OS.get_cmdline_user_args()).any(func(arg): return String(arg).begins_with("--fps-report="))
-
 	# The director is there when the showcase says it is ready; it begins
 	# once whoever waits for that has heard it.
-	if run_show and not reporting and ResourceLoader.exists(STORY):
+	if run_show and ResourceLoader.exists(STORY):
 		director = DirectorScript.new()
 		director.read_args(OS.get_cmdline_user_args())
 		add_child(director)
@@ -198,6 +196,11 @@ func _ready() -> void:
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--fps-report="):
+			# Measured with the show running: the night as it is filmed (the
+			# Cinema camera, its focus and all).
+			if director != null:
+				director.run()
+
 			_fps_report(float(arg.trim_prefix("--fps-report=")))
 			return
 
@@ -717,7 +720,7 @@ func _vantages() -> void:
 		mark.add_to_group(&"cine_vantage")
 
 
-## The frame rate over `seconds` of the yard at rest, then quit.
+## The frame rate over `seconds` of the night from its start, then quit.
 func _fps_report(seconds: float) -> void:
 	var samples: Array[float] = []
 
@@ -733,5 +736,5 @@ func _fps_report(seconds: float) -> void:
 		lowest = minf(lowest, s)
 
 	var counted := maxi(samples.size() - 2, 1)
-	print("[fps] %d guards: average %.1f, lowest %.1f over %d s" % [cast.size(), total / counted, lowest, counted])
+	print("[fps] %d guards, the show running: average %.1f, lowest %.1f over %d s" % [cast.size(), total / counted, lowest, counted])
 	get_tree().quit()
