@@ -610,20 +610,25 @@ func _k15() -> void:
 
 
 ## K31 (Review Focus 1) a bare-headed watchman's hat never cuts his hair or
-## head: every face and hair he may wear under it (his options doctored to
-## each pair), at rest, bowed (_bow 0.61) and looking up (-0.4) (he has no
-## overhead); edges through faces, as K22.
+## head: every face and hair he may roll (his options doctored to each
+## pair), at rest, bowed and looking up as far as the game turns his head
+## (GuardRig.HEAD_PITCH_MAX 0.7), each pose from rest (_bow turns from where
+## he is); edges through faces, as K22. Each pose must really lean his
+## head: forward bowed, back looking up.
 func _k31() -> void:
 	var cuts := 0
 	var pairs := 0
 	var where := []
+	var leaned := true
+	var roll: Dictionary = EXPECT[&"watchman"].roll
 
-	for face in ["young", "weathered", "heavy", "old"]:
-		for style in ["parted", "buzzed", "tied"]:
+	for face in roll.faces:
+		for style in roll.hair:
 			_doctor(&"watchman", {"faces": [face], "hair": [style], "beards": [], "headgear": [["kettlehat_bare"]]})
 			var g := await _guard(7)
 			g.set_physics_process(false)
 			var man = g._rig.man
+			var skeleton: Skeleton3D = man.skeleton
 			var hat := _worn(man, "kettlehat_bare")
 			var head := _worn(man, "Head_" + face)
 			var hair := _worn(man, "Hair_" + style)
@@ -631,15 +636,21 @@ func _k31() -> void:
 			if hat != null and head != null and hair != null:
 				pairs += 1
 				var hat_faces := _faces_of(hat, PackedInt32Array())
+				var rest_pose := _head_pose(skeleton)
 
-				for angle in [0.0, 0.61, -0.4]:
+				for angle in [0.0, 0.7, -0.7]:
+					_set_head_pose(skeleton, rest_pose)
+
 					if angle != 0.0:
 						_bow(man, angle)
+						var head_up := (skeleton.global_basis * skeleton.get_bone_global_pose(skeleton.find_bone(&"Head")).basis).y.normalized()
+						var ahead := head_up.dot(-man.global_basis.z.normalized())
+						leaned = leaned and (ahead > 0.3 if angle > 0.0 else ahead < -0.3)
 
-					var skinned_hat := _skinned(hat, man.skeleton)
+					var skinned_hat := _skinned(hat, skeleton)
 
 					for piece in [head, hair]:
-						var n := _cuts(skinned_hat, hat_faces, _skinned(piece, man.skeleton), _faces_of(piece, PackedInt32Array()))
+						var n := _cuts(skinned_hat, hat_faces, _skinned(piece, skeleton), _faces_of(piece, PackedInt32Array()))
 
 						if n > 0:
 							cuts += n
@@ -649,8 +660,8 @@ func _k31() -> void:
 			g.queue_free()
 			await _frames(1)
 
-	_check("K31 the bare kettle hat never cuts his hair or head", cuts == 0 and pairs == 12,
-		"%d cuts over %d face-hair pairs %s" % [cuts, pairs, where])
+	_check("K31 the bare kettle hat never cuts his hair or head, bowed or looking up", cuts == 0 and leaned
+		and pairs == roll.faces.size() * roll.hair.size(), "%d cuts over %d face-hair pairs, leaned %s %s" % [cuts, pairs, leaned, where])
 
 
 ## K33 his hair and beard never cut what he wears over or round them:
