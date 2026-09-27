@@ -768,6 +768,81 @@ def case_faces():
     return messages
 
 
+def build_hair_into(folder):
+    """Every hair and beard of both bodies built into `folder`, over the
+    committed heads (copied there first: hair is fitted over them):
+    {style: (points, bones)} with bones the set any vertex is weighted to."""
+    import shutil
+
+    import build
+
+    source = common.WARDROBE / "source"
+
+    for name in ("heads.blend", "heads_female.blend"):
+        shutil.copy(source / name, folder / name)
+
+    made = {}
+
+    for body in ("male", "female"):
+        fresh()
+        common.SOURCE, common.BACKUP = folder, folder / "backup"
+
+        try:
+            build.build_hair(True, body)
+        finally:
+            common.SOURCE, common.BACKUP = source, source / "backup"
+
+        for obj in [o for o in bpy.data.objects if o.name.startswith("Hair_") and o.type == "MESH"]:
+            names = {g.index: g.name for g in obj.vertex_groups}
+            bones = {names[g.group] for v in obj.data.vertices for g in v.groups if g.weight > 1e-4}
+            made[obj.name[len("Hair_"):]] = ([v.co.copy() for v in obj.data.vertices], bones)
+
+    fresh()
+    return made
+
+
+def case_beards_and_tails():
+    """Batch 3's hair (§8): the short beard (his jaw and chin, under his
+    mouth: no cheeks, no moustache), the moustache (his upper lip only),
+    tied hair (the parted cut and a tail down the back of his neck) and her
+    tail (her long hair cut at her nape, tied back): each on his Head and
+    neck alone, the tails clear of what they hang over (above the collars:
+    a man's ends over z 1.52, hers over 1.46)."""
+    import tempfile
+    from pathlib import Path
+
+    import recipes
+
+    missing = [s for s in ("short", "moustache", "tied", "tail") if s not in recipes.HAIR]
+
+    if missing:
+        return ["no recipe for %s" % missing]
+
+    hair = build_hair_into(Path(tempfile.mkdtemp(prefix="wardrobe_beards_")))
+    messages = []
+    short, moustache, tied, tail = (hair[s][0] for s in ("short", "moustache", "tied", "tail"))
+
+    if max(p.z for p in short) > 1.62 or min(p.z for p in short) > 1.56:
+        messages.append("short beard z %.3f..%.3f (want under his mouth, to his chin)" % (min(p.z for p in short), max(p.z for p in short)))
+
+    if not all(abs(p.x) <= 0.045 and 1.62 <= p.z <= 1.65 and p.y <= -0.07 for p in moustache):
+        messages.append("moustache off his upper lip: x %.3f z %.3f..%.3f y %.3f" % (max(abs(p.x) for p in moustache),
+                        min(p.z for p in moustache), max(p.z for p in moustache), max(p.y for p in moustache)))
+
+    if not 1.52 <= min(p.z for p in tied) <= 1.58:
+        messages.append("tied hair's tail ends at z %.3f (want 1.52-1.58)" % min(p.z for p in tied))
+
+    under_nape = [p for p in tail if p.z < 1.57]
+
+    if not under_nape or any(abs(p.x) > 0.03 for p in under_nape) or min(p.z for p in tail) < 1.46:
+        messages.append("her tail: %d points under her nape, widest |x| %.3f, lowest %.3f" % (
+            len(under_nape), max((abs(p.x) for p in under_nape), default=0), min(p.z for p in tail)))
+
+    messages += ["%s on %s" % (s, sorted(hair[s][1])) for s in ("short", "moustache", "tied", "tail")
+                 if not hair[s][1] <= {"Head", "neck_01"}]
+    return messages
+
+
 def case_foreign_parts():
     """A kind whose options name a part of the other body is refused
     (check.foreign_parts); the heaviest combination counts "" as none and
@@ -864,7 +939,7 @@ def case_skin():
 CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, "watchman": case_watchman,
          "hood": case_hood, "launcher": case_launcher, "bodies": case_bodies, "male_parts": case_male_parts,
          "types2": case_types2, "skin": case_skin, "brute_arms": case_brute_arms, "foreign_parts": case_foreign_parts,
-         "faces": case_faces}
+         "faces": case_faces, "beards_and_tails": case_beards_and_tails}
 
 
 def main():

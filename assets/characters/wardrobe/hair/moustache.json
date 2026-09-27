@@ -1,0 +1,11 @@
+{
+ "style": "moustache",
+ "kind": "beard",
+ "body": "male",
+ "triangles": 36,
+ "dye_base": [
+  0.502,
+  0.502,
+  0.502
+ ]
+}

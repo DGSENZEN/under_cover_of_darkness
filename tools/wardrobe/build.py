@@ -1928,8 +1928,10 @@ def build_hair(force, body="male"):
         h = recipes.HAIR[style]
         obj = quaternius_style(h["from"], "Hair_%s" % style)
         common.weld(obj)
+        cut_style(obj, h)
+        tail = h.get("tail")
         decimate = obj.modifiers.new("Decimate", "DECIMATE")
-        decimate.ratio = min(1.0, h["tris"] / max(common.tri_count(obj), 1))
+        decimate.ratio = min(1.0, (h["tris"] - (tail_triangles(tail) if tail else 0)) / max(common.tri_count(obj), 1))
         decimate.use_collapse_triangulate = True
         decimate.use_symmetry = True
         decimate.symmetry_axis = "X"
@@ -1947,6 +1949,10 @@ def build_hair(force, body="male"):
         enclose(bm, under, centre, h["clearance"] + 0.001, from_inside=True)
         bm.to_mesh(obj.data)
         bm.free()
+
+        if tail:
+            add_tail(obj, tail, heads, h["clearance"])
+
         common.set_faces(obj, 1, recipes.FABRICS.index("hair"), 0.0, False, True, HAIR_GREY)
         weigh_part(obj, reference)
         ride(obj, 1e9, ("Head", "neck_01"))
@@ -1959,6 +1965,70 @@ def build_hair(force, body="male"):
         print("wardrobe: %s %s %d triangles over %d head vertices" % (h["kind"], style, common.tri_count(obj), len(under)))
 
     finish(path, made, reference)
+
+
+def cut_style(obj, h):
+    """A Quaternius style cut down to the part of it its recipe keeps: faces
+    whose centre lies under `trim.below` dropped; with `keep.box` (two
+    corners), only faces whose centre lies inside it kept."""
+    trim, keep = h.get("trim"), h.get("keep")
+
+    if not trim and not keep:
+        return
+
+    lo, hi = (Vector(keep["box"][0]), Vector(keep["box"][1])) if keep else (None, None)
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    doomed = []
+
+    for face in bm.faces:
+        c = face.calc_center_median()
+
+        if (trim and c.z < trim["below"]) or (keep and not all(lo[i] <= c[i] <= hi[i] for i in range(3))):
+            doomed.append(face)
+
+    bmesh.ops.delete(bm, geom=doomed, context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    bm.to_mesh(obj.data)
+    bm.free()
+
+
+TAIL_RINGS = 5
+
+
+def tail_triangles(tail):
+    """A tail's triangles: `sides` quads between each of its rings, and a
+    cone to its tip."""
+    return tail["sides"] * 2 * (TAIL_RINGS - 1) + tail["sides"]
+
+
+def add_tail(obj, tail, heads, clearance):
+    """Hair tied back: a tail `length` long, `width` across at its top and
+    half that at its tip, of `sides` round, from the back of the head at
+    (0, at[0], at[1]) down the back of the neck (leaning a little back),
+    each ring moved back until it clears every head of the body (`heads`,
+    their points) by `clearance`; joined into `obj`."""
+    down = Vector((0.0, 0.15, -1.0)).normalized()
+    side = Vector((1.0, 0.0, 0.0))
+    back = down.cross(side).normalized()
+    start = Vector((0.0, tail["at"][0], tail["at"][1]))
+    rings = []
+
+    for i in range(TAIL_RINGS):
+        t = i / (TAIL_RINGS - 1)
+        centre = start + down * tail["length"] * t
+        radius = tail["width"] * 0.5 * (1.0 - 0.5 * t)
+        # The back of every head at this height, within the tail's width.
+        behind = max((p.y for p in heads if abs(p.z - centre.z) <= 0.012 and abs(p.x) <= radius + 0.01), default=centre.y)
+        centre.y = max(centre.y, behind + radius + clearance)
+        rings.append([centre + (side * math.cos(a) + back * math.sin(a)) * radius
+                      for a in (2.0 * math.pi * k / tail["sides"] for k in range(tail["sides"]))])
+
+    tip = rings[-1][0].lerp(rings[-1][tail["sides"] // 2], 0.5) + down * tail["width"] * 0.4
+    piece = common.loft("%s_tail" % obj.name, rings, closed=True, cap=tip)
+    outward(piece)
+    common.select_only([obj, piece], active=obj)
+    bpy.ops.object.join()
 
 
 # The grey hair is baked in (the game tints it: its JSON's dye_base).

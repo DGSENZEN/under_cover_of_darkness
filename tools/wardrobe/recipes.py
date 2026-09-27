@@ -700,4 +700,29 @@ HAIR = {
     "full": {"from": "assets/characters/hair/Hair_Beard.gltf", "body": "male", "kind": "beard", "tris": 120,
              "clearance": 0.003,
              "fit_rays": JAW},
+    # Batch 3. The Quaternius pack has no short beard, moustache or tied
+    # hair: they are cut from its styles (`keep`, `trim`) and tied (`tail`).
+    # The short beard: the full beard under his mouth (his jaw and chin; it
+    # ends at the chin as the full one does, 1.55: its shortness is no
+    # cheeks and no moustache), close to his skin.
+    "short": {"from": "assets/characters/hair/Hair_Beard.gltf", "body": "male", "kind": "beard", "tris": 70,
+              "keep": {"box": [[-0.2, -0.2, 1.50], [0.2, 0.2, 1.612]]}, "clearance": 0.002, "fit_rays": JAW},
+    # His upper lip alone (his mouth's line is at z 1.623, bake.weather; his
+    # nose's base above 1.645); the check's rays aimed there from his head's
+    # middle (about 36 degrees down).
+    "moustache": {"from": "assets/characters/hair/Hair_Beard.gltf", "body": "male", "kind": "beard", "tris": 36,
+                  "keep": {"box": [[-0.035, -0.13, 1.624], [0.035, -0.075, 1.648]]}, "clearance": 0.002,
+                  "fit_rays": {"elevations": [-40, -36, -32], "azimuths": [-15, 0, 15]}},
+    # The parted cut tied back: a tail from the back of his hair (its back
+    # edge ends at z 1.66, y 0.1) down his neck, over the collars.
+    "tied": {"from": "assets/characters/hair/Hair_SimpleParted.gltf", "body": "male", "kind": "hair", "tris": 200,
+             "tail": {"length": 0.13, "width": 0.035, "sides": 6, "at": [0.095, 1.675]}, "clearance": 0.004,
+             "fit_rays": CROWN},
+    # Her hair pulled back tight (the female buzzed cap: z 1.60-1.77, its
+    # back edge at y 0.115) and tied in a short tail down her neck, clear of
+    # her half-cape's top. (Her long hair cut under her ears left spiky
+    # locks and a jagged edge where it was cut: batch 3's look.)
+    "tail": {"from": "assets/characters/hair/Hair_BuzzedFemale.gltf", "body": "female", "kind": "hair", "tris": 200,
+             "tail": {"length": 0.14, "width": 0.04, "sides": 6, "at": [0.1, 1.645]},
+             "clearance": 0.004, "fit_rays": CROWN},
 }
