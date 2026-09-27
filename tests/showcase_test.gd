@@ -375,6 +375,31 @@ func _run() -> void:
 	_check("D18 H hides every subtitle, mark and title (and shows them again)",
 		hidden18 and none18 and overlay.visible,
 		"hidden %s, nothing shown %s, back %s" % [hidden18, none18, overlay.visible])
+
+	# D36 the act's title across the middle of the screen, the name card at
+	#     the bottom, a toast at the top: on the screen at any size of window
+	overlay.name_card(osric16)
+	overlay.toast("Speed x2")
+	var window36 := get_tree().root.size
+	var off36: Array[String] = []
+
+	for size36 in [Vector2i(1152, 648), Vector2i(3840, 2160), Vector2i(1280, 1024), Vector2i(2560, 1080)]:
+		get_tree().root.size = size36
+		await _frames(3)
+		var view36: Rect2 = get_viewport().get_visible_rect()
+		var rects36: Dictionary = overlay.label_rects()
+		var title36: Rect2 = rects36["title"]
+		var card36: Rect2 = rects36["card"]
+		var toast36: Rect2 = rects36["toast"]
+
+		if not (view36.encloses(title36) and view36.encloses(card36) and view36.encloses(toast36)
+				and absf(title36.get_center().y - view36.get_center().y) < 2.0 and card36.end.y > view36.size.y * 0.85 and toast36.position.y < view36.size.y * 0.15):
+			off36.append("%s: title %s card %s toast %s in %s" % [size36, title36, card36, toast36, view36.size])
+
+	get_tree().root.size = window36
+	await _frames(2)
+	_check("D36 the title across the middle, the name card at the bottom, a toast at the top, on the screen at any size of window",
+		off36.is_empty(), "; ".join(off36) if not off36.is_empty() else "4 sizes")
 	overlay.queue_free()
 	eye.queue_free()
 	await _unload(map16)

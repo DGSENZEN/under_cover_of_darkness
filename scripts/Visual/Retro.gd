@@ -154,15 +154,16 @@ func _fit() -> void:
 
 	var on := enabled and virtual_height > 0
 	_rect.visible = on
-	var window := Vector2(get_viewport().get_visible_rect().size)
 	var cells := virtual_size()
 	_material.set_shader_parameter("virtual_size", cells)
 	_material.set_shader_parameter("levels", color_levels)
 	_material.set_shader_parameter("dither_strength", dither)
 
 	# Two rendered pixels to each cell is plenty: the rest would be averaged
-	# away.
+	# away. Pixels of the window itself: the visible rect is in the HUD's
+	# units, scaled with the window (project stretch, canvas_items).
 	var root := get_tree().root
+	var window := Vector2(root.size)
 	var scale := 1.0
 
 	if on and auto_render_scale and window.y > 0.0:

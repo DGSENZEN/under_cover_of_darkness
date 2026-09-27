@@ -554,6 +554,8 @@ func _ui_checks() -> void:
 		"offered '%s', lit %s light %s, then '%s'" % [offered, torch.lit, torch.light.visible, after])
 	torch.queue_free()
 
+	await _fit_checks()
+
 	# U9 caught: the screen fades to black
 	player.take_damage(1000.0, null)
 	await _frames(90)
@@ -565,6 +567,97 @@ func _ui_checks() -> void:
 	hud._fade.color.a = 0.0
 	player.hand.set_suppressed(false)
 	chest_b.queue_free()
+
+
+## U15 the HUD at any size of window: small, square, wide, tall, 4K. The 2D
+## is scaled with the window (project stretch, from 1152x648), and every
+## piece is on the screen: the prompt centred under the crosshair, a long
+## line of subtitle wrapped over the caption, the caption over the
+## lightgem, none of them on another; the pause screen in the middle, and
+## nothing else showing through it.
+func _fit_checks() -> void:
+	var hud: Node = player.hud
+	var torch: Node3D = TorchScript.new()
+	torch.can_douse = true
+	add_child(torch)
+	torch.global_position = Vector3(20.0, 2.2, 4.6)
+	await _place(Vector3(20.0, 1.05, 5.9), 0.0)
+	_aim(torch.global_position)
+	var speaker := Node3D.new()
+	add_child(speaker)
+	speaker.global_position = player.global_position
+	var legacy: bool = bool(player.get("legacy_feel"))
+	player.set("legacy_feel", true)
+	var window := get_tree().root.size
+	var failures: Array[String] = []
+	var sizes := [Vector2i(800, 600), Vector2i(1280, 1024), Vector2i(1920, 1080), Vector2i(2560, 1080), Vector2i(3840, 2160), Vector2i(1080, 1920)]
+
+	for size in sizes:
+		get_tree().root.size = size
+		hud._on_bark("Did you hear that? Something moved down by the old well, past the cart and the barrels. Go and have a look, and take a light.", speaker)
+		hud.show_caption("Water flask (3)", 30.0)
+		hud._shield_timer = 30.0
+		hud._death.text = "You were caught."
+		await _frames(6)
+		hud._death.modulate.a = 1.0
+		await get_tree().process_frame
+		var view: Rect2 = get_viewport().get_visible_rect()
+		var rects: Dictionary = hud.layout_rects()
+		var scale: float = get_tree().root.get_final_transform().x.x
+		var want := minf(size.x / 1152.0, size.y / 648.0)
+
+		if absf(scale - want) > 0.01 or view.size.x < 1151.0 or view.size.y < 647.0:
+			failures.append("%s scaled %.3f (want %.3f), view %s" % [size, scale, want, view.size])
+
+		for key in ["prompts", "subtitles", "caption", "gem", "legacy", "death", "shields"]:
+			if not rects.has(key):
+				failures.append("%s %s not shown" % [size, key])
+
+		for key in rects:
+			if not view.grow(0.5).encloses(rects[key]):
+				failures.append("%s %s off the screen: %s in %s" % [size, key, rects[key], view.size])
+
+		for pair in [["subtitles", "caption"], ["subtitles", "gem"], ["caption", "gem"], ["prompts", "subtitles"], ["prompts", "crosshair"]]:
+			if rects.has(pair[0]) and rects.has(pair[1]) and (rects[pair[0]] as Rect2).intersects(rects[pair[1]]):
+				failures.append("%s %s over %s" % [size, pair[0], pair[1]])
+
+		if rects.has("prompts") and absf((rects["prompts"] as Rect2).get_center().x - view.get_center().x) > 2.0:
+			failures.append("%s prompts not centred: %s" % [size, rects["prompts"]])
+
+		if rects.has("subtitles") and (rects["subtitles"] as Rect2).size.x > view.size.x * hud.SUBTITLE_WIDTH + 40.0:
+			failures.append("%s subtitles not wrapped: %s" % [size, rects["subtitles"]])
+
+		# The pause screen, in the middle.
+		var esc := InputEventAction.new()
+		esc.action = &"ui_cancel"
+		esc.pressed = true
+		player._unhandled_input(esc)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var paused_rects: Dictionary = hud.layout_rects()
+		var column: Rect2 = paused_rects.get("pause", Rect2())
+
+		if column.size == Vector2.ZERO or not view.encloses(column) or column.get_center().distance_to(view.get_center()) > 2.0:
+			failures.append("%s pause screen at %s in %s" % [size, column, view.size])
+
+		# Nothing of the play HUD through it.
+		if paused_rects.size() != 1:
+			failures.append("%s shown under the pause screen: %s" % [size, paused_rects.keys()])
+
+		hud.resume()
+		await get_tree().process_frame
+
+	get_tree().root.size = window
+	player.set("legacy_feel", legacy)
+	hud._death.modulate.a = 0.0
+	hud._death.text = ""
+	hud._shield_timer = 0.0
+	hud.show_caption("", 0.0)
+	speaker.queue_free()
+	torch.queue_free()
+	await _frames(3)
+	_check("U15 at any size of window the HUD is scaled with it and all on the screen, the prompt centred, a long subtitle wrapped, nothing over anything (nor under the pause screen)",
+		failures.is_empty(), "; ".join(failures) if not failures.is_empty() else "%d sizes" % sizes.size())
 
 
 func _release_all() -> void:

@@ -43,7 +43,8 @@ func _run() -> void:
 
 	# R1 the screen: under the HUD, a square grid, the 3D drawn only as sharp
 	#    as the grid needs
-	var window := Vector2(get_viewport().get_visible_rect().size)
+	# The window's own pixels (the visible rect is in the HUD's scaled units).
+	var window := Vector2(get_tree().root.size)
 	var height_before: int = retro.virtual_height if retro != null else 0
 	var grid := Vector2.ZERO
 	var scale := 0.0
