@@ -67,6 +67,7 @@ func _run() -> void:
 	await _sounds()
 	await _switched()
 	await _maps()
+	await _gallery()
 
 
 # ---------------------------------------------------------------------------
@@ -1256,6 +1257,52 @@ func _maps() -> void:
 	_ground.collision_layer = 1
 	_check("L47 every torch in the six maps is a fixture (sconce, cresset, brazier, campfire...), none a bare flame",
 		bare_in.is_empty() and fixtures > 0, "fixtures %d, bare %s" % [fixtures, bare_in])
+
+
+## L48 the gallery shows every fixture lit; its L key's cycle puts them all
+## out, and three more bring them all back.
+func _gallery() -> void:
+	_ground.collision_layer = 0
+	await _frames(2)
+	var gallery: Node = load("res://maps/lights_gallery.tscn").instantiate()
+	add_child(gallery)
+	await _frames(180)
+	var wanted: Array[String] = []
+
+	for file in DirAccess.get_files_at("res://assets/props/lights/"):
+		if file.ends_with(".json") and file != "chain_link.json":
+			wanted.append(file.get_basename())
+
+	var found := {}
+	var fixtures: Array = []
+
+	for node in gallery.find_children("*", "", true, false):
+		if node.is_in_group(&"torches") and node.get("fixture") != null and node.fixture != &"":
+			fixtures.append(node)
+			found[String(node.fixture)] = true
+
+	var missing := wanted.filter(func(n): return not found.has(n))
+	var all_lit := not fixtures.is_empty() and fixtures.all(func(f): return f.is_lit())
+	var all_out := false
+	var lit_again := false
+
+	if gallery.has_method("cycle_lights"):
+		gallery.cycle_lights()
+		await _frames(30)
+		all_out = fixtures.all(func(f): return not is_instance_valid(f) or not f.is_lit())
+
+		for i in 3:
+			gallery.cycle_lights()
+			await _frames(30)
+
+		lit_again = fixtures.all(func(f): return not is_instance_valid(f) or f.is_lit())
+
+	_check("L48 the lights gallery has every fixture, all lit; one turn of its L key puts them out, three more light them again",
+		missing.is_empty() and all_lit and all_out and lit_again,
+		"%d fixtures, missing %s, lit %s, out %s, lit again %s" % [fixtures.size(), missing, all_lit, all_out, lit_again])
+	gallery.queue_free()
+	await _frames(10)
+	_ground.collision_layer = 1
 
 
 ## Whether `node` hangs from a Hanging (a lantern swinging from a fist).
