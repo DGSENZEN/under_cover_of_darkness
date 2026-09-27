@@ -364,6 +364,8 @@ var climb_volumes: Array[Area3D] = []
 ## The water you are in (WaterVolume), or null; the stroke count swimming.
 var water: Area3D = null
 var _strokes := 0.0
+## The waters the body is in (WaterVolume tells us as we go in and come out).
+var _water_volumes: Array[Area3D] = []
 
 ## Distance along a simulated rope where the hands are, or -1.
 var rope_param := -1.0
@@ -395,6 +397,14 @@ var _regrab_timer := 0.0
 var _climb_reattach_timer := 0.0
 var _failed_plan_cooldown := 0.0
 var _last_reject := ""
+## Scans that found nothing wait this long before looking again: holding jump
+## in the air, climbing toward a top, a chain looking for its next obstacle.
+const RESCAN_TIME := 0.05
+var _air_scan_timer := 0.0
+var _climb_scan_timer := 0.0
+var _chain_scan_timer := 0.0
+## The step-up's collision, reused every tick rather than made anew.
+var _step_blocked := KinematicCollision3D.new()
 
 var _chain_buffered := false
 var _chain_links := 0
@@ -423,6 +433,9 @@ var _floor_valid := true
 var _stepped_up_this_frame := false
 ## True on frames where the body is riding down a step edge.
 var _on_stairs := false
+## The stair magnet pulled the body down onto a tread it could not be set on:
+## the touchdown that follows is a step, not a landing.
+var _stair_pulled := false
 ## After a step up, the body holds its height until its centre has passed
 ## the riser. Otherwise the floor snap drags it back down onto the lower
 ## tread and it climbs the same step twice.
@@ -753,8 +766,14 @@ func _update_locomotion(delta: float) -> void:
 	# it, or when the debug overlay is showing it.
 	cached_profile = null
 
-	if forward_intent and (jump_pressed or air_hold or debug_traversal):
+	if forward_intent and (jump_pressed or (air_hold and _air_scan_timer <= 0.0) or debug_traversal):
 		cached_profile = scanner.scan(facing_direction, velocity, not grounded)
+
+		# Held in the air with nothing there: look again in a moment, not
+		# every tick.
+		if air_hold and not jump_pressed and cached_profile == null:
+			_air_scan_timer = RESCAN_TIME
+
 	var can_grab := (
 		_regrab_timer <= 0.0
 		and _failed_plan_cooldown <= 0.0
@@ -826,6 +845,7 @@ func _update_locomotion(delta: float) -> void:
 
 	if jumping:
 		_step_lock_timer = 0.0
+		_stair_pulled = false
 
 	# The lock ends once the capsule's centre has crossed the riser.
 	if _step_lock_timer > 0.0:
@@ -874,6 +894,13 @@ func _update_locomotion(delta: float) -> void:
 	# Landing on someone: combat may have a drop attack waiting.
 	if is_on_floor() and not grounded and combat != null:
 		combat.on_landed(fall_speed)
+
+	# Pulled down onto the next tread by the stair magnet: that is a step.
+	if is_on_floor() and _stair_pulled:
+		_stair_pulled = false
+
+		if not grounded and fall_speed < stair_magnet_speed + 2.0:
+			_on_stairs = true
 
 	if is_on_floor() and not grounded and fall_speed > 3.0 and not _on_stairs:
 		if legacy_feel:
@@ -955,6 +982,9 @@ func _update_timers(delta: float) -> void:
 	_regrab_timer = maxf(_regrab_timer - delta, 0.0)
 	_climb_reattach_timer = maxf(_climb_reattach_timer - delta, 0.0)
 	_failed_plan_cooldown = maxf(_failed_plan_cooldown - delta, 0.0)
+	_air_scan_timer = maxf(_air_scan_timer - delta, 0.0)
+	_climb_scan_timer = maxf(_climb_scan_timer - delta, 0.0)
+	_chain_scan_timer = maxf(_chain_scan_timer - delta, 0.0)
 
 	# A held jump may trigger one traversal. The next needs a fresh press.
 	if not Input.is_action_pressed("jump"):
@@ -1105,6 +1135,8 @@ func _apply_vertical_movement(delta: float) -> void:
 	if Input.is_action_just_released("jump") and velocity.y > 0.0 and _jump_cut_allowed:
 		velocity.y *= jump_cut_multiplier
 		_jump_cut_allowed = false
+		# A shorter jump lands short of where the assist aimed it.
+		_assist_active = false
 
 	if _on_floor_now() and velocity.y <= 0.0:
 		# A small downward velocity helps maintain floor contact.
@@ -1413,6 +1445,9 @@ func _die() -> void:
 		MoveState.MOVING:
 			current_move = null
 			movement_state = MoveState.LOCOMOTION
+		MoveState.SWIMMING:
+			# Nothing keeps a dead man afloat: he sinks.
+			movement_state = MoveState.LOCOMOTION
 
 	died.emit()
 
@@ -1451,7 +1486,7 @@ func _try_step_up(delta: float) -> void:
 
 	var forward := horizontal.normalized()
 	var motion := horizontal * delta
-	var blocked := KinematicCollision3D.new()
+	var blocked := _step_blocked
 
 	if not test_move(global_transform, motion, blocked):
 		return
@@ -1551,6 +1586,7 @@ func _try_step_down() -> void:
 		return
 
 	velocity.y = minf(velocity.y, -stair_magnet_speed)
+	_stair_pulled = true
 
 
 ## Remember how fast this staircase climbs, so the eyes can follow it at
@@ -1717,9 +1753,10 @@ func _update_jump_assist(wish_direction: Vector3, grounded: bool) -> void:
 	_assist_time += get_physics_process_delta_time()
 	var landed := grounded and (_assist_left_ground or _assist_time > 0.2)
 	var steering_away := wish_direction.length() > 0.3 and wish_direction.dot(_assist_direction) < 0.7
-	var cut_short := not Input.is_action_pressed("jump") and velocity.y > 0.0
 
-	if landed or steering_away or cut_short:
+	# (A jump cut short ends it where the cut happens: a buffered jump pressed
+	# and let go before landing is a full jump, held or not.)
+	if landed or steering_away:
 		_assist_active = false
 
 
@@ -1848,6 +1885,7 @@ func _start_move(move: TraversalMove, chained := false) -> void:
 		_move_started_sneaking = is_crouched
 
 	_chain_buffered = false
+	_chain_scan_timer = 0.0
 	_assist_active = false
 
 	current_move = move
@@ -1938,9 +1976,11 @@ func _update_move(delta: float) -> void:
 	if Input.is_action_just_pressed("jump"):
 		_chain_buffered = true
 
-	if _chain_buffered and s >= chain_window_start and _can_chain():
+	if _chain_buffered and s >= chain_window_start and _chain_scan_timer <= 0.0 and _can_chain():
 		if _try_chain():
 			return
+
+		_chain_scan_timer = RESCAN_TIME
 
 	if t >= 1.0:
 		_finish_move()
@@ -2053,6 +2093,13 @@ func _update_hang(delta: float) -> void:
 
 	if _hang_scan_timer <= 0.0 or Input.is_action_just_pressed("jump"):
 		_hang_scan_timer = 0.1
+
+		# The ledge may have gone from under the hands (a door swung open, a
+		# crate pushed off): then there is nothing to hold.
+		if not _lip_under_hands():
+			_drop_from_hang()
+			return
+
 		hang_target = _find_hang_target(wish_direction)
 
 	# Jump: leap to the target if there is one, otherwise climb onto the ledge.
@@ -2104,6 +2151,23 @@ func _update_hang(delta: float) -> void:
 
 	# Pushing into the wall lifts the eyes over the lip.
 	is_peeking = wish_direction.dot(-hang_normal) > 0.5
+
+
+## Something to hold where the hands are: a few rays down onto the lip, just
+## past the face and a little deeper.
+func _lip_under_hands() -> bool:
+	for depth in [0.04, scanner.top_probe_depth, 0.3]:
+		var hands: Vector3 = global_position - hang_normal * (_radius + planner.hang_gap + depth)
+		var lip := scanner.ray(
+			Vector3(hands.x, hang_lip_y + 0.27, hands.z),
+			Vector3(hands.x, hang_lip_y - 0.17, hands.z),
+			false
+		)
+
+		if not lip.is_empty():
+			return true
+
+	return false
 
 
 func _drop_from_hang() -> void:
@@ -2581,8 +2645,32 @@ func remove_climb_volume(volume: Area3D) -> void:
 	climb_volumes.erase(volume)
 
 	if current_climb == volume:
+		# Onto the next volume of the same ladder or wall, if you are in one:
+		# a ladder built of two volumes has no seam to fall through.
+		var next := _climb_handover(volume)
+
+		if next != null:
+			current_climb = next
+			return
+
 		# Swung or slid out of it: let go, keeping the motion.
 		_leave_climb(velocity)
+
+
+## Another volume you are in that carries on the flat climb in `volume`
+## (facing the same way), or null. Ropes are never handed over.
+func _climb_handover(volume: Area3D) -> Area3D:
+	if not is_instance_valid(volume) or volume.rope or volume.has_method("rope_point"):
+		return null
+
+	var normal: Vector3 = volume.get_climb_normal()
+
+	for other in climb_volumes:
+		if is_instance_valid(other) and not other.rope and not other.has_method("rope_point"):
+			if (other.get_climb_normal() as Vector3).dot(normal) > 0.85:
+				return other
+
+	return null
 
 
 func _is_carrying() -> bool:
@@ -2597,7 +2685,15 @@ func _is_carrying() -> bool:
 ## where you can stand again, you wade.
 func _update_water() -> void:
 	var feet := get_feet_position()
-	water = WaterScript.at(get_tree(), feet + Vector3.UP * 0.05, 0.3)
+	water = null
+
+	for i in range(_water_volumes.size() - 1, -1, -1):
+		var volume := _water_volumes[i]
+
+		if not is_instance_valid(volume):
+			_water_volumes.remove_at(i)
+		elif water == null and volume.holds(feet + Vector3.UP * 0.05, 0.3):
+			water = volume
 
 	if water == null:
 		if movement_state == MoveState.SWIMMING:
@@ -2614,12 +2710,23 @@ func _update_water() -> void:
 				_leave_swim()
 
 
+## Called by WaterVolume when the body goes in, and comes out.
+func add_water_volume(volume: Area3D) -> void:
+	if not _water_volumes.has(volume):
+		_water_volumes.append(volume)
+
+
+func remove_water_volume(volume: Area3D) -> void:
+	_water_volumes.erase(volume)
+
+
 func _enter_swim() -> void:
 	movement_state = MoveState.SWIMMING
 	_clear_ground_state()
 	current_climb = null
 
-	if is_crouched:
+	# Swimming is done standing, where there is room (a flooded culvert).
+	if is_crouched and _can_stand():
 		_set_crouched(false)
 
 	# Nothing held swims with you.
@@ -2654,6 +2761,9 @@ func wade_scale() -> float:
 ## crouch, up while you hold jump, and left alone you float up until your eyes
 ## are over the surface. Jump at a bank low enough, and you climb out.
 func _update_swim(delta: float) -> void:
+	if is_crouched and _can_stand():
+		_set_crouched(false)
+
 	var afloat_y: float = water.surface_y() + float_eye - _neck_stand_y
 	var wish := _wish_direction()
 	var facing := _facing_direction()
@@ -2667,6 +2777,10 @@ func _update_swim(delta: float) -> void:
 
 		if cached_profile != null and _try_traversal(cached_profile):
 			return
+
+	# A ladder or a rope that reaches down into the water: swim to it and take it.
+	if at_top and _try_enter_climb(wish):
+		return
 
 	var want := clampf((afloat_y - global_position.y) * 3.0, -1.0, 0.9)
 
@@ -2720,6 +2834,7 @@ func warn_attack(from: Node3D) -> void:
 ## what the player was doing before, and must not fire later.
 func _clear_ground_state() -> void:
 	_step_lock_timer = 0.0
+	_stair_pulled = false
 	_assist_active = false
 	drop_target = {}
 
@@ -2728,19 +2843,28 @@ func _try_enter_climb(wish_direction: Vector3) -> bool:
 	if climb_volumes.is_empty() or _climb_reattach_timer > 0.0 or _is_carrying():
 		return false
 
-	var volume := climb_volumes[climb_volumes.size() - 1]
+	# Overlapping volumes (a ladder beside a rope, two halves of a wall): the
+	# latest entered first, then any other one pushed into.
+	var volume: Area3D = null
 
-	if not is_instance_valid(volume):
-		climb_volumes.erase(volume)
-		return false
+	for i in range(climb_volumes.size() - 1, -1, -1):
+		var candidate := climb_volumes[i]
 
-	var normal: Vector3 = volume.get_climb_normal()
+		if not is_instance_valid(candidate):
+			climb_volumes.remove_at(i)
+			continue
 
-	if volume.rope:
-		normal = volume.get_rope_normal(global_position)
+		var normal: Vector3 = candidate.get_climb_normal()
 
-	# Only attach when pushing into the surface.
-	if wish_direction.dot(-normal) < 0.3:
+		if candidate.rope:
+			normal = candidate.get_rope_normal(global_position)
+
+		# Only attach when pushing into the surface.
+		if wish_direction.dot(-normal) >= 0.3:
+			volume = candidate
+			break
+
+	if volume == null:
 		return false
 
 	movement_state = MoveState.CLIMBING
@@ -2862,7 +2986,8 @@ func _update_climb(_delta: float) -> void:
 
 	# Near the top while climbing up: mantle onto whatever is in reach. On a
 	# ladder that is the wall it leans on; on a rope, whatever you face.
-	if vertical > 0.1:
+	if vertical > 0.1 and _climb_scan_timer <= 0.0:
+		_climb_scan_timer = RESCAN_TIME
 		var profile: ObstacleProfile = null
 
 		if is_rope:
@@ -2930,7 +3055,8 @@ func _update_rope_climb(delta: float) -> void:
 		return
 
 	# Near the top while climbing up: mantle onto whatever you face.
-	if vertical > 0.1:
+	if vertical > 0.1 and _climb_scan_timer <= 0.0:
+		_climb_scan_timer = RESCAN_TIME
 		var from := Vector3(grip.x, global_position.y, grip.z)
 		var profile := scanner.scan_from(from, _facing_direction(), grip_velocity, true)
 
@@ -2952,6 +3078,37 @@ func _update_rope_climb(delta: float) -> void:
 	move_and_slide()
 
 
+## Puts the player at `xform` (the gym's bays): on his feet, with no move to
+## finish, no ledge, ladder or rope held, no stair lock, and still.
+func teleport(xform: Transform3D) -> void:
+	if current_climb != null and is_instance_valid(current_climb) and current_climb.has_method("release"):
+		current_climb.release()
+
+	global_transform = xform
+	movement_state = MoveState.LOCOMOTION
+	current_move = null
+	move_elapsed = 0.0
+	move_progress = 0.0
+	move_windup = 0.0
+	_chain_buffered = false
+	current_climb = null
+	rope_param = -1.0
+	is_peeking = false
+	hang_target = {}
+	_pending_drop_target = {}
+	_clear_ground_state()
+	velocity = Vector3.ZERO
+	_shove_time = 0.0
+	jump_buffer_timer = 0.0
+	coyote_timer = 0.0
+	_jump_cut_allowed = false
+	_floor_valid = false
+	_step_view_offset = 0.0
+	_step_change_tick = 0.0
+	_last_motion_position = global_position
+	reset_physics_interpolation()
+
+
 func _leave_climb(exit_velocity: Vector3) -> void:
 	if current_climb != null and is_instance_valid(current_climb) and current_climb.has_method("release"):
 		current_climb.release()
@@ -2962,6 +3119,9 @@ func _leave_climb(exit_velocity: Vector3) -> void:
 	velocity = exit_velocity
 	_climb_reattach_timer = climb_reattach_delay
 	_jump_hold_consumed = true
+	# The press that took you off is spent, and there is no ground to jump from.
+	jump_buffer_timer = 0.0
+	coyote_timer = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -3023,16 +3183,18 @@ func _update_view(delta: float) -> void:
 	var move_kind := 0
 
 	if movement_state == MoveState.MOVING and current_move != null:
-		if current_move.kind == MoveVariantRes.Kind.VAULT:
-			move_kind = 2
-		elif current_move.kind == TraversalPlanner.KIND_LOWER:
-			move_kind = 3
-		elif current_move.kind == TraversalPlanner.KIND_LEAP:
-			move_kind = 4
-		elif current_move.kind == TraversalPlanner.KIND_CORNER:
-			move_kind = 0
-		elif current_move.kind != MoveVariantRes.Kind.HANG_ENTER:
-			move_kind = 1
+		match current_move.kind:
+			MoveVariantRes.Kind.VAULT:
+				move_kind = 2
+			TraversalPlanner.KIND_LOWER:
+				move_kind = 3
+			TraversalPlanner.KIND_LEAP:
+				move_kind = 4
+			MoveVariantRes.Kind.MANTLE, TraversalPlanner.KIND_PULL_UP:
+				move_kind = 1
+			_:
+				# Reaching for a hang, rounding a corner, letting go: no dip.
+				move_kind = 0
 
 	juice.intensity = camera_feel
 	# The walk as drawn: between the last two ticks, like the body.

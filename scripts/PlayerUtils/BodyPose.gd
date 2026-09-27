@@ -7,6 +7,9 @@ extends RefCounted
 ## from geometry the traversal system already measured, which is why the
 ## hands land on the real ledge instead of roughly near it.
 
+const MoveVariantRes := preload("res://scripts/PlayerUtils/MoveVariant.gd")
+const TraversalPlanner := preload("res://scripts/PlayerUtils/TraversalPlanner.gd")
+
 var pose: StringName = &"idle"
 
 var left_target := Transform3D.IDENTITY
@@ -104,12 +107,13 @@ func _update_move(player: CharacterBody3D) -> void:
 	right_target = Transform3D(basis, center - lateral * hand_spread)
 
 	match move.kind:
-		0:
+		MoveVariantRes.Kind.VAULT:
 			# Vault: one hand plants, the other swings free. Hands leave as
 			# the body passes over.
 			_right_goal = 1.0 - smoothstep(0.55, 0.8, s)
-		1:
-			# Mantle: both hands push down on the edge until the body is up.
+		MoveVariantRes.Kind.MANTLE, TraversalPlanner.KIND_PULL_UP:
+			# Mantle, or pulling up from a hang: both hands push down on the
+			# edge until the body is up.
 			var push := 1.0 - smoothstep(0.6, 0.9, s)
 			_left_goal = push
 			_right_goal = push

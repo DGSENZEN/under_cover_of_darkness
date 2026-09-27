@@ -151,10 +151,17 @@ func _on_body_entered(body: Node3D) -> void:
 	if going is Vector3 and (going as Vector3).y < -SPLASH_SPEED:
 		splash(body.global_position, -(going as Vector3).y, body)
 
+	# The player keeps the waters he is in, rather than asking every tick.
+	if body.has_method("add_water_volume"):
+		body.add_water_volume(self)
+
 
 func _on_body_exited(body: Node3D) -> void:
 	if body is RigidBody3D:
 		_floating.erase(body as RigidBody3D)
+
+	if body.has_method("remove_water_volume"):
+		body.remove_water_volume(self)
 
 
 ## Loose things float: pushed up by as much of them as is under, and
