@@ -14,3 +14,11 @@ assets/characters/wardrobe/source/backup/
 
 # Python bytecode (the wardrobe tools write none, but other runs may)
 __pycache__/
+
+# Photos bought from textures.com and what is made from them (tools/textures):
+# the repository is public and their licence forbids passing them on.
+textures/source/
+textures/ps2/
+
+# Props build backups (tools/props)
+assets/props/source/backup/

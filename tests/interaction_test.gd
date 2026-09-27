@@ -548,7 +548,8 @@ func _ui_checks() -> void:
 	await _frames(5)
 	var offered: String = player.frob.current_prompt()
 	await _tap("frob")
-	await _frames(5)
+	# Pinched out, it dies over a tenth of a second (Torch.SNUFF_TIME).
+	await _frames(10)
 	var after: String = player.frob.current_prompt()
 	_check("U14 a torch on the wall offers to be put out, and goes dark when you do", offered == "Put out the torch" and not torch.lit and not torch.light.visible and after == "",
 		"offered '%s', lit %s light %s, then '%s'" % [offered, torch.lit, torch.light.visible, after])

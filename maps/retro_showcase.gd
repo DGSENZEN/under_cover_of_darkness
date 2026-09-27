@@ -18,7 +18,7 @@ const GUARD := preload("res://Guard.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
-const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 const PSX_SHADER := preload("res://scripts/Visual/retro_psx.gdshader")
 
 const STONE_ROAD := preload("res://maps/test_stone_road.png")
@@ -115,11 +115,7 @@ func _lights() -> void:
 
 	# Torches along the west wall and on the pillars facing the middle.
 	for at in [Vector3(-7.7, 2.5, -9.0), Vector3(-7.7, 2.5, -3.0), Vector3(-7.7, 2.5, 3.0), Vector3(-3.0, 2.3, -2.0), Vector3(3.0, 2.3, -8.0)]:
-		var torch: Node3D = TorchScript.new()
-		torch.position = at
-		torch.can_douse = true
-		add_child(torch)
-		_bracket(at)
+		Lights.torch_at(self, at, 2.4, 9.0, true, {"can_douse": true})
 
 	# Mist lying in the south-west corner.
 	var mist := FogVolume.new()
@@ -219,19 +215,6 @@ func _brush(center: Vector3, size: Vector3, texture: Texture2D, tile: float, sur
 			(child as MeshInstance3D).material_override = material
 
 	return body
-
-
-## An iron bracket under a torch.
-func _bracket(at: Vector3) -> void:
-	var iron := MeshInstance3D.new()
-	var bar := BoxMesh.new()
-	bar.size = Vector3(0.06, 0.34, 0.06)
-	bar.material = Props.material(Color(0.12, 0.11, 0.1), 0.6)
-	iron.mesh = bar
-	# Right under the flame, its shadow would be a black wedge on the wall.
-	iron.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(iron)
-	iron.global_position = at + Vector3.DOWN * 0.24
 
 
 func _sign(at: Vector3, yaw: float, text: String) -> void:

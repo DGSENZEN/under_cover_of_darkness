@@ -576,7 +576,9 @@ func _look_for_oddities(step: float) -> void:
 	# sees, so it takes no light to see it.
 	for torch in tree.get_nodes_in_group(&"lights"):
 		if torch.has_method("left_out") and torch.left_out() and not torch.has_meta(&"noticed") and Comms.now() >= float(torch.get_meta(&"out_of_reach_until", -1.0)):
-			var at: Vector3 = (torch as Node3D).global_position
+			# Its flame, where it should be burning (a fixture's origin is on the
+			# wall behind it, or on the floor under its basket).
+			var at: Vector3 = torch.flame_position() if torch.has_method("flame_position") else (torch as Node3D).global_position
 
 			if near != Vector3.INF and at.distance_to(near) > ODD_NEAR:
 				continue

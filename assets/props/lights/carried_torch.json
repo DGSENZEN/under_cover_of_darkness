@@ -1,0 +1,61 @@
+{
+ "fixture": "carried_torch",
+ "family": "torches",
+ "mount": "carried",
+ "tris": 90,
+ "slots": [
+  "bark",
+  "pitch_glow"
+ ],
+ "glow_parts": [
+  "head"
+ ],
+ "shadow_parts": [],
+ "stretch": {},
+ "sockets": {
+  "flame": [
+   [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  ],
+  "corona": [
+   [
+    0.0,
+    0.06,
+    -0.0
+   ]
+  ],
+  "grip": [
+   [
+    0.0,
+    -0.36,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "torch",
+  "ramp": "torch",
+  "low_ramp": "dying",
+  "flicker_kind": "torch",
+  "flicker": 0.22,
+  "energy": 2.1,
+  "light_range": 7.5,
+  "shadows": false,
+  "color": "FF9829",
+  "corona_px": 48.0,
+  "ember_rate": 6.0,
+  "smoke_rate": 3.0,
+  "flame_size": 0.3,
+  "flame_layers": 2,
+  "core": true,
+  "loop": "torch_loop",
+  "loop_db": -13.0,
+  "loop_reach": 11.0
+ },
+ "soot": false,
+ "cookie": false,
+ "hash": "50b196bb09b86b00621ac91ae3ddb72d"
+}

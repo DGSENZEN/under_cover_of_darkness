@@ -293,6 +293,12 @@ func dozing() -> bool:
 	return _dozing
 
 
+## On his way over to a friend for a word, or with him for it ("visit"): the
+## friend; else null.
+func visiting() -> Node3D:
+	return _friend if habit == &"visit" and is_instance_valid(_friend) else null
+
+
 ## What the rig shows: the pose he is in ("" for none of this).
 func activity() -> StringName:
 	if _standing > 0.0:

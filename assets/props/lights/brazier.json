@@ -1,0 +1,68 @@
+{
+ "fixture": "brazier",
+ "family": "fires",
+ "mount": "floor",
+ "tris": 372,
+ "slots": [
+  "bark",
+  "char",
+  "coal_glow",
+  "iron"
+ ],
+ "glow_parts": [
+  "coals"
+ ],
+ "shadow_parts": [],
+ "stretch": {},
+ "sockets": {
+  "flame": [
+   [
+    0.0,
+    1.1,
+    -0.0
+   ]
+  ],
+  "corona": [
+   [
+    0.0,
+    1.45,
+    -0.0
+   ]
+  ],
+  "mount": [
+   [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "brazier",
+  "ramp": "brazier",
+  "low_ramp": "dying",
+  "flicker_kind": "brazier",
+  "flicker": 0.12,
+  "energy": 2.6,
+  "light_range": 8.0,
+  "shadows": true,
+  "color": "FF9829",
+  "corona_px": 72.0,
+  "ember_rate": 15.0,
+  "smoke_rate": 6.0,
+  "flame_size": 0.8,
+  "flame_layers": 2,
+  "core": true,
+  "loop": "fire_medium",
+  "loop_db": -11.0,
+  "loop_reach": 14.0,
+  "event_every": [
+   15.0,
+   30.0
+  ],
+  "light_above": 0.37
+ },
+ "soot": false,
+ "cookie": false,
+ "hash": "379098f0326b6fe99625a335f566055b"
+}

@@ -1,0 +1,70 @@
+{
+ "fixture": "cresset_pole",
+ "family": "torches",
+ "mount": "floor",
+ "tris": 322,
+ "slots": [
+  "iron",
+  "pitch_glow"
+ ],
+ "glow_parts": [
+  "rope"
+ ],
+ "shadow_parts": [],
+ "stretch": {
+  "part": "pole",
+  "length": 2.4,
+  "keep": [
+   "pole_collar",
+   "foot_0",
+   "foot_1",
+   "foot_2"
+  ]
+ },
+ "sockets": {
+  "flame": [
+   [
+    0.0,
+    2.57,
+    -0.0
+   ]
+  ],
+  "corona": [
+   [
+    0.0,
+    2.63,
+    -0.0
+   ]
+  ],
+  "mount": [
+   [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "fire",
+  "ramp": "fire",
+  "low_ramp": "dying",
+  "flicker_kind": "cresset",
+  "flicker": 0.12,
+  "energy": 2.8,
+  "light_range": 10.0,
+  "shadows": true,
+  "color": "FF9829",
+  "corona_px": 60.0,
+  "ember_rate": 10.0,
+  "smoke_rate": 5.0,
+  "flame_size": 0.55,
+  "flame_layers": 2,
+  "core": true,
+  "loop": "fire_small",
+  "loop_db": -12.0,
+  "loop_reach": 12.0
+ },
+ "soot": false,
+ "cookie": false,
+ "hash": "ffc6a7295bd4a782851af43eb15b80c5"
+}

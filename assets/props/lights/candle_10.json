@@ -1,0 +1,51 @@
+{
+ "fixture": "candle_10",
+ "family": "candles",
+ "mount": "table",
+ "tris": 58,
+ "slots": [
+  "wax"
+ ],
+ "glow_parts": [],
+ "shadow_parts": [],
+ "stretch": {},
+ "sockets": {
+  "flame": [
+   [
+    0.0,
+    0.112,
+    -0.0
+   ]
+  ],
+  "corona": [
+   [
+    0.0,
+    0.132,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "candle",
+  "ramp": "candle",
+  "low_ramp": "gutter",
+  "flicker_kind": "candle",
+  "flicker": 0.04,
+  "energy": 0.35,
+  "light_range": 2.5,
+  "shadows": false,
+  "color": "FFA645",
+  "corona_px": 12.0,
+  "ember_rate": 0.0,
+  "smoke_rate": 0.0,
+  "flame_size": 0.05,
+  "flame_layers": 2,
+  "core": true,
+  "loop": "",
+  "loop_db": -30.0,
+  "loop_reach": 0.0
+ },
+ "soot": false,
+ "cookie": false,
+ "hash": "c858437352842cd8c77e0532216029e6"
+}

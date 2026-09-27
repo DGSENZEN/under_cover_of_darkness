@@ -332,12 +332,9 @@ BRUTE = {
     # (1,400 before his neck was kept: the neck's faces came out of his
     # shoulders', and big faces touching his mantle left holes there.)
     "base_tris": 1500,
-    # His bare neck kept up under his head (build.low_poly_base): cut at the
-    # head's bone weights, its dark stub showed between the teeth of the
-    # head's edge (K34).
-    # (Up to just over the head's edge, 1.567 at its highest: higher, it
-    # reached under his jaw, and his beard cut it.)
-    "neck_under": {"up_to": 1.572, "from": 1.515, "tuck": 0.005},
+    # His neck bare down to his mantle: his body's skin up to the seam his
+    # head is cut on (common.NECK_CUT), his shells not grown up over it.
+    "bare_neck": True,
     "bare": ["head", "upper", "lower", "hand"],
     "belt": ("spine_01", 0.0),
     "garments": [
@@ -629,12 +626,14 @@ HEADS = {
 # A sleeve of skin inside every head's neck (build.neck_sleeve), down under
 # the collars: where the teeth of a low head's edge met a collar standing off
 # the neck, the background showed through (the bare-hat watchman's, the
-# duelist's, the arms master's). Sunk deeper than the brute's kept neck
-# (his neck_under's 5 mm), so his shows over it. 12 round: 24 triangles, a head
-# stays within its 450.
-# It spans the band the head's edge zigzags through (male 1.518-1.567,
-# female 1.472-1.5) and a little under: one ring of faces, straight between
-# its rings, cut inside the neck's flare when it ran down to 1.47.
+# duelist's, the arms master's). Heads now end on the seam round the neck
+# (common.NECK_CUT) and every kind rebuilt since meets them there; it still
+# fills the gap under the watchman's batch 0 gambeson, cut at the bone
+# weights. Sunk 5 mm under the full body's neck (the brute's bare neck shows
+# over it). 12 round: 24 triangles, a head stays within its 450.
+# It spans the seam (male 1.515-1.562, female 1.477-1.493) and a little
+# under: one ring of faces, straight between its rings, cut inside the
+# neck's flare when it ran down to 1.47.
 NECK_SLEEVE = {"male": {"bottom": 1.505, "tuck": 0.005, "segments": 12},
                "female": {"bottom": 1.46, "tuck": 0.005, "segments": 12}}
 

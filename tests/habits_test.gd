@@ -874,6 +874,36 @@ func _run() -> void:
 		left_lying == 0 and is_instance_valid(scabbard) and scabbard.is_visible_in_tree(),
 		"dropped %d, still at his hip %s" % [left_lying, is_instance_valid(scabbard) and scabbard.is_visible_in_tree()])
 
+	# H30 a friend coming over for a word is company: each man's remark to
+	# himself comes due as he sets out, and neither says one on the way (the
+	# word is coming); they talk
+	await _fresh()
+	var caller := _man(Vector3(240, 0, 0), 0.0, &"steady", [&"visit"])
+	var host := _man(Vector3(240, 0, -7), PI, &"rash", [&"chop"])
+	caller._life._talk_rest = 0.0
+	host._life._talk_rest = 0.0
+	var director: RefCounted = caller._life._director()
+	await _until(func(): return caller._habits.habit == &"visit", 60 * 10)
+	director._solo_next[caller.get_instance_id()] = 0.0
+	director._solo_next[host.get_instance_id()] = 0.0
+	var muttered := []
+	var together := false
+
+	for i in 60 * 20:
+		await _frames(1)
+
+		if caller._habits.habit == &"visit":
+			muttered = director.remarks().filter(func(r): return r["man"] == caller or r["man"] == host).map(func(r): return r["id"])
+
+		together = together or (caller._life.talking() and host._life.talking())
+
+		if together and not caller._life.talking():
+			break
+
+	_check("H30 a friend coming over for a word is company: neither he nor the man he goes to says anything to himself meanwhile, and they talk",
+		muttered.is_empty() and together,
+		"remarks on the way %s, talked %s" % [muttered, together])
+
 
 # ---------------------------------------------------------------------------
 

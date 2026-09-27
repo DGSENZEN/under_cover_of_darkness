@@ -281,7 +281,10 @@ func _run() -> void:
 	var i15 := _intruder(Vector3(40, 0, 26))
 	await _frames(10)
 	i15.brain.backstab(g15)
-	await _until(func(): return not is_instance_valid(g15) or g15._knocked_out, 900)
+	# Held weakly: a knife in the back frees him, and a lambda holding him
+	# outright would be handed null (an engine error).
+	var held15: WeakRef = weakref(g15)
+	await _until(func(): return held15.get_ref() == null or held15.get_ref()._knocked_out, 900)
 	_check("I15 backstab kills an unaware guard from behind",
 		not is_instance_valid(g15) or g15._knocked_out,
 		"guard %s" % ("dead" if not is_instance_valid(g15) or g15._knocked_out else "alive, state %d" % g15.state))

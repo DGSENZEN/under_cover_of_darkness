@@ -1,0 +1,51 @@
+{
+ "fixture": "oil_lamp_clay",
+ "family": "candles",
+ "mount": "table",
+ "tris": 106,
+ "slots": [
+  "clay"
+ ],
+ "glow_parts": [],
+ "shadow_parts": [],
+ "stretch": {},
+ "sockets": {
+  "flame": [
+   [
+    0.09,
+    0.038,
+    -0.0
+   ]
+  ],
+  "corona": [
+   [
+    0.09,
+    0.058,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "small",
+  "ramp": "lamp",
+  "low_ramp": "gutter",
+  "flicker_kind": "lamp",
+  "flicker": 0.04,
+  "energy": 0.5,
+  "light_range": 3.0,
+  "shadows": false,
+  "color": "FFA645",
+  "corona_px": 16.0,
+  "ember_rate": 0.0,
+  "smoke_rate": 0.0,
+  "flame_size": 0.06,
+  "flame_layers": 2,
+  "core": true,
+  "loop": "",
+  "loop_db": -30.0,
+  "loop_reach": 0.0
+ },
+ "soot": false,
+ "cookie": false,
+ "hash": "839817cadda894af7da54767c25da2f1"
+}

@@ -196,8 +196,12 @@ static func splash(context: Node, at: Vector3, normal: Vector3, by: Node3D, stru
 
 		var hit_it: bool = struck != null and struck is Node and (struck as Node).get_parent() == torch
 
-		if hit_it or (torch.global_position.distance_to(at) <= SPLASH_REACH and (space == null or _clear(space, at + normal * 0.1, torch.global_position, torch))):
-			torch.put_out(by)
+		# At its flame (a fixture's origin is on its wall or floor), and out
+		# the way water puts a fire out.
+		var flame: Vector3 = torch.flame_position() if torch.has_method("flame_position") else torch.global_position
+
+		if hit_it or (flame.distance_to(at) <= SPLASH_REACH and (space == null or _clear(space, at + normal * 0.1, flame, torch))):
+			torch.put_out(&"douse", false, by)
 
 
 static func _space_of(context: Node) -> PhysicsDirectSpaceState3D:

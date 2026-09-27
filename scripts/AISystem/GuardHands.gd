@@ -29,7 +29,7 @@ extends RefCounted
 ##   evidence    your arrow in a wall, pulled out and taken (GuardLife).
 
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
-const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 const HumanoidScript := preload("res://scripts/Visual/Humanoid.gd")
 const HangingScript := preload("res://scripts/Visual/Hanging.gd")
 const ThrownScript := preload("res://scripts/Combat/Thrown.gd")
@@ -129,7 +129,7 @@ func update(delta: float) -> void:
 
 		if _relight != null and is_instance_valid(_relight):
 			# Facing it as he works.
-			var to := _relight.global_position - guard.global_position
+			var to: Vector3 = (_relight.flame_position() if _relight.has_method("flame_position") else _relight.global_position) - guard.global_position
 			guard.rotation.y = lerp_angle(guard.rotation.y, atan2(-to.x, -to.z), 1.0 - exp(-8.0 * delta))
 
 			if not _relit and RELIGHT_TIME - _relighting >= RELIGHT_AT:
@@ -467,7 +467,7 @@ func light_lantern() -> void:
 	if lantern != null or guard._rig == null or guard._rig.get("man") == null:
 		return
 
-	lantern = _hang_lantern(&"hand_l", 0.2, 0.08)
+	lantern = _hang_lantern(&"hand_l", 0.08)
 	Sfx.play(guard, &"ignite", guard.eye_position() - Vector3.UP * 0.4, -6.0, 1.3)
 	LightProbe.invalidate()
 
@@ -485,53 +485,27 @@ func carry_light(kind: StringName) -> void:
 		_light_holder = guard._rig.man.attach(&"hand_l", lantern, HumanoidScript.FIST_L * Transform3D(Basis.IDENTITY, Vector3(0.0, TORCH_UP, 0.0)))
 	else:
 		# His blade in its scabbard while his hand holds the light (GuardRig).
-		lantern = _hang_lantern(&"hand_r", 0.16, 0.06)
+		lantern = _hang_lantern(&"hand_r", 0.06)
 
 	light_kind = kind
 	Sfx.play(guard, &"ignite", guard.eye_position() - Vector3.UP * 0.4, -8.0, 1.2)
 	LightProbe.invalidate()
 
 
-## A torch: a stick with a head of pitch-soaked rag, the flame on it (the
-## flame is the node: the stick hangs down from it).
+## A torch (Lights.carried_torch): a stick with a head of pitch-soaked rag,
+## the flame on it (the flame is the node: the stick hangs down from it).
 func _torch() -> Node3D:
-	var flame: Node3D = TorchScript.new()
-	flame.name = "RoundsLight"
-	flame.shadows = false
-	flame.energy = TORCH_ENERGY
-	flame.light_range = TORCH_RANGE
-	flame.flame_size = 0.3
-	flame.flicker = 0.22
-	_part(flame, _rod(0.026, 0.021, 0.56), Vector3(0.0, -0.4, 0.0), Color(0.3, 0.2, 0.12))
-	_part(flame, _rod(0.044, 0.034, 0.1), Vector3(0.0, -0.13, 0.0), Color(0.11, 0.08, 0.06))
+	var flame: Node3D = Lights.carried_torch()
+	flame.overrides = {"energy": TORCH_ENERGY, "light_range": TORCH_RANGE}
 	return flame
 
 
-## A lantern hanging by its bail from his fist on `bone` (Hanging.gd): a cage
-## of glass round the flame, a lid, a base. The flame is returned (what hangs
-## is its node, the cage round it).
-func _hang_lantern(bone: StringName, size: float, flicker: float) -> Node3D:
-	var flame: Node3D = TorchScript.new()
-	flame.name = "Lantern"
-	flame.shadows = false
-	flame.energy = LANTERN_ENERGY
-	flame.light_range = LANTERN_RANGE
-	flame.flame_size = size
-	flame.flicker = flicker
-	var glass := _paint(Color(1.0, 0.75, 0.4, 0.35))
-	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	glass.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	var cage := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(0.14, 0.2, 0.14)
-	cage.mesh = box
-	cage.material_override = glass
-	flame.add_child(cage)
-	var iron := Color(0.16, 0.16, 0.17)
-	_part(flame, _box(Vector3(0.16, 0.03, 0.16)), Vector3(0.0, 0.115, 0.0), iron)
-	_part(flame, _box(Vector3(0.16, 0.025, 0.16)), Vector3(0.0, -0.11, 0.0), iron)
-	# The bail, up from the lid into his fist.
-	_part(flame, _box(Vector3(0.012, LANTERN_HANG - 0.13, 0.012)), Vector3(0.0, (LANTERN_HANG + 0.13) * 0.5, 0.0), iron)
+## A lantern (Lights.carried_lantern) hanging by its bail from his fist on
+## `bone` (Hanging.gd), wavering by `flicker`. The flame is returned (what
+## hangs is its node, the lantern round it).
+func _hang_lantern(bone: StringName, flicker: float) -> Node3D:
+	var flame: Node3D = Lights.carried_lantern()
+	flame.overrides = {"energy": LANTERN_ENERGY, "light_range": LANTERN_RANGE, "flicker": flicker}
 	var grip := Node3D.new()
 	grip.name = "Bail"
 	_light_holder = guard._rig.man.attach(bone, grip, HumanoidScript.FIST_R if bone == &"hand_r" else HumanoidScript.FIST_L)
@@ -539,38 +513,9 @@ func _hang_lantern(bone: StringName, size: float, flicker: float) -> Node3D:
 	hanging.length = LANTERN_HANG
 	grip.add_child(hanging)
 	hanging.add_child(flame)
-	flame.position = Vector3.DOWN * LANTERN_HANG
+	# Its bail's grip in his fist, the lantern below it.
+	flame.position = -flame.socket(&"grip")
 	return flame
-
-
-static func _rod(top: float, bottom: float, height: float) -> CylinderMesh:
-	var rod := CylinderMesh.new()
-	rod.top_radius = top
-	rod.bottom_radius = bottom
-	rod.height = height
-	rod.radial_segments = 8
-	return rod
-
-
-static func _box(size: Vector3) -> BoxMesh:
-	var box := BoxMesh.new()
-	box.size = size
-	return box
-
-
-static func _part(on: Node3D, mesh: Mesh, at: Vector3, colour: Color) -> MeshInstance3D:
-	var part := MeshInstance3D.new()
-	part.mesh = mesh
-	part.material_override = _paint(colour)
-	on.add_child(part)
-	part.position = at
-	return part
-
-
-static func _paint(colour: Color) -> StandardMaterial3D:
-	var paint := StandardMaterial3D.new()
-	paint.albedo_color = colour
-	return paint
 
 
 ## Out: back on his belt.

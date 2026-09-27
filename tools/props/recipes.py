@@ -1,0 +1,598 @@
+"""The light fixtures, as data: what each is made of, its sockets, its light.
+
+Plain data (any Python reads it: props.sh list needs no Blender). Blender
+space, metres, Z up. A wall fixture's wall is the XZ plane at y = 0 and it
+stands out toward -Y; in Godot that is +Z out of the wall.
+
+Every part: "type" (see build.py: lathe, tube, box, ring, chain, stones,
+logs, blob, panes, collider), "name", "slot" (a surface slot, SLOTS), and
+optionally "glow" (it shines from inside when lit, chars when cold), "at"
+(x, y, z), "rotate" (degrees about x, y, z, before `at`), "seed".
+
+"sockets": name -> list of points: "flame" (every flame), "corona" (the
+halo), "mount" (where it meets its wall or floor), "hang" (the top of what
+it hangs by), "grip" (a hand's hold).
+
+"burner": Torch.gd exports set on the fixture (color is a hex string, loop
+a name in audio/ambience/, "" for none).
+
+"shadow_parts": the parts that cast shadows (none by default: small parts
+right under their own light would throw huge wedges of shadow, which PS2
+fixtures never did; a hearth's masonry should).
+"""
+
+import copy
+
+# Every surface slot a part may use (scripts/Visual/Materials.gd has their
+# photos and flat colours); "<slot>_glow" is the same surface shining.
+SLOTS = ["iron", "chain", "wood_old", "bark", "stone", "ashlar", "pitch", "brass", "clay", "wax", "horn", "char", "coal"]
+
+# Flat colours (sRGB) for Blender's own previews, as Materials.gd has them.
+SLOT_COLOURS = {
+    "iron": "2A2826", "chain": "33302C", "wood_old": "4A3524", "bark": "3D2E22", "stone": "5E5A55",
+    "ashlar": "6B665F", "pitch": "17110D", "brass": "8C6A35", "clay": "8A5236", "wax": "D9C9A3",
+    "horn": "C8964B", "char": "1C1714", "coal": "2B1A12",
+}
+
+TORCH_BURNER = {
+    "sheet": "torch", "ramp": "torch", "low_ramp": "dying", "flicker_kind": "torch", "flicker": 0.12,
+    "energy": 2.4, "light_range": 9.0, "shadows": True, "color": "FF9829", "corona_px": 48.0,
+    "ember_rate": 6.0, "smoke_rate": 3.0, "flame_size": 0.34, "flame_layers": 2, "core": True,
+    "loop": "torch_loop", "loop_db": -13.0, "loop_reach": 11.0,
+}
+
+def _along(base, axis, distance):
+    return tuple(round(b + a * distance, 4) for b, a in zip(base, axis))
+
+
+def _round(point, radius, angle_deg):
+    """A point on a flat circle of `radius` round `point` (about Z)."""
+    import math
+    a = math.radians(angle_deg)
+    return (round(point[0] + radius * math.cos(a), 4), round(point[1] + radius * math.sin(a), 4), point[2])
+
+
+# The wall torch: its stick leans 20 degrees out from the wall, through a
+# basket cup on a bent bar from a riveted plate; a tow head flared at the
+# top, bound with an iron band.
+_LEAN = (0.0, -0.342, 0.940)
+_STICK = (0.0, -0.17, -0.02)
+_HEAD = _along(_STICK, _LEAN, 0.46)
+_CUP = (0.0, -0.221, 0.12)
+_CUP_LOW = (0.0, -0.199, 0.06)
+
+FIXTURES = {
+    "wall_torch": {
+        "family": "torches",
+        "mount": "wall",
+        "budget": 300,
+        "soot": True,
+        "cookie": False,
+        "parts": [
+            {"type": "box", "name": "plate", "slot": "iron", "size": (0.09, 0.02, 0.2), "at": (0.0, -0.01, 0.0)},
+            {"type": "lathe", "name": "rivet_top", "slot": "iron", "segments": 3, "profile": [(0.009, 0.0), (0.0, 0.007)],
+             "rotate": (90.0, 0.0, 0.0), "at": (0.0, -0.02, 0.075)},
+            {"type": "lathe", "name": "rivet_low", "slot": "iron", "segments": 3, "profile": [(0.009, 0.0), (0.0, 0.007)],
+             "rotate": (90.0, 0.0, 0.0), "at": (0.0, -0.02, -0.075)},
+            {"type": "tube", "name": "arm", "slot": "iron", "radius": 0.008, "sides": 4,
+             "points": [(0.0, -0.02, -0.06), (0.0, -0.09, -0.04), (0.0, -0.15, 0.03), (0.0, -0.181, 0.105)]},
+            {"type": "ring", "name": "cup", "slot": "iron", "radius": 0.04, "thickness": 0.011, "sides": 3, "segments": 8, "axis": "Z", "at": _CUP},
+            {"type": "ring", "name": "cup_low", "slot": "iron", "radius": 0.026, "thickness": 0.009, "sides": 3, "segments": 6, "axis": "Z", "at": _CUP_LOW},
+        ] + [
+            {"type": "tube", "name": "strap_%d" % i, "slot": "iron", "radius": 0.004, "sides": 3,
+             "points": [_round(_CUP_LOW, 0.026, a), _round(_CUP, 0.04, a)]}
+            for i, a in enumerate((90.0, 210.0, 330.0))
+        ] + [
+            {"type": "lathe", "name": "stick", "slot": "bark", "segments": 5,
+             "profile": [(0.0, 0.0), (0.019, 0.0), (0.021, 0.25), (0.024, 0.5), (0.0, 0.5)],
+             "rotate": (20.0, 0.0, 0.0), "at": _STICK},
+            {"type": "blob", "name": "head", "slot": "pitch", "glow": True, "segments": 7, "noise": 0.005, "seed": 3,
+             "profile": [(0.0, 0.0), (0.026, 0.0), (0.034, 0.03), (0.046, 0.08), (0.044, 0.11), (0.03, 0.13), (0.0, 0.135)],
+             "rotate": (20.0, 0.0, 0.0), "at": _HEAD},
+            {"type": "ring", "name": "band", "slot": "iron", "radius": 0.037, "thickness": 0.01, "sides": 3, "segments": 7,
+             "axis": "Z", "rotate": (20.0, 0.0, 0.0), "at": _along(_HEAD, _LEAN, 0.045)},
+        ],
+        "sockets": {
+            "flame": [_along(_HEAD, _LEAN, 0.12)],
+            "corona": [tuple(round(v, 4) for v in (_along(_HEAD, _LEAN, 0.12)[0], _along(_HEAD, _LEAN, 0.12)[1], _along(_HEAD, _LEAN, 0.12)[2] + 0.06))],
+            "mount": [(0.0, 0.0, 0.0)],
+        },
+        "burner": dict(TORCH_BURNER),
+    },
+}
+
+# The carried torch: the same stick and tow head, its flame at its origin
+# (it is held by the node where the flame is: GuardHands), a hand 0.36 m down.
+_HEAD_PROFILE = [(0.0, 0.0), (0.026, 0.0), (0.034, 0.03), (0.046, 0.08), (0.044, 0.11), (0.03, 0.13), (0.0, 0.135)]
+
+FIXTURES["carried_torch"] = {
+    "family": "torches",
+    "mount": "carried",
+    "budget": 120,
+    "soot": False,
+    "cookie": False,
+    "parts": [
+        {"type": "lathe", "name": "stick", "slot": "bark", "segments": 5,
+         "profile": [(0.0, 0.0), (0.021, 0.0), (0.024, 0.3), (0.026, 0.56), (0.0, 0.56)], "at": (0.0, 0.0, -0.64)},
+        {"type": "blob", "name": "head", "slot": "pitch", "glow": True, "segments": 6, "noise": 0.005, "seed": 5,
+         "profile": _HEAD_PROFILE, "at": (0.0, 0.0, -0.12)},
+    ],
+    "sockets": {"flame": [(0.0, 0.0, 0.0)], "corona": [(0.0, 0.0, 0.06)], "grip": [(0.0, 0.0, -0.36)]},
+    "burner": dict(TORCH_BURNER, energy=2.1, light_range=7.5, shadows=False, flicker=0.22, flame_size=0.3),
+}
+
+
+def _basket(at, top_radius=0.16, low_radius=0.06, height=0.22, bars=6):
+    """A cresset's iron basket standing at `at`, and pitch rope burning in it."""
+    x, y, z = at
+    parts = [
+        {"type": "ring", "name": "basket_rim", "slot": "iron", "radius": top_radius, "thickness": 0.014, "sides": 3, "segments": 8,
+         "axis": "Z", "at": (x, y, z + height)},
+        {"type": "ring", "name": "basket_collar", "slot": "iron", "radius": low_radius, "thickness": 0.016, "sides": 3, "segments": 6,
+         "axis": "Z", "at": (x, y, z)},
+        {"type": "blob", "name": "rope", "slot": "pitch", "glow": True, "segments": 8, "noise": 0.012, "seed": 11,
+         "profile": [(0.0, 0.03), (0.07, 0.03), (0.12, 0.09), (0.13, 0.15), (0.09, 0.18), (0.0, 0.19)], "at": (x, y, z)},
+    ]
+
+    for i in range(bars):
+        a = 360.0 * i / bars
+        low = _round((x, y, z), low_radius, a)
+        mid = _round((x, y, z + height * 0.55), (low_radius + top_radius) * 0.62, a + 8.0)
+        top = _round((x, y, z + height), top_radius, a)
+        parts.append({"type": "tube", "name": "basket_bar_%d" % i, "slot": "iron", "radius": 0.006, "sides": 3, "points": [low, mid, top]})
+
+    return parts
+
+
+FIRE_BURNER = {
+    "sheet": "fire", "ramp": "fire", "low_ramp": "dying", "flicker_kind": "cresset", "flicker": 0.12,
+    "energy": 2.8, "light_range": 10.0, "shadows": True, "color": "FF9829", "corona_px": 60.0,
+    "ember_rate": 10.0, "smoke_rate": 5.0, "flame_size": 0.55, "flame_layers": 2, "core": True,
+    "loop": "fire_small", "loop_db": -12.0, "loop_reach": 12.0,
+}
+
+# The cresset on its pole: a square iron pole on three feet, the basket on
+# top (the pole stretches to put the flame where it is wanted: "stretch").
+_POLE_TOP = 2.4
+
+FIXTURES["cresset_pole"] = {
+    "family": "torches",
+    "mount": "floor",
+    "budget": 600,
+    "soot": False,
+    "cookie": False,
+    "parts": [
+        {"type": "tube", "name": "pole", "slot": "iron", "radius": 0.022, "sides": 4, "points": [(0.0, 0.0, 0.0), (0.0, 0.0, _POLE_TOP)]},
+        {"type": "ring", "name": "pole_collar", "slot": "iron", "radius": 0.03, "thickness": 0.02, "sides": 3, "segments": 6,
+         "axis": "Z", "at": (0.0, 0.0, 0.3)},
+    ] + [
+        {"type": "tube", "name": "foot_%d" % i, "slot": "iron", "radius": 0.012, "sides": 3,
+         "points": [(0.0, 0.0, 0.3), _round((0.0, 0.0, 0.08), 0.22, a), _round((0.0, 0.0, 0.0), 0.28, a)]}
+        for i, a in enumerate((90.0, 210.0, 330.0))
+    ] + _basket((0.0, 0.0, _POLE_TOP)),
+    "sockets": {"flame": [(0.0, 0.0, _POLE_TOP + 0.17)], "corona": [(0.0, 0.0, _POLE_TOP + 0.23)], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(FIRE_BURNER),
+    # How the pole stretches: its part, its length as built, and what stays on the floor.
+    "stretch": {"part": "pole", "length": _POLE_TOP, "keep": ["pole_collar", "foot_0", "foot_1", "foot_2"]},
+}
+
+# The cresset on a wall bracket: a plate, a bar out with a brace under it.
+_BRACKET = (0.0, -0.45, 0.12)
+
+FIXTURES["cresset_wall"] = {
+    "family": "torches",
+    "mount": "wall",
+    "budget": 600,
+    "soot": True,
+    "cookie": False,
+    "parts": [
+        {"type": "box", "name": "plate", "slot": "iron", "size": (0.1, 0.02, 0.36), "at": (0.0, -0.01, 0.0)},
+        {"type": "tube", "name": "bracket", "slot": "iron", "radius": 0.012, "sides": 4, "points": [(0.0, -0.02, 0.12), _BRACKET]},
+        {"type": "tube", "name": "brace", "slot": "iron", "radius": 0.009, "sides": 4, "points": [(0.0, -0.02, -0.14), (0.0, -0.3, 0.12)]},
+    ] + _basket(_BRACKET),
+    "sockets": {"flame": [(0.0, -0.45, 0.29)], "corona": [(0.0, -0.45, 0.35)], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(FIRE_BURNER),
+}
+
+# Lanterns: a tankard of horn panes in iron bars, a domed roof, a dish base,
+# a wick. Scaled for the bigger hanging lantern. The flame is its origin
+# (unless moved with `at`).
+LAMP_BURNER = {
+    "sheet": "small", "ramp": "lamp", "low_ramp": "gutter", "flicker_kind": "lamp", "flicker": 0.05,
+    "energy": 1.5, "light_range": 6.5, "shadows": False, "color": "FFA645", "corona_px": 28.0,
+    "ember_rate": 0.0, "smoke_rate": 0.0, "flame_size": 0.08, "flame_layers": 1, "core": False,
+    "loop": "", "loop_db": -30.0, "loop_reach": 0.0,
+}
+
+
+def _lantern(scale=1.0, at=(0.0, 0.0, 0.0), prefix=""):
+    x, y, z = at
+    r, h = 0.075 * scale, 0.2 * scale
+    return [
+        {"type": "panes", "name": prefix + "panes", "slot": "horn", "glow": True, "sides": 8, "radius": r, "height": h,
+         "bars": 0.005 * scale, "at": (x, y, z - h * 0.5)},
+        {"type": "lathe", "name": prefix + "roof", "slot": "iron", "segments": 8,
+         "profile": [(r * 1.08, 0.0), (r * 1.0, 0.02 * scale), (r * 0.68, 0.05 * scale), (r * 0.28, 0.068 * scale), (r * 0.2, 0.08 * scale), (0.0, 0.085 * scale)],
+         "at": (x, y, z + h * 0.5)},
+        {"type": "lathe", "name": prefix + "base", "slot": "iron", "segments": 8,
+         "profile": [(0.0, -0.025 * scale), (r * 1.06, -0.025 * scale), (r * 1.06, 0.0), (0.0, 0.0)], "at": (x, y, z - h * 0.5)},
+        {"type": "lathe", "name": prefix + "wick", "slot": "wax", "segments": 4,
+         "profile": [(0.0, 0.0), (0.012 * scale, 0.0), (0.01 * scale, 0.04 * scale), (0.0, 0.045 * scale)], "at": (x, y, z - h * 0.5)},
+    ]
+
+
+FIXTURES["carried_lantern"] = {
+    "family": "lanterns",
+    "mount": "carried",
+    "budget": 400,
+    "soot": False,
+    "cookie": False,
+    "parts": _lantern() + [
+        {"type": "tube", "name": "bail", "slot": "iron", "radius": 0.004, "sides": 3,
+         "points": [(-0.07, 0.0, 0.1), (-0.05, 0.0, 0.2), (0.0, 0.0, 0.23), (0.05, 0.0, 0.2), (0.07, 0.0, 0.1)]},
+    ],
+    "sockets": {"flame": [(0.0, 0.0, -0.05)], "corona": [(0.0, 0.0, 0.0)], "grip": [(0.0, 0.0, 0.23)]},
+    "burner": dict(LAMP_BURNER),
+}
+
+# The hanging lantern: half again as big, a ring on top to hang by (its chain
+# is added where it is hung: Lights.hanging_lantern). Its origin is its ring.
+_HL = 1.5
+_HL_BODY = (0.0, 0.0, -0.075 * _HL - 0.15 * _HL)
+
+FIXTURES["hanging_lantern"] = {
+    "family": "lanterns",
+    "mount": "hang",
+    "budget": 500,
+    "soot": False,
+    "cookie": True,
+    "parts": _lantern(_HL, _HL_BODY) + [
+        {"type": "ring", "name": "hang_ring", "slot": "iron", "radius": 0.02, "thickness": 0.006, "sides": 3, "segments": 6,
+         "axis": "Y", "at": (0.0, 0.0, -0.02)},
+    ],
+    "sockets": {"flame": [(0.0, 0.0, _HL_BODY[2] - 0.05 * _HL)], "corona": [(0.0, 0.0, _HL_BODY[2])], "hang": [(0.0, 0.0, 0.0)]},
+    "burner": dict(LAMP_BURNER, energy=1.4, light_range=7.0, shadows=True),
+}
+
+# A link of chain: hung lanterns and chandeliers repeat it (LightFixture).
+FIXTURES["chain_link"] = {
+    "family": "parts",
+    "mount": "",
+    "budget": 40,
+    "soot": False,
+    "cookie": False,
+    "parts": [{"type": "chain", "name": "link", "slot": "chain", "start": (0.0, 0.0, 0.0), "end": (0.0, 0.0, -0.054), "link": (0.07, 0.04, 0.008)}],
+    "sockets": {},
+    "burner": {},
+}
+
+# The wall lantern: a square box lantern hanging from an iron bracket.
+_WL_BODY = (0.0, -0.3, -0.05)
+
+FIXTURES["wall_lantern"] = {
+    "family": "lanterns",
+    "mount": "wall",
+    "budget": 450,
+    "soot": True,
+    "cookie": False,
+    "parts": [
+        {"type": "box", "name": "plate", "slot": "iron", "size": (0.08, 0.02, 0.16), "at": (0.0, -0.01, 0.12)},
+        {"type": "tube", "name": "bracket", "slot": "iron", "radius": 0.008, "sides": 4,
+         "points": [(0.0, -0.02, 0.14), (0.0, -0.18, 0.17), (0.0, -0.3, 0.16), (0.0, -0.3, 0.12)]},
+        {"type": "tube", "name": "brace", "slot": "iron", "radius": 0.006, "sides": 4, "points": [(0.0, -0.02, 0.06), (0.0, -0.17, 0.165)]},
+        {"type": "panes", "name": "panes", "slot": "horn", "glow": True, "sides": 4, "radius": 0.113, "height": 0.24, "bars": 0.007,
+         "at": (0.0, -0.3, -0.17)},
+        {"type": "lathe", "name": "roof", "slot": "iron", "segments": 4,
+         "profile": [(0.125, 0.0), (0.11, 0.02), (0.02, 0.1), (0.0, 0.11)], "rotate": (0.0, 0.0, 45.0), "at": (0.0, -0.3, 0.07)},
+        {"type": "lathe", "name": "base", "slot": "iron", "segments": 4,
+         "profile": [(0.0, -0.02), (0.12, -0.02), (0.12, 0.0), (0.0, 0.0)], "rotate": (0.0, 0.0, 45.0), "at": (0.0, -0.3, -0.17)},
+        {"type": "lathe", "name": "wick", "slot": "wax", "segments": 4,
+         "profile": [(0.0, 0.0), (0.015, 0.0), (0.012, 0.05), (0.0, 0.055)], "at": (0.0, -0.3, -0.17)},
+    ],
+    "sockets": {"flame": [(0.0, -0.3, -0.1)], "corona": [(0.0, -0.3, -0.05)], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(LAMP_BURNER, energy=1.2, light_range=6.0, shadows=False),
+}
+
+# The lamp post: a timber post on a stone foot, an iron crook arm, and the
+# hanging lantern's make hung from it.
+_LP_LANTERN = (0.0, -0.6, 2.75 - 0.075 * _HL - 0.15 * _HL)
+
+FIXTURES["lamp_post"] = {
+    "family": "lanterns",
+    "mount": "floor",
+    "budget": 700,
+    "soot": False,
+    "cookie": True,
+    "parts": [
+        {"type": "box", "name": "foot", "slot": "stone", "size": (0.32, 0.32, 0.22), "at": (0.0, 0.0, 0.11)},
+        {"type": "tube", "name": "post", "slot": "wood_old", "radius": 0.085, "sides": 4, "points": [(0.0, 0.0, 0.2), (0.0, 0.0, 3.0)]},
+        {"type": "tube", "name": "arm", "slot": "iron", "radius": 0.014, "sides": 4,
+         "points": [(0.0, -0.05, 2.82), (0.0, -0.3, 2.92), (0.0, -0.6, 2.9), (0.0, -0.6, 2.78)]},
+        {"type": "tube", "name": "brace", "slot": "iron", "radius": 0.01, "sides": 4, "points": [(0.0, -0.05, 2.5), (0.0, -0.32, 2.9)]},
+        {"type": "ring", "name": "hook", "slot": "iron", "radius": 0.02, "thickness": 0.006, "sides": 3, "segments": 6, "axis": "Y",
+         "at": (0.0, -0.6, 2.76)},
+    ] + _lantern(_HL, _LP_LANTERN, "lantern_"),
+    "sockets": {"flame": [(0.0, -0.6, _LP_LANTERN[2] - 0.05 * _HL)], "corona": [(0.0, -0.6, _LP_LANTERN[2])], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(LAMP_BURNER, energy=1.6, light_range=9.0, shadows=True),
+}
+
+# Candles and oil lamps.
+CANDLE_BURNER = {
+    "sheet": "candle", "ramp": "candle", "low_ramp": "gutter", "flicker_kind": "candle", "flicker": 0.04,
+    "energy": 0.35, "light_range": 2.5, "shadows": False, "color": "FFA645", "corona_px": 12.0,
+    "ember_rate": 0.0, "smoke_rate": 0.0, "flame_size": 0.05, "flame_layers": 2, "core": True,
+    "loop": "", "loop_db": -30.0, "loop_reach": 0.0,
+}
+CLUSTER = {"flame_layers": 1, "core": False}
+
+
+def _candle(at=(0.0, 0.0, 0.0), height=0.10, prefix="", pool=True, drip=True):
+    """A tallow candle standing at `at`; returns (parts, flame point)."""
+    x, y, z = at
+    parts = [
+        {"type": "lathe", "name": prefix + "candle", "slot": "wax", "segments": 6,
+         "profile": [(0.0, 0.0), (0.02, 0.0), (0.02, height - 0.006), (0.012, height), (0.0, height + 0.002)], "at": (x, y, z)},
+    ]
+
+    if pool:
+        parts.append({"type": "lathe", "name": prefix + "pool", "slot": "wax", "segments": 6,
+                      "profile": [(0.028, 0.0), (0.0, 0.005)], "at": (x, y, z)})
+
+    if drip:
+        parts.append({"type": "lathe", "name": prefix + "drip", "slot": "wax", "segments": 3,
+                      "profile": [(0.0, 0.0), (0.004, 0.004), (0.005, height * 0.4), (0.0, height * 0.45)],
+                      "at": (x + 0.017, y, z + height * 0.45)})
+
+    return parts, (x, y, z + height + 0.012)
+
+
+def _candle_fixture(height):
+    parts, flame = _candle(height=height)
+    return {
+        "family": "candles", "mount": "table", "budget": 60, "soot": False, "cookie": False, "parts": parts,
+        "sockets": {"flame": [flame], "corona": [(flame[0], flame[1], flame[2] + 0.02)]},
+        "burner": dict(CANDLE_BURNER),
+    }
+
+
+for _cm in (6, 10, 16):
+    FIXTURES["candle_%d" % _cm] = _candle_fixture(_cm / 100.0)
+
+_candle_on_pricket, _pricket_flame = _candle((0.0, 0.0, 0.22), 0.10, pool=False)
+FIXTURES["candlestick_iron"] = {
+    "family": "candles", "mount": "table", "budget": 150, "soot": False, "cookie": False,
+    "parts": [
+        {"type": "lathe", "name": "dish", "slot": "iron", "segments": 6,
+         "profile": [(0.0, 0.0), (0.07, 0.0), (0.075, 0.012), (0.06, 0.016), (0.0, 0.016)]},
+        {"type": "tube", "name": "stem", "slot": "iron", "radius": 0.008, "sides": 4, "points": [(0.0, 0.0, 0.016), (0.0, 0.0, 0.2)]},
+        {"type": "lathe", "name": "pan", "slot": "iron", "segments": 6, "profile": [(0.0, 0.195), (0.04, 0.2), (0.045, 0.215), (0.0, 0.21)]},
+    ] + _candle_on_pricket,
+    "sockets": {"flame": [_pricket_flame], "corona": [(0.0, 0.0, _pricket_flame[2] + 0.02)]},
+    "burner": dict(CANDLE_BURNER, **CLUSTER),
+}
+
+_candle_on_socket, _socket_flame = _candle((0.0, 0.0, 0.2), 0.10, pool=False)
+FIXTURES["candlestick_brass"] = {
+    "family": "candles", "mount": "table", "budget": 150, "soot": False, "cookie": False,
+    "parts": [
+        {"type": "lathe", "name": "stick", "slot": "brass", "segments": 6,
+         "profile": [(0.0, 0.0), (0.055, 0.0), (0.05, 0.015), (0.018, 0.03), (0.014, 0.12), (0.02, 0.16), (0.012, 0.18), (0.026, 0.2), (0.0, 0.2)]},
+    ] + _candle_on_socket,
+    "sockets": {"flame": [_socket_flame], "corona": [(0.0, 0.0, _socket_flame[2] + 0.02)]},
+    "burner": dict(CANDLE_BURNER, **CLUSTER),
+}
+
+
+def _candelabra(arms):
+    parts = [
+        {"type": "lathe", "name": "base", "slot": "brass", "segments": 6,
+         "profile": [(0.0, 0.0), (0.09, 0.0), (0.08, 0.02), (0.03, 0.05), (0.0, 0.05)]},
+        {"type": "tube", "name": "stem", "slot": "brass", "radius": 0.012, "sides": 4, "points": [(0.0, 0.0, 0.05), (0.0, 0.0, 0.3)]},
+    ]
+    flames = []
+    spread = 0.12 if arms == 3 else 0.22
+    reach = [((i - (arms - 1) / 2.0) / ((arms - 1) / 2.0)) * spread for i in range(arms)]
+
+    for i, x in enumerate(reach):
+        cup = (x, 0.0, 0.34 if abs(x) > 0.01 else 0.38)
+
+        if abs(x) > 0.01:
+            parts.append({"type": "tube", "name": "arm_%d" % i, "slot": "brass", "radius": 0.006, "sides": 3,
+                          "points": [(0.0, 0.0, 0.26), (x * 0.6, 0.0, 0.25), (x, 0.0, cup[2] - 0.01)]})
+
+        parts.append({"type": "lathe", "name": "cup_%d" % i, "slot": "brass", "segments": 5,
+                      "profile": [(0.0, -0.01), (0.03, 0.0), (0.028, 0.012), (0.0, 0.01)], "at": cup})
+        candle, flame = _candle((cup[0], cup[1], cup[2] + 0.01), 0.10, "c%d_" % i, pool=False, drip=(i % 2 == 0))
+        parts += candle
+        flames.append(flame)
+
+    return {
+        "family": "candles", "mount": "table", "budget": 450, "soot": False, "cookie": False, "parts": parts,
+        "sockets": {"flame": flames, "corona": [(0.0, 0.0, max(f[2] for f in flames) + 0.03)]},
+        "burner": dict(CANDLE_BURNER, energy=0.9, light_range=4.5, corona_px=20.0, **CLUSTER),
+    }
+
+
+FIXTURES["candelabra_3"] = _candelabra(3)
+FIXTURES["candelabra_5"] = _candelabra(5)
+
+
+def _chandelier(candles):
+    import math
+    hoop = 0.35
+    drop = 0.5
+    parts = [
+        {"type": "ring", "name": "hang_ring", "slot": "iron", "radius": 0.025, "thickness": 0.008, "sides": 3, "segments": 6,
+         "axis": "Y", "at": (0.0, 0.0, -0.02)},
+        {"type": "ring", "name": "hoop", "slot": "iron", "radius": hoop, "thickness": 0.02, "sides": 4, "segments": 12,
+         "axis": "Z", "at": (0.0, 0.0, -drop)},
+    ]
+
+    for i in range(3):
+        a = math.tau * i / 3.0 + 0.3
+        parts.append({"type": "tube", "name": "rod_%d" % i, "slot": "iron", "radius": 0.004, "sides": 3,
+                      "points": [(0.0, 0.0, -0.04), (round(hoop * math.cos(a), 4), round(hoop * math.sin(a), 4), -drop)]})
+
+    flames = []
+
+    for i in range(candles):
+        a = math.tau * i / candles
+        at = (round(hoop * math.cos(a), 4), round(hoop * math.sin(a), 4), -drop + 0.01)
+        parts.append({"type": "lathe", "name": "cup_%d" % i, "slot": "iron", "segments": 5,
+                      "profile": [(0.0, -0.012), (0.03, 0.0), (0.028, 0.01), (0.0, 0.008)], "at": at})
+        candle, flame = _candle((at[0], at[1], at[2] + 0.008), 0.09, "c%d_" % i, pool=False, drip=(i % 3 == 0))
+        parts += candle
+        flames.append(flame)
+
+    return {
+        "family": "candles", "mount": "hang", "budget": 900, "soot": False, "cookie": False, "parts": parts,
+        "sockets": {"flame": flames, "corona": [(0.0, 0.0, -drop + 0.14)], "hang": [(0.0, 0.0, 0.0)]},
+        "burner": dict(CANDLE_BURNER, energy=1.6, light_range=8.0, shadows=True, corona_px=36.0, **CLUSTER),
+    }
+
+
+FIXTURES["chandelier_6"] = _chandelier(6)
+FIXTURES["chandelier_8"] = _chandelier(8)
+
+OIL_BURNER = dict(CANDLE_BURNER, sheet="small", ramp="lamp", flicker_kind="lamp", energy=0.5, light_range=3.0,
+                  corona_px=16.0, flame_size=0.06)
+
+
+def _oil_bowl(slot, at=(0.0, 0.0, 0.0)):
+    x, y, z = at
+    return [
+        {"type": "lathe", "name": "bowl", "slot": slot, "segments": 8,
+         "profile": [(0.0, 0.0), (0.035, 0.0), (0.05, 0.015), (0.048, 0.03), (0.02, 0.034), (0.0, 0.03)], "at": at},
+        {"type": "tube", "name": "spout", "slot": slot, "radius": 0.009, "sides": 4, "points": [(x + 0.04, y, z + 0.02), (x + 0.085, y, z + 0.03)]},
+    ], (x + 0.09, y, z + 0.038)
+
+
+_clay_parts, _clay_flame = _oil_bowl("clay")
+FIXTURES["oil_lamp_clay"] = {
+    "family": "candles", "mount": "table", "budget": 120, "soot": False, "cookie": False,
+    "parts": _clay_parts + [
+        {"type": "ring", "name": "handle", "slot": "clay", "radius": 0.02, "thickness": 0.008, "sides": 3, "segments": 5,
+         "axis": "Y", "at": (-0.055, 0.0, 0.025)},
+    ],
+    "sockets": {"flame": [_clay_flame], "corona": [(_clay_flame[0], 0.0, _clay_flame[2] + 0.02)]},
+    "burner": dict(OIL_BURNER),
+}
+
+_hung_parts, _hung_flame = _oil_bowl("brass", (0.0, 0.0, -0.3))
+FIXTURES["oil_lamp_hanging"] = {
+    "family": "candles", "mount": "hang", "budget": 120, "soot": False, "cookie": False,
+    "parts": _hung_parts + [
+        {"type": "ring", "name": "hang_ring", "slot": "chain", "radius": 0.015, "thickness": 0.005, "sides": 3, "segments": 3,
+         "axis": "Y", "at": (0.0, 0.0, -0.012)},
+    ] + [
+        {"type": "tube", "name": "rod_%d" % i, "slot": "chain", "radius": 0.002, "sides": 3,
+         "points": [(0.0, 0.0, -0.02), _round((0.0, 0.0, -0.27), 0.045, a)]}
+        for i, a in enumerate((0.0, 120.0, 240.0))
+    ],
+    "sockets": {"flame": [_hung_flame], "corona": [(_hung_flame[0], 0.0, _hung_flame[2] + 0.02)], "hang": [(0.0, 0.0, 0.0)]},
+    "burner": dict(OIL_BURNER),
+}
+
+# Open fires. Their light keeps today's height (light_above), their flames
+# sit on their fuel.
+BRAZIER_BURNER = {
+    "sheet": "brazier", "ramp": "brazier", "low_ramp": "dying", "flicker_kind": "brazier", "flicker": 0.12,
+    "energy": 2.6, "light_range": 8.0, "shadows": True, "color": "FF9829", "corona_px": 72.0,
+    "ember_rate": 15.0, "smoke_rate": 6.0, "flame_size": 0.8, "flame_layers": 2, "core": True,
+    "loop": "fire_medium", "loop_db": -11.0, "loop_reach": 14.0, "event_every": (15.0, 30.0),
+}
+
+FIXTURES["brazier"] = {
+    "family": "fires",
+    "mount": "floor",
+    "budget": 700,
+    "soot": False,
+    "cookie": False,
+    "parts": [
+        {"type": "lathe", "name": "bowl", "slot": "iron", "segments": 10,
+         "profile": [(0.0, 0.8), (0.18, 0.8), (0.34, 0.95), (0.42, 1.1), (0.45, 1.115), (0.4, 1.105), (0.3, 0.99), (0.0, 0.96)]},
+        {"type": "blob", "name": "coals", "slot": "coal", "glow": True, "segments": 10, "noise": 0.014, "seed": 21,
+         "profile": [(0.0, 0.97), (0.33, 0.99), (0.32, 1.05), (0.18, 1.1), (0.0, 1.12)]},
+        {"type": "logs", "name": "sticks", "slot": "bark", "sides": 5,
+         "logs": [((-0.22, 0.02, 1.04), (0.2, -0.04, 1.16), 0.028), ((0.08, -0.22, 1.05), (-0.04, 0.2, 1.15), 0.026),
+                  ((0.18, 0.15, 1.05), (-0.16, -0.12, 1.13), 0.024)]},
+        {"type": "ring", "name": "band", "slot": "iron", "radius": 0.37, "thickness": 0.02, "sides": 3, "segments": 10, "axis": "Z",
+         "at": (0.0, 0.0, 0.98)},
+    ] + [
+        {"type": "tube", "name": "leg_%d" % i, "slot": "iron", "radius": 0.018, "sides": 4,
+         "points": [_round((0.0, 0.0, 0.86), 0.2, a), _round((0.0, 0.0, 0.45), 0.3, a), _round((0.0, 0.0, 0.06), 0.36, a), _round((0.0, 0.0, 0.0), 0.42, a)]}
+        for i, a in enumerate((90.0, 210.0, 330.0))
+    ],
+    "sockets": {"flame": [(0.0, 0.0, 1.1)], "corona": [(0.0, 0.0, 1.45)], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(BRAZIER_BURNER, light_above=0.37),
+}
+
+FIXTURES["campfire"] = {
+    "family": "fires",
+    "mount": "floor",
+    "budget": 600,
+    "soot": False,
+    "cookie": False,
+    "parts": [
+        {"type": "stones", "name": "ring", "slot": "stone", "count": 8, "radius": 0.3, "size": (0.14, 0.12, 0.12), "jitter": 0.25, "seed": 4},
+        {"type": "blob", "name": "embers", "slot": "coal", "glow": True, "segments": 10, "noise": 0.012, "seed": 8,
+         "profile": [(0.0, 0.0), (0.22, 0.005), (0.21, 0.04), (0.1, 0.065), (0.0, 0.07)]},
+        {"type": "logs", "name": "logs", "slot": "bark", "sides": 6,
+         "logs": [((-0.28, 0.0, 0.03), (0.16, 0.04, 0.17), 0.036), ((0.26, 0.1, 0.03), (-0.1, -0.06, 0.18), 0.034),
+                  ((0.05, -0.27, 0.03), (0.0, 0.12, 0.19), 0.035), ((-0.12, 0.25, 0.03), (0.06, -0.05, 0.16), 0.03),
+                  ((0.22, -0.2, 0.02), (-0.12, 0.1, 0.12), 0.028)]},
+    ],
+    "sockets": {"flame": [(0.0, 0.0, 0.08)], "corona": [(0.0, 0.0, 0.4)], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(BRAZIER_BURNER, sheet="fire", ramp="fire", flicker_kind="fire", flicker=0.18, energy=2.2, light_range=7.0,
+                   flame_size=0.5, ember_rate=20.0, smoke_rate=6.0, event_every=(20.0, 40.0), light_above=0.26),
+}
+
+# The hearth: an ashlar fireplace against a wall (its back on the wall at
+# y = 0, opening toward -Y), a hood tapering up into a chimney breast,
+# firedogs and logs on a hearth stone. Its masonry casts shadows (its own
+# fire lights only the room in front) and is solid.
+FIXTURES["hearth"] = {
+    "family": "fires",
+    "mount": "wall",
+    "budget": 1500,
+    "soot": False,
+    "cookie": False,
+    "shadow_parts": ["cheek_l", "cheek_r", "back", "hood", "breast", "mantel"],
+    "parts": [
+        {"type": "box", "name": "back", "slot": "ashlar", "size": (1.6, 0.12, 1.1), "at": (0.0, -0.06, 0.55)},
+        {"type": "box", "name": "cheek_l", "slot": "ashlar", "size": (0.3, 0.62, 1.1), "at": (-0.65, -0.43, 0.55)},
+        {"type": "box", "name": "cheek_r", "slot": "ashlar", "size": (0.3, 0.62, 1.1), "at": (0.65, -0.43, 0.55)},
+        {"type": "box", "name": "mantel", "slot": "ashlar", "size": (1.8, 0.8, 0.14), "at": (0.0, -0.4, 1.17)},
+        {"type": "lathe", "name": "hood", "slot": "ashlar", "segments": 4, "profile": [(1.0, 0.0), (0.62, 0.9), (0.0, 0.9)],
+         "rotate": (0.0, 0.0, 45.0), "at": (0.0, -0.35, 1.24)},
+        {"type": "box", "name": "breast", "slot": "ashlar", "size": (0.9, 0.5, 0.9), "at": (0.0, -0.25, 2.55)},
+        {"type": "box", "name": "hearthstone", "slot": "stone", "size": (1.9, 1.0, 0.06), "at": (0.0, -0.5, 0.03)},
+        {"type": "blob", "name": "embers", "slot": "coal", "glow": True, "segments": 10, "noise": 0.012, "seed": 9,
+         "profile": [(0.0, 0.06), (0.4, 0.065), (0.38, 0.09), (0.15, 0.11), (0.0, 0.115)], "at": (0.0, -0.4, 0.0)},
+        {"type": "logs", "name": "logs", "slot": "bark", "sides": 6,
+         "logs": [((-0.45, -0.38, 0.18), (0.45, -0.4, 0.2), 0.05), ((-0.4, -0.5, 0.16), (0.42, -0.3, 0.26), 0.045),
+                  ((-0.3, -0.25, 0.14), (0.35, -0.5, 0.3), 0.04)]},
+        {"type": "collider", "name": "wall_back", "slot": "", "size": (1.6, 0.12, 1.1), "at": (0.0, -0.06, 0.55)},
+        {"type": "collider", "name": "wall_left", "slot": "", "size": (0.3, 0.62, 1.1), "at": (-0.65, -0.43, 0.55)},
+        {"type": "collider", "name": "wall_right", "slot": "", "size": (0.3, 0.62, 1.1), "at": (0.65, -0.43, 0.55)},
+        {"type": "collider", "name": "wall_hood", "slot": "", "size": (1.8, 0.8, 0.6), "at": (0.0, -0.4, 1.4)},
+        {"type": "collider", "name": "wall_breast", "slot": "", "size": (0.9, 0.5, 1.4), "at": (0.0, -0.25, 2.4)},
+    ] + [
+        {"type": "tube", "name": "firedog_%d" % i, "slot": "iron", "radius": 0.014, "sides": 4,
+         "points": [(x, -0.15, 0.1), (x, -0.62, 0.1), (x, -0.66, 0.16), (x, -0.64, 0.3)]}
+        for i, x in enumerate((-0.32, 0.32))
+    ],
+    "sockets": {"flame": [(0.0, -0.4, 0.22)], "corona": [(0.0, -0.45, 0.5)], "mount": [(0.0, 0.0, 0.0)]},
+    "burner": dict(BRAZIER_BURNER, sheet="fire", ramp="fire", flicker_kind="fire", flicker=0.18, energy=2.6, light_range=9.0,
+                   flame_size=0.6, ember_rate=20.0, smoke_rate=4.0, loop="fire_big", loop_db=-14.0, event_every=(20.0, 40.0), light_above=0.2,
+                   crackle_rate=0.5, chimney="chimney"),
+}
+
+KINDS = list(FIXTURES)
+
+
+def variant(base, **changes):
+    """A copy of recipe `base` with `changes` laid over it."""
+    recipe = copy.deepcopy(FIXTURES[base])
+    recipe.update(copy.deepcopy(changes))
+    return recipe

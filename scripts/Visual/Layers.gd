@@ -4,7 +4,9 @@ extends RefCounted
 ## the lightgem's cameras do not see particles, effect lights do not light the
 ## lightgem's probe, and blood on the floor does not paint the guards.
 ##
-##   layers 1-16   the world: level geometry and props
+##   layers 1-16   the world: level geometry and props (layer 16: the parts
+##                 of light fixtures that glow from inside, which their own
+##                 burners do not light: GLOWING)
 ##   layer 17      actors: guards and their bodies (wounds paint only these)
 ##   layer 18      effects: particles, blade trails, glints
 ##   layer 19      your hands (drawn over everything)
@@ -13,6 +15,10 @@ extends RefCounted
 const WORLD := 1
 ## Everything a stain on the floor or a wall may paint: layers 1 to 16.
 const WORLD_ALL := (1 << 16) - 1
+## A fixture's glowing parts (a pitch head, coals, horn panes): they shine by
+## their own glow, and a burner's light (a hand's breadth away) would blow
+## them out, so burners leave this layer unlit.
+const GLOWING := 1 << 15
 const ACTORS := 1 << 16
 const FX := 1 << 17
 const VIEWMODEL := 1 << 18

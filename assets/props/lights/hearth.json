@@ -1,0 +1,79 @@
+{
+ "fixture": "hearth",
+ "family": "fires",
+ "mount": "wall",
+ "tris": 262,
+ "slots": [
+  "ashlar",
+  "bark",
+  "char",
+  "coal_glow",
+  "iron",
+  "stone"
+ ],
+ "glow_parts": [
+  "embers"
+ ],
+ "shadow_parts": [
+  "cheek_l",
+  "cheek_r",
+  "back",
+  "hood",
+  "breast",
+  "mantel"
+ ],
+ "stretch": {},
+ "sockets": {
+  "flame": [
+   [
+    0.0,
+    0.22,
+    0.4
+   ]
+  ],
+  "corona": [
+   [
+    0.0,
+    0.5,
+    0.45
+   ]
+  ],
+  "mount": [
+   [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "fire",
+  "ramp": "fire",
+  "low_ramp": "dying",
+  "flicker_kind": "fire",
+  "flicker": 0.18,
+  "energy": 2.6,
+  "light_range": 9.0,
+  "shadows": true,
+  "color": "FF9829",
+  "corona_px": 72.0,
+  "ember_rate": 20.0,
+  "smoke_rate": 4.0,
+  "flame_size": 0.6,
+  "flame_layers": 2,
+  "core": true,
+  "loop": "fire_big",
+  "loop_db": -14.0,
+  "loop_reach": 14.0,
+  "event_every": [
+   20.0,
+   40.0
+  ],
+  "light_above": 0.2,
+  "crackle_rate": 0.5,
+  "chimney": "chimney"
+ },
+ "soot": false,
+ "cookie": false,
+ "hash": "6480ee88a62709cbcdfb3b5ad9ee3516"
+}

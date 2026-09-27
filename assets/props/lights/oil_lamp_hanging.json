@@ -1,0 +1,59 @@
+{
+ "fixture": "oil_lamp_hanging",
+ "family": "candles",
+ "mount": "hang",
+ "tris": 118,
+ "slots": [
+  "brass",
+  "chain"
+ ],
+ "glow_parts": [],
+ "shadow_parts": [],
+ "stretch": {},
+ "sockets": {
+  "flame": [
+   [
+    0.09,
+    -0.262,
+    -0.0
+   ]
+  ],
+  "corona": [
+   [
+    0.09,
+    -0.242,
+    -0.0
+   ]
+  ],
+  "hang": [
+   [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "small",
+  "ramp": "lamp",
+  "low_ramp": "gutter",
+  "flicker_kind": "lamp",
+  "flicker": 0.04,
+  "energy": 0.5,
+  "light_range": 3.0,
+  "shadows": false,
+  "color": "FFA645",
+  "corona_px": 16.0,
+  "ember_rate": 0.0,
+  "smoke_rate": 0.0,
+  "flame_size": 0.06,
+  "flame_layers": 2,
+  "core": true,
+  "loop": "",
+  "loop_db": -30.0,
+  "loop_reach": 0.0
+ },
+ "soot": false,
+ "cookie": false,
+ "hash": "d5c7375f27e7379f95b14e348619f12d"
+}

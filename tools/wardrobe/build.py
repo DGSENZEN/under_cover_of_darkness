@@ -113,8 +113,8 @@ class Kind:
         # Garments that leave the body under them (`"hides": False`: they
         # stand clear of it, and it shows under their rims).
         self.open_over = set()
-        # The faces of his neck kept up under his head (low_poly_base,
-        # `neck_under`), by index (the base keeps its faces' numbers until
+        # The faces of his neck's foot kept under the seam round it
+        # (low_poly_base), by index (the base keeps its faces' numbers until
         # hide_body).
         self.neck_faces = set()
         # Trim for the bake to paint on the outfit (bake.trim): pauldrons'.
@@ -234,11 +234,11 @@ def build_kind(recipe, force):
 
 def low_poly_base(kind):
     """His left half, without the head (a part of its own) or the hands if
-    mittens replace them, cut to half the recipe's triangles. With
-    `neck_under` (a bare neck: the brute's), his neck is kept up to its
-    `up_to` height, sunk `tuck` under the head's from its `from` height up:
-    between the teeth of the head's edge his neck shows, not the dark
-    underside of a stub cut at the head's bone weights."""
+    mittens replace them, cut to half the recipe's triangles. His neck is
+    cut on the seam the heads are cut on (common.cut_at_neck), its edge laid
+    on the full body where theirs is: one seam, where the bone weights cut
+    each in teeth. (Batch 0's watchman is built as approved: cut at the
+    head's bone weights.)"""
     base = kind.ref.copy()
     base.data = kind.ref.data.copy()
     base.name = "Base"
@@ -251,9 +251,12 @@ def low_poly_base(kind):
     regions = common.vertex_regions(base)
     bm = bmesh.new()
     bm.from_mesh(base.data)
-    neck = kind.recipe.get("neck_under")
-    kept_neck = [face for face in bm.faces if neck and face.calc_center_median().z < neck["up_to"]
-                 and majority([regions[v.index] for v in face.verts]) == "head"]
+    seam = kind.recipe.get("batch") != 0
+    body = kind.recipe["body"]
+    neck_y = kind.at(("neck_01", 0.0)).y
+    # (Kept a little over the seam: cut there once decimated.)
+    kept_neck = [face for face in bm.faces if seam and majority([regions[v.index] for v in face.verts]) == "head"
+                 and face.calc_center_median().z < common.neck_cut_z(body, face.calc_center_median(), neck_y) + 0.025]
     doomed = [face for face in bm.faces if majority([regions[v.index] for v in face.verts]) in dropped
               and face not in kept_neck]
     marked = sorted({v.index for face in kept_neck for v in face.verts})
@@ -261,8 +264,8 @@ def low_poly_base(kind):
     bm.to_mesh(base.data)
     bm.free()
 
-    # (Its vertices marked through the decimation: the neck kept, and only
-    # it, is sunk, and the garments measure past it.)
+    # (Its vertices marked through the decimation and the cut: the garments
+    # measure past the neck kept.)
     if marked:
         base.vertex_groups.new(name="wr_neck").add(marked, 1.0, "REPLACE")
 
@@ -286,27 +289,19 @@ def low_poly_base(kind):
     bmesh.ops.dissolve_degenerate(bm, dist=1e-5, edges=bm.edges[:])
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
 
-    group = base.vertex_groups.get("wr_neck")
-    on_neck = set()
-
-    if group is not None:
-        deform = bm.verts.layers.deform.verify()
-        on_neck = {vertex for vertex in bm.verts if vertex[deform].get(group.index, 0.0) > 0.5}
-
-        # Sunk under the head's neck (along the full body's own surface
-        # normal), easing in over a centimetre from where the head's begins.
-        for vertex in on_neck:
-            ease = smoothstep(neck["from"], neck["from"] + 0.01, vertex.co.z)
-            seam = vertex.co.x == 0.0
-            vertex.co -= kind.normal_at(vertex.co) * neck["tuck"] * ease
-            vertex.co.x = 0.0 if seam else vertex.co.x
-
-    bm.faces.index_update()
-    kind.neck_faces = {f.index for f in bm.faces if all(v in on_neck for v in f.verts)}
     bm.to_mesh(base.data)
     bm.free()
 
+    if seam:
+        # Its edge's weights copied from the full body at the end (weigh),
+        # as the heads' are: where they meet, they move alike.
+        common.group(base, common.TRANSFER, 1.0, common.cut_at_neck(base, body, neck_y, False, kind.ref_tree, half=True))
+
+    group = base.vertex_groups.get("wr_neck")
+
     if group is not None:
+        on_neck = {v.index for v in base.data.vertices if any(g.group == group.index and g.weight > 0.5 for g in v.groups)}
+        kind.neck_faces = {p.index for p in base.data.polygons if any(i in on_neck for i in p.vertices)}
         base.vertex_groups.remove(group)
 
     kind.types[base.name] = "base"
@@ -365,16 +360,63 @@ def shell(kind, g, part):
     # (Batch 0's watchman is built as approved: recipes.WATCHMAN "batch".)
     if kind.recipe.get("batch") != 0:
         clean_edge(chosen, near)
+
+        # Up to the seam round his neck, from wherever it reaches his neck
+        # (the base keeps his neck's foot, under the seam, as the head's):
+        # a clean neckline, not the teeth of his bone weights. A bare neck
+        # (the brute's) stays skin, all of its foot.
+        if kind.recipe.get("bare_neck"):
+            foot = neck_foot(kind)
+            chosen -= {f for f in chosen if f.index in foot}
+        else:
+            neck = {f for f in bm.faces if majority([regions[v.index] for v in f.verts]) == "head" and within(f)}
+            grown = set()
+
+            while True:
+                more = {other for f in chosen | grown for e in f.edges for other in e.link_faces
+                        if other in neck and other not in grown}
+
+                if not more:
+                    break
+
+                grown |= more
+
+            chosen |= grown
+
         one_owner(kind, g, chosen)
 
     doomed = [f for f in bm.faces if f not in chosen]
     kind.covered |= {f.index for f in bm.faces} - {f.index for f in doomed}
     kind.shell_faces[g["name"]] = sorted(f.index for f in chosen)
+    # Each face tagged with the base face it is (a lip, -1): its faces' order
+    # is not kept (bmesh fills the gaps the cut leaves with the lips' faces,
+    # differently from build to build), and one_owner takes faces by it.
+    # (Batch 0 as approved.)
+    base_of = None
+
+    if kind.recipe.get("batch") != 0:
+        # (A new layer leaves the faces held stale: fetched again.)
+        doomed = [f.index for f in doomed]
+        base_of = bm.faces.layers.int.new(BASE_FACE)
+        bm.faces.ensure_lookup_table()
+        doomed = [bm.faces[i] for i in doomed]
+
+        for f in bm.faces:
+            f[base_of] = f.index
+
     bmesh.ops.delete(bm, geom=doomed, context="FACES")
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
     offset_verts(kind, bm, lambda co, n: g["thickness"] + pad(kind, g, co, n), g.get("smooth", 1))
-    kind.rims[g["name"]] = [v.co.copy() for v in bm.verts if v.is_boundary]
-    lips(bm, kind, g.get("lips", []))
+    # (Its open edges, not its mirror seam: down his spine, that ran a
+    # collar's back down to his shoulder blades. Batch 0 as approved.)
+    kind.rims[g["name"]] = [v.co.copy() for v in bm.verts if v.is_boundary and (kind.recipe.get("batch") == 0 or any(
+        e.is_boundary and not all(abs(w.co.x) < 1e-4 for w in e.verts) for e in v.link_edges))]
+    made = lips(bm, kind, g.get("lips", []) + (["neck"] if kind.recipe.get("batch") != 0 else []))
+
+    if base_of is not None:
+        for f in made:
+            f[base_of] = -1
+
     bm.to_mesh(obj.data)
     bm.free()
     kind.add(obj, g, part, "shell")
@@ -383,6 +425,10 @@ def shell(kind, g, part):
         # Iron studs over it (a studded jerkin), left for the bake.
         kind.details.setdefault("studs", []).append({"part": part, "spacing": g["studs"]["spacing"],
                                                      "centre_y": kind.centre(kind.z(("spine_02", 0.0))).y})
+
+
+# A shell's faces' base face (shell, one_owner): -1 on a lip.
+BASE_FACE = "wr_base_face"
 
 
 def one_owner(kind, g, chosen):
@@ -405,13 +451,15 @@ def one_owner(kind, g, chosen):
             mine -= shared
             continue
 
-        # (Its object's first faces are the base faces it kept, in order:
-        # lips come after them.)
+        # (By the base face each of its faces is, BASE_FACE; a lip turned in
+        # from a face it loses goes with it, not left hanging at his neck.)
         other = next(obj for obj in kind.parts if obj.name == name)
         bm = bmesh.new()
         bm.from_mesh(other.data)
-        bm.faces.ensure_lookup_table()
-        bmesh.ops.delete(bm, geom=[bm.faces[i] for i, base in enumerate(kept) if base in shared], context="FACES")
+        base_of = bm.faces.layers.int[BASE_FACE]
+        lost = [f for f in bm.faces if f[base_of] in shared]
+        lost_lips = {f for face in lost for e in face.edges for f in e.link_faces if f[base_of] == -1}
+        bmesh.ops.delete(bm, geom=lost + sorted(lost_lips, key=lambda f: f.index), context="FACES")
         bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
         bm.to_mesh(other.data)
         bm.free()
@@ -496,23 +544,33 @@ def offset_verts(kind, bm, amount, iterations=1):
 
 def lips(bm, kind, where):
     """Open edges turned in, back to where the body was, so nothing shows
-    through an opening: at the sleeves (out along his arms) and the bottom
-    (below the belt), as `where` asks. Never the seam."""
+    through an opening: at the sleeves (out along his arms), the bottom
+    (below the belt) and his neck (an edge that was on the seam round it:
+    turned in to where his head's edge is), as `where` asks. Never the
+    seam. Returns the faces it made."""
     layer = bm.verts.layers.float_vector.get("wr_rest")
     belt = kind.belt_z()
+    body = kind.recipe["body"]
+    neck_y = kind.at(("neck_01", 0.0)).y
+
+    def on_neck(vertex):
+        rest = Vector(vertex[layer])
+        return abs(rest.z - common.neck_cut_z(body, rest, neck_y)) < 1e-4
 
     def wanted(edge):
         mid = (edge.verts[0].co + edge.verts[1].co) * 0.5
-        return ("sleeve" in where and mid.x > 0.45) or ("bottom" in where and mid.z < belt and mid.x < 0.45)
+        return ("sleeve" in where and mid.x > 0.45) or ("bottom" in where and mid.z < belt and mid.x < 0.45) \
+            or ("neck" in where and layer is not None and all(on_neck(v) for v in edge.verts))
 
     edges = [e for e in bm.edges if e.is_boundary and not all(abs(v.co.x) < 1e-4 for v in e.verts) and wanted(e)]
 
     if not edges or layer is None:
-        return
+        return []
 
-    rim = {v for e in edges for v in e.verts}
+    # (In their order: from a set, which of two rim vertices at one place a
+    # lip went back to changed from build to build.)
+    rim = sorted({v for e in edges for v in e.verts}, key=lambda v: v.index)
     tree = KDTree(len(rim))
-    rim = list(rim)
 
     for i, vertex in enumerate(rim):
         tree.insert(vertex.co, i)
@@ -523,6 +581,8 @@ def lips(bm, kind, where):
     for vertex in (item for item in made if isinstance(item, bmesh.types.BMVert)):
         source = rim[tree.find(vertex.co)[1]]
         vertex.co = Vector(source[layer])
+
+    return [item for item in made if isinstance(item, bmesh.types.BMFace)]
 
 
 def pad(kind, g, co, normal):
@@ -719,6 +779,19 @@ def boots(kind, g, part):
 def collar(kind, g, part):
     """A standing collar on a shell's neck edge, leaning in to the throat."""
     rim = [p for p in kind.rims[g["on"]] if p.z > kind.z(("spine_03", 0.6)) and abs(p.x) < 0.17]
+
+    # On the seam round his neck, where his shells now end (the rest of a
+    # shell's edges, round a shoulder blade, ran its back down her spine):
+    # its foot just inside that clean edge, a centimetre under it all round,
+    # its top where it was. (Outside the edge, on a floor under its lowest
+    # point, its foot came out through the duelist's doublet in front when
+    # she took her guard.)
+    seam = kind.recipe.get("batch") != 0
+
+    if seam:
+        neck_y = kind.at(("neck_01", 0.0)).y
+        rim = [p for p in rim if abs(p.z - common.neck_cut_z(kind.recipe["body"], p, neck_y)) < 0.035] or rim
+
     axis = Vector((0.0, sum(p.y for p in rim) / len(rim), 0.0))
     ring0, ring1 = [], []
 
@@ -736,6 +809,11 @@ def collar(kind, g, part):
         flat = Vector((low.x, low.y - axis.y, 0.0))
         # Tall enough to stand over the whole rim, however ragged.
         high = low + Vector((0.0, 0.0, max(g["height"], ceiling - floor + 0.015))) - flat * g["lean_in"]
+
+        if seam:
+            low = Vector((best.x, best.y, best.z - 0.01)) - direction * 0.004
+            low.x = 0.0 if d in (0.0, 180.0) else low.x
+
         ring0.append(low)
         ring1.append(high)
 
@@ -1250,8 +1328,8 @@ def mantle(kind, g, part):
     rides (no chains: stiff fur)."""
     neck = kind.at(("neck_01", 0.0))
     top = neck.z + g.get("rise", 0.02)
-    # (Measured from his body without the neck kept up under his head,
-    # `neck_under`: it sits where it sat on the body cut at his head.)
+    # (Measured from his body without his neck's foot, kept up to the seam
+    # round it: it sits where it sat on the body cut at his head.)
     def not_neck(obj, polygon):
         return obj is not kind.base or polygon.index not in kind.neck_faces
 
@@ -1286,6 +1364,21 @@ def mantle(kind, g, part):
                 ring[i] = point + normal * (g["clear"] - depth)
 
             ring[i].x = 0.0 if i in (0, 8) else ring[i].x
+
+    # And the middle of every edge between them, both its ends lifted: each
+    # point clear, the edge between two sagged into the round top of a bare
+    # shoulder, and the fur came through his skin there.
+    for _ in range(4):
+        for ring in under[1:]:
+            for i in range(len(ring) - 1):
+                middle = (ring[i] + ring[i + 1]) * 0.5
+                near, normal, _, _ = tree.find_nearest(middle)
+                depth = (middle - near).dot(normal) if near is not None else 1.0
+
+                if depth < g["clear"]:
+                    for j in (i, i + 1):
+                        ring[j] = ring[j] + normal * (g["clear"] - depth)
+                        ring[j].x = 0.0 if j in (0, 8) else ring[j].x
 
     over = [[p + n * g["thickness"] for p, n in zip(ring, normals)] for ring in under]
 
@@ -1718,7 +1811,10 @@ def hide_body(kind, garments=None):
     opened = [obj for obj in garments if obj.name in kind.open_over]
     # (The shells' covered faces count on his half only: their indices go
     # stale once faces are gone.)
-    hidden = covered_by(kind, closed, whole, COVERED) | covered_by(kind, opened, whole, None) | \
+    # (A bare neck's foot stays: the mantle's roll, snug behind his neck,
+    # touched it, and his head's edge stood over a hole there.)
+    bare_foot = neck_foot(kind) if kind.recipe.get("bare_neck") else set()
+    hidden = covered_by(kind, closed, whole, COVERED) | (covered_by(kind, opened, whole, None) - bare_foot) | \
         (set() if whole else kind.covered)
     bm = bmesh.new()
     bm.from_mesh(base.data)
@@ -1728,6 +1824,18 @@ def hide_body(kind, garments=None):
     bm.to_mesh(base.data)
     bm.free()
     print("wardrobe: %d body faces hidden, %d left" % (len(hidden), len(base.data.polygons)))
+
+
+def neck_foot(kind, depth=0.03, reach=0.12):
+    """The base's faces at the foot of his neck, within `depth` under the
+    seam round it (common.NECK_CUT) and `reach` of its middle: a bare neck's
+    (the brute's), no shell's, and not hidden by a garment standing clear.
+    His jerkin took two behind it (cut, their corners weigh more on his
+    spine than his neck), and his head's edge stood over a hole there."""
+    body = kind.recipe["body"]
+    neck_y = kind.at(("neck_01", 0.0)).y
+    return {p.index for p in kind.base.data.polygons if math.hypot(p.center.x, p.center.y - neck_y) < reach
+            and 0.0 < common.neck_cut_z(body, p.center, neck_y) - p.center.z < depth}
 
 
 def strips_face_out(outfit, armature):
@@ -1939,9 +2047,11 @@ def start(name, body="male"):
     return armature, reference, keep
 
 
-def head_region(reference, name):
+def head_region(reference, name, body=None, neck_y=0.0):
     """His head and neck, as their own mesh: every face mostly moved by the
-    Head or the neck, welded whole."""
+    Head or the neck, welded whole. With `body`, also every face of his
+    neck's foot within 3 cm under the seam round it (common.NECK_CUT): the
+    head is cut there."""
     obj = reference.copy()
     obj.data = reference.data.copy()
     obj.name = name
@@ -1952,7 +2062,12 @@ def head_region(reference, name):
     regions = common.vertex_regions(obj)
     bm = bmesh.new()
     bm.from_mesh(obj.data)
-    doomed = [f for f in bm.faces if sum(1 for v in f.verts if regions[v.index] == "head") < 2]
+
+    def foot(f):
+        c = f.calc_center_median()
+        return body is not None and math.hypot(c.x, c.y - neck_y) < 0.16 and c.z > common.neck_cut_z(body, c, neck_y) - 0.03
+
+    doomed = [f for f in bm.faces if sum(1 for v in f.verts if regions[v.index] == "head") < 2 and not foot(f)]
     bmesh.ops.delete(bm, geom=doomed, context="FACES")
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
     bm.to_mesh(obj.data)
@@ -2044,11 +2159,14 @@ def build_heads(force, body="male"):
     guard(path, force)
     armature, reference, extras = start(target, body)
     kind = Kind({"belt": ("spine_01", 0.0), "garments": []}, armature, reference)
+    neck_y = kind.at(("neck_01", 0.0)).y
     made = []
 
     for face in faces:
         recipe = recipes.HEADS[face]
-        high = head_region(reference, "High_%s" % face)
+        # (The bake's source runs on past the seam: the low head's edge has
+        # something under it to bake from.)
+        high = head_region(reference, "High_%s" % face, body, neck_y)
         sources = [high]
 
         for part in ("eyes", "brows"):
@@ -2064,7 +2182,7 @@ def build_heads(force, body="male"):
         if "eyes" in extras:
             shrink_eyes(sources[1], recipe["eyes"])
 
-        low = head_region(reference, "Head_%s" % face)
+        low = head_region(reference, "Head_%s" % face, body, neck_y)
         reshape(sources + [low], recipe["shape"], kind)
         decimate = low.modifiers.new("Decimate", "DECIMATE")
         decimate.ratio = min(1.0, recipe["tris"] / max(common.tri_count(low), 1))
@@ -2073,6 +2191,10 @@ def build_heads(force, body="male"):
         decimate.symmetry_axis = "X"
         common.select_only([low])
         bpy.ops.object.modifier_apply(modifier=decimate.name)
+        # Cut on the seam round his neck, its edge laid on the full body and
+        # weighed as it is there: where every kind's body is cut and weighed.
+        common.group(low, common.TRANSFER, 1.0, common.cut_at_neck(low, body, neck_y, True, kind.ref_tree))
+        weigh(low, reference)
         split_at_seam(low)
         head_uv(low)
         faces_of_head = len(low.data.polygons)

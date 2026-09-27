@@ -1,0 +1,72 @@
+{
+ "fixture": "candelabra_5",
+ "family": "candles",
+ "mount": "table",
+ "tris": 420,
+ "slots": [
+  "brass",
+  "wax"
+ ],
+ "glow_parts": [],
+ "shadow_parts": [],
+ "stretch": {},
+ "sockets": {
+  "flame": [
+   [
+    -0.22,
+    0.462,
+    -0.0
+   ],
+   [
+    -0.11,
+    0.462,
+    -0.0
+   ],
+   [
+    0.0,
+    0.502,
+    -0.0
+   ],
+   [
+    0.11,
+    0.462,
+    -0.0
+   ],
+   [
+    0.22,
+    0.462,
+    -0.0
+   ]
+  ],
+  "corona": [
+   [
+    0.0,
+    0.532,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "candle",
+  "ramp": "candle",
+  "low_ramp": "gutter",
+  "flicker_kind": "candle",
+  "flicker": 0.04,
+  "energy": 0.9,
+  "light_range": 4.5,
+  "shadows": false,
+  "color": "FFA645",
+  "corona_px": 20.0,
+  "ember_rate": 0.0,
+  "smoke_rate": 0.0,
+  "flame_size": 0.05,
+  "flame_layers": 1,
+  "core": false,
+  "loop": "",
+  "loop_db": -30.0,
+  "loop_reach": 0.0
+ },
+ "soot": false,
+ "cookie": false,
+ "hash": "0d07394f9d463ee3dbb86b11769c5c2e"
+}

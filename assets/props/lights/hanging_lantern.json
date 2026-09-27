@@ -1,0 +1,62 @@
+{
+ "fixture": "hanging_lantern",
+ "family": "lanterns",
+ "mount": "hang",
+ "tris": 402,
+ "slots": [
+  "horn_glow",
+  "iron",
+  "wax"
+ ],
+ "glow_parts": [
+  "panes"
+ ],
+ "shadow_parts": [],
+ "stretch": {},
+ "sockets": {
+  "flame": [
+   [
+    0.0,
+    -0.4125,
+    -0.0
+   ]
+  ],
+  "corona": [
+   [
+    0.0,
+    -0.3375,
+    -0.0
+   ]
+  ],
+  "hang": [
+   [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "small",
+  "ramp": "lamp",
+  "low_ramp": "gutter",
+  "flicker_kind": "lamp",
+  "flicker": 0.05,
+  "energy": 1.4,
+  "light_range": 7.0,
+  "shadows": true,
+  "color": "FFA645",
+  "corona_px": 28.0,
+  "ember_rate": 0.0,
+  "smoke_rate": 0.0,
+  "flame_size": 0.08,
+  "flame_layers": 1,
+  "core": false,
+  "loop": "",
+  "loop_db": -30.0,
+  "loop_reach": 0.0
+ },
+ "soot": false,
+ "cookie": true,
+ "hash": "7a24a5baddb856bc4e3d22c1022e5ec1"
+}

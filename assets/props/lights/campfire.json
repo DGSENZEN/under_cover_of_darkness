@@ -1,0 +1,68 @@
+{
+ "fixture": "campfire",
+ "family": "fires",
+ "mount": "floor",
+ "tris": 256,
+ "slots": [
+  "bark",
+  "char",
+  "coal_glow",
+  "stone"
+ ],
+ "glow_parts": [
+  "embers"
+ ],
+ "shadow_parts": [],
+ "stretch": {},
+ "sockets": {
+  "flame": [
+   [
+    0.0,
+    0.08,
+    -0.0
+   ]
+  ],
+  "corona": [
+   [
+    0.0,
+    0.4,
+    -0.0
+   ]
+  ],
+  "mount": [
+   [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "fire",
+  "ramp": "fire",
+  "low_ramp": "dying",
+  "flicker_kind": "fire",
+  "flicker": 0.18,
+  "energy": 2.2,
+  "light_range": 7.0,
+  "shadows": true,
+  "color": "FF9829",
+  "corona_px": 72.0,
+  "ember_rate": 20.0,
+  "smoke_rate": 6.0,
+  "flame_size": 0.5,
+  "flame_layers": 2,
+  "core": true,
+  "loop": "fire_medium",
+  "loop_db": -11.0,
+  "loop_reach": 14.0,
+  "event_every": [
+   20.0,
+   40.0
+  ],
+  "light_above": 0.26
+ },
+ "soot": false,
+ "cookie": false,
+ "hash": "8602b01a5c2322d272eff715291fe6dc"
+}

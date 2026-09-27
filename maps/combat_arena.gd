@@ -30,7 +30,7 @@ const GUARD := preload("res://Guard.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
-const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const BarrelScript := preload("res://scripts/Combat/Barrel.gd")
 const HangingWeightScript := preload("res://scripts/Combat/HangingWeight.gd")
@@ -190,7 +190,10 @@ func _ring_yard() -> void:
 		for z in [-4.0, -24.0]:
 			_torch(Vector3(x, 3.0, z))
 
-	_torch(Vector3(0, 4.0, -14))
+	# A lantern on a long chain from the beam, over the middle of the ring
+	# (a torch hung in the air there before), as bright as the torches and,
+	# without its bars, lighting the ring below as the torch did.
+	Lights.hanging_lantern(self, Vector3(0.2, 7.12, -12), 2.7, {"energy": 2.4, "light_range": 10.0, "cookie": false, "can_douse": true})
 
 	# The pen they come from, behind the north gate, and its portcullis.
 	Props.block(self, Vector3(-4.5, 1.8, -30), Vector3(0.5, 3.6, 8), STONE)
@@ -794,14 +797,8 @@ func _mark(at: Vector3, radius: float) -> void:
 ## `shadows` off for the lesser lights: every guard who moves near a
 ## shadowed light has it drawn over again.
 func _torch(at: Vector3, shadows := true) -> void:
-	var torch: Node3D = TorchScript.new()
-	torch.energy = 2.4
-	torch.light_range = 10.0
-	torch.shadows = shadows
 	# One of the level's own: you can put it out (the guards light it again).
-	torch.can_douse = true
-	add_child(torch)
-	torch.global_position = at
+	Lights.torch_at(self, at, 2.4, 10.0, shadows, {"can_douse": true})
 
 
 func _sign(at: Vector3, text: String, size := 32) -> void:

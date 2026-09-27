@@ -21,12 +21,11 @@ extends RefCounted
 ##       floor; yaw: which way the man sitting on it faces (as a node's yaw).
 
 const Props := preload("res://scripts/Interaction/Props.gd")
-const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 const IdleSpotScript := preload("res://scripts/Interaction/IdleSpot.gd")
 
 const WOOD := Color(0.36, 0.25, 0.15)
 const DARK_WOOD := Color(0.26, 0.18, 0.11)
-const STONE := Color(0.42, 0.4, 0.38)
 const BREAD := Color(0.62, 0.43, 0.2)
 ## How high a seat is (its top), and how far in front of it a man's feet
 ## are when he sits (IdleSpot.SEAT_BACK).
@@ -149,21 +148,10 @@ static func provisions(parent: Node, at: Vector3, yaw: float) -> StaticBody3D:
 ## A fire in a ring of stones, and places round it to crouch and tend it.
 static func campfire(parent: Node, at: Vector3, spots := 3) -> Node3D:
 	var body := _body(parent, "Campfire", at, 0.0)
-
-	for i in 8:
-		var angle := TAU * float(i) / 8.0
-		_part(body, Vector3(cos(angle) * 0.3, 0.06, sin(angle) * 0.3), Vector3(0.14, 0.12, 0.12), STONE, false)
-
-	_part(body, Vector3(0, 0.05, 0), Vector3(0.36, 0.06, 0.08), DARK_WOOD, false)
-	_part(body, Vector3(0, 0.07, 0), Vector3(0.08, 0.06, 0.36), DARK_WOOD, false)
 	_shape(body, Vector3(0, 0.1, 0), Vector3(0.7, 0.2, 0.7))
-	var flame: Node3D = TorchScript.new()
-	flame.energy = 2.2
-	flame.light_range = 7.0
-	flame.flame_size = 0.5
-	flame.shadows = false
-	body.add_child(flame)
-	flame.position = Vector3(0, 0.22, 0)
+	# Its ring of stones and logs (Lights.gd, from the props pipeline),
+	# unshadowed as it always was: the men sit round it in its light.
+	var flame: Node3D = Lights.campfire(body, body.global_position, {"shadows": false})
 
 	for i in spots:
 		var angle := TAU * float(i) / float(spots) + 0.4
