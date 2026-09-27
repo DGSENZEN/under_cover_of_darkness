@@ -1051,6 +1051,23 @@ func _same_names(names: Array, want: Array) -> bool:
 	return names.size() == want.size() and want.all(func(n): return n in names)
 
 
+## Whether `man` is the plain base body of his sex (§11: a guard his kind's
+## files cannot dress): the base model's own meshes, no painted outfit
+## texture on any, no hair, no armour, no boots.
+func _plain(man: Node, female: bool) -> bool:
+	var names := _worn_names(man)
+	var painted := false
+
+	for m in man.worn():
+		var worn_material := m.material_override as StandardMaterial3D
+
+		if worn_material != null and worn_material.albedo_texture != null and worn_material.albedo_texture.resource_path.contains("outfits/T_"):
+			painted = true
+
+	return not painted and man.armour.is_empty() and ("SuperHero_Female" if female else "SuperHero_Male") in names \
+		and not names.any(func(n): return n.begins_with("Hair") or n == "Boots" or n == "Outfit")
+
+
 ## The first seed from `from` whose roll for `kind` `wants`.
 func _seed_for(kind: StringName, wants: Callable, from: int) -> int:
 	for seed in range(from, from + 200):
@@ -1286,21 +1303,22 @@ func _dressed() -> void:
 	_check("K18 his hair and beard are worn and tinted his hair colour", "Head_old" in _worn_names(aged) and tinted,
 		str(_worn_names(aged)))
 
-	# K24 a kind whose every hair style (or every beard) is missing is painted,
-	# as one whose every headgear set is: dressed bald or beardless, his
-	# silhouette would be gone (the arms master, one's files doctored away)
+	# K24 a kind whose every hair style (or every beard) is missing is the
+	# plain base body, as one whose every headgear set is: dressed bald or
+	# beardless, his silhouette would be gone (the arms master, one's files
+	# doctored away)
 	var fallen := {}
 
 	for style in [&"parted", &"full"]:
 		Wardrobe._json[Wardrobe.ROOT + "hair/%s.json" % style] = {}
 		var dresses := Wardrobe.can_dress(&"arms_master")
 		var shorn := await _guard(9, &"trainer")
-		fallen[style] = not dresses and shorn._rig.man.body.material_override is StandardMaterial3D
+		fallen[style] = not dresses and _plain(shorn._rig.man, false)
 		Wardrobe.forget()
 		shorn.queue_free()
 
-	_check("K24 a kind whose hair or beards are all missing is painted, as one without its headgear", not fallen.values().has(false),
-		str(fallen))
+	_check("K24 a kind whose hair or beards are all missing is the plain body, as one without its headgear",
+		not fallen.values().has(false), str(fallen))
 
 	# K26 a kind never wears a face or hair made for the other body (the
 	# watchman, doctored with the duelist's beside his own; with only hers
@@ -1389,17 +1407,17 @@ func _dressed() -> void:
 	var g: CharacterBody3D = first[&"watchman"]
 	var man = g._rig.man
 
-	# K1b (Review Focus 3) a missing option is dropped; missing kind files: still a watchman, painted, kettle hat on
+	# K1b (Review Focus 5) a missing option is dropped; without any wardrobe
+	# files the watchman is the plain base body
 	var kept: Dictionary = Wardrobe.usable_options({"faces": [&"weathered", &"nobody"], "tones": [&"light"], "hair": [], "beards": [],
 		"headgear": [[&"kettlehat", &"coif"], [&"nothing"]], "dye": {"colour": [0.62, 0.52, 0.16], "shift": 0.04, "fade": [0.0, 0.35]},
 		"grime": [0.2, 0.8]}, "male")
 	Wardrobe.ROOT = "user://no_wardrobe/"
 	Wardrobe.forget()
 	var painted := await _guard(5)
-	_check("K1b missing options are dropped; without wardrobe files the watchman falls back to the painted look",
-		kept.get("faces", []) == [&"weathered"] and kept.get("headgear", []).size() == 1
-		and painted._rig.man.body.material_override is StandardMaterial3D
-		and painted._rig.man.armour.any(func(a): return a.name == "kettlehat"), "kept %s" % kept)
+	_check("K1b missing options are dropped; without wardrobe files the watchman is the plain base body",
+		kept.get("faces", []) == [&"weathered"] and kept.get("headgear", []).size() == 1 and _plain(painted._rig.man, false),
+		"kept %s worn %s" % [kept, _worn_names(painted._rig.man)])
 	Wardrobe.ROOT = "res://assets/characters/wardrobe/"
 	Wardrobe.forget()
 
@@ -1417,9 +1435,8 @@ func _dressed() -> void:
 	_check("K1c every kind shares its own mesh, skin and material, and no two kinds share one",
 		within and _distinct(shared) and _distinct(meshes), "%d kinds" % squad.size())
 
-	# K1b (Review Focus 2) one kind's files gone: that kind alone falls back to
-	# its own painted look (every piece of its painted armour and hair on),
-	# and the next kind still dresses
+	# K1b (Review Focus 5) one kind's files gone: that kind alone is the
+	# plain base body of its sex, and the next kind still dresses
 	var fallbacks := {}
 	var kinds: Array = DRESSED.keys()
 
@@ -1429,16 +1446,11 @@ func _dressed() -> void:
 		var next: StringName = kinds[(kinds.find(kind) + 1) % kinds.size()]
 		var still := await _guard(54, DRESSED[next])
 		Wardrobe.forget()
-		# (The plain watchman's painted look is batch 0's: his kettle hat.)
-		var own: Dictionary = GuardFighterScript.ARCHETYPES.get(DRESSED[kind], {}).get("look", {"armour": [&"kettlehat"]})
-		var wanted: Array = own.get("armour", []) + own.get("hair", [])
-		var names := _worn_names(lost._rig.man)
-		fallbacks[kind] = lost._rig.man.body.material_override is StandardMaterial3D and not wanted.is_empty() \
-			and wanted.all(func(piece): return String(piece) in names) and still._rig.man.body.name == "Outfit"
+		fallbacks[kind] = _plain(lost._rig.man, EXPECT[kind].get("body", "male") == "female") and still._rig.man.body.name == "Outfit"
 		lost.queue_free()
 		still.queue_free()
 
-	_check("K1b each kind without its files is painted, all its own armour and hair on; the next kind still dresses",
+	_check("K1b each kind without its files is the plain base body of its sex; the next kind still dresses",
 		not fallbacks.values().has(false), str(fallbacks))
 
 	for x in [g, painted]:
