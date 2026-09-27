@@ -100,6 +100,14 @@ static func dust(context: Node, at: Vector3, normal: Vector3, amount := 1.0, sur
 		world._dust(at, normal, amount, surface)
 
 
+## Chips knocked off `surface` and no dust with them: an axe biting a log.
+static func chips(context: Node, at: Vector3, normal: Vector3, amount := 1.0, surface := "wood") -> void:
+	var world := _world_for(context)
+
+	if world != null:
+		world._dust(at, normal, amount, surface, false)
+
+
 ## A star that flares and fades. With `follow`, it rides that node.
 static func glint(context: Node, at: Vector3, size := 0.14, follow: Node3D = null, color := Color(1.0, 0.96, 0.85)) -> void:
 	var world := _world_for(context)
@@ -902,7 +910,7 @@ func _sparks(at: Vector3, normal: Vector3, amount: float, with_flash: bool) -> v
 		_flash(at + n * 0.15, Color(1.0, 0.72, 0.42), 1.5 * sqrt(maxf(amount, 0.1)), 2.8, 0.07)
 
 
-func _dust(at: Vector3, normal: Vector3, amount: float, surface: String) -> void:
+func _dust(at: Vector3, normal: Vector3, amount: float, surface: String, with_puffs := true) -> void:
 	var n := normal.normalized() if normal.length() > 0.001 else Vector3.UP
 	var tone: Color
 	var chip_tone: Color
@@ -932,7 +940,7 @@ func _dust(at: Vector3, normal: Vector3, amount: float, surface: String) -> void
 
 	var puffs: Pool = _pools[Kind.DUST]
 
-	for i in range(clampi(int(round(4.0 * amount)), 1, 10)):
+	for i in range(clampi(int(round(4.0 * amount)), 1, 10) if with_puffs else 0):
 		puffs.add(
 			at + n * 0.05 + _rand_unit() * 0.05,
 			n * randf_range(0.25, 0.9) + _rand_unit() * 0.3,

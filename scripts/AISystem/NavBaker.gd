@@ -8,6 +8,10 @@ extends NavigationRegion3D
 ## Doors are left out of the bake on purpose: a closed door would cut the mesh
 ## at every doorway. Guards path through doorways and open the door.
 ##
+## Furniture low enough to pass for a step (group "nav_blocks": a chair's
+## seat, a stump; Furnishings) is kept off, with room round it, instead of
+## being walked over.
+##
 ## Deep water (WaterVolume) is cut out of the mesh, and baked as a swim region
 ## of its own, dearer to cross (SWIM_COST). Then the ways across that walking
 ## cannot take are found and linked (NavLinks: climbing, dropping, leaping,
@@ -124,6 +128,22 @@ func bake() -> void:
 	for water in _deep_waters():
 		var corners := _local_corners(water)
 		source.add_projected_obstruction(corners, float(water.bottom_y()) - 1.0 - global_position.y, float(water.surface_y()) - float(water.bottom_y()) + 1.05, true)
+
+	# Furniture low enough to pass for a step (a seat, a stump: Furnishings)
+	# is kept off, with room for a man round it, rather than walked over.
+	var local := global_transform.affine_inverse()
+
+	for body in get_tree().get_nodes_in_group(&"nav_blocks"):
+		if not root.is_ancestor_of(body):
+			continue
+
+		for block in body.get_meta(&"nav_blocks", []):
+			var corners := PackedVector3Array()
+
+			for corner in block["corners"]:
+				corners.append(local * corner)
+
+			source.add_projected_obstruction(corners, float(block["bottom"]) - global_position.y, float(block["height"]), false)
 
 	NavigationServer3D.bake_from_source_geometry_data_async(mesh, source, _on_baked.bind(mesh))
 

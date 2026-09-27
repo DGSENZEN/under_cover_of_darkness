@@ -33,6 +33,10 @@ extends CharacterBody3D
 ##               ladders, into water and out (GuardClimb.gd, NavLinks.gd).
 ##   WORD        what they call to each other, out loud (Comms.gd): where you
 ##               are, where you went, powder, a noise, all clear, the bell.
+##   HIS OWN     at his ease, what he does with himself, in his own way
+##   WAYS        (GuardHabits.gd): sits, dozes, leans on a wall or a rail,
+##               eats, chops wood, tends the fire, carries crates, goes over
+##               to a friend, paces, fidgets; walks his rounds with a light.
 ##
 ## The body origin is at the FEET. The capsule floats above step height and
 ## the body hovers on a ray, so stairs need no special handling.
@@ -56,6 +60,7 @@ const GuardHandsScript := preload("res://scripts/AISystem/GuardHands.gd")
 const GuardMercyScript := preload("res://scripts/AISystem/GuardMercy.gd")
 const GuardClimbScript := preload("res://scripts/AISystem/GuardClimb.gd")
 const GuardWaterScript := preload("res://scripts/AISystem/GuardWater.gd")
+const GuardHabitsScript := preload("res://scripts/AISystem/GuardHabits.gd")
 ## Bleeding (bleeding): at most this much a second, never below this share of
 ## his health, and bound this long after he last saw you.
 const BLEED_MAX := 4.0
@@ -149,6 +154,16 @@ signal bound_wounds
 @export var lookout := false
 ## Searching somewhere dark once the garrison is roused, he lights a lantern.
 @export var carries_lantern := true
+## Walks his rounds (and stands his post) with a light: "lantern" (held out,
+## his blade at his belt), "torch" (held up), or "" (none).
+@export var rounds_light: StringName = &""
+## At his ease, what he does with himself (GuardHabits): only these, if any
+## are given ("sit", "lean", "rail", "eat", "chop", "tend", "carry", "visit",
+## "pace", "fidget"); his quirk, if the level gives him one (GuardHabits.QUIRKS);
+## and how far from his post he goes for it (m).
+@export var habits: Array[StringName] = []
+@export var quirk: StringName = &""
+@export var habit_range := 10.0
 ## What the garrison calls him ("" picks one for him, the same every load).
 @export var given_name := ""
 
@@ -411,6 +426,8 @@ var _mercy: RefCounted
 ## (GuardWater).
 var _climb: RefCounted
 var _water: RefCounted
+## What he does with himself at his ease (GuardHabits).
+var _habits: RefCounted
 ## When he came into the level (Comms.now): a man only misses those who were
 ## there before him.
 var _born_at := 0.0
@@ -489,6 +506,7 @@ func _ready() -> void:
 	_mercy = GuardMercyScript.new(self)
 	_climb = GuardClimbScript.new(self)
 	_water = GuardWaterScript.new(self)
+	_habits = GuardHabitsScript.new(self)
 
 	if _agent != null:
 		_agent.link_reached.connect(_on_link_reached)
@@ -559,6 +577,7 @@ func _physics_process(delta: float) -> void:
 	_water.update(delta)
 	_hands.update(delta)
 	_life.update(delta)
+	_habits.update(delta)
 	_watch_for_powder(delta)
 
 	if _burning > 0.0:
@@ -732,6 +751,10 @@ func _visibility_of(target: Node3D) -> float:
 	if seen == 0:
 		return 0.0
 
+	# Asleep in his seat he sees nothing, but for a touch.
+	if _habits != null and _habits.dozing() and nearest > touch_distance:
+		return 0.0
+
 	var cover := float(seen) / float(points.size())
 	var exposure: float = target.get_exposure()
 
@@ -803,7 +826,9 @@ func hear_sound(event: Dictionary) -> void:
 		return
 
 	var source: Object = event["source"]
-	var reach: float = event["range"] * hearing_acuity
+	# Asleep, he hears only what is loud or near (and wakes to it).
+	var dozing: bool = _habits != null and _habits.dozing()
+	var reach: float = event["range"] * hearing_acuity * (GuardHabitsScript.DOZE_HEARING if dozing else 1.0)
 
 	# A path is never shorter than the straight line, so this settles most
 	# sounds without asking the navmesh anything.
@@ -815,6 +840,9 @@ func hear_sound(event: Dictionary) -> void:
 	if source is Guard:
 		# A colleague shouting: go to where HE thinks the trouble is.
 		if event["kind"] == &"shout" and state != Alert.COMBAT:
+			if dozing:
+				_habits.wake()
+
 			var from: Vector3 = event["position"]
 
 			if _sound_distance(from) <= reach:
@@ -839,6 +867,9 @@ func hear_sound(event: Dictionary) -> void:
 
 	if amount < 1.0:
 		return
+
+	if dozing:
+		_habits.wake()
 
 	alert = maxf(alert, minf(alert + amount, hearing_alert_cap))
 	_since_stimulus = 0.0
@@ -1034,9 +1065,13 @@ func say(situation: StringName, chance := 1.0) -> void:
 ## What he is doing with his hands or himself, for the rig: crossing a link
 ## ("climb", "ladder", "hang", "gather", "fall", "leap", "land": GuardClimb),
 ## swimming ("swim", "tread": GuardWater),
-## "pickup", "ring", "hold", begging ("kneel", "plead_kneel", "plead_stand",
-## "rise", "rise_knees": GuardMercy), "talk", "listen", "fold_arms", "drink",
-## "lantern", "call", or "".
+## "pickup", "ring", "hold", his light on his rounds ("carry_lantern",
+## "carry_torch": GuardHands), begging ("kneel", "plead_kneel", "plead_stand",
+## "rise", "rise_knees": GuardMercy), his own ways (GuardHabits: "sit",
+## "sit_talk", "doze", "sit_down", "stand_up", "stand_up_quick", "lean",
+## "rail", "reach", "eat", "chop", "kneel_down", "tend", "kneel_up", "carry",
+## "set_down", "fold_arms", "drink", "nod", "shake", "dance"), "talk",
+## "listen" ("nod", "shake": GuardLife), "lantern", "call", or "".
 func activity() -> StringName:
 	var crossing: StringName = _climb.activity() if _climb != null else &""
 
@@ -1058,7 +1093,16 @@ func activity() -> StringName:
 	if begging != &"":
 		return begging
 
+	# What he does with himself (GuardHabits), talking the while (GuardLife):
+	# sat, he talks where he sits.
+	var own: StringName = _habits.activity() if _habits != null else &""
 	var doing: StringName = _life.activity() if _life != null else &""
+
+	if own == &"sit" and doing != &"":
+		return &"sit_talk"
+
+	if own != &"":
+		return own
 
 	if doing != &"":
 		return doing
@@ -1295,8 +1339,11 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 	health -= damage
 	hurt.emit(damage)
 
-	# Struck on a wall or a ladder: he loses his hold.
+	# Struck on a wall or a ladder: he loses his hold. Whatever he was about
+	# of his own is over.
 	_climb.interrupt()
+	_habits.wake()
+	_habits.interrupt()
 
 	# Cut down on his knees, or cut and he gives up on your mercy.
 	if health <= 0.0:
@@ -1594,6 +1641,7 @@ func kick(push: Vector3, attacker: Node3D) -> void:
 
 	_mercy.struck(attacker)
 	_climb.interrupt()
+	_habits.interrupt()
 
 	if _downed:
 		# A man on the floor, booted along it.
@@ -1917,6 +1965,7 @@ func knock_down(push: Vector3, attacker: Node3D = null, at := Vector3.INF) -> vo
 		return
 
 	_climb.interrupt()
+	_habits.interrupt()
 
 	if _rig == null or _rig.man == null or _rig.man.ragdoll == null:
 		return
@@ -2398,6 +2447,11 @@ func bark(text: String) -> void:
 # ---------------------------------------------------------------------------
 
 func _do_patrol(delta: float) -> void:
+	# About something of his own (a seat, the woodpile, a friend): it has him.
+	if _habits.busy():
+		_habits.run(delta)
+		return
+
 	if _waypoints.is_empty():
 		# No route: stand post, and walk back to it if something drew us away.
 		# As close as the navmesh allows counts as back.
@@ -2405,10 +2459,15 @@ func _do_patrol(delta: float) -> void:
 			_go_to(_home.origin)
 
 			if not _walk(patrol_speed, delta):
+				_habits.walking()
 				return
 
 		_stop(delta)
 		_life.at_rest(delta)
+		_habits.at_rest(delta)
+
+		if _habits.busy():
+			return
 
 		if _life.talking():
 			_face(_life.partner_direction(), delta)
@@ -2423,6 +2482,10 @@ func _do_patrol(delta: float) -> void:
 
 	if _wait_timer > 0.0:
 		_life.at_rest(delta)
+		_habits.at_rest(delta, true)
+
+		if _habits.busy():
+			return
 
 		# A word with the man beside him: his rounds wait for it.
 		if _life.talking():
@@ -2442,6 +2505,7 @@ func _do_patrol(delta: float) -> void:
 		return
 
 	_life.walking()
+	_habits.walking()
 
 	if not _walk(patrol_speed, delta):
 		return
@@ -2994,8 +3058,12 @@ func _update_head(delta: float) -> void:
 
 	match state:
 		Alert.RELAXED:
-			# An idle guard's gaze drifts; a lookout's sweeps wider.
+			# An idle guard's gaze drifts; a lookout's sweeps wider. About
+			# something of his own, his head goes where that takes it.
 			_head_yaw_goal = sin(_idle_time * (0.45 if lookout else 0.6)) * deg_to_rad(50.0 if lookout else 35.0)
+
+			if _habits != null and (_habits.busy() or _habits.dozing()):
+				_head_yaw_goal = _habits.head().x
 		Alert.SUSPICIOUS:
 			if has_last_known:
 				var to := last_known_position - global_position
@@ -3016,6 +3084,9 @@ func _update_head(delta: float) -> void:
 		var aim: Vector3 = _target.global_position if can_see_target and _target != null and is_instance_valid(_target) else last_known_position
 		var to := aim - eye_position()
 		pitch_goal = clampf(atan2(to.y, Vector2(to.x, to.z).length()), -LOOK_PITCH, LOOK_PITCH)
+	elif state == Alert.RELAXED and _habits != null:
+		# Up at the sky, out over a rail, down asleep.
+		pitch_goal = _habits.head().y
 
 	_head.rotation.x = lerp_angle(_head.rotation.x, pitch_goal, 1.0 - exp(-6.0 * delta))
 

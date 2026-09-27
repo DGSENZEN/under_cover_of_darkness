@@ -12,12 +12,22 @@ extends RefCounted
 ##               guard knocks it aside.
 ##   the bell    a pull on its rope (AlarmBell.gd).
 ##   a lantern   searching somewhere dark with the garrison roused, he lights
-##               one and holds it up; it lights you (and a body in a corner)
-##               as any light does. Into a fight he drops it, still burning.
+##               one and holds it up, hanging from his fist by its bail
+##               (Hanging.gd); it lights you (and a body in a corner) as any
+##               light does. Into a fight he drops it, still burning.
+##   his rounds  a man set to walk them with a light (Guard.rounds_light)
+##               carries it lit (GuardHabits keeps it so): a lantern held out
+##               before him in his sword hand, hanging and swinging from his
+##               fist, his blade at his belt; or a torch held up in the other,
+##               its stick through his fist, his blade still in his hand. Into
+##               a fight he drops it as he would the lantern (a torch lies
+##               where it falls, still burning).
 ##   evidence    your arrow in a wall, pulled out and taken (GuardLife).
 
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const HumanoidScript := preload("res://scripts/Visual/Humanoid.gd")
+const HangingScript := preload("res://scripts/Visual/Hanging.gd")
 const ThrownScript := preload("res://scripts/Combat/Thrown.gd")
 const Dangers := preload("res://scripts/AISystem/Dangers.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
@@ -39,6 +49,13 @@ const THROW_FLIGHT_MAX := 1.3
 const LANTERN_ENERGY := 1.5
 const LANTERN_RANGE := 6.5
 const DROPPED_LIGHT_TIME := 25.0
+## A torch on his rounds: brighter and wilder than a lantern.
+const TORCH_ENERGY := 2.1
+const TORCH_RANGE := 7.5
+## A torch's flame this far up its stick from his fist; a lantern's flame
+## this far below his fist, hanging by its bail.
+const TORCH_UP := 0.36
+const LANTERN_HANG := 0.22
 
 var guard: CharacterBody3D
 ## His blade is in his hand (or his crossbow).
@@ -48,6 +65,9 @@ var kind: StringName = &"sword"
 ## Something picked up to throw, and his lantern (lit), if any.
 var held: RigidBody3D = null
 var lantern: Node3D = null
+## His light carried on his rounds: "lantern", "torch", or "" (none, or the
+## lantern lit to search by).
+var light_kind: StringName = &""
 
 var _stoop := 0.0
 var _rise := 0.0
@@ -60,6 +80,8 @@ var _bell_where := Vector3.ZERO
 var _rung := false
 var _held_layer := 1
 var _held_mask := 1
+## What holds his light on his hand (a BoneAttachment3D), gone with it.
+var _light_holder: Node = null
 
 
 func _init(p_guard: CharacterBody3D, carried: StringName) -> void:
@@ -97,7 +119,8 @@ func busy() -> bool:
 
 
 ## Anything in his hands to show (GuardRig): "pickup", "ring", "hold" (a thing
-## to throw), "lantern", or "".
+## to throw), "carry_lantern" or "carry_torch" (his light on his rounds), or
+## "".
 func activity() -> StringName:
 	if _stoop > 0.0 or _rise > 0.0:
 		return &"pickup"
@@ -107,6 +130,9 @@ func activity() -> StringName:
 
 	if held != null:
 		return &"hold"
+
+	if lantern != null and light_kind != &"" and int(guard.state) != 4:
+		return &"carry_lantern" if light_kind == &"lantern" else &"carry_torch"
 
 	return &""
 
@@ -377,17 +403,111 @@ func light_lantern() -> void:
 	if lantern != null or guard._rig == null or guard._rig.get("man") == null:
 		return
 
-	var flame: Node3D = TorchScript.new()
-	flame.name = "Lantern"
-	flame.energy = LANTERN_ENERGY
-	flame.light_range = LANTERN_RANGE
-	flame.flame_size = 0.2
-	flame.shadows = false
-	flame.flicker = 0.08
-	guard._rig.man.attach(&"hand_l", flame, Transform3D(Basis.IDENTITY, Vector3(0.0, 0.1, 0.06)))
-	lantern = flame
+	lantern = _hang_lantern(&"hand_l", 0.2, 0.08)
 	Sfx.play(guard, &"ignite", guard.eye_position() - Vector3.UP * 0.4, -6.0, 1.3)
 	LightProbe.invalidate()
+
+
+## His light for his rounds (`kind` "lantern" or "torch"), lit and carried:
+## the lantern held out in his sword hand (his blade at his belt), the torch
+## held up in the other.
+func carry_light(kind: StringName) -> void:
+	if lantern != null or guard._rig == null or guard._rig.get("man") == null:
+		return
+
+	if kind == &"torch":
+		lantern = _torch()
+		# Its stick through his fist, the flame at its head, over his hand.
+		_light_holder = guard._rig.man.attach(&"hand_l", lantern, HumanoidScript.FIST_L * Transform3D(Basis.IDENTITY, Vector3(0.0, TORCH_UP, 0.0)))
+	else:
+		lantern = _hang_lantern(&"hand_r", 0.16, 0.06)
+		# His blade at his belt while his hand holds the light.
+		guard._rig.weapon.visible = false
+
+	light_kind = kind
+	Sfx.play(guard, &"ignite", guard.eye_position() - Vector3.UP * 0.4, -8.0, 1.2)
+	LightProbe.invalidate()
+
+
+## A torch: a stick with a head of pitch-soaked rag, the flame on it (the
+## flame is the node: the stick hangs down from it).
+func _torch() -> Node3D:
+	var flame: Node3D = TorchScript.new()
+	flame.name = "RoundsLight"
+	flame.shadows = false
+	flame.energy = TORCH_ENERGY
+	flame.light_range = TORCH_RANGE
+	flame.flame_size = 0.3
+	flame.flicker = 0.22
+	_part(flame, _rod(0.026, 0.021, 0.56), Vector3(0.0, -0.4, 0.0), Color(0.3, 0.2, 0.12))
+	_part(flame, _rod(0.044, 0.034, 0.1), Vector3(0.0, -0.13, 0.0), Color(0.11, 0.08, 0.06))
+	return flame
+
+
+## A lantern hanging by its bail from his fist on `bone` (Hanging.gd): a cage
+## of glass round the flame, a lid, a base. The flame is returned (what hangs
+## is its node, the cage round it).
+func _hang_lantern(bone: StringName, size: float, flicker: float) -> Node3D:
+	var flame: Node3D = TorchScript.new()
+	flame.name = "Lantern"
+	flame.shadows = false
+	flame.energy = LANTERN_ENERGY
+	flame.light_range = LANTERN_RANGE
+	flame.flame_size = size
+	flame.flicker = flicker
+	var glass := _paint(Color(1.0, 0.75, 0.4, 0.35))
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var cage := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(0.14, 0.2, 0.14)
+	cage.mesh = box
+	cage.material_override = glass
+	flame.add_child(cage)
+	var iron := Color(0.16, 0.16, 0.17)
+	_part(flame, _box(Vector3(0.16, 0.03, 0.16)), Vector3(0.0, 0.115, 0.0), iron)
+	_part(flame, _box(Vector3(0.16, 0.025, 0.16)), Vector3(0.0, -0.11, 0.0), iron)
+	# The bail, up from the lid into his fist.
+	_part(flame, _box(Vector3(0.012, LANTERN_HANG - 0.13, 0.012)), Vector3(0.0, (LANTERN_HANG + 0.13) * 0.5, 0.0), iron)
+	var grip := Node3D.new()
+	grip.name = "Bail"
+	_light_holder = guard._rig.man.attach(bone, grip, HumanoidScript.FIST_R if bone == &"hand_r" else HumanoidScript.FIST_L)
+	var hanging: Node3D = HangingScript.new()
+	hanging.length = LANTERN_HANG
+	grip.add_child(hanging)
+	hanging.add_child(flame)
+	flame.position = Vector3.DOWN * LANTERN_HANG
+	return flame
+
+
+static func _rod(top: float, bottom: float, height: float) -> CylinderMesh:
+	var rod := CylinderMesh.new()
+	rod.top_radius = top
+	rod.bottom_radius = bottom
+	rod.height = height
+	rod.radial_segments = 8
+	return rod
+
+
+static func _box(size: Vector3) -> BoxMesh:
+	var box := BoxMesh.new()
+	box.size = size
+	return box
+
+
+static func _part(on: Node3D, mesh: Mesh, at: Vector3, colour: Color) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.mesh = mesh
+	part.material_override = _paint(colour)
+	on.add_child(part)
+	part.position = at
+	return part
+
+
+static func _paint(colour: Color) -> StandardMaterial3D:
+	var paint := StandardMaterial3D.new()
+	paint.albedo_color = colour
+	return paint
 
 
 ## Out: back on his belt.
@@ -399,13 +519,31 @@ func douse() -> void:
 		lantern.queue_free()
 
 	lantern = null
+	_light_gone()
 	LightProbe.invalidate()
 
 
-## Let fall where he stands, still burning a while (into a fight).
+## His hand free of the light: his blade back in it, and nothing left on his
+## hand to hold one.
+func _light_gone() -> void:
+	if light_kind == &"lantern" and guard._rig != null:
+		guard._rig.weapon.visible = armed and held == null
+
+	light_kind = &""
+
+	if _light_holder != null and is_instance_valid(_light_holder):
+		_light_holder.queue_free()
+
+	_light_holder = null
+
+
+## Let fall where he stands, still burning a while (into a fight). A torch
+## lies where it falls, its flame at one end.
 func drop_lantern() -> void:
 	var flame := lantern
+	var torch := light_kind == &"torch"
 	lantern = null
+	_light_gone()
 
 	if flame == null or not is_instance_valid(flame) or not guard.is_inside_tree():
 		return
@@ -418,13 +556,15 @@ func drop_lantern() -> void:
 	body.collision_mask = 1
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(0.14, 0.2, 0.14)
+	box.size = Vector3(0.62, 0.07, 0.07) if torch else Vector3(0.14, 0.2, 0.14)
 	shape.shape = box
 	body.add_child(shape)
 	guard.get_parent().add_child(body)
 	body.global_position = at
 	flame.reparent(body, false)
-	flame.transform = Transform3D(Basis.IDENTITY, Vector3.UP * 0.12)
+	# The torch along the body, its stick one way from the flame; the lantern
+	# in its cage.
+	flame.transform = Transform3D(Basis(Vector3.BACK, -PI * 0.5), Vector3(0.34, 0.0, 0.0)) if torch else Transform3D.IDENTITY
 	body.linear_velocity = guard.velocity * 0.4 + Vector3(randf_range(-0.8, 0.8), 1.2, randf_range(-0.8, 0.8))
 	body.add_to_group(&"dropped_lights")
 	body.reset_physics_interpolation()

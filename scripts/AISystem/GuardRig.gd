@@ -21,6 +21,7 @@ const SwingTrailScript := preload("res://scripts/Visual/SwingTrail.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 const HumanoidScript := preload("res://scripts/Visual/Humanoid.gd")
+const GuardHabitsScript := preload("res://scripts/AISystem/GuardHabits.gd")
 
 ## Guard.Alert.SEARCHING and COMBAT: hunting, his guard is up.
 const SEARCHING := 3
@@ -88,7 +89,43 @@ const ACTIVITIES := {
 	&"drink": [&"Consume", false, 0.2, 0.9],
 	&"lantern": [&"Idle_Torch", true, 0.3, 0.85],
 	&"call": [&"Idle_Rail_Call", false, 0.15, 0.9],
+	# His own ways at his ease (GuardHabits), and a listener's nod.
+	&"sit_down": [&"Sitting_Enter", false, 0.25, 1.0],
+	&"sit": [&"Sitting_Idle", true, 0.25, 1.0],
+	&"sit_talk": [&"Sitting_Talking", true, 0.35, 1.0],
+	&"stand_up": [&"Sitting_Exit", false, 0.1, 1.0],
+	&"lean": [&"Idle_FoldArms", true, 0.4, 0.95],
+	&"rail": [&"Idle_Rail", true, 0.4, 1.0],
+	&"reach": [&"PickUp_Table", false, 0.2, 0.95],
+	&"eat": [&"Consume", true, 0.2, 0.9],
+	&"nod": [&"Yes", false, 0.2, 0.85],
+	&"shake": [&"Idle_No", false, 0.2, 0.85],
+	&"dance": [&"Dance", true, 0.3, 1.0],
 }
+## How a pose of his own sits him (GuardHabits): leaning back on a wall, his
+## body tipped back onto it (a tilt, as _tilt); at a rail, the drawn man
+## forward over it while his body stands clear of it (an offset, as _offset).
+const POSE_TILT := {&"lean": Vector3(0.0, 0.0, 0.1)}
+const POSE_SHIFT := {&"rail": Vector3(0.0, 0.0, -0.3)}
+## Kneeling at his work (Fixing_Kneeling): down by KNEEL_DOWN, working between
+## KNEEL_WORK, up from KNEEL_UP.
+const KNEEL_DOWN := 1.35
+const KNEEL_WORK := Vector2(1.5, 4.8)
+const KNEEL_UP := 5.3
+## Up off a seat in a hurry: the clip this much faster.
+const STAND_QUICK_PACE := 1.8
+## Chopping wood (GuardHabits.CHOP_*): the overhead blow's clip (SWINGS
+## "heavy") with an axe in his hand, from the axe raised over his head
+## (CHOP_RAISED) down to it biting the log before him (CHOP_BITE), and back.
+const CHOP_CLIP := &"Sword_Attack"
+const CHOP_RAISED := 0.38
+const CHOP_BITE := 0.56
+## Poses with his arms folded or across a rail, his hands talking or on a
+## rung or a rope: his blade put by for them (it would go through him, or
+## wave about), and back in his hand after.
+const STOW_POSES := [&"fold_arms", &"listen", &"talk", &"lean", &"rail", &"nod", &"shake", &"drink", &"climb", &"ladder", &"hang"]
+## His head tipped up or down no more than this (rad) for the eye.
+const HEAD_PITCH_MAX := 0.7
 ## Crossing what walking cannot (GuardClimb): hauling himself up in the
 ## climbing clip (in place, a metre to each CLIMB_CYCLE seconds of it); in the
 ## air in AIR_CLIP; gathering for a jump and landing from one in LAND_CLIP.
@@ -217,6 +254,8 @@ var _held_point: Node3D = null
 ## What he was last shown doing (Guard.activity), and since when.
 var _activity: StringName = &""
 var _activity_at := 0.0
+## His blade put by for the pose he is in (_stow).
+var _stowed := false
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +507,10 @@ func update(delta: float) -> void:
 	if standing:
 		tilt_goal += Vector3(0.0, 0.0, stance_lean())
 
+	# Leaning back on a wall, over a rail (GuardHabits).
+	var pose: StringName = guard.activity() if guard.has_method("activity") else &""
+	tilt_goal += POSE_TILT.get(pose, Vector3.ZERO)
+
 	_update_glance(delta, standing)
 
 	# Heavy springs, nearly critically damped: a man with weight to him
@@ -476,6 +519,7 @@ func update(delta: float) -> void:
 	_tilt_v += ((tilt_goal - _tilt) * 110.0 / mass - _tilt_v * 17.0 / sqrt(mass)) * dt
 	_tilt += _tilt_v * dt
 	var rest := Vector3(0.0, stance_crouch(), 0.0) if standing else Vector3.ZERO
+	rest += POSE_SHIFT.get(pose, Vector3.ZERO)
 	_offset_v += ((rest - _offset) * 100.0 / mass - _offset_v * 16.0 / sqrt(mass)) * dt
 	_offset += _offset_v * dt
 	_jolt_v += (-_jolt * 260.0 - _jolt_v * 22.0) * dt
@@ -676,6 +720,11 @@ func _process(_delta: float) -> void:
 	var ahead := Engine.get_physics_interpolation_fraction() / float(maxi(Engine.physics_ticks_per_second, 1))
 	man.set_motion(_velocity / size, guard.state >= SEARCHING, _delta)
 	man.turn_head((_logical_head.rotation.y if _logical_head != null else 0.0) + _glance)
+
+	# Up at you on a wall, up at the sky, down asleep: where his eyes go
+	# (Guard._update_head), his head goes.
+	if man.has_method("pitch_head"):
+		man.pitch_head(clampf(_logical_head.rotation.x if _logical_head != null else 0.0, -HEAD_PITCH_MAX, HEAD_PITCH_MAX))
 	_animate(ahead)
 
 	# The trail follows the blade where it is drawn this frame.
@@ -687,6 +736,11 @@ func _process(_delta: float) -> void:
 func _animate(ahead: float) -> void:
 	var now := _time + ahead
 	var kicking: bool = guard._attack == &"kick" and guard._phase != &""
+
+	# Out of the pose his blade was put by for, whatever he is at now (a blow
+	# straight after a word, off the ladder into a fight): back in his hand.
+	if _stowed and not (guard.activity() in STOW_POSES):
+		_stow(false)
 	_kick(ahead if kicking else -1.0)
 
 	# A blow thrown on the move: his legs run under it.
@@ -743,6 +797,7 @@ func _show_activity(now: float) -> bool:
 	if doing != _activity:
 		_activity = doing
 		_activity_at = now
+		_stow(doing in STOW_POSES)
 
 	var since := now - _activity_at
 	var hands: RefCounted = guard.get("_hands")
@@ -768,6 +823,34 @@ func _show_activity(now: float) -> bool:
 		&"climb", &"ladder", &"hang", &"gather", &"fall", &"leap", &"land":
 			_show_crossing(doing)
 			return true
+		&"doze":
+			# Asleep in his seat, still (his head down: Guard._update_head).
+			man.show_action(&"Sitting_Idle", 0.3, 0.6)
+			return true
+		&"stand_up_quick":
+			man.show_action(&"Sitting_Exit", minf(since * STAND_QUICK_PACE, man.action_length(&"Sitting_Exit") - 0.02), 0.05)
+			return true
+		&"kneel_down":
+			man.show_action(&"Fixing_Kneeling", minf(since, KNEEL_DOWN), 0.2)
+			return true
+		&"tend":
+			# Working at it, rocking between the ends of his work.
+			var span := KNEEL_WORK.y - KNEEL_WORK.x
+			man.show_action(&"Fixing_Kneeling", KNEEL_WORK.x + pingpong(since, span), 0.2)
+			return true
+		&"kneel_up":
+			man.show_action(&"Fixing_Kneeling", minf(KNEEL_UP + since, man.action_length(&"Fixing_Kneeling") - 0.02), 0.15)
+			return true
+		&"set_down":
+			# The reach played back: set down before him.
+			man.show_action(&"PickUp_Table", maxf(man.action_length(&"PickUp_Table") - since, 0.0), 0.2)
+			return true
+		&"carry", &"carry_lantern", &"carry_torch":
+			# The load (or the light) held before him, his legs his own.
+			var clip: StringName = {&"carry": &"Walk_Carry", &"carry_lantern": &"Idle_Lantern", &"carry_torch": &"Idle_Torch"}[doing]
+			man.set_leg_drive(clampf(_velocity.length() / size - 0.2, 0.0, 1.0) if doing != &"carry" else 1.0)
+			man.show_action(clip, fmod(since, maxf(man.action_length(clip), 0.1)) if doing != &"carry" else fmod(_walk_phase / PI * 0.5 * man.action_length(clip), maxf(man.action_length(clip), 0.1)), 0.25, 0.9)
+			return true
 		&"swim", &"tread":
 			# Stroke by stroke as he goes; treading water where he is.
 			var stroke := maxf(man.action_length(SWIM_CLIP), 0.1)
@@ -780,6 +863,10 @@ func _show_activity(now: float) -> bool:
 
 			return true
 
+	if doing == &"chop":
+		_show_chop(since)
+		return true
+
 	var spec: Array = ACTIVITIES.get(doing, [])
 
 	if spec.is_empty():
@@ -790,6 +877,40 @@ func _show_activity(now: float) -> bool:
 	var t: float = fmod(since, length) if bool(spec[1]) else minf(since, length - 0.02)
 	man.show_action(clip, t, float(spec[2]), float(spec[3]))
 	return true
+
+
+## Chopping wood, `since` seconds in: the axe pulled out of the log and
+## lifted over his head, held, brought down hard, and left in the log a moment
+## (GuardHabits.CHOP_*).
+func _show_chop(since: float) -> void:
+	var lift: float = GuardHabitsScript.CHOP_LIFT
+	var hold: float = GuardHabitsScript.CHOP_HOLD
+	var down: float = GuardHabitsScript.CHOP_DOWN
+	var into := fmod(since, GuardHabitsScript.CHOP_CYCLE)
+	var t := CHOP_BITE
+
+	if into < lift:
+		t = lerpf(CHOP_BITE, CHOP_RAISED, smoothstep(0.0, 1.0, into / lift))
+	elif into < lift + hold:
+		t = CHOP_RAISED
+	elif into < lift + hold + down:
+		t = lerpf(CHOP_RAISED, CHOP_BITE, (into - lift - hold) / down)
+
+	man.show_action(CHOP_CLIP, t, 0.15)
+
+
+## His blade put by for a pose with his arms folded (`away`), or back in his
+## hand after it, if it was there before.
+func _stow(away: bool) -> void:
+	if away and weapon.visible:
+		weapon.visible = false
+		_stowed = true
+	elif not away and _stowed:
+		_stowed = false
+		var hands: RefCounted = guard.get("_hands")
+		var habits: RefCounted = guard.get("_habits")
+		var free: bool = hands == null or (hands.armed and hands.held == null and not (hands.lantern != null and hands.light_kind == &"lantern"))
+		weapon.visible = free and (habits == null or not habits.get("_sheathed"))
 
 
 ## Crossing what walking cannot (GuardClimb): hauling himself up (the

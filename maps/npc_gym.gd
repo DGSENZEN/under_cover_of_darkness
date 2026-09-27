@@ -43,8 +43,16 @@ extends Node3D
 ##                GuardWater). Nobody strikes afloat: in the water they swim
 ##                after you and wait for you to climb out. Hit a man on the
 ##                ladder and he falls.
+##   11 GARRISON  through a door in bay 10's west wall: a courtyard at night
+##                and its men at their ease, none of them looking for you,
+##                each in his own way (GuardHabits): a patrol with a torch, one
+##                on the walkway with a lantern, a man at the gate leaning on
+##                the wall, one splitting logs and shifting crates, one at the
+##                mess table eating and gossiping, one dozing on a bench in the
+##                dark, one at the campfire. A rope and a chain go up to a
+##                tower and the walkway. Stir them and it is all dropped.
 ##
-##   1-9  go to that bay and start it (again)     -  bay 10     0  back to the hub
+##   1-9  go to that bay and start it (again)     -  bay 10     =  bay 11     0  back to the hub
 ##   F1   what each of them is thinking, over his head: his temperament,
 ##        his place, his resolve
 ##   F2   you cannot be hurt      F4  everyone freezes      R  rest
@@ -69,6 +77,8 @@ const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const AlarmBellScript := preload("res://scripts/Interaction/AlarmBell.gd")
 const WaterScript := preload("res://scripts/Interaction/WaterVolume.gd")
 const ClimbScript := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
+const Furnishings := preload("res://scripts/Interaction/Furnishings.gd")
+const RopeScript := preload("res://scripts/PlayerUtils/VerletRope.gd")
 
 const STONE := Color(0.4, 0.38, 0.36)
 const DARK := Color(0.2, 0.19, 0.21)
@@ -90,6 +100,7 @@ const BAYS := [
 	["ARMS MASTER", Vector3(17, 0, -62), 1, "The arms master swings on a steady beat: parry just before it lands, or right on it\n(a perfect deflect). Answer his cut with a cut and his thrust with a thrust (a counter), or step into\nhis thrust (forward + Q). Straw men to cut; shielded ones to break. Sprint and swing: a running blow."],
 	["GUARDHOUSE", Vector3(0, 0, 24), 0, "The guardhouse. A squad in the yard; two men off duty in the barracks (east); a lookout\non the platform (far corner): he calls where you are, rings the bell, sends a man to look,\nthrows down what is to hand, and comes down when they need him. Break one and he runs\nfor help: catch him and he begs for his life. Walk away and he runs to his own; cut him down\nand the next will not beg. Lose them in the dark (west): they split the search, the lookout\nwatches. A man waiting his turn throws what is near; powder gets shot. F5: the garrison forgets you."],
 	["CLIMB & SWIM", Vector3(0, 0, -86.5), 0, "Climb and swim. Get up on the block, up the ladder onto the tower, across the gap,\nor into the pool: they come after you, climbing, dropping, leaping and swimming.\nNobody strikes afloat: they swim after you and wait for you to climb out.\nHit a man on the ladder and he falls. F4 freezes them to watch."],
+	["GARRISON", Vector3(-30, 0, -86.75), 0, "The garrison at its ease, and nobody looking for you. Each man in his own way: a patrol\nwith a torch, a lantern up on the walkway, the gate man leaning on the wall, a woodsman\nsplitting logs and shifting crates, a man at the mess table eating and gossiping, one\ndozing on the bench in the dark (creep past him), one at the fire. A rope and a chain go up.\nF1: what each is doing. Stir them and they drop it all."],
 ]
 const BAY_SIZE := 14.0
 
@@ -99,6 +110,8 @@ var _bay_guards := {}
 ## The guardhouse's off-duty men: not in the fight until fetched; and its
 ## lookout, not in it until he sees you.
 var _barracks: Array = []
+## Bay 11's crates, stacked again each time it starts.
+var _stock: Array = []
 var _posted: Array = []
 var _labels_on := true
 var _frozen := false
@@ -134,7 +147,7 @@ func _ready() -> void:
 	_build_overlay()
 
 	await _baker.baked
-	_say("The NPC gym. Press 1-9 or - (or pull a lever) to start a bay. F1 shows what they think.")
+	_say("The NPC gym. Press 1-9, - or = (or pull a lever) to start a bay. F1 shows what they think.")
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +158,7 @@ func _hall() -> void:
 	# The hub, lit, with the notice.
 	_torch(Vector3(-4, 2.6, 6), false)
 	_torch(Vector3(4, 2.6, 6), false)
-	_sign(Vector3(0, 2.5, 2.5), "THE NPC GYM\n1-9 go to a bay and start it   - bay 10 (climb & swim)   0 back here\n" +
+	_sign(Vector3(0, 2.5, 2.5), "THE NPC GYM\n1-9 go to a bay and start it   - bay 10 (climb & swim)   = bay 11 (garrison)   0 back here\n" +
 		"F1 what they think   F2 no harm to you   F3 sight cones   F4 freeze them   R rest   F5 they forget you\n" +
 		"LMB attack (your look picks the cut)   RMB block/parry   F kick   Q dodge", 28)
 	Props.block(self, Vector3(0, 0.4, 5.5), Vector3(2.0, 0.8, 0.9), WOOD, "wood")
@@ -174,6 +187,10 @@ func _build_bay(index: int) -> void:
 
 	if index == 9:
 		_build_waterside()
+		return
+
+	if index == 10:
+		_build_garrison()
 		return
 
 	var spec: Array = BAYS[index]
@@ -351,7 +368,9 @@ func _build_waterside() -> void:
 	Props.block(self, Vector3(5.5, -1.5, -88), Vector3(19, 3, 12), DARK, "stone")
 	Props.block(self, Vector3(-8, -3.1, -88), Vector3(8, 1, 12), DARK, "stone")
 	WaterScript.build(self, Vector3(-8, -1.55, -88), Vector3(8, 2.1, 12))
-	Props.block(self, Vector3(-15.5, 3, -86.75), Vector3(1, 6, 29.5), STONE)
+	# The west wall, with a way through near its south end into bay 11.
+	Props.block(self, Vector3(-15.5, 3, -89.75), Vector3(1, 6, 23.5), STONE)
+	Props.block(self, Vector3(-15.5, 3, -73.75), Vector3(1, 6, 3.5), STONE)
 	Props.block(self, Vector3(15.5, 3, -86.75), Vector3(1, 6, 29.5), STONE)
 	Props.block(self, Vector3(0, 3, -101.5), Vector3(32, 6, 1), STONE)
 
@@ -376,6 +395,67 @@ func _build_waterside() -> void:
 		landmark.add_to_group(&"landmarks")
 		add_child(landmark)
 		landmark.global_position = mark[1]
+
+
+## Bay 11, through the door in bay 10's west wall: a courtyard at night with
+## what a garrison at its ease has about it (Furnishings.gd).
+##
+##        x -45                -30                 -16
+##   z -101 +------ walkway (2.5 m, railing) --stairs-+
+##          | tower  chain                  crates  |
+##          | +rope   woodpile     fire       crates |
+##          | bench                           cart   |
+##          |           mess table                 door (bay 10)
+##   z -72  +-- provisions ---------------------------+
+func _build_garrison() -> void:
+	var spec: Array = BAYS[10]
+	Props.block(self, Vector3(-30, -0.5, -86.75), Vector3(29, 1, 29.5), DARK, "stone")
+	Props.block(self, Vector3(-30, 3, -101.5), Vector3(30, 6, 1), STONE)
+	Props.block(self, Vector3(-45, 3, -86.75), Vector3(1, 6, 29.5), STONE)
+	Props.block(self, Vector3(-37.5, 3, -72), Vector3(15, 6, 1), STONE)
+	_sign(Vector3(-15.0, 3.4, -76.75), "11  %s" % spec[0], 40)
+	LeverScript.build(self, Vector3(-14.4, 0, -78.9), PI * 0.5, "Start %s" % spec[0], func(): _start_bay(10))
+	_sign(Vector3(-22.0, 3.2, -74.0), spec[3], 20)
+
+	# The mess: a table and its chairs, bread on a counter by the wall.
+	Furnishings.table(self, Vector3(-33, 0, -80), 0.0)
+	Furnishings.provisions(self, Vector3(-39, 0, -73.3), 0.0)
+	# A bench against the west wall, in the dark.
+	Furnishings.bench(self, Vector3(-44.0, 0, -85), -PI * 0.5)
+	Furnishings.campfire(self, Vector3(-28, 0, -88))
+	Furnishings.chopping_block(self, Vector3(-39, 0, -95.5), 0.0)
+	_stock = Furnishings.crate_piles(self, Vector3(-19.5, 0, -95.0), 0.0, Vector3(-25.0, 0, -95.0), 0.0)
+	Furnishings.cart(self, Vector3(-21, 0, -83), 0.0)
+
+	# The walkway along the north wall, stairs up at its east end, a railing
+	# along its edge to lean on and look over the yard.
+	Props.block(self, Vector3(-32, 1.25, -99.75), Vector3(16, 2.5, 2.5), STONE)
+	_stairs(Vector3(-21.6, 0, -99.75), Vector3.LEFT, 8, 0.3125, 0.3, 2.0)
+	Furnishings.railing(self, Vector3(-39.6, 2.5, -98.62), Vector3(-24.4, 2.5, -98.62), Vector3(0, 0, 1))
+
+	# A tower in the west corner, up by a rope; a chain up to the walkway's
+	# west end.
+	Props.block(self, Vector3(-42.5, 2.0, -92), Vector3(3, 4.0, 4), STONE)
+	Props.block(self, Vector3(-40.5, 4.1, -92), Vector3(1.4, 0.2, 0.3), WOOD, "wood")
+	_rope(Vector3(-40.1, 4.0, -92), 3.6, 0)
+	Props.block(self, Vector3(-40.5, 3.4, -99.75), Vector3(1.2, 0.2, 0.3), WOOD, "wood")
+	_rope(Vector3(-40.9, 3.3, -99.75), 3.0, 1)
+
+	# Walls to lean on: by the mess, and along the east wall.
+	Furnishings.lean_spots(self, Vector3(-36.5, 0, -72.5), Vector3(-30.5, 0, -72.5), Vector3(0, 0, -1), 2.5)
+	Furnishings.lean_spots(self, Vector3(-16, 0, -93), Vector3(-16, 0, -86), Vector3(-1, 0, 0), 3.0)
+
+	for at in [Vector3(-44.4, 2.8, -78), Vector3(-44.4, 2.8, -97), Vector3(-30, 4.4, -100.9), Vector3(-16.1, 2.8, -90), Vector3(-26, 2.8, -72.6)]:
+		_torch(at, false, 1.8)
+
+
+## A rope (`style` 0) or a chain (1) hanging `length` from `anchor`.
+func _rope(anchor: Vector3, length: float, style: int) -> void:
+	var rope: Area3D = RopeScript.new()
+	rope.style = style
+	rope.length = length
+	rope.position = anchor
+	add_child(rope)
 
 
 ## A ladder up a wall to the north of `centre` (a ClimbVolume, `height`
@@ -489,6 +569,36 @@ func _start_bay(index: int) -> void:
 		9:
 			guards.append(_spawn(&"swordsman", Vector3(-2, 0, -97.5), PI))
 			guards.append(_spawn(&"", Vector3(2.5, 0, -98.5), PI))
+		10:
+			# The garrison at its ease, each man in his own way; the crates
+			# back on their pile.
+			Furnishings.restack(_stock, Vector3(-19.5, 0, -95.0), 0.0)
+			var torch := _patrol([Vector3(-20, 0, -78), Vector3(-20, 0, -92), Vector3(-35, 0, -92), Vector3(-36, 0, -84)])
+			torch.rounds_light = &"torch"
+			torch.habits.assign([&"fidget", &"lean", &"visit"])
+			guards.append(torch)
+			var lantern := _patrol([Vector3(-38, 2.5, -99.9), Vector3(-25, 2.5, -99.9), Vector3(-20, 0, -97.8)])
+			lantern.rounds_light = &"lantern"
+			lantern.habits.assign([&"rail", &"fidget"])
+			guards.append(lantern)
+			var gate := _spawn(&"", Vector3(-18.5, 0, -73.4), 0.0, false, &"steady")
+			gate.habits.assign([&"lean", &"fidget", &"visit"])
+			guards.append(gate)
+			var woodsman := _spawn(&"swordsman", Vector3(-35, 0, -93), 0.0, false, &"rash")
+			woodsman.habits.assign([&"chop", &"carry", &"pace", &"fidget"])
+			woodsman.habit_range = 22.0
+			guards.append(woodsman)
+			var mess := _spawn(&"", Vector3(-30, 0, -82), 0.0, false, &"craven")
+			mess.habits.assign([&"sit", &"eat", &"visit", &"fidget"])
+			mess.habit_range = 14.0
+			guards.append(mess)
+			var dozer := _spawn(&"", Vector3(-41.5, 0, -85), -PI * 0.5, false, &"steady")
+			dozer.habits.assign([&"sit"])
+			dozer.quirk = &"dozes"
+			guards.append(dozer)
+			var fireside := _spawn(&"", Vector3(-26.5, 0, -90), PI, false, &"sly")
+			fireside.habits.assign([&"tend", &"sit", &"fidget"])
+			guards.append(fireside)
 
 	_bay_guards[index] = guards
 
@@ -507,13 +617,18 @@ func _start_bay(index: int) -> void:
 	elif index == 9:
 		player.global_position = Vector3(0, 1.05, -74.5)
 		player.rotation.y = 0.0
+	# Bay 11: in through the door from bay 10, facing the yard.
+	elif index == 10:
+		player.global_position = Vector3(-17.0, 1.05, -76.75)
+		player.rotation.y = PI * 0.5
 	player.get_node("Neck").rotation.x = 0.0
 	player.reset_physics_interpolation()
 	_rest()
 	player.inventory.select_by_id(&"blackjack" if index == 0 else &"sword")
 
-	# The fights start at once; the watchmen have to find you.
-	if index != 0:
+	# The fights start at once; the watchmen (and the garrison at its ease)
+	# have to find you.
+	if index != 0 and index != 10:
 		for g in guards:
 			g._engage(player)
 
@@ -525,6 +640,11 @@ func _start_bay(index: int) -> void:
 func _clear_bay(index: int) -> void:
 	for g in _bay_guards.get(index, []):
 		if is_instance_valid(g):
+			# Whatever he had in his arms put down first (a crate goes with
+			# him otherwise).
+			if g.get("_habits") != null:
+				g._habits.interrupt()
+
 			# Out of it at once: gone at the end of the frame, but no more
 			# thinking, fighting or joining anything before then.
 			g.remove_from_group(&"guards")
@@ -551,6 +671,8 @@ func _clear_bay(index: int) -> void:
 		half = Vector2(30.0, 18.5)
 	elif index == 9:
 		half = Vector2(15.5, 15.0)
+	elif index == 10:
+		half = Vector2(14.5, 15.0)
 
 	for thing in get_tree().get_nodes_in_group(&"bodies"):
 		var at: Vector3 = (thing as Node3D).global_position
@@ -565,7 +687,8 @@ func _clear_bay(index: int) -> void:
 	for child in get_children():
 		var name := String(child.name)
 
-		if (name.begins_with("DroppedSword") or name.begins_with("DroppedLantern") or name.begins_with("crate")) and absf((child as Node3D).global_position.x - centre.x) < half.x and absf((child as Node3D).global_position.z - centre.z) < half.y:
+		# (Not the stock the garrison carries about: that is the bay's own.)
+		if (name.begins_with("DroppedSword") or name.begins_with("DroppedLantern") or name.begins_with("crate")) and not child.is_in_group(&"stock") and absf((child as Node3D).global_position.x - centre.x) < half.x and absf((child as Node3D).global_position.z - centre.z) < half.y:
 			child.queue_free()
 
 	for barrel in get_tree().get_nodes_in_group(&"explosives"):
@@ -645,6 +768,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	match key:
 		KEY_MINUS:
 			_start_bay(9)
+		KEY_EQUAL:
+			_start_bay(10)
 		KEY_0:
 			player.global_position = Vector3(0, 1.05, 8)
 			player.rotation.y = 0.0
@@ -807,6 +932,14 @@ func _update_labels() -> void:
 ## clear of powder, dealing with something out of place.
 func _about(g: Node) -> String:
 	var bits: Array[String] = [String(g.given_name)]
+	# His own ways: his quirk, and whether he has nodded off.
+	var habits: RefCounted = g.get("_habits")
+
+	if habits != null and habits.quirk != &"":
+		bits.append("(%s)" % String(habits.quirk))
+
+	if habits != null and habits.dozing():
+		bits.append("ASLEEP")
 
 	if g.lookout:
 		bits.append("lookout (come down)" if g._left_post else ("lookout, on his post" if g._holds_post() else "lookout"))

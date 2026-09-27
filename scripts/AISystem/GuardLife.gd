@@ -3,10 +3,11 @@ extends RefCounted
 ##   talk      two men at their ease and near each other pass the time with
 ##             whatever is on the garrison's mind (Garrison.gossip): their
 ##             dead, their fear, what they have heard of how you fight, or the
-##             cold. You can listen. Anything that stirs either of them ends
-##             it.
-##   idle      standing his post a while, a man folds his arms, or takes a
-##             pull from his flask.
+##             cold. The one listening nods along, or shakes his head (by his
+##             temperament). You can listen. Anything that stirs either of
+##             them ends it.
+##   idle      what he does with himself standing about, sat, leaning:
+##             GuardHabits.gd.
 ##   oddities  a door you left open, your arrow in a wall: he notices it (it
 ##             takes light, and a look), goes to it and deals with it (shuts
 ##             the door, pulls the arrow out), then searches about it; the
@@ -17,7 +18,8 @@ extends RefCounted
 ##             goes to look; the friend covers him from where he stands, and
 ##             stands easy when he calls that it was nothing.
 ##   lantern   searching somewhere dark with the garrison roused, he lights one
-##             (GuardHands); at his ease a while, he puts it out.
+##             (GuardHands); at his ease a while, he puts it out (not the light
+##             he walks his rounds with).
 ##   lookout   a man set to watch (Guard.lookout) sweeps his ground slowly.
 
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
@@ -37,8 +39,8 @@ const CHECK := 0.35
 const TALK_RANGE := 3.8
 const TALK_GAP := 2.6
 const TALK_REST := Vector2(40.0, 80.0)
-## Standing still this long, a man finds something to do with himself.
-const IDLE_AFTER := 3.0
+## Listening, he nods (or shakes his head) this long after each line.
+const REACT := 1.6
 ## Seeing something out of place: this long in view (weighted by how near the
 ## middle of his view it is) before it registers; how far off it can be; and
 ## the light it needs beyond arm's length.
@@ -72,11 +74,11 @@ var _line := 0
 var _line_timer := 0.0
 var _talk_rest := 0.0
 var _spoke_at := -10.0
-## Standing still, and what he is doing with himself.
+## Standing still this long (talk starts between men at rest).
 var _resting := 0.0
-var _idle: StringName = &""
-var _idle_left := 0.0
-var _idle_wait := 0.0
+## Listening: how he takes the last line ("nod", "shake", "") and when.
+var _react: StringName = &""
+var _react_at := -10.0
 ## Something out of place he is going to deal with.
 var _odd: Node3D = null
 var _odd_kind: StringName = &""
@@ -98,7 +100,6 @@ func _init(p_guard: CharacterBody3D) -> void:
 	guard = p_guard
 	_check = randf() * CHECK
 	_talk_rest = randf_range(6.0, 16.0)
-	_idle_wait = randf_range(3.0, 8.0)
 	_watch_time = randf() * LOOKOUT_PERIOD
 
 
@@ -124,63 +125,34 @@ func update(delta: float) -> void:
 		_look_for_company()
 
 
-## What he is doing with himself, for the rig: "talk", "listen", "fold_arms",
-## "drink", or "".
+## What he is doing with himself, for the rig: "talk", "listen" ("nod" or
+## "shake" just after the other's line), or "".
 func activity() -> StringName:
-	if talking():
-		return &"talk" if Comms.now() - _spoke_at < TALK_GAP * 0.85 else &"listen"
+	if not talking():
+		return &""
 
-	# Fidgets are for a man at his ease: anything else and they are over.
-	if int(guard.state) != RELAXED:
-		_idle = &""
-		_idle_left = 0.0
+	if Comms.now() - _spoke_at < TALK_GAP * 0.85:
+		return &"talk"
 
-	return _idle
+	if _react != &"" and Comms.now() - _react_at < REACT:
+		return _react
+
+	return &"listen"
 
 
 # ---------------------------------------------------------------------------
 # Standing about
 # ---------------------------------------------------------------------------
 
-## Standing still at his post or a waypoint.
+## Standing (or sat, or leaning) still at his post or a waypoint: what he
+## does with himself meanwhile is GuardHabits'.
 func at_rest(delta: float) -> void:
 	_resting += delta
 
-	if talking() or bool(guard.get("lookout")):
-		_idle = &""
-		return
 
-	if _idle_left > 0.0:
-		_idle_left -= delta
-
-		if _idle_left <= 0.0:
-			_idle = &""
-			_idle_wait = randf_range(5.0, 10.0)
-
-		return
-
-	if _resting < IDLE_AFTER:
-		return
-
-	_idle_wait -= delta
-
-	if _idle_wait > 0.0:
-		return
-
-	# A soldier's fidgets: arms folded a while, a pull from the flask.
-	if randf() < 0.6:
-		_idle = &"fold_arms"
-		_idle_left = randf_range(4.0, 7.0)
-	else:
-		_idle = &"drink"
-		_idle_left = 1.3
-
-
-## On the move: whatever he was doing standing still is over.
+## On the move: he is not at rest.
 func walking() -> void:
 	_resting = 0.0
-	_idle = &""
-	_idle_left = 0.0
 
 
 ## A lookout at his post: the way he faces now, sweeping his ground.
@@ -262,7 +234,6 @@ func _begin_talk(other: Node3D) -> void:
 func _join_talk(lead: Node3D) -> void:
 	partner = lead
 	_lead = false
-	_idle = &""
 
 
 func _update_talk(delta: float) -> void:
@@ -291,10 +262,26 @@ func _update_talk(delta: float) -> void:
 
 	var entry: Array = _lines[_line]
 	var speaker: Node3D = guard if int(entry[0]) == 0 else partner
+	var listener: Node3D = partner if speaker == guard else guard
 	speaker.bark(String(entry[1]))
 	speaker._life._spoke_at = Comms.now()
+	listener._life._take_line()
 	_line += 1
 	_line_timer = TALK_GAP
+
+
+## Listening to a line: a nod from an easy man, now and then a shake of the
+## head from a hard one.
+func _take_line() -> void:
+	var fighter: RefCounted = guard.get("_fighter")
+	var tag: StringName = fighter.temper.tag if fighter != null and fighter.temper != null else &"steady"
+	var roll := randf()
+	_react_at = Comms.now()
+
+	if tag in [&"rash", &"stubborn"]:
+		_react = &"shake" if roll < 0.4 else (&"nod" if roll < 0.6 else &"")
+	else:
+		_react = &"nod" if roll < 0.6 else (&"shake" if roll < 0.7 else &"")
 
 
 func end_talk() -> void:
@@ -615,7 +602,7 @@ func _update_lantern(delta: float) -> void:
 	if hands.lantern != null:
 		if state == COMBAT:
 			hands.drop_lantern()
-		elif _easy > DOUSE_AFTER:
+		elif _easy > DOUSE_AFTER and hands.light_kind == &"":
 			hands.douse()
 
 		return
