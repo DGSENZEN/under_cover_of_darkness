@@ -91,6 +91,9 @@ var _swapped := false
 var _set_count := 0
 ## Where his path was last asked for.
 var _going_to := Vector3.INF
+## Lent a station for a while (a gathering): his own rota kept aside.
+var _lent := false
+var _own: Array[Node3D] = []
 
 
 func _init(p_guard: CharacterBody3D) -> void:
@@ -145,7 +148,8 @@ func update(delta: float) -> void:
 	if carried != null and is_instance_valid(carried):
 		carried.global_transform = Transform3D(guard.global_basis, guard.global_transform * CARRY_OFFSET)
 
-	if _step == Step.EXIT and int(guard.state) != RELAXED:
+	# Getting up runs its course (stirred, or taken off his station).
+	if _step == Step.EXIT:
 		_t += delta
 
 		if _t >= _length:
@@ -182,6 +186,92 @@ func patrol(delta: float) -> void:
 			_carry(station, delta)
 		_:
 			_stay(station, delta)
+
+
+## His stations now `nodes` (a new duty: NightRota); off the one he is at,
+## the way it ends.
+func set_stations(nodes: Array) -> void:
+	_leave_station()
+	_stations.clear()
+
+	for node in nodes:
+		if node is Node3D:
+			_stations.append(node)
+
+	_index = 0
+	_lent = false
+
+
+## Lent `station` for a while (a gathering): he goes to it and does its
+## thing; his own rota waits.
+func lend(station: Node3D) -> void:
+	if not _lent:
+		_own = _stations.duplicate()
+
+	_leave_station()
+	_stations.clear()
+	_stations.append(station)
+	_index = 0
+	_lent = true
+
+
+## The loan over: off it, back to his own rota.
+func end_loan() -> void:
+	if not _lent:
+		return
+
+	_leave_station()
+	_stations = _own.duplicate()
+	_own.clear()
+	_index = 0
+	_lent = false
+
+
+func on_loan() -> bool:
+	return _lent
+
+
+## Settled at his station and at it.
+func at_station() -> bool:
+	return _step == Step.DOING
+
+
+## Off the station he holds, the way it ends (a sitter stands, a sleeper gets
+## up, a crate is dropped, an open lid shut), without being stirred.
+func _leave_station() -> void:
+	if carried != null and is_instance_valid(carried):
+		_drop(carried, guard.velocity)
+
+	carried = null
+	_crate = null
+	_asleep = false
+	_going_to = Vector3.INF
+	var station := _held()
+
+	if station == null:
+		if _step != Step.EXIT:
+			_step = Step.NONE
+			_activity = &""
+
+		return
+
+	var kind := StringName(station.kind)
+
+	if kind == &"rummage":
+		var chest: Node3D = station.chest_node()
+
+		if chest != null and bool(chest.get("is_open")):
+			chest.frob(guard)
+
+	station.release(guard)
+
+	if kind == &"sit" and (_step == Step.ENTER or _step == Step.DOING):
+		_begin(Step.EXIT, &"stand_up", STAND_UP)
+	elif kind == &"sleep" and (_step == Step.ENTER or _step == Step.DOING):
+		_begin(Step.EXIT, &"wake", WAKE)
+	else:
+		_step = Step.NONE
+		_activity = &""
 
 
 ## Down or dead (Guard._let_go): the crate in his arms falls loose, an open

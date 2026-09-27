@@ -2446,6 +2446,47 @@ func _bark_for(new_state: int, old_state: int) -> void:
 				bark("Probably nothing.")
 
 
+## Put on a duty by the night rota (NightRota): a post (he stands where it
+## says), a round (he walks its route), or stations (his rota of them: the
+## bench, a bed, his work).
+func take_duty(duty: Dictionary) -> void:
+	var data: Dictionary = duty.get("data", {})
+
+	match StringName(duty.get("kind", &"")):
+		&"post":
+			_home = data.get("transform", _home)
+			_waypoints.clear()
+			_wait_timer = 0.0
+			_rota.set_stations([])
+		&"round":
+			_waypoints.clear()
+			var route := get_node_or_null(data.get("route", NodePath()))
+
+			if route != null:
+				for child in route.get_children():
+					if child is Node3D:
+						_waypoints.append(child)
+
+			_waypoint_index = 0
+			_wait_timer = 0.0
+			_rota.set_stations([])
+
+			if not _waypoints.is_empty():
+				_go_to(_waypoints[0].global_position, true)
+		_:
+			var nodes: Array[Node3D] = []
+
+			for path in data.get("paths", []):
+				var station := get_node_or_null(path) as Node3D
+
+				if station != null:
+					nodes.append(station)
+
+			_waypoints.clear()
+			_wait_timer = 0.0
+			_rota.set_stations(nodes)
+
+
 ## Calls out (or says anything that is not part of a conversation): a man
 ## calling out has left whatever he was talking about.
 func bark(text: String) -> void:

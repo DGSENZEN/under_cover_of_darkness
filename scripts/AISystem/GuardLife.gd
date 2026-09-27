@@ -31,8 +31,10 @@ const SEARCHING := 3
 const COMBAT := 4
 ## How often he looks about him for things out of place (staggered).
 const CHECK := 0.35
-## Who talks to whom (made at run time: it reads this script too).
+## Who talks to whom (made at run time: it reads this script too); the
+## night's rota, where a level has one.
 const TALK_DIRECTOR := "res://scripts/AISystem/Talk/TalkDirector.gd"
+const NIGHT_ROTA := "res://scripts/AISystem/NightRota.gd"
 ## Standing still this long, a man finds something to do with himself.
 const IDLE_AFTER := 3.0
 ## Seeing something out of place: this long in view (weighted by how near the
@@ -60,6 +62,7 @@ const LOOKOUT_ARC := 70.0
 const LOOKOUT_PERIOD := 12.0
 
 static var _talk_script: GDScript = null
+static var _rota_script: GDScript = null
 
 var guard: CharacterBody3D
 ## After a conversation, this long before he talks again (TalkDirector).
@@ -101,6 +104,14 @@ func update(delta: float) -> void:
 
 	if talk != null:
 		talk.tick(delta)
+
+	if _rota_script == null:
+		_rota_script = load(NIGHT_ROTA)
+
+	var night: RefCounted = _rota_script.of(guard)
+
+	if night != null:
+		night.tick(delta)
 
 	_update_cover(delta)
 	_update_lantern(delta)
