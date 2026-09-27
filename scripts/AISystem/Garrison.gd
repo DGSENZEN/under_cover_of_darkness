@@ -106,6 +106,8 @@ var dread := 0.0
 var dead := 0
 var captains := 0
 var dead_names: Array[String] = []
+## How many of them have been found lying where you left them.
+var bodies_found := 0
 var alarm := 0.0
 ## [{where, name, at (Comms.now), noticed}] for each man taken from his post.
 var fallen := []
@@ -209,6 +211,7 @@ func on_gore() -> void:
 
 ## One of theirs found lying where you left him.
 func on_body_found() -> void:
+	bodies_found += 1
 	_dread(DREAD_BODY)
 	raise_alarm(0.6)
 

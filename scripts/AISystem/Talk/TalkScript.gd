@@ -25,11 +25,13 @@ extends RefCounted
 ##
 ## Each conversation comes out as a Dictionary:
 ##   {id, when, cast, place, cooldown, priority, group, again, lines,
-##    interrupt, source}
+##    interrupt, source, sources (the file:line of each key)}
 ## where `when` is an Array of terms (each an Array of its alternatives),
 ## `cast` an Array of {key, optional, reqs} (reqs shaped like `when`), and
 ## `lines`/`interrupt` Arrays of turns {part, choices: [{if, emotes, text,
 ## source}]}.
+
+const TalkFactsScript := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
 
 const FOLDER := "res://data/talk"
 ## Once a night.
@@ -67,11 +69,23 @@ static func load_dir(path := FOLDER) -> Dictionary:
 	var files := Array(DirAccess.get_files_at(path)).filter(func(f): return String(f).ends_with(".talk"))
 	files.sort()
 
+	var read := []
+
 	for file in files:
 		var full: String = path.path_join(file)
-		var text := FileAccess.get_file_as_string(full)
-		var one := load_text_for_test(text, full)
+		read.append(parse(FileAccess.get_file_as_string(full), full))
+
+	var traits := []
+
+	for one in read:
+		for man in one["cast"]:
+			traits.append_array(one["cast"][man]["traits"])
+
+	for one in read:
 		merged["errors"].append_array(one["errors"])
+
+		for c in one["conversations"]:
+			merged["errors"].append_array(validate(c, traits))
 
 		for c in one["conversations"]:
 			if seen.has(c["id"]):
@@ -92,9 +106,45 @@ static func load_dir(path := FOLDER) -> Dictionary:
 	return merged
 
 
-## `parse`, and the checks a whole library gets.
+## `parse`, and the checks a whole library gets (the traits a requirement may
+## name come from the cast sheet in the talk folder, and any in `text`).
 static func load_text_for_test(text: String, file: String) -> Dictionary:
-	return parse(text, file)
+	var one := parse(text, file)
+	var traits := []
+
+	for sheet in [one["cast"], parse(FileAccess.get_file_as_string(FOLDER.path_join("cast.talk")), "cast.talk")["cast"]]:
+		for man in sheet:
+			traits.append_array(sheet[man]["traits"])
+
+	for c in one["conversations"]:
+		one["errors"].append_array(validate(c, traits))
+
+	return one
+
+
+## Every condition and requirement of `conv` means something: the faults, by
+## file and line.
+static func validate(conv: Dictionary, traits: Array) -> Array[String]:
+	var errors: Array[String] = []
+	var sources: Dictionary = conv.get("sources", {})
+
+	for term in conv["when"]:
+		for alt in term:
+			if not TalkFactsScript.known(alt, false, traits):
+				errors.append("%s: unknown condition '%s'" % [sources.get("when", conv["source"]), alt])
+
+	for part in conv["cast"]:
+		for req in part["reqs"]:
+			for alt in req:
+				if not TalkFactsScript.known(alt, true, traits):
+					errors.append("%s: unknown requirement '%s'" % [sources.get("cast", conv["source"]), alt])
+
+	for turn in conv["lines"] + conv["interrupt"]:
+		for choice in turn["choices"]:
+			if choice["if"] != "" and not TalkFactsScript.known(choice["if"], true, traits):
+				errors.append("%s: unknown condition '%s'" % [choice["source"], choice["if"]])
+
+	return errors
 
 
 ## One file's text: {conversations, cast, errors}.
@@ -135,7 +185,7 @@ static func parse(text: String, file: String) -> Dictionary:
 
 			ids[id] = at
 			block = {"id": id, "when": [], "cast": [], "place": &"", "cooldown": DEFAULT_COOLDOWN, "priority": 0,
-				"group": &"", "again": false, "lines": [], "interrupt": [], "source": at, "_parts": {}}
+				"group": &"", "again": false, "lines": [], "interrupt": [], "source": at, "sources": {}, "_parts": {}}
 			continue
 
 		if in_cast:
@@ -153,6 +203,7 @@ static func parse(text: String, file: String) -> Dictionary:
 		var colon := line.find(":")
 
 		if colon > 0 and KEYS.has(line.substr(0, colon)):
+			block["sources"][line.substr(0, colon)] = at
 			_key(block, line.substr(0, colon), line.substr(colon + 1).strip_edges(), at, out)
 			continue
 

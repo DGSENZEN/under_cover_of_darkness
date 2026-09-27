@@ -6,6 +6,7 @@ extends Node3D
 ##   Godot --headless --fixed-fps 60 --quit-after 3000000 --path . res://tests/talk_test.tscn
 
 const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
+const TalkFacts := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
 
 var results: Array[String] = []
 
@@ -22,6 +23,7 @@ func _ready() -> void:
 
 func _run() -> void:
 	_files()
+	_facts()
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +65,50 @@ func _files() -> void:
 			wrong.append(c["id"])
 
 	_check("T4 every conversation of two or more opens with two different speakers", wrong.is_empty(), str(wrong))
+
+
+# ---------------------------------------------------------------------------
+# Facts and casting
+# ---------------------------------------------------------------------------
+
+func _facts() -> void:
+	var sheet: Dictionary = TalkScript.library()["cast"]
+
+	# T5 conditions
+	var w := {"night": &"late", "dead": 2, "at_ease": false, "dead_names": ["Jory"]}
+	_check("T5 conditions read the night and the garrison",
+		TalkFacts.holds("night:late", w) and not TalkFacts.holds("night:early", w) and TalkFacts.holds("dead>=1", w)
+		and not TalkFacts.holds("dead>=3", w) and TalkFacts.holds("not(at_ease)", w) and TalkFacts.holds("dead(Jory)", w)
+		and not TalkFacts.holds("dead(Osric)", w), "")
+
+	# T6 requirements and ties
+	var osric := TalkFacts.sheet_man("Osric", sheet)
+	var jory := TalkFacts.sheet_man("Jory", sheet)
+	var piers := TalkFacts.sheet_man("Piers", sheet, &"craven")
+	var col := TalkFacts.sheet_man("Col", sheet)
+	_check("T6 requirements read temperament, rank and ties",
+		TalkFacts.meets(jory, "kin(A)", {"A": osric}, {}) and TalkFacts.meets(piers, "owes(A)", {"A": col}, {})
+		and not TalkFacts.meets(col, "owes(A)", {"A": piers}, {}) and TalkFacts.meets(piers, "craven", {}, {})
+		and not TalkFacts.meets(col, "craven", {}, {}) and TalkFacts.meets(TalkFacts.sheet_man("Mirelle", sheet), "rank>=4", {}, {})
+		and TalkFacts.meets(TalkFacts.sheet_man("Mirelle", sheet), "captain", {}, {}) and TalkFacts.meets(col, "not(captain)", {}, {}), "")
+
+	# T7 casting
+	var dice: Dictionary = TalkScript.parse("== d\ncast: A = any; B = owes(A); C? = friend(A)|friend(B)\nA: You owe me.\nB: Three.\nC: Pay him.\n", "t")["conversations"][0]
+	var cast7 := TalkFacts.cast_parts(dice, [piers, col, TalkFacts.sheet_man("Ned", sheet)], {})
+	_check("T7 casting fills parts by their ties and leaves an optional part empty when nobody fits",
+		cast7.get("A", {}).get("name") == "Col" and cast7.get("B", {}).get("name") == "Piers" and not cast7.has("C"), str(cast7.keys()))
+
+	# T8 an unknown word
+	var bad := TalkScript.load_text_for_test("== y\nwhen: at_eaze\ncast: A = any\nA: Hm.\n", "y.talk")
+	_check("T8 a condition nobody knows is an error with its file and line",
+		"\n".join(bad["errors"]).contains("y.talk:2: unknown condition 'at_eaze'"), str(bad["errors"]))
+
+	# T9 the quietest first
+	var any2: Dictionary = TalkScript.parse("== q\ncast: A = any; B = any\nA: One.\nB: Two.\n", "t")["conversations"][0]
+	var x := TalkFacts.sheet_man("Tam", sheet)
+	var y := TalkFacts.sheet_man("Gideon", sheet)
+	var cast9 := TalkFacts.cast_parts(any2, [x, y], {})
+	_check("T9 the quietest man is cast first", cast9.get("A", {}).get("name") == "Tam" and cast9.get("B", {}).get("name") == "Gideon", str(cast9.keys()))
 
 
 # ---------------------------------------------------------------------------
