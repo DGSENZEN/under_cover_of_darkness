@@ -48,6 +48,11 @@ static var _materials := {}
 static var _warned := false
 
 var _time := 0.0
+## What each sprite's shader was last told (sent again only when it changes).
+var _sent_frame := -1
+var _sent_strength := -1.0
+var _sent_lean := Vector3.INF
+var _sent_low := -1.0
 var _strength := 1.0
 var _scale := 1.0
 var _shown := 1.0
@@ -69,6 +74,10 @@ func _ready() -> void:
 
 	if core:
 		sprites.append(_sprite(quad, material(sheet, ramp, low_ramp, &"core"), "Heart"))
+
+	# The second layer is the first mirrored, always.
+	for i in sprites.size():
+		sprites[i].set_instance_shader_parameter(&"mirror", 1.0 if i == 1 else 0.0)
 
 	_apply()
 
@@ -120,6 +129,12 @@ func _apply() -> void:
 	var frames := int(info[2])
 	var offset := _lean * LEAN_REACH * (size / 0.34)
 	var s := _scale * _shown
+	# The shaders are told only what changed (every call is a trip to the
+	# renderer, for every sprite of every flame, every frame).
+	var new_frame := frame != _sent_frame
+	var new_strength := _strength != _sent_strength
+	var new_lean := _lean != _sent_lean
+	var new_low := _low != _sent_low
 
 	for i in sprites.size():
 		var sprite := sprites[i]
@@ -127,11 +142,23 @@ func _apply() -> void:
 		sprite.visible = s > 0.01
 		sprite.position = offset
 		sprite.scale = Vector3(s, s * _flat, s) * (0.8 if is_core else 1.0)
-		sprite.set_instance_shader_parameter(&"frame", frame + (frames / 2 if i == 1 else 0))
-		sprite.set_instance_shader_parameter(&"strength", _strength)
-		sprite.set_instance_shader_parameter(&"lean", _lean)
-		sprite.set_instance_shader_parameter(&"mirror", 1.0 if i == 1 else 0.0)
-		sprite.set_instance_shader_parameter(&"low", _low)
+
+		if new_frame:
+			sprite.set_instance_shader_parameter(&"frame", frame + (frames / 2 if i == 1 else 0))
+
+		if new_strength:
+			sprite.set_instance_shader_parameter(&"strength", _strength)
+
+		if new_lean:
+			sprite.set_instance_shader_parameter(&"lean", _lean)
+
+		if new_low:
+			sprite.set_instance_shader_parameter(&"low", _low)
+
+	_sent_frame = frame
+	_sent_strength = _strength
+	_sent_lean = _lean
+	_sent_low = _low
 
 
 func _sprite(quad: QuadMesh, look: ShaderMaterial, sprite_name: String) -> MeshInstance3D:

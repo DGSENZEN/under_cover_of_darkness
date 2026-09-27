@@ -14,8 +14,14 @@ const Layers := preload("res://scripts/Visual/Layers.gd")
 const SHADER := preload("res://scripts/Visual/Lights/corona.gdshader")
 
 ## Its size on the 360-line screen.
-@export var size_px := 48.0
-@export var tint := Color.WHITE
+@export var size_px := 48.0:
+	set(value):
+		size_px = value
+		_sent_look = false
+@export var tint := Color.WHITE:
+	set(value):
+		tint = value
+		_sent_look = false
 
 ## 0..1: how much of it shows.
 var visibility := 0.0
@@ -28,6 +34,12 @@ const MASK := 1 | 2
 
 static var _material: ShaderMaterial
 var _query := PhysicsRayQueryParameters3D.new()
+## What the shader and the rays were last given.
+var _sent_amount := -1.0
+var _sent_look := false
+var _skipping: Array[RID] = []
+var _skip_player := RID()
+var _player: Node = null
 
 
 func _ready() -> void:
@@ -86,16 +98,25 @@ func _clear_share(camera: Camera3D, exclude: Array[RID]) -> float:
 	var space := get_world_3d().direct_space_state
 	var from := camera.global_position
 	var side := camera.global_basis.x * world_radius(camera) * 0.25
-	var skip: Array[RID] = exclude.duplicate()
-	var player := get_tree().get_first_node_in_group(&"player")
+	if _player == null or not is_instance_valid(_player) or not _player.is_inside_tree():
+		_player = get_tree().get_first_node_in_group(&"player")
 
-	if player is CollisionObject3D:
-		skip.append((player as CollisionObject3D).get_rid())
+	var player_rid := (_player as CollisionObject3D).get_rid() if _player is CollisionObject3D else RID()
+
+	# Told again only when what it skips changes (not built afresh each tick).
+	if exclude != _skipping or player_rid != _skip_player:
+		_skipping = exclude.duplicate()
+		_skip_player = player_rid
+		var skip: Array[RID] = exclude.duplicate()
+
+		if player_rid.is_valid():
+			skip.append(player_rid)
+
+		_query.exclude = skip
 
 	_query.from = from
 	_query.collision_mask = MASK
 	_query.collide_with_areas = false
-	_query.exclude = skip
 	var clear := 0
 
 	for target in [global_position, global_position + side, global_position - side]:
@@ -112,9 +133,15 @@ func _show(amount: float) -> void:
 		return
 
 	quad.visible = amount > 0.001
-	quad.set_instance_shader_parameter(&"amount", amount)
-	quad.set_instance_shader_parameter(&"size_px", size_px)
-	quad.set_instance_shader_parameter(&"tint", tint)
+
+	if not _sent_look:
+		_sent_look = true
+		quad.set_instance_shader_parameter(&"size_px", size_px)
+		quad.set_instance_shader_parameter(&"tint", tint)
+
+	if amount != _sent_amount:
+		_sent_amount = amount
+		quad.set_instance_shader_parameter(&"amount", amount)
 
 
 static func _shared() -> ShaderMaterial:
