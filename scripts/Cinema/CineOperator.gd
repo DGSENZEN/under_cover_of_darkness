@@ -31,6 +31,8 @@ const SHAKE_DECAY := 1.5
 ## long (s).
 const LENS_RATE := 12.0
 const FOCUS_PULL := 0.4
+## A move eases its lens at no less than this (deg/s).
+const MOVE_LENS_LEAST := 0.5
 ## Depth of field, only on a close shot or a portrait: far blur begins this
 ## far behind the subject (m), this soft. Nothing else is blurred.
 const FAR_BEHIND := 4.0
@@ -43,6 +45,10 @@ const NEAR_TRANSITION := 0.6
 const CLEARANCE := 0.3
 ## Held black this long once there, for the cut to settle (real s).
 const BLACK_HOLD := 0.15
+
+## Fades run headless too (a test's seam: headless there is no frame to
+## hold, but going down to black and cutting there needs none).
+static var fade_headless := false
 
 ## How shaken it is (0..1; the shake is its square).
 var trauma := 0.0
@@ -68,6 +74,7 @@ var _attributes: CameraAttributesPractical
 ## The camera's own lens and attributes, given back whenever it is not ours.
 ## A shot waiting for the screen to go black (a fade) before it is cut to.
 var _after_black: Dictionary = {}
+var _lens_rate := LENS_RATE
 var _own_fov := 75.0
 var _own_attributes: CameraAttributes = null
 
@@ -135,17 +142,42 @@ func show(framing: Dictionary, how: StringName) -> void:
 
 	_after_black = {}
 
-	if how == &"fade" and _screen != null and _screen.has_method("fade_through") and DisplayServer.get_name() != "headless":
-		_screen.fade_through(BLACK_HOLD)
-		_after_black = framing
-		return
+	# Through black: it waits where it is until the screen is black, then is
+	# cut there (headless, a plain cut).
+	if how == &"fade":
+		if _screen != null and _screen.has_method("fade_through") and (DisplayServer.get_name() != "headless" or fade_headless):
+			_screen.fade_through(BLACK_HOLD)
+			_after_black = framing
+			return
+
+		how = &"cut"
+
+	# A drift cut to (begun through black): there at its first point, then
+	# along it.
+	var drift: PackedVector3Array = framing.get("path", PackedVector3Array())
+
+	if how == &"cut" and drift.size() >= 2:
+		var first := framing.duplicate()
+		first.erase("path")
+		first["position"] = drift[0]
+		show(first, &"cut")
+		how = &"path"
 
 	_framing = framing
 	_goal = framing.get("position", _goal)
 	_path = PackedVector3Array()
-	# A new shot's lens is its own at once (a push-in within it is follow's).
-	_fov = float(framing.get("fov", _fov))
-	_camera.fov = _fov
+	var fov := float(framing.get("fov", _fov))
+
+	# A cut's lens is its own at once; a move eases to it over the move (no
+	# snap in the middle of a picture); a push-in within a shot is follow's.
+	if how in [&"glide", &"path"]:
+		var going := _base.distance_to(_goal) if how == &"glide" else _length(drift)
+		var seconds := maxf(going / maxf(float(_mode["speed"]), 0.01), float(_mode["settle"]))
+		_lens_rate = maxf(absf(fov - _fov) / seconds, MOVE_LENS_LEAST)
+	else:
+		_lens_rate = LENS_RATE
+		_fov = fov
+		_camera.fov = _fov
 
 	match how:
 		&"glide":
@@ -207,6 +239,11 @@ func focus_distance() -> float:
 ## Where it aims (before the hand's sway and the shake).
 func look_point() -> Vector3:
 	return _look
+
+
+## Still waiting for black (a fade) before its cut.
+func waiting() -> bool:
+	return not _after_black.is_empty()
 
 
 ## Still moving to its mark, or along its path.
@@ -307,6 +344,16 @@ func _slope(segment: int, t: float) -> Vector3:
 	return 0.5 * ((-p0 + p2) + 2.0 * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t + 3.0 * (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t * t)
 
 
+## How long a path is (m), point to point.
+static func _length(points: PackedVector3Array) -> float:
+	var total := 0.0
+
+	for i in range(1, points.size()):
+		total += points[i - 1].distance_to(points[i])
+
+	return total
+
+
 func _catmull(segment: int, t: float) -> Vector3:
 	var count := _path.size()
 	var p0 := _path[maxi(segment - 1, 0)]
@@ -339,7 +386,7 @@ func _aim(omega: float, dt: float) -> void:
 
 ## The lens eased to the framing's; focus pulled onto the subject.
 func _lens(dt: float) -> void:
-	_fov = move_toward(_fov, float(_framing.get("fov", _fov)), LENS_RATE * dt)
+	_fov = move_toward(_fov, float(_framing.get("fov", _fov)), _lens_rate * dt)
 	_camera.fov = _fov
 	var subject: Vector3 = _framing.get("subject", _framing.get("look", _look))
 	var wanted := _base.distance_to(subject)

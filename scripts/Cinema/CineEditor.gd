@@ -83,6 +83,12 @@ const REACTION_REST := 6.0
 ## near (m) where it was made.
 const SETUP_KINDS := [&"close", &"medium", &"reaction", &"portrait"]
 const SETUP_WITHIN := 1.5
+## A setup is kept only while he faces within this of how he faced (deg), a
+## portrait's while the man he speaks to is within this of where he was; a
+## portrait never stands nearer their line than this (deg).
+const SETUP_TURN := 60.0
+const SETUP_TURN_PORTRAIT := 30.0
+const OFF_THE_LINE := 15.0
 ## A conversation: portraits from this line (by mode); a new speaker's
 ## portrait this long into his line (s); a listener's face after a hard line
 ## once in this long (s); back to the two of them every this many changes of
@@ -92,6 +98,8 @@ const SPEAKER_CUT := 0.3
 const REACTION_EVERY := 8.0
 const REESTABLISH_EVERY := 4
 const STILL_WITHIN := 0.3
+## The cuts a conversation makes.
+const TALK_CUTS := [&"portrait", &"reaction", &"reestablish", &"two"]
 ## A conversation is men standing: none going faster than this (m/s), and no
 ## blow for this long (s); lines traded in a fight or on the move are not.
 const TALK_STILL := 1.0
@@ -256,6 +264,7 @@ func hold(held: bool) -> void:
 	_axial = {}
 	_talk = {}
 	_scene_due = -INF
+	_fade_due = false
 
 	if _operator != null:
 		_operator.stand_up()
@@ -509,6 +518,11 @@ func _observe_step(age: float) -> void:
 
 	# Nothing cut in the middle of a line, nor straight after the talk.
 	if _clock < _talk_until or _clock - _talk_until < LINGER:
+		return
+
+	# The talk over and lingered on: from its last cut back to the takes.
+	if _talk.is_empty() and _shot["cause"] in TALK_CUTS:
+		_fresh_take(&"take")
 		return
 
 	if age < TAKE.x:
@@ -1075,17 +1089,40 @@ func _drama_next(cause: StringName, how: StringName) -> void:
 
 
 ## `man`'s setup for `kind` in this scene, if he is within SETUP_WITHIN of
-## where it was made and it stands clear and sees him; else nothing.
-func _setup(man: Node3D, kind: StringName, space: PhysicsDirectSpaceState3D) -> Dictionary:
+## where it was made, faces as he did (a portrait: toward the same man), it
+## is on the same side of the line (`context.side`), and it stands clear and
+## sees him; else nothing.
+func _setup(man: Node3D, kind: StringName, space: PhysicsDirectSpaceState3D, context: Dictionary) -> Dictionary:
 	var kept: Dictionary = _setups.get("%d:%s" % [man.get_instance_id(), kind], {})
 
 	if kept.is_empty():
 		return {}
 
-	if CineShot.head_of(man).distance_to(kept["head"]) > SETUP_WITHIN or not CineVantage.clear(space, kept["position"]) or not CineVantage.sees(space, kept["position"], [man]):
+	var head := CineShot.head_of(man)
+	var side: Vector3 = context.get("side", Vector3.ZERO)
+
+	if head.distance_to(kept["head"]) > SETUP_WITHIN or (side != Vector3.ZERO and (kept["side"] as Vector3).dot(side) < 0.0):
+		return {}
+
+	if kind == &"portrait":
+		var toward: Variant = context.get("toward")
+
+		if toward is Vector3 and kept.get("toward") is Vector3 and _flat_angle((kept["toward"] as Vector3) - (kept["head"] as Vector3), (toward as Vector3) - head) > SETUP_TURN_PORTRAIT:
+			return {}
+	elif _flat_angle(kept["facing"], CineShot.facing(man)) > SETUP_TURN:
+		return {}
+
+	if not CineVantage.clear(space, kept["position"]) or not CineVantage.sees(space, kept["position"], [man]):
 		return {}
 
 	return kept
+
+
+## The angle between `u` and `v` seen from above (deg).
+static func _flat_angle(u: Vector3, v: Vector3) -> float:
+	var a := Vector3(u.x, 0.0, u.z)
+	var b := Vector3(v.x, 0.0, v.z)
+	return rad_to_deg(a.angle_to(b)) if a.length() > 0.001 and b.length() > 0.001 else 0.0
 
 
 ## The first of `options` ([kind, men, context?]) that sees its man and is
@@ -1118,7 +1155,7 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 			# A man's setup in this scene, if he is still near where it was made
 			# and it still sees him: the same place and lens again.
 			if one:
-				var kept: Dictionary = _setup(men[0], option[0], space)
+				var kept: Dictionary = _setup(men[0], option[0], space, context)
 
 				if not kept.is_empty():
 					if turn != 0.0:
@@ -1130,6 +1167,12 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 			var line_side: Vector3 = context["side"]
 
 			if turn != 0.0 and line_side != Vector3.ZERO and (at - CineShot.head_of(men[0])).dot(line_side) < 0.0:
+				continue
+
+			# A portrait from on their line stands behind (or in) the other
+			# man.
+			if option[0] == &"portrait" and context.get("toward") is Vector3 \
+					and _flat_angle(at - CineShot.head_of(men[0]), (context["toward"] as Vector3) - CineShot.head_of(men[0])) < OFF_THE_LINE:
 				continue
 
 			if not CineVantage.clear(space, at) or not CineVantage.sees(space, at, [men[0]]):
@@ -1148,7 +1191,8 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 				continue
 
 			if one and not context.has("from"):
-				_setups["%d:%s" % [men[0].get_instance_id(), option[0]]] = {"position": at, "fov": framing["fov"], "side": context["side"], "head": CineShot.head_of(men[0])}
+				_setups["%d:%s" % [men[0].get_instance_id(), option[0]]] = {"position": at, "fov": framing["fov"], "side": context["side"], "head": CineShot.head_of(men[0]),
+					"facing": CineShot.facing(men[0]), "toward": context.get("toward")}
 
 			_start(option[0], men, cause, how, context, length)
 			return true
@@ -1311,6 +1355,13 @@ func _start(kind: StringName, men: Array, cause: StringName, how: StringName, co
 	# else first).
 	var enter := how
 
+	# A drift taken through black sets off from its first point once the
+	# screen is black.
+	if how == &"fade" and (ctx.get("path", PackedVector3Array()) as PackedVector3Array).size() >= 2:
+		var drift: PackedVector3Array = ctx["path"]
+		framing["position"] = drift[drift.size() - 1]
+		framing["path"] = drift
+
 	if how == &"path":
 		var path: PackedVector3Array = ctx.get("path", PackedVector3Array())
 
@@ -1325,6 +1376,7 @@ func _start(kind: StringName, men: Array, cause: StringName, how: StringName, co
 			# (watching, dissolved to, as any new take).
 			if _camera.global_position.distance_to(path[0]) > 0.5:
 				var first := framing.duplicate()
+				first.erase("path")
 				first["position"] = path[0]
 				enter = &"dissolve" if _mode == &"observe" else &"cut"
 				_operator.show(first, enter)
@@ -1344,7 +1396,9 @@ func _start(kind: StringName, men: Array, cause: StringName, how: StringName, co
 func _follow(live: Array) -> void:
 	var kind: StringName = _shot["kind"]
 
-	if kind in [&"establishing", &"insert", &"overhead"] or live.is_empty():
+	# Going down to black the camera is still at the last shot: the next is
+	# taken as it was planned when the screen is black.
+	if kind in [&"establishing", &"insert", &"overhead"] or live.is_empty() or _operator.waiting():
 		return
 
 	var ctx: Dictionary = (_shot["context"] as Dictionary).duplicate()
@@ -1381,7 +1435,7 @@ func _follow(live: Array) -> void:
 
 	# Over a talk the lens narrows (and stays narrowed for the rest of the
 	# take).
-	if _mode == &"observe" and _clock < _talk_until + TALK_GAP and _talk_since > -INF:
+	if _mode == &"observe" and _clock < _talk_until + TALK_GAP and _talk_since > -INF and not (_shot["cause"] in TALK_CUTS):
 		var talked := _clock - maxf(_talk_since, float(_shot["at"]))
 		_shot["pushed"] = minf(float(_shot.get("pushed", base_fov)), base_fov * lerpf(1.0, PUSH_TO, clampf(talked / PUSH_OVER, 0.0, 1.0)))
 
@@ -1395,7 +1449,7 @@ func _follow(live: Array) -> void:
 
 ## How long the man it is on has been out of sight.
 func _watch(live: Array, dt: float) -> void:
-	if live.is_empty() or _shot["kind"] in [&"insert", &"establishing", &"overhead"]:
+	if live.is_empty() or _shot["kind"] in [&"insert", &"establishing", &"overhead"] or _operator.waiting():
 		_hidden = 0.0
 		return
 

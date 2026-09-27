@@ -671,25 +671,33 @@ func _operator() -> void:
 		"fastest %.2f m/s, end %.2f m from the last point" % [fastest10, camera.global_position.distance_to(arc[3])])
 	op.set_mode(&"drama")
 
-	# O5 a new shot sets its lens at once, a glide too; within a shot (a
-	# push-in) the lens eases
-	op.show(_frame_at(Vector3(600, 1.6, 4), head, 40.0, &"close"), &"cut")
-	await _frames(2)
+	# O5 a cut sets its lens at once; a move eases it over the move (no snap
+	# in the middle of a picture); within a shot (a push-in) it eases too
+	op.show(_frame_at(Vector3(600, 1.6, 4), head, 40.0, &"cut"), &"cut")
+	await _frames(1)
+	var cut5: float = camera.fov
 	op.show(_frame_at(Vector3(600, 1.6, 4.5), head, 28.0, &"close"), &"glide")
 	await _frames(1)
-	var set5: float = camera.fov
-	op.follow(_frame_at(Vector3(600, 1.6, 4.5), head, 34.0, &"close"))
+	var moved5: float = camera.fov
 	var biggest := 0.0
 	var was_fov: float = camera.fov
 
-	for f in 180:
+	for f in 60:
 		await get_tree().process_frame
 		biggest = maxf(biggest, absf(camera.fov - was_fov))
 		was_fov = camera.fov
 
-	_check("O5 a new shot's lens is set at once (a glide's too); a push-in within the shot eases, never a degree a frame",
-		absf(set5 - 28.0) < 0.01 and biggest <= 1.0 and biggest > 0.0 and absf(camera.fov - 34.0) < 0.1,
-		"glide set %.2f, biggest step easing %.2f, now %.2f" % [set5, biggest, camera.fov])
+	var arrived5: float = camera.fov
+	op.follow(_frame_at(Vector3(600, 1.6, 4.5), head, 34.0, &"close"))
+
+	for f in 120:
+		await get_tree().process_frame
+		biggest = maxf(biggest, absf(camera.fov - was_fov))
+		was_fov = camera.fov
+
+	_check("O5 a cut sets its lens at once; a move eases it over the move and a push-in eases, never a degree a frame",
+		absf(cut5 - 40.0) < 0.01 and moved5 > 38.0 and absf(arrived5 - 28.0) < 0.1 and biggest <= 1.0 and absf(camera.fov - 34.0) < 0.1,
+		"cut %.2f, a frame into the move %.2f, after 1 s %.2f, biggest step %.2f, now %.2f" % [cut5, moved5, arrived5, biggest, camera.fov])
 
 	# O6 focus on his head, the blur held down, the near blur only over a shoulder
 	op.show(_frame_at(Vector3(600, 1.6, 3), head, 40.0, &"close"), &"cut")
@@ -919,6 +927,41 @@ func _observing() -> void:
 
 	_check("E43 watched scenes asked through black each open through black, drifting takes too",
 		fades43.all(func(f): return f[1] == &"fade"), "%s" % [fades43])
+
+	# E47 through black as in a window (the fade run headless): when the
+	# picture comes up the camera stands where the take begins, not where it
+	# was, a drifting take too
+	CineOperator.fade_headless = true
+	var came47 := []
+
+	for i in 2:
+		await _real(2.0)
+		camera.global_position = Vector3(760, 12, 30)
+		editor.scene({"mode": &"observe", "subjects": [man19], "transition": &"fade"})
+		var shot47: Dictionary = editor.current()
+		var path47: Variant = shot47["framing"].get("path")
+		var start47: Vector3 = (path47 as PackedVector3Array)[0] if path47 != null else shot47["framing"]["position"]
+		var held47: bool = camera.global_position.distance_to(Vector3(760, 12, 30)) < 0.5
+		await _real(0.9)
+		came47.append([shot47["kind"], held47, snappedf(camera.global_position.distance_to(start47), 0.01)])
+
+	CineOperator.fade_headless = false
+	_check("E47 through black, the camera waits where it was, then comes up where the take begins (a drift too)",
+		came47.size() == 2 and came47.all(func(c): return c[1] and c[2] < 1.0) and came47.any(func(c): return c[0] == &"roving"), "%s" % [came47])
+
+	# E48 an act asked through black while the camera is held: back in hand,
+	# a later scene does not fade
+	await _real(2.0)
+	editor.hold(true)
+	editor.scene({"mode": &"observe", "subjects": [man19], "transition": &"fade"})
+	await _real(0.5)
+	editor.hold(false)
+	await _real(2.0)
+	shots.clear()
+	editor.scene({"mode": &"observe", "subjects": [man19]})
+	await _real(0.5)
+	_check("E48 a fade asked while held is forgotten once the camera is back",
+		shots.all(func(sh): return sh["how"] != &"fade"), "%s" % [shots.map(func(sh): return [sh["kind"], sh["how"]])])
 	man19.queue_free()
 	editor.release()
 	editor.queue_free()
@@ -1504,6 +1547,108 @@ func _drama() -> void:
 		not of_b44.is_empty() and of_b44[0]["kind"] == &"portrait", "%s" % [shots.map(func(sh): return [sh["kind"], sh["cause"]])])
 	wall44.queue_free()
 	b.rotation.y = yaw44
+
+	# E46 a portrait walled at its place and further round: never taken from
+	# on their line (behind the other man, into his face)
+	await _real(6.0)
+	b.rotation.y = 0.0
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(2.0)
+	var side46: Vector3 = editor._side_of([b, a])
+	var head_a46 := CineShot.head_of(a)
+	var head_b46 := CineShot.head_of(b)
+	var walls46 := [Props.block(self, CineShot.frame(&"portrait", [b], {"toward": head_a46, "side": side46, "aspect": editor._aspect()})["position"], Vector3(0.8, 4.0, 0.8))]
+
+	for t in [30.0, -30.0]:
+		var turned46: Vector3 = CineShot.frame(&"portrait", [b], {"toward": head_a46, "side": side46, "aspect": editor._aspect(), "turn": t})["position"]
+		var off46 := rad_to_deg(Vector3(turned46.x - head_b46.x, 0, turned46.z - head_b46.z).angle_to(Vector3(head_a46.x - head_b46.x, 0, head_a46.z - head_b46.z)))
+
+		if off46 > 20.0:
+			walls46.append(Props.block(self, turned46, Vector3(0.8, 4.0, 0.8)))
+
+	await _frames(3)
+	shots.clear()
+	_say(a, b, 2.0)
+	await _real(2.5)
+	_say(b, a, 2.0)
+	await _real(1.0)
+	var of_b46 := shots.filter(func(sh): return sh["subjects"] == [b] and sh["cause"] == &"portrait")
+	var offs46 := of_b46.map(func(sh): return roundi(rad_to_deg(Vector3((sh["framing"]["position"] as Vector3).x - head_b46.x, 0, (sh["framing"]["position"] as Vector3).z - head_b46.z).angle_to(Vector3(head_a46.x - head_b46.x, 0, head_a46.z - head_b46.z)))))
+	_check("E46 a walled portrait is never taken from on their line",
+		not of_b46.is_empty() and offs46.all(func(o): return o >= 15), "%s, degrees off their line %s" % [of_b46.map(func(sh): return sh["kind"]), offs46])
+
+	for w in walls46:
+		w.queue_free()
+
+	b.rotation.y = yaw44
+
+	# E50 a man who has turned round: a close of him is a new setup, in
+	# front of him again
+	await _real(6.0)
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(1.6)
+	editor.cut_to(&"medium", [b])
+	await _real(1.6)
+	editor.cut_to(&"close", [a])
+	await _real(1.6)
+	editor.cut_to(&"medium", [b])
+	var yaw50 := a.rotation.y
+	a.rotation.y += PI
+	await _real(1.6)
+	editor.cut_to(&"close", [a])
+	var at50: Vector3 = editor.current()["framing"]["position"]
+	var front50 := Vector3(at50.x - a.global_position.x, 0, at50.z - a.global_position.z).dot(CineShot.facing(a))
+	_check("E50 a man turned round gets a new close, in front of him",
+		editor.current()["subjects"] == [a] and front50 > 0.0, "%s, %.2f in front" % [editor.current()["kind"], front50])
+	a.rotation.y = yaw50
+
+	# E51 a portrait of him toward another man is a new setup
+	await _real(1.6)
+	var head51 := CineShot.head_of(a)
+	editor.cut_to(&"portrait", [a], {"toward": CineShot.head_of(b)})
+	var first51: Vector3 = editor.current()["framing"]["position"]
+	var kind51: StringName = editor.current()["kind"]
+	await _real(1.6)
+	editor.cut_to(&"medium", [b])
+	await _real(1.6)
+	var other51 := head51 + (CineShot.head_of(b) - head51).rotated(Vector3.UP, deg_to_rad(-70.0))
+	editor.cut_to(&"portrait", [a], {"toward": other51})
+	var second51: Vector3 = editor.current()["framing"]["position"]
+	_check("E51 his portrait toward another man is a new setup",
+		kind51 == &"portrait" and editor.current()["kind"] == &"portrait" and second51.distance_to(first51) > 0.5, "%.2f m apart (%s, %s)" % [second51.distance_to(first51), kind51, editor.current()["kind"]])
+
+	# E52 watched, a portrait keeps its lens while he moves his head; E49 the
+	# talk over, its last portrait gives way to a take once it has lingered
+	await _real(6.0)
+	editor.scene({"mode": &"observe", "subjects": [a, b]})
+	await _real(2.0)
+
+	for i in 3:
+		_say(a if i % 2 == 0 else b, b if i % 2 == 0 else a, 2.0)
+		await _real(2.5)
+
+	var lens52: float = camera.fov
+	var on52: StringName = editor.current()["kind"]
+	a.global_position += Vector3(0, 0, 0.4)
+	b.global_position += Vector3(0, 0, 0.4)
+	var drift52 := 0.0
+
+	for f in 60:
+		await get_tree().process_frame
+		drift52 = maxf(drift52, absf(camera.fov - lens52))
+
+	a.global_position -= Vector3(0, 0, 0.4)
+	b.global_position -= Vector3(0, 0, 0.4)
+	_check("E52 watched, a portrait keeps its lens while he moves",
+		on52 == &"portrait" and drift52 < 0.05, "%s, lens moved %.2f deg" % [on52, drift52])
+	# (the last line ended 1.5 s ago: 0.5 s before the lens check, 1 s of it)
+	var ended49 := TimeFx.real_time() - 1.5
+	shots.clear()
+	await _real(6.0)
+	var took49 := shots.filter(func(sh): return not (sh["cause"] in [&"portrait", &"reaction", &"reestablish", &"two"]))
+	var after49: float = float(took49[0]["real_at"]) - ended49 if not took49.is_empty() else INF
+	_check("E49 watched, the talk over: its last portrait gives way to a take once it has lingered",
+		after49 >= 2.9 and after49 <= 4.5, "a take %.1f s after the last line (%s)" % [after49, shots.map(func(sh): return [sh["kind"], sh["cause"]])])
 
 	# E18 released in the middle of a slowing and a wipe: time back at once, the screen cleared
 	editor.scene({"mode": &"drama", "subjects": [a, b]})
