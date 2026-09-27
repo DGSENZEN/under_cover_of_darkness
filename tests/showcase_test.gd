@@ -322,6 +322,33 @@ func _run() -> void:
 	director21.queue_free()
 	DirectorScript.ending = &"random"
 
+	# D40 flying free, the director keeps its hands off: slow motion ends as
+	# you take the camera, a new beat neither moves nor re-lenses it, its blur
+	# is off, and nothing slows while you fly
+	var mirelle: Node3D = map13.cast["Mirelle"]
+	camera.mode = CameraScript.Mode.DIRECTOR
+	camera.want({"mode": &"drama", "subjects": [osric]})
+	await _frames(30)
+	CineEvents.emit(&"knife", {"attacker": mirelle, "victim": osric, "where": osric.global_position})
+	await _frames(18)
+	var slowed40 := Engine.time_scale
+	camera.mode = CameraScript.Mode.FREE
+	var freed40 := Engine.time_scale
+	await _frames(2)
+	var at40 := camera.global_position
+	var fov40 := camera.fov
+	camera.want({"mode": &"drama", "subjects": [mirelle]})
+	await _frames(3)
+	var blur40: bool = camera.attributes is CameraAttributesPractical and (camera.attributes as CameraAttributesPractical).dof_blur_far_enabled
+	var moved40 := camera.global_position.distance_to(at40)
+	await _frames(9 * 60)
+	CineEvents.emit(&"death", {"man": mirelle, "killer": osric, "where": mirelle.global_position})
+	await _frames(18)
+	var later40 := Engine.time_scale
+	_check("D40 taking the camera ends slow motion; flying, a new beat neither moves nor re-lenses it, its blur is off, nothing slows it",
+		slowed40 < 0.9 and absf(freed40 - 1.0) < 0.001 and moved40 < 0.01 and is_equal_approx(camera.fov, fov40) and is_equal_approx(fov40, 55.0) and not blur40 and absf(later40 - 1.0) < 0.001,
+		"slowed %.2f, on taking %.2f, moved %.3f m, fov %.1f -> %.1f, blur %s, a death while flying %.2f" % [slowed40, freed40, moved40, fov40, camera.fov, blur40, later40])
+
 	# D15 flying while paused
 	camera.mode = CameraScript.Mode.FREE
 	get_tree().paused = true

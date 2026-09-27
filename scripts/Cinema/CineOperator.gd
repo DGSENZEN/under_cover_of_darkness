@@ -66,6 +66,9 @@ var _last := -1.0
 var _clock := 0.0
 var _noise := FastNoiseLite.new()
 var _attributes: CameraAttributesPractical
+## The camera's own lens and attributes, given back whenever it is not ours.
+var _own_fov := 75.0
+var _own_attributes: CameraAttributes = null
 
 
 func _ready() -> void:
@@ -81,6 +84,8 @@ func _ready() -> void:
 func attach(camera: Camera3D, screen: CanvasLayer) -> void:
 	_camera = camera
 	_screen = screen
+	_own_fov = camera.fov
+	_own_attributes = camera.attributes
 	_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_goal = camera.global_position
 	_base = camera.global_position
@@ -92,6 +97,24 @@ func attach(camera: Camera3D, screen: CanvasLayer) -> void:
 		_attributes.dof_blur_far_transition = FAR_TRANSITION
 		_attributes.dof_blur_near_transition = NEAR_TRANSITION
 		camera.attributes = _attributes
+
+
+## The camera given back for a while (flown, following, let go): its own
+## lens and attributes, no shake left in it.
+func stand_down() -> void:
+	trauma = 0.0
+
+	if _camera != null and is_instance_valid(_camera):
+		_camera.fov = _own_fov
+		_camera.attributes = _own_attributes
+
+
+## The camera taken again: its focus ours again (the next shot sets the lens).
+func stand_up() -> void:
+	if _camera != null and is_instance_valid(_camera) and _attributes != null:
+		_camera.attributes = _attributes
+
+	_last = -1.0
 
 
 ## "observe" or "drama": its speeds and its sway.
@@ -214,14 +237,25 @@ static func _held_to(from: Vector3, to: Vector3, speed: float, dt: float) -> Vec
 	return to
 
 
-## Along the path (Catmull-Rom through its points) at the mode's speed.
+## Along the path (Catmull-Rom through its points) at the mode's speed:
+## this frame's distance spent piece by piece, each at its own pace (the
+## curve's slope), so no join goes faster than the rest.
 func _along_path(dt: float) -> void:
 	var count := _path.size()
-	var segment := clampi(int(_path_at), 0, count - 2)
-	var here := _catmull(segment, _path_at - float(segment))
-	var ahead := _catmull(segment, minf(_path_at - float(segment) + 0.01, 1.0))
-	var per := maxf(here.distance_to(ahead) / 0.01, 0.01)
-	_path_at += float(_mode["speed"]) * dt / per
+	var left := float(_mode["speed"]) * dt
+
+	while left > 0.0 and _path_at < float(count - 1):
+		var piece := clampi(int(_path_at), 0, count - 2)
+		var t := _path_at - float(piece)
+		var pace := maxf(_slope(piece, t).length(), 0.01)
+		var step := left / pace
+
+		if t + step < 1.0:
+			_path_at += step
+			left = 0.0
+		else:
+			left -= (1.0 - t) * pace
+			_path_at = float(piece + 1)
 
 	if _path_at >= float(count - 1):
 		_base = _path[count - 1]
@@ -229,8 +263,18 @@ func _along_path(dt: float) -> void:
 		_path = PackedVector3Array()
 		return
 
-	segment = clampi(int(_path_at), 0, count - 2)
+	var segment := clampi(int(_path_at), 0, count - 2)
 	_base = _catmull(segment, _path_at - float(segment))
+
+
+## How fast the curve goes through piece `segment` at `t` (m per unit t).
+func _slope(segment: int, t: float) -> Vector3:
+	var count := _path.size()
+	var p0 := _path[maxi(segment - 1, 0)]
+	var p1 := _path[segment]
+	var p2 := _path[mini(segment + 1, count - 1)]
+	var p3 := _path[mini(segment + 2, count - 1)]
+	return 0.5 * ((-p0 + p2) + 2.0 * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t + 3.0 * (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t * t)
 
 
 func _catmull(segment: int, t: float) -> Vector3:

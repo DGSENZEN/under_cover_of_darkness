@@ -128,6 +128,14 @@ var _reaction: Dictionary = {}
 var _reacted_at := -INF
 var _scene_men: Array = []
 var _cycle := 0
+## Held (the camera someone else's); a scene's first shot waiting out the
+## floor (when, with a wipe or not, asked when); a face-off nowhere could see
+## tried again after this.
+var _held := false
+var _scene_due := -INF
+var _scene_wipe := false
+var _scene_asked := -INF
+var _face_off_retry := -INF
 
 
 func _init() -> void:
@@ -155,6 +163,9 @@ func release() -> void:
 	CineEvents.remove_listener(self)
 	TimeFx.cancel(&"cinema")
 
+	if _operator != null and is_instance_valid(_operator):
+		_operator.stand_down()
+
 	if _screen != null and is_instance_valid(_screen):
 		_screen.clear()
 		_screen.queue_free()
@@ -174,18 +185,47 @@ func _exit_tree() -> void:
 
 ## Held: the camera is someone else's for now (flown, following a man); the
 ## scene is kept and events still heard, and it takes up again as it was.
+## On hold: its slow motion over, any wipe gone, the camera's own lens back,
+## and nothing it hears slows or shakes anything. Taken up again, it forgets
+## what it heard meanwhile and takes a fresh shot of the scene as it is.
 func hold(held: bool) -> void:
-	var how := Node.PROCESS_MODE_DISABLED if held else Node.PROCESS_MODE_PAUSABLE
-	process_mode = how
+	if held == _held:
+		return
+
+	_held = held
+	process_mode = Node.PROCESS_MODE_DISABLED if held else Node.PROCESS_MODE_PAUSABLE
 
 	if _operator != null:
 		_operator.process_mode = Node.PROCESS_MODE_INHERIT
-		_last = -1.0
+
+	_last = -1.0
+
+	if held:
+		TimeFx.cancel(&"cinema")
+
+		if _screen != null:
+			_screen.clear()
+
+		if _operator != null:
+			_operator.stand_down()
+
+		return
+
+	_pending = {}
+	_reaction = {}
+	_axial = {}
+	_scene_due = -INF
+
+	if _operator != null:
+		_operator.stand_up()
+
+	if _camera != null:
+		_next_shot(&"back")
 
 
 ## A new scene: `intent` {mode "observe"|"drama", subjects (men, or a Callable
 ## giving them), pin {kind, subjects, seconds}, letterbox}. Its first shot at
-## once.
+## once, or when the shot now has had FLOOR; held, when it is taken up again.
 func scene(intent: Dictionary) -> void:
 	_intent = intent.duplicate()
 	_mode = StringName(intent.get("mode", &"observe"))
@@ -212,11 +252,30 @@ func scene(intent: Dictionary) -> void:
 		elif _mode == &"drama":
 			_screen.letterbox(true)
 
-	var pin: Dictionary = intent.get("pin", {})
+	_pin_until = -INF
+	_scene_asked = _clock
 
-	if not pin.is_empty() and _camera != null:
+	if _camera == null or _held:
+		return
+
+	var age := _clock - float(_shot["at"]) if not _shot.is_empty() else INF
+
+	if age < FLOOR:
+		_scene_due = float(_shot["at"]) + FLOOR
+		_scene_wipe = wipe
+		return
+
+	_open_scene(wipe)
+
+
+## The scene's first shot: its pin (what is left of it), or the mode's own.
+func _open_scene(wipe: bool) -> void:
+	_scene_due = -INF
+	var pin: Dictionary = _intent.get("pin", {})
+
+	if not pin.is_empty():
 		var men := _men_of(pin.get("subjects", _subjects))
-		var seconds := float(pin.get("seconds", 5.0))
+		var seconds := maxf(float(pin.get("seconds", 5.0)) - (_clock - _scene_asked), FLOOR)
 		var kind := StringName(pin.get("kind", &"medium"))
 		var side := _side_of(_principals())
 		_pin_until = _clock + seconds
@@ -232,13 +291,10 @@ func scene(intent: Dictionary) -> void:
 
 		return
 
-	_pin_until = -INF
-
-	if _camera != null:
-		if _mode == &"drama":
-			_drama_next(&"scene", &"wipe" if wipe else &"cut")
-		elif not _carry_on():
-			_fresh_take(&"scene")
+	if _mode == &"drama":
+		_drama_next(&"scene", &"wipe" if wipe else &"cut")
+	elif not _carry_on():
+		_fresh_take(&"scene")
 
 
 ## Observing, a new scene whose men the take already sees: the take goes on,
@@ -297,7 +353,7 @@ func cine_event(kind: StringName, data: Dictionary) -> void:
 	if _interest.is_empty() or float(_interest["at"]) < _clock or priority >= int(_interest["priority"]):
 		_interest = {"kind": kind, "data": data, "at": _clock, "priority": priority}
 
-	if _mode == &"drama":
+	if _mode == &"drama" and not _held:
 		_drama_event(kind, data, priority)
 
 
@@ -323,6 +379,11 @@ func _process(_delta: float) -> void:
 		_fresh_take(&"start")
 		return
 
+	# A scene asked for too soon after the last cut: its first shot now.
+	if _scene_due > -INF and _clock >= _scene_due:
+		_open_scene(_scene_wipe)
+		return
+
 	var age := _clock - float(_shot["at"])
 	var framed: Array = _shot["subjects"]
 	var live := framed.filter(_valid)
@@ -340,7 +401,7 @@ func _process(_delta: float) -> void:
 		_next_shot(&"hidden")
 		return
 
-	if pinned:
+	if pinned or _scene_due > -INF:
 		return
 
 	if _mode == &"drama":
@@ -625,9 +686,12 @@ func _drama_step(age: float) -> void:
 			_start(&"reaction", [listener], &"reaction", &"cut", {"side": _side_of(_principals())}, randf_range(SHOT.x, SHOT.y))
 			return
 
-	if not face.is_empty() and _shot.get("cause") != &"face_off":
-		_face_off_shot(face)
-		return
+	if not face.is_empty() and _shot.get("cause") != &"face_off" and _clock >= _face_off_retry:
+		if _face_off_shot(face):
+			return
+
+		# Nowhere sees it: not again for a while, and the shots go on.
+		_face_off_retry = _clock + 2.0
 
 	if age >= float(_shot.get("planned", SHOT.y)):
 		_drama_next(&"rhythm", &"cut")
@@ -810,7 +874,8 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 
 
 ## A face-off: from well off to the side of their line, on a long lens, still.
-func _face_off_shot(pair: Array) -> void:
+## False if nowhere sees it.
+func _face_off_shot(pair: Array) -> bool:
 	var side := _side_of(pair)
 	var centre := CineShot.centre_of(pair)
 	var from := centre + side * FACE_OFF_OFF
@@ -820,9 +885,10 @@ func _face_off_shot(pair: Array) -> void:
 		from = CineVantage.best(get_tree(), pair, &"long", side, space)
 
 	if from == Vector3.INF:
-		return
+		return false
 
 	_start(&"observe", pair, &"face_off", &"cut", {"from": from, "side": side}, SHOT.y)
+	return true
 
 
 ## Two of the men squared up: near, facing each other, no blow or line
@@ -847,8 +913,15 @@ func _face_off() -> Array:
 
 			var limit := cos(deg_to_rad(FACE_OFF_FACING))
 
-			if CineShot.facing(a).dot(between.normalized()) >= limit and CineShot.facing(b).dot(-between.normalized()) >= limit:
-				return [a, b]
+			if CineShot.facing(a).dot(between.normalized()) < limit or CineShot.facing(b).dot(-between.normalized()) < limit:
+				continue
+
+			# Men with minds of their own face off only if they mean each
+			# other harm (two of the hunt conferring do not).
+			if (&"_target" in a or &"_target" in b) and a.get("_target") != b and b.get("_target") != a:
+				continue
+
+			return [a, b]
 
 	return []
 
@@ -968,7 +1041,12 @@ func _follow(live: Array) -> void:
 
 	var framing := CineShot.frame(kind, live, ctx)
 
-	if not (kind in [&"roving", &"observe", &"group"]):
+	# A track runs alongside its man (where the way is clear); every other
+	# shot stays where it was put and turns to keep him.
+	if kind == &"track":
+		if _operator.blocked(_camera.global_position, framing["position"]):
+			return
+	elif not (kind in [&"roving", &"observe", &"group"]):
 		framing["position"] = _shot["framing"]["position"]
 		framing["look"] = (framing["subject"] as Vector3) + (_shot["offset"] as Vector3)
 

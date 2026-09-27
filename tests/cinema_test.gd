@@ -172,6 +172,7 @@ func _events() -> void:
 ## which way he faces and goes, what he is doing.
 class Man extends Node3D:
 	var velocity := Vector3.ZERO
+	var _target: Node3D = null
 	var eye_height := 1.6
 	var doing: StringName = &""
 	var _knocked_out := false
@@ -591,6 +592,30 @@ func _operator() -> void:
 
 	_check("O4 a path passes each of its points in order", order == [0, 1, 2, 3], "nearest %s, order %s" % [nearest, order])
 
+	# O10 an observe path keeps to its 0.4 m/s at the joins of its pieces too
+	op.set_mode(&"observe")
+	var arc := PackedVector3Array()
+
+	for angle in [0.0, 0.53, 1.07, 1.6]:
+		arc.append(Vector3(600, 1.7, -10) + Vector3(sin(angle), 0, cos(angle)) * 4.0)
+
+	op.show(_frame_at(arc[0], head, 40.0, &"medium"), &"cut")
+	await _frames(2)
+	var arc_framing := _frame_at(arc[3], head, 40.0, &"medium")
+	arc_framing["path"] = arc
+	op.show(arc_framing, &"path")
+	var fastest10 := 0.0
+	var was10 := camera.global_position
+
+	for f in 1200:
+		await get_tree().process_frame
+		fastest10 = maxf(fastest10, camera.global_position.distance_to(was10) * 60.0)
+		was10 = camera.global_position
+
+	_check("O10 along an observe path, even where its pieces join, the camera keeps to 0.4 m/s", fastest10 <= 0.42 and camera.global_position.distance_to(arc[3]) < 0.05,
+		"fastest %.2f m/s, end %.2f m from the last point" % [fastest10, camera.global_position.distance_to(arc[3])])
+	op.set_mode(&"drama")
+
 	# O5 the lens eases
 	op.show(_frame_at(Vector3(600, 1.6, 4), head, 40.0, &"close"), &"cut")
 	await _frames(2)
@@ -753,10 +778,12 @@ func _observing() -> void:
 
 	# E7 a pin holds under a flood of lines
 	editor.scene({"mode": &"observe", "subjects": [man, other], "pin": {"kind": &"close", "subjects": [man], "seconds": 10.0}})
+	# (Asked for straight after a cut, the pin waits out the floor first.)
+	await _until(func(): return editor.current().get("cause") == &"pin", 120)
 	var kinds7 := {}
 	var pinned_at := TimeFx.real_time()
 
-	while TimeFx.real_time() - pinned_at < 9.5:
+	while TimeFx.real_time() - pinned_at < 8.0:
 		CineEvents.emit(&"line", {"speaker": other, "listeners": [man], "seconds": 1.0, "delivery": &"shout", "text": "!", "where": other.global_position})
 		await _real(0.5)
 		kinds7[editor.current().get("kind")] = true
@@ -898,7 +925,10 @@ func _drama() -> void:
 		axial.size() == 3 and gaps.all(func(g): return absf(g - 0.6) <= 0.1) and one_line and lenses12 == [40, 30, 22],
 		"%d axial, gaps %s, one line %s, lenses %s" % [axial.size(), gaps, one_line, lenses12])
 
-	# E13 a face-off held still, side on, long; the first blow cuts in
+	# E13 a face-off held still, side on, long; the first blow cuts in (two
+	# who mean each other harm)
+	a._target = b
+	b._target = a
 	await _real(8.0)
 	shots.clear()
 	await _real(4.0)
@@ -994,7 +1024,76 @@ func _drama() -> void:
 	await _real(0.2)
 	_check("E20 a line and a death in one moment: the death is cut to", editor.current().get("cause") == &"death", "cause %s" % editor.current().get("cause"))
 
+	# E21 a new scene straight after a cut waits out the 1.5 s floor (from a
+	# shot that has had its floor, so the first scene cuts at once)
+	b.rotation.y = -PI * 0.5
+	await _real(3.0)
+	await _until(func(): return TimeFx.real_time() - float(editor.current()["real_at"]) >= 1.6, 600)
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	var first21: float = float(editor.current()["real_at"])
+	shots.clear()
+	await _real(0.1)
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
+	await _real(1.25)
+	var early21 := shots.size()
+	await _real(0.6)
+	_check("E21 a new scene 0.1 s after a cut waits for the 1.5 s floor, then cuts",
+		absf(first21 - TimeFx.real_time() + 1.95) < 0.2 and early21 == 0 and shots.size() >= 1 and float(shots[0]["real_at"]) - first21 >= 1.45,
+		"first cut %.2f s ago, %d shots before 1.35 s, then %s" % [TimeFx.real_time() - first21, early21, shots.map(func(sh): return snappedf(float(sh["real_at"]) - first21, 0.01))])
+
+	# E22 a face-off with nowhere to watch it from: the shots go on; and two
+	# men facing who mean nobody harm are no face-off
+	var d := _man(Vector3(900, 0, 40), -PI * 0.5)
+	var e := _man(Vector3(903, 0, 40), PI * 0.5)
+	d._target = e
+	e._target = d
+	var walls22: Array[Node] = []
+
+	for z in [38.5, 41.5]:
+		walls22.append(Props.block(self, Vector3(901.5, 2.5, z), Vector3(80, 5, 0.3)))
+
+	await _frames(3)
+	editor.scene({"mode": &"drama", "subjects": [d, e]})
+	shots.clear()
+	await _real(8.0)
+	var went22 := shots.size()
+
+	for w in walls22:
+		w.queue_free()
+
+	d._target = null
+	e._target = null
+	await _frames(3)
+	editor.scene({"mode": &"drama", "subjects": [d, e]})
+	shots.clear()
+	await _real(6.0)
+	var friends22 := shots.filter(func(sh): return sh["cause"] == &"face_off").size()
+	_check("E22 a face-off nowhere can see still gives way to the next shot; two men facing who mean nobody harm are no face-off",
+		went22 >= 1 and friends22 == 0, "%d shots in the corridor in 8 s; %d face-offs between friends" % [went22, friends22])
+
+	# E23 a track runs alongside a running man, keeping him in view
+	var runner := _man(Vector3(900, 0, 80), -PI * 0.5)
+	runner.velocity = Vector3(5, 0, 0)
+	editor.scene({"mode": &"drama", "subjects": [runner], "pin": {"kind": &"track", "subjects": [runner], "seconds": 5.0}})
+	await _frames(2)
+	var from23 := camera.global_position
+	var seen23 := true
+
+	for f in 120:
+		runner.global_position += runner.velocity / 60.0
+		await get_tree().process_frame
+		seen23 = seen23 and not camera.is_position_behind(CineShot.head_of(runner))
+
+	var ran23 := camera.global_position.distance_to(from23)
+	_check("E23 a track runs alongside a running man (5 m/s for 2 s) and keeps him before it", ran23 >= 6.0 and seen23,
+		"the camera went %.1f m, kept him before it %s" % [ran23, seen23])
+	runner.velocity = Vector3.ZERO
+
+	for m in [d, e, runner]:
+		m.queue_free()
+
 	# E18 released in the middle of a slowing and a wipe: time back at once, the screen cleared
+	editor.scene({"mode": &"drama", "subjects": [a, b]})
 	await _real(9.0)
 	CineEvents.emit(&"knife", {"attacker": a, "victim": b, "where": b.global_position})
 	var image := Image.create(8, 8, false, Image.FORMAT_RGB8)
