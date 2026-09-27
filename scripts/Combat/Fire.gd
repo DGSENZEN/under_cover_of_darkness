@@ -11,7 +11,7 @@ extends Area3D
 ## log (`feed`), it flares up and burns on. Burning low (`low`), the men talk
 ## of it and one goes for wood (TalkFacts, Gathering).
 
-const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 
 ## Seconds a guard burns for.
 @export var burn_time := 4.5
@@ -51,38 +51,14 @@ static func brazier(parent: Node, position: Vector3) -> Area3D:
 	leg.shape = leg_shape
 	leg.position.y = 0.5
 	stand.add_child(leg)
-	var bowl := MeshInstance3D.new()
-	var bowl_mesh := CylinderMesh.new()
-	bowl_mesh.top_radius = 0.42
-	bowl_mesh.bottom_radius = 0.18
-	bowl_mesh.height = 0.3
-	var iron := StandardMaterial3D.new()
-	iron.albedo_color = Color(0.16, 0.15, 0.15)
-	iron.metallic = 0.6
-	iron.roughness = 0.55
-	bowl_mesh.material = iron
-	bowl.mesh = bowl_mesh
-	bowl.position.y = 0.95
-	stand.add_child(bowl)
-	var post := MeshInstance3D.new()
-	var post_mesh := CylinderMesh.new()
-	post_mesh.top_radius = 0.06
-	post_mesh.bottom_radius = 0.14
-	post_mesh.height = 0.85
-	post_mesh.material = iron
-	post.mesh = post_mesh
-	post.position.y = 0.42
-	stand.add_child(post)
 	stand.set_meta(&"surface", "metal")
 	parent.add_child(stand)
 	stand.global_position = position
 
-	var torch: Node3D = TorchScript.new()
-	torch.energy = 2.6
-	torch.light_range = 8.0
-	torch.flame_size = 0.8
-	stand.add_child(torch)
-	torch.position = Vector3(0.0, 1.35, 0.0)
+	# Its tripod, bowl and coals (Lights.gd, from the props pipeline); the
+	# Atmosphere sheds its embers.
+	var torch: Node3D = Lights.brazier(stand, stand.global_position)
+	torch.embers_by_atmosphere = true
 
 	var fire: Area3D = (load("res://scripts/Combat/Fire.gd") as GDScript).new()
 	fire.torch = torch

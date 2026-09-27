@@ -24,6 +24,7 @@ const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
 const LightBudget := preload("res://scripts/Visual/Lights/LightBudget.gd")
 const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const HangingScript := preload("res://scripts/Visual/Hanging.gd")
 const LightFixture := preload("res://scripts/Visual/Lights/LightFixture.gd")
 
 ## LightProbe 2 m from a bare torch, the brazier and the campfire (each
@@ -62,6 +63,7 @@ func _run() -> void:
 	await _candles()
 	await _fires()
 	await _sounds()
+	await _switched()
 
 
 # ---------------------------------------------------------------------------
@@ -1129,6 +1131,107 @@ func _sounds() -> void:
 	Sfx.silence()
 	Sfx.enabled = false
 	await _frames(3)
+
+
+# ---------------------------------------------------------------------------
+# The guards' lights, the brazier and the campfire, switched over
+# ---------------------------------------------------------------------------
+
+func _switched() -> void:
+	Props.block(self, Vector3(0, -0.5, 1200), Vector3(80, 1, 40))
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.8, 1206)
+	camera.current = true
+
+	# L45 a guard's lantern and torch are the new fixtures; a dropped one burns on, then dims out
+	var man: CharacterBody3D = GUARD.instantiate()
+	add_child(man)
+	man.global_position = Vector3(0, 0, 1200)
+	await _frames(10)
+	man._hands.carry_light(&"lantern")
+	await _frames(3)
+	var lantern: Node3D = man._hands.lantern
+	var lantern_name: String = str(lantern.get("fixture")) if lantern != null else "none"
+	var hung: bool = lantern != null and lantern.get("fixture") == &"carried_lantern" and _hung_from(lantern) and is_equal_approx(lantern.energy, man._hands.LANTERN_ENERGY)
+	man._hands.drop_lantern()
+	await _frames(2)
+	var dropped: Node3D = null
+
+	for body in get_tree().get_nodes_in_group(&"dropped_lights"):
+		if body is Node3D and body.global_position.distance_to(man.global_position) < 3.0:
+			dropped = body
+
+	var found := dropped != null
+	var burning_on := false
+	var dimmed := false
+
+	if found:
+		await _frames(int((man._hands.DROPPED_LIGHT_TIME - 1.0) * 60.0))
+		burning_on = is_instance_valid(lantern) and lantern.light.light_energy > 0.1
+		await _frames(int(4.1 * 60.0))
+		dimmed = not is_instance_valid(dropped) or not is_instance_valid(lantern) or lantern.light.light_energy <= 0.001
+
+	man._hands.carry_light(&"torch")
+	await _frames(3)
+	var torch: Node3D = man._hands.lantern
+	var held_torch: bool = torch != null and torch.get("fixture") == &"carried_torch" and is_equal_approx(torch.energy, man._hands.TORCH_ENERGY)
+	_check("L45 a guard's lantern is the carried lantern under its Hanging and his torch the carried torch; dropped, it burns on and dims out",
+		hung and found and burning_on and dimmed and held_torch,
+		"lantern %s hung %s, dropped %s burning on %s dimmed %s, torch %s" % [lantern_name, hung, found, burning_on, dimmed, torch.get("fixture") if torch != null else "none", ])
+	man.queue_free()
+
+	# L46 the brazier and the campfire are the new fixtures; a guard kicked into the brazier catches fire
+	var fire: Area3D = FireScript.brazier(self, Vector3(20, 0, 1200))
+	var camp: Node3D = Furnishings.campfire(self, Vector3(40, 0, 1200))
+	var victim: CharacterBody3D = GUARD.instantiate()
+	add_child(victim)
+	victim.global_position = Vector3(20, 0, 1201.4)
+	await _frames(20)
+	var bowl: Node3D = fire.torch
+	var brazier_ok: bool = bowl != null and bowl.get("fixture") == &"brazier" and bowl.embers_by_atmosphere
+	var flame: Node3D = _burner_in(camp)
+	var pointed := 0
+
+	for spot in get_children():
+		if spot.has_meta(&"fire") and spot.get_meta(&"fire") == flame:
+			pointed += 1
+
+	var camp_ok: bool = flame != null and flame.get("fixture") == &"campfire" and not flame.shadows and pointed == 3
+	victim.kick(Vector3(0, 0, -5), null)
+	var caught := false
+
+	for i in 120:
+		await _frames(1)
+
+		if not is_instance_valid(victim) or victim.is_burning():
+			caught = true
+			break
+
+	_check("L46 Fire.brazier is the brazier fixture (the Atmosphere's embers) and a guard kicked into it catches fire; the campfire is its fixture, unshadowed, its spots pointing at it",
+		brazier_ok and camp_ok and caught,
+		"brazier %s, campfire %s (%d spots on it), caught %s" % [bowl.get("fixture") if bowl != null else "none", flame.get("fixture") if flame != null else "none", pointed, caught])
+
+	if is_instance_valid(victim):
+		victim.queue_free()
+
+	fire.get_parent().queue_free()
+	camp.queue_free()
+	camera.queue_free()
+	await _frames(3)
+
+
+## Whether `node` hangs from a Hanging (a lantern swinging from a fist).
+func _hung_from(node: Node) -> bool:
+	var up := node.get_parent()
+
+	while up != null:
+		if up.get_script() == HangingScript:
+			return true
+
+		up = up.get_parent()
+
+	return false
 
 
 ## The fixture (a LightFixture) nearest `at` within `reach`.
