@@ -65,6 +65,7 @@ const GuardVoiceScript := preload("res://scripts/AISystem/GuardVoice.gd")
 const GuardPastimesScript := preload("res://scripts/AISystem/GuardPastimes.gd")
 const TalkDirectorScript := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
 const GuardHabitsScript := preload("res://scripts/AISystem/GuardHabits.gd")
+const CineEvents := preload("res://scripts/Cinema/CineEvents.gd")
 ## A friend or kinsman this near who sees him die calls his name; this near,
 ## he knows the voice of his dying cry.
 const MOURN_SIGHT := 20.0
@@ -1558,7 +1559,11 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 		_last_push = blow * 1.4 + (Vector3.DOWN * 2.0 if kind == &"drop" else Vector3.ZERO)
 		_last_at = at
 		_sever = sever_hint.duplicate()
-		struck_by.emit(&"killed", kind, damage)
+
+		if kind == &"backstab":
+			CineEvents.emit(&"knife", {"attacker": attacker, "victim": self, "where": global_position})
+
+		_struck(&"killed", kind, damage, attacker)
 		die(attacker)
 		return &"killed"
 
@@ -1567,7 +1572,7 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 
 	if answer == &"parried":
 		_engage(attacker)
-		struck_by.emit(&"parried", kind, 0.0)
+		_struck(&"parried", kind, 0.0, attacker)
 		return &"parried"
 
 	if answer == &"blocked":
@@ -1581,7 +1586,7 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 			Sfx.play(self, &"thud_wood", clash, -2.0)
 
 		_rig.react_block(blow)
-		struck_by.emit(&"blocked", kind, 0.0)
+		_struck(&"blocked", kind, 0.0, attacker)
 		return &"blocked"
 
 	# Open (thrown off his balance): whatever lands is a deathblow.
@@ -1700,12 +1705,12 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 			_sever = _torn_by_blast(damage)
 
 		_last_at = at
-		struck_by.emit(&"killed", kind, damage)
+		_struck(&"killed", kind, damage, attacker)
 		die(attacker)
 		return &"killed"
 
 	_engage(attacker)
-	struck_by.emit(&"hit", kind, damage)
+	_struck(&"hit", kind, damage, attacker)
 
 	# Cut, he cries out (fire has its own screams, below).
 	if kind != &"fire" and randf() < 0.8:
@@ -2025,6 +2030,16 @@ func hazard_hit(_hazard: Node, lethal_speed: float) -> void:
 		die(null)
 
 
+## A blow taken (take_hit): struck_by for whoever listens on him, and the
+## camera told (CineEvents "blow": a power blow, a drop or a stab heavy).
+func _struck(result: StringName, kind: StringName, damage: float, attacker: Node3D) -> void:
+	struck_by.emit(result, kind, damage)
+	CineEvents.emit(&"blow", {"attacker": attacker if is_instance_valid(attacker) else null, "victim": self,
+		"weight": &"heavy" if kind in [&"power", &"drop", &"backstab"] else &"light",
+		"outcome": {&"hit": &"landed", &"killed": &"killed", &"parried": &"parried", &"blocked": &"blocked"}.get(result, &"landed"),
+		"where": global_position})
+
+
 func die(_attacker: Node3D) -> void:
 	if _knocked_out:
 		return
@@ -2068,6 +2083,7 @@ func die(_attacker: Node3D) -> void:
 
 	# A dying scream. Others come to where he last knew trouble to be.
 	SoundBus.emit_sound(eye_position(), shout_db, self, &"shout")
+	CineEvents.emit(&"death", {"man": self, "killer": _attacker if is_instance_valid(_attacker) else null, "where": global_position})
 	died.emit(body)
 	queue_free()
 
@@ -2192,6 +2208,7 @@ func knock_out(attacker: Node3D, force := false) -> bool:
 
 	# The thud is the attacker's noise: other guards can hear it.
 	SoundBus.emit_sound(global_position, 44.0, attacker, &"body", self)
+	CineEvents.emit(&"death", {"man": self, "killer": attacker if is_instance_valid(attacker) else null, "where": global_position})
 	knocked_out.emit(body)
 	queue_free()
 	return true
@@ -2692,6 +2709,10 @@ func _set_state(new_state: int) -> void:
 
 	_bark_for(new_state, old)
 	alert_changed.emit(new_state, old)
+	CineEvents.emit(&"alert", {"man": self, "from": old, "to": new_state, "where": global_position})
+
+	if new_state == Alert.COMBAT and can_see_target:
+		CineEvents.emit(&"spotted", {"man": self, "target": _target, "where": global_position})
 
 	# At his ease again: what he saw is behind him (he stays wary a while).
 	if new_state == Alert.RELAXED:
@@ -2876,12 +2897,13 @@ func bark(text: String) -> void:
 
 
 ## A line of a conversation (TalkDirector), said `delivery` ("whisper",
-## "murmur", "shout", or "" as he would).
-func speak(text: String, delivery: StringName = &"") -> void:
+## "murmur", "shout", or "" as he would), to `listeners`, lasting `seconds`
+## (by its length if not given).
+func speak(text: String, delivery: StringName = &"", listeners: Array = [], seconds := -1.0) -> void:
 	if puppet:
 		return
 
-	_utter(text, delivery, GuardVoiceScript.CHATTER)
+	_utter(text, delivery, GuardVoiceScript.CHATTER, listeners, seconds)
 
 
 ## A gesture or a sound with it (a conversation's emote: "nods", "laughs",
@@ -2896,7 +2918,7 @@ func emote(what: String) -> void:
 		_rig.emote(what)
 
 
-func _utter(text: String, delivery: StringName, rung: int) -> void:
+func _utter(text: String, delivery: StringName, rung: int, listeners: Array = [], seconds := -1.0) -> void:
 	if _voice != null:
 		_voice.utter(rung, text, delivery)
 
@@ -2906,6 +2928,11 @@ func _utter(text: String, delivery: StringName, rung: int) -> void:
 
 	if _bark_label != null:
 		_bark_label.text = text
+
+	if seconds < 0.0:
+		seconds = TalkDirectorScript.LINE_BASE + TalkDirectorScript.LINE_PER_CHAR * text.length()
+
+	CineEvents.emit(&"line", {"speaker": self, "listeners": listeners, "seconds": seconds, "delivery": delivery, "text": text, "where": global_position})
 
 
 # ---------------------------------------------------------------------------

@@ -31,6 +31,7 @@ const TalkFacts := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
 const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
 const GuardLifeScript := preload("res://scripts/AISystem/GuardLife.gd")
 const GuardStationScript := preload("res://scripts/AISystem/GuardStation.gd")
+const CineEvents := preload("res://scripts/Cinema/CineEvents.gd")
 
 ## Reached at run time (they read the guard scripts too).
 const TALK_DIRECTOR := "res://scripts/AISystem/Talk/TalkDirector.gd"
@@ -479,6 +480,7 @@ func _advance(g: Dictionary) -> void:
 				g["until"] = clock + randf_range(spec["length"].x, spec["length"].y)
 				g["next_at"] = clock + 1.0
 				_history.append(g["kind"])
+				_announce(g["kind"], g["members"], &"started")
 			elif clock - float(g["started_at"]) > GATHER_FOR:
 				_end(g)
 		&"playing":
@@ -505,6 +507,7 @@ func _advance(g: Dictionary) -> void:
 
 func _end(g: Dictionary) -> void:
 	_live.erase(g)
+	_announce(g.get("kind", &""), g.get("members", []), &"ended")
 	_cooling[g["kind"]] = clock + float(KINDS[g["kind"]]["cooldown"] if KINDS.has(g["kind"]) else SPECIAL.get(g["kind"], 0.0))
 
 	if g.has("log") and is_instance_valid(g["log"]):
@@ -683,6 +686,7 @@ func _advance_watch(g: Dictionary) -> void:
 			if relief._rota.at_station() and at_post and not talk.in_talk(on_post) and not talk.in_talk(relief):
 				g["state"] = &"talking"
 				_history.append(&"watch_change")
+				_announce(&"watch_change", [on_post, relief], &"started")
 
 				if not talk.play_place([on_post, relief], &"watch_change", {"A": on_post, "B": relief}):
 					_hand_over(g)
@@ -790,6 +794,7 @@ func _advance_round(g: Dictionary) -> void:
 
 					if not _history.has(&"round") or _history[-1] != &"round":
 						_history.append(&"round")
+						_announce(&"round", [captain, him], &"started")
 				elif clock - float(g["t"]) > 6.0:
 					g["state"] = &"next"
 			elif clock - float(g["t"]) > GATHER_FOR:
@@ -1116,3 +1121,17 @@ func _rota() -> RefCounted:
 		_rota_script = load(NIGHT_ROTA)
 
 	return _rota_script.of(tree.root)
+
+
+## The camera told (CineEvents "gathering"): begun, or over.
+func _announce(kind: StringName, men: Array, state: StringName) -> void:
+	var live := men.filter(func(m): return m != null and is_instance_valid(m))
+	var where := Vector3.ZERO
+
+	for m in live:
+		where += (m as Node3D).global_position
+
+	if not live.is_empty():
+		where /= float(live.size())
+
+	CineEvents.emit(&"gathering", {"kind": kind, "men": live, "state": state, "where": where})
