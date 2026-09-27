@@ -109,6 +109,9 @@ var _light_base := Vector3.ZERO
 func _ready() -> void:
 	_before_ready()
 	add_to_group(&"torches")
+	# Its clock starts somewhere of its own. (One draw from the global dice,
+	# as torches always made: seeded suites roll the same numbers after it.)
+	_time = randf() * 100.0
 	# The light wavers and the flame changes every drawn frame: drawn as set.
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 
