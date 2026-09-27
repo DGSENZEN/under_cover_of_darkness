@@ -47,6 +47,10 @@ const CARRY_OFFSET := Vector3(0.0, 1.0, -0.42)
 ## A crate this near a pick-up point is his to carry; where he sets them down,
 ## each goes this far along from the last.
 const CARGO_REACH := 1.8
+## He lifts a crate this near him; one up on a cart, from this near when he
+## can get no nearer.
+const CRATE_REACH := 1.3
+const CRATE_REACH_UP := 1.8
 const STACK_STEP := 0.55
 ## Near enough his station to settle onto it (m), and how fast he eases the
 ## rest of the way.
@@ -445,10 +449,19 @@ func _carry(station: Node3D, delta: float) -> void:
 			guard._stop(delta)
 			return
 
+	# Within arm's reach of it; or, a crate up on something (the cart), as
+	# near as the ground lets him get.
+	var near := _flat(guard.global_position, _crate.global_position)
 	var beside: Vector3 = _crate.global_position + (guard.global_position - _crate.global_position).normalized() * 0.55
 	beside.y = guard.global_position.y
 
-	if _walk_to(beside, delta) or _flat(guard.global_position, _crate.global_position) < 0.75:
+	if near < CRATE_REACH:
+		_begin(Step.ENTER, &"lift", LIFT)
+		return
+
+	_walk_to(beside, delta)
+
+	if near < CRATE_REACH_UP and guard._agent.is_navigation_finished():
 		_begin(Step.ENTER, &"lift", LIFT)
 
 
