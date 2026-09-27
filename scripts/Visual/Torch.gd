@@ -44,6 +44,10 @@ const POP_SHARE := 0.4
 ## A flare: this much brighter and this much taller at its height, gone over
 ## FLARE_TIME.
 const FLARE_LIGHT := 0.6
+## Its light is as bright as the torches always were (Color(1, 0.64, 0.32),
+## by LightProbe's luminance), whatever its colour: a warmer colour is a
+## hue, not a dimmer light. The gameplay reads it.
+const LIGHT_LUMA := 0.7112
 const FLARE_SIZE := 0.45
 const FLARE_TIME := 0.9
 ## How far the top of the flame goes with a full wind (m, at its made size).
@@ -182,7 +186,7 @@ func _ready() -> void:
 
 	light = OmniLight3D.new()
 	light.name = "Light"
-	light.light_color = color
+	light.light_color = _light_colour()
 	light.light_energy = energy
 	light.omni_range = light_range
 	light.omni_attenuation = 1.15
@@ -302,7 +306,7 @@ func _process(delta: float) -> void:
 	_step_lit(delta)
 	# Eased as it lights: fast at first, settling into its flame.
 	var shown := 1.0 - (1.0 - _lit_level) * (1.0 - _lit_level)
-	light.light_color = color
+	light.light_color = _light_colour()
 	light.light_energy = energy * _strength * (1.0 + flicker * waver) * (1.0 + FLARE_LIGHT * flared) * shown
 	light.omni_range = light_range * lerpf(0.55, 1.0, clampf(_strength, 0.0, 1.0))
 	light.position = _light_base
@@ -599,3 +603,14 @@ func _crackles(delta: float) -> void:
 
 func _crackle_wait(rate: float) -> float:
 	return maxf(-log(1.0 - rng.randf() * 0.9999) / rate, 0.02)
+
+
+## Its colour, at LIGHT_LUMA.
+func _light_colour() -> Color:
+	var luma := 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
+
+	if luma < 0.001:
+		return color
+
+	var k := LIGHT_LUMA / luma
+	return Color(color.r * k, color.g * k, color.b * k)

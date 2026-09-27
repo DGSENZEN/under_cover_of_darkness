@@ -146,6 +146,29 @@ func _baselines() -> void:
 
 	await _frames(3)
 
+	# L3b whatever its colour, a burner's light is as bright as today's torch:
+	#     a warmer colour is a hue, not a dimmer light
+	var luma := func(c: Color) -> float: return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b
+	var today: float = luma.call(Color(1.0, 0.64, 0.32))
+	var hues_kept := true
+	var lumas: Array[float] = []
+
+	for colour in [Color("FF9829"), Color("FFA645")]:
+		var burner: Node3D = TorchScript.new()
+		burner.color = colour
+		add_child(burner)
+		burner.global_position = Vector3(160, 2, 100)
+		await _frames(2)
+		var shone: Color = burner.light.light_color
+		lumas.append(luma.call(shone))
+		hues_kept = hues_kept and is_equal_approx(shone.g / shone.r, colour.g / colour.r) and is_equal_approx(shone.b / shone.r, colour.b / colour.r)
+		burner.queue_free()
+
+	_check("L3b a torch's or a lantern's light is as bright as today's torch light, in its own hue",
+		hues_kept and absf(lumas[0] - today) < 0.005 and absf(lumas[1] - today) < 0.005,
+		"luminance %s (today %.4f), hues kept %s" % [lumas, today, hues_kept])
+	await _frames(2)
+
 
 # ---------------------------------------------------------------------------
 # Flicker
