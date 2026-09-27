@@ -19,6 +19,7 @@ const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const CineShot := preload("res://scripts/Cinema/CineShot.gd")
+const CineVantage := preload("res://scripts/Cinema/CineVantage.gd")
 
 const COMBAT := 4
 const SEARCHING := 3
@@ -54,6 +55,7 @@ func _ready() -> void:
 	CineEvents.remove_listener(ears)
 	await _ramps()
 	await _framing()
+	await _vantages()
 	print("\n==== RESULTS ====")
 
 	for r in results:
@@ -342,6 +344,83 @@ func _framing() -> void:
 	man.queue_free()
 	other.queue_free()
 	view.queue_free()
+
+
+# ---------------------------------------------------------------------------
+# V: places to watch from
+# ---------------------------------------------------------------------------
+
+func _vantages() -> void:
+	var space := get_world_3d().direct_space_state
+	var dressing: Array[Node] = []
+
+	# V1 a marker behind a wall is never taken
+	var man1 := _man(Vector3(300, 0, 0), 0.0)
+	var hidden := _marker(Vector3(318, 1.6, 0))
+	dressing.append(Props.block(self, Vector3(309, 2.0, 0), Vector3(0.4, 4.0, 6.0)))
+	await _frames(3)
+	var got1 := CineVantage.best(get_tree(), [man1], &"long", Vector3.ZERO, space)
+	_check("V1 a marker behind a wall is never chosen; a clear place is",
+		got1 != Vector3.INF and got1.distance_to(hidden.global_position) > 0.5 and CineVantage.sees(space, got1, [man1]),
+		"chose %s (the hidden marker at %s)" % [got1, hidden.global_position])
+	hidden.queue_free()
+
+	# V2 the long lens wants 18 m, not 8 or 40
+	var man2 := _man(Vector3(360, 0, 0), 0.0)
+	var near := _marker(Vector3(360, 1.6, 8))
+	var right := _marker(Vector3(342, 1.6, 0))
+	var far := _marker(Vector3(360, 1.6, -40))
+	await _frames(3)
+	var got2 := CineVantage.best(get_tree(), [man2], &"long", Vector3.ZERO, space)
+	_check("V2 for a long lens the place 18 m off is chosen over 8 m and 40 m", got2.distance_to(right.global_position) < 0.1,
+		"chose %s" % [got2])
+
+	for m in [near, right, far]:
+		m.queue_free()
+
+	# V3 two places 18 m off: the one with something half in the way
+	var man3 := _man(Vector3(420, 0, 0), 0.0)
+	var open := _marker(Vector3(438, 1.6, 0))
+	var framed := _marker(Vector3(402, 1.6, 0))
+	dressing.append(Props.block(self, Vector3(411, 1.2, 0.8), Vector3(0.3, 2.4, 0.3)))
+	await _frames(3)
+	var got3 := CineVantage.best(get_tree(), [man3], &"long", Vector3.ZERO, space)
+	_check("V3 of two places 18 m off, the one with a post half in the way (watched from hiding)", got3.distance_to(framed.global_position) < 0.1,
+		"chose %s (framed at %s)" % [got3, framed.global_position])
+	open.queue_free()
+	framed.queue_free()
+
+	# V4 a side given: the place is on that side
+	var man4 := _man(Vector3(480, 0, 0), 0.0)
+	var side4 := Vector3(0, 0, -1)
+	await _frames(3)
+	var got4 := CineVantage.best(get_tree(), [man4], &"medium", side4, space)
+	_check("V4 with a side given, the place is on that side", got4 != Vector3.INF and (got4 - man4.global_position).dot(side4) > 0.0,
+		"chose %s" % [got4])
+
+	# V5 a man shut in by four walls, no markers: nowhere
+	var man5 := _man(Vector3(540, 0, 0), 0.0)
+
+	for wall in [[Vector3(542, 2.5, 0), Vector3(0.4, 5, 4.4)], [Vector3(538, 2.5, 0), Vector3(0.4, 5, 4.4)], [Vector3(540, 2.5, 2), Vector3(4.4, 5, 0.4)], [Vector3(540, 2.5, -2), Vector3(4.4, 5, 0.4)]]:
+		dressing.append(Props.block(self, wall[0], wall[1]))
+
+	await _frames(3)
+	var got5 := CineVantage.best(get_tree(), [man5], &"long", Vector3.ZERO, space)
+	_check("V5 a man shut in by four walls has no place to be watched from", got5 == Vector3.INF, "chose %s" % [got5])
+
+	for m in [man1, man2, man3, man4, man5]:
+		m.queue_free()
+
+	for d in dressing:
+		d.queue_free()
+
+
+func _marker(at: Vector3) -> Marker3D:
+	var m := Marker3D.new()
+	add_child(m)
+	m.global_position = at
+	m.add_to_group(&"cine_vantage")
+	return m
 
 
 ## Where `point` falls on the screen of `camera` put where `framing` says.
