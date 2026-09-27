@@ -28,6 +28,8 @@ const SLOTS := {
 	&"coal": {"photo": "", "colour": Color("2B1A12"), "metallic": 0.0, "roughness": 0.85},
 }
 
+const GLOW := preload("res://scripts/Visual/Lights/glow.gdshader")
+
 ## A slot nobody knows is drawn this loud, so it is noticed.
 const UNKNOWN := Color("FF00FF")
 
@@ -37,6 +39,7 @@ static var folder := "res://textures/ps2/"
 static var photo_names := {}
 
 static var _surfaces := {}
+static var _glowing := {}
 static var _warned := {}
 
 
@@ -70,6 +73,25 @@ static func surface(slot: StringName) -> StandardMaterial3D:
 	return material
 
 
+## The slot shining from inside (a pitch head, coals, horn panes): shared,
+## its glow and char set per fixture (glow.gdshader's instance uniforms).
+static func glowing(slot: StringName) -> ShaderMaterial:
+	if _glowing.has(slot):
+		return _glowing[slot]
+
+	var material := ShaderMaterial.new()
+	material.shader = GLOW
+	var texture := photo(slot)
+	material.set_shader_parameter(&"has_texture", texture != null)
+
+	if texture != null:
+		material.set_shader_parameter(&"albedo_texture", texture)
+
+	material.set_shader_parameter(&"albedo", SLOTS.get(slot, {"colour": UNKNOWN})["colour"])
+	_glowing[slot] = material
+	return material
+
+
 ## The slot's converted photo, or null when it is not on this machine.
 static func photo(slot: StringName) -> Texture2D:
 	var name := _photo_name(slot)
@@ -99,6 +121,7 @@ static func fallbacks() -> Array[StringName]:
 
 static func clear_cache() -> void:
 	_surfaces.clear()
+	_glowing.clear()
 
 
 static func _photo_name(slot: StringName) -> String:

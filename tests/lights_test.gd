@@ -22,6 +22,8 @@ const GUARD := preload("res://Guard.tscn")
 const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
 const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
 const LightBudget := preload("res://scripts/Visual/Lights/LightBudget.gd")
+const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
+const LightFixture := preload("res://scripts/Visual/Lights/LightFixture.gd")
 
 ## LightProbe 2 m from a bare torch, the brazier and the campfire (each
 ## flame's flicker held still), read on main before any of this work: the
@@ -53,6 +55,7 @@ func _run() -> void:
 	await _particles()
 	await _lit_and_out()
 	await _budget()
+	await _fixture()
 
 
 # ---------------------------------------------------------------------------
@@ -654,6 +657,80 @@ func _budget() -> void:
 
 	camera.queue_free()
 	await _frames(3)
+
+
+# ---------------------------------------------------------------------------
+# A fixture: the model on a burner
+# ---------------------------------------------------------------------------
+
+func _fixture() -> void:
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.8, 604)
+	camera.current = true
+	# A wall facing +Z, its face at z = 596.15, a ceiling 1.2 m over the flame.
+	Props.block(self, Vector3(0, 2, 596), Vector3(4, 4, 0.3))
+	var spec: Dictionary = LightFixture.spec(&"wall_torch")
+	var flame_local: Vector3 = _v(spec.get("sockets", {}).get("flame", [[0, 0, 0]])[0])
+	var face_z := 596.15
+	var flame_at := Vector3(0, 2.4, face_z + flame_local.z)
+
+	# L28 against a wall: its flame where asked, its mount on the wall, one light above the flame
+	var torch: Node3D = Lights.wall_torch(self, flame_at, Vector3(0, 0, 1))
+	await _frames(5)
+	# Where its light rests (a torch's light dances a couple of centimetres round it).
+	var light_at: Vector3 = torch.global_transform * torch._light_base if torch.get("light") != null else Vector3.INF
+	var mount_at: Vector3 = torch.global_transform * torch.socket(&"mount") if torch.has_method("socket") else Vector3.INF
+	_check("L28 a wall torch stands on its wall: one flame, its light just above it, its mount on the wall face",
+		torch.flames.size() == 1 and light_at.distance_to(flame_at + Vector3(0, 0.12, 0)) < 0.01 and absf(mount_at.z - face_z) < 0.03,
+		"flames %d, light %s (flame %s), mount z %.3f (wall %.3f)" % [torch.flames.size(), light_at, flame_at, mount_at.z, face_z])
+
+	# L29 its surfaces are the shared slot materials, and it keeps its baked colours
+	var right := true
+	var coloured := false
+
+	for mesh in torch.find_children("*", "MeshInstance3D", true, false):
+		if mesh.layers == Layers.FX:
+			continue
+
+		for i in mesh.mesh.get_surface_count():
+			var look: Material = mesh.get_surface_override_material(i)
+			var slot := String(mesh.mesh.surface_get_material(i).resource_name)
+			right = right and (look is ShaderMaterial if slot.ends_with("_glow") else look == Materials.surface(StringName(slot)))
+			var arrays: Array = mesh.mesh.surface_get_arrays(i)
+			coloured = coloured or (arrays[Mesh.ARRAY_COLOR] != null and arrays[Mesh.ARRAY_COLOR].size() > 0)
+
+	_check("L29 a fixture's surfaces are Materials' slot materials (or glowing), and its baked colours came through",
+		right and coloured and torch.glow_meshes.size() >= 1, "slot materials %s, vertex colours %s, glowing %d" % [right, coloured, torch.glow_meshes.size()])
+
+	# L30 soot on the wall above it
+	var decals := torch.find_children("*", "Decal", true, false)
+	var soot_ok: bool = decals.size() == 1 and decals[0].cull_mask == Layers.WORLD_ALL and decals[0].global_position.y > flame_at.y
+	_check("L30 a wall fixture leaves one soot mark on the wall above its flame, on world surfaces only", soot_ok,
+		"decals %d%s" % [decals.size(), (" at %s mask %d" % [decals[0].global_position, decals[0].cull_mask]) if decals.size() > 0 else ""])
+
+	# L31 doused, its head cools to char
+	torch.put_out(&"douse")
+	await _frames(int(3.2 * 60.0))
+	var charred: float = torch.glow_meshes[0].get_instance_shader_parameter(&"charred") if torch.glow_meshes.size() > 0 else -1.0
+	var glow: float = torch.glow_meshes[0].get_instance_shader_parameter(&"glow") if torch.glow_meshes.size() > 0 else -1.0
+	_check("L31 doused, its head's glow cools away and it is left charred", charred >= 0.95 and glow <= 0.05,
+		"charred %.2f glow %.2f" % [charred, glow])
+	torch.queue_free()
+
+	# L32 a fixture with no model: still a light, as a bare flame
+	var lost: Node3D = Lights.make(self, &"no_such_fixture", Vector3(3, 2, 600))
+	await _frames(3)
+	_check("L32 a fixture whose model is missing is still a bare flame with its light",
+		lost.get("light") != null and lost.flames.size() == 1 and lost.flames[0].position == Vector3.ZERO,
+		"light %s flames %d" % [lost.get("light") != null, lost.flames.size() if lost.get("flames") != null else -1])
+	lost.queue_free()
+	camera.queue_free()
+	await _frames(3)
+
+
+func _v(a) -> Vector3:
+	return Vector3(float(a[0]), float(a[1]), float(a[2]))
 
 
 ## The frequency (Hz) with the most energy in 8 s of a flicker sampled at 60 Hz.

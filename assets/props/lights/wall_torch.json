@@ -1,0 +1,61 @@
+{
+ "fixture": "wall_torch",
+ "family": "torches",
+ "mount": "wall",
+ "tris": 298,
+ "slots": [
+  "bark",
+  "iron",
+  "pitch_glow"
+ ],
+ "glow_parts": [
+  "head"
+ ],
+ "shadow_parts": [],
+ "sockets": {
+  "flame": [
+   [
+    0.0,
+    0.5252,
+    0.3683
+   ]
+  ],
+  "corona": [
+   [
+    0.0,
+    0.5852,
+    0.3683
+   ]
+  ],
+  "mount": [
+   [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "torch",
+  "ramp": "torch",
+  "low_ramp": "dying",
+  "flicker_kind": "torch",
+  "flicker": 0.12,
+  "energy": 2.4,
+  "light_range": 9.0,
+  "shadows": true,
+  "color": "FF9829",
+  "corona_px": 48.0,
+  "ember_rate": 6.0,
+  "smoke_rate": 3.0,
+  "flame_size": 0.34,
+  "flame_layers": 2,
+  "core": true,
+  "loop": "torch_loop",
+  "loop_db": -13.0,
+  "loop_reach": 11.0
+ },
+ "soot": true,
+ "cookie": false,
+ "hash": "b5555895422c058e6f3dda7bf566a9f1"
+}

@@ -15,6 +15,10 @@ it hangs by), "grip" (a hand's hold).
 
 "burner": Torch.gd exports set on the fixture (color is a hex string, loop
 a name in audio/ambience/, "" for none).
+
+"shadow_parts": the parts that cast shadows (none by default: small parts
+right under their own light would throw huge wedges of shadow, which PS2
+fixtures never did; a hearth's masonry should).
 """
 
 import copy
@@ -37,8 +41,25 @@ TORCH_BURNER = {
     "loop": "torch_loop", "loop_db": -13.0, "loop_reach": 11.0,
 }
 
-# The stick leans 20 degrees out from the wall; along it (0, -sin 20, cos 20).
+def _along(base, axis, distance):
+    return tuple(round(b + a * distance, 4) for b, a in zip(base, axis))
+
+
+def _round(point, radius, angle_deg):
+    """A point on a flat circle of `radius` round `point` (about Z)."""
+    import math
+    a = math.radians(angle_deg)
+    return (round(point[0] + radius * math.cos(a), 4), round(point[1] + radius * math.sin(a), 4), point[2])
+
+
+# The wall torch: its stick leans 20 degrees out from the wall, through a
+# basket cup on a bent bar from a riveted plate; a tow head flared at the
+# top, bound with an iron band.
 _LEAN = (0.0, -0.342, 0.940)
+_STICK = (0.0, -0.17, -0.02)
+_HEAD = _along(_STICK, _LEAN, 0.46)
+_CUP = (0.0, -0.221, 0.12)
+_CUP_LOW = (0.0, -0.199, 0.06)
 
 FIXTURES = {
     "wall_torch": {
@@ -48,21 +69,32 @@ FIXTURES = {
         "soot": True,
         "cookie": False,
         "parts": [
-            {"type": "box", "name": "plate", "slot": "iron", "size": (0.10, 0.02, 0.22), "at": (0.0, -0.01, 0.0)},
-            {"type": "tube", "name": "arm", "slot": "iron", "radius": 0.009, "sides": 4,
-             "points": [(0.0, -0.02, -0.03), (0.0, -0.12, 0.01), (0.0, -0.215, 0.11)]},
-            {"type": "ring", "name": "cup", "slot": "iron", "radius": 0.045, "thickness": 0.012, "sides": 4, "segments": 8,
-             "axis": "Z", "at": (0.0, -0.22, 0.12)},
-            {"type": "lathe", "name": "stick", "slot": "bark", "segments": 6,
-             "profile": [(0.0, 0.0), (0.016, 0.0), (0.019, 0.28), (0.022, 0.55), (0.0, 0.55)],
-             "rotate": (20.0, 0.0, 0.0), "at": (0.0, -0.17, -0.02)},
-            {"type": "blob", "name": "head", "slot": "pitch", "glow": True, "segments": 8, "noise": 0.005, "seed": 3,
-             "profile": [(0.0, 0.0), (0.03, 0.0), (0.042, 0.04), (0.04, 0.09), (0.025, 0.12), (0.0, 0.13)],
-             "rotate": (20.0, 0.0, 0.0), "at": (0.0, -0.341, 0.45)},
+            {"type": "box", "name": "plate", "slot": "iron", "size": (0.09, 0.02, 0.2), "at": (0.0, -0.01, 0.0)},
+            {"type": "lathe", "name": "rivet_top", "slot": "iron", "segments": 3, "profile": [(0.009, 0.0), (0.0, 0.007)],
+             "rotate": (90.0, 0.0, 0.0), "at": (0.0, -0.02, 0.075)},
+            {"type": "lathe", "name": "rivet_low", "slot": "iron", "segments": 3, "profile": [(0.009, 0.0), (0.0, 0.007)],
+             "rotate": (90.0, 0.0, 0.0), "at": (0.0, -0.02, -0.075)},
+            {"type": "tube", "name": "arm", "slot": "iron", "radius": 0.008, "sides": 4,
+             "points": [(0.0, -0.02, -0.06), (0.0, -0.09, -0.04), (0.0, -0.15, 0.03), (0.0, -0.181, 0.105)]},
+            {"type": "ring", "name": "cup", "slot": "iron", "radius": 0.04, "thickness": 0.011, "sides": 3, "segments": 8, "axis": "Z", "at": _CUP},
+            {"type": "ring", "name": "cup_low", "slot": "iron", "radius": 0.026, "thickness": 0.009, "sides": 3, "segments": 6, "axis": "Z", "at": _CUP_LOW},
+        ] + [
+            {"type": "tube", "name": "strap_%d" % i, "slot": "iron", "radius": 0.004, "sides": 3,
+             "points": [_round(_CUP_LOW, 0.026, a), _round(_CUP, 0.04, a)]}
+            for i, a in enumerate((90.0, 210.0, 330.0))
+        ] + [
+            {"type": "lathe", "name": "stick", "slot": "bark", "segments": 5,
+             "profile": [(0.0, 0.0), (0.019, 0.0), (0.021, 0.25), (0.024, 0.5), (0.0, 0.5)],
+             "rotate": (20.0, 0.0, 0.0), "at": _STICK},
+            {"type": "blob", "name": "head", "slot": "pitch", "glow": True, "segments": 7, "noise": 0.005, "seed": 3,
+             "profile": [(0.0, 0.0), (0.026, 0.0), (0.034, 0.03), (0.046, 0.08), (0.044, 0.11), (0.03, 0.13), (0.0, 0.135)],
+             "rotate": (20.0, 0.0, 0.0), "at": _HEAD},
+            {"type": "ring", "name": "band", "slot": "iron", "radius": 0.037, "thickness": 0.01, "sides": 3, "segments": 7,
+             "axis": "Z", "rotate": (20.0, 0.0, 0.0), "at": _along(_HEAD, _LEAN, 0.045)},
         ],
         "sockets": {
-            "flame": [(0.0, -0.383, 0.565)],
-            "corona": [(0.0, -0.383, 0.625)],
+            "flame": [_along(_HEAD, _LEAN, 0.12)],
+            "corona": [tuple(round(v, 4) for v in (_along(_HEAD, _LEAN, 0.12)[0], _along(_HEAD, _LEAN, 0.12)[1], _along(_HEAD, _LEAN, 0.12)[2] + 0.06))],
             "mount": [(0.0, 0.0, 0.0)],
         },
         "burner": dict(TORCH_BURNER),

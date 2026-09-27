@@ -4,6 +4,10 @@
 #   tools/props/props.sh flames               the effect sheets (assets/vfx/)
 #   tools/props/props.sh build <fixture|all>  recipe -> assets/props/source/<fixture>.blend
 #   tools/props/props.sh check <fixture|all>  the rules, nothing written
+#   tools/props/props.sh bake <fixture|all>   ambient occlusion, grime, soot -> vertex colours
+#   tools/props/props.sh export <fixture|all> assets/props/lights/<fixture>.glb + .json
+#   tools/props/props.sh preview <fixture|all> [--out=<dir>]  pictures from four sides
+#   tools/props/props.sh all <fixture|all>    build, check, bake, export
 #   tools/props/props.sh list                 the fixtures the recipes make
 #   tools/props/props.sh test                 the pipeline's own tests
 #
@@ -39,9 +43,25 @@ case "$verb" in
     fixtures
     ;;
   test)
-    exec "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_check.py"
+    "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_check.py"
+    exec "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_build.py"
     ;;
-  build|check)
+  all)
+    target=${1:?"usage: props.sh all <fixture|all>"}
+
+    if [ "$target" = all ]; then
+      every=$(fixtures)
+    else
+      every=$target
+    fi
+
+    for one in $every; do
+      for step in build check bake export; do
+        run "$step" "$one"
+      done
+    done
+    ;;
+  build|check|bake|export|preview)
     target=${1:?"usage: props.sh $verb <fixture|all>"}
     shift
 
@@ -59,7 +79,7 @@ case "$verb" in
     exec "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/flames.py" -- "${1:-all}"
     ;;
   *)
-    sed -n '2,10p' "$0"
+    sed -n '2,14p' "$0"
     exit 1
     ;;
 esac

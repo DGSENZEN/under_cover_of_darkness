@@ -102,8 +102,10 @@ var crackle: AudioStreamPlayer3D
 var flames: Array = []
 ## Its own dice: drawn from where it stands, so every run is the same.
 var rng := RandomNumberGenerator.new()
-## Its halo (null with corona_px 0).
+## Its halo (null with corona_px 0), and where it is in its own space (INF:
+## just over its flames).
 var corona: Node3D
+var corona_point := Vector3.INF
 ## The Atmosphere makes this fire's embers already (Fire.brazier): none of
 ## its own while there is one.
 var embers_by_atmosphere := false
@@ -198,7 +200,7 @@ func _ready() -> void:
 		corona.size_px = corona_px
 		corona.tint = color
 		add_child(corona)
-		corona.position = _light_base - Vector3(0.0, LIGHT_ABOVE - 0.06, 0.0)
+		corona.position = corona_point if corona_point != Vector3.INF else _light_base - Vector3(0.0, LIGHT_ABOVE - 0.06, 0.0)
 
 	_make_loop()
 	_show_lit(&"lit" if lit else &"out")
