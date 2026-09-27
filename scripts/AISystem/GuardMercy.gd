@@ -3,6 +3,8 @@ extends RefCounted
 ## Squad.will_of, and placed to flee or fetch help):
 ##   plead    caught (you within PLEAD_NEAR, he sees you, and you are coming
 ##            at him or swinging at him, or he is too hurt to run: _caught),
+##            and nobody near him begging you already (one at a time: the
+##            rest run while they can),
 ##            he throws his blade down at your feet and begs for his life,
 ##            never taking his eyes off you: on his knees if he is terrified
 ##            enough (terror: little nerve, badly hurt), else on his feet with
@@ -35,6 +37,9 @@ const CLOSING := 1.0
 const TOO_HURT := 0.35
 ## On his heels this near, you need not be seen: he hears you, and turns.
 const HEARD_NEAR := 2.0
+## One man begs you at a time: another begging within this (m), he runs
+## while he can.
+const ONE_AT_A_TIME := 8.0
 ## A man with this much nerve does not beg.
 const PROUD_NERVE := 0.65
 ## On his knees at this much terror or more.
@@ -122,7 +127,9 @@ func update(delta: float, target: Node3D, sees: bool, broken: bool) -> bool:
 		return true
 
 	if not pleading:
-		if broken and guard._game_time >= _running_until and _caught(target, sees, near) and would_beg():
+		# One at a time: with another begging you beside him, he runs while
+		# he can (unless too hurt to).
+		if broken and guard._game_time >= _running_until and _caught(target, sees, near) and would_beg() and (_too_hurt() or not _another_begging()):
 			_begin(toward)
 			guard._stop(delta)
 			return true
@@ -163,7 +170,7 @@ func _caught(target: Node3D, sees: bool, near: float) -> bool:
 	if near > PLEAD_NEAR or (not sees and near > HEARD_NEAR) or target == null or not is_instance_valid(target):
 		return false
 
-	if float(guard.health) / maxf(float(guard.max_health), 1.0) < TOO_HURT:
+	if _too_hurt():
 		return true
 
 	var going: Variant = target.get("velocity")
@@ -175,6 +182,25 @@ func _caught(target: Node3D, sees: bool, near: float) -> bool:
 
 	var combat: Variant = target.get("combat")
 	return combat is Node and (combat as Node).has_method("threat_phase") and combat.threat_phase() != &""
+
+
+## Too hurt to run.
+func _too_hurt() -> bool:
+	return float(guard.health) / maxf(float(guard.max_health), 1.0) < TOO_HURT
+
+
+## Another of his own begging you within ONE_AT_A_TIME of him.
+func _another_begging() -> bool:
+	for other in guard.get_tree().get_nodes_in_group(&"guards"):
+		if other == guard or not is_instance_valid(other):
+			continue
+
+		var mercy: RefCounted = other.get("_mercy")
+
+		if mercy != null and bool(mercy.pleading) and (other as Node3D).global_position.distance_to(guard.global_position) < ONE_AT_A_TIME:
+			return true
+
+	return false
 
 
 ## Whether he would beg at all: not a proud man, not after he has been struck
@@ -278,7 +304,7 @@ func _begin(to: Vector3) -> void:
 
 	if guard._hands != null:
 		guard._hands.drop_held()
-		guard._hands.lose_weapon(toward * 2.5)
+		guard._hands.lose_weapon(toward * 2.5, true)
 
 	var said: String = fighter.temper.line(&"plead") if fighter.temper != null else ""
 	guard.bark(said if said != "" else "Mercy!")

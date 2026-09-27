@@ -400,6 +400,105 @@ func _run(door: Node3D) -> void:
 	var shadowed: float = LightProbe.light_at(self, Vector3(-24, 2.0, 24))
 	_check("K10 light probe: 0.50 at 2 m, 0.22 at 4 m, 0 behind a wall", absf(at_two - 0.496) < 0.01 and absf(at_four - 0.22) < 0.01 and shadowed < 0.001,
 		"2 m %.3f  4 m %.3f  shadowed %.3f" % [at_two, at_four, shadowed])
+	probe_lamp.queue_free()
+
+	await _signs_checks()
+
+
+## Signs of being noticed (StealthHUD's awareness marks): over a man making
+## you out, an eye in a ring that fills as he does; behind you, his mark at
+## the bottom of the screen; the first to have you, a red "!" and his name.
+func _signs_checks() -> void:
+	var hud: Node = player.hud
+	var view: Vector2 = get_viewport().get_visible_rect().size
+
+	# D1 at his ease and unaware of you: no mark
+	var easy := _new_guard(Vector3(-32, 0, 0), 0.0)
+	player.debug_light_level = 0.0
+	_put_player(Vector3(-32, 1.05, 7))
+	await _frames(30)
+	var unmarked: bool = _mark_of(hud, easy).is_empty()
+
+	# D2 lit a little in front of him: an eye over him, its ring filling as he
+	#    makes you out, the edge of it glowing while it climbs; the man
+	#    nearest to having you drawn biggest
+	var other := _new_guard(Vector3(-38, 0, -16), PI)
+	_put_player(Vector3(-32, 1.05, -6))
+	player.rotation.y = PI
+	player.debug_light_level = 0.3
+	var first_fill := -1.0
+	var last_fill := 0.0
+	var eye := false
+	var climbing := false
+	var lead := false
+	var over_him := false
+
+	for i in 150:
+		await _frames(1)
+		var mark: Dictionary = _mark_of(hud, easy)
+
+		if mark.is_empty() or int(easy.state) == COMBAT:
+			continue
+
+		if first_fill < 0.0:
+			first_fill = float(mark["fill"])
+
+		last_fill = float(mark["fill"])
+		eye = eye or mark["icon"] == &"eye"
+		climbing = climbing or float(mark["rise"]) > 0.15
+		lead = lead or bool(mark["lead"])
+		var head: Vector2 = get_viewport().get_camera_3d().unproject_position(easy.eye_position())
+		over_him = over_him or (not bool(mark["edge"]) and (mark["at"] as Vector2).distance_to(head) < 60.0 and (mark["at"] as Vector2).y < head.y)
+
+	_check("D1 a man at his ease and unaware of you has no mark", unmarked, "marked %s" % [not unmarked])
+	_check("D2 a man making you out: an eye over him in a ring that fills as he does, glowing while it climbs, and drawn biggest",
+		eye and over_him and first_fill >= 0.0 and last_fill > first_fill + 0.2 and climbing and lead,
+		"eye %s over him %s fill %.2f -> %.2f climbing %s biggest %s" % [eye, over_him, first_fill, last_fill, climbing, lead])
+
+	# D3 the first to have you: a red "!", bursting, and his name; the next
+	#    man after him, no name
+	player.debug_light_level = 1.0
+	await _until(func(): return int(easy.state) == COMBAT, 180)
+	await _frames(2)
+	var had: Dictionary = _mark_of(hud, easy)
+	await _until(func(): return int(other.state) == COMBAT, 240)
+	await _frames(2)
+	var next: Dictionary = _mark_of(hud, other)
+	_check("D3 the first to have you: a red \"!\" bursting, his name under it; the next man, no name",
+		not had.is_empty() and had["icon"] == &"fight" and float(had["flash"]) > 0.5 and had["name"] == easy.given_name and easy.given_name != ""
+			and not next.is_empty() and next["icon"] == &"fight" and next["name"] == "",
+		"first %s, next (state %d) %s" % [had, int(other.state), next])
+	easy.queue_free()
+	other.queue_free()
+	await _frames(3)
+
+	# D4 a man behind you who heard you: his mark at the bottom of the screen,
+	#    pointing back at him
+	var heard_by := _new_guard(Vector3(-32, 0, 14), PI)
+	player.debug_light_level = 0.0
+	_put_player(Vector3(-32, 1.05, 4))
+	player.rotation.y = 0.0
+	await _frames(10)
+	SoundBus.emit_sound(Vector3(-32, 0, 10), 58.0, self, &"test")
+	await _frames(20)
+	var behind: Dictionary = _mark_of(hud, heard_by)
+	_check("D4 a man behind you who heard you: his mark at the bottom of the screen, pointing back at him",
+		int(heard_by.state) >= SUSPICIOUS and not behind.is_empty() and bool(behind["edge"]) and (behind["at"] as Vector2).y > view.y * 0.5 and (behind["out"] as Vector2).y > 0.7,
+		"state %d mark %s in %s" % [int(heard_by.state), behind, view])
+	heard_by.queue_free()
+	await _frames(3)
+
+
+## The HUD's awareness mark over `g`, or {} if none.
+func _mark_of(hud: Node, g: Node) -> Dictionary:
+	if hud == null or not is_instance_valid(g):
+		return {}
+
+	for mark in hud.awareness_marks():
+		if int(mark["id"]) == g.get_instance_id():
+			return mark
+
+	return {}
 
 
 var _bark_log := {}

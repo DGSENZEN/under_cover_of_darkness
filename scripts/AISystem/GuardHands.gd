@@ -18,10 +18,12 @@ extends RefCounted
 ##   his rounds  a man set to walk them with a light (Guard.rounds_light)
 ##               carries it lit (GuardHabits keeps it so): a lantern held out
 ##               before him in his sword hand, hanging and swinging from his
-##               fist, his blade at his belt; or a torch held up in the other,
-##               its stick through his fist, his blade still in his hand. Into
-##               a fight he drops it as he would the lantern (a torch lies
-##               where it falls, still burning).
+##               fist, his blade in its scabbard; or a torch held up in the
+##               other, his sword hand free for his blade. Into a fight he
+##               drops it as he would the lantern (a torch lies where it
+##               falls, still burning).
+##   his blade   drawn when he needs it and put by when he does not: GuardRig
+##               shows it, from what is in his hands here.
 ##   evidence    your arrow in a wall, pulled out and taken (GuardLife).
 
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
@@ -171,6 +173,11 @@ func stoop_for(item: Node3D, what: StringName) -> void:
 	guard.velocity.z = 0.0
 
 
+## What he is stooping for ("weapon", "throwable", "evidence"), or "".
+func stooping_for() -> StringName:
+	return _item_kind if _stoop > 0.0 and _item != null else &""
+
+
 ## Struck, knocked about: whatever he was stooping for or pulling at, he
 ## leaves (the bell, if it had not rung yet, stays silent).
 func interrupt() -> void:
@@ -257,10 +264,6 @@ func _hold(item: RigidBody3D) -> void:
 	item.transform = Transform3D(Basis.IDENTITY, Vector3(0.0, 0.12, 0.05))
 	item.reset_physics_interpolation()
 
-	# His blade at his belt while his hand is full.
-	if guard._rig != null:
-		guard._rig.weapon.visible = false
-
 
 ## Lets go of whatever he holds to throw, where he stands.
 func drop_held() -> void:
@@ -275,9 +278,6 @@ func drop_held() -> void:
 	item.collision_mask = _held_mask
 	item.freeze = false
 	Dangers.unclaim(item, guard)
-
-	if guard._rig != null:
-		guard._rig.weapon.visible = armed
 
 
 ## Throws what he holds at `aim` (where he wants it to meet `target`, or to
@@ -313,10 +313,6 @@ func throw_held(aim: Vector3, target: Node3D = null) -> bool:
 	var damage := clampf(item.mass * 2.6 + 6.0, 8.0, 26.0)
 	ThrownScript.launch(item, guard, velocity, damage)
 	Sfx.play(guard, &"whoosh", from, 0.0, 0.8)
-
-	if guard._rig != null:
-		guard._rig.weapon.visible = armed
-
 	return true
 
 
@@ -352,13 +348,14 @@ func _arc_clear(from: Vector3, velocity: Vector3, gravity: float, flight: float,
 # ---------------------------------------------------------------------------
 
 ## His grip goes (thrown off his feet): the weapon clatters away along
-## `push`. Returns it, lying in the world.
-func lose_weapon(push := Vector3.ZERO) -> RigidBody3D:
+## `push`. Returns it, lying in the world. Put by (in its scabbard), it stays
+## on him, unless `even_put_by` (thrown down to beg).
+func lose_weapon(push := Vector3.ZERO, even_put_by := false) -> RigidBody3D:
 	if not armed or guard._rig == null:
 		return null
 
 	drop_held()
-	var dropped: RigidBody3D = guard._rig.drop_weapon()
+	var dropped: RigidBody3D = guard._rig.drop_weapon(even_put_by)
 
 	if dropped == null:
 		return null
@@ -420,9 +417,8 @@ func carry_light(kind: StringName) -> void:
 		# Its stick through his fist, the flame at its head, over his hand.
 		_light_holder = guard._rig.man.attach(&"hand_l", lantern, HumanoidScript.FIST_L * Transform3D(Basis.IDENTITY, Vector3(0.0, TORCH_UP, 0.0)))
 	else:
+		# His blade in its scabbard while his hand holds the light (GuardRig).
 		lantern = _hang_lantern(&"hand_r", 0.16, 0.06)
-		# His blade at his belt while his hand holds the light.
-		guard._rig.weapon.visible = false
 
 	light_kind = kind
 	Sfx.play(guard, &"ignite", guard.eye_position() - Vector3.UP * 0.4, -8.0, 1.2)
@@ -523,12 +519,9 @@ func douse() -> void:
 	LightProbe.invalidate()
 
 
-## His hand free of the light: his blade back in it, and nothing left on his
-## hand to hold one.
+## His hand free of the light (his blade back in it, if he wants it:
+## GuardRig), and nothing left on his hand to hold one.
 func _light_gone() -> void:
-	if light_kind == &"lantern" and guard._rig != null:
-		guard._rig.weapon.visible = armed and held == null
-
 	light_kind = &""
 
 	if _light_holder != null and is_instance_valid(_light_holder):

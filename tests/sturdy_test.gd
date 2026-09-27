@@ -173,7 +173,9 @@ func _run() -> void:
 	group.add_child(grouped)
 	grouped.global_position = Vector3(60, 0, 25)
 	grouped.reset_physics_interpolation()
-	await _frames(10)
+	# On edge (his blade drawn, not in its scabbard, so it falls from his hand).
+	grouped._hunted_at = grouped._game_time
+	await _frames(60)
 	var stood := grouped.global_position
 	grouped.die(null)
 	await _frames(3)

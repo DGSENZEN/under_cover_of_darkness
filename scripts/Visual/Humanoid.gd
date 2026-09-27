@@ -369,6 +369,12 @@ func pitch_head(pitch: float) -> void:
 		posture.set("head_pitch", pitch)
 
 
+## Leaning back at the waist (a breath in, asleep in his seat): radians.
+func lean_back(angle: float) -> void:
+	if posture != null:
+		posture.set("lean", angle)
+
+
 ## A kick laid over whatever he is doing: `knee` 0..1 up, `extend` 0..1 out.
 func kick_pose(knee: float, extend: float) -> void:
 	if posture != null:

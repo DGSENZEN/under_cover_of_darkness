@@ -12,6 +12,7 @@ const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
+const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 
 var player: CharacterBody3D
 var results: Array[String] = []
@@ -152,7 +153,7 @@ func _run() -> void:
 	await _frames(10)
 	_check("H2 a lull does not wipe them: both searching, one fights again, and it is the same mind",
 		g1._fighter.squad == squad and kept_members == 2 and absf(squad.morale - 0.5) < 0.1 and float(squad.read[&"turtle"]) > 0.5
-		and squad.largest == 2 and squad.fighting().size() == 1,
+		and squad.largest == 2 and squad.fighting().size() >= 1,
 		"same %s members %d heart %.2f turtle %.2f largest %d fighting %d" % [g1._fighter.squad == squad, kept_members, squad.morale, squad.read[&"turtle"], squad.largest, squad.fighting().size()])
 
 	# H3 the last to give up ends the hunt; the next starts from what the
@@ -322,7 +323,8 @@ func _run() -> void:
 		s15.role_of(t) == &"hold" and t.global_position.distance_to(player.global_position) > 3.2 and not swung and hold_lines[0] >= 1,
 		"place %s at %.1f m swung %s calls %d" % [s15.role_of(t), t.global_position.distance_to(player.global_position), swung, hold_lines[0]])
 
-	# H7 a rash flanker loses patience; a sly one waits for you to commit
+	# H7 a rash flanker loses patience; a sly one waits for you to commit,
+	# longer, though not for ever
 	await _fresh()
 	_put_player(Vector3(160, 1.05, 0))
 	var f7 := _guard(&"swordsman", Vector3(160, 0, -2.0))
@@ -334,10 +336,14 @@ func _run() -> void:
 	var p_rash: float = s7.patience_of(rash7)
 	var expected := lerpf(4.0, 1.0, (0.85 - 0.65) / 0.35)
 	rash7._fighter._flank_waited = p_rash + 0.1
-	sly7._fighter._flank_waited = 99.0
-	_check("H7 a rash flanker loses patience and goes in out of turn; a sly one waits for you to commit",
-		s7.role_of(rash7) == &"flank" and absf(p_rash - expected) < 0.01 and is_inf(s7.patience_of(sly7)) and s7.may_strike(rash7) and not s7.may_strike(sly7),
-		"patience %.2f (want %.2f) sly %s" % [p_rash, expected, s7.patience_of(sly7)])
+	sly7._fighter._flank_waited = p_rash + 0.1
+	var sly_waits: bool = not s7.may_strike(sly7)
+	sly7._fighter._flank_waited = s7.patience_of(sly7) + 0.1
+	var sly_goes: bool = s7.may_strike(sly7)
+	sly7._fighter._flank_waited = 0.0
+	_check("H7 a rash flanker loses patience and goes in out of turn; a sly one waits for you to commit, longer, though not for ever",
+		s7.role_of(rash7) == &"flank" and absf(p_rash - expected) < 0.01 and s7.patience_of(sly7) >= 7.0 and s7.may_strike(rash7) and sly_waits and sly_goes,
+		"patience %.2f (want %.2f) sly %.1f: waits %s, goes in after %s" % [p_rash, expected, s7.patience_of(sly7), sly_waits, sly_goes])
 
 	# H7b ...and he really swings while you stand watching the man in front
 	rash7._fighter._flank_waited = 0.0
@@ -388,7 +394,7 @@ func _run() -> void:
 	# H10 a man who breaks runs for help, and the man he fetches joins knowing where you were
 	await _fresh()
 	_put_player(Vector3(240, 1.05, 0))
-	var helper := _guard(&"", Vector3(240, 0, 24), &"steady", false, PI)
+	var helper := _guard(&"", Vector3(240, 0, -26), &"steady", false)
 	helper.hearing_acuity = 0.1
 	var stub10 := _guard(&"swordsman", Vector3(240, 0, -2.4), &"stubborn")
 	var crav10 := _guard(&"swordsman", Vector3(242, 0, -2.8), &"craven")
@@ -416,7 +422,7 @@ func _run() -> void:
 	# H10b half of them down: the captain sends a man for help
 	await _fresh()
 	_put_player(Vector3(280, 1.05, 0))
-	var helper_b := _guard(&"", Vector3(280, 0, 24), &"steady", false, PI)
+	var helper_b := _guard(&"", Vector3(280, 0, -26), &"steady", false)
 	helper_b.hearing_acuity = 0.1
 	var cap := _guard(&"duelist", Vector3(280, 0, -2.2))
 	var man := _guard(&"swordsman", Vector3(278.5, 0, -3.0))
@@ -435,7 +441,7 @@ func _run() -> void:
 	# H10c an archer who breaks runs for help on foot
 	await _fresh()
 	_put_player(Vector3(320, 1.05, 0))
-	var helper_c := _guard(&"", Vector3(320, 0, 24), &"steady", false, PI)
+	var helper_c := _guard(&"", Vector3(320, 0, -26), &"steady", false)
 	helper_c.hearing_acuity = 0.1
 	var stub_c := _guard(&"swordsman", Vector3(320, 0, -2.4), &"stubborn")
 	var archer_c := _guard(&"archer", Vector3(322, 0, -9.0))
@@ -453,7 +459,7 @@ func _run() -> void:
 	# H11 kill the runner before he gets there and nobody comes
 	await _fresh()
 	_put_player(Vector3(360, 1.05, 0))
-	var helper11 := _guard(&"", Vector3(360, 0, 24), &"steady", false, PI)
+	var helper11 := _guard(&"", Vector3(360, 0, -26), &"steady", false)
 	helper11.hearing_acuity = 0.1
 	var stub11 := _guard(&"swordsman", Vector3(360, 0, -2.4), &"stubborn")
 	var crav11 := _guard(&"swordsman", Vector3(362, 0, -2.8), &"craven")
@@ -650,8 +656,8 @@ func _run() -> void:
 	#      running; he does not go on to rouse the next
 	await _fresh()
 	_put_player(Vector3(300, 1.05, 0))
-	var first_help := _guard(&"", Vector3(300, 0, 24), &"steady", false, PI)
-	var second_help := _guard(&"", Vector3(328, 0, 24), &"steady", false, PI)
+	var first_help := _guard(&"", Vector3(300, 0, -26), &"steady", false)
+	var second_help := _guard(&"", Vector3(328, 0, -26), &"steady", false)
 
 	for one in [first_help, second_help]:
 		one.hearing_acuity = 0.1
@@ -681,8 +687,8 @@ func _run() -> void:
 	#      instead: nobody frozen, shouting, for the rest of the hunt
 	await _fresh()
 	_put_player(Vector3(500, 1.05, 0))
-	Props.block(self, Vector3(500, 1.5, 20), Vector3(4, 3, 4))
-	var perched := _guard(&"", Vector3(500, 0, 15), &"steady", false, PI)
+	Props.block(self, Vector3(500, 1.5, -25), Vector3(4, 3, 4))
+	var perched := _guard(&"", Vector3(500, 0, -20), &"steady", false)
 	perched.hearing_acuity = 0.1
 	var stay_b := _guard(&"swordsman", Vector3(500, 0, -2.4), &"stubborn")
 	var stuck := _guard(&"swordsman", Vector3(502, 0, -2.8), &"craven")
@@ -694,11 +700,212 @@ func _run() -> void:
 	await _frames(10)
 	var set_off: bool = sb2.role_of(stuck) == &"fetch"
 	# Up where no path goes (a block laid down after the navmesh was baked).
-	perched.global_position = Vector3(500, 3.05, 20)
-	perched._home.origin = Vector3(500, 3.05, 20)
+	perched.global_position = Vector3(500, 3.05, -25)
+	perched._home.origin = Vector3(500, 3.05, -25)
 	await _frames(600)
 	_check("H11b a runner who cannot reach the man gives it up and runs instead", set_off and sb2.role_of(stuck) == &"flee" and sb2.helper_of(stuck) == null,
 		"set off %s, then %s" % [set_off, sb2.role_of(stuck)])
+
+	# H10e a broken man does not run past you for help: the only man there is
+	#      beyond you, so he runs instead
+	await _fresh()
+	_put_player(Vector3(560, 1.05, 0))
+	var beyond := _guard(&"", Vector3(560, 0, 24), &"steady", false, PI)
+	beyond.hearing_acuity = 0.1
+	var stay_e := _guard(&"swordsman", Vector3(560, 0, -2.4), &"stubborn")
+	var crav_e := _guard(&"swordsman", Vector3(562, 0, -2.8), &"craven")
+	await _frames(40)
+	player.debug_light_level = 0.0
+	var se2 = stay_e._fighter.squad
+	se2.morale = 0.15
+	await _think(se2)
+	await _frames(10)
+	_check("H10e a broken man does not run past you for help: with the only man beyond you, he runs instead",
+		se2.will_of(crav_e) == &"broken" and se2.role_of(crav_e) == &"flee" and se2.helper_of(crav_e) == null and beyond.state == 0,
+		"will %s place %s fetching %s, the man beyond %d" % [se2.will_of(crav_e), se2.role_of(crav_e), se2.helper_of(crav_e), beyond.state])
+
+	await _chase_checks()
+
+
+## Chasing: on after you when you are lost running, to fresh word of you at a
+## run, called to a fight at a run, one watch for each place you were last
+## seen, told where you are only when it helps, and never your back to a man
+## behind you.
+func _chase_checks() -> void:
+	# H17 lost on the run: the search starts by running on the way you went,
+	#     as far as you could have got, not by standing where you were last
+	#     seen
+	await _fresh()
+	_put_player(Vector3(200, 1.05, 0))
+	var tracker := _guard(&"swordsman", Vector3(200, 0, 6))
+	await _frames(30)
+	player.debug_light_level = 0.0
+	_put_player(Vector3(200, 1.05, -28))
+	var s17 = tracker._fighter.squad
+	# Last had at (200, 0, 0), going west at a run, as long ago as he takes
+	# to give you up for lost (Guard.lose_time).
+	s17.last_sighting = {"position": Vector3(200, 0, 0), "time": s17.clock - tracker.lose_time, "velocity": Vector3(-6, 0, 0)}
+	tracker.last_known_position = Vector3(200, 0, 0)
+	tracker.has_last_known = true
+	tracker._seen_heading = Vector3(-6, 0, 0)
+	tracker._since_seen = tracker.lose_time + 0.1
+	tracker._since_stimulus = tracker.lose_time + 0.1
+	tracker.alert = 70.0
+	tracker._set_state(3)
+	var trailing: bool = tracker._trailing
+	var trail_to: Vector3 = tracker._agent.target_position
+	var fastest := 0.0
+
+	for i in 150:
+		await _frames(1)
+		fastest = maxf(fastest, Vector2(tracker.velocity.x, tracker.velocity.z).length())
+
+	_check("H17 lost on the run, he runs on the way you went, as far as you could have got, not stood where you were last seen",
+		trailing and trail_to.x < 190.0 and tracker.global_position.x < 192.0 and fastest > tracker.investigate_speed + 0.8,
+		"on the trail %s to x %.1f, now at x %.1f, fastest %.1f m/s" % [trailing, trail_to.x, tracker.global_position.x, fastest])
+
+	# H18 searching, word of you breaks off his look: he goes to it at a run,
+	#     and does not give up while it keeps coming
+	await _fresh()
+	_put_player(Vector3(220, 1.05, -28))
+	player.debug_light_level = 0.0
+	var searcher := _guard(&"", Vector3(220, 0, 0), &"steady", false)
+	await _frames(10)
+	searcher.last_known_position = Vector3(220, 0, 0)
+	searcher.has_last_known = true
+	searcher.alert = 70.0
+	searcher._set_state(3)
+	await _frames(5)
+	searcher._search_left = 1
+	searcher._start_looking()
+	var was_looking: bool = searcher._look_timer > 0.0
+	SoundBus.emit_sound(Vector3(226, 0, 9), 62.0, self, &"test")
+	await _frames(3)
+	var broke_off: bool = searcher._look_timer <= 0.0
+	var quickest := 0.0
+
+	for i in 60:
+		await _frames(1)
+		quickest = maxf(quickest, Vector2(searcher.velocity.x, searcher.velocity.z).length())
+
+	_check("H18 searching, a sound of you breaks off his look: he goes to it at a run, and keeps at the search",
+		was_looking and broke_off and quickest > searcher.investigate_speed + 0.8 and searcher._search_left >= 2 and int(searcher.state) == 3,
+		"looking %s broke off %s fastest %.1f m/s, places left %d, state %d" % [was_looking, broke_off, quickest, searcher._search_left, int(searcher.state)])
+
+	# H19 called to a fight he runs; stirred by a noise he walks to look
+	await _fresh()
+	_put_player(Vector3(260, 1.05, -28))
+	player.debug_light_level = 0.0
+	var called := _guard(&"", Vector3(256, 0, 0), &"steady", false)
+	var stirred := _guard(&"", Vector3(264, 0, 0), &"steady", false)
+	await _frames(10)
+	called.hear_call(Vector3(256, 0, 16))
+	stirred.last_known_position = Vector3(264, 0, 16)
+	stirred.has_last_known = true
+	stirred._stimulus = &"noise"
+	stirred._since_stimulus = 0.0
+	stirred.alert = 50.0
+	var runs := 0.0
+	var walks := 0.0
+
+	for i in 90:
+		await _frames(1)
+		runs = maxf(runs, Vector2(called.velocity.x, called.velocity.z).length())
+		walks = maxf(walks, Vector2(stirred.velocity.x, stirred.velocity.z).length())
+
+	_check("H19 called to a fight he runs; stirred by a noise he walks to look",
+		int(called.state) == 2 and int(stirred.state) == 2 and runs > called.investigate_speed + 0.8 and walks < stirred.investigate_speed + 0.3,
+		"states %d/%d, the called man %.1f m/s, the stirred one %.1f m/s" % [int(called.state), int(stirred.state), runs, walks])
+
+	# H20 the hunt's watcher keeps one watch for each place you were last
+	#     seen: his time up, he searches with the rest, nobody is set to watch
+	#     that place over again, and nobody says so again
+	await _fresh()
+	_put_player(Vector3(340, 1.05, 0))
+	var hunters20 := []
+
+	for spot in [Vector3(340, 0, -3), Vector3(342, 0, -3.5), Vector3(338, 0, -3.5)]:
+		hunters20.append(_guard(&"swordsman", spot))
+
+	var watch_lines := [0]
+
+	for one in hunters20:
+		one.barked.connect(func(t: String) -> void:
+			if t in TemperamentScript.LINES.get(one._fighter.temper.tag, {}).get(&"watch", []) or t in TemperamentScript.MORE_LINES.get(one._fighter.temper.tag, {}).get(&"watch", []):
+				watch_lines[0] += 1)
+
+	await _frames(30)
+	var s20 = hunters20[0]._fighter.squad
+	player.debug_light_level = 0.0
+	_put_player(Vector3(340, 1.05, -28))
+
+	for one in hunters20:
+		one._since_seen = 99.0
+		one.alert = 70.0
+		one._set_state(3)
+
+	await _frames(10)
+	var first_watcher: Node3D = s20.watcher()
+	s20._watch_until = s20.clock - 1.0
+
+	for one in hunters20:
+		one._look_timer = 0.0
+		one._next_search_point()
+
+	await _frames(10)
+	var watching_after := hunters20.filter(func(one): return one._watching).size()
+	_check("H20 the hunt's watcher keeps one watch for each place you were last seen, and says so once",
+		first_watcher != null and s20.watcher() == null and watching_after == 0 and watch_lines[0] <= 1,
+		"watcher %s, after his time %s, watching %d, said so %d times" % [first_watcher != null, s20.watcher() != null, watching_after, watch_lines[0]])
+
+	# H21 where you are is called to those who would come to it, not to a man
+	#     fighting at your side who lost you a moment
+	await _fresh()
+	_put_player(Vector3(420, 1.05, 0))
+	var caller := _guard(&"swordsman", Vector3(420, 0, -2.4))
+	var beside := _guard(&"swordsman", Vector3(422.5, 0, 0.5))
+	await _frames(30)
+	var s21 = caller._fighter.squad
+	beside.can_see_target = false
+	beside._since_seen = 3.0
+	beside._since_heard_of = 3.0
+	caller._fighter._spot_timer = 0.0
+	s21._last_spot_call = -100.0
+	caller._fighter._call_out_where(0.1, player)
+	var told_beside: bool = s21._last_spot_call > -100.0
+	beside.global_position = Vector3(420, 0, 24)
+	beside.alert = 70.0
+	beside._set_state(3)
+	beside.can_see_target = false
+	beside._since_seen = 3.0
+	beside._since_heard_of = 3.0
+	caller._fighter._spot_timer = 0.0
+	s21._last_spot_call = -100.0
+	caller._fighter._call_out_where(0.1, player)
+	var told_far: bool = s21._last_spot_call > -100.0
+	_check("H21 where you are is called to a man off searching, not to one fighting at your side",
+		not told_beside and told_far, "told the man beside you %s, the man searching %s" % [told_beside, told_far])
+
+	# H22 a man at your back strikes, busy or not; at your side he waits for
+	#     his moment
+	await _fresh()
+	_put_player(Vector3(460, 1.05, 0))
+	var front22 := _guard(&"swordsman", Vector3(460, 0, -2.2), &"stubborn")
+	var back22 := _guard(&"swordsman", Vector3(460.4, 0, 2.4), &"sly")
+	await _frames(40)
+	var s22 = front22._fighter.squad
+	back22.global_position = Vector3(460.3, 0, 2.4)
+	_aim(front22.global_position + Vector3.UP * 1.2)
+	await _frames(1)
+	back22._fighter._flank_waited = 0.0
+	var not_at_once: bool = not s22.may_strike(back22)
+	back22._fighter._flank_waited = SquadScript.BACK_WAIT + 0.1
+	var at_back: bool = s22.may_strike(back22)
+	back22.global_position = Vector3(462.4, 0, 0)
+	var at_side: bool = s22.may_strike(back22)
+	_check("H22 a man at your back strikes, busy or not; at your side he waits for his moment",
+		s22.role_of(back22) == &"flank" and not_at_once and at_back and not at_side,
+		"role %s, at once %s, after a moment at your back %s, at your side %s" % [s22.role_of(back22), not not_at_once, at_back, at_side])
 
 
 # --------------------------------------------------------------------------

@@ -7,10 +7,15 @@ extends Node3D
 ## when he is stirred; over to a friend for a word, the easy man nodding and
 ## the hard one shaking his head; talk at the table where they sit; forearms
 ## on a rail; asleep on a bench, blind to you and woken by a noise; rounds
-## walked with a torch or a lantern (the blade at his belt), up the stairs
+## walked with a torch or a lantern (the blade in its scabbard), up the stairs
 ## with it, dropped into a fight and lit again after; up a rope and a chain to
-## the ledges beside them; the navmesh keeping them off the furniture; and a
-## chair drawn out from the table to sit and tucked in once sat.
+## the ledges beside them; the navmesh keeping them off the furniture; a
+## chair drawn out from the table to sit and tucked in once sat; the last of
+## the way to a seat walked, not slid, and a turn on the spot stepped round;
+## a look round at a man going by, and a word to him and a nod back; a flask
+## for a drink, bread bitten smaller; the fire stoked; a sleeper breathing;
+## and what is heard of all of it. His blade in its scabbard all the while,
+## drawn when he goes to look into something, and left on him if he dies so.
 ##
 ## Each station stands on its own, 40 m from the next, and each man is set
 ## to the one thing checked (Guard.habits) and starts on it at once.
@@ -26,6 +31,7 @@ const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const GuardHabitsScript := preload("res://scripts/AISystem/GuardHabits.gd")
+const GuardLifeScript := preload("res://scripts/AISystem/GuardLife.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const RopeScript := preload("res://scripts/PlayerUtils/VerletRope.gd")
@@ -158,8 +164,8 @@ func _run() -> void:
 		"favourites %s; rolled %s / %s quirks '%s' '%s'" % [favourite, _top(one._habits.leanings), _top(two._habits.leanings), one._habits.quirk, two._habits.quirk])
 
 	# H2 down on the chair near his post, a while, and up again: his blade
-	# put by as he sits, the chair letting him in among it, and a step back out
-	# of it before he goes
+	# at his hip (a man at his ease has it in its scabbard), the chair letting
+	# him in among it, and a step back out of it before he goes
 	await _fresh()
 	var sitter := _man(Vector3(0, 0, 0), 0.0, &"steady", [&"sit"], &"", 6.0)
 	var seat: Node3D = IdleSpotScript.nearest(get_tree(), &"seat", Vector3(0, 0, -3), 1.0, sitter)
@@ -187,10 +193,10 @@ func _run() -> void:
 	# Back out where he stepped in from (the floor clear of the chair).
 	var stepped_out := _flat(sitter.global_position - seat.global_position)
 	var came_back := _flat(sitter.global_position - sitter._habits._came_from)
-	_check("H2 he sits down on the chair by his post, a while, and gets up again: blade put by, in among the chair, a step back out of it",
+	_check("H2 he sits down on the chair by his post, a while, and gets up again: blade at his hip, in among the chair, a step back out of it",
 		seen.has(&"sit_down") and seen.has(&"sit") and seen.has(&"stand_up") and sat_at != Vector3.INF and _flat(sat_at - seat.global_position) < 0.15
-			and let_in and put_by and sitter._habits.habit == &"" and sitter.get_collision_exceptions().is_empty() and sitter._rig.weapon.visible and stepped_out > 0.1 and came_back < 0.05,
-		"did %s, sat %.2f m from the seat, let in %s, blade put by %s; after: exceptions %d, blade %s, stepped %.2f m back out to where he came from (%.2f off it)" % [seen.keys(), _flat(sat_at - seat.global_position) if sat_at != Vector3.INF else -1.0, let_in, put_by, sitter.get_collision_exceptions().size(), sitter._rig.weapon.visible, stepped_out, came_back])
+			and let_in and put_by and sitter._habits.habit == &"" and sitter.get_collision_exceptions().is_empty() and _at_hip(sitter) and stepped_out > 0.1 and came_back < 0.05,
+		"did %s, sat %.2f m from the seat, let in %s, blade put by %s; after: exceptions %d, blade at his hip %s, stepped %.2f m back out to where he came from (%.2f off it)" % [seen.keys(), _flat(sat_at - seat.global_position) if sat_at != Vector3.INF else -1.0, let_in, put_by, sitter.get_collision_exceptions().size(), _at_hip(sitter), stepped_out, came_back])
 
 	# H3 stirred where he sits: up at once, in a hurry, and a guard again
 	await _fresh()
@@ -206,8 +212,8 @@ func _run() -> void:
 		hurried = hurried or stirred.activity() == &"stand_up_quick"
 
 	_check("H3 stirred where he sits, he is up at once in a hurry, and a guard again",
-		seated and hurried and int(stirred.state) >= SUSPICIOUS and stirred._habits.habit == &"" and stirred._rig.weapon.visible,
-		"seated %s hurried %s state %d habit '%s' blade %s" % [seated, hurried, int(stirred.state), stirred._habits.habit, stirred._rig.weapon.visible])
+		seated and hurried and int(stirred.state) >= SUSPICIOUS and stirred._habits.habit == &"" and not stirred._habits._sheathed,
+		"seated %s hurried %s state %d habit '%s' hands wanted by his ways %s" % [seated, hurried, int(stirred.state), stirred._habits.habit, stirred._habits._sheathed])
 
 	# H4 back against the wall behind his post, looking out from it
 	await _fresh()
@@ -239,8 +245,8 @@ func _run() -> void:
 		ate.has(&"reach") and ate.has(&"eat") and in_hand and eater._habits._held.is_empty() and eater._habits.habit == &"",
 		"did %s, bread in hand %s, after: held %d" % [ate.keys(), in_hand, eater._habits._held.size()])
 
-	# H6 the axe at the block, blow on blow, heard well off; the blade put by
-	# meanwhile and back after
+	# H6 the axe at the block, blow on blow, heard well off; his blade at his
+	# hip meanwhile and after
 	await _fresh()
 	var woodsman := _man(Vector3(120, 0, 2), 0.0, &"rash", [&"chop"])
 	heard.clear()
@@ -260,10 +266,10 @@ func _run() -> void:
 
 	var blows := heard.filter(func(e): return e["kind"] == &"chop" and e["source"] == woodsman)
 	var far: float = SoundBus.range_for(GuardHabitsScript.CHOP_DB)
-	_check("H6 he splits logs at the block with an axe, blow on blow, each heard well off; his blade back after",
+	_check("H6 he splits logs at the block with an axe, blow on blow, each heard well off; his blade at his hip after",
 		chopped and axe and blows.size() >= GuardHabitsScript.CHOPS.x and _count(&"thud_wood") - thuds_before >= blows.size() and far > 15.0
-			and woodsman._habits._held.is_empty() and woodsman._rig.weapon.visible,
-		"chopped %s axe %s, %d blows heard to %.0f m, thuds %d, after: held %d blade %s" % [chopped, axe, blows.size(), far, _count(&"thud_wood") - thuds_before, woodsman._habits._held.size(), woodsman._rig.weapon.visible])
+			and woodsman._habits._held.is_empty() and _at_hip(woodsman) and not woodsman._habits._sheathed,
+		"chopped %s axe %s, %d blows heard to %.0f m, thuds %d, after: held %d blade at his hip %s" % [chopped, axe, blows.size(), far, _count(&"thud_wood") - thuds_before, woodsman._habits._held.size(), _at_hip(woodsman)])
 
 	# H7 down on his knees at the fire, tending it, and up again
 	await _fresh()
@@ -372,6 +378,10 @@ func _run() -> void:
 	var other := _man(Vector3(482, 0, 0), 0.0, &"craven", [&"sit"])
 	var table_talk := [false, false]
 	var both_sat := false
+	# How nearly each has his head turned to the other, talking (as far as it
+	# turns).
+	var eyed := [INF, INF]
+	var talked_for := 0
 
 	for i in 60 * 30:
 		await _frames(1)
@@ -385,12 +395,24 @@ func _run() -> void:
 		table_talk[0] = table_talk[0] or diner.activity() == &"sit_talk"
 		table_talk[1] = table_talk[1] or other.activity() == &"sit_talk"
 
-		if table_talk[0] and table_talk[1]:
+		if diner._life.talking() and other._life.talking():
+			talked_for += 1
+
+			# A moment for their heads to come round.
+			if talked_for > 40:
+				for m in 2:
+					var me: Node3D = diner if m == 0 else other
+					var them: Node3D = other if m == 0 else diner
+					var to := them.global_position - me.global_position
+					var want := clampf(wrapf(atan2(-to.x, -to.z) - me.rotation.y, -PI, PI), -GuardLifeScript.REGARD_MAX, GuardLifeScript.REGARD_MAX)
+					eyed[m] = minf(eyed[m], absf(wrapf(want - me._head.rotation.y, -PI, PI)))
+
+		if table_talk[0] and table_talk[1] and talked_for > 60:
 			break
 
-	_check("H12 two sat at the table talk where they sit",
-		table_talk[0] and table_talk[1],
-		"sat talking %s, now %s / %s" % [table_talk, diner.activity(), other.activity()])
+	_check("H12 two sat at the table talk where they sit, each with his head turned to the other",
+		table_talk[0] and table_talk[1] and eyed[0] < 0.2 and eyed[1] < 0.2,
+		"sat talking %s, now %s / %s, heads within %.2f / %.2f rad of each other" % [table_talk, diner.activity(), other.activity(), eyed[0], eyed[1]])
 
 	# H13 forearms on the rail, looking out over it
 	await _fresh()
@@ -438,10 +460,15 @@ func _run() -> void:
 	var lit: bool = torch._hands.lantern != null and torch._hands.light_kind == &"torch" and torch.activity() == &"carry_torch"
 	var left: bool = _held_in(torch._hands.lantern, &"hand_l")
 	var busied := {}
+	# Turning about at the end of his rounds: his feet shuffle round.
+	var turned_feet := 0.0
 
 	for i in 60 * 20:
 		await _frames(1)
 		busied[torch._habits.habit] = true
+
+		if torch.activity() == &"carry_torch" and _flat(torch.velocity) < 0.3:
+			turned_feet = maxf(turned_feet, (torch._rig._shuffle as Vector3).length())
 
 	torch._engage(player)
 	await _frames(10)
@@ -452,9 +479,9 @@ func _run() -> void:
 	var not_yet: bool = torch._hands.lantern == null
 	await _until(func(): return torch._hands.lantern != null, 60 * 6)
 	var relit: bool = torch._hands.lantern != null and torch._hands.light_kind == &"torch"
-	_check("H15 his rounds with a torch held up: nothing but a look about on the way, dropped into a fight, lit again a while after",
-		lit and left and busied.keys().all(func(h): return h in [&"", &"fidget"]) and dropped and not_yet and relit,
-		"lit %s in his left hand %s, about %s, dropped %s, not at once %s, relit %s" % [lit, left, busied.keys(), dropped, not_yet, relit])
+	_check("H15 his rounds with a torch held up: nothing but a look about on the way, stepped round at the end of them, dropped into a fight, lit again a while after",
+		lit and left and busied.keys().all(func(h): return h in [&"", &"fidget"]) and turned_feet > 0.4 and dropped and not_yet and relit,
+		"lit %s in his left hand %s, about %s, feet round at up to %.2f m/s, dropped %s, not at once %s, relit %s" % [lit, left, busied.keys(), turned_feet, dropped, not_yet, relit])
 
 	# H16 his rounds with a lantern held out, his blade at his belt: up the
 	# stairs with it (walked, not climbed), and into a fight it drops and the
@@ -538,7 +565,7 @@ func _run() -> void:
 
 		if seat2 == null and h.spot != null:
 			seat2 = h.spot
-			chair2 = seat2.get_meta(&"tuck", null)
+			chair2 = seat2.get_meta(&"tuck") if seat2.has_meta(&"tuck") else null
 
 		if seat2 == null or chair2 == null:
 			continue
@@ -576,8 +603,280 @@ func _run() -> void:
 		drawn_ok and was_in < 0.05 and absf(shoved - pull) < 0.08 and absf(chair_shoved - pull) < 0.05 and int(diner2.state) >= SUSPICIOUS,
 		"sitting down %.2f m out, sat %.2f (chair %.2f off its place), getting up %.2f out, chair back %.2f; stirred: from %.2f to %.2f out, chair %.2f out, state %d" % [down_off, in_off, chair_in, up_off, pushed_in, was_in, shoved, chair_shoved, int(diner2.state)])
 
+	# H20 the last of the way to his seat walked, not slid: his legs carry him
+	# in at the pace he came at, slowing into place, and his feet stay on the
+	# floor as he steps in among the chair
+	await _fresh()
+	var stepper := _man(Vector3(0, 0, 0), 0.0, &"steady", [&"sit"], &"", 6.0)
+	var came_at := 0.0
+	var set_off := -1.0
+	var legs := -1.0
+	var topmost := 0.0
+	var stepped_in := false
+
+	for i in 60 * 20:
+		await _frames(1)
+		var h: RefCounted = stepper._habits
+
+		if h.habit == &"" or h._step < 0 or h._step >= h._steps.size():
+			continue
+
+		var doing: StringName = h._steps[h._step]["do"]
+
+		if doing == &"go":
+			came_at = _flat(stepper.velocity)
+		elif doing == &"settle" and h._step == 1:
+			stepped_in = true
+
+			# (Its first frame: begun by the last of the walk, run from the next.)
+			if set_off < 0.0 and h._t > 0.0:
+				set_off = h.stepping().length()
+
+			# Halfway in (well after any walking the rig was still showing).
+			if legs < 0.0 and h._t >= float(h._settle_time) * 0.5:
+				legs = (stepper._rig._velocity as Vector3).length()
+
+			topmost = maxf(topmost, stepper.global_position.y)
+		elif stepped_in:
+			break
+
+	_check("H20 the last of the way to his seat is walked, not slid: at the pace he came at, slowing into place, feet on the floor",
+		stepped_in and legs > 0.5 and came_at > 0.3 and set_off > came_at * 0.6 and topmost < 0.05,
+		"stepped in %s, legs shown at %.2f m/s halfway in, came at %.2f and set off at %.2f m/s, highest %.2f m" % [stepped_in, legs, came_at, set_off, topmost])
+
+	# H21 turned about where he stands, his feet shuffle round under him (not a
+	# statue turned on a plinth), and are still again once he has turned
+	await _fresh()
+	var turner := _man(Vector3(520, 0, 0), 0.0, &"steady", [&"fidget"])
+	turner._habits._wait = 999.0
+	await _frames(30)
+	turner.rotation.y = PI * 0.9
+	var shuffled := 0.0
+
+	for i in 60:
+		await _frames(1)
+		shuffled = maxf(shuffled, (turner._rig._shuffle as Vector3).length())
+
+	await _frames(60)
+	var faces_back: float = (-turner.global_basis.z).dot(Vector3.FORWARD)
+	var still: float = (turner._rig._shuffle as Vector3).length()
+	_check("H21 turning about where he stands, his feet shuffle round under him, and are still once he has turned",
+		shuffled > 0.4 and faces_back > 0.95 and still < 0.05 and not turner._rig._shuffling,
+		"feet at up to %.2f m/s turning, facing his way %.2f after, feet %.2f m/s" % [shuffled, faces_back, still])
+
+	# H22 at his ease, he looks round at a man going by
+	await _fresh()
+	var watcher := _man(Vector3(560, 0, 0), 0.0, &"steady", [&"fidget"])
+	watcher._habits._wait = 999.0
+	var passer := _man(Vector3(555, 0, -3), -PI * 0.5, &"steady", [&"fidget"])
+	passer._habits._wait = 999.0
+	passer._life.greet_chance = 0.0
+	await _frames(30)
+	passer._home.origin = Vector3(566, 0, -3)
+	var aside := 0.0
+	var off_him := INF
+
+	for i in 60 * 8:
+		await _frames(1)
+		var to := passer.global_position - watcher.global_position
+		var toward := wrapf(atan2(-to.x, -to.z) - watcher.rotation.y, -PI, PI)
+
+		# Well off to one side of the way he faces: his head is turned to him.
+		if absf(toward) > 0.5 and absf(toward) < 1.1:
+			aside = maxf(aside, absf(toward))
+			off_him = minf(off_him, absf(wrapf(toward - watcher._head.rotation.y, -PI, PI)))
+
+	_check("H22 at his ease, he looks round at a man going by",
+		aside > 0.5 and off_him < 0.3,
+		"the other up to %.2f rad off the way he faces, his head within %.2f rad of him" % [aside, off_him])
+
+	# H23 going by a man at his ease, a word to him; he looks round and nods.
+	# By him again straight after: nothing (not the same two for a good while)
+	await _fresh()
+	var stood := _man(Vector3(560, 0, 0), 0.0, &"steady", [&"fidget"])
+	stood._habits._wait = 999.0
+	var greeter := _man(Vector3(555, 0, -3), -PI * 0.5, &"steady", [&"fidget"])
+	greeter._habits._wait = 999.0
+	greeter._life.greet_chance = 1.0
+	await _frames(30)
+	greeter._home.origin = Vector3(566, 0, -3)
+	var nodded := false
+
+	for i in 60 * 8:
+		await _frames(1)
+		nodded = nodded or stood._life.nod() < -0.1
+
+	var greeted: bool = _barks_of(greeter).any(func(t): return _is_greet(t, stood.given_name))
+	var said := _barks_of(greeter).size()
+	greeter._life._greet_rest = 0.0
+	stood._life._greet_rest = 0.0
+	greeter._home.origin = Vector3(555, 0, -3)
+	await _frames(60 * 8)
+	var back_by := _flat(greeter.global_position - Vector3(555, 0, -3)) < 1.0
+	_check("H23 going by a man at his ease, a word to him, and he nods; by him again straight after, nothing",
+		greeted and nodded and back_by and _barks_of(greeter).size() == said,
+		"said %s, nodded %s, back by him %s, said after %s" % [_barks_of(greeter), nodded, back_by, _barks_of(greeter).slice(said)])
+
+	# H24 a flask in his left hand for a pull from it, and put away after;
+	# bread bitten smaller mouthful by mouthful
+	await _fresh()
+	var drinker := _man(Vector3(660, 0, 0), 0.0, &"steady", [&"fidget"])
+	drinker._habits.roll()
+	drinker._habits.fidgets = {&"drink": 1.0}
+	var drank := false
+	var flask_in := false
+
+	for i in 60 * 10:
+		await _frames(1)
+
+		if drinker.activity() == &"drink":
+			drank = true
+
+			if not drinker._habits._held.is_empty() and (drinker._habits._held[0] as Node).get_child_count() > 0:
+				flask_in = flask_in or _held_in((drinker._habits._held[0] as Node).get_child(0), &"hand_l")
+		elif drank and drinker._habits.habit == &"":
+			break
+
+	var put_away: bool = drank and drinker._habits._held.is_empty()
+	var eater2 := _man(Vector3(80, 0, -8), 0.0, &"steady", [&"eat"])
+	var least := INF
+
+	for i in 60 * 20:
+		await _frames(1)
+		var bread: Node3D = eater2._habits._bread_held
+
+		if bread != null and is_instance_valid(bread):
+			least = minf(least, bread.scale.x)
+
+		if least < INF and eater2._habits.habit == &"":
+			break
+
+	_check("H24 a flask in his left hand for a drink, put away after; bread bitten smaller as he eats",
+		drank and flask_in and put_away and least < 0.6,
+		"drank %s flask in his left hand %s put away %s; the bread down to %.2f of itself" % [drank, flask_in, put_away, least])
+
+	# H25 at the fire he stokes it now and then: sparks up, the flame flares,
+	# it crackles
+	await _fresh()
+	var stoker := _man(Vector3(160, 0, 1), 0.0, &"sly", [&"tend"])
+	var crackles := _count(&"burning")
+	var flame: Node3D = null
+	var flared := 0.0
+
+	for i in 60 * 25:
+		await _frames(1)
+		var at_spot: Node3D = stoker._habits.spot
+
+		if flame == null and at_spot != null and at_spot.has_meta(&"fire"):
+			flame = at_spot.get_meta(&"fire")
+
+		if flame != null:
+			flared = maxf(flared, float(flame.get("_flare")))
+
+		if stoker.activity() == &"tend" and stoker._habits._t > GuardHabitsScript.STOKE_FIRST + GuardHabitsScript.STOKE_EVERY + 0.5:
+			break
+
+	crackles = _count(&"burning") - crackles
+	_check("H25 at the fire he stokes it now and then: the flame flares up and crackles",
+		flame != null and flared > 0.5 and crackles >= 2,
+		"a flame %s, flared to %.2f, crackled %d times" % [flame != null, flared, crackles])
+
+	# H26 asleep in his seat, he breathes, slow: his chest lifts and falls
+	await _fresh()
+	var sleeper := _man(Vector3(280, 0, 0), 0.0, &"steady", [&"sit"], &"dozes", 6.0)
+	await _until(func(): return sleeper.activity() == &"doze", 60 * 30)
+	var leans := []
+
+	for i in 60 * 6:
+		await _frames(1)
+		leans.append(float(sleeper._rig.man.posture.get("lean")))
+
+	var sleeping: bool = sleeper.activity() == &"doze"
+	var breathed: float = (leans.max() - leans.min()) if not leans.is_empty() else 0.0
+	_check("H26 asleep in his seat, he breathes slow and deep",
+		sleeping and breathed > 0.02,
+		"asleep %s, his chest through %.3f rad" % [sleeping, breathed])
+
+	# H27 heard at his ease: his clothes as he sits and gets up, the seat
+	# creaking under him, the chair scraping the floor drawn out and in, and a
+	# grunt lifting a crate (his blade stays in its scabbard: no slide heard)
+	await _fresh()
+	var heard_before := {}
+
+	for sound in [&"cloth", &"creak_rope", &"scuff", &"sheath", &"blade_draw", &"grunt"]:
+		heard_before[sound] = _count(sound)
+
+	var diner3 := _man(Vector3(478, 0, 0), 0.0, &"steady", [&"sit"])
+	await _until(func(): return diner3._habits._step == 4 and diner3.activity() == &"sit", 60 * 20)
+	diner3._habits._t = float(diner3._habits._steps[4]["time"]) - 0.2
+	await _until(func(): return diner3._habits.habit == &"", 60 * 10)
+	var lifter := _man(Vector3(203, 0, 2), 0.0, &"rash", [&"carry"])
+	await _until(func(): return lifter._habits._crate != null, 60 * 20)
+	await _frames(5)
+	var foley := {}
+
+	for sound in heard_before.keys():
+		foley[sound] = _count(sound) - int(heard_before[sound])
+
+	_check("H27 heard at his ease: a rustle sitting and getting up, the seat creaking, the chair scraping, a grunt at a crate; no blade in or out",
+		int(foley[&"cloth"]) >= 2 and int(foley[&"creak_rope"]) >= 1 and int(foley[&"scuff"]) >= 4 and int(foley[&"sheath"]) == 0 and int(foley[&"blade_draw"]) == 0 and int(foley[&"grunt"]) >= 1,
+		"heard %s" % [foley])
+
+	# H28 his blade in its scabbard at his ease (the hilt at his hip); going to
+	# look into something he draws it, his hand to the hilt and the blade out
+	# with a ring; at his ease again, back into its scabbard with a slide
+	await _fresh()
+	var blade_man := _man(Vector3(560, 0, 0), 0.0, &"steady", [&"fidget"])
+	blade_man._habits._wait = 999.0
+	await _frames(20)
+	var sheathed := _at_hip(blade_man)
+	var draws_before := _count(&"blade_draw")
+	var slides_before := _count(&"sheath")
+	blade_man.last_known_position = Vector3(566, 0, 0)
+	blade_man.has_last_known = true
+	blade_man.alert = blade_man.investigate_at + 5.0
+	blade_man._set_state(GuardScript.Alert.INVESTIGATING)
+	var to_hilt := false
+
+	for i in 90:
+		await _frames(1)
+		var arm: Variant = blade_man._rig._reach
+		to_hilt = to_hilt or (arm != null and float(arm.weights[1]) > 0.9)
+
+	var drawn: bool = blade_man._rig.weapon.visible and not blade_man._rig._sheath.visible
+	var drew := _count(&"blade_draw") - draws_before
+	# It was nothing: he stands easy.
+	blade_man.alert = 0.0
+	blade_man.has_last_known = false
+	blade_man._set_state(GuardScript.Alert.RELAXED)
+	await _frames(90)
+	var back_in := _at_hip(blade_man)
+	var slid := _count(&"sheath") - slides_before
+	_check("H28 at his ease his blade is in its scabbard; to look into something he draws it (hand to the hilt, a ring); at ease again it goes back (a slide)",
+		sheathed and to_hilt and drawn and drew == 1 and back_in and slid == 1,
+		"at ease put by %s; looking: hand to the hilt %s, drawn %s, rings %d; at ease again put by %s, slides %d" % [sheathed, to_hilt, drawn, drew, back_in, slid])
+
+	# H29 killed with his blade in its scabbard, it stays on him: nothing
+	# dropped, the hilt still at the body's hip
+	await _fresh()
+	var victim := _man(Vector3(600, 0, 0), 0.0, &"steady", [&"fidget"])
+	victim._habits._wait = 999.0
+	await _frames(20)
+	var scabbard: Node3D = victim._rig._sheath
+	victim.die(null)
+	await _frames(10)
+	var left_lying := get_tree().get_nodes_in_group(&"dropped_weapons").size()
+	_check("H29 killed with his blade in its scabbard, it stays on him",
+		left_lying == 0 and is_instance_valid(scabbard) and scabbard.is_visible_in_tree(),
+		"dropped %d, still at his hip %s" % [left_lying, is_instance_valid(scabbard) and scabbard.is_visible_in_tree()])
+
 
 # ---------------------------------------------------------------------------
+
+## His blade put by (in its scabbard, or slung), none in his hand.
+func _at_hip(man: Node) -> bool:
+	return not man._rig.weapon.visible and man._rig._sheath.visible
+
 
 ## A man at `at` facing `yaw`, of temperament `tag`, set to `habits` only
 ## (none: his temperament's), with `quirk`, finding things to do within
@@ -756,6 +1055,16 @@ func _is_line(text: String, situation: StringName) -> bool:
 	for tag in TemperamentScript.MORE_LINES:
 		if text in (TemperamentScript.MORE_LINES[tag] as Dictionary).get(situation, []):
 			return true
+
+	return false
+
+
+## A greeting any temperament has, to the man named `name` ("%s").
+func _is_greet(text: String, name: String) -> bool:
+	for tag in TemperamentScript.MORE_LINES:
+		for line in (TemperamentScript.MORE_LINES[tag] as Dictionary).get(&"greet", []):
+			if text == line or (String(line).contains("%s") and text == String(line) % name):
+				return true
 
 	return false
 

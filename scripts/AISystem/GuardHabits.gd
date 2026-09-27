@@ -70,9 +70,11 @@ const RANGE := 10.0
 const STROLL := 0.85
 ## Given up if he cannot get there in this long.
 const GO_TIMEOUT := 25.0
-## Closer than this to it, the last of the way is a step into place.
+## Closer than this to it, the last of the way is a step into place: walked
+## at this pace (m/s, on the whole), and never quicker than SETTLE_TIME.
 const SETTLE_FROM := 1.4
 const SETTLE_TIME := 0.35
+const SETTLE_PACE := 0.9
 ## At a table: he draws the chair out this far (m) to sit down and to get
 ## up, clear of the table's edge, and in to the table once he is sat, taking
 ## this long (s) over it.
@@ -120,8 +122,32 @@ const RELIGHT := 3.0
 ## as Humanoid.FIST_R), as he holds his sword: the head out of the thumb's
 ## side, the edge the way his knuckles go.
 const AXE_GRIP := Transform3D(Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0)), Vector3(-0.03, 0.08, 0.0)) * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.06, 0.0))
-## Bread in the palm of his left hand, along his fist.
+## Bread in the palm of his left hand, along his fist; a bite out of it with
+## each mouthful (the eating clip's hand at his mouth this far into each
+## loop of it), this much of it left after each.
 const BREAD_GRIP := Transform3D(Basis.IDENTITY, Vector3(0.035, 0.07, 0.03))
+const EAT_CYCLE := 1.33
+const BITE_AT := 0.75
+const BITE_LEFT := 0.7
+## Sitting down: his weight on the seat this far into it (s).
+const SEATED_AT := 0.95
+## A flask off his belt for a pull from it, upright in his left fist, its
+## neck out of the thumb's side (as Humanoid.FIST_L): up at his mouth as the
+## hand comes to it. In his hand this far into the drink.
+const FLASK_GRIP := Transform3D(Basis(Vector3(0, 1, 0), Vector3(0, 0, 1), Vector3(1, 0, 0)), Vector3(0.03, 0.08, 0.0))
+const FLASK_AT := 0.12
+## At the fire, a log pushed in (sparks up, the flame flares) this often (s),
+## the first this long in.
+const STOKE_EVERY := 3.3
+const STOKE_FIRST := 1.2
+## Wary (Guard.wary: a hunt not long since, the garrison roused), nothing
+## that takes his hands or his eyes off his ground: a few steps, a look about,
+## a word to himself.
+const WARY_HABITS := [&"pace", &"fidget"]
+const WARY_FIDGETS := [&"look_about", &"mutter"]
+## Poses that leave his head free to look round at someone (GuardLife: a
+## man going by, a greeting, the man he talks with).
+const HEAD_FREE := [&"", &"sit", &"lean", &"rail", &"fold_arms", &"eat", &"carry"]
 
 var guard: CharacterBody3D
 ## His leanings (habit -> pull), his fidgets (fidget -> pull), his quirk.
@@ -149,6 +175,14 @@ var _held: Array = []
 var _excepted: Array = []
 var _sheathed := false
 var _settle_from := Vector3.ZERO
+var _settle_time := SETTLE_TIME
+## The pace he came into it at (world, flat).
+var _settle_v := Vector3.ZERO
+## Stepping into place: how fast he goes (world, flat), for his legs (the rig):
+## he is put there, not walked, and they would stand still. Zero otherwise.
+var _stepping := Vector3.ZERO
+## The bread in his hand, bitten into as he eats.
+var _bread_held: Node3D = null
 ## Where he stepped in among the furniture from (on the floor clear of it),
 ## and whether he is in among it still.
 var _came_from := Vector3.ZERO
@@ -228,6 +262,7 @@ func roll() -> void:
 ## his rounds kept lit; a mutter now and then.
 func update(delta: float) -> void:
 	_standing = maxf(_standing - delta, 0.0)
+	_stepping = Vector3.ZERO
 	_keep_light(delta)
 	_shove_back(delta)
 
@@ -238,7 +273,9 @@ func update(delta: float) -> void:
 		if _clearing > CLEAR_TIME or Vector2(off.x, off.z).length() > CLEAR_BY:
 			_unexcept()
 
-	if habit != &"" and not _at_ease():
+	# Stirred, or plainly not at ease: whatever it was is over. A little on
+	# his mind, short of suspicious, and he carries on.
+	if habit != &"" and not _at_ease(true):
 		interrupt()
 
 	if _dozing:
@@ -279,6 +316,18 @@ func head() -> Vector2:
 		return Vector2(0.0, -0.5)
 
 	return Vector2(_look_yaw, _look_pitch)
+
+
+## Whether what he is doing leaves his head free to look round at someone
+## (not asleep, not at work, not a drink at his lips).
+func head_free() -> bool:
+	return _standing <= 0.0 and not _dozing and (habit == &"" or _pose in HEAD_FREE)
+
+
+## Stepping into place: how fast his feet carry him (world, flat), for the
+## rig; zero when he is not.
+func stepping() -> Vector3:
+	return _stepping
 
 
 ## Standing at his post or his waypoint, nothing on: after a while he finds
@@ -362,12 +411,21 @@ func wake(startled := true) -> void:
 func _choose(on_rounds: bool) -> void:
 	var hands: RefCounted = guard.get("_hands")
 	var lit: bool = hands != null and hands.lantern != null
+	var wary: bool = guard.has_method("wary") and guard.wary()
 	var home: Vector3 = guard.global_position if on_rounds else guard._home.origin
 	var reach := 4.5 if on_rounds else float(guard.get("habit_range"))
 	var options := {}
 
 	for each in HABITS:
 		var pull: float = float(leanings.get(each, 0.0))
+
+		# Wary: nothing that takes him off his guard. A man given to none of
+		# what is left still looks about him.
+		if wary and not (each in WARY_HABITS):
+			continue
+
+		if wary and each == &"fidget":
+			pull = maxf(pull, 0.5)
 
 		if pull <= 0.0:
 			continue
@@ -387,7 +445,7 @@ func _choose(on_rounds: bool) -> void:
 		var each: StringName = _pick(options)
 		options.erase(each)
 
-		if _start(each, home, reach, lit):
+		if _start(each, home, reach, lit, wary):
 			return
 
 
@@ -410,7 +468,7 @@ static func _pick(options: Dictionary) -> StringName:
 
 
 ## Starts `each` near `home` (within `reach`) if it can be done there.
-func _start(each: StringName, home: Vector3, reach: float, lit: bool) -> bool:
+func _start(each: StringName, home: Vector3, reach: float, lit: bool, wary := false) -> bool:
 	var tree := guard.get_tree()
 
 	match each:
@@ -461,23 +519,30 @@ func _start(each: StringName, home: Vector3, reach: float, lit: bool) -> bool:
 			_begin(each, [{"do": &"go", "to": to}, {"do": &"pose", "pose": &"", "time": 2.0, "look": &"about"}])
 			return true
 		&"fidget":
-			return _start_fidget(lit)
+			return _start_fidget(lit, wary)
 
 	return false
 
 
-func _start_fidget(lit: bool) -> bool:
+func _start_fidget(lit: bool, wary := false) -> bool:
 	var options := {}
 
 	for each in fidgets.keys():
-		# A light in his hand: his head only.
+		# A light in his hand: his head only. Wary: his eyes on his ground.
 		if lit and not (each in [&"look_about", &"look_up", &"mutter"]):
+			continue
+
+		if wary and not (each in WARY_FIDGETS):
 			continue
 
 		options[each] = fidgets[each]
 
-	# A merry man dances, when nobody is by.
-	if quirk == &"merry" and not lit and _alone(10.0):
+	# Wary, whatever his leanings: a look about him.
+	if wary and options.is_empty():
+		options[&"look_about"] = 1.0
+
+	# A merry man dances, when nobody is by (and nothing is afoot).
+	if quirk == &"merry" and not lit and not wary and _alone(10.0):
 		options[&"dance"] = 2.0
 
 	if options.is_empty():
@@ -489,7 +554,7 @@ func _start_fidget(lit: bool) -> bool:
 		&"fold_arms":
 			_begin(&"fidget", [{"do": &"pose", "pose": &"fold_arms", "time": randf_range(4.0, 8.0), "rest": true}])
 		&"drink":
-			_begin(&"fidget", [{"do": &"pose", "pose": &"drink", "time": 1.33}])
+			_begin(&"fidget", [{"do": &"pose", "pose": &"drink", "time": 1.33, "at": [FLASK_AT, _take_flask], "exit": _let_go}])
 		&"look_about":
 			_begin(&"fidget", [{"do": &"pose", "pose": &"", "time": 4.0, "look": &"about", "rest": true}])
 		&"look_up":
@@ -502,7 +567,8 @@ func _start_fidget(lit: bool) -> bool:
 			_begin(&"fidget", [{"do": &"pose", "pose": &"dance", "time": 3.75}])
 		&"mutter":
 			guard.say(&"mutter")
-			_begin(&"fidget", [{"do": &"pose", "pose": &"" if lit else &"fold_arms", "time": 3.0, "look": &"about" if lit else &"", "rest": true}])
+			var head_only := lit or wary
+			_begin(&"fidget", [{"do": &"pose", "pose": &"" if head_only else &"fold_arms", "time": 3.0, "look": &"about" if head_only else &"", "rest": true}])
 
 	return true
 
@@ -514,7 +580,7 @@ func _plan(each: StringName) -> Array:
 
 	match each:
 		&"sit":
-			var chair: Node3D = spot.get_meta(&"tuck", null)
+			var chair: Node3D = spot.get_meta(&"tuck") if spot.has_meta(&"tuck") else null
 
 			if chair != null and is_instance_valid(chair) and chair.has_meta(&"home"):
 				return _plan_at_table(at, facing, chair)
@@ -522,9 +588,9 @@ func _plan(each: StringName) -> Array:
 			var steps: Array = [
 				{"do": &"go", "to": at},
 				{"do": &"settle", "to": at, "face": facing, "bodies": spot.get_meta(&"bodies", [])},
-				{"do": &"pose", "pose": &"sit_down", "time": 1.6, "face": facing, "enter": _sheathe},
+				{"do": &"pose", "pose": &"sit_down", "time": 1.6, "face": facing, "enter": _sit_down, "at": [SEATED_AT, _seated]},
 				{"do": &"pose", "pose": &"sit", "time": randf_range(SIT_TIME.x, SIT_TIME.y), "rest": true, "doze": true, "face": facing},
-				{"do": &"pose", "pose": &"stand_up", "time": 1.25, "face": facing},
+				{"do": &"pose", "pose": &"stand_up", "time": 1.25, "face": facing, "enter": _rustle},
 				{"do": &"settle", "back": true, "face": facing},
 			]
 			_doze_in = randf_range(DOZE_AFTER.x, DOZE_AFTER.y)
@@ -546,7 +612,7 @@ func _plan(each: StringName) -> Array:
 				{"do": &"go", "to": at},
 				{"do": &"settle", "to": at, "face": facing},
 				{"do": &"pose", "pose": &"reach", "time": 1.04, "face": facing, "at": [0.55, _take_bread], "enter": _sheathe},
-				{"do": &"pose", "pose": &"eat", "time": 2.66, "face": facing, "exit": _let_go},
+				{"do": &"pose", "pose": &"eat", "time": 2.66, "face": facing, "every": [EAT_CYCLE, BITE_AT, _bite], "exit": _let_go},
 			]
 		&"chop":
 			var swings := randi_range(CHOPS.x, CHOPS.y)
@@ -562,11 +628,17 @@ func _plan(each: StringName) -> Array:
 				{"do": &"pose", "pose": &"", "time": 0.4, "face": facing, "enter": _let_go},
 			]
 		&"tend":
+			var tending := {"do": &"pose", "pose": &"tend", "time": randf_range(TEND_TIME.x, TEND_TIME.y), "face": facing}
+
+			# At a fire: now and then a log pushed in, and it flares.
+			if spot.has_meta(&"fire"):
+				tending["every"] = [STOKE_EVERY, STOKE_FIRST, _stoke]
+
 			return [
 				{"do": &"go", "to": at},
 				{"do": &"settle", "to": at, "face": facing},
 				{"do": &"pose", "pose": &"kneel_down", "time": 1.35, "face": facing, "enter": _sheathe},
-				{"do": &"pose", "pose": &"tend", "time": randf_range(TEND_TIME.x, TEND_TIME.y), "face": facing},
+				tending,
 				{"do": &"pose", "pose": &"kneel_up", "time": 1.1, "face": facing},
 			]
 
@@ -587,11 +659,11 @@ func _plan_at_table(at: Vector3, facing: Vector3, chair: Node3D) -> Array:
 	return [
 		{"do": &"go", "to": out_at},
 		{"do": &"settle", "to": out_at, "face": facing, "bodies": spot.get_meta(&"bodies", []), "move": [chair, chair_out]},
-		{"do": &"pose", "pose": &"sit_down", "time": 1.6, "face": facing, "enter": _sheathe},
+		{"do": &"pose", "pose": &"sit_down", "time": 1.6, "face": facing, "enter": _sit_down, "at": [SEATED_AT, _seated]},
 		{"do": &"settle", "to": at, "face": facing, "pose": &"sit", "move": [chair, home], "time": SCOOT_TIME, "tuck": tuck},
 		{"do": &"pose", "pose": &"sit", "time": randf_range(SIT_TIME.x, SIT_TIME.y), "rest": true, "doze": true, "face": facing},
 		{"do": &"settle", "to": out_at, "face": facing, "pose": &"sit", "move": [chair, chair_out], "time": SCOOT_TIME, "untuck": true},
-		{"do": &"pose", "pose": &"stand_up", "time": 1.25, "face": facing},
+		{"do": &"pose", "pose": &"stand_up", "time": 1.25, "face": facing, "enter": _rustle},
 		{"do": &"settle", "back": true, "face": facing, "move": [chair, home]},
 	]
 
@@ -748,11 +820,13 @@ func _go(step: Dictionary, delta: float) -> void:
 
 
 ## The last of the way: a step into place (among the seat's legs, under the
-## table's edge), turning to face as he does. "back": the step out again, to
-## where he stepped in from.
+## table's edge), turning to face as he does; on his feet he walks it (his
+## legs shown going, stepping()), sat he shuffles his chair with him. "back":
+## the step out again, to where he stepped in from.
 func _settle(step: Dictionary, delta: float) -> void:
 	var back: bool = step.get("back", false)
 	var moved: Array = step.get("move", [])
+	var to: Vector3 = _came_from if back else step["to"]
 
 	if _t <= delta:
 		_settle_from = guard.global_position
@@ -767,20 +841,36 @@ func _settle(step: Dictionary, delta: float) -> void:
 				_excepted.append(body)
 				_among = true
 
+		# A chair drawn out or pushed in scrapes the floor.
 		if not moved.is_empty() and is_instance_valid(moved[0]):
 			_moved_from = (moved[0] as Node3D).global_position
+			Sfx.play(guard, &"scuff", _moved_from, -4.0, randf_range(0.7, 0.8))
 
 		if step.has("tuck"):
 			_tucked = step["tuck"]
 
+		var way := Vector2(to.x - _settle_from.x, to.z - _settle_from.z).length()
+		_settle_time = float(step["time"]) if step.has("time") else maxf(SETTLE_TIME, way / SETTLE_PACE)
+		# Walking in, he carries on at the pace he came at and slows into
+		# place (never so fast that he would overshoot it); from standing, he
+		# steps off and slows the same.
+		_settle_v = Vector3(guard.velocity.x, 0.0, guard.velocity.z)
+
+		if _settle_v.length() * _settle_time > way * 2.5:
+			_settle_v = _settle_v.normalized() * way * 2.5 / _settle_time
+
 	_pose = step.get("pose", &"")
-	var to: Vector3 = _came_from if back else step["to"]
-	var u := clampf(_t / float(step.get("time", SETTLE_TIME)), 0.0, 1.0)
+	var u := clampf(_t / _settle_time, 0.0, 1.0)
+	var at := _eased_way(_settle_from, _settle_v * _settle_time, to, u)
 	var eased := smoothstep(0.0, 1.0, u)
-	var at := _settle_from.lerp(to, eased)
-	guard.global_position = Vector3(at.x, guard.global_position.y, at.z)
+	var was := guard.global_position
+	guard.global_position = Vector3(at.x, was.y, at.z)
 	guard.velocity = Vector3(0.0, guard.velocity.y, 0.0)
 	guard._face(step["face"], delta, 2.5)
+
+	# On his feet (not sat, shuffling his chair): his legs take him there.
+	if _pose == &"" or _pose == &"carry":
+		_stepping = Vector3(at.x - was.x, 0.0, at.z - was.z) / maxf(delta, 0.0001)
 
 	# What he moves as he goes (a chair drawn out or in).
 	if not moved.is_empty() and is_instance_valid(moved[0]):
@@ -794,6 +884,14 @@ func _settle(step: Dictionary, delta: float) -> void:
 			_tucked = {}
 
 		_next()
+
+
+## `u` (0..1) of the way from `from` to `to`, setting off along `off` (the
+## pace he came at times the time it takes) and slowing to a stop there.
+static func _eased_way(from: Vector3, off: Vector3, to: Vector3, u: float) -> Vector3:
+	var u2 := u * u
+	var u3 := u2 * u
+	return from * (2.0 * u3 - 3.0 * u2 + 1.0) + off * (u3 - 2.0 * u2 + u) + to * (3.0 * u2 - 2.0 * u3)
 
 
 func _hold(step: Dictionary, delta: float) -> void:
@@ -962,9 +1060,9 @@ func _unexcept() -> void:
 	_excepted.clear()
 
 
-func _at_ease() -> bool:
+func _at_ease(still := false) -> bool:
 	var life: RefCounted = guard.get("_life")
-	return int(guard.state) == RELAXED and (life == null or life.at_ease(guard))
+	return int(guard.state) == RELAXED and (life == null or life.at_ease(guard, still))
 
 
 func _dozy() -> bool:
@@ -1025,29 +1123,62 @@ func _wall_behind() -> Dictionary:
 # Things in his hands
 # ---------------------------------------------------------------------------
 
-## His blade put by while his hands are busy (and back after).
+## His hands wanted for his ways at ease (a seat, the axe, bread, a crate,
+## kneeling at his work): his blade put by for them if it was out, and free
+## for it again after (GuardRig shows it, and is heard).
 func _sheathe() -> void:
-	var rig: Node = guard.get("_rig")
-
-	if rig != null and rig.get("weapon") != null:
-		rig.weapon.visible = false
-		_sheathed = true
+	_sheathed = true
 
 
 func _unsheathe() -> void:
-	if not _sheathed:
-		return
-
 	_sheathed = false
-	var rig: Node = guard.get("_rig")
-	var hands: RefCounted = guard.get("_hands")
 
-	if rig != null and rig.get("weapon") != null and hands != null:
-		rig.weapon.visible = hands.armed and hands.held == null and not (hands.lantern != null and hands.light_kind == &"lantern")
+
+## Down onto the seat: his blade put by, his clothes rustling as he goes.
+func _sit_down() -> void:
+	_sheathe()
+	_rustle()
+
+
+## His weight on the seat: it creaks under him.
+func _seated() -> void:
+	Sfx.play(guard, &"creak_rope", guard.global_position + Vector3.UP * 0.45, -2.0, randf_range(0.55, 0.7))
+
+
+## His clothes and his mail as he sits down or gets up.
+func _rustle() -> void:
+	Sfx.play(guard, &"cloth", guard.global_position + Vector3.UP * 0.8, 2.0)
 
 
 func _take_bread() -> void:
-	_hold_thing(&"hand_l", _bread(), BREAD_GRIP)
+	_bread_held = _bread()
+	_hold_thing(&"hand_l", _bread_held, BREAD_GRIP)
+
+
+## A mouthful off the bread in his hand: less of it left.
+func _bite() -> void:
+	if _bread_held != null and is_instance_valid(_bread_held):
+		_bread_held.scale *= BITE_LEFT
+
+
+func _take_flask() -> void:
+	_hold_thing(&"hand_l", _flask(), FLASK_GRIP)
+
+
+## A log pushed into the fire: sparks up off it, and the flame flares a
+## moment and crackles.
+func _stoke() -> void:
+	var flame: Node3D = spot.get_meta(&"fire") if spot != null and is_instance_valid(spot) and spot.has_meta(&"fire") else null
+
+	if flame == null or not is_instance_valid(flame):
+		return
+
+	var at := flame.global_position + Vector3.UP * 0.05
+	Fx.sparks(guard, at, Vector3.UP, 0.3, false)
+	Sfx.play(guard, &"burning", at, -4.0, randf_range(0.9, 1.15))
+
+	if flame.has_method("flare"):
+		flame.flare(1.0)
 
 
 func _take_axe() -> void:
@@ -1073,6 +1204,7 @@ func _let_go() -> void:
 			holder.queue_free()
 
 	_held.clear()
+	_bread_held = null
 
 
 ## A blow of the axe on the log: heard well off, chips flying.
@@ -1093,6 +1225,33 @@ static func _bread() -> Node3D:
 	paint.albedo_color = Color(0.62, 0.43, 0.2)
 	bread.material_override = paint
 	return bread
+
+
+## A leather flask: its body in his fist, the neck and its stopper out of the
+## top.
+static func _flask() -> Node3D:
+	var flask := Node3D.new()
+	var leather := StandardMaterial3D.new()
+	leather.albedo_color = Color(0.3, 0.19, 0.11)
+	leather.roughness = 0.8
+
+	for part in [[0.042, 0.13, 0.0], [0.015, 0.04, 0.085], [0.018, 0.022, 0.112]]:
+		var tube := CylinderMesh.new()
+		tube.top_radius = part[0]
+		tube.bottom_radius = part[0]
+		tube.height = part[1]
+		tube.radial_segments = 12
+		var drawn := MeshInstance3D.new()
+		drawn.mesh = tube
+		drawn.material_override = leather
+		flask.add_child(drawn)
+		drawn.position = Vector3(0.0, part[2], 0.0)
+
+	# The stopper, a darker wood.
+	var cork := StandardMaterial3D.new()
+	cork.albedo_color = Color(0.45, 0.33, 0.2)
+	(flask.get_child(2) as MeshInstance3D).material_override = cork
+	return flask
 
 
 ## A woodsman's axe: a haft, and the head across its end.
@@ -1172,6 +1331,8 @@ func _take_crate() -> void:
 	best.global_basis = guard.global_basis
 	best.reset_physics_interpolation()
 	Sfx.play(guard, &"grab", best.global_position, -4.0)
+	# The weight of it.
+	guard.voice(&"grunt", -12.0)
 
 
 ## The crate set down on this pile.

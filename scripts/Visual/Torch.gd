@@ -10,6 +10,9 @@ extends Node3D
 ## muffled through a wall, a little different from every other torch. It only
 ## plays while you are near enough to hear it.
 ##
+## A log pushed into it (flare) and it flares up a moment, brighter and
+## taller.
+##
 ##   var torch := Torch.new(); torch.position = Vector3(0, 2.2, 0); add_child(torch)
 
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -20,6 +23,10 @@ const CRACKLE := "res://audio/ambience/torch_loop.ogg"
 ## How loud its crackle is (dB at a metre or so), and how far it carries.
 const CRACKLE_DB := -13.0
 const CRACKLE_REACH := 11.0
+## Flaring up: this much brighter and taller at first, gone in this long (s).
+const FLARE_LIGHT := 0.6
+const FLARE_SIZE := 0.45
+const FLARE_TIME := 0.9
 
 @export var color := Color(1.0, 0.64, 0.32)
 @export var energy := 2.4
@@ -41,6 +48,8 @@ var _time := 0.0
 var _phase := 0.0
 var _listen_in := 0.0
 var _crackle_db := CRACKLE_DB
+## Flaring up (a log pushed in): 1 at once, fading.
+var _flare := 0.0
 
 
 func _ready() -> void:
@@ -113,13 +122,21 @@ func _process(delta: float) -> void:
 		+ sin(_time * 5.3 + 1.1) * 0.35
 		+ sin(_time * 13.1 + 2.3) * 0.2
 	)
-	light.light_energy = energy * (1.0 + flicker * n)
+	_flare = move_toward(_flare, 0.0, delta / FLARE_TIME)
+	var flared := _flare * _flare
+	light.light_energy = energy * (1.0 + flicker * n) * (1.0 + FLARE_LIGHT * flared)
 	light.position = Vector3(sin(_time * 3.1) * 0.02, 0.12 + sin(_time * 4.7) * 0.015, cos(_time * 2.9) * 0.02)
 
 	var frame := int(floor(_time * frame_rate)) % 4
 	_flame_material.uv1_offset = Vector3(0.25 * frame, 0.0, 0.0)
-	flame.scale = Vector3.ONE * (1.0 + 0.08 * n)
+	flame.scale = Vector3.ONE * (1.0 + 0.08 * n) * (1.0 + FLARE_SIZE * flared)
 	_listen(delta)
+
+
+## Flares up a moment (a log pushed into a fire): brighter and taller, then
+## back as it was over FLARE_TIME.
+func flare(amount := 1.0) -> void:
+	_flare = maxf(_flare, clampf(amount, 0.0, 1.0))
 
 
 ## Its crackle: started when you come near enough to hear it (somewhere in
