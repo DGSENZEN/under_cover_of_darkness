@@ -243,6 +243,39 @@ func _run() -> void:
 		chopped[0] and leaned[0],
 		"chop %s, lean %s" % [chopped[0], leaned[0]])
 
+	# T13 a carrier knocked out mid-carry: his crate falls loose
+	await _fresh()
+	var drop13 := Marker3D.new()
+	add_child(drop13)
+	drop13.global_position = Vector3(165, 0, 5)
+	drop13.add_to_group(&"stations_props")
+	var crate13 := _crate(Vector3(150.6, 0.3, 5))
+	var pick13 := _station(&"carry", Vector3(150, 0, 5), -PI * 0.5, {"drop_to": drop13})
+	var g13 := _guard(Vector3(150, 0, 8), [pick13])
+	await _until(func(): return g13._rota.carried == crate13 and g13.activity() == &"carry", 2400)
+	await _frames(20)
+	var held13: bool = g13._rota.carried == crate13
+	var height13 := crate13.global_position.y
+	g13.knock_out(g13, true)
+	await _frames(60)
+	_check("T13 a carrier knocked out mid-carry lets his crate fall loose",
+		held13 and not crate13.freeze and crate13.collision_layer == 1 and crate13.global_position.y < height13 - 0.3,
+		"was holding %s, frozen %s, layer %d, height %.2f -> %.2f" % [held13, crate13.freeze, crate13.collision_layer, height13, crate13.global_position.y])
+
+	# T14 a quartermaster killed at an open chest leaves the lid shut
+	await _fresh()
+	var chest14: Node3D = Props.chest(self, Vector3(120, 0, -1.2), 0.0)
+	chest14.add_to_group(&"stations_props")
+	var at14 := _station(&"rummage", Vector3(120, 0, 0), PI, {"chest": chest14})
+	var g14 := _guard(Vector3(121, 0, 3), [at14])
+	await _until(func(): return g14.activity() == &"rummage", 1200)
+	var open14: bool = chest14.is_open
+	g14.take_hit(999.0, null, &"backstab", g14.global_position + Vector3.UP, Vector3.FORWARD)
+	await _frames(40)
+	_check("T14 a quartermaster killed at an open chest leaves it shut and the station free",
+		open14 and not chest14.is_open and at14.holder == null,
+		"was open %s, open now %s, holder %s" % [open14, chest14.is_open, at14.holder])
+
 	# T11 an eater sits and eats
 	await _fresh()
 	var seat11 := _station(&"eat", Vector3(230, 0, 0), PI)

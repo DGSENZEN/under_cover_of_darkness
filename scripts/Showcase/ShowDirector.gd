@@ -15,8 +15,9 @@ extends Node
 ## the beat's length), "enough" (s: done by then whatever, not skipped),
 ## "timeout" (s: let go, logged), "shot" (for ShowCamera)}.
 ##
-## Keys: 1-5 start from that act, N the next beat, E the ending, R the start
-## again, Space pause, [ ] slow motion (1/4, 1/2, 1). The command line (after
+## Keys: 1-5 start from that act, N the next beat, V Act V's ending (E is
+## the camera's: fly up), R the start again, Space pause, [ ] slow motion
+## (1/4, 1/2, 1). A beat's time is the world's: slowed, it waits longer. The command line (after
 ## --): --act=N --ending=overwhelmed|victor|escape --auto --quit-at-end.
 
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
@@ -142,7 +143,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			jump_to(key - KEY_0)
 		KEY_N:
 			next_beat()
-		KEY_E:
+		KEY_V:
 			cycle_ending()
 		KEY_R:
 			jump_to(1)
@@ -246,7 +247,9 @@ func _play_beat(beat: Dictionary) -> void:
 		if get_tree().paused:
 			continue
 
-		elapsed += 1.0 / float(Engine.physics_ticks_per_second)
+		# The world's time, not the wall's: in slow motion (or a hit-stop) a
+		# beat waits as long as the world takes.
+		elapsed += Engine.time_scale / float(Engine.physics_ticks_per_second)
 
 		if _skip:
 			_skip = false

@@ -101,6 +101,9 @@ var _recent_at := -100.0
 func _init() -> void:
 	name = "ShowCamera"
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Moved every drawn frame, so drawn where it is put (interpolated between
+	# physics ticks it would lag and judder: PlayerController does the same).
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	fov = 55.0
 
 

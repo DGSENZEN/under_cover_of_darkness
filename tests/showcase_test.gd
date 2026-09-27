@@ -14,6 +14,7 @@ const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const CameraScript := preload("res://scripts/Showcase/ShowCamera.gd")
 const OverlayScript := preload("res://scripts/Showcase/ShowOverlay.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 ## Who is at which kind of station at the start of the night.
 const STATIONED := {"Piers": &"sit", "Col": &"eat", "Tam": &"sleep", "Gideon": &"rummage", "Ned": &"carry", "Brand": &"chop"}
@@ -30,6 +31,14 @@ const SHOWS := {
 var results: Array[String] = []
 ## The showcase now loaded (a reload swaps it: _reload).
 var _loaded: Node = null
+
+
+## Game time, as the world lives it (slowed with it).
+class GameClock extends Node:
+	var seconds := 0.0
+
+	func _physics_process(delta: float) -> void:
+		seconds += delta
 
 
 ## A story for the director's own checks: beats that end, and one that never
@@ -164,7 +173,50 @@ func _run() -> void:
 		paused11 and not get_tree().paused and is_equal_approx(after11, 0.5),
 		"paused %s, now paused %s, time after %.3f" % [paused11, get_tree().paused, after11])
 	director11.queue_free()
+
+	# D20 in slow motion a beat's time is the world's time
+	var clock20 := GameClock.new()
+	add_child(clock20)
+	var story20 := TestStory.new()
+	story20.acts_list = [{"title": "Slow", "beats": [
+		{"name": &"a_second", "until": func(): return clock20.seconds >= 1.0, "timeout": 2.0},
+		{"name": &"after", "min": 0.1},
+	]}]
+	var director20: Node = DirectorScript.new()
+	add_child(director20)
+	director20.setup(null, story20)
+	director20.set_speed(0)
+	var skipped20 := []
+	var ended20 := [false]
+	director20.beat_skipped.connect(func(n): skipped20.append(n))
+	director20.show_ended.connect(func(): ended20[0] = true)
+	director20.run()
+	await _until(func(): return ended20[0], 900)
+	director20.set_speed(2)
+	_check("D20 at quarter speed a beat waits in the world's time: one second of game time comes before its two-second timeout",
+		ended20[0] and skipped20.is_empty() and clock20.seconds >= 1.0,
+		"ended %s, skipped %s, game time %.2f s" % [ended20[0], skipped20, clock20.seconds])
+	director20.queue_free()
+	clock20.queue_free()
 	await _unload(_loaded)
+
+	# D19 the showcase starts the score and the ambience (Sfx.warm)
+	var was_enabled := Sfx.enabled
+	Sfx.enabled = true
+	var map19 := await _map(false)
+	await _frames(5)
+	var music19 := get_tree().current_scene.get_node_or_null("Music") != null
+	Sfx.enabled = was_enabled
+	_check("D19 the showcase starts the score and the ambience (there is a Music node)",
+		music19,
+		"music %s" % music19)
+	var music_node := get_tree().current_scene.get_node_or_null("Music")
+	if music_node != null:
+		music_node.queue_free()
+	var ambience_node := get_tree().current_scene.get_node_or_null("Ambience")
+	if ambience_node != null:
+		ambience_node.queue_free()
+	await _unload(map19)
 
 	# ------------------------------------------------------------------
 	# The camera
@@ -201,6 +253,44 @@ func _run() -> void:
 	_check("D14 a \"close\" shot on a guard ends with his head in the middle third of the view",
 		middle and camera.global_position.distance_to(head) < 4.0,
 		"head at %s of %s, %.1f m off; camera %s looking at %s, aiming at %s, forward to head %.2f, mode %d, osric moved %s" % [on_screen, size, camera.global_position.distance_to(head), camera.global_position, camera._look_at, camera._goal_look, (-camera.global_basis.z).dot((head - camera.global_position).normalized()), camera.mode, osric.velocity])
+
+	# D22 the camera is drawn where it is put (not physics-interpolated: it
+	# moves every drawn frame)
+	await _frames(30)
+	var drawn22: Vector3 = camera.get_global_transform_interpolated().origin
+	_check("D22 the show camera is drawn where it is put, not interpolated between physics ticks",
+		camera.physics_interpolation_mode == Node.PHYSICS_INTERPOLATION_MODE_OFF and drawn22.distance_to(camera.global_position) < 0.01,
+		"mode %d, drawn %.3f m from where it is" % [camera.physics_interpolation_mode, drawn22.distance_to(camera.global_position)])
+
+	# D21 choosing the ending is not flying: V chooses it and leaves the
+	# director the camera; E flies and leaves the ending alone
+	var director21: Node = DirectorScript.new()
+	add_child(director21)
+	director21.setup(map13, null)
+	camera.mode = CameraScript.Mode.DIRECTOR
+	var ending_before: StringName = DirectorScript.ending
+	var v := InputEventKey.new()
+	v.physical_keycode = KEY_V
+	v.pressed = true
+	Input.parse_input_event(v)
+	await _frames(5)
+	var chose21: bool = DirectorScript.ending != ending_before and camera.mode == CameraScript.Mode.DIRECTOR
+	var ending_mid: StringName = DirectorScript.ending
+	var e_down := InputEventKey.new()
+	e_down.physical_keycode = KEY_E
+	e_down.pressed = true
+	Input.parse_input_event(e_down)
+	await _frames(10)
+	var e_up := InputEventKey.new()
+	e_up.physical_keycode = KEY_E
+	e_up.pressed = false
+	Input.parse_input_event(e_up)
+	await _frames(2)
+	_check("D21 V chooses the ending and leaves the camera to the director; E flies and leaves the ending alone",
+		chose21 and DirectorScript.ending == ending_mid and camera.mode == CameraScript.Mode.FREE,
+		"chose %s, ending after E %s (was %s), camera mode %d" % [chose21, DirectorScript.ending, ending_mid, camera.mode])
+	director21.queue_free()
+	DirectorScript.ending = &"random"
 
 	# D15 flying while paused
 	camera.mode = CameraScript.Mode.FREE

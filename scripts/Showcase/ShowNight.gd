@@ -413,7 +413,7 @@ func _lost_him() -> bool:
 			seen = true
 			break
 
-	_unseen = 0.0 if seen else _unseen + 1.0 / float(Engine.physics_ticks_per_second)
+	_unseen = 0.0 if seen else _unseen + Engine.time_scale / float(Engine.physics_ticks_per_second)
 	return _brain() != null and _brain().done() and _unseen >= LOST_FOR
 
 

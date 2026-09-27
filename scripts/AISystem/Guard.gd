@@ -1806,6 +1806,10 @@ func _let_go() -> void:
 		_hands.drop_held()
 		_hands.drop_lantern()
 
+	# And whatever his station had in his hands (GuardRota).
+	if _rota != null:
+		_rota.release()
+
 	var dropped: RigidBody3D = _rig.drop_weapon()
 
 	if _hands != null:

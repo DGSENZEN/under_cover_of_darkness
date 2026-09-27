@@ -16,7 +16,7 @@ extends Node3D
 ##   open above (rafters, no roof), so a camera overhead sees into it.
 ##
 ## Keys (ShowDirector, ShowCamera, ShowOverlay):
-##   1-5 start from that act       N the next beat       E the ending
+##   1-5 start from that act       N the next beat       V Act V's ending
 ##   R from the start again        Space pause           [ ] slow motion
 ##   C the camera to the director  Tab follow the next man, or click on one
 ##   WASD Q/E fly (right mouse held to look, Shift fast, the wheel for speed)
@@ -56,6 +56,7 @@ const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const DirectorScript := preload("res://scripts/Showcase/ShowDirector.gd")
 const CameraScript := preload("res://scripts/Showcase/ShowCamera.gd")
 const OverlayScript := preload("res://scripts/Showcase/ShowOverlay.gd")
@@ -122,6 +123,11 @@ func _ready() -> void:
 	GarrisonScript.clear_all()
 	LightProbe.invalidate()
 	build()
+
+	# Its sound: the recordings loaded, the ambience, the stone's acoustics,
+	# the score (Sfx.warm: what the player's arrival does in a level).
+	set_meta(&"acoustics", "stone")
+	Sfx.warm(self)
 	await _baker.baked
 	LightProbe.invalidate()
 

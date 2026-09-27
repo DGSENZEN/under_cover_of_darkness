@@ -184,6 +184,29 @@ func patrol(delta: float) -> void:
 			_stay(station, delta)
 
 
+## Down or dead (Guard._let_go): the crate in his arms falls loose, an open
+## lid is shut, his station is free for another.
+func release() -> void:
+	if carried != null and is_instance_valid(carried):
+		_drop(carried, guard.velocity)
+
+	carried = null
+	_crate = null
+	_asleep = false
+	var station := _held()
+
+	if station != null:
+		var chest: Node3D = station.chest_node() if StringName(station.kind) == &"rummage" else null
+
+		if chest != null and bool(chest.get("is_open")):
+			chest.frob(guard)
+
+		station.release(guard)
+
+	_step = Step.NONE
+	_activity = &""
+
+
 ## Something stirred him: his station is over, the way it ends.
 func stir() -> void:
 	var station := _held()
