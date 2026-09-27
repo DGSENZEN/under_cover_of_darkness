@@ -121,3 +121,138 @@ cooldown: 2m
 group: small_talk
 A: Did you hear something?
 B: Only your stomach.
+
+# The men of the yard, and what is between them.
+
+== brand_rats
+when: at_ease
+cast: A = name(Brand); B = name(Ned)
+cooldown: once
+A: Oi, recruit. Ever seen a rat the size of a dog?
+B: No...
+A: Keep your feet off the drains, then.
+B {if craven}: You're making that up. Aren't you?
+B: I'll keep that in mind.
+
+== col_supper
+when: at_ease
+cast: A = name(Col); B = friend(A)
+cooldown: once
+A: You going to eat that?
+B: I was.
+A: Were.
+B [sighs]: Take it.
+
+== aldous_snow
+when: at_ease
+cast: A = old_guard; B = any
+cooldown: once
+A: My knees say snow before morning.
+B: Your knees said that last week.
+A: And was it warm last week?
+B [shrugs]: No.
+
+== wat_fishwife
+when: at_ease
+cast: A = gambler; B = any
+cooldown: once
+A: The fishmonger's wife ran off with a bargeman.
+B: Which fishmonger?
+A: Does it matter? It's a good story either way.
+
+== hendrik_wall
+when: at_ease
+cast: A = name(Hendrik); B = name(Ned)
+cooldown: once
+A: Keep your back to a wall, Ned. Always.
+B: Why?
+A: So nothing comes at you from where you can't see.
+B [nods]: A wall. Right.
+
+== gideon_candles
+when: at_ease
+cast: A = ledger; B = any
+cooldown: once
+A: Eleven candles signed out. Nine came back.
+B: Maybe they burned.
+A: Candles don't burn in a cupboard.
+
+== jory_south
+when: at_ease
+cast: A = sweetheart; B = any
+cooldown: once
+A: When the pay comes, I'm taking her south.
+B: South's a long way on a guard's pay.
+A [shrugs]: Then we'll walk slow.
+
+== captain_from
+when: at_ease, present(Mirelle)
+cast: A = not(captain); B = not(captain)
+cooldown: once
+A: Where's the captain from, anyway?
+B: The south. Where the sun comes out.
+A: No wonder she's always cold.
+
+== glass_worth
+when: at_ease
+cast: A = any; B = any
+cooldown: 15m
+A: What's it worth, that glass in the tower?
+B: More than you'll earn if you live to a hundred.
+A: Then why's it guarded by us?
+B [laughs]: We come cheap.
+
+== lantern_round
+when: at_ease
+cast: A = any; B = any
+cooldown: 15m
+A: First round at the Lantern when we're off?
+B: If you're paying.
+A: I paid last time.
+B: Then you know how it's done.
+
+== canal_smell
+when: at_ease
+cast: A = any; B = any
+cooldown: 15m
+A: Smell that? The canal's up again.
+B: That's not the canal. That's Brand's boots.
+
+== hollin_emeralds
+when: at_ease
+cast: A = any; B = any
+cooldown: once
+A: Hollin had his emeralds stolen, they say.
+B: Out of a locked room, three floors up.
+A: Good thing we've no emeralds here.
+B [looks:the tower]: No. Just the glass.
+
+== tam_saw
+when: at_ease, asleep(Tam)
+cast: A = any; B = any
+cooldown: once
+A [looks:the shed]: Listen to him. Like a saw through wet wood.
+B: At least we know he's alive.
+
+== col_luck
+when: at_ease
+cast: A = any; B = lucky
+cooldown: once
+A: How do you win every throw?
+B [shrugs]: Clean living.
+A: You've never lived clean a day in your life.
+
+== wat_aldous_tower
+when: at_ease, present(Aldous)
+cast: A = name(Wat); B = name(Aldous)
+cooldown: 15m
+A [shouts]: Still up your tower, old man?
+B [shouts]: Still down on your arse, boy?
+
+== osric_brother
+when: at_ease, present(Jory)
+cast: A = name(Osric); B = not(kin(A))
+cooldown: once
+A: Keep an eye on my brother tonight.
+B: He's a grown man.
+A: He's a grown man with his head in the clouds.

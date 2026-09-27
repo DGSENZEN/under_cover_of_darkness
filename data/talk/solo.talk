@@ -11,3 +11,608 @@ place: sleep
 cast: A = name(Tam)
 cooldown: 3m
 A [murmurs]: No, mother... not the eels...
+
+== solo_sit_1
+place: sit
+cast: A = any
+cooldown: 5m
+A: My backside's gone to sleep.
+
+== solo_sit_2
+place: sit
+cast: A = any
+cooldown: 5m
+A: Best seat in the yard, this.
+
+== solo_sit_3
+place: sit
+cast: A = any
+cooldown: 5m
+A: If I sit any closer I'll catch light.
+
+== solo_sit_4
+place: sit
+cast: A = any
+cooldown: 5m
+A: Wood's damp. It spits.
+
+== solo_sit_5
+place: sit
+cast: A = any
+cooldown: 5m
+A: Another hour. Just another hour.
+
+== solo_sit_6
+place: sit
+cast: A = any
+cooldown: 5m
+A: Gods, the smoke gets in everything.
+
+== solo_sit_7
+place: sit
+cast: A = any
+cooldown: 5m
+A: Somebody should put more on that.
+
+== solo_sit_8
+place: sit
+cast: A = any
+cooldown: 5m
+A: I could sit here till spring.
+
+== solo_eat_1
+place: eat
+cast: A = any
+cooldown: 5m
+A: Cold again. Always cold.
+
+== solo_eat_2
+place: eat
+cast: A = any
+cooldown: 5m
+A: There's more gristle than meat in this.
+
+== solo_eat_3
+place: eat
+cast: A = any
+cooldown: 5m
+A: Could do with some salt.
+
+== solo_eat_4
+place: eat
+cast: A = any
+cooldown: 5m
+A: Cook's outdone himself. Outdone himself badly.
+
+== solo_eat_5
+place: eat
+cast: A = any
+cooldown: 5m
+A: Bread's hard as a door.
+
+== solo_eat_6
+place: eat
+cast: A = any
+cooldown: 5m
+A: One more bowl. Just one.
+
+== solo_eat_7
+place: eat
+cast: A = any
+cooldown: 5m
+A: Mm. Not bad. Not good, but not bad.
+
+== solo_eat_8
+place: eat
+cast: A = any
+cooldown: 5m
+A: I'll dream of pie tonight.
+
+== solo_sleep_1
+place: sleep
+cast: A = any
+cooldown: 5m
+A: No... not the eels...
+
+== solo_sleep_2
+place: sleep
+cast: A = any
+cooldown: 5m
+A: Five more minutes, mother.
+
+== solo_sleep_3
+place: sleep
+cast: A = any
+cooldown: 5m
+A: Mm. Pie.
+
+== solo_sleep_4
+place: sleep
+cast: A = any
+cooldown: 5m
+A: I'll pay you back... I swear...
+
+== solo_sleep_5
+place: sleep
+cast: A = any
+cooldown: 5m
+A: Who's there? ...Nobody.
+
+== solo_sleep_6
+place: sleep
+cast: A = any
+cooldown: 5m
+A: The bells... stop the bells...
+
+== solo_sleep_7
+place: sleep
+cast: A = any
+cooldown: 5m
+A: Warm. So warm.
+
+== solo_sleep_8
+place: sleep
+cast: A = any
+cooldown: 5m
+A: Not my watch... not yet...
+
+== solo_rummage_1
+place: rummage
+cast: A = any
+cooldown: 5m
+A: Where's the damned lamp oil...
+
+== solo_rummage_2
+place: rummage
+cast: A = any
+cooldown: 5m
+A: Who's been at the salt pork?
+
+== solo_rummage_3
+place: rummage
+cast: A = any
+cooldown: 5m
+A: Candles, candles... not a one left.
+
+== solo_rummage_4
+place: rummage
+cast: A = any
+cooldown: 5m
+A: This was full on Tuesday.
+
+== solo_rummage_5
+place: rummage
+cast: A = any
+cooldown: 5m
+A: Rope. Rope. More rope. No oil.
+
+== solo_rummage_6
+place: rummage
+cast: A = any
+cooldown: 5m
+A: Somebody's been in here. Somebody always has.
+
+== solo_rummage_7
+place: rummage
+cast: A = any
+cooldown: 5m
+A: I'll have to write it down again.
+
+== solo_rummage_8
+place: rummage
+cast: A = any
+cooldown: 5m
+A: Moths. Wonderful.
+
+== solo_carry_1
+place: carry
+cast: A = any
+cooldown: 5m
+A: Heavy. What's in these, stones?
+
+== solo_carry_2
+place: carry
+cast: A = any
+cooldown: 5m
+A: Four more. Then four more after that.
+
+== solo_carry_3
+place: carry
+cast: A = any
+cooldown: 5m
+A: My back. Gods, my back.
+
+== solo_carry_4
+place: carry
+cast: A = any
+cooldown: 5m
+A: Why is it always me?
+
+== solo_carry_5
+place: carry
+cast: A = any
+cooldown: 5m
+A: Careful... careful...
+
+== solo_carry_6
+place: carry
+cast: A = any
+cooldown: 5m
+A: If I drop this I'm done for.
+
+== solo_carry_7
+place: carry
+cast: A = any
+cooldown: 5m
+A: Two weeks in and I'm a mule.
+
+== solo_carry_8
+place: carry
+cast: A = any
+cooldown: 5m
+A: Nearly there. Nearly.
+
+== solo_chop_1
+place: chop
+cast: A = any
+cooldown: 5m
+A: Come on, you knotted thing.
+
+== solo_chop_2
+place: chop
+cast: A = any
+cooldown: 5m
+A: Split, damn you.
+
+== solo_chop_3
+place: chop
+cast: A = any
+cooldown: 5m
+A: There. And there.
+
+== solo_chop_4
+place: chop
+cast: A = any
+cooldown: 5m
+A: Harder than the last one.
+
+== solo_chop_5
+place: chop
+cast: A = any
+cooldown: 5m
+A: Ha. Clean through.
+
+== solo_chop_6
+place: chop
+cast: A = any
+cooldown: 5m
+A: This one's got iron in it.
+
+== solo_chop_7
+place: chop
+cast: A = any
+cooldown: 5m
+A: Blisters. Every night, blisters.
+
+== solo_chop_8
+place: chop
+cast: A = any
+cooldown: 5m
+A: One more stack. Then a drink.
+
+== solo_lean_1
+place: lean
+cast: A = any
+cooldown: 5m
+A: Quiet out there.
+
+== solo_lean_2
+place: lean
+cast: A = any
+cooldown: 5m
+A: Nothing moving. Good.
+
+== solo_lean_3
+place: lean
+cast: A = any
+cooldown: 5m
+A: Lean long enough, you grow into the wall.
+
+== solo_lean_4
+place: lean
+cast: A = any
+cooldown: 5m
+A: Wind's turned.
+
+== solo_aldous_1
+cast: A = name(Aldous)
+cooldown: 5m
+A: My knees. Oh, my knees.
+
+== solo_aldous_2
+cast: A = name(Aldous)
+cooldown: 5m
+A: Thirty years of stairs.
+
+== solo_aldous_3
+cast: A = name(Aldous)
+cooldown: 5m
+A: Glass that looks at the moon. Unnatural, that is.
+
+== solo_aldous_4
+cast: A = name(Aldous)
+cooldown: 5m
+A: In my day we had a bell and a stick.
+
+== solo_aldous_5
+cast: A = name(Aldous)
+cooldown: 5m
+A: Young captain. Young ideas.
+
+== solo_aldous_6
+cast: A = name(Aldous)
+cooldown: 5m
+A: Nothing out there. Never is, till there is.
+
+== solo_wat_1
+cast: A = name(Wat)
+cooldown: 5m
+A [murmurs]: Oh, the eel-wife of the Low Bridge...
+
+== solo_wat_2
+cast: A = name(Wat)
+cooldown: 5m
+A [murmurs]: She had a crooked leg, and a crookeder smile...
+
+== solo_wat_3
+cast: A = name(Wat)
+cooldown: 5m
+A [murmurs]: Down by the water, where the lanterns drown...
+
+== solo_wat_4
+cast: A = name(Wat)
+cooldown: 5m
+A [murmurs]: Tra-la, the bargeman's daughter...
+
+== solo_wat_5
+cast: A = name(Wat)
+cooldown: 5m
+A: Wonder what's in the store tonight.
+
+== solo_wat_6
+cast: A = name(Wat)
+cooldown: 5m
+A: Lamp oil fetches a good price in the Lower Town.
+
+== solo_hendrik_1
+cast: A = name(Hendrik)
+cooldown: 5m
+A: She'll mend. They always mend.
+
+== solo_hendrik_2
+cast: A = name(Hendrik)
+cooldown: 5m
+A: Silver. Always silver.
+
+== solo_hendrik_3
+cast: A = name(Hendrik)
+cooldown: 5m
+A: I should have been a baker.
+
+== solo_hendrik_4
+cast: A = name(Hendrik)
+cooldown: 5m
+A: Round and round. Round and round.
+
+== solo_hendrik_5
+cast: A = name(Hendrik)
+cooldown: 5m
+A: Keep your eyes open, Hendrik.
+
+== solo_jory_1
+cast: A = name(Jory)
+cooldown: 5m
+A: South. Where it's warm.
+
+== solo_jory_2
+cast: A = name(Jory)
+cooldown: 5m
+A: She laughed at my joke. She actually laughed.
+
+== solo_jory_3
+cast: A = name(Jory)
+cooldown: 5m
+A: Two more months and I'm gone.
+
+== solo_jory_4
+cast: A = name(Jory)
+cooldown: 5m
+A: Cold post, this. Coldest in the yard.
+
+== solo_jory_5
+cast: A = name(Jory)
+cooldown: 5m
+A: Wonder if she's thinking of me.
+
+== solo_mirelle_1
+cast: A = name(Mirelle)
+cooldown: 5m
+A: Idlers. The lot of them.
+
+== solo_mirelle_2
+cast: A = name(Mirelle)
+cooldown: 5m
+A: The glass stays where it is.
+
+== solo_mirelle_3
+cast: A = name(Mirelle)
+cooldown: 5m
+A: Two men short and a wall to watch.
+
+== solo_mirelle_4
+cast: A = name(Mirelle)
+cooldown: 5m
+A: Tomorrow I'll have the roster changed.
+
+== solo_mirelle_5
+cast: A = name(Mirelle)
+cooldown: 5m
+A: Not one of them would last a week in the south.
+
+== solo_osric_1
+cast: A = name(Osric)
+cooldown: 5m
+A: Mother would have a fit if she saw this place.
+
+== solo_osric_2
+cast: A = name(Osric)
+cooldown: 5m
+A: Keep your head down, Jory.
+
+== solo_osric_3
+cast: A = name(Osric)
+cooldown: 5m
+A: Warm bed. One day.
+
+== solo_osric_4
+cast: A = name(Osric)
+cooldown: 5m
+A: I'll write her tomorrow.
+
+== solo_cold_1
+when: cold
+cast: A = any
+cooldown: 5m
+A: Cold enough to crack teeth.
+
+== solo_cold_2
+when: cold
+cast: A = any
+cooldown: 5m
+A: Can't feel my fingers.
+
+== solo_cold_3
+when: cold
+cast: A = any
+cooldown: 5m
+A: My breath's freezing.
+
+== solo_cold_4
+when: cold
+cast: A = any
+cooldown: 5m
+A: Winter's coming early.
+
+== solo_cold_5
+when: cold
+cast: A = any
+cooldown: 5m
+A: Wish I'd brought the other cloak.
+
+== solo_night_1
+when: night:late|dawn
+cast: A = any
+cooldown: 5m
+A: Dawn can't come soon enough.
+
+== solo_night_2
+when: night:late|dawn
+cast: A = any
+cooldown: 5m
+A: How long till the bells?
+
+== solo_night_3
+when: night:late|dawn
+cast: A = any
+cooldown: 5m
+A: Longest night of my life. Every night.
+
+== solo_night_4
+when: night:late|dawn
+cast: A = any
+cooldown: 5m
+A: Half asleep on my feet.
+
+== solo_uneasy_1
+when: uneasy
+cast: A = any
+cooldown: 5m
+A [whispers]: What was that?
+
+== solo_uneasy_2
+when: uneasy
+cast: A = any
+cooldown: 5m
+A [whispers]: Just the wind. Just the wind.
+
+== solo_uneasy_3
+when: uneasy
+cast: A = any
+cooldown: 5m
+A [whispers]: I don't like this.
+
+== solo_uneasy_4
+when: uneasy
+cast: A = any
+cooldown: 5m
+A [whispers]: Somebody's out there.
+
+== solo_uneasy_5
+when: uneasy
+cast: A = any
+cooldown: 5m
+A [whispers]: Stay sharp. Stay sharp.
+
+== solo_at_ease_1
+when: at_ease
+cast: A = any
+cooldown: 5m
+A: Quiet. Too quiet.
+
+== solo_at_ease_2
+when: at_ease
+cast: A = any
+cooldown: 5m
+A: Another night, another penny.
+
+== solo_at_ease_3
+when: at_ease
+cast: A = any
+cooldown: 5m
+A: Gods, I'm bored.
+
+== solo_at_ease_4
+when: at_ease
+cast: A = any
+cooldown: 5m
+A: Hm.
+
+== solo_at_ease_5
+when: at_ease
+cast: A = any
+cooldown: 5m
+A: Could murder a pie.
+
+== solo_at_ease_6
+when: at_ease
+cast: A = any
+cooldown: 5m
+A: Wonder what the captain's writing up there.
+
+== solo_at_ease_7
+when: at_ease
+cast: A = any
+cooldown: 5m
+A: Should've been a sailor.
+
+== solo_at_ease_8
+when: at_ease
+cast: A = any
+cooldown: 5m
+A: One day I'll have my own house. With a door that shuts.
+
+== solo_at_ease_9
+when: at_ease
+cast: A = any
+cooldown: 5m
+A: The canal's high tonight.

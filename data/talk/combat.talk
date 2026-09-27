@@ -129,3 +129,67 @@ B {if craven}: Me? Why always me?
 B {if sly}: Going. Quietly.
 B {if rash}: I'll have a look. And whatever's there.
 B: Going!
+
+== tactic_envelop_behind
+when: situation:tactic_envelop
+cast: A = any; B = sly
+cooldown: 30s
+again: yes
+A [shouts]: Get round him!
+B: I'll take his back.
+
+== tactic_press_blood
+when: situation:tactic_press
+cast: A = any; B = craven
+cooldown: 30s
+again: yes
+A [shouts]: He's done for! Finish him!
+B: You finish him! I'll watch!
+
+== tactic_fall_back_gladly
+when: situation:tactic_fall_back
+cast: A = any; B = craven
+cooldown: 30s
+again: yes
+A [shouts]: Regroup! Together!
+B: Gladly!
+
+== tactic_rout_captain
+when: situation:tactic_rout
+cast: A = any; B = stubborn
+cooldown: 30s
+again: yes
+A [shouts]: Get out! Get help!
+B: Go! I'll stand!
+
+== spotted_ask_come_out
+when: situation:spotted_ask
+cast: A = any; B = rash
+cooldown: 30s
+again: yes
+A [shouts]: Where'd he go?
+B [shouts]: Come out! Come out and fight!
+
+== man_down_close
+when: situation:man_down
+cast: A = any; B = stubborn
+cooldown: 20s
+again: yes
+A [shouts]: {dead}'s down!
+B: Close the gap! Close it!
+
+== last_man_run
+when: situation:last_man
+cast: A = craven; B? = any
+cooldown: 1m
+again: yes
+A [shouts]: I'm getting help! Hold him!
+B: Hold him? With what?
+
+== tactic_break_boot
+when: situation:tactic_break
+cast: A = any; B = rash
+cooldown: 30s
+again: yes
+A [shouts]: Smash through his guard!
+B: Watch this.

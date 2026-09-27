@@ -175,6 +175,7 @@ func _ready() -> void:
 func _run() -> void:
 	_files()
 	_facts()
+	_writing()
 	await _yard()
 	seed(2026)
 	GuardScript.randomize_on = false
@@ -224,6 +225,111 @@ func _files() -> void:
 			wrong.append(c["id"])
 
 	_check("T4 every conversation of two or more opens with two different speakers", wrong.is_empty(), str(wrong))
+
+
+# ---------------------------------------------------------------------------
+# The writing
+# ---------------------------------------------------------------------------
+
+func _writing() -> void:
+	var lib: Dictionary = TalkScript.load_dir()
+	var sheet: Dictionary = lib["cast"]
+	var cast: Array = (load("res://maps/npc_showcase.gd") as GDScript).get("CAST")
+
+	# T34 every conversation can be cast from the showcase's men
+	var uncastable := []
+
+	for conv in lib["conversations"]:
+		var men := _showcase_men(cast, sheet, StringName(conv["place"]))
+
+		if TalkFacts.cast_parts(conv, men, {}).is_empty():
+			uncastable.append(conv["id"])
+
+	_check("T34 every conversation, remark and call can be cast from the showcase's men", uncastable.is_empty(), str(uncastable))
+
+	# T35 enough of each
+	var counts := {}
+
+	for conv in lib["conversations"]:
+		var file := String(conv["source"]).get_file().get_slice(":", 0).get_basename()
+		counts[file] = int(counts.get(file, 0)) + 1
+
+	var wanted := {"at_ease": 20, "gatherings": 15, "unease": 5, "fear": 7, "solo": 90, "combat": 22}
+	var short := []
+
+	for file in wanted:
+		if int(counts.get(file, 0)) < int(wanted[file]):
+			short.append("%s %d/%d" % [file, int(counts.get(file, 0)), wanted[file]])
+
+	_check("T35 the night has its writing: enough of each kind", short.is_empty(), "short %s, counts %s" % [short, counts])
+
+	# T36 the voice: short lines, no modern words
+	var banned := ["okay", "ok", "guys", "yeah", "cool", "dude", "gonna", "wanna", "kids", "awesome"]
+	var long := []
+	var modern := []
+
+	for conv in lib["conversations"]:
+		for turn in conv["lines"] + conv["interrupt"]:
+			for choice in turn["choices"]:
+				var text := String(choice["text"])
+
+				if text.split(" ", false).size() > 16:
+					long.append(conv["id"])
+
+				for word in text.to_lower().replace(".", " ").replace(",", " ").replace("!", " ").replace("?", " ").split(" ", false):
+					if banned.has(word):
+						modern.append("%s:%s" % [conv["id"], word])
+
+	_check("T36 every line is short and of its time", long.is_empty() and modern.is_empty(), "too long %s, modern %s" % [long, modern])
+
+	# T37 every man has his own conversations
+	var thin := []
+
+	for entry in cast:
+		var name: String = entry[0]
+		var count := 0
+
+		for conv in lib["conversations"]:
+			var file := String(conv["source"]).get_file().get_slice(":", 0).get_basename()
+
+			if (file == "at_ease" or file == "gatherings") and _his(conv, name, cast, sheet):
+				count += 1
+
+		if count < 2:
+			thin.append("%s %d" % [name, count])
+
+	_check("T37 every man of the showcase is named or tied into at least two conversations of his own", thin.is_empty(), str(thin))
+
+
+## The showcase's twelve, as the talk sees them, at `place`, with every
+## state a requirement might ask for.
+func _showcase_men(cast: Array, sheet: Dictionary, place: StringName) -> Array:
+	var men := []
+
+	for entry in cast:
+		var man := TalkFacts.sheet_man(entry[0], sheet, entry[2], entry[1])
+		man["station"] = place
+		man["states"] = {"tired": 0.7, "hungry": 0.7, "cold": 0.7, "hurt": 0.7, "grieving": true, "afraid": true, "asleep": false}
+		men.append(man)
+
+	return men
+
+
+## `name` can take a part of `conv` that asks for more than anyone.
+func _his(conv: Dictionary, name: String, cast: Array, sheet: Dictionary) -> bool:
+	var men := _showcase_men(cast, sheet, StringName(conv["place"]))
+
+	for part in conv["cast"]:
+		if (part["reqs"] as Array).all(func(r): return r == ["any"]):
+			continue
+
+		var key: String = part["key"]
+		var only := func(m: Dictionary, p: String) -> bool: return (m["name"] == name) == (p == key)
+
+		if not TalkFacts.cast_parts(conv, men, {}, only).is_empty():
+			return true
+
+	return false
 
 
 # ---------------------------------------------------------------------------
