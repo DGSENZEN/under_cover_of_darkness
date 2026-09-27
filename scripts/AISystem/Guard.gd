@@ -56,6 +56,7 @@ const GuardHandsScript := preload("res://scripts/AISystem/GuardHands.gd")
 const GuardMercyScript := preload("res://scripts/AISystem/GuardMercy.gd")
 const GuardClimbScript := preload("res://scripts/AISystem/GuardClimb.gd")
 const GuardWaterScript := preload("res://scripts/AISystem/GuardWater.gd")
+const GuardRotaScript := preload("res://scripts/AISystem/GuardRota.gd")
 ## Bleeding (bleeding): at most this much a second, never below this share of
 ## his health, and bound this long after he last saw you.
 const BLEED_MAX := 4.0
@@ -129,6 +130,9 @@ signal bound_wounds
 ## A node whose children are the waypoints, visited in order, looping. While
 ## waiting at one, the guard faces the way that waypoint's -Z points.
 @export var patrol_route: NodePath
+## Where he goes at his ease and what he does there (GuardStation nodes, in
+## turn: GuardRota). Instead of a patrol route. Set before he enters the tree.
+@export var stations: Array[NodePath] = []
 @export var patrol_wait := 2.0
 @export var patrol_speed := 1.6
 @export var investigate_speed := 2.4
@@ -411,6 +415,8 @@ var _mercy: RefCounted
 ## (GuardWater).
 var _climb: RefCounted
 var _water: RefCounted
+## His stations, at his ease (GuardRota).
+var _rota: RefCounted
 ## When he came into the level (Comms.now): a man only misses those who were
 ## there before him.
 var _born_at := 0.0
@@ -489,6 +495,8 @@ func _ready() -> void:
 	_mercy = GuardMercyScript.new(self)
 	_climb = GuardClimbScript.new(self)
 	_water = GuardWaterScript.new(self)
+	_rota = GuardRotaScript.new(self)
+	_rota.setup(stations)
 
 	if _agent != null:
 		_agent.link_reached.connect(_on_link_reached)
@@ -564,6 +572,7 @@ func _physics_process(delta: float) -> void:
 
 	if not puppet:
 		_life.update(delta)
+		_rota.update(delta)
 		_watch_for_powder(delta)
 
 	if _burning > 0.0:
@@ -612,6 +621,9 @@ func _physics_process(delta: float) -> void:
 
 		if state == Alert.COMBAT:
 			_fighter.watch(delta)
+	elif _rota.busy():
+		# Getting up off his seat or his bedroll.
+		_stop(delta)
 	elif puppet:
 		_puppet_drive(delta)
 	else:
@@ -679,6 +691,12 @@ func look_direction() -> Vector3:
 
 
 func _sense_vision(delta: float) -> void:
+	# Asleep (GuardRota): his eyes are shut.
+	if _rota != null and _rota.asleep():
+		visibility = 0.0
+		can_see_target = false
+		return
+
 	# A body on the floor, the player's included, is not someone to chase.
 	if _target != null and _target.get("is_dead") == true:
 		visibility = 0.0
@@ -807,6 +825,10 @@ func hear_sound(event: Dictionary) -> void:
 	var source: Object = event["source"]
 	var reach: float = event["range"] * hearing_acuity
 
+	# Asleep (GuardRota), only a loud noise gets through.
+	if _rota != null and _rota.asleep():
+		reach *= GuardRotaScript.SLEEP_HEARING
+
 	# A path is never shorter than the straight line, so this settles most
 	# sounds without asking the navmesh anything.
 	var sound_at: Vector3 = event["position"]
@@ -814,7 +836,8 @@ func hear_sound(event: Dictionary) -> void:
 	if global_position.distance_to(sound_at) > reach:
 		return
 
-	if source is Guard:
+	# (The showcase's intruder is a guard's body, but no colleague.)
+	if source is Guard and not (source as Guard).puppet:
 		# A colleague shouting: go to where HE thinks the trouble is.
 		if event["kind"] == &"shout" and state != Alert.COMBAT:
 			var from: Vector3 = event["position"]
@@ -1059,6 +1082,11 @@ func activity() -> StringName:
 
 	if begging != &"":
 		return begging
+
+	var station: StringName = _rota.activity() if _rota != null else &""
+
+	if station != &"":
+		return station
 
 	var doing: StringName = _life.activity() if _life != null else &""
 
@@ -2323,6 +2351,10 @@ func _set_state(new_state: int) -> void:
 	if old == Alert.COMBAT and _fighter != null:
 		_fighter.leave_combat()
 
+	# Stirred from his station: it ends the way it ends (GuardRota).
+	if old == Alert.RELAXED and _rota != null:
+		_rota.stir()
+
 	if _life != null:
 		# Stirred: whatever he was saying or doing with himself is over.
 		if new_state != Alert.RELAXED and _life.talking():
@@ -2412,6 +2444,11 @@ func bark(text: String) -> void:
 # ---------------------------------------------------------------------------
 
 func _do_patrol(delta: float) -> void:
+	# At his ease with a station to go to: there, and at it (GuardRota).
+	if _rota.has_stations():
+		_rota.patrol(delta)
+		return
+
 	if _waypoints.is_empty():
 		# No route: stand post, and walk back to it if something drew us away.
 		# As close as the navmesh allows counts as back.

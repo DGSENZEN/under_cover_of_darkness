@@ -88,6 +88,24 @@ const ACTIVITIES := {
 	&"drink": [&"Consume", false, 0.2, 0.9],
 	&"lantern": [&"Idle_Torch", true, 0.3, 0.85],
 	&"call": [&"Idle_Rail_Call", false, 0.15, 0.9],
+	# At a station (GuardRota).
+	&"sit": [&"Sitting_Idle", true, 0.3, 1.0],
+	&"sit_talk": [&"Sitting_Talking", true, 0.3, 1.0],
+	&"eat": [&"Consume", true, 0.2, 1.0],
+	&"rummage": [&"Crouch_Idle", true, 0.3, 1.0],
+	&"chop": [&"TreeChopping", true, 0.25, 1.0],
+	&"lean": [&"Idle_Rail", true, 0.35, 1.0],
+}
+## Getting onto and off a station (GuardRota), each shown through its clip in
+## its time: [clip, backwards, fade in].
+const STATION_MOVES := {
+	&"sit_down": [&"Sitting_Enter", false, 0.2],
+	&"stand_up": [&"Sitting_Exit", false, 0.1],
+	&"lie_down": [&"LayToIdle", true, 0.25],
+	&"wake": [&"LayToIdle", false, 0.05],
+	&"lid": [&"Chest_Open", false, 0.2],
+	&"lift": [&"PickUp_Table", false, 0.2],
+	&"set_down": [&"PickUp_Table", true, 0.2],
 }
 ## Crossing what walking cannot (GuardClimb): hauling himself up in the
 ## climbing clip (in place, a metre to each CLIMB_CYCLE seconds of it); in the
@@ -752,6 +770,14 @@ func _show_activity(now: float) -> bool:
 		_activity = doing
 		_activity_at = now
 
+	# At a station his blade is put away (GuardRota.sheathed), and drawn the
+	# moment he is stirred: hidden, not dropped (`visible` says he has it).
+	var rota: RefCounted = guard.get("_rota")
+	var layers: int = 0 if rota != null and rota.sheathed() else Layers.ACTORS
+
+	if weapon != null and weapon.layers != layers:
+		weapon.layers = layers
+
 	var since := now - _activity_at
 	var hands: RefCounted = guard.get("_hands")
 
@@ -775,6 +801,16 @@ func _show_activity(now: float) -> bool:
 			return true
 		&"climb", &"ladder", &"hang", &"gather", &"fall", &"leap", &"land":
 			_show_crossing(doing)
+			return true
+		&"sleep":
+			# Lying still on his bedroll: the first moment of getting up.
+			man.show_action(&"LayToIdle", 0.0, 0.3)
+			return true
+		&"carry":
+			# A crate in his arms, stepping with it as he goes.
+			var cycle := maxf(man.action_length(&"Walk_Carry"), 0.1)
+			var pace := _velocity.length() / size
+			man.show_action(&"Walk_Carry", fmod(since * clampf(pace / 1.4, 0.6, 1.3), cycle) if pace > 0.2 else 0.3, 0.2)
 			return true
 		&"sneak":
 			# Crouched (the showcase's intruder): stepping low as he goes,
@@ -800,6 +836,13 @@ func _show_activity(now: float) -> bool:
 				man.show_action(TREAD_CLIP, fmod(since, tread), 0.3)
 
 			return true
+
+	if STATION_MOVES.has(doing):
+		var move: Array = STATION_MOVES[doing]
+		var length := maxf(man.action_length(move[0]), 0.1)
+		var at := minf(since, length - 0.02)
+		man.show_action(move[0], length - 0.02 - at if bool(move[1]) else at, float(move[2]))
+		return true
 
 	var spec: Array = ACTIVITIES.get(doing, [])
 

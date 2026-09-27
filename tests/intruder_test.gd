@@ -291,6 +291,10 @@ func _run() -> void:
 	_light(Vector3(60, 3, 20))
 	var i16 := _intruder(Vector3(60, 0, 20))
 	var g16 := _guard(&"swordsman", Vector3(60, 0, 17.5), 0.0)
+	# (This is about his guard, not his blade: the swordsman lasts.)
+	g16.max_health = 2000.0
+	g16.health = 2000.0
+	g16._fighter.posture_max = 1.0e6
 	var met16 := [0]
 	var came16 := [0]
 	i16.combat.defended.connect(func(_r): met16[0] += 1)
@@ -309,7 +313,7 @@ func _run() -> void:
 	await _frames(1200)
 	_check("I16 in trade he meets most of a swordsman's blows that reach him while he can answer (20 s)",
 		came16[0] >= 3 and float(met16[0]) >= 0.6 * float(came16[0]),
-		"met %d of %d that reached him free to answer (%d more while reeling); unguarded: %s" % [met16[0], came16[0], reeling16[0], through16])
+		"met %d of %d that reached him free to answer (%d more while reeling); unguarded: %s; the swordsman %s" % [met16[0], came16[0], reeling16[0], through16, "standing" if is_instance_valid(g16) else "dead"])
 
 	# I17 pressing, he never cuts a man on his knees
 	await _fresh()
