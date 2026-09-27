@@ -908,6 +908,24 @@ A: Hm.
 		asleep43 and not spoke43[0] and not director.remarks().any(func(r): return r["man"] == dozer),
 		"asleep %s, spoke %s, remarks %s" % [asleep43, spoke43[0], director.remarks().map(func(r): return r["id"])])
 
+	# T49 a remark to himself is no conversation: it leaves him no rest after
+	# it, and he talks with the next man to stand by him
+	await _fresh()
+	_use(["muse_1", "talk_pair"])
+	director = TalkDirector.of(self)
+	var loner := _guard(Vector3(150, 0, -20), 0.0)
+	director._solo_next[loner.get_instance_id()] = 0.0
+	await _until(func(): return director.remarks().any(func(r): return r["man"] == loner), 60 * 5)
+	var remarked49: bool = director.remarks().any(func(r): return r["man"] == loner)
+	await _until(func(): return not director.speaking(loner) and director.talks().is_empty(), 60 * 10)
+	var rest49: float = loner._life._talk_rest
+	var comer := _guard(Vector3(152.6, 0, -20), PI * 0.5)
+	await _until(func(): return director.in_talk(loner) and director.in_talk(comer), 60 * 6)
+	var talked49: bool = director.in_talk(loner) and director.in_talk(comer)
+	_check("T49 a remark to himself is no conversation: no rest after it, and he talks with the next man to stand by him",
+		remarked49 and rest49 == 0.0 and talked49,
+		"remarked %s, rest after it %.1f s, talking with the next man %s" % [remarked49, rest49, talked49])
+
 
 ## The file a conversation comes from ("at_ease", "unease"...).
 func _file_of(lib: Dictionary, id: String) -> String:

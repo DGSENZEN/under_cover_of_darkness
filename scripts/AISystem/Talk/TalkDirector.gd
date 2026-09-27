@@ -25,7 +25,9 @@ extends RefCounted
 ## men do not air the same topic twice. A man who walks up to a conversation
 ## with an empty part that fits him takes it. A man alone says something to
 ## himself now and then (a remark: a conversation of one part, fitting his
-## station), never on top of another within earshot.
+## station), never on top of another within earshot, nor with a friend on
+## his way over for a word (GuardHabits "visit"). A remark is no
+## conversation: no rest after it keeps him from the next.
 ##
 ## In a fight, a call is answered (`call_pair`: chosen after the squad has
 ## decided what to do): a man asks if another stands and the man cut answers
@@ -980,6 +982,11 @@ func _interrupt(talk: Dictionary) -> void:
 func _end(talk: Dictionary) -> void:
 	_talks.erase(talk)
 
+	# A remark to himself is no conversation: no rest after it (his remarks
+	# wait SOLO_GAP of their own), so he talks with the next man to come by.
+	if bool(talk["solo"]):
+		return
+
 	for man in talk["members"]:
 		if man != null and is_instance_valid(man) and man.get("_life") != null:
 			man._life._talk_rest = randf_range(TALK_REST.x, TALK_REST.y)
@@ -1113,6 +1120,26 @@ func _near_any(man: Node3D, members: Array) -> bool:
 	return false
 
 
+## `man` on his way over to a friend for a word, or a friend on his way over
+## to him (GuardHabits "visit").
+func _visit_for(man: Node, guards: Array) -> bool:
+	for other in guards:
+		if not is_instance_valid(other):
+			continue
+
+		var habits: RefCounted = other.get("_habits")
+
+		if habits == null or not habits.has_method("visiting"):
+			continue
+
+		var friend: Node3D = habits.visiting()
+
+		if friend != null and (other == man or friend == man):
+			return true
+
+	return false
+
+
 ## A man alone, at his ease, his time come: a remark fitting his station (or
 ## none in particular), unless another has just been made near him.
 func _remark(tree: SceneTree) -> void:
@@ -1134,6 +1161,11 @@ func _remark(tree: SceneTree) -> void:
 
 		# Someone to talk to is company, not solitude.
 		if free.any(func(other): return other != man and (other as Node3D).global_position.distance_to((man as Node3D).global_position) <= TALK_RANGE):
+			continue
+
+		# So is a friend on his way over for a word, and the friend he is on
+		# his way over to: the word is coming.
+		if _visit_for(man, guards):
 			continue
 
 		if _remarks.any(func(r): return clock - float(r["at"]) < SOLO_QUIET and (r["where"] as Vector3).distance_to((man as Node3D).global_position) <= SOLO_EARSHOT):
