@@ -48,7 +48,14 @@ one after another into one stretch of talk).
 
     python3 tools/prepare_sfx.py --only=murmur,laugh,...
 
-cuts only those groups and leaves every other file as it is.
+cuts only those groups and leaves every other file as it is;
+
+    python3 tools/prepare_sfx.py --fire
+
+makes only the fire beds (FIRE_LOOPS). The lights' sounds (CRACKLES,
+LAYERED) are cut from the NOX Essentials (CC0), the 400 Sounds Pack and
+FilmCow's recorded effects (approved by the user), the TomMusic torch and
+Kenney's RPG audio; a layered sound is several recordings laid together.
 
 Needs ffmpeg and numpy.
 """
@@ -407,6 +414,69 @@ AMBIENCES = [
 ]
 
 
+# Lights and fire (scripts/Visual/Torch.gd, LightFixture.gd). From the user's
+# NOX Essentials (CC0), the 400 Sounds Pack and FilmCow's recorded effects
+# (both approved by the user, Sept 27 2026), the TomMusic torch and Kenney.
+NOX = os.path.expanduser("~/Downloads/Essentials_Series_NOX_SOUND/Nature_Essentials_NOX_SOUND/")
+FOUR_HUNDRED = os.path.expanduser("~/Downloads/400 Sounds Pack/")
+FILMCOW = os.path.expanduser("~/Downloads/FilmCow Recorded SFX/")
+TOM_TORCH = os.path.join(PACK, TORCH)
+
+# Fire beds, looped whole (NOX made them loops): mono, a low-pass (Hz) and a
+# pitch where given, to audio/ambience/<name>.wav (a looping WAV); a length
+# (s) cuts a long one short, its end crossfaded into its start.
+FIRE_LOOPS = [
+    ("fire_small", NOX + "Ambiance_Firecamp_Small_Loop_Mono.wav", None, 1.0, None),
+    ("fire_medium", NOX + "Ambiance_Firecamp_Medium_Loop_Mono.wav", None, 1.0, None),
+    ("fire_big", NOX + "Ambiance_Fire_Big_Loop_Mono.wav", 5000, 1.0, None),
+    # A hearth's chimney draw: a calm wind, dark and slow.
+    ("chimney", NOX + "Ambiance_Wind_Calm_Loop_Stereo.wav", 900, 0.7, 12.0),
+]
+
+# Crackles: the sharp snaps inside a fire bed, the bed filtered away first
+# (a high-pass, Hz), each cut short: (group, sources, takes, high-pass).
+CRACKLES = [
+    ("crackle", [NOX + "Ambiance_Firecamp_Medium_Loop_Mono.wav", NOX + "Ambiance_Firecamp_Small_Loop_Mono.wav"], 6, 700),
+    ("coal_pop", [NOX + "Ambiance_Fire_Big_Loop_Mono.wav"], 4, 300),
+]
+
+# Layered: a sound made of several recordings laid together: (name, layers,
+# fade-out), each layer (source, start, end, gain dB, offset s, low-pass Hz
+# or None, pitch). A start/end of None is found on its own.
+LAYERED = [
+    ("ignite_torch_1", [(TOM_TORCH + "Light Torch with Starting Loop 1.wav", None, 1.4, 0.0, 0.0, None, 1.0),
+                        (FOUR_HUNDRED + "Environment/fire_lighting.wav", None, None, -6.0, 0.0, None, 1.0)], 0.35),
+    ("ignite_torch_2", [(TOM_TORCH + "Light Torch with Starting Loop 2.wav", None, 1.4, 0.0, 0.0, None, 1.0),
+                        (FOUR_HUNDRED + "Environment/fire_lighting.wav", None, None, -7.0, 0.05, None, 0.94)], 0.35),
+    ("snuff_1", [(FOUR_HUNDRED + "Environment/air_burst.wav", None, 0.15, 0.0, 0.0, None, 1.0),
+                 (FILMCOW + "gas leak.wav", 0.3, 0.7, -10.0, 0.05, 6000, 1.0)], 0.2),
+    ("snuff_2", [(FOUR_HUNDRED + "Environment/air_burst.wav", None, 0.12, 0.0, 0.0, None, 1.12),
+                 (FILMCOW + "gas leak.wav", 1.1, 1.5, -11.0, 0.04, 6000, 1.0)], 0.2),
+    ("douse_1", [(FOUR_HUNDRED + "Environment/water_splashing.wav", None, 0.5, 0.0, 0.0, None, 1.0),
+                 (FILMCOW + "gas leak.wav", 0.2, 1.1, -4.0, 0.08, None, 1.0)], 0.4),
+    ("douse_2", [(FOUR_HUNDRED + "Environment/water_splashing.wav", None, 0.5, 0.0, 0.0, None, 0.9),
+                 (FILMCOW + "gas leak.wav", 1.0, 1.9, -5.0, 0.06, None, 0.95)], 0.4),
+    ("log_settle_1", [(FILMCOW + "footstep on branch heavy.wav", None, None, 0.0, 0.0, None, 0.85),
+                      (W(KENNEY_RPG + "chop.ogg"), None, None, -8.0, 0.0, 2000, 0.8)], 0.2),
+    ("log_settle_2", [(FILMCOW + "footstep on branch light.wav", None, None, 0.0, 0.0, None, 0.8),
+                      (W(KENNEY_RPG + "chop.ogg"), None, None, -9.0, 0.01, 2000, 0.7)], 0.2),
+    ("log_settle_3", [(FILMCOW + "footstep on branch heavy.wav", None, None, -1.0, 0.0, None, 0.7),
+                      (W(KENNEY_RPG + "chop.ogg"), None, None, -8.0, 0.02, 1800, 0.9)], 0.2),
+    ("lantern_creak_1", [(W(KENNEY_RPG + "creak1.ogg"), None, None, 0.0, 0.0, None, 1.3),
+                         (FILMCOW + "metal latch 1.wav", None, None, -10.0, 0.02, None, 1.2)], 0.15),
+    ("lantern_creak_2", [(W(KENNEY_RPG + "creak2.ogg"), None, None, 0.0, 0.0, None, 1.3),
+                         (FILMCOW + "metal latch 1.wav", None, None, -11.0, 0.05, None, 1.35)], 0.15),
+    ("lantern_creak_3", [(W(KENNEY_RPG + "creak3.ogg"), None, None, 0.0, 0.0, None, 1.25),
+                         (FILMCOW + "metal latch 1.wav", None, None, -12.0, 0.03, None, 1.1)], 0.15),
+] + [
+    # A lantern's bail rattling in the hand: FilmCow's chain, short.
+    ("bail_rattle_%d" % (i + 1), [(FILMCOW + "chain %d.wav" % n, None, None, 0.0, 0.0, 4000, 1.15)], 0.05)
+    for i, n in enumerate((2, 4, 6, 8))
+]
+# Layered takes no longer than this (s); a bail rattle no longer than 0.25 s.
+LAYERED_LONGEST = {"bail_rattle": 0.25}
+
+
 # Blows are squeezed a little: the first spike of an impact is far louder
 # than the body behind it, so at the same peak they sounded thin. A gentle
 # compressor brings the body up; nothing else is touched.
@@ -522,6 +592,141 @@ def voice_slices(sources, mode, count, fade_out):
                     out.append(fade(piece, 0.08, fade_out))
 
     return out
+
+
+def decode_filtered(path, start, end, filters=None):
+    """decode(), through ffmpeg filters first (a pitch, a low- or high-pass)."""
+    command = ["ffmpeg", "-v", "error", "-i", path]
+
+    if filters:
+        command += ["-af", ",".join(filters)]
+
+    raw = subprocess.run(command + ["-f", "f32le", "-ac", "2", "-ar", str(RATE), "-"], capture_output=True, check=True).stdout
+    mono = np.frombuffer(raw, dtype=np.float32).reshape(-1, 2).astype(np.float64).mean(axis=1)
+
+    if start is None or end is None:
+        first, last = auto_bounds(mono)
+        start = first / RATE if start is None else start
+        end = last / RATE if end is None else end
+
+    return mono[int(start * RATE):int(end * RATE)]
+
+
+def _filters(lowpass=None, pitch=1.0, highpass=None):
+    filters = []
+
+    if abs(pitch - 1.0) > 1e-6:
+        filters += ["asetrate=%d" % int(RATE * pitch), "aresample=%d" % RATE]
+
+    if lowpass:
+        filters.append("lowpass=f=%d" % lowpass)
+
+    if highpass:
+        filters.append("highpass=f=%d" % highpass)
+
+    return filters
+
+
+def layered(layers, fade_out, longest=None):
+    """Recordings laid together, each at its gain and offset."""
+    pieces = []
+
+    for source, start, end, gain_db, offset, lowpass, pitch in layers:
+        x = decode_filtered(source, start, end, _filters(lowpass, pitch))
+        x = x * 10 ** (PEAK_LIMIT_DB / 20) / max(np.abs(x).max(), 1e-9) * 10 ** (gain_db / 20)
+        pieces.append(np.concatenate([np.zeros(int(offset * RATE)), x]))
+
+    mixed = np.zeros(max(len(p) for p in pieces))
+
+    for piece in pieces:
+        mixed[:len(piece)] += piece
+
+    if longest:
+        mixed = mixed[:int(longest * RATE)]
+
+    return fade(mixed, 0.004, fade_out)
+
+
+def snaps(x, count, apart=0.08, lead=0.004, length=0.09):
+    """The loudest `count` sharp peaks in `x`, at least `apart` seconds from
+    each other (a crackle is a couple of milliseconds: an envelope would
+    smear it away), each cut `lead` before to `length` after."""
+    a = np.abs(x)
+    order = np.argsort(-a)
+    chosen = []
+
+    for i in order:
+        if len(chosen) == count or a[i] < a[order[0]] * 0.15:
+            break
+
+        if all(abs(int(i) - c) > apart * RATE for c in chosen):
+            chosen.append(int(i))
+
+    return [(max(c / RATE - lead, 0.0), min(c / RATE + length, len(x) / RATE)) for c in sorted(chosen)]
+
+
+def crackles(sources, count, highpass):
+    out = []
+    each = max(count // len(sources), 1)
+
+    for source in sources:
+        whole = decode_filtered(source, 0.0, 1e9, _filters(highpass=highpass))
+
+        for start, end in snaps(whole, each):
+            out.append(fade(whole[int(start * RATE):int(end * RATE)], 0.002, 0.04))
+
+    return out
+
+
+FIRE_IMPORT = """[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+
+[deps]
+
+source_file="res://audio/ambience/{name}.wav"
+
+[params]
+
+force/8_bit=false
+force/mono=true
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=2
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2
+"""
+
+
+def prepare_fire_loops():
+    """The fire beds, as WAVs that loop (this ffmpeg has no Vorbis encoder;
+    Godot loops a WAV itself: edit/loop_mode 2 in its import settings)."""
+    os.makedirs(AMBIENCE_OUT, exist_ok=True)
+
+    for name, source, lowpass, pitch, length in FIRE_LOOPS:
+        x = decode_filtered(source, 0.0, 1e9, _filters(lowpass, pitch))
+
+        if length:
+            # Its last 1.5 s laid over its first, equal power: a seamless loop.
+            n = int(1.5 * RATE)
+            x = x[:int(length * RATE) + n].copy()
+            t = np.linspace(0.0, np.pi * 0.5, n)
+            x[:n] = x[-n:] * np.cos(t) + x[:n] * np.sin(t)
+            x = x[:-n]
+
+        x = peak_normalise(x, -3.0)
+        write_wav(os.path.join(AMBIENCE_OUT, name + ".wav"), x)
+        importer = os.path.join(AMBIENCE_OUT, name + ".wav.import")
+
+        if not os.path.exists(importer):
+            with open(importer, "w") as out:
+                out.write(FIRE_IMPORT.format(name=name))
+
+        print("%-12s fire loop, %.2f s, %.1f LUFS" % (name, len(x) / RATE, loudness(x)))
 
 
 def fade(x, fade_in, fade_out):
@@ -694,6 +899,9 @@ def main():
     for a in sys.argv[1:]:
         if a.startswith("--only="):
             only = set(a.split("=", 1)[1].split(","))
+        elif a == "--fire":
+            prepare_fire_loops()
+            return
         else:
             args.append(a)
 
@@ -730,6 +938,25 @@ def main():
 
         groups.setdefault(group, []).append([name, x, loudness(x)])
 
+    for group, sources, count, highpass in CRACKLES:
+        if only is not None and group not in only:
+            continue
+
+        for x in crackles(sources, count, highpass):
+            x = x * 10 ** (PEAK_LIMIT_DB / 20) / max(np.abs(x).max(), 1e-9)
+            name = "%s_%d" % (group, len(groups.get(group, [])) + 1)
+            groups.setdefault(group, []).append([name, x, loudness(x)])
+
+    for name, layers, fade_out in LAYERED:
+        group = re.sub(r"_\d+$", "", name)
+
+        if only is not None and group not in only:
+            continue
+
+        x = layered(layers, fade_out, LAYERED_LONGEST.get(group))
+        x *= 10 ** (PEAK_LIMIT_DB / 20) / max(np.abs(x).max(), 1e-9)
+        groups.setdefault(group, []).append([name, x, loudness(x)])
+
     # Variations match the quietest of them.
     for group, members in groups.items():
         level = min(m[2] for m in members)
@@ -749,6 +976,8 @@ def main():
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", os.path.join(pack, source), "-c", "copy",
                         os.path.join(AMBIENCE_OUT, name + ".ogg")], check=True)
         print("%-12s ambience loop" % name)
+
+    prepare_fire_loops()
 
 
 if __name__ == "__main__":

@@ -85,3 +85,11 @@ Every sound in the game is a recording, cut and levelled from the packs below by
 - **Explosion**: "dull_explosion" from "Various Sound Effects", produced by
   **Julie Damsgaard / Spring Spring / Spring Enterprises**
   ([OpenGameArt](https://opengameart.org/content/various-sound-effects-0)), CC0.
+- **Fire beds (campfires, braziers, cressets, the hearth), their crackles and pops, a
+  chimney's draw**: "Nature Essentials" from the "Essentials Series" by **NOX SOUND**, CC0.
+- **Lighting a torch, snuffing a flame, dousing one**: the "400 Sounds Pack" (fire
+  lighting, an air burst, a splash), with FilmCow's gas leak; used with the user's
+  approval (Sept 27 2026).
+- **Settling logs, a lantern's creak and its bail rattling**: "FilmCow Recorded SFX"
+  by **FilmCow** (branches snapping, a metal latch, chains), with Kenney's chop and
+  creaks; used with the user's approval (Sept 27 2026).

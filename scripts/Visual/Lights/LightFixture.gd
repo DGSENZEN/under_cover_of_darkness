@@ -131,7 +131,7 @@ func _apply_settings(settings: Dictionary) -> void:
 			"color":
 				color = Color(value) if value is String else value
 			"loop":
-				loop_path = "" if String(value).is_empty() else "res://audio/ambience/%s.ogg" % value
+				loop_path = _ambience(String(value))
 			_:
 				if key in self:
 					var current = get(key)
@@ -143,6 +143,20 @@ func _apply_settings(settings: Dictionary) -> void:
 						value = Vector3(float(value[0]), float(value[1]), float(value[2]))
 
 					set(key, value)
+
+
+## A loop by name in audio/ambience/ (a looping WAV or an OGG); "" for none.
+static func _ambience(loop_name: String) -> String:
+	if loop_name.is_empty():
+		return ""
+
+	for extension in ["wav", "ogg"]:
+		var path := "res://audio/ambience/%s.%s" % [loop_name, extension]
+
+		if ResourceLoader.exists(path):
+			return path
+
+	return ""
 
 
 func _build_model() -> void:

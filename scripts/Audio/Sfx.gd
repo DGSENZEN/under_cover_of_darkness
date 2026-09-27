@@ -197,6 +197,17 @@ const GAIN := {
 	&"coins": -0.5,
 	&"keys": -10.2,
 	&"pickup": -5.1,
+	# Lights and fire: target LUFS less measured (crackle -30, coal pop -28,
+	# log settling -26, lighting a torch -24, snuffing -32, dousing -24, a
+	# lantern's creak and bail -30), capped at +4.
+	&"crackle": 3.2,
+	&"coal_pop": 2.4,
+	&"log_settle": -5.0,
+	&"ignite_torch": -6.3,
+	&"snuff": -14.8,
+	&"douse": -7.0,
+	&"lantern_creak": -14.2,
+	&"bail_rattle": -6.4,
 	# Not in the world: the music of being noticed.
 	&"sting_suspicious": -13.1,
 	&"sting_combat": -5.1,
