@@ -41,6 +41,8 @@ var _time := 0.0
 var _phase := 0.0
 var _listen_in := 0.0
 var _crackle_db := CRACKLE_DB
+## How brightly it burns (a brazier burning down: Fire.gd); 1 as made.
+var _strength := 1.0
 
 
 func _ready() -> void:
@@ -113,13 +115,20 @@ func _process(delta: float) -> void:
 		+ sin(_time * 5.3 + 1.1) * 0.35
 		+ sin(_time * 13.1 + 2.3) * 0.2
 	)
-	light.light_energy = energy * (1.0 + flicker * n)
+	light.light_energy = energy * _strength * (1.0 + flicker * n)
+	light.omni_range = light_range * lerpf(0.55, 1.0, clampf(_strength, 0.0, 1.0))
 	light.position = Vector3(sin(_time * 3.1) * 0.02, 0.12 + sin(_time * 4.7) * 0.015, cos(_time * 2.9) * 0.02)
 
 	var frame := int(floor(_time * frame_rate)) % 4
 	_flame_material.uv1_offset = Vector3(0.25 * frame, 0.0, 0.0)
-	flame.scale = Vector3.ONE * (1.0 + 0.08 * n)
+	flame.scale = Vector3.ONE * lerpf(0.35, 1.0, clampf(_strength, 0.0, 1.5)) * (1.0 + 0.08 * n)
 	_listen(delta)
+
+
+## How brightly it burns: its light, its reach and its flame (1 as made;
+## less burning down, more flaring).
+func set_strength(k: float) -> void:
+	_strength = maxf(k, 0.0)
 
 
 ## Its crackle: started when you come near enough to hear it (somewhere in

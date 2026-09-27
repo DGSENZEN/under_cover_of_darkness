@@ -5,6 +5,11 @@ extends Area3D
 ##
 ## Build with Fire.brazier(parent, position) for the bowl, the flame and the
 ## light together.
+##
+## Tended (`fuel_seconds` set), it burns down: over that long its fuel
+## goes, and its light and flame shrink to embers (never quite out). Fed a
+## log (`feed`), it flares up and burns on. Burning low (`low`), the men talk
+## of it and one goes for wood (TalkFacts, Gathering).
 
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
 
@@ -12,6 +17,22 @@ const TorchScript := preload("res://scripts/Visual/Torch.gd")
 @export var burn_time := 4.5
 ## Damage to you each time the flame catches you (twice a second at most).
 @export var scorch := 6.0
+## From full to embers, in seconds; 0 (as made) never burns down (a level
+## where nobody tends it).
+@export var fuel_seconds := 0.0
+
+## Below this it burns low; it never burns below EMBERS. Fed, it flares to
+## FLARE times as bright, easing back over FLARE_TIME.
+const LOW_AT := 0.35
+const EMBERS := 0.08
+const FLARE := 1.5
+const FLARE_TIME := 2.0
+
+## 0..1: what it has left to burn.
+var fuel := 1.0
+## Its flame and light (Torch.gd), made by `brazier`.
+var torch: Node3D
+var _flare_left := 0.0
 
 var _scorched_at := -10.0
 var _time := 0.0
@@ -62,6 +83,7 @@ static func brazier(parent: Node, position: Vector3) -> Area3D:
 	torch.position = Vector3(0.0, 1.35, 0.0)
 
 	var fire: Area3D = (load("res://scripts/Combat/Fire.gd") as GDScript).new()
+	fire.torch = torch
 	var zone := CollisionShape3D.new()
 	var cylinder := CylinderShape3D.new()
 	cylinder.radius = 0.5
@@ -76,6 +98,7 @@ static func brazier(parent: Node, position: Vector3) -> Area3D:
 func _ready() -> void:
 	# Guards know where it is: to keep off it, and to kick you into it.
 	add_to_group(&"hazards")
+	add_to_group(&"fires")
 	collision_layer = 0
 	collision_mask = 1 | 2
 	monitoring = true
@@ -83,6 +106,13 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_time += delta
+	if fuel_seconds > 0.0:
+		fuel = maxf(fuel - delta / fuel_seconds, EMBERS)
+
+	_flare_left = maxf(_flare_left - delta, 0.0)
+
+	if torch != null and is_instance_valid(torch) and torch.has_method("set_strength"):
+		torch.set_strength(strength())
 
 	for body in get_overlapping_bodies():
 		if body.has_method("ignite"):
@@ -97,6 +127,27 @@ func _physics_process(delta: float) -> void:
 		elif body.has_method("take_damage") and _time - _scorched_at > 0.5:
 			_scorched_at = _time
 			body.take_damage(scorch, self)
+
+
+## A log put on: more to burn, and it flares.
+func feed(amount := 0.6) -> void:
+	fuel = minf(fuel + amount, 1.0)
+	_flare_left = FLARE_TIME
+
+
+func low() -> bool:
+	return fuel < LOW_AT
+
+
+## "low" or "burning" (for what the men say).
+func burning() -> StringName:
+	return &"low" if low() else &"burning"
+
+
+## How bright it burns (1 full, over 1 flaring): its light and flame.
+func strength() -> float:
+	var flare := 1.0 + (FLARE - 1.0) * (_flare_left / FLARE_TIME)
+	return lerpf(0.25, 1.0, fuel) * flare
 
 
 ## What the flame is to whoever it touches: no guard stops it, nothing
