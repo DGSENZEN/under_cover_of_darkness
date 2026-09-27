@@ -1,0 +1,57 @@
+# Men at their ease: tired, grumbling, teasing, gossiping.
+
+== tam_resting
+when: at_ease, asleep(Tam)
+cast: A = any; B = any
+cooldown: once
+A [looks:the shed]: Is Tam asleep again?
+B: He's resting his eyes.
+A: For three hours?
+B [shrugs]: They're very tired eyes.
+
+== wat_sings
+when: at_ease, present(Wat), present(Aldous)
+cast: A = name(Aldous); B = name(Wat)
+cooldown: 15m
+B [murmurs]: Oh, the eel-wife of the Low Bridge, she had a crooked leg...
+A [shouts]: Wat! Sing that again and I'll shoot you myself.
+B: You haven't got a bow, old man.
+A: I'll find one.
+
+== the_moon_glass
+when: at_ease, night:early|middle
+cast: A = recruit; B = friend(A)|any
+cooldown: once
+A [looks:the tower]: What does the captain want with a glass that looks at the moon?
+B: Same thing Hollin wants with his emeralds. To have it.
+A: Brand says it shows you where the dead walk.
+B {if stubborn}: Brand says a lot of things. None of them sober.
+B: Brand says a lot of things. Eat your supper.
+
+== hendriks_girl
+when: at_ease
+cast: A = name(Hendrik); B = friend(A)
+cooldown: once
+B: You're quiet tonight.
+A: My girl's fever's back.
+B: The physick in the Lower Town...
+A [sighs]: Wants silver I haven't got. She'll mend. They mend.
+B [nods]: She'll mend.
+
+== oil_gone
+when: at_ease
+cast: A = name(Gideon); B = name(Wat)
+cooldown: 20m
+A: Two flasks of lamp oil, gone. Again.
+B: Rats.
+A: Rats that climb shelves and pull corks?
+B [shrugs]: Clever rats.
+
+== mothers_letter
+when: at_ease, night:early|middle
+cast: A = name(Osric); B = kin(A)
+cooldown: once
+A: Mother wrote. She asks if you're eating.
+B: Tell her I'm eating.
+A: She asks about the girl at the Lantern.
+B [laughs]: Tell her I'm eating.

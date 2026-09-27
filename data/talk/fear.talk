@@ -1,0 +1,18 @@
+# After the murder: fear, names called into the dark, grief.
+
+== where_is_jory
+when: missing(Jory)
+cast: A = any; B? = any
+cooldown: once
+A: Jory? Jory, this isn't funny.
+B [whispers]: Stay behind me.
+
+== grief_jory_osric
+when: dead(Jory), body_found
+cast: A = kin(Jory); B? = any
+cooldown: once
+priority: 10
+A [shouts]: Jory! No. No, no, no...
+B: Osric, come away. He's gone.
+A {if rash}: I'll open him like a sack!
+A: Find him. Find him for me.

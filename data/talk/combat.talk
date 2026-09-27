@@ -1,0 +1,16 @@
+# In the fight: a call, and a man who answers it.
+
+== status_check
+when: combat
+cast: A = rank>=2; B = hurt
+cooldown: 20s
+A [shouts]: {B}! Are you standing?
+B {if hurt>0.6}: He's cut me! I'm still here!
+B: Standing! Come on!
+
+== not_there
+when: combat, dead>=1
+cast: A = rank>=2; B = craven
+cooldown: 1m
+A [shouts]: {B}, round his left!
+B: Not there! That's where {dead} fell!

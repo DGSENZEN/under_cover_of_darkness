@@ -1,0 +1,9 @@
+# What is said at the things they do together: dice, the flask, a story, the
+# watch changing, the captain's round, waking the sleeper, feeding the fire.
+
+== round_tam
+place: round
+cast: A = captain; B = name(Tam)
+cooldown: once
+A [kicks]: On your feet. The Moon-Glass doesn't guard itself.
+B: I was listening, Captain. With my eyes shut.

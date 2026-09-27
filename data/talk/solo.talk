@@ -1,0 +1,13 @@
+# A man alone at his station or his post, now and then, to himself.
+
+== brand_block
+place: chop
+cast: A = name(Brand)
+cooldown: 2m
+A [murmurs]: Come on, you knotted bastard.
+
+== tam_sleeptalk
+place: sleep
+cast: A = name(Tam)
+cooldown: 3m
+A [murmurs]: No, mother... not the eels...
