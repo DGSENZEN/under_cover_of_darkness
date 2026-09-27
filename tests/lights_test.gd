@@ -14,6 +14,8 @@ const TorchScript := preload("res://scripts/Visual/Torch.gd")
 const Materials := preload("res://scripts/Visual/Materials.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const Flicker := preload("res://scripts/Visual/Lights/Flicker.gd")
+const FlameFx := preload("res://scripts/Visual/Lights/FlameFx.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 
 ## LightProbe 2 m from a bare torch, the brazier and the campfire (each
 ## flame's flicker held still), read on main before any of this work: the
@@ -39,6 +41,7 @@ func _run() -> void:
 	await _materials()
 	await _baselines()
 	_flicker()
+	await _flames()
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +170,66 @@ func _flicker() -> void:
 	_check("L6 a candle burns still, a draft makes it shiver and it settles within a second",
 		still and early > 0.3 and Flicker.draft(1.0) == 0.0 and tail < 0.05,
 		"still %s, strongest in the first 0.3 s %.3f, at 1 s %.3f, last fifth %.3f" % [still, early, Flicker.draft(1.0), tail])
+
+
+# ---------------------------------------------------------------------------
+# Flames
+# ---------------------------------------------------------------------------
+
+func _flames() -> void:
+	# L7 sprites on the effects layer, sharing one material per sheet
+	var a: Node3D = FlameFx.new()
+	var b: Node3D = FlameFx.new()
+	a.layers = 2
+	a.core = true
+	add_child(a)
+	add_child(b)
+	a.global_position = Vector3(0, 2, -60)
+	b.global_position = Vector3(2, 2, -60)
+	await _frames(2)
+	var all_fx := true
+
+	for sprite in a.sprites:
+		all_fx = all_fx and sprite.layers == Layers.FX and sprite.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+	_check("L7 a flame is sprites on the effects layer, and flames of one sheet share a material",
+		a.sprites.size() == 3 and all_fx and a.sprites[0].material_override == b.sprites[0].material_override and a.sprites[0].material_override is ShaderMaterial,
+		"sprites %d all on FX %s shared %s" % [a.sprites.size(), all_fx, a.sprites[0].material_override == b.sprites[0].material_override])
+
+	# L8 the flipbook runs at the sheet's rate, and slower in slow motion
+	var changes := [0, 0]
+
+	for pass_index in 2:
+		Engine.time_scale = 1.0 if pass_index == 0 else 0.5
+		var last: int = a.frame
+
+		for i in 120:
+			await get_tree().process_frame
+
+			if a.frame != last:
+				changes[pass_index] += 1
+				last = a.frame
+
+	Engine.time_scale = 1.0
+	_check("L8 the flipbook runs at its rate (torch 12 a second), half that at half speed",
+		changes[0] >= 20 and changes[1] <= 14 and changes[1] >= 8,
+		"changes in 2 s: %d at full speed, %d at half" % [changes[0], changes[1]])
+
+	# L9 the wind leans it and flattens it a little
+	a.shape(0.0, 1.0, Vector3(1, 0, 0), 0.0, 0.0)
+	_check("L9 the wind leans the flame its way and flattens it", a.sprites[0].position.x >= 0.05 and a.sprites[0].scale.y < 1.0,
+		"moved %.3f m, height %.3f" % [a.sprites[0].position.x, a.sprites[0].scale.y])
+
+	# L10 burning low it goes to its dying colours
+	a.shape(0.0, 0.2, Vector3.ZERO, 0.0, 0.0)
+	var low: float = a.sprites[0].get_instance_shader_parameter(&"low")
+	a.shape(0.0, 1.0, Vector3.ZERO, 0.0, 0.0)
+	var full: float = a.sprites[0].get_instance_shader_parameter(&"low")
+	_check("L10 burning low a flame turns to its dying ramp; burning full it does not", low > 0.5 and full == 0.0,
+		"low %.2f at strength 0.2, %.2f at 1" % [low, full])
+	a.queue_free()
+	b.queue_free()
+	await _frames(2)
 
 
 ## The frequency (Hz) with the most energy in 8 s of a flicker sampled at 60 Hz.
