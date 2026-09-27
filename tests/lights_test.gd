@@ -23,6 +23,7 @@ const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
 const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
 const LightBudget := preload("res://scripts/Visual/Lights/LightBudget.gd")
 const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const LightFixture := preload("res://scripts/Visual/Lights/LightFixture.gd")
 
 ## LightProbe 2 m from a bare torch, the brazier and the campfire (each
@@ -60,6 +61,7 @@ func _run() -> void:
 	await _lanterns()
 	await _candles()
 	await _fires()
+	await _sounds()
 
 
 # ---------------------------------------------------------------------------
@@ -992,6 +994,140 @@ func _fires() -> void:
 		"bodies %d, hood hit %s" % [bodies, not hood_hit.is_empty()])
 	hearth.queue_free()
 	camera.queue_free()
+	await _frames(3)
+
+
+# ---------------------------------------------------------------------------
+# Their sounds
+# ---------------------------------------------------------------------------
+
+func _sounds() -> void:
+	Sfx.enabled = true
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.6, 1103)
+	camera.current = true
+
+	# L42 a campfire's bed near you, gone far off, silent once out, muffled through a wall
+	var camp: Node3D = Lights.campfire(self, Vector3(0, 0, 1100))
+	await _frames(60)
+	var bed: AudioStreamPlayer3D = camp.crackle
+	var bed_file: String = bed.stream.resource_path.get_file() if bed != null else "none"
+	var near_playing: bool = bed != null and bed.playing and bed.bus == Sfx.BUS_WORLD and bed_file.get_basename() == "fire_medium"
+	camera.global_position = Vector3(0, 1.6, 1120)
+	await _frames(60)
+	var far_stopped: bool = bed != null and not bed.playing
+	camera.global_position = Vector3(0, 1.6, 1103)
+	await _frames(60)
+	var back: bool = bed != null and bed.playing
+	camp.put_out(&"douse")
+	await _frames(60)
+	var out_stopped: bool = bed != null and not bed.playing
+	camp.queue_free()
+	var room := Vector3(20, 0, 1100)
+	Props.block(self, room + Vector3(0, 1.6, -2.2), Vector3(4.8, 3.2, 0.4))
+	Props.block(self, room + Vector3(0, 1.6, 2.2), Vector3(4.8, 3.2, 0.4))
+	Props.block(self, room + Vector3(-2.2, 1.6, 0), Vector3(0.4, 3.2, 4.8))
+	Props.block(self, room + Vector3(2.2, 1.6, 0), Vector3(0.4, 3.2, 4.8))
+	Props.block(self, room + Vector3(0, 3.4, 0), Vector3(4.8, 0.4, 4.8))
+	var boxed: Node3D = Lights.campfire(self, room)
+	camera.global_position = room + Vector3(0, 1.6, 8)
+	await _frames(60)
+	var muffled: bool = boxed.crackle != null and boxed.crackle.playing and boxed.crackle.attenuation_filter_cutoff_hz == Sfx.OCCLUDED_CUTOFF
+	_check("L42 a campfire's fire bed plays near you on the World bus, stops 20 m off and once doused, and is muffled through a wall",
+		near_playing and far_stopped and back and out_stopped and muffled,
+		"near %s (%s), far stopped %s, back %s, doused stopped %s, boxed muffled %s" % [near_playing, bed_file, far_stopped, back, out_stopped, muffled])
+	boxed.queue_free()
+
+	# L42b a hearth's chimney draws with its fire, from the top of its masonry
+	var hearth: Node3D = Lights.hearth(self, Vector3(30, 0, 1100), 0.0)
+	camera.global_position = Vector3(30, 1.6, 1104)
+	await _frames(60)
+	var draw: AudioStreamPlayer3D = hearth.get("chimney")
+	var drawing: bool = draw != null and draw.playing and hearth.crackle.playing and draw.position.y > 1.5 and draw.stream.resource_path.get_file().get_basename() == "chimney"
+	var under_bed: bool = draw != null and absf(draw.volume_db - (LightFixture.CHIMNEY_DB + hearth.crackle.volume_db - hearth.loop_db)) < 0.01
+	hearth.put_out(&"douse")
+	await _frames(60)
+	var draw_stopped: bool = draw != null and not draw.playing
+	_check("L42b a hearth's chimney draws from the top of its masonry, 20 dB under its fire, and stops with it; it crackles half as often",
+		drawing and under_bed and draw_stopped and is_equal_approx(hearth.crackle_rate, 0.5),
+		"drawing %s at %.2f m, under the bed %s, stopped %s, crackles %.2f/s" % [drawing, draw.position.y if draw != null else -1.0, under_bed, draw_stopped, hearth.crackle_rate])
+	hearth.queue_free()
+
+	# L43 a brazier crackles at random over its bed: never on a grid
+	var brazier: Node3D = Lights.brazier(self, Vector3(40, 0, 1100))
+	camera.global_position = Vector3(40, 1.6, 1104)
+	await _frames(60)
+	Sfx.recording = true
+	Sfx.recorded.clear()
+	var times: Array[float] = []
+	var seen := 0
+
+	for i in 60 * 60:
+		await _frames(1)
+
+		while seen < Sfx.recorded.size():
+			if Sfx.recorded[seen][0] in [&"crackle", &"coal_pop"]:
+				times.append(i / 60.0)
+
+			seen += 1
+
+	Sfx.recording = false
+	var gaps: Array[float] = []
+
+	for i in range(1, times.size()):
+		gaps.append(times[i] - times[i - 1])
+
+	var mean := 0.0
+
+	for gap in gaps:
+		mean += gap
+
+	mean /= maxf(gaps.size(), 1)
+	var spread := 0.0
+
+	for gap in gaps:
+		spread += (gap - mean) * (gap - mean)
+
+	var cv := sqrt(spread / maxf(gaps.size(), 1)) / maxf(mean, 0.0001)
+	_check("L43 a brazier crackles and pops 40-80 times a minute over its bed, at irregular times",
+		times.size() >= 40 and times.size() <= 80 and cv > 0.6, "%d in 60 s, variation of the gaps %.2f" % [times.size(), cv])
+	brazier.queue_free()
+
+	# L44 a hung lantern creaks as the wind swings it; a guard's lantern rattles every other step
+	var hung: Node3D = Lights.hanging_lantern(self, Vector3(60, 3, 1100), 0.6)
+	camera.global_position = Vector3(60, 1.6, 1104)
+	await _frames(3)
+	Sfx.recording = true
+	Sfx.recorded.clear()
+	hung.lean(Vector3(3, 0, 0))
+	await _frames(180)
+	var creaks := Sfx.recorded.filter(func(entry): return entry[0] == &"lantern_creak").size()
+	hung.queue_free()
+	var guard: CharacterBody3D = GUARD.instantiate()
+	add_child(guard)
+	guard.global_position = Vector3(80, 0, 1100)
+	await _frames(10)
+	guard._hands.carry_light(&"lantern")
+	guard.set_physics_process(false)
+	guard.velocity = Vector3(0, 0, 1.4)
+	Sfx.recorded.clear()
+	var steps := 0
+
+	while steps < 10:
+		guard.global_position += guard.velocity / 60.0
+		guard._update_weapon(1.0 / 60.0)
+		await _frames(1)
+		steps = Sfx.recorded.filter(func(entry): return String(entry[0]).begins_with("step_")).size()
+
+	var rattles := Sfx.recorded.filter(func(entry): return entry[0] == &"bail_rattle").size()
+	Sfx.recording = false
+	_check("L44 a hanging lantern creaks as the wind swings it; a guard's lantern rattles on every other step",
+		creaks >= 1 and rattles >= 4 and rattles <= 6, "creaks %d, rattles %d in %d steps" % [creaks, rattles, steps])
+	guard.queue_free()
+	camera.queue_free()
+	Sfx.silence()
+	Sfx.enabled = false
 	await _frames(3)
 
 

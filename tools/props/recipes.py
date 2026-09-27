@@ -584,7 +584,8 @@ FIXTURES["hearth"] = {
     ],
     "sockets": {"flame": [(0.0, -0.4, 0.22)], "corona": [(0.0, -0.45, 0.5)], "mount": [(0.0, 0.0, 0.0)]},
     "burner": dict(BRAZIER_BURNER, sheet="fire", ramp="fire", flicker_kind="fire", flicker=0.18, energy=2.6, light_range=9.0,
-                   flame_size=0.6, ember_rate=20.0, smoke_rate=4.0, loop="fire_big", loop_db=-14.0, event_every=(20.0, 40.0), light_above=0.2),
+                   flame_size=0.6, ember_rate=20.0, smoke_rate=4.0, loop="fire_big", loop_db=-14.0, event_every=(20.0, 40.0), light_above=0.2,
+                   crackle_rate=0.5, chimney="chimney"),
 }
 
 KINDS = list(FIXTURES)

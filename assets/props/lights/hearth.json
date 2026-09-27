@@ -69,9 +69,11 @@
    20.0,
    40.0
   ],
-  "light_above": 0.2
+  "light_above": 0.2,
+  "crackle_rate": 0.5,
+  "chimney": "chimney"
  },
  "soot": false,
  "cookie": false,
- "hash": "89093de399e81e48cf25b1d31d45fd9c"
+ "hash": "6480ee88a62709cbcdfb3b5ad9ee3516"
 }

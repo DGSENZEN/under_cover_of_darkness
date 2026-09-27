@@ -307,6 +307,8 @@ var _rise_length := 1.0
 var _rise_speed := 1.0
 ## Which step of his walk he is on: a new one is a foot coming down.
 var _step_index := 0
+## How many steps he has been heard to take (his lantern rattles every other).
+var _steps_heard := 0
 var _grip := GRIP
 var _blade_base := BLADE_BASE
 var _blade_tip := BLADE_TIP
@@ -620,6 +622,12 @@ func update(delta: float) -> void:
 
 		if speed > 0.6:
 			Sfx.play(guard, _step_sound(speed), guard.global_position + Vector3.UP * 0.05, Sfx.loudness(44.0 + speed * 2.5))
+			_steps_heard += 1
+			# His lantern rattles on its bail, every other step.
+			var hands: RefCounted = guard.get("_hands")
+
+			if hands != null and hands.lantern != null and hands.light_kind != &"torch" and _steps_heard % 2 == 0:
+				Sfx.play(guard, &"bail_rattle", hands.lantern.global_position, 0.0)
 
 	# A lean into his running, away from what hit him, and with a kick.
 	var tilt_goal := local_velocity * 0.012

@@ -36,6 +36,11 @@ const CRACKLE := "res://audio/ambience/torch_loop.ogg"
 ## How loud its crackle is (dB at a metre or so), and how far it carries.
 const CRACKLE_DB := -13.0
 const CRACKLE_REACH := 11.0
+## Crackles and pops a second over its loop, by kind (a Poisson process:
+## never on a grid, or a fire sounds fake); a brazier's or a campfire's are
+## coals popping this share of the time.
+const CRACKLES := {&"torch": 0.6, &"cresset": 0.8, &"brazier": 1.0, &"fire": 1.0}
+const POP_SHARE := 0.4
 ## A flare: this much brighter and this much taller at its height, gone over
 ## FLARE_TIME.
 const FLARE_LIGHT := 0.6
@@ -90,6 +95,8 @@ signal lit_changed(lit: bool)
 @export var loop_path := CRACKLE
 @export var loop_db := CRACKLE_DB
 @export var loop_reach := CRACKLE_REACH
+## Crackles a second over its loop (-1: its kind's, CRACKLES).
+@export var crackle_rate := -1.0
 ## Lit as made.
 @export var lit := true
 ## Embers and smoke a second from each flame.
@@ -125,6 +132,7 @@ var _salt := 0
 var _seeded := false
 var _listen_in := 0.0
 var _crackle_db := CRACKLE_DB
+var _crackle_in := -1.0
 ## How brightly it burns (a brazier burning down: Fire.gd); 1 as made.
 var _strength := 1.0
 ## The wind on it (Atmosphere): the flame leans its way.
@@ -308,6 +316,7 @@ func _process(delta: float) -> void:
 
 	_shed(delta)
 	_listen(delta)
+	_crackles(delta)
 
 
 ## A fire's surges and settling logs (event_every): its flames jump, embers
@@ -538,8 +547,8 @@ func flare(amount := 1.0) -> void:
 
 
 ## Its crackle: started when you come near enough to hear it (somewhere in
-## the loop, never in step with another torch), stopped when you leave;
-## dulled and dropped through a wall, eased there so it never jumps.
+## the loop, never in step with another torch), stopped when you leave or it
+## goes out; dulled and dropped through a wall, eased there so it never jumps.
 func _listen(delta: float) -> void:
 	if crackle == null:
 		return
@@ -550,7 +559,7 @@ func _listen(delta: float) -> void:
 	if _listen_in <= 0.0:
 		_listen_in = 0.4 + randf() * 0.2
 		var camera := get_viewport().get_camera_3d()
-		var near := camera != null and camera.global_position.distance_to(global_position) < loop_reach + 1.0
+		var near := lit and camera != null and camera.global_position.distance_to(global_position) < loop_reach + 1.0
 
 		if near and not crackle.playing:
 			crackle.volume_db = -40.0
@@ -565,3 +574,28 @@ func _listen(delta: float) -> void:
 
 	if crackle.playing:
 		crackle.volume_db = lerpf(crackle.volume_db, _crackle_db, 1.0 - exp(-4.0 * real))
+
+
+## Crackles and pops over its loop while it plays, at random: the next one's
+## wait drawn from an exponential at its rate. A bigger fire's are louder, as
+## its loop is.
+func _crackles(delta: float) -> void:
+	var rate := crackle_rate if crackle_rate >= 0.0 else float(CRACKLES.get(flicker_kind, 0.0))
+
+	if crackle == null or not crackle.playing or rate <= 0.0:
+		_crackle_in = -1.0
+		return
+
+	if _crackle_in < 0.0:
+		_crackle_in = _crackle_wait(rate)
+
+	_crackle_in -= delta
+
+	while _crackle_in <= 0.0:
+		var pop := (flicker_kind == &"brazier" or flicker_kind == &"fire") and rng.randf() < POP_SHARE
+		Sfx.play(self, &"coal_pop" if pop else &"crackle", crackle.global_position, loop_db - CRACKLE_DB)
+		_crackle_in += _crackle_wait(rate)
+
+
+func _crackle_wait(rate: float) -> float:
+	return maxf(-log(1.0 - rng.randf() * 0.9999) / rate, 0.02)

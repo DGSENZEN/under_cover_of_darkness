@@ -24,6 +24,12 @@ const LINK_PITCH := 0.054
 const SWING_DAMPING := 1.5
 const SWING_WIND := 0.8
 const SWING_MOST := 0.5
+## A hung fixture creaks as it swings faster than this (rad/s, as it passes
+## it), at most every CREAK_EVERY s.
+const CREAK_SPEED := 0.15
+const CREAK_EVERY := 0.8
+## A hearth's chimney draw, under its fire's loop.
+const CHIMNEY_DB := -20.0
 ## Candles feel a draft from a man moving faster than DRAFT_SPEED within
 ## DRAFT_REACH, or a door swinging within DRAFT_DOOR; they look DRAFT_EVERY.
 const DRAFT_SPEED := 3.0
@@ -53,6 +59,10 @@ var glow_meshes: Array[GeometryInstance3D] = []
 var soot: Decal
 ## A big fire's heat haze (null for other fixtures).
 var haze: MeshInstance3D
+## A hearth's chimney draw (null for other fixtures, or with sound off), and
+## its loop's path (the recipe's "chimney", a name in audio/ambience/).
+var chimney: AudioStreamPlayer3D
+var chimney_path := ""
 var spec_data := {}
 var _tilt := Vector2.ZERO
 var _spin := Vector2.ZERO
@@ -60,6 +70,8 @@ var _rest_basis := Basis.IDENTITY
 var _swinging := false
 var _draft_clock := 0.0
 var _door_angles := {}
+var _creak_wait := 0.0
+var _was_fast := false
 
 static var _specs := {}
 var _bodies: Array[RID] = []
@@ -122,7 +134,7 @@ func _before_ready() -> void:
 
 
 ## Burner settings from the recipe: exports by name; "color" as hex, "loop"
-## as a name in audio/ambience/ ("" for silence).
+## and "chimney" as names in audio/ambience/ ("" for silence).
 func _apply_settings(settings: Dictionary) -> void:
 	for key in settings:
 		var value = settings[key]
@@ -132,6 +144,8 @@ func _apply_settings(settings: Dictionary) -> void:
 				color = Color(value) if value is String else value
 			"loop":
 				loop_path = _ambience(String(value))
+			"chimney":
+				chimney_path = _ambience(String(value))
 			_:
 				if key in self:
 					var current = get(key)
@@ -207,6 +221,8 @@ func _after_ready() -> void:
 	if spec_data.get("family", "") == "fires":
 		_make_haze()
 
+	_make_chimney()
+
 	if spec_data.get("family", "") == "candles":
 		light.distance_fade_enabled = true
 		light.distance_fade_begin = SMALL_FADE_FROM
@@ -227,6 +243,54 @@ func _make_haze() -> void:
 	add_child(haze)
 	haze.position = flame_points[0] + Vector3(0.0, flame_size + 0.45, 0.0)
 	haze.visible = false
+
+
+## A hearth's chimney: the slow draw of air up it, heard from the top of its
+## masonry whenever its fire's loop is.
+func _make_chimney() -> void:
+	if crackle == null or chimney_path.is_empty():
+		return
+
+	chimney = AudioStreamPlayer3D.new()
+	chimney.name = "Chimney"
+	chimney.stream = load(chimney_path)
+	chimney.bus = crackle.bus
+	chimney.unit_size = crackle.unit_size
+	chimney.max_distance = loop_reach
+	chimney.volume_db = CHIMNEY_DB
+	chimney.max_db = 0.0
+	chimney.attenuation_filter_db = Sfx.AIR_DB
+	chimney.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
+	var under := flame_points[0] if not flame_points.is_empty() else Vector3.ZERO
+	chimney.position = Vector3(under.x, _model_top(), under.z)
+	add_child(chimney)
+
+
+## The top of its model, in its own space.
+func _model_top() -> float:
+	var top := 0.0
+
+	if model == null:
+		return top
+
+	var to_self := global_transform.affine_inverse()
+
+	for mesh in model.find_children("*", "MeshInstance3D", true, false):
+		var box: AABB = (to_self * (mesh as MeshInstance3D).global_transform) * (mesh as MeshInstance3D).get_aabb()
+		top = maxf(top, box.end.y)
+
+	return top
+
+
+## Its chimney plays with its fire's loop, as muffled.
+func _draw_chimney() -> void:
+	if crackle.playing and not chimney.playing:
+		chimney.play(randf() * maxf(chimney.stream.get_length() - 1.0, 0.0))
+	elif not crackle.playing and chimney.playing:
+		chimney.stop()
+
+	chimney.volume_db = CHIMNEY_DB + crackle.volume_db - loop_db
+	chimney.attenuation_filter_cutoff_hz = crackle.attenuation_filter_cutoff_hz
 
 
 ## A hung fixture hangs `hang_drop` below its hook on links of chain; it
@@ -343,6 +407,9 @@ func _process(delta: float) -> void:
 	if flicker_kind == &"candle":
 		_watch_drafts(delta)
 
+	if chimney != null:
+		_draw_chimney()
+
 	if haze != null:
 		var camera := get_viewport().get_camera_3d()
 		haze.visible = lit and camera != null and camera.global_position.distance_to(global_position) < HAZE_REACH
@@ -394,6 +461,15 @@ func _swing(delta: float) -> void:
 	_tilt = (_tilt + _spin * delta).limit_length(SWING_MOST)
 	# Its foot swings downwind: about Z for x, about X (against) for z.
 	transform.basis = _rest_basis * Basis(Vector3.BACK, _tilt.x) * Basis(Vector3.RIGHT, -_tilt.y)
+	# A gust that sets it swinging: its chain creaks.
+	_creak_wait = maxf(_creak_wait - delta, 0.0)
+	var fast := swing_speed() > CREAK_SPEED
+
+	if fast and not _was_fast and _creak_wait <= 0.0:
+		_creak_wait = CREAK_EVERY
+		Sfx.play(self, &"lantern_creak", global_position, 0.0)
+
+	_was_fast = fast
 
 
 func _show_lit(state: StringName) -> void:
