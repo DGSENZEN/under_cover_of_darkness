@@ -148,6 +148,7 @@ func _run() -> void:
 	await _k3()
 	await _k3b()
 	await _k15b()
+	await _k31()
 	await _dressed()
 	await _integration()
 
@@ -593,6 +594,50 @@ func _k15() -> void:
 	scene.free()
 	_check("K15 the coif's hood above his ears rides his head alone", hood > 0 and wrong.is_empty(),
 		"hood vertices %d, on other bones %s" % [hood, wrong])
+
+
+## K31 (Review Focus 1) a bare-headed watchman's hat never cuts his hair or
+## head: every face and hair he may wear under it (his options doctored to
+## each pair), at rest, bowed (_bow 0.61) and looking up (-0.4) (he has no
+## overhead); edges through faces, as K22.
+func _k31() -> void:
+	var cuts := 0
+	var pairs := 0
+	var where := []
+
+	for face in ["young", "weathered", "heavy", "old"]:
+		for style in ["parted", "buzzed", "tied"]:
+			_doctor(&"watchman", {"faces": [face], "hair": [style], "beards": [], "headgear": [["kettlehat_bare"]]})
+			var g := await _guard(7)
+			g.set_physics_process(false)
+			var man = g._rig.man
+			var hat := _worn(man, "kettlehat_bare")
+			var head := _worn(man, "Head_" + face)
+			var hair := _worn(man, "Hair_" + style)
+
+			if hat != null and head != null and hair != null:
+				pairs += 1
+				var hat_faces := _faces_of(hat, PackedInt32Array())
+
+				for angle in [0.0, 0.61, -0.4]:
+					if angle != 0.0:
+						_bow(man, angle)
+
+					var skinned_hat := _skinned(hat, man.skeleton)
+
+					for piece in [head, hair]:
+						var n := _cuts(skinned_hat, hat_faces, _skinned(piece, man.skeleton), _faces_of(piece, PackedInt32Array()))
+
+						if n > 0:
+							cuts += n
+							where.append("%s %s %s %.2f" % [face, style, piece.name, angle])
+
+			Wardrobe.forget()
+			g.queue_free()
+			await _frames(1)
+
+	_check("K31 the bare kettle hat never cuts his hair or head", cuts == 0 and pairs == 12,
+		"%d cuts over %d face-hair pairs %s" % [cuts, pairs, where])
 
 
 ## K15b (Review Focus 2) the new faces sit in what closes round them as the

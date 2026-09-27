@@ -638,6 +638,22 @@ HEADGEAR = {
                   "comb": 0.0, "brim": 0.07, "droop": 0.036, "lip": 0.012, "rivets": 12,
                   "fabric": "iron", "colour": IRON_HAT, "band": ("leather", LEATHER),
                   "metal": ["Head"], "hides_hair": False, "allows_beard": True},
+    # The same hat on a bare head (batch 3; §8: "coif or bare head under the
+    # kettle hat"), his hair and beard showing under its brim: fitted over
+    # every male head and the hair he may wear under it (`over_hair`), its
+    # band just over his brows. check.py holds it `clearance` to `rest` off
+    # the outermost of them along `fit_rays` (above its band: lower rays
+    # meet the brim, and one near its top: a hair's crest rises between
+    # sampled points, build.kettle fits its upper bowl over the most any way
+    # near each point needs); clearing the thickest hair, its round bowl
+    # stands up to 4.9 cm off his bare crown, as the coif's hat does off his
+    # head (3.2 over 1.5 of mail).
+    "kettlehat_bare": {"type": "kettle", "bone": "Head", "over": "head", "over_hair": ["parted", "buzzed", "tied"],
+                       "clearance": 0.006, "slack": 0.009, "rest": 0.05, "base_z": 1.735, "centre_y": 0.02, "drop": 0.05,
+                       "segments": 16, "elevations": [15, 38, 60, 80], "comb": 0.0, "brim": 0.07, "droop": 0.036,
+                       "lip": 0.012, "rivets": 12, "fabric": "iron", "colour": IRON_HAT, "band": ("leather", LEATHER),
+                       "fit_rays": {"elevations": [35, 55, 75, 85], "azimuths": list(range(0, 360, 30))},
+                       "metal": ["Head"], "hides_hair": False, "allows_beard": True, "body": "male"},
     # The swordsman's nasal helm (build.helm): the kettle's bowl without a
     # brim, set straight on his head (every head he may wear it on), its
     # crown drawn up `point` to a point, an iron brow band `band` tall

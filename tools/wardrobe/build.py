@@ -2153,7 +2153,9 @@ def kettle(kind, g, piece, made):
     `brim` wide turning `droop` down to a lip turned `lip` down. Wholly on
     his Head. Its trim (rivets above the band, a bright seam over the crown
     and a bright rim) is left for the bake (wr_details)."""
-    tree = common.bvh([made[g["over"]]])
+    # Over the coif, or (on a bare head) over every head and the hair worn
+    # under it.
+    tree = heads_tree(kind, g.get("over_hair", ())) if g["over"] == "head" else common.bvh([made[g["over"]]])
     centre = Vector((0.0, g["centre_y"], g["base_z"]))
     n = g["segments"]
     around = [2.0 * math.pi * i / n for i in range(n)]
@@ -2185,7 +2187,27 @@ def kettle(kind, g, piece, made):
         hit = common.outer_hit(tree, middle, d, 0.4)
         return (hit - middle).length if hit is not None and (hit - middle).dot(d) > 0.0 else None
 
-    crown = (along(Vector((0.0, 0.0, 1.0))) or 0.13) + off - g["drop"]
+    def need_near(d):
+        """How far out the bowl must stand along `d`: over a coif, as far as
+        it is there; over bare heads and hair, the most any way round it
+        needs, half-way to the next points (a hair's crest rises between
+        them, under the bowl's flat faces)."""
+        best = along(d)
+
+        if g["over"] != "head":
+            return best
+
+        u = d.orthogonal().normalized()
+        v = d.cross(u)
+
+        for a in (-0.2, 0.0, 0.2):
+            for b in (-0.2, 0.0, 0.2):
+                n = along((d + u * a + v * b).normalized())
+                best = n if best is None or (n is not None and n > best) else best
+
+        return best
+
+    crown = (need_near(Vector((0.0, 0.0, 1.0))) or 0.13) + off - g["drop"]
     rows = []
 
     for elevation in [0.0] + list(g["elevations"]):
@@ -2198,7 +2220,9 @@ def kettle(kind, g, piece, made):
             # Never nearer the coif than `off`, looking out from his head's
             # middle.
             d = (point - middle).normalized()
-            need = along(d)
+            # (The upper bowl only: round its band, the hair under it flares
+            # over his ears, the brim's business.)
+            need = need_near(d) if elevation >= 30.0 else along(d)
 
             if need is not None and (point - middle).length < need + off:
                 point = middle + d * (need + off)
@@ -2577,16 +2601,18 @@ def imported(kind, g, piece, made):
     return obj
 
 
-def heads_tree(kind):
-    """What a helm goes over, as one tree: his own head (the full body's)
-    and every low head in heads.blend (a low head strays a little outside
-    the full one)."""
+def heads_tree(kind, hair=()):
+    """What a helm goes over, as one tree: his own head (the full body's),
+    every low head in heads.blend (a low head strays a little outside the
+    full one) and the `hair` styles (hair.blend) it is worn over."""
     objects = [head_region(kind.ref, "wr_helm_head")]
-    path = common.SOURCE / "heads.blend"
 
-    if path.exists():
+    for path, names in ((common.SOURCE / "heads.blend", None), (common.SOURCE / "hair.blend", ["Hair_%s" % h for h in hair])):
+        if not path.exists() or names == []:
+            continue
+
         with bpy.data.libraries.load(str(path)) as (source, target):
-            target.objects = [name for name in source.objects if name.startswith("Head_")]
+            target.objects = [name for name in source.objects if (name.startswith("Head_") if names is None else name in names)]
 
         objects += [o for o in target.objects if o is not None and o.type == "MESH"]
 

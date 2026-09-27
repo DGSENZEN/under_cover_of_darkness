@@ -118,7 +118,7 @@ def check_parts(prefix, folder, body="male"):
             forget(under)
 
         if piece.get("over") == "head":
-            under = heads()
+            under = heads() + hair_of("male", piece.get("over_hair", []))
             messages += ["%s %s" % (obj.name, m) for m in fit(obj, under, pivot, piece["clearance"], piece["rest"],
                                                               piece.get("fit_rays"))] if under else []
             forget(under)
@@ -151,6 +151,20 @@ def heads(body="male"):
     # The heads by their objects' names (their meshes keep the body's).
     with bpy.data.libraries.load(str(path)) as (source, target):
         target.objects = [name for name in source.objects if name.startswith("Head_")]
+
+    return [o for o in target.objects if o is not None and o.type == "MESH"]
+
+
+def hair_of(body, styles):
+    """The hair `styles` of `body` (its hair file), brought into this file
+    (forget() lets them go): what a hat on a bare head goes over."""
+    path = common.SOURCE / ("%s.blend" % common.part_target("hair", body))
+
+    if not path.exists() or not styles:
+        return []
+
+    with bpy.data.libraries.load(str(path)) as (source, target):
+        target.objects = [name for name in source.objects if name in ["Hair_%s" % s for s in styles]]
 
     return [o for o in target.objects if o is not None and o.type == "MESH"]
 
