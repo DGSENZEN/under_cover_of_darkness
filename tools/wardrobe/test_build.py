@@ -19,6 +19,7 @@ from mathutils import Vector  # noqa: E402
 from mathutils.bvhtree import BVHTree  # noqa: E402
 
 import common  # noqa: E402
+import testkit  # noqa: E402
 
 
 def fresh():
@@ -182,7 +183,7 @@ def case_types():
     import validate
 
     fresh()
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_types_"))
+    folder = testkit.scratch_dir("wardrobe_types_")
     common.SOURCE, common.BACKUP = folder, folder / "backup"
     before = set(bpy.data.objects)
     skeleton, _, _ = common.import_quaternius("male")
@@ -358,7 +359,7 @@ def build_types(recipe):
 
     fresh()
     source = common.WARDROBE / "source"
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_%s_" % recipe["kind"]))
+    folder = testkit.scratch_dir("wardrobe_%s_" % recipe["kind"])
     common.SOURCE, common.BACKUP = folder, folder / "backup"
     before = set(bpy.data.objects)
     skeleton, _, _ = common.import_quaternius(recipe["body"])
@@ -487,7 +488,7 @@ def case_watchman():
     source = common.WARDROBE / "source"
     approved = source / "watchman.blend"
     fresh()
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_watchman_"))
+    folder = testkit.scratch_dir("wardrobe_watchman_")
     common.SOURCE, common.BACKUP = folder, folder / "backup"
 
     try:
@@ -608,7 +609,7 @@ def case_launcher():
     import tempfile
     from pathlib import Path
 
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_launcher_"))
+    folder = testkit.scratch_dir("wardrobe_launcher_")
     broken = folder / "python3"
     broken.write_text("#!/bin/sh\nexit 1\n")
     broken.chmod(0o755)
@@ -645,7 +646,7 @@ def case_male_parts():
     import build
 
     source = common.WARDROBE / "source"
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_male_parts_"))
+    folder = testkit.scratch_dir("wardrobe_male_parts_")
     messages = []
 
     # The heads first: the hair is fitted over the heads it finds there.
@@ -818,7 +819,7 @@ def case_faces():
         return ["faces: male %s, female %s" % (male, female)]
 
     source = common.WARDROBE / "source"
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_faces_"))
+    folder = testkit.scratch_dir("wardrobe_faces_")
     heads = {}
 
     for body in ("male", "female"):
@@ -906,7 +907,7 @@ def case_beards_and_tails():
     if missing:
         return ["no recipe for %s" % missing]
 
-    hair = build_hair_into(Path(tempfile.mkdtemp(prefix="wardrobe_beards_")))
+    hair = build_hair_into(testkit.scratch_dir("wardrobe_beards_"))
     messages = []
     short, moustache, tied, tail = (hair[s][0] for s in ("short", "moustache", "tied", "tail"))
 
@@ -950,7 +951,7 @@ def case_bare_hat():
         return ["no kettlehat_bare recipe"]
 
     source = common.WARDROBE / "source"
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_bare_hat_"))
+    folder = testkit.scratch_dir("wardrobe_bare_hat_")
 
     for name in ("heads.blend", "hair.blend"):
         shutil.copy(source / name, folder / name)
@@ -1005,7 +1006,7 @@ def case_coif_beards():
     import recipes
 
     source = common.WARDROBE / "source"
-    folder = Path(tempfile.mkdtemp(prefix="wardrobe_coif_beards_"))
+    folder = testkit.scratch_dir("wardrobe_coif_beards_")
 
     for name in ("heads.blend", "hair.blend"):
         shutil.copy(source / name, folder / name)
@@ -1152,7 +1153,14 @@ def main():
         print("%s %s%s" % ("PASS" if not messages else "FAIL", name, "" if not messages else ": %s" % messages))
         failed += 1 if messages else 0
 
-    print("build: %d/%d" % (len(CASES) - failed, len(CASES)))
+    testkit.tidy()
+    left = testkit.leaked()
+
+    if left:
+        print("FAIL leak: %d scratch folders left in the temp folder (%s)" % (len(left), left[:2]))
+        failed += 1
+
+    print("build: %d/%d" % (len(CASES) + 1 - failed, len(CASES) + 1))
     sys.exit(1 if failed else 0)
 
 
