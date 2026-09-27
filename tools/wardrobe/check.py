@@ -105,6 +105,7 @@ def check_parts(prefix, folder, body="male"):
 
         if piece.get("covers_head"):
             messages += ["%s %s" % (obj.name, m) for m in encloses(obj, piece, armature.data.bones["Head"].head_local)]
+            messages += ["%s %s" % (obj.name, m) for m in holds_faces(obj, piece, armature.data.bones["Head"].head_local)]
 
         # The beards worn under it lie under its mail: no face of one
         # through a face of it.
@@ -230,6 +231,36 @@ def encloses(obj, piece, pivot):
     if where is not None and worst < piece["inside"]:
         return ["encloses: the head comes %.1f mm from its surface at (%.3f, %.3f, %.3f) (at least %.1f mm under it)"
                 % (worst * 1000, where.x, where.y, where.z, piece["inside"] * 1000)]
+
+    return []
+
+
+def holds_faces(obj, piece, pivot):
+    """No face comes through a hood: along the ray from the middle of his
+    head through each vertex of every head (over its cape's top: lower down
+    the cape covers from outside), the hood is not met before the vertex.
+    `encloses` holds his skull; this, his face at its opening's rim."""
+    found = heads()
+    tree = common.bvh([obj])
+    centre = pivot + Vector((0.0, 0.0, 0.1))
+    above = piece["cape"]["top_z"] + 0.01
+    worst, where = 0.0, None
+
+    for head in found:
+        for vertex in head.data.vertices:
+            if vertex.co.z <= above:
+                continue
+
+            d = vertex.co - centre
+            hit = tree.ray_cast(centre, d.normalized(), d.length)
+
+            if hit[0] is not None and d.length - hit[3] > worst:
+                worst, where = d.length - hit[3], vertex.co.copy()
+
+    forget(found)
+
+    if where is not None and worst > 0.0005:
+        return ["holds: a face comes %.1f mm through it at (%.3f, %.3f, %.3f)" % (worst * 1000, where.x, where.y, where.z)]
 
     return []
 

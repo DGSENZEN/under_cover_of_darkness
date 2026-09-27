@@ -207,6 +207,7 @@ def build_kind(recipe, force):
 
     common.smooth(outfit, CREASE)
     materials(outfit)
+    common.open_necklines(outfit, armature)
     weigh(outfit, reference)
     chains = add_chains(kind)
     outfit.parent = armature
@@ -1950,14 +1951,22 @@ def build_heads(force, body="male"):
         common.select_only([low])
         bpy.ops.object.modifier_apply(modifier=decimate.name)
         split_at_seam(low)
+        head_uv(low)
+        faces_of_head = len(low.data.polygons)
+        low = join_two(low, neck_sleeve(kind, low, recipes.NECK_SLEEVE[body], body), low.name)
+        sleeve_uv(low, faces_of_head)
         common.select_only([low])
         bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
         bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL", lock_active=False)
-        head_uv(low)
         common.smooth(low, HEAD_CREASE)
         low.data.materials.clear()
         low.data.materials.append(bpy.data.materials.get("WR_closed") or bpy.data.materials.new("WR_closed"))
         common.set_faces(low, 1, recipes.FABRICS.index("skin"), 0.0, False, False, SKIN)
+        # (Its sleeve is part 2: bake.neck_fade fades from the head's own
+        # open edge, not the sleeve's.)
+        common.set_faces(low, 2, recipes.FABRICS.index("skin"), 0.0, False, False, SKIN,
+                         faces=range(faces_of_head, len(low.data.polygons)))
+        open_neck_edge(low, faces_of_head, body)
         low.parent = armature
         low.modifiers.new("Armature", "ARMATURE").object = armature
 
@@ -1971,6 +1980,77 @@ def build_heads(force, body="male"):
         bpy.data.objects.remove(extra)
 
     finish(path, made, reference)
+
+
+def neck_sleeve(kind, low, g, body):
+    """A sleeve of skin inside his neck (recipes.NECK_SLEEVE): `segments`
+    round, from just over the head's open edge down to `bottom`, sunk
+    `tuck` under the full body's neck (the first surface out from its
+    middle). Hidden inside his neck and under his collar, it fills the gap
+    where the teeth of a low head's edge met a collar standing off his
+    neck: the background showed through beside the bare-hat watchman's
+    neck (and the duelist's and the arms master's)."""
+    bm = bmesh.new()
+    bm.from_mesh(low.data)
+    top = max(v.co.z for v in bm.verts if v.is_boundary and v.co.z < common.NECK_EDGE_BELOW[body]) + 0.005
+    bm.free()
+    axis_y = kind.at(("neck_01", 0.0)).y
+    rings = []
+
+    for z in (top, g["bottom"]):
+        centre = Vector((0.0, axis_y, z))
+        ring = []
+
+        for k in range(g["segments"]):
+            a = 2.0 * math.pi * k / g["segments"]
+            d = Vector((math.sin(a), -math.cos(a), 0.0))
+            hit = kind.ref_tree.ray_cast(centre, d, 0.15)
+            reach = (hit[0] - centre).length if hit[0] is not None else 0.05
+            ring.append(centre + d * (reach - g["tuck"]))
+
+        rings.append(ring)
+
+    sleeve = common.loft("neck_sleeve", rings, closed=True)
+    outward(sleeve)
+    weigh_part(sleeve, kind.ref)
+    return sleeve
+
+
+def open_neck_edge(obj, faces_of_head, body, reach=0.03):
+    """The head's faces within `reach` of its open neck edge drawn from both
+    sides (a WR_strips surface, as common.open_necklines draws a garment's):
+    seen past the side of his neck, the inside of its flare at his back
+    showed the background (the bare-hat watchman)."""
+    obj.data.materials.append(bpy.data.materials.get("WR_strips") or bpy.data.materials.new("WR_strips"))
+    strips = obj.data.attributes["wr_strip"].data
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.faces.ensure_lookup_table()
+    edge = [v.co.copy() for e in bm.edges if e.is_boundary and all(f.index < faces_of_head for f in e.link_faces)
+            and max(v.co.z for v in e.verts) < common.NECK_EDGE_BELOW[body] for v in e.verts]
+
+    for f in bm.faces:
+        if f.index < faces_of_head and any((v.co - p).length < reach for v in f.verts for p in edge):
+            strips[f.index].value = True
+            obj.data.polygons[f.index].material_index = 1
+
+    bm.free()
+
+
+def sleeve_uv(obj, first):
+    """The sleeve's faces (`first` on) sample the bottom row of the head's
+    map, round as head_uv goes: the foot of the head's neck, faded there to
+    his body's skin (bake.neck_fade)."""
+    layer = obj.data.uv_layers.active
+    ys = [v.co.y for v in obj.data.vertices]
+    yc = (min(ys) + max(ys)) * 0.5
+
+    for polygon in obj.data.polygons[first:]:
+        for index in polygon.loop_indices:
+            co = obj.data.vertices[obj.data.loops[index].vertex_index].co
+            angle = math.atan2(co.x, -(co.y - yc))
+            reach = abs(angle / math.pi) ** 0.8
+            layer.data[index].uv = (0.5 + math.copysign(reach, angle) * 0.49, 0.012)
 
 
 def split_at_seam(obj):
@@ -2060,6 +2140,10 @@ def build_hair(force, body="male"):
         common.set_faces(obj, 1, recipes.FABRICS.index("hair"), 0.0, False, True, HAIR_GREY)
         weigh_part(obj, reference)
         ride(obj, 1e9, ("Head", "neck_01"))
+
+        if "hem" in h:
+            rest_on_neck(obj, h["hem"])
+
         common.unwrap([obj], {obj.name: 1.0})
         common.smooth(obj, HEAD_CREASE)
         materials(obj)
@@ -2069,6 +2153,25 @@ def build_hair(force, body="male"):
         print("wardrobe: %s %s %d triangles over %d head vertices" % (h["kind"], style, common.tri_count(obj), len(under)))
 
     finish(path, made, reference)
+
+
+def rest_on_neck(obj, hem):
+    """A beard's hem resting on his throat: below `from` (under his chin)
+    its neck's share of each vertex grows to `neck` at `to`, the rest his
+    Head's. Borne by his head alone, a hem hanging to his throat went
+    through his collar when he bowed his head (dozing: K33)."""
+    neck, head = obj.vertex_groups["neck_01"], obj.vertex_groups["Head"]
+
+    for vertex in obj.data.vertices:
+        t = smoothstep(hem["from"], hem["to"], vertex.co.z)
+
+        if t <= 0.0:
+            continue
+
+        now = next((g.weight for g in vertex.groups if g.group == neck.index), 0.0)
+        share = max(now, now + (hem["neck"] - now) * t)
+        neck.add([vertex.index], share, "REPLACE")
+        head.add([vertex.index], 1.0 - share, "REPLACE")
 
 
 def cut_style(obj, h):
@@ -2421,7 +2524,10 @@ def coif(kind, g, piece, made=None):
     def in_opening(p):
         return abs(p.x) < hole["x"] + 0.01 and hole["from_z"] - 0.01 < p.z < hole["to_z"] + 0.01 and p.y < -0.02
 
-    head = common.bvh([head_region(kind.ref, "wr_coif_head")])
+    # Every head it may go over (heads_tree: his own and each low head):
+    # fitted to his own alone, the heavy face's jaw came through the hood's
+    # rim.
+    head = heads_tree(kind)
     # The beards it is worn over (`over_beards`): they hang below his chin
     # in front of his throat, where it closes round his neck.
     beard_points, beards = hair_points(g.get("over_beards", ()), grow=g.get("beard_margin", 0.0))
@@ -2451,7 +2557,6 @@ def coif(kind, g, piece, made=None):
     crown = middle + Vector((0.0, 0.0, reach(middle, Vector((0.0, 0.0, 1.0)), 0.12) + off))
     obj = common.loft("Gear_%s" % piece, rows, closed=True, cap=crown)
     outward(obj)
-    bpy.data.objects.remove(bpy.data.objects["wr_coif_head"])
 
     bm = bmesh.new()
     bm.from_mesh(obj.data)
@@ -2476,12 +2581,12 @@ def coif(kind, g, piece, made=None):
     enclose(bm, skull, middle, g["inside"] + 0.004)
     opening = [e for e in bm.edges if e.is_boundary and (e.verts[0].co.z + e.verts[1].co.z) * 0.5 > g["cape"]["top_z"] + 0.005]
 
-    # Its face edge turned in to his face (resting on a beard it goes over,
+    # Its face edge turned in to the faces (resting on a beard it goes over,
     # where one is in its way), so the mail shows its thickness.
     made = bmesh.ops.extrude_edge_only(bm, edges=opening)["geom"]
 
     for vertex in (item for item in made if isinstance(item, bmesh.types.BMVert)):
-        near = kind.ref_tree.find_nearest(vertex.co)[0]
+        near = head.find_nearest(vertex.co)[0]
 
         if near is None:
             continue
@@ -2497,6 +2602,10 @@ def coif(kind, g, piece, made=None):
 
     bm.to_mesh(obj.data)
     bm.free()
+    # No face it goes over through it over its cape's top (its turned-in
+    # edge lay inside the heavy face's jaw corner, 6 mm).
+    over_cape = g["cape"]["top_z"] + 0.01
+    clear_through(obj, heads_tree(kind, keep=lambda o, p: p.center.z > over_cape), lambda p: middle)
     fabric = recipes.FABRICS.index(g["fabric"])
     dye = g.get("dye", False)
     common.set_faces(obj, 1, fabric, g["thickness"], False, dye, g["colour"])
@@ -2804,10 +2913,11 @@ def imported(kind, g, piece, made):
     return obj
 
 
-def heads_tree(kind, hair=()):
+def heads_tree(kind, hair=(), keep=None):
     """What a helm goes over, as one tree: his own head (the full body's),
     every low head in heads.blend (a low head strays a little outside the
-    full one) and the `hair` styles (hair.blend) it is worn over."""
+    full one) and the `hair` styles (hair.blend) it is worn over; only the
+    faces `keep(obj, polygon)` passes, given."""
     objects = [head_region(kind.ref, "wr_helm_head")]
 
     for path, names in ((common.SOURCE / "heads.blend", None), (common.SOURCE / "hair.blend", ["Hair_%s" % h for h in hair])):
@@ -2819,7 +2929,7 @@ def heads_tree(kind, hair=()):
 
         objects += [o for o in target.objects if o is not None and o.type == "MESH"]
 
-    tree = common.bvh(objects)
+    tree = common.bvh(objects, keep=keep)
 
     for obj in objects:
         mesh = obj.data
