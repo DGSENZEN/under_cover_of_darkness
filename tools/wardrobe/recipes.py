@@ -545,6 +545,10 @@ HEADS = {
         "eyes": 0.8,
         "grit": {"stubble": 0.35, "bags": 0.9, "lines": 1.0},
         "brows": (0.62, 0.60, 0.57),
+        # His hair and beard grey as his brows, whatever his kind rolls for a
+        # younger man (a watchman's browns under grey brows); the game's roll
+        # takes these over his kind's colours (Wardrobe.roll).
+        "hair_colours": [[0.72, 0.70, 0.66], [0.58, 0.56, 0.53], [0.66, 0.64, 0.60]],
         "tones": TONES,
     },
     # A young man (batch 3): cheeks full where the weathered face is hollow,

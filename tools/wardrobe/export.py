@@ -299,6 +299,9 @@ def export_parts(prefix, folder, body="male"):
 
         if folder == "heads":
             data = {"face": name, "body": recipes.HEADS[name]["body"], "triangles": common.tri_count(obj)}
+
+            if "hair_colours" in recipes.HEADS[name]:
+                data["hair_colours"] = recipes.HEADS[name]["hair_colours"]
         elif folder == "hair":
             h = recipes.HAIR[name]
             data = {"style": name, "kind": h["kind"], "body": h.get("body", "male"), "triangles": common.tri_count(obj),
