@@ -2,10 +2,12 @@ extends Node3D
 ## Visual check, not a test: each kind the wardrobe dresses, under the retro
 ## screen, by day and by torchlight. Nothing is checked; look at the
 ## pictures (sheet_<kind>.png puts a kind's side by side, sheet.png every
-## kind's lineup).
+## kind's lineup). With --crowd, twelve of each kind instead, as a squad
+## stands: crowd_<kind>_day.png, crowd_<kind>_night.png and their faces,
+## faces_<kind>.png.
 ##
 ##   perl -e 'alarm 480; exec @ARGV' Godot --fixed-fps 60 --resolution 1280x720 --path . \
-##       res://tests/visual/stage_wardrobe.tscn -- --out=/some/folder [--kinds=watchman,archer]
+##       res://tests/visual/stage_wardrobe.tscn -- --out=/some/folder [--kinds=watchman,archer] [--crowd]
 
 const GUARD := preload("res://Guard.tscn")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
@@ -16,6 +18,9 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 ## Five from the wardrobe (their look seeds).
 const SEEDS := [1, 2, 3, 4, 5]
 const SPACING := 1.5
+## A crowd: seeds 1-12, two rows of six this far apart.
+const CROWD := 12
+const CROWD_SPACING := 1.2
 ## Every kind the wardrobe dresses, and the archetype that is it.
 const KINDS := {&"watchman": &"", &"swordsman": &"swordsman", &"archer": &"archer", &"arms_master": &"trainer",
 	&"brute": &"brute", &"duelist": &"duelist"}
@@ -33,9 +38,12 @@ var torch: Node3D
 
 func _ready() -> void:
 	var kinds: Array = KINDS.keys()
+	var crowd := false
 
 	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--out="):
+		if arg == "--crowd":
+			crowd = true
+		elif arg.begins_with("--out="):
 			out_dir = arg.substr(6).trim_suffix("/") + "/"
 		elif arg.begins_with("--kinds="):
 			kinds = Array(arg.substr(8).split(",")).map(func(k): return StringName(k))
@@ -58,7 +66,10 @@ func _ready() -> void:
 	camera.current = true
 
 	for kind in kinds:
-		await _stage(kind)
+		if crowd:
+			await _crowd(kind)
+		else:
+			await _stage(kind)
 
 	_lineup_sheet()
 	print("staged into ", ProjectSettings.globalize_path(out_dir))
@@ -94,6 +105,63 @@ func _stage(kind: StringName) -> void:
 	guards.clear()
 	torch.queue_free()
 	await _frames(3)
+
+
+## Twelve of a kind (seeds 1-12) in two rows of six (the back row between
+## the front row's men), at 6 m by day and by torchlight, and each face at
+## 0.7 m from a little below (under a brim), by day.
+func _crowd(kind: StringName) -> void:
+	world.environment = _neutral()
+	sun.visible = true
+
+	for i in range(CROWD):
+		var at := Vector3((i % 6 - 2.5) * CROWD_SPACING + (CROWD_SPACING * 0.5 if i >= 6 else 0.0), 0, -(i / 6) * CROWD_SPACING)
+		guards.append(_guard(i + 1, at, KINDS.get(kind, &"")))
+
+	await _frames(45)
+	var row := []
+	await _shot("crowd_%s_day" % kind, Vector3(0, 1.6, 6.0), Vector3(0, 1.0, -0.6), row)
+	var faces := []
+
+	for g in guards:
+		var head := _head(g)
+		await _shot("face_%s_%02d" % [kind, int(g.get("look_seed"))], head + Vector3(0, -0.16, 0.7), head, faces)
+
+	world.environment = RetroScript.night_environment()
+	sun.visible = false
+	torch = TorchScript.new()
+	torch.position = Vector3(0.0, 2.1, 2.2)
+	add_child(torch)
+	await _frames(20)
+	await _shot("crowd_%s_night" % kind, Vector3(0, 1.6, 6.0), Vector3(0, 1.0, -0.6), row)
+	_strip(faces, "faces_%s.png" % kind)
+
+	for g in guards:
+		g.queue_free()
+
+	guards.clear()
+	torch.queue_free()
+	await _frames(3)
+
+
+## Faces side by side, six to a row: the middle of each shot, square.
+func _strip(images: Array, file: String) -> void:
+	if images.is_empty():
+		return
+
+	var h: int = images[0].get_height()
+	var side := int(h * 0.75)
+	var cell := side / 2
+	var sheet := Image.create(cell * 6, cell * int(ceil(images.size() / 6.0)), false, Image.FORMAT_RGBA8)
+
+	for i in range(images.size()):
+		var image: Image = images[i]
+		var square := image.get_region(Rect2i((image.get_width() - side) / 2, (h - side) / 2, side, side))
+		square.convert(Image.FORMAT_RGBA8)
+		square.resize(cell, cell, Image.INTERPOLATE_NEAREST)
+		sheet.blit_rect(square, Rect2i(0, 0, cell, cell), Vector2i((i % 6) * cell, (i / 6) * cell))
+
+	sheet.save_png(out_dir + file)
 
 
 func _neutral() -> Environment:
