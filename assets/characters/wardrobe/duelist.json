@@ -245,14 +245,16 @@
  ],
  "options": {
   "faces": [
-   "sharp"
+   "sharp",
+   "soft"
   ],
   "tones": [
    "light",
    "dark"
   ],
   "hair": [
-   "buns"
+   "buns",
+   "tail"
   ],
   "beards": [],
   "hair_colours": [

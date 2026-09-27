@@ -113,8 +113,12 @@ WATCHMAN = {
     ],
     "metal": [],
     "options": {
-        "faces": ["weathered"], "tones": ["light", "dark"], "hair": [], "beards": [],
-        "headgear": [["kettlehat", "coif"]],
+        # His hair shows only under the bare hat (the coif hides it); his
+        # beard under either.
+        "faces": ["young", "weathered", "heavy", "old"], "tones": ["light", "dark"], "hair": ["parted", "buzzed", "tied"],
+        "beards": ["", "short", "moustache", "full"],
+        "hair_colours": [[0.20, 0.14, 0.09], [0.10, 0.08, 0.06], [0.35, 0.25, 0.15], [0.45, 0.30, 0.18]],
+        "headgear": [["kettlehat", "coif"], ["kettlehat_bare"]],
         # A watch wears one livery: its hue moves a little, washing and dirt
         # (fade, grime) do the rest.
         "dye": {"colour": list(MUSTARD), "shift": 0.025, "fade": [0.0, 0.3]},
@@ -184,7 +188,7 @@ SWORDSMAN = {
     ],
     "metal": ["spine_01", "spine_02", "spine_03", "pelvis", "upperarm_l", "upperarm_r"],
     "options": {
-        "faces": ["weathered"], "tones": ["light", "dark"], "hair": [], "beards": [],
+        "faces": ["young", "weathered", "heavy", "old"], "tones": ["light", "dark"], "hair": [], "beards": [],
         "headgear": [["nasalhelm", "curtain"]],
         "dye": {"colour": list(SWORD_RED), "shift": 0.02, "fade": [0.0, 0.3]},
         "grime": [0.2, 0.9],
@@ -243,7 +247,7 @@ ARCHER = {
     ],
     "metal": [],
     "options": {
-        "faces": ["weathered"], "tones": ["light", "dark"], "hair": [], "beards": [],
+        "faces": ["young", "weathered", "heavy", "old"], "tones": ["light", "dark"], "hair": [], "beards": [],
         "headgear": [["hood"]],
         # His tunic and hood: green, brown or grey (baked in the first).
         "dye": {"colours": [list(ARCHER_GREEN), [0.34, 0.25, 0.15], [0.37, 0.37, 0.35]], "shift": 0.02, "fade": [0.0, 0.35]},
@@ -387,7 +391,7 @@ BRUTE = {
     ],
     "metal": ["upperarm_r"],
     "options": {
-        "faces": ["weathered"], "tones": ["light", "dark"], "hair": ["buzzed"], "beards": ["full"],
+        "faces": ["heavy", "weathered"], "tones": ["light", "dark"], "hair": ["buzzed"], "beards": ["short", "full"],
         "hair_colours": [[0.25, 0.20, 0.18], [0.14, 0.11, 0.09], [0.45, 0.30, 0.18]],
         "headgear": [[]],
         "grime": [0.4, 1.0],
@@ -469,7 +473,7 @@ DUELIST = {
     ],
     "metal": [],
     "options": {
-        "faces": ["sharp"], "tones": ["light", "dark"], "hair": ["buns"], "beards": [],
+        "faces": ["sharp", "soft"], "tones": ["light", "dark"], "hair": ["buns", "tail"], "beards": [],
         "hair_colours": [[0.35, 0.22, 0.14], [0.12, 0.09, 0.07], [0.55, 0.38, 0.20]],
         "headgear": [[]],
         "dye": {"colours": [list(CRIMSON), [0.40, 0.05, 0.10], [0.56, 0.12, 0.06]], "shift": 0.02, "fade": [0.0, 0.3]},
@@ -624,6 +628,12 @@ HEADGEAR = {
              "covers_head": True, "inside": 0.006,
              # Above this (his ears) the hood rides his Head alone (K15).
              "rigid_above": 1.68, "limit": 240,
+             # The beards he may wear under it (§6: a coif "allows a beard"),
+             # each at least `beard_clear` under its mail below his chin, and
+             # nowhere nearer than `beard_margin` (his head turns on his neck
+             # in his idle: a beard on his head moves against mail on his
+             # neck).
+             "over_beards": ["short", "moustache", "full"], "beard_clear": 0.006, "beard_margin": 0.01,
              "metal": ["neck_01", "Head"], "hides_hair": True, "allows_beard": True},
     # A kettle hat forged over the coif (build.kettle): a round bowl (a
     # ridge read as a peak from the front: a coolie hat), a leather band at
@@ -739,6 +749,8 @@ HAIR = {
     # her half-cape's top. (Her long hair cut under her ears left spiky
     # locks and a jagged edge where it was cut: batch 3's look.)
     "tail": {"from": "assets/characters/hair/Hair_BuzzedFemale.gltf", "body": "female", "kind": "hair", "tris": 200,
-             "tail": {"length": 0.14, "width": 0.04, "sides": 6, "at": [0.1, 1.645]},
+             # Leaning back off her neck: in her fighting idle her head
+             # tips back, and a tail hanging straight cut her collar (K33).
+             "tail": {"length": 0.14, "width": 0.04, "sides": 6, "at": [0.1, 1.645], "lean": 0.4},
              "clearance": 0.004, "fit_rays": CROWN},
 }

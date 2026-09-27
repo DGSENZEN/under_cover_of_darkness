@@ -157,7 +157,10 @@
  ],
  "options": {
   "faces": [
-   "weathered"
+   "young",
+   "weathered",
+   "heavy",
+   "old"
   ],
   "tones": [
    "light",

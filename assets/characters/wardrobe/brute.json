@@ -199,6 +199,7 @@
  ],
  "options": {
   "faces": [
+   "heavy",
    "weathered"
   ],
   "tones": [
@@ -209,6 +210,7 @@
    "buzzed"
   ],
   "beards": [
+   "short",
    "full"
   ],
   "hair_colours": [

@@ -2007,8 +2007,9 @@ def add_tail(obj, tail, heads, clearance):
     half that at its tip, of `sides` round, from the back of the head at
     (0, at[0], at[1]) down the back of the neck (leaning a little back),
     each ring moved back until it clears every head of the body (`heads`,
-    their points) by `clearance`; joined into `obj`."""
-    down = Vector((0.0, 0.15, -1.0)).normalized()
+    their points) by `clearance`; joined into `obj`. It leans back `lean`
+    (metres back per metre down; 0.15 by default)."""
+    down = Vector((0.0, tail.get("lean", 0.15), -1.0)).normalized()
     side = Vector((1.0, 0.0, 0.0))
     back = down.cross(side).normalized()
     start = Vector((0.0, tail["at"][0], tail["at"][1]))
@@ -2090,6 +2091,37 @@ def head_points(body="male"):
         bpy.data.meshes.remove(mesh)
 
     return points
+
+
+def hair_points(styles, body="male", grow=0.0):
+    """Every vertex of the hair `styles` of `body` (its hair file), and one
+    tree over them grown `grow` out along their normals (None without any):
+    what a hood goes over."""
+    path = common.SOURCE / ("%s.blend" % common.part_target("hair", body))
+
+    if not styles or not path.exists():
+        return [], None
+
+    with bpy.data.libraries.load(str(path)) as (source, target):
+        target.objects = [name for name in source.objects if name in ["Hair_%s" % s for s in styles]]
+
+    objects = [o for o in target.objects if o is not None and o.type == "MESH"]
+    points = [v.co.copy() for o in objects for v in o.data.vertices]
+    grown, polygons = [], []
+
+    for obj in objects:
+        start = len(grown)
+        grown += [v.co + v.normal * grow for v in obj.data.vertices]
+        polygons += [tuple(start + i for i in p.vertices) for p in obj.data.polygons]
+
+    tree = BVHTree.FromPolygons(grown, polygons) if objects else None
+
+    for obj in objects:
+        mesh = obj.data
+        bpy.data.objects.remove(obj)
+        bpy.data.meshes.remove(mesh)
+
+    return points, tree
 
 
 def quaternius_style(relative, name):
@@ -2286,6 +2318,9 @@ def coif(kind, g, piece, made=None):
         return abs(p.x) < hole["x"] + 0.01 and hole["from_z"] - 0.01 < p.z < hole["to_z"] + 0.01 and p.y < -0.02
 
     head = common.bvh([head_region(kind.ref, "wr_coif_head")])
+    # The beards it is worn over (`over_beards`): they hang below his chin
+    # in front of his throat, where it closes round his neck.
+    beard_points, beards = hair_points(g.get("over_beards", ()), grow=g.get("beard_margin", 0.0))
     middle = kind.arm.data.bones["Head"].head_local + Vector((0.0, 0.0, 0.1))
     n = g["segments"]
     around = [2.0 * math.pi * i / n for i in range(n)]
@@ -2337,14 +2372,24 @@ def coif(kind, g, piece, made=None):
     enclose(bm, skull, middle, g["inside"] + 0.004)
     opening = [e for e in bm.edges if e.is_boundary and (e.verts[0].co.z + e.verts[1].co.z) * 0.5 > g["cape"]["top_z"] + 0.005]
 
-    # Its face edge turned in to his face, so the mail shows its thickness.
+    # Its face edge turned in to his face (resting on a beard it goes over,
+    # where one is in its way), so the mail shows its thickness.
     made = bmesh.ops.extrude_edge_only(bm, edges=opening)["geom"]
 
     for vertex in (item for item in made if isinstance(item, bmesh.types.BMVert)):
         near = kind.ref_tree.find_nearest(vertex.co)[0]
 
-        if near is not None:
-            vertex.co = near + (vertex.co - near) * 0.3
+        if near is None:
+            continue
+
+        to = near + (vertex.co - near) * 0.3
+        # Short of a beard in its way: the edge rests on it.
+        hit = beards.ray_cast(vertex.co, to - vertex.co, (to - vertex.co).length) if beards is not None else (None,)
+
+        if hit[0] is not None:
+            to = vertex.co + (hit[0] - vertex.co) * max(0.0, 1.0 - 0.002 / max((hit[0] - vertex.co).length, 1e-6))
+
+        vertex.co = to
 
     bm.to_mesh(obj.data)
     bm.free()
@@ -2361,6 +2406,27 @@ def coif(kind, g, piece, made=None):
     # One sheet of mail: drawn from both sides.
     common.set_faces(cape, 1, fabric, g["thickness"], True, dye, g["colour"])
     obj = join_two(obj, cape, obj.name)
+
+    if beard_points:
+        # Every beard it goes over under its mail, `beard_clear` under it
+        # looking out from his neck (through its face opening a ray meets no
+        # mail: that part shows): its neck and the cape's top hang in front
+        # of a beard below his chin, not through it. Then any face of it
+        # still within `beard_margin` of a beard (its turned-in edge, where
+        # it meets a beard at the corners of his jaw) is pushed out until
+        # none is.
+        neck_y = kind.at(("neck_01", 0.0)).y
+
+        def from_neck(p):
+            return Vector((0.0, neck_y, p.z))
+
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        enclose(bm, beard_points, from_neck, g["beard_clear"])
+        bm.to_mesh(obj.data)
+        bm.free()
+        clear_through(obj, beards, from_neck)
+
     common.group(obj, common.TRANSFER, 1.0)
     weigh_part(obj, kind.ref)
     # The cape (and the hood's edge round his neck, which it tucks into).
@@ -2450,36 +2516,69 @@ def ride(obj, below, bones):
 
 
 def enclose(bm, points, centre, inside, rounds=8, from_inside=False):
-    """A shell's vertices pushed out, along rays from `centre`, until every
-    one of `points` lies at least `inside` under it: its flat faces sag
-    between their corners, and a head shows through a sag. Under its
-    outermost surface, or (`from_inside`) its innermost: a shell of two
-    layers (hair) must clear the head with the one nearer it."""
+    """A shell's vertices pushed out, along rays from `centre` (a point, or
+    a function giving one for each of `points`), until every one of
+    `points` lies at least `inside` under it: its flat faces sag between
+    their corners, and a head shows through a sag. Under its outermost
+    surface, or (`from_inside`) its innermost: a shell of two layers (hair)
+    must clear the head with the one nearer it."""
     for _ in range(rounds):
         bm.faces.ensure_lookup_table()
         tree = BVHTree.FromBMesh(bm)
         short = {}
 
         for p in points:
-            d = (p - centre).normalized()
-            hit = tree.ray_cast(centre, d, 0.4) if from_inside else tree.ray_cast(centre + d * 0.4, -d, 0.4)
+            c = centre(p) if callable(centre) else centre
+            d = (p - c).normalized()
+            hit = tree.ray_cast(c, d, 0.4) if from_inside else tree.ray_cast(c + d * 0.4, -d, 0.4)
 
-            if hit[0] is None or (hit[0] - centre).dot(d) <= 0.0:
+            if hit[0] is None or (hit[0] - c).dot(d) <= 0.0:
                 continue
 
-            need = inside - ((hit[0] - centre).dot(d) - (p - centre).length)
+            need = inside - ((hit[0] - c).dot(d) - (p - c).length)
 
             if need > 0.0:
                 for vertex in bm.faces[hit[2]].verts:
-                    short[vertex] = max(short.get(vertex, 0.0), need)
+                    if need > short.get(vertex, (0.0, c))[0]:
+                        short[vertex] = (need, c)
 
         if not short:
             return
 
-        for vertex, need in short.items():
+        for vertex, (need, c) in short.items():
             seam = abs(vertex.co.x) < 1e-4
-            vertex.co += (vertex.co - centre).normalized() * need
+            vertex.co += (vertex.co - c).normalized() * need
             vertex.co.x = 0.0 if seam else vertex.co.x
+
+
+def clear_through(obj, tree, centre, step=0.001, rounds=80):
+    """Each face of `obj` through a face of `tree` pushed out, a `step` at a
+    time along the way from `centre` (a function of the vertex), until none
+    is; each vertex's mirror twin (across x = 0) pushed with it, and its
+    middle seam kept on it."""
+    vertices = obj.data.vertices
+    twin = {}
+
+    for vertex in vertices:
+        mirrored = Vector((-vertex.co.x, vertex.co.y, vertex.co.z))
+        other = min(vertices, key=lambda v: (v.co - mirrored).length)
+        twin[vertex.index] = other.index if (other.co - mirrored).length < 0.002 else vertex.index
+
+    for _ in range(rounds):
+        pairs = common.bvh([obj]).overlap(tree)
+
+        if not pairs:
+            return
+
+        pushed = {v for face, _ in pairs for v in obj.data.polygons[face].vertices}
+
+        for index in pushed | {twin[i] for i in pushed}:
+            vertex = vertices[index]
+            seam = abs(vertex.co.x) < 1e-4
+            vertex.co += (vertex.co - centre(vertex.co)).normalized() * step
+            vertex.co.x = 0.0 if seam else vertex.co.x
+
+    print("wardrobe: %s still through %d faces after %d rounds" % (obj.name, len(common.bvh([obj]).overlap(tree)), rounds))
 
 
 def rigid(obj, above, bone):

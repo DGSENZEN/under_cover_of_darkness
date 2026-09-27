@@ -903,6 +903,53 @@ def case_bare_hat():
     return messages
 
 
+def case_coif_beards():
+    """The spec's coif "hides the hair but allows a beard" (§6): every beard
+    the watchman may wear under it lies under its mail (or in its face
+    opening), no face of the one through a face of the other, on the heads
+    they are fitted over."""
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    import build
+    import check
+    import recipes
+
+    source = common.WARDROBE / "source"
+    folder = Path(tempfile.mkdtemp(prefix="wardrobe_coif_beards_"))
+
+    for name in ("heads.blend", "hair.blend"):
+        shutil.copy(source / name, folder / name)
+
+    fresh()
+    common.SOURCE, common.BACKUP = folder, folder / "backup"
+    beards = [b for b in recipes.WATCHMAN["options"]["beards"] if b]
+
+    try:
+        build.build_headgear(True)
+        coif = common.bvh([bpy.data.objects["Gear_coif"]])
+        found = check.hair_of("male", beards)
+        messages = ["%s passes through the coif at %d pairs of faces" % (b.name, len(coif.overlap(common.bvh([b]))))
+                    for b in found if coif.overlap(common.bvh([b]))]
+        messages += [] if len(found) == len(beards) == 3 else ["beards %s found %d" % (beards, len(found))]
+        check.forget(found)
+        # check.py says so of a coif shrunk onto them.
+        obj = bpy.data.objects["Gear_coif"]
+        pivot = bpy.data.objects["Armature"].data.bones["Head"].head_local + Vector((0.0, 0.0, 0.1))
+
+        for v in obj.data.vertices:
+            v.co = pivot + (v.co - pivot) * 0.85
+
+        said = [m for m in check.check_parts("Gear_", "headgear") if "Gear_coif" in m and "passes through" in m]
+        messages += [] if said else ["check.py passed a coif shrunk onto the beards"]
+    finally:
+        common.SOURCE, common.BACKUP = source, source / "backup"
+
+    fresh()
+    return messages
+
+
 def case_foreign_parts():
     """A kind whose options name a part of the other body is refused
     (check.foreign_parts); the heaviest combination counts "" as none and
@@ -1000,7 +1047,7 @@ CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, 
          "hood": case_hood, "launcher": case_launcher, "bodies": case_bodies, "male_parts": case_male_parts,
          "types2": case_types2, "skin": case_skin, "brute_arms": case_brute_arms, "foreign_parts": case_foreign_parts,
          "faces": case_faces, "beards_and_tails": case_beards_and_tails,
-         "bare_hat": case_bare_hat}
+         "bare_hat": case_bare_hat, "coif_beards": case_coif_beards}
 
 
 def main():

@@ -197,18 +197,55 @@
  ],
  "options": {
   "faces": [
-   "weathered"
+   "young",
+   "weathered",
+   "heavy",
+   "old"
   ],
   "tones": [
    "light",
    "dark"
   ],
-  "hair": [],
-  "beards": [],
+  "hair": [
+   "parted",
+   "buzzed",
+   "tied"
+  ],
+  "beards": [
+   "",
+   "short",
+   "moustache",
+   "full"
+  ],
+  "hair_colours": [
+   [
+    0.2,
+    0.14,
+    0.09
+   ],
+   [
+    0.1,
+    0.08,
+    0.06
+   ],
+   [
+    0.35,
+    0.25,
+    0.15
+   ],
+   [
+    0.45,
+    0.3,
+    0.18
+   ]
+  ],
   "headgear": [
    [
     "kettlehat",
     "coif"
+   ],
+   [
+    "kettlehat_bare"
    ]
   ],
   "dye": {

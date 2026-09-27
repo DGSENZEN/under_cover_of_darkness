@@ -106,6 +106,15 @@ def check_parts(prefix, folder, body="male"):
         if piece.get("covers_head"):
             messages += ["%s %s" % (obj.name, m) for m in encloses(obj, piece, armature.data.bones["Head"].head_local)]
 
+        # The beards worn under it lie under its mail: no face of one
+        # through a face of it.
+        if piece.get("over_beards"):
+            beards = hair_of("male", piece["over_beards"])
+            tree = common.bvh([obj])
+            messages += ["%s cuts: %s passes through it at %d pairs of faces" % (obj.name, b.name, len(tree.overlap(common.bvh([b]))))
+                         for b in beards if tree.overlap(common.bvh([b]))]
+            forget(beards)
+
         pivot = armature.data.bones["Head"].head_local
         style = recipes.HAIR.get(obj.name[len(prefix):], {}) if prefix == "Hair_" else {}
 

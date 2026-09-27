@@ -25,8 +25,9 @@ var results: Array[String] = []
 const DRESSED := {&"watchman": &"", &"swordsman": &"swordsman", &"archer": &"archer", &"arms_master": &"trainer",
 	&"brute": &"brute", &"duelist": &"duelist"}
 ## What each dressed kind must show:
-##   worn: every mesh he wears (none of the base body's);
-##   key: his silhouette, worn by every guard of his kind;
+##   roll: every face, hair, beard ("" is none) and headgear set his
+##     options list, each reached and worn over 32 seeds (K10);
+##   key: his silhouette, worn by every guard of his kind: one of each list;
 ##   rings / silent: where steel rings and where it must not, each
 ##     [bone, up, ahead] (metres from the bone's joint, in his frame) or
 ##     [bone, bone] (half-way between two joints);
@@ -41,23 +42,28 @@ const EXPECT := {
 	# his legs (recipes.WATCHMAN "batch"), so his kick swings a skirt 9 mm
 	# into a thigh, and through whole blows his lunge 3.1 cm. Rebuilt with
 	# batch 1's cloth it clears them: the user's call.
-	&"watchman": {"worn": ["Outfit", "Head_weathered", "kettlehat", "coif"], "key": ["kettlehat"],
+	&"watchman": {"roll": {"faces": ["young", "weathered", "heavy", "old"], "hair": ["parted", "buzzed", "tied"],
+		"beards": ["", "short", "moustache", "full"], "headgear": [["kettlehat", "coif"], ["kettlehat_bare"]]},
+		"key": [["kettlehat", "kettlehat_bare"]],
 		"rings": [[&"Head", 0.12, 0.0], [&"neck_01", 0.0, 0.06]],
 		"silent": [[&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]],
 		"metal": {&"neck_01": "coif", &"Head": "coif"}, "k5": 0.04},
 	# Through whole blows his thrust's windup lifts his left thigh 1 cm into
 	# his surcoat's front (whatever its stiffness): made before K5 drove
 	# windups and recovers; a redesign is the user's call.
-	&"swordsman": {"worn": ["Outfit", "Head_weathered", "nasalhelm", "curtain"], "key": ["nasalhelm"],
+	&"swordsman": {"roll": {"faces": ["young", "weathered", "heavy", "old"], "hair": [], "beards": [], "headgear": [["nasalhelm", "curtain"]]},
+		"key": [["nasalhelm"]],
 		"rings": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"upperarm_l", 0.0, 0.0]],
 		"silent": [[&"thigh_l", &"calf_l"], [&"calf_l", 0.0, 0.0]],
 		"metal": {&"Head": "nasalhelm", &"neck_01": "curtain", &"spine_02": "Outfit", &"upperarm_l": "Outfit"}, "k5": 0.015},
-	&"archer": {"worn": ["Outfit", "Head_weathered", "hood"], "key": ["hood"], "rings": [],
+	&"archer": {"roll": {"faces": ["young", "weathered", "heavy", "old"], "hair": [], "beards": [], "headgear": [["hood"]]},
+		"key": [["hood"]], "rings": [],
 		"silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {}},
 	# Bare-armed; steel only at his right shoulder (his one pauldron). His
 	# hides ride his thighs: his sweep's widest swing takes a rear hide 1-1.6
 	# cm into the thigh it hangs from (recipes.BRUTE's chains).
-	&"brute": {"worn": ["Outfit", "Head_weathered", "Hair_buzzed", "Beard_full"], "key": ["Hair_buzzed", "Beard_full"],
+	&"brute": {"roll": {"faces": ["heavy", "weathered"], "hair": ["buzzed"], "beards": ["short", "full"], "headgear": [[]]},
+		"key": [["Hair_buzzed"], ["Beard_short", "Beard_full"]],
 		"rings": [[&"upperarm_r", 0.0, 0.0]], "silent": [[&"upperarm_l", 0.0, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]],
 		"metal": {&"upperarm_r": "Outfit"}, "k5": 0.02},
 	# On the female body: bare-headed, her hair up; no steel. Her body keeps
@@ -65,14 +71,16 @@ const EXPECT := {
 	# K4b's 12 slowed frames against the swordsman's 0.10; her painted look
 	# too: a body matter, its own task), and her cloth rides and is pushed
 	# by it: K4b allows her 0.4.
-	&"duelist": {"worn": ["Outfit", "Head_sharp", "Hair_buns"], "key": ["Hair_buns"], "rings": [],
+	&"duelist": {"roll": {"faces": ["sharp", "soft"], "hair": ["buns", "tail"], "beards": [], "headgear": [[]]},
+		"key": [["Hair_buns", "Hair_tail"]], "rings": [],
 		"silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {}, "k4b": 0.4,
 		"body": "female"},
 	# One man: every seed gives him the same face, hair and beard. Through
 	# whole blows his left cut's recover swings his left thigh 5 cm through
 	# his sash's tail (whatever its stiffness): made before K5 drove windups
 	# and recovers; a redesign (the tail riding his thigh) is the user's call.
-	&"arms_master": {"worn": ["Outfit", "Head_old", "Hair_parted", "Beard_full"], "key": ["Hair_parted", "Beard_full"],
+	&"arms_master": {"roll": {"faces": ["old"], "hair": ["parted"], "beards": ["full"], "headgear": [[]]},
+		"key": [["Hair_parted"], ["Beard_full"]],
 		"rings": [], "silent": [[&"Head", 0.12, 0.0], [&"spine_02", 0.0, 0.15], [&"thigh_l", &"calf_l"]], "metal": {},
 		"same": ["face", "hair", "beard"], "k5": 0.06},
 }
@@ -149,6 +157,7 @@ func _run() -> void:
 	await _k3b()
 	await _k15b()
 	await _k31()
+	await _k33()
 	await _dressed()
 	await _integration()
 
@@ -407,6 +416,9 @@ func _k2a() -> void:
 				sizes["headgear/%s_mask" % piece] = 128
 
 		for style in options.get("hair", []) + options.get("beards", []):
+			if style == "":
+				continue
+
 			sizes["hair/%s" % style] = 128
 			sizes["hair/%s_mask" % style] = 128
 
@@ -638,6 +650,54 @@ func _k31() -> void:
 
 	_check("K31 the bare kettle hat never cuts his hair or head", cuts == 0 and pairs == 12,
 		"%d cuts over %d face-hair pairs %s" % [cuts, pairs, where])
+
+
+## K33 his hair and beard never cut what he wears over or round them:
+## each hair and beard each kind may roll, in each of his headgear sets
+## (his options doctored to each), at rest, against his headgear and his
+## outfit above his chest (edges through faces, as K22). (A face's neck
+## meets its collar and hood by design: K15b.)
+func _k33() -> void:
+	var cuts := {}
+	var dressed := 0
+
+	for kind in DRESSED:
+		var roll: Dictionary = EXPECT[kind].roll
+		var n: int = maxi(1, maxi(roll.hair.size(), roll.beards.size()))
+
+		for pieces in roll.headgear:
+			for i in range(n):
+				var hair: Array = [roll.hair[i % roll.hair.size()]] if not roll.hair.is_empty() else []
+				var beard: Array = [roll.beards[i % roll.beards.size()]] if not roll.beards.is_empty() else []
+				_doctor(kind, {"faces": [roll.faces[0]], "hair": hair, "beards": beard, "headgear": [pieces]})
+				var g := await _guard(7, DRESSED[kind])
+				g.set_physics_process(false)
+				var man = g._rig.man
+				var skeleton: Skeleton3D = man.skeleton
+				var chest: float = skeleton.get_bone_global_rest(skeleton.find_bone(&"spine_02")).origin.y
+				var outfit := _skinned(man.body, skeleton)
+				var round_him := [[outfit, _faces_of(man.body, _vertices_on(man.body, [], chest, 0.0)), "outfit"]]
+				dressed += 1
+
+				for gear in man.worn().filter(func(m): return String(m.name) in pieces):
+					round_him.append([_skinned(gear, skeleton), _faces_of(gear, PackedInt32Array()), String(gear.name)])
+
+				for strands in man.worn().filter(func(m): return String(m.name).begins_with("Hair_") or String(m.name).begins_with("Beard_")):
+					var at := _skinned(strands, skeleton)
+					var faces := _faces_of(strands, PackedInt32Array())
+
+					for other in round_him:
+						var c := _cuts(at, faces, other[0], other[1])
+
+						if c > 0:
+							cuts["%s %s through %s" % [kind, strands.name, other[2]]] = c
+
+				Wardrobe.forget()
+				g.queue_free()
+				await _frames(1)
+
+	_check("K33 no hair or beard he may roll cuts his headgear or his collar", cuts.is_empty() and dressed == 15,
+		"%s over %d guards" % [cuts, dressed])
 
 
 ## K15b (Review Focus 2) the new faces sit in what closes round them as the
@@ -953,6 +1013,53 @@ func _worn_names(man: Node) -> Array:
 	return man.worn().map(func(m): return String(m.name))
 
 
+## What a guard of `kind` with `seed` rolls, as his dresser rolls it: before
+## any headgear hides his hair or forbids his beard.
+func _roll(kind: StringName, seed: int) -> Dictionary:
+	var data := Wardrobe.kind_data(kind)
+	var options := Wardrobe.usable_options(data.get("options", {}), String(data.get("body", "male")))
+	return Wardrobe.roll(options, data.get("skin_tones", {}), seed)
+
+
+## The pieces `look` dresses him in: his outfit and face, his hair unless a
+## piece of his headgear hides it, his beard unless one forbids it ("" is
+## none), and his headgear.
+func _rolled(look: Dictionary) -> Array:
+	var names := ["Outfit", "Head_%s" % look.face]
+	var hides := false
+	var forbids := false
+
+	for piece in look.headgear:
+		var info := Wardrobe.headgear_data(piece)
+		hides = hides or bool(info.get("hides_hair", false))
+		forbids = forbids or not bool(info.get("allows_beard", true))
+
+	if not hides and look.hair != &"":
+		names.append("Hair_%s" % look.hair)
+
+	if not forbids and look.beard != &"":
+		names.append("Beard_%s" % look.beard)
+
+	for piece in look.headgear:
+		names.append(String(piece))
+
+	return names
+
+
+## Whether `names` is exactly `want`, in any order.
+func _same_names(names: Array, want: Array) -> bool:
+	return names.size() == want.size() and want.all(func(n): return n in names)
+
+
+## The first seed from `from` whose roll for `kind` `wants`.
+func _seed_for(kind: StringName, wants: Callable, from: int) -> int:
+	for seed in range(from, from + 200):
+		if wants.call(_roll(kind, seed)):
+			return seed
+
+	return from
+
+
 ## The mesh he wears by that name, or null.
 func _worn(man: Node, piece: String) -> MeshInstance3D:
 	for m in man.worn():
@@ -1038,15 +1145,19 @@ func _dressed() -> void:
 	for kind in DRESSED:
 		var archetype: StringName = DRESSED[kind]
 		var expect: Dictionary = EXPECT[kind]
-		# K1 he dresses in the wardrobe, nothing of the base body left
+		# K1 he dresses as he rolled: his outfit, face, hair unless his
+		# headgear hides it, beard unless it forbids one, headgear; nothing
+		# of the base body left
 		var g := await _guard(3, archetype)
 		var man = g._rig.man
 		first[kind] = g
 		var names := _worn_names(man)
+		var rolled := _rolled(_roll(kind, 3))
 		var bare := names.any(func(n): return n in ["SuperHero_Male", "SuperHero_Female", "Eyes", "Eyebrows", "Boots"])
 		var layered: bool = man.worn().all(func(m): return m.layers == Layers.ACTORS)
-		_check("K1 %s: dressed in everything his kind wears; no base body" % kind,
-			man.body != null and man.body.name == "Outfit" and expect.worn.all(func(n): return n in names) and not bare and layered, str(names))
+		_check("K1 %s dresses as rolled; no base body" % kind,
+			man.body != null and man.body.name == "Outfit" and _same_names(names, rolled) and not bare and layered,
+			"%s, rolled %s" % [names, rolled])
 
 		# K14 his headgear wears a dirt mask: how dirty he rolled reaches it
 		var masked := {}
@@ -1072,26 +1183,67 @@ func _dressed() -> void:
 		_check("K2 %s: every combination within %d triangles" % [kind, _budget(kind)],
 			heaviest > 0 and heaviest <= _budget(kind) and carried == _budget(kind), "heaviest %d, JSON budget %d" % [heaviest, carried])
 
-		# K10 same seed, same man; four seeds, not four clones; his silhouette always
+		# K10 (Review Focus 4) his options are his roll, and over 32 seeds
+		# every face, hair, beard ("" too) and headgear set of it is worn,
+		# each guard wears exactly what he rolled, the same seed makes the
+		# same man, his silhouette (one of each key list) always; a kind with
+		# hair or beards has hair colours
 		var twin := await _guard(3, archetype)
+		var options: Dictionary = Wardrobe.kind_data(kind).get("options", {})
+		var roll: Dictionary = expect.roll
+		var unseen := {}
+		var extra := []
+
+		for key in ["faces", "hair", "beards"]:
+			for style in roll[key]:
+				unseen["%s:%s" % [key, style]] = true
+
+			if str(options.get(key, [])) != str(roll[key]):
+				extra.append("%s %s" % [key, options.get(key, [])])
+
+		for pieces in roll.headgear:
+			unseen["headgear:%s" % ",".join(pieces)] = true
+
+		if str(options.get("headgear", [])) != str(roll.headgear):
+			extra.append("headgear %s" % [options.get("headgear", [])])
+
+		var coloured: bool = (roll.hair + roll.beards).all(func(style): return style == "") or not options.get("hair_colours", []).is_empty()
 		var looks := {}
 		var keyed := true
+		var not_worn := []
 		# What must not vary (one man: the arms master's face, hair, beard).
 		var kept := {}
 
-		for s in [1, 2, 3, 4]:
+		for s in range(1, 33):
 			var w := await _guard(s, archetype)
+			var worn_names := _worn_names(w._rig.man)
+			var drawn := _roll(kind, s)
+
+			if not _same_names(worn_names, _rolled(drawn)):
+				not_worn.append(s)
+
+			var hair_worn: Array = worn_names.filter(func(n): return n.begins_with("Hair_"))
+			var beard_worn: Array = worn_names.filter(func(n): return n.begins_with("Beard_"))
+			unseen.erase("faces:%s" % drawn.face)
+			unseen.erase("hair:%s" % (hair_worn[0].trim_prefix("Hair_") if not hair_worn.is_empty() else ""))
+			unseen.erase("beards:%s" % (beard_worn[0].trim_prefix("Beard_") if not beard_worn.is_empty() else ""))
+			unseen.erase("headgear:%s" % ",".join(drawn.headgear.map(func(p): return String(p))))
 			looks[str(w._rig.man.look)] = true
-			keyed = keyed and expect.key.all(func(n): return n in _worn_names(w._rig.man))
+			keyed = keyed and expect.key.all(func(alternatives): return alternatives.any(func(n): return n in worn_names))
 
 			for key in expect.get("same", []):
 				kept[key] = kept.get(key, {}).merged({str(w._rig.man.look.get(key)): true})
 
+			w.queue_free()
+
 		var same: bool = kept.values().all(func(values): return values.size() == 1)
-		_check("K10 %s: the same seed makes the same man, four seeds at least two looks, his silhouette always" % kind,
-			not man.look.is_empty() and str(twin._rig.man.look) == str(man.look)
+		_check("K10 %s: the whole roll is reached and worn; the same seed the same man; his silhouette always" % kind,
+			unseen.is_empty() and extra.is_empty() and not_worn.is_empty() and coloured
+			and not man.look.is_empty() and str(twin._rig.man.look) == str(man.look)
 			and _carries_look(man.body, man.look) and _carries_look(twin._rig.man.body, twin._rig.man.look)
-			and looks.size() >= 2 and keyed and same, "distinct %d same %s look %s" % [looks.size(), kept, man.look])
+			and looks.size() >= 2 and keyed and same,
+			"unseen %s, options not his roll %s, not as rolled %s, hair colours %s, distinct %d, keyed %s, same %s"
+			% [unseen.keys(), extra, not_worn, coloured, looks.size(), keyed, kept])
 
 		# K1d the strips are drawn from both sides, the rest culls
 		var shaders := []
@@ -1112,9 +1264,10 @@ func _dressed() -> void:
 		_doctor(&"watchman", {"headgear": none})
 		var bared := await _guard(3)
 		var bare_names := _worn_names(bared._rig.man)
+		var bare_roll := _rolled(_roll(&"watchman", 3))
 		Wardrobe.forget()
 		bares.append(bared._rig.man.body != null and bared._rig.man.body.name == "Outfit"
-			and bared._rig.man.look.get("headgear", [&"?"]).is_empty() and bare_names.all(func(n): return n in ["Outfit", "Head_weathered"]))
+			and bared._rig.man.look.get("headgear", [&"?"]).is_empty() and _same_names(bare_names, bare_roll))
 
 	_check("K17 a kind with no headgear dresses ([[]] or [])", not bares.has(false), str(bares))
 
@@ -1153,7 +1306,8 @@ func _dressed() -> void:
 	# watchman, doctored with the duelist's beside his own; with only hers
 	# he would have no hair to wear and be painted, K24): on his skeleton it
 	# would sit at her head's height
-	_doctor(&"watchman", {"faces": ["weathered", "sharp"], "hair": ["buns", "buzzed"], "headgear": [[]]})
+	var own_faces: Array = EXPECT[&"watchman"].roll.faces
+	_doctor(&"watchman", {"faces": own_faces + ["sharp"], "hair": EXPECT[&"watchman"].roll.hair + ["buns"], "headgear": [[]]})
 	var mixed := []
 
 	for s in range(1, 9):
@@ -1162,7 +1316,7 @@ func _dressed() -> void:
 		man_of_seed.queue_free()
 
 	Wardrobe.forget()
-	_check("K26 a kind never wears a face or hair of the other body", "Head_weathered" in mixed
+	_check("K26 a kind never wears a face or hair of the other body", own_faces.any(func(f): return "Head_" + f in mixed)
 		and not ("Head_sharp" in mixed) and not ("Hair_buns" in mixed), str(mixed))
 
 	# K30 "" in a kind's hair or beards is none, not a missing file: a
@@ -1521,8 +1675,8 @@ func _mantle_and_arms(g: Node, man: Node) -> void:
 	var skeleton: Skeleton3D = man.skeleton
 	var chest: float = skeleton.get_bone_global_rest(skeleton.find_bone(&"spine_02")).origin.y
 	var mantle := _faces_of(man.body, _vertices_on(man.body, [&"neck_01", &"spine_03", &"spine_02", &"clavicle_l", &"clavicle_r"], chest))
-	var beard := _worn(man, "Beard_full")
-	var face := _worn(man, "Head_weathered")
+	var beard := _worn(man, "Beard_%s" % man.look.beard)
+	var face := _worn(man, "Head_%s" % man.look.face)
 	var cuts := 0
 	# How far forward the top of his head leans while bowed (his head's up
 	# against the way he faces): a look down leans it forward.
@@ -2238,7 +2392,7 @@ func _integration_kind(kind: StringName, archetype: StringName) -> void:
 		if String(n).begins_with("cloth_") and not (hung_from.get(String(n), &"") in under_leg):
 			cloth_on_leg = true
 	var last_word: bool = man.severed != null and man.cloth != null and man.severed.get_index() > man.cloth.get_index()
-	var head_items: Array = expect.worn.filter(func(n): return n != "Outfit")
+	var head_items: Array = _rolled(_roll(kind, 41)).filter(func(n): return n != "Outfit")
 	_check("K7 %s: a severed head takes his face and headgear; a leg its outfit; cloth stays on him; Severed runs last" % kind,
 		head_items.all(func(n): return n in in_head)
 		and "Outfit" in in_leg and not head_items.any(func(n): return n in in_leg)
@@ -2259,7 +2413,9 @@ func _integration_kind(kind: StringName, archetype: StringName) -> void:
 		"%s" % [copies.map(func(c): return String(c.name))])
 
 	# K8 the hit flash covers everything he wears
-	var h := await _guard(42, archetype)
+	# (In his first headgear set: EXPECT's rings and metal are its.)
+	var first_set := func(look): return str(look.headgear.map(func(p): return String(p))) == str(expect.roll.headgear[0])
+	var h := await _guard(_seed_for(kind, first_set, 42), archetype)
 	var rig = h._rig
 	rig.react_hit(h.global_basis.z, 1.0)
 	rig.update(1.0 / 60.0)
@@ -2279,6 +2435,18 @@ func _integration_kind(kind: StringName, archetype: StringName) -> void:
 	var metal_ok: bool = expect.metal.keys().all(func(bone): return am.metal.get(bone) != null and String(am.metal[bone].name) == expect.metal[bone])
 	_check("K9 %s: steel rings where he wears it, and nowhere else" % kind, not rings.has(false) and not silent.has(false) and metal_ok,
 		"rings %s silent %s metal %s" % [rings, silent, metal_ok])
+
+	# K9d under the bare kettle hat his head rings, from the hat; his
+	# throat, with no coif, is silent
+	if kind == &"watchman":
+		var hatted := await _guard(_seed_for(kind, func(look): return &"kettlehat_bare" in look.headgear, 42), archetype)
+		var hm = hatted._rig.man
+		var head_rings: bool = hm.armour_near(_point(hm, hatted, [&"Head", 0.12, 0.0])) != null
+		var throat_silent: bool = hm.armour_near(_point(hm, hatted, [&"neck_01", 0.0, 0.06])) == null
+		var hat_metal: String = String(hm.metal[&"Head"].name) if hm.metal.get(&"Head") != null else ""
+		_check("K9d the bare kettle hat rings at his head; his throat is silent", head_rings and throat_silent and hat_metal == "kettlehat_bare",
+			"head %s throat silent %s metal %s" % [head_rings, throat_silent, hat_metal])
+		hatted.queue_free()
 
 	# K9b steel rings on his chest, back and shoulders; not on his calves
 	if kind == &"swordsman":
