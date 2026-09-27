@@ -46,6 +46,11 @@ const FIRE_NEAR := 15.0
 const HABIT_TALKED := 0.35
 ## A bell rung this recently still counts.
 const BELL_FOR := 600.0
+## The dread on his nerve past this, a man is afraid (not at his ease).
+const AFRAID_AT := 0.3
+## What a fight's call can be about (Squad, Guard: TalkDirector.call_pair).
+const SITUATIONS := ["status", "excuse", "spotted_ask", "man_down", "last_man", "send",
+	"tactic_envelop", "tactic_press", "tactic_break", "tactic_rush", "tactic_fall_back", "tactic_rout"]
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +81,7 @@ static func man(guard: Node, sheet: Dictionary) -> Dictionary:
 	var garrison := _garrison(guard.get_tree())
 
 	if garrison != null and fighter != null and fighter.temper != null:
-		states["afraid"] = float(garrison.fear_of(float(fighter.temper.nerve))) > 0.3
+		states["afraid"] = float(garrison.fear_of(float(fighter.temper.nerve))) > AFRAID_AT
 
 	if stations != null:
 		var held: Node = stations._held()
@@ -137,11 +142,20 @@ static func world(men: Array, tree: SceneTree, extra := {}) -> Dictionary:
 		"place_name": String(extra.get("place_name", "")), "dead_name": String(extra.get("dead_name", "")),
 	}
 
+	var dread_of: RefCounted = _garrison(tree)
+
 	for m in men:
 		var node: Variant = m.get("node") if m is Dictionary else m
 
 		if node != null and is_instance_valid(node) and not GuardLifeScript.at_ease(node):
 			facts["at_ease"] = false
+
+		# Afraid, a man is not at his ease, whatever he is doing.
+		if node != null and is_instance_valid(node) and dread_of != null:
+			var fighter: RefCounted = node.get("_fighter")
+
+			if fighter != null and fighter.temper != null and float(dread_of.fear_of(float(fighter.temper.nerve))) > AFRAID_AT:
+				facts["at_ease"] = false
 
 	if tree == null:
 		return facts
@@ -324,11 +338,11 @@ static func meets(man: Dictionary, term: String, cast: Dictionary, world: Dictio
 
 ## Whether a word means anything: in a `when:` (as_requirement false) or as a
 ## part's requirement or a line's {if} (true; `traits` are the cast sheet's).
-static func known(term: String, as_requirement: bool, traits := []) -> bool:
+static func known(term: String, as_requirement: bool, traits := [], names := []) -> bool:
 	term = term.strip_edges()
 
 	if term.begins_with("not(") and term.ends_with(")"):
-		return known(term.substr(4, term.length() - 5), as_requirement, traits)
+		return known(term.substr(4, term.length() - 5), as_requirement, traits, names)
 
 	var compared := _compare(term)
 	var called := _called(term)
@@ -338,7 +352,7 @@ static func known(term: String, as_requirement: bool, traits := []) -> bool:
 			return WHEN_MEASURES.has(compared[0])
 
 		if not called.is_empty():
-			return WHEN_NAMED.has(called[0])
+			return WHEN_NAMED.has(called[0]) and (names.is_empty() or names.has(called[1]))
 
 		if term.contains(":"):
 			var key := term.substr(0, term.find(":"))
@@ -352,7 +366,7 @@ static func known(term: String, as_requirement: bool, traits := []) -> bool:
 				"habit":
 					return HABITS.has(value)
 				"situation":
-					return value != ""
+					return SITUATIONS.has(value)
 
 			return false
 
@@ -362,6 +376,12 @@ static func known(term: String, as_requirement: bool, traits := []) -> bool:
 		return compared[0] == "rank" or MEASURED.has(compared[0])
 
 	if not called.is_empty():
+		# A man named must be one of the cast (a tie may name a part instead).
+		var named: bool = called[0] == "name" or (TIES.has(called[0]) and called[1].length() > 1)
+
+		if named and not names.is_empty() and not names.has(called[1]):
+			return false
+
 		return called[0] in ["name", "kind", "station", "near"] or TIES.has(called[0])
 
 	return term == "any" or term == "captain" or TEMPERS.has(term) or STATES.has(term) or traits.has(term)

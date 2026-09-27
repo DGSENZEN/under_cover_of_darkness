@@ -713,7 +713,15 @@ func _process(_delta: float) -> void:
 	# Between physics ticks, how far into the next one this frame is drawn.
 	var ahead := Engine.get_physics_interpolation_fraction() / float(maxi(Engine.physics_ticks_per_second, 1))
 	man.set_motion(_velocity / size, guard.state >= SEARCHING, _delta)
-	man.turn_head((_logical_head.rotation.y if _logical_head != null else 0.0) + _glance + (expression.head_yaw() if expression != null else 0.0))
+	# His head: the AI's look (and a craven glance), or, with something
+	# holding his eye at his ease, that (Expression): one or the other, not
+	# both added; the eyes' darts on top.
+	var look := (_logical_head.rotation.y if _logical_head != null else 0.0) + _glance
+
+	if expression != null:
+		look = lerpf(look, expression.head_yaw(), expression.gaze_weight()) + expression.dart()
+
+	man.turn_head(look)
 	_animate(ahead)
 
 	if expression != null:

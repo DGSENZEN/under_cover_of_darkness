@@ -45,6 +45,12 @@ const TIES := ["kin", "friend", "rival", "owes", "suspects"]
 ## Ties that run both ways.
 const MUTUAL := ["kin", "friend", "rival"]
 const KEYS := ["when", "cast", "place", "cooldown", "priority", "group", "again"]
+## Where a conversation may belong: the things they do together, and the
+## stations.
+const PLACES := ["dice", "flask", "story", "watch_change", "round", "wake", "fire", "invite",
+	"sit", "eat", "sleep", "rummage", "carry", "chop", "lean"]
+## What may be put into a line besides the parts' names.
+const PLACEHOLDERS := ["dead", "place", "missing", "spared", "slain"]
 
 static var _library: Dictionary = {}
 
@@ -76,16 +82,18 @@ static func load_dir(path := FOLDER) -> Dictionary:
 		read.append(parse(FileAccess.get_file_as_string(full), full))
 
 	var traits := []
+	var names := []
 
 	for one in read:
 		for man in one["cast"]:
 			traits.append_array(one["cast"][man]["traits"])
+			names.append(man)
 
 	for one in read:
 		merged["errors"].append_array(one["errors"])
 
 		for c in one["conversations"]:
-			merged["errors"].append_array(validate(c, traits))
+			merged["errors"].append_array(validate(c, traits, names))
 
 		for c in one["conversations"]:
 			if seen.has(c["id"]):
@@ -111,37 +119,39 @@ static func load_dir(path := FOLDER) -> Dictionary:
 static func load_text_for_test(text: String, file: String) -> Dictionary:
 	var one := parse(text, file)
 	var traits := []
+	var names := []
 
 	for sheet in [one["cast"], parse(FileAccess.get_file_as_string(FOLDER.path_join("cast.talk")), "cast.talk")["cast"]]:
 		for man in sheet:
 			traits.append_array(sheet[man]["traits"])
+			names.append(man)
 
 	for c in one["conversations"]:
-		one["errors"].append_array(validate(c, traits))
+		one["errors"].append_array(validate(c, traits, names))
 
 	return one
 
 
 ## Every condition and requirement of `conv` means something: the faults, by
 ## file and line.
-static func validate(conv: Dictionary, traits: Array) -> Array[String]:
+static func validate(conv: Dictionary, traits: Array, names := []) -> Array[String]:
 	var errors: Array[String] = []
 	var sources: Dictionary = conv.get("sources", {})
 
 	for term in conv["when"]:
 		for alt in term:
-			if not TalkFactsScript.known(alt, false, traits):
+			if not TalkFactsScript.known(alt, false, traits, names):
 				errors.append("%s: unknown condition '%s'" % [sources.get("when", conv["source"]), alt])
 
 	for part in conv["cast"]:
 		for req in part["reqs"]:
 			for alt in req:
-				if not TalkFactsScript.known(alt, true, traits):
+				if not TalkFactsScript.known(alt, true, traits, names):
 					errors.append("%s: unknown requirement '%s'" % [sources.get("cast", conv["source"]), alt])
 
 	for turn in conv["lines"] + conv["interrupt"]:
 		for choice in turn["choices"]:
-			if choice["if"] != "" and not TalkFactsScript.known(choice["if"], true, traits):
+			if choice["if"] != "" and not TalkFactsScript.known(choice["if"], true, traits, names):
 				errors.append("%s: unknown condition '%s'" % [choice["source"], choice["if"]])
 
 	return errors
@@ -269,9 +279,16 @@ static func _key(block: Dictionary, key: String, value: String, at: String, out:
 					out["errors"].append("%s: parts are A, B, C and D ('%s')" % [at, name])
 					continue
 
+				if block["_parts"].has(name):
+					out["errors"].append("%s: the part '%s' is cast twice" % [at, name])
+					continue
+
 				block["cast"].append({"key": name, "optional": optional, "reqs": terms(part.substr(eq + 1))})
 				block["_parts"][name] = true
 		"place":
+			if not PLACES.has(value):
+				out["errors"].append("%s: no such place '%s'" % [at, value])
+
 			block["place"] = StringName(value)
 		"cooldown":
 			var seconds := _duration(value)
@@ -288,6 +305,9 @@ static func _key(block: Dictionary, key: String, value: String, at: String, out:
 		"group":
 			block["group"] = StringName(value)
 		"again":
+			if not value in ["yes", "no", "true", "false"]:
+				out["errors"].append("%s: again is yes or no ('%s')" % [at, value])
+
 			block["again"] = value in ["yes", "true"]
 
 
@@ -326,6 +346,15 @@ static func _spoken(block: Dictionary, line: String, at: String, out: Dictionary
 
 	if condition != "":
 		condition = condition.substr(4, condition.length() - 5).strip_edges()
+
+	for found_word in RegEx.create_from_string("\\{([A-Za-z_]+)\\}").search_all(text):
+		var word := found_word.get_string(1)
+
+		if PARTS.has(word):
+			if not block["_parts"].has(word):
+				out["errors"].append("%s: {%s} is not a part of the cast" % [at, word])
+		elif not PLACEHOLDERS.has(word):
+			out["errors"].append("%s: no such placeholder {%s}" % [at, word])
 
 	var choice := {"if": condition, "emotes": emotes, "text": text, "source": at}
 	var turns: Array = block["interrupt"] if interrupting else block["lines"]

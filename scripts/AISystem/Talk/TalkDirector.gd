@@ -118,17 +118,24 @@ var _join_in := 0.0
 var _grieved := {}
 
 
-## The director for `node`'s tree (made the first time it is asked for).
+## The director for `node`'s level (made the first time it is asked for): a
+## level loaded again (the scene reloaded) starts afresh.
 static func of(node: Node) -> RefCounted:
 	var tree := node.get_tree() if node != null and node.is_inside_tree() else null
 
 	if tree == null:
 		return null
 
-	var key := tree.get_instance_id()
+	var level: Node = tree.current_scene if tree.current_scene != null else tree.root
+	var key := level.get_instance_id()
 	var director: RefCounted = _directors.get(key)
 
 	if director == null:
+		# Levels gone: their directors with them.
+		for old in _directors.keys():
+			if not is_instance_id_valid(old):
+				_directors.erase(old)
+
 		director = (load("res://scripts/AISystem/Talk/TalkDirector.gd") as GDScript).new()
 		director._tree = weakref(tree)
 		director._choose_in = randf() * CHOOSE_EVERY
@@ -247,7 +254,7 @@ func play(conv_id: String, cast: Dictionary, extra := {}) -> bool:
 	for key in cast:
 		var man: Variant = cast[key]
 
-		if man == null or not is_instance_valid(man) or in_talk(man):
+		if man == null or not is_instance_valid(man) or not _talk_of(man).is_empty():
 			return false
 
 	_start(conv, cast, extra)

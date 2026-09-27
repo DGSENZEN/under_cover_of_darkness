@@ -96,7 +96,7 @@ A: That's what you said last night.
 
 == story_sewer_thing
 place: story
-cast: A = storyteller|rank>=2; B = any; C? = any; D? = any
+cast: A = undertown; B = any; C? = any; D? = any
 cooldown: once
 A: When I caught rats in the Undertown, we had a saying.
 B: Don't fall in?

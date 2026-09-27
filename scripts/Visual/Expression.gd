@@ -97,6 +97,9 @@ var traits: Dictionary = {}
 var _time := 0.0
 var _yaw := 0.0
 var _pitch := 0.0
+## How much his gaze has the head (0: the AI's own look; 1: what holds his
+## eye, measured from his body).
+var _weight := 0.0
 var _dart := 0.0
 var _dart_goal := 0.0
 var _dart_in := 1.0
@@ -154,9 +157,20 @@ func walk_factor() -> float:
 	return float(traits.get("walk", 1.0)) * float(GAIT.get(_tag(), [1.0, 1.0])[0])
 
 
-## What he adds to where his head is turned: radians, positive to his left.
+## Where what holds his eye is, from his body: radians, positive to his
+## left (GuardRig blends his head to it by `gaze_weight`).
 func head_yaw() -> float:
-	return _yaw + _dart
+	return _yaw
+
+
+## How much his head is his gaze's, not the AI's look (0..1).
+func gaze_weight() -> float:
+	return _weight
+
+
+## The small darts of his eyes, on top of wherever his head is.
+func dart() -> float:
+	return _dart
 
 
 ## How far he bows his head (radians, positive down).
@@ -220,8 +234,9 @@ func _update_gaze(delta: float, state: int, drift: float) -> void:
 		pitch = clampf(atan2(-local.y, maxf(flat, 0.01)), -GAZE_PITCH, GAZE_PITCH)
 
 	var follow := 1.0 - exp(-8.0 * delta)
-	_yaw = lerpf(_yaw, yaw * _calm, follow)
+	_yaw = lerpf(_yaw, yaw, follow)
 	_pitch = lerpf(_pitch, pitch * _calm, follow)
+	_weight = lerpf(_weight, _calm if target is Vector3 else 0.0, 1.0 - exp(-6.0 * delta))
 
 	# Small darts of the eyes (and so the head) on top.
 	var darts: Array = DARTS.get(_tag(), DARTS_CALM)
@@ -339,7 +354,7 @@ func _update_posture(posture: Object, delta: float) -> void:
 	posture.set("chest_lean", lean * _calm)
 	posture.set("shoulders", shoulders * _calm)
 	posture.set("head_pitch", (bow + _pitch) * _calm)
-	posture.set("chest_yaw", 0.25 * head_yaw())
+	posture.set("chest_yaw", 0.25 * _yaw * _weight)
 
 	# His chest, breathing.
 	var voice: Variant = guard.get("_voice")

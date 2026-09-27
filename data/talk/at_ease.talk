@@ -212,8 +212,8 @@ A: I paid last time.
 B: Then you know how it's done.
 
 == canal_smell
-when: at_ease
-cast: A = any; B = any
+when: at_ease, present(Brand)
+cast: A = not(name(Brand)); B = not(name(Brand))
 cooldown: 15m
 A: Smell that? The canal's up again.
 B: That's not the canal. That's Brand's boots.

@@ -64,22 +64,34 @@ var _wanted: Array = []
 var _asked := {}
 
 
-## Sets one up for `node`'s tree.
+## Sets one up for `node`'s level.
 static func setup(node: Node, p_hour_length: float, start_hour := &"early") -> RefCounted:
 	var rota: RefCounted = (load("res://scripts/AISystem/NightRota.gd") as GDScript).new()
 	rota.hour_length = maxf(p_hour_length, 1.0)
 	rota._start = maxi(HOURS.find(start_hour), 0)
 	rota._tree = weakref(node.get_tree())
-	_rotas[node.get_tree().get_instance_id()] = rota
+
+	for old in _rotas.keys():
+		if not is_instance_id_valid(old):
+			_rotas.erase(old)
+
+	_rotas[_level_key(node)] = rota
 	return rota
 
 
-## The rota of `node`'s tree; null if none was set up.
+## The rota of `node`'s level; null if it set none up (a level loaded again
+## sets its own up again).
 static func of(node: Node) -> RefCounted:
 	if node == null or not node.is_inside_tree():
 		return null
 
-	return _rotas.get(node.get_tree().get_instance_id())
+	return _rotas.get(_level_key(node))
+
+
+static func _level_key(node: Node) -> int:
+	var tree := node.get_tree()
+	var level: Node = tree.current_scene if tree.current_scene != null else tree.root
+	return level.get_instance_id()
 
 
 static func clear_all() -> void:

@@ -46,6 +46,8 @@ const BETWEEN := Vector2(3.0, 6.0)
 const FLASK_APART := 1.2
 ## After a gathering, this long before its men talk again (TalkDirector).
 const REST := Vector2(20.0, 45.0)
+## A gathering asked for is given up after this long (s) if it cannot begin.
+const REQUEST_FOR := 45.0
 ## Each kind: size [least, most], its place kind ("" where they stand), how
 ## long it lasts (s, once playing), how many conversations, the rest before
 ## another like it, how far its men may be to come.
@@ -102,17 +104,24 @@ var _live: Array = []
 var _history: Array[StringName] = []
 
 
-## The director for `node`'s tree (made the first time it is asked for).
+## The director for `node`'s level (made the first time it is asked for): a
+## level loaded again starts afresh.
 static func of(node: Node) -> RefCounted:
 	if node == null or not node.is_inside_tree():
 		return null
 
-	var key := node.get_tree().get_instance_id()
+	var tree := node.get_tree()
+	var level: Node = tree.current_scene if tree.current_scene != null else tree.root
+	var key := level.get_instance_id()
 	var director: RefCounted = _directors.get(key)
 
 	if director == null:
+		for old in _directors.keys():
+			if not is_instance_id_valid(old):
+				_directors.erase(old)
+
 		director = (load("res://scripts/AISystem/Gathering.gd") as GDScript).new()
-		director._tree = weakref(node.get_tree())
+		director._tree = weakref(tree)
 		_directors[key] = director
 
 	return director
@@ -122,10 +131,30 @@ static func clear_all() -> void:
 	_directors.clear()
 
 
-## Starts a `kind` soon (whatever its rest), with these men (names) if given.
+## Starts a `kind` soon (whatever its rest), with these men (names) if given;
+## given up after REQUEST_FOR seconds if it cannot come about.
 func request(kind: StringName, names := []) -> void:
-	_queue.append({"kind": kind, "names": names})
+	_queue.append({"kind": kind, "names": names, "at": clock})
 	_start_in = minf(_start_in, 0.0)
+
+
+## What is asked for and not yet begun: [{kind, names, at}].
+func queued() -> Array:
+	return _queue
+
+
+## No longer asked for.
+func cancel(kind: StringName) -> void:
+	_queue = _queue.filter(func(q): return q["kind"] != kind)
+
+
+## Everything going on ended (its men back to their duties) and nothing more
+## asked for (the night has moved on).
+func end_all() -> void:
+	_queue.clear()
+
+	for g in _live.duplicate():
+		_end(g)
 
 
 ## The gatherings going on, for tests and the showcase.
@@ -195,6 +224,15 @@ func tick(delta: float) -> void:
 	# A fire burning low is fed.
 	if _feed_a_fire():
 		return
+
+	# Given up: asked for too long ago, or for men who are not here.
+	var tree_now: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+	_queue = _queue.filter(func(q):
+		if clock - float(q.get("at", clock)) > REQUEST_FOR:
+			return false
+
+		var names: Array = q.get("names", [])
+		return names.is_empty() or tree_now == null or tree_now.get_nodes_in_group(&"guards").any(func(m): return names.has(String(m.get("given_name")))))
 
 	if not _queue.is_empty():
 		var asked: Dictionary = _queue.pop_front()
@@ -455,7 +493,10 @@ func _advance(g: Dictionary) -> void:
 				return
 
 			if clock >= float(g["next_at"]):
-				if talk != null and talk.play_place(g["members"], g["kind"]):
+				# The teller tells his story (the story's part A is his).
+				var fixed := {"A": g["roles"]["teller"]} if g["roles"].has("teller") else {}
+
+				if talk != null and talk.play_place(g["members"], g["kind"], fixed):
 					g["conversations"] = int(g["conversations"]) + 1
 				else:
 					# Nothing left to say here.
@@ -531,7 +572,11 @@ func _start_special(kind: StringName, names: Array) -> bool:
 
 			return false
 		&"fire":
-			return _feed_a_fire()
+			# Already being fed, or none burning low: nothing to ask for.
+			if _live.any(func(g): return g["kind"] == &"fire"):
+				return true
+
+			return _feed_a_fire() or not tree.get_nodes_in_group(&"fires").any(func(f): return f.has_method("low") and f.low())
 
 	return false
 
@@ -546,7 +591,7 @@ func _see_to(want: Dictionary, rota: RefCounted) -> void:
 	if want["kind"] == &"relief":
 		if not _start_watch(man, null):
 			# Nobody to send yet: asked again next time.
-			_queue.append({"kind": &"watch_change", "names": [String(man.get("given_name"))], "man": man})
+			_queue.append({"kind": &"watch_change", "names": [String(man.get("given_name"))], "man": man, "at": clock})
 
 		return
 

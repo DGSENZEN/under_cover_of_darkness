@@ -64,6 +64,7 @@ func _run() -> void:
 	await _expression()
 	await _pastimes()
 	await _atmosphere()
+	await _steady_gaze()
 	GuardScript.randomize_on = true
 
 
@@ -454,6 +455,35 @@ func _atmosphere() -> void:
 		"moths %d hidden %s, leaves at 1 %s, at 0 off %s" % [air.moths().size(), moths_hidden, leaves_on, leaves_off])
 	torch.queue_free()
 	air.queue_free()
+
+
+# ---------------------------------------------------------------------------
+# The final review's findings
+# ---------------------------------------------------------------------------
+
+func _steady_gaze() -> void:
+	# A21 a man listening holds his eyes on the man speaking (his gaze is
+	# not added to his idle drift)
+	await _fresh()
+	_use(["talk_pair"])
+	var director: RefCounted = TalkDirector.of(self)
+	var a := _guard(Vector3(170, 0, 0), -PI * 0.5)
+	var b := _guard(Vector3(172.6, 0, 0), PI * 0.5)
+	await _until(func(): return director.speaking(a) or director.speaking(b), 1800)
+	await _frames(20)
+	var speaker: Node3D = a if director.speaking(a) else b
+	var listener: Node3D = b if speaker == a else a
+	var axis := _rest_forward_axis(listener)
+	var worst := 0.0
+
+	for i in 8:
+		var pose: Dictionary = await _posed_global(listener, [&"Head"])
+		var facing: Vector3 = ((pose[&"Head"] as Transform3D).basis * axis).normalized()
+		var to_him: Vector3 = (speaker.eye_position() - (pose[&"Head"] as Transform3D).origin).normalized()
+		worst = maxf(worst, rad_to_deg(acos(clampf(Vector2(facing.x, facing.z).normalized().dot(Vector2(to_him.x, to_him.z).normalized()), -1.0, 1.0))))
+		await _frames(10)
+
+	_check("A21 a man listening holds his eyes on the man speaking, not drifting about him", worst <= 20.0, "at worst %.0f deg off him" % worst)
 
 
 # ---------------------------------------------------------------------------

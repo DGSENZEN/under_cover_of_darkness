@@ -1,6 +1,7 @@
 # After the murder: fear, names called into the dark, grief.
 
 == where_is_jory
+priority: 1
 when: missing(Jory)
 cast: A = any; B? = any
 cooldown: once
@@ -8,6 +9,7 @@ A: Jory? Jory, this isn't funny.
 B [whispers]: Stay behind me.
 
 == missing_where
+priority: 1
 when: missing
 cast: A = any; B? = any
 cooldown: 1m
@@ -70,6 +72,7 @@ B: We will. After. Get up.
 # Fear.
 
 == fear_count_heads
+priority: 1
 when: dread>=0.35
 cast: A = any; B = any
 cooldown: 3m
@@ -78,6 +81,7 @@ A [whispers]: Count heads. Who's still here?
 B: Not enough of us.
 
 == fear_lantern_out
+priority: 1
 when: dread>=0.35, alarm>=0.45
 cast: A = craven; B = any
 cooldown: 3m

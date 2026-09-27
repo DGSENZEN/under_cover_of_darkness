@@ -2,6 +2,7 @@
 # how you fight, the men you spared and the men you cut down begging.
 
 == how_many_now
+priority: 1
 when: dead>=1
 cast: A = any; B = any
 cooldown: 3m
@@ -10,6 +11,7 @@ A: How many is that now?
 B: Too many. Watch the shadows.
 
 == nobody_that_good
+priority: 1
 when: dead>=1
 cast: A = any; B = any
 cooldown: 3m
@@ -18,6 +20,7 @@ A: Whoever it is, he's good.
 B: Nobody's that good. We'll have him.
 
 == found_another
+priority: 1
 when: dead>=1
 cast: A = any; B = any
 cooldown: 3m
@@ -26,6 +29,7 @@ A: They found another one.
 B [whispers]: Keep your voice down.
 
 == throat_cut
+priority: 1
 when: dead>=1
 cast: A = any; B = any
 cooldown: 3m
@@ -34,6 +38,7 @@ A: They found {dead}. Throat cut, they say.
 B: Keep your voice down.
 
 == owed_me_money
+priority: 1
 when: dead>=1
 cast: A = any; B = any
 cooldown: 3m
@@ -42,6 +47,7 @@ A: {dead} owed me money.
 B: Then you'd best find who did it.
 
 == not_another_night
+priority: 1
 when: dread>=0.35
 cast: A = any; B = any
 cooldown: 3m
@@ -50,6 +56,7 @@ A: I'm not staying another night here.
 B: Nor me. Stay close.
 
 == hearing_footsteps
+priority: 1
 when: dread>=0.35
 cast: A = any; B = any
 cooldown: 3m
@@ -58,6 +65,7 @@ A: I keep hearing footsteps.
 B: That's me, you fool.
 
 == killed_the_captain
+priority: 1
 when: captain_dead
 cast: A = any; B = any
 cooldown: 5m
@@ -65,6 +73,7 @@ A: They killed the captain.
 B: Then we make them pay for it.
 
 == eyes_open
+priority: 1
 when: alarm>=0.45
 cast: A = any; B = any
 cooldown: 3m
@@ -73,6 +82,7 @@ A: Eyes open. He's still in here somewhere.
 B: I know, I know.
 
 == where_i_can_see_you
+priority: 1
 when: alarm>=0.45
 cast: A = any; B = any
 cooldown: 3m
@@ -81,6 +91,7 @@ A: Stay where I can see you.
 B: Likewise.
 
 == habit_turtle
+priority: 1
 when: habit:turtle
 cast: A = any; B = any
 cooldown: 5m
@@ -88,6 +99,7 @@ A: They say he hides behind his blade.
 B: Then put a boot through it.
 
 == habit_spam
+priority: 1
 when: habit:spam
 cast: A = any; B = any
 cooldown: 5m
@@ -95,6 +107,7 @@ A: Swings like a butcher, they say.
 B: Then let him tire, and cut him down.
 
 == habit_kite
+priority: 1
 when: habit:kite
 cast: A = any; B = any
 cooldown: 5m
@@ -102,6 +115,7 @@ A: He runs. Won't stand and fight.
 B: Then we'll run him down.
 
 == habit_bow
+priority: 1
 when: habit:bow
 cast: A = any; B = any
 cooldown: 5m
@@ -109,6 +123,7 @@ A: He's got a bow. Keep out of the light.
 B: And off the open ground.
 
 == habit_parry
+priority: 1
 when: habit:parry
 cast: A = any; B = any
 cooldown: 5m
@@ -116,6 +131,7 @@ A: He turns every blow aside, they say.
 B: Then feint. Make him guess.
 
 == habit_dodge
+priority: 1
 when: habit:dodge
 cast: A = any; B = any
 cooldown: 5m
@@ -123,6 +139,7 @@ A: Quick on his feet, that one.
 B: Then go for his legs.
 
 == anyone_seen
+priority: 1
 when: missing
 cast: A = any; B = any
 cooldown: 3m
@@ -130,6 +147,7 @@ A: Anyone seen {missing}?
 B: Not since he took his post.
 
 == let_him_go
+priority: 1
 when: spared
 cast: A = any; B = any
 cooldown: 5m
@@ -138,6 +156,7 @@ A: He had {spared} on his knees. And let him go.
 B: Then he's soft. Or he's playing with us.
 
 == walked_away
+priority: 1
 when: spared
 cast: A = any; B = any
 cooldown: 5m
@@ -146,6 +165,7 @@ A: {spared} begged, and he walked away.
 B: I'd not count on that twice.
 
 == nobody_kneels
+priority: 1
 when: slain_begging
 cast: A = any; B = any
 cooldown: 5m
@@ -154,6 +174,7 @@ A: {slain} begged him. On his knees. He cut him down anyway.
 B: Then nobody kneels. Nobody.
 
 == fight_to_the_last
+priority: 1
 when: slain_begging
 cast: A = any; B = any
 cooldown: 5m

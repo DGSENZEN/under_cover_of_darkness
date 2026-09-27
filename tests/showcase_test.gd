@@ -605,6 +605,25 @@ func _other_nights() -> void:
 	_check("D32 Act I comes to its end on other nights too (seeds 7 and 99)", times.all(func(t): return t[1] and float(t[2]) <= 330.0),
 		"%s" % [times])
 
+	# D34 however Act I went, Act II finds Jory at the postern and nobody
+	# still gathering
+	DirectorScript.start_act = 1
+	var map34 := await _map(true)
+	await _frames(60)
+
+	while map34.director.act_index < 2:
+		map34.director.next_beat()
+		await _frames(30)
+
+	await _frames(60)
+	var jory34: Node3D = map34.cast.get("Jory")
+	var posted34: bool = jory34 != null and jory34.global_position.distance_to(map34.marks["postern_post"]) < 1.2
+	var gatherings34: RefCounted = GatheringScript.of(map34)
+	_check("D34 whatever Act I came to, Act II finds Jory at the postern and no gathering going on or asked for",
+		posted34 and gatherings34.live().is_empty() and gatherings34.queued().is_empty(),
+		"Jory at %s, gatherings live %d, asked for %s" % [jory34.global_position if jory34 != null else "gone", gatherings34.live().size(), gatherings34.queued()])
+	await _unload(map34)
+
 	# D33 a whisper is shown smaller than talk, a shout larger
 	_check("D33 the subtitles show a whisper small and a shout large",
 		OverlayScript.size_for(&"whisper") < OverlayScript.size_for(&"") and OverlayScript.size_for(&"") < OverlayScript.size_for(&"shout"),

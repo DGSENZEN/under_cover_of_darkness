@@ -45,6 +45,7 @@ func _run() -> void:
 	await _rota()
 	await _gatherings()
 	await _duties()
+	await _review_fixes()
 
 
 # ---------------------------------------------------------------------------
@@ -379,6 +380,49 @@ func _duties() -> void:
 	_check("R15 needs move men: the hungry to eat, the cold to the fire, the tired to bed",
 		ate[0] and warmed[0] and rota.kind_of(rota.duty_of(tired)) == &"bed", "ate %s warmed %s, tired man's duty %s" % [ate[0], warmed[0], rota.duty_of(tired)])
 	hearth.get_parent().queue_free()
+
+
+# ---------------------------------------------------------------------------
+# The final review's findings
+# ---------------------------------------------------------------------------
+
+func _review_fixes() -> void:
+	# R16 the storyteller tells the story, whoever else of rank sits with him
+	await _fresh()
+	var fire: Area3D = FireScript.brazier(self, Vector3(100, 0, 0))
+	var story := _place(&"story", Vector3(100, 0, 0), [[Vector3(1.9, 0, 0), &"stand", &"teller"], [Vector3(-1.9, 0, 0), &"squat", &"listener"],
+		[Vector3(0, 0, -1.9), &"stand", &"listener"], [Vector3(0.3, 0, 1.9), &"squat", &"listener"]])
+	var brand := _guard(Vector3(104, 0, 6), 0.0, &"rash", "Brand", [], &"brute")
+	var others := [_guard(Vector3(98, 0, 6), 0.0, &"steady", "Mirelle", [], &"duelist"), _guard(Vector3(100, 0, 7), 0.0), _guard(Vector3(102, 0, 7), 0.0)]
+	for g in [brand] + others:
+		g._life._talk_rest = 0.0
+	var gatherings: RefCounted = GatheringScript.of(self)
+	var director: RefCounted = TalkDirector.of(self)
+	gatherings.request(&"story")
+	var told := [{}]
+	await _until(func():
+		for t in director.talks():
+			if String(t["id"]).begins_with("story_"):
+				told[0] = t
+		return not told[0].is_empty(), 3000)
+	_check("R16 the storyteller tells the story, whoever else of rank sits and listens",
+		not told[0].is_empty() and told[0]["cast"].get("A") == brand, "story %s told by %s" % [told[0].get("id", "none"), told[0].get("cast", {}).get("A").given_name if told[0].get("cast", {}).get("A") != null else "nobody"])
+	story.queue_free()
+	fire.get_parent().queue_free()
+
+	# R17 a gathering asked for and never possible is not asked for forever
+	# (a man about to keep the director ticking; no dice place for him)
+	await _fresh()
+	_guard(Vector3(120, 0, 0), 0.0)
+	gatherings = GatheringScript.of(self)
+	gatherings.request(&"dice")
+	gatherings.request(&"watch_change", ["Nobody", "Noone"])
+	await _frames(int((GatheringScript.REQUEST_FOR + 5.0) * 60))
+	var stale: int = gatherings.queued().size()
+	gatherings.request(&"flask")
+	gatherings.cancel(&"flask")
+	_check("R17 a gathering asked for that cannot come about is given up after a while, and one can be called off",
+		stale == 0 and gatherings.queued().is_empty(), "still queued %d, after calling off %s" % [stale, gatherings.queued()])
 
 
 ## A gathering place of `kind` at `at`: spots [offset, activity, role], each

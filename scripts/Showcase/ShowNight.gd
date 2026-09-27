@@ -260,6 +260,13 @@ func _act_two() -> Dictionary:
 		"title": "II. A Knife in the Dark",
 		"stage": _after_the_watch_change,
 		"enter": func() -> void:
+			# The night moves on: whatever they were doing together is over,
+			# and the watch has changed however Act I went.
+			_gatherings().end_all()
+			var jory_now := _man("Jory")
+			var rota_now: Variant = map.get("rota")
+			if jory_now != null and rota_now != null and rota_now.duty_of(jory_now) != &"postern":
+				_after_the_watch_change()
 			var i: Node3D = map.spawn_intruder(map.marks["drop_in"], PI)
 			i.exposure_scale = SNEAK_EXPOSURE
 			i.crouched = true,

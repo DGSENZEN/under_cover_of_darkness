@@ -183,6 +183,7 @@ func _run() -> void:
 	await _memory()
 	await _voice()
 	await _fight_talk()
+	await _review_fixes()
 	GuardScript.randomize_on = true
 
 
@@ -787,6 +788,114 @@ func _fight_talk() -> void:
 	await _until(func(): return _barks_of(sent).any(func(t): return replies.has(t)), 240)
 	_check("T33 the lookout sends a man by name to look, and he answers in his own way", _barks_of(sent).any(func(t): return replies.has(t)),
 		"lookout said %s, the man said %s" % [_barks_of(watcher), _barks_of(sent)])
+
+
+# ---------------------------------------------------------------------------
+# The final review's findings
+# ---------------------------------------------------------------------------
+
+func _review_fixes() -> void:
+	var lib: Dictionary = TalkScript.library()
+
+	# T38 after a death, what is on their minds comes before the light talk
+	await _fresh()
+	_use_files()
+	GarrisonScript.of(player).on_death(false, "Jory")
+	var hendrik := _guard(Vector3(250, 0, 0), -PI * 0.5, &"steady", "Hendrik")
+	var ned := _guard(Vector3(252.6, 0, 0), PI * 0.5, &"steady", "Ned")
+	var director: RefCounted = TalkDirector.of(self)
+	await _until(func(): return not director.played().is_empty(), 900)
+	var first38: String = director.played()[0] if not director.played().is_empty() else ""
+	var from38 := _file_of(lib, first38)
+	_check("T38 after a death, two men at their ease talk of it before anything light", from38 == "unease" or from38 == "fear",
+		"first talk %s (from %s)" % [first38, from38])
+
+	# T38b afraid men are not at their ease
+	await _fresh()
+	_use_files()
+	GarrisonScript.of(player).dread = 0.8
+	var shaky_a := _guard(Vector3(230, 0, 12), -PI * 0.5, &"craven")
+	var shaky_b := _guard(Vector3(232.6, 0, 12), PI * 0.5, &"craven")
+	director = TalkDirector.of(self)
+	await _until(func(): return not director.played().is_empty(), 900)
+	var first38b: String = director.played()[0] if not director.played().is_empty() else ""
+	var eased := false
+
+	for c in lib["conversations"]:
+		if c["id"] == first38b:
+			eased = (c["when"] as Array).any(func(t): return (t as Array).has("at_ease"))
+
+	var world38b := TalkFacts.world([shaky_a, shaky_b], get_tree(), {})
+	_check("T38b men afraid are not at their ease: none of the at-ease talk", first38b != "" and not eased and not bool(world38b["at_ease"]),
+		"first talk %s; states %d/%d alert %.1f/%.1f resting %.1f/%.1f rest %.1f/%.1f remarks %d" % [first38b, shaky_a.state, shaky_b.state, shaky_a.alert, shaky_b.alert, shaky_a._life._resting, shaky_b._life._resting, shaky_a._life._talk_rest, shaky_b._life._talk_rest, director.remarks().size()])
+
+	# T39 the file checks catch what would silently never play
+	var bad := TalkScript.load_text_for_test("""== t1
+when: asleep(Tom)
+cast: A = name(Tomas)
+A: Hm.
+
+== t2
+place: dcie
+cast: A = any; A = any
+again: maybe
+A: {C} and {dead} and {plase}.
+
+== t3
+when: situation:lunch
+cast: A = any
+A: Hm.
+""", "typos.talk")
+	var errs: String = "\n".join(bad["errors"])
+	var caught := ["typos.talk:2:", "typos.talk:3:", "typos.talk:7:", "typos.talk:8:", "typos.talk:9:", "typos.talk:10:", "typos.talk:13:"].filter(func(at): return not errs.contains(at))
+	_check("T39 a name nobody has, a place nobody gathers, a doubled part, a bad 'again', an unknown placeholder or situation is an error with its line",
+		caught.is_empty(), "missed %s in %s" % [caught, errs])
+
+	# T40 nobody speaks of himself by name as another man
+	var smell: Dictionary = {}
+
+	for c in lib["conversations"]:
+		if c["id"] == "canal_smell":
+			smell = c
+
+	var sheet: Dictionary = lib["cast"]
+	var only := [TalkFacts.sheet_man("Brand", sheet, &"rash", &"brute"), TalkFacts.sheet_man("Wat", sheet, &"sly", &"archer")]
+	var cast40 := TalkFacts.cast_parts(smell, only, {"present": ["Brand", "Wat"], "at_ease": true})
+	_check("T40 Brand is never the man who says 'that's Brand's boots'", not smell.is_empty() and not cast40.values().any(func(m): return m["name"] == "Brand"),
+		"cast %s" % [cast40.keys().map(func(k): return "%s=%s" % [k, cast40[k]["name"]])])
+
+	# T41 a man muttering to himself is not booked into a talk as well
+	await _fresh()
+	_use(["muse_1", "talk_pair"])
+	director = TalkDirector.of(self)
+	var mutterer := _guard(Vector3(180, 0, 20), 0.0)
+	var other41 := _guard(Vector3(205, 0, 20), 0.0)
+	await _until(func(): return director.remarks().any(func(r): return r["man"] == mutterer) and director.speaking(mutterer), 3600)
+	var muttering: bool = director.speaking(mutterer)
+	var booked: bool = director.play("talk_pair", {"A": mutterer, "B": other41})
+	_check("T41 a man in the middle of a remark cannot be booked into a conversation too", muttering and not booked, "muttering %s, booked %s" % [muttering, booked])
+
+	# T42 a new level (the scene reloaded) starts with a fresh director
+	await _fresh()
+	var before42: RefCounted = TalkDirector.of(self)
+	var elsewhere := Node.new()
+	get_tree().root.add_child(elsewhere)
+	get_tree().current_scene = elsewhere
+	var after42: RefCounted = TalkDirector.of(self)
+	get_tree().current_scene = self
+	var back42: RefCounted = TalkDirector.of(self)
+	elsewhere.queue_free()
+	_check("T42 the director belongs to the level: a reloaded scene gets its own", before42 != after42 and back42 == before42,
+		"new level new director %s, same level same %s" % [before42 != after42, back42 == before42])
+
+
+## The file a conversation comes from ("at_ease", "unease"...).
+func _file_of(lib: Dictionary, id: String) -> String:
+	for c in lib["conversations"]:
+		if c["id"] == id:
+			return String(c["source"]).get_file().get_slice(":", 0).get_basename()
+
+	return ""
 
 
 ## The files' conversations for the director (not the fixtures).
