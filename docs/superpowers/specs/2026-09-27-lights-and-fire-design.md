@@ -233,7 +233,7 @@ One per fixture, at its `corona` socket. A candelabra or chandelier has one.
 ### 7.6 Lit and out
 
 `LightFixture` API:
-- `light(instant := false)`
+- `kindle(instant := false)` (named `kindle`, not `light`: every burner already has a `light` member, its `OmniLight3D`)
 - `put_out(how := &"snuff", instant := false)`, where `how` is `&"snuff"` or `&"douse"`
 - `is_lit() -> bool`
 - signal `lit_changed(lit: bool)`
@@ -367,7 +367,7 @@ Each bay also has one guard carrying a lantern and one carrying a torch on a sho
 - flames, cores, coronas, embers, smoke and haze are all on `Layers.FX`, and the gem camera's cull mask excludes them;
 - `Flicker` for each kind stays within its swing, and its dominant frequency is within 20% of its puff rate;
 - a candle's light is steady in still air and shivers after a nearby door opens;
-- `light()`, `put_out(&"snuff")` and `put_out(&"douse")` change the light's energy on their timings, emit `lit_changed`, and move `LightProbe.light_at` beside the fixture;
+- `kindle()`, `put_out(&"snuff")` and `put_out(&"douse")` change the light's energy on their timings, emit `lit_changed`, and move `LightProbe.light_at` beside the fixture;
 - `LightBudget` never gives more than 6 shadows, and never switches a light within 12 m of the camera;
 - under `TimeFx` slow motion, flame frames and embers advance at the slowed rate;
 - a fire's loop plays only within its reach, and is quieter behind a wall;
