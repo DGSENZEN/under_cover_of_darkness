@@ -4,16 +4,21 @@
 # suite (passes, failures) and the suites that never printed their results or
 # hit a script error. Exits 1 if anything failed.
 #
-#   tools/run_suites.sh                         all of tests/*_test.tscn
-#   tools/run_suites.sh 'tests/l*_test.tscn'    some
+#   tools/run_suites.sh                                   all of tests/*_test.tscn
+#   tools/run_suites.sh tests/retro_test.tscn tests/l*    some
 set -uo pipefail
 
 GODOT=${GODOT:-/Users/tinkertailorr/Desktop/Godot.app/Contents/MacOS/Godot}
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 LOGS="${TMPDIR:-/tmp}/suites"
-PATTERN=${1:-tests/*_test.tscn}
 mkdir -p "$LOGS"
 cd "$HERE"
+
+if [ $# -gt 0 ]; then
+  SCENES=$(ls "$@")
+else
+  SCENES=$(ls tests/*_test.tscn)
+fi
 
 run_one() {
   local scene=$1
@@ -24,13 +29,11 @@ run_one() {
 export -f run_one
 export GODOT LOGS
 
-# shellcheck disable=SC2086
-ls $PATTERN | xargs -P 6 -I{} bash -c 'run_one "$@"' _ {}
+echo "$SCENES" | xargs -P 6 -I{} bash -c 'run_one "$@"' _ {}
 
 status=0
 
-# shellcheck disable=SC2086
-for scene in $(ls $PATTERN); do
+for scene in $SCENES; do
   name=$(basename "$scene" .tscn)
   log="$LOGS/$name.log"
   passes=$(grep -c "^PASS" "$log" || true)

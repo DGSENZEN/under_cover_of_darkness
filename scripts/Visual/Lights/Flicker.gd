@@ -25,6 +25,9 @@ const DRIFT := 0.4
 const DRAFT_RATE := 10.0
 const DRAFT_TIME := 1.0
 
+## salt -> its three phases, drawn once.
+static var _phases := {}
+
 
 ## The waver of a flame of `kind` at time `t` (s), -1..1.
 static func value(kind: StringName, t: float, salt: int) -> float:
@@ -33,15 +36,22 @@ static func value(kind: StringName, t: float, salt: int) -> float:
 	if rate <= 0.0:
 		return 0.0
 
-	var rng := RandomNumberGenerator.new()
-	rng.seed = salt
-	var p1 := rng.randf() * TAU
-	var p2 := rng.randf() * TAU
-	var p3 := rng.randf() * TAU
+	var phases: Vector3 = _phases.get(salt, Vector3.INF)
+
+	if phases == Vector3.INF:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = salt
+		phases = Vector3(rng.randf(), rng.randf(), rng.randf()) * TAU
+
+		if _phases.size() > 4096:
+			_phases.clear()
+
+		_phases[salt] = phases
+
 	return (
-		0.55 * sin(TAU * rate * t + p1)
-		+ 0.25 * sin(TAU * 1.73 * rate * t + p2)
-		+ 0.2 * sin(TAU * DRIFT * t + p3)
+		0.55 * sin(TAU * rate * t + phases.x)
+		+ 0.25 * sin(TAU * 1.73 * rate * t + phases.y)
+		+ 0.2 * sin(TAU * DRIFT * t + phases.z)
 	)
 
 

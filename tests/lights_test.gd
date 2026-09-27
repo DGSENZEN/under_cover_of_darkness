@@ -42,6 +42,7 @@ func _run() -> void:
 	await _baselines()
 	_flicker()
 	await _flames()
+	await _burner()
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +230,56 @@ func _flames() -> void:
 		"low %.2f at strength 0.2, %.2f at 1" % [low, full])
 	a.queue_free()
 	b.queue_free()
+	await _frames(2)
+
+
+# ---------------------------------------------------------------------------
+# The burner (Torch.gd)
+# ---------------------------------------------------------------------------
+
+func _burner() -> void:
+	# L11 a bare torch keeps everything the game holds it by, and burns in its band
+	var torch: Node3D = TorchScript.new()
+	add_child(torch)
+	torch.global_position = Vector3(0, 2, -80)
+	await _frames(2)
+	var kept: bool = torch.is_in_group(&"torches") and torch.has_method("lean") and torch.has_method("set_strength") and torch.has_method("flare")
+	var drawn: bool = torch.flame is MeshInstance3D and torch.flame.layers == Layers.FX
+	var marked: bool = torch.light.has_meta(&"casts_shadow") and torch.light.get_meta(&"casts_shadow") == true
+	var frames_seen := {}
+
+	for i in 60:
+		await get_tree().process_frame
+		frames_seen[torch.get("frame")] = true
+
+	var low := INF
+	var high := -INF
+
+	for i in 300:
+		await get_tree().process_frame
+		low = minf(low, torch.light.light_energy)
+		high = maxf(high, torch.light.light_energy)
+
+	var band: bool = low >= torch.energy * (1.0 - torch.flicker) - 0.01 and high <= torch.energy * (1.0 + torch.flicker) + 0.01
+	torch.set_strength(0.2)
+	await _frames(2)
+	var dim: bool = torch.light.light_energy < 0.6 * torch.energy
+	torch.set_strength(1.0)
+	torch.flare(1.0)
+	var flared: float = torch._flare
+	var faded := false
+
+	for i in int((TorchScript.FLARE_TIME + 0.1) * 60.0):
+		await get_tree().process_frame
+
+		if torch._flare < 0.1:
+			faded = true
+			break
+
+	_check("L11 a bare torch keeps its hold-points, draws its flame on FX, burns in its band, dims and flares",
+		kept and drawn and marked and frames_seen.size() >= 3 and not frames_seen.has(null) and band and dim and flared == 1.0 and faded,
+		"kept %s drawn %s marked %s frames %d energy %.2f..%.2f band %s dim %s flare %.2f faded %s" % [kept, drawn, marked, frames_seen.size(), low, high, band, dim, flared, faded])
+	torch.queue_free()
 	await _frames(2)
 
 

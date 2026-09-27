@@ -194,7 +194,7 @@ func _run() -> void:
 	for i in 60:
 		await _frames(1)
 		energies.append(torch.light.light_energy)
-		frames[torch.flame.material_override.uv1_offset.x] = true
+		frames[torch.frame] = true
 
 	var low: float = energies.min()
 	var high: float = energies.max()

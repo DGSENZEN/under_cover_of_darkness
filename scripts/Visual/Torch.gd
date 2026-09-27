@@ -1,14 +1,21 @@
 extends Node3D
-## A torch: a warm light that breathes and gutters, and a flame drawn as a
-## four-frame pixel flipbook that always faces you. Its shadows are on, so in
-## a foggy room it throws shafts past pillars and through doorways.
+## A burner: a warm light that breathes and gutters, and the flames that make
+## it, drawn from our own heat sheets (FlameFx.gd). Its shadows are on, so in
+## a foggy room it throws shafts past pillars and through doorways. On its
+## own it is a bare flame (a torch as the game has always had one); every
+## light fixture (LightFixture.gd) is one of these with a model round it.
 ##
 ## A real light: guards see you by it (and see you flicker with it), and the
-## lightgem reads it. Put the node where the flame is.
+## lightgem reads it. Its flames, like every effect, are on their own layer,
+## so they light nothing and the lightgem never sees them. Put the node where
+## the flame is (for several flames, `flame_points` round it).
 ##
-## Heard as well: it crackles (audio/ambience/torch_loop.ogg), close by only,
-## muffled through a wall, a little different from every other torch. It only
-## plays while you are near enough to hear it.
+## It flickers at the rate its kind of flame puffs (Flicker.gd), never
+## outside energy × (1 ± flicker), however it is stoked or blown.
+##
+## Heard as well: it crackles (audio/ambience/torch_loop.ogg unless told
+## otherwise), close by only, muffled through a wall, a little different from
+## every other torch. It only plays while you are near enough to hear it.
 ##
 ## A log pushed into it (flare) and it flares up a moment, brighter and
 ## taller.
@@ -18,52 +25,103 @@ extends Node3D
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const Flicker := preload("res://scripts/Visual/Lights/Flicker.gd")
+const FlameFxScript := preload("res://scripts/Visual/Lights/FlameFx.gd")
 
 const CRACKLE := "res://audio/ambience/torch_loop.ogg"
 ## How loud its crackle is (dB at a metre or so), and how far it carries.
 const CRACKLE_DB := -13.0
 const CRACKLE_REACH := 11.0
-## Flaring up: this much brighter and taller at first, gone in this long (s).
+## A flare: this much brighter and this much taller at its height, gone over
+## FLARE_TIME.
 const FLARE_LIGHT := 0.6
 const FLARE_SIZE := 0.45
 const FLARE_TIME := 0.9
+## How far the top of the flame goes with a full wind (m, at its made size).
+const LEAN_REACH := 0.07
+## The light sits this far above its flames, so they never shadow it.
+const LIGHT_ABOVE := 0.12
 
-@export var color := Color(1.0, 0.64, 0.32)
+@export var color := Color("FF9829")
 @export var energy := 2.4
 @export var light_range := 9.0
 ## How much the light wavers, as a fraction of its energy.
 @export_range(0.0, 0.6, 0.01) var flicker := 0.16
 @export var shadows := true
-## Flame frames per second.
-@export var frame_rate := 9.0
+## Flame frames per second; 0 is the sheet's own.
+@export var frame_rate := 0.0
+## The flame's height (m).
 @export var flame_size := 0.34
 
+## Which way it flickers (Flicker.KINDS): torch, cresset, brazier, fire,
+## lamp or candle.
+@export var flicker_kind := &"torch"
+## Its heat sheet and colour ramps (FlameFx.gd).
+@export var sheet := &"torch"
+@export var ramp := &"torch"
+@export var low_ramp := &"dying"
+## Where its flames are, in its own space. One light serves them all.
+@export var flame_points: PackedVector3Array = PackedVector3Array([Vector3.ZERO])
+@export var flame_layers := 2
+@export var core := true
+## Its halo's size on the 360-line screen; 0 for none.
+@export var corona_px := 48.0
+## Its loop ("" for silence), how loud and how far.
+@export var loop_path := CRACKLE
+@export var loop_db := CRACKLE_DB
+@export var loop_reach := CRACKLE_REACH
+## Lit as made.
+@export var lit := true
+## Embers and smoke a second from each flame.
+@export var ember_rate := 6.0
+@export var smoke_rate := 3.0
+## A fire's events (surges, settling logs) every x..y seconds; zero for none.
+@export var event_every := Vector2.ZERO
+
 var light: OmniLight3D
+## The main flame sprite.
 var flame: MeshInstance3D
 ## Its crackle (null with sound off).
 var crackle: AudioStreamPlayer3D
+var flames: Array = []
+## Its own dice: drawn from where it stands, so every run is the same.
+var rng := RandomNumberGenerator.new()
+## The main flame's flipbook frame.
+var frame: int:
+	get:
+		return flames[0].frame if not flames.is_empty() else 0
 
-var _flame_material: StandardMaterial3D
 var _time := 0.0
-var _phase := 0.0
+var _salt := 0
+var _seeded := false
 var _listen_in := 0.0
 var _crackle_db := CRACKLE_DB
 ## How brightly it burns (a brazier burning down: Fire.gd); 1 as made.
 var _strength := 1.0
 ## The wind on it (Atmosphere): the flame leans its way.
 var _lean := Vector3.ZERO
-## How far the top of the flame goes with a full wind (m, at its made size).
-const LEAN_REACH := 0.07
-## Flaring up (a log pushed in): 1 at once, fading.
 var _flare := 0.0
+## A fire's surge or settling log, 0..1: the flames only, never the light.
+var _jump := 0.0
+var _light_base := Vector3.ZERO
 
 
 func _ready() -> void:
+	_before_ready()
 	add_to_group(&"torches")
 	# The light wavers and the flame changes every drawn frame: drawn as set.
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	_phase = randf() * 100.0
-	_time = _phase
+
+	if flame_points.is_empty():
+		flame_points = PackedVector3Array([Vector3.ZERO])
+
+	var middle := Vector3.ZERO
+
+	for point in flame_points:
+		middle += point
+
+	middle /= float(flame_points.size())
+	_light_base = middle + Vector3(0.0, LIGHT_ABOVE, 0.0)
 
 	light = OmniLight3D.new()
 	light.name = "Light"
@@ -74,74 +132,90 @@ func _ready() -> void:
 	light.shadow_enabled = shadows
 	light.shadow_blur = 1.5
 	light.light_volumetric_fog_energy = 1.4
-	# Just above the flame, so the flame does not shadow its own light.
-	light.position = Vector3(0.0, 0.12, 0.0)
+	# What the guards' light arithmetic takes it to be, whatever the shadow
+	# budget does to what is drawn (LightProbe, LightBudget).
+	light.set_meta(&"casts_shadow", shadows)
+	light.position = _light_base
 	add_child(light)
 
-	flame = MeshInstance3D.new()
-	flame.name = "Flame"
-	var quad := QuadMesh.new()
-	quad.size = Vector2(flame_size * 0.75, flame_size)
-	flame.mesh = quad
-	flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	flame.layers = Layers.FX
+	for point in flame_points:
+		var fx: Node3D = FlameFxScript.new()
+		fx.name = "Flame"
+		fx.sheet = sheet
+		fx.ramp = ramp
+		fx.low_ramp = low_ramp
+		fx.size = flame_size
+		fx.frame_rate = frame_rate
+		fx.layers = flame_layers
+		fx.core = core
+		add_child(fx)
+		fx.position = point
+		flames.append(fx)
 
-	_flame_material = StandardMaterial3D.new()
-	_flame_material.albedo_texture = Fx.texture(&"flame")
-	_flame_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	_flame_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_flame_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-	_flame_material.alpha_scissor_threshold = 0.5
-	_flame_material.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
-	_flame_material.albedo_color = Color(1.6, 1.3, 1.0)
-	_flame_material.disable_fog = true
-	_flame_material.uv1_scale = Vector3(0.25, 1.0, 1.0)
-	flame.material_override = _flame_material
-	add_child(flame)
+	flame = flames[0].sprites[0]
+	_make_loop()
 
-	if Sfx.enabled and ResourceLoader.exists(CRACKLE):
-		var loop := load(CRACKLE) as AudioStreamOggVorbis
 
-		if loop != null:
-			loop.loop = true
-			crackle = AudioStreamPlayer3D.new()
-			crackle.name = "Crackle"
-			crackle.stream = loop
-			crackle.bus = Sfx.BUS_WORLD
-			crackle.unit_size = 1.4
-			crackle.max_distance = CRACKLE_REACH
-			crackle.volume_db = CRACKLE_DB
-			crackle.max_db = 0.0
-			crackle.attenuation_filter_cutoff_hz = Sfx.AIR_CUTOFF
-			crackle.attenuation_filter_db = Sfx.AIR_DB
-			crackle.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
-			# No two torches burn alike.
-			crackle.pitch_scale = randf_range(0.9, 1.1)
-			add_child(crackle)
+## For what is built on a burner (LightFixture.gd): set the exports before
+## the burner builds itself from them.
+func _before_ready() -> void:
+	pass
+
+
+func _make_loop() -> void:
+	if not Sfx.enabled or loop_path.is_empty() or not ResourceLoader.exists(loop_path):
+		return
+
+	var loop := load(loop_path) as AudioStream
+
+	if loop == null:
+		return
+
+	if loop is AudioStreamOggVorbis:
+		loop.loop = true
+
+	crackle = AudioStreamPlayer3D.new()
+	crackle.name = "Crackle"
+	crackle.stream = loop
+	crackle.bus = Sfx.BUS_WORLD
+	crackle.unit_size = 1.4
+	crackle.max_distance = loop_reach
+	crackle.volume_db = loop_db
+	crackle.max_db = 0.0
+	crackle.attenuation_filter_cutoff_hz = Sfx.AIR_CUTOFF
+	crackle.attenuation_filter_db = Sfx.AIR_DB
+	crackle.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
+	crackle.position = _light_base - Vector3(0.0, LIGHT_ABOVE, 0.0)
+	# No two torches burn alike.
+	crackle.pitch_scale = randf_range(0.9, 1.1)
+	_crackle_db = loop_db
+	add_child(crackle)
 
 
 func _process(delta: float) -> void:
-	_time += delta
+	if not _seeded:
+		# Seeded once it stands where it will burn (it is often placed just
+		# after it is added).
+		_seeded = true
+		_salt = Flicker.seed_of(global_position)
+		rng.seed = _salt
 
-	# A slow breath, a quicker waver and a nervous flutter.
-	var n := (
-		sin(_time * 1.7) * 0.45
-		+ sin(_time * 5.3 + 1.1) * 0.35
-		+ sin(_time * 13.1 + 2.3) * 0.2
-	)
+	_time += delta
 	_flare = move_toward(_flare, 0.0, delta / FLARE_TIME)
 	var flared := _flare * _flare
-	light.light_energy = energy * _strength * (1.0 + flicker * n) * (1.0 + FLARE_LIGHT * flared)
+	var waver := Flicker.value(flicker_kind, _time, _salt)
+	light.light_color = color
+	light.light_energy = energy * _strength * (1.0 + flicker * waver) * (1.0 + FLARE_LIGHT * flared)
 	light.omni_range = light_range * lerpf(0.55, 1.0, clampf(_strength, 0.0, 1.0))
-	light.position = Vector3(sin(_time * 3.1) * 0.02, 0.12 + sin(_time * 4.7) * 0.015, cos(_time * 2.9) * 0.02)
+	light.position = _light_base
 
-	var frame := int(floor(_time * frame_rate)) % 4
-	_flame_material.uv1_offset = Vector3(0.25 * frame, 0.0, 0.0)
-	flame.scale = Vector3.ONE * lerpf(0.35, 1.0, clampf(_strength, 0.0, 1.5)) * (1.0 + 0.08 * n) * (1.0 + FLARE_SIZE * flared)
-	# Leaning with the wind: the flame goes its way and flattens a little.
-	var gust := Vector3(_lean.x, 0.0, _lean.z)
-	flame.position = gust * LEAN_REACH * (flame_size / 0.34)
-	flame.scale.y *= 1.0 - 0.15 * clampf(gust.length(), 0.0, 1.0)
+	if flicker_kind == &"torch" or flicker_kind == &"cresset":
+		# A torch's light dances a little, so its shadows shimmer.
+		light.position += Vector3(sin(_time * 3.1) * 0.02, sin(_time * 4.7) * 0.015, cos(_time * 2.9) * 0.02)
+
+	for fx in flames:
+		fx.shape(waver, _strength, _lean, _flare, _jump)
+
 	_listen(delta)
 
 
@@ -175,7 +249,7 @@ func _listen(delta: float) -> void:
 	if _listen_in <= 0.0:
 		_listen_in = 0.4 + randf() * 0.2
 		var camera := get_viewport().get_camera_3d()
-		var near := camera != null and camera.global_position.distance_to(global_position) < CRACKLE_REACH + 1.0
+		var near := camera != null and camera.global_position.distance_to(global_position) < loop_reach + 1.0
 
 		if near and not crackle.playing:
 			crackle.volume_db = -40.0
@@ -185,7 +259,7 @@ func _listen(delta: float) -> void:
 
 		if crackle.playing:
 			var hidden := Sfx.occlusion_at(self, global_position)
-			_crackle_db = CRACKLE_DB + (Sfx.OCCLUDED_DB if hidden >= 1.0 else (Sfx.AROUND_DB if hidden > 0.0 else 0.0))
+			_crackle_db = loop_db + (Sfx.OCCLUDED_DB if hidden >= 1.0 else (Sfx.AROUND_DB if hidden > 0.0 else 0.0))
 			crackle.attenuation_filter_cutoff_hz = Sfx.OCCLUDED_CUTOFF if hidden >= 1.0 else (Sfx.AROUND_CUTOFF if hidden > 0.0 else Sfx.AIR_CUTOFF)
 
 	if crackle.playing:
