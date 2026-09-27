@@ -164,6 +164,81 @@ func _run() -> void:
 	director11.queue_free()
 	await _unload(_loaded)
 
+	# ------------------------------------------------------------------
+	# The night (ShowNight), act by act from each act's own start
+	# ------------------------------------------------------------------
+
+	# D4 Act I: the watch at rest
+	DirectorScript.start_act = 1
+	var map4 := await _map(true)
+	var shown4 := {}
+	var talked4 := [false]
+	await _until(func():
+		for name in STATIONED:
+			var man: Node = map4.cast.get(name)
+			if man != null and is_instance_valid(man) and StringName(man.activity()) in [&"sit", &"sit_talk", &"eat", &"sleep", &"rummage", &"carry", &"chop"]:
+				shown4[name] = true
+		for name in ["Mirelle", "Osric", "Piers", "Col"]:
+			var man: Node = map4.cast.get(name)
+			if man != null and is_instance_valid(man) and StringName(man.activity()) in [&"talk", &"sit_talk"]:
+				talked4[0] = true
+		return map4.director.act_index >= 2, 6000)
+	_check("D4 Act I: every stationed man shows his station's activity at least once, and a pair talk",
+		shown4.size() == STATIONED.size() and talked4[0] and map4.director.act_index >= 2,
+		"shown %s, talked %s, act now %d" % [shown4.keys(), talked4[0], map4.director.act_index])
+	await _unload(map4)
+
+	# D5 Act II: the knife in the dark, and the man who saw it
+	DirectorScript.start_act = 2
+	var map5 := await _map(true)
+	var jory5: Node3D = map5.cast["Jory"]
+	var ned: Node3D = map5.cast["Ned"]
+	var ned_barks := []
+	ned.barked.connect(func(t): ned_barks.append(t))
+	var damped5 := [false]
+	var killed_at := [-1]
+	var frame5 := [0]
+	await _until(func():
+		frame5[0] += 1
+		if map5.intruder != null and is_instance_valid(map5.intruder) and map5.intruder.exposure_scale < 0.5:
+			damped5[0] = true
+		if killed_at[0] < 0 and (not is_instance_valid(jory5) or jory5._knocked_out):
+			killed_at[0] = frame5[0]
+		return killed_at[0] >= 0 and frame5[0] > killed_at[0] + 720, 9000)
+	var undamped5: bool = map5.intruder != null and is_instance_valid(map5.intruder) and is_equal_approx(map5.intruder.exposure_scale, 1.0)
+	var saw5: bool = is_instance_valid(ned) and (ned.state >= 3 or ned_barks.any(func(t): return String(t).contains("Murder")))
+	_check("D5 Act II: Jory dies by backstab, the damping is off after the kill, and Ned sees it (combat or searching, or a Murder bark) within 12 s",
+		killed_at[0] >= 0 and damped5[0] and undamped5 and saw5,
+		"Jory killed at frame %d, damped before %s, undamped after %s, Ned state %d, said %s" % [killed_at[0], damped5[0], undamped5, ned.state if is_instance_valid(ned) else -1, ned_barks])
+	await _unload(map5)
+
+	# D6 Act III: the cry goes round, the bell, the hunt
+	DirectorScript.start_act = 3
+	var map6 := await _map(true)
+	var rung6 := [false]
+	for bell in get_tree().get_nodes_in_group(&"alarm_bells"):
+		bell.rung.connect(func(_by): rung6[0] = true)
+	var stirred6 := {}
+	var states6 := {}
+	var searching6 := [0]
+	await _until(func():
+		for name in map6.cast:
+			var man: Variant = map6.cast[name]
+			if man != null and is_instance_valid(man) and (man as Node).state != 0:
+				stirred6[name] = true
+				states6[name] = maxi(int(states6.get(name, 0)), int((man as Node).state))
+		var searching := 0
+		for man in get_tree().get_nodes_in_group(&"guards"):
+			if man.state == 3:
+				searching += 1
+		searching6[0] = maxi(searching6[0], searching)
+		return stirred6.size() >= map6.cast.size() - 1 and rung6[0] and searching6[0] >= 2, 1800)
+	_check("D6 Act III: within 30 s every man is out of RELAXED, the bell has rung, and at least two men search",
+		stirred6.size() >= map6.cast.size() - 1 and rung6[0] and searching6[0] >= 2,
+		"stirred %d of %d, bell %s, most searching at once %d; highest states %s; beats skipped %s" % [stirred6.size(), map6.cast.size(), rung6[0], searching6[0], states6, map6.director.log_lines])
+	await _unload(map6)
+	DirectorScript.start_act = 1
+
 
 ## The director's reload for a test: the showcase freed and loaded afresh
 ## (the real one reloads the scene).

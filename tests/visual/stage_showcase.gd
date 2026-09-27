@@ -12,10 +12,10 @@ const REST_SHOTS := [
 	["fire", Vector3(5.5, 3.2, 6.0), Vector3(0, 0.8, 0)],
 	["store", Vector3(8.0, 4.0, 4.0), Vector3(14.5, 0.6, -1.0)],
 	["shed", Vector3(-12.0, 3.5, 5.0), Vector3(-18.0, 0.3, -1.0)],
-	["wall", Vector3(-4.0, 6.0, -6.0), Vector3(-10.0, 3.0, -14.5)],
+	["wall", Vector3(4.0, 6.0, -6.0), Vector3(10.0, 3.0, -14.5)],
 	["woodpile", Vector3(-7.5, 3.5, 15.0), Vector3(-12.5, 0.6, 11.0)],
 	["cart", Vector3(4.5, 3.5, 5.0), Vector3(9.0, 0.8, 9.5)],
-	["postern", Vector3(12.0, 4.5, -6.0), Vector3(17.5, 0.8, -13.5)],
+	["postern", Vector3(13.5, 4.5, -3.0), Vector3(19.5, 0.8, -9.0)],
 ]
 
 var _out := "user://stage_showcase/"

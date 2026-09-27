@@ -7,10 +7,11 @@ extends Node3D
 ##
 ## The yard (40 x 30 m, its middle at the origin, the gate to the south, +Z):
 ##   the north wall carries a wall-walk (stairs at both ends) and the tower in
-##   its west corner (the lookout, the bell); the postern is in its dark east
-##   corner. An open shed of bedrolls on the west side, the quartermaster's
-##   store on the east (a dark alley behind it, along the east wall), the
-##   fire and its benches in the middle, the well, the woodpile and the cart.
+##   its east corner (the lookout, the bell); the postern is in the east wall
+##   just south of the tower, in the dark. An open shed of bedrolls on the west
+##   side, the quartermaster's store on the east (a dark alley behind it, along
+##   the east wall, up to the postern), the fire and its benches in the
+##   middle, the well, the woodpile and the cart.
 ##   Outside the north wall: lean-to roofs, then a canal. Every building is
 ##   open above (rafters, no roof), so a camera overhead sees into it.
 ##
@@ -104,6 +105,16 @@ func _ready() -> void:
 	_spawn_cast()
 	GuardScript.randomize_on = true
 	_overview()
+	var reporting := Array(OS.get_cmdline_user_args()).any(func(arg): return String(arg).begins_with("--fps-report="))
+
+	# The director is there when the showcase says it is ready; it begins
+	# once whoever waits for that has heard it.
+	if run_show and not reporting and ResourceLoader.exists(STORY):
+		director = DirectorScript.new()
+		director.read_args(OS.get_cmdline_user_args())
+		add_child(director)
+		director.setup(self, (load(STORY) as GDScript).new(self))
+
 	ready_to_show.emit()
 
 	for arg in OS.get_cmdline_user_args():
@@ -111,11 +122,7 @@ func _ready() -> void:
 			_fps_report(float(arg.trim_prefix("--fps-report=")))
 			return
 
-	if run_show and ResourceLoader.exists(STORY):
-		director = DirectorScript.new()
-		director.read_args(OS.get_cmdline_user_args())
-		add_child(director)
-		director.setup(self, (load(STORY) as GDScript).new(self))
+	if director != null:
 		director.run()
 
 
@@ -160,12 +167,8 @@ func _yard() -> void:
 func _walls() -> void:
 	var h := WALL_HEIGHT
 
-	# North (1.2 m thick: a man can stand on it, going over), the postern at
-	# x 16.3..17.7.
-	_brush(Vector3(-2.35, h * 0.5, -15.9), Vector3(37.3, h, 1.2), BRICK, 2.0)
-	_brush(Vector3(19.35, h * 0.5, -15.9), Vector3(3.3, h, 1.2), BRICK, 2.0)
-	_brush(Vector3(17.0, h - 0.85, -15.9), Vector3(1.4, 1.7, 1.2), BRICK, 2.0)
-	_brush(Vector3(17.0, 1.25, -15.45), Vector3(1.4, 2.5, 0.3), WOOD, 1.0, "wood")
+	# North (1.2 m thick: a man can stand on it, going over).
+	_brush(Vector3(0, h * 0.5, -15.9), Vector3(42, h, 1.2), BRICK, 2.0)
 
 	# South, the gate in its middle (shut).
 	_brush(Vector3(-11.5, h * 0.5, 15.9), Vector3(19, h, 0.8), BRICK, 2.0)
@@ -173,25 +176,29 @@ func _walls() -> void:
 	_brush(Vector3(0, h - 0.5, 15.9), Vector3(4, 1.0, 0.8), BRICK, 2.0)
 	_brush(Vector3(0, 1.6, 15.75), Vector3(4, 3.2, 0.3), WOOD, 1.0, "wood")
 
-	# West and east.
+	# West, and east with the postern in it (z -9.5..-8.1, shut).
 	_brush(Vector3(-20.9, h * 0.5, 0), Vector3(0.8, h, 32.6), BRICK, 2.0)
-	_brush(Vector3(20.9, h * 0.5, 0), Vector3(0.8, h, 32.6), BRICK, 2.0)
+	_brush(Vector3(20.9, h * 0.5, -12.7), Vector3(0.8, h, 7.2), BRICK, 2.0)
+	_brush(Vector3(20.9, h * 0.5, 3.75), Vector3(0.8, h, 23.7), BRICK, 2.0)
+	_brush(Vector3(20.9, h - 0.85, -8.8), Vector3(0.8, 1.7, 1.4), BRICK, 2.0)
+	_brush(Vector3(20.65, 1.25, -8.8), Vector3(0.3, 2.5, 1.4), WOOD, 1.0, "wood")
 
-	# The wall-walk along the north wall, from the tower to short of the
-	# postern corner, and its stairs at each end.
-	_brush(Vector3(-0.55, WALK_HEIGHT * 0.5, -14.5), Vector3(32.7, WALK_HEIGHT, 1.6), STONE_WEATHERED, 2.0)
+	# The wall-walk along the north wall, from the west wall to the tower, and
+	# its stairs at each end.
+	_brush(Vector3(-1.8, WALK_HEIGHT * 0.5, -14.5), Vector3(37.4, WALK_HEIGHT, 1.6), STONE_WEATHERED, 2.0)
 	_stairs(Vector3(-14.8, 0, -9.7), Vector3(0, 0, -1), 12, WALK_HEIGHT / 12.0, 0.333, 1.4)
 	_stairs(Vector3(15.0, 0, -9.7), Vector3(0, 0, -1), 12, WALK_HEIGHT / 12.0, 0.333, 1.4)
 
 
 func _tower() -> void:
-	# The north-west corner, a step up off the wall-walk (a man climbs it).
-	_brush(Vector3(-18.7, TOWER_HEIGHT * 0.5, -13.7), Vector3(3.6, TOWER_HEIGHT, 3.6), BRICK, 2.0)
+	# The north-east corner, over the postern: a step up off the wall-walk (a
+	# man climbs it).
+	_brush(Vector3(18.7, TOWER_HEIGHT * 0.5, -13.7), Vector3(3.6, TOWER_HEIGHT, 3.6), BRICK, 2.0)
 
-	for corner in [Vector2(-20.3, -15.3), Vector2(-17.1, -15.3), Vector2(-20.3, -12.1), Vector2(-17.1, -12.1)]:
+	for corner in [Vector2(20.3, -15.3), Vector2(17.1, -15.3), Vector2(20.3, -12.1), Vector2(17.1, -12.1)]:
 		_brush(Vector3(corner.x, TOWER_HEIGHT + 0.55, corner.y), Vector3(0.4, 1.1, 0.4), BRICK, 1.0)
 
-	AlarmBellScript.build(self, Vector3(-19.9, TOWER_HEIGHT, -14.9), PI * 0.25)
+	AlarmBellScript.build(self, Vector3(19.9, TOWER_HEIGHT, -14.9), -PI * 0.25)
 
 
 func _shed() -> void:
@@ -288,8 +295,9 @@ func _stations_and_props() -> void:
 	var carry := _station("carry_ned", &"carry", Vector3(9, 0, 8.7), PI)
 	carry.drop_to = carry.get_path_to(drop)
 
-	for i in 4:
-		var crate := Props.crate(self, Vector3(8.0 + i * 0.66, 1.1, 10.2), 0.5, 5.0)
+	# Two rows of four: a night's hauling.
+	for i in 8:
+		var crate := Props.crate(self, Vector3(8.0 + (i % 4) * 0.66, 1.1 + (i / 4) * 0.52, 10.2), 0.5, 5.0)
 		crate.add_to_group(&"cargo")
 
 	# Brand at the chopping block.
@@ -304,12 +312,12 @@ func _marks() -> void:
 	marks = {
 		"fire": Vector3(0, 0, 0),
 		"gate": Vector3(0, 0, 13.5),
-		"postern_post": Vector3(17.2, 0, -14.3),
+		"postern_post": Vector3(19.6, 0, -8.8),
 		# The intruder: in over the east wall into the alley behind the store,
 		# where he waits for the archer to pass, and where he hides.
 		"drop_in": Vector3(19.4, 0, 9.0),
-		"alley_wait": Vector3(18.8, 0, -7.5),
-		"hide": Vector3(19.2, 0, 2.5),
+		"alley_wait": Vector3(18.9, 0, -4.2),
+		"hide": Vector3(19.2, 0, 4.0),
 		"found": Vector3(2.5, 0, 2.5),
 		"east_stairs": Vector3(15.0, 0, -9.2),
 		"walk_east": Vector3(12.5, WALK_HEIGHT, -14.5),
@@ -321,8 +329,8 @@ func _marks() -> void:
 	}
 
 	for mark in [["the fire", Vector3(0, 0, 0)], ["the well", Vector3(-5, 0, 7)], ["the gate", Vector3(0, 0, 14.5)],
-			["the tower", Vector3(-18.7, TOWER_HEIGHT, -13.7)], ["the store", Vector3(14, 0, -0.5)], ["the shed", Vector3(-17.4, 0, 1)],
-			["the postern", Vector3(17, 0, -15)], ["the wall", Vector3(0, WALK_HEIGHT, -14.5)], ["the woodpile", Vector3(-13, 0, 11)]]:
+			["the tower", Vector3(18.7, TOWER_HEIGHT, -13.7)], ["the store", Vector3(14, 0, -0.5)], ["the shed", Vector3(-17.4, 0, 1)],
+			["the postern", Vector3(20.3, 0, -8.8)], ["the wall", Vector3(0, WALK_HEIGHT, -14.5)], ["the woodpile", Vector3(-13, 0, 11)]]:
 		var landmark := Marker3D.new()
 		landmark.set_meta(&"landmark", mark[0])
 		landmark.add_to_group(&"landmarks")
@@ -357,9 +365,9 @@ func _lights() -> void:
 	# Torches: the gate, the tower, the store's front and inside it, inside the
 	# shed, by the woodpile. The postern has one of its own, dim (a man there
 	# is seen only near); the alley behind the store has none.
-	for torch in [[Vector3(-2.6, 2.6, 15.2), 2.4], [Vector3(2.6, 2.6, 15.2), 2.4], [Vector3(-16.6, 3.4, -11.7), 2.0],
+	for torch in [[Vector3(-2.6, 2.6, 15.2), 2.4], [Vector3(2.6, 2.6, 15.2), 2.4], [Vector3(16.6, 3.4, -11.7), 2.0],
 			[Vector3(11.3, 2.3, 5.2), 1.8], [Vector3(13.6, 2.5, -0.5), 1.4], [Vector3(-16.4, 2.4, 1.0), 1.6],
-			[Vector3(-20.4, 2.6, 10.5), 1.8], [Vector3(18.6, 2.4, -15.1), 0.7]]:
+			[Vector3(-20.4, 2.6, 10.5), 1.8], [Vector3(20.4, 2.4, -10.2), 0.7]]:
 		_torch(torch[0], torch[1])
 
 
@@ -374,14 +382,14 @@ func _spawn_cast() -> void:
 		"Osric": [Vector3(2.7, 0, 1.1), PI * 0.5, [], "", false],
 		"Brand": [Vector3(-12, 0, 12.4), 0.0, ["chop_brand"], "", false],
 		"Wat": [Vector3(-13.5, WALK_HEIGHT, -14.5), -PI * 0.5, [], "wall", false],
-		"Aldous": [Vector3(-18.5, TOWER_HEIGHT, -13.5), -2.2, [], "", true],
+		"Aldous": [Vector3(18.5, TOWER_HEIGHT, -13.5), 2.2, [], "", true],
 		"Hendrik": [Vector3(-7, 0, -6), 0.0, [], "yard", false],
 		"Piers": [Vector3(-0.6, 0, -1.2), PI, ["sit_piers"], "", false],
 		"Col": [Vector3(1.0, 0, 3.4), 0.0, ["eat_col"], "", false],
 		"Tam": [Vector3(-18.6, 0, -1.8), -PI * 0.5, ["sleep_tam"], "", false],
 		"Gideon": [Vector3(13.2, 0, -0.6), -PI * 0.5, ["chest_0", "chest_1", "chest_2"], "", false],
 		"Ned": [Vector3(9, 0, 7.5), PI, ["carry_ned"], "", false],
-		"Jory": [marks["postern_post"], 0.0, [], "", false],
+		"Jory": [marks["postern_post"], -PI * 0.5, [], "", false],
 	}
 
 	for entry in CAST:
