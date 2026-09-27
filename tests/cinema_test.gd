@@ -310,6 +310,30 @@ func _framing() -> void:
 
 	_check("F4 a two-shot stands on the side of their line it is given", sides == [true, true], "%s" % [sides])
 
+	# F9 a portrait: at his eye height, 32 deg, 30 deg off his line to the
+	# other man, on a third with room toward him
+	var toward9 := CineShot.head_of(other)
+	var p9 := CineShot.frame(&"portrait", [man], {"toward": toward9, "side": side})
+	var head9 := CineShot.head_of(man)
+	var at9 := _project(camera, p9, head9)
+	var room9 := _project(camera, p9, head9 + (toward9 - head9).normalized() * 0.5)
+	var off9 := Vector3(p9["position"].x - head9.x, 0, p9["position"].z - head9.z)
+	var line9 := Vector3(toward9.x - head9.x, 0, toward9.z - head9.z)
+	var on_third9: bool = absf(at9.x - w / 3.0) < 0.04 * w or absf(at9.x - w * 2.0 / 3.0) < 0.04 * w
+	_check("F9 a portrait: at his eye height, 32 deg, 30 deg off his line to the other man, on a third with room toward him",
+		absf(p9["position"].y - head9.y) < 0.05 and is_equal_approx(float(p9["fov"]), 32.0) and on_third9 and signf(room9.x - at9.x) != signf(at9.x - w * 0.5) \
+			and absf(rad_to_deg(off9.angle_to(line9)) - 30.0) < 2.0 and p9["kind"] == &"portrait" and p9["size"] == &"close",
+		"height %.2f of %.2f, fov %s, head at %s (room toward %s), %.1f deg off the line" % [p9["position"].y, head9.y, p9["fov"], at9, room9, rad_to_deg(off9.angle_to(line9))])
+
+	# F10 the other man's portrait mirrors it: the same side of the line, his
+	# head on the other third
+	var p10 := CineShot.frame(&"portrait", [other], {"toward": head9, "side": side})
+	var at10 := _project(camera, p10, toward9)
+	var centre10 := (man.global_position + other.global_position) * 0.5
+	var same_side: bool = ((p9["position"] as Vector3) - centre10).dot(side) > 0.0 and ((p10["position"] as Vector3) - centre10).dot(side) > 0.0
+	_check("F10 the other man's portrait mirrors it: the same side of their line, his head on the other third",
+		same_side and signf(at10.x - w * 0.5) != signf(at9.x - w * 0.5), "same side %s, heads at %.0f and %.0f" % [same_side, at9.x, at10.x])
+
 	# F5 the axial steps: one axis, nearer each time, a longer lens each time
 	var axial := []
 

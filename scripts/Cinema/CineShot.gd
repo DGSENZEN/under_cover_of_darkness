@@ -16,6 +16,9 @@ extends RefCounted
 ##   over_shoulder over the listener's shoulder (men[1]) onto the speaker.
 ##   two           both men, from the side of their line it is given.
 ##   reaction      the listener's face (men[0]) as a line lands.
+##   portrait      a man in a conversation, chest up, at his eye height, the
+##                 camera 30 deg off his line to the other man (context.toward):
+##                 the two men's portraits face each other across the cut.
 ##   insert        a detail (context.target): the fire, a torch, a hand.
 ##   track         alongside a man as he goes, from well off, long.
 ##   axial         straight in along one line, a step at a time (0, 1, 2).
@@ -43,8 +46,11 @@ const ESTABLISHING := 35.0
 const INSERT := 32.0
 const OVERHEAD := 50.0
 const AXIAL := [40.0, 34.0, 28.0]
-## A conversation's portraits: both men through one lens.
+## A conversation's portraits: both men through one lens, chest up (m), from
+## this far off the line to the other man (deg).
 const PORTRAIT := 32.0
+const PORTRAIT_HEIGHT := 1.1
+const PORTRAIT_OFF := 30.0
 ## A single man is seen from this far round from his front (degrees).
 const THREE_QUARTER := 30.0
 ## Over the shoulder: behind the listener's head, and out to the side (m).
@@ -76,6 +82,9 @@ static func frame(kind: StringName, men: Array, context: Dictionary) -> Dictiona
 				return _from(kind, men, from, NORMAL, MEDIUM_HEIGHT, aspect, &"medium")
 
 			return _single(kind, man, head, MEDIUM_HEIGHT, NORMAL, &"medium", side, aspect, float(context.get("turn", 0.0)))
+		&"portrait":
+			var toward: Variant = context.get("toward")
+			return _portrait(man, head, toward if toward is Vector3 else head + facing(man), side, aspect)
 		&"two":
 			return _two(men, side, aspect)
 		&"over_shoulder":
@@ -187,6 +196,22 @@ static func _single(kind: StringName, man: Node3D, head: Vector3, height: float,
 	var position := head + round * _distance(height, fov)
 	var look := _composed(position, head, ahead, fov, aspect)
 	return _result(kind, size, position, look, fov, head, false)
+
+
+## A man talking, chest up, at his eye height, the camera PORTRAIT_OFF off his
+## line to `toward` (on `side`), on the third that leaves room toward him.
+static func _portrait(man: Node3D, head: Vector3, toward: Vector3, side: Vector3, aspect: float) -> Dictionary:
+	var to := toward - head
+	to.y = 0.0
+	to = to.normalized() if to.length() > 0.05 else facing(man)
+	var off := to.rotated(Vector3.UP, deg_to_rad(PORTRAIT_OFF))
+
+	if side != Vector3.ZERO and off.dot(side) < 0.0:
+		off = to.rotated(Vector3.UP, -deg_to_rad(PORTRAIT_OFF))
+
+	var position := head + off * _distance(PORTRAIT_HEIGHT, PORTRAIT)
+	var look := _composed(position, head, to, PORTRAIT, aspect)
+	return _result(&"portrait", &"close", position, look, PORTRAIT, head, false)
 
 
 ## Both men from the side of their line (the side given, else the one to
