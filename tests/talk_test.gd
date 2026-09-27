@@ -7,8 +7,57 @@ extends Node3D
 
 const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
 const TalkFacts := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
+const TalkDirector := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
+const PLAYER := preload("res://Player.tscn")
+const GUARD := preload("res://Guard.tscn")
+const Props := preload("res://scripts/Interaction/Props.gd")
+const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
+const SquadScript := preload("res://scripts/AISystem/Squad.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const GuardScript := preload("res://scripts/AISystem/Guard.gd")
+const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
+const Comms := preload("res://scripts/AISystem/Comms.gd")
+const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
+
+## Conversations for the director's own checks, so they do not hang on the
+## writing.
+const FIXTURES := """
+== talk_pair
+cast: A = any; B = any
+cooldown: 0s
+A: First line, from the one.
+B: Second line, from the other.
+A: Third line, back again.
+B: Fourth and last.
+
+== three_way
+cast: A = any; B = any; C = any
+cooldown: 0s
+A: One.
+B: Two.
+C: Three.
+A: Four.
+B: Five.
+C: Six.
+
+== hush
+when: at_ease
+cast: A = any; B = any
+cooldown: 0s
+A: Quiet night.
+B: Quiet enough.
+A: Too quiet.
+B: Stop saying that.
+-- interrupt
+B: Hush. What was that?
+"""
 
 var results: Array[String] = []
+var player: CharacterBody3D
+var _barks := {}
+## [man, text, Comms.now()] for every line, in order.
+var _said: Array = []
 
 
 func _ready() -> void:
@@ -24,6 +73,11 @@ func _ready() -> void:
 func _run() -> void:
 	_files()
 	_facts()
+	await _yard()
+	seed(2026)
+	GuardScript.randomize_on = false
+	await _director()
+	GuardScript.randomize_on = true
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +163,178 @@ func _facts() -> void:
 	var y := TalkFacts.sheet_man("Gideon", sheet)
 	var cast9 := TalkFacts.cast_parts(any2, [x, y], {})
 	_check("T9 the quietest man is cast first", cast9.get("A", {}).get("name") == "Tam" and cast9.get("B", {}).get("name") == "Gideon", str(cast9.keys()))
+
+
+# ---------------------------------------------------------------------------
+# The director
+# ---------------------------------------------------------------------------
+
+func _director() -> void:
+	# T10 two men at their ease talk a whole conversation, turn and turn about
+	await _fresh()
+	_use(["talk_pair"])
+	var a := _guard(Vector3(0, 0, 0), -PI * 0.5)
+	var b := _guard(Vector3(2.6, 0, 0), PI * 0.5)
+	await _until(func(): return _said.size() >= 4, 1500)
+	var texts := _said.map(func(e): return e[1])
+	var turns: bool = _said.size() >= 4 and _said[0][0] != _said[1][0] and _said[1][0] != _said[2][0] and _said[2][0] != _said[3][0]
+	_check("T10 two men at their ease talk a written conversation through, turn and turn about",
+		texts.slice(0, 4) == ["First line, from the one.", "Second line, from the other.", "Third line, back again.", "Fourth and last."] and turns,
+		"said %s" % [texts])
+
+	# T11 one speaker at a time
+	await _fresh()
+	_use(["three_way"])
+	var men := [_guard(Vector3(20, 0, 0), 0.0), _guard(Vector3(22.5, 0, 0), 0.0), _guard(Vector3(21.25, 0, 2.1), PI)]
+	var director: RefCounted = TalkDirector.of(self)
+	var both := [0]
+	await _until(func():
+		var at_once := men.filter(func(m): return director.speaking(m)).size()
+		if at_once > 1:
+			both[0] += 1
+		return _said.size() >= 6, 2400)
+	var gaps_ok := true
+
+	for i in range(1, _said.size()):
+		if float(_said[i][2]) - float(_said[i - 1][2]) < TalkDirector.LINE_BASE:
+			gaps_ok = false
+
+	_check("T11 in a group of three only one speaks at a time, each line given its time",
+		_said.size() >= 6 and both[0] == 0 and gaps_ok, "lines %d, frames with two speaking %d, gaps ok %s" % [_said.size(), both[0], gaps_ok])
+
+	# T12 something stirs them: the interrupt line, and it is over
+	await _fresh()
+	_use(["hush"])
+	var a12 := _guard(Vector3(40, 0, 0), -PI * 0.5)
+	var b12 := _guard(Vector3(42.6, 0, 0), PI * 0.5)
+	await _until(func(): return _said.size() >= 1, 900)
+	var first_by: Node = _said[0][0] if not _said.is_empty() else null
+	SoundBus.emit_sound(Vector3(41.3, 0, -6), 60.0, self, &"test")
+	await _frames(20)
+	var other: Node = b12 if first_by == a12 else a12
+	var hushed: bool = _barks_of(other).has("Hush. What was that?")
+	var never: bool = not _said.any(func(e): return e[1] == "Too quiet.")
+	_check("T12 a noise breaks it off: the next man says the interrupt line, and neither talks on",
+		first_by != null and hushed and never and not a12._life.talking() and not b12._life.talking(),
+		"said %s, after: %s/%s" % [_said.map(func(e): return e[1]), a12._life.talking(), b12._life.talking()])
+
+	# T13 a call-out ends it
+	await _fresh()
+	_use(["talk_pair"])
+	var a13 := _guard(Vector3(60, 0, 0), -PI * 0.5)
+	var b13 := _guard(Vector3(62.6, 0, 0), PI * 0.5)
+	await _until(func(): return _said.size() >= 1, 900)
+	var was13: bool = a13._life.talking()
+	a13.bark("Over here!")
+	await _frames(12)
+	_check("T13 a man calling out ends his conversation", was13 and not a13._life.talking() and not b13._life.talking(),
+		"talking before %s, after %s/%s" % [was13, a13._life.talking(), b13._life.talking()])
+
+	# T14 a man gone in the middle of his line
+	await _fresh()
+	_use(["talk_pair"])
+	var a14 := _guard(Vector3(80, 0, 0), -PI * 0.5)
+	var b14 := _guard(Vector3(82.6, 0, 0), PI * 0.5)
+	var director14: RefCounted = TalkDirector.of(self)
+	await _until(func(): return director14.speaking(a14) or director14.speaking(b14), 900)
+	var gone: Node = a14 if director14.speaking(a14) else b14
+	var left: Node = b14 if gone == a14 else a14
+	var was14: bool = left._life.talking()
+	gone.remove_from_group(&"guards")
+	gone.queue_free()
+	await _frames(60)
+	_check("T14 a man freed in the middle of his line: the other stops talking, and nothing breaks",
+		was14 and is_instance_valid(left) and not left._life.talking(), "talking before %s, after %s" % [was14, left._life.talking()])
+
+	# T15 a man who walks off
+	await _fresh()
+	_use(["talk_pair"])
+	var a15 := _guard(Vector3(100, 0, 0), -PI * 0.5)
+	var b15 := _guard(Vector3(102.6, 0, 0), PI * 0.5)
+	await _until(func(): return _said.size() >= 1, 900)
+	var was15: bool = b15._life.talking()
+	b15._home = Transform3D(b15._home.basis, b15.global_position + Vector3(0, 0, 14))
+	await _until(func(): return not a15._life.talking(), 900)
+	var apart: float = a15.global_position.distance_to(b15.global_position)
+	_check("T15 a man who walks off ends it once he is out of earshot of the talk",
+		was15 and not a15._life.talking() and not b15._life.talking() and apart >= TalkDirector.LEAVE_RANGE - 0.5,
+		"talking before %s, after %s/%s, apart %.1f m" % [was15, a15._life.talking(), b15._life.talking(), apart])
+
+
+# ---------------------------------------------------------------------------
+# The yard
+# ---------------------------------------------------------------------------
+
+func _yard() -> void:
+	TemperamentScript.rolling = false
+	Props.block(self, Vector3(100, -0.5, 0), Vector3(320, 1, 60))
+	var baker := NavigationRegion3D.new()
+	baker.set_script(NavBakerScript)
+	add_child(baker)
+	player = PLAYER.instantiate()
+	add_child(player)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	player.debug_traversal = false
+	player.invulnerable = true
+	player.reload_on_death = false
+
+	if player.has_node("LightGem"):
+		player.get_node("LightGem").queue_free()
+
+	player.debug_light_level = 0.0
+	player.global_position = Vector3(100, 1.05, 28)
+	await baker.baked
+	await _frames(5)
+
+
+## The director's conversations for a check: those of FIXTURES named.
+func _use(ids: Array) -> void:
+	var lib := TalkScript.parse(FIXTURES, "fixtures")
+	lib["conversations"] = (lib["conversations"] as Array).filter(func(c): return ids.has(c["id"]))
+	TalkDirector.of(self).use_library(lib)
+
+
+func _guard(at: Vector3, yaw := 0.0, preset: StringName = &"steady", name := "", archetype: StringName = &"") -> CharacterBody3D:
+	var g: CharacterBody3D = GUARD.instantiate()
+	g.archetype = archetype
+	g.temperament = preset
+	g.debug_ai = false
+	g.given_name = name
+	g.position = at
+	g.rotation.y = yaw
+	add_child(g)
+	g._attack_timer = 999.0
+	g.attack_cooldown = 999.0
+	g._life._talk_rest = 0.0
+	_barks[g] = []
+	g.barked.connect(func(t):
+		_barks[g].append(t)
+		_said.append([g, t, Comms.now()]))
+	return g
+
+
+func _fresh() -> void:
+	for g in get_tree().get_nodes_in_group(&"guards"):
+		g.remove_from_group(&"guards")
+		g.set_physics_process(false)
+		g.queue_free()
+
+	for group in [&"bodies", &"dropped_weapons", &"dropped_lights", &"stray_arrows"]:
+		for thing in get_tree().get_nodes_in_group(group):
+			thing.queue_free()
+
+	SquadScript.clear_all()
+	GarrisonScript.clear_all()
+	_barks.clear()
+	_said.clear()
+	player.debug_light_level = 0.0
+	player.global_position = Vector3(100, 1.05, 28)
+	await _frames(5)
+	LightProbe.invalidate()
+
+
+func _barks_of(g: Node) -> Array:
+	return _barks.get(g, [])
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,162 @@
+# When something is wrong: their dead, their fear, what they have heard of
+# how you fight, the men you spared and the men you cut down begging.
+
+== how_many_now
+when: dead>=1
+cast: A = any; B = any
+cooldown: 3m
+group: of_the_dead
+A: How many is that now?
+B: Too many. Watch the shadows.
+
+== nobody_that_good
+when: dead>=1
+cast: A = any; B = any
+cooldown: 3m
+group: of_the_dead
+A: Whoever it is, he's good.
+B: Nobody's that good. We'll have him.
+
+== found_another
+when: dead>=1
+cast: A = any; B = any
+cooldown: 3m
+group: of_the_dead
+A: They found another one.
+B [whispers]: Keep your voice down.
+
+== throat_cut
+when: dead>=1
+cast: A = any; B = any
+cooldown: 3m
+group: of_the_dead
+A: They found {dead}. Throat cut, they say.
+B: Keep your voice down.
+
+== owed_me_money
+when: dead>=1
+cast: A = any; B = any
+cooldown: 3m
+group: of_the_dead
+A: {dead} owed me money.
+B: Then you'd best find who did it.
+
+== not_another_night
+when: dread>=0.35
+cast: A = any; B = any
+cooldown: 3m
+group: dread
+A: I'm not staying another night here.
+B: Nor me. Stay close.
+
+== hearing_footsteps
+when: dread>=0.35
+cast: A = any; B = any
+cooldown: 3m
+group: dread
+A: I keep hearing footsteps.
+B: That's me, you fool.
+
+== killed_the_captain
+when: captain_dead
+cast: A = any; B = any
+cooldown: 5m
+A: They killed the captain.
+B: Then we make them pay for it.
+
+== eyes_open
+when: alarm>=0.45
+cast: A = any; B = any
+cooldown: 3m
+group: alarm
+A: Eyes open. He's still in here somewhere.
+B: I know, I know.
+
+== where_i_can_see_you
+when: alarm>=0.45
+cast: A = any; B = any
+cooldown: 3m
+group: alarm
+A: Stay where I can see you.
+B: Likewise.
+
+== habit_turtle
+when: habit:turtle
+cast: A = any; B = any
+cooldown: 5m
+A: They say he hides behind his blade.
+B: Then put a boot through it.
+
+== habit_spam
+when: habit:spam
+cast: A = any; B = any
+cooldown: 5m
+A: Swings like a butcher, they say.
+B: Then let him tire, and cut him down.
+
+== habit_kite
+when: habit:kite
+cast: A = any; B = any
+cooldown: 5m
+A: He runs. Won't stand and fight.
+B: Then we'll run him down.
+
+== habit_bow
+when: habit:bow
+cast: A = any; B = any
+cooldown: 5m
+A: He's got a bow. Keep out of the light.
+B: And off the open ground.
+
+== habit_parry
+when: habit:parry
+cast: A = any; B = any
+cooldown: 5m
+A: He turns every blow aside, they say.
+B: Then feint. Make him guess.
+
+== habit_dodge
+when: habit:dodge
+cast: A = any; B = any
+cooldown: 5m
+A: Quick on his feet, that one.
+B: Then go for his legs.
+
+== anyone_seen
+when: missing
+cast: A = any; B = any
+cooldown: 3m
+A: Anyone seen {missing}?
+B: Not since he took his post.
+
+== let_him_go
+when: spared
+cast: A = any; B = any
+cooldown: 5m
+group: spared
+A: He had {spared} on his knees. And let him go.
+B: Then he's soft. Or he's playing with us.
+
+== walked_away
+when: spared
+cast: A = any; B = any
+cooldown: 5m
+group: spared
+A: {spared} begged, and he walked away.
+B: I'd not count on that twice.
+
+== nobody_kneels
+when: slain_begging
+cast: A = any; B = any
+cooldown: 5m
+group: slain
+A: {slain} begged him. On his knees. He cut him down anyway.
+B: Then nobody kneels. Nobody.
+
+== fight_to_the_last
+when: slain_begging
+cast: A = any; B = any
+cooldown: 5m
+group: slain
+A: He killed {slain} while he was begging.
+B: Then we fight to the last. All of us.

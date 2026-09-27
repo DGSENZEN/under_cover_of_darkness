@@ -55,3 +55,69 @@ A: Mother wrote. She asks if you're eating.
 B: Tell her I'm eating.
 A: She asks about the girl at the Lantern.
 B [laughs]: Tell her I'm eating.
+
+# The small talk of any two men on any night.
+
+== quiet_tonight
+when: at_ease
+cast: A = any; B = any
+cooldown: 2m
+group: small_talk
+A: Quiet tonight.
+B: Too quiet. I don't like it.
+
+== freeze_the_piss
+when: at_ease
+cast: A = any; B = any
+cooldown: 2m
+group: small_talk
+A: Cold enough to freeze the piss in you.
+B: Then stop standing in the wind.
+
+== relief_due
+when: at_ease
+cast: A = any; B = any
+cooldown: 2m
+group: small_talk
+A: When's the relief due?
+B: Not soon enough.
+
+== foul_mood
+when: at_ease
+cast: A = not(captain); B = not(captain)
+cooldown: 2m
+group: small_talk
+A: The captain's in a foul mood again.
+B: When isn't she?
+
+== kill_for_a_drink
+when: at_ease
+cast: A = any; B = any
+cooldown: 2m
+group: small_talk
+A: I'd kill for a drink.
+B: Wait till the watch changes.
+
+== owe_for_dice
+when: at_ease
+cast: A = any; B = any
+cooldown: 2m
+group: small_talk
+A: You still owe me for the dice.
+B: Put it on my tab.
+
+== keep_haunted
+when: at_ease
+cast: A = any; B = any
+cooldown: 2m
+group: small_talk
+A: They say the old keep's haunted.
+B: They say a lot of things.
+
+== your_stomach
+when: at_ease
+cast: A = any; B = any
+cooldown: 2m
+group: small_talk
+A: Did you hear something?
+B: Only your stomach.

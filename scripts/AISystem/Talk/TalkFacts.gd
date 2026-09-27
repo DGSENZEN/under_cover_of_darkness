@@ -34,7 +34,8 @@ const TIES := ["kin", "friend", "rival", "owes", "suspects"]
 const HOURS := ["early", "middle", "late", "dawn"]
 const HABITS := ["turtle", "spam", "kite", "bow", "parry", "dodge"]
 ## Bare words a `when:` may use, and what can be compared (>=, >, <).
-const WHEN_WORDS := ["at_ease", "uneasy", "alarm", "hunt", "combat", "bell_rung", "body_found", "spared", "slain_begging", "cold", "wind"]
+const WHEN_WORDS := ["at_ease", "uneasy", "alarm", "hunt", "combat", "bell_rung", "body_found", "spared", "slain_begging", "cold", "wind",
+	"captain_dead", "missing"]
 const WHEN_MEASURES := ["alarm", "dead", "dread"]
 const WHEN_NAMED := ["dead", "missing", "present", "asleep"]
 ## A man's rank when the cast sheet does not give one, by his kind.
@@ -128,6 +129,7 @@ static func world(men: Array, tree: SceneTree, extra := {}) -> Dictionary:
 	var facts := {
 		"at_ease": true, "uneasy": false, "combat": false, "hunt": false,
 		"alarm": 0.0, "bell_rung": false, "dead": 0, "dead_names": [], "body_found": false, "missing": [],
+		"captain_dead": false, "spared_names": [], "slain_names": [],
 		"dread": 0.0, "spared": false, "slain_begging": false, "habits": {},
 		"night": &"early", "cold": false, "fire": &"", "wind": false,
 		"present": [], "asleep": [],
@@ -185,6 +187,9 @@ static func world(men: Array, tree: SceneTree, extra := {}) -> Dictionary:
 		facts["body_found"] = int(garrison.get("bodies_found")) > 0
 		facts["spared"] = not garrison.spared.is_empty()
 		facts["slain_begging"] = not garrison.slain_begging.is_empty()
+		facts["spared_names"] = Array(garrison.spared).duplicate()
+		facts["slain_names"] = Array(garrison.slain_begging).duplicate()
+		facts["captain_dead"] = int(garrison.captains) > 0
 		facts["habits"] = (garrison.habits as Dictionary).duplicate()
 
 		for post in garrison.fallen:
@@ -252,7 +257,7 @@ static func holds(term: String, world: Dictionary, cast := {}) -> bool:
 			_:
 				return String(world.get(key, "")) == value
 
-	return bool(world.get(term, false))
+	return _truthy(world.get(term, false))
 
 
 ## Whether `man` meets a requirement (or a line's {if}); `cast` has the parts
@@ -446,6 +451,21 @@ static func _compare(term: String) -> Array:
 				return [term.substr(0, at), op, float(number)]
 
 	return []
+
+
+## A fact that is there: true, a number above nothing, a list with
+## something in it.
+static func _truthy(value: Variant) -> bool:
+	if value is Array:
+		return not (value as Array).is_empty()
+
+	if value is bool:
+		return value
+
+	if value is int or value is float:
+		return float(value) > 0.0
+
+	return value != null and String(value) != ""
 
 
 static func _measure(value: float, op: String, against: float) -> bool:

@@ -228,6 +228,19 @@ func _run() -> void:
 	camera.setup(map13, null)
 	camera.make_current()
 
+	# D14 a close shot puts his head in the middle of the frame (a man at
+	# his ease: before D13 sets the yard running)
+	var osric: Node3D = map13.cast["Osric"]
+	camera.want({"type": &"close", "subjects": [osric]})
+	await _frames(300)
+	var head: Vector3 = osric.global_position + Vector3.UP * 1.6
+	var size := get_viewport().get_visible_rect().size
+	var on_screen := camera.unproject_position(head)
+	var middle: bool = on_screen.x > size.x / 3.0 and on_screen.x < size.x * 2.0 / 3.0 and on_screen.y > size.y / 3.0 and on_screen.y < size.y * 2.0 / 3.0 and not camera.is_position_behind(head)
+	_check("D14 a \"close\" shot on a guard ends with his head in the middle third of the view",
+		middle and camera.global_position.distance_to(head) < 4.0,
+		"head at %s of %s, %.1f m off; camera %s looking at %s, aiming at %s, forward to head %.2f, mode %d, osric moved %s" % [on_screen, size, camera.global_position.distance_to(head), camera.global_position, camera._look_at, camera._goal_look, (-camera.global_basis.z).dot((head - camera.global_position).normalized()), camera.mode, osric.velocity])
+
 	# D13 following a man who dies
 	var col: Node3D = map13.cast["Col"]
 	camera.follow(col)
@@ -241,18 +254,6 @@ func _run() -> void:
 	_check("D13 following a man who dies, the camera frames where he fell, then returns to DIRECTOR within 3 s, with no errors",
 		held13 and camera.mode == CameraScript.Mode.DIRECTOR,
 		"held on where he fell %s (%.1f m off), mode now %d" % [held13, framing13.distance_to(fell_at), camera.mode])
-
-	# D14 a close shot puts his head in the middle of the frame
-	var osric: Node3D = map13.cast["Osric"]
-	camera.want({"type": &"close", "subjects": [osric]})
-	await _frames(300)
-	var head: Vector3 = osric.global_position + Vector3.UP * 1.6
-	var size := get_viewport().get_visible_rect().size
-	var on_screen := camera.unproject_position(head)
-	var middle: bool = on_screen.x > size.x / 3.0 and on_screen.x < size.x * 2.0 / 3.0 and on_screen.y > size.y / 3.0 and on_screen.y < size.y * 2.0 / 3.0 and not camera.is_position_behind(head)
-	_check("D14 a \"close\" shot on a guard ends with his head in the middle third of the view",
-		middle and camera.global_position.distance_to(head) < 4.0,
-		"head at %s of %s, %.1f m off; camera %s looking at %s, aiming at %s, forward to head %.2f, mode %d, osric moved %s" % [on_screen, size, camera.global_position.distance_to(head), camera.global_position, camera._look_at, camera._goal_look, (-camera.global_basis.z).dot((head - camera.global_position).normalized()), camera.mode, osric.velocity])
 
 	# D22 the camera is drawn where it is put (not physics-interpolated: it
 	# moves every drawn frame)

@@ -149,6 +149,9 @@ signal bound_wounds
 @export var carries_lantern := true
 ## What the garrison calls him ("" picks one for him, the same every load).
 @export var given_name := ""
+## How his last line was said: "whisper", "murmur", "shout" or "" (the
+## subtitles show it).
+var last_delivery: StringName = &""
 
 
 @export_category("Vision")
@@ -2432,11 +2435,42 @@ func _bark_for(new_state: int, old_state: int) -> void:
 				bark("Probably nothing.")
 
 
+## Calls out (or says anything that is not part of a conversation): a man
+## calling out has left whatever he was talking about.
 func bark(text: String) -> void:
 	if puppet:
 		return
 
+	if _life != null and _life.talking():
+		_life.end_talk()
+
+	_utter(text, &"")
+
+
+## A line of a conversation (TalkDirector), said `delivery` ("whisper",
+## "murmur", "shout", or "" as he would).
+func speak(text: String, delivery: StringName = &"") -> void:
+	if puppet:
+		return
+
+	_utter(text, delivery)
+
+
+## A gesture or a sound with it (a conversation's emote: "nods", "laughs",
+## "points:the tower"...).
+func emote(what: String) -> void:
+	var voice_now: Variant = get("_voice")
+
+	if voice_now != null and voice_now.has_method("emote"):
+		voice_now.emote(what)
+
+	if _rig != null and _rig.has_method("emote"):
+		_rig.emote(what)
+
+
+func _utter(text: String, delivery: StringName) -> void:
 	_bark_timer = 3.0
+	last_delivery = delivery
 	barked.emit(text)
 
 	if _bark_label != null:

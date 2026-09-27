@@ -1,10 +1,9 @@
 extends RefCounted
 ## A guard's life when there is no fight: his rounds as more than a walk.
-##   talk      two men at their ease and near each other pass the time with
-##             whatever is on the garrison's mind (Garrison.gossip): their
-##             dead, their fear, what they have heard of how you fight, or the
-##             cold. You can listen. Anything that stirs either of them ends
-##             it.
+##   talk      men at their ease and near each other talk: written
+##             conversations chosen to fit the moment (TalkDirector, the
+##             files in data/talk). You can listen. Anything that stirs one
+##             of them ends it.
 ##   idle      standing his post a while, a man folds his arms, or takes a
 ##             pull from his flask.
 ##   oddities  a door you left open, your arrow in a wall: he notices it (it
@@ -32,11 +31,8 @@ const SEARCHING := 3
 const COMBAT := 4
 ## How often he looks about him for things out of place (staggered).
 const CHECK := 0.35
-## Talk: within this of each other, a line this often, then a rest this long
-## (s) before either talks again.
-const TALK_RANGE := 3.8
-const TALK_GAP := 2.6
-const TALK_REST := Vector2(40.0, 80.0)
+## Who talks to whom (made at run time: it reads this script too).
+const TALK_DIRECTOR := "res://scripts/AISystem/Talk/TalkDirector.gd"
 ## Standing still this long, a man finds something to do with himself.
 const IDLE_AFTER := 3.0
 ## Seeing something out of place: this long in view (weighted by how near the
@@ -63,15 +59,11 @@ const DOUSE_AFTER := 8.0
 const LOOKOUT_ARC := 70.0
 const LOOKOUT_PERIOD := 12.0
 
+static var _talk_script: GDScript = null
+
 var guard: CharacterBody3D
-## Talking with, and whether he leads it (says when each line comes).
-var partner: Node3D = null
-var _lead := false
-var _lines: Array = []
-var _line := 0
-var _line_timer := 0.0
+## After a conversation, this long before he talks again (TalkDirector).
 var _talk_rest := 0.0
-var _spoke_at := -10.0
 ## Standing still, and what he is doing with himself.
 var _resting := 0.0
 var _idle: StringName = &""
@@ -105,7 +97,11 @@ func _init(p_guard: CharacterBody3D) -> void:
 ## Every physics frame, while he is up and about.
 func update(delta: float) -> void:
 	_talk_rest = maxf(_talk_rest - delta, 0.0)
-	_update_talk(delta)
+	var talk := _director()
+
+	if talk != null:
+		talk.tick(delta)
+
 	_update_cover(delta)
 	_update_lantern(delta)
 	_check -= delta
@@ -120,15 +116,12 @@ func update(delta: float) -> void:
 		_look_for_oddities(CHECK)
 		_look_for_missing(CHECK)
 
-	if state == RELAXED:
-		_look_for_company()
-
 
 ## What he is doing with himself, for the rig: "talk", "listen", "fold_arms",
 ## "drink", or "".
 func activity() -> StringName:
 	if talking():
-		return &"talk" if Comms.now() - _spoke_at < TALK_GAP * 0.85 else &"listen"
+		return &"talk" if _director().speaking(guard) else &"listen"
 
 	# Fidgets are for a man at his ease: anything else and they are over.
 	if int(guard.state) != RELAXED:
@@ -194,12 +187,19 @@ func watch_yaw(home_yaw: float, delta: float) -> float:
 # ---------------------------------------------------------------------------
 
 func talking() -> bool:
-	return partner != null and is_instance_valid(partner)
+	var talk := _director()
+	return talk != null and talk.in_talk(guard)
 
 
-## Which way his partner is (to face him).
+## Which way the man he listens to is (to face him).
 func partner_direction() -> Vector3:
-	return partner.global_position - guard.global_position if talking() else Vector3.ZERO
+	var talk := _director()
+	var other: Variant = talk.speaker_near(guard) if talk != null else null
+
+	if other == null or not is_instance_valid(other):
+		return Vector3.ZERO
+
+	return (other as Node3D).global_position - guard.global_position
 
 
 ## At his ease: nothing on his mind, nothing wrong with him.
@@ -217,97 +217,19 @@ static func at_ease(man: Node) -> bool:
 	return fighter == null or not bool(fighter.stays_put)
 
 
-func _look_for_company() -> void:
-	if _talk_rest > 0.0 or talking() or bool(guard.get("lookout")) or _resting < 1.0 or not at_ease(guard):
-		return
-
-	for other in guard.get_tree().get_nodes_in_group(&"guards"):
-		if other == guard or other.get("_life") == null or bool(other.get("lookout")):
-			continue
-
-		var life: RefCounted = other._life
-
-		if life.talking() or float(life._talk_rest) > 0.0 or float(life._resting) < 0.5 or not at_ease(other):
-			continue
-
-		if guard.global_position.distance_to(other.global_position) > TALK_RANGE:
-			continue
-
-		if not guard._line_of_sight(guard.eye_position(), other.eye_position(), other):
-			continue
-
-		_begin_talk(other)
-		return
-
-
-func _begin_talk(other: Node3D) -> void:
-	var garrison: RefCounted = _garrison()
-	var pair: Array = garrison.gossip() if garrison != null else GarrisonScript.SMALL_TALK[randi() % GarrisonScript.SMALL_TALK.size()]
-	_lines = [[0, pair[0]], [1, pair[1]]]
-
-	# Now and then it runs on a while.
-	if garrison != null and randf() < 0.4:
-		var more: Array = garrison.gossip()
-
-		if more[0] != pair[0]:
-			_lines.append_array([[0, more[0]], [1, more[1]]])
-
-	partner = other
-	_lead = true
-	_line = 0
-	_line_timer = 0.4
-	other._life._join_talk(guard)
-
-
-func _join_talk(lead: Node3D) -> void:
-	partner = lead
-	_lead = false
-	_idle = &""
-
-
-func _update_talk(delta: float) -> void:
-	if partner != null and not is_instance_valid(partner):
-		partner = null
-
-	if not talking():
-		return
-
-	# Anything that stirs either of them ends it.
-	if not at_ease(guard) or not at_ease(partner) or partner._life.partner != guard:
-		end_talk()
-		return
-
-	if not _lead:
-		return
-
-	_line_timer -= delta
-
-	if _line_timer > 0.0:
-		return
-
-	if _line >= _lines.size():
-		end_talk()
-		return
-
-	var entry: Array = _lines[_line]
-	var speaker: Node3D = guard if int(entry[0]) == 0 else partner
-	speaker.bark(String(entry[1]))
-	speaker._life._spoke_at = Comms.now()
-	_line += 1
-	_line_timer = TALK_GAP
-
-
+## He leaves the conversation he is in (broken off).
 func end_talk() -> void:
-	var other := partner
-	partner = null
-	_lead = false
-	_lines = []
-	_talk_rest = randf_range(TALK_REST.x, TALK_REST.y)
+	var talk := _director()
 
-	if other != null and is_instance_valid(other) and other.get("_life") != null and other._life.partner == guard:
-		other._life.partner = null
-		other._life._lead = false
-		other._life._talk_rest = randf_range(TALK_REST.x, TALK_REST.y)
+	if talk != null:
+		talk.leave(guard)
+
+
+func _director() -> RefCounted:
+	if _talk_script == null:
+		_talk_script = load(TALK_DIRECTOR)
+
+	return _talk_script.of(guard) if guard.is_inside_tree() else null
 
 
 # ---------------------------------------------------------------------------
