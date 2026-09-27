@@ -18,6 +18,7 @@ const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
+const CineShot := preload("res://scripts/Cinema/CineShot.gd")
 
 const COMBAT := 4
 const SEARCHING := 3
@@ -52,6 +53,7 @@ func _ready() -> void:
 	await _events()
 	CineEvents.remove_listener(ears)
 	await _ramps()
+	await _framing()
 	print("\n==== RESULTS ====")
 
 	for r in results:
@@ -157,6 +159,21 @@ func _events() -> void:
 	holder.queue_free()
 
 
+## A man as the camera sees him (light: no rig, no AI): where he stands,
+## which way he faces and goes, what he is doing.
+class Man extends Node3D:
+	var velocity := Vector3.ZERO
+	var eye_height := 1.6
+	var doing: StringName = &""
+	var _knocked_out := false
+
+	func eye_position() -> Vector3:
+		return global_position + Vector3.UP * eye_height
+
+	func activity() -> StringName:
+		return doing
+
+
 ## A listener that is a node (freed in C6 without leaving).
 class _NodeEars extends Node:
 	func cine_event(_kind: StringName, _data: Dictionary) -> void:
@@ -215,6 +232,132 @@ func _real(seconds: float) -> void:
 
 	while TimeFx.real_time() < until:
 		await get_tree().physics_frame
+
+
+# ---------------------------------------------------------------------------
+# F: framing
+# ---------------------------------------------------------------------------
+
+func _framing() -> void:
+	var view := SubViewport.new()
+	view.size = Vector2i(1920, 1080)
+	view.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	add_child(view)
+	var camera := Camera3D.new()
+	view.add_child(camera)
+	camera.current = true
+	var w := 1920.0
+	var h := 1080.0
+	var man := _man(Vector3(100, 0, 0), -PI * 0.5)
+
+	# F1 a close shot: his head on a third, his eyes in the upper third
+	var close := CineShot.frame(&"close", [man], {})
+	var at1 := _project(camera, close, CineShot.head_of(man))
+	var on_third1: bool = absf(at1.x - w / 3.0) < 0.04 * w or absf(at1.x - w * 2.0 / 3.0) < 0.04 * w
+	_check("F1 a close shot puts his head on a third and his eyes in the upper third",
+		on_third1 and at1.y >= 0.22 * h and at1.y <= 0.40 * h and close["size"] == &"close" and not camera.is_position_behind(CineShot.head_of(man)),
+		"head at %s of %sx%s, %.2f m off" % [at1, w, h, close["position"].distance_to(CineShot.head_of(man))])
+
+	# F2 room on the side he faces: his head on the other third, whichever
+	# way he faces
+	var roomy := true
+	var seen2 := []
+
+	for yaw in [-PI * 0.5, PI * 0.5, 0.0, PI]:
+		man.rotation.y = yaw
+		var f := CineShot.frame(&"close", [man], {})
+		var head := _project(camera, f, CineShot.head_of(man))
+		var ahead := _project(camera, f, CineShot.head_of(man) + CineShot.facing(man) * 0.5)
+		roomy = roomy and signf(ahead.x - head.x) != signf(head.x - w * 0.5)
+		seen2.append([snappedf(yaw, 0.01), roundi(head.x), roundi(ahead.x)])
+
+	man.rotation.y = -PI * 0.5
+	_check("F2 he has room on the side he faces: his head sits on the far third", roomy, "%s" % [seen2])
+
+	# F3 the lens by kind
+	var other := _man(Vector3(103, 0, 1), PI * 0.5)
+	var lenses := {}
+
+	for kind in [&"establishing", &"observe", &"roving", &"group", &"medium", &"close", &"over_shoulder", &"two", &"reaction", &"insert", &"track", &"overhead"]:
+		lenses[kind] = float(CineShot.frame(kind, [man, other], {"from": Vector3(120, 4, 10), "target": man})["fov"])
+
+	var lens_ok: bool = [&"observe", &"group", &"track"].all(func(k): return lenses[k] >= 18.0 and lenses[k] <= 28.0) \
+		and [&"close", &"over_shoulder", &"reaction"].all(func(k): return lenses[k] >= 35.0 and lenses[k] <= 45.0) \
+		and [&"medium", &"two", &"roving"].all(func(k): return is_equal_approx(lenses[k], 40.0)) \
+		and lenses[&"establishing"] >= 30.0 and lenses[&"establishing"] <= 40.0 and is_equal_approx(lenses[&"overhead"], 50.0) and is_equal_approx(lenses[&"insert"], 32.0)
+	_check("F3 each kind of shot has its lens: long for watching, near normal up close", lens_ok, "%s" % [lenses])
+
+	# F4 a two-shot stays on the side of the line it is given
+	var line := other.global_position - man.global_position
+	line.y = 0.0
+	var side := Vector3.UP.cross(line.normalized())
+	var sides := []
+
+	for s4 in [side, -side]:
+		var f4 := CineShot.frame(&"two", [man, other], {"side": s4})
+		var centre := (man.global_position + other.global_position) * 0.5
+		sides.append(((f4["position"] as Vector3) - centre).dot(s4) > 0.0)
+
+	_check("F4 a two-shot stands on the side of their line it is given", sides == [true, true], "%s" % [sides])
+
+	# F5 the axial steps: one axis, nearer each time, a longer lens each time
+	var axial := []
+
+	for step in 3:
+		axial.append(CineShot.frame(&"axial", [man], {"from": Vector3(115, 1.6, 6), "step": step}))
+
+	var head5 := CineShot.head_of(man)
+	var dirs := axial.map(func(f): return ((f["position"] as Vector3) - head5).normalized())
+	var dists := axial.map(func(f): return (f["position"] as Vector3).distance_to(head5))
+	var one_axis: bool = rad_to_deg((dirs[0] as Vector3).angle_to(dirs[1])) < 2.0 and rad_to_deg((dirs[0] as Vector3).angle_to(dirs[2])) < 2.0
+	_check("F5 an axial cut-in keeps one axis, comes nearer each step, and narrows the lens 40, 30, 22",
+		one_axis and dists[0] > dists[1] and dists[1] > dists[2] and axial.map(func(f): return roundi(f["fov"])) == [40, 30, 22] \
+			and axial.map(func(f): return f["size"]) == [&"wide", &"medium", &"close"],
+		"dirs %s, distances %s, lenses %s" % [dirs, dists, axial.map(func(f): return f["fov"])])
+
+	# F6 a 4:3 screen: still on a third
+	view.size = Vector2i(1440, 1080)
+	var close6 := CineShot.frame(&"close", [man], {"aspect": 1440.0 / 1080.0})
+	var at6 := _project(camera, close6, CineShot.head_of(man))
+	_check("F6 on a 4:3 screen the head is still on a third",
+		absf(at6.x - 480.0) < 0.04 * 1440.0 or absf(at6.x - 960.0) < 0.04 * 1440.0, "head at %s of 1440x1080" % [at6])
+	view.size = Vector2i(1920, 1080)
+
+	# F7 over the listener's shoulder onto the speaker
+	var ots := CineShot.frame(&"over_shoulder", [man, other], {})
+	var speaker7 := _project(camera, ots, CineShot.head_of(man))
+	var listener7 := _project(camera, ots, CineShot.head_of(other))
+	var third7: bool = absf(speaker7.x - w / 3.0) < 0.05 * w or absf(speaker7.x - w * 2.0 / 3.0) < 0.05 * w
+	_check("F7 over the listener's shoulder: the speaker on a third, the listener's head in the frame, the shoulder soft",
+		third7 and listener7.x >= 0.0 and listener7.x <= w and not camera.is_position_behind(CineShot.head_of(other)) and bool(ots["near_blur"]),
+		"speaker %s, listener %s, near blur %s" % [speaker7, listener7, ots["near_blur"]])
+
+	# F8 where his head is, lying or sat
+	man.doing = &"sleep"
+	var lying := CineShot.head_of(man).y - man.global_position.y
+	man.doing = &"sit"
+	var sat := CineShot.head_of(man).y - man.global_position.y
+	man.doing = &""
+	_check("F8 his head is 0.35 m up lying, 0.95 m sat", is_equal_approx(lying, 0.35) and is_equal_approx(sat, 0.95), "lying %.2f, sat %.2f" % [lying, sat])
+	man.queue_free()
+	other.queue_free()
+	view.queue_free()
+
+
+## Where `point` falls on the screen of `camera` put where `framing` says.
+func _project(camera: Camera3D, framing: Dictionary, point: Vector3) -> Vector2:
+	camera.fov = float(framing["fov"])
+	camera.global_position = framing["position"]
+	camera.look_at(framing["look"], Vector3.UP)
+	return camera.unproject_position(point)
+
+
+func _man(at: Vector3, yaw: float) -> Man:
+	var m := Man.new()
+	add_child(m)
+	m.global_position = at
+	m.rotation.y = yaw
+	return m
 
 
 # ---------------------------------------------------------------------------
