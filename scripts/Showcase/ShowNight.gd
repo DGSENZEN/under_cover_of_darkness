@@ -4,7 +4,12 @@ extends RefCounted
 ## their own; the beats move only the intruder (IntruderBrain), wait for the
 ## world to come true, and ask the camera for its shots.
 ##
-##   I.   The Watch at Rest   no intruder: a tour of the yard at its ease.
+##   I.   The Watch at Rest   no intruder: a stretch of the night at its
+##                             ease, condensed: talk by the fire, dice, the
+##                             captain's round (the sleeper booted), the fire
+##                             burning low and fed, a story, the watch
+##                             changing (Jory takes the postern from Hendrik),
+##                             the wall, the lookout.
 ##   II.  A Knife in the Dark  in over the east wall and along the alley; he
 ##                             waits for the archer to be far along the wall
 ##                             and the carrier to be coming round the store,
@@ -28,8 +33,12 @@ extends RefCounted
 ##                             and they come after him).
 ##
 ## A shot: {"type": wide | two | close | track | reveal, "subjects": [men]}.
+## A subject is a cast name, "intruder", "nearest", "@talk" (the men of the
+## latest conversation) or "@gathering:<kind>" (the men of that gathering).
 
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
+const TalkDirectorScript := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
+const GatheringScript := preload("res://scripts/AISystem/Gathering.gd")
 
 ## Guard.Alert.
 const RELAXED := 0
@@ -56,6 +65,13 @@ const TRADE_ENOUGH := 20.0
 ## The victor: the man he spares is up off his knees and this far from where
 ## he begged (running to his friends: GuardMercy's "spared").
 const SPARED_RAN := 4.0
+## Act I: the talk by the fire lasts at least this long; the captain's round
+## is enough once she has stopped at this many men; the fire is fed past
+## this; burning low is this much fuel (the director lets it burn down to
+## it when its beat comes).
+const ROUND_ENOUGH := 3
+const FIRE_FED := 0.7
+const FIRE_LOW := 0.32
 ## The ending's titles.
 const ENDING_TITLES := {&"overwhelmed": "V. Overwhelmed", &"victor": "V. The Victor", &"escape": "V. Over the Wall"}
 
@@ -76,6 +92,10 @@ var _spared: Node3D = null
 var _spared_at := Vector3.ZERO
 ## The ending came true (it stays true: the spared man may come back).
 var _ending_came := false
+## Act I: the conversations started when a beat began (to know its own), and
+## the round's visits so far.
+var _played_at_beat := 0
+var _rounds_at_beat := 0
 
 
 func _init(p_map: Node3D) -> void:
@@ -109,22 +129,122 @@ func _act_one() -> Dictionary:
 		"title": "I. The Watch at Rest",
 		"enter": func() -> void:
 			# The talkers need not wait out their rest before a word.
-			for name in ["Mirelle", "Osric", "Piers", "Col"]:
+			for name in map.cast:
 				var man := _man(name)
 				if man != null:
 					man._life._talk_rest = randf_range(0.0, 3.0),
 		"beats": [
 			_look(&"establish", 8.0, &"wide", []),
-			_look(&"fire_talk", 10.0, &"two", ["Mirelle", "Osric"]),
-			_look(&"sitters", 7.0, &"two", ["Piers", "Col"]),
-			_look(&"sleeper", 6.0, &"close", ["Tam"]),
-			_look(&"quartermaster", 8.0, &"close", ["Gideon"]),
-			_look(&"carrier", 8.0, &"track", ["Ned"]),
-			_look(&"chopper", 6.0, &"close", ["Brand"]),
+			{"name": &"fire_talk", "shot": _shot(&"two", ["@talk"]), "min": 10.0, "enough": 22.0, "timeout": 40.0,
+				"do": _mark_talk,
+				"until": func() -> bool: return _talk_ended_since()},
+			{"name": &"dice", "shot": _shot(&"two", ["@gathering:dice"]), "min": 12.0, "enough": 30.0, "timeout": 60.0,
+				"do": func() -> void:
+					_mark_talk()
+					_gatherings().request(&"dice"),
+				"until": func() -> bool: return _played_since("dice_")},
+			{"name": &"round", "shot": _shot(&"track", ["Mirelle"]), "min": 10.0, "enough": 30.0, "timeout": 60.0,
+				"do": func() -> void:
+					_rounds_at_beat = _round_visits()
+					_gatherings().request(&"round", ["Mirelle"]),
+				"until": func() -> bool: return _round_visits() - _rounds_at_beat >= ROUND_ENOUGH},
+			{"name": &"fire_fed", "shot": _shot(&"close", ["@gathering:fire"]), "min": 4.0, "timeout": 50.0,
+				"do": func() -> void:
+					# The fire has burnt low: someone sees to it.
+					var fire: Variant = map.get("fire")
+					if fire != null and is_instance_valid(fire) and not fire.low():
+						fire.fuel = FIRE_LOW
+					_gatherings().request(&"fire"),
+				"until": func() -> bool:
+					var fire: Variant = map.get("fire")
+					return fire == null or not is_instance_valid(fire) or float(fire.fuel) > FIRE_FED},
+			{"name": &"story", "shot": _shot(&"two", ["@gathering:story"]), "min": 15.0, "enough": 45.0, "timeout": 70.0,
+				"do": func() -> void:
+					_mark_talk()
+					_gatherings().request(&"story"),
+				"until": func() -> bool: return _played_since("story_") and not _talking_in("story_")},
+			{"name": &"watch_change", "shot": _shot(&"two", ["Jory", "Hendrik"]), "min": 6.0, "timeout": 60.0,
+				"do": func() -> void: _gatherings().request(&"watch_change", ["Jory", "Hendrik"]),
+				"until": func() -> bool:
+					var jory := _man("Jory")
+					var rota: Variant = map.get("rota")
+					return jory != null and rota != null and rota.duty_of(jory) == &"postern" and _flat(jory.global_position, map.marks["postern_post"]) < 1.0},
 			_look(&"wall", 8.0, &"track", ["Wat"]),
 			_look(&"lookout", 7.0, &"close", ["Aldous"]),
 		],
 	}
+
+
+## The conversations played so far, noted as a beat begins.
+func _mark_talk() -> void:
+	_played_at_beat = _talk().played().size() if _talk() != null else 0
+
+
+## A conversation begun since the beat began has ended (not a remark).
+func _talk_ended_since() -> bool:
+	var talk := _talk()
+
+	if talk == null:
+		return false
+
+	var since: Array = talk.played().slice(_played_at_beat)
+	var live: Array = talk.talks().map(func(t): return t["id"])
+	return since.any(func(id): return not live.has(id))
+
+
+## A conversation whose id begins so has been played since the beat began.
+func _played_since(prefix: String) -> bool:
+	var talk := _talk()
+	return talk != null and talk.played().slice(_played_at_beat).any(func(id): return String(id).begins_with(prefix))
+
+
+func _talking_in(prefix: String) -> bool:
+	var talk := _talk()
+	return talk != null and talk.talks().any(func(t): return String(t["id"]).begins_with(prefix))
+
+
+## How many men the captain has stopped at on her rounds tonight.
+func _round_visits() -> int:
+	var talk := _talk()
+	return talk.played().filter(func(id): return String(id).begins_with("round_")).size() if talk != null else 0
+
+
+func _talk() -> RefCounted:
+	return TalkDirectorScript.of(map)
+
+
+func _gatherings() -> RefCounted:
+	return GatheringScript.of(map)
+
+
+## Jumped to a later act: the watch has changed (Jory has the postern,
+## Hendrik is on his rounds), as Act I would have left it.
+func _after_the_watch_change() -> void:
+	var rota: Variant = map.get("rota")
+	var jory := _man("Jory")
+	var hendrik := _man("Hendrik")
+
+	if rota == null:
+		return
+
+	if hendrik != null:
+		rota.assign(hendrik, &"yard_round")
+		var route: Node3D = map.get_node_or_null("YardRoute")
+
+		if route != null and route.get_child_count() > 0:
+			hendrik.global_position = (route.get_child(0) as Node3D).global_position
+			hendrik.reset_physics_interpolation()
+
+	if jory != null:
+		rota.assign(jory, &"postern")
+		# Put there once Hendrik has gone from it in the physics too (else
+		# he lands on Hendrik and is carried off with him).
+		map.get_tree().create_timer(0.1, true, true).timeout.connect(func() -> void:
+			if is_instance_valid(jory) and not jory._knocked_out:
+				jory.global_position = map.marks["postern_post"]
+				jory.rotation.y = -PI * 0.5
+				jory.velocity = Vector3.ZERO
+				jory.reset_physics_interpolation())
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +254,7 @@ func _act_one() -> Dictionary:
 func _act_two() -> Dictionary:
 	return {
 		"title": "II. A Knife in the Dark",
+		"stage": _after_the_watch_change,
 		"enter": func() -> void:
 			var i: Node3D = map.spawn_intruder(map.marks["drop_in"], PI)
 			i.exposure_scale = SNEAK_EXPOSURE
@@ -155,6 +276,9 @@ func _act_two() -> Dictionary:
 					_verb(&"stand", [])
 					_verb(&"face", [_man_position("Ned")]),
 				"until": func() -> bool: return _state("Ned") >= SEARCHING or _has_said("Ned", "Murder")},
+			# His brother knew the voice of that cry.
+			{"name": &"grief", "shot": _shot(&"close", ["Osric"]), "min": 3.0, "timeout": 20.0,
+				"until": func() -> bool: return _has_said("Osric", "Jory") or _man("Osric") == null},
 		],
 	}
 
@@ -185,6 +309,7 @@ func _act_three() -> Dictionary:
 		"stage": func() -> void:
 			# Jumped to: the man at the postern dead, the intruder over him, the
 			# carrier at the body with the alarm in him.
+			_after_the_watch_change()
 			var i: Node3D = map.spawn_intruder(map.marks["postern_post"] + Vector3(0.2, 0, 1.2), PI)
 			var jory := _man("Jory")
 			if jory != null:
@@ -256,6 +381,7 @@ func _act_four() -> Dictionary:
 ## fighters on him and everyone else roused; for the ending, the swordsman
 ## and the captain dead too.
 func _stage_fight(for_the_end: bool) -> void:
+	_after_the_watch_change()
 	var i: Node3D = map.spawn_intruder(map.marks["found"], PI * 0.75)
 	i.exposure_scale = 1.0
 	var dead := ["Jory", "Osric", "Mirelle"] if for_the_end else ["Jory"]
@@ -437,12 +563,41 @@ func subjects(shot: Dictionary) -> Array:
 	var found := []
 
 	for name in shot.get("subjects", []):
+		if String(name) == "@talk":
+			found.append_array(_talkers())
+			continue
+
+		if String(name).begins_with("@gathering:"):
+			found.append_array(_gathered(StringName(String(name).trim_prefix("@gathering:"))))
+			continue
+
 		var node: Node3D = _intruder() if name == "intruder" else (_nearest() if name == "nearest" else _man(name))
 
 		if node != null:
 			found.append(node)
 
 	return found
+
+
+## The men of the latest conversation going on (not a call in a fight); the
+## captain and her swordsman if there is none.
+func _talkers() -> Array:
+	var talk := _talk()
+	var live: Array = talk.talks().filter(func(t): return (t["members"] as Array).size() >= 2) if talk != null else []
+
+	if not live.is_empty():
+		return (live[-1]["members"] as Array).filter(func(m): return m != null and is_instance_valid(m))
+
+	return [_man("Mirelle"), _man("Osric")].filter(func(m): return m != null)
+
+
+## The men of the gathering of `kind` going on; else whoever it would be.
+func _gathered(kind: StringName) -> Array:
+	for g in _gatherings().live():
+		if g["kind"] == kind:
+			return (g["members"] as Array).filter(func(m): return m != null and is_instance_valid(m))
+
+	return _talkers()
 
 
 func _man(name: String) -> Node3D:

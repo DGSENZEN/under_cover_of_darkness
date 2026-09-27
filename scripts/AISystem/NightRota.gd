@@ -47,6 +47,9 @@ var hour_length := 600.0
 var _start := 0
 ## A man on a post this long wants relieving (s).
 var post_turn := 600.0
+## Whether a need run full asks for a man to be moved (off where a level
+## wants each man to stay where it put him: its needs still grow).
+var wants_rest := true
 
 var _tree: WeakRef
 var _frame := -1
@@ -265,7 +268,7 @@ func _ask(man: Node) -> void:
 		_asked.erase("%d:relief" % key)
 
 	for need in ["tired", "hungry", "cold"]:
-		if float(needs[need]) >= 1.0 and not on_post:
+		if float(needs[need]) >= 1.0 and not on_post and wants_rest and kind_of(duty_of(man)) != &"round":
 			_want(key, StringName(need), {"kind": &"rest", "man": man, "need": StringName(need)})
 		elif float(needs[need]) < EASED:
 			_asked.erase("%d:%s" % [key, need])

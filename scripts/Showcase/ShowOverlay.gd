@@ -26,6 +26,10 @@ const SAY_MAX := 3
 const SAY_RANGE := 30.0
 const SAY_ABOVE := 0.55
 const SAY_SIZE := 15
+## A whisper shown smaller and greyer; a shout larger.
+const SAY_SIZE_WHISPER := 12
+const SAY_SIZE_SHOUT := 17
+const WHISPER_INK := Color(0.78, 0.78, 0.8)
 ## Marks: how long, and how high over his head.
 const MARK_FOR := 2.0
 const MARK_ABOVE := 1.05
@@ -239,10 +243,13 @@ func _draw_canvas() -> void:
 		# Lines of one man stack upwards.
 		var row: int = stacked.get(man, 0)
 		stacked[man] = row + 1
-		var width := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, SAY_SIZE).x
-		var spot := Vector2(clampf(at.x - width * 0.5, MARGIN, size.x - width - MARGIN), clampf(at.y - row * (SAY_SIZE + 4), MARGIN + SAY_SIZE, size.y - MARGIN))
-		font.draw_string_outline(_canvas.get_canvas_item(), spot, line, HORIZONTAL_ALIGNMENT_LEFT, -1, SAY_SIZE, 5, Color(0, 0, 0, 0.85 * alpha))
-		font.draw_string(_canvas.get_canvas_item(), spot, line, HORIZONTAL_ALIGNMENT_LEFT, -1, SAY_SIZE, Color(0.96, 0.92, 0.82, alpha))
+		var delivery: StringName = entry.get("delivery", &"")
+		var font_size := size_for(delivery)
+		var ink := WHISPER_INK if delivery == &"whisper" else Color(0.96, 0.92, 0.82)
+		var width := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+		var spot := Vector2(clampf(at.x - width * 0.5, MARGIN, size.x - width - MARGIN), clampf(at.y - row * (SAY_SIZE + 4), MARGIN + font_size, size.y - MARGIN))
+		font.draw_string_outline(_canvas.get_canvas_item(), spot, line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 5, Color(0, 0, 0, 0.85 * alpha))
+		font.draw_string(_canvas.get_canvas_item(), spot, line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(ink.r, ink.g, ink.b, alpha))
 
 	for mark in _shown_marks:
 		var man: Node3D = mark[0]
@@ -288,11 +295,22 @@ func _draw_mark(font: Font, at: Vector2, glyph: String, alpha: float) -> void:
 # Heard and seen
 # ---------------------------------------------------------------------------
 
+## How big a line is shown, by how it was said.
+static func size_for(delivery: StringName) -> int:
+	match delivery:
+		&"whisper":
+			return SAY_SIZE_WHISPER
+		&"shout":
+			return SAY_SIZE_SHOUT
+
+	return SAY_SIZE
+
+
 func _on_barked(text: String, man: Node3D) -> void:
 	if text.strip_edges() == "":
 		return
 
-	_said.append({"man": man, "text": text, "at": _clock})
+	_said.append({"man": man, "text": text, "at": _clock, "delivery": StringName(man.get("last_delivery")) if man.get("last_delivery") != null else &""})
 
 
 func _on_alert_changed(new_state: int, _old_state: int, man: Node3D) -> void:

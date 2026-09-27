@@ -190,6 +190,7 @@ B: Captain. I was resting my eyes.
 
 == round_osric
 place: round
+priority: 1
 cast: A = captain; B = name(Osric)
 cooldown: once
 A: Keep your brother off the dice tonight.
@@ -197,6 +198,7 @@ B [nods]: I'll try, Captain.
 
 == round_jory
 place: round
+priority: 1
 cast: A = captain; B = name(Jory)
 cooldown: once
 A: You're daydreaming again. The Lantern will keep.
@@ -204,6 +206,7 @@ B: Yes, Captain.
 
 == round_brand
 place: round
+priority: 1
 cast: A = captain; B = name(Brand)
 cooldown: once
 A: Chop the wood, Brand. Not the block.
@@ -211,6 +214,7 @@ B [laughs]: The block started it.
 
 == round_wat
 place: round
+priority: 1
 cast: A = captain; B = name(Wat)
 cooldown: once
 A: Eyes on the water, Wat. Not on the storehouse.
@@ -218,6 +222,7 @@ B [shrugs]: Can't I do both?
 
 == round_aldous
 place: round
+priority: 1
 cast: A = captain; B = name(Aldous)
 cooldown: once
 A: How are the knees tonight?
@@ -225,6 +230,7 @@ B: Older than you, Captain. Like the rest of me.
 
 == round_hendrik
 place: round
+priority: 1
 cast: A = captain; B = name(Hendrik)
 cooldown: once
 A: How's your girl?
@@ -232,6 +238,7 @@ B [sighs]: Better, they say. Thank you for asking.
 
 == round_piers
 place: round
+priority: 1
 cast: A = captain; B = name(Piers)
 cooldown: once
 A: Sit up straight. You look like a sack of turnips.
@@ -239,6 +246,7 @@ B: I feel like one, Captain.
 
 == round_col
 place: round
+priority: 1
 cast: A = captain; B = name(Col)
 cooldown: once
 A: Is that your second supper?
@@ -246,6 +254,7 @@ B: Third, Captain. The cook likes me.
 
 == round_gideon
 place: round
+priority: 1
 cast: A = captain; B = name(Gideon)
 cooldown: once
 A: The ledger balance yet?
@@ -253,6 +262,7 @@ B: It would, if the lamp oil stayed where I put it.
 
 == round_ned
 place: round
+priority: 1
 cast: A = captain; B = name(Ned)
 cooldown: once
 A: Two weeks, Ned. You'll do.

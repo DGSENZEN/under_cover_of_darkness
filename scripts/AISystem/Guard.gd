@@ -60,8 +60,10 @@ const GuardRotaScript := preload("res://scripts/AISystem/GuardRota.gd")
 const GuardVoiceScript := preload("res://scripts/AISystem/GuardVoice.gd")
 const GuardPastimesScript := preload("res://scripts/AISystem/GuardPastimes.gd")
 const TalkDirectorScript := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
-## A friend or kinsman this near who sees him die calls his name.
+## A friend or kinsman this near who sees him die calls his name; this near,
+## he knows the voice of his dying cry.
 const MOURN_SIGHT := 20.0
+const MOURN_HEAR := 35.0
 ## Bleeding (bleeding): at most this much a second, never below this share of
 ## his health, and bound this long after he last saw you.
 const BLEED_MAX := 4.0
@@ -1233,17 +1235,18 @@ func _knows_body_near(point: Vector3) -> bool:
 
 ## Those of his own in the fight who saw him fall know of his body: they do
 ## not "find" it later.
-## Dying where his kin or his friends could see: each calls his name
-## (TalkDirector.grieve).
+## Dying where his kin or his friends could see, or hear his last cry: each
+## calls his name (TalkDirector.grieve does nothing for a man who did not
+## know him).
 func _mourned() -> void:
 	for other in get_tree().get_nodes_in_group(&"guards"):
 		if other == self or other.get("_knocked_out") == true or not other.has_method("eye_position"):
 			continue
 
-		if (other as Node3D).global_position.distance_to(global_position) > MOURN_SIGHT:
-			continue
+		var d := (other as Node3D).global_position.distance_to(global_position)
+		var saw: bool = d <= MOURN_SIGHT and other._line_of_sight(other.eye_position(), eye_position(), self)
 
-		if other._line_of_sight(other.eye_position(), eye_position(), self):
+		if saw or d <= MOURN_HEAR:
 			TalkDirectorScript.of(self).grieve(other, given_name)
 
 

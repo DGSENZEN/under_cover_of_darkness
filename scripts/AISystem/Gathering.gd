@@ -52,10 +52,10 @@ const REST := Vector2(20.0, 45.0)
 const KINDS := {
 	&"dice": {"size": Vector2i(2, 3), "place": &"dice", "length": Vector2(45.0, 80.0), "convs": 2, "cooldown": 150.0, "reach": 14.0},
 	&"flask": {"size": Vector2i(2, 2), "place": &"", "length": Vector2(12.0, 20.0), "convs": 1, "cooldown": 90.0, "reach": 5.0},
-	&"story": {"size": Vector2i(3, 4), "place": &"story", "length": Vector2(60.0, 150.0), "convs": 1, "cooldown": 180.0, "reach": 14.0},
+	&"story": {"size": Vector2i(3, 4), "place": &"story", "length": Vector2(60.0, 150.0), "convs": 1, "cooldown": 180.0, "reach": 20.0},
 }
 ## The kinds with a shape of their own, and the rest before another.
-const SPECIAL := {&"watch_change": 0.0, &"round": 240.0, &"wake": 0.0, &"fire": 20.0}
+const SPECIAL := {&"watch_change": 0.0, &"round": 240.0, &"wake": 0.0, &"fire": 5.0}
 ## The relief stands this far from the man on the post; the captain this far
 ## from each man; the waker this far from the sleeper.
 const RELIEF_APART := 1.1
@@ -83,6 +83,10 @@ const WARM_APART := 1.6
 
 static var _directors := {}
 static var _talk_script: GDScript = null
+
+## Whether its men gather of their own accord where there is a night rota
+## (off where the level asks for each gathering itself: the showcase).
+var spontaneous := true
 static var _rota_script: GDScript = null
 
 var clock := 0.0
@@ -203,7 +207,7 @@ func tick(delta: float) -> void:
 		return
 
 	# Where the level keeps a night, the men gather of their own accord.
-	if rota == null:
+	if rota == null or not spontaneous:
 		return
 
 	for kind in KINDS:
@@ -546,7 +550,8 @@ func _see_to(want: Dictionary, rota: RefCounted) -> void:
 
 		return
 
-	if not member_of(man).is_empty():
+	# A sleeper, a man set to watch, a man stirred: not now.
+	if not member_of(man).is_empty() or man._rota.asleep() or bool(man.get("lookout")) or not GuardLifeScript.at_ease(man):
 		return
 
 	match StringName(want.get("need", &"")):
@@ -667,11 +672,14 @@ func _start_round(captain: Node) -> bool:
 	if tree == null or not member_of(captain).is_empty():
 		return false
 
-	var visits: Array = tree.get_nodes_in_group(&"guards").filter(func(m):
+	var candidates: Array = tree.get_nodes_in_group(&"guards").filter(func(m):
 		return m != captain and _here(m) and GuardLifeScript.at_ease(m) and not bool(m.get("lookout")) and member_of(m).is_empty())
-	visits.sort_custom(func(x: Node3D, y: Node3D) -> bool:
+	candidates.sort_custom(func(x: Node3D, y: Node3D) -> bool:
 		return x.global_position.distance_to((captain as Node3D).global_position) < y.global_position.distance_to((captain as Node3D).global_position))
-	visits = visits.slice(0, ROUND_VISITS)
+	# Anyone asleep gets his boot, whoever else she has time for.
+	var sleepers := candidates.filter(func(m): return m._rota.asleep())
+	var visits: Array = candidates.filter(func(m): return not m._rota.asleep()).slice(0, maxi(ROUND_VISITS - sleepers.size(), 0)) + sleepers
+	visits = _tour(visits, (captain as Node3D).global_position)
 
 	if visits.is_empty():
 		return false
@@ -680,6 +688,21 @@ func _start_round(captain: Node) -> bool:
 		"visits": visits, "visit": -1, "state": &"next", "t": clock}
 	_live.append(g)
 	return true
+
+
+## `men` in the order she would walk them: each next the nearest to the last.
+func _tour(men: Array, from: Vector3) -> Array:
+	var left := men.duplicate()
+	var order := []
+	var at := from
+
+	while not left.is_empty():
+		left.sort_custom(func(x: Node3D, y: Node3D) -> bool: return x.global_position.distance_to(at) < y.global_position.distance_to(at))
+		var next: Node3D = left.pop_front()
+		order.append(next)
+		at = next.global_position
+
+	return order
 
 
 func _advance_round(g: Dictionary) -> void:
@@ -737,7 +760,7 @@ func _advance_round(g: Dictionary) -> void:
 					if bench != &"":
 						rota.assign(him, bench)
 					else:
-						him._rota.stir()
+						him._rota.roused()
 
 				g["members"] = [captain]
 				g["state"] = &"next"

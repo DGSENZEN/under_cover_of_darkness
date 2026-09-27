@@ -188,6 +188,13 @@ func patrol(delta: float) -> void:
 			_stay(station, delta)
 
 
+## Woken and kept up (a boot from the captain): off his station the way it
+## ends, and not back to it for `seconds` at his ease.
+func roused(seconds := 60.0) -> void:
+	stir()
+	_calm = STATION_RETURN - seconds
+
+
 ## His stations now `nodes` (a new duty: NightRota); off the one he is at,
 ## the way it ends.
 func set_stations(nodes: Array) -> void:

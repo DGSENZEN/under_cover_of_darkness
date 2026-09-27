@@ -58,6 +58,10 @@ const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const DirectorScript := preload("res://scripts/Showcase/ShowDirector.gd")
+const NightRotaScript := preload("res://scripts/AISystem/NightRota.gd")
+const GatheringScript := preload("res://scripts/AISystem/Gathering.gd")
+const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
+const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
 const CameraScript := preload("res://scripts/Showcase/ShowCamera.gd")
 const OverlayScript := preload("res://scripts/Showcase/ShowOverlay.gd")
 ## The night's story (acts and beats), for the director.
@@ -79,13 +83,13 @@ const CAST := [
 	["Brand", &"brute", &"rash", 13, "the brute"],
 	["Wat", &"archer", &"sly", 14, "archer on the wall"],
 	["Aldous", &"", &"stubborn", 15, "lookout"],
-	["Hendrik", &"", &"steady", 16, "on his rounds"],
+	["Hendrik", &"", &"steady", 16, "at the postern"],
 	["Piers", &"", &"craven", 17, "by the fire"],
 	["Col", &"", &"steady", 18, "at his supper"],
 	["Tam", &"", &"steady", 19, "asleep"],
 	["Gideon", &"", &"steady", 20, "quartermaster"],
 	["Ned", &"", &"craven", 21, "carrier"],
-	["Jory", &"", &"steady", 22, "at the postern"],
+	["Jory", &"", &"steady", 22, "off watch"],
 ]
 const CAST_NAMES := ["Mirelle", "Osric", "Brand", "Wat", "Aldous", "Hendrik", "Piers", "Col", "Tam", "Gideon", "Ned", "Jory"]
 ## The heights of things: the curtain wall, the wall-walk on it, the tower.
@@ -97,6 +101,15 @@ const SEED := 1926
 
 ## Off in a test that only wants the people living (no director).
 static var run_show := true
+## Another night than the usual one for a test (-1: --seed, else SEED).
+static var seed_override := -1
+## The night: an hour of it lasts this long (s); the man at a post is not
+## relieved of his own accord (the night's beats change the watch).
+const HOUR := 90.0
+const POST_TURN := 600.0
+## The fire: well fed at dusk, burning down over this long.
+const FIRE_FUEL := 0.9
+const FIRE_BURNS := 240.0
 
 ## name -> the man; name -> what he is to the viewer.
 var cast := {}
@@ -114,6 +127,10 @@ var overlay: CanvasLayer = null
 var _baker: NavigationRegion3D
 var _stations := {}
 var _routes := {}
+## The brazier's fire, the night's rota, and the air.
+var fire: Area3D = null
+var rota: RefCounted = null
+var atmosphere: Node3D = null
 
 
 func _ready() -> void:
@@ -131,11 +148,15 @@ func _ready() -> void:
 	await _baker.baked
 	LightProbe.invalidate()
 
+	# Every conversation read before anyone speaks.
+	TalkScript.library()
+
 	# The same night every run: nobody reseeds the dice as he is made.
 	GuardScript.randomize_on = false
 	seed(_seed())
 	_spawn_cast()
 	GuardScript.randomize_on = true
+	_night()
 	_overview()
 	var reporting := Array(OS.get_cmdline_user_args()).any(func(arg): return String(arg).begins_with("--fps-report="))
 
@@ -200,6 +221,57 @@ func build() -> void:
 	_baker = NavigationRegion3D.new()
 	_baker.set_script(NavBakerScript)
 	add_child(_baker)
+
+
+## The night's rota (duties, the hour) and the air of the yard.
+func _night() -> void:
+	rota = NightRotaScript.setup(self, HOUR, &"early")
+	rota.post_turn = POST_TURN
+	# Its gatherings and the watch changing move them; their needs do not
+	# (the story wants each man where it left him).
+	rota.wants_rest = false
+	rota.add_duty(&"postern", &"post", {"transform": Transform3D(Basis(Vector3.UP, -PI * 0.5), marks["postern_post"])})
+	rota.add_duty(&"yard_round", &"round", {"route": (_routes["yard"] as Node).get_path()})
+	rota.add_duty(&"wall_round", &"round", {"route": (_routes["wall"] as Node).get_path()})
+	rota.add_duty(&"bench", &"bench", {"paths": [(_stations["sit_bench"] as Node).get_path()]})
+	rota.add_duty(&"bed", &"bed", {"paths": [(_stations["sleep_tam"] as Node).get_path()]})
+	var duties := {"Hendrik": &"postern", "Wat": &"wall_round", "Jory": &"bench", "Tam": &"bed"}
+
+	for name in duties:
+		var man: Node = cast.get(name)
+
+		if man != null:
+			rota.assign(man, duties[name])
+
+	# The night's beats ask for each gathering (ShowNight); the fire is fed
+	# when it burns low whoever asks.
+	GatheringScript.of(self).spontaneous = false
+	set_meta(&"yard_size", Vector2(40.0, 30.0))
+	atmosphere = AtmosphereScript.new()
+	atmosphere.name = "Atmosphere"
+	add_child(atmosphere)
+	atmosphere.add_crows([Vector3(-10, WALL_HEIGHT + 0.05, -15.1), Vector3(-4, WALL_HEIGHT + 0.05, -15.1), Vector3(3, WALL_HEIGHT + 0.05, -15.1),
+		Vector3(8, WALL_HEIGHT + 0.05, -15.1), Vector3(-15, WALL_HEIGHT + 0.05, -15.1)])
+
+
+## A place they gather of `kind` at `at`: spots [offset, activity, role],
+## each facing the middle.
+func _gathering_place(kind: StringName, at: Vector3, spots: Array) -> void:
+	var place := Marker3D.new()
+	place.name = "Gather_%s" % kind
+	place.set_meta(&"gathering", kind)
+	place.add_to_group(&"gathering_places")
+	add_child(place)
+	place.global_position = at
+
+	for spot in spots:
+		var marker := Marker3D.new()
+		marker.set_meta(&"activity", spot[1])
+		marker.set_meta(&"role", spot[2])
+		place.add_child(marker)
+		marker.global_position = at + (spot[0] as Vector3)
+		var inward: Vector3 = -(spot[0] as Vector3)
+		marker.global_basis = Basis.looking_at(Vector3(inward.x, 0, inward.z).normalized(), Vector3.UP)
 
 
 ## The intruder, at `at` (the director's).
@@ -284,9 +356,13 @@ func _store() -> void:
 
 func _middle() -> void:
 	# The fire and its benches; the well; the woodpile; the cart.
-	FireScript.brazier(self, Vector3.ZERO)
+	fire = FireScript.brazier(self, Vector3.ZERO)
+	fire.fuel = FIRE_FUEL
+	fire.fuel_seconds = FIRE_BURNS
 	_brush(Vector3(0, 0.22, -2.6), Vector3(2.8, 0.45, 0.45), WOOD, 1.0, "wood")
 	_brush(Vector3(0, 0.22, 2.9), Vector3(2.2, 0.45, 0.45), WOOD, 1.0, "wood")
+	# The crate by the south bench they dice on.
+	_brush(Vector3(2.9, 0.25, 3.8), Vector3(0.6, 0.5, 0.6), WOOD, 1.0, "wood")
 
 	_brush(Vector3(-5, 0.45, 7), Vector3(1.6, 0.9, 1.6), MOSS, 1.0)
 
@@ -367,6 +443,20 @@ func _stations_and_props() -> void:
 
 	# Brand at the chopping block.
 	_station("chop_brand", &"chop", Vector3(-12, 0, 11.3), 0.0)
+
+	# The south bench, where a man off watch sits (the night's bench duty).
+	_station("sit_bench", &"sit", Vector3(-0.7, 0, 2.45), 0.0)
+
+	# Where they gather: dice at the crate by the south bench; a story round
+	# the fire (the teller to the east); the woodpile a log is fetched from.
+	_gathering_place(&"dice", Vector3(2.9, 0, 3.8), [[Vector3(-0.8, 0, 0.0), &"squat", &"any"], [Vector3(0.8, 0, 0.0), &"squat", &"any"], [Vector3(0, 0, 0.8), &"squat", &"any"]])
+	_gathering_place(&"story", Vector3.ZERO, [[Vector3(1.9, 0, 0), &"stand", &"teller"], [Vector3(-1.9, 0, 0), &"squat", &"listener"],
+		[Vector3(0, 0, -1.9), &"stand", &"listener"], [Vector3(0.3, 0, 1.9), &"squat", &"listener"]])
+	var pile := Marker3D.new()
+	pile.name = "Woodpile"
+	pile.add_to_group(&"woodpiles")
+	add_child(pile)
+	pile.global_position = Vector3(-13.8, 0, 11.2)
 
 	# Crates and a barrel about the yard, for throwing when it comes to it.
 	for at in [Vector3(-10, 0.3, -6), Vector3(6.5, 0.3, -8.5), Vector3(-8.6, 0.3, 11.8)]:
@@ -450,13 +540,13 @@ func _spawn_cast() -> void:
 		"Brand": [Vector3(-12, 0, 12.4), 0.0, ["chop_brand"], "", false],
 		"Wat": [Vector3(-13.5, WALK_HEIGHT, -14.5), -PI * 0.5, [], "wall", false],
 		"Aldous": [Vector3(18.5, TOWER_HEIGHT, -13.5), 2.2, [], "", true],
-		"Hendrik": [Vector3(-7, 0, -6), 0.0, [], "yard", false],
+		"Hendrik": [marks["postern_post"], -PI * 0.5, [], "", false],
 		"Piers": [Vector3(-0.6, 0, -1.2), PI, ["sit_piers"], "", false],
 		"Col": [Vector3(1.0, 0, 3.4), 0.0, ["eat_col"], "", false],
 		"Tam": [Vector3(-18.6, 0, -1.8), -PI * 0.5, ["sleep_tam"], "", false],
 		"Gideon": [Vector3(13.2, 0, -0.6), -PI * 0.5, ["chest_0", "chest_1", "chest_2"], "", false],
 		"Ned": [Vector3(9, 0, 7.5), PI, ["carry_ned"], "", false],
-		"Jory": [marks["postern_post"], -PI * 0.5, [], "", false],
+		"Jory": [Vector3(-0.7, 0, 3.4), 0.0, ["sit_bench"], "", false],
 	}
 
 	for entry in CAST:
@@ -584,6 +674,9 @@ func _route(route_name: String, points: Array) -> Node3D:
 
 ## The night's seed: --seed=N, else SEED.
 func _seed() -> int:
+	if seed_override >= 0:
+		return seed_override
+
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
 			return int(arg.trim_prefix("--seed="))

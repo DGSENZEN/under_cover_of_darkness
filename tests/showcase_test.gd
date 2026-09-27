@@ -15,6 +15,10 @@ const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const CameraScript := preload("res://scripts/Showcase/ShowCamera.gd")
 const OverlayScript := preload("res://scripts/Showcase/ShowOverlay.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const TalkDirector := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
+const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
+const GatheringScript := preload("res://scripts/AISystem/Gathering.gd")
+const NightRotaScript := preload("res://scripts/AISystem/NightRota.gd")
 
 ## Who is at which kind of station at the start of the night.
 const STATIONED := {"Piers": &"sit", "Col": &"eat", "Tam": &"sleep", "Gideon": &"rummage", "Ned": &"carry", "Brand": &"chop"}
@@ -77,8 +81,12 @@ func _run() -> void:
 		if man == null or not is_instance_valid(man) or not (StringName(man.activity()) in SHOWS[STATIONED[name]]) or man._rota._held() == null:
 			wrong.append("%s:%s" % [name, man.activity() if man != null and is_instance_valid(man) else "gone"])
 
+	# Hendrik has the postern at the start of the night; Jory is on the bench
+	# until the watch changes.
+	var hendrik: Node3D = map.cast.get("Hendrik")
+	var posted: bool = hendrik != null and hendrik.global_position.distance_to(map.marks["postern_post"]) < 1.2
 	var jory: Node3D = map.cast.get("Jory")
-	var posted: bool = jory != null and jory.global_position.distance_to(map.marks["postern_post"]) < 1.2
+	var benched: bool = jory != null and StringName(jory.activity()) in [&"sit", &"sit_talk", &"sit_down"]
 	var nav := get_viewport().world_3d.navigation_map
 	var path := NavigationServer3D.map_get_path(nav, map.marks["gate"], map.marks["postern_post"], true)
 	var length := 0.0
@@ -88,8 +96,8 @@ func _run() -> void:
 
 	var straight: float = (map.marks["gate"] as Vector3).distance_to(map.marks["postern_post"])
 	_check("D1 the yard builds and bakes, every cast member stands at his place, and each station has its man",
-		missing.is_empty() and wrong.is_empty() and posted and path.size() > 1 and length < straight * 1.6,
-		"missing %s, not at their stations %s, Jory at his post %s, gate to postern %.1f m walked for %.1f m straight" % [missing, wrong, posted, length, straight])
+		missing.is_empty() and wrong.is_empty() and posted and benched and path.size() > 1 and length < straight * 1.6,
+		"missing %s, not at their stations %s, Hendrik at the postern %s, Jory on the bench %s, gate to postern %.1f m walked for %.1f m straight" % [missing, wrong, posted, benched, length, straight])
 
 	# D1b the carrier really carries: crates from the cart to the store
 	var drop: Vector3 = map.get_node("CratesDrop").global_position
@@ -151,7 +159,7 @@ func _run() -> void:
 	var guards10 := get_tree().get_nodes_in_group(&"guards").size()
 	var listeners10 := SoundBus._listeners.size()
 	_check("D10 jumping acts twice leaves one cast, no hunts, no garrison memory, time at 1, and the act asked for",
-		guards10 == 12 and listeners10 == 12 and SquadScript._squads.is_empty() and GarrisonScript._garrisons.is_empty() and is_equal_approx(Engine.time_scale, 1.0) and DirectorScript.start_act == 2,
+		guards10 == 12 and listeners10 == 12 + get_tree().get_nodes_in_group(&"atmosphere").size() and SquadScript._squads.is_empty() and GarrisonScript._garrisons.is_empty() and is_equal_approx(Engine.time_scale, 1.0) and DirectorScript.start_act == 2,
 		"guards %d, listeners %d, hunts %d, garrisons %d, time %.2f, act %d" % [guards10, listeners10, SquadScript._squads.size(), GarrisonScript._garrisons.size(), Engine.time_scale, DirectorScript.start_act])
 	director10.queue_free()
 	DirectorScript.start_act = 1
@@ -380,6 +388,8 @@ func _run() -> void:
 	var map4 := await _map(true)
 	var shown4 := {}
 	var talked4 := [false]
+	var clock4 := GameClock.new()
+	add_child(clock4)
 	await _until(func():
 		for name in STATIONED:
 			var man: Node = map4.cast.get(name)
@@ -389,10 +399,44 @@ func _run() -> void:
 			var man: Node = map4.cast.get(name)
 			if man != null and is_instance_valid(man) and StringName(man.activity()) in [&"talk", &"sit_talk"]:
 				talked4[0] = true
-		return map4.director.act_index >= 2, 6000)
+		return map4.director.act_index >= 2, 20000)
 	_check("D4 Act I: every stationed man shows his station's activity at least once, and a pair talk",
 		shown4.size() == STATIONED.size() and talked4[0] and map4.director.act_index >= 2,
 		"shown %s, talked %s, act now %d" % [shown4.keys(), talked4[0], map4.director.act_index])
+
+	# D30 Act I is a night that moves: eight conversations or more (none but
+	# those meant to be said again said twice), three gatherings and the watch
+	# changing, and Jory at the postern for Act II
+	var played4: Array = TalkDirector.of(map4).played()
+	var history4: Array = GatheringScript.of(map4).history()
+	var again := {}
+
+	for conv in TalkScript.library()["conversations"]:
+		again[conv["id"]] = bool(conv["again"])
+
+	var twice4 := []
+
+	for id in played4:
+		if not again.get(id, false) and played4.count(id) > 1 and not twice4.has(id):
+			twice4.append(id)
+
+	var distinct4 := {}
+
+	for id in played4:
+		distinct4[id] = true
+
+	var kinds4 := {}
+
+	for kind in history4:
+		if kind != &"watch_change":
+			kinds4[kind] = true
+
+	var jory4: Node3D = map4.cast.get("Jory")
+	var at_post4: bool = jory4 != null and jory4.global_position.distance_to(map4.marks["postern_post"]) < 1.2
+	_check("D30 Act I is a night that moves: eight conversations or more, none repeated, three gatherings and the watch changing, Jory at the postern for Act II",
+		distinct4.size() >= 8 and twice4.is_empty() and kinds4.size() >= 3 and history4.has(&"watch_change") and at_post4 and clock4.seconds <= 300.0,
+		"%d conversations (%s), said twice %s, gatherings %s, Jory at the postern %s, Act I took %.0f s" % [distinct4.size(), played4, twice4, history4, at_post4, clock4.seconds])
+	clock4.queue_free()
 	await _unload(map4)
 
 	# D5 Act II: the knife in the dark, and the man who saw it
@@ -402,6 +446,9 @@ func _run() -> void:
 	var ned: Node3D = map5.cast["Ned"]
 	var ned_barks := []
 	ned.barked.connect(func(t): ned_barks.append(t))
+	var osric5: Node3D = map5.cast["Osric"]
+	var osric_barks := []
+	osric5.barked.connect(func(t): osric_barks.append(t))
 	var damped5 := [false]
 	var killed_at := [-1]
 	var frame5 := [0]
@@ -417,6 +464,10 @@ func _run() -> void:
 	_check("D5 Act II: Jory dies by backstab, the damping is off after the kill, and Ned sees it (combat or searching, or a Murder bark) within 12 s",
 		killed_at[0] >= 0 and damped5[0] and undamped5 and saw5,
 		"Jory killed at frame %d, damped before %s, undamped after %s, Ned state %d, said %s" % [killed_at[0], damped5[0], undamped5, ned.state if is_instance_valid(ned) else -1, ned_barks])
+
+	# D31 after the murder his brother calls his name
+	_check("D31 after the murder, Osric calls his brother's name", osric_barks.any(func(t): return String(t).contains("Jory")),
+		"Osric said %s" % [osric_barks])
 	await _unload(map5)
 
 	# D6 Act III: the cry goes round, the bell, the hunt
@@ -526,10 +577,37 @@ func _run() -> void:
 	await _unload(map9)
 	DirectorScript.start_act = 1
 	DirectorScript.ending = &"random"
+	await _other_nights()
 
 
 ## The director's reload for a test: the showcase freed and loaded afresh
 ## (the real one reloads the scene).
+## D32 and D33 (called at the end of the run).
+func _other_nights() -> void:
+	# D32 Act I comes to its end on other nights too
+	var times := []
+
+	for night in [7, 99]:
+		MapScript.seed_override = night
+		DirectorScript.start_act = 1
+		var map32 := await _map(true)
+		var clock32 := GameClock.new()
+		add_child(clock32)
+		await _until(func(): return map32.director.act_index >= 2 or clock32.seconds > 330.0, 20400)
+		times.append([night, map32.director.act_index >= 2, clock32.seconds])
+		clock32.queue_free()
+		await _unload(map32)
+
+	MapScript.seed_override = -1
+	_check("D32 Act I comes to its end on other nights too (seeds 7 and 99)", times.all(func(t): return t[1] and float(t[2]) <= 330.0),
+		"%s" % [times])
+
+	# D33 a whisper is shown smaller than talk, a shout larger
+	_check("D33 the subtitles show a whisper small and a shout large",
+		OverlayScript.size_for(&"whisper") < OverlayScript.size_for(&"") and OverlayScript.size_for(&"") < OverlayScript.size_for(&"shout"),
+		"whisper %d, talk %d, shout %d" % [OverlayScript.size_for(&"whisper"), OverlayScript.size_for(&""), OverlayScript.size_for(&"shout")])
+
+
 func _reload() -> void:
 	if _loaded != null and is_instance_valid(_loaded):
 		_loaded.queue_free()
