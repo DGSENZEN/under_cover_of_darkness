@@ -54,6 +54,7 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 const SettingsScript := preload("res://scripts/UI/Settings.gd")
+const CrispTextScript := preload("res://scripts/Visual/CrispText.gd")
 
 const SUBTITLE_RANGE := 22.0
 ## A man noticing you is marked this near (m). One fighting you this near
@@ -65,7 +66,8 @@ const AWARE_FIGHT_TIME := 1.6
 const AWARE_NAME_TIME := 3.0
 ## How far over his eyes the mark sits (m): above his balance bar; and on
 ## the screen, at least AWARE_CLEAR (px) above the top of the words over his
-## head (BARK_TOP, m, over the label's middle).
+## head (as drawn sharp over the retro screen: CrispText; drawn in the world,
+## BARK_TOP, m, over the label's middle).
 const AWARE_OVER := 0.85
 const AWARE_CLEAR := 19.0
 const BARK_TOP := 0.13
@@ -1299,8 +1301,7 @@ func _update_awareness(delta: float) -> void:
 				"says": doing(state, sees, stirred_by if stirred_by is StringName else &"", float(record["fall_for"]) >= GIVING_UP_AFTER, blind),
 				"first": now < float(record["name_until"]),
 				"notches": [float(guard.get("suspicious_at")) / full, float(guard.get("investigate_at")) / full] if state < 3 and icon != &"odd" else []}
-			var bark: Node3D = guard.get_node_or_null("Bark") as Node3D
-			_place_mark(mark, over, camera, view, bark.global_position if bark != null else Vector3.INF)
+			_place_mark(mark, over, camera, view, guard.get_node_or_null("Bark") as Label3D)
 			marks.append(mark)
 
 			if icon == &"odd":
@@ -1482,7 +1483,7 @@ func _walled_off(camera: Camera3D, guard: Node3D) -> bool:
 ## Where a mark goes: over him, or off the screen at its edge the way he is:
 ## off to a side or above, where he would be; behind you, round the bottom
 ## of it (ahead is up, behind is down, as the marks of blows).
-func _place_mark(mark: Dictionary, over: Vector3, camera: Camera3D, view: Vector2, words := Vector3.INF) -> void:
+func _place_mark(mark: Dictionary, over: Vector3, camera: Camera3D, view: Vector2, words: Label3D = null) -> void:
 	var margin := minf(38.0, minf(view.x, view.y) * 0.1)
 	var centre := view * 0.5
 	var behind := camera.is_position_behind(over)
@@ -1491,10 +1492,9 @@ func _place_mark(mark: Dictionary, over: Vector3, camera: Camera3D, view: Vector
 	if not behind and at.x > margin and at.x < view.x - margin and at.y > margin and at.y < view.y - margin:
 		# Above what he says over his head (Guard's "Bark"), never over it:
 		# however far off he is, the ring clears the top of his words.
-		if words != Vector3.INF and not camera.is_position_behind(words):
-			var top := camera.unproject_position(words + Vector3.UP * BARK_TOP)
+		if words != null and not camera.is_position_behind(words.global_position):
 			# Never lifted off the top of the screen, though.
-			at.y = maxf(minf(at.y, top.y - AWARE_CLEAR), margin)
+			at.y = maxf(minf(at.y, _words_top(words, camera, view) - AWARE_CLEAR), margin)
 
 		mark["at"] = at
 		return
@@ -1520,6 +1520,16 @@ func _place_mark(mark: Dictionary, over: Vector3, camera: Camera3D, view: Vector
 	mark["at"] = edge
 	mark["edge"] = true
 	mark["out"] = way
+
+
+## The top of the words over his head on the screen: as drawn sharp over
+## the retro screen (CrispText), or else in the world (BARK_TOP over the
+## label's middle).
+func _words_top(words: Label3D, camera: Camera3D, view: Vector2) -> float:
+	if CrispTextScript.drawing and words.is_in_group(CrispTextScript.GROUP):
+		return CrispTextScript.top_of(words, camera, view)
+
+	return camera.unproject_position(words.global_position + Vector3.UP * BARK_TOP).y
 
 
 func _name_of(guard: Node3D) -> String:

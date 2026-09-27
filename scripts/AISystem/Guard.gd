@@ -591,6 +591,12 @@ func _ready() -> void:
 	_agent = get_node_or_null("NavigationAgent3D") as NavigationAgent3D
 	_head = get_node_or_null("Head") as Node3D
 	_bark_label = get_node_or_null("Bark") as Label3D
+
+	# What he says is drawn sharp over the retro screen's big pixels, not
+	# broken up by them (CrispText).
+	if _bark_label != null:
+		_bark_label.add_to_group(&"crisp_text")
+
 	_home = global_transform
 	inventory.ids = keys
 

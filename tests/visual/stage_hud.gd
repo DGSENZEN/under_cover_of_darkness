@@ -97,6 +97,12 @@ func _ready() -> void:
 	for key in player.hud.layout_rects():
 		print("  %s %s" % [key, player.hud.layout_rects()[key]])
 
+	# The words over their heads, drawn sharp over the retro screen.
+	var crisp: Node = get_node_or_null("/root/Retro/CrispText")
+
+	for entry in crisp.shown() if crisp != null else []:
+		print("  crisp '%s' at %s px %d depth %.1f m presence %.2f" % [(entry["label"] as Label3D).text, entry["at"], int(entry["px"]), float(entry["depth"]), float(entry["presence"])])
+
 	# The pause screen.
 	var esc := InputEventAction.new()
 	esc.action = &"ui_cancel"

@@ -815,6 +815,8 @@ func _info_label(g: CharacterBody3D) -> void:
 	label.no_depth_test = true
 	label.shaded = false
 	label.fixed_size = true
+	# Sharp over the retro screen, not broken up by its big pixels.
+	label.add_to_group(&"crisp_text")
 	g.add_child(label)
 	label.position = Vector3(0, float(g.get("eye_height")) + 0.75, 0)
 
