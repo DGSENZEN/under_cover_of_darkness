@@ -558,10 +558,15 @@ func _lit_and_out() -> void:
 	# L22 freed while it cools: nothing left behind, nothing broken
 	torch.put_out(&"douse")
 	await get_tree().process_frame
+	var counted: bool = LightBudget._world != null and LightBudget._world._burners.has(torch)
 	torch.queue_free()
+	# The next frame, before the budget has looked again: it was told.
+	await get_tree().process_frame
+	var forgotten: bool = LightBudget._world != null and LightBudget._world._burners.all(func(b): return is_instance_valid(b))
 	await _frames(240)
-	_check("L22 a doused flame freed the next frame leaves nothing behind", FireParticles.live(&"steam") == 0 and not is_instance_valid(torch),
-		"steam %d, freed %s" % [FireParticles.live(&"steam"), not is_instance_valid(torch)])
+	_check("L22 a doused flame freed the next frame leaves nothing behind: no steam, and the budget forgets it at once",
+		FireParticles.live(&"steam") == 0 and not is_instance_valid(torch) and counted and forgotten,
+		"steam %d, freed %s, counted %s then forgotten %s" % [FireParticles.live(&"steam"), not is_instance_valid(torch), counted, forgotten])
 	camera.queue_free()
 	await _frames(2)
 
@@ -652,18 +657,31 @@ func _budget() -> void:
 
 	await _frames(3)
 
-	# L26 a level freed and another built: the budget and particles start clean
+	# L26 a level freed and another built: its budget and particles go with
+	#     it, and start clean in the next
 	var level := Node3D.new()
-	add_child(level)
+	get_tree().root.add_child(level)
+	var own_scene := get_tree().current_scene
+	get_tree().current_scene = level
+
+	for manager in [FireParticles.world_node(), LightBudget._world]:
+		if manager != null and is_instance_valid(manager):
+			manager.free()
 
 	for i in 4:
 		var torch: Node3D = TorchScript.new()
 		level.add_child(torch)
 		torch.global_position = camera.global_position + Vector3(float(i), 0.5, -30.0)
 
+	FireParticles.emit(level, &"ember", camera.global_position + Vector3(0, 0, -5), 1)
 	await _frames(20)
+	var old_budget: Node = LightBudget._world
+	var old_particles: Node = FireParticles.world_node()
+	var made_there: bool = old_budget != null and old_budget.get_parent() == level and old_particles != null and old_particles.get_parent() == level
+	get_tree().current_scene = own_scene
 	level.queue_free()
 	await _frames(3)
+	var went_with_it: bool = not is_instance_valid(old_budget) and not is_instance_valid(old_particles)
 	var fresh: Array = []
 
 	for i in 3:
@@ -674,9 +692,10 @@ func _budget() -> void:
 
 	FireParticles.clear()
 	await _frames(90)
-	_check("L26 after a level is freed the budget and embers work on the new lights alone",
-		LightBudget.shadowed() == 3 and FireParticles.live(&"ember") > 0,
-		"shadowed %d, embers %d" % [LightBudget.shadowed(), FireParticles.live(&"ember")])
+	var rebuilt: bool = LightBudget._world != null and LightBudget._world.get_parent() == own_scene and FireParticles.world_node() != null and FireParticles.world_node().get_parent() == own_scene
+	_check("L26 a level's budget and particles are made in it, go with it, and start clean in the next, on the new lights alone",
+		made_there and went_with_it and rebuilt and LightBudget.shadowed() == 3 and FireParticles.live(&"ember") > 0,
+		"made in the level %s, went with it %s, rebuilt %s, shadowed %d, embers %d" % [made_there, went_with_it, rebuilt, LightBudget.shadowed(), FireParticles.live(&"ember")])
 
 	# L27 no camera at all: nothing breaks, nothing shows
 	camera.current = false
