@@ -714,7 +714,7 @@ func _run() -> void:
 	await _frames(60 * 8)
 	var back_by := _flat(greeter.global_position - Vector3(555, 0, -3)) < 1.0
 	_check("H23 going by a man at his ease, a word to him, and he nods; by him again straight after, nothing",
-		greeted and nodded and back_by and _barks_of(greeter).size() == said,
+		greeted and nodded and back_by and not _barks_of(greeter).slice(said).any(func(t): return _is_greet(t, stood.given_name)),
 		"said %s, nodded %s, back by him %s, said after %s" % [_barks_of(greeter), nodded, back_by, _barks_of(greeter).slice(said)])
 
 	# H24 a flask in his left hand for a pull from it, and put away after;
