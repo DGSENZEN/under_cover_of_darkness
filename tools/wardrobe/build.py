@@ -192,11 +192,13 @@ def build_kind(recipe, force):
             common.mirror(obj)
             swap_sides(obj)
 
-    # One-sided garments (not props) hide the body under them now it is whole.
+    # One-sided garments (not props) hide the body under them now it is
+    # whole, with every other garment (a face half under a bracer and half
+    # under a mitten's cuff is wholly covered).
     sided = [obj for obj in kind.props if kind.types[obj.name] != "prop"]
 
     if sided:
-        hide_body(kind, sided)
+        hide_body(kind, sided + kind.parts)
 
     outfit = join([kind.base] + kind.parts + kind.props)
 
@@ -1341,13 +1343,29 @@ def half_cape(kind, g, part):
 
 def bracer(kind, g, part):
     """A leather ring round one forearm (`bone`, from `from` to `to` along
-    it), `thickness` over what he wears there, its ends turned in to it:
-    whole (not mirrored), wholly on its bone."""
+    it), `thickness` over what he wears there (a sleeve, or his bare skin
+    `clear` under it), its ends turned in to it: whole (not mirrored),
+    wholly on its bone. Every point of his forearm between its ends lies
+    under it: a fixed ring over a bare arm let his skin out through its
+    rim."""
     bone = kind.arm.data.bones[g["bone"]]
     head, tail = bone.head_local, bone.tail_local
     axis = (tail - head).normalized()
     u, v = across(axis)
-    tree = common.bvh([obj for obj in kind.parts if kind.types[obj.name] == "shell"])
+    # (His body is his left half as garments are made: a right forearm is
+    # measured on his left, mirrored.)
+    right = head.x < 0.0
+    flip = Vector((-1.0, 1.0, 1.0))
+    tree = common.bvh([obj for obj in kind.parts if kind.types[obj.name] == "shell"] + [kind.base])
+
+    def reach(centre, d):
+        """His forearm's (or its sleeve's) outermost surface along `d`,
+        within 10 cm (further out lies his trunk)."""
+        centre, d = (centre * flip, d * flip) if right else (centre, d)
+        hit = common.outer_hit(tree, centre, d, 0.1)
+        return (hit - centre).dot(d) if hit is not None and (hit - centre).dot(d) > 0.0 else 0.04
+
+    clear = g.get("clear", 0.002)
     rings = []
 
     for t in (g["from"], g["to"]):
@@ -1356,13 +1374,26 @@ def bracer(kind, g, part):
 
         for k in range(8):
             d = u * math.cos(k * math.pi / 4.0) + v * math.sin(k * math.pi / 4.0)
-            r = reach_out(tree, centre, d, 0.04)
+            r = reach(centre, d) + clear
             under.append(centre + d * r)
             over.append(centre + d * (r + g["thickness"]))
 
         rings.append((under, over))
 
     obj = common.loft(g["name"], [rings[0][0], rings[0][1], rings[1][1], rings[1][0]], closed=True)
+    # His forearm's own points between its ends, under its outside.
+    span = [(p * flip if right else p) for p in (vtx.co for vtx in kind.base.data.vertices)]
+    span = [p for p in span if g["from"] <= (p - head).dot(axis) / bone.length <= g["to"]
+            and ((p - head) - axis * (p - head).dot(axis)).length < 0.07]
+
+    def from_axis(p):
+        return head + axis * (p - head).dot(axis)
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    enclose(bm, span, from_axis, clear + g["thickness"] * 0.5)
+    bm.to_mesh(obj.data)
+    bm.free()
     face_away(obj, head, axis)
     common.group(obj, g["bone"], 1.0)
     kind.add(obj, g, part, "bracer", whole=True)
@@ -1578,8 +1609,8 @@ BUILDERS = {"shell": shell, "mittens": mittens, "boots": boots, "collar": collar
 
 def hide_body(kind, garments=None):
     """The body faces a garment hides, gone (spec §6.3 step 4): under every
-    part, while he is his left half; or, given `garments` (one-sided pieces:
-    a right pauldron), under those once he is whole. Within COVERED of a
+    part, while he is his left half; or, given `garments` (one-sided pieces,
+    a right pauldron, with the rest), under those once he is whole. Within COVERED of a
     garment; of one standing clear of him (`"hides": False`: the brute's
     mantle, the body showing under its rim), only where it touches him."""
     base = kind.base

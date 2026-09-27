@@ -745,6 +745,45 @@ def case_duelist_cape():
     return [] if hem >= upper + 0.08 else ["its hem is %.1f cm across, its top %.1f: a strip, not a cape" % (hem * 100, upper * 100)]
 
 
+def case_brute_bracers():
+    """The committed brute's bracers close round his forearms: coming in
+    from outside (16 ways round, all along each bracer but its rims), the
+    bracer is met first, never his skin through it."""
+    import recipes
+
+    bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / "brute.blend"))
+    outfit, arm = bpy.data.objects["Outfit"], bpy.data.objects["Armature"]
+    tree = BVHTree.FromPolygons([v.co.copy() for v in outfit.data.vertices], [tuple(p.vertices) for p in outfit.data.polygons])
+    parts = outfit.data.attributes["wr_part"].data
+    names = [g["name"] for g in recipes.BRUTE["garments"]]
+    through = []
+
+    for g in recipes.BRUTE["garments"]:
+        if g["type"] != "bracer":
+            continue
+
+        bone = arm.data.bones[g["bone"]]
+        axis = (bone.tail_local - bone.head_local).normalized()
+        u = axis.orthogonal().normalized()
+        v = axis.cross(u)
+
+        for step in range(5):
+            t = g["from"] + 0.02 + (g["to"] - g["from"] - 0.04) * step / 4
+            centre = bone.head_local.lerp(bone.tail_local, t)
+
+            for k in range(16):
+                d = u * math.cos(k * math.pi / 8.0) + v * math.sin(k * math.pi / 8.0)
+                hit = tree.ray_cast(centre + d * 0.2, -d, 0.2)
+
+                met = names[parts[hit[2]].value - 1] if hit[2] is not None and parts[hit[2]].value > 0 else "skin"
+
+                if met != g["name"]:
+                    through.append("%s %.2f %d" % (g["name"], t, k * 22.5))
+
+    fresh()
+    return ["%d rays meet his skin before his bracer (%s)" % (len(through), through[:4])] if through else []
+
+
 def width_at(tree, y, z):
     """How far out to his left a surface stands at (y, z): its outermost
     hit coming in along x (a low-poly head has few vertices near any one
@@ -1097,7 +1136,8 @@ CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, 
          "types2": case_types2, "skin": case_skin, "brute_arms": case_brute_arms, "foreign_parts": case_foreign_parts,
          "faces": case_faces, "beards_and_tails": case_beards_and_tails,
          "bare_hat": case_bare_hat, "coif_beards": case_coif_beards,
-         "brute_neck": case_brute_neck, "duelist_cape": case_duelist_cape}
+         "brute_neck": case_brute_neck, "duelist_cape": case_duelist_cape,
+         "brute_bracers": case_brute_bracers}
 
 
 def main():
