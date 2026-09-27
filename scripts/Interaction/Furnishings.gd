@@ -44,7 +44,7 @@ const LEAN_OUT := 0.36
 const LOW := 0.7
 ## Where a man stands to chop at a chopping block, from it (its space): his
 ## axe comes down on the log on it (GuardHabits.CHOP_AT).
-const CHOP_FROM := Vector3(0.25, 0.0, 0.48)
+const CHOP_FROM := Vector3(0.37, 0.0, 1.2)
 
 
 ## A chair (a stool if `stool`): its seat centred on `at`, and a man on it
@@ -188,12 +188,12 @@ static func chopping_block(parent: Node, at: Vector3, yaw: float) -> StaticBody3
 	var standing := CylinderMesh.new()
 	standing.top_radius = 0.1
 	standing.bottom_radius = 0.1
-	standing.height = 0.26
+	standing.height = 0.21
 	var split := MeshInstance3D.new()
 	split.mesh = standing
 	split.material_override = Props.material(WOOD)
 	body.add_child(split)
-	split.position = Vector3(0, 0.58, 0)
+	split.position = Vector3(0, 0.555, 0)
 
 	# The pile beside it, on the side away from where he stands.
 	for i in 5:

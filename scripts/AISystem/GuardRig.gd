@@ -21,6 +21,7 @@ const SwingTrailScript := preload("res://scripts/Visual/SwingTrail.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 const HumanoidScript := preload("res://scripts/Visual/Humanoid.gd")
+const GuardHabitsScript := preload("res://scripts/AISystem/GuardHabits.gd")
 
 ## Guard.Alert.SEARCHING and COMBAT: hunting, his guard is up.
 const SEARCHING := 3
@@ -97,7 +98,6 @@ const ACTIVITIES := {
 	&"rail": [&"Idle_Rail", true, 0.4, 1.0],
 	&"reach": [&"PickUp_Table", false, 0.2, 0.95],
 	&"eat": [&"Consume", true, 0.2, 0.9],
-	&"chop": [&"TreeChopping", true, 0.15, 1.0],
 	&"nod": [&"Yes", false, 0.2, 0.85],
 	&"shake": [&"Idle_No", false, 0.2, 0.85],
 	&"dance": [&"Dance", true, 0.3, 1.0],
@@ -114,6 +114,12 @@ const KNEEL_WORK := Vector2(1.5, 4.8)
 const KNEEL_UP := 5.3
 ## Up off a seat in a hurry: the clip this much faster.
 const STAND_QUICK_PACE := 1.8
+## Chopping wood (GuardHabits.CHOP_*): the overhead blow's clip (SWINGS
+## "heavy") with an axe in his hand, from the axe raised over his head
+## (CHOP_RAISED) down to it biting the log before him (CHOP_BITE), and back.
+const CHOP_CLIP := &"Sword_Attack"
+const CHOP_RAISED := 0.38
+const CHOP_BITE := 0.56
 ## Poses with his arms folded or across a rail, his hands talking or on a
 ## rung or a rope: his blade put by for them (it would go through him, or
 ## wave about), and back in his hand after.
@@ -857,6 +863,10 @@ func _show_activity(now: float) -> bool:
 
 			return true
 
+	if doing == &"chop":
+		_show_chop(since)
+		return true
+
 	var spec: Array = ACTIVITIES.get(doing, [])
 
 	if spec.is_empty():
@@ -867,6 +877,26 @@ func _show_activity(now: float) -> bool:
 	var t: float = fmod(since, length) if bool(spec[1]) else minf(since, length - 0.02)
 	man.show_action(clip, t, float(spec[2]), float(spec[3]))
 	return true
+
+
+## Chopping wood, `since` seconds in: the axe pulled out of the log and
+## lifted over his head, held, brought down hard, and left in the log a moment
+## (GuardHabits.CHOP_*).
+func _show_chop(since: float) -> void:
+	var lift: float = GuardHabitsScript.CHOP_LIFT
+	var hold: float = GuardHabitsScript.CHOP_HOLD
+	var down: float = GuardHabitsScript.CHOP_DOWN
+	var into := fmod(since, GuardHabitsScript.CHOP_CYCLE)
+	var t := CHOP_BITE
+
+	if into < lift:
+		t = lerpf(CHOP_BITE, CHOP_RAISED, smoothstep(0.0, 1.0, into / lift))
+	elif into < lift + hold:
+		t = CHOP_RAISED
+	elif into < lift + hold + down:
+		t = lerpf(CHOP_RAISED, CHOP_BITE, (into - lift - hold) / down)
+
+	man.show_action(CHOP_CLIP, t, 0.15)
 
 
 ## His blade put by for a pose with his arms folded (`away`), or back in his

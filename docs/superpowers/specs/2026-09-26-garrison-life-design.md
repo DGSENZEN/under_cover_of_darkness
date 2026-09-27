@@ -27,7 +27,7 @@ Before this, a guard with nothing to do stood at his post, or walked his rounds 
 | What a habit is | **A list of steps:** go there, step into place, then one or more timed poses. A pose can call something at a moment in it (take the bread) or every so often (each blow of the axe). The same small runner plays them all. |
 | Lights on rounds | **`Guard.rounds_light`** ("torch" or "lantern"): lit at once, carried while he walks his rounds, dropped still burning when a fight starts, lit again 3 s after the fight ends. While his hand holds a light, his habits are only looks about and mutters. |
 | Ropes, chains, stairs | **The ways across that already exist** (`NavLinks`, `GuardClimb`). Ropes and chains now link the floor at their foot to the highest ledge beside them. Stairs are walked on the navmesh. |
-| Presentation | **Existing clips only** (Universal Animation Library): `Sitting_Enter`, `Sitting_Idle`, `Sitting_Talking`, `Sitting_Exit`, `Idle_FoldArms` (also tilted back as the wall lean), `Idle_Rail`, `PickUp_Table`, `Consume`, `TreeChopping`, `Fixing_Kneeling`, `Walk_Carry`, `Idle_Torch`, `Idle_Lantern`, `Yes`, `Idle_No`, `Dance`. |
+| Presentation | **Existing clips only** (Universal Animation Library): `Sitting_Enter`, `Sitting_Idle`, `Sitting_Talking`, `Sitting_Exit`, `Idle_FoldArms` (also tilted back as the wall lean), `Idle_Rail`, `PickUp_Table`, `Consume`, `Sword_Attack` (the overhead blow, with an axe), `Fixing_Kneeling`, `Walk_Carry`, `Idle_Torch`, `Idle_Lantern`, `Yes`, `Idle_No`, `Dance`. |
 
 ## 3. Scope
 
@@ -72,7 +72,7 @@ After 3 s at rest he picks something, by pull, from what can be done within his 
 - **lean:** back against a "lean" place, or against the wall right behind his post if there is one (a ray 1.3 m back). 8–22 s, arms folded.
 - **rail:** forearms on the rail, looking out and down over it, 8–22 s.
 - **eat:** to the provisions: reaches for bread, takes it in the palm of his left hand, eats it there. Blade put by.
-- **chop:** takes up an axe (blade put by) and splits logs, 8–16 blows, one every 0.97 s. He stands before the block and a little to its right. The haft goes through his right fist, the head out of the little finger's side, so the chop clip brings it down from over his head onto the log standing on the block. Each blow is a wood thud with chips flying from the log, heard 18 m off (`SoundBus` "chop", 52 dB): a sound the rest of the guards hear and know.
+- **chop:** takes up an axe (blade put by) and splits logs, 8–16 blows, one every 1.18 s. He holds the axe as he holds his sword: the haft through his right fist, the head out of the thumb's side, the edge leading. Each blow is the guards' own overhead blow (`Sword_Attack`, as the heavy blow uses it): the axe pulled out of the log and lifted back over his head, held a breath, brought down level onto the log standing on the block, and left in it a moment. He stands 1.2 m back from the log and a little to its right, where the blow lands (a bigger man stands further back). Each blow is a wood thud with chips flying from the log, heard 18 m off (`SoundBus` "chop", 52 dB): a sound the rest of the guards hear and know.
 - **tend:** down on his knees at the fire (or at a cart's wheel), working at it 10–20 s, and up again.
 - **carry:** a crate from the fuller pile, held at his chest, walked to the other pile and set down there. Next time, back the other way.
 - **visit:** over to a friend at his ease within 12 m. He stands 1.4 m off him and they talk (GuardLife), and he goes back once they are done.
@@ -134,7 +134,7 @@ A rope goes up to a tower and a chain up to the walkway. F1 shows each man's tem
 ## 7. Known limits
 
 - **Leaning on a wall is the folded-arms idle, tilted back.** The library has no wall lean. Tending a fire and mending a wheel share the kneeling-repair clip, and eating is the drinking clip with bread in the hand.
-- **The axe is held one-handed, the head out of the little finger's side.** The library's only chop (`TreeChopping`) swings one-handed and ends with the fist at chest height; held that way, the head lands on the log.
+- **The axe is swung one-handed, with a swordsman's stance.** The library has no two-handed chop (`TreeChopping` is a sideways swing at a standing tree, and did not bring an axe held in the fist down onto a block), so the woodsman uses the overhead blow, stopped where the axe bites the log.
 - **Places are where furniture is.** Without any, a man only leans on the wall behind his post, paces and fidgets. A level gets the rest by building with `Furnishings` or placing `IdleSpot`s.
 - **One man to a place,** and crates go between two piles only.
 - **Only furniture built by `Furnishings` (or put in "nav_blocks") is kept off.** A hand-made low box is still a step to the baker.

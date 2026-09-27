@@ -79,13 +79,20 @@ const LEAN_TIME := Vector2(8.0, 22.0)
 const RAIL_TIME := Vector2(8.0, 22.0)
 const TEND_TIME := Vector2(10.0, 20.0)
 const CHOPS := Vector2i(8, 16)
-const CHOP_CYCLE := 0.97
-## The axe meets the log this far into each swing (TreeChopping).
-const CHOP_HIT := 0.32
+## Each blow of the axe (GuardRig shows it): pulled out of the log and lifted
+## back over his head, held there a breath, brought down, and left in the log
+## a moment. It lands CHOP_HIT into each.
+const CHOP_LIFT := 0.62
+const CHOP_HOLD := 0.16
+const CHOP_DOWN := 0.15
+const CHOP_REST := 0.25
+const CHOP_CYCLE := CHOP_LIFT + CHOP_HOLD + CHOP_DOWN + CHOP_REST
+const CHOP_HIT := CHOP_LIFT + CHOP_HOLD + CHOP_DOWN
 const CHOP_DB := 52.0
-## Where the axe meets the log, from where he stands (the log on the block
-## before him and a little to his left: Furnishings.chopping_block).
-const CHOP_AT := Vector3(-0.25, 0.62, -0.48)
+## Where the axe bites the log, from where he stands (a man of his class's
+## own size; a bigger man reaches further): before him and to his left
+## (Furnishings.chopping_block puts him there).
+const CHOP_AT := Vector3(-0.37, 0.66, -1.2)
 ## Sat this long, a dozy man in the dark may nod off; he sleeps this long if
 ## nothing wakes him; asleep he hears this share of what he would awake.
 const DOZE_AFTER := Vector2(6.0, 12.0)
@@ -105,10 +112,9 @@ const VISIT_RANGE := 12.0
 ## Relit after a fight, this long after.
 const RELIGHT := 3.0
 ## The axe through his right fist near the end of its haft (hand bone space,
-## as Humanoid.FIST_R), its head out of the little finger's side and its edge
-## the way his knuckles go: his chop (TreeChopping) brings it down from over
-## his head onto the log on the block before him.
-const AXE_GRIP := Transform3D(Basis(Vector3(-1, 0, 0), Vector3(0, 0, -1), Vector3(0, -1, 0)), Vector3(-0.03, 0.08, 0.0))
+## as Humanoid.FIST_R), as he holds his sword: the head out of the thumb's
+## side, the edge the way his knuckles go.
+const AXE_GRIP := Transform3D(Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0)), Vector3(-0.03, 0.08, 0.0)) * Transform3D(Basis.IDENTITY, Vector3(0.0, 0.06, 0.0))
 ## Bread in the palm of his left hand, along his fist.
 const BREAD_GRIP := Transform3D(Basis.IDENTITY, Vector3(0.035, 0.07, 0.03))
 
@@ -519,6 +525,10 @@ func _plan(each: StringName) -> Array:
 			]
 		&"chop":
 			var swings := randi_range(CHOPS.x, CHOPS.y)
+			# Where he stands for the axe to bite the log: a bigger man
+			# stands further back, a smaller one nearer.
+			var size: float = guard._rig.get("size") if guard.get("_rig") != null and guard._rig.get("size") != null else 1.0
+			at += Basis.looking_at(facing, Vector3.UP) * (Vector3(CHOP_AT.x, 0.0, CHOP_AT.z) * (1.0 - size))
 			return [
 				{"do": &"go", "to": at},
 				{"do": &"settle", "to": at, "face": facing},
@@ -983,9 +993,10 @@ func _let_go() -> void:
 
 ## A blow of the axe on the log: heard well off, chips flying.
 func _chop() -> void:
-	var at: Vector3 = guard.global_position + guard.global_basis * CHOP_AT
+	var size: float = guard._rig.get("size") if guard.get("_rig") != null and guard._rig.get("size") != null else 1.0
+	var at: Vector3 = guard.global_position + guard.global_basis * (CHOP_AT * size)
 	Sfx.play(guard, &"thud_wood", at, 2.0, randf_range(0.9, 1.1))
-	Fx.dust(guard, at, Vector3.UP, 0.35, "wood")
+	Fx.chips(guard, at, Vector3.UP, 0.8, "wood")
 	SoundBus.emit_sound(at, CHOP_DB, guard, &"chop")
 
 
