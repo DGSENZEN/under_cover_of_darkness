@@ -1,0 +1,15 @@
+{
+ "piece": "kettlehat_bare",
+ "body": "male",
+ "triangles": 240,
+ "metal": [
+  "Head"
+ ],
+ "hides_hair": false,
+ "allows_beard": true,
+ "cloth": [],
+ "colliders": [],
+ "marks": {
+  "foot": 1.735
+ }
+}

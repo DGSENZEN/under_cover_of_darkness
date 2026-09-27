@@ -108,6 +108,12 @@ class Kind:
         self.types = {}
         # The base's faces a shell was made from: under that shell, gone.
         self.covered = set()
+        # Garments that leave the body under them (`"hides": False`: they
+        # stand clear of it, and it shows under their rims).
+        self.open_over = set()
+        # The faces of his neck kept up under his head (low_poly_base,
+        # `neck_under`), by their centres.
+        self.neck_faces = set()
         # Trim for the bake to paint on the outfit (bake.trim): pauldrons'.
         self.details = {}
         # Headgear's chains, as the export reads them (each tagged with its
@@ -144,9 +150,15 @@ class Kind:
         # buckle, fittings, fletchings) is not the garment's cloth: undyed.
         if dye is None:
             dye = g.get("dye", False) and fabric is None and colour is None
-        common.set_faces(obj, part, recipes.FABRICS.index(fabric or g["fabric"]), g.get("thickness", 0.004), strip, dye,
-                         colour or g["colour"])
+        # (Its faces' thickness says how far under them the body is hidden:
+        # none under a garment that stands clear.)
+        common.set_faces(obj, part, recipes.FABRICS.index(fabric or g["fabric"]),
+                         g.get("thickness", 0.004) if g.get("hides", True) else 0.0, strip, dye, colour or g["colour"])
         self.types[obj.name] = kind
+
+        if not g.get("hides", True):
+            self.open_over.add(obj.name)
+
         (self.props if whole else self.parts).append(obj)
         self.made.setdefault(g["name"], obj)
         return obj
@@ -213,7 +225,11 @@ def build_kind(recipe, force):
 
 def low_poly_base(kind):
     """His left half, without the head (a part of its own) or the hands if
-    mittens replace them, cut to half the recipe's triangles."""
+    mittens replace them, cut to half the recipe's triangles. With
+    `neck_under` (a bare neck: the brute's), his neck is kept up to its
+    `up_to` height, sunk `tuck` under the head's from its `from` height up:
+    between the teeth of the head's edge his neck shows, not the dark
+    underside of a stub cut at the head's bone weights."""
     base = kind.ref.copy()
     base.data = kind.ref.data.copy()
     base.name = "Base"
@@ -226,10 +242,21 @@ def low_poly_base(kind):
     regions = common.vertex_regions(base)
     bm = bmesh.new()
     bm.from_mesh(base.data)
-    doomed = [face for face in bm.faces if majority([regions[v.index] for v in face.verts]) in dropped]
+    neck = kind.recipe.get("neck_under")
+    kept_neck = [face for face in bm.faces if neck and face.calc_center_median().z < neck["up_to"]
+                 and majority([regions[v.index] for v in face.verts]) == "head"]
+    doomed = [face for face in bm.faces if majority([regions[v.index] for v in face.verts]) in dropped
+              and face not in kept_neck]
+    marked = sorted({v.index for face in kept_neck for v in face.verts})
     bmesh.ops.delete(bm, geom=doomed, context="FACES")
     bm.to_mesh(base.data)
     bm.free()
+
+    # (Its vertices marked through the decimation: the neck kept, and only
+    # it, is sunk, and the garments measure past it.)
+    if marked:
+        base.vertex_groups.new(name="wr_neck").add(marked, 1.0, "REPLACE")
+
     decimate = base.modifiers.new("Decimate", "DECIMATE")
     decimate.ratio = min(1.0, kind.recipe["base_tris"] * 0.5 / max(common.tri_count(base), 1))
     decimate.use_collapse_triangulate = True
@@ -249,8 +276,30 @@ def low_poly_base(kind):
     bmesh.ops.delete(bm, geom=flat, context="FACES")
     bmesh.ops.dissolve_degenerate(bm, dist=1e-5, edges=bm.edges[:])
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+
+    group = base.vertex_groups.get("wr_neck")
+    on_neck = set()
+
+    if group is not None:
+        deform = bm.verts.layers.deform.verify()
+        on_neck = {vertex for vertex in bm.verts if vertex[deform].get(group.index, 0.0) > 0.5}
+
+        # Sunk under the head's neck (along the full body's own surface
+        # normal), easing in over a centimetre from where the head's begins.
+        for vertex in on_neck:
+            ease = smoothstep(neck["from"], neck["from"] + 0.01, vertex.co.z)
+            seam = vertex.co.x == 0.0
+            vertex.co -= kind.normal_at(vertex.co) * neck["tuck"] * ease
+            vertex.co.x = 0.0 if seam else vertex.co.x
+
+    kind.neck_faces = {tuple(round(c, 5) for c in f.calc_center_median()) for f in bm.faces
+                       if all(v in on_neck for v in f.verts)}
     bm.to_mesh(base.data)
     bm.free()
+
+    if group is not None:
+        base.vertex_groups.remove(group)
+
     kind.types[base.name] = "base"
     return base
 
@@ -1102,7 +1151,13 @@ def mantle(kind, g, part):
     rides (no chains: stiff fur)."""
     neck = kind.at(("neck_01", 0.0))
     top = neck.z + g.get("rise", 0.02)
-    tree = common.bvh([kind.base, kind.made[g["over"]]] + [obj for obj in kind.parts if kind.types[obj.name] == "shell"])
+    # (Measured from his body without the neck kept up under his head,
+    # `neck_under`: it sits where it sat on the body cut at his head.)
+    def not_neck(obj, polygon):
+        return obj is not kind.base or tuple(round(c, 5) for c in polygon.center) not in kind.neck_faces
+
+    tree = common.bvh([kind.base, kind.made[g["over"]]] + [obj for obj in kind.parts if kind.types[obj.name] == "shell"],
+                      keep=not_neck)
     front_tilt, side_tilt = g.get("tilt_front", 70.0), g.get("tilt_side", 25.0)
     under, normals = [[], [], []], []
 
@@ -1520,33 +1575,19 @@ BUILDERS = {"shell": shell, "mittens": mittens, "boots": boots, "collar": collar
 def hide_body(kind, garments=None):
     """The body faces a garment hides, gone (spec §6.3 step 4): under every
     part, while he is his left half; or, given `garments` (one-sided pieces:
-    a right pauldron), under those once he is whole."""
+    a right pauldron), under those once he is whole. Within COVERED of a
+    garment; of one standing clear of him (`"hides": False`: the brute's
+    mantle, the body showing under its rim), only where it touches him."""
     base = kind.base
     common.set_faces(base, 0, recipes.FABRICS.index("skin"), 0.0, False, False, SKIN)
     whole = garments is not None
     garments = garments if whole else [obj for obj in kind.parts if kind.types[obj.name] != "base"]
-    trial = [base] + [obj.copy() for obj in garments]
-
-    for copy in trial[1:]:
-        copy.data = copy.data.copy()
-        bpy.context.scene.collection.objects.link(copy)
-
-        # Whole, as he will wear them: a face by his middle may look across
-        # it, under the garment's other half (the mantle over his throat).
-        if not whole and len(copy.data.polygons) > 0:
-            common.mirror(copy)
-
-    common.select_only(trial, active=trial[0])
-    probe = base.copy()
-    probe.data = base.data.copy()
-    bpy.context.scene.collection.objects.link(probe)
-    common.select_only([probe] + trial[1:], active=probe)
-    bpy.ops.object.join()
+    closed = [obj for obj in garments if obj.name not in kind.open_over]
+    opened = [obj for obj in garments if obj.name in kind.open_over]
     # (The shells' covered faces count on his half only: their indices go
     # stale once faces are gone.)
-    hidden = set(common.hidden_faces(probe, reach=COVERED, bare=set(kind.recipe.get("bare", ())))) | \
+    hidden = covered_by(kind, closed, whole, COVERED) | covered_by(kind, opened, whole, None) | \
         (set() if whole else kind.covered)
-    bpy.data.objects.remove(probe)
     bm = bmesh.new()
     bm.from_mesh(base.data)
     bm.faces.ensure_lookup_table()
@@ -1555,6 +1596,34 @@ def hide_body(kind, garments=None):
     bm.to_mesh(base.data)
     bm.free()
     print("wardrobe: %d body faces hidden, %d left" % (len(hidden), len(base.data.polygons)))
+
+
+def covered_by(kind, garments, whole, reach):
+    """The base's faces `garments` cover (common.hidden_faces: within
+    `reach` of them, or with None within their faces' thickness), as he
+    will wear them."""
+    if not garments:
+        return set()
+
+    copies = [obj.copy() for obj in garments]
+
+    for copy in copies:
+        copy.data = copy.data.copy()
+        bpy.context.scene.collection.objects.link(copy)
+
+        # Whole, as he will wear them: a face by his middle may look across
+        # it, under the garment's other half (the mantle over his throat).
+        if not whole and len(copy.data.polygons) > 0:
+            common.mirror(copy)
+
+    probe = kind.base.copy()
+    probe.data = kind.base.data.copy()
+    bpy.context.scene.collection.objects.link(probe)
+    common.select_only([probe] + copies, active=probe)
+    bpy.ops.object.join()
+    hidden = set(common.hidden_faces(probe, reach=reach, bare=set(kind.recipe.get("bare", ()))))
+    bpy.data.objects.remove(probe)
+    return hidden
 
 
 def swap_sides(obj):
@@ -1928,8 +1997,10 @@ def build_hair(force, body="male"):
         h = recipes.HAIR[style]
         obj = quaternius_style(h["from"], "Hair_%s" % style)
         common.weld(obj)
+        cut_style(obj, h)
+        tail = h.get("tail")
         decimate = obj.modifiers.new("Decimate", "DECIMATE")
-        decimate.ratio = min(1.0, h["tris"] / max(common.tri_count(obj), 1))
+        decimate.ratio = min(1.0, (h["tris"] - (tail_triangles(tail) if tail else 0)) / max(common.tri_count(obj), 1))
         decimate.use_collapse_triangulate = True
         decimate.use_symmetry = True
         decimate.symmetry_axis = "X"
@@ -1947,6 +2018,10 @@ def build_hair(force, body="male"):
         enclose(bm, under, centre, h["clearance"] + 0.001, from_inside=True)
         bm.to_mesh(obj.data)
         bm.free()
+
+        if tail:
+            add_tail(obj, tail, heads, h["clearance"])
+
         common.set_faces(obj, 1, recipes.FABRICS.index("hair"), 0.0, False, True, HAIR_GREY)
         weigh_part(obj, reference)
         ride(obj, 1e9, ("Head", "neck_01"))
@@ -1959,6 +2034,71 @@ def build_hair(force, body="male"):
         print("wardrobe: %s %s %d triangles over %d head vertices" % (h["kind"], style, common.tri_count(obj), len(under)))
 
     finish(path, made, reference)
+
+
+def cut_style(obj, h):
+    """A Quaternius style cut down to the part of it its recipe keeps: faces
+    whose centre lies under `trim.below` dropped; with `keep.box` (two
+    corners), only faces whose centre lies inside it kept."""
+    trim, keep = h.get("trim"), h.get("keep")
+
+    if not trim and not keep:
+        return
+
+    lo, hi = (Vector(keep["box"][0]), Vector(keep["box"][1])) if keep else (None, None)
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    doomed = []
+
+    for face in bm.faces:
+        c = face.calc_center_median()
+
+        if (trim and c.z < trim["below"]) or (keep and not all(lo[i] <= c[i] <= hi[i] for i in range(3))):
+            doomed.append(face)
+
+    bmesh.ops.delete(bm, geom=doomed, context="FACES")
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
+    bm.to_mesh(obj.data)
+    bm.free()
+
+
+TAIL_RINGS = 5
+
+
+def tail_triangles(tail):
+    """A tail's triangles: `sides` quads between each of its rings, and a
+    cone to its tip."""
+    return tail["sides"] * 2 * (TAIL_RINGS - 1) + tail["sides"]
+
+
+def add_tail(obj, tail, heads, clearance):
+    """Hair tied back: a tail `length` long, `width` across at its top and
+    half that at its tip, of `sides` round, from the back of the head at
+    (0, at[0], at[1]) down the back of the neck (leaning a little back),
+    each ring moved back until it clears every head of the body (`heads`,
+    their points) by `clearance`; joined into `obj`. It leans back `lean`
+    (metres back per metre down; 0.15 by default)."""
+    down = Vector((0.0, tail.get("lean", 0.15), -1.0)).normalized()
+    side = Vector((1.0, 0.0, 0.0))
+    back = down.cross(side).normalized()
+    start = Vector((0.0, tail["at"][0], tail["at"][1]))
+    rings = []
+
+    for i in range(TAIL_RINGS):
+        t = i / (TAIL_RINGS - 1)
+        centre = start + down * tail["length"] * t
+        radius = tail["width"] * 0.5 * (1.0 - 0.5 * t)
+        # The back of every head at this height, within the tail's width.
+        behind = max((p.y for p in heads if abs(p.z - centre.z) <= 0.012 and abs(p.x) <= radius + 0.01), default=centre.y)
+        centre.y = max(centre.y, behind + radius + clearance)
+        rings.append([centre + (side * math.cos(a) + back * math.sin(a)) * radius
+                      for a in (2.0 * math.pi * k / tail["sides"] for k in range(tail["sides"]))])
+
+    tip = rings[-1][0].lerp(rings[-1][tail["sides"] // 2], 0.5) + down * tail["width"] * 0.4
+    piece = common.loft("%s_tail" % obj.name, rings, closed=True, cap=tip)
+    outward(piece)
+    common.select_only([obj, piece], active=obj)
+    bpy.ops.object.join()
 
 
 # The grey hair is baked in (the game tints it: its JSON's dye_base).
@@ -2022,6 +2162,37 @@ def head_points(body="male"):
     return points
 
 
+def hair_points(styles, body="male", grow=0.0):
+    """Every vertex of the hair `styles` of `body` (its hair file), and one
+    tree over them grown `grow` out along their normals (None without any):
+    what a hood goes over."""
+    path = common.SOURCE / ("%s.blend" % common.part_target("hair", body))
+
+    if not styles or not path.exists():
+        return [], None
+
+    with bpy.data.libraries.load(str(path)) as (source, target):
+        target.objects = [name for name in source.objects if name in ["Hair_%s" % s for s in styles]]
+
+    objects = [o for o in target.objects if o is not None and o.type == "MESH"]
+    points = [v.co.copy() for o in objects for v in o.data.vertices]
+    grown, polygons = [], []
+
+    for obj in objects:
+        start = len(grown)
+        grown += [v.co + v.normal * grow for v in obj.data.vertices]
+        polygons += [tuple(start + i for i in p.vertices) for p in obj.data.polygons]
+
+    tree = BVHTree.FromPolygons(grown, polygons) if objects else None
+
+    for obj in objects:
+        mesh = obj.data
+        bpy.data.objects.remove(obj)
+        bpy.data.meshes.remove(mesh)
+
+    return points, tree
+
+
 def quaternius_style(relative, name):
     """A Quaternius hair or beard (a glTF skinned to its own copy of the
     skeleton) as a plain mesh called `name`, where it sits: its skeleton,
@@ -2083,7 +2254,9 @@ def kettle(kind, g, piece, made):
     `brim` wide turning `droop` down to a lip turned `lip` down. Wholly on
     his Head. Its trim (rivets above the band, a bright seam over the crown
     and a bright rim) is left for the bake (wr_details)."""
-    tree = common.bvh([made[g["over"]]])
+    # Over the coif, or (on a bare head) over every head and the hair worn
+    # under it.
+    tree = heads_tree(kind, g.get("over_hair", ())) if g["over"] == "head" else common.bvh([made[g["over"]]])
     centre = Vector((0.0, g["centre_y"], g["base_z"]))
     n = g["segments"]
     around = [2.0 * math.pi * i / n for i in range(n)]
@@ -2115,7 +2288,27 @@ def kettle(kind, g, piece, made):
         hit = common.outer_hit(tree, middle, d, 0.4)
         return (hit - middle).length if hit is not None and (hit - middle).dot(d) > 0.0 else None
 
-    crown = (along(Vector((0.0, 0.0, 1.0))) or 0.13) + off - g["drop"]
+    def need_near(d):
+        """How far out the bowl must stand along `d`: over a coif, as far as
+        it is there; over bare heads and hair, the most any way round it
+        needs, half-way to the next points (a hair's crest rises between
+        them, under the bowl's flat faces)."""
+        best = along(d)
+
+        if g["over"] != "head":
+            return best
+
+        u = d.orthogonal().normalized()
+        v = d.cross(u)
+
+        for a in (-0.2, 0.0, 0.2):
+            for b in (-0.2, 0.0, 0.2):
+                n = along((d + u * a + v * b).normalized())
+                best = n if best is None or (n is not None and n > best) else best
+
+        return best
+
+    crown = (need_near(Vector((0.0, 0.0, 1.0))) or 0.13) + off - g["drop"]
     rows = []
 
     for elevation in [0.0] + list(g["elevations"]):
@@ -2128,7 +2321,9 @@ def kettle(kind, g, piece, made):
             # Never nearer the coif than `off`, looking out from his head's
             # middle.
             d = (point - middle).normalized()
-            need = along(d)
+            # (The upper bowl only: round its band, the hair under it flares
+            # over his ears, the brim's business.)
+            need = need_near(d) if elevation >= 30.0 else along(d)
 
             if need is not None and (point - middle).length < need + off:
                 point = middle + d * (need + off)
@@ -2192,6 +2387,9 @@ def coif(kind, g, piece, made=None):
         return abs(p.x) < hole["x"] + 0.01 and hole["from_z"] - 0.01 < p.z < hole["to_z"] + 0.01 and p.y < -0.02
 
     head = common.bvh([head_region(kind.ref, "wr_coif_head")])
+    # The beards it is worn over (`over_beards`): they hang below his chin
+    # in front of his throat, where it closes round his neck.
+    beard_points, beards = hair_points(g.get("over_beards", ()), grow=g.get("beard_margin", 0.0))
     middle = kind.arm.data.bones["Head"].head_local + Vector((0.0, 0.0, 0.1))
     n = g["segments"]
     around = [2.0 * math.pi * i / n for i in range(n)]
@@ -2243,14 +2441,24 @@ def coif(kind, g, piece, made=None):
     enclose(bm, skull, middle, g["inside"] + 0.004)
     opening = [e for e in bm.edges if e.is_boundary and (e.verts[0].co.z + e.verts[1].co.z) * 0.5 > g["cape"]["top_z"] + 0.005]
 
-    # Its face edge turned in to his face, so the mail shows its thickness.
+    # Its face edge turned in to his face (resting on a beard it goes over,
+    # where one is in its way), so the mail shows its thickness.
     made = bmesh.ops.extrude_edge_only(bm, edges=opening)["geom"]
 
     for vertex in (item for item in made if isinstance(item, bmesh.types.BMVert)):
         near = kind.ref_tree.find_nearest(vertex.co)[0]
 
-        if near is not None:
-            vertex.co = near + (vertex.co - near) * 0.3
+        if near is None:
+            continue
+
+        to = near + (vertex.co - near) * 0.3
+        # Short of a beard in its way: the edge rests on it.
+        hit = beards.ray_cast(vertex.co, to - vertex.co, (to - vertex.co).length) if beards is not None else (None,)
+
+        if hit[0] is not None:
+            to = vertex.co + (hit[0] - vertex.co) * max(0.0, 1.0 - 0.002 / max((hit[0] - vertex.co).length, 1e-6))
+
+        vertex.co = to
 
     bm.to_mesh(obj.data)
     bm.free()
@@ -2267,6 +2475,27 @@ def coif(kind, g, piece, made=None):
     # One sheet of mail: drawn from both sides.
     common.set_faces(cape, 1, fabric, g["thickness"], True, dye, g["colour"])
     obj = join_two(obj, cape, obj.name)
+
+    if beard_points:
+        # Every beard it goes over under its mail, `beard_clear` under it
+        # looking out from his neck (through its face opening a ray meets no
+        # mail: that part shows): its neck and the cape's top hang in front
+        # of a beard below his chin, not through it. Then any face of it
+        # still within `beard_margin` of a beard (its turned-in edge, where
+        # it meets a beard at the corners of his jaw) is pushed out until
+        # none is.
+        neck_y = kind.at(("neck_01", 0.0)).y
+
+        def from_neck(p):
+            return Vector((0.0, neck_y, p.z))
+
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        enclose(bm, beard_points, from_neck, g["beard_clear"])
+        bm.to_mesh(obj.data)
+        bm.free()
+        clear_through(obj, beards, from_neck)
+
     common.group(obj, common.TRANSFER, 1.0)
     weigh_part(obj, kind.ref)
     # The cape (and the hood's edge round his neck, which it tucks into).
@@ -2356,36 +2585,69 @@ def ride(obj, below, bones):
 
 
 def enclose(bm, points, centre, inside, rounds=8, from_inside=False):
-    """A shell's vertices pushed out, along rays from `centre`, until every
-    one of `points` lies at least `inside` under it: its flat faces sag
-    between their corners, and a head shows through a sag. Under its
-    outermost surface, or (`from_inside`) its innermost: a shell of two
-    layers (hair) must clear the head with the one nearer it."""
+    """A shell's vertices pushed out, along rays from `centre` (a point, or
+    a function giving one for each of `points`), until every one of
+    `points` lies at least `inside` under it: its flat faces sag between
+    their corners, and a head shows through a sag. Under its outermost
+    surface, or (`from_inside`) its innermost: a shell of two layers (hair)
+    must clear the head with the one nearer it."""
     for _ in range(rounds):
         bm.faces.ensure_lookup_table()
         tree = BVHTree.FromBMesh(bm)
         short = {}
 
         for p in points:
-            d = (p - centre).normalized()
-            hit = tree.ray_cast(centre, d, 0.4) if from_inside else tree.ray_cast(centre + d * 0.4, -d, 0.4)
+            c = centre(p) if callable(centre) else centre
+            d = (p - c).normalized()
+            hit = tree.ray_cast(c, d, 0.4) if from_inside else tree.ray_cast(c + d * 0.4, -d, 0.4)
 
-            if hit[0] is None or (hit[0] - centre).dot(d) <= 0.0:
+            if hit[0] is None or (hit[0] - c).dot(d) <= 0.0:
                 continue
 
-            need = inside - ((hit[0] - centre).dot(d) - (p - centre).length)
+            need = inside - ((hit[0] - c).dot(d) - (p - c).length)
 
             if need > 0.0:
                 for vertex in bm.faces[hit[2]].verts:
-                    short[vertex] = max(short.get(vertex, 0.0), need)
+                    if need > short.get(vertex, (0.0, c))[0]:
+                        short[vertex] = (need, c)
 
         if not short:
             return
 
-        for vertex, need in short.items():
+        for vertex, (need, c) in short.items():
             seam = abs(vertex.co.x) < 1e-4
-            vertex.co += (vertex.co - centre).normalized() * need
+            vertex.co += (vertex.co - c).normalized() * need
             vertex.co.x = 0.0 if seam else vertex.co.x
+
+
+def clear_through(obj, tree, centre, step=0.001, rounds=80):
+    """Each face of `obj` through a face of `tree` pushed out, a `step` at a
+    time along the way from `centre` (a function of the vertex), until none
+    is; each vertex's mirror twin (across x = 0) pushed with it, and its
+    middle seam kept on it."""
+    vertices = obj.data.vertices
+    twin = {}
+
+    for vertex in vertices:
+        mirrored = Vector((-vertex.co.x, vertex.co.y, vertex.co.z))
+        other = min(vertices, key=lambda v: (v.co - mirrored).length)
+        twin[vertex.index] = other.index if (other.co - mirrored).length < 0.002 else vertex.index
+
+    for _ in range(rounds):
+        pairs = common.bvh([obj]).overlap(tree)
+
+        if not pairs:
+            return
+
+        pushed = {v for face, _ in pairs for v in obj.data.polygons[face].vertices}
+
+        for index in pushed | {twin[i] for i in pushed}:
+            vertex = vertices[index]
+            seam = abs(vertex.co.x) < 1e-4
+            vertex.co += (vertex.co - centre(vertex.co)).normalized() * step
+            vertex.co.x = 0.0 if seam else vertex.co.x
+
+    print("wardrobe: %s still through %d faces after %d rounds" % (obj.name, len(common.bvh([obj]).overlap(tree)), rounds))
 
 
 def rigid(obj, above, bone):
@@ -2507,16 +2769,18 @@ def imported(kind, g, piece, made):
     return obj
 
 
-def heads_tree(kind):
-    """What a helm goes over, as one tree: his own head (the full body's)
-    and every low head in heads.blend (a low head strays a little outside
-    the full one)."""
+def heads_tree(kind, hair=()):
+    """What a helm goes over, as one tree: his own head (the full body's),
+    every low head in heads.blend (a low head strays a little outside the
+    full one) and the `hair` styles (hair.blend) it is worn over."""
     objects = [head_region(kind.ref, "wr_helm_head")]
-    path = common.SOURCE / "heads.blend"
 
-    if path.exists():
+    for path, names in ((common.SOURCE / "heads.blend", None), (common.SOURCE / "hair.blend", ["Hair_%s" % h for h in hair])):
+        if not path.exists() or names == []:
+            continue
+
         with bpy.data.libraries.load(str(path)) as (source, target):
-            target.objects = [name for name in source.objects if name.startswith("Head_")]
+            target.objects = [name for name in source.objects if (name.startswith("Head_") if names is None else name in names)]
 
         objects += [o for o in target.objects if o is not None and o.type == "MESH"]
 

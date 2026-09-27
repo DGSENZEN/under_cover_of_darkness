@@ -22,9 +22,8 @@ const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 const HumanoidScript := preload("res://scripts/Visual/Humanoid.gd")
 const ExpressionScript := preload("res://scripts/Visual/Expression.gd")
-const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
-## The axe bites this far into each loop of the chopping clip (s).
-const CHOP_BITE := 0.55
+const GuardHabitsScript := preload("res://scripts/AISystem/GuardHabits.gd")
+const ArmReachScript := preload("res://scripts/Visual/ArmReach.gd")
 
 ## Guard.Alert.SEARCHING and COMBAT: hunting, his guard is up.
 const SEARCHING := 3
@@ -90,13 +89,22 @@ const SWINGS := {
 const ACTIVITIES := {
 	&"lantern": [&"Idle_Torch", true, 0.3, 0.85],
 	&"call": [&"Idle_Rail_Call", false, 0.15, 0.9],
-	# At a station (GuardRota).
-	&"sit": [&"Sitting_Idle", true, 0.3, 1.0],
-	&"sit_talk": [&"Sitting_Talking", true, 0.3, 1.0],
-	&"eat": [&"Consume", true, 0.2, 1.0],
+	# His own ways at his ease (GuardHabits), and a listener's nod; sat,
+	# eating or leaning at a station too (GuardRota).
+	&"sit_down": [&"Sitting_Enter", false, 0.25, 1.0],
+	&"sit": [&"Sitting_Idle", true, 0.25, 1.0],
+	&"sit_talk": [&"Sitting_Talking", true, 0.35, 1.0],
+	&"stand_up": [&"Sitting_Exit", false, 0.1, 1.0],
+	&"lean": [&"Idle_FoldArms", true, 0.4, 0.95],
+	&"rail": [&"Idle_Rail", true, 0.4, 1.0],
+	&"reach": [&"PickUp_Table", false, 0.2, 0.95],
+	&"eat": [&"Consume", true, 0.2, 0.9],
+	&"nod": [&"Yes", false, 0.2, 0.85],
+	&"shake": [&"Idle_No", false, 0.2, 0.85],
+	&"dance": [&"Dance", true, 0.3, 1.0],
+	# At a station (GuardRota): a look through a chest. (Chopping, at a
+	# station or at his ease, is _show_chop's.)
 	&"rummage": [&"Crouch_Idle", true, 0.3, 1.0],
-	&"chop": [&"TreeChopping", true, 0.25, 1.0],
-	&"lean": [&"Idle_Rail", true, 0.35, 1.0],
 	# Passing the time (GuardPastimes): squatting by the fire.
 	&"squat": [&"Crouch_Idle", true, 0.3, 1.0],
 	# Feeding the fire (Gathering): a log taken up from the pile, then
@@ -105,16 +113,93 @@ const ACTIVITIES := {
 	&"feed_fire": [&"Fixing_Kneeling", false, 0.2, 1.0],
 }
 ## Getting onto and off a station (GuardRota), each shown through its clip in
-## its time: [clip, backwards, fade in].
+## its time: [clip, backwards, fade in]. (Sitting down and getting up, and a
+## crate set down, are as at his ease: ACTIVITIES, _show_activity.)
 const STATION_MOVES := {
-	&"sit_down": [&"Sitting_Enter", false, 0.2],
-	&"stand_up": [&"Sitting_Exit", false, 0.1],
 	&"lie_down": [&"LayToIdle", true, 0.25],
 	&"wake": [&"LayToIdle", false, 0.05],
 	&"lid": [&"Chest_Open", false, 0.2],
 	&"lift": [&"PickUp_Table", false, 0.2],
-	&"set_down": [&"PickUp_Table", true, 0.2],
 }
+## How a pose of his own sits him (GuardHabits): leaning back on a wall, his
+## body tipped back onto it (a tilt, as _tilt); at a rail, the drawn man
+## forward over it while his body stands clear of it (an offset, as _offset).
+const POSE_TILT := {&"lean": Vector3(0.0, 0.0, 0.1)}
+const POSE_SHIFT := {&"rail": Vector3(0.0, 0.0, -0.3)}
+## Kneeling at his work (Fixing_Kneeling): down by KNEEL_DOWN, working between
+## KNEEL_WORK, up from KNEEL_UP.
+const KNEEL_DOWN := 1.35
+const KNEEL_WORK := Vector2(1.5, 4.8)
+const KNEEL_UP := 5.3
+## Up off a seat in a hurry: the clip this much faster.
+const STAND_QUICK_PACE := 1.8
+## Chopping wood (GuardHabits.CHOP_*): the overhead blow's clip (SWINGS
+## "heavy") with an axe in his hand, from the axe raised over his head
+## (CHOP_RAISED) down to it biting the log before him (CHOP_BITE), and back.
+const CHOP_CLIP := &"Sword_Attack"
+const CHOP_RAISED := 0.38
+const CHOP_BITE := 0.56
+## Poses with his arms folded or across a rail, his hands talking or on a
+## rung or a rope, swimming: his blade put by for them (it would go through
+## him, or wave about), and back in his hand after if he still wants it.
+const STOW_POSES := [&"fold_arms", &"listen", &"talk", &"lean", &"rail", &"nod", &"shake", &"drink", &"climb", &"ladder", &"hang", &"swim", &"tread"]
+## His blade put by when he has no need of it (Guard.wants_blade: at his ease
+## and not on edge), drawn when he has. A sword in the scabbard he wears
+## (part of his outfit: only its hilt shows over the throat), by the kind he
+## is dressed as, in his pelvis bone's space: the blade (+Y) down the
+## scabbard, the guard resting on its locket. The watchman's scabbard slants
+## in across his legs as it was made; the hilt sits over it all the same.
+const SHEATHES := {
+	&"watchman": Transform3D(Basis(Vector3(0.052, -0.300, -0.952), Vector3(-0.336, -0.903, 0.267), Vector3(-0.941, 0.306, -0.147)), Vector3(0.243, 0.187, -0.020)),
+	&"swordsman": Transform3D(Basis(Vector3(-0.181, 0.153, -0.971), Vector3(0.095, -0.980, -0.172), Vector3(-0.979, -0.123, 0.163)), Vector3(0.185, 0.180, -0.029)),
+	&"arms_master": Transform3D(Basis(Vector3(-0.185, 0.152, -0.971), Vector3(0.095, -0.980, -0.172), Vector3(-0.978, -0.124, 0.167)), Vector3(0.193, 0.167, -0.028)),
+	&"duelist": Transform3D(Basis(Vector3(-0.183, 0.355, -0.916), Vector3(0.095, -0.921, -0.376), Vector3(-0.978, -0.156, 0.135)), Vector3(0.184, 0.110, 0.008)),
+}
+## What has no scabbard (a maul, a crossbow, a blade on a man who wears
+## none) is slung across his back, in his own space (he looks down -Z, +X his
+## right): a maul's haft from his right hip up over his left shoulder, a
+## crossbow upright between his shoulder blades, its prod across them.
+const SLUNG := {
+	&"maul": Transform3D(Basis(Vector3(0.89, 0.45, 0.0), Vector3(-0.45, 0.89, 0.0), Vector3(0.0, 0.0, 1.0)), Vector3(0.2, 0.84, 0.2)),
+	&"crossbow": Transform3D(Basis(Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, 1.0), Vector3(0.0, -1.0, 0.0)), Vector3(0.0, 1.13, 0.21)),
+	&"blade": Transform3D(Basis(Vector3(0.8, -0.6, 0.0), Vector3(0.6, 0.8, 0.0), Vector3(0.0, 0.0, 1.0)), Vector3(-0.18, 0.95, 0.19)),
+}
+## Drawing it: his hand to the hilt at his hip (DRAW_REACH, s), the blade out
+## with a ring, and his hand back up into its own pose (DRAW_BACK). Putting it
+## away: the blade down to the scabbard (SHEATHE_REACH), in with a slide, his
+## hand back (SHEATHE_BACK). In a fight it comes out at once, his hand
+## whipping up from the hip with it (QUICK_DRAW). Anything else his arms are
+## busy with, or a weapon slung on his back: out or away with no reach.
+const DRAW_REACH := 0.32
+const DRAW_BACK := 0.4
+const SHEATHE_REACH := 0.5
+const SHEATHE_BACK := 0.3
+const QUICK_DRAW := 0.28
+## His sword arm's elbow reaching across to the hilt (his space, as
+## ArmReach.ELBOW_HINT): out in front of him and to his right. How far the
+## blade comes up out of the scabbard along it before it swings free (m).
+const DRAW_ELBOW := Vector3(0.8, -0.6, -0.8)
+const DRAW_PULL := 0.34
+## His head tipped up or down no more than this (rad) for the eye.
+const HEAD_PITCH_MAX := 0.7
+## Turning where he stands, from this quick a turn (rad/s): his feet shuffle
+## round under him (a slow walk shown, its hips turned into the turn by
+## SHUFFLE_HIPS), rather than him spinning on the spot like a statue on a
+## plinth. So fast (m/s shown) for each rad/s, at least and at most, and each
+## shuffle a step long at the least (s), however short the turn.
+const SHUFFLE_FROM := 0.9
+const SHUFFLE_PACE := 0.25
+const SHUFFLE_SPEED := Vector2(0.55, 0.9)
+const SHUFFLE_HIPS := 0.7
+const SHUFFLE_HOLD := 0.6
+## What he may be showing and still shuffle round: nothing, or a light held
+## on his rounds (his legs his own under it).
+const SHUFFLE_POSES := [&"", &"carry_torch", &"carry_lantern"]
+## Asleep in his seat: a slow breath in and out every this long (s), his
+## chest lifting (a lean back, rad) and his head with it.
+const BREATH := 4.4
+const BREATH_LEAN := 0.035
+const BREATH_HEAD := 0.06
 ## Crossing what walking cannot (GuardClimb): hauling himself up in the
 ## climbing clip (in place, a metre to each CLIMB_CYCLE seconds of it); in the
 ## air in AIR_CLIP; gathering for a jump and landing from one in LAND_CLIP.
@@ -156,10 +241,9 @@ const OPEN_CLIP := &"Fixing_Kneeling"
 const DEATH := [&"Death01", 0.25, 1.45]
 const KNOCKOUT := [&"Death01", 0.3, 1.6]
 const IMPACT := 1.15
-## What a guard with no archetype wears and carries.
-## The watchman: dressed from the wardrobe (Humanoid.dress), or painted with
-## his kettle hat if the wardrobe cannot dress him.
-const DEFAULT_LOOK := {"kind": &"watchman", "outfit": &"watchman", "armour": [&"kettlehat"], "weapon": &"sword"}
+## What a guard with no archetype wears and carries: the watchman, dressed
+## from the wardrobe (Humanoid.dress).
+const DEFAULT_LOOK := {"kind": &"watchman", "weapon": &"sword"}
 ## Bones a wound or an arrow can ride on: the nearest takes it.
 const FLESH_BONES := HumanoidScript.FLESH_BONES
 
@@ -168,6 +252,9 @@ var guard: CharacterBody3D
 var man: Node3D
 ## What he shows of himself at his ease (Expression.gd).
 var expression: RefCounted
+## A chopper at his station: the axe in his hand while he chops (its
+## holder), and how far into the blow he was last frame.
+var _station_axe: Node3D = null
 var _chop_t := 0.0
 var body_mesh: MeshInstance3D
 var weapon: MeshInstance3D
@@ -250,6 +337,37 @@ var _held_point: Node3D = null
 ## What he was last shown doing (Guard.activity), and since when.
 var _activity: StringName = &""
 var _activity_at := 0.0
+## His blade in his hand (else put by: at his hip, on his back); settled
+## the first tick, as he is when he comes in (no draw heard).
+var _blade_out := false
+var _blade_known := false
+## Drawing or putting it away ("draw", "quick", "sheathe"), how far in (s),
+## and whether the blade has changed hands yet.
+var _drawing: StringName = &""
+var _draw_t := 0.0
+var _swapped := false
+## The weapon put by (a copy of the one in his hand: the hilt at his hip, or
+## the whole of it slung on his back), and what holds it on him.
+var _sheath: MeshInstance3D
+var _sheath_holder: Node3D
+var _slung := false
+## His outfit's kind (Wardrobe.gd), if he was dressed from it.
+var _dressed_kind: StringName = &""
+## His arm put to the hilt (ArmReach.gd), made the first time he draws.
+var _reach: SkeletonModifier3D
+## His weapon dropped or thrown away (drop_weapon), until he has one again.
+var _lost := false
+## Which way he faced last tick, how fast he is turning (rad/s, positive to
+## his left), and the shuffle his feet are making of it (his own space, as
+## _velocity) and how long it has left at the least.
+var _yaw := 0.0
+var _turn := 0.0
+var _shuffle := Vector3.ZERO
+var _shuffle_left := 0.0
+var _shuffle_side := 1.0
+var _shuffling := false
+## What he was doing at the last physics tick (Guard.activity).
+var _doing: StringName = &""
 
 
 # ---------------------------------------------------------------------------
@@ -279,7 +397,7 @@ func setup(p_guard: CharacterBody3D) -> void:
 
 	var look: Dictionary = guard.look() if guard.has_method("look") else GuardFighterScript.look_of(guard.archetype)
 
-	if not look.has("outfit"):
+	if not look.has("kind"):
 		look = DEFAULT_LOOK.merged(look, true)
 
 	size = float(look.get("scale", 1.0))
@@ -291,11 +409,14 @@ func setup(p_guard: CharacterBody3D) -> void:
 	man.name = "Man"
 	add_child(man)
 	var idle: StringName = &"Pistol_Idle" if _crossbow else &"Sword_Idle"
-	# From the wardrobe if his kind is there, else painted as before.
-	var dressed: bool = look.has("kind") and man.dress(look["kind"], _look_seed(), idle)
+	# From the wardrobe; a kind it cannot dress (warned once) is the plain
+	# base body of his sex.
+	var dressed: bool = man.dress(look["kind"], _look_seed(), idle)
 
 	if not dressed:
-		man.build(look.get("outfit", &"watchman"), bool(look.get("female", false)), idle)
+		man.build(&"", bool(look.get("female", false)), idle)
+	else:
+		_dressed_kind = look["kind"]
 
 	# Dyed his own colour (Guard.look_override).
 	if dressed and look.has("dye"):
@@ -306,15 +427,6 @@ func setup(p_guard: CharacterBody3D) -> void:
 	female = bool(look.get("female", false))
 	_voice_pitch = (1.0 if female else 1.0 / sqrt(maxf(size, 0.5))) * randf_range(0.95, 1.05)
 	body_mesh = man.body
-
-	for style in look.get("hair", []) if not dressed else []:
-		man.add_hair(style, look.get("hair_tint", Color.WHITE))
-
-	for piece in look.get("armour", []) if not dressed else []:
-		man.add_armour(piece)
-
-	if not dressed and not bool(look.get("female", false)):
-		man.add_boots()
 
 	# The body he falls as (Ragdoll.gd): made now, while he stands in his rest
 	# pose and at his own size, which its joints are measured in.
@@ -352,6 +464,8 @@ func setup(p_guard: CharacterBody3D) -> void:
 		nock.visible = false
 		weapon.add_child(nock)
 
+	_fit_sheath()
+
 	trail = SwingTrailScript.new()
 	trail.name = "Trail"
 	trail.setup(Layers.FX)
@@ -364,6 +478,7 @@ func setup(p_guard: CharacterBody3D) -> void:
 	_overlay = ShaderMaterial.new()
 	_overlay.shader = HIT_RIM
 	expression = ExpressionScript.new(self)
+	_yaw = guard.global_rotation.y
 	_apply()
 
 
@@ -477,10 +592,24 @@ func update(delta: float) -> void:
 	if phase != &"recover" and phase != &"strike":
 		_bounced = false
 
-	var local_velocity: Vector3 = guard.global_basis.inverse() * guard.velocity
+	# What he is doing with himself (Guard.activity), this tick.
+	var pose: StringName = guard.activity() if guard.has_method("activity") else &""
+	_doing = pose
+	_update_blade(delta)
+
+	# Stepping into place at his ease (GuardHabits): he is put there, and his
+	# legs go by how fast.
+	var moving: Vector3 = guard.velocity
+	var habits: RefCounted = guard.get("_habits")
+
+	if habits != null:
+		moving += habits.stepping()
+
+	var local_velocity: Vector3 = guard.global_basis.inverse() * moving
 	local_velocity.y = 0.0
 	_velocity = _velocity.lerp(local_velocity, 1.0 - exp(-12.0 * dt))
 	var speed := local_velocity.length()
+	_update_shuffle(delta, dt, speed, pose)
 
 	# Each foot coming down, heard in mail and boots: you hear him coming.
 	_walk_phase += speed * dt * PI / (0.75 * size)
@@ -506,6 +635,9 @@ func update(delta: float) -> void:
 	if standing:
 		tilt_goal += Vector3(0.0, 0.0, stance_lean())
 
+	# Leaning back on a wall, over a rail (GuardHabits).
+	tilt_goal += POSE_TILT.get(pose, Vector3.ZERO)
+
 	_update_glance(delta, standing)
 
 	# Heavy springs, nearly critically damped: a man with weight to him
@@ -514,6 +646,7 @@ func update(delta: float) -> void:
 	_tilt_v += ((tilt_goal - _tilt) * 110.0 / mass - _tilt_v * 17.0 / sqrt(mass)) * dt
 	_tilt += _tilt_v * dt
 	var rest := Vector3(0.0, stance_crouch(), 0.0) if standing else Vector3.ZERO
+	rest += POSE_SHIFT.get(pose, Vector3.ZERO)
 	_offset_v += ((rest - _offset) * 100.0 / mass - _offset_v * 16.0 / sqrt(mass)) * dt
 	_offset += _offset_v * dt
 	_jolt_v += (-_jolt * 260.0 - _jolt_v * 22.0) * dt
@@ -550,6 +683,39 @@ func stance_crouch() -> float:
 ## Fighting, and between blows: nothing else is being shown.
 func _in_stance() -> bool:
 	return int(guard.state) == 4 and guard._phase == &"" and _reel <= 0.0 and guard._stagger <= 0.0 and guard._knock <= 0.0 and _open_left <= 0.0
+
+
+## Turning where he stands: his feet shuffle round under him, a step at the
+## least, the hips into the turn. Only standing (not on the move, nothing shown
+## over his legs but a light on his rounds, no blow, not reeling).
+func _update_shuffle(delta: float, dt: float, speed: float, pose: StringName) -> void:
+	var yaw := guard.global_rotation.y
+	var turning := clampf(wrapf(yaw - _yaw, -PI, PI) / maxf(delta, 0.0001), -12.0, 12.0)
+	_yaw = yaw
+	_turn = lerpf(_turn, turning, 1.0 - exp(-14.0 * dt))
+	_shuffle_left = maxf(_shuffle_left - delta, 0.0)
+	var standing: bool = speed < 0.3 and guard._phase == &"" and _reel <= 0.0 and _flail <= 0.0 and _open_left <= 0.0 \
+		and guard._knock <= 0.0 and guard._stagger <= 0.0 and pose in SHUFFLE_POSES
+	var goal := Vector3.ZERO
+
+	# A turn begun: a step at the least, however short the turn.
+	if standing and absf(_turn) > SHUFFLE_FROM and not _shuffling:
+		_shuffling = true
+		_shuffle_left = SHUFFLE_HOLD
+
+	# Done once the turn is (nearly) over and that step is taken.
+	if not standing or (absf(_turn) < SHUFFLE_FROM * 0.7 and _shuffle_left <= 0.0):
+		_shuffling = false
+
+	if _shuffling:
+		if absf(_turn) > SHUFFLE_FROM * 0.7:
+			_shuffle_side = signf(_turn)
+
+		var pace := clampf(absf(_turn) * SHUFFLE_PACE, SHUFFLE_SPEED.x, SHUFFLE_SPEED.y)
+		var hips := SHUFFLE_HIPS * _shuffle_side
+		goal = Vector3(-sin(hips), 0.0, -cos(hips)) * pace
+
+	_shuffle = _shuffle.lerp(goal, 1.0 - exp(-10.0 * dt))
 
 
 ## A craven man looks over his shoulder every few seconds, for a way out.
@@ -712,7 +878,7 @@ func _process(_delta: float) -> void:
 
 	# Between physics ticks, how far into the next one this frame is drawn.
 	var ahead := Engine.get_physics_interpolation_fraction() / float(maxi(Engine.physics_ticks_per_second, 1))
-	man.set_motion(_velocity / size, guard.state >= SEARCHING, _delta)
+	man.set_motion((_velocity + _shuffle) / size, guard.state >= SEARCHING, _delta)
 	# His head: the AI's look (and a craven glance), or, with something
 	# holding his eye at his ease, that (Expression): one or the other, not
 	# both added; the eyes' darts on top.
@@ -722,6 +888,23 @@ func _process(_delta: float) -> void:
 		look = lerpf(look, expression.head_yaw(), expression.gaze_weight()) + expression.dart()
 
 	man.turn_head(look)
+	# Asleep in his seat, he breathes slow and deep: his chest lifts, and his
+	# head with it.
+	var breath := 0.0
+
+	if _doing == &"doze":
+		breath = 0.5 + 0.5 * sin(TAU * _time / BREATH)
+
+	if man.has_method("lean_back"):
+		man.lean_back(BREATH_LEAN * breath)
+
+	# Up at you on a wall, up at the sky, down asleep: where his eyes go
+	# (Guard._update_head), his head goes; and a nod to a man who greets him
+	# (GuardLife), his eyes where they were.
+	if man.has_method("pitch_head"):
+		var life: RefCounted = guard.get("_life")
+		var nodding: float = life.nod() if life != null and life.has_method("nod") else 0.0
+		man.pitch_head(clampf((_logical_head.rotation.x if _logical_head != null else 0.0) + nodding + BREATH_HEAD * breath, -HEAD_PITCH_MAX, HEAD_PITCH_MAX))
 	_animate(ahead)
 
 	if expression != null:
@@ -736,6 +919,7 @@ func _process(_delta: float) -> void:
 func _animate(ahead: float) -> void:
 	var now := _time + ahead
 	var kicking: bool = guard._attack == &"kick" and guard._phase != &""
+
 	_kick(ahead if kicking else -1.0)
 
 	# A blow thrown on the move: his legs run under it.
@@ -792,15 +976,13 @@ func _show_activity(now: float) -> bool:
 	if doing != _activity:
 		_activity = doing
 		_activity_at = now
+		_chop_t = 0.0
 
-	# At a station his blade is put away (GuardRota.sheathed), and drawn the
-	# moment he is stirred: hidden, not dropped (`visible` says he has it).
-	var rota: RefCounted = guard.get("_rota")
-	var layers: int = 0 if rota != null and rota.sheathed() else Layers.ACTORS
-
-	if weapon != null and weapon.layers != layers:
-		weapon.layers = layers
-
+	# A chopper at his station (GuardRota) works with an axe, his blade in its
+	# scabbard as at his ease; the woodsman (GuardHabits) brings his own.
+	var habits: RefCounted = guard.get("_habits")
+	var station_chop: bool = doing == &"chop" and not (habits != null and habits.habit == &"chop")
+	_hold_station_axe(station_chop)
 	var since := now - _activity_at
 	var hands: RefCounted = guard.get("_hands")
 
@@ -829,12 +1011,6 @@ func _show_activity(now: float) -> bool:
 			# Lying still on his bedroll: the first moment of getting up.
 			man.show_action(&"LayToIdle", 0.0, 0.3)
 			return true
-		&"carry":
-			# A crate in his arms, stepping with it as he goes.
-			var cycle := maxf(man.action_length(&"Walk_Carry"), 0.1)
-			var pace := _velocity.length() / size
-			man.show_action(&"Walk_Carry", fmod(since * clampf(pace / 1.4, 0.6, 1.3), cycle) if pace > 0.2 else 0.3, 0.2)
-			return true
 		&"sneak":
 			# Crouched (the showcase's intruder): stepping low as he goes,
 			# still when he stops.
@@ -848,6 +1024,34 @@ func _show_activity(now: float) -> bool:
 				man.show_action(CROUCH_CLIP, fmod(since, still), 0.25)
 
 			return true
+		&"doze":
+			# Asleep in his seat, still (his head down: Guard._update_head).
+			man.show_action(&"Sitting_Idle", 0.3, 0.6)
+			return true
+		&"stand_up_quick":
+			man.show_action(&"Sitting_Exit", minf(since * STAND_QUICK_PACE, man.action_length(&"Sitting_Exit") - 0.02), 0.05)
+			return true
+		&"kneel_down":
+			man.show_action(&"Fixing_Kneeling", minf(since, KNEEL_DOWN), 0.2)
+			return true
+		&"tend":
+			# Working at it, rocking between the ends of his work.
+			var span := KNEEL_WORK.y - KNEEL_WORK.x
+			man.show_action(&"Fixing_Kneeling", KNEEL_WORK.x + pingpong(since, span), 0.2)
+			return true
+		&"kneel_up":
+			man.show_action(&"Fixing_Kneeling", minf(KNEEL_UP + since, man.action_length(&"Fixing_Kneeling") - 0.02), 0.15)
+			return true
+		&"set_down":
+			# The reach played back: set down before him.
+			man.show_action(&"PickUp_Table", maxf(man.action_length(&"PickUp_Table") - since, 0.0), 0.2)
+			return true
+		&"carry", &"carry_lantern", &"carry_torch":
+			# The load (or the light) held before him, his legs his own.
+			var clip: StringName = {&"carry": &"Walk_Carry", &"carry_lantern": &"Idle_Lantern", &"carry_torch": &"Idle_Torch"}[doing]
+			man.set_leg_drive(clampf((_velocity + _shuffle).length() / size - 0.2, 0.0, 1.0) if doing != &"carry" else 1.0)
+			man.show_action(clip, fmod(since, maxf(man.action_length(clip), 0.1)) if doing != &"carry" else fmod(_walk_phase / PI * 0.5 * man.action_length(clip), maxf(man.action_length(clip), 0.1)), 0.25, 0.9)
+			return true
 		&"swim", &"tread":
 			# Stroke by stroke as he goes; treading water where he is.
 			var stroke := maxf(man.action_length(SWIM_CLIP), 0.1)
@@ -859,6 +1063,21 @@ func _show_activity(now: float) -> bool:
 				man.show_action(TREAD_CLIP, fmod(since, tread), 0.3)
 
 			return true
+
+	# Blow on blow with his axe. At his station the blows are the rig's to
+	# land (GuardHabits lands the woodsman's own): heard, chips flying.
+	if doing == &"chop":
+		_show_chop(since)
+
+		if station_chop and habits != null:
+			var into := fmod(since, GuardHabitsScript.CHOP_CYCLE)
+
+			if into >= GuardHabitsScript.CHOP_HIT and _chop_t < GuardHabitsScript.CHOP_HIT:
+				habits._chop()
+
+			_chop_t = into
+
+		return true
 
 	if STATION_MOVES.has(doing):
 		var move: Array = STATION_MOVES[doing]
@@ -876,15 +1095,297 @@ func _show_activity(now: float) -> bool:
 	var length := maxf(man.action_length(clip), 0.1)
 	var t: float = fmod(since, length) if bool(spec[1]) else minf(since, length - 0.02)
 	man.show_action(clip, t, float(spec[2]), float(spec[3]))
-
-	# Each blow of the axe sends chips off the block (Atmosphere).
-	if doing == &"chop":
-		if t >= CHOP_BITE and _chop_t < CHOP_BITE:
-			AtmosphereScript.chips_at(guard, weapon.global_transform * _blade_tip)
-
-		_chop_t = t
-
 	return true
+
+
+## The axe in a station chopper's hand while he chops (GuardHabits' axe, held
+## as the woodsman holds it), gone once he stops.
+func _hold_station_axe(held: bool) -> void:
+	if held and (_station_axe == null or not is_instance_valid(_station_axe)) and man != null and man.has_method("attach"):
+		var axe: Node3D = GuardHabitsScript._axe()
+		axe.name = "StationAxe"
+		_station_axe = man.attach(&"hand_r", axe, GuardHabitsScript.AXE_GRIP)
+	elif not held and _station_axe != null:
+		if is_instance_valid(_station_axe):
+			_station_axe.queue_free()
+
+		_station_axe = null
+
+
+## Chopping wood, `since` seconds in: the axe pulled out of the log and
+## lifted over his head, held, brought down hard, and left in the log a moment
+## (GuardHabits.CHOP_*).
+func _show_chop(since: float) -> void:
+	var lift: float = GuardHabitsScript.CHOP_LIFT
+	var hold: float = GuardHabitsScript.CHOP_HOLD
+	var down: float = GuardHabitsScript.CHOP_DOWN
+	var into := fmod(since, GuardHabitsScript.CHOP_CYCLE)
+	var t := CHOP_BITE
+
+	if into < lift:
+		t = lerpf(CHOP_BITE, CHOP_RAISED, smoothstep(0.0, 1.0, into / lift))
+	elif into < lift + hold:
+		t = CHOP_RAISED
+	elif into < lift + hold + down:
+		t = lerpf(CHOP_RAISED, CHOP_BITE, (into - lift - hold) / down)
+
+	man.show_action(CHOP_CLIP, t, 0.15)
+
+
+# ---------------------------------------------------------------------------
+# His blade: drawn when he needs it, put by when he does not
+# ---------------------------------------------------------------------------
+
+## Each tick: where his blade should be (in his hand, or put by), and the
+## draw or the sheathing that gets it there.
+func _update_blade(delta: float) -> void:
+	if weapon == null or _sheath == null:
+		return
+
+	var hands: RefCounted = guard.get("_hands")
+	var armed: bool = (hands == null or bool(hands.armed)) and not _lost
+	var want: bool = armed and _hand_free() and guard.has_method("wants_blade") and bool(guard.wants_blade())
+
+	if not _blade_known:
+		_blade_known = true
+		_blade_out = want
+
+	if not armed:
+		_end_draw()
+		_blade_out = false
+	elif _drawing != &"":
+		_step_draw(delta, want)
+	elif want != _blade_out and not man.is_limp() and _rising <= 0.0:
+		if _slung or not _arms_idle():
+			# His arms busy with something else (or it hangs on his back):
+			# out or away as he goes, heard.
+			_swap(want)
+		else:
+			_drawing = (&"quick" if int(guard.state) == COMBAT else &"draw") if want else &"sheathe"
+			_draw_t = 0.0
+			_swapped = false
+
+			# In a fight it is in his hand at once.
+			if _drawing == &"quick":
+				_swap(true)
+				_swapped = true
+
+			_step_draw(0.0, want)
+
+	weapon.visible = armed and _blade_out
+	_sheath.visible = armed and not _blade_out
+
+
+## His sword hand free to hold his blade: nothing in it (a thing to throw,
+## his lantern, what his ways at ease have put there), and not in a pose that
+## wants it empty.
+func _hand_free() -> bool:
+	var hands: RefCounted = guard.get("_hands")
+	var habits: RefCounted = guard.get("_habits")
+
+	if hands != null and (hands.held != null or (hands.lantern != null and hands.light_kind == &"lantern")):
+		return false
+
+	if habits != null and bool(habits.get("_sheathed")):
+		return false
+
+	return not (_doing in STOW_POSES)
+
+
+## Nothing shown in his arms but his walk (or a torch in his other hand): a
+## hand free to go to his hip.
+func _arms_idle() -> bool:
+	return (_doing == &"" or _doing == &"carry_torch") and guard._phase == &"" and _reel <= 0.0 and _flail <= 0.0 \
+		and _open_left <= 0.0 and guard._knock <= 0.0 and guard._stagger <= 0.0 and not man.is_limp() and _rising <= 0.0
+
+
+## A draw or a sheathing, `delta` further on: his hand to the hilt, the
+## blade changing hands, his hand back. Cut short (the blade where it is
+## going, at once) if something else takes his arms, or he changes his mind
+## before it has changed hands.
+func _step_draw(delta: float, want: bool) -> void:
+	_draw_t += delta
+	var drawing := _drawing != &"sheathe"
+
+	if not _swapped and want != drawing:
+		_end_draw()
+		return
+
+	if not _arms_idle():
+		if not _swapped:
+			_swap(drawing)
+
+		_end_draw()
+		return
+
+	var reach := 0.0 if _drawing == &"quick" else (DRAW_REACH if drawing else SHEATHE_REACH)
+	var back := QUICK_DRAW if _drawing == &"quick" else (DRAW_BACK if drawing else SHEATHE_BACK)
+
+	if _draw_t >= reach + back:
+		_end_draw()
+		return
+
+	# How far to the hilt his hand has gone, and how far out of the scabbard
+	# along it (the blade drawn up out of it before it swings free; brought
+	# down into it along it).
+	var weight := 1.0
+	var pull := 0.0
+
+	if _draw_t < reach:
+		var u := _draw_t / reach
+
+		if drawing:
+			weight = smoothstep(0.0, 1.0, u)
+		else:
+			weight = smoothstep(0.0, 1.0, u / 0.6)
+			pull = 1.0 - smoothstep(0.6, 1.0, u)
+	else:
+		if not _swapped:
+			_swapped = true
+			_swap(drawing)
+
+		var u := (_draw_t - reach) / back
+
+		if drawing:
+			pull = smoothstep(0.0, 0.4, u)
+			weight = 1.0 - smoothstep(0.4, 1.0, u)
+		else:
+			weight = 1.0 - smoothstep(0.0, 1.0, u)
+
+	_hand_to_hilt(weight, pull)
+
+
+## His right hand put `weight` of the way to the hilt of the blade at his hip
+## (where it sits in the scabbard: so the blade in his hand, sheathing, goes
+## down into it), `pull` of DRAW_PULL up out of it along it, his fist closed
+## on it.
+func _hand_to_hilt(weight: float, pull := 0.0) -> void:
+	if _reach == null:
+		_reach = ArmReachScript.new()
+		_reach.name = "Draw"
+		_reach.set("man", man)
+		_reach.set("curl_only_reaching", true)
+		# Across his front to the far hip: the elbow out before him.
+		_reach.elbow_hints[1] = DRAW_ELBOW
+		man.skeleton.add_child(_reach)
+
+	var hilt := _sheath.global_transform.translated_local(Vector3(0.0, -DRAW_PULL * pull, 0.0))
+	var hand := man.global_transform.affine_inverse() * (hilt * _grip.affine_inverse())
+	_reach.targets[1] = hand.orthonormalized()
+	_reach.weights[1] = weight
+	_reach.curls[1] = 1.0
+	_reach.active = true
+
+
+func _end_draw() -> void:
+	_drawing = &""
+	_draw_t = 0.0
+	_swapped = false
+
+	if _reach != null:
+		_reach.weights[1] = 0.0
+		_reach.active = false
+
+
+## The blade into his hand (`out`) or put by: heard, a ring drawn and a
+## slide sheathed (a haft or a crossbow off his back, a creak of leather).
+func _swap(out: bool) -> void:
+	if out == _blade_out:
+		return
+
+	_blade_out = out
+	var at := _sheath.global_position if _sheath.is_inside_tree() else guard.global_position + Vector3.UP * 0.9
+
+	if _slung:
+		Sfx.play(guard, (&"bow_out" if out else &"bow_away") if _crossbow else &"grab", at, -8.0, 0.9)
+		Sfx.play(guard, &"cloth", at, -4.0)
+	elif out:
+		Sfx.play(guard, &"blade_draw", at, -3.0, 0.97 / sqrt(size))
+	else:
+		Sfx.play(guard, &"sheath", at, -6.0, 1.0 / sqrt(size))
+
+
+## The weapon he carries, put by on him: a blade's hilt over the scabbard he
+## wears, else the whole of it slung on his back.
+func _fit_sheath() -> void:
+	if _sheath_holder != null and is_instance_valid(_sheath_holder):
+		_sheath_holder.queue_free()
+
+	var hip: bool = SHEATHES.has(_dressed_kind) and _carried in [&"sword", &"rapier"]
+	_slung = not hip
+	_sheath = MeshInstance3D.new()
+	_sheath.name = "PutBy"
+	_sheath.layers = Layers.ACTORS
+	_sheath.visible = false
+
+	if hip:
+		# The blade itself is in the scabbard: only what is left of it shows.
+		var kept := []
+
+		for i in range(weapon.mesh.get_surface_count()):
+			var material := weapon.mesh.surface_get_material(i)
+
+			if material == null or material.resource_name != "M_Steel":
+				kept.append(i)
+
+		_sheath.mesh = _hilt_of(weapon.mesh, kept)
+
+		for j in range(kept.size()):
+			_sheath.set_surface_override_material(j, weapon.get_surface_override_material(kept[j]))
+
+		_sheath_holder = man.attach(&"pelvis", _sheath, SHEATHES[_dressed_kind])
+		return
+
+	_sheath.mesh = weapon.mesh
+
+	for i in range(weapon.mesh.get_surface_count()):
+		_sheath.set_surface_override_material(i, weapon.get_surface_override_material(i))
+
+	_sheath.material_overlay = _blade_blood
+	var slung: Transform3D = SLUNG.get(_carried, SLUNG[&"blade"])
+	_sheath_holder = man.attach(&"spine_03", _sheath, _in_bone(&"spine_03", slung))
+
+
+## `placed` (in his own space: he looks down -Z, at his own size) in `bone`'s
+## space, as he stands at rest.
+func _in_bone(bone: StringName, placed: Transform3D) -> Transform3D:
+	var skeleton: Skeleton3D = man.skeleton
+	var index := skeleton.find_bone(bone)
+
+	if index < 0:
+		return placed
+
+	# Down from him to his skeleton (whatever turns and scales his model).
+	var skeleton_in_man := Transform3D.IDENTITY
+	var node: Node = skeleton
+
+	while node != null and node != man:
+		if node is Node3D:
+			skeleton_in_man = (node as Node3D).transform * skeleton_in_man
+
+		node = node.get_parent()
+
+	return (skeleton_in_man * skeleton.get_bone_global_rest(index)).affine_inverse() * placed
+
+
+## What of a weapon's mesh shows out of its scabbard (the `kept` surfaces):
+## made once for each mesh, shared.
+static var _hilts := {}
+
+
+static func _hilt_of(mesh: Mesh, kept: Array) -> Mesh:
+	if _hilts.has(mesh):
+		return _hilts[mesh]
+
+	var hilt := ArrayMesh.new()
+
+	for i in kept:
+		var kind := (mesh as ArrayMesh).surface_get_primitive_type(i) if mesh is ArrayMesh else Mesh.PRIMITIVE_TRIANGLES
+		hilt.add_surface_from_arrays(kind, mesh.surface_get_arrays(i))
+		hilt.surface_set_material(hilt.get_surface_count() - 1, mesh.surface_get_material(i))
+
+	_hilts[mesh] = hilt
+	return hilt
 
 
 ## Crossing what walking cannot (GuardClimb): hauling himself up (the
@@ -966,7 +1467,16 @@ func take_weapon(kind: StringName) -> void:
 			_blade_blood.set_shader_parameter("blade_base", _blade_base)
 			_blade_blood.set_shader_parameter("blade_tip", _blade_tip)
 
+		_fit_sheath()
+
+	# Picked up: in his hand (put by after, if he has no need of it).
+	_lost = false
+	_end_draw()
+	_blade_out = true
 	weapon.visible = true
+
+	if _sheath != null:
+		_sheath.visible = false
 
 
 ## A reel's time in its animation: thrown back over `open`, held there, and
@@ -1344,9 +1854,16 @@ func chest() -> Vector3:
 # ---------------------------------------------------------------------------
 
 ## He lets go of his weapon: it falls and clatters. Nothing picks it up yet.
-func drop_weapon() -> RigidBody3D:
-	if weapon == null or not weapon.visible:
+## Put by (in its scabbard, on his back), it stays on him, unless `even_put_by`
+## (thrown down to beg for his life: drawn and thrown).
+func drop_weapon(even_put_by := false) -> RigidBody3D:
+	if weapon == null or _lost or not (_blade_out or even_put_by):
 		return null
+
+	if not _blade_out:
+		_end_draw()
+		_blade_out = true
+		_sheath.visible = false
 
 	var sword := RigidBody3D.new()
 	sword.name = "DroppedSword"
@@ -1390,6 +1907,9 @@ func drop_weapon() -> RigidBody3D:
 	sword.angular_velocity = Vector3(randf_range(-6.0, 6.0), randf_range(-3.0, 3.0), randf_range(-6.0, 6.0))
 	parent.add_child(sword)
 	weapon.visible = false
+	_lost = true
+	_blade_out = false
+	_end_draw()
 	_cutting = false
 	trail.clear()
 	sword.reset_physics_interpolation()
@@ -1412,6 +1932,8 @@ func transfer_to(corpse: Node3D, push := Vector3.ZERO, at := Vector3.INF) -> voi
 		stand_in.visible = false
 
 	_rising = 0.0
+	# Whatever his arm was reaching for (his hilt), it is limp now.
+	_end_draw()
 	var world := man.global_transform
 	remove_child(man)
 	corpse.add_child(man)
@@ -1470,6 +1992,7 @@ func go_limp(velocity: Vector3, push := Vector3.ZERO, at := Vector3.INF) -> void
 	man.global_transform = world
 	_rising = 0.0
 	_cutting = false
+	_end_draw()
 	trail.clear()
 	man.go_limp(velocity)
 

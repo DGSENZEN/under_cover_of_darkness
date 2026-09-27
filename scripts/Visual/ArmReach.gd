@@ -43,6 +43,12 @@ var foot_target := Transform3D.IDENTITY
 var foot_weight := 0.0
 ## Bones folded away to nothing (a head you are inside of).
 var folded: Array[StringName] = []
+## Only a hand that is reaching has its fingers closed by `curls`; the other
+## keeps the animation's (a guard's own hand, holding what it holds).
+var curl_only_reaching := false
+## Where each elbow points (as ELBOW_HINT, which it starts as): a reach
+## across the body wants the elbow out in front, not back.
+var elbow_hints: Array[Vector3] = [ELBOW_HINT[0], ELBOW_HINT[1]]
 
 ## How far each wrist is bent off straight, degrees, and where each hand
 ## was put (world space), at the last solve. The skeleton's own pose is
@@ -118,7 +124,8 @@ func _process_modification() -> void:
 		if weights[side] > 0.001:
 			_reach(skeleton, side, into)
 
-		_curl(skeleton, side)
+		if weights[side] > 0.001 or not curl_only_reaching:
+			_curl(skeleton, side)
 
 	if foot_weight > 0.001:
 		var knee := into.basis * KNEE_HINT
@@ -128,7 +135,7 @@ func _process_modification() -> void:
 func _reach(skeleton: Skeleton3D, side: int, into: Transform3D) -> void:
 	var bones: Array = ARMS[side]
 	var target: Transform3D = into * targets[side]
-	var hint: Vector3 = into.basis * (ELBOW_HINT[side] as Vector3)
+	var hint: Vector3 = into.basis * elbow_hints[side]
 	_solve(skeleton, bones[1], bones[2], bones[3], target, weights[side], hint, SHOULDER_GIVE, bones[0])
 	var forearm := skeleton.get_bone_global_pose(_bone(skeleton, bones[2])).basis.y.normalized()
 	var hand_pose := skeleton.get_bone_global_pose(_bone(skeleton, bones[3]))

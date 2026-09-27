@@ -682,6 +682,89 @@ func _run() -> void:
 		begged_32 and garrison32.slain_begging.size() == 1 and garrison32.dread >= dread_before + 0.17 and garrison32.mercy_hope() < 0.7,
 		"begged %s slain begging %d dread %.2f -> %.2f hope %.2f" % [begged_32, garrison32.slain_begging.size(), dread_before, garrison32.dread, garrison32.mercy_hope()])
 
+	# W33 two broken men caught together: one begs, the other runs while he
+	#     can (not all of them at your feet at once)
+	await _fresh()
+	_put_player(Vector3(1340, 1.05, 0))
+	var first33 := _guard(&"", Vector3(1339, 0, 2.2), 0.0)
+	var second33 := _guard(&"", Vector3(1341, 0, 2.2), 0.0)
+	await _frames(10)
+	_break_heart(first33)
+	await _run_down(first33, 240)
+	var first_begs: bool = first33._mercy.pleading
+	var second_from: Vector3 = second33.global_position
+	var second_begged := [false]
+	# At the other, while the first is on his knees beside him.
+	Input.action_press("move_forward")
+
+	for i in 45:
+		var to33: Vector3 = second33.global_position - player.global_position
+		player.rotation.y = atan2(-to33.x, -to33.z)
+		await _frames(1)
+		second_begged[0] = second_begged[0] or second33._mercy.pleading
+
+	_release_all()
+	player.velocity = Vector3.ZERO
+	_check("W33 two broken men caught together: one begs, the other runs while he can",
+		first_begs and first33._mercy.pleading and not second_begged[0] and second33.global_position.distance_to(second_from) > 1.5,
+		"the first begs %s; the second begged %s, ran %.1f m" % [first_begs, second_begged[0], second33.global_position.distance_to(second_from)])
+
+	# W34 spared, with nobody of his own to run to: he gets clear of you and
+	#     goes back to his post, not stood about in the open
+	await _fresh()
+	_put_player(Vector3(1380, 1.05, 0))
+	var lone := _guard(&"", Vector3(1380, 0, 2.2), 0.0)
+	await _frames(10)
+	_break_heart(lone)
+	await _run_down(lone, 240)
+	var begged_34: bool = lone._mercy.pleading
+	# You walk off into the dark.
+	player.debug_light_level = 0.0
+	_put_player(Vector3(1380, 1.05, -30))
+	var back_at := [-1]
+
+	for i in 60 * 14:
+		await _frames(1)
+
+		if int(lone.state) == 0:
+			back_at[0] = i
+			break
+
+	_check("W34 spared with nobody to run to, he gets clear and goes back to his post, not stood about",
+		begged_34 and back_at[0] >= 0 and back_at[0] < 60 * 9,
+		"begged %s, back to his post after %.1f s" % [begged_34, float(back_at[0]) / 60.0])
+
+	# W35 running from you with you on his heels in the dark (heard, not
+	#     seen): he does not give up the flight
+	await _fresh()
+	_put_player(Vector3(1380, 1.05, 0))
+	var hounded := _guard(&"", Vector3(1380, 0, 2.2), 0.0)
+	await _frames(10)
+	player.debug_light_level = 0.0
+	_break_heart(hounded)
+	var dropped_it := [false]
+
+	for i in 60 * 15:
+		# His heart kept broken (nothing to give it back but time).
+		if hounded._fighter.squad != null:
+			hounded._fighter.squad.morale = -2.0
+
+		# Five metres behind him, whichever way he runs.
+		var off35: Vector3 = hounded.global_position - player.global_position
+		off35.y = 0.0
+
+		if off35.length() > 5.5 or off35.length() < 4.5:
+			var at35: Vector3 = hounded.global_position - (off35.normalized() if off35.length() > 0.01 else Vector3.FORWARD) * 5.0
+			player.global_position = Vector3(at35.x, 1.05, at35.z)
+			player.velocity = Vector3.ZERO
+
+		await _frames(1)
+		dropped_it[0] = dropped_it[0] or int(hounded.state) != 4
+
+	_check("W35 run from with you on his heels in the dark (heard, not seen), he does not give up the flight",
+		not dropped_it[0] and hounded._fighter.squad != null and hounded._fighter.squad.will_of(hounded) == &"broken",
+		"gave up %s, will %s" % [dropped_it[0], hounded._fighter.squad.will_of(hounded) if hounded._fighter.squad != null else &"-"])
+
 
 # --------------------------------------------------------------------------
 

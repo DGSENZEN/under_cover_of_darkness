@@ -51,6 +51,13 @@ const LOOPED := [&"Sword_Idle"]
 ## Bones the legs keep while the arms hold a guard: the rest follow the arms.
 const LEGS := [&"root", &"pelvis", &"spine_01", &"thigh_l", &"calf_l", &"foot_l", &"ball_l",
 	&"thigh_r", &"calf_r", &"foot_r", &"ball_r"]
+## Something held through the fist (a torch's stick, a lantern's bail, a
+## haft), for attach on "hand_r" / "hand_l": its +Y along the thumb side,
+## centred in the curled fingers. In a hand bone's own space +Y runs along
+## the fingers and +Z out of the thumb side; the palm is -X on the right hand
+## and +X on the left.
+const FIST_R := Transform3D(Basis(Vector3(0, 1, 0), Vector3(0, 0, 1), Vector3(1, 0, 0)), Vector3(-0.03, 0.08, 0.0))
+const FIST_L := Transform3D(Basis(Vector3(0, 1, 0), Vector3(0, 0, 1), Vector3(1, 0, 0)), Vector3(0.03, 0.08, 0.0))
 
 static var _library: AnimationLibrary = null
 static var _scenes := {}
@@ -418,6 +425,18 @@ func set_walk_clip(clip: StringName) -> void:
 func turn_head(yaw: float) -> void:
 	if posture != null:
 		posture.set("head_yaw", yaw)
+
+
+## His head tipped up (positive) or down: radians.
+func pitch_head(pitch: float) -> void:
+	if posture != null:
+		posture.set("head_pitch", pitch)
+
+
+## Leaning back at the waist (a breath in, asleep in his seat): radians.
+func lean_back(angle: float) -> void:
+	if posture != null:
+		posture.set("lean", angle)
 
 
 ## A kick laid over whatever he is doing: `knee` 0..1 up, `extend` 0..1 out.

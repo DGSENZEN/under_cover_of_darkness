@@ -121,6 +121,20 @@ const OPEN_TIME := 1.7
 const KICK_WINDUP := 0.4
 ## Running for help and getting no nearer for this long: he gives that man up.
 const FETCH_STALL := 4.0
+## Running from you: on his heels within FLEE_SENSE (m) you are heard, not
+## seen. No sight nor sound of you for FLEE_GIVE_UP (s), or FLEE_CLEAR_TIME
+## once FLEE_CLEAR (m) clear of you, and he gives it up. With nobody to run to,
+## a bell within FLEE_BELL (m) is what he runs for.
+const FLEE_SENSE := 7.0
+const FLEE_GIVE_UP := 12.0
+const FLEE_CLEAR := 18.0
+const FLEE_CLEAR_TIME := 3.0
+const FLEE_BELL := 35.0
+## How far on he looks for ground to run to (m), keeping to the way he chose
+## for FLEE_KEEP (s), and never passing within FLEE_CLEAR_OF_YOU (m) of you.
+const FLEE_STEP := 7.0
+const FLEE_KEEP := 1.2
+const FLEE_CLEAR_OF_YOU := 2.0
 ## A hop back out of a blow: how fast it starts, and how far it gets him
 ## before a blade that was about to land does.
 const BACKSTEP_SPEED := 8.0
@@ -136,6 +150,11 @@ const THROW_RANGE := 14.0
 ## from him faster than RUNNING_OFF (m/s), is worth a throw.
 const GRAB_NEAR := 6.0
 const THROW_MEANT := 6.0
+## Not from nearer you than this (m): that close, it is his blade's work. A
+## throw given up (let fall unthrown), none thought of again for this long
+## (s): no picking the same stool up and putting it down again, over and over.
+const THROW_NEAR := 2.2
+const THROW_REST := 8.0
 const KEEP_AWAY := 5.0
 const KEPT_AWAY := 2.0
 const RUNNING_OFF := 2.0
@@ -144,6 +163,13 @@ const WAIT_WALK := 2.2
 ## Calling where you are to the others who cannot see you: at most this often
 ## for the whole squad (Squad.may_call), and a lookout this often.
 const SPOT_EVERY := 2.4
+## Lost sight of you, he follows on the way you went, a few steps at a time
+## (GuardNav.scent), while he had you this recently (s).
+const SCENT_FRESH := 4.0
+## A man told where you are only once he has not had you for this long (s),
+## and not while he fights within this of you (m): he knows.
+const SPOT_STALE := 1.0
+const SPOT_BESIDE := 6.0
 ## Behind you, spikes, fire or a drop: the boot is that much likelier. He
 ## weighs it up this often (s), and his mind made up, means nothing else for
 ## this long: he closes to a kick's reach for it instead of swinging from
@@ -164,7 +190,7 @@ const ARCHETYPES := {
 		"attacks": {&"overhead": 1.0, &"left": 1.0, &"right": 1.0, &"thrust": 0.6, &"sweep": 0.3},
 		"posture": 100.0, "delay_chance": 0.25, "grip_loss": 0.4, "spacing": 0.35,
 		"follow": {&"left": [&"right", &"right", &"bash", &"overhead"], &"right": [&"left", &"overhead", &"thrust"], &"overhead": [&"thrust", &"left"], &"thrust": [&"left", &"right"], &"sweep": [&"overhead"], &"bash": [&"overhead", &"thrust"]},
-		"look": {"scale": 1.0, "kind": &"swordsman", "outfit": &"swordsman", "armour": [&"nasalhelm", &"pauldron_r", &"pauldron_l"], "weapon": &"sword"},
+		"look": {"scale": 1.0, "kind": &"swordsman", "weapon": &"sword"},
 	},
 	&"duelist": {
 		"speaker": "Duelist",
@@ -177,7 +203,7 @@ const ARCHETYPES := {
 		"attacks": {&"left": 1.0, &"right": 1.0, &"thrust": 1.4, &"overhead": 0.5, &"sweep": 0.35},
 		"posture": 85.0, "delay_chance": 0.35, "leap_chance": 0.35, "grip_loss": 0.3, "spacing": 0.55, "carries_lantern": false,
 		"follow": {&"thrust": [&"thrust", &"left", &"right", &"sweep"], &"left": [&"right", &"thrust"], &"right": [&"left", &"thrust", &"sweep"], &"leap": [&"thrust", &"left"], &"sweep": [&"thrust"]},
-		"look": {"scale": 0.94, "kind": &"duelist", "outfit": &"duelist", "female": true, "hair": [&"Hair_Buns"], "hair_tint": Color(0.35, 0.22, 0.14), "weapon": &"rapier"},
+		"look": {"scale": 0.94, "kind": &"duelist", "female": true, "weapon": &"rapier"},
 	},
 	&"brute": {
 		"speaker": "Brute",
@@ -191,7 +217,7 @@ const ARCHETYPES := {
 		"attacks": {&"heavy": 1.0, &"overhead": 0.7, &"left": 0.5, &"sweep": 0.45},
 		"posture": 190.0, "delay_chance": 0.15, "charge_chance": 0.3, "deathblows": 2, "grip_loss": 0.0, "carries_lantern": false,
 		"follow": {&"overhead": [&"heavy", &"sweep"], &"left": [&"overhead", &"heavy"], &"sweep": [&"heavy"], &"charge": [&"heavy"]},
-		"look": {"scale": 1.25, "kind": &"brute", "outfit": &"brute", "hair": [&"Hair_Buzzed", &"Hair_Beard"], "hair_tint": Color(0.25, 0.2, 0.18), "armour": [&"pauldron_r"], "weapon": &"maul"},
+		"look": {"scale": 1.25, "kind": &"brute", "weapon": &"maul"},
 	},
 	&"archer": {
 		"speaker": "Archer",
@@ -202,7 +228,7 @@ const ARCHETYPES := {
 		"strafe_speed": 1.3, "counter_chance": 0.0, "stagger_time": 0.3,
 		"ranged": true, "draw_time": 0.95, "shot_speed": 30.0, "backstep_chance": 0.3,
 		"attacks": {&"kick": 1.0}, "posture": 60.0, "kick_range": 2.1, "grip_loss": 0.5,
-		"look": {"scale": 0.97, "kind": &"archer", "outfit": &"archer", "armour": [&"hood"], "weapon": &"crossbow"},
+		"look": {"scale": 0.97, "kind": &"archer", "weapon": &"crossbow"},
 	},
 	&"trainer": {
 		"speaker": "Arms master",
@@ -212,7 +238,7 @@ const ARCHETYPES := {
 		"poise": 99.0, "guard_damage": 14.0, "strafe_speed": 0.0, "stays_put": true, "kick_resist": 0.0, "topple_scale": 0.0, "posture": 99999.0,
 		"timing_variance": 0.0, "grip_loss": 0.0, "carries_lantern": false,
 		"attacks": {&"overhead": 1.0, &"left": 0.6, &"right": 0.6, &"thrust": 0.5},
-		"look": {"scale": 1.0, "kind": &"arms_master", "outfit": &"trainer", "hair": [&"Hair_SimpleParted", &"Hair_Beard"], "hair_tint": Color(0.7, 0.68, 0.64), "weapon": &"sword"},
+		"look": {"scale": 1.0, "kind": &"arms_master", "weapon": &"sword"},
 	},
 }
 
@@ -395,6 +421,11 @@ var _punish_until := -1.0
 var _help_call := 0.0
 var _last_place: StringName = &""
 var _fled_unseen := 0.0
+## Where he is running to, running from you, and until when he keeps to it.
+var _flee_goal := Vector3.ZERO
+var _flee_until := -10.0
+## Running for the bell, he has cried out that he is.
+var _cried_bell := false
 ## How long he has waited at his place at your side for his turn (a rash
 ## man's patience runs out), and how long more he gives ground (craven).
 var _flank_waited := 0.0
@@ -433,6 +464,7 @@ var _fetch_check := 0.0
 ## Set on throwing something at you because it helps (_throw_worth): until
 ## then (game time). And how long you have kept out of his reach.
 var _throw_meant_until := -100.0
+var _no_throw_until := -100.0
 var _kept_away := 0.0
 ## Calling where you are: until the next call.
 var _spot_timer := 0.0
@@ -1195,15 +1227,22 @@ func leave_combat() -> void:
 	_countering = false
 	_was_fighting = false
 	_scented = false
+	_cried_bell = false
+	_fled_unseen = 0.0
 
 	if _fetching != null and is_instance_valid(_fetching):
 		Dangers.unclaim(_fetching, guard)
 
 	_fetching = null
-	_throw_meant_until = -100.0
+	_give_up_throw()
 	_shot_point = Vector3.INF
 	_boot_until = -10.0
 	release_token()
+
+	# The fight over: whatever he picked up to throw is let fall, not carried
+	# about the hunt and his rounds after.
+	if guard._hands != null and guard._hands.held != null:
+		guard._hands.drop_held()
 
 	if guard._mercy != null:
 		guard._mercy.reset()
@@ -1597,10 +1636,17 @@ func _flee(delta: float, target: Node3D, sees: bool, to: Vector3) -> void:
 		guard._stop(delta)
 		return
 
-	# Broken and away, and no sight of you for a good while: he gives it up.
-	_fled_unseen = 0.0 if sees else _fled_unseen + delta
+	var away: Vector3 = guard.global_position - target.global_position
+	away.y = 0.0
+	var far := away.length()
+	away = away.normalized() if far > 0.01 else guard.global_basis.z
 
-	if _fled_unseen > 12.0 and squad != null and squad.will_of(guard) == &"broken":
+	# Broken and away, no sight nor sound of you for a while (on his heels
+	# you are heard, not seen): he gives it up, and goes back to his post
+	# (sooner once well clear of you).
+	_fled_unseen = 0.0 if sees or far < FLEE_SENSE else _fled_unseen + delta
+
+	if squad != null and squad.will_of(guard) == &"broken" and (_fled_unseen > FLEE_GIVE_UP or (far > FLEE_CLEAR and _fled_unseen > FLEE_CLEAR_TIME)):
 		_fled_unseen = 0.0
 		guard._give_up()
 		return
@@ -1609,13 +1655,14 @@ func _flee(delta: float, target: Node3D, sees: bool, to: Vector3) -> void:
 	if guard._mercy.run_to_haven(delta, target, sees, to):
 		return
 
-	var away: Vector3 = guard.global_position - target.global_position
-	away.y = 0.0
-	var far := away.length()
-	away = away.normalized() if far > 0.01 else guard.global_basis.z
+	# Nobody to run to: the bell, if he can get to it without going past you.
+	if _run_to_bell(delta, target):
+		return
 
-	if far < 14.0:
-		guard._go_to(guard.global_position + away * 6.0)
+	# Else away from you, and on out of your sight: where the ground goes
+	# (not into a wall or a corner), never back past you.
+	if far < 14.0 or (sees and far < FLEE_CLEAR * 1.6):
+		guard._go_to(_flee_point(target, away))
 
 		if guard._walk(guard.chase_speed * 1.1, delta):
 			guard._stop(delta)
@@ -1628,6 +1675,81 @@ func _flee(delta: float, target: Node3D, sees: bool, to: Vector3) -> void:
 
 		if sees:
 			guard._face(to, delta)
+
+
+## Where to run from `target`: of the ways more or less away from you
+## (`away`), the one whose ground (the navmesh, FLEE_STEP on) takes him
+## furthest from you without passing near you; kept a moment (FLEE_KEEP)
+## once chosen, so he does not dither between two.
+func _flee_point(target: Node3D, away: Vector3) -> Vector3:
+	var now: float = guard._game_time
+
+	if now < _flee_until and guard._flat_distance(_flee_goal) > 1.2:
+		return _flee_goal
+
+	var map: RID = guard.get_world_3d().navigation_map
+	var from: Vector3 = guard.global_position
+	var you: Vector3 = target.global_position
+	var best := from + away * FLEE_STEP
+	var best_score := -INF
+
+	for turn in [0.0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9]:
+		var way := away.rotated(Vector3.UP, turn)
+		var guess := from + way * FLEE_STEP
+		var on := NavigationServer3D.map_get_closest_point(map, guess)
+		var reach := Vector2(on.x - from.x, on.z - from.z).length()
+
+		if reach < 2.0:
+			continue
+
+		# Not back past you on the way.
+		var along := (on - from)
+		along.y = 0.0
+		var t := clampf((you - from).dot(along) / maxf(along.length_squared(), 0.001), 0.0, 1.0)
+		var closest := from + along * t
+
+		if Vector2(closest.x - you.x, closest.z - you.z).length() < FLEE_CLEAR_OF_YOU:
+			continue
+
+		var score := Vector2(on.x - you.x, on.z - you.z).length() + reach * 0.3 - absf(turn) * 0.8
+
+		if score > best_score:
+			best_score = score
+			best = on
+
+	_flee_goal = best
+	_flee_until = now + FLEE_KEEP
+	return best
+
+
+## Broken, with nobody of his own to run to: the alarm bell, if one near him
+## can be rung and he can get to it without going past you (nearer it than
+## you are); rung, it brings them all. True while he is about it.
+func _run_to_bell(delta: float, target: Node3D) -> bool:
+	var bell: Node3D = Dangers.bell_near(guard.get_tree(), guard.global_position, FLEE_BELL)
+
+	if bell == null:
+		return false
+
+	var rope: Vector3 = bell.rope_point()
+
+	if target.global_position.distance_to(rope) < guard.global_position.distance_to(rope) + 1.0:
+		return false
+
+	if guard._flat_distance(rope) > 0.9:
+		guard._go_to(rope)
+		guard._walk(guard.chase_speed * 1.1, delta)
+
+		if temper != null and guard._bark_timer <= 0.0 and not _cried_bell:
+			_cried_bell = true
+			guard.bark(temper.line(&"bell"))
+
+		return true
+
+	guard._stop(delta)
+	guard._face(bell.global_position - guard.global_position, delta)
+	guard._hands.ring_bell(bell, guard.last_known_position)
+	return true
 
 
 ## Running for help: to the man he is fetching, crying out as he goes, a
@@ -1764,10 +1886,11 @@ func _stand_guard(delta: float, target: Node3D, sees: bool, to: Vector3, dist: f
 ## (GuardNav.lead); where he last had you (seen, or called by his own) if not;
 ## and, there and still nothing, a few steps on the way you went.
 func _chase_point(target: Node3D, sees: bool, dist: float) -> Vector3:
+	# (Up a ladder or over an edge, where you come out: goal_of.)
 	if sees:
 		_scented = false
 		_scent_from = Vector3.INF
-		return guard._nav.lead(target, guard._feet_of(target), dist, guard.chase_speed)
+		return guard._nav.lead(target, guard.goal_of(target), dist, guard.chase_speed)
 
 	var lost_at: Vector3 = guard.last_known_position
 
@@ -1775,10 +1898,21 @@ func _chase_point(target: Node3D, sees: bool, dist: float) -> Vector3:
 	if _scented and _scent_from.distance_to(lost_at) > 2.0:
 		_scented = false
 
-	if not _scented and guard._flat_distance(lost_at) < 1.2:
+	# There is where he last had you, not under it (on a tower, up a
+	# ladder): unless his path can take him no nearer.
+	var level: bool = absf(lost_at.y - guard.global_position.y - 1.0) < 1.5 or guard._agent == null or guard._agent.is_navigation_finished()
+
+	if not _scented and guard._flat_distance(lost_at) < 1.2 and level:
 		_scented = true
 		_scent_from = lost_at
 		_scent_point = guard._nav.scent(lost_at, guard._seen_heading)
+	elif _scented and guard._flat_distance(_scent_point) < 1.2 and guard._since_seen < SCENT_FRESH:
+		# Still on it: a few steps more the way you went, each time he gets
+		# there, while the scent is fresh (not stood sniffing at the end of it).
+		var on: Vector3 = guard._nav.scent(_scent_point, guard._seen_heading)
+
+		if on.distance_to(_scent_point) > 1.0:
+			_scent_point = on
 
 	return _scent_point if _scented else lost_at
 
@@ -1793,7 +1927,8 @@ func _update_reach(delta: float, target: Node3D, _level: float) -> void:
 		return
 
 	_reach_check = 0.5
-	var feet: Vector3 = guard._feet_of(target)
+	# On a ladder or over an edge: where you come out.
+	var feet: Vector3 = guard.goal_of(target)
 
 	# Afloat, you are at the water's surface as its navmesh has it.
 	var water: Node3D = WaterScript.at(guard.get_tree(), feet + Vector3.UP * 0.05, 0.3)
@@ -1842,8 +1977,21 @@ func _call_out_where(delta: float, target: Node3D) -> void:
 			if member == guard or member.get("can_see_target") == true or member.global_position.distance_to(guard.global_position) >= 45.0:
 				continue
 
-			blind = true
+			# No telling wanted by a man fighting at your side who lost you a
+			# moment (behind him, round a pillar), one who only now had you,
+			# or one running or down: only by those who would come to it.
+			var status: StringName = squad.status_of(member)
 			var unseen := minf(float(member.get("_since_seen")), float(member.get("_since_heard_of")))
+
+			if status == &"running" or status == &"down" or unseen < SPOT_STALE:
+				continue
+
+			var off: Vector3 = member.global_position - target.global_position
+
+			if status == &"fighting" and Vector2(off.x, off.z).length() < SPOT_BESIDE:
+				continue
+
+			blind = true
 
 			if unseen > float(member.get("lose_time")) - 1.5:
 				losing = true
@@ -1856,8 +2004,11 @@ func _call_out_where(delta: float, target: Node3D) -> void:
 	Comms.call_out(guard, &"spotted", feet, {"heading": going if going is Vector3 else Vector3.ZERO})
 
 	# Calling you out is a lookout's whole work: he says it over anything.
-	if watching or guard._bark_timer <= 0.0:
+	# Others say it now and then, not every time it is called (Guard._chorus).
+	if watching:
 		guard.bark(Comms.spotted_line(feet, guard))
+	else:
+		guard._chorus(&"spotted", Comms.spotted_line(feet, guard))
 
 	squad.called()
 
@@ -1910,7 +2061,7 @@ func _fetch_something(delta: float, target: Node3D, sees: bool, dist: float) -> 
 		if _fetching == null and hands.held == null and sees and dist <= THROW_RANGE + 2.0 and not ranged:
 			if _unreachable or not hands.armed:
 				_fetching = _thing_to_throw()
-			elif _throw_worth(target, dist):
+			elif guard._game_time >= _no_throw_until and _throw_worth(target, dist):
 				# It helps them: something near to hand, and his turn for it.
 				var thing := _thing_to_throw(GRAB_NEAR, role() == &"lookout")
 
@@ -1968,7 +2119,7 @@ func _give_up_throw() -> void:
 ## (KEPT_AWAY) or running off from him. As likely as his reason is good, and
 ## likelier the more guile he has.
 func _throw_worth(target: Node3D, dist: float) -> bool:
-	if squad == null or ranged or dist < 2.2 or dist > THROW_RANGE:
+	if squad == null or ranged or dist < THROW_NEAR or dist > THROW_RANGE:
 		return false
 
 	var place := role()
@@ -2264,6 +2415,7 @@ func _consider_attack(delta: float, target: Node3D, to: Vector3, dist: float, le
 		if not _unreachable and guard._hands.armed and dist < _reach(&"overhead") + (0.2 if _throw_meant() else 1.0):
 			guard._hands.drop_held()
 			_give_up_throw()
+			_no_throw_until = guard._game_time + THROW_REST
 		else:
 			if dist <= THROW_RANGE and dist >= 1.5 and _clear_shot(target) and _take_shot(target):
 				_start(&"throw")

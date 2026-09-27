@@ -22,6 +22,10 @@ extends RefCounted
 ##
 ## Messages carry the time they were called (`now`, the same clock for
 ## everyone), so a man who hears two knows which is fresher.
+##
+## Not all at once: what many men would say at the same moment (coming to a
+## call, a noise heard, the hunt given up) is said by the first of them near
+## (may_voice); the rest come, or stand easy, without a word.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 
@@ -41,11 +45,43 @@ const DANGER := ["Powder! Get back!", "It's going to blow! Move!", "Barrel! Get 
 const SEND := ["%s! Something %s! Go and look!", "%s! Movement %s! Have a look!", "%s! I saw something %s! Go and see!"]
 
 static var _serial := 0
+## The same sort of thing said within CHORUS_REACH (m) in the last
+## CHORUS_TIME (s) by as many as want saying it: the rest keep quiet.
+const CHORUS_TIME := 2.5
+const CHORUS_REACH := 18.0
+## Said lately: [time, kind, where].
+static var _voiced: Array = []
 
 
 ## Seconds of game time: the one clock every man's calls are stamped with.
 static func now() -> float:
 	return float(Engine.get_physics_frames()) / float(maxi(Engine.physics_ticks_per_second, 1))
+
+
+## Whether a line of `kind` ("coming", "heard", "lost", "stand_down"...)
+## wants saying at `where` now, or has been said near there just now by
+## `voices` men already. Said (true), it is counted.
+static func may_voice(kind: StringName, where: Vector3, voices := 1) -> bool:
+	var at := now()
+	var said := 0
+	var kept := []
+
+	for entry in _voiced:
+		if at - float(entry[0]) > CHORUS_TIME or float(entry[0]) > at:
+			continue
+
+		kept.append(entry)
+
+		if entry[1] == kind and (entry[2] as Vector3).distance_to(where) < CHORUS_REACH:
+			said += 1
+
+	_voiced = kept
+
+	if said >= voices:
+		return false
+
+	_voiced.append([at, kind, where])
+	return true
 
 
 ## `speaker` calls `what` out about `where`, as loud as `db`. `data` rides

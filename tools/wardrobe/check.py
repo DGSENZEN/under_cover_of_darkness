@@ -72,8 +72,9 @@ def check_kind(recipe):
     combined = common.tri_count(outfit) + parts_triangles(recipe)
     print("wardrobe: %s outfit %d triangles, %d with head, hair and headgear (limit %d)"
           % (recipe["kind"], common.tri_count(outfit), combined, common.budget_of(recipe["kind"])))
-    return validate.check(outfit, armature=armature, reference_joints=reference_joints(recipe["body"]), cloth_bones=cloth,
-                          combined_tris=combined, budget=common.budget_of(recipe["kind"]), bare=set(recipe["bare"]))
+    return foreign_parts(recipe) + validate.check(outfit, armature=armature, reference_joints=reference_joints(recipe["body"]),
+                                                  cloth_bones=cloth, combined_tris=combined,
+                                                  budget=common.budget_of(recipe["kind"]), bare=set(recipe["bare"]))
 
 
 def check_parts(prefix, folder, body="male"):
@@ -105,6 +106,15 @@ def check_parts(prefix, folder, body="male"):
         if piece.get("covers_head"):
             messages += ["%s %s" % (obj.name, m) for m in encloses(obj, piece, armature.data.bones["Head"].head_local)]
 
+        # The beards worn under it lie under its mail: no face of one
+        # through a face of it.
+        if piece.get("over_beards"):
+            beards = hair_of("male", piece["over_beards"])
+            tree = common.bvh([obj])
+            messages += ["%s cuts: %s passes through it at %d pairs of faces" % (obj.name, b.name, len(tree.overlap(common.bvh([b]))))
+                         for b in beards if tree.overlap(common.bvh([b]))]
+            forget(beards)
+
         pivot = armature.data.bones["Head"].head_local
         style = recipes.HAIR.get(obj.name[len(prefix):], {}) if prefix == "Hair_" else {}
 
@@ -117,7 +127,7 @@ def check_parts(prefix, folder, body="male"):
             forget(under)
 
         if piece.get("over") == "head":
-            under = heads()
+            under = heads() + hair_of("male", piece.get("over_hair", []))
             messages += ["%s %s" % (obj.name, m) for m in fit(obj, under, pivot, piece["clearance"], piece["rest"],
                                                               piece.get("fit_rays"))] if under else []
             forget(under)
@@ -150,6 +160,20 @@ def heads(body="male"):
     # The heads by their objects' names (their meshes keep the body's).
     with bpy.data.libraries.load(str(path)) as (source, target):
         target.objects = [name for name in source.objects if name.startswith("Head_")]
+
+    return [o for o in target.objects if o is not None and o.type == "MESH"]
+
+
+def hair_of(body, styles):
+    """The hair `styles` of `body` (its hair file), brought into this file
+    (forget() lets them go): what a hat on a bare head goes over."""
+    path = common.SOURCE / ("%s.blend" % common.part_target("hair", body))
+
+    if not path.exists() or not styles:
+        return []
+
+    with bpy.data.libraries.load(str(path)) as (source, target):
+        target.objects = [name for name in source.objects if name in ["Hair_%s" % s for s in styles]]
 
     return [o for o in target.objects if o is not None and o.type == "MESH"]
 
@@ -272,19 +296,23 @@ def collar_top(kind):
 
 def parts_triangles(recipe):
     """The heaviest head, hair, beard and headgear set the kind can roll
-    (as export.heaviest_parts counts them), from their exported JSON (or
-    their budget, until exported)."""
+    (common.heaviest_combination, as the export counts them), from their
+    exported JSON (or their budget, until exported)."""
+    heaviest = common.heaviest_combination(recipe["options"], read)
+    return PARTS_UNTIL_EXPORTED if heaviest is None else heaviest
+
+
+def foreign_parts(recipe):
+    """Every face, hair style, beard and headgear piece a kind's options
+    name that is made for another body than the kind's (on his skeleton it
+    would sit at the other body's head height)."""
+    body = recipe["body"]
     options = recipe["options"]
-    heads = [read("heads/%s.json" % face) for face in options["faces"]]
-    hair = [read("hair/%s.json" % style) for style in options.get("hair", [])]
-    beards = [read("hair/%s.json" % style) for style in options.get("beards", [])]
-    sets = [[read("headgear/%s.json" % piece) for piece in pieces] for pieces in options["headgear"]]
-
-    if any(p is None for p in heads + hair + beards) or any(p is None for s in sets for p in s):
-        return PARTS_UNTIL_EXPORTED
-
-    return (max(h["triangles"] for h in heads) + max((h["triangles"] for h in hair), default=0)
-            + max((b["triangles"] for b in beards), default=0) + max((sum(p["triangles"] for p in s) for s in sets), default=0))
+    named = [(name, recipes.HEADS.get(name, {})) for name in options.get("faces", [])]
+    named += [(name, recipes.HAIR.get(name, {})) for key in ("hair", "beards") for name in options.get(key, []) if name != ""]
+    named += [(name, recipes.HEADGEAR.get(name, {})) for pieces in options.get("headgear", []) for name in pieces]
+    return ["options: %s is made for the %s body" % (name, part.get("body", "male"))
+            for name, part in named if part.get("body", "male") != body]
 
 
 def read(relative):
@@ -304,4 +332,5 @@ def reference_joints(body):
     return joints
 
 
-main()
+if __name__ == "__main__":
+    main()

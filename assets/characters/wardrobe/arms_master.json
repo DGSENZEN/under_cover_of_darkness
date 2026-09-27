@@ -2,6 +2,7 @@
  "kind": "arms_master",
  "body": "male",
  "triangles": 1498,
+ "budget": 3000,
  "cloth": [
   {
    "chain": "doublet_skirt_back",

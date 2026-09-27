@@ -37,7 +37,7 @@ const GATHERING := "res://scripts/AISystem/Gathering.gd"
 const SUSPICIOUS := 1
 const COMBAT := 4
 
-## By temperament: [chest_lean, shoulders, head_pitch] (Posture).
+## By temperament: [chest_lean, shoulders, head_bow] (Posture).
 const POSTURE := {
 	&"rash": [0.06, 0.0, -0.05],
 	&"craven": [0.12, 0.45, 0.12],
@@ -353,7 +353,7 @@ func _update_posture(posture: Object, delta: float) -> void:
 
 	posture.set("chest_lean", lean * _calm)
 	posture.set("shoulders", shoulders * _calm)
-	posture.set("head_pitch", (bow + _pitch) * _calm)
+	posture.set("head_bow", (bow + _pitch) * _calm)
 	posture.set("chest_yaw", 0.25 * _yaw * _weight)
 
 	# His chest, breathing.

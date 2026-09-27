@@ -115,8 +115,16 @@ const SEARCH_SPREAD := 4.0
 const CUT_OFF := 10.0
 ## A flanker with this much drive (and less guile than PATIENT_GUILE) will not
 ## wait for you to commit to another: he goes in once his patience is gone.
+## A patient man waits longer (PATIENT_WAIT, s), not for ever. At your back
+## (you facing further from him than BACK_DOT) for BACK_WAIT (s), he strikes.
 const IMPATIENT_DRIVE := 0.65
 const PATIENT_GUILE := 0.65
+const PATIENT_WAIT := 7.0
+const BACK_DOT := -0.35
+const BACK_WAIT := 1.0
+## A man sent for help is not sent to one he would have to run past you
+## (within this, m) to reach.
+const FETCH_PAST := 3.0
 ## Where you are, called to the others: at most this often (s).
 const SPOT_EVERY := 2.4
 ## ...or as soon as this, when one of them who cannot see you is about to
@@ -157,9 +165,9 @@ const WATCH_NEAR := 5.0
 const WATCH_FAR := 11.0
 
 const Dangers := preload("res://scripts/AISystem/Dangers.gd")
+const Comms := preload("res://scripts/AISystem/Comms.gd")
 
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
-const Comms := preload("res://scripts/AISystem/Comms.gd")
 ## Calls answered, by the talk (a second man answers: TalkDirector).
 const TALK_DIRECTOR := "res://scripts/AISystem/Talk/TalkDirector.gd"
 
@@ -253,8 +261,10 @@ var _status_at := -100.0
 var _fell_back_at_lost := 0
 ## When one of them last called where you are.
 var _last_spot_call := -100.0
-## The hunt's watcher, his vantage, and until when he keeps it.
+## The hunt's watcher, his vantage, and until when he keeps it; and which
+## sighting (its time) was last watched.
 var _watcher: WeakRef = null
+var _watched_sighting := -INF
 var _watch_point := Vector3.INF
 var _watch_until := -100.0
 
@@ -400,9 +410,11 @@ func member_died(guard: Node3D, killed := true) -> void:
 		_leader_fell_at = clock
 		_berserk_until = clock + 12.0
 
-	# The brute takes it personally.
+	# The brute takes it personally: a brute in the fight, near enough to have
+	# seen it (one roar, not one from every brute in the hunt).
 	for member in members():
-		if _kind(member) == &"brute":
+		if _kind(member) == &"brute" and int(member.state) == 4 and (member as Node3D).global_position.distance_to(guard.global_position) < 15.0 \
+				and Comms.may_voice(&"roar", (member as Node3D).global_position):
 			member.bark("RAAAGH!")
 
 	# "Man down!", and a man counts them.
@@ -548,7 +560,7 @@ func may_strike(guard: Node3D) -> bool:
 			var near := target()
 			return near != null and guard.global_position.distance_to(near.global_position) < float(guard._fighter._reach(&"overhead")) + 0.5
 		&"flank":
-			return _committed_away_from(guard) or impatient_now(guard)
+			return _committed_away_from(guard) or impatient_now(guard) or _at_your_back(guard)
 		&"hold":
 			# Only when you come to him.
 			var foe := target()
@@ -558,6 +570,22 @@ func may_strike(guard: Node3D) -> bool:
 			return enemy != null and guard.global_position.distance_to(enemy.global_position) < 2.0
 
 	return true
+
+
+## At your back (you face well away from him), and there a moment: your back
+## is his to strike, busy or not.
+func _at_your_back(guard: Node3D) -> bool:
+	var enemy := target()
+	var fighter = guard.get("_fighter")
+
+	if enemy == null or fighter == null or float(fighter._flank_waited) < BACK_WAIT:
+		return false
+
+	var facing := -enemy.global_basis.z
+	facing.y = 0.0
+	var to_him := guard.global_position - enemy.global_position
+	to_him.y = 0.0
+	return to_him.length() > 0.01 and facing.length() > 0.01 and facing.normalized().dot(to_him.normalized()) < BACK_DOT
 
 
 ## You are busy with someone other than `guard`: swinging, winding up,
@@ -1301,8 +1329,9 @@ func _break_point(guard: Node3D) -> float:
 func patience_of(guard: Node3D) -> float:
 	var drive := drive_of(guard)
 
+	# A patient man waits for his moment, but not for ever.
 	if _guile(guard) >= PATIENT_GUILE or drive < IMPATIENT_DRIVE:
-		return INF
+		return PATIENT_WAIT * (2.0 if held(guard) else 1.0)
 
 	var wait := lerpf(4.0, 1.0, clampf((drive - IMPATIENT_DRIVE) / (1.0 - IMPATIENT_DRIVE), 0.0, 1.0))
 	return wait * (2.0 if held(guard) else 1.0)
@@ -1367,6 +1396,8 @@ func helper_for(runner: Node3D) -> Node3D:
 	var best: Node3D = null
 	var best_length := HELPER_RANGE
 	var map: RID = runner.get_world_3d().navigation_map
+	# Not a man he would have to run past you to reach.
+	var enemy := target()
 
 	for other in runner.get_tree().get_nodes_in_group(&"guards"):
 		if not _can_fetch(other, runner) or other.global_position.distance_to(runner.global_position) > HELPER_RANGE:
@@ -1375,6 +1406,10 @@ func helper_for(runner: Node3D) -> Node3D:
 		var path := NavigationServer3D.map_get_path(map, runner.global_position, other.global_position, true)
 
 		if path.is_empty() or path[path.size() - 1].distance_to(other.global_position) > 2.0:
+			continue
+
+		# (Nearer you than that already, only nearer still counts.)
+		if enemy != null and _passes(path, enemy.global_position, minf(FETCH_PAST, enemy.global_position.distance_to(runner.global_position) - 0.5)):
 			continue
 
 		var length := 0.0
@@ -1388,11 +1423,27 @@ func helper_for(runner: Node3D) -> Node3D:
 
 	var bell: Node3D = Dangers.bell_near(runner.get_tree(), runner.global_position, best_length)
 
-	if bell != null and _can_fetch(bell, runner):
+	# The bell, likewise not past you (you nearer it than he is).
+	if bell != null and _can_fetch(bell, runner) and (enemy == null or enemy.global_position.distance_to(bell.global_position) > runner.global_position.distance_to(bell.global_position)):
 		best = bell
 
 	_helper_cache[id] = [weakref(best) if best != null else null, clock]
 	return best
+
+
+## Whether `path` goes within `clearance` (flat) of `point`.
+static func _passes(path: PackedVector3Array, point: Vector3, clearance: float) -> bool:
+	for i in range(1, path.size()):
+		var a := Vector2(path[i - 1].x, path[i - 1].z)
+		var b := Vector2(path[i].x, path[i].z)
+		var p := Vector2(point.x, point.z)
+		var ab := b - a
+		var t := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
+
+		if (a + ab * t).distance_to(p) < clearance:
+			return true
+
+	return false
 
 
 func _can_fetch(other: Node, runner: Node3D) -> bool:
@@ -1657,6 +1708,11 @@ func watch_point_for(guard: Node3D) -> Variant:
 		watcher = null
 		_watcher = null
 
+	# One watch for each place you were last seen: his time up, he searches
+	# with the rest (and is not set to watch the same place over again).
+	if watcher == null and float(last_sighting.get("time", -1.0)) == _watched_sighting:
+		return null
+
 	if watcher == null:
 		# A man set to watch among them keeps watch from his own post
 		# (Guard._next_search_point): nobody else need. (Come down to
@@ -1688,6 +1744,7 @@ func watch_point_for(guard: Node3D) -> Variant:
 		_watcher = weakref(best)
 		_watch_point = point
 		_watch_until = clock + WATCH_TIME
+		_watched_sighting = float(last_sighting.get("time", -1.0))
 		var t := _temper_of(best)
 
 		if t != null and best.has_method("bark") and float(best.get("_bark_timer")) <= 0.0:

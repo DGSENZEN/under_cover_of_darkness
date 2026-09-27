@@ -38,6 +38,35 @@ func get_rope_normal(from: Vector3) -> Vector3:
 	return n.normalized()
 
 
+## Where it leads, as world points by them: [the floor at its foot, in front
+## of it; over its top, on what it goes up to] (for a rope, straight below
+## and at its top): the ends of the way across the guards found up it
+## (NavLinks, "climb_ends"), else worked out from its box. What a guard after
+## a man on it goes for (Guard.goal_of).
+func ends() -> Array:
+	if has_meta(&"climb_ends"):
+		return get_meta(&"climb_ends")
+
+	var box := AABB()
+
+	for child in get_children():
+		if child is CollisionShape3D and (child as CollisionShape3D).shape is BoxShape3D:
+			var size: Vector3 = ((child as CollisionShape3D).shape as BoxShape3D).size
+			box = (child as CollisionShape3D).global_transform * AABB(-size * 0.5, size)
+			break
+
+	if box.size == Vector3.ZERO:
+		return [global_position, global_position]
+
+	var at := global_position
+
+	if rope:
+		return [Vector3(at.x, box.position.y, at.z), Vector3(at.x, box.end.y, at.z)]
+
+	var out := get_climb_normal()
+	return [Vector3(at.x, box.position.y, at.z) + out * 0.6, Vector3(at.x, box.end.y + 0.3, at.z) - out * 0.8]
+
+
 ## Unit normal pointing out of the wall, toward the climber.
 func get_climb_normal() -> Vector3:
 	var n := global_transform.basis.z

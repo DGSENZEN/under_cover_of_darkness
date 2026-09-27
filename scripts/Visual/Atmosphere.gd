@@ -9,7 +9,6 @@ extends Node3D
 ##   moths   circling the torches.
 ##   wind    in gusts from the north-west: flames lean (Torch.lean), embers
 ##           and dead leaves skitter.
-##   chips   off the chopping block at each blow (`chips_at`: Fx's wood).
 ##   crows   on the wall-walk (`add_crows`): off at a shout or a man running
 ##           near, back a while later.
 ## `quality` thins it for the frame rate: 1 loses the moths, 0 the leaves
@@ -93,12 +92,6 @@ static func of(node: Node) -> Node:
 		return null
 
 	return node.get_tree().get_first_node_in_group(&"atmosphere")
-
-
-## Chips off the chopping block at `at` (only where there is an atmosphere).
-static func chips_at(context: Node, at: Vector3) -> void:
-	if of(context) != null:
-		Fx.dust(context, at, Vector3.UP, 0.5, "wood")
 
 
 func _ready() -> void:

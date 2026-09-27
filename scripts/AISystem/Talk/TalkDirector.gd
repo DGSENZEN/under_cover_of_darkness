@@ -77,10 +77,8 @@ const JOIN_EVERY := 0.5
 const EARSHOT_CALL := 25.0
 ## A missing man asked after with whoever is this near.
 const MISSING_COMPANY := 6.0
-## At the end of a line one man listening may nod or shake his head: the
-## chance, by his temperament (a nod, but a rash man shakes his).
-const REACT_CHANCE := {&"steady": 0.35, &"stubborn": 0.35, &"rash": 0.25}
-const REACT_OTHERWISE := 0.15
+## At the end of a line one man listening may nod or shake his head
+## (GuardLife._take_line, by his temperament).
 const REACTIONS := ["nods", "shakes"]
 ## A rash man's grief turns to rage for this long (s).
 const RAGE_FOR := 20.0
@@ -927,12 +925,18 @@ func _react(talk: Dictionary) -> void:
 	if listeners.is_empty():
 		return
 
+	# How he takes it, by his temperament (GuardLife: an easy man mostly
+	# nods, a hard one mostly shakes his head).
 	var listener: Node = listeners[randi() % listeners.size()]
-	var fighter: RefCounted = listener.get("_fighter")
-	var tag: StringName = fighter.temper.tag if fighter != null and fighter.temper != null else &"steady"
+	var life: RefCounted = listener.get("_life")
 
-	if randf() < float(REACT_CHANCE.get(tag, REACT_OTHERWISE)):
-		listener.emote("shakes" if tag == &"rash" else "nods")
+	if life == null:
+		return
+
+	life._take_line()
+
+	if life._react != &"":
+		listener.emote("nods" if life._react == &"nod" else "shakes")
 
 
 ## Broken off: whoever was to speak next says its interrupt line (if it has

@@ -184,6 +184,7 @@ def export_kind(recipe):
         "kind": kind,
         "body": recipe["body"],
         "triangles": common.tri_count(outfit),
+        "budget": common.budget_of(kind),
         "cloth": chains,
         "colliders": [{"bone": c["bone"], "radius": c["radius"], "height": round(bones[c["bone"]].length, 4)}
                       for c in recipe["colliders"]],
@@ -221,18 +222,13 @@ def kind_marks(recipe, outfit):
 
 def heaviest_parts(recipe):
     """The heaviest head, hair, beard and headgear set the kind can roll
-    (from their exported JSON)."""
-    options = recipe["options"]
-    heads = [read("heads/%s.json" % face) for face in options["faces"]]
-    hair = [read("hair/%s.json" % style) for style in options.get("hair", [])]
-    beards = [read("hair/%s.json" % style) for style in options.get("beards", [])]
-    sets = [[read("headgear/%s.json" % piece) for piece in pieces] for pieces in options["headgear"]]
+    (common.heaviest_combination, from their exported JSON)."""
+    heaviest = common.heaviest_combination(recipe["options"], read)
 
-    if any(p is None for p in heads + hair + beards) or any(p is None for s in sets for p in s):
+    if heaviest is None:
         common.fail("export heads, hair and headgear first: %s needs their triangle counts" % recipe["kind"])
 
-    return (max(h["triangles"] for h in heads) + max((h["triangles"] for h in hair), default=0)
-            + max((b["triangles"] for b in beards), default=0) + max((sum(p["triangles"] for p in s) for s in sets), default=0))
+    return heaviest
 
 
 def read(relative):
@@ -310,7 +306,7 @@ def export_parts(prefix, folder, body="male"):
             # by: a hood's cape top and the line above which it rides his
             # head alone; a helm's foot.
             marks = {"cape_top": g.get("cape", {}).get("top_z"), "rigid_above": g.get("rigid_above"), "foot": g.get("base_z")}
-            data = {"piece": name, "triangles": common.tri_count(obj),
+            data = {"piece": name, "body": g.get("body", "male"), "triangles": common.tri_count(obj),
                     "metal": g["metal"], "hides_hair": g["hides_hair"], "allows_beard": g["allows_beard"],
                     "cloth": own,
                     "colliders": [{"bone": c["bone"], "radius": c["radius"], "height": round(bones[c["bone"]].length, 4)}

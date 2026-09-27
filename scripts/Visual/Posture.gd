@@ -10,6 +10,9 @@ extends SkeletonModifier3D
 
 ## Radians, positive to his left, followed smoothly.
 var head_yaw := 0.0
+## Radians, positive up (looking up at a wall top, at the sky), negative
+## down (asleep in his seat), followed smoothly.
+var head_pitch := 0.0
 ## The way his feet go, radians from straight ahead, positive to his left.
 ## The hips turn toward it and the spine turns back, so he keeps his face.
 var hips_yaw := 0.0
@@ -21,7 +24,7 @@ var extend := 0.0
 var lean := 0.0
 ## Laid over those by his expression (Expression.gd), all followed smoothly
 ## but breath and limp:
-##   head_pitch   radians, positive bowed.
+##   head_bow     radians, positive bowed (under head_pitch, the AI's).
 ##   chest_yaw    radians, positive to his left (the chest after the eyes).
 ##   chest_lean   radians, positive hunched forward.
 ##   shoulders    -1 dropped .. 1 hunched up.
@@ -29,7 +32,7 @@ var lean := 0.0
 ##   hip_shift    -1 .. 1: his weight on one leg or the other.
 ##   limp         0..1, with limp_phase (0..1 through his step): a dip on
 ##                the bad leg.
-var head_pitch := 0.0
+var head_bow := 0.0
 var chest_yaw := 0.0
 var chest_lean := 0.0
 var shoulders := 0.0
@@ -42,8 +45,9 @@ var limp_phase := 0.0
 var man: Node3D
 
 var _head := 0.0
-var _hips := 0.0
 var _pitch := 0.0
+var _hips := 0.0
+var _bow := 0.0
 var _chest_yaw := 0.0
 var _chest_lean := 0.0
 var _shoulders := 0.0
@@ -59,9 +63,10 @@ func _process_modification() -> void:
 
 	var delta := get_process_delta_time()
 	_head = lerp_angle(_head, head_yaw, 1.0 - exp(-8.0 * delta))
+	_pitch = lerp_angle(_pitch, head_pitch, 1.0 - exp(-5.0 * delta))
 	_hips = lerp_angle(_hips, hips_yaw, 1.0 - exp(-10.0 * delta))
 	var follow := 1.0 - exp(-8.0 * delta)
-	_pitch = lerpf(_pitch, head_pitch, follow)
+	_bow = lerpf(_bow, head_bow, follow)
 	_chest_yaw = lerpf(_chest_yaw, chest_yaw, follow)
 	_chest_lean = lerpf(_chest_lean, chest_lean, follow)
 	_shoulders = lerpf(_shoulders, shoulders, follow)
@@ -84,6 +89,13 @@ func _process_modification() -> void:
 	if absf(_head) > 0.001:
 		_turn(skeleton, &"neck_01", up, _head * 0.35)
 		_turn(skeleton, &"Head", up, _head * 0.65)
+
+	# Up at the wall top, down asleep (the AI's), and bowed (his expression).
+	var tip := _pitch - _bow
+
+	if absf(tip) > 0.001:
+		_turn(skeleton, &"neck_01", right, tip * 0.4)
+		_turn(skeleton, &"Head", right, tip * 0.6)
 
 	# His expression, over the animation (not while a leg is up to kick).
 	if knee <= 0.001:
@@ -108,10 +120,6 @@ func _process_modification() -> void:
 		if absf(shrug) > 0.0001:
 			_turn(skeleton, &"clavicle_l", ahead, shrug)
 			_turn(skeleton, &"clavicle_r", ahead, -shrug)
-
-		if absf(_pitch) > 0.001:
-			_turn(skeleton, &"neck_01", right, -_pitch * 0.35)
-			_turn(skeleton, &"Head", right, -_pitch * 0.65)
 
 	if knee > 0.001:
 		var k := clampf(knee, 0.0, 1.0)

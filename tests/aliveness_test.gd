@@ -106,7 +106,7 @@ func _rig() -> void:
 	for f in 40:
 		a.set_motion(Vector3.ZERO, false, 1.0 / 60.0)
 		b.set_motion(Vector3.ZERO, false, 1.0 / 60.0)
-		b.posture.set("head_pitch", 0.4)
+		b.posture.set("head_bow", 0.4)
 		b.posture.set("shoulders", 1.0)
 		await get_tree().physics_frame
 
@@ -119,7 +119,7 @@ func _rig() -> void:
 	var shrug_l := ((pb[&"upperarm_l"] as Transform3D).origin.y - (pb[&"pelvis"] as Transform3D).origin.y) - ((pa[&"upperarm_l"] as Transform3D).origin.y - (pa[&"pelvis"] as Transform3D).origin.y)
 	var shrug_r := ((pb[&"upperarm_r"] as Transform3D).origin.y - (pb[&"pelvis"] as Transform3D).origin.y) - ((pa[&"upperarm_r"] as Transform3D).origin.y - (pa[&"pelvis"] as Transform3D).origin.y)
 	var shrug := minf(shrug_l, shrug_r)
-	b.posture.set("head_pitch", 0.0)
+	b.posture.set("head_bow", 0.0)
 	b.posture.set("shoulders", 0.0)
 	b.posture.set("breath", 0.0)
 
@@ -173,11 +173,13 @@ func _expression() -> void:
 	for g in [craven, steady]:
 		g._life._talk_rest = 99.0
 	await _frames(90)
-	var bones := [&"Head", &"upperarm_l", &"upperarm_r", &"pelvis"]
+	# His shoulders against his neck (the idle clip's own sway and dip, each man
+	# at his own point in it, and his hunched chest move them together).
+	var bones := [&"Head", &"upperarm_l", &"upperarm_r", &"neck_01"]
 	var pc: Dictionary = await _posed(craven._rig.man, bones)
 	var ps: Dictionary = await _posed(steady._rig.man, bones)
 	var hunch: float = (((pc[&"upperarm_l"] as Transform3D).origin.y + (pc[&"upperarm_r"] as Transform3D).origin.y) - ((ps[&"upperarm_l"] as Transform3D).origin.y + (ps[&"upperarm_r"] as Transform3D).origin.y)) * 0.5 \
-		- ((pc[&"pelvis"] as Transform3D).origin.y - (ps[&"pelvis"] as Transform3D).origin.y)
+		- ((pc[&"neck_01"] as Transform3D).origin.y - (ps[&"neck_01"] as Transform3D).origin.y)
 	var bowed: float = _forward_y(ps[&"Head"]) - _forward_y(pc[&"Head"])
 	_check("A5 a craven man stands hunched, shoulders up and head down; a steady one does not",
 		hunch > 0.01 and bowed > 0.05, "shoulders %.3f m higher, head forward %.3f lower" % [hunch, bowed])

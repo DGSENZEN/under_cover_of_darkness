@@ -696,6 +696,330 @@ def case_brute_arms():
     return ["%d rays out of his bare arms meet no skin first (%s)" % (len(holes), holes[0])] if holes else []
 
 
+def case_brute_neck():
+    """The committed brute's throat and the tops of his shoulders are whole
+    under his mantle's inner rim: rays out of the foot of his neck (3 cm
+    under its joint; round his front, to 60 degrees either side, level, a
+    little down and a little up) meet his skin before his fur or his gut.
+    (Steeper up they leave by his neck, which his head fills; further round
+    they skim his shoulders to his mantle's rim hanging over them.)
+    (Cut away under the roll, the skin left a ragged edge there, and his
+    mantle's unlit underside showed through it as black shards.)"""
+    bpy.ops.wm.open_mainfile(filepath=str(common.WARDROBE / "source" / "brute.blend"))
+    outfit, arm = bpy.data.objects["Outfit"], bpy.data.objects["Armature"]
+    tree = BVHTree.FromPolygons([v.co.copy() for v in outfit.data.vertices], [tuple(p.vertices) for p in outfit.data.polygons])
+    fabric = outfit.data.attributes["wr_fabric"].data
+    centre = arm.data.bones["neck_01"].head_local - Vector((0.0, 0.0, 0.03))
+    holes = []
+
+    for elevation in (-15.0, 0.0, 15.0):
+        for azimuth in range(-60, 61, 15):
+            e, a = math.radians(elevation), math.radians(azimuth)
+            hit = tree.ray_cast(centre, Vector((math.cos(e) * math.sin(a), -math.cos(e) * math.cos(a), math.sin(e))), 0.4)
+
+            if hit[2] is None or fabric[hit[2]].value != 0:
+                holes.append("%d up, %d round" % (elevation, azimuth))
+
+    fresh()
+    return ["%d rays out of his neck meet no skin first (%s)" % (len(holes), holes[:4])] if holes else []
+
+
+def width_at(tree, y, z):
+    """How far out to his left a surface stands at (y, z): its outermost
+    hit coming in along x (a low-poly head has few vertices near any one
+    point: its surface is measured, not its vertices)."""
+    hit = common.outer_hit(tree, Vector((0.0, y, z)), Vector((1.0, 0.0, 0.0)), 0.3)
+    return hit.x if hit is not None else 0.0
+
+
+def depth_at(tree, point):
+    """How far a surface stands out from the head's middle (the vertical
+    axis) toward `point`: its outermost hit along that way."""
+    centre = Vector((0.0, 0.0, point[2]))
+    way = (Vector(point) - centre).normalized()
+    hit = common.outer_hit(tree, centre, way, 0.3)
+    return (hit - centre).length if hit is not None else 0.0
+
+
+def case_faces():
+    """Batch 3's faces (§8): male young, weathered, heavy and old, female
+    sharp and soft. Each built face differs from its neighbour where its
+    recipe moves it (the heavy jaw wider, the young cheek not hollowed, the
+    soft jaw rounder than the sharp), within the head budget."""
+    import tempfile
+    from pathlib import Path
+
+    import build
+    import recipes
+
+    male, female = common.parts_of(recipes.HEADS, "male"), common.parts_of(recipes.HEADS, "female")
+
+    if not {"young", "weathered", "heavy", "old"} <= set(male) or not {"sharp", "soft"} <= set(female):
+        return ["faces: male %s, female %s" % (male, female)]
+
+    source = common.WARDROBE / "source"
+    folder = Path(tempfile.mkdtemp(prefix="wardrobe_faces_"))
+    heads = {}
+
+    for body in ("male", "female"):
+        fresh()
+        common.SOURCE, common.BACKUP = folder, folder / "backup"
+
+        try:
+            build.build_heads(True, body)
+        finally:
+            common.SOURCE, common.BACKUP = source, source / "backup"
+
+        for obj in [o for o in bpy.data.objects if o.name.startswith("Head_") and o.type == "MESH"]:
+            points = [v.co.copy() for v in obj.data.vertices]
+            tree = BVHTree.FromPolygons(points, [tuple(p.vertices) for p in obj.data.polygons])
+            heads[obj.name[len("Head_"):]] = (points, tree, common.tri_count(obj))
+
+    fresh()
+    messages = []
+    cheek = (0.047, -0.07, 1.648)
+
+    heavy, weathered = width_at(heads["heavy"][1], -0.04, 1.60), width_at(heads["weathered"][1], -0.04, 1.60)
+
+    if heavy < weathered + 0.004:
+        messages.append("heavy jaw %.4f, weathered %.4f" % (heavy, weathered))
+
+    if depth_at(heads["young"][1], cheek) < depth_at(heads["weathered"][1], cheek) + 0.005:
+        messages.append("young cheek %.4f, weathered %.4f" % (depth_at(heads["young"][1], cheek), depth_at(heads["weathered"][1], cheek)))
+
+    soft, sharp = width_at(heads["soft"][1], -0.045, 1.56), width_at(heads["sharp"][1], -0.045, 1.56)
+
+    if soft < sharp + 0.003:
+        messages.append("soft jaw %.4f, sharp %.4f" % (soft, sharp))
+
+    messages += ["%s %d triangles (limit 450)" % (name, h[2]) for name, h in heads.items() if h[2] > 450]
+    return messages
+
+
+def build_hair_into(folder):
+    """Every hair and beard of both bodies built into `folder`, over the
+    committed heads (copied there first: hair is fitted over them):
+    {style: (points, bones)} with bones the set any vertex is weighted to."""
+    import shutil
+
+    import build
+
+    source = common.WARDROBE / "source"
+
+    for name in ("heads.blend", "heads_female.blend"):
+        shutil.copy(source / name, folder / name)
+
+    made = {}
+
+    for body in ("male", "female"):
+        fresh()
+        common.SOURCE, common.BACKUP = folder, folder / "backup"
+
+        try:
+            build.build_hair(True, body)
+        finally:
+            common.SOURCE, common.BACKUP = source, source / "backup"
+
+        for obj in [o for o in bpy.data.objects if o.name.startswith("Hair_") and o.type == "MESH"]:
+            names = {g.index: g.name for g in obj.vertex_groups}
+            bones = {names[g.group] for v in obj.data.vertices for g in v.groups if g.weight > 1e-4}
+            made[obj.name[len("Hair_"):]] = ([v.co.copy() for v in obj.data.vertices], bones)
+
+    fresh()
+    return made
+
+
+def case_beards_and_tails():
+    """Batch 3's hair (§8): the short beard (his jaw and chin, under his
+    mouth: no cheeks, no moustache), the moustache (his upper lip only),
+    tied hair (the parted cut and a tail down the back of his neck) and her
+    tail (her long hair cut at her nape, tied back): each on his Head and
+    neck alone, the tails clear of what they hang over (above the collars:
+    a man's ends over z 1.52, hers over 1.46)."""
+    import tempfile
+    from pathlib import Path
+
+    import recipes
+
+    missing = [s for s in ("short", "moustache", "tied", "tail") if s not in recipes.HAIR]
+
+    if missing:
+        return ["no recipe for %s" % missing]
+
+    hair = build_hair_into(Path(tempfile.mkdtemp(prefix="wardrobe_beards_")))
+    messages = []
+    short, moustache, tied, tail = (hair[s][0] for s in ("short", "moustache", "tied", "tail"))
+
+    if max(p.z for p in short) > 1.62 or min(p.z for p in short) > 1.56:
+        messages.append("short beard z %.3f..%.3f (want under his mouth, to his chin)" % (min(p.z for p in short), max(p.z for p in short)))
+
+    if not all(abs(p.x) <= 0.045 and 1.62 <= p.z <= 1.65 and p.y <= -0.07 for p in moustache):
+        messages.append("moustache off his upper lip: x %.3f z %.3f..%.3f y %.3f" % (max(abs(p.x) for p in moustache),
+                        min(p.z for p in moustache), max(p.z for p in moustache), max(p.y for p in moustache)))
+
+    if not 1.52 <= min(p.z for p in tied) <= 1.58:
+        messages.append("tied hair's tail ends at z %.3f (want 1.52-1.58)" % min(p.z for p in tied))
+
+    under_nape = [p for p in tail if p.z < 1.57]
+
+    if not under_nape or any(abs(p.x) > 0.03 for p in under_nape) or min(p.z for p in tail) < 1.46:
+        messages.append("her tail: %d points under her nape, widest |x| %.3f, lowest %.3f" % (
+            len(under_nape), max((abs(p.x) for p in under_nape), default=0), min(p.z for p in tail)))
+
+    messages += ["%s on %s" % (s, sorted(hair[s][1])) for s in ("short", "moustache", "tied", "tail")
+                 if not hair[s][1] <= {"Head", "neck_01"}]
+    return messages
+
+
+def case_bare_hat():
+    """The watchman's kettle hat over a bare head (batch 3's helmet variant,
+    §8 "coif or bare head under the kettle hat"): along its rays it clears
+    every male head and every hair style he may wear under it by at least
+    its clearance, and floats no more than its `rest` off any of them."""
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    import build
+    import check
+    import recipes
+
+    g = recipes.HEADGEAR.get("kettlehat_bare")
+
+    if g is None:
+        return ["no kettlehat_bare recipe"]
+
+    source = common.WARDROBE / "source"
+    folder = Path(tempfile.mkdtemp(prefix="wardrobe_bare_hat_"))
+
+    for name in ("heads.blend", "hair.blend"):
+        shutil.copy(source / name, folder / name)
+
+    fresh()
+    common.SOURCE, common.BACKUP = folder, folder / "backup"
+
+    try:
+        build.build_headgear(True)
+        hat = bpy.data.objects["Gear_kettlehat_bare"]
+        pivot = bpy.data.objects["Armature"].data.bones["Head"].head_local
+        unders = check.heads("male") + check.hair_of("male", g["over_hair"])
+        messages = check.fit(hat, unders, pivot, g["clearance"], g["rest"], g.get("fit_rays"))
+        # And every vertex of every head and hair above the hat's band is
+        # under its bowl: along the ray from his head's middle through it,
+        # the hat stands beyond it (sampled rays miss a hair's crest).
+        tree = common.bvh([hat])
+        centre = pivot + Vector((0.0, 0.0, 0.1))
+        out = []
+
+        for obj in unders:
+            for v in obj.data.vertices:
+                if v.co.z <= g["base_z"] + 0.005:
+                    continue
+
+                way = (v.co - centre).normalized()
+                hit = tree.ray_cast(centre, way, 0.5)
+
+                if hit[0] is None or hit[3] < (v.co - centre).length + 0.001:
+                    out.append("%s (%.3f, %.3f, %.3f)" % (obj.name, v.co.x, v.co.y, v.co.z))
+
+        messages += ["%d vertices through the hat: %s" % (len(out), out[:3])] if out else []
+        messages += [] if len(unders) == 4 + len(g["over_hair"]) else ["fitted over %d pieces" % len(unders)]
+    finally:
+        common.SOURCE, common.BACKUP = source, source / "backup"
+
+    fresh()
+    return messages
+
+
+def case_coif_beards():
+    """The spec's coif "hides the hair but allows a beard" (§6): every beard
+    the watchman may wear under it lies under its mail (or in its face
+    opening), no face of the one through a face of the other, on the heads
+    they are fitted over."""
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    import build
+    import check
+    import recipes
+
+    source = common.WARDROBE / "source"
+    folder = Path(tempfile.mkdtemp(prefix="wardrobe_coif_beards_"))
+
+    for name in ("heads.blend", "hair.blend"):
+        shutil.copy(source / name, folder / name)
+
+    fresh()
+    common.SOURCE, common.BACKUP = folder, folder / "backup"
+    beards = [b for b in recipes.WATCHMAN["options"]["beards"] if b]
+
+    try:
+        build.build_headgear(True)
+        coif = common.bvh([bpy.data.objects["Gear_coif"]])
+        found = check.hair_of("male", beards)
+        messages = ["%s passes through the coif at %d pairs of faces" % (b.name, len(coif.overlap(common.bvh([b]))))
+                    for b in found if coif.overlap(common.bvh([b]))]
+        messages += [] if len(found) == len(beards) == 3 else ["beards %s found %d" % (beards, len(found))]
+        check.forget(found)
+        # check.py says so of a coif shrunk onto them.
+        obj = bpy.data.objects["Gear_coif"]
+        pivot = bpy.data.objects["Armature"].data.bones["Head"].head_local + Vector((0.0, 0.0, 0.1))
+
+        for v in obj.data.vertices:
+            v.co = pivot + (v.co - pivot) * 0.85
+
+        said = [m for m in check.check_parts("Gear_", "headgear") if "Gear_coif" in m and "passes through" in m]
+        messages += [] if said else ["check.py passed a coif shrunk onto the beards"]
+    finally:
+        common.SOURCE, common.BACKUP = source, source / "backup"
+
+    fresh()
+    return messages
+
+
+def case_foreign_parts():
+    """A kind whose options name a part of the other body is refused
+    (check.foreign_parts); the heaviest combination counts "" as none and
+    leaves out hair a set hides and beards it forbids
+    (common.heaviest_combination); an unknown body stops with a message."""
+    import contextlib
+    import io
+
+    import check
+
+    messages = []
+    recipe = {"kind": "x", "body": "male",
+              "options": {"faces": ["weathered", "sharp"], "hair": ["", "buns"], "beards": [], "headgear": [[]]}}
+    found = check.foreign_parts(recipe)
+
+    if found != ["options: sharp is made for the female body", "options: buns is made for the female body"]:
+        messages.append("foreign parts %s" % found)
+
+    counts = {"heads/a.json": {"triangles": 400}, "hair/h.json": {"triangles": 200}, "hair/b.json": {"triangles": 100},
+              "headgear/hides.json": {"triangles": 300, "hides_hair": True, "allows_beard": False},
+              "headgear/open.json": {"triangles": 250, "hides_hair": False, "allows_beard": True}}
+    options = {"faces": ["a"], "hair": ["", "h"], "beards": ["", "b"], "headgear": [["hides"], ["open"]]}
+    heaviest = common.heaviest_combination(options, counts.get)
+
+    # The open set: 400 + 200 + 100 + 250; the hiding set only 400 + 300.
+    if heaviest != 950:
+        messages.append("heaviest %s (want 950)" % heaviest)
+
+    out = io.StringIO()
+
+    try:
+        with contextlib.redirect_stdout(out):
+            common.part_target("heads", "elf")
+
+        messages.append("part_target(heads, elf) did not stop")
+    except SystemExit:
+        if "no heads for the elf body" not in out.getvalue():
+            messages.append("part_target said %r" % out.getvalue())
+
+    return messages
+
+
 def head_skin():
     """Where the open file's detailed heads (High_*) sample their skin
     texture, the median colour (sRGB) of each: {head: (r, g, b)}."""
@@ -749,7 +1073,10 @@ def case_skin():
 
 CASES = {"chain": case_chain_bones, "limits": case_limits, "types": case_types, "watchman": case_watchman,
          "hood": case_hood, "launcher": case_launcher, "bodies": case_bodies, "male_parts": case_male_parts,
-         "types2": case_types2, "skin": case_skin, "brute_arms": case_brute_arms}
+         "types2": case_types2, "skin": case_skin, "brute_arms": case_brute_arms, "foreign_parts": case_foreign_parts,
+         "faces": case_faces, "beards_and_tails": case_beards_and_tails,
+         "bare_hat": case_bare_hat, "coif_beards": case_coif_beards,
+         "brute_neck": case_brute_neck}
 
 
 def main():

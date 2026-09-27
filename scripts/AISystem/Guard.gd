@@ -33,6 +33,10 @@ extends CharacterBody3D
 ##               ladders, into water and out (GuardClimb.gd, NavLinks.gd).
 ##   WORD        what they call to each other, out loud (Comms.gd): where you
 ##               are, where you went, powder, a noise, all clear, the bell.
+##   HIS OWN     at his ease, what he does with himself, in his own way
+##   WAYS        (GuardHabits.gd): sits, dozes, leans on a wall or a rail,
+##               eats, chops wood, tends the fire, carries crates, goes over
+##               to a friend, paces, fidgets; walks his rounds with a light.
 ##
 ## The body origin is at the FEET. The capsule floats above step height and
 ## the body hovers on a ray, so stairs need no special handling.
@@ -60,6 +64,7 @@ const GuardRotaScript := preload("res://scripts/AISystem/GuardRota.gd")
 const GuardVoiceScript := preload("res://scripts/AISystem/GuardVoice.gd")
 const GuardPastimesScript := preload("res://scripts/AISystem/GuardPastimes.gd")
 const TalkDirectorScript := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
+const GuardHabitsScript := preload("res://scripts/AISystem/GuardHabits.gd")
 ## A friend or kinsman this near who sees him die calls his name; this near,
 ## he knows the voice of his dying cry.
 const MOURN_SIGHT := 20.0
@@ -73,6 +78,12 @@ const BIND_AFTER := 3.0
 const GORE_SEEN_RANGE := 14.0
 ## A lit fuse is heard this near (m), whichever way he faces.
 const FUSE_HEARD := 4.0
+## Seen going up a ladder, over an edge or through the air, and lost: for this
+## long (s) he knows where you come out (_follow_through).
+const FOLLOW_THROUGH := 3.0
+## In a fight his eyes go up and down after you (on a wall, up a ladder), up
+## to this far (rad) from level.
+const LOOK_PITCH := 1.1
 ## A man set to watch is on his post within POST_NEAR of it. There he keeps
 ## it, while there are friends of his within POST_FRIENDS to do the walking:
 ## what he sees or hears he watches from up there, and sends the nearest of
@@ -88,9 +99,41 @@ const POST_OWN := 4.0
 const POST_BELL := 30.0
 const POST_BLIND := 3.0
 ## The parts of one man (a head, an arm) lie this near each other: one find.
-const BODY_SAME := 2.5
+const BODY_SAME := 4.0
 ## He shouts about a find at most this often (s).
 const BODY_SHOUT_GAP := 15.0
+## Just lost you, and you were going somewhere: the search begins by running
+## on after you the way you went (the trail), as far as you could have got
+## since (up to TRAIL_MAX, m), while it is fresh (TRAIL_FRESH, s since he had
+## you); each man a little to one side (TRAIL_SPREAD, m), not in single file.
+## Word or a sound of you mid-search breaks off his look and sends him to it
+## at a run (HOT_PACE of his chase speed) for HOT_TIME (s); and he does not
+## give up while it keeps coming (at least HOT_POINTS more places to look).
+const TRAIL_FRESH := 6.0
+const TRAIL_MAX := 18.0
+const TRAIL_SPREAD := 2.5
+const HOT_TIME := 5.0
+const HOT_PACE := 0.85
+const HOT_POINTS := 2
+## Called to a fight (a shout, a call of where you are, the bell): he goes at
+## a run, not a walk.
+const URGENT := [&"shout", &"call", &"alarm"]
+## Wary (wary()): this long (s) after he was last hunting you, or while the
+## garrison's alarm is at least this (a fight, a body, the bell).
+const WARY_AFTER := 60.0
+const WARY_ALARM := 0.45
+## A fight near his post goes on counting this long (s) after the last sign
+## of it (no turning back and forth for the bell).
+const FIGHT_NEAR_HOLD := 2.0
+## Lines as his state changes: the passing ones ("Hm?", "I'd better take a
+## look") wait this long (s), and go unsaid if he is past them by then; a
+## line is on show at least this long before another of his takes its place;
+## the same kind of line not again from him for this long.
+const STATE_LINE_WAIT := 0.35
+const LINE_SHOWN := 1.0
+const LINE_AGAIN := 8.0
+## The fight over and his blade gone, he goes back for one this near (m).
+const REARM_REACH := 15.0
 
 ## Off, cuts do not bleed (tests of exact damage).
 static var bleeding_on := true
@@ -154,6 +197,16 @@ signal bound_wounds
 @export var lookout := false
 ## Searching somewhere dark once the garrison is roused, he lights a lantern.
 @export var carries_lantern := true
+## Walks his rounds (and stands his post) with a light: "lantern" (held out,
+## his blade at his belt), "torch" (held up), or "" (none).
+@export var rounds_light: StringName = &""
+## At his ease, what he does with himself (GuardHabits): only these, if any
+## are given ("sit", "lean", "rail", "eat", "chop", "tend", "carry", "visit",
+## "pace", "fidget"); his quirk, if the level gives him one (GuardHabits.QUIRKS);
+## and how far from his post he goes for it (m).
+@export var habits: Array[StringName] = []
+@export var quirk: StringName = &""
+@export var habit_range := 10.0
 ## What the garrison calls him ("" picks one for him, the same every load).
 @export var given_name := ""
 ## How his last line was said: "whisper", "murmur", "shout" or "" (the
@@ -299,6 +352,19 @@ var grief_fades := true
 var alert := 0.0
 var state := Alert.RELAXED
 var wariness := 1.0
+## Whether he has seen you (or fought you) since he was last at his ease: it
+## was no rat. And when he was last hunting you (game time).
+var _saw_you := false
+var _hunted_at := -1000.0
+## Running on along your trail, the search's first leg (TRAIL_*); running to
+## fresh word of you until then (HOT_TIME).
+var _trailing := false
+var _hot_until := -100.0
+var _standing_still := true
+## A line waiting its moment: [text, kind, when (game time), the state it is
+## for, voices]; and when he last said each kind of line (_chorus).
+var _pending_line: Array = []
+var _said_kinds := {}
 
 ## How visible the player is to this guard right now, 0..1.
 var visibility := 0.0
@@ -327,6 +393,9 @@ var _search_left := 0
 var _door_wait := 0.0
 var _bark_timer := 0.0
 var _head_yaw_goal := 0.0
+## Last seen off your feet (on a ladder, over an edge, in the air): followed
+## through to where you come out (_follow_through).
+var _seen_off_feet := false
 var _idle_time := 0.0
 var _attack_timer := 0.0
 
@@ -434,9 +503,19 @@ var _rota: RefCounted
 ## His voice and breath: his heart, the speech ladder, his murmur
 ## (GuardVoice).
 var _voice: RefCounted
+## What he does with himself at his ease (GuardHabits).
+var _habits: RefCounted
 ## When he came into the level (Comms.now): a man only misses those who were
 ## there before him.
 var _born_at := 0.0
+## When he last saw a fight near his post (_fight_near).
+var _fight_near_at := -100.0
+## Going back for a blade (his own, thrown down or knocked from his hand, or
+## another he can use) now the fight is over; where he was going before; and
+## when he next looks for one.
+var _rearm_blade: RigidBody3D = null
+var _rearm_back := Vector3.INF
+var _rearm_check := 0.0
 ## What last stirred him: "sight", "noise", "shout", "body", "call", "alarm",
 ## "oddity", "missing" or "fight".
 var _stimulus: StringName = &""
@@ -515,6 +594,7 @@ func _ready() -> void:
 	_rota = GuardRotaScript.new(self)
 	_rota.setup(stations)
 	_voice = GuardVoiceScript.new(self)
+	_habits = GuardHabitsScript.new(self)
 
 	# Each man walks at his own pace at his ease (Expression: his kind, his
 	# temperament, and himself).
@@ -526,7 +606,7 @@ func _ready() -> void:
 	_born_at = Comms.now()
 
 	if given_name == "":
-		given_name = TemperamentScript.name_for(look_seed if look_seed >= 0 else hash(String(get_path())), bool(_rig.get("female")))
+		given_name = _free_name(look_seed if look_seed >= 0 else hash(String(get_path())), bool(_rig.get("female")))
 
 	# Set to watch: he sees further than a man on his rounds.
 	if lookout:
@@ -536,6 +616,82 @@ func _ready() -> void:
 	if not _waypoints.is_empty():
 		_waypoint_index = 0
 		_go_to(_waypoints[0].global_position, true)
+
+
+## His blade gone from his hands (thrown down begging, knocked out of them)
+## and the fight over: before anything else he goes back for it, or for
+## another lying near that he can fight with (GuardHands.usable). True while
+## he is about it. Hunting, he takes up the search where he left it after.
+func _rearming(delta: float) -> bool:
+	if _hands == null or _hands.armed or _climb.active() or _water.swimming or _mercy.pleading:
+		_rearm_blade = null
+		_rearm_back = Vector3.INF
+		return false
+
+	var blade_ok := _rearm_blade != null and is_instance_valid(_rearm_blade) and not _rearm_blade.is_queued_for_deletion() and not Dangers.claimed(_rearm_blade, self)
+	_rearm_check -= delta
+
+	if not blade_ok and _rearm_check <= 0.0:
+		_rearm_check = 1.0
+		var near := Dangers.weapons_near(get_tree(), global_position, REARM_REACH, _hands.usable(), self)
+		_rearm_blade = near[0] if not near.is_empty() else null
+		blade_ok = _rearm_blade != null
+
+		if blade_ok and _agent != null and _rearm_back == Vector3.INF:
+			_rearm_back = _agent.target_position
+
+	if not blade_ok:
+		_rearm_blade = null
+		_rearm_back = Vector3.INF
+		return false
+
+	if _habits.busy():
+		_habits.interrupt()
+
+	if _hands.can_reach(_rearm_blade):
+		_stop(delta)
+		_hands.stoop_for(_rearm_blade, &"weapon")
+		_rearm_blade = null
+
+		# Back to where he was going, once it is in his hand.
+		if state == Alert.SEARCHING and _rearm_back != Vector3.INF:
+			_go_to(_rearm_back, true)
+
+		_rearm_back = Vector3.INF
+		return true
+
+	Dangers.claim(_rearm_blade, self)
+	_go_to(_rearm_blade.global_position)
+
+	if _walk(patrol_speed if state == Alert.RELAXED else investigate_speed, delta):
+		# As near as he can get, and still out of reach: not that one.
+		Dangers.unclaim(_rearm_blade, self)
+		_rearm_blade = null
+		_rearm_check = 5.0
+		return false
+
+	return true
+
+
+## His name (Temperament.name_for, the same every time the level loads), or
+## the next one along if another man about already has it: no two men of one
+## garrison answer to the same name.
+func _free_name(seed: int, female: bool) -> String:
+	var taken := {}
+
+	for other in get_tree().get_nodes_in_group(&"guards"):
+		if other != self and String(other.get("given_name")) != "":
+			taken[String(other.get("given_name"))] = true
+
+	var names: Array = TemperamentScript.NAMES_F if female else TemperamentScript.NAMES
+
+	for i in names.size():
+		var called: String = TemperamentScript.name_for(seed + i, female)
+
+		if not taken.has(called):
+			return called
+
+	return TemperamentScript.name_for(seed, female)
 
 
 ## Listening starts and stops with the tree, so a guard that is moved or
@@ -561,6 +717,17 @@ func _physics_process(delta: float) -> void:
 	_idle_time += delta
 
 	_game_time += delta
+
+	if state >= Alert.SEARCHING:
+		_hunted_at = _game_time
+
+	# Standing still (for how he holds his lantern up), with some give either
+	# way so it does not flick between the two at a shuffle.
+	var flat_speed := Vector2(velocity.x, velocity.z).length()
+	_standing_still = flat_speed < 0.3 or (_standing_still and flat_speed < 0.7)
+
+	if can_see_target and state >= Alert.SUSPICIOUS:
+		_saw_you = true
 
 	# The garrison's memory of you keeps its own time, whoever of them is about.
 	if not puppet and _target != null and is_instance_valid(_target):
@@ -597,6 +764,7 @@ func _physics_process(delta: float) -> void:
 	if not puppet:
 		_life.update(delta)
 		_rota.update(delta)
+		_habits.update(delta)
 		_watch_for_powder(delta)
 
 	if _burning > 0.0:
@@ -650,6 +818,9 @@ func _physics_process(delta: float) -> void:
 		_stop(delta)
 	elif puppet:
 		_puppet_drive(delta)
+	elif state != Alert.COMBAT and state != Alert.INVESTIGATING and _rearming(delta):
+		# His blade first (the fight has its own way of getting one).
+		pass
 	else:
 		match state:
 			Alert.RELAXED:
@@ -731,6 +902,7 @@ func _sense_vision(delta: float) -> void:
 	can_see_target = visibility > 0.02
 
 	if not can_see_target:
+		_follow_through()
 		return
 
 	_since_seen = 0.0
@@ -738,6 +910,7 @@ func _sense_vision(delta: float) -> void:
 	_stimulus = &"sight"
 	last_known_position = _target.global_position
 	has_last_known = true
+	_seen_off_feet = _target.has_method("is_off_feet") and _target.is_off_feet()
 	alert = minf(alert + visibility * vision_gain * wariness * delta, combat_at)
 
 	# Which way you were going: where he looks first once he loses you.
@@ -745,6 +918,22 @@ func _sense_vision(delta: float) -> void:
 
 	if going is Vector3 and Vector2((going as Vector3).x, (going as Vector3).z).length() > 0.8:
 		_seen_heading = Vector3((going as Vector3).x, 0.0, (going as Vector3).z)
+
+
+## Last seen on a ladder, hanging, going over an edge or in the air: which way
+## you were going is plain (up, over, down), so for a moment after he loses
+## you he knows where you come out, until you are on your feet again. Not
+## under water: that is hiding.
+func _follow_through() -> void:
+	if not _seen_off_feet:
+		return
+
+	if _target == null or not is_instance_valid(_target) or _since_seen > FOLLOW_THROUGH:
+		_seen_off_feet = false
+		return
+
+	last_known_position = _target.global_position
+	_seen_off_feet = _target.has_method("is_off_feet") and _target.is_off_feet()
 
 
 ## Light, distance, view cone and cover, multiplied together.
@@ -774,6 +963,10 @@ func _visibility_of(target: Node3D) -> float:
 		nearest = minf(nearest, distance)
 
 	if seen == 0:
+		return 0.0
+
+	# Asleep in his seat he sees nothing, but for a touch.
+	if _habits != null and _habits.dozing() and nearest > touch_distance:
 		return 0.0
 
 	var cover := float(seen) / float(points.size())
@@ -847,7 +1040,9 @@ func hear_sound(event: Dictionary) -> void:
 		return
 
 	var source: Object = event["source"]
-	var reach: float = event["range"] * hearing_acuity
+	# Asleep, he hears only what is loud or near (and wakes to it).
+	var dozing: bool = _habits != null and _habits.dozing()
+	var reach: float = event["range"] * hearing_acuity * (GuardHabitsScript.DOZE_HEARING if dozing else 1.0)
 
 	# Asleep (GuardRota), only a loud noise gets through.
 	if _rota != null and _rota.asleep():
@@ -864,10 +1059,15 @@ func hear_sound(event: Dictionary) -> void:
 	if source is Guard and not (source as Guard).puppet:
 		# A colleague shouting: go to where HE thinks the trouble is.
 		if event["kind"] == &"shout" and state != Alert.COMBAT:
+			if dozing:
+				_habits.wake()
+
 			var from: Vector3 = event["position"]
 
 			if _sound_distance(from) <= reach:
 				var other := source as Guard
+				# A fight shouted outweighs covering a friend's look.
+				_life.stop_covering()
 				last_known_position = other.last_known_position if other.has_last_known else from
 				has_last_known = true
 				alert = maxf(alert, shout_alert)
@@ -888,6 +1088,13 @@ func hear_sound(event: Dictionary) -> void:
 
 	if amount < 1.0:
 		return
+
+	if dozing:
+		_habits.wake()
+
+	# Covering a friend's look, and this is somewhere else: his own business.
+	if _life.covering() and position.distance_to(_life.covered_place()) > GarrisonScript.LOOK_REACH:
+		_life.stop_covering()
 
 	alert = maxf(alert, minf(alert + amount, hearing_alert_cap))
 	_since_stimulus = 0.0
@@ -980,12 +1187,13 @@ func _heard_spotted(message: Dictionary, where: Vector3) -> void:
 	has_last_known = true
 	_since_stimulus = 0.0
 	_stimulus = &"call"
+	_life.stop_covering()
 	alert = maxf(alert, shout_alert + 10.0)
 
+	# Already on his way: he says he is coming (else stirring to it says so).
 	if state >= Alert.INVESTIGATING:
 		_go_to(_look_from(where), true)
-
-	say(&"ack", 0.5)
+		_ack(0.5)
 
 
 ## A friend heard something and is going to look: this one covers him.
@@ -1015,12 +1223,12 @@ func _heard_alarm(where: Vector3) -> void:
 	has_last_known = true
 	_since_stimulus = 0.0
 	_stimulus = &"alarm"
+	_life.stop_covering()
 	alert = maxf(alert, investigate_at + 25.0)
 
 	if state >= Alert.INVESTIGATING:
 		_go_to(_look_from(where), true)
-
-	say(&"ack", 0.4)
+		_ack(0.4)
 
 
 ## The man set to watch calls down to one of them to go and look at
@@ -1083,9 +1291,13 @@ func say(situation: StringName, chance := 1.0) -> void:
 ## What he is doing with his hands or himself, for the rig: crossing a link
 ## ("climb", "ladder", "hang", "gather", "fall", "leap", "land": GuardClimb),
 ## swimming ("swim", "tread": GuardWater),
-## "pickup", "ring", "hold", begging ("kneel", "plead_kneel", "plead_stand",
-## "rise", "rise_knees": GuardMercy), "talk", "listen", "fold_arms", "drink",
-## "lantern", "call", or "".
+## "pickup", "ring", "hold", his light on his rounds ("carry_lantern",
+## "carry_torch": GuardHands), begging ("kneel", "plead_kneel", "plead_stand",
+## "rise", "rise_knees": GuardMercy), his own ways (GuardHabits: "sit",
+## "sit_talk", "doze", "sit_down", "stand_up", "stand_up_quick", "lean",
+## "rail", "reach", "eat", "chop", "kneel_down", "tend", "kneel_up", "carry",
+## "set_down", "fold_arms", "drink", "nod", "shake", "dance"), "talk",
+## "listen" ("nod", "shake": GuardLife), "lantern", "call", or "".
 func activity() -> StringName:
 	var crossing: StringName = _climb.activity() if _climb != null else &""
 
@@ -1112,12 +1324,21 @@ func activity() -> StringName:
 	if station != &"":
 		return station
 
+	# What he does with himself (GuardHabits), talking the while (GuardLife):
+	# sat, he talks where he sits.
+	var own: StringName = _habits.activity() if _habits != null else &""
 	var doing: StringName = _life.activity() if _life != null else &""
+
+	if own == &"sit" and doing != &"":
+		return &"sit_talk"
+
+	if own != &"":
+		return own
 
 	if doing != &"":
 		return doing
 
-	if _hands != null and _hands.lantern != null and state != Alert.COMBAT and Vector2(velocity.x, velocity.z).length() < 0.4:
+	if _hands != null and _hands.lantern != null and state != Alert.COMBAT and _standing_still:
 		return &"lantern"
 
 	return &""
@@ -1220,7 +1441,8 @@ func _discover(body: Node3D) -> void:
 
 	if _game_time - _body_shouted_at >= BODY_SHOUT_GAP:
 		_body_shouted_at = _game_time
-		bark("He's dead! Murder!" if body.get("dead") == true else "A body! Someone's in here!")
+		# Two finding him at once: one cry for them both (both shout).
+		_chorus(&"body", "He's dead! Murder!" if body.get("dead") == true else "A body! Someone's in here!", 1, 0.0, true)
 		shout()
 
 
@@ -1272,6 +1494,7 @@ func hear_call(where: Vector3) -> void:
 	has_last_known = true
 	_since_stimulus = 0.0
 	_stimulus = &"call"
+	_life.stop_covering()
 	alert = maxf(alert, shout_alert)
 
 
@@ -1282,6 +1505,7 @@ func join_hunt(where: Vector3) -> void:
 	has_last_known = true
 	_since_stimulus = 0.0
 	_stimulus = &"call"
+	_life.stop_covering()
 	alert = maxf(alert, investigate_at + 25.0)
 
 	# Fetched to it by one of his own: a man set to watch comes down too.
@@ -1371,8 +1595,11 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 	health -= damage
 	hurt.emit(damage)
 
-	# Struck on a wall or a ladder: he loses his hold.
+	# Struck on a wall or a ladder: he loses his hold. Whatever he was about
+	# of his own is over.
 	_climb.interrupt()
+	_habits.wake()
+	_habits.interrupt()
 
 	# Cut down on his knees, or cut and he gives up on your mercy.
 	if health <= 0.0:
@@ -1596,6 +1823,13 @@ func _start_evade(from: Vector3, radius: float, shout: bool) -> void:
 	_evade_left = 2.5
 	_phase = &""
 
+	# Up and away, whatever he was about: off his seat, the word unfinished.
+	if _habits != null and _habits.busy():
+		_habits.interrupt()
+
+	if _life != null and _life.talking():
+		_life.end_talk()
+
 	if _fighter != null:
 		_fighter.release_token()
 		_fighter.guarding = false
@@ -1670,6 +1904,7 @@ func kick(push: Vector3, attacker: Node3D) -> void:
 
 	_mercy.struck(attacker)
 	_climb.interrupt()
+	_habits.interrupt()
 
 	if _downed:
 		# A man on the floor, booted along it.
@@ -2010,6 +2245,7 @@ func knock_down(push: Vector3, attacker: Node3D = null, at := Vector3.INF) -> vo
 		return
 
 	_climb.interrupt()
+	_habits.interrupt()
 
 	if _rig == null or _rig.man == null or _rig.man.ragdoll == null:
 		return
@@ -2300,9 +2536,12 @@ func _look_from(point: Vector3) -> Vector3:
 func _fight_near() -> bool:
 	for other in get_tree().get_nodes_in_group(&"guards"):
 		if other != self and int(other.get("state")) == Alert.COMBAT and (other as Node3D).global_position.distance_to(global_position) <= POST_FRIENDS:
+			_fight_near_at = _game_time
 			return true
 
-	return false
+	# A moment's lull in it (a man out of it and back in, a step past the
+	# edge): still a fight near, so he does not turn back and forth.
+	return _game_time - _fight_near_at < FIGHT_NEAR_HOLD
 
 
 ## Set to watch, and his friends fighting below: the bell first, if there is
@@ -2327,7 +2566,7 @@ func _ring_for_fight(delta: float) -> bool:
 			_look_timer = 0.0
 
 			if _fighter != null and _fighter.temper != null:
-				bark(_fighter.temper.line(&"bell"))
+				_chorus(&"bell", _fighter.temper.line(&"bell"))
 
 		# Whatever word comes to him on the way: the bell first.
 		if _agent != null and _agent.target_position.distance_to(rope) > 0.3:
@@ -2405,6 +2644,8 @@ func _set_state(new_state: int) -> void:
 	state = new_state as Alert
 	_wait_timer = 0.0
 	_look_timer = 0.0
+	# A line he had yet to say for the state he was in goes unsaid.
+	_pending_line = []
 
 	if old == Alert.COMBAT and _fighter != null:
 		_fighter.leave_combat()
@@ -2423,21 +2664,38 @@ func _set_state(new_state: int) -> void:
 		if new_state == Alert.RELAXED and (old == Alert.INVESTIGATING or old == Alert.SEARCHING):
 			_life.done_looking()
 
-	# Into a fight: his lantern goes to the floor, still burning.
+	# Into a fight: his lantern goes to the floor, still burning; what he was
+	# stooping to look at can wait; whatever he meant to see to, or had
+	# claimed to look into, is left (GuardLife.stirred_to_fight).
 	if new_state == Alert.COMBAT and _hands != null:
 		_hands.drop_lantern()
 
-	# Back to his rounds (and his post): the hunt goes on without him.
+		if _hands.stooping_for() == &"evidence":
+			_hands.interrupt()
+
+	if new_state == Alert.COMBAT and _life != null:
+		_life.stirred_to_fight()
+
+	# Back to his rounds (and his post): the hunt goes on without him, and he
+	# is no longer its watcher.
 	if new_state == Alert.RELAXED:
 		_left_post = false
 		_to_bell = false
+		_watching = false
 
 	if new_state == Alert.RELAXED and _fighter != null and _fighter.squad != null:
 		_fighter.squad.stand_down(self)
 		_fighter.squad = null
 
+	if new_state == Alert.COMBAT:
+		_saw_you = true
+
 	_bark_for(new_state, old)
 	alert_changed.emit(new_state, old)
+
+	# At his ease again: what he saw is behind him (he stays wary a while).
+	if new_state == Alert.RELAXED:
+		_saw_you = false
 
 	match new_state:
 		Alert.COMBAT:
@@ -2447,11 +2705,22 @@ func _set_state(new_state: int) -> void:
 		Alert.SEARCHING:
 			# A hunt searches longer than one man would.
 			_search_left = search_points + (2 if _fighter != null and _fighter.squad != null else 0)
-			_next_search_point()
+			_trailing = false
+			var trail := _trail_point() if old == Alert.COMBAT else Vector3.INF
+
+			# Just lost you on the move: on after you the way you went.
+			if trail != Vector3.INF:
+				_trailing = true
+				_go_to(trail, true)
+			else:
+				_next_search_point()
 		Alert.RELAXED:
 			_resume_patrol()
 
 
+## What he says as his state changes. What several would say at the same
+## moment (coming, a noise heard, lost, given up) the first man near says for
+## them all (_chorus).
 func _bark_for(new_state: int, old_state: int) -> void:
 	match new_state:
 		Alert.SUSPICIOUS:
@@ -2459,38 +2728,105 @@ func _bark_for(new_state: int, old_state: int) -> void:
 			if _life != null and _life.covering() and _fighter != null and _fighter.temper != null:
 				bark(_fighter.temper.line(&"noise_cover"))
 			else:
-				bark("Hm? What was that?")
+				# A moment first: sure of it the next instant, he says that
+				# instead (STATE_LINE_WAIT).
+				_chorus(&"heard", "Hm? What was that?", 1, STATE_LINE_WAIT)
 		Alert.INVESTIGATING:
 			if _stimulus == &"sent" and _fighter != null and _fighter.temper != null:
 				bark(_fighter.temper.line(&"ack"))
 			elif _holds_post() and _fighter != null and _fighter.temper != null:
 				# Set to watch: he looks from where he is.
-				bark(_fighter.temper.line(&"watch"))
+				_chorus(&"hold_post", _fighter.temper.line(&"watch"))
 			elif alert >= shout_alert and _since_seen > 1.0 and not can_see_target:
-				bark("I'm coming!")
+				_chorus(&"coming", "I'm coming!")
 			else:
-				bark("I'd better take a look.")
+				_chorus(&"look", "I'd better take a look.", 1, STATE_LINE_WAIT)
 		Alert.SEARCHING:
 			if old_state == Alert.COMBAT:
 				# Which way you went, if he saw: the others hear it too.
-				bark(Comms.lost_line(last_known_position, _seen_heading, self) if _seen_heading.length() > 1.0 else "Where did you go? Show yourself!")
-			else:
-				bark("Someone's been here...")
+				_chorus(&"lost", Comms.lost_line(last_known_position, _seen_heading, self) if _seen_heading.length() > 1.0 else "Where did you go? Show yourself!")
+			elif _stimulus != &"body":
+				# (A body found says so itself: _discover.)
+				_chorus(&"sign", "Someone's been here...")
 		Alert.COMBAT:
 			# In his own way: of their dead, if the dread in him has turned to anger.
 			bark(_fighter.engage_line() if _fighter != null else "You there! Stop!")
 		Alert.RELAXED:
 			if old_state == Alert.SEARCHING:
-				bark("Must have been rats.")
+				_chorus(&"stand_down", _stand_down_line())
 			elif old_state == Alert.SUSPICIOUS:
-				bark("Probably nothing.")
+				_chorus(&"nothing", "Probably nothing.")
+
+
+## "Coming!" to a call (now and then, `chance`): the first of them near says
+## it for all.
+func _ack(chance: float) -> void:
+	if randf() < chance and _bark_timer <= 0.0 and _fighter != null and _fighter.temper != null and Comms.may_voice(&"coming", global_position):
+		bark(_fighter.temper.line(&"ack"))
+
+
+## A line many would say at once: said by the first man near, the rest keep
+## quiet (Comms.may_voice); and by him not again for a while (LINE_AGAIN).
+## After `wait` (s), if he is still in the state it was for; and never on top
+## of a line he has only just said (it waits its turn after it).
+func _chorus(kind: StringName, text: String, voices := 1, wait := 0.0, urgent := false) -> void:
+	if text == "" or _game_time - float(_said_kinds.get(kind, -100.0)) < LINE_AGAIN:
+		return
+
+	if _bark_timer > 3.0 - LINE_SHOWN and not urgent:
+		wait = maxf(wait, _bark_timer - (3.0 - LINE_SHOWN))
+
+	if wait > 0.0:
+		_pending_line = [text, kind, _game_time + wait, int(state), voices]
+		return
+
+	_voice_line(kind, text, voices)
+
+
+func _voice_line(kind: StringName, text: String, voices: int) -> void:
+	if Comms.may_voice(kind, global_position, voices):
+		_said_kinds[kind] = _game_time
+		bark(text)
+
+
+## Wary: hunting you not long since (WARY_AFTER), or the garrison roused (a
+## fight, a body, the bell: its alarm past WARY_ALARM). At his ease he takes
+## none (GuardHabits), and keeps his blade out.
+func wary() -> bool:
+	return _game_time - _hunted_at < WARY_AFTER or _garrison_alarm() >= WARY_ALARM
+
+
+## His blade wanted in his hand (GuardRig draws it, or puts it by): looking
+## into something, hunting, fighting, or on edge (wary). At his ease it is in
+## its scabbard.
+func wants_blade() -> bool:
+	return state >= Alert.INVESTIGATING or wary()
+
+
+## How roused the garrison is (Garrison.alarm), 0 with nobody to be roused
+## about.
+func _garrison_alarm() -> float:
+	var target := _target if _target != null and is_instance_valid(_target) else get_tree().get_first_node_in_group(&"player") as Node3D
+	return float(GarrisonScript.of(target).alarm) if target != null else 0.0
+
+
+## Giving up the hunt: rats, if it was only ever a noise; if he saw you, or
+## the garrison is roused (a body, the bell, their dead), something that
+## knows better, in his own way.
+func _stand_down_line() -> String:
+	if not _saw_you and _garrison_alarm() < WARY_ALARM:
+		return "Must have been rats."
+
+	var own: String = _fighter.temper.line(&"gave_up") if _fighter != null and _fighter.temper != null else ""
+	return own if own != "" else "He's gone. Stay sharp."
 
 
 ## Put on a duty by the night rota (NightRota): a post (he stands where it
 ## says), a round (he walks its route), or stations (his rota of them: the
-## bench, a bed, his work).
+## bench, a bed, his work). Whatever of his own he was about is over.
 func take_duty(duty: Dictionary) -> void:
 	var data: Dictionary = duty.get("data", {})
+	_habits.interrupt()
 
 	match StringName(duty.get("kind", &"")):
 		&"post":
@@ -2577,9 +2913,18 @@ func _utter(text: String, delivery: StringName, rung: int) -> void:
 # ---------------------------------------------------------------------------
 
 func _do_patrol(delta: float) -> void:
-	# At his ease with a station to go to: there, and at it (GuardRota).
+	# At his ease with a station to go to: there, and at it (GuardRota);
+	# whatever of his own he was about is over.
 	if _rota.has_stations():
+		if _habits.busy():
+			_habits.interrupt()
+
 		_rota.patrol(delta)
+		return
+
+	# About something of his own (a seat, the woodpile, a friend): it has him.
+	if _habits.busy():
+		_habits.run(delta)
 		return
 
 	if _waypoints.is_empty():
@@ -2601,10 +2946,16 @@ func _do_patrol(delta: float) -> void:
 			_go_to(_home.origin)
 
 			if not _walk(patrol_speed, delta):
+				_habits.walking()
+				_life.walking()
 				return
 
 		_stop(delta)
 		_life.at_rest(delta)
+		_habits.at_rest(delta)
+
+		if _habits.busy():
+			return
 
 		if _life.talking():
 			_face(_life.partner_direction(), delta)
@@ -2619,6 +2970,10 @@ func _do_patrol(delta: float) -> void:
 
 	if _wait_timer > 0.0:
 		_life.at_rest(delta)
+		_habits.at_rest(delta, true)
+
+		if _habits.busy():
+			return
 
 		# A word with the man beside him: his rounds wait for it.
 		if _life.talking():
@@ -2638,6 +2993,7 @@ func _do_patrol(delta: float) -> void:
 		return
 
 	_life.walking()
+	_habits.walking()
 
 	if not _walk(patrol_speed, delta):
 		return
@@ -2713,7 +3069,10 @@ func _do_investigate(delta: float) -> void:
 
 		return
 
-	if _walk(investigate_speed, delta):
+	# Called to a fight: at a run. A noise to look into: at a walk.
+	var pace := maxf(investigate_speed, chase_speed * HOT_PACE) if _stimulus in URGENT else investigate_speed
+
+	if _walk(pace, delta):
 		# Come to something out of place: he deals with it, then looks about.
 		_life.deal_with_oddity()
 		_start_looking()
@@ -2725,16 +3084,22 @@ func _do_search(delta: float) -> void:
 
 	_come_down_if_blind()
 
-	# Heard or glimpsed something new mid-search: go there instead. (Not the
-	# hunt's watcher: his place is his vantage, whatever the others go to.)
+	# Heard or glimpsed something new mid-search: go there instead, at a run,
+	# breaking off his look; and not giving up while word of you keeps
+	# coming. (Not the hunt's watcher: his place is his vantage, whatever the
+	# others go to.)
 	if _since_stimulus < 0.1 and has_last_known and not _watching:
 		var from := _look_from(last_known_position)
+		_search_left = maxi(_search_left, HOT_POINTS)
 
 		# From his post: his eyes go to it, not his feet.
 		if from != last_known_position:
 			if _look_timer > 0.0:
 				_scan = _post_headings()
-		elif _look_timer <= 0.0:
+		else:
+			_trailing = false
+			_hot_until = _game_time + HOT_TIME
+			_look_timer = 0.0
 			_go_to(from)
 
 	if _look_timer > 0.0:
@@ -2748,7 +3113,18 @@ func _do_search(delta: float) -> void:
 
 		return
 
-	if _walk(investigate_speed, delta):
+	var pace := investigate_speed
+
+	if _trailing or _game_time < _hot_until:
+		pace = maxf(investigate_speed, chase_speed * HOT_PACE)
+
+	if _walk(pace, delta):
+		# The trail's end: here is where he now thinks you are, and he looks
+		# about him.
+		if _trailing:
+			_trailing = false
+			last_known_position = global_position
+
 		_start_looking()
 
 
@@ -2823,6 +3199,23 @@ func _feet_of(node: Node3D) -> Vector3:
 	return node.global_position
 
 
+## Where to go to get at `node`: where his feet are; or, on a ladder, off an
+## edge or over one, where that comes out (the top he is going up to, the
+## foot going down), so a man after him goes up the ladder behind him instead
+## of waiting under it.
+func goal_of(node: Node3D) -> Vector3:
+	if node.has_method("climb_goal"):
+		var goal: Vector3 = node.climb_goal()
+
+		if goal != Vector3.INF:
+			var on := NavigationServer3D.map_get_closest_point(get_world_3d().navigation_map, goal)
+
+			if on.distance_to(goal) < 1.5:
+				return on
+
+	return _feet_of(node)
+
+
 func _give_up() -> void:
 	alert = suspicious_at * 0.5
 	has_last_known = false
@@ -2864,6 +3257,42 @@ func _next_search_point() -> void:
 	var reach := randf_range(search_radius * 0.4, search_radius)
 	var guess := center + Vector3(cos(angle), 0.0, sin(angle)) * reach
 	_go_to(NavigationServer3D.map_get_closest_point(map, guess), true)
+
+
+## Where the trail of you, just lost, leads: on from where he last had you
+## the way you were going, as far as you could have got since at your pace
+## (TRAIL_MAX at most), as far as the ground goes that way, and to one side
+## of it by his own lot (so they do not all run in single file). INF if there
+## is no trail: you were standing, it has gone cold, or no ground goes that
+## way (or it is near enough that he may as well look about him here).
+func _trail_point() -> Vector3:
+	var heading := _likely_heading()
+
+	if not has_last_known or _since_seen > TRAIL_FRESH or Vector2(heading.x, heading.z).length() < 0.8:
+		return Vector3.INF
+
+	var way := Vector3(heading.x, 0.0, heading.z).normalized()
+	var pace := clampf(Vector2(heading.x, heading.z).length(), 3.0, 7.0)
+	var reach := clampf(pace * (_since_seen + 1.0), 6.0, TRAIL_MAX)
+	var aside := Vector3.UP.cross(way) * randf_range(-TRAIL_SPREAD, TRAIL_SPREAD)
+	var map := get_world_3d().navigation_map
+	var best := Vector3.INF
+	var along := 2.0
+
+	while along <= reach + 0.01:
+		var guess := last_known_position + way * along + aside * (along / reach)
+		var on := NavigationServer3D.map_get_closest_point(map, guess)
+
+		if Vector2(on.x - guess.x, on.z - guess.z).length() > 1.2 or absf(on.y - guess.y) > 2.5:
+			break
+
+		best = on
+		along += 2.0
+
+	if best == Vector3.INF or _flat_distance(best) < 3.0:
+		return Vector3.INF
+
+	return best
 
 
 func _start_looking() -> void:
@@ -2973,6 +3402,9 @@ func _go_to(point: Vector3, force := false) -> void:
 	_agent.target_position = point
 	path_requests += 1
 
+	if _climb != null:
+		_climb.forget_wait()
+
 	if _nav != null:
 		_nav.new_path()
 
@@ -3009,8 +3441,17 @@ func _walk(speed: float, delta: float, face := true) -> bool:
 
 	var next := _agent.get_next_path_position()
 
+	# At a ladder with someone on it: up it once it is clear.
+	_climb.retry()
+
 	# His path came to a way across it cannot walk: the move has him now.
 	if _climb.active():
+		return false
+
+	# Waiting at its foot meanwhile.
+	if _climb.waiting():
+		_stop(delta)
+		_last_walk_position = global_position
 		return false
 
 	var direction := Vector3(next.x - global_position.x, 0.0, next.z - global_position.z)
@@ -3105,7 +3546,15 @@ func _face(direction: Vector3, delta: float, rate := 1.0) -> void:
 func _apply_ground(delta: float) -> void:
 	var from := global_position + Vector3.UP * 0.6
 	var to := global_position - Vector3.UP * 0.6
-	var query := PhysicsRayQueryParameters3D.create(from, to, 1, [get_rid()])
+	# What he may pass through (a chair he steps in among to sit) is not
+	# ground to him: stepping over its seat he would be lifted onto it.
+	var exclude: Array[RID] = [get_rid()]
+
+	for body in get_collision_exceptions():
+		if is_instance_valid(body):
+			exclude.append(body.get_rid())
+
+	var query := PhysicsRayQueryParameters3D.create(from, to, 1, exclude)
 	query.collide_with_areas = false
 
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
@@ -3169,8 +3618,20 @@ func _update_head(delta: float) -> void:
 
 	match state:
 		Alert.RELAXED:
-			# An idle guard's gaze drifts; a lookout's sweeps wider.
+			# An idle guard's gaze drifts; a lookout's sweeps wider. About
+			# something of his own, his head goes where that takes it.
 			_head_yaw_goal = sin(_idle_time * (0.45 if lookout else 0.6)) * deg_to_rad(50.0 if lookout else 35.0)
+
+			if _habits != null and (_habits.busy() or _habits.dozing()):
+				_head_yaw_goal = _habits.head().x
+
+			# Round at someone (GuardLife): the man he talks with, one going
+			# by, one greeting him; as far as his head turns.
+			var regard: Vector3 = _life.regard_direction() if _life != null else Vector3.ZERO
+
+			if regard != Vector3.ZERO and (_habits == null or _habits.head_free()):
+				var toward := atan2(-regard.x, -regard.z)
+				_head_yaw_goal = clampf(wrapf(toward - rotation.y, -PI, PI), -GuardLifeScript.REGARD_MAX, GuardLifeScript.REGARD_MAX)
 		Alert.SUSPICIOUS:
 			if has_last_known:
 				var to := last_known_position - global_position
@@ -3182,6 +3643,20 @@ func _update_head(delta: float) -> void:
 			_head_yaw_goal = sin(_look_timer * 4.5) * 0.55 if _look_timer > 0.0 and state != Alert.COMBAT else 0.0
 
 	_head.rotation.y = lerp_angle(_head.rotation.y, _head_yaw_goal, 1.0 - exp(-6.0 * delta))
+
+	# In a fight he looks up (or down) at you, where he sees you or last had
+	# you: up a ladder, on a wall over him. Otherwise his eyes are level.
+	var pitch_goal := 0.0
+
+	if state == Alert.COMBAT and has_last_known:
+		var aim: Vector3 = _target.global_position if can_see_target and _target != null and is_instance_valid(_target) else last_known_position
+		var to := aim - eye_position()
+		pitch_goal = clampf(atan2(to.y, Vector2(to.x, to.z).length()), -LOOK_PITCH, LOOK_PITCH)
+	elif state == Alert.RELAXED and _habits != null:
+		# Up at the sky, out over a rail, down asleep.
+		pitch_goal = _habits.head().y
+
+	_head.rotation.x = lerp_angle(_head.rotation.x, pitch_goal, 1.0 - exp(-6.0 * delta))
 
 
 ## His sword and his body show what he is doing: GuardRig.gd.
@@ -3367,6 +3842,14 @@ func _skid_dust(delta: float) -> void:
 
 
 func _update_bark(delta: float) -> void:
+	# A line waiting its moment (_chorus): said now, if he is still as he was.
+	if not _pending_line.is_empty() and _game_time >= float(_pending_line[2]):
+		var line: Array = _pending_line
+		_pending_line = []
+
+		if int(line[3]) == int(state):
+			_voice_line(line[1], line[0], int(line[4]))
+
 	# Up close the words would sit in the middle of a fight; the HUD's
 	# subtitle carries them there. From afar they float over his head.
 	if _bark_label != null:

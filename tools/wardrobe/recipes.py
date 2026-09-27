@@ -113,8 +113,12 @@ WATCHMAN = {
     ],
     "metal": [],
     "options": {
-        "faces": ["weathered"], "tones": ["light", "dark"], "hair": [], "beards": [],
-        "headgear": [["kettlehat", "coif"]],
+        # His hair shows only under the bare hat (the coif hides it); his
+        # beard under either.
+        "faces": ["young", "weathered", "heavy", "old"], "tones": ["light", "dark"], "hair": ["parted", "buzzed", "tied"],
+        "beards": ["", "short", "moustache", "full"],
+        "hair_colours": [[0.20, 0.14, 0.09], [0.10, 0.08, 0.06], [0.35, 0.25, 0.15], [0.45, 0.30, 0.18]],
+        "headgear": [["kettlehat", "coif"], ["kettlehat_bare"]],
         # A watch wears one livery: its hue moves a little, washing and dirt
         # (fade, grime) do the rest.
         "dye": {"colour": list(MUSTARD), "shift": 0.025, "fade": [0.0, 0.3]},
@@ -184,7 +188,7 @@ SWORDSMAN = {
     ],
     "metal": ["spine_01", "spine_02", "spine_03", "pelvis", "upperarm_l", "upperarm_r"],
     "options": {
-        "faces": ["weathered"], "tones": ["light", "dark"], "hair": [], "beards": [],
+        "faces": ["young", "weathered", "heavy", "old"], "tones": ["light", "dark"], "hair": [], "beards": [],
         "headgear": [["nasalhelm", "curtain"]],
         "dye": {"colour": list(SWORD_RED), "shift": 0.02, "fade": [0.0, 0.3]},
         "grime": [0.2, 0.9],
@@ -243,7 +247,7 @@ ARCHER = {
     ],
     "metal": [],
     "options": {
-        "faces": ["weathered"], "tones": ["light", "dark"], "hair": [], "beards": [],
+        "faces": ["young", "weathered", "heavy", "old"], "tones": ["light", "dark"], "hair": [], "beards": [],
         "headgear": [["hood"]],
         # His tunic and hood: green, brown or grey (baked in the first).
         "dye": {"colours": [list(ARCHER_GREEN), [0.34, 0.25, 0.15], [0.37, 0.37, 0.35]], "shift": 0.02, "fade": [0.0, 0.35]},
@@ -325,7 +329,15 @@ ARMS_MASTER = {
 BRUTE = {
     "kind": "brute",
     "body": "male",
-    "base_tris": 1400,
+    # (1,400 before his neck was kept: the neck's faces came out of his
+    # shoulders', and big faces touching his mantle left holes there.)
+    "base_tris": 1500,
+    # His bare neck kept up under his head (build.low_poly_base): cut at the
+    # head's bone weights, its dark stub showed between the teeth of the
+    # head's edge (K34).
+    # (Up to just over the head's edge, 1.567 at its highest: higher, it
+    # reached under his jaw, and his beard cut it.)
+    "neck_under": {"up_to": 1.572, "from": 1.515, "tuck": 0.005},
     "bare": ["head", "upper", "lower", "hand"],
     "belt": ("spine_01", 0.0),
     "garments": [
@@ -363,8 +375,12 @@ BRUTE = {
          "panels": {"left": [105, 155], "right": [-155, -105]}},
         {"name": "belt", "type": "belt", "fabric": "leather", "colour": (0.16, 0.11, 0.07), "height": 0.09,
          "buckle": {"fabric": "iron", "colour": IRON, "size": (0.07, 0.012, 0.06)}},
+        # It stands clear of him: the skin under it stays (cut away, its
+        # ragged edge let the roll's unlit underside show as black shards
+        # round his throat).
         {"name": "mantle", "type": "mantle", "fabric": "fur", "colour": (0.30, 0.24, 0.18), "over": "jerkin",
-         "reach": 0.16, "thickness": 0.05, "depth_front": 0.12, "depth_back": 0.18, "clear": 0.02, "dip": 0.08},
+         "reach": 0.16, "thickness": 0.05, "depth_front": 0.12, "depth_back": 0.18, "clear": 0.02, "dip": 0.08,
+         "hides": False},
         {"name": "pauldron", "type": "pauldron", "fabric": "iron", "colour": (0.28, 0.27, 0.27), "side": "right",
          "over": "jerkin", "reach": 0.14, "drop": 0.12, "rings": 3, "clearance": 0.012, "roll": 0.01},
         {"name": "pouch", "type": "prop", "shape": "pouch", "fabric": "leather", "colour": BELT_BROWN,
@@ -387,7 +403,7 @@ BRUTE = {
     ],
     "metal": ["upperarm_r"],
     "options": {
-        "faces": ["weathered"], "tones": ["light", "dark"], "hair": ["buzzed"], "beards": ["full"],
+        "faces": ["heavy", "weathered"], "tones": ["light", "dark"], "hair": ["buzzed"], "beards": ["short", "full"],
         "hair_colours": [[0.25, 0.20, 0.18], [0.14, 0.11, 0.09], [0.45, 0.30, 0.18]],
         "headgear": [[]],
         "grime": [0.4, 1.0],
@@ -469,7 +485,7 @@ DUELIST = {
     ],
     "metal": [],
     "options": {
-        "faces": ["sharp"], "tones": ["light", "dark"], "hair": ["buns"], "beards": [],
+        "faces": ["sharp", "soft"], "tones": ["light", "dark"], "hair": ["buns", "tail"], "beards": [],
         "hair_colours": [[0.35, 0.22, 0.14], [0.12, 0.09, 0.07], [0.55, 0.38, 0.20]],
         "headgear": [[]],
         "dye": {"colours": [list(CRIMSON), [0.40, 0.05, 0.10], [0.56, 0.12, 0.06]], "shift": 0.02, "fade": [0.0, 0.3]},
@@ -528,6 +544,45 @@ HEADS = {
         "brows": (0.62, 0.60, 0.57),
         "tones": TONES,
     },
+    # A young man (batch 3): cheeks full where the weathered face is hollow,
+    # a shorter jaw, a lighter brow; a little stubble, no wear yet.
+    "young": {
+        "body": "male",
+        "tris": 340,
+        "shape": [
+            {"at": (0.047, -0.07, 1.648), "radius": 0.03, "along_normal": 0.005},
+            # A narrower, lighter jaw (its side is at x ~0.04 at y -0.04,
+            # z 1.60). (A smaller chin, pushed in at y -0.087, took his lower
+            # lip into the detailed head's mouth: the bake painted a dark
+            # streak from its corner.)
+            {"at": (0.04, -0.04, 1.60), "radius": 0.03, "move": (-0.003, 0.0, 0.0)},
+            {"at": (0.032, -0.088, 1.722), "radius": 0.03, "move": (0.0, 0.002, 0.002)},
+        ],
+        "eyes": 0.95,
+        "grit": {"stubble": 0.1, "bags": 0.05, "lines": 0.05},
+        "brows": (0.20, 0.14, 0.09),
+        "tones": TONES,
+    },
+    # A heavy man (batch 3; the brute's other face): the jaw's sides wider,
+    # full jowls, a broad nose, a low heavy brow; dark stubble. (Anchored on
+    # his head's surface as measured: the jaw's side is at x 0.037-0.044
+    # at y -0.04, z 1.60; the nose's tip at z 1.665.)
+    "heavy": {
+        "body": "male",
+        "tris": 340,
+        "shape": [
+            {"at": (0.04, -0.04, 1.60), "radius": 0.03, "move": (0.012, 0.0, 0.0)},
+            {"at": (0.044, -0.015, 1.60), "radius": 0.03, "move": (0.008, 0.0, 0.0)},
+            {"at": (0.036, -0.058, 1.61), "radius": 0.025, "along_normal": 0.008},
+            {"at": (0.0, -0.087, 1.598), "radius": 0.025, "move": (0.0, -0.004, -0.002)},
+            {"at": (0.012, -0.1, 1.65), "radius": 0.012, "move": (0.004, 0.0, 0.0)},
+            {"at": (0.032, -0.088, 1.722), "radius": 0.03, "move": (0.0, -0.006, -0.003)},
+        ],
+        "eyes": 0.8,
+        "grit": {"stubble": 1.0, "bags": 0.5, "lines": 0.4},
+        "brows": (0.12, 0.09, 0.07),
+        "tones": TONES,
+    },
     # The duelist's face, on the female head (her face sits 4.2 cm under a
     # man's and 0.5 cm further back): cheekbones higher and fuller, the jaw
     # narrower at its sides, a straighter nose; no stubble, a little wear,
@@ -543,6 +598,22 @@ HEADS = {
         "eyes": 0.85,
         "grit": {"stubble": 0.0, "bags": 0.3, "lines": 0.3, "scar": "brow"},
         "brows": (0.14, 0.10, 0.08),
+        "tones": TONES,
+    },
+    # Her other face (batch 3): fuller low cheeks, a rounder jaw, a smaller
+    # nose; hardly any wear. (Her jaw's side is at x ~0.03 at y -0.045,
+    # z 1.56; her nose's front at y -0.107.)
+    "soft": {
+        "body": "female",
+        "tris": 340,
+        "shape": [
+            {"at": (0.05, -0.063, 1.61), "radius": 0.028, "along_normal": 0.006},
+            {"at": (0.03, -0.045, 1.56), "radius": 0.028, "move": (0.006, 0.0, 0.002)},
+            {"at": (0.0, -0.105, 1.628), "radius": 0.012, "along_normal": -0.002},
+        ],
+        "eyes": 0.9,
+        "grit": {"stubble": 0.0, "bags": 0.15, "lines": 0.1},
+        "brows": (0.25, 0.17, 0.10),
         "tones": TONES,
     },
 }
@@ -569,6 +640,12 @@ HEADGEAR = {
              "covers_head": True, "inside": 0.006,
              # Above this (his ears) the hood rides his Head alone (K15).
              "rigid_above": 1.68, "limit": 240,
+             # The beards he may wear under it (§6: a coif "allows a beard"),
+             # each at least `beard_clear` under its mail below his chin, and
+             # nowhere nearer than `beard_margin` (his head turns on his neck
+             # in his idle: a beard on his head moves against mail on his
+             # neck).
+             "over_beards": ["short", "moustache", "full"], "beard_clear": 0.006, "beard_margin": 0.01,
              "metal": ["neck_01", "Head"], "hides_hair": True, "allows_beard": True},
     # A kettle hat forged over the coif (build.kettle): a round bowl (a
     # ridge read as a peak from the front: a coolie hat), a leather band at
@@ -583,6 +660,22 @@ HEADGEAR = {
                   "comb": 0.0, "brim": 0.07, "droop": 0.036, "lip": 0.012, "rivets": 12,
                   "fabric": "iron", "colour": IRON_HAT, "band": ("leather", LEATHER),
                   "metal": ["Head"], "hides_hair": False, "allows_beard": True},
+    # The same hat on a bare head (batch 3; §8: "coif or bare head under the
+    # kettle hat"), his hair and beard showing under its brim: fitted over
+    # every male head and the hair he may wear under it (`over_hair`), its
+    # band just over his brows. check.py holds it `clearance` to `rest` off
+    # the outermost of them along `fit_rays` (above its band: lower rays
+    # meet the brim, and one near its top: a hair's crest rises between
+    # sampled points, build.kettle fits its upper bowl over the most any way
+    # near each point needs); clearing the thickest hair, its round bowl
+    # stands up to 4.9 cm off his bare crown, as the coif's hat does off his
+    # head (3.2 over 1.5 of mail).
+    "kettlehat_bare": {"type": "kettle", "bone": "Head", "over": "head", "over_hair": ["parted", "buzzed", "tied"],
+                       "clearance": 0.006, "slack": 0.009, "rest": 0.05, "base_z": 1.735, "centre_y": 0.02, "drop": 0.05,
+                       "segments": 16, "elevations": [15, 38, 60, 80], "comb": 0.0, "brim": 0.07, "droop": 0.036,
+                       "lip": 0.012, "rivets": 12, "fabric": "iron", "colour": IRON_HAT, "band": ("leather", LEATHER),
+                       "fit_rays": {"elevations": [35, 55, 75, 85], "azimuths": list(range(0, 360, 30))},
+                       "metal": ["Head"], "hides_hair": False, "allows_beard": True, "body": "male"},
     # The swordsman's nasal helm (build.helm): the kettle's bowl without a
     # brim, set straight on his head (every head he may wear it on), its
     # crown drawn up `point` to a point, an iron brow band `band` tall
@@ -645,4 +738,31 @@ HAIR = {
     "full": {"from": "assets/characters/hair/Hair_Beard.gltf", "body": "male", "kind": "beard", "tris": 120,
              "clearance": 0.003,
              "fit_rays": JAW},
+    # Batch 3. The Quaternius pack has no short beard, moustache or tied
+    # hair: they are cut from its styles (`keep`, `trim`) and tied (`tail`).
+    # The short beard: the full beard under his mouth (his jaw and chin; it
+    # ends at the chin as the full one does, 1.55: its shortness is no
+    # cheeks and no moustache), close to his skin.
+    "short": {"from": "assets/characters/hair/Hair_Beard.gltf", "body": "male", "kind": "beard", "tris": 70,
+              "keep": {"box": [[-0.2, -0.2, 1.50], [0.2, 0.2, 1.612]]}, "clearance": 0.002, "fit_rays": JAW},
+    # His upper lip alone (his mouth's line is at z 1.623, bake.weather; his
+    # nose's base above 1.645); the check's rays aimed there from his head's
+    # middle (about 36 degrees down).
+    "moustache": {"from": "assets/characters/hair/Hair_Beard.gltf", "body": "male", "kind": "beard", "tris": 36,
+                  "keep": {"box": [[-0.035, -0.13, 1.624], [0.035, -0.075, 1.648]]}, "clearance": 0.002,
+                  "fit_rays": {"elevations": [-40, -36, -32], "azimuths": [-15, 0, 15]}},
+    # The parted cut tied back: a tail from the back of his hair (its back
+    # edge ends at z 1.66, y 0.1) down his neck, over the collars.
+    "tied": {"from": "assets/characters/hair/Hair_SimpleParted.gltf", "body": "male", "kind": "hair", "tris": 200,
+             "tail": {"length": 0.13, "width": 0.035, "sides": 6, "at": [0.095, 1.675]}, "clearance": 0.004,
+             "fit_rays": CROWN},
+    # Her hair pulled back tight (the female buzzed cap: z 1.60-1.77, its
+    # back edge at y 0.115) and tied in a short tail down her neck, clear of
+    # her half-cape's top. (Her long hair cut under her ears left spiky
+    # locks and a jagged edge where it was cut: batch 3's look.)
+    "tail": {"from": "assets/characters/hair/Hair_BuzzedFemale.gltf", "body": "female", "kind": "hair", "tris": 200,
+             # Leaning back off her neck: in her fighting idle her head
+             # tips back, and a tail hanging straight cut her collar (K33).
+             "tail": {"length": 0.14, "width": 0.04, "sides": 6, "at": [0.1, 1.645], "lean": 0.4},
+             "clearance": 0.004, "fit_rays": CROWN},
 }

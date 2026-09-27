@@ -2,6 +2,7 @@
  "kind": "swordsman",
  "body": "male",
  "triangles": 2054,
+ "budget": 3000,
  "cloth": [
   {
    "chain": "surcoat_back",
@@ -179,7 +180,10 @@
  ],
  "options": {
   "faces": [
-   "weathered"
+   "young",
+   "weathered",
+   "heavy",
+   "old"
   ],
   "tones": [
    "light",

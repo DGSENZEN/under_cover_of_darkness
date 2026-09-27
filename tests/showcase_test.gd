@@ -388,9 +388,13 @@ func _run() -> void:
 	var map4 := await _map(true)
 	var shown4 := {}
 	var talked4 := [false]
+	var habits4 := {}
 	var clock4 := GameClock.new()
 	add_child(clock4)
 	await _until(func():
+		for man in map4.cast.values():
+			if is_instance_valid(man) and man._habits.habit != &"":
+				habits4[man._habits.habit] = true
 		for name in STATIONED:
 			var man: Node = map4.cast.get(name)
 			if man != null and is_instance_valid(man) and StringName(man.activity()) in [&"sit", &"sit_talk", &"eat", &"sleep", &"rummage", &"carry", &"chop"]:
@@ -436,6 +440,21 @@ func _run() -> void:
 	_check("D30 Act I is a night that moves: eight conversations or more, none repeated, three gatherings and the watch changing, Jory at the postern for Act II",
 		distinct4.size() >= 8 and twice4.is_empty() and kinds4.size() >= 3 and history4.has(&"watch_change") and at_post4 and clock4.seconds <= 300.0,
 		"%d conversations (%s), said twice %s, gatherings %s, Jory at the postern %s, Act I took %.0f s" % [distinct4.size(), played4, twice4, history4, at_post4, clock4.seconds])
+
+	# D35 his own ways (GuardHabits) keep a man at his mark: a fidget, the
+	# wall behind him; never off to a friend or a seat (the night is the
+	# rota's and the gatherings')
+	var free4 := []
+
+	for name in map4.cast:
+		var man: Node = map4.cast[name]
+
+		if is_instance_valid(man) and man._habits.leanings.keys().any(func(h): return float(man._habits.leanings[h]) > 0.0 and not (h in [&"fidget", &"lean"])):
+			free4.append(name)
+
+	_check("D35 in the showcase a man's own ways keep him at his mark: fidgets and the wall behind him, never off to a friend",
+		free4.is_empty() and habits4.keys().all(func(h): return h in [&"fidget", &"lean"]),
+		"free to wander %s, did %s" % [free4, habits4.keys()])
 	clock4.queue_free()
 	await _unload(map4)
 

@@ -105,7 +105,7 @@ func _run() -> void:
 	var g3 := _guard(Vector3(60, 0, 3), [seat3])
 	await _until(func(): return g3.activity() == &"sit", 900)
 	await _frames(2)
-	var put_away: bool = g3._rig.weapon.layers == 0 and g3._rig.weapon.visible
+	var put_away: bool = not g3._rig.weapon.visible and bool(g3._hands.armed)
 	g3.alert = 40.0
 	g3.last_known_position = g3.global_position + Vector3(5, 0, 5)
 	g3.has_last_known = true
@@ -116,10 +116,6 @@ func _run() -> void:
 	_check("T3 stirred (alert to 40), a sitter shows stand_up, is busy, then leaves RELAXED on his feet",
 		standing3 == &"stand_up" and busy3 and not g3._rota.busy() and g3.state != RELAXED and not (g3.activity() in [&"sit", &"sit_talk", &"stand_up"]),
 		"at the stir %s busy %s; after: %s busy %s state %d" % [standing3, busy3, g3.activity(), g3._rota.busy(), g3.state])
-
-	_check("T12 at his station his blade is put away (hidden, still his), and drawn again once he is up",
-		put_away and g3._rig.weapon.layers != 0 and g3._rig.weapon.visible,
-		"seated: hidden %s; up: layers %d, visible %s" % [put_away, g3._rig.weapon.layers, g3._rig.weapon.visible])
 
 	# T8 calm again, he goes back to his seat
 	g3.alert = 0.0
@@ -132,6 +128,14 @@ func _run() -> void:
 	_check("T8 calm again for STATION_RETURN s, he goes back to his station",
 		g3.activity() == &"sit" and float(frames8[0]) / 60.0 >= GuardRotaScript.STATION_RETURN - 0.5,
 		"%s after %.1f s at his ease" % [g3.activity(), float(frames8[0]) / 60.0])
+
+	# T12 (at ease his blade is in its scabbard: GuardRig) still his at his
+	# station, and drawn once he goes to look
+	g3.alert = g3.investigate_at + 5.0
+	await _until(func(): return g3._rig.weapon.visible, 300)
+	_check("T12 at his station his blade is in its scabbard (still his), and drawn once he goes to look",
+		put_away and g3._rig.weapon.layers != 0 and g3._rig.weapon.visible,
+		"seated: in its scabbard and his %s; looking: layers %d, drawn %s" % [put_away, g3._rig.weapon.layers, g3._rig.weapon.visible])
 
 	# T4 asleep: blind, hard of hearing, and up when something gets through
 	await _fresh()
@@ -242,6 +246,21 @@ func _run() -> void:
 	_check("T10 a chopper chops and a man at a rail leans on it",
 		chopped[0] and leaned[0],
 		"chop %s, lean %s" % [chopped[0], leaned[0]])
+
+	# T10b the chopper chops with an axe in his hand, his blade in its
+	# scabbard, and each blow is heard
+	_heard.clear()
+	var axe10 := [false]
+	var drawn10 := [false]
+	await _until(func():
+		if g10a.activity() == &"chop":
+			axe10[0] = axe10[0] or g10a._rig.man.find_child("StationAxe", true, false) != null
+			drawn10[0] = drawn10[0] or g10a._rig.weapon.visible
+		return false, 300)
+	var blows10 := _heard.filter(func(e): return e["kind"] == &"chop" and e["source"] == g10a)
+	_check("T10b a chopper at his station chops with an axe, blow on blow, each heard; his blade stays in its scabbard",
+		axe10[0] and blows10.size() >= 2 and not drawn10[0],
+		"axe %s, blows heard %d, blade out %s" % [axe10[0], blows10.size(), drawn10[0]])
 
 	# T13 a carrier knocked out mid-carry: his crate falls loose
 	await _fresh()

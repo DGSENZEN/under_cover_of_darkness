@@ -13,7 +13,9 @@ extends RefCounted
 ## view, room to pace), a length, and a rest before it comes again.
 ##
 ## What he does is `activity()` (GuardRig and Expression show it); pacing
-## moves him (`wants_step`: Guard walks him there and back).
+## moves him (`wants_step`: Guard walks him there and back). His own ways
+## (GuardHabits: a seat, a wall, a friend) come first: he passes the time
+## between them, and they wait for it.
 
 ## Reached at run time (it reads the guard scripts too).
 const NIGHT_ROTA := "res://scripts/AISystem/NightRota.gd"
@@ -145,6 +147,24 @@ func activity() -> StringName:
 ## Pacing: where he is walking to now; else null.
 func wants_step() -> Variant:
 	return (_pace_from if _pacing_back else _pace_to) if _doing == &"pace" else null
+
+
+## `id` begun now, if what it needs is there (GuardHabits hands him its
+## "pace": a few steps out and back, facing his ground). False if not.
+func start(id: StringName) -> bool:
+	if not OPTIONS.has(id) or not _has(StringName(OPTIONS[id]["needs"]), _needs()):
+		return false
+
+	_end()
+	_begin(id)
+	return _doing == id
+
+
+## Whatever he is passing the time with, over (something of his own has him:
+## GuardHabits).
+func stop() -> void:
+	if _doing != &"":
+		_end()
 
 
 ## A pick now (for checks): what he would choose, remembered as if done,

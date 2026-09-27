@@ -560,6 +560,10 @@ func _spawn_cast() -> void:
 		g.look_seed = entry[3]
 		g.lookout = place[4]
 		g.debug_ai = false
+		# His own ways (GuardHabits) keep him at his mark: a fidget, the wall
+		# behind him. The night moves him (the rota, the gatherings), not a
+		# whim to go and see a friend.
+		g.habits.assign([&"fidget", &"lean"])
 		var paths: Array[NodePath] = []
 
 		for key in place[2]:
