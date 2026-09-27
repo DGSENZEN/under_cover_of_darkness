@@ -1,7 +1,7 @@
 # Lights and Fire: Design
 
 **Date:** 2026-09-27
-**Status:** design approved section by section in conversation; this document awaits the user's review.
+**Status:** approved by the user on 2026-09-27.
 **Program:** sub-project 1 of the look and sound polish pass. Sub-project 2 is props (doors, chests, barrels, crates, furniture); sub-project 3 is night and weather (moon, rain, storms, fog, wind), built to the canal-quarter spec's section 7.5. Each gets its own spec, plan and build.
 
 ## 1. Goal
@@ -283,7 +283,7 @@ The hanging lantern and the lamp post (whose lantern is the same model) carry `c
 
 ## 9. Sound
 
-All sounds are cut and layered by `tools/prepare_sfx.py` from recordings the user already has: the TomMusic pack, the NOX Essentials (CC0), and the packs approved for the sound design in `~/Downloads/AUCOD Web SFX`. The 400 Sounds Pack and the FilmCow packs have no licence file on disk, so they are used only after the user confirms where they came from and on what terms. Every source is credited in `CREDITS.md`. Levels follow the existing loudness targets (`Sfx.GAIN`).
+All sounds are cut and layered by `tools/prepare_sfx.py` from recordings the user already has: the TomMusic pack, the NOX Essentials (CC0), the packs approved for the sound design in `~/Downloads/AUCOD Web SFX`, and the 400 Sounds Pack and the FilmCow Recorded and Designed packs (the user approved both on 2026-09-27; they carry no licence file on disk). Every source is credited in `CREDITS.md`. Levels follow the existing loudness targets (`Sfx.GAIN`).
 
 **Loops** (3D on the World bus). Each behaves like today's torch crackle: it starts only when the camera is within reach + 1 m, at a random point in the loop, pitched 0.9–1.1 per fixture, and is muffled through walls by `Sfx.occlusion_at`, eased.
 
