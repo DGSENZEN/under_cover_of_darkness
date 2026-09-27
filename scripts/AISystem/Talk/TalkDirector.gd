@@ -61,6 +61,11 @@ const SOLO_EARSHOT := 15.0
 const SOLO_QUIET := 8.0
 ## How often it looks for men to join conversations with an empty part.
 const JOIN_EVERY := 0.5
+## At the end of a line one man listening may nod or shake his head: the
+## chance, by his temperament (a nod, but a rash man shakes his).
+const REACT_CHANCE := {&"steady": 0.35, &"stubborn": 0.35, &"rash": 0.25}
+const REACT_OTHERWISE := 0.15
+const REACTIONS := ["nods", "shakes"]
 
 static var _directors := {}
 
@@ -364,6 +369,8 @@ func _choose_for(group: Array, tree: SceneTree) -> void:
 	if candidates.is_empty():
 		return
 
+	candidates = _placed_first(candidates)
+	best_priority = candidates.map(func(c): return float(c["priority"])).max()
 	var top := candidates.filter(func(c): return float(c["priority"]) >= best_priority)
 	var best_spec: int = top.map(func(c): return int(c["spec"])).max()
 	var pool := top.filter(func(c): return int(c["spec"]) >= best_spec - 1)
@@ -465,6 +472,12 @@ func _pairs_of(men: Array) -> Array:
 	return keys
 
 
+## What belongs where they are comes before what could be said anywhere.
+func _placed_first(candidates: Array) -> Array:
+	var placed := candidates.filter(func(c): return StringName(c["conv"]["place"]) != &"")
+	return placed if not placed.is_empty() else candidates
+
+
 func _when_holds(conv: Dictionary, world: Dictionary) -> bool:
 	for term in conv["when"]:
 		if not (term as Array).any(func(alt): return TalkFacts.holds(String(alt), world)):
@@ -542,6 +555,10 @@ func _advance(talk: Dictionary, delta: float) -> void:
 			_interrupt(talk)
 			return
 
+	if not bool(talk.get("reacted", true)) and clock >= float(talk["speaking_until"]):
+		talk["reacted"] = true
+		_react(talk)
+
 	talk["timer"] = float(talk["timer"]) - delta
 
 	if float(talk["timer"]) > 0.0:
@@ -570,8 +587,9 @@ func _advance(talk: Dictionary, delta: float) -> void:
 		if choice.is_empty():
 			continue
 
-		var length := _say(speaker, choice, talk, world)
+		var length := _say(speaker, choice, talk, world, int(talk.get("pre_emoted", -1)) == int(talk["turn"]) - 1)
 		talk["speaker"] = speaker
+		talk["reacted"] = false
 		talk["speaking_until"] = clock + length
 		talk["timer"] = length + randf_range(PAUSE.x, PAUSE.y)
 		return
@@ -615,7 +633,7 @@ func _choice(turn: Dictionary, speaker: Node, talk: Dictionary, world: Dictionar
 
 
 ## Says a line: the words, how, and his emotes. Returns how long it lasts.
-func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary) -> float:
+func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary, nodded := false) -> float:
 	var text := _fill(String(choice["text"]), talk, world)
 	var delivery: StringName = &""
 
@@ -636,6 +654,10 @@ func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary
 	speaker.speak(text, delivery)
 
 	for emote in choice["emotes"]:
+		# A nod he already gave as the last line ended is not given twice.
+		if nodded and REACTIONS.has(emote):
+			continue
+
 		if not DELIVERIES.has(emote) and speaker.has_method("emote"):
 			speaker.emote(String(emote))
 
@@ -680,6 +702,37 @@ func _fill(text: String, talk: Dictionary, world: Dictionary) -> String:
 			text = text.replace(pair[0], String(names[randi() % names.size()]) if not names.is_empty() else "one of ours")
 
 	return text
+
+
+## A line has ended: the man who answers next with a nod or a shake of the
+## head gives it now, as it ends; else one man listening may, by his
+## temperament.
+func _react(talk: Dictionary) -> void:
+	var turns: Array = talk["conv"]["lines"]
+	var index := int(talk["turn"])
+
+	if index < turns.size():
+		var next: Dictionary = turns[index]
+		var answerer: Variant = talk["cast"].get(next["part"])
+
+		if answerer != null and is_instance_valid(answerer) and answerer != talk["speaker"]:
+			for emote in (next["choices"][0] as Dictionary)["emotes"]:
+				if REACTIONS.has(emote):
+					answerer.emote(String(emote))
+					talk["pre_emoted"] = index
+					return
+
+	var listeners := (talk["members"] as Array).filter(func(m): return m != talk["speaker"] and m != null and is_instance_valid(m))
+
+	if listeners.is_empty():
+		return
+
+	var listener: Node = listeners[randi() % listeners.size()]
+	var fighter: RefCounted = listener.get("_fighter")
+	var tag: StringName = fighter.temper.tag if fighter != null and fighter.temper != null else &"steady"
+
+	if randf() < float(REACT_CHANCE.get(tag, REACT_OTHERWISE)):
+		listener.emote("shakes" if tag == &"rash" else "nods")
 
 
 ## Broken off: whoever was to speak next says its interrupt line (if it has
@@ -845,6 +898,7 @@ func _remark(tree: SceneTree) -> void:
 		if candidates.is_empty():
 			continue
 
+		candidates = _placed_first(candidates)
 		var best_priority: int = candidates.map(func(c): return int(c["priority"])).max()
 		var top := candidates.filter(func(c): return int(c["priority"]) >= best_priority)
 		var best_spec: int = top.map(func(c): return int(c["spec"])).max()

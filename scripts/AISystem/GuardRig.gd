@@ -21,6 +21,7 @@ const SwingTrailScript := preload("res://scripts/Visual/SwingTrail.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 const HumanoidScript := preload("res://scripts/Visual/Humanoid.gd")
+const ExpressionScript := preload("res://scripts/Visual/Expression.gd")
 
 ## Guard.Alert.SEARCHING and COMBAT: hunting, his guard is up.
 const SEARCHING := 3
@@ -81,11 +82,9 @@ const SWINGS := {
 }
 ## What he is doing with his hands or himself (Guard.activity), as clips:
 ## [clip, loops, fade in, weight].
+## (Talking, listening, arms folded, a drink are his upper body's, shown by
+## Expression.gd over whatever he stands or walks.)
 const ACTIVITIES := {
-	&"talk": [&"Idle_Talking", true, 0.3, 0.9],
-	&"listen": [&"Idle_FoldArms", true, 0.35, 0.85],
-	&"fold_arms": [&"Idle_FoldArms", true, 0.35, 0.9],
-	&"drink": [&"Consume", false, 0.2, 0.9],
 	&"lantern": [&"Idle_Torch", true, 0.3, 0.85],
 	&"call": [&"Idle_Rail_Call", false, 0.15, 0.9],
 	# At a station (GuardRota).
@@ -158,6 +157,8 @@ const FLESH_BONES := HumanoidScript.FLESH_BONES
 var guard: CharacterBody3D
 ## The man himself (Humanoid.gd).
 var man: Node3D
+## What he shows of himself at his ease (Expression.gd).
+var expression: RefCounted
 var body_mesh: MeshInstance3D
 var weapon: MeshInstance3D
 var trail: MeshInstance3D
@@ -352,6 +353,7 @@ func setup(p_guard: CharacterBody3D) -> void:
 
 	_overlay = ShaderMaterial.new()
 	_overlay.shader = HIT_RIM
+	expression = ExpressionScript.new(self)
 	_apply()
 
 
@@ -701,8 +703,11 @@ func _process(_delta: float) -> void:
 	# Between physics ticks, how far into the next one this frame is drawn.
 	var ahead := Engine.get_physics_interpolation_fraction() / float(maxi(Engine.physics_ticks_per_second, 1))
 	man.set_motion(_velocity / size, guard.state >= SEARCHING, _delta)
-	man.turn_head((_logical_head.rotation.y if _logical_head != null else 0.0) + _glance)
+	man.turn_head((_logical_head.rotation.y if _logical_head != null else 0.0) + _glance + (expression.head_yaw() if expression != null else 0.0))
 	_animate(ahead)
+
+	if expression != null:
+		expression.update(_delta)
 
 	# The trail follows the blade where it is drawn this frame.
 	if _cutting and weapon.is_visible_in_tree():
@@ -894,6 +899,12 @@ func _show_plea(doing: StringName, since: float) -> void:
 			man.show_action(PLEA_KNEEL, lerpf(PLEA_KNEEL_UP, man.action_length(PLEA_KNEEL) - 0.05, progress), 0.08)
 		&"plead_stand":
 			man.show_action(PLEA_STAND, fmod(since, maxf(man.action_length(PLEA_STAND), 0.1)), 0.25, 0.9)
+
+
+## A gesture (a conversation's emote: Guard.emote).
+func emote(what: String) -> void:
+	if expression != null:
+		expression.emote(what)
 
 
 ## Where a thing he picks up to throw sits in his hand (GuardHands).

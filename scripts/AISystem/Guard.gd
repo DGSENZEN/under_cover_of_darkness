@@ -506,6 +506,11 @@ func _ready() -> void:
 	_rota.setup(stations)
 	_voice = GuardVoiceScript.new(self)
 
+	# Each man walks at his own pace at his ease (Expression: his kind, his
+	# temperament, and himself).
+	if _rig.get("expression") != null:
+		patrol_speed *= float(_rig.expression.walk_factor())
+
 	if _agent != null:
 		_agent.link_reached.connect(_on_link_reached)
 	_born_at = Comms.now()
