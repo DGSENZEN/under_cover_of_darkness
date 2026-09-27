@@ -138,6 +138,8 @@ var _cool := 0.0
 var _smoke_left := 0.0
 var _thread_due := 0.0
 var _told := true
+## Seconds since a draft reached it (a candle shivers for Flicker.DRAFT_TIME).
+var _draft_since := INF
 
 
 func _ready() -> void:
@@ -271,6 +273,12 @@ func _process(delta: float) -> void:
 	_flare = move_toward(_flare, 0.0, delta / FLARE_TIME)
 	var flared := _flare * _flare
 	var waver := Flicker.value(flicker_kind, _time, _salt)
+
+	if flicker_kind == &"candle":
+		# Still, but for a draft.
+		_draft_since += delta
+		waver = Flicker.draft(_draft_since)
+
 	_step_lit(delta)
 	# Eased as it lights: fast at first, settling into its flame.
 	var shown := 1.0 - (1.0 - _lit_level) * (1.0 - _lit_level)
@@ -413,6 +421,11 @@ func put_out(how := &"snuff", instant := false) -> void:
 
 func is_lit() -> bool:
 	return lit
+
+
+## A draft reaches it (a door, a man running past): a candle shivers a while.
+func draft() -> void:
+	_draft_since = 0.0
 
 
 ## What is built on a burner shows its lit, cooling and out states here

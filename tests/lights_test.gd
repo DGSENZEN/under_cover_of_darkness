@@ -58,6 +58,7 @@ func _run() -> void:
 	await _fixture()
 	await _torches()
 	await _lanterns()
+	await _candles()
 
 
 # ---------------------------------------------------------------------------
@@ -843,6 +844,74 @@ func _lanterns() -> void:
 		"carried cookie %s shadows %s; post cookie %s flame at %.2f m" % [carried.light.light_projector != null, carried.light.shadow_enabled, post.light.light_projector != null, flame_height])
 	carried.queue_free()
 	post.queue_free()
+	camera.queue_free()
+	await _frames(3)
+
+
+# ---------------------------------------------------------------------------
+# Candles, oil lamps and the draft
+# ---------------------------------------------------------------------------
+
+func _candles() -> void:
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.global_position = Vector3(0, 1.8, 910)
+	camera.current = true
+
+	# L37 a candelabra: one light for its five candles, one halo, plain flames
+	var five: Node3D = Lights.candelabra(self, Vector3(0, 1.0, 900), 5)
+	var lone: Node3D = Lights.candle(self, Vector3(3, 1.0, 900), 10)
+	await _frames(5)
+	var lights: int = five.find_children("*", "OmniLight3D", true, false).size()
+	var plain: bool = five.flames.size() == 5
+
+	for fx in five.flames:
+		plain = plain and fx.sprites.size() == 1 and not fx.core
+
+	var halos: int = five.find_children("*", "", true, false).filter(func(n): return n.get_script() == CoronaScript).size()
+	var low := INF
+	var high := -INF
+
+	for i in 120:
+		await get_tree().process_frame
+		low = minf(low, lone.light.light_energy)
+		high = maxf(high, lone.light.light_energy)
+
+	_check("L37 a candelabra of five has one light, five plain flames and one halo; a lone candle burns still",
+		lights == 1 and plain and halos == 1 and high - low <= 0.001,
+		"lights %d, flames %d plain %s, halos %d, lone candle %.4f..%.4f" % [lights, five.flames.size(), plain, halos, low, high])
+
+	# L38 a door opening beside a candle makes it shiver, and it settles; so does a man running past
+	var door: Node3D = Props.door(self, Vector3(4.5, 0, 900), 0.0)
+	await _frames(20)
+	door.rotation.y += 0.6
+	var shivered := false
+	var base: float = lone.energy
+
+	for i in 30:
+		await get_tree().process_frame
+		shivered = shivered or absf(lone.light.light_energy - base) > 0.01 * base
+
+	await _frames(90)
+	var settled_door: bool = absf(lone.light.light_energy - base) <= 0.001
+	var runner := CharacterBody3D.new()
+	runner.add_to_group(&"guards")
+	add_child(runner)
+	runner.global_position = Vector3(1.0, 1.0, 900.6)
+	runner.velocity = Vector3(4, 0, 0)
+	var run_shiver := false
+
+	for i in 30:
+		runner.global_position += Vector3(4.0 / 60.0, 0, 0)
+		await get_tree().process_frame
+		run_shiver = run_shiver or absf(lone.light.light_energy - base) > 0.01 * base
+
+	runner.queue_free()
+	_check("L38 a door swung beside a candle makes it shiver and it settles; a man running past does the same",
+		shivered and settled_door and run_shiver, "door shiver %s, settled %s, runner shiver %s" % [shivered, settled_door, run_shiver])
+	door.queue_free()
+	five.queue_free()
+	lone.queue_free()
 	camera.queue_free()
 	await _frames(3)
 

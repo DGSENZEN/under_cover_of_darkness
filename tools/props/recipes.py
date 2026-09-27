@@ -316,6 +316,183 @@ FIXTURES["lamp_post"] = {
     "burner": dict(LAMP_BURNER, energy=1.6, light_range=9.0, shadows=True),
 }
 
+# Candles and oil lamps.
+CANDLE_BURNER = {
+    "sheet": "candle", "ramp": "candle", "low_ramp": "gutter", "flicker_kind": "candle", "flicker": 0.04,
+    "energy": 0.35, "light_range": 2.5, "shadows": False, "color": "FFA645", "corona_px": 12.0,
+    "ember_rate": 0.0, "smoke_rate": 0.0, "flame_size": 0.05, "flame_layers": 2, "core": True,
+    "loop": "", "loop_db": -30.0, "loop_reach": 0.0,
+}
+CLUSTER = {"flame_layers": 1, "core": False}
+
+
+def _candle(at=(0.0, 0.0, 0.0), height=0.10, prefix="", pool=True, drip=True):
+    """A tallow candle standing at `at`; returns (parts, flame point)."""
+    x, y, z = at
+    parts = [
+        {"type": "lathe", "name": prefix + "candle", "slot": "wax", "segments": 6,
+         "profile": [(0.0, 0.0), (0.02, 0.0), (0.02, height - 0.006), (0.012, height), (0.0, height + 0.002)], "at": (x, y, z)},
+    ]
+
+    if pool:
+        parts.append({"type": "lathe", "name": prefix + "pool", "slot": "wax", "segments": 6,
+                      "profile": [(0.028, 0.0), (0.0, 0.005)], "at": (x, y, z)})
+
+    if drip:
+        parts.append({"type": "lathe", "name": prefix + "drip", "slot": "wax", "segments": 3,
+                      "profile": [(0.0, 0.0), (0.004, 0.004), (0.005, height * 0.4), (0.0, height * 0.45)],
+                      "at": (x + 0.017, y, z + height * 0.45)})
+
+    return parts, (x, y, z + height + 0.012)
+
+
+def _candle_fixture(height):
+    parts, flame = _candle(height=height)
+    return {
+        "family": "candles", "mount": "table", "budget": 60, "soot": False, "cookie": False, "parts": parts,
+        "sockets": {"flame": [flame], "corona": [(flame[0], flame[1], flame[2] + 0.02)]},
+        "burner": dict(CANDLE_BURNER),
+    }
+
+
+for _cm in (6, 10, 16):
+    FIXTURES["candle_%d" % _cm] = _candle_fixture(_cm / 100.0)
+
+_candle_on_pricket, _pricket_flame = _candle((0.0, 0.0, 0.22), 0.10, pool=False)
+FIXTURES["candlestick_iron"] = {
+    "family": "candles", "mount": "table", "budget": 150, "soot": False, "cookie": False,
+    "parts": [
+        {"type": "lathe", "name": "dish", "slot": "iron", "segments": 6,
+         "profile": [(0.0, 0.0), (0.07, 0.0), (0.075, 0.012), (0.06, 0.016), (0.0, 0.016)]},
+        {"type": "tube", "name": "stem", "slot": "iron", "radius": 0.008, "sides": 4, "points": [(0.0, 0.0, 0.016), (0.0, 0.0, 0.2)]},
+        {"type": "lathe", "name": "pan", "slot": "iron", "segments": 6, "profile": [(0.0, 0.195), (0.04, 0.2), (0.045, 0.215), (0.0, 0.21)]},
+    ] + _candle_on_pricket,
+    "sockets": {"flame": [_pricket_flame], "corona": [(0.0, 0.0, _pricket_flame[2] + 0.02)]},
+    "burner": dict(CANDLE_BURNER, **CLUSTER),
+}
+
+_candle_on_socket, _socket_flame = _candle((0.0, 0.0, 0.2), 0.10, pool=False)
+FIXTURES["candlestick_brass"] = {
+    "family": "candles", "mount": "table", "budget": 150, "soot": False, "cookie": False,
+    "parts": [
+        {"type": "lathe", "name": "stick", "slot": "brass", "segments": 6,
+         "profile": [(0.0, 0.0), (0.055, 0.0), (0.05, 0.015), (0.018, 0.03), (0.014, 0.12), (0.02, 0.16), (0.012, 0.18), (0.026, 0.2), (0.0, 0.2)]},
+    ] + _candle_on_socket,
+    "sockets": {"flame": [_socket_flame], "corona": [(0.0, 0.0, _socket_flame[2] + 0.02)]},
+    "burner": dict(CANDLE_BURNER, **CLUSTER),
+}
+
+
+def _candelabra(arms):
+    parts = [
+        {"type": "lathe", "name": "base", "slot": "brass", "segments": 6,
+         "profile": [(0.0, 0.0), (0.09, 0.0), (0.08, 0.02), (0.03, 0.05), (0.0, 0.05)]},
+        {"type": "tube", "name": "stem", "slot": "brass", "radius": 0.012, "sides": 4, "points": [(0.0, 0.0, 0.05), (0.0, 0.0, 0.3)]},
+    ]
+    flames = []
+    spread = 0.12 if arms == 3 else 0.22
+    reach = [((i - (arms - 1) / 2.0) / ((arms - 1) / 2.0)) * spread for i in range(arms)]
+
+    for i, x in enumerate(reach):
+        cup = (x, 0.0, 0.34 if abs(x) > 0.01 else 0.38)
+
+        if abs(x) > 0.01:
+            parts.append({"type": "tube", "name": "arm_%d" % i, "slot": "brass", "radius": 0.006, "sides": 3,
+                          "points": [(0.0, 0.0, 0.26), (x * 0.6, 0.0, 0.25), (x, 0.0, cup[2] - 0.01)]})
+
+        parts.append({"type": "lathe", "name": "cup_%d" % i, "slot": "brass", "segments": 5,
+                      "profile": [(0.0, -0.01), (0.03, 0.0), (0.028, 0.012), (0.0, 0.01)], "at": cup})
+        candle, flame = _candle((cup[0], cup[1], cup[2] + 0.01), 0.10, "c%d_" % i, pool=False, drip=(i % 2 == 0))
+        parts += candle
+        flames.append(flame)
+
+    return {
+        "family": "candles", "mount": "table", "budget": 450, "soot": False, "cookie": False, "parts": parts,
+        "sockets": {"flame": flames, "corona": [(0.0, 0.0, max(f[2] for f in flames) + 0.03)]},
+        "burner": dict(CANDLE_BURNER, energy=0.9, light_range=4.5, corona_px=20.0, **CLUSTER),
+    }
+
+
+FIXTURES["candelabra_3"] = _candelabra(3)
+FIXTURES["candelabra_5"] = _candelabra(5)
+
+
+def _chandelier(candles):
+    import math
+    hoop = 0.35
+    drop = 0.5
+    parts = [
+        {"type": "ring", "name": "hang_ring", "slot": "iron", "radius": 0.025, "thickness": 0.008, "sides": 3, "segments": 6,
+         "axis": "Y", "at": (0.0, 0.0, -0.02)},
+        {"type": "ring", "name": "hoop", "slot": "iron", "radius": hoop, "thickness": 0.02, "sides": 4, "segments": 12,
+         "axis": "Z", "at": (0.0, 0.0, -drop)},
+    ]
+
+    for i in range(3):
+        a = math.tau * i / 3.0 + 0.3
+        parts.append({"type": "tube", "name": "rod_%d" % i, "slot": "iron", "radius": 0.004, "sides": 3,
+                      "points": [(0.0, 0.0, -0.04), (round(hoop * math.cos(a), 4), round(hoop * math.sin(a), 4), -drop)]})
+
+    flames = []
+
+    for i in range(candles):
+        a = math.tau * i / candles
+        at = (round(hoop * math.cos(a), 4), round(hoop * math.sin(a), 4), -drop + 0.01)
+        parts.append({"type": "lathe", "name": "cup_%d" % i, "slot": "iron", "segments": 5,
+                      "profile": [(0.0, -0.012), (0.03, 0.0), (0.028, 0.01), (0.0, 0.008)], "at": at})
+        candle, flame = _candle((at[0], at[1], at[2] + 0.008), 0.09, "c%d_" % i, pool=False, drip=(i % 3 == 0))
+        parts += candle
+        flames.append(flame)
+
+    return {
+        "family": "candles", "mount": "hang", "budget": 900, "soot": False, "cookie": False, "parts": parts,
+        "sockets": {"flame": flames, "corona": [(0.0, 0.0, -drop + 0.14)], "hang": [(0.0, 0.0, 0.0)]},
+        "burner": dict(CANDLE_BURNER, energy=1.6, light_range=8.0, shadows=True, corona_px=36.0, **CLUSTER),
+    }
+
+
+FIXTURES["chandelier_6"] = _chandelier(6)
+FIXTURES["chandelier_8"] = _chandelier(8)
+
+OIL_BURNER = dict(CANDLE_BURNER, sheet="small", ramp="lamp", flicker_kind="lamp", energy=0.5, light_range=3.0,
+                  corona_px=16.0, flame_size=0.06)
+
+
+def _oil_bowl(slot, at=(0.0, 0.0, 0.0)):
+    x, y, z = at
+    return [
+        {"type": "lathe", "name": "bowl", "slot": slot, "segments": 8,
+         "profile": [(0.0, 0.0), (0.035, 0.0), (0.05, 0.015), (0.048, 0.03), (0.02, 0.034), (0.0, 0.03)], "at": at},
+        {"type": "tube", "name": "spout", "slot": slot, "radius": 0.009, "sides": 4, "points": [(x + 0.04, y, z + 0.02), (x + 0.085, y, z + 0.03)]},
+    ], (x + 0.09, y, z + 0.038)
+
+
+_clay_parts, _clay_flame = _oil_bowl("clay")
+FIXTURES["oil_lamp_clay"] = {
+    "family": "candles", "mount": "table", "budget": 120, "soot": False, "cookie": False,
+    "parts": _clay_parts + [
+        {"type": "ring", "name": "handle", "slot": "clay", "radius": 0.02, "thickness": 0.008, "sides": 3, "segments": 5,
+         "axis": "Y", "at": (-0.055, 0.0, 0.025)},
+    ],
+    "sockets": {"flame": [_clay_flame], "corona": [(_clay_flame[0], 0.0, _clay_flame[2] + 0.02)]},
+    "burner": dict(OIL_BURNER),
+}
+
+_hung_parts, _hung_flame = _oil_bowl("brass", (0.0, 0.0, -0.3))
+FIXTURES["oil_lamp_hanging"] = {
+    "family": "candles", "mount": "hang", "budget": 120, "soot": False, "cookie": False,
+    "parts": _hung_parts + [
+        {"type": "ring", "name": "hang_ring", "slot": "chain", "radius": 0.015, "thickness": 0.005, "sides": 3, "segments": 3,
+         "axis": "Y", "at": (0.0, 0.0, -0.012)},
+    ] + [
+        {"type": "tube", "name": "rod_%d" % i, "slot": "chain", "radius": 0.002, "sides": 3,
+         "points": [(0.0, 0.0, -0.02), _round((0.0, 0.0, -0.27), 0.045, a)]}
+        for i, a in enumerate((0.0, 120.0, 240.0))
+    ],
+    "sockets": {"flame": [_hung_flame], "corona": [(_hung_flame[0], 0.0, _hung_flame[2] + 0.02)], "hang": [(0.0, 0.0, 0.0)]},
+    "burner": dict(OIL_BURNER),
+}
+
 KINDS = list(FIXTURES)
 
 

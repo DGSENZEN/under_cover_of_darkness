@@ -1,0 +1,84 @@
+{
+ "fixture": "chandelier_6",
+ "family": "candles",
+ "mount": "hang",
+ "tris": 516,
+ "slots": [
+  "iron",
+  "wax"
+ ],
+ "glow_parts": [],
+ "shadow_parts": [],
+ "stretch": {},
+ "sockets": {
+  "flame": [
+   [
+    0.35,
+    -0.38,
+    -0.0
+   ],
+   [
+    0.175,
+    -0.38,
+    -0.3031
+   ],
+   [
+    -0.175,
+    -0.38,
+    -0.3031
+   ],
+   [
+    -0.35,
+    -0.38,
+    -0.0
+   ],
+   [
+    -0.175,
+    -0.38,
+    0.3031
+   ],
+   [
+    0.175,
+    -0.38,
+    0.3031
+   ]
+  ],
+  "corona": [
+   [
+    0.0,
+    -0.36,
+    -0.0
+   ]
+  ],
+  "hang": [
+   [
+    0.0,
+    0.0,
+    -0.0
+   ]
+  ]
+ },
+ "burner": {
+  "sheet": "candle",
+  "ramp": "candle",
+  "low_ramp": "gutter",
+  "flicker_kind": "candle",
+  "flicker": 0.04,
+  "energy": 1.6,
+  "light_range": 8.0,
+  "shadows": true,
+  "color": "FFA645",
+  "corona_px": 36.0,
+  "ember_rate": 0.0,
+  "smoke_rate": 0.0,
+  "flame_size": 0.05,
+  "flame_layers": 1,
+  "core": false,
+  "loop": "",
+  "loop_db": -30.0,
+  "loop_reach": 0.0
+ },
+ "soot": false,
+ "cookie": false,
+ "hash": "69c7bb465d551b561d793c0a5ad76718"
+}

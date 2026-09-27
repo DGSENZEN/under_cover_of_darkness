@@ -97,6 +97,39 @@ static func lamp_post(parent: Node, foot_at: Vector3, yaw := 0.0, overrides := {
 	return make(parent, &"lamp_post", foot_at, yaw, overrides)
 
 
+## A candle `height` centimetres tall (6, 10 or 16) standing on `at`.
+static func candle(parent: Node, at: Vector3, height := 10, overrides := {}) -> Node3D:
+	return make(parent, StringName("candle_%d" % height), at, 0.0, overrides)
+
+
+## A candlestick ("iron" pricket or "brass" socket) with its candle, on `at`.
+static func candlestick(parent: Node, at: Vector3, variant := &"iron", overrides := {}) -> Node3D:
+	return make(parent, StringName("candlestick_%s" % variant), at, 0.0, overrides)
+
+
+## A brass candelabra of 3 or 5 candles standing on `at`, its arms along its X.
+static func candelabra(parent: Node, at: Vector3, arms := 3, yaw := 0.0, overrides := {}) -> Node3D:
+	return make(parent, StringName("candelabra_%d" % arms), at, yaw, overrides)
+
+
+## An iron hoop of 6 or 8 candles hung `chain` metres below a hook at `hook_at`.
+static func chandelier(parent: Node, hook_at: Vector3, candles := 6, chain := 1.0, overrides := {}) -> Node3D:
+	var settings := overrides.duplicate()
+	settings["hang_drop"] = chain
+	return make(parent, StringName("chandelier_%d" % candles), hook_at, 0.0, settings)
+
+
+## An oil lamp: "clay" standing on `at`, or "hanging" from a hook at `at`
+## (`chain` metres more below it).
+static func oil_lamp(parent: Node, at: Vector3, variant := &"clay", yaw := 0.0, chain := 0.0, overrides := {}) -> Node3D:
+	var settings := overrides.duplicate()
+
+	if chain > 0.0:
+		settings["hang_drop"] = chain
+
+	return make(parent, StringName("oil_lamp_%s" % variant), at, yaw, settings)
+
+
 ## A cresset: "pole" standing on `at` (its foot), or "wall" on its bracket
 ## (`at` its plate, turned by `yaw`).
 static func cresset(parent: Node, at: Vector3, variant := &"pole", yaw := 0.0, overrides := {}) -> Node3D:

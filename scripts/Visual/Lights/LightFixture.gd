@@ -24,6 +24,15 @@ const LINK_PITCH := 0.054
 const SWING_DAMPING := 1.5
 const SWING_WIND := 0.8
 const SWING_MOST := 0.5
+## Candles feel a draft from a man moving faster than DRAFT_SPEED within
+## DRAFT_REACH, or a door swinging within DRAFT_DOOR; they look DRAFT_EVERY.
+const DRAFT_SPEED := 3.0
+const DRAFT_REACH := 1.5
+const DRAFT_DOOR := 3.0
+const DRAFT_EVERY := 0.25
+## Candles and oil lamps fade out between these distances (their light).
+const SMALL_FADE_FROM := 20.0
+const SMALL_FADE_OVER := 5.0
 
 ## Which fixture (assets/props/lights/<fixture>.glb / .json).
 @export var fixture := &""
@@ -44,6 +53,8 @@ var _tilt := Vector2.ZERO
 var _spin := Vector2.ZERO
 var _rest_basis := Basis.IDENTITY
 var _swinging := false
+var _draft_clock := 0.0
+var _door_angles := {}
 
 static var _specs := {}
 var _bodies: Array[RID] = []
@@ -166,6 +177,11 @@ func _after_ready() -> void:
 	_swinging = spec_data.get("mount", "") == "hang"
 	_rest_basis = transform.basis
 
+	if spec_data.get("family", "") == "candles":
+		light.distance_fade_enabled = true
+		light.distance_fade_begin = SMALL_FADE_FROM
+		light.distance_fade_length = SMALL_FADE_OVER
+
 
 ## A hung fixture hangs `hang_drop` below its hook on links of chain; it
 ## swings about the hook.
@@ -278,11 +294,44 @@ func _process(delta: float) -> void:
 	if _swinging:
 		_swing(delta)
 
+	if flicker_kind == &"candle":
+		_watch_drafts(delta)
+
 	if lit and not glow_meshes.is_empty():
 		var ratio := clampf(light.light_energy / maxf(energy, 0.001), 0.0, 1.5)
 
 		for mesh in glow_meshes:
 			mesh.set_instance_shader_parameter(&"glow", ratio)
+
+
+## A man hurrying past or a door swung near makes a candle shiver.
+func _watch_drafts(delta: float) -> void:
+	_draft_clock -= delta
+
+	if _draft_clock > 0.0:
+		return
+
+	_draft_clock = DRAFT_EVERY
+	var here := global_position
+
+	for group in [&"player", &"guards"]:
+		for body in get_tree().get_nodes_in_group(group):
+			if body is CharacterBody3D:
+				var off: Vector3 = body.global_position - here
+				var speed := Vector2(body.velocity.x, body.velocity.z).length()
+
+				if Vector2(off.x, off.z).length() < DRAFT_REACH and absf(off.y) < 2.0 and speed > DRAFT_SPEED:
+					draft()
+					return
+
+	for door in get_tree().get_nodes_in_group(&"doors"):
+		if door is Node3D and door.global_position.distance_to(here) < DRAFT_DOOR:
+			var angle: float = door.rotation.y
+
+			if _door_angles.has(door) and absf(angle - float(_door_angles[door])) > 0.02:
+				draft()
+
+			_door_angles[door] = angle
 
 
 ## A pendulum from its hook, pushed by the wind.
