@@ -237,6 +237,12 @@ func asked(man: Node, what: StringName) -> bool:
 	return _asked.has("%d:%s" % [man.get_instance_id(), what])
 
 
+## His want of `what` given up without being seen to: he asks it again while
+## it holds.
+func forget(man: Node, what: StringName) -> void:
+	_asked.erase("%d:%s" % [man.get_instance_id(), what])
+
+
 ## What is waiting to be seen to (a peek).
 func wanted() -> Array:
 	return _wanted

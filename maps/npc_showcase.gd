@@ -131,10 +131,13 @@ var _routes := {}
 var fire: Area3D = null
 var rota: RefCounted = null
 var atmosphere: Node3D = null
+## Temperament.rolling as it was before the showcase (put back after it).
+var _was_rolling := true
 
 
 func _ready() -> void:
 	reset_physics_interpolation.call_deferred()
+	_was_rolling = TemperamentScript.rolling
 	TemperamentScript.rolling = false
 	SquadScript.clear_all()
 	GarrisonScript.clear_all()
@@ -210,6 +213,11 @@ func _ready() -> void:
 
 	if director != null:
 		director.run()
+
+
+## Gone: the men made after it roll their temperaments as they did before.
+func _exit_tree() -> void:
+	TemperamentScript.rolling = _was_rolling
 
 
 ## Everything but the people: the yard, the buildings, outside, the lights,

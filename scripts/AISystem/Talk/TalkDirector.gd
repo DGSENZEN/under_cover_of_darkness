@@ -673,6 +673,21 @@ func _when_holds(conv: Dictionary, world: Dictionary) -> bool:
 		if not (term as Array).any(func(alt): return TalkFacts.holds(String(alt), world)):
 			return false
 
+	return _fillable(conv, world)
+
+
+## Whether its names can be put in: no line speaks of {dead} when there is no
+## one dead to name.
+func _fillable(conv: Dictionary, world: Dictionary) -> bool:
+	if String(world.get("dead_name", "")) != "" or not (world.get("dead_names", []) as Array).is_empty():
+		return true
+
+	for turns in [conv["lines"], conv.get("interrupt", [])]:
+		for turn in turns:
+			for choice in turn["choices"]:
+				if String(choice["text"]).contains("{dead}"):
+					return false
+
 	return true
 
 
@@ -1170,7 +1185,7 @@ func _remark(tree: SceneTree) -> void:
 		if _visit_for(man, guards):
 			continue
 
-		if _remarks.any(func(r): return clock - float(r["at"]) < SOLO_QUIET and (r["where"] as Vector3).distance_to((man as Node3D).global_position) <= SOLO_EARSHOT):
+		if _remarked_near((man as Node3D).global_position):
 			continue
 
 		var me := _facts_of(man, sheet)
@@ -1207,6 +1222,22 @@ func _remark(tree: SceneTree) -> void:
 		_start(pick["conv"], {part: man}, {}, true)
 		_solo_next[id] = clock + SOLO_GAP
 		_remarks.append({"id": String(pick["conv"]["id"]), "man": man, "at": clock, "where": (man as Node3D).global_position})
+
+
+## A remark made within SOLO_EARSHOT of `at` less than SOLO_QUIET ago. The
+## newest are last: only those back to SOLO_QUIET are looked at, not the
+## whole night's.
+func _remarked_near(at: Vector3) -> bool:
+	for i in range(_remarks.size() - 1, -1, -1):
+		var r: Dictionary = _remarks[i]
+
+		if clock - float(r["at"]) >= SOLO_QUIET:
+			return false
+
+		if (r["where"] as Vector3).distance_to(at) <= SOLO_EARSHOT:
+			return true
+
+	return false
 
 
 # ---------------------------------------------------------------------------

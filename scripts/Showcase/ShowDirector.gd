@@ -177,6 +177,14 @@ func jump_to(act: int) -> void:
 		await reload.call()
 
 
+## Gone (the showcase closed or reloaded): time back to normal for what
+## comes after, unless another director has set the speed since.
+func _exit_tree() -> void:
+	if is_equal_approx(TimeFx.base, SPEEDS[_speed_index]):
+		TimeFx.clear()
+		TimeFx.set_base(1.0)
+
+
 func next_beat() -> void:
 	_skip = true
 

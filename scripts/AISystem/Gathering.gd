@@ -146,12 +146,19 @@ func queued() -> Array:
 
 ## No longer asked for.
 func cancel(kind: StringName) -> void:
+	for q in _queue:
+		if q["kind"] == kind:
+			_given_up(q)
+
 	_queue = _queue.filter(func(q): return q["kind"] != kind)
 
 
 ## Everything going on ended (its men back to their duties) and nothing more
 ## asked for (the night has moved on).
 func end_all() -> void:
+	for q in _queue:
+		_given_up(q)
+
 	_queue.clear()
 
 	for g in _live.duplicate():
@@ -229,11 +236,14 @@ func tick(delta: float) -> void:
 	# Given up: asked for too long ago, or for men who are not here.
 	var tree_now: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
 	_queue = _queue.filter(func(q):
-		if clock - float(q.get("at", clock)) > REQUEST_FOR:
-			return false
-
 		var names: Array = q.get("names", [])
-		return names.is_empty() or tree_now == null or tree_now.get_nodes_in_group(&"guards").any(func(m): return names.has(String(m.get("given_name")))))
+		var keep: bool = clock - float(q.get("at", clock)) <= REQUEST_FOR \
+				and (names.is_empty() or tree_now == null or tree_now.get_nodes_in_group(&"guards").any(func(m): return names.has(String(m.get("given_name")))))
+
+		if not keep:
+			_given_up(q)
+
+		return keep)
 
 	if not _queue.is_empty():
 		var asked: Dictionary = _queue.pop_front()
@@ -530,6 +540,30 @@ func _end(g: Dictionary) -> void:
 		if is_instance_valid(station):
 			station.queue_free()
 
+	# The want it was to see to, if it is still wanted, is asked again (a
+	# watch handed over has taken him off his post: nothing to ask).
+	var rota := _rota()
+
+	if rota != null:
+		var roles: Dictionary = g.get("roles", {})
+		var relieved: Variant = roles.get("post") if g["kind"] == &"watch_change" else roles.get("then")
+
+		if relieved != null and is_instance_valid(relieved):
+			rota.forget(relieved, &"relief")
+
+		if StringName(g.get("need", &"")) != &"" and is_instance_valid(g["members"][0]):
+			rota.forget(g["members"][0], g["need"])
+
+
+## A request dropped before it came about: the want behind it (the relief
+## for a post) is asked again.
+func _given_up(q: Dictionary) -> void:
+	var man: Variant = q.get("man")
+	var rota := _rota()
+
+	if rota != null and man != null and is_instance_valid(man):
+		rota.forget(man, &"relief")
+
 
 # ---------------------------------------------------------------------------
 # The watch, the round, the sleeper, the fire
@@ -598,11 +632,14 @@ func _see_to(want: Dictionary, rota: RefCounted) -> void:
 
 		return
 
-	# A sleeper, a man set to watch, a man stirred: not now.
+	var need := StringName(want.get("need", &""))
+
+	# A sleeper, a man set to watch, a man stirred: not now (he asks again).
 	if not member_of(man).is_empty() or man._rota.asleep() or bool(man.get("lookout")) or not GuardLifeScript.at_ease(man):
+		rota.forget(man, need)
 		return
 
-	match StringName(want.get("need", &"")):
+	match need:
 		&"tired":
 			var bed: StringName = rota.free_duty(&"bed")
 
@@ -611,17 +648,23 @@ func _see_to(want: Dictionary, rota: RefCounted) -> void:
 
 			if bed != &"":
 				rota.assign(man, bed)
+				return
 		&"hungry":
 			var bowl := _free_station(&"eat", man)
 
 			if bowl != null:
-				_rest(man, bowl, MEAL, false)
+				_rest(man, bowl, MEAL, false, need)
+				return
 		&"cold":
 			var fire := _nearest_fire((man as Node3D).global_position, INF)
 
 			if fire != null:
 				var at := _beside(fire.global_position, (man as Node3D).global_position, WARM_APART)
-				_rest(man, _make_station(&"warm_hands", at, fire.global_position), WARMING, true)
+				_rest(man, _make_station(&"warm_hands", at, fire.global_position), WARMING, true, need)
+				return
+
+	# Nowhere free to see to it: he asks again.
+	rota.forget(man, need)
 
 
 ## The relief sent to the man on his post (or, the only one free asleep,
@@ -672,7 +715,8 @@ func _advance_watch(g: Dictionary) -> void:
 	var on_post: Variant = g["roles"]["post"]
 	var relief: Variant = g["roles"]["relief"]
 
-	if not _here(on_post) or not _here(relief):
+	# Stirred (an alarm broke their talk): over, the duties as they were.
+	if not _here(on_post) or not _here(relief) or not GuardLifeScript.at_ease(on_post) or not GuardLifeScript.at_ease(relief):
 		_end(g)
 		return
 
@@ -1011,9 +1055,10 @@ func _advance_fire(g: Dictionary) -> void:
 				_end(g)
 
 
-## A man lent `station` for `seconds` (a meal, warming at the fire).
-func _rest(man: Node, station: Node3D, seconds: float, made: bool) -> void:
-	var g := {"kind": &"rest", "members": [man], "roles": {}, "stations": [station] if made else [], "until": clock + seconds}
+## A man lent `station` for `seconds` (a meal, warming at the fire), for his
+## `need`.
+func _rest(man: Node, station: Node3D, seconds: float, made: bool, need := &"") -> void:
+	var g := {"kind": &"rest", "members": [man], "roles": {}, "stations": [station] if made else [], "until": clock + seconds, "need": need}
 	_live.append(g)
 	man._rota.lend(station)
 
