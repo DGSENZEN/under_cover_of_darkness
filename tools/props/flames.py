@@ -26,9 +26,11 @@ Run headless: Blender -b --factory-startup --python flames.py -- all
 
 import math
 import os
+import shutil
 import struct
 import sys
 import tempfile
+import time
 import zlib
 from pathlib import Path
 
@@ -36,6 +38,9 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 VFX = ROOT / "assets" / "vfx"
+# What a sheet is written over is kept here first (gitignored, as the
+# props' own backups).
+BACKUP = ROOT / "assets" / "props" / "source" / "backup"
 SUPERSAMPLE = 4
 
 # sheet: frame width, height, frames, and the flame's make: half-width at the
@@ -65,8 +70,16 @@ RAMPS = {
 # PNG out (exact bytes: no colour management between the numbers and the file)
 # ---------------------------------------------------------------------------
 
-def write_png(path, pixels):
-    """8-bit PNG from a uint8 array, (h, w) grey or (h, w, 4) RGBA, top row first."""
+def write_png(path, pixels, backup_dir=BACKUP):
+    """8-bit PNG from a uint8 array, (h, w) grey or (h, w, 4) RGBA, top row
+    first; whatever was at `path` is copied into `backup_dir` first."""
+    path = Path(path)
+
+    if path.exists():
+        backup_dir = Path(backup_dir)
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, backup_dir / ("%s.%d%s" % (path.stem, time.time_ns(), path.suffix)))
+
     pixels = np.ascontiguousarray(pixels, dtype=np.uint8)
     height, width = pixels.shape[:2]
     colour_type = 0 if pixels.ndim == 2 else 6

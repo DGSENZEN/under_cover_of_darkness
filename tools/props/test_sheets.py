@@ -5,6 +5,8 @@ the fuel, hard-edged smoke and soot, and the colour ramps.
     python3 -m unittest tools/props/test_sheets.py -v
 """
 
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -81,6 +83,24 @@ class SheetsTest(unittest.TestCase):
             self.assertEqual(ramp[0, 0, 3], 0, name)
             brightness = ramp[0, :, :3].sum(axis=1)
             self.assertEqual(int(np.argmax(brightness)), 63, name)
+
+
+class Backups(unittest.TestCase):
+    """Every write backs up what it writes over (spec 12), sheets too."""
+
+    def test_a_sheet_written_over_is_backed_up_first(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import flames
+
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder) / "sheet.png"
+            backups = Path(folder) / "backup"
+            flames.write_png(out, np.zeros((2, 2), np.uint8), backup_dir=backups)
+            self.assertFalse(backups.exists() and any(backups.iterdir()), "nothing was there to back up")
+            flames.write_png(out, np.full((2, 2), 255, np.uint8), backup_dir=backups)
+            saved = list(backups.iterdir())
+            self.assertEqual(len(saved), 1)
+            self.assertEqual(int(np.asarray(Image.open(saved[0])).max()), 0, "the backup is the sheet as it was")
 
 
 if __name__ == "__main__":
