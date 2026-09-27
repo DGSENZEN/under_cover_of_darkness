@@ -35,6 +35,9 @@ const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
+const DirectorScript := preload("res://scripts/Showcase/ShowDirector.gd")
+## The night's story (acts and beats), for the director.
+const STORY := "res://scripts/Showcase/ShowNight.gd"
 
 const STONE_ROAD := preload("res://maps/test_stone_road.png")
 const STONE_WEATHERED := preload("res://maps/test_stone_weathered.png")
@@ -77,6 +80,8 @@ var roles := {}
 ## Named places for the story (Vector3): see _marks.
 var marks := {}
 var intruder: CharacterBody3D = null
+## The director, when the show runs.
+var director: Node = null
 
 var _baker: NavigationRegion3D
 var _stations := {}
@@ -104,6 +109,14 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--fps-report="):
 			_fps_report(float(arg.trim_prefix("--fps-report=")))
+			return
+
+	if run_show and ResourceLoader.exists(STORY):
+		director = DirectorScript.new()
+		director.read_args(OS.get_cmdline_user_args())
+		add_child(director)
+		director.setup(self, (load(STORY) as GDScript).new(self))
+		director.run()
 
 
 ## Everything but the people: the yard, the buildings, outside, the lights,

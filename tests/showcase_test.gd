@@ -9,6 +9,9 @@ const MapScript := preload("res://maps/npc_showcase.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const GuardScript := preload("res://scripts/AISystem/Guard.gd")
+const DirectorScript := preload("res://scripts/Showcase/ShowDirector.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
+const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 
 ## Who is at which kind of station at the start of the night.
 const STATIONED := {"Piers": &"sit", "Col": &"eat", "Tam": &"sleep", "Gideon": &"rummage", "Ned": &"carry", "Brand": &"chop"}
@@ -23,6 +26,17 @@ const SHOWS := {
 }
 
 var results: Array[String] = []
+## The showcase now loaded (a reload swaps it: _reload).
+var _loaded: Node = null
+
+
+## A story for the director's own checks: beats that end, and one that never
+## does.
+class TestStory:
+	var acts_list: Array = []
+
+	func acts() -> Array:
+		return acts_list
 
 
 func _ready() -> void:
@@ -73,6 +87,92 @@ func _run() -> void:
 		_crates_near(drop, 2.2) >= 1,
 		"crates at the store %d, Ned %s at %s" % [_crates_near(drop, 2.2), map.cast["Ned"].activity(), map.cast["Ned"].global_position])
 	await _unload(map)
+
+	# ------------------------------------------------------------------
+	# The director
+	# ------------------------------------------------------------------
+
+	# D2 a beat that never comes true is let go, and the show goes on
+	var story2 := TestStory.new()
+	story2.acts_list = [{"title": "A test", "beats": [
+		{"name": &"never", "until": func(): return false, "timeout": 1.0},
+		{"name": &"next", "min": 0.5},
+	]}]
+	var director2: Node = DirectorScript.new()
+	add_child(director2)
+	director2.setup(null, story2)
+	var skipped2 := []
+	var started2 := []
+	var ended2 := [false]
+	director2.beat_skipped.connect(func(n): skipped2.append(n))
+	director2.beat_started.connect(func(n, _shot): started2.append(n))
+	director2.show_ended.connect(func(): ended2[0] = true)
+	director2.run()
+	await _until(func(): return ended2[0], 300)
+	_check("D2 a beat whose condition never comes true times out, is skipped with a log line, and the next beat starts",
+		skipped2 == [&"never"] and started2 == [&"never", &"next"] and ended2[0] and director2.log_lines.any(func(l): return l.contains("never")),
+		"skipped %s, started %s, ended %s, log %s" % [skipped2, started2, ended2[0], director2.log_lines])
+	director2.queue_free()
+
+	# D3 what the command line asks for
+	var director3: Node = DirectorScript.new()
+	director3.read_args(PackedStringArray(["--act=3", "--ending=escape", "--auto", "--quit-at-end"]))
+	_check("D3 --act=3 --ending=escape --auto --quit-at-end are read from the command line",
+		DirectorScript.start_act == 3 and DirectorScript.ending == &"escape" and director3.auto and director3.quit_at_end,
+		"act %d, ending %s, auto %s, quit %s" % [DirectorScript.start_act, DirectorScript.ending, director3.auto, director3.quit_at_end])
+	director3.free()
+	DirectorScript.start_act = 1
+	DirectorScript.ending = &"random"
+
+	# D10 jumping about the acts leaves nothing behind
+	_loaded = await _map(false)
+	var director10: Node = DirectorScript.new()
+	add_child(director10)
+	director10.setup(_loaded, TestStory.new())
+	director10.reload = _reload
+	# A hunt, a garrison that remembers, time slowed: all to be forgotten.
+	var someone: Node3D = _loaded.spawn_intruder(Vector3(0, 0, 8))
+	SquadScript.of(someone)
+	GarrisonScript.of(someone).dread = 0.5
+	TimeFx.request(get_tree(), &"test", 0.3, 30.0)
+	await director10.jump_to(3)
+	await director10.jump_to(2)
+	var guards10 := get_tree().get_nodes_in_group(&"guards").size()
+	var listeners10 := SoundBus._listeners.size()
+	_check("D10 jumping acts twice leaves one cast, no hunts, no garrison memory, time at 1, and the act asked for",
+		guards10 == 12 and listeners10 == 12 and SquadScript._squads.is_empty() and GarrisonScript._garrisons.is_empty() and is_equal_approx(Engine.time_scale, 1.0) and DirectorScript.start_act == 2,
+		"guards %d, listeners %d, hunts %d, garrisons %d, time %.2f, act %d" % [guards10, listeners10, SquadScript._squads.size(), GarrisonScript._garrisons.size(), Engine.time_scale, DirectorScript.start_act])
+	director10.queue_free()
+	DirectorScript.start_act = 1
+
+	# D11 paused in the middle of a hit-stop: time comes back at the show speed
+	var director11: Node = DirectorScript.new()
+	add_child(director11)
+	director11.setup(_loaded, TestStory.new())
+	director11.set_speed(1)
+	TimeFx.hitstop(get_tree(), 0.1)
+	director11.toggle_pause()
+	var paused11 := get_tree().paused
+	await _frames(30)
+	director11.toggle_pause()
+	await _frames(5)
+	var after11 := Engine.time_scale
+	director11.set_speed(2)
+	_check("D11 paused during a hit-stop, time comes back at the show speed after unpausing",
+		paused11 and not get_tree().paused and is_equal_approx(after11, 0.5),
+		"paused %s, now paused %s, time after %.3f" % [paused11, get_tree().paused, after11])
+	director11.queue_free()
+	await _unload(_loaded)
+
+
+## The director's reload for a test: the showcase freed and loaded afresh
+## (the real one reloads the scene).
+func _reload() -> void:
+	if _loaded != null and is_instance_valid(_loaded):
+		_loaded.queue_free()
+		await _frames(2)
+
+	_loaded = await _map(false)
 
 
 func _crates_near(point: Vector3, reach: float) -> int:
