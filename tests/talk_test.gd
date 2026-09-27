@@ -20,6 +20,8 @@ const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Comms := preload("res://scripts/AISystem/Comms.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const GuardStationScript := preload("res://scripts/AISystem/GuardStation.gd")
+const GuardVoiceScript := preload("res://scripts/AISystem/GuardVoice.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 ## Conversations for the director's own checks, so they do not hang on the
 ## writing.
@@ -178,6 +180,7 @@ func _run() -> void:
 	GuardScript.randomize_on = false
 	await _director()
 	await _memory()
+	await _voice()
 	GuardScript.randomize_on = true
 
 
@@ -479,6 +482,91 @@ func _memory() -> void:
 	_check("T22 a man alone at his station says a remark of that station, not too often, and two within earshot never speak on each other",
 		chop_first and spaced and his.size() >= 2 and pair.size() >= 2 and quiet,
 		"chopper %s, loners %s" % [his.map(func(r): return "%s@%.0f" % [r["id"], r["at"]]), pair.map(func(r): return "%s@%.0f" % [r["id"], r["at"]])])
+
+
+# ---------------------------------------------------------------------------
+# The voice
+# ---------------------------------------------------------------------------
+
+func _voice() -> void:
+	# T23 the heart: up in a fight, down after
+	await _fresh()
+	_use([])
+	var fighter := _guard(Vector3(150, 0, 0), 0.0)
+	player.debug_light_level = 1.0
+	player.global_position = Vector3(150, 1.05, -6)
+	fighter._engage(player)
+	await _frames(600)
+	var in_fight: float = fighter._voice.heart
+	player.debug_light_level = 0.0
+	player.global_position = Vector3(150, 1.05, 28)
+	fighter._give_up()
+	await _frames(2400)
+	var after: float = fighter._voice.heart
+	_check("T23 a man's heart races in a fight and eases after it", in_fight >= 120.0 and after <= 95.0,
+		"in the fight %.0f bpm, 40 s after %.0f bpm (state %d)" % [in_fight, after, fighter.state])
+
+	# T24 the ladder: pain cuts chatter; then quiet
+	await _fresh()
+	_use([])
+	var man := _guard(Vector3(160, 0, 0), 0.0)
+	man._life._talk_rest = 99.0
+	var chatting: bool = man._voice.utter(GuardVoiceScript.CHATTER, "Cold tonight.", &"")
+	var murmured: bool = man._voice.murmuring()
+	man._voice.cry(&"pain")
+	var pained: bool = man._voice.sounding() == GuardVoiceScript.PAIN and not man._voice.murmuring()
+	await _frames(60)
+	_check("T24 a cry of pain stops his chatter, and passes", chatting and murmured and pained and man._voice.sounding() < GuardVoiceScript.CALL,
+		"chatting %s murmured %s pained %s, after %d" % [chatting, murmured, pained, man._voice.sounding()])
+
+	# T25 chatter never talks over a call
+	var called: bool = man._voice.utter(GuardVoiceScript.CALL, "Over here!", &"")
+	var chat_over: bool = man._voice.utter(GuardVoiceScript.CHATTER, "Anyway...", &"")
+	_check("T25 chatter never talks over a call-out", called and not chat_over, "call %s, chatter over it %s" % [called, chat_over])
+
+	# T26 breathing: heard when his heart races, in time with his breath
+	await _fresh()
+	_use([])
+	var breather := _guard(Vector3(170, 0, 0), 0.0)
+	breather._life._talk_rest = 99.0
+	breather._voice.hold_heart(72.0)
+	Sfx.recording = true
+	Sfx.recorded.clear()
+	await _frames(600)
+	var calm_breaths := Sfx.recorded.filter(func(r): return r[0] == &"breath_heavy" or r[0] == &"breath_scared").size()
+	breather._voice.hold_heart(150.0)
+	Sfx.recorded.clear()
+	var rises: Array = []
+	var was_out := [breather._voice.out_breath()]
+	await _until(func():
+		var now_out: bool = breather._voice.out_breath()
+		if now_out and not was_out[0]:
+			rises.append(breather._voice.clock)
+		was_out[0] = now_out
+		return false, 600)
+	var hard_breaths := Sfx.recorded.filter(func(r): return r[0] == &"breath_heavy" or r[0] == &"breath_scared").size()
+	Sfx.recording = false
+	var period := (float(rises[-1]) - float(rises[0])) / float(rises.size() - 1) if rises.size() >= 2 else 0.0
+	var expected: float = 1.0 / breather._voice.breath_rate()
+	_check("T26 at rest his breath is silent; racing, he is heard breathing, in time with his breath",
+		calm_breaths == 0 and hard_breaths >= 3 and absf(period - expected) <= expected * 0.1,
+		"calm %d, racing %d, a breath every %.2f s (expected %.2f)" % [calm_breaths, hard_breaths, period, expected])
+	breather._voice.hold_heart(-1.0)
+
+	# T27 a line's murmur: a whisper is quieter than a shout
+	await _fresh()
+	_use([])
+	var speaker := _guard(Vector3(180, 0, 0), 0.0)
+	speaker._life._talk_rest = 99.0
+	Sfx.recording = true
+	Sfx.recorded.clear()
+	speaker.speak("Hush now.", &"whisper")
+	await _frames(150)
+	speaker.speak("Get over here!", &"shout")
+	var murmurs := Sfx.recorded.filter(func(r): return r[0] == &"murmur")
+	Sfx.recording = false
+	_check("T27 each line is murmured, a whisper well under a shout",
+		murmurs.size() == 2 and float(murmurs[0][1]) <= float(murmurs[1][1]) - 12.0, "murmurs %s" % [murmurs])
 
 
 ## `seconds` of the director's time, the men's rest cut short after each

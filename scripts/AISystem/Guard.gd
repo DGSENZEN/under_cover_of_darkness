@@ -57,6 +57,7 @@ const GuardMercyScript := preload("res://scripts/AISystem/GuardMercy.gd")
 const GuardClimbScript := preload("res://scripts/AISystem/GuardClimb.gd")
 const GuardWaterScript := preload("res://scripts/AISystem/GuardWater.gd")
 const GuardRotaScript := preload("res://scripts/AISystem/GuardRota.gd")
+const GuardVoiceScript := preload("res://scripts/AISystem/GuardVoice.gd")
 ## Bleeding (bleeding): at most this much a second, never below this share of
 ## his health, and bound this long after he last saw you.
 const BLEED_MAX := 4.0
@@ -420,6 +421,9 @@ var _climb: RefCounted
 var _water: RefCounted
 ## His stations, at his ease (GuardRota).
 var _rota: RefCounted
+## His voice and breath: his heart, the speech ladder, his murmur
+## (GuardVoice).
+var _voice: RefCounted
 ## When he came into the level (Comms.now): a man only misses those who were
 ## there before him.
 var _born_at := 0.0
@@ -500,6 +504,7 @@ func _ready() -> void:
 	_water = GuardWaterScript.new(self)
 	_rota = GuardRotaScript.new(self)
 	_rota.setup(stations)
+	_voice = GuardVoiceScript.new(self)
 
 	if _agent != null:
 		_agent.link_reached.connect(_on_link_reached)
@@ -572,6 +577,7 @@ func _physics_process(delta: float) -> void:
 
 	_water.update(delta)
 	_hands.update(delta)
+	_voice.update(delta)
 
 	if not puppet:
 		_life.update(delta)
@@ -2444,7 +2450,7 @@ func bark(text: String) -> void:
 	if _life != null and _life.talking():
 		_life.end_talk()
 
-	_utter(text, &"")
+	_utter(text, &"", GuardVoiceScript.CALL)
 
 
 ## A line of a conversation (TalkDirector), said `delivery` ("whisper",
@@ -2453,7 +2459,7 @@ func speak(text: String, delivery: StringName = &"") -> void:
 	if puppet:
 		return
 
-	_utter(text, delivery)
+	_utter(text, delivery, GuardVoiceScript.CHATTER)
 
 
 ## A gesture or a sound with it (a conversation's emote: "nods", "laughs",
@@ -2468,7 +2474,10 @@ func emote(what: String) -> void:
 		_rig.emote(what)
 
 
-func _utter(text: String, delivery: StringName) -> void:
+func _utter(text: String, delivery: StringName, rung: int) -> void:
+	if _voice != null:
+		_voice.utter(rung, text, delivery)
+
 	_bark_timer = 3.0
 	last_delivery = delivery
 	barked.emit(text)
@@ -2697,6 +2706,11 @@ func voice(kind: StringName, volume := 0.0) -> void:
 		return
 
 	_voice_at = _game_time
+
+	if _voice != null:
+		_voice.cry(kind, volume)
+		return
+
 	var pitch: float = _rig.voice_pitch() if _rig != null and _rig.has_method("voice_pitch") else 1.0
 	# A woman speaks with her own voice ("pain_f"...).
 	var spoken := StringName(String(kind) + "_f") if _rig != null and bool(_rig.get("female")) else kind
