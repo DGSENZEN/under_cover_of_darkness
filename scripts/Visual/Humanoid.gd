@@ -90,6 +90,16 @@ var _fighting_idle: StringName = &"Sword_Idle"
 ## How much his legs run under whatever he is doing (set_leg_drive).
 var _legs := 0.0
 var _legs_goal := 0.0
+## The upper-body layer (show_upper): how much of it shows, toward what, and
+## how fast it comes and goes.
+var _upper := 0.0
+var _upper_goal := 0.0
+var _upper_in := 0.15
+var _upper_out := 0.25
+var _upper_clip: StringName = &""
+## His stride: under 1, short quick steps; over 1, long ones (the pace the
+## walk is played at follows).
+var stride := 1.0
 ## An action playing itself out (play_once), how far in, and how fast.
 var _once: StringName = &""
 var _once_time := 0.0
@@ -244,7 +254,23 @@ func _build_tree() -> AnimationNodeBlendTree:
 	root.add_node(&"legs", legs, Vector2(850, 400))
 	root.connect_node(&"legs", 0, &"act")
 	root.connect_node(&"legs", 1, &"legs_pace")
-	root.connect_node(&"output", 0, &"legs")
+	# Over all of it, his arms, chest and head alone (show_upper): a gesture,
+	# a drink, hands held to the fire, whatever the legs are doing.
+	var upper_clip := AnimationNodeAnimation.new()
+	upper_clip.animation = &"Idle"
+	root.add_node(&"upper_clip", upper_clip, Vector2(850, 650))
+	root.add_node(&"upper_seek", AnimationNodeTimeSeek.new(), Vector2(1050, 650))
+	root.connect_node(&"upper_seek", 0, &"upper_clip")
+	var upper := AnimationNodeBlend2.new()
+	upper.filter_enabled = true
+
+	for path in _arm_tracks(&"Idle"):
+		upper.set_filter_path(path, true)
+
+	root.add_node(&"upper", upper, Vector2(1250, 450))
+	root.connect_node(&"upper", 0, &"legs")
+	root.connect_node(&"upper", 1, &"upper_seek")
+	root.connect_node(&"output", 0, &"upper")
 	return root
 
 
@@ -339,7 +365,7 @@ func set_motion(velocity: Vector3, fighting: bool, delta: float) -> void:
 	elif position > WALK_SPEED:
 		natural = lerpf(WALK_SPEED, JOG_SPEED, (position - WALK_SPEED) / (JOG_SPEED - WALK_SPEED))
 
-	var pace := 1.0 if position < 0.3 else clampf(position / natural, 0.6, 1.6) * reverse
+	var pace := 1.0 if position < 0.3 else clampf(position / (natural * maxf(stride, 0.1)), 0.6, 1.6) * reverse
 	mixer.set(&"parameters/pace/scale", pace)
 	mixer.set(&"parameters/legs_pace/scale", pace)
 
@@ -348,6 +374,42 @@ func set_motion(velocity: Vector3, fighting: bool, delta: float) -> void:
 ## thrown on the move.
 func set_leg_drive(amount: float) -> void:
 	_legs_goal = clampf(amount, 0.0, 1.0)
+
+
+## Shows `animation` at `time` on his arms, chest and head only, over
+## whatever the rest of him does. Call every frame it lasts; `weight` below 1
+## keeps some of what was under it.
+func show_upper(animation: StringName, time: float, fade_in := 0.15, weight := 0.9) -> void:
+	if mixer == null or not library().has_animation(animation):
+		return
+
+	if _upper_clip != animation:
+		(_root.get_node(&"upper_clip") as AnimationNodeAnimation).animation = animation
+		_upper_clip = animation
+
+	_upper_in = fade_in
+	_upper_goal = clampf(weight, 0.0, 1.0)
+	mixer.set(&"parameters/upper_seek/seek_request", maxf(time, 0.0))
+
+
+## His upper body back to the rest of him, over `fade` seconds.
+func clear_upper(fade := 0.25) -> void:
+	_upper_goal = 0.0
+	_upper_out = fade
+
+
+## How much the upper layer shows now (0..1).
+func upper_weight() -> float:
+	return _upper
+
+
+## The walk he walks at his ease (the captain's formal step).
+func set_walk_clip(clip: StringName) -> void:
+	if _root == null or not library().has_animation(clip):
+		return
+
+	var space := _root.get_node(&"relaxed") as AnimationNodeBlendSpace1D
+	(space.get_blend_point_node(1) as AnimationNodeAnimation).animation = clip
 
 
 ## Where his eyes are turned: radians, positive to his left.
@@ -435,6 +497,9 @@ func _process(delta: float) -> void:
 	mixer.set(&"parameters/act/blend_amount", _action)
 	mixer.set(&"parameters/cross/blend_amount", _cross)
 	mixer.set(&"parameters/legs/blend_amount", _legs)
+	var upper_rate := 1.0 / maxf(_upper_in if _upper_goal > _upper else _upper_out, 0.01)
+	_upper = move_toward(_upper, _upper_goal, delta * upper_rate)
+	mixer.set(&"parameters/upper/blend_amount", _upper)
 
 
 # ---------------------------------------------------------------------------
