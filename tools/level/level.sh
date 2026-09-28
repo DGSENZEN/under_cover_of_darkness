@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# The level kit pipeline (tools/level): levels built in Blender from a kit of
+# pieces, gameplay placed as markers, exported for Godot.
+#
+#   tools/level/level.sh kit               the kit's pieces -> assets/level/source/kit.blend
+#   tools/level/level.sh build <level>     its layout -> assets/level/source/<level>.blend (then the user's)
+#   tools/level/level.sh check <level>     the rules, nothing written
+#   tools/level/level.sh export <level>    checked, then glTF per sector + the manifest, imported by Godot
+#   tools/level/level.sh all <level>       kit, build, export
+#   tools/level/level.sh test              the rules against broken levels
+#
+# Exits non-zero when a step fails.
+set -euo pipefail
+
+BLENDER=${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}
+GODOT=${GODOT:-/Users/tinkertailorr/Desktop/Godot.app/Contents/MacOS/Godot}
+HERE="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$HERE/../.." && pwd)"
+SOURCE="$ROOT/assets/level/source"
+
+verb=${1:-}
+level=${2:-}
+
+need_level() {
+  if [ -z "$level" ]; then
+    echo "level: $verb needs a level" >&2
+    exit 2
+  fi
+}
+
+case "$verb" in
+  kit)
+    "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/kit.py"
+    ;;
+  build)
+    need_level
+    "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/build.py" -- "$level"
+    ;;
+  check)
+    need_level
+    "$BLENDER" -b "$SOURCE/$level.blend" --python-exit-code 1 --python "$HERE/check.py" -- "${3:-stage1}"
+    ;;
+  export)
+    need_level
+    "$BLENDER" -b "$SOURCE/$level.blend" --python-exit-code 1 --python "$HERE/export.py" -- "${3:-stage1}"
+    perl -e 'alarm 600; exec @ARGV' "$GODOT" --headless --path "$ROOT" --import > /dev/null 2>&1 || true
+    echo "level: imported by Godot"
+    ;;
+  all)
+    need_level
+    "$0" kit
+    "$0" build "$level"
+    "$0" export "$level"
+    ;;
+  test)
+    python3 "$HERE/test_rules.py"
+    ;;
+  *)
+    sed -n '2,12p' "$0"
+    exit 2
+    ;;
+esac

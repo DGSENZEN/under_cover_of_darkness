@@ -1,0 +1,183 @@
+{
+ "schema": {
+  "spawn": {
+   "required": [],
+   "optional": {},
+   "box": false
+  },
+  "guard": {
+   "required": [
+    "archetype"
+   ],
+   "optional": {
+    "temperament": "",
+    "route": "",
+    "lookout": false,
+    "stations": "",
+    "voice": "",
+    "look_seed": 0,
+    "role": ""
+   },
+   "box": false
+  },
+  "route": {
+   "required": [],
+   "optional": {},
+   "box": false
+  },
+  "waypoint": {
+   "required": [
+    "route",
+    "order"
+   ],
+   "optional": {
+    "wait": 0.0
+   },
+   "box": false
+  },
+  "door": {
+   "required": [],
+   "optional": {
+    "kind": "hinged",
+    "locked": false,
+    "key": "",
+    "label": "",
+    "width": 1.2,
+    "height": 2.2,
+    "barred": false
+   },
+   "box": false
+  },
+  "light": {
+   "required": [
+    "kind"
+   ],
+   "optional": {
+    "lit": true,
+    "energy": 0.0,
+    "range": 0.0,
+    "color": "",
+    "cookie": "",
+    "douse": true
+   },
+   "box": false
+  },
+  "bell": {
+   "required": [],
+   "optional": {
+    "db": 90.0
+   },
+   "box": false
+  },
+  "ladder": {
+   "required": [],
+   "optional": {
+    "rope": false
+   },
+   "box": true
+  },
+  "landmark": {
+   "required": [
+    "label"
+   ],
+   "optional": {},
+   "box": false
+  },
+  "trigger": {
+   "required": [
+    "event"
+   ],
+   "optional": {},
+   "box": true
+  },
+  "sector": {
+   "required": [],
+   "optional": {
+    "label": ""
+   },
+   "box": true
+  },
+  "water": {
+   "required": [],
+   "optional": {
+    "murk": 0.6
+   },
+   "box": true
+  },
+  "station": {
+   "required": [
+    "kind"
+   ],
+   "optional": {
+    "chest": "",
+    "drop_to": ""
+   },
+   "box": false
+  },
+  "hide": {
+   "required": [],
+   "optional": {
+    "label": ""
+   },
+   "box": false
+  },
+  "hunt_area": {
+   "required": [
+    "label"
+   ],
+   "optional": {},
+   "box": true
+  },
+  "vantage": {
+   "required": [],
+   "optional": {
+    "lens": ""
+   },
+   "box": false
+  },
+  "zone": {
+   "required": [
+    "grade"
+   ],
+   "optional": {
+    "fog": 1.0,
+    "fog_color": ""
+   },
+   "box": true
+  },
+  "mark": {
+   "required": [],
+   "optional": {},
+   "box": false
+  }
+ },
+ "station_kinds": [
+  "sit",
+  "eat",
+  "sleep",
+  "rummage",
+  "carry",
+  "chop",
+  "lean",
+  "pray",
+  "drill"
+ ],
+ "light_kinds": [
+  "torch",
+  "brazier",
+  "candle",
+  "lantern",
+  "window",
+  "chandelier",
+  "window_shaft",
+  "hearth",
+  "fire"
+ ],
+ "grades": [
+  "outside",
+  "indoors",
+  "chapel",
+  "cellar",
+  "hearth"
+ ]
+}
