@@ -168,7 +168,7 @@ static func pick(guard: Node3D, centre: Vector3, heading: Vector3, reach: float,
 	for i in mini(places.size(), REACH_TRIES):
 		var place: Dictionary = places[i][1]
 
-		if _reachable(map, start, place["stand"]):
+		if _reachable(map, start, place["stand"], _layers_of(guard)):
 			place.erase("score")
 			place.erase("inward")
 			return place
@@ -234,7 +234,8 @@ static func in_area(guard: Node, point: Vector3) -> bool:
 
 ## Somewhere in `guard`'s hunt area to search round: of its hiding places,
 ## the doorways and some floor in it, one of the AREA_CHOICES best (clear of
-## anywhere `searched`, near him); its middle on the navmesh if none is.
+## anywhere `searched`, near him, and his to get to); its middle on the
+## navmesh if none is.
 static func area_centre(guard: Node3D, searched: Array) -> Vector3:
 	var area := area_of(guard)
 	var map: RID = guard.get_world_3d().navigation_map
@@ -255,8 +256,11 @@ static func area_centre(guard: Node3D, searched: Array) -> Vector3:
 
 	var scored: Array = []
 
+	var layers := _layers_of(guard)
+
 	for point in choices:
-		if not area.has_point(point):
+		# (Only where he can get to: not a room locked against him.)
+		if not area.has_point(point) or not _reachable(map, guard.global_position, point, layers):
 			continue
 
 		var clear := INF
@@ -273,9 +277,10 @@ static func area_centre(guard: Node3D, searched: Array) -> Vector3:
 	return NavigationServer3D.map_get_closest_point(map, scored[randi() % mini(AREA_CHOICES, scored.size())][1])
 
 
-## Whether a man at `start` has a way along the navmesh to `to`.
-static func _reachable(map: RID, start: Vector3, to: Vector3) -> bool:
-	var path := NavigationServer3D.map_get_path(map, start, to, true)
+## Whether a man at `start` has a way along the navmesh to `to` (on his
+## `layers`: the doorways his keys open).
+static func _reachable(map: RID, start: Vector3, to: Vector3, layers := 1) -> bool:
+	var path := NavigationServer3D.map_get_path(map, start, to, true, layers)
 
 	if path.is_empty():
 		return false
@@ -438,6 +443,12 @@ static func _ray(from: Vector3, to: Vector3, exclude: Array[RID]) -> PhysicsRayQ
 	var query := PhysicsRayQueryParameters3D.create(from, to, 1, exclude)
 	query.collide_with_areas = false
 	return query
+
+
+## The navmesh layers `guard` walks (his keys' doorways among them).
+static func _layers_of(guard: Node) -> int:
+	var agent: Variant = guard.get("_agent")
+	return (agent as NavigationAgent3D).navigation_layers if agent is NavigationAgent3D else 1
 
 
 static func _flat(a: Vector3, b: Vector3) -> float:
