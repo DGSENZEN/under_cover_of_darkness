@@ -35,7 +35,7 @@ uniform vec3 middle_color : source_color = vec3(0.014, 0.022, 0.052);
 uniform vec3 horizon_color : source_color = vec3(0.06, 0.078, 0.12);
 uniform vec3 cloud_color : source_color = vec3(0.048, 0.055, 0.075);
 uniform vec3 moon_color : source_color = vec3(0.88, 0.92, 1.0);
-uniform vec3 haze_color : source_color = vec3(0.11, 0.115, 0.125);
+uniform vec3 haze_color : source_color = vec3(0.095, 0.105, 0.135);
 // The town beyond the lanes: its firelight low in the sky that way, and on
 // the clouds' bellies over it.
 uniform vec3 town_color : source_color = vec3(0.11, 0.06, 0.028);

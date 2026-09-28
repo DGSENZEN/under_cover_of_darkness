@@ -85,9 +85,9 @@ const PUDDLE_SIZE := 2.4
 const MIST := 0.2
 ## Thick fog greys the level's fog colour toward moonlit silver (this much
 ## at its thickest) and the moon scatters this much less in it.
-const FOG_SILVER := Color(0.62, 0.64, 0.67)
+const FOG_SILVER := Color(0.74, 0.76, 0.79)
 const FOG_GREYED := 0.85
-const FOG_SCATTER := 0.35
+const FOG_SCATTER := 0.45
 ## High thin cloud on a clear night: this much of it at no cover, none from
 ## CIRRUS_GONE.
 const CIRRUS := 0.4
