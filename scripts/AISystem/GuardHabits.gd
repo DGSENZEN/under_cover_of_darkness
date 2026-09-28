@@ -1266,13 +1266,13 @@ static func _axe() -> Node3D:
 	return axe
 
 
-## The stock ("stock" group) lying by `pile`.
+## The stock ("stock" group) lying by `pile`: not what you hold up there.
 static func _stock_at(pile: Node3D) -> Array:
 	var ahead: Vector3 = pile.global_position + pile.facing() * 0.75
 	var found := []
 
 	for crate in pile.get_tree().get_nodes_in_group(&"stock"):
-		if is_instance_valid(crate) and (crate as Node3D).global_position.distance_to(ahead) < 1.4:
+		if is_instance_valid(crate) and not crate.is_in_group(&"in_hand") and (crate as Node3D).global_position.distance_to(ahead) < 1.4:
 			found.append(crate)
 
 	return found
