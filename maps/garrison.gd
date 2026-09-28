@@ -31,6 +31,12 @@ const LADDER_ON_ROOF := 3.25
 ## times their own and die back over this long (s).
 const GLASS_FLARE := 7.0
 const GLASS_FADE := 0.9
+## The moon's way (its light, as garrison_lights sets it); the chapel's north
+## glass line (z); dust boxes this big, at these distances (m) down a shaft.
+const MOON_TOWARD := Vector3(0.62, -0.5, 0.6)
+const GLASS_LINE := -25.2
+const DUST_BOX := Vector3(1.0, 1.1, 1.0)
+const DUST_STEPS := [1.6, 3.2, 4.8, 6.3]
 
 var level: LevelLoader.Level = null
 ## Every door by its marker's name.
@@ -406,6 +412,39 @@ func _night() -> void:
 	atmosphere.name = "Atmosphere"
 	add_child(atmosphere)
 	atmosphere.add_crows([Vector3(-12, 6.15, -27.0), Vector3(-2, 6.15, -27.0), Vector3(9, 6.15, -27.0), Vector3(20, 6.15, -27.0), Vector3(31.0, 6.15, 4.0)])
+	atmosphere.add_dust(_shaft_dust())
+
+
+## Where dust hangs in the chapel: boxes down each shaft of moonlight, from
+## its lancet on along the moon's way to the floor.
+func _shaft_dust() -> Array:
+	var boxes := []
+	var toward := MOON_TOWARD.normalized()
+	# (Inside the chapel only: the east shaft meets its wall before the floor.)
+	var inside := AABB()
+
+	for m in level.of("zone"):
+		if m["name"] == "zone_chapel":
+			inside = AABB((m["transform"] as Transform3D).origin - m["size"] * 0.5, m["size"]).grow(-0.4)
+
+	for m in level.of("light"):
+		if String(m["props"]["kind"]) != "window_shaft":
+			continue
+
+		# From the glass (the shaft's lancet, in the north wall) on inward.
+		var glass: Vector3 = (m["transform"] as Transform3D).origin
+		var start := glass + toward * ((glass.z - GLASS_LINE) / -toward.z)
+
+		for step in DUST_STEPS:
+			var box := AABB(start + toward * float(step) - DUST_BOX * 0.5, DUST_BOX)
+
+			if inside.has_volume():
+				box = box.intersection(inside)
+
+			if box.has_volume():
+				boxes.append(box)
+
+	return boxes
 
 
 func _overview() -> void:

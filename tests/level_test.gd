@@ -102,6 +102,18 @@ func _garrison() -> void:
 	_check("G1 the garrison builds, its navmesh bakes and its twelve are at their places",
 		map._baker.is_baked and map.cast.size() == 12, "baked %s after %d frames, cast %d" % [map._baker.is_baked, frames[0], map.cast.size()])
 
+	# G18 nobody walks the ceilings under the pitched roofs (the barracks',
+	# the chapel's): no navmesh up there
+	var ceilings18 := []
+
+	for at in [Vector3(22.0, 6.4, 0.0), Vector3(18.0, 6.4, -14.0), Vector3(4.0, 12.4, -20.8)]:
+		var near18 := NavigationServer3D.map_get_closest_point(map.get_world_3d().navigation_map, at)
+
+		if near18.distance_to(at) < 1.0:
+			ceilings18.append("navmesh at %s" % near18.snapped(Vector3.ONE * 0.1))
+
+	_check("G18 nobody walks the ceilings under the pitched roofs", ceilings18.is_empty(), "%s" % [ceilings18])
+
 	# G2 every man's place, station, hiding spot and round is on the navmesh
 	# and reachable from the courtyard
 	var nav_map: RID = map.get_world_3d().navigation_map
@@ -209,6 +221,14 @@ func _garrison() -> void:
 	_check("G16 the walls carry their baked shading in vertex colours, dark in corners and bright in the open",
 		walls16 > 50 and coloured16 == walls16 and spread16,
 		"walls %d, coloured %d, 5th/95th percentile %s" % [walls16, coloured16, [shades16[int(shades16.size() * 0.05)], shades16[int(shades16.size() * 0.95)]] if not shades16.is_empty() else []])
+
+	# G17 dust hangs in the chapel's shafts of moonlight
+	await _seconds(3.0)
+	var chapel17: AABB = get_tree().get_nodes_in_group(&"hunt_area").filter(func(n): return String(n.name) == "area_chapel")[0].get_meta(&"box")
+	var dust17: Array = map.atmosphere.motes(&"dust")
+	var in17: int = dust17.filter(func(p): return chapel17.has_point(p)).size()
+	var out17: Array = dust17.filter(func(p): return not chapel17.has_point(p)).slice(0, 4).map(func(p): return (p as Vector3).snapped(Vector3.ONE * 0.1))
+	_check("G17 dust hangs in the chapel's shafts of moonlight", in17 >= 20 and in17 == dust17.size(), "dust motes %d, in the chapel %d, outside %s" % [dust17.size(), in17, out17])
 
 	# G6 lightning through the stained glass: the chapel's shafts of light
 	# flare with a flash and die back after it
@@ -342,13 +362,16 @@ func _garrison() -> void:
 	called8.call_off_search()
 	var free8: bool = not called8.has_meta(&"hunt_area") and not called8.has_meta(&"hunt_group")
 	var counts8 := {}
+	var where8 := {}
 
 	for name in sent8:
 		counts8[name] = (spots8[name] as Array).size()
+		var man8: Node3D = map.cast[name]
+		where8[name] = [man8.global_position.snapped(Vector3.ONE * 0.1), man8._agent.target_position.snapped(Vector3.ONE * 0.1), man8.state]
 
 	_check("G8 men sent to a hunt area search only inside it and keep at it; called off, anywhere again",
 		stray8.is_empty() and went8.is_empty() and kept8 and free8 and counts8.values().all(func(c): return int(c) >= 3),
-		"outside their ground %s, making for places off it %s, a call from outside ignored %s, from inside answered %s, still searching in their groups %s, called off %s, places searched %s" % [stray8.slice(0, 6), went8, ignored8, answered8, kept8, free8, counts8])
+		"outside their ground %s, making for places off it %s, a call from outside ignored %s, from inside answered %s, still searching in their groups %s, called off %s, places searched %s; where, making for, state %s" % [stray8.slice(0, 6), went8, ignored8, answered8, kept8, free8, counts8, where8])
 
 	# G9 sent to the bell: a man who is no lookout runs to it and rings it
 	var rung9 := [null]

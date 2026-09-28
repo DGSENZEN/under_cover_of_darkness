@@ -19,6 +19,8 @@ extends RefCounted
 ##   level.of("guard")              # every guard marker: {name, ucd, sector, transform, size, props}
 
 const Materials := preload("res://scripts/Visual/Materials.gd")
+## A collider's surface that marks a ceiling (never walked on).
+const CEILING := "ceiling"
 const ZonesScript := preload("res://scripts/Level/Zones.gd")
 
 ## A level put together: its root, its sectors, its markers.
@@ -112,6 +114,12 @@ static func _colliders(level: Level, colliders: Array) -> void:
 			body.name = key
 			body.collision_layer = 1
 			body.set_meta(&"surface", String(c["surface"]))
+
+			# A ceiling (under a pitched roof) stops sight and what is thrown,
+			# but nobody walks on it: the navmesh is baked without it.
+			if String(c["surface"]) == CEILING:
+				body.set_meta(&"surface", "wood")
+				body.add_to_group(&"nav_ignore")
 			var holder: Node3D = level.sectors.get(String(c["sector"]), level.root)
 			holder.add_child(body)
 			bodies[key] = body

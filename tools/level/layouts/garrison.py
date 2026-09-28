@@ -221,7 +221,7 @@ def barracks():
     # the kitchen stove, the great hearth and the dormitory's stove.
     for x in range(14, 30, 4):
         for z in range(-20, 18, 4):
-            G.put("floor_board_4", (x + 2.0, 6.2, z + 2.0), 0.0, s)
+            G.put("ceiling_board_4", (x + 2.0, 6.2, z + 2.0), 0.0, s)
 
     for z in range(-20, 16, 4):
         G.put("roof_ridge_4x16", (22.0, 6.2, z + 2.0), 90.0, s)
@@ -332,7 +332,7 @@ def chapel():
     # roof over the nave, its ridge along it; its gable ends.
     for x in range(-6, 14, 4):
         for z in (-26, -22, -18):
-            G.put("floor_board_4", (x + 2.0, 12.2, z + 2.0), 0.0, s)
+            G.put("ceiling_board_4", (x + 2.0, 12.2, z + 2.0), 0.0, s)
 
     for x in range(-6, 14, 4):
         G.put("roof_ridge_4x10", (x + 2.0, 12.2, -20.8), 0.0, s)

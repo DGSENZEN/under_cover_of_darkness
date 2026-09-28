@@ -184,6 +184,13 @@ for kind, (slot, surface) in FLOORS.items():
         piece("floor_%s_%d" % (kind, size), "floor", slot, surface,
               [box(0.0, -0.1, 0.0, float(size), 0.2, float(size), slot)], size=[float(size), 0.2, float(size)])
 
+# A ceiling under a pitched roof (boards, its underside the room's ceiling):
+# its colliders stop sight and what is thrown, but it is never walked on
+# (surface "ceiling": LevelLoader leaves it out of the navmesh).
+for size in (2, 4):
+    piece("ceiling_board_%d" % size, "ceiling", "boards", "ceiling",
+          [box(0.0, -0.1, 0.0, float(size), 0.2, float(size), "boards")], size=[float(size), 0.2, float(size)])
+
 for size in (2, 4):
     piece("roof_slope_%d" % size, "roof", "slate", "stone",
           [box(0.0, 0.0, 0.0, float(size), 0.2, float(size) * math.sqrt(2.0), "slate", 0.0, 45.0, 0.0)],

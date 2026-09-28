@@ -11,6 +11,7 @@ extends Node3D
 ##           and dead leaves skitter.
 ##   crows   on the wall-walk (`add_crows`): off at a shout or a man running
 ##           near, back a while later.
+##   dust    hanging in shafts of light (`add_dust`), drifting slowly.
 ## `quality` thins it for the frame rate: 1 loses the moths, 0 the leaves
 ## too.
 ##
@@ -48,7 +49,12 @@ const KINDS := {
 	&"breath": [0.035, 0.11, Color(0.86, 0.9, 0.97, 0.24), Color(0.86, 0.9, 0.97, 0.0), 0.9, 160],
 	&"ember": [0.035, 0.02, Color(1.0, 0.6, 0.2, 1.0), Color(0.9, 0.2, 0.05, 0.0), 1.6, 160],
 	&"leaf": [0.09, 0.09, Color(0.32, 0.24, 0.12, 1.0), Color(0.28, 0.2, 0.1, 0.0), 3.0, 40],
+	&"dust": [0.022, 0.022, Color(1.0, 0.86, 0.62, 0.55), Color(1.0, 0.86, 0.62, 0.0), 7.0, 260],
 }
+## Dust hangs in a shaft of light (add_dust): this many a second a box, this
+## slow.
+const DUST_RATE := 5.0
+const DUST_DRIFT := 0.04
 
 ## 2 everything; 1 no moths; 0 no moths and no leaves.
 var quality := 2
@@ -67,6 +73,7 @@ var _embers := {}
 var _leaves: Puffs
 var _moths := {}
 var _crows: Array = []
+var _dust: Array = []
 var _motes := {}
 var _draw := {}
 
@@ -173,6 +180,25 @@ func crows() -> Array:
 
 
 ## Crows perched at `points`.
+## Dust hanging in shafts of light (the chapel's moonlight through its
+## glass): motes drifting slowly in each of `boxes` (AABB), no wind indoors.
+func add_dust(boxes: Array) -> void:
+	for box in boxes:
+		var puffs := Puffs.new(&"dust", DUST_RATE)
+		puffs.origin = (box as AABB).get_center()
+		puffs.box = (box as AABB).size * 0.5
+		puffs.spread = DUST_DRIFT
+		puffs.rise = 0.0
+		puffs.wind_share = 0.0
+		puffs.emitting = true
+		_dust.append(puffs)
+
+
+## Where the motes of `kind` are now.
+func motes(kind: StringName) -> Array:
+	return (_motes.get(kind, []) as Array).map(func(m): return m["p"])
+
+
 func add_crows(points: Array) -> void:
 	for point in points:
 		var body := MeshInstance3D.new()
@@ -416,7 +442,7 @@ func _update_crows(delta: float) -> void:
 # ---------------------------------------------------------------------------
 
 func _all_puffs() -> Array:
-	var all: Array = _breaths.values() + [_leaves]
+	var all: Array = _breaths.values() + [_leaves] + _dust
 
 	for entry in _embers.values():
 		all.append(entry[0])
@@ -437,6 +463,11 @@ func _emit(puffs: Puffs, delta: float, air: Vector3) -> void:
 	while puffs._owed >= 1.0 and motes.size() < int(spec[5]):
 		puffs._owed -= 1.0
 		var at := puffs.origin + Vector3(_rng.randf_range(-1, 1) * puffs.box.x, 0.0, _rng.randf_range(-1, 1) * puffs.box.z)
+
+		# (A box with height, as dust in a shaft: anywhere up it too.)
+		if puffs.box.y > 0.0:
+			at.y += _rng.randf_range(-1, 1) * puffs.box.y
+
 		var v := puffs.velocity + Vector3(_rng.randf_range(-1, 1), _rng.randf_range(0, 1), _rng.randf_range(-1, 1)) * puffs.spread + Vector3.UP * puffs.rise
 		motes.append({"p": at, "v": v, "age": 0.0, "wind": puffs.wind_share})
 
