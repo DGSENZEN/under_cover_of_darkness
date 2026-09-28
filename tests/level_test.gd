@@ -6,12 +6,15 @@ extends Node3D
 
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const Materials := preload("res://scripts/Visual/Materials.gd")
+const GARRISON := preload("res://maps/garrison.tscn")
+const MapScript := preload("res://maps/npc_showcase.gd")
 
 var results: Array[String] = []
 
 
 func _ready() -> void:
 	await _fixture()
+	await _garrison()
 	print("\n==== RESULTS ====")
 
 	for r in results:
@@ -81,6 +84,67 @@ func _fixture() -> void:
 	camera.queue_free()
 	world.queue_free()
 	await _frames(2)
+
+
+func _garrison() -> void:
+	MapScript.run_show = false
+	var map: Node3D = GARRISON.instantiate()
+	add_child(map)
+	var frames := [0]
+
+	while not (map.get("_baker") != null and map._baker.is_baked) and frames[0] < 3600:
+		await get_tree().process_frame
+		frames[0] += 1
+
+	await _frames(30)
+
+	# G1 the garrison builds, bakes and is peopled
+	_check("G1 the garrison builds, its navmesh bakes and its twelve are at their places",
+		map._baker.is_baked and map.cast.size() == 12, "baked %s after %d frames, cast %d" % [map._baker.is_baked, frames[0], map.cast.size()])
+
+	# G2 every man's place, station, hiding spot and round is on the navmesh
+	# and reachable from the courtyard
+	var nav_map: RID = map.get_world_3d().navigation_map
+	var start := NavigationServer3D.map_get_closest_point(nav_map, Vector3(0, 0, 10))
+	var level: RefCounted = map.level
+	var lost := []
+
+	for m in level.markers:
+		if not (m["ucd"] in ["station", "hide", "guard", "waypoint"]):
+			continue
+
+		var at: Vector3 = (m["transform"] as Transform3D).origin
+		var on := NavigationServer3D.map_get_closest_point(nav_map, at)
+
+		if on.distance_to(at) > 0.8:
+			lost.append("%s off the mesh (%.1f m)" % [m["name"], on.distance_to(at)])
+			continue
+
+		var path := NavigationServer3D.map_get_path(nav_map, start, on, true)
+
+		if path.is_empty() or path[path.size() - 1].distance_to(on) > 0.8:
+			lost.append("%s unreachable (the way ends at %s)" % [m["name"], path[path.size() - 1].snapped(Vector3.ONE * 0.1) if not path.is_empty() else "nowhere"])
+
+	_check("G2 every post, station, hiding place and round point is on the navmesh and reachable from the courtyard",
+		lost.is_empty(), "%s" % [lost.slice(0, 12)])
+
+	# G3 its doors, its lights
+	var doors := get_tree().get_nodes_in_group(&"doors")
+	var torches := get_tree().get_nodes_in_group(&"torches")
+	_check("G3 every door is made (21), and the lights are lit (torches and the rest)",
+		doors.size() == 21 and torches.size() >= 20 and map.fire != null, "doors %d, torches %d, fire %s" % [doors.size(), torches.size(), map.fire != null])
+
+	# G4 a zone: the camera in the chapel is in its red and gold
+	var camera := Camera3D.new()
+	add_child(camera)
+	camera.make_current()
+	camera.global_position = Vector3(4, 1.7, -20.8)
+	await _seconds(2.5)
+	_check("G4 the camera in the chapel is in the chapel's grade", level.zones.current == "chapel", "grade %s" % level.zones.current)
+	camera.queue_free()
+	map.queue_free()
+	await _frames(3)
+	MapScript.run_show = true
 
 
 func _ray(from: Vector3, to: Vector3) -> Dictionary:

@@ -67,7 +67,8 @@ def grounds():
     G.floor(6, 22, 30, 26, "cobble", 0.0, "courtyard")
     G.floor(14, 18, 30, 22, "cobble", 0.0, "courtyard")
     G.floor(14, -26, 30, -20, "cobble", 0.0, "courtyard")
-    G.floor(-30, -26, -6, -14, "gravel", 0.0, "courtyard")
+    G.floor(-27, -26, -6, -14, "gravel", 0.0, "courtyard")
+    G.floor(-30, -23, -27, -14, "gravel", 0.0, "courtyard")
     G.floor(-30, -14, -20, -2, "flag", 0.0, "west_range")       # armoury
     G.floor(-20, -14, -16, 20, "flag", 0.0, "west_range")       # colonnade
     G.floor(-30, 12, -20, 22, "mud", 0.0, "west_range")         # lean-to
@@ -105,7 +106,7 @@ def watchtower():
     G.wall((x0, z0 + 0.2), (x1, z0 + 0.2), "ashlar", 0.0, "tower", storeys=4)
     G.wall((x0 + 0.2, z0), (x0 + 0.2, z1), "ashlar", 0.0, "tower", storeys=4)
     G.wall((x1 - 0.2, z0), (x1 - 0.2, z1), "ashlar", 0.0, "tower", storeys=4, openings={3.0: "slit", 6.0: "slit"})
-    G.floor(-34.6, -30.6, -27.4, -23.4, "flag", 0.0, "tower")
+    G.floor(-35, -31, -27, -23, "flag", 0.0, "tower")
     # Flights: north up the east wall, west along the north, south down the
     # west, east along the south; corner landings.
     G.stairs((-28.2, 0.0, -24.4), 180.0, "stair_straight", "tower")
@@ -183,20 +184,19 @@ def barracks():
     # over the mess hall (it is two storeys high).
     G.floor(14, -20, 30, 18, "board", 0.0, s)
 
-    for z in range(-20, 18, 2):
-        G.put("floor_board_2", (15.4, 3.0, z + 1.0), 0.0, s)
+    # The upper floor on one grid from the outer wall (under the partitions,
+    # so every doorway has floor): the gallery (x 14..16) the whole length,
+    # the north and south blocks right across; the stairs' wells (x 18..22)
+    # left open, the tile at x 16..18 the landing by the gallery's doors.
+    for x in range(14, 30, 2):
+        for z in range(-20, 18, 2):
+            over_mess = -8 <= z < 10
+            well = x in (18, 20) and (z in (-20, -18) or z in (14, 16))
 
-    for x in (17.6, 19.6, 21.6, 23.6, 25.6, 27.6, 29.6):
-        for z in range(-20, -8, 2):
-            # The north stairs' well (x 18..22.5, z -19..-17) left open.
-            if 17.0 <= x <= 23.0 and -20.0 <= z <= -17.0:
+            if (over_mess and x > 14) or well:
                 continue
-            G.put("floor_board_2", (x, 3.0, z + 1.0), 0.0, s)
 
-        for z in range(10, 18, 2):
-            if 17.0 <= x <= 23.0 and z >= 14.0:
-                continue
-            G.put("floor_board_2", (x, 3.0, z + 1.0), 0.0, s)
+            G.put("floor_board_2", (x + 1.0, 3.0, z + 1.0), 0.0, s)
 
     # Upper walls: the captain's chamber (a stout door off the gallery), the
     # dormitory; the gallery railed where it looks down into the mess.
@@ -205,11 +205,12 @@ def barracks():
     G.wall((16.6, -15.2), (29.6, -15.2), "timber", 3.0, s, thin=True)
 
     for z in range(-7, 10, 2):
-        G.put("railing_2", (16.5, 3.0, z), 90.0, s)
+        G.put("railing_2", (15.95, 3.0, z), 90.0, s)
 
-    # Stairs: north (up along +x) and south.
-    G.stairs((18.0, 0.0, -18.0), 90.0, "stair_straight", s)
-    G.stairs((18.0, 0.0, 16.0), 90.0, "stair_straight", s)
+    # Stairs: up toward the corridor (-x), arriving on a landing by the
+    # gallery's doors.
+    G.stairs((22.5, 0.0, -18.0), -90.0, "stair_straight", s)
+    G.stairs((22.5, 0.0, 16.0), -90.0, "stair_straight", s)
     # The roof (a flat slab in stage 1).
     for x in range(14, 30, 4):
         for z in range(-20, 18, 4):
@@ -230,8 +231,10 @@ def barracks():
     G.put("sacks", (19.0, 0, -9.2), 0.0, s)
 
     for x in (19.0, 21.4, 23.8, 26.2):
-        G.put("bunk", (x, 3.0, 16.3), 0.0, s)
         G.put("bunk", (x, 3.0, 11.7), 0.0, s)
+
+    for x in (24.4, 26.8):
+        G.put("bunk", (x, 3.0, 16.6), 0.0, s)
 
     G.put("stove", (28.6, 3.0, 14.0), -90.0, s)
     G.put("map_table", (23.0, 3.0, -11.5), 0.0, s)
@@ -271,7 +274,7 @@ def chapel():
 
     G.put("altar", (11.6, 0, -20.8), -90.0, s)
 
-    for z in (-24.4, -17.2):
+    for z in (-24.4, -23.0):
         G.put("candle_stand", (10.6, 0, z), 0.0, s)
 
     for x in (-2.0, 4.0):
@@ -292,7 +295,7 @@ def chapel():
     # The loft (x 12..14, z -18.4..-16.4 at 3 m) and its stair down into the
     # nave; its door onto the barracks gallery is the barracks' west wall's.
     G.put("landing_2", (13.0, 3.0, -17.4), 0.0, s)
-    G.put("railing_2", (12.0, 3.0, -17.4), 90.0, s)
+    G.put("railing_2", (13.0, 3.0, -18.4), 0.0, s)
     G.stairs((7.6, 0.0, -17.2), 90.0, "stair_straight", s)
 
 
@@ -308,7 +311,12 @@ def west_range():
     G.wall((-20.2, -14.0), (-20.2, 12.0), "rubble", 0.0, s, openings={6.0: "door", 18.0: "door"})
     G.wall((-29.6, -2.0), (-20.4, -2.0), "rubble", 0.0, s, thin=True, openings={4.0: "door"})
     G.wall((-30.0, 12.2), (-20.0, 12.2), "rubble", 0.0, s, openings={5.0: "arch"})
-    G.floor(-30, -2, -20, 12, "board", 0.0, s)
+    # The storehouse's boards, a well left over the cellar's flight.
+    for x in range(-30, -20, 2):
+        for z in range(-2, 12, 2):
+            if x == -28 and z in (6, 8):
+                continue
+            G.put("floor_board_2", (x + 1.0, 0.0, z + 1.0), 0.0, s)
     # The roof over the range and the colonnade.
     for x in range(-30, -16, 2):
         for z in range(-14, 20, 2):
