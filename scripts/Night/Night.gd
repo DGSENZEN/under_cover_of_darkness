@@ -29,9 +29,9 @@ const STATES := {
 	&"clear": {"cover": 0.15, "rain": 0.0, "wind": 1.0, "fog": 1.0, "mask": 0.0, "crossings": true, "lightning": false},
 	&"cloudy": {"cover": 0.5, "rain": 0.0, "wind": 2.0, "fog": 1.0, "mask": 0.0, "crossings": true, "lightning": false},
 	&"drizzle": {"cover": 0.65, "rain": 0.25, "wind": 2.0, "fog": 1.0, "mask": 3.0, "crossings": false, "lightning": false},
-	&"shower": {"cover": 0.8, "rain": 0.6, "wind": 4.0, "fog": 1.0, "mask": 6.0, "crossings": false, "lightning": false},
-	&"rain": {"cover": 0.9, "rain": 0.8, "wind": 5.5, "fog": 1.1, "mask": 8.0, "crossings": false, "lightning": false},
-	&"storm": {"cover": 0.95, "rain": 1.0, "wind": 8.0, "fog": 1.0, "mask": 10.0, "crossings": false, "lightning": true},
+	&"shower": {"cover": 0.8, "rain": 0.6, "wind": 4.0, "fog": 1.25, "mask": 6.0, "crossings": false, "lightning": false},
+	&"rain": {"cover": 0.9, "rain": 0.8, "wind": 5.5, "fog": 1.3, "mask": 8.0, "crossings": false, "lightning": false},
+	&"storm": {"cover": 0.95, "rain": 1.0, "wind": 8.0, "fog": 1.6, "mask": 10.0, "crossings": false, "lightning": true},
 	&"fog": {"cover": 0.4, "rain": 0.0, "wind": 0.5, "fog": 4.0, "mask": 0.0, "crossings": false, "lightning": false},
 }
 const ORDER := [&"clear", &"cloudy", &"drizzle", &"shower", &"rain", &"storm", &"fog"]
@@ -75,7 +75,7 @@ const THUNDER_AFTER := Vector2(1.0, 4.0)
 const WET_RISE := 30.0
 const WET_DRY := 120.0
 const WET_DARKEN := 0.7
-const WET_ROUGH := 0.35
+const WET_ROUGH := 0.15
 ## Puddles show from this wetness, and splash underfoot from PUDDLE_SPLASH.
 const PUDDLE_FROM := 0.1
 const PUDDLE_SPLASH := 0.3
@@ -83,6 +83,25 @@ const PUDDLE_SIZE := 2.4
 
 ## The mist banks' density in thick fog.
 const MIST := 0.2
+## Thick fog greys the level's fog colour toward moonlit silver (this much
+## at its thickest) and the moon scatters this much less in it.
+const FOG_SILVER := Color(0.62, 0.64, 0.67)
+const FOG_GREYED := 0.85
+const FOG_SCATTER := 0.35
+## High thin cloud on a clear night: this much of it at no cover, none from
+## CIRRUS_GONE.
+const CIRRUS := 0.4
+const CIRRUS_GONE := 0.6
+## A flash's place: anywhere round the sky, this high (rad); its bolt drawn
+## while the flash is at least this bright (times the moon).
+const FLASH_ELEVATION := Vector2(0.12, 0.38)
+const BOLT_FROM := 3.0
+## In a flash the rain-thick air lights this many times over at most (the
+## ground takes the whole flash; the air would white the sky out).
+const FLASH_AIR := 1.5
+## The eye opens in the rain: the picture's exposure this many times over
+## under a full storm (a look only; the lights stay as they are).
+const WET_EYE := 1.35
 ## The roof test: a ray this far up.
 const INDOORS_REACH := 30.0
 ## The wind's m/s to Atmosphere's strength (1 as it was made: a shower).
@@ -117,6 +136,14 @@ var _over := 0.0
 var _pending: Array = []
 var _clock := 0.0
 var _rng := RandomNumberGenerator.new()
+## (The flash's place from dice of its own: the weather's run of rolls stays
+## as it was.)
+var _sky_rng := RandomNumberGenerator.new()
+var _flash_dir := Vector3(0.0, 0.3, -1.0).normalized()
+var _bolt_seed := 0.0
+var _fog_albedo_base := Color(1, 1, 1)
+var _exposure_base := 1.0
+var _moon_scatter_base := 1.0
 var _field: Image
 var _field_texture: ImageTexture
 var _offset := Vector2.ZERO
@@ -141,6 +168,7 @@ var _decals: Array[Decal] = []
 
 func _ready() -> void:
 	_rng.seed = seed if seed != 0 else randi()
+	_sky_rng.seed = _rng.seed ^ 0x5eed
 	var noise := FastNoiseLite.new()
 	noise.seed = 7
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
@@ -152,10 +180,13 @@ func _ready() -> void:
 
 	if moon != null:
 		_moon_base = moon.light_energy
+		_moon_scatter_base = moon.light_volumetric_fog_energy
 
 	if environment != null:
 		_ambient_base = environment.ambient_light_energy
 		_fog_base = environment.volumetric_fog_density
+		_fog_albedo_base = environment.volumetric_fog_albedo
+		_exposure_base = environment.tonemap_exposure
 		_sky = NightSkyScript.new(environment, _field_texture)
 
 	_rain = RainScript.new()
@@ -228,9 +259,13 @@ func cover_moon(hold: float) -> void:
 		_veil = {"t": 0.0, "hold": hold, "along": _wind_flat()}
 
 
-## A lightning flash, now; its thunder follows.
+## A lightning flash, now, somewhere in the sky; its thunder follows.
 func flash() -> void:
 	_flash_t = 0.0
+	var round := _sky_rng.randf_range(0.0, TAU)
+	var high := _sky_rng.randf_range(FLASH_ELEVATION.x, FLASH_ELEVATION.y)
+	_flash_dir = Vector3(sin(round) * cos(high), sin(high), cos(round) * cos(high)).normalized()
+	_bolt_seed = _sky_rng.randf_range(0.0, 97.0)
 	_thunder_delay = _rng.randf_range(THUNDER_AFTER.x, THUNDER_AFTER.y)
 	_thunder_in = _thunder_delay
 	flashed.emit()
@@ -337,6 +372,15 @@ func register_wet(material: BaseMaterial3D) -> void:
 
 	_wet[material] = material.get_meta(&"night_dry")
 	_wet_shown = -1.0
+
+
+## How much of the unclouded moon's light falls now: 1 in the clear, down to
+## CLOUDED under cloud, more in a lightning flash (its light added).
+func moon_share() -> float:
+	if moon == null or _moon_base <= 0.0:
+		return 1.0
+
+	return moon.light_energy / _moon_base
 
 
 ## The night of `node`'s level; null if it has none.
@@ -487,15 +531,19 @@ func _apply(air: Vector3) -> void:
 	var flash_level := _flash_level()
 
 	# (lightning is its own light: it adds to the moon's whatever the cloud)
+	var thick := clampf((float(_now.get("fog", 1.0)) - 1.0) / 3.0, 0.0, 1.0)
+
 	if moon != null:
 		moon.light_energy = _moon_base * (lerpf(1.0, CLOUDED, cover) + flash_level - 1.0)
+		moon.light_volumetric_fog_energy = _moon_scatter_base * lerpf(1.0, FOG_SCATTER, thick) / maxf(flash_level / FLASH_AIR, 1.0)
 
 	if environment != null:
 		environment.ambient_light_energy = _ambient_base * lerpf(1.0, AMBIENT_CLOUDED, cover)
 		environment.volumetric_fog_density = _fog_base * float(_now.get("fog", 1.0)) * zone_fog
-
-		if zone_fog_color.a > 0.0:
-			environment.volumetric_fog_albedo = zone_fog_color
+		# Thick fog in moonlight is silver-grey, whatever the place's own.
+		var own := zone_fog_color if zone_fog_color.a > 0.0 else _fog_albedo_base
+		environment.volumetric_fog_albedo = own.lerp(FOG_SILVER, FOG_GREYED * thick)
+		environment.tonemap_exposure = _exposure_base * lerpf(1.0, WET_EYE, rain())
 
 	SoundBus.masking_db = masking_db()
 	var atmosphere := get_tree().get_first_node_in_group(&"atmosphere") if is_inside_tree() else null
@@ -505,8 +553,10 @@ func _apply(air: Vector3) -> void:
 
 	if _sky != null:
 		var veil_on := 1.0 if not _veil.is_empty() else 0.0
-		_sky.show_night(float(_now.get("cover", 0.0)), _offset, _veil_centre(), veil_on,
-			clampf((flash_level - 1.0) / 5.0, 0.0, 1.0), clampf((float(_now.get("fog", 1.0)) - 1.0) / 3.0, 0.0, 1.0), _clock)
+		var cover_now := float(_now.get("cover", 0.0))
+		_sky.show_night(cover_now, _offset, _veil_centre(), veil_on, clampf((flash_level - 1.0) / 5.0, 0.0, 1.0), thick, _clock)
+		_sky.show_lightning(_flash_dir, 1.0 if flash_level >= BOLT_FROM else 0.0, _bolt_seed)
+		_sky.show_cirrus(CIRRUS * clampf(1.0 - cover_now / CIRRUS_GONE, 0.0, 1.0))
 
 	if _rain != null:
 		_rain.amount = rain()

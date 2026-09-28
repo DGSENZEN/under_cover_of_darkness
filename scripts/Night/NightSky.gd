@@ -6,6 +6,8 @@ extends RefCounted
 
 const SHADER := preload("res://scripts/Night/night_sky.gdshader")
 const SKYLINE := "res://assets/sky/skyline.png"
+## The moon's face (tools/textures/paint.py: ours, committed).
+const MOON_FACE := "res://textures/painted/moon.png"
 
 var material: ShaderMaterial
 
@@ -15,6 +17,7 @@ func _init(environment: Environment, field: Texture2D) -> void:
 	material.shader = SHADER
 	material.set_shader_parameter("cloud_field", field)
 	material.set_shader_parameter("skyline", _skyline())
+	material.set_shader_parameter("moon_face", _moon_face())
 	var sky := Sky.new()
 	sky.sky_material = material
 	# (nothing reads its radiance: reflections are off and the ambient is a
@@ -34,6 +37,33 @@ func show_night(cover: float, offset: Vector2, veil_center: Vector2, veil_on: fl
 	material.set_shader_parameter("veil_on", veil_on)
 	material.set_shader_parameter("flash", flash)
 	material.set_shader_parameter("fog", fog)
+
+
+## Lightning: where the flash is in the sky, its bolt (0 or 1), which bolt.
+func show_lightning(direction: Vector3, bolt: float, seed: float) -> void:
+	material.set_shader_parameter("flash_dir", direction)
+	material.set_shader_parameter("bolt", bolt)
+	material.set_shader_parameter("bolt_seed", seed)
+
+
+## High thin cloud (0..1).
+func show_cirrus(amount: float) -> void:
+	material.set_shader_parameter("cirrus", amount)
+
+
+## The painted moon, or a plain pale disc to stand in.
+static func _moon_face() -> Texture2D:
+	if ResourceLoader.exists(MOON_FACE):
+		return load(MOON_FACE)
+
+	var image := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+
+	for y in 32:
+		for x in 32:
+			var inside := Vector2(x - 15.5, y - 15.5).length() < 15.5
+			image.set_pixel(x, y, Color(0.85, 0.87, 0.9, 1.0 if inside else 0.0))
+
+	return ImageTexture.create_from_image(image)
 
 
 ## The Blender skyline, or a plain ridge of hills and roofs to stand in.

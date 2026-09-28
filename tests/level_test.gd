@@ -305,6 +305,32 @@ func _garrison() -> void:
 	_check("G6 a lightning flash flares the chapel's shafts of light through the glass, and they die back after it",
 		flared6, "shafts %d, calm %s, in the flash %s, after %s" % [shafts.size(), calm6, lit6, after6])
 
+	# G24 god rays: a shaft of coloured moonlight falls from every moonward
+	# lancet of the chapel (its low tier and its clerestory) into the nave and
+	# stops at its floor and walls; it fades as a cloud crosses the moon, is
+	# gone under rain, and flares with lightning
+	var rays24: Node = get_tree().get_first_node_in_group(&"god_rays")
+	var beams24: Array = rays24.beams if rays24 != null else []
+	var nave24 := AABB(Vector3(-5.7, -0.4, -25.4), Vector3(19.4, 12.0, 9.1))
+	var strays24 := beams24.filter(func(b): return not nave24.encloses((b as MeshInstance3D).global_transform * (b as MeshInstance3D).get_aabb()))
+	await _frames(10)
+	var clear24: float = rays24.strength if rays24 != null else 0.0
+	map.night.cover_moon(12.0)
+	await _seconds(6.0)
+	var covered24: float = rays24.strength if rays24 != null else 0.0
+	map.night.to(&"rain", 0.0)
+	await _frames(5)
+	var rain24: float = rays24.strength if rays24 != null else 0.0
+	map.night.to(&"clear", 0.0)
+	await _seconds(9.0)
+	map.night.flash()
+	await _frames(3)
+	var flash24: float = rays24.strength if rays24 != null else 0.0
+	await _seconds(1.0)
+	_check("G24 god rays fall from the chapel's eight moonward lancets and stay in the nave; a cloud over the moon dims them, rain puts them out, lightning flares them",
+		beams24.size() == 8 and strays24.is_empty() and clear24 > 0.5 and covered24 < clear24 * 0.4 and rain24 < 0.05 and flash24 > clear24 * 2.0,
+		"beams %d (out of the nave %d), clear %.2f, covered %.2f, rain %.2f, flash %.2f" % [beams24.size(), strays24.size(), clear24, covered24, rain24, flash24])
+
 	# G7 the story's ways: every leg the intruder runs is on the navmesh end
 	# to end (over the wall and into the canal by the breach and the roof)
 	var legs := [["drop_in", "colonnade_wait"], ["colonnade_post", "gone_to_ground"], ["gone_to_ground", "sneak_3"], ["gone_to_ground", "sneak_1"], ["sneak_1", "sneak_2"],

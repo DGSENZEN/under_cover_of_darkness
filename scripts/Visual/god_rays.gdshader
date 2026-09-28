@@ -1,0 +1,44 @@
+// A shaft of light through a window (GodRays.gd): added onto the scene in the
+// glass's colours, brightest by the window and fading along its way, soft
+// where it meets the floor or a pew (the depth behind it) and where a face
+// of it is seen edge-on, dust drifting through it.
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+
+uniform sampler2D glass : source_color, filter_linear_mipmap, repeat_disable;
+uniform sampler2D dust : filter_linear, repeat_enable;
+uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
+uniform float strength = 1.0;
+// Moonlight's colour through clear glass; how much the whole shaft adds.
+uniform vec3 tint : source_color = vec3(0.8, 0.86, 1.0);
+uniform float gain = 0.11;
+// The glass seen through dusty air: its picture this blurred (mip levels).
+uniform float blur = 4.5;
+// It softens this close (m) to what it falls on.
+uniform float soft_depth = 0.5;
+
+varying vec3 world_pos;
+
+void vertex() {
+	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+
+void fragment() {
+	// The glass's colours in soft patches (no lead lines drawn down the
+	// shaft), a little richer than the panes themselves.
+	vec3 colour = textureLod(glass, UV, blur).rgb;
+	float grey = dot(colour, vec3(0.3, 0.59, 0.11));
+	colour = max(mix(vec3(grey), colour, 1.5), vec3(0.0)) * 1.4;
+	float along = UV2.x;
+	float fall = pow(1.0 - along, 1.15) * smoothstep(0.0, 0.05, along);
+	float facing = abs(dot(normalize(NORMAL), normalize(VIEW)));
+	float edge = smoothstep(0.08, 0.8, facing);
+	vec2 drift = vec2(TIME * 0.011, TIME * -0.007);
+	float motes = texture(dust, world_pos.xz * 0.23 + vec2(world_pos.y * 0.17, 0.0) + drift).r;
+	motes = 0.55 + 0.9 * motes * texture(dust, world_pos.zy * 0.41 - drift * 1.7).r;
+	float depth = texture(depth_texture, SCREEN_UV).r;
+	vec4 behind = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, depth, 1.0);
+	float scene = -behind.z / behind.w;
+	float soft = clamp((scene + VERTEX.z) / soft_depth, 0.0, 1.0);
+	ALBEDO = colour * tint * strength * gain * fall * edge * motes * soft;
+}

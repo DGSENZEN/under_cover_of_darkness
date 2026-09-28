@@ -561,6 +561,9 @@ def outside():
     for i, z in enumerate(range(-39, 42, 6)):
         G.put("house_" + east[i], (44.0 + depth / 2.0 + 0.6 * (i % 3 == 2), 0, z), -90.0, "outside")
 
+    # (The corner lot where the lanes meet, built on: no gap onto the sky.)
+    G.put("house_e", (44.0 + depth / 2.0, 0, -45.5), -90.0, "outside")
+
     for x, z in ((-45.0, -30.0), (-50.0, -18.0), (-42.0, -4.0), (-54.0, 6.0), (-46.0, 18.0), (-52.0, 32.0)):
         G.put("tree", (x, 0, z), 0.0, "outside")
 

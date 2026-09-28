@@ -286,7 +286,61 @@ def shield_3():
     return _shield(field)
 
 
-PAINTINGS = {"banner": banner, "rose_window": rose_window, "altar_frontal": altar_frontal,
+def moon():
+    """The full moon's face as seen from the garrison: grey highlands, the
+    dark maria where they lie on the near side, a few bright rayed craters,
+    darker at its limb; clear outside its disc."""
+    size = 128 * SCALE
+    c = size / 2.0
+    yy, xx = np.mgrid[0:size, 0:size]
+    r = np.hypot(xx + 0.5 - c, yy + 0.5 - c) / c
+    rng = np.random.default_rng(29)
+    # Highlands: pale grey, mottled.
+    field = np.zeros((size, size))
+
+    for octave, scale in ((1.0, 12), (0.5, 28), (0.25, 64)):
+        cells = rng.random((scale + 1, scale + 1))
+        field += octave * np.asarray(Image.fromarray((cells * 255).astype(np.uint8), "L").resize((size, size), Image.Resampling.BICUBIC), dtype=np.float64) / 255.0
+
+    field /= 1.75
+    tone = 0.72 + 0.16 * (field - 0.5)
+    # The maria, placed as the near side's (Imbrium and Procellarum spilling
+    # into each other on the west, Serenitatis, Tranquillitatis, Fecunditatis
+    # and Nectaris down the east, Crisium alone at the edge, Nubium low):
+    # overlapping blobs on warped ground, so their shores wander.
+    warp_x = (field - 0.5) * 0.28
+    cells = rng.random((9, 9))
+    warp_y = (np.asarray(Image.fromarray((cells * 255).astype(np.uint8), "L").resize((size, size), Image.Resampling.BICUBIC), dtype=np.float64) / 255.0 - 0.5) * 0.28
+    u = (xx + 0.5 - c) / c + warp_x
+    v = (yy + 0.5 - c) / c + warp_y
+    sea = np.zeros((size, size))
+
+    for mx, my, sx, sy in ((-0.3, -0.34, 0.26, 0.2), (-0.55, -0.05, 0.2, 0.34), (-0.42, 0.22, 0.16, 0.14), (0.1, -0.3, 0.15, 0.13),
+                           (0.22, -0.06, 0.18, 0.14), (0.38, 0.14, 0.12, 0.13), (0.25, 0.28, 0.1, 0.09), (0.6, -0.16, 0.09, 0.11),
+                           (-0.12, 0.3, 0.14, 0.1), (-0.05, -0.02, 0.1, 0.08)):
+        d = np.hypot((u - mx) / sx, (v - my) / sy)
+        sea = np.maximum(sea, np.clip((1.0 - d) / 0.35, 0.0, 1.0))
+
+    tone = tone * (1.0 - 0.36 * sea) + 0.03 * sea * (field - 0.5)
+
+    # Rayed craters (Tycho low, Copernicus, Kepler): a bright ring, fine rays
+    # broken by the ground.
+    for cx, cy, cr, reach in ((-0.08, 0.62, 0.03, 0.45), (-0.3, -0.06, 0.028, 0.28), (-0.52, -0.02, 0.018, 0.2)):
+        dx, dy = (xx + 0.5 - c) / c - cx, (yy + 0.5 - c) / c - cy
+        d = np.hypot(dx, dy)
+        tone += 0.2 * np.exp(-((d - cr) / (cr * 0.45)) ** 2)
+        angle = np.arctan2(dy, dx)
+        rays = np.clip(np.cos(angle * 17.0 + cx * 20.0) * np.cos(angle * 5.0 + cy * 9.0), 0.0, 1.0) ** 3
+        tone += 0.07 * rays * np.exp(-d / reach) * (d > cr) * (field > 0.45)
+
+    tone *= 1.0 - 0.28 * r ** 3
+    grey = np.clip(tone, 0.0, 1.0)[:, :, None] * np.array([232.0, 236.0, 244.0])[None, None, :]
+    image = Image.fromarray(grey.astype(np.uint8), "RGB")
+    mask = Image.fromarray(((r <= 0.985) * 255).astype(np.uint8), "L")
+    return _finish(image, (128, 128), 24, mask)
+
+
+PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_frontal": altar_frontal,
              "shield_1": shield_1, "shield_2": shield_2, "shield_3": shield_3}
 
 

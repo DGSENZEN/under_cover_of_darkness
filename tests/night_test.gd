@@ -56,6 +56,8 @@ func _stage() -> void:
 	environment.ambient_light_color = Color(0.3, 0.32, 0.4)
 	environment.ambient_light_energy = 0.1
 	environment.volumetric_fog_density = 0.01
+	# (The level's fog as the moonlit yard's grade has it: blue-grey.)
+	environment.volumetric_fog_albedo = Color(0.55, 0.62, 0.78)
 	var world := WorldEnvironment.new()
 	world.environment = environment
 	add_child(world)
@@ -160,6 +162,27 @@ func _moon_and_clouds() -> void:
 	_check("N5 the sky neither re-filters a big radiance map every frame nor reads TIME",
 		sky != null and sky.radiance_size == Sky.RADIANCE_SIZE_32 and sky.process_mode != Sky.PROCESS_MODE_REALTIME and not sky_code.contains("TIME"),
 		"radiance %s, mode %s, TIME %s" % [sky.radiance_size if sky else -1, sky.process_mode if sky else -1, sky_code.contains("TIME")])
+
+	# N6 the sky: the moon has its painted face; a flash picks its place in
+	# the sky (above the horizon) and its bolt shows only while the flash is
+	# at its height; high thin cloud streaks a clear night, none under rain
+	var material6: ShaderMaterial = night._sky.material
+	var face6: bool = material6.get_shader_parameter("moon_face") != null
+	night.flash()
+	await _frames(1)
+	var dir6: Vector3 = material6.get_shader_parameter("flash_dir")
+	var bolt6: float = float(material6.get_shader_parameter("bolt"))
+	await _frames(40)
+	var after6: float = float(material6.get_shader_parameter("bolt"))
+	var cirrus6: float = float(material6.get_shader_parameter("cirrus"))
+	night.to(&"rain", 0.0)
+	await _frames(2)
+	var rained6: float = float(material6.get_shader_parameter("cirrus"))
+	night.to(&"clear", 0.0)
+	await _frames(2)
+	_check("N6 the moon has its painted face; a flash picks its place in the sky and draws its bolt only at its height; thin high cloud on a clear night, none in rain",
+		face6 and dir6.y > 0.05 and absf(dir6.length() - 1.0) < 0.01 and bolt6 > 0.5 and after6 == 0.0 and cirrus6 > 0.3 and rained6 < 0.05,
+		"face %s, flash at %s, bolt %.2f then %.2f, cirrus clear %.2f, rain %.2f" % [face6, dir6, bolt6, after6, cirrus6, rained6])
 	night.queue_free()
 	await _frames(2)
 
@@ -213,11 +236,28 @@ func _states() -> void:
 		storm >= 4.0 * calm and calm > 0.0, "clear %.2f, storm %.2f" % [calm, storm])
 
 	# W4 fog: four times the level's fog, and mist banks over the ground
+	# (the moon's scatter as it is in the clear, settled, for W8)
+	night.to(&"clear", 0.0)
+	await _frames(2)
+	var scatter8 := moon.light_volumetric_fog_energy
 	night.to(&"fog", 0.0)
 	await _frames(2)
 	var mist: float = night.mist_density()
 	_check("W4 fog: the level's fog four times over, mist banks lying on the ground",
 		absf(environment.volumetric_fog_density - 0.04) < 0.001 and mist > 0.0, "fog %.3f, mist %.2f" % [environment.volumetric_fog_density, mist])
+
+	# W8 thick fog in moonlight is silver-grey, not blue: its colour greyed,
+	# the moon scattering less in it (and all as it was once clear again)
+	var albedo8: Color = environment.volumetric_fog_albedo
+	var spread8 := maxf(albedo8.r, maxf(albedo8.g, albedo8.b)) - minf(albedo8.r, minf(albedo8.g, albedo8.b))
+	var foggy8 := moon.light_volumetric_fog_energy
+	night.to(&"clear", 0.0)
+	await _frames(2)
+	var back8 := environment.volumetric_fog_albedo.is_equal_approx(Color(0.55, 0.62, 0.78)) and is_equal_approx(moon.light_volumetric_fog_energy, scatter8)
+	night.to(&"fog", 0.0)
+	await _frames(2)
+	_check("W8 thick fog is silver-grey (not blue) and the moon scatters less in it; clear again, both as they were",
+		spread8 < 0.12 and foggy8 <= scatter8 * 0.5 and back8, "fog colour %s (spread %.2f), moon's scatter %.2f of %.2f, back %s" % [albedo8, spread8, foggy8, scatter8, back8])
 
 	# W5 F4's cycle: clear, cloudy, drizzle, shower, rain, storm, fog, clear
 	night.to(&"clear", 0.0)
@@ -249,6 +289,27 @@ func _states() -> void:
 	_check("R1 raindrops fade out within a metre of the camera, fully seen from 3 m",
 		drop.distance_fade_mode != BaseMaterial3D.DISTANCE_FADE_DISABLED and drop.distance_fade_min_distance >= 1.0 and drop.distance_fade_max_distance <= 3.5,
 		"fade %s from %.1f to %.1f m" % [drop.distance_fade_mode, drop.distance_fade_min_distance, drop.distance_fade_max_distance])
+
+	# R2 heavy rain the way it is seen at night: many fine streaks, lit by the
+	# lamps and torches they fall past (not flat white), and the air thicker
+	# with it (rain, and more in a storm)
+	var drops2 := night.get_node("Rain/Drops") as GPUParticles3D
+	var streak2 := drops2.draw_pass_1 as BoxMesh
+	night.to(&"storm", 0.0)
+	await _frames(2)
+	var storm_fog2 := environment.volumetric_fog_density
+	var storm_eye := environment.tonemap_exposure
+	night.to(&"clear", 0.0)
+	await _frames(2)
+	var clear_eye := environment.tonemap_exposure
+	# W9 the eye opens in the rain: the picture's exposure up under a storm (a
+	# look only: the lights, and what the guards and the gem see, are as they
+	# are), and back in the clear
+	_check("W9 the eye opens in the rain: exposure up a third under a storm, as it was in the clear",
+		storm_eye >= clear_eye * 1.3 and is_equal_approx(clear_eye, 1.0), "storm %.2f, clear %.2f" % [storm_eye, clear_eye])
+	_check("R2 heavy rain: many fine streaks lit by the lights they fall past, the air thicker in a storm",
+		drops2.amount >= 6000 and streak2.size.x <= 0.0085 and drop.shading_mode != BaseMaterial3D.SHADING_MODE_UNSHADED and storm_fog2 >= 0.015,
+		"drops %d, streak %.3f wide, shading %d, storm fog %.3f" % [drops2.amount, streak2.size.x, drop.shading_mode, storm_fog2])
 
 	# W6 a change asked for later waits for its time
 	night.to(&"clear", 0.0)
@@ -340,8 +401,8 @@ func _ground() -> void:
 	night.to(&"clear", 0.0)
 	await _seconds(12.0)
 	var drying: float = night.wetness
-	_check("G1 the rain wets the ground over about 30 s (stone darkens to 0.7, its sheen to roughness 0.35) and it dries slowly",
-		rising > 0.25 and rising < 0.45 and soaked > 0.99 and absf(dark_stone - 0.35) < 0.01 and absf(sheen - 0.35) < 0.01 and drying > 0.85 and drying < 0.95,
+	_check("G1 the rain wets the ground over about 30 s (stone darkens to 0.7, its sheen to roughness 0.15: the lights glance off it) and it dries slowly",
+		rising > 0.25 and rising < 0.45 and soaked > 0.99 and absf(dark_stone - 0.35) < 0.01 and absf(sheen - 0.15) < 0.01 and drying > 0.85 and drying < 0.95,
 		"10 s %.2f, 32 s %.2f (stone %.2f, roughness %.2f), 12 s dry %.2f" % [rising, soaked, dark_stone, sheen, drying])
 
 	# G3 a puddle: a foot in it splashes once the ground is wet (0.3), not

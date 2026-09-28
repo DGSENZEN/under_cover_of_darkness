@@ -7,7 +7,7 @@ extends Node3D
 ## The box the rain falls through round the camera (m), the most drops seen
 ## at once, how fast they fall (m/s) and how long each lives (s).
 const BOX := Vector3(24.0, 12.0, 24.0)
-const MOST := 3000
+const MOST := 7000
 const FALL := 11.0
 const LIFE := 1.3
 ## The wind leans the rain this much (per m/s).
@@ -73,9 +73,17 @@ func _ready() -> void:
 	_falling.sub_emitter_mode = ParticleProcessMaterial.SUB_EMITTER_AT_COLLISION
 	_falling.sub_emitter_amount_at_collision = 1
 	_drops.process_material = _falling
+	# Fine streaks, lit by what they fall past (a torch behind the rain turns
+	# it to falling fire, the moon to silver), faint in the dark.
 	var streak := BoxMesh.new()
-	streak.size = Vector3(0.012, 0.45, 0.012)
-	var streak_material := _drop_material(Color(0.7, 0.75, 0.85, 0.3), false)
+	streak.size = Vector3(0.008, 0.7, 0.008)
+	var streak_material := _drop_material(Color(0.8, 0.84, 0.92, 0.3), false)
+	streak_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	streak_material.roughness = 0.25
+	streak_material.backlight_enabled = true
+	streak_material.backlight = Color(0.85, 0.88, 1.0)
+	streak_material.emission_enabled = true
+	streak_material.emission = Color(0.07, 0.08, 0.1)
 	# Gone within a metre of the lens, whole from 3 m: no bars across a close
 	# shot.
 	streak_material.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA

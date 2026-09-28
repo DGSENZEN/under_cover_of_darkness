@@ -165,7 +165,7 @@ def lights(G):
     L("candles_altar_1", "candle", (11.6, 1.25, -19.9), "chapel")
 
     for i, (x, colour) in enumerate(((-2.0, "#ff4a2a"), (2.0, "#ffb347"), (6.0, "#ff4a2a"), (10.0, "#ffb347"))):
-        L("shaft_%d" % i, "window_shaft", (x - 1.9, 5.4, -27.2), "chapel", color=colour, energy=2.5, range=14.0)
+        L("shaft_%d" % i, "window_shaft", (x - 1.9, 5.4, -27.2), "chapel", color=colour, energy=5.0, range=14.0)
 
     # The west range: the armoury's torch, the storehouse's lantern, the
     # cellar's one green lantern.

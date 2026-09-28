@@ -12,11 +12,11 @@ extends Node
 ## green-black in the cellar, deep orange at the hearth.
 
 const GRADES := {
-	"outside": {"shadow": Color(0.0, 0.012, 0.035), "mid": Color(0.4, 0.5, 0.6), "high": Color(0.92, 0.97, 1.0), "saturation": 0.92, "fog_color": Color(0.55, 0.62, 0.78)},
-	"indoors": {"shadow": Color(0.025, 0.012, 0.0), "mid": Color(0.56, 0.44, 0.3), "high": Color(1.0, 0.93, 0.78), "saturation": 1.05, "fog_color": Color(0.62, 0.48, 0.32)},
-	"chapel": {"shadow": Color(0.035, 0.0, 0.004), "mid": Color(0.58, 0.32, 0.22), "high": Color(1.0, 0.86, 0.6), "saturation": 1.15, "fog_color": Color(0.62, 0.34, 0.22)},
-	"cellar": {"shadow": Color(0.0, 0.015, 0.004), "mid": Color(0.34, 0.42, 0.3), "high": Color(0.84, 0.94, 0.76), "saturation": 0.8, "fog_color": Color(0.32, 0.4, 0.3)},
-	"hearth": {"shadow": Color(0.04, 0.01, 0.0), "mid": Color(0.64, 0.42, 0.24), "high": Color(1.0, 0.88, 0.66), "saturation": 1.1, "fog_color": Color(0.72, 0.44, 0.24)},
+	"outside": {"shadow": Color(0.006, 0.02, 0.05), "mid": Color(0.4, 0.5, 0.6), "high": Color(0.92, 0.97, 1.0), "saturation": 0.92, "fog_color": Color(0.55, 0.62, 0.78)},
+	"indoors": {"shadow": Color(0.04, 0.024, 0.012), "mid": Color(0.56, 0.44, 0.3), "high": Color(1.0, 0.93, 0.78), "saturation": 1.05, "fog_color": Color(0.62, 0.48, 0.32)},
+	"chapel": {"shadow": Color(0.045, 0.014, 0.012), "mid": Color(0.58, 0.32, 0.22), "high": Color(1.0, 0.86, 0.6), "saturation": 1.15, "fog_color": Color(0.62, 0.34, 0.22)},
+	"cellar": {"shadow": Color(0.008, 0.024, 0.012), "mid": Color(0.34, 0.42, 0.3), "high": Color(0.84, 0.94, 0.76), "saturation": 0.8, "fog_color": Color(0.32, 0.4, 0.3)},
+	"hearth": {"shadow": Color(0.05, 0.022, 0.008), "mid": Color(0.64, 0.42, 0.24), "high": Color(1.0, 0.88, 0.66), "saturation": 1.1, "fog_color": Color(0.72, 0.44, 0.24)},
 }
 const DEFAULT := "outside"
 ## A new zone is eased in over this long (s).

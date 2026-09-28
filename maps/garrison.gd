@@ -15,6 +15,7 @@ extends "res://maps/npc_showcase.gd"
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const ClimbScript := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
 const Materials := preload("res://scripts/Visual/Materials.gd")
+const GodRaysScript := preload("res://scripts/Visual/GodRays.gd")
 const LEVEL := "res://assets/level/garrison"
 ## The night it plays: six acts on the level's marks.
 const GARRISON_STORY := "res://scripts/Showcase/GarrisonNight.gd"
@@ -28,19 +29,33 @@ const GROUNDS := Vector2(60.0, 52.0)
 const LADDER := "range_ladder"
 const LADDER_ON_ROOF := 3.25
 ## Lightning through the chapel's glass: its shafts of light flare this many
-## times their own and die back over this long (s).
+## times their own at a flash's height (and die back with it).
 const GLASS_FLARE := 7.0
 ## The smallest island of navmesh kept (m²): the tops of sack piles, barrels
 ## and crates left out. The highest step a man walks up (m): the garrison's
 ## risers are 0.2, and a sack pile's or a bench's top (0.5) must not be one.
 const MIN_ISLAND := 1.2
 const MAX_CLIMB := 0.3
-const GLASS_FADE := 0.9
+## The chapel's moonward lancets (its north wall): their middles (x), their
+## sills (the low tier and the clerestory), their openings (m: 0.9 wide,
+## springing 2.1 over the sill, their points 3.6 over it); the glass in the
+## wall's middle (z); the nave's floor and inner faces (the shafts stop at).
+const LANCETS_X := [-2.0, 2.0, 6.0, 10.0]
+const LANCET_SILLS := [1.8, 7.8]
+const LANCET := Vector3(0.9, 2.1, 3.6)
+const LANCET_GLASS := -25.3
+const NAVE := {"floor": 0.0, "south": -16.4, "east": 13.6, "west": -5.6}
 ## The moon's way (its light, as garrison_lights sets it); the chapel's north
 ## glass line (z); dust boxes this big, at these distances (m) down a shaft.
 const MOON_TOWARD := Vector3(0.62, -0.5, 0.6)
 ## Screen-space reflections this fine (the canal, the puddles).
 const SSR_STEPS := 48
+## The look (not what the guards or the gem see): the sky's fill a little over
+## the yard's, a little light bounced off what the flames light, a soft bloom
+## round them and the lit windows.
+const AMBIENT := 0.13
+const BOUNCE := Vector2(3.0, 1.0)
+const BLOOM := 0.07
 ## Decals: how much of their picture over the wall's; faded out from this far.
 const DECAL_MIX := 0.85
 const DECAL_FADE := 40.0
@@ -71,6 +86,7 @@ func build() -> void:
 	_routes_from_markers()
 	_marks_from_markers()
 	_garrison_lights()
+	_god_rays()
 	_baker = NavigationRegion3D.new()
 	_baker.set_script(NavBakerScript)
 	# (Nobody routed over a sack pile, a bench or a barrel's top.)
@@ -226,8 +242,12 @@ func _marks_from_markers() -> void:
 # ---------------------------------------------------------------------------
 
 func _garrison_lights() -> void:
-	var environment := RetroScript.night_environment(Color(0.34, 0.34, 0.42), AMBIENT_ENERGY)
+	var environment := RetroScript.night_environment(Color(0.34, 0.34, 0.42), AMBIENT)
 	environment.volumetric_fog_density = 0.01
+	environment.ssil_enabled = true
+	environment.ssil_radius = BOUNCE.x
+	environment.ssil_intensity = BOUNCE.y
+	environment.glow_bloom = BLOOM
 	# The canal and the puddles reflect what is lit (the lamps, the windows).
 	environment.ssr_enabled = true
 	environment.ssr_max_steps = SSR_STEPS
@@ -261,7 +281,6 @@ func _garrison_lights() -> void:
 	var mist: Array[AABB] = [AABB(Vector3(-46, -0.5, -46), Vector3(92, 3.0, 92))]
 	night.mist_boxes = mist
 	add_child(night)
-	night.flashed.connect(_lightning_through_glass)
 
 	for body in level.root.find_children("*", "MeshInstance3D", true, false):
 		for i in (body as MeshInstance3D).get_surface_override_material_count():
@@ -385,15 +404,37 @@ func pull_up_ladder() -> void:
 		(piece as Node3D).global_transform = Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(at.x, LADDER_ON_ROOF, at.z + 0.6))
 
 
-## A flash outside (Night): the chapel's shafts of light flare through the
-## glass and die back.
-func _lightning_through_glass() -> void:
-	for shaft in get_tree().get_nodes_in_group(&"glass_shafts"):
-		var light := shaft as Light3D
-		var calm := float(light.get_meta(&"calm", light.light_energy))
-		light.light_energy = calm * GLASS_FLARE
-		var fade := light.create_tween()
-		fade.tween_property(light, "light_energy", calm, GLASS_FADE).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+## God rays: a shaft of the moon's light in the glass's colours from each of
+## the chapel's moonward lancets, to its floor or its walls. The coloured
+## pools the glass throws (the window_shaft lights) follow them: clouds over
+## the moon dim both, rain puts them out, lightning flares them.
+func _god_rays() -> void:
+	var rays := GodRaysScript.new()
+	rays.name = "GodRays"
+	rays.direction = MOON_TOWARD
+	rays.glass = Materials.photo(&"stained_glass")
+	rays.flare_gain = (GLASS_FLARE - 1.0) / 5.0
+	rays.planes = [Plane(Vector3.UP, NAVE["floor"]), Plane(Vector3.FORWARD, -float(NAVE["south"])),
+		Plane(Vector3.LEFT, -float(NAVE["east"])), Plane(Vector3.RIGHT, float(NAVE["west"]))]
+
+	for light in get_tree().get_nodes_in_group(&"glass_shafts"):
+		rays.lights.append(light as Light3D)
+
+	add_child(rays)
+	var half := LANCET.x * 0.5
+
+	for sill in LANCET_SILLS:
+		for x in LANCETS_X:
+			var corners := [Vector2(-half, 0.0), Vector2(half, 0.0), Vector2(half, LANCET.y), Vector2(half * 0.7, (LANCET.y + LANCET.z) * 0.5 + 0.1),
+				Vector2(0.0, LANCET.z), Vector2(-half * 0.7, (LANCET.y + LANCET.z) * 0.5 + 0.1), Vector2(-half, LANCET.y)]
+			var outline := PackedVector3Array()
+			var uvs := PackedVector2Array()
+
+			for c in corners:
+				outline.append(Vector3(float(x) + c.x, float(sill) + c.y, LANCET_GLASS))
+				uvs.append(Vector2((c.x + half) / LANCET.x, 1.0 - c.y / LANCET.z))
+
+			rays.add_window(outline, uvs)
 
 
 # ---------------------------------------------------------------------------
