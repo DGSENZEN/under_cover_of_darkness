@@ -157,7 +157,7 @@ func _garrison() -> void:
 
 	# G7 the story's ways: every leg the intruder runs is on the navmesh end
 	# to end (over the wall and into the canal by the breach and the roof)
-	var legs := [["drop_in", "colonnade_wait"], ["colonnade_post", "gone_to_ground"], ["gone_to_ground", "sneak_1"], ["sneak_1", "sneak_2"],
+	var legs := [["drop_in", "colonnade_wait"], ["colonnade_post", "gone_to_ground"], ["gone_to_ground", "sneak_3"], ["gone_to_ground", "sneak_1"], ["sneak_1", "sneak_2"],
 		["sneak_2", "sneak_3"], ["sneak_3", "chapel_hide"], ["chapel_fight", "captain_door_at"], ["captain_door_at", "escape_stairs"],
 		["escape_stairs", "escape_door"], ["escape_door", "escape_climb"], ["escape_climb", "escape_walk"], ["escape_walk", "escape_over"],
 		["escape_over", "canal_edge"], ["canal_edge", "canal_swim"], ["captain_door_at", "courtyard_fight"], ["courtyard_fight", "gate_out"]]
@@ -192,9 +192,12 @@ func _garrison() -> void:
 	for i in range(1, loft7.size()):
 		loft_length += loft7[i - 1].distance_to(loft7[i])
 
-	_check("G7 every leg of the intruder's night is a way on the navmesh, over the wall (by the breach), through the loft, and into the canal too",
-		broken7.is_empty() and over_length > 0.0 and over_length < 12.0 and loft_length > 0.0 and loft_length < 20.0,
-		"%s; over the wall %.1f m, the loft to the gallery %.1f m" % [broken7, over_length, loft_length])
+	# (Up onto the range's roof by the crates: somewhere to go to ground.)
+	var roof7: bool = map.marks.has("gone_to_ground") and (map.marks["gone_to_ground"] as Vector3).y > 3.0
+
+	_check("G7 every leg of the intruder's night is a way on the navmesh, onto the range's roof, over the wall (by the breach), through the loft, and into the canal",
+		broken7.is_empty() and roof7 and over_length > 0.0 and over_length < 12.0 and loft_length > 0.0 and loft_length < 20.0,
+		"%s; to ground on the roof %s, over the wall %.1f m, the loft to the gallery %.1f m" % [broken7, roof7, over_length, loft_length])
 
 	# G5 a man at prayer in the chapel: down on his knees, his head bowed, a
 	# murmured line now and then; stirred, he gets up off his knees

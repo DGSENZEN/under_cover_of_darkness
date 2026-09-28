@@ -29,8 +29,12 @@ const WALK_SPEED := 1.6
 ## (Running he outpaces them, as a thief does: they chase at 4.6, the
 ## player sprints at 8.5.)
 const RUN_SPEED := 7.5
-## Close enough to where he was going.
+## Close enough to where he was going (and within ARRIVE_UP of its height:
+## under a roof's edge is not on the roof); a walk that ends short of it is
+## asked for again this many times before he settles where he is.
 const ARRIVE := 0.7
+const ARRIVE_UP := 1.0
+const ASK_AGAIN := 40
 ## A knife in the back from this near, from this far behind the man.
 const STAB_REACH := 1.1
 const STAB_BEHIND := 0.9
@@ -98,6 +102,8 @@ var _riposte_on: Node3D = null
 var _spare_from: Node3D = null
 var _spare_since := -1.0
 var _look_at := Vector3.INF
+## Walks asked for again since the verb began (ASK_AGAIN).
+var _asked := 0
 ## Blows coming at him: [{"from": Node3D, "answer": StringName}].
 var _coming: Array = []
 
@@ -223,12 +229,18 @@ func drive(delta: float) -> void:
 func _begin(verb: Verb) -> void:
 	_verb = verb
 	_done = verb == Verb.NONE
+	_asked = 0
 	_coming.clear()
 	_victim = null
 	_look_at = Vector3.INF
 	intruder.crouched = false
 	intruder.state = RELAXED
 	combat.guard_up(false)
+
+
+## At `point`: near it on the flat (ARRIVE times `slack`), and on its level.
+func _there(point: Vector3, slack := 1.0) -> bool:
+	return _flat(intruder.global_position, point) < ARRIVE * slack and absf(intruder.global_position.y - point.y) < ARRIVE_UP
 
 
 func _speed() -> float:
@@ -247,9 +259,11 @@ func _drive_go(delta: float) -> void:
 		_face_look(delta)
 		return
 
-	if intruder._walk(_speed(), delta) or _flat(intruder.global_position, _goal) < ARRIVE:
-		# "Finished" before the navmesh answered is not there: ask again.
-		if _flat(intruder.global_position, _goal) > ARRIVE * 1.5 and intruder._agent.get_current_navigation_path().is_empty():
+	if intruder._walk(_speed(), delta) or _there(_goal):
+		# "Finished" short of it (before the navmesh answered, or at the end
+		# of an old path, or off a drop): ask again, a while.
+		if not _there(_goal, 1.5) and _asked < ASK_AGAIN:
+			_asked += 1
 			intruder._go_to(_goal, true)
 			return
 
@@ -298,11 +312,13 @@ func _drive_flee(delta: float) -> void:
 
 	var point: Vector3 = _route[0]
 
-	if intruder._walk(RUN_SPEED, delta) or _flat(intruder.global_position, point) < ARRIVE:
-		if _flat(intruder.global_position, point) > ARRIVE * 1.5 and intruder._agent.get_current_navigation_path().is_empty():
+	if intruder._walk(RUN_SPEED, delta) or _there(point):
+		if not _there(point, 1.5) and _asked < ASK_AGAIN:
+			_asked += 1
 			intruder._go_to(point, true)
 			return
 
+		_asked = 0
 		_route.remove_at(0)
 
 		if not _route.is_empty():

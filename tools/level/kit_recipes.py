@@ -295,6 +295,10 @@ _thing("railing_2", "timber", "wood", [box(0.0, 1.0, 0.0, 2.0, 0.08, 0.08, "timb
                                        box(0.95, 0.5, 0.0, 0.08, 1.0, 0.08, "timber")])
 _thing("balcony_2", "boards", "wood", [box(0.0, -0.1, 0.6, 2.0, 0.2, 1.2, "boards"), box(0.0, 0.9, 1.15, 2.0, 0.08, 0.08, "timber")])
 _thing("window_lit", "glass_lit", "stone", [box(0.0, 1.55, 0.0, 0.85, 1.25, 0.05, "glass_lit")], solid=False)
+# A ladder against a wall (its back on local +z, the wall's side): two rails
+# and rungs; its climb is a ladder marker's (ClimbVolume).
+_thing("ladder_3", "timber", "wood", [box(side * 0.25, 1.7, 0.0, 0.07, 3.4, 0.07, "timber") for side in (-1.0, 1.0)] +
+       [box(0.0, 0.3 + i * 0.32, 0.0, 0.5, 0.05, 0.05, "timber") for i in range(10)], solid=False)
 # A lean-to against a wall's outer face (its back on local -z): a boarded
 # roof at LEAN_TO_ROOF on two posts, a way down off the wall for the
 # desperate (the navmesh links wall, roof and ground by drops).

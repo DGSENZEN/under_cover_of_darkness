@@ -176,6 +176,7 @@ def things(G):
     G.mark("bell", "bell", (7.0, 0, 19.5), 180.0)
     G.mark("canal", "water", (0.0, -2.5, 58.5), 0.0, "outside", size=(100.0, 3.0, 27.0), murk=0.7)
     G.mark("wall_climb", "ladder", (18.0, 2.5, 28.65), 0.0, "walls", size=(1.2, 5.0, 0.7))
+    G.mark("range_ladder", "ladder", (-25.0, 1.7, -14.7), 180.0, "west_range", size=(1.0, 3.4, 0.6))
 
     for i, (x, z, yaw) in enumerate(((-26.0, -13.2, 0.0), (-23.0, -13.2, 0.0), (-28.4, -10.0, 90.0))):
         # (the chest faces its station: its front toward +z, or +x for the third)
@@ -272,7 +273,7 @@ def story(G):
         ("postern_post", (24.0, 0, 24.6), "courtyard"),
         ("wall_foot", (18.0, 0, 30.2), "outside"), ("drop_in", (-9.0, WALK, 26.8), "walls"),
         ("colonnade_wait", (-18.8, 0, 1.0), "west_range"), ("colonnade_post", (-17.6, 0, -1.5), "west_range"),
-        ("hide", (-28.8, -3.0, 10.4), "cellar"), ("gone_to_ground", (-11.6, 0, -24.0), "courtyard"),
+        ("hide", (-28.8, -3.0, 10.4), "cellar"), ("gone_to_ground", (-26.0, 3.2, -9.0), "west_range"),
         ("sneak_1", (19.2, 0, -16.6), "barracks"), ("sneak_2", (14.8, 3.0, -2.0), "barracks"),
         ("sneak_3", (13.0, 3.0, -17.4), "chapel"), ("chapel_hide", (-4.6, 0, -24.8), "chapel"),
         ("chapel_fight", (2.0, 0, -20.8), "chapel"),

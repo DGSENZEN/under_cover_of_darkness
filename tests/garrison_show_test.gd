@@ -4,7 +4,12 @@ extends Node
 ## fight, the captain's door and the three endings; the camera and the
 ## weather as the yard's.
 ##
-##   Godot --headless --fixed-fps 60 --path . res://tests/garrison_show_test.tscn
+## The sections are played by suite scenes a few at a time (each within
+## tools/run_suites' 900 s): garrison_acts_test (S1 with S0, S2, S3),
+## garrison_hunt_test (S4, S5), garrison_endings_test (S6),
+## garrison_night_test (S7, S8).
+##   Godot --headless --fixed-fps 60 --path . res://tests/garrison_acts_test.tscn
+##   Godot --headless --fixed-fps 60 --path . res://tests/garrison_acts_test.tscn -- --only=S2
 
 const MAP := preload("res://maps/garrison.tscn")
 const MapScript := preload("res://maps/npc_showcase.gd")
@@ -19,6 +24,9 @@ const CineVantage := preload("res://scripts/Cinema/CineVantage.gd")
 
 ## The groups the captain divides the hunt into, by their ground.
 const GROUPS := ["area_barracks", "area_west", "area_walls", "area_courtyard"]
+
+## The sections this scene plays (empty: all of them).
+@export var sections: PackedStringArray = []
 
 var results: Array[String] = []
 
@@ -37,8 +45,9 @@ func _ready() -> void:
 
 
 func _run() -> void:
-	# (-- --only=S2,S5: those sections alone.)
-	var only := []
+	# The scene's sections (each suite scene a few of them: tools/run_suites
+	# gives each 900 s), or -- --only=S2,S5: those alone; else all.
+	var only: Array = Array(sections)
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--only="):
@@ -47,7 +56,9 @@ func _run() -> void:
 	# (S1 plays on into S0: Act I.)
 	for section in ["S1", "S2", "S3", "S4", "S5", "S6", "S7"]:
 		if only.is_empty() or only.has(section):
+			var began := Time.get_ticks_msec()
 			await call("_" + String(section).to_lower())
+			print("[section] %s took %.0f s" % [section, (Time.get_ticks_msec() - began) / 1000.0])
 
 
 func _s1() -> void:
@@ -123,6 +134,9 @@ func _s3() -> void:
 	# S3 Act III: the cry, the bell, lanterns, and the captain dividing them
 	DirectorScript.start_act = 3
 	var map3 := await _map(true)
+	var osric3: Node3D = map3.cast["Osric"]
+	var osric_said := []
+	osric3.barked.connect(func(t): osric_said.append(t))
 	var rung3 := [false]
 	for bell in get_tree().get_nodes_in_group(&"alarm_bells"):
 		bell.rung.connect(func(_by): rung3[0] = true)
@@ -139,9 +153,10 @@ func _s3() -> void:
 		lanterns3[0] = maxi(lanterns3[0], lit)
 		return ended3[0], 7200)
 	var groups3 := _groups(map3)
-	_check("S3 Act III: the bell rings, men take up lanterns, and the captain divides them: three groups or more, each of three or four sent to its own ground",
-		ended3[0] and rung3[0] and lanterns3[0] >= 2 and groups3.size() >= 3 and groups3.values().all(func(g): return (g as Array).size() >= 2 and (g as Array).size() <= 4),
-		"act over %s, bell %s, lanterns %d, groups %s, skipped %s" % [ended3[0], rung3[0], lanterns3[0], groups3, map3.director.log_lines])
+	var grieved3 := osric_said.any(func(t): return String(t).contains("Jory"))
+	_check("S3 Act III: his brother calls Jory's name, the bell rings, men take up lanterns, and the captain divides them: three groups or more, each sent to its own ground",
+		ended3[0] and grieved3 and rung3[0] and lanterns3[0] >= 2 and groups3.size() >= 3 and groups3.values().all(func(g): return (g as Array).size() >= 2 and (g as Array).size() <= 4),
+		"act over %s, Osric said %s, bell %s, lanterns %d, groups %s, skipped %s" % [ended3[0], osric_said, rung3[0], lanterns3[0], groups3, map3.director.log_lines])
 	await _unload(map3)
 
 
@@ -254,6 +269,7 @@ func _s7() -> void:
 	var weather7 := {}
 	var due7 := []
 	var seen7 := [0, 0]
+	var blind7 := []
 	var checked7 := [0]
 	map7.director.show_ended.connect(func(): ended7[0] = true)
 	map7.director.act_started.connect(func(index: int, _t: String) -> void:
@@ -262,13 +278,19 @@ func _s7() -> void:
 	await _until(func():
 		frames7[0] += 1
 		var history: Array = editor7.history()
-		while checked7[0] < history.size() - 1:
+		# (Each new shot within two frames of its start, while the camera is on
+		# it.)
+		while checked7[0] < history.size() - 1 or (checked7[0] < history.size() and frames7[0] % 2 == 0):
 			var shot: Dictionary = history[checked7[0]]
 			checked7[0] += 1
 			var on: Array = (shot["subjects"] as Array).filter(func(m): return m != null and is_instance_valid(m))
 			if not on.is_empty():
 				seen7[0] += 1
-				seen7[1] += 1 if CineVantage.sees(map7.get_world_3d().direct_space_state, map7.camera.global_position, [on[0]]) else 0
+				var saw7: bool = CineVantage.sees(map7.get_world_3d().direct_space_state, map7.camera.global_position, [on[0]])
+				seen7[1] += 1 if saw7 else 0
+				if not saw7:
+					blind7.append([map7.director.act_index, String(map7.director.beat_name), shot["kind"], shot["cause"], shot["how"], String(on[0].get("given_name")),
+						(on[0] as Node3D).global_position.snapped(Vector3.ONE * 0.1), map7.camera.global_position.snapped(Vector3.ONE * 0.1)])
 		for due in due7.duplicate():
 			if float(editor7._clock) >= float(due[1]):
 				weather7[due[0]] = snappedf(float(map7.night.rain()), 0.01)
@@ -281,7 +303,7 @@ func _s7() -> void:
 		ended7[0] and fits7 and acts7.size() == 6 and opened7.all(func(h): return h == &"fade"),
 		"ended %s after %.0f s, rain as each act opens %s, openings %s, skipped %s" % [ended7[0], frames7[0] / 60.0, weather7, opened7, map7.director.log_lines])
 	_check("S8 over the night every shot sees the man it is on as it begins (at most 1 in 20 not)",
-		seen7[0] >= 20 and float(seen7[1]) >= 0.95 * float(seen7[0]), "%d of %d shots saw their man" % [seen7[1], seen7[0]])
+		seen7[0] >= 20 and float(seen7[1]) >= 0.95 * float(seen7[0]), "%d of %d shots saw their man; blind [act, beat, kind, cause, how, man, at, camera] %s" % [seen7[1], seen7[0], blind7])
 	await _unload(map7)
 
 ## The men sent to each ground, by their group: {group: [names]}.

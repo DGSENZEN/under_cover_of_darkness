@@ -69,7 +69,7 @@ func _ready() -> void:
 
 	for vantage in get_tree().get_nodes_in_group(&"cine_vantage"):
 		var at: Vector3 = (vantage as Node3D).global_position
-		await _shot(camera, "vantage %s" % (vantage as Node).name, at, Vector3(0.0, 1.0, 2.0) if at.distance_to(Vector3(0, 0, 2)) > 6.0 else at + Vector3(0, -0.3, -6))
+		await _shot(camera, "vantage %s" % (vantage as Node).name, at, _looking_from(map, at))
 
 	# The courtyard under a cloud: everything shadow and torchlight.
 	map.night.cover_moon(30.0)
@@ -82,6 +82,32 @@ func _ready() -> void:
 	_sheet()
 	print("staged %d stills" % _stills.size())
 	get_tree().quit()
+
+
+## Where a vantage looks for its still: down the length of the room it is in
+## (the far corner of the smallest zone round it), else at the courtyard.
+func _looking_from(map: Node, at: Vector3) -> Vector3:
+	var best := AABB()
+
+	for m in map.level.of("zone"):
+		var size: Vector3 = m["size"]
+		var box := AABB((m["transform"] as Transform3D).origin - size * 0.5, size)
+
+		if box.grow(0.5).has_point(at) and (not best.has_volume() or box.get_volume() < best.get_volume()):
+			best = box
+
+	if not best.has_volume():
+		return Vector3(0.0, 1.0, 2.0)
+
+	var far := at
+
+	for corner in [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1)]:
+		var point := best.position + Vector3(best.size.x * corner.x, 1.2, best.size.z * corner.y)
+
+		if Vector2(point.x - at.x, point.z - at.z).length() > Vector2(far.x - at.x, far.z - at.z).length():
+			far = point
+
+	return far
 
 
 func _shot(camera: Camera3D, title: String, at: Vector3, look: Vector3) -> void:

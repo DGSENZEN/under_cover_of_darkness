@@ -13,9 +13,10 @@ extends "res://scripts/Showcase/ShowNight.gd"
 ##                             is turned, down the flight and along the dark
 ##                             colonnade; the knife in Jory's back as a cloud
 ##                             covers the moon, and the carrier coming with a
-##                             crate sees him over the body; the brother's cry.
-##   III. The Cry             he runs for the dark of the drill yard and is lost
-##                             to them; the bell, men out with lanterns, and the
+##                             crate sees him over the body.
+##   III. The Cry             he runs as the cry goes up (the brother's grief),
+##                             for the drill yard, up the ladder onto the
+##                             range's roof, and is lost to them; the bell, men out with lanterns, and the
 ##                             captain divides them into groups, each sent to
 ##                             its ground (Guard.send_to_search).
 ##   IV.  The Divided Hunt    each group searches its ground; knowing he is
@@ -52,8 +53,14 @@ const FIRST_GROUND := {"area_barracks": "area_barracks_ground"}
 const ORDERS := "Split up! Osric, Brand, Col: the barracks! Gideon, the range and the cellar! Wat, the walls! Tam, with me!"
 const ANSWERS := [["Osric", "Aye. With me.", 1.6], ["Gideon", "The cellar first.", 2.8], ["Wat", "Walls it is.", 3.8]]
 ## Act II: in over the wall once the archer on it is this far from where he
-## comes in.
+## comes in; at his hiding place he waits at most MOMENT_WAIT (s) for the
+## moment.
 const WALL_CLEAR := 18.0
+const MOMENT_WAIT := 20.0
+## Nobody else this near the post for the knife (m); as he runs from the body,
+## how easily he is seen (the dark colonnade).
+const ALONE_OF := 12.0
+const RUN_EXPOSURE := 0.5
 ## The carrier coming along the colonnade toward the post with a crate: south
 ## of it by this much (m), and the archer this far from it.
 const CARRIER_NEAR := Vector2(1.5, 7.5)
@@ -73,6 +80,8 @@ const IN_CHAPEL := 0.5
 ## victor leaves with this much of his health.
 const RATTLE_AGAIN := 0.9
 const WOUNDED := 0.45
+## They come for him: this long at most before he runs (s).
+const THEY_COME := 10.0
 ## The ways out for each ending.
 const OVER_THE_WALL := ["escape_stairs", "escape_door", "escape_climb", "escape_walk", "escape_over", "canal_edge", "canal_swim"]
 const INTO_THE_YARD := ["escape_stairs", "escape_door", "courtyard_fight"]
@@ -216,7 +225,8 @@ func _act_two_g() -> Dictionary:
 					i.crouched = true
 					_verb(&"go_to", [map.marks["colonnade_wait"], &"sneak"]),
 				"until": func() -> bool: return _brain() != null and _brain().done()},
-			{"name": &"his_moment", "scene": _scene(&"observe", ["intruder", "Ned"]), "min": 1.0, "timeout": 30.0,
+			# (His moment, or as long as he will wait for it.)
+			{"name": &"his_moment", "scene": _scene(&"observe", ["intruder", "Ned"]), "min": 1.0, "enough": MOMENT_WAIT, "timeout": MOMENT_WAIT + 10.0,
 				"until": _his_moment_g},
 			{"name": &"the_knife", "scene": _scene(&"drama", ["intruder", "Jory"], {"kind": &"track", "seconds": 4.0}), "timeout": 25.0,
 				"do": func() -> void: _verb(&"backstab", [_man("Jory")]),
@@ -229,9 +239,6 @@ func _act_two_g() -> Dictionary:
 					_verb(&"stand", [])
 					_verb(&"face", [_man_position("Ned")]),
 				"until": func() -> bool: return _state("Ned") >= SEARCHING or _has_said("Ned", "Murder")},
-			# His brother knew the voice of that cry.
-			{"name": &"grief", "scene": _scene(&"drama", ["Osric"]), "min": 3.0, "timeout": 20.0,
-				"until": func() -> bool: return _has_said("Osric", "Jory") or _man("Osric") == null},
 		],
 	}
 
@@ -249,7 +256,18 @@ func _his_moment_g() -> bool:
 
 	var south := ned.global_position.z - post.z
 	var coming: bool = ned._rota.carried != null and ned.global_position.x > post.x - 2.8 and south >= CARRIER_NEAR.x and south <= CARRIER_NEAR.y
-	return archer_far and coming
+	return archer_far and coming and _alone_but(["Jory", "Ned"], post)
+
+
+## Nobody but `names` within ALONE_OF of `at`.
+func _alone_but(names: Array, at: Vector3) -> bool:
+	for name in map.cast:
+		var man := _man(name)
+
+		if man != null and not (name in names) and _flat(man.global_position, at) < ALONE_OF:
+			return false
+
+	return true
 
 
 # ---------------------------------------------------------------------------
@@ -274,13 +292,17 @@ func _act_three_g() -> Dictionary:
 				ned.last_known_position = i.global_position
 				ned.has_last_known = true,
 		"beats": [
-			{"name": &"the_cry", "scene": _scene(&"drama", ["Ned"]), "timeout": 25.0,
+			# He runs as the cry goes up (the dark colonnade half hides him),
+			# and the brother, who knew the voice of that cry, comes.
+			{"name": &"the_cry", "scene": _scene(&"drama", ["Ned"]), "min": 1.5, "timeout": 25.0,
 				"do": func() -> void:
 					var i := _intruder()
 					if i != null:
-						i.exposure_scale = 1.0
+						i.exposure_scale = RUN_EXPOSURE
 					_verb(&"go_to", [map.marks["gone_to_ground"], &"run"]),
-				"until": func() -> bool: return _out_of_rest(["Mirelle", "Osric", "Piers", "Brand", "Col"]) and (_brain() == null or _brain().done())},
+				"until": func() -> bool: return _out_of_rest(["Mirelle", "Osric", "Piers", "Brand", "Col"])},
+			{"name": &"grief", "scene": _scene(&"drama", ["Osric"]), "min": 3.0, "timeout": 20.0,
+				"until": func() -> bool: return (_has_said("Osric", "Jory") or _man("Osric") == null) and (_brain() == null or _brain().done())},
 			# He goes to ground in the dark (the director's hand: hard to see).
 			{"name": &"lost_him", "scene": _scene(&"drama", ["intruder"]), "timeout": 20.0,
 				"do": func() -> void:
@@ -402,7 +424,7 @@ func _act_four_g() -> Dictionary:
 			{"name": &"slip_back", "scene": _scene(&"observe", ["intruder"]), "timeout": 60.0,
 				"do": func() -> void: _verb(&"hide_at", [map.marks["sneak_3"]]),
 				"until": _there_or_pressed},
-			{"name": &"upstairs", "scene": _scene(&"drama", ["@group:area_barracks"]), "min": 3.0, "timeout": 25.0,
+			{"name": &"upstairs", "scene": _scene(&"drama", ["@group:area_barracks"]), "min": 3.0, "enough": 12.0, "timeout": 25.0,
 				"do": func() -> void:
 					for man in _group(&"area_barracks"):
 						man.send_to_search(_areas.get("area_barracks", AABB()), &"area_barracks")
@@ -592,7 +614,9 @@ func _escape_beats(ending: StringName) -> Array:
 			"until": func() -> bool: return _brain() == null or _brain().done()},
 		{"name": &"barred", "scene": _scene(&"drama", ["intruder"]), "min": 3.0,
 			"do": _try_the_door},
-		{"name": &"they_come", "scene": _scene(&"drama", ["@hunt"]), "min": 2.0, "timeout": 15.0,
+		# (Coming for him: a held shot of them, done when the nearest is close or
+		# by THEY_COME whatever.)
+		{"name": &"they_come", "scene": _scene(&"drama", ["@hunt"]), "min": 2.0, "enough": THEY_COME, "timeout": THEY_COME + 10.0,
 			"until": func() -> bool: return _nearest() != null and _intruder() != null and _nearest().global_position.distance_to(_intruder().global_position) < 14.0},
 	]
 
