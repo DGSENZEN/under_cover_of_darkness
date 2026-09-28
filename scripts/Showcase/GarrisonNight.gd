@@ -14,9 +14,11 @@ extends "res://scripts/Showcase/ShowNight.gd"
 ##                             colonnade; the knife in Jory's back as a cloud
 ##                             covers the moon, and the carrier coming with a
 ##                             crate sees him over the body.
-##   III. The Cry             he runs as the cry goes up (the brother's grief),
+##   III. The Cry             he barges the carrier down and runs as the cry
+##                             goes up (the brother's grief),
 ##                             for the drill yard, up the ladder onto the
-##                             range's roof, and is lost to them; the bell, men out with lanterns, and the
+##                             range's roof, pulls it up after him, and is
+##                             lost to them; the bell, men out with lanterns, and the
 ##                             captain divides them into groups, each sent to
 ##                             its ground (Guard.send_to_search).
 ##   IV.  The Divided Hunt    each group searches its ground; knowing he is
@@ -32,9 +34,9 @@ extends "res://scripts/Showcase/ShowNight.gd"
 ##                             the rest come for him, and it ends one of three
 ##                             ways: over the wall by the breach and into the
 ##                             canal (escape), cut down in the courtyard
-##                             (overwhelmed), or the courtyard fight survived,
-##                             a man spared, and out through the gate, wounded
-##                             but victorious (victor).
+##                             (overwhelmed), or the courtyard fight survived
+##                             (a man spared if one begs) and out through the
+##                             gate, wounded but victorious (victor).
 ##
 ## A scene's subjects may also be "@group:<hunt area>": the men sent there.
 
@@ -61,6 +63,11 @@ const MOMENT_WAIT := 20.0
 ## how easily he is seen (the dark colonnade).
 const ALONE_OF := 12.0
 const RUN_EXPOSURE := 0.5
+## Up on the range's roof: higher than this (m).
+const ON_THE_ROOF := 2.5
+## Breaking away, he barges down a man this near him (m), this hard (m/s).
+const BARGE_REACH := 3.0
+const BARGE_PUSH := 4.5
 ## The carrier coming along the colonnade toward the post with a crate: south
 ## of it by this much (m), and the archer this far from it.
 const CARRIER_NEAR := Vector2(1.5, 7.5)
@@ -76,14 +83,23 @@ const PRESSED_AT := 5.5
 const WAIT_MOST := 12.0
 const STEALTH_EXPOSURE := 0.2
 ## Act V: the barracks group is in the chapel when one of them is this far
-## inside its box.
+## inside its box; his parrying lasts this long at most (s).
 const IN_CHAPEL := 0.5
+const PARRY_MOST := 25.0
 ## Act VI: the captain's door rattled twice, this long apart (s); the
 ## victor leaves with this much of his health.
 const RATTLE_AGAIN := 0.9
 const WOUNDED := 0.45
 ## They come for him: this long at most before he runs (s).
 const THEY_COME := 10.0
+## The victor: he presses them this long at most (s); out through the gate
+## within this of its mark (m).
+const BREAK_MOST := 45.0
+## The escape: the chase calls where he is this often (s).
+const CHASE_CALLS := 2.0
+const OUT_THE_GATE := 2.0
+## Jumped to after the chapel: where its dead lie round the fight (m).
+const FELL_ROUND := [Vector3(1.3, 0, 0.7), Vector3(-1.1, 0, 1.2), Vector3(0.4, 0, -1.4)]
 ## The ways out for each ending.
 const OVER_THE_WALL := ["escape_stairs", "escape_door", "escape_climb", "escape_walk", "escape_over", "canal_edge", "canal_swim"]
 const INTO_THE_YARD := ["escape_stairs", "escape_door", "courtyard_fight"]
@@ -114,6 +130,13 @@ const ENDING_TITLES_G := {&"overwhelmed": "VI. Overwhelmed", &"victor": "VI. The
 var _areas := {}
 ## The man sent to ring the bell.
 var _bell_man: Node3D = null
+## The keep's spaces (its zones' boxes): never outside.
+var _spaces: Array = []
+## The ladder to the range's roof is up.
+var _ladder_up := false
+## The chase's clock and when it last called where he is.
+var _chase_clock := 0.0
+var _called_at := -INF
 
 
 func _init(p_map: Node3D) -> void:
@@ -121,6 +144,13 @@ func _init(p_map: Node3D) -> void:
 
 	for node in map.get_tree().get_nodes_in_group(&"hunt_area"):
 		_areas[String(node.name)] = node.get_meta(&"box")
+
+	var level: Variant = map.get("level")
+
+	if level != null:
+		for m in level.of("zone"):
+			var size: Vector3 = m["size"]
+			_spaces.append(AABB((m["transform"] as Transform3D).origin - size * 0.5, size))
 
 
 func acts() -> Array:
@@ -151,9 +181,13 @@ func _post_mark() -> String:
 	return "colonnade_post"
 
 
-## Outside the walls: past the curtain on any side.
+## Outside the walls: past the curtain on any side, and not in one of the
+## keep's spaces (the watchtower stands out past the curtain's line).
 func _outside(at: Vector3) -> bool:
-	return at.z > 28.6 or at.z < -28.6 or absf(at.x) > 32.6
+	if not (at.z > 28.6 or at.z < -28.6 or absf(at.x) > 32.6):
+		return false
+
+	return not _spaces.any(func(box): return (box as AABB).has_point(at + Vector3.UP * 0.5))
 
 
 func _subjects_of(subject: String) -> Variant:
@@ -285,7 +319,7 @@ func _act_three_g() -> Dictionary:
 			_after_the_watch_change()
 			var post: Vector3 = map.marks["colonnade_post"]
 			var i: Node3D = map.spawn_intruder(post + Vector3(0.2, 0, 1.2), PI)
-			_kill("Jory", i, &"backstab")
+			_kill("Jory", i, &"backstab", post)
 			var ned := _man("Ned")
 			if ned != null:
 				ned.global_position = post + Vector3(-0.4, 0, 5.5)
@@ -301,13 +335,19 @@ func _act_three_g() -> Dictionary:
 					var i := _intruder()
 					if i != null:
 						i.exposure_scale = RUN_EXPOSURE
+					_barge("Ned")
 					_verb(&"go_to", [map.marks["gone_to_ground"], &"run"]),
 				"until": func() -> bool: return _out_of_rest(["Mirelle", "Osric", "Piers", "Brand", "Col"])},
 			{"name": &"grief", "scene": _scene(&"drama", ["Osric"]), "min": 3.0, "timeout": 20.0,
-				"until": func() -> bool: return (_has_said("Osric", "Jory") or _man("Osric") == null) and (_brain() == null or _brain().done())},
-			# He goes to ground in the dark (the director's hand: hard to see).
+				"until": func() -> bool:
+					# (The ladder up the moment he is on the roof.)
+					_pull_up_ladder()
+					return (_has_said("Osric", "Jory") or _man("Osric") == null) and (_brain() == null or _brain().done())},
+			# Up on the roof he pulls the ladder up after him and goes to ground
+			# in the dark (the director's hand: hard to see).
 			{"name": &"lost_him", "scene": _scene(&"drama", ["intruder"]), "timeout": 20.0,
 				"do": func() -> void:
+					_pull_up_ladder()
 					_verb(&"hide_at", [map.marks["gone_to_ground"]])
 					_sneaking(),
 				"until": _lost_him},
@@ -499,17 +539,47 @@ func _clear() -> bool:
 	return true
 
 
+## The ladder he climbed to the range's roof, pulled up after him (if he is
+## up there; jumped to a later act, it was). Once.
+func _pull_up_ladder() -> void:
+	var i := _intruder()
+
+	if not _ladder_up and map.has_method("pull_up_ladder") and (i == null or i.global_position.y > ON_THE_ROOF):
+		_ladder_up = true
+		map.pull_up_ladder()
+
+
+## He barges `name` off his feet as he breaks away (the man nearest him, who
+## would be on his heels).
+func _barge(name: String) -> void:
+	var i := _intruder()
+	var man := _man(name)
+
+	if i == null or man == null or _flat(man.global_position, i.global_position) > BARGE_REACH:
+		return
+
+	var away := man.global_position - i.global_position
+	away.y = 0.0
+	man.knock_down(away.normalized() * BARGE_PUSH + Vector3.UP * 1.2, i)
+
+
 ## Jumped to the hunt: the watch changed, the man at the post dead and the
-## garrison roused; the intruder at `at`, crouched; `dead` killed too.
+## garrison roused; the intruder at `at`, crouched; `dead` killed too; the
+## ladder up the range's roof pulled up long since.
 func _stage_hunt(at: Vector3, dead: Array) -> void:
+	if map.has_method("pull_up_ladder"):
+		_ladder_up = true
+		map.pull_up_ladder()
+
 	_after_the_watch_change()
 	var i: Node3D = map.spawn_intruder(at, 0.0)
 	i.exposure_scale = STEALTH_EXPOSURE
 	i.crouched = true
-	_kill("Jory", i, &"backstab")
+	_kill("Jory", i, &"backstab", map.marks["colonnade_post"])
 
-	for name in dead:
-		_kill(name, i, &"power")
+	# (The chapel's dead where they fell round the fight.)
+	for k in dead.size():
+		_kill(dead[k], i, &"power", map.marks["chapel_fight"] + FELL_ROUND[k % FELL_ROUND.size()])
 
 	for name in map.cast:
 		var man := _man(name)
@@ -520,13 +590,17 @@ func _stage_hunt(at: Vector3, dead: Array) -> void:
 			man.has_last_known = true
 
 
-## `name` dead by the intruder's hand, as the garrison would have heard it.
-func _kill(name: String, by: Node3D, kind: StringName) -> void:
+## `name` dead by the intruder's hand at `at` (where he fell), as the
+## garrison would have heard it.
+func _kill(name: String, by: Node3D, kind: StringName, at: Vector3) -> void:
 	var man := _man(name)
 
 	if man == null:
 		return
 
+	man.global_position = at
+	man.velocity = Vector3.ZERO
+	man.reset_physics_interpolation()
 	man.take_hit(999.0, by, kind, man.global_position + Vector3.UP * 1.2, Vector3.FORWARD)
 	GarrisonScript.of(by).on_death(name == "Mirelle", name)
 
@@ -565,7 +639,9 @@ func _act_five_g() -> Dictionary:
 			{"name": &"chapel_trade", "scene": _scene(&"drama", ["intruder", "Osric"]), "min": 6.0, "enough": 16.0, "timeout": 25.0,
 				"do": func() -> void: _verb(&"fight", [&"trade"]),
 				"until": func() -> bool: return _flankers() >= 1},
-			{"name": &"chapel_parry", "scene": _scene(&"drama", ["intruder", "nearest"]), "timeout": 50.0,
+			# (His blows turned aside and answered a while: until one is cut
+			# down, or PARRY_MOST.)
+			{"name": &"chapel_parry", "scene": _scene(&"drama", ["intruder", "nearest"]), "enough": PARRY_MOST, "timeout": PARRY_MOST + 20.0,
 				"do": func() -> void:
 					_parry_mark = _deathblows + _riposte_kills
 					_verb(&"fight", [&"parry"]),
@@ -634,6 +710,7 @@ func _escape_beats(ending: StringName) -> Array:
 						var i := _intruder()
 						if i != null:
 							i.fall()
+						_call_in()
 						_verb(&"fight", [&"trade"]),
 					"until": func() -> bool: return _intruder() == null},
 				_look(&"silence", 6.0, &"observe", ["@hunt"]),
@@ -641,9 +718,13 @@ func _escape_beats(ending: StringName) -> Array:
 		&"victor":
 			beats.append_array([
 				_into_the_yard(),
-				{"name": &"break_them", "scene": _scene(&"drama", ["intruder", "@hunt"]), "timeout": 60.0,
-					"do": func() -> void: _verb(&"fight", [&"press"]),
-					"until": func() -> bool: return _pleader() != null},
+				# Until one of them begs, or none is left fighting him: the
+				# fight is his (by BREAK_MOST whatever).
+				{"name": &"break_them", "scene": _scene(&"drama", ["intruder", "@hunt"]), "enough": BREAK_MOST, "timeout": BREAK_MOST + 15.0,
+					"do": func() -> void:
+						_call_in()
+						_verb(&"fight", [&"press"]),
+					"until": func() -> bool: return _pleader() != null or _fighting() == 0},
 				{"name": &"spare", "scene": _scene(&"drama", ["intruder", "nearest"]), "timeout": 40.0,
 					"do": func() -> void:
 						_spared = _pleader()
@@ -660,9 +741,14 @@ func _escape_beats(ending: StringName) -> Array:
 			])
 		_:
 			beats.append_array([
+				# After him as he goes: the chase calls where he is running.
 				{"name": &"break_off", "scene": _scene(&"drama", ["intruder", "@hunt"]), "timeout": 100.0,
-					"do": func() -> void: _verb(&"flee_by", [_route(OVER_THE_WALL)]),
-					"until": _escaped},
+					"do": func() -> void:
+						_verb(&"flee_by", [_route(OVER_THE_WALL)])
+						_called_at = -INF,
+					"until": func() -> bool:
+						_chase_calls()
+						return _escaped()},
 				_look(&"gone", 6.0, &"observe", ["@hunt"]),
 			])
 
@@ -672,7 +758,9 @@ func _escape_beats(ending: StringName) -> Array:
 ## Down the stairs and out into the courtyard, until they are on him.
 func _into_the_yard() -> Dictionary:
 	return {"name": &"into_the_yard", "scene": _scene(&"drama", ["intruder", "@hunt"]), "timeout": 45.0,
-		"do": func() -> void: _verb(&"flee_by", [_route(INTO_THE_YARD)]),
+		"do": func() -> void:
+			_verb(&"flee_by", [_route(INTO_THE_YARD)])
+			_call_in(),
 		"until": func() -> bool: return _fighting() >= 2 or _brain() == null or _brain().done()}
 
 
@@ -696,16 +784,33 @@ func _try_the_door() -> void:
 		if d != null and who != null and is_instance_valid(who) and not who.is_dead:
 			d.frob(who))
 
+	_call_in()
+
+
+## The rattle and the shout are heard: they come, all of them, to where he is
+## (off whatever ground they were sent to).
+func _call_in() -> void:
+	var i := _intruder()
+
+	if i == null:
+		return
+
 	for name in map.cast:
 		var man := _man(name)
 
-		if man == null:
-			continue
+		if man != null:
+			man.call_off_search()
+			man.hear_call(i.global_position)
 
-		man.call_off_search()
-		man.alert = maxf(float(man.alert), 60.0)
-		man.last_known_position = i.global_position
-		man.has_last_known = true
+
+## In a chase, where he is running is called every CHASE_CALLS seconds (of
+## the world's time): the hunt comes after him.
+func _chase_calls() -> void:
+	_chase_clock += Engine.time_scale / float(Engine.physics_ticks_per_second)
+
+	if _chase_clock - _called_at >= CHASE_CALLS:
+		_called_at = _chase_clock
+		_call_in()
 
 
 ## The marks named, as places.
@@ -716,6 +821,16 @@ func _route(names: Array) -> Array[Vector3]:
 		points.append(map.marks[name])
 
 	return points
+
+
+## The victor's ending came true when he is out through the gate alive
+## (whether or not a man begged to be spared on the way).
+func ending_done() -> bool:
+	if _ending == &"victor":
+		var i := _intruder()
+		return i != null and _flat(i.global_position, map.marks["gate_out"]) < OUT_THE_GATE
+
+	return super()
 
 
 func ending_outcome() -> String:

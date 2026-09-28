@@ -159,6 +159,8 @@ func _s3() -> void:
 	var osric3: Node3D = map3.cast["Osric"]
 	var osric_said := []
 	osric3.barked.connect(func(t): osric_said.append(t))
+	await _frames(30)
+	var fallen3 := _bodies_near(map3.marks["colonnade_post"], 3.0)
 	var rung3 := [false]
 	for bell in get_tree().get_nodes_in_group(&"alarm_bells"):
 		bell.rung.connect(func(_by): rung3[0] = true)
@@ -176,9 +178,9 @@ func _s3() -> void:
 		return ended3[0], 7200)
 	var groups3 := _groups(map3)
 	var grieved3 := osric_said.any(func(t): return String(t).contains("Jory"))
-	_check("S3 Act III: his brother calls Jory's name, the bell rings, men take up lanterns, and the captain divides them: three groups or more, each sent to its own ground",
-		ended3[0] and grieved3 and rung3[0] and lanterns3[0] >= 2 and groups3.size() >= 3 and groups3.values().all(func(g): return (g as Array).size() >= 2 and (g as Array).size() <= 4),
-		"act over %s, Osric said %s, bell %s, lanterns %d, groups %s, skipped %s" % [ended3[0], osric_said, rung3[0], lanterns3[0], groups3, map3.director.log_lines])
+	_check("S3 Act III: Jory lies where he fell, his brother calls his name, the bell rings, men take up lanterns, and the captain divides them: three groups or more, each sent to its own ground",
+		ended3[0] and fallen3 >= 1 and grieved3 and rung3[0] and lanterns3[0] >= 2 and groups3.size() >= 3 and groups3.values().all(func(g): return (g as Array).size() >= 2 and (g as Array).size() <= 4),
+		"act over %s, Jory's body at his post %s, Osric said %s, bell %s, lanterns %d, groups %s, skipped %s" % [ended3[0], fallen3, osric_said, rung3[0], lanterns3[0], groups3, map3.director.log_lines])
 	await _unload(map3)
 
 
@@ -200,6 +202,9 @@ func _s4() -> void:
 		var i: Node3D = map4.intruder
 		beats4.append([String(beat), i.global_position.snapped(Vector3.ONE * 0.1) if i != null and is_instance_valid(i) else Vector3.INF]))
 	await _until(func():
+		# (Once Act V begins its own orders are given: nothing more of IV's.)
+		if ended4[0]:
+			return true
 		for man in get_tree().get_nodes_in_group(&"guards"):
 			if man == map4.intruder or man._knocked_out:
 				continue
@@ -266,6 +271,9 @@ func _s6() -> void:
 		DirectorScript.start_act = 6
 		DirectorScript.ending = ending
 		var map6 := await _map(true)
+		await _frames(30)
+		var chapel6: AABB = _areas()["area_chapel"]
+		var in_chapel6 := get_tree().get_nodes_in_group(&"bodies").filter(func(b): return chapel6.has_point((b as Node3D).global_position + Vector3.UP * 0.3)).size()
 		var rattled6 := [0]
 		var door: Node = map6.doors.get("captain_door")
 		if door != null:
@@ -274,9 +282,9 @@ func _s6() -> void:
 		map6.director.show_ended.connect(func(): ended6[0] = true)
 		await _until(func(): return ended6[0], 12000)
 		var outcome6: String = map6.story.ending_outcome()
-		_check("S6 the %s ending: the captain's door fails him, and it finishes before its timeout (%s)" % [ending, outcome6],
-			ended6[0] and rattled6[0] >= 1 and map6.director.log_lines.is_empty() and map6.story.ending_done(),
-			"ended %s, the door rattled %d, skipped %s, outcome %s" % [ended6[0], rattled6[0], map6.director.log_lines, outcome6])
+		_check("S6 the %s ending: the chapel's dead lie in it, the captain's door fails him, and it finishes before its timeout (%s)" % [ending, outcome6],
+			ended6[0] and in_chapel6 >= 3 and rattled6[0] >= 1 and map6.director.log_lines.is_empty() and map6.story.ending_done(),
+			"ended %s, the chapel's dead in the chapel %d, the door rattled %d, skipped %s, outcome %s" % [ended6[0], in_chapel6, rattled6[0], map6.director.log_lines, outcome6])
 		await _unload(map6)
 
 	DirectorScript.ending = &"random"
@@ -351,6 +359,11 @@ func _groups(map: Node) -> Dictionary:
 			groups[group].append(name)
 
 	return groups
+
+
+## How many bodies lie within `reach` (flat) of `at`.
+func _bodies_near(at: Vector3, reach: float) -> int:
+	return get_tree().get_nodes_in_group(&"bodies").filter(func(b): return _flat((b as Node3D).global_position, at) < reach).size()
 
 
 ## Every hunt area's box, by its name.

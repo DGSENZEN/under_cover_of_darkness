@@ -22,6 +22,10 @@ const GARRISON_STORY := "res://scripts/Showcase/GarrisonNight.gd"
 const ARCHETYPES := {"watchman": &"", "arms_master": &"trainer"}
 ## Where the air's leaves blow (Atmosphere: centred on the origin).
 const GROUNDS := Vector2(60.0, 52.0)
+## The ladder that can be pulled up onto the range's roof (its climb's
+## marker), and the roof's height there.
+const LADDER := "range_ladder"
+const LADDER_ON_ROOF := 3.25
 ## Lightning through the chapel's glass: its shafts of light flare this many
 ## times their own and die back over this long (s).
 const GLASS_FLARE := 7.0
@@ -294,6 +298,25 @@ func _light(m: Dictionary) -> void:
 			add_child(shaft)
 			shaft.global_position = at.origin
 			shaft.global_basis = Basis.looking_at(Vector3(0.62, -0.5, 0.6).normalized(), Vector3.UP)
+
+
+## The ladder up the range's roof pulled up by a man on it (ShowNight's
+## intruder going to ground): it lies on the roof now, and nobody climbs
+## after him (its climb and the navmesh's ways up it gone).
+func pull_up_ladder() -> void:
+	var volume := get_node_or_null(LADDER)
+
+	if volume != null:
+		for link in find_children("*", "NavigationLink3D", true, false):
+			if link.has_meta(&"volume") and link.get_meta(&"volume") == volume:
+				(link as NavigationLink3D).enabled = false
+
+		volume.queue_free()
+
+	for piece in level.root.find_children("ladder_3*", "", true, false):
+		var at: Vector3 = (piece as Node3D).global_position
+		# Tipped over onto its back, lying on the roof from the eaves inward.
+		(piece as Node3D).global_transform = Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(at.x, LADDER_ON_ROOF, at.z + 0.6))
 
 
 ## A flash outside (Night): the chapel's shafts of light flare through the

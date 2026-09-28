@@ -3377,12 +3377,14 @@ func send_to_search(area: AABB, group: StringName = &"") -> void:
 	if _knocked_out or state == Alert.COMBAT:
 		return
 
+	# Somewhere on his ground he can stand (not the box's middle, which may be
+	# in the air over it); and no fresh word of you: where he goes first is
+	# the search's own choice of place, not a run to that spot.
 	if not has_last_known or not area.grow(0.25).has_point(last_known_position):
-		last_known_position = area.get_center()
+		last_known_position = SearchSpotsScript.area_centre(self, [])
 		has_last_known = true
 
 	alert = maxf(alert, investigate_at)
-	_since_stimulus = 0.0
 	_stimulus = &"sent"
 
 	if state == Alert.SEARCHING:

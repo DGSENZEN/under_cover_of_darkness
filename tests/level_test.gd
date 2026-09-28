@@ -229,7 +229,7 @@ func _garrison() -> void:
 	for node in get_tree().get_nodes_in_group(&"hunt_area"):
 		areas8[String(node.name)] = node.get_meta(&"box")
 
-	var sent8 := {"Col": "area_barracks", "Osric": "area_barracks", "Ned": "area_west", "Piers": "area_west"}
+	var sent8 := {"Col": "area_barracks", "Osric": "area_barracks", "Ned": "area_west", "Piers": "area_west", "Wat": "area_walls"}
 	var spots8 := {}
 	var stray8 := []
 
@@ -241,9 +241,17 @@ func _garrison() -> void:
 		man.send_to_search(areas8[sent8[name]], StringName(sent8[name]))
 		spots8[name] = []
 
+	var frame8 := [0]
+	var went8 := []
 	await _until(func():
+		frame8[0] += 1
 		for name in sent8:
 			var man: Node3D = map.cast[name]
+			# Wherever he is making for, too (not only the places he searches):
+			# never off his ground.
+			var going: Vector3 = man._agent.target_position
+			if frame8[0] > 2 and not (areas8[sent8[name]] as AABB).grow(0.6).has_point(going) and went8.size() < 6:
+				went8.append("%s making for %s" % [name, going.snapped(Vector3.ONE * 0.1)])
 			var spot: Dictionary = man._spot
 			if not spot.is_empty() and not (spots8[name] as Array).has(spot["stand"]):
 				(spots8[name] as Array).append(spot["stand"])
@@ -271,8 +279,8 @@ func _garrison() -> void:
 		counts8[name] = (spots8[name] as Array).size()
 
 	_check("G8 men sent to a hunt area search only inside it and keep at it; called off, anywhere again",
-		stray8.is_empty() and kept8 and free8 and counts8.values().all(func(c): return int(c) >= 3),
-		"outside their ground %s, a call from outside ignored %s, from inside answered %s, still searching in their groups %s, called off %s, places searched %s" % [stray8.slice(0, 6), ignored8, answered8, kept8, free8, counts8])
+		stray8.is_empty() and went8.is_empty() and kept8 and free8 and counts8.values().all(func(c): return int(c) >= 3),
+		"outside their ground %s, making for places off it %s, a call from outside ignored %s, from inside answered %s, still searching in their groups %s, called off %s, places searched %s" % [stray8.slice(0, 6), went8, ignored8, answered8, kept8, free8, counts8])
 
 	# G9 sent to the bell: a man who is no lookout runs to it and rings it
 	var rung9 := [null]
@@ -285,6 +293,21 @@ func _garrison() -> void:
 	await _until(func(): return rung9[0] != null, 3600)
 	_check("G9 a man sent to the bell runs to it and rings it", rung9[0] == tam9,
 		"rung by %s, Tam at %s" % [rung9[0].name if rung9[0] != null else "nobody", tam9.global_position.snapped(Vector3.ONE * 0.1)])
+
+	# G10 the ladder pulled up behind a man on the range's roof: nobody
+	# follows him straight up (the only way now is round by the flights and
+	# the wall-walk), and he can still come down by the drop at its corner
+	var yard10 := NavigationServer3D.map_get_closest_point(nav_map, Vector3(-22.0, 0.0, -17.0))
+	var roof10 := NavigationServer3D.map_get_closest_point(nav_map, map.marks["gone_to_ground"])
+	var up_before := _way_length(nav_map, yard10, roof10)
+	map.pull_up_ladder()
+	await _frames(10)
+	var up_after := _way_length(nav_map, yard10, roof10)
+	var down_after := _reaches(nav_map, roof10, yard10)
+	var lying10: bool = map.level.root.find_children("ladder_3*", "", true, false).all(func(n): return (n as Node3D).global_position.y > 3.0)
+	_check("G10 the ladder pulled up onto the range's roof: nobody follows him straight up (round by the walls only), and he can still get down",
+		up_before > 0.0 and up_before < 15.0 and up_after > 40.0 and down_after and lying10,
+		"the way up before %.1f m, after %.1f m, down after %s, the ladder on the roof %s" % [up_before, up_after, down_after, lying10])
 	camera.queue_free()
 	map.queue_free()
 	await _frames(3)
@@ -309,6 +332,27 @@ func _seconds(seconds: float) -> void:
 func _frames(n: int) -> void:
 	for i in n:
 		await get_tree().process_frame
+
+
+## The navmesh's way from `a` all the way to `b`, how long (-1: none).
+func _way_length(nav_map: RID, a: Vector3, b: Vector3) -> float:
+	var way := NavigationServer3D.map_get_path(nav_map, a, b, true)
+
+	if way.is_empty() or way[way.size() - 1].distance_to(b) >= 0.8:
+		return -1.0
+
+	var length := 0.0
+
+	for i in range(1, way.size()):
+		length += way[i - 1].distance_to(way[i])
+
+	return length
+
+
+## Whether the navmesh has a way from `a` all the way to `b`.
+func _reaches(nav_map: RID, a: Vector3, b: Vector3) -> bool:
+	var way := NavigationServer3D.map_get_path(nav_map, a, b, true)
+	return not way.is_empty() and way[way.size() - 1].distance_to(b) < 0.8
 
 
 func _until(cond: Callable, max_frames: int) -> void:

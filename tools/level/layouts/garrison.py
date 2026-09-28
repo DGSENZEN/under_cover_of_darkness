@@ -346,7 +346,6 @@ def west_range():
     # (in the tower's moon-shadow): a way up for a man who must vanish (its
     # climb is the "range_ladder" marker's).
     G.put("ladder_3", (-25.0, 0, -14.5), 0.0, s)
-    G.put("barrel", (-26.2, 0, -14.8), 0.0, s)
     # The storehouse: crates (the carrier's are markers: loose crates), sacks,
     # barrels; the cellar's stair down.
     for x, z in ((-28.5, 0.0), (-28.5, 1.2), (-27.3, 0.0)):
