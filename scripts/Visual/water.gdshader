@@ -7,6 +7,7 @@
 // skin of duckweed in the still water near them.
 shader_type spatial;
 render_mode cull_disabled, specular_schlick_ggx;
+#include "res://scripts/Visual/psx.gdshaderinc"
 
 // Ripples: a seamless normal map, a ripple `tile` metres along the flow,
 // `stretch` times closer across it; how steep; which way and how fast (m/s).
@@ -47,6 +48,7 @@ varying vec2 local_pos;
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	local_pos = VERTEX.xz;
+	POSITION = psx_snapped(PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)), VIEWPORT_SIZE);
 }
 
 float hash(vec2 p) {

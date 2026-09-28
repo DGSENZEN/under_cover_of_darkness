@@ -7,6 +7,7 @@
 // side is drawn by its own face.
 shader_type spatial;
 render_mode cull_back, specular_schlick_ggx;
+#include "res://scripts/Visual/psx.gdshaderinc"
 
 uniform sampler2D albedo_texture : source_color, filter_nearest_mipmap, repeat_disable;
 uniform vec4 albedo : source_color = vec4(1.0);
@@ -35,6 +36,7 @@ void vertex() {
 	vec3 offset = vec3(way.x, 0.0, way.y) * (flutter + lean) + vec3(0.0, flutter * 0.25, 0.0);
 	VERTEX += (inverse(mat3(MODEL_MATRIX)) * offset);
 	baked = COLOR.rgb;
+	POSITION = psx_snapped(PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)), VIEWPORT_SIZE);
 }
 
 void fragment() {

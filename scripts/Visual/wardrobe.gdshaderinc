@@ -10,6 +10,8 @@
 // dirt. Nearest sampling is set here: the Retro autoload only converts
 // standard materials.
 
+#include "res://scripts/Visual/psx.gdshaderinc"
+
 uniform sampler2D albedo : source_color, filter_nearest_mipmap, repeat_disable;
 uniform sampler2D mask : filter_nearest_mipmap, repeat_disable;
 // The colour the dyed cloth was baked in: the new dye keeps its shading.
@@ -35,4 +37,9 @@ vec3 wardrobe_colour(vec2 uv) {
 	// most 80% of the way (by eye: 60% hid it at a few metres).
 	c = mix(c, vec3(dot(c, LUMA)) * vec3(0.52, 0.46, 0.38), clamp(m.b * grime, 0.0, 1.0) * 0.8);
 	return c;
+}
+
+// The world's gentle PS1 wobble (psx.gdshaderinc): the men shiver with it.
+void vertex() {
+	POSITION = psx_snapped(PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)), VIEWPORT_SIZE);
 }

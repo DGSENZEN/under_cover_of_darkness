@@ -6,6 +6,7 @@
 // coals glow in hot spots that come and go (`mottle`), never evenly: an even
 // glow, lifted by the night's exposure, reads as a pale bulb.
 shader_type spatial;
+#include "res://scripts/Visual/psx.gdshaderinc"
 
 uniform sampler2D albedo_texture : source_color, filter_nearest_mipmap, repeat_enable;
 uniform bool has_texture = false;
@@ -27,6 +28,7 @@ varying vec3 local;
 
 void vertex() {
 	local = VERTEX;
+	POSITION = psx_snapped(PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)), VIEWPORT_SIZE);
 }
 
 float hash(vec3 p) {

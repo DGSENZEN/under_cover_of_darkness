@@ -142,3 +142,14 @@ textures/decals/filter=2
 textures/light_projectors/filter=2
 environment/volumetric_fog/volume_size=96
 environment/volumetric_fog/volume_depth=96
+
+[shader_globals]
+
+psx_snap_lines={
+"type": "float",
+"value": 0.0
+}
+psx_snap_aspect={
+"type": "float",
+"value": 1.7778
+}
