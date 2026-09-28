@@ -53,9 +53,11 @@ const PORTRAIT_HEIGHT := 1.1
 const PORTRAIT_OFF := 30.0
 ## A single man is seen from this far round from his front (degrees).
 const THREE_QUARTER := 30.0
-## Over the shoulder: behind the listener's head, and out to the side (m).
-const SHOULDER_BACK := 0.9
-const SHOULDER_OUT := 0.35
+## Over the shoulder: behind the listener's head, and out to the side (m):
+## far enough out that the speaker is seen past him (his shoulder at the
+## frame's edge, not across it).
+const SHOULDER_BACK := 1.2
+const SHOULDER_OUT := 0.6
 ## Tracking a man: out to his side (m).
 const TRACK_OFF := 7.0
 ## Overhead: up and a little to the south of them.
@@ -317,6 +319,13 @@ static func _from(kind: StringName, men: Array, vantage: Vector3, fov: float, he
 			nearest = m
 
 	var look := centre
+	# Taken from among them (nearer their middle than their spread): the
+	# man it is on, composed, not the ground in their middle.
+	var among := live.size() > 1 and Vector2(vantage.x - centre.x, vantage.z - centre.z).length() < spread * 0.6 + 1.5
+
+	if among:
+		look = _composed(vantage, head_of(live[0]), facing(live[0]), fov, aspect)
+		return _result(kind, size, vantage, look, fov, head_of(live[0]), false)
 
 	if live.size() == 1 or kind == &"group":
 		look = _composed(vantage, head_of(nearest), facing(nearest), fov, aspect) if nearest != null else centre

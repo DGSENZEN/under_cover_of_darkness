@@ -3,22 +3,40 @@ extends Node
 ## editor asks (a cut, a glide, a path, a wipe), as a dolly and a crane
 ## would: critically damped springs (no floating, no overshoot) held to each
 ## mode's speeds, the lens eased, focus pulled onto the subject, a little
-## handheld sway, and shake from blows. It runs on real time
-## (TimeFx.real_time), so a slowed world does not slow the camera.
+## handheld sway, and shake from blows. A shot's aim, once settled, holds
+## while its man shifts his weight or sways where he stands (a dead zone, as
+## an operator's eye allows), and turns only to keep him in it. Up close an
+## eye light, a hand's breadth off the lens, lifts the actors' faces out of
+## the dark (it lights nothing else, and no guard reckons with it). It runs
+## on real time (TimeFx.real_time), so a slowed world does not slow the
+## camera.
 ##   observe  a slow dolly (0.4 m/s, 8 deg/s), all but still in the hand.
-##   drama    quick (6 m/s, 90 deg/s), handheld up close.
+##   drama    quick (6 m/s, 60 deg/s), handheld up close.
 
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 
 ## Focus effects on (the probe found them fit under the retro filter).
 const DEPTH_OF_FIELD := true
 ## Per mode: the top speed (m/s), the fastest turn (deg/s), how long a move
 ## takes to settle (s), and the handheld sway on a close shot and otherwise
 ## (deg).
+## The dead zone (deg): how far off its aim a settled shot lets its man go
+## before it turns.
 const MODES := {
-	&"observe": {"speed": 0.4, "turn": 8.0, "settle": 1.2, "close_sway": 0.0, "sway": 0.0, "drift": 0.0},
-	&"drama": {"speed": 6.0, "turn": 90.0, "settle": 0.35, "close_sway": 0.15, "sway": 0.0, "drift": 0.005},
+	&"observe": {"speed": 0.4, "turn": 8.0, "settle": 1.2, "close_sway": 0.0, "sway": 0.0, "drift": 0.0, "dead": 1.0},
+	&"drama": {"speed": 6.0, "turn": 60.0, "settle": 0.35, "close_sway": 0.15, "sway": 0.0, "drift": 0.005, "dead": 3.0},
 }
+## A new aim is settled once this near it (deg): from then its dead zone.
+const SETTLED := 0.3
+## The eye light: its energy by the shot's size (a portrait's as a close
+## shot's), its reach (m), its colour (a cool moonlit fill), how far off the
+## lens (m: up, and to the side), and how fast it eases (a second).
+const EYE := {&"close": 0.4, &"medium": 0.18}
+const EYE_RANGE := 4.0
+const EYE_COLOUR := Color(0.78, 0.82, 0.95)
+const EYE_OFF := Vector2(0.35, 0.3)
+const EYE_EASE := 3.0
 ## The handheld's slow drift: how fast (Hz) (how far the camera itself
 ## moves: MODES "drift", m).
 const SWAY_RATE := 0.35
@@ -77,6 +95,9 @@ var _after_black: Dictionary = {}
 var _lens_rate := LENS_RATE
 var _own_fov := 75.0
 var _own_attributes: CameraAttributes = null
+## A fresh aim (a shot shown) is met exactly before its dead zone holds it.
+var _settling := true
+var _eye: OmniLight3D = null
 
 
 func _ready() -> void:
@@ -85,6 +106,20 @@ func _ready() -> void:
 	_noise.fractal_octaves = 3
 	_noise.frequency = 1.0
 	_noise.seed = 1932
+	_eye = OmniLight3D.new()
+	_eye.name = "EyeLight"
+	_eye.light_color = EYE_COLOUR
+	_eye.light_energy = 0.0
+	_eye.omni_range = EYE_RANGE
+	_eye.omni_attenuation = 1.5
+	_eye.shadow_enabled = false
+	_eye.light_cull_mask = Layers.ACTORS
+	_eye.light_specular = 0.2
+	_eye.visible = false
+	_eye.top_level = true
+	# (Not light for anyone to be seen by: LightProbe passes over it.)
+	_eye.add_to_group(&"fx_light")
+	add_child(_eye)
 
 
 ## Takes `camera` (drawn where it is put: no physics interpolation), and
@@ -166,6 +201,7 @@ func show(framing: Dictionary, how: StringName) -> void:
 	_framing = framing
 	_goal = framing.get("position", _goal)
 	_path = PackedVector3Array()
+	_settling = true
 	var fov := float(framing.get("fov", _fov))
 
 	# A cut's lens is its own at once; a move eases to it over the move (no
@@ -241,6 +277,11 @@ func look_point() -> Vector3:
 	return _look
 
 
+## The eye light on the actors up close.
+func eye_light() -> Light3D:
+	return _eye
+
+
 ## Still waiting for black (a fade) before its cut.
 func waiting() -> bool:
 	return not _after_black.is_empty()
@@ -283,6 +324,7 @@ func _process(_delta: float) -> void:
 	_lens(dt)
 	trauma = maxf(trauma - SHAKE_DECAY * dt, 0.0)
 	_hand()
+	_eye_light(dt)
 
 
 ## Toward `target`, critically damped (exact for the frame): [where, speed].
@@ -368,8 +410,23 @@ func _catmull(segment: int, t: float) -> Vector3:
 ## The aim follows the framing's look point, no faster than the mode turns.
 func _aim(omega: float, dt: float) -> void:
 	var target: Vector3 = _framing.get("look", _look)
-	var next := _spring(_look, target, _look_velocity, omega * 1.5, dt)
 	var from := _base
+	var off := (_look - from).angle_to(target - from) if from.distance_to(target) > 0.05 and from.distance_to(_look) > 0.05 else 0.0
+
+	# Settled, it holds while he stays within its dead zone, and turns only
+	# as far as keeps him at its edge.
+	if _settling:
+		_settling = rad_to_deg(off) > SETTLED
+	else:
+		var dead := deg_to_rad(float(_mode.get("dead", 0.0)))
+
+		if off <= dead:
+			target = from + (_look - from).normalized() * from.distance_to(target)
+		else:
+			var held_dir := (_look - from).normalized().slerp((target - from).normalized(), (off - dead) / off)
+			target = from + held_dir * from.distance_to(target)
+
+	var next := _spring(_look, target, _look_velocity, omega * 1.5, dt)
 	var was_dir := (_look - from).normalized()
 	var want_dir: Vector3 = (next[0] - from).normalized()
 	var most := deg_to_rad(float(_mode["turn"])) * dt
@@ -438,6 +495,19 @@ func _hand() -> void:
 
 	if drifts:
 		_camera.global_position = from + _camera.global_basis * Vector3(_noise.get_noise_2d(t, 300.0), _noise.get_noise_2d(t, 400.0), 0.0) * float(_mode["drift"])
+
+
+## The eye light eased to the shot's size (a portrait as a close shot), a
+## hand's breadth up and to the side of the lens.
+func _eye_light(dt: float) -> void:
+	if _eye == null:
+		return
+
+	var size := StringName(_framing.get("size", &""))
+	var wanted := float(EYE.get(&"close" if StringName(_framing.get("kind", &"")) == &"portrait" else size, 0.0))
+	_eye.light_energy = move_toward(_eye.light_energy, wanted, EYE_EASE * dt * maxf(wanted, 0.2))
+	_eye.visible = _eye.light_energy > 0.001
+	_eye.global_position = _camera.global_position + _camera.global_basis * Vector3(EYE_OFF.x, EYE_OFF.y, 0.0)
 
 
 func _cut() -> void:

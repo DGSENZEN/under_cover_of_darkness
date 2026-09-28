@@ -97,6 +97,12 @@ func _s1() -> void:
 	var titles1 := acts1.map(func(a): return a["title"] if a["title"] is String else "(ending)")
 	_check("S1 the garrison's night is six acts, --act=6 starts the last, and a shorter night asked for act 6 plays its last act staged",
 		acts1.size() == 6 and read6 == 6 and short_ok, "acts %s, --act=6 read as %d, the two-act night staged %s and ended at act %d" % [titles1, read6, short.staged, short_act])
+	# S1b the show's camera opens where the level says (camera_home: high
+	# over its south-west corner), not at the yard's place
+	var home1: Array = map1.camera_home()
+	var opened1: Variant = map1.camera.get("started_at")
+	_check("S1b the show's camera opens at the level's home, not the yard's",
+		opened1 is Vector3 and (opened1 as Vector3).distance_to(home1[0]) < 0.1, "opened at %s, home %s" % [opened1, home1[0]])
 
 	# S0 Act I: the night moves (conversations, gatherings, the watch changing
 	# at the colonnade), and a man goes to his prayers

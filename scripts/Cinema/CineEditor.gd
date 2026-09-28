@@ -16,8 +16,12 @@ extends Node
 ##            the first blow; the hunt from far off or alongside; slow motion
 ##            on the knife, a parry or a death (once in 8 s); a wipe into a
 ##            scene of other men; the letterbox in, and shake from blows.
-## Either way: no jump cut, a new shot when the man it is on is hidden or
-## gone, never a cut before FLOOR, and a pinned shot held whatever happens.
+## Either way: no jump cut, a new shot when the man it is on is hidden (by a
+## wall or another man), out of the frame, or gone, never a cut before FLOOR,
+## and a pinned shot held whatever happens; a camera crowded (a man walked
+## into it, the stones at its lens) is a new shot at once. Nowhere watches
+## them all: the first of them, from wherever he is seen, near him in close
+## quarters; from on high only under an open sky.
 ## Knows nothing of any level's story: a scene is {mode, subjects (the men,
 ## or a Callable giving them, asked once a second), pin, letterbox}.
 
@@ -39,8 +43,8 @@ const MOVE_WITHIN := 12.0
 const PUSH_TO := 0.8
 const PUSH_OVER := 20.0
 const LINGER := 3.0
-const ELEMENT_AFTER := Vector2(60.0, 90.0)
-const QUIET := 8.0
+const ELEMENT_AFTER := Vector2(35.0, 55.0)
+const QUIET := 5.0
 const ELEMENTS := [&"fires", &"torches"]
 const ELEMENT_REACH := 25.0
 ## Drifting round the men: how far off (m), how high (m), how much of a
@@ -54,6 +58,27 @@ const ROVE_POINTS := 4
 ## from within this angle (deg) is a jump cut; lines this close together
 ## are one talk (s).
 const HIDDEN_FOR := 0.6
+## Watched (observe), a long take is patient: a man out of sight is waited on
+## this long (s: a sneaking man ducks behind cover, a man walks behind a
+## cart), another man in front of him this long, and only stone this thick
+## at the lens crowds it.
+const HIDDEN_WATCHED := 4.0
+const BLOCKED_WATCHED := 3.0
+const CROWDED_FILL_WATCHED := 0.65
+## The frame's fill (its sight lines) is looked at this often (s), not every
+## frame.
+const FILL_EVERY := 0.1
+## Another man crossing in front of him is ridden out this long (s), as an
+## editor lets a passer-by go through a shot.
+const BLOCKED_FOR := 1.4
+## Crowded this long (s): a man in the camera, or stone filling its frame
+## past CROWDED_FILL, and it is a new shot, however young (but not before
+## CROWDED_AGE, so a shot is never cut the frame it is taken).
+const CROWDED_FOR := 0.25
+const CROWDED_FILL := 0.45
+const CROWDED_AGE := 0.3
+## From on high over the men: only if nothing is over them this far up (m).
+const OPEN_SKY := 30.0
 const FLOOR := 1.5
 const NEAR := 12.0
 const SAME_ANGLE := 30.0
@@ -132,6 +157,10 @@ var _history: Array = []
 var _clock := 0.0
 var _last := -1.0
 var _hidden := 0.0
+var _blocked := 0.0
+var _crowded := 0.0
+var _filled := false
+var _fill_in := 0.0
 var _talk_until := -INF
 var _talk_since := -INF
 var _speaker: Node3D = null
@@ -279,6 +308,10 @@ func hold(held: bool) -> void:
 func scene(intent: Dictionary) -> void:
 	_intent = intent.duplicate()
 	_mode = StringName(intent.get("mode", &"observe"))
+
+	# (Where it happens, for as long as nobody is there to watch.)
+	if intent.get("place") is Vector3:
+		_place = intent["place"]
 
 	if _operator != null:
 		_operator.set_mode(_mode)
@@ -481,11 +514,30 @@ func _process(_delta: float) -> void:
 	_follow(live)
 	_watch(live, dt)
 
-	if _hidden > HIDDEN_FOR and age >= FLOOR and not pinned and _axial.is_empty():
+	# Crowded (a man in the camera, stone at its lens): a new shot, a pinned
+	# one taken again (still the pin: held, but never held broken).
+	if _crowded > CROWDED_FOR and age >= CROWDED_AGE and _axial.is_empty():
+		if pinned:
+			_open_scene(false)
+		else:
+			_next_shot(&"crowded")
+
+		return
+
+	var watched := _mode != &"drama"
+
+	if (_hidden > (HIDDEN_WATCHED if watched else HIDDEN_FOR) or _blocked > (BLOCKED_WATCHED if watched else BLOCKED_FOR)) and age >= FLOOR and not pinned and _axial.is_empty():
 		_next_shot(&"hidden")
 		return
 
 	if pinned or _scene_due > -INF:
+		return
+
+	# Waited on the place with nobody there (not a quiet insert asked for):
+	# its men come, the take goes to them.
+	if not _subjects.is_empty() and (_shot["subjects"] as Array).is_empty() and _shot["kind"] in [&"establishing", &"insert"] \
+			and _shot["cause"] != &"element" and age >= FLOOR:
+		_next_shot(&"come")
 		return
 
 	if _talk_step(age):
@@ -511,7 +563,7 @@ func _next_shot(cause: StringName) -> void:
 
 func _observe_step(age: float) -> void:
 	if _subjects.is_empty():
-		if _shot["kind"] != &"establishing" and age >= FLOOR:
+		if not (_shot["kind"] in [&"establishing", &"insert"]) and age >= FLOOR:
 			_fresh_take(&"nobody")
 
 		return
@@ -542,7 +594,7 @@ func _fresh_take(cause: StringName, how: StringName = &"dissolve") -> void:
 	var men := _subjects.filter(_valid)
 
 	if men.is_empty():
-		_start(&"establishing", [], &"nobody" if cause != &"scene" else cause, how, {"from": _high_over(_place), "place": _place}, TAKE.y)
+		_nobody(&"nobody" if cause != &"scene" else cause, how, TAKE.y)
 		return
 
 	var length := _rng.randf_range(TAKE.x, TAKE.y)
@@ -572,14 +624,7 @@ func _fresh_take(cause: StringName, how: StringName = &"dissolve") -> void:
 		return
 
 	# Nothing fresh to be had: from wherever they can be seen, all the same.
-	for lens in [&"long", &"medium"]:
-		var from := CineVantage.best(get_tree(), men, lens, Vector3.ZERO, space)
-
-		if from != Vector3.INF:
-			_start(&"observe", men, cause, how, {"from": from}, length)
-			return
-
-	_start(&"overhead", men, cause, how, {}, length)
+	_rescue(men, cause, how, length, Vector3.ZERO)
 
 
 ## Where a take of `kind` comes from: {how, context, position, size}; empty if
@@ -616,9 +661,10 @@ func _observe_plan(kind: StringName, men: Array, space: PhysicsDirectSpaceState3
 
 		for i in ROVE_POINTS:
 			var angle := float(attempt) + turn * span * float(i) / float(ROVE_POINTS - 1)
-			var point := Vector3(centre.x, 0.0, centre.z) + start_dir.rotated(Vector3.UP, angle) * ROVE_RADIUS + Vector3.UP * ROVE_HEIGHT
+			var point := Vector3(centre.x, centre.y - CineShot.HEAD_STANDING, centre.z) + start_dir.rotated(Vector3.UP, angle) * ROVE_RADIUS + Vector3.UP * ROVE_HEIGHT
 
-			if not CineVantage.clear(space, point) or not CineVantage.sees(space, point, men):
+			if not CineVantage.clear(space, point) or not CineVantage.sees(space, point, men) \
+					or CineVantage.fill(space, point, centre, CineShot.NORMAL, _aspect(), _rids_of(men)) > CineVantage.WALLED_FILL:
 				clear = false
 				break
 
@@ -641,13 +687,14 @@ func _observe_plan(kind: StringName, men: Array, space: PhysicsDirectSpaceState3
 	return {}
 
 
-## A move there if it is near, the way is clear, and `men` are seen from
-## where it is now (a move that begins blind is a cut); else a cut.
+## A move there if it is near, the way is clear, `men` are seen from where it
+## is now (a move that begins blind is a cut), and it is not crowded here (a
+## drift out of a crowd is crowded all the way); else a cut.
 func _how_to(position: Vector3, men: Array) -> StringName:
 	var here := _camera.global_position
 	var space := _camera.get_world_3d().direct_space_state
 
-	if here.distance_to(position) <= MOVE_WITHIN and not _operator.blocked(here, position) and CineVantage.sees(space, here, men):
+	if here.distance_to(position) <= MOVE_WITHIN and not _operator.blocked(here, position) and CineVantage.sees(space, here, men) and CineVantage.clear(space, here):
 		return &"path" if _mode == &"observe" else &"glide"
 
 	return &"cut"
@@ -1051,7 +1098,7 @@ func _drama_next(cause: StringName, how: StringName) -> void:
 	var men := _subjects.filter(_valid)
 
 	if men.is_empty():
-		_start(&"establishing", [], &"nobody", how, {"from": _high_over(_place), "place": _place}, SHOT.y)
+		_nobody(&"nobody", how, SHOT.y)
 		return
 
 	var length := _rng.randf_range(SHOT.x, SHOT.y)
@@ -1181,6 +1228,9 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 			if not CineVantage.open(space, at, framing["subject"], float(framing["fov"]), _aspect(), _rids_of(men)):
 				continue
 
+			if CineVantage.fill(space, at, framing["look"], float(framing["fov"]), _aspect(), _rids_of(men)) > CineVantage.WALLED_FILL:
+				continue
+
 			if chosen.is_empty():
 				chosen = [option[0], men, context]
 
@@ -1204,16 +1254,70 @@ func _pick(options: Array, cause: StringName, side: Vector3, length: float, new_
 	if strict:
 		return false
 
-	# Nothing near sees him: from wherever he can be seen, on a long lens.
+	# Nothing near sees him: from wherever he can be seen.
 	var men: Array = (options[0][1] as Array).filter(_valid) if not options.is_empty() else []
-	var from := CineVantage.best(get_tree(), men, &"long", side, space) if not men.is_empty() else Vector3.INF
 
-	if from != Vector3.INF:
-		_start(&"observe", men, cause, how, {"from": from, "side": side}, length)
+	if men.is_empty():
+		_nobody(cause, how, length)
 	else:
-		_start(&"establishing", [], cause, how, {"from": _high_over(_place), "place": _place}, length)
+		_rescue(men, cause, how, length, side)
 
 	return true
+
+
+## Nowhere a planned shot will do: `men` all from wherever they are seen (a
+## long lens, then nearer); else the first of them alone, so; else him in
+## close quarters (a room, a passage: a ring close round him); from on high
+## only under an open sky; else the place from on high.
+func _rescue(men: Array, cause: StringName, how: StringName, length: float, side: Vector3) -> void:
+	var space := _camera.get_world_3d().direct_space_state
+	var groups: Array = [men] if men.size() == 1 else [men, [men[0]]]
+
+	for group in groups:
+		for lens in [&"long", &"medium", &"near"]:
+			for on_side in ([side, Vector3.ZERO] if side != Vector3.ZERO else [Vector3.ZERO]):
+				var from := CineVantage.best(get_tree(), group, lens, on_side, space)
+
+				if from != Vector3.INF:
+					# (In close quarters waist up, near normal; else a long lens.)
+					_start(&"roving" if lens == &"near" else &"observe", group, cause, how, {"from": from, "side": on_side}, length)
+					return
+
+	if _open_sky(men[0]):
+		_start(&"overhead", men, cause, how, {}, length)
+		return
+
+	# Still nobody to be seen: hold on to a shot that sees him, else the
+	# place from on high.
+	if not _shot.is_empty() and _hidden <= 0.0 and _crowded <= 0.0 and (_shot.get("subjects", []) as Array).has(men[0]):
+		return
+
+	_place = CineShot.head_of(men[0])
+	_nobody(cause, how, length)
+
+
+## Whether `point` is in the picture: within the lens's height, and within a
+## 16:9 frame's width, whatever the window is (a test's square one too).
+func _in_view(point: Vector3) -> bool:
+	var to := point - _camera.global_position
+	var forward := -_camera.global_basis.z
+
+	if to.dot(forward) <= 0.05:
+		return false
+
+	var half := deg_to_rad(_camera.fov) * 0.5
+	var up := _camera.global_basis.y
+	var right := _camera.global_basis.x
+	var depth := to.dot(forward)
+	return absf(to.dot(up)) <= tan(half) * depth * 1.05 and absf(to.dot(right)) <= tan(half) * depth * (16.0 / 9.0) * 1.05
+
+
+## Nothing over `man` for OPEN_SKY (a roof, a ceiling, a gallery).
+func _open_sky(man: Node3D) -> bool:
+	var head := CineShot.head_of(man)
+	var query := PhysicsRayQueryParameters3D.create(head, head + Vector3.UP * OPEN_SKY, 1)
+	query.collide_with_areas = false
+	return _camera.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 
 ## A face-off: from well off to the side of their line, on a long lens, still.
@@ -1387,6 +1491,10 @@ func _start(kind: StringName, men: Array, cause: StringName, how: StringName, co
 		"offset": (framing["look"] as Vector3) - (framing["subject"] as Vector3)}
 	_history.append(_shot)
 	_hidden = 0.0
+	_blocked = 0.0
+	_crowded = 0.0
+	_filled = false
+	_fill_in = 0.0
 	shot_started.emit(_shot)
 
 
@@ -1447,14 +1555,33 @@ func _follow(live: Array) -> void:
 	_operator.follow(framing)
 
 
-## How long the man it is on has been out of sight.
+## How long the man it is on has been out of sight (behind a wall, or out of
+## the frame), and how long another man has stood in front of him; how long
+## the camera has been crowded (a man in it, the stones filling its frame).
 func _watch(live: Array, dt: float) -> void:
 	if live.is_empty() or _shot["kind"] in [&"insert", &"establishing", &"overhead"] or _operator.waiting():
 		_hidden = 0.0
+		_blocked = 0.0
+		_crowded = 0.0
 		return
 
 	var space := _camera.get_world_3d().direct_space_state
-	_hidden = 0.0 if CineVantage.sees(space, _camera.global_position, [live[0]]) else _hidden + dt
+	var at := _camera.global_position
+	var walls := CineVantage.sees(space, at, [live[0]], false)
+	# (Out of the frame: him, or on several men, all of them: a two-shot may
+	# let one drift to its edge a while.)
+	var framed := live.any(func(m): return _in_view(CineShot.head_of(m)))
+	var seen := walls and framed
+	_hidden = 0.0 if seen else _hidden + dt
+	_blocked = _blocked + dt if walls and not CineVantage.sees(space, at, [live[0]]) else 0.0
+	_fill_in -= dt
+
+	if _fill_in <= 0.0:
+		_fill_in = FILL_EVERY
+		_filled = CineVantage.fill(space, at, _operator.look_point(), _camera.fov, _aspect(), _rids_of(live)) > (CROWDED_FILL if _mode == &"drama" else CROWDED_FILL_WATCHED)
+
+	var crowded := _filled or not CineVantage.clear(space, at)
+	_crowded = _crowded + dt if crowded else 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -1512,6 +1639,40 @@ func _aspect() -> float:
 	return size.x / maxf(size.y, 1.0)
 
 
-## A place high over `at`, to see it all from.
-func _high_over(at: Vector3) -> Vector3:
-	return at + Vector3(10.0, 12.0, 14.0)
+## Nobody to watch (its men not come, or gone): no showing the whole place off
+## from on high; a quiet insert on the fire or torch nearest where it happens
+## if there is one, else the place from eye level.
+func _nobody(cause: StringName, how: StringName, length: float) -> void:
+	var element := _element()
+
+	if element != null:
+		_start(&"insert", [], cause, how, {"target": element}, length)
+		return
+
+	_start(&"establishing", [], cause, how, {"from": _eye_level(_place), "place": _place}, length)
+
+
+## A place at a man's eye height a few metres from `at` that stands clear and
+## sees it; else the nearest try.
+func _eye_level(at: Vector3) -> Vector3:
+	var first := at + Vector3(4.0, 1.5, 4.0)
+
+	if _camera == null or not _camera.is_inside_tree():
+		return first
+
+	var space := _camera.get_world_3d().direct_space_state
+
+	for reach in [6.0, 9.0, 4.0]:
+		for i in 8:
+			var place: Vector3 = at + Vector3(reach, 0.0, 0.0).rotated(Vector3.UP, TAU * float(i) / 8.0) + Vector3.UP * 1.5
+
+			if CineVantage.clear(space, place) and _sees_point(space, place, at):
+				return place
+
+	return first
+
+
+static func _sees_point(space: PhysicsDirectSpaceState3D, from: Vector3, point: Vector3) -> bool:
+	var query := PhysicsRayQueryParameters3D.create(from, point + Vector3.UP * 0.5, 1)
+	query.collide_with_areas = false
+	return space.intersect_ray(query).is_empty()

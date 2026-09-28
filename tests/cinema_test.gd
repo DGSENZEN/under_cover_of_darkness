@@ -23,6 +23,7 @@ const CineVantage := preload("res://scripts/Cinema/CineVantage.gd")
 const CineScreen := preload("res://scripts/Cinema/CineScreen.gd")
 const CineOperator := preload("res://scripts/Cinema/CineOperator.gd")
 const CineEditor := preload("res://scripts/Cinema/CineEditor.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 
 const COMBAT := 4
 const SEARCHING := 3
@@ -63,6 +64,7 @@ func _ready() -> void:
 	await _operator()
 	await _observing()
 	await _drama()
+	await _picture()
 	print("\n==== RESULTS ====")
 
 	for r in results:
@@ -179,6 +181,15 @@ class Man extends Node3D:
 
 	func eye_position() -> Vector3:
 		return global_position + Vector3.UP * eye_height
+
+	func activity() -> StringName:
+		return doing
+
+
+## A man with a body (the guards' layer): the camera must see past him and
+## keep out of him.
+class Body extends CharacterBody3D:
+	var doing: StringName = &""
 
 	func activity() -> StringName:
 		return doing
@@ -867,7 +878,8 @@ func _observing() -> void:
 	fire.remove_from_group(&"fires")
 	fire.queue_free()
 
-	# E6 hidden behind a wall, a new shot within a second
+	# E6 hidden behind a wall, a new shot within 5 s (watched, a long take is
+	# patient with a hiding: P12)
 	editor.scene({"mode": &"observe", "subjects": [man]})
 	await _real(3.0)
 	shots.clear()
@@ -877,9 +889,10 @@ func _observing() -> void:
 	# (as wide as a third of the way to him, up to 3 m: never round the camera)
 	var across6 := minf(3.0, eye.distance_to(head6) * 0.3)
 	var wall := Props.block(self, mid, Vector3(across6, 5.0, across6))
-	await _real(1.0)
-	var hid6 := shots.filter(func(sh): return sh["cause"] == &"hidden")
-	_check("E6 his head hidden behind a wall: a new shot within a second", not hid6.is_empty(), "shots %s" % [shots.map(func(sh): return sh["cause"])])
+	await _real(5.0)
+	# (A wall that near the lens crowds the camera too: either is a new shot.)
+	var hid6 := shots.filter(func(sh): return sh["cause"] in [&"hidden", &"crowded"])
+	_check("E6 his head hidden behind a wall: a new shot within 5 s", not hid6.is_empty(), "shots %s" % [shots.map(func(sh): return sh["cause"])])
 	wall.queue_free()
 	await _frames(2)
 
@@ -907,8 +920,12 @@ func _observing() -> void:
 	await _real(2.0)
 	man.queue_free()
 	await _real(3.0)
-	_check("E8 a man freed mid-shot brings a new shot; with nobody left, the place from on high",
-		not shots.is_empty() and editor.current().get("kind") == &"establishing", "shots %s" % [shots.map(func(sh): return [sh["kind"], sh["cause"]])])
+	# (Nobody left and no fire near: the place at eye level, never from on
+	# high: no showing the whole level off before anything happens.)
+	var nobody8: Dictionary = editor.current()
+	var low8: bool = nobody8.get("kind") == &"establishing" and camera.global_position.y - float((nobody8.get("context", {}) as Dictionary).get("place", camera.global_position).y) <= 3.0
+	_check("E8 a man freed mid-shot brings a new shot; with nobody left, the place at eye level",
+		not shots.is_empty() and low8, "shots %s, camera %s" % [shots.map(func(sh): return [sh["kind"], sh["cause"]]), camera.global_position])
 
 	# E19 paused, nothing is cut; unpaused, it goes on
 	var man19 := _man(Vector3(740, 0, 0), 0.0)
@@ -1728,6 +1745,357 @@ func _man(at: Vector3, yaw: float) -> Man:
 	m.global_position = at
 	m.rotation.y = yaw
 	return m
+
+
+# ---------------------------------------------------------------------------
+# P: a picture worth looking at, in close quarters (the garrison's rooms)
+# ---------------------------------------------------------------------------
+
+func _picture() -> void:
+	await _fresh()
+	TimeFx.clear()
+	TimeFx.set_base(1.0)
+	var space := get_world_3d().direct_space_state
+	var dressing: Array[Node] = []
+
+	# P1 another man standing between the camera and him hides him; stepped
+	# aside, he is seen again
+	var a1 := _body(Vector3(1100, 0, 0))
+	var blocker := _body(Vector3(1103, 0, 0))
+	await _frames(3)
+	var behind1: bool = CineVantage.sees(space, Vector3(1106, 1.6, 0), [a1])
+	blocker.global_position = Vector3(1103, 0, 3)
+	await _frames(3)
+	var aside1: bool = CineVantage.sees(space, Vector3(1106, 1.6, 0), [a1])
+	_check("P1 another man between the camera and him hides him; stepped aside, he is seen", not behind1 and aside1,
+		"seen behind the other %s, with him aside %s" % [behind1, aside1])
+
+	# P2 no camera inside a man, nor grazing his shoulder; a step off is clear
+	var inside2: bool = CineVantage.clear(space, a1.global_position + Vector3(0.15, 1.4, 0))
+	var grazing2: bool = CineVantage.clear(space, a1.global_position + Vector3(0.45, 1.5, 0))
+	var off2: bool = CineVantage.clear(space, a1.global_position + Vector3(1.2, 1.5, 0))
+	_check("P2 a camera inside a man or grazing his shoulder is not clear; a step off it is", not inside2 and not grazing2 and off2,
+		"inside %s, grazing %s, a step off %s" % [inside2, grazing2, off2])
+
+	# P3 a frame the stones fill (through a crenel, a wall at the lens) is
+	# walled; one across the open yard is not
+	var a3 := _body(Vector3(1208, 0, 0))
+	dressing.append(Props.block(self, Vector3(1200.8, 2.0, 0.8), Vector3(0.3, 4.0, 1.2)))
+	dressing.append(Props.block(self, Vector3(1200.8, 2.0, -0.8), Vector3(0.3, 4.0, 1.2)))
+	await _frames(3)
+	var crenel3: float = CineVantage.fill(space, Vector3(1200, 1.6, 0), CineShot.head_of(a3), 40.0, 16.0 / 9.0, [])
+	var yard3: float = CineVantage.fill(space, Vector3(1208, 1.6, 12), CineShot.head_of(a3), 40.0, 16.0 / 9.0, [])
+	_check("P3 a frame the stones fill (a crenel at the lens) is walled; across the open yard it is not",
+		crenel3 >= 0.5 and yard3 <= 0.05, "crenel %.2f, yard %.2f" % [crenel3, yard3])
+
+	# P4 over the listener's shoulder the speaker is seen past him, and the
+	# camera stands clear of him
+	var speaker4 := _body(Vector3(1300, 0, 0))
+	var listener4 := _body(Vector3(1301.6, 0, 0))
+	await _frames(3)
+	var ots4 := CineShot.frame(&"over_shoulder", [speaker4, listener4], {"side": Vector3(0, 0, 1), "aspect": 16.0 / 9.0})
+	var past4: bool = CineVantage.sees(space, ots4["position"], [speaker4])
+	var clear4: bool = CineVantage.clear(space, ots4["position"])
+	_check("P4 over the listener's shoulder the speaker is seen past him, the camera clear of him", past4 and clear4,
+		"seen %s, clear %s, from %s" % [past4, clear4, ots4["position"]])
+
+	# P5 a man in a roofed room (its door onto a roofed porch) and another shut
+	# in a room far off: never watched from over the roofs; a shot that sees
+	# the first
+	var man5 := _body(Vector3(1400, 0, 0))
+
+	for wall in [[Vector3(1403.2, 1.6, 0), Vector3(0.4, 3.2, 6.8)], [Vector3(1396.8, 1.6, 0), Vector3(0.4, 3.2, 6.8)], [Vector3(1400, 1.6, 3.2), Vector3(6.8, 3.2, 0.4)],
+			[Vector3(1398.2, 1.6, -3.2), Vector3(3.2, 3.2, 0.4)], [Vector3(1402.6, 1.6, -3.2), Vector3(1.6, 3.2, 0.4)], [Vector3(1400, 3.4, 0), Vector3(6.8, 0.4, 6.8)],
+			[Vector3(1400.8, 1.6, -4.8), Vector3(5.0, 3.2, 0.4)], [Vector3(1400.8, 3.4, -4.0), Vector3(5.0, 0.4, 2.0)]]:
+		dressing.append(Props.block(self, wall[0], wall[1]))
+
+	# ...and a second man shut in a room of his own far off: no one place
+	# sees both
+	var other5 := _body(Vector3(1440, 0, 0))
+
+	for wall in [[Vector3(1442.2, 1.6, 0), Vector3(0.4, 3.2, 4.8)], [Vector3(1437.8, 1.6, 0), Vector3(0.4, 3.2, 4.8)], [Vector3(1440, 1.6, 2.2), Vector3(4.8, 3.2, 0.4)],
+			[Vector3(1440, 1.6, -2.2), Vector3(4.8, 3.2, 0.4)], [Vector3(1440, 3.4, 0), Vector3(4.8, 0.4, 4.8)]]:
+		dressing.append(Props.block(self, wall[0], wall[1]))
+
+	await _frames(3)
+	var camera5 := Camera3D.new()
+	add_child(camera5)
+	camera5.global_position = Vector3(1400, 20, 30)
+	var editor5: Node = CineEditor.new()
+	add_child(editor5)
+	editor5.take_over(camera5)
+	var shots5: Array = []
+	editor5.shot_started.connect(func(shot: Dictionary) -> void: shots5.append(shot))
+	editor5.scene({"mode": &"observe", "subjects": [man5, other5]})
+	await _real(1.0)
+	var kinds5: Array = shots5.map(func(sh): return sh["kind"])
+	var sees5: bool = CineVantage.sees(space, camera5.global_position, [man5])
+	_check("P5 men in roofed rooms apart are never watched from over the roofs: a shot from where the first is seen",
+		not shots5.is_empty() and not kinds5.has(&"overhead") and sees5, "shots %s, from %s, sees him %s" % [kinds5, camera5.global_position, sees5])
+	editor5.release()
+	editor5.queue_free()
+	camera5.queue_free()
+
+	# P6 the operator holds its aim while he sways a little where he stands
+	# (a fighter's weight shifting), and turns to keep him once he walks off
+	var camera6 := Camera3D.new()
+	add_child(camera6)
+	var screen6: CanvasLayer = CineScreen.new()
+	add_child(screen6)
+	var op6: Node = CineOperator.new()
+	add_child(op6)
+	op6.attach(camera6, screen6)
+	op6.set_mode(&"drama")
+	var head6 := Vector3(1500, 1.6, 0)
+	op6.show(_frame_at(Vector3(1500, 1.6, 3), head6, 40.0, &"medium"), &"cut")
+	await _frames(2)
+	var aim6: Vector3 = -camera6.global_basis.z
+	var drift6 := 0.0
+	var t6 := 0.0
+
+	for f in 120:
+		t6 += 1.0 / 60.0
+		var swayed := head6 + Vector3(0.12 * sin(t6 * TAU * 1.5), 0.0, 0.0)
+		op6.follow(_frame_at(Vector3(1500, 1.6, 3), swayed, 40.0, &"medium"))
+		await get_tree().process_frame
+		drift6 = maxf(drift6, rad_to_deg(aim6.angle_to(-camera6.global_basis.z)))
+
+	var gone6 := head6 + Vector3(2.0, 0.0, 0.0)
+
+	for f in 90:
+		op6.follow(_frame_at(Vector3(1500, 1.6, 3), gone6, 40.0, &"medium"))
+		await get_tree().process_frame
+
+	var kept6 := rad_to_deg((-camera6.global_basis.z).angle_to((gone6 - camera6.global_position).normalized()))
+	_check("P6 the aim holds while he sways where he stands, and turns to keep him when he walks off",
+		drift6 < 1.0 and kept6 < 6.0, "turned %.2f deg for the sway; %.1f deg off him after he walked" % [drift6, kept6])
+
+	# P8 an eye light on the actors for a close shot (it lights nothing else,
+	# nor the guards' reckoning of light); none on a wide one
+	op6.show(_frame_at(Vector3(1500, 1.6, 2), head6, 40.0, &"close"), &"cut")
+	await _frames(3)
+	var eye8: Light3D = op6.eye_light() if op6.has_method(&"eye_light") else null
+	var close8: bool = eye8 != null and eye8.visible and eye8.light_energy > 0.0 and eye8.light_cull_mask == Layers.ACTORS and eye8.is_in_group(&"fx_light")
+	op6.show(_frame_at(Vector3(1500, 1.6, 20), head6, 30.0, &"wide"), &"cut")
+	await _real(1.0)
+	var wide8: bool = eye8 != null and (not eye8.visible or eye8.light_energy < 0.01)
+	_check("P8 a close shot has an eye light on the actors only (not the guards' light reckoning); a wide one none", close8 and wide8,
+		"close %s, wide off %s" % [close8, wide8])
+	op6.queue_free()
+	screen6.queue_free()
+	camera6.queue_free()
+
+	# P7 a man walking into the camera: a new shot, soon, that is clear of him
+	var camera7 := Camera3D.new()
+	add_child(camera7)
+	var editor7: Node = CineEditor.new()
+	add_child(editor7)
+	editor7.take_over(camera7)
+	var shots7: Array = []
+	editor7.shot_started.connect(func(shot: Dictionary) -> void: shots7.append(shot))
+	var a7 := _body(Vector3(1600, 0, 0))
+	var b7 := _body(Vector3(1600, 0, 30))
+	editor7.scene({"mode": &"drama", "subjects": [a7]})
+	await _real(2.5)
+	var before7 := shots7.size()
+	b7.global_position = camera7.global_position - Vector3(0, 1.3, 0)
+	await _real(0.7)
+	var clear7: bool = CineVantage.clear(space, camera7.global_position)
+	_check("P7 a man walking into the camera: a new shot within 0.7 s, clear of him", shots7.size() > before7 and clear7,
+		"shots %d then %d, clear %s" % [before7, shots7.size(), clear7])
+	editor7.release()
+	editor7.queue_free()
+	camera7.queue_free()
+
+	# P9 a pinned drift on a group taken from among them (a man standing by
+	# the fire, three sat round it) keeps to the man it is on, never staring
+	# at the ground in their middle
+	var ring9: Array = [_body(Vector3(1700.0, 0.0, 1.2))]
+
+	for spot in [Vector3(1698.5, 0.0, 0.0), Vector3(1700.0, 0.0, -1.5), Vector3(1701.5, 0.0, 0.0)]:
+		var sat := _body(spot)
+		sat.doing = &"sit"
+		ring9.append(sat)
+
+	await _frames(3)
+	var camera9 := Camera3D.new()
+	add_child(camera9)
+	var editor9: Node = CineEditor.new()
+	add_child(editor9)
+	editor9.take_over(camera9)
+	editor9.scene({"mode": &"observe", "subjects": ring9, "pin": {"kind": &"roving", "seconds": 10.0}})
+	var worst9 := 90.0
+	var seen9 := true
+
+	for f in 90:
+		await get_tree().process_frame
+
+		if f > 20:
+			worst9 = minf(worst9, rad_to_deg(asin(clampf((-camera9.global_basis.z).y, -1.0, 1.0))))
+			seen9 = seen9 and camera9.is_position_in_frustum(CineShot.head_of(ring9[0]))
+
+	_check("P9 a pinned drift on a ring of men from among them keeps to its man, never staring down at their middle",
+		worst9 > -15.0 and seen9, "steepest %.1f deg down, its man in frame %s, from %s" % [worst9, seen9, camera9.global_position])
+	editor9.release()
+	editor9.queue_free()
+	camera9.queue_free()
+
+	# P9b framed from a place among them, the drift aims at its man (level,
+	# him in view), not down at the ground in their middle
+	var among9 := Vector3(1699.2, 1.6, -0.3)
+	var framing9 := CineShot.frame(&"roving", ring9, {"from": among9, "aspect": 16.0 / 9.0})
+	var aim9: Vector3 = ((framing9["look"] as Vector3) - among9).normalized()
+	var pitch9 := rad_to_deg(asin(clampf(aim9.y, -1.0, 1.0)))
+	var off9 := rad_to_deg(aim9.angle_to((CineShot.head_of(ring9[0]) - among9).normalized()))
+	_check("P9b a drift framed from among a ring of men aims at its man, not down at their middle",
+		pitch9 > -15.0 and off9 < 20.0, "aim %.1f deg down, %.1f deg off its man" % [-pitch9, off9])
+
+	# P10 a man walking into a pinned shot: taken again, still the pin
+	var camera10 := Camera3D.new()
+	add_child(camera10)
+	var editor10: Node = CineEditor.new()
+	add_child(editor10)
+	editor10.take_over(camera10)
+	var shots10: Array = []
+	editor10.shot_started.connect(func(shot: Dictionary) -> void: shots10.append(shot))
+	var a10 := _body(Vector3(1800, 0, 0))
+	var b10 := _body(Vector3(1800, 0, 30))
+	editor10.scene({"mode": &"drama", "subjects": [a10], "pin": {"kind": &"medium", "subjects": [a10], "seconds": 10.0}})
+	await _real(2.0)
+	var before10 := shots10.size()
+	b10.global_position = camera10.global_position - Vector3(0, 1.3, 0)
+	await _real(0.7)
+	var retaken10: bool = shots10.size() > before10 and shots10[-1]["cause"] == &"pin" and CineVantage.clear(space, camera10.global_position)
+	_check("P10 a man walking into a pinned shot: it is taken again, still the pin, clear of him", retaken10,
+		"shots %d then %d, last cause %s" % [before10, shots10.size(), shots10[-1]["cause"] if not shots10.is_empty() else "none"])
+	editor10.release()
+	editor10.queue_free()
+	camera10.queue_free()
+
+	# P11 a take from where a man stands in the camera is cut to, never
+	# drifted to from there (a drift out of a crowd is crowded the whole way)
+	var camera11 := Camera3D.new()
+	add_child(camera11)
+	var a11 := _body(Vector3(1900, 0, 0))
+	var b11 := _body(Vector3(1905, 0, 30))
+	var editor11: Node = CineEditor.new()
+	add_child(editor11)
+	editor11.take_over(camera11)
+	var shots11: Array = []
+	editor11.shot_started.connect(func(shot: Dictionary) -> void: shots11.append(shot))
+	editor11.scene({"mode": &"observe", "subjects": [a11]})
+	var drifted11 := false
+
+	# Crowded three times over (a man walks into it wherever it goes): each
+	# take after is cut to.
+	for k in 3:
+		await _real(2.0)
+		var before11 := shots11.size()
+		b11.global_position = camera11.global_position - Vector3(0, 1.3, 0)
+		await _real(0.8)
+		# (How its first frame comes: a drift or glide from here, or cut to.)
+		drifted11 = drifted11 or shots11.slice(before11).any(func(sh): return sh.get("enter", sh["how"]) in [&"path", &"glide"])
+
+	# ...and near: from a crowded place (a man in the camera), a new place 3 m
+	# off that is clear and sees him is cut to, not drifted to
+	# (Asked at once: the operator puts the camera back on its mark each frame.)
+	b11.global_position = Vector3(1903, 0, 4)
+	await _frames(3)
+	camera11.global_position = b11.global_position + Vector3(0, 1.4, 0)
+	var near11: StringName = editor11._how_to(Vector3(1903, 1.6, 7.5), [a11])
+	camera11.global_position = Vector3(1903, 1.6, 9.0)
+	var open11: StringName = editor11._how_to(Vector3(1903, 1.6, 7.5), [a11])
+	_check("P11 a take from where a man stands in the camera is cut to, never drifted to", shots11.size() >= 4 and not drifted11 and near11 == &"cut" and open11 != &"cut",
+		"%s; near from the crowd %s, from the open %s" % [shots11.map(func(sh): return [sh["kind"], sh.get("enter", sh["how"]), sh["cause"]]), near11, open11])
+	editor11.release()
+	editor11.queue_free()
+	camera11.queue_free()
+
+	# P12 watched, a man ducking behind cover for a while is waited on (the
+	# take rides it out); hidden longer, a new take
+	var camera12 := Camera3D.new()
+	add_child(camera12)
+	var editor12: Node = CineEditor.new()
+	add_child(editor12)
+	editor12.take_over(camera12)
+	var shots12: Array = []
+	editor12.shot_started.connect(func(shot: Dictionary) -> void: shots12.append(shot))
+	var a12 := _body(Vector3(2000, 0, 0))
+	editor12.scene({"mode": &"observe", "subjects": [a12]})
+	await _real(4.0)
+	shots12.clear()
+	var eye12 := camera12.global_position
+	var mid12 := (eye12 + CineShot.head_of(a12)) * 0.5
+	var cover12 := Props.block(self, mid12, Vector3(1.2, 5.0, 1.2))
+	await _real(2.0)
+	cover12.queue_free()
+	await _real(1.0)
+	var rode12 := shots12.filter(func(sh): return sh["cause"] in [&"hidden", &"crowded"]).is_empty()
+	cover12 = Props.block(self, (camera12.global_position + CineShot.head_of(a12)) * 0.5, Vector3(1.2, 5.0, 1.2))
+	await _real(5.0)
+	var taken12 := not shots12.filter(func(sh): return sh["cause"] in [&"hidden", &"crowded"]).is_empty()
+	cover12.queue_free()
+	_check("P12 watched, a man hidden behind cover for two seconds is waited on; hidden five, a new take", rode12 and taken12,
+		"rode it out %s, then a new take %s: %s" % [rode12, taken12, shots12.map(func(sh): return sh["cause"])])
+	editor12.release()
+	editor12.queue_free()
+	camera12.queue_free()
+
+	# P13 a scene whose men are not there yet (the intruder not yet come) by a
+	# fire: a slow insert on the fire, never the whole place from on high;
+	# P14 its man come, the take goes to him soon
+	var fire13 := Node3D.new()
+	add_child(fire13)
+	fire13.global_position = Vector3(2100, 0.5, 0)
+	fire13.add_to_group(&"fires")
+	var camera13 := Camera3D.new()
+	add_child(camera13)
+	camera13.global_position = Vector3(2100, 30, 20)
+	var editor13: Node = CineEditor.new()
+	add_child(editor13)
+	editor13.take_over(camera13)
+	var shots13: Array = []
+	editor13.shot_started.connect(func(shot: Dictionary) -> void: shots13.append(shot))
+	var coming13: Array = []
+	editor13.scene({"mode": &"observe", "subjects": func() -> Array: return coming13, "place": Vector3(2101, 0, 1)})
+	await _real(2.0)
+	var first13: Dictionary = editor13.current()
+	var high13: bool = shots13.any(func(sh): return sh["kind"] in [&"establishing", &"overhead"] and ((sh["framing"] as Dictionary)["position"] as Vector3).y > 4.0)
+	_check("P13 a scene with nobody come yet, by a fire: an insert on the fire, never the place from on high",
+		first13.get("kind") == &"insert" and not high13, "shots %s" % [shots13.map(func(sh): return [sh["kind"], sh["cause"], ((sh["framing"] as Dictionary)["position"] as Vector3).snapped(Vector3.ONE * 0.1)])])
+	var man14 := _body(Vector3(2104, 0, 3))
+	coming13.append(man14)
+	await _real(3.5)
+	var now14: Dictionary = editor13.current()
+	_check("P14 its man come, the take goes to him within a few seconds", (now14.get("subjects", []) as Array).has(man14),
+		"now %s on %s" % [now14.get("kind"), now14.get("subjects", [])])
+	editor13.release()
+	editor13.queue_free()
+	camera13.queue_free()
+	fire13.queue_free()
+
+	for b in [a1, blocker, a3, speaker4, listener4, man5, other5, a7, b7, a10, b10, a11, b11, a12, man14] + ring9:
+		b.queue_free()
+
+	for d in dressing:
+		d.queue_free()
+
+
+## A man with a body on the guards' layer, `at` his feet.
+func _body(at: Vector3) -> Body:
+	var b := Body.new()
+	b.collision_layer = 2
+	b.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.3
+	capsule.height = 1.8
+	shape.shape = capsule
+	shape.position = Vector3(0, 0.9, 0)
+	b.add_child(shape)
+	add_child(b)
+	b.global_position = at
+	return b
 
 
 # ---------------------------------------------------------------------------

@@ -181,8 +181,9 @@ func _ready() -> void:
 		story = (load(_story_path()) as GDScript).new(self)
 		director.setup(self, story)
 		camera = CameraScript.new()
-		add_child(camera)
+		# (Told its map first: it opens where the level says.)
 		camera.setup(self, story)
+		add_child(camera)
 		camera.make_current()
 		director.beat_started.connect(func(_beat: StringName, scene: Dictionary) -> void: camera.want(scene))
 

@@ -53,6 +53,8 @@ var map: Node3D = null
 var story: RefCounted = null
 
 var _editor: Node = null
+## Where it opened (the level's camera_home, or the yard's place).
+var started_at := Vector3.ZERO
 var _fade_next := false
 var _speed := 6.0
 var _yaw := 0.0
@@ -88,6 +90,7 @@ func _ready() -> void:
 	# (Where the level says, if it does.)
 	var home: Array = map.camera_home() if map != null and map.has_method("camera_home") else [START, YARD]
 	global_position = home[0]
+	started_at = home[0]
 	_look_at = home[1]
 	look_at(home[1], Vector3.UP)
 	_yaw = rotation.y
