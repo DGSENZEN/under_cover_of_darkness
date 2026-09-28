@@ -211,7 +211,8 @@ func _garrison() -> void:
 
 		middle26 = map._baker.global_transform * (middle26 / float(land26.get_polygon(i).size()))
 
-		if not _reaches(nav_map, start, middle26) and not _reaches(nav_map, middle26, start):
+		# (Through any doorway, locked ones too: the man with the key gets there.)
+		if not _reaches(nav_map, start, middle26, 0xFFFFFFFF) and not _reaches(nav_map, middle26, start, 0xFFFFFFFF):
 			unreached26[Vector3i((middle26 / 4.0).round() * 4.0)] = true
 
 	_check("G26 no floor on the navmesh that nobody can reach from the courtyard", unreached26.is_empty(),
@@ -782,9 +783,9 @@ func _way_length(nav_map: RID, a: Vector3, b: Vector3) -> float:
 	return length
 
 
-## Whether the navmesh has a way from `a` all the way to `b`.
-func _reaches(nav_map: RID, a: Vector3, b: Vector3) -> bool:
-	var way := NavigationServer3D.map_get_path(nav_map, a, b, true)
+## Whether the navmesh has a way from `a` all the way to `b` (on `layers`).
+func _reaches(nav_map: RID, a: Vector3, b: Vector3, layers := 1) -> bool:
+	var way := NavigationServer3D.map_get_path(nav_map, a, b, true, layers)
 	return not way.is_empty() and way[way.size() - 1].distance_to(b) < 0.8
 
 

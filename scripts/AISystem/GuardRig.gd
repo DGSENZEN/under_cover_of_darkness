@@ -313,6 +313,9 @@ var _jolt_v := Vector3.ZERO
 var _logical_head: Node3D
 var _overlay: ShaderMaterial
 var _flash := 0.0
+## Flashing last tick: what he wears is walked while he flashes and once
+## after, to take it off.
+var _was_flashing := false
 var _walk_phase := 0.0
 ## His own clock, advanced every physics tick; reactions are timed on it.
 var _time := 0.0
@@ -830,11 +833,14 @@ func _apply() -> void:
 		if flashing:
 			_overlay.set_shader_parameter("amount", _flash * _flash)
 
-		for worn in man.worn():
-			if flashing:
-				worn.material_overlay = _overlay
-			elif worn.material_overlay == _overlay:
-				worn.material_overlay = null
+		if flashing or _was_flashing:
+			for worn in man.worn():
+				if flashing:
+					worn.material_overlay = _overlay
+				elif worn.material_overlay == _overlay:
+					worn.material_overlay = null
+
+		_was_flashing = flashing
 
 
 ## 0..1 through his current phase, `ahead` seconds from now.
@@ -2131,7 +2137,8 @@ func transfer_to(corpse: Node3D, push := Vector3.ZERO, at := Vector3.INF) -> voi
 	if man.ragdoll == null:
 		var how: Array = DEATH if bool(corpse.get("dead")) else KNOCKOUT
 		man.play_once(how[0], how[2], how[1])
-	elif not man.is_limp():
+	elif not man.is_limp() or man.ragdoll.is_recovering():
+		# Getting up is not finished: he goes down again, and stays.
 		man.go_limp(guard.velocity)
 
 	if man.ragdoll != null and push != Vector3.ZERO:

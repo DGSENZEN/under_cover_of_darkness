@@ -27,6 +27,8 @@ enum Style {
 @export var swing_strength := 7.0
 ## Extra sag pulled into the rope at the grip while someone hangs on it.
 @export var climber_weight := 2.0
+## The fastest the rope carries a climber, or throws him off it (m/s).
+@export var max_swing_speed := 9.0
 
 var points := PackedVector3Array()
 var previous := PackedVector3Array()
@@ -38,6 +40,10 @@ var _visual: MultiMeshInstance3D
 var _material: StandardMaterial3D
 
 var _grip_param := -1.0
+## The step the last tick integrated (game seconds). A hit-stop or slow motion
+## shrinks the step, not the tick rate: the swing carried into the next tick
+## is scaled by the change, so the rope moves in game time.
+var _last_step := 0.0
 var _grip_push := Vector3.ZERO
 var _buffer_now := PackedFloat32Array()
 var _buffer_before := PackedFloat32Array()
@@ -78,14 +84,22 @@ func _physics_process(delta: float) -> void:
 # ---------------------------------------------------------------------------
 
 func _simulate(delta: float) -> void:
+	if delta <= 0.0:
+		return
+
 	var gravity_step := Vector3.DOWN * rope_gravity * delta * delta
+	# Damping is per tick at the normal rate; the swing carried over is last
+	# tick's travel, rescaled to this tick's step.
+	var hz := float(maxi(Engine.physics_ticks_per_second, 1))
+	var carry := pow(damping, delta * hz) * (delta / _last_step if _last_step > 0.0 else 1.0)
+	_last_step = delta
 
 	# Point 0 is pinned to the anchor.
 	points[0] = global_position
 	previous[0] = global_position
 
 	for i in range(1, segments + 1):
-		var velocity := (points[i] - previous[i]) * damping
+		var velocity := (points[i] - previous[i]) * carry
 		previous[i] = points[i]
 		points[i] += velocity + gravity_step
 
@@ -144,14 +158,16 @@ func rope_point(param: float) -> Vector3:
 	return points[index].lerp(points[index + 1], t)
 
 
-## Velocity of the rope at `param`, per second.
-func rope_velocity(param: float, delta: float) -> Vector3:
+## Velocity of the rope at `param`, per second of game time: the last tick's
+## travel over the step it integrated (`_delta` is not it during a hit-stop
+## that began or ended between the two), never faster than max_swing_speed.
+func rope_velocity(param: float, _delta: float) -> Vector3:
 	var index := _index_for_param(param)
 
-	if delta <= 0.0:
+	if _last_step <= 0.0:
 		return Vector3.ZERO
 
-	return (points[index] - previous[index]) / delta
+	return ((points[index] - previous[index]) / _last_step).limit_length(max_swing_speed)
 
 
 ## Hold on at `param`. Call every frame while attached; pass the climber's
@@ -206,6 +222,7 @@ func _reseed() -> void:
 		points[i] = global_position - Vector3.UP * segment_length * i
 		previous[i] = points[i]
 
+	_last_step = 0.0
 	_buffer_before = PackedFloat32Array()
 
 

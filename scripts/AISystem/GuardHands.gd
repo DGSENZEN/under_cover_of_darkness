@@ -94,6 +94,9 @@ var _held_layer := 1
 var _held_mask := 1
 ## What holds his light on his hand (a BoneAttachment3D), gone with it.
 var _light_holder: Node = null
+## What he threw -> how long until it can strike him again: it leaves his
+## hand through him, and once clear of him it is a thing like any other.
+var _thrown := {}
 
 
 func _init(p_guard: CharacterBody3D, carried: StringName) -> void:
@@ -138,6 +141,9 @@ func update(delta: float) -> void:
 
 		if _relighting <= 0.0:
 			_relight = null
+
+	if not _thrown.is_empty():
+		_clear_thrown(delta)
 
 
 ## Stooping, straightening, at the bell rope or lighting a torch: he can do
@@ -250,8 +256,8 @@ func _take() -> void:
 	if item == null or not is_instance_valid(item) or item.is_queued_for_deletion():
 		return
 
-	if not can_reach(item):
-		# Kicked away from under his hand.
+	if not can_reach(item) or not _still_there(item):
+		# Kicked away from under his hand, or taken up by someone else.
 		Dangers.unclaim(item, guard)
 		return
 
@@ -264,6 +270,21 @@ func _take() -> void:
 			_hold(item as RigidBody3D)
 		_:
 			item.queue_free()
+
+
+## What he stooped for is still lying there to take: not in your hands, and
+## (to throw) still a thing to throw, (a weapon) not in another man's.
+func _still_there(item: Node3D) -> bool:
+	if item.is_in_group(&"in_hand"):
+		return false
+
+	match _item_kind:
+		&"throwable":
+			return item is RigidBody3D and Dangers.throwable(item as RigidBody3D, guard)
+		&"weapon":
+			return not (item is RigidBody3D and (item as RigidBody3D).freeze)
+
+	return true
 
 
 ## The weapons he can fight with: his own kind, and what is near enough to it.
@@ -338,6 +359,7 @@ func throw_held(aim: Vector3, target: Node3D = null) -> bool:
 	item.collision_mask = _held_mask
 	item.freeze = false
 	item.add_collision_exception_with(guard)
+	_thrown[item] = 0.5
 	Dangers.unclaim(item, guard)
 	var gravity := float(ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)) * item.gravity_scale
 	var gap := aim - from
@@ -355,6 +377,29 @@ func throw_held(aim: Vector3, target: Node3D = null) -> bool:
 	ThrownScript.launch(item, guard, velocity, damage)
 	Sfx.play(guard, &"whoosh", from, 0.0, 0.8)
 	return true
+
+
+## What he threw strikes him again (throw it back at him) once it has flown
+## clear of him.
+func _clear_thrown(delta: float) -> void:
+	for item in _thrown.keys():
+		if not is_instance_valid(item):
+			_thrown.erase(item)
+			continue
+
+		_thrown[item] -= delta
+
+		if _thrown[item] > 0.0:
+			continue
+
+		# Still at his feet: not out of him yet.
+		var off: Vector3 = (item as Node3D).global_position - guard.global_position
+
+		if Vector2(off.x, off.z).length() < 0.9 and absf(off.y) < 2.0:
+			continue
+
+		_thrown.erase(item)
+		(item as PhysicsBody3D).remove_collision_exception_with(guard)
 
 
 ## Whether a throw from `from` at `velocity` (under `gravity`) goes through
@@ -437,7 +482,13 @@ func stop_relighting() -> void:
 ## Lights `light` (a torch gone out) again: at it RELIGHT_TIME, lit
 ## RELIGHT_AT into it.
 func relight(light: Node3D) -> void:
-	if busy() or light == null or not is_instance_valid(light):
+	if light == null or not is_instance_valid(light):
+		return
+
+	# Hands full: not lit, so it stays out for whoever notices it next.
+	if busy():
+		if light.has_meta(&"noticed"):
+			light.remove_meta(&"noticed")
 		return
 
 	_relight = light

@@ -116,8 +116,13 @@ static func pick(guard: Node3D, centre: Vector3, heading: Vector3, reach: float,
 	var way := Vector3(heading.x, 0.0, heading.z)
 	way = way.normalized() if way.length() > 0.01 else Vector3.ZERO
 	var ahead_angle := atan2(way.z, way.x)
-	# [score, place] for each place worth a look.
+	# [score, place] for each place worth a look, and the REACH_TRIES best
+	# scores so far (least first).
 	var places: Array = []
+	var best: Array = []
+	# The rest of a place on the floor, asked only of one that could be among
+	# the best (_weigh).
+	var see := func(place: Dictionary) -> void: _see_floor(guard, space, exclude, eye, place)
 	var ring := RING_FIRST
 
 	while ring <= reach + 0.01:
@@ -135,26 +140,26 @@ static func pick(guard: Node3D, centre: Vector3, heading: Vector3, reach: float,
 			var point := NavigationServer3D.map_get_closest_point(map, guess)
 
 			if _flat(point, guess) <= ON_FLOOR and absf(point.y - centre.y) <= SAME_LEVEL and _free(point, taken, spread, searched):
-				var place := _floor_place(guard, space, exclude, eye, point)
-				_weigh(places, place, guard, centre, way, ahead_only)
+				var place := _floor_place(space, exclude, point)
 				# By a wall: a step further in, into the corner if there is one.
 				var inward: Vector3 = place["inward"]
+				_weigh(places, best, place, guard, centre, way, ahead_only, see)
 
 				if inward.length() > 0.5:
 					var deeper_guess := point + inward.normalized() * DEEPER
 					var deeper := NavigationServer3D.map_get_closest_point(map, deeper_guess)
 
 					if _flat(deeper, deeper_guess) <= ON_FLOOR and absf(deeper.y - point.y) < 0.3 and _flat(deeper, point) > 0.2 and _free(deeper, taken, spread, searched):
-						_weigh(places, _floor_place(guard, space, exclude, eye, deeper), guard, centre, way, ahead_only)
+						_weigh(places, best, _floor_place(space, exclude, deeper), guard, centre, way, ahead_only, see)
 
 			# Over it, somewhere you could have climbed to.
-			_weigh(places, _ledge_place(guard, space, exclude, map, centre, guess, taken, spread, searched), guard, centre, way, ahead_only)
+			_weigh(places, best, _ledge_place(guard, space, exclude, map, centre, guess, taken, spread, searched), guard, centre, way, ahead_only)
 
 		ring += RING_GAP
 
 	# Through a door near it: a room to look round.
 	for node in guard.get_tree().get_nodes_in_group(&"doors"):
-		_weigh(places, _room_place(guard, space, exclude, map, node as Node3D, centre, reach, taken, spread, searched), guard, centre, way, ahead_only)
+		_weigh(places, best, _room_place(guard, space, exclude, map, node as Node3D, centre, reach, taken, spread, searched), guard, centre, way, ahead_only)
 
 	# The best of them he has a way to.
 	places.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) > float(b[0]))
@@ -173,8 +178,12 @@ static func pick(guard: Node3D, centre: Vector3, heading: Vector3, reach: float,
 
 ## Adds `place` (if there is one, and it is the way you went when only that
 ## will do) to `places`, with its score: its own, the way you went, less how
-## far he has to go, and a little chance.
-static func _weigh(places: Array, place: Dictionary, guard: Node3D, centre: Vector3, way: Vector3, ahead_only: bool) -> void:
+## far he has to go, and a little chance. `best`: the REACH_TRIES best scores
+## so far. A place on the floor not yet seen to (`see`: its light, whether he
+## sees it) is seen to only if it could be among them, were it as dark and as
+## out of his sight as a place gets; else it could never be tried, and is
+## left.
+static func _weigh(places: Array, best: Array, place: Dictionary, guard: Node3D, centre: Vector3, way: Vector3, ahead_only: bool, see := Callable()) -> void:
 	if place.is_empty():
 		return
 
@@ -188,7 +197,23 @@ static func _weigh(places: Array, place: Dictionary, guard: Node3D, centre: Vect
 	if ahead_only and ahead < AHEAD_ONLY:
 		return
 
-	places.append([float(place["score"]) + ahead * AHEAD_WEIGHT - FAR_COST * guard.global_position.distance_to(stand) + randf() * JITTER, place])
+	var chance := randf() * JITTER
+
+	if see.is_valid():
+		var most := float(place["score"]) + DARK_WEIGHT + UNSEEN_WEIGHT + ahead * AHEAD_WEIGHT - FAR_COST * guard.global_position.distance_to(stand) + chance
+
+		if best.size() >= REACH_TRIES and most < float(best[0]) - 0.001:
+			return
+
+		see.call(place)
+
+	var score := float(place["score"]) + ahead * AHEAD_WEIGHT - FAR_COST * guard.global_position.distance_to(stand) + chance
+	places.append([score, place])
+	best.append(score)
+	best.sort()
+
+	if best.size() > REACH_TRIES:
+		best.pop_front()
 
 
 ## The ground `guard` was sent to search (his "hunt_area"), or an empty box:
@@ -259,12 +284,11 @@ static func _reachable(map: RID, start: Vector3, to: Vector3) -> bool:
 	return _flat(end, to) < 0.6 and absf(end.y - to.y) < 1.0
 
 
-## A place on the floor: how dark, how shut in, whether he can see it; and
-## what he looks into on his way (the place itself, if it is somewhere to
-## hide).
-static func _floor_place(guard: Node3D, space: PhysicsDirectSpaceState3D, exclude: Array[RID], eye: Vector3, point: Vector3) -> Dictionary:
+## A place on the floor: how shut in; the rest (how dark, whether he can see
+## it, what he looks into) once it is worth asking (_see_floor). Its score
+## so far is only its being shut in.
+static func _floor_place(space: PhysicsDirectSpaceState3D, exclude: Array[RID], point: Vector3) -> Dictionary:
 	var low := point + Vector3.UP * CROUCH
-	var dark := 1.0 - LightProbe.light_at(guard, low, exclude)
 	var shut := 0
 	# The way into it: toward what shuts it in.
 	var inward := Vector3.ZERO
@@ -278,6 +302,17 @@ static func _floor_place(guard: Node3D, space: PhysicsDirectSpaceState3D, exclud
 			inward += out
 
 	var shut_in := clampf(float(shut - SHUT_WALL) / float(SHUT_ALL), 0.0, 1.0)
+	return {"stand": point, "inward": inward, "shut_in": shut_in, "score": SHUT_WEIGHT * shut_in}
+
+
+## The rest of a place on the floor (_floor_place): how dark, whether he can
+## see it; and what he looks into on his way (the place itself, if it is
+## somewhere to hide).
+static func _see_floor(guard: Node3D, space: PhysicsDirectSpaceState3D, exclude: Array[RID], eye: Vector3, place: Dictionary) -> void:
+	var low: Vector3 = place["stand"] + Vector3.UP * CROUCH
+	var inward: Vector3 = place["inward"]
+	var shut_in: float = place["shut_in"]
+	var dark := 1.0 - LightProbe.light_at(guard, low, exclude)
 	var unseen := 1.0 if not space.intersect_ray(_ray(eye, low, exclude)).is_empty() else 0.5 * dark
 	var kind := &"nook" if shut_in >= SHUT_NOOK else (&"dark" if dark > 0.6 else &"open")
 	var peer := Vector3.INF
@@ -287,7 +322,10 @@ static func _floor_place(guard: Node3D, space: PhysicsDirectSpaceState3D, exclud
 	elif kind == &"dark":
 		peer = low
 
-	return {"stand": point, "peer": peer, "kind": kind, "inward": inward, "score": DARK_WEIGHT * dark + SHUT_WEIGHT * shut_in + UNSEEN_WEIGHT * unseen}
+	place["peer"] = peer
+	place["kind"] = kind
+	place["score"] = DARK_WEIGHT * dark + SHUT_WEIGHT * shut_in + UNSEEN_WEIGHT * unseen
+	place.erase("shut_in")
 
 
 ## Higher up over `guess` (a ledge, a gallery, a stack you could climb): he

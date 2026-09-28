@@ -8,6 +8,8 @@ extends Node
 ## Started with the level (Sfx.warm), stopped with it. Only audio: guards
 ## hear nothing of it.
 
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
+
 const FOLDER := "res://audio/ambience/"
 const DEFAULT := "interior_night"
 ## How loud the place is under everything else (dB).
@@ -21,6 +23,7 @@ const FIGHT_FULL := 0.6
 var loop_name := ""
 var _player: AudioStreamPlayer
 var _fade := 0.0
+var _last_real := -1.0
 
 
 ## Starts the level's ambience, once, if sound is on.
@@ -67,12 +70,14 @@ func _ready() -> void:
 	_player.play()
 
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	if _player == null:
 		return
 
 	# Real time, not the game's: a hit-stop or slow motion does not dip it.
-	_fade = minf(_fade + delta / maxf(Engine.time_scale, 0.05) / FADE_IN, 1.0)
+	var real := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
+	_last_real = TimeFx.real_time()
+	_fade = minf(_fade + real / FADE_IN, 1.0)
 	_player.volume_db = lerpf(-60.0, VOLUME_DB, sqrt(_fade)) + dip_for(_fight())
 
 

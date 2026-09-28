@@ -6,7 +6,10 @@ extends NavigationRegion3D
 ## path-find. TrenchBroom brushes arrive as static bodies, so they just work.
 ##
 ## Doors are left out of the bake on purpose: a closed door would cut the mesh
-## at every doorway. Guards path through doorways and open the door.
+## at every doorway. Guards path through doorways and open the door. Each
+## doorway (Door.footprint) is cut out of the mesh and baked as a region of
+## its own, on the layers its door says (Door.nav_layers): locked, it is off
+## the navmesh of a guard without the key, and he goes round.
 ##
 ## Furniture low enough to pass for a step (group "nav_blocks": a chair's
 ## seat, a stump; Furnishings) is kept off, with room round it, instead of
@@ -149,7 +152,7 @@ func bake() -> void:
 	# The last bake's swim regions and links go; deep water is cut out of the
 	# mesh (walked on it would be its bottom), and baked on its own after.
 	for child in get_children():
-		if child.name.begins_with("Swim") or child.name == "TraversalLinks":
+		if child.name.begins_with("Swim") or child.name.begins_with("Doorway") or child.name == "TraversalLinks":
 			remove_child(child)
 			child.queue_free()
 
@@ -157,12 +160,19 @@ func bake() -> void:
 		if water.has_meta(&"swim_region"):
 			water.remove_meta(&"swim_region")
 
+	for door in _doors():
+		if door.has_meta(&"nav_region"):
+			door.remove_meta(&"nav_region")
+
 	_source = NavigationMeshSourceGeometryData3D.new()
 	_source.append_arrays(source.get_vertices(), source.get_indices())
 
 	for water in _deep_waters():
 		var corners := _local_corners(water)
 		source.add_projected_obstruction(corners, float(water.bottom_y()) - 1.0 - global_position.y, float(water.surface_y()) - float(water.bottom_y()) + 1.05, true)
+
+	for door in _doors():
+		source.add_projected_obstruction(_local_corners(door), float(door.doorway().y) - global_position.y - 0.5, 2.0, true)
 
 	# Furniture low enough to pass for a step (a seat, a stump: Furnishings)
 	# is kept off, with room for a man round it, rather than walked over.
@@ -184,6 +194,9 @@ func bake() -> void:
 
 
 func _on_baked(mesh: NavigationMesh) -> void:
+	if not is_inside_tree():
+		return
+
 	sealed_count = _drop_sealed(mesh)
 	navigation_mesh = mesh
 
@@ -195,10 +208,19 @@ func _on_baked(mesh: NavigationMesh) -> void:
 	for i in 60:
 		await get_tree().physics_frame
 
+		# The level gone meanwhile (a reload, a test's next scene): no more.
+		if not is_inside_tree():
+			return
+
 		if i >= 1 and (vertices.is_empty() or NavigationServer3D.map_get_closest_point(get_navigation_map(), corner).distance_to(corner) < 0.5):
 			break
 
+	# The doorways reach the map with the water (_bake_water waits for it).
+	_bake_doorways(mesh)
 	await _bake_water(mesh)
+
+	if not is_inside_tree():
+		return
 
 	if traversal_links:
 		link_count = NavLinksScript.build(self)
@@ -207,12 +229,18 @@ func _on_baked(mesh: NavigationMesh) -> void:
 	# before then.
 	await _map_synced()
 
+	if not is_inside_tree():
+		return
+
 	if drop_unreached:
 		unreached_count = _drop_unreached(mesh)
 
 		if unreached_count > 0:
 			NavigationServer3D.region_set_navigation_mesh(get_rid(), mesh)
 			await _map_synced()
+
+			if not is_inside_tree():
+				return
 
 	is_baked = true
 	baked.emit()
@@ -226,6 +254,9 @@ func _map_synced() -> void:
 
 	for i in 30:
 		await get_tree().physics_frame
+
+		if not is_inside_tree():
+			return
 
 		if NavigationServer3D.map_get_iteration_id(map) != before and i >= 1:
 			return
@@ -357,9 +388,11 @@ static func _island_of(parent: PackedInt32Array, i: int) -> int:
 	return i
 
 
-## The map has a way from `a` all the way to `b` (links and all).
+## The map has a way from `a` all the way to `b` (links and all, and through
+## doorways on any layer: a room behind a locked door is reached by the man
+## with its key).
 static func _way_between(map: RID, a: Vector3, b: Vector3) -> bool:
-	var way := NavigationServer3D.map_get_path(map, a, b, true)
+	var way := NavigationServer3D.map_get_path(map, a, b, true, 0xFFFFFFFF)
 	return not way.is_empty() and way[way.size() - 1].distance_to(b) < 0.5
 
 
@@ -382,12 +415,17 @@ func _deep_waters() -> Array:
 	return deep
 
 
-## `water`'s outline seen from above, in this region's space.
-func _local_corners(water: Node3D) -> PackedVector3Array:
+## The doors whose doorways are regions of their own.
+func _doors() -> Array:
+	return get_tree().get_nodes_in_group(&"doors").filter(func(door): return door.has_method("footprint"))
+
+
+## `thing`'s outline seen from above (water, a doorway), in this region's space.
+func _local_corners(thing: Node3D) -> PackedVector3Array:
 	var corners := PackedVector3Array()
 	var local := global_transform.affine_inverse()
 
-	for corner in water.footprint():
+	for corner in thing.footprint():
 		corners.append(local * corner)
 
 	return corners
@@ -438,6 +476,48 @@ func _bake_water(land: NavigationMesh) -> void:
 
 	# Let the map take the regions before anything asks it about them.
 	await _map_synced()
+
+
+## Each doorway: its strip of floor, as a region of its own, cut where the
+## frame stands, and nowhere else; on its door's layers (Door.nav_layers).
+func _bake_doorways(land: NavigationMesh) -> void:
+	for door in _doors():
+		var mesh := NavigationMesh.new()
+
+		for property in ["agent_radius", "agent_height", "agent_max_slope", "agent_max_climb", "cell_size", "cell_height", "geometry_collision_mask"]:
+			mesh.set(property, land.get(property))
+
+		var source := NavigationMeshSourceGeometryData3D.new()
+		source.append_arrays(_source.get_vertices(), _source.get_indices())
+		var floor_y: float = float(door.doorway().y) - global_position.y
+		var c := _local_corners(door)
+		var middle: Vector3 = (c[0] + c[2]) * 0.5
+		var bounds := AABB(Vector3(middle.x, floor_y, middle.z), Vector3(0.0, land.agent_height, 0.0))
+
+		# Everything outside it, cut away: past each side, far along it.
+		for k in 4:
+			var a: Vector3 = c[k]
+			var b: Vector3 = c[(k + 1) % 4]
+			var along := (b - a).normalized() * 50.0
+			var out := Vector3(along.z, 0.0, -along.x)
+
+			if out.dot((a + b) * 0.5 - middle) < 0.0:
+				out = -out
+
+			source.add_projected_obstruction(PackedVector3Array([a - along, b + along, b + along + out, a - along + out]), floor_y - 50.0, 100.0, true)
+			bounds = bounds.expand(a)
+
+		# Baked only round it, with room for the frame's erosion.
+		mesh.filter_baking_aabb = bounds.grow(1.5)
+		NavigationServer3D.bake_from_source_geometry_data(mesh, source)
+		_drop_sealed(mesh)
+		var region := NavigationRegion3D.new()
+		region.name = "Doorway_%s" % door.name
+		region.navigation_mesh = _surface_only(mesh, floor_y)
+		region.navigation_layers = door.nav_layers()
+		NavigationServer3D.region_set_use_async_iterations(region.get_rid(), false)
+		add_child(region)
+		door.set_meta(&"nav_region", region)
 
 
 ## Only the polygons of `mesh` lying at `height` (the water's surface): not

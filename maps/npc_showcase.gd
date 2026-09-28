@@ -58,7 +58,7 @@ const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
-const DirectorScript := preload("res://scripts/Showcase/ShowDirector.gd")
+const DirectorScript = preload("res://scripts/Showcase/ShowDirector.gd")
 const NightRotaScript := preload("res://scripts/AISystem/NightRota.gd")
 const GatheringScript := preload("res://scripts/AISystem/Gathering.gd")
 const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
@@ -143,10 +143,13 @@ var atmosphere: Node3D = null
 ## The moon, its clouds and the weather.
 var night: Node3D = null
 var _wet_materials: Array[StandardMaterial3D] = []
+## Temperament.rolling as it was before the showcase (put back after it).
+var _was_rolling := true
 
 
 func _ready() -> void:
 	reset_physics_interpolation.call_deferred()
+	_was_rolling = TemperamentScript.rolling
 	TemperamentScript.rolling = false
 	SquadScript.clear_all()
 	GarrisonScript.clear_all()
@@ -237,6 +240,11 @@ func _story_path() -> String:
 ## scene.
 func camera_home() -> Array:
 	return [Vector3(18.0, 18.0, 24.0), Vector3(0, 0.5, -1.0)]
+
+
+## Gone: the men made after it roll their temperaments as they did before.
+func _exit_tree() -> void:
+	TemperamentScript.rolling = _was_rolling
 
 
 ## Everything but the people: the yard, the buildings, outside, the lights,

@@ -290,6 +290,8 @@ var _look_motion := Vector2.ZERO
 var _last_look := Vector2.ZERO
 var _look_known := false
 var _hit_this_swing := {}
+## How many men this swing has gone into (a stool or a rope does not count).
+var _men_hit_this_swing := 0
 var _last_sweep := 0.0
 var _block_started := -100.0
 var _guard_sound_at := -100.0
@@ -769,8 +771,10 @@ func _style() -> Dictionary:
 	return STYLES.get(_direction, STYLES[&"left"])
 
 
+## Whether the blow under way is a riposte (an arrow or a throw after it is
+## not).
 func is_riposte() -> bool:
-	return _riposte
+	return _riposte and phase in [Phase.WINDUP, Phase.CHARGING, Phase.STRIKE, Phase.RECOVER]
 
 
 ## How hard the blow under way presses a raised guard (GuardFighter.defend):
@@ -820,6 +824,7 @@ func _start_strike(power: bool) -> void:
 	_finisher = power and adrenaline >= adrenaline_max
 	_direction = _swing_direction()
 	_hit_this_swing.clear()
+	_men_hit_this_swing = 0
 	_last_sweep = 0.0
 	_charge_ready = false
 	_cleave = 1.0
@@ -1035,10 +1040,11 @@ func _sweep(p: float) -> void:
 			return
 
 		# A thrust goes into one man; a cut may carry on into the next.
-		if not bool(_style()["through"]) and not _hit_this_swing.is_empty():
+		if not bool(_style()["through"]) and _men_hit_this_swing > 0:
 			return
 
 		_hit_this_swing[collider] = true
+		_men_hit_this_swing += 1
 		_strike_target(collider as Node3D, point, _blow_direction(direction, basis))
 		return
 
@@ -1475,7 +1481,8 @@ func filter_incoming(amount: float, from: Node) -> float:
 
 	# Met by more than a raised guard: his point stepped into, his blow
 	# answered with one of yours, or yours already in the air (_answer_blow).
-	if from is Node3D and not bool(info.get("ranged", false)) and _answer_blow(from as Node3D, info) != &"":
+	# Only a man's blow asks for an answer: a blast or a spike does not.
+	if from is Node3D and info.has("call") and not bool(info.get("ranged", false)) and _answer_blow(from as Node3D, info) != &"":
 		return 0.0
 
 	if bool(info.get("unblockable", false)):
@@ -1923,6 +1930,7 @@ func _drop_attack(target: Node3D) -> void:
 	_backing = 0.0
 	_hit_this_swing.clear()
 	_hit_this_swing[target] = true
+	_men_hit_this_swing = 1
 	_enter(Phase.STRIKE)
 	_strike_time = weapon.strike_time
 	_t = _strike_time * 0.45

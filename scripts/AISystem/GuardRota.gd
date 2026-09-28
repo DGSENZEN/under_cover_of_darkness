@@ -582,7 +582,8 @@ func _carry(station: Node3D, delta: float) -> void:
 			guard._face(_crate.global_position - guard.global_position, delta, 2.0)
 
 		if _t >= _length:
-			if _crate != null and is_instance_valid(_crate):
+			# Still there to lift: not taken up by you meanwhile.
+			if _crate != null and is_instance_valid(_crate) and not _crate.is_in_group(&"in_hand"):
 				_lift(_crate)
 
 			_crate = null
@@ -625,7 +626,8 @@ func _cargo_near(point: Vector3) -> RigidBody3D:
 	var best_distance := CARGO_REACH
 
 	for thing in guard.get_tree().get_nodes_in_group(&"cargo"):
-		if not (thing is RigidBody3D) or thing == carried:
+		# Not one in your hands.
+		if not (thing is RigidBody3D) or thing == carried or thing.is_in_group(&"in_hand"):
 			continue
 
 		var d := _flat((thing as Node3D).global_position, point)

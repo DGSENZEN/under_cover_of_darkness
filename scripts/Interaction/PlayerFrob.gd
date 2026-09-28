@@ -4,7 +4,8 @@ extends Node3D
 ## can be frobbed; `get_prompt(player)` is optional.
 ##
 ## Also carries physics objects: frob a RigidBody3D to pick it up, frob again
-## to set it down, throw to hurl it. Carrying blocks climbing.
+## to set it down, throw to hurl it. Carrying blocks climbing. What you hold
+## is in the group "in_hand": no guard takes it from you, no door shuts on it.
 ##
 ## What is in your hand is used with the attack button: the blackjack swung; a
 ## flash bomb or a water flask thrown (ThrownTool.gd), one off the belt each
@@ -106,6 +107,9 @@ var _highlighted: Node = null
 var _highlight_material := StandardMaterial3D.new()
 var _held_gravity_scale := 1.0
 var _carry_strain := 0.0
+## Where what you hold was when you took it: moved from there (into a guard's
+## hand), it is no longer yours.
+var _held_parent: Node = null
 
 
 func _ready() -> void:
@@ -214,6 +218,12 @@ func _physics_process(delta: float) -> void:
 ## both hands.
 func _hands_free() -> bool:
 	return player.movement_state == player.MoveState.LOCOMOTION
+
+
+## Not in the middle of a blow, a stagger or a dodge: taking something up now
+## would cut it short (combat stands down while you carry).
+func _combat_idle() -> bool:
+	return player.combat == null or player.combat.phase == player.combat.Phase.IDLE
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +362,7 @@ func _on_frob() -> void:
 		return
 
 	if target is RigidBody3D and _can_carry(target as RigidBody3D):
-		if _hands_free():
+		if _hands_free() and _combat_idle():
 			_pick_up(target as RigidBody3D)
 			frobbed.emit(target)
 
@@ -402,12 +412,14 @@ func _turn_key_in(lock: Node) -> void:
 		return
 
 	_unlocking = true
-	hands.turn_key(key_mesh, _target_point, func() -> void:
+	var point := _target_point
+	hands.turn_key(key_mesh, point, func() -> void:
 		_unlocking = false
 
-		if is_instance_valid(lock):
-			SoundBus.emit_sound(_target_point, 30.0, player, &"unlock")
-			Sfx.play(player, &"unlock", _target_point)
+		# Turned with you gone from the door (or down): it stays locked.
+		if is_instance_valid(lock) and not player.is_dead and _eye().origin.distance_to(point) <= frob_distance + 0.3:
+			SoundBus.emit_sound(point, 30.0, player, &"unlock")
+			Sfx.play(player, &"unlock", point)
 			lock.frob(player)
 			frobbed.emit(lock))
 
@@ -450,8 +462,10 @@ func _pick_up(body: RigidBody3D) -> void:
 	_carry_strain = 0.0
 	held = body
 	_holding = true
+	_held_parent = body.get_parent()
 	_held_gravity_scale = body.gravity_scale
 	body.gravity_scale = 0.0
+	body.add_to_group(&"in_hand")
 	body.add_collision_exception_with(player)
 	player.add_collision_exception_with(body)
 	picked_up.emit(body)
@@ -484,6 +498,11 @@ func _update_carry(delta: float) -> void:
 		released.emit(null, false)
 		return
 
+	# Taken out of your hands (a guard lifted it): let go of it as it is.
+	if held.freeze or held.get_parent() != _held_parent:
+		_release(false, false)
+		return
+
 	var to_hold := _hold_point() - held.global_position
 
 	if to_hold.length() > carry_break_distance:
@@ -504,10 +523,13 @@ func _update_carry(delta: float) -> void:
 	held.angular_velocity *= 0.85
 
 
-func _release(thrown: bool) -> void:
+## Lets go of what you hold: thrown, or set down (`place`: onto whatever is
+## under it; not, when it has been taken from you).
+func _release(thrown: bool, place := true) -> void:
 	var body := held
 	held = null
 	_holding = false
+	_held_parent = null
 
 	if not is_instance_valid(body):
 		released.emit(null, thrown)
@@ -516,8 +538,9 @@ func _release(thrown: bool) -> void:
 	body.gravity_scale = _held_gravity_scale
 	body.remove_collision_exception_with(player)
 	player.remove_collision_exception_with(body)
+	body.remove_from_group(&"in_hand")
 
-	if not thrown:
+	if not thrown and place:
 		body.linear_velocity = player.velocity
 
 		# Set down means set down: onto whatever is under your hands, quietly.
@@ -548,12 +571,44 @@ func _place_on_surface(body: RigidBody3D) -> bool:
 		return false
 
 	var floor_point: Vector3 = hit["position"]
+	var upright := Basis(Vector3.UP, body.global_rotation.y)
+	var down := from.y - (floor_point.y + half + 0.01)
+
+	# All of it let down there, not just its middle: a table's edge or a man
+	# in the way, and it is dropped instead.
+	if not _fits_down(body, Transform3D(upright, from), down):
+		return false
+
 	body.global_position = Vector3(from.x, floor_point.y + half + 0.01, from.z)
 	body.global_rotation = Vector3(0.0, body.global_rotation.y, 0.0)
 	body.reset_physics_interpolation()
 	body.linear_velocity = Vector3.ZERO
 	body.angular_velocity = Vector3.ZERO
 	Sfx.play(player, &"thud_wood", body.global_position, -9.0, 1.2)
+	return true
+
+
+## Whether `body`'s own shapes, stood at `at`, go `down` (m) without meeting
+## anything: the world, a man, a body, another thing lying there.
+func _fits_down(body: RigidBody3D, at: Transform3D, down: float) -> bool:
+	var space := get_world_3d().direct_space_state
+
+	for child in body.get_children():
+		var holder := child as CollisionShape3D
+
+		if holder == null or holder.shape == null or holder.disabled:
+			continue
+
+		var query := PhysicsShapeQueryParameters3D.new()
+		query.shape = holder.shape
+		query.transform = at * holder.transform
+		query.motion = Vector3.DOWN * down
+		query.collision_mask = 1 | 2 | GuardBodyScript.LAYER
+		query.exclude = [player.get_rid(), body.get_rid()]
+
+		if space.cast_motion(query)[0] < 1.0:
+			return false
+
 	return true
 
 
@@ -698,7 +753,7 @@ func drop_held() -> void:
 # ---------------------------------------------------------------------------
 
 func shoulder(body: RigidBody3D) -> void:
-	if held != null or shouldered != null or not _hands_free():
+	if held != null or shouldered != null or not _hands_free() or not _combat_idle():
 		return
 
 	shouldered = body
@@ -753,7 +808,6 @@ func put_down_body() -> void:
 
 	var spot := rest.origin
 	body.global_transform = rest
-	body.reset_physics_interpolation()
 	body.collision_layer = _shouldered_layer
 	body.collision_mask = _shouldered_mask
 	body.visible = true
@@ -764,6 +818,10 @@ func put_down_body() -> void:
 		body.freeze = false
 		body.linear_velocity = Vector3.ZERO
 		body.angular_velocity = Vector3.ZERO
+
+	# Only now, the man (under the body) put where he lies too: drawn there
+	# from the first frame, not slid in from where he was taken up.
+	body.reset_physics_interpolation()
 
 	# Setting a body down is not silent.
 	SoundBus.emit_sound(spot, 36.0, player, &"body")

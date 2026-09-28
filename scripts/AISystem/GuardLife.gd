@@ -134,6 +134,8 @@ var _check := 0.0
 ## Covering a friend who went to look (a weakref), and for how much longer;
 ## and, going to look himself, whether anyone covers him.
 var _covering: WeakRef = null
+## The friend he covers, by name (he may be gone before he is missed).
+var _covering_name := ""
 var _cover_left := 0.0
 var _covered := false
 ## Seconds at his ease (for putting the lantern out).
@@ -171,6 +173,12 @@ func update(delta: float) -> void:
 	_glance_rest = maxf(_glance_rest - delta, 0.0)
 	_greet_rest = maxf(_greet_rest - delta, 0.0)
 	_pastimes.update(delta)
+
+	# Stirred from his ease: his pacing is over too (else, at his ease again,
+	# he would walk out to where he paced before).
+	if int(guard.state) != RELAXED and _pastimes.activity() == &"pace":
+		_pastimes.stop()
+
 	var talk := _director()
 
 	if talk != null:
@@ -206,8 +214,11 @@ func update(delta: float) -> void:
 
 	# Things out of place, men missing: noticed at his ease (suspicious, only
 	# what might be what stirred him: something by where he heard it), and
-	# not while he covers a friend's look.
-	if (state == RELAXED or state == SUSPICIOUS) and not covering() and not (guard.has_method("blinded") and guard.blinded()):
+	# not while he covers a friend's look, nor with his eyes shut.
+	var eyes_shut: bool = (guard._rota != null and guard._rota.asleep()) \
+		or (guard._habits != null and guard._habits.dozing())
+
+	if (state == RELAXED or state == SUSPICIOUS) and not covering() and not eyes_shut and not (guard.has_method("blinded") and guard.blinded()):
 		_look_for_oddities(CHECK)
 
 		if state == RELAXED:
@@ -558,7 +569,7 @@ func _look_for_oddities(step: float) -> void:
 	var near: Vector3 = guard.last_known_position if int(guard.state) == SUSPICIOUS else Vector3.INF
 
 	for door in tree.get_nodes_in_group(&"doors"):
-		if door.has_method("left_open") and door.left_open() and not door.has_meta(&"noticed"):
+		if door.has_method("left_open") and door.left_open() and not _noticed(door):
 			var way: Vector3 = door.doorway() if door.has_method("doorway") else door.global_position
 
 			if near != Vector3.INF and way.distance_to(near) > ODD_NEAR:
@@ -575,7 +586,7 @@ func _look_for_oddities(step: float) -> void:
 	# A torch dark where it should be burning: its not burning is what he
 	# sees, so it takes no light to see it.
 	for torch in tree.get_nodes_in_group(&"lights"):
-		if torch.has_method("left_out") and torch.left_out() and not torch.has_meta(&"noticed") and Comms.now() >= float(torch.get_meta(&"out_of_reach_until", -1.0)):
+		if torch.has_method("left_out") and torch.left_out() and not _noticed(torch) and Comms.now() >= float(torch.get_meta(&"out_of_reach_until", -1.0)):
 			# Its flame, where it should be burning (a fixture's origin is on the
 			# wall behind it, or on the floor under its basket).
 			var at: Vector3 = torch.flame_position() if torch.has_method("flame_position") else (torch as Node3D).global_position
@@ -590,7 +601,7 @@ func _look_for_oddities(step: float) -> void:
 			_noticing.erase(torch)
 
 	for arrow in tree.get_nodes_in_group(&"stray_arrows"):
-		if arrow.is_queued_for_deletion() or arrow.has_meta(&"noticed"):
+		if arrow.is_queued_for_deletion() or _noticed(arrow):
 			continue
 
 		if near != Vector3.INF and (arrow as Node3D).global_position.distance_to(near) > ODD_NEAR:
@@ -638,8 +649,23 @@ func _watch_for(thing: Node3D, points: Array, reach: float, eye: Vector3, step: 
 	return seen >= NOTICE
 
 
+## Noticed already by a man still able to see to it: not one since killed,
+## knocked out or gone (it waits for whoever notices it next).
+static func _noticed(thing: Node) -> bool:
+	if not thing.has_meta(&"noticed"):
+		return false
+
+	var by: Variant = thing.get_meta(&"noticed")
+
+	if not by is WeakRef:
+		return true
+
+	var man: Object = (by as WeakRef).get_ref()
+	return man != null and not (man as Node).is_queued_for_deletion() and man.get("_knocked_out") != true
+
+
 func _notice(thing: Node3D, kind: StringName, where: Vector3) -> void:
-	thing.set_meta(&"noticed", true)
+	thing.set_meta(&"noticed", weakref(guard))
 	_noticing.erase(thing)
 	_odd = thing
 	_odd_kind = kind
@@ -829,6 +855,7 @@ func cover(looker: Node3D) -> void:
 		return
 
 	_covering = weakref(looker)
+	_covering_name = String(looker.get("given_name"))
 	_cover_left = COVER_MAX
 
 
@@ -860,8 +887,7 @@ func stop_covering() -> void:
 
 
 func _update_cover(delta: float) -> void:
-	if not covering():
-		_covering = null
+	if _covering == null:
 		return
 
 	var looker: Node3D = _covering.get_ref() as Node3D
@@ -872,7 +898,9 @@ func _update_cover(delta: float) -> void:
 		stop_covering()
 		return
 
-	if looker.get("_knocked_out") == true or not looker.is_inside_tree():
+	# Gone without a "clear" (a club to the head takes him away at once) is
+	# gone quiet too.
+	if looker == null or looker.is_queued_for_deletion() or looker.get("_knocked_out") == true or not looker.is_inside_tree():
 		# He went to look and went quiet: this one goes now, and not easy.
 		# A man set to watch calls them all to it instead, and watches.
 		stop_covering()
@@ -881,7 +909,7 @@ func _update_cover(delta: float) -> void:
 			var said: String = guard._fighter.temper.line(&"quiet") if guard._fighter != null and guard._fighter.temper != null else "%s's gone quiet! To arms!"
 
 			if said.contains("%s"):
-				said = said % String(looker.get("given_name"))
+				said = said % _covering_name
 
 			guard.bark(said)
 			Comms.call_out(guard, &"alarm", guard.last_known_position)

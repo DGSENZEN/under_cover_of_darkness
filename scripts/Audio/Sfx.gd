@@ -37,6 +37,7 @@ extends Node
 
 const AmbienceScript := preload("res://scripts/Audio/Ambience.gd")
 const MusicScript := preload("res://scripts/Audio/Music.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
 const FOLDER := "res://audio/sfx/"
 ## The most takes of one sound read (name_1 .. name_24, numbered without a
@@ -72,6 +73,8 @@ const AROUND_DB := -3.5
 const AROUND_CUTOFF := 2600.0
 ## Further than this, a sound plays on WorldFar.
 const FAR := 12.0
+## Further than this, a sound is not heard at all: it takes no voice.
+const REACH := 45.0
 ## How far the room is sounded out, and how often (seconds).
 const PROBE_REACH := 28.0
 const PROBE_EVERY := 0.5
@@ -302,6 +305,13 @@ static var _bank := {}
 static var _last_pick := {}
 static var _mutex := Mutex.new()
 static var _node: Node = null
+## The loader told to stop after the recording it is reading (leaving the
+## level); whether the bank is let go of when the game closes.
+static var _stop_warming := false
+static var _let_go_hooked := false
+## When the score last had a hit (a sting, real time): the next waits for
+## it to ring out.
+static var sting_at := -100.0
 
 ## Tests: while true, every sound asked for is written down here as
 ## [name, volume_db, positional], whether or not audio is on.
@@ -314,6 +324,7 @@ var room := Vector2(0.5, 1.0)
 var _room_heard := Vector2(0.5, 1.0)
 var _room_shaped := Vector2(0.5, 1.0)
 var _probe_in := 0.0
+var _last_real := -1.0
 ## The level's stuff (ACOUSTICS): the room's size and walls come from probing.
 static var _material := "stone"
 ## How deadened your hearing is by the last heavy blow (0..1, fading).
@@ -348,13 +359,20 @@ static func play_flat(context: Node, sound: StringName, volume := 0.0, pitch := 
 	if recording:
 		recorded.append([sound, volume, false])
 
+	if sound in MUSICAL:
+		sting_at = TimeFx.real_time()
+
 	var node := _node_for(context)
 
 	if node == null:
 		return
 
-	var level := volume + float(GAIN.get(sound, 0.0)) + (0.0 if sound in MUSICAL else randf_range(-0.8, 0.8))
-	node._play_flat(sound, level, pitch * (1.0 + randf_range(-jitter, jitter)))
+	# The score's hits are played as written: in tune, at their level. (The
+	# pitch is still drawn, so the dice fall the same either way.)
+	var musical := sound in MUSICAL
+	var level := volume + float(GAIN.get(sound, 0.0)) + (0.0 if musical else randf_range(-0.8, 0.8))
+	var wobble := randf_range(-jitter, jitter)
+	node._play_flat(sound, level, pitch * (1.0 + (0.0 if musical else wobble)))
 
 
 ## Loads every recording in the background, so the first blow of a fight
@@ -460,6 +478,11 @@ static func _node_for(context: Node) -> Node:
 		parent.add_child.call_deferred(node)
 
 	_node = node
+
+	if not _let_go_hooked:
+		_let_go_hooked = true
+		tree.root.tree_exiting.connect(func() -> void: _let_go(), CONNECT_ONE_SHOT)
+
 	return node
 
 
@@ -475,7 +498,7 @@ func _init() -> void:
 		# sound whose GAIN plus its own volume is at most 0 dB is never cut
 		# off: the table still decides how loud it is.
 		player.max_db = 6.0
-		player.max_distance = 45.0
+		player.max_distance = REACH
 		player.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
 		player.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
 		player.bus = BUS_WORLD
@@ -676,16 +699,24 @@ func _exit_tree() -> void:
 		player.stop()
 		player.stream = null
 
+	# The loader stops after the recording it is on: no waiting for the rest.
 	if _task != -1:
+		_stop_warming = true
 		WorkerThreadPool.wait_for_task_completion(_task)
+		_stop_warming = false
 		_task = -1
 
-	# Leaving the level: the recordings are quick to load again.
+	# Leaving the level (a reload after death): the recordings stay loaded
+	# for the next, and are let go of when the game closes.
 	if _node == self:
 		_node = null
-		_mutex.lock()
-		_bank.clear()
-		_mutex.unlock()
+
+
+## The recordings let go of (the game closing).
+static func _let_go() -> void:
+	_mutex.lock()
+	_bank.clear()
+	_mutex.unlock()
 
 
 func _play_3d(sound: StringName, at: Vector3, volume: float, pitch: float) -> void:
@@ -698,10 +729,16 @@ func _play_3d(sound: StringName, at: Vector3, volume: float, pitch: float) -> vo
 	if chosen == null:
 		return
 
-	var player := _free_player_3d()
+	# Out of hearing: no voice taken, no walls looked for. (The take is
+	# still picked, so the dice fall the same either way.)
+	var camera := get_viewport().get_camera_3d()
+
+	if camera != null and camera.global_position.distance_to(at) > REACH:
+		return
+
+	var player := _free_player_3d(camera)
 	player.stream = chosen
 	player.pitch_scale = clampf(pitch, 0.25, 4.0)
-	var camera := get_viewport().get_camera_3d()
 	player.bus = bus_for_distance(camera.global_position.distance_to(at)) if camera != null else BUS_WORLD
 
 	# Through a wall: muffled and quieter; round a corner, a little. In the
@@ -778,7 +815,8 @@ func _occlusion(at: Vector3) -> float:
 	if from.distance_to(camera.global_position) > 2.5 or to.distance_to(at) > 2.5:
 		return 1.0
 
-	var path := NavigationServer3D.map_get_path(map, from, to, true)
+	# Through doors locked or not (NavBaker).
+	var path := NavigationServer3D.map_get_path(map, from, to, true, 0xFFFFFFFF)
 
 	if path.is_empty() or path[path.size() - 1].distance_to(to) > 0.5:
 		return 1.0
@@ -817,8 +855,9 @@ static func health_of(you: Node, dead_is_whole := true) -> float:
 
 ## Every frame: the room sounded out now and then and the reverb eased
 ## toward it; how dull your hurt makes the world; your heart.
-func _process(delta: float) -> void:
-	var real := delta / maxf(Engine.time_scale, 0.05)
+func _process(_delta: float) -> void:
+	var real := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
+	_last_real = TimeFx.real_time()
 	var camera := get_viewport().get_camera_3d()
 
 	if camera != null:
@@ -905,8 +944,8 @@ func _play_flat(sound: StringName, volume: float, pitch: float) -> void:
 	if chosen == null:
 		return
 
-	var player := _players_flat[_cursor_flat]
-	_cursor_flat = (_cursor_flat + 1) % _players_flat.size()
+	var player := _free_player_flat()
+	player.set_meta(&"sound", sound)
 	player.stream = chosen
 	player.bus = BUS_MUSIC if sound in MUSICAL else BUS_BODY
 	player.volume_db = volume + volume_db
@@ -914,8 +953,9 @@ func _play_flat(sound: StringName, volume: float, pitch: float) -> void:
 	player.play()
 
 
-## A player not in use, or failing that the one used longest ago.
-func _free_player_3d() -> AudioStreamPlayer3D:
+## A player not in use, or failing that the one heard least (the furthest
+## and quietest, from `camera`), or without one the one used longest ago.
+func _free_player_3d(camera: Camera3D = null) -> AudioStreamPlayer3D:
 	for i in range(_players_3d.size()):
 		var index := (_cursor_3d + i) % _players_3d.size()
 
@@ -924,8 +964,49 @@ func _free_player_3d() -> AudioStreamPlayer3D:
 			return _players_3d[index]
 
 	var player := _players_3d[_cursor_3d]
-	_cursor_3d = (_cursor_3d + 1) % _players_3d.size()
+
+	if camera != null:
+		var least := INF
+
+		for other in _players_3d:
+			var off := maxf(camera.global_position.distance_to(other.global_position), NEAR)
+			var heard := other.volume_db - 20.0 * log(off / other.unit_size) / log(10.0)
+
+			if heard < least:
+				least = heard
+				player = other
+
+	_cursor_3d = (_players_3d.find(player) + 1) % _players_3d.size()
 	return player
+
+
+## A player in your head not in use, or failing that the one used longest
+## ago that is not playing the score's hit: a step or a heartbeat never cuts
+## a sting short.
+func _free_player_flat() -> AudioStreamPlayer:
+	var count := _players_flat.size()
+	var pick := -1
+
+	for i in range(count):
+		var index := (_cursor_flat + i) % count
+
+		if not _players_flat[index].playing:
+			pick = index
+			break
+
+	if pick < 0:
+		for i in range(count):
+			var index := (_cursor_flat + i) % count
+
+			if not (_players_flat[index].get_meta(&"sound", &"") in MUSICAL):
+				pick = index
+				break
+
+	if pick < 0:
+		pick = _cursor_flat
+
+	_cursor_flat = (pick + 1) % count
+	return _players_flat[pick]
 
 
 func _busy() -> int:
@@ -944,6 +1025,9 @@ func _busy() -> int:
 
 func _warm_all() -> void:
 	for sound in GAIN.keys():
+		if _stop_warming:
+			return
+
 		_mutex.lock()
 		var known: bool = _bank.has(sound) and (_bank[sound] as Array).size() >= VARIANTS
 		_mutex.unlock()

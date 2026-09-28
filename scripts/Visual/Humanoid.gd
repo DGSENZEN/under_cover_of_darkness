@@ -644,7 +644,7 @@ func sever(bone: StringName, velocity := Vector3.ZERO) -> RigidBody3D:
 
 	var root := skeleton.find_bone(bone)
 
-	if root < 0 or (severed != null and bone in severed.bones):
+	if root < 0 or is_severed(bone):
 		return null
 
 	var taken := _bones_under(root)
@@ -691,6 +691,23 @@ func sever(bone: StringName, velocity := Vector3.ZERO) -> RigidBody3D:
 
 	_stump(bone)
 	return piece
+
+
+## Already gone from him: `bone`, or a part it hung from (a calf goes with
+## its thigh).
+func is_severed(bone: StringName) -> bool:
+	if severed == null or skeleton == null:
+		return false
+
+	var at := skeleton.find_bone(bone)
+
+	while at >= 0:
+		if StringName(skeleton.get_bone_name(at)) in severed.bones:
+			return true
+
+		at = skeleton.get_bone_parent(at)
+
+	return false
 
 
 ## The skinned meshes he wears that put weight on any of `bones` (skeleton

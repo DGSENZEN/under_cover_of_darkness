@@ -419,7 +419,7 @@ func member_died(guard: Node3D, killed := true) -> void:
 	_lost += 1
 
 	if killed and target() != null:
-		GarrisonScript.of(target()).on_death(was_leader)
+		GarrisonScript.of(target()).on_death(was_leader, called)
 
 	if was_leader:
 		_leader = null
@@ -917,8 +917,10 @@ func _give_places(alive: Array, now: float) -> void:
 		_roles[watcher.get_instance_id()] = &"lookout"
 
 	# Already on his way for help: he keeps going until he has fetched him.
+	# On his knees begging you, he is going nowhere: the man he was to fetch
+	# is free for another to.
 	for man in melee.duplicate() + archers.duplicate():
-		if helper_of(man) != null:
+		if not _pleading(man) and helper_of(man) != null:
 			_roles[man.get_instance_id()] = &"fetch"
 			melee.erase(man)
 			archers.erase(man)
@@ -965,7 +967,7 @@ func _give_places(alive: Array, now: float) -> void:
 				var sent: Node3D = null
 
 				for man in rallying:
-					if man != lead_now and (sent == null or resolve_of(man) < resolve_of(sent)):
+					if man != lead_now and not _pleading(man) and (sent == null or resolve_of(man) < resolve_of(sent)):
 						sent = man
 
 				if sent != null and _assign_fetch(sent):
@@ -1024,6 +1026,10 @@ func _give_places(alive: Array, now: float) -> void:
 			if man == lead:
 				score -= 0.8
 
+			# Knocked off his feet: not the man in front while another is up.
+			if man.has_method("is_downed") and man.is_downed():
+				score += 50.0
+
 			if _health_of(man) < 0.3:
 				score += 3.0
 
@@ -1050,7 +1056,7 @@ func _give_places(alive: Array, now: float) -> void:
 	# Worn down in front: he steps back, and a fresher man takes his place.
 	if not breaking and now - _last_swap > 5.0 and melee.size() >= 2 and _health_of(front) < 0.3:
 		for man in melee:
-			if man != front and _health_of(man) > 0.6:
+			if man != front and _health_of(man) > 0.6 and not (man.has_method("is_downed") and man.is_downed()):
 				_swapped_out = weakref(front)
 				front = man
 				_last_swap = now
@@ -1947,6 +1953,12 @@ static func _guile(guard: Node) -> float:
 static func _kind(guard: Node) -> StringName:
 	var archetype: Variant = guard.get("archetype")
 	return archetype if archetype is StringName else StringName(str(archetype)) if archetype != null else &""
+
+
+## On his knees begging you (GuardMercy).
+static func _pleading(guard: Node) -> bool:
+	var mercy: RefCounted = guard.get("_mercy")
+	return mercy != null and bool(mercy.pleading)
 
 
 static func _health_of(guard: Node) -> float:
