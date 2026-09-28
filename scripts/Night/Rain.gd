@@ -31,9 +31,10 @@ func _ready() -> void:
 	_splashes.name = "Splashes"
 	_splashes.amount = 600
 	_splashes.lifetime = 0.25
-	# (a sub-emitter is driven by the drops' collisions, never on its own, but
-	# is only drawn while emitting)
-	_splashes.emitting = true
+	# (a sub-emitter is driven by the drops' collisions, but is only drawn
+	# while emitting, and then throws a few of its own too: on only while it
+	# rains, its own thrown far below the world)
+	_splashes.emitting = false
 	_splashes.local_coords = false
 	# (a seed of its own: starting to emit would roll the world's dice)
 	_splashes.use_fixed_seed = true
@@ -44,6 +45,7 @@ func _ready() -> void:
 	splash.initial_velocity_min = 0.6
 	splash.initial_velocity_max = 1.4
 	splash.gravity = Vector3(0.0, -9.0, 0.0)
+	splash.emission_shape_offset = Vector3(0.0, -1000.0, 0.0)
 	_splashes.process_material = splash
 	var dot := QuadMesh.new()
 	dot.size = Vector2(0.05, 0.05)
@@ -111,6 +113,7 @@ func _process(delta: float) -> void:
 
 	var raining := amount > 0.01
 	_drops.emitting = raining
+	_splashes.emitting = raining
 	_drops.amount_ratio = clampf(amount, 0.0, 1.0)
 	_field.visible = raining
 	_falling.gravity = Vector3(wind.x * SLANT * FALL, -4.0, wind.z * SLANT * FALL)

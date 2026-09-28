@@ -302,6 +302,13 @@ func _states() -> void:
 	night.to(&"clear", 0.0)
 	await _frames(2)
 	var clear_eye := environment.tonemap_exposure
+	# R3 no stray splashes: in the dry the splash emitter is off, and what it
+	# would throw of its own (not where a drop lands) is far out of sight
+	var splashes3 := night.get_node("Rain/Splashes") as GPUParticles3D
+	var own3 := (splashes3.process_material as ParticleProcessMaterial).emission_shape_offset
+	_check("R3 no stray splashes: off in the dry; nothing thrown but where drops land",
+		not splashes3.emitting and own3.y < -100.0, "emitting %s, its own at %s" % [splashes3.emitting, own3])
+
 	# W9 the eye opens in the rain: the picture's exposure up under a storm (a
 	# look only: the lights, and what the guards and the gem see, are as they
 	# are), and back in the clear
