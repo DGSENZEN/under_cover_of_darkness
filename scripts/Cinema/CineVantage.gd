@@ -130,8 +130,9 @@ static func clear(space: PhysicsDirectSpaceState3D, at: Vector3) -> bool:
 
 
 ## How much of the frame from `at` onto `look` (through `fov`, `aspect`) is
-## stone at the lens (0..1): of sight lines across it, the share that meet a
-## wall nearer than FILL_NEAR or FILL_SHARE of the way to what it looks at.
+## filled at the lens (0..1): of sight lines across it, the share that meet a
+## wall, or another man's back (`exclude`: the shot's own men), nearer than
+## FILL_NEAR or FILL_SHARE of the way to what it looks at.
 static func fill(space: PhysicsDirectSpaceState3D, at: Vector3, look: Vector3, fov: float, aspect: float, exclude: Array[RID]) -> float:
 	var view := look - at
 	var distance := view.length()
@@ -150,7 +151,7 @@ static func fill(space: PhysicsDirectSpaceState3D, at: Vector3, look: Vector3, f
 
 	for column in FILL_COLUMNS:
 		for row in FILL_ROWS:
-			var query := PhysicsRayQueryParameters3D.create(at, look + right * half_h * float(column) + up * half_v * float(row), 1, exclude)
+			var query := PhysicsRayQueryParameters3D.create(at, look + right * half_h * float(column) + up * half_v * float(row), 1 | BODIES, exclude)
 			query.collide_with_areas = false
 			var hit := space.intersect_ray(query)
 

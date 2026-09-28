@@ -2251,6 +2251,26 @@ func _picture() -> void:
 	for b in [runner20, left20, right20]:
 		b.queue_free()
 
+	# P21 another man's back at the lens fills the frame as stone would (a
+	# place with one there is not taken; one walking in crowds the shot); the
+	# shot's own men never count against it
+	var subject21 := _body(Vector3(2800, 0, 0))
+	var near21 := _body(Vector3(2800, 0, 4.3))
+	await _frames(3)
+	var from21 := Vector3(2800, 1.6, 5.0)
+	var head21 := CineShot.head_of(subject21)
+	var rids21: Array[RID] = [subject21.get_rid()]
+	var filled21: float = CineVantage.fill(space, from21, head21, 40.0, 16.0 / 9.0, rids21)
+	near21.global_position = Vector3(2803, 0, 4.3)
+	await _frames(3)
+	var aside21: float = CineVantage.fill(space, from21, head21, 40.0, 16.0 / 9.0, rids21)
+	var own21: float = CineVantage.fill(space, Vector3(2800, 1.6, 1.0), head21, 40.0, 16.0 / 9.0, rids21)
+	_check("P21 another man's back at the lens fills the frame; stepped aside it is clear; its own man never counts",
+		filled21 >= CineEditor.CROWDED_FILL and aside21 < 0.1 and own21 < 0.1, "at the lens %.2f, aside %.2f, its own man up close %.2f" % [filled21, aside21, own21])
+
+	for b in [subject21, near21]:
+		b.queue_free()
+
 	for b in [a1, blocker, a3, speaker4, listener4, man5, other5, a7, b7, a10, b10, a11, b11, a12, man14] + ring9:
 		b.queue_free()
 
