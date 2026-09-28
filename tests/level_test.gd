@@ -294,6 +294,89 @@ func _garrison() -> void:
 	_check("G9 a man sent to the bell runs to it and rings it", rung9[0] == tam9,
 		"rung by %s, Tam at %s" % [rung9[0].name if rung9[0] != null else "nobody", tam9.global_position.snapped(Vector3.ONE * 0.1)])
 
+	# G13 every marker made into its node: doors, stations, the cast, the
+	# bell, ladders, vantages, hiding places, hunt areas, rounds, and a light
+	# at every light marker
+	var unmade := []
+	var counts13 := {"door": get_tree().get_nodes_in_group(&"doors").size(), "station": map._stations.size(), "guard": map.cast.size(),
+		"bell": get_tree().get_nodes_in_group(&"alarm_bells").size(), "vantage": get_tree().get_nodes_in_group(&"cine_vantage").size(),
+		"hide": get_tree().get_nodes_in_group(&"hide_spot").size(), "hunt_area": get_tree().get_nodes_in_group(&"hunt_area").size()}
+
+	for ucd in counts13:
+		if int(counts13[ucd]) != level.of(ucd).size():
+			unmade.append("%s: %d of %d" % [ucd, counts13[ucd], level.of(ucd).size()])
+
+	for m in level.of("ladder"):
+		if map.get_node_or_null(NodePath(String(m["name"]))) == null:
+			unmade.append("ladder %s" % m["name"])
+
+	for m in level.of("route"):
+		var round13: Node = map._routes.get(m["name"])
+		if round13 == null or round13.get_child_count() < 2:
+			unmade.append("round %s" % m["name"])
+
+	var lit13: Array = map.find_children("*", "Light3D", true, false).map(func(l): return (l as Node3D).global_position)
+
+	for m in level.of("light"):
+		var at13: Vector3 = (m["transform"] as Transform3D).origin
+		# (In plan: a lamp's light hangs at its head above its foot, a
+		# chandelier's below where it hangs from.)
+		if not lit13.any(func(p): return Vector2((p as Vector3).x - at13.x, (p as Vector3).z - at13.z).length() < 1.5 and absf((p as Vector3).y - at13.y) < 4.0):
+			unmade.append("no light at %s (%s)" % [m["name"], m["props"]["kind"]])
+
+	_check("G13 every marker is made into its node: doors, stations, the cast, the bell, ladders, vantages, hiding places, hunt areas, rounds, a light at every light",
+		unmade.is_empty(), "%s" % [unmade.slice(0, 10)])
+
+	# G11 a door in his way opens for a guard: sent to look at something in
+	# the storehouse, the man at the colonnade goes in through its door
+	var door11: Node = map.doors.get("storehouse_door")
+	var looker11: Node3D = map.cast["Hendrik"]
+	var inside11 := Vector3(-24.0, 0.0, 6.5)
+	var opened11 := [false]
+	looker11.notice(inside11, &"test")
+	await _until(func():
+		if door11 != null and bool(door11.is_open):
+			opened11[0] = true
+		return opened11[0] and looker11.global_position.distance_to(inside11) < 2.0, 2400)
+	_check("G11 a door in his way opens for a guard: he goes through into the storehouse",
+		door11 != null and opened11[0] and looker11.global_position.distance_to(inside11) < 2.0,
+		"door %s, opened %s, he is %.1f m from the place" % [door11 != null, opened11[0], looker11.global_position.distance_to(inside11)])
+
+	# G12 every zone: the camera in it (where no smaller zone is) is in its
+	# grade, eased in
+	var zoned12 := []
+	var probe12 := Camera3D.new()
+	add_child(probe12)
+	probe12.make_current()
+
+	for m in level.of("zone"):
+		var size12: Vector3 = m["size"]
+		var box12 := AABB((m["transform"] as Transform3D).origin - size12 * 0.5, size12)
+		var grade12 := String(m["props"]["grade"])
+		var spot12 := Vector3.INF
+
+		for f in [Vector3(0.5, 0.5, 0.5), Vector3(0.2, 0.5, 0.2), Vector3(0.8, 0.5, 0.8), Vector3(0.2, 0.5, 0.8), Vector3(0.8, 0.5, 0.2)]:
+			var at12: Vector3 = box12.position + box12.size * (f as Vector3)
+			if level.zones.zone_at(at12) == String(m["name"]):
+				spot12 = at12
+				break
+
+		if spot12 == Vector3.INF:
+			zoned12.append("%s: nowhere its own" % m["name"])
+			continue
+
+		probe12.global_position = spot12
+		# (Eased over Zones.EASE a second: four of them, all but settled.)
+		await _seconds(4.0)
+		var eased12: bool = absf(float(level.zones.look()["saturation"]) - float(level.zones.GRADES[grade12]["saturation"])) < 0.03
+
+		if level.zones.current != grade12 or not eased12:
+			zoned12.append("%s: %s, saturation %.2f" % [m["name"], level.zones.current, float(level.zones.look()["saturation"])])
+
+	probe12.queue_free()
+	camera.make_current()
+	_check("G12 every zone's grade eases in with the camera in it", zoned12.is_empty(), "%s" % [zoned12])
+
 	# G10 the ladder pulled up behind a man on the range's roof: nobody
 	# follows him straight up (the only way now is round by the flights and
 	# the wall-walk), and he can still come down by the drop at its corner
