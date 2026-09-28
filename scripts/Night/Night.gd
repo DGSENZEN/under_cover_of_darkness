@@ -103,6 +103,10 @@ signal thundered(delay: float)
 
 var state: StringName = &"clear"
 var wetness := 0.0
+## The atmosphere zone the camera is in (scripts/Level/Zones.gd): its fog,
+## times the level's and the weather's, and its colour.
+var zone_fog := 1.0
+var zone_fog_color := Color(0, 0, 0, 0)
 
 var _now := {}
 var _from := {}
@@ -487,7 +491,10 @@ func _apply(air: Vector3) -> void:
 
 	if environment != null:
 		environment.ambient_light_energy = _ambient_base * lerpf(1.0, AMBIENT_CLOUDED, cover)
-		environment.volumetric_fog_density = _fog_base * float(_now.get("fog", 1.0))
+		environment.volumetric_fog_density = _fog_base * float(_now.get("fog", 1.0)) * zone_fog
+
+		if zone_fog_color.a > 0.0:
+			environment.volumetric_fog_albedo = zone_fog_color
 
 	SoundBus.masking_db = masking_db()
 	var atmosphere := get_tree().get_first_node_in_group(&"atmosphere") if is_inside_tree() else null

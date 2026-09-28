@@ -26,6 +26,21 @@ const SLOTS := {
 	&"horn": {"photo": "", "colour": Color("C8964B"), "metallic": 0.0, "roughness": 0.85},
 	&"char": {"photo": "", "colour": Color("1C1714"), "metallic": 0.0, "roughness": 0.85},
 	&"coal": {"photo": "", "colour": Color("2B1A12"), "metallic": 0.0, "roughness": 0.85},
+	# The level kit's (tools/level): walls, floors, roofs, dressing.
+	&"plaster": {"photo": "plaster", "colour": Color("7A7163"), "metallic": 0.0, "roughness": 0.9},
+	&"timber": {"photo": "timber", "colour": Color("3E2C1E"), "metallic": 0.0, "roughness": 0.85},
+	&"cobble": {"photo": "cobble", "colour": Color("4E4B46"), "metallic": 0.0, "roughness": 0.9},
+	&"flagstone": {"photo": "flagstone", "colour": Color("5C5852"), "metallic": 0.0, "roughness": 0.9},
+	&"boards": {"photo": "boards", "colour": Color("4D3825"), "metallic": 0.0, "roughness": 0.85},
+	&"slate": {"photo": "slate", "colour": Color("2B2D33"), "metallic": 0.0, "roughness": 0.8},
+	&"grass": {"photo": "grass", "colour": Color("2E3A20"), "metallic": 0.0, "roughness": 0.95},
+	&"mud": {"photo": "mud", "colour": Color("3A2E20"), "metallic": 0.0, "roughness": 0.9},
+	&"gravel": {"photo": "gravel", "colour": Color("55514B"), "metallic": 0.0, "roughness": 0.95},
+	&"carpet": {"photo": "carpet", "colour": Color("5E1712"), "metallic": 0.0, "roughness": 0.95},
+	&"leaves": {"photo": "leaves", "colour": Color("1F2B16"), "metallic": 0.0, "roughness": 0.95},
+	&"straw": {"photo": "", "colour": Color("8A7238"), "metallic": 0.0, "roughness": 0.95},
+	&"cloth": {"photo": "", "colour": Color("6E1414"), "metallic": 0.0, "roughness": 0.95},
+	&"glass_lit": {"photo": "", "colour": Color("FFB765"), "metallic": 0.0, "roughness": 0.4},
 }
 
 const GLOW := preload("res://scripts/Visual/Lights/glow.gdshader")
