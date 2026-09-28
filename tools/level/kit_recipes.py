@@ -89,10 +89,10 @@ def _with_opening(width, depth, height, gap_w, gap_h, sill, slot):
 
 for material, (slot, surface) in WALLS.items():
     for depth, suffix in ((OUTER, ""), (INNER, "_thin")):
-        for length in (1, 2, 4):
-            piece("wall_%s%s_%d" % (material, suffix, length), "wall", slot, surface,
-                  [box(0.0, STOREY / 2.0, 0.0, float(length), STOREY, depth, slot)],
-                  size=[float(length), STOREY, depth])
+        for length, label in ((1.0, "1"), (2.0, "2"), (2.4, "2p4"), (4.0, "4")):
+            piece("wall_%s%s_%s" % (material, suffix, label), "wall", slot, surface,
+                  [box(0.0, STOREY / 2.0, 0.0, length, STOREY, depth, slot)],
+                  size=[length, STOREY, depth])
 
         piece("wall_%s%s_door" % (material, suffix), "wall", slot, surface,
               _with_opening(2.0, depth, STOREY, DOOR[0], DOOR[1], 0.0, slot),
@@ -137,6 +137,14 @@ for length in (2, 4):
     piece("curtain_%d" % length, "curtain", "ashlar", "stone", _curtain(float(length)),
           size=[float(length), CURTAIN_HEIGHT + PARAPET, CURTAIN_DEPTH])
 
+# The postern: a curtain segment with a door-sized tunnel through it (the walk
+# carries on over it).
+_postern = [box(-1.3, CURTAIN_HEIGHT / 2.0, 0.0, 1.4, CURTAIN_HEIGHT, CURTAIN_DEPTH, "ashlar"),
+            box(1.3, CURTAIN_HEIGHT / 2.0, 0.0, 1.4, CURTAIN_HEIGHT, CURTAIN_DEPTH, "ashlar"),
+            box(0.0, (CURTAIN_HEIGHT + DOOR[1]) / 2.0, 0.0, 1.2, CURTAIN_HEIGHT - DOOR[1], CURTAIN_DEPTH, "ashlar")]
+piece("curtain_postern_4", "curtain", "ashlar", "stone", _postern + _curtain(4.0)[1:],
+      size=[4.0, CURTAIN_HEIGHT + PARAPET, CURTAIN_DEPTH], opening=list(DOOR))
+
 piece("curtain_corner", "curtain", "ashlar", "stone",
       [box(0.0, CURTAIN_HEIGHT / 2.0, 0.0, CURTAIN_DEPTH, CURTAIN_HEIGHT, CURTAIN_DEPTH, "ashlar"),
        box(0.0, CURTAIN_HEIGHT + PARAPET / 2.0, 0.0, CURTAIN_DEPTH, PARAPET, CURTAIN_DEPTH, "ashlar")],
@@ -172,6 +180,14 @@ _steps = int(round(STOREY / RISER))
 piece("stair_straight", "stair", "flagstone", "stone",
       [box(0.0, (i + 1) * RISER / 2.0, i * TREAD + TREAD / 2.0, 1.2, (i + 1) * RISER, TREAD, "flagstone") for i in range(_steps)],
       size=[1.2, STOREY, _steps * TREAD])
+
+# The flight up to the wall-walk (CURTAIN_HEIGHT), 1.4 m wide.
+_curtain_steps = int(round(CURTAIN_HEIGHT / RISER))
+piece("stair_curtain", "stair", "ashlar", "stone",
+      [box(0.0, (i + 1) * RISER / 2.0, i * TREAD + TREAD / 2.0, 1.4, (i + 1) * RISER, TREAD, "ashlar") for i in range(_curtain_steps)],
+      size=[1.4, CURTAIN_HEIGHT, _curtain_steps * TREAD])
+# A landing: a slab whose top is at the pivot, 2 x 2 m.
+piece("landing_2", "floor", "flagstone", "stone", [box(0.0, -0.15, 0.0, 2.0, 0.3, 2.0, "flagstone")], size=[2.0, 0.3, 2.0])
 
 _spiral = []
 
@@ -243,6 +259,7 @@ _thing("hearth", "ashlar", "stone", [box(0.0, 1.4, 0.0, 3.0, 2.8, 1.0, "ashlar")
 _thing("stove", "iron", "metal", [box(0.0, 0.5, 0.0, 0.8, 1.0, 0.8, "iron")], sockets={"fire": [[0.0, 0.6, 0.45]]})
 _thing("map_table", "boards", "wood", [box(0.0, 0.85, 0.0, 1.8, 0.08, 1.2, "boards"), box(0.0, 0.42, 0.0, 0.3, 0.84, 0.3, "timber")])
 _thing("bed", "boards", "wood", [box(0.0, 0.3, 0.0, 1.2, 0.3, 2.1, "boards")])
+_thing("bedroll", "cloth", "dirt", [box(0.0, 0.03, 0.0, 0.9, 0.06, 2.0, "cloth")], solid=False)
 _thing("candle_stand", "iron", "metal", [box(0.0, 0.7, 0.0, 0.2, 1.4, 0.2, "iron")], sockets={"candle": [[0.0, 1.45, 0.0]]})
 _thing("banner", "cloth", "dirt", [box(0.0, 1.6, 0.0, 1.0, 2.4, 0.04, "cloth")], solid=False)
 _thing("chandelier", "iron", "metal", [box(0.0, 0.0, 0.0, 1.6, 0.1, 1.6, "iron"), box(0.0, 1.5, 0.0, 0.05, 3.0, 0.05, "iron")], solid=False,

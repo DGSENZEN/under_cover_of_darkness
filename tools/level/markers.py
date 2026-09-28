@@ -39,7 +39,7 @@ SCHEMA = {
 }
 
 STATION_KINDS = ["sit", "eat", "sleep", "rummage", "carry", "chop", "lean", "pray", "drill"]
-LIGHT_KINDS = ["torch", "brazier", "candle", "lantern", "window", "chandelier", "window_shaft", "hearth", "fire"]
+LIGHT_KINDS = ["torch", "brazier", "candle", "lantern", "window", "chandelier", "window_shaft", "hearth", "fire", "glow", "lamp_post"]
 ARCHETYPES = ["watchman", "swordsman", "archer", "duelist", "brute", "arms_master"]
 GRADES = ["outside", "indoors", "chapel", "cellar", "hearth"]
 

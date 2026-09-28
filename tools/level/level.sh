@@ -6,6 +6,7 @@
 #   tools/level/level.sh build <level>     its layout -> assets/level/source/<level>.blend (then the user's)
 #   tools/level/level.sh check <level>     the rules, nothing written
 #   tools/level/level.sh export <level>    checked, then glTF per sector + the manifest, imported by Godot
+#   tools/level/level.sh preview <level> [out]  a plan and four bird's-eye pictures
 #   tools/level/level.sh all <level>       kit, build, export
 #   tools/level/level.sh test              the rules against broken levels
 #
@@ -45,6 +46,10 @@ case "$verb" in
     "$BLENDER" -b "$SOURCE/$level.blend" --python-exit-code 1 --python "$HERE/export.py" -- "${3:-stage1}"
     perl -e 'alarm 600; exec @ARGV' "$GODOT" --headless --path "$ROOT" --import > /dev/null 2>&1 || true
     echo "level: imported by Godot"
+    ;;
+  preview)
+    need_level
+    "$BLENDER" -b "$SOURCE/$level.blend" --python-exit-code 1 --python "$HERE/preview.py" -- "${3:-$ROOT/tmp_preview}"
     ;;
   all)
     need_level
