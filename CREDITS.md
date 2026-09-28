@@ -54,6 +54,11 @@ Every sound in the game is a recording, cut and levelled from the packs below by
   ([OpenGameArt](https://opengameart.org/content/various-sound-effects-0)), CC0.
 - **Fire beds (campfires, braziers, cressets, the hearth), their crackles and pops, a
   chimney's draw**: "Nature Essentials" from the "Essentials Series" by **NOX SOUND**, CC0.
+- **Rain (calm and strong) and the wind in the weather**: "Nature Essentials" from the
+  "Essentials Series" by **NOX SOUND**, CC0; **dripping under the eaves**: "FilmCow
+  Recorded SFX" by **FilmCow**, used with the user's approval (Sept 27 2026).
+- **Thunder**: "100 CC0 SFX #2" by **rubberduck**
+  ([OpenGameArt](https://opengameart.org/content/100-cc0-sfx-2)), CC0.
 - **Lighting a torch, snuffing a flame, dousing one**: the "400 Sounds Pack" (fire
   lighting, an air burst, a splash), with FilmCow's gas leak; used with the user's
   approval (Sept 27 2026).

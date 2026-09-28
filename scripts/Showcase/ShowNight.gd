@@ -76,6 +76,25 @@ const ROUND_ENOUGH := 3
 const FIRE_FED := 0.7
 const FIRE_LOW := 0.32
 ## The ending's titles.
+## The weather through the night (Night): as each act begins, changes at 0
+## s timed for when its first shot is black (the fade), then any later ones
+## ([state, seconds, after]); and at beats, a change or a veil over the moon
+## (held that long; 0 sends it on).
+const WEATHER_ACTS := {
+	1: [[&"clear", 0.0, 0.55]],
+	2: [[&"clear", 0.0, 0.55]],
+	3: [[&"shower", 0.0, 0.55]],
+	4: [[&"shower", 0.0, 0.55]],
+	5: [[&"storm", 0.0, 0.55], [&"fog", 40.0, 12.0]],
+}
+const WEATHER_BEATS := {
+	# The kill in the dark: a cloud over the moon as he moves in, held
+	# through the knife; the drizzle with the witness.
+	&"his_moment": {"veil": 90.0},
+	&"the_witness": {"veil": 0.0, "to": [&"drizzle", 20.0]},
+	&"trade": {"to": [&"storm", 30.0]},
+}
+
 const ENDING_TITLES := {&"overwhelmed": "V. Overwhelmed", &"victor": "V. The Victor", &"escape": "V. Over the Wall"}
 
 var map: Node3D
@@ -832,3 +851,29 @@ func _heard(text: String, name: String) -> void:
 
 static func _flat(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
+
+
+## The act's weather, as it begins.
+func weather_act(index: int) -> void:
+	var night: Node = map.get("night")
+
+	if night == null:
+		return
+
+	for change in WEATHER_ACTS.get(index, []):
+		night.to(change[0], float(change[1]), float(change[2]))
+
+
+## The beat's weather, if it has any.
+func weather_beat(beat: StringName) -> void:
+	var night: Node = map.get("night")
+	var change: Dictionary = WEATHER_BEATS.get(beat, {})
+
+	if night == null or change.is_empty():
+		return
+
+	if change.has("veil"):
+		night.cover_moon(float(change["veil"]))
+
+	if change.has("to"):
+		night.to(change["to"][0], float(change["to"][1]))

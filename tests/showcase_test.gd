@@ -23,6 +23,7 @@ const CineEvents := preload("res://scripts/Cinema/CineEvents.gd")
 const CineShot := preload("res://scripts/Cinema/CineShot.gd")
 const CineVantage := preload("res://scripts/Cinema/CineVantage.gd")
 const CineScreen := preload("res://scripts/Cinema/CineScreen.gd")
+const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 
 ## Who is at which kind of station at the start of the night.
 const STATIONED := {"Piers": &"sit", "Col": &"eat", "Tam": &"sleep", "Gideon": &"rummage", "Ned": &"carry", "Brand": &"chop"}
@@ -132,6 +133,64 @@ func _run() -> void:
 		bool(map.get_meta(&"cold", false)) and voices36.get("Mirelle") == "pain_f" and voices36.get("Brand") == "pain"
 			and others36.count("pain") >= 4 and others36.count("pain_b") >= 4,
 		"cold %s, voices %s" % [map.get_meta(&"cold", false), voices36])
+
+	# D44 the moonlight, tuned: a man in open moonlight reads 0.25-0.3, under
+	# a cloud about 0.07, in a building's shadow the ambient floor (0.02-0.05);
+	# measured with the moon alone (every other light out for the reading)
+	var night44: Node = map.night
+	var space44: PhysicsDirectSpaceState3D = map.get_world_3d().direct_space_state
+	var toward44: Vector3 = night44.moon.global_basis.z
+	var open44 := Vector3.INF
+
+	for at in [Vector3(-5, 1.2, 5), Vector3(-6, 1.2, 8), Vector3(6, 1.2, 8), Vector3(-9, 1.2, 0), Vector3(0, 1.2, 9)]:
+		var ray44 := PhysicsRayQueryParameters3D.create(at, at + toward44 * 150.0, 1)
+
+		if space44.intersect_ray(ray44).is_empty():
+			open44 = at
+			break
+
+	# (the buildings are open to the sky: the shade is where a wall stands
+	# between the moon and the man, the alley behind the store, the postern)
+	var shade_at44 := Vector3.INF
+
+	for at in [Vector3(18.5, 1.2, 2.0), Vector3(19.0, 1.2, 6.0), Vector3(19.0, 1.2, -8.5), Vector3(-19.0, 1.2, -13.5), Vector3(16.0, 1.2, 2.0)]:
+		var ray44 := PhysicsRayQueryParameters3D.create(at, at + toward44 * 150.0, 1)
+
+		if not space44.intersect_ray(ray44).is_empty():
+			shade_at44 = at
+			break
+
+	var others44: Array = map.find_children("*", "Light3D", true, false).filter(func(l): return l != night44.moon and (l as Light3D).visible)
+
+	for light in others44:
+		(light as Light3D).visible = false
+
+	LightProbe.invalidate()
+	var lit44: float = LightProbe.light_at(map, open44) if open44 != Vector3.INF else -1.0
+	var shade44: float = LightProbe.light_at(map, shade_at44) if shade_at44 != Vector3.INF else -1.0
+	night44.cover_moon(30.0)
+	await _frames(300)
+	LightProbe.invalidate()
+	var clouded44: float = LightProbe.light_at(map, open44) if open44 != Vector3.INF else -1.0
+	night44.cover_moon(0.0)
+
+	for light in others44:
+		(light as Light3D).visible = true
+
+	LightProbe.invalidate()
+	_check("D44 the moonlight is tuned: open moonlight 0.25-0.3, under a cloud about 0.07, a building's shadow the ambient floor",
+		lit44 >= 0.25 and lit44 <= 0.3 and clouded44 >= 0.05 and clouded44 <= 0.09 and shade44 >= 0.02 and shade44 <= 0.05,
+		"open %s %.3f, clouded %.3f, in a wall's shadow %s %.3f" % [open44, lit44, clouded44, shade_at44, shade44])
+
+	# D45 F4 turns the weather on to the next
+	var before45: StringName = night44.state
+	var key45 := InputEventKey.new()
+	key45.physical_keycode = KEY_F4
+	key45.pressed = true
+	map._unhandled_input(key45)
+	var after45: StringName = night44.state
+	night44.to(before45, 0.0)
+	_check("D45 F4 turns the weather on to the next", before45 == &"clear" and after45 == &"cloudy", "%s -> %s" % [before45, after45])
 
 	# D1b the carrier really carries: crates from the cart to the store
 	var drop: Vector3 = map.get_node("CratesDrop").global_position
@@ -710,6 +769,12 @@ func _run() -> void:
 	map9.director.show_ended.connect(func(): ended9[0] = true)
 	var acts9 := []
 	map9.director.act_started.connect(func(index: int, _title: String) -> void: acts9.append([index, editor9.history().size()]))
+	# The weather a second into each act, and the moon's cloud as the knife falls.
+	var weather9 := {}
+	var weather_due9 := []
+	var knife_cover9 := [-1.0]
+	var heard9 := [_heard.size()]
+	map9.director.act_started.connect(func(index: int, _title: String) -> void: weather_due9.append([index, float(editor9._clock) + 0.7]))
 	map9.director.beat_started.connect(func(beat: StringName, _scene: Dictionary) -> void:
 		if beat == &"the_knife":
 			knife_at[0] = float(editor9._clock)
@@ -731,6 +796,14 @@ func _run() -> void:
 					blind9.append([shot["kind"], shot["cause"], shot["how"], String(on[0].get("given_name")), snappedf((on[0] as Node3D).global_position.x, 0.1), snappedf((on[0] as Node3D).global_position.z, 0.1)])
 		if knife_at[0] >= 0.0 and float(editor9._clock) - knife_at[0] > 2.0:
 			bars9.append(editor9.screen().bar_height())
+		for due in weather_due9.duplicate():
+			if float(editor9._clock) >= float(due[1]):
+				weather9[due[0]] = snappedf(float(map9.night.rain()), 0.01)
+				weather_due9.erase(due)
+		while heard9[0] < _heard.size():
+			if _heard[heard9[0]][0] == &"knife" and knife_cover9[0] < 0.0:
+				knife_cover9[0] = float(map9.night.cloud_cover())
+			heard9[0] += 1
 		return ended9[0], 25200)
 	_check("D9 the whole night from Act I plays to its end in under 7 minutes of game time",
 		ended9[0] and frames9[0] < 25200,
@@ -749,6 +822,14 @@ func _run() -> void:
 	_check("D37 from the knife on the letterbox is up and the shots are short (8 s or less on average)",
 		knife_at[0] >= 0.0 and bars_up and drama9.size() >= 5 and mean9 <= 8.0,
 		"knife at %.1f, %d shots, mean %.1f s, bar %s of %.1f; causes %s" % [knife_at[0], drama9.size(), mean9, bars9.slice(bars9.size() - 1) if not bars9.is_empty() else [], target9, _tally(drama9.map(func(sh): return String(sh["kind"]) + "/" + String(sh["cause"])))])
+
+	# D43 the weather follows the story, and the knife falls in the dark
+	# (read by its rain as each act's first shot comes up: clear 0, shower 0.6,
+	# storm 1; a beat may already be easing it on)
+	var wanted43 := {1: 0.0, 2: 0.0, 3: 0.6, 4: 0.6, 5: 1.0}
+	var fits43 := wanted43.keys().all(func(k): return weather9.has(k) and absf(float(weather9[k]) - float(wanted43[k])) <= 0.05)
+	_check("D43 each act opens in its weather (clear, clear, shower, shower, storm), and the knife falls with the moon clouded",
+		fits43 and weather9.size() == 5 and knife_cover9[0] >= 0.9, "rain as each act opens %s, the moon's cloud at the knife %.2f" % [weather9, knife_cover9[0]])
 
 	# D41 each act opens through black
 	var opened41 := acts9.map(func(act): return [act[0], editor9.history()[act[1]]["how"] if editor9.history().size() > act[1] else &"none"])

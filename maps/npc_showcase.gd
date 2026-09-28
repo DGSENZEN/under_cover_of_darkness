@@ -47,6 +47,7 @@ const Props := preload("res://scripts/Interaction/Props.gd")
 const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
+const NightScript := preload("res://scripts/Night/Night.gd")
 const FireScript := preload("res://scripts/Combat/Fire.gd")
 const AlarmBellScript := preload("res://scripts/Interaction/AlarmBell.gd")
 const WaterScript := preload("res://scripts/Interaction/WaterVolume.gd")
@@ -107,6 +108,14 @@ static var seed_override := -1
 ## relieved of his own accord (the night's beats change the watch).
 const HOUR := 90.0
 const POST_TURN := 600.0
+## The moonlight (Night dims it under cloud), the sky's ambient and the
+## picture's exposure (see _lights).
+const MOON_ENERGY := 0.375
+const AMBIENT_ENERGY := 0.1
+const EXPOSURE := 1.6
+## Low spots in the yard where the rain puddles.
+const PUDDLES: Array[Vector3] = [Vector3(-8, 0.02, 3), Vector3(5, 0.02, -4.5), Vector3(-3, 0.02, 9), Vector3(8.5, 0.02, 10.5),
+	Vector3(-11, 0.02, -6), Vector3(4, 0.02, 12.5)]
 ## The fire: well fed at dusk, burning down over this long.
 const FIRE_FUEL := 0.9
 const FIRE_BURNS := 240.0
@@ -131,6 +140,9 @@ var _routes := {}
 var fire: Area3D = null
 var rota: RefCounted = null
 var atmosphere: Node3D = null
+## The moon, its clouds and the weather.
+var night: Node3D = null
+var _wet_materials: Array[StandardMaterial3D] = []
 
 
 func _ready() -> void:
@@ -185,6 +197,9 @@ func _ready() -> void:
 		director.act_started.connect(func(_index: int, act_title: String) -> void: overlay.title(act_title))
 		# Each act opens through black.
 		director.act_started.connect(func(_index: int, _title: String) -> void: camera.fade_next())
+		# The weather follows the story (ShowNight).
+		director.act_started.connect(func(index: int, _title: String) -> void: story.weather_act(index))
+		director.beat_started.connect(func(beat: StringName, _scene: Dictionary) -> void: story.weather_beat(beat))
 		camera.following.connect(overlay.name_card)
 		director.ending_chosen.connect(func(ending: StringName) -> void: overlay.toast("Ending: %s" % String(ending)))
 		director.speed_changed.connect(func(scale: float) -> void: overlay.toast("Speed x%s" % String.num(scale, 2)))
@@ -509,16 +524,20 @@ func _marks() -> void:
 
 
 func _lights() -> void:
-	var environment := RetroScript.night_environment(Color(0.34, 0.34, 0.42), 0.28)
-	environment.background_color = Color(0.025, 0.035, 0.07)
+	# The moonlight as the canal quarter's is tuned (a man in open moonlight
+	# reads 0.28, under a cloud about 0.07, in a building's shadow the ambient
+	# floor, 0.035); the picture's exposure raised to keep the yard as bright
+	# to the eye as it was.
+	var environment := RetroScript.night_environment(Color(0.34, 0.34, 0.42), AMBIENT_ENERGY)
 	environment.volumetric_fog_density = 0.01
+	environment.tonemap_exposure = EXPOSURE
 	var world := WorldEnvironment.new()
 	world.environment = environment
 	add_child(world)
 
 	var moon := DirectionalLight3D.new()
 	moon.light_color = Color(0.55, 0.65, 0.95)
-	moon.light_energy = 0.75
+	moon.light_energy = MOON_ENERGY
 	moon.shadow_enabled = true
 	moon.light_volumetric_fog_energy = 4.0
 	moon.directional_shadow_max_distance = 60.0
@@ -534,6 +553,32 @@ func _lights() -> void:
 			[Vector3(11.3, 2.3, 5.2), 1.8], [Vector3(13.6, 2.5, -0.5), 1.4], [Vector3(-16.4, 2.4, 1.0), 1.6],
 			[Vector3(-20.4, 2.6, 10.5), 1.8], [Vector3(20.4, 2.4, -10.2), 0.7]]:
 		_torch(torch[0], torch[1])
+
+	# The sky, the moon's clouds and the weather (made with the level, before
+	# the night's dice are seeded).
+	night = NightScript.new()
+	night.name = "Night"
+	night.moon = moon
+	night.environment = environment
+	night.seed = 1932
+	night.puddles = PUDDLES
+	var mist: Array[AABB] = [AABB(Vector3(-30, -0.5, -25), Vector3(60, 3.0, 50))]
+	night.mist_boxes = mist
+	add_child(night)
+
+	for material in _wet_materials:
+		night.register_wet(material)
+
+
+## F4: the next weather (to look at each).
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and (event as InputEventKey).physical_keycode == KEY_F4 and night != null:
+		night.cycle()
+
+		if overlay != null:
+			overlay.toast("Weather: %s" % String(night.state))
+
+		get_viewport().set_input_as_handled()
 
 
 # ---------------------------------------------------------------------------
@@ -609,6 +654,7 @@ func _brush(center: Vector3, size: Vector3, texture: Texture2D, tile: float, sur
 	material.uv1_world_triplanar = true
 	material.uv1_scale = Vector3.ONE / tile
 	material.roughness = 0.92
+	_wet_materials.append(material)
 
 	for child in body.get_children():
 		if child is MeshInstance3D:

@@ -130,6 +130,11 @@ static func fallbacks() -> Array[StringName]:
 	return missing
 
 
+## Every shared surface made so far (Night wets them).
+static func surfaces() -> Array:
+	return _surfaces.values()
+
+
 static func clear_cache() -> void:
 	_surfaces.clear()
 	_glowing.clear()

@@ -52,6 +52,8 @@ const KINDS := {
 
 ## 2 everything; 1 no moths; 0 no moths and no leaves.
 var quality := 2
+## How hard the weather lets the wind blow (Night): 1 as it was made.
+var strength := 1.0
 
 var _time := 0.0
 var _forced: Variant = null
@@ -135,7 +137,7 @@ func wind() -> Vector3:
 
 	var gust := clampf(0.5 + 0.7 * _noise.get_noise_1d(_time * GUST_PACE * 10.0), 0.0, 1.0)
 	var turn := WIND_WANDER * _noise.get_noise_1d(500.0 + _time * 0.5)
-	return WIND_FROM.normalized().rotated(Vector3.UP, turn) * gust
+	return WIND_FROM.normalized().rotated(Vector3.UP, turn) * gust * strength
 
 
 func breath_of(man: Node) -> Object:
@@ -208,13 +210,14 @@ func _process(delta: float) -> void:
 	_update_breaths()
 	_update_embers()
 	_leaves.emitting = quality >= 1
-	_leaves.amount_ratio = air.length()
+	_leaves.amount_ratio = clampf(air.length(), 0.0, 1.0)
 	_update_moths()
 	_update_crows(delta)
 
 	for torch in get_tree().get_nodes_in_group(&"torches"):
 		if torch.has_method("lean"):
-			torch.lean(air)
+			# (a storm's wind bends the flames as far as they bend)
+			torch.lean(air.limit_length(1.5))
 
 	for puffs in _all_puffs():
 		_emit(puffs, delta, air)

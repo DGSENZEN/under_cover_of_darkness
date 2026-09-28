@@ -48,7 +48,12 @@ cuts only those groups and leaves every other file as it is;
 
     python3 tools/prepare_sfx.py --fire
 
-makes only the fire beds (FIRE_LOOPS). The lights' sounds (CRACKLES,
+makes only the fire beds (FIRE_LOOPS);
+
+    python3 tools/prepare_sfx.py --weather
+
+only the weather's loops (WEATHER_LOOPS: the NOX Essentials' rain and wind,
+FilmCow's dripping), to audio/weather/ for scripts/Night/NightSound.gd. The lights' sounds (CRACKLES,
 LAYERED) are cut from the NOX Essentials (CC0), the 400 Sounds Pack and
 FilmCow's recorded effects (approved by the user), the TomMusic torch and
 Kenney's RPG audio; a layered sound is several recordings laid together.
@@ -436,6 +441,25 @@ FIRE_LOOPS = [
     ("chimney", NOX + "Ambiance_Wind_Calm_Loop_Stereo.wav", 900, 0.7, 12.0),
 ]
 
+# The weather's loops (NightSound), to audio/weather/<name>.wav, as the fire
+# beds are: (name, source, low-pass, pitch, length).
+WEATHER_LOOPS = [
+    ("rain_calm", NOX + "Ambiance_Rain_Calm_Loop_Stereo.wav", None, 1.0, None),
+    ("rain_strong", NOX + "Ambiance_Rain_Strong_Loop_Stereo.wav", None, 1.0, None),
+    ("wind", NOX + "Ambiance_Wind_Calm_Loop_Stereo.wav", 2500, 1.0, None),
+    ("drip", FILMCOW + "ambience - dripping water 1.wav", None, 1.0, 12.0),
+]
+WEATHER_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audio", "weather")
+# Thunder (NightSound, after each flash), from rubberduck's "100 CC0 SFX #2"
+# (CC0, approved Sept 27 2026): its one clap as it is, lower and duller (far
+# off), and higher and sharper (near): (name, source, low-pass, pitch).
+THUNDER = os.path.join(WEB, "100-CC0-SFX-2", "sfx100v2_thunder_01.ogg")
+WEATHER_ONESHOTS = [
+    ("thunder_1", THUNDER, None, 1.0),
+    ("thunder_2", THUNDER, 1600, 0.82),
+    ("thunder_3", THUNDER, 4000, 1.12),
+]
+
 # Crackles: the sharp snaps inside a fire bed, the bed filtered away first
 # (a high-pass, Hz), each cut short: (group, sources, takes, high-pass).
 CRACKLES = [
@@ -684,12 +708,15 @@ compress/mode=2
 """
 
 
-def prepare_fire_loops():
+def prepare_fire_loops(loops=None, out_dir=None, folder="ambience", what="fire loop"):
     """The fire beds, as WAVs that loop (this ffmpeg has no Vorbis encoder;
-    Godot loops a WAV itself: edit/loop_mode 2 in its import settings)."""
-    os.makedirs(AMBIENCE_OUT, exist_ok=True)
+    Godot loops a WAV itself: edit/loop_mode 2 in its import settings). The
+    weather's loops are made the same way (WEATHER_LOOPS)."""
+    loops = FIRE_LOOPS if loops is None else loops
+    out_dir = AMBIENCE_OUT if out_dir is None else out_dir
+    os.makedirs(out_dir, exist_ok=True)
 
-    for name, source, lowpass, pitch, length in FIRE_LOOPS:
+    for name, source, lowpass, pitch, length in loops:
         x = decode_filtered(source, 0.0, 1e9, _filters(lowpass, pitch))
 
         if length:
@@ -701,14 +728,14 @@ def prepare_fire_loops():
             x = x[:-n]
 
         x = peak_normalise(x, -3.0)
-        write_wav(os.path.join(AMBIENCE_OUT, name + ".wav"), x)
-        importer = os.path.join(AMBIENCE_OUT, name + ".wav.import")
+        write_wav(os.path.join(out_dir, name + ".wav"), x)
+        importer = os.path.join(out_dir, name + ".wav.import")
 
         if not os.path.exists(importer):
             with open(importer, "w") as out:
-                out.write(FIRE_IMPORT.format(name=name))
+                out.write(FIRE_IMPORT.format(name=name).replace("res://audio/ambience/", "res://audio/%s/" % folder))
 
-        print("%-12s fire loop, %.2f s, %.1f LUFS" % (name, len(x) / RATE, loudness(x)))
+        print("%-12s %s, %.2f s, %.1f LUFS" % (name, what, len(x) / RATE, loudness(x)))
 
 
 def fade(x, fade_in, fade_out):
@@ -883,6 +910,15 @@ def main():
             only = set(a.split("=", 1)[1].split(","))
         elif a == "--fire":
             prepare_fire_loops()
+            return
+        elif a == "--weather":
+            prepare_fire_loops(WEATHER_LOOPS, WEATHER_OUT, "weather", "weather loop")
+
+            for name, source, lowpass, pitch in WEATHER_ONESHOTS:
+                x = peak_normalise(decode_filtered(source, 0.0, 1e9, _filters(lowpass, pitch)), -1.0)
+                write_wav(os.path.join(WEATHER_OUT, name + ".wav"), x)
+                print("%-12s thunder, %.2f s, %.1f LUFS" % (name, len(x) / RATE, loudness(x)))
+
             return
         else:
             args.append(a)

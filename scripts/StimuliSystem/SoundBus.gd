@@ -16,6 +16,9 @@ const DB_PER_DOUBLING := 7.0
 
 ## Draw every event for a moment. Set from anywhere: SoundBus.debug = true
 static var debug := false
+## The noise floor (dB): rain and wind drowning sounds out (Night). Every
+## sound carries as if it were this much quieter.
+static var masking_db := 0.0
 
 static var _listeners: Array = []
 
@@ -47,7 +50,7 @@ static func emit_sound(position: Vector3, db: float, source: Object, kind: Strin
 	_emit({
 		"position": position,
 		"db": db,
-		"range": range_for(db),
+		"range": range_for(db - masking_db),
 		"source": source,
 		"kind": kind,
 	}, also_skip)
@@ -64,7 +67,7 @@ static func emit_message(position: Vector3, db: float, source: Object, kind: Str
 	_emit({
 		"position": position,
 		"db": db,
-		"range": range_for(db),
+		"range": range_for(db - masking_db),
 		"source": source,
 		"kind": kind,
 		"message": message,
