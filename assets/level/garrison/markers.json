@@ -58,7 +58,8 @@
     "range": 0.0,
     "color": "",
     "cookie": "",
-    "douse": true
+    "douse": true,
+    "chain": 0.0
    },
    "box": false
   },

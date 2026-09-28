@@ -31,6 +31,8 @@ const SLOTS := {
 	&"plaster": {"photo": "plaster", "colour": Color("7A7163"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
 	&"plaster_damaged": {"photo": "plaster_damaged", "colour": Color("736A5C"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
 	&"timber": {"photo": "timber", "colour": Color("3E2C1E"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
+	# Dark oak: the frames on the plaster, joists, trusses.
+	&"beam": {"photo": "beam", "colour": Color("2A1D14"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
 	&"cobble": {"photo": "cobble", "colour": Color("4E4B46"), "metallic": 0.0, "roughness": 0.9, "tile": 1.5},
 	&"flagstone": {"photo": "flagstone", "colour": Color("5C5852"), "metallic": 0.0, "roughness": 0.9, "tile": 2.0},
 	&"boards": {"photo": "boards", "colour": Color("4D3825"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
@@ -45,20 +47,49 @@ const SLOTS := {
 	&"leaves": {"photo": "leaves", "colour": Color("1F2B16"), "metallic": 0.0, "roughness": 0.95, "cut": true},
 	&"straw": {"photo": "", "colour": Color("8A7238"), "metallic": 0.0, "roughness": 0.95},
 	&"cloth": {"photo": "", "colour": Color("6E1414"), "metallic": 0.0, "roughness": 0.95},
-	&"glass_lit": {"photo": "", "colour": Color("FFB765"), "metallic": 0.0, "roughness": 0.4},
+	# A window lit from within: glows its own colour whatever falls on it.
+	&"glass_lit": {"photo": "", "colour": Color("FFB765"), "metallic": 0.0, "roughness": 0.4, "glow": 0.9},
 	# Photos drawn on a piece's own face (its UVs): the chapel's glass, reliefs,
-	# arcade and bands; the lane's house fronts; shutters.
+	# arcade and bands; shutters.
 	&"stained_glass": {"photo": "stained_glass", "colour": Color("7A3A2A"), "metallic": 0.0, "roughness": 0.4, "glow": 0.75},
 	&"stained_glass_small": {"photo": "stained_glass_small", "colour": Color("5E6A4A"), "metallic": 0.0, "roughness": 0.4, "glow": 0.6},
 	&"relief_frieze": {"photo": "relief_frieze", "colour": Color("8C8170"), "metallic": 0.0, "roughness": 0.9},
 	&"relief_angels": {"photo": "relief_angels", "colour": Color("8C8170"), "metallic": 0.0, "roughness": 0.9},
 	&"arcade": {"photo": "arcade", "colour": Color("7C766C"), "metallic": 0.0, "roughness": 0.9},
 	&"ornament": {"photo": "ornament", "colour": Color("7C766C"), "metallic": 0.0, "roughness": 0.9},
-	&"facade_1": {"photo": "facade_1", "colour": Color("6A6052"), "metallic": 0.0, "roughness": 0.9},
-	&"facade_2": {"photo": "facade_2", "colour": Color("6A6052"), "metallic": 0.0, "roughness": 0.9},
-	&"facade_3": {"photo": "facade_3", "colour": Color("6A6052"), "metallic": 0.0, "roughness": 0.9},
-	&"facade_4": {"photo": "facade_4", "colour": Color("6A6052"), "metallic": 0.0, "roughness": 0.9},
 	&"shutters": {"photo": "shutters", "colour": Color("6A6458"), "metallic": 0.0, "roughness": 0.9},
+	# Roofs laid along their slopes (their UVs: the rows along the eaves).
+	&"roof_slate": {"photo": "slate", "colour": Color("2B2D33"), "metallic": 0.0, "roughness": 0.8},
+	&"roof_fish": {"photo": "roof_fish", "colour": Color("303238"), "metallic": 0.0, "roughness": 0.75},
+	&"roof_tiles": {"photo": "roof_tiles", "colour": Color("5E3426"), "metallic": 0.0, "roughness": 0.85},
+	&"roof_shingle": {"photo": "shingles", "colour": Color("3E2E22"), "metallic": 0.0, "roughness": 0.9},
+	&"door_1": {"photo": "door_1", "colour": Color("4A3322"), "metallic": 0.0, "roughness": 0.85},
+	&"door_2": {"photo": "door_2", "colour": Color("4A4238"), "metallic": 0.0, "roughness": 0.85},
+	&"band": {"photo": "band", "colour": Color("857E72"), "metallic": 0.0, "roughness": 0.9},
+	# More walls and floors, mapped to the world.
+	&"limewash": {"photo": "limewash", "colour": Color("8C8472"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0},
+	&"plaster_ochre": {"photo": "plaster_ochre", "colour": Color("8A6E44"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	&"tiles_chancel": {"photo": "tiles_chancel", "colour": Color("7A4A30"), "metallic": 0.0, "roughness": 0.6, "tile": 0.9},
+	# Painted by us (tools/textures/paint.py, committed): the garrison's
+	# banner, the rose window, the altar's frontal, the mess hall's shields.
+	&"banner": {"photo": "banner", "painted": true, "colour": Color("6E1414"), "metallic": 0.0, "roughness": 0.95, "cut": true},
+	&"rose_window": {"photo": "rose_window", "painted": true, "colour": Color("3A3A8A"), "metallic": 0.0, "roughness": 0.4, "glow": 0.7},
+	&"altar_frontal": {"photo": "altar_frontal", "painted": true, "colour": Color("681018"), "metallic": 0.0, "roughness": 0.95},
+	&"shield_1": {"photo": "shield_1", "painted": true, "colour": Color("7A2A18"), "metallic": 0.1, "roughness": 0.8},
+	&"shield_2": {"photo": "shield_2", "painted": true, "colour": Color("2A3A6A"), "metallic": 0.1, "roughness": 0.8},
+	&"shield_3": {"photo": "shield_3", "painted": true, "colour": Color("2A2622"), "metallic": 0.1, "roughness": 0.8},
+	# Small things flat, the baked shade on them: the mess's crocks and
+	# food, sacks, leather, rope; dark glass in the windows nobody lit.
+	&"glass_dark": {"photo": "", "colour": Color("1B2029"), "metallic": 0.2, "roughness": 0.25},
+	&"pottery": {"photo": "", "colour": Color("6E4128"), "metallic": 0.0, "roughness": 0.5},
+	&"pewter": {"photo": "", "colour": Color("7A7A74"), "metallic": 0.45, "roughness": 0.45},
+	&"bread": {"photo": "", "colour": Color("9C6A32"), "metallic": 0.0, "roughness": 0.9},
+	&"cheese": {"photo": "", "colour": Color("C9A24A"), "metallic": 0.0, "roughness": 0.7},
+	&"meat": {"photo": "", "colour": Color("6E2A1E"), "metallic": 0.0, "roughness": 0.6},
+	&"herbs": {"photo": "", "colour": Color("4B5A2A"), "metallic": 0.0, "roughness": 0.95},
+	&"burlap": {"photo": "", "colour": Color("8A7550"), "metallic": 0.0, "roughness": 0.95},
+	&"leather": {"photo": "", "colour": Color("4A2E1C"), "metallic": 0.0, "roughness": 0.7},
+	&"rope": {"photo": "", "colour": Color("7C6A48"), "metallic": 0.0, "roughness": 0.95},
 }
 
 const GLOW := preload("res://scripts/Visual/Lights/glow.gdshader")
@@ -76,8 +107,10 @@ const TRIPLANAR_SHARPNESS := 8.0
 ## A slot nobody knows is drawn this loud, so it is noticed.
 const UNKNOWN := Color("FF00FF")
 
-## Where the converted photos are (tests point it elsewhere).
+## Where the converted photos are (tests point it elsewhere); where the
+## painted ones are.
 static var folder := "res://textures/ps2/"
+const PAINTED := "res://textures/painted/"
 ## slot -> photo name, filled from SLOTS on first use (tests may change one).
 static var photo_names := {}
 
@@ -189,7 +222,7 @@ static func photo(slot: StringName) -> Texture2D:
 	if name.is_empty():
 		return null
 
-	var path := folder.path_join(name + ".png")
+	var path := (PAINTED if bool(SLOTS.get(slot, {}).get("painted", false)) else folder).path_join(name + ".png")
 
 	if not ResourceLoader.exists(path):
 		return null

@@ -22,7 +22,7 @@ SCHEMA = {
     "door": {"required": [], "optional": {"kind": "hinged", "locked": False, "key": "", "label": "", "width": 1.2,
                                           "height": 2.2, "barred": False}, "box": False},
     "light": {"required": ["kind"], "optional": {"lit": True, "energy": 0.0, "range": 0.0, "color": "", "cookie": "",
-                                                 "douse": True}, "box": False},
+                                                 "douse": True, "chain": 0.0}, "box": False},
     "bell": {"required": [], "optional": {"db": 90.0}, "box": False},
     "ladder": {"required": [], "optional": {"rope": False}, "box": True},
     "landmark": {"required": ["label"], "optional": {}, "box": False},

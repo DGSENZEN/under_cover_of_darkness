@@ -58,8 +58,75 @@ class Shapes(unittest.TestCase):
         middle = [y for x, y, z in part["verts"] if abs(x) < 1e-3 and 1.8 < y < 6.0 - 1e-3]
         self.assertTrue(any(abs(y - 5.4) < 1e-3 for y in middle), middle)
 
+    def test_a_lathe_turns_its_profile(self):
+        # A bowl: 0.08 at its foot, 0.15 at its lip 0.07 up.
+        part = kit_shapes.build([kit_shapes.lathe(0.0, 0.0, 0.0, [[0.08, 0.0], [0.13, 0.04], [0.15, 0.07]], 10, "pottery")])
+        low, high = bounds(part)
+        self.assertAlmostEqual(low[1], 0.0, places=5)
+        self.assertAlmostEqual(high[1], 0.07, places=5)
+        self.assertLessEqual(high[0], 0.15 + EPS)
+        self.assertGreater(high[0], 0.14)
+        # (Its foot closed, its mouth open: 10 x 2 bands, a 10-gon underneath.)
+        self.assertEqual(tris(part), 10 * 2 * 2 + 8)
+
+    def test_a_lathe_tipped_lies_along_its_axis(self):
+        # A keg on its side: turned about x.
+        part = kit_shapes.build([kit_shapes.lathe(0.0, 0.3, 0.0, [[0.25, -0.35], [0.3, 0.0], [0.25, 0.35]], 8, "boards", roll=90.0)])
+        low, high = bounds(part)
+        self.assertAlmostEqual(high[0] - low[0], 0.7, places=4)
+        self.assertLess(high[1] - low[1], 0.61)
+
+    def test_a_disc_has_its_photo_across_it(self):
+        part = kit_shapes.build([kit_shapes.disc(0.0, 2.0, 0.0, 1.2, 16, "rose_window")])
+        us = [uv[0] for face in part["faces"] for uv in face[2]]
+        self.assertAlmostEqual(min(us), 0.0, places=5)
+        self.assertAlmostEqual(max(us), 1.0, places=5)
+        low, high = bounds(part)
+        self.assertAlmostEqual(high[1], 3.2, places=5)
+        # (Drawn both ways.)
+        self.assertEqual(len(part["faces"]), 2)
+
+    def test_a_slab_lays_its_photo_along_its_first_edge(self):
+        # A roof's slope: its top from the ridge (y 5) down to the eaves; the
+        # photo's rows run along the ridge, one photo every 1.5 m.
+        corners = [[-2.0, 5.0, 0.0], [2.0, 5.0, 0.0], [2.0, 0.0, 8.0], [-2.0, 0.0, 8.0]]
+        part = kit_shapes.build([kit_shapes.slab(corners, 0.2, "roof_slate", tile=1.5)])
+        top = [f for f in part["faces"] if f[1] == "roof_slate"][0]
+        points = [part["verts"][i] for i in top[0]]
+        normal = kit_shapes._normal(points)
+        self.assertGreater(normal[1], 0.0)
+        self.assertGreater(normal[2], 0.0)
+
+        for p, uv in zip(points, top[2]):
+            self.assertAlmostEqual(uv[0], (p[0] + 2.0) / 1.5, places=5)
+            self.assertAlmostEqual(uv[1], ((p[2] / 8.0) * 9.4339811) / 1.5, places=4)
+
+    def test_a_ring_is_an_arc_of_stone(self):
+        # An arch's hood: a half ring from 2.0 to 2.4 m out, 0.2 deep, over a
+        # springing at y 3.
+        part = kit_shapes.build([kit_shapes.ring(0.0, 3.0, 0.0, 2.0, 2.4, 0.2, 0.0, 180.0, 8, "ashlar")])
+        low, high = bounds(part)
+        self.assertAlmostEqual(low[1], 3.0, places=5)
+        self.assertAlmostEqual(high[1], 5.4, places=4)
+        self.assertAlmostEqual(high[0], 2.4, places=5)
+        self.assertAlmostEqual(high[2] - low[2], 0.2, places=5)
+
+        for x, y, z in part["verts"]:
+            self.assertGreaterEqual(round((x * x + (y - 3.0) ** 2) ** 0.5, 6), 2.0 - 1e-6)
+
+    def test_moved_shapes_turn_about_the_upright(self):
+        # A board along x, turned a quarter: along z, then lifted.
+        shapes = kit_shapes.moved([kit_shapes.box(2.0, 0.0, 0.0, 4.0, 0.2, 0.2, "timber"),
+                                   kit_shapes.slab([[0, 0, 0], [4, 0, 0], [4, 0, 1], [0, 0, 1]], 0.1, "boards")], 90.0, (0.0, 3.0, 0.0))
+        part = kit_shapes.build(shapes)
+        low, high = bounds(part)
+        self.assertAlmostEqual(low[1], 2.9, places=5)
+        self.assertAlmostEqual(high[1], 3.1, places=5)
+        self.assertAlmostEqual(low[2], -4.0, places=5)
+        self.assertLess(high[0] - low[0], 1.3)
+
     def test_a_card_has_its_photo_across_it(self):
-        part = kit_shapes.build([kit_shapes.card(0.0, 1.0, 0.0, 2.0, 2.0, "facade_1")])
+        part = kit_shapes.build([kit_shapes.card(0.0, 1.0, 0.0, 2.0, 2.0, "banner")])
         us = [uv[0] for face in part["faces"] for uv in face[2]]
         vs = [uv[1] for face in part["faces"] for uv in face[2]]
         self.assertAlmostEqual(min(us), 0.0)
@@ -79,15 +146,228 @@ class Roofs(unittest.TestCase):
         self.assertTrue(apex and all(abs(v[0]) < 1e-6 for v in apex))
 
     def test_a_pitched_roof_runs_from_its_eaves_to_its_ridge(self):
-        # A section of the barracks' roof: 16 m across, its ridge 5 m up.
-        recipe = kit_recipes.PIECES["roof_ridge_4x16"]
+        # The barracks' roof: 16 m across, its ridge 5 m up.
+        recipe = kit_recipes.PIECES["roof_16x38"]
         part = kit_shapes.build(recipe["shapes"])
         low, high = bounds(part)
         self.assertLess(low[1], 0.05)
         self.assertGreater(high[1], 5.0)
-        self.assertLess(high[1], 5.6)
+        self.assertLess(high[1], 5.8)
         self.assertGreaterEqual(max(high[2], -low[2]), 8.0)
         self.assertEqual(recipe["cols"], [])
+
+    def test_a_pitched_roof_is_an_a_not_a_v(self):
+        # Its slopes fall from the ridge to the eaves: what is out at the eaves
+        # is low, what is over the middle high; each slope's photo side faces
+        # up and out.
+        for name in ("roof_16x38", "roof_10x21"):
+            part = kit_shapes.build(kit_recipes.PIECES[name]["shapes"])
+            span = kit_recipes.PIECES[name]["span"]
+            eaves = [v[1] for v in part["verts"] if abs(v[2]) > span / 2.0 - 0.01]
+            ridge = [v[1] for v in part["verts"] if abs(v[2]) < 0.3]
+            self.assertLess(max(eaves), 1.0, name)
+            self.assertGreater(max(ridge), span * 0.25, name)
+
+            for indices, slot, _ in part["faces"]:
+                points = [part["verts"][i] for i in indices]
+
+                # (The slopes; not the ridge's tiles over where they meet.)
+                if slot.startswith("roof_") and max(abs(p[2]) for p in points) > 0.5:
+                    normal = kit_shapes._normal(points)
+                    middle_z = sum(p[2] for p in points) / len(points)
+
+                    if abs(normal[1]) > 0.5 * max(abs(n) for n in normal):
+                        self.assertGreater(normal[1], 0.0, "%s: a slope's top faces down" % name)
+                        self.assertGreater(normal[2] * middle_z, -1e-6, "%s: a slope's top faces in" % name)
+
+
+class Houses(unittest.TestCase):
+    """The lanes' houses: modelled, jettied, roofed, each its own."""
+
+    NAMES = ["house_%s" % c for c in "abcdef"]
+
+    def slots(self, part):
+        return {f[1] for f in part["faces"]}
+
+    def test_every_house_is_modelled_door_windows_and_roof(self):
+        for name in self.NAMES:
+            recipe = kit_recipes.PIECES[name]
+            part = kit_shapes.build(recipe["shapes"])
+            slots = self.slots(part)
+            self.assertTrue(slots & {"door_1", "door_2"}, name)
+            self.assertTrue(slots & {"glass_dark", "glass_lit"}, name)
+            self.assertTrue(any(s.startswith("roof_") for s in slots), name)
+            self.assertIn("beam", slots, name)
+            self.assertLessEqual(tris(part), recipe.get("budget", kit_shapes.PIECE_TRIS), name)
+            low, high = bounds(part)
+            self.assertGreaterEqual(low[1], -0.01, name)
+            self.assertGreater(high[1], 8.0, name)
+
+    def test_upper_storeys_jut_over_the_lane(self):
+        # A jettied house: what is up at the first floor stands further out
+        # than the ground floor's front.
+        for name in self.NAMES:
+            part = kit_shapes.build(kit_recipes.PIECES[name]["shapes"])
+            front = kit_recipes.PIECES[name]["front"]
+            upper = [v[2] for v in part["verts"] if 3.4 < v[1] < 5.0]
+            self.assertGreater(max(upper), front + 0.3, name)
+
+    def test_a_house_is_solid_to_its_eaves(self):
+        for name in self.NAMES:
+            recipe = kit_recipes.PIECES[name]
+            self.assertTrue(recipe["cols"], name)
+            col = recipe["cols"][0]
+            self.assertAlmostEqual(col[1] - col[4] / 2.0, 0.0, places=5)
+            self.assertGreaterEqual(col[4], 5.5, name)
+
+    def test_the_houses_differ(self):
+        looks = set()
+
+        for name in self.NAMES:
+            part = kit_shapes.build(kit_recipes.PIECES[name]["shapes"])
+            roof = sorted(s for s in self.slots(part) if s.startswith("roof_"))[0]
+            looks.add((round(bounds(part)[1][1]), roof))
+
+        self.assertGreaterEqual(len(looks), 5)
+
+
+class Dressing(unittest.TestCase):
+    """The gatehouse's arches, banners, framed walls, joists and trusses."""
+
+    def test_a_banner_hangs_from_its_rod_against_the_wall(self):
+        # Its wall is behind it (local -z): the cloth just before it, a rod
+        # over it on brackets into the wall; its tails at its foot (y 0).
+        part = kit_shapes.build(kit_recipes.PIECES["banner"]["shapes"])
+        low, high = bounds(part)
+        self.assertAlmostEqual(low[1], 0.0, places=5)
+        self.assertGreater(low[2], -0.02)
+        cloth = [part["verts"][i] for f in part["faces"] if f[1] == "banner" for i in f[0]]
+        self.assertTrue(cloth)
+        self.assertTrue(all(0.0 < v[2] < 0.08 for v in cloth))
+        self.assertGreater(high[1], max(v[1] for v in cloth))
+        self.assertEqual(kit_recipes.PIECES["banner"]["cols"], [])
+
+    def test_the_gate_arch_leaves_the_passage_clear(self):
+        recipe = kit_recipes.PIECES["gate_arch"]
+        part = kit_shapes.build(recipe["shapes"])
+
+        for x, y, z in part["verts"]:
+            if abs(x) < 1.95 - 1e-3 and y < 2.55 - 1e-3:
+                self.fail("the gate arch stands in the passage at %s" % [x, y, z])
+
+        low, high = bounds(part)
+        self.assertGreater(high[1], 5.9)
+        # (Solid only over the walk's floor: the parapet there.)
+        self.assertTrue(all(c[1] - c[4] / 2.0 >= 4.8 - 1e-6 for c in recipe["cols"]))
+
+    def test_plaster_walls_are_framed_both_sides(self):
+        for name in ("wall_plaster_2", "wall_plaster_4", "wall_plaster_window", "wall_plaster_door", "wall_timber_thin_2"):
+            recipe = kit_recipes.PIECES[name]
+            part = kit_shapes.build(recipe["shapes"])
+            depth = recipe["size"][2]
+            beams = [part["verts"][i] for f in part["faces"] if f[1] == "beam" for i in f[0]]
+            self.assertTrue(any(v[2] > depth / 2.0 + 0.01 for v in beams), name)
+            self.assertTrue(any(v[2] < -depth / 2.0 - 0.01 for v in beams), name)
+
+    def test_a_framed_door_is_flat_headed_and_clear(self):
+        part = kit_shapes.build(kit_recipes.PIECES["wall_plaster_door"]["shapes"])
+
+        for x, y, z in part["verts"]:
+            if abs(x) < 0.6 - 1e-3 and 1e-3 < y < 2.2 - 1e-3:
+                self.fail("something in the doorway at %s" % [x, y, z])
+
+    def test_joists_and_trusses_are_drawn_only(self):
+        for name in ("joists_22", "joists_72", "hall_truss_15"):
+            recipe = kit_recipes.PIECES[name]
+            self.assertEqual(recipe["cols"], [], name)
+            self.assertTrue(recipe["shapes"], name)
+
+
+class Chapel(unittest.TestCase):
+    """The chapel's art: open trusses, glass, a spire, its dressing."""
+
+    def test_the_hidden_ceiling_stops_but_is_not_drawn(self):
+        recipe = kit_recipes.PIECES["ceiling_hidden_4"]
+        self.assertEqual(recipe["boxes"], [])
+        self.assertFalse(recipe.get("shapes"))
+        self.assertEqual(len(recipe["cols"]), 1)
+        self.assertEqual(recipe["surface"], "ceiling")
+
+    def test_the_gables_carry_their_glass_on_both_faces(self):
+        for name, radius in (("gable_chapel_east", 1.05), ("gable_chapel_west", 0.7)):
+            part = kit_shapes.build(kit_recipes.PIECES[name]["shapes"])
+            glass = [part["verts"][i] for f in part["faces"] if f[1] == "rose_window" for i in f[0]]
+            self.assertTrue(any(v[2] > 0.2 for v in glass) and any(v[2] < -0.2 for v in glass), name)
+            self.assertGreater(max(v[0] for v in glass), radius, name)
+            # (The glass within the gable's triangle.)
+            for x, y, z in glass:
+                self.assertLess(abs(x), 4.8 * (1.0 - y / 5.0), name)
+
+    def test_the_spire_rises_well_over_the_ridge(self):
+        part = kit_shapes.build(kit_recipes.PIECES["fleche"]["shapes"])
+        low, high = bounds(part)
+        self.assertGreater(high[1], 8.0)
+        self.assertEqual(kit_recipes.PIECES["fleche"]["cols"], [])
+
+    def test_the_portal_leaves_the_door_clear(self):
+        part = kit_shapes.build(kit_recipes.PIECES["chapel_portal"]["shapes"])
+
+        for x, y, z in part["verts"]:
+            if abs(x) < 0.6 - 1e-3 and y < 1.6 - 1e-3:
+                self.fail("the portal stands in the doorway at %s" % [x, y, z])
+
+    def test_the_dais_is_a_step_men_climb(self):
+        recipe = kit_recipes.PIECES["chapel_dais"]
+        self.assertTrue(recipe["cols"])
+        self.assertLessEqual(recipe["size"][1], 0.2)
+
+    def test_a_truss_spans_the_nave(self):
+        part = kit_shapes.build(kit_recipes.PIECES["chapel_truss"]["shapes"])
+        low, high = bounds(part)
+        self.assertGreater(high[0] - low[0], 9.0)
+        self.assertLess(high[0] - low[0], 9.4)
+        self.assertGreater(high[1], 4.0)
+        self.assertLess(low[1], -2.3)
+
+
+class Props(unittest.TestCase):
+    """What fills the mess hall and the kitchen."""
+
+    PROPS = ["tableware_4", "dresser", "keg_rack", "hanging_food", "shield_trio", "cauldron", "stool", "kitchen_spread", "log_basket"]
+
+    def test_every_prop_is_modelled_within_its_budget(self):
+        for name in self.PROPS:
+            recipe = kit_recipes.PIECES[name]
+            part = kit_shapes.build(recipe["shapes"])
+            self.assertLessEqual(tris(part), recipe.get("budget", kit_shapes.PIECE_TRIS), name)
+
+    def test_tableware_sits_on_the_table_and_leaves_the_candles_room(self):
+        # Its foot at the table top (y 0); nothing over the table's edge;
+        # the candles (x -1 or +1 on the table's middle line) have room.
+        part = kit_shapes.build(kit_recipes.PIECES["tableware_4"]["shapes"])
+        low, high = bounds(part)
+        self.assertGreaterEqual(low[1], -1e-6)
+        self.assertLess(high[2], 0.45)
+        self.assertGreater(low[2], -0.45)
+
+        for x, y, z in part["verts"]:
+            for candle in (-1.0, 1.0):
+                self.assertGreater((x - candle) ** 2 + z ** 2, 0.15 ** 2, "something where a candle stands at %s" % [x, y, z])
+
+    def test_the_food_hangs_under_its_pole(self):
+        part = kit_shapes.build(kit_recipes.PIECES["hanging_food"]["shapes"])
+        low, high = bounds(part)
+        self.assertLess(high[1], 0.1)
+        self.assertLess(low[1], -0.4)
+
+    def test_the_tables_and_benches_stand_on_trestles(self):
+        for name in ("table_long", "bench", "crate", "chest", "rack", "woodpile", "sacks", "stove"):
+            self.assertTrue(kit_recipes.PIECES[name].get("shapes"), name)
+
+    def test_what_is_hung_on_walls_stays_before_them(self):
+        for name in ("shield_trio", "dresser", "keg_rack"):
+            part = kit_shapes.build(kit_recipes.PIECES[name]["shapes"])
+            self.assertGreaterEqual(bounds(part)[0][2], -kit_recipes.PIECES[name]["size"][2] / 2.0 - 0.01, name)
 
 
 class Pieces(unittest.TestCase):
@@ -111,14 +391,14 @@ class Pieces(unittest.TestCase):
         self.assertEqual(loose, [])
 
     def test_modelled_pieces_are_low_poly(self):
-        heavy = [(n, tris(kit_shapes.build(r["shapes"]))) for n, r in kit_recipes.PIECES.items() if r.get("shapes")]
-        self.assertEqual([h for h in heavy if h[1] > kit_shapes.PIECE_TRIS], [])
+        heavy = [(n, tris(kit_shapes.build(r["shapes"])), r.get("budget", kit_shapes.PIECE_TRIS)) for n, r in kit_recipes.PIECES.items() if r.get("shapes")]
+        self.assertEqual([h for h in heavy if h[1] > h[2]], [])
 
     def test_the_kit_is_modelled(self):
         # Kit v1: the pieces that read as boxes are modelled (openings, columns
         # and arches, round things, foliage, the house fronts).
         wanted = ["wall_ashlar_door", "wall_plaster_window", "wall_ashlar_arch", "wall_ashlar_tall_lancet", "column", "arch_span_3",
-                  "barrel", "well", "candle_stand", "cart", "tree", "bush", "house_front", "banner", "buttress", "chandelier", "weeds"]
+                  "barrel", "well", "candle_stand", "cart", "tree", "bush", "house_a", "banner", "buttress", "chandelier", "weeds"]
         self.assertEqual([n for n in wanted if not kit_recipes.PIECES[n].get("shapes")], [])
 
     def test_colliders_stay_the_blocks(self):

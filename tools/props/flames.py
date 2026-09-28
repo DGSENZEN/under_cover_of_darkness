@@ -284,7 +284,9 @@ def make_corona():
     side = 64
     yy, xx = np.mgrid[0:side, 0:side]
     r = np.hypot(xx + 0.5 - side / 2, yy + 0.5 - side / 2) / (side / 2)
-    write_png(VFX / "corona.png", quantise(np.clip(1.0 - r, 0.0, 1.0) ** 2.2, 16))
+    # A hot heart in a faint haze (never a lit ball), gone before its edge.
+    glow = 0.72 * np.exp(-(r / 0.16) ** 2) + 0.28 * np.exp(-(r / 0.42) ** 2)
+    write_png(VFX / "corona.png", quantise(np.clip(glow * np.clip((1.0 - r) / 0.2, 0.0, 1.0), 0.0, 1.0), 16))
 
 
 def make_soot(seed=5):

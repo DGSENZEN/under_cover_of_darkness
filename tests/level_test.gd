@@ -114,6 +114,20 @@ func _garrison() -> void:
 
 	_check("G18 nobody walks the ceilings under the pitched roofs", ceilings18.is_empty(), "%s" % [ceilings18])
 
+	# G23 nor the tops of small things (a sack pile, a barrel, a crate, a
+	# bench): no navmesh up there for a man to be routed over (a 0.5 m top is
+	# a climb, never a step)
+	var tops23 := []
+	var nav23: RID = map.get_world_3d().navigation_map
+
+	for at in [Vector3(-22.0, 0.7, 2.0), Vector3(-21.2, 1.1, 7.0), Vector3(-28.5, 0.9, 0.0), Vector3(27.8, 1.1, -14.2), Vector3(22.0, 0.7, -3.9)]:
+		var near23 := NavigationServer3D.map_get_closest_point(nav23, at)
+
+		if near23.distance_to(at) < 0.5:
+			tops23.append("navmesh at %s" % near23.snapped(Vector3.ONE * 0.1))
+
+	_check("G23 no navmesh on the tops of small things (sacks, barrels, crates, benches)", tops23.is_empty(), "%s" % [tops23])
+
 	# G2 every man's place, station, hiding spot and round is on the navmesh
 	# and reachable from the courtyard
 	var nav_map: RID = map.get_world_3d().navigation_map
@@ -263,6 +277,20 @@ func _garrison() -> void:
 	var culling21: bool = ProjectSettings.get_setting("rendering/occlusion_culling/use_occlusion_culling", false)
 	_check("G21 small dressing is drawn only as near as it shows; the big walls occlude (occlusion culling on)",
 		ranged21 and occluders21 >= 100 and culling21, "small %d ranged %s, occluders %d, culling %s" % [small21.size(), ranged21, occluders21, culling21])
+
+	# G22 the doors are studded planks (their own UVs: the photo swings with
+	# the door), when the photo is here
+	var studded22: Material = Materials.surface(&"wood_studded")
+	var photo22: bool = Materials.photo(&"wood_studded") != null
+	var plain22 := []
+
+	for door in map.doors.values():
+		var panels: Array = (door as Node).find_children("*", "MeshInstance3D", true, false).filter(func(m): return (m as MeshInstance3D).get_aabb().size.y > 1.0)
+
+		if panels.is_empty() or (panels[0] as MeshInstance3D).material_override != studded22:
+			plain22.append(String((door as Node).name))
+
+	_check("G22 the doors are drawn in studded planks", not photo22 or plain22.is_empty(), "photo %s, plain doors %s" % [photo22, plain22.slice(0, 5)])
 
 	# G6 lightning through the stained glass: the chapel's shafts of light
 	# flare with a flash and die back after it
@@ -443,9 +471,9 @@ func _garrison() -> void:
 	var lit13: Array = map.find_children("*", "Light3D", true, false).map(func(l): return (l as Node3D).global_position)
 
 	for m in level.of("light"):
-		var at13: Vector3 = (m["transform"] as Transform3D).origin
 		# (In plan: a lamp's light hangs at its head above its foot, a
-		# chandelier's below where it hangs from.)
+		# chandelier's below where it hangs from, its chain's length.)
+		var at13: Vector3 = (m["transform"] as Transform3D).origin - Vector3(0.0, float(m["props"].get("chain", 0.0)), 0.0)
 		if not lit13.any(func(p): return Vector2((p as Vector3).x - at13.x, (p as Vector3).z - at13.z).length() < 1.5 and absf((p as Vector3).y - at13.y) < 4.0):
 			unmade.append("no light at %s (%s)" % [m["name"], m["props"]["kind"]])
 

@@ -42,6 +42,16 @@ class SheetsTest(unittest.TestCase):
             with Image.open(VFX / (name + ".png")) as image:
                 self.assertEqual(image.size, size, name)
 
+    def test_the_corona_is_a_glow_not_a_disc(self):
+        # A hot heart and a faint haze round it: by half its radius it is
+        # down to a fifth of its heart, so it never reads as a lit ball.
+        halo = np.asarray(Image.open(VFX / "corona.png").convert("L"), dtype=np.float64)
+        middle = halo.shape[0] // 2
+        heart = halo[middle, middle]
+        self.assertGreater(heart, 200.0)
+        self.assertLess(halo[middle, middle + halo.shape[0] // 4], heart * 0.2)
+        self.assertGreater(halo[middle, middle + halo.shape[0] // 4], 0.0)
+
     def test_levels(self):
         for name in SHEETS:
             sheet = np.asarray(Image.open(VFX / ("flame_%s.png" % name)).convert("L"))

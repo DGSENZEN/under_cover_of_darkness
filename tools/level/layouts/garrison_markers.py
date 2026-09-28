@@ -139,6 +139,10 @@ def lights(G):
     L("hearth_mess", "hearth", (28.3, 0, 1.0), "barracks", -90.0)
     L("candles_mess_0", "candle", (21.0, 0.79, -3.0), "barracks")
     L("candles_mess_1", "candle", (23.0, 0.79, 5.0), "barracks")
+    # A chandelier from the mess hall's middle truss over its tables, candles
+    # on its dresser.
+    L("chandelier_mess", "chandelier", (22.0, 5.28, 1.0), "barracks", chain=2.3)
+    L("candles_dresser", "candle", (26.4, 0.88, -7.55), "barracks")
     L("lantern_kitchen", "lantern", (22.0, 2.9, -11.5), "barracks")
     L("lantern_stairs_n", "lantern", (19.5, 2.9, -16.0), "barracks")
     L("lantern_stairs_s", "lantern", (19.5, 2.9, 14.4), "barracks")
@@ -147,14 +151,18 @@ def lights(G):
     # The chapel: the chandeliers, candles on stands and the altar, moonlight
     # through the north lancets as coloured shafts (the moon is in the
     # north-west; the shafts fall south across the pews).
-    L("chandelier_w", "chandelier", (0.0, 9.0, -20.8), "chapel")
-    L("chandelier_e", "chandelier", (7.0, 9.0, -20.8), "chapel")
+    # (The chandeliers hung from the trusses' tie beams, 4 m of chain.)
+    # (Reaching far enough to catch the roof's timbers over them.)
+    L("chandelier_w", "chandelier", (0.0, 11.98, -20.8), "chapel", chain=3.98, range=12.0)
+    L("chandelier_e", "chandelier", (8.0, 11.98, -20.8), "chapel", chain=3.98, range=12.0)
 
-    for i, (x, z) in enumerate(((10.6, -24.4), (10.6, -23.0), (0.0, -24.8), (8.0, -24.8), (-2.0, -16.6), (4.0, -16.6))):
-        L("candle_stand_%d" % i, "candle", (x, 1.45, z), "chapel")
+    # (The chancel's two on its step; the reliefs' by the west door.)
+    for i, (x, y, z) in enumerate(((11.6, 1.6, -22.8), (11.6, 1.6, -18.8), (-5.0, 1.45, -23.5), (-5.0, 1.45, -18.1), (-2.0, 1.45, -16.7),
+                                   (5.6, 1.45, -16.7))):
+        L("candle_stand_%d" % i, "candle", (x, y, z), "chapel")
 
-    L("candles_altar_0", "candle", (11.6, 1.1, -21.7), "chapel")
-    L("candles_altar_1", "candle", (11.6, 1.1, -19.9), "chapel")
+    L("candles_altar_0", "candle", (11.6, 1.25, -21.7), "chapel")
+    L("candles_altar_1", "candle", (11.6, 1.25, -19.9), "chapel")
 
     for i, (x, colour) in enumerate(((-2.0, "#ff4a2a"), (2.0, "#ffb347"), (6.0, "#ff4a2a"), (10.0, "#ffb347"))):
         L("shaft_%d" % i, "window_shaft", (x - 1.9, 5.4, -27.2), "chapel", color=colour, energy=2.5, range=14.0)
@@ -165,7 +173,10 @@ def lights(G):
     L("lantern_store", "lantern", (-25.0, 2.8, 5.0), "west_range")
     L("lantern_cellar", "lantern", (-25.0, -1.2, 5.0), "cellar", color="#6f9f55", energy=1.1)
     # Outside: lamp posts on the quay and the lanes.
-    for i, (x, z) in enumerate(((-10.0, 40.0), (14.0, 40.0), (-20.0, -34.0), (20.0, -34.0), (38.0, 0.0))):
+    # (The north lane's close before its houses, whose fronts the moon never
+    # reaches.)
+    for i, (x, z) in enumerate(((-10.0, 40.0), (14.0, 40.0), (-20.0, -41.0), (20.0, -41.0), (38.0, 0.0), (-16.0, 73.5), (20.0, 73.5),
+                                (0.0, -41.0), (-36.0, -41.0), (36.0, -41.0), (38.5, -24.0))):
         L("lamp_%d" % i, "lamp_post", (x, 0, z), "outside")
 
 

@@ -83,7 +83,7 @@ def grounds():
         G.put("floor_mud_2", (x, 0.01, z), 0.0, "courtyard")
 
     # The fire (a marker: the game's Fire), its benches, the well, the
-    # woodpile, the cart, banners.
+    # woodpile, the cart.
 
     for x, z, yaw in ((0, -0.6, 0.0), (0, 4.6, 180.0), (-2.6, 2, 90.0)):
         G.put("bench", (x, 0, z), yaw, "courtyard")
@@ -92,9 +92,6 @@ def grounds():
     G.put("cart", (9, 0, 15), 20.0, "courtyard")
     G.put("chopping_block", (-22.3, 0, 16.4), 0.0, "west_range")
     G.put("woodpile", (-24, 0, 18), 0.0, "west_range")
-
-    for x in (-4.5, -1.5, 1.5, 4.5):
-        G.put("banner", (x, 0, 21.2), 180.0, "courtyard")
 
     # Palisade and a lattice screen to frame through (the references' 7, 9).
     for x in (-14, -12):
@@ -146,12 +143,31 @@ def gatehouse():
     G.wall((2.0, 30.8), (6.0, 30.8), "ashlar", 0.0, "gatehouse", storeys=2, openings={2.0: "slit"})
     G.wall((-5.8, 22.0), (-5.8, 31.0), "ashlar", 0.0, "gatehouse", storeys=2)
     G.wall((5.8, 22.0), (5.8, 31.0), "ashlar", 0.0, "gatehouse", storeys=2)
-    G.wall((-2.2, 22.0), (-2.2, 31.0), "ashlar", 0.0, "gatehouse", storeys=2, openings={2.0: "door"})
-    G.wall((2.2, 22.0), (2.2, 31.0), "ashlar", 0.0, "gatehouse", storeys=2, openings={2.0: "arch"})
+    G.wall((-2.2, 22.0), (-2.2, 31.0), "ashlar", 0.0, "gatehouse", openings={2.0: "door"})
+    G.wall((2.2, 22.0), (2.2, 31.0), "ashlar", 0.0, "gatehouse", openings={2.0: "arch"})
+
+    # (Over the ground storey they stop under the walk, so its top is one
+    # platform from side to side.)
+    for x in (-2.2, 2.2):
+        for z, length in ((24.0, 4), (28.0, 4), (30.5, 1)):
+            G.put("wall_ashlar_low_%d" % length, (x, 3.0, z), 90.0, "gatehouse")
     G.floor(-6, 22, 6, 32, "cobble", 0.0, "gatehouse")
-    # The walk over it (top at the curtain's walk).
-    G.floor(-6, 22, 6, 32, "flag", WALK, "gatehouse")
+    # The walk over it (top at the curtain's walk), ended flush with the
+    # outer wall's face.
+    G.floor(-6, 22, 6, 30, "flag", WALK, "gatehouse")
+
+    for x in (-4.0, 0.0, 4.0):
+        G.put("floor_flag_strip_4", (x, WALK, 30.5), 0.0, "gatehouse")
     G.put("portcullis", (0, 0, 30.2), 0.0, "gatehouse")
+    # Round arches over either end of the passage, proud of the faces; the
+    # garrison's banners hung high either side of them, over the windows
+    # (the courtyard's face) and the slits (the canal's).
+    G.put("gate_arch", (0.0, 0, 21.85), 180.0, "gatehouse")
+    G.put("gate_arch", (0.0, 0, 31.15), 0.0, "gatehouse")
+
+    for x in (-4.0, 4.0):
+        G.put("banner", (x, 3.2, 21.99), 180.0, "gatehouse")
+        G.put("banner", (x, 3.2, 31.01), 0.0, "gatehouse")
     # A lattice across the east guardroom's arch: its brazier throws the bars'
     # shadows into the passage.
     G.put("lattice_screen", (2.2, 0, 24.0), 90.0, "gatehouse")
@@ -208,6 +224,10 @@ def barracks():
     G.wall((16.6, -19.6), (16.6, -8.0), "timber", 3.0, s, thin=True, openings={2.0: "door", 8.0: "door"})
     G.wall((16.6, 10.0), (16.6, 17.6), "timber", 3.0, s, thin=True, openings={4.0: "door"})
     G.wall((16.6, -15.2), (29.6, -15.2), "timber", 3.0, s, thin=True)
+    # The captain's chamber and the dormitory closed off from the mess
+    # hall's height (its banners hang on them).
+    G.wall((16.6, -8.0), (29.6, -8.0), "timber", 3.0, s, thin=True)
+    G.wall((16.6, 10.0), (29.6, 10.0), "timber", 3.0, s, thin=True)
 
     for z in range(-7, 10, 2):
         G.put("railing_2", (15.95, 3.0, z), 90.0, s)
@@ -223,10 +243,7 @@ def barracks():
         for z in range(-20, 18, 4):
             G.put("ceiling_board_4", (x + 2.0, 6.2, z + 2.0), 0.0, s)
 
-    for z in range(-20, 16, 4):
-        G.put("roof_ridge_4x16", (22.0, 6.2, z + 2.0), 90.0, s)
-
-    G.put("roof_ridge_2x16", (22.0, 6.2, 17.0), 90.0, s)
+    G.put("roof_16x38", (22.0, 6.2, -1.0), 90.0, s)
     G.put("gable_16", (22.0, 6.2, -19.8), 0.0, s)
     G.put("gable_16", (22.0, 6.2, 17.8), 0.0, s)
 
@@ -237,19 +254,63 @@ def barracks():
     # on the east wall's middle), the kitchen, the dormitory, the captain.
     G.put("hearth", (28.9, 0, 1.0), -90.0, s)
 
-    # Crimson banners in rows down the mess hall's long walls (the
-    # references' rule 8), hung high.
-    for x in (19.0, 22.0, 25.0, 28.0):
-        G.put("banner", (x, 1.6, -7.85), 0.0, s)
-        G.put("banner", (x, 1.6, 9.85), 180.0, s)
+    # The garrison's banners in rows down the mess hall's long walls (the
+    # references' rule 8), hung high, either side of its doors (x 23).
+    for x in (18.5, 20.8, 25.2, 27.5):
+        G.put("banner", (x, 2.9, -7.89), 0.0, s)
+        G.put("banner", (x, 2.9, 9.89), 180.0, s)
+
+    # Its trusses (the middle one's corbel clear over the hearth's breast;
+    # the chandelier hangs from it), joists under the gallery over the
+    # corridor and over the kitchen.
+    for z in (-5.5, -2.25, 1.0, 4.25, 7.5):
+        G.put("hall_truss_15", (22.0, 0.0, z), 0.0, s)
+
+    for i in range(19):
+        G.put("joists_22", (15.45, 2.8, -19.6 + 37.2 / 19.0 * (i + 0.5)), 0.0, s)
+
+    for x in (17.7, 19.7, 21.7, 23.7, 25.7, 27.7, 28.9):
+        G.put("joists_72", (x, 2.8, -11.6), 90.0, s)
 
     for z in (-3.0, 5.0):
         G.put("table_long", (22.0, 0, z), 0.0, s)
         G.put("bench", (22.0, 0, z - 0.9), 0.0, s)
         G.put("bench", (22.0, 0, z + 0.9), 180.0, s)
 
+    # The tables laid; a dresser of plates and the kegs along the north
+    # wall, a rack of spears on the south; shields and spears flanking the
+    # hearth and over the doors; a cauldron, logs and stools at the fire.
+    for z in (-3.0, 5.0):
+        G.put("tableware_4", (22.0, 0.79, z), 0.0, s)
+
+    G.put("dresser", (26.4, 0, -7.675), 0.0, s)
+    G.put("keg_rack", (19.2, 0, -7.6), 0.0, s)
+    G.put("rack", (19.2, 0, 9.75), 180.0, s)
+
+    for x, z in ((27.4, 9.4), (28.2, 9.3)):
+        G.put("crate", (x, 0, z), 0.0, s)
+
+    for z in (-4.5, 6.5):
+        G.put("shield_trio", (29.58, 2.5, z), -90.0, s)
+
+    G.put("shield_trio", (23.0, 3.3, -7.88), 0.0, s)
+    G.put("shield_trio", (23.0, 3.3, 9.88), 180.0, s)
+    G.put("cauldron", (27.7, 0, -1.3), 0.0, s)
+    G.put("log_basket", (28.1, 0, 3.3), 0.0, s)
+
+    for x, z in ((26.6, 0.3), (26.8, 2.0)):
+        G.put("stool", (x, 0, z), 0.0, s)
+
+    # The kitchen: its table spread, hams hung from the joists, a dresser, a
+    # cauldron by the stove.
     G.put("stove", (28.6, 0, -11.5), -90.0, s)
     G.put("table_long", (22.0, 0, -11.5), 0.0, s)
+    G.put("kitchen_spread", (22.0, 0.79, -11.5), 0.0, s)
+    G.put("hanging_food", (19.8, 2.57, -13.6), 0.0, s)
+    G.put("hanging_food", (25.2, 2.57, -9.6), 0.0, s)
+    G.put("dresser", (26.0, 0, -8.325), 180.0, s)
+    G.put("cauldron", (27.6, 0, -9.4), 0.0, s)
+    G.put("stool", (20.5, 0, -10.3), 0.0, s)
     G.put("barrel", (27.8, 0, -14.2), 0.0, s)
     G.put("sacks", (19.0, 0, -9.2), 0.0, s)
 
@@ -263,7 +324,7 @@ def barracks():
     G.put("map_table", (23.0, 3.0, -11.5), 0.0, s)
     G.put("bed", (28.2, 3.0, -13.6), 0.0, s)
     G.put("bedroll", (24.8, 3.0, 14.0), 90.0, s)
-    G.put("banner", (29.5, 3.0, -11.5), -90.0, s)
+    G.put("banner", (29.58, 3.4, -11.5), -90.0, s)
     # Lit windows on the courtyard front (about one in four).
     for z, y in ((-17.0, 0.0), (6.0, 3.0), (12.0, 3.0)):
         G.put("window_lit", (14.0, y, z), -90.0, s)
@@ -292,59 +353,93 @@ def chapel():
 
     # The glass in every lancet (panes in the wall's middle, from its sill):
     # the north tier from the floor, the south, west and east tiers a storey
-    # up.
+    # up; the ground floor's two windows glazed too.
+    # (The north wall's second tier, high under the roof, glazed too.)
     for x in (-2.0, 2.0, 6.0, 10.0):
         G.put("glass_lancet", (x, 1.8, -25.4), 0.0, s)
+        G.put("glass_lancet", (x, 7.8, -25.4), 0.0, s)
 
     for x in (-2.0, 8.0):
         G.put("glass_lancet", (x, 4.8, -16.2), 0.0, s)
+        G.put("glass_window", (x, 0.9, -16.2), 0.0, s)
 
     for x, z in ((-5.8, -20.8), (13.8, -23.2), (13.8, -20.6)):
         G.put("glass_lancet", (x, 4.8, z), 90.0, s)
 
-    # Reliefs lit from below by candle stands: a frieze between the north
-    # lancets either side, the angels over the altar.
-    for x in (0.0, 8.0):
-        G.put("relief_panel", (x, 1.85, -25.17), 0.0, s)
+    # Reliefs lit from below by candle stands: the frieze panels either side
+    # of the west door inside, the angels in their reredos behind the altar.
+    for z in (-23.5, -18.1):
+        G.put("relief_panel", (-5.58, 1.2, z), 90.0, s)
+        G.put("candle_stand", (-5.0, 0, z), 0.0, s)
 
-    G.put("relief_altar", (13.57, 1.4, -20.8), -90.0, s)
-
-    for x in range(-4, 12, 2):
+    for x in range(-4, 10, 2):
         G.put("floor_carpet_2", (x + 1.0, 0.02, -20.8), 0.0, s)
 
-    # Pews in rows either side of the aisle, facing the altar (east).
-    for x in (-3.0, -1.4, 0.2, 1.8, 3.4, 5.0, 6.6):
+    # Pews in rows either side of the aisle, facing the altar (east), clear
+    # of the loft stair's foot (x 7.6).
+    for x in (-3.6, -2.0, -0.4, 1.2, 2.8, 4.4, 6.0):
         G.put("pew", (x, 0, -23.2), -90.0, s)
         G.put("pew", (x, 0, -18.4), -90.0, s)
 
-    G.put("altar", (11.6, 0, -20.8), -90.0, s)
+    # The chancel: a step of patterned tiles, the altar dressed on it, the
+    # reredos behind it, candle stands either side.
+    G.put("chapel_dais", (11.8, 0, -21.0), 0.0, s)
+    G.put("altar", (11.6, 0.15, -20.8), -90.0, s)
+    G.put("reredos", (13.6, 0.15, -20.8), -90.0, s)
+    G.put("relief_altar", (13.57, 1.6, -20.8), -90.0, s)
 
-    for z in (-24.4, -23.0):
-        G.put("candle_stand", (10.6, 0, z), 0.0, s)
+    for z in (-22.8, -18.8):
+        G.put("candle_stand", (11.6, 0.15, z), 0.0, s)
 
-    for x in (0.0, 8.0):
-        G.put("candle_stand", (x, 0, -24.8), 0.0, s)
+    for x in (-2.0, 5.6):
+        G.put("candle_stand", (x, 0, -16.7), 0.0, s)
 
-    for x in (-2.0, 4.0):
-        G.put("candle_stand", (x, 0, -16.6), 0.0, s)
-
-    # Banners for the relief panels until the art pass (the chandeliers are
-    # light markers: their fixture is their model).
-    for x in (1.0, 9.0):
-        G.put("banner", (x, 5.0, -25.1), 0.0, s)
-        G.put("banner", (x, 5.0, -16.5), 180.0, s)
-
-    # The ceiling (moonlight comes in only through the glass) and the pitched
-    # roof over the nave, its ridge along it; its gable ends.
+    # Open to its rafters: the ceiling stays (hidden) to stop sight and what
+    # is thrown; arch-braced trusses each bay on shafts up the walls, a carved
+    # frieze under their corbels; the fish-scale roof over them, the east
+    # gable's rose, the west's oculus and bell-cote, the fleche on the ridge.
     for x in range(-6, 14, 4):
         for z in (-26, -22, -18):
-            G.put("ceiling_board_4", (x + 2.0, 12.2, z + 2.0), 0.0, s)
+            G.put("ceiling_hidden_4", (x + 2.0, 12.2, z + 2.0), 0.0, s)
 
-    for x in range(-6, 14, 4):
-        G.put("roof_ridge_4x10", (x + 2.0, 12.2, -20.8), 0.0, s)
+    for x in (-4.0, 0.0, 4.0, 8.0, 12.0):
+        G.put("chapel_truss", (x, 12.0, -20.8), 90.0, s)
+        G.put("wall_shaft", (x, 0, -25.2), 0.0, s)
 
-    G.put("gable_10", (-5.8, 12.2, -20.8), 90.0, s)
-    G.put("gable_10", (13.8, 12.2, -20.8), 90.0, s)
+        # (The south wall's shafts clear of its windows.)
+        if x != 8.0:
+            G.put("wall_shaft", (x, 0, -16.4), 180.0, s)
+
+    # (Not on the north wall: its upper lancets are where it would run.)
+    G.put("chapel_frieze_19p2", (4.0, 9.0, -16.4), 180.0, s)
+    G.put("chapel_frieze_9p2", (-5.6, 9.0, -20.8), 90.0, s)
+    G.put("chapel_frieze_9p2", (13.6, 9.0, -20.8), -90.0, s)
+    G.put("roof_10x21", (4.0, 12.0, -20.8), 0.0, s)
+    G.put("gable_chapel_west", (-5.8, 12.0, -20.8), 90.0, s)
+    G.put("gable_chapel_east", (13.8, 12.0, -20.8), 90.0, s)
+    G.put("fleche", (9.0, 17.0, -20.8), 0.0, s)
+
+    # Outside: buttresses between its bays, a plinth, a string course under
+    # the lancets, a cornice on corbels under the eaves; a stepped portal
+    # round each door.
+    for x in (-4.5, 0.0, 5.0, 11.0):
+        G.put("buttress_chapel", (x, 0, -16.0), 0.0, s)
+
+    for z in (-24.0, -17.6):
+        G.put("buttress_chapel", (-6.0, 0, z), -90.0, s)
+
+    G.put("chapel_plinth_7p0", (-2.5, 0, -16.0), 0.0, s)
+    G.put("chapel_plinth_11p0", (8.5, 0, -16.0), 0.0, s)
+
+    for z in (-23.5, -18.1):
+        G.put("chapel_plinth_4p2", (-6.0, 0, z), -90.0, s)
+
+    G.put("chapel_course_20p0", (4.0, 4.4, -16.0), 0.0, s)
+    G.put("chapel_course_9p6", (-6.0, 4.4, -20.8), -90.0, s)
+    G.put("chapel_cornice_20p0", (4.0, 11.7, -16.0), 0.0, s)
+    G.put("chapel_cornice_9p6", (-6.0, 11.7, -20.8), -90.0, s)
+    G.put("chapel_portal", (2.0, 0, -16.0), 0.0, s)
+    G.put("chapel_portal", (-6.0, 0, -20.8), -90.0, s)
 
     # The loft (x 12..14, z -18.4..-16.4 at 3 m) and its stair down into the
     # nave; its door onto the barracks gallery is the barracks' west wall's.
@@ -453,18 +548,18 @@ def outside():
 
     G.put("crane", (-20.0, 0, 41.0), 0.0, "outside")
 
-    # House fronts, their heights varied (a town's roofline, not a wall).
-    # (Four photographed fronts in turn.)
-    fronts = ["house_front", "house_front_3", "house_front_2", "house_front_4"]
+    # The lanes' houses (kit_houses), their fronts to the garrison: six of
+    # them in an order that never repeats a neighbour, some set back a
+    # little (a town's line, not a wall).
+    north = "abcdefcadbfeac"
+    east = "dfbeacfdaecbdf"
+    depth = 7.0
 
     for i, x in enumerate(range(-39, 42, 6)):
-        G.put(fronts[i % 4], (x, -1.5 * (i % 3 == 1) - 3.0 * (i % 5 == 3), -44.0 - 0.6 * (i % 2)), 0.0, "outside")
+        G.put("house_" + north[i], (x, 0, -44.0 - depth / 2.0 - 0.6 * (i % 3 == 1)), 0.0, "outside")
 
     for i, z in enumerate(range(-39, 42, 6)):
-        G.put(fronts[(i + 1) % 4], (44.0 + 0.6 * (i % 2), -2.0 * (i % 3 == 2), z), -90.0, "outside")
-
-    for x, z in ((-21.0, -43.75), (3.0, -43.75), (27.0, -43.75)):
-        G.put("window_lit", (x, 3.0, z), 0.0, "outside")
+        G.put("house_" + east[i], (44.0 + depth / 2.0 + 0.6 * (i % 3 == 2), 0, z), -90.0, "outside")
 
     for x, z in ((-45.0, -30.0), (-50.0, -18.0), (-42.0, -4.0), (-54.0, 6.0), (-46.0, 18.0), (-52.0, 32.0)):
         G.put("tree", (x, 0, z), 0.0, "outside")

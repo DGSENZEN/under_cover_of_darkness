@@ -34,7 +34,7 @@ GRADED = ("wall", "curtain", "floor", "stair", "column", "roof", "quay", "vault"
 GRADE_EDGE = 1.0
 AO_RAYS = 12
 AO_REACH = 1.2
-UNLIT = ("stained_glass", "stained_glass_small")
+UNLIT = ("stained_glass", "stained_glass_small", "rose_window", "glass_lit")
 # Dressing smaller than SMALL (m) is drawn out to SMALL_RANGE (m); weeds to
 # WEEDS_RANGE.
 SMALL = 3.0
@@ -193,16 +193,20 @@ def bake(data):
 
     for obj in objects:
         mesh = obj.data
-
-        if any(m is not None and m.name in UNLIT for m in mesh.materials):
-            continue
-
+        # (Glass that glows is left white: nothing shades what shines.)
+        unlit = {i for i, m in enumerate(mesh.materials) if m is not None and m.name in UNLIT}
         attribute = mesh.color_attributes.new("Col", "FLOAT_COLOR", "CORNER")
         to_world = obj.matrix_world
         turn = to_world.to_3x3()
 
         for polygon in mesh.polygons:
             normal = (turn @ polygon.normal).normalized()
+
+            if polygon.material_index in unlit:
+                for loop in polygon.loop_indices:
+                    attribute.data[loop].color = (1.0, 1.0, 1.0, 1.0)
+
+                continue
 
             for loop in polygon.loop_indices:
                 point = to_world @ mesh.vertices[mesh.loops[loop].vertex_index].co

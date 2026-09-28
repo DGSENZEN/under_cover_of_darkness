@@ -3,7 +3,9 @@ extends Node
 ## marks and from inside each space, the night clear; then the courtyard under
 ## a cloud (everything shadow and torchlight); all in sheet.png. Not a test:
 ## look at the pictures.
-##   Godot --fixed-fps 60 --resolution 1280x720 --path . res://tests/visual/stage_garrison.tscn -- --out=<dir>
+## With --key, only the spec's key views (stage 2's look review), composed,
+## in key_sheet.png.
+##   Godot --fixed-fps 60 --resolution 1280x720 --path . res://tests/visual/stage_garrison.tscn -- --out=<dir> [--key]
 
 const GARRISON := preload("res://maps/garrison.tscn")
 const MapScript := preload("res://maps/npc_showcase.gd")
@@ -25,18 +27,37 @@ const INSIDE := [
 	["the wall-walk", Vector3(-26.0, 6.7, 26.8), Vector3(26.0, 5.5, 26.8)],
 	["the quay", Vector3(-24.0, 1.7, 40.0), Vector3(6.0, 3.0, 30.0)],
 ]
+## The key views (the garrison spec, stage 2: the user's look review), each
+## composed: [name, camera, looked at, the moon covered].
+const KEY_VIEWS := [
+	["the gatehouse", Vector3(0.0, 1.7, 13.0), Vector3(0.0, 3.2, 26.0), false],
+	["the courtyard in moonlight", Vector3(-14.0, 7.0, 20.0), Vector3(4.0, 0.0, -2.0), false],
+	["the courtyard under cloud", Vector3(-14.0, 7.0, 20.0), Vector3(4.0, 0.0, -2.0), true],
+	["the colonnade", Vector3(-18.0, 1.6, -13.0), Vector3(-18.0, 1.4, 18.0), false],
+	["a corridor", Vector3(15.4, 1.7, -19.0), Vector3(15.4, 1.6, 17.0), false],
+	["the mess", Vector3(15.4, 4.8, -7.0), Vector3(26.0, 0.5, 3.0), false],
+	["the dormitory", Vector3(17.2, 4.8, 16.9), Vector3(27.5, 3.3, 11.2), false],
+	["the chapel", Vector3(-4.6, 1.8, -20.8), Vector3(12.0, 2.5, -20.8), false],
+	["the cellar", Vector3(-27.0, -1.3, 11.4), Vector3(-26.0, -2.5, 0.0), false],
+	["the quay and the canal", Vector3(-2.0, 1.9, 43.0), Vector3(8.0, -0.6, 60.0), false],
+	["the watchtower", Vector3(-12.0, 1.6, -17.0), Vector3(-31.0, 8.0, -27.0), false]
+]
 const THUMB := Vector2i(320, 180)
 const ACROSS := 4
 
 var _out := "user://stage_garrison/"
 var _stills: Array = []
 var _label: Label
+## --key: only the key views, big, in key_sheet.png.
+var _key := false
 
 
 func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
 			_out = arg.trim_prefix("--out=").trim_suffix("/") + "/"
+		elif arg == "--key":
+			_key = true
 
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_out) if _out.begins_with("user://") else _out)
 	AudioServer.set_bus_mute(0, true)
@@ -63,6 +84,21 @@ func _ready() -> void:
 	camera.fov = 55.0
 	add_child(camera)
 	camera.make_current()
+
+	if _key:
+		for view in KEY_VIEWS:
+			if view[3]:
+				map.night.cover_moon(30.0)
+
+				for f in 300:
+					await get_tree().process_frame
+
+			await _shot(camera, view[0], view[1], view[2])
+
+		_sheet(Vector2i(640, 360), 2, "key_sheet.png")
+		print("staged %d key views" % _stills.size())
+		get_tree().quit()
+		return
 
 	for view in INSIDE:
 		await _shot(camera, view[0], view[1], view[2])
@@ -125,14 +161,14 @@ func _shot(camera: Camera3D, title: String, at: Vector3, look: Vector3) -> void:
 	_stills.append(image)
 
 
-func _sheet() -> void:
-	var rows := int(ceil(float(_stills.size()) / ACROSS))
-	var sheet := Image.create(THUMB.x * ACROSS, THUMB.y * rows, false, Image.FORMAT_RGB8)
+func _sheet(thumb := THUMB, across := ACROSS, file := "sheet.png") -> void:
+	var rows := int(ceil(float(_stills.size()) / across))
+	var sheet := Image.create(thumb.x * across, thumb.y * rows, false, Image.FORMAT_RGB8)
 
 	for i in _stills.size():
 		var still: Image = (_stills[i] as Image).duplicate()
 		still.convert(Image.FORMAT_RGB8)
-		still.resize(THUMB.x, THUMB.y, Image.INTERPOLATE_BILINEAR)
-		sheet.blit_rect(still, Rect2i(Vector2i.ZERO, THUMB), Vector2i((i % ACROSS) * THUMB.x, (i / ACROSS) * THUMB.y))
+		still.resize(thumb.x, thumb.y, Image.INTERPOLATE_BILINEAR)
+		sheet.blit_rect(still, Rect2i(Vector2i.ZERO, thumb), Vector2i((i % across) * thumb.x, (i / across) * thumb.y))
 
-	sheet.save_png(_out + "sheet.png")
+	sheet.save_png(_out + file)

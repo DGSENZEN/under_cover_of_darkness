@@ -30,6 +30,11 @@ const LADDER_ON_ROOF := 3.25
 ## Lightning through the chapel's glass: its shafts of light flare this many
 ## times their own and die back over this long (s).
 const GLASS_FLARE := 7.0
+## The smallest island of navmesh kept (m²): the tops of sack piles, barrels
+## and crates left out. The highest step a man walks up (m): the garrison's
+## risers are 0.2, and a sack pile's or a bench's top (0.5) must not be one.
+const MIN_ISLAND := 1.2
+const MAX_CLIMB := 0.3
 const GLASS_FADE := 0.9
 ## The moon's way (its light, as garrison_lights sets it); the chapel's north
 ## glass line (z); dust boxes this big, at these distances (m) down a shaft.
@@ -68,6 +73,9 @@ func build() -> void:
 	_garrison_lights()
 	_baker = NavigationRegion3D.new()
 	_baker.set_script(NavBakerScript)
+	# (Nobody routed over a sack pile, a bench or a barrel's top.)
+	_baker.min_island = MIN_ISLAND
+	_baker.agent_max_climb = MAX_CLIMB
 	add_child(_baker)
 
 
@@ -88,6 +96,11 @@ func _doors() -> void:
 			key, String(props.get("label", "")) if String(props.get("label", "")) != "" else "door")
 		door.name = m["name"]
 		doors[m["name"]] = door
+
+		# Studded planks on the panel (its own UVs: the photo swings with it).
+		for panel in door.find_children("*", "MeshInstance3D", true, false):
+			if (panel as MeshInstance3D).get_aabb().size.y > 1.0:
+				(panel as MeshInstance3D).material_override = Materials.surface(&"wood_studded")
 
 
 func _things() -> void:
@@ -292,7 +305,7 @@ func _light(m: Dictionary) -> void:
 		"lamp_post":
 			Lights.lamp_post(self, at.origin, yaw, overrides)
 		"chandelier":
-			Lights.chandelier(self, at.origin, 8, 1.0, overrides)
+			Lights.chandelier(self, at.origin, 8, float(props.get("chain", 1.0)), overrides)
 		"hearth":
 			Lights.hearth(self, at.origin, yaw, overrides)
 		"fire":

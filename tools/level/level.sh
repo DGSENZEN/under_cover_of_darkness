@@ -48,11 +48,11 @@ case "$verb" in
     ;;
   check)
     need_level
-    "$BLENDER" -b "$SOURCE/$level.blend" --python-exit-code 1 --python "$HERE/check.py" -- "${3:-stage1}"
+    "$BLENDER" -b "$SOURCE/$level.blend" --python-exit-code 1 --python "$HERE/check.py" -- "${3:-stage2}"
     ;;
   export)
     need_level
-    "$BLENDER" -b "$SOURCE/$level.blend" --python-exit-code 1 --python "$HERE/export.py" -- "${3:-stage1}"
+    "$BLENDER" -b "$SOURCE/$level.blend" --python-exit-code 1 --python "$HERE/export.py" -- "${3:-stage2}"
     perl -e 'alarm 600; exec @ARGV' "$GODOT" --headless --path "$ROOT" --import > /dev/null 2>&1 || true
     echo "level: imported by Godot"
     ;;

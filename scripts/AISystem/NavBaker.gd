@@ -49,6 +49,9 @@ signal baked
 @export var agent_max_slope := 45.0
 ## Smaller cells follow geometry more closely and bake more slowly.
 @export var cell_size := 0.1
+## The smallest island of floor kept (m²): the tops of small things (a sack
+## pile, a barrel) are left out, so nobody is routed over them. 0 keeps all.
+@export var min_island := 0.0
 
 @export_group("Source")
 ## CSG levels have no static bodies to parse: turn this on for them.
@@ -92,6 +95,9 @@ func bake() -> void:
 	# The baker works in whole cells. Round the climb UP to one, or a riser
 	# exactly at the limit gets rounded out of the mesh.
 	mesh.agent_max_climb = ceilf(agent_max_climb / cell_size - 0.001) * cell_size
+
+	if min_island > 0.0:
+		mesh.region_min_size = ceilf(sqrt(min_island) / cell_size)
 	mesh.geometry_collision_mask = collision_mask
 	mesh.geometry_source_geometry_mode = NavigationMesh.SOURCE_GEOMETRY_ROOT_NODE_CHILDREN
 

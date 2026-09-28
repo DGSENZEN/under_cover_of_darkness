@@ -117,6 +117,13 @@ for material, (slot, surface) in WALLS.items():
     piece("wall_%s_corner" % material, "wall", slot, surface,
           [box(0.0, STOREY / 2.0, 0.0, OUTER, STOREY, OUTER, slot)], size=[OUTER, STOREY, OUTER])
 
+# A low wall: the top of a storey that stops under a floor 1.8 m up (the
+# gatehouse's passage walls, under its walk).
+LOW = 1.8
+
+for length, label in ((1.0, "1"), (2.0, "2"), (4.0, "4")):
+    piece("wall_ashlar_low_%s" % label, "wall", "ashlar", "stone", [box(0.0, LOW / 2.0, 0.0, length, LOW, OUTER, "ashlar")], size=[length, LOW, OUTER])
+
 # A tall wall: two storeys in one (the chapel's, the gatehouse's front).
 for material, (slot, surface) in WALLS.items():
     piece("wall_%s_tall_2" % material, "wall", slot, surface,
@@ -183,6 +190,9 @@ for kind, (slot, surface) in FLOORS.items():
     for size in (2, 4):
         piece("floor_%s_%d" % (kind, size), "floor", slot, surface,
               [box(0.0, -0.1, 0.0, float(size), 0.2, float(size), slot)], size=[float(size), 0.2, float(size)])
+
+# A strip of flags 4 x 1 m: a floor ended flush with a wall's face.
+piece("floor_flag_strip_4", "floor", "flagstone", "stone", [box(0.0, -0.1, 0.0, 4.0, 0.2, 1.0, "flagstone")], size=[4.0, 0.2, 1.0])
 
 # A ceiling under a pitched roof (boards, its underside the room's ceiling):
 # its colliders stop sight and what is thrown, but it is never walked on
@@ -298,7 +308,6 @@ _thing("fire_ring", "stone", "stone", [box(0.0, 0.1, 0.0, 1.6, 0.2, 1.6, "stone"
 _thing("portcullis", "iron", "metal", [box(0.0, 2.5, 0.0, 4.0, 5.0, 0.15, "iron")], solid=False)
 _thing("bush", "leaves", "grass", [box(0.0, 0.6, 0.0, 1.6, 1.2, 1.6, "leaves")], solid=False)
 _thing("tree", "bark", "wood", [box(0.0, 2.0, 0.0, 0.5, 4.0, 0.5, "bark"), box(0.0, 5.0, 0.0, 3.5, 3.0, 3.5, "leaves")])
-_thing("house_front", "timber", "wood", [box(0.0, 4.5, 0.0, 6.0, 9.0, 0.4, "timber"), box(0.0, 10.0, -1.5, 6.4, 2.0, 3.2, "slate")])
 
 # Foreground to frame through (the references' rule 7): a palisade fence, a
 # lattice screen (a brazier behind it throws silhouettes), a railing, a
@@ -386,49 +395,108 @@ PIECES["tree"]["cols"] = [[0.0, 2.0, 0.0, 0.5, 4.0, 0.5, "wood", 0, 0, 0]]
 model("bush", [ks.card(0.0, 0.6, 0.0, 1.7, 1.2, "leaves", yaw) for yaw in (0.0, 60.0, 120.0)])
 model("banner", [ks.box(0.0, 2.85, 0.0, 1.2, 0.06, 0.06, "timber"), ks.card(0.0, 1.6, 0.0, 1.0, 2.4, "cloth")])
 
-# The lane's house fronts: each a photographed front (four of them) on its
-# timbered body under a slate roof.
-for number, facade in ((1, "facade_1"), (2, "facade_2"), (3, "facade_3"), (4, "facade_4")):
-    name = "house_front" if number == 1 else "house_front_%d" % number
-
-    if name not in PIECES:
-        _thing(name, "timber", "wood", [box(0.0, 4.5, 0.0, 6.0, 9.0, 0.4, "timber"), box(0.0, 10.0, -1.5, 6.4, 2.0, 3.2, "slate")])
-
-    model(name, [ks.box(0.0, 4.5, 0.0, 6.0, 9.0, 0.4, "plaster"), ks.card(0.0, 3.2, 0.21, 6.0, 6.4, facade),
-                 ks.box(0.0, 6.5, 0.24, 6.1, 0.18, 0.12, "timber"), ks.box(0.0, 10.0, -1.5, 6.4, 2.0, 3.2, "slate")])
-
-
 # Pitched roofs over the barracks and the chapel (drawn only: their flat
 # ceilings stay what stops sight and feet), their gable ends, chimneys over
 # the hearths and stoves.
-ROOF_OVERHANG = 0.3
+ROOF_OVERHANG = 0.4
+ROOF_VERGE = 0.3
+ROOF_THICK = 0.2
+BARGE = 0.32
 
 
-def _pitched(length, span, rise, slot):
-    """A `length` section of a double-pitched roof `span` across (along z),
-    its eaves at y 0 and its ridge `rise` up: two slabs and a ridge cap."""
+def pitched(length, span, rise, slot="roof_slate", under="boards", tile=1.5, rafters=0.0, verge=ROOF_VERGE, overhang=ROOF_OVERHANG):
+    """A double-pitched roof `length` along x (and its verges past either
+    end), `span` across (z) at its walls: its underside at y 0 on the walls
+    and `rise` at the ridge. Two slopes falling from the ridge to the eaves
+    (their photo's rows along the eaves), a ridge, fascia boards along the
+    eaves, bargeboards at its ends; rafters under it every `rafters` m (0:
+    none, a ceiling hides them)."""
     half = span / 2.0
-    slope = math.hypot(half, rise)
-    angle = math.degrees(math.atan2(rise, half))
-    return [ks.box(0.0, rise / 2.0, half / 2.0, length, 0.2, slope + 2 * ROOF_OVERHANG, slot, 0.0, -angle, 0.0),
-            ks.box(0.0, rise / 2.0, -half / 2.0, length, 0.2, slope + 2 * ROOF_OVERHANG, slot, 0.0, angle, 0.0),
-            ks.box(0.0, rise + 0.08, 0.0, length, 0.25, 0.45, slot)]
+    a = math.atan2(rise, half)
+    lift = ROOF_THICK / math.cos(a)
+    run = overhang * math.cos(a)
+    eave_y = -overhang * math.sin(a) + lift
+    top = rise + lift
+    x0, x1 = -length / 2.0 - verge, length / 2.0 + verge
+    out = []
+
+    for side in (1.0, -1.0):
+        z = side * (half + run)
+        out.append(ks.slab([[x0, top, 0.0], [x1, top, 0.0], [x1, eave_y, z], [x0, eave_y, z]], ROOF_THICK, slot, under=under,
+                           edge="timber", tile=tile, up=(0.0, 1.0, side)))
+        # The fascia along the eaves; the bargeboards down the ends.
+        out.append(ks.box(0.0, eave_y - ROOF_THICK * 0.6, z + side * 0.03, x1 - x0, 0.28, 0.05, "timber"))
+
+        for end, x in ((-1.0, x0 - 0.03), (1.0, x1 + 0.03)):
+            out.append(ks.slab([[x, top + 0.04, 0.0], [x, eave_y + 0.04, z], [x, eave_y + 0.04 - BARGE, z], [x, top + 0.04 - BARGE, 0.0]],
+                               0.05, "timber", up=(end, 0.0, 0.0)))
+
+        if rafters > 0.0:
+            count = int(length // rafters)
+            depth = 0.18
+            along = math.hypot(half, rise)
+
+            for i in range(count + 1):
+                x = -length / 2.0 + 0.1 + i * (length - 0.2) / max(count, 1)
+                out.append(ks.box(x, rise / 2.0 - depth / 2.0 * math.cos(a), side * (half / 2.0 - depth / 2.0 * math.sin(a)), 0.12, depth, along,
+                                  "timber", 0.0, side * math.degrees(a), 0.0))
+
+    # The ridge: a row of tiles over where the slopes meet.
+    out.append(ks.box(0.0, top, 0.0, x1 - x0, 0.26, 0.26, slot, 0.0, 45.0, 0.0))
+    return out
 
 
-for length in (2, 4):
-    for span, rise in ((16, 5.0), (10, 4.0)):
-        name = "roof_ridge_%dx%d" % (length, span)
-        piece(name, "roof", "slate", "stone", [], cols=[], size=[float(length), rise + 0.4, span + 2 * ROOF_OVERHANG])
-        model(name, _pitched(float(length), float(span), rise, "slate"))
+def _roof(name, length, span, rise, **options):
+    piece(name, "roof", options.get("slot", "roof_slate"), "stone", [], cols=[],
+          size=[length + 2 * ROOF_VERGE, rise + 0.6, span + 2 * (ROOF_OVERHANG + 0.1)])
+    PIECES[name]["span"] = span
+    model(name, pitched(length, span, rise, **options))
 
-for span, rise, slot in ((16, 5.0, "plaster"), (10, 4.0, "ashlar")):
-    name = "gable_%d" % span
-    piece(name, "roof", slot, "stone", [], cols=[], size=[float(span), rise, OUTER])
-    model(name, [ks.gable(0.0, 0.0, 0.0, float(span), rise, OUTER, slot)])
 
-piece("chimney_6", "roof", "ashlar", "stone", [], cols=[], size=[1.3, 6.3, 1.3])
-model("chimney_6", [ks.box(0.0, 3.0, 0.0, 1.0, 6.0, 1.0, "ashlar"), ks.box(0.0, 6.15, 0.0, 1.3, 0.3, 1.3, "ashlar"),
-                    ks.box(0.0, 6.2, 0.0, 0.5, 0.05, 0.5, "pitch")])
+# The barracks' (38 m along its wing, 16 across, slate) and the chapel's
+# (20 m along its nave, 9.6 across, steeper, fish-scale slates, open to its
+# rafters inside).
+_roof("roof_16x38", 38.0, 16.0, 5.0)
+_roof("roof_10x21", 20.0, 9.6, 5.0, slot="roof_fish", tile=1.2, rafters=0.9)
+
+
+def _framed_gable(span, rise, depth, slot):
+    """A gable end, its timbers on both faces: the tie beam, a king post, a
+    collar, two struts; a louvred vent up in it."""
+    out = [ks.gable(0.0, 0.0, 0.0, span, rise, depth, slot)]
+    collar_y = rise * 0.5
+    collar_w = span * (1.0 - collar_y / rise) - 0.3
+
+    for face in (1.0, -1.0):
+        z = face * (depth / 2.0 + 0.02)
+        out.append(ks.box(0.0, 0.14, z, span - 0.2, 0.28, 0.08, "timber"))
+        out.append(ks.box(0.0, rise * 0.45, z, 0.22, rise * 0.9 - 0.2, 0.08, "timber"))
+        out.append(ks.box(0.0, collar_y, z, collar_w, 0.22, 0.08, "timber"))
+
+        for side in (-1.0, 1.0):
+            length = math.hypot(span * 0.22, collar_y - 0.3)
+            angle = math.degrees(math.atan2(collar_y - 0.3, span * 0.22))
+            out.append(ks.box(side * span * 0.14, 0.3 + (collar_y - 0.3) / 2.0, z, length, 0.18, 0.08, "timber", 0.0, 0.0, -side * angle))
+
+        out.append(ks.card(0.0, rise * 0.7, face * (depth / 2.0 + 0.045), 0.7, 0.7, "shutters", 0.0 if face > 0 else 180.0))
+
+    return out
+
+
+piece("gable_16", "roof", "plaster", "stone", [], cols=[], size=[16.0, 5.0, OUTER])
+model("gable_16", _framed_gable(16.0, 5.0, OUTER, "plaster"))
+
+piece("chimney_6", "roof", "ashlar", "stone", [], cols=[], size=[1.3, 6.6, 1.3])
+model("chimney_6", [ks.box(0.0, 3.0, 0.0, 1.0, 6.0, 1.0, "ashlar"), ks.box(0.0, 6.12, 0.0, 1.25, 0.25, 1.25, "ashlar"),
+                    ks.lathe(-0.22, 6.25, 0.0, [[0.13, 0.0], [0.11, 0.3], [0.14, 0.42]], 8, "clay"),
+                    ks.lathe(0.22, 6.25, 0.0, [[0.13, 0.0], [0.11, 0.24], [0.14, 0.34]], 8, "clay"),
+                    ks.prism(-0.22, 6.66, 0.0, 0.12, 0.02, 8, "pitch"), ks.prism(0.22, 6.58, 0.0, 0.12, 0.02, 8, "pitch")])
+
+
+# A window lit from within, leaded: its glass in the opening's outer face,
+# a mullion and two transoms of lead over it.
+model("window_lit", [ks.card(0.0, 1.55, 0.0, 0.85, 1.25, "glass_lit"), ks.box(0.0, 1.55, 0.02, 0.03, 1.25, 0.02, "iron")]
+      + [ks.box(0.0, y, 0.02, 0.85, 0.03, 0.02, "iron") for y in (1.2, 1.9)])
 
 
 # The chapel's hero pieces: stained glass in the lancets (a pane the size of
@@ -444,3 +512,17 @@ for name, width, height, slot in (("glass_lancet", 0.9, 3.6, "stained_glass"), (
 # yards' corners). Drawn only.
 piece("weeds", "dressing", "leaves", "grass", [], cols=[], size=[0.7, 0.45, 0.7])
 model("weeds", [ks.card(0.0, 0.2, 0.0, 0.7, 0.4, "leaves", yaw) for yaw in (0.0, 60.0, 120.0)])
+
+
+# The lanes' houses (kit_houses: house_a .. house_f).
+import kit_houses  # noqa: E402,F401
+
+# The building dressing (kit_art: banners, the gate's arches, framed walls,
+# joists, trusses).
+import kit_art  # noqa: E402,F401
+
+# The chapel's art (kit_chapel).
+import kit_chapel  # noqa: E402,F401
+
+# The props (kit_props: the mess hall's and kitchen's, the dressing modelled).
+import kit_props  # noqa: E402,F401

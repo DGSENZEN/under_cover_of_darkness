@@ -14,6 +14,13 @@ frame (Godot's axes, as the boxes: x along it, y up, z through it):
     gable    a triangular end under a pitched roof
     card     a flat rectangle drawn both ways (foliage, a photographed front),
              its photo across it (UVs 0..1)
+    lathe    a profile turned about an upright axis (a bowl, a tankard, a
+             jug, a keg on its side, a spire), tipped by yaw/pitch/roll
+    disc     a flat n-gon drawn both ways, its photo across it (a rose
+             window's glass, a shield's face)
+    slab     a board through four corners with a thickness under it, its
+             photo laid along its first edge (a roof's slope, its rows along
+             the eaves)
 
 build(shapes) makes them one mesh part: {"verts": [[x, y, z], ...],
 "faces": [(indices, slot, uvs), ...]}, each face wound outward
@@ -71,15 +78,75 @@ def card(cx, cy, cz, width, height, slot, yaw=0.0, pitch=0.0):
     return {"kind": "card", "centre": [cx, cy, cz], "size": [width, height], "slot": slot, "turn": [yaw, pitch, 0.0]}
 
 
+def lathe(cx, cy, cz, profile, sides, slot, yaw=0.0, pitch=0.0, roll=0.0, caps=True, closed=False):
+    """`profile` [[radius, height], ...] from the bottom up (heights from
+    cy) turned `sides` round an upright axis through (cx, cz), then tipped
+    by yaw/pitch/roll. `caps` closes an end whose radius is above 0;
+    `closed` joins its last ring to its first (a ring's section)."""
+    return {"kind": "lathe", "centre": [cx, cy, cz], "profile": [list(p) for p in profile], "sides": int(sides), "slot": slot,
+            "turn": [yaw, pitch, roll], "caps": caps, "closed": closed}
+
+
+def disc(cx, cy, cz, radius, sides, slot, yaw=0.0, pitch=0.0):
+    """A flat `sides`-gon of `radius` facing +z (turned by yaw/pitch),
+    drawn both ways, its photo across it."""
+    return {"kind": "disc", "centre": [cx, cy, cz], "radius": radius, "sides": int(sides), "slot": slot, "turn": [yaw, pitch, 0.0]}
+
+
+def slab(corners, thickness, slot, under=None, edge=None, tile=1.0, up=(0.0, 1.0, 0.0)):
+    """A board whose top runs through `corners` (four, in the piece's
+    frame), `thickness` beneath it: its top in `slot`, facing the `up` side,
+    its photo laid along it (u along corner 0 to 1, v along 0 to 3, one photo
+    every `tile` m, or [along, down]); its underside in `under`, its edges in `edge` (both
+    `slot` if not given)."""
+    return {"kind": "slab", "corners": [list(c) for c in corners], "thickness": thickness, "slot": slot,
+            "under": under or slot, "edge": edge or slot, "tile": tile, "up": list(up)}
+
+
+def ring(cx, cy, cz, inner, outer, depth, start, end, segments, slot, yaw=0.0):
+    """An arc of a ring in the plane facing +z (turned by yaw), centred on
+    (cx, cy, cz): from `inner` to `outer` out, `depth` thick, from `start`
+    to `end` degrees (0 to the right, 90 up) in `segments` (an arch's hood,
+    a rose window's frame, a shield's rim)."""
+    return {"kind": "ring", "centre": [cx, cy, cz], "inner": inner, "outer": outer, "depth": depth, "start": start, "end": end,
+            "segments": int(segments), "slot": slot, "turn": [yaw, 0.0, 0.0]}
+
+
+def moved(shapes, yaw=0.0, offset=(0.0, 0.0, 0.0)):
+    """Copies of `shapes` turned `yaw` degrees about the piece's upright
+    axis, then moved by `offset` (a roof laid along z instead of x)."""
+    turn = geo.rotation(yaw)
+    out = []
+
+    for shape in shapes:
+        shape = dict(shape)
+
+        if shape["kind"] == "arched":
+            raise ValueError("an arched wall is placed by its piece, not moved")
+
+        if shape["kind"] == "slab":
+            shape["corners"] = [geo.add(geo.apply(turn, c), offset) for c in shape["corners"]]
+            shape["up"] = geo.apply(turn, shape["up"])
+        else:
+            shape["centre"] = geo.add(geo.apply(turn, shape["centre"]), offset)
+            shape["turn"] = [shape["turn"][0] + yaw, shape["turn"][1], shape["turn"][2]]
+
+        out.append(shape)
+
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Building
 # ---------------------------------------------------------------------------
 
 def build(shapes):
     part = {"verts": [], "faces": []}
+    makers = {"box": _box, "prism": _prism, "arched": _arched, "gable": _gable, "card": _card, "lathe": _lathe, "disc": _disc,
+              "slab": _slab, "ring": _ring}
 
     for shape in shapes:
-        {"box": _box, "prism": _prism, "arched": _arched, "gable": _gable, "card": _card}[shape["kind"]](part, shape)
+        makers[shape["kind"]](part, shape)
 
     return part
 
@@ -252,3 +319,98 @@ def _card(part, shape):
     uvs = [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]
     _add_face(part, corners, shape["slot"], uvs)
     _add_face(part, corners[::-1], shape["slot"], uvs[::-1])
+
+
+def _lathe(part, shape):
+    n = shape["sides"]
+    rings = []
+
+    for radius, height in shape["profile"]:
+        rings.append([_placed(shape, [radius * math.cos(2 * math.pi * k / n), height, radius * math.sin(2 * math.pi * k / n)]) for k in range(n)])
+
+    pairs = list(zip(rings, rings[1:]))
+
+    if shape["closed"]:
+        pairs.append((rings[-1], rings[0]))
+
+    for a, b in pairs:
+        for k in range(n):
+            j = (k + 1) % n
+            _add_face(part, [a[k], a[j], b[j], b[k]][::-1], shape["slot"])
+
+    if shape["caps"] and not shape["closed"]:
+        if shape["profile"][0][0] > 1e-6:
+            _add_face(part, rings[0], shape["slot"])
+
+        if shape["profile"][-1][0] > 1e-6 and len(shape["profile"]) > 1 and shape["profile"][-1][1] > shape["profile"][0][1] + 1e-6 \
+                and _closes_top(shape["profile"]):
+            _add_face(part, rings[-1][::-1], shape["slot"])
+
+
+def _closes_top(profile):
+    """A lathe's top is closed unless its profile rises to an open mouth (its
+    last point further out than the one before it: a bowl, a tankard)."""
+    if len(profile) < 2:
+        return True
+
+    return profile[-1][0] <= profile[-2][0] + 1e-6
+
+
+def _disc(part, shape):
+    n, r = shape["sides"], shape["radius"]
+    local = [[r * math.cos(2 * math.pi * k / n + math.pi / 2), r * math.sin(2 * math.pi * k / n + math.pi / 2)] for k in range(n)]
+    points = [_placed(shape, [x, y, 0.0]) for x, y in local]
+    uvs = [[0.5 + x / (2 * r), 0.5 - y / (2 * r)] for x, y in local]
+    # (Its photo across it: stretched so the n-gon's corners reach its edges.)
+    us = [u for u, _ in uvs]
+    vs = [v for _, v in uvs]
+    uvs = [[(u - min(us)) / (max(us) - min(us)), (v - min(vs)) / (max(vs) - min(vs))] for u, v in uvs]
+    _add_face(part, points, shape["slot"], uvs)
+    _add_face(part, points[::-1], shape["slot"], uvs[::-1])
+
+
+def _slab(part, shape):
+    top = [list(c) for c in shape["corners"]]
+    a, b, d = top[0], top[1], top[3]
+    across = geo.sub(b, a)
+    down = geo.sub(d, a)
+    across = [c / math.sqrt(geo.dot(across, across)) for c in across]
+    down = [c / math.sqrt(geo.dot(down, down)) for c in down]
+    tile = shape["tile"] if isinstance(shape["tile"], (list, tuple)) else (shape["tile"], shape["tile"])
+    uvs = [[geo.dot(geo.sub(p, a), across) / tile[0], geo.dot(geo.sub(p, a), down) / tile[1]] for p in top]
+    normal = _normal(top)
+
+    if geo.dot(normal, shape["up"]) < 0.0:
+        top, uvs = top[::-1], uvs[::-1]
+        normal = [-c for c in normal]
+
+    length = math.sqrt(geo.dot(normal, normal))
+    offset = [-c / length * shape["thickness"] for c in normal]
+    bottom = [geo.add(p, offset) for p in top]
+    _add_face(part, top, shape["slot"], uvs)
+    _add_face(part, bottom[::-1], shape["under"])
+
+    for i in range(4):
+        j = (i + 1) % 4
+        _add_face(part, [top[j], top[i], bottom[i], bottom[j]], shape["edge"])
+
+
+def _ring(part, shape):
+    n, d = shape["segments"], shape["depth"] / 2.0
+    whole = abs((shape["end"] - shape["start"]) % 360.0) < 1e-6
+    angles = [math.radians(shape["start"] + (shape["end"] - shape["start"]) * i / n) for i in range(n + 1)]
+
+    def at(radius, angle, z):
+        return _placed(shape, [radius * math.cos(angle), radius * math.sin(angle), z])
+
+    for a0, a1 in zip(angles, angles[1:]):
+        ri, ro = shape["inner"], shape["outer"]
+        _add_face(part, [at(ri, a0, d), at(ro, a0, d), at(ro, a1, d), at(ri, a1, d)], shape["slot"])
+        _add_face(part, [at(ri, a1, -d), at(ro, a1, -d), at(ro, a0, -d), at(ri, a0, -d)], shape["slot"])
+        _add_face(part, [at(ro, a0, d), at(ro, a0, -d), at(ro, a1, -d), at(ro, a1, d)], shape["slot"])
+        _add_face(part, [at(ri, a1, d), at(ri, a1, -d), at(ri, a0, -d), at(ri, a0, d)], shape["slot"])
+
+    if not whole:
+        for angle, flip in ((angles[0], False), (angles[-1], True)):
+            quad = [at(shape["inner"], angle, d), at(shape["inner"], angle, -d), at(shape["outer"], angle, -d), at(shape["outer"], angle, d)]
+            _add_face(part, quad[::-1] if flip else quad, shape["slot"])
