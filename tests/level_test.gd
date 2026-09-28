@@ -186,6 +186,30 @@ func _garrison() -> void:
 	_check("G15 the chapel's lancets are glazed (the glass in its own colours, unlit), its shafts project the glass, reliefs on its walls",
 		panes15 >= 9 and glows15 and cast15 and reliefs15 >= 3, "panes %d, glowing %s, shafts projecting (photo %s) %s, reliefs %d" % [panes15, glows15, photo15, cast15, reliefs15])
 
+	# G16 the level's shading baked into its vertex colours (the PS2 way):
+	# the walls carry colours that darken into corners, soot and damp, and
+	# brighten out in the open
+	var shades16: Array[float] = []
+	var coloured16 := 0
+	var walls16 := 0
+
+	for mesh in level.root.find_children("wall_*", "MeshInstance3D", true, false):
+		walls16 += 1
+		var arrays := ((mesh as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0)
+		var colours: PackedColorArray = arrays[Mesh.ARRAY_COLOR] if arrays[Mesh.ARRAY_COLOR] != null else PackedColorArray()
+
+		if not colours.is_empty():
+			coloured16 += 1
+
+			for c in colours:
+				shades16.append((c.r + c.g + c.b) / 3.0)
+
+	shades16.sort()
+	var spread16: bool = not shades16.is_empty() and shades16[int(shades16.size() * 0.05)] < 0.75 and shades16[int(shades16.size() * 0.95)] > 0.9
+	_check("G16 the walls carry their baked shading in vertex colours, dark in corners and bright in the open",
+		walls16 > 50 and coloured16 == walls16 and spread16,
+		"walls %d, coloured %d, 5th/95th percentile %s" % [walls16, coloured16, [shades16[int(shades16.size() * 0.05)], shades16[int(shades16.size() * 0.95)]] if not shades16.is_empty() else []])
+
 	# G6 lightning through the stained glass: the chapel's shafts of light
 	# flare with a flash and die back after it
 	var shafts: Array = get_tree().get_nodes_in_group(&"glass_shafts")
