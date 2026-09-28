@@ -465,6 +465,15 @@ func _garrison() -> void:
 		fires30.size() >= 3 and sooted30 and int(kinds30.get("dirt", 0)) >= 10 and int(kinds30.get("straw", 0)) >= 2 and int(kinds30.get("leaves", 0)) >= 4 and stains30 and strewn30 and flat30,
 		"fires %d sooted %s, kinds %s, stains multiply %s, straw and leaves painted decals %s, flat %s" % [fires30.size(), sooted30, kinds30, stains30, strewn30, flat30])
 
+	# G31 our own paintings are always here (committed, no photo in them):
+	# every painted slot finds its painting; the chapel's runner is one (it
+	# was the one slot left on its flat colour: no photo was ever made)
+	var painted31: Array = Materials.SLOTS.keys().filter(func(k): return bool(Materials.SLOTS[k].get("painted", false)))
+	var found31: bool = painted31.all(func(k): return Materials.photo(k) != null)
+	var runner31: bool = painted31.has(&"carpet") and Materials.photo(&"carpet") != null
+	_check("G31 every painted slot finds its painting; the chapel's runner is painted, not flat", found31 and runner31,
+		"painted %d all found %s, runner %s" % [painted31.size(), found31, runner31])
+
 	# G21 drawn only as near as it shows: small dressing fades out at its
 	# range; the big walls occlude what is behind them (occlusion culling on)
 	var small21: Array = level.root.find_children("weeds*", "MeshInstance3D", true, false) + level.root.find_children("candle_stand*", "MeshInstance3D", true, false)

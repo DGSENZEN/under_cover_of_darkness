@@ -42,7 +42,7 @@ const SLOTS := {
 	&"gravel": {"photo": "gravel", "colour": Color("55514B"), "metallic": 0.0, "roughness": 0.95, "tile": 2.0},
 	&"stone_moss": {"photo": "stone_moss", "colour": Color("4F5244"), "metallic": 0.0, "roughness": 0.9, "tile": 2.0},
 	&"wood_studded": {"photo": "wood_studded", "colour": Color("3A2A1E"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
-	&"carpet": {"photo": "carpet", "colour": Color("5E1712"), "metallic": 0.0, "roughness": 0.95},
+	&"carpet": {"photo": "carpet", "painted": true, "colour": Color("5E1712"), "metallic": 0.0, "roughness": 0.95, "tile": 1.0},
 	&"leaves": {"photo": "leaves", "colour": Color("1F2B16"), "metallic": 0.0, "roughness": 0.95, "cut": true},
 	# Nature (tools/level/kit_nature; our own paintings): drawn in the
 	# swaying foliage (level_surface): "sway" is [rustle, bough] (m: a
@@ -83,7 +83,8 @@ const SLOTS := {
 	&"plaster_ochre": {"photo": "plaster_ochre", "colour": Color("8A6E44"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
 	&"tiles_chancel": {"photo": "tiles_chancel", "colour": Color("7A4A30"), "metallic": 0.0, "roughness": 0.6, "tile": 0.9},
 	# Painted by us (tools/textures/paint.py, committed): the garrison's
-	# banner, the rose window, the altar's frontal, the mess hall's shields.
+	# banner, the rose window, the altar's frontal, the mess hall's shields
+	# (the chapel's runner is painted too: carpet, above).
 	&"banner": {"photo": "banner", "painted": true, "colour": Color("6E1414"), "metallic": 0.0, "roughness": 0.95, "cut": true},
 	&"rose_window": {"photo": "rose_window", "painted": true, "colour": Color("3A3A8A"), "metallic": 0.0, "roughness": 0.4, "glow": 0.7},
 	&"altar_frontal": {"photo": "altar_frontal", "painted": true, "colour": Color("681018"), "metallic": 0.0, "roughness": 0.95},

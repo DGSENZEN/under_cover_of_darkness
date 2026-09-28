@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Textures we paint ourselves (no photo in them, so they are committed):
-the garrison's banner, the chapel's rose window and altar frontal, the mess
-hall's shields, the moon, and the nature round the walls: leaves for a
+the garrison's banner, the chapel's rose window, altar frontal and runner,
+the mess hall's shields, the moon, and the nature round the walls: leaves for a
 tree's crown and a shrub, a yew's needles, bare twigs, grass, broad weeds,
 reeds, ivy, and bark.
 
@@ -926,11 +926,45 @@ def decal_leaves():
     return _finish(image, (size, size), 20, mask_image)
 
 
+def carpet():
+    """The chapel's runner, tiling both ways: a deep red weave (warp and weft
+    threads), a lattice of darker diamonds with a gold knot at each crossing,
+    worn paler in soft patches."""
+    size = 128
+    big = size * SCALE
+    rng = np.random.default_rng(755)
+    y, x = np.mgrid[0:big, 0:big] / float(big)
+    # Threads: fine waves across and along, a whole number to the tile.
+    weave = 0.5 + 0.25 * np.cos(math.tau * 64 * x) * np.cos(math.tau * 64 * y) + 0.1 * np.cos(math.tau * 128 * (x + y))
+    # Diamonds: |x| + |y| in each of four cells to the tile, banded.
+    cx = np.abs(((x * 4.0) % 1.0) - 0.5)
+    cy = np.abs(((y * 4.0) % 1.0) - 0.5)
+    diamond = cx + cy
+    band = (np.abs(diamond - 0.36) < 0.035)
+    knot = np.hypot(cx - 0.5, cy - 0.5) < 0.07
+    # Wear: slow, tiling.
+    wear = np.zeros_like(x)
+
+    for _ in range(6):
+        fx, fy = int(rng.integers(1, 4)), int(rng.integers(1, 4))
+        wear += rng.uniform(0.3, 1.0) * np.cos(math.tau * (fx * x + fy * y) + rng.uniform(0, math.tau))
+
+    wear = (wear - wear.min()) / (wear.max() - wear.min())
+    red = np.array([112.0, 22.0, 20.0])
+    pixels = red[None, None, :] * (0.78 + 0.35 * weave)[:, :, None]
+    pixels[band] = np.array([62.0, 10.0, 12.0])
+    pixels[knot] = np.array([176.0, 132.0, 58.0])
+    pixels *= (0.92 + 0.22 * wear)[:, :, None]
+    image = Image.fromarray(np.clip(pixels, 0, 255).astype(np.uint8), "RGB")
+    return image.resize((size, size), Image.Resampling.BOX).quantize(colors=16, dither=Image.Dither.NONE).convert("RGB")
+
+
 PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_frontal": altar_frontal,
              "shield_1": shield_1, "shield_2": shield_2, "shield_3": shield_3,
              "leaf_crown": leaf_crown, "leaf_shrub": leaf_shrub, "yew": yew, "twigs": twigs, "grass": grass,
              "weed_broad": weed_broad, "reeds": reeds, "ivy": ivy, "bark": bark, "bat": bat,
-             "decal_soot": decal_soot, "decal_dirt": decal_dirt, "decal_straw": decal_straw, "decal_leaves": decal_leaves}
+             "decal_soot": decal_soot, "decal_dirt": decal_dirt, "decal_straw": decal_straw, "decal_leaves": decal_leaves,
+             "carpet": carpet}
 
 
 def main(argv):

@@ -173,6 +173,27 @@ class FloorDecals(unittest.TestCase):
         self.assertTrue(set(np.unique(_alpha("decal_leaves"))) <= {0, 255})
 
 
+class Carpet(unittest.TestCase):
+    def test_the_carpet_tiles_both_ways(self):
+        image = np.asarray(paint.PAINTINGS["carpet"]().convert("RGB")).astype(float)
+        inside = np.abs(np.diff(image, axis=1)).mean()
+        self.assertLess(np.abs(image[:, -1] - image[:, 0]).mean(), inside * 2.0 + 4.0)
+        inside_v = np.abs(np.diff(image, axis=0)).mean()
+        self.assertLess(np.abs(image[-1] - image[0]).mean(), inside_v * 2.0 + 4.0)
+
+    def test_the_carpet_is_a_deep_red_weave_with_a_pattern_in_it(self):
+        image = paint.PAINTINGS["carpet"]()
+        w, h = image.size
+        self.assertEqual(w & (w - 1), 0)
+        self.assertEqual(h & (h - 1), 0)
+        pixels = np.asarray(image.convert("RGB")).astype(float)
+        mean = pixels.reshape(-1, 3).mean(axis=0)
+        self.assertGreater(mean[0], mean[1] + 30)
+        self.assertGreater(mean[0], mean[2] + 30)
+        self.assertGreaterEqual(len({tuple(p) for p in pixels.reshape(-1, 3).astype(int)}), 8)
+        self.assertGreater(pixels.std(), 10.0)
+
+
 class Bark(unittest.TestCase):
     def test_bark_is_solid_and_tiles_both_ways(self):
         image = np.asarray(paint.PAINTINGS["bark"]().convert("RGB")).astype(float)
