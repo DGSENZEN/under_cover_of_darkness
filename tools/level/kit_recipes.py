@@ -422,3 +422,12 @@ for span, rise, slot in ((16, 5.0, "plaster"), (10, 4.0, "ashlar")):
 piece("chimney_6", "roof", "ashlar", "stone", [], cols=[], size=[1.3, 6.3, 1.3])
 model("chimney_6", [ks.box(0.0, 3.0, 0.0, 1.0, 6.0, 1.0, "ashlar"), ks.box(0.0, 6.15, 0.0, 1.3, 0.3, 1.3, "ashlar"),
                     ks.box(0.0, 6.2, 0.0, 0.5, 0.05, 0.5, "pitch")])
+
+
+# The chapel's hero pieces: stained glass in the lancets (a pane the size of
+# the opening; the wall hides its corners round the pointed head), reliefs
+# for its walls (a frieze, the angels over the altar). Drawn only.
+for name, width, height, slot in (("glass_lancet", 0.9, 3.6, "stained_glass"), ("relief_panel", 2.6, 1.13, "relief_frieze"),
+                                  ("relief_altar", 3.2, 1.6, "relief_angels")):
+    piece(name, "dressing", slot, "stone", [], cols=[], size=[width, height, 0.1])
+    model(name, [ks.card(0.0, height / 2.0, 0.0, width, height, slot)])

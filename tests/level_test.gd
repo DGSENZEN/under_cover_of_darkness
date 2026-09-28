@@ -173,6 +173,19 @@ func _garrison() -> void:
 	_check("G14 the level is drawn in its slots' level materials, mapped to the world at each slot's size, photo or flat colour, leaves cut out",
 		wrong14.is_empty() and cut14 and drawn14.size() >= 8, "%s, leaves cut %s, materials %d" % [wrong14, cut14, drawn14.size()])
 
+	# G15 the chapel's glass: every lancet glazed with the stained glass
+	# (glowing, as moonlit), the moonlight's shafts projecting it when the
+	# photo is here; reliefs on its walls
+	var glass15: StandardMaterial3D = Materials.level_surface(&"stained_glass")
+	var panes15: int = level.root.find_children("glass_lancet*", "", true, false).size()
+	var reliefs15: int = level.root.find_children("relief_*", "", true, false).size()
+	# (Drawn unlit, as the PS2 drew glass: its own colours, whatever shines on it.)
+	var glows15: bool = glass15.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED
+	var photo15: bool = Materials.photo(&"stained_glass") != null
+	var cast15: bool = get_tree().get_nodes_in_group(&"glass_shafts").all(func(l): return ((l as Light3D).light_projector != null) == photo15)
+	_check("G15 the chapel's lancets are glazed (the glass in its own colours, unlit), its shafts project the glass, reliefs on its walls",
+		panes15 >= 9 and glows15 and cast15 and reliefs15 >= 3, "panes %d, glowing %s, shafts projecting (photo %s) %s, reliefs %d" % [panes15, glows15, photo15, cast15, reliefs15])
+
 	# G6 lightning through the stained glass: the chapel's shafts of light
 	# flare with a flash and die back after it
 	var shafts: Array = get_tree().get_nodes_in_group(&"glass_shafts")

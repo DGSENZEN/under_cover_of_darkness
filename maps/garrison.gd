@@ -14,6 +14,7 @@ extends "res://maps/npc_showcase.gd"
 
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const ClimbScript := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
+const Materials := preload("res://scripts/Visual/Materials.gd")
 const LEVEL := "res://assets/level/garrison"
 ## The night it plays: six acts on the level's marks.
 const GARRISON_STORY := "res://scripts/Showcase/GarrisonNight.gd"
@@ -285,7 +286,7 @@ func _light(m: Dictionary) -> void:
 			glow.global_position = at.origin
 		"window_shaft":
 			# Moonlight through the glass: a spot along the moon's way, caught in
-			# the chapel's dusty fog (its glass's cookie comes with the art pass).
+			# the chapel's dusty fog.
 			var shaft := SpotLight3D.new()
 			shaft.light_color = overrides.get("color", Color(1.0, 0.7, 0.4))
 			shaft.light_energy = float(overrides.get("energy", 2.0))
@@ -293,6 +294,8 @@ func _light(m: Dictionary) -> void:
 			shaft.spot_angle = 12.0
 			shaft.light_volumetric_fog_energy = 3.0
 			shaft.shadow_enabled = false
+			# (The glass's picture cast through it, when the photo is here.)
+			shaft.light_projector = Materials.photo(&"stained_glass")
 			shaft.set_meta(&"calm", shaft.light_energy)
 			shaft.add_to_group(&"glass_shafts")
 			add_child(shaft)

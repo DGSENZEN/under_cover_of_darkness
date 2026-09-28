@@ -284,6 +284,25 @@ def chapel():
     G.wall((13.8, -25.6), (13.8, -16.0), "ashlar", 3.0, s, storeys=3, openings={2.4: "lancet", 5.0: "lancet", 8.2: "door"})
     G.floor(-6, -26, 14, -16, "flag", 0.0, s)
 
+    # The glass in every lancet (panes in the wall's middle, from its sill):
+    # the north tier from the floor, the south, west and east tiers a storey
+    # up.
+    for x in (-2.0, 2.0, 6.0, 10.0):
+        G.put("glass_lancet", (x, 1.8, -25.4), 0.0, s)
+
+    for x in (-2.0, 8.0):
+        G.put("glass_lancet", (x, 4.8, -16.2), 0.0, s)
+
+    for x, z in ((-5.8, -20.8), (13.8, -23.2), (13.8, -20.6)):
+        G.put("glass_lancet", (x, 4.8, z), 90.0, s)
+
+    # Reliefs lit from below by candle stands: a frieze between the north
+    # lancets either side, the angels over the altar.
+    for x in (0.0, 8.0):
+        G.put("relief_panel", (x, 1.85, -25.17), 0.0, s)
+
+    G.put("relief_altar", (13.57, 1.4, -20.8), -90.0, s)
+
     for x in range(-4, 12, 2):
         G.put("floor_carpet_2", (x + 1.0, 0.02, -20.8), 0.0, s)
 
@@ -297,8 +316,10 @@ def chapel():
     for z in (-24.4, -23.0):
         G.put("candle_stand", (10.6, 0, z), 0.0, s)
 
+    for x in (0.0, 8.0):
+        G.put("candle_stand", (x, 0, -24.8), 0.0, s)
+
     for x in (-2.0, 4.0):
-        G.put("candle_stand", (x, 0, -25.0), 0.0, s)
         G.put("candle_stand", (x, 0, -16.6), 0.0, s)
 
     # Banners for the relief panels until the art pass (the chandeliers are

@@ -48,8 +48,8 @@ const SLOTS := {
 	&"glass_lit": {"photo": "", "colour": Color("FFB765"), "metallic": 0.0, "roughness": 0.4},
 	# Photos drawn on a piece's own face (its UVs): the chapel's glass, reliefs,
 	# arcade and bands; the lane's house fronts; shutters.
-	&"stained_glass": {"photo": "stained_glass", "colour": Color("7A3A2A"), "metallic": 0.0, "roughness": 0.4},
-	&"stained_glass_small": {"photo": "stained_glass_small", "colour": Color("5E6A4A"), "metallic": 0.0, "roughness": 0.4},
+	&"stained_glass": {"photo": "stained_glass", "colour": Color("7A3A2A"), "metallic": 0.0, "roughness": 0.4, "glow": 0.75},
+	&"stained_glass_small": {"photo": "stained_glass_small", "colour": Color("5E6A4A"), "metallic": 0.0, "roughness": 0.4, "glow": 0.6},
 	&"relief_frieze": {"photo": "relief_frieze", "colour": Color("8C8170"), "metallic": 0.0, "roughness": 0.9},
 	&"relief_angels": {"photo": "relief_angels", "colour": Color("8C8170"), "metallic": 0.0, "roughness": 0.9},
 	&"arcade": {"photo": "arcade", "colour": Color("7C766C"), "metallic": 0.0, "roughness": 0.9},
@@ -121,7 +121,8 @@ static func surface(slot: StringName) -> StandardMaterial3D:
 ## surface(), but a slot with a "tile" is mapped to the world, one photo every
 ## "tile" metres whichever way the face looks (walls, floors and roofs run on
 ## from piece to piece without seams), and a "cut" slot's photo is cut out
-## where it is clear (leaves on a card). Shared per slot.
+## where it is clear (leaves on a card), and a "glow" slot is drawn unlit in
+## its own photo's colours (the chapel's glass). Shared per slot.
 static func level_surface(slot: StringName) -> StandardMaterial3D:
 	if _level.has(slot):
 		return _level[slot]
@@ -134,6 +135,13 @@ static func level_surface(slot: StringName) -> StandardMaterial3D:
 		material.uv1_world_triplanar = true
 		material.uv1_triplanar_sharpness = TRIPLANAR_SHARPNESS
 		material.uv1_scale = Vector3.ONE / float(entry["tile"])
+
+	# Glass the moon shines through: drawn unlit, as the PS2 drew it, in its
+	# own colours ("glow" as bright) whatever light falls on it.
+	if float(entry.get("glow", 0.0)) > 0.0:
+		var bright := float(entry["glow"])
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_color = (Color(bright, bright, bright) if material.albedo_texture != null else entry["colour"] * bright)
 
 	if bool(entry.get("cut", false)) and material.albedo_texture != null:
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR

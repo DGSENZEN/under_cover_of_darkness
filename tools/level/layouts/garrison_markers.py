@@ -149,7 +149,7 @@ def lights(G):
     L("chandelier_w", "chandelier", (0.0, 9.0, -20.8), "chapel")
     L("chandelier_e", "chandelier", (7.0, 9.0, -20.8), "chapel")
 
-    for i, (x, z) in enumerate(((10.6, -24.4), (10.6, -23.0), (-2.0, -25.0), (4.0, -25.0), (-2.0, -16.6), (4.0, -16.6))):
+    for i, (x, z) in enumerate(((10.6, -24.4), (10.6, -23.0), (0.0, -24.8), (8.0, -24.8), (-2.0, -16.6), (4.0, -16.6))):
         L("candle_stand_%d" % i, "candle", (x, 1.45, z), "chapel")
 
     L("candles_altar_0", "candle", (11.6, 1.1, -21.7), "chapel")
