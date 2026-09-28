@@ -4,6 +4,7 @@ extends Node3D
 ## the garrison.
 ##   Godot --headless --fixed-fps 60 --path . res://tests/level_test.tscn
 
+const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const Materials := preload("res://scripts/Visual/Materials.gd")
 const GARRISON := preload("res://maps/garrison.tscn")
@@ -394,6 +395,36 @@ func _garrison() -> void:
 		enough27 and foliage27 and storm27 > calm27 * 3.0 and calm27 > 0.0 and lit27.is_empty(),
 		"%s, foliage %s, wind calm %.2f storm %.2f, shadowed cover %s" % [kinds27, foliage27, calm27, storm27, lit27.slice(0, 4)])
 
+	# G29 night creatures: bats flitting round the chapel's spire, the
+	# watchtower's top and over the yard, fireflies low over the grassy
+	# banks, both gone to ground in rain; moths at the lamp posts in the lanes
+	# and on the quay, and at no other light (not a torch, a lantern, a
+	# chandelier, a candle)
+	var bats29: Array = get_tree().get_nodes_in_group(&"bats")
+	var flies29: Array = get_tree().get_nodes_in_group(&"fireflies")
+	var air29: Node = get_tree().get_first_node_in_group(&"atmosphere")
+	var moths29: Array = air29.moths() if air29 != null else []
+	# (Each lamp post's flame: its burner, the torch inside a lamp_post fixture.)
+	var marked29: int = level.markers.filter(func(m): return m["ucd"] == "light" and String(m["props"].get("kind", "")) == "lamp_post").size()
+	var posts29: Array = get_tree().get_nodes_in_group(&"torches").filter(func(t): return AtmosphereScript._draws_moths(t)).map(func(t): return (t as Node3D).global_position)
+	var roosts29 := [Vector3(9.0, 21.5, -20.8), Vector3(-31.0, 14.0, -27.0), Vector3(0.0, 12.5, 2.0)]
+	var was29: Array = bats29.map(func(b): return (b as Node3D).global_position)
+	await _seconds(0.5)
+	var flew29: bool = not bats29.is_empty() and range(bats29.size()).all(func(k): return (bats29[k] as Node3D).global_position.distance_to(was29[k]) > 0.2)
+	var near29: bool = bats29.all(func(b): return roosts29.any(func(r): return (b as Node3D).global_position.distance_to(r) < 14.0))
+	var at_posts29: bool = not moths29.is_empty() and moths29.all(func(m): return posts29.any(func(p): return (m as Node3D).global_position.distance_to(p) < 2.5))
+	var every_post29: bool = posts29.all(func(p): return moths29.any(func(m): return (m as Node3D).global_position.distance_to(p) < 2.5))
+	var out29: bool = (bats29 + flies29).all(func(n): return (n as Node3D).is_visible_in_tree())
+	map.night.to(&"rain", 0.0)
+	await _seconds(1.0)
+	var gone29: bool = (bats29 + flies29).all(func(n): return not (n as Node3D).is_visible_in_tree())
+	map.night.to(&"clear", 0.0)
+	await _seconds(1.0)
+	var back29: bool = (bats29 + flies29).all(func(n): return (n as Node3D).is_visible_in_tree())
+	_check("G29 bats round the spire, the tower and over the yard, fireflies over the banks, gone in rain; moths at every lamp post and no other light",
+		bats29.size() >= 8 and flew29 and near29 and flies29.size() >= 2 and out29 and gone29 and back29 and posts29.size() == marked29 and marked29 >= 8 and at_posts29 and every_post29,
+		"bats %d (flying %s, near their roosts %s), fireflies %d, out %s, gone in rain %s, back %s, moths %d all at lamp posts %s, every post %s (%d posts)" % [bats29.size(), flew29, near29, flies29.size(), out29, gone29, back29, moths29.size(), at_posts29, every_post29, posts29.size()])
+
 	# G20 grime, leaks and moss decals where the level marks them (each its
 	# photo when here); crimson banners in rows down the mess
 	# (The level's own: the night's puddles are decals too.)
@@ -442,10 +473,11 @@ func _garrison() -> void:
 	_check("G6 a lightning flash flares the chapel's shafts of light through the glass, and they die back after it",
 		flared6, "shafts %d, calm %s, in the flash %s, after %s" % [shafts.size(), calm6, lit6, after6])
 
-	# G24 god rays: a shaft of coloured moonlight falls from every moonward
-	# lancet of the chapel (its low tier and its clerestory) into the nave and
-	# stops at its floor and walls; it fades as a cloud crosses the moon, is
-	# gone under rain, and flares with lightning
+	# G24 god rays: a shaft of coloured moonlight falls steeply from every
+	# moonward lancet of the chapel (its low tier and its clerestory) into the
+	# nave and stops at its floor and walls; a cloud over the moon or rain
+	# dims it, never puts it out (the chapel is never without them), and it
+	# flares with lightning
 	var rays24: Node = get_tree().get_first_node_in_group(&"god_rays")
 	var beams24: Array = rays24.beams if rays24 != null else []
 	var nave24 := AABB(Vector3(-5.7, -0.4, -25.4), Vector3(19.4, 12.0, 9.1))
@@ -464,9 +496,11 @@ func _garrison() -> void:
 	await _frames(3)
 	var flash24: float = rays24.strength if rays24 != null else 0.0
 	await _seconds(1.0)
-	_check("G24 god rays fall from the chapel's eight moonward lancets and stay in the nave; a cloud over the moon dims them, rain puts them out, lightning flares them",
-		beams24.size() == 8 and strays24.is_empty() and clear24 > 0.5 and covered24 < clear24 * 0.4 and rain24 < 0.05 and flash24 > clear24 * 2.0,
-		"beams %d (out of the nave %d), clear %.2f, covered %.2f, rain %.2f, flash %.2f" % [beams24.size(), strays24.size(), clear24, covered24, rain24, flash24])
+	var steep24: float = (rays24.direction as Vector3).normalized().y if rays24 != null else 0.0
+	_check("G24 god rays fall steeply from the chapel's eight moonward lancets and stay in the nave; cloud and rain dim them but never put them out; lightning flares them",
+		beams24.size() == 8 and strays24.is_empty() and steep24 <= -0.7 and clear24 > 0.5 and covered24 < clear24 * 0.95 and covered24 >= clear24 * 0.5
+		and rain24 >= clear24 * 0.55 and flash24 > clear24 * 2.0,
+		"beams %d (out of the nave %d), falling %.2f, clear %.2f, covered %.2f, rain %.2f, flash %.2f" % [beams24.size(), strays24.size(), steep24, clear24, covered24, rain24, flash24])
 
 	# G7 the story's ways: every leg the intruder runs is on the navmesh end
 	# to end (over the wall and into the canal by the breach and the roof)

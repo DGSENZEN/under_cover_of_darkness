@@ -16,6 +16,7 @@ const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const ClimbScript := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
 const Materials := preload("res://scripts/Visual/Materials.gd")
 const WindScript := preload("res://scripts/Visual/Wind.gd")
+const WildlifeScript := preload("res://scripts/Visual/Wildlife.gd")
 const GodRaysScript := preload("res://scripts/Visual/GodRays.gd")
 const LEVEL := "res://assets/level/garrison"
 ## The night it plays: six acts on the level's marks.
@@ -40,6 +41,13 @@ const MAX_CLIMB := 0.3
 ## The navmesh keeps a man this far (m) off walls and corners: his shoulders
 ## clear them (his capsule is 0.3); the narrowest doorway still passes.
 const AGENT_RADIUS := 0.4
+## Where the bats fly (over the spire, the tower's top); the fields the
+## fireflies keep to (the west bank, the far bank) and how many.
+const SPIRE_BATS := Vector3(9.0, 21.5, -20.8)
+const TOWER_BATS := Vector3(-31.0, 14.5, -27.0)
+## (And a few over the yard, above its roofs: against the sky.)
+const YARD_BATS := Vector3(0.0, 12.5, 2.0)
+const FIREFLY_FIELDS := [[AABB(Vector3(-58.0, 0.3, -40.0), Vector3(22.0, 1.4, 80.0)), 110], [AABB(Vector3(-45.0, 0.3, 73.0), Vector3(90.0, 1.2, 6.0)), 60]]
 ## The navmesh's box: the level and its banks, its corner on whole metres.
 const BAKE_BOUNDS := AABB(Vector3(-64.0, -8.0, -56.0), Vector3(128.0, 32.0, 144.0))
 ## The chapel's moonward lancets (its north wall): their middles (x), their
@@ -54,6 +62,10 @@ const NAVE := {"floor": 0.0, "south": -16.4, "east": 13.6, "west": -5.6}
 ## The moon's way (its light, as garrison_lights sets it); the chapel's north
 ## glass line (z); dust boxes this big, at these distances (m) down a shaft.
 const MOON_TOWARD := Vector3(0.62, -0.5, 0.6)
+## The way the moonlight falls through the chapel's glass: steeper than the
+## moon's own (the shafts cross the nave to its floor, as a painter would
+## have them), for the god rays, the pools they throw and the dust in them.
+const GLASS_TOWARD := Vector3(0.3, -0.8, 0.52)
 ## Screen-space reflections this fine (the canal, the puddles).
 const SSR_STEPS := 48
 ## The look (not what the guards or the gem see): the sky's fill a little over
@@ -70,6 +82,7 @@ const DUST_BOX := Vector3(1.0, 1.1, 1.0)
 const DUST_STEPS := [1.6, 3.2, 4.8, 6.3]
 
 var level: LevelLoader.Level = null
+var _lamp_posts: Array[Node3D] = []
 ## Every door by its marker's name.
 var doors := {}
 
@@ -78,9 +91,10 @@ func _story_path() -> String:
 	return GARRISON_STORY
 
 
-## The show's camera starts high over the south-west corner, over the walls.
+## The show's camera starts at eye level by the watch's fire (never the whole
+## place from on high before anything has happened).
 func camera_home() -> Array:
-	return [Vector3(-22.0, 24.0, 44.0), Vector3(2.0, 0.0, 0.0)]
+	return [Vector3(-3.5, 1.7, 5.5), Vector3(0.0, 1.2, 0.0)]
 
 
 ## The place: the level from its markers, the moon and the sky, the night.
@@ -98,6 +112,7 @@ func build() -> void:
 	wind.name = "Wind"
 	wind.set_script(WindScript)
 	add_child(wind)
+	_wildlife()
 	_baker = NavigationRegion3D.new()
 	_baker.set_script(NavBakerScript)
 	# (Nobody routed over a sack pile, a bench or a barrel's top.)
@@ -339,7 +354,7 @@ func _light(m: Dictionary) -> void:
 		"lantern":
 			Lights.hanging_lantern(self, at.origin, 0.4, overrides)
 		"lamp_post":
-			Lights.lamp_post(self, at.origin, yaw, overrides)
+			_lamp_posts.append(Lights.lamp_post(self, at.origin, yaw, overrides))
 		"chandelier":
 			Lights.chandelier(self, at.origin, 8, float(props.get("chain", 1.0)), overrides)
 		"hearth":
@@ -369,7 +384,7 @@ func _light(m: Dictionary) -> void:
 			shaft.add_to_group(&"glass_shafts")
 			add_child(shaft)
 			shaft.global_position = at.origin
-			shaft.global_basis = Basis.looking_at(Vector3(0.62, -0.5, 0.6).normalized(), Vector3.UP)
+			shaft.global_basis = Basis.looking_at(GLASS_TOWARD.normalized(), Vector3.UP)
 
 
 ## A decal marker made a Decal: its photo ("decal_<kind>") projected into
@@ -421,14 +436,29 @@ func pull_up_ladder() -> void:
 		(piece as Node3D).global_transform = Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(at.x, LADDER_ON_ROOF, at.z + 0.6))
 
 
-## God rays: a shaft of the moon's light in the glass's colours from each of
-## the chapel's moonward lancets, to its floor or its walls. The coloured
-## pools the glass throws (the window_shaft lights) follow them: clouds over
-## the moon dim both, rain puts them out, lightning flares them.
+## The night's creatures: bats round the chapel's spire, the tower's top and
+## over the yard, fireflies low over the grassy banks (Wildlife: gone in
+## rain). The moths at the lamp posts are the Atmosphere's.
+func _wildlife() -> void:
+	var life := WildlifeScript.new()
+	add_child(life)
+	life.bats(SPIRE_BATS, 5, 5.0)
+	life.bats(TOWER_BATS, 4, 4.5)
+	life.bats(YARD_BATS, 3, 7.0)
+
+	for field in FIREFLY_FIELDS:
+		life.fireflies(field[0], field[1])
+
+
+## God rays: a shaft of the moon's light in the glass's colours falling
+## steeply from each of the chapel's moonward lancets to its floor or its
+## walls. The coloured pools the glass throws (the window_shaft lights)
+## follow them: clouds and rain dim both, never put them out (the chapel is
+## never without them); lightning flares them.
 func _god_rays() -> void:
 	var rays := GodRaysScript.new()
 	rays.name = "GodRays"
-	rays.direction = MOON_TOWARD
+	rays.direction = GLASS_TOWARD
 	rays.glass = Materials.photo(&"stained_glass")
 	rays.flare_gain = (GLASS_FLARE - 1.0) / 5.0
 	rays.planes = [Plane(Vector3.UP, NAVE["floor"]), Plane(Vector3.FORWARD, -float(NAVE["south"])),
@@ -534,7 +564,7 @@ func _night() -> void:
 ## its lancet on along the moon's way to the floor.
 func _shaft_dust() -> Array:
 	var boxes := []
-	var toward := MOON_TOWARD.normalized()
+	var toward := GLASS_TOWARD.normalized()
 	# (Inside the chapel only: the east shaft meets its wall before the floor.)
 	var inside := AABB()
 

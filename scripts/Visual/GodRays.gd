@@ -6,7 +6,8 @@ extends Node3D
 ## drifting in it.
 ##
 ## They are as bright as the light that makes them: a Night's moon (clouds
-## crossing it dim them, rain puts them out, lightning flares them), and the
+## crossing it and rain dim them, never below `least`; lightning flares
+## them), and the
 ## lights given in `lights` (the coloured pools the glass throws on the floor)
 ## follow them, each from its own calm energy.
 ##
@@ -28,6 +29,9 @@ const SHADER := preload("res://scripts/Visual/god_rays.gdshader")
 ## A lightning flash (the moon's share over 1) flares them this much for each
 ## unit of it.
 @export var flare_gain := 1.2
+## However the weather (a cloud over the moon, rain), never less than this
+## share of their brightness: the chapel is never without them.
+@export var least := 0.6
 ## The glass's picture (null: plain moonlight).
 var glass: Texture2D
 ## The room the shafts stay in: each plane's normal points inside it.
@@ -114,7 +118,7 @@ func _reach(p: Vector3, way: Vector3) -> float:
 
 func _process(_delta: float) -> void:
 	var share := _light_share()
-	var steady := smoothstep(fade_from, 1.0, minf(share, 1.0))
+	var steady := lerpf(least, 1.0, smoothstep(fade_from, 1.0, minf(share, 1.0)))
 	var flare := maxf(share - 1.0, 0.0)
 	strength = brightness * (steady + flare_gain * flare)
 	_material.set_shader_parameter(&"strength", strength)

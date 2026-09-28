@@ -78,6 +78,22 @@ class Foliage(unittest.TestCase):
                 self.assertGreater(bottom, top)
 
 
+class Bat(unittest.TestCase):
+    def test_a_bat_is_two_frames_of_a_dark_cut_out_silhouette(self):
+        image = paint.PAINTINGS["bat"]()
+        w, h = image.size
+        self.assertEqual((w, h), (128, 64))
+        pixels = np.asarray(image)
+        alpha = pixels[:, :, 3]
+        self.assertTrue(set(np.unique(alpha)) <= {0, 255})
+        left, right = alpha[:, : w // 2], alpha[:, w // 2:]
+        # Both frames a bat, and not the same bat: its wings beat.
+        self.assertGreater((left == 255).mean(), 0.05)
+        self.assertGreater((right == 255).mean(), 0.05)
+        self.assertGreater((left != right).mean(), 0.05)
+        self.assertLess(pixels[alpha == 255][:, :3].mean(), 60)
+
+
 class Bark(unittest.TestCase):
     def test_bark_is_solid_and_tiles_both_ways(self):
         image = np.asarray(paint.PAINTINGS["bark"]().convert("RGB")).astype(float)

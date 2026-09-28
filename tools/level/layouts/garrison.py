@@ -382,10 +382,13 @@ def chapel():
         G.put("floor_carpet_2", (x + 1.0, 0.02, -20.8), 0.0, s)
 
     # Pews in rows either side of the aisle, facing the altar (east), clear
-    # of the loft stair's foot (x 7.6).
+    # of the loft stair's foot (x 7.6); side aisles by the walls, and a cross
+    # aisle from the south door (x 2) to the middle one (no pew at 2.8 there).
     for x in (-3.6, -2.0, -0.4, 1.2, 2.8, 4.4, 6.0):
-        G.put("pew", (x, 0, -23.2), -90.0, s)
-        G.put("pew", (x, 0, -18.4), -90.0, s)
+        G.put("pew", (x, 0, -22.8), -90.0, s)
+
+        if x != 2.8:
+            G.put("pew", (x, 0, -18.8), -90.0, s)
 
     # The chancel: a step of patterned tiles, the altar dressed on it, the
     # reredos behind it, candle stands either side.

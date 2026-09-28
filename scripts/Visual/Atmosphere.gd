@@ -6,7 +6,8 @@ extends Node3D
 ##           when he shouts.
 ##   embers  off each fire, drifting with the wind; fewer as it burns low, a
 ##           burst when it is fed (Fire.fed).
-##   moths   circling the torches.
+##   moths   circling the lamp posts' lamps (no other light: not a torch, a
+##           lantern, a chandelier or a candle).
 ##   wind    in gusts from the north-west: flames lean (Torch.lean), embers
 ##           and dead leaves skitter.
 ##   crows   on the wall-walk (`add_crows`): off at a shout or a man running
@@ -19,6 +20,8 @@ extends Node3D
 ## MultiMesh a kind: a few chunky sprites.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
+## The fixtures whose lamps the moths come to.
+const MOTH_FIXTURES := [&"lamp_post"]
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 
@@ -286,7 +289,7 @@ func _scan() -> void:
 				fire.fed.connect(func() -> void: _embers[fire][2] = BURST)
 
 	for torch in get_tree().get_nodes_in_group(&"torches"):
-		if not _moths.has(torch):
+		if not _moths.has(torch) and _draws_moths(torch):
 			_moths[torch] = _make_moths()
 
 	for dict in [_breaths, _embers, _moths]:
@@ -335,6 +338,25 @@ func _update_embers() -> void:
 		embers.amount_ratio = float(fire.get("fuel")) if fire.get("fuel") != null else 1.0
 		entry[2] = maxf(float(entry[2]) - get_process_delta_time(), 0.0)
 		burst.emitting = float(entry[2]) > 0.0
+
+
+## Whether `torch` is a lamp post's lamp (a burner inside a fixture of one of
+## MOTH_FIXTURES): the only lights the moths come to.
+static func _draws_moths(torch: Node) -> bool:
+	var node := torch
+
+	for i in 4:
+		if node == null:
+			return false
+
+		var fixture: Variant = node.get("fixture")
+
+		if fixture is StringName and fixture != &"":
+			return MOTH_FIXTURES.has(fixture)
+
+		node = node.get_parent()
+
+	return false
 
 
 func _make_moths() -> Array:

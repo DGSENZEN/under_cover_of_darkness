@@ -24,6 +24,7 @@ const FireScript := preload("res://scripts/Combat/Fire.gd")
 const NightRotaScript := preload("res://scripts/AISystem/NightRota.gd")
 const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 
 const FIXTURES := """
@@ -449,6 +450,20 @@ func _atmosphere() -> void:
 	air.force_wind(null)
 	_check("A19 the wind leans the flames its way", leaned > 0.01, "flame leaned %.3f m" % leaned)
 
+	# A22 moths circle the lamp posts and nothing else: not a bare torch, a
+	# lantern, a chandelier or a candle
+	air.quality = 2
+	var post21: Node3D = Lights.lamp_post(self, Vector3(170, 0, 0))
+	var others21: Array = [Lights.hanging_lantern(self, Vector3(176, 3, 0), 0.4), Lights.chandelier(self, Vector3(182, 4, 0), 6, 1.0), Lights.candelabra(self, Vector3(188, 1, 0), 3)]
+	await _frames(90)
+	var moths21: Array = air.moths()
+	# (Round the post's flame: its burner, in the torches.)
+	var flames21: Array = post21.find_children("*", "", true, false).filter(func(n): return n.is_in_group(&"torches"))
+	var flame21: Vector3 = (flames21[0] as Node3D).global_position if not flames21.is_empty() else post21.global_position
+	var at_post21: int = moths21.filter(func(m): return (m as Node3D).global_position.distance_to(flame21) < 1.5).size()
+	_check("A22 moths circle the lamp post and no other light (not a bare torch, a lantern, a chandelier, candles)",
+		moths21.size() > 0 and at_post21 == moths21.size(), "moths %d, at the post %d" % [moths21.size(), at_post21])
+
 	# A20 thinned for the frame rate: moths first, then leaves
 	air.quality = 1
 	await _frames(3)
@@ -460,6 +475,11 @@ func _atmosphere() -> void:
 	_check("A20 thinned, the moths go first, then the leaves", not air.moths().is_empty() and moths_hidden and leaves_on and leaves_off,
 		"moths %d hidden %s, leaves at 1 %s, at 0 off %s" % [air.moths().size(), moths_hidden, leaves_on, leaves_off])
 	torch.queue_free()
+	post21.queue_free()
+
+	for light in others21:
+		light.queue_free()
+
 	air.queue_free()
 
 

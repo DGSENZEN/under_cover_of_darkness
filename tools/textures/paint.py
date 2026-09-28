@@ -718,10 +718,56 @@ def bark():
     return image.resize((size, size), Image.Resampling.BOX).quantize(colors=24, dither=Image.Dither.NONE).convert("RGB")
 
 
+def bat():
+    """A bat against the night sky, two frames side by side (its wings up, its
+    wings down): a black body, ears, membranes between long fingers."""
+    w, h = 128 * SCALE, 64 * SCALE
+    image = Image.new("RGB", (w, h), (14, 12, 14))
+    mask_image = Image.new("L", (w, h), 0)
+    draw = ImageDraw.Draw(image)
+    mask = ImageDraw.Draw(mask_image)
+    frame = w // 2
+
+    for k, lift in enumerate((-0.55, 0.45)):
+        cx, cy = frame * k + frame / 2.0, h * 0.55
+        body = [(cx - 5 * SCALE, cy - 9 * SCALE), (cx + 5 * SCALE, cy - 9 * SCALE), (cx + 4 * SCALE, cy + 11 * SCALE), (cx - 4 * SCALE, cy + 11 * SCALE)]
+        ears = [(cx - 5 * SCALE, cy - 9 * SCALE), (cx - 4 * SCALE, cy - 15 * SCALE), (cx - 1 * SCALE, cy - 9 * SCALE), (cx + 1 * SCALE, cy - 9 * SCALE),
+                (cx + 4 * SCALE, cy - 15 * SCALE), (cx + 5 * SCALE, cy - 9 * SCALE)]
+
+        for side in (-1.0, 1.0):
+            # The arm out to the wrist, three fingers from it; the membrane
+            # scalloped between their tips and the body.
+            wrist = (cx + side * 18 * SCALE, cy - lift * 14 * SCALE - 4 * SCALE)
+            tips = [(cx + side * 29 * SCALE, cy - lift * 22 * SCALE - 2 * SCALE), (cx + side * 30 * SCALE, cy - lift * 8 * SCALE + 6 * SCALE),
+                    (cx + side * 22 * SCALE, cy - lift * 2 * SCALE + 12 * SCALE)]
+            web = [(cx + side * 4 * SCALE, cy - 6 * SCALE), wrist, tips[0]]
+
+            for a, b in zip(tips, tips[1:] + [(cx + side * 5 * SCALE, cy + 9 * SCALE)]):
+                mid = ((a[0] + b[0]) / 2.0 - side * 2 * SCALE, (a[1] + b[1]) / 2.0 - 2 * SCALE)
+                web += [mid, b]
+
+            draw.polygon(web, fill=(30, 26, 30))
+            mask.polygon(web, fill=255)
+
+            for tip in tips:
+                draw.line([wrist, tip], fill=(10, 8, 10), width=SCALE)
+                mask.line([wrist, tip], fill=255, width=SCALE)
+
+            draw.line([(cx, cy - 6 * SCALE), wrist], fill=(10, 8, 10), width=2 * SCALE)
+            mask.line([(cx, cy - 6 * SCALE), wrist], fill=255, width=2 * SCALE)
+
+        draw.polygon(body, fill=(20, 16, 18))
+        mask.polygon(body, fill=255)
+        draw.polygon(ears, fill=(20, 16, 18))
+        mask.polygon(ears, fill=255)
+
+    return _finish(image, (128, 64), 8, mask_image)
+
+
 PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_frontal": altar_frontal,
              "shield_1": shield_1, "shield_2": shield_2, "shield_3": shield_3,
              "leaf_crown": leaf_crown, "leaf_shrub": leaf_shrub, "yew": yew, "twigs": twigs, "grass": grass,
-             "weed_broad": weed_broad, "reeds": reeds, "ivy": ivy, "bark": bark}
+             "weed_broad": weed_broad, "reeds": reeds, "ivy": ivy, "bark": bark, "bat": bat}
 
 
 def main(argv):
