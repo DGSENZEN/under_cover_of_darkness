@@ -24,6 +24,8 @@ at 0.9 m, stairs 0.3 m treads and 0.2 m risers).
 
 import math
 
+import kit_shapes as ks
+
 STOREY = 3.0
 OUTER = 0.4
 INNER = 0.2
@@ -60,8 +62,14 @@ def piece(name, family, slot, surface, boxes, cols=None, sockets=None, size=None
 
     PIECES[name] = {
         "family": family, "slot": slot, "surface": surface, "boxes": boxes, "cols": cols,
-        "sockets": sockets or {}, "size": size, "opening": opening,
+        "sockets": sockets or {}, "size": size, "opening": opening, "shapes": None,
     }
+
+
+def model(name, shapes):
+    """Kit v1: `name` drawn with `shapes` (kit_shapes) instead of its boxes;
+    its colliders stay its boxes'."""
+    PIECES[name]["shapes"] = shapes
 
 
 # ---------------------------------------------------------------------------
@@ -318,3 +326,66 @@ for rise, run in ((1.0, 4.0), (2.0, 8.0)):
 
 def names():
     return sorted(PIECES)
+
+
+# ---------------------------------------------------------------------------
+# Kit v1 (the art pass): the pieces that read as boxes, modelled low-poly
+# (kit_shapes); their colliders stay the boxes above.
+# ---------------------------------------------------------------------------
+
+# Openings with their heads and reveals: doors round-headed, windows flat
+# with a sill standing out, arches round, the chapel's lancets pointed.
+for material, (slot, surface) in WALLS.items():
+    for depth, suffix in ((OUTER, ""), (INNER, "_thin")):
+        model("wall_%s%s_door" % (material, suffix),
+              ks.arched_wall(2.0, STOREY, depth, DOOR[0], DOOR[1] - DOOR[0] / 2.0, DOOR[0] / 2.0, 0.0, slot))
+        model("wall_%s%s_window" % (material, suffix),
+              ks.arched_wall(2.0, STOREY, depth, WINDOW[0], WINDOW[2] + WINDOW[1], 0.0, WINDOW[2], slot)
+              + [ks.box(0.0, WINDOW[2] - 0.04, depth / 2.0 + 0.03, WINDOW[0] + 0.2, 0.08, 0.06, slot)])
+        model("wall_%s%s_arch" % (material, suffix),
+              ks.arched_wall(2.4, STOREY, depth, ARCH[0], ARCH[1] - ARCH[0] / 2.0, ARCH[0] / 2.0, 0.0, slot))
+
+    model("wall_%s_tall_lancet" % material, ks.arched_wall(2.0, STOREY * 2.0, OUTER, 0.9, 3.9, 1.5, 1.8, slot, pointed=True))
+
+# The colonnade: octagonal shafts on square bases under square capitals, and
+# round arches between them (the band over each, its springing on the
+# capitals).
+model("column", [ks.box(0.0, 0.12, 0.0, 0.45, 0.24, 0.45, "ashlar"), ks.prism(0.0, 0.26, 0.0, 0.26, 0.04, 8, "ashlar", top=0.2),
+                 ks.prism(0.0, 1.43, 0.0, 0.2, 2.3, 8, "ashlar"), ks.prism(0.0, 2.64, 0.0, 0.2, 0.12, 8, "ashlar", top=0.27),
+                 ks.box(0.0, 2.85, 0.0, 0.45, 0.3, 0.45, "ashlar")])
+model("arch_span_3", ks.arched_wall(3.0, STOREY, 0.45, 2.55, 2.1, 0.62, 0.0, "ashlar", piers=False))
+model("buttress", [ks.box(0.0, 2.0, 0.0, 0.8, 4.0, 1.2, "ashlar"), ks.box(0.0, 4.6, -0.2, 0.8, 1.2, 0.8, "ashlar"),
+                   ks.box(0.0, 5.55, -0.25, 0.8, 0.9, 0.7, "ashlar", 0.0, 32.0, 0.0)])
+
+# Round things: barrels, the well, candle stands; the cart on its wheels.
+model("barrel", [ks.prism(0.0, 0.45, 0.0, 0.26, 0.9, 10, "boards", rings=[[0.3, 0.3], [0.7, 0.3]]),
+                 ks.prism(0.0, 0.2, 0.0, 0.29, 0.05, 10, "iron", caps=False), ks.prism(0.0, 0.7, 0.0, 0.29, 0.05, 10, "iron", caps=False)])
+model("well", [ks.prism(0.0, 0.45, 0.0, 0.8, 0.9, 12, "stone"), ks.prism(0.0, 0.905, 0.0, 0.62, 0.01, 12, "pitch"),
+               ks.box(-0.8, 1.35, 0.0, 0.12, 1.8, 0.12, "timber"), ks.box(0.8, 1.35, 0.0, 0.12, 1.8, 0.12, "timber"),
+               ks.box(0.0, 2.2, 0.0, 1.8, 0.15, 0.2, "timber"), ks.prism(0.0, 1.9, 0.0, 0.1, 0.25, 8, "boards", 0.0, 0.0, 90.0)])
+model("candle_stand", [ks.prism(0.0, 0.03, 0.0, 0.16, 0.06, 6, "iron", top=0.1), ks.prism(0.0, 0.73, 0.0, 0.025, 1.34, 6, "iron"),
+                       ks.prism(0.0, 1.41, 0.0, 0.1, 0.03, 6, "iron", top=0.12), ks.prism(0.0, 1.5, 0.0, 0.035, 0.16, 6, "wax")])
+model("cart", [ks.box(0.0, 0.8, 0.0, 1.6, 0.1, 3.0, "boards"), ks.box(-0.75, 1.0, 0.0, 0.08, 0.3, 3.0, "boards"),
+               ks.box(0.75, 1.0, 0.0, 0.08, 0.3, 3.0, "boards"), ks.box(0.0, 0.65, 0.4, 1.9, 0.1, 0.1, "timber"),
+               ks.prism(-0.85, 0.5, 0.4, 0.5, 0.08, 10, "timber", 0.0, 0.0, 90.0), ks.prism(0.85, 0.5, 0.4, 0.5, 0.08, 10, "timber", 0.0, 0.0, 90.0)])
+model("chandelier", [ks.prism(0.0, 0.0, 0.0, 0.8, 0.06, 12, "iron"), ks.box(0.0, 1.5, 0.0, 0.05, 3.0, 0.05, "iron")]
+      + [ks.prism(math.sin(i * math.tau / 6) * 0.7, 0.11, math.cos(i * math.tau / 6) * 0.7, 0.035, 0.16, 6, "wax") for i in range(6)])
+
+# Foliage as crossed cards (a man hides behind them): a tree on its trunk, a
+# bush; banners of crimson cloth on their poles.
+model("tree", [ks.prism(0.0, 2.0, 0.0, 0.28, 4.0, 7, "bark", top=0.16)]
+      + [ks.card(0.0, 5.0, 0.0, 3.6, 3.2, "leaves", yaw) for yaw in (0.0, 60.0, 120.0)] + [ks.card(0.0, 4.4, 0.0, 3.0, 3.0, "leaves", 0.0, 90.0)])
+PIECES["tree"]["cols"] = [[0.0, 2.0, 0.0, 0.5, 4.0, 0.5, "wood", 0, 0, 0]]
+model("bush", [ks.card(0.0, 0.6, 0.0, 1.7, 1.2, "leaves", yaw) for yaw in (0.0, 60.0, 120.0)])
+model("banner", [ks.box(0.0, 2.85, 0.0, 1.2, 0.06, 0.06, "timber"), ks.card(0.0, 1.6, 0.0, 1.0, 2.4, "cloth")])
+
+# The lane's house fronts: each a photographed front (four of them) on its
+# timbered body under a slate roof.
+for number, facade in ((1, "facade_1"), (2, "facade_2"), (3, "facade_3"), (4, "facade_4")):
+    name = "house_front" if number == 1 else "house_front_%d" % number
+
+    if name not in PIECES:
+        _thing(name, "timber", "wood", [box(0.0, 4.5, 0.0, 6.0, 9.0, 0.4, "timber"), box(0.0, 10.0, -1.5, 6.4, 2.0, 3.2, "slate")])
+
+    model(name, [ks.box(0.0, 4.5, 0.0, 6.0, 9.0, 0.4, "plaster"), ks.card(0.0, 3.2, 0.21, 6.0, 6.4, facade),
+                 ks.box(0.0, 6.5, 0.24, 6.1, 0.18, 0.12, "timber"), ks.box(0.0, 10.0, -1.5, 6.4, 2.0, 3.2, "slate")])

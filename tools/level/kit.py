@@ -1,5 +1,6 @@
 """Builds the kit (assets/level/source/kit.blend) from kit_recipes.PIECES:
-a mesh `kit_<piece>` for each piece (its boxes, one material per slot) and
+a mesh `kit_<piece>` for each piece (its boxes, or kit v1's shapes with their
+UVs; one material per slot) and
 an object of it laid out in a grid by family, for looking at. Levels link
 the meshes, so building the kit again updates every level.
 
@@ -16,6 +17,7 @@ import bpy  # noqa: E402
 import common  # noqa: E402
 import geo  # noqa: E402
 import kit_recipes  # noqa: E402
+import kit_shapes  # noqa: E402
 
 # A box's corners, by (x > 0) + 2 (y > 0) + 4 (z > 0); its faces, outward.
 FACES = [(0, 4, 6, 2), (1, 3, 7, 5), (0, 1, 5, 4), (2, 6, 7, 3), (0, 2, 3, 1), (4, 5, 7, 6)]
@@ -52,7 +54,39 @@ def material(slot):
     return mat
 
 
+def make_modelled(name, recipe):
+    """Kit v1: the piece drawn from its shapes (kit_shapes), with its UVs."""
+    part = kit_shapes.build(recipe["shapes"])
+    slots = []
+
+    for _, slot, _ in part["faces"]:
+        if slot not in slots:
+            slots.append(slot)
+
+    mesh = bpy.data.meshes.new(common.KIT_PREFIX + name)
+    mesh.from_pydata([geo.to_blender(v) for v in part["verts"]], [], [f[0] for f in part["faces"]])
+
+    for slot in slots:
+        mesh.materials.append(material(slot))
+
+    layer = mesh.uv_layers.new(name="UVMap")
+
+    for polygon, (indices, slot, uvs) in zip(mesh.polygons, part["faces"]):
+        polygon.material_index = slots.index(slot)
+
+        # (kit_shapes' v runs down the photo; Blender's up it.)
+        for loop, uv in zip(polygon.loop_indices, uvs):
+            layer.data[loop].uv = (uv[0], 1.0 - uv[1])
+
+    mesh.update()
+    mesh.use_fake_user = True
+    return mesh
+
+
 def make_mesh(name, recipe):
+    if recipe.get("shapes"):
+        return make_modelled(name, recipe)
+
     verts, faces, slots, face_slots = [], [], [], []
 
     for b in recipe["boxes"]:

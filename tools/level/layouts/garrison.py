@@ -408,11 +408,14 @@ def outside():
     G.put("crane", (-20.0, 0, 41.0), 0.0, "outside")
 
     # House fronts, their heights varied (a town's roofline, not a wall).
+    # (Four photographed fronts in turn.)
+    fronts = ["house_front", "house_front_3", "house_front_2", "house_front_4"]
+
     for i, x in enumerate(range(-39, 42, 6)):
-        G.put("house_front", (x, -1.5 * (i % 3 == 1) - 3.0 * (i % 5 == 3), -44.0 - 0.6 * (i % 2)), 0.0, "outside")
+        G.put(fronts[i % 4], (x, -1.5 * (i % 3 == 1) - 3.0 * (i % 5 == 3), -44.0 - 0.6 * (i % 2)), 0.0, "outside")
 
     for i, z in enumerate(range(-39, 42, 6)):
-        G.put("house_front", (44.0 + 0.6 * (i % 2), -2.0 * (i % 3 == 2), z), -90.0, "outside")
+        G.put(fronts[(i + 1) % 4], (44.0 + 0.6 * (i % 2), -2.0 * (i % 3 == 2), z), -90.0, "outside")
 
     for x, z in ((-21.0, -43.75), (3.0, -43.75), (27.0, -43.75)):
         G.put("window_lit", (x, 3.0, z), 0.0, "outside")
