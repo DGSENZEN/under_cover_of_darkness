@@ -68,6 +68,28 @@ class Shapes(unittest.TestCase):
         self.assertAlmostEqual(max(vs), 1.0)
 
 
+class Roofs(unittest.TestCase):
+    def test_a_gable_is_a_triangle_to_its_apex(self):
+        part = kit_shapes.build([kit_shapes.gable(0.0, 0.0, 0.0, 16.0, 5.0, 0.4, "plaster")])
+        low, high = bounds(part)
+        self.assertAlmostEqual(high[1], 5.0, places=5)
+        self.assertAlmostEqual(low[1], 0.0, places=5)
+        self.assertAlmostEqual(high[0], 8.0, places=5)
+        apex = [v for v in part["verts"] if abs(v[1] - 5.0) < 1e-6]
+        self.assertTrue(apex and all(abs(v[0]) < 1e-6 for v in apex))
+
+    def test_a_pitched_roof_runs_from_its_eaves_to_its_ridge(self):
+        # A section of the barracks' roof: 16 m across, its ridge 5 m up.
+        recipe = kit_recipes.PIECES["roof_ridge_4x16"]
+        part = kit_shapes.build(recipe["shapes"])
+        low, high = bounds(part)
+        self.assertLess(low[1], 0.05)
+        self.assertGreater(high[1], 5.0)
+        self.assertLess(high[1], 5.6)
+        self.assertGreaterEqual(max(high[2], -low[2]), 8.0)
+        self.assertEqual(recipe["cols"], [])
+
+
 class Pieces(unittest.TestCase):
     def test_modelled_pieces_stay_in_their_size(self):
         # A v1 piece drawn within the footprint its v0 boxes (its colliders)

@@ -389,3 +389,36 @@ for number, facade in ((1, "facade_1"), (2, "facade_2"), (3, "facade_3"), (4, "f
 
     model(name, [ks.box(0.0, 4.5, 0.0, 6.0, 9.0, 0.4, "plaster"), ks.card(0.0, 3.2, 0.21, 6.0, 6.4, facade),
                  ks.box(0.0, 6.5, 0.24, 6.1, 0.18, 0.12, "timber"), ks.box(0.0, 10.0, -1.5, 6.4, 2.0, 3.2, "slate")])
+
+
+# Pitched roofs over the barracks and the chapel (drawn only: their flat
+# ceilings stay what stops sight and feet), their gable ends, chimneys over
+# the hearths and stoves.
+ROOF_OVERHANG = 0.3
+
+
+def _pitched(length, span, rise, slot):
+    """A `length` section of a double-pitched roof `span` across (along z),
+    its eaves at y 0 and its ridge `rise` up: two slabs and a ridge cap."""
+    half = span / 2.0
+    slope = math.hypot(half, rise)
+    angle = math.degrees(math.atan2(rise, half))
+    return [ks.box(0.0, rise / 2.0, half / 2.0, length, 0.2, slope + 2 * ROOF_OVERHANG, slot, 0.0, -angle, 0.0),
+            ks.box(0.0, rise / 2.0, -half / 2.0, length, 0.2, slope + 2 * ROOF_OVERHANG, slot, 0.0, angle, 0.0),
+            ks.box(0.0, rise + 0.08, 0.0, length, 0.25, 0.45, slot)]
+
+
+for length in (2, 4):
+    for span, rise in ((16, 5.0), (10, 4.0)):
+        name = "roof_ridge_%dx%d" % (length, span)
+        piece(name, "roof", "slate", "stone", [], cols=[], size=[float(length), rise + 0.4, span + 2 * ROOF_OVERHANG])
+        model(name, _pitched(float(length), float(span), rise, "slate"))
+
+for span, rise, slot in ((16, 5.0, "plaster"), (10, 4.0, "ashlar")):
+    name = "gable_%d" % span
+    piece(name, "roof", slot, "stone", [], cols=[], size=[float(span), rise, OUTER])
+    model(name, [ks.gable(0.0, 0.0, 0.0, float(span), rise, OUTER, slot)])
+
+piece("chimney_6", "roof", "ashlar", "stone", [], cols=[], size=[1.3, 6.3, 1.3])
+model("chimney_6", [ks.box(0.0, 3.0, 0.0, 1.0, 6.0, 1.0, "ashlar"), ks.box(0.0, 6.15, 0.0, 1.3, 0.3, 1.3, "ashlar"),
+                    ks.box(0.0, 6.2, 0.0, 0.5, 0.05, 0.5, "pitch")])

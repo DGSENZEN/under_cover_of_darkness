@@ -216,10 +216,22 @@ def barracks():
     # gallery's doors.
     G.stairs((22.5, 0.0, -18.0), -90.0, "stair_straight", s)
     G.stairs((22.5, 0.0, 16.0), -90.0, "stair_straight", s)
-    # The roof (a flat slab in stage 1).
+    # The ceiling under the roof (what stops sight and feet), and the pitched
+    # slate roof over it, its ridge along the wing; gable ends; chimneys over
+    # the kitchen stove, the great hearth and the dormitory's stove.
     for x in range(14, 30, 4):
         for z in range(-20, 18, 4):
             G.put("floor_board_4", (x + 2.0, 6.2, z + 2.0), 0.0, s)
+
+    for z in range(-20, 16, 4):
+        G.put("roof_ridge_4x16", (22.0, 6.2, z + 2.0), 90.0, s)
+
+    G.put("roof_ridge_2x16", (22.0, 6.2, 17.0), 90.0, s)
+    G.put("gable_16", (22.0, 6.2, -19.8), 0.0, s)
+    G.put("gable_16", (22.0, 6.2, 17.8), 0.0, s)
+
+    for z in (-11.5, 1.0, 14.0):
+        G.put("chimney_6", (29.1, 6.2, z), 0.0, s)
 
     # Dressing: the mess (two long tables and their benches, the great hearth
     # on the east wall's middle), the kitchen, the dormitory, the captain.
@@ -295,10 +307,17 @@ def chapel():
         G.put("banner", (x, 5.0, -25.1), 0.0, s)
         G.put("banner", (x, 5.0, -16.5), 180.0, s)
 
-    # The roof (a slab in stage 1: moonlight comes in only through the glass).
+    # The ceiling (moonlight comes in only through the glass) and the pitched
+    # roof over the nave, its ridge along it; its gable ends.
     for x in range(-6, 14, 4):
         for z in (-26, -22, -18):
             G.put("floor_board_4", (x + 2.0, 12.2, z + 2.0), 0.0, s)
+
+    for x in range(-6, 14, 4):
+        G.put("roof_ridge_4x10", (x + 2.0, 12.2, -20.8), 0.0, s)
+
+    G.put("gable_10", (-5.8, 12.2, -20.8), 90.0, s)
+    G.put("gable_10", (13.8, 12.2, -20.8), 90.0, s)
 
     # The loft (x 12..14, z -18.4..-16.4 at 3 m) and its stair down into the
     # nave; its door onto the barracks gallery is the barracks' west wall's.

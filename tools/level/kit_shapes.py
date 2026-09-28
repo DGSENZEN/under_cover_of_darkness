@@ -11,6 +11,7 @@ frame (Godot's axes, as the boxes: x along it, y up, z through it):
     arched   a wall with an opening whose head is round, pointed or flat,
              its reveals (jambs, soffit, sill) drawn; without its piers it is
              the band over an arch between two columns
+    gable    a triangular end under a pitched roof
     card     a flat rectangle drawn both ways (foliage, a photographed front),
              its photo across it (UVs 0..1)
 
@@ -58,6 +59,12 @@ def arched_wall(width, height, depth, opening, spring, rise, sill, slot, pointed
              "rise": rise, "sill": sill, "slot": slot, "pointed": pointed, "piers": piers, "x": x}]
 
 
+def gable(cx, cy, cz, width, rise, depth, slot, yaw=0.0):
+    """A triangle `width` across and `rise` high (its base at cy), `depth`
+    thick: a gable end under a pitched roof."""
+    return {"kind": "gable", "centre": [cx, cy, cz], "width": width, "rise": rise, "depth": depth, "slot": slot, "turn": [yaw, 0.0, 0.0]}
+
+
 def card(cx, cy, cz, width, height, slot, yaw=0.0, pitch=0.0):
     """A rectangle `width` x `height` facing +z (turned by yaw), drawn from
     both sides, its photo across it."""
@@ -72,7 +79,7 @@ def build(shapes):
     part = {"verts": [], "faces": []}
 
     for shape in shapes:
-        {"box": _box, "prism": _prism, "arched": _arched, "card": _card}[shape["kind"]](part, shape)
+        {"box": _box, "prism": _prism, "arched": _arched, "gable": _gable, "card": _card}[shape["kind"]](part, shape)
 
     return part
 
@@ -225,6 +232,18 @@ def _arched(part, shape):
         # Under the band's ends (on the columns).
         _add_face(part, [front(-w, low), back(-w, low), back(-half, low), front(-half, low)], slot)
         _add_face(part, [front(half, low), back(half, low), back(w, low), front(w, low)], slot)
+
+
+def _gable(part, shape):
+    hw, h, hd = shape["width"] / 2.0, shape["rise"], shape["depth"] / 2.0
+    f = [_placed(shape, p) for p in ([-hw, 0.0, hd], [hw, 0.0, hd], [0.0, h, hd])]
+    b = [_placed(shape, p) for p in ([-hw, 0.0, -hd], [hw, 0.0, -hd], [0.0, h, -hd])]
+    slot = shape["slot"]
+    _add_face(part, f, slot)
+    _add_face(part, [b[2], b[1], b[0]], slot)
+    _add_face(part, [f[1], b[1], b[2], f[2]], slot)
+    _add_face(part, [b[0], f[0], f[2], b[2]], slot)
+    _add_face(part, [f[0], b[0], b[1], f[1]], slot)
 
 
 def _card(part, shape):
