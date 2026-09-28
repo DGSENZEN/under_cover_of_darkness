@@ -2451,6 +2451,11 @@ func _update_downed(delta: float) -> void:
 		return
 
 	_down_time += delta
+
+	# Left open to a deathblow: the chance passes while he lies there too.
+	if _fighter != null:
+		_fighter.tick_open(delta)
+
 	var hips: Vector3 = rag.centre()
 	_down_peak = maxf(_down_peak, hips.y)
 	# Standing in for himself where he lies: on the ground under his hips.
