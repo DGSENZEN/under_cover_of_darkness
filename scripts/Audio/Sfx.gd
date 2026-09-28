@@ -815,7 +815,8 @@ func _occlusion(at: Vector3) -> float:
 	if from.distance_to(camera.global_position) > 2.5 or to.distance_to(at) > 2.5:
 		return 1.0
 
-	var path := NavigationServer3D.map_get_path(map, from, to, true)
+	# Through doors locked or not (NavBaker).
+	var path := NavigationServer3D.map_get_path(map, from, to, true, 0xFFFFFFFF)
 
 	if path.is_empty() or path[path.size() - 1].distance_to(to) > 0.5:
 		return 1.0

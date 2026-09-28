@@ -19,6 +19,14 @@ signal opened
 signal closed
 signal rattled
 
+## How deep the doorway NavBaker bakes as a region of its own is (m).
+const DOORWAY_DEPTH := 0.6
+
+## Each key's navigation layer (2 to 32, handed out as keys turn up; layer 1
+## is everyone's). Locked, a door's doorway is on its key's layer only: off
+## the navmesh of anyone without the key (Guard: his keys' layers).
+static var _key_layers := {}
+
 @export var open_db := 42.0
 @export var rattle_db := 52.0
 
@@ -26,7 +34,13 @@ signal rattled
 @export var open_time := 0.9
 ## When on, the door swings away from the player each time. Off swings one way.
 @export var swing_away_from_frobber := true
-@export var locked := false
+@export var locked := false:
+	set(value):
+		locked = value
+		var region: Variant = get_meta(&"nav_region") if has_meta(&"nav_region") else null
+
+		if region is NavigationRegion3D and is_instance_valid(region):
+			(region as NavigationRegion3D).navigation_layers = nav_layers()
 @export var key_id: StringName = &""
 @export var door_name := "door"
 
@@ -71,6 +85,19 @@ func get_prompt(player: Node) -> String:
 static func can_pick(player: Node) -> bool:
 	var hands: Variant = player.get("frob") if player != null else null
 	return hands != null and hands.has_method("can_pick") and hands.can_pick()
+
+
+## The layer `id`'s key opens (see _key_layers).
+static func key_layer(id: StringName) -> int:
+	if not _key_layers.has(id):
+		_key_layers[id] = 1 << (1 + _key_layers.size() % 31)
+
+	return _key_layers[id]
+
+
+## Its doorway's navigation layers: everyone's, or locked, its key's only.
+func nav_layers() -> int:
+	return key_layer(key_id) if locked else 1
 
 
 ## Does this frobber carry the key?
@@ -158,6 +185,17 @@ func doorway() -> Vector3:
 	var shut := parent_xform * Transform3D(Basis(Vector3.UP, _closed_yaw), position)
 	var middle := shut * _shape.position
 	return Vector3(middle.x, global_position.y, middle.z)
+
+
+## The doorway seen from above, in the world: the shut panel, a little wider
+## (into its frame), DOORWAY_DEPTH through.
+func footprint() -> PackedVector3Array:
+	var middle := doorway()
+	var front := facing()
+	var width := _shape.shape.get_debug_mesh().get_aabb().size.x if _shape != null and _shape.shape != null else 1.0
+	var along := Vector3(-front.z, 0.0, front.x) * (width * 0.5 + 0.2)
+	var through := front * DOORWAY_DEPTH * 0.5
+	return PackedVector3Array([middle - along - through, middle + along - through, middle + along + through, middle - along + through])
 
 
 func _physics_process(delta: float) -> void:

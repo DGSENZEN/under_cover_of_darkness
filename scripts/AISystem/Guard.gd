@@ -612,6 +612,11 @@ func _ready() -> void:
 		_agent.path_desired_distance = 0.5
 		_agent.target_desired_distance = 0.6
 
+		# A doorway locked against him is off his navmesh (NavBaker), but for
+		# those he has the key to.
+		for id in keys:
+			_agent.navigation_layers |= Door.key_layer(id)
+
 	if not patrol_route.is_empty():
 		var route := get_node_or_null(patrol_route)
 
@@ -1187,7 +1192,8 @@ func hear_sound(event: Dictionary) -> void:
 func _sound_distance(position: Vector3) -> float:
 	var straight := global_position.distance_to(position)
 	var map := get_world_3d().navigation_map
-	var path := NavigationServer3D.map_get_path(map, global_position, position, true)
+	# Through doors locked or not: the lock does not stop it.
+	var path := NavigationServer3D.map_get_path(map, global_position, position, true, 0xFFFFFFFF)
 
 	if path.size() < 2:
 		return straight * 2.0
@@ -3973,6 +3979,10 @@ func _use_door(door: Object) -> void:
 	var key_id: StringName = door.get("key_id") if door.get("key_id") != null else &""
 
 	if locked and not inventory.has_key(key_id):
+		# Off his navmesh (NavBaker): his way goes round it, if there is one.
+		if door.has_meta(&"nav_region") and _agent != null and _agent.is_target_reachable():
+			return
+
 		# Try the handle once, then treat it as the wall it is.
 		var now := _game_time
 
