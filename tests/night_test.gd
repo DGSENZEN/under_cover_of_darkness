@@ -219,16 +219,16 @@ func _states() -> void:
 	_check("W4 fog: the level's fog four times over, mist banks lying on the ground",
 		absf(environment.volumetric_fog_density - 0.04) < 0.001 and mist > 0.0, "fog %.3f, mist %.2f" % [environment.volumetric_fog_density, mist])
 
-	# W5 F4's cycle: clear, cloudy, drizzle, shower, storm, fog, clear
+	# W5 F4's cycle: clear, cloudy, drizzle, shower, rain, storm, fog, clear
 	night.to(&"clear", 0.0)
 	var cycled := []
 
-	for i in 6:
+	for i in 7:
 		night.cycle()
 		cycled.append(night.state)
 
-	_check("W5 the cycle goes clear, cloudy, drizzle, shower, storm, fog and round",
-		cycled == [&"cloudy", &"drizzle", &"shower", &"storm", &"fog", &"clear"], "%s" % [cycled])
+	_check("W5 the cycle goes clear, cloudy, drizzle, shower, rain, storm, fog and round",
+		cycled == [&"cloudy", &"drizzle", &"shower", &"rain", &"storm", &"fog", &"clear"], "%s" % [cycled])
 
 	# W7 the clouds drift with the wind: a cloud seen now toward d is seen a
 	# moment later a little downwind of d

@@ -70,8 +70,10 @@ const CARRIER_NEAR := Vector2(1.5, 7.5)
 const CLEAR_OF := 8.0
 const LEVEL_OF := 2.0
 const NOTICE := 0.08
-## One of them this near (m, flat, on his level): he moves on, now.
+## One of them this near (m, flat, on his level): he moves on, now; he waits
+## at a hiding place this long at most (s).
 const PRESSED_AT := 5.5
+const WAIT_MOST := 12.0
 const STEALTH_EXPOSURE := 0.2
 ## Act V: the barracks group is in the chapel when one of them is this far
 ## inside its box.
@@ -404,26 +406,29 @@ func _act_four_g() -> Dictionary:
 			_look(&"the_groups", 5.0, &"observe", ["@group:area_courtyard"]),
 			_look(&"group_west", 4.5, &"observe", ["@group:area_west"]),
 			_look(&"group_walls", 4.5, &"observe", ["@group:area_walls"]),
-			{"name": &"in_the_dark", "scene": _scene(&"observe", ["intruder"]), "min": 2.0, "timeout": 20.0,
+			# From hiding place to hiding place: each move goes all the way;
+			# each wait ends when nobody is near and nobody makes him out, at
+			# once if one of them comes close, and by a held length whatever.
+			{"name": &"in_the_dark", "scene": _scene(&"observe", ["intruder"]), "min": 2.0, "enough": WAIT_MOST, "timeout": WAIT_MOST + 10.0,
 				"do": func() -> void: _verb(&"hide_at", [map.marks["gone_to_ground"]]),
 				"until": _clear},
 			# In by the chapel (nobody's ground) and up to its loft...
 			{"name": &"by_the_chapel", "scene": _scene(&"observe", ["intruder"]), "timeout": 70.0,
 				"do": func() -> void: _verb(&"hide_at", [map.marks["sneak_3"]]),
-				"until": _there_or_pressed},
-			{"name": &"the_loft_door", "scene": _scene(&"observe", ["intruder"]), "min": 2.0, "timeout": 20.0,
+				"until": _arrived},
+			{"name": &"the_loft_door", "scene": _scene(&"observe", ["intruder"]), "min": 2.0, "enough": WAIT_MOST, "timeout": WAIT_MOST + 10.0,
 				"until": func() -> bool: return _clear() or _pressed()},
 			# ...through into the barracks, along the gallery over the mess,
 			# the group searching the floor below him...
 			{"name": &"the_gallery", "scene": _scene(&"observe", ["intruder"]), "timeout": 60.0,
 				"do": func() -> void: _verb(&"hide_at", [map.marks["sneak_2"]]),
-				"until": _there_or_pressed},
-			{"name": &"above_them", "scene": _scene(&"observe", ["intruder", "@group:area_barracks"]), "min": 6.0, "timeout": 20.0,
+				"until": _arrived},
+			{"name": &"above_them", "scene": _scene(&"observe", ["intruder", "@group:area_barracks"]), "min": 6.0, "enough": WAIT_MOST, "timeout": WAIT_MOST + 10.0,
 				"until": func() -> bool: return _clear() or _pressed()},
 			# ...and back to the loft as they are sent up after him.
 			{"name": &"slip_back", "scene": _scene(&"observe", ["intruder"]), "timeout": 60.0,
 				"do": func() -> void: _verb(&"hide_at", [map.marks["sneak_3"]]),
-				"until": _there_or_pressed},
+				"until": _arrived},
 			{"name": &"upstairs", "scene": _scene(&"drama", ["@group:area_barracks"]), "min": 3.0, "enough": 12.0, "timeout": 25.0,
 				"do": func() -> void:
 					for man in _group(&"area_barracks"):
@@ -467,9 +472,9 @@ func _pressed() -> bool:
 	return false
 
 
-## At the hiding place he was making for, or pressed on the way to it.
-func _there_or_pressed() -> bool:
-	return _brain() == null or _brain().done() or _pressed()
+## At the place he was making for (or gone: nothing to wait for).
+func _arrived() -> bool:
+	return _brain() == null or _brain().done()
 
 
 ## Nobody near him on his level, and nobody makes him out: he can move on.

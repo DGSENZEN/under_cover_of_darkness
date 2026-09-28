@@ -170,9 +170,13 @@ func _s4() -> void:
 	var seen4 := [0]
 	var searched4 := {}
 	var ended4 := [false]
+	var beats4 := []
 	map4.director.act_started.connect(func(index: int, _t: String) -> void:
 		if index >= 5:
 			ended4[0] = true)
+	map4.director.beat_started.connect(func(beat: StringName, _scene: Dictionary) -> void:
+		var i: Node3D = map4.intruder
+		beats4.append([String(beat), i.global_position.snapped(Vector3.ONE * 0.1) if i != null and is_instance_valid(i) else Vector3.INF]))
 	await _until(func():
 		for man in get_tree().get_nodes_in_group(&"guards"):
 			if man == map4.intruder or man._knocked_out:
@@ -199,7 +203,7 @@ func _s4() -> void:
 	var hidden4: bool = i4 != null and is_instance_valid(i4) and _flat(i4.global_position, map4.marks["chapel_hide"]) < 1.5
 	_check("S4 Act IV: three groups or more search each its own ground, and he moves through the barracks unseen for 20 s or more, to the chapel",
 		ended4[0] and searched4.size() >= 3 and stray4.is_empty() and unseen4[0] >= 1200 and hidden4,
-		"act over %s, places searched by group %s, outside their ground %s, in the barracks unseen %.1f s, seen %.1f s, in the chapel %s, skipped %s" % [ended4[0], searched4, stray4.slice(0, 5), unseen4[0] / 60.0, seen4[0] / 60.0, hidden4, map4.director.log_lines])
+		"act over %s, places searched by group %s, outside their ground %s, in the barracks unseen %.1f s, seen %.1f s, in the chapel %s, skipped %s, beats and where he was %s" % [ended4[0], searched4, stray4.slice(0, 5), unseen4[0] / 60.0, seen4[0] / 60.0, hidden4, map4.director.log_lines, beats4])
 	await _unload(map4)
 
 
