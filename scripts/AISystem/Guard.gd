@@ -3347,6 +3347,39 @@ func goal_of(node: Node3D) -> Vector3:
 	return _feet_of(node)
 
 
+## Sent to search `area` with his group `group` (the captain dividing a hunt:
+## ShowNight): he searches it, and only it, until called off (SearchSpots'
+## hunt areas). In a fight he fights on; once it is over, his ground is his
+## orders.
+func send_to_search(area: AABB, group: StringName = &"") -> void:
+	set_meta(&"hunt_area", area)
+	set_meta(&"hunt_group", group)
+
+	if _knocked_out or state == Alert.COMBAT:
+		return
+
+	if not has_last_known or not area.grow(0.25).has_point(last_known_position):
+		last_known_position = area.get_center()
+		has_last_known = true
+
+	alert = maxf(alert, investigate_at)
+	_since_stimulus = 0.0
+	_stimulus = &"sent"
+
+	if state == Alert.SEARCHING:
+		_search_left = maxi(_search_left, 1)
+		_look_timer = 0.0
+		_next_search_point()
+	else:
+		_set_state(Alert.SEARCHING)
+
+
+## His orders to search a hunt area are over: anywhere is his ground again.
+func call_off_search() -> void:
+	remove_meta(&"hunt_area") if has_meta(&"hunt_area") else null
+	remove_meta(&"hunt_group") if has_meta(&"hunt_group") else null
+
+
 func _give_up() -> void:
 	alert = suspicious_at * 0.5
 	has_last_known = false

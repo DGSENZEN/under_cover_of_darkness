@@ -223,11 +223,10 @@ func _garrison() -> void:
 
 	for name in sent8:
 		var man: Node3D = map.cast[name]
-		man.set_meta(&"hunt_area", areas8[sent8[name]])
+		# Word of him in the courtyard, then the orders: each his ground.
 		man.last_known_position = Vector3(0, 0, 10)
 		man.has_last_known = true
-		man.alert = 60.0
-		man._set_state(3)
+		man.send_to_search(areas8[sent8[name]], StringName(sent8[name]))
 		spots8[name] = []
 
 	await _until(func():
@@ -239,15 +238,19 @@ func _garrison() -> void:
 				if not (areas8[sent8[name]] as AABB).grow(0.3).has_point(spot["stand"]):
 					stray8.append("%s at %s" % [name, (spot["stand"] as Vector3).snapped(Vector3.ONE * 0.1)])
 		return false, 2400)
-	var kept8: bool = sent8.keys().all(func(n): return int((map.cast[n] as Node).state) == 3)
+	var kept8: bool = sent8.keys().all(func(n): return int((map.cast[n] as Node).state) == 3 and (map.cast[n] as Node).get_meta(&"hunt_group", &"") == StringName(sent8[n]))
+	# Called off: his ground is anywhere again.
+	var called8: Node3D = map.cast["Piers"]
+	called8.call_off_search()
+	var free8: bool = not called8.has_meta(&"hunt_area") and not called8.has_meta(&"hunt_group")
 	var counts8 := {}
 
 	for name in sent8:
 		counts8[name] = (spots8[name] as Array).size()
 
-	_check("G8 men sent to a hunt area search only inside it and keep at it",
-		stray8.is_empty() and kept8 and counts8.values().all(func(c): return int(c) >= 3),
-		"outside their ground %s, still searching %s, places searched %s" % [stray8.slice(0, 6), kept8, counts8])
+	_check("G8 men sent to a hunt area search only inside it and keep at it; called off, anywhere again",
+		stray8.is_empty() and kept8 and free8 and counts8.values().all(func(c): return int(c) >= 3),
+		"outside their ground %s, still searching in their groups %s, called off %s, places searched %s" % [stray8.slice(0, 6), kept8, free8, counts8])
 	camera.queue_free()
 	map.queue_free()
 	await _frames(3)
