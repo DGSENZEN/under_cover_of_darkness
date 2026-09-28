@@ -96,7 +96,9 @@ static func frame(kind: StringName, men: Array, context: Dictionary) -> Dictiona
 			var target: Node3D = context.get("target", man)
 			var at := target.global_position if target != null else centre
 			var toward := _away(at, side, Vector3(0.0, 0.0, 1.0))
-			var position := at + toward * 2.0 + Vector3.UP * 0.8
+			# (From where it is given, if it is: a place found clear of walls.)
+			var given: Variant = context.get("from")
+			var position: Vector3 = given if given is Vector3 else at + toward * 2.0 + Vector3.UP * 0.8
 			return _result(kind, &"close", position, at, INSERT, at, false)
 		&"track":
 			return _track(man, head, side, aspect)

@@ -605,8 +605,11 @@ func _fresh_take(cause: StringName, how: StringName = &"dissolve") -> void:
 		if element != null:
 			_element_in = _rng.randf_range(ELEMENT_AFTER.x, ELEMENT_AFTER.y)
 			_quiet_since = _clock
-			_start(&"insert", [], &"element", how, {"target": element}, length)
-			return
+			var near_it := _insert_from(element)
+
+			if near_it != Vector3.INF:
+				_start(&"insert", [], &"element", how, {"target": element, "from": near_it}, length)
+				return
 
 	var space := _camera.get_world_3d().direct_space_state
 	var tries := [&"roving", &"observe"] if _rove_next else [&"observe", &"roving"]
@@ -1644,12 +1647,33 @@ func _aspect() -> float:
 ## if there is one, else the place from eye level.
 func _nobody(cause: StringName, how: StringName, length: float) -> void:
 	var element := _element()
+	var near_it := _insert_from(element) if element != null else Vector3.INF
 
-	if element != null:
-		_start(&"insert", [], cause, how, {"target": element}, length)
+	if near_it != Vector3.INF:
+		_start(&"insert", [], cause, how, {"target": element, "from": near_it}, length)
 		return
 
 	_start(&"establishing", [], cause, how, {"from": _eye_level(_place), "place": _place}, length)
+
+
+## Where to take an insert on `element` from: a place a couple of metres off
+## it, a little over it, standing clear (not in the wall a torch hangs on)
+## and seeing it; INF if none.
+func _insert_from(element: Node3D) -> Vector3:
+	var at := element.global_position
+	var space := _camera.get_world_3d().direct_space_state
+
+	for reach in [2.0, 2.6, 1.6]:
+		for rise in [0.8, 0.4]:
+			for i in 8:
+				var place: Vector3 = at + Vector3(reach, 0.0, 0.0).rotated(Vector3.UP, TAU * float(i) / 8.0) + Vector3.UP * rise
+				var query := PhysicsRayQueryParameters3D.create(place, at, 1)
+				query.collide_with_areas = false
+
+				if CineVantage.clear(space, place) and space.intersect_ray(query).is_empty():
+					return place
+
+	return Vector3.INF
 
 
 ## A place at a man's eye height a few metres from `at` that stands clear and

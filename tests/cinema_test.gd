@@ -2074,6 +2074,36 @@ func _picture() -> void:
 	camera13.queue_free()
 	fire13.queue_free()
 
+	# P15 an insert on a torch on a wall is taken from the open room, never
+	# from inside the wall behind it
+	# (The wall on the torch's +z side, the room on its -z.)
+	var wall15 := Props.block(self, Vector3(2200, 2.0, 0.6), Vector3(8.0, 4.0, 1.0))
+	dressing.append(wall15)
+	var torch15 := Node3D.new()
+	add_child(torch15)
+	torch15.global_position = Vector3(2200, 1.8, -0.05)
+	torch15.add_to_group(&"torches")
+	var camera15 := Camera3D.new()
+	add_child(camera15)
+	camera15.global_position = Vector3(2200, 20, 20)
+	var editor15: Node = CineEditor.new()
+	add_child(editor15)
+	editor15.take_over(camera15)
+	await _frames(3)
+	editor15.scene({"mode": &"observe", "subjects": [], "place": Vector3(2200, 0, -1)})
+	# (The scene opens once the shot before has had its floor.)
+	await _real(2.5)
+	var shot15: Dictionary = editor15.current()
+	var clear15: bool = CineVantage.clear(space, camera15.global_position)
+	var ray15 := PhysicsRayQueryParameters3D.create(camera15.global_position, torch15.global_position, 1)
+	var sees15: bool = space.intersect_ray(ray15).is_empty()
+	_check("P15 an insert on a torch on a wall is taken from the open room, clear of the wall and seeing the torch",
+		shot15.get("kind") == &"insert" and clear15 and sees15, "kind %s from %s, clear %s, sees it %s" % [shot15.get("kind"), camera15.global_position, clear15, sees15])
+	editor15.release()
+	editor15.queue_free()
+	camera15.queue_free()
+	torch15.queue_free()
+
 	for b in [a1, blocker, a3, speaker4, listener4, man5, other5, a7, b7, a10, b10, a11, b11, a12, man14] + ring9:
 		b.queue_free()
 
