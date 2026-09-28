@@ -650,7 +650,11 @@ func _act_five_g() -> Dictionary:
 				"do": func() -> void: _verb(&"fight", [&"focus", _man("Osric")]),
 				"until": func() -> bool: return _dead("Osric")},
 			{"name": &"chapel_last", "scene": _scene(&"drama", ["intruder", "@group:area_barracks"]), "timeout": 60.0,
-				"do": func() -> void: _verb(&"fight", [&"press"]),
+				# (He calls the last of them on, and they come: none left
+				# searching the doorway for a man in the middle of the nave.)
+				"do": func() -> void:
+					_verb(&"fight", [&"press"])
+					_call_group("area_barracks"),
 				"until": func() -> bool: return GROUPS["area_barracks"].all(func(n): return _beaten(n))},
 			{"name": &"over_them", "scene": _scene(&"observe", ["intruder"]), "min": 5.0,
 				"do": func() -> void: _verb(&"stand", [])},
@@ -800,6 +804,20 @@ func _call_in() -> void:
 
 		if man != null:
 			man.call_off_search()
+			man.hear_call(i.global_position)
+
+
+## The men of `group` still on their feet come to where he is.
+func _call_group(group: String) -> void:
+	var i := _intruder()
+
+	if i == null:
+		return
+
+	for name in GROUPS.get(group, []):
+		var man := _man(name)
+
+		if man != null and not _beaten(name):
 			man.hear_call(i.global_position)
 
 

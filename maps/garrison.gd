@@ -39,7 +39,8 @@ const GLASS_FLARE := 7.0
 const MIN_ISLAND := 1.2
 const MAX_CLIMB := 0.3
 ## The navmesh keeps a man this far (m) off walls and corners: his shoulders
-## clear them (his capsule is 0.3); the narrowest doorway still passes.
+## clear them (his capsule is 0.3); the narrowest doorway still passes. (The
+## baker counts in whole 0.1 m cells: 0.35 would bake as 0.4.)
 const AGENT_RADIUS := 0.4
 ## Where the bats fly (over the spire, the tower's top); the fields the
 ## fireflies keep to (the west bank, the far bank) and how many.
