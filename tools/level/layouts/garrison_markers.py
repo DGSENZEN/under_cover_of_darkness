@@ -308,9 +308,17 @@ def story(G):
 def decals(G):
     count = [0]
 
-    def D(kind, at, yaw, size, sector="courtyard"):
+    def D(kind, at, yaw, size, sector="courtyard", floor=False):
         count[0] += 1
-        G.mark("decal_%d" % count[0], "decal", at, yaw, sector, size=size, kind=kind)
+
+        if floor:
+            G.mark("decal_%d" % count[0], "decal", at, yaw, sector, size=size, kind=kind, floor=True)
+        else:
+            G.mark("decal_%d" % count[0], "decal", at, yaw, sector, size=size, kind=kind)
+
+    def F(kind, x, z, yaw, across, along, sector="courtyard", y=0.0):
+        """Laid flat on the floor at (x, y, z): `across` by `along` (m)."""
+        D(kind, (x, y + 0.05, z), yaw, (across, 0.5, along), sector, floor=True)
 
     # Moss along the curtain's outer feet, the towpath's side and the north.
     for x in range(-24, 28, 8):
@@ -337,3 +345,41 @@ def decals(G):
 
     for z in (-12.0, -6.0, 0.0, 6.0):
         D("grime", (-20.0, 0.45, z), 90.0, (4.0, 0.9, 0.8), "west_range")
+
+    # The ground lived on (our own paintings, tools/textures/paint.py).
+    # Soot under the braziers, and before the mess's hearth.
+    F("soot", 0.0, 2.0, 20.0, 2.6, 2.6)
+    F("soot", 4.0, 24.0, -30.0, 2.0, 2.0, "gatehouse")
+    F("soot", 26.6, 1.0, 0.0, 1.6, 2.6, "barracks")
+
+    # Trodden dirt on the yard's side of each door that gives onto it.
+    for x, z, yaw, sector in [(2.0, -15.1, 0.0, "courtyard"), (-6.9, -20.8, 90.0, "courtyard"), (13.1, -12.0, 90.0, "courtyard"),
+                              (13.1, 6.0, 90.0, "courtyard"), (-19.1, -8.0, 90.0, "courtyard"), (-19.1, 4.0, 90.0, "courtyard"),
+                              (-1.2, 24.0, 90.0, "gatehouse"), (-29.0, -22.1, 0.0, "courtyard"), (24.0, 24.9, 0.0, "courtyard"),
+                              (26.0, -20.9, 0.0, "courtyard")]:
+        F("dirt", x, z, yaw, 2.4, 1.8, sector)
+
+    # Worn down the gate passage and out of it, and along the yard's
+    # busiest ways (gate to fire, fire to the barracks and the west range).
+    F("dirt", 0.0, 27.0, 0.0, 3.2, 9.0, "gatehouse")
+    F("dirt", 0.3, 35.5, 8.0, 3.6, 5.0, "outside")
+    F("dirt", -0.5, 17.0, -6.0, 4.5, 6.5)
+    F("dirt", 7.5, 4.0, 70.0, 3.2, 6.0)
+    F("dirt", -10.5, -3.0, -75.0, 3.2, 7.0)
+    F("dirt", 2.5, -9.0, 10.0, 3.0, 5.0)
+
+    # Straw spilt from the lean-to, and in it.
+    F("straw", -18.9, 15.0, 30.0, 2.4, 2.6)
+    F("straw", -19.3, 19.6, -50.0, 1.9, 2.1)
+    F("straw", -24.5, 17.0, 10.0, 3.2, 3.2, "west_range")
+
+    # Leaves blown in over the walls from the oaks on the bank, gathered in
+    # the yard's corners and along the chapel's foot; and under the oaks.
+    for x, z in [(-15.0, -15.1), (13.0, -15.1), (-15.0, 21.0), (13.0, 21.0), (-5.0, 21.2)]:
+        F("leaves", x, z, (x * 37.0 + z * 11.0) % 360.0, 2.4, 2.4)
+
+    for x in (-3.0, 9.0):
+        F("leaves", x, -15.4, 0.0, 3.4, 1.4)
+
+    for x, z in [(-43.0, -3.0), (-47.0, 19.0), (-44.0, -33.0)]:
+        F("leaves", x + 1.2, z + 0.8, 40.0, 4.0, 4.0, "outside")

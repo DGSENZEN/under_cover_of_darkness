@@ -429,14 +429,41 @@ func _garrison() -> void:
 	# G20 grime, leaks and moss decals where the level marks them (each its
 	# photo when here); crimson banners in rows down the mess
 	# (The level's own: the night's puddles are decals too.)
-	var decals20: Array = map.find_children("decal_*", "Decal", true, false)
-	var marked20: int = level.of("decal").size()
+	var photo_kinds20 := ["grime", "leak_1", "leak_2", "moss"]
+	var decals20: Array = map.find_children("decal_*", "Decal", true, false).filter(func(d): return String((d as Decal).get_meta(&"kind", "")) in photo_kinds20)
+	var marked20: int = level.of("decal").filter(func(m): return String(m["props"]["kind"]) in photo_kinds20).size()
 	var photo20: bool = Materials.picture("decal_moss") != null
 	var textured20: bool = decals20.all(func(d): return ((d as Decal).texture_albedo != null) == photo20)
 	var banners20: int = level.root.find_children("banner*", "", true, false).filter(func(n): return Rect2(16.6, -8.0, 13.0, 18.0).has_point(Vector2((n as Node3D).global_position.x, (n as Node3D).global_position.z))).size()
 	_check("G20 grime, leak and moss decals where marked (photos when here); crimson banners in rows down the mess",
 		marked20 >= 30 and (decals20.size() == marked20 or not photo20) and textured20 and banners20 >= 8,
 		"decals %d of %d marked, textured %s (photo %s), banners in the mess %d" % [decals20.size(), marked20, textured20, photo20, banners20])
+
+	# G30 the ground lived on, in our own paintings (there without the
+	# photos): soot under each brazier and before the mess hearth, trodden
+	# dirt at the yard's doors and down the gate passage (stains that darken
+	# whatever light is on the ground: cards laid on it, multiplying), straw
+	# spilt by the lean-to, leaves blown into the yard's corners (decals);
+	# each flat on the floor (the hearth's soot lies before its stone slab,
+	# 1.7 m from its fire)
+	var floor30: Array = map.find_children("decal_*", "", true, false).filter(func(n): return String(n.get_meta(&"kind", "")) in ["soot", "dirt", "straw", "leaves"])
+	var kinds30 := {}
+
+	for n in floor30:
+		kinds30[String(n.get_meta(&"kind"))] = int(kinds30.get(String(n.get_meta(&"kind")), 0)) + 1
+
+	var fires30: Array = level.of("light").filter(func(m): return String(m["props"].get("kind", "")) in ["brazier", "hearth"])
+	var sooted30: bool = fires30.all(func(m): return floor30.any(func(n): return String(n.get_meta(&"kind")) == "soot" \
+		and Vector2(n.global_position.x - (m["transform"] as Transform3D).origin.x, n.global_position.z - (m["transform"] as Transform3D).origin.z).length() < 2.0))
+	var stains30: bool = floor30.filter(func(n): return String(n.get_meta(&"kind")) in ["soot", "dirt"]).all(func(n): return n is MeshInstance3D \
+		and (n as MeshInstance3D).material_override is ShaderMaterial and ((n as MeshInstance3D).material_override as ShaderMaterial).shader.code.contains("blend_mul") \
+		and ((n as MeshInstance3D).material_override as ShaderMaterial).get_shader_parameter(&"stain") != null)
+	var strewn30: bool = floor30.filter(func(n): return String(n.get_meta(&"kind")) in ["straw", "leaves"]).all(func(n): return n is Decal \
+		and (n as Decal).texture_albedo != null and (n as Decal).texture_albedo.resource_path.begins_with("res://textures/painted/"))
+	var flat30: bool = floor30.all(func(n): return (n as Node3D).global_basis.y.normalized().dot(Vector3.UP) > 0.99)
+	_check("G30 the ground lived on (our paintings): soot at every brazier and the hearth, dirt at the doors and the gate (darkening stains), straw by the lean-to, leaves in the corners",
+		fires30.size() >= 3 and sooted30 and int(kinds30.get("dirt", 0)) >= 10 and int(kinds30.get("straw", 0)) >= 2 and int(kinds30.get("leaves", 0)) >= 4 and stains30 and strewn30 and flat30,
+		"fires %d sooted %s, kinds %s, stains multiply %s, straw and leaves painted decals %s, flat %s" % [fires30.size(), sooted30, kinds30, stains30, strewn30, flat30])
 
 	# G21 drawn only as near as it shows: small dressing fades out at its
 	# range; the big walls occlude what is behind them (occlusion culling on)

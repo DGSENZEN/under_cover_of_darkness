@@ -764,10 +764,173 @@ def bat():
     return _finish(image, (128, 64), 8, mask_image)
 
 
+# ---------------------------------------------------------------------------
+# The ground lived on: decals laid on the floors (garrison_markers.decals).
+# Each fades out well inside its square; soot and dirt in a few steps of
+# alpha (a PS2's soft edge), straw and leaves cut clean.
+# ---------------------------------------------------------------------------
+
+ALPHA_STEPS = [0, 72, 140, 200, 255]
+
+
+def _noise(size, rng, octaves=4, base=4):
+    """A soft field in 0..1: random grids from coarse to fine, each smoothed
+    up to `size` and weighted half the one before."""
+    field = np.zeros((size, size))
+    weight, total = 1.0, 0.0
+
+    for o in range(octaves):
+        cells = base * 2 ** o
+        grid = Image.fromarray((rng.random((cells, cells)) * 255).astype(np.uint8), "L")
+        field += weight * np.asarray(grid.resize((size, size), Image.Resampling.BICUBIC), dtype=np.float64) / 255.0
+        total += weight
+        weight *= 0.5
+
+    field /= total
+    return (field - field.min()) / max(field.max() - field.min(), 1e-6)
+
+
+def _patch(size, rng, reach, rag, lumps=4):
+    """How thick a patch lies (0..1) at each point: lumps round the middle,
+    their edges eaten into by noise (`rag`), nothing past `reach` of the
+    half-width."""
+    y, x = np.mgrid[0:size, 0:size] / float(size) - 0.5
+    thick = np.zeros((size, size))
+
+    for _ in range(lumps):
+        cx, cy = rng.uniform(-0.12, 0.12, 2)
+        r = rng.uniform(0.22, 0.34) * reach / 0.46
+        thick = np.maximum(thick, 1.0 - np.hypot(x - cx, y - cy) / r)
+
+    # Eaten into, never grown out of: no islands off the patch.
+    thick = np.where(thick > 0.0, thick - rag * (_noise(size, rng) - 0.5), 0.0)
+    thick[np.hypot(x, y) > reach] = 0.0
+    return np.clip(thick, 0.0, 1.0)
+
+
+def _stepped(thick, size):
+    """Its thickness shrunk to `size` and stepped to ALPHA_STEPS."""
+    small = np.asarray(Image.fromarray((thick * 255).astype(np.uint8), "L").resize((size, size), Image.Resampling.BOX), dtype=np.float64)
+    steps = np.array(ALPHA_STEPS, dtype=np.float64)
+    picked = steps[np.abs(small[:, :, None] - steps[None, None, :]).argmin(axis=2)]
+    picked[:4], picked[-4:], picked[:, :4], picked[:, -4:] = 0, 0, 0, 0
+    return Image.fromarray(picked.astype(np.uint8), "L")
+
+
+def _soft_finish(pixels, thick, size, colours):
+    image = Image.fromarray(np.clip(pixels, 0, 255).astype(np.uint8), "RGB").resize((size, size), Image.Resampling.BOX)
+    out = image.quantize(colors=colours, dither=Image.Dither.NONE).convert("RGBA")
+    out.putalpha(_stepped(thick, size))
+    return out
+
+
+def decal_soot():
+    """Soot and ash under a brazier: grey ash fallen through its grate in the
+    middle, black soot round it thinning out in ragged steps, charcoal
+    crumbs."""
+    size = 128
+    big = size * SCALE
+    rng = np.random.default_rng(311)
+    thick = _patch(big, rng, 0.46, 0.55, lumps=3) ** 0.8
+    grain = _noise(big, rng, octaves=5, base=8)
+    tone = 16.0 + 14.0 * grain + 34.0 * np.clip((thick - 0.72) / 0.28, 0.0, 1.0) * (0.6 + 0.4 * grain)
+    pixels = np.stack([tone * 1.05, tone, tone * 0.95], axis=2)
+    ash = (_noise(big, rng, octaves=3, base=16) > 0.8) & (thick > 0.3)
+    pixels[ash] = [70.0, 67.0, 63.0]
+    crumbs = rng.random((big, big)) > 0.996
+    pixels[crumbs] = [6.0, 5.0, 5.0]
+    # (Never quite solid: the stones show through it.)
+    return _soft_finish(pixels, thick * 0.78, size, 12)
+
+
+def decal_dirt():
+    """Trodden dirt over the stones: browns in blotches, darker wet hollows,
+    pale dust; its edge ragged, fading in steps."""
+    size = 256
+    big = size * SCALE
+    rng = np.random.default_rng(422)
+    thick = _patch(big, rng, 0.47, 0.9, lumps=5) ** 0.7
+    grain = _noise(big, rng, octaves=5, base=6)
+    brown = np.array([88.0, 66.0, 44.0])
+    pixels = brown[None, None, :] * (0.72 + 0.5 * grain)[:, :, None]
+    wet = _noise(big, rng, octaves=3, base=5) > 0.7
+    pixels[wet] *= 0.8
+    dust = _noise(big, rng, octaves=4, base=12) > 0.8
+    pixels[dust] = pixels[dust] * 0.5 + np.array([128.0, 110.0, 82.0]) * 0.5
+    return _soft_finish(pixels, thick * 0.9, size, 16)
+
+
+def decal_straw():
+    """Straw spilled on the ground: pale gold strands every way, thickest in
+    the middle and thinning to single straws."""
+    size = 256
+    big = size * SCALE
+    rng = np.random.default_rng(533)
+    image = Image.new("RGB", (big, big), (160, 130, 70))
+    mask_image = Image.new("L", (big, big), 0)
+    draw = ImageDraw.Draw(image)
+    mask = ImageDraw.Draw(mask_image)
+    golds = [(196, 164, 92), (176, 146, 78), (214, 188, 116), (150, 120, 64), (186, 150, 70)]
+
+    for _ in range(520):
+        r = abs(rng.normal(0.0, 0.17)) * big
+
+        if r > big * 0.4:
+            continue
+
+        a = rng.random() * math.tau
+        x, y = big / 2 + math.cos(a) * r, big / 2 + math.sin(a) * r
+        length = rng.uniform(14, 44) * SCALE
+        turn = rng.random() * math.tau
+        bend = rng.uniform(-0.25, 0.25)
+        mid = (x + math.cos(turn) * length * 0.5 + math.cos(turn + math.pi / 2) * length * bend * 0.3,
+               y + math.sin(turn) * length * 0.5 + math.sin(turn + math.pi / 2) * length * bend * 0.3)
+        end = (x + math.cos(turn + bend) * length, y + math.sin(turn + bend) * length)
+        width = int(rng.integers(1, 3)) * SCALE
+        colour = golds[int(rng.integers(len(golds)))]
+        draw.line([(x, y), mid, end], fill=colour, width=width)
+        mask.line([(x, y), mid, end], fill=255, width=width)
+
+    edge = int(big * 0.03)
+    mask.rectangle([0, 0, big, edge], fill=0)
+    mask.rectangle([0, big - edge, big, big], fill=0)
+    mask.rectangle([0, 0, edge, big], fill=0)
+    mask.rectangle([big - edge, 0, big, big], fill=0)
+    return _finish(image, (size, size), 12, mask_image)
+
+
+def decal_leaves():
+    """Fallen leaves blown together: browns, rust, ochre and dry olive, each
+    with its rib, scattered thick in the middle and few at the edges."""
+    size = 256
+    big = size * SCALE
+    rng = np.random.default_rng(644)
+    image = Image.new("RGB", (big, big), (90, 60, 30))
+    mask_image = Image.new("L", (big, big), 0)
+    draw = ImageDraw.Draw(image)
+    mask = ImageDraw.Draw(mask_image)
+    autumn = [(120, 72, 34), (146, 92, 40), (98, 60, 30), (160, 110, 50), (110, 90, 40), (80, 52, 28), (134, 58, 30), (170, 124, 58)]
+
+    for _ in range(170):
+        r = abs(rng.normal(0.0, 0.16)) * big
+
+        if r > big * 0.38:
+            continue
+
+        a = rng.random() * math.tau
+        x, y = big / 2 + math.cos(a) * r, big / 2 + math.sin(a) * r
+        length = rng.uniform(9, 17) * SCALE
+        fill = _tinted(autumn[int(rng.integers(len(autumn)))], rng.uniform(0.8, 1.1))
+        _leaf(draw, mask, x, y, length, length * rng.uniform(0.45, 0.65), rng.random() * math.tau, fill, _tinted(fill, 0.7), _tinted(fill, 0.6))
+
+    return _finish(image, (size, size), 20, mask_image)
+
+
 PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_frontal": altar_frontal,
              "shield_1": shield_1, "shield_2": shield_2, "shield_3": shield_3,
              "leaf_crown": leaf_crown, "leaf_shrub": leaf_shrub, "yew": yew, "twigs": twigs, "grass": grass,
-             "weed_broad": weed_broad, "reeds": reeds, "ivy": ivy, "bark": bark, "bat": bat}
+             "weed_broad": weed_broad, "reeds": reeds, "ivy": ivy, "bark": bark, "bat": bat,
+             "decal_soot": decal_soot, "decal_dirt": decal_dirt, "decal_straw": decal_straw, "decal_leaves": decal_leaves}
 
 
 def main(argv):

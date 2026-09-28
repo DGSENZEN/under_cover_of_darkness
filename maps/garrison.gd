@@ -15,6 +15,7 @@ extends "res://maps/npc_showcase.gd"
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const ClimbScript := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
 const Materials := preload("res://scripts/Visual/Materials.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 const WindScript := preload("res://scripts/Visual/Wind.gd")
 const WildlifeScript := preload("res://scripts/Visual/Wildlife.gd")
 const GodRaysScript := preload("res://scripts/Visual/GodRays.gd")
@@ -78,6 +79,14 @@ const BLOOM := 0.07
 ## Decals: how much of their picture over the wall's; faded out from this far.
 const DECAL_MIX := 0.85
 const DECAL_FADE := 40.0
+## Stains laid as cards on the floor (ground_stain.gdshader), each kind's
+## [strength, curve]; how far over the floor they lie (m: clear of it, under
+## a foot).
+const STAINS := {"soot": [1.2, 0.75], "dirt": [1.3, 0.3]}
+const STAIN_LIFT := 0.012
+## A floor decal's marker stands this far over its floor (garrison_markers).
+const FLOOR_MARK := 0.05
+const GROUND_STAIN := preload("res://scripts/Visual/ground_stain.gdshader")
 const GLASS_LINE := -25.2
 const DUST_BOX := Vector3(1.0, 1.1, 1.0)
 const DUST_STEPS := [1.6, 3.2, 4.8, 6.3]
@@ -388,9 +397,11 @@ func _light(m: Dictionary) -> void:
 			shaft.global_basis = Basis.looking_at(GLASS_TOWARD.normalized(), Vector3.UP)
 
 
-## A decal marker made a Decal: its photo ("decal_<kind>") projected into
-## the wall it faces (its -z), or straight down onto a floor. Nothing when
-## the photo is not on this machine (the flat-colour fallback has no stains).
+## A decal marker made a Decal: its picture ("decal_<kind>": a photo, or
+## our own painting of the ground's soot, dirt, straw and leaves) projected
+## into the wall it faces (its -z), or straight down onto a floor, never onto
+## the men walking through it. Nothing when there is no picture (the
+## flat-colour fallback has no stains).
 func _decal(m: Dictionary) -> void:
 	var texture := Materials.picture("decal_" + String(m["props"]["kind"]))
 
@@ -399,8 +410,33 @@ func _decal(m: Dictionary) -> void:
 
 	var at: Transform3D = m["transform"]
 	var size: Vector3 = m["size"]
+
+	# A stain (soot, dirt): a card on the floor darkening what is under it.
+	if STAINS.has(String(m["props"]["kind"])):
+		var card := MeshInstance3D.new()
+		card.name = m["name"]
+		card.set_meta(&"kind", String(m["props"]["kind"]))
+		var plane := PlaneMesh.new()
+		plane.size = Vector2(size.x, size.z)
+		card.mesh = plane
+		var paint := ShaderMaterial.new()
+		paint.shader = GROUND_STAIN
+		paint.set_shader_parameter(&"stain", texture)
+		paint.set_shader_parameter(&"strength", float(STAINS[String(m["props"]["kind"])][0]))
+		paint.set_shader_parameter(&"curve", float(STAINS[String(m["props"]["kind"])][1]))
+		card.material_override = paint
+		card.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		card.visibility_range_end = DECAL_FADE + 10.0
+		card.visibility_range_end_margin = 10.0
+		card.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+		add_child(card)
+		card.global_transform = Transform3D(Basis(Vector3.UP, at.basis.get_euler().y), at.origin + Vector3.UP * (STAIN_LIFT - FLOOR_MARK))
+		return
+
 	var decal := Decal.new()
 	decal.name = m["name"]
+	decal.set_meta(&"kind", String(m["props"]["kind"]))
+	decal.cull_mask = Layers.WORLD_ALL
 	decal.texture_albedo = texture
 	decal.albedo_mix = DECAL_MIX
 	decal.distance_fade_enabled = true

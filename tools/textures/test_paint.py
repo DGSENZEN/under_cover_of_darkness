@@ -94,6 +94,85 @@ class Bat(unittest.TestCase):
         self.assertLess(pixels[alpha == 255][:, :3].mean(), 60)
 
 
+FLOOR_DECALS = ["decal_soot", "decal_dirt", "decal_straw", "decal_leaves"]
+
+
+def _alpha(name):
+    return np.asarray(paint.PAINTINGS[name]())[:, :, 3]
+
+
+def _visible(name):
+    pixels = np.asarray(paint.PAINTINGS[name]())
+    return pixels[pixels[:, :, 3] > 0][:, :3].astype(float)
+
+
+class FloorDecals(unittest.TestCase):
+    def test_a_floor_decal_fades_out_before_its_square_edges(self):
+        for name in FLOOR_DECALS:
+            with self.subTest(name):
+                image = paint.PAINTINGS[name]()
+                self.assertEqual(image.mode, "RGBA")
+                w, h = image.size
+                self.assertEqual(w & (w - 1), 0)
+                self.assertEqual(h & (h - 1), 0)
+                alpha = _alpha(name)
+                rim = np.concatenate([alpha[:4].ravel(), alpha[-4:].ravel(), alpha[:, :4].ravel(), alpha[:, -4:].ravel()])
+                self.assertLess((rim > 0).mean(), 0.02, "its square shows at the rim")
+                shown = float((alpha > 0).mean())
+                self.assertGreater(shown, 0.08, "hardly anything painted")
+                self.assertLess(shown, 0.85)
+
+    def test_soot_and_dirt_fade_in_a_few_steps_not_a_hard_cut(self):
+        # A PS2 falloff: some steps between clear and solid, not a smooth
+        # ramp nor one cut.
+        for name in ["decal_soot", "decal_dirt"]:
+            with self.subTest(name):
+                levels = set(np.unique(_alpha(name))) - {0}
+                self.assertGreaterEqual(len(levels), 3)
+                self.assertLessEqual(len(levels), 6)
+
+    def test_soot_is_black_and_thickest_in_the_middle(self):
+        alpha = _alpha("decal_soot").astype(float)
+        h, w = alpha.shape
+        middle = alpha[h * 3 // 8: h * 5 // 8, w * 3 // 8: w * 5 // 8].mean()
+        y, x = np.mgrid[0:h, 0:w]
+        ring = alpha[(np.hypot(x - w / 2, y - h / 2) > w * 0.3) & (np.hypot(x - w / 2, y - h / 2) < w * 0.45)].mean()
+        self.assertGreater(middle, ring * 2.0)
+        self.assertLess(_visible("decal_soot").mean(), 50)
+
+    def test_dirt_is_brown_with_a_ragged_edge(self):
+        mean = _visible("decal_dirt").mean(axis=0)
+        self.assertGreater(mean[0], mean[2] + 8)
+        alpha = _alpha("decal_dirt")
+        h, w = alpha.shape
+        ends = []
+
+        for angle in np.linspace(0.0, 2.0 * np.pi, 48, endpoint=False):
+            last = 0
+
+            for r in range(1, w // 2):
+                if alpha[int(h / 2 + np.sin(angle) * r), int(w / 2 + np.cos(angle) * r)] > 0:
+                    last = r
+
+            ends.append(last)
+
+        self.assertGreater(max(ends) - min(ends), w * 0.1)
+
+    def test_straw_is_pale_gold_strands(self):
+        mean = _visible("decal_straw").mean(axis=0)
+        self.assertGreater(mean[0], mean[2] + 30)
+        self.assertGreater(mean[1], mean[2] + 20)
+        self.assertLess(float((_alpha("decal_straw") > 0).mean()), 0.45, "a mat, not strands")
+        self.assertTrue(set(np.unique(_alpha("decal_straw"))) <= {0, 255})
+
+    def test_leaves_are_many_autumn_colours_cut_clean(self):
+        visible = _visible("decal_leaves")
+        self.assertGreaterEqual(len({tuple(p) for p in visible.astype(int)}), 10)
+        mean = visible.mean(axis=0)
+        self.assertGreater(mean[0], mean[2] + 15)
+        self.assertTrue(set(np.unique(_alpha("decal_leaves"))) <= {0, 255})
+
+
 class Bark(unittest.TestCase):
     def test_bark_is_solid_and_tiles_both_ways(self):
         image = np.asarray(paint.PAINTINGS["bark"]().convert("RGB")).astype(float)
