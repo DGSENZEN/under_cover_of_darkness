@@ -50,6 +50,15 @@ class Rules(unittest.TestCase):
         data["pieces"].append(piece("odd", "wall_marble_9", (0, 0, 0)))
         self.assertTrue(any("no kit piece" in p for p in rules.problems(data)))
 
+    def test_a_scaled_piece(self):
+        # Scaled in Blender, its mesh would export scaled but its colliders
+        # come from the recipe: told, not shipped.
+        data = good()
+        data["pieces"][2]["scale"] = [1.0, 1.5, 1.0]
+        self.assertTrue(any("wall" in p and "scaled" in p for p in rules.problems(data)))
+        data["pieces"][2]["scale"] = [1.0, 1.00001, 1.0]
+        self.assertEqual(rules.problems(data), [])
+
     def test_an_unknown_marker(self):
         data = good()
         data["markers"].append(marker("x", "teleporter", (0, 0, 0)))

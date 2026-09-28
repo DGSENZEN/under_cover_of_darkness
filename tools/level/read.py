@@ -38,9 +38,10 @@ def read():
 
     for obj in bpy.context.scene.objects:
         if "kit_piece" in obj.keys():
-            position, basis, _ = common.unpack(obj)
+            position, basis, scale = common.unpack(obj)
             piece = obj["kit_piece"]
-            pieces.append({"name": obj.name, "piece": piece, "sector": sector_of(obj), "position": position, "basis": basis})
+            pieces.append({"name": obj.name, "piece": piece, "sector": sector_of(obj), "position": position, "basis": basis,
+                           "scale": scale})
 
             if obj.type == "MESH" and piece not in tris:
                 tris[piece] = sum(len(p.vertices) - 2 for p in obj.data.polygons)

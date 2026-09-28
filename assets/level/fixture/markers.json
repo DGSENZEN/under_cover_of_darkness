@@ -171,7 +171,9 @@
   "chandelier",
   "window_shaft",
   "hearth",
-  "fire"
+  "fire",
+  "glow",
+  "lamp_post"
  ],
  "grades": [
   "outside",

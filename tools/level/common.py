@@ -3,6 +3,7 @@ check, export)."""
 
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -62,7 +63,29 @@ def data_hash(data):
 
 
 def level_path(level):
-    return SOURCE / (level + ".blend")
+    """A level's .blend: in assets/level/source, or LEVEL_SOURCE if set (the
+    guard's test builds into a scratch folder)."""
+    return Path(os.environ.get("LEVEL_SOURCE", str(SOURCE))) / (level + ".blend")
+
+
+def _rounded(value):
+    if isinstance(value, float):
+        return round(value, 4) + 0.0
+
+    if isinstance(value, list):
+        return [_rounded(v) for v in value]
+
+    if isinstance(value, dict):
+        return {k: _rounded(v) for k, v in value.items()}
+
+    return value
+
+
+def content_hash(data):
+    """A level's pieces and markers as read back from its .blend (read.read),
+    its numbers rounded: saved as it is built, so an edit since then can be
+    told (build will not overwrite it without --force)."""
+    return data_hash(_rounded({"pieces": data["pieces"], "markers": data["markers"]}))
 
 
 def out_dir(level):

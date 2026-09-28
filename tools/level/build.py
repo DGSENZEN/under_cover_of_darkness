@@ -4,7 +4,8 @@ data: pieces and markers, see rules.py). Each piece is an object linking the
 kit's mesh (kit.blend), in its sector's collection; each marker an empty
 (a cube for a box marker) with `ucd` and its properties, in the sector's
 "<sector> markers" collection. After this the .blend is the user's to edit:
-check and export read it back.
+check and export read it back, and build will not overwrite it once edited
+(edited.py; `level.sh build <level> --force` does).
 
     Blender -b --factory-startup --python tools/level/build.py -- <level>
 """
@@ -20,6 +21,7 @@ import bpy  # noqa: E402
 import common  # noqa: E402
 import geo  # noqa: E402
 import markers as schema  # noqa: E402
+import read as reader  # noqa: E402
 
 
 def collection(scene, name, parent=None):
@@ -82,10 +84,13 @@ def build(level):
 
     scene["level"] = level
     scene["layout_hash"] = common.data_hash(data)
+    # The level as it reads back, for the next build to tell an edit by.
+    scene["content_hash"] = common.content_hash(reader.read())
     path = common.level_path(level)
     path.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(path), relative_remap=True)
-    print("level: %s: %d pieces, %d markers -> %s" % (level, len(data["pieces"]), len(data["markers"]), path.relative_to(common.ROOT)))
+    shown = path.relative_to(common.ROOT) if path.is_relative_to(common.ROOT) else path
+    print("level: %s: %d pieces, %d markers -> %s" % (level, len(data["pieces"]), len(data["markers"]), shown))
 
 
 args = common.argv()

@@ -51,6 +51,10 @@ def floor_under(boxes, point):
     return best if best is not None and best <= FLOOR_BELOW + 0.05 else None
 
 
+# A piece's scale this far from 1 is a scaled piece.
+SCALE_SLACK = 0.001
+
+
 def problems(data, stage="stage1"):
     out = []
     names = {}
@@ -58,6 +62,13 @@ def problems(data, stage="stage1"):
     for p in data["pieces"]:
         if p["piece"] not in kit_recipes.PIECES:
             out.append("%s: no kit piece called '%s'" % (p["name"], p["piece"]))
+
+        # Its colliders are the recipe's, unscaled: a scaled piece would look
+        # one size and stop men at another.
+        scale = p.get("scale", [1.0, 1.0, 1.0])
+
+        if any(abs(float(k) - 1.0) > SCALE_SLACK for k in scale):
+            out.append("%s: scaled (%s); pieces are used at their own size (use a bigger piece)" % (p["name"], ", ".join("%.2f" % float(k) for k in scale)))
 
     for m in data["markers"]:
         if m["name"] in names:
