@@ -639,9 +639,13 @@ func receive(kind: String, mesh: Mesh, from: Transform3D) -> void:
 	_jobs.append({ "kind": kind, "mesh": mesh, "from": from, "t": 0.0 })
 
 
-## Bring a key to a lock and turn it. `done` runs when it has turned.
+## Bring a key to a lock and turn it. `done` runs when it has turned. It goes
+## before any pickups still to show, and the one showing now is cut short.
 func turn_key(mesh: Mesh, lock_point: Vector3, done: Callable) -> void:
-	_jobs.append({ "kind": "key_turn", "mesh": mesh, "lock": lock_point, "done": done, "t": 0.0 })
+	if not _job.is_empty() and _job["kind"] != "key_turn" and not _job.has("hurry"):
+		_job["hurry"] = float(_job["t"])
+
+	_jobs.push_front({ "kind": "key_turn", "mesh": mesh, "lock": lock_point, "done": done, "t": 0.0 })
 
 
 ## Holding up the purse and key ring to see what you carry.
@@ -711,6 +715,10 @@ func _run_job() -> void:
 	var stow := 0.16
 	var show := 0.55 if kind == "loot" else 0.25
 	var lower := 0.18
+
+	# A key to turn: shown only as long as it has been, then straight down.
+	if _job.has("hurry"):
+		show = clampf(float(_job["hurry"]) - fly - stow, 0.0, show)
 	_off_lower = 1.0 - smoothstep(0.0, fly * 0.8, t)
 
 	if t < fly:

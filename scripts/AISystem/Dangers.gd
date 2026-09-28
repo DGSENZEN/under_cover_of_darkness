@@ -136,7 +136,7 @@ static func _near_shapes(area: Node3D, point: Vector3, margin: float) -> bool:
 
 
 ## Loose things within `radius` of `point` that `guard` could pick up and
-## throw: light enough, resting, not held, not a body, powder, treasure, a
+## throw: light enough, resting, not held (by you: "in_hand"), not a body, powder, treasure, a
 ## key, a tool or a blade; and not already another man's. Nearest first.
 static func throwables_near(guard: Node3D, point: Vector3, radius: float) -> Array[RigidBody3D]:
 	var sphere := SphereShape3D.new()
@@ -168,7 +168,7 @@ static func throwable(body: RigidBody3D, guard: Node3D = null) -> bool:
 	if body.mass < THROW_MASS_MIN or body.mass > THROW_MASS_MAX or body.gravity_scale < 0.5:
 		return false
 
-	for group in [&"bodies", &"dropped_weapons", &"dropped_lights", &"explosives"]:
+	for group in [&"bodies", &"dropped_weapons", &"dropped_lights", &"explosives", &"in_hand"]:
 		if body.is_in_group(group):
 			return false
 
@@ -179,14 +179,15 @@ static func throwable(body: RigidBody3D, guard: Node3D = null) -> bool:
 
 
 ## Blades lying where they fell within `radius` of `point`, of the kinds in
-## `kinds` (any, if empty), resting and not another man's. Nearest first.
+## `kinds` (any, if empty), resting, not in your hands and not another man's.
+## Nearest first.
 static func weapons_near(tree: SceneTree, point: Vector3, radius: float, kinds: Array = [], guard: Node3D = null) -> Array[RigidBody3D]:
 	var found: Array[RigidBody3D] = []
 
 	for thing in tree.get_nodes_in_group(&"dropped_weapons"):
 		var body := thing as RigidBody3D
 
-		if body == null or body.is_queued_for_deletion() or claimed(body, guard):
+		if body == null or body.is_queued_for_deletion() or body.is_in_group(&"in_hand") or claimed(body, guard):
 			continue
 
 		if not kinds.is_empty() and not (StringName(body.get_meta(&"weapon_kind", &"sword")) in kinds):

@@ -190,11 +190,13 @@ func _closed_global_basis() -> Basis:
 	return parent_basis * Basis(Vector3.UP, _closed_yaw)
 
 
-## Would the panel push into a PERSON at this angle? Crates, keys and bodies
-## are simply pushed aside: a key on the floor must not jam a door. Only
-## bodies on the side the door swings TOWARD count; whoever just opened it is
-## standing against the other face. Static walls are not checked: a door that
-## swings into a wall is a level bug, not a runtime one.
+## Would the panel push into a PERSON at this angle, or a man lying down (a
+## body, the limbs of one gone limp), or what you hold in your hands? Crates
+## and keys on the floor are simply pushed aside: a key on the floor must not
+## jam a door. Only what is on the side the door swings TOWARD counts;
+## whoever just opened it is standing against the other face. Static walls
+## are not checked: a door that swings into a wall is a level bug, not a
+## runtime one.
 func _would_hit_body(angle: float, direction: float) -> bool:
 	if _shape == null or _shape.shape == null:
 		return false
@@ -219,7 +221,7 @@ func _would_hit_body(angle: float, direction: float) -> bool:
 	for hit in space.intersect_shape(query, 8):
 		var collider: Object = hit.get("collider")
 
-		if not (collider is CharacterBody3D):
+		if not _stops_door(collider):
 			continue
 
 		# The panel lies along local +X with its front toward -Z. Turning the
@@ -230,3 +232,16 @@ func _would_hit_body(angle: float, direction: float) -> bool:
 			return true
 
 	return false
+
+
+## A man standing or lying, or something in your hands: not to be shoved
+## through the frame.
+static func _stops_door(thing: Object) -> bool:
+	if thing is CharacterBody3D:
+		return true
+
+	if not (thing is Node):
+		return false
+
+	var node := thing as Node
+	return node.is_in_group(&"bodies") or node.is_in_group(&"in_hand") or node.has_meta(&"ragdoll")
