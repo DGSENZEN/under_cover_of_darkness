@@ -44,6 +44,11 @@ const ON_LADDER := 0.9
 ## As the moves are heard (dB): a man climbing in mail, landing, a splash.
 const CLIMB_DB := 44.0
 const LAND_DB := 52.0
+## Kept waiting at a ladder's foot this long (s), he gives up that way (his
+## path as far as he can go: Guard._path_blocked); held on it this long, he
+## goes back down (or up) the way he came, and does the same.
+const WAIT_LONGEST := 10.0
+const HOLD_LONGEST := 5.0
 
 var guard: CharacterBody3D
 ## The kind of way being crossed ("climb", "drop", "leap", "ladder", "rope",
@@ -67,6 +72,12 @@ var _going_up := true
 ## A ladder he came to with a man on it in his way: tried again while he
 ## stands at its foot (retry), forgotten when his path changes.
 var _waiting: Dictionary = {}
+## Since when he has waited there; how long he has been held on the ladder;
+## where he got on it; and whether he is going back off it that way.
+var _wait_since := 0.0
+var _held := 0.0
+var _start := Vector3.ZERO
+var _backing := false
 
 
 func _init(p_guard: CharacterBody3D) -> void:
@@ -148,6 +159,10 @@ func begin(details: Dictionary) -> bool:
 			if _in_the_way(from.y):
 				_legs.clear()
 				_ladder_line = Vector3.INF
+
+				if _waiting.is_empty():
+					_wait_since = guard._game_time
+
 				_waiting = details
 				return false
 		&"water":
@@ -163,6 +178,9 @@ func begin(details: Dictionary) -> bool:
 	_leg = 0
 	_leg_t = 0.0
 	_leg_from = from
+	_start = from
+	_held = 0.0
+	_backing = false
 	_waiting = {}
 	guard.velocity = Vector3.ZERO
 	_noise(CLIMB_DB)
@@ -179,6 +197,12 @@ func retry() -> void:
 
 	if entry == Vector3.INF or Vector2(entry.x - guard.global_position.x, entry.z - guard.global_position.z).length() > 1.6:
 		_waiting = {}
+		return
+
+	# Kept waiting too long: not that way.
+	if guard._game_time - _wait_since > WAIT_LONGEST:
+		_waiting = {}
+		guard._path_blocked = true
 		return
 
 	begin(_waiting)
@@ -203,6 +227,7 @@ func interrupt() -> void:
 	kind = &""
 	_legs.clear()
 	_ladder_line = Vector3.INF
+	_backing = false
 	guard.velocity = Vector3(guard.velocity.x, minf(guard.velocity.y, 0.0), guard.velocity.z)
 
 
@@ -214,11 +239,18 @@ func update(delta: float) -> void:
 
 	var before := guard.global_position
 
-	# On a ladder with someone on it ahead of him: he holds where he is.
+	# On a ladder with someone on it ahead of him: he holds where he is; held
+	# too long, he goes back off it the way he came.
 	if _leg < _legs.size() and _legs[_leg][2] == &"ladder" and _in_the_way(guard.global_position.y):
 		guard.velocity = Vector3.ZERO
+		_held += delta
+
+		if _held > HOLD_LONGEST and not _backing:
+			_back_off()
+
 		return
 
+	_held = 0.0
 	_leg_t += delta
 
 	while _leg < _legs.size() and _leg_t >= float(_legs[_leg][1]):
@@ -385,7 +417,29 @@ func _arrive(leg: Array) -> void:
 		_noise(LAND_DB)
 
 
-## Across: back to walking, his path's next point the far end.
+## Held on a ladder too long (update): back along it to where he got on,
+## and off it there.
+func _back_off() -> void:
+	var at := guard.global_position
+	var line := _ladder_line
+	_backing = true
+	_held = 0.0
+	_going_up = not _going_up
+	_legs.clear()
+	_leg = 0
+	_leg_t = 0.0
+	_leg_from = at
+
+	if _going_up:
+		_legs.append([Vector3(line.x, _start.y - 0.15, line.z), maxf(_start.y - 0.15 - at.y, 0.1) / LADDER_SPEED, &"ladder", &"line"])
+		_legs.append([_start, 0.3, &"climb", &"line"])
+	else:
+		_legs.append([Vector3(line.x, _start.y, line.z), maxf(at.y - _start.y, 0.1) / LADDER_SPEED, &"ladder", &"line"])
+		_legs.append([_start, 0.25, &"land", &"line"])
+
+
+## Across: back to walking, his path's next point the far end. Come back off
+## a ladder he was held on (_back_off): that way is given up.
 func _finish() -> void:
 	kind = &""
 	_legs.clear()
@@ -393,6 +447,10 @@ func _finish() -> void:
 	guard._stuck_time = 0.0
 	guard._last_walk_position = guard.global_position
 	guard._fall_peak = 0.0
+
+	if _backing:
+		_backing = false
+		guard._path_blocked = true
 
 
 ## Someone on the ladder he climbs, in his way: ahead of him along it (above
@@ -420,13 +478,28 @@ func _in_the_way(at_y: float) -> bool:
 
 	var target: Variant = guard.get("_target")
 
-	if target is Node3D and is_instance_valid(target) and target.has_method("is_off_feet") and target.is_off_feet():
+	# You, only if he sees you there or knows you went up it: unseen, he
+	# does not know to wait for you.
+	if target is Node3D and is_instance_valid(target) and target.has_method("is_off_feet") and target.is_off_feet() and _knows_you_are_on_it():
 		var feet: Vector3 = guard._feet_of(target)
 
 		if Vector2(feet.x - _ladder_line.x, feet.z - _ladder_line.z).length() <= ON_LADDER and _ahead(feet.y, at_y):
 			return true
 
 	return false
+
+
+## Whether he knows you are on the ladder: he sees you, or last had you
+## on it (Guard._follow_through keeps that while you climb out of sight).
+func _knows_you_are_on_it() -> bool:
+	if guard.get("can_see_target") == true:
+		return true
+
+	if guard.get("has_last_known") != true:
+		return false
+
+	var known: Vector3 = guard.last_known_position
+	return Vector2(known.x - _ladder_line.x, known.z - _ladder_line.z).length() <= ON_LADDER + 0.6
 
 
 ## Feet at `y` are ahead of feet at `at_y` along his way, nearer than BODY.

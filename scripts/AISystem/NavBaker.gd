@@ -160,6 +160,9 @@ func bake() -> void:
 
 
 func _on_baked(mesh: NavigationMesh) -> void:
+	if not is_inside_tree():
+		return
+
 	sealed_count = _drop_sealed(mesh)
 	navigation_mesh = mesh
 
@@ -171,10 +174,17 @@ func _on_baked(mesh: NavigationMesh) -> void:
 	for i in 60:
 		await get_tree().physics_frame
 
+		# The level gone meanwhile (a reload, a test's next scene): no more.
+		if not is_inside_tree():
+			return
+
 		if i >= 1 and (vertices.is_empty() or NavigationServer3D.map_get_closest_point(get_navigation_map(), corner).distance_to(corner) < 0.5):
 			break
 
 	await _bake_water(mesh)
+
+	if not is_inside_tree():
+		return
 
 	if traversal_links:
 		link_count = NavLinksScript.build(self)
@@ -182,6 +192,10 @@ func _on_baked(mesh: NavigationMesh) -> void:
 	# Links reach the map on one of its next syncs: nobody asks it for a path
 	# before then.
 	await _map_synced()
+
+	if not is_inside_tree():
+		return
+
 	is_baked = true
 	baked.emit()
 
@@ -194,6 +208,9 @@ func _map_synced() -> void:
 
 	for i in 30:
 		await get_tree().physics_frame
+
+		if not is_inside_tree():
+			return
 
 		if NavigationServer3D.map_get_iteration_id(map) != before and i >= 1:
 			return
