@@ -78,6 +78,20 @@ def make_modelled(name, recipe):
         for loop, uv in zip(polygon.loop_indices, uvs):
             layer.data[loop].uv = (uv[0], 1.0 - uv[1])
 
+    # Faces that carry their own normals (rounded cards: a crown lit as a
+    # mass); the rest keep their flat ones.
+    if part["normals"]:
+        mesh.update()
+        loops = [None] * len(mesh.loops)
+
+        for index, polygon in enumerate(mesh.polygons):
+            own = part["normals"].get(index)
+
+            for k, loop in enumerate(polygon.loop_indices):
+                loops[loop] = tuple(geo.to_blender(own[k])) if own is not None else tuple(polygon.normal)
+
+        mesh.normals_split_custom_set(loops)
+
     mesh.update()
     mesh.use_fake_user = True
     return mesh

@@ -218,11 +218,23 @@ piece("stair_straight", "stair", "flagstone", "stone",
       [box(0.0, (i + 1) * RISER / 2.0, i * TREAD + TREAD / 2.0, 1.2, (i + 1) * RISER, TREAD, "flagstone") for i in range(_steps)],
       size=[1.2, STOREY, _steps * TREAD])
 
+# A tower's steep flight: a storey in 3 m (0.25 risers and treads), so a
+# flight runs from one corner landing to the next inside a tower 7.2 m
+# across (the ordinary flight's 4.5 m ran under the next landing).
+TOWER_STEP = 0.25
+_tower_steps = int(round(STOREY / TOWER_STEP))
+piece("stair_tower", "stair", "flagstone", "stone",
+      [box(0.0, (i + 1) * TOWER_STEP / 2.0, i * TOWER_STEP + TOWER_STEP / 2.0, 1.3, (i + 1) * TOWER_STEP, TOWER_STEP, "flagstone") for i in range(_tower_steps)],
+      size=[1.3, STOREY, _tower_steps * TOWER_STEP])
+
 # The flight up to the wall-walk (CURTAIN_HEIGHT), 1.4 m wide.
 _curtain_steps = int(round(CURTAIN_HEIGHT / RISER))
 piece("stair_curtain", "stair", "ashlar", "stone",
       [box(0.0, (i + 1) * RISER / 2.0, i * TREAD + TREAD / 2.0, 1.4, (i + 1) * RISER, TREAD, "ashlar") for i in range(_curtain_steps)],
       size=[1.4, CURTAIN_HEIGHT, _curtain_steps * TREAD])
+# A landing at the head of a wall's flight, as wide as the flight: its top
+# at the pivot, running into the walk beside it.
+piece("landing_walk", "floor", "ashlar", "stone", [box(0.0, -0.15, 0.0, 1.4, 0.3, 1.4, "ashlar")], size=[1.4, 0.3, 1.4])
 # A landing: a slab whose top is at the pivot, 2 x 2 m.
 piece("landing_2", "floor", "flagstone", "stone", [box(0.0, -0.15, 0.0, 2.0, 0.3, 2.0, "flagstone")], size=[2.0, 0.3, 2.0])
 
@@ -526,3 +538,6 @@ import kit_chapel  # noqa: E402,F401
 
 # The props (kit_props: the mess hall's and kitchen's, the dressing modelled).
 import kit_props  # noqa: E402,F401
+
+# The nature round the walls (kit_nature: trees, shrubs, grass, reeds, ivy).
+import kit_nature  # noqa: E402,F401

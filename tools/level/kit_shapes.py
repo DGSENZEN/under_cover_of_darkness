@@ -72,10 +72,17 @@ def gable(cx, cy, cz, width, rise, depth, slot, yaw=0.0):
     return {"kind": "gable", "centre": [cx, cy, cz], "width": width, "rise": rise, "depth": depth, "slot": slot, "turn": [yaw, 0.0, 0.0]}
 
 
-def card(cx, cy, cz, width, height, slot, yaw=0.0, pitch=0.0):
+def card(cx, cy, cz, width, height, slot, yaw=0.0, pitch=0.0, round=None):
     """A rectangle `width` x `height` facing +z (turned by yaw), drawn from
-    both sides, its photo across it."""
-    return {"kind": "card", "centre": [cx, cy, cz], "size": [width, height], "slot": slot, "turn": [yaw, pitch, 0.0]}
+    both sides, its photo across it. `round` (a point in the piece's frame):
+    its normals point out from there on both faces, so cards gathered round
+    it light as one mass (a tree's crown), not as flat boards."""
+    shape = {"kind": "card", "centre": [cx, cy, cz], "size": [width, height], "slot": slot, "turn": [yaw, pitch, 0.0]}
+
+    if round is not None:
+        shape["round"] = [float(c) for c in round]
+
+    return shape
 
 
 def lathe(cx, cy, cz, profile, sides, slot, yaw=0.0, pitch=0.0, roll=0.0, caps=True, closed=False):
@@ -131,6 +138,9 @@ def moved(shapes, yaw=0.0, offset=(0.0, 0.0, 0.0)):
             shape["centre"] = geo.add(geo.apply(turn, shape["centre"]), offset)
             shape["turn"] = [shape["turn"][0] + yaw, shape["turn"][1], shape["turn"][2]]
 
+            if "round" in shape:
+                shape["round"] = geo.add(geo.apply(turn, shape["round"]), offset)
+
         out.append(shape)
 
     return out
@@ -141,7 +151,10 @@ def moved(shapes, yaw=0.0, offset=(0.0, 0.0, 0.0)):
 # ---------------------------------------------------------------------------
 
 def build(shapes):
-    part = {"verts": [], "faces": []}
+    """The shapes' corners and faces: {verts, faces: [(indices, slot, uvs)],
+    normals: {face index: [a normal per corner]} for the faces that carry
+    their own (rounded cards), the rest flat}."""
+    part = {"verts": [], "faces": [], "normals": {}}
     makers = {"box": _box, "prism": _prism, "arched": _arched, "gable": _gable, "card": _card, "lathe": _lathe, "disc": _disc,
               "slab": _slab, "ring": _ring}
 
@@ -319,6 +332,17 @@ def _card(part, shape):
     uvs = [[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]
     _add_face(part, corners, shape["slot"], uvs)
     _add_face(part, corners[::-1], shape["slot"], uvs[::-1])
+
+    if "round" in shape:
+        out = []
+
+        for c in corners:
+            d = [c[i] - shape["round"][i] for i in range(3)]
+            length = max(sum(x * x for x in d) ** 0.5, 1e-6)
+            out.append([x / length for x in d])
+
+        part["normals"][len(part["faces"]) - 2] = out
+        part["normals"][len(part["faces"]) - 1] = out[::-1]
 
 
 def _lathe(part, shape):

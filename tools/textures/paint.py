@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Textures we paint ourselves (no photo in them, so they are committed):
 the garrison's banner, the chapel's rose window and altar frontal, the mess
-hall's shields.
+hall's shields, the moon, and the nature round the walls: leaves for a
+tree's crown and a shrub, a yew's needles, bare twigs, grass, broad weeds,
+reeds, ivy, and bark.
 
     python3 tools/textures/paint.py            every one -> textures/painted/<name>.png
     python3 tools/textures/paint.py banner     just those named
@@ -340,8 +342,386 @@ def moon():
     return _finish(image, (128, 128), 24, mask)
 
 
+# ---------------------------------------------------------------------------
+# Nature: leaves, needles, twigs, grass, weeds, reeds, ivy (cut out), bark
+# ---------------------------------------------------------------------------
+
+def _tinted(colour, bright):
+    return tuple(int(max(0, min(255, c * bright))) for c in colour)
+
+
+def _leaf(draw, mask, x, y, length, width, angle, fill, edge, vein=None):
+    """A pointed leaf from its stalk at (x, y), `length` along `angle`."""
+    ca, sa = math.cos(angle), math.sin(angle)
+    points = []
+
+    for i in range(11):
+        t = i / 10.0
+        points.append((t * length, width * 0.5 * math.sin(math.pi * t) ** 0.8 * (1.0 - 0.25 * t)))
+
+    outline = points + [(px, -py) for px, py in reversed(points[1:-1])]
+    placed = [(x + px * ca - py * sa, y + px * sa + py * ca) for px, py in outline]
+    draw.polygon(placed, fill=fill, outline=edge)
+    mask.polygon(placed, fill=255)
+
+    if vein is not None:
+        draw.line([(x, y), (x + length * 0.85 * ca, y + length * 0.85 * sa)], fill=vein, width=max(1, int(width * 0.08)))
+
+
+def _blob_points(rng, centres, count):
+    """`count` points spread through overlapping round blobs [(x, y, r)],
+    thicker toward each middle."""
+    areas = np.array([r * r for _, _, r in centres], dtype=np.float64)
+    picks = rng.choice(len(centres), size=count, p=areas / areas.sum())
+    out = []
+
+    for k in picks:
+        cx, cy, r = centres[k]
+        a = rng.random() * math.tau
+        d = r * math.sqrt(rng.random())
+        out.append((cx + math.cos(a) * d, cy + math.sin(a) * d))
+
+    return out
+
+
+def _crown(size, final, leaves, leaf_len, leaf_w, palette, blobs, seed, twigs=True):
+    """Leaves in lumpy blobs, lit from above: the lower and inner ones darker,
+    drawn first; the outer and upper ones lighter, over them; a few twigs
+    showing through the gaps."""
+    rng = np.random.default_rng(seed)
+    image = Image.new("RGB", (size, size), (20, 26, 16))
+    mask_image = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(image)
+    mask = ImageDraw.Draw(mask_image)
+    c = size / 2.0
+
+    if twigs:
+        for cx, cy, _ in blobs:
+            draw.line([(c, size * 0.98), (cx, cy)], fill=(40, 32, 24), width=int(size * 0.012))
+            mask.line([(c, size * 0.98), (cx, cy)], fill=255, width=int(size * 0.012))
+
+    placed = []
+
+    for x, y in _blob_points(rng, blobs, leaves):
+        up = (c - y) / c
+        out = math.hypot(x - c, y - c) / c
+        bright = 0.62 + 0.28 * up + 0.22 * out + rng.uniform(-0.12, 0.12)
+        placed.append((bright, x, y))
+
+    placed.sort()
+
+    for bright, x, y in placed:
+        colour = palette[int(rng.integers(len(palette)))]
+        outward = math.atan2(y - c, x - c) + rng.uniform(-1.1, 1.1)
+        length = leaf_len * rng.uniform(0.8, 1.2)
+        _leaf(draw, mask, x, y, length, leaf_w * rng.uniform(0.8, 1.2), outward, _tinted(colour, bright), _tinted(colour, bright * 0.7), _tinted(colour, bright * 1.15))
+
+    return _finish(image, (final, final), 32, mask_image)
+
+
+OAK = [(34, 52, 26), (44, 66, 30), (56, 80, 36), (70, 92, 40), (84, 104, 48), (104, 110, 50)]
+
+
+def leaf_crown():
+    """A tree's leaves in a lumpy spray (a card of its crown): oak greens,
+    a few turning."""
+    size = 256 * SCALE
+    rng = np.random.default_rng(41)
+    blobs = [(size * 0.5, size * 0.52, size * 0.26)]
+
+    for k in range(8):
+        a = k * math.tau / 8 + rng.uniform(-0.3, 0.3)
+        d = size * rng.uniform(0.2, 0.3)
+        blobs.append((size * 0.5 + math.cos(a) * d, size * 0.5 + math.sin(a) * d, size * rng.uniform(0.09, 0.16)))
+
+    return _crown(size, 256, 1100, size * 0.05, size * 0.022, OAK, blobs, 43)
+
+
+def leaf_shrub():
+    """A shrub's leaves, smaller and thicker together, in a rounder spray."""
+    size = 128 * SCALE
+    rng = np.random.default_rng(51)
+    blobs = [(size * 0.5, size * 0.55, size * 0.28)]
+
+    for k in range(6):
+        a = k * math.tau / 6 + rng.uniform(-0.3, 0.3)
+        blobs.append((size * 0.5 + math.cos(a) * size * 0.22, size * 0.52 + math.sin(a) * size * 0.2, size * rng.uniform(0.1, 0.16)))
+
+    return _crown(size, 128, 700, size * 0.075, size * 0.035, [(38, 60, 28), (50, 74, 32), (62, 88, 38), (78, 100, 44), (60, 70, 30)], blobs, 53, twigs=False)
+
+
+def yew():
+    """A yew's needles in flat sprays: near-black greens, a little lighter at
+    their tips."""
+    size = 256 * SCALE
+    rng = np.random.default_rng(61)
+    image = Image.new("RGB", (size, size), (16, 22, 16))
+    mask_image = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(image)
+    mask = ImageDraw.Draw(mask_image)
+    c = size / 2.0
+    blobs = [(c, c * 1.05, size * 0.3)] + [(c + math.cos(a) * size * 0.25, c + math.sin(a) * size * 0.22, size * 0.13) for a in np.linspace(0, math.tau, 7, endpoint=False)]
+    palette = [(20, 34, 22), (26, 42, 26), (32, 50, 30), (40, 60, 34), (52, 72, 40)]
+    sprays = sorted(((c - y) / c + rng.uniform(-0.3, 0.3), x, y) for x, y in _blob_points(rng, blobs, 230))
+
+    for up, x, y in sprays:
+        # (Outward at the rim, any way at all in the thick of it.)
+        rim = math.hypot(x - c, y - c) / (size * 0.35)
+        angle = math.atan2(y - c, x - c) + rng.uniform(-0.8, 0.8) if rng.random() < rim else rng.uniform(0.0, math.tau)
+        length = size * rng.uniform(0.06, 0.11)
+        bright = 0.8 + 0.3 * up
+        colour = palette[int(rng.integers(len(palette)))]
+        ca, sa = math.cos(angle), math.sin(angle)
+        end = (x + ca * length, y + sa * length)
+        draw.line([(x, y), end], fill=_tinted((40, 34, 24), bright), width=int(size * 0.006))
+        mask.line([(x, y), end], fill=255, width=int(size * 0.006))
+
+        for t in np.linspace(0.1, 1.0, 9):
+            px, py = x + ca * length * t, y + sa * length * t
+            needle = size * 0.022 * (1.1 - 0.4 * t)
+
+            for side in (-1.0, 1.0):
+                na = angle + side * 1.0
+                tip = (px + math.cos(na) * needle, py + math.sin(na) * needle)
+                shade = _tinted(colour, bright * (0.9 + 0.3 * t))
+                draw.line([(px, py), tip], fill=shade, width=int(size * 0.007))
+                mask.line([(px, py), tip], fill=255, width=int(size * 0.007))
+
+    return _finish(image, (256, 256), 24, mask_image)
+
+
+def twigs():
+    """Bare twigs against the sky (a dead tree's crown): branching from the
+    bottom, finer as they go."""
+    size = 256 * SCALE
+    rng = np.random.default_rng(71)
+    image = Image.new("RGB", (size, size), (30, 26, 22))
+    mask_image = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(image)
+    mask = ImageDraw.Draw(mask_image)
+
+    def grow(x, y, angle, length, width, depth):
+        end = (x + math.cos(angle) * length, y + math.sin(angle) * length)
+        shade = _tinted((58, 50, 42), 0.8 + 0.3 * rng.random())
+        draw.line([(x, y), end], fill=shade, width=int(width))
+        mask.line([(x, y), end], fill=255, width=int(width))
+
+        if depth == 0:
+            return
+
+        for _ in range(2 + int(rng.random() < 0.45)):
+            grow(end[0], end[1], angle + rng.uniform(-0.75, 0.75), length * rng.uniform(0.62, 0.8), max(width * 0.7, 7.0), depth - 1)
+
+    for start in (0.35, 0.5, 0.65):
+        grow(size * start, size, -math.pi / 2 + rng.uniform(-0.5, 0.5), size * 0.24, size * 0.03, 6)
+
+    return _finish(image, (256, 256), 16, mask_image)
+
+
+def grass():
+    """A tuft of grass: blades from its root, bending, green and some straw,
+    darker at the root."""
+    w = h = 128 * SCALE
+    rng = np.random.default_rng(81)
+    image = Image.new("RGB", (w, h), (30, 40, 20))
+    mask_image = Image.new("L", (w, h), 0)
+    draw = ImageDraw.Draw(image)
+    mask = ImageDraw.Draw(mask_image)
+    palette = [(56, 80, 34), (70, 94, 40), (84, 104, 46), (102, 112, 54), (122, 118, 70)]
+
+    for _ in range(80):
+        base = w * (0.5 + rng.normal(0.0, 0.14))
+        height = h * rng.uniform(0.4, 0.95)
+        lean = rng.uniform(-0.45, 0.45) * height
+        colour = palette[int(rng.integers(len(palette)))]
+        root_w = w * rng.uniform(0.02, 0.03)
+        left, right = [], []
+
+        for i in range(9):
+            t = i / 8.0
+            x = base + lean * t * t
+            y = h - height * t
+            half = root_w * (1.0 - 0.8 * t) * 0.5
+            left.append((x - half, y))
+            right.append((x + half, y))
+
+        draw.polygon(left + right[::-1], fill=_tinted(colour, 0.7 + 0.5 * rng.random()))
+        mask.polygon(left + right[::-1], fill=255)
+
+    return _finish(image, (128, 128), 24, mask_image)
+
+
+def weed_broad():
+    """Broad weeds (dock and nettle): big leaves from the root, toothed,
+    veined, and a stalk or two gone to seed."""
+    size = 128 * SCALE
+    rng = np.random.default_rng(91)
+    image = Image.new("RGB", (size, size), (26, 36, 18))
+    mask_image = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(image)
+    mask = ImageDraw.Draw(mask_image)
+    root = (size * 0.5, size * 0.97)
+
+    for _ in range(3):
+        top = (size * rng.uniform(0.3, 0.7), size * rng.uniform(0.08, 0.25))
+        draw.line([root, top], fill=(70, 62, 36), width=int(size * 0.012))
+        mask.line([root, top], fill=255, width=int(size * 0.012))
+
+        for k in range(6):
+            t = 0.6 + 0.4 * k / 5.0
+            px, py = root[0] + (top[0] - root[0]) * t, root[1] + (top[1] - root[1]) * t
+            r = size * 0.018
+            draw.ellipse([px - r, py - r, px + r, py + r], fill=(96, 78, 44))
+            mask.ellipse([px - r, py - r, px + r, py + r], fill=255)
+
+    palette = [(52, 78, 32), (62, 90, 36), (74, 100, 42), (58, 84, 30)]
+
+    # Broad dock leaves, rounded, the outer ones lolling low; smaller
+    # toothed nettle leaves up the middle.
+    for k in range(8):
+        angle = -math.pi / 2 + (k / 7.0 - 0.5) * 2.9 + rng.uniform(-0.15, 0.15)
+        colour = palette[int(rng.integers(len(palette)))]
+        length = size * rng.uniform(0.32, 0.44)
+        width = length * rng.uniform(0.5, 0.62)
+        bright = 0.7 + 0.25 * (1.0 - abs(k / 7.0 - 0.5) * 2.0) + rng.uniform(-0.1, 0.1)
+        _leaf(draw, mask, root[0], root[1], length, width, angle, _tinted(colour, bright), _tinted(colour, bright * 0.65), _tinted(colour, bright * 1.25))
+
+    for k in range(12):
+        t = 0.25 + 0.055 * k
+        stalk = (root[0] + (0.08 if k % 2 else -0.08) * size * (1.0 - t), root[1] - size * t)
+        side = 1.0 if k % 2 else -1.0
+        colour = palette[int(rng.integers(len(palette)))]
+        bright = 0.85 + 0.3 * rng.random()
+        _leaf(draw, mask, stalk[0], stalk[1], size * rng.uniform(0.1, 0.14), size * 0.055, -math.pi / 2 + side * rng.uniform(0.7, 1.1),
+              _tinted(colour, bright), _tinted(colour, bright * 0.65), _tinted(colour, bright * 1.2))
+
+    return _finish(image, (128, 128), 24, mask_image)
+
+
+def reeds():
+    """Reeds by the water: tall narrow blades leaning a little, a few bulrush
+    heads on their stalks."""
+    w, h = 128 * SCALE, 256 * SCALE
+    rng = np.random.default_rng(101)
+    image = Image.new("RGB", (w, h), (40, 44, 24))
+    mask_image = Image.new("L", (w, h), 0)
+    draw = ImageDraw.Draw(image)
+    mask = ImageDraw.Draw(mask_image)
+    palette = [(78, 92, 44), (92, 104, 50), (108, 110, 58), (130, 122, 72)]
+
+    for _ in range(4):
+        x = w * rng.uniform(0.25, 0.75)
+        top = h * rng.uniform(0.08, 0.3)
+        draw.line([(x, h), (x + rng.uniform(-20, 20), top)], fill=(96, 96, 52), width=int(w * 0.02))
+        mask.line([(x, h), (x, top)], fill=255, width=int(w * 0.02))
+        draw.ellipse([x - w * 0.045, top - h * 0.01, x + w * 0.045, top + h * 0.11], fill=(84, 56, 32))
+        mask.ellipse([x - w * 0.045, top - h * 0.01, x + w * 0.045, top + h * 0.11], fill=255)
+
+    for _ in range(42):
+        base = w * (0.5 + rng.normal(0.0, 0.16))
+        height = h * rng.uniform(0.5, 1.0)
+        lean = rng.uniform(-0.25, 0.25) * height
+        colour = palette[int(rng.integers(len(palette)))]
+        root_w = w * rng.uniform(0.03, 0.045)
+        left, right = [], []
+
+        for i in range(9):
+            t = i / 8.0
+            x = base + lean * t * t
+            y = h - height * t
+            half = root_w * (1.0 - 0.85 * t) * 0.5
+            left.append((x - half, y))
+            right.append((x + half, y))
+
+        draw.polygon(left + right[::-1], fill=_tinted(colour, 0.7 + 0.45 * rng.random()))
+        mask.polygon(left + right[::-1], fill=255)
+
+    return _finish(image, (128, 256), 24, mask_image)
+
+
+def ivy():
+    """Ivy on stone: stems wandering up, five-lobed leaves along them in
+    dark glossy greens, pale-veined; gaps where the wall shows."""
+    size = 256 * SCALE
+    rng = np.random.default_rng(111)
+    image = Image.new("RGB", (size, size), (22, 30, 18))
+    mask_image = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(image)
+    mask = ImageDraw.Draw(mask_image)
+    palette = [(26, 50, 26), (32, 58, 28), (40, 68, 32), (50, 80, 38), (36, 54, 26)]
+
+    for k in range(13):
+        # Stems from the foot, most toward the middle; each gives out
+        # somewhere up the wall, the outer ones soonest (ragged, creeping
+        # up, never a rectangle).
+        x = size * (0.5 + 0.34 * math.sin(k * 2.1) + rng.uniform(-0.08, 0.08))
+        y = size * 1.02
+        heading = -math.pi / 2 + rng.uniform(-0.4, 0.4)
+        side = 1.0
+        reach = size * (1.02 - rng.uniform(0.35, 1.0) * (1.0 - 0.9 * abs(x / size - 0.5)))
+
+        while y > max(reach, -size * 0.05):
+            step = size * 0.03
+            heading += rng.uniform(-0.35, 0.35)
+            heading = max(-math.pi * 0.85, min(-math.pi * 0.15, heading))
+            nx, ny = x + math.cos(heading) * step, y + math.sin(heading) * step
+            draw.line([(x, y), (nx, ny)], fill=(62, 48, 32), width=int(size * 0.007))
+            mask.line([(x, y), (nx, ny)], fill=255, width=int(size * 0.007))
+            x, y = nx, ny
+            side = -side
+
+            climb = 1.0 - y / size
+
+            if rng.random() < 0.8 * (1.0 - 0.45 * climb):
+                leaf = size * rng.uniform(0.028, 0.045) * (1.0 - 0.3 * climb)
+                lx, ly = x + math.cos(heading + side * 1.4) * leaf * 0.8, y + math.sin(heading + side * 1.4) * leaf * 0.8
+                colour = palette[int(rng.integers(len(palette)))]
+                bright = 0.75 + 0.45 * rng.random()
+                points = []
+
+                for i in range(20):
+                    a = i / 20.0 * math.tau
+                    r = leaf * (0.62 + 0.38 * abs(math.cos(a * 2.5)))
+                    points.append((lx + math.cos(a - math.pi / 2 + side * 0.3) * r, ly + math.sin(a - math.pi / 2 + side * 0.3) * r))
+
+                draw.polygon(points, fill=_tinted(colour, bright), outline=_tinted(colour, bright * 0.6))
+                mask.polygon(points, fill=255)
+                draw.line([(lx, ly + leaf * 0.5), (lx, ly - leaf * 0.5)], fill=_tinted((120, 140, 96), bright * 0.8), width=max(1, int(size * 0.003)))
+
+    return _finish(image, (256, 256), 24, mask_image)
+
+
+def bark():
+    """Bark that tiles both ways: furrows running up the trunk, ridges
+    between them, fine grain; grey-browns."""
+    size = 256
+    rng = np.random.default_rng(121)
+    y, x = np.mgrid[0:size * SCALE, 0:size * SCALE] / float(size * SCALE)
+    field = np.zeros_like(x)
+
+    # Furrows: waves round the trunk (many), slow ones up it (few), each a
+    # whole number of times across so it tiles.
+    for _ in range(26):
+        fx = int(rng.integers(6, 28))
+        fy = int(rng.integers(0, 4))
+        field += rng.uniform(0.3, 1.0) / (1.0 + fx * 0.05) * np.cos(math.tau * (fx * x + fy * y) + rng.uniform(0, math.tau))
+
+    for _ in range(14):
+        fx = int(rng.integers(20, 60))
+        fy = int(rng.integers(2, 10))
+        field += rng.uniform(0.1, 0.3) * np.cos(math.tau * (fx * x + fy * y) + rng.uniform(0, math.tau))
+
+    field = (field - field.min()) / (field.max() - field.min())
+    tone = np.where(field < 0.34, 0.35 + field * 0.6, 0.55 + (field - 0.34) * 0.75)
+    pixels = tone[:, :, None] * np.array([150.0, 132.0, 112.0])[None, None, :]
+    image = Image.fromarray(np.clip(pixels, 0, 255).astype(np.uint8), "RGB")
+    return image.resize((size, size), Image.Resampling.BOX).quantize(colors=24, dither=Image.Dither.NONE).convert("RGB")
+
+
 PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_frontal": altar_frontal,
-             "shield_1": shield_1, "shield_2": shield_2, "shield_3": shield_3}
+             "shield_1": shield_1, "shield_2": shield_2, "shield_3": shield_3,
+             "leaf_crown": leaf_crown, "leaf_shrub": leaf_shrub, "yew": yew, "twigs": twigs, "grass": grass,
+             "weed_broad": weed_broad, "reeds": reeds, "ivy": ivy, "bark": bark}
 
 
 def main(argv):

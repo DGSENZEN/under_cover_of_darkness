@@ -370,6 +370,67 @@ class Props(unittest.TestCase):
             self.assertGreaterEqual(bounds(part)[0][2], -kit_recipes.PIECES[name]["size"][2] / 2.0 - 0.01, name)
 
 
+class Nature(unittest.TestCase):
+    PLANTS = ["tree_oak", "tree_yew", "tree_dead", "bush", "grass_tuft", "weeds", "reeds_clump", "ivy_2x3", "ivy_1x2"]
+
+    def test_a_rounded_card_carries_normals_out_from_its_middle(self):
+        # (On both of its faces: lit alike from either side, as a mass.)
+        part = kit_shapes.build([kit_shapes.card(1.0, 2.0, 0.0, 1.0, 1.0, "leaf_crown", round=[0.0, 2.0, 0.0])])
+        self.assertEqual(sorted(part["normals"]), [0, 1])
+
+        for face, normals in part["normals"].items():
+            for index, n in zip(part["faces"][face][0], normals):
+                v = part["verts"][index]
+                out = [v[0] - 0.0, v[1] - 2.0, v[2] - 0.0]
+                length = sum(c * c for c in out) ** 0.5
+                self.assertAlmostEqual(sum(a * b / length for a, b in zip(n, out)), 1.0, places=5)
+
+    def test_a_plain_card_keeps_flat_normals(self):
+        part = kit_shapes.build([kit_shapes.card(0.0, 1.0, 0.0, 1.0, 1.0, "cloth")])
+        self.assertEqual(part["normals"], {})
+
+    def test_every_plant_is_modelled_within_its_budget(self):
+        for name in self.PLANTS:
+            with self.subTest(name):
+                recipe = kit_recipes.PIECES[name]
+                self.assertTrue(recipe.get("shapes"))
+                self.assertLessEqual(tris(kit_shapes.build(recipe["shapes"])), recipe.get("budget", kit_shapes.PIECE_TRIS))
+
+    def test_a_trees_crown_is_leaves_rounded_as_a_mass_over_its_trunk(self):
+        for name, leaves, least in (("tree_oak", "leaf_crown", 24), ("tree_yew", "yew", 24), ("tree_dead", "twigs", 6)):
+            with self.subTest(name):
+                part = kit_shapes.build(kit_recipes.PIECES[name]["shapes"])
+                crown = [i for i, f in enumerate(part["faces"]) if f[1] == leaves]
+                self.assertGreaterEqual(len(crown) // 2, least)
+                self.assertTrue(all(i in part["normals"] for i in crown))
+                trunk = [f for f in part["faces"] if f[1] == "bark"]
+                self.assertTrue(trunk)
+                low, high = bounds(part)
+                self.assertGreater(high[1], 5.0)
+
+    def test_a_tree_stands_on_its_trunk_alone(self):
+        # Men walk under the boughs and round the trunk, not the crown.
+        for name in ("tree_oak", "tree_yew", "tree_dead"):
+            with self.subTest(name):
+                cols = kit_recipes.PIECES[name]["cols"]
+                self.assertEqual(len(cols), 1)
+                self.assertLessEqual(max(cols[0][3], cols[0][5]), 1.2)
+
+    def test_ground_cover_and_ivy_stop_nobody(self):
+        for name in ("bush", "grass_tuft", "weeds", "reeds_clump", "ivy_2x3", "ivy_1x2"):
+            with self.subTest(name):
+                self.assertEqual(kit_recipes.PIECES[name]["cols"], [])
+
+    def test_ivy_lies_flat_before_its_wall(self):
+        # (Its wall at the piece's back: local z 0, the ivy just in front.)
+        for name in ("ivy_2x3", "ivy_1x2"):
+            with self.subTest(name):
+                low, high = bounds(kit_shapes.build(kit_recipes.PIECES[name]["shapes"]))
+                self.assertGreaterEqual(low[2], 0.0)
+                self.assertLessEqual(high[2], 0.25)
+                self.assertAlmostEqual(low[1], 0.0, places=3)
+
+
 class Pieces(unittest.TestCase):
     def test_modelled_pieces_stay_in_their_size(self):
         # A v1 piece drawn within the footprint its v0 boxes (its colliders)

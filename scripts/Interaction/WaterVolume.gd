@@ -37,12 +37,29 @@ const WATER_DRAG := 2.5
 
 var _floating: Array[RigidBody3D] = []
 var _surface_mesh: MeshInstance3D
-## Ripples (ripple()): a ripple this many metres across, drawn out this many
-## times the other way; the normal map's size and strength.
+## Ripples (ripple()): a ripple this many metres along, drawn out this many
+## times the other way; a canal's flow (m/s); the normal map's size and
+## strength.
 const RIPPLE_TILE := 3.0
 const RIPPLE_STRETCH := 6.0
+const CANAL_FLOW := 0.08
 const RIPPLE_TEXELS := 128
 const RIPPLE_STRENGTH := 6.0
+const SHADER := preload("res://scripts/Visual/water.gdshader")
+## The night sky seen in it at a glancing look: overhead, and low.
+const SKY_ZENITH := Color(0.03, 0.04, 0.075)
+const SKY_HORIZON := Color(0.09, 0.1, 0.13)
+## The lights that stand in it as columns: at most this many, this near its
+## sides (m) and not this far over its surface (m); a column carries about
+## this far (m) for each unit of the light's energy, at most COLUMN_FAR.
+const COLUMNS := 16
+const COLUMN_REACH := 14.0
+const COLUMN_HIGH := 12.0
+const COLUMN_CARRY := 6.0
+const COLUMN_FAR := 18.0
+var _columns: Array[Light3D] = []
+var _paint: ShaderMaterial
+var _night: Node = null
 
 
 ## Water filling a `size` box centred on `centre`, its top the surface.
@@ -82,6 +99,8 @@ func _ready() -> void:
 		add_child(shape)
 
 	_build_surface()
+	# The level's lights are made after the water: gathered once they are.
+	get_tree().create_timer(0.5).timeout.connect(gather_lights)
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
 
@@ -184,46 +203,113 @@ func _physics_process(delta: float) -> void:
 		thing.angular_velocity = thing.angular_velocity.move_toward(Vector3.ZERO, WATER_DRAG * under * delta)
 
 
-## Ripples on the surface (a canal at night): a normal map made from noise,
-## stretched `stretch` times along z, so lights on it draw out into streaks;
-## `tile` metres a ripple across.
-func ripple(tile := RIPPLE_TILE, stretch := RIPPLE_STRETCH) -> void:
-	if _surface_mesh == null:
+## Ripples on the surface drawn out into streaks (a canal at night): packed
+## `stretch` times closer across it than along it, so lights on it draw out
+## toward the eye; `tile` metres a ripple along it; it flows along its length
+## at `drift` m/s.
+func ripple(tile := RIPPLE_TILE, stretch := RIPPLE_STRETCH, drift := CANAL_FLOW) -> void:
+	if _paint == null:
 		return
 
-	var paint := (_surface_mesh.mesh as PlaneMesh).material as StandardMaterial3D
-	var noise := FastNoiseLite.new()
-	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	noise.frequency = 0.02
-	noise.seed = 71
-	var bumps := NoiseTexture2D.new()
-	bumps.width = RIPPLE_TEXELS
-	bumps.height = RIPPLE_TEXELS
-	bumps.seamless = true
-	bumps.as_normal_map = true
-	bumps.bump_strength = RIPPLE_STRENGTH
-	bumps.noise = noise
-	paint.normal_enabled = true
-	paint.normal_texture = bumps
-	paint.normal_scale = 0.6
-	paint.uv1_scale = Vector3(size.x / tile, size.z / tile * stretch, 1.0)
+	_paint.set_shader_parameter(&"tile", tile)
+	_paint.set_shader_parameter(&"stretch", stretch)
+	_paint.set_shader_parameter(&"flow", (Vector2(1.0, 0.0) if size.x >= size.z else Vector2(0.0, 1.0)) * drift)
+
+
+## The night on the water: rain rings it; the sky in it as bright as the moon
+## lets.
+func _process(_delta: float) -> void:
+	if _paint == null:
+		return
+
+	_show_columns()
+
+	if _night == null or not is_instance_valid(_night):
+		_night = get_tree().get_first_node_in_group(&"night")
+
+		if _night == null:
+			return
+
+	if _night.has_method(&"rain"):
+		_paint.set_shader_parameter(&"rain", clampf(float(_night.rain()), 0.0, 1.0))
+
+	if _night.has_method(&"moon_share"):
+		_paint.set_shader_parameter(&"sky_light", clampf(0.45 + 0.55 * float(_night.moon_share()), 0.0, 2.0))
+
+
+## The lamps and torches by it (Light3D within COLUMN_REACH of its sides, not
+## effects), nearest first, found once the level has lit them.
+func gather_lights() -> void:
+	_columns.clear()
+	var found := []
+
+	for node in get_tree().root.find_children("*", "Light3D", true, false):
+		var light := node as Light3D
+
+		if light is DirectionalLight3D or light.is_in_group(&"fx_light"):
+			continue
+
+		var at := light.global_position
+		var outside := Vector2(maxf(absf(at.x - global_position.x) - size.x * 0.5, 0.0), maxf(absf(at.z - global_position.z) - size.z * 0.5, 0.0)).length()
+		var over := at.y - surface_y()
+
+		if outside <= COLUMN_REACH and over > 0.0 and over <= COLUMN_HIGH:
+			found.append([outside, light])
+
+	found.sort_custom(func(a, b): return a[0] < b[0])
+
+	for pair in found.slice(0, COLUMNS):
+		_columns.append(pair[1])
+
+	_show_columns()
+
+
+## Each light's column as it is lit now (a torch flickers, a lamp douses).
+func _show_columns() -> void:
+	var places := PackedVector4Array()
+	var colours := PackedVector4Array()
+	places.resize(COLUMNS)
+	colours.resize(COLUMNS)
+	var n := 0
+
+	for light in _columns:
+		if not is_instance_valid(light) or not light.is_visible_in_tree() or light.light_energy <= 0.0:
+			continue
+
+		var c := light.light_color * light.light_energy
+		places[n] = Vector4(light.global_position.x, light.global_position.y, light.global_position.z, 0.0)
+		colours[n] = Vector4(c.r, c.g, c.b, minf(COLUMN_CARRY * light.light_energy, COLUMN_FAR))
+		n += 1
+
+	_paint.set_shader_parameter(&"lights", places)
+	_paint.set_shader_parameter(&"light_colours", colours)
+	_paint.set_shader_parameter(&"light_count", n)
 
 
 ## The surface, seen from above and below; the depth darkens toward the
 ## bottom as murk.
 func _build_surface() -> void:
-	var paint := StandardMaterial3D.new()
-	paint.albedo_color = tint
-	paint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	paint.cull_mode = BaseMaterial3D.CULL_DISABLED
-	paint.roughness = 0.08
-	paint.metallic_specular = 0.9
+	_paint = ShaderMaterial.new()
+	_paint.shader = SHADER
+	_paint.set_shader_parameter(&"ripples", _noise(RIPPLE_TEXELS, 0.02, 71, true))
+	_paint.set_shader_parameter(&"patches", _noise(64, 0.05, 29, false))
+	_paint.set_shader_parameter(&"deep", Color(tint.r * 0.14, tint.g * 0.12, tint.b * 0.1))
+	_paint.set_shader_parameter(&"half_size", Vector2(size.x, size.z) * 0.5)
+	# Still water, rippled every way alike (a canal's streaks: ripple()), the
+	# night sky in it.
+	_paint.set_shader_parameter(&"tile", RIPPLE_TILE)
+	_paint.set_shader_parameter(&"stretch", 1.0)
+	_paint.set_shader_parameter(&"flow", Vector2(0.02, 0.0))
+	_paint.set_shader_parameter(&"sky_zenith", SKY_ZENITH)
+	_paint.set_shader_parameter(&"sky_horizon", SKY_HORIZON)
+	_paint.set_shader_parameter(&"sky_light", 1.0)
+	_paint.set_shader_parameter(&"rain", 0.0)
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(size.x, size.z)
-	plane.material = paint
 	_surface_mesh = MeshInstance3D.new()
 	_surface_mesh.name = "Surface"
 	_surface_mesh.mesh = plane
+	_surface_mesh.material_override = _paint
 	_surface_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_surface_mesh.position = Vector3(0.0, size.y * 0.5 - 0.02, 0.0)
 	add_child(_surface_mesh)
@@ -243,3 +329,24 @@ func _build_surface() -> void:
 	depth.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	depth.position = Vector3(0.0, -0.02, 0.0)
 	add_child(depth)
+
+
+## Seamless noise: a normal map (the ripples) or plain (the duckweed's
+## patches).
+static func _noise(texels: int, frequency: float, seed: int, normal: bool) -> NoiseTexture2D:
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = frequency
+	noise.seed = seed
+	var texture := NoiseTexture2D.new()
+	texture.width = texels
+	texture.height = texels
+	texture.seamless = true
+	texture.generate_mipmaps = true
+	texture.noise = noise
+
+	if normal:
+		texture.as_normal_map = true
+		texture.bump_strength = RIPPLE_STRENGTH
+
+	return texture

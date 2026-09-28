@@ -15,6 +15,7 @@ extends "res://maps/npc_showcase.gd"
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const ClimbScript := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
 const Materials := preload("res://scripts/Visual/Materials.gd")
+const WindScript := preload("res://scripts/Visual/Wind.gd")
 const GodRaysScript := preload("res://scripts/Visual/GodRays.gd")
 const LEVEL := "res://assets/level/garrison"
 ## The night it plays: six acts on the level's marks.
@@ -36,6 +37,11 @@ const GLASS_FLARE := 7.0
 ## risers are 0.2, and a sack pile's or a bench's top (0.5) must not be one.
 const MIN_ISLAND := 1.2
 const MAX_CLIMB := 0.3
+## The navmesh keeps a man this far (m) off walls and corners: his shoulders
+## clear them (his capsule is 0.3); the narrowest doorway still passes.
+const AGENT_RADIUS := 0.4
+## The navmesh's box: the level and its banks, its corner on whole metres.
+const BAKE_BOUNDS := AABB(Vector3(-64.0, -8.0, -56.0), Vector3(128.0, 32.0, 144.0))
 ## The chapel's moonward lancets (its north wall): their middles (x), their
 ## sills (the low tier and the clerestory), their openings (m: 0.9 wide,
 ## springing 2.1 over the sill, their points 3.6 over it); the glass in the
@@ -87,11 +93,22 @@ func build() -> void:
 	_marks_from_markers()
 	_garrison_lights()
 	_god_rays()
+	# (The leaves, grass and reeds stir with the night's wind.)
+	var wind := Node.new()
+	wind.name = "Wind"
+	wind.set_script(WindScript)
+	add_child(wind)
 	_baker = NavigationRegion3D.new()
 	_baker.set_script(NavBakerScript)
 	# (Nobody routed over a sack pile, a bench or a barrel's top.)
 	_baker.min_island = MIN_ISLAND
 	_baker.agent_max_climb = MAX_CLIMB
+	# (and he walks clear of the walls; no scrap of floor he cannot reach, a
+	# house's flat roof, is ever the nearest floor to anything)
+	_baker.agent_radius = AGENT_RADIUS
+	_baker.drop_unreached = true
+	# (Its grid pinned: nothing built at the edges shifts the thin places.)
+	_baker.bake_bounds = BAKE_BOUNDS
 	add_child(_baker)
 
 

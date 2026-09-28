@@ -22,6 +22,10 @@ extends NavigationRegion3D
 ## of its own, dearer to cross (SWIM_COST). Then the ways across that walking
 ## cannot take are found and linked (NavLinks: climbing, dropping, leaping,
 ## ladders, into and out of water) before `baked` is emitted.
+##
+## With drop_unreached, any island of floor nobody can get to or from the
+## rest (a house's flat roof, a far bank), links and all, is left out: no man
+## asked for the floor nearest a point is ever sent up there.
 
 const NavLinksScript := preload("res://scripts/AISystem/NavLinks.gd")
 
@@ -40,8 +44,10 @@ signal baked
 @export var bake_on_ready := true
 
 @export_group("Agent")
-## Keep this at or under the guard's capsule radius. A 1 m doorway needs a
-## radius under 0.5 to stay open in the mesh.
+## Near the guard's capsule radius (0.3): a little over keeps his shoulders
+## off the walls (a man standing nearer a wall than this starts his way from
+## the nearest point on the mesh). A 1 m doorway needs a radius under 0.5 to
+## stay open in the mesh.
 @export var agent_radius := 0.3
 @export var agent_height := 1.8
 ## Stairs: risers up to this height are walkable.
@@ -52,6 +58,11 @@ signal baked
 ## The smallest island of floor kept (m²): the tops of small things (a sack
 ## pile, a barrel) are left out, so nobody is routed over them. 0 keeps all.
 @export var min_island := 0.0
+## The box baked (this region's space; zero: all the geometry). Its corner
+## pins the baker's grid, so what is built at the level's edges (a tree on
+## a far bank) never shifts the cells, and with them the thin places (a
+## stair's last step), everywhere else.
+@export var bake_bounds := AABB()
 
 @export_group("Source")
 ## CSG levels have no static bodies to parse: turn this on for them.
@@ -59,12 +70,16 @@ signal baked
 @export_flags_3d_physics var collision_mask := 1
 ## Off, guards only walk: no climbing, dropping or leaping (NavLinks).
 @export var traversal_links := true
+## Islands of floor with no way to or from the biggest one are left out.
+@export var drop_unreached := false
 
 var is_baked := false
 ## How many ways across were linked in the last bake; how many scraps of
 ## floor sealed inside blocks were dropped from it.
 var link_count := 0
 var sealed_count := 0
+## How many polygons the last bake left out as out of anyone's reach.
+var unreached_count := 0
 var _source: NavigationMeshSourceGeometryData3D
 
 
@@ -98,6 +113,9 @@ func bake() -> void:
 
 	if min_island > 0.0:
 		mesh.region_min_size = ceilf(sqrt(min_island) / cell_size)
+
+	if bake_bounds.size != Vector3.ZERO:
+		mesh.filter_baking_aabb = bake_bounds
 	mesh.geometry_collision_mask = collision_mask
 	mesh.geometry_source_geometry_mode = NavigationMesh.SOURCE_GEOMETRY_ROOT_NODE_CHILDREN
 
@@ -188,6 +206,14 @@ func _on_baked(mesh: NavigationMesh) -> void:
 	# Links reach the map on one of its next syncs: nobody asks it for a path
 	# before then.
 	await _map_synced()
+
+	if drop_unreached:
+		unreached_count = _drop_unreached(mesh)
+
+		if unreached_count > 0:
+			NavigationServer3D.region_set_navigation_mesh(get_rid(), mesh)
+			await _map_synced()
+
 	is_baked = true
 	baked.emit()
 
@@ -247,6 +273,94 @@ func _drop_sealed(mesh: NavigationMesh) -> int:
 			mesh.add_polygon(polygon)
 
 	return dropped
+
+
+## Drops from `mesh` every island of polygons (sharing corners) that has no
+## way on the map, links and all, to or from the biggest island. How many
+## polygons were dropped.
+func _drop_unreached(mesh: NavigationMesh) -> int:
+	var vertices := mesh.get_vertices()
+	var count := mesh.get_polygon_count()
+	var parent := PackedInt32Array()
+	parent.resize(vertices.size())
+
+	for i in vertices.size():
+		parent[i] = i
+
+	for i in count:
+		var polygon := mesh.get_polygon(i)
+
+		for k in range(1, polygon.size()):
+			var a := _island_of(parent, polygon[0])
+			var b := _island_of(parent, polygon[k])
+
+			if a != b:
+				parent[a] = b
+
+	# Each island: its area, and the middle of its biggest polygon (where a
+	# way to it is asked for).
+	var area := {}
+	var biggest := {}
+	var middle := {}
+
+	for i in count:
+		var polygon := mesh.get_polygon(i)
+		var island := _island_of(parent, polygon[0])
+		var size := 0.0
+		var centre := Vector3.ZERO
+
+		for k in polygon.size():
+			centre += vertices[polygon[k]]
+
+			if k >= 2:
+				size += (vertices[polygon[k - 1]] - vertices[polygon[0]]).cross(vertices[polygon[k]] - vertices[polygon[0]]).length() * 0.5
+
+		area[island] = float(area.get(island, 0.0)) + size
+
+		if size > float(biggest.get(island, -1.0)):
+			biggest[island] = size
+			middle[island] = global_transform * (centre / float(polygon.size()))
+
+	if area.size() < 2:
+		return 0
+
+	var home: int = area.keys().reduce(func(best, island): return island if area[island] > area[best] else best)
+	var map := get_navigation_map()
+	var kept := {home: true}
+
+	for island in area:
+		if island != home and (_way_between(map, middle[home], middle[island]) or _way_between(map, middle[island], middle[home])):
+			kept[island] = true
+
+	var polygons: Array[PackedInt32Array] = []
+
+	for i in count:
+		if kept.has(_island_of(parent, mesh.get_polygon(i)[0])):
+			polygons.append(mesh.get_polygon(i))
+
+	var dropped := count - polygons.size()
+
+	if dropped > 0:
+		mesh.clear_polygons()
+
+		for polygon in polygons:
+			mesh.add_polygon(polygon)
+
+	return dropped
+
+
+static func _island_of(parent: PackedInt32Array, i: int) -> int:
+	while parent[i] != i:
+		parent[i] = parent[parent[i]]
+		i = parent[i]
+
+	return i
+
+
+## The map has a way from `a` all the way to `b` (links and all).
+static func _way_between(map: RID, a: Vector3, b: Vector3) -> bool:
+	var way := NavigationServer3D.map_get_path(map, a, b, true)
+	return not way.is_empty() and way[way.size() - 1].distance_to(b) < 0.5
 
 
 ## The water deep enough to swim in (WaterVolume.deep_at, anywhere in it).

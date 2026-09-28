@@ -57,9 +57,13 @@ def curtain():
     for corner in ((31.2, -27.2), (31.2, 27.2), (-31.2, 27.2)):
         G.put("curtain_corner", (corner[0], 0, corner[1]), 0.0, "walls")
 
-    # The flights up to the walk, either side of the gatehouse.
-    G.stairs((-14.0, 0, 24.6), 90.0, "stair_curtain", "walls")
-    G.stairs((14.0, 0, 24.6), -90.0, "stair_curtain", "walls")
+    # The flights up to the walk, either side of the gatehouse, against the
+    # curtain's inner face (z 26), each to a landing at the walk's height
+    # that runs into the walk (a top step alone is too narrow to step off).
+    G.stairs((-15.4, 0, 25.3), 90.0, "stair_curtain", "walls")
+    G.put("landing_walk", (-7.2, 5.0, 25.3), 0.0, "walls")
+    G.stairs((15.4, 0, 25.3), -90.0, "stair_curtain", "walls")
+    G.put("landing_walk", (7.2, 5.0, 25.3), 0.0, "walls")
 
 
 # ---------------------------------------------------------------------------
@@ -109,15 +113,17 @@ def watchtower():
     G.wall((x0 + 0.2, z0), (x0 + 0.2, z1), "ashlar", 0.0, "tower", storeys=4)
     G.wall((x1 - 0.2, z0), (x1 - 0.2, z1), "ashlar", 0.0, "tower", storeys=4, openings={3.0: "slit", 6.0: "slit"})
     G.floor(-35, -31, -27, -23, "flag", 0.0, "tower")
-    # Flights: north up the east wall, west along the north, south down the
-    # west, east along the south; corner landings.
-    G.stairs((-28.2, 0.0, -24.4), 180.0, "stair_straight", "tower")
+    # Flights: north up the east wall, west along the north, south up the
+    # west, east along the south; each a steep tower flight (3 m) from the
+    # edge of one corner landing to the edge of the next (the middle two
+    # landings stand 0.2 off their walls so the flights meet them).
+    G.stairs((-28.2, 0.0, -25.6), 180.0, "stair_tower", "tower")
     G.put("landing_2", (-28.4, 3.0, -29.6), 0.0, "tower")
-    G.stairs((-29.4, 3.0, -29.8), -90.0, "stair_straight", "tower")
-    G.put("landing_2", (-33.6, 6.0, -29.6), 0.0, "tower")
-    G.stairs((-33.8, 6.0, -28.6), 0.0, "stair_straight", "tower")
-    G.put("landing_2", (-33.6, 9.0, -24.4), 0.0, "tower")
-    G.stairs((-32.6, 9.0, -24.2), 90.0, "stair_straight", "tower")
+    G.stairs((-29.4, 3.0, -29.8), -90.0, "stair_tower", "tower")
+    G.put("landing_2", (-33.4, 6.0, -29.6), 0.0, "tower")
+    G.stairs((-33.8, 6.0, -28.6), 0.0, "stair_tower", "tower")
+    G.put("landing_2", (-33.4, 9.0, -24.6), 0.0, "tower")
+    G.stairs((-32.4, 9.0, -24.2), 90.0, "stair_tower", "tower")
     G.put("landing_2", (-28.4, 12.0, -24.4), 0.0, "tower")
     # The platform (open over the last flight) and its merlons.
     for x in (-34, -32, -30, -28):
@@ -564,11 +570,91 @@ def outside():
     # (The corner lot where the lanes meet, built on: no gap onto the sky.)
     G.put("house_e", (44.0 + depth / 2.0, 0, -45.5), -90.0, "outside")
 
-    for x, z in ((-45.0, -30.0), (-50.0, -18.0), (-42.0, -4.0), (-54.0, 6.0), (-46.0, 18.0), (-52.0, 32.0)):
-        G.put("tree", (x, 0, z), 0.0, "outside")
 
-    for x, z in ((-36.0, -12.0), (-38.0, 8.0), (-35.5, 22.0), (-40.0, 36.0)):
-        G.put("bush", (x, 0, z), 0.0, "outside")
+
+# Nature round the walls (kit_nature): trees on the grassy bank to the west
+# and along the canal's far bank, a yew or two, dead trees against the
+# moon; shrubs at the wall's foot; grass in tufts over the bank and in the
+# cracks at the curtain's feet; reeds along the far bank's edge; ivy up the
+# curtain's outer faces, the tower's, and the chapel's west end.
+TREES = [("tree_oak", -44.0, -33.0), ("tree_oak", -52.0, -20.0), ("tree_dead", -48.5, -10.5), ("tree_oak", -43.0, -3.0),
+         ("tree_oak", -55.0, 5.0), ("tree_yew", -39.0, 13.0), ("tree_oak", -47.0, 19.0), ("tree_dead", -56.5, 24.0),
+         ("tree_oak", -52.0, 33.0), ("tree_oak", -58.0, -38.0), ("tree_yew", -38.5, -17.5),
+         ("tree_oak", -38.0, 77.5), ("tree_dead", -24.0, 78.0), ("tree_oak", -5.0, 77.0), ("tree_oak", 11.0, 78.5),
+         ("tree_oak", 27.0, 77.0), ("tree_yew", 41.0, 76.5)]
+SHRUBS = [(-36.0, -12.0), (-37.5, 8.0), (-35.5, 22.0), (-40.0, 36.0), (-41.5, -26.0), (-50.0, -2.0), (-44.0, 27.0),
+          (-31.0, 74.5), (4.0, 74.8), (33.0, 74.4), (-12.0, 75.5)]
+# (Kept clear of: the hiding place by the tower's foot; the gate, the
+# lean-to under the breach, the postern and the climb on the south; the lamps
+# on the far bank.)
+KEEP_CLEAR = [(-33.6, -30.0, 1.5), (0.0, 30.0, 7.5), (9.0, 30.0, 2.5), (24.0, 29.0, 2.0), (18.0, 29.0, 1.5), (-16.0, 73.5, 1.2), (20.0, 73.5, 1.2)]
+
+
+def _clear(x, z, taken):
+    for cx, cz, r in KEEP_CLEAR + taken:
+        if (x - cx) ** 2 + (z - cz) ** 2 < r * r:
+            return False
+
+    return True
+
+
+def nature():
+    import random
+    rng = random.Random(1848)
+    taken = []
+
+    for kind, x, z in TREES:
+        G.put(kind, (x, 0, z), rng.uniform(0.0, 360.0), "outside")
+        taken.append((x, z, 1.4))
+
+    for x, z in SHRUBS:
+        G.put("bush", (x, 0, z), rng.uniform(0.0, 360.0), "outside")
+        taken.append((x, z, 1.2))
+
+    # Grass: over the west bank and the far bank, in the cracks along the
+    # curtain's outer feet, a little in the drill yard's corners.
+    fields = [((-59.0, -33.5), (-43.0, 43.0), 95, "outside"), ((-49.0, 49.0), (72.6, 79.5), 40, "outside"),
+              ((-30.0, 30.0), (28.5, 29.3), 18, "outside"), ((-30.0, 30.0), (-29.3, -28.5), 14, "outside"),
+              ((32.5, 33.3), (-26.0, 26.0), 12, "outside"), ((-29.6, -26.0), (22.5, 25.6), 5, "courtyard"),
+              ((25.0, 29.6), (22.5, 25.6), 5, "courtyard")]
+
+    for (x0, x1), (z0, z1), count, sector in fields:
+        placed = 0
+
+        for _ in range(count * 6):
+            if placed >= count:
+                break
+
+            x, z = rng.uniform(x0, x1), rng.uniform(z0, z1)
+
+            if _clear(x, z, taken):
+                G.put("grass_tuft", (round(x, 2), 0.0, round(z, 2)), rng.uniform(0.0, 180.0), sector)
+                placed += 1
+
+    # Reeds along the far bank's edge, in clumps.
+    x = -48.0
+
+    while x < 48.0:
+        for _ in range(rng.randint(1, 3)):
+            rx, rz = x + rng.uniform(-0.8, 0.8), 72.4 + rng.uniform(0.0, 0.9)
+
+            if _clear(rx, rz, []):
+                G.put("reeds_clump", (round(rx, 2), 0.0, round(rz, 2)), rng.uniform(0.0, 180.0), "outside")
+
+        x += rng.uniform(2.5, 5.5)
+
+    # Ivy: up the curtain's outer faces (west x -32.4, south z 28.4, north
+    # z -28.4), the tower's west and north faces, the chapel's west end (in
+    # its corners by the buttresses, clear of its door).
+    ivy = [(-32.4, 0.0, -18.0, -90.0, 2), (-32.4, 0.0, -9.5, -90.0, 2), (-32.4, 3.0, -9.5, -90.0, 1), (-32.4, 0.0, -2.0, -90.0, 1),
+           (-32.4, 0.0, 6.0, -90.0, 2), (-32.4, 3.0, 6.5, -90.0, 2), (-32.4, 0.0, 14.5, -90.0, 1), (-32.4, 0.0, 21.0, -90.0, 2),
+           (-26.0, 0.0, 28.4, 0.0, 2), (-18.0, 0.0, 28.4, 0.0, 1), (-11.0, 0.0, 28.4, 0.0, 2), (-11.0, 3.0, 28.4, 0.0, 1),
+           (14.0, 0.0, 28.4, 0.0, 1), (28.0, 0.0, 28.4, 0.0, 2), (-20.0, 0.0, -28.4, 180.0, 2), (-5.0, 0.0, -28.4, 180.0, 1),
+           (12.0, 0.0, -28.4, 180.0, 2), (25.0, 0.0, -28.4, 180.0, 1), (-35.0, 0.0, -27.5, -90.0, 2), (-35.0, 3.0, -25.5, -90.0, 2),
+           (-32.0, 0.0, -31.0, 180.0, 2), (-6.4, 0.0, -24.95, -90.0, 1), (-6.4, 1.8, -24.95, -90.0, 1), (-6.4, 0.0, -16.7, -90.0, 1)]
+
+    for x, y, z, yaw, size in ivy:
+        G.put("ivy_2x3" if size == 2 else "ivy_1x2", (x, y, z), yaw, "chapel" if abs(x + 6.4) < 0.1 else "outside")
 
 
 def weeds():
@@ -594,6 +680,7 @@ def weeds():
 
 def layout():
     weeds()
+    nature()
     curtain()
     grounds()
     watchtower()

@@ -105,6 +105,11 @@ static func _dress(node: Node) -> void:
 			if slot != &"" and Materials.SLOTS.has(slot):
 				mesh_node.set_surface_override_material(i, Materials.level_surface(slot))
 
+				# (Ground cover and ivy cast no shadow: a lawn of cards
+				# would double the moon's shadow pass.)
+				if bool(Materials.SLOTS[slot].get("shadowless", false)):
+					mesh_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
 	for child in node.get_children():
 		_dress(child)
 

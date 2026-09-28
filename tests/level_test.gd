@@ -154,6 +154,100 @@ func _garrison() -> void:
 	_check("G2 every post, station, hiding place and round point is on the navmesh and reachable from the courtyard",
 		lost.is_empty(), "%s" % [lost.slice(0, 12)])
 
+	# G25 a man's way keeps his shoulders off the walls: along the ways
+	# between the stations (each to the next three), a sphere the width of
+	# his shoulders at their height brushes a wall at under 1% of points
+	var stations25 := []
+
+	for m in level.markers:
+		if m["ucd"] == "station":
+			stations25.append(NavigationServer3D.map_get_closest_point(nav_map, (m["transform"] as Transform3D).origin))
+
+	var shoulders25 := SphereShape3D.new()
+	shoulders25.radius = 0.36
+	var query25 := PhysicsShapeQueryParameters3D.new()
+	query25.shape = shoulders25
+	query25.collision_mask = 1
+	var space25 := map.get_world_3d().direct_space_state
+	var points25 := 0
+	var brushes25 := 0
+	var where25 := {}
+
+	for i in stations25.size():
+		for k in range(1, 4):
+			var way25 := NavigationServer3D.map_get_path(nav_map, stations25[i], stations25[(i + k) % stations25.size()], true)
+
+			for j in range(1, way25.size()):
+				var leg25: Vector3 = way25[j] - way25[j - 1]
+				var steps25 := int(leg25.length() / 0.25)
+
+				for s in steps25:
+					var p25: Vector3 = way25[j - 1] + leg25 * (float(s) / float(steps25))
+					query25.transform = Transform3D(Basis(), p25 + Vector3.UP * 1.25)
+					points25 += 1
+
+					for hit in space25.intersect_shape(query25, 4):
+						if hit["collider"] is StaticBody3D and not (hit["collider"] as Node).is_in_group(&"nav_ignore"):
+							brushes25 += 1
+							where25[Vector3i(p25.round())] = true
+							break
+
+	_check("G25 a man's way keeps his shoulders off the walls (under 1% of its points brush one)",
+		points25 > 1000 and brushes25 <= points25 * 0.01, "%d of %d points (%.1f%%), at %s" % [brushes25, points25, 100.0 * brushes25 / maxf(points25, 1.0), where25.keys().slice(0, 8)])
+
+	# G26 no floor on the navmesh that nobody can reach from the courtyard
+	# (a house's roof, the far bank): a man asked for the nearest floor to a
+	# point is never sent up there
+	var unreached26 := {}
+	var land26: NavigationMesh = map._baker.navigation_mesh
+	var corners26 := land26.get_vertices()
+
+	for i in land26.get_polygon_count():
+		var middle26 := Vector3.ZERO
+
+		for index in land26.get_polygon(i):
+			middle26 += corners26[index]
+
+		middle26 = map._baker.global_transform * (middle26 / float(land26.get_polygon(i).size()))
+
+		if not _reaches(nav_map, start, middle26) and not _reaches(nav_map, middle26, start):
+			unreached26[Vector3i((middle26 / 4.0).round() * 4.0)] = true
+
+	_check("G26 no floor on the navmesh that nobody can reach from the courtyard", unreached26.is_empty(),
+		"%d places, about %s" % [unreached26.size(), unreached26.keys().slice(0, 10)])
+
+	# G28 every flight of stairs is walked, not climbed: from before its foot
+	# to past its head the way keeps to the navmesh (no link: no scramble up
+	# a missing step, no leap across to the walk), and gets there (the
+	# tower's steep flights between its corner landings, the wall's onto the
+	# walk, the barracks', the chapel loft's, the cellar's)
+	var flights28 := [[Vector3(-28.2, 0.0, -25.6), 180.0, 3.0, 3.0], [Vector3(-29.4, 3.0, -29.8), -90.0, 3.0, 3.0], [Vector3(-33.8, 6.0, -28.6), 0.0, 3.0, 3.0],
+		[Vector3(-32.4, 9.0, -24.2), 90.0, 3.0, 3.0], [Vector3(-15.4, 0.0, 25.3), 90.0, 7.5, 5.0, Vector3(-7.5, 5.0, 26.9)], [Vector3(15.4, 0.0, 25.3), -90.0, 7.5, 5.0, Vector3(7.5, 5.0, 26.9)],
+		[Vector3(22.5, 0.0, -18.0), -90.0, 4.5, 3.0], [Vector3(22.5, 0.0, 16.0), -90.0, 4.5, 3.0], [Vector3(7.6, 0.0, -17.2), 90.0, 4.5, 3.0],
+		[Vector3(-27.0, -3.0, 10.0), 180.0, 4.5, 3.0]]
+	var climbed28 := []
+
+	for flight in flights28:
+		var way28 := Vector3(sin(deg_to_rad(flight[1])), 0.0, cos(deg_to_rad(flight[1])))
+		var foot28: Vector3 = flight[0] - way28 * 0.7
+		# (Past its head, or onto the walk it gives on to.)
+		var head28: Vector3 = flight[4] if flight.size() > 4 else flight[0] + way28 * (float(flight[2]) + 0.7) + Vector3.UP * float(flight[3])
+		var query28 := NavigationPathQueryParameters3D.new()
+		query28.map = nav_map
+		query28.start_position = NavigationServer3D.map_get_closest_point(nav_map, foot28)
+		query28.target_position = NavigationServer3D.map_get_closest_point(nav_map, head28)
+		query28.metadata_flags = NavigationPathQueryParameters3D.PATH_METADATA_INCLUDE_TYPES
+		var result28 := NavigationPathQueryResult3D.new()
+		NavigationServer3D.query_path(query28, result28)
+		var path28 := result28.path
+		var linked28: bool = Array(result28.path_types).has(NavigationPathQueryResult3D.PATH_SEGMENT_TYPE_LINK)
+		var there28: bool = not path28.is_empty() and path28[path28.size() - 1].distance_to(head28) < 0.8 and query28.target_position.distance_to(head28) < 0.8
+
+		if linked28 or not there28:
+			climbed28.append("%s: %s" % [flight[0], "a link on it" if linked28 else "never gets up (ends %s)" % (path28[path28.size() - 1].snapped(Vector3.ONE * 0.1) if not path28.is_empty() else "nowhere")])
+
+	_check("G28 every flight of stairs is walked foot to head, never climbed", climbed28.is_empty(), "%s" % [climbed28])
+
 	# G3 its doors, its lights
 	var doors := get_tree().get_nodes_in_group(&"doors")
 	var torches := get_tree().get_nodes_in_group(&"torches")
@@ -244,18 +338,61 @@ func _garrison() -> void:
 	var out17: Array = dust17.filter(func(p): return not chapel17.has_point(p)).slice(0, 4).map(func(p): return (p as Vector3).snapped(Vector3.ONE * 0.1))
 	_check("G17 dust hangs in the chapel's shafts of moonlight", in17 >= 20 and in17 == dust17.size(), "dust motes %d, in the chapel %d, outside %s" % [dust17.size(), in17, out17])
 
-	# G19 the canal is dark water that catches the lights in streaks:
-	# rippled (a normal map stretched across it), glossy, and the night's
-	# screen reflections on
+	# G19 the canal is dark water drawn by its own shader (water.gdshader):
+	# opaque, so the night's screen reflections land on it (the lamps and
+	# the lit windows in streaks: its ripples drawn out along it, packed
+	# across it); it flows; the sky is in it; rain rings it
 	var canal19: Node = get_tree().get_nodes_in_group(&"water").filter(func(w): return w.get("_surface_mesh") != null)[0] if not get_tree().get_nodes_in_group(&"water").is_empty() else null
-	var paint19: StandardMaterial3D = ((canal19._surface_mesh as MeshInstance3D).mesh as PlaneMesh).material if canal19 != null else null
-	# (Ripples per metre: drawn out along the canal, packed across it.)
-	var size19: Vector3 = canal19.get("size") if canal19 != null else Vector3.ONE
-	var rippled19: bool = paint19 != null and paint19.normal_enabled and paint19.normal_texture != null and paint19.uv1_scale.y / size19.z > 2.0 * paint19.uv1_scale.x / size19.x
-	var glossy19: bool = paint19 != null and paint19.roughness < 0.2
+	var paint19: Material = (canal19._surface_mesh as MeshInstance3D).material_override if canal19 != null else null
+	var shader19: Shader = (paint19 as ShaderMaterial).shader if paint19 is ShaderMaterial else null
+	var drawn19: bool = shader19 != null and shader19.resource_path == "res://scripts/Visual/water.gdshader" and not shader19.code.contains("ALPHA")
+	var rippled19: bool = drawn19 and paint19.get_shader_parameter(&"ripples") != null and float(paint19.get_shader_parameter(&"stretch")) >= 2.0
+	var flows19: bool = drawn19 and (paint19.get_shader_parameter(&"flow") as Vector2).length() > 0.0
+	var sky19: bool = drawn19 and (paint19.get_shader_parameter(&"sky_zenith") as Color).get_luminance() > 0.0
 	var reflects19: bool = map.night.environment.ssr_enabled
-	_check("G19 the canal catches the lights in streaks: rippled, glossy, reflected", rippled19 and glossy19 and reflects19,
-		"rippled %s, glossy %s, screen reflections %s" % [rippled19, glossy19, reflects19])
+	map.night.to(&"rain", 0.0)
+	await _seconds(1.0)
+	var rain19: float = float(paint19.get_shader_parameter(&"rain")) if drawn19 else 0.0
+	map.night.to(&"clear", 0.0)
+	await _seconds(1.0)
+	var dry19: float = float(paint19.get_shader_parameter(&"rain")) if drawn19 else 1.0
+	_check("G19 the canal is its own water: opaque (the screen reflections on it), rippled in streaks, flowing, the sky in it, rain rings it",
+		drawn19 and rippled19 and flows19 and sky19 and reflects19 and rain19 > 0.5 and dry19 < 0.05,
+		"drawn %s, rippled %s, flows %s, sky %s, screen reflections %s, rain %.2f, dry %.2f" % [drawn19, rippled19, flows19, sky19, reflects19, rain19, dry19])
+
+	# G27 nature round the walls: oaks, a yew and dead trees, shrubs, grass,
+	# weeds, reeds by the canal, ivy up the stone; their leaves our own
+	# paintings drawn in the swaying foliage, stirring more in a storm than
+	# on a still night; ground cover casts no shadow
+	var kinds27 := {"tree_oak": 0, "tree_yew": 0, "tree_dead": 0, "bush": 0, "grass_tuft": 0, "weeds": 0, "reeds_clump": 0, "ivy_": 0}
+
+	for node in level.root.find_children("*", "Node3D", true, false):
+		for kind in kinds27:
+			if String(node.name).begins_with(kind) and (node.get_parent() == null or not String(node.get_parent().name).begins_with(kind)):
+				kinds27[kind] += 1
+
+	var leaves27: Material = Materials.level_surface(&"leaf_crown")
+	var foliage27: bool = leaves27 is ShaderMaterial and (leaves27 as ShaderMaterial).shader.resource_path == "res://scripts/Visual/foliage.gdshader" \
+		and (leaves27 as ShaderMaterial).get_shader_parameter(&"albedo_texture") != null
+	var lit27 := []
+
+	for node in level.root.find_children("grass_tuft*", "GeometryInstance3D", true, false) + level.root.find_children("reeds_clump*", "GeometryInstance3D", true, false):
+		if (node as GeometryInstance3D).cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+			lit27.append(node.name)
+
+	map.night.to(&"clear", 0.0)
+	await _seconds(1.0)
+	var calm27: float = (leaves27.get_shader_parameter(&"wind") as Vector3).length() if foliage27 else 0.0
+	map.night.to(&"storm", 0.0)
+	await _seconds(1.0)
+	var storm27: float = (leaves27.get_shader_parameter(&"wind") as Vector3).length() if foliage27 else 0.0
+	map.night.to(&"clear", 0.0)
+	await _seconds(1.0)
+	var enough27: bool = kinds27["tree_oak"] >= 6 and kinds27["tree_yew"] >= 1 and kinds27["tree_dead"] >= 2 and kinds27["bush"] >= 6 \
+		and kinds27["grass_tuft"] >= 120 and kinds27["weeds"] >= 40 and kinds27["reeds_clump"] >= 20 and kinds27["ivy_"] >= 12
+	_check("G27 nature round the walls: trees, shrubs, grass, weeds, reeds, ivy; painted leaves swaying, more in a storm; ground cover casts no shadow",
+		enough27 and foliage27 and storm27 > calm27 * 3.0 and calm27 > 0.0 and lit27.is_empty(),
+		"%s, foliage %s, wind calm %.2f storm %.2f, shadowed cover %s" % [kinds27, foliage27, calm27, storm27, lit27.slice(0, 4)])
 
 	# G20 grime, leaks and moss decals where the level marks them (each its
 	# photo when here); crimson banners in rows down the mess

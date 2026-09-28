@@ -16,7 +16,7 @@ const SLOTS := {
 	&"iron": {"photo": "rust_iron", "colour": Color("2A2826"), "metallic": 0.35, "roughness": 0.85},
 	&"chain": {"photo": "chain", "colour": Color("33302C"), "metallic": 0.35, "roughness": 0.85},
 	&"wood_old": {"photo": "wood_old", "colour": Color("4A3524"), "metallic": 0.0, "roughness": 0.85},
-	&"bark": {"photo": "bark", "colour": Color("3D2E22"), "metallic": 0.0, "roughness": 0.85},
+	&"bark": {"photo": "bark", "painted": true, "colour": Color("3D2E22"), "metallic": 0.0, "roughness": 0.85, "tile": 1.2},
 	&"stone": {"photo": "stone_rubble", "colour": Color("5E5A55"), "metallic": 0.0, "roughness": 0.85, "tile": 2.0},
 	&"ashlar": {"photo": "stone_ashlar", "colour": Color("6B665F"), "metallic": 0.0, "roughness": 0.85, "tile": 2.0},
 	&"pitch": {"photo": "", "colour": Color("17110D"), "metallic": 0.0, "roughness": 0.85},
@@ -38,13 +38,25 @@ const SLOTS := {
 	&"boards": {"photo": "boards", "colour": Color("4D3825"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
 	&"slate": {"photo": "slate", "colour": Color("2B2D33"), "metallic": 0.0, "roughness": 0.8, "tile": 1.5},
 	&"roof_clay": {"photo": "roof_clay", "colour": Color("6A3A28"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
-	&"grass": {"photo": "grass", "colour": Color("2E3A20"), "metallic": 0.0, "roughness": 0.95, "tile": 3.0},
 	&"mud": {"photo": "mud", "colour": Color("3A2E20"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0},
 	&"gravel": {"photo": "gravel", "colour": Color("55514B"), "metallic": 0.0, "roughness": 0.95, "tile": 2.0},
 	&"stone_moss": {"photo": "stone_moss", "colour": Color("4F5244"), "metallic": 0.0, "roughness": 0.9, "tile": 2.0},
 	&"wood_studded": {"photo": "wood_studded", "colour": Color("3A2A1E"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
 	&"carpet": {"photo": "carpet", "colour": Color("5E1712"), "metallic": 0.0, "roughness": 0.95},
 	&"leaves": {"photo": "leaves", "colour": Color("1F2B16"), "metallic": 0.0, "roughness": 0.95, "cut": true},
+	# Nature (tools/level/kit_nature; our own paintings): drawn in the
+	# swaying foliage (level_surface): "sway" is [rustle, bough] (m: a
+	# card's top edge; a bough, per metre over a man's height); "shadowless":
+	# ground cover casts no shadow.
+	&"leaf_crown": {"photo": "leaf_crown", "painted": true, "colour": Color("2E4420"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.06, 0.014]},
+	&"leaf_shrub": {"photo": "leaf_shrub", "painted": true, "colour": Color("304A22"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.05, 0.0]},
+	&"yew": {"photo": "yew", "painted": true, "colour": Color("1C2E1C"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.03, 0.006]},
+	&"twigs": {"photo": "twigs", "painted": true, "colour": Color("3A322A"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.05, 0.01]},
+	&"grass": {"photo": "grass", "colour": Color("2E3A20"), "metallic": 0.0, "roughness": 0.95, "tile": 3.0},
+	&"grass_blades": {"photo": "grass", "painted": true, "colour": Color("4A5E2C"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.07, 0.0], "shadowless": true},
+	&"weed_broad": {"photo": "weed_broad", "painted": true, "colour": Color("3E5A26"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.05, 0.0], "shadowless": true},
+	&"reeds": {"photo": "reeds", "painted": true, "colour": Color("5E6634"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.14, 0.0], "shadowless": true},
+	&"ivy": {"photo": "ivy", "painted": true, "colour": Color("22381E"), "metallic": 0.0, "roughness": 0.8, "cut": true, "sway": [0.012, 0.0], "shadowless": true},
 	&"straw": {"photo": "", "colour": Color("8A7238"), "metallic": 0.0, "roughness": 0.95},
 	&"cloth": {"photo": "", "colour": Color("6E1414"), "metallic": 0.0, "roughness": 0.95},
 	# A window lit from within: glows its own colour whatever falls on it.
@@ -93,6 +105,7 @@ const SLOTS := {
 }
 
 const GLOW := preload("res://scripts/Visual/Lights/glow.gdshader")
+const FOLIAGE := preload("res://scripts/Visual/foliage.gdshader")
 ## How a glowing slot glows: [the flame's share of its colour, brightness,
 ## how much in hot spots rather than evenly].
 const GLOW_LOOK := {
@@ -116,6 +129,8 @@ static var photo_names := {}
 
 static var _surfaces := {}
 static var _level := {}
+## The foliage the wind stirs (blow()).
+static var swaying: Array[ShaderMaterial] = []
 static var _glowing := {}
 static var _warned := {}
 
@@ -156,12 +171,18 @@ static func surface(slot: StringName) -> StandardMaterial3D:
 ## from piece to piece without seams), and a "cut" slot's photo is cut out
 ## where it is clear (leaves on a card), and a "glow" slot is drawn unlit in
 ## its own photo's colours (the chapel's glass). Shared per slot.
-static func level_surface(slot: StringName) -> StandardMaterial3D:
+static func level_surface(slot: StringName) -> Material:
 	if _level.has(slot):
 		return _level[slot]
 
-	var material: StandardMaterial3D = surface(slot).duplicate()
 	var entry: Dictionary = SLOTS.get(slot, {})
+
+	# Leaves, grass, reeds and ivy: our own paintings, stirred by the wind.
+	if entry.has("sway"):
+		_level[slot] = _foliage(slot, entry)
+		return _level[slot]
+
+	var material: StandardMaterial3D = surface(slot).duplicate()
 
 	if entry.has("tile"):
 		material.uv1_triplanar = true
@@ -183,6 +204,26 @@ static func level_surface(slot: StringName) -> StandardMaterial3D:
 
 	_level[slot] = material
 	return material
+
+
+## A foliage slot's material (foliage.gdshader): its painting cut out, its
+## rustle and bough sway, the wind as it is now.
+static func _foliage(slot: StringName, entry: Dictionary) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = FOLIAGE
+	material.set_shader_parameter(&"albedo_texture", photo(slot))
+	material.set_shader_parameter(&"albedo", Color.WHITE if photo(slot) != null else entry["colour"])
+	material.set_shader_parameter(&"rustle", float(entry["sway"][0]))
+	material.set_shader_parameter(&"bough", float(entry["sway"][1]))
+	material.set_shader_parameter(&"wind", Vector3(0.6, 0.0, 0.6))
+	swaying.append(material)
+	return material
+
+
+## The wind (m/s, Night's) on all the foliage.
+static func blow(wind: Vector3) -> void:
+	for material in swaying:
+		material.set_shader_parameter(&"wind", wind)
 
 
 ## The slot shining from inside (a pitch head, coals, horn panes): shared,
@@ -251,6 +292,7 @@ static func clear_cache() -> void:
 	_surfaces.clear()
 	_glowing.clear()
 	_level.clear()
+	swaying.clear()
 
 
 static func _photo_name(slot: StringName) -> String:

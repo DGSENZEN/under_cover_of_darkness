@@ -40,6 +40,9 @@ UNLIT = ("stained_glass", "stained_glass_small", "rose_window", "glass_lit")
 SMALL = 3.0
 SMALL_RANGE = 35.0
 WEEDS_RANGE = 22.0
+# Low ground cover, drawn as near as the weeds (reeds stand taller: the
+# small dressing's range).
+LOW_COVER = ("weeds", "grass_tuft")
 
 IMPORT = """[remap]
 
@@ -113,7 +116,7 @@ def manifest(data):
         recipe = kit_recipes.PIECES[p["piece"]]
 
         if recipe["family"] == "dressing" and recipe.get("size") and max(recipe["size"]) < SMALL:
-            ranges[p["name"]] = WEEDS_RANGE if p["piece"] == "weeds" else SMALL_RANGE
+            ranges[p["name"]] = WEEDS_RANGE if p["piece"] in LOW_COVER else SMALL_RANGE
 
     return {"level": data["level"], "sectors": data["sectors"], "colliders": colliders, "markers": found, "sockets": sockets,
             "pieces": len(data["pieces"]), "ranges": ranges}
