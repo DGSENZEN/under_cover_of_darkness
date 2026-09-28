@@ -104,12 +104,15 @@ func run() -> void:
 
 	_running = true
 	var acts: Array = story.acts()
+	# A night of fewer acts than asked for starts at its last, staged as a
+	# start there is.
+	var first := clampi(start_act - 1, 0, maxi(acts.size() - 1, 0))
 
-	for i in range(clampi(start_act - 1, 0, maxi(acts.size() - 1, 0)), acts.size()):
+	for i in range(first, acts.size()):
 		if not is_inside_tree():
 			return
 
-		await _play_act(i + 1, acts[i], i == start_act - 1)
+		await _play_act(i + 1, acts[i], i == first)
 
 	_running = false
 	show_ended.emit()

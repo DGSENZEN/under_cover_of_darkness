@@ -61,7 +61,7 @@ const TRACK_OFF := 7.0
 ## Overhead: up and a little to the south of them.
 const ABOVE := Vector3(0.0, 14.0, 3.0)
 const LYING := [&"sleep", &"lie_down", &"wake"]
-const KNEELING := [&"kneel", &"plead_kneel", &"rise_knees", &"rummage", &"sit", &"sit_talk", &"sit_down", &"sneak", &"doze", &"kneel_down", &"pray", &"kneel_up"]
+const KNEELING := [&"kneel", &"plead_kneel", &"rise_knees", &"rummage", &"sit", &"sit_talk", &"sit_down", &"sneak", &"doze", &"kneel_down", &"tend", &"feed_fire", &"pray", &"kneel_up"]
 
 
 ## The shot `kind` of `men` (see the header).

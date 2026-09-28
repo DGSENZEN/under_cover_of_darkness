@@ -373,6 +373,18 @@ func _framing() -> void:
 	var sat := CineShot.head_of(man).y - man.global_position.y
 	man.doing = &""
 	_check("F8 his head is 0.35 m up lying, 0.95 m sat", is_equal_approx(lying, 0.35) and is_equal_approx(sat, 0.95), "lying %.2f, sat %.2f" % [lying, sat])
+
+	# F8b down on his knees at his work, from going down to getting up (the
+	# fire tended, fed; a man at prayer): framed kneeling throughout
+	var knelt := {}
+
+	for doing in [&"kneel_down", &"tend", &"feed_fire", &"kneel_up", &"pray"]:
+		man.doing = doing
+		knelt[doing] = snappedf(CineShot.head_of(man).y - man.global_position.y, 0.01)
+
+	man.doing = &""
+	_check("F8b kneeling at his work, from going down to getting up, his head is framed 0.95 m up throughout",
+		knelt.values().all(func(y): return is_equal_approx(float(y), 0.95)), "%s" % [knelt])
 	man.queue_free()
 	other.queue_free()
 	view.queue_free()

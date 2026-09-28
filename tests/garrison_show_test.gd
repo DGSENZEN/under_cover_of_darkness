@@ -25,6 +25,15 @@ const CineVantage := preload("res://scripts/Cinema/CineVantage.gd")
 ## The groups the captain divides the hunt into, by their ground.
 const GROUPS := ["area_barracks", "area_west", "area_walls", "area_courtyard"]
 
+## A night of two acts (for the director asked for a later act than it has).
+class TwoActs:
+	var staged := []
+
+	func acts() -> Array:
+		return [{"title": "one", "beats": [{"name": &"a", "min": 0.05}]},
+			{"title": "two", "stage": func() -> void: staged.append(2), "beats": [{"name": &"b", "min": 0.05}]}]
+
+
 ## The sections this scene plays (empty: all of them).
 @export var sections: PackedStringArray = []
 
@@ -62,19 +71,32 @@ func _run() -> void:
 
 
 func _s1() -> void:
-	# S1 the night has six acts; 6 starts the last
-	DirectorScript.start_act = 6
+	# S1 the night has six acts; 6 starts the last (read from the command
+	# line); a night of fewer acts asked for a later one starts at its last,
+	# staged
+	DirectorScript.start_act = 1
 	var args := PackedStringArray(["--act=6"])
 	var director := DirectorScript.new()
 	director.read_args(args)
 	var read6 := DirectorScript.start_act
 	director.free()
+	var short := TwoActs.new()
+	var short_director := DirectorScript.new()
+	var short_map := Node3D.new()
+	add_child(short_map)
+	short_map.add_child(short_director)
+	short_director.setup(short_map, short)
+	DirectorScript.start_act = 6
+	await short_director.run()
+	var short_act: int = short_director.act_index
+	var short_ok: bool = short.staged == [2] and short_act == 2
+	short_map.queue_free()
 	DirectorScript.start_act = 1
 	var map1 := await _map(true)
 	var acts1: Array = map1.story.acts()
 	var titles1 := acts1.map(func(a): return a["title"] if a["title"] is String else "(ending)")
-	_check("S1 the garrison's night is six acts, and --act=6 starts the last",
-		acts1.size() == 6 and read6 == 6, "acts %s, --act=6 read as %d" % [titles1, read6])
+	_check("S1 the garrison's night is six acts, --act=6 starts the last, and a shorter night asked for act 6 plays its last act staged",
+		acts1.size() == 6 and read6 == 6 and short_ok, "acts %s, --act=6 read as %d, the two-act night staged %s and ended at act %d" % [titles1, read6, short.staged, short_act])
 
 	# S0 Act I: the night moves (conversations, gatherings, the watch changing
 	# at the colonnade), and a man goes to his prayers
