@@ -12,8 +12,9 @@ const REFRESH_SECONDS := 2.0
 static var _lights: Array = []
 static var _ambient := 0.0
 static var _refreshed_at := -100.0
-static var _node_count := -1
 static var _scene_id := 0
+## The tree whose comings and goings of lights mark the cache stale.
+static var _watching: SceneTree = null
 
 
 ## 0 = pitch black, 1 = fully lit. `asker` is any node in the scene tree.
@@ -100,16 +101,25 @@ static func _luminance(color: Color) -> float:
 	return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
 
 
-## The cache is rebuilt when a light was freed, when anything was added to or
-## removed from the tree, on a new scene (a level reload leaves the old lists
-## pointing at freed lights), and at the latest every REFRESH_SECONDS.
+## The cache is rebuilt when a light was freed, when a light or an environment
+## was added to or taken out of the tree (_on_tree_changed: not for every node
+## that comes and goes, a sound or a spark), on a new scene (a level reload
+## leaves the old lists pointing at freed lights), and at the latest every
+## REFRESH_SECONDS.
 static func _refresh(asker: Node3D) -> void:
 	var now := float(Engine.get_physics_frames()) / float(maxi(Engine.physics_ticks_per_second, 1))
 	var tree := asker.get_tree()
 	var scene := tree.current_scene
 	var scene_id := scene.get_instance_id() if scene != null else 0
+
+	if _watching != tree:
+		_watching = tree
+		tree.node_added.connect(_on_tree_changed)
+		tree.node_removed.connect(_on_tree_changed)
+		_refreshed_at = -100.0
+
 	var stale := now - _refreshed_at >= REFRESH_SECONDS
-	stale = stale or scene_id != _scene_id or tree.get_node_count() != _node_count
+	stale = stale or scene_id != _scene_id
 
 	if not stale:
 		for light in _lights:
@@ -122,7 +132,6 @@ static func _refresh(asker: Node3D) -> void:
 
 	_refreshed_at = now
 	_scene_id = scene_id
-	_node_count = tree.get_node_count()
 	var root := tree.root
 	_lights = root.find_children("*", "Light3D", true, false)
 	_ambient = 0.0
@@ -140,3 +149,10 @@ static func _refresh(asker: Node3D) -> void:
 ## or removing lights if two seconds is too long to wait.
 static func invalidate() -> void:
 	_refreshed_at = -100.0
+
+
+## A node into or out of the tree: only a light or an environment makes the
+## cache stale.
+static func _on_tree_changed(node: Node) -> void:
+	if node is Light3D or node is WorldEnvironment:
+		_refreshed_at = -100.0

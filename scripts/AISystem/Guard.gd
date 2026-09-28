@@ -522,8 +522,10 @@ var _sent: WeakRef = null
 ## nothing of you from it.
 var _left_post := false
 var _post_blind_for := 0.0
-## On his way to the bell (_ring_for_fight).
+## On his way to the bell (_ring_for_fight), and the bell he could not get
+## to this time (tried again once the hunt is over).
 var _to_bell := false
+var _bell_missed: Node3D = null
 ## Getting about, his life off duty, his hands, and his life at your mercy
 ## (GuardNav, GuardLife, GuardHands, GuardMercy).
 var _nav: RefCounted
@@ -553,6 +555,8 @@ var _fight_near_at := -100.0
 var _rearm_blade: RigidBody3D = null
 var _rearm_back := Vector3.INF
 var _rearm_check := 0.0
+## Blades he could not get to (instance id: where each lay then).
+var _rearm_missed := {}
 ## What last stirred him: "sight", "noise", "shout", "body", "call", "alarm",
 ## "oddity", "missing" or "fight".
 var _stimulus: StringName = &""
@@ -677,7 +681,16 @@ func _rearming(delta: float) -> bool:
 	if not blade_ok and _rearm_check <= 0.0:
 		_rearm_check = 1.0
 		var near := Dangers.weapons_near(get_tree(), global_position, REARM_REACH, _hands.usable(), self)
-		_rearm_blade = near[0] if not near.is_empty() else null
+		_rearm_blade = null
+
+		# Not one he has already found he cannot get to, where it still lies.
+		for blade in near:
+			var tried: Variant = _rearm_missed.get(blade.get_instance_id())
+
+			if tried == null or (tried as Vector3).distance_to(blade.global_position) > 0.5:
+				_rearm_blade = blade
+				break
+
 		blade_ok = _rearm_blade != null
 
 		if blade_ok and _agent != null and _rearm_back == Vector3.INF:
@@ -707,8 +720,10 @@ func _rearming(delta: float) -> bool:
 	_go_to(_rearm_blade.global_position)
 
 	if _walk(patrol_speed if state == Alert.RELAXED else investigate_speed, delta):
-		# As near as he can get, and still out of reach: not that one.
+		# As near as he can get, and still out of reach: not that one (not
+		# while it lies there).
 		Dangers.unclaim(_rearm_blade, self)
+		_rearm_missed[_rearm_blade.get_instance_id()] = _rearm_blade.global_position
 		_rearm_blade = null
 		_rearm_check = 5.0
 		return false
@@ -995,6 +1010,16 @@ func _visibility_of(target: Node3D) -> float:
 	var cone := 0.0
 	var nearest := INF
 
+	# All of him past sight_max (and out of touch): nothing to see however
+	# lit (see below), so no rays asked.
+	var closest := INF
+
+	for point in points:
+		closest = minf(closest, eye.distance_to(point))
+
+	if closest >= maxf(sight_max, maxf(touch_distance, 3.0)):
+		return 0.0
+
 	for point in points:
 		var to_point: Vector3 = point - eye
 		var distance := to_point.length()
@@ -1116,7 +1141,10 @@ func hear_sound(event: Dictionary) -> void:
 				var other := source as Guard
 				# A fight shouted outweighs covering a friend's look.
 				_life.stop_covering()
-				last_known_position = other.last_known_position if other.has_last_known else from
+				# A man at his ease knows of no trouble (what he last did is long
+				# settled): a cry from him (dying, alight) is where he is.
+				var knows: bool = other.has_last_known and other.state != Alert.RELAXED
+				last_known_position = other.last_known_position if knows else from
 				has_last_known = true
 				alert = maxf(alert, shout_alert)
 				_since_stimulus = 0.0
@@ -1186,6 +1214,13 @@ func _hear_message(event: Dictionary) -> void:
 	var message: Dictionary = event["message"]
 	var from: Vector3 = event["position"]
 	var reach: float = float(event["range"]) * hearing_acuity
+
+	# Asleep, as with any sound (hear_sound): only what is loud or near.
+	if _habits != null and _habits.dozing():
+		reach *= GuardHabitsScript.DOZE_HEARING
+
+	if _rota != null and _rota.asleep():
+		reach *= GuardRotaScript.SLEEP_HEARING
 
 	if global_position.distance_to(from) > reach or _sound_distance(from) > reach:
 		return
@@ -1348,7 +1383,13 @@ func dazzle(at: Vector3, amount: float) -> void:
 	_stimulus = &"flash"
 	alert = maxf(alert, investigate_at + 10.0)
 
-	# Whatever he had in his hands to do, he leaves it.
+	# Whatever he had in his hands to do, he leaves it: a blow he was winding
+	# up too, and his turn at you with it (nobody else's to wait on).
+	_phase = &""
+
+	if _fighter != null:
+		_fighter.release_token()
+
 	if _hands != null:
 		_hands.interrupt()
 		_hands.stop_relighting()
@@ -1442,8 +1483,12 @@ func activity() -> StringName:
 func _sense_bodies(delta: float) -> void:
 	_body_check_timer -= delta
 
-	# Blinded by a flash, he sees no body either.
+	# Blinded by a flash, he sees no body either; nor asleep, his eyes shut.
 	if _body_check_timer > 0.0 or _blind > 0.0:
+		return
+
+	if (_rota != null and _rota.asleep()) or (_habits != null and _habits.dozing()):
+		_body_notice.clear()
 		return
 
 	var interval := 0.15
@@ -1497,11 +1542,11 @@ func _discover(body: Node3D) -> void:
 	_known_bodies[body] = true
 	_body_notice.erase(body)
 
-	# A man he knew: he calls his name (TalkDirector.grieve does nothing if
-	# he did not know him).
+	# A man he knew, dead: he calls his name (TalkDirector.grieve does nothing
+	# if he did not know him). One only put to sleep is no one to grieve.
 	var called := String(body.get("called")) if body.get("called") != null else ""
 
-	if called != "":
+	if called != "" and body.get("dead") == true:
 		TalkDirectorScript.of(self).grieve(self, called)
 	var first_to_find: bool = body.get("discovered") != true
 	body.set("discovered", true)
@@ -2025,6 +2070,10 @@ func kick(push: Vector3, attacker: Node3D) -> void:
 
 	if _fighter.is_open():
 		health -= 6.0
+
+		if health <= 0.0:
+			die(attacker)
+
 		return
 
 	_knock = knockdown_time
@@ -2170,7 +2219,8 @@ func die(_attacker: Node3D) -> void:
 
 	_rig.transfer_to(body, _last_push, _last_at)
 
-	# A dying scream. Others come to where he last knew trouble to be.
+	# A dying scream. Others come to where he last knew trouble to be (at his
+	# ease, knowing of none: to him; hear_sound).
 	SoundBus.emit_sound(eye_position(), shout_db, self, &"shout")
 	CineEvents.emit(&"death", {"man": self, "killer": _attacker if is_instance_valid(_attacker) else null, "where": global_position})
 	died.emit(body)
@@ -2196,9 +2246,13 @@ func _let_go() -> void:
 		_hands.drop_held()
 		_hands.drop_lantern()
 
-	# And whatever his station had in his hands (GuardRota).
+	# And whatever his station had in his hands (GuardRota), and what he was
+	# about of his own (GuardHabits: a crate he carried, his axe, his bread).
 	if _rota != null:
 		_rota.release()
+
+	if _habits != null:
+		_habits.interrupt()
 
 	var dropped: RigidBody3D = _rig.drop_weapon()
 
@@ -2452,11 +2506,13 @@ func _get_up(rag: Node) -> void:
 
 	global_position = _standing_room(feet)
 	rotation.y = yaw
-	reset_physics_interpolation()
 	velocity = Vector3.ZERO
 	collision_layer = _down_layer
 	_downed = false
 	_rising = _rig.get_up(up)
+	# Only now, with the man back under him too (GuardRig.get_up): drawn
+	# where he stands up, not smeared over from where he lay.
+	reset_physics_interpolation()
 	_stagger = _rising
 	_attack_timer = maxf(_attack_timer, _rising + 0.25)
 
@@ -2656,6 +2712,10 @@ func _fight_near() -> bool:
 func _ring_for_fight(delta: float) -> bool:
 	var bell: Node3D = Dangers.bell_near(get_tree(), global_position, POST_BELL) if lookout and _fight_near() else null
 
+	# One he could not get to: the fight, not the bell.
+	if bell != null and bell == _bell_missed:
+		bell = null
+
 	if bell == null:
 		# Rung (by him or another): to his post, or to them.
 		if _to_bell:
@@ -2678,7 +2738,14 @@ func _ring_for_fight(delta: float) -> bool:
 		if _agent != null and _agent.target_position.distance_to(rope) > 0.3:
 			_go_to(rope, true)
 
-		_walk(chase_speed, delta)
+		# As near as he can get (or his way barred), and still out of reach
+		# of the rope: he gives up the bell and goes on with the fight.
+		if _walk(chase_speed, delta):
+			_bell_missed = bell
+			_to_bell = false
+			_go_to(_look_from(last_known_position), true)
+			return false
+
 		return true
 
 	_stop(delta)
@@ -2789,6 +2856,7 @@ func _set_state(new_state: int) -> void:
 	if new_state == Alert.RELAXED:
 		_left_post = false
 		_to_bell = false
+		_bell_missed = null
 		_watching = false
 
 	if new_state == Alert.RELAXED and _fighter != null and _fighter.squad != null:
@@ -3742,8 +3810,13 @@ func _walk(speed: float, delta: float, face := true) -> bool:
 
 	var next := _agent.get_next_path_position()
 
-	# At a ladder with someone on it: up it once it is clear.
+	# At a ladder with someone on it: up it once it is clear (kept waiting
+	# too long, not that way: as far as he can get).
 	_climb.retry()
+
+	if _path_blocked:
+		_stop(delta)
+		return true
 
 	# His path came to a way across it cannot walk: the move has him now.
 	if _climb.active():
