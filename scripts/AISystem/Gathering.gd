@@ -715,8 +715,9 @@ func _advance_watch(g: Dictionary) -> void:
 	var on_post: Variant = g["roles"]["post"]
 	var relief: Variant = g["roles"]["relief"]
 
-	# Stirred (an alarm broke their talk): over, the duties as they were.
-	if not _here(on_post) or not _here(relief) or not GuardLifeScript.at_ease(on_post) or not GuardLifeScript.at_ease(relief):
+	# Stirred (an alarm broke their talk): over, the duties as they were. A
+	# watchman is never quite at ease; only a man roused out of it counts.
+	if not _here(on_post) or not _here(relief) or _roused(on_post) or _roused(relief):
 		_end(g)
 		return
 
@@ -1133,6 +1134,11 @@ func _free_station(kind: StringName, man: Node) -> Node3D:
 			best = station
 
 	return best
+
+
+## Out of his ease for real: suspicious or worse, down, burning.
+func _roused(man: Node) -> bool:
+	return int(man.state) != GuardLifeScript.RELAXED or man.is_downed() or float(man._burning) > 0.0
 
 
 func _here(man: Variant) -> bool:
