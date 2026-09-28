@@ -5,7 +5,8 @@ extends Node
 ## mode's speeds, the lens eased, focus pulled onto the subject, a little
 ## handheld sway, and shake from blows. A shot's aim, once settled, holds
 ## while its man shifts his weight or sways where he stands (a dead zone, as
-## an operator's eye allows), and turns only to keep him in it. Up close an
+## an operator's eye allows), and turns only to keep him in it; however fast
+## he goes, it never lets him out of the frame (EDGE). Up close an
 ## eye light, a hand's breadth off the lens, lifts the actors' faces out of
 ## the dark (it lights nothing else, and no guard reckons with it). It runs
 ## on real time (TimeFx.real_time), so a slowed world does not slow the
@@ -29,6 +30,10 @@ const MODES := {
 }
 ## A new aim is settled once this near it (deg): from then its dead zone.
 const SETTLED := 0.3
+## However fast he goes, the man it is on is kept within this share of half
+## the lens's height off the aim: past its turning speed the camera turns as
+## fast as keeps him in the frame (a man bolting across a close shot).
+const EDGE := 0.7
 ## The eye light: its energy by the shot's size (a portrait's as a close
 ## shot's), its reach (m), its colour (a cool moonlit fill), how far off the
 ## lens (m: up, and to the side), and how fast it eases (a second).
@@ -435,10 +440,45 @@ func _aim(omega: float, dt: float) -> void:
 	if angle > most and angle > 0.0001:
 		want_dir = was_dir.slerp(want_dir, most / angle)
 
+	# Never so slow that he leaves the frame: held at its edge instead.
+	var subject: Vector3 = _framing.get("subject", _framing.get("look", _look))
+
+	if from.distance_to(subject) > 0.05:
+		want_dir = _kept_in(want_dir, (subject - from).normalized())
+
 	var reach := maxf(from.distance_to(next[0]), 0.5)
 	var was_look := _look
 	_look = from + want_dir * reach
 	_look_velocity = (_look - was_look) / dt if dt > 0.0 else Vector3.ZERO
+
+
+## `aim` turned as little as brings the way `to_him` within EDGE of the
+## frame's middle, across and up (on its own lens and screen); as it is if
+## he is within that already. Behind it, straight to him.
+func _kept_in(aim: Vector3, to_him: Vector3) -> Vector3:
+	var right := aim.cross(Vector3.UP)
+	var ahead := to_him.dot(aim)
+
+	if right.length() < 0.001:
+		return aim
+
+	if ahead <= 0.01:
+		return to_him
+
+	right = right.normalized()
+	var up := right.cross(aim).normalized()
+	var screen := _camera.get_viewport().get_visible_rect().size if _camera.is_inside_tree() else Vector2(16.0, 9.0)
+	var tan_v := tan(deg_to_rad(_fov) * 0.5)
+	var tan_h := tan_v * screen.x / maxf(screen.y, 1.0)
+	var across := to_him.dot(right) / ahead / tan_h
+	var high := to_him.dot(up) / ahead / tan_v
+
+	if absf(across) <= EDGE and absf(high) <= EDGE:
+		return aim
+
+	var pitch := atan(high * tan_v) - atan(clampf(high, -EDGE, EDGE) * tan_v)
+	var yaw := atan(across * tan_h) - atan(clampf(across, -EDGE, EDGE) * tan_h)
+	return aim.rotated(right, pitch).rotated(Vector3.UP, -yaw).normalized()
 
 
 ## The lens eased to the framing's; focus pulled onto the subject.

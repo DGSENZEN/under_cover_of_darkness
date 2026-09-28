@@ -79,6 +79,11 @@ const CROWDED_FILL := 0.45
 const CROWDED_AGE := 0.3
 ## From on high over the men: only if nothing is over them this far up (m).
 const OPEN_SKY := 30.0
+## Men further apart in height than this (m) are on different floors (the
+## yard and the cellar under it): a take is on those on its first man's.
+const STOREY := 2.0
+## A moving camera's way is looked along every this far (m) for men in it.
+const WAY_STEP := 0.3
 const FLOOR := 1.5
 const NEAR := 12.0
 const SAME_ANGLE := 30.0
@@ -591,7 +596,7 @@ func _observe_step(age: float) -> void:
 ## with nobody to watch. One that does not drift there comes in `how` (a
 ## dissolve, or a fade opening an act).
 func _fresh_take(cause: StringName, how: StringName = &"dissolve") -> void:
-	var men := _subjects.filter(_valid)
+	var men := _together(_subjects.filter(_valid))
 
 	if men.is_empty():
 		_nobody(&"nobody" if cause != &"scene" else cause, how, TAKE.y)
@@ -691,13 +696,15 @@ func _observe_plan(kind: StringName, men: Array, space: PhysicsDirectSpaceState3
 
 
 ## A move there if it is near, the way is clear, `men` are seen from where it
-## is now (a move that begins blind is a cut), and it is not crowded here (a
-## drift out of a crowd is crowded all the way); else a cut.
+## is now and one of them is in the picture already (a move that begins
+## blind, or looking away at a torch, is a cut), and it is not crowded here
+## (a drift out of a crowd is crowded all the way); else a cut.
 func _how_to(position: Vector3, men: Array) -> StringName:
 	var here := _camera.global_position
 	var space := _camera.get_world_3d().direct_space_state
+	var framed := men.any(func(m): return _in_view(CineShot.head_of(m)))
 
-	if here.distance_to(position) <= MOVE_WITHIN and not _operator.blocked(here, position) and CineVantage.sees(space, here, men) and CineVantage.clear(space, here):
+	if framed and here.distance_to(position) <= MOVE_WITHIN and not _operator.blocked(here, position) and CineVantage.sees(space, here, men) and CineVantage.clear(space, here):
 		return &"path" if _mode == &"observe" else &"glide"
 
 	return &"cut"
@@ -1098,7 +1105,7 @@ func _axial_clear(man: Node3D, from: Vector3) -> bool:
 ## over each shoulder, each man close and waist up), or one man; the hunt
 ## from far off and alongside; the size changed from the shot before.
 func _drama_next(cause: StringName, how: StringName) -> void:
-	var men := _subjects.filter(_valid)
+	var men := _together(_subjects.filter(_valid))
 
 	if men.is_empty():
 		_nobody(&"nobody", how, SHOT.y)
@@ -1126,6 +1133,11 @@ func _drama_next(cause: StringName, how: StringName) -> void:
 	if pair.size() == 2:
 		options = [[&"two", pair], [&"over_shoulder", [pair[0], pair[1]]], [&"close", [pair[0]]], [&"medium", [pair[1]]],
 			[&"over_shoulder", [pair[1], pair[0]]], [&"close", [pair[1]]], [&"medium", [pair[0]]]]
+	elif _flat_speed(men[0]) > RUNNING:
+		# A man on the run is run alongside: from where he stands now he is
+		# out of any standing place in a second.
+		_pick([[&"track", [men[0]]], [&"medium", [men[0]]]], cause, side, length, false, how)
+		return
 	else:
 		options = [[&"medium", [men[0]]], [&"close", [men[0]]]]
 
@@ -1434,6 +1446,30 @@ func _slow() -> void:
 	TimeFx.ramp(get_tree(), &"cinema", SLOW[0], SLOW[1], SLOW[2], SLOW[3])
 
 
+## Whether the camera can be moved from `from` to `to` without passing
+## through a man (or into a wall): clear every WAY_STEP along it and there.
+func _way_clear(from: Vector3, to: Vector3) -> bool:
+	var space := _camera.get_world_3d().direct_space_state
+	var steps := maxi(ceili(from.distance_to(to) / WAY_STEP), 1)
+
+	for i in range(1, steps + 1):
+		if not CineVantage.clear(space, from.lerp(to, float(i) / float(steps))):
+			return false
+
+	return true
+
+
+## Those of `men` on the first one's floor (within STOREY of his height): a
+## take is on men who can share a picture, never aimed into the ground
+## between a man in the yard and one in the cellar under it.
+func _together(men: Array) -> Array:
+	if men.size() < 2:
+		return men
+
+	var y := (men[0] as Node3D).global_position.y
+	return men.filter(func(m): return absf((m as Node3D).global_position.y - y) <= STOREY)
+
+
 func _flat_speed(man: Node3D) -> float:
 	var going: Variant = man.get("velocity")
 	return Vector2((going as Vector3).x, (going as Vector3).z).length() if going is Vector3 else 0.0
@@ -1533,10 +1569,11 @@ func _follow(live: Array) -> void:
 
 	var framing := CineShot.frame(kind, live, ctx)
 
-	# A track runs alongside its man (where the way is clear); every other
+	# A track runs alongside its man (where the way is clear of walls and
+	# men: it waits for a man in its way, turning to keep him); every other
 	# shot stays where it was put and turns to keep him.
 	if kind == &"track":
-		if _operator.blocked(_camera.global_position, framing["position"]):
+		if _operator.blocked(_camera.global_position, framing["position"]) or not _way_clear(_camera.global_position, framing["position"]):
 			return
 	elif not (kind in [&"roving", &"observe", &"group"]):
 		framing["position"] = _shot["framing"]["position"]

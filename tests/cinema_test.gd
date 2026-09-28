@@ -2104,6 +2104,153 @@ func _picture() -> void:
 	camera15.queue_free()
 	torch15.queue_free()
 
+	# P16 a man bolting across a close shot never leaves the frame: past its
+	# turning speed the camera turns as fast as keeps him in it
+	var camera16 := Camera3D.new()
+	add_child(camera16)
+	var screen16: CanvasLayer = CineScreen.new()
+	add_child(screen16)
+	var op16: Node = CineOperator.new()
+	add_child(op16)
+	op16.attach(camera16, screen16)
+	op16.set_mode(&"drama")
+	var from16 := Vector3(2300, 1.6, 1.2)
+	var head16 := Vector3(2300, 1.6, 0)
+	op16.show(_frame_at(from16, head16, 40.0, &"close"), &"cut")
+	await _frames(2)
+	var framed16 := 0
+	var steps16 := 0
+
+	for f in 36:
+		head16 += Vector3(5.0 / 60.0, 0, 0)
+		op16.follow(_frame_at(from16, head16, 40.0, &"close"))
+		await get_tree().process_frame
+		steps16 += 1
+		framed16 += 1 if camera16.is_position_in_frustum(head16) else 0
+
+	_check("P16 a man bolting across a close shot (5 m/s at 1.2 m) is kept in the frame all the way", framed16 == steps16,
+		"in frame %d of %d frames" % [framed16, steps16])
+	op16.queue_free()
+	screen16.queue_free()
+	camera16.queue_free()
+
+	# P17 a lone man running is taken running alongside him, not from a
+	# standing place he runs out of
+	var camera17 := Camera3D.new()
+	add_child(camera17)
+	var editor17: Node = CineEditor.new()
+	add_child(editor17)
+	editor17.take_over(camera17)
+	var shots17: Array = []
+	editor17.shot_started.connect(func(shot: Dictionary) -> void: shots17.append(shot))
+	var runner17 := _man(Vector3(2400, 0, 0), -PI * 0.5)
+	runner17.velocity = Vector3(4, 0, 0)
+	editor17.scene({"mode": &"drama", "subjects": [runner17]})
+	var t17 := 0.0
+
+	while t17 < 5.0:
+		runner17.global_position += runner17.velocity / 60.0
+		await get_tree().process_frame
+		t17 += 1.0 / 60.0
+
+	var kinds17: Array = shots17.map(func(sh): return sh["kind"])
+	_check("P17 a lone man running is taken alongside him (a track), never a standing close or medium",
+		not kinds17.is_empty() and kinds17.all(func(k): return k == &"track"), "%s" % [kinds17])
+	editor17.release()
+	editor17.queue_free()
+	camera17.queue_free()
+	runner17.queue_free()
+
+	# P18 a scene's men apart on two floors (one in a cellar under the
+	# yard): the take is on the first where he stands, never aimed into the
+	# ground between them
+	var camera18 := Camera3D.new()
+	add_child(camera18)
+	camera18.global_position = Vector3(2500, 1.7, 12)
+	var editor18: Node = CineEditor.new()
+	add_child(editor18)
+	editor18.take_over(camera18)
+	var up18 := _man(Vector3(2500, 0, 0), 0.0)
+	var down18 := _man(Vector3(2518, -4.0, 6), 0.0)
+	await _frames(3)
+	editor18.scene({"mode": &"observe", "subjects": [up18, down18]})
+	await _real(2.5)
+	var shot18: Dictionary = editor18.current()
+	var look18: Vector3 = (shot18.get("framing", {}) as Dictionary).get("look", Vector3.INF)
+	var near18 := look18.distance_to(CineShot.head_of(up18))
+	_check("P18 men on two floors: the take aims at the first where he stands, not into the ground between them",
+		near18 < 3.0 and not (shot18.get("subjects", []) as Array).has(down18), "aimed %.1f m off him at %s, subjects %s" % [near18, look18, shot18.get("subjects", [])])
+	editor18.release()
+	editor18.queue_free()
+	camera18.queue_free()
+	up18.queue_free()
+	down18.queue_free()
+
+	# P19 a drifting take sets off from where the camera is only if its men
+	# are in the picture already; looking away from them (at a torch), it
+	# comes in on its own start
+	var camera19 := Camera3D.new()
+	add_child(camera19)
+	var editor19: Node = CineEditor.new()
+	add_child(editor19)
+	editor19.take_over(camera19)
+	var man19 := _man(Vector3(2600, 0, 0), 0.0)
+	await _frames(3)
+	camera19.global_position = Vector3(2600, 1.7, 6)
+	camera19.look_at(Vector3(2608, 1.7, 6), Vector3.UP)
+	var how19: StringName = editor19._how_to(Vector3(2601, 1.7, 5), [man19])
+	camera19.look_at(CineShot.head_of(man19), Vector3.UP)
+	var facing19: StringName = editor19._how_to(Vector3(2601, 1.7, 5), [man19])
+	_check("P19 a drift sets off from here only with its man already in the picture; looking away, a cut",
+		how19 == &"cut" and facing19 != &"cut", "looking away %s, looking at him %s" % [how19, facing19])
+	editor19.release()
+	editor19.queue_free()
+	camera19.queue_free()
+	man19.queue_free()
+
+	# P20 a track running alongside a man never runs through another man
+	# standing in its way (it waits and turns to keep him instead)
+	var camera20 := Camera3D.new()
+	add_child(camera20)
+	var editor20: Node = CineEditor.new()
+	add_child(editor20)
+	editor20.take_over(camera20)
+	var runner20 := _man(Vector3(2700, 0, 0), -PI * 0.5)
+	runner20.velocity = Vector3(5, 0, 0)
+	var left20 := _body(Vector3(2700, -50, 0))
+	var right20 := _body(Vector3(2700, -50, 0))
+	await _frames(3)
+	editor20.scene({"mode": &"drama", "subjects": [runner20], "pin": {"kind": &"track", "subjects": [runner20], "seconds": 5.0}})
+
+	# (Once the track is on, a man stands either side of his way 3 m on.)
+	for f in 240:
+		if editor20.current().get("kind") == &"track":
+			break
+
+		await get_tree().process_frame
+
+	await _frames(10)
+	left20.global_position = runner20.global_position + Vector3(3, 0, -CineShot.TRACK_OFF)
+	right20.global_position = runner20.global_position + Vector3(3, 0, CineShot.TRACK_OFF)
+	var nearest20 := INF
+
+	for f in 120:
+		runner20.global_position += runner20.velocity / 60.0
+		await get_tree().process_frame
+
+		for by in [left20, right20]:
+			var flat := Vector2(camera20.global_position.x - by.global_position.x, camera20.global_position.z - by.global_position.z)
+			nearest20 = minf(nearest20, flat.length())
+
+	_check("P20 a track never runs through a man standing in its way", editor20.current().get("kind") == &"track" and nearest20 >= 0.6,
+		"%s, came within %.2f m of a man" % [editor20.current().get("kind"), nearest20])
+	editor20.release()
+	editor20.queue_free()
+	camera20.queue_free()
+
+	for b in [runner20, left20, right20]:
+		b.queue_free()
+
 	for b in [a1, blocker, a3, speaker4, listener4, man5, other5, a7, b7, a10, b10, a11, b11, a12, man14] + ring9:
 		b.queue_free()
 
