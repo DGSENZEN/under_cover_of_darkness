@@ -64,6 +64,10 @@ var _moths := {}
 var _crows: Array = []
 var _motes := {}
 var _draw := {}
+## The torches the wind leans (found by _scan), and the wind they were last
+## given: told again only when it has moved.
+var _torches: Array = []
+var _leant := Vector3.INF
 
 
 ## Where motes come from: a place, a rate, which way they go.
@@ -212,9 +216,12 @@ func _process(delta: float) -> void:
 	_update_moths()
 	_update_crows(delta)
 
-	for torch in get_tree().get_nodes_in_group(&"torches"):
-		if torch.has_method("lean"):
-			torch.lean(air)
+	if air.distance_to(_leant) > 0.01:
+		_leant = air
+
+		for torch in _torches:
+			if is_instance_valid(torch):
+				torch.lean(air)
 
 	for puffs in _all_puffs():
 		_emit(puffs, delta, air)
@@ -252,9 +259,15 @@ func _scan() -> void:
 			if fire.has_signal(&"fed"):
 				fire.fed.connect(func() -> void: _embers[fire][2] = BURST)
 
+	_torches.clear()
+	_leant = Vector3.INF
+
 	for torch in get_tree().get_nodes_in_group(&"torches"):
 		if not _moths.has(torch):
 			_moths[torch] = _make_moths()
+
+		if torch.has_method("lean"):
+			_torches.append(torch)
 
 	for dict in [_breaths, _embers, _moths]:
 		for key in dict.keys():

@@ -41,7 +41,27 @@ static func _load() -> void:
 	var file := ConfigFile.new()
 
 	if file.load(path) == OK:
-		_awareness_marks = bool(file.get_value("hud", "awareness_marks", true))
+		_awareness_marks = _as_bool(file.get_value("hud", "awareness_marks", true), true)
+
+
+## A value from the file as a switch, however it was written (true, 1,
+## "false"); `otherwise` if it is not one.
+static func _as_bool(value: Variant, otherwise: bool) -> bool:
+	match typeof(value):
+		TYPE_BOOL:
+			return value
+		TYPE_INT, TYPE_FLOAT:
+			return value != 0
+		TYPE_STRING, TYPE_STRING_NAME:
+			var said := str(value).strip_edges().to_lower()
+
+			if said in ["true", "1", "yes", "on"]:
+				return true
+
+			if said in ["false", "0", "no", "off"]:
+				return false
+
+	return otherwise
 
 
 static func _save() -> void:

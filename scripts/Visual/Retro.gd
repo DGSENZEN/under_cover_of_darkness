@@ -200,6 +200,7 @@ func _on_node_added(node: Node) -> void:
 
 	if scene != null and scene != _scene:
 		_scene = scene
+		_forget_gone()
 		_convert_tree.call_deferred(scene)
 
 
@@ -219,6 +220,14 @@ func _restore_all() -> void:
 			material.texture_filter = entry[1]
 
 	_seen.clear()
+
+
+## The materials of levels gone by are let go of (a long night of reloads
+## would otherwise keep a note of every one).
+func _forget_gone() -> void:
+	for id in _seen.keys():
+		if (_seen[id][0] as WeakRef).get_ref() == null:
+			_seen.erase(id)
 
 
 func _convert_tree(root: Node) -> void:

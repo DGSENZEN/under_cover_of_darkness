@@ -19,6 +19,7 @@ extends Node
 ## Started with the level (Sfx.warm). Only audio: guards hear none of it.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
 const FOLDER := "res://audio/music/"
 ## [layer, where it starts coming in, where it is all there, its level (dB)].
@@ -37,6 +38,9 @@ const FALL := 0.12
 ## Above this it has turned severe: the escalation hit, now and then.
 const SEVERE := 0.72
 const ESCALATE_EVERY := 14.0
+## Not within this long (real seconds) of another of the score's hits (the
+## HUD's stab as the fight opens): the two would pile up.
+const STING_GAP := 3.0
 ## Guards this near count toward the fight.
 const NEAR := 14.0
 const CLOSE := 5.0
@@ -53,6 +57,7 @@ var _playing := false
 var _think := 0.0
 var _escalated_at := -100.0
 var _clock := 0.0
+var _last_real := -1.0
 var _last_health := -1.0
 var _hurt_at := -100.0
 
@@ -150,9 +155,10 @@ func _load_loop(layer: StringName) -> AudioStream:
 	return null
 
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	# Real time: slow motion and hit-stops do not hold the score back.
-	var real := delta / maxf(Engine.time_scale, 0.05)
+	var real := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
+	_last_real = TimeFx.real_time()
 	_clock += real
 	_think -= real
 
@@ -165,7 +171,9 @@ func _process(delta: float) -> void:
 	# The fight turning: once in a while, the hit as it goes over the edge.
 	if intensity >= SEVERE and target >= SEVERE and _clock - _escalated_at > ESCALATE_EVERY:
 		_escalated_at = _clock
-		Sfx.play_flat(self, &"sting_escalate")
+
+		if TimeFx.real_time() - Sfx.sting_at >= STING_GAP:
+			Sfx.play_flat(self, &"sting_escalate")
 
 	if _layers.is_empty():
 		return

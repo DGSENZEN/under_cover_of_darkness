@@ -1179,7 +1179,7 @@ func _on_alert(new_state: int, old_state: int, guard: Node3D) -> void:
 		Sfx.play_flat(self, &"sting_combat")
 		_stab_at = now
 		_sting_at = now
-	elif new_state == 1 and now - _sting_at >= 3.0:
+	elif new_state == 1 and now - maxf(_sting_at, Sfx.sting_at) >= 3.0:
 		Sfx.play_flat(self, &"sting_suspicious")
 		_sting_at = now
 

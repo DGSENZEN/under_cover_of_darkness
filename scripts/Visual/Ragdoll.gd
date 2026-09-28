@@ -166,15 +166,22 @@ static func _basis_along(along: Vector3) -> Basis:
 ## Lets physics have him from the pose he is in, every part moving at
 ## `velocity` (how he was moving).
 func go_limp(velocity := Vector3.ZERO) -> void:
+	var rising := _recover_left > 0.0
 	_recover_left = 0.0
 	influence = 1.0
 
 	if _limp:
+		# Down again on his way up: the rise stops where it is, hands and
+		# feet with it.
+		if rising and man != null and man.has_method("hold_still"):
+			man.hold_still()
+
 		return
 
 	_limp = true
 	_loose_for = 0.0
 	active = true
+	set_physics_process(true)
 
 	if man != null and man.has_method("hold_still"):
 		man.hold_still()
@@ -244,6 +251,7 @@ func shove(push: Vector3, at := Vector3.INF, reach := 0.6) -> void:
 
 	# Moving again: loose again.
 	_loose_for = 0.0
+	set_physics_process(true)
 
 	for body in _bodies.values():
 		var part := body as PhysicalBone3D
@@ -279,6 +287,10 @@ func _physics_process(delta: float) -> void:
 		var body := part as PhysicalBone3D
 		body.linear_damp = lerpf(0.15, 0.9, heavy)
 		body.angular_damp = lerpf(3.0, 9.0, heavy)
+
+	# As heavy as he gets: nothing to change until he is moved again.
+	if heavy >= 1.0:
+		set_physics_process(false)
 
 
 func _process(delta: float) -> void:

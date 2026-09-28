@@ -63,6 +63,11 @@ var _settled := false
 ## Where it last put itself (on his hips): moved from there by anything else,
 ## he is taken along.
 var _followed := Vector3.INF
+## Lain still this long (seconds), he stops being worked out every tick:
+## only watched, until something moves him (a blade, a boot, another body
+## falling on him, a script) or he is laid down again.
+const SLEEP_AFTER := 2.0
+var _asleep := false
 
 
 func _ready() -> void:
@@ -167,6 +172,7 @@ func lay_down(rest: Transform3D) -> bool:
 	_limp_time = 0.0
 	_settled = false
 	_followed = Vector3.INF
+	_asleep = false
 	return true
 
 
@@ -177,6 +183,7 @@ func struck(point: Vector3, direction: Vector3, heavy := false, cuts := false) -
 
 	if rag != null and rag.is_limp():
 		rag.shove(direction.normalized() * (2.4 if heavy else 1.4), point, 0.5)
+		_asleep = false
 
 	# A cutting edge can take him apart: a heavy cut always takes what it
 	# met (a neck, a limb), a quick one now and then.
@@ -209,12 +216,12 @@ func _hack(point: Vector3, direction: Vector3, heavy: bool) -> void:
 static func limb_at(who: Node3D, point: Vector3) -> StringName:
 	var skeleton: Skeleton3D = who.get("skeleton")
 	var severable: Dictionary = who.get_script().get_script_constant_map().get("SEVERABLE", {})
-	var gone: Array = (who.get("severed") as Node).get("bones") if who.get("severed") != null else []
 	var best: StringName = &""
 	var nearest := HACK_REACH
 
 	for bone in severable:
-		if bone in gone or not LIMB_ENDS.has(bone):
+		# Gone, or hung from a part that is (a calf off a thigh cut away).
+		if who.is_severed(bone) or not LIMB_ENDS.has(bone):
 			continue
 
 		var from := skeleton.find_bone(bone)
@@ -242,6 +249,13 @@ func _physics_process(delta: float) -> void:
 
 	if rag == null or not rag.is_limp():
 		return
+
+	# Asleep: nothing to do while neither he nor it has been moved.
+	if _asleep:
+		if global_position.distance_to(_followed) < 0.01 and rag.centre().distance_to(_followed) < 0.02:
+			return
+
+		_asleep = false
 
 	# Only ever where he is: nothing of its own to fall with.
 	freeze = true
@@ -287,6 +301,8 @@ func _physics_process(delta: float) -> void:
 	if dead and not _pooled and _still > 0.6:
 		_pooled = true
 		Fx.pool(self, hips, 1.15, 6.0)
+
+	_asleep = _settled and _still > SLEEP_AFTER and (_pooled or not dead)
 
 
 ## Coming down hard (`speed`, m/s): a thud, his gear with him the first time,
