@@ -1013,6 +1013,17 @@ func is_open() -> bool:
 	return _open > 0.0
 
 
+## His opening runs out while he is down too, not only while he fights
+## (Guard._update_downed).
+func tick_open(delta: float) -> void:
+	if _open > 0.0:
+		_open -= delta
+
+		# Found his feet again: still shaken.
+		if _open <= 0.0:
+			posture = posture_max * 0.35
+
+
 ## Off his balance: guard gone, blow lost, reeling, open to a deathblow.
 func _break_posture() -> void:
 	_open = OPEN_TIME
@@ -3130,6 +3141,23 @@ func _strike(target: Node3D) -> void:
 	var combat := _combat_of(target)
 	var airborne: bool = target is CharacterBody3D and not (target as CharacterBody3D).is_on_floor()
 
+	# A wall or a shut door between you: his blow meets that instead.
+	if near and in_arc:
+		var wall := _wall_between(target)
+
+		if not wall.is_empty():
+			_outcome = &"missed"
+			var at: Vector3 = wall["position"]
+
+			if kind in [&"kick", &"punch", &"jab"]:
+				Sfx.play(guard, &"kick", at, -4.0, 0.9)
+			else:
+				Fx.sparks(guard, at, wall.get("normal", Vector3.UP), 0.8)
+				Sfx.play(guard, &"clang", at, -4.0, 0.95)
+				SoundBus.emit_sound(at, 50.0, guard, &"clang")
+
+			return
+
 	# Low at your legs: over it you go, and he is left with nothing.
 	if kind == &"sweep" and near and in_arc and airborne and feet.y - guard.global_position.y > 0.15:
 		_answered(&"jumped", target)
@@ -3229,6 +3257,29 @@ func _shoot(target: Node3D) -> void:
 	arrow.launch(from, aim.normalized() * shot_speed, guard.attack_damage, guard, 1.5)
 	Sfx.play(guard, &"twang", from, 0.0, randf_range(0.95, 1.05))
 	SoundBus.emit_sound(from, 42.0, guard, &"twang")
+
+
+## What stands between his chest and `target`'s (a wall, a shut door): the
+## ray's hit, or {} if nothing does. Loose props are knocked aside by a
+## blow, and do not stop it; nor do other men.
+func _wall_between(target: Node3D) -> Dictionary:
+	var from: Vector3 = guard.eye_position() - Vector3.UP * 0.35
+	var to: Vector3 = target.eye_position() - Vector3.UP * 0.35 if target.has_method("eye_position") else _aim_at(target, 0.25)
+	var exclude: Array[RID] = [guard.get_rid()]
+
+	if target is CollisionObject3D:
+		exclude.append((target as CollisionObject3D).get_rid())
+
+	for i in 4:
+		var query := PhysicsRayQueryParameters3D.create(from, to, 1, exclude)
+		var hit := guard.get_world_3d().direct_space_state.intersect_ray(query)
+
+		if hit.is_empty() or not (hit.get("collider") is RigidBody3D):
+			return hit
+
+		exclude.append((hit["collider"] as RigidBody3D).get_rid())
+
+	return {}
 
 
 ## Nothing solid between his eye and your chest.
