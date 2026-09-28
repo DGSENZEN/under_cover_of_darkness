@@ -9,15 +9,10 @@
 // soot blackens them).
 shader_type spatial;
 render_mode blend_mul, unshaded, cull_back, depth_draw_never, shadows_disabled, fog_disabled;
-#include "res://scripts/Visual/psx.gdshaderinc"
 
 uniform sampler2D stain : source_color, filter_nearest_mipmap, repeat_disable;
 uniform float strength = 1.0;
 uniform float curve = 1.0;
-
-void vertex() {
-	POSITION = psx_snapped(PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)), VIEWPORT_SIZE);
-}
 
 void fragment() {
 	vec4 paint = texture(stain, UV);

@@ -9,7 +9,6 @@ const Props := preload("res://scripts/Interaction/Props.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
 const GemEnvironment := preload("res://scripts/Visual/GemEnvironment.gd")
-const Layers := preload("res://scripts/Visual/Layers.gd")
 
 const NEAREST_MIPS := BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
 
@@ -274,100 +273,35 @@ func _run() -> void:
 	await _psx_checks(retro)
 
 
-## R12-R17 the PS1's wobble on the world: its vertices snap to the grid's
-## cells (gently: the grid's own lines, not a PS1's 240), every material
-## drawing the world through a snapping twin of itself that follows it (the
-## night wets the stones), the hands and held things and 'retro_skip' left
-## smooth, the world's own shaders snapping alike; the dither reads.
+## R12-R13 PS1-inspired, not a copy: the world drawn smooth (no vertex
+## snapping: its materials left as they are, its own shaders placing their
+## vertices where they are), and the dither that reads.
 func _psx_checks(retro: CanvasLayer) -> void:
-	RetroScript.twin_headless = true
 	var stone := StandardMaterial3D.new()
-	stone.albedo_color = Color(0.6, 0.5, 0.4)
-	stone.roughness = 0.9
-	var picture := ImageTexture.create_from_image(Image.create(4, 4, false, Image.FORMAT_RGBA8))
-	stone.albedo_texture = picture
 	var wall := MeshInstance3D.new()
 	wall.mesh = BoxMesh.new()
 	(wall.mesh as BoxMesh).material = stone
-	var held := MeshInstance3D.new()
-	held.mesh = BoxMesh.new()
-	held.material_override = StandardMaterial3D.new()
-	held.layers = Layers.VIEWMODEL
-	var skipped := MeshInstance3D.new()
-	skipped.mesh = BoxMesh.new()
-	skipped.material_override = StandardMaterial3D.new()
-	skipped.material_override.set_meta(&"retro_skip", true)
-
-	for node in [wall, held, skipped]:
-		add_child(node)
-
+	add_child(wall)
 	await _frames(3)
-	var twin := wall.get_surface_override_material(0) as ShaderMaterial
-	var snapping := twin != null and twin.shader != null and twin.shader.code.contains("psx_snapped(")
-	var kept := twin != null and (twin.get_shader_parameter(&"albedo") as Color).is_equal_approx(stone.albedo_color) \
-		and twin.get_shader_parameter(&"texture_albedo") != null
-	var base_kept := (wall.mesh as BoxMesh).material == stone
-	_check("R12 a mesh drawing the world gets a snapping twin of its material, the same colour and texture; its own material left as it was",
-		snapping and kept and base_kept, "twin %s snapping %s kept %s own kept %s" % [twin != null, snapping, kept, base_kept])
-	var smooth := held.material_override is BaseMaterial3D and skipped.material_override is BaseMaterial3D
-	_check("R13 the hands and held things (the view's layer) and 'retro_skip' keep their own smooth materials", smooth,
-		"held %s skipped %s" % [held.material_override, skipped.material_override])
-
-	# R14 the twin follows its material (the night wetting the stones)
-	stone.albedo_color = Color(0.3, 0.25, 0.2)
-	stone.roughness = 0.15
-	for f in 30:
-		await get_tree().process_frame
-	var followed := twin != null and (twin.get_shader_parameter(&"albedo") as Color).is_equal_approx(Color(0.3, 0.25, 0.2)) \
-		and is_equal_approx(float(twin.get_shader_parameter(&"roughness")), 0.15)
-	_check("R14 a twin follows its material as it changes (wet stone darker and glossier)", followed,
-		"albedo %s roughness %s" % [twin.get_shader_parameter(&"albedo") if twin else null, twin.get_shader_parameter(&"roughness") if twin else null])
-
-	# R15 the snap follows the grid: its lines while the look is on, none off
-	var height_before: int = retro.virtual_height
-	var on_lines: float = retro.snap_lines()
-	retro.virtual_height = 240
-	var at_240: float = retro.snap_lines()
-	retro.snap = false
-	var snap_off: float = retro.snap_lines()
-	retro.snap = true
-	retro.virtual_height = 0
-	var grid_off: float = retro.snap_lines()
-	retro.virtual_height = height_before
-	_check("R15 vertices snap to the grid's lines (gently: 360 by default), none with the snap or the grid off",
-		is_equal_approx(on_lines, float(height_before)) and is_equal_approx(at_240, 240.0) and snap_off == 0.0 and grid_off == 0.0 and height_before >= 300,
-		"on %.0f at 240 %.0f snap off %.0f grid off %.0f (grid %d)" % [on_lines, at_240, snap_off, grid_off, height_before])
-
-	# R16 the world's own shaders snap alike (leaves, water, glowing glass,
-	# the stains on the floor, the men's clothes and skin)
-	var own := {}
+	var left_alone := wall.get_surface_override_material(0) == null and wall.material_override == null
+	var snapping := {}
 
 	for path in ["res://scripts/Visual/foliage.gdshader", "res://scripts/Visual/water.gdshader", "res://scripts/Visual/Lights/glow.gdshader",
-			"res://scripts/Visual/ground_stain.gdshader", "res://scripts/Visual/retro_psx.gdshader", "res://scripts/Visual/wardrobe.gdshaderinc"]:
-		var resource: Resource = load(path)
-		own[path.get_file()] = String(resource.get("code")).contains("psx_snapped(")
+			"res://scripts/Visual/ground_stain.gdshader", "res://scripts/Visual/wardrobe.gdshaderinc"]:
+		var code := String((load(path) as Resource).get("code"))
 
-	_check("R16 the world's own shaders snap alike: foliage, water, glow, floor stains, the old psx shader, the men's wardrobe", own.values().all(func(v): return v),
-		"%s" % [own])
+		if code.contains("psx_snapped(") or code.contains("POSITION ="):
+			snapping[path.get_file()] = true
 
-	# R17 the look off: the twins given back, the world's own materials on
-	retro.enabled = false
-	var given_back := wall.get_surface_override_material(0) == null
-	retro.enabled = true
-	await _frames(3)
-	var twinned_again := wall.get_surface_override_material(0) is ShaderMaterial
-	_check("R17 with the look off the world draws with its own materials again; on again, twinned again", given_back and twinned_again,
-		"given back %s twinned again %s" % [given_back, twinned_again])
+	var no_snap: bool = not ("snap" in retro) and not ProjectSettings.has_setting("shader_globals/psx_snap_lines")
+	_check("R12 the world is drawn smooth: no vertex snapping (its materials left alone, its shaders unsnapped)",
+		left_alone and snapping.is_empty() and no_snap, "left alone %s, snapping %s, no snap setting %s" % [left_alone, snapping.keys(), no_snap])
 
-	# R18 the PS1's crunch reads: colour cut to 24 levels a channel or fewer,
+	# R13 the PS1's crunch reads: colour cut to 24 levels a channel or fewer,
 	# the dither at full strength
-	_check("R18 the dither reads: 24 levels a channel or fewer, dithered at full strength",
+	_check("R13 the dither reads: 24 levels a channel or fewer, dithered at full strength",
 		retro.color_levels <= 24.0 and retro.color_levels > 0.0 and retro.dither >= 0.95, "levels %.0f dither %.2f" % [retro.color_levels, retro.dither])
-	RetroScript.twin_headless = false
-
-	for node in [wall, held, skipped]:
-		node.queue_free()
-
+	wall.queue_free()
 	await _frames(2)
 
 

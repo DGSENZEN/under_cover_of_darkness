@@ -4,20 +4,17 @@ shader_type spatial;
 //
 //   snap_lines   vertices snap to a grid of this many screen lines, so edges
 //                jitter as they move: the PS1 had no sub-pixel precision.
-//                0 snaps them as the rest of the world does (Retro's
-//                psx_snap_lines, gentle).
+//                0 leaves them smooth.
 //   affine       texture coordinates interpolated across the screen instead
 //                of in depth, so textures swim and bend on big polygons.
 //                0 is correct perspective, 1 is a PS1.
 //   per_vertex   lighting worked out at the corners and blended between them
 //                (Gouraud), as consoles of the time did.
 //
-// Use it for idols, props and monsters that want more than the world's
-// gentle snap; keep affine off level geometry, where swimming walls would
-// make people sick.
+// Use it for idols, props and monsters; keep level geometry on the default
+// look, where swimming walls would make people sick.
 
 render_mode cull_back, diffuse_lambert, specular_schlick_ggx;
-#include "res://scripts/Visual/psx.gdshaderinc"
 
 uniform vec4 albedo : source_color = vec4(1.0);
 uniform sampler2D albedo_texture : source_color, filter_nearest_mipmap, repeat_enable;
@@ -38,9 +35,6 @@ void vertex() {
 		vec2 grid = vec2(snap_lines * VIEWPORT_SIZE.x / VIEWPORT_SIZE.y, snap_lines) * 0.5;
 		vec2 ndc = clip.xy / clip.w;
 		clip.xy = floor(ndc * grid + 0.5) / grid * clip.w;
-	} else {
-		// The world's own wobble (psx.gdshaderinc, set by Retro).
-		clip = psx_snapped(clip, VIEWPORT_SIZE);
 	}
 
 	// Written always: a shader that writes POSITION anywhere owns it
