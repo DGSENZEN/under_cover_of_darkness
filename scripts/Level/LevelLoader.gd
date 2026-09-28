@@ -21,6 +21,10 @@ extends RefCounted
 const Materials := preload("res://scripts/Visual/Materials.gd")
 ## A collider's surface that marks a ceiling (never walked on).
 const CEILING := "ceiling"
+## Small dressing fades out over this much past its range (m); a collider
+## occludes when its two bigger sides are at least these (m).
+const RANGE_MARGIN := 4.0
+const OCCLUDER_SIZE := Vector2(3.0, 4.0)
 const ZonesScript := preload("res://scripts/Level/Zones.gd")
 
 ## A level put together: its root, its sectors, its markers.
@@ -75,6 +79,8 @@ static func load_level(parent: Node3D, folder: String) -> Level:
 			_dress(scene)
 
 	_colliders(level, manifest.get("colliders", []))
+	_ranges(level, manifest.get("ranges", {}))
+	_occluders(level, manifest.get("colliders", []))
 	level.sockets = manifest.get("sockets", [])
 
 	for raw in manifest.get("markers", []):
@@ -130,6 +136,52 @@ static func _colliders(level: Level, colliders: Array) -> void:
 		shape.shape = box
 		shape.transform = Transform3D(_basis(c["basis"]), _vector(c["centre"]))
 		(bodies[key] as StaticBody3D).add_child(shape)
+
+
+## Small dressing drawn only as near as it shows (the manifest's ranges).
+static func _ranges(level: Level, ranges: Dictionary) -> void:
+	if ranges.is_empty():
+		return
+
+	# (Blender's "weeds.001" is Godot's node "weeds_001".)
+	var by_node := {}
+
+	for name in ranges:
+		by_node[String(name).replace(".", "_")] = ranges[name]
+
+	for mesh in level.root.find_children("*", "GeometryInstance3D", true, false):
+		var reach: Variant = by_node.get(String((mesh as Node).name))
+
+		if reach == null:
+			reach = by_node.get(String((mesh as Node).get_parent().name))
+
+		if reach != null:
+			(mesh as GeometryInstance3D).visibility_range_end = float(reach)
+			(mesh as GeometryInstance3D).visibility_range_end_margin = RANGE_MARGIN
+
+
+## The big walls occlude what is behind them: a box occluder for every
+## collider at least OCCLUDER_SIZE across and up (the kit's walls, the
+## curtain), under one node.
+static func _occluders(level: Level, colliders: Array) -> void:
+	var holder := Node3D.new()
+	holder.name = "Occluders"
+	level.root.add_child(holder)
+
+	for c in colliders:
+		var size := _vector(c["size"])
+		var sides := [size.x, size.y, size.z]
+		sides.sort()
+
+		if String(c["surface"]) == CEILING or sides[1] < OCCLUDER_SIZE.x or sides[2] < OCCLUDER_SIZE.y:
+			continue
+
+		var occluder := OccluderInstance3D.new()
+		var box := BoxOccluder3D.new()
+		box.size = size
+		occluder.occluder = box
+		holder.add_child(occluder)
+		occluder.transform = Transform3D(_basis(c["basis"]), _vector(c["centre"]))
 
 
 static func _marker(raw: Dictionary) -> Dictionary:

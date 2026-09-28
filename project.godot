@@ -86,6 +86,8 @@ common/physics_interpolation=true
 
 [rendering]
 
+occlusion_culling/use_occlusion_culling=true
+
 textures/decals/filter=2
 textures/light_projectors/filter=2
 environment/volumetric_fog/volume_size=96

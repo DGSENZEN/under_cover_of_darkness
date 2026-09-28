@@ -35,6 +35,11 @@ GRADE_EDGE = 1.0
 AO_RAYS = 12
 AO_REACH = 1.2
 UNLIT = ("stained_glass", "stained_glass_small")
+# Dressing smaller than SMALL (m) is drawn out to SMALL_RANGE (m); weeds to
+# WEEDS_RANGE.
+SMALL = 3.0
+SMALL_RANGE = 35.0
+WEEDS_RANGE = 22.0
 
 IMPORT = """[remap]
 
@@ -101,8 +106,17 @@ def manifest(data):
                       "basis": [rounded(r) for r in m["basis"]], "size": rounded(m["size"]) if m.get("size") else None,
                       "props": m["props"]})
 
+    # Small dressing is drawn only as near as it shows (m).
+    ranges = {}
+
+    for p in data["pieces"]:
+        recipe = kit_recipes.PIECES[p["piece"]]
+
+        if recipe["family"] == "dressing" and recipe.get("size") and max(recipe["size"]) < SMALL:
+            ranges[p["name"]] = WEEDS_RANGE if p["piece"] == "weeds" else SMALL_RANGE
+
     return {"level": data["level"], "sectors": data["sectors"], "colliders": colliders, "markers": found, "sockets": sockets,
-            "pieces": len(data["pieces"])}
+            "pieces": len(data["pieces"]), "ranges": ranges}
 
 
 def _subdivide(mesh):

@@ -149,6 +149,15 @@
    "required": [],
    "optional": {},
    "box": false
+  },
+  "decal": {
+   "required": [
+    "kind"
+   ],
+   "optional": {
+    "floor": false
+   },
+   "box": true
   }
  },
  "station_kinds": [

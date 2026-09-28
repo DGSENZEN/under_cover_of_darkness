@@ -255,6 +255,15 @@ func _garrison() -> void:
 		marked20 >= 30 and (decals20.size() == marked20 or not photo20) and textured20 and banners20 >= 8,
 		"decals %d of %d marked, textured %s (photo %s), banners in the mess %d" % [decals20.size(), marked20, textured20, photo20, banners20])
 
+	# G21 drawn only as near as it shows: small dressing fades out at its
+	# range; the big walls occlude what is behind them (occlusion culling on)
+	var small21: Array = level.root.find_children("weeds*", "MeshInstance3D", true, false) + level.root.find_children("candle_stand*", "MeshInstance3D", true, false)
+	var ranged21: bool = not small21.is_empty() and small21.all(func(m): return (m as GeometryInstance3D).visibility_range_end > 0.0)
+	var occluders21: int = map.find_children("*", "OccluderInstance3D", true, false).size()
+	var culling21: bool = ProjectSettings.get_setting("rendering/occlusion_culling/use_occlusion_culling", false)
+	_check("G21 small dressing is drawn only as near as it shows; the big walls occlude (occlusion culling on)",
+		ranged21 and occluders21 >= 100 and culling21, "small %d ranged %s, occluders %d, culling %s" % [small21.size(), ranged21, occluders21, culling21])
+
 	# G6 lightning through the stained glass: the chapel's shafts of light
 	# flare with a flash and die back after it
 	var shafts: Array = get_tree().get_nodes_in_group(&"glass_shafts")
