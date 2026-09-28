@@ -37,6 +37,12 @@ const WATER_DRAG := 2.5
 
 var _floating: Array[RigidBody3D] = []
 var _surface_mesh: MeshInstance3D
+## Ripples (ripple()): a ripple this many metres across, drawn out this many
+## times the other way; the normal map's size and strength.
+const RIPPLE_TILE := 3.0
+const RIPPLE_STRETCH := 6.0
+const RIPPLE_TEXELS := 128
+const RIPPLE_STRENGTH := 6.0
 
 
 ## Water filling a `size` box centred on `centre`, its top the surface.
@@ -176,6 +182,31 @@ func _physics_process(delta: float) -> void:
 		thing.apply_central_force(Vector3.UP * gravity * thing.mass * 1.6 * under)
 		thing.linear_velocity = thing.linear_velocity.move_toward(Vector3.ZERO, WATER_DRAG * under * delta)
 		thing.angular_velocity = thing.angular_velocity.move_toward(Vector3.ZERO, WATER_DRAG * under * delta)
+
+
+## Ripples on the surface (a canal at night): a normal map made from noise,
+## stretched `stretch` times along z, so lights on it draw out into streaks;
+## `tile` metres a ripple across.
+func ripple(tile := RIPPLE_TILE, stretch := RIPPLE_STRETCH) -> void:
+	if _surface_mesh == null:
+		return
+
+	var paint := (_surface_mesh.mesh as PlaneMesh).material as StandardMaterial3D
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.02
+	noise.seed = 71
+	var bumps := NoiseTexture2D.new()
+	bumps.width = RIPPLE_TEXELS
+	bumps.height = RIPPLE_TEXELS
+	bumps.seamless = true
+	bumps.as_normal_map = true
+	bumps.bump_strength = RIPPLE_STRENGTH
+	bumps.noise = noise
+	paint.normal_enabled = true
+	paint.normal_texture = bumps
+	paint.normal_scale = 0.6
+	paint.uv1_scale = Vector3(size.x / tile, size.z / tile * stretch, 1.0)
 
 
 ## The surface, seen from above and below; the depth darkens toward the

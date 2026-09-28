@@ -34,6 +34,8 @@ const GLASS_FADE := 0.9
 ## The moon's way (its light, as garrison_lights sets it); the chapel's north
 ## glass line (z); dust boxes this big, at these distances (m) down a shaft.
 const MOON_TOWARD := Vector3(0.62, -0.5, 0.6)
+## Screen-space reflections this fine (the canal, the puddles).
+const SSR_STEPS := 48
 const GLASS_LINE := -25.2
 const DUST_BOX := Vector3(1.0, 1.1, 1.0)
 const DUST_STEPS := [1.6, 3.2, 4.8, 6.3]
@@ -94,6 +96,8 @@ func _things() -> void:
 	for m in level.of("water"):
 		var water: Area3D = WaterScript.build(self, (m["transform"] as Transform3D).origin, m["size"])
 		water.set("clarity", 1.0 - float(m["props"].get("murk", 0.6)))
+		# The canal catches the lamps and the lit windows in streaks.
+		water.call_deferred(&"ripple")
 
 	for m in level.of("ladder"):
 		var volume := Area3D.new()
@@ -204,6 +208,9 @@ func _marks_from_markers() -> void:
 func _garrison_lights() -> void:
 	var environment := RetroScript.night_environment(Color(0.34, 0.34, 0.42), AMBIENT_ENERGY)
 	environment.volumetric_fog_density = 0.01
+	# The canal and the puddles reflect what is lit (the lamps, the windows).
+	environment.ssr_enabled = true
+	environment.ssr_max_steps = SSR_STEPS
 	environment.tonemap_exposure = EXPOSURE
 	var world := WorldEnvironment.new()
 	world.environment = environment

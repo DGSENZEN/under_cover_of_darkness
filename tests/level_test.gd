@@ -230,6 +230,19 @@ func _garrison() -> void:
 	var out17: Array = dust17.filter(func(p): return not chapel17.has_point(p)).slice(0, 4).map(func(p): return (p as Vector3).snapped(Vector3.ONE * 0.1))
 	_check("G17 dust hangs in the chapel's shafts of moonlight", in17 >= 20 and in17 == dust17.size(), "dust motes %d, in the chapel %d, outside %s" % [dust17.size(), in17, out17])
 
+	# G19 the canal is dark water that catches the lights in streaks:
+	# rippled (a normal map stretched across it), glossy, and the night's
+	# screen reflections on
+	var canal19: Node = get_tree().get_nodes_in_group(&"water").filter(func(w): return w.get("_surface_mesh") != null)[0] if not get_tree().get_nodes_in_group(&"water").is_empty() else null
+	var paint19: StandardMaterial3D = ((canal19._surface_mesh as MeshInstance3D).mesh as PlaneMesh).material if canal19 != null else null
+	# (Ripples per metre: drawn out along the canal, packed across it.)
+	var size19: Vector3 = canal19.get("size") if canal19 != null else Vector3.ONE
+	var rippled19: bool = paint19 != null and paint19.normal_enabled and paint19.normal_texture != null and paint19.uv1_scale.y / size19.z > 2.0 * paint19.uv1_scale.x / size19.x
+	var glossy19: bool = paint19 != null and paint19.roughness < 0.2
+	var reflects19: bool = map.night.environment.ssr_enabled
+	_check("G19 the canal catches the lights in streaks: rippled, glossy, reflected", rippled19 and glossy19 and reflects19,
+		"rippled %s, glossy %s, screen reflections %s" % [rippled19, glossy19, reflects19])
+
 	# G6 lightning through the stained glass: the chapel's shafts of light
 	# flare with a flash and die back after it
 	var shafts: Array = get_tree().get_nodes_in_group(&"glass_shafts")
