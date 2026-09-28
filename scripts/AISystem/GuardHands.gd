@@ -482,7 +482,13 @@ func stop_relighting() -> void:
 ## Lights `light` (a torch gone out) again: at it RELIGHT_TIME, lit
 ## RELIGHT_AT into it.
 func relight(light: Node3D) -> void:
-	if busy() or light == null or not is_instance_valid(light):
+	if light == null or not is_instance_valid(light):
+		return
+
+	# Hands full: not lit, so it stays out for whoever notices it next.
+	if busy():
+		if light.has_meta(&"noticed"):
+			light.remove_meta(&"noticed")
 		return
 
 	_relight = light
