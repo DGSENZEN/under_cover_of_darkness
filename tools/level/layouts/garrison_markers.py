@@ -19,6 +19,7 @@ def add(G):
     camera(G)
     zones(G)
     story(G)
+    decals(G)
 
 
 # ---------------------------------------------------------------------------
@@ -285,3 +286,43 @@ def story(G):
         ("courtyard_fight", (0.0, 0, 10.0), "courtyard"), ("gate_passage", (0.0, 0, 27.6), "gatehouse"),
     ):
         G.mark(name, "mark", at, 0.0, sector)
+
+
+# ---------------------------------------------------------------------------
+# Decals: moss at the walls' feet outside, leaks down from sills and eaves,
+# grime along the bottoms of the courtyard's walls. Each faces into its wall
+# (local -z); its size across, up and how deep it reaches.
+# ---------------------------------------------------------------------------
+
+def decals(G):
+    count = [0]
+
+    def D(kind, at, yaw, size, sector="courtyard"):
+        count[0] += 1
+        G.mark("decal_%d" % count[0], "decal", at, yaw, sector, size=size, kind=kind)
+
+    # Moss along the curtain's outer feet, the towpath's side and the north.
+    for x in range(-24, 28, 8):
+        D("moss", (float(x), 0.35, 28.6), 0.0, (4.0, 0.7, 0.8), "outside")
+        D("moss", (float(x), 0.35, -28.6), 180.0, (4.0, 0.7, 0.8), "outside")
+
+    # Leaks: under the barracks' upper windows and the chapel's south lancets,
+    # down the gatehouse's front, under the curtain's walk inside.
+    for i, z in enumerate((-12.0, -6.0, 0.0, 6.0, 12.0)):
+        D("leak_1" if i % 2 == 0 else "leak_2", (13.9, 4.3, z), -90.0, (1.3, 1.8, 0.8), "barracks")
+
+    for x in (-2.0, 8.0):
+        D("leak_2", (x, 3.9, -16.0), 0.0, (1.1, 1.6, 0.8), "chapel")
+
+    for x in (-4.0, 4.0):
+        D("leak_1", (x, 4.2, 31.0), 0.0, (1.4, 2.0, 0.8), "gatehouse")
+
+    for x in (-20.0, -12.0, 12.0, 20.0):
+        D("leak_2", (x, 3.6, 25.9), 180.0, (1.6, 2.2, 0.8), "walls")
+
+    # Grime along the bottoms of the barracks' front and the colonnade's back wall.
+    for z in (-18.0, -12.0, -6.0, 0.0, 6.0, 12.0):
+        D("grime", (13.9, 0.45, z), -90.0, (4.0, 0.9, 0.8), "barracks")
+
+    for z in (-12.0, -6.0, 0.0, 6.0):
+        D("grime", (-20.0, 0.45, z), 90.0, (4.0, 0.9, 0.8), "west_range")

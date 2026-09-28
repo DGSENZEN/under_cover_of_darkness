@@ -50,6 +50,13 @@ class Rules(unittest.TestCase):
         data["pieces"].append(piece("odd", "wall_marble_9", (0, 0, 0)))
         self.assertTrue(any("no kit piece" in p for p in rules.problems(data)))
 
+    def test_a_decal_of_no_known_kind(self):
+        data = good()
+        data["markers"].append(marker("stain", "decal", (0, 1, -2), {"kind": "graffiti"}, size=[1, 1, 0.3]))
+        self.assertTrue(any("decal kind" in p for p in rules.problems(data)))
+        data["markers"][-1]["props"]["kind"] = "leak_1"
+        self.assertEqual(rules.problems(data), [])
+
     def test_a_scaled_piece(self):
         # Scaled in Blender, its mesh would export scaled but its colliders
         # come from the recipe: told, not shipped.

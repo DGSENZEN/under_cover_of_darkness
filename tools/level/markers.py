@@ -36,12 +36,16 @@ SCHEMA = {
     "vantage": {"required": [], "optional": {"lens": ""}, "box": False},
     "zone": {"required": ["grade"], "optional": {"fog": 1.0, "fog_color": ""}, "box": True},
     "mark": {"required": [], "optional": {}, "box": False},
+    # Dressing: a decal (grime, a leak, moss) projected onto what is behind it
+    # (local -z: into the wall; "floor": straight down instead).
+    "decal": {"required": ["kind"], "optional": {"floor": False}, "box": True},
 }
 
 STATION_KINDS = ["sit", "eat", "sleep", "rummage", "carry", "chop", "lean", "pray", "drill"]
 LIGHT_KINDS = ["torch", "brazier", "candle", "lantern", "window", "chandelier", "window_shaft", "hearth", "fire", "glow", "lamp_post"]
 ARCHETYPES = ["watchman", "swordsman", "archer", "duelist", "brute", "arms_master"]
 GRADES = ["outside", "indoors", "chapel", "cellar", "hearth"]
+DECAL_KINDS = ["leak_1", "leak_2", "moss", "grime"]
 
 
 def problems(marker):
@@ -74,6 +78,9 @@ def problems(marker):
 
     if ucd == "zone" and props.get("grade") not in GRADES:
         out.append("%s: no grade '%s'" % (marker["name"], props.get("grade")))
+
+    if ucd == "decal" and props.get("kind") not in DECAL_KINDS:
+        out.append("%s: no decal kind '%s'" % (marker["name"], props.get("kind")))
 
     return out
 

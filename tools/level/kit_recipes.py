@@ -438,3 +438,9 @@ for name, width, height, slot in (("glass_lancet", 0.9, 3.6, "stained_glass"), (
                                   ("relief_altar", 3.2, 1.6, "relief_angels")):
     piece(name, "dressing", slot, "stone", [], cols=[], size=[width, height, 0.1])
     model(name, [ks.card(0.0, height / 2.0, 0.0, width, height, slot)])
+
+
+# Weeds: a clump of three small crossed leaf cards (at wall feet, in the
+# yards' corners). Drawn only.
+piece("weeds", "dressing", "leaves", "grass", [], cols=[], size=[0.7, 0.45, 0.7])
+model("weeds", [ks.card(0.0, 0.2, 0.0, 0.7, 0.4, "leaves", yaw) for yaw in (0.0, 60.0, 120.0)])

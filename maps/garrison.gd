@@ -36,6 +36,9 @@ const GLASS_FADE := 0.9
 const MOON_TOWARD := Vector3(0.62, -0.5, 0.6)
 ## Screen-space reflections this fine (the canal, the puddles).
 const SSR_STEPS := 48
+## Decals: how much of their picture over the wall's; faded out from this far.
+const DECAL_MIX := 0.85
+const DECAL_FADE := 40.0
 const GLASS_LINE := -25.2
 const DUST_BOX := Vector3(1.0, 1.1, 1.0)
 const DUST_STEPS := [1.6, 3.2, 4.8, 6.3]
@@ -111,6 +114,10 @@ func _things() -> void:
 		volume.add_child(shape)
 		add_child(volume)
 		volume.global_transform = m["transform"]
+
+	# Decals: grime, leaks and moss, projected into their walls.
+	for m in level.of("decal"):
+		_decal(m)
 
 	# Chests (a rummaging man's), the carrier's crates, the woodpile.
 	for m in level.of("mark"):
@@ -314,6 +321,36 @@ func _light(m: Dictionary) -> void:
 			add_child(shaft)
 			shaft.global_position = at.origin
 			shaft.global_basis = Basis.looking_at(Vector3(0.62, -0.5, 0.6).normalized(), Vector3.UP)
+
+
+## A decal marker made a Decal: its photo ("decal_<kind>") projected into
+## the wall it faces (its -z), or straight down onto a floor. Nothing when
+## the photo is not on this machine (the flat-colour fallback has no stains).
+func _decal(m: Dictionary) -> void:
+	var texture := Materials.picture("decal_" + String(m["props"]["kind"]))
+
+	if texture == null:
+		return
+
+	var at: Transform3D = m["transform"]
+	var size: Vector3 = m["size"]
+	var decal := Decal.new()
+	decal.name = m["name"]
+	decal.texture_albedo = texture
+	decal.albedo_mix = DECAL_MIX
+	decal.distance_fade_enabled = true
+	decal.distance_fade_begin = DECAL_FADE
+	decal.distance_fade_length = 10.0
+	add_child(decal)
+
+	if bool(m["props"].get("floor", false)):
+		decal.size = Vector3(size.x, size.y, size.z)
+		decal.global_transform = Transform3D(Basis(Vector3.UP, at.basis.get_euler().y), at.origin)
+		return
+
+	# Its projection (-y) into the wall, its picture's top up.
+	decal.size = Vector3(size.x, size.z, size.y)
+	decal.global_transform = Transform3D(Basis(at.basis.x, at.basis.z, Vector3.DOWN), at.origin)
 
 
 ## The ladder up the range's roof pulled up by a man on it (ShowNight's

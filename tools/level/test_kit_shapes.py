@@ -118,7 +118,7 @@ class Pieces(unittest.TestCase):
         # Kit v1: the pieces that read as boxes are modelled (openings, columns
         # and arches, round things, foliage, the house fronts).
         wanted = ["wall_ashlar_door", "wall_plaster_window", "wall_ashlar_arch", "wall_ashlar_tall_lancet", "column", "arch_span_3",
-                  "barrel", "well", "candle_stand", "cart", "tree", "bush", "house_front", "banner", "buttress", "chandelier"]
+                  "barrel", "well", "candle_stand", "cart", "tree", "bush", "house_front", "banner", "buttress", "chandelier", "weeds"]
         self.assertEqual([n for n in wanted if not kit_recipes.PIECES[n].get("shapes")], [])
 
     def test_colliders_stay_the_blocks(self):

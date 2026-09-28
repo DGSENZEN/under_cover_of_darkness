@@ -237,6 +237,12 @@ def barracks():
     # on the east wall's middle), the kitchen, the dormitory, the captain.
     G.put("hearth", (28.9, 0, 1.0), -90.0, s)
 
+    # Crimson banners in rows down the mess hall's long walls (the
+    # references' rule 8), hung high.
+    for x in (19.0, 22.0, 25.0, 28.0):
+        G.put("banner", (x, 1.6, -7.85), 0.0, s)
+        G.put("banner", (x, 1.6, 9.85), 180.0, s)
+
     for z in (-3.0, 5.0):
         G.put("table_long", (22.0, 0, z), 0.0, s)
         G.put("bench", (22.0, 0, z - 0.9), 0.0, s)
@@ -467,7 +473,29 @@ def outside():
         G.put("bush", (x, 0, z), 0.0, "outside")
 
 
+def weeds():
+    """Clumps of weeds along the curtain's outer feet, in the drill yard's and
+    the wood yard's corners (a fixed scatter: the same every build)."""
+    import random
+    rng = random.Random(1932)
+    spots = []
+
+    for x in range(-28, 30, 3):
+        spots.append((x + rng.uniform(-0.8, 0.8), 28.8 + rng.uniform(0.0, 0.5)))
+        spots.append((x + rng.uniform(-0.8, 0.8), -28.8 - rng.uniform(0.0, 0.5)))
+
+    for z in range(-26, 28, 3):
+        spots.append((32.8 + rng.uniform(0.0, 0.5), z + rng.uniform(-0.8, 0.8)))
+
+    for x, z in ((-26.5, -25.3), (-24.0, -25.4), (-8.5, -25.2), (-27.0, -15.6), (-29.2, 25.2), (-26.4, 25.3), (-21.0, 25.4)):
+        spots.append((x, z))
+
+    for i, (x, z) in enumerate(spots):
+        G.put("weeds", (round(x, 2), 0.0, round(z, 2)), rng.uniform(0, 180), "outside" if abs(x) > 31 or abs(z) > 28 else "courtyard")
+
+
 def layout():
+    weeds()
     curtain()
     grounds()
     watchtower()

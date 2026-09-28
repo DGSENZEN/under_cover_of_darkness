@@ -175,6 +175,13 @@ static func glowing(slot: StringName) -> ShaderMaterial:
 	return material
 
 
+## A converted photo by its own name (a decal's), or null when it is not
+## on this machine.
+static func picture(name: String) -> Texture2D:
+	var path := folder.path_join(name + ".png")
+	return load(path) as Texture2D if ResourceLoader.exists(path) else null
+
+
 ## The slot's converted photo, or null when it is not on this machine.
 static func photo(slot: StringName) -> Texture2D:
 	var name := _photo_name(slot)

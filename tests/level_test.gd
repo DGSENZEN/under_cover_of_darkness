@@ -243,6 +243,18 @@ func _garrison() -> void:
 	_check("G19 the canal catches the lights in streaks: rippled, glossy, reflected", rippled19 and glossy19 and reflects19,
 		"rippled %s, glossy %s, screen reflections %s" % [rippled19, glossy19, reflects19])
 
+	# G20 grime, leaks and moss decals where the level marks them (each its
+	# photo when here); crimson banners in rows down the mess
+	# (The level's own: the night's puddles are decals too.)
+	var decals20: Array = map.find_children("decal_*", "Decal", true, false)
+	var marked20: int = level.of("decal").size()
+	var photo20: bool = Materials.picture("decal_moss") != null
+	var textured20: bool = decals20.all(func(d): return ((d as Decal).texture_albedo != null) == photo20)
+	var banners20: int = level.root.find_children("banner*", "", true, false).filter(func(n): return Rect2(16.6, -8.0, 13.0, 18.0).has_point(Vector2((n as Node3D).global_position.x, (n as Node3D).global_position.z))).size()
+	_check("G20 grime, leak and moss decals where marked (photos when here); crimson banners in rows down the mess",
+		marked20 >= 30 and (decals20.size() == marked20 or not photo20) and textured20 and banners20 >= 8,
+		"decals %d of %d marked, textured %s (photo %s), banners in the mess %d" % [decals20.size(), marked20, textured20, photo20, banners20])
+
 	# G6 lightning through the stained glass: the chapel's shafts of light
 	# flare with a flash and die back after it
 	var shafts: Array = get_tree().get_nodes_in_group(&"glass_shafts")
