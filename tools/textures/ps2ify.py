@@ -6,6 +6,9 @@
 
 Each texture has a small recipe in tools/textures/recipes/<name>.json: which
 photo, what size, how many colours, a crop, a tint and so on (see RECIPE).
+"alpha" is "none", "threshold" (the photo's own mask, cut at "threshold") or
+"luma" (no mask: what is darker than "threshold" is cut out, as the gaps
+between leaves).
 The photo is cropped, shrunk by averaging (never sharpened), graded, and cut
 down to its own palette WITHOUT dithering: the Retro screen dithers the
 whole frame, and dithering twice turns into noise at 128 px.
@@ -129,6 +132,11 @@ def convert(image, recipe):
         cut = int(recipe["threshold"])
         alpha = alpha.point(lambda a: 255 if a >= cut else 0)
         out.putalpha(alpha)
+    elif recipe["alpha"] == "luma":
+        # No mask in the photo: what is darker than the threshold (the gaps
+        # between leaves) is cut out.
+        cut = int(recipe["threshold"])
+        out.putalpha(rgb.convert("L").point(lambda v: 255 if v >= cut else 0))
     elif recipe["key"]:
         out.putalpha(alpha)
     else:

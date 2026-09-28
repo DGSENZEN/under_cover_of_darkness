@@ -34,7 +34,7 @@ func _fixture() -> void:
 	# K1 its sectors, drawn in their slots' materials
 	var meshes: Array = level.root.find_children("*", "MeshInstance3D", true, false)
 	var dressed: bool = meshes.any(func(m): return range((m as MeshInstance3D).get_surface_override_material_count()).any(
-		func(i): return (m as MeshInstance3D).get_surface_override_material(i) == Materials.surface(&"cobble")))
+		func(i): return (m as MeshInstance3D).get_surface_override_material(i) == Materials.level_surface(&"cobble")))
 	_check("K1 the level's sectors come in, their surfaces in their slots' materials",
 		level.sectors.has("yard") and level.sectors.has("room") and meshes.size() >= 2 and dressed,
 		"sectors %s, meshes %d, cobble dressed %s" % [level.sectors.keys(), meshes.size(), dressed])
@@ -141,6 +141,37 @@ func _garrison() -> void:
 	camera.global_position = Vector3(4, 1.7, -20.8)
 	await _seconds(2.5)
 	_check("G4 the camera in the chapel is in the chapel's grade", level.zones.current == "chapel", "grade %s" % level.zones.current)
+
+	# G14 the level is drawn in its slots' level materials: stone, plaster,
+	# floors and roofs mapped to the world at their slot's size (no seams from
+	# piece to piece), each with its photo when the photo is on this machine,
+	# its flat colour when not; leaves cut out where the photo is
+	var drawn14 := {}
+	var wrong14 := []
+
+	for mesh in level.root.find_children("*", "MeshInstance3D", true, false):
+		for i in (mesh as MeshInstance3D).get_surface_override_material_count():
+			var material := (mesh as MeshInstance3D).get_surface_override_material(i) as StandardMaterial3D
+
+			if material != null:
+				drawn14[material] = true
+
+	for slot in [&"ashlar", &"plaster", &"cobble", &"boards", &"slate"]:
+		var material: StandardMaterial3D = Materials.level_surface(slot)
+		var tile: float = float(Materials.SLOTS[slot]["tile"])
+		var textured: bool = Materials.photo(slot) != null
+
+		if not drawn14.has(material):
+			wrong14.append("%s not used" % slot)
+		elif not (material.uv1_triplanar and material.uv1_world_triplanar and is_equal_approx(material.uv1_scale.x, 1.0 / tile)):
+			wrong14.append("%s not world-mapped at %.1f m" % [slot, tile])
+		elif textured != (material.albedo_texture != null):
+			wrong14.append("%s photo %s, texture %s" % [slot, textured, material.albedo_texture != null])
+
+	var leaves14: StandardMaterial3D = Materials.level_surface(&"leaves")
+	var cut14: bool = leaves14.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR or Materials.photo(&"leaves") == null
+	_check("G14 the level is drawn in its slots' level materials, mapped to the world at each slot's size, photo or flat colour, leaves cut out",
+		wrong14.is_empty() and cut14 and drawn14.size() >= 8, "%s, leaves cut %s, materials %d" % [wrong14, cut14, drawn14.size()])
 
 	# G6 lightning through the stained glass: the chapel's shafts of light
 	# flare with a flash and die back after it

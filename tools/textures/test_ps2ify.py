@@ -68,6 +68,16 @@ class Ps2ifyTest(unittest.TestCase):
         out = ps2ify.convert(image, recipe(alpha="threshold"))
         self.assertTrue(set(np.unique(np.asarray(out.convert("RGBA"))[:, :, 3])) <= {0, 255})
 
+    def test_luma_alpha(self):
+        # Leaves photographed without a mask: the dark gaps between them are
+        # cut out by brightness (the card shows through there).
+        pixels = np.full((64, 64, 3), 20, dtype=np.uint8)
+        pixels[16:48, 16:48] = (90, 140, 60)
+        out = np.asarray(ps2ify.convert(Image.fromarray(pixels, "RGB"), recipe(size=[64, 64], alpha="luma", threshold=50)).convert("RGBA"))
+        self.assertEqual(out[2, 2, 3], 0)
+        self.assertEqual(out[32, 32, 3], 255)
+        self.assertTrue(set(np.unique(out[:, :, 3])) <= {0, 255})
+
     def test_crop(self):
         pixels = np.zeros((200, 200, 3), dtype=np.uint8)
         pixels[:100, :100] = (230, 20, 20)

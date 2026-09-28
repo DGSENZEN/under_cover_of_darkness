@@ -17,8 +17,8 @@ const SLOTS := {
 	&"chain": {"photo": "chain", "colour": Color("33302C"), "metallic": 0.35, "roughness": 0.85},
 	&"wood_old": {"photo": "wood_old", "colour": Color("4A3524"), "metallic": 0.0, "roughness": 0.85},
 	&"bark": {"photo": "bark", "colour": Color("3D2E22"), "metallic": 0.0, "roughness": 0.85},
-	&"stone": {"photo": "stone_rubble", "colour": Color("5E5A55"), "metallic": 0.0, "roughness": 0.85},
-	&"ashlar": {"photo": "stone_ashlar", "colour": Color("6B665F"), "metallic": 0.0, "roughness": 0.85},
+	&"stone": {"photo": "stone_rubble", "colour": Color("5E5A55"), "metallic": 0.0, "roughness": 0.85, "tile": 2.0},
+	&"ashlar": {"photo": "stone_ashlar", "colour": Color("6B665F"), "metallic": 0.0, "roughness": 0.85, "tile": 2.0},
 	&"pitch": {"photo": "", "colour": Color("17110D"), "metallic": 0.0, "roughness": 0.85},
 	&"brass": {"photo": "", "colour": Color("8C6A35"), "metallic": 0.35, "roughness": 0.85},
 	&"clay": {"photo": "", "colour": Color("8A5236"), "metallic": 0.0, "roughness": 0.85},
@@ -26,21 +26,39 @@ const SLOTS := {
 	&"horn": {"photo": "", "colour": Color("C8964B"), "metallic": 0.0, "roughness": 0.85},
 	&"char": {"photo": "", "colour": Color("1C1714"), "metallic": 0.0, "roughness": 0.85},
 	&"coal": {"photo": "", "colour": Color("2B1A12"), "metallic": 0.0, "roughness": 0.85},
-	# The level kit's (tools/level): walls, floors, roofs, dressing.
-	&"plaster": {"photo": "plaster", "colour": Color("7A7163"), "metallic": 0.0, "roughness": 0.9},
-	&"timber": {"photo": "timber", "colour": Color("3E2C1E"), "metallic": 0.0, "roughness": 0.85},
-	&"cobble": {"photo": "cobble", "colour": Color("4E4B46"), "metallic": 0.0, "roughness": 0.9},
-	&"flagstone": {"photo": "flagstone", "colour": Color("5C5852"), "metallic": 0.0, "roughness": 0.9},
-	&"boards": {"photo": "boards", "colour": Color("4D3825"), "metallic": 0.0, "roughness": 0.85},
-	&"slate": {"photo": "slate", "colour": Color("2B2D33"), "metallic": 0.0, "roughness": 0.8},
-	&"grass": {"photo": "grass", "colour": Color("2E3A20"), "metallic": 0.0, "roughness": 0.95},
-	&"mud": {"photo": "mud", "colour": Color("3A2E20"), "metallic": 0.0, "roughness": 0.9},
-	&"gravel": {"photo": "gravel", "colour": Color("55514B"), "metallic": 0.0, "roughness": 0.95},
+	# The level kit's (tools/level): walls, floors, roofs, dressing. "tile":
+	# drawn mapped to the world, one photo every so many metres (level_surface).
+	&"plaster": {"photo": "plaster", "colour": Color("7A7163"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	&"plaster_damaged": {"photo": "plaster_damaged", "colour": Color("736A5C"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	&"timber": {"photo": "timber", "colour": Color("3E2C1E"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
+	&"cobble": {"photo": "cobble", "colour": Color("4E4B46"), "metallic": 0.0, "roughness": 0.9, "tile": 1.5},
+	&"flagstone": {"photo": "flagstone", "colour": Color("5C5852"), "metallic": 0.0, "roughness": 0.9, "tile": 2.0},
+	&"boards": {"photo": "boards", "colour": Color("4D3825"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
+	&"slate": {"photo": "slate", "colour": Color("2B2D33"), "metallic": 0.0, "roughness": 0.8, "tile": 1.5},
+	&"roof_clay": {"photo": "roof_clay", "colour": Color("6A3A28"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
+	&"grass": {"photo": "grass", "colour": Color("2E3A20"), "metallic": 0.0, "roughness": 0.95, "tile": 3.0},
+	&"mud": {"photo": "mud", "colour": Color("3A2E20"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0},
+	&"gravel": {"photo": "gravel", "colour": Color("55514B"), "metallic": 0.0, "roughness": 0.95, "tile": 2.0},
+	&"stone_moss": {"photo": "stone_moss", "colour": Color("4F5244"), "metallic": 0.0, "roughness": 0.9, "tile": 2.0},
+	&"wood_studded": {"photo": "wood_studded", "colour": Color("3A2A1E"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
 	&"carpet": {"photo": "carpet", "colour": Color("5E1712"), "metallic": 0.0, "roughness": 0.95},
-	&"leaves": {"photo": "leaves", "colour": Color("1F2B16"), "metallic": 0.0, "roughness": 0.95},
+	&"leaves": {"photo": "leaves", "colour": Color("1F2B16"), "metallic": 0.0, "roughness": 0.95, "cut": true},
 	&"straw": {"photo": "", "colour": Color("8A7238"), "metallic": 0.0, "roughness": 0.95},
 	&"cloth": {"photo": "", "colour": Color("6E1414"), "metallic": 0.0, "roughness": 0.95},
 	&"glass_lit": {"photo": "", "colour": Color("FFB765"), "metallic": 0.0, "roughness": 0.4},
+	# Photos drawn on a piece's own face (its UVs): the chapel's glass, reliefs,
+	# arcade and bands; the lane's house fronts; shutters.
+	&"stained_glass": {"photo": "stained_glass", "colour": Color("7A3A2A"), "metallic": 0.0, "roughness": 0.4},
+	&"stained_glass_small": {"photo": "stained_glass_small", "colour": Color("5E6A4A"), "metallic": 0.0, "roughness": 0.4},
+	&"relief_frieze": {"photo": "relief_frieze", "colour": Color("8C8170"), "metallic": 0.0, "roughness": 0.9},
+	&"relief_angels": {"photo": "relief_angels", "colour": Color("8C8170"), "metallic": 0.0, "roughness": 0.9},
+	&"arcade": {"photo": "arcade", "colour": Color("7C766C"), "metallic": 0.0, "roughness": 0.9},
+	&"ornament": {"photo": "ornament", "colour": Color("7C766C"), "metallic": 0.0, "roughness": 0.9},
+	&"facade_1": {"photo": "facade_1", "colour": Color("6A6052"), "metallic": 0.0, "roughness": 0.9},
+	&"facade_2": {"photo": "facade_2", "colour": Color("6A6052"), "metallic": 0.0, "roughness": 0.9},
+	&"facade_3": {"photo": "facade_3", "colour": Color("6A6052"), "metallic": 0.0, "roughness": 0.9},
+	&"facade_4": {"photo": "facade_4", "colour": Color("6A6052"), "metallic": 0.0, "roughness": 0.9},
+	&"shutters": {"photo": "shutters", "colour": Color("6A6458"), "metallic": 0.0, "roughness": 0.9},
 }
 
 const GLOW := preload("res://scripts/Visual/Lights/glow.gdshader")
@@ -52,6 +70,9 @@ const GLOW_LOOK := {
 	&"coal": [0.1, 0.7, 0.9],
 }
 
+## World-mapped slots blend their three projections this sharply (high: a
+## face shows one, as a box-mapped PS2 wall did).
+const TRIPLANAR_SHARPNESS := 8.0
 ## A slot nobody knows is drawn this loud, so it is noticed.
 const UNKNOWN := Color("FF00FF")
 
@@ -61,6 +82,7 @@ static var folder := "res://textures/ps2/"
 static var photo_names := {}
 
 static var _surfaces := {}
+static var _level := {}
 static var _glowing := {}
 static var _warned := {}
 
@@ -92,6 +114,33 @@ static func surface(slot: StringName) -> StandardMaterial3D:
 			push_error("Materials: no slot called '%s'" % slot)
 
 	_surfaces[slot] = material
+	return material
+
+
+## The level's material for `slot` (tools/level's kit, LevelLoader): as
+## surface(), but a slot with a "tile" is mapped to the world, one photo every
+## "tile" metres whichever way the face looks (walls, floors and roofs run on
+## from piece to piece without seams), and a "cut" slot's photo is cut out
+## where it is clear (leaves on a card). Shared per slot.
+static func level_surface(slot: StringName) -> StandardMaterial3D:
+	if _level.has(slot):
+		return _level[slot]
+
+	var material: StandardMaterial3D = surface(slot).duplicate()
+	var entry: Dictionary = SLOTS.get(slot, {})
+
+	if entry.has("tile"):
+		material.uv1_triplanar = true
+		material.uv1_world_triplanar = true
+		material.uv1_triplanar_sharpness = TRIPLANAR_SHARPNESS
+		material.uv1_scale = Vector3.ONE / float(entry["tile"])
+
+	if bool(entry.get("cut", false)) and material.albedo_texture != null:
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+		material.alpha_scissor_threshold = 0.5
+		material.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+	_level[slot] = material
 	return material
 
 
@@ -153,6 +202,7 @@ static func surfaces() -> Array:
 static func clear_cache() -> void:
 	_surfaces.clear()
 	_glowing.clear()
+	_level.clear()
 
 
 static func _photo_name(slot: StringName) -> String:

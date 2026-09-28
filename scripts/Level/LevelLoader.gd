@@ -2,7 +2,8 @@ extends RefCounted
 ## A level made in Blender (tools/level) put together in Godot, from what
 ## `level.sh export` wrote in its folder (res://assets/level/<level>/):
 ##   - each sector's glTF, its surfaces drawn with their slot's shared
-##     material (Materials: the slot's photo, or its flat colour);
+##     level material (Materials.level_surface: the slot's photo mapped to the
+##     world, or its flat colour);
 ##   - a static body for each sector and surface, a box for every collider,
 ##     its meta "surface" what a foot on it sounds like (layer 1: it blocks
 ##     sight and bodies);
@@ -94,7 +95,7 @@ static func _dress(node: Node) -> void:
 			var slot := StringName(material.resource_name) if material != null else &""
 
 			if slot != &"" and Materials.SLOTS.has(slot):
-				mesh_node.set_surface_override_material(i, Materials.surface(slot))
+				mesh_node.set_surface_override_material(i, Materials.level_surface(slot))
 
 	for child in node.get_children():
 		_dress(child)
