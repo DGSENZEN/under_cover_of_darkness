@@ -174,3 +174,32 @@ The garrison's lights are many: the lights-and-fire `LightBudget` (six shadows) 
 - The third camera pass (sub-project 4): the level provides vantages and light set pieces for it.
 - Pacing polish (the murder's build-up, the grief) and the sound pass (sub-project 5).
 - The canal mission's traversal checks, saving and mechanisms.
+
+## 11. References, and what we take from them
+
+Studied on 2026-09-27 at the user's request ("look for references as well to improve the general look"): Gloomwood's store screenshots and its Hightown chapel; The Dark Mod's media page; FILMGRAB stills of Seven Samurai, Throne of Blood and Ran (Kurosawa) and Andrei Rublev (Tarkovsky). Links: store.steampowered.com/app/1150760/Gloomwood, youtube.com/watch?v=u7gNuPdrdpU, thedarkmod.com/media, film-grab.com/2016/09/03/seven-samurai, film-grab.com/2016/09/24/throne-of-blood, film-grab.com/2017/03/04/ran, film-grab.com/2025/06/04/andrei-rublev.
+
+Rules the garrison follows (stage 1 lays them out, stage 2 dresses them):
+
+**Light (Gloomwood, The Dark Mod, Andrei Rublev)**
+1. Light is small and hot: every source has a near-white core and a short, steep falloff; warm pools are separated by real darkness, never by a flat fill.
+2. Lit windows are sparse warm accents on dark fronts, about one in four; the moon tints stone teal-blue, and low shots keep the moon or a lit sky gap in frame.
+3. Candles come in clusters (three to seven) on floors, tables, the altar and window sills.
+4. Coloured light is rare and deliberate: the chapel's glass red and gold, one green lantern in the cellar.
+5. Light from below where it is dramatic: the hearth, the braziers, the candle stands under the chapel reliefs; sparks and embers with it.
+
+**Composition (Kurosawa)**
+6. Symmetry is built in: the gate passage, the chapel nave, the mess hall's long axis and the captain's chamber are symmetric about their centre lines, so a camera on the axis frames them square.
+7. Foreground to frame through: palisade fences, lattice screens, the colonnade's columns, the cart, doorways, hanging banners; the vantage markers stand behind them.
+8. One heraldic colour, crimson, on banners in rows and on the men's cloth, against muted stone and wood.
+9. Fire behind lattices and fences throws silhouettes: a brazier behind a lattice screen in the gate passage, the courtyard fire seen past the cart and woodpile.
+10. Figures small in large dark spaces: tall interiors (the chapel, the mess hall two storeys high at its hearth end) with one pool of light in them.
+
+**Ground and air (Seven Samurai, Andrei Rublev)**
+11. The ground has texture that weather changes: mud patches in the courtyard and outside that darken and shine in rain, puddle hollows, straw, drains; water in frame wherever it can be (puddles, the canal, drips off eaves).
+12. Rain reads as a grey veil that washes out the background so dark figures stand against it (for sub-project 2); mist lies over the ground outside.
+
+**Space (Tarkovsky, Thief)**
+13. Enfilades: doorways in a line through several rooms (the barracks' ground floor, the upper gallery), so a camera can track or look through space after space.
+14. Verticality and clutter: beams, balconies, railings, stairs, stacked roofs, chimneys; low angles up tall fronts.
+15. Every place a fight or a kill can happen has a lighter backdrop somewhere behind it (a lit wall patch, a sky gap, fog, a window), so figures read as silhouettes.
