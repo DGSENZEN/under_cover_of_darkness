@@ -15,6 +15,7 @@ extends CanvasLayer
 ##   AdrenalineView.cut(get_tree(), 0.8, -1.0)  # hurt, from the left
 
 const SHADER := preload("res://scripts/Visual/adrenaline.gdshader")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 ## Beats a minute: a heart working hard.
 const BPM := 84.0
 ## Below this much health the colour starts to go.
@@ -33,6 +34,7 @@ var _hurt := 0.0
 var _hurt_side := 0.0
 var _wounded := 0.0
 var _wounded_shown := 0.0
+var _last_real := -1.0
 
 
 ## A blow landed: every view in the tree jolts. 1 is a heavy one.
@@ -87,7 +89,8 @@ func set_health(fraction: float) -> void:
 ## power blow is being wound up. Call every frame.
 func show_state(fraction: float, primed: bool, delta: float) -> void:
 	# Real time: slow motion slows the world, not your heart or your eyes.
-	var real := delta / maxf(Engine.time_scale, 0.05)
+	var real := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
+	_last_real = TimeFx.real_time()
 	var full := fraction >= 1.0
 	_ready_shown = move_toward(_ready_shown, 1.0 if full else 0.0, delta / (0.6 if full else 0.25))
 	_primed_shown = move_toward(_primed_shown, 1.0 if full and primed else 0.0, delta / 0.15)

@@ -26,6 +26,10 @@ const FLOOR_MASK := 1
 
 var _last := Vector3.INF
 var _owed := 0
+## Where his hips were when the floor was last found, and where it was put:
+## lying still, the floor under him is where it was.
+var _floor_from := Vector3.INF
+var _floor_put := Vector3.INF
 
 
 func _process_modification() -> void:
@@ -61,12 +65,19 @@ func _keep_floor(skeleton: Skeleton3D) -> void:
 
 	if ragdoll == null or not ragdoll.is_limp() or hips < 0 or not skeleton.is_inside_tree():
 		ground.global_position = cloth.PARKED
+		_floor_from = Vector3.INF
 		return
 
 	var at := skeleton.global_transform * skeleton.get_bone_global_pose(hips).origin
+
+	if _floor_from != Vector3.INF and at.distance_to(_floor_from) < 0.01 and ground.global_position.distance_to(_floor_put) < 0.001:
+		return
+
 	var ray := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.3, at + Vector3.DOWN * 2.0, FLOOR_MASK)
 	var hit := skeleton.get_world_3d().direct_space_state.intersect_ray(ray)
 	ground.global_position = (hit.position + Vector3.UP * 0.01) if not hit.is_empty() else cloth.PARKED
+	_floor_from = at
+	_floor_put = ground.global_position
 
 
 ## Started afresh over the next frames, whatever he moved: for whoever puts

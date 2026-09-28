@@ -59,6 +59,8 @@ var model: Node3D
 ## socket name -> its points in the fixture's space.
 var sockets := {}
 var glow_meshes: Array[GeometryInstance3D] = []
+## The glow its meshes were last told while lit (-1: tell them again).
+var _sent_glow := -1.0
 var soot: Decal
 ## A big fire's heat haze (null for other fixtures).
 var haze: MeshInstance3D
@@ -211,6 +213,7 @@ func _build_model() -> void:
 
 				if not glow_meshes.has(drawn):
 					glow_meshes.append(drawn)
+					_sent_glow = -1.0
 					# Lit by its glow, not by its burner (Layers.GLOWING).
 					drawn.layers = Layers.GLOWING
 			else:
@@ -446,8 +449,13 @@ func _process(delta: float) -> void:
 	if lit and not glow_meshes.is_empty():
 		var ratio := clampf(light.light_energy / _made_energy, 0.0, 1.5)
 
-		for mesh in glow_meshes:
-			mesh.set_instance_shader_parameter(&"glow", ratio)
+		# Told only when it has changed enough to see (every call is a trip
+		# to the renderer, for every mesh of every fixture, every frame).
+		if absf(ratio - _sent_glow) > 0.01:
+			_sent_glow = ratio
+
+			for mesh in glow_meshes:
+				mesh.set_instance_shader_parameter(&"glow", ratio)
 
 
 ## A man hurrying past or a door swung near makes a candle shiver.
@@ -507,6 +515,8 @@ func _swing(delta: float) -> void:
 
 
 func _show_lit(state: StringName) -> void:
+	_sent_glow = -1.0
+
 	for mesh in glow_meshes:
 		mesh.set_instance_shader_parameter(&"heat_tint", color)
 

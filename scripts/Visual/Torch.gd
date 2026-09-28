@@ -38,6 +38,7 @@ const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const LightBudget := preload("res://scripts/Visual/Lights/LightBudget.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
 const CRACKLE := "res://audio/ambience/torch_loop.ogg"
 ## Put out: heard this loud (SoundBus, dB), close by only. The ray you use
@@ -145,6 +146,8 @@ var corona_point := Vector3.INF
 ## The Atmosphere makes this fire's embers already (Fire.brazier): none of
 ## its own while there is one.
 var embers_by_atmosphere := false
+## The Atmosphere that sheds them, once found.
+var _atmosphere: Node = null
 ## The main flame's flipbook frame.
 var frame: int:
 	get:
@@ -154,6 +157,7 @@ var _time := 0.0
 var _salt := 0
 var _seeded := false
 var _listen_in := 0.0
+var _last_real := -1.0
 var _crackle_db := CRACKLE_DB
 var _crackle_in := -1.0
 ## How brightly it burns (a brazier burning down: Fire.gd); 1 as made.
@@ -490,7 +494,13 @@ func _near_camera() -> bool:
 
 
 func _atmosphere_embers() -> bool:
-	return embers_by_atmosphere and get_tree().get_first_node_in_group(&"atmosphere") != null
+	if not embers_by_atmosphere:
+		return false
+
+	if _atmosphere == null or not is_instance_valid(_atmosphere) or not _atmosphere.is_inside_tree():
+		_atmosphere = get_tree().get_first_node_in_group(&"atmosphere")
+
+	return _atmosphere != null
 
 
 ## A point up one of its flames (`up` of its height), picked by its dice.
@@ -718,11 +728,12 @@ func flare(amount := 1.0) -> void:
 ## Its crackle: started when you come near enough to hear it (somewhere in
 ## the loop, never in step with another torch), stopped when you leave or it
 ## goes out; dulled and dropped through a wall, eased there so it never jumps.
-func _listen(delta: float) -> void:
+func _listen(_delta: float) -> void:
 	if crackle == null:
 		return
 
-	var real := delta / maxf(Engine.time_scale, 0.05)
+	var real := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
+	_last_real = TimeFx.real_time()
 	_listen_in -= real
 
 	if _listen_in <= 0.0:

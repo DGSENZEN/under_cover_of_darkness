@@ -64,6 +64,9 @@ const GAZE_PITCH := 0.6
 ## A man walking past this near, this fast, catches his eye; a fire this near.
 const PASSER_NEAR := 4.0
 const PASSER_SPEED := 0.8
+## How often he looks round for someone passing (seconds): the one he saw
+## holds his eye in between.
+const PASSER_EVERY := 0.3
 const FIRE_NEAR := 6.0
 ## Gestures from emotes: [clip, seconds] on the upper body.
 const EMOTE_CLIPS := {
@@ -115,6 +118,8 @@ var _noise := FastNoiseLite.new()
 var _seed := 0
 var _since_doing: StringName = &""
 var _since_at := 0.0
+var _passer: CharacterBody3D = null
+var _passer_at := 0.0
 
 
 func _init(p_rig: Node3D) -> void:
@@ -124,6 +129,8 @@ func _init(p_rig: Node3D) -> void:
 	traits = variation(_seed, StringName(guard.get("archetype")), _tag())
 	_noise.seed = _seed
 	_noise.frequency = 0.05
+	# Not every man looks round on the same frame.
+	_passer_at = float(absi(_seed) % 100) / 100.0 * PASSER_EVERY
 	var man: Node3D = rig.man
 	man.set("stride", float(GAIT.get(_tag(), [1.0, 1.0])[1]))
 
@@ -274,14 +281,17 @@ func _gaze_target(state: int) -> Variant:
 		if speaker != null and is_instance_valid(speaker) and speaker.has_method("eye_position"):
 			return speaker.eye_position()
 
-	for other in guard.get_tree().get_nodes_in_group(&"guards"):
-		if other == guard or not (other is CharacterBody3D):
-			continue
+	if _time >= _passer_at:
+		_passer_at = _time + PASSER_EVERY
+		_passer = null
 
-		var body := other as CharacterBody3D
+		for other in guard.get_tree().get_nodes_in_group(&"guards"):
+			if other != guard and other is CharacterBody3D and _passing(other as CharacterBody3D):
+				_passer = other as CharacterBody3D
+				break
 
-		if body.global_position.distance_to(guard.global_position) < PASSER_NEAR and Vector2(body.velocity.x, body.velocity.z).length() > PASSER_SPEED:
-			return body.eye_position() if body.has_method("eye_position") else body.global_position + Vector3.UP * 1.6
+	if _passer != null and is_instance_valid(_passer) and _passing(_passer):
+		return _passer.eye_position() if _passer.has_method("eye_position") else _passer.global_position + Vector3.UP * 1.6
 
 	var doing: StringName = guard.activity() if guard.has_method("activity") else &""
 
@@ -296,6 +306,12 @@ func _gaze_target(state: int) -> Variant:
 				return (mark as Node3D).global_position + Vector3.UP * 2.0
 
 	return null
+
+
+## Someone going by near him, quick enough to look at.
+func _passing(body: CharacterBody3D) -> bool:
+	return body.is_inside_tree() and body.global_position.distance_to(guard.global_position) < PASSER_NEAR \
+		and Vector2(body.velocity.x, body.velocity.z).length() > PASSER_SPEED
 
 
 # ---------------------------------------------------------------------------
