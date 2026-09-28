@@ -22,6 +22,10 @@ extends RefCounted
 ## A place: {"stand": where he goes, "peer": what he looks into as he comes to
 ## it and first thing there (INF: nothing in particular), "kind": &"nook",
 ## &"dark", &"open", &"room" or &"ledge", "door": the door, for a room}.
+##
+## A man sent to search a hunt area (his meta "hunt_area", an AABB: the
+## divided hunt's orders) looks only inside it: places outside it are passed
+## over, and where he searches round is somewhere in it (area_centre).
 
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 
@@ -81,6 +85,14 @@ const LEDGE_WEIGHT := 0.4
 const AHEAD_ONLY := 0.3
 ## A place searched is left alone this near it (m).
 const SEARCHED_NEAR := 3.0
+## Where a man searches round in his hunt area: of its hiding places and
+## doorways, one of the best few: well clear of what has been searched (up to
+## AREA_CLEAR m counts), not far to go (AREA_FAR_COST a metre), a little
+## chance.
+const AREA_CHOICES := 3
+const AREA_CLEAR := 12.0
+const AREA_FAR_COST := 0.15
+const AREA_JITTER := 2.0
 ## Of the best places, this many at most are tried for a way there.
 const REACH_TRIES := 6
 
@@ -165,12 +177,67 @@ static func _weigh(places: Array, place: Dictionary, guard: Node3D, centre: Vect
 		return
 
 	var stand: Vector3 = place["stand"]
+
+	if not in_area(guard, stand):
+		return
+
 	var ahead := _ahead(way, centre, stand)
 
 	if ahead_only and ahead < AHEAD_ONLY:
 		return
 
 	places.append([float(place["score"]) + ahead * AHEAD_WEIGHT - FAR_COST * guard.global_position.distance_to(stand) + randf() * JITTER, place])
+
+
+## The ground `guard` was sent to search (his "hunt_area"), or an empty box:
+## anywhere.
+static func area_of(guard: Node) -> AABB:
+	return guard.get_meta(&"hunt_area", AABB()) if guard != null else AABB()
+
+
+static func has_area(guard: Node) -> bool:
+	return area_of(guard).has_volume()
+
+
+## Whether `point` is on `guard`'s ground (anywhere is, if he has none).
+static func in_area(guard: Node, point: Vector3) -> bool:
+	var area := area_of(guard)
+	return not area.has_volume() or area.grow(0.25).has_point(point)
+
+
+## Somewhere in `guard`'s hunt area to search round: of its hiding places and
+## the doorways in it, one of the AREA_CHOICES best (clear of anywhere
+## `searched`, near him); its middle on the navmesh if it has neither.
+static func area_centre(guard: Node3D, searched: Array) -> Vector3:
+	var area := area_of(guard)
+	var map: RID = guard.get_world_3d().navigation_map
+	var choices: Array = []
+
+	for node in guard.get_tree().get_nodes_in_group(&"hide_spot"):
+		choices.append((node as Node3D).global_position)
+
+	for node in guard.get_tree().get_nodes_in_group(&"doors"):
+		if node.has_method("doorway"):
+			choices.append(node.doorway())
+
+	var scored: Array = []
+
+	for point in choices:
+		if not area.has_point(point):
+			continue
+
+		var clear := INF
+
+		for done in searched:
+			clear = minf(clear, (point as Vector3).distance_to(done))
+
+		scored.append([minf(clear, AREA_CLEAR) - guard.global_position.distance_to(point) * AREA_FAR_COST + randf() * AREA_JITTER, point])
+
+	if scored.is_empty():
+		return NavigationServer3D.map_get_closest_point(map, area.get_center())
+
+	scored.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) > float(b[0]))
+	return NavigationServer3D.map_get_closest_point(map, scored[randi() % mini(AREA_CHOICES, scored.size())][1])
 
 
 ## Whether a man at `start` has a way along the navmesh to `to`.

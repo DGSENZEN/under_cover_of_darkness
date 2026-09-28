@@ -1656,11 +1656,17 @@ func search_spot_for(guard: Node3D) -> Dictionary:
 	var heading := going.normalized() if going.length() > 0.5 and _flat(centre, seen) < 3.0 else Vector3.ZERO
 	var map: RID = guard.get_world_3d().navigation_map
 
+	# Sent to search a hunt area (the divided hunt): his piece of it, round
+	# somewhere in it if where you were is not.
+	if not SearchSpotsScript.in_area(guard, centre):
+		centre = SearchSpotsScript.area_centre(guard, _searched_since_seen())
+		heading = Vector3.ZERO
+
 	if heading != Vector3.ZERO and _guile(guard) >= PATIENT_GUILE:
 		var ahead := seen + heading * CUT_OFF + heading.cross(Vector3.UP) * randf_range(-2.0, 2.0)
 		var cut_off := NavigationServer3D.map_get_closest_point(map, ahead)
 
-		if _flat(cut_off, ahead) <= 2.0:
+		if _flat(cut_off, ahead) <= 2.0 and SearchSpotsScript.in_area(guard, cut_off):
 			_claims[id] = cut_off
 			var t := _temper_of(guard)
 
@@ -1766,7 +1772,8 @@ func _door_to_hold(guard: Node3D) -> Dictionary:
 		var guess := doorway - into.normalized() * HOLD_BACK
 		var stand := NavigationServer3D.map_get_closest_point(map, guess)
 
-		if _flat(stand, guess) > 1.0:
+		# (Not a door off the ground he was sent to search.)
+		if _flat(stand, guess) > 1.0 or not SearchSpotsScript.in_area(guard, stand):
 			continue
 
 		room["held_by"] = own

@@ -1092,6 +1092,10 @@ func _show_activity(now: float) -> bool:
 		&"kneel_up":
 			man.show_action(&"Fixing_Kneeling", minf(KNEEL_UP + since, man.action_length(&"Fixing_Kneeling") - 0.02), 0.15)
 			return true
+		&"pray":
+			# On his knees at a pew, still (his head bowed: Guard._update_head).
+			man.show_action(&"Fixing_Kneeling", KNEEL_DOWN, 0.3)
+			return true
 		&"set_down":
 			# The reach played back: set down before him.
 			man.show_action(&"PickUp_Table", maxf(man.action_length(&"PickUp_Table") - since, 0.0), 0.2)

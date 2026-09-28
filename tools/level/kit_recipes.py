@@ -145,6 +145,18 @@ _postern = [box(-1.3, CURTAIN_HEIGHT / 2.0, 0.0, 1.4, CURTAIN_HEIGHT, CURTAIN_DE
 piece("curtain_postern_4", "curtain", "ashlar", "stone", _postern + _curtain(4.0)[1:],
       size=[4.0, CURTAIN_HEIGHT + PARAPET, CURTAIN_DEPTH], opening=list(DOOR))
 
+# A breach: a curtain segment whose parapet has fallen in the middle (a gap
+# of BREACH over the outer face, its stones lying on the walk's inner edge).
+BREACH = 2.0
+_breach = [box(0.0, CURTAIN_HEIGHT / 2.0, 0.0, 4.0, CURTAIN_HEIGHT, CURTAIN_DEPTH, "ashlar")]
+
+for side in (-1.0, 1.0):
+    _breach.append(box(side * (BREACH / 2.0 + 0.5), CURTAIN_HEIGHT + PARAPET / 2.0, CURTAIN_DEPTH / 2.0 - 0.25, 1.0, PARAPET, 0.5, "ashlar"))
+    _breach.append(box(side * (BREACH / 2.0 + 0.2), CURTAIN_HEIGHT + 0.15, CURTAIN_DEPTH / 2.0 - 0.3, 0.5, 0.3, 0.4, "stone", side * 20.0))
+
+_breach.append(box(0.3, CURTAIN_HEIGHT + 0.12, -CURTAIN_DEPTH / 2.0 + 0.3, 0.45, 0.24, 0.35, "stone", 35.0))
+piece("curtain_breach_4", "curtain", "ashlar", "stone", _breach, size=[4.0, CURTAIN_HEIGHT + PARAPET, CURTAIN_DEPTH])
+
 piece("curtain_corner", "curtain", "ashlar", "stone",
       [box(0.0, CURTAIN_HEIGHT / 2.0, 0.0, CURTAIN_DEPTH, CURTAIN_HEIGHT, CURTAIN_DEPTH, "ashlar"),
        box(0.0, CURTAIN_HEIGHT + PARAPET / 2.0, 0.0, CURTAIN_DEPTH, PARAPET, CURTAIN_DEPTH, "ashlar")],
@@ -283,6 +295,14 @@ _thing("railing_2", "timber", "wood", [box(0.0, 1.0, 0.0, 2.0, 0.08, 0.08, "timb
                                        box(0.95, 0.5, 0.0, 0.08, 1.0, 0.08, "timber")])
 _thing("balcony_2", "boards", "wood", [box(0.0, -0.1, 0.6, 2.0, 0.2, 1.2, "boards"), box(0.0, 0.9, 1.15, 2.0, 0.08, 0.08, "timber")])
 _thing("window_lit", "glass_lit", "stone", [box(0.0, 1.55, 0.0, 0.85, 1.25, 0.05, "glass_lit")], solid=False)
+# A lean-to against a wall's outer face (its back on local -z): a boarded
+# roof at LEAN_TO_ROOF on two posts, a way down off the wall for the
+# desperate (the navmesh links wall, roof and ground by drops).
+LEAN_TO_ROOF = 2.5
+_thing("lean_to_4", "boards", "wood", [box(0.0, LEAN_TO_ROOF - 0.06, 0.0, 4.0, 0.12, 2.6, "slate"),
+                                       box(-1.85, (LEAN_TO_ROOF - 0.12) / 2.0, 1.15, 0.2, LEAN_TO_ROOF - 0.12, 0.2, "timber"),
+                                       box(1.85, (LEAN_TO_ROOF - 0.12) / 2.0, 1.15, 0.2, LEAN_TO_ROOF - 0.12, 0.2, "timber"),
+                                       box(0.0, LEAN_TO_ROOF - 0.25, 1.15, 4.0, 0.2, 0.2, "timber")])
 
 # A ramp of ground: the bank, a slope up `rise` over `run`.
 for rise, run in ((1.0, 4.0), (2.0, 8.0)):

@@ -20,6 +20,10 @@ const LEVEL := "res://assets/level/garrison"
 const ARCHETYPES := {"watchman": &"", "arms_master": &"trainer"}
 ## Where the air's leaves blow (Atmosphere: centred on the origin).
 const GROUNDS := Vector2(60.0, 52.0)
+## Lightning through the chapel's glass: its shafts of light flare this many
+## times their own and die back over this long (s).
+const GLASS_FLARE := 7.0
+const GLASS_FADE := 0.9
 
 var level: LevelLoader.Level = null
 ## Every door by its marker's name.
@@ -208,6 +212,7 @@ func _garrison_lights() -> void:
 	var mist: Array[AABB] = [AABB(Vector3(-46, -0.5, -46), Vector3(92, 3.0, 92))]
 	night.mist_boxes = mist
 	add_child(night)
+	night.flashed.connect(_lightning_through_glass)
 
 	for body in level.root.find_children("*", "MeshInstance3D", true, false):
 		for i in (body as MeshInstance3D).get_surface_override_material_count():
@@ -273,9 +278,22 @@ func _light(m: Dictionary) -> void:
 			shaft.spot_angle = 12.0
 			shaft.light_volumetric_fog_energy = 3.0
 			shaft.shadow_enabled = false
+			shaft.set_meta(&"calm", shaft.light_energy)
+			shaft.add_to_group(&"glass_shafts")
 			add_child(shaft)
 			shaft.global_position = at.origin
 			shaft.global_basis = Basis.looking_at(Vector3(0.62, -0.5, 0.6).normalized(), Vector3.UP)
+
+
+## A flash outside (Night): the chapel's shafts of light flare through the
+## glass and die back.
+func _lightning_through_glass() -> void:
+	for shaft in get_tree().get_nodes_in_group(&"glass_shafts"):
+		var light := shaft as Light3D
+		var calm := float(light.get_meta(&"calm", light.light_energy))
+		light.light_energy = calm * GLASS_FLARE
+		var fade := light.create_tween()
+		fade.tween_property(light, "light_energy", calm, GLASS_FADE).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 
 
 # ---------------------------------------------------------------------------
@@ -329,15 +347,15 @@ func _night() -> void:
 	rota = NightRotaScript.setup(self, HOUR, &"early")
 	rota.post_turn = POST_TURN
 	rota.wants_rest = false
+	# The colonnade's post (Hendrik's at the start of the night; the watch
+	# changes there: ShowNight), the rounds, the bench and the bed.
 	var post: Dictionary = level.get_marker("Hendrik")
-	rota.add_duty(&"postern", &"post", {"transform": post["transform"]})
+	rota.add_duty(&"colonnade", &"post", {"transform": post["transform"]})
 	rota.add_duty(&"yard_round", &"round", {"route": (_routes["yard_round"] as Node).get_path()})
 	rota.add_duty(&"wall_round", &"round", {"route": (_routes["wall_round"] as Node).get_path()})
 	rota.add_duty(&"bench", &"bench", {"paths": [(_stations["sit_bench"] as Node).get_path()]})
 	rota.add_duty(&"bed", &"bed", {"paths": [(_stations["sleep_tam"] as Node).get_path()]})
-	var colonnade: Vector3 = marks.get("colonnade_post", Vector3.ZERO)
-	rota.add_duty(&"colonnade", &"post", {"transform": Transform3D(Basis(Vector3.UP, PI * 0.5), colonnade)})
-	var duties := {"Hendrik": &"postern", "Wat": &"wall_round", "Jory": &"bench", "Tam": &"bed"}
+	var duties := {"Hendrik": &"colonnade", "Wat": &"wall_round", "Jory": &"bench", "Tam": &"bed"}
 
 	for name in duties:
 		var man: Node = cast.get(name)

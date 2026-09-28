@@ -26,6 +26,10 @@ const SIT_DOWN := 1.6
 const STAND_UP := 1.3
 const LIE_DOWN := 1.5
 const WAKE := 1.5
+## Down onto his knees at a pew and up off them (GuardRig: Fixing_Kneeling,
+## down by its KNEEL_DOWN, up from its KNEEL_UP).
+const KNEEL_DOWN := 1.35
+const KNEEL_RISE := 1.2
 ## A chest's lid, up or down; a crate lifted or set down (s).
 const LID := 0.9
 const LIFT := 1.0
@@ -64,6 +68,15 @@ const RUMMAGE_LINES := [
 ]
 ## The lid banged shut: how loud.
 const LID_BANG_DB := 50.0
+## At prayer: a line murmured this often (s), from these.
+const PRAY_EVERY := Vector2(7.0, 14.0)
+const PRAY_LINES := [
+	"...and keep us through the dark hours...",
+	"...forgive us, as we forgive...",
+	"...watch over the gate, and the men on it...",
+	"...deliver us from what walks at night...",
+	"...for mine is the watch, and the watch is long...",
+]
 
 enum Step { NONE, GOING, ENTER, DOING, EXIT }
 
@@ -274,6 +287,8 @@ func _leave_station() -> void:
 
 	if kind == &"sit" and (_step == Step.ENTER or _step == Step.DOING):
 		_begin(Step.EXIT, &"stand_up", STAND_UP)
+	elif kind == &"pray" and (_step == Step.ENTER or _step == Step.DOING):
+		_begin(Step.EXIT, &"kneel_up", KNEEL_RISE)
 	elif kind == &"sleep" and (_step == Step.ENTER or _step == Step.DOING):
 		# Got up at nobody's alarm: he sighs, waking.
 		_begin(Step.EXIT, &"wake", WAKE)
@@ -342,6 +357,10 @@ func stir() -> void:
 
 		if kind == &"sleep" and (_step == Step.ENTER or _step == Step.DOING):
 			_begin(Step.EXIT, &"wake", WAKE)
+			return
+
+		if kind == &"pray" and (_step == Step.ENTER or _step == Step.DOING):
+			_begin(Step.EXIT, &"kneel_up", KNEEL_RISE)
 			return
 
 	_step = Step.NONE
@@ -417,7 +436,8 @@ func _settle(station: Node3D, delta: float) -> void:
 	guard._face(station.facing(), delta, 2.0)
 
 
-## Sit, eat, sleep, lean, chop: there, and at it until something stirs him.
+## Sit, eat, sleep, lean, chop, pray: there, and at it until something stirs
+## him.
 func _stay(station: Node3D, delta: float) -> void:
 	var kind := StringName(station.kind)
 
@@ -430,6 +450,8 @@ func _stay(station: Node3D, delta: float) -> void:
 				_begin(Step.ENTER, &"sit_down", SIT_DOWN)
 			&"sleep":
 				_begin(Step.ENTER, &"lie_down", LIE_DOWN)
+			&"pray":
+				_begin(Step.ENTER, &"kneel_down", KNEEL_DOWN)
 			&"eat":
 				_begin(Step.DOING, &"")
 				_next_at = randf_range(EAT_EVERY.x, EAT_EVERY.y) * 0.5
@@ -441,8 +463,8 @@ func _stay(station: Node3D, delta: float) -> void:
 
 	if _step == Step.ENTER:
 		if _t >= _length:
-			_begin(Step.DOING, &"sleep" if kind == &"sleep" else &"sit")
-			_next_at = randf_range(EAT_EVERY.x, EAT_EVERY.y)
+			_begin(Step.DOING, {&"sleep": &"sleep", &"pray": &"pray"}.get(kind, &"sit"))
+			_next_at = randf_range(PRAY_EVERY.x, PRAY_EVERY.y) * 0.5 if kind == &"pray" else randf_range(EAT_EVERY.x, EAT_EVERY.y)
 
 		return
 
@@ -474,6 +496,14 @@ func _stay(station: Node3D, delta: float) -> void:
 			# (Set to watch, his eyes sweep his ground as he leans: Guard's
 			# own head does that at his ease.)
 			_activity = &"lean"
+		&"pray":
+			# On his knees, his head bowed (Guard._update_head): a line
+			# murmured now and then, nobody's conversation.
+			_activity = &"pray"
+
+			if _t >= _next_at:
+				_next_at = _t + randf_range(PRAY_EVERY.x, PRAY_EVERY.y)
+				guard.speak(PRAY_LINES[randi() % PRAY_LINES.size()], &"murmur", [], 3.0)
 
 
 ## Rummage: lid up, a look through it (a line muttered), lid down, the next.

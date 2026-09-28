@@ -93,6 +93,8 @@ const FOLLOW_THROUGH := 3.0
 ## In a fight his eyes go up and down after you (on a wall, up a ladder), up
 ## to this far (rad) from level.
 const LOOK_PITCH := 1.1
+## At prayer, his head bowed this far (rad).
+const PRAY_BOW := -0.55
 ## A man set to watch is on his post within POST_NEAR of it. There he keeps
 ## it, while there are friends of his within POST_FRIENDS to do the walking:
 ## what he sees or hears he watches from up there, and sends the nearest of
@@ -1385,7 +1387,8 @@ func say(situation: StringName, chance := 1.0) -> void:
 ## "rise", "rise_knees": GuardMercy), his own ways (GuardHabits: "sit",
 ## "sit_talk", "doze", "sit_down", "stand_up", "stand_up_quick", "lean",
 ## "rail", "reach", "eat", "chop", "kneel_down", "tend", "kneel_up", "carry",
-## "set_down", "fold_arms", "drink", "nod", "shake", "dance"), "talk",
+## "set_down", "fold_arms", "drink", "nod", "shake", "dance"; at a station,
+## GuardRota's too, "pray" among them), "talk",
 ## "listen" ("nod", "shake": GuardLife), "lantern", "call", or "".
 func activity() -> StringName:
 	var crossing: StringName = _climb.activity() if _climb != null else &""
@@ -3206,7 +3209,8 @@ func _do_search(delta: float) -> void:
 	# breaking off his look; and not giving up while word of you keeps
 	# coming. (Not the hunt's watcher: his place is his vantage, whatever the
 	# others go to.)
-	if _since_stimulus < 0.1 and has_last_known and not _watching:
+	# (Sent to search a hunt area: word from outside it is another group's.)
+	if _since_stimulus < 0.1 and has_last_known and not _watching and SearchSpotsScript.in_area(self, last_known_position):
 		var from := _look_from(last_known_position)
 		_search_left = maxi(_search_left, HOT_POINTS)
 
@@ -3226,9 +3230,11 @@ func _do_search(delta: float) -> void:
 			_searched_here()
 			_search_left -= 1
 
-			if _search_left <= 0:
+			# Sent to search a hunt area, he keeps at it until called off.
+			if _search_left <= 0 and not SearchSpotsScript.has_area(self):
 				_give_up()
 			else:
+				_search_left = maxi(_search_left, 1)
 				_next_search_point()
 
 		return
@@ -3357,7 +3363,7 @@ func _next_search_point() -> void:
 	# The hunt's watcher: to his vantage, for a long look from it.
 	var watch: Variant = _fighter.squad.watch_point_for(self) if _fighter != null and _fighter.squad != null else null
 
-	if watch is Vector3:
+	if watch is Vector3 and SearchSpotsScript.in_area(self, watch):
 		_watching = true
 		_go_to(watch, true)
 		return
@@ -3378,9 +3384,15 @@ func _next_search_point() -> void:
 		_search_at(shared)
 		return
 
-	# Alone: the likeliest place round where he thinks you are.
+	# Alone: the likeliest place round where he thinks you are (sent to
+	# search a hunt area, round somewhere in it if that is not).
 	var center := last_known_position if has_last_known else global_position
-	var heading := _likely_heading()
+	var sent := SearchSpotsScript.has_area(self)
+
+	if sent and not SearchSpotsScript.in_area(self, center):
+		center = SearchSpotsScript.area_centre(self, _searched_points())
+
+	var heading := _likely_heading() if not sent or SearchSpotsScript.in_area(self, last_known_position) else Vector3.ZERO
 	var own := SearchSpotsScript.pick(self, center, Vector3(heading.x, 0.0, heading.z), search_radius, [], 0.0, _searched_points())
 
 	if not own.is_empty():
@@ -3388,6 +3400,11 @@ func _next_search_point() -> void:
 		return
 
 	var map := get_world_3d().navigation_map
+
+	if sent:
+		_go_to(SearchSpotsScript.area_centre(self, _searched_points()), true)
+		return
+
 	var angle := randf() * TAU
 	var reach := randf_range(search_radius * 0.4, search_radius)
 	var guess := center + Vector3(cos(angle), 0.0, sin(angle)) * reach
@@ -3934,6 +3951,10 @@ func _update_head(delta: float) -> void:
 			if _habits != null and (_habits.busy() or _habits.dozing()):
 				_head_yaw_goal = _habits.head().x
 
+			# At prayer: straight before him.
+			if _praying():
+				_head_yaw_goal = 0.0
+
 			# Round at someone (GuardLife): the man he talks with, one going
 			# by, one greeting him; as far as his head turns.
 			var regard: Vector3 = _life.regard_direction() if _life != null else Vector3.ZERO
@@ -3969,6 +3990,8 @@ func _update_head(delta: float) -> void:
 		var aim: Vector3 = _target.global_position if can_see_target and _target != null and is_instance_valid(_target) else last_known_position
 		var to := aim - eye_position()
 		pitch_goal = clampf(atan2(to.y, Vector2(to.x, to.z).length()), -LOOK_PITCH, LOOK_PITCH)
+	elif state == Alert.RELAXED and _praying():
+		pitch_goal = PRAY_BOW
 	elif state == Alert.RELAXED and _habits != null:
 		# Up at the sky, out over a rail, down asleep.
 		pitch_goal = _habits.head().y
@@ -3978,6 +4001,11 @@ func _update_head(delta: float) -> void:
 		pitch_goal = clampf(atan2(into.y, Vector2(into.x, into.z).length()), -LOOK_PITCH, LOOK_PITCH)
 
 	_head.rotation.x = lerp_angle(_head.rotation.x, pitch_goal, 1.0 - exp(-6.0 * delta))
+
+
+## On his knees at a pew (GuardRota's "pray"), his head bowed.
+func _praying() -> bool:
+	return _rota != null and _rota.activity() == &"pray"
 
 
 ## His sword and his body show what he is doing: GuardRig.gd.

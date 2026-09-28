@@ -30,10 +30,11 @@ const STATES := {
 	&"cloudy": {"cover": 0.5, "rain": 0.0, "wind": 2.0, "fog": 1.0, "mask": 0.0, "crossings": true, "lightning": false},
 	&"drizzle": {"cover": 0.65, "rain": 0.25, "wind": 2.0, "fog": 1.0, "mask": 3.0, "crossings": false, "lightning": false},
 	&"shower": {"cover": 0.8, "rain": 0.6, "wind": 4.0, "fog": 1.0, "mask": 6.0, "crossings": false, "lightning": false},
+	&"rain": {"cover": 0.9, "rain": 0.8, "wind": 5.5, "fog": 1.1, "mask": 8.0, "crossings": false, "lightning": false},
 	&"storm": {"cover": 0.95, "rain": 1.0, "wind": 8.0, "fog": 1.0, "mask": 10.0, "crossings": false, "lightning": true},
 	&"fog": {"cover": 0.4, "rain": 0.0, "wind": 0.5, "fog": 4.0, "mask": 0.0, "crossings": false, "lightning": false},
 }
-const ORDER := [&"clear", &"cloudy", &"drizzle", &"shower", &"storm", &"fog"]
+const ORDER := [&"clear", &"cloudy", &"drizzle", &"shower", &"rain", &"storm", &"fog"]
 const EASED := ["cover", "rain", "wind", "fog", "mask"]
 
 ## Under full cloud the moon gives this much of its light, the sky's ambient

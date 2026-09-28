@@ -29,15 +29,15 @@ def people(G):
     at_fire = lambda p: facing(p, FIRE)
     G.mark("Mirelle", "guard", (2.6, 0, 0.8), at_fire((2.6, 0, 0.8)), archetype="duelist", temperament="steady", look_seed=11, role="captain")
     G.mark("Osric", "guard", (2.8, 0, 3.4), at_fire((2.8, 0, 3.4)), archetype="swordsman", temperament="steady", look_seed=12)
-    G.mark("Brand", "guard", (-17.2, 0, 17.3), 0.0, "west_range", archetype="brute", temperament="rash", look_seed=13, stations="chop_brand")
+    G.mark("Brand", "guard", (-21.6, 0, 16.4), 90.0, "west_range", archetype="brute", temperament="rash", look_seed=13, stations="chop_brand")
     G.mark("Wat", "guard", (-24.0, WALK, 26.8), 180.0, "walls", archetype="archer", temperament="sly", look_seed=14, route="wall_round")
     G.mark("Aldous", "guard", (-31.0, 12.0, -27.0), 45.0, "tower", archetype="watchman", temperament="stubborn", look_seed=15, lookout=True, role="lookout")
-    G.mark("Hendrik", "guard", (24.0, 0, 24.6), 0.0, archetype="watchman", temperament="steady", look_seed=16, role="postern")
+    G.mark("Hendrik", "guard", (-17.6, 0, -1.5), -90.0, "west_range", archetype="watchman", temperament="steady", look_seed=16, role="colonnade")
     G.mark("Piers", "guard", (0.0, 0, -0.1), 180.0, archetype="watchman", temperament="craven", look_seed=17, stations="sit_piers")
     G.mark("Col", "guard", (22.0, 0, -1.6), 0.0, "barracks", archetype="watchman", temperament="steady", look_seed=18, stations="eat_col")
     G.mark("Tam", "guard", (24.8, 3.0, 13.2), 0.0, "barracks", archetype="watchman", temperament="steady", look_seed=19, stations="sleep_tam")
     G.mark("Gideon", "guard", (-26.0, 0, -12.2), 0.0, "west_range", archetype="watchman", temperament="steady", look_seed=20,
-           stations="chest_0,chest_1,chest_2", role="quartermaster")
+           stations="chest_0,chest_1,chest_2,pray_0", role="quartermaster")
     G.mark("Ned", "guard", (-22.6, 0, 9.4), 0.0, "west_range", archetype="watchman", temperament="craven", look_seed=21, stations="carry_ned",
            role="carrier")
     G.mark("Jory", "guard", (0.0, 0, 4.1), 0.0, archetype="watchman", temperament="steady", look_seed=22, stations="sit_bench")
@@ -58,7 +58,7 @@ def people(G):
         G.mark("chest_%d" % i, "station", (x, 0, z), yaw, "west_range", kind="rummage", chest="chest_box_%d" % i)
 
     G.mark("carry_ned", "station", (-22.6, 0, 9.4), 0.0, "west_range", kind="carry", drop_to="crates_drop")
-    G.mark("chop_brand", "station", (-17.2, 0, 17.3), 0.0, "west_range", kind="chop")
+    G.mark("chop_brand", "station", (-21.6, 0, 16.4), 90.0, "west_range", kind="chop")
     G.mark("lean_walk", "station", (2.0, WALK, 26.9), 180.0, "walls", kind="lean")
     G.mark("pray_0", "station", (9.6, 0, -21.6), -90.0, "chapel", kind="pray")
     G.mark("pray_1", "station", (9.6, 0, -20.0), -90.0, "chapel", kind="pray")
@@ -217,7 +217,8 @@ def hiding(G):
         G.mark("hide_%d" % i, "hide", at, 0.0, sector)
 
     for name, centre, size, label in (
-        ("area_barracks", (12.0, 3.25, -4.0), (36.0, 7.5, 44.0), "the barracks and the chapel"),
+        ("area_barracks", (22.1, 3.25, -4.0), (16.2, 7.5, 44.0), "the barracks"),
+        ("area_chapel", (4.0, 3.25, -21.0), (20.4, 7.5, 10.0), "the chapel"),
         ("area_west", (-23.0, 0.0, 3.0), (16.0, 7.0, 36.0), "the west range and the cellar"),
         ("area_walls", (-1.0, 9.25, 1.0), (68.0, 9.5, 64.0), "the walls and the tower"),
         ("area_courtyard", (-1.0, 1.0, 14.5), (30.0, 4.0, 61.0), "the courtyard and the quay"),
@@ -269,16 +270,16 @@ def story(G):
     for name, at, sector in (
         ("gate", (0.0, 0, 26.0), "gatehouse"), ("gate_out", (0.0, 0, 34.0), "outside"),
         ("postern_post", (24.0, 0, 24.6), "courtyard"),
-        ("wall_foot", (18.0, 0, 30.2), "outside"), ("drop_in", (18.0, WALK, 26.8), "walls"),
+        ("wall_foot", (18.0, 0, 30.2), "outside"), ("drop_in", (-9.0, WALK, 26.8), "walls"),
         ("colonnade_wait", (-18.8, 0, 1.0), "west_range"), ("colonnade_post", (-17.6, 0, -1.5), "west_range"),
-        ("hide", (-28.8, -3.0, 10.4), "cellar"),
+        ("hide", (-28.8, -3.0, 10.4), "cellar"), ("gone_to_ground", (28.4, 0, -24.4), "courtyard"),
         ("sneak_1", (19.2, 0, -16.6), "barracks"), ("sneak_2", (15.3, 3.0, -2.0), "barracks"),
         ("sneak_3", (13.0, 3.0, -17.4), "chapel"), ("chapel_hide", (-4.6, 0, -24.8), "chapel"),
         ("chapel_fight", (2.0, 0, -20.8), "chapel"),
         ("captain_door_at", (15.6, 3.0, -11.6), "barracks"),
         ("escape_stairs", (22.4, 3.0, 16.0), "barracks"), ("escape_door", (13.4, 0, 6.0), "courtyard"),
-        ("escape_climb", (14.0, 0, 24.0), "walls"), ("escape_walk", (10.0, WALK, 26.9), "walls"),
-        ("escape_over", (10.0, 0, 30.6), "outside"), ("canal_edge", (10.0, 0, 43.6), "outside"),
+        ("escape_climb", (14.0, 0, 24.0), "walls"), ("escape_walk", (8.0, WALK, 27.4), "walls"),
+        ("escape_over", (9.0, 0, 32.6), "outside"), ("canal_edge", (10.0, 0, 43.6), "outside"),
         ("canal_swim", (10.0, -1.0, 47.0), "outside"),
         ("courtyard_fight", (0.0, 0, 10.0), "courtyard"), ("gate_passage", (0.0, 0, 27.6), "gatehouse"),
     ):

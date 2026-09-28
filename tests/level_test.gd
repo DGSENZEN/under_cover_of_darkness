@@ -141,6 +141,113 @@ func _garrison() -> void:
 	camera.global_position = Vector3(4, 1.7, -20.8)
 	await _seconds(2.5)
 	_check("G4 the camera in the chapel is in the chapel's grade", level.zones.current == "chapel", "grade %s" % level.zones.current)
+
+	# G6 lightning through the stained glass: the chapel's shafts of light
+	# flare with a flash and die back after it
+	var shafts: Array = get_tree().get_nodes_in_group(&"glass_shafts")
+	var calm6: Array = shafts.map(func(s): return float((s as Light3D).light_energy))
+	map.night.flash()
+	await _frames(3)
+	var lit6: Array = shafts.map(func(s): return float((s as Light3D).light_energy))
+	await _seconds(2.0)
+	var after6: Array = shafts.map(func(s): return float((s as Light3D).light_energy))
+	var flared6 := not shafts.is_empty() and range(shafts.size()).all(func(i): return lit6[i] >= 3.0 * calm6[i] and after6[i] <= calm6[i] * 1.1)
+	_check("G6 a lightning flash flares the chapel's shafts of light through the glass, and they die back after it",
+		flared6, "shafts %d, calm %s, in the flash %s, after %s" % [shafts.size(), calm6, lit6, after6])
+
+	# G7 the story's ways: every leg the intruder runs is on the navmesh end
+	# to end (over the wall and into the canal by the breach and the roof)
+	var legs := [["drop_in", "colonnade_wait"], ["colonnade_post", "gone_to_ground"], ["gone_to_ground", "sneak_1"], ["sneak_1", "sneak_2"],
+		["sneak_2", "sneak_3"], ["sneak_3", "chapel_hide"], ["chapel_fight", "captain_door_at"], ["captain_door_at", "escape_stairs"],
+		["escape_stairs", "escape_door"], ["escape_door", "escape_climb"], ["escape_climb", "escape_walk"], ["escape_walk", "escape_over"],
+		["escape_over", "canal_edge"], ["canal_edge", "canal_swim"], ["captain_door_at", "courtyard_fight"], ["courtyard_fight", "gate_out"]]
+	var broken7 := []
+
+	for leg in legs:
+		if not (map.marks.has(leg[0]) and map.marks.has(leg[1])):
+			broken7.append("%s-%s: no mark" % leg)
+			continue
+
+		var a := NavigationServer3D.map_get_closest_point(nav_map, map.marks[leg[0]])
+		var b := NavigationServer3D.map_get_closest_point(nav_map, map.marks[leg[1]])
+		var way := NavigationServer3D.map_get_path(nav_map, a, b, true)
+
+		if a.distance_to(map.marks[leg[0]]) > 1.0 or b.distance_to(map.marks[leg[1]]) > 1.0 or way.is_empty() or way[way.size() - 1].distance_to(b) > 0.8:
+			broken7.append("%s-%s ends at %s" % [leg[0], leg[1], way[way.size() - 1].snapped(Vector3.ONE * 0.1) if not way.is_empty() else "nowhere"])
+
+	# (Over the wall by the breach and the lean-to's roof, not round by the
+	# postern.)
+	var over7 := NavigationServer3D.map_get_path(nav_map, NavigationServer3D.map_get_closest_point(nav_map, map.marks.get("escape_walk", Vector3.ZERO)),
+		NavigationServer3D.map_get_closest_point(nav_map, map.marks.get("escape_over", Vector3.ZERO)), true)
+	var over_length := 0.0
+
+	for i in range(1, over7.size()):
+		over_length += over7[i - 1].distance_to(over7[i])
+
+	_check("G7 every leg of the intruder's night is a way on the navmesh, over the wall (by the breach) and into the canal too",
+		broken7.is_empty() and over_length > 0.0 and over_length < 12.0, "%s; over the wall %.1f m" % [broken7, over_length])
+
+	# G5 a man at prayer in the chapel: down on his knees, his head bowed, a
+	# murmured line now and then; stirred, he gets up off his knees
+	var gideon: Node3D = map.cast["Gideon"]
+	var gideon_said := []
+	gideon.barked.connect(func(t): gideon_said.append([t, gideon.last_delivery]))
+	gideon._rota.set_stations([map._stations["pray_0"]])
+	var seen5 := {}
+	var bowed5 := [0.0]
+	var frame5 := [0]
+	await _until(func():
+		frame5[0] += 1
+		seen5[StringName(gideon.activity())] = true
+		if StringName(gideon.activity()) == &"pray":
+			bowed5[0] = minf(bowed5[0], gideon._head.rotation.x)
+		return seen5.has(&"pray") and gideon_said.any(func(l): return l[1] == &"murmur" and gideon._rota.PRAY_LINES.has(l[0])) and frame5[0] > 600, 5400)
+	gideon._rota.stir()
+	await _frames(2)
+	var rose5 := StringName(gideon.activity())
+	var at5: float = gideon.global_position.distance_to((map._stations["pray_0"] as Node3D).global_position)
+	_check("G5 a man at prayer kneels at the pew, bows his head and murmurs; stirred, he gets up off his knees",
+		seen5.has(&"kneel_down") and seen5.has(&"pray") and bowed5[0] < -0.3 and gideon_said.any(func(l): return l[1] == &"murmur" and gideon._rota.PRAY_LINES.has(l[0])) and rose5 == &"kneel_up" and at5 < 1.0,
+		"showed %s, head %.2f, said %s, stirred: %s, %.1f m from the pew" % [seen5.keys(), bowed5[0], gideon_said, rose5, at5])
+
+	# G8 the divided hunt's ground: men sent to search a hunt area look only
+	# in it, whatever word comes from outside it, and keep at it
+	var areas8 := {}
+
+	for node in get_tree().get_nodes_in_group(&"hunt_area"):
+		areas8[String(node.name)] = node.get_meta(&"box")
+
+	var sent8 := {"Col": "area_barracks", "Osric": "area_barracks", "Ned": "area_west", "Piers": "area_west"}
+	var spots8 := {}
+	var stray8 := []
+
+	for name in sent8:
+		var man: Node3D = map.cast[name]
+		man.set_meta(&"hunt_area", areas8[sent8[name]])
+		man.last_known_position = Vector3(0, 0, 10)
+		man.has_last_known = true
+		man.alert = 60.0
+		man._set_state(3)
+		spots8[name] = []
+
+	await _until(func():
+		for name in sent8:
+			var man: Node3D = map.cast[name]
+			var spot: Dictionary = man._spot
+			if not spot.is_empty() and not (spots8[name] as Array).has(spot["stand"]):
+				(spots8[name] as Array).append(spot["stand"])
+				if not (areas8[sent8[name]] as AABB).grow(0.3).has_point(spot["stand"]):
+					stray8.append("%s at %s" % [name, (spot["stand"] as Vector3).snapped(Vector3.ONE * 0.1)])
+		return false, 2400)
+	var kept8: bool = sent8.keys().all(func(n): return int((map.cast[n] as Node).state) == 3)
+	var counts8 := {}
+
+	for name in sent8:
+		counts8[name] = (spots8[name] as Array).size()
+
+	_check("G8 men sent to a hunt area search only inside it and keep at it",
+		stray8.is_empty() and kept8 and counts8.values().all(func(c): return int(c) >= 3),
+		"outside their ground %s, still searching %s, places searched %s" % [stray8.slice(0, 6), kept8, counts8])
 	camera.queue_free()
 	map.queue_free()
 	await _frames(3)
@@ -165,6 +272,14 @@ func _seconds(seconds: float) -> void:
 func _frames(n: int) -> void:
 	for i in n:
 		await get_tree().process_frame
+
+
+func _until(cond: Callable, max_frames: int) -> void:
+	for i in max_frames:
+		if cond.call():
+			return
+
+		await get_tree().physics_frame
 
 
 func _check(test_name: String, ok: bool, detail: String) -> void:

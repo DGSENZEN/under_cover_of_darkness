@@ -36,8 +36,13 @@ def curtain():
 
     G.put("curtain_2", (30.0, 0, -27.2), 180.0, "walls")
     # South (outside +z), leaving the gatehouse (x -6..6) and the postern at 24.
-    for x in list(range(-28, -6, 4)) + [8, 12, 16, 20, 28]:
+    for x in list(range(-28, -6, 4)) + [12, 16, 20, 28]:
         G.put("curtain_4", (x, 0, 27.2), 0.0, "walls")
+
+    # A breach in the parapet over a lean-to on the towpath: the way over the
+    # wall for a man with nowhere else to go.
+    G.put("curtain_breach_4", (8.0, 0, 27.2), 0.0, "walls")
+    G.put("lean_to_4", (9.0, 0, 29.7), 0.0, "outside")
 
     G.put("curtain_postern_4", (24.0, 0, 27.2), 0.0, "walls")
     # East (outside +x) and west (outside -x, from the tower south).
@@ -85,7 +90,7 @@ def grounds():
 
     G.put("well", (-8, 0, 12), 0.0, "courtyard")
     G.put("cart", (9, 0, 15), 20.0, "courtyard")
-    G.put("chopping_block", (-17.2, 0, 16.6), 0.0, "west_range")
+    G.put("chopping_block", (-22.3, 0, 16.4), 0.0, "west_range")
     G.put("woodpile", (-24, 0, 18), 0.0, "west_range")
 
     for x in (-4.5, -1.5, 1.5, 4.5):
