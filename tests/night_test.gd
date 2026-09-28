@@ -305,6 +305,20 @@ func _ground() -> void:
 		rising > 0.25 and rising < 0.45 and soaked > 0.99 and absf(dark_stone - 0.35) < 0.01 and absf(sheen - 0.35) < 0.01 and drying > 0.85 and drying < 0.95,
 		"10 s %.2f, 32 s %.2f (stone %.2f, roughness %.2f), 12 s dry %.2f" % [rising, soaked, dark_stone, sheen, drying])
 
+	# G3 a puddle: a foot in it splashes once the ground is wet (0.3), not
+	# before, and not beside it
+	var puddled := _night(&"clear")
+	puddled.puddles = [Vector3(-10, 0.02, 10)] as Array[Vector3]
+	await _frames(2)
+	puddled.wetness = 0.2
+	var damp: bool = puddled.splashes_at(Vector3(-10, 0.0, 10))
+	puddled.wetness = 0.5
+	var wet: bool = puddled.splashes_at(Vector3(-10.4, 0.0, 10.3))
+	var beside: bool = puddled.splashes_at(Vector3(-12.5, 0.0, 10))
+	_check("G3 a foot in a puddle splashes once the ground is wet, not before and not beside it",
+		not damp and wet and not beside, "damp %s, wet %s, beside %s" % [damp, wet, beside])
+	puddled.queue_free()
+
 	# G2 the roof: under the shelter is indoors, the open is not
 	_check("G2 under a roof is indoors, the open yard is not",
 		night.indoors(Vector3(10, 1.0, 0)) and not night.indoors(Vector3(0, 1.0, 0)), "under %s, open %s" % [night.indoors(Vector3(10, 1.0, 0)), night.indoors(Vector3(0, 1.0, 0))])

@@ -3270,8 +3270,13 @@ func _chain_land() -> StringName:
 ## What he stands on ("stone", "wood", ... as the floor's "surface" meta
 ## says; "" when it does not), looked up now and then as he goes.
 func floor_surface() -> String:
-	# Wading: it is water he steps in.
+	# Wading: it is water he steps in; in a puddle after rain (Night), too.
 	if _water != null and _water.water != null and _water.water.depth_of(global_position) > 0.1:
+		return "water"
+
+	var night := get_tree().get_first_node_in_group(&"night")
+
+	if night != null and night.splashes_at(global_position):
 		return "water"
 
 	if _game_time < _floor_checked_at + 0.3:

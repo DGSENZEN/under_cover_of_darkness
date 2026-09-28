@@ -1281,8 +1281,14 @@ func _surface_offset() -> float:
 func _surface_name() -> String:
 	var feet := global_position - Vector3.UP * _standing_height * 0.5
 
-	# In water over the ankles, it is water you step in.
+	# In water over the ankles, it is water you step in; in a puddle after
+	# rain (Night), too.
 	if water != null and water.depth_of(feet) > 0.1:
+		return "water"
+
+	var night := get_tree().get_first_node_in_group(&"night")
+
+	if night != null and night.splashes_at(feet):
 		return "water"
 
 	var under := scanner.ray(feet + Vector3.UP * 0.2, feet - Vector3.UP * 0.4)
