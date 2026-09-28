@@ -2271,6 +2271,39 @@ func _picture() -> void:
 	for b in [subject21, near21]:
 		b.queue_free()
 
+	# P22 a man stepping in front of the lens of a shot just taken: it is cut
+	# away from, but not before 0.9 s (a crowded cut on a new shot is a
+	# stutter), and by 1.6 s
+	var camera22 := Camera3D.new()
+	add_child(camera22)
+	var editor22: Node = CineEditor.new()
+	add_child(editor22)
+	editor22.take_over(camera22)
+	var shots22: Array = []
+	editor22.shot_started.connect(func(shot: Dictionary) -> void: shots22.append(shot))
+	var a22 := _body(Vector3(2900, 0, 0))
+	var b22 := _body(Vector3(2900, -50, 0))
+	editor22.scene({"mode": &"drama", "subjects": [a22]})
+	await _real(2.5)
+	editor22.cut_to(&"medium", [a22])
+	var cut22 := shots22.size()
+	await _real(0.35)
+	var toward22 := CineShot.head_of(a22) - camera22.global_position
+	toward22.y = 0.0
+	b22.global_position = Vector3(camera22.global_position.x, a22.global_position.y, camera22.global_position.z) + toward22.normalized() * 0.75
+	await _real(0.45)
+	var early22 := shots22.size() - cut22
+	await _real(0.8)
+	var late22 := shots22.size() - cut22
+	_check("P22 a man stepping in front of a shot just taken: cut away from, not before 0.9 s, by 1.6 s", early22 == 0 and late22 >= 1,
+		"new shots by 0.8 s %d, by 1.6 s %d" % [early22, late22])
+	editor22.release()
+	editor22.queue_free()
+	camera22.queue_free()
+
+	for b in [a22, b22]:
+		b.queue_free()
+
 	for b in [a1, blocker, a3, speaker4, listener4, man5, other5, a7, b7, a10, b10, a11, b11, a12, man14] + ring9:
 		b.queue_free()
 

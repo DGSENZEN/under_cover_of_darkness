@@ -71,12 +71,13 @@ const FILL_EVERY := 0.1
 ## Another man crossing in front of him is ridden out this long (s), as an
 ## editor lets a passer-by go through a shot.
 const BLOCKED_FOR := 1.4
-## Crowded this long (s): a man in the camera, or stone filling its frame
-## past CROWDED_FILL, and it is a new shot, however young (but not before
-## CROWDED_AGE, so a shot is never cut the frame it is taken).
+## Crowded this long (s): a man in the camera, or stone or a man's back
+## filling its frame past CROWDED_FILL, and it is a new shot, however young
+## (but not before CROWDED_AGE: a crowded cut on a shot just taken is a
+## stutter).
 const CROWDED_FOR := 0.25
 const CROWDED_FILL := 0.45
-const CROWDED_AGE := 0.3
+const CROWDED_AGE := 0.9
 ## From on high over the men: only if nothing is over them this far up (m).
 const OPEN_SKY := 30.0
 ## Men further apart in height than this (m) are on different floors (the
