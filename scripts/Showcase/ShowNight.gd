@@ -190,7 +190,7 @@ func _act_one() -> Dictionary:
 				"until": func() -> bool:
 					var jory := _man("Jory")
 					var rota: Variant = map.get("rota")
-					return jory != null and rota != null and rota.duty_of(jory) == &"postern" and _flat(jory.global_position, map.marks["postern_post"]) < 1.0},
+					return jory != null and rota != null and rota.duty_of(jory) == _post_duty() and _flat(jory.global_position, map.marks[_post_mark()]) < 1.0},
 			_look(&"wall", 8.0, &"observe", ["Wat"]),
 			_look(&"lookout", 7.0, &"observe", ["Aldous"]),
 		],
@@ -239,8 +239,17 @@ func _gatherings() -> RefCounted:
 	return GatheringScript.of(map)
 
 
-## Jumped to a later act: the watch has changed (Jory has the postern,
-## Hendrik is on his rounds), as Act I would have left it.
+## The post the watch changes at (Jory relieves Hendrik there), its mark.
+func _post_duty() -> StringName:
+	return &"postern"
+
+
+func _post_mark() -> String:
+	return "postern_post"
+
+
+## Jumped to a later act: the watch has changed (Jory has the post, Hendrik
+## is on his rounds), as Act I would have left it.
 func _after_the_watch_change() -> void:
 	var rota: Variant = map.get("rota")
 	var jory := _man("Jory")
@@ -258,11 +267,11 @@ func _after_the_watch_change() -> void:
 			hendrik.reset_physics_interpolation()
 
 	if jory != null:
-		rota.assign(jory, &"postern")
+		rota.assign(jory, _post_duty())
 		# Put there once Hendrik has gone from it in the physics too (else
 		# he lands on Hendrik and is carried off with him).
 		var held: WeakRef = weakref(jory)
-		var post: Vector3 = map.marks["postern_post"]
+		var post: Vector3 = map.marks[_post_mark()]
 		map.get_tree().create_timer(0.1, true, true).timeout.connect(func() -> void:
 			var man := held.get_ref() as Node3D
 
@@ -558,10 +567,15 @@ func _escaped() -> bool:
 ## A guard gone after him over the wall: outside it, or in the water.
 func _followed() -> bool:
 	for man in map.get_tree().get_nodes_in_group(&"guards"):
-		if (man as Node3D).global_position.z < -16.6 or bool(man._water.swimming):
+		if man != map.intruder and not man._knocked_out and (_outside((man as Node3D).global_position) or bool(man._water.swimming)):
 			return true
 
 	return false
+
+
+## Outside the walls (the yard's: past its north wall).
+func _outside(at: Vector3) -> bool:
+	return at.z < -16.6
 
 
 func _lost_him() -> bool:
@@ -615,12 +629,24 @@ func subjects(scene: Dictionary) -> Array:
 			found.append_array(_gathered(StringName(String(name).trim_prefix("@gathering:"))))
 			continue
 
+		var more: Variant = _subjects_of(String(name))
+
+		if more != null:
+			found.append_array(more)
+			continue
+
 		var node: Node3D = _intruder() if name == "intruder" else (_nearest() if name == "nearest" else _man(name))
 
 		if node != null:
 			found.append(node)
 
 	return found
+
+
+## The men a subject of a night's own names ("@group:..."), or null: not one
+## of its own.
+func _subjects_of(_subject: String) -> Variant:
+	return null
 
 
 ## The men searching or fighting (the nearest few to the intruder first, if
@@ -853,6 +879,15 @@ static func _flat(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
 
 
+## The weather by the act and by the beat (a night of its own has its own).
+func weather_acts() -> Dictionary:
+	return WEATHER_ACTS
+
+
+func weather_beats() -> Dictionary:
+	return WEATHER_BEATS
+
+
 ## The act's weather, as it begins.
 func weather_act(index: int) -> void:
 	var night: Node = map.get("night")
@@ -860,14 +895,14 @@ func weather_act(index: int) -> void:
 	if night == null:
 		return
 
-	for change in WEATHER_ACTS.get(index, []):
+	for change in weather_acts().get(index, []):
 		night.to(change[0], float(change[1]), float(change[2]))
 
 
 ## The beat's weather, if it has any.
 func weather_beat(beat: StringName) -> void:
 	var night: Node = map.get("night")
-	var change: Dictionary = WEATHER_BEATS.get(beat, {})
+	var change: Dictionary = weather_beats().get(beat, {})
 
 	if night == null or change.is_empty():
 		return

@@ -1,13 +1,16 @@
 extends Node
-## Windowed staging of the NPC showcase: a still of every shot of the night
-## as the Cinema editor takes it, 0.6 s in (the whole night with the escape
-## ending, then Act V again for the other two endings), or the yard at rest
-## (--rest); all put together in sheet.png, each still labelled with its act,
-## its beat, its kind of shot and what cut to it.
+## Windowed staging of the NPC showcase (the garrison; the old yard with
+## --yard): a still of every shot of the night as the Cinema editor takes
+## it, 0.6 s in (the whole night with the escape ending, then the last act
+## again for the other two endings), or the yard at rest (--yard --rest; the
+## garrison's spaces are tests/visual/stage_garrison's); all put together in
+## sheet.png, each still labelled with its act, its beat, its kind of shot
+## and what cut to it.
 ## Not a test (nothing is checked): look at the pictures.
-##   Godot --fixed-fps 60 --resolution 1280x720 --path . res://tests/visual/stage_showcase.tscn -- --out=<dir> [--rest]
+##   Godot --fixed-fps 60 --resolution 1280x720 --path . res://tests/visual/stage_showcase.tscn -- --out=<dir> [--yard] [--rest]
 
-const MAP := preload("res://maps/npc_showcase.tscn")
+const GARRISON := preload("res://maps/garrison.tscn")
+const YARD := preload("res://maps/npc_showcase.tscn")
 const MapScript := preload("res://maps/npc_showcase.gd")
 const DirectorScript := preload("res://scripts/Showcase/ShowDirector.gd")
 
@@ -29,9 +32,12 @@ const CLEAR_AFTER := 1.3
 ## The sheet: each still this big, this many across.
 const THUMB := Vector2i(240, 135)
 const ACROSS := 8
-const ROMAN := ["", "I", "II", "III", "IV", "V"]
+const ROMAN := ["", "I", "II", "III", "IV", "V", "VI"]
 
 var _out := "user://stage_showcase/"
+## The showcase staged, and its last act (the endings').
+var _showcase: PackedScene = GARRISON
+var _last := 6
 var _stills: Array = []
 var _label: Label
 
@@ -44,6 +50,9 @@ func _ready() -> void:
 			_out = arg.trim_prefix("--out=").trim_suffix("/") + "/"
 		elif arg == "--rest":
 			rest = true
+		elif arg == "--yard":
+			_showcase = YARD
+			_last = 5
 
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_out) if _out.begins_with("user://") else _out)
 	AudioServer.set_bus_mute(0, true)
@@ -62,8 +71,8 @@ func _ready() -> void:
 		await _rest()
 	else:
 		await _night(1, &"escape")
-		await _night(5, &"overwhelmed")
-		await _night(5, &"victor")
+		await _night(_last, &"overwhelmed")
+		await _night(_last, &"victor")
 
 	_sheet()
 	print("staged %d stills" % _stills.size())
@@ -75,7 +84,7 @@ func _night(act: int, ending: StringName) -> void:
 	DirectorScript.start_act = act
 	DirectorScript.ending = ending
 	MapScript.run_show = true
-	var map: Node = MAP.instantiate()
+	var map: Node = _showcase.instantiate()
 	add_child(map)
 	await map.ready_to_show
 	var pending := []
@@ -99,7 +108,7 @@ func _night(act: int, ending: StringName) -> void:
 				pending.erase(p)
 
 				if editor.current() == p[2]:
-					await _still("%s %s: %s (%s)%s" % [ROMAN[p[0]], p[1], p[2]["kind"], p[2]["cause"], " [%s]" % ending if p[0] == 5 else ""])
+					await _still("%s %s: %s (%s)%s" % [ROMAN[p[0]], p[1], p[2]["kind"], p[2]["cause"], " [%s]" % ending if p[0] == _last else ""])
 
 	map.queue_free()
 
@@ -112,7 +121,7 @@ func _night(act: int, ending: StringName) -> void:
 
 func _rest() -> void:
 	MapScript.run_show = false
-	var map: Node = MAP.instantiate()
+	var map: Node = _showcase.instantiate()
 	add_child(map)
 	await map.ready_to_show
 

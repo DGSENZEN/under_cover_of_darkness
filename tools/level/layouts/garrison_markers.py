@@ -89,7 +89,6 @@ def doors(G):
         ("north_landing_door", (16.6, 3.0, -17.6), 90.0, "barracks", {}),
         ("captain_door", (16.6, 3.0, -11.6), 90.0, "barracks", {"locked": True, "key": "captain_key", "label": "the captain's door", "barred": True}),
         ("dormitory_door", (16.6, 3.0, 14.0), 90.0, "barracks", {}),
-        ("loft_door", (14.2, 3.0, -18.0), 90.0, "barracks", {"label": "the loft door"}),
         ("chapel_south_door", (2.0, 0, -16.2), 0.0, "chapel", {"label": "the chapel door"}),
         ("chapel_west_door", (-5.8, 0, -20.8), 90.0, "chapel", {}),
         ("armoury_door", (-20.2, 0, -8.0), 90.0, "west_range", {"label": "the armoury door"}),
@@ -218,6 +217,7 @@ def hiding(G):
 
     for name, centre, size, label in (
         ("area_barracks", (22.1, 3.25, -4.0), (16.2, 7.5, 44.0), "the barracks"),
+        ("area_barracks_ground", (22.1, 1.0, -4.0), (16.2, 3.0, 44.0), "the barracks' ground floor"),
         ("area_chapel", (4.0, 3.25, -21.0), (20.4, 7.5, 10.0), "the chapel"),
         ("area_west", (-23.0, 0.0, 3.0), (16.0, 7.0, 36.0), "the west range and the cellar"),
         ("area_walls", (-1.0, 9.25, 1.0), (68.0, 9.5, 64.0), "the walls and the tower"),
@@ -272,8 +272,8 @@ def story(G):
         ("postern_post", (24.0, 0, 24.6), "courtyard"),
         ("wall_foot", (18.0, 0, 30.2), "outside"), ("drop_in", (-9.0, WALK, 26.8), "walls"),
         ("colonnade_wait", (-18.8, 0, 1.0), "west_range"), ("colonnade_post", (-17.6, 0, -1.5), "west_range"),
-        ("hide", (-28.8, -3.0, 10.4), "cellar"), ("gone_to_ground", (28.4, 0, -24.4), "courtyard"),
-        ("sneak_1", (19.2, 0, -16.6), "barracks"), ("sneak_2", (15.3, 3.0, -2.0), "barracks"),
+        ("hide", (-28.8, -3.0, 10.4), "cellar"), ("gone_to_ground", (-11.6, 0, -24.0), "courtyard"),
+        ("sneak_1", (19.2, 0, -16.6), "barracks"), ("sneak_2", (14.8, 3.0, -2.0), "barracks"),
         ("sneak_3", (13.0, 3.0, -17.4), "chapel"), ("chapel_hide", (-4.6, 0, -24.8), "chapel"),
         ("chapel_fight", (2.0, 0, -20.8), "chapel"),
         ("captain_door_at", (15.6, 3.0, -11.6), "barracks"),

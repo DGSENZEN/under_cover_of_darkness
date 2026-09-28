@@ -526,6 +526,8 @@ var _left_post := false
 var _post_blind_for := 0.0
 ## On his way to the bell (_ring_for_fight).
 var _to_bell := false
+## Sent to ring the alarm (send_to_bell), lookout or not.
+var _sent_to_bell := false
 ## Getting about, his life off duty, his hands, and his life at your mercy
 ## (GuardNav, GuardLife, GuardHands, GuardMercy).
 var _nav: RefCounted
@@ -1194,6 +1196,11 @@ func _hear_message(event: Dictionary) -> void:
 
 	var where: Vector3 = message.get("where", from)
 
+	# Sent to search a hunt area: where you were seen off his ground, and the
+	# bell for it, are another group's.
+	if message.get("what", &"") in [&"spotted", &"alarm"] and not SearchSpotsScript.in_area(self, where):
+		return
+
 	match message.get("what", &""):
 		&"spotted":
 			_heard_spotted(message, where)
@@ -1582,7 +1589,11 @@ func shout() -> void:
 
 
 ## One of the hunt has found you again, near enough to hear: he goes there.
+## (Sent to search a hunt area: a find off his ground is another group's.)
 func hear_call(where: Vector3) -> void:
+	if not SearchSpotsScript.in_area(self, where):
+		return
+
 	last_known_position = where
 	has_last_known = true
 	_since_stimulus = 0.0
@@ -1592,8 +1603,11 @@ func hear_call(where: Vector3) -> void:
 
 
 ## Fetched to the hunt by one of his own (Squad.rouse): he knows where they
-## last saw you, and goes.
+## last saw you, and goes (not off the ground he was sent to search).
 func join_hunt(where: Vector3) -> void:
+	if not SearchSpotsScript.in_area(self, where):
+		return
+
 	last_known_position = where
 	has_last_known = true
 	_since_stimulus = 0.0
@@ -2659,6 +2673,11 @@ func _fight_near() -> bool:
 func _ring_for_fight(delta: float) -> bool:
 	var bell: Node3D = Dangers.bell_near(get_tree(), global_position, POST_BELL) if lookout and _fight_near() else null
 
+	# Sent to it: the nearest bell, wherever it is, until it has been rung.
+	if bell == null and _sent_to_bell:
+		bell = Dangers.bell_near(get_tree(), global_position, INF)
+		_sent_to_bell = bell != null
+
 	if bell == null:
 		# Rung (by him or another): to his post, or to them.
 		if _to_bell:
@@ -3371,6 +3390,26 @@ func send_to_search(area: AABB, group: StringName = &"") -> void:
 		_look_timer = 0.0
 		_next_search_point()
 	else:
+		_set_state(Alert.SEARCHING)
+
+
+## Sent to ring the alarm (the captain's word: ShowNight): to the nearest
+## bell at a run, and he rings it; then on with the search.
+func send_to_bell() -> void:
+	_sent_to_bell = true
+
+	if _knocked_out or state == Alert.COMBAT:
+		return
+
+	if not has_last_known:
+		last_known_position = global_position
+		has_last_known = true
+
+	alert = maxf(alert, investigate_at)
+	_since_stimulus = 0.0
+	_stimulus = &"sent"
+
+	if state < Alert.SEARCHING:
 		_set_state(Alert.SEARCHING)
 
 

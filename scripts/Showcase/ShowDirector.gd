@@ -16,7 +16,7 @@ extends Node
 ## "timeout" (s: let go, logged), "scene" (for ShowCamera: whom to watch, and
 ## how)}.
 ##
-## Keys: 1-5 start from that act, N the next beat, V Act V's ending (E is
+## Keys: 1-6 start from that act, N the next beat, V the ending (E is
 ## the camera's: fly up), R the start again, Space pause, [ ] slow motion
 ## (1/4, 1/2, 1). A beat's time is the world's: slowed, it waits longer. The command line (after
 ## --): --act=N --ending=overwhelmed|victor|escape --auto --quit-at-end.
@@ -42,6 +42,8 @@ const ENDINGS := [&"random", &"overwhelmed", &"victor", &"escape"]
 const QUIT_AFTER := 3.0
 ## A beat with no timeout of its own.
 const DEFAULT_TIMEOUT := 30.0
+## The most acts a night has (the garrison's six; the yard's has five).
+const MAX_ACTS := 6
 
 ## Which act the show starts at, and which ending: kept across a reload.
 static var start_act := 1
@@ -83,7 +85,7 @@ func setup(p_map: Node3D, p_story: RefCounted) -> void:
 func read_args(args: PackedStringArray) -> void:
 	for arg in args:
 		if arg.begins_with("--act="):
-			start_act = clampi(int(arg.trim_prefix("--act=")), 1, 5)
+			start_act = clampi(int(arg.trim_prefix("--act=")), 1, MAX_ACTS)
 		elif arg.begins_with("--ending="):
 			var asked := StringName(arg.trim_prefix("--ending="))
 
@@ -140,7 +142,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key := (event as InputEventKey).physical_keycode
 
 	match key:
-		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6:
 			jump_to(key - KEY_0)
 		KEY_N:
 			next_beat()
@@ -164,7 +166,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## forgotten (hunts, the garrison's memory, slowed time, the light cache),
 ## and the showcase is loaded afresh.
 func jump_to(act: int) -> void:
-	start_act = clampi(act, 1, 5)
+	start_act = clampi(act, 1, MAX_ACTS)
 	get_tree().paused = false
 	SquadScript.clear_all()
 	GarrisonScript.clear_all()

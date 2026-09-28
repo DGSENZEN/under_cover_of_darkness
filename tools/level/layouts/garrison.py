@@ -170,7 +170,7 @@ def barracks():
     G.wall((14.2, -20.0), (14.2, 18.0), "plaster", 0.0, s, storeys=1,
            openings={3.0: "window", 8.0: "door", 13.0: "window", 18.0: "window", 22.0: "window", 26.0: "door", 32.0: "window", 36.0: "window"})
     G.wall((14.2, -20.0), (14.2, 18.0), "plaster", 3.0, s, storeys=1,
-           openings={2.0: "door", 8.0: "window", 14.0: "window", 20.0: "window", 26.0: "window", 32.0: "window"})
+           openings={2.6: "door", 8.0: "window", 14.0: "window", 20.0: "window", 26.0: "window", 32.0: "window"})
     G.wall((29.8, -20.0), (29.8, 18.0), "plaster", 0.0, s, storeys=2)
     G.wall((14.0, -19.8), (30.0, -19.8), "plaster", 0.0, s, storeys=2, openings={12.0: "door"})
     G.wall((14.0, 17.8), (30.0, 17.8), "plaster", 0.0, s, storeys=2, openings={8.0: "window"})
@@ -266,7 +266,10 @@ def chapel():
     # the loft's door to the barracks gallery above).
     G.wall((-5.8, -25.6), (-5.8, -16.0), "ashlar", 0.0, s, storeys=1, openings={4.8: "door"})
     G.wall((-5.8, -25.6), (-5.8, -16.0), "ashlar", 3.0, s, storeys=3, openings={4.8: "lancet"})
-    G.wall((13.8, -25.6), (13.8, -16.0), "ashlar", 0.0, s, storeys=4, openings={2.4: "lancet", 5.0: "lancet"})
+    # (Plain behind the altar; above it the lancets, and the loft's way
+    # through to the barracks at 8.2.)
+    G.wall((13.8, -25.6), (13.8, -16.0), "ashlar", 0.0, s, storeys=1)
+    G.wall((13.8, -25.6), (13.8, -16.0), "ashlar", 3.0, s, storeys=3, openings={2.4: "lancet", 5.0: "lancet", 8.2: "door"})
     G.floor(-6, -26, 14, -16, "flag", 0.0, s)
 
     for x in range(-4, 12, 2):

@@ -93,6 +93,8 @@ const AREA_CHOICES := 3
 const AREA_CLEAR := 12.0
 const AREA_FAR_COST := 0.15
 const AREA_JITTER := 2.0
+## Floor anywhere in it tried besides (points on the navmesh in the box).
+const AREA_SAMPLES := 12
 ## Of the best places, this many at most are tried for a way there.
 const REACH_TRIES := 6
 
@@ -205,9 +207,9 @@ static func in_area(guard: Node, point: Vector3) -> bool:
 	return not area.has_volume() or area.grow(0.25).has_point(point)
 
 
-## Somewhere in `guard`'s hunt area to search round: of its hiding places and
-## the doorways in it, one of the AREA_CHOICES best (clear of anywhere
-## `searched`, near him); its middle on the navmesh if it has neither.
+## Somewhere in `guard`'s hunt area to search round: of its hiding places,
+## the doorways and some floor in it, one of the AREA_CHOICES best (clear of
+## anywhere `searched`, near him); its middle on the navmesh if none is.
 static func area_centre(guard: Node3D, searched: Array) -> Vector3:
 	var area := area_of(guard)
 	var map: RID = guard.get_world_3d().navigation_map
@@ -219,6 +221,12 @@ static func area_centre(guard: Node3D, searched: Array) -> Vector3:
 	for node in guard.get_tree().get_nodes_in_group(&"doors"):
 		if node.has_method("doorway"):
 			choices.append(node.doorway())
+
+	# And floor anywhere in it (the walks and a tower top have no hiding
+	# places or doors).
+	for k in AREA_SAMPLES:
+		var guess := area.position + Vector3(randf(), randf(), randf()) * area.size
+		choices.append(NavigationServer3D.map_get_closest_point(map, guess))
 
 	var scored: Array = []
 

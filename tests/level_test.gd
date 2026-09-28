@@ -131,8 +131,8 @@ func _garrison() -> void:
 	# G3 its doors, its lights
 	var doors := get_tree().get_nodes_in_group(&"doors")
 	var torches := get_tree().get_nodes_in_group(&"torches")
-	_check("G3 every door is made (21), and the lights are lit (torches and the rest)",
-		doors.size() == 21 and torches.size() >= 20 and map.fire != null, "doors %d, torches %d, fire %s" % [doors.size(), torches.size(), map.fire != null])
+	_check("G3 every door is made (20), and the lights are lit (torches and the rest)",
+		doors.size() == 20 and torches.size() >= 20 and map.fire != null, "doors %d, torches %d, fire %s" % [doors.size(), torches.size(), map.fire != null])
 
 	# G4 a zone: the camera in the chapel is in its red and gold
 	var camera := Camera3D.new()
@@ -184,8 +184,17 @@ func _garrison() -> void:
 	for i in range(1, over7.size()):
 		over_length += over7[i - 1].distance_to(over7[i])
 
-	_check("G7 every leg of the intruder's night is a way on the navmesh, over the wall (by the breach) and into the canal too",
-		broken7.is_empty() and over_length > 0.0 and over_length < 12.0, "%s; over the wall %.1f m" % [broken7, over_length])
+	# (And from the chapel's loft straight through onto the barracks' gallery.)
+	var loft7 := NavigationServer3D.map_get_path(nav_map, NavigationServer3D.map_get_closest_point(nav_map, map.marks.get("sneak_3", Vector3.ZERO)),
+		NavigationServer3D.map_get_closest_point(nav_map, map.marks.get("sneak_2", Vector3.ZERO)), true)
+	var loft_length := 0.0
+
+	for i in range(1, loft7.size()):
+		loft_length += loft7[i - 1].distance_to(loft7[i])
+
+	_check("G7 every leg of the intruder's night is a way on the navmesh, over the wall (by the breach), through the loft, and into the canal too",
+		broken7.is_empty() and over_length > 0.0 and over_length < 12.0 and loft_length > 0.0 and loft_length < 20.0,
+		"%s; over the wall %.1f m, the loft to the gallery %.1f m" % [broken7, over_length, loft_length])
 
 	# G5 a man at prayer in the chapel: down on his knees, his head bowed, a
 	# murmured line now and then; stirred, he gets up off his knees
@@ -238,7 +247,17 @@ func _garrison() -> void:
 				if not (areas8[sent8[name]] as AABB).grow(0.3).has_point(spot["stand"]):
 					stray8.append("%s at %s" % [name, (spot["stand"] as Vector3).snapped(Vector3.ONE * 0.1)])
 		return false, 2400)
-	var kept8: bool = sent8.keys().all(func(n): return int((map.cast[n] as Node).state) == 3 and (map.cast[n] as Node).get_meta(&"hunt_group", &"") == StringName(sent8[n]))
+	# A call from outside his ground (another group's find) he leaves to
+	# them; one from inside it he answers.
+	var col8: Node3D = map.cast["Col"]
+	col8.hear_call(Vector3(0, 0, 10))
+	# (And word called out through Comms: "He's there!", the bell.)
+	col8._hear_message({"message": {"what": &"spotted", "where": Vector3(0, 0, 10), "time": 9999.0}, "position": col8.global_position, "range": 200.0})
+	col8._hear_message({"message": {"what": &"alarm", "where": Vector3(0, 0, 10)}, "position": col8.global_position, "range": 200.0})
+	var ignored8: bool = (areas8["area_barracks"] as AABB).grow(0.3).has_point(col8.last_known_position)
+	col8.hear_call(Vector3(22, 0, 4))
+	var answered8: bool = col8.last_known_position.distance_to(Vector3(22, 0, 4)) < 0.1
+	var kept8: bool = ignored8 and answered8 and sent8.keys().all(func(n): return int((map.cast[n] as Node).state) == 3 and (map.cast[n] as Node).get_meta(&"hunt_group", &"") == StringName(sent8[n]))
 	# Called off: his ground is anywhere again.
 	var called8: Node3D = map.cast["Piers"]
 	called8.call_off_search()
@@ -250,7 +269,19 @@ func _garrison() -> void:
 
 	_check("G8 men sent to a hunt area search only inside it and keep at it; called off, anywhere again",
 		stray8.is_empty() and kept8 and free8 and counts8.values().all(func(c): return int(c) >= 3),
-		"outside their ground %s, still searching in their groups %s, called off %s, places searched %s" % [stray8.slice(0, 6), kept8, free8, counts8])
+		"outside their ground %s, a call from outside ignored %s, from inside answered %s, still searching in their groups %s, called off %s, places searched %s" % [stray8.slice(0, 6), ignored8, answered8, kept8, free8, counts8])
+
+	# G9 sent to the bell: a man who is no lookout runs to it and rings it
+	var rung9 := [null]
+	for bell in get_tree().get_nodes_in_group(&"alarm_bells"):
+		bell.rung.connect(func(by): rung9[0] = by)
+	var tam9: Node3D = map.cast["Tam"]
+	tam9.last_known_position = Vector3(-17.6, 0, -1.5)
+	tam9.has_last_known = true
+	tam9.send_to_bell()
+	await _until(func(): return rung9[0] != null, 3600)
+	_check("G9 a man sent to the bell runs to it and rings it", rung9[0] == tam9,
+		"rung by %s, Tam at %s" % [rung9[0].name if rung9[0] != null else "nobody", tam9.global_position.snapped(Vector3.ONE * 0.1)])
 	camera.queue_free()
 	map.queue_free()
 	await _frames(3)

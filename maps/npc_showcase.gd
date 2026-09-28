@@ -174,11 +174,11 @@ func _ready() -> void:
 	_overview()
 	# The director is there when the showcase says it is ready; it begins
 	# once whoever waits for that has heard it.
-	if run_show and ResourceLoader.exists(STORY):
+	if run_show and ResourceLoader.exists(_story_path()):
 		director = DirectorScript.new()
 		director.read_args(OS.get_cmdline_user_args())
 		add_child(director)
-		story = (load(STORY) as GDScript).new(self)
+		story = (load(_story_path()) as GDScript).new(self)
 		director.setup(self, story)
 		camera = CameraScript.new()
 		add_child(camera)
@@ -225,6 +225,17 @@ func _ready() -> void:
 
 	if director != null:
 		director.run()
+
+
+## The night's story (a level of its own plays its own).
+func _story_path() -> String:
+	return STORY
+
+
+## Where the show's camera starts, and what it looks at, before the first
+## scene.
+func camera_home() -> Array:
+	return [Vector3(18.0, 18.0, 24.0), Vector3(0, 0.5, -1.0)]
 
 
 ## Everything but the people: the yard, the buildings, outside, the lights,

@@ -85,8 +85,11 @@ func setup(p_map: Node3D, p_story: RefCounted) -> void:
 
 
 func _ready() -> void:
-	global_position = START
-	look_at(YARD, Vector3.UP)
+	# (Where the level says, if it does.)
+	var home: Array = map.camera_home() if map != null and map.has_method("camera_home") else [START, YARD]
+	global_position = home[0]
+	_look_at = home[1]
+	look_at(home[1], Vector3.UP)
 	_yaw = rotation.y
 	_pitch = rotation.x
 	_editor = CineEditorScript.new()

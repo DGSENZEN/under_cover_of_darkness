@@ -15,6 +15,8 @@ extends "res://maps/npc_showcase.gd"
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const ClimbScript := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
 const LEVEL := "res://assets/level/garrison"
+## The night it plays: six acts on the level's marks.
+const GARRISON_STORY := "res://scripts/Showcase/GarrisonNight.gd"
 
 ## The marker's archetype names to the game's.
 const ARCHETYPES := {"watchman": &"", "arms_master": &"trainer"}
@@ -28,6 +30,15 @@ const GLASS_FADE := 0.9
 var level: LevelLoader.Level = null
 ## Every door by its marker's name.
 var doors := {}
+
+
+func _story_path() -> String:
+	return GARRISON_STORY
+
+
+## The show's camera starts high over the south-west corner, over the walls.
+func camera_home() -> Array:
+	return [Vector3(-22.0, 24.0, 44.0), Vector3(2.0, 0.0, 0.0)]
 
 
 ## The place: the level from its markers, the moon and the sky, the night.
