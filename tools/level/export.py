@@ -1,5 +1,6 @@
-"""Exports the open level .blend for Godot, if it passes the check: its
-shading baked into vertex colours (bake: shade.py), a glTF
+"""Exports the open level .blend for Godot, if it passes the check: no two
+pieces' faces fighting in one plane (overlap.py: the earlier pushed back),
+its shading baked into vertex colours (bake: shade.py), a glTF
 of each sector's pieces (assets/level/<level>/<sector>.glb) and the level's
 manifest (<level>.json: its sectors, every collider as an oriented box with
 its surface, every marker with its properties and defaults), plus the
@@ -25,6 +26,7 @@ import common  # noqa: E402
 import geo  # noqa: E402
 import kit_recipes  # noqa: E402
 import markers as schema  # noqa: E402
+import overlap  # noqa: E402
 import shade  # noqa: E402
 
 # The bake (shade.py): the families whose faces are cut finer (to about
@@ -170,6 +172,94 @@ def _occlusion(tree, point, normal, rays):
     return shut / len(rays)
 
 
+def _faces(objects, order):
+    """Every face of `objects` in the world, for overlap.py: [(object,
+    polygon index)] and its faces."""
+    where, faces = [], []
+
+    for obj in objects:
+        to_world = obj.matrix_world
+        turn = to_world.to_3x3()
+        owner = order.get(obj.name, -1)
+
+        for polygon in obj.data.polygons:
+            if polygon.area < 1e-5:
+                continue
+
+            where.append((obj, polygon.index))
+            faces.append({"owner": owner, "normal": tuple((turn @ polygon.normal).normalized()),
+                          "points": [tuple(to_world @ obj.data.vertices[i].co) for i in polygon.vertices]})
+
+    return where, faces
+
+
+def _ungrip(objects, order):
+    """No two pieces fighting for the same pixels (overlap.py): where faces of
+    two pieces lie in one plane and overlap, the whole face of the earlier
+    piece in that plane is pushed back behind the later one's (a wall laid
+    over a wall, a floor's edge flush with a wall, floors overlapping);
+    round after round (a stack of three: the lowest goes back twice), each
+    round looking again only at the pieces the last one found fighting."""
+    looking = objects
+    pushed = set()
+    planes_pushed = 0
+    left = []
+
+    for _ in range(overlap.ROUNDS):
+        where, faces = _faces(looking, order)
+        left = overlap.fights(faces)
+
+        if not left:
+            break
+
+        planes = set()
+        involved = set()
+
+        for loser, winner, _ in left:
+            obj = where[loser][0]
+            n = faces[loser]["normal"]
+            d = sum(a * b for a, b in zip(n, faces[loser]["points"][0]))
+            planes.add((obj.name, round(n[0], 2), round(n[1], 2), round(n[2], 2), round(d / overlap.TOLERANCE)))
+            involved.add(obj.name)
+            involved.add(where[winner][0].name)
+
+        for obj in looking:
+            if any(p[0] == obj.name for p in planes):
+                _push_back(obj, planes)
+                pushed.add(obj.name)
+
+        planes_pushed += len(planes)
+        looking = [o for o in objects if o.name in involved]
+    else:
+        left = overlap.fights(_faces(looking, order)[1])
+
+    print("level: %d pieces pushed back off faces they fought over (%d planes); %d fights left" % (len(pushed), planes_pushed, len(left)))
+
+
+def _push_back(obj, planes):
+    """`obj`'s faces in `planes` pushed back overlap.RECESS against their
+    normals (a vertex shared by two such faces goes back along both)."""
+    to_world = obj.matrix_world
+    turn = to_world.to_3x3()
+    back = turn.inverted()
+    shift = {}
+
+    for polygon in obj.data.polygons:
+        n = (turn @ polygon.normal).normalized()
+        d = n.dot(to_world @ obj.data.vertices[polygon.vertices[0]].co)
+        key = (obj.name, round(n.x, 2), round(n.y, 2), round(n.z, 2), round(d / overlap.TOLERANCE))
+
+        if key not in planes:
+            continue
+
+        for i in polygon.vertices:
+            shift.setdefault(i, {})[key[1:4]] = back @ (-n * overlap.RECESS)
+
+    for i, pushes in shift.items():
+        for push in pushes.values():
+            obj.data.vertices[i].co += push
+
+
 def bake(data):
     """The level's shading into its pieces' vertex colours (shade.py): each
     piece its own copy of its mesh (the .blend is not saved after), the big
@@ -182,6 +272,7 @@ def bake(data):
         if kit_recipes.PIECES[obj["kit_piece"]]["family"] in GRADED:
             _subdivide(obj.data)
 
+    _ungrip(objects, {p["name"]: i for i, p in enumerate(data["pieces"])})
     verts, polys = [], []
 
     for obj in objects:
