@@ -58,6 +58,9 @@ var strength := 1.0
 var _time := 0.0
 var _forced: Variant = null
 var _noise := FastNoiseLite.new()
+## Its own dice: how hard the weather blows changes how many leaves it rolls
+## for, and that must not change the world's.
+var _rng := RandomNumberGenerator.new()
 var _scan_in := 0.0
 var _breaths := {}
 var _embers := {}
@@ -102,6 +105,7 @@ func _ready() -> void:
 	add_to_group(&"atmosphere")
 	SoundBus.add_listener(self)
 	_noise.seed = 1926
+	_rng.seed = 1926
 	_noise.frequency = 1.0
 
 	for kind in KINDS:
@@ -182,7 +186,7 @@ func add_crows(points: Array) -> void:
 		body.layers = Layers.FX
 		add_child(body)
 		body.global_position = point
-		body.rotation.y = randf() * TAU
+		body.rotation.y = _rng.randf() * TAU
 		_crows.append({"node": body, "state": &"perched", "home": point, "t": 0.0, "away": Vector3.ZERO, "back_at": 0.0})
 
 
@@ -322,9 +326,9 @@ func _make_moths() -> Array:
 		moth.mesh = quad
 		moth.layers = Layers.FX
 		moth.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		moth.set_meta(&"phase", randf() * TAU)
-		moth.set_meta(&"radius", randf_range(0.3, 0.7))
-		moth.set_meta(&"pace", randf_range(2.0, 4.0))
+		moth.set_meta(&"phase", _rng.randf() * TAU)
+		moth.set_meta(&"radius", _rng.randf_range(0.3, 0.7))
+		moth.set_meta(&"pace", _rng.randf_range(2.0, 4.0))
 		add_child(moth)
 		moths.append(moth)
 
@@ -359,7 +363,7 @@ func _update_moths() -> void:
 func _fly(crow: Dictionary, from: Vector3) -> void:
 	var away: Vector3 = (crow["home"] as Vector3) - from
 	away.y = 0.0
-	away = away.normalized() if away.length() > 0.1 else Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized()
+	away = away.normalized() if away.length() > 0.1 else Vector3(_rng.randf_range(-1, 1), 0, _rng.randf_range(-1, 1)).normalized()
 	crow["state"] = &"flying"
 	crow["t"] = 0.0
 	crow["away"] = away
@@ -390,7 +394,7 @@ func _update_crows(delta: float) -> void:
 
 				if float(crow["t"]) >= CROW_FLY:
 					crow["state"] = &"away"
-					crow["back_at"] = _time + randf_range(CROW_AWAY.x, CROW_AWAY.y)
+					crow["back_at"] = _time + _rng.randf_range(CROW_AWAY.x, CROW_AWAY.y)
 					body.visible = false
 			&"away":
 				if _time >= float(crow["back_at"]):
@@ -432,8 +436,8 @@ func _emit(puffs: Puffs, delta: float, air: Vector3) -> void:
 
 	while puffs._owed >= 1.0 and motes.size() < int(spec[5]):
 		puffs._owed -= 1.0
-		var at := puffs.origin + Vector3(randf_range(-1, 1) * puffs.box.x, 0.0, randf_range(-1, 1) * puffs.box.z)
-		var v := puffs.velocity + Vector3(randf_range(-1, 1), randf_range(0, 1), randf_range(-1, 1)) * puffs.spread + Vector3.UP * puffs.rise
+		var at := puffs.origin + Vector3(_rng.randf_range(-1, 1) * puffs.box.x, 0.0, _rng.randf_range(-1, 1) * puffs.box.z)
+		var v := puffs.velocity + Vector3(_rng.randf_range(-1, 1), _rng.randf_range(0, 1), _rng.randf_range(-1, 1)) * puffs.spread + Vector3.UP * puffs.rise
 		motes.append({"p": at, "v": v, "age": 0.0, "wind": puffs.wind_share})
 
 

@@ -10,6 +10,8 @@ const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const AtmosphereScript := preload("res://scripts/Visual/Atmosphere.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
+const GuardScript := preload("res://scripts/AISystem/Guard.gd")
+const GUARD := preload("res://Guard.tscn")
 
 ## Hears every sound event (the noise floor).
 class Ear:
@@ -127,20 +129,37 @@ func _moon_and_clouds() -> void:
 	# every 60 to 90 s
 	var dark := 0.0
 	var darks := []
+	var starts := []
 	var t := 0.0
 
-	while t < 200.0:
+	while t < 300.0:
 		await get_tree().process_frame
 		t += 1.0 / 60.0
 
 		if night.cloud_cover() > 0.9:
+			if dark == 0.0:
+				starts.append(t)
 			dark += 1.0 / 60.0
 		elif dark > 0.0:
 			darks.append(snappedf(dark, 0.1))
 			dark = 0.0
 
+	var gaps4 := []
+
+	for i in range(1, starts.size()):
+		gaps4.append(snappedf(starts[i] - starts[i - 1], 0.1))
+
 	_check("N4 in clear a cloud crosses the moon every 60-90 s, dark for 15-25 s",
-		darks.size() >= 2 and darks.all(func(d): return d >= 12.0 and d <= 26.0), "dark spells %s" % [darks])
+		darks.size() >= 3 and darks.all(func(d): return d >= 14.9 and d <= 25.1) and gaps4.all(func(g): return g >= 59.9 and g <= 90.1),
+		"dark spells %s, a crossing every %s s" % [darks, gaps4])
+
+	# N5 the sky wastes nothing: no TIME in it (a sky using TIME re-filters a
+	# 256 radiance map every frame) and a small radiance map nothing reads
+	var sky: Sky = environment.sky
+	var sky_code := (load("res://scripts/Night/night_sky.gdshader") as Shader).code
+	_check("N5 the sky neither re-filters a big radiance map every frame nor reads TIME",
+		sky != null and sky.radiance_size == Sky.RADIANCE_SIZE_32 and sky.process_mode != Sky.PROCESS_MODE_REALTIME and not sky_code.contains("TIME"),
+		"radiance %s, mode %s, TIME %s" % [sky.radiance_size if sky else -1, sky.process_mode if sky else -1, sky_code.contains("TIME")])
 	night.queue_free()
 	await _frames(2)
 
@@ -210,6 +229,26 @@ func _states() -> void:
 
 	_check("W5 the cycle goes clear, cloudy, drizzle, shower, storm, fog and round",
 		cycled == [&"cloudy", &"drizzle", &"shower", &"storm", &"fog", &"clear"], "%s" % [cycled])
+
+	# W7 the clouds drift with the wind: a cloud seen now toward d is seen a
+	# moment later a little downwind of d
+	atmosphere.force_wind(Vector3(1.0, 0.0, 0.0))
+	night.to(&"shower", 0.0)
+	await _frames(2)
+	var d7 := Vector3(0.0, 0.8, -0.6).normalized()
+	var seen7: Vector2 = night.sky_uv(d7)
+	await _seconds(2.0)
+	var downwind7 := Vector3(0.05, 0.8, -0.6).normalized()
+	var upwind7 := Vector3(-0.05, 0.8, -0.6).normalized()
+	atmosphere.force_wind(null)
+	_check("W7 the clouds drift with the wind (the way the rain slants and the flames lean)",
+		night.sky_uv(downwind7).distance_to(seen7) < night.sky_uv(upwind7).distance_to(seen7), "downwind %.4f, upwind %.4f" % [night.sky_uv(downwind7).distance_to(seen7), night.sky_uv(upwind7).distance_to(seen7)])
+
+	# R1 the rain fades near the lens (no bars across a close shot)
+	var drop: StandardMaterial3D = (night.get_node("Rain/Drops") as GPUParticles3D).draw_pass_1.surface_get_material(0)
+	_check("R1 raindrops fade out within a metre of the camera, fully seen from 3 m",
+		drop.distance_fade_mode != BaseMaterial3D.DISTANCE_FADE_DISABLED and drop.distance_fade_min_distance >= 1.0 and drop.distance_fade_max_distance <= 3.5,
+		"fade %s from %.1f to %.1f m" % [drop.distance_fade_mode, drop.distance_fade_min_distance, drop.distance_fade_max_distance])
 
 	# W6 a change asked for later waits for its time
 	night.to(&"clear", 0.0)
@@ -319,6 +358,51 @@ func _ground() -> void:
 		not damp and wet and not beside, "damp %s, wet %s, beside %s" % [damp, wet, beside])
 	puddled.queue_free()
 
+	# G4 a level made again (watch it again): what a night wetted is dry once
+	# it goes, and the next night takes it as dry
+	var iron := StandardMaterial3D.new()
+	iron.albedo_color = Color(0.4, 0.4, 0.4)
+	iron.roughness = 0.9
+	var first := _night(&"storm")
+	first.register_wet(iron)
+	first.wetness = 1.0
+	await _frames(2)
+	var soaked4: float = iron.albedo_color.r
+	first.queue_free()
+	await _frames(2)
+	var after_free: float = iron.albedo_color.r
+	var second := _night(&"clear")
+	second.register_wet(iron)
+	second.wetness = 1.0
+	await _frames(2)
+	var soaked_again: float = iron.albedo_color.r
+	second.queue_free()
+	await _frames(2)
+	_check("G4 a night gone leaves the ground dry, and the next wets it from dry (no darker every time)",
+		absf(soaked4 - 0.28) < 0.01 and absf(after_free - 0.4) < 0.001 and absf(soaked_again - 0.28) < 0.01 and absf(iron.roughness - 0.9) < 0.001,
+		"wet %.3f, gone %.3f, wet again %.3f" % [soaked4, after_free, soaked_again])
+
+	# G5 a guard's foot in a puddle after rain is in water (the level's night:
+	# the one this part of the suite made)
+	var guard_night := night
+	guard_night.puddles = [Vector3(-14, 0.02, -14)] as Array[Vector3]
+	GuardScript.randomize_on = false
+	var guard: CharacterBody3D = GUARD.instantiate()
+	add_child(guard)
+	guard.global_position = Vector3(-14, 0.0, -14)
+	await _frames(3)
+	guard_night.wetness = 0.0
+	guard.set("_floor_checked_at", -100.0)
+	var dry5: String = guard.floor_surface()
+	guard_night.wetness = 0.8
+	var wet5: String = guard.floor_surface()
+	guard.queue_free()
+	guard_night.wetness = 0.0
+	guard_night.puddles = [] as Array[Vector3]
+	GuardScript.randomize_on = true
+	await _frames(2)
+	_check("G5 a guard's foot in a puddle after rain steps in water", dry5 != "water" and wet5 == "water", "dry %s, wet %s" % [dry5, wet5])
+
 	# G2 the roof: under the shelter is indoors, the open is not
 	_check("G2 under a roof is indoors, the open yard is not",
 		night.indoors(Vector3(10, 1.0, 0)) and not night.indoors(Vector3(0, 1.0, 0)), "under %s, open %s" % [night.indoors(Vector3(10, 1.0, 0)), night.indoors(Vector3(0, 1.0, 0))])
@@ -331,9 +415,6 @@ func _ground() -> void:
 # ---------------------------------------------------------------------------
 
 func _dice() -> void:
-	# (the atmosphere's embers and leaves roll the world's dice themselves)
-	atmosphere.queue_free()
-	await _frames(2)
 	# (made with the level, before the world's dice are seeded: a particle
 	# system takes one roll of them as it is made, as every level's do)
 	var night := _night(&"clear", 9)

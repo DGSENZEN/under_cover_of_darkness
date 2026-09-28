@@ -17,14 +17,17 @@ func _init(environment: Environment, field: Texture2D) -> void:
 	material.set_shader_parameter("skyline", _skyline())
 	var sky := Sky.new()
 	sky.sky_material = material
+	# (nothing reads its radiance: reflections are off and the ambient is a
+	# flat colour; incremental keeps its updates cheap)
 	sky.radiance_size = Sky.RADIANCE_SIZE_32
-	sky.process_mode = Sky.PROCESS_MODE_REALTIME
+	sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL
 	environment.sky = sky
 	environment.background_mode = Environment.BG_SKY
 
 
 ## The sky as the night is now.
-func show_night(cover: float, offset: Vector2, veil_center: Vector2, veil_on: float, flash: float, fog: float) -> void:
+func show_night(cover: float, offset: Vector2, veil_center: Vector2, veil_on: float, flash: float, fog: float, clock: float) -> void:
+	material.set_shader_parameter("clock", clock)
 	material.set_shader_parameter("cloud_cover", cover)
 	material.set_shader_parameter("cloud_offset", offset)
 	material.set_shader_parameter("veil_center", veil_center)

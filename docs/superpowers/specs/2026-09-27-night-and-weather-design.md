@@ -151,3 +151,16 @@ F4 cycles clear, cloudy, drizzle, shower, storm, fog, each over 2 s.
 - The night's pacing: the murder, the grief, the hunt.
 - Saving the weather, noise zones with local masking, and wind on cloth, ropes, signs and lanterns. These are the canal spec's section 7.5 items this yard does not have; the `Night` API leaves room for them.
 - A mission-clock schedule (the canal mission's rain waves and storm trigger): `Night.to` is what a clock would call.
+
+## 9. As built (2026-09-27)
+
+Where the build differs from the sections above, this wins:
+
+- **Under cloud** a man reads about 0.07, not 0.05: with open moonlight at 0.28 and the ambient floor at 0.035, the spec's own dimming (the moon to 15%, the ambient to 90%) gives 0.068; 0.05 would need shadows near black (0.015), too dark to film.
+- **The skyline strip** spans 2° below the horizon to 28° above (not 12°), rendered 4096 × 384: from the yard floor the walls hide everything below about 9°, and the spire reaches 25°.
+- **Crossings** (clear and cloudy): one every 60–90 s from start to start, the moon dark 15–25 s (a hold of 12.7–22.7 s plus the veil's edges).
+- **The weather's sounds** live in `NightSound.gd` (not `Ambience.gd`); under a roof the rain is 8 dB lower rather than switching to the interior loop.
+- **The clouds drift with the wind** (the field's offset runs against it).
+- **The sky** reads a clock uniform, not the engine's time, and keeps a small incremental radiance map (nothing reads it).
+- **Atmosphere's motes** roll their own dice too, since the wind's strength changes how many leaves it makes.
+- **Puddle footsteps:** the player's and the guards' floor reads "water" in a wet puddle.

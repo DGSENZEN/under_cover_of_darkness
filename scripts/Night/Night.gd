@@ -57,10 +57,11 @@ const VEIL_RADIUS := 0.22
 const VEIL_EDGE := 0.18
 const VEIL_TRAVEL := 0.9
 const VEIL_IN := 4.0
-## In clear and cloudy weather a cloud crosses the moon this often (s), held
-## over it this long (with VEIL_IN each way: dark 15-25 s).
+## In clear and cloudy weather a cloud crosses the moon this often (s, from
+## one crossing to the next), held over it this long (the moon dark about
+## 2.3 s longer than the hold: 15-25 s).
 const CROSSING_EVERY := Vector2(60.0, 90.0)
-const CROSSING_HOLD := Vector2(8.0, 16.0)
+const CROSSING_HOLD := Vector2(12.7, 22.7)
 
 ## Lightning in a storm this often (s); a flash's light, as [until s, times
 ## the unclouded moon's light, added to it]; its thunder this long after (s).
@@ -153,8 +154,10 @@ func _ready() -> void:
 		_sky = NightSkyScript.new(environment, _field_texture)
 
 	_rain = RainScript.new()
+	_rain.name = "Rain"
 	add_child(_rain)
 	_sound = NightSoundScript.new()
+	_sound.name = "Sound"
 	add_child(_sound)
 	_make_puddles()
 	_make_mist()
@@ -164,6 +167,13 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	SoundBus.masking_db = 0.0
+
+	# What it wetted, dry again (the shared surfaces outlive the level).
+	for material in _wet:
+		if is_instance_valid(material):
+			var dry: Array = _wet[material]
+			material.albedo_color = dry[0]
+			material.roughness = float(dry[1])
 
 
 ## To `to_state` over `seconds` (0: at once), `after` s from now (a change
@@ -310,11 +320,18 @@ func splashes_at(point: Vector3) -> bool:
 	return false
 
 
-## `material` darkens and shines as the ground gets wet.
+## `material` darkens and shines as the ground gets wet. Its dry look is
+## kept on it (a shared surface outlives a level, and the next night must not
+## take it wet as dry).
 func register_wet(material: BaseMaterial3D) -> void:
-	if material != null and not _wet.has(material):
-		_wet[material] = [material.albedo_color, material.roughness]
-		_wet_shown = -1.0
+	if material == null or _wet.has(material):
+		return
+
+	if not material.has_meta(&"night_dry"):
+		material.set_meta(&"night_dry", [material.albedo_color, material.roughness])
+
+	_wet[material] = material.get_meta(&"night_dry")
+	_wet_shown = -1.0
 
 
 ## The night of `node`'s level; null if it has none.
@@ -345,8 +362,9 @@ func _process(delta: float) -> void:
 		for key in EASED:
 			_now[key] = lerpf(float(_from[key]), float(_to[key]), k)
 
+	# (the field slides against the wind, so the clouds on it go with it)
 	var air := wind()
-	_offset += Vector2(air.x, air.z) * CLOUD_DRIFT * delta
+	_offset -= Vector2(air.x, air.z) * CLOUD_DRIFT * delta
 	_step_veil(delta)
 	_step_crossings(delta)
 	_step_lightning(delta)
@@ -401,12 +419,14 @@ func _step_veil(delta: float) -> void:
 
 
 func _step_crossings(delta: float) -> void:
-	if not bool(STATES[state]["crossings"]) or not _veil.is_empty():
+	if not bool(STATES[state]["crossings"]):
 		return
 
+	# (counted from one crossing's start to the next; one due while a veil is
+	# still over the moon waits for it to go)
 	_crossing_in -= delta
 
-	if _crossing_in <= 0.0:
+	if _crossing_in <= 0.0 and _veil.is_empty():
 		_crossing_in = _rng.randf_range(CROSSING_EVERY.x, CROSSING_EVERY.y)
 		cover_moon(_rng.randf_range(CROSSING_HOLD.x, CROSSING_HOLD.y))
 
@@ -478,7 +498,7 @@ func _apply(air: Vector3) -> void:
 	if _sky != null:
 		var veil_on := 1.0 if not _veil.is_empty() else 0.0
 		_sky.show_night(float(_now.get("cover", 0.0)), _offset, _veil_centre(), veil_on,
-			clampf((flash_level - 1.0) / 5.0, 0.0, 1.0), clampf((float(_now.get("fog", 1.0)) - 1.0) / 3.0, 0.0, 1.0))
+			clampf((flash_level - 1.0) / 5.0, 0.0, 1.0), clampf((float(_now.get("fog", 1.0)) - 1.0) / 3.0, 0.0, 1.0), _clock)
 
 	if _rain != null:
 		_rain.amount = rain()

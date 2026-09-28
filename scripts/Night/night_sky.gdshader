@@ -14,6 +14,9 @@ uniform vec2 veil_center = vec2(10.0);
 uniform float veil_on = 0.0;
 uniform float flash = 0.0;
 uniform float fog = 0.0;
+// The night's clock (s), for the stars' twinkle (not the engine's clock: a
+// sky reading that re-filters its radiance map every frame).
+uniform float clock = 0.0;
 
 uniform vec3 zenith_color : source_color = vec3(0.006, 0.009, 0.024);
 uniform vec3 horizon_color : source_color = vec3(0.055, 0.07, 0.115);
@@ -77,7 +80,7 @@ void sky() {
 		vec2 sph = vec2(atan(d.x, d.z), asin(clamp(d.y, -1.0, 1.0)));
 		vec2 cell = floor(sph / STAR_CELL);
 		float star = step(STAR_RARITY, hash(cell));
-		star *= 0.55 + 0.45 * sin(TIME * (1.0 + 3.0 * hash(cell + 7.0)) + hash(cell + 3.0) * 6.28);
+		star *= 0.55 + 0.45 * sin(clock * (1.0 + 3.0 * hash(cell + 7.0)) + hash(cell + 3.0) * 6.28);
 		star *= smoothstep(0.03, 0.25, d.y) * (1.0 - fog) * smoothstep(0.2, 0.5, angle);
 		vec3 behind = col + vec3(0.75, 0.8, 1.0) * star * 0.45;
 

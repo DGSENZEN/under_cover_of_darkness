@@ -31,7 +31,9 @@ func _ready() -> void:
 	_splashes.name = "Splashes"
 	_splashes.amount = 600
 	_splashes.lifetime = 0.25
-	_splashes.emitting = false
+	# (a sub-emitter is driven by the drops' collisions, never on its own, but
+	# is only drawn while emitting)
+	_splashes.emitting = true
 	_splashes.local_coords = false
 	# (a seed of its own: starting to emit would roll the world's dice)
 	_splashes.use_fixed_seed = true
@@ -73,7 +75,13 @@ func _ready() -> void:
 	_drops.process_material = _falling
 	var streak := BoxMesh.new()
 	streak.size = Vector3(0.012, 0.45, 0.012)
-	streak.material = _drop_material(Color(0.7, 0.75, 0.85, 0.3), false)
+	var streak_material := _drop_material(Color(0.7, 0.75, 0.85, 0.3), false)
+	# Gone within a metre of the lens, whole from 3 m: no bars across a close
+	# shot.
+	streak_material.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
+	streak_material.distance_fade_min_distance = 1.0
+	streak_material.distance_fade_max_distance = 3.0
+	streak.material = streak_material
 	_drops.draw_pass_1 = streak
 	add_child(_drops)
 	_drops.sub_emitter = _drops.get_path_to(_splashes)
