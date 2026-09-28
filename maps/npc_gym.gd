@@ -605,25 +605,26 @@ func _start_bay(index: int) -> void:
 
 	# In at the mouth, facing in, whole and armed.
 	var mouth: float = centre.x - side * (BAY_SIZE * 0.5 - 0.5)
-	player.global_position = Vector3(mouth, 1.05, centre.z)
-	player.velocity = Vector3.ZERO
+	var at := Vector3(mouth, 1.05, centre.z)
 	# Into the bay: west bays open east, so you face west, and the other way.
-	player.rotation.y = -PI * 0.5 * side
+	var yaw := -PI * 0.5 * side
 
 	# The guardhouse: in through the hub's south wall, facing the yard.
 	if index == 8:
-		player.global_position = Vector3(0, 1.05, 14.5)
-		player.rotation.y = PI
+		at = Vector3(0, 1.05, 14.5)
+		yaw = PI
 	# Bay 10: in through the corridor's north wall.
 	elif index == 9:
-		player.global_position = Vector3(0, 1.05, -74.5)
-		player.rotation.y = 0.0
+		at = Vector3(0, 1.05, -74.5)
+		yaw = 0.0
 	# Bay 11: in through the door from bay 10, facing the yard.
 	elif index == 10:
-		player.global_position = Vector3(-17.0, 1.05, -76.75)
-		player.rotation.y = PI * 0.5
+		at = Vector3(-17.0, 1.05, -76.75)
+		yaw = PI * 0.5
+
+	# Mid-vault, hanging or on a ladder: all of it let go.
+	player.teleport(Transform3D(Basis(Vector3.UP, yaw), at))
 	player.get_node("Neck").rotation.x = 0.0
-	player.reset_physics_interpolation()
 	_rest()
 	player.inventory.select_by_id(&"blackjack" if index == 0 else &"sword")
 
@@ -772,9 +773,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_EQUAL:
 			_start_bay(10)
 		KEY_0:
-			player.global_position = Vector3(0, 1.05, 8)
-			player.rotation.y = 0.0
-			player.reset_physics_interpolation()
+			player.teleport(Transform3D(Basis.IDENTITY, Vector3(0, 1.05, 8)))
 		KEY_F1:
 			_labels_on = not _labels_on
 			_say("What they think: %s" % ("shown" if _labels_on else "hidden"))
