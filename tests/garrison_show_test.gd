@@ -253,8 +253,18 @@ func _s5() -> void:
 	map5.director.act_started.connect(func(index: int, _t: String) -> void:
 		if index >= 6:
 			ended5[0] = true)
+	# (S5b: in the chapel's last beat, whom he goes for.)
+	var beat5 := [&""]
+	map5.director.beat_started.connect(func(beat_name: StringName, _scene: Dictionary) -> void: beat5[0] = beat_name)
+	var last5 := [0, 0]
 	await _until(func():
 		var i: Node3D = map5.intruder
+		if beat5[0] == &"chapel_last" and i != null and is_instance_valid(i) and i.brain != null:
+			var standing := ["Brand", "Col"].filter(func(n): return not _beaten(map5, n)).map(func(n): return map5.cast.get(n))
+			if not standing.is_empty():
+				last5[0] += 1
+				if standing.has(i.brain.focus):
+					last5[1] += 1
 		if i != null and is_instance_valid(i) and chapel5.has_point(i.global_position + Vector3.UP * 0.5):
 			for name in ["Osric", "Brand", "Col"]:
 				var man: Variant = map5.cast.get(name)
@@ -267,6 +277,9 @@ func _s5() -> void:
 	_check("S5 Act V: the barracks group fights him in the chapel, and he is left standing over them, lightning through the glass",
 		ended5[0] and fought_in5[0] >= 120 and beaten5 and standing5 and flashes5[0] >= 1,
 		"act over %s, fought in the chapel %.1f s, the three beaten %s, he stands %s, flashes %d, skipped %s" % [ended5[0], fought_in5[0] / 60.0, beaten5, standing5, flashes5[0], map5.director.log_lines])
+	var aimed5 := float(last5[1]) / float(maxi(last5[0], 1))
+	_check("S5b in the chapel's last beat he goes for the barracks men still standing (not whoever is nearest), 90% of it or more",
+		last5[0] == 0 or aimed5 >= 0.9, "on a barracks man %.0f%% of %.1f s" % [aimed5 * 100.0, last5[0] / 60.0])
 	await _unload(map5)
 
 

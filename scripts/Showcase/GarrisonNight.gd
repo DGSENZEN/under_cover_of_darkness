@@ -651,15 +651,33 @@ func _act_five_g() -> Dictionary:
 				"until": func() -> bool: return _dead("Osric")},
 			{"name": &"chapel_last", "scene": _scene(&"drama", ["intruder", "@group:area_barracks"]), "timeout": 60.0,
 				# (He calls the last of them on, and they come: none left
-				# searching the doorway for a man in the middle of the nave.)
+				# searching the doorway for a man in the middle of the nave.
+				# He goes for them, one and then the next, not for whoever
+				# else has come in: the beat waits on them.)
 				"do": func() -> void:
-					_verb(&"fight", [&"press"])
+					_verb(&"fight", [&"focus", _next_of("area_barracks")])
 					_call_group("area_barracks"),
-				"until": func() -> bool: return GROUPS["area_barracks"].all(func(n): return _beaten(n))},
+				"until": func() -> bool:
+					var brain := _brain()
+					var next := _next_of("area_barracks")
+
+					if brain != null and next != null and brain.focus != next:
+						brain.fight(&"focus", next)
+
+					return next == null},
 			{"name": &"over_them", "scene": _scene(&"observe", ["intruder"]), "min": 5.0,
 				"do": func() -> void: _verb(&"stand", [])},
 		],
 	}
+
+
+## The first man of `group` not yet beaten (null: all of them are).
+func _next_of(group: String) -> Node3D:
+	for name in GROUPS.get(group, []):
+		if not _beaten(name):
+			return _man(name)
+
+	return null
 
 
 ## Beaten: dead or down, begging, broken or running from the fight.
