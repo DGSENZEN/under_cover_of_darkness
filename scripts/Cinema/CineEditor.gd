@@ -83,6 +83,14 @@ const OPEN_SKY := 30.0
 ## Men further apart in height than this (m) are on different floors (the
 ## yard and the cellar under it): a take is on those on its first man's.
 const STOREY := 2.0
+## A man crossing the camera's view faster than this (deg/s, as it sees him)
+## for this long (s) outruns a close shot: it is cut from, never whipped
+## after. A man walking faster than MOVING (m/s) is taken from a medium's
+## distance, not a close one.
+const OUTRUN := 45.0
+const OUTRUN_FOR := 0.3
+const OUTRUN_KINDS := [&"close", &"medium", &"reaction", &"over_shoulder", &"two", &"portrait"]
+const MOVING := 1.0
 ## A moving camera's way is looked along every this far (m) for men in it.
 const WAY_STEP := 0.3
 const FLOOR := 1.5
@@ -165,6 +173,10 @@ var _last := -1.0
 var _hidden := 0.0
 var _blocked := 0.0
 var _crowded := 0.0
+## How long the man it is on has been crossing the view faster than OUTRUN,
+## and which way the camera saw him last.
+var _outrun := 0.0
+var _outrun_dir := Vector3.ZERO
 var _filled := false
 var _fill_in := 0.0
 var _talk_until := -INF
@@ -519,6 +531,12 @@ func _process(_delta: float) -> void:
 
 	_follow(live)
 	_watch(live, dt)
+
+	# A man crossing the view faster than a close shot can follow: cut from
+	# (not while a scene waits to open: its shot is coming).
+	if _outrun > OUTRUN_FOR and age >= OUTRUN_FOR and not pinned and _axial.is_empty() and _scene_due == -INF:
+		_next_shot(&"outrun")
+		return
 
 	# Crowded (a man in the camera, stone at its lens): a new shot, a pinned
 	# one taken again (still the pin: held, but never held broken).
@@ -1139,6 +1157,11 @@ func _drama_next(cause: StringName, how: StringName) -> void:
 		# out of any standing place in a second.
 		_pick([[&"track", [men[0]]], [&"medium", [men[0]]]], cause, side, length, false, how)
 		return
+	elif _flat_speed(men[0]) > MOVING:
+		# Walking: from a medium's distance, which he does not cross in a
+		# second.
+		_pick([[&"medium", [men[0]]]], cause, side, length, false, how)
+		return
 	else:
 		options = [[&"medium", [men[0]]], [&"close", [men[0]]]]
 
@@ -1533,6 +1556,8 @@ func _start(kind: StringName, men: Array, cause: StringName, how: StringName, co
 	_hidden = 0.0
 	_blocked = 0.0
 	_crowded = 0.0
+	_outrun = 0.0
+	_outrun_dir = Vector3.ZERO
 	_filled = false
 	_fill_in = 0.0
 	shot_started.emit(_shot)
@@ -1604,6 +1629,8 @@ func _watch(live: Array, dt: float) -> void:
 		_hidden = 0.0
 		_blocked = 0.0
 		_crowded = 0.0
+		_outrun = 0.0
+		_outrun_dir = Vector3.ZERO
 		return
 
 	var space := _camera.get_world_3d().direct_space_state
@@ -1623,6 +1650,18 @@ func _watch(live: Array, dt: float) -> void:
 
 	var crowded := _filled or not CineVantage.clear(space, at)
 	_crowded = _crowded + dt if crowded else 0.0
+
+	# How fast he crosses the view, as the camera sees him (a close shot's
+	# camera stands still: his own going).
+	var toward := CineShot.head_of(live[0]) - at
+
+	if _shot["kind"] in OUTRUN_KINDS and toward.length() > 0.1 and _outrun_dir != Vector3.ZERO and dt > 0.0:
+		var crossing := rad_to_deg(_outrun_dir.angle_to(toward.normalized())) / dt
+		_outrun = _outrun + dt if crossing > OUTRUN else maxf(_outrun - dt, 0.0)
+	else:
+		_outrun = 0.0
+
+	_outrun_dir = toward.normalized() if toward.length() > 0.1 else Vector3.ZERO
 
 
 # ---------------------------------------------------------------------------

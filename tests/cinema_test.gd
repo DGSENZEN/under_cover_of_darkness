@@ -195,6 +195,15 @@ class Body extends CharacterBody3D:
 		return doing
 
 
+## A man who walks himself on the physics ticks (as a guard's body does),
+## drawn between them by the engine's interpolation.
+class Walker extends Node3D:
+	var velocity := Vector3(1.4, 0, 0)
+
+	func _physics_process(delta: float) -> void:
+		global_position += velocity * delta
+
+
 ## A listener that is a node (freed in C6 without leaving).
 class _NodeEars extends Node:
 	func cine_event(_kind: StringName, _data: Dictionary) -> void:
@@ -780,6 +789,30 @@ func _operator() -> void:
 
 	_check("O8 a shake never turns the camera more than 2.5 deg and dies away within 0.6 s",
 		worst8 <= 2.5 and worst8 > 0.2 and float(op.trauma) < 0.01, "worst %.2f deg, trauma %.3f" % [worst8, op.trauma])
+
+	# O12 a flurry of heavy blows shakes the camera in jolts, not a buzz: its
+	# turn never changes by more than 30 deg/s from one frame to the next
+	op.show(_frame_at(Vector3(600, 1.6, 3), head, 40.0, &"medium"), &"cut")
+	await _frames(20)
+	op.shake(0.5)
+	op.shake(0.5)
+	var last12: Vector3 = -camera.global_basis.z
+	var last_rate12 := -1.0
+	var jump12 := 0.0
+
+	for f in 30:
+		await get_tree().process_frame
+		var fwd12: Vector3 = -camera.global_basis.z
+		var rate12 := rad_to_deg(last12.angle_to(fwd12)) * 60.0
+		last12 = fwd12
+
+		if last_rate12 >= 0.0:
+			jump12 = maxf(jump12, absf(rate12 - last_rate12))
+
+		last_rate12 = rate12
+
+	_check("O12 a flurry of heavy blows shakes in jolts, not a buzz: the turn never changes 30 deg/s between frames", jump12 < 30.0,
+		"worst jump %.0f deg/s" % jump12)
 	op.queue_free()
 	screen.queue_free()
 	camera.queue_free()
@@ -2104,8 +2137,10 @@ func _picture() -> void:
 	camera15.queue_free()
 	torch15.queue_free()
 
-	# P16 a man bolting across a close shot never leaves the frame: past its
-	# turning speed the camera turns as fast as keeps him in it
+	# P16 a man bolting across a close shot is never whipped after: the
+	# camera turns no faster than 200 deg/s and its turn never jumps between
+	# frames (a whip pan up close shakes the whole picture); the editor cuts
+	# away from him instead (P25)
 	var camera16 := Camera3D.new()
 	add_child(camera16)
 	var screen16: CanvasLayer = CineScreen.new()
@@ -2118,21 +2153,184 @@ func _picture() -> void:
 	var head16 := Vector3(2300, 1.6, 0)
 	op16.show(_frame_at(from16, head16, 40.0, &"close"), &"cut")
 	await _frames(2)
-	var framed16 := 0
-	var steps16 := 0
+	var last_fwd16: Vector3 = -camera16.global_basis.z
+	var last_rate16 := -1.0
+	var fastest16 := 0.0
+	var jump16 := 0.0
 
-	for f in 36:
-		head16 += Vector3(5.0 / 60.0, 0, 0)
+	# (He dashes for 0.6 s, then stops dead: the camera slows as smoothly as
+	# it gathered.)
+	for f in 72:
+		if f < 36:
+			head16 += Vector3(5.0 / 60.0, 0, 0)
+
 		op16.follow(_frame_at(from16, head16, 40.0, &"close"))
 		await get_tree().process_frame
-		steps16 += 1
-		framed16 += 1 if camera16.is_position_in_frustum(head16) else 0
+		var fwd16: Vector3 = -camera16.global_basis.z
+		var rate16 := rad_to_deg(last_fwd16.angle_to(fwd16)) * 60.0
+		last_fwd16 = fwd16
+		fastest16 = maxf(fastest16, rate16)
 
-	_check("P16 a man bolting across a close shot (5 m/s at 1.2 m) is kept in the frame all the way", framed16 == steps16,
-		"in frame %d of %d frames" % [framed16, steps16])
+		if last_rate16 >= 0.0:
+			jump16 = maxf(jump16, absf(rate16 - last_rate16))
+
+		last_rate16 = rate16
+
+	_check("P16 a man bolting across a close shot (5 m/s at 1.2 m) and stopping dead is never whipped after: under 200 deg/s, no jump over 30 deg/s between frames",
+		fastest16 < 200.0 and jump16 < 30.0, "fastest %.0f deg/s, worst jump %.0f deg/s" % [fastest16, jump16])
 	op16.queue_free()
 	screen16.queue_free()
 	camera16.queue_free()
+
+	# P26 the edge's quickening eases off, not drops: a shot's man jumping
+	# back to the middle of the frame (the speaker changing over a shoulder)
+	# while it is still turning fast never jerks its turn down
+	var camera26 := Camera3D.new()
+	add_child(camera26)
+	var screen26: CanvasLayer = CineScreen.new()
+	add_child(screen26)
+	var op26: Node = CineOperator.new()
+	add_child(op26)
+	op26.attach(camera26, screen26)
+	op26.set_mode(&"drama")
+	var from26 := Vector3(2380, 1.6, 1.2)
+	var look26 := Vector3(2380, 1.6, 0)
+	op26.show(_frame_at(from26, look26, 40.0, &"close"), &"cut")
+	await _frames(2)
+	var last_fwd26: Vector3 = -camera26.global_basis.z
+	var last_rate26 := -1.0
+	var jump26 := 0.0
+
+	for f in 60:
+		look26 += Vector3(3.5 / 60.0, 0, 0)
+		var framing26 := _frame_at(from26, look26, 40.0, &"close")
+
+		# From frame 24, the man it is on is where it already aims.
+		if f >= 24:
+			framing26["subject"] = op26.look_point()
+
+		op26.follow(framing26)
+		await get_tree().process_frame
+		var fwd26: Vector3 = -camera26.global_basis.z
+		var rate26 := rad_to_deg(last_fwd26.angle_to(fwd26)) * 60.0
+		last_fwd26 = fwd26
+
+		if last_rate26 >= 0.0:
+			jump26 = maxf(jump26, absf(rate26 - last_rate26))
+
+		last_rate26 = rate26
+
+	_check("P26 the edge's quickening eases off, never drops: its man back in the middle while it turns fast, the turn never jumps 30 deg/s",
+		jump26 < 30.0, "worst jump %.0f deg/s" % jump26)
+	op26.queue_free()
+	screen26.queue_free()
+	camera26.queue_free()
+
+	# P25 a man bolting out of a close shot is cut away from (a new shot
+	# within 0.6 s), not whipped after
+	var camera25 := Camera3D.new()
+	add_child(camera25)
+	var editor25: Node = CineEditor.new()
+	add_child(editor25)
+	editor25.take_over(camera25)
+	var shots25: Array = []
+	editor25.shot_started.connect(func(shot: Dictionary) -> void: shots25.append(shot))
+	var man25 := _man(Vector3(2450, 0, 0), 0.0)
+	editor25.scene({"mode": &"drama", "subjects": [man25]})
+	await _real(2.5)
+	editor25.cut_to(&"close", [man25])
+	await _real(1.2)
+	var before25 := shots25.size()
+	var last_fwd25: Vector3 = -camera25.global_basis.z
+	var fastest25 := 0.0
+	var cut_at25 := -1.0
+	var t25 := 0.0
+
+	while t25 < 0.8:
+		man25.global_position += Vector3(5.0 / 60.0, 0, 0)
+		await get_tree().process_frame
+		t25 += 1.0 / 60.0
+		var fwd25: Vector3 = -camera25.global_basis.z
+
+		if shots25.size() > before25:
+			if cut_at25 < 0.0:
+				cut_at25 = t25
+		else:
+			fastest25 = maxf(fastest25, rad_to_deg(last_fwd25.angle_to(fwd25)) * 60.0)
+
+		last_fwd25 = fwd25
+
+	_check("P25 a man bolting out of a close shot is cut away from within 0.6 s, not whipped after (under 200 deg/s until the cut)",
+		cut_at25 > 0.0 and cut_at25 <= 0.6 and fastest25 < 200.0, "cut at %.2f s, fastest before it %.0f deg/s" % [cut_at25, fastest25])
+	editor25.release()
+	editor25.queue_free()
+	camera25.queue_free()
+	man25.queue_free()
+
+	# P23 a man walking past a close shot is followed smoothly: the camera's
+	# turn never jumps from one frame to the next (a judder shakes the whole
+	# picture), and he stays in the frame
+	var camera23 := Camera3D.new()
+	add_child(camera23)
+	var screen23: CanvasLayer = CineScreen.new()
+	add_child(screen23)
+	var op23: Node = CineOperator.new()
+	add_child(op23)
+	op23.attach(camera23, screen23)
+	op23.set_mode(&"drama")
+	var from23 := Vector3(2350, 1.6, 1.5)
+	var head23 := Vector3(2349.2, 1.6, 0)
+	op23.show(_frame_at(from23, head23, 40.0, &"close"), &"cut")
+	await _frames(3)
+	var last_fwd23: Vector3 = -camera23.global_basis.z
+	var last_rate23 := -1.0
+	var worst_jump23 := 0.0
+	var framed23 := true
+
+	for f in 90:
+		head23 += Vector3(1.4 / 60.0, 0.03 * sin(float(f) * 0.9), 0)
+		op23.follow(_frame_at(from23, head23, 40.0, &"close"))
+		await get_tree().process_frame
+		var fwd23: Vector3 = -camera23.global_basis.z
+		var rate23 := rad_to_deg(last_fwd23.angle_to(fwd23)) * 60.0
+		last_fwd23 = fwd23
+
+		if last_rate23 >= 0.0:
+			worst_jump23 = maxf(worst_jump23, absf(rate23 - last_rate23))
+
+		last_rate23 = rate23
+		framed23 = framed23 and camera23.is_position_in_frustum(head23)
+
+	_check("P23 a man walking past a close shot is followed smoothly (the turn never jumps 15 deg/s between frames) and kept in the frame",
+		worst_jump23 < 15.0 and framed23, "worst jump %.1f deg/s, framed %s" % [worst_jump23, framed23])
+	op23.queue_free()
+	screen23.queue_free()
+	camera23.queue_free()
+
+	# P24 two frames drawn to each physics tick (a fast screen): the aim at a
+	# walking man moves every frame, as he is drawn, not every other one
+	var walker24 := Walker.new()
+	add_child(walker24)
+	walker24.global_position = Vector3(2360, 0, 0)
+	Engine.physics_ticks_per_second = 30
+	await get_tree().physics_frame
+	await get_tree().process_frame
+	var heads24: Array[Vector3] = []
+
+	for f in 12:
+		await get_tree().process_frame
+		heads24.append(CineShot.head_of(walker24))
+
+	Engine.physics_ticks_per_second = 60
+	var stalled24 := 0
+
+	for i in range(1, heads24.size()):
+		if heads24[i].distance_to(heads24[i - 1]) < 0.001:
+			stalled24 += 1
+
+	_check("P24 at two frames a physics tick, the aim at a walking man moves every frame (as he is drawn), never holding for a frame",
+		stalled24 == 0, "held still on %d of %d frames" % [stalled24, heads24.size() - 1])
+	walker24.queue_free()
 
 	# P17 a lone man running is taken running alongside him, not from a
 	# standing place he runs out of

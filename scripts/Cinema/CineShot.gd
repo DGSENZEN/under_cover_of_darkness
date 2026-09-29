@@ -134,16 +134,29 @@ static func head_of(man: Node3D) -> Vector3:
 
 	var doing: StringName = man.activity() if man.has_method("activity") else &""
 
+	var at := drawn_at(man)
+
 	if doing in LYING:
-		return man.global_position + Vector3.UP * HEAD_LYING
+		return at + Vector3.UP * HEAD_LYING
 
 	var rig: Variant = man.get("_rig")
 	var size := float(rig.get("size")) if rig != null and rig.get("size") != null else 1.0
 
 	if doing in KNEELING:
-		return man.global_position + Vector3.UP * HEAD_KNEELING * size
+		return at + Vector3.UP * HEAD_KNEELING * size
 
-	return man.global_position + Vector3.UP * HEAD_STANDING * size
+	return at + Vector3.UP * HEAD_STANDING * size
+
+
+## Where `node` is drawn this frame: between its physics ticks (the engine's
+## interpolation) on a screen drawing faster than they come, so the camera
+## follows a man as he is seen and not a tick behind in steps (the judder
+## up close); where it is when nothing interpolates.
+static func drawn_at(node: Node3D) -> Vector3:
+	if node.is_inside_tree() and node.is_physics_interpolated_and_enabled():
+		return node.get_global_transform_interpolated().origin
+
+	return node.global_position
 
 
 ## Which way he faces, flat: the way he goes if he is going anywhere.

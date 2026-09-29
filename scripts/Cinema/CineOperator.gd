@@ -5,8 +5,10 @@ extends Node
 ## mode's speeds, the lens eased, focus pulled onto the subject, a little
 ## handheld sway, and shake from blows. A shot's aim, once settled, holds
 ## while its man shifts his weight or sways where he stands (a dead zone, as
-## an operator's eye allows), and turns only to keep him in it; however fast
-## he goes, it never lets him out of the frame (EDGE). Up close an
+## an operator's eye allows), and turns only to keep him in it: smoothly, its
+## turn gathering speed no faster than the mode's acceleration, quicker as he
+## nears the frame's edge (never a snap: a whip pan up close shakes the whole
+## picture; a man who outruns it is the editor's to cut from). Up close an
 ## eye light, a hand's breadth off the lens, lifts the actors' faces out of
 ## the dark (it lights nothing else, and no guard reckons with it). It runs
 ## on real time (TimeFx.real_time), so a slowed world does not slow the
@@ -24,16 +26,23 @@ const DEPTH_OF_FIELD := true
 ## (deg).
 ## The dead zone (deg): how far off its aim a settled shot lets its man go
 ## before it turns.
+## How fast its turn may gather speed (deg/s per s).
 const MODES := {
-	&"observe": {"speed": 0.4, "turn": 8.0, "settle": 1.2, "close_sway": 0.0, "sway": 0.0, "drift": 0.0, "dead": 1.0},
-	&"drama": {"speed": 6.0, "turn": 60.0, "settle": 0.35, "close_sway": 0.15, "sway": 0.0, "drift": 0.005, "dead": 3.0},
+	&"observe": {"speed": 0.4, "turn": 8.0, "settle": 1.2, "close_sway": 0.0, "sway": 0.0, "drift": 0.0, "dead": 1.0, "accel": 30.0},
+	&"drama": {"speed": 6.0, "turn": 60.0, "settle": 0.35, "close_sway": 0.15, "sway": 0.0, "drift": 0.005, "dead": 3.0, "accel": 360.0},
 }
 ## A new aim is settled once this near it (deg): from then its dead zone.
 const SETTLED := 0.3
-## However fast he goes, the man it is on is kept within this share of half
-## the lens's height off the aim: past its turning speed the camera turns as
-## fast as keeps him in the frame (a man bolting across a close shot).
-const EDGE := 0.7
+## As the man it is on nears the frame's edge (from EDGE_SOFT to EDGE_HARD
+## of the way out from the middle, across or up), its turn and acceleration
+## grow smoothly, to EDGE_BOOST times the mode's.
+const EDGE_SOFT := 0.45
+const EDGE_HARD := 0.85
+const EDGE_BOOST := 3.0
+## That quickening comes on this fast and eases off this fast (a share of
+## it per second): never dropped at once, or its turn would jerk down.
+const EDGE_RISE := 8.0
+const EDGE_FALL := 3.0
 ## The eye light: its energy by the shot's size (a portrait's as a close
 ## shot's), its reach (m), its colour (a cool moonlit fill), how far off the
 ## lens (m: up, and to the side), and how fast it eases (a second).
@@ -46,9 +55,12 @@ const EYE_EASE := 3.0
 ## moves: MODES "drift", m).
 const SWAY_RATE := 0.35
 ## Shake: its most (deg, at trauma 1, as trauma squared), how fast it
-## wanders (Hz), and how fast trauma dies (a second).
-const SHAKE_MOST := 2.5
-const SHAKE_RATE := 14.0
+## wanders (Hz: slow enough to read as a jolt, not a buzz), and how fast
+## trauma dies (a second).
+const SHAKE_MOST := 1.6
+const SHAKE_RATE := 7.0
+## A blow's shake comes in over about this long (s): a jolt, not a jump.
+const SHAKE_ONSET := 0.08
 const SHAKE_DECAY := 1.5
 ## The lens eases at most this fast (deg/s); focus is pulled in about this
 ## long (s).
@@ -93,6 +105,10 @@ var _path_at := 0.0
 var _last := -1.0
 var _clock := 0.0
 var _noise := FastNoiseLite.new()
+## The shake's own wander: one smooth octave (the sway's fractal detail at the
+## shake's rate would buzz); and how much of it is in the picture now.
+var _shake_noise := FastNoiseLite.new()
+var _jolt := 0.0
 var _attributes: CameraAttributesPractical
 ## The camera's own lens and attributes, given back whenever it is not ours.
 ## A shot waiting for the screen to go black (a fade) before it is cut to.
@@ -102,6 +118,10 @@ var _own_fov := 75.0
 var _own_attributes: CameraAttributes = null
 ## A fresh aim (a shot shown) is met exactly before its dead zone holds it.
 var _settling := true
+## How fast the aim turned last frame (deg/s): its turn gathers speed from it.
+var _turn_rate := 0.0
+## How much of the edge's quickening is on now (0..1).
+var _edge := 0.0
 var _eye: OmniLight3D = null
 
 
@@ -111,6 +131,10 @@ func _ready() -> void:
 	_noise.fractal_octaves = 3
 	_noise.frequency = 1.0
 	_noise.seed = 1932
+	_shake_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	_shake_noise.fractal_type = FastNoiseLite.FRACTAL_NONE
+	_shake_noise.frequency = 1.0
+	_shake_noise.seed = 1933
 	_eye = OmniLight3D.new()
 	_eye.name = "EyeLight"
 	_eye.light_color = EYE_COLOUR
@@ -151,6 +175,7 @@ func attach(camera: Camera3D, screen: CanvasLayer) -> void:
 ## lens and attributes, no shake left in it.
 func stand_down() -> void:
 	trauma = 0.0
+	_jolt = 0.0
 	_after_black = {}
 
 	if _camera != null and is_instance_valid(_camera):
@@ -328,6 +353,7 @@ func _process(_delta: float) -> void:
 	_aim(omega, dt)
 	_lens(dt)
 	trauma = maxf(trauma - SHAKE_DECAY * dt, 0.0)
+	_jolt = move_toward(_jolt, trauma * trauma, dt / SHAKE_ONSET)
 	_hand()
 	_eye_light(dt)
 
@@ -434,51 +460,46 @@ func _aim(omega: float, dt: float) -> void:
 	var next := _spring(_look, target, _look_velocity, omega * 1.5, dt)
 	var was_dir := (_look - from).normalized()
 	var want_dir: Vector3 = (next[0] - from).normalized()
-	var most := deg_to_rad(float(_mode["turn"])) * dt
 	var angle := was_dir.angle_to(want_dir)
+	# Quicker as he nears the frame's edge; never faster than its turn gathers.
+	var subject: Vector3 = _framing.get("subject", _framing.get("look", _look))
+	var urgency := _urgency(was_dir, (subject - from).normalized()) if from.distance_to(subject) > 0.05 else 0.0
+	_edge = move_toward(_edge, urgency, (EDGE_RISE if urgency > _edge else EDGE_FALL) * dt)
+	var boost := lerpf(1.0, EDGE_BOOST, _edge)
+	var wanted := rad_to_deg(angle) / dt if dt > 0.0 else 0.0
+	var rate := minf(minf(wanted, float(_mode["turn"]) * boost), _turn_rate + float(_mode.get("accel", 360.0)) * boost * dt)
+	var most := deg_to_rad(rate) * dt
 
 	if angle > most and angle > 0.0001:
 		want_dir = was_dir.slerp(want_dir, most / angle)
 
-	# Never so slow that he leaves the frame: held at its edge instead.
-	var subject: Vector3 = _framing.get("subject", _framing.get("look", _look))
-
-	if from.distance_to(subject) > 0.05:
-		want_dir = _kept_in(want_dir, (subject - from).normalized())
-
+	_turn_rate = rad_to_deg(was_dir.angle_to(want_dir)) / dt if dt > 0.0 else 0.0
 	var reach := maxf(from.distance_to(next[0]), 0.5)
 	var was_look := _look
 	_look = from + want_dir * reach
 	_look_velocity = (_look - was_look) / dt if dt > 0.0 else Vector3.ZERO
 
 
-## `aim` turned as little as brings the way `to_him` within EDGE of the
-## frame's middle, across and up (on its own lens and screen); as it is if
-## he is within that already. Behind it, straight to him.
-func _kept_in(aim: Vector3, to_him: Vector3) -> Vector3:
+## How near the frame's edge the way `to_him` falls from `aim`, across or up
+## (on its own lens and screen): 0 within EDGE_SOFT of the way out from the
+## middle, 1 at EDGE_HARD and past it (behind the camera: 1).
+func _urgency(aim: Vector3, to_him: Vector3) -> float:
 	var right := aim.cross(Vector3.UP)
 	var ahead := to_him.dot(aim)
 
 	if right.length() < 0.001:
-		return aim
+		return 0.0
 
 	if ahead <= 0.01:
-		return to_him
+		return 1.0
 
 	right = right.normalized()
 	var up := right.cross(aim).normalized()
 	var screen := _camera.get_viewport().get_visible_rect().size if _camera.is_inside_tree() else Vector2(16.0, 9.0)
 	var tan_v := tan(deg_to_rad(_fov) * 0.5)
 	var tan_h := tan_v * screen.x / maxf(screen.y, 1.0)
-	var across := to_him.dot(right) / ahead / tan_h
-	var high := to_him.dot(up) / ahead / tan_v
-
-	if absf(across) <= EDGE and absf(high) <= EDGE:
-		return aim
-
-	var pitch := atan(high * tan_v) - atan(clampf(high, -EDGE, EDGE) * tan_v)
-	var yaw := atan(across * tan_h) - atan(clampf(across, -EDGE, EDGE) * tan_h)
-	return aim.rotated(right, pitch).rotated(Vector3.UP, -yaw).normalized()
+	var out := maxf(absf(to_him.dot(right) / ahead / tan_h), absf(to_him.dot(up) / ahead / tan_v))
+	return smoothstep(EDGE_SOFT, EDGE_HARD, out)
 
 
 ## The lens eased to the framing's; focus pulled onto the subject.
@@ -515,11 +536,11 @@ func _hand() -> void:
 	var portrait := StringName(_framing.get("kind", &"")) == &"portrait"
 	var drifts: bool = close and not portrait and float(_mode["drift"]) > 0.0
 	var sway := 0.0 if portrait else deg_to_rad(float(_mode["close_sway"] if close else _mode["sway"]))
-	var shaken := deg_to_rad(SHAKE_MOST) * trauma * trauma
+	var shaken := deg_to_rad(SHAKE_MOST) * _jolt
 	var t := _clock * SWAY_RATE
 	var s := _clock * SHAKE_RATE
-	var tilt := Vector2(sway * _noise.get_noise_2d(t, 0.0) + shaken * _noise.get_noise_2d(s, 50.0),
-		sway * _noise.get_noise_2d(t, 100.0) + shaken * _noise.get_noise_2d(s, 150.0))
+	var tilt := Vector2(sway * _noise.get_noise_2d(t, 0.0) + shaken * _shake_noise.get_noise_2d(s, 50.0),
+		sway * _noise.get_noise_2d(t, 100.0) + shaken * _shake_noise.get_noise_2d(s, 150.0))
 	var most := deg_to_rad(SHAKE_MOST)
 
 	# However hard it shakes, never further off its aim than SHAKE_MOST.
@@ -528,7 +549,7 @@ func _hand() -> void:
 
 	var yaw := tilt.x
 	var pitch := tilt.y
-	var roll := sway * 0.5 * _noise.get_noise_2d(t, 200.0) + shaken * 0.5 * _noise.get_noise_2d(s, 250.0)
+	var roll := sway * 0.5 * _noise.get_noise_2d(t, 200.0) + shaken * 0.5 * _shake_noise.get_noise_2d(s, 250.0)
 	_camera.rotate_object_local(Vector3.UP, yaw)
 	_camera.rotate_object_local(Vector3.RIGHT, pitch)
 	_camera.rotate_object_local(Vector3.FORWARD, roll)
@@ -554,6 +575,8 @@ func _cut() -> void:
 	_base = _goal
 	_camera.global_position = _goal
 	_velocity = Vector3.ZERO
+	_turn_rate = 0.0
+	_edge = 0.0
 	_look = _framing.get("look", _look)
 	_look_velocity = Vector3.ZERO
 	_fov = float(_framing.get("fov", _fov))
