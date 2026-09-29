@@ -41,7 +41,94 @@ def good():
     }
 
 
+def checks(route, points):
+    """A route's checks: [((x, y, z), move), ...] in order."""
+    return [marker("%s_%d" % (route, i + 1), "route_check", at, {"route": route, "order": i + 1, "move": move})
+            for i, (at, move) in enumerate(points)]
+
+
+def gap_level(gap):
+    """Two floors, the first to x = 2, the second from x = 2 + gap on."""
+    return {"level": "fixture", "markers": [],
+            "pieces": [piece("near", "floor_cobble_4", (0, 0, 0)),
+                       piece("far", "floor_cobble_4", (2.0 + gap + 2.0, 0, 0)),
+                       piece("far_2", "floor_cobble_4", (2.0 + gap + 6.0, 0, 0))]}
+
+
+def ledge_level(top):
+    """A floor in front (z > 0) of a ledge `top` high and 0.4 deep (z -0.4 to 0)."""
+    name = "test_ledge_%d" % int(round(top * 100))
+    kit_recipes.piece(name, "wall", "ashlar", "stone", [kit_recipes.box(0.0, top / 2.0, -0.2, 4.0, top, 0.4, "ashlar")])
+    TEST_PIECES.append(name)
+    return {"level": "fixture", "markers": [],
+            "pieces": [piece("front", "floor_cobble_4", (0, 0, 2)), piece("ledge", name, (0, 0, 0))]}
+
+
+# Test-only pieces, removed after each test.
+TEST_PIECES = []
+
+
 class Rules(unittest.TestCase):
+    def setUp(self):
+        kit_recipes.piece("beam_low", "beam", "timber", "wood", [kit_recipes.box(0.0, 1.7, 0.0, 0.3, 0.2, 3.0, "timber")])
+        kit_recipes.piece("crate_stack", "dressing", "boards", "wood", [kit_recipes.box(0.0, 1.0, 0.0, 1.0, 2.0, 1.0, "boards")])
+        TEST_PIECES.extend(["beam_low", "crate_stack"])
+
+    def tearDown(self):
+        for name in TEST_PIECES:
+            kit_recipes.PIECES.pop(name, None)
+
+        TEST_PIECES.clear()
+
+    def test_a_jump_names_its_class(self):
+        # two floors 4.6 m apart edge to edge, the same height; the landing
+        # 0.3 m past the far edge
+        data = gap_level(4.6)
+        data["markers"] += checks("leap", [((0, 0, 0), "walk"), ((6.9, 0, 0), "jump")])
+        self.assertTrue(any("sprint" in p for p in rules.problems(data)))
+        data["markers"][-1]["props"]["move"] = "sprint_jump"
+        self.assertEqual(rules.problems(data), [])
+
+    def test_the_uncertain_and_never_gaps(self):
+        for gap, word in ((6.3, "uncertain"), (6.6, "never")):
+            data = gap_level(gap)
+            data["markers"] += checks("leap", [((0, 0, 0), "walk"), ((gap + 2.3, 0, 0), "assist_jump")])
+            self.assertTrue(any(word in p for p in rules.problems(data)), gap)
+
+    def test_a_hang_needs_room_under_its_lip(self):
+        data = ledge_level(3.6)
+        data["markers"] += checks("up", [((0, 0, 1.0), "walk"), ((0, 3.6, -0.2), "hang")])
+        self.assertEqual(rules.problems(data), [])
+        data["pieces"].append(piece("crate_in_the_way", "crate_stack", (0, 0, 0.6)))
+        self.assertTrue(any("room under" in p for p in rules.problems(data)))
+
+    def test_a_mantle_too_high(self):
+        data = ledge_level(2.6)
+        data["markers"] += checks("up", [((0, 0, 1.0), "walk"), ((0, 2.6, -0.2), "mantle")])
+        self.assertTrue(any("mantle" in p and "2.6" in p for p in rules.problems(data)))
+
+    def test_a_drop_too_far(self):
+        data = ledge_level(5.0)
+        data["markers"] += checks("down", [((0, 5.0, -0.2), "walk"), ((0, 0, 1.0), "drop")])
+        self.assertTrue(any("drop" in p for p in rules.problems(data)))
+
+    def test_a_guard_route_under_a_low_beam(self):
+        data = good()
+        data["pieces"].append(piece("beam", "beam_low", (2.5, 0, 0.5)))
+        self.assertTrue(any("headroom" in p for p in rules.problems(data)))
+
+    def test_a_locked_door_needs_its_key_or_a_pick(self):
+        data = good()
+        data["markers"].append(marker("office_door", "door", (0, 0, -2.2), {"locked": True, "key": "office", "pick": False}))
+        self.assertTrue(any("no key 'office'" in p for p in rules.problems(data)))
+        data["markers"].append(marker("office_key", "key", (0.5, 0, 0.5), {"key_id": "office"}))
+        self.assertEqual(rules.problems(data), [])
+
+    def test_a_key_to_nothing(self):
+        data = good()
+        data["markers"].append(marker("stray", "key", (0.5, 0, 0.5), {"key_id": "nowhere"}))
+        self.assertTrue(any("opens nothing" in p for p in rules.problems(data)))
+
     def test_a_good_level_passes(self):
         self.assertEqual(rules.problems(good()), [])
 
