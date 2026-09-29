@@ -9,7 +9,7 @@
 #   tools/level/level.sh export <level>    checked, then glTF per sector + the manifest, imported by Godot
 #   tools/level/level.sh preview <level> [out]  a plan and four bird's-eye pictures
 #   tools/level/level.sh all <level>       kit, build, export
-#   tools/level/level.sh test              the rules against broken levels; the build's guard
+#   tools/level/level.sh test              the rules against broken levels, the terrain; the build's guard
 #
 # Exits non-zero when a step fails.
 set -euo pipefail
@@ -68,6 +68,7 @@ case "$verb" in
     ;;
   test)
     python3 "$HERE/test_rules.py"
+    python3 "$HERE/test_terrain.py"
     "$HERE/test_guard.sh"
     ;;
   *)

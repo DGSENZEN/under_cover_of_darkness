@@ -1,10 +1,11 @@
 """A level's data read back from its open .blend (the user may have edited
-it): its pieces, its markers, its sectors and the kit's triangle counts, in
-Godot's axes (see rules.py)."""
+it): its pieces, its markers, its terrain, its sectors and the kit's
+triangle counts, in Godot's axes (see rules.py)."""
 
 import bpy
 
 import common
+import geo
 import markers as schema
 
 SKIP = {"ucd"}
@@ -33,11 +34,24 @@ def value(key, raw, ucd):
     return raw
 
 
+def terrain_of(obj):
+    """A terrain object as the rules read it: its triangles in the world, in
+    Godot's axes (as sculpted, if it was)."""
+    mesh = obj.data
+    mesh.calc_loop_triangles()
+    to_world = obj.matrix_world
+    corners = [geo.from_blender(list(to_world @ v.co)) for v in mesh.vertices]
+    return {"name": obj.name, "sector": sector_of(obj), "surface": obj.get("surface", "stone"), "occluder": bool(obj.get("occluder", 0)),
+            "tris": [[corners[i] for i in tri.vertices] for tri in mesh.loop_triangles]}
+
+
 def read():
-    pieces, found, tris = [], [], {}
+    pieces, found, tris, ground = [], [], {}, []
 
     for obj in bpy.context.scene.objects:
-        if "kit_piece" in obj.keys():
+        if obj.type == "MESH" and obj.get("terrain"):
+            ground.append(terrain_of(obj))
+        elif "kit_piece" in obj.keys():
             position, basis, scale = common.unpack(obj)
             piece = obj["kit_piece"]
             pieces.append({"name": obj.name, "piece": piece, "sector": sector_of(obj), "position": position, "basis": basis,
@@ -54,5 +68,5 @@ def read():
             found.append({"name": obj.name, "ucd": ucd, "sector": sector_of(obj), "position": position, "basis": basis,
                           "size": size, "props": props})
 
-    return {"level": bpy.context.scene.get("level", ""), "pieces": pieces, "markers": found, "tris": tris,
-            "sectors": sorted({p["sector"] for p in pieces} | {m["sector"] for m in found})}
+    return {"level": bpy.context.scene.get("level", ""), "pieces": pieces, "markers": found, "tris": tris, "terrain": ground,
+            "sectors": sorted({p["sector"] for p in pieces} | {m["sector"] for m in found} | {t["sector"] for t in ground})}

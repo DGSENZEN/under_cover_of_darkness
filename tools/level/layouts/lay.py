@@ -16,6 +16,7 @@ class Layout:
         self.level = level
         self.pieces = []
         self.markers = []
+        self.ground = []
         self._count = {}
 
     # ------------------------------------------------------------------
@@ -139,8 +140,15 @@ class Layout:
             self.mark("%s_%d" % (name, i + 1), "waypoint", p[:3], yaw=p[3] if len(p) > 3 else 0.0, sector=sector,
                       route=name, order=i + 1, wait=wait)
 
+    # ------------------------------------------------------------------
+    # Ground
+
+    def terrain(self, t):
+        """A terrain (terrain.py's grid, cliff or tunnel) into the level."""
+        self.ground.append(t)
+
     def data(self):
-        return {"level": self.level, "pieces": self.pieces, "markers": self.markers}
+        return {"level": self.level, "pieces": self.pieces, "markers": self.markers, "terrain": self.ground}
 
 
 def facing(frm, to):

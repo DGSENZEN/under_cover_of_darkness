@@ -31,6 +31,10 @@ check "an unedited level is built again" $ok
 check "an edited level is not built over" $ok
 "$HERE/level.sh" build fixture --force >> "$scratch/log" 2>&1 && ok=yes || ok=no
 check "--force builds over it" $ok
+"$BLENDER" -b "$scratch/fixture.blend" --python-expr \
+  "import bpy; o = [o for o in bpy.data.objects if o.get('terrain')][0]; o.data.vertices[0].co.z += 0.5; bpy.ops.wm.save_mainfile()" >> "$scratch/log" 2>&1
+"$HERE/level.sh" build fixture >> "$scratch/log" 2>&1 && ok=no || ok=yes
+check "a sculpted terrain is not built over" $ok
 echo "== guard: $passed pass, $failed fail"
 [ "$failed" -eq 0 ] && rm -rf "${scratch:?}"
 [ "$failed" -eq 0 ]

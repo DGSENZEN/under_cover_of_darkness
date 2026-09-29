@@ -15,6 +15,7 @@ sentence each, naming the object and the rule; an empty list passes.
 import geo
 import kit_recipes
 import markers as schema
+from terrain import NAME as terrain_names
 
 # Triangle budget per sector (stage 1 blocks; the art pass raises it).
 BUDGET = {"stage1": 60000, "stage2": 120000}
@@ -37,8 +38,9 @@ def colliders(data):
     return out
 
 
-def floor_under(boxes, point):
-    """How far below `point` the first collider is (None within FLOOR_BELOW)."""
+def floor_under(boxes, point, ground=None):
+    """How far below `point` the first collider (or the ground) is (None
+    within FLOOR_BELOW)."""
     origin = geo.add(point, [0.0, 0.05, 0.0])
     best = None
 
@@ -48,7 +50,29 @@ def floor_under(boxes, point):
         if t is not None and (best is None or t < best):
             best = t
 
+    if ground is not None:
+        t = ground.down(origin, FLOOR_BELOW + 0.05)
+
+        if t is not None and (best is None or t < best):
+            best = t
+
     return best if best is not None and best <= FLOOR_BELOW + 0.05 else None
+
+
+def ground_of(data):
+    """The level's terrain as one geo.TriGrid (None without terrain): as a
+    layout makes it (its verts and faces) or as a .blend reads back (its
+    triangles)."""
+    tris = []
+
+    for t in data.get("terrain", []):
+        tris.extend(t["tris"] if "tris" in t else [[t["verts"][i] for i in face] for face in t["faces"]])
+
+    return geo.TriGrid(tris) if tris else None
+
+
+def terrain_tris(t):
+    return len(t["tris"]) if "tris" in t else len(t["faces"])
 
 
 # A piece's scale this far from 1 is a scaled piece.
@@ -125,14 +149,28 @@ def problems(data, stage="stage1"):
         if len(waypoints.get(route, [])) < 2:
             out.append("%s: a route needs two waypoints or more" % route)
 
-    # Standing markers: on a floor, not in a wall.
+    # The terrain: named as Godot keeps it (a copy made in Blender is
+    # "bank.001"), each name once.
+    seen = set()
+
+    for t in data.get("terrain", []):
+        if not terrain_names.match(t["name"]):
+            out.append("%s: a terrain's name is small letters, digits and underscores (Godot finds its collider by it)" % t["name"])
+
+        if t["name"] in seen:
+            out.append("%s: two terrains have this name" % t["name"])
+
+        seen.add(t["name"])
+
+    # Standing markers: on a floor, not in a wall, not under the ground.
     boxes = colliders(data)
+    ground = ground_of(data)
 
     for m in data["markers"]:
         if m["ucd"] not in STANDING:
             continue
 
-        if floor_under(boxes, m["position"]) is None:
+        if floor_under(boxes, m["position"], ground) is None:
             out.append("%s (%s): no floor under it within %.1f m" % (m["name"], m["ucd"], FLOOR_BELOW))
 
         for height in BODY_HEIGHTS:
@@ -142,7 +180,9 @@ def problems(data, stage="stage1"):
                 out.append("%s (%s): its body is inside something at %.1f m up" % (m["name"], m["ucd"], height))
                 break
 
-    ground = None
+        if ground is not None and ground.up(geo.add(m["position"], [0.0, 0.05, 0.0]), BODY_HEIGHTS[-1]) is not None:
+            out.append("%s (%s): its body is under the ground" % (m["name"], m["ucd"]))
+
     out.extend(move_problems(data, boxes, ground))
     out.extend(headroom_problems(data, boxes, ground))
     out.extend(key_problems(data))
@@ -155,6 +195,9 @@ def problems(data, stage="stage1"):
         recipe = kit_recipes.PIECES.get(p["piece"])
         count = tris.get(p["piece"], len(recipe["boxes"]) * 12 if recipe else 0)
         per_sector[p["sector"]] = per_sector.get(p["sector"], 0) + count
+
+    for t in data.get("terrain", []):
+        per_sector[t["sector"]] = per_sector.get(t["sector"], 0) + terrain_tris(t)
 
     for sector, count in per_sector.items():
         if count > BUDGET[stage]:
@@ -286,6 +329,9 @@ def _volumes(data):
 # ---------------------------------------------------------------------------
 
 def _jump(boxes, ground, a, b, move):
+    if _floor_y(boxes, ground, b) is None:
+        return ["lands on nothing"]
+
     d, total = _flat(a, b)
     gap = max(0.0, total - _edge(boxes, ground, a, d, total) - _edge(boxes, ground, b, [-d[0], 0.0, -d[2]], total))
     rise = b[1] - a[1]
@@ -335,6 +381,10 @@ def _move(boxes, ground, volumes, a, b, move):
 
     if move == "drop":
         fall = a[1] - b[1]
+
+        if _floor_y(boxes, ground, b) is None:
+            return ["drops onto nothing"]
+
         return ["a drop of %.2f m: the player is hurt past %.2f" % (fall, SAFE_DROP)] if fall > SAFE_DROP else []
 
     if move in ("walk", "stairs", "balance"):

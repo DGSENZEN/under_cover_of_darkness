@@ -1,10 +1,12 @@
 """Exports the open level .blend for Godot, if it passes the check: no two
 pieces' faces fighting in one plane (overlap.py: the earlier pushed back),
-its shading baked into vertex colours (bake: shade.py), a glTF
-of each sector's pieces (assets/level/<level>/<sector>.glb) and the level's
-manifest (<level>.json: its sectors, every collider as an oriented box with
-its surface, every marker with its properties and defaults), plus the
-marker schema (markers.json). scripts/Level/LevelLoader.gd reads them.
+its shading baked into vertex colours (bake: shade.py; the terrain's own
+tint multiplied in), a glTF of each sector's pieces and terrain
+(assets/level/<level>/<sector>.glb) and the level's manifest (<level>.json:
+its sectors, every collider as an oriented box with its surface, the
+terrain whose meshes are their own colliders, every marker with its
+properties and defaults), plus the marker schema (markers.json).
+scripts/Level/LevelLoader.gd reads them.
 
     Blender -b assets/level/source/<level>.blend --python tools/level/export.py [-- stage2]
 """
@@ -120,8 +122,12 @@ def manifest(data):
         if recipe["family"] == "dressing" and recipe.get("size") and max(recipe["size"]) < SMALL:
             ranges[p["name"]] = WEEDS_RANGE if p["piece"] in LOW_COVER else SMALL_RANGE
 
+    # The terrain: its mesh is its collider (LevelLoader finds it by name).
+    ground = [{"name": t["name"], "sector": t["sector"], "surface": t["surface"], "occluder": bool(t.get("occluder"))}
+              for t in data.get("terrain", [])]
+
     return {"level": data["level"], "sectors": data["sectors"], "colliders": colliders, "markers": found, "sockets": sockets,
-            "pieces": len(data["pieces"]), "ranges": ranges}
+            "pieces": len(data["pieces"]), "ranges": ranges, "terrain": ground}
 
 
 def _subdivide(mesh):
@@ -264,15 +270,19 @@ def bake(data):
     """The level's shading into its pieces' vertex colours (shade.py): each
     piece its own copy of its mesh (the .blend is not saved after), the big
     faces cut finer, occlusion measured against the whole level."""
-    objects = [o for o in bpy.context.scene.objects if o.type == "MESH" and "kit_piece" in o.keys()]
+    pieces = [o for o in bpy.context.scene.objects if o.type == "MESH" and "kit_piece" in o.keys()]
+    # (The terrain is baked with the rest, its own tint multiplied in; it is
+    # cut as finely as it was made, and floors are kept off its faces.)
+    ground = [o for o in bpy.context.scene.objects if o.type == "MESH" and o.get("terrain")]
+    objects = pieces + ground
 
     for obj in objects:
         obj.data = obj.data.copy()
 
-        if kit_recipes.PIECES[obj["kit_piece"]]["family"] in GRADED:
+        if obj in pieces and kit_recipes.PIECES[obj["kit_piece"]]["family"] in GRADED:
             _subdivide(obj.data)
 
-    _ungrip(objects, {p["name"]: i for i, p in enumerate(data["pieces"])})
+    _ungrip(pieces, {p["name"]: i for i, p in enumerate(data["pieces"])})
     verts, polys = [], []
 
     for obj in objects:
@@ -289,6 +299,7 @@ def bake(data):
         mesh = obj.data
         # (Glass that glows is left white: nothing shades what shines.)
         unlit = {i for i, m in enumerate(mesh.materials) if m is not None and m.name in UNLIT}
+        tint = mesh.color_attributes.get("Tint")
         attribute = mesh.color_attributes.new("Col", "FLOAT_COLOR", "CORNER")
         to_world = obj.matrix_world
         turn = to_world.to_3x3()
@@ -310,9 +321,21 @@ def bake(data):
                     occlusion = _occlusion(tree, point, normal, rays)
                     memo[key] = shade.colour(geo.from_blender(list(point)), geo.from_blender(list(normal)), occlusion, flames)
 
-                attribute.data[loop].color = (*memo[key], 1.0)
+                colour = memo[key]
+
+                if tint is not None:
+                    own = tint.data[mesh.loops[loop].vertex_index].color
+                    colour = (colour[0] * own[0], colour[1] * own[1], colour[2] * own[2])
+
+                attribute.data[loop].color = (*colour, 1.0)
+
+        # (Only the baked colour goes to Godot: the tint is in it now.)
+        if tint is not None:
+            mesh.color_attributes.remove(tint)
+            attribute = mesh.color_attributes.get("Col")
 
         mesh.color_attributes.active_color = attribute
+        mesh.color_attributes.render_color_index = mesh.color_attributes.active_color_index
 
     print("level: shading baked into %d pieces (%d corners measured)" % (len(objects), len(memo)))
 
@@ -329,7 +352,7 @@ def export(stage="stage1"):
     bake(data)
 
     for sector in data["sectors"]:
-        names = {p["name"] for p in data["pieces"] if p["sector"] == sector}
+        names = {p["name"] for p in data["pieces"] if p["sector"] == sector} | {t["name"] for t in data.get("terrain", []) if t["sector"] == sector}
 
         if not names:
             continue

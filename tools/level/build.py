@@ -1,9 +1,10 @@
 """Builds a level's .blend (assets/level/source/<level>.blend) from its
 layout (tools/level/layouts/<level>.py, whose layout() returns the level's
-data: pieces and markers, see rules.py). Each piece is an object linking the
-kit's mesh (kit.blend), in its sector's collection; each marker an empty
-(a cube for a box marker) with `ucd` and its properties, in the sector's
-"<sector> markers" collection. After this the .blend is the user's to edit:
+data: pieces, markers and terrain, see rules.py). Each piece is an object
+linking the kit's mesh (kit.blend), in its sector's collection; each terrain
+a mesh of its own (terrain_object); each marker an empty (a cube for a box
+marker) with `ucd` and its properties, in the sector's "<sector> markers"
+collection. After this the .blend is the user's to edit:
 check and export read it back, and build will not overwrite it once edited
 (edited.py; `level.sh build <level> --force` does).
 
@@ -34,6 +35,36 @@ def collection(scene, name, parent=None):
     return found
 
 
+def terrain_object(t, sector):
+    """A terrain (terrain.py) as a mesh object of its own, its faces in their
+    slots' materials, its tint a colour attribute ("Tint": the export
+    multiplies it into the baked shading), marked `terrain` with its
+    surface; smooth-shaded ground."""
+    mesh = bpy.data.meshes.new(t["name"])
+    mesh.from_pydata([geo.to_blender(v) for v in t["verts"]], [], [tuple(f) for f in t["faces"]])
+    slots = list(dict.fromkeys(t["slots"]))
+
+    for slot in slots:
+        mesh.materials.append(common.material(slot))
+
+    for polygon, slot in zip(mesh.polygons, t["slots"]):
+        polygon.material_index = slots.index(slot)
+        polygon.use_smooth = True
+
+    tint = mesh.color_attributes.new("Tint", "FLOAT_COLOR", "POINT")
+
+    for i, colour in enumerate(t["tints"]):
+        tint.data[i].color = (colour[0], colour[1], colour[2], 1.0)
+
+    mesh.update()
+    obj = bpy.data.objects.new(t["name"], mesh)
+    obj["terrain"] = 1
+    obj["surface"] = t["surface"]
+    obj["occluder"] = 1 if t.get("occluder") else 0
+    sector.objects.link(obj)
+    return obj
+
+
 def build(level):
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "layouts"))
     data = importlib.import_module(level).layout()
@@ -60,6 +91,9 @@ def build(level):
         obj.matrix_world = common.matrix(p["position"], p["basis"])
         obj["kit_piece"] = p["piece"]
         sector.objects.link(obj)
+
+    for t in data.get("terrain", []):
+        terrain_object(t, collection(scene, t["sector"]))
 
     for m in data["markers"]:
         sector = collection(scene, p_sector := m["sector"])
@@ -90,7 +124,8 @@ def build(level):
     path.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(path), relative_remap=True)
     shown = path.relative_to(common.ROOT) if path.is_relative_to(common.ROOT) else path
-    print("level: %s: %d pieces, %d markers -> %s" % (level, len(data["pieces"]), len(data["markers"]), shown))
+    print("level: %s: %d pieces, %d markers, %d terrains -> %s" % (level, len(data["pieces"]), len(data["markers"]),
+                                                                   len(data.get("terrain", [])), shown))
 
 
 args = common.argv()

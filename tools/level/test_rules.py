@@ -64,6 +64,12 @@ def ledge_level(top):
             "pieces": [piece("front", "floor_cobble_4", (0, 0, 2)), piece("ledge", name, (0, 0, 0))]}
 
 
+def flat_terrain(name, y, x0, x1, z0=-4.0, z1=4.0):
+    """A flat patch of terrain as a level reads it back (its triangles)."""
+    a, b, c, d = [x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1]
+    return {"name": name, "sector": "yard", "surface": "gravel", "occluder": False, "tris": [[a, c, b], [a, d, c]]}
+
+
 # Test-only pieces, removed after each test.
 TEST_PIECES = []
 
@@ -122,6 +128,31 @@ class Rules(unittest.TestCase):
         data["markers"].append(marker("office_door", "door", (0, 0, -2.2), {"locked": True, "key": "office", "pick": False}))
         self.assertTrue(any("no key 'office'" in p for p in rules.problems(data)))
         data["markers"].append(marker("office_key", "key", (0.5, 0, 0.5), {"key_id": "office"}))
+        self.assertEqual(rules.problems(data), [])
+
+    def test_a_marker_on_the_terrain(self):
+        data = good()
+        data["terrain"] = [flat_terrain("ground", y=0.0, x0=6, x1=14)]
+        data["markers"].append(marker("on_ground", "hide", (10, 0.0, 0)))
+        self.assertEqual(rules.problems(data), [])
+
+    def test_a_marker_under_the_terrain(self):
+        data = good()
+        data["terrain"] = [flat_terrain("mound", y=1.2, x0=6, x1=14)]
+        data["markers"].append(marker("buried", "hide", (10, 0.0, 0)))
+        self.assertTrue(any("under the ground" in p for p in rules.problems(data)))
+
+    def test_a_terrain_renamed_in_blender(self):
+        data = good()
+        data["terrain"] = [flat_terrain("bank.001", y=0.0, x0=6, x1=14)]
+        self.assertTrue(any("bank.001" in p and "name" in p for p in rules.problems(data)))
+
+    def test_a_jump_onto_the_terrain(self):
+        # the far side is ground, not a piece
+        data = gap_level(3.0)
+        data["pieces"] = data["pieces"][:1]
+        data["terrain"] = [flat_terrain("far_bank", y=0.0, x0=5.0, x1=12.0)]
+        data["markers"] += checks("leap", [((0, 0, 0), "walk"), ((5.5, 0, 0), "jump")])
         self.assertEqual(rules.problems(data), [])
 
     def test_a_key_to_nothing(self):

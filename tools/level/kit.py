@@ -35,23 +35,7 @@ def box_corners(b):
     return out
 
 
-def material(slot):
-    existing = bpy.data.materials.get(slot)
-
-    if existing is not None:
-        return existing
-
-    mat = bpy.data.materials.new(slot)
-    mat.use_nodes = True
-    colour = common.SLOT_COLOURS.get(slot, (1.0, 0.0, 1.0))
-    principled = mat.node_tree.nodes.get("Principled BSDF")
-
-    if principled is not None:
-        principled.inputs["Base Color"].default_value = (*colour, 1.0)
-        principled.inputs["Roughness"].default_value = 0.9
-
-    mat.diffuse_color = (*colour, 1.0)
-    return mat
+material = common.material
 
 
 def make_modelled(name, recipe):

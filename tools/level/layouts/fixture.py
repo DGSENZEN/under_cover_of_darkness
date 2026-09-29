@@ -1,8 +1,10 @@
 """A small level for the pipeline's and the loader's own tests: a yard of
 cobbles with a wall, a doorway into a room of boards, a torch, a bench
-station, a route, a guard, a zone, a hide spot, a vantage and a mark."""
+station, a route, a guard, a zone, a hide spot, a vantage and a mark; a bank
+of terrain beside the yard."""
 
 import geo
+import terrain
 
 
 def P(name, piece, at, yaw=0.0, sector="yard"):
@@ -47,4 +49,6 @@ def layout():
         M("well_spot", "mark", (3, 0, 0)),
         M("yard_area", "hunt_area", (0, 1.5, 0), {"label": "the yard"}, size=[12, 3, 12]),
     ]
-    return {"level": "fixture", "pieces": pieces, "markers": markers}
+    # A bank of gravel east of the yard, rising a quarter metre a metre.
+    bank = terrain.grid("bank", "yard", 6, -6, 14, 6, 1.0, lambda x, z: (x - 6) * 0.25, "gravel", surface="gravel")
+    return {"level": "fixture", "pieces": pieces, "markers": markers, "terrain": [bank]}

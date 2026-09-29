@@ -16,7 +16,8 @@
     "stations": "",
     "voice": "",
     "look_seed": 0,
-    "role": ""
+    "role": "",
+    "light": ""
    },
    "box": false
   },
@@ -44,7 +45,8 @@
     "label": "",
     "width": 1.2,
     "height": 2.2,
-    "barred": false
+    "barred": false,
+    "pick": true
    },
    "box": false
   },
@@ -58,7 +60,8 @@
     "range": 0.0,
     "color": "",
     "cookie": "",
-    "douse": true
+    "douse": true,
+    "chain": 0.0
    },
    "box": false
   },
@@ -158,6 +161,186 @@
     "floor": false
    },
    "box": true
+  },
+  "loot": {
+   "required": [
+    "value"
+   ],
+   "optional": {
+    "label": "goblet",
+    "kind": "",
+    "special": false
+   },
+   "box": false
+  },
+  "key": {
+   "required": [
+    "key_id"
+   ],
+   "optional": {
+    "label": "key"
+   },
+   "box": false
+  },
+  "tool": {
+   "required": [
+    "tool"
+   ],
+   "optional": {
+    "count": 1,
+    "label": ""
+   },
+   "box": false
+  },
+  "chest": {
+   "required": [],
+   "optional": {
+    "locked": false,
+    "key": "",
+    "pick": true,
+    "label": "chest",
+    "large": false
+   },
+   "box": false
+  },
+  "prop": {
+   "required": [
+    "kind"
+   ],
+   "optional": {
+    "mass": 0.0
+   },
+   "box": false
+  },
+  "rope": {
+   "required": [
+    "length"
+   ],
+   "optional": {
+    "chain": false
+   },
+   "box": false
+  },
+  "objective": {
+   "required": [
+    "label"
+   ],
+   "optional": {
+    "kind": "steal"
+   },
+   "box": false
+  },
+  "exit": {
+   "required": [
+    "label"
+   ],
+   "optional": {},
+   "box": true
+  },
+  "secret": {
+   "required": [],
+   "optional": {
+    "label": ""
+   },
+   "box": true
+  },
+  "noise_zone": {
+   "required": [
+    "db"
+   ],
+   "optional": {
+    "period": 0.0,
+    "label": ""
+   },
+   "box": true
+  },
+  "probe": {
+   "required": [
+    "expect"
+   ],
+   "optional": {},
+   "box": false
+  },
+  "route_check": {
+   "required": [
+    "route",
+    "order",
+    "move"
+   ],
+   "optional": {},
+   "box": false
+  },
+  "lever": {
+   "required": [],
+   "optional": {
+    "target": "",
+    "state": "",
+    "label": "",
+    "hold": false,
+    "width": 4.0,
+    "height": 5.0
+   },
+   "box": false
+  },
+  "wheel": {
+   "required": [],
+   "optional": {
+    "target": "",
+    "state": "",
+    "label": "",
+    "hold": false,
+    "width": 4.0,
+    "height": 5.0
+   },
+   "box": false
+  },
+  "portcullis": {
+   "required": [],
+   "optional": {
+    "target": "",
+    "state": "",
+    "label": "",
+    "hold": false,
+    "width": 4.0,
+    "height": 5.0
+   },
+   "box": false
+  },
+  "sluice": {
+   "required": [],
+   "optional": {
+    "target": "",
+    "state": "",
+    "label": "",
+    "hold": false,
+    "width": 4.0,
+    "height": 5.0
+   },
+   "box": false
+  },
+  "hoist": {
+   "required": [],
+   "optional": {
+    "target": "",
+    "state": "",
+    "label": "",
+    "hold": false,
+    "width": 4.0,
+    "height": 5.0
+   },
+   "box": false
+  },
+  "slider": {
+   "required": [],
+   "optional": {
+    "target": "",
+    "state": "",
+    "label": "",
+    "hold": false,
+    "width": 4.0,
+    "height": 5.0
+   },
+   "box": false
   }
  },
  "station_kinds": [
@@ -190,5 +373,47 @@
   "chapel",
   "cellar",
   "hearth"
+ ],
+ "tool_kinds": [
+  "flask",
+  "flash_bomb",
+  "lockpick",
+  "arrows"
+ ],
+ "prop_kinds": [
+  "crate",
+  "crate_small"
+ ],
+ "moves": [
+  "walk",
+  "stairs",
+  "mantle",
+  "hang",
+  "jump",
+  "sprint_jump",
+  "assist_jump",
+  "drop",
+  "climb",
+  "rope",
+  "swim",
+  "balance"
+ ],
+ "probe_expect": [
+  "moon",
+  "shadow",
+  "lamp"
+ ],
+ "rounds_lights": [
+  "",
+  "lantern",
+  "torch"
+ ],
+ "mechanisms": [
+  "lever",
+  "wheel",
+  "portcullis",
+  "sluice",
+  "hoist",
+  "slider"
  ]
 }

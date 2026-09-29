@@ -96,10 +96,37 @@ def _rounded(value):
 
 
 def content_hash(data):
-    """A level's pieces and markers as read back from its .blend (read.read),
-    its numbers rounded: saved as it is built, so an edit since then can be
-    told (build will not overwrite it without --force)."""
-    return data_hash(_rounded({"pieces": data["pieces"], "markers": data["markers"]}))
+    """A level's pieces, markers and terrain as read back from its .blend
+    (read.read), its numbers rounded: saved as it is built, so an edit since
+    then can be told (build will not overwrite it without --force). (A level
+    without terrain hashes as it did before terrain was read.)"""
+    content = {"pieces": data["pieces"], "markers": data["markers"]}
+
+    if data.get("terrain"):
+        content["terrain"] = [{"name": t["name"], "sector": t["sector"], "tris": t["tris"]} for t in data["terrain"]]
+
+    return data_hash(_rounded(content))
+
+
+def material(slot):
+    """The level's material for `slot`, made once: its preview colour (the
+    game's look is Materials.gd's; the glTF carries only the slot's name)."""
+    existing = bpy.data.materials.get(slot)
+
+    if existing is not None:
+        return existing
+
+    mat = bpy.data.materials.new(slot)
+    mat.use_nodes = True
+    colour = SLOT_COLOURS.get(slot, (1.0, 0.0, 1.0))
+    principled = mat.node_tree.nodes.get("Principled BSDF")
+
+    if principled is not None:
+        principled.inputs["Base Color"].default_value = (*colour, 1.0)
+        principled.inputs["Roughness"].default_value = 0.9
+
+    mat.diffuse_color = (*colour, 1.0)
+    return mat
 
 
 def out_dir(level):
