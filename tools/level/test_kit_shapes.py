@@ -4,6 +4,7 @@ pure Python, no Blender.
     python3 tools/level/test_kit_shapes.py
 """
 
+import math
 import os
 import sys
 import unittest
@@ -50,6 +51,47 @@ class Shapes(unittest.TestCase):
         for x, y, z in part["verts"]:
             if abs(x) < 0.6 - 1e-3 and 1e-3 < y < 1.6 - 1e-3:
                 self.fail("a vertex in the doorway at %s" % [x, y, z])
+
+    def test_a_horseshoe_head_runs_below_its_springing(self):
+        # The Nasrid gate: an arch 7 m across at 6.5 m, its circle running on a
+        # third of its radius below that, onto jambs narrower than the arch.
+        shape = kit_shapes.arched_wall(12.0, 14.5, 2.4, 7.0, 6.5, 3.5, 0.0, "brick", horseshoe=0.33)[0]
+        head = kit_shapes._head(shape)
+        drop = 0.33 * 3.5
+        jamb = abs(head[0][0])
+        self.assertAlmostEqual(min(y for _, y in head), 6.5 - drop, places=3)
+        self.assertAlmostEqual(max(y for _, y in head), 10.0, places=3)
+        self.assertAlmostEqual(max(abs(x) for x, _ in head), 3.5, places=2)
+        self.assertLess(jamb, 3.5 - 0.1)
+
+        # Nothing of the wall in the opening: under the jambs' tops, nor in
+        # the arch's circle over them.
+        for x, y, z in kit_shapes.build([shape])["verts"]:
+            if y < 6.5 - drop - 1e-3 and abs(x) < jamb - 1e-3:
+                self.fail("a vertex in the gateway at %s" % [x, y, z])
+
+            if y > 6.5 - drop + 1e-3 and math.hypot(x, y - 6.5) < 3.5 - 1e-2:
+                self.fail("a vertex in the arch at %s" % [x, y, z])
+
+        # Its fronts look out (drawn one side only): +z at the front, -z at
+        # the back.
+        part = kit_shapes.build([shape])
+
+        for indices, _, _ in part["faces"]:
+            points = [part["verts"][i] for i in indices]
+
+            for side in (1.2, -1.2):
+                if all(abs(p[2] - side) < 1e-6 for p in points):
+                    self.assertGreater(kit_shapes._normal(points)[2] * side, 0.0, points)
+
+        # And the wall is whole round the arch: its front's area is the
+        # wall's less the opening's.
+        front = sum(abs(kit_shapes._normal([part["verts"][i] for i in f[0]])[2]) / 2.0 for f in part["faces"]
+                    if all(abs(part["verts"][i][2] - 1.2) < 1e-6 for i in f[0]))
+        jamb_top = 6.5 - drop
+        opening = 2.0 * jamb * jamb_top + sum(abs(x1 * y0 - x0 * y1) / 2.0 for (x0, y0), (x1, y1) in
+                                               zip([(x, y - jamb_top) for x, y in head], [(x, y - jamb_top) for x, y in head[1:]]))
+        self.assertAlmostEqual(front, 12.0 * 14.5 - opening, delta=0.5)
 
     def test_a_pointed_head_reaches_its_rise(self):
         part = kit_shapes.build(kit_shapes.arched_wall(2.0, 6.0, 0.4, 0.9, 3.9, 1.5, 1.8, "ashlar", pointed=True))

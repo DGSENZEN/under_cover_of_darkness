@@ -541,3 +541,7 @@ import kit_props  # noqa: E402,F401
 
 # The nature round the walls (kit_nature: trees, shrubs, grass, reeds, ivy).
 import kit_nature  # noqa: E402,F401
+
+# The city's fortifications (kit_fort: walls, towers, the golden tower, the
+# fort, the Sea Gate, the Nasrid gate, the chain).
+import kit_fort  # noqa: E402,F401

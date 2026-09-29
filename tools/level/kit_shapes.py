@@ -57,13 +57,16 @@ def prism(cx, cy, cz, radius, height, sides, slot, yaw=0.0, pitch=0.0, roll=0.0,
             "turn": [yaw, pitch, roll], "top": radius if top is None else top, "rings": rings or [], "caps": caps}
 
 
-def arched_wall(width, height, depth, opening, spring, rise, sill, slot, pointed=False, piers=True, x=0.0):
+def arched_wall(width, height, depth, opening, spring, rise, sill, slot, pointed=False, piers=True, x=0.0, horseshoe=0.0):
     """A wall `width` x `height` x `depth` (its foot at y 0, centred on x)
     with an opening `opening` wide from `sill` up to `spring`, its head a
     round arch `rise` high (pointed: a gothic one; 0: flat). Without piers,
-    only the band over the opening (between two columns)."""
+    only the band over the opening (between two columns). `horseshoe`: the
+    Moorish arch, its circle (`opening` across, centred at `spring`) running
+    on that share of its radius below the springing, onto jambs narrower
+    than the arch."""
     return [{"kind": "arched", "width": width, "height": height, "depth": depth, "opening": opening, "spring": spring,
-             "rise": rise, "sill": sill, "slot": slot, "pointed": pointed, "piers": piers, "x": x}]
+             "rise": rise, "sill": sill, "slot": slot, "pointed": pointed, "piers": piers, "x": x, "horseshoe": horseshoe}]
 
 
 def gable(cx, cy, cz, width, rise, depth, slot, yaw=0.0):
@@ -231,6 +234,14 @@ def _head(shape):
     spring, rise = shape["spring"], shape["rise"]
     segments = ARCH_SEGMENTS
 
+    if shape.get("horseshoe", 0.0) > 0.0:
+        # From the left jamb's top round over the apex to the right's: the
+        # circle through them all, past a half turn by `beyond` either side.
+        beyond = math.asin(shape["horseshoe"])
+        steps = segments + 4
+        return [[half * math.cos(math.pi + beyond - (math.pi + 2.0 * beyond) * i / steps),
+                 spring + half * math.sin(math.pi + beyond - (math.pi + 2.0 * beyond) * i / steps)] for i in range(steps + 1)]
+
     if rise <= 0.0:
         return [[-half, spring], [half, spring]]
 
@@ -255,7 +266,88 @@ def _head(shape):
     return left + right
 
 
+def _horseshoe(part, shape):
+    """A wall with a horseshoe arch through it: its piers to the jambs'
+    tops, the wall over and round the arch in a fan from its circle out to
+    its sides and top (the circle bulges wider than the jambs, so the
+    round arch's strips cannot be used), the reveals, its ends and top."""
+    w, height, d = shape["width"] / 2.0, shape["height"], shape["depth"] / 2.0
+    ox, slot, sill, spring = shape["x"], shape["slot"], shape["sill"], shape["spring"]
+    head = _head(shape)
+    jamb, foot = abs(head[0][0]), head[0][1]
+
+    def front(x, y):
+        return [ox + x, y, d]
+
+    def back(x, y):
+        return [ox + x, y, -d]
+
+    def both(points):
+        _add_face(part, [front(x, y) for x, y in points], slot)
+        _add_face(part, [back(x, y) for x, y in reversed(points)], slot)
+
+    def rim(x, y):
+        """Where the ray from the circle's middle through (x, y) meets the
+        wall's sides or top (no lower than the jambs' tops)."""
+        dx, dy = x, y - spring
+        hits = []
+
+        if abs(dx) > 1e-9:
+            t = (w if dx > 0 else -w) / dx
+            hits.append((t, [w if dx > 0 else -w, max(foot, spring + dy * t)]))
+
+        if dy > 1e-9:
+            t = (height - spring) / dy
+            hits.append((t, [dx * t, height]))
+
+        return min(hits, key=lambda h: h[0])[1]
+
+    both([[-w, 0.0], [-jamb, 0.0], [-jamb, foot], [-w, foot]])
+    both([[jamb, 0.0], [w, 0.0], [w, foot], [jamb, foot]])
+
+    if sill > 0.0:
+        both([[-jamb, 0.0], [jamb, 0.0], [jamb, sill], [-jamb, sill]])
+
+    def along(p):
+        """How far round the wall's edge p is: up its left side, across its
+        top, down its right."""
+        if p[0] <= -w + 1e-9:
+            return p[1] - foot
+
+        if p[1] >= height - 1e-9:
+            return (height - foot) + (p[0] + w)
+
+        return (height - foot) + 2.0 * w + (height - p[1])
+
+    corners = [(height - foot, [-w, height]), (height - foot + 2.0 * w, [w, height])]
+
+    # The head runs clockwise over the arch (seen from the front); each fan
+    # face goes along it, out to the edge, back along the edge (round any
+    # corner it passes) and in again: counter-clockwise.
+    for (x0, y0), (x1, y1) in zip(head, head[1:]):
+        a, b = rim(x0, y0), rim(x1, y1)
+        passed = [c for s, c in sorted(corners, reverse=True) if along(a) + 1e-9 < s < along(b) - 1e-9]
+        both([[x0, y0], [x1, y1], b] + passed + [a])
+
+    if foot > sill:
+        _add_face(part, [front(-jamb, sill), back(-jamb, sill), back(-jamb, foot), front(-jamb, foot)], slot)
+        _add_face(part, [back(jamb, sill), front(jamb, sill), front(jamb, foot), back(jamb, foot)], slot)
+
+    for (x0, y0), (x1, y1) in zip(head, head[1:]):
+        _add_face(part, [front(x0, y0), front(x1, y1), back(x1, y1), back(x0, y0)], slot)
+
+    if sill > 0.0:
+        _add_face(part, [front(-jamb, sill), front(jamb, sill), back(jamb, sill), back(-jamb, sill)], slot)
+
+    _add_face(part, [front(-w, 0.0), front(-w, height), back(-w, height), back(-w, 0.0)], slot)
+    _add_face(part, [back(w, 0.0), back(w, height), front(w, height), front(w, 0.0)], slot)
+    _add_face(part, [front(-w, height), front(w, height), back(w, height), back(-w, height)], slot)
+
+
 def _arched(part, shape):
+    if shape.get("horseshoe", 0.0) > 0.0:
+        return _horseshoe(part, shape)
+
     w, height, d = shape["width"] / 2.0, shape["height"], shape["depth"] / 2.0
     half, sill, spring = shape["opening"] / 2.0, shape["sill"], shape["spring"]
     ox = shape["x"]
