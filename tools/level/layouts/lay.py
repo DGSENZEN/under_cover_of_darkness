@@ -125,9 +125,10 @@ class Layout:
     # ------------------------------------------------------------------
     # Markers
 
-    def mark(self, name, ucd, at, yaw=0.0, sector="courtyard", size=None, **props):
+    def mark(self, name, ucd, at, yaw=0.0, sector="courtyard", size=None, pitch=0.0, roll=0.0, **props):
         self.markers.append({"name": name, "ucd": ucd, "sector": sector, "position": [float(v) for v in at],
-                             "basis": geo.rotation(yaw), "size": [float(v) for v in size] if size else None, "props": props})
+                             "basis": geo.rotation(yaw, pitch, roll), "size": [float(v) for v in size] if size else None,
+                             "props": props})
 
     def route(self, name, points, sector="courtyard", wait=0.0):
         """A route and its waypoints [(x, y, z, yaw), ...] in order."""

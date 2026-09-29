@@ -118,6 +118,35 @@ class Rules(unittest.TestCase):
         data["markers"].append(copy.deepcopy(data["markers"][0]))
         self.assertTrue(any("two markers have this name" in p for p in rules.problems(data)))
 
+    def test_the_new_markers_pass_when_right(self):
+        data = good()
+        data["markers"] += [
+            marker("purse", "loot", (0.5, 0, 0.5), {"value": 25}),
+            marker("seal", "loot", (1.0, 0, 0.5), {"value": 0, "special": True, "kind": "seal", "label": "the harbourmaster's seal"}),
+            marker("office_key", "key", (1.5, 0, 0.5), {"key_id": "office"}),
+            marker("office_door", "door", (0, 0, -2.2), {"locked": True, "key": "office"}),
+            marker("flask", "tool", (2.0, 0, 0.5), {"tool": "flask", "count": 2}),
+            marker("crate_1", "prop", (2.5, 0, 0.5), {"kind": "crate"}),
+            marker("rope_1", "rope", (3.0, 4, 0.5), {"length": 4.0}),
+            marker("roar", "noise_zone", (0, 1, 0), {"db": 30.0}, size=[4, 3, 4]),
+            marker("gate_up", "portcullis", (0, 0, -2), {"state": "up"}),
+            marker("to_old_town", "exit", (0, 1, 1), {"label": "the old town"}, size=[2, 2, 2]),
+            marker("see_moon", "probe", (1, 1, 1), {"expect": "moon"}),
+        ]
+        self.assertEqual(rules.problems(data), [])
+
+    def test_an_unknown_property(self):
+        data = good()
+        data["markers"][0]["props"]["colour"] = "red"
+        self.assertTrue(any("no property 'colour'" in p for p in rules.problems(data)))
+
+    def test_bad_enums(self):
+        for ucd, props, word in (("tool", {"tool": "grenade"}, "tool"), ("prop", {"kind": "piano"}, "prop kind"),
+                                 ("probe", {"expect": "sun"}, "expect"), ("guard", {"archetype": "watchman", "light": "flare"}, "light")):
+            data = good()
+            data["markers"].append(marker("odd", ucd, (0.5, 0, 0.5), props))
+            self.assertTrue(any(word in p for p in rules.problems(data)), ucd)
+
     def test_the_kit_keeps_the_metrics(self):
         self.assertEqual(rules.kit_problems(), [])
 

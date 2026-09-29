@@ -16,11 +16,11 @@ SCHEMA = {
     # The canal spec's (section 6.3), as the garrison uses them.
     "spawn": {"required": [], "optional": {}, "box": False},
     "guard": {"required": ["archetype"], "optional": {"temperament": "", "route": "", "lookout": False, "stations": "",
-                                                      "voice": "", "look_seed": 0, "role": ""}, "box": False},
+                                                      "voice": "", "look_seed": 0, "role": "", "light": ""}, "box": False},
     "route": {"required": [], "optional": {}, "box": False},
     "waypoint": {"required": ["route", "order"], "optional": {"wait": 0.0}, "box": False},
     "door": {"required": [], "optional": {"kind": "hinged", "locked": False, "key": "", "label": "", "width": 1.2,
-                                          "height": 2.2, "barred": False}, "box": False},
+                                          "height": 2.2, "barred": False, "pick": True}, "box": False},
     "light": {"required": ["kind"], "optional": {"lit": True, "energy": 0.0, "range": 0.0, "color": "", "cookie": "",
                                                  "douse": True, "chain": 0.0}, "box": False},
     "bell": {"required": [], "optional": {"db": 90.0}, "box": False},
@@ -40,13 +40,47 @@ SCHEMA = {
     # leaves) projected onto what is behind it (local -z: into the wall;
     # "floor": straight down instead).
     "decal": {"required": ["kind"], "optional": {"floor": False}, "box": True},
+    # The city's (the city spec, section 8): things to take, things to use,
+    # the mission's places, the air's noise, and what the level's own tests
+    # check; the mechanisms (stubs until their sub-project) are below.
+    "loot": {"required": ["value"], "optional": {"label": "goblet", "kind": "", "special": False}, "box": False},
+    "key": {"required": ["key_id"], "optional": {"label": "key"}, "box": False},
+    "tool": {"required": ["tool"], "optional": {"count": 1, "label": ""}, "box": False},
+    "chest": {"required": [], "optional": {"locked": False, "key": "", "pick": True, "label": "chest", "large": False}, "box": False},
+    "prop": {"required": ["kind"], "optional": {"mass": 0.0}, "box": False},
+    # A rope or a chain hanging from the marker, `length` down.
+    "rope": {"required": ["length"], "optional": {"chain": False}, "box": False},
+    "objective": {"required": ["label"], "optional": {"kind": "steal"}, "box": False},
+    "exit": {"required": ["label"], "optional": {}, "box": True},
+    "secret": {"required": [], "optional": {"label": ""}, "box": True},
+    # Inside it, sound is masked by `db` (a blowhole's roar, a fountain).
+    "noise_zone": {"required": ["db"], "optional": {"period": 0.0, "label": ""}, "box": True},
+    # A point the light is checked at: "moon", "shadow" or "lamp".
+    "probe": {"required": ["expect"], "optional": {}, "box": False},
+    # A point on a way through the level, and the move that reaches it from
+    # the one before (the check measures the move: rules.py).
+    "route_check": {"required": ["route", "order", "move"], "optional": {}, "box": False},
 }
+
+# The mechanisms, one schema each: what they work, the state they start in,
+# a portcullis's opening.
+MECHANISMS = ["lever", "wheel", "portcullis", "sluice", "hoist", "slider"]
+
+for _kind in MECHANISMS:
+    SCHEMA[_kind] = {"required": [], "optional": {"target": "", "state": "", "label": "", "hold": False, "width": 4.0, "height": 5.0},
+                     "box": False}
 
 STATION_KINDS = ["sit", "eat", "sleep", "rummage", "carry", "chop", "lean", "pray", "drill"]
 LIGHT_KINDS = ["torch", "brazier", "candle", "lantern", "window", "chandelier", "window_shaft", "hearth", "fire", "glow", "lamp_post"]
 ARCHETYPES = ["watchman", "swordsman", "archer", "duelist", "brute", "arms_master"]
 GRADES = ["outside", "indoors", "chapel", "cellar", "hearth"]
-DECAL_KINDS = ["leak_1", "leak_2", "moss", "grime", "soot", "dirt", "straw", "leaves"]
+DECAL_KINDS = ["leak_1", "leak_2", "moss", "grime", "soot", "dirt", "straw", "leaves", "salt"]
+TOOL_KINDS = ["flask", "flash_bomb", "lockpick", "arrows"]
+PROP_KINDS = ["crate", "crate_small"]
+MOVES = ["walk", "stairs", "mantle", "hang", "jump", "sprint_jump", "assist_jump", "drop", "climb", "rope", "swim", "balance"]
+PROBE_EXPECT = ["moon", "shadow", "lamp"]
+# What a guard carries on his rounds (Guard.rounds_light).
+ROUNDS_LIGHTS = ["", "lantern", "torch"]
 
 
 def problems(marker):
@@ -64,6 +98,10 @@ def problems(marker):
     for key in entry["required"]:
         if key not in props or props[key] in ("", None):
             out.append("%s (%s): needs '%s'" % (marker["name"], ucd, key))
+
+    for key in props:
+        if key not in entry["required"] and key not in entry["optional"]:
+            out.append("%s (%s): no property '%s'" % (marker["name"], ucd, key))
 
     if entry["box"] and not marker.get("size"):
         out.append("%s (%s): a box marker needs a size" % (marker["name"], ucd))
@@ -83,6 +121,21 @@ def problems(marker):
     if ucd == "decal" and props.get("kind") not in DECAL_KINDS:
         out.append("%s: no decal kind '%s'" % (marker["name"], props.get("kind")))
 
+    if ucd == "tool" and props.get("tool") not in TOOL_KINDS:
+        out.append("%s: no tool '%s'" % (marker["name"], props.get("tool")))
+
+    if ucd == "prop" and props.get("kind") not in PROP_KINDS:
+        out.append("%s: no prop kind '%s'" % (marker["name"], props.get("kind")))
+
+    if ucd == "probe" and props.get("expect") not in PROBE_EXPECT:
+        out.append("%s: a probe cannot expect '%s'" % (marker["name"], props.get("expect")))
+
+    if ucd == "route_check" and props.get("move") not in MOVES:
+        out.append("%s: no move '%s'" % (marker["name"], props.get("move")))
+
+    if ucd == "guard" and props.get("light", "") not in ROUNDS_LIGHTS:
+        out.append("%s: no rounds light '%s'" % (marker["name"], props.get("light")))
+
     return out
 
 
@@ -94,4 +147,6 @@ def with_defaults(marker):
 
 def write_json(path):
     with open(path, "w") as out:
-        json.dump({"schema": SCHEMA, "station_kinds": STATION_KINDS, "light_kinds": LIGHT_KINDS, "grades": GRADES}, out, indent=1)
+        json.dump({"schema": SCHEMA, "station_kinds": STATION_KINDS, "light_kinds": LIGHT_KINDS, "grades": GRADES,
+                   "tool_kinds": TOOL_KINDS, "prop_kinds": PROP_KINDS, "moves": MOVES, "probe_expect": PROBE_EXPECT,
+                   "rounds_lights": ROUNDS_LIGHTS, "mechanisms": MECHANISMS}, out, indent=1)
