@@ -81,6 +81,7 @@ static func load_level(parent: Node3D, folder: String, root_name := "Level") -> 
 
 	_colliders(level, manifest.get("colliders", []))
 	_ranges(level, manifest.get("ranges", {}))
+	_shadowless(level, manifest.get("shadowless", []))
 	_occluders(level, manifest.get("colliders", []))
 	_terrain(level, manifest.get("terrain", []))
 	level.sockets = manifest.get("sockets", [])
@@ -165,6 +166,23 @@ static func _ranges(level: Level, ranges: Dictionary) -> void:
 		if reach != null:
 			(mesh as GeometryInstance3D).visibility_range_end = float(reach)
 			(mesh as GeometryInstance3D).visibility_range_end_margin = RANGE_MARGIN
+
+
+## The city's far massing drawn without shadows (the manifest's
+## "shadowless": pieces only a silhouette cost the moon's shadow pass
+## nothing).
+static func _shadowless(level: Level, names: Array) -> void:
+	if names.is_empty():
+		return
+
+	var wanted := {}
+
+	for name in names:
+		wanted[String(name).replace(".", "_")] = true
+
+	for mesh in level.root.find_children("*", "GeometryInstance3D", true, false):
+		if wanted.has(String((mesh as Node).name)) or wanted.has(String((mesh as Node).get_parent().name)):
+			(mesh as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 ## The big walls occlude what is behind them: a box occluder for every

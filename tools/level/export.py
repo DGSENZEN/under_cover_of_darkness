@@ -127,7 +127,7 @@ def manifest(data):
               for t in data.get("terrain", [])]
 
     return {"level": data["level"], "sectors": data["sectors"], "colliders": colliders, "markers": found, "sockets": sockets,
-            "pieces": len(data["pieces"]), "ranges": ranges, "terrain": ground}
+            "pieces": len(data["pieces"]), "ranges": ranges, "terrain": ground, "shadowless": kit_recipes.shadowless(data["pieces"])}
 
 
 def _subdivide(mesh):

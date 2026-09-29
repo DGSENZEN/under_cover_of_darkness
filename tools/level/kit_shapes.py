@@ -58,8 +58,8 @@ def prism(cx, cy, cz, radius, height, sides, slot, yaw=0.0, pitch=0.0, roll=0.0,
 
 
 def arched_wall(width, height, depth, opening, spring, rise, sill, slot, pointed=False, piers=True, x=0.0, horseshoe=0.0, z=0.0, yaw=0.0,
-                jambs=True):
-    """A wall `width` x `height` x `depth` (its foot at y 0, centred on x,
+                jambs=True, y=0.0):
+    """A wall `width` x `height` x `depth` (its foot at y, centred on x,
     its middle at z, then turned `yaw` about the piece's upright) with an
     opening `opening` wide from `sill` up to `spring`, its head a round arch
     `rise` high (pointed: a gothic one; 0: flat). Without piers, only the
@@ -70,7 +70,7 @@ def arched_wall(width, height, depth, opening, spring, rise, sill, slot, pointed
     narrower than the arch."""
     return [{"kind": "arched", "width": width, "height": height, "depth": depth, "opening": opening, "spring": spring,
              "rise": rise, "sill": sill, "slot": slot, "pointed": pointed, "piers": piers, "x": x, "horseshoe": horseshoe,
-             "z": z, "yaw": yaw, "jambs": jambs}]
+             "z": z, "yaw": yaw, "jambs": jambs, "y": y}]
 
 
 def gable(cx, cy, cz, width, rise, depth, slot, yaw=0.0):
@@ -279,8 +279,8 @@ def _head(shape):
 
 
 def _turned(shape, p):
-    """An arched wall's point moved to its z and turned by its yaw."""
-    q = [p[0], p[1], p[2] + shape.get("z", 0.0)]
+    """An arched wall's point moved to its y and z and turned by its yaw."""
+    q = [p[0], p[1] + shape.get("y", 0.0), p[2] + shape.get("z", 0.0)]
     return geo.apply(geo.rotation(shape["yaw"]), q) if shape.get("yaw", 0.0) else q
 
 

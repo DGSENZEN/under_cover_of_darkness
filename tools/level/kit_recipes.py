@@ -360,6 +360,13 @@ def names():
     return sorted(PIECES)
 
 
+def shadowless(pieces):
+    """The placed pieces (a level's, by name) drawn without a shadow: the
+    city's far massing (the moon's shadow pass need not draw a district
+    that is only a silhouette)."""
+    return [p["name"] for p in pieces if PIECES.get(p["piece"], {}).get("family") == "massing"]
+
+
 # ---------------------------------------------------------------------------
 # Kit v1 (the art pass): the pieces that read as boxes, modelled low-poly
 # (kit_shapes); their colliders stay the boxes above.
@@ -560,3 +567,8 @@ import kit_harbour  # noqa: E402,F401
 
 # The harbour's ships (kit_ships: the carrack, a caravel, boats).
 import kit_ships  # noqa: E402,F401
+
+# Mediterranean planting (kit_planting) and the rest of the city as
+# silhouettes until it is built (kit_massing).
+import kit_planting  # noqa: E402,F401
+import kit_massing  # noqa: E402,F401

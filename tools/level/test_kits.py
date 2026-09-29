@@ -329,5 +329,42 @@ class Ships(unittest.TestCase):
             self.assertTrue(any(c[4] <= 0.2 and c[3] >= 2.0 for c in cols), name)
 
 
+PLANTS = ["palm_date", "cypress", "orange_tree", "agave"]
+MASSING = ["mass_houses_20", "mass_houses_tall_20", "mass_terrace_wall_40", "mass_cathedral", "mass_belltower", "mass_palace", "mass_mirador",
+           "mass_aqueduct_40", "mass_bridge", "mass_curtain_30", "mass_castle_tower", "mass_keep"]
+
+
+class PlantingAndMassing(unittest.TestCase):
+    def test_budgets(self):
+        for name in PLANTS + MASSING:
+            recipe = kit_recipes.PIECES[name]
+            self.assertLessEqual(tris(recipe), recipe.get("budget", kit_shapes.PIECE_TRIS), name)
+
+    def test_massing_is_its_own_family_and_low(self):
+        for name in MASSING:
+            recipe = kit_recipes.PIECES[name]
+            self.assertEqual(recipe["family"], "massing", name)
+            self.assertLessEqual(tris(recipe), 900, name)
+            self.assertTrue(recipe["cols"], name)
+
+    def test_massing_casts_no_shadow(self):
+        pieces = [{"name": "keep.001", "piece": "mass_keep"}, {"name": "quay.001", "piece": "quay_8"}]
+        self.assertEqual(kit_recipes.shadowless(pieces), ["keep.001"])
+
+    def test_the_keep_is_the_crown(self):
+        part = kit_shapes.build(kit_recipes.PIECES["mass_keep"]["shapes"])
+        self.assertAlmostEqual(100.0 + max(v[1] for v in part["verts"]), 155.0, delta=0.6)
+
+    def test_the_belltower_reaches_its_height(self):
+        part = kit_shapes.build(kit_recipes.PIECES["mass_belltower"]["shapes"])
+        self.assertAlmostEqual(45.0 + max(v[1] for v in part["verts"]), 140.0, delta=1.0)
+
+    def test_trees_stand_on_their_trunks_and_plants_stop_nobody(self):
+        for name in ("palm_date", "cypress", "orange_tree"):
+            self.assertTrue(kit_recipes.PIECES[name]["cols"], name)
+
+        self.assertEqual(kit_recipes.PIECES["agave"]["cols"], [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
