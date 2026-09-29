@@ -105,6 +105,52 @@ class Box:
         return max(near, 0.0)
 
 
+class TriGrid:
+    """Triangles (a terrain's) bucketed on a grid over x and z, for straight
+    up and down rays: where one crosses a triangle, the triangle's plane
+    gives the height (a vertical face is crossed edge-on, never hit)."""
+
+    def __init__(self, triangles, cell=4.0):
+        self.cell = cell
+        self.cells = {}
+
+        for tri in triangles:
+            (ax, ay, az), (bx, by, bz), (cx, cy, cz) = tri
+            area = (bx - ax) * (cz - az) - (bz - az) * (cx - ax)
+
+            if abs(area) < 1e-9:
+                continue
+
+            for i in range(int(math.floor(min(ax, bx, cx) / cell)), int(math.floor(max(ax, bx, cx) / cell)) + 1):
+                for k in range(int(math.floor(min(az, bz, cz) / cell)), int(math.floor(max(az, bz, cz) / cell)) + 1):
+                    self.cells.setdefault((i, k), []).append((tri, area))
+
+    def heights(self, x, z):
+        """The heights of every triangle over or under (x, z)."""
+        out = []
+
+        for tri, area in self.cells.get((int(math.floor(x / self.cell)), int(math.floor(z / self.cell))), []):
+            (ax, ay, az), (bx, by, bz), (cx, cy, cz) = tri
+            u = ((bx - x) * (cz - z) - (bz - z) * (cx - x)) / area
+            v = ((cx - x) * (az - z) - (cz - z) * (ax - x)) / area
+            w = 1.0 - u - v
+
+            if u >= -1e-9 and v >= -1e-9 and w >= -1e-9:
+                out.append(u * ay + v * by + w * cy)
+
+        return out
+
+    def down(self, point, reach):
+        """How far below `point` the first triangle is, or None within `reach`."""
+        below = [point[1] - y for y in self.heights(point[0], point[2]) if -1e-6 <= point[1] - y <= reach]
+        return max(0.0, min(below)) if below else None
+
+    def up(self, point, reach):
+        """How far above `point` the first triangle is, or None within `reach`."""
+        above = [y - point[1] for y in self.heights(point[0], point[2]) if -1e-6 <= y - point[1] <= reach]
+        return max(0.0, min(above)) if above else None
+
+
 def piece_boxes(recipe, position, basis, which="cols"):
     """A placed piece's colliders (or visual boxes) as world Boxes."""
     out = []
