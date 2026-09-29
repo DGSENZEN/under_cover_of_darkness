@@ -45,6 +45,10 @@ WALLS = {
     "rubble": ("stone", "stone"),
     "plaster": ("plaster", "stone"),
     "timber": ("timber", "wood"),
+    # The city's: granite (the harbour's customs house, its quay walls) and
+    # ochre render.
+    "granite": ("granite", "stone"),
+    "render": ("render_ochre", "stone"),
 }
 
 PIECES = {}
@@ -545,3 +549,7 @@ import kit_nature  # noqa: E402,F401
 # The city's fortifications (kit_fort: walls, towers, the golden tower, the
 # fort, the Sea Gate, the Nasrid gate, the chain).
 import kit_fort  # noqa: E402,F401
+
+# The city's Iberian buildings (kit_iberian: the Ribeira's houses and
+# arcade, the Terreiro's arcades, granite stairs, the statue, a shrine).
+import kit_iberian  # noqa: E402,F401

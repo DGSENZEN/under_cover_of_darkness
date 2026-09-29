@@ -57,16 +57,18 @@ def prism(cx, cy, cz, radius, height, sides, slot, yaw=0.0, pitch=0.0, roll=0.0,
             "turn": [yaw, pitch, roll], "top": radius if top is None else top, "rings": rings or [], "caps": caps}
 
 
-def arched_wall(width, height, depth, opening, spring, rise, sill, slot, pointed=False, piers=True, x=0.0, horseshoe=0.0):
-    """A wall `width` x `height` x `depth` (its foot at y 0, centred on x)
-    with an opening `opening` wide from `sill` up to `spring`, its head a
-    round arch `rise` high (pointed: a gothic one; 0: flat). Without piers,
-    only the band over the opening (between two columns). `horseshoe`: the
-    Moorish arch, its circle (`opening` across, centred at `spring`) running
-    on that share of its radius below the springing, onto jambs narrower
-    than the arch."""
+def arched_wall(width, height, depth, opening, spring, rise, sill, slot, pointed=False, piers=True, x=0.0, horseshoe=0.0, z=0.0, yaw=0.0):
+    """A wall `width` x `height` x `depth` (its foot at y 0, centred on x,
+    its middle at z, then turned `yaw` about the piece's upright) with an
+    opening `opening` wide from `sill` up to `spring`, its head a round arch
+    `rise` high (pointed: a gothic one; 0: flat). Without piers, only the
+    band over the opening (between two columns). `horseshoe`: the Moorish
+    arch, its circle (`opening` across, centred at `spring`) running on that
+    share of its radius below the springing, onto jambs narrower than the
+    arch."""
     return [{"kind": "arched", "width": width, "height": height, "depth": depth, "opening": opening, "spring": spring,
-             "rise": rise, "sill": sill, "slot": slot, "pointed": pointed, "piers": piers, "x": x, "horseshoe": horseshoe}]
+             "rise": rise, "sill": sill, "slot": slot, "pointed": pointed, "piers": piers, "x": x, "horseshoe": horseshoe,
+             "z": z, "yaw": yaw}]
 
 
 def gable(cx, cy, cz, width, rise, depth, slot, yaw=0.0):
@@ -266,6 +268,12 @@ def _head(shape):
     return left + right
 
 
+def _turned(shape, p):
+    """An arched wall's point moved to its z and turned by its yaw."""
+    q = [p[0], p[1], p[2] + shape.get("z", 0.0)]
+    return geo.apply(geo.rotation(shape["yaw"]), q) if shape.get("yaw", 0.0) else q
+
+
 def _horseshoe(part, shape):
     """A wall with a horseshoe arch through it: its piers to the jambs'
     tops, the wall over and round the arch in a fan from its circle out to
@@ -277,10 +285,10 @@ def _horseshoe(part, shape):
     jamb, foot = abs(head[0][0]), head[0][1]
 
     def front(x, y):
-        return [ox + x, y, d]
+        return _turned(shape, [ox + x, y, d])
 
     def back(x, y):
-        return [ox + x, y, -d]
+        return _turned(shape, [ox + x, y, -d])
 
     def both(points):
         _add_face(part, [front(x, y) for x, y in points], slot)
@@ -355,10 +363,10 @@ def _arched(part, shape):
     head = _head(shape)
 
     def front(x, y):
-        return [ox + x, y, d]
+        return _turned(shape, [ox + x, y, d])
 
     def back(x, y):
-        return [ox + x, y, -d]
+        return _turned(shape, [ox + x, y, -d])
 
     def both(quad):
         """A face on the front (its points as given, x/y) and its mirror at the back."""

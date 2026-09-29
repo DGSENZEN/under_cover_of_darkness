@@ -52,6 +52,16 @@ class Shapes(unittest.TestCase):
             if abs(x) < 0.6 - 1e-3 and 1e-3 < y < 1.6 - 1e-3:
                 self.fail("a vertex in the doorway at %s" % [x, y, z])
 
+    def test_an_arched_wall_moves_and_turns(self):
+        # Set 1 m forward and turned a quarter: it runs along z, 0.4 thick
+        # about x = 1.
+        part = kit_shapes.build(kit_shapes.arched_wall(2.0, 3.0, 0.4, 1.2, 1.6, 0.6, 0.0, "ashlar", z=1.0, yaw=90.0))
+        low, high = bounds(part)
+        self.assertAlmostEqual(low[0], 0.8, places=5)
+        self.assertAlmostEqual(high[0], 1.2, places=5)
+        self.assertAlmostEqual(low[2], -1.0, places=5)
+        self.assertAlmostEqual(high[2], 1.0, places=5)
+
     def test_a_horseshoe_head_runs_below_its_springing(self):
         # The Nasrid gate: an arch 7 m across at 6.5 m, its circle running on a
         # third of its radius below that, onto jambs narrower than the arch.

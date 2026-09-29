@@ -28,7 +28,8 @@ def family(name):
 def treads(recipe):
     """A flight's steps in order up: [(top y, depth along the flight)]."""
     steps = sorted(recipe["boxes"], key=lambda b: b[1] + b[4] / 2.0)
-    return [(round(b[1] + b[4] / 2.0, 3), round(b[3], 3)) for b in steps]
+    # (A tread is the step's shorter side: its run, not its width.)
+    return [(round(b[1] + b[4] / 2.0, 3), round(min(b[3], b[5]), 3)) for b in steps]
 
 
 def top_of(col):
@@ -111,6 +112,82 @@ class Fort(unittest.TestCase):
 
     def test_the_chain_stops_nobody(self):
         self.assertEqual(kit_recipes.PIECES["chain_span_12"]["cols"], [])
+
+
+CASAS = ["casa_%s" % c for c in "abcdefgh"]
+
+
+def balconies(recipe):
+    """A house's balcony floors (thin, deep enough to stand on, out over its
+    front), from the bottom up."""
+    front = recipe["front"]
+    return sorted((c for c in recipe["cols"] if c[4] <= 0.2 and c[5] >= 0.8 and c[2] > front), key=lambda c: c[1])
+
+
+class Iberian(unittest.TestCase):
+    def test_budgets(self):
+        pieces = dict(family("iberian"), **family("casa"))
+        self.assertGreaterEqual(len(pieces), 18)
+
+        for name, recipe in pieces.items():
+            self.assertLessEqual(tris(recipe), recipe.get("budget", kit_shapes.PIECE_TRIS), name)
+
+    def test_balconies_ladder_up_a_front(self):
+        # From the quay to the first, then balcony to balcony: each lip within
+        # a hang of the floor under it, deep enough, nothing solid in front
+        # of the wall under it.
+        for name in ("casa_a", "casa_d"):
+            recipe = kit_recipes.PIECES[name]
+            floors = balconies(recipe)
+            self.assertGreaterEqual(len(floors), 3, name)
+            below = 0.0
+
+            for c in floors:
+                lip = top_of(c)
+                self.assertLessEqual(lip - below, rules.HANG, name)
+                self.assertGreaterEqual(c[5], rules.LIP)
+                below = lip
+                hang = [c[0], lip - 1.0, c[2] + c[5] / 2.0 + 0.2]
+                solid = [o for o in geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY) if o.contains(hang)]
+                self.assertEqual(solid, [], "%s: under its balcony at %.1f" % (name, lip))
+
+    def test_the_arcade_is_walked_under(self):
+        # The Ribeira's arcade: 2.2 m and more under its arches, its walkway
+        # clear, a floor over it for the house.
+        cols = kit_recipes.PIECES["arcade_ribeira_6"]["cols"]
+
+        for c in cols:
+            if abs(c[0]) - c[3] / 2.0 < 2.2 - 1e-3 and c[1] - c[4] / 2.0 < 2.6 - 1e-3:
+                self.fail("in the arcade's way: %s" % c)
+
+    def test_house_doors_meet_the_metrics(self):
+        for name in CASAS:
+            door = kit_recipes.PIECES[name]["door"]
+            self.assertGreaterEqual(door[0], 1.2, name)
+            self.assertGreaterEqual(door[1], 2.2, name)
+
+    def test_roofs_are_walkable(self):
+        for name in CASAS:
+            roof = [c for c in kit_recipes.PIECES[name]["cols"] if abs(c[8]) > 1.0]
+            self.assertEqual(len(roof), 2, name)
+            self.assertTrue(all(abs(c[8]) <= 25.0 for c in roof), name)
+
+    def test_the_houses_differ(self):
+        looks = {(kit_recipes.PIECES[n]["slot"], kit_recipes.PIECES[n]["size"][1]) for n in CASAS}
+        self.assertEqual(len(looks), len(CASAS))
+
+    def test_granite_and_render_walls_exist(self):
+        for name in ("wall_granite_door", "wall_granite_4", "wall_render_window", "wall_render_4"):
+            self.assertIn(name, kit_recipes.PIECES)
+
+    def test_flights_keep_the_metrics(self):
+        steps = treads(kit_recipes.PIECES["granite_flight_3"])
+        self.assertEqual(len(steps), 10)
+        self.assertTrue(all(abs(b[0] - a[0] - kit_recipes.RISER) < 1e-6 for a, b in zip(steps, steps[1:])))
+        self.assertTrue(all(abs(d - kit_recipes.TREAD) < 1e-6 for _, d in steps))
+        water = treads(kit_recipes.PIECES["water_stair_20"])
+        self.assertAlmostEqual(water[-1][0], 2.3, places=3)
+        self.assertLess(water[0][0], 0.0)
 
 
 if __name__ == "__main__":
