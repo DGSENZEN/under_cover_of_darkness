@@ -557,3 +557,6 @@ import kit_iberian  # noqa: E402,F401
 # The city's harbour (kit_harbour: quays, the mole, the shipyard's naves,
 # the galley on the stocks, a crane, the quays' dressing).
 import kit_harbour  # noqa: E402,F401
+
+# The harbour's ships (kit_ships: the carrack, a caravel, boats).
+import kit_ships  # noqa: E402,F401

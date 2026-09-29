@@ -262,5 +262,72 @@ class Harbour(unittest.TestCase):
             self.assertTrue(kit_recipes.PIECES[name]["cols"], name)
 
 
+class Ships(unittest.TestCase):
+    def test_budgets(self):
+        pieces = family("ship")
+        self.assertGreaterEqual(len(pieces), 6)
+
+        for name, recipe in pieces.items():
+            self.assertLessEqual(tris(recipe), recipe.get("budget", kit_shapes.PIECE_TRIS), name)
+
+    def test_the_carrack_shrouds_reach_the_top(self):
+        rig = kit_recipes.PIECES["carrack_rig"]
+        top = max(top_of(c) for c in rig["cols"] if c[3] >= 2.0 and c[5] >= 2.0)
+        self.assertAlmostEqual(top, 20.0, places=2)
+        # Both sides: from the main deck to a mantle under the top.
+        up = [c for c in rig["climbs"] if c[1] - c[4] / 2.0 <= 2.0 + 0.3 and c[1] + c[4] / 2.0 >= top - rules.MANTLE]
+        self.assertEqual(len(up), 2)
+
+    def test_the_top_is_a_floor(self):
+        rig = kit_recipes.PIECES["carrack_rig"]
+        floors = [c for c in rig["cols"] if abs(top_of(c) - 20.0) < 1e-3]
+        self.assertTrue(floors)
+        self.assertGreaterEqual(min(floors[0][3], floors[0][5]), 2.0)
+
+    def test_decks_meet_their_bulwarks(self):
+        cols = kit_recipes.PIECES["carrack_hull"]["cols"]
+        self.assertTrue(any(abs(top_of(c) - 2.0) < 1e-3 and c[3] > 10.0 for c in cols))
+        self.assertTrue(any(abs(top_of(c) - 3.0) < 1e-3 and c[4] <= 1.05 for c in cols))
+        self.assertTrue(any(abs(top_of(c) - 6.5) < 1e-3 for c in cols))
+        self.assertTrue(any(abs(top_of(c) - 5.0) < 1e-3 for c in cols))
+
+    def test_the_cabin_door(self):
+        door = kit_recipes.PIECES["carrack_hull"]["door"]
+        self.assertGreaterEqual(door[0], 1.2)
+        self.assertGreaterEqual(door[1], 2.0)
+
+    def test_the_mainyard_is_a_beam_to_walk(self):
+        cols = kit_recipes.PIECES["carrack_mainyard"]["cols"]
+        self.assertEqual(len(cols), 1)
+        self.assertGreaterEqual(cols[0][3], 20.0)
+        self.assertLessEqual(cols[0][5], 0.5)
+
+    def test_ladders_up_the_castles(self):
+        hull = kit_recipes.PIECES["carrack_hull"]
+        tops = sorted(round(c[1] + c[4] / 2.0, 1) for c in hull["climbs"])
+        self.assertTrue(any(t >= 5.0 for t in tops) and any(t >= 6.5 for t in tops))
+
+    def test_bulwarks_are_seen_from_the_deck(self):
+        # Over the main deck the ship's sides are drawn inward as well: from
+        # its deck nobody sees through them to the sea.
+        part = kit_shapes.build(kit_recipes.PIECES["carrack_hull"]["shapes"])
+        inward = 0
+
+        for indices, _, _ in part["faces"]:
+            points = [part["verts"][i] for i in indices]
+            middle = [sum(p[c] for p in points) / len(points) for c in range(3)]
+            n = kit_shapes._normal(points)
+
+            if middle[1] > 2.2 and abs(middle[2]) > 2.5 and n[2] * middle[2] < 0.0 and abs(n[1]) < 0.5 * abs(n[2]):
+                inward += 1
+
+        self.assertGreaterEqual(inward, 12)
+
+    def test_the_boats_can_be_stood_in(self):
+        for name in ("rowboat", "boat_fishing"):
+            cols = kit_recipes.PIECES[name]["cols"]
+            self.assertTrue(any(c[4] <= 0.2 and c[3] >= 2.0 for c in cols), name)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
