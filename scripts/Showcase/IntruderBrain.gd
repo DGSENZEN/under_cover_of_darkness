@@ -66,6 +66,20 @@ const RIPOSTE_AFTER := 0.12
 const FOCUS_PARRY := 0.7
 ## Pressing: how often he cuts.
 const PRESS_EVERY := 1.0
+## Fleeing, a man in his way where he cannot go round (a doorway held): no
+## headway (STUCK_HEADWAY m) for STUCK_FOR s with a man within IN_THE_WAY m,
+## and he cuts at him until he gives way (THROUGH_MOST s at most), then runs
+## on.
+const STUCK_FOR := 1.5
+const STUCK_HEADWAY := 0.25
+const IN_THE_WAY := 1.6
+const THROUGH_MOST := 6.0
+## A man still in his way after BARGE_AFTER s of cuts is barged off his feet
+## (as the cry's barge: pushed BARGE_PUSH m/s away, lifted BARGE_LIFT): a
+## held door gives way.
+const BARGE_AFTER := 1.5
+const BARGE_PUSH := 4.5
+const BARGE_LIFT := 1.2
 ## Sparing: how long he looks at the man begging him, how far he walks off.
 const SPARE_LOOK := 1.5
 const SPARE_WALK := 10.0
@@ -92,6 +106,13 @@ var _verb := Verb.NONE
 var _gait: StringName = &"walk"
 var _goal := Vector3.ZERO
 var _route: Array[Vector3] = []
+## Where he last made headway fleeing, and how long since; the man he is
+## cutting his way through, and until when.
+var _headway_at := Vector3.INF
+var _stuck := 0.0
+var _through: Node3D = null
+var _through_until := 0.0
+var _through_since := 0.0
 var _victim: Node3D = null
 var _done := true
 var _clock := 0.0
@@ -163,6 +184,9 @@ func flee_by(route: Array[Vector3]) -> void:
 	_begin(Verb.FLEE)
 	_route = route.duplicate()
 	_gait = &"run"
+	_headway_at = Vector3.INF
+	_stuck = 0.0
+	_through = null
 
 	if not _route.is_empty():
 		intruder._go_to(_route[0], true)
@@ -312,6 +336,25 @@ func _drive_flee(delta: float) -> void:
 
 	var point: Vector3 = _route[0]
 
+	# Cutting his way through a man in his way, until he gives way.
+	if _through != null:
+		if _gives_way(_through) or _clock >= _through_until:
+			_through = null
+			_stuck = 0.0
+			_headway_at = intruder.global_position
+			intruder.state = RELAXED
+			combat.guard_up(false)
+			intruder._go_to(point, true)
+		elif _clock - _through_since >= BARGE_AFTER and _barge(_through):
+			_through = null
+			_stuck = 0.0
+			_headway_at = intruder.global_position
+			intruder.state = RELAXED
+			intruder._go_to(point, true)
+		else:
+			_cut_through(delta)
+			return
+
 	if intruder._walk(RUN_SPEED, delta) or _there(point):
 		if not _there(point, 1.5) and _asked < ASK_AGAIN:
 			_asked += 1
@@ -323,6 +366,94 @@ func _drive_flee(delta: float) -> void:
 
 		if not _route.is_empty():
 			intruder._go_to(_route[0], true)
+
+		return
+
+	# No headway with a man in his way: through him.
+	if _headway_at == Vector3.INF or _flat(intruder.global_position, _headway_at) > STUCK_HEADWAY:
+		_headway_at = intruder.global_position
+		_stuck = 0.0
+	else:
+		_stuck += delta
+
+	if _stuck >= STUCK_FOR:
+		_stuck = 0.0
+		_through = _in_the_way(point)
+
+		if _through != null:
+			_through_until = _clock + THROUGH_MOST
+			_through_since = _clock
+			intruder.state = COMBAT
+
+
+## The man nearest him within IN_THE_WAY, one toward `point` first.
+func _in_the_way(point: Vector3) -> Node3D:
+	var at := intruder.global_position
+	var ahead := point - at
+	ahead.y = 0.0
+	var best: Node3D = null
+	var best_score := INF
+
+	for man in intruder.get_tree().get_nodes_in_group(&"guards"):
+		if man == intruder or not is_instance_valid(man) or bool(man.get("_knocked_out")):
+			continue
+
+		var to: Vector3 = (man as Node3D).global_position - at
+		to.y = 0.0
+		var dist := to.length()
+
+		if dist > IN_THE_WAY:
+			continue
+
+		# (Behind him counts for less: a man ahead is the one in his way.)
+		var score := dist + (0.0 if ahead.length() < 0.01 or to.dot(ahead) > 0.0 else IN_THE_WAY)
+
+		if score < best_score:
+			best_score = score
+			best = man
+
+	return best
+
+
+## `man` barged off his feet, away from him; false if he cannot be (not a
+## man who falls, or already down).
+func _barge(man: Node3D) -> bool:
+	if not man.has_method(&"knock_down") or (man.has_method(&"is_downed") and man.is_downed()):
+		return false
+
+	var away := man.global_position - intruder.global_position
+	away.y = 0.0
+
+	if away.length() < 0.01:
+		away = -intruder.global_basis.z
+
+	man.knock_down(away.normalized() * BARGE_PUSH + Vector3.UP * BARGE_LIFT, intruder)
+	return true
+
+
+## A man in his way no longer: gone, down, or stepped out of it.
+func _gives_way(man: Node3D) -> bool:
+	return not is_instance_valid(man) or bool(man.get("_knocked_out")) or (man.has_method(&"is_downed") and man.is_downed()) \
+		or _flat(man.global_position, intruder.global_position) > IN_THE_WAY + 0.6
+
+
+## At the man in his way: a step in to his reach, facing him, a cut each
+## PRESS_EVERY.
+func _cut_through(delta: float) -> void:
+	var to := _through.global_position - intruder.global_position
+	to.y = 0.0
+
+	if to.length() > CUT_REACH * 0.8:
+		intruder._go_to(_through.global_position)
+		intruder._walk(WALK_SPEED * 1.3, delta)
+	else:
+		intruder._stop(delta)
+
+	intruder._face(to, delta, 2.0)
+
+	if not combat.busy() and _clock >= _cut_at and to.length() <= CUT_REACH:
+		_cut(_through)
+		_cut_at = _clock + PRESS_EVERY
 
 
 # ---------------------------------------------------------------------------

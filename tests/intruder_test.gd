@@ -36,6 +36,9 @@ func _ready() -> void:
 	TemperamentScript.rolling = false
 	GuardScript.bleeding_on = false
 	Props.block(self, Vector3(200, -0.5, 0), Vector3(500, 1, 60))
+	# (I20's doorway: a wall across the floor at x 430, a 1.2 m gap in it.)
+	Props.block(self, Vector3(430, 1.5, -15.3), Vector3(0.4, 3.0, 29.4))
+	Props.block(self, Vector3(430, 1.5, 15.3), Vector3(0.4, 3.0, 29.4))
 
 	var baker := NavigationRegion3D.new()
 	baker.set_script(NavBakerScript)
@@ -369,6 +372,68 @@ func _run() -> void:
 	_check("I19 TimeFx.set_base(0.5) halves time, and a hit-stop under it gives back 0.5 after",
 		is_equal_approx(halved, 0.5) and stopped < 0.1 and is_equal_approx(after, 0.5) and is_equal_approx(Engine.time_scale, 1.0),
 		"base %.2f, in the stop %.3f, after %.2f, reset %.2f" % [halved, stopped, after, Engine.time_scale])
+
+	# I20 fleeing, a man standing in the way of his route where he cannot go
+	# round (a doorway): he cuts at him, and once the man gives way he runs on
+	# (three men holding the barracks door once kept him there a minute and a
+	# half, and the escape never came)
+	await _fresh()
+	var i20 := _intruder(Vector3(427, 0, 0))
+	var g20 := _guard(&"", Vector3(430.3, 0, 0), PI * 0.5)
+	await _frames(5)
+	# (He stands his ground, and does nothing else.)
+	g20.set_physics_process(false)
+	var struck20 := [0]
+	g20.struck_by.connect(func(_r, _k, _d): struck20[0] += 1)
+	var route20: Array[Vector3] = [Vector3(433, 0, 0), Vector3(437, 0, 0)]
+	i20.brain.flee_by(route20)
+	await _until(func(): return struck20[0] > 0, 360)
+	var cut20: bool = struck20[0] > 0
+
+	if is_instance_valid(g20):
+		g20.global_position = Vector3(430.3, 0, 12)
+
+	await _until(func(): return _flat(i20.global_position, Vector3(437, 0, 0)) < 1.0, 480)
+	var through20 := _flat(i20.global_position, Vector3(437, 0, 0)) < 1.0
+	_check("I20 fleeing, a man standing in his way in a doorway: he cuts at him within 6 s, and runs on once the man gives way",
+		cut20 and through20, "cut at him %s (%d), through %s, at %s" % [cut20, struck20[0], through20, i20.global_position])
+
+	# I21 a doorway held by three men fighting him, one behind another (the
+	# chase calls bring them all to him): he gets through (cut, then barged
+	# down: a man still in his way after a cut or two goes over)
+	await _fresh()
+	var i21 := _intruder(Vector3(427, 0, 0))
+	var held21: Array = [_guard(&"", Vector3(430.3, 0, 0), PI * 0.5), _guard(&"", Vector3(431.3, 0, 0.35), PI * 0.5), _guard(&"", Vector3(431.3, 0, -0.35), PI * 0.5)]
+	await _frames(5)
+
+	# (On him, fighting: they parry and strike back.)
+	for g in held21:
+		g._engage(i21)
+
+	var route21: Array[Vector3] = [Vector3(433, 0, 0), Vector3(437, 0, 0)]
+	i21.brain.flee_by(route21)
+	await _until(func(): return _flat(i21.global_position, Vector3(437, 0, 0)) < 1.0, 900)
+	var through21 := _flat(i21.global_position, Vector3(437, 0, 0)) < 1.0
+	var downed21: int = held21.filter(func(g): return is_instance_valid(g) and g.is_downed()).size()
+	_check("I21 a doorway held by three men fighting him, one behind another: he gets through within 15 s (cut, then barged down)",
+		through21, "through %s at %s, men downed %d" % [through21, i21.global_position, downed21])
+
+	# I22 a man in the doorway his cuts do not move (he stands and takes
+	# them): he barges him off his feet and gets through
+	await _fresh()
+	var i22 := _intruder(Vector3(427, 0, 0))
+	var g22 := _guard(&"", Vector3(430.3, 0, 0), PI * 0.5)
+	await _frames(5)
+	g22.set_physics_process(false)
+	g22.max_health = 99999.0
+	g22.health = 99999.0
+	var route22: Array[Vector3] = [Vector3(433, 0, 0), Vector3(437, 0, 0)]
+	i22.brain.flee_by(route22)
+	await _until(func(): return _flat(i22.global_position, Vector3(437, 0, 0)) < 1.0, 600)
+	var through22 := _flat(i22.global_position, Vector3(437, 0, 0)) < 1.0
+	var downed22: bool = is_instance_valid(g22) and g22.is_downed()
+	_check("I22 a man in the doorway his cuts do not move: barged off his feet, and he gets through within 10 s",
+		through22 and downed22, "through %s at %s, the man downed %s" % [through22, i22.global_position, downed22])
 
 
 func _flat(a: Vector3, b: Vector3) -> float:
