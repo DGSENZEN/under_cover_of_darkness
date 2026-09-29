@@ -384,16 +384,22 @@ def _blob_points(rng, centres, count):
     return out
 
 
-def _crown(size, final, leaves, leaf_len, leaf_w, palette, blobs, seed, twigs=True):
+def _crown(size, final, leaves, leaf_len, leaf_w, palette, blobs, seed, twigs=True, fruit=None, heart=0.0):
     """Leaves in lumpy blobs, lit from above: the lower and inner ones darker,
     drawn first; the outer and upper ones lighter, over them; a few twigs
-    showing through the gaps."""
+    showing through the gaps; `fruit` (count, radius, colour) among them;
+    `heart` (a share of the size) a dense shadowed middle under them all."""
     rng = np.random.default_rng(seed)
     image = Image.new("RGB", (size, size), (20, 26, 16))
     mask_image = Image.new("L", (size, size), 0)
     draw = ImageDraw.Draw(image)
     mask = ImageDraw.Draw(mask_image)
     c = size / 2.0
+
+    if heart > 0.0:
+        r = size * heart
+        draw.ellipse([c - r, c - r, c + r, c + r], fill=_tinted(palette[0], 0.7))
+        mask.ellipse([c - r, c - r, c + r, c + r], fill=255)
 
     if twigs:
         for cx, cy, _ in blobs:
@@ -415,6 +421,15 @@ def _crown(size, final, leaves, leaf_len, leaf_w, palette, blobs, seed, twigs=Tr
         outward = math.atan2(y - c, x - c) + rng.uniform(-1.1, 1.1)
         length = leaf_len * rng.uniform(0.8, 1.2)
         _leaf(draw, mask, x, y, length, leaf_w * rng.uniform(0.8, 1.2), outward, _tinted(colour, bright), _tinted(colour, bright * 0.7), _tinted(colour, bright * 1.15))
+
+    if fruit is not None:
+        count, radius, colour = fruit
+
+        for x, y in _blob_points(rng, blobs, count):
+            r = radius * rng.uniform(0.85, 1.15)
+            draw.ellipse([x - r, y - r, x + r, y + r], fill=_tinted(colour, rng.uniform(0.8, 1.0)), outline=_tinted(colour, 0.6))
+            draw.ellipse([x - r * 0.55, y - r * 0.6, x - r * 0.1, y - r * 0.15], fill=_tinted(colour, 1.2))
+            mask.ellipse([x - r, y - r, x + r, y + r], fill=255)
 
     return _finish(image, (final, final), 32, mask_image)
 
@@ -959,12 +974,243 @@ def carpet():
     return image.resize((size, size), Image.Resampling.BOX).quantize(colors=16, dither=Image.Dither.NONE).convert("RGB")
 
 
+# ---------------------------------------------------------------------------
+# The harbour's: wrought iron, a ship's ratlines, the rope coil's mask, salt
+# on the quays; Mediterranean planting
+# ---------------------------------------------------------------------------
+
+IRON_LIT = (84, 80, 74)
+
+
+def _canvas(w, h, ground=(30, 28, 26)):
+    image = Image.new("RGB", (w, h), ground)
+    mask_image = Image.new("L", (w, h), 0)
+    return image, mask_image, ImageDraw.Draw(image), ImageDraw.Draw(mask_image)
+
+
+def _bar(draw, mask, points, width, fill, lit=None):
+    """A bar or a rope along `points`, lit along its top edge."""
+    draw.line(points, fill=fill, width=width, joint="curve")
+    mask.line(points, fill=255, width=width, joint="curve")
+
+    if lit is not None:
+        draw.line([(x, y - width * 0.3) for x, y in points], fill=lit, width=max(1, width // 3))
+
+
+def iron_rail():
+    """A balcony's wrought-iron rail, seen from the street: a handrail and a
+    bottom rail, bars between, a band of C-scrolls back to back under the
+    handrail (Porto's and Lisbon's balconies)."""
+    w, h = 128 * SCALE, 64 * SCALE
+    image, mask_image, draw, mask = _canvas(w, h)
+    thick = int(SCALE * 2.5)
+    _bar(draw, mask, [(0, h * 0.1), (w, h * 0.1)], int(SCALE * 4), IRON, IRON_LIT)
+    _bar(draw, mask, [(0, h * 0.93), (w, h * 0.93)], int(SCALE * 3), IRON, IRON_LIT)
+    _bar(draw, mask, [(0, h * 0.42), (w, h * 0.42)], int(SCALE * 2), IRON)
+
+    for x in range(0, w + 1, 12 * SCALE):
+        _bar(draw, mask, [(x, h * 0.1), (x, h * 0.93)], thick, IRON)
+
+    # The scrolls: a C each way in every bay, between the handrail and the
+    # middle rail.
+    for x in range(0, w, 12 * SCALE):
+        r = 4.2 * SCALE
+        for cx, start, end in ((x + 6 * SCALE - r * 0.55, 60, 300), (x + 6 * SCALE + r * 0.55, 240, 480)):
+            box = [cx - r, h * 0.26 - r, cx + r, h * 0.26 + r]
+            draw.arc(box, start, end, fill=IRON, width=int(SCALE * 2))
+            mask.arc(box, start, end, fill=255, width=int(SCALE * 2))
+
+    return _finish(image, (128, 64), 8, mask_image)
+
+
+def window_grille():
+    """A window's iron grille: square bars, two cross bars, a small rosette
+    where they meet, a frame round it."""
+    w, h = 64 * SCALE, 128 * SCALE
+    image, mask_image, draw, mask = _canvas(w, h)
+    edge = int(SCALE * 3)
+    draw.rectangle([0, 0, w - 1, h - 1], outline=IRON, width=edge)
+    mask.rectangle([0, 0, w - 1, h - 1], outline=255, width=edge)
+    rows = (h * 0.34, h * 0.67)
+
+    for y in rows:
+        _bar(draw, mask, [(0, y), (w, y)], int(SCALE * 2.5), IRON, IRON_LIT)
+
+    for x in np.linspace(w / 5.0, w * 4 / 5.0, 4):
+        _bar(draw, mask, [(x, 0), (x, h)], int(SCALE * 2.5), IRON)
+
+        for y in rows:
+            r = 3 * SCALE
+            draw.ellipse([x - r, y - r, x + r, y + r], fill=IRON, outline=IRON_LIT)
+            mask.ellipse([x - r, y - r, x + r, y + r], fill=255)
+
+    return _finish(image, (64, 128), 8, mask_image)
+
+
+def ratlines():
+    """A ship's shrouds and ratlines on a clear card: the shrouds running up
+    from the channel and drawing in toward the masthead, tarred black, the
+    ratlines across them a hand's span apart, sagging a little between."""
+    w = h = 128 * SCALE
+    tar, lit = (38, 32, 26), (74, 62, 46)
+    image, mask_image, draw, mask = _canvas(w, h, tar)
+    feet = np.linspace(w * 0.06, w * 0.94, 5)
+    heads = np.linspace(w * 0.3, w * 0.7, 5)
+
+    for foot, head in zip(feet, heads):
+        _bar(draw, mask, [(foot, h), (head, 0)], int(SCALE * 3), tar, lit)
+
+    for y in np.arange(h - 5 * SCALE, 0, -10 * SCALE):
+        t = 1.0 - y / h
+        xs = [f + (hd - f) * t for f, hd in zip(feet, heads)]
+
+        for a, b in zip(xs, xs[1:]):
+            sag = 1.2 * SCALE
+            _bar(draw, mask, [(a, y), ((a + b) / 2.0, y + sag), (b, y)], int(SCALE * 1.6), tar)
+
+    return _finish(image, (128, 128), 8, mask_image)
+
+
+def coil_mask():
+    """The rope coil's mask (ps2ify: rope_coil): the coil round, the deck it
+    lay on cut away."""
+    size = 128 * SCALE
+    image = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(image).ellipse([size * 0.05, size * 0.05, size * 0.95, size * 0.95], fill=255)
+    return image.resize((128, 128), Image.Resampling.BOX).point(lambda v: 255 if v >= 128 else 0)
+
+
+def decal_salt():
+    """Salt dried on a quay's face or a hull: pale tide marks, bands of white
+    bloom one over another, fading out raggedly."""
+    size = 256
+    rng = np.random.default_rng(141)
+    y, x = np.mgrid[0:size, 0:size] / float(size)
+    wander = (_noise(size, rng) - 0.5) * 0.12
+    # The bloom: a band across the middle, its top and foot ragged, fading
+    # out toward both ends; three tide lines in it, whiter.
+    band = np.clip(1.0 - np.abs(y - 0.5 + wander) / 0.2, 0.0, 1.0)
+    ends = np.clip(np.minimum(x, 1.0 - x) / 0.2, 0.0, 1.0)
+    lines = np.zeros_like(band)
+
+    for level in (0.38, 0.47, 0.58):
+        lines = np.maximum(lines, np.clip(1.0 - np.abs(y - level + wander * 0.6) / 0.012, 0.0, 1.0))
+
+    # Runs of salt left by water trickling down under it.
+    drips = np.zeros_like(band)
+
+    for column in rng.choice(size, 18, replace=False):
+        length = rng.uniform(0.08, 0.25)
+        near = np.clip(1.0 - np.abs(x - column / float(size)) / 0.008, 0.0, 1.0)
+        drips = np.maximum(drips, near * ((y > 0.6) & (y < 0.6 + length)) * (1.0 - (y - 0.6) / length))
+
+    thick = np.clip((band * 0.75 * (0.55 + 0.45 * _noise(size, rng)) + lines * 0.5 + drips * 0.6) * ends, 0.0, 1.0)
+    thick[thick < 0.12] = 0.0
+    mottle = _noise(size, rng)
+    pixels = np.empty((size, size, 3))
+    pixels[:] = np.array([206.0, 204.0, 192.0])
+    pixels *= (0.86 + 0.2 * mottle)[:, :, None]
+    return _soft_finish(pixels, thick, 128, 12)
+
+
+def palm_frond():
+    """A date palm's frond on a card: the midrib arching out and down,
+    narrow leaflets along it both ways, dusty greens going yellow at the
+    tip."""
+    size = 128 * SCALE
+    rng = np.random.default_rng(151)
+    image, mask_image, draw, mask = _canvas(size, size, (40, 50, 30))
+    palette = [(58, 76, 40), (72, 90, 46), (88, 102, 52), (106, 110, 58), (124, 118, 64)]
+    rib = []
+
+    for i in range(24):
+        t = i / 23.0
+        rib.append((size * (0.06 + 0.86 * t), size * (0.92 - 1.25 * t + 0.95 * t * t)))
+
+    _bar(draw, mask, rib, int(SCALE * 2.5), (92, 86, 54))
+
+    for (x, y), (nx, ny) in zip(rib[1:-1], rib[2:]):
+        along = math.atan2(ny - y, nx - x)
+        t = x / size
+
+        for side in (-1.0, 1.0):
+            for _ in range(2):
+                colour = palette[min(len(palette) - 1, int(t * len(palette) + rng.integers(0, 2)))]
+                angle = along + side * rng.uniform(0.5, 0.85)
+                length = size * (0.2 - 0.1 * abs(t - 0.4)) * rng.uniform(0.85, 1.1)
+                _leaf(draw, mask, x, y, length, size * 0.026, angle, _tinted(colour, rng.uniform(0.8, 1.15)), _tinted(colour, 0.65))
+
+    return _finish(image, (128, 128), 24, mask_image)
+
+
+def cypress():
+    """A cypress: a tall dark flame of close sprays, a little light on its
+    moonward side, gaps here and there."""
+    w, h = 64 * SCALE, 256 * SCALE
+    rng = np.random.default_rng(161)
+    image, mask_image, draw, mask = _canvas(w, h, (14, 20, 14))
+    palette = [(20, 32, 20), (26, 40, 24), (32, 48, 28), (42, 58, 34)]
+    sprays = []
+
+    for _ in range(1400):
+        t = rng.random()
+        half = w * 0.46 * math.sin(math.pi * min(1.0, (1.0 - t) ** 0.7 * 1.02)) ** 0.9
+        x = w / 2.0 + rng.uniform(-1.0, 1.0) * half
+        y = h * (0.02 + 0.97 * t)
+        sprays.append((x, y))
+
+    for x, y in sorted(sprays, key=lambda p: p[0]):
+        colour = palette[int(rng.integers(len(palette)))]
+        bright = 0.7 + 0.5 * (x / w)
+        _leaf(draw, mask, x, y, w * 0.09, w * 0.035, -math.pi / 2 + rng.uniform(-0.7, 0.7), _tinted(colour, bright), _tinted(colour, bright * 0.7))
+
+    return _finish(image, (64, 256), 16, mask_image)
+
+
+def agave():
+    """An agave from the side: thick pointed leaves fanning up and out from
+    the ground, blue-green with yellow edges, a dark spine at each tip."""
+    size = 128 * SCALE
+    rng = np.random.default_rng(171)
+    image, mask_image, draw, mask = _canvas(size, size, (50, 64, 58))
+    base = (size / 2.0, size * 0.97)
+
+    for k in range(13):
+        angle = -math.pi / 2 + (k - 6) * 0.2 + rng.uniform(-0.06, 0.06)
+        length = size * (0.8 - 0.07 * abs(k - 6)) * rng.uniform(0.9, 1.05)
+        bright = 0.8 + 0.3 * rng.random()
+        _leaf(draw, mask, base[0], base[1], length, size * 0.1, angle, _tinted((92, 122, 112), bright), (168, 160, 88))
+        tip = (base[0] + length * math.cos(angle), base[1] + length * math.sin(angle))
+        draw.line([tip, (tip[0] - math.cos(angle) * SCALE * 6, tip[1] - math.sin(angle) * SCALE * 6)], fill=(40, 32, 24), width=SCALE * 2)
+
+    return _finish(image, (128, 128), 16, mask_image)
+
+
+def orange_leaves():
+    """An orange tree's crown: glossy dark leaves in a round mass, oranges
+    among them."""
+    size = 128 * SCALE
+    rng = np.random.default_rng(181)
+    # (Leaves grow out from where they start: a dense heart keeps the
+    # middle of the crown full.)
+    blobs = [(size * 0.5, size * 0.52, size * 0.3), (size * 0.5, size * 0.52, size * 0.15), (size * 0.47, size * 0.48, size * 0.1)]
+
+    for k in range(7):
+        a = k * math.tau / 7 + rng.uniform(-0.3, 0.3)
+        blobs.append((size * 0.5 + math.cos(a) * size * 0.24, size * 0.5 + math.sin(a) * size * 0.22, size * rng.uniform(0.1, 0.15)))
+
+    return _crown(size, 128, 950, size * 0.07, size * 0.032, [(22, 48, 24), (30, 60, 30), (40, 74, 36), (52, 86, 40)], blobs, 183,
+                  twigs=False, fruit=(18, size * 0.028, (232, 128, 32)), heart=0.14)
+
+
 PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_frontal": altar_frontal,
              "shield_1": shield_1, "shield_2": shield_2, "shield_3": shield_3,
              "leaf_crown": leaf_crown, "leaf_shrub": leaf_shrub, "yew": yew, "twigs": twigs, "grass": grass,
              "weed_broad": weed_broad, "reeds": reeds, "ivy": ivy, "bark": bark, "bat": bat,
              "decal_soot": decal_soot, "decal_dirt": decal_dirt, "decal_straw": decal_straw, "decal_leaves": decal_leaves,
-             "carpet": carpet}
+             "carpet": carpet,
+             "iron_rail": iron_rail, "window_grille": window_grille, "ratlines": ratlines, "coil_mask": coil_mask,
+             "decal_salt": decal_salt, "palm_frond": palm_frond, "cypress": cypress, "agave": agave, "orange_leaves": orange_leaves}
 
 
 def main(argv):

@@ -10,6 +10,11 @@ const Materials := preload("res://scripts/Visual/Materials.gd")
 const GARRISON := preload("res://maps/garrison.tscn")
 const MapScript := preload("res://maps/npc_showcase.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
+## The harbour's photo slots (tools/textures/recipes), K10.
+const HARBOUR_PHOTO_SLOTS := [&"granite", &"granite_rough", &"ashlar_gold", &"render_ochre", &"render_salmon", &"render_blue",
+	&"render_straw", &"whitewash", &"azulejo_green", &"azulejo_cube", &"azulejo_blue", &"azulejo_blue2", &"azulejo_border",
+	&"waterline_tide", &"waterline_algae", &"calcada", &"terracotta", &"terracotta_hex", &"roof_spanish", &"brick", &"rock",
+	&"cliff", &"hull_tarred", &"hull_bare", &"sailcloth", &"rope_lay", &"rope_coil", &"net", &"manueline"]
 
 var results: Array[String] = []
 
@@ -168,6 +173,44 @@ func _fixture() -> void:
 		absf(inside_range - SoundBus.range_for(10.0)) < 0.01 and absf(outside_range - SoundBus.range_for(50.0)) < 0.01
 		and absf(after_range - SoundBus.range_for(50.0)) < 0.01,
 		"inside %.2f m, outside %.2f m, after %.2f m" % [inside_range, outside_range, after_range])
+
+	# K10 a fresh clone (no bought photos): every harbour slot in its flat
+	# colour, nothing missing
+	var photos_at: String = Materials.folder
+	Materials.folder = "res://no_photos_here/"
+	Materials.clear_cache()
+	var bare10: Array = []
+
+	for slot in HARBOUR_PHOTO_SLOTS:
+		var entry: Dictionary = Materials.SLOTS.get(slot, {})
+		var drawn := Materials.level_surface(slot) as StandardMaterial3D
+
+		if entry.is_empty() or drawn == null or drawn.albedo_texture != null or not drawn.albedo_color.is_equal_approx(entry["colour"]):
+			bare10.append(slot)
+
+	Materials.folder = photos_at
+	Materials.clear_cache()
+	_check("K10 with no photos on the machine every harbour slot draws in its flat colour", bare10.is_empty(), "wrong: %s" % [bare10])
+
+	# K11 the waterline's photo is anchored to the sea: its top row at 1.4 m
+	var tide := Materials.level_surface(&"waterline_tide") as StandardMaterial3D
+	var tile11: Array = Materials.SLOTS[&"waterline_tide"]["tile"]
+	var v11 := -(1.4 * tide.uv1_scale.y + tide.uv1_offset.y)
+	_check("K11 a waterline band is anchored to the sea: its photo's top row falls at y 1.4 on a quay face",
+		absf(v11 - roundf(v11)) < 0.0001 and is_equal_approx(tide.uv1_scale.x, 1.0 / float(tile11[0])) and is_equal_approx(tide.uv1_scale.y, 1.0 / float(tile11[1])),
+		"v at 1.4 m %.4f, scale %s" % [v11, tide.uv1_scale])
+
+	# K12 our own paintings for the harbour are all here
+	var missing12: Array = []
+
+	for slot in [&"iron_rail", &"window_grille", &"ratlines", &"palm_frond", &"cypress", &"agave", &"orange_leaves"]:
+		if Materials.photo(slot) == null:
+			missing12.append(slot)
+
+	if Materials.picture("decal_salt") == null:
+		missing12.append("decal_salt")
+
+	_check("K12 every new painted slot finds its painting (and the salt decal its picture)", missing12.is_empty(), "missing %s" % [missing12])
 
 
 func _garrison() -> void:

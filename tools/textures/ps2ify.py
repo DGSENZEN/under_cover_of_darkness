@@ -8,7 +8,12 @@ Each texture has a small recipe in tools/textures/recipes/<name>.json: which
 photo, what size, how many colours, a crop, a tint and so on (see RECIPE).
 "alpha" is "none", "threshold" (the photo's own mask, cut at "threshold") or
 "luma" (no mask: what is darker than "threshold" is cut out, as the gaps
-between leaves).
+between leaves); "mask" names a second file whose light is kept and dark cut
+out (a photo's own alpha map, or "painted/<name>.png", one of ours); "ao" a
+second file multiplied into the colour (an AO or height map: the gaps
+between roof tiles). "seamless" makes a photo that does not tile tile both
+ways (shifted half its size and cross-faded over its old edges); "seams"
+[every px, px wide, how dark] darkens columns (a sail's seams).
 The photo is cropped, shrunk by averaging (never sharpened), graded, and cut
 down to its own palette WITHOUT dithering: the Retro screen dithers the
 whole frame, and dithering twice turns into noise at 128 px.
@@ -33,6 +38,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RECIPES = Path(__file__).resolve().parent / "recipes"
 SOURCE = ROOT / "textures" / "source"
 OUT = ROOT / "textures" / "ps2"
+PAINTED = ROOT / "textures" / "painted"
 DOWNLOADS = Path.home() / "Downloads"
 
 # Every key a recipe may give, and what it is when left out.
@@ -50,6 +56,9 @@ RECIPE = {
     "alpha": "none",
     "threshold": 128,
     "key": None,
+    "mask": None,
+    "seams": None,
+    "seamless": False,
 }
 
 
@@ -83,6 +92,21 @@ def _grime(size, strength, seed=7):
     return 1.0 - strength * (1.0 - np.asarray(blotch, dtype=np.float64) / 255.0)
 
 
+def _seamless(image):
+    """`image` made to tile: a copy shifted half its size either way (its
+    old edges now in the middle, its new ones meeting as the photo did in
+    its middle) shows at the edges, the photo itself in the middle, a
+    smooth window between."""
+    pixels = np.asarray(image, dtype=np.float64)
+    height, width = pixels.shape[:2]
+    shifted = np.roll(np.roll(pixels, width // 2, axis=1), height // 2, axis=0)
+    wx = np.sin(np.linspace(0.0, np.pi, width)) ** 0.5
+    wy = np.sin(np.linspace(0.0, np.pi, height)) ** 0.5
+    window = (wy[:, None] * wx[None, :])[:, :, None]
+    blended = pixels * window + shifted * (1.0 - window)
+    return Image.fromarray(np.clip(blended, 0, 255).astype(np.uint8), image.mode)
+
+
 def convert(image, recipe):
     """One photo made a PS2 texture, as the recipe says. Pure: reads and writes no files."""
     recipe = {**RECIPE, **recipe}
@@ -92,6 +116,9 @@ def convert(image, recipe):
         x, y, w, h = recipe["crop"]
         width, height = image.size
         image = image.crop((round(x * width), round(y * height), round((x + w) * width), round((y + h) * height)))
+
+    if recipe["seamless"]:
+        image = _seamless(image)
 
     size = tuple(int(v) for v in recipe["size"])
     image = image.resize(size, Image.Resampling.BOX)
@@ -116,6 +143,11 @@ def convert(image, recipe):
     if recipe["grime"]:
         pixels *= _grime(size, float(recipe["grime"]))[:, :, None]
 
+    if recipe["seams"]:
+        period, wide, dark = recipe["seams"]
+        columns = (np.arange(size[0]) % int(period)) < int(wide)
+        pixels[:, columns] *= float(dark)
+
     rgb = Image.fromarray(np.clip(pixels, 0, 255).astype(np.uint8), "RGB")
 
     if recipe["key"]:
@@ -128,7 +160,11 @@ def convert(image, recipe):
     palette = rgb.quantize(colors=int(recipe["colours"]), dither=Image.Dither.NONE).convert("RGB")
     out = palette.convert("RGBA")
 
-    if recipe["alpha"] == "threshold":
+    if recipe.get("_mask") is not None:
+        cut = int(recipe["threshold"])
+        mask = _eight_bit(recipe["_mask"]).convert("L").resize(size, Image.Resampling.BOX)
+        out.putalpha(mask.point(lambda v: 255 if v >= cut else 0))
+    elif recipe["alpha"] == "threshold":
         cut = int(recipe["threshold"])
         alpha = alpha.point(lambda a: 255 if a >= cut else 0)
         out.putalpha(alpha)
@@ -160,6 +196,14 @@ def build(name, source_dir=SOURCE, out_dir=OUT, recipes_dir=RECIPES):
             raise FileNotFoundError("%s: its AO map %s is not in %s" % (name, recipe["ao"], source_dir))
 
         recipe["_ao"] = Image.open(ao)
+
+    if recipe["mask"]:
+        mask = (PAINTED / recipe["mask"][len("painted/"):]) if recipe["mask"].startswith("painted/") else Path(source_dir) / recipe["mask"]
+
+        if not mask.exists():
+            raise FileNotFoundError("%s: its mask %s is not there (%s)" % (name, recipe["mask"], mask))
+
+        recipe["_mask"] = Image.open(mask)
 
     out = Path(out_dir) / (name + ".png")
     out.parent.mkdir(parents=True, exist_ok=True)

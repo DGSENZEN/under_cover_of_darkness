@@ -13,7 +13,40 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import paint  # noqa: E402
 
-FOLIAGE = ["leaf_crown", "leaf_shrub", "yew", "twigs", "grass", "weed_broad", "reeds", "ivy"]
+FOLIAGE = ["leaf_crown", "leaf_shrub", "yew", "twigs", "grass", "weed_broad", "reeds", "ivy",
+           "palm_frond", "cypress", "agave", "orange_leaves"]
+IRONWORK = ["iron_rail", "window_grille", "ratlines"]
+
+
+class Harbour(unittest.TestCase):
+    def test_ironwork_and_rigging_are_dark_lines_cut_clean(self):
+        for name in IRONWORK:
+            with self.subTest(name):
+                image = paint.PAINTINGS[name]()
+                w, h = image.size
+                self.assertEqual((w & (w - 1), h & (h - 1)), (0, 0))
+                pixels = np.asarray(image)
+                alpha = pixels[:, :, 3]
+                self.assertTrue(set(np.unique(alpha)) <= {0, 255}, "alpha not cut clean")
+                solid = float((alpha == 255).mean())
+                self.assertGreater(solid, 0.08, "hardly anything painted")
+                self.assertLess(solid, 0.7, "a plate, not bars and lines")
+                self.assertLess(pixels[alpha == 255][:, :3].mean(), 110.0, "not dark iron or tarred rope")
+
+    def test_the_coil_mask_is_a_round_white_on_black(self):
+        mask = np.asarray(paint.PAINTINGS["coil_mask"]().convert("L"))
+        h, w = mask.shape
+        self.assertTrue(set(np.unique(mask)) <= {0, 255})
+        self.assertEqual(mask[h // 2, w // 2], 255)
+        self.assertEqual(mask[0, 0], 0)
+        self.assertEqual(mask[h - 1, w - 1], 0)
+
+    def test_salt_is_a_pale_bloom_fading_to_nothing(self):
+        image = np.asarray(paint.PAINTINGS["decal_salt"]())
+        alpha = image[:, :, 3]
+        self.assertGreaterEqual(len(np.unique(alpha)), 3, "a soft edge, not a hard cut")
+        self.assertEqual(int(alpha[0, 0]), 0)
+        self.assertGreater(image[alpha > 0][:, :3].mean(), 150.0, "not pale")
 
 
 class Foliage(unittest.TestCase):

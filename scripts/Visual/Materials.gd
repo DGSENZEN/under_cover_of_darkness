@@ -103,6 +103,51 @@ const SLOTS := {
 	&"burlap": {"photo": "", "colour": Color("8A7550"), "metallic": 0.0, "roughness": 0.95},
 	&"leather": {"photo": "", "colour": Color("4A2E1C"), "metallic": 0.0, "roughness": 0.7},
 	&"rope": {"photo": "", "colour": Color("7C6A48"), "metallic": 0.0, "roughness": 0.95},
+	# The city's harbour (tools/textures/recipes): granite quays and rock-faced
+	# walls, golden dressings, the render of the Iberian fronts, azulejos, the
+	# sea's marks on the quays, pavements, roofs, brick, the rock, ships.
+	# "tile" [across, up] (m) for a photo that is not square; "offset" (m): the
+	# height its top row sits at (a waterline band anchored to the sea).
+	&"granite": {"photo": "granite", "colour": Color("5F5E5A"), "metallic": 0.0, "roughness": 0.9, "tile": 2.0},
+	&"granite_rough": {"photo": "granite_rough", "colour": Color("6A675F"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	&"ashlar_gold": {"photo": "ashlar_gold", "colour": Color("8A7658"), "metallic": 0.0, "roughness": 0.9, "tile": 2.0},
+	&"render_ochre": {"photo": "render_ochre", "colour": Color("B0823E"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	&"render_salmon": {"photo": "render_salmon", "colour": Color("A8654A"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	&"render_blue": {"photo": "render_blue", "colour": Color("8C9EA8"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	&"render_straw": {"photo": "render_straw", "colour": Color("C2AC7C"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	&"whitewash": {"photo": "whitewash", "colour": Color("B4AEA2"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0},
+	&"azulejo_green": {"photo": "azulejo_green", "colour": Color("2E6A3A"), "metallic": 0.0, "roughness": 0.45, "tile": 0.6},
+	&"azulejo_cube": {"photo": "azulejo_cube", "colour": Color("7E8870"), "metallic": 0.0, "roughness": 0.45, "tile": 0.6},
+	&"azulejo_blue": {"photo": "azulejo_blue", "colour": Color("5E7090"), "metallic": 0.0, "roughness": 0.45, "tile": 0.6},
+	&"azulejo_blue2": {"photo": "azulejo_blue2", "colour": Color("5A6E8E"), "metallic": 0.0, "roughness": 0.45, "tile": 0.6},
+	&"azulejo_border": {"photo": "azulejo_border", "colour": Color("3E5E8C"), "metallic": 0.0, "roughness": 0.45, "tile": [0.6, 0.15]},
+	&"waterline_tide": {"photo": "waterline_tide", "colour": Color("55564C"), "metallic": 0.0, "roughness": 0.8, "tile": [4.0, 2.0], "offset": 1.4},
+	&"waterline_algae": {"photo": "waterline_algae", "colour": Color("4A5040"), "metallic": 0.0, "roughness": 0.7, "tile": [4.0, 1.4], "offset": 1.0},
+	&"calcada": {"photo": "calcada", "colour": Color("9C968A"), "metallic": 0.0, "roughness": 0.85, "tile": 2.0},
+	&"terracotta": {"photo": "terracotta", "colour": Color("8E4A30"), "metallic": 0.0, "roughness": 0.8, "tile": 1.2},
+	&"terracotta_hex": {"photo": "terracotta_hex", "colour": Color("6E3828"), "metallic": 0.0, "roughness": 0.8, "tile": 1.2},
+	&"brick": {"photo": "brick", "colour": Color("7A4A38"), "metallic": 0.0, "roughness": 0.9, "tile": [1.5, 0.75]},
+	&"rock": {"photo": "rock", "colour": Color("7C7A74"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0},
+	&"cliff": {"photo": "cliff", "colour": Color("8A8478"), "metallic": 0.0, "roughness": 0.9, "tile": 8.0},
+	&"hull_tarred": {"photo": "hull_tarred", "colour": Color("2C2A28"), "metallic": 0.0, "roughness": 0.7, "tile": 2.0},
+	&"hull_bare": {"photo": "hull_bare", "colour": Color("5E4A36"), "metallic": 0.0, "roughness": 0.85, "tile": 2.0},
+	&"sailcloth": {"photo": "sailcloth", "colour": Color("B8B0A0"), "metallic": 0.0, "roughness": 0.95, "tile": 2.0},
+	&"rope_lay": {"photo": "rope_lay", "colour": Color("7C6A48"), "metallic": 0.0, "roughness": 0.95, "tile": [1.0, 0.25]},
+	# Drawn on a piece's own face (its UVs): the Spanish roof tiles along their
+	# slopes, a rope coil and a net (cut out), the fort's Manueline carving.
+	&"roof_spanish": {"photo": "roof_spanish", "colour": Color("8A4C34"), "metallic": 0.0, "roughness": 0.85},
+	&"rope_coil": {"photo": "rope_coil", "colour": Color("8E7E5C"), "metallic": 0.0, "roughness": 0.95, "cut": true},
+	&"net": {"photo": "net", "colour": Color("6E5A3C"), "metallic": 0.0, "roughness": 0.95, "cut": true},
+	&"manueline": {"photo": "manueline", "colour": Color("8E8878"), "metallic": 0.0, "roughness": 0.9},
+	# Our own paintings for the harbour (tools/textures/paint.py): wrought iron,
+	# a ship's ratlines; Mediterranean planting, stirred by the wind.
+	&"iron_rail": {"photo": "iron_rail", "painted": true, "colour": Color("34322F"), "metallic": 0.3, "roughness": 0.8, "cut": true},
+	&"window_grille": {"photo": "window_grille", "painted": true, "colour": Color("34322F"), "metallic": 0.3, "roughness": 0.8, "cut": true},
+	&"ratlines": {"photo": "ratlines", "painted": true, "colour": Color("26201A"), "metallic": 0.0, "roughness": 0.95, "cut": true},
+	&"palm_frond": {"photo": "palm_frond", "painted": true, "colour": Color("4E6232"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.1, 0.02]},
+	&"cypress": {"photo": "cypress", "painted": true, "colour": Color("1E2E1E"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.02, 0.004]},
+	&"agave": {"photo": "agave", "painted": true, "colour": Color("5C786E"), "metallic": 0.0, "roughness": 0.8, "cut": true, "sway": [0.005, 0.0]},
+	&"orange_leaves": {"photo": "orange_leaves", "painted": true, "colour": Color("22402A"), "metallic": 0.0, "roughness": 0.7, "cut": true, "sway": [0.04, 0.008]},
 }
 
 const GLOW := preload("res://scripts/Visual/Lights/glow.gdshader")
@@ -186,10 +231,16 @@ static func level_surface(slot: StringName) -> Material:
 	var material: StandardMaterial3D = surface(slot).duplicate()
 
 	if entry.has("tile"):
+		var tile: Vector2 = Vector2(entry["tile"][0], entry["tile"][1]) if entry["tile"] is Array else Vector2.ONE * float(entry["tile"])
 		material.uv1_triplanar = true
 		material.uv1_world_triplanar = true
 		material.uv1_triplanar_sharpness = TRIPLANAR_SHARPNESS
-		material.uv1_scale = Vector3.ONE / float(entry["tile"])
+		material.uv1_scale = Vector3(1.0 / tile.x, 1.0 / tile.y, 1.0 / tile.x)
+
+		# A band anchored to the world's height: its photo's top row at
+		# "offset" m (the side projections read v = -(y * scale + offset)).
+		if entry.has("offset"):
+			material.uv1_offset = Vector3(0.0, -float(entry["offset"]) / tile.y, 0.0)
 
 	# Glass the moon shines through: drawn unlit, as the PS2 drew it, in its
 	# own colours ("glow" as bright) whatever light falls on it.

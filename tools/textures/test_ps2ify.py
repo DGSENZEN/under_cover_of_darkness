@@ -102,6 +102,41 @@ class Ps2ifyTest(unittest.TestCase):
             out = ps2ify.convert(Image.open(path), recipe(size=[32, 32]))
             self.assertEqual(out.size, (32, 32))
 
+    def test_a_mask_from_a_second_file(self):
+        mask = Image.new("L", (64, 64), 0)
+        mask.paste(255, (0, 0, 32, 64))
+        out = ps2ify.convert(noise(64, 64), recipe(size=[32, 32], _mask=mask))
+        alpha = np.asarray(out)[:, :, 3]
+        self.assertEqual(out.mode, "RGBA")
+        self.assertTrue((alpha[:, :16] == 255).all())
+        self.assertTrue((alpha[:, 16:] == 0).all())
+
+    def test_seams_darken_columns(self):
+        flat = Image.new("RGB", (64, 64), (200, 200, 200))
+        out = np.asarray(ps2ify.convert(flat, recipe(size=[64, 64], seams=[16, 2, 0.5])).convert("RGB")).astype(float)
+        self.assertLess(out[:, 0].mean(), 120.0)
+        self.assertLess(out[:, 16].mean(), 120.0)
+        self.assertGreater(out[:, 8].mean(), 190.0)
+
+    def test_seamless_tiles_both_ways(self):
+        # a ramp left to right and top to bottom: nothing like a tile
+        x = np.linspace(0, 255, 256)
+        ramp = np.clip(x[None, :, None] * 0.5 + x[:, None, None] * 0.5, 0, 255).repeat(3, axis=2).astype(np.uint8)
+        out = np.asarray(ps2ify.convert(Image.fromarray(ramp, "RGB"), recipe(size=[128, 128], seamless=True)).convert("RGB")).astype(float)
+        self.assertLess(np.abs(out[:, 0] - out[:, -1]).mean(), 8.0)
+        self.assertLess(np.abs(out[0] - out[-1]).mean(), 8.0)
+
+    def test_a_recipe_names_its_mask_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source, recipes = Path(folder) / "source", Path(folder) / "recipes"
+            source.mkdir()
+            recipes.mkdir()
+            noise(64, 64).save(source / "photo.png")
+            Image.new("L", (64, 64), 0).save(source / "mask.png")
+            (recipes / "x.json").write_text('{"source": "photo.png", "mask": "mask.png", "size": [16, 16], "colours": 8}')
+            out = Image.open(ps2ify.build("x", source, Path(folder) / "out", recipes))
+            self.assertTrue((np.asarray(out)[:, :, 3] == 0).all())
+
     def test_missing_source(self):
         with tempfile.TemporaryDirectory() as folder:
             recipes = Path(folder) / "recipes"
