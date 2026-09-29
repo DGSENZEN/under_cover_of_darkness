@@ -48,6 +48,18 @@ def layout():
         M("yard_high", "vantage", (5, 3.5, 5), {"lens": "long"}),
         M("well_spot", "mark", (3, 0, 0)),
         M("yard_area", "hunt_area", (0, 1.5, 0), {"label": "the yard"}, size=[12, 3, 12]),
+        # The city's: things to take and use, a mechanism, an exit, the air's
+        # noise, a probe (LevelGameplay makes them).
+        M("purse", "loot", (-3, 0.1, 2), {"value": 25, "label": "purse"}),
+        M("room_key", "key", (-2, 0.1, 2), {"key_id": "room", "label": "the room's key"}),
+        M("flask_1", "tool", (-1, 0.1, 2), {"tool": "flask", "count": 2}),
+        M("strongbox", "chest", (2, 0, -9.6), {"locked": True, "key": "room", "pick": False}, yaw=180.0, sector="room"),
+        M("crate_a", "prop", (3, 0.3, 3), {"kind": "crate"}),
+        M("rope_a", "rope", (-5, 3.5, 5), {"length": 3.0}),
+        M("roar_zone", "noise_zone", (4, 1.5, -3), {"db": 40.0}, size=[4, 3, 4]),
+        M("gate_bars", "portcullis", (0, 0, 5.5), {"state": "down", "width": 2.0, "height": 2.5}),
+        M("way_out", "exit", (-4, 1, -4), {"label": "the way out"}, size=[2, 2, 2]),
+        M("yard_probe", "probe", (0, 1, 0), {"expect": "moon"}),
     ]
     # A bank of gravel east of the yard, rising a quarter metre a metre.
     bank = terrain.grid("bank", "yard", 6, -6, 14, 6, 1.0, lambda x, z: (x - 6) * 0.25, "gravel", surface="gravel")

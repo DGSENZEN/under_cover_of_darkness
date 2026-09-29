@@ -382,8 +382,9 @@ func _on_frob() -> void:
 		_turn_key_in(target)
 		return
 
-	# Locked, no key, a lockpick on your belt: you set to work on it.
-	if target.get("locked") == true and can_pick():
+	# Locked, no key, a lockpick on your belt: you set to work on it (unless
+	# it is a lock no pick opens).
+	if target.get("locked") == true and target.get("pickable") != false and can_pick():
 		if _picking != target:
 			_pick_lock(target)
 

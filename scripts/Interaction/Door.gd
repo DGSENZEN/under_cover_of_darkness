@@ -42,6 +42,8 @@ static var _key_layers := {}
 		if region is NavigationRegion3D and is_instance_valid(region):
 			(region as NavigationRegion3D).navigation_layers = nav_layers()
 @export var key_id: StringName = &""
+## Off: no lockpick opens it, only its key (a level's `pick` false).
+@export var pickable := true
 @export var door_name := "door"
 
 var is_open := false
@@ -73,7 +75,7 @@ func get_prompt(player: Node) -> String:
 		if can_unlock(player):
 			return "Unlock the " + door_name
 
-		if can_pick(player):
+		if pickable and can_pick(player):
 			return "Pick the lock"
 
 		return "Locked"

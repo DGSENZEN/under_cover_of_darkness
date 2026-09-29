@@ -10,6 +10,10 @@ const Materials := preload("res://scripts/Visual/Materials.gd")
 const GARRISON := preload("res://maps/garrison.tscn")
 const MapScript := preload("res://maps/npc_showcase.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
+const LevelGameplay := preload("res://scripts/Level/LevelGameplay.gd")
+const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const GUARD := preload("res://Guard.tscn")
 ## The harbour's photo slots (tools/textures/recipes), K10.
 const HARBOUR_PHOTO_SLOTS := [&"granite", &"granite_rough", &"ashlar_gold", &"render_ochre", &"render_salmon", &"render_blue",
 	&"render_straw", &"whitewash", &"azulejo_green", &"azulejo_cube", &"azulejo_blue", &"azulejo_blue2", &"azulejo_border",
@@ -30,6 +34,7 @@ class Ear:
 
 func _ready() -> void:
 	await _fixture()
+	await _gameplay()
 	await _garrison()
 	print("\n==== RESULTS ====")
 
@@ -211,6 +216,88 @@ func _fixture() -> void:
 		missing12.append("decal_salt")
 
 	_check("K12 every new painted slot finds its painting (and the salt decal its picture)", missing12.is_empty(), "missing %s" % [missing12])
+
+
+## The fixture's markers made into the game's nodes by LevelGameplay (any
+## level's, not the garrison's own map).
+func _gameplay() -> void:
+	var was_rolling: bool = TemperamentScript.rolling
+	TemperamentScript.rolling = false
+	var environment := Environment.new()
+	var world := WorldEnvironment.new()
+	world.environment = environment
+	add_child(world)
+	var holder := Node3D.new()
+	holder.name = "Gameplay"
+	add_child(holder)
+	var level: RefCounted = LevelLoader.load_level(holder, "res://assets/level/fixture", "gameplay")
+	var made: Dictionary = LevelGameplay.build_all(holder, level)
+	var baker := NavigationRegion3D.new()
+	baker.set_script(NavBakerScript)
+	baker.bake_bounds = AABB(Vector3(-8.0, -2.0, -12.0), Vector3(24.0, 8.0, 20.0))
+	holder.add_child(baker)
+	await baker.baked
+	await _frames(2)
+
+	# K13 every new marker is made into its node
+	var pickups: Dictionary = made["pickups"]
+	var purse: Node = pickups.get("purse")
+	var key: Node = pickups.get("room_key")
+	var flask: Node = pickups.get("flask_1")
+	var chest: Node = made["chests"].get("strongbox")
+	var ok13: bool = purse != null and int(purse.get("value")) == 25 and key != null and StringName(key.get("key_id")) == &"room" \
+		and flask != null and int(flask.get("count")) == 2 and chest != null and bool(chest.get("locked")) and not bool(chest.get("pickable")) \
+		and made["props"].size() == 1 and made["ropes"].size() == 1 and made["noise_zones"].size() == 1 and made["mechanisms"].size() == 1 \
+		and get_tree().get_nodes_in_group(&"district_exit").size() == 1 and get_tree().get_nodes_in_group(&"probe").size() == 1
+	_check("K13 every marker of the fixture is made into its node by LevelGameplay", ok13,
+		"pickups %s, chest %s, props %d, ropes %d, noise %d, mechanisms %d, exits %d, probes %d" % [pickups.keys(), chest != null,
+			made["props"].size(), made["ropes"].size(), made["noise_zones"].size(), made["mechanisms"].size(),
+			get_tree().get_nodes_in_group(&"district_exit").size(), get_tree().get_nodes_in_group(&"probe").size()])
+
+	# K14 the portcullis stub: down it bars the way, up it does not
+	var bars: Node3D = made["mechanisms"][0]
+	var down14 := not _ray(Vector3(0, 1.0, 4.5), Vector3(0, 1.0, 6.5)).is_empty()
+	LevelGameplay.raise(bars, true)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var up14 := _ray(Vector3(0, 1.0, 4.5), Vector3(0, 1.0, 6.5)).is_empty()
+	_check("K14 a portcullis down bars the way; raised, it lets through", down14 and up14, "down blocks %s, up clear %s" % [down14, up14])
+
+	# K15 a guard made by LevelGameplay walks his route
+	var guards: Dictionary = LevelGameplay.guards(holder, level, made["routes"], made["stations"], GUARD)
+	var hendrik: Node3D = guards.get("Hendrik")
+	var reached := [false]
+
+	if hendrik != null:
+		await _until(func(): return hendrik.global_position.distance_to(Vector3(4, 0, 3)) < 1.2, 1200)
+		reached[0] = hendrik.global_position.distance_to(Vector3(4, 0, 3)) < 1.2
+
+	_check("K15 a guard from LevelGameplay walks his route to its second point", reached[0],
+		"guard %s at %s" % [hendrik != null, hendrik.global_position if hendrik != null else Vector3.INF])
+
+	# K16 walking into an exit's box is seen
+	var exit: Area3D = get_tree().get_nodes_in_group(&"district_exit")[0]
+	var entered := [false]
+	exit.body_entered.connect(func(_body): entered[0] = true)
+	var walker := CharacterBody3D.new()
+	var capsule := CollisionShape3D.new()
+	capsule.shape = CapsuleShape3D.new()
+	walker.add_child(capsule)
+	holder.add_child(walker)
+	walker.global_position = Vector3(-8, 1, -4)
+	await get_tree().physics_frame
+	walker.global_position = Vector3(-4, 1, -4)
+
+	for i in 4:
+		await get_tree().physics_frame
+
+	_check("K16 walking into an exit's box is seen, its label on it", entered[0] and String(exit.get_meta(&"label", "")) == "the way out",
+		"entered %s, label %s" % [entered[0], exit.get_meta(&"label", "")])
+	holder.queue_free()
+	world.queue_free()
+	SoundBus.clear_zones()
+	TemperamentScript.rolling = was_rolling
+	await _frames(3)
 
 
 func _garrison() -> void:

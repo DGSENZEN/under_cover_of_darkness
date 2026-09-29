@@ -15,6 +15,8 @@ signal rattled
 @export var open_time := 0.6
 @export var locked := false
 @export var key_id: StringName = &""
+## Off: no lockpick opens it, only its key (a level's `pick` false).
+@export var pickable := true
 @export var container_name := "chest"
 
 var is_open := false
@@ -31,7 +33,7 @@ func get_prompt(player: Node) -> String:
 		if can_unlock(player):
 			return "Unlock the " + container_name
 
-		if can_pick(player):
+		if pickable and can_pick(player):
 			return "Pick the lock"
 
 		return "Locked"

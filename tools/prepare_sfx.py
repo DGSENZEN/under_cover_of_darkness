@@ -496,6 +496,13 @@ LAYERED = [
     ("lantern_creak_3", [(W(KENNEY_RPG + "creak3.ogg"), None, None, 0.0, 0.0, None, 1.25),
                          (FILMCOW + "metal latch 1.wav", None, None, -12.0, 0.03, None, 1.1)], 0.15),
 ] + [
+    # The smugglers' cave's blowhole (the harbour's Blowhole): the sea's surge
+    # through the rock, slowed and darkened, bursting out as two big splashes.
+    ("blowhole_%d" % (i + 1), [(FILMCOW + "ocean waves %d.wav" % waves, start, start + 3.5, 0.0, 0.0, 1400, 0.72 + 0.02 * i),
+                               (FILMCOW + "splash big %d.wav" % burst, None, None, -1.0, 0.9 - 0.05 * i, 2600, 0.75),
+                               (FILMCOW + "splash big %d.wav" % spray, None, None, -4.0, 1.4, None, 1.0)], 1.2)
+    for i, (waves, start, burst, spray) in enumerate(((6, 6.0, 3, 6), (7, 12.0, 1, 9), (4, 3.0, 5, 7)))
+] + [
     # A lantern's bail rattling in the hand: FilmCow's chain, short.
     ("bail_rattle_%d" % (i + 1), [(FILMCOW + "chain %d.wav" % n, None, None, 0.0, 0.0, 4000, 1.15)], 0.05)
     for i, n in enumerate((2, 4, 6, 8))
