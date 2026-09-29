@@ -21,6 +21,46 @@ static var debug := false
 static var masking_db := 0.0
 
 static var _listeners: Array = []
+## Noise zones (a level's `noise_zone` markers): inside each box, sound is
+## masked by its own noise floor (a blowhole's roar, a fountain), where it
+## is louder than the night's. id -> [box, dB].
+static var _zones := {}
+static var _next_zone := 1
+
+
+## A box of noise: what is made inside it carries as if it were `db`
+## quieter (or the night's masking, whichever is more). Returns its id.
+static func add_zone(box: AABB, db: float) -> int:
+	var id := _next_zone
+	_next_zone += 1
+	_zones[id] = [box, db]
+	return id
+
+
+## The zone's noise changes (a roar rising and falling).
+static func set_zone_db(id: int, db: float) -> void:
+	if _zones.has(id):
+		_zones[id][1] = db
+
+
+static func remove_zone(id: int) -> void:
+	_zones.erase(id)
+
+
+static func clear_zones() -> void:
+	_zones.clear()
+
+
+## How much a sound made at `position` is masked (dB): the night's noise
+## floor, or the loudest noise zone round it.
+static func masking_at(position: Vector3) -> float:
+	var db := masking_db
+
+	for id in _zones:
+		if (_zones[id][0] as AABB).has_point(position):
+			db = maxf(db, float(_zones[id][1]))
+
+	return db
 
 
 static func add_listener(listener: Object) -> void:
@@ -50,7 +90,7 @@ static func emit_sound(position: Vector3, db: float, source: Object, kind: Strin
 	_emit({
 		"position": position,
 		"db": db,
-		"range": range_for(db - masking_db),
+		"range": range_for(db - masking_at(position)),
 		"source": source,
 		"kind": kind,
 	}, also_skip)
@@ -67,7 +107,7 @@ static func emit_message(position: Vector3, db: float, source: Object, kind: Str
 	_emit({
 		"position": position,
 		"db": db,
-		"range": range_for(db - masking_db),
+		"range": range_for(db - masking_at(position)),
 		"source": source,
 		"kind": kind,
 		"message": message,

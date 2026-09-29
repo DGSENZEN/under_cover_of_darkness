@@ -51,8 +51,9 @@ class Level:
 		return by_name.get(marker_name, {})
 
 
-## Loads the level exported to `folder` under `parent` (a node "Level").
-static func load_level(parent: Node3D, folder: String) -> Level:
+## Loads the level exported to `folder` under `parent` (a node `root_name`:
+## a map of several levels names each after its own).
+static func load_level(parent: Node3D, folder: String, root_name := "Level") -> Level:
 	var level := Level.new()
 	level.name = folder.get_file()
 	var text := FileAccess.get_file_as_string(folder.path_join(level.name + ".json"))
@@ -63,7 +64,7 @@ static func load_level(parent: Node3D, folder: String) -> Level:
 
 	var manifest: Dictionary = JSON.parse_string(text)
 	level.root = Node3D.new()
-	level.root.name = "Level"
+	level.root.name = root_name
 	parent.add_child(level.root)
 
 	for sector in manifest.get("sectors", []):
@@ -81,6 +82,7 @@ static func load_level(parent: Node3D, folder: String) -> Level:
 	_colliders(level, manifest.get("colliders", []))
 	_ranges(level, manifest.get("ranges", {}))
 	_occluders(level, manifest.get("colliders", []))
+	_terrain(level, manifest.get("terrain", []))
 	level.sockets = manifest.get("sockets", [])
 
 	for raw in manifest.get("markers", []):
@@ -189,6 +191,51 @@ static func _occluders(level: Level, colliders: Array) -> void:
 		occluder.transform = Transform3D(_basis(c["basis"]), _vector(c["centre"]))
 
 
+## The terrain (tools/level/terrain.py): each is its own collider, a
+## trimesh of the mesh it is drawn with (as sculpted in the .blend), on
+## layer 1 with its surface; the big rock that hides what is behind it an
+## occluder of the same mesh.
+static func _terrain(level: Level, ground: Array) -> void:
+	var occluders: Node3D = level.root.get_node_or_null("Occluders")
+
+	for t in ground:
+		var holder: Node3D = level.sectors.get(String(t["sector"]), level.root)
+		var drawn := holder.find_child(String(t["name"]), true, false) as MeshInstance3D
+
+		if drawn == null:
+			push_error("LevelLoader: no mesh for the terrain %s" % t["name"])
+			continue
+
+		var body := StaticBody3D.new()
+		body.name = "terrain_" + String(t["name"])
+		body.collision_layer = 1
+		body.set_meta(&"surface", String(t["surface"]))
+		var shape := CollisionShape3D.new()
+		shape.shape = drawn.mesh.create_trimesh_shape()
+		body.add_child(shape)
+		holder.add_child(body)
+		shape.global_transform = drawn.global_transform
+
+		if bool(t.get("occluder", false)) and occluders != null:
+			var occluder := OccluderInstance3D.new()
+			var mesh := ArrayOccluder3D.new()
+			var points := PackedVector3Array()
+			var indices := PackedInt32Array()
+
+			for s in drawn.mesh.get_surface_count():
+				var arrays := drawn.mesh.surface_get_arrays(s)
+				var base := points.size()
+				points.append_array(arrays[Mesh.ARRAY_VERTEX])
+
+				for i in (arrays[Mesh.ARRAY_INDEX] as PackedInt32Array):
+					indices.append(base + i)
+
+			mesh.set_arrays(points, indices)
+			occluder.occluder = mesh
+			occluders.add_child(occluder)
+			occluder.global_transform = drawn.global_transform
+
+
 static func _marker(raw: Dictionary) -> Dictionary:
 	return {
 		"name": String(raw["name"]), "ucd": String(raw["ucd"]), "sector": String(raw.get("sector", "")),
@@ -231,13 +278,27 @@ static func _own_markers(level: Level) -> void:
 				zones.append(m)
 
 	if not zones.is_empty():
-		level.zones = ZonesScript.new()
-		level.zones.name = "Zones"
-		level.root.add_child(level.zones)
+		level.zones = _shared_zones(level)
 
 		for m in zones:
 			level.zones.add_zone(m["name"], m["transform"], m["size"], String(m["props"]["grade"]), float(m["props"].get("fog", 1.0)),
 				String(m["props"].get("fog_color", "")))
+
+
+## One set of zones for every level loaded under the same parent (a map of
+## several districts): two would each grade the one camera their own way.
+static func _shared_zones(level: Level) -> Node:
+	var parent := level.root.get_parent()
+
+	for found in level.root.get_tree().get_nodes_in_group(&"level_zones"):
+		if parent.is_ancestor_of(found):
+			return found
+
+	var zones: Node = ZonesScript.new()
+	zones.name = "Zones"
+	zones.add_to_group(&"level_zones")
+	level.root.add_child(zones)
+	return zones
 
 
 static func _placed(level: Level, m: Dictionary, at: Transform3D) -> Marker3D:

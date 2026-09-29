@@ -9,8 +9,18 @@ const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const Materials := preload("res://scripts/Visual/Materials.gd")
 const GARRISON := preload("res://maps/garrison.tscn")
 const MapScript := preload("res://maps/npc_showcase.gd")
+const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 
 var results: Array[String] = []
+
+
+## A listener that keeps every sound it hears (K9).
+class Ear:
+	extends RefCounted
+	var heard: Array = []
+
+	func hear_sound(event: Dictionary) -> void:
+		heard.append(event)
 
 
 func _ready() -> void:
@@ -81,10 +91,83 @@ func _fixture() -> void:
 	_check("K5 the camera walking into a zone eases its grade in (indoors: warm, saturation 1.05)",
 		outside == "outside" and inside == "indoors" and absf(saturation - 1.05) < 0.01 and partway < 1.04 and environment.adjustment_color_correction != null,
 		"outside %s, inside %s, saturation %.3f (after 0.3 s %.3f)" % [outside, inside, saturation, partway])
+
+	# K6 the bank beside the yard is terrain: solid, gravel underfoot
+	var bank_hit := _ray(Vector3(10, 5, 0), Vector3(10, -5, 0))
+	var bank_y: float = (bank_hit["position"] as Vector3).y if not bank_hit.is_empty() else -99.0
+	_check("K6 the fixture's bank is solid terrain: a ray down onto it hits gravel at its height",
+		_surface(bank_hit) == "gravel" and absf(bank_y - 1.0) < 0.05, "surface %s, height %.3f" % [_surface(bank_hit), bank_y])
+
+	# K7 its collider is the mesh it is drawn with
+	var bank_body := level.root.find_child("terrain_bank", true, false) as StaticBody3D
+	var bank_mesh := level.root.find_child("bank", true, false) as MeshInstance3D
+	var shape_faces := 0
+	var mesh_faces := 0
+	var same_box := false
+
+	if bank_body != null and bank_mesh != null:
+		var concave := (bank_body.get_child(0) as CollisionShape3D).shape as ConcavePolygonShape3D
+		shape_faces = concave.get_faces().size() / 3 if concave != null else 0
+
+		for s in bank_mesh.mesh.get_surface_count():
+			mesh_faces += (bank_mesh.mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+
+		var drawn := bank_mesh.global_transform * bank_mesh.get_aabb()
+		var solid := AABB()
+
+		if concave != null:
+			var faces := concave.get_faces()
+			var to_world := (bank_body.get_child(0) as CollisionShape3D).global_transform
+			solid = AABB(to_world * faces[0], Vector3.ZERO)
+
+			for p in faces:
+				solid = solid.expand(to_world * p)
+
+		same_box = drawn.position.distance_to(solid.position) < 0.01 and drawn.size.distance_to(solid.size) < 0.01
+
+	_check("K7 the terrain's collider is its drawn mesh", bank_body != null and shape_faces > 0 and shape_faces == mesh_faces and same_box,
+		"body %s, shape faces %d, mesh faces %d, same box %s" % [bank_body != null, shape_faces, mesh_faces, same_box])
 	level.root.queue_free()
 	camera.queue_free()
+	await _frames(2)
+
+	# K8 two levels side by side: their own roots, sectors and colliders,
+	# one set of zones between them
+	var holder := Node3D.new()
+	add_child(holder)
+	var level_a: RefCounted = LevelLoader.load_level(holder, "res://assets/level/fixture", "fixture_a")
+	var level_b: RefCounted = LevelLoader.load_level(holder, "res://assets/level/fixture", "fixture_b")
+	await _frames(2)
+	var bodies_a: Array = level_a.root.find_children("*", "StaticBody3D", true, false)
+	var bodies_b: Array = level_b.root.find_children("*", "StaticBody3D", true, false)
+	var ok8: bool = level_a.root.name == "fixture_a" and level_b.root.name == "fixture_b" and level_a.sectors.has("yard") \
+		and level_b.sectors.has("room") and not bodies_a.is_empty() and bodies_a.size() == bodies_b.size() \
+		and not bodies_a.any(func(b): return bodies_b.has(b)) and level_b.of("guard").size() == 1 \
+		and level_a.zones != null and level_a.zones == level_b.zones and holder.find_children("*", "", true, false).filter(func(n): return n.name == "Zones").size() == 1
+	_check("K8 two levels load side by side under their own roots, their zones shared", ok8,
+		"roots %s %s, bodies %d %d, guards %d, zones shared %s" % [level_a.root.name, level_b.root.name, bodies_a.size(), bodies_b.size(),
+			level_b.of("guard").size(), level_a.zones == level_b.zones])
+	holder.queue_free()
 	world.queue_free()
 	await _frames(2)
+
+	# K9 a noise zone masks what is made inside it
+	var ear := Ear.new()
+	SoundBus.add_listener(ear)
+	var zone := SoundBus.add_zone(AABB(Vector3(-2, -1, -2), Vector3(4, 3, 4)), 40.0)
+	SoundBus.emit_sound(Vector3(0, 0, 0), 50.0, null, &"test")
+	var inside_range: float = ear.heard[-1]["range"] if not ear.heard.is_empty() else -1.0
+	SoundBus.emit_sound(Vector3(10, 0, 0), 50.0, null, &"test")
+	var outside_range: float = ear.heard[-1]["range"] if ear.heard.size() > 1 else -1.0
+	SoundBus.remove_zone(zone)
+	SoundBus.emit_sound(Vector3(0, 0, 0), 50.0, null, &"test")
+	var after_range: float = ear.heard[-1]["range"] if ear.heard.size() > 2 else -1.0
+	SoundBus.remove_listener(ear)
+	SoundBus.clear_zones()
+	_check("K9 a noise zone masks what is made inside it (and nothing once it is gone)",
+		absf(inside_range - SoundBus.range_for(10.0)) < 0.01 and absf(outside_range - SoundBus.range_for(50.0)) < 0.01
+		and absf(after_range - SoundBus.range_for(50.0)) < 0.01,
+		"inside %.2f m, outside %.2f m, after %.2f m" % [inside_range, outside_range, after_range])
 
 
 func _garrison() -> void:
