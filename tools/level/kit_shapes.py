@@ -57,18 +57,20 @@ def prism(cx, cy, cz, radius, height, sides, slot, yaw=0.0, pitch=0.0, roll=0.0,
             "turn": [yaw, pitch, roll], "top": radius if top is None else top, "rings": rings or [], "caps": caps}
 
 
-def arched_wall(width, height, depth, opening, spring, rise, sill, slot, pointed=False, piers=True, x=0.0, horseshoe=0.0, z=0.0, yaw=0.0):
+def arched_wall(width, height, depth, opening, spring, rise, sill, slot, pointed=False, piers=True, x=0.0, horseshoe=0.0, z=0.0, yaw=0.0,
+                jambs=True):
     """A wall `width` x `height` x `depth` (its foot at y 0, centred on x,
     its middle at z, then turned `yaw` about the piece's upright) with an
     opening `opening` wide from `sill` up to `spring`, its head a round arch
     `rise` high (pointed: a gothic one; 0: flat). Without piers, only the
-    band over the opening (between two columns). `horseshoe`: the Moorish
-    arch, its circle (`opening` across, centred at `spring`) running on that
-    share of its radius below the springing, onto jambs narrower than the
-    arch."""
+    band over the opening (between two columns); `jambs` False leaves the
+    reveals under its springing to the piers the band stands on. `horseshoe`:
+    the Moorish arch, its circle (`opening` across, centred at `spring`)
+    running on that share of its radius below the springing, onto jambs
+    narrower than the arch."""
     return [{"kind": "arched", "width": width, "height": height, "depth": depth, "opening": opening, "spring": spring,
              "rise": rise, "sill": sill, "slot": slot, "pointed": pointed, "piers": piers, "x": x, "horseshoe": horseshoe,
-             "z": z, "yaw": yaw}]
+             "z": z, "yaw": yaw, "jambs": jambs}]
 
 
 def gable(cx, cy, cz, width, rise, depth, slot, yaw=0.0):
@@ -124,6 +126,12 @@ def ring(cx, cy, cz, inner, outer, depth, start, end, segments, slot, yaw=0.0):
             "segments": int(segments), "slot": slot, "turn": [yaw, 0.0, 0.0]}
 
 
+def polygon(points, slot):
+    """One face through `points` (in the piece's frame), drawn from the side
+    they wind counter-clockwise toward only: a vault's web, a hull's panel."""
+    return {"kind": "polygon", "points": [list(p) for p in points], "slot": slot}
+
+
 def moved(shapes, yaw=0.0, offset=(0.0, 0.0, 0.0)):
     """Copies of `shapes` turned `yaw` degrees about the piece's upright
     axis, then moved by `offset` (a roof laid along z instead of x)."""
@@ -139,6 +147,8 @@ def moved(shapes, yaw=0.0, offset=(0.0, 0.0, 0.0)):
         if shape["kind"] == "slab":
             shape["corners"] = [geo.add(geo.apply(turn, c), offset) for c in shape["corners"]]
             shape["up"] = geo.apply(turn, shape["up"])
+        elif shape["kind"] == "polygon":
+            shape["points"] = [geo.add(geo.apply(turn, p), offset) for p in shape["points"]]
         else:
             shape["centre"] = geo.add(geo.apply(turn, shape["centre"]), offset)
             shape["turn"] = [shape["turn"][0] + yaw, shape["turn"][1], shape["turn"][2]]
@@ -161,7 +171,7 @@ def build(shapes):
     their own (rounded cards), the rest flat}."""
     part = {"verts": [], "faces": [], "normals": {}}
     makers = {"box": _box, "prism": _prism, "arched": _arched, "gable": _gable, "card": _card, "lathe": _lathe, "disc": _disc,
-              "slab": _slab, "ring": _ring}
+              "slab": _slab, "ring": _ring, "polygon": lambda part, shape: _add_face(part, shape["points"], shape["slot"])}
 
     for shape in shapes:
         makers[shape["kind"]](part, shape)
@@ -393,7 +403,7 @@ def _arched(part, shape):
         both([[half, low], [w, low], [w, height], [half, height]])
 
     # The reveals: jambs, the soffit round the head, the sill.
-    if spring > sill:
+    if spring > sill and shape.get("jambs", True):
         _add_face(part, [front(-half, sill), back(-half, sill), back(-half, spring), front(-half, spring)], slot)
         _add_face(part, [back(half, sill), front(half, sill), front(half, spring), back(half, spring)], slot)
 

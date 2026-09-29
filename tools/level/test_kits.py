@@ -190,5 +190,77 @@ class Iberian(unittest.TestCase):
         self.assertLess(water[0][0], 0.0)
 
 
+class Harbour(unittest.TestCase):
+    def test_budgets(self):
+        pieces = dict(family("quay"), **family("harbour"), **family("dressing"))
+        self.assertGreaterEqual(len([n for n in pieces if n.startswith(("quay", "mole", "nave", "galley", "crane", "slipway"))]), 11)
+
+        for name, recipe in pieces.items():
+            self.assertLessEqual(tris(recipe), recipe.get("budget", kit_shapes.PIECE_TRIS), name)
+
+    def test_a_quay_meets_the_sea(self):
+        # Its top at 2.5 over the sea, its face down to -3, its coping a lip
+        # a hand can hold, standing proud of the face.
+        for name in ("quay_8", "quay_4"):
+            cols = kit_recipes.PIECES[name]["cols"]
+            body = max(cols, key=lambda c: c[3] * c[4] * c[5])
+            self.assertAlmostEqual(top_of(body), 2.5, places=3)
+            self.assertAlmostEqual(body[1] - body[4] / 2.0, -3.0, places=3)
+            coping = [c for c in cols if c is not body and abs(top_of(c) - 2.5) < 1e-3]
+            self.assertTrue(coping, name)
+            self.assertGreaterEqual(coping[0][2] + coping[0][5] / 2.0 - (body[2] + body[5] / 2.0), 0.05)
+            self.assertGreaterEqual(coping[0][5], rules.LIP)
+
+    def test_quay_steps_go_down_to_the_sea(self):
+        steps = treads(kit_recipes.PIECES["quay_steps_8"])
+        self.assertAlmostEqual(steps[-1][0], 2.3, places=3)
+        self.assertLessEqual(steps[0][0], 0.1)
+        self.assertTrue(all(abs(b[0] - a[0] - kit_recipes.RISER) < 1e-6 for a, b in zip(steps, steps[1:])))
+
+    def test_the_mole_is_walked_and_its_parapet_climbed(self):
+        cols = kit_recipes.PIECES["mole_8"]["cols"]
+        body = max(cols, key=lambda c: c[3] * c[4] * c[5])
+        self.assertAlmostEqual(top_of(body), 3.5, places=3)
+        parapet = [c for c in cols if abs(top_of(c) - 5.5) < 1e-3]
+        self.assertTrue(parapet)
+        # From the boulders at its seaward foot a mantle up, then a hang to
+        # the parapet's top.
+        boulders = [c for c in cols if c[2] > 7.0]
+        self.assertTrue(boulders)
+        self.assertLessEqual(max(top_of(c) for c in boulders), rules.MANTLE)
+        self.assertLessEqual(5.5 - max(top_of(c) for c in boulders), rules.HANG)
+
+    def test_nave_bays_tile(self):
+        pier = kit_recipes.PIECES["nave_pier"]
+        vault = kit_recipes.PIECES["nave_vault"]
+        arch = kit_recipes.PIECES["nave_arch_x"]
+        self.assertAlmostEqual(arch["size"][0], 8.4, places=3)
+        self.assertAlmostEqual(vault["size"][0], 8.4, places=3)
+        self.assertAlmostEqual(vault["size"][2], 8.4, places=3)
+        self.assertAlmostEqual(max(top_of(c) for c in vault["cols"]), 13.0, places=3)
+        # (Slightly pointed arches over 7.2 m to an apex at 10.9 spring at
+        # 7.1: the piers' tops.)
+        self.assertAlmostEqual(max(top_of(c) for c in pier["cols"]), 7.1, places=3)
+        # The arch leaves the nave clear under its apex.
+        for c in arch["cols"]:
+            self.assertGreaterEqual(c[1] - c[4] / 2.0, 10.9 - 1e-3)
+
+    def test_the_galley_scaffold_climbs(self):
+        galley = kit_recipes.PIECES["galley_stocks"]
+        planks = sorted({round(top_of(c), 3) for c in galley["cols"] if c[4] <= 0.15 and c[3] > 20.0})
+        self.assertEqual(len(planks), 2)
+        self.assertLessEqual(planks[0], rules.MANTLE)
+        self.assertLessEqual(planks[1] - planks[0], rules.MANTLE)
+        climbs = galley["climbs"]
+        self.assertTrue(any(c[1] + c[4] / 2.0 >= planks[1] - 0.1 and c[1] - c[4] / 2.0 <= 0.1 for c in climbs))
+
+    def test_small_dressing_stops_nobody_but_the_big_does(self):
+        for name in ("net_hung", "rope_coil", "basket_fish", "lobster_pots"):
+            self.assertEqual(kit_recipes.PIECES[name]["cols"], [], name)
+
+        for name in ("crate_stack", "barrel_row", "cargo_bales", "anchor_big"):
+            self.assertTrue(kit_recipes.PIECES[name]["cols"], name)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

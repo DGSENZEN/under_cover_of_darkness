@@ -553,3 +553,7 @@ import kit_fort  # noqa: E402,F401
 # The city's Iberian buildings (kit_iberian: the Ribeira's houses and
 # arcade, the Terreiro's arcades, granite stairs, the statue, a shrine).
 import kit_iberian  # noqa: E402,F401
+
+# The city's harbour (kit_harbour: quays, the mole, the shipyard's naves,
+# the galley on the stocks, a crane, the quays' dressing).
+import kit_harbour  # noqa: E402,F401

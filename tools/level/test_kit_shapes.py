@@ -52,6 +52,15 @@ class Shapes(unittest.TestCase):
             if abs(x) < 0.6 - 1e-3 and 1e-3 < y < 1.6 - 1e-3:
                 self.fail("a vertex in the doorway at %s" % [x, y, z])
 
+    def test_a_polygon_is_one_face_as_wound(self):
+        # A vault's web: one face through its points, seen from the side it
+        # winds counter-clockwise toward (here: from below).
+        part = kit_shapes.build([kit_shapes.polygon([[0.0, 3.0, 0.0], [1.0, 2.0, 0.0], [0.0, 2.0, 1.0]], "brick")])
+        self.assertEqual(tris(part), 1)
+        self.assertLess(kit_shapes._normal([part["verts"][i] for i in part["faces"][0][0]])[1], 0.0)
+        moved = kit_shapes.moved([kit_shapes.polygon([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]], "brick")], 90.0, (0.0, 5.0, 0.0))
+        self.assertAlmostEqual(moved[0]["points"][2][1], 6.0)
+
     def test_an_arched_wall_moves_and_turns(self):
         # Set 1 m forward and turned a quarter: it runs along z, 0.4 thick
         # about x = 1.

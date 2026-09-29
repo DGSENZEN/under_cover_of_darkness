@@ -34,7 +34,7 @@ import shade  # noqa: E402
 # The bake (shade.py): the families whose faces are cut finer (to about
 # GRADE_EDGE) so the shading grades across them; occlusion measured with
 # AO_RAYS rays out to AO_REACH (m); pieces drawn unlit keep no colours.
-GRADED = ("wall", "curtain", "floor", "stair", "column", "roof", "quay", "vault", "fort", "casa", "iberian")
+GRADED = ("wall", "curtain", "floor", "stair", "column", "roof", "quay", "vault", "fort", "casa", "iberian", "harbour")
 GRADE_EDGE = 1.0
 AO_RAYS = 12
 AO_REACH = 1.2
