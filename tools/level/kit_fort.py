@@ -90,24 +90,68 @@ def _battlements(length, top, z, slot="granite", merlons=True):
     return shapes, cols
 
 
-def _ring_battlements(apothem, top, sides, merlons, slot, pyramids=False):
+def _ring_battlements(apothem, top, sides, merlons, slot, pyramids=False, phase=0.5, gap=None):
     """A breastwork round a polygon's rim at `top` and merlons on it
-    (Moorish pyramids, or square), and their colliders."""
+    (Moorish pyramids, or square), and their colliders. The merlons stand at
+    the corners (`phase` 0.5) or the flats' middles (0); `gap` (flat, from,
+    to): the breastwork left open on that flat between those distances along
+    it from its middle (toward the next flat round: a ladder's head)."""
     corner = apothem / math.cos(math.pi / sides)
     inner = corner - PARAPET
-    shapes = [ks.lathe(0.0, top, 0.0, [[inner, 0.0], [corner, 0.0], [corner, BREAST], [inner, BREAST]], sides, slot, yaw=180.0 / sides,
-                       closed=True)]
     flat = 2.0 * apothem * math.tan(math.pi / sides)
     cols = []
+
+    if gap is None:
+        shapes = [ks.lathe(0.0, top, 0.0, [[inner, 0.0], [corner, 0.0], [corner, BREAST], [inner, BREAST]], sides, slot, yaw=180.0 / sides,
+                           closed=True)]
+    else:
+        # (Flat by flat, to leave the gap open: a board BREAST deep between
+        # each flat's outer and inner corners, the gap's flat in its pieces.)
+        shapes = []
+
+        for i in range(sides):
+            a0, a1 = math.radians((i - 0.5) * 360.0 / sides), math.radians((i + 0.5) * 360.0 / sides)
+            outer = ([corner * math.cos(a0), top + BREAST, corner * math.sin(a0)], [corner * math.cos(a1), top + BREAST, corner * math.sin(a1)])
+            inside = ([inner * math.cos(a0), top + BREAST, inner * math.sin(a0)], [inner * math.cos(a1), top + BREAST, inner * math.sin(a1)])
+            spans = [(-1.0, 1.0)]
+
+            if i == gap[0]:
+                half = flat / 2.0
+                spans = [(s0, s1) for s0, s1 in ((-1.0, gap[1] / half), (gap[2] / half, 1.0)) if s1 - s0 > 1e-3]
+
+            for s0, s1 in spans:
+                def at(pair, s):
+                    t = (s + 1.0) / 2.0
+                    return [pair[0][k] + (pair[1][k] - pair[0][k]) * t for k in range(3)]
+
+                shapes.append(ks.slab([at(outer, s0), at(outer, s1), at(inside, s1), at(inside, s0)], BREAST, slot))
 
     for i in range(sides):
         angle = i * 360.0 / sides
         a = math.radians(angle)
         r = apothem - PARAPET / 2.0
-        cols.append(col(r * math.cos(a), top + BREAST / 2.0, r * math.sin(a), flat, BREAST, PARAPET, _yaw_out(angle)))
+        along = [-math.sin(a), math.cos(a)]
+        start, end = -flat / 2.0, flat / 2.0
+
+        # (A gap to a corner: the next flat's box, which reaches past its own
+        # corner, stops short of it.)
+        if gap is not None and i == (gap[0] - 1) % sides and gap[1] <= -flat / 2.0 + 1e-6:
+            end -= 0.35
+
+        if gap is not None and i == (gap[0] + 1) % sides and gap[2] >= flat / 2.0 - 1e-6:
+            start += 0.35
+
+        pieces = [((start + end) / 2.0, end - start)]
+
+        if gap is not None and i == gap[0]:
+            pieces = [((s0 + s1) / 2.0, s1 - s0) for s0, s1 in ((-flat / 2.0, gap[1]), (gap[2], flat / 2.0)) if s1 - s0 > 1e-3]
+
+        for mid, length in pieces:
+            cols.append(col(r * math.cos(a) + along[0] * mid, top + BREAST / 2.0, r * math.sin(a) + along[1] * mid, length, BREAST, PARAPET,
+                            _yaw_out(angle)))
 
     for i in range(merlons):
-        angle = (i + 0.5) * 360.0 / merlons
+        angle = (i + phase) * 360.0 / merlons
         a = math.radians(angle)
         r = apothem - PARAPET / 2.0
         x, z = r * math.cos(a), r * math.sin(a)
@@ -370,7 +414,10 @@ def _gold_stage_1():
     for rung in range(int((height - 0.3) / 0.3)):
         shapes.append(ks.prism(LADDER, 0.3 + rung * 0.3, -apothem - 0.1, 0.025, 0.7, 3, "iron", roll=90.0, caps=False))
 
-    top, top_cols = _ring_battlements(apothem, height, 12, 12, "render_straw", pyramids=True)
+    # The terrace's breastwork open where the ladder comes up (from the
+    # flat's corner to just past the ladder), a merlon over each flat's
+    # middle, none over the ladder.
+    top, top_cols = _ring_battlements(apothem, height, 12, 12, "render_straw", pyramids=True, phase=0.0, gap=(9, -flat, LADDER + 0.6))
     return shapes + top, cols + top_cols
 
 
@@ -402,7 +449,7 @@ def _gold_stage(index):
 
 
 _shapes, _cols = _gold_stage_1()
-_fort("gold_stage_1", "render_straw", _shapes, _cols, [GOLD[0][0] + 1.2, GOLD[0][1] + 2.1, GOLD[0][0] + 1.2], budget=1500)
+_fort("gold_stage_1", "render_straw", _shapes, _cols, [GOLD[0][0] + 1.2, GOLD[0][1] + 2.1, GOLD[0][0] + 1.2], budget=1550)
 # Its ladder's climb (the level's ladder marker): [x, y, z, sx, sy, sz, yaw],
 # its back (-z) on the tower.
 k.PIECES["gold_stage_1"]["climbs"] = [[LADDER, (GOLD[0][1] + 0.4) / 2.0, -GOLD[0][0] / 2.0 - 0.35, 0.8, GOLD[0][1] + 0.4, 0.5, 180.0]]

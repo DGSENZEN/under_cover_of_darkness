@@ -186,6 +186,26 @@ func _moon_and_clouds() -> void:
 	night.queue_free()
 	await _frames(2)
 
+	# N7 a map's own skyline (the city's): the sky draws the picture it names;
+	# none named, the showcase's
+	var own7: Node = NightScript.new()
+	own7.moon = moon
+	own7.environment = environment
+	own7.set("skyline", "res://textures/painted/moon.png")
+	add_child(own7)
+	await _frames(1)
+	var drawn7: Texture2D = (own7._sky.material as ShaderMaterial).get_shader_parameter("skyline")
+	own7.queue_free()
+	await _frames(1)
+	var plain7 := _night(&"clear")
+	await _frames(1)
+	var default7: Texture2D = (plain7._sky.material as ShaderMaterial).get_shader_parameter("skyline")
+	_check("N7 a map's own skyline is the one the sky draws; none named, the showcase's",
+		drawn7 != null and drawn7.resource_path == "res://textures/painted/moon.png" and default7 != null and default7.resource_path == "res://assets/sky/skyline.png",
+		"own %s, default %s" % [drawn7.resource_path if drawn7 else "none", default7.resource_path if default7 else "none"])
+	plain7.queue_free()
+	await _frames(2)
+
 
 # ---------------------------------------------------------------------------
 # W: the states

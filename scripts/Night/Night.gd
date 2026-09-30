@@ -120,6 +120,9 @@ signal thundered(delay: float)
 ## Low spots where puddles gather; boxes where mist lies in fog.
 @export var puddles: Array[Vector3] = []
 @export var mist_boxes: Array[AABB] = []
+## The map's own skyline (tools/skyline: a picture round the horizon); ""
+## the showcase's.
+@export var skyline := ""
 
 var state: StringName = &"clear"
 var wetness := 0.0
@@ -187,7 +190,7 @@ func _ready() -> void:
 		_fog_base = environment.volumetric_fog_density
 		_fog_albedo_base = environment.volumetric_fog_albedo
 		_exposure_base = environment.tonemap_exposure
-		_sky = NightSkyScript.new(environment, _field_texture)
+		_sky = NightSkyScript.new(environment, _field_texture, skyline)
 
 	_rain = RainScript.new()
 	_rain.name = "Rain"

@@ -172,15 +172,39 @@ def losers(faces, tolerance=TOLERANCE):
     return sorted({loser for loser, _, _ in fights(faces, tolerance)})
 
 
+def giving_way(found, owner, key=lambda i: i):
+    """What goes back this round (their keys), the fights taken earliest
+    loser first: a loser goes back and its winner is held in front; a loser
+    held in front already (it won the fight before) sends its winner back
+    instead. So a chain of pieces each over the next settles in one round,
+    every other one back (not each a round after the last, deeper and
+    deeper); a stack in one plane takes a round a layer, the latest in
+    front. `owner(i)`: face i's piece's place in the layout; `key(i)`: what
+    goes back with it (its piece's whole plane)."""
+    back, held = set(), set()
+
+    for loser, winner, _ in sorted(found, key=lambda f: (owner(f[0]), owner(f[1]))):
+        lk, wk = key(loser), key(winner)
+
+        if lk in held:
+            if wk not in held:
+                back.add(wk)
+        elif wk not in back:
+            back.add(lk)
+            held.add(wk)
+
+    return back
+
+
 def recessed(faces, tolerance=TOLERANCE):
-    """`faces` with each loser pushed back RECESS against its own normal,
-    round after round (a stack of three in one plane: the first round pushes
-    both lower ones back together, the next the lowest again) until none
-    fights, or ROUNDS."""
+    """`faces` with each loser that gives way this round (giving_way) pushed
+    back RECESS against its own normal, round after round (a stack of three
+    in one plane: the lowest back, then the middle, then the lowest again)
+    until none fights, or ROUNDS."""
     out = list(faces)
 
     for _ in range(ROUNDS):
-        beaten = losers(out, tolerance)
+        beaten = giving_way(fights(out, tolerance), lambda i: out[i]["owner"])
 
         if not beaten:
             break

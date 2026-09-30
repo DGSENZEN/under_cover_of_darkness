@@ -81,6 +81,15 @@ class Recess(unittest.TestCase):
         self.assertLess(depth[1], depth[2])
         self.assertEqual(depth[2], 0.0)
 
+    def test_a_long_chain_is_settled_at_once_and_goes_back_no_further_than_one_recess(self):
+        # A run of pieces each just over the next (the mole's copings, the
+        # Terreiro's bays): every other one gives way in one round, not each
+        # one a round after the last (17 rounds, 17 recesses deep at its end).
+        faces = [quad(k + 1, 4.0 * k, 0, 4.0 * k + 4.05, 4) for k in range(17)]
+        moved = overlap.recessed(faces)
+        self.assertEqual(overlap.fights(moved), [])
+        self.assertGreaterEqual(min(p[2] for f in moved for p in f["points"]), -overlap.RECESS - 1e-9)
+
     def test_nothing_fighting_is_left_as_it_is(self):
         faces = [quad(1, 0, 0, 4, 4), quad(2, 4, 0, 8, 4)]
         self.assertEqual(overlap.recessed(faces), faces)

@@ -75,6 +75,9 @@ signal baked
 @export var traversal_links := true
 ## Islands of floor with no way to or from the biggest one are left out.
 @export var drop_unreached := false
+## Where the level is played from (a point on its floor, in the world): its
+## island is the one kept, with those reached from it. INF: the biggest.
+@export var home := Vector3.INF
 
 var is_baked := false
 ## How many ways across were linked in the last bake; how many scraps of
@@ -355,12 +358,16 @@ func _drop_unreached(mesh: NavigationMesh) -> int:
 	if area.size() < 2:
 		return 0
 
-	var home: int = area.keys().reduce(func(best, island): return island if area[island] > area[best] else best)
+	var own: int = area.keys().reduce(func(best, island): return island if area[island] > area[best] else best)
+
+	if home != Vector3.INF:
+		own = _island_of(parent, mesh.get_polygon(_nearest_polygon(mesh, global_transform.affine_inverse() * home))[0])
+
 	var map := get_navigation_map()
-	var kept := {home: true}
+	var kept := {own: true}
 
 	for island in area:
-		if island != home and (_way_between(map, middle[home], middle[island]) or _way_between(map, middle[island], middle[home])):
+		if island != own and (_way_between(map, middle[own], middle[island]) or _way_between(map, middle[island], middle[own])):
 			kept[island] = true
 
 	var polygons: Array[PackedInt32Array] = []
@@ -386,6 +393,28 @@ static func _island_of(parent: PackedInt32Array, i: int) -> int:
 		i = parent[i]
 
 	return i
+
+
+## The polygon whose middle is nearest `point` (the mesh's own space).
+static func _nearest_polygon(mesh: NavigationMesh, point: Vector3) -> int:
+	var vertices := mesh.get_vertices()
+	var best := 0
+	var nearest := INF
+
+	for i in mesh.get_polygon_count():
+		var polygon := mesh.get_polygon(i)
+		var centre := Vector3.ZERO
+
+		for k in polygon:
+			centre += vertices[k]
+
+		var d := (centre / float(polygon.size())).distance_squared_to(point)
+
+		if d < nearest:
+			nearest = d
+			best = i
+
+	return best
 
 
 ## The map has a way from `a` all the way to `b` (links and all, and through

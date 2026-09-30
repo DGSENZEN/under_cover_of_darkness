@@ -203,9 +203,11 @@ def _ungrip(objects, order):
     """No two pieces fighting for the same pixels (overlap.py): where faces of
     two pieces lie in one plane and overlap, the whole face of the earlier
     piece in that plane is pushed back behind the later one's (a wall laid
-    over a wall, a floor's edge flush with a wall, floors overlapping);
-    round after round (a stack of three: the lowest goes back twice), each
-    round looking again only at the pieces the last one found fighting."""
+    over a wall, a floor's edge flush with a wall, floors overlapping), a
+    chain of pieces each over the next every other one back at once
+    (overlap.giving_way); round after round (a stack of three: the lowest
+    goes back twice), each round looking again only at the pieces the last
+    one found fighting."""
     looking = objects
     pushed = set()
     planes_pushed = 0
@@ -218,15 +220,18 @@ def _ungrip(objects, order):
         if not left:
             break
 
-        planes = set()
         involved = set()
 
+        def plane(i):
+            n = faces[i]["normal"]
+            d = sum(a * b for a, b in zip(n, faces[i]["points"][0]))
+            return (where[i][0].name, round(n[0], 2), round(n[1], 2), round(n[2], 2), round(d / overlap.TOLERANCE))
+
+        # (Every other piece of a chain back at once: overlap.giving_way.)
+        planes = overlap.giving_way(left, lambda i: faces[i]["owner"], plane)
+
         for loser, winner, _ in left:
-            obj = where[loser][0]
-            n = faces[loser]["normal"]
-            d = sum(a * b for a, b in zip(n, faces[loser]["points"][0]))
-            planes.add((obj.name, round(n[0], 2), round(n[1], 2), round(n[2], 2), round(d / overlap.TOLERANCE)))
-            involved.add(obj.name)
+            involved.add(where[loser][0].name)
             involved.add(where[winner][0].name)
 
         for obj in looking:

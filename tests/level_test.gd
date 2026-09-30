@@ -14,6 +14,7 @@ const LevelGameplay := preload("res://scripts/Level/LevelGameplay.gd")
 const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GUARD := preload("res://Guard.tscn")
+const Props := preload("res://scripts/Interaction/Props.gd")
 ## The harbour's photo slots (tools/textures/recipes), K10.
 const HARBOUR_PHOTO_SLOTS := [&"granite", &"granite_rough", &"ashlar_gold", &"render_ochre", &"render_salmon", &"render_blue",
 	&"render_straw", &"whitewash", &"azulejo_green", &"azulejo_cube", &"azulejo_blue", &"azulejo_blue2", &"azulejo_border",
@@ -321,6 +322,25 @@ func _gameplay() -> void:
 	_check("K17 a noise zone with a period masks its box only while it roars", roar != null and is_zero_approx(quiet17)
 		and is_equal_approx(loud17, 45.0) and is_zero_approx(beside17), "roar %s; masked %.1f, roaring %.1f, beside %.1f" % [roar != null, quiet17,
 			loud17, beside17])
+
+	# K18 the baker keeps the island its home is on, and what is reached from
+	# it: not the biggest (the city: the harbour, not the rock behind it)
+	var yard := Node3D.new()
+	holder.add_child(yard)
+	Props.block(yard, Vector3(60, -0.5, 0), Vector3(6, 1, 6))
+	Props.block(yard, Vector3(90, -0.5, 0), Vector3(20, 1, 20))
+	var baker18 := NavigationRegion3D.new()
+	baker18.set_script(NavBakerScript)
+	baker18.drop_unreached = true
+	baker18.set("home", Vector3(60, 0, 0))
+	baker18.bake_bounds = AABB(Vector3(50, -2, -12), Vector3(52, 6, 24))
+	yard.add_child(baker18)
+	await baker18.baked
+	var map18 := baker18.get_navigation_map()
+	var home18 := NavigationServer3D.map_get_closest_point(map18, Vector3(60, 0, 0)).distance_to(Vector3(60, 0, 0))
+	var big18 := NavigationServer3D.map_get_closest_point(map18, Vector3(90, 0, 0)).distance_to(Vector3(90, 0, 0))
+	_check("K18 the navmesh keeps its home's island, not the biggest", home18 < 0.5 and big18 > 5.0,
+		"home's floor %.1f m off, the big island's %.1f m off" % [home18, big18])
 	holder.queue_free()
 	world.queue_free()
 	SoundBus.clear_zones()

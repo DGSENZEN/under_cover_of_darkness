@@ -1,7 +1,8 @@
-"""The skyline round the showcase yard, modelled and rendered in Blender.
+"""The skyline round the showcase yard (or the city on the rock's: `city`),
+modelled and rendered in Blender.
 
 Run by tools/skyline/skyline.sh (headless Blender):
-    Blender -b --factory-startup --python skyline.py -- <out.png>
+    Blender -b --factory-startup --python skyline.py -- <out.png> [city]
 
 Everything is built here from code, the same every run (random.Random(1932)):
 far hills all round, tree lines to the west, the town to the east and north
@@ -33,8 +34,13 @@ TREES = (0.013, 0.017, 0.020)
 CANAL = (0.011, 0.013, 0.019)
 HILLS = (0.028, 0.034, 0.050)
 WINDOW = (1.0, 0.62, 0.30)
-# Toward the moon (Godot), for the faint rim on the silhouettes.
+COAST = (0.020, 0.024, 0.036)
+FAR = (0.040, 0.046, 0.064)
+SEA = (0.010, 0.013, 0.020)
+# Toward the moon (Godot), for the faint rim on the silhouettes (the city's:
+# up the other way from maps/city.gd's MOON_TOWARD, the light's way).
 MOON_TOWARD = (-0.62, 0.5, -0.6)
+CITY_MOON_TOWARD = (-0.3, 0.57, 0.77)
 
 rng = random.Random(1932)
 
@@ -255,13 +261,81 @@ def canal(mat, lit):
         count += 1
 
 
-def moonlight():
+def ridge(name, mat, start, end, distance, height, step=1.0, foot=-150.0):
+    """A ridge from azimuth `start` to `end` (degrees: 0 south, 90 east),
+    `distance` m off, its crest height(azimuth) m over the sea, down to
+    `foot`."""
+    verts, faces = [], []
+    count = int(round((end - start) / step)) + 1
+
+    for i in range(count):
+        a = start + (end - start) * i / (count - 1)
+        x, _, z = at(a, distance)
+        verts.append((x, foot, z))
+        verts.append((x, max(0.0, height(a)), z))
+
+    for i in range(count - 1):
+        faces.append((i * 2, (i + 1) * 2, (i + 1) * 2 + 1, i * 2 + 1))
+
+    return mesh_object(name, verts, faces, mat)
+
+
+def city():
+    """The city on the rock's horizon (skyline.sh city; maps/city.gd): hills
+    to the north behind the rock, 3 km off; the coast east and west, 2 km
+    off, stepping down to the sea; open sea to the south but for a faint
+    far headland to the south-south-west and its light."""
+    lit = material("window", WINDOW, 2.5, rim=False)
+    hills_mat = material("hills", HILLS)
+    coast_mat = material("coast", COAST)
+    far_mat = material("far", FAR, rim=False)
+    sea_mat = material("sea", SEA, rim=False)
+    wobble = [rng.uniform(-1.0, 1.0) for _ in range(400)]
+
+    def rough(a, amount):
+        return amount * wobble[int(a) % 400]
+
+    def taper(a, start, end, span):
+        """Down to nothing at either end, over `span` degrees."""
+        t0, t1 = max(0.0, min(1.0, (a - start) / span)), max(0.0, min(1.0, (end - a) / span))
+        return t0 * t0 * (3.0 - 2.0 * t0) * t1 * t1 * (3.0 - 2.0 * t1)
+
+    # (Each falls away at its ends: into the sea at the south, behind the
+    # hills at the north.)
+    ridge("north_hills", hills_mat, 80.0, 280.0, 3000.0,
+          lambda a: (190.0 + 90.0 * math.sin(math.radians(a * 4.0 + 30.0)) + 45.0 * math.sin(math.radians(a * 11.0)) + rough(a, 8.0))
+          * taper(a, 80.0, 280.0, 14.0))
+    ridge("east_coast", coast_mat, 30.0, 112.0, 2200.0,
+          lambda a: (15.0 + 110.0 * max(0.0, (a - 30.0) / 82.0) ** 1.4 + 18.0 * math.sin(math.radians(a * 9.0)) + rough(a, 4.0))
+          * taper(a, 30.0, 112.0, 10.0), foot=0.0)
+    ridge("west_coast", coast_mat, 248.0, 330.0, 2200.0,
+          lambda a: (15.0 + 130.0 * max(0.0, (330.0 - a) / 82.0) ** 1.3 + 16.0 * math.sin(math.radians(a * 7.0)) + rough(a, 4.0))
+          * taper(a, 248.0, 330.0, 10.0), foot=0.0)
+    def headland(a):
+        """Up gently from the land to its height near its end, then down
+        steeply into the sea."""
+        rise = max(0.0, min(1.0, (a - 322.0) / 24.0)) ** 1.6
+        fall = math.cos(math.radians(max(0.0, a - 346.0) / 6.0 * 90.0)) if a < 352.0 else 0.0
+        return (110.0 * rise + rough(a * 3.0, 5.0)) * fall
+
+    ridge("far_headland", far_mat, 322.0, 352.0, 4600.0, headland, step=0.5, foot=0.0)
+    # The sea all round below the horizon, past where the harbour's ends.
+    ridge("far_sea", sea_mat, 0.0, 360.0, 2600.0, lambda a: 0.0, step=2.0)
+    # (Its light: a lantern on its end, and a few windows on the coasts.)
+    box("far_light", at(342.0, 4560.0, 88.0), (10.0, 9.0, 10.0), 0.0, lit)
+
+    for i in range(7):
+        a = rng.uniform(44.0, 96.0) if i % 2 else rng.uniform(262.0, 318.0)
+        box("coast_window_%d" % i, at(a, 2150.0, rng.uniform(12.0, 40.0)), (3.0, 2.2, 3.0), 0.0, lit)
+
+
+def moonlight(toward_moon=None):
     sun = bpy.data.lights.new("moon", "SUN")
     sun.energy = 0.25
     sun.color = (0.6, 0.7, 1.0)
     obj = bpy.data.objects.new("moon", sun)
     bpy.context.scene.collection.objects.link(obj)
-    toward = blender(*MOON_TOWARD)
+    toward = blender(*(toward_moon or MOON_TOWARD))
     length = math.sqrt(sum(c * c for c in toward))
     direction = [c / length for c in toward]
     # A sun shines along its -Z: point -Z away from the moon.
@@ -315,14 +389,22 @@ def render(path):
 
 
 def main():
-    path = sys.argv[sys.argv.index("--") + 1]
+    args = sys.argv[sys.argv.index("--") + 1:]
+    path = args[0]
+    scene = args[1] if len(args) > 1 else "yard"
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    lit = material("window", WINDOW, 2.5, rim=False)
-    hills(material("hills", HILLS))
-    trees(material("trees", TREES))
-    town(material("town", TOWN), lit)
-    canal(material("canal", CANAL), lit)
-    moonlight()
+
+    if scene == "city":
+        city()
+        moonlight(CITY_MOON_TOWARD)
+    else:
+        lit = material("window", WINDOW, 2.5, rim=False)
+        hills(material("hills", HILLS))
+        trees(material("trees", TREES))
+        town(material("town", TOWN), lit)
+        canal(material("canal", CANAL), lit)
+        moonlight()
+
     render(path)
 
 

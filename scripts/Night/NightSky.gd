@@ -1,8 +1,8 @@
 extends RefCounted
 ## The night's sky on an environment: night_sky.gdshader, the cloud field
-## Night gives it, and the skyline (assets/sky/skyline.png, rendered by
-## tools/skyline in Blender; a plain noise ridge until it is there). Night
-## feeds it every frame (show_night).
+## Night gives it, and the skyline (assets/sky/skyline.png, or the map's own:
+## rendered by tools/skyline in Blender; a plain noise ridge until it is
+## there). Night feeds it every frame (show_night).
 
 const SHADER := preload("res://scripts/Night/night_sky.gdshader")
 const SKYLINE := "res://assets/sky/skyline.png"
@@ -12,11 +12,11 @@ const MOON_FACE := "res://textures/painted/moon.png"
 var material: ShaderMaterial
 
 
-func _init(environment: Environment, field: Texture2D) -> void:
+func _init(environment: Environment, field: Texture2D, skyline := "") -> void:
 	material = ShaderMaterial.new()
 	material.shader = SHADER
 	material.set_shader_parameter("cloud_field", field)
-	material.set_shader_parameter("skyline", _skyline())
+	material.set_shader_parameter("skyline", _skyline(skyline if skyline != "" else SKYLINE))
 	material.set_shader_parameter("moon_face", _moon_face())
 	var sky := Sky.new()
 	sky.sky_material = material
@@ -66,10 +66,11 @@ static func _moon_face() -> Texture2D:
 	return ImageTexture.create_from_image(image)
 
 
-## The Blender skyline, or a plain ridge of hills and roofs to stand in.
-static func _skyline() -> Texture2D:
-	if ResourceLoader.exists(SKYLINE):
-		return load(SKYLINE)
+## The Blender skyline at `path`, or a plain ridge of hills and roofs to
+## stand in.
+static func _skyline(path := SKYLINE) -> Texture2D:
+	if ResourceLoader.exists(path):
+		return load(path)
 
 	var width := 1024
 	var height := 128

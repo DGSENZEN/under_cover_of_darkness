@@ -80,6 +80,31 @@ class Fort(unittest.TestCase):
             corner = max(math.hypot(abs(c[0]) + c[3] / 2.0, abs(c[2]) + c[5] / 2.0) for c in body if c[7] == 0.0)
             self.assertLessEqual(corner, radius / math.cos(math.pi / (16 if "drum" in name else 12)) + 0.05, name)
 
+    def test_the_gold_ladder_comes_up_through_the_breastwork(self):
+        # Its top meets a gap in the terrace's breastwork, no merlon over it:
+        # a man comes up onto the terrace, and a guard's ladder link (which
+        # lands 0.7 m in from the ladder) finds its floor. Drawn open too.
+        import kit_fort
+        recipe = kit_recipes.PIECES["gold_stage_1"]
+        apothem, height = kit_fort.GOLD[0][0] / 2.0, kit_fort.GOLD[0][1]
+        boxes = geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY)
+        built = kit_shapes.build(recipe["shapes"])
+        drawn = []
+
+        for y in (height + 0.3, height + 0.8, height + 1.5):
+            for z in (-apothem + 0.1, -apothem + 0.3, -apothem + 0.55):
+                for x in (kit_fort.LADDER - 0.3, kit_fort.LADDER, kit_fort.LADDER + 0.3):
+                    self.assertFalse(any(b.contains([x, y, z]) for b in boxes), (x, y, z))
+
+        # (No drawn face of the breastwork crosses the gap at its middle.)
+        for face in built["faces"]:
+            points = [built["verts"][i] for i in face[0]]
+
+            if all(abs(p[0] - kit_fort.LADDER) < 0.4 for p in points) and all(height + 0.05 < p[1] < height + kit_fort.BREAST + 0.05 for p in points):
+                drawn.append(points)
+
+        self.assertEqual(drawn, [])
+
     def test_the_sea_gate_passage_is_clear(self):
         # 4 m wide and 5 m high through its front and its passage.
         for name in ("gate_front", "gate_passage_16"):
