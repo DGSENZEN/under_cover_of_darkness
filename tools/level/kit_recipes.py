@@ -188,7 +188,10 @@ piece("curtain_corner", "curtain", "ashlar", "stone",
 
 FLOORS = {"cobble": ("cobble", "stone"), "flag": ("flagstone", "stone"), "board": ("boards", "wood"),
           "grass": ("grass", "grass"), "mud": ("mud", "dirt"), "gravel": ("gravel", "gravel"),
-          "carpet": ("carpet", "carpet")}
+          "carpet": ("carpet", "carpet"),
+          # The city's: the Terreiro's calcada, granite (quays, naves, the
+          # Sea Gate's passage), terracotta (houses, the customs house).
+          "calcada": ("calcada", "stone"), "granite": ("granite", "stone"), "terracotta": ("terracotta", "stone")}
 
 for kind, (slot, surface) in FLOORS.items():
     for size in (2, 4):

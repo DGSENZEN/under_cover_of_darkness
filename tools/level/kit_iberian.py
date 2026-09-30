@@ -10,8 +10,11 @@ A house (casa_a .. casa_h) stands on the quay: its pivot the middle of its
 footprint on the ground, its front to +z. Its first storey starts over the
 arcade (GROUND), the arcade piece (arcade_ribeira_6) standing under its
 front (ARCADE deep) before its ground floor. Its balconies are the thief's
-ladder: each a hang from the one under it (rules.HANG), the first from the
-quay, their iron rails drawn only (a rail's bar is no lip to hang from).
+ladder in the rules' measure (each a hang from the one under it), but the
+controller cannot climb a stack of them (the one over you is your ceiling,
+and a hang leap reaches 1.2 m): casa_d's old vine up its front beside them is
+the climb to its eaves. Their iron rails are drawn only (a rail's bar is no
+lip to hang from).
 """
 
 import math
@@ -31,6 +34,9 @@ FRENCH = (1.0, 2.2)
 PITCH = 20.0
 CASA_TRIS = 2200
 DOOR = (1.2, 2.2)
+# Where casa_d's vine climbs its front: between its right balconies and its
+# quoin, up the arcade's pier.
+VINE_X = 2.55
 
 
 def col(cx, cy, cz, sx, sy, sz, yaw=0.0, pitch=0.0, roll=0.0):
@@ -71,11 +77,33 @@ def _window(x, y0, lit, balcony):
     return out
 
 
-def casa(storeys, front, side, balconies, lit, chimney=1.0):
+def _vine(eaves):
+    """An old vine up a front from the quay to the eaves (beside its right
+    balconies, on the arcade's pier): its gnarled trunk, mats of our painted
+    ivy, and the climb up it (ending at the eaves, so the climber mantles
+    onto the roof)."""
+    x = VINE_X
+    shapes = [ks.box(x - 0.05, 1.3, FRONT + 0.08, 0.14, 2.6, 0.12, "bark", 0.0, 0.0, 4.0),
+              ks.box(x + 0.04, 2.6 + (eaves - 0.5 - 2.6) / 2.0, FRONT + 0.07, 0.11, eaves - 0.5 - 2.6, 0.1, "bark", 0.0, 0.0, -1.5)]
+    # (Mats of ivy up it, overlapping a little, the last one up to the
+    # cornice however short.)
+    mats = int(math.ceil((eaves - 0.45 - 0.8) / 2.8))
+    h = (eaves - 0.45 - 0.8 + 0.2 * (mats - 1)) / mats
+
+    for k in range(mats):
+        y = 0.8 + k * (h - 0.2)
+        shapes.append(ks.card(x + (0.12 if k % 2 else -0.1), y + h / 2.0, FRONT + 0.16, 1.1 - 0.1 * (k % 2), h, "ivy"))
+
+    climb = [x, eaves / 2.0, FRONT + 0.25, 0.7, eaves, 0.5, 0.0]
+    return shapes, climb
+
+
+def casa(storeys, front, side, balconies, lit, chimney=1.0, vine=False):
     """A house: `storeys` over the arcade, its front skin `front` (tiles or
     render), its sides and back `side`; balconies "all" (every storey) or
     "top"; `lit` [(storey, window 0 or 1)]; the chimney to the left (-1) or
-    right. Returns (shapes, colliders, size)."""
+    right; `vine` its old vine up its front (the climb to its roof). Returns
+    (shapes, colliders, size, eaves, climbs)."""
     height = storeys * STOREY
     eaves = GROUND + height
     rise = FRONT * math.tan(math.radians(PITCH))
@@ -126,7 +154,14 @@ def casa(storeys, front, side, balconies, lit, chimney=1.0):
 
     top = eaves + rise + 1.0
     shapes += kit_houses._chimney(chimney * 1.8, -FRONT + 1.5, top, side)[:2]
-    return shapes, cols, [WIDTH + 0.4, top + 0.3, 2.0 * (FRONT + BALCONY[2])], eaves
+    climbs = []
+
+    if vine:
+        more, climb = _vine(eaves)
+        shapes += more
+        climbs.append(climb)
+
+    return shapes, cols, [WIDTH + 0.4, top + 0.3, 2.0 * (FRONT + BALCONY[2])], eaves, climbs
 
 
 # The eight: storeys over the arcade, their fronts and sides, which have
@@ -135,7 +170,7 @@ CASAS = {
     "casa_a": dict(storeys=5, front="azulejo_green", side="render_ochre", balconies="all", lit=[(2, 0), (4, 1)], chimney=1.0),
     "casa_b": dict(storeys=4, front="azulejo_cube", side="whitewash", balconies="top", lit=[(3, 1)], chimney=-1.0),
     "casa_c": dict(storeys=6, front="azulejo_blue", side="render_salmon", balconies="all", lit=[(1, 1), (5, 0)], chimney=1.0),
-    "casa_d": dict(storeys=3, front="render_ochre", side="render_ochre", balconies="all", lit=[(2, 1)], chimney=-1.0),
+    "casa_d": dict(storeys=3, front="render_ochre", side="render_ochre", balconies="all", lit=[(2, 1)], chimney=-1.0, vine=True),
     "casa_e": dict(storeys=5, front="render_salmon", side="render_salmon", balconies="top", lit=[], chimney=1.0),
     "casa_f": dict(storeys=4, front="render_blue", side="whitewash", balconies="all", lit=[(1, 0), (4, 0)], chimney=-1.0),
     "casa_g": dict(storeys=6, front="whitewash", side="whitewash", balconies="top", lit=[(6, 1)], chimney=1.0),
@@ -143,13 +178,14 @@ CASAS = {
 }
 
 for _name, _spec in CASAS.items():
-    _shapes, _cols, _size, _eaves = casa(**_spec)
+    _shapes, _cols, _size, _eaves, _climbs = casa(**_spec)
     k.piece(_name, "casa", _spec["front"], "stone", [], cols=_cols, size=_size)
     k.model(_name, _shapes)
     k.PIECES[_name]["budget"] = CASA_TRIS
     k.PIECES[_name]["front"] = FRONT
     k.PIECES[_name]["door"] = list(DOOR)
     k.PIECES[_name]["eaves"] = _eaves
+    k.PIECES[_name]["climbs"] = _climbs
 
 
 def _iberian(name, slot, shapes, cols, size, budget=None):
@@ -179,8 +215,10 @@ def _arcade():
     walk_mid = (arch_z - 0.45 - walk / 2.0) / 2.0
     shapes.append(ks.ring(0.0, crown - radius, walk_mid, radius, radius + 0.25, width, 90.0 - spring, 90.0 + spring, 4, "granite", 90.0))
     # (Solid over the vault: the house's first floor stands on it.)
+    # Its walkway paved (the quay ends at its front).
+    shapes.append(ks.box(0.0, -0.1, 0.0, width, 0.2, walk, "granite"))
     cols = [col(-(2.2 + 0.4), height / 2.0, arch_z, 0.8, height, 0.9), col(2.2 + 0.4, height / 2.0, arch_z, 0.8, height, 0.9),
-            col(0.0, 3.5, arch_z, 4.4, 0.2, 0.9), col(0.0, 3.5, walk_mid, width, 0.2, span)]
+            col(0.0, 3.5, arch_z, 4.4, 0.2, 0.9), col(0.0, 3.5, walk_mid, width, 0.2, span), col(0.0, -0.1, 0.0, width, 0.2, walk)]
     return shapes, cols
 
 

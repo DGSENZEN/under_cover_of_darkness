@@ -167,7 +167,28 @@ def _city_corner(height):
     return shapes, cols
 
 
+def _postern(height):
+    """A 3 m run of wall with a door's passage through it (1.2 x 2.2, a
+    round head), the walk carrying on over it."""
+    length, d = 3.0, DEPTH
+    door_w, door_h = k.DOOR
+    shapes = ks.arched_wall(length, height, d, door_w, door_h - door_w / 2.0, door_w / 2.0, 0.0, "granite")
+    shapes.append(ks.slab([[-length / 2.0, BATTER[0], d / 2.0], [-door_w / 2.0, BATTER[0], d / 2.0], [-door_w / 2.0, 0.0, d / 2.0 + BATTER[1]],
+                           [-length / 2.0, 0.0, d / 2.0 + BATTER[1]]], 0.3, "granite_rough", up=(0.0, 0.15, 1.0), tile=2.5))
+    shapes.append(ks.slab([[door_w / 2.0, BATTER[0], d / 2.0], [length / 2.0, BATTER[0], d / 2.0], [length / 2.0, 0.0, d / 2.0 + BATTER[1]],
+                           [door_w / 2.0, 0.0, d / 2.0 + BATTER[1]]], 0.3, "granite_rough", up=(0.0, 0.15, 1.0), tile=2.5))
+    side = (length - door_w) / 2.0
+    cols = [col(-(length / 2.0 - side / 2.0), height / 2.0, 0.0, side, height, d), col(length / 2.0 - side / 2.0, height / 2.0, 0.0, side, height, d),
+            col(0.0, (height + door_h) / 2.0, 0.0, door_w, height - door_h, d)]
+    more, more_cols = _battlements(length, height, d / 2.0 - PARAPET / 2.0)
+    return shapes + more, cols + more_cols
+
+
 for _height in (12, 10):
+    _shapes, _cols = _postern(float(_height))
+    _fort("city_wall_%d_postern" % _height, "granite", _shapes, _cols, [3.0, _height + BREAST + MERLON_UP + 0.1, DEPTH + 2.0 * BATTER[1]])
+    k.PIECES["city_wall_%d_postern" % _height]["opening"] = list(k.DOOR)
+
     for _length in (6, 3):
         _shapes, _cols = _city_wall(float(_height), float(_length))
         _fort("city_wall_%d_%d" % (_height, _length), "granite", _shapes, _cols,
@@ -265,6 +286,8 @@ _fort("tower_square_8", "granite", _shapes, _cols, [9.2, 21.9, 9.2])
 
 ROOM = 5.0
 WALL = 1.5
+# Where the golden tower's ladder runs up its door's flat (m from its middle).
+LADDER = -1.5
 
 
 def _corners(apothem, y0, height, sides=12):
@@ -338,12 +361,14 @@ def _gold_stage_1():
         a = math.radians(angle)
         shapes.append(ks.box(math.cos(a) * (apothem + 0.01), 14.5, math.sin(a) * (apothem + 0.01), 0.16, 1.4, 0.03, "pitch", _yaw_out(angle)))
 
+    # The ladder from the mole to the terrace, beside the door (LADDER: its
+    # rails' middle across the flat).
     for x in (-0.35, 0.35):
-        shapes.append(ks.box(x - 1.5, (ROOM + 0.5 + height + 1.0) / 2.0, -apothem - 0.1, 0.06, height + 0.5 - ROOM, 0.06, "iron"))
+        shapes.append(ks.box(x + LADDER, (height + 1.0) / 2.0, -apothem - 0.1, 0.06, height + 1.0, 0.06, "iron"))
 
     # (Rungs as three-sided rods, open at their ends: 6 triangles each.)
-    for rung in range(int((height - ROOM - 0.3) / 0.3)):
-        shapes.append(ks.prism(-1.5, ROOM + 0.3 + rung * 0.3, -apothem - 0.1, 0.025, 0.7, 3, "iron", roll=90.0, caps=False))
+    for rung in range(int((height - 0.3) / 0.3)):
+        shapes.append(ks.prism(LADDER, 0.3 + rung * 0.3, -apothem - 0.1, 0.025, 0.7, 3, "iron", roll=90.0, caps=False))
 
     top, top_cols = _ring_battlements(apothem, height, 12, 12, "render_straw", pyramids=True)
     return shapes + top, cols + top_cols
@@ -377,7 +402,10 @@ def _gold_stage(index):
 
 
 _shapes, _cols = _gold_stage_1()
-_fort("gold_stage_1", "render_straw", _shapes, _cols, [GOLD[0][0] + 1.2, GOLD[0][1] + 2.1, GOLD[0][0] + 1.2], budget=1400)
+_fort("gold_stage_1", "render_straw", _shapes, _cols, [GOLD[0][0] + 1.2, GOLD[0][1] + 2.1, GOLD[0][0] + 1.2], budget=1500)
+# Its ladder's climb (the level's ladder marker): [x, y, z, sx, sy, sz, yaw],
+# its back (-z) on the tower.
+k.PIECES["gold_stage_1"]["climbs"] = [[LADDER, (GOLD[0][1] + 0.4) / 2.0, -GOLD[0][0] / 2.0 - 0.35, 0.8, GOLD[0][1] + 0.4, 0.5, 180.0]]
 
 for _index in (1, 2):
     _shapes, _cols = _gold_stage(_index)

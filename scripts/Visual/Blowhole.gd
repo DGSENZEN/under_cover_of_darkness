@@ -20,6 +20,9 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 @export var roar_time := 3.2
 @export var roar_db := 45.0
 @export var reach := Vector3(18.0, 20.0, 18.0)
+## Or the box it masks, given whole (a level's noise_zone marker: the cave
+## below it and the headland round its mouth).
+@export var zone_box := AABB()
 ## How high the spray is thrown (m); how loud the roar plays (dB).
 @export var spray_height := 12.0
 @export var volume := 6.0
@@ -31,7 +34,7 @@ var _clock := 0.0
 
 
 func _ready() -> void:
-	zone = SoundBus.add_zone(AABB(global_position - reach * 0.5, reach), 0.0)
+	zone = SoundBus.add_zone(zone_box if zone_box.has_volume() else AABB(global_position - reach * 0.5, reach), 0.0)
 	spray = _make_spray()
 	add_child(spray)
 	# (Its first roar a little after the level begins, not on its first frame.)

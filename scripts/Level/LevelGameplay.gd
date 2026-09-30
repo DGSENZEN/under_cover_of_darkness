@@ -24,6 +24,7 @@ const RopeScript := preload("res://scripts/PlayerUtils/VerletRope.gd")
 const AlarmBellScript := preload("res://scripts/Interaction/AlarmBell.gd")
 const GuardStationScript := preload("res://scripts/AISystem/GuardStation.gd")
 const GROUND_STAIN := preload("res://scripts/Visual/ground_stain.gdshader")
+const BlowholeScript := preload("res://scripts/Visual/Blowhole.gd")
 
 ## A marker's archetype to the game's (Guard.archetype).
 const ARCHETYPES := {"watchman": &"", "arms_master": &"trainer"}
@@ -444,18 +445,35 @@ static func props(parent: Node3D, level) -> Array:
 	return out
 
 
-## Each noise zone (SoundBus: what is made inside is masked by its dB); the
-## ids, taken away again when `parent` leaves the tree.
+## Each noise zone (SoundBus: what is made inside is masked by its dB): a
+## steady one's id (taken away again when `parent` leaves the tree); one with
+## a period roars now and then: a Blowhole at its box's top, masking the box
+## only while it roars.
 static func noise_zones(parent: Node3D, level) -> Array:
 	var out := []
+	var ids := []
 
 	for m in level.of("noise_zone"):
 		var size: Vector3 = m["size"]
-		var id := SoundBus.add_zone(AABB((m["transform"] as Transform3D).origin - size * 0.5, size), float(m["props"]["db"]))
-		out.append(id)
+		var centre: Vector3 = (m["transform"] as Transform3D).origin
+		var box := AABB(centre - size * 0.5, size)
 
-	if not out.is_empty():
-		var ids := out.duplicate()
+		if float(m["props"].get("period", 0.0)) > 0.0:
+			var roar: Node3D = BlowholeScript.new()
+			roar.name = m["name"]
+			roar.set("zone_box", box)
+			roar.set("period", float(m["props"]["period"]))
+			roar.set("roar_db", float(m["props"]["db"]))
+			roar.position = centre + Vector3.UP * (size.y * 0.5 - 2.0) - parent.global_position
+			parent.add_child(roar)
+			out.append(roar)
+			continue
+
+		var id := SoundBus.add_zone(box, float(m["props"]["db"]))
+		out.append(id)
+		ids.append(id)
+
+	if not ids.is_empty():
 		parent.tree_exiting.connect(func() -> void:
 			for id in ids:
 				SoundBus.remove_zone(int(id)))

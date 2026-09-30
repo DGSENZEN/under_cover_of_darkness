@@ -22,14 +22,28 @@ class Layout:
     # ------------------------------------------------------------------
     # Pieces
 
-    def put(self, piece, at, yaw=0.0, sector="courtyard", pitch=0.0, roll=0.0, name=None):
+    def put(self, piece, at, yaw=0.0, sector="courtyard", pitch=0.0, roll=0.0, name=None, climbs=False):
+        """A piece; with `climbs`, a ladder marker for each of its recipe's
+        climbs (a ship's shrouds, a scaffold's ladders), named after it."""
         if piece not in kit.PIECES:
             raise KeyError("no kit piece " + piece)
 
         n = self._count.get(piece, 0) + 1
         self._count[piece] = n
-        self.pieces.append({"name": name or "%s.%03d" % (piece, n), "piece": piece, "sector": sector,
-                            "position": [float(at[0]), float(at[1]), float(at[2])], "basis": geo.rotation(yaw, pitch, roll)})
+        name = name or "%s.%03d" % (piece, n)
+        basis = geo.rotation(yaw, pitch, roll)
+        self.pieces.append({"name": name, "piece": piece, "sector": sector,
+                            "position": [float(at[0]), float(at[1]), float(at[2])], "basis": basis})
+
+        for i, c in enumerate(kit.PIECES[piece].get("climbs", []) if climbs else []):
+            where = geo.add([float(v) for v in at], geo.apply(basis, c[0:3]))
+            self.mark("%s_climb_%d" % (name.replace(".", "_"), i + 1), "ladder", where, yaw + c[6], sector, size=c[3:6])
+
+        return name
+
+    def ship(self, piece, at, yaw=0.0, sector="ships", name=None):
+        """A ship (or anything with climbs) and its climbs."""
+        return self.put(piece, at, yaw, sector, name=name, climbs=True)
 
     def wall(self, a, b, material="ashlar", y=0.0, sector="courtyard", thin=False, storeys=1, openings=None, face=1):
         """A straight wall from a to b (x, z) along x or z, `storeys` high from

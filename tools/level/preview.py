@@ -39,6 +39,27 @@ def posts(scene):
     return made
 
 
+def frame(scene):
+    """The middle of the level's pieces seen from above (Blender's x, y) and
+    how wide a picture holds them all (100 m at the least)."""
+    lo, hi = [float("inf")] * 2, [float("-inf")] * 2
+
+    for obj in scene.objects:
+        if obj.type != "MESH" or "kit_piece" not in obj.keys():
+            continue
+
+        for corner in obj.bound_box:
+            w = obj.matrix_world @ Vector(corner)
+
+            for i in range(2):
+                lo[i], hi[i] = min(lo[i], w[i]), max(hi[i], w[i])
+
+    if lo[0] == float("inf"):
+        return (0.0, 0.0), 100.0
+
+    return ((lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0), max(100.0, (hi[0] - lo[0]) * 1.05, (hi[1] - lo[1]) * 1.05 * 4.0 / 3.0)
+
+
 def render(scene, path, location, target, ortho=None):
     data = bpy.data.cameras.new("preview")
     camera = bpy.data.objects.new("preview", data)
@@ -76,10 +97,13 @@ def main():
         obj.active_material = None
 
     scene.display.shading.color_type = "MATERIAL"
-    render(scene, os.path.join(out, level + "_plan.png"), (0, 0, 120), (0, 0, 0), ortho=100.0)
+    # (Framed on the level's pieces: a courtyard or a whole harbour.)
+    (cx, cy), span = frame(scene)
+    render(scene, os.path.join(out, level + "_plan.png"), (cx, cy, span + 20.0), (cx, cy, 0), ortho=span)
 
-    for i, (x, y) in enumerate(((70, -70), (-70, -70), (-70, 70), (70, 70))):
-        render(scene, os.path.join(out, "%s_view_%d.png" % (level, i)), (x, y, 55), (0, 0, 0))
+    for i, (sx, sy) in enumerate(((1, -1), (-1, -1), (-1, 1), (1, 1))):
+        render(scene, os.path.join(out, "%s_view_%d.png" % (level, i)), (cx + sx * span * 0.55, cy + sy * span * 0.55, span * 0.4 + 5.0),
+               (cx, cy, 0))
 
     print("level: previews -> %s" % out)
 

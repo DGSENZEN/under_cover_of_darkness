@@ -324,13 +324,17 @@ def _carrack_rig():
     return shapes, cols, climbs
 
 
+YARD = 26.0
+
+
 def _mainyard():
-    """The main yard (22 m), furled sail under it, a footrope below; its
-    top a beam to walk. Pivot: its middle, on the mast."""
-    shapes = [ks.prism(0.0, 0.0, 0.0, 0.25, 22.0, 8, "hull_bare", roll=90.0, top=0.25, rings=[[0.5, 0.3]]),
-              _furled(0.0, -0.35, 0.0, 21.0, 0.0, 0.0, 90.0),
-              ks.box(0.0, -1.05, 0.35, 20.0, 0.04, 0.04, "rope")]
-    return shapes, [col(0.0, 0.2, 0.0, 22.0, 0.1, 0.45)]
+    """The main yard (26 m: its arm reaches over the sea wall's walk with
+    the carrack alongside the quay), furled sail under it, a footrope
+    below; its top a beam to walk. Pivot: its middle, on the mast."""
+    shapes = [ks.prism(0.0, 0.0, 0.0, 0.25, YARD, 8, "hull_bare", roll=90.0, top=0.25, rings=[[0.5, 0.3]]),
+              _furled(0.0, -0.35, 0.0, YARD - 1.0, 0.0, 0.0, 90.0),
+              ks.box(0.0, -1.05, 0.35, YARD - 2.0, 0.04, 0.04, "rope")]
+    return shapes, [col(0.0, 0.2, 0.0, YARD, 0.1, 0.45)]
 
 
 _shapes, _cols, _climbs = _carrack_hull()
@@ -339,7 +343,7 @@ k.PIECES["carrack_hull"]["door"] = list(DOOR)
 _shapes, _cols, _climbs = _carrack_rig()
 _ship("carrack_rig", "hull_bare", _shapes, _cols, [34.0, 28.5, 15.4], 1400, _climbs)
 _shapes, _cols = _mainyard()
-_ship("carrack_mainyard", "hull_bare", _shapes, _cols, [22.0, 1.2, 1.0], 300)
+_ship("carrack_mainyard", "hull_bare", _shapes, _cols, [YARD, 1.2, 1.0], 300)
 
 
 # ---------------------------------------------------------------------------

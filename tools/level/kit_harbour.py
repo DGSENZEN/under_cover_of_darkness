@@ -263,7 +263,10 @@ _piece("nave_end_wall", "harbour", "brick", _shapes, _cols, [NAVE, TERRACE, BAND
 # planks at 2.2 and 4.4 (a mantle each), two ladders.
 # ---------------------------------------------------------------------------
 
-GALLEY = (40.0, 5.5)
+GALLEY = (40.0, 4.4)
+# The scaffold stands this far out from the galley's side (it and the galley
+# fit a nave's 7.2 m between its piers).
+SCAFFOLD = 0.8
 
 
 def _galley():
@@ -287,7 +290,7 @@ def _galley():
         shapes.append(ks.slab([[-8.0, 1.25, z0], [8.0, 1.25, z0], [8.0, 2.4, z1], [-8.0, 2.4, z1]], 0.08, "hull_bare",
                               up=(0.0, 1.0, side * 0.8), tile=2.0))
         # The scaffold: poles, and its planks.
-        z = side * (beam / 2.0 + 1.1)
+        z = side * (beam / 2.0 + SCAFFOLD)
 
         for x in range(-16, 17, 4):
             shapes.append(ks.prism(float(x), 2.6, z + side * 0.35, 0.09, 5.2, 4, "timber", caps=False))
@@ -298,7 +301,7 @@ def _galley():
 
     # Two ladders up the +z scaffold, from the floor to the upper planks.
     climbs = []
-    z = beam / 2.0 + 1.1 + 0.55
+    z = beam / 2.0 + SCAFFOLD + 0.55
 
     for x in (-12.0, 12.0):
         for dx in (-0.25, 0.25):

@@ -265,6 +265,16 @@ class Rules(unittest.TestCase):
             data["markers"].append(marker("odd", ucd, (0.5, 0, 0.5), props))
             self.assertTrue(any(word in p for p in rules.problems(data)), ucd)
 
+    def test_the_city_layouts_check_clean(self):
+        # The harbour and the city's massing, as their layouts make them.
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "layouts"))
+        import city_harbour  # noqa: E402
+        import city_massing  # noqa: E402
+
+        for module in (city_harbour, city_massing):
+            data = module.layout()
+            self.assertEqual(rules.problems(data, "stage2"), [], data["level"])
+
     def test_the_kit_keeps_the_metrics(self):
         self.assertEqual(rules.kit_problems(), [])
 

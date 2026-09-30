@@ -151,13 +151,44 @@ class Iberian(unittest.TestCase):
                 solid = [o for o in geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY) if o.contains(hang)]
                 self.assertEqual(solid, [], "%s: under its balcony at %.1f" % (name, lip))
 
+    def test_casa_d_has_a_vine_to_its_eaves(self):
+        # The controller cannot climb a stack of balconies: the one over you is
+        # your ceiling, and a hang leap reaches 1.2 m, not a storey. So the
+        # roofs' way is casa_d's old vine: a climb from the quay to its eaves
+        # (ending there, so the climber mantles onto the roof), against its
+        # front, beside its balconies and clear of them. Only casa_d has one.
+        recipe = kit_recipes.PIECES["casa_d"]
+        self.assertEqual(len(recipe.get("climbs", [])), 1)
+        x, y, z, sx, sy, sz, yaw = recipe["climbs"][0]
+        self.assertLessEqual(y - sy / 2.0, 0.1)
+        self.assertAlmostEqual(y + sy / 2.0, recipe["eaves"], delta=0.3)
+        self.assertAlmostEqual(z - sz / 2.0, recipe["front"], places=2)
+        self.assertAlmostEqual(yaw, 0.0)
+
+        for c in balconies(recipe):
+            self.assertGreaterEqual(abs(x) - sx / 2.0, abs(c[0]) + c[3] / 2.0 - 1e-6)
+
+        self.assertTrue(any(s["slot"] == "ivy" for s in recipe["shapes"]))
+
+        for name in CASAS:
+            if name != "casa_d":
+                self.assertEqual(kit_recipes.PIECES[name].get("climbs", []), [], name)
+
+    def test_the_arcade_is_paved(self):
+        # Its walkway is floored (the quay ends at its front): a collider
+        # whose top is the ground, the bay's width, the walkway's depth.
+        cols = kit_recipes.PIECES["arcade_ribeira_6"]["cols"]
+        paving = [c for c in cols if abs(c[1] + c[4] / 2.0) < 1e-3 and c[3] >= 6.0 - 1e-3 and c[5] >= 4.0 - 1e-3]
+        self.assertEqual(len(paving), 1)
+
     def test_the_arcade_is_walked_under(self):
         # The Ribeira's arcade: 2.2 m and more under its arches, its walkway
-        # clear, a floor over it for the house.
+        # clear (its paving, under the ground, is no obstacle), a floor over it
+        # for the house.
         cols = kit_recipes.PIECES["arcade_ribeira_6"]["cols"]
 
         for c in cols:
-            if abs(c[0]) - c[3] / 2.0 < 2.2 - 1e-3 and c[1] - c[4] / 2.0 < 2.6 - 1e-3:
+            if abs(c[0]) - c[3] / 2.0 < 2.2 - 1e-3 and c[1] - c[4] / 2.0 < 2.6 - 1e-3 and c[1] + c[4] / 2.0 > 1e-3:
                 self.fail("in the arcade's way: %s" % c)
 
     def test_house_doors_meet_the_metrics(self):

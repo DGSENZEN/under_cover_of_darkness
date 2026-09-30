@@ -32,6 +32,15 @@ class Ear:
 		heard.append(event)
 
 
+## A level of the markers given (what LevelGameplay's builders read of one).
+class Markers:
+	extends RefCounted
+	var markers: Array = []
+
+	func of(ucd: String) -> Array:
+		return markers.filter(func(m): return m["ucd"] == ucd)
+
+
 func _ready() -> void:
 	await _fixture()
 	await _gameplay()
@@ -293,6 +302,25 @@ func _gameplay() -> void:
 
 	_check("K16 walking into an exit's box is seen, its label on it", entered[0] and String(exit.get_meta(&"label", "")) == "the way out",
 		"entered %s, label %s" % [entered[0], exit.get_meta(&"label", "")])
+
+	# K17 a noise zone with a period roars now and then (the blowhole): its
+	# box masked only while it roars, nothing beside it
+	var roaring := Markers.new()
+	roaring.markers = [{"name": "roar_test", "ucd": "noise_zone", "transform": Transform3D(Basis(), Vector3(20, 3, 20)), "size": Vector3(6, 6, 6),
+		"props": {"db": 45.0, "period": 11.0}}]
+	var roars: Array = LevelGameplay.noise_zones(holder, roaring)
+	var roar: Node = roars[0] if not roars.is_empty() and roars[0] is Node else null
+	await get_tree().physics_frame
+	var quiet17 := SoundBus.masking_at(Vector3(20, 3, 20))
+
+	if roar != null:
+		roar.call(&"roar")
+
+	var loud17 := SoundBus.masking_at(Vector3(20, 3, 20))
+	var beside17 := SoundBus.masking_at(Vector3(30, 3, 20))
+	_check("K17 a noise zone with a period masks its box only while it roars", roar != null and is_zero_approx(quiet17)
+		and is_equal_approx(loud17, 45.0) and is_zero_approx(beside17), "roar %s; masked %.1f, roaring %.1f, beside %.1f" % [roar != null, quiet17,
+			loud17, beside17])
 	holder.queue_free()
 	world.queue_free()
 	SoundBus.clear_zones()
