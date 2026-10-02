@@ -12,29 +12,87 @@ const ROPE := preload("res://scripts/PlayerUtils/VerletRope.gd")
 
 const LANE_WIDTH := 3.0
 
-var _materials := {}
+const Run := preload("res://maps/MovementGymRun.gd")
+const Fixtures := preload("res://maps/MovementGymFixtures.gd")
+const Props := preload("res://scripts/Interaction/Props.gd")
+const GUARD := preload("res://Guard.tscn")
+const Baker := preload("res://scripts/AISystem/NavBaker.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
+const Garrison := preload("res://scripts/AISystem/Garrison.gd")
 
+var stations: Array[Dictionary] = []
+var movers: Array[Dictionary] = []
+var run := Run.new()
+var selected := 0
+var player: CharacterBody3D
+var _fixture_root: Node3D
+var _materials := {}
+var _obstacle_time := 0.0
+var _hud: Label
+var _status: Label
+var _transition := "Ready"
+var _last_state := -1
+var _last_move := ""
+var _resets := 0
+var _falls := 0
+var _was_airborne := false
+var _lowest_speed := 0.0
+var _saved_rate := 60
+var _saved_scale := 1.0
+var _guard: CharacterBody3D
+var _encounter: Node3D
+var _baker: NavigationRegion3D
+var _guard_enabled := false
+var _damage_enabled := false
 
 func _ready() -> void:
-	# Everything below is placed after it is added: draw it from where it ends up.
+	_saved_rate = Engine.physics_ticks_per_second
+	_saved_scale = TimeFx.base
 	reset_physics_interpolation.call_deferred()
 	_environment()
+	_fixture_root = self
 	_floor()
-
-	_lane_stairs(0.0)
-	_lane_mantles(8.0)
-	_lane_vaults(16.0)
-	_lane_hang_course(24.0)
-	_lane_kick_and_upward(32.0)
-	_lane_gaps(40.0)
-	_lane_ladder_and_rope(48.0)
-	_lane_facade(56.0)
-
-	var player := PLAYER.instantiate()
-	player.debug_traversal = true
+	var names := ["Steps & stairs", "Mantles", "Vault flow", "Hang & leap", "Kick & upward leap", "Progressive gaps", "Ladder, rope & chain", "Facade", "Thin lips & seams", "Corners & angled faces", "Crouched clearance", "Moving obstruction", "Slopes & momentum", "Water & landings", "Vertical relay", "Combat / stealth relay"]
+	var legacy := [_lane_stairs, _lane_mantles, _lane_vaults, _lane_hang_course, _lane_kick_and_upward, _lane_gaps, _lane_ladder_and_rope, _lane_facade]
+	for i in names.size():
+		var root := Node3D.new()
+		root.name = "Station%02d" % (i + 1)
+		root.position = Vector3((i % 4) * 36.0, 0, -floori(float(i) / 4.0) * 44.0)
+		add_child(root)
+		_fixture_root = root
+		_box(Vector3(4, -0.5, -11), Vector3(28, 1, 42), "floor")
+		stations.append({"root": root, "title": names[i], "spawn": root.position + Vector3(0, 1.05, 8), "gates": [Vector3(0, 1.5, 5), Vector3(0, 1.5, -12), Vector3(0, 1.5, -30)]})
+		if i < legacy.size():
+			legacy[i].call(0.0)
+		else:
+			Fixtures.build(self, i)
+		# Gates above elevated fixtures follow the intended route.
+		if i == 3:
+			stations[i].gates = [Vector3(0, 1.5, 5), Vector3(3.75, 4.5, -3.5), Vector3(0, 4.5, -15.5)]
+		elif i == 4:
+			stations[i].gates = [Vector3(0, 1.5, 5), Vector3(0, 5.2, -2.7), Vector3(0, 5.6, -12.5)]
+		elif i == 5:
+			stations[i].gates = [Vector3(0, 3.1, -1), Vector3(0, 3.1, -17.6), Vector3(0, 3.1, -28.1)]
+		elif i == 6:
+			stations[i].gates = [Vector3(0, 1.5, 5), Vector3(0, 5.5, -14.4), Vector3(0, 5.5, -23.4)]
+		elif i == 7:
+			stations[i].gates = [Vector3(0, 1.5, 5), Vector3(0, 5.5, -2.7), Vector3(0, 9.0, -4.5)]
+		_course_gates(i)
+	_fixture_root = self
+	player = PLAYER.instantiate()
+	player.debug_traversal = false
+	player.reload_on_death = false
+	player.invulnerable = true
 	add_child(player)
-	player.global_position = Vector3(0.0, 1.05, 8.0)
+	Props.give_weapons(player)
+	player.inventory.select_by_id(&"sword")
+	_build_hud()
+	select_station(0)
 
+func _exit_tree() -> void:
+	Engine.physics_ticks_per_second = _saved_rate
+	TimeFx.clear()
+	TimeFx.set_base(_saved_scale)
 
 # ---------------------------------------------------------------------------
 # Lanes
@@ -162,13 +220,23 @@ func _stairs(x: float, z_start: float, riser: float, tread: float, count: int, m
 		)
 
 
-func _box(center: Vector3, size: Vector3, material: String) -> void:
-	var box := CSGBox3D.new()
-	box.size = size
-	box.use_collision = true
-	box.material = _material(material)
-	add_child(box)
-	box.global_position = center
+func _box(center: Vector3, size: Vector3, material: String) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.position = center
+	body.set_meta(&"surface", "metal" if material == "steel" else ("wood" if material == "wood" else "stone"))
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = size
+	collision.shape = shape
+	body.add_child(collision)
+	var visual := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	visual.mesh = mesh
+	visual.material_override = _material(material)
+	body.add_child(visual)
+	_fixture_root.add_child(body)
+	return body
 
 
 func _ladder(center: Vector3, height: float) -> void:
@@ -180,8 +248,8 @@ func _ladder(center: Vector3, height: float) -> void:
 	box.size = Vector3(1.4, height, 0.7)
 	shape.shape = box
 	volume.add_child(shape)
-	add_child(volume)
-	volume.global_position = center
+	volume.position = center
+	_fixture_root.add_child(volume)
 
 	# Rungs, purely visual.
 	var rungs := int(height / 0.3)
@@ -192,8 +260,8 @@ func _ladder(center: Vector3, height: float) -> void:
 		mesh.size = Vector3(0.8, 0.04, 0.04)
 		rung.mesh = mesh
 		rung.material_override = _material("wood")
-		add_child(rung)
-		rung.global_position = Vector3(center.x, 0.3 * (i + 1), center.z - 0.28)
+		rung.position = Vector3(center.x, center.y - height * 0.5 + 0.3 * (i + 1), center.z - 0.28)
+		_fixture_root.add_child(rung)
 
 
 func _rope(anchor: Vector3, length: float, style: int) -> void:
@@ -204,7 +272,7 @@ func _rope(anchor: Vector3, length: float, style: int) -> void:
 	# Placed before it is added: it hangs its links from where it is when it
 	# enters the tree.
 	rope.position = anchor
-	add_child(rope)
+	_fixture_root.add_child(rope)
 
 
 ## A thin ledge sticking 0.3 m out of a wall whose face is at z = -3.
@@ -214,17 +282,18 @@ func _molding(x: float, top: float) -> void:
 
 func _sign(x: float, text: String) -> void:
 	var label := Label3D.new()
-	label.text = text
-	label.font_size = 40
-	label.pixel_size = 0.008
+	label.text = "%02d  %s" % [stations.size(), text]
+	label.font_size = 36
+	label.pixel_size = 0.006
 	label.modulate = Color(0.95, 0.9, 0.8)
 	label.outline_size = 8
-	add_child(label)
-	label.global_position = Vector3(x, 1.6, 3.0)
+	label.position = Vector3(x, 3.0, 3.0)
+	label.shaded = false
+	_fixture_root.add_child(label)
 
 
 func _floor() -> void:
-	_box(Vector3(24.0, -0.5, -10.0), Vector3(70.0, 1.0, 90.0), "floor")
+	_box(Vector3(54, -0.7, -66), Vector3(156, 1, 190), "dark")
 
 
 func _environment() -> void:
@@ -259,6 +328,9 @@ func _material(name: String) -> StandardMaterial3D:
 		"dark": Color(0.28, 0.28, 0.32),
 		"moss": Color(0.3, 0.45, 0.28),
 		"rope": Color(0.75, 0.62, 0.4),
+		"start": Color(0.2, 0.75, 0.65),
+		"checkpoint": Color(0.95, 0.68, 0.2),
+		"finish": Color(0.4, 0.65, 1.0),
 	}
 
 	var material := StandardMaterial3D.new()
@@ -266,3 +338,251 @@ func _material(name: String) -> StandardMaterial3D:
 	material.roughness = 0.9
 	_materials[name] = material
 	return material
+
+# ---------------------------------------------------------------------------
+# Practice harness
+# ---------------------------------------------------------------------------
+
+func select_station(index: int) -> void:
+	selected = posmod(index, stations.size())
+	reset_station()
+
+func reset_station() -> void:
+	_resets += 1
+	TimeFx.clear()
+	_obstacle_time = 0.0
+	_update_obstacles()
+	for mover in movers:
+		mover.body.reset_physics_interpolation()
+	_was_airborne = false
+	_lowest_speed = 0.0
+	player.frob.drop_held()
+	player.teleport(Transform3D(Basis.IDENTITY, stations[selected].spawn))
+	player.health = 100.0
+	player.is_dead = false
+	player._death_fall = 0.0
+	player._set_crouched(false)
+	player.neck.rotation = Vector3.ZERO
+	player.juice.death = 0.0
+	player.hand.set_suppressed(false)
+	player.combat.reset_for_practice()
+	player.body_motion.reset()
+	if Input.is_action_pressed("throw"):
+		player.spend_attack_press()
+	run.reset(selected, stations[selected].gates.size(), _preset())
+	_transition = "Ready — cross START"
+	_last_state = -1
+	_last_move = ""
+	if is_instance_valid(_encounter):
+		_encounter.queue_free()
+		_encounter = null
+		_guard = null
+	Garrison.clear_all()
+	if _guard_enabled and selected == 15 and is_instance_valid(_baker) and _baker.is_baked:
+		_spawn_guard.call_deferred()
+	_update_hud()
+
+func _preset() -> String:
+	return "%d Hz / %.1fx" % [Engine.physics_ticks_per_second, TimeFx.base]
+
+func _input(event: InputEvent) -> void:
+	if get_tree().paused or not event is InputEventKey or not event.pressed or event.echo:
+		return
+	var key: int = event.physical_keycode
+	if key == 0:
+		key = event.keycode
+	if key >= KEY_1 and key <= KEY_9:
+		select_station(key - KEY_1)
+	elif key == KEY_BRACKETLEFT:
+		select_station(selected - 1)
+	elif key == KEY_BRACKETRIGHT:
+		select_station(selected + 1)
+	elif key == KEY_R or key == KEY_0:
+		reset_station()
+	elif key == KEY_F4:
+		var rates := [30, 60, 120]
+		Engine.physics_ticks_per_second = rates[(rates.find(Engine.physics_ticks_per_second) + 1) % rates.size()]
+		reset_station()
+	elif key == KEY_F5:
+		player.debug_traversal = not player.debug_traversal
+	elif key == KEY_F6:
+		_guard_enabled = not _guard_enabled
+		select_station(15)
+		if _guard_enabled:
+			_enable_guard()
+	elif key == KEY_F8:
+		_damage_enabled = not _damage_enabled
+		player.invulnerable = not _damage_enabled
+		reset_station()
+	elif key == KEY_F9:
+		TimeFx.set_base(0.5 if TimeFx.base >= 0.99 else 1.0)
+		reset_station()
+	else:
+		return
+	get_viewport().set_input_as_handled()
+
+func _physics_process(delta: float) -> void:
+	_obstacle_time += delta
+	_update_obstacles()
+	run.tick(delta)
+	if player == null:
+		return
+	var move_name := ""
+	if player.current_move != null:
+		move_name = str(player.current_move.kind)
+	if player.movement_state != _last_state or move_name != _last_move:
+		var names := ["Ground / air", "Traversal", "Hanging", "Climbing", "Swimming"]
+		var previous: String = names[_last_state] if _last_state >= 0 and _last_state < names.size() else "Ready"
+		var current: String = names[player.movement_state] if player.movement_state < names.size() else "Unknown"
+		_transition = "%s → %s %s" % [previous, current, move_name]
+		_last_state = player.movement_state
+		_last_move = move_name
+	if not player.is_on_floor() and player.movement_state == 0:
+		_was_airborne = true
+		_lowest_speed = minf(_lowest_speed, player.velocity.y)
+	elif player.is_on_floor() and _was_airborne:
+		if _lowest_speed < -12.0:
+			_falls += 1
+		_was_airborne = false
+		_lowest_speed = 0.0
+	if player.is_dead or player.global_position.y < -8:
+		reset_station()
+	_update_hud()
+
+func _update_obstacles() -> void:
+	for mover in movers:
+		mover.body.position = mover.origin + mover.axis * sin(_obstacle_time * mover.speed) * mover.distance
+
+func checkpoint_reached(station: int, gate: int, body: Node3D) -> void:
+	if body != player or station != selected:
+		return
+	if run.reach(gate):
+		_transition = "FINISH %.2f s" % run.elapsed if run.finished else "Checkpoint %d / %d" % [gate + 1, run.gate_count]
+		_update_hud()
+
+func _course_gates(index: int) -> void:
+	for i in stations[index].gates.size():
+		var at: Vector3 = stations[index].gates[i]
+		var area := Area3D.new()
+		area.name = "Gate%d" % i
+		area.position = at
+		area.collision_layer = 0
+		area.collision_mask = 1
+		var collider := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(3.2, 2.8, 0.5)
+		collider.shape = shape
+		area.add_child(collider)
+		_fixture_root.add_child(area)
+		_connect_gate(area, index, i)
+		var color := "start" if i == 0 else ("finish" if i == stations[index].gates.size() - 1 else "checkpoint")
+		# Visible non-colliding posts: the trigger is the opening between them.
+		for x in [-1.75, 1.75]:
+			var post := MeshInstance3D.new()
+			var mesh := BoxMesh.new()
+			mesh.size = Vector3(0.08, 2.8, 0.08)
+			post.mesh = mesh
+			post.material_override = _material(color)
+			area.add_child(post)
+			post.position.x = x
+		var label := Label3D.new()
+		label.text = "START" if i == 0 else ("FINISH" if i == stations[index].gates.size() - 1 else "CHECK %d" % i)
+		label.font_size = 38
+		label.pixel_size = 0.007
+		label.shaded = false
+		label.modulate = _material(color).albedo_color
+		label.position.y = 1.6
+		area.add_child(label)
+
+func _connect_gate(area: Area3D, station: int, gate: int) -> void:
+	area.body_entered.connect(func(body: Node3D): checkpoint_reached(station, gate, body))
+
+func _build_hud() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 20
+	add_child(layer)
+	var panel := PanelContainer.new()
+	panel.anchor_top = 1.0
+	panel.anchor_bottom = 1.0
+	panel.offset_left = 16
+	panel.offset_right = 440
+	panel.offset_top = -278
+	panel.offset_bottom = -16
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(panel)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.035, 0.045, 0.06, 0.9)
+	style.content_margin_left = 14
+	style.content_margin_right = 14
+	style.content_margin_top = 10
+	style.content_margin_bottom = 10
+	panel.add_theme_stylebox_override("panel", style)
+	var stack := VBoxContainer.new()
+	panel.add_child(stack)
+	_hud = Label.new()
+	_hud.add_theme_font_size_override("font_size", 16)
+	stack.add_child(_hud)
+	_status = Label.new()
+	_status.add_theme_font_size_override("font_size", 13)
+	_status.modulate = Color(0.75, 0.82, 0.9)
+	stack.add_child(_status)
+
+func _update_hud() -> void:
+	if _hud == null:
+		return
+	var best := "—" if not run.best.has(selected) else "%.2f s" % run.best[selected]
+	var timer := "FINISHED" if run.finished else ("RUNNING" if run.running else "READY")
+	var move := ""
+	if player.current_move != null:
+		move = " · %s %.0f%%" % [player.current_move.kind, player.move_progress * 100.0]
+	_hud.text = "%02d / %02d  %s\n%s  %.2f s  ·  gates %d/%d  ·  best %s\nSpeed %.2f m/s  ·  height %.2f m  ·  %s%s\n%s\nAttempts %d  ·  hard landings %d  ·  resets %d" % [selected + 1, stations.size(), stations[selected].title, timer, run.elapsed, run.next_gate, run.gate_count, best, Vector2(player.velocity.x, player.velocity.z).length(), player.global_position.y - 1.0, _preset(), move, _transition, run.attempts.get(selected, 0), _falls, _resets]
+	var rejection: String = player._last_reject
+	_status.text = "1–9 station   [ / ] previous / next   R restart\nF4 physics   F5 probes   F6 guard relay   F8 damage %s\nF9 slow motion   F10 legacy feel   Esc pause\n%s" % ["ON" if _damage_enabled else "OFF", "Planner: " + rejection if rejection != "" else "Cross green → amber → blue gates in order"]
+	if selected == 15 and is_instance_valid(_guard):
+		_status.text += "\nGuard: alert %.0f · sees you %s" % [_guard.alert, _guard.can_see_target]
+
+func _enable_guard() -> void:
+	if is_instance_valid(_baker):
+		if _baker.is_baked and not is_instance_valid(_guard):
+			_spawn_guard()
+		return
+	_baker = NavigationRegion3D.new()
+	_baker.set_script(Baker)
+	_baker.source_root = NodePath("..")
+	_baker.bake_bounds = AABB(Vector3(-10, -1, -33), Vector3(28, 16, 43))
+	_baker.traversal_links = false
+	stations[15].root.add_child(_baker)
+	_baker.baked.connect(_spawn_guard)
+
+func _spawn_guard() -> void:
+	if not _guard_enabled or selected != 15 or is_instance_valid(_guard):
+		return
+	_guard = GUARD.instantiate()
+	_encounter = Node3D.new()
+	_encounter.name = "RelayAttempt"
+	add_child(_encounter)
+	_guard.position = stations[15].root.position + Vector3(0, 0, -24)
+	_guard.rotation.y = PI
+	_guard.speaker_name = "Relay sentry"
+	_guard.debug_ai = false
+	_encounter.add_child(_guard)
+
+func add_mover(at: Vector3, size: Vector3, axis: Vector3, distance: float, speed: float) -> void:
+	var body := AnimatableBody3D.new()
+	# Updated in the physics tick; no render-to-physics transform buffering.
+	body.sync_to_physics = false
+	body.position = at
+	body.collision_layer = 2
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = size
+	collision.shape = shape
+	body.add_child(collision)
+	var visual := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	visual.mesh = mesh
+	visual.material_override = _material("checkpoint")
+	body.add_child(visual)
+	_fixture_root.add_child(body)
+	movers.append({"body": body, "origin": at, "axis": axis, "distance": distance, "speed": speed})

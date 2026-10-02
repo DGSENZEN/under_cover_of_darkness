@@ -95,7 +95,8 @@ func scan_from(
 	direction: Vector3,
 	velocity: Vector3,
 	airborne: bool,
-	lookahead_time := -1.0
+	lookahead_time := -1.0,
+	max_top_y := INF
 ) -> ObstacleProfile:
 	if lookahead_time < 0.0:
 		lookahead_time = scan_lookahead_time
@@ -110,7 +111,7 @@ func scan_from(
 	# How high may the sweep reach? A low ceiling would otherwise be mistaken
 	# for a wall, because the sweep box would start inside it.
 	#
-	var top_limit := feet.y + max_reach
+	var top_limit := minf(feet.y + max_reach, max_top_y)
 	var ceiling := ray(
 		origin,
 		Vector3(origin.x, top_limit + 0.1, origin.z)
@@ -190,7 +191,9 @@ func scan_from(
 	var face_point: Vector3 = face["position"]
 	var raw_normal: Vector3 = face["normal"]
 
-	if absf(raw_normal.y) > max_wall_normal_y:
+	# Traversal can use steep tilted banks. Walking handles walkable slopes;
+	# dedicated kick and hanging probes keep their vertical-face limit.
+	if absf(raw_normal.y) >= min_top_normal_y:
 		last_reject = "not a wall (slope)"
 		return null
 
@@ -205,12 +208,16 @@ func scan_from(
 	# 2. Find the top surface just behind the face.
 	#
 	var across := -normal
-	var probe := face_point + across * top_probe_depth
-	var top := ray(
-		Vector3(probe.x, top_limit, probe.z),
-		Vector3(probe.x, feet.y + step_height * 0.5, probe.z),
-		false
-	)
+	var top := {}
+	var measured_depth := top_probe_depth
+	# A single 10 cm inset can overshoot a boat rail and measure its lower
+	# floor instead. Keep the highest top at the face, including thin lips.
+	for depth in [SKIN, top_probe_depth]:
+		var probe: Vector3 = face_point + across * depth
+		var sample := ray(Vector3(probe.x, top_limit, probe.z), Vector3(probe.x, feet.y + step_height * 0.5, probe.z), false)
+		if not sample.is_empty() and (top.is_empty() or (sample["position"] as Vector3).y > (top["position"] as Vector3).y):
+			top = sample
+			measured_depth = depth
 
 	if top.is_empty():
 		last_reject = "no top within reach"
@@ -253,7 +260,7 @@ func scan_from(
 		var under := ray(sample + Vector3.UP * 0.3, sample - Vector3.UP * 0.15, false)
 
 		if under.is_empty():
-			profile.thickness = top_probe_depth + walked - step_size * 0.5
+			profile.thickness = measured_depth + walked - step_size * 0.5
 			profile.far_edge = profile.face_point + across * profile.thickness
 			break
 
@@ -508,31 +515,35 @@ func fits(origin_position: Vector3, crouched: bool) -> bool:
 	return space.intersect_shape(query, 1).is_empty()
 
 
+## Sweep the capsule so thin obstacles cannot fall between fit samples.
+## Also used during playback: a guard or door can enter a validated path.
+func motion_is_clear(from: Vector3, to: Vector3, crouched: bool) -> bool:
+	if not fits(to, crouched):
+		return false
+
+	if from.distance_squared_to(to) < 0.0000001:
+		return true
+
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = _crouch_shape if crouched else _stand_shape
+	var center := from
+	if crouched:
+		center -= Vector3.UP * (standing_height - crouch_height) * 0.5
+	query.transform = Transform3D(Basis.IDENTITY, center)
+	query.motion = to - from
+	query.collision_mask = mask | body_mask
+	query.exclude = _exclude()
+	query.collide_with_areas = false
+	query.margin = 0.0
+	var fractions := body.get_world_3d().direct_space_state.cast_motion(query)
+	return fractions.size() == 2 and fractions[0] >= 1.0
+
+
 ## Fit-tests the capsule along a whole path of origin positions.
 func path_is_clear(points: PackedVector3Array, crouched: bool) -> bool:
-	var spacing := 0.12
-	var skip := 0.05
-	var travelled := 0.0
 
 	for i in range(1, points.size()):
-		var a := points[i - 1]
-		var b := points[i]
-		var length := a.distance_to(b)
-
-		if length < 0.0001:
-			continue
-
-		var samples := maxi(int(ceil(length / spacing)), 1)
-
-		for s in range(1, samples + 1):
-			var u := float(s) / float(samples)
-
-			if travelled + length * u < skip:
-				continue
-
-			if not fits(a.lerp(b, u), crouched):
-				return false
-
-		travelled += length
+		if not motion_is_clear(points[i - 1], points[i], crouched):
+			return false
 
 	return true

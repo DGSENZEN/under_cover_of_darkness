@@ -149,7 +149,7 @@ func _entry() -> void:
 		"LMB attack, hold to charge. Your movement picks the swing.\n" +
 		"Click again during a swing: the next follows, quicker (a combo).\n" +
 		"RMB block. Just before his blade falls: PARRY, then strike back fast (riposte).\n" +
-		"RMB during your own windup: FEINT (draws out his parry).\n" +
+		"RMB in your windup: FEINT. Release guard, change the cut, attack quickly.\n" +
 		"Q dodge   F kick (breaks a guard, sends them flying)   wheel: weapons\n" +
 		"Stamina (the arc under the crosshair): blocks cost it. Out, a blow breaks through.\n" +
 		"Falling onto a guard with LMB: DROP ATTACK.", 30)
@@ -258,7 +258,7 @@ func _training_yard() -> void:
 	# The arms master: swings on a steady beat, and barely hurts.
 	var master := _post(&"trainer", yard + Vector3(-4, 0, -3), PI, true)
 	master.speaker_name = "Arms master"
-	_sign(yard + Vector3(-4, 2.8, -1.2), "PARRY PRACTICE\nhe swings every second or so\nRMB just after the glint, just before the blade falls", 24)
+	_sign(yard + Vector3(-4, 2.8, -1.2), "PARRY / FOOTWORK\nMeet his blade just before it falls.\nOr step out after his glint: close misses open a stronger reply.", 24)
 
 	# The fencer: parries anything, never swings first.
 	var fencer := _post(&"duelist", yard + Vector3(5, 0, -3), PI, true)
@@ -271,7 +271,7 @@ func _training_yard() -> void:
 	fencer.attack_damage = 3.0
 	fencer.attack_cooldown = 999.0
 	fencer._attack_timer = 999.0
-	_sign(yard + Vector3(5, 2.8, -1.2), "FEINT PRACTICE\nhe parries everything\nRMB during your windup (a feint) spends his parry: then strike", 24)
+	_sign(yard + Vector3(5, 2.8, -1.2), "FEINT PRACTICE\nBait his parry with RMB in your windup.\nRelease guard, change attack direction and strike.\nThe amber opening marks a wasted parry.", 24)
 
 	for p in [Vector3(-9, 3, 9), Vector3(9, 3, 9), Vector3(-9, 3, -6), Vector3(9, 3, -6)]:
 		_torch(yard + p, false)
@@ -589,6 +589,7 @@ func _hook_player() -> void:
 	combat.riposte_started.connect(func(): _popup(_ahead(1.4), "RIPOSTE", Color(1.0, 0.85, 0.3)))
 	combat.drop_attacked.connect(func(t): _popup(t.global_position + Vector3.UP * 2.0, "DROP ATTACK", Color(1.0, 0.4, 0.2)); _log_line("Drop attack", Color(1.0, 0.5, 0.3)))
 	combat.staggered.connect(func(why): _log_line({&"broken": "Your guard broke (no stamina)", &"kicked": "Kicked: guard down", &"flinch": "Cut while winding up: attack lost"}.get(why, String(why)), Color(1.0, 0.45, 0.35)))
+	combat.punished.connect(func(t): _popup(t.global_position + Vector3.UP * 2.0, "PUNISH", Color(1.0, 0.8, 0.35)); _log_line("Earned opening taken", Color(1.0, 0.8, 0.35)))
 	combat.landed.connect(_on_landed)
 
 

@@ -150,7 +150,7 @@ func begin(details: Dictionary) -> bool:
 		&"ladder", &"rope":
 			var volume: Variant = (link as Node).get_meta(&"volume") if (link as Node).has_meta(&"volume") else null
 
-			if not (volume is Node3D) or not is_instance_valid(volume):
+			if not is_instance_valid(volume) or not (volume is Node3D):
 				return false
 
 			_plan_ladder(from, a, b, volume, what == &"rope")

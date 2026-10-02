@@ -139,6 +139,10 @@ func _viewmodel(instance: MeshInstance3D) -> void:
 
 static func _squeezed(source: Material) -> BaseMaterial3D:
 	var material := (source as BaseMaterial3D).duplicate() as BaseMaterial3D
+	# Keep the first-person representation out of water's reflection source;
+	# late depth writes retain correct overlap with held items.
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
 	material.use_z_clip_scale = true
 	material.z_clip_scale = Z_CLIP
 	return material

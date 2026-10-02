@@ -94,66 +94,44 @@ func _moon_and_clouds() -> void:
 	_check("N1 clear, the moon is unclouded and at its full light",
 		clear_cover < 0.2 and absf(moon.light_energy - 0.4) < 0.02, "cover %.2f, energy %.3f" % [clear_cover, moon.light_energy])
 
-	# N2 a veil: drifts over in about 4 s, holds, drifts off; the light 15%
+	# N2 old story calls remain compatible, but cannot force a cloud, stop
+	# it on the moon or alter weather. Moonlight reads the actual field.
+	var before_offset: Vector2 = night._offset
+	var before_cover: float = night.cloud_cover()
+	var before_rng: int = night._rng.state
 	night.cover_moon(3.0)
-	await _seconds(1.0)
-	var coming: float = night.cloud_cover()
-	await _seconds(3.5)
-	var covered: float = night.cloud_cover()
-	var dimmed: float = moon.light_energy
-	var ambient_dimmed: float = environment.ambient_light_energy
-	await _seconds(2.0)
-	var still: float = night.cloud_cover()
-	await _seconds(6.0)
-	var after: float = night.cloud_cover()
-	_check("N2 a veil drifts over the moon in about 4 s, holds it covered, and drifts off; covered, the moon is 15% and the ambient 90%",
-		coming < 0.9 and covered > 0.99 and still > 0.99 and after < 0.2 and absf(dimmed - 0.4 * 0.15) < 0.01 and absf(ambient_dimmed - 0.09) < 0.005,
-		"at 1 s %.2f, 4.5 s %.2f, 6.5 s %.2f, 12.5 s %.2f; energy %.3f, ambient %.3f" % [coming, covered, still, after, dimmed, ambient_dimmed])
+	night.cover_moon(90.0)
+	night.cover_moon(0.0)
+	_check("N2 deprecated story cues preserve natural clouds and moonlight",
+		night._offset == before_offset and absf(night.cloud_cover() - before_cover) < 0.0001 and night._rng.state == before_rng and absf(moon.light_energy - 0.4 * lerpf(1.0, 0.15, before_cover)) < 0.01,
+		"coverage %.3f, light %.3f" % [before_cover, moon.light_energy])
 
-	# N3 the sky draws the clouds the light reads: one projection, the same
-	# constants in the shader
-	var code := (load("res://scripts/Night/night_sky.gdshader") as Shader).code
-	var same := true
-
-	var constants := {"CLOUD_CURVE": NightScript.CLOUD_CURVE, "CLOUD_SCALE": NightScript.CLOUD_SCALE, "CLOUD_SOFT": NightScript.CLOUD_SOFT,
-		"VEIL_RADIUS": NightScript.VEIL_RADIUS, "VEIL_EDGE": NightScript.VEIL_EDGE}
-
-	for name in constants:
-		var found := RegEx.create_from_string("const float %s = ([0-9.]+);" % name).search(code)
-		same = same and found != null and absf(float(found.get_string(1)) - float(constants[name])) < 0.0001
-
+	# N3 the sky receives the actual CPU density image, which wraps seamlessly.
+	var material3: ShaderMaterial = night._sky.material
+	var same: bool = material3.get_shader_parameter("cloud_field") == night._field_texture
 	var up_uv: Vector2 = night.sky_uv(Vector3.UP)
 	var wrapped: float = night.field_at(up_uv + Vector2(3.0, -2.0))
-	_check("N3 the sky shader and the moon's light share one cloud projection (its constants match, the field wraps)",
-		same and absf(wrapped - night.field_at(up_uv)) < 0.001, "constants match %s" % same)
+	_check("N3 the sky and moonlight receive the same density image and the field wraps",
+		same and absf(wrapped - night.field_at(up_uv)) < 0.001, "shared density texture %s" % same)
 
-	# N4 in clear, now and then a cloud crosses the moon: dark 15 to 25 s,
-	# every 60 to 90 s
-	var dark := 0.0
-	var darks := []
-	var starts := []
+	# N4 natural passages are caused by a persistent field drifting with the
+	# wind. Cover changes gradually instead of an artificial 60-90 s timer.
+	var least := 1.0
+	var most := 0.0
+	var biggest := 0.0
+	var was: float = night.cloud_cover()
 	var t := 0.0
-
 	while t < 300.0:
 		await get_tree().process_frame
 		t += 1.0 / 60.0
-
-		if night.cloud_cover() > 0.9:
-			if dark == 0.0:
-				starts.append(t)
-			dark += 1.0 / 60.0
-		elif dark > 0.0:
-			darks.append(snappedf(dark, 0.1))
-			dark = 0.0
-
-	var gaps4 := []
-
-	for i in range(1, starts.size()):
-		gaps4.append(snappedf(starts[i] - starts[i - 1], 0.1))
-
-	_check("N4 in clear a cloud crosses the moon every 60-90 s, dark for 15-25 s",
-		darks.size() >= 3 and darks.all(func(d): return d >= 14.9 and d <= 25.1) and gaps4.all(func(g): return g >= 59.9 and g <= 90.1),
-		"dark spells %s, a crossing every %s s" % [darks, gaps4])
+		var cover: float = night.cloud_cover()
+		least = minf(least, cover)
+		most = maxf(most, cover)
+		biggest = maxf(biggest, absf(cover - was))
+		was = cover
+	_check("N4 persistent clear-weather clouds naturally pass over the moon with gradual coverage",
+		least < 0.1 and most > 0.9 and biggest < 0.03 and (night._offset as Vector2).distance_to(before_offset) > 0.2,
+		"coverage %.3f..%.3f, largest frame change %.5f" % [least, most, biggest])
 
 	# N5 the sky wastes nothing: no TIME in it (a sky using TIME re-filters a
 	# 256 radiance map every frame) and a small radiance map nothing reads
@@ -367,6 +345,10 @@ func _wind_over(seconds: float) -> float:
 # ---------------------------------------------------------------------------
 
 func _lightning() -> void:
+	# Previous cases reuse this light and may leave it partly clouded. Give
+	# this independent fixture its declared unclouded energy before Night
+	# captures that baseline.
+	moon.light_energy = 0.4
 	var night := _night(&"storm")
 	await _frames(2)
 	var flashes := []
@@ -381,12 +363,19 @@ func _lightning() -> void:
 	var base: float = moon.light_energy
 	night.flash()
 	await _frames(1)
+	# The coroutine resumes at process_frame before nodes update; sample the
+	# light and its moving cloud field at the same instant.
+	night._apply(night.wind())
 	var peak: float = moon.light_energy
+	var peak_source: float = 0.4 * lerpf(1.0, 0.15, night.cloud_cover())
 	var lit := LightProbe.light_at(self, open)
 	await _seconds(0.3)
+	night._apply(night.wind())
 	var after: float = moon.light_energy
+	var after_source: float = 0.4 * lerpf(1.0, 0.15, night.cloud_cover())
 	_check("L1 a flash adds five times the unclouded moon's light (clouds or none) and is gone within 0.2 s; a man in the open is lit by it",
-		absf(peak - (base + 0.4 * 5.0)) < 0.05 and absf(after - base) < 0.01 and lit > before + 0.2, "base %.2f, peak %.2f, after %.2f; light %.2f -> %.2f" % [base, peak, after, before, lit])
+		absf(peak - (peak_source + 0.4 * 5.0)) < 0.05 and absf(after - after_source) < 0.01 and lit > before + 0.2,
+		"before %.2f, peak %.2f (natural %.2f), after %.2f (natural %.2f); light %.2f -> %.2f" % [base, peak, peak_source, after, after_source, before, lit])
 
 	# L2 over a minute of storm: flashes 20 to 40 s apart, thunder 1 to 4 s
 	# after each

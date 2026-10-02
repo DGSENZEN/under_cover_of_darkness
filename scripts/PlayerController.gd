@@ -29,6 +29,7 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const BodyMotionScript := preload("res://scripts/PlayerUtils/BodyMotion.gd")
 const WaterScript := preload("res://scripts/Interaction/WaterVolume.gd")
+const LanternBody := preload("res://scripts/Visual/Lights/LanternBody.gd")
 
 ## The old feel's strides (legacy_feel): four steps a second at a walk.
 const LEGACY_STRIDE_WALK := 1.6
@@ -95,6 +96,11 @@ enum MoveState {
 @export var swim_sprint_speed := 4.2
 @export var dive_speed := 2.2
 @export var swim_acceleration := 6.0
+## Releasing a stroke settles sooner than changing its direction.
+@export var swim_braking := 8.4
+## The floor must be deeper than the standing exit threshold by this much
+## before wading becomes swimming, so borderline shallows do not oscillate.
+@export var swim_depth_hysteresis := 0.15
 ## Afloat, the eyes this far over the surface.
 @export var float_eye := 0.12
 ## Chest-deep and nothing to stand on (m of water over the feet): swimming.
@@ -189,6 +195,9 @@ enum MoveState {
 ## pressing crouch lowers you into a hang instead of crouching.
 @export var lower_look_down_degrees := 35.0
 @export var shimmy_speed := 1.3
+## Time to reach full shimmy speed; release settles more quickly.
+@export var shimmy_start_time := 0.12
+@export var shimmy_stop_time := 0.08
 @export var shimmy_max_turn_degrees := 25.0
 ## How far above the lip the eyes rise while peeking.
 @export var peek_above_lip := 0.15
@@ -347,6 +356,9 @@ var move_windup := 0.0
 var hang_normal := Vector3.ZERO
 var hang_lip_y := 0.0
 var is_peeking := false
+var _shimmy_velocity := 0.0
+## A fresh press during a catch/corner is spent once the hands settle.
+var _hang_buffered_action: StringName = &""
 
 ## Where a jump would leap to from the current hang, or {}.
 var hang_target := {}
@@ -395,6 +407,9 @@ var _crouch_held_last := false
 var _crouch_just_pressed := false
 var _regrab_timer := 0.0
 var _climb_reattach_timer := 0.0
+## Area overlap lists settle after a teleport; old contacts cannot attach
+## during that tick. Retain registrations for teleports within one volume.
+var _teleport_contacts_until := -1
 var _failed_plan_cooldown := 0.0
 var _last_reject := ""
 ## Scans that found nothing wait this long before looking again: holding jump
@@ -847,15 +862,7 @@ func _update_locomotion(delta: float) -> void:
 		_step_lock_timer = 0.0
 		_stair_pulled = false
 
-	# The lock ends once the capsule's centre has crossed the riser.
-	if _step_lock_timer > 0.0:
-		_step_lock_timer -= delta
-		var travelled := Vector3(global_position.x - _step_lock_from.x, 0.0, global_position.z - _step_lock_from.z).length()
-
-		if travelled >= _radius + 0.05:
-			_step_lock_timer = 0.0
-
-	var step_locked := _step_lock_timer > 0.0
+	var step_locked := _advance_step_lock(delta)
 
 	if step_locked:
 		# Hold the stepped-up height; slide forward onto the tread.
@@ -879,7 +886,7 @@ func _update_locomotion(delta: float) -> void:
 	else:
 		floor_snap_length = 0.0
 
-	move_and_slide()
+	LanternBody.slide_character(self)
 	_floor_valid = true
 
 	if step_locked or _stepped_up_this_frame:
@@ -1427,7 +1434,7 @@ func _stop_on_death(delta: float) -> void:
 	else:
 		velocity.y = maxf(velocity.y - gravity * fall_gravity_multiplier * delta, -maximum_fall_speed)
 
-	move_and_slide()
+	LanternBody.slide_character(self)
 	_floor_valid = true
 
 
@@ -1480,6 +1487,16 @@ func _ensure_action(action: StringName, key: Key) -> void:
 # ---------------------------------------------------------------------------
 # Stairs
 # ---------------------------------------------------------------------------
+
+## A wet step uses the same hold as a dry one, until the capsule crosses it.
+func _advance_step_lock(delta: float) -> bool:
+	if _step_lock_timer > 0.0:
+		_step_lock_timer -= delta
+		var travelled := Vector3(global_position.x - _step_lock_from.x, 0.0, global_position.z - _step_lock_from.z).length()
+		if travelled >= _radius + 0.05:
+			_step_lock_timer = 0.0
+	return _step_lock_timer > 0.0
+
 
 ## move_and_slide treats a step's riser as a wall. When a riser blocks us and
 ## there is room above it, lift the body so the slide carries it onto the tread
@@ -1905,6 +1922,8 @@ func _start_move(move: TraversalMove, chained := false) -> void:
 	current_climb = null
 	cached_profile = null
 	is_peeking = false
+	_shimmy_velocity = 0.0
+	_hang_buffered_action = &""
 
 	velocity = Vector3.ZERO
 	jump_buffer_timer = 0.0
@@ -1946,11 +1965,20 @@ func _move_sound(move: TraversalMove) -> void:
 
 func _update_move(delta: float) -> void:
 	move_elapsed += delta
+	# The press that started the move is already consumed. A new press is a
+	# deliberate next action, even if the hands have not finished catching.
+	if current_move.ends_in_hang:
+		if Input.is_action_just_pressed("jump"):
+			_hang_buffered_action = &"jump"
+		if Input.is_action_just_pressed("crouch"):
+			_hang_buffered_action = &"drop"
 
 	# Windup: hold position with a small dip before launching.
 	if move_elapsed < current_move.windup_time:
 		var w := move_elapsed / current_move.windup_time
-		global_position = current_move.points[0] - Vector3.UP * current_move.windup_dip * sin(w * PI)
+		var dip := current_move.points[0] - Vector3.UP * current_move.windup_dip * sin(w * PI)
+		if scanner.motion_is_clear(global_position, dip, is_crouched):
+			global_position = dip
 		move_windup = w
 		return
 
@@ -1965,9 +1993,13 @@ func _update_move(delta: float) -> void:
 	var s := lerpf(t, symmetric, current_move.smoothing)
 	s = lerpf(s, launched, current_move.ease_out)
 
-	# The path was fit-tested before the move began, so the body is carried
-	# along it directly. No collision response, and never an abort halfway.
-	global_position = current_move.position_at(s)
+	# Validate this tick too: moving doors and actors were not necessarily
+	# here when the path was planned. Stop outside them and hand back gravity.
+	var next := current_move.position_at(s)
+	if not scanner.motion_is_clear(global_position, next, is_crouched):
+		_cancel_blocked_move()
+		return
+	global_position = next
 
 	# Turning happens through the middle of the move, not spread thin over it.
 	if current_move.yaw_delta != 0.0:
@@ -1990,6 +2022,24 @@ func _update_move(delta: float) -> void:
 
 	if t >= 1.0:
 		_finish_move()
+
+
+func _cancel_blocked_move() -> void:
+	current_move = null
+	move_progress = 0.0
+	move_windup = 0.0
+	movement_state = MoveState.LOCOMOTION
+	velocity = Vector3.ZERO
+	is_peeking = false
+	_hang_buffered_action = &""
+	_chain_buffered = false
+	_pending_drop_target = {}
+	drop_target = {}
+	jump_buffer_timer = 0.0
+	coyote_timer = 0.0
+	_regrab_timer = regrab_delay
+	_jump_hold_consumed = true
+	_last_reject = "move blocked by changed geometry"
 
 
 func _can_chain() -> bool:
@@ -2052,7 +2102,7 @@ func _finish_move() -> void:
 			move.kind == MoveVariantRes.Kind.HANG_ENTER
 			or move.kind == TraversalPlanner.KIND_LEAP
 		)
-		_enter_hang(move.hang_normal, move.hang_lip_y, caught)
+		_enter_hang(move.hang_normal, move.hang_lip_y, caught, _hang_buffered_action)
 		return
 
 	movement_state = MoveState.LOCOMOTION
@@ -2065,7 +2115,7 @@ func _finish_move() -> void:
 # HANGING
 # ---------------------------------------------------------------------------
 
-func _enter_hang(normal: Vector3, lip_y: float, caught := true) -> void:
+func _enter_hang(normal: Vector3, lip_y: float, caught := true, buffered_action: StringName = &"") -> void:
 	movement_state = MoveState.HANGING
 	# Hands slapping onto the ledge; softer when easing into the hang.
 	Sfx.play_flat(self, &"grab", 0.0 if caught else -6.0)
@@ -2073,6 +2123,8 @@ func _enter_hang(normal: Vector3, lip_y: float, caught := true) -> void:
 	hang_lip_y = lip_y
 	velocity = Vector3.ZERO
 	is_peeking = false
+	_shimmy_velocity = 0.0
+	_hang_buffered_action = buffered_action
 	hang_target = {}
 	hang_aiming_elsewhere = false
 	_kicks_this_airtime = 0
@@ -2092,12 +2144,20 @@ func _update_hang(delta: float) -> void:
 	velocity = Vector3.ZERO
 
 	var wish_direction := _wish_direction()
+	var jump_requested := Input.is_action_just_pressed("jump") or _hang_buffered_action == &"jump"
+	var drop_requested := Input.is_action_just_pressed("crouch") or _hang_buffered_action == &"drop"
+	_hang_buffered_action = &""
+	# Drop has priority over a queued pull-up.
+	var pulling_away := Input.is_action_just_pressed("move_back") and _facing_direction().dot(-hang_normal) > 0.0
+	if drop_requested or pulling_away:
+		_drop_from_hang()
+		return
 
 	# Where would a jump take us? Up to a hundred physics queries, so it is
 	# refreshed ten times a second, and at once when jump is pressed.
 	_hang_scan_timer -= delta
 
-	if _hang_scan_timer <= 0.0 or Input.is_action_just_pressed("jump"):
+	if _hang_scan_timer <= 0.0 or jump_requested:
 		_hang_scan_timer = 0.1
 
 		# The ledge may have gone from under the hands (a door swung open, a
@@ -2109,7 +2169,8 @@ func _update_hang(delta: float) -> void:
 		hang_target = _find_hang_target(wish_direction)
 
 	# Jump: leap to the target if there is one, otherwise climb onto the ledge.
-	if Input.is_action_just_pressed("jump"):
+	if jump_requested:
+		jump_buffer_timer = 0.0
 		if not hang_target.is_empty():
 			var target_lip: float = hang_target["lip_y"]
 
@@ -2130,7 +2191,7 @@ func _update_hang(delta: float) -> void:
 		elif hang_aiming_elsewhere:
 			_last_reject = "no ledge in reach there"
 		else:
-			var move := planner.pull_up(hang_normal, global_position)
+			var move := planner.pull_up(hang_normal, global_position, hang_lip_y)
 
 			if move != null:
 				_start_move(move)
@@ -2138,22 +2199,17 @@ func _update_hang(delta: float) -> void:
 
 			_last_reject = planner.last_reject
 
-	# Crouch, or pulling away from the wall: let go.
-	var pulling_away := (
-		Input.is_action_just_pressed("move_back")
-		and _facing_direction().dot(-hang_normal) > 0.0
-	)
-
-	if Input.is_action_just_pressed("crouch") or pulling_away:
-		_drop_from_hang()
-		return
-
 	# Sideways input, in world space, so it works whichever way you look.
 	var lateral := hang_normal.cross(Vector3.UP).normalized()
 	var sideways := wish_direction.dot(lateral)
+	var wanted := sideways * shimmy_speed if absf(sideways) > 0.3 else 0.0
+	var response := shimmy_start_time if wanted != 0.0 else shimmy_stop_time
+	_shimmy_velocity = move_toward(_shimmy_velocity, wanted, shimmy_speed * delta / maxf(response, 0.001))
 
-	if absf(sideways) > 0.3:
-		_shimmy(lateral * signf(sideways), delta)
+	if absf(_shimmy_velocity) > 0.001:
+		_shimmy(lateral * signf(_shimmy_velocity), delta)
+		if movement_state != MoveState.HANGING:
+			return
 
 	# Pushing into the wall lifts the eyes over the lip.
 	is_peeking = wish_direction.dot(-hang_normal) > 0.5
@@ -2179,6 +2235,10 @@ func _lip_under_hands() -> bool:
 func _drop_from_hang() -> void:
 	movement_state = MoveState.LOCOMOTION
 	is_peeking = false
+	_shimmy_velocity = 0.0
+	_hang_buffered_action = &""
+	hang_target = {}
+	hang_aiming_elsewhere = false
 	jump_buffer_timer = 0.0
 	coyote_timer = 0.0
 
@@ -2189,18 +2249,24 @@ func _drop_from_hang() -> void:
 
 
 func _shimmy(direction: Vector3, delta: float) -> void:
-	var next := global_position + direction * shimmy_speed * delta
+	var distance := absf(_shimmy_velocity) * delta
+	var next := global_position + direction * distance
 	var hit := planner.probe_hang(next, hang_normal, hang_lip_y, 0.12)
 
 	if not hit.is_empty():
 		var normal: Vector3 = hit["normal"]
 
 		if normal.angle_to(hang_normal) <= deg_to_rad(shimmy_max_turn_degrees):
-			global_position = hit["anchor"]
-			hang_normal = normal
-			hang_lip_y = hit["lip_y"]
-			_last_reject = ""
-			return
+			# Spend the same travel budget on height/depth changes as sideways
+			# travel. A seam must not snap the camera ten centimetres in a tick.
+			var anchor: Vector3 = hit["anchor"]
+			var step := global_position.move_toward(anchor, distance)
+			if scanner.motion_is_clear(global_position, step, false):
+				global_position = step
+				hang_normal = normal
+				hang_lip_y = hit["lip_y"]
+				_last_reject = ""
+				return
 
 		_last_reject = "shimmy: ledge turns sharply"
 	else:
@@ -2211,6 +2277,8 @@ func _shimmy(direction: Vector3, delta: float) -> void:
 
 	if move != null:
 		_start_move(move)
+	else:
+		_shimmy_velocity = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -2457,28 +2525,33 @@ func _find_aimed_ledge() -> Dictionary:
 			outward.push_front(toward_us.normalized())
 
 		for direction in outward:
-			var outside := hit + direction * 0.6
-			outside.y = hit.y - 0.1
-			var face := scanner.ray(outside, outside - direction * 1.2)
+			# The crosshair can rest well inside a roof, not just on its rim.
+			# Find the outside of that surface, then look back at its face.
+			for distance in [0.6, 1.2, 1.8, 2.4]:
+				var outside: Vector3 = hit + direction * distance
+				outside.y = hit.y - 0.04
+				var face := scanner.ray(outside, outside - direction * (distance + 0.1))
 
-			if face.is_empty():
-				continue
+				if face.is_empty():
+					continue
 
-			var face_raw: Vector3 = face["normal"]
+				var face_raw: Vector3 = face["normal"]
+				if absf(face_raw.y) > scanner.max_wall_normal_y:
+					continue
 
-			if absf(face_raw.y) > scanner.max_wall_normal_y:
-				continue
+				var face_normal := Vector3(face_raw.x, 0.0, face_raw.z).normalized()
+				if face_normal.dot(direction) < 0.5:
+					continue
 
-			var face_normal := Vector3(face_raw.x, 0.0, face_raw.z).normalized()
+				var face_hit: Vector3 = face["position"]
+				var rim := face_hit - face_normal * scanner.top_probe_depth
+				var top := scanner.ray(Vector3(rim.x, hit.y + 0.06, rim.z), Vector3(rim.x, hit.y - 0.06, rim.z), false)
+				if top.is_empty() or top["collider"] != look["collider"] or (top["normal"] as Vector3).y < scanner.min_top_normal_y:
+					continue
 
-			if face_normal.dot(direction) < 0.5:
-				continue
-
-			var face_hit: Vector3 = face["position"]
-			var from_top := _leap_target_from(Vector3(face_hit.x, hit.y, face_hit.z), face_normal, hit.y)
-
-			if not from_top.is_empty():
-				return from_top
+				var from_top := _leap_target_from(Vector3(face_hit.x, hit.y, face_hit.z), face_normal, hit.y)
+				if not from_top.is_empty():
+					return from_top
 
 		return {}
 
@@ -2701,19 +2774,48 @@ func _update_water() -> void:
 		elif water == null and volume.holds(feet + Vector3.UP * 0.05, 0.3):
 			water = volume
 
+	# Area notifications settle after a teleport. Resolve the destination now,
+	# while the cached overlap list remains the usual fast path.
+	if water == null:
+		for volume in get_tree().get_nodes_in_group(&"water"):
+			if volume.has_method("holds") and volume.holds(feet + Vector3.UP * 0.05, 0.3):
+				water = volume
+				break
+
 	if water == null:
 		if movement_state == MoveState.SWIMMING:
 			_leave_swim()
 
 		return
 
+	if movement_state != MoveState.LOCOMOTION and movement_state != MoveState.SWIMMING:
+		return
+
+	var floor_depth := _swim_floor_depth()
 	match movement_state:
 		MoveState.LOCOMOTION:
-			if water.depth_of(feet) > swim_start_depth and water.deep_at(feet):
+			if _step_lock_timer <= 0.0 and water.depth_of(feet) > swim_start_depth and floor_depth > water.SWIM_DEPTH + swim_depth_hysteresis:
 				_enter_swim()
 		MoveState.SWIMMING:
-			if not water.deep_at(feet) and water.depth_of(feet) < swim_start_depth + 0.3:
+			# Contact with a standable tread resolves the hysteresis band too.
+			# Merely floating over the deep side of a bank does not.
+			var supported := is_on_floor() or _step_lock_timer > 0.0
+			var stand_depth: float = water.SWIM_DEPTH + (swim_depth_hysteresis if supported else 0.0)
+			if floor_depth <= stand_depth and water.depth_of(feet) < swim_start_depth + 0.3:
 				_leave_swim()
+
+
+## Measure beneath the swimmer, excluding their capsule. A flooded roof
+## above the surface is not the bottom of the pool.
+func _swim_floor_depth() -> float:
+	var bottom: float = water.bottom_y()
+	var query := PhysicsRayQueryParameters3D.create(
+		global_position, Vector3(global_position.x, bottom - 0.5, global_position.z), 1, [get_rid()])
+	query.collide_with_areas = false
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty():
+		bottom = (hit["position"] as Vector3).y
+	return water.surface_y() - bottom
 
 
 ## Called by WaterVolume when the body goes in, and comes out.
@@ -2729,6 +2831,8 @@ func remove_water_volume(volume: Area3D) -> void:
 func _enter_swim() -> void:
 	movement_state = MoveState.SWIMMING
 	_clear_ground_state()
+	_floor_valid = false
+	_on_stairs = false
 	current_climb = null
 
 	# Swimming is done standing, where there is room (a flooded culvert).
@@ -2740,13 +2844,22 @@ func _enter_swim() -> void:
 		frob.drop_held()
 
 	# The water takes the fall out of you.
-	velocity.y *= 0.3
+	velocity.y = clampf(velocity.y * 0.3, -dive_speed, dive_speed)
+	jump_buffer_timer = 0.0
+	coyote_timer = 0.0
+	_jump_cut_allowed = false
+	cached_profile = null
+	_pending_drop_target = {}
 	_strokes = 0.0
 
 
 func _leave_swim() -> void:
 	movement_state = MoveState.LOCOMOTION
 	_floor_valid = false
+	jump_buffer_timer = 0.0
+	coyote_timer = 0.0
+	_jump_cut_allowed = false
+	_strokes = 0.0
 
 
 ## The eyes are under the surface.
@@ -2771,35 +2884,82 @@ func _update_swim(delta: float) -> void:
 		_set_crouched(false)
 
 	var afloat_y: float = water.surface_y() + float_eye - _neck_stand_y
+	var axis := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var wish := _wish_direction()
 	var facing := _facing_direction()
 	var speed := swim_sprint_speed if Input.is_action_pressed("sprint") else swim_speed
-	var flat := Vector3(velocity.x, 0.0, velocity.z).move_toward(wish * speed, swim_acceleration * delta)
 	var at_top := global_position.y > afloat_y - 0.3
 
-	# Out onto a bank: at it, pushing toward it, and jump.
-	if at_top and Input.is_action_just_pressed("jump") and wish.dot(facing) > min_forward_input and not _is_carrying():
-		cached_profile = scanner.scan(facing, velocity, true)
-
-		if cached_profile != null and _try_traversal(cached_profile):
-			return
+	# Holding jump to surface also asks to climb out. A short ground jump
+	# buffer cannot cover the ascent from deeper water. Rescan while held,
+	# but consume the hold once a real, collision-checked exit starts.
+	var exit_intent := not Input.is_action_pressed("crouch") and (jump_buffer_timer > 0.0 or Input.is_action_pressed("jump"))
+	if at_top and exit_intent and not _jump_hold_consumed and wish.dot(facing) > min_forward_input and not _is_carrying():
+		if _air_scan_timer <= 0.0 or Input.is_action_just_pressed("jump"):
+			_air_scan_timer = RESCAN_TIME
+			cached_profile = scanner.scan(facing, velocity, false)
+			if cached_profile != null:
+				var exit := planner.water_exit(cached_profile, global_position, water.surface_y() - water.SWIM_DEPTH - swim_depth_hysteresis)
+				if exit != null:
+					_start_move(exit)
+					return
+				_last_reject = planner.last_reject
+			else:
+				_last_reject = scanner.last_reject
 
 	# A ladder or a rope that reaches down into the water: swim to it and take it.
-	if at_top and _try_enter_climb(wish):
+	if _try_enter_climb(wish):
+		jump_buffer_timer = 0.0
+		coyote_timer = 0.0
+		_jump_cut_allowed = false
 		return
 
-	var want := clampf((afloat_y - global_position.y) * 3.0, -1.0, 0.9)
+	# Forward/reverse follow the view below water; strafe stays level. At the
+	# surface looking around does nothing until a stroke or dive is held.
+	var course := (global_basis.x * axis.x + neck.global_basis.z * axis.y).normalized()
+	var directed_vertical := absf(axis.y) > 0.05 and absf(course.y) > 0.15
+	var target := wish * speed
+	var surface_error := afloat_y - global_position.y
+	var want := clampf(surface_error * 3.0, -1.0, 1.2)
+	if directed_vertical and (surface_error > 0.05 or course.y < 0.0):
+		target = course * speed
+		want = target.y
 
 	if Input.is_action_pressed("crouch"):
 		want = -dive_speed
-	elif Input.is_action_pressed("jump") and global_position.y < afloat_y - 0.05:
+	elif Input.is_action_pressed("jump") and surface_error > 0.0:
 		want = dive_speed
 
-	velocity.x = flat.x
-	velocity.z = flat.z
-	velocity.y = move_toward(velocity.y, want, 9.0 * delta)
+	# Begin braking before the eyes reach their surface height. No position
+	# snap is needed, and the capsule still meets ceilings through physics.
+	if want > 0.0:
+		want = minf(want, maxf(surface_error * 3.0, 0.0))
+	target.y = want
+	target = target.limit_length(speed)
+	var acceleration := swim_acceleration if not axis.is_zero_approx() else swim_braking
+	if Input.is_action_pressed("crouch") or Input.is_action_pressed("jump"):
+		acceleration = maxf(acceleration, 9.0)
+	# One vector keeps turns inside the speed limit. Easing its axes at
+	# different rates can briefly add speed when a diagonal dive turns steep.
+	velocity = velocity.move_toward(target, acceleration * delta)
+	var step_locked := _advance_step_lock(delta)
+	_stepped_up_this_frame = false
+	# At the surface, small flooded risers are steps, just as on land.
+	# Explicit diving keeps full swim control and releases any tread hold.
+	var diving := Input.is_action_pressed("crouch") or (directed_vertical and course.y < 0.0 and not Input.is_action_pressed("jump"))
+	if diving:
+		_step_lock_timer = 0.0
+		step_locked = false
+	elif at_top:
+		if step_locked:
+			global_position.y = _step_lock_y
+			velocity.y = 0.0
+		_try_step_up(delta)
 	floor_snap_length = 0.0
-	move_and_slide()
+	LanternBody.slide_character(self)
+	if step_locked or _stepped_up_this_frame:
+		global_position.y = _step_lock_y
+		velocity.y = 0.0
 	_swim_sounds(at_top)
 
 
@@ -2846,7 +3006,7 @@ func _clear_ground_state() -> void:
 
 
 func _try_enter_climb(wish_direction: Vector3) -> bool:
-	if climb_volumes.is_empty() or _climb_reattach_timer > 0.0 or _is_carrying():
+	if Engine.get_physics_frames() <= _teleport_contacts_until or climb_volumes.is_empty() or _climb_reattach_timer > 0.0 or _is_carrying():
 		return false
 
 	# Overlapping volumes (a ladder beside a rope, two halves of a wall): the
@@ -3016,7 +3176,7 @@ func _update_climb(_delta: float) -> void:
 		+ lateral * sideways * max_horizontal
 	)
 
-	move_and_slide()
+	LanternBody.slide_character(self)
 
 
 ## A simulated rope: the hands hold a point that moves. The body is pulled to
@@ -3081,7 +3241,7 @@ func _update_rope_climb(delta: float) -> void:
 	var spring := (wanted - global_position) * rope_grip_stiffness
 
 	velocity = spring + grip_velocity
-	move_and_slide()
+	LanternBody.slide_character(self)
 
 
 ## Puts the player at `xform` (the gym's bays): on his feet, with no move to
@@ -3091,17 +3251,41 @@ func teleport(xform: Transform3D) -> void:
 		current_climb.release()
 
 	global_transform = xform
+	_teleport_contacts_until = Engine.get_physics_frames() + 1
 	movement_state = MoveState.LOCOMOTION
 	current_move = null
 	move_elapsed = 0.0
 	move_progress = 0.0
 	move_windup = 0.0
+	cached_profile = null
 	_chain_buffered = false
 	current_climb = null
 	rope_param = -1.0
 	is_peeking = false
+	_shimmy_velocity = 0.0
+	_hang_buffered_action = &""
 	hang_target = {}
+	hang_aiming_elsewhere = false
+	drop_target = {}
 	_pending_drop_target = {}
+	hang_normal = Vector3.ZERO
+	hang_lip_y = 0.0
+	_regrab_timer = 0.0
+	_climb_reattach_timer = 0.0
+	_failed_plan_cooldown = 0.0
+	_air_scan_timer = 0.0
+	_climb_scan_timer = 0.0
+	_chain_scan_timer = 0.0
+	_last_reject = ""
+	_assist_active = false
+	_assist_left_ground = false
+	_assist_direction = Vector3.ZERO
+	_assist_speed = 0.0
+	_assist_time = 0.0
+	_kicks_this_airtime = 0
+	_jump_hold_consumed = Input.is_action_pressed("jump")
+	_crouch_held_last = Input.is_action_pressed("crouch")
+	_crouch_just_pressed = false
 	_clear_ground_state()
 	velocity = Vector3.ZERO
 	_shove_time = 0.0

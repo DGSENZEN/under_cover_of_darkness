@@ -1,0 +1,272 @@
+[
+  {
+    "axis": 0,
+    "box": 1,
+    "clear": 18,
+    "collider": [
+      0.0,
+      2.0,
+      1.4,
+      3.0,
+      4.05,
+      0.3,
+      "stone",
+      0.0,
+      -8.53076560994813,
+      0.0
+    ],
+    "file": "res://assets/level/city_harbour/shipyard.glb",
+    "instances": 13.0,
+    "node": "city_wall_12_3_006",
+    "piece": "city_wall_12_3",
+    "point": [
+      0.0,
+      1.82250010967255,
+      0.135000005364418
+    ],
+    "samples": 81
+  },
+  {
+    "axis": 0,
+    "box": 1,
+    "clear": 18,
+    "collider": [
+      0.0,
+      2.0,
+      1.4,
+      6.0,
+      4.05,
+      0.3,
+      "stone",
+      0.0,
+      -8.53076560994813,
+      0.0
+    ],
+    "file": "res://assets/level/city_harbour/shipyard.glb",
+    "instances": 90.0,
+    "node": "city_wall_12_6_052",
+    "piece": "city_wall_12_6",
+    "point": [
+      0.0,
+      1.82250010967255,
+      0.135000005364418
+    ],
+    "samples": 81
+  },
+  {
+    "axis": 0,
+    "box": 0,
+    "clear": 66,
+    "collider": [
+      0.0,
+      11.95,
+      0.0,
+      8.4,
+      2.1,
+      8.4,
+      "stone",
+      0.0,
+      0.0,
+      0.0
+    ],
+    "file": "res://assets/level/city_harbour/shipyard.glb",
+    "instances": 84.0,
+    "node": "nave_vault_001",
+    "piece": "nave_vault",
+    "point": [
+      0.0,
+      0.708749949932098,
+      3.77999973297119
+    ],
+    "samples": 81
+  },
+  {
+    "axis": 0,
+    "box": 0,
+    "clear": 9,
+    "collider": [
+      0.0,
+      0.05,
+      0.0,
+      8.4,
+      0.4,
+      9.17877987534291,
+      "stone",
+      0.0,
+      29.3577535427913,
+      0.0
+    ],
+    "file": "res://assets/level/city_harbour/shipyard.glb",
+    "instances": 1.0,
+    "node": "slipway_8_001",
+    "piece": "slipway_8",
+    "point": [
+      0.0,
+      0.180000007152557,
+      4.13045072555542
+    ],
+    "samples": 81
+  },
+  {
+    "axis": 0,
+    "box": 0,
+    "clear": 12,
+    "collider": [
+      -1.0,
+      -0.5,
+      0.0,
+      14.0,
+      4.0,
+      5.6,
+      "wood",
+      0.0,
+      0.0,
+      0.0
+    ],
+    "file": "res://assets/level/city_harbour/ships.glb",
+    "instances": 1.0,
+    "node": "caravel_001",
+    "piece": "caravel",
+    "point": [
+      0.0,
+      -0.899999976158142,
+      2.51999998092651
+    ],
+    "samples": 81
+  },
+  {
+    "axis": 2,
+    "box": 2,
+    "clear": 17,
+    "collider": [
+      13.2,
+      -0.2,
+      0.0,
+      2.4,
+      4.4,
+      3.0,
+      "wood",
+      0.0,
+      0.0,
+      0.0
+    ],
+    "file": "res://assets/level/city_harbour/ships.glb",
+    "instances": 1.0,
+    "node": "carrack_hull_001",
+    "piece": "carrack_hull",
+    "point": [
+      1.08000004291534,
+      0.0,
+      0.0
+    ],
+    "samples": 81
+  },
+  {
+    "axis": 0,
+    "box": 3,
+    "clear": 40,
+    "collider": [
+      0.0,
+      3.5,
+      -0.45,
+      6.0,
+      0.2,
+      3.1,
+      "stone",
+      0.0,
+      0.0,
+      0.0
+    ],
+    "file": "res://assets/level/city_harbour/ribeira.glb",
+    "instances": 13.0,
+    "node": "arcade_ribeira_6_001",
+    "piece": "arcade_ribeira_6",
+    "point": [
+      0.0,
+      0.0900000035762787,
+      1.39499998092651
+    ],
+    "samples": 81
+  },
+  {
+    "axis": 0,
+    "box": 0,
+    "clear": 6,
+    "collider": [
+      0.0,
+      1.75,
+      0.0,
+      3.2,
+      3.5,
+      5.2,
+      "stone",
+      0.0,
+      0.0,
+      0.0
+    ],
+    "file": "res://assets/level/city_harbour/terreiro.glb",
+    "instances": 1.0,
+    "node": "statue_king_001",
+    "piece": "statue_king",
+    "point": [
+      0.0,
+      1.18124997615814,
+      2.33999991416931
+    ],
+    "samples": 81
+  },
+  {
+    "axis": 0,
+    "box": 1,
+    "clear": 8,
+    "collider": [
+      15.0,
+      20.0,
+      0.0,
+      16.0,
+      40.0,
+      44.0,
+      "stone",
+      0.0,
+      0.0,
+      0.0
+    ],
+    "file": "res://assets/level/city_massing/cathedral.glb",
+    "instances": 1.0,
+    "node": "mass_cathedral_001",
+    "piece": "mass_cathedral",
+    "point": [
+      0.0,
+      18.0,
+      19.7999992370605
+    ],
+    "samples": 81
+  },
+  {
+    "axis": 1,
+    "box": 0,
+    "clear": 12,
+    "collider": [
+      0.0,
+      12.5,
+      0.0,
+      10.8,
+      25.0,
+      10.8,
+      "stone",
+      0.0,
+      0.0,
+      0.0
+    ],
+    "file": "res://assets/level/city_massing/castle.glb",
+    "instances": 8.0,
+    "node": "mass_castle_tower_001",
+    "piece": "mass_castle_tower",
+    "point": [
+      4.8600001335144,
+      0.0,
+      4.8600001335144
+    ],
+    "samples": 81
+  }
+]

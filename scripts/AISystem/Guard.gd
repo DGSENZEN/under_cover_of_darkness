@@ -51,6 +51,7 @@ const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const LanternBody := preload("res://scripts/Visual/Lights/LanternBody.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Comms := preload("res://scripts/AISystem/Comms.gd")
@@ -165,6 +166,11 @@ const FIGHT_NEAR_HOLD := 2.0
 const STATE_LINE_WAIT := 0.35
 const LINE_SHOWN := 1.0
 const LINE_AGAIN := 8.0
+## A faint silhouette must be clearer to acquire than to keep tracking.
+## Complete cover still drops sight immediately; alert's own hold/decay is
+## unchanged. This only settles tiny light/exposure changes at the boundary.
+const SIGHT_ACQUIRE := 0.02
+const SIGHT_KEEP := 0.01
 ## The fight over and his blade gone, he goes back for one this near (m).
 const REARM_REACH := 15.0
 
@@ -406,6 +412,8 @@ var _said_kinds := {}
 ## How visible the player is to this guard right now, 0..1.
 var visibility := 0.0
 var can_see_target := false
+## Sight continuity belongs to one target, including airborne follow-through.
+var _vision_target_id := 0
 var last_known_position := Vector3.ZERO
 var has_last_known := false
 
@@ -917,7 +925,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if not carried:
-		move_and_slide()
+		LanternBody.slide_character(self)
 
 	if _knock <= 0.0 and not carried:
 		_open_doors_in_the_way()
@@ -957,6 +965,19 @@ func look_direction() -> Vector3:
 
 
 func _sense_vision(delta: float) -> void:
+	var target_id := _target.get_instance_id() if is_instance_valid(_target) else 0
+
+	if target_id != _vision_target_id:
+		_vision_target_id = target_id
+		can_see_target = false
+		_seen_off_feet = false
+		_seen_heading = Vector3.ZERO
+
+	if target_id == 0:
+		visibility = 0.0
+		can_see_target = false
+		return
+
 	# Asleep (GuardRota): his eyes are shut.
 	if _rota != null and _rota.asleep():
 		visibility = 0.0
@@ -971,7 +992,7 @@ func _sense_vision(delta: float) -> void:
 		return
 
 	visibility = _visibility_of(_target)
-	can_see_target = visibility > 0.02
+	can_see_target = visibility > (SIGHT_KEEP if can_see_target else SIGHT_ACQUIRE)
 
 	if not can_see_target:
 		_follow_through()
@@ -988,6 +1009,7 @@ func _sense_vision(delta: float) -> void:
 	# Which way you were going: where he looks first once he loses you.
 	var going: Variant = _target.get("velocity")
 
+	_seen_heading = Vector3.ZERO
 	if going is Vector3 and Vector2((going as Vector3).x, (going as Vector3).z).length() > 0.8:
 		_seen_heading = Vector3((going as Vector3).x, 0.0, (going as Vector3).z)
 
@@ -1108,7 +1130,13 @@ func _line_of_sight(from: Vector3, to: Vector3, target: Node3D) -> bool:
 
 	var query := PhysicsRayQueryParameters3D.create(from, to, sight_mask, exclude)
 	query.collide_with_areas = false
-	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return true
+	# Fixtures own their collision bodies. Seeing the target's own shell
+	# counts as seeing that target (including a lamp that has gone dark).
+	var blocker := hit.get("collider") as Node
+	return target != null and blocker != null and target.is_ancestor_of(blocker)
 
 
 ## SoundBus calls this for every gameplay sound in the level.
@@ -1754,6 +1782,7 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 		_fighter.end_open()
 		deathblow.emit()
 
+	var punished: bool = kind in [&"quick", &"power"] and _fighter.consume_punish(attacker)
 	health -= damage
 	hurt.emit(damage)
 
@@ -1770,7 +1799,7 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 		_mercy.struck(attacker)
 
 	# Cut, he is shaken: a heavy blow the more, a riposte most.
-	var riposte: bool = _fighter.riposted_by(attacker)
+	var riposte: bool = punished or _fighter.riposted_by(attacker)
 
 	if not opened:
 		_fighter.add_posture(26.0 if riposte else (22.0 if kind in [&"power", &"drop", &"crush", &"blast"] else 10.0))
@@ -2115,7 +2144,11 @@ func kick(push: Vector3, attacker: Node3D) -> void:
 	_engage(attacker)
 
 
-## His blow met a raised guard at just the right moment.
+## Whether this opponent can take the opening his footwork or feint earned.
+func punishable_by(attacker: Node3D) -> bool:
+	return _fighter != null and _fighter.punishable_by(attacker)
+
+
 ## Off his balance (his posture broken): the next blow is a deathblow.
 func is_open() -> bool:
 	return _fighter != null and _fighter.is_open()
@@ -3279,6 +3312,11 @@ func _do_investigate(delta: float) -> void:
 	# A fresher clue moves the goal (or, looking from his post, his eyes).
 	if _since_stimulus < 0.1 and has_last_known:
 		var from := _look_from(last_known_position)
+		# A different place to investigate ends the look at the old one.
+		# Repeated clues at our feet keep that look, and a lookout on his
+		# post redirects his scan instead of abandoning his vantage.
+		if from == last_known_position and _flat_distance(from) > waypoint_radius and _agent.target_position.distance_to(from) >= repath_distance:
+			_look_timer = 0.0
 		_go_to(from)
 
 		if from != last_known_position and _look_timer > 0.0:

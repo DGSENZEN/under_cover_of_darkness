@@ -2,8 +2,8 @@ extends RefCounted
 ## A validated, choreographed movement. The controller carries the body along
 ## `points` over `duration` seconds, then hands back `exit_velocity`.
 ##
-## The path was fit-tested by the planner before this object was created, so
-## the player never aborts a move halfway.
+## The planner validates the path before it starts. Playback checks it again
+## so a door or actor entering the path can safely interrupt the move.
 
 var label: StringName = &""
 var kind := 0

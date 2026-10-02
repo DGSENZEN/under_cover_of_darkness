@@ -29,12 +29,10 @@ func _init(environment: Environment, field: Texture2D, skyline := "") -> void:
 
 
 ## The sky as the night is now.
-func show_night(cover: float, offset: Vector2, veil_center: Vector2, veil_on: float, flash: float, fog: float, clock: float) -> void:
+func show_night(cover: float, offset: Vector2, flash: float, fog: float, clock: float) -> void:
 	material.set_shader_parameter("clock", clock)
 	material.set_shader_parameter("cloud_cover", cover)
 	material.set_shader_parameter("cloud_offset", offset)
-	material.set_shader_parameter("veil_center", veil_center)
-	material.set_shader_parameter("veil_on", veil_on)
 	material.set_shader_parameter("flash", flash)
 	material.set_shader_parameter("fog", fog)
 

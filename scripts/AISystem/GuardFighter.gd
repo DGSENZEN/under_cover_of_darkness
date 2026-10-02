@@ -369,6 +369,11 @@ var _answer: StringName = &""
 ## one that met nothing.
 var _parry_at := -1.0
 var _parry_miss := 0.0
+var _parry_target_id := 0
+## An earned opening belongs to the opponent who baited it, for one hit.
+var _exposed_until := -1.0
+var _punish_target_id := 0
+var _committed_target_id := 0
 var _combo_left := 0
 ## Part of the way up (0..1) that this blow is abandoned: a feint. <0: not.
 var _feint_at := -1.0
@@ -697,6 +702,9 @@ func _tick(delta: float, now: float) -> void:
 		_parry_at = -1.0
 		_parry_open_at = -1.0
 		_parry_miss = 0.45
+		_exposed_until = now + 0.45
+		_punish_target_id = _parry_target_id
+		guarding = false
 
 
 ## Staggered: no footwork, no blows, no guard; but he still sees what is
@@ -774,6 +782,8 @@ func _read_threat(delta: float, target: Node3D, dist: float, now: float) -> void
 ## A parry timed to meet a blade `arrives` seconds from now, begun when he
 ## saw it at `seen`: it cannot be up before he has had time to react.
 func _schedule_parry(now: float, arrives: float, seen: float) -> void:
+	var target := _target_now()
+	_parry_target_id = target.get_instance_id() if target != null else 0
 	_parry_at = now + maxf(arrives, reaction * 0.5)
 	_parry_open_at = maxf(seen + reaction, _parry_at - 0.09)
 
@@ -781,7 +791,7 @@ func _schedule_parry(now: float, arrives: float, seen: float) -> void:
 ## Hit twice running and still under attack: up with the guard at once (or,
 ## light on his feet, a step back out of reach). A brute just swings back.
 func _reflex_defence(target: Node3D, dist: float) -> void:
-	if not _reflex or guard._stagger > 0.0 or guard._phase != &"":
+	if not _reflex or guard._stagger > 0.0 or guard._phase != &"" or guard._game_time <= _exposed_until:
 		return
 
 	var combat := _combat_of(target)
@@ -837,7 +847,7 @@ func _read(direction: StringName) -> float:
 func _choose_answer(combat: Node = null, dist := 0.0) -> StringName:
 	# Mid-parry, or just out of one that met nothing: no answer at all. (A
 	# stagger does not stop him choosing: he answers when it passes.)
-	if guard.state != COMBAT or guard._phase != &"" or _parry_miss > 0.0 or _parry_at > 0.0:
+	if guard.state != COMBAT or guard._phase != &"" or _parry_miss > 0.0 or _parry_at > 0.0 or guard._game_time <= _exposed_until:
 		return &""
 
 	if guard._knock > 0.0:
@@ -876,7 +886,7 @@ func _choose_answer(combat: Node = null, dist := 0.0) -> StringName:
 ## step back makes it miss, a raised guard only delays the pain.
 func _answer_to_charge(dist: float) -> StringName:
 	# Caught mid-parry by a blow that did not come when he read it would.
-	if guard._phase != &"" or guard._stagger > 0.0 or _parry_miss > 0.0 or _parry_at > 0.0:
+	if guard._phase != &"" or guard._stagger > 0.0 or _parry_miss > 0.0 or _parry_at > 0.0 or guard._game_time <= _exposed_until:
 		return &""
 
 	if dodge_chance > 0.0 and randf() < dodge_chance:
@@ -955,6 +965,8 @@ func defend(kind: StringName, attacker: Node3D) -> StringName:
 		return &""
 
 	var now: float = guard._game_time
+	if kind in [&"quick", &"power"] and punishable_by(attacker):
+		return &""
 
 	# In the middle of his own blow he has neither guard nor parry; with no
 	# blade in his hand, neither at all.
@@ -1007,6 +1019,22 @@ func add_posture(amount: float) -> void:
 
 	if posture >= posture_max:
 		_break_posture()
+
+
+## A brief recovery opening, distinct from a broken posture/deathblow.
+func punishable_by(attacker: Node3D) -> bool:
+	if attacker == null or guard.state != COMBAT or guard._downed or _open > 0.0:
+		return false
+	return guard._game_time <= _exposed_until and attacker.get_instance_id() == _punish_target_id and _target_now() == attacker
+
+
+func consume_punish(attacker: Node3D) -> bool:
+	if not punishable_by(attacker):
+		return false
+	_exposed_until = -1.0
+	_punish_target_id = 0
+	add_posture(12.0)
+	return true
 
 
 func is_open() -> bool:
@@ -2399,6 +2427,10 @@ func _update_dodge(delta: float) -> void:
 # ---------------------------------------------------------------------------
 
 func _consider_attack(delta: float, target: Node3D, to: Vector3, dist: float, level: float) -> void:
+	# Recovery openings take precedence over retaliation and improvised throws.
+	if guard._game_time <= _exposed_until:
+		return
+
 	# You swung and met nothing: in, now, while you recover. Stepped out of it,
 	# he lunges straight back in.
 	var combat_now := _combat_of(target)
@@ -2892,6 +2924,9 @@ func _start(kind: StringName, scale := 1.0) -> void:
 
 	_last_attack = kind
 	guard._attack = kind
+	_committed_target_id = 0
+	_exposed_until = -1.0
+	_punish_target_id = 0
 	guard._phase = &"windup"
 	_flank_waited = 0.0
 	_countering = false
@@ -2951,6 +2986,15 @@ func _update_attack(delta: float, target: Node3D, sees: bool, to: Vector3, dist:
 
 	guard._stop(delta)
 	var forward: Vector3 = -guard.global_basis.z
+
+	# Only a blow actually threatening him while committed can be baited by
+	# close footwork. Distant swings and unreachable targets earn nothing.
+	if phase == &"windup" and u >= COMMITTED and _committed_target_id == 0:
+		var arc: float = float(ATTACKS.get(kind, ATTACKS[&"overhead"])["arc"])
+		if (sees and target != null and dist <= _hit_reach(kind) + 0.3
+			and absf(level) <= guard.attack_reach_height
+			and (dist < 0.05 or forward.dot(to.normalized()) >= cos(deg_to_rad(arc * 0.5)))):
+			_committed_target_id = target.get_instance_id()
 
 	# Down it comes: a lunge into the blow.
 	if phase == &"windup" and u > 0.78 and kind in [&"overhead", &"thrust", &"heavy"] and not stays_put:
@@ -3165,6 +3209,15 @@ func _strike(target: Node3D) -> void:
 
 	if not in_reach or not in_arc:
 		_outcome = &"missed"
+		if (kind in [&"left", &"right", &"overhead", &"thrust", &"lunge"]
+			and _committed_target_id == target.get_instance_id()
+			and to.length() <= _hit_reach(kind) + 1.4
+			and absf(feet.y - guard.global_position.y) <= guard.attack_reach_height
+			and _wall_between(target).is_empty()):
+			_exposed_until = guard._game_time + 0.55
+			_punish_target_id = target.get_instance_id()
+			_combo_left = 0
+			guarding = false
 
 		# Out of it at the last moment: he is left overreaching. Out of a cut
 		# (which asked for your blade) he only overreaches a little.

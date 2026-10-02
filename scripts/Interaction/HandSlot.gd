@@ -296,6 +296,7 @@ func _ready() -> void:
 	# Blood on the blade, over the steel, squeezed in front like the rest.
 	_blood_overlay = ShaderMaterial.new()
 	_blood_overlay.shader = BLADE_BLOOD
+	_blood_overlay.render_priority = 11 # After the held steel (10).
 	_blood_overlay.set_shader_parameter("z_clip", ViewArmsScript.Z_CLIP)
 
 	# The smear a blade leaves, drawn over the world like the hands.
@@ -1386,6 +1387,10 @@ func _viewmodel_material(mesh: Mesh) -> Material:
 
 ## In front of the world, in order among the rest of the view's things.
 static func _squeeze(material: BaseMaterial3D) -> void:
+	# Solid-looking alpha draws after SSR/screen copies. Write depth in that
+	# later pass so fingers and grips still occlude each other correctly.
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
 	material.no_depth_test = false
 	material.use_z_clip_scale = true
 	material.z_clip_scale = ViewArmsScript.Z_CLIP

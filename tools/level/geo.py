@@ -70,6 +70,8 @@ class Box:
         self.basis = basis
         self.half = [abs(s) / 2.0 for s in size]
         self.surface = surface
+        # Collision may fill an opening that visual occlusion must leave clear.
+        self.occluder = True
 
     def axes(self):
         return [[self.basis[r][c] for r in range(3)] for c in range(3)]
@@ -155,9 +157,12 @@ def piece_boxes(recipe, position, basis, which="cols"):
     """A placed piece's colliders (or visual boxes) as world Boxes."""
     out = []
 
-    for b in recipe[which]:
+    for index, b in enumerate(recipe[which]):
         local_rot = rotation(b[7] if len(b) > 7 else 0.0, b[8] if len(b) > 8 else 0.0, b[9] if len(b) > 9 else 0.0)
         centre = add(position, apply(basis, b[0:3]))
-        out.append(Box(centre, mul(basis, local_rot), b[3:6], b[6] if len(b) > 6 else ""))
+        box = Box(centre, mul(basis, local_rot), b[3:6], b[6] if len(b) > 6 else "")
+        if which == "cols":
+            box.occluder = index not in recipe.get("occlusion_exclude", [])
+        out.append(box)
 
     return out

@@ -128,8 +128,8 @@ func _s1() -> void:
 
 
 func _s2() -> void:
-	# S2 Act II: the knife in the dark colonnade under the clouded moon, and
-	# the man who saw it
+	# S2 Act II: the knife in the dark colonnade and the man who saw it.
+	# Clouds keep drifting through the scene instead of blacking out on cue.
 	DirectorScript.start_act = 2
 	var map2 := await _map(true)
 	var ned: Node3D = map2.cast["Ned"]
@@ -138,23 +138,31 @@ func _s2() -> void:
 	var jory_held: WeakRef = weakref(map2.cast["Jory"])
 	var jory_at := [Vector3.INF]
 	var cover2 := [-1.0]
+	var previous_cover2 := [float(map2.night.cloud_cover())]
+	var cover_step2 := [INF]
+	var moon_share2 := [-1.0]
 	var killed2 := [-1]
 	var frame2 := [0]
 	await _until(func():
 		frame2[0] += 1
+		var current_cover := float(map2.night.cloud_cover())
 		var j: Variant = jory_held.get_ref()
 		if killed2[0] < 0 and (j == null or not is_instance_valid(j) or j._knocked_out):
 			killed2[0] = frame2[0]
-			cover2[0] = float(map2.night.cloud_cover())
+			cover2[0] = current_cover
+			cover_step2[0] = absf(current_cover - previous_cover2[0])
+			moon_share2[0] = float(map2.night.moon_share())
 		elif killed2[0] < 0:
 			# (Where he stands until he falls: the dead man's node goes.)
 			jory_at[0] = (j as Node3D).global_position
+		previous_cover2[0] = current_cover
 		return killed2[0] >= 0 and frame2[0] > killed2[0] + 840, 12000)
 	var saw2: bool = is_instance_valid(ned) and (ned.state >= 3 or ned_said.any(func(t): return String(t).contains("Murder")))
 	var in_colonnade: bool = jory_at[0] != Vector3.INF and _flat(jory_at[0], map2.marks["colonnade_post"]) < 3.0
-	_check("S2 Act II: Jory knifed at his post in the colonnade with the moon clouded, and Ned sees it within 14 s",
-		killed2[0] >= 0 and in_colonnade and cover2[0] >= 0.9 and saw2,
-		"killed at frame %d, where %s, the moon's cloud %.2f, Ned state %d, said %s, skipped %s" % [killed2[0], jory_at[0], cover2[0], ned.state if is_instance_valid(ned) else -1, ned_said, map2.director.log_lines])
+	_check("S2 Act II: Jory knifed at his colonnade post under naturally drifting clouds, and Ned sees it within 14 s",
+		killed2[0] >= 0 and in_colonnade and cover_step2[0] < 0.02
+		and absf(moon_share2[0] - (1.0 - 0.85 * cover2[0])) < 0.01 and saw2,
+		"killed at frame %d, where %s, cloud %.2f (step %.4f), moon share %.2f, Ned state %d, said %s, skipped %s" % [killed2[0], jory_at[0], cover2[0], cover_step2[0], moon_share2[0], ned.state if is_instance_valid(ned) else -1, ned_said, map2.director.log_lines])
 	await _unload(map2)
 
 

@@ -113,10 +113,9 @@ const WEATHER_ACTS_G := {
 	6: [[&"storm", 0.0, 0.55]],
 }
 const WEATHER_BEATS_G := {
-	# The knife: a cloud over the moon as he moves in, held through it; the
-	# drizzle with the witness.
-	&"his_moment": {"veil": 90.0},
-	&"the_witness": {"veil": 0.0, "to": [&"drizzle", 20.0]},
+	# Drizzle begins with the witness. Moon coverage follows the existing
+	# wind-driven field throughout the encounter.
+	&"the_witness": {"to": [&"drizzle", 20.0]},
 	# He steps out of the dark of the chapel as the lightning comes.
 	&"found": {"flash": true},
 	# The storm easing to fog as it ends.

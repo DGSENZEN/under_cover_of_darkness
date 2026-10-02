@@ -194,6 +194,10 @@ static func _occluders(level: Level, colliders: Array) -> void:
 	level.root.add_child(holder)
 
 	for c in colliders:
+		# Some movement barriers fill visible openings (the crane wheel).
+		# Only the occlusion pass skips them; their physics stays unchanged.
+		if not bool(c.get("occluder", true)):
+			continue
 		var size := _vector(c["size"])
 		var sides := [size.x, size.y, size.z]
 		sides.sort()

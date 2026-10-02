@@ -66,7 +66,11 @@ static func light_at(asker: Node3D, point: Vector3, exclude: Array[RID] = []) ->
 		# as made (its "casts_shadow"), not as the shadow budget draws it.
 		if light.get_meta(&"casts_shadow", light.shadow_enabled):
 			var from := point + toward * 0.05
-			var query := PhysicsRayQueryParameters3D.create(from, point + toward * reach, 1, exclude)
+			var shadow_exclude: Array[RID] = exclude
+			if light.has_meta(&"occlusion_exclude"):
+				shadow_exclude = exclude.duplicate()
+				shadow_exclude.append_array(light.get_meta(&"occlusion_exclude"))
+			var query := PhysicsRayQueryParameters3D.create(from, point + toward * reach, 1, shadow_exclude)
 			query.collide_with_areas = false
 
 			if not space.intersect_ray(query).is_empty():

@@ -78,8 +78,8 @@ const FIRE_LOW := 0.32
 ## The ending's titles.
 ## The weather through the night (Night): as each act begins, changes at 0
 ## s timed for when its first shot is black (the fade), then any later ones
-## ([state, seconds, after]); and at beats, a change or a veil over the moon
-## (held that long; 0 sends it on).
+## ([state, seconds, after]); and weather changes at beats. Clouds drift
+## naturally through the field rather than being directed onto the moon.
 const WEATHER_ACTS := {
 	1: [[&"clear", 0.0, 0.55]],
 	2: [[&"clear", 0.0, 0.55]],
@@ -88,10 +88,8 @@ const WEATHER_ACTS := {
 	5: [[&"storm", 0.0, 0.55], [&"fog", 40.0, 12.0]],
 }
 const WEATHER_BEATS := {
-	# The kill in the dark: a cloud over the moon as he moves in, held
-	# through the knife; the drizzle with the witness.
-	&"his_moment": {"veil": 90.0},
-	&"the_witness": {"veil": 0.0, "to": [&"drizzle", 20.0]},
+	# The witness brings drizzle; the moon follows the natural cloud field.
+	&"the_witness": {"to": [&"drizzle", 20.0]},
 	&"trade": {"to": [&"storm", 30.0]},
 }
 
@@ -906,9 +904,6 @@ func weather_beat(beat: StringName) -> void:
 
 	if night == null or change.is_empty():
 		return
-
-	if change.has("veil"):
-		night.cover_moon(float(change["veil"]))
 
 	if change.has("to"):
 		night.to(change["to"][0], float(change["to"][1]))

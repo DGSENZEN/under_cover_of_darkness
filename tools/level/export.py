@@ -94,8 +94,11 @@ def manifest(data):
         recipe = kit_recipes.PIECES[p["piece"]]
 
         for box in geo.piece_boxes(recipe, p["position"], p["basis"]):
-            colliders.append({"sector": p["sector"], "centre": rounded(box.centre), "basis": [rounded(r) for r in box.basis],
-                              "size": rounded([h * 2.0 for h in box.half]), "surface": box.surface})
+            collider = {"sector": p["sector"], "centre": rounded(box.centre), "basis": [rounded(r) for r in box.basis],
+                        "size": rounded([h * 2.0 for h in box.half]), "surface": box.surface}
+            if not box.occluder:
+                collider["occluder"] = False
+            colliders.append(collider)
 
     sockets = []
 

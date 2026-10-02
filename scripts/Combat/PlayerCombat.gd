@@ -15,7 +15,9 @@ extends Node
 ##              free, and it throws him further off his balance, and your
 ##              riposte is quicker still. Pressing it again straight away
 ##              does not parry again: a parry is a commitment. Pressed
-##              during your own windup, the attack is abandoned: a feint.
+##              during your own windup, the attack is abandoned: a feint. Release
+##              guard, change attack direction, and click quickly: a faster
+##              follow-through. Feinting that follow-through earns no new boost.
 ##   Q          dodge: a quick step the way you are moving (back if still).
 ##   F          kick. Guards stagger back, off ledges and onto spikes, and a
 ##              raised guard is knocked aside; crates fly; doors burst open.
@@ -96,6 +98,9 @@ signal perfect_parry
 signal countered(from: Node)
 ## Both blades in the air at once: neither landed.
 signal clashed(from: Node)
+## The moment of contact, for presentation: flesh, steel, turned, punish, deathblow.
+signal contact(kind: StringName)
+signal punished(target: Node3D)
 
 enum Phase {
 	IDLE,
@@ -171,8 +176,15 @@ const STYLES := {
 @export var riposte_window := 0.9
 @export_range(0.1, 1.0, 0.05) var riposte_windup_scale := 0.4
 @export var riposte_damage := 1.5
+## A fresh changed attack after a feint, once, before the opportunity expires.
+@export var feint_followup_window := 0.45
+@export var feint_followup_windup := 0.7
+## Only against the man whose committed miss or wasted parry you baited.
+@export var punish_damage := 1.25
 
 @export_group("Dodge")
+## A fresh press just before a committed blow can end still counts.
+@export var dodge_buffer := 0.18
 @export var dodge_speed := 7.5
 @export var dodge_time := 0.22
 @export var dodge_cooldown := 0.35
@@ -309,10 +321,14 @@ var _stagger_time := 0.0
 var _dodge_cooldown := 0.0
 var _stamina_rest := 0.0
 var _riposte_until := -100.0
+var _feint_until := -100.0
+var _feint_direction: StringName = &""
+var _feint_followup := false
 ## Each windup a new number: guards watch it to know a new blow is coming.
 var _serial := 0
 ## When attack was last clicked and not yet used.
 var _attack_pressed_at := -100.0
+var _dodge_pressed_at := -100.0
 var _drop_target: Node3D = null
 var _drop_armed := false
 ## A click during a blow in progress: the next blow, whenever it can start.
@@ -397,6 +413,7 @@ func _physics_process(delta: float) -> void:
 
 	if weapon_id != _weapon_id:
 		_weapon_id = weapon_id
+		_clear_buffered_inputs()
 
 		if phase != Phase.IDLE and phase != Phase.KICK and phase != Phase.DODGE and phase != Phase.STAGGER and phase != Phase.RECOVER:
 			_reset()
@@ -406,10 +423,6 @@ func _physics_process(delta: float) -> void:
 	# had time to pass.
 	var block_held := Input.is_action_pressed("block")
 	var block_pressed := block_held and not _block_held
-
-	if block_pressed and _game_time >= _parry_ready_at:
-		_block_pressed_at = _game_time
-		_parry_ready_at = _game_time + parry_window + parry_cooldown
 
 	_block_held = block_held
 
@@ -422,6 +435,7 @@ func _physics_process(delta: float) -> void:
 
 	if not able:
 		_reset()
+		_block_pressed_at = -100.0
 		_drop_armed = false
 		_drop_target = null
 		_send_pose(delta)
@@ -430,8 +444,15 @@ func _physics_process(delta: float) -> void:
 	# A click that already threw what you held, or recaptured the mouse, is
 	# not a blow.
 	var spent: bool = player.is_mouse_input_swallowed() or player.is_attack_press_spent()
-	var attack_pressed := Input.is_action_just_pressed("throw") and not spent
+	var attack_pressed := Input.is_action_just_pressed("throw") and not spent and phase != Phase.STAGGER
 	var attack_held := Input.is_action_pressed("throw") and not spent
+
+	if spent:
+		_clear_buffered_inputs()
+
+	if block_pressed and phase != Phase.STAGGER and not player.is_mouse_input_swallowed() and _game_time >= _parry_ready_at:
+		_block_pressed_at = _game_time
+		_parry_ready_at = _game_time + parry_window + parry_cooldown
 
 	# Falling onto someone: the click is a drop attack, not a swing.
 	if _update_drop(attack_pressed):
@@ -457,8 +478,10 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("kick") and kick_ok:
 		_start_kick()
 
-	if Input.is_action_just_pressed("dodge"):
-		_try_dodge()
+	if Input.is_action_just_pressed("dodge") and phase != Phase.STAGGER and phase != Phase.KICK and phase != Phase.DODGE and player.is_on_floor() and stamina >= 1.0:
+		_dodge_pressed_at = _game_time
+
+	_try_buffered_dodge()
 
 	match phase:
 		Phase.KICK:
@@ -552,6 +575,9 @@ func _begin_attack(chained: bool) -> void:
 	_riposte = _game_time <= _riposte_until
 	_riposte_until = -100.0
 	_direction = _swing_direction(true, chained)
+	_feint_followup = _game_time <= _feint_until
+	var changed_feint := _feint_followup and _direction != _feint_direction
+	_feint_until = -100.0
 	_windup = weapon.windup * float(_style()["windup"])
 	_blow_started = _game_time
 	_weigh(chained)
@@ -560,6 +586,8 @@ func _begin_attack(chained: bool) -> void:
 		_windup *= perfect_riposte_windup if _perfect_riposte else riposte_windup_scale
 		riposte_started.emit()
 		_hand(&"show_glint")
+	elif changed_feint:
+		_windup *= feint_followup_windup
 	elif chained:
 		_windup *= chained_windup_scale
 
@@ -585,6 +613,10 @@ func _weigh(chained: bool) -> void:
 
 func _update_recover(delta: float, buffered: bool, block_held: bool) -> void:
 	_t += delta
+	_try_buffered_dodge()
+
+	if phase == Phase.DODGE:
+		return
 
 	# Raising your guard cuts a recovery short; a parried blow can be
 	# covered at once.
@@ -592,6 +624,7 @@ func _update_recover(delta: float, buffered: bool, block_held: bool) -> void:
 	var can_guard: bool = _t >= _recovery * block_cancel or _outcome == &"parried"
 
 	if guard_now and can_guard:
+		_clear_buffered_inputs()
 		_enter(Phase.IDLE)
 		blocking = true
 		_block_started = _block_pressed_at
@@ -636,6 +669,12 @@ func _enter(new_phase: int) -> void:
 		blocking = false
 
 
+func _clear_buffered_inputs() -> void:
+	_attack_pressed_at = -100.0
+	_dodge_pressed_at = -100.0
+	_queued = false
+
+
 func _reset() -> void:
 	# A fresh start: no turn of the view carried into the next blow.
 	_look_motion = Vector2.ZERO
@@ -653,10 +692,38 @@ func _reset() -> void:
 	phase = Phase.IDLE
 	blocking = false
 	_riposte = false
+	_feint_until = -100.0
+	_feint_followup = false
 	_running = false
 	_backing = 0.0
-	_queued = false
+	_clear_buffered_inputs()
 	_t = 0.0
+
+
+## A gym restart restores resources and forgets opportunities from the last
+## attempt. Ordinary action cancellation uses _reset() and keeps those costs.
+func reset_for_practice() -> void:
+	_reset()
+	stamina = stamina_max
+	adrenaline = 0.0
+	combo = 0
+	_combo_timer = 0.0
+	_dodge_cooldown = 0.0
+	_kick_cooldown = 0.0
+	_stamina_rest = 0.0
+	_riposte_until = -100.0
+	_perfect_riposte = false
+	_dodged_at = -100.0
+	_block_pressed_at = -100.0
+	_block_started = -100.0
+	_parry_ready_at = 0.0
+	_block_held = Input.is_action_pressed("block")
+	_drop_target = null
+	_drop_armed = false
+	_charge = 0.0
+	draw = 0.0
+	_power = false
+	_finisher = false
 
 
 ## Movement is slower with a raised guard, a charged blow, a drawn bow, a
@@ -1234,6 +1301,11 @@ func _strike_target(target: Node3D, point: Vector3, direction: Vector3) -> void:
 	if _riposte:
 		dealt *= riposte_damage
 
+	var target_open: bool = target.has_method("is_open") and target.is_open()
+	var punish: bool = target.has_method("punishable_by") and target.punishable_by(player) and not target_open
+	if punish:
+		dealt *= punish_damage
+
 	dealt *= float(_style()["damage"])
 
 	# Your weight in it: a run behind it, or going the other way.
@@ -1246,7 +1318,7 @@ func _strike_target(target: Node3D, point: Vector3, direction: Vector3) -> void:
 	# does not, and a finisher spends adrenaline rather than refilling it.
 	var health_before: float = float(target.get("health")) if target.get("health") != null else dealt
 	# Off his balance: this is the deathblow.
-	var open: bool = target.has_method("is_open") and target.is_open() and kind != &"backstab"
+	var open: bool = target_open and kind != &"backstab"
 	# Should this kill him, what it cuts off him.
 	var cut_off := _sever_parts(target, point, target.deathblow_damage(dealt) if open else dealt, health_before, kind, open)
 
@@ -1312,7 +1384,7 @@ func _strike_target(target: Node3D, point: Vector3, direction: Vector3) -> void:
 			pass
 		_:
 			SoundBus.emit_sound(point, weapon.hit_db, player, &"hit")
-			var heavy := _power or _finisher or _riposte or open or result == &"killed" or kind == &"backstab"
+			var heavy := _power or _finisher or _riposte or punish or open or result == &"killed" or kind == &"backstab"
 			var freeze := hitstop_finisher if _finisher else (hitstop_heavy if heavy else hitstop_quick)
 			TimeFx.hitstop(get_tree(), freeze, 0.04)
 			player.juice.add_trauma(0.5 if heavy else 0.28)
@@ -1332,6 +1404,13 @@ func _strike_target(target: Node3D, point: Vector3, direction: Vector3) -> void:
 			if not _finisher:
 				var landed_damage := minf(dealt, maxf(health_before, 0.0))
 				adrenaline = minf(adrenaline + landed_damage * adrenaline_per_damage, adrenaline_max)
+
+	if result in [&"hit", &"killed"]:
+		contact.emit(&"deathblow" if open else (&"punish" if punish else &"flesh"))
+		if punish:
+			punished.emit(target)
+	elif result in [&"blocked", &"parried"]:
+		contact.emit(&"turned" if result == &"parried" else &"steel")
 
 	landed.emit(target, result, dealt)
 
@@ -1393,8 +1472,13 @@ func _recoil_view(strength: float) -> void:
 
 ## Up it went, and back it comes: no blow. A parry he spent on it is wasted.
 func _feint() -> void:
+	var can_follow := not _feint_followup
+	var abandoned := _direction
 	_spend(cost_feint)
 	_reset()
+	if can_follow:
+		_feint_until = _game_time + feint_followup_window
+		_feint_direction = abandoned
 	player.juice.set_zoom(0.0)
 	Sfx.play_flat(player, &"whoosh_light", -12.0, 1.3)
 	feinted.emit()
@@ -1409,6 +1493,11 @@ func _feint() -> void:
 # ---------------------------------------------------------------------------
 # The dodge
 # ---------------------------------------------------------------------------
+
+func _try_buffered_dodge() -> void:
+	if _game_time - _dodge_pressed_at <= dodge_buffer:
+		_try_dodge()
+
 
 func _try_dodge() -> void:
 	if _dodge_cooldown > 0.0 or not player.is_on_floor() or stamina < 1.0:
@@ -1782,6 +1871,7 @@ func is_parrying() -> bool:
 ## Knocked off balance: no blow and no guard until it passes.
 func _stagger(seconds: float, why: StringName) -> void:
 	_reset()
+	_block_pressed_at = -100.0
 	_stagger_time = seconds
 	_enter(Phase.STAGGER)
 	staggered.emit(why)

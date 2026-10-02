@@ -14,6 +14,11 @@ static var _token := 0
 ## The speed everything runs at when nothing slows it (the NPC showcase's
 ## slow motion); requests slow it further.
 static var base := 1.0
+## Epochs keep feedback deadlines monotonic when a gym changes physics Hz.
+static var _clock_hz := 0.0
+static var _clock_frame := 0
+static var _clock_epoch := 0.0
+static var _clock_last := 0.0
 
 
 ## Time at `scale` when nothing else slows it (1 is normal speed).
@@ -92,7 +97,16 @@ static func hitstop(tree: SceneTree, real_seconds: float, scale := 0.05) -> void
 ## scale changes (a hit-stop), when it reads 25 times too long.
 static func real_time() -> float:
 	var hz := float(maxi(Engine.physics_ticks_per_second, 1))
-	return (float(Engine.get_physics_frames()) + Engine.get_physics_interpolation_fraction()) / hz
+	var frame := Engine.get_physics_frames()
+	if _clock_hz == 0.0:
+		_clock_hz = hz
+	if hz != _clock_hz:
+		_clock_epoch += float(frame - _clock_frame) / _clock_hz
+		_clock_frame = frame
+		_clock_hz = hz
+	var now := _clock_epoch + (float(frame - _clock_frame) + Engine.get_physics_interpolation_fraction()) / hz
+	_clock_last = maxf(_clock_last, now)
+	return _clock_last
 
 
 ## Real seconds since `last` (a value real_time() gave before), capped, so a

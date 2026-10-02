@@ -203,6 +203,12 @@ class Crosshair:
 	var stamina := 1.0
 	var stamina_alpha := 0.0
 	var short := false
+	var contact_kind: StringName = &""
+	var contact_amount := 0.0
+
+	func contact(kind: StringName) -> void:
+		contact_kind = kind
+		contact_amount = 1.0
 
 	func _draw() -> void:
 		var c := size * 0.5
@@ -224,6 +230,23 @@ class Crosshair:
 		var colour := Color(1, 1, 1, 0.35).lerp(Color(1.0, 0.8, 0.4, 0.95), warm)
 		draw_circle(c, radius + 1.0, Color(0, 0, 0, 0.35 + 0.3 * warm))
 		draw_circle(c, radius, colour)
+
+		# Brief contact shapes: crossed cuts in flesh, brackets on steel,
+		# a diamond for an earned punish/deathblow. No persistent combat text.
+		if contact_amount > 0.01:
+			var ink := Color(0.92, 0.86, 0.76, contact_amount * 0.85)
+			var r := lerpf(12.0, 8.0, contact_amount)
+			if contact_kind in [&"punish", &"deathblow", &"perfect"]:
+				ink = Color(1.0, 0.75, 0.36, contact_amount) if contact_kind != &"deathblow" else Color(1.0, 0.24, 0.13, contact_amount)
+				var points := PackedVector2Array([c + Vector2(0, -r), c + Vector2(r, 0), c + Vector2(0, r), c + Vector2(-r, 0), c + Vector2(0, -r)])
+				draw_polyline(points, ink, 1.5, true)
+			elif contact_kind in [&"steel", &"turned", &"parry"]:
+				ink = Color(0.63, 0.8, 0.92, contact_amount * 0.9)
+				for side in [-1.0, 1.0]:
+					draw_polyline(PackedVector2Array([c + Vector2(side * (r - 3), -4), c + Vector2(side * r, -4), c + Vector2(side * r, 4), c + Vector2(side * (r - 3), 4)]), ink, 1.5, true)
+			else:
+				for side in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+					draw_line(c + side * 4.0, c + side * r, ink, 1.5, true)
 
 
 class Gem:
@@ -308,7 +331,7 @@ class HurtMarks:
 class PostureMarks:
 	extends Control
 
-	## [screen position, fill 0..1, open]
+	## [screen position, fill 0..1, open, punish opening]
 	var marks: Array = []
 
 	func _draw() -> void:
@@ -323,6 +346,10 @@ class PostureMarks:
 				points.append(points[0])
 				draw_polyline(points, Color(1.0, 0.78, 0.66, 0.9), 1.5, true)
 				continue
+
+			if m.size() > 3 and bool(m[3]):
+				draw_arc(at, 7.0, PI * 0.2, PI * 0.8, 12, Color(1.0, 0.86, 0.55, 0.95), 2.0, true)
+				draw_arc(at, 7.0, PI * 1.2, PI * 1.8, 12, Color(1.0, 0.86, 0.55, 0.95), 2.0, true)
 
 			var w := 58.0
 			var h := 4.0
@@ -747,6 +774,14 @@ func setup(p_player: CharacterBody3D) -> void:
 	if combat != null and combat.has_signal("finisher_started"):
 		combat.finisher_started.connect(func(): _grade_amount = 1.0)
 
+	if combat != null:
+		combat.contact.connect(_crosshair.contact)
+		combat.defended.connect(func(kind):
+			if kind == &"parry" and combat._perfect_riposte:
+				_crosshair.contact(&"perfect")
+			else:
+				_crosshair.contact(&"parry" if kind == &"parry" else (&"turned" if kind == &"broken" else &"steel")))
+
 	if player.get("inventory") != null:
 		player.inventory.belt_selection_changed.connect(_on_item_selected)
 
@@ -964,6 +999,7 @@ func _process(delta: float) -> void:
 	# them.
 	var real_delta := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
 	_last_real = TimeFx.real_time()
+	_crosshair.contact_amount = maxf(0.0, _crosshair.contact_amount - real_delta / 0.24)
 	_vignette.modulate.a = move_toward(_vignette.modulate.a, 0.0, delta * 1.2)
 
 	for m in _hurt_marks.marks:
@@ -1711,7 +1747,8 @@ func _update_posture_marks() -> void:
 			var open: bool = fighter.is_open()
 			var fill := clampf(float(fighter.posture) / maxf(float(fighter.posture_max), 1.0), 0.0, 1.0)
 
-			if fill < 0.03 and not open:
+			var punish: bool = guard.has_method("punishable_by") and guard.punishable_by(player)
+			if fill < 0.03 and not open and not punish:
 				continue
 
 			var over: Vector3 = guard.eye_position() + Vector3.UP * 0.5
@@ -1719,7 +1756,7 @@ func _update_posture_marks() -> void:
 			if over.distance_to(camera.global_position) > POSTURE_RANGE or camera.is_position_behind(over):
 				continue
 
-			marks.append([camera.unproject_position(over), fill, open])
+			marks.append([camera.unproject_position(over), fill, open, punish])
 
 	_posture_marks.marks = marks
 	_posture_marks.queue_redraw()

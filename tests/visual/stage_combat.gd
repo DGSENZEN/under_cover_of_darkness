@@ -1,6 +1,6 @@
 ## Visual check, not a test: run it in a window and look at the screenshots.
 ##   Godot --fixed-fps 60 --resolution 1280x720 --path . res://tests/visual/stage_combat.tscn -- --only=hit --out=/some/folder
-##   sequences: hit, telegraph, block, kill, kick, bow, wall (all without --only)
+##   sequences: hit, telegraph, block, kill, kick, bow, wall, exchange (all without --only)
 extends Node3D
 ## Windowed staging: plays out blows, blocks, kills, a kick and arrows, and
 ## saves screenshots at the moments that matter. Not a test: a camera.
@@ -61,6 +61,8 @@ func _ready() -> void:
 		await _bow_sequence()
 	if only == "" or only == "wall":
 		await _wall_sequence()
+	if only == "" or only == "exchange":
+		await _exchange_sequence()
 
 	Sfx.silence()
 	await _frames(5)
@@ -103,6 +105,46 @@ func _torch(at: Vector3) -> void:
 
 
 # --- sequences ---------------------------------------------------------------
+
+## Contacts come from actual blade sweeps, including a real feint bait.
+func _exchange_sequence() -> void:
+	for kind in [&"flesh", &"steel", &"punish", &"deathblow"]:
+		_put_player(Vector3(0, 1.05, 0), 0.0)
+		player.combat.reset_for_practice()
+		var g := _fighter(Vector3(0, 0, -1.6))
+		g.max_health = 300.0
+		g.health = 300.0
+		g._fighter.stays_put = true
+		g._fighter.counter_chance = 0.0
+		g._fighter.dodge_chance = 0.0
+		g._fighter.backstep_chance = 0.0
+		g._fighter.parry_chance = 1.0 if kind == &"punish" else 0.0
+		g.block_chance = 1.0 if kind == &"steel" else 0.0
+		g._fighter.reaction = 0.01
+		await _frames(10)
+		if kind == &"punish":
+			await _tap("throw")
+			Input.action_press("block")
+			await _frames(2)
+			Input.action_release("block")
+			await _until(func(): return g.punishable_by(player), 40)
+			await _shot("h03_baited_parry_opening")
+			player.combat.add_look_motion(Vector2(0, 0.3))
+		elif kind == &"deathblow":
+			g._fighter.add_posture(300.0)
+			await _frames(2)
+			await _shot("h05_broken_posture")
+		var contacts: Array = []
+		var record := func(c): contacts.append(c)
+		player.combat.contact.connect(record)
+		await _tap("throw")
+		await _until(func(): return not contacts.is_empty(), 90)
+		await _shot("h_contact_" + String(kind))
+		print("Exchange visual %s: %s" % [kind, contacts])
+		player.combat.contact.disconnect(record)
+		if is_instance_valid(g):
+			g.queue_free()
+		await _frames(70)
 
 func _hit_sequence() -> void:
 	var g := _fighter(Vector3(0, 0, -1.6))

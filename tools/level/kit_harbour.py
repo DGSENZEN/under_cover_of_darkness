@@ -341,6 +341,9 @@ def _crane():
 
 _shapes, _cols = _crane()
 _piece("crane_jib", "harbour", "timber", _shapes, _cols, [4.0, 10.0, 9.4], budget=900, surface="wood")
+# The wheel's movement barrier fills its center; it cannot hide the view
+# through the rim and spokes. The base and upright keep their usual policy.
+k.PIECES["crane_jib"]["occlusion_exclude"] = [2]
 
 
 # ---------------------------------------------------------------------------

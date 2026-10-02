@@ -165,14 +165,28 @@ func _run() -> void:
 	for light in others44:
 		(light as Light3D).visible = false
 
+	# Measure unclouded and opaque real field fixtures, independent of where
+	# the natural wind has carried the clouds by this point in the suite.
+	var field44: Image = night44._field
+	var texture44: ImageTexture = night44._field_texture
+	var fixture44 := Image.create(256, 256, false, Image.FORMAT_L8)
+	fixture44.fill(Color.BLACK)
+	night44._field = fixture44
+	night44._field_texture = ImageTexture.create_from_image(fixture44)
+	night44._sky.material.set_shader_parameter("cloud_field", night44._field_texture)
+	night44._apply(night44.wind())
 	LightProbe.invalidate()
 	var lit44: float = LightProbe.light_at(map, open44) if open44 != Vector3.INF else -1.0
 	var shade44: float = LightProbe.light_at(map, shade_at44) if shade_at44 != Vector3.INF else -1.0
-	night44.cover_moon(30.0)
-	await _frames(300)
+	fixture44.fill(Color.WHITE)
+	night44._field_texture.update(fixture44)
+	night44._apply(night44.wind())
 	LightProbe.invalidate()
 	var clouded44: float = LightProbe.light_at(map, open44) if open44 != Vector3.INF else -1.0
-	night44.cover_moon(0.0)
+	night44._field = field44
+	night44._field_texture = texture44
+	night44._sky.material.set_shader_parameter("cloud_field", texture44)
+	night44._apply(night44.wind())
 
 	for light in others44:
 		(light as Light3D).visible = true
@@ -773,6 +787,7 @@ func _run() -> void:
 	var weather9 := {}
 	var weather_due9 := []
 	var knife_cover9 := [-1.0]
+	var knife_share9 := [-1.0]
 	var heard9 := [_heard.size()]
 	map9.director.act_started.connect(func(index: int, _title: String) -> void: weather_due9.append([index, float(editor9._clock) + 0.7]))
 	map9.director.beat_started.connect(func(beat: StringName, _scene: Dictionary) -> void:
@@ -803,6 +818,7 @@ func _run() -> void:
 		while heard9[0] < _heard.size():
 			if _heard[heard9[0]][0] == &"knife" and knife_cover9[0] < 0.0:
 				knife_cover9[0] = float(map9.night.cloud_cover())
+				knife_share9[0] = float(map9.night.moon_share())
 			heard9[0] += 1
 		return ended9[0], 25200)
 	_check("D9 the whole night from Act I plays to its end in under 7 minutes of game time",
@@ -823,13 +839,15 @@ func _run() -> void:
 		knife_at[0] >= 0.0 and bars_up and drama9.size() >= 5 and mean9 <= 8.0,
 		"knife at %.1f, %d shots, mean %.1f s, bar %s of %.1f; causes %s" % [knife_at[0], drama9.size(), mean9, bars9.slice(bars9.size() - 1) if not bars9.is_empty() else [], target9, _tally(drama9.map(func(sh): return String(sh["kind"]) + "/" + String(sh["cause"])))])
 
-	# D43 the weather follows the story, and the knife falls in the dark
+	# D43 the weather follows the story; moonlight at the knife follows
+	# natural disc coverage instead of a forced blackout.
 	# (read by its rain as each act's first shot comes up: clear 0, shower 0.6,
 	# storm 1; a beat may already be easing it on)
 	var wanted43 := {1: 0.0, 2: 0.0, 3: 0.6, 4: 0.6, 5: 1.0}
 	var fits43 := wanted43.keys().all(func(k): return weather9.has(k) and absf(float(weather9[k]) - float(wanted43[k])) <= 0.05)
-	_check("D43 each act opens in its weather (clear, clear, shower, shower, storm), and the knife falls with the moon clouded",
-		fits43 and weather9.size() == 5 and knife_cover9[0] >= 0.9, "rain as each act opens %s, the moon's cloud at the knife %.2f" % [weather9, knife_cover9[0]])
+	_check("D43 each act opens in its weather and moonlight at the knife follows natural cloud coverage",
+		fits43 and weather9.size() == 5 and knife_cover9[0] >= 0.0 and knife_cover9[0] <= 1.0 and absf(float(knife_share9[0]) - lerpf(1.0, 0.15, float(knife_cover9[0]))) < 0.02,
+		"rain as each act opens %s, knife coverage %.3f, moon share %.3f" % [weather9, knife_cover9[0], knife_share9[0]])
 
 	# D41 each act opens through black
 	var opened41 := acts9.map(func(act): return [act[0], editor9.history()[act[1]]["how"] if editor9.history().size() > act[1] else &"none"])
