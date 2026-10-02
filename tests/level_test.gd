@@ -16,6 +16,7 @@ const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GUARD := preload("res://Guard.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const WaterScript := preload("res://scripts/Interaction/WaterVolume.gd")
+const FireParticlesScript := preload("res://scripts/Visual/Lights/FireParticles.gd")
 ## The harbour's photo slots (tools/textures/recipes), K10.
 const HARBOUR_PHOTO_SLOTS := [&"granite", &"granite_rough", &"ashlar_gold", &"render_ochre", &"render_salmon", &"render_blue",
 	&"render_straw", &"whitewash", &"azulejo_green", &"azulejo_cube", &"azulejo_blue", &"azulejo_blue2", &"azulejo_border",
@@ -219,7 +220,7 @@ func _fixture() -> void:
 	# K12 our own paintings for the harbour are all here
 	var missing12: Array = []
 
-	for slot in [&"iron_rail", &"window_grille", &"ratlines", &"palm_frond", &"cypress", &"agave", &"orange_leaves"]:
+	for slot in [&"iron_rail", &"window_grille", &"casement", &"sash", &"lattice", &"gorse", &"fennel", &"pine", &"laundry", &"ratlines", &"palm_frond", &"cypress", &"agave", &"orange_leaves"]:
 		if Materials.photo(slot) == null:
 			missing12.append(slot)
 
@@ -361,6 +362,33 @@ func _gameplay() -> void:
 	_check("K19 swim regions only where the bake reaches: none for water wholly outside it",
 		region19 != null and region19.navigation_mesh != null and region19.navigation_mesh.get_polygon_count() > 0 and not outside.has_meta(&"swim_region"),
 		"the reached water's region %s, the outside one's %s" % [region19 != null, outside.has_meta(&"swim_region")])
+
+	# K20 a chimney's smoke marker breathes smoke off its pots while the
+	# camera is near (the Ribeira's chimneys)
+	var chimneys := Markers.new()
+	chimneys.markers = [{"name": "smoke_test", "ucd": "smoke", "transform": Transform3D(Basis(), Vector3(-20, 14, 30)), "props": {}}]
+	var smokes: Array = LevelGameplay.smokes(holder, chimneys)
+	var eye := Camera3D.new()
+	holder.add_child(eye)
+	eye.global_position = Vector3(-20, 14, 40)
+	eye.make_current()
+	var before20 := FireParticlesScript.emitted(&"smoke")
+
+	for i in 30:
+		await get_tree().process_frame
+
+	var puffs20 := FireParticlesScript.emitted(&"smoke") - before20
+	_check("K20 a chimney's smoke marker puffs smoke at its place", smokes.size() == 1 and smokes[0] is Node3D
+		and (smokes[0] as Node3D).global_position.is_equal_approx(Vector3(-20, 14, 30)) and puffs20 > 0,
+		"made %d, puffs %d" % [smokes.size(), puffs20])
+
+	# K21 the shore's rock is banded by height (shore.gdshader), its photo the
+	# rock's
+	var shore21: Material = Materials.level_surface(&"rock_shore")
+	_check("K21 the shore's rock is its banded shader with the rock's photo", shore21 is ShaderMaterial
+		and (shore21 as ShaderMaterial).shader.resource_path.ends_with("shore.gdshader")
+		and ((shore21 as ShaderMaterial).get_shader_parameter(&"albedo_texture") != null or Materials.photo(&"rock_shore") == null),
+		"%s" % [shore21])
 	holder.queue_free()
 	world.queue_free()
 	SoundBus.clear_zones()

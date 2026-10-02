@@ -250,6 +250,7 @@ class Rules(unittest.TestCase):
             marker("gate_up", "portcullis", (0, 0, -2), {"state": "up"}),
             marker("to_old_town", "exit", (0, 1, 1), {"label": "the old town"}, size=[2, 2, 2]),
             marker("see_moon", "probe", (1, 1, 1), {"expect": "moon"}),
+            marker("chimney", "smoke", (2, 9, 2), {}),
         ]
         self.assertEqual(rules.problems(data), [])
 
@@ -274,6 +275,31 @@ class Rules(unittest.TestCase):
         for module in (city_harbour, city_massing):
             data = module.layout()
             self.assertEqual(rules.problems(data, "stage2"), [], data["level"])
+
+    def test_the_headland_stands_over_its_cave_not_the_mole(self):
+        # The east headland (the harbour's ground): its rock over the
+        # smugglers' cave, the blowhole's mouth up on it, the mole and the
+        # channel before the cliff open to the sky; each cliff faces the sea
+        # (inland was turned the wrong way: the plateau lay over the mole and
+        # the cave in the open sea).
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "layouts"))
+        from harbour import ground  # noqa: E402
+
+        for x, z in ((230.0, 26.0), (229.0, 10.0), (226.0, 40.0)):
+            self.assertGreater(ground.headland(x, z), 20.0, (x, z))
+
+        self.assertGreater(ground.headland(232.0, 6.0), 20.0)
+
+        for x, z in ((165.0, 60.0), (172.0, 100.0), (190.0, 60.0), (176.0, 118.0)):
+            self.assertLess(ground.headland(x, z), 0.0, (x, z))
+
+        for a, b in zip(ground.COAST, ground.COAST[1:]):
+            dx, dz = b[0] - a[0], b[1] - a[1]
+            length = (dx * dx + dz * dz) ** 0.5
+            face = (dz / length, -dx / length)
+            mx, mz = (a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0
+            self.assertLess(ground.headland(mx + face[0] * 6.0, mz + face[1] * 6.0), 0.0, (a, b))
+            self.assertGreater(ground.headland(mx - face[0] * 3.0, mz - face[1] * 3.0), 20.0, (a, b))
 
     def test_the_kit_keeps_the_metrics(self):
         self.assertEqual(rules.kit_problems(), [])

@@ -36,6 +36,18 @@ class Terrain(unittest.TestCase):
         # it looks to the left of its path (going east: north, -z)
         self.assertTrue(all(face_normal(c, f)[2] < -0.5 for f in c["faces"]))
 
+    def test_a_cliff_jointed_in_blocks(self):
+        # Granite's upright joints: every `columns` columns a block of each
+        # band stands out or back on its own; the columns inside a block keep
+        # its face, the next block's differs.
+        c = terrain.cliff("face", "yard", [(0, 0), (30, 0)], 0.0, 12.0, band=3.0, jitter=0.4, step=1.0, blocks=(3, 0.8), seed=5)
+        foot = sorted((v for v in c["verts"] if abs(v[1]) < 1e-6), key=lambda v: v[0])
+        outs = [round(v[2], 4) for v in foot]
+        groups = [outs[i:i + 3] for i in range(0, len(outs) - 2, 3)]
+        self.assertTrue(all(len(set(g)) == 1 for g in groups), groups)
+        self.assertGreater(len({g[0] for g in groups}), 4)
+        self.assertTrue(all(face_normal(c, f)[2] < 0.0 for f in c["faces"]))
+
     def test_slopes_choose_slots(self):
         t = terrain.grid("hill", "yard", 0, 0, 20, 20, 2.0, lambda x, z: 0.0 if x < 10 else (x - 10) * 2.0,
                          lambda x, y, z, s: "cliff" if s > 50 else "grass")

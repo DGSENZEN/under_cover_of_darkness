@@ -22,6 +22,18 @@ def grey(colour):
 
 
 class Shade(unittest.TestCase):
+    def test_long_edges_are_cut_finer_but_not_a_slopes_canal_tiles(self):
+        # (A slope's canal tiles run its length in thin strips: cut finer
+        # they are thousands of corners measured for nothing a roof shows.)
+        self.assertTrue(shade.cut_finer(2.0, ["granite"]))
+        self.assertTrue(shade.cut_finer(2.0, ["roof_spanish", "granite"]))
+        self.assertFalse(shade.cut_finer(2.0, ["roof_spanish", "roof_spanish"]))
+        self.assertFalse(shade.cut_finer(1.2, ["granite"]))
+        # (Nor a ship's rigging: its ropes, tarred lines, ratlines and furled
+        # sails, long and thin, shade the same cut or not.)
+        for slot in ("rope", "pitch", "ratlines", "sailcloth"):
+            self.assertFalse(shade.cut_finer(9.0, [slot, slot]), slot)
+
     def test_open_and_clean_is_near_white(self):
         c = shade.colour((50.0, 3.0, 50.0), UP, 0.0, [], seed_free=True)
         self.assertTrue(all(0.9 <= v <= 1.1 for v in c), c)

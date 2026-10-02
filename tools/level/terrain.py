@@ -178,11 +178,14 @@ def _along(path, step):
 
 
 def cliff(name, sector, path, base, top, band=6.0, jitter=0.6, seed=0, slot="cliff", surface="stone", step=4.0, lean=0.15,
-          tint=None, occluder=True):
+          tint=None, occluder=True, blocks=None):
     """A cliff face from `base` to `top` along `path` [(x, z)], looking to
     its left: each strata band a vertical face stepped out or back by up to
     `jitter` (a little different along it), a short slope up to the next;
-    each band `lean` m further back than the one under it."""
+    each band `lean` m further back than the one under it. `blocks`
+    (columns, m): granite's upright joints too, the bands broken every
+    `columns` columns into blocks each standing out or back by up to `m` on
+    its own (in place of the little wander along a band)."""
     rng = random.Random(seed)
     heights = []
     y = base
@@ -195,6 +198,8 @@ def cliff(name, sector, path, base, top, band=6.0, jitter=0.6, seed=0, slot="cli
     bands = len(heights) - 1
     shift = [rng.uniform(-jitter, jitter) for _ in range(bands)]
     columns = _along([(p[0], p[1]) for p in path], step)
+    jointed = random.Random(seed + 1)
+    offsets = [[jointed.uniform(-blocks[1], blocks[1]) for _ in range(bands + 1)] for _ in range(len(columns) // blocks[0] + 2)] if blocks else None
     normals = []
 
     for s in range(len(path) - 1):
@@ -204,7 +209,7 @@ def cliff(name, sector, path, base, top, band=6.0, jitter=0.6, seed=0, slot="cli
 
     verts, rows = [], []
 
-    for s, f in columns:
+    for c, (s, f) in enumerate(columns):
         a, b = path[s], path[s + 1]
         x, z = a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f
         nx, nz = normals[s]
@@ -219,13 +224,13 @@ def cliff(name, sector, path, base, top, band=6.0, jitter=0.6, seed=0, slot="cli
         column = []
 
         for k in range(bands):
-            out = shift[k] + wobble - lean * k
+            out = shift[k] + (offsets[c // blocks[0]][k] if blocks else wobble) - lean * k
             # The band's face, then its top sloping back to the next band's.
             for y in (heights[k], heights[k] + (heights[k + 1] - heights[k]) * 0.85):
                 column.append(len(verts))
                 verts.append([x + nx * out, y, z + nz * out])
 
-        out = (shift[-1] if shift else 0.0) + wobble - lean * bands
+        out = (shift[-1] if shift else 0.0) + (offsets[c // blocks[0]][bands] if blocks else wobble) - lean * bands
         column.append(len(verts))
         verts.append([x + nx * out, top, z + nz * out])
         rows.append((column, (nx, nz)))

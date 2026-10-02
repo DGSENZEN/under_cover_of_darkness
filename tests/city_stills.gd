@@ -5,7 +5,9 @@ extends Node3D
 ## Sea Gate, the Ribeira, a nave, the galley, the carrack's top, the golden
 ## tower's terrace, the cave) under a clear night, a cloudy one and rain.
 ##   Godot --path . --resolution 1920x1080 res://tests/city_stills.tscn -- --out=/tmp/city-stills
-##   (-- --weather=clear  for one weather; --only=view_ribeira  for one view)
+##   (-- --weather=clear  for one weather; --only=view_ribeira  for one view;
+##   --view=name:x,y,z:x,y,z  a view of your own, from a point at another,
+##   as many as you like; with --only=none, only those)
 
 const City := preload("res://maps/city.tscn")
 const WEATHERS := [&"clear", &"cloudy", &"rain"]
@@ -19,6 +21,7 @@ var out := "/tmp/city-stills/"
 func _ready() -> void:
 	var weathers: Array = WEATHERS
 	var only := ""
+	var own: Array = []
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
@@ -27,6 +30,11 @@ func _ready() -> void:
 			weathers = [StringName(arg.trim_prefix("--weather="))]
 		elif arg.begins_with("--only="):
 			only = arg.trim_prefix("--only=")
+		elif arg.begins_with("--view="):
+			var parts := arg.trim_prefix("--view=").split(":")
+			var at := Vector3(float(parts[1].split(",")[0]), float(parts[1].split(",")[1]), float(parts[1].split(",")[2]))
+			var look := Vector3(float(parts[2].split(",")[0]), float(parts[2].split(",")[1]), float(parts[2].split(",")[2]))
+			own.append({"name": parts[0], "transform": Transform3D(Basis(), at).looking_at(look, Vector3.UP), "props": {}})
 
 	DirAccess.make_dir_recursive_absolute(out)
 	AudioServer.set_bus_mute(0, true)
@@ -49,6 +57,8 @@ func _ready() -> void:
 		for m in city.levels[district].of("vantage"):
 			if only == "" or String(m["name"]) == only:
 				views.append(m)
+
+	views.append_array(own)
 
 	for weather in weathers:
 		city.night.to(weather, 0.0)

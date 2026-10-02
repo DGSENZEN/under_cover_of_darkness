@@ -20,6 +20,8 @@ uniform vec3 wind = vec3(0.6, 0.0, 0.6);
 uniform float full_wind = 8.0;
 // Light through the leaves from behind.
 uniform float translucency = 0.35;
+// A card hung from its top edge (washing on a line): its bottom edge stirs.
+uniform bool hanging = false;
 
 varying vec3 baked;
 
@@ -29,7 +31,7 @@ void vertex() {
 	vec2 way = speed > 0.001 ? wind.xz / speed : vec2(0.7, 0.7);
 	float strength = clamp(speed / full_wind, 0.0, 1.3);
 	float phase = TIME * (1.2 + 2.2 * strength) + dot(world.xz, vec2(0.37, 0.23));
-	float top = 1.0 - UV.y;
+	float top = hanging ? UV.y : 1.0 - UV.y;
 	float flutter = rustle * top * top * (0.25 + strength) * (0.6 * sin(phase * 2.3) + 0.4 * sin(phase * 3.7 + 1.3));
 	float lean = max(world.y - 1.8, 0.0) * bough * (strength * 0.8 + 0.2 * sin(TIME * 0.6 + world.x * 0.05 + world.z * 0.04) + 0.15 * strength * sin(TIME * 1.7 + world.z * 0.1));
 	vec3 offset = vec3(way.x, 0.0, way.y) * (flutter + lean) + vec3(0.0, flutter * 0.25, 0.0);

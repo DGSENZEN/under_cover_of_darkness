@@ -127,6 +127,10 @@ const SLOTS := {
 	&"terracotta": {"photo": "terracotta", "colour": Color("8E4A30"), "metallic": 0.0, "roughness": 0.8, "tile": 1.2},
 	&"terracotta_hex": {"photo": "terracotta_hex", "colour": Color("6E3828"), "metallic": 0.0, "roughness": 0.8, "tile": 1.2},
 	&"brick": {"photo": "brick", "colour": Color("7A4A38"), "metallic": 0.0, "roughness": 0.9, "tile": [1.5, 0.75]},
+	# The shore's rock and cliffs, banded by height (shore.gdshader): wet under
+	# high water, black with lichen over it.
+	&"rock_shore": {"photo": "rock", "colour": Color("7C7A74"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0, "shore": true, "tint": 0.78},
+	&"cliff_shore": {"photo": "cliff", "colour": Color("8A8478"), "metallic": 0.0, "roughness": 0.9, "tile": 8.0, "shore": true, "tint": 0.6},
 	&"rock": {"photo": "rock", "colour": Color("7C7A74"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0},
 	&"cliff": {"photo": "cliff", "colour": Color("8A8478"), "metallic": 0.0, "roughness": 0.9, "tile": 8.0},
 	&"hull_tarred": {"photo": "hull_tarred", "colour": Color("2C2A28"), "metallic": 0.0, "roughness": 0.7, "tile": 2.0},
@@ -137,12 +141,27 @@ const SLOTS := {
 	# slopes, a rope coil and a net (cut out), the fort's Manueline carving.
 	&"roof_spanish": {"photo": "roof_spanish", "colour": Color("8A4C34"), "metallic": 0.0, "roughness": 0.85},
 	&"rope_coil": {"photo": "rope_coil", "colour": Color("8E7E5C"), "metallic": 0.0, "roughness": 0.95, "cut": true},
+	# The coast's planting (our paintings) and its life: gulls, cork floats,
+	# washing hung on a line (its hem stirs, not its top).
+	&"gorse": {"photo": "gorse", "painted": true, "colour": Color("2C4224"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.03, 0.0]},
+	&"fennel": {"photo": "fennel", "painted": true, "colour": Color("6A7E5A"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.05, 0.0], "shadowless": true},
+	&"pine": {"photo": "pine", "painted": true, "colour": Color("22382A"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.04, 0.012]},
+	&"laundry": {"photo": "laundry", "painted": true, "colour": Color("BEB6A4"), "metallic": 0.0, "roughness": 0.95, "cut": true, "sway": [0.14, 0.0], "hang": true},
+	&"feather": {"photo": "", "colour": Color("C9C9C3"), "metallic": 0.0, "roughness": 0.9},
+	&"feather_dark": {"photo": "", "colour": Color("4C5054"), "metallic": 0.0, "roughness": 0.9},
+	&"beak": {"photo": "", "colour": Color("B39232"), "metallic": 0.0, "roughness": 0.7},
+	&"cork": {"photo": "", "colour": Color("8E6A44"), "metallic": 0.0, "roughness": 0.95},
 	&"net": {"photo": "net", "colour": Color("6E5A3C"), "metallic": 0.0, "roughness": 0.95, "cut": true},
 	&"manueline": {"photo": "manueline", "colour": Color("8E8878"), "metallic": 0.0, "roughness": 0.9},
 	# Our own paintings for the harbour (tools/textures/paint.py): wrought iron,
 	# a ship's ratlines; Mediterranean planting, stirred by the wind.
 	&"iron_rail": {"photo": "iron_rail", "painted": true, "colour": Color("34322F"), "metallic": 0.3, "roughness": 0.8, "cut": true},
 	&"window_grille": {"photo": "window_grille", "painted": true, "colour": Color("34322F"), "metallic": 0.3, "roughness": 0.8, "cut": true},
+	# The Ribeira's windows: pale-painted glazing (the glass behind shows
+	# through) and green lattice shutters (rotulas).
+	&"casement": {"photo": "casement", "painted": true, "colour": Color("D4CEBE"), "metallic": 0.0, "roughness": 0.7, "cut": true},
+	&"sash": {"photo": "sash", "painted": true, "colour": Color("D4CEBE"), "metallic": 0.0, "roughness": 0.7, "cut": true},
+	&"lattice": {"photo": "lattice", "painted": true, "colour": Color("30483A"), "metallic": 0.0, "roughness": 0.9, "cut": true},
 	&"ratlines": {"photo": "ratlines", "painted": true, "colour": Color("26201A"), "metallic": 0.0, "roughness": 0.95, "cut": true},
 	&"palm_frond": {"photo": "palm_frond", "painted": true, "colour": Color("4E6232"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.1, 0.02]},
 	&"cypress": {"photo": "cypress", "painted": true, "colour": Color("1E2E1E"), "metallic": 0.0, "roughness": 0.9, "cut": true, "sway": [0.02, 0.004]},
@@ -152,6 +171,7 @@ const SLOTS := {
 
 const GLOW := preload("res://scripts/Visual/Lights/glow.gdshader")
 const FOLIAGE := preload("res://scripts/Visual/foliage.gdshader")
+const SHORE := preload("res://scripts/Visual/shore.gdshader")
 ## How a glowing slot glows: [the flame's share of its colour, brightness,
 ## how much in hot spots rather than evenly].
 const GLOW_LOOK := {
@@ -228,6 +248,11 @@ static func level_surface(slot: StringName) -> Material:
 		_level[slot] = _foliage(slot, entry)
 		return _level[slot]
 
+	# The shore's rock: banded by height (shore.gdshader).
+	if entry.has("shore"):
+		_level[slot] = _shore(slot, entry)
+		return _level[slot]
+
 	var material: StandardMaterial3D = surface(slot).duplicate()
 
 	if entry.has("tile"):
@@ -268,7 +293,26 @@ static func _foliage(slot: StringName, entry: Dictionary) -> ShaderMaterial:
 	material.set_shader_parameter(&"rustle", float(entry["sway"][0]))
 	material.set_shader_parameter(&"bough", float(entry["sway"][1]))
 	material.set_shader_parameter(&"wind", Vector3(0.6, 0.0, 0.6))
+	material.set_shader_parameter(&"hanging", bool(entry.get("hang", false)))
 	swaying.append(material)
+	return material
+
+
+## A shore slot's material (shore.gdshader): its photo on the world from
+## three sides, banded by height.
+static func _shore(slot: StringName, entry: Dictionary) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = SHORE
+	var texture := photo(slot)
+
+	if texture != null:
+		material.set_shader_parameter(&"albedo_texture", texture)
+
+	# (A pale photo darkened to the granite's own grey: "tint".)
+	var tint := float(entry.get("tint", 1.0))
+	material.set_shader_parameter(&"albedo", Color(tint, tint, tint) if texture != null else entry["colour"])
+	material.set_shader_parameter(&"tile", float(entry.get("tile", 3.0)))
+	material.set_shader_parameter(&"sharpness", TRIPLANAR_SHARPNESS)
 	return material
 
 

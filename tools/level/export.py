@@ -35,7 +35,7 @@ import shade  # noqa: E402
 # GRADE_EDGE) so the shading grades across them; occlusion measured with
 # AO_RAYS rays out to AO_REACH (m); pieces drawn unlit keep no colours.
 GRADED = ("wall", "curtain", "floor", "stair", "column", "roof", "quay", "vault", "fort", "casa", "iberian", "harbour", "ship")
-GRADE_EDGE = 1.0
+GRADE_EDGE = shade.GRADE_EDGE
 AO_RAYS = 12
 AO_REACH = 1.2
 UNLIT = ("stained_glass", "stained_glass_small", "rose_window", "glass_lit")
@@ -134,12 +134,14 @@ def manifest(data):
 
 
 def _subdivide(mesh):
-    """Its long edges halved until none is much over GRADE_EDGE."""
+    """Its long edges halved until none is much over GRADE_EDGE (but not
+    between a slope's canal tiles: shade.cut_finer)."""
     bm = bmesh.new()
     bm.from_mesh(mesh)
+    slots = [m.name if m is not None else "" for m in mesh.materials]
 
     for _ in range(4):
-        long_edges = [e for e in bm.edges if e.calc_length() > GRADE_EDGE * 1.5]
+        long_edges = [e for e in bm.edges if shade.cut_finer(e.calc_length(), [slots[f.material_index] for f in e.link_faces])]
 
         if not long_edges:
             break

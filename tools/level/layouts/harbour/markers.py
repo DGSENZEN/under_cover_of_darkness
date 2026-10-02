@@ -27,6 +27,11 @@ def _terrace(radius, angle):
     return (MOLE_HEAD[0] + radius * math.cos(a), TERRACE, MOLE_HEAD[1] + radius * math.sin(a))
 
 
+def _eye(at):
+    """A man's eye over a floor's point."""
+    return (at[0], at[1] + 1.7, at[2])
+
+
 def _tower_local(x, y, z):
     """A point in the golden tower's frame (its door on its -z flat) in the
     world."""
@@ -191,14 +196,14 @@ def _exits_and_views(L):
     L.mark("blowhole", "mark", (232.0, 26.0, 0.0), 0.0, "cave")
 
     for name, at, look, lens in (("view_mole_start", (175.0, 4.5, 118.0), (60.0, 60.0, -150.0), "wide"),
-                                 ("view_quay_rock", (-20.0, 4.5, -3.0), (-40.0, 70.0, -300.0), "wide"),
+                                 ("view_quay_rock", (-40.0, 6.0, 45.0), (-45.0, 60.0, -300.0), "wide"),
                                  ("view_terreiro_stair", (GATE_X, 3.5, 3.0), (GATE_X, 8.0, -70.0), ""),
                                  ("view_sea_gate", (GATE_X, 4.2, -60.0), (GATE_X, 8.0, -76.0), ""),
                                  ("view_ribeira", (-120.0, 6.0, 12.0), (-150.0, 12.0, -14.0), ""),
                                  ("view_nave", (58.6, 4.2, -12.0), (58.6, 6.0, -67.0), ""),
-                                 ("view_galley", (37.4, 7.0, -30.0), (45.8, 4.0, -38.0), ""),
+                                 ("view_galley", (43.3, 6.5, -20.0), (45.8, 3.5, -40.0), ""),
                                  ("view_carrack_top", (CARRACK_X, 21.7, CARRACK_Z), (CARRACK_X, 20.0, -80.0), "wide"),
-                                 ("view_golden_terrace", _terrace(6.5, 250.0), (0.0, 10.0, 0.0), "wide"),
+                                 ("view_golden_terrace", _eye(_terrace(5.2, 250.0)), (0.0, 10.0, 0.0), "wide"),
                                  ("view_cave_beach", (230.0, 2.5, 10.0), (226.0, 3.0, 60.0), "")):
         # (Looking at its subject: up at the rock, down at the galley.)
         pitch = math.degrees(math.atan2(look[1] - at[1], math.hypot(look[0] - at[0], look[2] - at[2])))

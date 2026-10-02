@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import paint  # noqa: E402
 
 FOLIAGE = ["leaf_crown", "leaf_shrub", "yew", "twigs", "grass", "weed_broad", "reeds", "ivy",
-           "palm_frond", "cypress", "agave", "orange_leaves"]
+           "palm_frond", "cypress", "agave", "orange_leaves", "gorse", "fennel", "pine"]
 IRONWORK = ["iron_rail", "window_grille", "ratlines"]
 
 
@@ -32,6 +32,48 @@ class Harbour(unittest.TestCase):
                 self.assertGreater(solid, 0.08, "hardly anything painted")
                 self.assertLess(solid, 0.7, "a plate, not bars and lines")
                 self.assertLess(pixels[alpha == 255][:, :3].mean(), 110.0, "not dark iron or tarred rope")
+
+    def test_a_casement_is_pale_bars_round_clear_panes_on_a_panelled_foot(self):
+        image = paint.PAINTINGS["casement"]()
+        w, h = image.size
+        self.assertEqual((w & (w - 1), h & (h - 1)), (0, 0))
+        pixels = np.asarray(image)
+        alpha = pixels[:, :, 3]
+        self.assertTrue(set(np.unique(alpha)) <= {0, 255}, "alpha not cut clean")
+        self.assertGreater(pixels[alpha == 255][:, :3].mean(), 150.0, "sashes are painted pale")
+        # Panes through most of it; the foot solid (its panels).
+        self.assertGreater(float((alpha[: int(h * 0.7)] == 0).mean()), 0.45, "no panes to see through")
+        self.assertGreater(float((alpha[int(h * 0.82):] == 255).mean()), 0.9, "no panelled foot")
+        # Two leaves: a meeting stile down the middle.
+        self.assertGreater(float((alpha[: int(h * 0.7), w // 2 - 1: w // 2 + 1] == 255).mean()), 0.95)
+
+    def test_a_sash_window_is_two_sashes_of_clear_panes(self):
+        image = paint.PAINTINGS["sash"]()
+        w, h = image.size
+        self.assertEqual((w & (w - 1), h & (h - 1)), (0, 0))
+        pixels = np.asarray(image)
+        alpha = pixels[:, :, 3]
+        self.assertTrue(set(np.unique(alpha)) <= {0, 255}, "alpha not cut clean")
+        self.assertGreater(pixels[alpha == 255][:, :3].mean(), 150.0, "sashes are painted pale")
+        self.assertGreater(float((alpha == 0).mean()), 0.5, "no panes to see through")
+        # The meeting rail across its middle; no panelled foot.
+        self.assertTrue(any((alpha[y] == 255).all() for y in range(int(h * 0.45), int(h * 0.56))), "no meeting rail")
+        self.assertLess(float((alpha[int(h * 0.82): int(h * 0.95)] == 255).mean()), 0.6, "a door's foot, not a window")
+
+    def test_a_lattice_is_painted_laths_crossing_with_gaps_between(self):
+        image = paint.PAINTINGS["lattice"]()
+        w, h = image.size
+        self.assertEqual((w & (w - 1), h & (h - 1)), (0, 0))
+        pixels = np.asarray(image)
+        alpha = pixels[:, :, 3]
+        self.assertTrue(set(np.unique(alpha)) <= {0, 255}, "alpha not cut clean")
+        solid = float((alpha == 255).mean())
+        self.assertGreater(solid, 0.35, "hardly any laths")
+        self.assertLess(solid, 0.8, "no gaps: a board, not a lattice")
+        # Diagonal: no row and no column is all gap or all lath inside the frame.
+        inner = alpha[h // 8: -h // 8, w // 8: -w // 8] == 255
+        self.assertFalse(inner.all(axis=1).any() or (~inner).all(axis=1).any(), "rows, not a lattice")
+        self.assertFalse(inner.all(axis=0).any() or (~inner).all(axis=0).any(), "columns, not a lattice")
 
     def test_the_coil_mask_is_a_round_white_on_black(self):
         mask = np.asarray(paint.PAINTINGS["coil_mask"]().convert("L"))
@@ -69,7 +111,7 @@ class Foliage(unittest.TestCase):
                 self.assertEqual(h & (h - 1), 0)
 
     def test_leaves_are_many_greens_not_a_flat_colour(self):
-        for name in ["leaf_crown", "leaf_shrub", "yew", "grass", "weed_broad", "ivy"]:
+        for name in ["leaf_crown", "leaf_shrub", "yew", "grass", "weed_broad", "ivy", "gorse", "fennel", "pine"]:
             with self.subTest(name):
                 pixels = np.asarray(paint.PAINTINGS[name]())
                 solid = pixels[pixels[:, :, 3] == 255][:, :3].astype(int)
@@ -79,6 +121,37 @@ class Foliage(unittest.TestCase):
                 mean = solid.mean(axis=0)
                 self.assertGreater(mean[1], mean[0])
                 self.assertGreater(mean[1], mean[2])
+
+    def test_gorse_flowers_and_fennel_flowers_show(self):
+        # Gorse's yellow among its dark spines; sea fennel's yellow-green
+        # umbels over its grey-green fronds.
+        for name, least in (("gorse", 0.01), ("fennel", 0.01)):
+            with self.subTest(name):
+                pixels = np.asarray(paint.PAINTINGS[name]())
+                solid = pixels[pixels[:, :, 3] == 255][:, :3].astype(int)
+                yellow = (solid[:, 0] > 140) & (solid[:, 1] > 120) & (solid[:, 2] < 90)
+                self.assertGreater(float(yellow.mean()), least)
+
+    def test_a_stone_pine_crown_is_wider_than_tall(self):
+        # The umbrella: its needles spread wide and flat over a bare underside.
+        alpha = np.asarray(paint.PAINTINGS["pine"]())[:, :, 3] == 255
+        rows, cols = np.nonzero(alpha)
+        self.assertGreater(cols.max() - cols.min(), 1.6 * (rows.max() - rows.min()))
+
+    def test_laundry_is_garments_on_a_line(self):
+        image = paint.PAINTINGS["laundry"]()
+        w, h = image.size
+        self.assertEqual((w & (w - 1), h & (h - 1)), (0, 0))
+        pixels = np.asarray(image)
+        alpha = pixels[:, :, 3]
+        self.assertTrue(set(np.unique(alpha)) <= {0, 255})
+        solid = float((alpha == 255).mean())
+        self.assertGreater(solid, 0.25)
+        self.assertLess(solid, 0.8)
+        # The line along the top end to end (sagging), gaps between the
+        # garments.
+        self.assertTrue((alpha[: h // 6] == 255).any(axis=0).all(), "no line end to end")
+        self.assertGreaterEqual(sum(1 for x in range(1, w) if alpha[h // 2, x] == 0 and alpha[h // 2, x - 1] == 255), 3)
 
     def test_a_crown_is_lumpy_not_a_disc(self):
         # Its outline wanders: along rays from the middle, where the leaves

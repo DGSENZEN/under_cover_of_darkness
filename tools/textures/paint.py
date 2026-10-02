@@ -1047,6 +1047,130 @@ def window_grille():
     return _finish(image, (64, 128), 8, mask_image)
 
 
+SASH = (212, 206, 190)
+SASH_LIT = (236, 232, 220)
+SASH_SHADE = (160, 152, 138)
+
+
+def casement():
+    """A balcony door's glazing, as Porto's are painted (Teixeira's casa
+    burguesa): a frame, a fixed fan light over a transom, two side-hung
+    leaves meeting down the middle, each two panes across and four up, a
+    panelled foot; the sashes painted pale, the panes clear (the glass behind
+    shows through)."""
+    w, h = 64 * SCALE, 128 * SCALE
+    image, mask_image, draw, mask = _canvas(w, h, SASH)
+    frame, bar = 4 * SCALE, 2 * SCALE
+    transom, foot = h * 0.18, h * 0.8
+
+    def solid(box, fill=SASH):
+        draw.rectangle(box, fill=fill)
+        mask.rectangle(box, fill=255)
+
+    # The frame, the transom bar, the meeting stile; the foot's panels.
+    for box in ([0, 0, w, frame], [0, 0, frame, h], [w - frame, 0, w, h], [0, transom - frame / 2, w, transom + frame / 2],
+                [w / 2 - frame / 2, transom, w / 2 + frame / 2, h], [0, foot, w, h]):
+        solid(box)
+
+    for x0, x1 in ((frame, w / 2 - frame / 2), (w / 2 + frame / 2, w - frame)):
+        inset = 3 * SCALE
+        draw.rectangle([x0 + inset, foot + inset, x1 - inset, h - inset], outline=SASH_SHADE, width=SCALE)
+        draw.line([(x0 + inset, h - inset), (x1 - inset, h - inset)], fill=SASH_LIT, width=SCALE)
+        draw.line([(x1 - inset, foot + inset), (x1 - inset, h - inset)], fill=SASH_LIT, width=SCALE)
+
+        # Each leaf's glazing bars: one up its middle, three across.
+        mid = (x0 + x1) / 2.0
+        solid([mid - bar / 2, transom, mid + bar / 2, foot])
+
+        for k in (1, 2, 3):
+            y = transom + (foot - transom) * k / 4.0
+            solid([x0, y - bar / 2, x1, y + bar / 2])
+
+    # The fan light: spokes from the transom's middle, a half ring.
+    cx, cy = w / 2.0, transom
+    radius = transom - frame / 2.0
+
+    for angle in (30.0, 60.0, 90.0, 120.0, 150.0):
+        a = math.radians(angle)
+        _bar(draw, mask, [(cx, cy), (cx + math.cos(a) * radius, cy - math.sin(a) * radius)], bar, SASH)
+
+    for r in (radius, radius * 0.3):
+        draw.arc([cx - r, cy - r, cx + r, cy + r], 180, 360, fill=SASH, width=bar)
+        mask.arc([cx - r, cy - r, cx + r, cy + r], 180, 360, fill=255, width=bar)
+
+    draw.pieslice([cx - radius * 0.3, cy - radius * 0.3, cx + radius * 0.3, cy + radius * 0.3], 180, 360, fill=SASH)
+    mask.pieslice([cx - radius * 0.3, cy - radius * 0.3, cx + radius * 0.3, cy + radius * 0.3], 180, 360, fill=255)
+    # (The frame's inner edges caught by the light on one side.)
+    draw.line([(frame, frame), (frame, h)], fill=SASH_SHADE, width=SCALE)
+    draw.line([(w - frame, frame), (w - frame, h)], fill=SASH_LIT, width=SCALE)
+    return _finish(image, (64, 128), 8, mask_image)
+
+
+def sash():
+    """A window over a sill: a frame, two sashes (the upper over the lower,
+    a meeting rail between), three panes across and two up in each; painted
+    pale, the panes clear."""
+    w, h = 64 * SCALE, 128 * SCALE
+    image, mask_image, draw, mask = _canvas(w, h, SASH)
+    frame, bar, rail = 4 * SCALE, 2 * SCALE, 4 * SCALE
+
+    def solid(box, fill=SASH):
+        draw.rectangle(box, fill=fill)
+        mask.rectangle(box, fill=255)
+
+    for box in ([0, 0, w, frame], [0, h - frame, w, h], [0, 0, frame, h], [w - frame, 0, w, h], [0, h / 2 - rail / 2, w, h / 2 + rail / 2]):
+        solid(box)
+
+    for k in (1, 2):
+        x = frame + (w - 2 * frame) * k / 3.0
+        solid([x - bar / 2, 0, x + bar / 2, h])
+
+    for y in (h * 0.25, h * 0.75):
+        solid([0, y - bar / 2, w, y + bar / 2])
+
+    # (The lower sash's top rail lit, the upper's bottom rail shaded: the
+    # sashes overlap at the meeting rail.)
+    draw.line([(0, h / 2 - rail / 2), (w, h / 2 - rail / 2)], fill=SASH_SHADE, width=SCALE)
+    draw.line([(0, h / 2 + rail / 2), (w, h / 2 + rail / 2)], fill=SASH_LIT, width=SCALE)
+    draw.line([(w - frame, frame), (w - frame, h - frame)], fill=SASH_LIT, width=SCALE)
+    return _finish(image, (64, 128), 8, mask_image)
+
+
+LATH = (48, 72, 54)
+LATH_LIT = (74, 102, 78)
+LATH_SHADE = (30, 46, 36)
+
+
+def lattice():
+    """A rotula: a window's lattice shutter (hinged at its head, propped
+    out at its foot), thin laths crossing on the diagonal in a frame,
+    painted green and worn."""
+    w, h = 64 * SCALE, 128 * SCALE
+    image, mask_image, draw, mask = _canvas(w, h, LATH)
+    lath, gap = int(2.5 * SCALE), 9 * SCALE
+    rng = np.random.default_rng(29)
+
+    # One family of laths each way, the second over the first (its edges
+    # shaded where it crosses), a little paint variation lath to lath.
+    for direction, edge in ((1.0, LATH_LIT), (-1.0, LATH_SHADE)):
+        for k in range(-h, w + h, gap):
+            tint = int(rng.integers(-8, 9))
+            colour = tuple(max(0, min(255, c + tint)) for c in LATH)
+            a, b = (k, 0), (k + direction * h, h)
+            _bar(draw, mask, [a, b], lath, colour)
+            draw.line([(a[0] + SCALE, a[1]), (b[0] + SCALE, b[1])], fill=edge, width=max(1, SCALE // 2))
+
+    frame = 4 * SCALE
+
+    for box in ([0, 0, w, frame], [0, h - frame, w, h], [0, 0, frame, h], [w - frame, 0, w, h]):
+        draw.rectangle(box, fill=LATH)
+        mask.rectangle(box, fill=255)
+
+    draw.line([(frame, frame), (w - frame, frame)], fill=LATH_SHADE, width=SCALE)
+    draw.line([(frame, h - frame), (w - frame, h - frame)], fill=LATH_LIT, width=SCALE)
+    return _finish(image, (64, 128), 8, mask_image)
+
+
 def ratlines():
     """A ship's shrouds and ratlines on a clear card: the shrouds running up
     from the channel and drawing in toward the masthead, tarred black, the
@@ -1203,14 +1327,155 @@ def orange_leaves():
                   twigs=False, fruit=(18, size * 0.028, (232, 128, 32)), heart=0.14)
 
 
+# ---------------------------------------------------------------------------
+# The coast's planting (docs/superpowers/refs/coast_life.md): gorse pruned to
+# a cushion by the wind, sea fennel in the cracks, a stone pine's umbrella;
+# the Ribeira's laundry
+# ---------------------------------------------------------------------------
+
+def gorse():
+    """Gorse in a low cushion: dark spiny greens, thick together, lit on
+    top, yellow flowers scattered over it."""
+    size = 128 * SCALE
+    rng = np.random.default_rng(171)
+    blobs = [(size * 0.5, size * 0.66, size * 0.3)]
+
+    for k in range(7):
+        x = size * (0.14 + 0.72 * k / 6.0) + rng.uniform(-6, 6) * SCALE
+        blobs.append((x, size * rng.uniform(0.56, 0.7), size * rng.uniform(0.12, 0.18)))
+
+    return _crown(size, 128, 1500, size * 0.045, size * 0.012, [(28, 44, 26), (36, 54, 30), (44, 64, 32), (54, 72, 36)], blobs, 173,
+                  twigs=False, fruit=(110, size * 0.011, (222, 186, 44)))
+
+
+def fennel():
+    """Sea fennel: a clump of fleshy grey-green fronds from a crack, its
+    yellow-green umbels over them on stiff stalks."""
+    w = h = 128 * SCALE
+    rng = np.random.default_rng(181)
+    image, mask_image, draw, mask = _canvas(w, h, (52, 62, 44))
+    palette = [(92, 112, 84), (106, 126, 94), (120, 138, 104), (82, 100, 76)]
+    tips = []
+
+    for _ in range(46):
+        base = w * (0.5 + rng.normal(0.0, 0.08))
+        height = h * rng.uniform(0.25, 0.7)
+        lean = rng.uniform(-0.7, 0.7) * height
+        colour = palette[int(rng.integers(len(palette)))]
+        points = [(base + lean * (i / 8.0) ** 1.5, h - height * (i / 8.0)) for i in range(9)]
+        _bar(draw, mask, points, int(SCALE * 2.2), _tinted(colour, rng.uniform(0.8, 1.1)))
+
+        # Its leaflets: short fat blades either side along it.
+        for (x, y), (nx, ny) in zip(points[2::2], points[3::2]):
+            for side in (-1.0, 1.0):
+                angle = math.atan2(ny - y, nx - x) + side * rng.uniform(0.5, 0.9)
+                tip = (x + math.cos(angle) * 7 * SCALE, y + math.sin(angle) * 7 * SCALE)
+                _bar(draw, mask, [(x, y), tip], int(SCALE * 2.6), _tinted(colour, rng.uniform(0.85, 1.15)))
+
+        if rng.random() < 0.45:
+            tips.append(points[-1])
+
+    for x, y in tips:
+        stalk = (x + rng.uniform(-4, 4) * SCALE, y - rng.uniform(8, 14) * SCALE)
+        _bar(draw, mask, [(x, y), stalk], int(SCALE * 1.5), (110, 120, 70))
+
+        for _ in range(9):
+            a = rng.uniform(math.pi * 1.1, math.pi * 1.9)
+            end = (stalk[0] + math.cos(a) * 6 * SCALE, stalk[1] + math.sin(a) * 4 * SCALE)
+            _bar(draw, mask, [stalk, end], SCALE, (150, 150, 70))
+            r = 1.6 * SCALE
+            draw.ellipse([end[0] - r, end[1] - r, end[0] + r, end[1] + r], fill=(196, 188, 62))
+            mask.ellipse([end[0] - r, end[1] - r, end[0] + r, end[1] + r], fill=255)
+
+    return _finish(image, (128, 128), 24, mask_image)
+
+
+def pine():
+    """A stone pine's crown as it is seen from the ground: an umbrella of
+    needle tufts, wide and flat, darker underneath (its limbs are drawn as
+    the tree's own)."""
+    size = 256 * SCALE
+    rng = np.random.default_rng(191)
+    image, mask_image, draw, mask = _canvas(size, size, (18, 26, 18))
+    c = size / 2.0
+    palette = [(26, 42, 30), (32, 52, 34), (40, 62, 40), (50, 74, 46), (62, 86, 52)]
+    blobs = [(c, c * 0.92, size * 0.16)]
+
+    for k in range(9):
+        x = size * (0.1 + 0.8 * k / 8.0)
+        blobs.append((x, c * rng.uniform(0.84, 1.02) - abs(x - c) * 0.08, size * rng.uniform(0.07, 0.11)))
+
+    tufts = sorted(((c - y) / c + rng.uniform(-0.2, 0.2), x, y) for x, y in _blob_points(rng, blobs, 1100))
+
+    for up, x, y in tufts:
+        colour = _tinted(palette[int(rng.integers(len(palette)))], 0.75 + 0.45 * up)
+
+        # A tuft: needles fanning up and out from a point.
+        for _ in range(7):
+            a = -math.pi / 2.0 + rng.uniform(-1.3, 1.3)
+            length = size * rng.uniform(0.018, 0.03)
+            tip = (x + math.cos(a) * length, y + math.sin(a) * length * 0.7)
+            draw.line([(x, y), tip], fill=colour, width=int(size * 0.006))
+            mask.line([(x, y), tip], fill=255, width=int(size * 0.006))
+
+    return _finish(image, (256, 256), 24, mask_image)
+
+
+def laundry():
+    """Washing on a line between two windows: a shirt, a sheet, breeches,
+    a shift, pegged along a sagging cord; their folds and shadows."""
+    w, h = 128 * SCALE, 64 * SCALE
+    rng = np.random.default_rng(201)
+    image, mask_image, draw, mask = _canvas(w, h, (60, 56, 50))
+    line = [(x, h * 0.05 + h * 0.05 * math.sin(math.pi * x / w)) for x in np.linspace(0, w, 17)]
+    _bar(draw, mask, line, int(SCALE * 1.5), (70, 62, 50))
+
+    def sag(x):
+        return h * 0.05 + h * 0.05 * math.sin(math.pi * x / w)
+
+    # (x0, x1, how far down, its cloth, its shape)
+    pieces = [(0.04, 0.22, 0.62, (196, 188, 168), "shirt"), (0.27, 0.56, 0.92, (214, 208, 192), "sheet"),
+              (0.61, 0.75, 0.7, (96, 74, 52), "breeches"), (0.8, 0.96, 0.8, (120, 128, 136), "shift")]
+
+    for x0, x1, down, cloth, shape in pieces:
+        a, b = w * x0, w * x1
+        top = sag((a + b) / 2.0)
+        bottom = top + h * down * 0.9
+
+        if shape == "shirt":
+            outline = [(a, top), (b, top), (b + 4 * SCALE, top + 10 * SCALE), (b - 4 * SCALE, top + 12 * SCALE), (b - 4 * SCALE, bottom),
+                       (a + 4 * SCALE, bottom), (a + 4 * SCALE, top + 12 * SCALE), (a - 4 * SCALE, top + 10 * SCALE)]
+        elif shape == "breeches":
+            m = (a + b) / 2.0
+            outline = [(a, top), (b, top), (b + 1 * SCALE, bottom), (m + 2 * SCALE, bottom), (m, top + (bottom - top) * 0.35),
+                       (m - 2 * SCALE, bottom), (a - 1 * SCALE, bottom)]
+        else:
+            outline = [(a, top), (b, top), (b + 2 * SCALE, bottom), (a - 1 * SCALE, bottom - 2 * SCALE)]
+
+        draw.polygon(outline, fill=cloth)
+        mask.polygon(outline, fill=255)
+
+        # Folds: darker runs down it, a lit edge beside each.
+        for k in range(3 + int(rng.integers(3))):
+            x = a + (b - a) * rng.uniform(0.15, 0.85)
+            draw.line([(x, top + 3 * SCALE), (x + rng.uniform(-3, 3) * SCALE, bottom - 2 * SCALE)], fill=_tinted(cloth, 0.72), width=2 * SCALE)
+            draw.line([(x + 2 * SCALE, top + 3 * SCALE), (x + 2 * SCALE, bottom - 4 * SCALE)], fill=_tinted(cloth, 1.08), width=SCALE)
+
+        for x in (a + 2 * SCALE, b - 2 * SCALE):
+            draw.rectangle([x - SCALE, top - 2 * SCALE, x + SCALE, top + 3 * SCALE], fill=(90, 74, 54))
+
+    return _finish(image, (128, 64), 24, mask_image)
+
+
 PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_frontal": altar_frontal,
              "shield_1": shield_1, "shield_2": shield_2, "shield_3": shield_3,
              "leaf_crown": leaf_crown, "leaf_shrub": leaf_shrub, "yew": yew, "twigs": twigs, "grass": grass,
              "weed_broad": weed_broad, "reeds": reeds, "ivy": ivy, "bark": bark, "bat": bat,
              "decal_soot": decal_soot, "decal_dirt": decal_dirt, "decal_straw": decal_straw, "decal_leaves": decal_leaves,
              "carpet": carpet,
-             "iron_rail": iron_rail, "window_grille": window_grille, "ratlines": ratlines, "coil_mask": coil_mask,
-             "decal_salt": decal_salt, "palm_frond": palm_frond, "cypress": cypress, "agave": agave, "orange_leaves": orange_leaves}
+             "iron_rail": iron_rail, "window_grille": window_grille, "casement": casement, "sash": sash, "lattice": lattice, "ratlines": ratlines, "coil_mask": coil_mask,
+             "decal_salt": decal_salt, "palm_frond": palm_frond, "cypress": cypress, "agave": agave, "orange_leaves": orange_leaves,
+             "gorse": gorse, "fennel": fennel, "pine": pine, "laundry": laundry}
 
 
 def main(argv):

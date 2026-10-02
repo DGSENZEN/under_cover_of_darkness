@@ -575,3 +575,7 @@ import kit_ships  # noqa: E402,F401
 # silhouettes until it is built (kit_massing).
 import kit_planting  # noqa: E402,F401
 import kit_massing  # noqa: E402,F401
+
+# The coast's rock, plants and life (kit_coast: tors, ledges, boulders;
+# gorse, fennel, pines, a fig; gulls, nets, washing, a tavern's bush).
+import kit_coast  # noqa: E402,F401

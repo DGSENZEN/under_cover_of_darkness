@@ -25,6 +25,7 @@ const AlarmBellScript := preload("res://scripts/Interaction/AlarmBell.gd")
 const GuardStationScript := preload("res://scripts/AISystem/GuardStation.gd")
 const GROUND_STAIN := preload("res://scripts/Visual/ground_stain.gdshader")
 const BlowholeScript := preload("res://scripts/Visual/Blowhole.gd")
+const ChimneySmokeScript := preload("res://scripts/Visual/ChimneySmoke.gd")
 
 ## A marker's archetype to the game's (Guard.archetype).
 const ARCHETYPES := {"watchman": &"", "arms_master": &"trainer"}
@@ -53,7 +54,8 @@ const RAISED_SHOWS := 0.35
 
 ## Everything a level's markers make but its guards (they want the navmesh
 ## baked first): {doors, lights, water, ladders, ropes, bells, decals,
-## routes, stations, pickups, chests, props, noise_zones, mechanisms}.
+## routes, stations, pickups, chests, props, noise_zones, mechanisms,
+## smokes}.
 static func build_all(parent: Node3D, level) -> Dictionary:
 	var made := {
 		"doors": doors(parent, level), "lights": lights(parent, level), "water": water(parent, level),
@@ -61,6 +63,7 @@ static func build_all(parent: Node3D, level) -> Dictionary:
 		"decals": decals(parent, level), "routes": routes(parent, level), "stations": stations(parent, level),
 		"pickups": pickups(parent, level), "chests": chests(parent, level), "props": props(parent, level),
 		"noise_zones": noise_zones(parent, level), "mechanisms": mechanisms(parent, level),
+		"smokes": smokes(parent, level),
 	}
 	mission_marks(parent, level)
 	return made
@@ -449,6 +452,20 @@ static func props(parent: Node3D, level) -> Array:
 ## steady one's id (taken away again when `parent` leaves the tree); one with
 ## a period roars now and then: a Blowhole at its box's top, masking the box
 ## only while it roars.
+## The chimneys' smoke ("smoke" markers: over their pots).
+static func smokes(parent: Node3D, level) -> Array:
+	var out := []
+
+	for m in level.of("smoke"):
+		var smoke: Node3D = ChimneySmokeScript.new()
+		smoke.name = m["name"]
+		parent.add_child(smoke)
+		smoke.global_position = (m["transform"] as Transform3D).origin
+		out.append(smoke)
+
+	return out
+
+
 static func noise_zones(parent: Node3D, level) -> Array:
 	var out := []
 	var ids := []

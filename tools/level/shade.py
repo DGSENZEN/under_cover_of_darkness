@@ -39,6 +39,18 @@ WARM_REACH = 3.0
 WARM_TINT = (1.08, 1.0, 0.86)
 COLD_TINT = (0.9, 0.96, 1.08)
 MOON_TOWARD = (0.62, -0.5, 0.6)
+# The export cuts long edges finer so the shading has corners to grade
+# along (over GRADE_EDGE by half again), but not between a slope's canal
+# tiles (its channels run its length in thin strips: cut, a slope is
+# thousands of corners measured for nothing a roof shows), nor along a
+# ship's rigging (ropes, tarred lines, ratlines, furled sails, a banner).
+GRADE_EDGE = 1.0
+UNGRADED = ("roof_spanish", "rope", "pitch", "ratlines", "sailcloth", "banner")
+
+
+def cut_finer(length, slots):
+    """Whether an edge `length` m long between faces of `slots` is cut."""
+    return length > GRADE_EDGE * 1.5 and any(s not in UNGRADED for s in slots)
 
 
 def colour(point, normal, occlusion, flames, seed_free=False):

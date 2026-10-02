@@ -55,6 +55,8 @@ SCHEMA = {
     "secret": {"required": [], "optional": {"label": ""}, "box": True},
     # Inside it, sound is masked by `db` (a blowhole's roar, a fountain).
     "noise_zone": {"required": ["db"], "optional": {"period": 0.0, "label": ""}, "box": True},
+    # A chimney's smoke, breathed off its pots (over them).
+    "smoke": {"required": [], "optional": {}, "box": False},
     # A point the light is checked at: "moon", "shadow" or "lamp".
     "probe": {"required": ["expect"], "optional": {}, "box": False},
     # A point on a way through the level, and the move that reaches it from

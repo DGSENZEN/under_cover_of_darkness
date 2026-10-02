@@ -3,6 +3,8 @@ main yard braced so its arm reaches over the wall's walk), a caravel at the
 Ribeira, fishing boats along it, rowboats at the water stair, the fort,
 the cave and the mole's seaward side (the thief's own)."""
 
+import kit_ships
+
 from . import CARRACK_X, CARRACK_Z, MAINYARD_Y
 
 # The thief's rowboat, by the mole's seaward boulders: where the night
@@ -17,6 +19,8 @@ def lay(L):
     L.ship("carrack_hull", (CARRACK_X, 0.0, CARRACK_Z), 0.0, "ships")
     L.ship("carrack_rig", (CARRACK_X, 0.0, CARRACK_Z), 0.0, "ships")
     L.put("carrack_mainyard", (CARRACK_X, MAINYARD_Y, CARRACK_Z), 90.0, "ships")
+    # Her brow from the quay's edge onto her waist (her deck's way ashore).
+    L.put("carrack_brow", (CARRACK_X + kit_ships.BROW_X, 0.0, 0.0), 0.0, "ships")
     L.ship("caravel", (-120.0, 0.0, 5.5), 180.0, "ships")
 
     for at, yaw in BOATS:

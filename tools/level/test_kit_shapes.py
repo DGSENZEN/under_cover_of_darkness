@@ -61,6 +61,15 @@ class Shapes(unittest.TestCase):
         moved = kit_shapes.moved([kit_shapes.polygon([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]], "brick")], 90.0, (0.0, 5.0, 0.0))
         self.assertAlmostEqual(moved[0]["points"][2][1], 6.0)
 
+    def test_a_polygon_takes_its_own_uvs(self):
+        # (A tiled roof's channels: its photo laid along the slope, not
+        # projected from above, so it runs on across the channels.)
+        uvs = [[0.0, 0.0], [0.5, 0.0], [0.5, 2.0]]
+        part = kit_shapes.build([kit_shapes.polygon([[0.0, 1.0, 0.0], [1.0, 1.0, 0.0], [1.0, 0.0, 1.0]], "roof_spanish", uvs=uvs)])
+        self.assertEqual(part["faces"][0][2], uvs)
+        moved = kit_shapes.moved([kit_shapes.polygon([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]], "brick", uvs=uvs)], 90.0)
+        self.assertEqual(kit_shapes.build(moved)["faces"][0][2], uvs)
+
     def test_an_arched_wall_moves_and_turns(self):
         # Set 1 m forward and turned a quarter: it runs along z, 0.4 thick
         # about x = 1.

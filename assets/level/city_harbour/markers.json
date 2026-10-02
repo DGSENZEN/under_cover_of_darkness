@@ -254,6 +254,11 @@
    },
    "box": true
   },
+  "smoke": {
+   "required": [],
+   "optional": {},
+   "box": false
+  },
   "probe": {
    "required": [
     "expect"

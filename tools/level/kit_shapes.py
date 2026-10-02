@@ -126,10 +126,16 @@ def ring(cx, cy, cz, inner, outer, depth, start, end, segments, slot, yaw=0.0):
             "segments": int(segments), "slot": slot, "turn": [yaw, 0.0, 0.0]}
 
 
-def polygon(points, slot):
+def polygon(points, slot, uvs=None):
     """One face through `points` (in the piece's frame), drawn from the side
-    they wind counter-clockwise toward only: a vault's web, a hull's panel."""
-    return {"kind": "polygon", "points": [list(p) for p in points], "slot": slot}
+    they wind counter-clockwise toward only: a vault's web, a hull's panel.
+    `uvs` one per point (metres on its own plane if not given)."""
+    shape = {"kind": "polygon", "points": [list(p) for p in points], "slot": slot}
+
+    if uvs is not None:
+        shape["uvs"] = [list(uv) for uv in uvs]
+
+    return shape
 
 
 def moved(shapes, yaw=0.0, offset=(0.0, 0.0, 0.0)):
@@ -171,7 +177,7 @@ def build(shapes):
     their own (rounded cards), the rest flat}."""
     part = {"verts": [], "faces": [], "normals": {}}
     makers = {"box": _box, "prism": _prism, "arched": _arched, "gable": _gable, "card": _card, "lathe": _lathe, "disc": _disc,
-              "slab": _slab, "ring": _ring, "polygon": lambda part, shape: _add_face(part, shape["points"], shape["slot"])}
+              "slab": _slab, "ring": _ring, "polygon": lambda part, shape: _add_face(part, shape["points"], shape["slot"], shape.get("uvs"))}
 
     for shape in shapes:
         makers[shape["kind"]](part, shape)

@@ -5,6 +5,7 @@ an object of it laid out in a grid by family, for looking at. Levels link
 the meshes, so building the kit again updates every level.
 
     Blender -b --factory-startup --python tools/level/kit.py
+    LEVEL_KIT_OUT=/tmp/ships.blend LEVEL_KIT_ONLY=caravel,rowboat Blender -b --factory-startup --python tools/level/kit.py
 """
 
 import os
@@ -117,8 +118,15 @@ def make_mesh(name, recipe):
 def main():
     scene = common.scene_fresh()
     families = {}
+    # (A private kit for looking at pieces while the levels' own is left as it
+    # is: LEVEL_KIT_OUT a .blend to write instead, LEVEL_KIT_ONLY the pieces.)
+    only = {n for n in os.environ.get("LEVEL_KIT_ONLY", "").split(",") if n}
+    out = os.environ.get("LEVEL_KIT_OUT") or str(common.KIT)
 
     for name in kit_recipes.names():
+        if only and name not in only:
+            continue
+
         recipe = kit_recipes.PIECES[name]
         mesh = make_mesh(name, recipe)
         family = recipe["family"]
@@ -136,8 +144,8 @@ def main():
         families[family][1] = count + 1
 
     common.SOURCE.mkdir(parents=True, exist_ok=True)
-    bpy.ops.wm.save_as_mainfile(filepath=str(common.KIT))
-    print("level: kit of %d pieces -> %s" % (len(kit_recipes.PIECES), common.KIT.relative_to(common.ROOT)))
+    bpy.ops.wm.save_as_mainfile(filepath=out)
+    print("level: kit of %d pieces -> %s" % (sum(c for _, c in families.values()), out))
 
 
 main()
