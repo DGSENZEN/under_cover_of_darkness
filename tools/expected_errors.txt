@@ -4,3 +4,7 @@
 
 # lights_test L32: a fixture whose model is missing is still a bare flame.
 LightFixture: no fixture called 'no_such_fixture'
+
+# NavBaker.drop_unreached (the city, the garrison): asking the map whether an
+# island of floor can be reached at all; Godot reports a "no" this way.
+It's not expect to not find the most reachable polygons

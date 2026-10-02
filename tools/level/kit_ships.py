@@ -314,12 +314,14 @@ def _carrack_rig():
     cols = [col(0.0, TOP - 0.05, 0.0, 2.0 * TOP_RADIUS - 0.2, 0.1, 2.0 * TOP_RADIUS - 0.2), col(10.0, 15.95, 0.0, 2.0, 0.1, 2.0),
             col(0.0, 15.0, 0.0, 0.6, 26.0, 0.6), col(10.0, 14.25, 0.0, 0.5, 15.5, 0.5), col(-9.0, 11.0, 0.0, 0.4, 12.0, 0.4)]
     # The climbs: upright, inside the shrouds' lean, from the deck to a
-    # mantle under the top; their backs on the side toward the mast.
+    # mantle under the top. A climb's wall is its box's middle (the climber
+    # hangs 0.38 m out from it): 0.2 m past the top's edge, so he comes up
+    # clear of the top and within the scanner's reach of its edge.
     climbs = []
 
     for side, yaw in ((1.0, 0.0), (-1.0, 180.0)):
-        climbs.append([0.0, (MAIN_DECK + TOP - 0.4) / 2.0, side * (TOP_RADIUS + 1.15), 3.0, TOP - 0.4 - MAIN_DECK, 2.3, yaw])
-        climbs.append([10.0, (FORE_DECK + 15.7) / 2.0, side * (1.1 + 0.9), 2.2, 15.7 - FORE_DECK, 1.8, yaw])
+        climbs.append([0.0, (MAIN_DECK + TOP - 0.4) / 2.0, side * (TOP_RADIUS + 0.2), 3.0, TOP - 0.4 - MAIN_DECK, 2.3, yaw])
+        climbs.append([10.0, (FORE_DECK + 15.7) / 2.0, side * (1.1 + 0.2), 2.2, 15.7 - FORE_DECK, 1.8, yaw])
 
     return shapes, cols, climbs
 

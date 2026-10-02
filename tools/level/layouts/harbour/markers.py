@@ -75,8 +75,11 @@ def _lights(L):
     L.mark("gate_torch_w", "light", (GATE_X - 3.5, QUAY + 4.0, WALL_D + 1.6), 0.0, "terreiro", kind="torch")
     L.mark("gate_torch_e", "light", (GATE_X + 3.5, QUAY + 4.0, WALL_D + 1.6), 0.0, "terreiro", kind="torch")
     L.mark("gate_brazier", "light", (GATE_X, QUAY, WALL_D + 7.0), 0.0, "terreiro", kind="brazier")
+    L.mark("sea_gate_portcullis", "portcullis", (GATE_X, QUAY, WALL_D + 0.7), 0.0, "terreiro", state="up", width=4.0, height=5.0,
+           label="the Sea Gate's portcullis")
 
-    for i in (1, 3, 5, 7, 9, 11):
+    # The arcade's lanterns far apart: dark stretches under it between them.
+    for i in (2, 8, 12):
         L.mark("arcade_lantern_%d" % i, "light", (rib_x(i), QUAY + 3.3, -8.0), 0.0, "ribeira", kind="lantern")
 
     L.mark("nave_brazier_w", "light", (29.0, QUAY, -30.0), 0.0, "shipyard", kind="brazier")
@@ -233,13 +236,15 @@ def _ways_in(L):
                                ((CARRACK_X, MAINYARD_Y + 0.25, 1.5), "drop"), ((CARRACK_X, MAINYARD_Y + 0.25, SEA_WALL - 0.3), "balance"),
                                ((CARRACK_X, WALK, SEA_WALL - 0.3), "drop")], "ships")
     # The roofs': up casa_d's old vine to its eaves, onto its roof, over its
-    # ridge and through a crenel onto the Ribeira wall's walk.
+    # ridge and a merlon onto the Ribeira wall's walk.
     x = rib_x(ROOF_HOUSE)
     vine = x + kit_iberian.VINE_X
     front = ARCADE_FRONT
+    # (Over a merlon, not through a crenel: one is 0.9 m, the thief 1.0 m.)
+    merlon = x - 1.5
     _checks(L, "way_roofs", [((vine, QUAY, -3.0), "walk"), ((vine, QUAY, front + 0.6), "walk"), ((vine, ROOF_EAVES - 0.1, front + 0.3), "climb"),
-                             ((vine, ROOF_EAVES + 0.5, front - 1.0), "mantle"), ((x, QUAY + 15.2, -13.0), "walk"), ((x, QUAY + 12.8, -19.8), "walk"),
-                             ((x, WALK + 0.9, WALL_RIB + 0.9), "walk"), ((x, WALK, WALL_RIB - 0.3), "drop")], "ribeira")
+                             ((vine, ROOF_EAVES + 0.5, front - 1.0), "mantle"), ((x, QUAY + 15.2, -13.0), "walk"), ((merlon, QUAY + 12.8, -19.8), "walk"),
+                             ((merlon, WALK + 1.8, WALL_RIB + 0.9), "mantle"), ((merlon, WALK, WALL_RIB - 0.3), "drop")], "ribeira")
     # The Nasrid gate's: swim in through it, up the slipway.
     _checks(L, "way_nasrid", [((71.0, -0.5, 8.0), "swim"), ((71.0, -0.5, -7.0), "swim"), ((71.0, -0.5, -20.0), "swim"),
                               ((71.0, -1.7, -26.5), "swim"), ((71.0, QUAY, -34.5), "walk")], "shipyard")
@@ -255,7 +260,7 @@ def _ways_in(L):
 
 
 def _probes(L):
-    for name, at, expect, sector in (("probe_arcade", (rib_x(ROOF_HOUSE), QUAY + 1.0, -8.5), "shadow", "ribeira"),
+    for name, at, expect, sector in (("probe_arcade", (rib_x(5), QUAY + 1.0, -8.5), "shadow", "ribeira"),
                                      ("probe_terreiro", (GATE_X, QUAY + 1.0, -50.0), "lamp", "terreiro"),
                                      ("probe_mole", (163.0, MOLE_TOP + 1.0, 60.0), "moon", "mole"),
                                      ("probe_nave", (58.6, QUAY + 1.0, -45.0), "shadow", "shipyard"),

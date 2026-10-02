@@ -326,8 +326,72 @@ func _run() -> void:
 		"crate at %.2f (surface %.2f, bottom -2.6)" % [crate.global_position.y, POOL_SURFACE])
 	crate.queue_free()
 
+	# P1 up a wall under a pitched roof (the Ribeira's vine): forward held,
+	#    onto the roof, never falling back onto the climb at the eaves (the
+	#    scanner meeting the roof's slope over the wall's top and turning it
+	#    away as "not a wall")
+	await _fresh()
+	_house_with_vine(Vector3(210, 0, 25))
+	await _frames(2)
+	_put_player(Vector3(210, 1.05, 28.9))
+	Input.action_press("move_forward")
+	var held := [false, 0, 0]
+
+	for i in 900:
+		var state: int = player.movement_state
+
+		if state == player.MoveState.CLIMBING:
+			held[0] = true
+
+			if held[2] != player.MoveState.CLIMBING and player.global_position.y > 4.0:
+				held[1] += 1
+
+		held[2] = state
+
+		if player.is_on_floor() and player.global_position.y > 6.95:
+			break
+
+		await get_tree().physics_frame
+
+	_release_all()
+	var roofed: bool = player.is_on_floor() and player.global_position.y > 6.95
+	_check("P1 up a wall under a pitched roof: forward held, onto the roof, never back onto the climb at the eaves", held[0] and roofed and held[1] == 0,
+		"climbed %s, on the roof %s at %s, took hold again up top %d times (%s)" % [held[0], roofed, player.global_position, held[1],
+			player.scanner.last_reject])
+
 
 # --------------------------------------------------------------------------
+
+## A house 6 m to its eaves with its front (+z) 3 m from `at`, a roof of two
+## 20-degree slopes (their colliders stopping at the walls, as the city's
+## houses'), and a vine up its front from the ground to the eaves (P1).
+func _house_with_vine(at: Vector3) -> void:
+	Props.block(self, at + Vector3(0, 3, 0), Vector3(6, 6, 6))
+	var pitch := deg_to_rad(20.0)
+	var rise := 3.0 * tan(pitch)
+	var trim := 0.2 * tan(pitch)
+
+	for s in [1.0, -1.0]:
+		var slab := StaticBody3D.new()
+		var shape := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(6, 0.2, sqrt(9.0 + rise * rise) - trim)
+		shape.shape = box
+		slab.add_child(shape)
+		add_child(slab)
+		slab.global_position = at + Vector3(0, 6 + rise / 2.0 + 0.1 / cos(pitch) + trim / 2.0 * sin(pitch), s * (1.5 - trim / 2.0 * cos(pitch)))
+		slab.rotation.x = s * pitch
+
+	var vine := Area3D.new()
+	vine.set_script(CLIMB)
+	var vine_shape := CollisionShape3D.new()
+	var vine_box := BoxShape3D.new()
+	vine_box.size = Vector3(0.7, 6.0, 0.5)
+	vine_shape.shape = vine_box
+	vine.add_child(vine_shape)
+	add_child(vine)
+	vine.global_position = at + Vector3(0, 3.0, 3.25)
+
 
 ## A ladder up a south face: a ClimbVolume `height` tall centred at `at`.
 func _ladder(at: Vector3, height: float) -> void:

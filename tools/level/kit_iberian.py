@@ -34,9 +34,13 @@ FRENCH = (1.0, 2.2)
 PITCH = 20.0
 CASA_TRIS = 2200
 DOOR = (1.2, 2.2)
-# Where casa_d's vine climbs its front: between its right balconies and its
-# quoin, up the arcade's pier.
-VINE_X = 2.55
+# Where casa_d's vine climbs its front: up its right windows (its balconies
+# are on its left), with room for a climber on its roof clear of the taller
+# house beside it.
+VINE_X = 1.4
+# The wall plate along each eaves (m over the wall's top): hidden under the
+# drawn eaves, it covers the roof slab's tilted end.
+EAVES_PLATE = 0.3
 
 
 def col(cx, cy, cz, sx, sy, sz, yaw=0.0, pitch=0.0, roll=0.0):
@@ -78,10 +82,10 @@ def _window(x, y0, lit, balcony):
 
 
 def _vine(eaves):
-    """An old vine up a front from the quay to the eaves (beside its right
-    balconies, on the arcade's pier): its gnarled trunk, mats of our painted
-    ivy, and the climb up it (ending at the eaves, so the climber mantles
-    onto the roof)."""
+    """An old vine up a front from the quay to the eaves (up its right
+    windows, hanging over the arcade's arch below them): its gnarled trunk,
+    mats of our painted ivy, and the climb up it (ending at the eaves, so the
+    climber mantles onto the roof)."""
     x = VINE_X
     shapes = [ks.box(x - 0.05, 1.3, FRONT + 0.08, 0.14, 2.6, 0.12, "bark", 0.0, 0.0, 4.0),
               ks.box(x + 0.04, 2.6 + (eaves - 0.5 - 2.6) / 2.0, FRONT + 0.07, 0.11, eaves - 0.5 - 2.6, 0.1, "bark", 0.0, 0.0, -1.5)]
@@ -101,7 +105,8 @@ def _vine(eaves):
 def casa(storeys, front, side, balconies, lit, chimney=1.0, vine=False):
     """A house: `storeys` over the arcade, its front skin `front` (tiles or
     render), its sides and back `side`; balconies "all" (every storey) or
-    "top"; `lit` [(storey, window 0 or 1)]; the chimney to the left (-1) or
+    "top" (the top storey's) or "left" (every storey's left window); `lit`
+    [(storey, window 0 or 1)]; the chimney to the left (-1) or
     right; `vine` its old vine up its front (the climb to its roof). Returns
     (shapes, colliders, size, eaves, climbs)."""
     height = storeys * STOREY
@@ -128,9 +133,8 @@ def casa(storeys, front, side, balconies, lit, chimney=1.0, vine=False):
     for storey in range(storeys):
         y0 = GROUND + storey * STOREY
         shapes.append(ks.box(0.0, y0 + 0.02, FRONT + 0.07, WIDTH, 0.18, 0.12, "granite"))
-        on_balcony = balconies == "all" or storey == storeys - 1
-
         for i, x in enumerate((-1.4, 1.4)):
+            on_balcony = balconies == "all" or (balconies == "left" and i == 0) or (balconies == "top" and storey == storeys - 1)
             shapes += _window(x, y0, (storey + 1, i) in lit, on_balcony)
 
             if on_balcony:
@@ -148,9 +152,17 @@ def casa(storeys, front, side, balconies, lit, chimney=1.0, vine=False):
 
     slope = math.hypot(FRONT, rise)
     lift = k.ROOF_THICK / 2.0 / math.cos(math.radians(PITCH))
+    # (Each slope's collider stops short of its eaves by what its tilted end
+    # would stand out past the wall: a climber at the eaves meets the wall's
+    # upright face, which the scanner takes for a wall to mantle.)
+    trim = k.ROOF_THICK * math.tan(math.radians(PITCH))
+    inward, up = trim / 2.0 * math.cos(math.radians(PITCH)), trim / 2.0 * math.sin(math.radians(PITCH))
 
     for s in (-1.0, 1.0):
-        cols.append(col(0.0, eaves + rise / 2.0 + lift, s * FRONT / 2.0, WIDTH, k.ROOF_THICK, slope, 0.0, s * PITCH))
+        cols.append(col(0.0, eaves + rise / 2.0 + lift + up, s * (FRONT / 2.0 - inward), WIDTH, k.ROOF_THICK, slope - trim, 0.0, s * PITCH))
+        # (A wall plate along the eaves, flush with the wall, over the slab's
+        # tilted end: just over the wall's top a climber still meets a wall.)
+        cols.append(col(0.0, eaves + EAVES_PLATE / 2.0, s * (FRONT - 0.1), WIDTH, EAVES_PLATE, 0.2))
 
     top = eaves + rise + 1.0
     shapes += kit_houses._chimney(chimney * 1.8, -FRONT + 1.5, top, side)[:2]
@@ -170,7 +182,7 @@ CASAS = {
     "casa_a": dict(storeys=5, front="azulejo_green", side="render_ochre", balconies="all", lit=[(2, 0), (4, 1)], chimney=1.0),
     "casa_b": dict(storeys=4, front="azulejo_cube", side="whitewash", balconies="top", lit=[(3, 1)], chimney=-1.0),
     "casa_c": dict(storeys=6, front="azulejo_blue", side="render_salmon", balconies="all", lit=[(1, 1), (5, 0)], chimney=1.0),
-    "casa_d": dict(storeys=3, front="render_ochre", side="render_ochre", balconies="all", lit=[(2, 1)], chimney=-1.0, vine=True),
+    "casa_d": dict(storeys=3, front="render_ochre", side="render_ochre", balconies="left", lit=[(2, 1)], chimney=-1.0, vine=True),
     "casa_e": dict(storeys=5, front="render_salmon", side="render_salmon", balconies="top", lit=[], chimney=1.0),
     "casa_f": dict(storeys=4, front="render_blue", side="whitewash", balconies="all", lit=[(1, 0), (4, 0)], chimney=-1.0),
     "casa_g": dict(storeys=6, front="whitewash", side="whitewash", balconies="top", lit=[(6, 1)], chimney=1.0),

@@ -140,6 +140,8 @@ class Fort(unittest.TestCase):
 
 
 CASAS = ["casa_%s" % c for c in "abcdefgh"]
+# The player's capsule's radius (Player.tscn): what a climb must leave room for.
+CLIMBER = 0.5
 
 
 def balconies(recipe):
@@ -190,14 +192,47 @@ class Iberian(unittest.TestCase):
         self.assertAlmostEqual(z - sz / 2.0, recipe["front"], places=2)
         self.assertAlmostEqual(yaw, 0.0)
 
+        # The climber (the player's capsule, 0.5 m round) passes the balconies
+        # and lands on the roof clear of the next house (a taller one: no room
+        # for him there, and the mantle is refused).
         for c in balconies(recipe):
-            self.assertGreaterEqual(abs(x) - sx / 2.0, abs(c[0]) + c[3] / 2.0 - 1e-6)
+            self.assertGreaterEqual(abs(x - c[0]) - c[3] / 2.0, CLIMBER + 0.05, c)
 
+        self.assertLessEqual(abs(x) + CLIMBER, recipe["size"][0] / 2.0 - 0.2 - 0.05)
+        self.assertGreaterEqual(len(balconies(recipe)), 3)
         self.assertTrue(any(s["slot"] == "ivy" for s in recipe["shapes"]))
 
         for name in CASAS:
             if name != "casa_d":
                 self.assertEqual(kit_recipes.PIECES[name].get("climbs", []), [], name)
+
+    def test_the_roofs_stop_at_the_walls(self):
+        # A climber at the eaves (casa_d's vine) must meet the wall's upright
+        # face, not the tilted end of a roof's collider standing out past it
+        # (the scanner turns a sloped face away: "not a wall").
+        for name in CASAS:
+            recipe = kit_recipes.PIECES[name]
+
+            for box in geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY):
+                if box.centre[1] < recipe["eaves"]:
+                    continue
+
+                for corner in _corners(box):
+                    self.assertLessEqual(abs(corner[2]), recipe["front"] + 1e-3, "%s: %s" % (name, [round(v, 3) for v in corner]))
+
+    def test_the_eaves_show_a_climber_a_wall(self):
+        # Just over the wall's top a climber's scan meets an upright wall plate
+        # (flush with the front and back), not the end of a roof's slab, which
+        # tilts and is turned away as "not a wall".
+        for name in CASAS:
+            recipe = kit_recipes.PIECES[name]
+            boxes = geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY)
+
+            for s in (1.0, -1.0):
+                for x in (-2.5, 0.0, 2.55):
+                    for up in (0.05, 0.15, 0.25):
+                        point = [x, recipe["eaves"] + up, s * (recipe["front"] - 0.02)]
+                        self.assertTrue(any(b.contains(point) for b in boxes), "%s: %s" % (name, point))
 
     def test_the_arcade_is_paved(self):
         # Its walkway is floored (the quay ends at its front): a collider
@@ -272,6 +307,21 @@ class Harbour(unittest.TestCase):
         self.assertAlmostEqual(steps[-1][0], 2.3, places=3)
         self.assertLessEqual(steps[0][0], 0.1)
         self.assertTrue(all(abs(b[0] - a[0] - kit_recipes.RISER) < 1e-6 for a, b in zip(steps, steps[1:])))
+
+    def test_a_shroud_climber_comes_up_within_reach_of_his_top(self):
+        # A climb's wall is its box's middle (ClimbVolume.get_plane_point):
+        # the climber hangs 0.38 m out from it (his radius and climb_distance).
+        # Up the shrouds he must pass the top clear of it overhead, and come
+        # up within the scanner's reach (1.2 m) of its edge to mantle onto it.
+        rig = kit_recipes.PIECES["carrack_rig"]
+        tops = [c for c in rig["cols"] if c[4] <= 0.15]
+
+        for c in rig["climbs"]:
+            top = min(tops, key=lambda t: abs(t[0] - c[0]))
+            half = top[5] / 2.0
+            hangs = abs(c[2]) + 0.38
+            self.assertGreaterEqual(hangs - 0.3, half + 0.05, c)
+            self.assertLessEqual(hangs - half, 1.0, c)
 
     def test_the_mole_is_walked_and_its_parapet_climbed(self):
         cols = kit_recipes.PIECES["mole_8"]["cols"]

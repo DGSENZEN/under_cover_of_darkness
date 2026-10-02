@@ -25,10 +25,13 @@ const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const LoadingScreen := preload("res://scripts/UI/LoadingScreen.gd")
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
 
 const DISTRICTS := ["res://assets/level/city_harbour", "res://assets/level/city_massing"]
+## What the loading screen says as each is laid out.
+const LAYING := {"city_harbour": "Laying out the harbour", "city_massing": "Raising the city on the rock"}
 ## The moon: from the south-south-west, over the sea; its shadows this far.
 const MOON_TOWARD := Vector3(0.3, -0.57, -0.77)
 const MOON_ENERGY := 0.36
@@ -79,12 +82,16 @@ func _ready() -> void:
 	SquadScript.clear_all()
 	GarrisonScript.clear_all()
 	LightProbe.invalidate()
+	# (Up from the first frame, saying what is being done.)
+	var screen := LoadingScreen.open(self, "The City on the Rock")
 
-	for folder in DISTRICTS:
-		var district: String = folder.get_file()
-		levels[district] = LevelLoader.load_level(self, folder, district)
+	for i in DISTRICTS.size():
+		var district: String = (DISTRICTS[i] as String).get_file()
+		await screen.step(LAYING.get(district, "Laying out %s" % district), 0.05 + 0.25 * i)
+		levels[district] = LevelLoader.load_level(self, DISTRICTS[i], district)
 		made[district] = LevelGameplay.build_all(self, levels[district])
 
+	await screen.step("The night comes in off the sea", 0.4)
 	var moon := _environment()
 	_night(moon)
 	var wind := Node.new()
@@ -113,9 +120,12 @@ func _ready() -> void:
 	for body in (levels["city_massing"] as LevelLoader.Level).root.find_children("*", "CollisionObject3D", true, false):
 		body.add_to_group(&"nav_ignore")
 
+	await screen.step("The watch learns its ways", 0.45)
+	screen.creep_to(0.9)
 	add_child(baker)
 	await baker.baked
 	LightProbe.invalidate()
+	await screen.step("The watch takes its posts", 0.92)
 
 	# The same night every run: nobody reseeds the dice as he is made.
 	GuardScript.randomize_on = false
@@ -126,7 +136,9 @@ func _ready() -> void:
 		guards.merge(LevelGameplay.guards(self, levels[district], d["routes"], d["stations"], GUARD))
 
 	GuardScript.randomize_on = true
+	await screen.step("Into the rowboat", 0.97)
 	_player()
+	screen.close()
 	load_seconds = (Time.get_ticks_msec() - started) / 1000.0
 	var mesh: NavigationMesh = baker.navigation_mesh
 	var off_mesh: Array[String] = []
