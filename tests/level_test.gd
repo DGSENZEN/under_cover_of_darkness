@@ -15,6 +15,7 @@ const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GUARD := preload("res://Guard.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
+const WaterScript := preload("res://scripts/Interaction/WaterVolume.gd")
 ## The harbour's photo slots (tools/textures/recipes), K10.
 const HARBOUR_PHOTO_SLOTS := [&"granite", &"granite_rough", &"ashlar_gold", &"render_ochre", &"render_salmon", &"render_blue",
 	&"render_straw", &"whitewash", &"azulejo_green", &"azulejo_cube", &"azulejo_blue", &"azulejo_blue2", &"azulejo_border",
@@ -341,6 +342,25 @@ func _gameplay() -> void:
 	var big18 := NavigationServer3D.map_get_closest_point(map18, Vector3(90, 0, 0)).distance_to(Vector3(90, 0, 0))
 	_check("K18 the navmesh keeps its home's island, not the biggest", home18 < 0.5 and big18 > 5.0,
 		"home's floor %.1f m off, the big island's %.1f m off" % [home18, big18])
+
+	# K19 swim regions only where the bake reaches: a deep water wholly
+	# outside its bounds gets none (the city's gorge: 8 s of a 19 s load),
+	# one reaching into them gets its region
+	var bay := Node3D.new()
+	holder.add_child(bay)
+	Props.block(bay, Vector3(80, -4.5, 0), Vector3(40, 1, 20))
+	Props.block(bay, Vector3(160, -4.5, 0), Vector3(20, 1, 20))
+	var half_in: Area3D = WaterScript.build(bay, Vector3(80, -2.0, 0), Vector3(40, 4, 20))
+	var outside: Area3D = WaterScript.build(bay, Vector3(160, -2.0, 0), Vector3(20, 4, 20))
+	var baker19 := NavigationRegion3D.new()
+	baker19.set_script(NavBakerScript)
+	baker19.bake_bounds = AABB(Vector3(50, -6, -12), Vector3(40, 10, 24))
+	bay.add_child(baker19)
+	await baker19.baked
+	var region19: NavigationRegion3D = half_in.get_meta(&"swim_region", null)
+	_check("K19 swim regions only where the bake reaches: none for water wholly outside it",
+		region19 != null and region19.navigation_mesh != null and region19.navigation_mesh.get_polygon_count() > 0 and not outside.has_meta(&"swim_region"),
+		"the reached water's region %s, the outside one's %s" % [region19 != null, outside.has_meta(&"swim_region")])
 	holder.queue_free()
 	world.queue_free()
 	SoundBus.clear_zones()

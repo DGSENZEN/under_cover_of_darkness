@@ -464,6 +464,15 @@ func _local_corners(thing: Node3D) -> PackedVector3Array:
 ## costs SWIM_COST), cut where walls stand in it, and nowhere else.
 func _bake_water(land: NavigationMesh) -> void:
 	for water in _deep_waters():
+		# Only water the bake reaches: a gorge past the bounds is a bake of its
+		# own for nothing. (A swim bake cut to the bounds as well pulls its
+		# edges back from the shores, and the ways out of the water go.)
+		var size: Vector3 = water.size
+		var box := AABB((water as Node3D).global_position - size * 0.5, size)
+
+		if bake_bounds.size != Vector3.ZERO and not (global_transform * bake_bounds).intersects(box):
+			continue
+
 		var mesh := NavigationMesh.new()
 
 		for property in ["agent_radius", "agent_height", "agent_max_slope", "agent_max_climb", "cell_size", "cell_height", "geometry_collision_mask"]:
