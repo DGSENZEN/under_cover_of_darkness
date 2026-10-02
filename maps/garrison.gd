@@ -1,16 +1,6 @@
 extends "res://maps/npc_showcase.gd"
-## The garrison (the garrison spec): the NPC showcase's night in a walled
-## keep on the canal bank, built in Blender with the level kit (tools/level:
-## assets/level/garrison) and put together here from its markers.
-##
-## Everything the yard's script does once the place exists is the yard's
-## (maps/npc_showcase.gd: the cast's configuration, the rota's engine, the
-## director, the camera, the overlay, the weather's key, the intruder); this
-## script answers only for the place: the level loaded, and the game's nodes
-## made from its markers (doors, lights, stations, the bell, the canal, the
-## climb, chests and crates, routes, gathering places, landmarks, the marks
-## the story plays on), where the cast stands, the night's duties and air.
-##   Godot --path . res://maps/garrison.tscn
+## Builds the marker-driven canal garrison and overrides the NPC showcase layout.
+## Inherits cast, rota, director, camera and night lifecycle from npc_showcase.gd.
 
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const ClimbScript := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
@@ -103,11 +93,13 @@ func _story_path() -> String:
 
 ## The show's camera starts at eye level by the watch's fire (never the whole
 ## place from on high before anything has happened).
+## Returns the garrison's [camera_position: Vector3, look_target: Vector3] in world space.
 func camera_home() -> Array:
 	return [Vector3(-3.5, 1.7, 5.5), Vector3(0.0, 1.2, 0.0)]
 
 
 ## The place: the level from its markers, the moon and the sky, the night.
+## Loads the exported level and instantiates markers into showcase geometry/gameplay nodes.
 func build() -> void:
 	level = LevelLoader.load_level(self, LEVEL)
 	_doors()
@@ -137,9 +129,7 @@ func build() -> void:
 	add_child(_baker)
 
 
-# ---------------------------------------------------------------------------
 # Markers into the game's nodes
-# ---------------------------------------------------------------------------
 
 func _doors() -> void:
 	for m in level.of("door"):
@@ -279,9 +269,7 @@ func _marks_from_markers() -> void:
 			[Vector3(-1.2, 0, -0.9), &"stand", &"listener"], [Vector3(0, 0, 1.6), &"stand", &"listener"]])
 
 
-# ---------------------------------------------------------------------------
 # The light: the moon and the sky (as the yard's), and every light marker
-# ---------------------------------------------------------------------------
 
 func _garrison_lights() -> void:
 	var environment := RetroScript.night_environment(Color(0.34, 0.34, 0.42), AMBIENT)
@@ -454,9 +442,8 @@ func _decal(m: Dictionary) -> void:
 	decal.global_transform = Transform3D(Basis(at.basis.x, at.basis.z, Vector3.DOWN), at.origin)
 
 
-## The ladder up the range's roof pulled up by a man on it (ShowNight's
-## intruder going to ground): it lies on the roof now, and nobody climbs
-## after him (its climb and the navmesh's ways up it gone).
+## Removes the infiltration climb volume and disables its navigation links.
+## Lays the ladder on the roof so ShowNight's fleeing intruder cannot be followed.
 func pull_up_ladder() -> void:
 	var volume := get_node_or_null(LADDER)
 
@@ -521,9 +508,7 @@ func _god_rays() -> void:
 			rays.add_window(outline, uvs)
 
 
-# ---------------------------------------------------------------------------
 # The cast where the markers put them; the night's duties and air
-# ---------------------------------------------------------------------------
 
 func _spawn_cast() -> void:
 	for entry in CAST:

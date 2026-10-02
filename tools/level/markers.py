@@ -84,8 +84,11 @@ ROUNDS_LIGHTS = ["", "lantern", "torch"]
 
 
 def problems(marker):
-    """What is wrong with one marker (a dict: name, ucd, props, size), as
-    sentences; none if it is right."""
+    """Return list[str] schema failures; [] passes, without mutating marker.
+
+    marker is a dict with name, ucd, props, and size (three-vector or None).
+    Unknown ucd returns one failure; properties must match its SCHEMA entry.
+    """
     out = []
     ucd = marker.get("ucd", "")
     props = marker.get("props", {})
@@ -140,12 +143,18 @@ def problems(marker):
 
 
 def with_defaults(marker):
+    """Return a shallow marker dict with fresh props; explicit values win.
+
+    Input is a marker dict with ucd and optional props; unknown kinds gain no
+    defaults. Other nested fields retain their original references.
+    """
     props = dict(SCHEMA.get(marker["ucd"], {}).get("optional", {}))
     props.update(marker.get("props", {}))
     return dict(marker, props=props)
 
 
 def write_json(path):
+    """Write schema/options JSON to a filesystem path; return None."""
     with open(path, "w") as out:
         json.dump({"schema": SCHEMA, "station_kinds": STATION_KINDS, "light_kinds": LIGHT_KINDS, "grades": GRADES,
                    "tool_kinds": TOOL_KINDS, "prop_kinds": PROP_KINDS, "moves": MOVES, "probe_expect": PROBE_EXPECT,

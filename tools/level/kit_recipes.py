@@ -76,10 +76,8 @@ def model(name, shapes):
     PIECES[name]["shapes"] = shapes
 
 
-# ---------------------------------------------------------------------------
 # Walls: plain runs, a door, a window, an arch, an arrow slit, a corner post;
 # one storey high, OUTER thick (INNER for the partitions).
-# ---------------------------------------------------------------------------
 
 def _with_opening(width, depth, height, gap_w, gap_h, sill, slot):
     """A wall `width` long with a hole gap_w x gap_h from `sill` up."""
@@ -135,10 +133,8 @@ for material, (slot, surface) in WALLS.items():
     piece("wall_%s_tall_lancet" % material, "wall", slot, surface,
           _with_opening(2.0, OUTER, STOREY * 2.0, 0.9, 3.6, 1.8, slot), size=[2.0, STOREY * 2.0, OUTER], opening=[0.9, 3.6])
 
-# ---------------------------------------------------------------------------
 # The curtain wall: a walk on top (CURTAIN_HEIGHT), a crenellated parapet on
 # its outer (+z) side; a gap for the gate; a corner block.
-# ---------------------------------------------------------------------------
 
 def _curtain(length, slot="ashlar"):
     out = [box(0.0, CURTAIN_HEIGHT / 2.0, 0.0, length, CURTAIN_HEIGHT, CURTAIN_DEPTH, slot)]
@@ -182,9 +178,7 @@ piece("curtain_corner", "curtain", "ashlar", "stone",
       cols=[[0.0, CURTAIN_HEIGHT / 2.0, 0.0, CURTAIN_DEPTH, CURTAIN_HEIGHT, CURTAIN_DEPTH, "stone", 0, 0, 0]],
       size=[CURTAIN_DEPTH, CURTAIN_HEIGHT + PARAPET, CURTAIN_DEPTH])
 
-# ---------------------------------------------------------------------------
 # Floors (their top at the pivot), ceilings, a roof slope.
-# ---------------------------------------------------------------------------
 
 FLOORS = {"cobble": ("cobble", "stone"), "flag": ("flagstone", "stone"), "board": ("boards", "wood"),
           "grass": ("grass", "grass"), "mud": ("mud", "dirt"), "gravel": ("gravel", "gravel"),
@@ -215,10 +209,8 @@ for size in (2, 4):
     piece("beam_%d" % size, "beam", "timber", "wood",
           [box(0.0, 0.0, 0.0, float(size), 0.25, 0.25, "timber")], size=[float(size), 0.25, 0.25])
 
-# ---------------------------------------------------------------------------
 # Stairs: a straight flight up one storey (along +z from its pivot, 1.2 m
 # wide); a spiral turn (a quarter turn, a quarter storey, round a post).
-# ---------------------------------------------------------------------------
 
 _steps = int(round(STOREY / RISER))
 piece("stair_straight", "stair", "flagstone", "stone",
@@ -255,18 +247,14 @@ for i in range(4):
 _spiral.append(box(0.0, 0.5, 0.0, 0.4, 1.0, 0.4, "ashlar"))
 piece("stair_spiral_quarter", "stair", "flagstone", "stone", _spiral, size=[3.0, 4 * RISER, 3.0])
 
-# ---------------------------------------------------------------------------
 # Columns and arches (the colonnade), vault ribs, a buttress.
-# ---------------------------------------------------------------------------
 
 piece("column", "column", "ashlar", "stone", [box(0.0, STOREY / 2.0, 0.0, 0.45, STOREY, 0.45, "ashlar")], size=[0.45, STOREY, 0.45])
 piece("arch_span_3", "column", "ashlar", "stone", [box(0.0, STOREY - 0.3, 0.0, 3.0, 0.6, 0.45, "ashlar")], size=[3.0, 0.6, 0.45])
 piece("rib_8", "vault", "ashlar", "stone", [box(0.0, 0.0, 0.0, 8.0, 0.35, 0.35, "ashlar")], cols=[], size=[8.0, 0.35, 0.35])
 piece("buttress", "column", "ashlar", "stone", [box(0.0, STOREY, 0.0, 0.8, STOREY * 2.0, 1.2, "ashlar")], size=[0.8, STOREY * 2.0, 1.2])
 
-# ---------------------------------------------------------------------------
 # The quay: its wall down to the water, steps, a post, a boat, the crane.
-# ---------------------------------------------------------------------------
 
 piece("quay_wall_4", "quay", "stone", "stone", [box(0.0, -1.25, 0.0, 4.0, 2.5, 1.0, "stone")], size=[4.0, 2.5, 1.0])
 piece("quay_steps", "quay", "stone", "stone",
@@ -278,9 +266,7 @@ piece("crane", "quay", "timber", "wood",
       [box(0.0, 3.0, 0.0, 0.4, 6.0, 0.4, "timber"), box(0.0, 5.8, 1.5, 0.3, 0.3, 3.4, "timber")],
       cols=[[0.0, 3.0, 0.0, 0.4, 6.0, 0.4, "wood", 0, 0, 0]], size=[0.4, 6.0, 3.4])
 
-# ---------------------------------------------------------------------------
 # Dressing: what the men sleep on, eat at, drill at, pray at, and the rest.
-# ---------------------------------------------------------------------------
 
 def _thing(name, slot, surface, boxes, solid=True, sockets=None):
     cols = None if solid else []
@@ -370,10 +356,8 @@ def shadowless(pieces):
     return [p["name"] for p in pieces if PIECES.get(p["piece"], {}).get("family") == "massing"]
 
 
-# ---------------------------------------------------------------------------
 # Kit v1 (the art pass): the pieces that read as boxes, modelled low-poly
 # (kit_shapes); their colliders stay the boxes above.
-# ---------------------------------------------------------------------------
 
 # Openings with their heads and reveals: doors round-headed, windows flat
 # with a sill standing out, arches round, the chapel's lancets pointed.

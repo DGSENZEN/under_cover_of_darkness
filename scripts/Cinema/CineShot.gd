@@ -1,35 +1,7 @@
 extends RefCounted
-## Where a camera stands for a kind of shot, where it looks, and through what
-## lens: framing, and nothing else (no scene tree beyond the men's places).
-## `frame` gives {kind, size, position, look, fov, focus, subject, near_blur}:
-##   size       wide, medium or close (the editor's cutting rules).
-##   fov        the vertical field of view, degrees.
-##   focus      metres from the camera to what it is on (`subject`).
-##   near_blur  whether what is nearest (a shoulder) goes soft.
-## The kinds:
-##   establishing  the whole place from high, from a vantage.
-##   observe       from a vantage, far off, a long lens fitted to the men.
-##   roving        a long take's framing: waist up, near normal.
-##   group         several men at different depths, from a vantage, long.
-##   medium        waist up.
-##   close         head and shoulders.
-##   over_shoulder over the listener's shoulder (men[1]) onto the speaker.
-##   two           both men, from the side of their line it is given.
-##   reaction      the listener's face (men[0]) as a line lands.
-##   portrait      a man in a conversation, chest up, at his eye height, the
-##                 camera 30 deg off his line to the other man (context.toward):
-##                 the two men's portraits face each other across the cut.
-##   insert        a detail (context.target): the fire, a torch, a hand.
-##   track         alongside a man as he goes, from well off, long.
-##   axial         straight in along one line, a step at a time (0, 1, 2).
-##   overhead      straight down from high: the last resort.
-## A man's head is set on a third, with room on the side he faces or goes,
-## and his eyes on the upper third.
-##
-## The context: `aspect` (width over height, 16:9 if not given); `side` (off
-## the line between men[0] and men[1], toward the camera); `from` (a vantage);
-## `step` (axial); `target` (insert); `place` (where to look with nobody);
-## `turn` (deg: a single man's shot taken further round him).
+## Pure framing calculations from actor transforms/activity: shot kind, size, world position/look/subject, FOV, focus, near blur.
+## FOV is vertical degrees; focus is metres. Context keys and supported kinds are in docs/systems/cinematics.md.
+## Uses interpolated drawn transforms to align framing with the rendered actors; does not validate placement against physics.
 
 ## Where a man's head is, by what he is doing, over his feet (times his size).
 const HEAD_LYING := 0.35
@@ -66,7 +38,9 @@ const LYING := [&"sleep", &"lie_down", &"wake"]
 const KNEELING := [&"kneel", &"plead_kneel", &"rise_knees", &"rummage", &"sit", &"sit_talk", &"sit_down", &"sneak", &"doze", &"kneel_down", &"tend", &"feed_fire", &"pray", &"kneel_up"]
 
 
-## The shot `kind` of `men` (see the header).
+## Returns framing {kind,size,position,look,fov,focus,subject,near_blur} for a kind and Node3D subjects.
+## Context supplies aspect/side/from/place/toward/target/step and held framing. Positions are world-space; FOV is degrees, focus metres.
+## Unknown kind falls back to medium; caller must validate physics placement and supply subjects suitable for the requested kind.
 static func frame(kind: StringName, men: Array, context: Dictionary) -> Dictionary:
 	var aspect := float(context.get("aspect", 16.0 / 9.0))
 	var side: Vector3 = context.get("side", Vector3.ZERO)
@@ -190,9 +164,7 @@ static func centre_of(men: Array) -> Vector3:
 	return sum / float(count) if count > 0 else Vector3.ZERO
 
 
-# ---------------------------------------------------------------------------
 # The kinds
-# ---------------------------------------------------------------------------
 
 ## One man, from three-quarters round his front (on `side` if given), far
 ## enough for `height` of him through `fov`.
@@ -348,9 +320,7 @@ static func _from(kind: StringName, men: Array, vantage: Vector3, fov: float, he
 	return _result(kind, size, vantage, look, fov, head_of(nearest) if nearest != null else centre, false)
 
 
-# ---------------------------------------------------------------------------
 # Composition
-# ---------------------------------------------------------------------------
 
 ## Where to look from `position` so `head` lands on the third away from
 ## `ahead` (the room on his side) with his eyes on the upper third: the look

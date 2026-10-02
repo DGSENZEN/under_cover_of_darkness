@@ -1,15 +1,7 @@
 extends Node3D
-## The city on the rock (the city spec; sub-project 1, the harbour): the
-## harbour's level and the rest of the city as massing loaded together (each
-## under its own root), the game's nodes made from their markers
-## (LevelGameplay), the moon from the south-south-west, the night changing
-## over the harbour (Night: its weather on a schedule, a cloud over the moon
-## now and then), the palms stirring, bats round the golden tower's lantern,
-## the navmesh baked, the nine guards on their rounds, and the thief in his
-## rowboat by the mole's boulders with his blackjack and tools.
-##   Godot --path . res://maps/city.tscn
-##   Godot --path . res://maps/city.tscn -- --vantage=view_ribeira
-##   Godot --headless --path . res://maps/city.tscn -- --fps-report=40
+## Loads harbour and city massing, instantiates marker gameplay and bakes navigation.
+## The level roots own imported geometry; this map owns player/guard spawns and night setup.
+## Run res://maps/city.tscn; scene options and diagnostics are in docs/systems/development.md.
 
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const LevelGameplay := preload("res://scripts/Level/LevelGameplay.gd")
@@ -31,9 +23,9 @@ const GUARD := preload("res://Guard.tscn")
 const DISTRICTS := ["res://assets/level/city_harbour", "res://assets/level/city_massing"]
 ## The moon: from the south-south-west, over the sea; its shadows this far.
 const MOON_TOWARD := Vector3(0.3, -0.57, -0.77)
-const MOON_ENERGY := 0.22
+const MOON_ENERGY := 0.36
 const SHADOW_DISTANCE := 120.0
-const AMBIENT := 0.13
+const AMBIENT := 0.40
 ## The navmesh over the land and 25 m of water round it (the guards'), its
 ## agent the garrison's.
 const BAKE_BOUNDS := AABB(Vector3(-240.0, -12.0, -130.0), Vector3(520.0, 60.0, 360.0))
@@ -47,9 +39,6 @@ const MAX_CLIMB := 0.3
 const MIN_ISLAND := 1.2
 ## The night's weather: [minute, state, over s].
 const WEATHER := [[4.0, &"cloudy", 60.0], [9.0, &"drizzle", 45.0], [13.0, &"shower", 30.0], [16.0, &"cloudy", 60.0]]
-## A cloud over the moon every so often (s), held so long (s).
-const COVER_EVERY := Vector2(90.0, 150.0)
-const COVER_HOLD := Vector2(10.0, 20.0)
 const SEED := 1947
 ## Where rain pools (on the Terreiro and the quays); where mist lies (the
 ## harbour's water).
@@ -71,7 +60,6 @@ var night: Node3D = null
 var baker: NavigationRegion3D = null
 var load_seconds := 0.0
 var environment: Environment = null
-var _rng := RandomNumberGenerator.new()
 var _was_rolling := true
 
 
@@ -83,7 +71,6 @@ func _ready() -> void:
 	SquadScript.clear_all()
 	GarrisonScript.clear_all()
 	LightProbe.invalidate()
-	_rng.seed = SEED
 
 	for folder in DISTRICTS:
 		var district: String = folder.get_file()
@@ -155,7 +142,7 @@ func _exit_tree() -> void:
 	TemperamentScript.rolling = _was_rolling
 
 
-## A marker by name from whichever district has it ({} if none does).
+## Returns the first district's marker matching marker_name, or {} when absent.
 func marker(marker_name: String) -> Dictionary:
 	for district in levels:
 		var m: Dictionary = (levels[district] as LevelLoader.Level).get_marker(marker_name)
@@ -169,6 +156,9 @@ func marker(marker_name: String) -> Dictionary:
 ## The night's environment and its moon.
 func _environment() -> DirectionalLight3D:
 	environment = RetroScript.night_environment(Color(0.34, 0.36, 0.44), AMBIENT)
+	# Lift the playable streets as well as moon-facing walls; exposure alone
+	# leaves shadowed routes unreadable and washes out the lamps.
+	environment.tonemap_exposure = 1.25
 	environment.volumetric_fog_density = 0.006
 	environment.ssr_enabled = true
 	var world := WorldEnvironment.new()
@@ -186,8 +176,8 @@ func _environment() -> DirectionalLight3D:
 	return moon
 
 
-## The night over the harbour: its weather on WEATHER's schedule, a cloud
-## over the moon every COVER_EVERY s; wet stone once it rains.
+## The night over the harbour: weather on WEATHER's schedule, persistent
+## clouds drifting with the wind; wet stone once it rains.
 func _night(moon: DirectionalLight3D) -> void:
 	night = NightScript.new()
 	night.name = "Night"
@@ -220,16 +210,6 @@ func _night(moon: DirectionalLight3D) -> void:
 
 				if material != null:
 					night.register_wet(material)
-
-	_cover_later()
-
-
-func _cover_later() -> void:
-	await get_tree().create_timer(_rng.randf_range(COVER_EVERY.x, COVER_EVERY.y), false).timeout
-
-	if is_instance_valid(night):
-		night.cover_moon(_rng.randf_range(COVER_HOLD.x, COVER_HOLD.y))
-		_cover_later()
 
 
 ## Each exit to a district not built yet: said, and printed, when the thief

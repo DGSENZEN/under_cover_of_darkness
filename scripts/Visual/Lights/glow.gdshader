@@ -1,10 +1,6 @@
-// A surface of a light fixture that shines from inside when lit: a torch's
-// pitch head, a brazier's coals, a lantern's horn panes. Its slot's photo or
-// flat colour, shaded by the model's baked vertex colour like every other
-// surface; glowing with the flame's colour as the flame flickers; charred
-// once it has gone cold. `glow` and `charred` are per fixture. Pitch and
-// coals glow in hot spots that come and go (`mottle`), never evenly: an even
-// glow, lifted by the night's exposure, reads as a pale bulb.
+// Fixture interiors: slot texture/colour times baked vertex shading, with instance glow/charred state.
+// Pitch/coals use local-space mottle for moving hot spots; horn panes glow evenly.
+// Local coordinates keep carried fixtures' patterns from swimming.
 shader_type spatial;
 
 uniform sampler2D albedo_texture : source_color, filter_nearest_mipmap, repeat_enable;

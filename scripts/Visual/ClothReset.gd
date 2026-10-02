@@ -1,10 +1,6 @@
 extends SkeletonModifier3D
-## Readies his cloth (Cloth.gd) each frame, at the one moment that works: in
-## his skeleton's own update, after physics has posed him and before the
-## cloth swings (it sits just ahead of the cloth). It starts the cloth
-## afresh when he is put somewhere far in one step (a teleport, getting up,
-## being laid down), and while he lies limp it keeps the cloth's floor at
-## the floor under his hips.
+## Restarts spring-bone cloth after pose jumps and keeps its floor beneath limp hips.
+## Runs inside the skeleton update after physics and immediately before Cloth; restart() also covers recovery.
 
 ## Further than this (metres) in one frame is being put somewhere, not
 ## moving (a sprint moves him 0.15). Getting up and being laid down restart
@@ -80,7 +76,6 @@ func _keep_floor(skeleton: Skeleton3D) -> void:
 	_floor_put = ground.global_position
 
 
-## Started afresh over the next frames, whatever he moved: for whoever puts
-## him somewhere in one step (Humanoid.restart_cloth).
+## Requests cloth restarts over the following skeleton updates to cover delayed transform propagation.
 func restart() -> void:
 	_owed = RESTARTS

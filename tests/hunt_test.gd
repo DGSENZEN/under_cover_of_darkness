@@ -1093,7 +1093,6 @@ func _build_search_ground() -> void:
 	Props.block(self, b + Vector3(3.85, 1.5, -9.2), Vector3(0.3, 3, 14))
 
 
-# --------------------------------------------------------------------------
 
 ## A guard of `archetype` at `at`, facing `yaw` (set before he enters the
 ## tree: a man at his post keeps turning back to the way he first faced).

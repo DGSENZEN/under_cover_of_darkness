@@ -442,7 +442,6 @@ func _run() -> void:
 		"deflected %d sparks %s stains %d -> %d recoil %.3f" % [bounced.size(), threw_sparks, scratches_before, Fx.stains_in_use(), recoiled])
 
 
-# --------------------------------------------------------------------------
 func _wield(weapon_id: StringName) -> void:
 	player.inventory.select_by_id(weapon_id)
 

@@ -1,16 +1,8 @@
 class_name Door
 extends AnimatableBody3D
-## A hinged door. This body IS the hinge: place it at the door's edge and give
-## it a CollisionShape3D and a mesh offset sideways, so the panel hangs off
-## the hinge. It has to be the body itself that rotates: an AnimatableBody3D
-## only follows its own transform, never a moving parent's.
-##
-## Frob toggles it. It swings away from whoever frobs it, stops when it would
-## push into a body, and can be locked with a key id the inventory must hold.
-##
-## It remembers who last opened it: a door that stood shut, opened by someone
-## who is not one of the guards and left open, is something a guard on his
-## rounds notices (GuardLife.gd), and shuts again.
+## Hinged AnimatableBody3D with key/pick lock, swing, navigation, and evidence.
+## Its origin is the hinge foot; the closed panel runs along +X, front toward
+## -Z. Body checks stop rotation toward people, ragdolls, and held objects.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -89,7 +81,7 @@ static func can_pick(player: Node) -> bool:
 	return hands != null and hands.has_method("can_pick") and hands.can_pick()
 
 
-## The layer `id`'s key opens (see _key_layers).
+## Allocates/caches a key navigation bit; allocation cycles through 31 bits.
 static func key_layer(id: StringName) -> int:
 	if not _key_layers.has(id):
 		_key_layers[id] = 1 << (1 + _key_layers.size() % 31)
@@ -97,7 +89,7 @@ static func key_layer(id: StringName) -> int:
 	return _key_layers[id]
 
 
-## Its doorway's navigation layers: everyone's, or locked, its key's only.
+## Returns 1 when unlocked, otherwise the key’s allocated navigation layer.
 func nav_layers() -> int:
 	return key_layer(key_id) if locked else 1
 
@@ -111,6 +103,8 @@ func can_unlock(player: Node) -> bool:
 	return inventory != null and inventory.has_key(key_id)
 
 
+## Unlocks with a matching inventory key or rattles and returns; otherwise toggles
+## the requested open state, target angle, sounds, and last-opener evidence.
 func frob(player: Node) -> void:
 	if locked:
 		if key_id != &"" and player.get("inventory") != null and player.inventory.has_key(key_id):
@@ -150,7 +144,7 @@ func frob(player: Node) -> void:
 		remove_meta(&"noticed")
 
 
-## Whoever opened it last, if they are still about.
+## Returns the last opener while its weak reference survives, or null.
 func opened_by() -> Node:
 	return _opened_by.get_ref() as Node if _opened_by != null else null
 

@@ -1,9 +1,6 @@
-// A flame drawn from its heat sheet (assets/vfx/flame_<sheet>.png, rendered
-// by tools/props/flames.py): the frame's heat looked up in a colour ramp, so
-// one sheet serves a torch, a dying fire or a guttering wick. Nearest
-// sampling and hard edges, as the look wants; the frame, the wind, how
-// strongly it burns and whether it is mirrored are per sprite (instance
-// uniforms), so every flame of a sheet shares one material.
+// Heat-sheet flipbook (assets/vfx/flame_<sheet>.png, tools/props/flames.py) mapped through colour ramps.
+// Frame, strength, mirroring, and wind are instance uniforms so sprites share one material.
+// Nearest sampling preserves the authored hard edges.
 
 uniform sampler2D heat : filter_nearest, repeat_disable;
 uniform sampler2D ramp : source_color, filter_nearest, repeat_disable;

@@ -1,7 +1,5 @@
-// A flame's corona, as Thief: Deadly Shadows drew them: a soft halo the same
-// size on screen however far the flame is, drawn over the fog, added onto
-// the scene. Walls and men hide it by ray (Corona.gd), not by depth, so it
-// is drawn without the depth test and fades rather than being cut.
+// Screen-sized additive halo above fog. Corona.gd supplies ray-tested occlusion;
+// depth testing is intentionally disabled so visibility can fade rather than cut.
 shader_type spatial;
 render_mode unshaded, blend_add, depth_test_disabled, depth_draw_never, fog_disabled, cull_disabled, shadows_disabled;
 

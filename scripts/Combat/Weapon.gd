@@ -1,7 +1,7 @@
 extends Resource
-## One weapon: how it hits, and how it looks. The melee numbers follow Dark
-## Messiah's shape: a quick attack starts at once, holding charges a power
-## attack, and which way you move picks the swing.
+## Weapon Resource with melee, bow, noise, and mesh tuning.
+## Times are seconds, reach is metres, arc_degrees is degrees, noise is dB.
+## find() shares cached sword/dagger/bow resources; builders create new ones.
 
 enum Kind {
 	MELEE,
@@ -46,13 +46,12 @@ enum Kind {
 var mesh: Mesh = null
 
 
-# ---------------------------------------------------------------------------
 # The armoury
-# ---------------------------------------------------------------------------
 
 static var _armoury := {}
 
 
+## Returns the shared cached sword/dagger/bow Resource, or null for an unknown ID.
 static func find(weapon_id: StringName) -> Resource:
 	if _armoury.is_empty():
 		for weapon in [sword(), dagger(), bow()]:
@@ -104,18 +103,16 @@ static func bow() -> Resource:
 	return w
 
 
-# ---------------------------------------------------------------------------
 # Meshes, with the grip at the origin so the hand pivots them there: the
 # models from assets/weapons (made in Blender, source/weapons.blend), blade
 # up +Y, or blocks of the same shape if a model is missing.
-# ---------------------------------------------------------------------------
 
 const MODELS := "res://assets/weapons/%s.glb"
 
 static var _models := {}
 
 
-## A weapon model, loaded once and shared by everyone who carries one.
+## Returns a shared imported Mesh or null if its file/mesh is missing; caches null misses.
 static func model(file: StringName) -> Mesh:
 	if _models.has(file):
 		return _models[file]
@@ -136,7 +133,7 @@ static func model(file: StringName) -> Mesh:
 	return mesh
 
 
-## Lets go of the shared models (a clean exit for tests).
+## Clears imported-model and arrow caches; does not clear the weapon armoury.
 static func forget_models() -> void:
 	_models.clear()
 	_arrow = null

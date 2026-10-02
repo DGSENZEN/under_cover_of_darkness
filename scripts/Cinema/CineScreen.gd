@@ -1,11 +1,6 @@
 extends CanvasLayer
-## What lies over the picture: the letterbox (black bars easing in until
-## what is left between them is 2.39:1), the wipe (the last frame held,
-## and a hard edge drawn across it, uncovering the next shot beneath, as
-## Kurosawa cut between scenes), the dissolve (the last frame held and
-## fading out over the next, between watching takes) and the fade (through
-## black, between acts). Above the retro filter (whose grid the captured
-## frame already has) and below the showcase's overlay.
+## Screen transitions above Retro and below the showcase overlay: 2.39:1 letterbox, wipe, dissolve, and fade through black.
+## Captured frames already contain the Retro grid. Envelopes use TimeFx real time; subtitle_band() exposes safe text placement.
 
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
@@ -194,7 +189,7 @@ func black() -> float:
 	return clampf(1.0 - (_fade_t - FADE - _fade_hold) / FADE, 0.0, 1.0)
 
 
-## Any wipe, dissolve or fade over at once, its frame let go.
+## Clears wipe/dissolve/fade state and captured textures; letterbox state is unchanged.
 func clear() -> void:
 	_wipe_t = -1.0
 	_dissolve_t = -1.0

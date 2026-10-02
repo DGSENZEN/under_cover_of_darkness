@@ -1,12 +1,8 @@
 extends RefCounted
-## A guard in water (WaterVolume). Where he can stand he wades: the deeper,
-## the slower, and every step splashes. Where he cannot, he swims: afloat,
-## his head out of it (lower in it on the move, flat on the surface), at
-## SWIM_SCALE of his speed, heard stroke by stroke; he neither guards nor
-## strikes. His path runs along the water's own navmesh (NavBaker's swim
-## region, on the surface), so what his path follows is lifted to his feet
-## (path_height_offset). He gets in and out where the bank is low, or by a
-## jump in and a haul out (GuardClimb, NavLinks).
+## Tracks the containing WaterVolume and wading/swimming state.
+## Depth scales movement speed; swimming suspends guard/strike behaviour and places
+## feet below the surface. Adjusts NavigationAgent path height for the swim mesh;
+## GuardClimb/NavLinks handle high banks. Steps/strokes emit gameplay sound.
 
 const WaterScript := preload("res://scripts/Interaction/WaterVolume.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -36,8 +32,8 @@ func _init(p_guard: CharacterBody3D) -> void:
 	guard = p_guard
 
 
-## Every physics frame, before he moves: which water he is in, and whether
-## he stands or swims in it; his path lifted to his feet.
+## Queries WaterVolume at feet, sets water/swimming and updates agent path height.
+## Out of water resets the height offset. _delta is unused; call before movement.
 func update(_delta: float) -> void:
 	var feet: Vector3 = guard.global_position
 	water = WaterScript.at(guard.get_tree(), feet + Vector3.UP * 0.05, 0.25)
@@ -70,9 +66,8 @@ func speed_scale() -> float:
 	return lerpf(1.0, WADE_SCALE, deep)
 
 
-## Swimming, in place of standing on the ground: afloat at his height for
-## how he is moving, no faster than he can swim, and nothing of a fall left
-## in him (the water took it). Heard stroke by stroke.
+## Requires current swimming water; adjusts velocity toward surface-relative feet,
+## limits horizontal speed, clears fall peak and emits stroke audio/gameplay sound.
 func float_him(delta: float) -> void:
 	var flat := Vector3(guard.velocity.x, 0.0, guard.velocity.z)
 	var most: float = float(guard.chase_speed) * SWIM_SCALE

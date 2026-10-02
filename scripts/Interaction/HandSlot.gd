@@ -1,22 +1,8 @@
 extends Node3D
-## Your hands: the inventory you can see.
-##
-##   MAIN HAND (right)  holds the selected item. Switching lowers it out of
-##                      view and raises the next one; there is no menu.
-##   OFF HAND (left)    does the brief jobs: pockets loot into the purse, whose
-##                      tag tallies the total; brings a key to a lock and turns
-##                      it; holds up the purse and key ring while you check
-##                      what you carry.
-##
-## Lives under the Camera3D, so it follows the view, the bob and the lean.
-## Everything here is drawn on visual layer 19 at a squeezed depth: in front
-## of the world, so it can never clip into a wall, and still in order among
-## itself, so fingers close over a grip. The lightgem's cameras are set not to
-## see it. It is lit by the world, so in darkness your hands are dark too.
-##
-## Your arms (ViewArms.gd) reach for all of it: the right hand holds the
-## grip of what you carry, the left the purse or what it is handed, both the
-## ledge you hang from; a leg comes up for a kick.
+## Camera-child inventory viewmodel and world-contact hand presentation.
+## The right hand shows the selection; the left queues pickup/key/purse jobs.
+## Viewmodels use visual layer 19 and squeezed depth, lit by the world; lightgem
+## cameras exclude them. ViewArms solves limbs and HandContacts supplies holds.
 
 signal key_turned
 
@@ -107,9 +93,7 @@ var _job: Dictionary = {}
 var _checking := false
 var _time := 0.0
 
-## Set every frame by combat: how the weapon hand is posed right now.
-## The weapon's frame, as combat last sent it (ViewPoses.gd: the grip in
-## camera space, full size), and the tick before's, drawn between the two.
+## Full-size camera-space weapon frames sent by combat and interpolated between ticks.
 var _frame_now := Transform3D.IDENTITY
 var _frame_before := Transform3D.IDENTITY
 ## Which set of poses the thing in hand has (a weapon), or none.
@@ -172,10 +156,8 @@ var _hop := 0.0
 var _hop_v := 0.0
 var _run := 0.0
 
-# Grips: when the body holds on to the world (a ledge, a rung, a rope, the
-# plant of a vault), a gloved hand appears where the body pose says it grips,
-# with a forearm back to the shoulder, and whatever you held goes down. These
-# are placeholders for a real arm rig; BodyPose is the contract it would use.
+# HandContacts provides world holds; ViewArms solves them from the shoulders.
+# A weapon lowers when the right hand is needed on a ledge, ladder, or rope.
 const SHOULDERS := [Vector3(-0.22, -0.4, 0.02), Vector3(0.22, -0.4, 0.02)]
 var _gripping := 0.0
 ## The world wants the right hand (a ledge, a rung): what it holds goes down
@@ -296,6 +278,7 @@ func _ready() -> void:
 	# Blood on the blade, over the steel, squeezed in front like the rest.
 	_blood_overlay = ShaderMaterial.new()
 	_blood_overlay.shader = BLADE_BLOOD
+	_blood_overlay.render_priority = 11 # After the held steel (10).
 	_blood_overlay.set_shader_parameter("z_clip", ViewArmsScript.Z_CLIP)
 
 	# The smear a blade leaves, drawn over the world like the hands.
@@ -339,11 +322,10 @@ func _find_player() -> CharacterBody3D:
 	return node as CharacterBody3D
 
 
-# ---------------------------------------------------------------------------
 # The main hand
-# ---------------------------------------------------------------------------
 
-## The inventory selected something (or nothing). Lower, swap, raise.
+## Queues lowering/switching to item.mesh; {} or absent/null mesh selects empty hands.
+## May play the previous item’s stow sound immediately.
 func show_item(item: Dictionary) -> void:
 	# What goes away is heard going: a blade into its sheath, a bow onto the
 	# back. A small blade rings higher.
@@ -393,7 +375,7 @@ func set_brace(amount: float) -> void:
 	_brace = clampf(amount, 0.0, 1.0)
 
 
-## The weapon's frame as shown now (tests).
+## Returns the last displayed weapon transform in full-size camera space.
 func weapon_frame() -> Transform3D:
 	return _frame_now
 
@@ -628,19 +610,15 @@ func _tint_blade() -> void:
 	_blood_overlay.set_shader_parameter("wet", float(_blood_wet.get(key, 1.0)))
 
 
-# ---------------------------------------------------------------------------
 # The off hand
-# ---------------------------------------------------------------------------
 
-## Something was just taken from the world. `kind` is "loot", "key" or
-## "tool"; `from` is where it lay. It flies to the off hand, and loot goes
-## into the purse.
+## Queues a pickup presentation job {kind, mesh, from, t}; from is a world transform.
 func receive(kind: String, mesh: Mesh, from: Transform3D) -> void:
 	_jobs.append({ "kind": kind, "mesh": mesh, "from": from, "t": 0.0 })
 
 
-## Bring a key to a lock and turn it. `done` runs when it has turned. It goes
-## before any pickups still to show, and the one showing now is cut short.
+## Prioritizes a key-turn job at world lock_point; done runs on completion.
+## A current pickup is hurried; a current key turn is not replaced.
 func turn_key(mesh: Mesh, lock_point: Vector3, done: Callable) -> void:
 	if not _job.is_empty() and _job["kind"] != "key_turn" and not _job.has("hurry"):
 		_job["hurry"] = float(_job["t"])
@@ -836,9 +814,7 @@ func _rebuild_keyring(count: int) -> void:
 		_keyring.add_child(key)
 
 
-# ---------------------------------------------------------------------------
 # Every frame
-# ---------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
 	_time += delta
@@ -1321,7 +1297,7 @@ const _LEDGE_LEFT := Basis(Vector3(0, -1, 0), Vector3(0, 0, -1), Vector3(1, 0, 0
 const _KICK_FOOT := Basis(Vector3(-1, 0, 0), Vector3(0, -0.3, -0.954), Vector3(0, -0.954, 0.3))
 
 
-## Where the hands holding on to the world are (world space), for tests.
+## Returns world hand positions whose grip weight exceeds 0.5; [] without arms.
 func grip_points() -> Array[Vector3]:
 	var points: Array[Vector3] = []
 
@@ -1340,8 +1316,7 @@ func gripping() -> float:
 	return _gripping
 
 
-## How far below the middle of `view` the hands taking hold of the world are
-## (radians, 0 if none): the view looks down to see them land.
+## Returns contact angle below view in radians, or 0 when suppressed/unavailable.
 func grip_below(view: Transform3D) -> float:
 	return _contacts.below(view) if _contacts != null and not _suppressed_for_grips() else 0.0
 
@@ -1352,9 +1327,7 @@ func _to_off_space(world: Transform3D) -> Vector3:
 	return camera_local - off_rest
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 func _viewmodel_instance() -> MeshInstance3D:
 	var instance := MeshInstance3D.new()
@@ -1386,6 +1359,10 @@ func _viewmodel_material(mesh: Mesh) -> Material:
 
 ## In front of the world, in order among the rest of the view's things.
 static func _squeeze(material: BaseMaterial3D) -> void:
+	# Solid-looking alpha draws after SSR/screen copies. Write depth in that
+	# later pass so fingers and grips still occlude each other correctly.
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
 	material.no_depth_test = false
 	material.use_z_clip_scale = true
 	material.z_clip_scale = ViewArmsScript.Z_CLIP

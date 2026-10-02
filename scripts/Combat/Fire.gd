@@ -1,15 +1,7 @@
 extends Area3D
-## Open flame: a brazier, a burning pile. A guard who goes into it (kicked,
-## thrown, blown) catches fire and runs about screaming until it burns out
-## or he does. A barrel in it goes up. You only scorch yourself.
-##
-## Build with Fire.brazier(parent, position) for the bowl, the flame and the
-## light together.
-##
-## Tended (`fuel_seconds` set), it burns down: over that long its fuel
-## goes, and its light and flame shrink to embers (never quite out). Fed a
-## log (`feed`), it flares up and burns on. Burning low (`low`), the men talk
-## of it and one goes for wood (TalkFacts, Gathering).
+## Flame Area3D: ignites flung/already burning guards, lights barrels, and
+## scorches damage receivers at most once per 0.5 s across the whole area.
+## Optional fuel burns down to embers; feed() restores fuel and briefly flares.
 
 const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 
@@ -107,13 +99,15 @@ func _physics_process(delta: float) -> void:
 			body.take_damage(scorch, self)
 
 
-## A log put on: more to burn, and it flares.
+## Adds fuel (capped above at 1), restarts flare timing, and emits fed.
+## amount defaults to 0.6; negative values are not rejected.
 func feed(amount := 0.6) -> void:
 	fuel = minf(fuel + amount, 1.0)
 	_flare_left = FLARE_TIME
 	fed.emit()
 
 
+## Returns fuel < LOW_AT.
 func low() -> bool:
 	return fuel < LOW_AT
 
@@ -123,7 +117,7 @@ func burning() -> StringName:
 	return &"low" if low() else &"burning"
 
 
-## How bright it burns (1 full, over 1 flaring): its light and flame.
+## Returns current fuel/flare light multiplier; it may exceed 1 during a flare.
 func strength() -> float:
 	var flare := 1.0 + (FLARE - 1.0) * (_flare_left / FLARE_TIME)
 	return lerpf(0.25, 1.0, fuel) * flare

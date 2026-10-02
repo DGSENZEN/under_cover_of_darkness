@@ -48,9 +48,7 @@ func _run() -> void:
 	await _review_fixes()
 
 
-# ---------------------------------------------------------------------------
 # The fire
-# ---------------------------------------------------------------------------
 
 func _fire() -> void:
 	# R1 it burns down, its light with it, never quite out
@@ -81,9 +79,7 @@ func _fire() -> void:
 	fire.get_parent().queue_free()
 
 
-# ---------------------------------------------------------------------------
 # The night rota
-# ---------------------------------------------------------------------------
 
 func _rota() -> void:
 	# R3 the hour passes
@@ -174,9 +170,7 @@ func _rota() -> void:
 	route.queue_free()
 
 
-# ---------------------------------------------------------------------------
 # Gatherings
-# ---------------------------------------------------------------------------
 
 func _gatherings() -> void:
 	# R8 dice: gathered, played, and broken up by a noise
@@ -262,9 +256,7 @@ func _gatherings() -> void:
 	fire.get_parent().queue_free()
 
 
-# ---------------------------------------------------------------------------
 # The watch, the round, the sleeper, the fire, and needs
-# ---------------------------------------------------------------------------
 
 func _duties() -> void:
 	# R11 the watch changes: a walk-over, a word, and the duties swap
@@ -382,9 +374,7 @@ func _duties() -> void:
 	hearth.get_parent().queue_free()
 
 
-# ---------------------------------------------------------------------------
 # The final review's findings
-# ---------------------------------------------------------------------------
 
 func _review_fixes() -> void:
 	# R16 the storyteller tells the story, whoever else of rank sits with him
@@ -487,9 +477,7 @@ func _posed_global(guard: Node3D, bones: Array) -> Dictionary:
 	return got
 
 
-# ---------------------------------------------------------------------------
 # The yard
-# ---------------------------------------------------------------------------
 
 func _yard() -> void:
 	TemperamentScript.rolling = false

@@ -1,20 +1,8 @@
 class_name GuardStation
 extends Marker3D
-## A place where a guard at his ease does something with himself (GuardRota):
-## where he stands (this node's position) and which way he faces (its -Z),
-## and what he does there (`kind`):
-##   sit      sits on the bench or log in front of him; talks seated when a
-##            friend at his ease is near.
-##   eat      stands here and eats and drinks now and then (between bites,
-##            a word with a friend near).
-##   sleep    lies on a bedroll here; asleep he sees nothing and hears little.
-##   rummage  goes through the chest (`chest`): lid up, a look inside, lid down.
-##   carry    carries crates (group "cargo") from here to `drop_to`, and back
-##            the other way once there are none left here.
-##   chop     chops wood at the block in front of him.
-##   lean     leans on the rail in front of him (a lookout sweeps his ground
-##            from it).
-## One man at a time holds a station (claim, release).
+## Exclusive station used by GuardRota. World position is the standing point;
+## local -Z is facing. Kind selects sit/eat/sleep/rummage/carry/chop/lean or pray.
+## Optional chest/drop_to paths supply work targets. Claims store the holder Node directly.
 
 @export var kind: StringName = &"sit"
 ## Rummage: the chest (a Chest.gd hinge).
@@ -37,15 +25,18 @@ func facing() -> Vector3:
 	return ahead.normalized() if ahead.length() > 0.01 else Vector3.FORWARD
 
 
+## Resolves chest as Node3D; null for an empty/missing/incompatible path.
 func chest_node() -> Node3D:
 	return get_node_or_null(chest) as Node3D if not chest.is_empty() else null
 
 
+## Resolves drop_to as Node3D; null for an empty/missing/incompatible path.
 func drop_node() -> Node3D:
 	return get_node_or_null(drop_to) as Node3D if not drop_to.is_empty() else null
 
 
-## Taken by `guard`, if nobody else has it. True if it is his.
+## Returns true if free, holder invalid/incapacitated, or already held by this guard;
+## otherwise false. Stores guard directly in holder.
 func claim(guard: Node) -> bool:
 	if holder != null and is_instance_valid(holder) and holder != guard and holder.get("_knocked_out") != true:
 		return false
@@ -54,6 +45,7 @@ func claim(guard: Node) -> bool:
 	return true
 
 
+## Clears holder only if it equals this guard.
 func release(guard: Node) -> void:
 	if holder == guard:
 		holder = null

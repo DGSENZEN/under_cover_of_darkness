@@ -1,14 +1,7 @@
 extends RefCounted
-## Where your hands hold on to the world: a small state machine. Each state
-## (hanging, mantling, vaulting, on a ladder, on a rope, carrying, free) says
-## which hands it needs and plants them on real surfaces, found by casting
-## against the level, then holds them there in the world: the body moves, the
-## hands stay put. A hand that has to move on (a shuffle along a ledge, the
-## next rung) lifts and travels a short arc to its new hold while the other
-## keeps its grip. Changing state lets go of what the new state has no use for
-## and reaches for what it does, never all at once.
-##
-## HandSlot reads hand(side) and weight(side) and the arms reach for them.
+## World-space hand-contact state machine for traversal and carrying.
+## Each grip plants on geometry, then travels in a short arc to its next hold;
+## weights ease contact changes. HandSlot reads hand(), weight(), and curl().
 
 enum State { FREE, HANG, MANTLE, VAULT, LADDER, ROPE, CARRY }
 
@@ -71,15 +64,17 @@ func _init(p_player: CharacterBody3D) -> void:
 	player = p_player
 
 
-## Where the hand holds now (world), and how firmly (0..1).
+## Returns the current world palm transform; side must be LEFT (0) or RIGHT (1).
 func hand(side: int) -> Transform3D:
 	return (grips[side] as Grip).current()
 
 
+## Returns the side’s contact blend in 0..1; side must index grips.
 func weight(side: int) -> float:
 	return (grips[side] as Grip).weight
 
 
+## Returns the greater contact weight of the two hands.
 func holding() -> float:
 	return maxf(weight(LEFT), weight(RIGHT))
 
@@ -127,6 +122,7 @@ func below(view: Transform3D) -> float:
 	return maxf(atan2(-to.dot(basis.y), -to.dot(basis.z)), 0.0)
 
 
+## Reads movement/carry state and advances grip targets, travel, and weights in game seconds.
 func update(delta: float) -> void:
 	var next := _state_now()
 
@@ -154,9 +150,7 @@ func update(delta: float) -> void:
 			g.planted = false
 
 
-# ---------------------------------------------------------------------------
 # Which state
-# ---------------------------------------------------------------------------
 
 func _state_now() -> int:
 	if player == null or player.get("is_dead") == true:
@@ -226,9 +220,7 @@ func _enter(next: int) -> void:
 			_keep_carry()
 
 
-# ---------------------------------------------------------------------------
 # Edges: a ledge hung from, climbed onto, vaulted
-# ---------------------------------------------------------------------------
 
 ## [a point on the edge, the edge's outward normal] for whatever the body is
 ## on or going to.
@@ -321,9 +313,7 @@ func _keep_move() -> void:
 		(grips[LEFT] as Grip).wanted = s < 0.62
 
 
-# ---------------------------------------------------------------------------
 # Ladders and ropes: hand over hand
-# ---------------------------------------------------------------------------
 
 func _ladder_hold(height: float, side: int) -> Transform3D:
 	var volume: Area3D = player.current_climb
@@ -430,9 +420,7 @@ func _keep_rope() -> void:
 		_plant(high_side, _rope_hold(here - 0.3))
 
 
-# ---------------------------------------------------------------------------
 # Carrying: both hands on what you hold (it moves with you: not planted)
-# ---------------------------------------------------------------------------
 
 func _keep_carry() -> void:
 	var held: RigidBody3D = player.frob.held if player.get("frob") != null else null
@@ -459,9 +447,7 @@ func _keep_carry() -> void:
 		g.wanted = true
 
 
-# ---------------------------------------------------------------------------
 # Surfaces
-# ---------------------------------------------------------------------------
 
 ## A hold on the top of an edge near `point`: the top found by casting down
 ## just behind the edge, the palm `inset` in from the edge, fingers pointing

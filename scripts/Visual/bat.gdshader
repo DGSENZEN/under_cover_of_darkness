@@ -1,6 +1,5 @@
-// A bat (Wildlife): our painting's two frames (wings down, wings up) beaten
-// at its own pace, always turned to the eye, a black shape against the sky
-// (unfogged: the sky it is seen against is not fogged either).
+// Wildlife billboard using the painted wings-down/up frames at an instance phase.
+// Fog is disabled to match the sky behind its black silhouette.
 shader_type spatial;
 render_mode unshaded, cull_disabled, shadows_disabled, fog_disabled;
 

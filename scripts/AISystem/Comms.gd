@@ -1,31 +1,9 @@
 extends RefCounted
-## What guards tell each other, and how it gets there: out loud. A call is a
-## sound (SoundBus.emit_message) with a message in it, so it carries as far as
-## a voice carries, round walls along the navmesh, and a man too far off or
-## hard of hearing never gets it. Every call is said as well (a bark), so you
-## hear the garrison work together, and can use it:
-##   spotted  "There! By the well!"  where you are now: hunters who have lost
-##            sight of you come to it, men at their posts come to look.
-##   lost     "Lost him! He went east!"  where they last had you, and which way
-##            you were going.
-##   danger   "Powder! Get back!"  a lit barrel: every man near it runs.
-##   noise    "Did you hear that?"  a man at his ease heard something: he goes
-##            to look, and whoever hears him covers him from where he stands.
-##   clear    "Nothing. Rats, likely."  the men covering him stand easy.
-##   look     "Osric! Something by the well! Go and look!"  a man set to watch
-##            sends the friend he names; the others keep an eye that way.
-##   alarm    the bell (AlarmBell.gd): every man who hears it comes. A man set
-##            to watch whose friend went to look and went quiet calls it too.
-## A place is named by a landmark near it if the level has one (a node in the
-## "landmarks" group: its "landmark" meta, else its name), up high or down
-## below, or the way it lies from the man calling it.
-##
-## Messages carry the time they were called (`now`, the same clock for
-## everyone), so a man who hears two knows which is fresher.
-##
-## Not all at once: what many men would say at the same moment (coming to a
-## call, a noise heard, the hunt given up) is said by the first of them near
-## (may_voice); the rest come, or stand easy, without a word.
+## Builds timestamped guard messages and emits them through SoundBus.
+## Guard listeners apply hearing range/navmesh distance before acting on messages.
+## Kinds: spotted, lost, danger, noise, clear, look and alarm. Location text uses
+## landmarks, height or relative direction; may_voice reserves nearby chorus slots.
+## Calls are gameplay events; callers separately choose/display their spoken line.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 
@@ -84,8 +62,9 @@ static func may_voice(kind: StringName, where: Vector3, voices := 1) -> bool:
 	return true
 
 
-## `speaker` calls `what` out about `where`, as loud as `db`. `data` rides
-## along in the message (a heading, a radius). Returns the message.
+## Copies data into {what: StringName, where: Vector3, time: float, id: int,
+## from: WeakRef}; reserved keys overwrite data. speaker supplies eye_position() or
+## feet + 1.6 m. db defaults to CALL_DB. Emits synchronously and returns the message.
 static func call_out(speaker: Node3D, what: StringName, where: Vector3, data := {}, db := CALL_DB) -> Dictionary:
 	_serial += 1
 	var message := data.duplicate()
@@ -99,7 +78,7 @@ static func call_out(speaker: Node3D, what: StringName, where: Vector3, data := 
 	return message
 
 
-## The man who called `message`, if he is still about.
+## Resolves message.from weak reference as Node3D, or null if absent/freed.
 static func caller(message: Dictionary) -> Node3D:
 	var w: Variant = message.get("from")
 	return (w as WeakRef).get_ref() as Node3D if w is WeakRef else null

@@ -1,44 +1,7 @@
 extends "res://scripts/Showcase/ShowNight.gd"
-## The night the NPC showcase plays in the garrison (maps/garrison.gd; the
-## garrison spec's section 4): six acts, its beats placed by the level's
-## named marks. What the guards do is their own; the beats move only the
-## intruder, wait for the world to come true, and ask the camera for shots.
-##
-##   I.   The Watch at Rest   as the yard's: talk by the fire, dice, the
-##                             captain's round, the fire fed, a story; a man at
-##                             his prayers in the chapel, the mess; the watch
-##                             changing at the colonnade (Jory relieves
-##                             Hendrik); the wall, the lookout.
-##   II.  A Knife in the Dark  in over the towpath wall when the archer's back
-##                             is turned, down the flight and along the dark
-##                             colonnade; the knife in Jory's back as a cloud
-##                             covers the moon, and the carrier coming with a
-##                             crate sees him over the body.
-##   III. The Cry             he barges the carrier down and runs as the cry
-##                             goes up (the brother's grief),
-##                             for the drill yard, up the ladder onto the
-##                             range's roof, pulls it up after him, and is
-##                             lost to them; the bell, men out with lanterns, and the
-##                             captain divides them into groups, each sent to
-##                             its ground (Guard.send_to_search).
-##   IV.  The Divided Hunt    each group searches its ground; knowing he is
-##                             found, he moves through the barracks by stealth,
-##                             between them: in by the chapel's loft, along the
-##                             gallery over the men searching the floor below,
-##                             back as they are sent upstairs, and down into
-##                             the chapel.
-##   V.   The Chapel          the barracks group is sent to the chapel and
-##                             finds him there; they fight, lightning through
-##                             the glass, and he is left standing over them.
-##   VI.  The Escape          he tries the captain's chamber and it is barred;
-##                             the rest come for him, and it ends one of three
-##                             ways: over the wall by the breach and into the
-##                             canal (escape), cut down in the courtyard
-##                             (overwhelmed), or the courtyard fight survived
-##                             (a man spared if one begs) and out through the
-##                             gate, wounded but victorious (victor).
-##
-## A scene's subjects may also be "@group:<hunt area>": the men sent there.
+## Six-act ShowNight variant for maps/garrison.gd, positioned from named level marks.
+## Beats cue intruder actions, guard/search staging, weather, and cinematic subjects while live AI resolves encounters.
+## Supports @group:<hunt area> subjects for the divided hunt and three endings.
 
 ## The captain divides the hunt: each hunt area's men.
 const GROUPS := {
@@ -113,10 +76,9 @@ const WEATHER_ACTS_G := {
 	6: [[&"storm", 0.0, 0.55]],
 }
 const WEATHER_BEATS_G := {
-	# The knife: a cloud over the moon as he moves in, held through it; the
-	# drizzle with the witness.
-	&"his_moment": {"veil": 90.0},
-	&"the_witness": {"veil": 0.0, "to": [&"drizzle", 20.0]},
+	# Drizzle begins with the witness. Moon coverage follows the existing
+	# wind-driven field throughout the encounter.
+	&"the_witness": {"to": [&"drizzle", 20.0]},
 	# He steps out of the dark of the chapel as the lightning comes.
 	&"found": {"flash": true},
 	# The storm easing to fog as it ends.
@@ -211,9 +173,7 @@ func _subjects_of(subject: String) -> Variant:
 	return men.slice(0, 4)
 
 
-# ---------------------------------------------------------------------------
 # I. The Watch at Rest: the yard's, with the chapel and the mess
-# ---------------------------------------------------------------------------
 
 func _act_one() -> Dictionary:
 	var act: Dictionary = super()
@@ -233,9 +193,7 @@ func _act_one() -> Dictionary:
 	return act
 
 
-# ---------------------------------------------------------------------------
 # II. A Knife in the Dark
-# ---------------------------------------------------------------------------
 
 func _act_two_g() -> Dictionary:
 	return {
@@ -306,9 +264,7 @@ func _alone_but(names: Array, at: Vector3) -> bool:
 	return true
 
 
-# ---------------------------------------------------------------------------
 # III. The Cry
-# ---------------------------------------------------------------------------
 
 func _act_three_g() -> Dictionary:
 	return {
@@ -431,9 +387,7 @@ func _group(group: StringName) -> Array:
 	return men
 
 
-# ---------------------------------------------------------------------------
 # IV. The Divided Hunt
-# ---------------------------------------------------------------------------
 
 func _act_four_g() -> Dictionary:
 	return {
@@ -605,9 +559,7 @@ func _kill(name: String, by: Node3D, kind: StringName, at: Vector3) -> void:
 	GarrisonScript.of(by).on_death(name == "Mirelle", name)
 
 
-# ---------------------------------------------------------------------------
 # V. The Chapel
-# ---------------------------------------------------------------------------
 
 func _act_five_g() -> Dictionary:
 	return {
@@ -691,9 +643,7 @@ func _beaten(name: String) -> bool:
 	return bool(man._mercy.pleading) or (squad != null and (squad.status_of(man) in [&"running", &"down"] or squad.will_of(man) == &"broken"))
 
 
-# ---------------------------------------------------------------------------
 # VI. The Escape
-# ---------------------------------------------------------------------------
 
 func _act_six_g() -> Dictionary:
 	return {

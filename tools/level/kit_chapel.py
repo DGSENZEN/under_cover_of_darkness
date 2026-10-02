@@ -27,21 +27,17 @@ def _drawn(name, family, slot, shapes, size):
     k.model(name, shapes)
 
 
-# ---------------------------------------------------------------------------
 # The ceiling under the roof stays what stops sight and anything thrown, but
 # it is not drawn: the nave is open to its rafters.
-# ---------------------------------------------------------------------------
 
 k.piece("ceiling_hidden_4", "ceiling", "boards", "ceiling", [], cols=[[0.0, -0.1, 0.0, 4.0, 0.2, 4.0, "ceiling", 0.0, 0.0, 0.0]],
         size=[4.0, 0.2, 4.0])
 
 
-# ---------------------------------------------------------------------------
 # The gables (across the nave, their faces along its axis): the east's rose,
 # the west's oculus under a bell-cote. Glass on both faces (it glows from
 # within at night and from without by day), a stone ring and tracery round
 # it.
-# ---------------------------------------------------------------------------
 
 def _rose(y, radius, spokes, face):
     z = face * (k.OUTER / 2.0 + 0.005)
@@ -79,10 +75,8 @@ _drawn("gable_chapel_east", "roof", "ashlar", east, [NAVE, RISE, k.OUTER])
 _drawn("gable_chapel_west", "roof", "ashlar", west, [NAVE, RISE + 3.7, k.OUTER])
 
 
-# ---------------------------------------------------------------------------
 # The fleche: a timber lantern straddling the ridge, its slated spire, a
 # gilt ball and an iron cross. Its pivot is the roof's apex under the ridge.
-# ---------------------------------------------------------------------------
 
 fleche = [ks.box(0.0, 0.6, 0.0, 1.3, 1.6, 1.3, "beam"), ks.box(0.0, 1.45, 0.0, 1.5, 0.12, 1.5, "beam"),
           ks.box(0.0, 2.15, 0.0, 0.9, 1.3, 0.9, "pitch"), ks.box(0.0, 2.85, 0.0, 1.45, 0.12, 1.45, "beam")]
@@ -97,11 +91,9 @@ fleche += [ks.lathe(0.0, 2.9, 0.0, [[0.72, 0.0], [0.05, 6.0], [0.0, 6.1]], 8, "r
 _drawn("fleche", "roof", "roof_fish", fleche, [1.5, 10.0, 1.5])
 
 
-# ---------------------------------------------------------------------------
 # Inside: an arch-braced tie-beam truss every bay (across the nave, x),
 # its posts on stone corbels, its pivot at the walls' top; the shafts up the
 # walls under the corbels; a carved frieze along the walls under them.
-# ---------------------------------------------------------------------------
 
 def _beam(x0, y0, x1, y1, width=0.24, depth=0.24, slot="beam"):
     length = math.hypot(x1 - x0, y1 - y0)
@@ -148,11 +140,9 @@ for _length, _label in ((INSIDE * 2.0 + 0.8, "19p2"), (INSIDE, "9p2")):
     _drawn("chapel_frieze_%s" % _label, "column", "band", _frieze(_length), [_length, 0.4, 0.2])
 
 
-# ---------------------------------------------------------------------------
 # Outside: buttresses (their backs on the wall, local z 0, standing out
 # along +z), the plinth, the string course, the cornice on its corbels, the
 # portal round a door.
-# ---------------------------------------------------------------------------
 
 def _weathering(y, z0, z1, width, rise):
     return ks.slab([[-width / 2.0, y + rise, z0], [width / 2.0, y + rise, z0], [width / 2.0, y, z1], [-width / 2.0, y, z1]], 0.3, "ashlar",
@@ -213,11 +203,9 @@ _drawn("glass_window", "dressing", "stained_glass_small", [ks.card(0.0, k.WINDOW
        [k.WINDOW[0], k.WINDOW[1], 0.1])
 
 
-# ---------------------------------------------------------------------------
 # The chancel: a step of patterned tiles, the altar on it (its frontal to the
 # nave, local +z; linen, a brass cross), the reredos framing the angels
 # behind it, the pews' carved ends.
-# ---------------------------------------------------------------------------
 
 k.piece("chapel_dais", "floor", "tiles_chancel", "stone", [], cols=[[0.0, 0.075, 0.0, 3.6, 0.15, 6.0, "stone", 0.0, 0.0, 0.0]], size=[3.6, 0.15, 6.0])
 k.model("chapel_dais", [ks.box(0.0, 0.075, 0.0, 3.6, 0.15, 6.0, "tiles_chancel"), ks.box(-1.77, 0.08, 0.0, 0.08, 0.16, 6.02, "ashlar")])

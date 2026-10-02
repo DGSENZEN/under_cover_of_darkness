@@ -1,8 +1,7 @@
 extends RefCounted
-## All the physics queries of the traversal system live here: measuring the
-## obstacle ahead, finding an edge to lower over, and fit-testing the capsule.
-##
-## The scanner never moves the player. It only answers questions.
+## Measures traversal geometry and checks capsule clearance without moving the body.
+## Call setup() before querying. Body origins use the standing capsule centre;
+## crouched queries lower their centre to keep the feet at the same position.
 
 const ObstacleProfile := preload("res://scripts/PlayerUtils/ObstacleProfile.gd")
 
@@ -52,6 +51,7 @@ var _stand_shape := CapsuleShape3D.new()
 var _crouch_shape := CapsuleShape3D.new()
 
 
+## Stores the body and capsule dimensions in metres; rebuilds reusable skin-shrunk shapes.
 func setup(
 	p_body: CharacterBody3D,
 	p_radius: float,
@@ -79,23 +79,23 @@ func origin_for_feet(surface_point: Vector3) -> Vector3:
 	return surface_point + Vector3.UP * (standing_height * 0.5 + floor_clearance)
 
 
-# ---------------------------------------------------------------------------
 # Obstacle scan
-# ---------------------------------------------------------------------------
 
+## Scans from the current body origin; returns an ObstacleProfile or null and sets last_reject.
 func scan(direction: Vector3, velocity: Vector3, airborne: bool) -> ObstacleProfile:
 	return scan_from(body.global_position, direction, velocity, airborne)
 
 
-## The same scan from any body-origin position. Chained moves scan from
-## mid-air, and hang leaps scan from points along the view direction.
-## `velocity` may be a carried velocity rather than the body's real one.
+## Scans at world body origin with forward direction and world velocity.
+## Negative lookahead_time uses scan_lookahead_time; max_top_y limits world top height.
+## Returns null on rejection and updates last_reject; never moves the body.
 func scan_from(
 	origin: Vector3,
 	direction: Vector3,
 	velocity: Vector3,
 	airborne: bool,
-	lookahead_time := -1.0
+	lookahead_time := -1.0,
+	max_top_y := INF
 ) -> ObstacleProfile:
 	if lookahead_time < 0.0:
 		lookahead_time = scan_lookahead_time
@@ -110,7 +110,7 @@ func scan_from(
 	# How high may the sweep reach? A low ceiling would otherwise be mistaken
 	# for a wall, because the sweep box would start inside it.
 	#
-	var top_limit := feet.y + max_reach
+	var top_limit := minf(feet.y + max_reach, max_top_y)
 	var ceiling := ray(
 		origin,
 		Vector3(origin.x, top_limit + 0.1, origin.z)
@@ -190,7 +190,9 @@ func scan_from(
 	var face_point: Vector3 = face["position"]
 	var raw_normal: Vector3 = face["normal"]
 
-	if absf(raw_normal.y) > max_wall_normal_y:
+	# Traversal can use steep tilted banks. Walking handles walkable slopes;
+	# dedicated kick and hanging probes keep their vertical-face limit.
+	if absf(raw_normal.y) >= min_top_normal_y:
 		last_reject = "not a wall (slope)"
 		return null
 
@@ -205,12 +207,16 @@ func scan_from(
 	# 2. Find the top surface just behind the face.
 	#
 	var across := -normal
-	var probe := face_point + across * top_probe_depth
-	var top := ray(
-		Vector3(probe.x, top_limit, probe.z),
-		Vector3(probe.x, feet.y + step_height * 0.5, probe.z),
-		false
-	)
+	var top := {}
+	var measured_depth := top_probe_depth
+	# A single 10 cm inset can overshoot a boat rail and measure its lower
+	# floor instead. Keep the highest top at the face, including thin lips.
+	for depth in [SKIN, top_probe_depth]:
+		var probe: Vector3 = face_point + across * depth
+		var sample := ray(Vector3(probe.x, top_limit, probe.z), Vector3(probe.x, feet.y + step_height * 0.5, probe.z), false)
+		if not sample.is_empty() and (top.is_empty() or (sample["position"] as Vector3).y > (top["position"] as Vector3).y):
+			top = sample
+			measured_depth = depth
 
 	if top.is_empty():
 		last_reject = "no top within reach"
@@ -253,7 +259,7 @@ func scan_from(
 		var under := ray(sample + Vector3.UP * 0.3, sample - Vector3.UP * 0.15, false)
 
 		if under.is_empty():
-			profile.thickness = top_probe_depth + walked - step_size * 0.5
+			profile.thickness = measured_depth + walked - step_size * 0.5
 			profile.far_edge = profile.face_point + across * profile.thickness
 			break
 
@@ -321,9 +327,7 @@ func scan_from(
 	return profile
 
 
-# ---------------------------------------------------------------------------
 # Edge below the player, for lowering into a hang
-# ---------------------------------------------------------------------------
 
 ## Returns {} when there is no edge, otherwise
 ## { "face_point": Vector3, "normal": Vector3, "lip_y": float }.
@@ -368,9 +372,7 @@ func edge_below(direction: Vector3, needed_drop: float) -> Dictionary:
 	}
 
 
-# ---------------------------------------------------------------------------
 # Landing target for an assisted jump
-# ---------------------------------------------------------------------------
 
 ## Looks along `direction` for a gap followed by a standable surface.
 ## Returns {} or { "point": Vector3, "distance": float }.
@@ -465,9 +467,7 @@ func _landing_edge(feet: Vector3, direction: Vector3, gap_at: float, land_at: fl
 	return far
 
 
-# ---------------------------------------------------------------------------
 # Primitives
-# ---------------------------------------------------------------------------
 
 func _exclude() -> Array[RID]:
 	var list: Array[RID] = [body.get_rid()]
@@ -475,6 +475,8 @@ func _exclude() -> Array[RID]:
 	return list
 
 
+## Returns a Godot ray-hit Dictionary, or {} on miss. Excludes player/extra_exclude;
+## uses mask, solid bodies only, and does not detect hits from inside geometry.
 func ray(from: Vector3, to: Vector3, hit_back_faces := true) -> Dictionary:
 	var space := body.get_world_3d().direct_space_state
 	var query := PhysicsRayQueryParameters3D.create(from, to, mask, _exclude())
@@ -508,31 +510,36 @@ func fits(origin_position: Vector3, crouched: bool) -> bool:
 	return space.intersect_shape(query, 1).is_empty()
 
 
-## Fit-tests the capsule along a whole path of origin positions.
+## Sweep the capsule so thin obstacles cannot fall between fit samples.
+## Also used during playback: a guard or door can enter a validated path.
+func motion_is_clear(from: Vector3, to: Vector3, crouched: bool) -> bool:
+	if not fits(to, crouched):
+		return false
+
+	if from.distance_squared_to(to) < 0.0000001:
+		return true
+
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = _crouch_shape if crouched else _stand_shape
+	var center := from
+	if crouched:
+		center -= Vector3.UP * (standing_height - crouch_height) * 0.5
+	query.transform = Transform3D(Basis.IDENTITY, center)
+	query.motion = to - from
+	query.collision_mask = mask | body_mask
+	query.exclude = _exclude()
+	query.collide_with_areas = false
+	query.margin = 0.0
+	var fractions := body.get_world_3d().direct_space_state.cast_motion(query)
+	return fractions.size() == 2 and fractions[0] >= 1.0
+
+
+## Sweeps each consecutive pair of world body origins with the chosen capsule.
+## Empty/single-point paths return true without checking the isolated point.
 func path_is_clear(points: PackedVector3Array, crouched: bool) -> bool:
-	var spacing := 0.12
-	var skip := 0.05
-	var travelled := 0.0
 
 	for i in range(1, points.size()):
-		var a := points[i - 1]
-		var b := points[i]
-		var length := a.distance_to(b)
-
-		if length < 0.0001:
-			continue
-
-		var samples := maxi(int(ceil(length / spacing)), 1)
-
-		for s in range(1, samples + 1):
-			var u := float(s) / float(samples)
-
-			if travelled + length * u < skip:
-				continue
-
-			if not fits(a.lerp(b, u), crouched):
-				return false
-
-		travelled += length
+		if not motion_is_clear(points[i - 1], points[i], crouched):
+			return false
 
 	return true

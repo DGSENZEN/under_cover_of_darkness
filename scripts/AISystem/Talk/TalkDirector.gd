@@ -1,42 +1,9 @@
 extends RefCounted
-## Who talks to whom, and what they say: one for each scene tree (`of`),
-## ticked by every guard's GuardLife and working once a frame whoever calls.
-##
-## Every CHOOSE_EVERY seconds it looks for men at their ease near each other
-## (standing a while, sitting, eating, leaning), in sight of each other: a
-## group. For a group it finds every written conversation (TalkScript) whose
-## conditions hold and whose parts can be cast from the group (TalkFacts),
-## and plays the most specific (ties by chance), never the one these same
-## men played last.
-##
-## Playing: one man speaks at a time. A line lasts LINE_BASE + LINE_PER_CHAR
-## a letter (a whisper a little longer, a shout shorter), then a pause.
-## Before each line its conditions are read again; a man stirred, gone, or
-## walked off breaks it off: whoever was to speak next says the
-## conversation's interrupt line, if it has one for him, and everyone goes
-## back to what he was doing. A man calling out (Guard.bark) leaves it.
-##
-## Each line comes out of the man's mouth as Guard.speak (the subtitle, his
-## murmur) and his emotes as Guard.emote (a gesture, a laugh).
-##
-## It remembers: a conversation waits out its cooldown (or is once a
-## night); every conversation of a group is played before any again; no man
-## says the same line twice in a night (unless it is marked `again`); two
-## men do not air the same topic twice. A man who walks up to a conversation
-## with an empty part that fits him takes it. A man alone says something to
-## himself now and then (a remark: a conversation of one part, fitting his
-## station), never on top of another within earshot, nor with a friend on
-## his way over for a word (GuardHabits "visit"). A remark is no
-## conversation: no rest after it keeps him from the next.
-##
-## In a fight, a call is answered (`call_pair`: chosen after the squad has
-## decided what to do): a man asks if another stands and the man cut answers
-## how he is, "Anyone see him?" and a man names the place, a man ordered
-## where his friend fell refuses. A man who sees his kin or his friend die,
-## or finds him, calls his name (`grieve`); a man who finds a post empty
-## asks after the man by name (`play_missing`). These are called out: they
-## do not wait for anyone to be at his ease, and nothing short of a man gone
-## breaks them.
+## Level-scoped conversation director, ticked once per physics frame.
+## Selects TalkScript conversations using TalkFacts, casts participants and schedules
+## lines through Guard.speak/emote. Rechecks conditions between turns; interruptions
+## end a conversation and may play its interrupt line. Tracks cooldowns, groups,
+## line/topic repetition, solo remarks and urgent call/answer or grief exchanges.
 
 const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
 const TalkFacts := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
@@ -118,8 +85,7 @@ var _join_in := 0.0
 var _grieved := {}
 
 
-## The director for `node`'s level (made the first time it is asked for): a
-## level loaded again (the scene reloaded) starts afresh.
+## Returns the level's director, lazily created; null for null/out-of-tree node.
 static func of(node: Node) -> RefCounted:
 	var tree := node.get_tree() if node != null and node.is_inside_tree() else null
 
@@ -149,8 +115,7 @@ static func clear_all() -> void:
 	_directors.clear()
 
 
-## The conversations to choose from: `lib` (TalkScript's shape) instead of
-## the files; {} for the files again.
+## Uses TalkScript-shaped lib {conversations, cast, errors}; {} restores file library.
 func use_library(lib: Dictionary) -> void:
 	_library = lib
 
@@ -182,9 +147,7 @@ func tick(delta: float) -> void:
 		_choose()
 
 
-# ---------------------------------------------------------------------------
 # Asking
-# ---------------------------------------------------------------------------
 
 ## In a conversation (a remark to himself is not one, nor a call and its
 ## answer in a fight: those are called out, not talked).
@@ -199,8 +162,7 @@ func speaking(man: Node) -> bool:
 	return not talk.is_empty() and talk["speaker"] == man and clock < float(talk["speaking_until"])
 
 
-## Whom he should face: the man who spoke last in his conversation, or (while
-## he speaks himself, or before anyone has) the one most in front of him.
+## Returns a conversation partner node to face as Variant, or null if no partner.
 func speaker_near(man: Node) -> Variant:
 	var talk := _talk_of(man)
 
@@ -243,8 +205,9 @@ func leave(man: Node, interrupted := true) -> void:
 		_end(talk)
 
 
-## Starts the conversation `conv_id` with these men ({part: man}) now. False
-## if there is no such conversation, or a man is not free for it.
+## Starts conv_id with cast mapping part strings to live guard nodes; extra is a
+## fact dictionary. Returns false for absent conversation or occupied/invalid cast.
+## Explicit playback does not perform automatic candidate selection.
 func play(conv_id: String, cast: Dictionary, extra := {}) -> bool:
 	var conv := _find(conv_id)
 
@@ -445,9 +408,7 @@ func lines_of(man: Node) -> Array:
 	return _lines.get(man.get_instance_id(), [])
 
 
-# ---------------------------------------------------------------------------
 # Choosing
-# ---------------------------------------------------------------------------
 
 func _choose() -> void:
 	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
@@ -712,9 +673,7 @@ func _weighted(pool: Array) -> Dictionary:
 	return pool[-1]
 
 
-# ---------------------------------------------------------------------------
 # Playing
-# ---------------------------------------------------------------------------
 
 func _start(conv: Dictionary, cast: Dictionary, extra: Dictionary, solo := false) -> void:
 	var members := []
@@ -1013,9 +972,7 @@ func _can_speak(man: Variant) -> bool:
 	return man != null and is_instance_valid(man) and not (man as Node).is_queued_for_deletion() and man.get("_knocked_out") != true
 
 
-# ---------------------------------------------------------------------------
 # Late joiners and remarks
-# ---------------------------------------------------------------------------
 
 ## A man free and near a conversation with an empty part he fits: he takes
 ## it.
@@ -1240,9 +1197,7 @@ func _remarked_near(at: Vector3) -> bool:
 	return false
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 func _talk_of(man: Node) -> Dictionary:
 	for talk in _talks:

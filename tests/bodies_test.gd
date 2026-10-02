@@ -294,7 +294,6 @@ func _run() -> void:
 	await _frames(10)
 
 
-# --------------------------------------------------------------------------
 
 func _pieces() -> Array:
 	return get_tree().get_nodes_in_group(&"bodies").filter(func(b): return b.get("part") != null)

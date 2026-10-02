@@ -1,13 +1,7 @@
 extends SkeletonModifier3D
-## Reaching: each hand put where it is asked to be, the arm bending at the
-## elbow to get it there (two-bone IK), the fingers closed as far as asked
-## (poses taken from the animation library, so a fist is a real fist). The
-## right leg can be put somewhere too: a kick. Laid over whatever the
-## skeleton was animated to; a limb with no weight is left as it was.
-##
-## Targets are in the space of the person it belongs to (Humanoid.gd): he
-## looks down -Z, at his own full size. ViewArms.gd drives this for your own
-## arms.
+## Two-bone arm/leg IK and animation-derived finger curls layered over the current pose.
+## Targets use the owning Humanoid's full-size space, facing -Z; zero limb weight preserves its animation.
+## ViewArms drives this modifier for first-person arms.
 
 ## Where the elbow points, as a direction from the shoulder, and where the
 ## knee does, from the hip.

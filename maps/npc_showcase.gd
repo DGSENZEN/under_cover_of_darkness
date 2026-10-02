@@ -1,40 +1,7 @@
 extends Node3D
-## The NPC showcase: one night at a Watch garrison, for others to watch. The
-## guards run their own minds; only the intruder follows a script (the
-## director, ShowDirector.gd, plays the night in acts).
-##
-##   Godot --path . res://maps/npc_showcase.tscn
-##
-## The yard (40 x 30 m, its middle at the origin, the gate to the south, +Z):
-##   the north wall carries a wall-walk (stairs at both ends) and the tower in
-##   its east corner (the lookout, the bell); the postern is in the east wall
-##   just south of the tower, in the dark. An open shed of bedrolls on the west
-##   side, the quartermaster's store on the east (a dark alley behind it, along
-##   the east wall, up to the postern), the fire and its benches in the
-##   middle, the well, the woodpile and the cart.
-##   Outside the north wall: lean-to roofs, then a canal. Every building is
-##   open above (rafters, no roof), so a camera overhead sees into it.
-##
-## Keys (ShowDirector, ShowCamera, ShowOverlay):
-##   1-5 start from that act       N the next beat       V Act V's ending
-##   R from the start again        Space pause           [ ] slow motion
-##   C the camera to the director  Tab follow the next man, or click on one
-##   WASD Q/E fly (right mouse held to look, Shift fast, the wheel for speed)
-##   H hide the subtitles, marks and titles      F6-F8 the retro look
-##
-## After -- on the command line:
-##   --act=N          start at act N (1-5)
-##   --ending=X       overwhelmed, victor or escape (else one at random)
-##   --auto           nobody at the controls: the director has the camera
-##   --quit-at-end    quit a few seconds after the night is over
-##   --seed=N         another night than the usual one (the same N, the same
-##                    night)
-##   --fps-report=N   the yard at rest for N seconds, then its frame rate
-##                    (average and lowest), and quit.
-##
-## To record the whole night to a video, frame by frame whatever the machine
-## can draw (Godot's Movie Maker):
-##   Godot --path . --write-movie showcase.avi --fixed-fps 60 --resolution 1920x1080 res://maps/npc_showcase.tscn -- --auto --ending=escape --quit-at-end
+## Owns the autonomous cast and scripted intruder in the NPC showcase.
+## Builds the yard, starts night/rota/cinematic services and configures act markers.
+## Garrison inherits this lifecycle while replacing the level geometry and placement.
 
 ## Built, baked and peopled: the director (or a test) can begin.
 signal ready_to_show
@@ -238,6 +205,7 @@ func _story_path() -> String:
 
 ## Where the show's camera starts, and what it looks at, before the first
 ## scene.
+## Returns [camera_position: Vector3, look_target: Vector3] in world coordinates.
 func camera_home() -> Array:
 	return [Vector3(18.0, 18.0, 24.0), Vector3(0, 0.5, -1.0)]
 
@@ -249,6 +217,7 @@ func _exit_tree() -> void:
 
 ## Everything but the people: the yard, the buildings, outside, the lights,
 ## the stations and the marks, and the navmesh baker.
+## Builds the showcase yard and its gameplay placement; inherited scenes override the layout.
 func build() -> void:
 	_yard()
 	_walls()
@@ -318,6 +287,8 @@ func _gathering_place(kind: StringName, at: Vector3, spots: Array) -> void:
 
 
 ## The intruder, at `at` (the director's).
+## Instantiates the scripted thief at a world-space foot origin; yaw is radians.
+## Stores and returns the CharacterBody3D used by the showcase director.
 func spawn_intruder(at: Vector3, yaw := 0.0) -> CharacterBody3D:
 	if intruder != null and is_instance_valid(intruder):
 		intruder.queue_free()
@@ -330,9 +301,7 @@ func spawn_intruder(at: Vector3, yaw := 0.0) -> CharacterBody3D:
 	return intruder
 
 
-# ---------------------------------------------------------------------------
 # The place
-# ---------------------------------------------------------------------------
 
 func _yard() -> void:
 	_brush(Vector3(0, -0.25, 0), Vector3(42, 0.5, 33), STONE_ROAD, 2.0)
@@ -451,9 +420,7 @@ func _outside() -> void:
 	WaterScript.build(self, Vector3(0, -2.05, -24), Vector3(42, 2.9, 6))
 
 
-# ---------------------------------------------------------------------------
 # Stations, props, marks
-# ---------------------------------------------------------------------------
 
 func _stations_and_props() -> void:
 	# By the fire: Piers on the north bench facing it; Col at his supper on
@@ -601,9 +568,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-# ---------------------------------------------------------------------------
 # The people
-# ---------------------------------------------------------------------------
 
 func _spawn_cast() -> void:
 	# [name, where, yaw, stations, route, lookout].
@@ -660,9 +625,7 @@ func _spawn_cast() -> void:
 		roles[name] = entry[4]
 
 
-# ---------------------------------------------------------------------------
 # Building blocks
-# ---------------------------------------------------------------------------
 
 ## A solid block with a texture laid on in world space, one tile every `tile`
 ## metres (maps/retro_showcase.gd's).

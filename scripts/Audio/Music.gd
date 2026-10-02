@@ -1,22 +1,7 @@
 extends Node
-## The score, and it follows the fight. Nothing while nobody knows you are
-## there. As a guard starts looking into something, a swell; as one comes
-## for you, a hit (both the HUD's stings: sting_suspicious, sting_combat).
-## Under a fight, layers come in as it gets worse, all loops in
-## audio/music/ played together from the fight's start:
-##
-##   music_drone    anything hunting you, or fighting you at all
-##   music_pulse    a fight on: the heartbeat of it
-##   music_drums    it is close, and more than one of them
-##   music_severe   outnumbered, cut badly, the brute enraged: it is going
-##                  wrong (a hit, sting_escalate, as it turns)
-##
-## How bad it is (intensity_of) comes from how many are on you and how near,
-## your health, a fresh wound, their moods and their plan. It rises quickly
-## and falls slowly, and when the fight is over the layers fade out.
-## A layer with no recording is simply not there.
-##
-## Started with the level (Sfx.warm). Only audio: guards hear none of it.
+## Level score driven by nearby hunting/fighting guards, health, wounds, pressure, and squad plans.
+## Four synchronized loops fade by smoothed intensity; absent recordings are skipped. Sfx.warm() starts it.
+## Real-time envelopes/sting cooldowns survive time scaling. Playback emits no gameplay sound stimulus.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
@@ -62,7 +47,8 @@ var _last_health := -1.0
 var _hurt_at := -100.0
 
 
-## Starts the score, once, if sound is on.
+## Adds one Music node to the current scene/tree root; detached contexts or an existing Music node are ignored.
+## Called by Sfx.warm(); missing individual loop recordings are skipped during setup.
 static func begin(context: Node) -> void:
 	var tree := context.get_tree() if context != null and context.is_inside_tree() else null
 
@@ -204,8 +190,7 @@ func _process(_delta: float) -> void:
 			player.volume_db += PULSE_YIELD * _hurt_badly()
 
 
-## Which beat of its bar the score is on (0..3), or -1 when its pulse is not
-## heard: a heart in the fight falls in with it.
+## Returns the pulse beat index (0..3), or -1 when its loop is absent, stopped, or below -45 dB.
 func beat_now() -> int:
 	var pulse: AudioStreamPlayer = _layers.get(&"music_pulse")
 

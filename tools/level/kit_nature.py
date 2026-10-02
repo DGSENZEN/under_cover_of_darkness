@@ -58,9 +58,7 @@ def _plant(name, slot, surface, size, shapes, cols=None, budget=None):
         PIECES[name]["budget"] = budget
 
 
-# ---------------------------------------------------------------------------
 # Trees
-# ---------------------------------------------------------------------------
 
 # An oak: a trunk flared at its foot, four limbs out of it, a broad crown of
 # leaf cards over them (and under, for the man beneath it).
@@ -100,9 +98,7 @@ _plant("tree_dead", "twigs", "wood", [7.6, 8.4, 7.6],
        + [ks.card(0.0, 6.8, 0.0, 2.6, 2.6, "twigs", yaw, 0.0, round=[0.0, 5.5, 0.0]) for yaw in (0.0, 90.0)],
        cols=[[0.0, 2.2, 0.0, 0.7, 4.4, 0.7, "wood", 0, 0, 0]], budget=500)
 
-# ---------------------------------------------------------------------------
 # Shrubs and ground cover
-# ---------------------------------------------------------------------------
 
 # A shrub: a dome of leaf cards (a man crouched behind it is hidden).
 PIECES["bush"]["size"] = [2.2, 1.6, 2.2]

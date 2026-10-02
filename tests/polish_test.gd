@@ -328,9 +328,7 @@ func _run() -> void:
 	await _review_findings()
 
 
-# --------------------------------------------------------------------------
 # From the three code reviews
-# --------------------------------------------------------------------------
 func _review_findings() -> void:
 	player.debug_light_level = 0.0
 
@@ -671,7 +669,6 @@ func _overlaps_world(node: Node3D) -> bool:
 	return not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
 
 
-# --------------------------------------------------------------------------
 func _box_fence(at: Vector3) -> void:
 	Props.block(self, at + Vector3(0, 0.45, 0), Vector3(3, 0.9, 0.2))
 

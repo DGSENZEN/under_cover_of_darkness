@@ -1,11 +1,9 @@
 class_name ClimbVolume
 extends Area3D
-## Marks a climbable surface: a ladder, a vine wall, a drainpipe.
-##
-## Place it against the surface with its local -Z pointing INTO the wall, the
-## same way a Camera3D would look at it. Give it a BoxShape3D that covers the
-## climbable area and sticks out about half a metre from the wall. Make it end
-## near the top of the wall so the player can mantle off the top.
+## Climbable Area3D. Flat surfaces face into the wall along local -Z; their
+## BoxShape3D should cover the climb and extend about 0.5 m from the wall.
+## Ropes use a vertical line through the origin. Entry/exit registers this
+## volume with bodies implementing add_climb_volume/remove_climb_volume.
 
 ## A rope: the climber hangs off a vertical line through this node's origin
 ## and can swing around it. Give it a tall thin box shape around the rope.

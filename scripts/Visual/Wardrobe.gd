@@ -1,23 +1,8 @@
 extends RefCounted
-## The wardrobe: guards as low-poly PS2 characters, built in Blender from the
-## Quaternius body (tools/wardrobe) and put together here. Presentation only:
-## nothing here decides anything.
-##
-## A part made in Blender (an outfit, a head, a coif) comes with a skeleton
-## of its own. Its bones sit where the game's do, but Blender may have turned
-## their frames, so its skin is re-bound to the game skeleton's own rest
-## frames before it is worn: however Blender turned a bone, the mesh moves
-## with it exactly as it did there. Bones the game skeleton lacks (the cloth
-## a skirt swings on) are added to it first.
-##
-##   Wardrobe.add_bones(skeleton, part_skeleton, ["cloth_skirt_front_1"])
-##   mesh.skin = Wardrobe.rebind(part_skin, part_skeleton, skeleton)
-##
-## Every guard of a kind is his own man in the details (his face, his skin,
-## how faded his tabard, how dirty, how tall) and the same in outline: roll()
-## draws those from the kind's options, the same every time for the same
-## seed. All of a kind share one material (wardrobe.gdshader); apply_look()
-## sets what is his alone on each thing he wears.
+## Assembles Blender wardrobe pieces on the game skeleton and rolls deterministic per-person appearance.
+## Quaternius-derived bodies are built by tools/wardrobe. Extra cloth bones are added before skin rebind.
+## Rebind converts source rest frames to target rest frames; all instances sharing textures reuse materials.
+## apply_look() writes per-mesh shader parameters, preserving shared material ownership.
 
 const SHADER := preload("res://scripts/Visual/wardrobe.gdshader")
 const SHADER_TWO_SIDED := preload("res://scripts/Visual/wardrobe_two_sided.gdshader")
@@ -89,9 +74,7 @@ static func add_bones(target: Skeleton3D, source: Skeleton3D, names: PackedStrin
 		target.set_bone_pose_scale(bone, local.basis.get_scale())
 
 
-# ---------------------------------------------------------------------------
 # The parts' data
-# ---------------------------------------------------------------------------
 
 ## A kind's JSON (tools/wardrobe/export.py): its cloth, colliders, metal,
 ## skin tones, probes and options. Empty if it has none.
@@ -138,9 +121,7 @@ static func _read(relative: String) -> Dictionary:
 	return data
 
 
-# ---------------------------------------------------------------------------
 # Each his own
-# ---------------------------------------------------------------------------
 
 ## What this man wears and looks like, drawn from a kind's `options` (its
 ## JSON's): {face, tone, hair, beard, headgear, dye, fade, grime, height,
@@ -258,9 +239,7 @@ static func _black_texture() -> ImageTexture:
 	return _black
 
 
-# ---------------------------------------------------------------------------
 # Dressing: what can be worn, and the worn parts themselves
-# ---------------------------------------------------------------------------
 
 static var _skins := {}
 static var _warned := {}

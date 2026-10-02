@@ -1,17 +1,7 @@
 extends "res://scripts/AISystem/Guard.gd"
-## The NPC showcase's intruder: a guard's body with the guard's mind switched
-## off (Guard.puppet). He wears the archer's hooded outfit dyed near-black and
-## carries a sword (Intruder.tscn sets all of it: values an inherited scene
-## instances with would undo any set in _init). The guards take him for the
-## one they are after: he is the "player" group's only member in the showcase.
-##
-## He answers to the guards as the player does: how easy he is to see
-## (get_exposure, get_sight_points), where to aim at him (get_aim_point), his
-## fighting (combat: IntruderCombat, the read-outs PlayerCombat gives them),
-## and a blow of theirs meeting him (take_damage, through his guard).
-##
-## Plot armour: until the director lifts it (fall), nothing takes him under
-## ARMOUR_FLOOR of his health.
+## Showcase player surrogate derived from Guard with puppet AI. Intruder.tscn supplies inherited scene settings.
+## IntruderBrain drives verbs; IntruderCombat exposes PlayerCombat-compatible threat/defence readings.
+## The player group lets guards target him. armoured preserves ARMOUR_FLOOR health until fall() releases it.
 
 const IntruderCombatScript := preload("res://scripts/Showcase/IntruderCombat.gd")
 const IntruderBrainScript := preload("res://scripts/Showcase/IntruderBrain.gd")
@@ -164,7 +154,7 @@ func warn_attack(from: Node3D) -> void:
 		brain.on_warned(from)
 
 
-## The director lifts his plot armour: the next blows can kill him.
+## Releases the plot-armour health floor; existing health is unchanged.
 func fall() -> void:
 	armoured = false
 

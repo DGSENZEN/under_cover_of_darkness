@@ -1,12 +1,6 @@
-// A stain on the ground (soot, trodden dirt: the garrison's floor stains):
-// a card laid on the floor that multiplies what is drawn under it, as a
-// PS2 laid its blob shadows, so it darkens the stones whatever light is on
-// them (a decal only swaps the colour the light falls on, and a dark one
-// all but vanished under the fire's light and the wet sheen). Its painting
-// mixed in by its alpha and `strength` (it darkens the light before the
-// tonemap, so it is laid on thick); `curve` under 1 lifts its colour toward
-// white (trodden dirt tints the stones brown and darkens them a little,
-// soot blackens them).
+// Multiplicative floor stain card: darkens the lit scene rather than only swapping decal albedo.
+// Texture alpha mixes strength; curve < 1 lifts colour toward white for lighter dirt tint.
+// Drawn before tonemapping, so soot remains visible under fire light and wet sheen.
 shader_type spatial;
 render_mode blend_mul, unshaded, cull_back, depth_draw_never, shadows_disabled, fog_disabled;
 

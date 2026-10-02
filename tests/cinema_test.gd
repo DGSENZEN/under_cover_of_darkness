@@ -73,9 +73,7 @@ func _ready() -> void:
 	get_tree().quit()
 
 
-# ---------------------------------------------------------------------------
 # C: what the world tells the camera
-# ---------------------------------------------------------------------------
 
 func _events() -> void:
 	# C1 a guard's line: speaker, listeners given, a length, a delivery
@@ -210,9 +208,7 @@ class _NodeEars extends Node:
 		pass
 
 
-# ---------------------------------------------------------------------------
 # R: eased slow motion
-# ---------------------------------------------------------------------------
 
 func _ramps() -> void:
 	await _fresh()
@@ -264,9 +260,7 @@ func _real(seconds: float) -> void:
 		await get_tree().physics_frame
 
 
-# ---------------------------------------------------------------------------
 # F: framing
-# ---------------------------------------------------------------------------
 
 func _framing() -> void:
 	var view := SubViewport.new()
@@ -410,9 +404,7 @@ func _framing() -> void:
 	view.queue_free()
 
 
-# ---------------------------------------------------------------------------
 # V: places to watch from
-# ---------------------------------------------------------------------------
 
 func _vantages() -> void:
 	var space := get_world_3d().direct_space_state
@@ -505,9 +497,7 @@ func _vantages() -> void:
 		d.queue_free()
 
 
-# ---------------------------------------------------------------------------
 # S: the letterbox and the wipe
-# ---------------------------------------------------------------------------
 
 func _screen() -> void:
 	var screen: CanvasLayer = CineScreen.new()
@@ -589,9 +579,7 @@ func _screen() -> void:
 	screen.queue_free()
 
 
-# ---------------------------------------------------------------------------
 # O: the operator
-# ---------------------------------------------------------------------------
 
 func _operator() -> void:
 	var camera := Camera3D.new()
@@ -818,9 +806,7 @@ func _operator() -> void:
 	camera.queue_free()
 
 
-# ---------------------------------------------------------------------------
 # E: the editor, observing
-# ---------------------------------------------------------------------------
 
 func _observing() -> void:
 	seed(1932)
@@ -1030,9 +1016,7 @@ func _observing() -> void:
 	camera.queue_free()
 
 
-# ---------------------------------------------------------------------------
 # E: the editor, in drama
-# ---------------------------------------------------------------------------
 
 func _drama() -> void:
 	seed(1954)
@@ -1780,9 +1764,7 @@ func _man(at: Vector3, yaw: float) -> Man:
 	return m
 
 
-# ---------------------------------------------------------------------------
 # P: a picture worth looking at, in close quarters (the garrison's rooms)
-# ---------------------------------------------------------------------------
 
 func _picture() -> void:
 	await _fresh()
@@ -2526,9 +2508,7 @@ func _body(at: Vector3) -> Body:
 	return b
 
 
-# ---------------------------------------------------------------------------
 # The stage
-# ---------------------------------------------------------------------------
 
 func _yard() -> void:
 	Props.block(self, Vector3(60, -0.5, 0), Vector3(200, 1, 60))

@@ -1,11 +1,8 @@
 extends RefCounted
-## How lit is an arbitrary point in the world? The lightgem answers that for
-## the player by rendering; this answers it for anything else by arithmetic:
-## every light's falloff at that point, a shadow ray to each, plus ambient.
-## Guards use it to decide whether a body on the floor can be seen.
-##
-## The falloff is Godot's own, from scene_forward_lights_inc.glsl, so a point
-## reads here roughly the way it looks on screen. It ignores bounced light.
+## Estimates world-point illumination for body detection and search scoring.
+## Sums ambient and visible light falloff, with optional shadow rays and negative lights.
+## Returns 0..1; ignores bounced light and lights in "fx_light". A shared light cache
+## refreshes on scene/light/environment changes or after REFRESH_SECONDS.
 
 const REFRESH_SECONDS := 2.0
 
@@ -17,7 +14,9 @@ static var _scene_id := 0
 static var _watching: SceneTree = null
 
 
-## 0 = pitch black, 1 = fully lit. `asker` is any node in the scene tree.
+## Returns estimated illumination in 0..1 at world-space point. asker must be a
+## Node3D inside the tree/world. exclude RIDs affect shadow rays only. Refreshes the
+## shared light cache and adds light occlusion_exclude metadata when present.
 static func light_at(asker: Node3D, point: Vector3, exclude: Array[RID] = []) -> float:
 	_refresh(asker)
 
@@ -66,7 +65,11 @@ static func light_at(asker: Node3D, point: Vector3, exclude: Array[RID] = []) ->
 		# as made (its "casts_shadow"), not as the shadow budget draws it.
 		if light.get_meta(&"casts_shadow", light.shadow_enabled):
 			var from := point + toward * 0.05
-			var query := PhysicsRayQueryParameters3D.create(from, point + toward * reach, 1, exclude)
+			var shadow_exclude: Array[RID] = exclude
+			if light.has_meta(&"occlusion_exclude"):
+				shadow_exclude = exclude.duplicate()
+				shadow_exclude.append_array(light.get_meta(&"occlusion_exclude"))
+			var query := PhysicsRayQueryParameters3D.create(from, point + toward * reach, 1, shadow_exclude)
 			query.collide_with_areas = false
 
 			if not space.intersect_ray(query).is_empty():
@@ -101,11 +104,8 @@ static func _luminance(color: Color) -> float:
 	return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
 
 
-## The cache is rebuilt when a light was freed, when a light or an environment
-## was added to or taken out of the tree (_on_tree_changed: not for every node
-## that comes and goes, a sound or a spark), on a new scene (a level reload
-## leaves the old lists pointing at freed lights), and at the latest every
-## REFRESH_SECONDS.
+## Rebuilds cache for a changed scene/light/environment or after REFRESH_SECONDS.
+## Tree signals mark it stale; freed cached lights also trigger a refresh.
 static func _refresh(asker: Node3D) -> void:
 	var now := float(Engine.get_physics_frames()) / float(maxi(Engine.physics_ticks_per_second, 1))
 	var tree := asker.get_tree()

@@ -1,18 +1,7 @@
 shader_type spatial;
-// The PS1's own wobble, for the props that want it. Lit by Godot's lights
-// like everything else (shadows, fog, shafts all work); on top of that:
-//
-//   snap_lines   vertices snap to a grid of this many screen lines, so edges
-//                jitter as they move: the PS1 had no sub-pixel precision.
-//                0 leaves them smooth.
-//   affine       texture coordinates interpolated across the screen instead
-//                of in depth, so textures swim and bend on big polygons.
-//                0 is correct perspective, 1 is a PS1.
-//   per_vertex   lighting worked out at the corners and blended between them
-//                (Gouraud), as consoles of the time did.
-//
-// Use it for idols, props and monsters; keep level geometry on the default
-// look, where swimming walls would make people sick.
+// Optional normally lit PS1-style prop material: snap_lines quantizes projected vertices,
+// affine mixes perspective-correct and affine UVs.
+// Keep level geometry on the normal look to avoid large swimming wall textures.
 
 render_mode cull_back, diffuse_lambert, specular_schlick_ggx;
 

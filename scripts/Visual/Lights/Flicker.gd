@@ -1,16 +1,7 @@
 extends RefCounted
-## How a flame wavers, as a number from -1 to 1 that a light's energy swings
-## by (Torch.gd: energy × (1 + flicker × value)).
-##
-## Flames puff at a rate set by their size: about 1.5 / sqrt(width) Hz, so a
-## torch flutters and a campfire heaves slowly. Each kind's value is its puff,
-## a quicker half-harmonic that never lines up with it, and a slow drift,
-## weighted 0.55 + 0.25 + 0.2, so it can never leave -1..1 and its strongest
-## frequency is always its puff rate. The phases come from `salt`, so no two
-## flames breathe together but each always breathes the same.
-##
-## A lone candle in still air does not flicker at all. A draft (a door, a man
-## running past) makes it shiver about ten times a second for a second.
+## Deterministic flame flicker in [-1, 1], used by Torch as energy * (1 + flicker * value).
+## Kind selects puff rate; salt decorrelates phases. Puff, half-harmonic, and drift weights sum to one.
+## A candle is steady until draft() supplies a brief high-frequency disturbance.
 
 ## kind -> puff rate (Hz). 0: still.
 const KINDS := {

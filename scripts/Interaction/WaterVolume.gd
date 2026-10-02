@@ -1,20 +1,8 @@
 extends Area3D
-## A body of water: a box, its top the surface (the node's origin is the
-## middle of the box, `size` its extent, not turned). What it does:
-##   deep       deeper than a man can stand in (SWIM_DEPTH): he swims. The
-##              player floats with his eyes above the surface, dives and comes
-##              up; a guard swims after you along its own navmesh (NavBaker
-##              bakes one per body of water, dearer to cross than land) and
-##              climbs out where the bank is low enough (NavLinks).
-##   shallow    up to the thigh: slow going, and every step splashes.
-##   splash     anything coming into it fast is heard (SoundBus) and seen.
-##   afloat     loose things (a crate, a stool) float, and are slowed.
-##   murk       under the surface you are hard to see.
-## Levels place them with build() or as nodes with a BoxShape3D child; the
-## navmesh must be baked after (NavBaker does it on load).
-##
-##   WaterVolume.build(parent, centre, size)
-##   WaterVolume.at(tree, point)   the water `point` is in, or null
+## Axis-aligned water Area3D; origin is box centre, size is full XYZ extent.
+## Its top is the surface; terrain below determines standable depth. Water
+## registers movement contacts, floats loose bodies, emits splashes, and
+## provides shoreline/light data to shaders. Bake navigation after placement.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -46,6 +34,12 @@ const CANAL_FLOW := 0.08
 const RIPPLE_TEXELS := 128
 const RIPPLE_STRENGTH := 6.0
 const SHADER := preload("res://scripts/Visual/water.gdshader")
+const SHORE_SHADER := preload("res://scripts/Visual/water_shore.gdshader")
+## Terrain survey resolution, bounded for the large harbour. Work is spread
+## over physics ticks and never follows moving actors or the camera.
+const SHORE_CELL := 0.4
+const SHORE_TEXELS := 768
+const SHORE_RAYS_PER_TICK := 4096
 ## The night sky seen in it at a glancing look: overhead, and low.
 const SKY_ZENITH := Color(0.03, 0.04, 0.075)
 const SKY_HORIZON := Color(0.09, 0.1, 0.13)
@@ -59,10 +53,13 @@ const COLUMN_CARRY := 6.0
 const COLUMN_FAR := 18.0
 var _columns: Array[Light3D] = []
 var _paint: ShaderMaterial
+var _shore_paint: ShaderMaterial
 var _night: Node = null
+var render_clock := 0.0
+var _moon: DirectionalLight3D
 
 
-## Water filling a `size` box centred on `centre`, its top the surface.
+## Attaches an axis-aligned water box centred at world centre with full XYZ box_size.
 static func build(parent: Node, centre: Vector3, box_size: Vector3) -> Area3D:
 	var water: Area3D = (load("res://scripts/Interaction/WaterVolume.gd") as GDScript).new()
 	water.name = "Water"
@@ -72,9 +69,8 @@ static func build(parent: Node, centre: Vector3, box_size: Vector3) -> Area3D:
 	return water
 
 
-## The water `point` is in (below its surface, above its bottom, inside it),
-## or null. `above`: count this far over the surface as in it (a man's feet
-## just clear of it).
+## Returns the first grouped water volume containing world point, or null.
+## above extends only the upper boundary in metres.
 static func at(tree: SceneTree, point: Vector3, above := 0.0) -> Area3D:
 	for water in tree.get_nodes_in_group(&"water"):
 		if water.has_method("holds") and water.holds(point, above):
@@ -99,6 +95,8 @@ func _ready() -> void:
 		add_child(shape)
 
 	_build_surface()
+	refresh_shoreline()
+	(load("res://scripts/Visual/WaterView.gd") as GDScript).ensure(get_viewport())
 	# The level's lights are made after the water: gathered once they are.
 	get_tree().create_timer(0.5).timeout.connect(gather_lights)
 	body_entered.connect(_on_body_entered)
@@ -139,8 +137,8 @@ func depth_of(point: Vector3) -> float:
 	return surface_y() - point.y
 
 
-## The floor under the water at `point` (a ray down from the surface), or
-## the bottom of the box if nothing is there.
+## Raycasts down from the surface on terrain layer 1; returns world floor Y
+## or bottom_y() on miss. exclude contains body RIDs.
 func floor_under(point: Vector3, exclude: Array[RID] = []) -> float:
 	var from := Vector3(point.x, surface_y() + 0.05, point.z)
 	var to := Vector3(point.x, bottom_y() - 0.5, point.z)
@@ -155,8 +153,8 @@ func deep_at(point: Vector3) -> bool:
 	return surface_y() - floor_under(point) > SWIM_DEPTH
 
 
-## Something went in at `at`, this fast: a splash, heard as far as it was
-## hard (`db` over the base), and a spray.
+## Emits noise/spray at surface-projected world at, scaled by speed; body may be null.
+## This method has no minimum-speed guard; body-entry callers apply SPLASH_SPEED.
 func splash(at: Vector3, speed: float, body: Node = null) -> void:
 	var on_top := Vector3(at.x, surface_y(), at.z)
 	var hard := clampf((speed - SPLASH_SPEED) / 8.0, 0.0, 1.0)
@@ -218,30 +216,66 @@ func ripple(tile := RIPPLE_TILE, stretch := RIPPLE_STRETCH, drift := CANAL_FLOW)
 	if _paint == null:
 		return
 
-	_paint.set_shader_parameter(&"tile", tile)
-	_paint.set_shader_parameter(&"stretch", stretch)
-	_paint.set_shader_parameter(&"flow", (Vector2(1.0, 0.0) if size.x >= size.z else Vector2(0.0, 1.0)) * drift)
+	_surface_parameter(&"tile", tile)
+	_surface_parameter(&"stretch", stretch)
+	_surface_parameter(&"flow", (Vector2(1.0, 0.0) if size.x >= size.z else Vector2(0.0, 1.0)) * drift)
 
 
 ## The night on the water: rain rings it; the sky in it as bright as the moon
 ## lets.
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	render_clock += delta
 	if _paint == null:
 		return
 
 	_show_columns()
+	_surface_parameter("water_clock", render_clock)
+	_surface_parameter("moon_direction", moon_direction())
+	_surface_parameter("moon_visibility", moon_visibility())
+	_surface_parameter("moon_colour", moon_colour())
 
 	if _night == null or not is_instance_valid(_night):
-		_night = get_tree().get_first_node_in_group(&"night")
+		_night = null
+		for night in get_tree().get_nodes_in_group(&"night"):
+			if night is Node3D and night.get_world_3d() == get_world_3d():
+				_night = night
+				break
 
 		if _night == null:
 			return
 
 	if _night.has_method(&"rain"):
-		_paint.set_shader_parameter(&"rain", clampf(float(_night.rain()), 0.0, 1.0))
+		_surface_parameter(&"rain", clampf(float(_night.rain()), 0.0, 1.0))
 
 	if _night.has_method(&"moon_share"):
-		_paint.set_shader_parameter(&"sky_light", clampf(0.45 + 0.55 * float(_night.moon_share()), 0.0, 2.0))
+		_surface_parameter(&"sky_light", clampf(0.45 + 0.55 * float(_night.moon_share()), 0.0, 2.0))
+
+
+## Shared source data for surface glitter and the submerged view. Standalone
+## levels without Night still follow their actual directional light.
+func _find_moon() -> DirectionalLight3D:
+	if is_instance_valid(_moon):
+		return _moon
+	for node in get_tree().root.find_children("*", "DirectionalLight3D", true, false):
+		if node.get_world_3d() == get_world_3d() and (_moon == null or node.name == "Moon"):
+			_moon = node as DirectionalLight3D
+	return _moon
+
+func moon_direction() -> Vector3:
+	if is_instance_valid(_night) and _night.has_method("moon_direction"):
+		return _night.moon_direction()
+	var source := _find_moon()
+	return source.global_basis.z.normalized() if source != null else Vector3.UP
+
+func moon_visibility() -> float:
+	if is_instance_valid(_night) and _night.has_method("moon_visibility"):
+		return _night.moon_visibility()
+	var source := _find_moon()
+	return clampf(source.light_energy / 0.4, 0.0, 1.0) if source != null and source.visible else 0.0
+
+func moon_colour() -> Color:
+	var source := _find_moon()
+	return source.light_color if source != null else Color(0.6, 0.7, 0.9)
 
 
 ## The lamps and torches by it (Light3D within COLUMN_REACH of its sides, not
@@ -288,9 +322,9 @@ func _show_columns() -> void:
 		colours[n] = Vector4(c.r, c.g, c.b, minf(COLUMN_CARRY * light.light_energy, COLUMN_FAR))
 		n += 1
 
-	_paint.set_shader_parameter(&"lights", places)
-	_paint.set_shader_parameter(&"light_colours", colours)
-	_paint.set_shader_parameter(&"light_count", n)
+	_surface_parameter(&"lights", places)
+	_surface_parameter(&"light_colours", colours)
+	_surface_parameter(&"light_count", n)
 
 
 ## The surface, seen from above and below; the depth darkens toward the
@@ -298,19 +332,23 @@ func _show_columns() -> void:
 func _build_surface() -> void:
 	_paint = ShaderMaterial.new()
 	_paint.shader = SHADER
-	_paint.set_shader_parameter(&"ripples", _noise(RIPPLE_TEXELS, 0.02, 71, true))
-	_paint.set_shader_parameter(&"patches", _noise(64, 0.05, 29, false))
-	_paint.set_shader_parameter(&"deep", Color(tint.r * 0.14, tint.g * 0.12, tint.b * 0.1))
-	_paint.set_shader_parameter(&"half_size", Vector2(size.x, size.z) * 0.5)
+	_surface_parameter(&"ripples", _noise(RIPPLE_TEXELS, 0.02, 71, true))
+	_surface_parameter(&"patches", _noise(64, 0.05, 29, false))
+	_surface_parameter(&"deep", Color(tint.r * 0.14, tint.g * 0.12, tint.b * 0.1))
+	_surface_parameter(&"half_size", Vector2(size.x, size.z) * 0.5)
 	# Still water, rippled every way alike (a canal's streaks: ripple()), the
 	# night sky in it.
-	_paint.set_shader_parameter(&"tile", RIPPLE_TILE)
-	_paint.set_shader_parameter(&"stretch", 1.0)
-	_paint.set_shader_parameter(&"flow", Vector2(0.02, 0.0))
-	_paint.set_shader_parameter(&"sky_zenith", SKY_ZENITH)
-	_paint.set_shader_parameter(&"sky_horizon", SKY_HORIZON)
-	_paint.set_shader_parameter(&"sky_light", 1.0)
-	_paint.set_shader_parameter(&"rain", 0.0)
+	_surface_parameter(&"tile", RIPPLE_TILE)
+	_surface_parameter(&"stretch", 1.0)
+	_surface_parameter(&"flow", Vector2(0.02, 0.0))
+	_surface_parameter(&"sky_zenith", SKY_ZENITH)
+	_surface_parameter(&"sky_horizon", SKY_HORIZON)
+	_surface_parameter(&"sky_light", 1.0)
+	_surface_parameter(&"rain", 0.0)
+	_shore_paint = _paint.duplicate() as ShaderMaterial
+	_shore_paint.shader = SHORE_SHADER
+	_shore_paint.render_priority = -126
+	_paint.next_pass = _shore_paint
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(size.x, size.z)
 	_surface_mesh = MeshInstance3D.new()
@@ -325,14 +363,26 @@ func _build_surface() -> void:
 	var murk := StandardMaterial3D.new()
 	murk.albedo_color = Color(tint.r * 0.6, tint.g * 0.6, tint.b * 0.6, 1.0 - clarity)
 	murk.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	murk.cull_mode = BaseMaterial3D.CULL_DISABLED
+	murk.cull_mode = BaseMaterial3D.CULL_BACK
 	murk.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	var box := BoxMesh.new()
 	box.size = Vector3(size.x - 0.02, size.y - 0.06, size.z - 0.02)
-	box.material = murk
+	# Leave its lid open: the underwater optical path supplies absorption.
+	# A flat translucent lid would obscure the newly visible shallow bed.
+	var arrays := box.get_mesh_arrays()
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var sides := PackedInt32Array()
+	for i in range(0, indices.size(), 3):
+		if normals[indices[i]].y < 0.5:
+			sides.append_array(indices.slice(i, i + 3))
+	arrays[Mesh.ARRAY_INDEX] = sides
+	var open_box := ArrayMesh.new()
+	open_box.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	open_box.surface_set_material(0, murk)
 	var depth := MeshInstance3D.new()
 	depth.name = "Murk"
-	depth.mesh = box
+	depth.mesh = open_box
 	depth.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	depth.position = Vector3(0.0, -0.02, 0.0)
 	add_child(depth)
@@ -357,3 +407,118 @@ static func _noise(texels: int, frequency: float, seed: int, normal: bool) -> No
 		texture.bump_strength = RIPPLE_STRENGTH
 
 	return texture
+
+
+## Keep both parts of the surface on the same clock, wind and light source.
+func _surface_parameter(parameter: StringName, value: Variant) -> void:
+	_paint.set_shader_parameter(parameter, value)
+	if _shore_paint != null:
+		_shore_paint.set_shader_parameter(parameter, value)
+
+
+## Restarts the terrain-only shoreline survey after static bank geometry changes.
+## Rays start above the water to avoid overhead bridges; work spans physics ticks.
+func refresh_shoreline() -> void:
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var width := clampi(int(ceil(size.x / SHORE_CELL)), 8, SHORE_TEXELS)
+	var height := clampi(int(ceil(size.z / SHORE_CELL)), 8, SHORE_TEXELS)
+	var image := Image.create(width, height, false, Image.FORMAT_RF)
+	var land: PackedByteArray = await _concave_land(width, height)
+	var space := get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.new()
+	query.collision_mask = 1
+	query.collide_with_areas = false
+	query.hit_from_inside = true
+	var rays := 0
+	for z in height:
+		for x in width:
+			var at := global_position + Vector3(
+				((float(x) + 0.5) / width - 0.5) * size.x, 0.0,
+				((float(z) + 0.5) / height - 0.5) * size.z)
+			query.from = Vector3(at.x, surface_y() + 0.03, at.z)
+			query.to = Vector3(at.x, bottom_y() - 0.5, at.z)
+			var hit := space.intersect_ray(query)
+			var bed := bottom_y()
+			if land[z * width + x] != 0:
+				bed = surface_y()
+			elif not hit.is_empty():
+				bed = (hit["position"] as Vector3).y
+			image.set_pixel(x, z, Color(maxf(surface_y() - 0.02 - bed, 0.0), 0.0, 0.0))
+			rays += 1
+			if rays % SHORE_RAYS_PER_TICK == 0:
+				await get_tree().physics_frame
+	_surface_parameter("shore_depth", ImageTexture.create_from_image(image))
+	_surface_parameter("shore_texel", Vector2(1.0 / width, 1.0 / height))
+	_surface_parameter("shore_ready", true)
+
+
+## Rays starting inside a concave mesh cannot detect its interior. Recover
+## that case from the closest triangle above the surface: an upward-facing
+## exit means land, a downward-facing entrance means an overhead deck. This
+## uses original winding because Godot flips the normals of backface hits.
+func _concave_land(width: int, height: int) -> PackedByteArray:
+	var land := PackedByteArray()
+	land.resize(width * height)
+	var closest := PackedFloat32Array()
+	closest.resize(width * height)
+	closest.fill(INF)
+	var contained := PackedByteArray()
+	contained.resize(width * height)
+	var low := Vector2(global_position.x - size.x * 0.5, global_position.z - size.z * 0.5)
+	var cell := Vector2(size.x / width, size.z / height)
+	var surface := surface_y() + 0.03
+	var work := 0
+	for node in get_tree().root.find_children("*", "CollisionShape3D", true, false):
+		var shape := node as CollisionShape3D
+		var body := shape.get_parent() as CollisionObject3D
+		if shape.disabled or not shape.shape is ConcavePolygonShape3D or body == null or (body.collision_layer & 1) == 0 or body.get_world_3d() != get_world_3d():
+			continue
+		var faces := (shape.shape as ConcavePolygonShape3D).get_faces()
+		if faces.is_empty():
+			continue
+		var bounds := AABB(faces[0], Vector3.ZERO)
+		for point in faces:
+			bounds = bounds.expand(point)
+		var transform := shape.global_transform
+		bounds = transform * bounds
+		if bounds.position.y > surface or bounds.end.y < surface or bounds.end.x < low.x or bounds.position.x > low.x + size.x or bounds.end.z < low.y or bounds.position.z > low.y + size.z:
+			continue
+		# Classify each solid independently. A nearer underside belonging to
+		# another bridge must not clear land inside an overlapping pier.
+		closest.fill(INF)
+		contained.fill(0)
+		var touched := PackedInt32Array()
+		for i in range(0, faces.size(), 3):
+			var a := transform * faces[i]
+			var b := transform * faces[i + 1]
+			var c := transform * faces[i + 2]
+			var denominator := (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x)
+			if absf(denominator) < 0.00001 or maxf(a.y, maxf(b.y, c.y)) < surface:
+				continue
+			var first_x := clampi(int(floor((minf(a.x, minf(b.x, c.x)) - low.x) / cell.x)), 0, width - 1)
+			var last_x := clampi(int(ceil((maxf(a.x, maxf(b.x, c.x)) - low.x) / cell.x)), 0, width - 1)
+			var first_z := clampi(int(floor((minf(a.z, minf(b.z, c.z)) - low.y) / cell.y)), 0, height - 1)
+			var last_z := clampi(int(ceil((maxf(a.z, maxf(b.z, c.z)) - low.y) / cell.y)), 0, height - 1)
+			for z in range(first_z, last_z + 1):
+				for x in range(first_x, last_x + 1):
+					var dx := low.x + (x + 0.5) * cell.x - a.x
+					var dz := low.y + (z + 0.5) * cell.y - a.z
+					var u := (dx * (c.z - a.z) - dz * (c.x - a.x)) / denominator
+					var v := ((b.x - a.x) * dz - (b.z - a.z) * dx) / denominator
+					if u >= 0.0 and v >= 0.0 and u + v <= 1.0:
+						var y := a.y + u * (b.y - a.y) + v * (c.y - a.y)
+						var index := z * width + x
+						if y >= surface and y < closest[index]:
+							if is_inf(closest[index]):
+								touched.append(index)
+							closest[index] = y
+							# Clockwise faces: negative cross is the outward normal.
+							contained[index] = 1 if denominator > 0.0 else 0
+					work += 1
+					if work % SHORE_RAYS_PER_TICK == 0:
+						await get_tree().physics_frame
+		for index in touched:
+			if contained[index] != 0:
+				land[index] = 1
+	return land

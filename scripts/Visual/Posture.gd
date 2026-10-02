@@ -1,12 +1,6 @@
 extends SkeletonModifier3D
-## Small changes laid over the animation after it plays: the head turned
-## where the eyes look, the hips turned the way the feet go while the chest
-## stays on the enemy, a leg raised and driven out for a kick (the library
-## has none), and his expression (a bowed head, hunched shoulders, the chest
-## breathing, his weight shifting, a limp). Every turn is about the man's own axes (his right, his
-## up), whatever way his bones happen to point.
-##
-## Humanoid.gd makes one for every person; set the values each frame.
+## Skeleton modifier for gaze, hips/chest counter-turn, kicks, breathing, weight shifts, and injury posture.
+## Humanoid creates it; callers update fields each frame. Rotations use the person's own axes, independent of bone frames.
 
 ## Radians, positive to his left, followed smoothly.
 var head_yaw := 0.0

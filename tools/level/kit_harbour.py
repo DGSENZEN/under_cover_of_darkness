@@ -54,10 +54,8 @@ def _down(points, slot):
     return ks.polygon(points if ny < 0.0 else points[::-1], slot)
 
 
-# ---------------------------------------------------------------------------
 # Quays: granite, the sea's marks on the face under 1.2 m (the waterline
 # photo is anchored to the sea's height), a coping standing proud, rings.
-# ---------------------------------------------------------------------------
 
 def _quay(length):
     height = QUAY_TOP - QUAY_FOOT
@@ -109,10 +107,8 @@ _piece("bollard", "quay", "granite", [ks.lathe(0.0, 0.0, 0.0, [[0.25, 0.0], [0.2
        [col(0.0, 0.36, 0.0, 0.5, 0.72, 0.5)], [0.6, 0.72, 0.6])
 
 
-# ---------------------------------------------------------------------------
 # The mole: its top a quay on the harbour side (-z), a parapet to the sea
 # (+z), battered and its foot heaped with boulders; its round head.
-# ---------------------------------------------------------------------------
 
 BED = -6.0
 
@@ -200,11 +196,9 @@ _piece("slipway_8", "quay", "granite",
        [col(0.0, (QUAY_TOP - 2.0) / 2.0 - 0.2, 0.0, NAVE, 0.4, math.hypot(8.0, QUAY_TOP + 2.0), 0.0, _ramp)], [NAVE, QUAY_TOP + 2.4, 8.0])
 
 
-# ---------------------------------------------------------------------------
 # The royal shipyard's naves, built of one bay: a pier, an arch (along x or
 # z), a groin vault under the terrace; a nave's end wall with a high window.
 # Floors are the level's own (its pivot on the nave's floor).
-# ---------------------------------------------------------------------------
 
 def _pier():
     shapes = [ks.box(0.0, SPRING / 2.0, 0.0, PIER, SPRING, PIER, "brick"), ks.box(0.0, 0.2, 0.0, PIER + 0.3, 0.4, PIER + 0.3, "ashlar_gold"),
@@ -257,11 +251,9 @@ _shapes, _cols = _end_wall()
 _piece("nave_end_wall", "harbour", "brick", _shapes, _cols, [NAVE, TERRACE, BAND])
 
 
-# ---------------------------------------------------------------------------
 # A galley half-built on the stocks: its keel on blocks, its frames up (the
 # middle planked below), stem and stern posts, a scaffold both sides with
 # planks at 2.2 and 4.4 (a mantle each), two ladders.
-# ---------------------------------------------------------------------------
 
 GALLEY = (40.0, 4.4)
 # The scaffold stands this far out from the galley's side (it and the galley
@@ -320,9 +312,7 @@ _piece("galley_stocks", "harbour", "hull_bare", _shapes, _cols, [GALLEY[0], 5.2,
 k.PIECES["galley_stocks"]["climbs"] = _climbs
 
 
-# ---------------------------------------------------------------------------
 # A timber jib crane with its treadwheel.
-# ---------------------------------------------------------------------------
 
 def _crane():
     shapes = [ks.box(0.0, 0.15, 0.0, 3.0, 0.3, 3.0, "beam"), ks.prism(0.0, 3.8, 0.0, 0.28, 7.0, 6, "timber"),
@@ -341,11 +331,12 @@ def _crane():
 
 _shapes, _cols = _crane()
 _piece("crane_jib", "harbour", "timber", _shapes, _cols, [4.0, 10.0, 9.4], budget=900, surface="wood")
+# The wheel's movement barrier fills its center; it cannot hide the view
+# through the rim and spokes. The base and upright keep their usual policy.
+k.PIECES["crane_jib"]["occlusion_exclude"] = [2]
 
 
-# ---------------------------------------------------------------------------
 # The quays' dressing.
-# ---------------------------------------------------------------------------
 
 def _dressing(name, slot, shapes, cols, size, surface="wood", budget=400):
     _piece(name, "dressing", slot, shapes, cols, size, budget=budget, surface=surface)

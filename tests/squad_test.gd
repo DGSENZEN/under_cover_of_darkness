@@ -184,7 +184,6 @@ func _run() -> void:
 	await _frames(10)
 
 
-# --------------------------------------------------------------------------
 
 func _guard(archetype: StringName, at: Vector3) -> CharacterBody3D:
 	var g: CharacterBody3D = GUARD.instantiate()

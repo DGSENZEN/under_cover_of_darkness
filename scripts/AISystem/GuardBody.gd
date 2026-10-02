@@ -1,20 +1,10 @@
 class_name GuardBody
 extends RigidBody3D
-## What is left of a guard after the blackjack or the blade. It lies where it
-## fell, it can be shouldered and carried somewhere dark, and any guard who
-## SEES it, which takes light, raises the alarm. Hiding bodies is the second
-## half of a knockout.
-##
-## Bodies live on physics layer 3: they rest on the world and can be frobbed,
-## but the player walks over them and guards' sight passes over them.
-##
-## A man (GuardRig) falls as physics has him (Ragdoll.gd): the body is then
-## only a stand-in that goes where his hips are, with nothing of its own to
-## collide; his limbs are what the world, the frob ray and a blade find.
-## Without one, the old way: the body lies still from the first frame and
-## only its look falls, from how he stood to how he lies, along the blow.
-## Either way it lands with a thud and a puff of dust, and a corpse bleeds a
-## spreading pool once it lies still.
+## Carryable remains of a killed or unconscious guard, registered in "bodies".
+## Normal bodies use physics layer 3; players and guard sight pass over them.
+## With a humanoid ragdoll, this collision-free proxy follows the hips; limbs collide.
+## Without one, a capsule supports an animated fall. Landing makes sound/dust;
+## corpses form a blood pool after settling. Detection is handled by Guard.
 
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -92,11 +82,12 @@ func get_prompt(_player: Node) -> String:
 	return "Shoulder the body"
 
 
-## Too heavy to hold at arm's length. It goes over the shoulder instead.
+## Returns false for arm-length carrying; frob() uses shoulder carrying instead.
 func can_carry() -> bool:
 	return false
 
 
+## Requests player.frob.shoulder(self) when the player exposes a frob component.
 func frob(player: Node) -> void:
 	if player.get("frob") != null:
 		player.frob.shoulder(self)
@@ -129,7 +120,7 @@ func finish_fall() -> void:
 		rag.recover(0.0)
 
 
-## The man lying here, if he has a body of his own (Humanoid.gd).
+## Returns the owned humanoid visual, or null when this body has none.
 func man() -> Node3D:
 	for child in get_children():
 		if child.get("ragdoll") != null:
@@ -321,9 +312,7 @@ func _thud(hips: Vector3, speed: float) -> void:
 		Sfx.play(self, Sfx.step(floor_kind, false, "land", true), hips, lerpf(-6.0, -2.0, hard), randf_range(0.9, 1.0))
 
 
-# ---------------------------------------------------------------------------
 # The fall
-# ---------------------------------------------------------------------------
 
 ## Animates the look of the body from `stood` (the standing body's world
 ## transform, capsule centre) to where it lies. `foot` is half the capsule's
@@ -414,10 +403,9 @@ const LENGTH := 1.7
 const MAN_LIES_BEHIND := 0.46
 
 
-## A place near `center` where a body can lie without being inside a wall,
-## the player or anyone else. Tries the given heading first, then turned, then
-## shifted along itself. Physics would otherwise shove an overlapping body out,
-## sometimes straight through a thin wall.
+## Finds a world-space lying transform near center, testing yaw rotations and offsets
+## against world/actors/bodies while excluding RIDs. If none is free, returns the
+## requested transform and lets physics resolve overlap; there is no failure sentinel.
 static func find_rest_transform(space: PhysicsDirectSpaceState3D, center: Vector3, yaw: float, exclude: Array[RID]) -> Transform3D:
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = RADIUS
@@ -444,8 +432,9 @@ static func find_rest_transform(space: PhysicsDirectSpaceState3D, center: Vector
 	return Transform3D(Basis(Vector3.UP, yaw), center)
 
 
-## Lays a body down where `guard` stood. `killed` marks a corpse. `fall` is
-## the blow that felled him: he goes down along it (without one, backwards).
+## Creates remains under guard's parent. killed marks a corpse; fall is a world-space
+## blow direction (ZERO defaults backwards). Returns RigidBody3D; rig transfer is
+## the caller's responsibility. Uses a ragdoll proxy when the rig already has one.
 static func spawn(guard: Node3D, killed := false, fall := Vector3.ZERO) -> RigidBody3D:
 	var body := RigidBody3D.new()
 	body.set_script(load("res://scripts/AISystem/GuardBody.gd"))

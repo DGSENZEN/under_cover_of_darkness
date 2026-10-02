@@ -74,9 +74,7 @@ func _ready() -> void:
 
 
 func _run() -> void:
-	# ------------------------------------------------------------------
 	# A man set to watch
-	# ------------------------------------------------------------------
 
 	# P1 word of you comes up to him: he watches it from his post
 	await _fresh()
@@ -212,9 +210,7 @@ func _run() -> void:
 		watch7._left_post and _off_post(watch7) > 3.0,
 		"came down %s, %.1f m off his post" % [watch7._left_post, _off_post(watch7)])
 
-	# ------------------------------------------------------------------
 	# Things thrown when it helps
-	# ------------------------------------------------------------------
 
 	# P8 waiting his turn while another is at you: he throws what is near
 	await _fresh()
@@ -253,9 +249,7 @@ func _run() -> void:
 		"held %s, it reached you %s (%.2f m), your health %.0f" % [threw9[0], threw9[1], threw9[2], player.health])
 	player.invulnerable = true
 
-	# ------------------------------------------------------------------
 	# Places, and the dead
-	# ------------------------------------------------------------------
 
 	# P10 a plain watchman waiting his turn goes round to his place
 	await _fresh()
@@ -310,7 +304,6 @@ func _run() -> void:
 	head12.queue_free()
 
 
-# --------------------------------------------------------------------------
 
 ## A 3 m platform (its top 3 m up) at `at`, stairs up its east side.
 func _platform(at: Vector3) -> void:

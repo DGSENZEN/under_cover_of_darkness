@@ -1,19 +1,8 @@
 extends Node3D
-## How a guard looks and moves, on top of what he decides. The AI picks what
-## to do; the rig shows it. He is one of the base characters in his side's
-## colours (Humanoid.gd), moved by the animation library: he walks, runs and
-## backs off, squares up with his guard held, winds up and cuts, catches your
-## blade, reels when parried, flinches, staggers when kicked, and falls when
-## he dies. Springs on top add the jolt of every blow. His arms are put where
-## they are wanted over all that (ArmReach): his sword hand to its hilt to
-## draw or rest on it, his light held out to what he is searching, his hand up
-## to a torch he lights again.
-##
-## Pure presentation: the AI reads nothing from here, so none of it can
-## change a fight. His vision still comes from his logical "Head". Each
-## swing is shown in step with the fight's own clock (his phase timers): the
-## animated blade meets you when his code says it does, however quick or slow
-## his windup is.
+## Builds and animates a guard's appearance, weapon, reactions and effects.
+## Attack animation follows GuardFighter phase timers; logical sight uses Guard.Head.
+## Gameplay queries rig anchors, weapon/ragdoll ownership and get-up timing, while
+## combat decisions remain in Guard/GuardFighter. Transfer moves visuals to a body.
 
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const HIT_RIM := preload("res://scripts/Visual/hit_rim.gdshader")
@@ -416,12 +405,10 @@ var _shuffling := false
 var _doing: StringName = &""
 
 
-# ---------------------------------------------------------------------------
 # Building
-# ---------------------------------------------------------------------------
 
-## Replaces the guard's stand-in looks (the "Body" capsule, whatever hangs off
-## his "Head") with the man. The Head itself stays where it is, for his eyes.
+## Builds rig/appearance/weapon for the supplied guard, adds this node under it
+## and stores presentation anchors. Call before update/react methods.
 func setup(p_guard: CharacterBody3D) -> void:
 	guard = p_guard
 	name = "Rig"
@@ -598,10 +585,10 @@ func _update_telegraph(delta: float) -> void:
 		steel.emission = Color(0.7, 0.72, 0.78).lerp(colour, _telegraph if call != &"cut" else 0.0)
 
 
-# ---------------------------------------------------------------------------
 # Every physics frame, called by the guard
-# ---------------------------------------------------------------------------
 
+## Updates animation/equipment/reactions for delta seconds from guard/helper state.
+## Attack timing follows gameplay phase timers; does not choose combat decisions.
 func update(delta: float) -> void:
 	var dt := minf(delta, 1.0 / 30.0)
 	_time += delta
@@ -910,9 +897,7 @@ func _events(phase: StringName) -> void:
 			Sfx.play(guard, &"whoosh_heavy", weapon.global_position, 6.0 if heavy else 0.0, pitch * 0.9)
 
 
-# ---------------------------------------------------------------------------
 # Every drawn frame: what the man shows, and where in it
-# ---------------------------------------------------------------------------
 
 func _process(_delta: float) -> void:
 	if man == null or guard == null or not is_instance_valid(guard) or man.get_parent() != self:
@@ -1192,9 +1177,7 @@ func _show_chop(since: float) -> void:
 	man.show_action(CHOP_CLIP, t, 0.15)
 
 
-# ---------------------------------------------------------------------------
 # His blade: drawn when he needs it, put by when he does not
-# ---------------------------------------------------------------------------
 
 ## Each tick: where his blade should be (in his hand, or put by), and the
 ## draw or the sheathing that gets it there.
@@ -1809,9 +1792,7 @@ func fall_time(killed: bool) -> float:
 	return (IMPACT - float(how[1])) / float(how[2])
 
 
-# ---------------------------------------------------------------------------
 # Reactions, called by the guard
-# ---------------------------------------------------------------------------
 
 ## Struck: he tips away from the blow and flinches. `strength` 0.6 a quick
 ## cut, 1 a heavy one, 1.5 a killing blow.
@@ -1907,9 +1888,7 @@ func react_land(speed: float) -> void:
 	_tilt_v += _push_dir * clampf(speed * 0.05, 0.0, 0.8)
 
 
-# ---------------------------------------------------------------------------
 # Marks on him
-# ---------------------------------------------------------------------------
 
 ## A wound where he was cut, painted on him; it moves with the part of him
 ## that was cut.
@@ -2037,13 +2016,10 @@ func chest() -> Vector3:
 	return man.bone_global(&"spine_03").origin
 
 
-# ---------------------------------------------------------------------------
 # Death
-# ---------------------------------------------------------------------------
 
-## He lets go of his weapon: it falls and clatters. Nothing picks it up yet.
-## Put by (in its scabbard, on his back), it stays on him, unless `even_put_by`
-## (thrown down to beg for his life: drawn and thrown).
+## Creates dropped weapon physics when drawn (or even_put_by allows sheathed).
+## Returns RigidBody3D or null if no droppable weapon; updates visual ownership.
 func drop_weapon(even_put_by := false) -> RigidBody3D:
 	if weapon == null or _lost or not (_blade_out or even_put_by):
 		return null
@@ -2104,12 +2080,10 @@ func drop_weapon(even_put_by := false) -> RigidBody3D:
 	return sword
 
 
-## He becomes his body: the man goes onto it and falls (the death animation),
-## wounds, arrows and all, to lie where its capsule lies. The capsule is what
-## you frob and carry; the man is what you see.
-## The man goes to his body, and falls as physics has him: from how he
-## stood, moving as he was, the part at `at` shoved by `push` (the blow).
-## Already down (kicked off his feet), he just goes on falling.
+## Reparents the humanoid into corpse while preserving its world transform.
+## push is a world-space shove at at (INF delegates point selection to ragdoll).
+## Transfers ragdoll ownership, releases rig reaches and clears wound/arrow lists;
+## no-op without a humanoid. Caller creates the corpse first.
 func transfer_to(corpse: Node3D, push := Vector3.ZERO, at := Vector3.INF) -> void:
 	if man == null:
 		return
@@ -2149,8 +2123,9 @@ func transfer_to(corpse: Node3D, push := Vector3.ZERO, at := Vector3.INF) -> voi
 	_holders.clear()
 
 
-## Cut apart (Humanoid.sever): each of `bones` goes off along `push`, up
-## and away, with a spin.
+## Severs named bones and applies world-space push/guard velocity to detached parts.
+## Returns untyped Array of successfully created RigidBody3D pieces; empty without
+## a humanoid or valid cuts. Emits bone-crack audio for detached pieces.
 func sever(bones: Array[StringName], push: Vector3) -> Array:
 	var pieces := []
 
@@ -2196,9 +2171,8 @@ func is_down() -> bool:
 	return man != null and man.is_limp() and _rising <= 0.0
 
 
-## Back on his feet, from lying on his back (`face_up`) or his front: the man
-## is the rig's again (the guard has been put where he lies), the pose he
-## lies in gives way to getting up. How long it takes, seconds.
+## Restores humanoid to rig-local ownership and begins recovery from face-up/down.
+## Returns recovery duration in seconds, or 0.0 without a humanoid.
 func get_up(face_up: bool) -> float:
 	if man == null:
 		return 0.0
@@ -2229,9 +2203,7 @@ func get_up(face_up: bool) -> float:
 	return _rise_length
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 ## A world direction as a flat direction in the guard's own space.
 func _local_flat(direction: Vector3) -> Vector3:

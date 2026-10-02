@@ -414,7 +414,6 @@ func _run() -> void:
 		"dead %s view %.2f m under the eye, thud %d" % [player.is_dead, eye_drop, _count(&"body_fall")])
 
 
-# --------------------------------------------------------------------------
 
 ## The average loudness of your steps while walking with `held` pressed.
 func _step_volume(held: Array) -> float:

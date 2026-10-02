@@ -1,32 +1,8 @@
 extends Node3D
-## A burner: a warm light that breathes and gutters, and the flames that make
-## it, drawn from our own heat sheets (FlameFx.gd). Its shadows are on, so in
-## a foggy room it throws shafts past pillars and through doorways. On its
-## own it is a bare flame (a torch as the game has always had one); every
-## light fixture (LightFixture.gd) is one of these with a model round it.
-##
-## A real light: guards see you by it (and see you flicker with it), and the
-## lightgem reads it. Its flames, like every effect, are on their own layer,
-## so they light nothing and the lightgem never sees them. Put the node where
-## the flame is (for several flames, `flame_points` round it).
-##
-## It flickers at the rate its kind of flame puffs (Flicker.gd), never
-## outside energy × (1 ± flicker), however it is stoked or blown.
-##
-## Heard as well: it crackles (audio/ambience/torch_loop.ogg unless told
-## otherwise), close by only, muffled through a wall, a little different from
-## every other torch. It only plays while you are near enough to hear it.
-##
-## A log pushed into it (flare) and it flares up a moment, brighter and
-## taller.
-##
-## A level's own torch on a wall (`can_douse`) can be put out: by you, up close
-## (use it: pinched out with a hiss and a wisp of smoke), and that place is
-## dark. It was burning when the level began, so a guard who sees it dark
-## knows someone has been at it (left_out: GuardLife), and lights it again
-## (relight: GuardHands).
-##
-##   var torch := Torch.new(); torch.position = Vector3(0, 2.2, 0); add_child(torch)
+## Burner shared by bare flames and LightFixture: gameplay-visible warm light, flame sprites, flicker, and local audio.
+## The light contributes to guards/lightgem; flame visuals use Layers.FX and do not contribute to gem capture.
+## Flicker stays within energy * (1 +/- flicker). flame_points are local offsets; lean uses world wind.
+## Kindling/extinguishing, flare, draft, fuel strength, reach, and lit_changed expose its state to callers.
 
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")

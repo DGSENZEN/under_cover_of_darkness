@@ -1,13 +1,6 @@
 extends Node3D
-## The night's creatures, for life at the edges of the picture: bats flitting
-## round a height (a spire, a tower's top), their wings beating (our painted
-## frames: bat.gdshader), jinking as bats do; fireflies low over grass,
-## blinking. (Moths are Atmosphere's, at the lamp posts.) All of them go to ground in rain or a hard wind
-## (the Night's), and come out again after.
-##
-##   var life := Wildlife.new(); add_child(life)
-##   life.bats(Vector3(9, 17, -21), 5, 5.0)
-##   life.fireflies(AABB(...), 30)
+## Cosmetic bats and fireflies; Atmosphere owns moths. Bats use the local painted two-frame sheet.
+## Night rain and wind suppress activity, which resumes in calm conditions.
 
 const BAT_SHADER := preload("res://scripts/Visual/bat.gdshader")
 const BAT_FRAMES := "res://textures/painted/bat.png"

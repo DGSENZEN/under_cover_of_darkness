@@ -1,23 +1,8 @@
 extends RefCounted
-## What the intruder does, told by the director (ShowDirector) a verb at a
-## time: where to go and how (walking, running, sneaking in a crouch), whom
-## to knife, how to fight, which way to run. The guards' side of it is all
-## their own; only he follows a script.
-##
-## Fighting is by a tactic, each chosen to bring out something in the squad:
-##   trade   a steady exchange with the front man: he meets most blows (a
-##           parry or his guard), steps out of those no guard stops, and cuts
-##           back, most of all when his man is recovering from a blow.
-##   turtle  his guard up and held (raised again when a boot knocks it
-##           down), a blow only now and then: the squad reads it and sends
-##           the man who breaks guards.
-##   parry   he fights his man (`focus`) and turns nearly every blow aside,
-##           answering each parry with a riposte on the man he parried.
-##   focus   he goes for one man (`focus`) and cuts only at him, parrying
-##           most blows and answering with ripostes.
-##   press   he goes for the man whose heart is failing (Squad.resolve_of).
-##   spare   he faces the man begging him, then walks away.
-## He never cuts a man on his knees (GuardMercy), and never sets out to.
+## Director-driven intruder verbs: walk/run/sneak, hide, backstab, fight, flee, face, and stand.
+## Fighting tactics are trade, turtle, parry, focus, press, and spare; guard AI remains autonomous.
+## Reaction runs before combat movement; locomotion runs only if combat did not consume the movement step.
+## Never deliberately attacks a kneeling mercy target.
 
 ## Guard.Alert: RELAXED stands him easy, COMBAT is his fighting stance (the
 ## rig reads it).
@@ -135,9 +120,7 @@ func _init(p_intruder: CharacterBody3D, p_combat: Node) -> void:
 	combat.defended.connect(_on_defended)
 
 
-# ---------------------------------------------------------------------------
 # Verbs (the director calls these)
-# ---------------------------------------------------------------------------
 
 ## Walks to `point` along the navmesh: "sneak" (crouched), "walk", "run".
 func go_to(point: Vector3, gait: StringName) -> void:
@@ -222,9 +205,7 @@ func on_warned(from: Node3D) -> void:
 	_coming.append({"from": from, "answer": _answer_for(from)})
 
 
-# ---------------------------------------------------------------------------
 # Every physics frame (Intruder._puppet_drive)
-# ---------------------------------------------------------------------------
 
 ## Before anything moves him (every frame he is on his feet, in a blow or
 ## not): the blows coming at him, met as he chose.
@@ -456,9 +437,7 @@ func _cut_through(delta: float) -> void:
 		_cut_at = _clock + PRESS_EVERY
 
 
-# ---------------------------------------------------------------------------
 # Fighting
-# ---------------------------------------------------------------------------
 
 func _drive_fight(delta: float) -> void:
 	if tactic == &"spare":

@@ -1,30 +1,9 @@
 extends RefCounted
-## A man at your mercy (GuardFighter.fight, for a man the squad has broken:
-## Squad.will_of, and placed to flee or fetch help):
-##   plead    caught (you within PLEAD_NEAR, he sees you, and you are coming
-##            at him or swinging at him, or he is too hurt to run: _caught),
-##            and nobody near him begging you already (one at a time: the
-##            rest run while they can),
-##            he throws his blade down at your feet and begs for his life,
-##            never taking his eyes off you: on his knees if he is terrified
-##            enough (terror: little nerve, badly hurt), else on his feet with
-##            a hand held out to you. He neither guards nor strikes. Not
-##            caught (you stand off), he runs while he can. A proud man
-##            (PROUD_NERVE and more) does not beg, nor does one who has seen
-##            you cut down men who did (Garrison.mercy_hope).
-##   spared   walk away from him (past LET_GO, or out of his sight, for
-##            SPARED_AFTER) and he is up and running: to the nearest place he
-##            would be safe (haven), men of his own well away from you, the
-##            more of them the better. There he keeps them between you and
-##            him and tells them where you are; a man not already after you
-##            comes (Squad.rouse). With nobody to run to, he just runs.
-##   struck   hit him while he begs, and he gives up on your mercy: up and
-##            running, and he will not beg you again.
-##   heart    his heart back while he begs (friends at hand, help coming: the
-##            squad no longer has him broken), he gets up to fight on, and
-##            goes back for his blade (GuardFighter._fetch_something).
-## What you did is remembered (Garrison.on_spared, on_slain_begging): the
-## garrison talks of it, and it decides whether the next man begs at all.
+## Owns pleading and escape behaviour for a broken guard.
+## Caught guards may drop their weapon and plead; proud guards or guards discouraged
+## by Garrison mercy history may refuse. Leaving them alone records a sparing;
+## striking ends their plea, recovery restores combat, and death records cruelty.
+## Escape seeks allies as a haven; other helpers still own movement and equipment.
 
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 
@@ -104,9 +83,9 @@ func _init(p_guard: CharacterBody3D) -> void:
 	_quirk = (float(posmod(hash(p_guard.get_instance_id()), 97)) / 96.0 - 0.5) * 0.24
 
 
-## Every frame he fights and is not mid-blow (GuardFighter.fight). `broken`:
-## the squad has him broken and running. True while this has him (begging,
-## or getting up off his knees): his footwork, guard and blows wait.
+## Updates pleading with delta seconds, target node, visibility and broken morale.
+## Returns true while pleading/getting up owns footwork/attacks; false when normal
+## combat should proceed. Can drop weapon, record mercy, stop movement or face target.
 func update(delta: float, target: Node3D, sees: bool, broken: bool) -> bool:
 	# Where you are, seen or not: a man begging you knows.
 	var toward := Vector3.ZERO
@@ -336,9 +315,7 @@ func _end(why: StringName) -> void:
 			guard.bark(_line(&"emboldened", "Now we'll see!"))
 
 
-# ---------------------------------------------------------------------------
 # Running to his own
-# ---------------------------------------------------------------------------
 
 ## Running from `target` to where he would be safe, and keeping behind his own
 ## once there (GuardFighter._flee). False if there is nowhere (he just runs).

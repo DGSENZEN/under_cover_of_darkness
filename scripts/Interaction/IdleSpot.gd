@@ -1,19 +1,8 @@
 extends Node3D
-## A place a guard at his ease goes to and does something at (GuardHabits):
-## where he stands (this node, on the floor) and which way he faces (its -Z),
-## and what for (kind):
-##   seat   sits down: the seat is behind him (SEAT_BACK), at knee height.
-##   lean   leans back against a wall: the wall is behind him.
-##   rail   leans on a rail, a parapet or a barrel head in front of him.
-##   table  takes something off the table in front of him, and eats it.
-##   chop   splits wood on the block in front of him.
-##   fire   crouches at the fire in front of him and tends it.
-##   work   kneels at a job in front of him (a cart wheel, a barrel).
-##   pile   crates stacked there (the "stock" group): carried to the other
-##          pile it is paired with (meta "other"), and set down there.
-## One man at a time: claimed while he is about it (claim), free again when
-## he is done or can no longer be (released, knocked out, gone). Levels place
-## them with build(); the furnishings (Furnishings.gd) bring their own.
+## Exclusive guard habit location: floor origin and local -Z facing.
+## Kinds: seat, lean, rail, table, chop, fire, work, pile. Weak ownership
+## expires when the holder leaves, dies, is knocked out, or changes spots.
+## Pile spots use metadata other to identify their paired destination.
 
 const KINDS := [&"seat", &"lean", &"rail", &"table", &"chop", &"fire", &"work", &"pile"]
 ## Sitting: the middle of the seat is this far behind where his feet go.
@@ -36,8 +25,8 @@ static func build(parent: Node, spot_kind: StringName, at: Vector3, yaw: float) 
 	return spot
 
 
-## The free spot of `spot_kind` nearest `from` (flat), within `reach` and not
-## far above or below it, for `man` (his own counts as free).
+## Returns the nearest free matching spot in horizontal reach, or null.
+## Accepts the caller’s own spot; rejects height differences above 2.5 m.
 static func nearest(tree: SceneTree, spot_kind: StringName, from: Vector3, reach: float, man: Node) -> Node3D:
 	var best: Node3D = null
 	var best_distance := reach
@@ -96,6 +85,7 @@ func free_for(man: Node) -> bool:
 	return held == null or held == man
 
 
+## Stores a weak owner reference and returns true if free_for(man); otherwise false.
 func claim(man: Node) -> bool:
 	if not free_for(man):
 		return false
@@ -104,6 +94,7 @@ func claim(man: Node) -> bool:
 	return true
 
 
+## Clears ownership only when man currently holds the spot.
 func release(man: Node) -> void:
 	if _holder != null and _holder.get_ref() == man:
 		_holder = null

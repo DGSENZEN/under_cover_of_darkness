@@ -1,16 +1,8 @@
 extends Node
-## How many lights may draw shadows at once: the SHADOWS nearest the camera
-## of those made to cast them (Torch.shadows). One of these lives in each
-## level, made when the first such light is lit (as Fx.gd).
-##
-## A light only switches while it stands further from the camera than both
-## NEAR and its own reach + 1 m: no shadow ever pops up close to you, and a
-## light that is switched cannot be touching you, so the lightgem reads what
-## it always did. The guards' light arithmetic (LightProbe) goes by what a
-## light is made to do (its "casts_shadow" meta), never by what is drawn.
-##
-## More than SHADOWS shadow lights within NEAR of one spot is over budget:
-## it warns once a level, and the level should be laid out otherwise.
+## Level-owned shadow budget for Torch burners (SHADOWS nearest eligible lights).
+## Only switches lights beyond both NEAR and their reach + 1 m, preserving nearby gem readings and avoiding close pops.
+## Gameplay LightProbe uses casts_shadow metadata rather than the budgeted render state.
+## Warns once per level when protected nearby lights exceed the budget.
 
 const SHADOWS := 6
 const NEAR := 12.0

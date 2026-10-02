@@ -38,6 +38,7 @@ def dot(a, b):
 
 
 def rotation(yaw=0.0, pitch=0.0, roll=0.0):
+    """Return a Godot YXZ basis (3x3 rows); yaw/pitch/roll are degrees."""
     y, p, r = (math.radians(a) for a in (yaw, pitch, roll))
     ry = [[math.cos(y), 0.0, math.sin(y)], [0.0, 1.0, 0.0], [-math.sin(y), 0.0, math.cos(y)]]
     rx = [[1.0, 0.0, 0.0], [0.0, math.cos(p), -math.sin(p)], [0.0, math.sin(p), math.cos(p)]]
@@ -62,28 +63,40 @@ def from_blender(v):
 
 
 class Box:
-    """An oriented box: centre, basis (rows are... columns are its axes),
-    half extents."""
+    """Oriented box in Godot metres; row-major basis columns are its axes."""
 
     def __init__(self, centre, basis, size, surface=""):
+        """centre/size: three-vectors; basis: 3x3 rows; surface: string.
+
+        Copy centre, retain basis, store abs(size)/2 half-extents. occluder
+        starts True; callers may exclude collision-only proxies.
+        """
         self.centre = list(centre)
         self.basis = basis
         self.half = [abs(s) / 2.0 for s in size]
         self.surface = surface
+        # Collision may fill an opening that visual occlusion must leave clear.
+        self.occluder = True
 
     def axes(self):
+        """Return three basis columns as new world-axis vector lists."""
         return [[self.basis[r][c] for r in range(3)] for c in range(3)]
 
     def local(self, point):
+        """Return box-relative axis coordinates for a world three-vector."""
         d = sub(point, self.centre)
         return [dot(d, a) for a in self.axes()]
 
     def contains(self, point, margin=0.0):
+        """Return bool for world point; positive margin shrinks bounds in metres."""
         return all(abs(c) <= h - margin for c, h in zip(self.local(point), self.half))
 
     def ray(self, origin, direction):
-        """The distance along a ray (origin, unit direction) to where it enters
-        the box, or None."""
+        """Return float entrance distance, or None when the ray misses.
+
+        origin is a world three-vector; direction must be a unit three-vector.
+        Distances are metres; a ray starting inside returns 0.0. No mutation.
+        """
         o = self.local(origin)
         d = [dot(direction, a) for a in self.axes()]
         near, far = -math.inf, math.inf
@@ -111,6 +124,10 @@ class TriGrid:
     gives the height (a vertical face is crossed edge-on, never hit)."""
 
     def __init__(self, triangles, cell=4.0):
+        """Bucket triangles (three world vectors each); cell is positive metres.
+
+        Vertical/degenerate xz projections are skipped; vertices remain shared.
+        """
         self.cell = cell
         self.cells = {}
 
@@ -126,7 +143,7 @@ class TriGrid:
                     self.cells.setdefault((i, k), []).append((tri, area))
 
     def heights(self, x, z):
-        """The heights of every triangle over or under (x, z)."""
+        """Return unsorted list[float] world heights intersecting x/z metres."""
         out = []
 
         for tri, area in self.cells.get((int(math.floor(x / self.cell)), int(math.floor(z / self.cell))), []):
@@ -141,23 +158,37 @@ class TriGrid:
         return out
 
     def down(self, point, reach):
-        """How far below `point` the first triangle is, or None within `reach`."""
+        """Return nearest downward float distance, or None within reach metres.
+
+        point is a world three-vector; near-zero hits clamp to 0.0.
+        """
         below = [point[1] - y for y in self.heights(point[0], point[2]) if -1e-6 <= point[1] - y <= reach]
         return max(0.0, min(below)) if below else None
 
     def up(self, point, reach):
-        """How far above `point` the first triangle is, or None within `reach`."""
+        """Return nearest upward float distance, or None within reach metres.
+
+        point is a world three-vector; near-zero hits clamp to 0.0.
+        """
         above = [y - point[1] for y in self.heights(point[0], point[2]) if -1e-6 <= y - point[1] <= reach]
         return max(0.0, min(above)) if above else None
 
 
 def piece_boxes(recipe, position, basis, which="cols"):
-    """A placed piece's colliders (or visual boxes) as world Boxes."""
+    """Return list[Box] transformed into Godot world space from recipe[which].
+
+    recipe is a kit dict; position is a three-vector and basis 3x3 rows.
+    which selects 'cols' collision or 'boxes' visual proxies. Collision boxes
+    indexed by occlusion_exclude retain collision but cannot occlude.
+    """
     out = []
 
-    for b in recipe[which]:
+    for index, b in enumerate(recipe[which]):
         local_rot = rotation(b[7] if len(b) > 7 else 0.0, b[8] if len(b) > 8 else 0.0, b[9] if len(b) > 9 else 0.0)
         centre = add(position, apply(basis, b[0:3]))
-        out.append(Box(centre, mul(basis, local_rot), b[3:6], b[6] if len(b) > 6 else ""))
+        box = Box(centre, mul(basis, local_rot), b[3:6], b[6] if len(b) > 6 else "")
+        if which == "cols":
+            box.occluder = index not in recipe.get("occlusion_exclude", [])
+        out.append(box)
 
     return out

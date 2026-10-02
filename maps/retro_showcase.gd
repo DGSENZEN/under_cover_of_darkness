@@ -1,17 +1,6 @@
 extends Node3D
-## The look, all in one room: a moonlit stone hall. Moonlight comes through
-## three tall windows as shafts in the fog; torches breathe on the walls and
-## throw pillar shadows through the haze; mist lies in one corner; an idol
-## wobbles the PS1 way; a guard walks his round.
-##
-##   Godot --path . res://maps/retro_showcase.tscn
-##
-##   F6  the grid: 360 lines, 240 (PS1), 448 (PS2), off  (the Retro autoload,
-##   F7  colour depth: 32 levels a channel, 64, full      in any scene of a
-##   F8  dither on and off                               debug build)
-##
-## Everything here is built in code from the project's textures, sampled
-## nearest-neighbour by the Retro autoload.
+## Builds a moonlit gallery for the retro post-process, haze, materials and NPC rendering.
+## F6/F7/F8 are the shared Retro debug controls, not scene-specific effects.
 
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
@@ -61,9 +50,7 @@ func _process(delta: float) -> void:
 		_idol.rotate_y(delta * 0.6)
 
 
-# ---------------------------------------------------------------------------
 # The hall
-# ---------------------------------------------------------------------------
 
 func _hall() -> void:
 	# Floor, ceiling, walls. Interior: x -8..8, z -12..6, 6 m high.
@@ -195,9 +182,7 @@ func _guard() -> void:
 	g.global_position = Vector3(-4.8, 0, 1.5)
 
 
-# ---------------------------------------------------------------------------
 # Building blocks
-# ---------------------------------------------------------------------------
 
 ## A solid block with a texture laid on in world space, one tile every `tile`
 ## metres, so blocks side by side continue each other's texture.

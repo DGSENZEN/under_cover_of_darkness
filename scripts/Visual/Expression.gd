@@ -1,31 +1,7 @@
 extends RefCounted
-## What a man shows of himself when he is not fighting: where he looks, how
-## he stands, how he breathes, what his hands do. Presentation only: the AI
-## reads nothing of it (GuardRig makes one and calls `update` every drawn
-## frame).
-##   gaze      his head goes to what holds his eye, in order: you (seen), a
-##             noise he is wary of, the man speaking to him, a man walking
-##             past, the fire he warms himself at, the tower he looks up at;
-##             else ahead. The chest follows the head a little; small darts
-##             on top (quick and wide for a sly or a craven man).
-##   posture   by his temperament (POSTURE): the rash chest out, the craven
-##             hunched with his shoulders up, the stubborn upright, the sly
-##             low and loose. Fear hunches him further; grief drops his
-##             shoulders; the captain passing straightens him.
-##   gait      by temperament too (GAIT: pace and stride); the captain walks
-##             her formal walk.
-##   breath    his chest rises and falls with his breathing (GuardVoice).
-##   weight    standing still, his weight goes from one leg to the other now
-##             and then; badly hurt, he limps.
-##   hands     on the upper-body layer (Humanoid.show_upper), by priority: a
-##             gesture (an emote: a nod, a drink, a point), talking with his
-##             hands as he speaks (big for the rash, small for the craven,
-##             almost none for the sly), what he is doing with them (arms
-##             folded, a drink, hands to the fire); else nothing.
-##   variation  each man is his own (`variation`, from his look seed): his
-##             pace, the rhythm of his idling, his breath, the size of his
-##             gestures, how much his eyes wander; drifting slowly (Perlin)
-##             so no two men move in step.
+## GuardRig presentation state: gaze, temperament posture/gait, breathing, weight shifts, limps, and hand gestures.
+## GuardRig calls update() each drawn frame. AI does not read these results.
+## Seeded per-person variation and slow noise keep idle motion and gestures distinct.
 
 const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
 
@@ -225,9 +201,7 @@ func update(delta: float) -> void:
 	_update_hands(man, fighting)
 
 
-# ---------------------------------------------------------------------------
 # Where he looks
-# ---------------------------------------------------------------------------
 
 func _update_gaze(delta: float, state: int, drift: float) -> void:
 	var target: Variant = _gaze_target(state) if state <= SUSPICIOUS and _calm > 0.5 else null
@@ -314,9 +288,7 @@ func _passing(body: CharacterBody3D) -> bool:
 		and Vector2(body.velocity.x, body.velocity.z).length() > PASSER_SPEED
 
 
-# ---------------------------------------------------------------------------
 # How he stands
-# ---------------------------------------------------------------------------
 
 func _update_posture(posture: Object, delta: float) -> void:
 	var row: Array = POSTURE.get(_tag(), POSTURE[&"steady"])
@@ -403,9 +375,7 @@ func _update_weight(posture: Object, delta: float, drift: float) -> void:
 	posture.set("limp_phase", fposmod(float(rig.get("_walk_phase")) / TAU, 1.0))
 
 
-# ---------------------------------------------------------------------------
 # His hands
-# ---------------------------------------------------------------------------
 
 func _update_hands(man: Node3D, fighting: bool) -> void:
 	if fighting or man.call(&"is_limp"):
@@ -455,9 +425,7 @@ func _activity_since(doing: StringName) -> float:
 	return _since_at
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 func _tag() -> StringName:
 	var fighter: RefCounted = guard.get("_fighter")

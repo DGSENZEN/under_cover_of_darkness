@@ -1,8 +1,8 @@
 class_name ToolItem
 extends RigidBody3D
-## Something that belongs on the belt: a flash bomb, a lockpick, a bundle of
-## arrows. Frob it and it hangs from a loop at your waist; take it in hand
-## from there. What a tool DOES when used is up to later systems.
+## Frobbable rigid belt pickup transferring tool_id, count, and optional mesh
+## to player.inventory once, then queuing deletion. It cannot be carried.
+## PlayerFrob and PlayerCombat interpret the selected tool ID.
 
 @export var tool_id: StringName = &"tool"
 @export var tool_name := "tool"

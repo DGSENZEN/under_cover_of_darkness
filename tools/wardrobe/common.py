@@ -65,9 +65,7 @@ def import_quaternius(body):
     return armature, meshes[0], meshes[1:]
 
 
-# ---------------------------------------------------------------------------
 # Building: the skeleton's places, regions, casting, lofts, weights, UVs
-# ---------------------------------------------------------------------------
 
 # Which part of him a bone moves (the dominant bone of a vertex decides).
 REGIONS = {

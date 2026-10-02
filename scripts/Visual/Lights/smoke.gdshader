@@ -1,7 +1,5 @@
-// A puff of smoke (or steam) from our own sheet (assets/vfx/smoke.png, four
-// puffs, hard alpha): dark, lit from below by the fire's colour and less so
-// as it rises, as Shadow of the Colossus lit its smoke from its light. Each
-// instance picks its puff and how much it shows through its custom data.
+// Smoke/steam from the four-puff sheet (assets/vfx/smoke.png).
+// MultiMesh custom data selects puff/visibility; COLOR supplies underside fire light that fades with height.
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
 

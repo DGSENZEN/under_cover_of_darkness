@@ -1,12 +1,6 @@
 extends Node3D
-## A playable stealth gym: a dark yard, two torches, a patrolling guard, a
-## second guard on post at a locked-room door, cover, and things to throw.
-## It uses the real lightgem, so light and shadow matter here.
-##
-##   Godot --path . res://maps/stealth_gym.tscn
-##
-## Debug is on: each guard shows its state, alert, and how well it sees you;
-## its view cone is drawn; every gameplay sound flashes where it happened.
+## Builds a stealth yard with a real lightgem, patrol/post guards and interaction props.
+## Enables sight-cone, alert-state and gameplay-sound diagnostics for local testing.
 
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")

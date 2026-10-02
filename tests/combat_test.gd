@@ -409,7 +409,6 @@ func _run() -> void:
 		"bow in hand %s arrow shown %s phase %d" % [showing_bow, nocked, combat.phase])
 
 
-# --------------------------------------------------------------------------
 func _wield(weapon_id: StringName) -> void:
 	player.inventory.select_by_id(weapon_id)
 

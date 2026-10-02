@@ -1,9 +1,6 @@
 shader_type canvas_item;
-// The retro screen: the frame as a grid of big square pixels, each the
-// average of the rendered pixels under it (four filtered taps; the screen's
-// own mipmaps are Gaussian-blurred and would smear it), with colour cut down
-// to a few levels per channel through a 4x4 Bayer dither, the way a PS1 drew
-// 15-bit colour.
+// Coarse screen grid with channel quantization and ordered 4x4 Bayer dithering.
+// Four filtered taps average each cell; screen mipmaps would Gaussian-blur the grid.
 
 uniform sampler2D screen : hint_screen_texture, filter_linear;
 // The grid, in cells.

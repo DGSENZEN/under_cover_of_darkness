@@ -1,11 +1,7 @@
 extends Node
-## The weather, heard: the rain (a calm and a strong loop crossfaded by how
-## hard it rains, lower under a roof), the wind (by its speed), dripping
-## (while it is wet), and thunder after each flash, quieter the longer the
-## delay. The loops are cut by tools/prepare_sfx.py --weather into
-## audio/weather/ (WAVs that loop on import); whatever is not there is not
-## heard. Only audio: guards hear none of it
-## (the noise floor is SoundBus.masking_db).
+## Weather playback: rain loops crossfade by intensity, wind follows speed, and wetness enables drips.
+## Shelter lowers rain; delayed thunder attenuates with travel time. Missing audio/weather recordings are silent.
+## It emits no guard stimulus; Night controls gameplay masking through SoundBus.
 
 const FOLDER := "res://audio/weather/"
 const LOOPS := ["rain_calm", "rain_strong", "wind", "drip"]
@@ -56,8 +52,8 @@ func _ready() -> void:
 				_thunders.append(load(path))
 
 
-## The weather now: how hard it rains (0..1), the wind (m/s), how wet it is,
-## whether you are under a roof.
+## Sets loop targets from rain/wetness fractions, wind_speed in m/s, and camera shelter.
+## Volumes ease in _process(); unavailable loops remain absent.
 func set_weather(rain: float, wind_speed: float, wetness: float, indoors: bool) -> void:
 	var roof := INDOORS if indoors else 0.0
 	_want("rain_calm", clampf(rain * 2.5, 0.0, 1.0) * (1.0 - smoothstep(0.5, 1.0, rain) * 0.6), roof)
@@ -66,7 +62,8 @@ func set_weather(rain: float, wind_speed: float, wetness: float, indoors: bool) 
 	_want("drip", smoothstep(0.2, 0.6, wetness), 0.0)
 
 
-## Thunder, `delay` s after its flash.
+## Plays a loaded thunder variation now, attenuated by delay seconds since its flash.
+## No recording means no playback; Night schedules the delay before calling this.
 func thunder(delay: float) -> void:
 	if _thunders.is_empty():
 		return

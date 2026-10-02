@@ -1,13 +1,7 @@
 extends StaticBody3D
-## An arrow. It flies itself under gravity, casting a ray along each step of
-## its path, so even a fast arrow never passes through a thin wall.
-##
-##   a guard   it hurts him; above the shoulders, far more
-##   the world it sticks, makes a noise there (a distraction, as in Thief),
-##             and can be picked up again
-##
-## In flight it collides with nothing. Stuck, it sits on layer 3 like a body:
-## the frob ray finds it, the player's feet do not.
+## Ray-swept arrow with gravity, damage, sticking, and inventory retrieval.
+## Flight has no body collision; each physics tick tests the travelled segment.
+## A stuck world arrow uses physics layer 3 (value 4) for frob targeting.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const RagdollScript := preload("res://scripts/Visual/Ragdoll.gd")
@@ -58,6 +52,7 @@ func _ready() -> void:
 	add_child(shape)
 
 
+## Sets world start, velocity (m/s), damage, shooter, and headshot multiplier; resets interpolation.
 func launch(from: Vector3, launch_velocity: Vector3, hit_damage: float, by: Node3D, head_multiplier: float) -> void:
 	global_position = from
 	velocity = launch_velocity
@@ -207,7 +202,7 @@ func _hit(hit: Dictionary, direction: Vector3) -> void:
 	struck.emit(collider, 0.0, false)
 
 
-## What it is, to a raised guard: a missile from over there, cheap to stop.
+## Returns ranged arrow defence metadata with guard_damage and reverse travel direction.
 func attack_info() -> Dictionary:
 	return {"type": &"arrow", "ranged": true, "guard_damage": 6.0, "from_direction": -_heading}
 
@@ -254,6 +249,7 @@ func get_prompt(_player: Node) -> String:
 	return "Take arrow" if stuck else ""
 
 
+## If stuck and untaken, adds one arrows belt item to player.inventory and queues deletion.
 func frob(player: Node) -> void:
 	if not stuck or taken:
 		return

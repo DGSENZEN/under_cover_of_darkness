@@ -1,23 +1,8 @@
 extends Node3D
-## The air of a night yard, sized for the PS2 look. Presentation only:
-## nothing reads it back but the talk's "wind" (TalkFacts).
-##   breath  each man's breath on the cold air, on the out-breath, in time
-##           with his breathing (GuardVoice); thicker as his heart races, and
-##           when he shouts.
-##   embers  off each fire, drifting with the wind; fewer as it burns low, a
-##           burst when it is fed (Fire.fed).
-##   moths   circling the lamp posts' lamps (no other light: not a torch, a
-##           lantern, a chandelier or a candle).
-##   wind    in gusts from the north-west: flames lean (Torch.lean), embers
-##           and dead leaves skitter.
-##   crows   on the wall-walk (`add_crows`): off at a shout or a man running
-##           near, back a while later.
-##   dust    hanging in shafts of light (`add_dust`), drifting slowly.
-## `quality` thins it for the frame rate: 1 loses the moths, 0 the leaves
-## too.
-##
-## As Fx.gd does, its particles are simulated here and drawn as one
-## MultiMesh a kind: a few chunky sprites.
+## Level atmosphere: breath, fire embers, lamp-post moths, wind, leaves, crows, and shaft dust.
+## Particles use one MultiMesh per kind. quality 1 removes moths; 0 also removes leaves.
+## Presentation state is read by TalkFacts for wind; SoundBus events can scare crows.
+## A private RNG keeps weather-dependent emission from changing gameplay rolls.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 ## The fixtures whose lamps the moths come to.
@@ -143,7 +128,7 @@ func _exit_tree() -> void:
 	SoundBus.remove_listener(self)
 
 
-## Tests: the wind held at `v` (null lets it blow).
+## Overrides wind with a Vector3; null restores noise-driven gusts (tests/weather tooling).
 func force_wind(v: Variant) -> void:
 	_forced = v
 
@@ -158,6 +143,7 @@ func wind() -> Vector3:
 	return WIND_FROM.normalized().rotated(Vector3.UP, turn) * gust * strength
 
 
+## Returns the tracked breath Puffs Object for man, or null if the actor has not been scanned.
 func breath_of(man: Node) -> Object:
 	return _breaths.get(man)
 
@@ -171,7 +157,7 @@ func leaves() -> Object:
 	return _leaves
 
 
-## Every moth of every torch.
+## Every moth circling the eligible lamp-post fixtures.
 func moths() -> Array:
 	var all := []
 
@@ -186,7 +172,6 @@ func crows() -> Array:
 	return _crows
 
 
-## Crows perched at `points`.
 ## Dust hanging in shafts of light (the chapel's moonlight through its
 ## glass): motes drifting slowly in each of `boxes` (AABB), no wind indoors.
 func add_dust(boxes: Array) -> void:
@@ -206,6 +191,7 @@ func motes(kind: StringName) -> Array:
 	return (_motes.get(kind, []) as Array).map(func(m): return m["p"])
 
 
+## Adds cosmetic perched crows at world Vector3 points; sound/running proximity can scatter them.
 func add_crows(points: Array) -> void:
 	for point in points:
 		var body := MeshInstance3D.new()
@@ -269,9 +255,7 @@ func _process(delta: float) -> void:
 		_show(kind)
 
 
-# ---------------------------------------------------------------------------
 # Who and what is about
-# ---------------------------------------------------------------------------
 
 func _scan() -> void:
 	for man in get_tree().get_nodes_in_group(&"guards"):
@@ -419,9 +403,7 @@ func _update_moths() -> void:
 			moth.global_position = at + Vector3(cos(t) * radius, 0.25 + 0.15 * sin(t * 1.7) + wobble * 0.1, sin(t) * radius)
 
 
-# ---------------------------------------------------------------------------
 # Crows
-# ---------------------------------------------------------------------------
 
 func _fly(crow: Dictionary, from: Vector3) -> void:
 	var away: Vector3 = (crow["home"] as Vector3) - from
@@ -474,9 +456,7 @@ func _update_crows(delta: float) -> void:
 					crow["state"] = &"perched"
 
 
-# ---------------------------------------------------------------------------
 # Motes
-# ---------------------------------------------------------------------------
 
 func _all_puffs() -> Array:
 	var all: Array = _breaths.values() + [_leaves] + _dust

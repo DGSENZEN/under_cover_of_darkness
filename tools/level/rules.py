@@ -27,6 +27,7 @@ BODY_HEIGHTS = (0.5, 1.2, 1.7)
 
 
 def colliders(data):
+    """Return list[geo.Box] from known layout pieces; unknown recipes are skipped."""
     out = []
 
     for p in data["pieces"]:
@@ -39,8 +40,11 @@ def colliders(data):
 
 
 def floor_under(boxes, point, ground=None):
-    """How far below `point` the first collider (or the ground) is (None
-    within FLOOR_BELOW)."""
+    """Return float hit distance or None within FLOOR_BELOW + 0.05 metres.
+
+    boxes: iterable[geo.Box]; point: world three-vector; ground: TriGrid|None.
+    Distances start 0.05 metres above point, not exactly at point's y.
+    """
     origin = geo.add(point, [0.0, 0.05, 0.0])
     best = None
 
@@ -60,9 +64,10 @@ def floor_under(boxes, point, ground=None):
 
 
 def ground_of(data):
-    """The level's terrain as one geo.TriGrid (None without terrain): as a
-    layout makes it (its verts and faces) or as a .blend reads back (its
-    triangles)."""
+    """Return geo.TriGrid|None from layout verts/faces or read-back tris.
+
+    data is the level dictionary; absent/empty terrain returns None.
+    """
     tris = []
 
     for t in data.get("terrain", []):
@@ -104,6 +109,11 @@ EDGE_STEP = 0.02
 
 
 def problems(data, stage="stage1"):
+    """Return list[str] validation failures; [] passes without changing data.
+
+    data is the level layout/read-back dict. stage selects the per-sector
+    triangle budget ('stage1' or 'stage2'); geometry uses Godot axes/metres.
+    """
     out = []
     names = {}
 
@@ -206,10 +216,8 @@ def problems(data, stage="stage1"):
     return out
 
 
-# ---------------------------------------------------------------------------
 # Rays against the level: its colliders and (when it has one) its ground, a
 # geo.TriGrid of its terrain's triangles
-# ---------------------------------------------------------------------------
 
 def _ray(boxes, ground, point, sign, reach):
     """How far from `point` straight down (sign -1) or up (1) the first solid
@@ -323,10 +331,8 @@ def _volumes(data):
     return climbs, waters
 
 
-# ---------------------------------------------------------------------------
 # Route checks: each point of a way through the level reached from the one
 # before by its move, the move measured
-# ---------------------------------------------------------------------------
 
 def _jump(boxes, ground, a, b, move):
     if _floor_y(boxes, ground, b) is None:

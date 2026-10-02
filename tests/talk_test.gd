@@ -188,9 +188,7 @@ func _run() -> void:
 	GuardScript.randomize_on = true
 
 
-# ---------------------------------------------------------------------------
 # The files
-# ---------------------------------------------------------------------------
 
 func _files() -> void:
 	# T1 the talk files load clean
@@ -229,9 +227,7 @@ func _files() -> void:
 	_check("T4 every conversation of two or more opens with two different speakers", wrong.is_empty(), str(wrong))
 
 
-# ---------------------------------------------------------------------------
 # The writing
-# ---------------------------------------------------------------------------
 
 func _writing() -> void:
 	var lib: Dictionary = TalkScript.load_dir()
@@ -334,9 +330,7 @@ func _his(conv: Dictionary, name: String, cast: Array, sheet: Dictionary) -> boo
 	return false
 
 
-# ---------------------------------------------------------------------------
 # Facts and casting
-# ---------------------------------------------------------------------------
 
 func _facts() -> void:
 	var sheet: Dictionary = TalkScript.library()["cast"]
@@ -378,9 +372,7 @@ func _facts() -> void:
 	_check("T9 the quietest man is cast first", cast9.get("A", {}).get("name") == "Tam" and cast9.get("B", {}).get("name") == "Gideon", str(cast9.keys()))
 
 
-# ---------------------------------------------------------------------------
 # The director
-# ---------------------------------------------------------------------------
 
 func _director() -> void:
 	# T10 two men at their ease talk a whole conversation, turn and turn about
@@ -474,9 +466,7 @@ func _director() -> void:
 		"talking before %s, after %s/%s, apart %.1f m" % [was15, a15._life.talking(), b15._life.talking(), apart])
 
 
-# ---------------------------------------------------------------------------
 # Memory, late joiners, remarks
-# ---------------------------------------------------------------------------
 
 func _memory() -> void:
 	# T16 a conversation waits out its cooldown, whoever would play it
@@ -593,9 +583,7 @@ func _memory() -> void:
 		"chopper %s, loners %s" % [his.map(func(r): return "%s@%.0f" % [r["id"], r["at"]]), pair.map(func(r): return "%s@%.0f" % [r["id"], r["at"]])])
 
 
-# ---------------------------------------------------------------------------
 # The voice
-# ---------------------------------------------------------------------------
 
 func _voice() -> void:
 	# T23 the heart: up in a fight, down after
@@ -678,9 +666,7 @@ func _voice() -> void:
 		murmurs.size() == 2 and float(murmurs[0][1]) <= float(murmurs[1][1]) - 12.0, "murmurs %s" % [murmurs])
 
 
-# ---------------------------------------------------------------------------
 # Whose voice: the two men and the woman of NOX's Voices Essentials
-# ---------------------------------------------------------------------------
 
 func _voices_of_men() -> void:
 	# T44 each keeps his own voice: the big man the deep one, a lighter man
@@ -785,9 +771,7 @@ func _voices_of_men() -> void:
 		"cold %d breaths a minute (loudest %+.0f dB), warm %d" % [colds[0], loudest, colds[1]])
 
 
-# ---------------------------------------------------------------------------
 # In the fight, and grief
-# ---------------------------------------------------------------------------
 
 func _fight_talk() -> void:
 	var lib: Dictionary = TalkScript.library()
@@ -898,9 +882,7 @@ func _fight_talk() -> void:
 		"lookout said %s, the man said %s" % [_barks_of(watcher), _barks_of(sent)])
 
 
-# ---------------------------------------------------------------------------
 # The final review's findings
-# ---------------------------------------------------------------------------
 
 func _review_fixes() -> void:
 	var lib: Dictionary = TalkScript.library()
@@ -1075,9 +1057,7 @@ func _rested_for(men: Array, seconds: float) -> void:
 		return director.clock >= until, int(seconds * 60) + 60)
 
 
-# ---------------------------------------------------------------------------
 # The yard
-# ---------------------------------------------------------------------------
 
 func _yard() -> void:
 	TemperamentScript.rolling = false
@@ -1160,9 +1140,7 @@ func _barks_of(g: Node) -> Array:
 	return _barks.get(g, [])
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 func _conv(lib: Dictionary, id: String) -> Dictionary:
 	for c in lib["conversations"]:

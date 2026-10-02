@@ -1,34 +1,9 @@
 extends RefCounted
-## What the whole level knows of you. Every squad that fights you tells it
-## what it saw you do, and every guard who comes after you knows it already:
-## word spreads through a garrison.
-##   habits  how you fight, each 0..1: turtle (behind a raised guard), spam
-##           (blows on each other's heels), kite (keeping away), bow. Built
-##           slowly from what the squads see (it takes a habit, not one
-##           moment), and never forgotten for the level. A new squad comes
-##           knowing them, and keeps the answer to them in its hands.
-##   dread   0..1, what you have done to them: each man of theirs you kill in
-##           a hunt, their captains most, a man cut apart in front of them, a
-##           body found. It fades once it has been quiet a while. It weighs
-##           on a man by how little nerve he has (fear_of), and turns to anger
-##           in a man with plenty (anger_of).
-##   alarm   0..1, how roused they are right now: a man missing from his post,
-##           one of your arrows in a wall, a body, a fight, the bell. It holds
-##           a while once raised, then settles. Roused, men take lanterns into
-##           the dark and talk of nothing else (data/talk/unease.talk).
-##   lights  the torches found put out (light_found_out): one is a draught;
-##           several not long apart is someone at work in the dark.
-##   fallen  the posts of men you took quietly (knocked out, or killed before
-##           anyone knew you were there): a man who knew one, looking at his
-##           post, misses him.
-##   looks   who is looking into what: one man goes to see what the noise
-##           was, and the men who heard him cover him from where they stand.
-##   mercy   the men you let go when they begged (spared) and the ones you cut
-##           down on their knees (slain_begging): they talk of both, and the
-##           next man weighs them before he begs you (mercy_hope). Killing a
-##           man who begged is a dread of its own.
-##
-## One for each target (`of`), kept for the level; `clear_all` forgets.
+## Target-scoped memory shared by guards and successive squads.
+## Habit strengths rise toward observed combat patterns and persist; dread and alarm
+## hold then fade on the garrison clock. Stores deaths, bodies, missing posts,
+## extinguished lights, investigation claims and mercy history.
+## of() caches by target instance; tick() advances once per physics frame.
 
 ## A habit comes to match what they see over this many seconds.
 const HABIT_TIME := 20.0
@@ -88,7 +63,7 @@ var _looks := []
 var _lights_out := {}
 
 
-## The garrison's memory of `target` (made the first time it is asked for).
+## Returns shared target-scoped memory, lazily created; null for a null/freed target.
 static func of(target: Node3D) -> RefCounted:
 	if target == null or not is_instance_valid(target):
 		return null
@@ -105,8 +80,7 @@ static func of(target: Node3D) -> RefCounted:
 	return garrison
 
 
-## Forget everything (a new level, a test, the gym's F5): and with it who
-## was talking to whom, the night's rota and what they were doing together.
+## Clears garrison, talk, night-rota and gathering caches; does not clear Squad cache.
 static func clear_all() -> void:
 	_garrisons.clear()
 	(load("res://scripts/AISystem/Talk/TalkDirector.gd") as GDScript).call(&"clear_all")
@@ -234,8 +208,8 @@ func post_fell(where: Vector3, called: String, at: float) -> void:
 	fallen.append({"where": where, "name": called, "at": at, "noticed": false})
 
 
-## Someone is looking into what happened near `where`: `by` claims it, unless
-## another man already has (then he is who you get back, and `by` covers him).
+## Reserves investigation near where for by; returns another nearby owner, or null
+## when by now owns it. Weak reservations expire after LOOK_HOLD seconds.
 func look_into(where: Vector3, by: Node3D) -> Node3D:
 	_looks = _looks.filter(func(l: Dictionary) -> bool:
 		var man: Object = (l["by"] as WeakRef).get_ref()

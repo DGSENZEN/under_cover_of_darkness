@@ -1,13 +1,8 @@
 extends Node3D
-## Your own arms, seen from inside your head: the base character in your
-## colours (Humanoid.gd), made small about your eye just as the things you
-## hold are, so that in the view they are full size. Each hand reaches for
-## what HandSlot says it holds (ArmReach.gd): the grip of your sword, the
-## purse, a ledge. Only the arms ever come into view: the head you are inside
-## is folded away and the rest of you hangs below the frame.
-##
-## Drawn like everything in your hands, on the viewmodel layer and in front of
-## the world (a squeezed depth, so the fingers still close over the grip).
+## Humanoid arm/foot rig for the camera viewmodel, using ArmReach targets.
+## The rig is scaled about the eye; targets use the parent’s small view space.
+## Meshes share the viewmodel layer and squeezed depth; hidden body parts
+## remain outside the view.
 
 const HumanoidScript := preload("res://scripts/Visual/Humanoid.gd")
 const ArmReachScript := preload("res://scripts/Visual/ArmReach.gd")
@@ -28,6 +23,7 @@ var man: Node3D
 var reach: SkeletonModifier3D
 
 
+## Builds/configures the arm rig and applies the supplied visual layer mask.
 func setup(layer: int) -> void:
 	name = "Arms"
 	scale = Vector3.ONE * SCALE
@@ -98,8 +94,7 @@ func forearm_to(side: int, wrist: Vector3) -> Vector3:
 	return (shoulder + along * d - elbow).normalized()
 
 
-## Where a hand is now (world space): the view's small world, so along the
-## same line from the eye as the real thing.
+## Returns the current world hand position from the configured rig; setup() is required.
 func hand_position(side: int) -> Vector3:
 	if reach.weights[side] > 0.0:
 		return reach.solved_hands[side]
@@ -107,7 +102,7 @@ func hand_position(side: int) -> Vector3:
 	return man.bone_global(&"hand_l" if side == Side.LEFT else &"hand_r").origin
 
 
-## A point in the real world, as seen from the eye, in the view's small world.
+## Scales a full-size camera-space transform’s origin into the viewmodel space.
 static func shrink(camera_space: Transform3D) -> Transform3D:
 	return Transform3D(camera_space.basis, camera_space.origin * SCALE)
 
@@ -139,6 +134,10 @@ func _viewmodel(instance: MeshInstance3D) -> void:
 
 static func _squeezed(source: Material) -> BaseMaterial3D:
 	var material := (source as BaseMaterial3D).duplicate() as BaseMaterial3D
+	# Keep the first-person representation out of water's reflection source;
+	# late depth writes retain correct overlap with held items.
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
 	material.use_z_clip_scale = true
 	material.z_clip_scale = Z_CLIP
 	return material

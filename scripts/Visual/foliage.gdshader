@@ -1,10 +1,6 @@
-// Leaves, needles, grass, reeds and ivy (Materials' foliage slots): our own
-// paintings cut out where they are clear, shaded by the level's baked
-// vertex colours, a little light through them from behind; stirred by the
-// wind (Materials.blow): each card's top edge rustles, and what stands high
-// (a tree's crown) sways slowly on its boughs; a card seen edge-on thins
-// away. The cards carry their own faces both ways (kit_shapes), so each
-// side is drawn by its own face.
+// Painted foliage cutouts shaded by baked vertex colour, with back translucency and wind animation.
+// Card tops rustle; elevated crowns sway; edge-on cards thin out.
+// Kit geometry carries faces for both sides, so backface culling remains enabled.
 shader_type spatial;
 render_mode cull_back, specular_schlick_ggx;
 

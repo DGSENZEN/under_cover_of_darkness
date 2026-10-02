@@ -1,8 +1,7 @@
 class_name MoveVariant
 extends Resource
-## One row of the traversal table. The classifier walks the table top to
-## bottom and the first row that matches the obstacle profile wins, so ORDER
-## IS PRIORITY. Everything here is tuning data; no code depends on the labels.
+## Traversal matching and playback Resource. Table order determines priority;
+## the controller tries matching rows until one produces a clear path.
 
 enum Kind {
 	VAULT,
@@ -57,6 +56,8 @@ enum Air {
 @export var noise_db := 45.0
 
 
+## Creates a fresh variant Resource with the supplied matching and playback values.
+## Other properties retain defaults; path loading works before editor class registration.
 static func make(
 	p_label: StringName,
 	p_kind: Kind,
@@ -83,8 +84,7 @@ static func make(
 	return v
 
 
-## The built-in table, used when the controller's variant_table is left empty.
-## Heights assume a 2.0 m tall player; scale them if you change the capsule.
+## Returns new priority-ordered variants for a 2.0 m capsule; scale height tuning for other sizes.
 static func default_table() -> Array[Resource]:
 	var table: Array[Resource] = []
 
@@ -95,7 +95,7 @@ static func default_table() -> Array[Resource]:
 	hang.noise_db = 40.0
 	table.append(hang)
 
-	# Crouched: slow and deliberate. These will carry the low noise values later.
+	# Sneaking variants use reduced noise and slower traversal.
 	var quiet_step = make(&"quiet step-up", Kind.MANTLE, 0.35, 1.0, 2.2, 0.35, 0.70, 1.0, 0.0)
 	quiet_step.stance = Stance.SNEAK
 	quiet_step.noise_db = 28.0

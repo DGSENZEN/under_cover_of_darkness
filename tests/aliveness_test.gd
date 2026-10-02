@@ -69,9 +69,7 @@ func _run() -> void:
 	GuardScript.randomize_on = true
 
 
-# ---------------------------------------------------------------------------
 # The rig
-# ---------------------------------------------------------------------------
 
 func _rig() -> void:
 	var a := _man(Vector3(-2, 0, 0))
@@ -138,9 +136,7 @@ func _rig() -> void:
 	b.queue_free()
 
 
-# ---------------------------------------------------------------------------
 # Expression
-# ---------------------------------------------------------------------------
 
 func _expression() -> void:
 	# A4 a listener's head turns to the man speaking
@@ -258,9 +254,7 @@ func _expression() -> void:
 		clip == &"Yes" and gone and reacted == &"Yes" and n2._rig.man.upper_weight() > 0.2, "clip %s, gone %s, the listener %s (%.2f)" % [clip, gone, reacted, n2._rig.man.upper_weight()])
 
 
-# ---------------------------------------------------------------------------
 # Pastimes
-# ---------------------------------------------------------------------------
 
 func _pastimes() -> void:
 	# A11 never the same twice running, never three in five
@@ -381,9 +375,7 @@ func _pastimes() -> void:
 		"did %s, furthest %.2f m, back to %.2f m; paced out %.2f m, home %.2f m" % [seen.keys(), furthest[0], back, out[0], home])
 
 
-# ---------------------------------------------------------------------------
 # Atmosphere
-# ---------------------------------------------------------------------------
 
 func _atmosphere() -> void:
 	await _fresh()
@@ -483,9 +475,7 @@ func _atmosphere() -> void:
 	air.queue_free()
 
 
-# ---------------------------------------------------------------------------
 # The final review's findings
-# ---------------------------------------------------------------------------
 
 func _steady_gaze() -> void:
 	# A21 a man listening holds his eyes on the man speaking (his gaze is
@@ -512,9 +502,7 @@ func _steady_gaze() -> void:
 	_check("A21 a man listening holds his eyes on the man speaking, not drifting about him", worst <= 20.0, "at worst %.0f deg off him" % worst)
 
 
-# ---------------------------------------------------------------------------
 # The yard
-# ---------------------------------------------------------------------------
 
 func _yard() -> void:
 	TemperamentScript.rolling = false

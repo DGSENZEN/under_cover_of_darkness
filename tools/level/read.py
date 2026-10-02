@@ -46,6 +46,11 @@ def terrain_of(obj):
 
 
 def read():
+    """Return the open Blender scene's level dict in Godot axes/metres.
+
+    Includes pieces, markers, sectors, per-kit triangle counts and terrain;
+    bpy must be available. Reads scene state without writing exported files.
+    """
     pieces, found, tris, ground = [], [], {}, []
 
     for obj in bpy.context.scene.objects:

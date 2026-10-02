@@ -1,9 +1,8 @@
 class_name Chest
 extends Node3D
-## A chest or cabinet with a lid. This node sits at the lid's hinge line; the
-## child AnimatableBody3D named Lid holds the lid's shape and mesh, and the
-## body of the chest is any static child. Loot and keys placed inside are
-## ordinary frobbables that the closed lid simply hides from the ray.
+## Lockable lid container. This node sits at the lid hinge; child Lid is an
+## AnimatableBody3D. Static children form the chest. The closed lid occludes
+## ordinary frobbables inside; missing Lid leaves animation pending.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
@@ -56,6 +55,8 @@ func can_unlock(player: Node) -> bool:
 	return inventory != null and inventory.has_key(key_id)
 
 
+## Unlocks with a matching inventory key or emits rattled and returns.
+## Otherwise toggles requested open state and target lid angle; completion signals come later.
 func frob(player: Node) -> void:
 	if locked:
 		if key_id != &"" and player.get("inventory") != null and player.inventory.has_key(key_id):

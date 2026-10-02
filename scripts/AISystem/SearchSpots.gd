@@ -1,31 +1,9 @@
 extends RefCounted
-## Where a man hunting you looks: the places you could be hiding, not just
-## anywhere round where he thinks you are (Guard._next_search_point, and the
-## hunt's shares of the ground, Squad.search_spot_for). Places on the floor
-## round it are weighed up:
-##   dark        no light falls there (LightProbe): you could be crouched in it
-##   shut in     walls or things close round it (a corner, between crates, an
-##               alcove): the more sides shut, the better a place to hide
-##   unseen      he cannot see it from where he stands (and what he can see
-##               counts only as far as it is dark)
-##   ahead       the way you were going, if he knows it
-## and two kinds of place more:
-##   a room      through a door near it (Door.gd, not locked against him), on
-##               the far side of it from where you were: he goes in and looks
-##               round it
-##   a ledge     somewhere higher up near it (on the navmesh, over his head):
-##               you could have climbed there; he goes under it and looks up
-## A place taken by another man (at least `spread` from his) or searched not
-## long since (SEARCHED_NEAR of it) is passed over; so is one he has no way
-## to (the navmesh keeps scraps of floor sealed inside tall blocks).
-##
-## A place: {"stand": where he goes, "peer": what he looks into as he comes to
-## it and first thing there (INF: nothing in particular), "kind": &"nook",
-## &"dark", &"open", &"room" or &"ledge", "door": the door, for a room}.
-##
-## A man sent to search a hunt area (his meta "hunt_area", an AABB: the
-## divided hunt's orders) looks only inside it: places outside it are passed
-## over, and where he searches round is somewhere in it (area_centre).
+## Scores reachable hiding places for Guard and shared Squad searches.
+## Darkness, enclosure, occlusion, heading, rooms and ledges affect score; taken and
+## recently searched points are excluded. Optional hunt_area metadata bounds orders.
+## Places contain stand: Vector3, peer: Vector3 (INF means no focus), kind: StringName
+## (nook/dark/open/room/ledge), and door: Node3D for rooms. pick() returns {} on failure.
 
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 
@@ -99,11 +77,10 @@ const AREA_SAMPLES := 12
 const REACH_TRIES := 6
 
 
-## The best place for `guard` to search round `centre` (see the header), or
-## {} if there is none. `heading`: the way you went (flat, or ZERO); `reach`:
-## how far from the middle; `taken`: places others have (kept `spread` from);
-## `searched`: places searched not long since; `ahead_only`: only places the
-## way you went.
+## Returns a reachable place dictionary or {} (including an unready nav map).
+## World-space centre/heading and reach bound candidates; taken/searched contain
+## Vector3 points and spread keeps distance from taken. ahead_only restricts heading.
+## Result stand/peer are Vector3, kind is StringName; room results include door.
 static func pick(guard: Node3D, centre: Vector3, heading: Vector3, reach: float, taken: Array, spread: float, searched: Array, ahead_only := false) -> Dictionary:
 	var map: RID = guard.get_world_3d().navigation_map
 

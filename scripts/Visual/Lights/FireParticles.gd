@@ -1,19 +1,7 @@
 extends Node3D
-## Embers, smoke, steam and sparks off the fires. One of these lives in each
-## level, made on first use (as Fx.gd): particles are simulated here and
-## drawn as one MultiMesh a kind, facing the camera, on the effects layer
-## (the lightgem never sees them). They move on the frame's delta, which
-## Engine.time_scale slows, so slow motion slows them too.
-##
-##   FireParticles.emit(self, &"ember", flame, 3, wind)
-##   FireParticles.emit(self, &"smoke", flame, 1, wind, fire_colour, 0.2)
-##
-##   ember  1-2 px streaks rising fast and slowing, orange cooling to red,
-##          drifting with the wind; added on
-##   smoke  dark puffs rising slower than the flame, lit from below by the
-##          fire's colour, growing and thinning out over 2-3 s
-##   steam  white puffs, quick (a doused flame)
-##   spark  bright streaks thrown out and falling (a flame lit)
+## Level-owned pools of ember, smoke, steam, and spark particles, created on first emission.
+## One camera-facing MultiMesh per kind uses Layers.FX; lightgem cameras exclude it.
+## Simulation uses scaled frame delta so slow motion also slows particles.
 
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const SMOKE := preload("res://scripts/Visual/Lights/smoke.gdshader")
@@ -79,13 +67,11 @@ class Pool:
 		tint[i] = tint[count]
 
 
-# ---------------------------------------------------------------------------
 # The API
-# ---------------------------------------------------------------------------
 
-## `count` of `kind` at `at`. `wind` is the air (Torch.lean), `tint` the
-## fire's colour (smoke's underside), `size` a puff's size (m, 0 for the
-## kind's own).
+## Emits count particles of kind (ember/smoke/steam/spark) at world at, with world wind and tint.
+## size is optional world size; context selects the level-owned pool. Detached contexts/unknown kinds produce no particles.
+## Nonpositive count spawns none; the emitted counter still adds count when the pool exists.
 static func emit(context: Node, kind: StringName, at: Vector3, count: int, wind := Vector3.ZERO, tint := Color.WHITE, size := 0.0) -> void:
 	var world := _world_for(context)
 
@@ -154,9 +140,7 @@ static func _joining(world: Node) -> bool:
 	return parent is Node and not (parent as Node).is_queued_for_deletion()
 
 
-# ---------------------------------------------------------------------------
 # The simulation
-# ---------------------------------------------------------------------------
 
 func _init() -> void:
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF

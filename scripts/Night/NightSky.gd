@@ -1,8 +1,7 @@
 extends RefCounted
-## The night's sky on an environment: night_sky.gdshader, the cloud field
-## Night gives it, and the skyline (assets/sky/skyline.png, or the map's own:
-## rendered by tools/skyline in Blender; a plain noise ridge until it is
-## there). Night feeds it every frame (show_night).
+## Owns the sky ShaderMaterial installed on an Environment. Night supplies its cloud field and frame uniforms.
+## Loads the chosen skyline and painted moon face; missing skyline falls back to a noise ridge.
+## Incremental low-resolution radiance is sufficient because reflections are off and ambient lighting is flat.
 
 const SHADER := preload("res://scripts/Night/night_sky.gdshader")
 const SKYLINE := "res://assets/sky/skyline.png"
@@ -28,13 +27,12 @@ func _init(environment: Environment, field: Texture2D, skyline := "") -> void:
 	environment.background_mode = Environment.BG_SKY
 
 
-## The sky as the night is now.
-func show_night(cover: float, offset: Vector2, veil_center: Vector2, veil_on: float, flash: float, fog: float, clock: float) -> void:
+## Writes cloud cover/offset, flash level, fog multiplier, and clock seconds to this sky material.
+## Night owns the input values and calls this each weather frame.
+func show_night(cover: float, offset: Vector2, flash: float, fog: float, clock: float) -> void:
 	material.set_shader_parameter("clock", clock)
 	material.set_shader_parameter("cloud_cover", cover)
 	material.set_shader_parameter("cloud_offset", offset)
-	material.set_shader_parameter("veil_center", veil_center)
-	material.set_shader_parameter("veil_on", veil_on)
 	material.set_shader_parameter("flash", flash)
 	material.set_shader_parameter("fog", fog)
 

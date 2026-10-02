@@ -131,12 +131,10 @@ def _ladder(x, y0, y1, z, yaw):
     return ks.moved(out, yaw, (x, 0.0, z))
 
 
-# ---------------------------------------------------------------------------
 # The carrack: 30 m, 9 across, three masts; its sterncastle holds the
 # captain's cabin (a door in its forward bulkhead off the main deck, lit
 # windows in its transom), a poop over its after part; a forecastle to the
 # bow. Ladders up to both castles.
-# ---------------------------------------------------------------------------
 
 # Half its beam at its main deck, along it (x: its transom at -15, its stem
 # at 15).
@@ -346,10 +344,8 @@ _shapes, _cols = _mainyard()
 _ship("carrack_mainyard", "hull_bare", _shapes, _cols, [YARD, 1.2, 1.0], 300)
 
 
-# ---------------------------------------------------------------------------
 # A caravel (20 m, lateen-rigged on two masts), a fishing boat and a
 # rowboat (open, drawn inside too; floors to stand on).
-# ---------------------------------------------------------------------------
 
 CARAVEL = [(-10.0, 2.4), (-6.0, 2.9), (0.0, 3.0), (5.0, 2.7), (8.0, 1.8), (10.0, 0.2)]
 

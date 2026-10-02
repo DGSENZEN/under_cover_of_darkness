@@ -1,15 +1,7 @@
 extends Node
-## How the intruder fights, as the guards see it: the same read-outs the
-## player's fighting gives them (PlayerCombat), so they judge his blows, his
-## guard, his parries and his dodges exactly as they judge yours; and his
-## blows land on them the way yours do, through their own take_hit, so their
-## guarding, parrying, posture, bleeding and dismemberment all run for real.
-##
-## What he does is not decided here: his brain (IntruderBrain.gd) calls
-## swing, backstab, guard_up and dodge. This keeps the clock of each blow,
-## shows it on his rig (through the guard fields GuardRig reads: _attack,
-## _phase, _phase_timer, _phase_length) and settles how a guard's blow meets
-## him (filter_incoming).
+## PlayerCombat-compatible threat/defence state for the showcase intruder. IntruderBrain chooses actions.
+## Ticks blow phases and mirrors GuardRig fields; landed strikes use guards' real take_hit paths.
+## Incoming damage passes through dodge/parry/guard handling, with signals for defence, movement, hits, and kills.
 
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -168,13 +160,11 @@ func busy() -> bool:
 	return phase != Phase.IDLE
 
 
-# ---------------------------------------------------------------------------
 # What he does (his brain calls these)
-# ---------------------------------------------------------------------------
 
-## A blow where he faces: "overhead", "left", "right", "thrust" or "heavy",
-## at `at` if he is in reach when it falls (else whoever is). Only from
-## standing ready (or recovering: a string). False if not begun.
+## Starts a blade swing aimed at optional at; returns false outside idle/recover or while staggered/knocked.
+## Unknown direction falls back to left.
+## Updates mirrored rig/threat state; contact and signals occur later during tick().
 func swing(direction: StringName, at: Node3D = null) -> bool:
 	if phase != Phase.IDLE and phase != Phase.RECOVER:
 		return false
@@ -244,9 +234,7 @@ func dodge(from: Vector3) -> bool:
 	return true
 
 
-# ---------------------------------------------------------------------------
 # What a guard reads off him (PlayerCombat's read-outs)
-# ---------------------------------------------------------------------------
 
 func threat_serial() -> int:
 	return _serial
@@ -307,9 +295,7 @@ func is_parrying() -> bool:
 	return blocking and _clock - _block_started <= PARRY_WINDOW
 
 
-# ---------------------------------------------------------------------------
 # A guard's blow meeting him (Intruder.take_damage)
-# ---------------------------------------------------------------------------
 
 ## How much of an incoming blow gets through: all of a boot or a low cut (and
 ## the boot shoves him); none of a blow parried; a little of one blocked.
@@ -319,6 +305,8 @@ func _told(outcome: StringName, from: Node, heavy: bool) -> void:
 		"weight": &"heavy" if heavy else &"light", "outcome": outcome, "where": intruder.global_position})
 
 
+## Returns damage remaining after dodge, parry, or guard handling for an incoming attacker.
+## May emit defended and update defence/riposte state; the caller applies returned health damage.
 func filter_incoming(amount: float, from: Node) -> float:
 	var info: Dictionary = from.attack_info() if from != null and from.has_method("attack_info") else {}
 
@@ -386,9 +374,7 @@ func filter_incoming(amount: float, from: Node) -> float:
 	return amount * (0.4 if thrust else 0.25)
 
 
-# ---------------------------------------------------------------------------
 # Inside a blow
-# ---------------------------------------------------------------------------
 
 func _enter(new_phase: int, length: float) -> void:
 	phase = new_phase as Phase

@@ -1,24 +1,8 @@
 extends RefCounted
-## Furniture for a garrison at its ease, each piece with the places a guard
-## uses it from (IdleSpot.gd), for GuardHabits.gd:
-##   chair / stool / bench   seats ("seat")
-##   table                   a table to sit at: chairs round it, facing it
-##   provisions              a counter with bread on it ("table")
-##   campfire                a ring of stones and a fire, to tend ("fire")
-##   chopping_block          a stump with a log on end on it and a pile of
-##                           logs ("chop")
-##   crate_piles             two piles of crates with a way between, each a
-##                           "pile": crates are carried from one to the other
-##                           (restack puts them all back on the first)
-##   cart                    a cart with a wheel to see to ("work")
-##   railing                 posts and a bar at forearm height, to lean on
-##                           ("rail"), along a walkway's edge
-##   lean_spots              places along a wall to lean back on ("lean")
-## All static bodies on the world layer: guards walk round them, and the
-## navmesh is baked round them (the low ones too: `_keep_off`).
-##
-##   Furnishings.chair(parent, at, yaw)   at: the middle of the seat, on the
-##       floor; yaw: which way the man sitting on it faces (as a node's yaw).
+## Procedural furniture with IdleSpot nodes used by guard habits.
+## Seat positions are floor-projected seat centres; yaw faces a seated guard
+## along local -Z. Static furniture uses world collision and nav_blocks
+## metadata keeps even low furniture out of baked walkable space.
 
 const Props := preload("res://scripts/Interaction/Props.gd")
 const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
@@ -319,7 +303,6 @@ static func lean_spots(parent: Node, from: Vector3, to: Vector3, out: Vector3, e
 	return spots
 
 
-# ---------------------------------------------------------------------------
 
 static func _body(parent: Node, body_name: String, at: Vector3, yaw: float) -> StaticBody3D:
 	var body := StaticBody3D.new()

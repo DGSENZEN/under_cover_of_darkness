@@ -1,9 +1,6 @@
 extends RefCounted
-## The light fixtures, built (as Props.gd builds props): every builder returns
-## the fixture, already added to `parent` and placed. `overrides` lays burner
-## settings (Torch.gd exports) over the fixture's own.
-##
-##   Lights.wall_torch(self, flame_at, wall_normal)
+## Fixture builders. Placed builders add the result to parent; carried_torch()/carried_lantern() return unparented fixtures.
+## overrides replace Torch export values after recipe settings. Wall/ground helpers align fixture sockets to world points.
 
 const LightFixtureScript := preload("res://scripts/Visual/Lights/LightFixture.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
@@ -17,7 +14,8 @@ const FLOOR_MARGIN := 0.05
 const SHORTEST_POLE := 0.6
 
 
-## Any fixture, its origin at `at`, turned `yaw` about up.
+## Returns an added/placed LightFixture at world at with yaw in radians and a dynamic overrides Dictionary.
+## Override keys name Torch/fixture settings; missing recipe/model reports an error and leaves available burner behavior.
 static func make(parent: Node, fixture: StringName, at: Vector3, yaw := 0.0, overrides := {}) -> Node3D:
 	var node: Node3D = LightFixtureScript.new()
 	node.name = String(fixture).to_pascal_case()
@@ -72,7 +70,7 @@ static func torch_at(parent: Node, flame_at: Vector3, energy := 2.4, light_range
 	return bare
 
 
-## The guards' torch (GuardHands): not added to anything; its flame is its origin.
+## Returns an unparented torch fixture for hand attachment; caller owns parenting and lifetime.
 static func carried_torch() -> Node3D:
 	var node: Node3D = LightFixtureScript.new()
 	node.name = "RoundsLight"
@@ -80,7 +78,7 @@ static func carried_torch() -> Node3D:
 	return node
 
 
-## The guards' lantern (GuardHands): not added to anything; its flame is its origin.
+## Returns an unparented lantern fixture for hand attachment; caller owns parenting and lifetime.
 static func carried_lantern() -> Node3D:
 	var node: Node3D = LightFixtureScript.new()
 	node.name = "Lantern"

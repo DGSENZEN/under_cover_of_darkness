@@ -1,20 +1,8 @@
 extends RefCounted
-## How a guard crosses what his path cannot walk (NavLinks), as his path
-## comes to it (Guard._on_link_reached): up onto a top (hands on it, and a
-## pull), down off it (a hop; from higher, lowered off the edge to hang and
-## let go), across a gap (a leap), up or down a ladder or a rope, into deep
-## water off a high bank (a jump) and out of it again (hauled up the bank).
-## Low banks he wades in and out of: no move of their own (GuardWater).
-##
-## Each is his whole body moved from where he stands to the far end, along a
-## few legs, over its own time: nothing else moves him meanwhile, and he
-## neither guards nor strikes. A blow or a boot takes him off it (interrupt):
-## off a wall or a ladder, he falls. The rig shows it (activity) and it is
-## heard: armour against stone, a landing.
-##
-## One ladder, one body at a time on each rung: a man on it just above him
-## (going up; below, going down) keeps him at its foot (waiting), and on it
-## a body's length behind (BODY), never climbing into him.
+## Owns timed movement across NavLinks: climb, drop, leap, ladder, rope and water.
+## While active, this helper places the guard; normal walking and attacks are suspended.
+## Interruptions release the move and can leave the guard falling.
+## Ladder spacing prevents overlapping climbers; blocked entry waits, then gives up.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
@@ -110,9 +98,10 @@ func climbed() -> float:
 	return _climbed
 
 
-## His path has come to a link (NavigationAgent3D.link_reached's `details`):
-## the move across it, from where he stands. False if it is walked (a low
-## bank) or not his to cross from here.
+## Consumes NavigationAgent link details: owner: NavigationLink3D,
+## link_entry_position/link_exit_position: Vector3. kind metadata selects traversal.
+## Returns true after taking movement ownership; false for invalid/remote/unsupported
+## links, low banks or ladder congestion (which can also set waiting state).
 func begin(details: Dictionary) -> bool:
 	var link: Variant = details.get("owner")
 
@@ -150,7 +139,7 @@ func begin(details: Dictionary) -> bool:
 		&"ladder", &"rope":
 			var volume: Variant = (link as Node).get_meta(&"volume") if (link as Node).has_meta(&"volume") else null
 
-			if not (volume is Node3D) or not is_instance_valid(volume):
+			if not is_instance_valid(volume) or not (volume is Node3D):
 				return false
 
 			_plan_ladder(from, a, b, volume, what == &"rope")
@@ -218,8 +207,8 @@ func forget_wait() -> void:
 	_waiting = {}
 
 
-## A blow, a boot: he loses his hold. Off a wall or a ladder he falls from
-## where he is; in the air he carries on falling (the ground has him).
+## Clears traversal/waiting state. An interrupted aerial/climbing move may fall;
+## the normal guard movement/ground handling resumes.
 func interrupt() -> void:
 	if not active():
 		return
@@ -295,9 +284,7 @@ func update(delta: float) -> void:
 		_water.splash(at, -guard.velocity.y, guard)
 
 
-# ---------------------------------------------------------------------------
 # The moves
-# ---------------------------------------------------------------------------
 
 ## Up onto a top: to its foot, facing it; hands up, and pulled up the face;
 ## over the lip, and onto his feet.
@@ -408,7 +395,6 @@ func _plan_water(from: Vector3, a: Vector3, b: Vector3) -> bool:
 	return true
 
 
-# ---------------------------------------------------------------------------
 
 ## Come to the end of `leg`: a landing is heard.
 func _arrive(leg: Array) -> void:

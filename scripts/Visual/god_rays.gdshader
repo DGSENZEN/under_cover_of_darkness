@@ -1,7 +1,5 @@
-// A shaft of light through a window (GodRays.gd): added onto the scene in the
-// glass's colours, brightest by the window and carrying down to what it
-// falls on, crisp at its sides, soft where it meets the floor or a pew (the
-// depth behind it), dust drifting through it.
+// Additive coloured window shafts (GodRays): glass picture and drifting dust,
+// with scene-depth contact softening and smooth edge-on fade.
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 

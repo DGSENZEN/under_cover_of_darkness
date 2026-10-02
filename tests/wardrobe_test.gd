@@ -163,9 +163,7 @@ func _run() -> void:
 	await _integration()
 
 
-# ---------------------------------------------------------------------------
 # K3a: re-binding a skin made on other bone frames
-# ---------------------------------------------------------------------------
 
 func _k3a() -> void:
 	# K3a a skin built on twisted bone frames lands exactly on the game skeleton
@@ -340,9 +338,7 @@ func _max_error_moved(got: PackedVector3Array, original: ArrayMesh, skeleton: Sk
 	return worst
 
 
-# ---------------------------------------------------------------------------
 # K10a: the variety roll and the wardrobe shader
-# ---------------------------------------------------------------------------
 
 func _k10a() -> void:
 	# K10a the roll: same seed same look, ranges held, new options never reshuffle
@@ -396,9 +392,7 @@ func _k10a() -> void:
 		"same %s distinct %d ranged %s steady %s uniforms %s two-sided %s instance %s" % [same, seen.size(), ranged, steady, names, sided, declared])
 
 
-# ---------------------------------------------------------------------------
 # K2a, K3: the baked, exported parts
-# ---------------------------------------------------------------------------
 
 func _k2a() -> void:
 	# K2a every dressed kind's files keep the PS2 budgets
@@ -1125,9 +1119,7 @@ func _pose(skeleton: Skeleton3D, animation: StringName, time: float) -> void:
 				skeleton.set_bone_pose_scale(bone, clip.scale_track_interpolate(t, time))
 
 
-# ---------------------------------------------------------------------------
 # K1, K1b, K1c, K2, K10: dressed guards
-# ---------------------------------------------------------------------------
 
 var _spawned := 0
 
@@ -1656,9 +1648,7 @@ func _dressed() -> void:
 	await _frames(3)
 
 
-# ---------------------------------------------------------------------------
 # K-order, K4, K4b, K5, K6, K6b, K12: cloth
-# ---------------------------------------------------------------------------
 
 ## Markers that follow his bones as drawn (bone attachments see the cloth's
 ## simulation; plain bone reads do not): each chain's hem and every joint
@@ -2505,9 +2495,7 @@ func _cloth_kind(kind: StringName, archetype: StringName) -> void:
 	await _frames(3)
 
 
-# ---------------------------------------------------------------------------
 # K7, K7b, K8, K9, K11: dismemberment, hit flash, armour, your arms
-# ---------------------------------------------------------------------------
 
 ## The meshes a severed piece carries (its copy of his skeleton's children).
 func _piece_meshes(piece: Node) -> Array:
@@ -2676,9 +2664,7 @@ func _integration_kind(kind: StringName, archetype: StringName) -> void:
 	await _frames(3)
 
 
-# ---------------------------------------------------------------------------
 # Harness
-# ---------------------------------------------------------------------------
 
 func _frames(n: int) -> void:
 	for i in n:

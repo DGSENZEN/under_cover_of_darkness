@@ -1,6 +1,7 @@
 extends RefCounted
-## Turns measurements into movement: picks rows from the variant table that
-## match an obstacle profile, and builds a validated TraversalMove for one.
+## Classifies obstacle profiles and generates collision-validated traversal paths.
+## Assign scanner before planning. Failed move builders return null; failed
+## hang probes return {}. last_reject describes the latest rejected attempt.
 
 const ObstacleProfile := preload("res://scripts/PlayerUtils/ObstacleProfile.gd")
 const MoveVariantRes := preload("res://scripts/PlayerUtils/MoveVariant.gd")
@@ -61,12 +62,10 @@ func _init() -> void:
 	) as MoveVariantRes
 
 
-# ---------------------------------------------------------------------------
 # Classify
-# ---------------------------------------------------------------------------
 
-## Every row that matches, in table order. The caller tries them one by one,
-## because a row can match on paper and still fail its fit tests.
+## Returns matching MoveVariant rows in table order; skips resources of another type.
+## Requires a valid profile; matching does not guarantee a collision-clear route.
 func classify(
 	profile: ObstacleProfile,
 	is_sneaking: bool,
@@ -132,10 +131,10 @@ func _matches(
 	return true
 
 
-# ---------------------------------------------------------------------------
 # Generate
-# ---------------------------------------------------------------------------
 
+## Builds a baked TraversalMove from profile/variant and world body start;
+## returns null if validation fails, with last_reject describing the failure.
 func generate(
 	profile: ObstacleProfile,
 	variant: MoveVariantRes,
@@ -161,12 +160,9 @@ func _generate_mantle(
 	var standoff := scanner.radius + scanner.landing_margin
 
 	# Rise in front of the face, just far enough out for the capsule to clear it.
-	var lift_y := maxf(p.top_point.y, p.landing.y) + half + lift_extra
 	var lift := p.face_point + p.face_normal * standoff
-	lift.y = lift_y
 
 	var landing := scanner.origin_for_feet(p.landing)
-	var raw := PackedVector3Array([start, lift, landing])
 
 	var try_standing := p.headroom == ObstacleProfile.Headroom.STANDING
 	var shapes: Array[bool] = []
@@ -177,7 +173,14 @@ func _generate_mantle(
 	shapes.append(true)
 
 	for crouched in shapes:
-		var path := _best_clear_path(raw, crouched)
+		var path := PackedVector3Array()
+		# Keep the comfortable lift where there is room. Under a low ceiling,
+		# the feet only need clearance above the top, not the full flourish.
+		for clearance in [lift_extra, scanner.floor_clearance]:
+			lift.y = maxf(p.top_point.y, p.landing.y) + half + clearance
+			path = _best_clear_path(PackedVector3Array([start, lift, landing]), crouched)
+			if not path.is_empty():
+				break
 
 		if path.is_empty():
 			continue
@@ -268,12 +271,46 @@ func hang_anchor(face_point: Vector3, normal: Vector3, lip_y: float) -> Vector3:
 	return anchor
 
 
-## From a hang, climb onto the ledge above.
-func pull_up(hang_normal: Vector3, start: Vector3) -> TraversalMove:
-	var profile := scanner.scan(-hang_normal, Vector3.ZERO, true)
+## Builds a bank/rail exit with world body start and minimum acceptable far-floor Y.
+## Returns null for unreachable tops, blocked landings, or blocked paths.
+func water_exit(profile: ObstacleProfile, start: Vector3, min_floor_y: float) -> TraversalMove:
+	last_reject = ""
+	if profile.height > scanner.max_reach or profile.height < scanner.step_height:
+		last_reject = "water exit: out of reach"
+		return null
+	# A gunwale is something to cross, not the floor to stand on. Only haul
+	# over it when there is a shallow, capsule-checked landing on the inside.
+	if profile.thickness < scanner.radius * 2.0 and profile.has_far_floor and profile.far_floor.y >= min_floor_y:
+		var across := _generate_vault(profile, _pull_up_variant, start)
+		if across != null:
+			across.kind = KIND_PULL_UP
+			across.exit_velocity = Vector3.ZERO
+			across.speed_kept = 0.0
+			return across
+	if profile.headroom == ObstacleProfile.Headroom.BLOCKED:
+		last_reject = "water exit: no room on top"
+		return null
+	var move := _generate_mantle(profile, _pull_up_variant, start)
+	if move != null:
+		move.kind = KIND_PULL_UP
+	return move
+
+
+## Builds a move onto the held lip; NAN infers lip height from the hang anchor.
+## Returns null when the held lip, headroom, or path cannot be validated.
+func pull_up(hang_normal: Vector3, start: Vector3, lip_y := NAN) -> TraversalMove:
+	if is_nan(lip_y):
+		lip_y = start.y + hang_eye_drop + eye_height
+	# Measure the lip in our hands. A full reach scan can choose a shelf
+	# above it instead, or miss a thin shelf under an overhang entirely.
+	var profile := scanner.scan_from(start, -hang_normal, Vector3.ZERO, true, -1.0, lip_y + 0.06)
 
 	if profile == null:
 		last_reject = "pull up: " + scanner.last_reject
+		return null
+
+	if absf(profile.top_point.y - lip_y) > 0.08:
+		last_reject = "pull up: held ledge not found"
 		return null
 
 	if profile.headroom == ObstacleProfile.Headroom.BLOCKED:
@@ -288,7 +325,8 @@ func pull_up(hang_normal: Vector3, start: Vector3) -> TraversalMove:
 	return move
 
 
-## From standing at an edge, climb down into a hang below it.
+## Builds an edge-to-hang move from edge {face_point, normal, lip_y}.
+## start is a world body origin; current_yaw is radians. Returns null if blocked.
 func lower(edge: Dictionary, start: Vector3, current_yaw: float) -> TraversalMove:
 	last_reject = ""
 
@@ -341,14 +379,11 @@ func lower(edge: Dictionary, start: Vector3, current_yaw: float) -> TraversalMov
 	return move
 
 
-# ---------------------------------------------------------------------------
 # Hanging: probing for lips, corners, leaps
-# ---------------------------------------------------------------------------
 
-## Is there a lip to hang from beside `point`, on a face whose normal is
-## roughly `normal`, at about `lip_y`? Shimmy, corners and sideways leaps all
-## ask this same question.
-## Returns {} or { "anchor", "normal", "lip_y", "face_point" }.
+## Finds a lip near world point/normal/height within max_lip_change metres.
+## Returns {anchor: Vector3, normal: Vector3, lip_y: float, face_point: Vector3}
+## or {} on failure; updates last_reject.
 func probe_hang(
 	point: Vector3,
 	normal: Vector3,
@@ -358,13 +393,26 @@ func probe_hang(
 	last_reject = ""
 
 	# Is there a face here? Probe just under the lip.
-	var chest := Vector3(point.x, lip_y - 0.2, point.z)
-	var wall := scanner.ray(chest, chest - normal * (scanner.radius + 0.6))
+	var found_face := false
+	# Thin cornices have no face 20 cm below the lip. Start near the fingers,
+	# then try above and below for a small change in the adjoining top.
+	for depth in [0.04, 0.04 - max_lip_change, 0.1, 0.2, max_lip_change + 0.04]:
+		var chest := Vector3(point.x, lip_y - depth, point.z)
+		var wall := scanner.ray(chest, chest - normal * (scanner.radius + 0.6))
+		if wall.is_empty():
+			continue
+		found_face = true
+		var target := _hang_from_face(wall, lip_y, max_lip_change)
+		if not target.is_empty():
+			last_reject = ""
+			return target
 
-	if wall.is_empty():
+	if not found_face:
 		last_reject = "ledge ends"
-		return {}
+	return {}
 
+
+func _hang_from_face(wall: Dictionary, lip_y: float, max_lip_change: float) -> Dictionary:
 	var raw_normal: Vector3 = wall["normal"]
 
 	if absf(raw_normal.y) > scanner.max_wall_normal_y:
@@ -393,6 +441,11 @@ func probe_hang(
 		last_reject = "lip too steep"
 		return {}
 
+	# Ray padding helps find an edge; it must not expand the permitted step.
+	if absf(lip_point.y - lip_y) > max_lip_change + 0.005:
+		last_reject = "lip height changes too far"
+		return {}
+
 	var anchor := hang_anchor(face_point, face_normal, lip_point.y)
 
 	if not scanner.fits(anchor, false):
@@ -407,8 +460,8 @@ func probe_hang(
 	}
 
 
-## The ledge ended, or a wall is in the way: carry the hang around the corner.
-## `direction` is the sideways direction the player was shimmying in.
+## Builds a hang-to-hang inside/outside-corner route; direction is world lateral.
+## Returns null if no adjoining hold or clear path exists.
 func corner(
 	start: Vector3,
 	hang_normal: Vector3,
@@ -469,9 +522,8 @@ func corner(
 	return move
 
 
-## From one hang to another. `target` comes from probe_hang or from a scan:
-## { "anchor", "normal", "lip_y" }. Only validated targets produce a move, so
-## a leap can be refused but never missed.
+## Builds a validated arc to target {anchor: Vector3, normal: Vector3, lip_y: float}.
+## Optional face_point supplies hand contact. Returns null if every candidate is blocked.
 func leap(start: Vector3, target: Dictionary, from_normal: Vector3) -> TraversalMove:
 	last_reject = ""
 
@@ -559,9 +611,7 @@ func _set_contact_from_target(move: TraversalMove, target: Dictionary) -> void:
 	move.contact_normal = target["normal"]
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 func _new_move(
 	variant: MoveVariantRes,

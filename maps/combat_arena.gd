@@ -1,29 +1,7 @@
 extends Node3D
-## The proving grounds: everything the fighting can do, in one walled yard
-## at night.
-##
-##   Godot --path . res://maps/combat_arena.tscn
-##
-##   THE RING      (north of the start) pull a lever and they come through
-##                 the gate: a swordsman, a duelist, a brute, an archer, a
-##                 swordsman with an archer behind him, or the gauntlet (waves,
-##                 harder each time). Braziers, spikes,
-##                 powder barrels and a hanging weight are in there with you.
-##                 The gallery on its west side overlooks it: drop on them.
-##   TRAINING YARD (west) straw men to cut, shielded ones to break, an arms
-##                 master who swings on a steady beat (parry practice) and a
-##                 fencer who parries everything (feint practice).
-##   HAZARD GARDEN (east) spikes, a ledge, barrels, a hanging cage, a brazier:
-##                 a guard at each, to be sent into it.
-##   THE CELLS     (north-west, dark) patrols to sneak past, backstab or drop
-##                 on from the balcony.
-##
-##   1-7   the ring's levers from anywhere: swordsman, duelist, brute, archer,
-##         swordsman + archer, gauntlet, clear.   R  rest (health, stamina, arrows).
-##
-## Every parry, block, feint, riposte and broken guard is called out where it
-## happened, and the log in the corner says how it went (how early a parry
-## was, what a block cost).
+## Combat practice scene with wave encounters, weapons and environmental hazards.
+## Owns encounter resets and navigation; actors use the normal gameplay systems.
+## Controls and station layout are documented in maps/COMBAT_PRACTICE.md.
 
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
@@ -113,9 +91,7 @@ func _ready() -> void:
 	_say("The proving grounds. Pull a lever at the ring, or press 1-7.")
 
 
-# ---------------------------------------------------------------------------
 # The yard
-# ---------------------------------------------------------------------------
 
 func _outer_walls() -> void:
 	Props.block(self, Vector3(0, 3, 26), Vector3(92, 6, 1), STONE)
@@ -149,7 +125,7 @@ func _entry() -> void:
 		"LMB attack, hold to charge. Your movement picks the swing.\n" +
 		"Click again during a swing: the next follows, quicker (a combo).\n" +
 		"RMB block. Just before his blade falls: PARRY, then strike back fast (riposte).\n" +
-		"RMB during your own windup: FEINT (draws out his parry).\n" +
+		"RMB in your windup: FEINT. Release guard, change the cut, attack quickly.\n" +
 		"Q dodge   F kick (breaks a guard, sends them flying)   wheel: weapons\n" +
 		"Stamina (the arc under the crosshair): blocks cost it. Out, a blow breaks through.\n" +
 		"Falling onto a guard with LMB: DROP ATTACK.", 30)
@@ -258,7 +234,7 @@ func _training_yard() -> void:
 	# The arms master: swings on a steady beat, and barely hurts.
 	var master := _post(&"trainer", yard + Vector3(-4, 0, -3), PI, true)
 	master.speaker_name = "Arms master"
-	_sign(yard + Vector3(-4, 2.8, -1.2), "PARRY PRACTICE\nhe swings every second or so\nRMB just after the glint, just before the blade falls", 24)
+	_sign(yard + Vector3(-4, 2.8, -1.2), "PARRY / FOOTWORK\nMeet his blade just before it falls.\nOr step out after his glint: close misses open a stronger reply.", 24)
 
 	# The fencer: parries anything, never swings first.
 	var fencer := _post(&"duelist", yard + Vector3(5, 0, -3), PI, true)
@@ -271,7 +247,7 @@ func _training_yard() -> void:
 	fencer.attack_damage = 3.0
 	fencer.attack_cooldown = 999.0
 	fencer._attack_timer = 999.0
-	_sign(yard + Vector3(5, 2.8, -1.2), "FEINT PRACTICE\nhe parries everything\nRMB during your windup (a feint) spends his parry: then strike", 24)
+	_sign(yard + Vector3(5, 2.8, -1.2), "FEINT PRACTICE\nBait his parry with RMB in your windup.\nRelease guard, change attack direction and strike.\nThe amber opening marks a wasted parry.", 24)
 
 	for p in [Vector3(-9, 3, 9), Vector3(9, 3, 9), Vector3(-9, 3, -6), Vector3(9, 3, -6)]:
 		_torch(yard + p, false)
@@ -350,9 +326,7 @@ func _cells() -> void:
 	_sign(hall + Vector3(0, 2.6, 8.0), "THE CELLS\nstay dark, get behind them\nthe balcony (stairs west): drop on the watchman", 24)
 
 
-# ---------------------------------------------------------------------------
 # The ring
-# ---------------------------------------------------------------------------
 
 func _release(kinds: Array) -> void:
 	_wave = -1
@@ -502,9 +476,7 @@ func _build_portcullis(at: Vector3) -> void:
 		_portcullis.add_child(rail)
 
 
-# ---------------------------------------------------------------------------
 # People
-# ---------------------------------------------------------------------------
 
 func _spawn(archetype: StringName, at: Vector3, yaw: float) -> CharacterBody3D:
 	var g: CharacterBody3D = GUARD.instantiate()
@@ -577,9 +549,7 @@ func _hang(beam: Vector3, rope: float) -> void:
 	weight.crushed.connect(func(victim): _popup(victim.global_position + Vector3.UP * 2.2, "CRUSHED", Color(1.0, 0.5, 0.2)))
 
 
-# ---------------------------------------------------------------------------
 # Calling it out
-# ---------------------------------------------------------------------------
 
 func _hook_player() -> void:
 	var combat: Node = player.combat
@@ -589,6 +559,7 @@ func _hook_player() -> void:
 	combat.riposte_started.connect(func(): _popup(_ahead(1.4), "RIPOSTE", Color(1.0, 0.85, 0.3)))
 	combat.drop_attacked.connect(func(t): _popup(t.global_position + Vector3.UP * 2.0, "DROP ATTACK", Color(1.0, 0.4, 0.2)); _log_line("Drop attack", Color(1.0, 0.5, 0.3)))
 	combat.staggered.connect(func(why): _log_line({&"broken": "Your guard broke (no stamina)", &"kicked": "Kicked: guard down", &"flinch": "Cut while winding up: attack lost"}.get(why, String(why)), Color(1.0, 0.45, 0.35)))
+	combat.punished.connect(func(t): _popup(t.global_position + Vector3.UP * 2.0, "PUNISH", Color(1.0, 0.8, 0.35)); _log_line("Earned opening taken", Color(1.0, 0.8, 0.35)))
 	combat.landed.connect(_on_landed)
 
 
@@ -763,9 +734,7 @@ func _banner_text(text: String) -> void:
 		_banner_timer = 2.0
 
 
-# ---------------------------------------------------------------------------
 # Building bits
-# ---------------------------------------------------------------------------
 
 ## Solid steps from the floor: `count` of them, each `rise` up and `run`
 ## along `direction` from `start` (the foot of the first).

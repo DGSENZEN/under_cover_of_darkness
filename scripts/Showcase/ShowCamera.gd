@@ -1,17 +1,7 @@
 extends Camera3D
-## The NPC showcase's camera, three ways:
-##   FREE      fly it: WASD, Q/E down and up, the right mouse button held to
-##             look, Shift for fast, the scroll wheel for speed.
-##   FOLLOW    a man clicked on (or Tab through the cast): it orbits him, the
-##             scroll wheel for how far off, the right mouse button to go
-##             round him.
-##   DIRECTOR  the night filmed by the Cinema editor (scripts/Cinema): each
-##             beat hands it a scene (ShowNight: whom to watch, observed or
-##             dramatic) and it chooses and cuts the shots itself, told what
-##             happens by the men.
-## A fly key or looking with the mouse takes it from the director; C gives it
-## back. It moves on real time (TimeFx.real_time): paused or slowed, you can
-## still fly round the moment.
+## Showcase camera modes: FREE fly controls, FOLLOW actor orbit, and DIRECTOR via CineEditor.
+## Uses TimeFx real time. Fly/look input takes control; C returns to director.
+## Right mouse looks/orbits, wheel changes speed/distance, Tab cycles actors, and clicking selects a subject.
 
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const CineEditorScript := preload("res://scripts/Cinema/CineEditor.gd")
@@ -81,6 +71,7 @@ func _init() -> void:
 	fov = 55.0
 
 
+## Binds map/story before _ready(), which creates the editor; story supplies dynamic subjects(scene) resolution.
 func setup(p_map: Node3D, p_story: RefCounted) -> void:
 	map = p_map
 	story = p_story
@@ -101,9 +92,7 @@ func _ready() -> void:
 	_editor.hold(mode != Mode.DIRECTOR)
 
 
-## The beat's scene for the director: {mode, subjects, pin, letterbox}, its
-## subjects cast names, "intruder", "@talk"... (found through the story, a
-## second at a time) or men.
+## Translates story subjects in the intent Dictionary into actors/Callable and forwards it to CineEditor.scene().
 func want(intent: Dictionary) -> void:
 	if _editor == null:
 		return
@@ -182,9 +171,7 @@ func focus_point() -> Vector3:
 	return _look_at
 
 
-# ---------------------------------------------------------------------------
 # Input
-# ---------------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -264,9 +251,7 @@ func _man_under(at: Vector2) -> Node3D:
 	return collider as Node3D if collider is Node3D and (collider as Node).is_in_group(&"guards") else null
 
 
-# ---------------------------------------------------------------------------
 # Every drawn frame
-# ---------------------------------------------------------------------------
 
 func _process(_delta: float) -> void:
 	var now := TimeFx.real_time()

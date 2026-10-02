@@ -74,9 +74,7 @@ func _run() -> void:
 	await _douseable()
 
 
-# ---------------------------------------------------------------------------
 # Materials
-# ---------------------------------------------------------------------------
 
 func _materials() -> void:
 	# L1 no photo: the slot's flat colour, shaded by vertex colour
@@ -102,9 +100,7 @@ func _materials() -> void:
 	Materials.clear_cache()
 
 
-# ---------------------------------------------------------------------------
 # The gameplay's light, before and after
-# ---------------------------------------------------------------------------
 
 func _baselines() -> void:
 	# L3 LightProbe beside a torch, the brazier and the campfire
@@ -174,9 +170,7 @@ func _baselines() -> void:
 	await _frames(2)
 
 
-# ---------------------------------------------------------------------------
 # Flicker
-# ---------------------------------------------------------------------------
 
 func _flicker() -> void:
 	# L4 every kind stays within -1..1
@@ -225,9 +219,7 @@ func _flicker() -> void:
 		"still %s, strongest in the first 0.3 s %.3f, at 1 s %.3f, last fifth %.3f" % [still, early, Flicker.draft(1.0), tail])
 
 
-# ---------------------------------------------------------------------------
 # Flames
-# ---------------------------------------------------------------------------
 
 func _flames() -> void:
 	# L7 sprites on the effects layer, sharing one material per sheet
@@ -285,9 +277,7 @@ func _flames() -> void:
 	await _frames(2)
 
 
-# ---------------------------------------------------------------------------
 # The burner (Torch.gd)
-# ---------------------------------------------------------------------------
 
 func _burner() -> void:
 	# L11 a bare torch keeps everything the game holds it by, and burns in its band
@@ -335,9 +325,7 @@ func _burner() -> void:
 	await _frames(2)
 
 
-# ---------------------------------------------------------------------------
 # Coronas
-# ---------------------------------------------------------------------------
 
 func _coronas() -> void:
 	var camera := Camera3D.new()
@@ -398,9 +386,7 @@ func _coronas() -> void:
 	await _frames(3)
 
 
-# ---------------------------------------------------------------------------
 # Embers and smoke
-# ---------------------------------------------------------------------------
 
 func _particles() -> void:
 	var camera := Camera3D.new()
@@ -488,9 +474,7 @@ func _particles() -> void:
 	await _frames(2)
 
 
-# ---------------------------------------------------------------------------
 # Lit and out
-# ---------------------------------------------------------------------------
 
 func _lit_and_out() -> void:
 	var camera := Camera3D.new()
@@ -573,9 +557,7 @@ func _lit_and_out() -> void:
 	await _frames(2)
 
 
-# ---------------------------------------------------------------------------
 # The shadow budget
-# ---------------------------------------------------------------------------
 
 func _budget() -> void:
 	var camera := Camera3D.new()
@@ -717,9 +699,7 @@ func _budget() -> void:
 	await _frames(3)
 
 
-# ---------------------------------------------------------------------------
 # A fixture: the model on a burner
-# ---------------------------------------------------------------------------
 
 func _fixture() -> void:
 	var camera := Camera3D.new()
@@ -787,9 +767,7 @@ func _fixture() -> void:
 	await _frames(3)
 
 
-# ---------------------------------------------------------------------------
 # The torch family and torch_at
-# ---------------------------------------------------------------------------
 
 func _torches() -> void:
 	var camera := Camera3D.new()
@@ -867,9 +845,7 @@ func _torches() -> void:
 	await _frames(3)
 
 
-# ---------------------------------------------------------------------------
 # Lanterns and lamps
-# ---------------------------------------------------------------------------
 
 func _lanterns() -> void:
 	var camera := Camera3D.new()
@@ -903,9 +879,7 @@ func _lanterns() -> void:
 	await _frames(3)
 
 
-# ---------------------------------------------------------------------------
 # Candles, oil lamps and the draft
-# ---------------------------------------------------------------------------
 
 func _candles() -> void:
 	var camera := Camera3D.new()
@@ -971,9 +945,7 @@ func _candles() -> void:
 	await _frames(3)
 
 
-# ---------------------------------------------------------------------------
 # Open fires
-# ---------------------------------------------------------------------------
 
 func _fires() -> void:
 	var camera := Camera3D.new()
@@ -1049,9 +1021,7 @@ func _fires() -> void:
 	await _frames(3)
 
 
-# ---------------------------------------------------------------------------
 # Their sounds
-# ---------------------------------------------------------------------------
 
 func _sounds() -> void:
 	Sfx.enabled = true
@@ -1183,9 +1153,7 @@ func _sounds() -> void:
 	await _frames(3)
 
 
-# ---------------------------------------------------------------------------
 # The guards' lights, the brazier and the campfire, switched over
-# ---------------------------------------------------------------------------
 
 func _switched() -> void:
 	Props.block(self, Vector3(0, -0.5, 1200), Vector3(80, 1, 40))

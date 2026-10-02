@@ -1,22 +1,8 @@
 extends RefCounted
-## A level made in Blender (tools/level) put together in Godot, from what
-## `level.sh export` wrote in its folder (res://assets/level/<level>/):
-##   - each sector's glTF, its surfaces drawn with their slot's shared
-##     level material (Materials.level_surface: the slot's photo mapped to the
-##     world, or its flat colour);
-##   - a static body for each sector and surface, a box for every collider,
-##     its meta "surface" what a foot on it sounds like (layer 1: it blocks
-##     sight and bodies);
-##   - the markers the level itself answers for: vantages (the Cinema
-##     editor's "cine_vantage" group), atmosphere zones (Zones), hide spots
-##     (group "hide_spot"), hunt areas (group "hunt_area") and marks.
-## Everything else (guards, routes, doors, lights, stations, the bell) is
-## handed back in the Level for the level's script to make, since how each
-## is made is the game's business, not the kit's.
-##
-##   var level := LevelLoader.load_level(self, "res://assets/level/garrison")
-##   level.marks["fire"]            # a Marker3D
-##   level.of("guard")              # every guard marker: {name, ucd, sector, transform, size, props}
+## Loads an exported level manifest plus per-sector GLBs under a new root.
+## Assigns shared Materials slots, layer-1 surface colliders, visibility ranges, shadows, and geometry occluders.
+## Creates loader-owned marks/vantages/hide/hunt/zone nodes; other markers remain records for LevelGameplay.
+## Manifest/marker schemas and failure behavior are documented in docs/systems/world.md.
 
 const Materials := preload("res://scripts/Visual/Materials.gd")
 ## A collider's surface that marks a ceiling (never walked on).
@@ -51,8 +37,9 @@ class Level:
 		return by_name.get(marker_name, {})
 
 
-## Loads the level exported to `folder` under `parent` (a node `root_name`:
-## a map of several levels names each after its own).
+## Loads folder/<folder-name>.json and optional sector GLBs beneath parent using root_name.
+## Returns Level records and creates collision/occlusion/marker nodes. An unreadable or empty manifest reports an error and returns a Level with null root.
+## JSON structure is trusted: malformed JSON or missing required fields are not validated here.
 static func load_level(parent: Node3D, folder: String, root_name := "Level") -> Level:
 	var level := Level.new()
 	level.name = folder.get_file()
@@ -194,6 +181,10 @@ static func _occluders(level: Level, colliders: Array) -> void:
 	level.root.add_child(holder)
 
 	for c in colliders:
+		# Some movement barriers fill visible openings (the crane wheel).
+		# Only the occlusion pass skips them; their physics stays unchanged.
+		if not bool(c.get("occluder", true)):
+			continue
 		var size := _vector(c["size"])
 		var sides := [size.x, size.y, size.z]
 		sides.sort()

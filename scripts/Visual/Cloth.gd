@@ -1,27 +1,15 @@
 extends SpringBoneSimulator3D
-## What swings on him: skirts, tabards, capes, hood tails. Each is a chain of
-## cloth bones (made in Blender, added to his skeleton by Wardrobe.gd) that
-## springs back toward the way it hangs, drags, and falls with gravity; it is
-## kept out of his legs and belly by capsules riding his bones. PS2 cloth: a
-## few bones a strip, no simulated fabric.
-##
-## Runs after the ragdoll (Humanoid.add_ragdoll puts it there), so a body's
-## cloth drapes over him as he falls, and before Severed, which keeps the
-## last word. It runs on game time: slow motion slows it. It swings in the
-## world, so it trails when he runs and drapes as he falls; when he is put
-## somewhere far in one step (a teleport), ClothReset, just ahead of it,
-## starts it afresh instead of letting it whip.
-##
-##   var cloth := Cloth.new()
-##   skeleton.add_child(cloth)
-##   cloth.setup(kind_json.cloth, kind_json.colliders)
+## Spring-bone cloth with bone-mounted capsule colliders, built from Wardrobe chains.
+## Modifier order: ragdoll, ClothReset, cloth, then Severed. Scaled game time slows the simulation.
+## World-space swing follows movement; ClothReset restarts it after teleports.
 
 ## Where the floor plane waits while he stands (Cloth.gd's "Floor").
 const PARKED := Vector3(0.0, -1000.0, 0.0)
 
 
-## The chains ({bones, tip, stiffness, drag, gravity, radius}) and the
-## capsules on his bones ({bone, radius, height}) from the wardrobe's JSON.
+## Configures chain dictionaries {bones,tip,stiffness,drag,gravity,radius} and collider dictionaries {bone,radius,height}.
+## Lengths/radii are metres; bones is an ordered name Array. Empty chains are skipped.
+## Adds a parked floor and bone-bound capsules; collider height is the straight section, excluding round ends.
 func setup(chains: Array, colliders: Array) -> void:
 	set_setting_count(chains.size())
 

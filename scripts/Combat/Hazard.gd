@@ -1,7 +1,7 @@
 extends Area3D
-## Spikes, a brazier, a drop onto rocks: somewhere Dark Messiah would kick a
-## man into. Anything thrown into it fast enough dies; walking past it
-## carefully does not. Give it a shape that covers the dangerous space.
+## Dangerous Area3D forwarding overlap contacts to hazard_hit(), or ragdoll_hazard().
+## into_speed() measures horizontal entry speed; directional hazards face +Z.
+## Victims decide damage from the hazard and lethal_speed; this node dispatches.
 
 ## Slower than this, touching it is harmless.
 @export var lethal_speed := 2.5
@@ -10,8 +10,8 @@ extends Area3D
 @export var directional := true
 
 
-## How fast `velocity` is carrying something into this hazard. Running along
-## a spiked wall is not running into it.
+## Returns horizontal speed into the +Z-facing hazard, possibly negative when leaving.
+## Nondirectional/degenerate facing returns horizontal magnitude; vertical velocity is ignored.
 func into_speed(velocity: Vector3) -> float:
 	var flat := Vector3(velocity.x, 0.0, velocity.z)
 

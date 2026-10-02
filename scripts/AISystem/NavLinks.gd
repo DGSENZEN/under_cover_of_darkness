@@ -1,23 +1,8 @@
 extends RefCounted
-## The ways across that a man walking the navmesh cannot take: made after
-## every bake (NavBaker), as NavigationLink3D nodes, and crossed by a guard
-## as his path comes to one (GuardClimb). Each link's "kind" meta says how:
-##   climb   up onto a top he can reach (CLIMB_MIN to CLIMB_MAX above his
-##           feet: a wall, a crate stack, a cart), and down off it again.
-##   drop    down from higher than that (to DROP_MAX): he lowers himself off
-##           the edge and lets go. One way.
-##   leap    across a gap (LEAP_MIN to LEAP_MAX) to about the same height.
-##   ladder  up or down a ClimbVolume (a ladder, a vine wall), from the floor
-##           at its foot to the top it leads to.
-##   rope    up or down a rope or a chain (VerletRope), from the floor under
-##           it to the highest ledge beside it that it reaches.
-##   water   off a bank into deep water (WaterVolume, and the swim region
-##           NavBaker bakes for it), and out again where the bank is low
-##           enough to haul himself out (WATER_CLIMB). Deeper drops in, one way.
-## They are found by walking the edges of the navmesh and looking out from
-## each: up for a top, down for a floor, across for the far side of a gap.
-## Each kind has its cost (COSTS): a guard goes round by the stairs if they
-## are not far, and climbs if they are.
+## Rebuilds NavigationLink3D traversal nodes after a NavBaker bake.
+## Link kind metadata selects climb/drop/leap/ladder/rope/water for GuardClimb;
+## volume metadata supplies ladder/rope geometry. Links are found at mesh borders
+## and registered climb volumes. Direction and travel/entry costs constrain routes.
 
 const WaterScript := preload("res://scripts/Interaction/WaterVolume.gd")
 
@@ -53,8 +38,8 @@ const COSTS := {
 }
 
 
-## Makes the links for what `region` has baked, under a "TraversalLinks"
-## node of its own (the last ones gone). Returns how many.
+## Replaces region/TraversalLinks, returning created link count. A missing mesh
+## returns 0 after creating an empty holder; old links are removed/queued for deletion.
 static func build(region: NavigationRegion3D) -> int:
 	var old := region.get_node_or_null("TraversalLinks")
 

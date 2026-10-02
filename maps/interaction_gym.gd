@@ -1,9 +1,6 @@
 extends Node3D
-## A playable gym for the interaction layer: doors, locks and keys, chests
-## with loot, things to carry and throw. Built in code from Props so every
-## piece is easy to read and copy.
-##
-##   Godot --path . res://maps/interaction_gym.tscn
+## Builds doors, locks, loot and physics props for player interaction testing.
+## All objects use the production Props factories and Frob interfaces.
 
 const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")

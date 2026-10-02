@@ -1,20 +1,7 @@
 extends RefCounted
-## The body under the camera. The camera is the head; under it are hips on a
-## leg spring, a torso balanced on them, and the shoulders the hands hang
-## from. The controller steps it once a physics tick with what the body feels
-## (a Frame: how it moves, where the walk is, the stance, the lean), and it
-## answers with where the head is (CameraJuice adds it to the view) and where
-## the shoulders are relative to the head (HandSlot adds it to the hands),
-## both drawn between the last two ticks.
-##
-## Every motion has a cause: a foot landing, a change of speed, a landing, a
-## change of stance, a lean, a breath. The head is steadied the way a neck
-## and eyes steady it: it rides the torso's position but keeps only a little
-## of its turning, so the view mostly moves and barely rotates (the Helsby
-## rule: little rotation, the motion in translation). The shoulders are not
-## steadied, so the hands move more than the view.
-##
-## All of it is cosmetic: gameplay reads none of it.
+## Cosmetic head and shoulder springs driven once per physics tick by Frame.
+## Head offsets are eye-local; shoulder offsets are relative to the head.
+## Outputs interpolate the previous/current tick and never change gameplay aim.
 
 ## The most the head is moved (m) and turned, per axis, and the shoulders.
 const HEAD_CAP := 0.15
@@ -159,13 +146,14 @@ var _shoulder_before := Transform3D.IDENTITY
 var _shoulder_now := Transform3D.IDENTITY
 
 
-## `eye_rate`: how fast the gameplay eye eases to a new stance height (the
-## controller's view_height_speed).
+## Uses footfall_curve or the built-in curve when null; eye_rate controls stance following.
 func setup(footfall_curve: Curve, eye_rate: float) -> void:
 	_footfall = footfall_curve if footfall_curve != null else default_footfall()
 	_eye_rate = eye_rate
 
 
+## Advances cosmetic springs from Frame in game seconds; nonpositive delta is a no-op.
+## Integration caps a tick at 1/30 s and substeps springs for stability.
 func step(delta: float, frame: Frame) -> void:
 	if delta <= 0.0:
 		return
@@ -332,7 +320,7 @@ func on_jump() -> void:
 	_leg_v += JUMP_RISE * _leg_omega / KICK_PEAK
 
 
-## Forget everything: after a teleport, a respawn, or switching feel.
+## Clears motion history and spring outputs; preserves configuration and footfall curve.
 func reset() -> void:
 	_vel_prev = Vector3.ZERO
 	_have_prev = false

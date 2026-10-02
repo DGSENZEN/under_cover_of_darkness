@@ -1,15 +1,7 @@
 extends RefCounted
-## One shared material per surface slot of a prop ("iron", "wax", "stone"
-## ...): the slot's PS2 photo when it is on this machine, its flat colour
-## when it is not. Either way the model's baked vertex colour (ambient
-## occlusion, grime, soot) multiplies in, so a fresh clone without the photos
-## still reads as shaded, grimy iron.
-##
-## The photos are converted by tools/textures/ps2ify.py into textures/ps2/,
-## which is gitignored (textures.com's licence: the repository is public), so
-## nothing here may assume they exist and nothing warns when they do not.
-##
-##   mesh.material_override = Materials.surface(&"iron")
+## Cached shared prop/level materials by surface slot, with baked vertex colour shading.
+## Textures in textures/ps2 are optional and gitignored under textures.com's licence; missing photos silently use flat colours.
+## Painted textures are repository assets. Duplicate shared resources before applying instance-specific material edits.
 
 ## slot -> its photo (a name in `folder`, "" for none), flat colour and finish.
 const SLOTS := {
@@ -181,7 +173,8 @@ static var _glowing := {}
 static var _warned := {}
 
 
-## The shared material for `slot`.
+## Returns a cached shared StandardMaterial3D for slot; missing optional photos use the flat slot colour.
+## Unknown slots return magenta and report an error once. Duplicate before making per-instance edits.
 static func surface(slot: StringName) -> StandardMaterial3D:
 	if _surfaces.has(slot):
 		return _surfaces[slot]
@@ -343,6 +336,8 @@ static func surfaces() -> Array:
 	return _surfaces.values()
 
 
+## Drops material cache references and tracked foliage; existing meshes keep resources they already own.
+## Does not reset photo_names or the unknown-slot warning registry.
 static func clear_cache() -> void:
 	_surfaces.clear()
 	_glowing.clear()

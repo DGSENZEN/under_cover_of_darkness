@@ -25,9 +25,7 @@ WALK = 5.0
 G = lay.Layout("garrison")
 
 
-# ---------------------------------------------------------------------------
 # The curtain
-# ---------------------------------------------------------------------------
 
 def curtain():
     # North (outside is -z): from the tower (x -27) to the corner.
@@ -66,9 +64,7 @@ def curtain():
     G.put("landing_walk", (7.2, 5.0, 25.3), 0.0, "walls")
 
 
-# ---------------------------------------------------------------------------
 # The ground inside
-# ---------------------------------------------------------------------------
 
 def grounds():
     G.floor(-16, -16, 14, 22, "cobble", 0.0, "courtyard")
@@ -102,9 +98,7 @@ def grounds():
         G.put("palisade_2", (x, 0, -15.0), 0.0, "courtyard")
 
 
-# ---------------------------------------------------------------------------
 # The watchtower (north-west): hollow, flights round its walls, a platform
-# ---------------------------------------------------------------------------
 
 def watchtower():
     x0, x1, z0, z1 = -35.0, -27.0, -31.0, -23.0
@@ -137,9 +131,7 @@ def watchtower():
         G.put("wall_ashlar_1", (x1 - 0.2, 12.0, z0 + 1.0 + i * 2.0), 90.0, "tower")
 
 
-# ---------------------------------------------------------------------------
 # The gatehouse (south): a symmetric passage, guardrooms, the walk over it
-# ---------------------------------------------------------------------------
 
 def gatehouse():
     # Guardrooms' outer walls (two storeys) and the passage's side walls.
@@ -181,9 +173,7 @@ def gatehouse():
     G.put("rack", (5.4, 0, 27.0), -90.0, "gatehouse")
 
 
-# ---------------------------------------------------------------------------
 # The barracks (east): two storeys
-# ---------------------------------------------------------------------------
 
 def barracks():
     s = "barracks"
@@ -336,9 +326,7 @@ def barracks():
         G.put("window_lit", (14.0, y, z), -90.0, s)
 
 
-# ---------------------------------------------------------------------------
 # The chapel (north): a tall nave, lancets, a loft at the east end
-# ---------------------------------------------------------------------------
 
 def chapel():
     s = "chapel"
@@ -457,10 +445,8 @@ def chapel():
     G.stairs((7.6, 0.0, -17.2), 90.0, "stair_straight", s)
 
 
-# ---------------------------------------------------------------------------
 # The west range: armoury, storehouse over the cellar, a lean-to; the
 # colonnade in front
-# ---------------------------------------------------------------------------
 
 def west_range():
     s = "west_range"
@@ -533,9 +519,7 @@ def drill_yard():
     G.put("barrel", (-9.0, 0, -25.0), 0.0, s)
 
 
-# ---------------------------------------------------------------------------
 # Outside: the quay and the canal, the lanes, the bank
-# ---------------------------------------------------------------------------
 
 def outside():
     G.floor(-44, 28, 44, 44, "cobble", 0.0, "outside")

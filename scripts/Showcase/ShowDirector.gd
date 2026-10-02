@@ -1,25 +1,9 @@
 extends Node
-## The director of the NPC showcase: plays the night (a story: ShowNight.gd)
-## as acts, each a list of beats. A beat does something (the intruder's
-## verbs, a nudge to someone's rounds), asks the camera for a shot, and waits
-## until something true of the world says it is done (a man's alert, the
-## squad's plan, a man down, begging, dead). If it never comes true (the
-## guards decide for themselves), it is let go after its timeout, logged, and
-## the show goes on: a run never stalls.
-##
-## An act: {"title", "enter" (run as it starts, always), "stage" (run only
-## when the show starts at it: the world put in the state it needs), "beats"}.
-## The title and the beats may be Callables, asked for as the act starts (the
-## ending's act is only known then).
-## A beat: {"name", "do", "until" (true when done), "min" (s at least; alone,
-## the beat's length), "enough" (s: done by then whatever, not skipped),
-## "timeout" (s: let go, logged), "scene" (for ShowCamera: whom to watch, and
-## how)}.
-##
-## Keys: 1-6 start from that act, N the next beat, V the ending (E is
-## the camera's: fly up), R the start again, Space pause, [ ] slow motion
-## (1/4, 1/2, 1). A beat's time is the world's: slowed, it waits longer. The command line (after
-## --): --act=N --ending=overwhelmed|victor|escape --auto --quit-at-end.
+## Runs story acts and beats, emitting camera/overlay cues while predicates observe live world state.
+## Beat timers use scaled physics time and pause with the tree; timeouts log/emit a skip so shows can continue.
+## Controls: 1-6 acts, N next beat, V ending, R restart, Space pause, [/] speed.
+## User arguments: --act=N --ending=overwhelmed|victor|escape --auto --quit-at-end.
+## Act/beat schemas and lifecycle are documented in docs/systems/cinematics.md.
 
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
@@ -73,6 +57,7 @@ func _init() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 
+## Binds a map and dynamic story object exposing acts(); installs the default scene reload Callable when absent.
 func setup(p_map: Node3D, p_story: RefCounted) -> void:
 	map = p_map
 	story = p_story
@@ -97,7 +82,8 @@ func read_args(args: PackedStringArray) -> void:
 			quit_at_end = true
 
 
-## Plays the night from `start_act` to its end.
+## Runs acts asynchronously from the clamped start_act; emits show_ended and optionally quits after a real-time delay.
+## Null story or an already-running show is ignored; leaving the tree aborts the run.
 func run() -> void:
 	if story == null or _running:
 		return
@@ -134,9 +120,7 @@ func chosen_ending() -> StringName:
 	return _resolved
 
 
-# ---------------------------------------------------------------------------
 # Keys
-# ---------------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
@@ -216,9 +200,7 @@ func speed() -> float:
 	return SPEEDS[_speed_index]
 
 
-# ---------------------------------------------------------------------------
 # Acts and beats
-# ---------------------------------------------------------------------------
 
 func _play_act(index: int, act: Dictionary, first: bool) -> void:
 	act_index = index

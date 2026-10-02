@@ -1,10 +1,6 @@
 extends RefCounted
-## The player's own settings, kept between games (user://settings.cfg): read
-## the first time one is asked for, written as soon as one changes. For now
-## only what the HUD shows, set on the pause screen.
-##
-##   Settings.awareness_marks()          the marks over men noticing you
-##   Settings.set_awareness_marks(false)
+## Lazy persistent HUD settings in user://settings.cfg; setters save immediately.
+## path and reload() let tests isolate their config. Unknown/missing awareness_marks values default to true.
 
 ## Where they are kept. Tests point this elsewhere (and reload), so a run
 ## never changes the player's own.
@@ -21,6 +17,8 @@ static func awareness_marks() -> bool:
 	return _awareness_marks
 
 
+## Updates the cached bool and immediately writes hud/awareness_marks to path, preserving other config entries.
+## ConfigFile save errors are not surfaced; the in-memory value still changes.
 static func set_awareness_marks(on: bool) -> void:
 	_load()
 	_awareness_marks = on

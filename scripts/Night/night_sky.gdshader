@@ -6,7 +6,7 @@ shader_type sky;
 // halo ring; the clouds of Night's cloud field (the same projection and
 // constants as Night.gd, so the cloud that crosses the moon is the one that
 // dims its light), shaded as the moon lights them, their ragged edges silver
-// toward it; high thin streaks on a clear night; a veil for a scripted cloud;
+// toward it; high thin streaks on a clear night; persistent clouds carried by the wind;
 // the skyline's silhouettes round the horizon; the fog's haze; lightning
 // lighting the clouds from within, its bolt down to the horizon.
 
@@ -15,8 +15,6 @@ uniform sampler2D skyline : source_color, repeat_enable, filter_nearest;
 uniform sampler2D moon_face : source_color, filter_linear, repeat_disable;
 uniform vec2 cloud_offset = vec2(0.0);
 uniform float cloud_cover = 0.15;
-uniform vec2 veil_center = vec2(10.0);
-uniform float veil_on = 0.0;
 uniform float flash = 0.0;
 uniform float fog = 0.0;
 // Lightning: where in the sky the flash is, whether its bolt shows, which
@@ -48,8 +46,7 @@ uniform float moon_brightness = 2.2;
 const float CLOUD_CURVE = 0.25;
 const float CLOUD_SCALE = 0.35;
 const float CLOUD_SOFT = 0.12;
-const float VEIL_RADIUS = 0.22;
-const float VEIL_EDGE = 0.18;
+const float CLOUD_CONTRAST = 2.0;
 // The skyline strip spans these elevations (rad): 28 degrees up to 2 down.
 const float SKYLINE_TOP = 0.488692;
 const float SKYLINE_BOTTOM = -0.034907;
@@ -71,10 +68,12 @@ vec2 sky_uv(vec3 d) {
 
 float clouds(vec3 d) {
 	vec2 uv = sky_uv(d);
-	float n = texture(cloud_field, uv).r;
+	float n = clamp((texture(cloud_field, uv).r - 0.5) * CLOUD_CONTRAST + 0.5, 0.0, 1.0);
 	float field = smoothstep(1.0 - cloud_cover - CLOUD_SOFT, 1.0 - cloud_cover + CLOUD_SOFT, n);
-	float veil = veil_on * (1.0 - smoothstep(VEIL_RADIUS, VEIL_RADIUS + VEIL_EDGE, distance(uv, veil_center)));
-	return max(field, veil);
+	float edge = field * (1.0 - field) * 4.0;
+	float grain = texture(cloud_field, uv * 3.3 + vec2(0.31, 0.77)).r;
+	field *= mix(1.0, smoothstep(0.2, 0.75, grain), 0.55 * edge);
+	return field * smoothstep(0.0, 0.1, d.y);
 }
 
 float hash(vec2 p) {
@@ -184,18 +183,18 @@ void sky() {
 		// into the haze. Under full cover the moon's glow barely comes through.
 		float c = d.y > 0.0 ? clouds(d) : 0.0;
 		vec2 uv = sky_uv(d);
-		float n0 = texture(cloud_field, uv).r;
-		float toward = texture(cloud_field, uv + flat_m * 0.035).r;
+		float n0 = clamp((texture(cloud_field, uv).r - 0.5) * CLOUD_CONTRAST + 0.5, 0.0, 1.0);
+		float toward = clamp((texture(cloud_field, uv + flat_m * 0.035).r - 0.5) * CLOUD_CONTRAST + 0.5, 0.0, 1.0);
 		float grain = texture(cloud_field, uv * 3.3 + vec2(0.31, 0.77)).r;
 		float edge = c * (1.0 - c) * 4.0;
-		c *= mix(1.0, smoothstep(0.2, 0.75, grain), 0.55 * edge);
-		c *= smoothstep(0.0, 0.1, d.y);
 		float near_moon = exp(-angle / 0.09);
 		float lit_side = clamp((n0 - toward) * 5.0 + 0.5, 0.0, 1.0);
 		float thick = smoothstep(1.0 - cloud_cover, 1.0, n0);
 		vec3 belly = cloud_color * (0.8 + 0.5 * moonward) * (1.0 - 0.4 * thick) * (0.8 + 0.45 * grain);
 		belly += town_color * 0.9 * townward * exp(-up / 0.35) * (1.0 - fog);
-		vec3 silver = moon_color * (edge * lit_side * near_moon * 0.55 + near_moon * 0.08 * (1.0 - thick));
+		// Restrained scattered light, rather than a bright outline around
+		// every threshold contour. Opaque bellies remain dark over the moon.
+		vec3 silver = moon_color * (edge * lit_side * near_moon * 0.12 + near_moon * 0.025 * (1.0 - thick));
 		float through = 1.0 - smoothstep(0.7, 0.95, cloud_cover);
 		col = mix(behind, belly + silver, c) + moon_color * glow * 0.3 * c * through;
 

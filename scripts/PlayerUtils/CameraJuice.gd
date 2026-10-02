@@ -1,11 +1,10 @@
 extends RefCounted
 
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
-## Camera feel. Works out the camera's offset from the eye (view_position,
-## view_rotation, read as view_transform()) and writes the Camera3D's fov.
-## The controller places the camera: eye * view_transform(). It never fights
-## the neck (pitch, crouch height, peek) or the body (yaw). Everything here
-## is cosmetic; gameplay reads nothing from it.
+## Cosmetic eye-local camera offsets, springs, shake, zoom, and traversal feedback.
+## setup() captures the camera and base FOV; update() writes camera.fov and
+## view offsets. The controller places the camera using view_transform().
+## Lean is supplied separately and remains active when intensity is zero.
 
 var camera: Camera3D
 var base_fov := 75.0
@@ -111,6 +110,7 @@ var _fov_kick := 0.0
 var _fov_kick_velocity := 0.0
 
 
+## Stores the camera and its current FOV; requires a nonnull Camera3D.
 func setup(p_camera: Camera3D) -> void:
 	camera = p_camera
 	base_fov = camera.fov
@@ -197,7 +197,7 @@ func on_throw(strength := 1.0) -> void:
 	_dip_velocity -= 0.2 * strength
 
 
-## Shake the view: 0.2 a knock, 0.5 a heavy blow, 1 as hard as it gets.
+## Adds view-shake trauma, clamped to 0..1.
 func add_trauma(amount: float) -> void:
 	_trauma = clampf(_trauma + amount, 0.0, 1.0)
 
@@ -246,7 +246,7 @@ func on_impact(strength: float) -> void:
 	_pitch_velocity += 0.18 * strength
 
 
-## Drawing a bow narrows the view, as far as `amount` degrees.
+## Sets the desired FOV reduction in degrees; update() eases toward it.
 func set_zoom(amount: float) -> void:
 	_zoom = amount
 
@@ -271,8 +271,10 @@ func on_catch() -> void:
 	_pitch_velocity -= 0.25
 
 
-## move_kind: 0 none, 1 mantle-like, 2 vault, 3 lowering, 4 leap.
-## move_s: 0..1 along the move. windup: 0..1 through a pre-launch pause.
+## Advances view effects in seconds from movement/state inputs and writes camera.fov.
+## move_s is normalized progress; move_kind uses presentation codes:
+## 0 none, 1 mantle/pull-up, 2 vault, 3 lower, 4 leap (not TraversalMove.kind).
+## Call setup() first; locomotion_from_body replaces legacy bob/strafe/sprint effects.
 func update(
 	delta: float,
 	horizontal_speed: float,
@@ -415,7 +417,7 @@ func update(
 		view_rotation += Vector3(0.35 * settle, 0.25 * settle, 1.15 * settle)
 
 
-## The offset as a transform, rotation in the camera's own order (Y, X, Z).
+## Returns the current eye-local cosmetic/lean transform from view_position and rotation.
 func view_transform() -> Transform3D:
 	return Transform3D(Basis.from_euler(view_rotation), view_position)
 

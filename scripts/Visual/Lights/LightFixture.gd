@@ -1,22 +1,14 @@
 extends "res://scripts/Visual/Torch.gd"
-## A light fixture: a burner (Torch.gd) with a model round it, built by the
-## props pipeline (tools/props): assets/props/lights/<fixture>.glb and its
-## .json (sockets, slots, the burner's settings). Its flames stand at the
-## model's flame sockets, its halo at the corona socket; its surfaces are the
-## shared slot materials (Materials.gd: the user's photos or flat colours)
-## shaded by the model's baked colours; parts that glow from inside (a pitch
-## head, coals, horn panes) glow with the flame and char once it is cold.
-## A wall fixture leaves soot on the wall above it.
-##
-## Everything that holds a torch holds a fixture the same way: it is one.
-##
-##   Lights.wall_torch(parent, flame_at, wall_normal)   (Lights.gd builds them)
+## Torch burner with a GLB model and JSON recipe from assets/props/lights.
+## Recipes supply sockets, shared material slots, burner settings, glow/shadow parts, mounting, and wall soot.
+## Flames/corona attach to recipe sockets; glowing parts use instance parameters and char when extinguished.
 
 const Materials := preload("res://scripts/Visual/Materials.gd")
 const FOLDER := "res://assets/props/lights/"
 const SOOT := preload("res://assets/vfx/soot.png")
 const COOKIE := "res://assets/vfx/cookie_lantern.png"
 const CHAIN_LINK := "res://assets/props/lights/chain_link.glb"
+const LanternBody := preload("res://scripts/Visual/Lights/LanternBody.gd")
 ## A chain link's length along its chain.
 const LINK_PITCH := 0.054
 ## A hung fixture's swing: gravity, damping, how hard the wind pushes it
@@ -24,6 +16,8 @@ const LINK_PITCH := 0.054
 const SWING_DAMPING := 1.5
 const SWING_WIND := 0.8
 const SWING_MOST := 0.5
+## One solid lantern body, rather than simulating every chain link.
+const LANTERN_MASS := 1.8
 ## A hung fixture creaks as it swings faster than this (rad/s, as it passes
 ## it), at most every CREAK_EVERY s.
 const CREAK_SPEED := 0.15
@@ -83,6 +77,9 @@ var _draft_clock := 0.0
 var _door_angles := {}
 var _creak_wait := 0.0
 var _was_fast := false
+## Physics owns the hanging lantern pose; the burner follows it as a whole.
+var swing_body: RigidBody3D
+var _swing_center := Vector3.ZERO
 
 static var _specs := {}
 static var _link_mesh: Mesh = null
@@ -229,6 +226,8 @@ func _after_ready() -> void:
 		light.light_projector = load(COOKIE)
 
 	_swinging = spec_data.get("mount", "") == "hang"
+	if fixture == &"wall_lantern":
+		_make_lantern_body(false)
 
 	if spec_data.get("family", "") == "fires":
 		_make_haze()
@@ -356,7 +355,82 @@ static func _chain_link_mesh() -> Mesh:
 
 ## How fast a hung fixture swings (rad/s): its creak (LightFixture sounds).
 func swing_speed() -> float:
+	if swing_body != null:
+		return 0.0 if swing_body.sleeping else swing_body.angular_velocity.length()
 	return _spin.length()
+
+
+## The enclosed lamp is solid; its chain and mounting hardware are not a
+## giant collision box. These local bounds follow the actual exported model.
+func _lantern_shape() -> CollisionShape3D:
+	var bounds := AABB()
+	var found := false
+	var to_self := global_transform.affine_inverse()
+	for mesh in model.find_children("*", "MeshInstance3D", true, false):
+		if String(mesh.name) not in ["base", "panes", "roof"]:
+			continue
+		var part: AABB = (to_self * mesh.global_transform) * mesh.get_aabb()
+		bounds = bounds.merge(part) if found else part
+		found = true
+	if not found:
+		return null
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = bounds.size
+	shape.shape = box
+	shape.position = bounds.get_center()
+	return shape
+
+
+func _make_lantern_body(hanging: bool) -> void:
+	if model == null:
+		return
+	var shape := _lantern_shape()
+	if shape == null:
+		return
+	var body: PhysicsBody3D
+	if hanging:
+		swing_body = LanternBody.new()
+		swing_body.mass = LANTERN_MASS
+		swing_body.angular_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+		swing_body.angular_damp = SWING_DAMPING
+		swing_body.linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+		swing_body.linear_damp = SWING_DAMPING
+		# Keep the body origin at its weight, with the joint above it. This
+		# gives the solver a centered hull and the correct pendulum lever arm.
+		_swing_center = shape.position
+		shape.position = Vector3.ZERO
+		swing_body.continuous_cd = true
+		# Moving the burner must never move the simulated body a second time.
+		swing_body.top_level = true
+		swing_body.transform = global_transform * Transform3D(Basis.IDENTITY, _swing_center)
+		body = swing_body
+	else:
+		body = StaticBody3D.new()
+	body.name = "LanternBody"
+	body.collision_layer = 1
+	body.collision_mask = 1
+	body.set_meta(&"surface", "metal")
+	body.add_child(shape)
+	add_child(body)
+	_bodies.append(body.get_rid())
+	# The light is inside the solid lamp. Its own hull must never block the
+	# guards' light calculation or its halo; unrelated walls still block it.
+	light.set_meta(&"occlusion_exclude", _bodies.duplicate())
+	_carriers_known = false
+	if not hanging:
+		return
+	var joint := Generic6DOFJoint3D.new()
+	joint.name = "LanternHook"
+	joint.top_level = true
+	joint.transform = global_transform
+	# Empty node_a anchors this joint to the world. Translation is locked;
+	# two axes swing, while yaw stays at the fixture's placed orientation.
+	joint.node_b = body.get_path()
+	for axis in ["x", "z"]:
+		joint.set("angular_limit_%s/lower_angle" % axis, -SWING_MOST)
+		joint.set("angular_limit_%s/upper_angle" % axis, SWING_MOST)
+	add_child(joint)
 
 
 ## A stretching part (a cresset's pole) grows by `stretch`; everything above
@@ -421,6 +495,17 @@ func _place_soot() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Builders place fixtures immediately after adding them. Make the joint
+	# on the first physics tick, once its actual hook position is known.
+	if fixture == &"hanging_lantern" and swing_body == null:
+		_make_lantern_body(true)
+	if swing_body != null:
+		var wind := Vector3(_lean.x, 0.0, _lean.z).limit_length(3.0)
+		if wind.length_squared() > 0.0001:
+			swing_body.sleeping = false
+			swing_body.apply_central_force(wind * LANTERN_MASS * SWING_WIND)
+		global_transform = swing_body.global_transform * Transform3D(Basis.IDENTITY, -_swing_center)
+		_creak(delta)
 	super._physics_process(delta)
 
 	if _soot_in > 0:
@@ -433,7 +518,7 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	super._process(delta)
 
-	if _swinging:
+	if _swinging and fixture != &"hanging_lantern":
 		_swing(delta)
 
 	if flicker_kind == &"candle":
@@ -504,6 +589,10 @@ func _swing(delta: float) -> void:
 	# whichever way it was turned.
 	global_basis = Basis(Vector3.BACK, _tilt.x) * Basis(Vector3.RIGHT, -_tilt.y) * _rest_basis
 	# A gust that sets it swinging: its chain creaks.
+	_creak(delta)
+
+
+func _creak(delta: float) -> void:
 	_creak_wait = maxf(_creak_wait - delta, 0.0)
 	var fast := swing_speed() > CREAK_SPEED
 

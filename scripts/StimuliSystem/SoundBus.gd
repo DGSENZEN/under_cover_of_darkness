@@ -1,14 +1,8 @@
 extends RefCounted
-## Gameplay sound, separate from audio. A footstep, a thrown crate landing, a
-## door rattling: each is an EVENT with a position and a loudness, and anyone
-## listening decides what to make of it. What the player hears through the
-## speakers is a different system entirely.
-##
-## No autoload needed: the listener list is static, so every script that
-## preloads this file shares it.
-##
-## Loudness follows The Dark Mod's rule: a 50 dB sound carries 15 m, and every
-## 7 dB doubles or halves that.
+## Synchronous gameplay-sound event bus, separate from audible playback.
+## Static listeners implement hear_sound(event: Dictionary). Sound range is 15 m at
+## 50 dB and doubles every 7 dB; emission-point masking reduces effective loudness.
+## Listeners decide audibility. Emission skips source/also_skip and prunes freed listeners.
 
 const REFERENCE_DB := 50.0
 const REFERENCE_RANGE := 15.0
@@ -63,11 +57,13 @@ static func masking_at(position: Vector3) -> float:
 	return db
 
 
+## Registers listener once; it must implement hear_sound(event: Dictionary).
 static func add_listener(listener: Object) -> void:
 	if not _listeners.has(listener):
 		_listeners.append(listener)
 
 
+## Unregisters listener; absent entries are no-op.
 static func remove_listener(listener: Object) -> void:
 	_listeners.erase(listener)
 
@@ -77,12 +73,9 @@ static func range_for(db: float) -> float:
 	return REFERENCE_RANGE * pow(2.0, (db - REFERENCE_DB) / DB_PER_DOUBLING)
 
 
-## Listeners need `hear_sound(event: Dictionary)`. The event holds:
-## position: Vector3, db: float, range: float, source: Object, kind: StringName
-##
-## The source never hears its own sound. `also_skip` is a second listener who
-## should not: a guard does not "hear" the clang of the club on his own helmet
-## as a noise somewhere to go and investigate.
+## Synchronously dispatches {position: Vector3, db: float, range: float,
+## source: Object, kind: StringName}. db <= 0 emits nothing. range uses masking at
+## position; source/also_skip are excluded. Listeners filter their own audibility.
 static func emit_sound(position: Vector3, db: float, source: Object, kind: StringName, also_skip: Object = null) -> void:
 	if db <= 0.0:
 		return
@@ -96,10 +89,8 @@ static func emit_sound(position: Vector3, db: float, source: Object, kind: Strin
 	}, also_skip)
 
 
-## A sound that says something: a guard calling out where you are, a bell
-## rung. It carries exactly as emit_sound does (so walls, distance and a
-## listener's hearing decide who gets it), and each listener finds what was
-## said in the event under "message" (Comms.gd).
+## Dispatches the same sound schema plus message: Dictionary; db <= 0 is no-op.
+## No distance/wall filtering occurs in the bus; listeners interpret the payload.
 static func emit_message(position: Vector3, db: float, source: Object, kind: StringName, message: Dictionary) -> void:
 	if db <= 0.0:
 		return

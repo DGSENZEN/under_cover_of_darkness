@@ -15,6 +15,11 @@ import rules  # noqa: E402
 
 
 def check(stage="stage1"):
+    """Return (level_dict, list[str] failures) for the open Blender scene.
+
+    stage is 'stage1' or 'stage2'. Prints all rule failures and a summary;
+    [] means valid. This function does not exit; the CLI exits 1 on failures.
+    """
     data = read.read()
     found = rules.kit_problems() + rules.problems(data, stage)
 

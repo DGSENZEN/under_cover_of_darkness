@@ -1,10 +1,6 @@
 extends Node3D
-## A playable combat gym: Dark Messiah's melee, the kick, and the bow.
-##
-##   Godot --path . res://maps/combat_gym.tscn
-##
-## You start with a sword, a dagger, a bow and a quiver. Mouse wheel changes
-## weapon. F3 shows every guard's state and flashes every gameplay sound.
+## Builds a small combat test yard with player weapons, guards and a navigation bake.
+## Uses the production combat and stimulus systems; F3 enables gameplay diagnostics.
 
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")

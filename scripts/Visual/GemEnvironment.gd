@@ -1,12 +1,7 @@
 extends Node
-## The lightgem measures light, not atmosphere. Its two little cameras see the
-## world's environment unless told otherwise, and volumetric fog, glow, SSAO,
-## SSIL, SSR, SDFGI, distance fog and tonemapping would all bend the reading:
-## fog alone would make you brighter the foggier the room. This gives them a
-## stripped copy of whatever the level uses: the same ambient light and sky,
-## none of the effects, and a linear curve, the one the gem was tuned under.
-##
-## It follows the level: when the world's environment changes, so does theirs.
+## Maintains a stripped copy of the level Environment for the lightgem cameras.
+## Keeps ambient light and sky, disables atmospheric/post effects, and uses the linear curve the gem was tuned under.
+## Resynchronizes when the level environment changes so fog and tonemapping cannot alter measured light.
 
 ## How often to look for a changed world environment, in seconds.
 const CHECK_EVERY := 0.5
@@ -19,7 +14,7 @@ var _gem: Environment = null
 var _timer := 0.0
 
 
-## The cameras to keep clean. Called once by the player.
+## Sets the Camera3D Array to receive the stripped environment and immediately synchronizes it.
 func setup(gem_cameras: Array[Camera3D]) -> void:
 	cameras = gem_cameras
 	sync()
@@ -33,8 +28,8 @@ func _process(delta: float) -> void:
 		sync()
 
 
-## Copies the world's environment for the gem, without the effects, if it has
-## changed since last time.
+## Copies changed level Environment state into the gem-safe resource and assigns it to the configured cameras.
+## Missing source environments are tolerated; the source resource is not edited.
 func sync() -> void:
 	if cameras.is_empty() or not is_inside_tree():
 		return

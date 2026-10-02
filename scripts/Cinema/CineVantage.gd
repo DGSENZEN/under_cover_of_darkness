@@ -1,14 +1,8 @@
 extends RefCounted
-## Places to watch from: the ones a level marks (Marker3D nodes in the group
-## "cine_vantage", with metadata `lens` "long" or "medium" if they are only
-## good for one), and, where none serves, places sampled on rings round the
-## men. A place must see every man's head (past walls and past other men),
-## stand on the side it is asked to, and be about as far off as the lens
-## wants, standing clear of any wall (a ray from inside one sees out through
-## it) and out of every man's body; one whose frame the stones fill at the
-## lens (a crenel, a wall's end) is never taken; one with something half in
-## the way (a post, a crate's corner: watched from hiding) is better, a marked
-## one better still, and one whose frame a wall closes in worse.
+## Finds camera positions from cine_vantage markers and sampled rings around subjects.
+## Candidates must see heads, stay on the requested side, fit lens distance, and clear walls/actor bodies.
+## Frame-fill rays reject stone close to the lens; partial foreground and marked positions receive score bonuses.
+## A ray beginning inside a wall can see out, so clearance tests are required as well as sight rays.
 
 const CineShot := preload("res://scripts/Cinema/CineShot.gd")
 

@@ -1,12 +1,7 @@
 extends Node
-## The place, heard: a loop under everything, quiet (audio/ambience/, cut by
-## tools/prepare_sfx.py). The level says which by a meta on its root node,
-## "ambience": a loop's name ("interior_night", "cave", "forest_night", each
-## also "_rain"), or "" for none. A level that does not say is indoors at
-## night: a keep's stone around you.
-##
-## Started with the level (Sfx.warm), stopped with it. Only audio: guards
-## hear nothing of it.
+## Level ambience loop in audio/ambience/<name>.ogg, selected by root ambience metadata.
+## Default is interior_night; an empty name or missing file is silent. Sfx.warm() starts it; scene exit stops it.
+## Real-time fades and Music intensity duck the loop. It emits no gameplay sound stimulus.
 
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
@@ -26,7 +21,8 @@ var _fade := 0.0
 var _last_real := -1.0
 
 
-## Starts the level's ambience, once, if sound is on.
+## Adds one Ambience node to the current scene (or tree root) from ambience metadata.
+## Detached contexts, duplicate nodes, empty names, or missing OGG files are ignored.
 static func begin(context: Node) -> void:
 	var tree := context.get_tree() if context != null and context.is_inside_tree() else null
 
@@ -81,8 +77,7 @@ func _process(_delta: float) -> void:
 	_player.volume_db = lerpf(-60.0, VOLUME_DB, sqrt(_fade)) + dip_for(_fight())
 
 
-## How far the place recedes under a fight whose score is at `intensity`
-## (Music.gd): it falls away as the fight fills your ears.
+## Returns the additional ambience attenuation in dB for normalized score intensity (0 to FIGHT_DIP).
 static func dip_for(intensity: float) -> float:
 	return FIGHT_DIP * smoothstep(0.0, FIGHT_FULL, intensity)
 

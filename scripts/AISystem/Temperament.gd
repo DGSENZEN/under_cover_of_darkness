@@ -1,26 +1,8 @@
 extends RefCounted
-## Who a man is, under what he is. Two swordsmen are trained alike; one
-## holds when the rest run, another cannot wait his turn, a third works round
-## behind you. Three numbers, 0 to 1:
-##   nerve   how long he stays in it when their heart goes: the stubborn man
-##           holds to the last, the craven one breaks first. Fear (the dread
-##           you have put into the garrison) weighs most on a man short of it.
-##   drive   how hard he presses: the rash man takes the front, goes in when
-##           it is not his turn, and presses on when told to fall back; he
-##           also guards and feints less, so he overreaches.
-##   guile   how he fights with others: the sly man takes the place behind
-##           you, waits for you to commit to someone else, and in the hunt
-##           goes round to cut you off.
-##
-## Each class has its own (BASE); each man is rolled within SPREAD of it,
-## new every time the level loads, unless the level pins him to a preset
-## (Guard.temperament: a preset moves his class's numbers, and always far
-## enough to be what it names). His tag names what shows most in him, for
-## his lines (LINES) and his stance (GuardRig).
-##
-## Squad.gd reads the numbers themselves (who takes which place, who breaks);
-## GuardFighter.gd turns only his difference from his own class into how he
-## fights, so the man his class describes fights exactly as it says.
+## Rolls nerve, drive and guile (0..1) from archetype baselines and presets.
+## Squad uses absolute values for resolve/roles; GuardFighter uses deviations from
+## its archetype. Tags select dialogue and stance. Names are deterministic by seed;
+## Guard resolves name collisions within the level.
 
 ## nerve, drive, guile by archetype ("" is the plain watchman).
 const BASE := {

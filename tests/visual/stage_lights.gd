@@ -64,9 +64,7 @@ func _ready() -> void:
 	get_tree().quit()
 
 
-# ---------------------------------------------------------------------------
 # The sheet
-# ---------------------------------------------------------------------------
 
 func _sheet() -> void:
 	var gallery: Node3D = load("res://maps/lights_gallery.tscn").instantiate()
@@ -210,9 +208,7 @@ func _shoot_timed(shot_name: String, at: Vector3, target: Vector3) -> float:
 	return float(Time.get_ticks_usec() - start) / 60000.0
 
 
-# ---------------------------------------------------------------------------
 # The lightgem
-# ---------------------------------------------------------------------------
 
 ## You 2 m from a bare torch, the brazier and the campfire in turn (each
 ## flicker held still), your lightgem read after 60 frames; `wall_too`, and

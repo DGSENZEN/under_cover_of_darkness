@@ -22,9 +22,7 @@ def add(G):
     decals(G)
 
 
-# ---------------------------------------------------------------------------
 # The cast: where each stands at the start, what he does
-# ---------------------------------------------------------------------------
 
 def people(G):
     at_fire = lambda p: facing(p, FIRE)
@@ -72,9 +70,7 @@ def people(G):
     G.route("barracks_round", [(15.4, 0, -18.0, 180.0), (15.4, 0, 16.0, 0.0)], "barracks")
 
 
-# ---------------------------------------------------------------------------
 # Doors (at their opening's middle, turned as their wall)
-# ---------------------------------------------------------------------------
 
 def doors(G):
     for name, at, yaw, sector, extra in (
@@ -102,9 +98,7 @@ def doors(G):
         G.mark(name, "door", at, yaw, sector, **extra)
 
 
-# ---------------------------------------------------------------------------
 # Lights: each space lit on purpose
-# ---------------------------------------------------------------------------
 
 def lights(G):
     L = lambda name, kind, at, sector="courtyard", yaw=0.0, **p: G.mark(name, "light", at, yaw, sector, kind=kind, **p)
@@ -180,9 +174,7 @@ def lights(G):
         L("lamp_%d" % i, "lamp_post", (x, 0, z), "outside")
 
 
-# ---------------------------------------------------------------------------
 # Things the game makes: the bell, the canal, the climb, chests, crates
-# ---------------------------------------------------------------------------
 
 def things(G):
     G.mark("bell", "bell", (7.0, 0, 19.5), 180.0)
@@ -212,9 +204,7 @@ def things(G):
         G.mark(name, "landmark", at, label=label)
 
 
-# ---------------------------------------------------------------------------
 # Hiding places and hunt areas
-# ---------------------------------------------------------------------------
 
 def hiding(G):
     for i, (at, sector) in enumerate((
@@ -239,10 +229,8 @@ def hiding(G):
         G.mark(name, "hunt_area", centre, 0.0, size=size, label=label)
 
 
-# ---------------------------------------------------------------------------
 # The camera's vantages: high corners, framing through foreground, the
 # symmetric axes, the enfilade down the corridor
-# ---------------------------------------------------------------------------
 
 def camera(G):
     for name, at, lens, sector in (
@@ -258,9 +246,7 @@ def camera(G):
         G.mark(name, "vantage", at, 0.0, sector, lens=lens)
 
 
-# ---------------------------------------------------------------------------
 # Atmosphere zones (outside is the default)
-# ---------------------------------------------------------------------------
 
 def zones(G):
     for name, centre, size, grade, fog, colour in (
@@ -275,9 +261,7 @@ def zones(G):
         G.mark(name, "zone", centre, 0.0, "courtyard", size=size, grade=grade, fog=fog, fog_color=colour)
 
 
-# ---------------------------------------------------------------------------
 # The story's marks (ShowNight reads them by name)
-# ---------------------------------------------------------------------------
 
 def story(G):
     for name, at, sector in (
@@ -299,11 +283,9 @@ def story(G):
         G.mark(name, "mark", at, 0.0, sector)
 
 
-# ---------------------------------------------------------------------------
 # Decals: moss at the walls' feet outside, leaks down from sills and eaves,
 # grime along the bottoms of the courtyard's walls. Each faces into its wall
 # (local -z); its size across, up and how deep it reaches.
-# ---------------------------------------------------------------------------
 
 def decals(G):
     count = [0]

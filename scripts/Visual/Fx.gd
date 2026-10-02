@@ -1,24 +1,7 @@
 extends Node3D
-## Effects: blood, sparks, dust, splinters, glints, light flashes, and the
-## stains they leave. One of these lives in each level, made on first use.
-##
-##   Fx.blood(self, point, direction, amount)    a spurt, stains where it lands
-##   Fx.sparks(self, point, normal, amount)      steel on steel or on stone
-##   Fx.dust(self, point, normal, amount, "wood") a puff and chips of the surface
-##   Fx.glint(self, point, size, follow)         a star on a blade
-##   Fx.flash(self, point, colour, energy, range, seconds)
-##   Fx.stain(self, point, normal, size)         a splat on the world
-##   Fx.pool(self, point, size, seconds)         a spreading pool under a body
-##   Fx.spurt(bone, offset, direction, seconds)  blood pumping from a wound
-##
-## Everything here is cosmetic. Nothing reads it back; its lights skip the
-## lightgem's probe and the guards' light arithmetic; it is drawn on its own
-## render layer, which the lightgem's cameras do not see. `enabled` switches
-## it all off and `gore` scales the blood (0 is none).
-##
-## The look is deliberately low-fi: tiny nearest-filtered sprites, hard or
-## dithered edges, a few chunky shapes. Particles are simulated here, drawn as
-## one MultiMesh per kind, and collide with the world by ray.
+## Level-owned cosmetic particles, blood/stains, sparks, chips, glints, trails, and temporary lights.
+## Created on first use; particles use MultiMeshes and world collision rays. enabled gates effects; gore scales blood.
+## Layers.FX is excluded from lightgem cameras; effect lights exclude the probe and gameplay light arithmetic.
 
 const Layers := preload("res://scripts/Visual/Layers.gd")
 
@@ -71,9 +54,7 @@ var _ray_budget := [0]
 var _stains_this_frame := 0
 
 
-# ---------------------------------------------------------------------------
 # The API
-# ---------------------------------------------------------------------------
 
 ## A spurt of blood from a wound, flying along `direction`. `amount` 1 is a
 ## solid sword cut; 2 is a killing blow.
@@ -268,9 +249,7 @@ static func _world_for(context: Node) -> Node:
 	return world
 
 
-# ---------------------------------------------------------------------------
 # Setting up
-# ---------------------------------------------------------------------------
 
 class Pool:
 	var kind := 0
@@ -692,9 +671,7 @@ func _material(tex: Texture2D, style: String) -> StandardMaterial3D:
 	return m
 
 
-# ---------------------------------------------------------------------------
 # Every frame
-# ---------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
 	var space := get_world_3d().direct_space_state
@@ -812,9 +789,7 @@ func _update_growing(delta: float) -> void:
 			_growing.erase(decal)
 
 
-# ---------------------------------------------------------------------------
 # The effects
-# ---------------------------------------------------------------------------
 
 func _blood(context: Node, at: Vector3, direction: Vector3, amount: float) -> void:
 	var dir := direction.normalized() if direction.length() > 0.001 else Vector3.UP
@@ -1075,9 +1050,7 @@ func _space(context: Node) -> PhysicsDirectSpaceState3D:
 	return null
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 static func _rand_unit() -> Vector3:
 	var v := Vector3(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0), randf_range(-1.0, 1.0))
@@ -1102,9 +1075,7 @@ static func _basis_on(normal: Vector3, angle: float) -> Basis:
 	return Basis(x, y, z).rotated(y, angle)
 
 
-# ---------------------------------------------------------------------------
 # Textures: drawn once, by hand, pixel by pixel
-# ---------------------------------------------------------------------------
 
 static func texture(texture_name: StringName) -> Texture2D:
 	if _textures.is_empty():

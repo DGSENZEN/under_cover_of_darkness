@@ -1,8 +1,6 @@
 extends RefCounted
-## Everything the scanner measured about the obstacle in front of the player.
-##
-## Heights are relative to the player's FEET at the moment of the scan, which
-## is what makes the system dynamic: jump, and a tall ledge measures shorter.
+## Traversal measurements; positions are world-space, height is feet-relative.
+## Unmeasured thickness and absent far-floor drop use INF.
 
 enum Headroom {
 	STANDING,
@@ -49,6 +47,7 @@ var airborne := false
 var collider: Object = null
 
 
+## Returns feet_y minus far_floor.y, or INF when no far floor was measured.
 func far_drop() -> float:
 	if not has_far_floor:
 		return INF

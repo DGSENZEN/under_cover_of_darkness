@@ -1,11 +1,7 @@
 extends RefCounted
-## What the body is doing, and where its hands belong, in world space.
-##
-## This is the contract between the movement code and an arm rig. The rig
-## plays the animation named by `pose`, and pulls each hand toward its target
-## by `weight` (0 = animation only, 1 = pinned to the world). The targets come
-## from geometry the traversal system already measured, which is why the
-## hands land on the real ledge instead of roughly near it.
+## Movement pose and world-space hand targets for an arm rig.
+## update() selects pose from player state and eases each hand weight toward
+## 0 (animation only) or 1 (world contact); it does not move the player.
 
 const MoveVariantRes := preload("res://scripts/PlayerUtils/MoveVariant.gd")
 const TraversalPlanner := preload("res://scripts/PlayerUtils/TraversalPlanner.gd")
@@ -26,6 +22,8 @@ var _left_goal := 0.0
 var _right_goal := 0.0
 
 
+## Reads PlayerController fields from player and updates pose, targets, and weights.
+## delta is game seconds; targets stay world-space and weights ease toward state goals.
 func update(player: CharacterBody3D, delta: float) -> void:
 	_left_goal = 0.0
 	_right_goal = 0.0
@@ -46,7 +44,6 @@ func update(player: CharacterBody3D, delta: float) -> void:
 	right_weight = lerpf(right_weight, _right_goal, rate)
 
 
-# ---------------------------------------------------------------------------
 
 func _update_locomotion(player: CharacterBody3D) -> void:
 	var speed := Vector3(player.velocity.x, 0.0, player.velocity.z).length()

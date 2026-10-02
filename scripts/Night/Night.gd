@@ -1,20 +1,8 @@
 extends Node3D
-## The night over a level: the moon and its clouds, and the weather (clear,
-## cloudy, drizzle, shower, storm, fog). It draws the sky (NightSky), lets
-## the rain fall (Rain), wets the ground, sets how hard the wind blows
-## (Atmosphere), throws lightning, thickens the fog and raises the noise
-## floor (SoundBus.masking_db), easing from one state to the next.
-##
-## The clouds the sky draws are this node's cloud field, and the moon's light
-## reads it here with the sky shader's own projection at the moon: a cloud
-## seen crossing the moon is the cloud that dims its light (to CLOUDED of it,
-## the ambient to AMBIENT_CLOUDED). The weather rolls its own dice, so it
-## never shifts the world's.
-##
-## A level adds one beside its moon light and its environment:
-##   night.moon = moon; night.environment = environment; add_child(night)
-##   night.to(&"storm", 30.0)        # a storm, eased in over 30 s
-##   night.cover_moon(20.0)          # a cloud over the moon, held 20 s
+## Level weather: shared cloud field/sky, moon and ambient light, rain, wet surfaces, wind, fog, lightning, and noise masking.
+## Transitions use scaled game time and a private weather RNG; moon dimming samples the same cloud projection as the sky.
+## Set moon/environment before adding to the tree. Exit dries registered shared materials and resets SoundBus masking.
+## Zones supplies zone_fog/zone_fog_color; weather multiplies that local atmosphere.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Materials := preload("res://scripts/Visual/Materials.gd")
@@ -23,16 +11,15 @@ const RainScript := preload("res://scripts/Night/Rain.gd")
 const NightSoundScript := preload("res://scripts/Night/NightSound.gd")
 
 ## Each state: cloud cover (0..1), rain (0..1), wind (m/s), fog (times the
-## level's own), the noise floor (dB), whether clouds cross the moon now and
-## then, whether lightning strikes.
+## level's own), the noise floor (dB), whether lightning strikes.
 const STATES := {
-	&"clear": {"cover": 0.15, "rain": 0.0, "wind": 1.0, "fog": 1.0, "mask": 0.0, "crossings": true, "lightning": false},
-	&"cloudy": {"cover": 0.5, "rain": 0.0, "wind": 2.0, "fog": 1.0, "mask": 0.0, "crossings": true, "lightning": false},
-	&"drizzle": {"cover": 0.65, "rain": 0.25, "wind": 2.0, "fog": 1.0, "mask": 3.0, "crossings": false, "lightning": false},
-	&"shower": {"cover": 0.8, "rain": 0.6, "wind": 4.0, "fog": 1.25, "mask": 6.0, "crossings": false, "lightning": false},
-	&"rain": {"cover": 0.9, "rain": 0.8, "wind": 5.5, "fog": 1.3, "mask": 8.0, "crossings": false, "lightning": false},
-	&"storm": {"cover": 0.95, "rain": 1.0, "wind": 8.0, "fog": 1.6, "mask": 10.0, "crossings": false, "lightning": true},
-	&"fog": {"cover": 0.4, "rain": 0.0, "wind": 0.5, "fog": 4.0, "mask": 0.0, "crossings": false, "lightning": false},
+	&"clear": {"cover": 0.15, "rain": 0.0, "wind": 1.0, "fog": 1.0, "mask": 0.0, "lightning": false},
+	&"cloudy": {"cover": 0.5, "rain": 0.0, "wind": 2.0, "fog": 1.0, "mask": 0.0, "lightning": false},
+	&"drizzle": {"cover": 0.65, "rain": 0.25, "wind": 2.0, "fog": 1.0, "mask": 3.0, "lightning": false},
+	&"shower": {"cover": 0.8, "rain": 0.6, "wind": 4.0, "fog": 1.25, "mask": 6.0, "lightning": false},
+	&"rain": {"cover": 0.9, "rain": 0.8, "wind": 5.5, "fog": 1.3, "mask": 8.0, "lightning": false},
+	&"storm": {"cover": 0.95, "rain": 1.0, "wind": 8.0, "fog": 1.6, "mask": 10.0, "lightning": true},
+	&"fog": {"cover": 0.4, "rain": 0.0, "wind": 0.5, "fog": 4.0, "mask": 0.0, "lightning": false},
 }
 const ORDER := [&"clear", &"cloudy", &"drizzle", &"shower", &"rain", &"storm", &"fog"]
 const EASED := ["cover", "rain", "wind", "fog", "mask"]
@@ -45,24 +32,15 @@ const AMBIENT_CLOUDED := 0.9
 ## The cloud field: a seamless noise image, projected on a plane overhead
 ## (the view's xz over its height plus CLOUD_CURVE, times CLOUD_SCALE), its
 ## edges CLOUD_SOFT wide; the wind carries it CLOUD_DRIFT a second per m/s.
-## The sky shader holds the same constants (night_test N3).
+## The sky shader holds the same projection and filtered density images.
 const FIELD := 256
 const CLOUD_CURVE := 0.25
 const CLOUD_SCALE := 0.35
 const CLOUD_SOFT := 0.12
 const CLOUD_DRIFT := 0.0025
-
-## A veil (cover_moon): a cloud this big, its edge this soft, coming from
-## this far off along the wind, over VEIL_IN seconds each way.
-const VEIL_RADIUS := 0.22
-const VEIL_EDGE := 0.18
-const VEIL_TRAVEL := 0.9
-const VEIL_IN := 4.0
-## In clear and cloudy weather a cloud crosses the moon this often (s, from
-## one crossing to the next), held over it this long (the moon dark about
-## 2.3 s longer than the hold: 15-25 s).
-const CROSSING_EVERY := Vector2(60.0, 90.0)
-const CROSSING_HOLD := Vector2(12.7, 22.7)
+## Sparse cloud bellies may be opaque even on a clear night.
+const CLOUD_CONTRAST := 2.0
+const MOON_RADIUS := 0.0244
 
 ## Lightning in a storm this often (s); a flash's light, as [until s, times
 ## the unclouded moon's light, added to it]; its thunder this long after (s).
@@ -150,8 +128,6 @@ var _moon_scatter_base := 1.0
 var _field: Image
 var _field_texture: ImageTexture
 var _offset := Vector2.ZERO
-var _veil := {}
-var _crossing_in := INF
 var _lightning_in := INF
 var _flash_t := INF
 var _thunder_in := INF
@@ -191,6 +167,7 @@ func _ready() -> void:
 		_fog_albedo_base = environment.volumetric_fog_albedo
 		_exposure_base = environment.tonemap_exposure
 		_sky = NightSkyScript.new(environment, _field_texture, skyline)
+		_sky.material.set_shader_parameter("moon_radius", MOON_RADIUS)
 
 	_rain = RainScript.new()
 	_rain.name = "Rain"
@@ -215,8 +192,9 @@ func _exit_tree() -> void:
 			material.roughness = float(dry[1])
 
 
-## To `to_state` over `seconds` (0: at once), `after` s from now (a change
-## asked for now drops any still waiting).
+## Transitions to a STATES key over seconds (game time); nonpositive duration jumps immediately.
+## after > 0 queues a delayed change; an immediate request clears pending changes. Unknown keys warn and leave state unchanged.
+## Updates state/emits state_changed when the transition starts, before its eased values finish.
 func to(to_state: StringName, seconds: float, after := 0.0) -> void:
 	if not STATES.has(to_state):
 		push_warning("Night: no weather '%s'" % to_state)
@@ -245,21 +223,11 @@ func cycle() -> void:
 	to(ORDER[(ORDER.find(state) + 1) % ORDER.size()], 2.0)
 
 
-## A cloud over the moon: in over VEIL_IN s, held `hold` s, off over VEIL_IN
-## s. 0 while one holds sends it on its way now.
-func cover_moon(hold: float) -> void:
-	if not _veil.is_empty():
-		var t := float(_veil["t"])
-
-		if hold <= 0.0 and t < VEIL_IN + float(_veil["hold"]):
-			_veil["hold"] = maxf(t - VEIL_IN, 0.0)
-		elif hold > 0.0:
-			_veil["hold"] = maxf(float(_veil["hold"]), t - VEIL_IN + hold)
-
-		return
-
-	if hold > 0.0:
-		_veil = {"t": 0.0, "hold": hold, "along": _wind_flat()}
+## Deprecated compatibility for old story/city scripts. Clouds now exist
+## continuously and travel only with the wind; a cue cannot spawn, hold or
+## teleport a cloud onto the moon. Weather changes remain available via to().
+func cover_moon(_hold: float) -> void:
+	pass
 
 
 ## A lightning flash, now, somewhere in the sky; its thunder follows.
@@ -274,9 +242,30 @@ func flash() -> void:
 	flashed.emit()
 
 
-## How clouded the moon is (0..1), a veil over it included.
+## How clouded the moon's disc is (0..1), averaged over equal-area samples.
 func cloud_cover() -> float:
-	return density_at(_moon_dir())
+	var dir := moon_direction()
+	var right := dir.cross(Vector3.UP).normalized()
+	if right.length_squared() < 0.1:
+		right = Vector3.RIGHT
+	var up := right.cross(dir).normalized()
+	var total := 0.0
+	# Four rings, eight directions each; radial midpoints cover equal areas.
+	for ring in 4:
+		var radius := MOON_RADIUS * sqrt((float(ring) + 0.5) / 4.0)
+		for sector in 8:
+			var angle := (float(sector) + float(ring % 2) * 0.5) * TAU / 8.0
+			total += density_at((dir + (right * cos(angle) + up * sin(angle)) * radius).normalized())
+	return total / 32.0
+
+
+## The source direction and unobscured fraction, independent of lightning.
+func moon_direction() -> Vector3:
+	return _moon_dir()
+
+
+func moon_visibility() -> float:
+	return clampf(1.0 - cloud_cover(), 0.0, 1.0)
 
 
 ## The clouds' density toward `dir`, as the sky draws it.
@@ -286,8 +275,12 @@ func density_at(dir: Vector3) -> float:
 
 	var uv := sky_uv(dir)
 	var cover := float(_now.get("cover", 0.0))
-	var field := smoothstep(1.0 - cover - CLOUD_SOFT, 1.0 - cover + CLOUD_SOFT, field_at(uv))
-	return maxf(field, _veil_at(uv))
+	var n := clampf((field_at(uv) - 0.5) * CLOUD_CONTRAST + 0.5, 0.0, 1.0)
+	var field := smoothstep(1.0 - cover - CLOUD_SOFT, 1.0 - cover + CLOUD_SOFT, n)
+	var edge := field * (1.0 - field) * 4.0
+	var grain := field_at(uv * 3.3 + Vector2(0.31, 0.77))
+	field *= lerpf(1.0, smoothstep(0.2, 0.75, grain), 0.55 * edge)
+	return field * smoothstep(0.0, 0.1, dir.normalized().y)
 
 
 ## Where `dir` falls on the cloud field (the sky shader's sky_uv).
@@ -363,9 +356,8 @@ func splashes_at(point: Vector3) -> bool:
 	return false
 
 
-## `material` darkens and shines as the ground gets wet. Its dry look is
-## kept on it (a shared surface outlives a level, and the next night must not
-## take it wet as dry).
+## Registers a shared BaseMaterial3D for wetness edits, storing its dry colour/roughness in night_dry metadata.
+## Null/already-registered resources are ignored; exit restores dry values so later levels do not inherit wet materials.
 func register_wet(material: BaseMaterial3D) -> void:
 	if material == null or _wet.has(material):
 		return
@@ -417,8 +409,6 @@ func _process(delta: float) -> void:
 	# (the field slides against the wind, so the clouds on it go with it)
 	var air := wind()
 	_offset -= Vector2(air.x, air.z) * CLOUD_DRIFT * delta
-	_step_veil(delta)
-	_step_crossings(delta)
 	_step_lightning(delta)
 	_step_wet(delta)
 	_registered_in -= delta
@@ -444,7 +434,6 @@ func _set_state(to_state: StringName) -> void:
 	var was := state
 	state = to_state
 	var values: Dictionary = STATES[to_state]
-	_crossing_in = _rng.randf_range(CROSSING_EVERY.x, CROSSING_EVERY.y) if values["crossings"] else INF
 	_lightning_in = _rng.randf_range(LIGHTNING_EVERY.x, LIGHTNING_EVERY.y) if values["lightning"] else INF
 
 	if was != to_state:
@@ -458,29 +447,6 @@ func _values(of_state: StringName) -> Dictionary:
 		values[key] = float(STATES[of_state][key])
 
 	return values
-
-
-func _step_veil(delta: float) -> void:
-	if _veil.is_empty():
-		return
-
-	_veil["t"] = float(_veil["t"]) + delta
-
-	if float(_veil["t"]) >= VEIL_IN * 2.0 + float(_veil["hold"]):
-		_veil = {}
-
-
-func _step_crossings(delta: float) -> void:
-	if not bool(STATES[state]["crossings"]):
-		return
-
-	# (counted from one crossing's start to the next; one due while a veil is
-	# still over the moon waits for it to go)
-	_crossing_in -= delta
-
-	if _crossing_in <= 0.0 and _veil.is_empty():
-		_crossing_in = _rng.randf_range(CROSSING_EVERY.x, CROSSING_EVERY.y)
-		cover_moon(_rng.randf_range(CROSSING_HOLD.x, CROSSING_HOLD.y))
 
 
 func _step_lightning(delta: float) -> void:
@@ -555,9 +521,8 @@ func _apply(air: Vector3) -> void:
 		atmosphere.strength = float(_now.get("wind", 0.0)) * WIND_STRENGTH
 
 	if _sky != null:
-		var veil_on := 1.0 if not _veil.is_empty() else 0.0
 		var cover_now := float(_now.get("cover", 0.0))
-		_sky.show_night(cover_now, _offset, _veil_centre(), veil_on, clampf((flash_level - 1.0) / 5.0, 0.0, 1.0), thick, _clock)
+		_sky.show_night(cover_now, _offset, clampf((flash_level - 1.0) / 5.0, 0.0, 1.0), thick, _clock)
 		_sky.show_lightning(_flash_dir, 1.0 if flash_level >= BOLT_FROM else 0.0, _bolt_seed)
 		_sky.show_cirrus(CIRRUS * clampf(1.0 - cover_now / CIRRUS_GONE, 0.0, 1.0))
 
@@ -592,39 +557,6 @@ func _apply(air: Vector3) -> void:
 
 func _moon_dir() -> Vector3:
 	return moon.global_basis.z.normalized() if moon != null and moon.is_inside_tree() else Vector3(-0.6, 0.5, -0.6).normalized()
-
-
-func _veil_at(uv: Vector2) -> float:
-	if _veil.is_empty():
-		return 0.0
-
-	return 1.0 - smoothstep(VEIL_RADIUS, VEIL_RADIUS + VEIL_EDGE, uv.distance_to(_veil_centre()))
-
-
-## Where the veil is on the field now: coming along the wind, over the moon,
-## going on.
-func _veil_centre() -> Vector2:
-	var moon_uv := sky_uv(_moon_dir())
-
-	if _veil.is_empty():
-		return moon_uv + Vector2(10.0, 10.0)
-
-	var t := float(_veil["t"])
-	var hold := float(_veil["hold"])
-	var x := 0.0
-
-	if t < VEIL_IN:
-		x = -VEIL_TRAVEL * (1.0 - t / VEIL_IN)
-	elif t > VEIL_IN + hold:
-		x = VEIL_TRAVEL * (t - VEIL_IN - hold) / VEIL_IN
-
-	return moon_uv + (_veil["along"] as Vector2) * x
-
-
-func _wind_flat() -> Vector2:
-	var air := wind()
-	var flat := Vector2(air.x, air.z)
-	return flat.normalized() if flat.length() > 0.01 else Vector2(0.7, 0.7).normalized()
 
 
 func _texel(x: int, y: int) -> float:

@@ -1,8 +1,6 @@
 extends StaticBody3D
-## A lever on a post. Pull it (frob) and it throws, and whatever it works
-## happens: the arena's gates, a trap. It springs back after a moment.
-##
-##   Lever.build(parent, position, yaw, "Release the brute", func(): ...)
+## Frobbable lever emitting pulled once per cooldown and animating its return.
+## build() connects the supplied action Callable and places the post at its foot.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
@@ -18,6 +16,7 @@ var _throw := 0.0
 var _wait := 0.0
 
 
+## Builds/attaches a lever at world position, applies local yaw radians, and connects pulled to action.
 static func build(parent: Node, position: Vector3, yaw: float, title: String, action: Callable) -> StaticBody3D:
 	var lever: StaticBody3D = (load("res://scripts/Interaction/Lever.gd") as GDScript).new()
 	lever.verb = title
@@ -87,6 +86,7 @@ func get_prompt(_player: Node) -> String:
 	return verb if _wait <= 0.0 else ""
 
 
+## Emits pulled and starts animation/cooldown; repeated pulls during cooldown are ignored.
 func frob(_player: Node) -> void:
 	if _wait > 0.0:
 		return
