@@ -1,9 +1,9 @@
 extends CanvasLayer
-## A loading screen over everything while a map makes itself: the place's
-## name, what is being done (its ellipsis moving whenever a frame is drawn),
-## and a thin amber rule filling as it goes, creeping on its own through a
-## long wait (a navmesh baking away from the main thread); it fades out when
-## the map is ready. In the HUD's ink and serif.
+## A loading screen over everything while a map makes itself: a title and
+## a line for what is being done (the map's own words; empty, nothing is
+## shown), and a thin amber rule filling as it goes, creeping on its own
+## through a long wait (a navmesh baking away from the main thread); it fades
+## out when the map is ready. In the HUD's ink and serif.
 ##
 ##   var screen := LoadingScreen.open(self, "The city on the rock")
 ##   await screen.step("Laying out the harbour", 0.1)   # drawn before you go on
@@ -135,3 +135,6 @@ func _process(delta: float) -> void:
 
 	if _status != null and _text != "":
 		_status.text = _text + ".".repeat(int(_clock / DOT) % 4)
+
+	if _title != null:
+		_title.visible = _title.text != ""

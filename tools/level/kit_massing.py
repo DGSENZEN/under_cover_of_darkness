@@ -12,6 +12,7 @@ middles.
 
 import math
 
+import kit_iberian
 import kit_recipes as k
 import kit_shapes as ks
 
@@ -41,6 +42,8 @@ def _houses(heights, depth=12.0, slot="whitewash"):
         shapes.append(ks.box(x, h / 2.0, 0.0, width - 0.1, h, depth, slot))
         shapes.append(ks.gable(x, h, 0.0, depth, 2.2, width - 0.1, "roof_spanish", 90.0))
         cols.append(col(x, h / 2.0, 0.0, width, h, depth))
+        # (Its roof stood on where it is drawn.)
+        cols += [[c[0] + x] + c[1:] for c in kit_iberian.roof_cols(width - 0.1, depth, 2.2, h)]
 
         for j, fy in enumerate((0.35, 0.7)):
             if (i + j) % 2 == 0:
@@ -118,7 +121,8 @@ def _mirador():
     for yaw in (0.0, 90.0, 180.0, 270.0):
         shapes += ks.moved([ks.card(-2.0, 22.0, 5.02, 1.4, 2.4, "glass_lit"), ks.card(2.0, 22.0, 5.02, 1.4, 2.4, "pitch")], yaw)
 
-    return shapes, [col(0.0, 12.5, 0.0, 10.0, 25.0, 10.0)]
+    # (Its pyramid roof stood on: two steps under it.)
+    return shapes, [col(0.0, 12.5, 0.0, 10.0, 25.0, 10.0), col(0.0, 25.75, 0.0, 5.4, 1.5, 5.4), col(0.0, 26.9, 0.0, 2.4, 0.8, 2.4)]
 
 
 def _aqueduct():

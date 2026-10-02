@@ -200,7 +200,9 @@ def _exits_and_views(L):
                                  ("view_carrack_top", (CARRACK_X, 21.7, CARRACK_Z), (CARRACK_X, 20.0, -80.0), "wide"),
                                  ("view_golden_terrace", _terrace(6.5, 250.0), (0.0, 10.0, 0.0), "wide"),
                                  ("view_cave_beach", (230.0, 2.5, 10.0), (226.0, 3.0, 60.0), "")):
-        L.mark(name, "vantage", at, facing(at, look), "sea", lens=lens)
+        # (Looking at its subject: up at the rock, down at the galley.)
+        pitch = math.degrees(math.atan2(look[1] - at[1], math.hypot(look[0] - at[0], look[2] - at[2])))
+        L.mark(name, "vantage", at, facing(at, look), "sea", pitch=pitch, lens=lens)
 
     for name, at, label, sector in (("lm_sea_gate", (GATE_X, QUAY, WALL_D + 6.0), "the Sea Gate", "terreiro"),
                                     ("lm_golden_tower", (MOLE_HEAD[0] + 8.0, MOLE_TOP, MOLE_HEAD[1] - 13.0), "the golden tower", "mole"),

@@ -48,11 +48,12 @@ func _ready() -> void:
 	# navmesh bakes; gone once the map is played.)
 	var screen: Node = city.get_node_or_null("LoadingScreen")
 	var shown := screen != null
-	var said := [""]
+	var filled := [-1.0, -1.0]
 
 	while not city.get("player"):
 		if screen != null and is_instance_valid(screen) and city.baker != null and not bool(city.baker.is_baked):
-			said[0] = String(screen.get("_text"))
+			filled[0] = float(screen.get("fraction")) if filled[0] < 0.0 else filled[0]
+			filled[1] = float(screen.get("fraction"))
 
 		await get_tree().process_frame
 
@@ -61,9 +62,9 @@ func _ready() -> void:
 
 	player = city.player
 	await _seconds(1.5)
-	_check("C15 a loading screen shows from the map's first frame, says what it is doing while the navmesh bakes, and is gone once it is played",
-		shown and said[0] != "" and not is_instance_valid(screen), "screen %s, while baking \"%s\", gone %s" % [shown, said[0],
-			not is_instance_valid(screen)])
+	_check("C15 a loading screen shows from the map's first frame, its rule moving on while the navmesh bakes, and is gone once it is played",
+		shown and filled[1] > filled[0] and not is_instance_valid(screen), "screen %s, the rule while baking %.2f to %.2f, gone %s" % [shown,
+			filled[0], filled[1], not is_instance_valid(screen)])
 	_load_check(started)
 	_markers()
 	_reach()

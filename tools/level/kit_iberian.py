@@ -47,6 +47,34 @@ def col(cx, cy, cz, sx, sy, sz, yaw=0.0, pitch=0.0, roll=0.0):
     return [cx, cy, cz, sx, sy, sz, "stone", yaw, pitch, roll]
 
 
+def roof_cols(length, span, rise, y, yaw=0.0):
+    """The colliders of a double-pitched roof (`length` along its ridge,
+    `span` across its walls, `rise` to the ridge, its walls' top at y): a slab
+    under each slope, stopping short of its eaves by what its tilted end would
+    stand out past the wall, and a wall plate along each eaves flush with the
+    wall, so a climber at the eaves meets an upright face to mantle over
+    (the scanner turns a sloped one away). Stood on everywhere it is drawn."""
+    half = span / 2.0
+    pitch = math.degrees(math.atan2(rise, half))
+    slope = math.hypot(half, rise)
+    lift = k.ROOF_THICK / 2.0 / math.cos(math.radians(pitch))
+    trim = k.ROOF_THICK * math.tan(math.radians(pitch))
+    inward, up = trim / 2.0 * math.cos(math.radians(pitch)), trim / 2.0 * math.sin(math.radians(pitch))
+    out = []
+
+    for s in (-1.0, 1.0):
+        out.append(col(0.0, y + rise / 2.0 + lift + up, s * (half / 2.0 - inward), length, k.ROOF_THICK, slope - trim, 0.0, s * pitch))
+        out.append(col(0.0, y + EAVES_PLATE / 2.0, s * (half - 0.1), length, EAVES_PLATE, 0.2))
+
+    return [_turned_col(c, yaw) for c in out] if yaw else out
+
+
+def _turned_col(c, yaw):
+    a = math.radians(yaw)
+    x, z = c[0] * math.cos(a) + c[2] * math.sin(a), -c[0] * math.sin(a) + c[2] * math.cos(a)
+    return [x, c[1], z, c[3], c[4], c[5], c[6], c[7] + yaw, c[8], c[9]]
+
+
 def _frame(x, y0, z, w, h, slot="granite"):
     """A granite surround on the front z: jambs and a lintel round an
     opening w x h whose foot is at y0."""
@@ -150,19 +178,7 @@ def casa(storeys, front, side, balconies, lit, chimney=1.0, vine=False):
     for s in (-1.0, 1.0):
         shapes.append(ks.gable(s * (WIDTH / 2.0 - 0.1), eaves, 0.0, DEPTH, rise, 0.2, side, 90.0))
 
-    slope = math.hypot(FRONT, rise)
-    lift = k.ROOF_THICK / 2.0 / math.cos(math.radians(PITCH))
-    # (Each slope's collider stops short of its eaves by what its tilted end
-    # would stand out past the wall: a climber at the eaves meets the wall's
-    # upright face, which the scanner takes for a wall to mantle.)
-    trim = k.ROOF_THICK * math.tan(math.radians(PITCH))
-    inward, up = trim / 2.0 * math.cos(math.radians(PITCH)), trim / 2.0 * math.sin(math.radians(PITCH))
-
-    for s in (-1.0, 1.0):
-        cols.append(col(0.0, eaves + rise / 2.0 + lift + up, s * (FRONT / 2.0 - inward), WIDTH, k.ROOF_THICK, slope - trim, 0.0, s * PITCH))
-        # (A wall plate along the eaves, flush with the wall, over the slab's
-        # tilted end: just over the wall's top a climber still meets a wall.)
-        cols.append(col(0.0, eaves + EAVES_PLATE / 2.0, s * (FRONT - 0.1), WIDTH, EAVES_PLATE, 0.2))
+    cols += roof_cols(WIDTH, DEPTH, rise, eaves)
 
     top = eaves + rise + 1.0
     shapes += kit_houses._chimney(chimney * 1.8, -FRONT + 1.5, top, side)[:2]
@@ -290,6 +306,7 @@ def _terreiro_bay():
             col(0.0, b["arcade"] / 2.0, -front + back / 2.0, b["width"], b["arcade"], back),
             col(0.0, b["arcade"] - 0.25, walk_mid, b["width"], 0.5, b["walk"]),
             col(0.0, b["arcade"] - 0.08, front + 0.4, 1.8, 0.16, 0.8)]
+    cols += roof_cols(b["width"], b["depth"], 2.0, b["top"])
     return shapes, cols
 
 
@@ -328,10 +345,13 @@ def _terreiro_corner():
     shapes += [ks.box(-half / 2.0, b["arcade"] / 2.0, -half / 2.0, half, b["arcade"], half, "render_ochre"),
                ks.box(0.0, b["arcade"] + upper / 2.0, 0.0, size, upper, size, "render_ochre"),
                ks.box(0.0, b["arcade"] - 0.25, 0.0, size, 0.5, size, "render_ochre"),
-               ks.prism(0.0, b["top"] + 1.1, 0.0, half * math.sqrt(2.0) + 0.4, 2.2, 4, "roof_spanish", yaw=45.0, top=0.0)]
+               ks.gable(-(half - 0.1), b["top"], 0.0, size, 2.2, 0.2, "render_ochre", 90.0),
+               ks.gable(half - 0.1, b["top"], 0.0, size, 2.2, 0.2, "render_ochre", 90.0)]
+    shapes += ks.moved(k.pitched(size, size, 2.2, slot="roof_spanish", under="boards", tile=2.0, overhang=0.35, verge=0.05), 0.0, (0.0, b["top"], 0.0))
     cols += [col(-half / 2.0, b["arcade"] / 2.0, -half / 2.0, half, b["arcade"], half),
              col(0.0, b["arcade"] + upper / 2.0, 0.0, size, upper, size),
              col(0.0, b["arcade"] - 0.25, 0.0, size, 0.5, size)]
+    cols += roof_cols(size, size, 2.2, b["top"])
     return shapes, cols
 
 

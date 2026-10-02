@@ -206,6 +206,44 @@ class Iberian(unittest.TestCase):
             if name != "casa_d":
                 self.assertEqual(kit_recipes.PIECES[name].get("climbs", []), [], name)
 
+    def test_every_city_roof_is_stood_on(self):
+        # Wherever a city piece draws roof tiles, a collider holds a man up
+        # within 0.4 m of them: nobody sinks into a roof (the Terreiro's
+        # arcades drew theirs 2.4 m over a flat collider at the eaves).
+        sunk = []
+
+        for name, recipe in kit_recipes.PIECES.items():
+            if recipe["family"] not in ("iberian", "casa", "harbour", "fort", "massing") or not recipe.get("shapes"):
+                continue
+
+            built = kit_shapes.build(recipe["shapes"])
+            boxes = geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY)
+
+            for face in built["faces"]:
+                if not face[1].startswith("roof"):
+                    continue
+
+                points = [built["verts"][i] for i in face[0]]
+                normal = kit_shapes._normal(points)
+
+                if normal[1] < 0.5:
+                    continue
+
+                middle = [sum(p[k] for p in points) / len(points) for k in range(3)]
+                t = None
+
+                for box in boxes:
+                    hit = box.ray([middle[0], middle[1] + 0.05, middle[2]], [0.0, -1.0, 0.0])
+
+                    if hit is not None and (t is None or hit < t):
+                        t = hit
+
+                if t is None or t > 0.45:
+                    sunk.append("%s at %s (%s)" % (name, [round(v, 1) for v in middle], "nothing under" if t is None else "%.2f m" % t))
+                    break
+
+        self.assertEqual(sunk, [])
+
     def test_the_roofs_stop_at_the_walls(self):
         # A climber at the eaves (casa_d's vine) must meet the wall's upright
         # face, not the tilted end of a roof's collider standing out past it
