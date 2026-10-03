@@ -10,6 +10,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import geo  # noqa: E402
+import kit_patio  # noqa: E402
 import kit_pombal  # noqa: E402
 import kit_porto  # noqa: E402
 import kit_recipes  # noqa: E402
@@ -40,6 +42,9 @@ def toured(design, route):
     kit_town.register(TEST, "town", "render_ochre", design)
     kit_recipes.piece("test_street", "floor", "cobble", "stone", [kit_recipes.box(0.0, -0.1, 2.0, 12.0, 0.2, 4.0, "cobble")])
     points = [marker("tour_%d" % (i + 1), "route_check", p[:3], {"route": "tour", "order": i + 1, "move": p[3]}) for i, p in enumerate(route)]
+    # (Its climbs, ladders as the layout lays them, Layout.put climbs=True.)
+    for i, c in enumerate(design.get("climbs", [])):
+        points.append(dict(marker("climb_%d" % (i + 1), "ladder", c[0:3], size=list(c[3:6])), basis=geo.rotation(c[6])))
     return rules.problems({"level": "fixture", "pieces": [piece("house", TEST, (0, 0, 0)), piece("street", "test_street", (0, 0, 0))],
                            "markers": points})
 
@@ -196,6 +201,84 @@ class Pombaline(unittest.TestCase):
                     design = kit_pombal.design(bays, 12.0, 4, kind, enterable=enterable, rooms=3 if enterable else 0)
                     kit_town.register(TEST, "town", "azulejo_blue", design)
                     self.assertLessEqual(tris(kit_recipes.PIECES[TEST]), design["budget"], (bays, kind, enterable))
+
+
+def area(box):
+    return (box[2] - box[0]) * (box[3] - box[1])
+
+
+class Patio(unittest.TestCase):
+    def tearDown(self):
+        for name in (TEST, "test_street"):
+            kit_recipes.PIECES.pop(name, None)
+
+    def test_the_patio_is_a_quarter_of_the_lot(self):
+        for kind, (width, depth) in kit_patio.LOTS.items():
+            design = kit_patio.design(width, depth, kind)
+            self.assertGreaterEqual(area(design["patio"]), 0.25 * width * depth, kind)
+
+    def test_the_zaguan_bends_once(self):
+        # (From the street door's middle straight back: a wall before the
+        # patio; the patio is reached through the cancela, off to one side.)
+        for kind, (width, depth) in kit_patio.LOTS.items():
+            design = kit_patio.design(width, depth, kind)
+            door = design["doors"][0]
+            hit = first_hit(design["cols"], [door[0], 1.5, 0.5], [0.0, 0.0, -1.0])
+            self.assertLess(hit, 0.5 - design["patio"][3], kind)
+
+    def test_the_front_is_mostly_blank(self):
+        for kind, (width, depth) in kit_patio.LOTS.items():
+            design = kit_patio.design(width, depth, kind)
+            open_area = sum(o[4] * o[5] for o in design["openings"] if o[1] == "front")
+            self.assertLessEqual(open_area, 0.15 * width * design["eaves"], kind)
+
+    def test_the_azotea_is_walked_and_walled(self):
+        design = kit_patio.design(6.0, 18.0)
+        eaves, patio = design["eaves"], design["patio"]
+        # (Over a range, a floor at the roof; over the patio, none.)
+        self.assertAlmostEqual(30.0 - first_hit(design["cols"], [0.0, 30.0, -2.5], [0.0, -1.0, 0.0]), eaves, delta=0.05)
+        middle = [(patio[0] + patio[2]) / 2.0, (patio[1] + patio[3]) / 2.0]
+        self.assertLess(30.0 - first_hit(design["cols"], [middle[0], 30.0, middle[1]], [0.0, -1.0, 0.0]), eaves - 2.0)
+        # (Its parapet: a metre high round its edge.)
+        self.assertIsNotNone(first_hit(design["cols"], [0.0, eaves + 0.9, 2.0], [0.0, 0.0, -1.0]))
+        over = first_hit(design["cols"], [0.0, eaves + 1.1, 2.0], [0.0, 0.0, -1.0])
+        self.assertTrue(over is None or over > 2.6, over)
+
+    def test_a_linked_roof_opens_to_its_neighbour(self):
+        shut = kit_patio.design(6.0, 18.0)
+        linked = kit_patio.design(6.0, 18.0, quirk="linked")
+        z = linked["places"]["link"][2]
+        across = ([5.0, shut["eaves"] + 0.5, z], [-1.0, 0.0, 0.0])
+        self.assertLess(first_hit(shut["cols"], *across), 2.1)
+        self.assertGreater(first_hit(linked["cols"], *across) or 99.0, 4.0)
+
+    def test_an_enterable_patio_house_is_toured(self):
+        for kind, (width, depth) in kit_patio.LOTS.items():
+            design = kit_patio.design(width, depth, kind)
+            self.assertEqual(toured(design, design["tour"]), [], kind)
+            kit_recipes.PIECES.pop(TEST, None)
+
+    def test_corral_cells_are_3_by_4(self):
+        design = kit_patio.design(16.0, 20.0, "corral")
+        self.assertGreaterEqual(len(design["cells"]), 8)
+
+        for cell in design["cells"]:
+            self.assertEqual(sorted([round(cell[2] - cell[0], 2), round(cell[3] - cell[1], 2)]), [3.0, 4.0])
+
+    def test_every_patio_house_is_stood_on(self):
+        for kind, (width, depth) in kit_patio.LOTS.items():
+            for quirk in kit_patio.QUIRKS:
+                for enterable in (True, False):
+                    design = kit_patio.design(width, depth, kind, quirk, enterable)
+                    self.assertEqual(stood_on(design["shapes"], design["cols"]), [], (kind, quirk, enterable))
+
+    def test_patio_budget(self):
+        for kind, (width, depth) in kit_patio.LOTS.items():
+            for quirk in kit_patio.QUIRKS:
+                for enterable in (True, False):
+                    design = kit_patio.design(width, depth, kind, quirk, enterable)
+                    kit_town.register(TEST, "town", "whitewash", design)
+                    self.assertLessEqual(tris(kit_recipes.PIECES[TEST]), kit_patio.BUDGET[kind], (kind, quirk, enterable))
 
 
 if __name__ == "__main__":

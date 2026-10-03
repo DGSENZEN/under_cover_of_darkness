@@ -388,23 +388,37 @@ def house_budget(bays, storeys, enterable):
     return BUDGET_BAY * bays + BUDGET_STOREY * storeys + (BUDGET_INSIDE if enterable else 0)
 
 
-def rooms(plan, y, height, doors, slot="plaster", surface="stone"):
+def _opening_at(d, along):
+    """A rooms() opening: (x, z) a ROOM_DOOR; (x, z, width, height, kind[,
+    foot]) any opening; `along` its middle along its wall."""
+    if len(d) == 2:
+        return kit_door(along)
+
+    return Opening(along, d[5] if len(d) > 5 else 0.0, d[2], d[3], d[4])
+
+
+def rooms(plan, y, height, doors, slot="plaster", surface="stone", thickness=PARTITION, only=None, inside=True):
     """The partitions between a storey's rooms (`plan`: (x0, z0, x1, z1)
-    each), PARTITION thick, `height` up from y, along each edge two rooms
-    share; a ROOM_DOOR in it at each of `doors` ((x, z) on that edge)."""
+    each), `thickness` thick, `height` up from y, along each edge two rooms
+    share (with `only`, the edges of plan[only] alone); in it an opening at
+    each of `doors` on that edge: (x, z) a ROOM_DOOR, (x, z, width, height,
+    kind[, foot]) any."""
     shapes, cols = [], []
     eps = 1e-6
 
     for i, a in enumerate(plan):
-        for b in plan[i + 1:]:
+        for j, b in enumerate(plan):
+            if j <= i or (only is not None and only not in (i, j)):
+                continue
+
             for xa, xb in ((a[2], b[0]), (b[2], a[0])):
                 lo, hi = max(a[1], b[1]), min(a[3], b[3])
 
                 if abs(xa - xb) < eps and hi - lo > eps:
                     middle = (lo + hi) / 2.0
                     # (Turned 90 degrees the wall's x runs to -z.)
-                    holes = [kit_door(middle - dz) for dx, dz in doors if abs(dx - xa) < 0.3 and lo < dz < hi]
-                    s, c = wall(hi - lo, height, PARTITION, holes, slot, (xa, middle, 90.0), surface)
+                    holes = [_opening_at(d, middle - d[1]) for d in doors if abs(d[0] - xa) < 0.3 and lo < d[1] < hi]
+                    s, c = wall(hi - lo, height, thickness, holes, slot, (xa, middle, 90.0), surface, False, inside)
                     shapes, cols = shapes + s, cols + c
 
             for za, zb in ((a[3], b[1]), (b[3], a[1])):
@@ -412,8 +426,8 @@ def rooms(plan, y, height, doors, slot="plaster", surface="stone"):
 
                 if abs(za - zb) < eps and hi - lo > eps:
                     middle = (lo + hi) / 2.0
-                    holes = [kit_door(dx - middle) for dx, dz in doors if abs(dz - za) < 0.3 and lo < dx < hi]
-                    s, c = wall(hi - lo, height, PARTITION, holes, slot, (middle, za, 0.0), surface)
+                    holes = [_opening_at(d, d[0] - middle) for d in doors if abs(d[1] - za) < 0.3 and lo < d[0] < hi]
+                    s, c = wall(hi - lo, height, thickness, holes, slot, (middle, za, 0.0), surface, False, inside)
                     shapes, cols = shapes + s, cols + c
 
     return placed(shapes, cols, y=y)
