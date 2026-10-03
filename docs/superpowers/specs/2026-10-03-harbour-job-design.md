@@ -1,6 +1,6 @@
 # The harbour's job: a goal, words in the world, and the way on (Oct 3 2026)
 
-**Status:** design approved in conversation (Oct 3 2026), awaiting the user's review of this file.
+**Status:** built (Oct 3 2026) on branch `harbour-job` by its plan (`docs/superpowers/plans/2026-10-03-harbour-job.md`); the words are the user's to write (`job_test` lists them); departures from this design are the plan's ledger rulings (customs round indoors, the fort's loot moved onto the deck).
 **Branch:** `harbour-job` (worktree `.claude/worktrees/harbour-job`) from main c99b516.
 **Program:** the city on the rock (`2026-09-28-city-on-the-rock-design.md`). This pulls the part of
 program step 6 (mission systems) that the harbour needs forward, built general so every later

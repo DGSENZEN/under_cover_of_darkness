@@ -47,3 +47,17 @@ Godot --headless --fixed-fps 60 --path . res://tests/job_test.tscn | grep WORDS
 The harbour's conversations (`data/talk/harbour.talk`) are written the same way: each line a `<<placeholder>>` under a `# intent:` comment. A line carrying `[note:<id>]` adds that pencil note when the player overhears it (in 22 m, nothing solid between).
 
 A mistake in a file (an unknown key, a note that does not exist, a broken condition) is reported with its file and line when the game starts and by `job_test`.
+
+## How the game uses them
+
+| Piece | What it does |
+| --- | --- |
+| The letter | `J` raises it (`PlayerFrob.open_letter`), `J` or `E` lowers it, a click turns the sheet. A fresh mission opens with it up (`DistrictMap.open_with_letter`; tests turn it off). It goes down for a run, a jump, a climb, a swim, a carry, a blow struck or taken; the HUD hides the crosshair and lifts its prompts above it. Drawn by [HeldPage](../../scripts/Interaction/HeldPage.gd) (its words a SubViewport, lit by the world but never darker than `LIGHT_FLOOR`) from [LetterText](../../scripts/UI/LetterText.gd). |
+| Readables | `readable` markers (docs/systems/world.md) become [Readable](../../scripts/Interaction/Readable.gd)s: `E` holds the page up, walking 2 m off or `E` puts it down. Reading one adds its note. |
+| Notes from talk | A talk line's `[note:<id>]` is learnt when the player hears it ([Earshot](../../scripts/AISystem/Talk/Earshot.gd): 22 m, nothing solid between; subtitles use the same rule). A conversation's `where:` keeps it to the garrison or a district. |
+| Hails | A district map's `_hails()` pairs (`maps/city.gd`) call each other when their rounds bring them near (`TalkDirector.call_pair(&"hail", ...)`); their conversations say `when: situation:hail`. |
+| The gate | An exit whose gate is not met turns the player back with the gate's text, once per 4 s (`DistrictMap._exit_reached`). |
+| The seal | Taking something `special` turns it in the hand (`HandSlot` "special" job, cut short by a run, a jump or a blow); a main goal done plays `sting_goal`, a note the pencil and "Noted". |
+| The theft | A chest left open is noticed (`GuardLife`, CHEST_RANGE 12 m); robbed of its special, the finder shouts the job's `== shout theft`, the alarm goes full and the man nearest the nearest bell rings it, once per district (`JobState.notice_theft`). |
+| The tally | [Tally](../../scripts/Level/Tally.gd) counts knockouts, kills, bodies found, times seen (one per 10 s), bells and time; loot and specials are counted where taken. Shown on the loading screen on the way into the next district, waiting for `[E] Go on` (`LoadingScreen.holds`; tests turn it off). |
+| Memory | `CityState.job` ([JobState](../../scripts/Level/JobState.gd)): goals shown and done, notes, readables read, what was taken, districts reached, each district's facts and tally; `save_state`/`load_state` for saving to disk. |
