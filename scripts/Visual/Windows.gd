@@ -3,13 +3,17 @@ extends Node3D
 ## district's window records (LevelLoader's Level.windows, kit_glazing's)
 ## and its rooms (box markers "room"), the moon's shafts falling in through
 ## every window it stands in front of and sees, each from the beam's mouth at
-## the room's face to where its corners' rays land; and what stands under a
-## roof in a shaft made to cast again. Made by DistrictMap once the navmesh
-## is in (a physics frame has passed: rays find the level).
+## the room's face to where its corners' rays land; what stands under a roof
+## in a shaft made to cast again; and a lit room's nearest lamp thrown out
+## through its glass (a warm shaft spreading from it, a window-shaped patch
+## on what is outside), following the lamp as it is doused and relit. Made by
+## DistrictMap once the navmesh is in (a physics frame has passed: rays find
+## the level).
 
 const GodRaysScript := preload("res://scripts/Visual/GodRays.gd")
 const SightRay := preload("res://scripts/StimuliSystem/SightRay.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
+const Materials := preload("res://scripts/Visual/Materials.gd")
 
 ## The moon stands in front of a window when its way into the glass is at
 ## least this much along the glass's inward normal.
@@ -25,6 +29,22 @@ const INSIDE := 0.3
 const MOON_TINT := Color(0.6, 0.78, 1.25)
 ## What a shaft's rays pass through: glass, and what lies loose.
 const SKIP: Array[StringName] = [&"glass", &"loose"]
+## A lamp's light out through its window: its shaft's reach; its patch, a
+## spot this far out from the wall's face, its cone the glass seen from the
+## lamp and this much more (degrees), its range, its share of the lamp's
+## energy; how fast both follow the lamp (s); how often the lamps are looked
+## at (s); the shaft's colour and gain (a third of the moon's).
+const OUT_REACH := 10.0
+const SPOT_OUT := 0.05
+const SPOT_PAD := 4.0
+const SPOT_RANGE := 8.0
+const SPOT_GAIN := 0.5
+const FADE := 0.3
+const POLL := 0.25
+const LAMP_TINT := Color(1.0, 0.62, 0.3)
+const LAMP_GAIN := 0.14 / 3.0
+## A window's lead, as its patch's picture.
+const PAINTINGS := {"quarries": &"quarries", "casement": &"casement", "grille": &"window_grille"}
 
 ## Each window: {piece, lead, outline (the glass's corners), normal (out),
 ## middle, outside, inside (the wall's faces from the glass), room, facing,
@@ -40,6 +60,7 @@ var recast: Array[GeometryInstance3D] = []
 var _levels: Array = []
 var _made: Array = []
 var _moon: DirectionalLight3D = null
+var _poll := 0.0
 
 
 ## Reads the levels' windows and rooms (`made`: their LevelGameplay
@@ -56,7 +77,8 @@ func build(levels: Array, made: Array, moon: DirectionalLight3D) -> void:
 			if m["size"] == null:
 				continue
 
-			rooms[String(m["name"])] = {"transform": m["transform"], "size": m["size"], "lamps": [], "lamp": null, "rays": null, "fade": 0.0}
+			rooms[String(m["name"])] = {"transform": m["transform"], "size": m["size"], "lamps": [], "lamp": null, "rays": null, "fade": 0.0,
+				"built_for": null}
 
 	for level in levels:
 		for raw in level.windows:
@@ -74,7 +96,26 @@ func build(levels: Array, made: Array, moon: DirectionalLight3D) -> void:
 				"normal": normal, "middle": middle, "outside": float(raw.get("outside", 0.0)), "inside": inside,
 				"room": room_of(middle - normal * (inside + INSIDE)), "facing": 0.0, "sky": 0.0, "shaft": null, "spot": null, "lamp_shaft": null})
 
+	# Each room's lamps: the lights standing in it.
+	for record in made:
+		for lamp in (record as Dictionary).get("lights", {}).values():
+			if lamp == null or not is_instance_valid(lamp) or not (lamp as Node).has_method("is_lit"):
+				continue
+
+			var room := room_of((lamp as Node3D).global_position)
+
+			if room == "":
+				continue
+
+			rooms[room]["lamps"].append(lamp)
+
+			if (lamp as Node).has_signal("lit_changed"):
+				(lamp as Node).connect("lit_changed", _lamp_changed.bind(room))
+
 	rebuild()
+
+	for room in rooms:
+		_pick(room)
 
 
 ## The moon's shafts made again (the moon moved): the old ones freed, what
@@ -130,6 +171,183 @@ func room_of(point: Vector3) -> String:
 				best = String(room_name)
 
 	return best
+
+
+# A lamp out
+
+func _process(delta: float) -> void:
+	_poll -= delta
+
+	if _poll <= 0.0:
+		_poll = POLL
+
+		# (A lamp's state restored without a word, a lamp gone: caught here.)
+		for room in rooms:
+			_pick(room)
+
+	for room_name in rooms:
+		var room: Dictionary = rooms[room_name]
+
+		if room["rays"] == null:
+			continue
+
+		room["fade"] = move_toward(float(room["fade"]), 1.0 if room["lamp"] != null else 0.0, delta / FADE)
+		var made_for: Variant = room["built_for"]
+		var light: Light3D = (made_for as Node).get("light") if made_for != null and is_instance_valid(made_for) else null
+		var energy := light.light_energy if light != null and is_instance_valid(light) else 0.0
+		(room["rays"] as Node3D).set("strength", float(room["fade"]))
+
+		for w in windows:
+			if w["room"] == room_name and w["spot"] != null and is_instance_valid(w["spot"]):
+				(w["spot"] as SpotLight3D).light_energy = SPOT_GAIN * energy * float(room["fade"])
+
+
+func _lamp_changed(_lit: bool, room: String) -> void:
+	_pick(room)
+
+
+## The room's lit lamp nearest its windows (or none); its light made out
+## through them again when it is another lamp than they were made for.
+func _pick(room_name: String) -> void:
+	var room: Dictionary = rooms[room_name]
+	var lamps: Array = room["lamps"]
+
+	if lamps.is_empty():
+		return
+
+	var at := Vector3.ZERO
+	var count := 0
+
+	for w in windows:
+		if w["room"] == room_name:
+			at += w["middle"]
+			count += 1
+
+	if count == 0:
+		return
+
+	at /= float(count)
+	var best: Node3D = null
+
+	for lamp in lamps:
+		if is_instance_valid(lamp) and bool((lamp as Node).call("is_lit")):
+			if best == null or (lamp as Node3D).global_position.distance_to(at) < best.global_position.distance_to(at):
+				best = lamp
+
+	room["lamp"] = best
+
+	if best != null and best != room["built_for"]:
+		_light_out(room_name, best)
+
+
+## The room's windows lit from `lamp`: a warm shaft from it through each
+## one's mouth at the wall's outer face, a patch thrown on what is outside.
+func _light_out(room_name: String, lamp: Node3D) -> void:
+	var room: Dictionary = rooms[room_name]
+
+	if room["rays"] != null and is_instance_valid(room["rays"]):
+		(room["rays"] as Node).queue_free()
+
+	var rays: Node3D = GodRaysScript.new()
+	rays.name = "LampShafts_%s" % room_name
+	rays.set("follow_moon", false)
+	rays.set("tint", LAMP_TINT)
+	rays.set("gain", LAMP_GAIN)
+	add_child(rays)
+	rays.set("strength", 0.0)
+	room["rays"] = rays
+	room["built_for"] = lamp
+	var light: Light3D = lamp.get("light")
+	var source := light.global_position if light != null and is_instance_valid(light) else lamp.global_position
+	var space := get_world_3d().direct_space_state
+
+	for w in windows:
+		if w["room"] != room_name:
+			continue
+
+		if w["spot"] != null and is_instance_valid(w["spot"]):
+			(w["spot"] as Node).queue_free()
+
+		w["spot"] = null
+		w["lamp_shaft"] = null
+		var normal: Vector3 = w["normal"]
+		var middle: Vector3 = w["middle"]
+		var toward := middle - source
+
+		if toward.dot(normal) <= 0.0:
+			continue
+
+		var frame := _frame(w)
+		var spot := SpotLight3D.new()
+		spot.name = "WindowLamp"
+		spot.light_color = light.light_color if light != null else Color(1.0, 0.7, 0.4)
+		spot.light_energy = 0.0
+		spot.spot_range = SPOT_RANGE
+		spot.spot_angle = rad_to_deg(atan((frame["box"] as Rect2).size.length() * 0.5 / maxf(toward.length(), 0.01))) + SPOT_PAD
+		spot.shadow_enabled = false
+		spot.set_meta(&"casts_shadow", false)
+		spot.light_projector = Materials.photo(PAINTINGS.get(String(w["lead"]), &"casement"))
+		add_child(spot)
+		spot.global_position = middle + normal * (float(w["outside"]) + SPOT_OUT)
+		var aim := toward.normalized()
+		spot.look_at(spot.global_position + aim, Vector3.UP if absf(aim.y) < 0.99 else Vector3.FORWARD)
+		w["spot"] = spot
+		w["lamp_shaft"] = _lamp_shaft(space, w, frame, source, rays)
+
+
+## A lamp's shaft out through a window: its mouth at the wall's outer face
+## (the outer opening, less what the inner opening, seen from the lamp,
+## shades), each corner going on away from the lamp to what it meets (the
+## water's top counts) or OUT_REACH.
+func _lamp_shaft(space: PhysicsDirectSpaceState3D, w: Dictionary, frame: Dictionary, source: Vector3, rays: Node3D) -> MeshInstance3D:
+	var normal: Vector3 = w["normal"]
+	var middle: Vector3 = w["middle"]
+	var outside := float(w["outside"])
+	var inside := float(w["inside"])
+	var depth := (source - middle).dot(normal)
+
+	if depth >= -inside:
+		return null
+
+	# Each inner corner carried from the lamp onto the outer face.
+	var seen := PackedVector2Array()
+	var lamp2 := Vector2((source - middle).dot(frame["across"]), (source - middle).dot(frame["up"]))
+	var t := (outside - depth) / (-inside - depth)
+
+	for q in frame["poly"]:
+		seen.append(lamp2 + (q - lamp2) * t)
+
+	var mouth2 := _clip(frame["poly"], seen)
+
+	if mouth2.size() < 3:
+		return null
+
+	var face: Vector3 = middle + normal * outside
+	var box: Rect2 = frame["box"]
+	var mouth := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var reaches := PackedFloat32Array()
+
+	for q in mouth2:
+		var p: Vector3 = face + frame["across"] * q.x + frame["up"] * q.y
+		var way := (p - source).normalized()
+		mouth.append(p)
+		uvs.append(Vector2((q.x - box.position.x) / maxf(box.size.x, 0.001), (box.end.y - q.y) / maxf(box.size.y, 0.001)))
+		var from := p + way * 0.02
+		var hit := SightRay.first_solid(space, PhysicsRayQueryParameters3D.create(from, from + way * OUT_REACH, 1), SKIP)
+		var reach := 0.02 + (from.distance_to(hit["position"]) if not hit.is_empty() else OUT_REACH)
+
+		# (Over water, its top.)
+		for water in get_tree().get_nodes_in_group(&"water"):
+			if way.y < -0.001 and water.has_method("over") and bool(water.call("over", p)):
+				var down := (p.y - float(water.call("surface_y"))) / -way.y
+
+				if down > 0.0:
+					reach = minf(reach, down)
+
+		reaches.append(reach)
+
+	return rays.call("add_window", mouth, uvs, reaches, source)
 
 
 # The moon in
