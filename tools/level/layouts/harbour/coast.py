@@ -11,13 +11,17 @@ tavern's bush under the arcade, smoke from the chimneys."""
 import math
 import random
 
+import kit_harbour
 import kit_iberian as ki
 import kit_recipes
 import terrain
 
-from . import ARCADE_FRONT, BLOWHOLE, QUAY, rib_x
+from . import ARCADE_FRONT, BLOWHOLE, MOLE_X, QUAY, rib_x
 from .ground import COAST, MOUTH, SPIT, _ripple, headland, inland, spit, west_bank
+from .mole import TOP as MOLE_TOP
 from .ribeira import HOUSES, ROOF_HOUSE
+
+MOLE_WIDTH, PARAPET_TOP = kit_harbour.MOLE_WIDTH, kit_harbour.PARAPET_TOP
 
 # Where nothing is put: the cave's mouth and beach, the blowhole's shaft, the
 # mole's root (and the way from the thief's boat), the fort.
@@ -251,6 +255,32 @@ def _life(L, rng):
         L.put("laundry_2", (rib_x(i), round(QUAY + ki.GROUND + storey * ki.STOREY + 2.9, 2), ARCADE_FRONT + (ki.FACE - ki.FRONT)), 0.0, "ribeira")
 
     L.put("tavern_bush", (rib_x(3) + 3.0, QUAY + 3.3, ARCADE_FRONT), 0.0, "ribeira")
+
+    # The mole: bollards along its harbour edge with rope by some, fishing
+    # gear by its parapet (clear of the watch's beat, x 161, and of the way up
+    # from the thief's boat at its far end), gulls on the parapet.
+    edge = MOLE_X - MOLE_WIDTH / 2.0 + 0.7
+
+    for z in (12.0, 28.0, 44.0, 60.0, 76.0, 92.0, 108.0):
+        L.put("bollard", (edge, MOLE_TOP, z), 0.0, "mole")
+
+        if z % 32.0 == 12.0:
+            L.put("rope_coil", (edge + 0.9, MOLE_TOP, z + 1.1), round(rng.uniform(0, 360), 1), "mole")
+
+    gear = MOLE_X + MOLE_WIDTH / 2.0 - 2.4
+
+    for piece, z, yaw in (("anchor_small", 18.0, 30.0), ("net_pile", 30.0, 0.0), ("lobster_pots", 34.0, 20.0), ("barrel", 52.0, 0.0),
+                          ("crate_stack", 70.0, 90.0), ("basket_fish", 86.0, 0.0), ("oars_stack", 98.0, 90.0)):
+        L.put(piece, (gear, MOLE_TOP, z), yaw, "mole")
+
+    for z in (40.0, 82.0):
+        L.put("gull" if z < 60.0 else "gull_sitting", (MOLE_X + MOLE_WIDTH / 2.0 - 0.6, PARAPET_TOP + 0.12, z), round(rng.uniform(60.0, 120.0), 1), "mole")
+
+    # Rocks round the blowhole's mouth on the headland.
+    for angle in (35.0, 160.0, 280.0):
+        a = math.radians(angle)
+        px, pz = BLOWHOLE[0] + 6.8 * math.cos(a), BLOWHOLE[1] + 6.8 * math.sin(a)
+        L.put("boulders_b", (round(px, 2), round(headland(px, pz), 2), round(pz, 2)), round(angle + 90.0, 1), "cave")
 
     # Smoke from the chimneys of a few houses.
     for i in (2, 4, 8, 11):

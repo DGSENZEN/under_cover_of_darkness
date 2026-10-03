@@ -48,3 +48,12 @@ def lay(L):
     L.put("water_stair_20", (GATE_X, 0.0, 2.55), 0.0, "terreiro")
     L.put("cais_colunas", (GATE_X, QUAY, -0.9), 0.0, "terreiro")
     L.put("statue_king", (GATE_X, QUAY, -34.0), 0.0, "terreiro")
+
+    # The day's goods left by the arcades: carts with their shafts down,
+    # barrels, sacks and crates (a little cover out in the open square).
+    for piece, at, yaw in (("cart", (WEST + 5.5, QUAY, -47.0), 80.0), ("sacks", (WEST + 4.8, QUAY, -33.0), 10.0),
+                           ("barrel_row", (WEST + 4.6, QUAY, -21.0), 90.0), ("crate_stack", (EAST - 5.0, QUAY, -50.0), -85.0),
+                           ("cart", (EAST - 5.5, QUAY, -27.0), -100.0), ("barrel", (EAST - 4.4, QUAY, -13.0), 0.0),
+                           ("sacks", (-80.0, QUAY, NORTH + 5.6), 0.0), ("basket_fish", (-78.6, QUAY, NORTH + 5.4), 0.0),
+                           ("barrel_row", (-31.0, QUAY, NORTH + 4.6), 0.0)):
+        L.put(piece, at, yaw, "terreiro")

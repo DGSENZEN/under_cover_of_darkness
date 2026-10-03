@@ -4,6 +4,7 @@
 """
 
 import copy
+import math
 import os
 import sys
 import unittest
@@ -13,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import geo  # noqa: E402
 import kit_recipes  # noqa: E402
 import rules  # noqa: E402
+import terrain  # noqa: E402
 
 I = geo.IDENTITY
 
@@ -300,6 +302,76 @@ class Rules(unittest.TestCase):
             mx, mz = (a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0
             self.assertLess(ground.headland(mx + face[0] * 6.0, mz + face[1] * 6.0), 0.0, (a, b))
             self.assertGreater(ground.headland(mx - face[0] * 3.0, mz - face[1] * 3.0), 20.0, (a, b))
+
+    def test_the_cave_opens_through_its_cliff(self):
+        # The smugglers' cave runs into the headland through the gap in its
+        # cliff (its first stretch square to the cliff, its mouth the gap's
+        # width), the rock round its arch filling the gap; its chest and loot
+        # inside it (it ran along behind the cliff, its side showing in the
+        # gap: a flat slab, not a mouth).
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "layouts"))
+        from harbour import ground  # noqa: E402
+        import city_harbour  # noqa: E402
+
+        a, b = ground.COAST[ground.MOUTH[0]], ground.COAST[ground.MOUTH[1]]
+        gap = math.hypot(b[0] - a[0], b[1] - a[1])
+        sea = ((b[1] - a[1]) / gap, -(b[0] - a[0]) / gap)
+        (x0, _, z0), (x1, _, z1) = ground.CAVE[0], ground.CAVE[1]
+        run = math.hypot(x1 - x0, z1 - z0)
+        self.assertGreater(-((x1 - x0) * sea[0] + (z1 - z0) * sea[1]) / run, math.cos(math.radians(15.0)))
+        self.assertAlmostEqual(2.0 * ground.CAVE_RADII[0][0], gap, delta=1.0)
+        data = city_harbour.layout()
+        mouth = [t for t in data["terrain"] if t["name"] == "cave_mouth"]
+        self.assertTrue(mouth and mouth[0]["faces"])
+
+        def inside(x, z):
+            for (ax, _, az), (bx, _, bz), ra, rb in zip(ground.CAVE, ground.CAVE[1:], ground.CAVE_RADII, ground.CAVE_RADII[1:]):
+                dx, dz = bx - ax, bz - az
+                t = max(0.0, min(1.0, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)))
+
+                if math.hypot(x - ax - dx * t, z - az - dz * t) < ra[0] + (rb[0] - ra[0]) * t - 0.8:
+                    return True
+
+            return False
+
+        for m in data["markers"]:
+            if m["name"] in ("smugglers_chest", "brandy", "lace", "silver_dish", "probe_beach"):
+                self.assertTrue(inside(m["position"][0], m["position"][2]), m["name"])
+
+    def test_the_blowhole_opens_in_a_funnel_of_rock(self):
+        # Its shaft ends under the headland's top (it stood 3 m out of it, a
+        # stone box), flaring into a funnel wider than the hole cut in the
+        # ground round it.
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "layouts"))
+        from harbour import BLOWHOLE, ground  # noqa: E402
+        import city_harbour  # noqa: E402
+
+        data = city_harbour.layout()
+        shaft = [t for t in data["terrain"] if t["name"] == "blowhole_shaft"][0]
+        top = max(v[1] for v in shaft["verts"])
+        rim = min(ground.headland(BLOWHOLE[0] + 6.0 * math.cos(a), BLOWHOLE[1] + 6.0 * math.sin(a)) for a in [i * math.pi / 8 for i in range(16)])
+        self.assertLess(top, rim)
+        land = geo.TriGrid(terrain.triangles([t for t in data["terrain"] if t["name"] == "east_headland"][0]))
+        hole = max(math.hypot(dx * 0.25, dz * 0.25) for dx in range(-36, 37) for dz in range(-36, 37)
+                   if math.hypot(dx * 0.25, dz * 0.25) < 9.0 and not land.heights(BLOWHOLE[0] + dx * 0.25, BLOWHOLE[1] + dz * 0.25))
+        funnel = max(math.hypot(v[0] - BLOWHOLE[0], v[2] - BLOWHOLE[1]) for v in shaft["verts"])
+        self.assertGreater(funnel, hole)
+
+    def test_the_rivers_banks_step_up_in_strata(self):
+        # Both banks of the river granite in strata, steep faces over ledges
+        # (the east bank was one smooth 30 m slab up to the Guindais stair).
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "layouts"))
+        from harbour import ground  # noqa: E402
+
+        for bank, x0, x1 in ((ground.west_bank, -258.0, -236.0), (ground.east_bank, -193.0, -186.0)):
+            for z in (-30.0, -60.0, -90.0):
+                xs = [x0 + (x1 - x0) * i / 140.0 for i in range(141)]
+                ys = [bank(x, z) for x in xs]
+                slopes = [math.degrees(math.atan2(abs(b - a), (x1 - x0) / 140.0)) for a, b in zip(ys, ys[1:])]
+                faces = sum(1 for a, b in zip(slopes, slopes[1:]) if a <= 50.0 < b)
+                ledges = sum(1 for s in slopes if s < 20.0)
+                self.assertGreaterEqual(faces, 3, (bank.__name__, z))
+                self.assertGreater(ledges, 20, (bank.__name__, z))
 
     def test_the_kit_keeps_the_metrics(self):
         self.assertEqual(rules.kit_problems(), [])

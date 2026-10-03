@@ -67,6 +67,12 @@ def _normal(a, b, c):
     return [v / length for v in n] if length > 1e-12 else [0.0, 0.0, 0.0]
 
 
+def _area(a, b, c):
+    n = [(b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]), (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]),
+         (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])]
+    return 0.5 * math.sqrt(sum(v * v for v in n))
+
+
 def _facing(verts, face, toward):
     """The triangle wound so it looks along `toward`."""
     n = _normal(*(verts[i] for i in face))
@@ -291,6 +297,83 @@ def tunnel(name, sector, path, radii, floor=None, sides=10, seed=0, slot="rock",
             for tri in ([ring[i], after[i], after[j]], [ring[i], after[j], ring[j]]):
                 middle = [sum(verts[v][c] for v in tri) / 3.0 for c in range(3)]
                 faces.append(_facing(verts, tri, [centre[c] - middle[c] for c in range(3)]))
+
+    return _made(name, sector, surface, occluder, verts, faces, slot, tint)
+
+
+def frame(name, sector, outline, centre, along, toward, bottom, top, reach, slot="cliff", surface="stone", tint=None, occluder=True):
+    """The rock round an opening (a cave's mouth in a cliff's gap): from
+    `outline` (its points in order round it, in the plane through `centre`
+    along `along` (level) and up) out to a rectangle `reach` m either side of
+    the middle along it, from `bottom` to `top`, looking `toward`: each
+    outline point carried straight out from the middle to the rectangle, its
+    corners filled between."""
+    def local(p):
+        return geo.dot([p[i] - centre[i] for i in range(3)], along), p[1] - centre[1]
+
+    def world(a, h):
+        return [centre[0] + along[0] * a, centre[1] + h, centre[2] + along[2] * a]
+
+    flat = [local(p) for p in outline]
+
+    # (Round it counter-clockwise, along then up.)
+    if sum(a0 * h1 - a1 * h0 for (a0, h0), (a1, h1) in zip(flat, flat[1:] + flat[:1])) < 0.0:
+        outline, flat = outline[::-1], flat[::-1]
+
+    up, down = top - centre[1], bottom - centre[1]
+    # The rectangle's sides counter-clockwise (right, top, left, bottom) and
+    # the corner after each.
+    corners = [(reach, up), (-reach, up), (-reach, down), (reach, down)]
+
+    def out(a, h):
+        hits = []
+
+        if a > 1e-9:
+            hits.append((reach / a, 0))
+        elif a < -1e-9:
+            hits.append((-reach / a, 2))
+
+        if h > 1e-9:
+            hits.append((up / h, 1))
+        elif h < -1e-9:
+            hits.append((down / h, 3))
+
+        t, side = min(hits)
+        return (a * t, h * t), side
+
+    verts = [list(p) for p in outline]
+    edge = []
+
+    for a, h in flat:
+        (pa, ph), side = out(a, h)
+        edge.append((len(verts), side))
+        verts.append(world(pa, ph))
+
+    corner_index = []
+
+    for a, h in corners:
+        corner_index.append(len(verts))
+        verts.append(world(a, h))
+
+    faces = []
+    n = len(outline)
+
+    for i in range(n):
+        j = (i + 1) % n
+        (pi, si), (pj, sj) = edge[i], edge[j]
+        between = []
+        k = si
+
+        while k != sj:
+            between.append(corner_index[k])
+            k = (k + 1) % 4
+
+        ring = [i, j, pj] + between[::-1] + [pi]
+
+        for a, b in zip(ring[1:], ring[2:]):
+            # (None where a point carried out lands on a corner.)
+            if _area(verts[ring[0]], verts[a], verts[b]) > 1e-6:
+                faces.append(_facing(verts, [ring[0], a, b], list(toward)))
 
     return _made(name, sector, surface, occluder, verts, faces, slot, tint)
 

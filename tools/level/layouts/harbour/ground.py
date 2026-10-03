@@ -25,6 +25,27 @@ NORTH_SHORE_TOP = 27.0
 SPIT = ((-215.0, 10.0), (-85.0, 195.0))
 
 
+def _cave():
+    """The smugglers' cave: in through the cliff's gap (its first stretch
+    square to the cliff, its mouth the gap's width less the rock round its
+    arch), then bending north under the headland, past its beach, to the
+    undercroft's seal. Its path and its radii (across, up)."""
+    (ax, az), (bx, bz) = COAST[MOUTH[0]], COAST[MOUTH[1]]
+    gap = math.hypot(bx - ax, bz - az)
+    sea = ((bz - az) / gap, -(bx - ax) / gap)
+    mx, mz = (ax + bx) / 2.0, (az + bz) / 2.0
+    path = [(mx + sea[0] * 0.6, 2.0, mz + sea[1] * 0.6), (mx - sea[0] * 5.0, 2.0, mz - sea[1] * 5.0), (232.5, 2.0, 48.5), (231.5, 2.0, 40.0),
+            (230.0, 2.0, 26.0), (231.0, 2.0, 10.0), (232.0, 2.0, -16.0)]
+    radii = [(gap / 2.0 - 0.5, 6.5), (6.6, 5.8), (6.0, 5.2), (5.8, 4.8), (5.5, 4.5), (4.0, 3.5), (3.0, 3.0)]
+    return path, radii
+
+
+CAVE, CAVE_RADII = _cave()
+CAVE_SIDES = 12
+# The rock over the cave's arch, from just over its crown.
+LINTEL_FOOT = 9.4
+
+
 def _ripple(x, z, amount):
     return amount * (math.sin(x * 0.37 + z * 0.11) * 0.6 + math.sin(x * 0.09 - z * 0.23) * 0.4)
 
@@ -78,6 +99,34 @@ def west_bank(x, z):
     stepped = min(45.0, max(0.0, k * 7.5 + 7.5 * min(1.0, (d / 4.0 - k) / 0.55)))
     t = min(1.0, max(0.0, (-140.0 - z) / 12.5))
     return stepped + (plain - stepped) * t + _ripple(x, z, 0.4)
+
+
+def east_bank(x, z):
+    """The river's east bank, under the Guindais stair: granite in three
+    strata, each a steep face over a ledge, wandering along it, up to the
+    stair's foot; toward the gorge (north of z -140) the plain slope the
+    massing's gorge carries on (river()). West of x -193, the river's bed."""
+    if x <= -193.0:
+        return river(x, z)
+
+    width = 5.0 + 0.2 * max(0.0, -100.0 - z)
+    t = (x + 193.0) / width - 0.1 + 0.06 * math.sin(z * 0.21) + 0.04 * math.sin(z * 0.57 + 1.0)
+    t = min(1.0, max(0.0, t))
+    step = min(2, int(math.floor(t * 3.0)))
+    rise = 1.0 if t >= 1.0 else (step + min(1.0, (t * 3.0 - step) / 0.45)) / 3.0
+    stepped = 0.5 + (stair_y(z) - 0.4 - 0.5) * rise + _ripple(x, z, 0.15)
+    blend = min(1.0, max(0.0, (-140.0 - z) / 12.5))
+    return stepped + (river(x, z) - stepped) * blend
+
+
+def _heath(x, y, z, slope):
+    """The headland's top: short turf, bare granite wherever it is steep.
+    (Patches of rock by face read as squares of paving: its bare rock is its
+    tors and ledges.)"""
+    if slope > 50.0:
+        return "cliff_shore"
+
+    return "rock_shore" if slope > 22.0 else "grass"
 
 
 def inland(x, z):
@@ -134,14 +183,18 @@ def lay(L):
                            keep=lambda ys: max(ys) > -2.5, skirt=0.8))
     # (To the massing's first row at its north end, and in under the west
     # wall at its east: city_massing's rock meets it there.)
-    L.terrain(terrain.grid("river_banks", "river", -235.0, -152.5, -177.5, -10.0, 2.5, river, _slope_slot("gravel"), surface="stone",
+    L.terrain(terrain.grid("river_banks", "river", -235.0, -152.5, -193.0, -10.0, 2.5, river, _slope_slot("gravel"), surface="stone",
                            skirt=0.8))
+    # (Its east bank finer, for its strata, up to the stair.)
+    L.terrain(terrain.grid("river_east_bank", "river", -193.0, -152.5, -177.5, -10.0, 0.7, east_bank,
+                           lambda x, y, z, slope: "cliff_shore" if slope > 50.0 else ("rock_shore" if slope > 22.0 else "gravel"),
+                           surface="stone", skirt=0.8))
     # (Its west bank finer, for its strata; grass on the ledges over the
     # water.)
     L.terrain(terrain.grid("river_west_bank", "river", -260.0, -152.5, -235.0, -10.0, 1.25, west_bank,
                            lambda x, y, z, slope: "cliff_shore" if slope > 50.0 else ("rock_shore" if slope > 22.0 else ("gravel" if y < 3.0 else "grass")),
                            surface="stone", skirt=0.8))
-    L.terrain(terrain.grid("east_headland", "cave", 150.0, HEADLAND_NORTH, HEADLAND_EAST, 123.5, 5.0, headland, _slope_slot("grass"),
+    L.terrain(terrain.grid("east_headland", "cave", 150.0, HEADLAND_NORTH, HEADLAND_EAST, 123.5, 2.5, headland, _heath,
                            surface="stone", keep=lambda ys: min(ys) > 0.0, occluder=True))
     # (Granite: strata 2.8 m deep, broken by upright joints into blocks.)
     L.terrain(terrain.cliff("east_cliff_a", "cave", COAST[:MOUTH[0] + 1], -4.0, CLIFF_TOP, band=2.8, jitter=0.6, seed=11, slot="cliff_shore",
@@ -150,14 +203,24 @@ def lay(L):
                             step=1.6, blocks=(2, 0.7)))
     # (Rock over the cave's mouth down to its arch, and down the ground's
     # east edge.)
-    L.terrain(terrain.cliff("cave_lintel", "cave", [COAST[MOUTH[0]], COAST[MOUTH[1]]], 7.0, CLIFF_TOP, band=2.8, jitter=0.4, seed=15,
+    L.terrain(terrain.cliff("cave_lintel", "cave", [COAST[MOUTH[0]], COAST[MOUTH[1]]], LINTEL_FOOT, CLIFF_TOP, band=2.8, jitter=0.4, seed=15,
                             slot="cliff_shore", step=1.6, blocks=(2, 0.5)))
     L.terrain(terrain.cliff("east_edge", "cave", [(HEADLAND_EAST, HEADLAND_NORTH), (HEADLAND_EAST, COAST[0][1])], -4.0, CLIFF_TOP + 0.9,
                             band=2.8, jitter=0.5, seed=16, slot="cliff_shore", step=2.0, blocks=(2, 0.6)))
-    L.terrain(terrain.tunnel("smugglers_cave", "cave", [(226.0, 2.0, 57.0), (228.0, 2.0, 42.0), (230.0, 2.0, 26.0), (231.0, 2.0, 10.0),
-                                                        (232.0, 2.0, -16.0)],
-                             [(7.0, 6.0), (6.0, 5.0), (5.5, 4.5), (4.0, 3.5), (3.0, 3.0)], floor=-1.5, sides=10, seed=13, slot="rock"))
+    cave = terrain.tunnel("smugglers_cave", "cave", CAVE, CAVE_RADII, floor=-1.5, sides=CAVE_SIDES, seed=13, slot="rock_shore")
+    L.terrain(cave)
+    # The rock round its arch, filling the cliff's gap from the cliff's foot
+    # to the lintel and into the cliff's ends either side.
+    (ax, az), (bx, bz) = COAST[MOUTH[0]], COAST[MOUTH[1]]
+    gap = math.hypot(bx - ax, bz - az)
+    along = [(bx - ax) / gap, 0.0, (bz - az) / gap]
+    L.terrain(terrain.frame("cave_mouth", "cave", cave["verts"][:CAVE_SIDES], list(CAVE[0]), along, [along[2], 0.0, -along[0]], -4.0,
+                            LINTEL_FOOT + 0.4, gap / 2.0 + 0.6, slot="cliff_shore"))
     L.terrain(terrain.grid("cave_beach", "cave", 223.0, 4.0, 237.0, 32.0, 1.0, lambda x, z: 0.6 + max(0.0, 30.0 - z) / 24.0 * 0.9 + _ripple(x, z, 0.08),
                            "gravel", surface="gravel"))
-    L.terrain(terrain.tunnel("blowhole_shaft", "cave", [(BLOWHOLE[0], 3.0, BLOWHOLE[1]), (BLOWHOLE[0], CLIFF_TOP + 3.0, BLOWHOLE[1])],
-                             [(1.8, 1.8), (2.3, 2.3)], floor=None, sides=8, seed=14, slot="rock"))
+    # The blowhole's shaft up from the cave, flaring at the top into a funnel
+    # of rock under the headland's turf (round the hole cut in it).
+    rim = min(headland(BLOWHOLE[0] + 6.0 * math.cos(a), BLOWHOLE[1] + 6.0 * math.sin(a)) for a in [i * math.pi / 8.0 for i in range(16)])
+    L.terrain(terrain.tunnel("blowhole_shaft", "cave", [(BLOWHOLE[0], 3.0, BLOWHOLE[1]), (BLOWHOLE[0], rim - 2.2, BLOWHOLE[1]),
+                                                         (BLOWHOLE[0], rim - 0.35, BLOWHOLE[1])],
+                             [(1.8, 1.8), (2.3, 2.3), (5.6, 5.6)], floor=None, sides=12, seed=14, slot="rock_shore"))

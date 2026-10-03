@@ -129,7 +129,7 @@ const SLOTS := {
 	&"brick": {"photo": "brick", "colour": Color("7A4A38"), "metallic": 0.0, "roughness": 0.9, "tile": [1.5, 0.75]},
 	# The shore's rock and cliffs, banded by height (shore.gdshader): wet under
 	# high water, black with lichen over it.
-	&"rock_shore": {"photo": "rock", "colour": Color("7C7A74"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0, "shore": true, "tint": 0.78},
+	&"rock_shore": {"photo": "rock", "colour": Color("7C7A74"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0, "shore": true, "tint": 0.68},
 	&"cliff_shore": {"photo": "cliff", "colour": Color("8A8478"), "metallic": 0.0, "roughness": 0.9, "tile": 8.0, "shore": true, "tint": 0.6},
 	&"rock": {"photo": "rock", "colour": Color("7C7A74"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0},
 	&"cliff": {"photo": "cliff", "colour": Color("8A8478"), "metallic": 0.0, "roughness": 0.9, "tile": 8.0},

@@ -4,6 +4,7 @@
     python3 tools/level/test_terrain.py
 """
 
+import math
 import os
 import sys
 import unittest
@@ -47,6 +48,25 @@ class Terrain(unittest.TestCase):
         self.assertTrue(all(len(set(g)) == 1 for g in groups), groups)
         self.assertGreater(len({g[0] for g in groups}), 4)
         self.assertTrue(all(face_normal(c, f)[2] < 0.0 for f in c["faces"]))
+
+    def test_a_frame_fills_round_an_opening(self):
+        # The rock round a cave's mouth: from the opening's outline out to a
+        # rectangle, no hole between (its area the rectangle's less the
+        # opening's), every face looking out, each edge of the outline met by
+        # the frame once.
+        outline = [[2.0 * math.cos(2 * math.pi * i / 8), 2.0 * math.sin(2 * math.pi * i / 8), 0.0] for i in range(8)]
+        f = terrain.frame("mouth", "cave", outline, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0], -4.0, 4.0, 4.0)
+        area = 0.0
+
+        for face in f["faces"]:
+            a, b, c = (f["verts"][i] for i in face)
+            cross = [(b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]), (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]),
+                     (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])]
+            area += 0.5 * math.sqrt(sum(v * v for v in cross))
+            self.assertGreater(face_normal(f, face)[2], 0.99)
+
+        opening = 0.5 * 8 * 2.0 * 2.0 * math.sin(2 * math.pi / 8)
+        self.assertAlmostEqual(area, 64.0 - opening, places=3)
 
     def test_slopes_choose_slots(self):
         t = terrain.grid("hill", "yard", 0, 0, 20, 20, 2.0, lambda x, z: 0.0 if x < 10 else (x - 10) * 2.0,

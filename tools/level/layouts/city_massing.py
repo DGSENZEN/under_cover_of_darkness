@@ -182,10 +182,10 @@ def height(x, z):
 
 def _slot(x, y, z, slope):
     if slope > 50.0:
-        return "cliff"
+        return "cliff_shore"
 
     if slope > 24.0:
-        return "rock"
+        return "rock_shore"
 
     if -180.0 < x < 150.0 and z > -265.0 and y < 60.0:
         return "calcada"
@@ -194,8 +194,9 @@ def _slot(x, y, z, slope):
 
 
 def _cliffs(L):
+    # (The rock banded by height as the harbour's is: shore.gdshader.)
     # The north shore of the sea east of the mole, the headland's end.
-    L.terrain(terrain.cliff("north_shore", "rock", [(401.0, -11.5), (152.5, -11.5)], -6.0, 27.0, band=6.0, jitter=0.8, seed=21))
+    L.terrain(terrain.cliff("north_shore", "rock", [(401.0, -11.5), (152.5, -11.5)], -6.0, 27.0, band=6.0, jitter=0.8, seed=21, slot="cliff_shore"))
     # The rock behind the east wall and up beside the old town to the
     # palace's terrace; round the terrace's south and west faces.
     marks = [-11.5, -60.0, -110.0, -160.0, -199.0]
@@ -204,13 +205,13 @@ def _cliffs(L):
         top = 26.0 + 49.0 * _smooth((-(za + zb) / 2.0 - 12.0) / 218.0) + 1.0
         base = _town(SCARP_X - 3.0, zb) - 3.0
         L.terrain(terrain.cliff("east_scarp_%d" % (i + 1), "rock", [(SCARP_X, za), (SCARP_X, zb)], base, top, band=6.0, jitter=0.8,
-                                seed=22 + i))
+                                seed=22 + i, slot="cliff_shore"))
 
     x0, x1, z0, z1 = PALACE[0]
     L.terrain(terrain.cliff("palace_scarp_s", "palace", [(SCARP_X, z1 + 3.0), (x0 - 3.0, z1 + 3.0)], _town(130.0, z1 + 8.0) - 3.0, PALACE[1] + 1.0,
-                            band=6.0, jitter=0.8, seed=27))
+                            band=6.0, jitter=0.8, seed=27, slot="cliff_shore"))
     L.terrain(terrain.cliff("palace_scarp_w", "palace", [(x0 - 3.0, z1 + 3.0), (x0 - 3.0, z0)], _town(x0 - 8.0, z0) - 3.0, PALACE[1] + 1.0,
-                            band=6.0, jitter=0.8, seed=28))
+                            band=6.0, jitter=0.8, seed=28, slot="cliff_shore"))
 
 
 def _on(ground, x, z, half_x, half_z):

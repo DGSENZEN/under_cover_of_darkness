@@ -80,7 +80,7 @@ def _blocks(specs):
     return shapes, cols
 
 
-def _row(rng, x0, width, y, depth, height, count, yaw, z=0.0, rounding=0.3, crack=(0.06, 0.16), lean=4.0):
+def _row(rng, x0, width, y, depth, height, count, yaw, z=0.0, rounding=0.3, crack=(0.06, 0.16), lean=6.0):
     """A row of `count` blocks along the joint set's x from x0, `width` in
     all with cracks between, `depth` through, about `height` tall, on y."""
     shares = [rng.uniform(0.7, 1.3) for _ in range(count)]
@@ -151,9 +151,9 @@ def _rock(name, shapes, cols, budget):
 
 
 # The tors: a big one with a capstone, a low ridge, a tall stack.
-_rock("tor_a", *_tor(301, [(5.2, 3.2, 1.6, 3, 0.3), (3.6, 2.6, 1.3, 2, 0.35), (1.9, 1.9, 1.1, 1, 0.5)]), 500)
-_rock("tor_b", *_tor(302, [(6.4, 2.6, 1.6, 4, 0.3), (3.8, 2.0, 1.2, 2, 0.4)]), 500)
-_rock("tor_c", *_tor(303, [(3.4, 2.8, 2.0, 2, 0.3), (2.8, 2.4, 1.7, 2, 0.35), (1.6, 1.8, 1.2, 1, 0.45)]), 400)
+_rock("tor_a", *_tor(301, [(5.2, 3.2, 1.6, 3, 0.5), (3.6, 2.6, 1.3, 2, 0.55), (1.9, 1.9, 1.1, 1, 0.7)]), 500)
+_rock("tor_b", *_tor(302, [(6.4, 2.6, 1.6, 4, 0.5), (3.8, 2.0, 1.2, 2, 0.6)]), 500)
+_rock("tor_c", *_tor(303, [(3.4, 2.8, 2.0, 2, 0.5), (2.8, 2.4, 1.7, 2, 0.55), (1.6, 1.8, 1.2, 1, 0.65)]), 400)
 # Ledges along the sheet joints: wide thin slabs stepping back and up.
 _rock("ledge_a", *_tor(311, [(7.6, 5.0, 0.6, 3, 0.15), (6.4, 3.6, 0.5, 2, 0.15), (4.2, 2.2, 0.45, 2, 0.18)], sunk=0.2), 500)
 _rock("ledge_b", *_tor(312, [(8.4, 4.2, 0.8, 4, 0.2), (5.6, 2.6, 0.6, 3, 0.2)], sunk=0.3), 500)
