@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # The level kit pipeline (tools/level): levels built in Blender from a kit of
-# pieces, gameplay placed as markers, exported for Godot.
+# pieces, gameplay placed as markers, exported for Godot. The levels are the
+# layouts in tools/level/layouts: garrison, city_harbour, city_massing (and
+# fixture, the tests' own).
 #
 #   tools/level/level.sh kit               the kit's pieces -> assets/level/source/kit.blend
+#                                          (LEVEL_KIT_OUT: another .blend; LEVEL_KIT_ONLY: those pieces, a,b,c)
 #   tools/level/level.sh build <level> [--force]  its layout -> assets/level/source/<level>.blend (then the
-#                                          user's: not built over once edited, unless --force)
+#                                          user's: not built over once edited, its ground's paint
+#                                          included, unless --force)
 #   tools/level/level.sh check <level>     the rules, nothing written
 #   tools/level/level.sh export <level>    checked, then glTF per sector + the manifest, imported by Godot
 #   tools/level/level.sh preview <level> [out]  a plan and four bird's-eye pictures
 #   tools/level/level.sh all <level>       kit, build, export
-#   tools/level/level.sh test              the rules against broken levels, the terrain; the build's guard
+#   tools/level/level.sh test              the rules against broken levels, the terrain, the kit's shapes
+#                                          and pieces, the ships, occlusion, overlap, shading; the build's guard
 #
 # Exits non-zero when a step fails.
 set -euo pipefail
@@ -72,10 +77,13 @@ case "$verb" in
     python3 "$HERE/test_kit_shapes.py"
     python3 "$HERE/test_kits.py"
     python3 "$HERE/test_occlusion.py"
+    python3 "$HERE/test_ships.py"
+    python3 "$HERE/test_overlap.py"
+    python3 "$HERE/test_shade.py"
     "$HERE/test_guard.sh"
     ;;
   *)
-    sed -n '2,13p' "$0"
+    sed -n '2,19p' "$0"
     exit 2
     ;;
 esac

@@ -172,9 +172,11 @@ def problems(data, stage="stage1"):
 
         seen.add(t["name"])
 
-    # Standing markers: on a floor, not in a wall, not under the ground.
+    # Standing markers: on a floor, not in a wall, not under the ground (nor
+    # under an overhang lower than a man).
     boxes = colliders(data)
     ground = ground_of(data)
+    buried = set()
 
     for m in data["markers"]:
         if m["ucd"] not in STANDING:
@@ -192,6 +194,13 @@ def problems(data, stage="stage1"):
 
         if ground is not None and ground.up(geo.add(m["position"], [0.0, 0.05, 0.0]), BODY_HEIGHTS[-1]) is not None:
             out.append("%s (%s): its body is under the ground" % (m["name"], m["ucd"]))
+            buried.add(m["name"])
+
+    # Every point marker (a key, loot, a probe, a guard on a quay): not
+    # under the ground, however deep the ground sculpted over it.
+    for m in data["markers"]:
+        if ground is not None and not m.get("size") and m["name"] not in buried and ground.under(geo.add(m["position"], [0.0, 0.05, 0.0])):
+            out.append("%s (%s): it is under the ground" % (m["name"], m["ucd"]))
 
     out.extend(move_problems(data, boxes, ground))
     out.extend(headroom_problems(data, boxes, ground))

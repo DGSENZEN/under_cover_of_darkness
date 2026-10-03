@@ -66,20 +66,21 @@ func _ready() -> void:
 		shown and filled[1] > filled[0] and not is_instance_valid(screen), "screen %s, the rule while baking %.2f to %.2f, gone %s" % [shown,
 			filled[0], filled[1], not is_instance_valid(screen)])
 	_load_check(started)
-	_markers()
-	_reach()
-	_locks()
-	_freeze(true)
-	await _probes()
-	_sea_gate()
-	await _carrack()
-	await _roofs()
-	await _swim()
-	await _spit()
-	await _blowhole()
-	await _zones()
-	await _light_budget()
-	await _chase()
+	# (--only=<step>: that step alone, after the load's checks.)
+	var only := ""
+
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--only="):
+			only = arg.trim_prefix("--only=")
+
+	var steps := [["markers", _markers], ["reach", _reach], ["locks", _locks], ["freeze", _freeze.bind(true)], ["probes", _probes],
+		["sea_gate", _sea_gate], ["carrack", _carrack], ["roofs", _roofs], ["swim", _swim], ["spit", _spit], ["blowhole", _blowhole],
+		["zones", _zones], ["light_budget", _light_budget], ["chase", _chase]]
+
+	for step in steps:
+		if only == "" or step[0] == only or step[0] == "freeze":
+			await (step[1] as Callable).call()
+
 	_release_all()
 	print("\n==== RESULTS ====")
 
@@ -475,12 +476,52 @@ func _chase() -> void:
 	for i in 1200:
 		await get_tree().physics_frame
 		lowest = minf(lowest, g.global_position.y)
-		swam = swam or String(g.call(&"activity")) in ["swim", "tread"] if g.has_method("activity") else swam
+		swam = swam or _afloat(g)
 
 	var state := int(g.get("state"))
+	# (Engaged, he is in combat from the first frame: searching is a choice
+	# he made, combat on the quay is not one.)
 	_check("C13 a guard chasing the player into the bay never walks its bed: in 20 s he swims after him or searches the quay",
-		lowest > -2.0 and (swam or state >= 2), "lowest %.1f, swam %s, alert %d, at %s" % [lowest, swam, state, g.global_position.snapped(Vector3.ONE * 0.1)])
+		lowest > -2.0 and (swam or state == SEARCHING), "lowest %.1f, swam %s, alert %d, at %s" % [lowest, swam, state,
+			g.global_position.snapped(Vector3.ONE * 0.1)])
+
+	# The thief swims off, far out in the open sea and out of his sight (the
+	# sea is a swim region to its edge, z 420): he gives him up and searches
+	# on, place to place (never treading round one spot he cannot reach),
+	# and does not stay in the water.
+	_put(Vector3(g.global_position.x + 120.0, 0.2, 400.0), PI)
+	var gave_up := -1.0
+	var ashore := -1.0
+	var from := g.global_position
+	var wandered := 0.0
+	var timeline: Array[String] = []
+
+	for i in 60 * 90:
+		await get_tree().physics_frame
+		lowest = minf(lowest, g.global_position.y)
+		wandered = maxf(wandered, Vector2(g.global_position.x - from.x, g.global_position.z - from.z).length())
+
+		if gave_up < 0.0 and int(g.get("state")) <= SEARCHING:
+			gave_up = i / 60.0
+
+		ashore = -1.0 if _afloat(g) else (i / 60.0 if ashore < 0.0 else ashore)
+
+		if i % 600 == 0:
+			timeline.append("%ds %s %d %s" % [i / 60, String(g.call(&"activity")), int(g.get("state")), g.global_position.snapped(Vector3.ONE)])
+
+	_check("C13b a guard whose thief swims off out of sight gives him up, searches on (4 m or more from where he lost him) and is out of the water (for good) within 90 s, never walking the bed",
+		gave_up >= 0.0 and wandered >= 4.0 and ashore >= 0.0 and lowest > -2.0, "gave up at %.0f s, went %.1f m, ashore since %.0f s, lowest %.1f; %s" % [gave_up,
+			wandered, ashore, lowest, ", ".join(timeline)])
 	_freeze(true)
+
+
+## The guards' alert at which a hunt is searching, not fighting (Guard.Alert).
+const SEARCHING := 3
+
+
+## Whether a guard is afloat (swimming or treading water: GuardWater).
+func _afloat(g: Node) -> bool:
+	return String(g.call(&"activity")) in ["swim", "tread"]
 
 
 # ---------------------------------------------------------------------------

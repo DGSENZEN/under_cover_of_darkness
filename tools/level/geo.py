@@ -62,6 +62,14 @@ def from_blender(v):
     return apply(transpose(TO_BLENDER), v)
 
 
+def facing_up(tri):
+    """How much a triangle (three world vectors) faces the sky: its normal's
+    y by the right-hand rule ((b - a) x (c - a)), its corners counter-
+    clockwise seen from the side it faces; > 0 faces up, < 0 down."""
+    (ax, ay, az), (bx, by, bz), (cx, cy, cz) = tri[0], tri[1], tri[2]
+    return (bz - az) * (cx - ax) - (bx - ax) * (cz - az)
+
+
 class Box:
     """Oriented box in Godot metres; row-major basis columns are its axes."""
 
@@ -121,7 +129,8 @@ class Box:
 class TriGrid:
     """Triangles (a terrain's) bucketed on a grid over x and z, for straight
     up and down rays: where one crosses a triangle, the triangle's plane
-    gives the height (a vertical face is crossed edge-on, never hit)."""
+    gives the height (a vertical face is crossed edge-on, never hit) and its
+    winding which way it faces (facing_up)."""
 
     def __init__(self, triangles, cell=4.0):
         """Bucket triangles (three world vectors each); cell is positive metres.
@@ -142,8 +151,10 @@ class TriGrid:
                 for k in range(int(math.floor(min(az, bz, cz) / cell)), int(math.floor(max(az, bz, cz) / cell)) + 1):
                     self.cells.setdefault((i, k), []).append((tri, area))
 
-    def heights(self, x, z):
-        """Return unsorted list[float] world heights intersecting x/z metres."""
+    def hits(self, x, z):
+        """Return unsorted list[(float, bool)]: the world heights the
+        vertical line at x/z metres crosses, each with whether that face
+        faces up (its area's sign: facing_up is minus it)."""
         out = []
 
         for tri, area in self.cells.get((int(math.floor(x / self.cell)), int(math.floor(z / self.cell))), []):
@@ -153,9 +164,20 @@ class TriGrid:
             w = 1.0 - u - v
 
             if u >= -1e-9 and v >= -1e-9 and w >= -1e-9:
-                out.append(u * ay + v * by + w * cy)
+                out.append((u * ay + v * by + w * cy, area < 0.0))
 
         return out
+
+    def heights(self, x, z):
+        """Return unsorted list[float] world heights intersecting x/z metres."""
+        return [y for y, _up in self.hits(x, z)]
+
+    def under(self, point):
+        """Whether `point` (a world three-vector) is under the ground: the
+        first face over it, however high, faces up (its top). Under a face
+        that faces down at it (a cave's roof, an overhang) it is not."""
+        above = [(y, up) for y, up in self.hits(point[0], point[2]) if y >= point[1] - 1e-6]
+        return bool(above) and min(above)[1]
 
     def down(self, point, reach):
         """Return nearest downward float distance, or None within reach metres.

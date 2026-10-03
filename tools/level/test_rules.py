@@ -144,6 +144,43 @@ class Rules(unittest.TestCase):
         data["markers"].append(marker("buried", "hide", (10, 0.0, 0)))
         self.assertTrue(any("under the ground" in p for p in rules.problems(data)))
 
+    def test_a_key_or_loot_under_the_terrain(self):
+        # Not only the markers that stand: a key sculpted over is a door
+        # never opened.
+        data = good()
+        data["terrain"] = [flat_terrain("mound", y=1.2, x0=6, x1=14)]
+        data["markers"] += [marker("lost_key", "key", (10, 0.0, 0), {"key_id": "nowhere"}),
+                            marker("lost_cup", "loot", (11, 0.3, 1), {"value": 10})]
+        found = rules.problems(data)
+        self.assertTrue(any("lost_key" in p and "under the ground" in p for p in found), found)
+        self.assertTrue(any("lost_cup" in p and "under the ground" in p for p in found), found)
+
+    def test_a_guard_deep_under_the_terrain(self):
+        # On a kit floor (the quay) with the ground sculpted 3 m over it.
+        data = good()
+        data["terrain"] = [flat_terrain("bank", y=3.0, x0=-2, x1=2)]
+        found = rules.problems(data)
+        self.assertTrue(any("Hendrik" in p and "under the ground" in p for p in found), found)
+
+    def test_a_marker_under_a_cave_roof_is_not_buried(self):
+        # The ground's underside (a cave's roof, facing down at him) is over
+        # him, not the ground he is under.
+        data = good()
+        roof = flat_terrain("cave_roof", y=3.0, x0=6, x1=14)
+        roof["tris"] = [list(reversed(t)) for t in roof["tris"]]
+        data["terrain"] = [flat_terrain("cave_floor", y=0.0, x0=6, x1=14), roof]
+        data["markers"] += [marker("in_the_cave", "hide", (10, 0.0, 0)),
+                            marker("cave_cup", "loot", (11, 0.3, 1), {"value": 10})]
+        self.assertEqual(rules.problems(data), [])
+
+    def test_the_ground_faces_up(self):
+        # The generator's ground is wound to face the sky (what the rules
+        # take as its top).
+        ground = terrain.grid("g", "yard", 0.0, 0.0, 4.0, 4.0, 1.0, lambda x, z: 0.1 * x, lambda x, y, z, s: "grass")
+
+        for face in ground["faces"]:
+            self.assertGreater(geo.facing_up([ground["verts"][i] for i in face]), 0.0)
+
     def test_a_terrain_renamed_in_blender(self):
         data = good()
         data["terrain"] = [flat_terrain("bank.001", y=0.0, x0=6, x1=14)]

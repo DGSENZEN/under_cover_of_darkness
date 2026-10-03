@@ -1,7 +1,7 @@
 # The City on the Rock: Program Design
 
 **Date:** 2026-09-28
-**Status:** concept and build order approved in conversation; this document awaits the user's review.
+**Status:** sub-project 1 built (the harbour, `docs/superpowers/plans/2026-09-29-city-harbour.md`, Oct 2026: the district playable in `maps/city.tscn` with the rest of the city as massing, its look polished after the user's review); sub-project 2 (the city in blocks: the other seven districts greyboxed with their ways in, guards and puzzles) next.
 **Supersedes:** the mission concept of `2026-09-26-canal-quarter-mission-design.md` (its sections 1–4, 7 and 12). That spec's level metrics (section 5) and Blender-to-Godot contract (section 6) still hold: the garrison program built the contract as `tools/level`, and this program extends it.
 **Working names:** the city (unnamed yet), the Moon-Glass (the target), the districts below.
 

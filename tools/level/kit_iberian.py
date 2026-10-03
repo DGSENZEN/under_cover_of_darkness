@@ -34,6 +34,10 @@ FRONT = DEPTH / 2.0
 # thickness, how far it stands out (deeper than Porto's 0.5 m: a thief
 # stands on it).
 BALCONY = (1.7, 0.15, 0.9)
+# Its rails: their handrail's top over its floor, and how thick a collider
+# stops a man at them.
+RAIL = 0.95
+RAIL_THICK = 0.1
 RUNNING = 5.0
 PITCH = 20.0
 CASA_TRIS = 5200
@@ -212,6 +216,19 @@ def _balcony(x, y0, width, carried, wall=FRONT, depth=BALCONY[2]):
                 ks.box(end, y0 + 0.93, wall + bd / 2.0, 0.06, 0.04, bd, "iron"),
                 ks.box(end, y0 + 0.47, front - 0.03, 0.05, 0.94, 0.05, "iron"),
                 ks.prism(end, y0 + 1.02, front - 0.03, 0.05, 0.14, 4, "iron", 45.0, top=0.0)]
+
+    return out
+
+
+def _rail_cols(x, y0, width, wall=FRONT, depth=BALCONY[2]):
+    """What stops a man on a balcony (_balcony's): its rails as colliders,
+    across its front and back to the wall at each end, as high as its
+    handrail (too thin to hide anything: no occluders)."""
+    front, high = wall + depth, RAIL
+    out = [col(x, y0 + high / 2.0, front - 0.03, width, high, RAIL_THICK)]
+
+    for s in (-1.0, 1.0):
+        out.append(col(x + s * (width / 2.0 - 0.03), y0 + high / 2.0, wall + depth / 2.0, RAIL_THICK, high, depth))
 
     return out
 
@@ -434,6 +451,7 @@ def casa(storeys, front, side, balconies, lit, chimney=1.0, vine=False, upper="d
         if balconies == "running":
             shapes += _balcony(0.0, y0, RUNNING, storey > 0)
             cols.append(col(0.0, y0 - BALCONY[1] / 2.0, FRONT + BALCONY[2] / 2.0, RUNNING, BALCONY[1], BALCONY[2]))
+            cols += _rail_cols(0.0, y0, RUNNING)
 
         for i, x in enumerate((-WINDOW_X, WINDOW_X)):
             on_balcony = balconies in ("all", "running") or (balconies == "left" and i == 0) or (balconies == "top" and top)
@@ -451,6 +469,7 @@ def casa(storeys, front, side, balconies, lit, chimney=1.0, vine=False, upper="d
             if on_balcony and balconies != "running":
                 shapes += _balcony(x, y0, BALCONY[0], storey > 0)
                 cols.append(col(x, y0 - BALCONY[1] / 2.0, FRONT + BALCONY[2] / 2.0, BALCONY[0], BALCONY[1], BALCONY[2]))
+                cols += _rail_cols(x, y0, BALCONY[0])
 
     if oculus:
         y = eaves - STOREY + 1.55

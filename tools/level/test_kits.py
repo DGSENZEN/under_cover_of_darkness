@@ -341,6 +341,25 @@ class Iberian(unittest.TestCase):
                 self.assertGreaterEqual(len([s for s in iron if s["kind"] == "box"]), 3, "%s: handrails at %.1f" % (name, lip))
                 self.assertEqual(len([s for s in iron if s["kind"] == "prism"]), 2, "%s: finials at %.1f" % (name, lip))
 
+    def test_a_balconys_rails_stop_a_man(self):
+        # A man on a balcony (dropped onto it from a roof) walks into its
+        # rails, not through them: across its front and at both ends, the
+        # handrail's height over its floor.
+        for name in CASAS:
+            recipe = kit_recipes.PIECES[name]
+            boxes = geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY)
+
+            for c in balconies(recipe):
+                lip, x0, x1 = top_of(c), c[0] - c[3] / 2.0, c[0] + c[3] / 2.0
+                wall, front = c[2] - c[5] / 2.0, c[2] + c[5] / 2.0
+                knee, waist = lip + 0.3, lip + 0.85
+                # (Where the rails are drawn: 3 cm in from its front and ends.)
+                outward = [[x, y, front - 0.03] for x in (x0 + 0.3, (x0 + x1) / 2.0, x1 - 0.3) for y in (knee, waist)]
+                sideways = [[x, y, (wall + front) / 2.0] for x in (x0 + 0.03, x1 - 0.03) for y in (knee, waist)]
+
+                for point in outward + sideways:
+                    self.assertTrue(any(b.contains(point) for b in boxes), "%s: no rail at %s over %.1f" % (name, point, lip))
+
     def test_the_eaves_are_stepped_rows_of_tile(self):
         # The beirado: rows of canal tile stepping out over a granite cornice,
         # three at the front and two at the back, each showing its row of

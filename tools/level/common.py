@@ -107,15 +107,24 @@ def _rounded(value):
     return value
 
 
-def content_hash(data):
+# What of a terrain the edit guard hashes: its shape (before October 2026,
+# only that), then its paint (each triangle's slot, the tint) and properties.
+SHAPE = ("name", "sector", "tris")
+PAINT = SHAPE + ("slots", "tint", "surface", "occluder")
+
+
+def content_hash(data, terrain=PAINT):
     """A level's pieces, markers and terrain as read back from its .blend
     (read.read), its numbers rounded: saved as it is built, so an edit since
-    then can be told (build will not overwrite it without --force). (A level
-    without terrain hashes as it did before terrain was read.)"""
+    then can be told (build will not overwrite it without --force): a piece
+    or marker moved, the ground sculpted, repainted or retinted, its surface
+    changed. `terrain` names what of the ground counts (SHAPE: as the guard
+    hashed it before it saw paint). (A level without terrain hashes as it
+    did before terrain was read.)"""
     content = {"pieces": data["pieces"], "markers": data["markers"]}
 
     if data.get("terrain"):
-        content["terrain"] = [{"name": t["name"], "sector": t["sector"], "tris": t["tris"]} for t in data["terrain"]]
+        content["terrain"] = [{k: t[k] for k in terrain if k in t} for t in data["terrain"]]
 
     return data_hash(_rounded(content))
 

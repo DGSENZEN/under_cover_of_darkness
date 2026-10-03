@@ -49,7 +49,7 @@ An empty/unreadable manifest reports an error and returns a Level with null root
 
 ## Gameplay marker contracts
 
-`build_all()` returns `{doors,lights,water,ladders,ropes,bells,decals,routes,stations,pickups,chests,props,noise_zones,mechanisms}` and also calls `mission_marks()` (void). It does not build guards. Dictionaries are name -> node; Array collections preserve creation order rather than name indexing.
+`build_all()` returns `{doors,lights,water,ladders,ropes,bells,decals,routes,stations,pickups,chests,props,smokes,noise_zones,mechanisms}` and also calls `mission_marks()` (void). It does not build guards. Dictionaries are name -> node; Array collections preserve creation order rather than name indexing.
 
 | Builder -> result | Markers / props consumed and side effects |
 | --- | --- |
@@ -66,6 +66,7 @@ An empty/unreadable manifest reports an error and returns a Level with null root
 | pickups -> Dictionary | loot value required, label/special/kind (seal groups); key key_id required; tool required kind/count/label. Supported tool kinds use TOOLS; arrows build quiver contents. Unknown tool is skipped. |
 | chests -> Dictionary | chest large/locked/key/label/pick; default dimensions .9×.55×.55 m, large 1.2×.7×.7 m. |
 | props -> Array | prop kind/mass; crate or crate_small size/mass presets; unknown kind uses crate preset. Positive mass overrides preset. |
+| smokes -> Array | smoke markers (no properties): a ChimneySmoke at each, breathing FireParticles smoke off its pots on the night's wind within 110 m of the player. |
 | noise_zones -> Array | noise_zone size/db and optional period; steady entries return SoundBus IDs and register parent-exit cleanup. Positive period builds a Blowhole at box top; results mix IDs and nodes. |
 | mechanisms -> Array | lever/wheel/portcullis/sluice/hoist/slider, target/state/label metadata in mechanism group. Portcullis additionally creates solid metal Grid; other entries are runtime stubs. |
 | mission_marks -> void | objective requires label, optional kind steal; exit/secret create box Area3D with label/groups and mask 1|2; probe requires expect metadata. Map/objective code watches these nodes. |

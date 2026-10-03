@@ -36,13 +36,19 @@ def value(key, raw, ucd):
 
 def terrain_of(obj):
     """A terrain object as the rules read it: its triangles in the world, in
-    Godot's axes (as sculpted, if it was)."""
+    Godot's axes (as sculpted, if it was); each triangle's slot (its
+    material's name) and each vertex's tint (the "Tint" colours), as
+    painted, if they were."""
     mesh = obj.data
     mesh.calc_loop_triangles()
     to_world = obj.matrix_world
     corners = [geo.from_blender(list(to_world @ v.co)) for v in mesh.vertices]
+    names = [m.name if m is not None else "" for m in mesh.materials]
+    tint = mesh.color_attributes.get("Tint")
     return {"name": obj.name, "sector": sector_of(obj), "surface": obj.get("surface", "stone"), "occluder": bool(obj.get("occluder", 0)),
-            "tris": [[corners[i] for i in tri.vertices] for tri in mesh.loop_triangles]}
+            "tris": [[corners[i] for i in tri.vertices] for tri in mesh.loop_triangles],
+            "slots": [names[tri.material_index] if tri.material_index < len(names) else "" for tri in mesh.loop_triangles],
+            "tint": [list(c.color)[:3] for c in tint.data] if tint is not None else []}
 
 
 def read():
