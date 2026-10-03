@@ -22,6 +22,8 @@ BUDGET = {"stage1": 60000, "stage2": 120000}
 # Markers that stand on the floor, and how far below them it may be.
 STANDING = {"station", "hide", "guard", "spawn", "waypoint", "arrival"}
 FLOOR_BELOW = 1.0
+# An arrival stands at least this far out of every exit's box (m).
+ARRIVAL_CLEAR = 2.0
 # A man stands up to this high; a marker whose body is in a wall is wrong.
 BODY_HEIGHTS = (0.5, 1.2, 1.7)
 
@@ -201,6 +203,23 @@ def problems(data, stage="stage1"):
     for m in data["markers"]:
         if ground is not None and not m.get("size") and m["name"] not in buried and ground.under(geo.add(m["position"], [0.0, 0.05, 0.0])):
             out.append("%s (%s): it is under the ground" % (m["name"], m["ucd"]))
+
+    # Arrivals: clear of every exit's box, or the player is sent straight
+    # back through it.
+    exits = [geo.Box(m["position"], m["basis"], m["size"]) for m in data["markers"] if m["ucd"] == "exit" and m.get("size")]
+    exit_names = [m["name"] for m in data["markers"] if m["ucd"] == "exit" and m.get("size")]
+
+    for m in data["markers"]:
+        if m["ucd"] != "arrival":
+            continue
+
+        for box, exit_name in zip(exits, exit_names):
+            local = box.local(m["position"])
+            gap = sum(max(0.0, abs(local[i]) - box.half[i]) ** 2 for i in range(3)) ** 0.5
+
+            if gap < ARRIVAL_CLEAR:
+                out.append("%s (arrival): %.1f m from %s's box, under %.1f m: the player would go straight back" % (m["name"], gap, exit_name,
+                                                                                                                 ARRIVAL_CLEAR))
 
     out.extend(move_problems(data, boxes, ground))
     out.extend(headroom_problems(data, boxes, ground))

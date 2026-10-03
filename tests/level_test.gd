@@ -342,6 +342,18 @@ func _gameplay() -> void:
 		and not bool(stale.from_file), "from file %s" % [stale.from_file])
 	stale.queue_free()
 
+	# K26 the hash of what a navmesh was baked from reads its meshes' hashes
+	# off the manifest: the same with the .glb files gone (an exported build
+	# carries only their imports)
+	var bare := "user://k26/fixture"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(bare))
+	DirAccess.copy_absolute(ProjectSettings.globalize_path("res://assets/level/fixture/fixture.json"), ProjectSettings.globalize_path(bare.path_join("fixture.json")))
+	var stamped: bool = (JSON.parse_string(FileAccess.get_file_as_string("res://assets/level/fixture/fixture.json")) as Dictionary).has("meshes")
+	var with_meshes: String = NavBakerScript.source_hash(["res://assets/level/fixture"], {"cell": 0.1})
+	var without: String = NavBakerScript.source_hash([bare], {"cell": 0.1})
+	_check("K26 a navmesh's source hash is the same with the meshes gone (their hashes stamped in the manifest)", stamped and with_meshes == without,
+		"stamped %s, hashes equal %s" % [stamped, with_meshes == without])
+
 	# K15 a guard made by LevelGameplay walks his route
 	var guards: Dictionary = LevelGameplay.guards(holder, level, made["routes"], made["stations"], GUARD)
 	var hendrik: Node3D = guards.get("Hendrik")

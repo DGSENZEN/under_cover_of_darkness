@@ -134,12 +134,15 @@ func _ready() -> void:
 		guards.merge(LevelGameplay.guards(self, levels[level], d["routes"], d["stations"], GUARD))
 
 	GuardScript.randomize_on = true
-	await screen.step(String(words.get("player", "")), 0.97)
+	# The player, and the district as he left it, before a frame passes: a
+	# man remembered down must not stand at his post for a tick first (and
+	# light his lantern).
 	_player()
 
 	if _mission() != null:
 		CityState.enter(self)
 
+	await screen.step(String(words.get("player", "")), 0.97)
 	screen.close()
 	load_seconds = (Time.get_ticks_msec() - started) / 1000.0
 	_report()

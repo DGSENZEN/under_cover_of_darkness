@@ -15,7 +15,8 @@ const LevelGameplayScript := preload("res://scripts/Level/LevelGameplay.gd")
 ## arrival (m).
 const FOLLOW_RANGE := 30.0
 const BEHIND := 1.5
-## Guard.Alert.COMBAT; the guard scene a follower is made from.
+## Guard.Alert.SEARCHING and COMBAT; the guard scene a follower is made from.
+const SEARCHING := 3
 const COMBAT := 4
 const GUARD_SCENE := "res://Guard.tscn"
 
@@ -52,6 +53,20 @@ func leave(map: Node, exit: Area3D) -> void:
 		if not state["guards"].has(guard_name) and (before[guard_name].has("down") or before[guard_name].has("away")):
 			state["guards"][guard_name] = before[guard_name]
 
+	# Men still on their way in behind the player, who has gone again first:
+	# they come through to find him gone and wait at the arrival, searching;
+	# in their own district, as its own men again.
+	for follower in followers.filter(func(f): return StringName(f["to"]) == map.district):
+		followers.erase(follower)
+		var at := _arrival(map, follower)
+		var waiting := {"transform": at, "state": SEARCHING, "alert": 60.0, "has_last_known": true, "last_known": at.origin}
+		var follower_name := String(follower["spec"]["name"])
+
+		if (state["guards"].get(follower_name, {}) as Dictionary).has("away"):
+			state["guards"][follower_name] = waiting
+		else:
+			state["visitors"][follower_name] = {"spec": follower["spec"], "state": waiting}
+
 	for guard_name in map.guards:
 		var g: Variant = map.guards[guard_name]
 
@@ -87,10 +102,7 @@ func enter(map: Node) -> void:
 	if not carried.is_empty() and map.player != null:
 		map.player.load_state(carried)
 
-	var arriving := followers.filter(func(f): return StringName(f["to"]) == map.district)
-	followers = followers.filter(func(f): return StringName(f["to"]) != map.district)
-
-	for follower in arriving:
+	for follower in followers.filter(func(f): return StringName(f["to"]) == map.district):
 		_follow(map, follower)
 
 
@@ -99,20 +111,39 @@ func _after(g: Variant, player: Node) -> bool:
 	return g != null and is_instance_valid(g) and not bool(g.get("_knocked_out")) and int(g.get("state")) == COMBAT and g.get("_target") == player
 
 
+## Where a follower comes through into `map`: a pace behind the player's
+## arrival.
+func _arrival(map: Node, follower: Dictionary) -> Transform3D:
+	var at: Transform3D = map.marker(String(follower["arrive"])).get("transform", Transform3D())
+	at.origin += at.basis.z * BEHIND
+	return at
+
+
 ## A man following the player into `map`: through the gate `delay` s after
-## him, a pace behind his arrival, made again from his spec and after him.
+## him, a pace behind his arrival, made again from his spec and after him; a
+## visitor here, or (coming home, away in its memory) the district's own
+## man again. Pending until then: if the player leaves first, `leave` puts
+## him there instead.
 func _follow(map: Node, follower: Dictionary) -> void:
 	await map.get_tree().create_timer(float(follower["delay"]), false).timeout
+
+	if not followers.has(follower):
+		return
+
+	followers.erase(follower)
 
 	if not is_instance_valid(map) or not map.is_inside_tree():
 		return
 
-	var at: Transform3D = map.marker(String(follower["arrive"])).get("transform", Transform3D())
-	at.origin += at.basis.z * BEHIND
 	var spec: Dictionary = follower["spec"]
-	var g := LevelGameplayScript.visitor(map, spec, at, load(GUARD_SCENE) as PackedScene)
-	map.guards[String(spec["name"])] = g
-	map.visitors[String(spec["name"])] = spec
+	var follower_name := String(spec["name"])
+	var home: bool = (districts.get(map.district, {}).get("guards", {}).get(follower_name, {}) as Dictionary).has("away")
+	var g := LevelGameplayScript.visitor(map, spec, _arrival(map, follower), load(GUARD_SCENE) as PackedScene)
+	map.guards[follower_name] = g
+
+	if not home:
+		map.visitors[follower_name] = spec
+
 	await map.get_tree().physics_frame
 
 	if is_instance_valid(g) and map.player != null and is_instance_valid(map.player):

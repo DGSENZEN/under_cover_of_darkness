@@ -11,6 +11,7 @@ scripts/Level/LevelLoader.gd reads them.
     Blender -b assets/level/source/<level>.blend --python tools/level/export.py [-- stage2]
 """
 
+import hashlib
 import json
 import math
 import os
@@ -477,7 +478,12 @@ def export(stage="stage1"):
             settings.write_text(IMPORT.format(source="res://" + str(path.relative_to(common.ROOT)).replace(os.sep, "/")))
 
     write_proxy(data, out)
-    (out / (level + ".json")).write_text(json.dumps(manifest(data), indent=None, separators=(",", ":")) + "\n")
+    # Each sector mesh's hash in the manifest: what a baked navmesh is checked
+    # against (NavBaker.source_hash) where the .glb itself is not shipped.
+    exported = manifest(data)
+    exported["meshes"] = {sector: hashlib.md5((out / (sector + ".glb")).read_bytes()).hexdigest()
+                          for sector in data["sectors"] if (out / (sector + ".glb")).exists()}
+    (out / (level + ".json")).write_text(json.dumps(exported, indent=None, separators=(",", ":")) + "\n")
     schema.write_json(out / "markers.json")
     print("level: exported %s: %d sectors -> %s" % (level, len(data["sectors"]), out.relative_to(common.ROOT)))
 

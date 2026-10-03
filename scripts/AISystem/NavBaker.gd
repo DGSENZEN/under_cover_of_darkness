@@ -338,19 +338,22 @@ func _loaded() -> void:
 
 
 ## What the bake of `folders` (levels' export folders) with `settings` (the
-## baker's) is made from, as one hash: each level's manifest and sector
-## meshes (its proxy left out: it is not walked) and the settings.
+## baker's) is made from, as one hash: each level's manifest, which carries
+## its sector meshes' hashes ("meshes": an exported build ships their
+## imports, not the .glb files), and the settings. A manifest from before
+## the stamp has its sector meshes hashed beside it (its proxy left out: it
+## is not walked).
 static func source_hash(folders: Array, settings: Dictionary) -> String:
 	var parts := PackedStringArray()
 
 	for folder: String in folders:
-		var files: Array[String] = []
+		var manifest_file := folder.get_file() + ".json"
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(folder.path_join(manifest_file)))
+		var stamped: bool = parsed is Dictionary and (parsed as Dictionary).has("meshes")
+		var files: Array[String] = [manifest_file]
 
 		for file in DirAccess.get_files_at(folder):
-			var manifest := file.ends_with(".json") and file != "markers.json"
-			var walked := file.ends_with(".glb") and file != "proxy.glb"
-
-			if manifest or walked:
+			if not stamped and file.ends_with(".glb") and file != "proxy.glb":
 				files.append(file)
 
 		files.sort()

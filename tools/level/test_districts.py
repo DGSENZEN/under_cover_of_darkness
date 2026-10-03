@@ -81,6 +81,16 @@ class Districts(unittest.TestCase):
         found = rules.district_problems(REG, {"la": la, "lb": lb})
         self.assertIn("Inigo: in la and lb", found)
 
+    def test_an_arrival_stands_clear_of_every_exit(self):
+        # Arriving in an exit's box (or a step from it) would send the player
+        # straight back; at least ARRIVAL_CLEAR m out of every exit box.
+        data = good()
+        data["markers"].append(marker("from_x", "arrival", (0.5, 0, 0.5)))
+        data["markers"].append(marker("exit_x", "exit", (1.5, 1.0, 0.5), {"label": "on"}, size=[2, 2, 2]))
+        self.assertTrue(any("from_x" in p and "exit_x" in p for p in rules.problems(data)), rules.problems(data))
+        data["markers"][-1]["position"] = [5.0, 1.0, 0.5]
+        self.assertEqual(rules.problems(data), [])
+
     def test_a_district_of_a_level(self):
         self.assertEqual(districts.district_of(REG, "lb"), "b")
         self.assertIsNone(districts.district_of(REG, "lc"))

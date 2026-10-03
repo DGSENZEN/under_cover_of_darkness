@@ -165,9 +165,11 @@ func _mission() -> void:
 	await _through("exit_sea_gate")
 	await _through("to_harbour_sea_gate")
 	var lies: Node = _body("Inigo")
-	_check("T8 a guard knocked out stays down: no Inigo, his body where he fell", not _standing("Inigo") and lies != null
-		and lies.global_position.distance_to(fell) < BODY_SLACK, "standing %s, body %s, %.2f m from where he fell" % [_standing("Inigo"), lies != null,
-			lies.global_position.distance_to(fell) if lies != null else -1.0])
+	# (He carried a lantern: put down again in silence, no lantern drops anew.)
+	var dropped: int = get_tree().get_nodes_in_group(&"dropped_lights").filter(func(l): return mission.map.is_ancestor_of(l)).size()
+	_check("T8 a guard knocked out stays down: no Inigo, his body where he fell, no lantern dropped again", not _standing("Inigo") and lies != null
+		and lies.global_position.distance_to(fell) < BODY_SLACK and dropped == 0, "standing %s, body %s, %.2f m from where he fell, lanterns dropped %d" % [
+			_standing("Inigo"), lies != null, lies.global_position.distance_to(fell) if lies != null else -1.0, dropped])
 
 	# T9 a body on the shoulder is left at the gate
 	mission.map.player.inventory.holster()
@@ -215,6 +217,64 @@ func _mission() -> void:
 	_check("T11 a follower knocked out in the old town is not raised at home", not _standing("Duarte") and not mission.map.guards.has("Duarte"),
 		"standing %s" % [_standing("Duarte")])
 
+	# T13 a man who chases the player home is his district's own again: one
+	# of him, his, where he was left; and (T13b) knocked out at home, he
+	# stays down
+	for test in [["T13", "Rodrigo", false], ["T13b", "Tome", true]]:
+		var who: String = test[1]
+		await _chase_through(who, Vector3(-55.0, 2.6, -70.0), "exit_sea_gate")
+		var out13: bool = (await _until_fighting(who)) != null
+		await _through("to_harbour_sea_gate")
+		var home13 := await _until_fighting(who)
+		var back13: bool = home13 != null
+
+		if bool(test[2]) and home13 != null:
+			home13.knock_out(mission.map.player, true)
+			await _seconds(1.5)
+
+		await _through("exit_west_wall")
+		var kept: Dictionary = CityState.districts.get(&"harbour", {}).get("guards", {}).get(who, {})
+		await _through("to_harbour_west_wall")
+		var men: Array = get_tree().get_nodes_in_group(&"guards").filter(func(g): return mission.map.is_ancestor_of(g) and String(g.get("given_name")) == who)
+
+		if bool(test[2]):
+			_check("T13b a man who chased the player home and was knocked out there stays down", out13 and back13 and men.is_empty()
+				and _body(who) != null, "followed out %s, back %s, standing %d, body %s" % [out13, back13, men.size(), _body(who) != null])
+		else:
+			var at13: Vector3 = (kept["transform"] as Transform3D).origin if kept.has("transform") else Vector3.INF
+			var one: bool = men.size() == 1 and mission.map.guards.get(who) == men[0] and not mission.map.visitors.has(who)
+			_check("T13 a man who chased the player home is one man, the district's own, where he was left", out13 and back13 and one
+				and men[0].global_position.distance_to(at13) < 3.0, "followed out %s, back %s, men %d, his own %s, %.1f m from where left" % [out13,
+					back13, men.size(), one, men[0].global_position.distance_to(at13) if not men.is_empty() else -1.0])
+
+	# T14 a follower the player turns back before is not lost: away from home,
+	# and waiting on the far side
+	await _chase_through("Baltasar", Vector3(-55.0, 2.6, -64.0), "exit_sea_gate")
+	await _through("to_harbour_sea_gate")
+	var gone_home: bool = not _standing("Baltasar")
+	await _through("exit_sea_gate")
+	await _seconds(1.0)
+	var waiting: Node = mission.map.guards.get("Baltasar")
+	var near14: bool = waiting != null and is_instance_valid(waiting) and waiting.global_position.distance_to(
+		(mission.map.marker("from_harbour_sea_gate")["transform"] as Transform3D).origin) < 20.0
+	_check("T14 a follower the player turns back before is not lost: away from home, on the far side", gone_home and near14,
+		"away from home %s, in the old town near the gate %s" % [gone_home, near14])
+	await _through("to_harbour_sea_gate")
+
+	# T6b an exit entered within a second of arriving does nothing; after it, it leads on
+	await _seconds(0.5)
+	var arrived_map: Node = mission.map
+	var arrived_at: Vector3 = mission.map.player.global_position
+	mission.map.player.teleport(Transform3D(mission.map.player.global_basis, _exit("exit_sea_gate").global_position))
+	await _seconds(1.5)
+	var held_back: bool = mission.map == arrived_map
+	mission.map.player.teleport(Transform3D(mission.map.player.global_basis, arrived_at))
+	await _seconds(0.3)
+	await _through("exit_sea_gate")
+	_check("T6b an exit entered in the arrival's first second does nothing; entered after it, it leads on", held_back and mission.map.district == &"old_town",
+		"held back %s, then through %s" % [held_back, mission.map.district == &"old_town"])
+	await _through("to_harbour_sea_gate")
+
 	# T12 a sealed way says where it goes and goes nowhere
 	var harbour_map: Node = mission.map
 	await _seconds(GRACE + 0.2)
@@ -246,6 +306,33 @@ func _through(exit_name: String) -> void:
 			break
 
 	await _frames(2)
+
+
+## `who` (a guard of the map in hand) put at `at`, after the player, and the
+## player through `exit_name` (he follows).
+func _chase_through(who: String, at: Vector3, exit_name: String) -> void:
+	var g: Node = mission.map.guards[who]
+	# (The player between him and the gate: he runs at the gate.)
+	var gate := _exit(exit_name).global_position
+	mission.map.player.teleport(Transform3D(mission.map.player.global_basis, Vector3(gate.x, at.y, lerpf(at.z, gate.z, 0.3))))
+	g.global_position = at
+	g.reset_physics_interpolation()
+	await _frames(2)
+	g.call("_engage", mission.map.player)
+	await _seconds(0.5)
+	await _through(exit_name)
+
+
+## The guard `who` of the map in hand once he is fighting (within 12 s), or null.
+func _until_fighting(who: String) -> Node:
+	for i in 60 * 12:
+		await get_tree().physics_frame
+		var g: Variant = mission.map.guards.get(who)
+
+		if g != null and is_instance_valid(g) and int(g.get("state")) == COMBAT:
+			return g
+
+	return null
 
 
 func _exit(exit_name: String) -> Area3D:

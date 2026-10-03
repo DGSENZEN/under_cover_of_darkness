@@ -111,6 +111,13 @@ static func apply(parent: Node3D, made: Dictionary, guards: Dictionary, state: D
 	for visitor_name in state.get("visitors", {}):
 		var entry: Dictionary = state["visitors"][visitor_name]
 		var at: Transform3D = entry["state"]["transform"] if entry.has("state") else Transform3D.IDENTITY
+		var native: Variant = guards.get(visitor_name)
+
+		# Never two men of one name: the visitor is the one remembered.
+		if native != null and is_instance_valid(native):
+			native.queue_free()
+			guards.erase(visitor_name)
+
 		var g := LevelGameplay.visitor(parent, entry["spec"], at, load(GUARD_SCENE) as PackedScene)
 		guards[visitor_name] = g
 		visitors[visitor_name] = entry["spec"]
@@ -126,8 +133,8 @@ static func apply(parent: Node3D, made: Dictionary, guards: Dictionary, state: D
 	var guard_states: Dictionary = state.get("guards", {})
 	var visitor_states: Dictionary = state.get("visitors", {})
 
-	for marker_name in guard_states.keys() + visitor_states.keys():
-		var saved: Dictionary = guard_states.get(marker_name, visitor_states.get(marker_name, {}))
+	for marker_name in guard_states.keys().filter(func(n): return not visitor_states.has(n)) + visitor_states.keys():
+		var saved: Dictionary = visitor_states[marker_name] if visitor_states.has(marker_name) else guard_states[marker_name]
 		var g: Variant = guards.get(marker_name)
 
 		if g == null or not is_instance_valid(g):
@@ -144,5 +151,6 @@ static func apply(parent: Node3D, made: Dictionary, guards: Dictionary, state: D
 				g.queue_free()
 
 			guards.erase(marker_name)
-		elif guard_states.has(marker_name):
+		elif not visitor_states.has(marker_name):
+			# (A visitor was put as he was when he was made, above.)
 			g.load_state(saved)

@@ -2453,9 +2453,16 @@ func restore_downed(at: Transform3D, killed: bool, discovered: bool) -> RigidBod
 	remove_from_group(&"guards")
 	SoundBus.remove_listener(self)
 	collision_layer = 0
+	global_transform = at
+
+	# His lantern went out where he fell, long ago: not dropped (lit) anew.
+	if _hands != null and _hands.lantern != null and is_instance_valid(_hands.lantern):
+		_hands.lantern.queue_free()
+		_hands.lantern = null
+		_hands.call("_light_gone")
+
 	_let_go()
 	visible = false
-	global_transform = at
 	var body: RigidBody3D = GuardBodyScript.spawn(self, killed, Vector3.ZERO)
 	_rig.transfer_to(body, Vector3.ZERO, at.origin + Vector3.UP)
 	body.set("discovered", discovered)
