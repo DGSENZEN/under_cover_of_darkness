@@ -51,6 +51,7 @@ func _ready() -> void:
 	await _robbed()
 	await _shut()
 	await _tally()
+	await _counted_once()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -219,6 +220,56 @@ func _tally() -> void:
 	_check("R8 the tally counts a knockout, sightings (one a moment), the totals and the time", int(t.get("knockouts", 0)) == 1 and merged == 1
 		and int(t.get("seen", 0)) == 2 and int(t.get("loot_total", 0)) == 100 and int(t.get("seconds", 0)) >= 14,
 		"tally %s, seen after the second sighting %d" % [t, merged])
+	tally.queue_free()
+
+
+# ---------------------------------------------------------------------------
+# R9: a theft and its bell are one alarm; a body found by two men is one
+# ---------------------------------------------------------------------------
+
+func _counted_once() -> void:
+	await _fresh()
+	CityState.job.reset()
+	CityState.job.arrive(&"fixture")
+	var tally: Node = TallyScript.new()
+	add_child(tally)
+	tally.setup(player, {})
+	_light(Vector3(250, 2.6, 1.5))
+	var chest: Node3D = Props.chest(self, Vector3(250, 0, 0))
+	var seal: RigidBody3D = Props.loot(self, Vector3(250, 0.15, 0), 250, "seal")
+	seal.set_meta(&"special", true)
+	LevelGameplay.fill_chests({"box": chest}, {"the_seal": seal})
+	var bell: StaticBody3D = AlarmBellScript.build(self, Vector3(250, 0, -14), 0.0)
+	var rung := []
+	bell.rung.connect(func(by): rung.append(by))
+	var finder := _guard(Vector3(250, 0, 6), 0.0)
+	_guard(Vector3(253, 0, -12), 0.0)
+	await _frames(70)
+	chest.frob(player)
+	seal.frob(player)
+	await _until(func(): return not rung.is_empty(), 60 * 25)
+	await _frames(30)
+	var alarms := int(CityState.job.tally_of(&"fixture").get("alarms", 0))
+
+	# A body two men both come upon.
+	await _fresh()
+	CityState.job.reset()
+	CityState.job.arrive(&"fixture")
+	tally.queue_free()
+	tally = TallyScript.new()
+	add_child(tally)
+	tally.setup(player, {})
+	_light(Vector3(270, 2.6, 0.0))
+	var sleeper := _guard(Vector3(270, 0, 0), 0.0)
+	await _frames(70)
+	sleeper.knock_out(player, true)
+	await _frames(30)
+	_guard(Vector3(268, 0, 6), deg_to_rad(-20.0))
+	_guard(Vector3(272, 0, 6), deg_to_rad(20.0))
+	await _frames(60 * 15)
+	var bodies := int(CityState.job.tally_of(&"fixture").get("bodies_found", 0))
+	_check("R9 a theft and the bell rung for it are one alarm; a body two men find is one body found", not rung.is_empty() and alarms == 1
+		and bodies == 1, "rung %d, alarms %d, bodies found %d" % [rung.size(), alarms, bodies])
 	tally.queue_free()
 
 

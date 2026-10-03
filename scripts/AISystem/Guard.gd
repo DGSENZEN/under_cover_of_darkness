@@ -3569,10 +3569,12 @@ func discover_theft(chest: Node3D) -> void:
 			keeper.send_to_bell_for(chest.global_position)
 
 
-## Sent to ring the alarm for what was found at `where`.
+## Sent to ring the alarm for a theft found at `where` (the theft is the
+## alarm counted: the bell he rings for it is not counted again, Tally).
 func send_to_bell_for(where: Vector3) -> void:
 	last_known_position = where
 	has_last_known = true
+	set_meta(&"bell_for_theft", true)
 	send_to_bell()
 
 

@@ -1,7 +1,7 @@
 extends Node
 ## A district's tally as it is played (the harbour's job spec, section 7),
 ## counted into the job (JobState.count, the district the player is in):
-## knockouts, kills, bodies found by the guards, times seen (a man come at
+## knockouts, kills, bodies found by the guards (each body once), times seen (a man come at
 ## the player, one in SEEN_MERGE s however many), bells rung, and the time
 ## spent there (pause and loading not counted). Loot, specials and
 ## readables are counted where they are taken (DistrictMap, JobState); their
@@ -62,13 +62,32 @@ func _listen() -> void:
 		if g.has_signal("knocked_out"):
 			g.knocked_out.connect(func(_body): CityState.job.count("knockouts"))
 			g.died.connect(func(_body): CityState.job.count("kills"))
-			g.found_body.connect(func(_body): CityState.job.count("bodies_found"))
+			g.found_body.connect(_on_found_body)
 			g.alert_changed.connect(_on_alert.bind(g))
 
 	for bell in get_tree().get_nodes_in_group(&"alarm_bells"):
 		if not _heard.has(bell):
 			_heard[bell] = true
-			bell.rung.connect(func(_by): CityState.job.count("alarms"))
+			bell.rung.connect(_on_rung)
+
+
+## A body counted once, however many men come upon it.
+func _on_found_body(body: Node) -> void:
+	if body == null or not is_instance_valid(body) or body.has_meta(&"tallied"):
+		return
+
+	body.set_meta(&"tallied", true)
+	CityState.job.count("bodies_found")
+
+
+## A bell rung is an alarm, but for the bell rung for a theft (the theft was
+## counted: JobState.notice_theft).
+func _on_rung(by: Node) -> void:
+	if by != null and is_instance_valid(by) and by.has_meta(&"bell_for_theft"):
+		by.remove_meta(&"bell_for_theft")
+		return
+
+	CityState.job.count("alarms")
 
 
 func _on_alert(new_state: int, _old_state: int, g: Node) -> void:
