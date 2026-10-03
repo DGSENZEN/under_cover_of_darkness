@@ -98,10 +98,6 @@ static func lights(parent: Node3D, level) -> Dictionary:
 		made.name = marker_name
 		made.set_meta(&"marker", marker_name)
 		made.set_meta(&"made_in", out)
-
-		if made.get("can_douse") != null:
-			made.set("can_douse", bool(m["props"].get("douse", true)))
-
 		out[marker_name] = made
 
 	return out
@@ -121,12 +117,16 @@ static func _light(parent: Node3D, m: Dictionary) -> Node3D:
 	if String(props.get("color", "")) != "":
 		overrides["color"] = Color(String(props["color"]))
 
+	# Before it is added: a flame finds its reach (the hand's ray, the guards'
+	# rounds) as it gets ready, by this.
+	overrides["can_douse"] = bool(props.get("douse", true))
 	var yaw := at.basis.get_euler().y
 
 	match String(props["kind"]):
 		"torch":
 			var energy := float(overrides.get("energy", 1.6))
-			return Lights.torch_at(parent, at.origin, energy, float(overrides.get("light_range", 9.0)), energy > 1.0)
+			return Lights.torch_at(parent, at.origin, energy, float(overrides.get("light_range", 9.0)), energy > 1.0,
+				{"can_douse": overrides["can_douse"]})
 		"brazier":
 			return Lights.brazier(parent, at.origin, overrides)
 		"candle":

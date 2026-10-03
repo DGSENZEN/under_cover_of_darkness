@@ -73,7 +73,7 @@ func _ready() -> void:
 		if arg.begins_with("--only="):
 			only = arg.trim_prefix("--only=")
 
-	var steps := [["markers", _markers], ["reach", _reach], ["locks", _locks], ["freeze", _freeze.bind(true)], ["probes", _probes],
+	var steps := [["markers", _markers], ["douse", _douse], ["reach", _reach], ["locks", _locks], ["freeze", _freeze.bind(true)], ["probes", _probes],
 		["sea_gate", _sea_gate], ["carrack", _carrack], ["roofs", _roofs], ["swim", _swim], ["spit", _spit], ["blowhole", _blowhole],
 		["zones", _zones], ["light_budget", _light_budget], ["chase", _chase]]
 
@@ -154,6 +154,36 @@ func _markers() -> void:
 		missing.append("guards: %d markers, %d made" % [guards, city.guards.size()])
 
 	_check("C2 every marker is made into its node", missing.is_empty(), "; ".join(missing))
+
+
+## C16: a light marked dousable (its marker's douse, true by default) is
+## found by the hand (its Reach) and known to the guards (the "lights" group,
+## their relighting rounds); one marked not, neither. (A glow or a window's
+## shaft is no flame: not counted.)
+func _douse() -> void:
+	var wrong: Array[String] = []
+	var flames := 0
+
+	for district in city.levels:
+		var made: Dictionary = city.made[district]
+
+		for m in (city.levels[district] as LevelLoader.Level).of("light"):
+			var node: Variant = made["lights"].get(String(m["name"]))
+
+			if node == null or not is_instance_valid(node) or node.get("can_douse") == null:
+				continue
+
+			flames += 1
+			var marked := bool(m["props"].get("douse", true))
+			var reach: bool = (node as Node).get_node_or_null("Reach") != null
+			var known: bool = (node as Node).is_in_group(&"lights")
+
+			if bool(node.get("can_douse")) != marked or reach != marked or known != marked:
+				wrong.append("%s (%s, marked %s): douses %s, reach %s, rounds %s" % [m["name"], m["props"].get("kind", ""), marked,
+					node.get("can_douse"), reach, known])
+
+	_check("C16 every flame marked dousable is found by the hand and on the guards' rounds; one marked not, neither",
+		flames > 0 and wrong.is_empty(), "%d flames; %s" % [flames, "; ".join(wrong.slice(0, 8))])
 
 
 func _reach() -> void:
