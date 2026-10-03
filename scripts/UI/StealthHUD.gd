@@ -11,7 +11,7 @@ const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 const SettingsScript := preload("res://scripts/UI/Settings.gd")
 const CrispTextScript := preload("res://scripts/Visual/CrispText.gd")
 
-const SUBTITLE_RANGE := 22.0
+const Earshot := preload("res://scripts/AISystem/Talk/Earshot.gd")
 ## A man noticing you is marked this near (m). One fighting you this near
 ## (his balance over him instead) only for AWARE_FIGHT_TIME (s) after he
 ## has you; the first of them to have you is named for AWARE_NAME_TIME (s).
@@ -1139,7 +1139,9 @@ func _on_bark(text: String, guard: Node3D) -> void:
 	if not is_instance_valid(guard) or not is_instance_valid(player):
 		return
 
-	if guard.global_position.distance_to(player.global_position) > SUBTITLE_RANGE:
+	# Heard: near enough, nothing solid between (a line shown is a line
+	# learnt: TalkDirector's notes go by the same).
+	if not Earshot.heard(guard, player):
 		return
 
 	var who := speaker_of(guard)
@@ -1157,7 +1159,7 @@ func _on_alert(new_state: int, old_state: int, guard: Node3D) -> void:
 
 	_mark_rise(guard, new_state)
 
-	if guard.global_position.distance_to(player.global_position) > SUBTITLE_RANGE:
+	if guard.global_position.distance_to(player.global_position) > Earshot.RANGE:
 		return
 
 	var now := TimeFx.real_time()

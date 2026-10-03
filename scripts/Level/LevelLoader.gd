@@ -387,8 +387,11 @@ static func _own_markers(level: Level) -> void:
 				var node := _placed(level, m, at)
 				level.marks[m["name"]] = node
 
+				# Landmarks, where the guards' call-outs and talk look for
+				# them (Comms, TalkFacts): named by their label.
 				if m["ucd"] == "landmark":
-					node.add_to_group(&"landmark")
+					node.add_to_group(&"landmarks")
+					node.set_meta(&"landmark", String(m["props"].get("label", "")))
 					node.set_meta(&"label", String(m["props"].get("label", "")))
 			"zone":
 				zones.append(m)

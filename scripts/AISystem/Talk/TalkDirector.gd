@@ -8,6 +8,7 @@ extends RefCounted
 const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
 const TalkFacts := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
 const GuardLifeScript := preload("res://scripts/AISystem/GuardLife.gd")
+const Earshot := preload("res://scripts/AISystem/Talk/Earshot.gd")
 
 ## The things they do together (reached at run time: it reads this script).
 const GATHERING := "res://scripts/AISystem/Gathering.gd"
@@ -539,6 +540,13 @@ func _choose_for(group: Array, tree: SceneTree) -> void:
 func _available(conv: Dictionary) -> bool:
 	var id := String(conv["id"])
 
+	# Had only where it belongs (the garrison's in the garrison, a district's
+	# in it).
+	var where := StringName(conv.get("where", &""))
+
+	if where != &"" and where != TalkFacts.place_now():
+		return false
+
 	if float(conv["cooldown"]) == TalkScript.ONCE:
 		if _once.has(id):
 			return false
@@ -837,6 +845,11 @@ func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary
 	speaker.speak(text, delivery, listeners, length)
 
 	for emote in choice["emotes"]:
+		# A note for the player (the job): learnt if he heard it; no gesture.
+		if String(emote).begins_with("note:"):
+			_note_heard(speaker, String(emote).trim_prefix("note:"))
+			continue
+
 		# A nod he already gave as the last line ended is not given twice.
 		if nodded and REACTIONS.has(emote):
 			continue
@@ -852,6 +865,19 @@ func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary
 	_lines[id].append(String(choice["text"]))
 	_last_spoke[id] = clock
 	return length
+
+
+## The player, if he heard `speaker` (Earshot), learns the pencil note `id`.
+func _note_heard(speaker: Node, id: String) -> void:
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+
+	if tree == null:
+		return
+
+	for listener in tree.get_nodes_in_group(&"player"):
+		if Earshot.heard(speaker as Node3D, listener as Node3D):
+			CityState.job.learn(id)
+			return
 
 
 ## Names and places put in: {A}..{D}, {dead} (the one they speak of, or the

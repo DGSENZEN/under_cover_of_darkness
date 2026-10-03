@@ -22,6 +22,9 @@ const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const GuardStationScript := preload("res://scripts/AISystem/GuardStation.gd")
 const GuardVoiceScript := preload("res://scripts/AISystem/GuardVoice.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const JobBook := preload("res://scripts/Level/JobBook.gd")
+const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
+const Earshot := preload("res://scripts/AISystem/Talk/Earshot.gd")
 
 ## Conversations for the director's own checks, so they do not hang on the
 ## writing.
@@ -185,6 +188,7 @@ func _run() -> void:
 	await _voices_of_men()
 	await _fight_talk()
 	await _review_fixes()
+	await _job_talk()
 	GuardScript.randomize_on = true
 
 
@@ -1018,6 +1022,139 @@ A: Hm.
 
 
 ## The file a conversation comes from ("at_ease", "unease"...).
+# The job's talk (the harbour's job plan, Task 9)
+
+## Conversations that know where they are, and lines worth noting.
+const JOB_FIXTURES := """
+== in_the_yard
+where: garrison
+cast: A = any; B = any
+cooldown: 0s
+A: The yard is cold.
+B: The yard is always cold.
+
+== on_the_quay
+where: harbour
+cast: A = any; B = any
+cooldown: 0s
+A: The quay is cold.
+B: The quay is always cold.
+
+== anywhere
+cast: A = any; B = any
+cooldown: 0s
+A: Cold.
+B: Always.
+
+== noted_pair
+cast: A = any; B = any
+cooldown: 0s
+A [note:office_key]: The key's kept downstairs.
+B: Is it now.
+"""
+
+
+func _job_talk() -> void:
+	await _fresh()
+	CityState.begin()
+	var lib := TalkScript.parse(JOB_FIXTURES, "job_fixtures")
+	var director: RefCounted = TalkDirector.of(self)
+	director.use_library(lib)
+	var conv := func(id: String) -> Dictionary: return _conv(lib, id)
+	CityState.job.here = &"harbour"
+	var in_harbour := [director._available(conv.call("in_the_yard")), director._available(conv.call("on_the_quay")),
+		director._available(conv.call("anywhere"))]
+	CityState.job.here = &""
+	var in_garrison := [director._available(conv.call("in_the_yard")), director._available(conv.call("on_the_quay")),
+		director._available(conv.call("anywhere"))]
+	_check("T50 where: keeps a conversation to its place (the garrison's out of the harbour, the harbour's out of the garrison)",
+		lib["errors"].is_empty() and in_harbour == [false, true, true] and in_garrison == [true, false, true],
+		"errors %s, in the harbour %s, in the garrison %s" % [lib["errors"], in_harbour, in_garrison])
+
+	CityState.job.arrive(&"harbour")
+	var before := TalkFacts.holds("done(seal)", TalkFacts.world([], get_tree()))
+	CityState.job.took_loot("the_seal", 250)
+	var after := TalkFacts.holds("done(seal)", TalkFacts.world([], get_tree()))
+	var quiet := TalkFacts.holds("theft_noticed", TalkFacts.world([], get_tree()))
+	CityState.job.notice_theft()
+	var stolen := TalkFacts.holds("theft_noticed", TalkFacts.world([], get_tree()))
+	var known := TalkFacts.known("done(seal)", false) and TalkFacts.known("theft_noticed", false) and TalkFacts.known("situation:hail", false)
+	_check("T51 done() and theft_noticed are facts a conversation can ask", not before and after and not quiet and stolen and known,
+		"done %s->%s, theft %s->%s, known %s" % [before, after, quiet, stolen, known])
+
+	# T52 a noted line is learnt in earshot, not through a wall, not far off
+	CityState.begin()
+	CityState.job.arrive(&"harbour")
+	var a := _guard(Vector3(160, 0, 0), 0.0)
+	var b := _guard(Vector3(161.5, 0, 0), 0.0)
+	await _frames(10)
+	player.global_position = Vector3(160.5, 1.05, 5.0)
+	await _frames(3)
+	director.play("noted_pair", {"A": a, "B": b})
+	await _until(func(): return director.played().has("noted_pair") and director.talks().is_empty(), 60 * 15)
+	var near_heard: bool = CityState.job.notes.has("office_key")
+	CityState.begin()
+	CityState.job.arrive(&"harbour")
+	var wall: StaticBody3D = Props.block(self, Vector3(160.5, 2.0, 2.5), Vector3(8.0, 4.0, 0.4))
+	await _frames(3)
+	director.play("noted_pair", {"A": a, "B": b})
+	await _until(func(): return director.talks().is_empty(), 60 * 15)
+	var walled: bool = CityState.job.notes.has("office_key")
+	wall.queue_free()
+	player.global_position = Vector3(160.5, 1.05, 25.0)
+	await _frames(3)
+	director.play("noted_pair", {"A": a, "B": b})
+	await _until(func(): return director.talks().is_empty(), 60 * 15)
+	var far: bool = CityState.job.notes.has("office_key")
+	_check("T52 a line carrying a note is learnt in earshot, not through a wall, not 25 m off", near_heard and not walled and not far,
+		"near %s, through a wall %s, far %s" % [near_heard, walled, far])
+
+	# T53 every note a talk file names is a note of the job
+	var notes: Dictionary = JobBook.library()["notes"]
+	var unknown: Array[String] = []
+
+	for c in TalkScript.library()["conversations"]:
+		for turn in c["lines"] + c["interrupt"]:
+			for choice in turn["choices"]:
+				for emote in choice["emotes"]:
+					if String(emote).begins_with("note:") and not notes.has(String(emote).trim_prefix("note:")):
+						unknown.append("%s: %s" % [c["id"], emote])
+
+	_check("T53 every [note:] in the talk files names a note of the job", unknown.is_empty(), "unknown %s" % [unknown])
+
+	# T54 a level's landmarks are named where the guards look for them
+	var level: LevelLoader.Level = LevelLoader.Level.new()
+	level.root = Node3D.new()
+	add_child(level.root)
+	level.markers = [{"name": "lm_test", "ucd": "landmark", "sector": "", "transform": Transform3D(Basis.IDENTITY, Vector3(200, 0, 10)),
+		"size": null, "props": {"label": "the test tower"}}]
+	LevelLoader._own_markers(level)
+	var named := Comms.landmark_near(get_tree(), Vector3(202, 0, 10))
+	level.root.queue_free()
+	_check("T54 a level's landmark is named by the guards' call-outs", named == "the test tower", "named '%s'" % named)
+
+	# T55 a subtitle does not come through a wall
+	var hud: Node = player.get("hud")
+	player.global_position = Vector3(160.5, 1.05, 5.0)
+	await _frames(3)
+	var open_air: bool = Earshot.heard(a, player)
+	var shut: StaticBody3D = Props.block(self, Vector3(160.5, 2.0, 2.5), Vector3(8.0, 4.0, 0.4))
+	await _frames(3)
+	var behind: bool = Earshot.heard(a, player)
+	var shown := ""
+
+	if hud != null:
+		hud._subtitle.text = ""
+		hud._on_bark("Through the wall.", a)
+		shown = String(hud._subtitle.text)
+
+	shut.queue_free()
+	_check("T55 a subtitle stops at a wall: heard in the open, not behind one", open_air and not behind and not shown.contains("Through the wall"),
+		"open %s, behind %s, subtitle '%s'" % [open_air, behind, shown])
+	CityState.begin()
+	await _fresh()
+
+
 func _file_of(lib: Dictionary, id: String) -> String:
 	for c in lib["conversations"]:
 		if c["id"] == id:

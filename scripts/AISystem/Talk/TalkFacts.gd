@@ -8,6 +8,7 @@ extends RefCounted
 const GuardLifeScript := preload("res://scripts/AISystem/GuardLife.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const Comms := preload("res://scripts/AISystem/Comms.gd")
+const JobBook := preload("res://scripts/Level/JobBook.gd")
 
 ## Scripts made later in the night's work, reached only if they are there.
 const NIGHT_ROTA := "res://scripts/AISystem/NightRota.gd"
@@ -28,9 +29,9 @@ const HOURS := ["early", "middle", "late", "dawn"]
 const HABITS := ["turtle", "spam", "kite", "bow", "parry", "dodge"]
 ## Bare words a `when:` may use, and what can be compared (>=, >, <).
 const WHEN_WORDS := ["at_ease", "uneasy", "alarm", "hunt", "combat", "bell_rung", "body_found", "spared", "slain_begging", "cold", "wind",
-	"captain_dead", "missing"]
+	"captain_dead", "missing", "theft_noticed"]
 const WHEN_MEASURES := ["alarm", "dead", "dread", "lights_out"]
-const WHEN_NAMED := ["dead", "missing", "present", "asleep"]
+const WHEN_NAMED := ["dead", "missing", "present", "asleep", "done"]
 ## A man's rank when the cast sheet does not give one, by his kind.
 const RANK_OF_KIND := {&"duelist": 4, &"brute": 3, &"swordsman": 2}
 ## A fire this near the men counts for them.
@@ -43,7 +44,7 @@ const BELL_FOR := 600.0
 const AFRAID_AT := 0.3
 ## What a fight's call can be about (Squad, Guard: TalkDirector.call_pair).
 const SITUATIONS := ["status", "excuse", "spotted_ask", "man_down", "last_man", "send",
-	"tactic_envelop", "tactic_press", "tactic_break", "tactic_rush", "tactic_fall_back", "tactic_rout"]
+	"tactic_envelop", "tactic_press", "tactic_break", "tactic_rush", "tactic_fall_back", "tactic_rout", "hail"]
 
 
 # Gathering
@@ -139,6 +140,11 @@ static func world(men: Array, tree: SceneTree, extra := {}) -> Dictionary:
 		"situation": StringName(extra.get("situation", &"")), "place": extra.get("place", []),
 		"place_name": String(extra.get("place_name", "")), "dead_name": String(extra.get("dead_name", "")),
 	}
+
+	# The job: its goals done, and a theft found where they are.
+	var job: RefCounted = CityState.job
+	facts["done"] = job.done.duplicate()
+	facts["theft_noticed"] = job.fact(job.here, &"theft_noticed") == true
 
 	var dread_of: RefCounted = _garrison(tree)
 
@@ -239,6 +245,13 @@ static func world(men: Array, tree: SceneTree, extra := {}) -> Dictionary:
 			facts["wind"] = (atmosphere.wind() as Vector3).length() > 0.6
 
 	return facts
+
+
+## Where the talk is had now: the district of the city the player is in, or
+## the garrison (any map that is not one of the city's).
+static func place_now() -> StringName:
+	var here: StringName = CityState.job.here
+	return here if here != &"" else &"garrison"
 
 
 # Reading
@@ -348,6 +361,10 @@ static func known(term: String, as_requirement: bool, traits := [], names := [])
 			return WHEN_MEASURES.has(compared[0])
 
 		if not called.is_empty():
+			# done(<goal>): a goal of the job, not a man of the cast.
+			if called[0] == "done":
+				return (JobBook.library()["goals"] as Array).any(func(g): return g["id"] == called[1])
+
 			return WHEN_NAMED.has(called[0]) and (names.is_empty() or names.has(called[1]))
 
 		if term.contains(":"):
