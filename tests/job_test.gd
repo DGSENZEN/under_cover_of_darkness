@@ -7,12 +7,14 @@ extends Node3D
 ## lines; their number never fails a check.
 
 const JobBook := preload("res://scripts/Level/JobBook.gd")
+const JobState := preload("res://scripts/Level/JobState.gd")
 
 var results: Array[String] = []
 
 
 func _ready() -> void:
 	_files()
+	_progress()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -87,6 +89,108 @@ func _files() -> void:
 
 	_check("J6 every readable's and goal's note exists", missing.is_empty() and not (lib.get("readables", {}) as Dictionary).is_empty(),
 		"missing %s, %d readables" % [missing, (lib.get("readables", {}) as Dictionary).size()])
+
+
+# ---------------------------------------------------------------------------
+# J7-J14: the job's progress
+# ---------------------------------------------------------------------------
+
+func _fresh() -> RefCounted:
+	var job: RefCounted = JobState.new()
+	job.reset()
+	return job
+
+
+func _progress() -> void:
+	var job := _fresh()
+	var heard := {"shown": [], "done": [], "noted": []}
+	job.goal_shown.connect(func(id): heard["shown"].append(id))
+	job.goal_done.connect(func(id, kind): heard["done"].append([id, kind]))
+	job.noted.connect(func(id): heard["noted"].append(id))
+	job.arrive(&"harbour")
+	var listed: Array = job.goals_listed().map(func(g): return g["id"])
+	var quiet: bool = (heard["shown"] as Array).is_empty()
+	job.took_loot("the_seal", 250)
+	var sealed: bool = job.done.has("seal") and heard["done"].has(["seal", &"main"]) and heard["shown"].has("up") and job.notes.has("way_up")
+	job.arrive(&"old_town")
+	_check("J7 goals unfold: listed on arrival, done when taken, the next shown with its note, done on arriving",
+		listed == ["loot", "seal", "captains_ring", "signet"] and quiet and sealed and job.done.has("up"),
+		"listed %s, quiet %s, sealed %s, heard %s, done %s" % [listed, quiet, sealed, heard, job.done])
+
+	job = _fresh()
+	var noted := []
+	job.noted.connect(func(id): noted.append(id))
+	job.learn("office_key")
+	job.learn("office_key")
+	job.learn("tower_bell")
+	job.learn("no_such_note")
+	_check("J8 notes learnt once, in order; an unknown one ignored", job.notes == ["office_key", "tower_bell"] and noted.size() == 2,
+		"notes %s, noted %s" % [job.notes, noted])
+
+	job = _fresh()
+	job.arrive(&"harbour")
+	job.read_slot("duty_orders")
+	job.read_slot("duty_orders")
+	_check("J9 reading a readable once: read, its note learnt, counted",
+		job.read_slots == ["duty_orders"] and job.notes == ["office_key"] and int(job.tally_of(&"harbour").get("read", 0)) == 1,
+		"read %s, notes %s, tally %s" % [job.read_slots, job.notes, job.tally_of(&"harbour")])
+
+	job = _fresh()
+	job.arrive(&"harbour")
+	var sea_gate := Area3D.new()
+	sea_gate.name = "exit_sea_gate"
+	sea_gate.set_meta(&"to", &"old_town")
+	var river := Area3D.new()
+	river.name = "exit_river"
+	river.set_meta(&"to", &"gorge")
+	var before: Dictionary = job.gate_for(sea_gate)
+	var elsewhere: Dictionary = job.gate_for(river)
+	job.took_loot("the_seal", 250)
+	var after: Dictionary = job.gate_for(sea_gate)
+	_check("J10 the gate turns you back without the seal, and only on the ways up",
+		String(before.get("text", "")).begins_with("<<") and elsewhere.is_empty() and after.is_empty(),
+		"before %s, river %s, after %s" % [before.get("text", "-"), elsewhere, after])
+	sea_gate.free()
+	river.free()
+
+	job = _fresh()
+	job.arrive(&"harbour")
+	var first: bool = job.notice_theft()
+	var second: bool = job.notice_theft()
+	_check("J11 the theft counts once in a district", first and not second and int(job.tally_of(&"harbour").get("alarms", 0)) == 1
+		and job.fact(&"harbour", &"theft_noticed") == true, "first %s, second %s, tally %s" % [first, second, job.tally_of(&"harbour")])
+
+	job = _fresh()
+	job.arrive(&"harbour")
+	job.took_loot("the_seal", 250)
+	job.learn("blowhole")
+	job.notice_theft()
+	job.count("seconds", 30)
+	job.letter_opened = true
+	var copy := _fresh()
+	copy.load_state(job.save_state())
+	var same := true
+
+	for key in ["done", "notes", "took", "loot", "tally", "facts", "arrived", "letter_opened", "shown", "read_slots"]:
+		same = same and str(copy.get(key)) == str(job.get(key))
+
+	_check("J12 the job's state round-trips", same, "saved %s" % JSON.stringify(job.save_state()).left(200))
+
+	job = _fresh()
+	job.arrive(&"harbour")
+	job.set_total("loot_total", 2040)
+	job.count("loot", 250)
+	job.count("seconds", 754)
+	var rows: Array = job.tally_rows(&"harbour")
+	var labels: Array = rows.map(func(r): return r[0])
+	_check("J13 the tally's rows, labelled",
+		labels == ["Loot", "Specials", "Notes read", "Knocked out", "Killed", "Bodies found", "Times seen", "Alarms", "Time"]
+		and rows[0] == ["Loot", "250 of 2040"] and rows[-1] == ["Time", "12:34"], "rows %s" % [rows])
+
+	CityState.job.took_loot("the_seal", 250)
+	var had: bool = not CityState.job.took.is_empty()
+	CityState.begin()
+	_check("J14 a new mission starts a new job", had and CityState.job.took.is_empty(), "had %s, after %s" % [had, CityState.job.took])
 
 
 func _check(test_name: String, ok: bool, detail: String) -> void:

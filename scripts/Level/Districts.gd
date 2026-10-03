@@ -23,6 +23,11 @@ static func entry(district: StringName) -> Dictionary:
 	return registry()["districts"].get(String(district), {})
 
 
+## A district's name as the player reads it (its "label"; its id if none).
+static func label(district: StringName) -> String:
+	return String(entry(district).get("label", String(district)))
+
+
 ## Whether a district is built (has a map one can go to).
 static func is_built(district: StringName) -> bool:
 	return registry()["districts"].has(String(district))
