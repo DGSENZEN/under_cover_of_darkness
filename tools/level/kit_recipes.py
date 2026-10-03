@@ -629,6 +629,10 @@ import kit_massing  # noqa: E402,F401
 # gorse, fennel, pines, a fig; gulls, nets, washing, a tavern's bush).
 import kit_coast  # noqa: E402,F401
 
+# The old town's grammar (kit_town: walls true to what opens, floors,
+# stairs, rooms, roofs), which its house families are built from.
+import kit_town  # noqa: E402,F401
+
 # Dense structure found by no one by name, joined at export (merge_groups) in
 # the levels that ask for it (export.MERGE_LEVELS): floors, the city's
 # walls, quays, the Terreiro's arcade bays (the naves' are flagged in
