@@ -4,6 +4,8 @@ extends RigidBody3D
 ## to player.inventory once, then queuing deletion. It cannot be carried.
 ## PlayerFrob and PlayerCombat interpret the selected tool ID.
 
+const PickupState := preload("res://scripts/Interaction/PickupState.gd")
+
 @export var tool_id: StringName = &"tool"
 @export var tool_name := "tool"
 @export var count := 1
@@ -36,3 +38,12 @@ func frob(player: Node) -> void:
 
 	player.inventory.add_belt_item(tool_id, tool_name, mesh, count)
 	queue_free()
+
+
+## Taken or not, and where it lies (PickupState), for the district's memory.
+func save_state() -> Dictionary:
+	return PickupState.save(self)
+
+
+func load_state(state: Dictionary) -> void:
+	PickupState.restore(self, state)

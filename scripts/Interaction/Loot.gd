@@ -3,6 +3,8 @@ extends RigidBody3D
 ## Frobbable rigid pickup transferring value to player.inventory.purse once.
 ## It cannot be carried; successful frob marks taken and queues the body for deletion.
 
+const PickupState := preload("res://scripts/Interaction/PickupState.gd")
+
 @export var value := 25
 @export var loot_name := "trinket"
 
@@ -24,3 +26,12 @@ func frob(player: Node) -> void:
 	taken = true
 	player.inventory.add_loot(value)
 	queue_free()
+
+
+## Taken or not, and where it lies (PickupState), for the district's memory.
+func save_state() -> Dictionary:
+	return PickupState.save(self)
+
+
+func load_state(state: Dictionary) -> void:
+	PickupState.restore(self, state)

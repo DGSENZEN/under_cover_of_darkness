@@ -137,6 +137,12 @@ func ragdoll() -> Node:
 ## Put down off a shoulder at `rest` (where the body goes, lying along its
 ## -Z): let fall from a little above the floor, flat on his back, and left
 ## to physics.
+## Whose body, killed or not, where it lies and whether it has been found:
+## the district's memory (Guard.restore_downed puts it back).
+func save_state() -> Dictionary:
+	return {"guard": called, "dead": dead, "transform": global_transform, "discovered": discovered}
+
+
 func lay_down(rest: Transform3D) -> bool:
 	var who := man()
 	var rag := ragdoll()

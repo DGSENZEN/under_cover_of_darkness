@@ -81,14 +81,24 @@ static func doors(parent: Node3D, level) -> Dictionary:
 	return out
 
 
-static func lights(parent: Node3D, level) -> Array:
-	var out := []
+## Every light marker made into its light, named after its marker (the
+## district's memory finds it by name), dousable as its marker says: marker
+## name → node. A torch is a bare flame for two ticks, then its fixture
+## (Lights.torch_at), which takes over its name and its place here.
+static func lights(parent: Node3D, level) -> Dictionary:
+	var out := {}
 
 	for m in level.of("light"):
 		var made := _light(parent, m)
 
-		if made != null:
-			out.append(made)
+		if made == null:
+			continue
+
+		var marker_name := String(m["name"])
+		made.name = marker_name
+		made.set_meta(&"marker", marker_name)
+		made.set_meta(&"made_in", out)
+		out[marker_name] = made
 
 	return out
 
@@ -107,12 +117,16 @@ static func _light(parent: Node3D, m: Dictionary) -> Node3D:
 	if String(props.get("color", "")) != "":
 		overrides["color"] = Color(String(props["color"]))
 
+	# Before it is added: a flame finds its reach (the hand's ray, the guards'
+	# rounds) as it gets ready, by this.
+	overrides["can_douse"] = bool(props.get("douse", true))
 	var yaw := at.basis.get_euler().y
 
 	match String(props["kind"]):
 		"torch":
 			var energy := float(overrides.get("energy", 1.6))
-			return Lights.torch_at(parent, at.origin, energy, float(overrides.get("light_range", 9.0)), energy > 1.0)
+			return Lights.torch_at(parent, at.origin, energy, float(overrides.get("light_range", 9.0)), energy > 1.0,
+				{"can_douse": overrides["can_douse"]})
 		"brazier":
 			return Lights.brazier(parent, at.origin, overrides)
 		"candle":
@@ -371,6 +385,30 @@ static func guards(parent: Node3D, level, route_nodes: Dictionary, station_nodes
 	return out
 
 
+## A man who followed the player through a gate (CityState), made again on
+## this side from his spec (Guard.spec): who he was, with no route and no
+## stations here; at `at`, named as he was.
+static func visitor(parent: Node3D, spec: Dictionary, at: Transform3D, scene: PackedScene) -> CharacterBody3D:
+	var g: CharacterBody3D = scene.instantiate()
+	g.name = String(spec["name"])
+	g.set("given_name", String(spec["name"]))
+	g.set("archetype", StringName(spec.get("archetype", &"")))
+	g.set("temperament", StringName(spec.get("temperament", &"")))
+	g.set("look_seed", int(spec.get("look_seed", 0)))
+	g.set("rounds_light", StringName(spec.get("light", &"")))
+	g.set("debug_ai", false)
+	var keys: Array[StringName] = []
+
+	for key in spec.get("keys", []):
+		keys.append(StringName(key))
+
+	g.set("keys", keys)
+	g.position = at.origin - parent.global_position
+	g.rotation.y = at.basis.get_euler().y
+	parent.add_child(g)
+	return g
+
+
 ## Loot, keys and tools lying where their markers are: {name: node}. Loot
 ## marked special is in the group "specials" (a seal: "seals" too).
 static func pickups(parent: Node3D, level) -> Dictionary:
@@ -589,6 +627,12 @@ static func mission_marks(parent: Node3D, level) -> void:
 			area.name = m["name"]
 			area.add_to_group(pair[1])
 			area.set_meta(&"label", String(m["props"].get("label", "")))
+
+			# An exit: the district it leads to and the arrival there.
+			if pair[0] == "exit":
+				area.set_meta(&"to", StringName(String(m["props"].get("to", ""))))
+				area.set_meta(&"arrive", StringName(String(m["props"].get("arrive", ""))))
+
 			area.collision_layer = 0
 			area.collision_mask = 1 | 2
 			var shape := CollisionShape3D.new()

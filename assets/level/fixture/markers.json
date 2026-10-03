@@ -234,8 +234,18 @@
    "required": [
     "label"
    ],
-   "optional": {},
+   "optional": {
+    "to": "",
+    "arrive": ""
+   },
    "box": true
+  },
+  "arrival": {
+   "required": [],
+   "optional": {
+    "label": ""
+   },
+   "box": false
   },
   "secret": {
    "required": [],
@@ -253,6 +263,11 @@
     "label": ""
    },
    "box": true
+  },
+  "smoke": {
+   "required": [],
+   "optional": {},
+   "box": false
   },
   "probe": {
    "required": [

@@ -61,7 +61,13 @@ SCHEMA = {
     # A rope or a chain hanging from the marker, `length` down.
     "rope": {"required": ["length"], "optional": {"chain": False}, "box": False},
     "objective": {"required": ["label"], "optional": {"kind": "steal"}, "box": False},
-    "exit": {"required": ["label"], "optional": {}, "box": True},
+    # A way out of the district: `to` names the district it leads to (one of
+    # data/districts.json's, or an unbuilt one: sealed), `arrive` the
+    # arrival there.
+    "exit": {"required": ["label"], "optional": {"to": "", "arrive": ""}, "box": True},
+    # Where a player coming through a gate from another district stands,
+    # facing in.
+    "arrival": {"required": [], "optional": {"label": ""}, "box": False},
     "secret": {"required": [], "optional": {"label": ""}, "box": True},
     # Inside it, sound is masked by `db` (a blowhole's roar, a fountain).
     "noise_zone": {"required": ["db"], "optional": {"period": 0.0, "label": ""}, "box": True},

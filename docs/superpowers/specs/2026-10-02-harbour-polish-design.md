@@ -11,7 +11,7 @@ mole to the golden tower and a built way along the spit to the fort.
 
 Found by a hole scan (tests/diag/diag_holes.gd: a ray down every metre
 against the colliders and against what is drawn, and from 1, 4 and 7.5 m
-over the built front) and pinned by city_test C16/C17.
+over the built front) and pinned by city_test C17/C18.
 
 - **The world's edge.** The ground stopped at x -260 and 300 and z 420:
   walk off the west land or the headland, or swim out, and you fell. Now
@@ -121,7 +121,7 @@ forge's coals as glows. Loose things are bodies (lay.put `loose=` kg: a
 "loose" marker; the exporter leaves their colliders out of the level's and
 lists them; LevelLoader makes each a RigidBody3D, asleep until touched):
 tools, buckets, crates, books, ledgers, candlesticks, tankards, bottles,
-chairs, stools, chests: 71, all a man can carry (city_test C18).
+chairs, stools, chests: 71, all a man can carry (city_test C19).
 
 ## 9. The frame rate: roofs the moon never sees
 
@@ -133,7 +133,7 @@ arches between bays, the customs house's office, stair and hall frame — or
 dressing inside a "roofed" box marker: the customs hall and store, the
 naves) is drawn on its own layer (Layers.ROOFED), which the city's moon
 leaves out of its shadow pass (shadow_caster_mask); lanterns and candles
-still cast from it. city_test C19.
+still cast from it. city_test C20.
 
 The start's rowboat lay in the mole's new riprap: moved out to 13 m from
 the mole's line, a step from a boulder.
@@ -211,7 +211,7 @@ How it is made:
   fan round it; behind clouds, gone in fog. The city's night sets it.
 - **Lit windows** (lit_window.gdshader for `glass_lit`): each piece its own
   brightness and warmth, a third of them flickering like a flame.
-- city_test C20 (it is all there), C21 (a corpse-light stared at goes out
+- city_test C21 (it is all there), C22 (a corpse-light stared at goes out
   and comes back).
 
 After the first renders (the user: "blend in a bit more into the

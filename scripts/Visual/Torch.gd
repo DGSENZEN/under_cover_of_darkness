@@ -603,6 +603,21 @@ func is_lit() -> bool:
 	return lit
 
 
+## Burning or out, for the district's memory.
+func save_state() -> Dictionary:
+	return {"lit": lit}
+
+
+## Lit or put out as it was left, at once and in silence (an out lamp still
+## reads as left out to the guards who pass it, and they relight it).
+func load_state(state: Dictionary) -> void:
+	if bool(state.get("lit", true)):
+		if not lit:
+			kindle(true)
+	else:
+		put_out(&"snuff", true)
+
+
 ## A draft reaches it (a door, a man running past): a candle shivers a while.
 func draft() -> void:
 	_draft_since = 0.0

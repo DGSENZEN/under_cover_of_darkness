@@ -45,6 +45,8 @@ var _target_angle := 0.0
 var _closed_yaw := 0.0
 var _shape: CollisionShape3D
 var _opened_by: WeakRef = null
+## load_state's: put it at its target on the next tick.
+var _snap := false
 
 
 func _ready() -> void:
@@ -194,7 +196,29 @@ func footprint() -> PackedVector3Array:
 	return PackedVector3Array([middle - along - through, middle + along - through, middle + along + through, middle - along + through])
 
 
+## What was done to it, for the district's memory (DistrictState): open or
+## shut, locked or not, which way it swung.
+func save_state() -> Dictionary:
+	return {"open": is_open, "locked": locked, "angle": _target_angle}
+
+
+## Puts it as it was left (save_state), on its next physics tick: no swing,
+## no sound. (A body that moves with the physics takes its turn there; set
+## from outside it, it is put back.)
+func load_state(state: Dictionary) -> void:
+	locked = bool(state.get("locked", locked))
+	is_open = bool(state.get("open", false))
+	_target_angle = float(state.get("angle", deg_to_rad(open_degrees))) if is_open else 0.0
+	_snap = true
+
+
 func _physics_process(delta: float) -> void:
+	if _snap:
+		_snap = false
+		rotation.y = _closed_yaw + _target_angle
+		reset_physics_interpolation()
+		return
+
 	var current := wrapf(rotation.y - _closed_yaw, -PI, PI)
 
 	if is_equal_approx(current, _target_angle):

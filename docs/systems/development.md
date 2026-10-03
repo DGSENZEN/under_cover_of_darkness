@@ -18,7 +18,10 @@ Platform-specific executable defaults live in the wrappers; use the environment 
 
 | Source | Responsibility / integration |
 | --- | --- |
-| [city.gd](../../maps/city.gd) | Loads city districts and their manifests, resolves markers, creates gameplay services and night/environment integration. |
+| [mission.gd](../../maps/mission.gd) | The game's way through the city: holds one district's map and swaps it at a gate, the district remembered (CityState). Run `res://maps/mission.tscn`. |
+| [DistrictMap.gd](../../scripts/Level/DistrictMap.gd) | The base of every district's map: its levels, the rest of the city as massing and proxies, its navmesh (saved or baked), guards and player. Options after `--`: `--vantage=<marker>`, `--fps-report=<s>`, `--bake-navmesh`. |
+| [city.gd](../../maps/city.gd) | The harbour's map (extends DistrictMap): its night, weather, puddles, mist, bats and navmesh settings. |
+| [old_town.gd](../../maps/old_town.gd) | The stand-in old town's map (extends DistrictMap), until plan B1 builds the district. |
 | [npc_showcase.gd](../../maps/npc_showcase.gd) | Base showcase geometry/cast lifecycle, intruder spawning, navigation and shared services. |
 | [garrison.gd](../../maps/garrison.gd) | Extends the NPC showcase with exported level/marker setup and garrison-specific routes/events. |
 | [traversal_gym.gd](../../maps/traversal_gym.gd) | Sixteen movement stations, timed runs, collision fixtures, resetting, presets and diagnostic HUD. |

@@ -74,7 +74,7 @@ func _ready() -> void:
 		if arg.begins_with("--only="):
 			only = arg.trim_prefix("--only=")
 
-	var steps := [["markers", _markers], ["reach", _reach], ["locks", _locks], ["freeze", _freeze.bind(true)], ["probes", _probes],
+	var steps := [["markers", _markers], ["douse", _douse], ["reach", _reach], ["locks", _locks], ["freeze", _freeze.bind(true)], ["probes", _probes],
 		["sea_gate", _sea_gate], ["carrack", _carrack], ["roofs", _roofs], ["swim", _swim], ["spit", _spit], ["blowhole", _blowhole],
 		["zones", _zones], ["light_budget", _light_budget], ["chase", _chase], ["holes", _holes], ["loose", _loose], ["roofed", _roofed], ["distance", _distance]]
 
@@ -155,6 +155,36 @@ func _markers() -> void:
 		missing.append("guards: %d markers, %d made" % [guards, city.guards.size()])
 
 	_check("C2 every marker is made into its node", missing.is_empty(), "; ".join(missing))
+
+
+## C16: a light marked dousable (its marker's douse, true by default) is
+## found by the hand (its Reach) and known to the guards (the "lights" group,
+## their relighting rounds); one marked not, neither. (A glow or a window's
+## shaft is no flame: not counted.)
+func _douse() -> void:
+	var wrong: Array[String] = []
+	var flames := 0
+
+	for district in city.levels:
+		var made: Dictionary = city.made[district]
+
+		for m in (city.levels[district] as LevelLoader.Level).of("light"):
+			var node: Variant = made["lights"].get(String(m["name"]))
+
+			if node == null or not is_instance_valid(node) or node.get("can_douse") == null:
+				continue
+
+			flames += 1
+			var marked := bool(m["props"].get("douse", true))
+			var reach: bool = (node as Node).get_node_or_null("Reach") != null
+			var known: bool = (node as Node).is_in_group(&"lights")
+
+			if bool(node.get("can_douse")) != marked or reach != marked or known != marked:
+				wrong.append("%s (%s, marked %s): douses %s, reach %s, rounds %s" % [m["name"], m["props"].get("kind", ""), marked,
+					node.get("can_douse"), reach, known])
+
+	_check("C16 every flame marked dousable is found by the hand and on the guards' rounds; one marked not, neither",
+		flames > 0 and wrong.is_empty(), "%d flames; %s" % [flames, "; ".join(wrong.slice(0, 8))])
 
 
 func _reach() -> void:
@@ -524,7 +554,7 @@ const UNDER := [4.0, 7.5]
 
 
 # ---------------------------------------------------------------------------
-# C16-C17: nowhere to fall out of the world
+# C17-C18: nowhere to fall out of the world
 # ---------------------------------------------------------------------------
 
 func _holes() -> void:
@@ -557,7 +587,7 @@ func _holes() -> void:
 			if space.intersect_ray(q).is_empty():
 				open.append("%s at %d" % [out, y])
 
-	_check("C16 the world is closed: a wall round it every way, and under any point inside it the ground (a ray down every 2 m)",
+	_check("C17 the world is closed: a wall round it every way, and under any point inside it the ground (a ray down every 2 m)",
 		void_at.is_empty() and open.is_empty(), "void at %d points %s; open %s" % [void_at.size(), ", ".join(void_at.slice(0, 12)), open])
 	var holes: Array[String] = []
 
@@ -577,7 +607,7 @@ func _holes() -> void:
 
 			x += 1.0
 
-	_check("C17 nowhere on the harbour's built front can a man drop through: from 4 and 7.5 m up, wherever there is room, a floor or the water's bed is under him",
+	_check("C18 nowhere on the harbour's built front can a man drop through: from 4 and 7.5 m up, wherever there is room, a floor or the water's bed is under him",
 		holes.is_empty(), "%d holes: %s" % [holes.size(), ", ".join(holes.slice(0, 16))])
 	# The slipway runs down between the floors beside it: walled both sides
 	# (it once ran under 0.2 m floors over nothing).
@@ -598,11 +628,11 @@ func _holes() -> void:
 
 		z += 0.5
 
-	_check("C17b the slipway is walled both sides all the way down (no way under the floors beside it)", open_sides.is_empty(), ", ".join(open_sides))
+	_check("C18b the slipway is walled both sides all the way down (no way under the floors beside it)", open_sides.is_empty(), ", ".join(open_sides))
 
 
 # ---------------------------------------------------------------------------
-# C18: loose things
+# C19: loose things
 # ---------------------------------------------------------------------------
 
 func _loose() -> void:
@@ -631,12 +661,12 @@ func _loose() -> void:
 		if d > 0.25:
 			moved.append("%s %.2f m" % [(b as Node).name, d])
 
-	_check("C18 loose things lie about to be taken: 40 or more bodies a man can carry, each resting where it was laid when woken",
+	_check("C19 loose things lie about to be taken: 40 or more bodies a man can carry, each resting where it was laid when woken",
 		bodies.size() >= 40 and heavy.is_empty() and moved.is_empty(), "%d bodies; too heavy %s; moved %s" % [bodies.size(), heavy, moved.slice(0, 12)])
 
 
 # ---------------------------------------------------------------------------
-# C19: what stands under a roof spares the moon's shadow pass
+# C20: what stands under a roof spares the moon's shadow pass
 # ---------------------------------------------------------------------------
 
 func _roofed() -> void:
@@ -672,13 +702,13 @@ func _roofed() -> void:
 				wrong.append("%s in the open on the roofed layer" % mesh.name)
 
 	var counted := vaults.size() + arcades.size() + _drawn(root, "bollard_001").size()
-	_check("C19 what stands under a roof is drawn on its own layer, which the moon casts no shadow from; what stands in the open casts",
+	_check("C20 what stands under a roof is drawn on its own layer, which the moon casts no shadow from; what stands in the open casts",
 		moon != null and moon.shadow_caster_mask & Layers.ROOFED == 0 and moon.shadow_caster_mask & Layers.WORLD != 0 and counted >= 2 and wrong.is_empty(),
 		"%d meshes looked at; %s" % [counted, wrong])
 
 
 # ---------------------------------------------------------------------------
-# C20-C21: the distance
+# C21-C22: the distance
 # ---------------------------------------------------------------------------
 
 func _distance() -> void:
@@ -689,7 +719,7 @@ func _distance() -> void:
 	var massing = city.levels["city_massing"]
 	var colossus: Node = massing.root.find_child("mass_colossus_001", true, false)
 	var farland: Node = massing.root.find_child("terrain_far_land", true, false)
-	_check("C20 the distance hazes, the far land and the colossus stand round the rock, the comet crosses the sky, torches and the balefire burn far off, mist lies low, chimneys smoke",
+	_check("C21 the distance hazes, the far land and the colossus stand round the rock, the comet crosses the sky, torches and the balefire burn far off, mist lies low, chimneys smoke",
 		env.fog_enabled and env.fog_mode == Environment.FOG_MODE_DEPTH and env.fog_depth_begin >= 60.0 and env.fog_sky_affect == 0.0
 		and sky != null and float(sky.get_shader_parameter("comet")) > 0.0 and colossus != null and farland != null
 		and int(counts.get("torches", 0)) >= 15 and bool(counts.get("balefire", false)) and int(counts.get("mist", 0)) >= 10
@@ -718,7 +748,7 @@ func _distance() -> void:
 
 	var back := float(far.wisp(0)[1])
 	eye.queue_free()
-	_check("C21 a corpse-light looked at too long goes out, and drifts back after a while", low < 0.1 and back > 0.9, "lowest %.2f, then %.2f" % [low, back])
+	_check("C22 a corpse-light looked at too long goes out, and drifts back after a while", low < 0.1 and back > 0.9, "lowest %.2f, then %.2f" % [low, back])
 
 
 ## The drawn meshes of the piece named `name` (itself or under it).

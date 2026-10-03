@@ -2414,6 +2414,67 @@ func is_downed() -> bool:
 	return _downed
 
 
+# The district's memory (DistrictState: the districts-as-maps plan)
+
+## Where he is and what he is about, for the district's memory: his place,
+## his alert state and level, what he last knew of you, his health.
+func save_state() -> Dictionary:
+	return {"transform": global_transform, "state": int(state), "alert": alert, "has_last_known": has_last_known,
+		"last_known": last_known_position, "health": health}
+
+
+## Puts him back as he was left (save_state). A man who was fighting you
+## when you left is searching when you come back: you are not where he
+## last saw you.
+func load_state(saved: Dictionary) -> void:
+	global_transform = saved.get("transform", global_transform)
+	reset_physics_interpolation()
+	health = float(saved.get("health", health))
+	last_known_position = saved.get("last_known", last_known_position)
+	has_last_known = bool(saved.get("has_last_known", false))
+	alert = float(saved.get("alert", alert))
+	var to := int(saved.get("state", Alert.RELAXED))
+	_set_state(Alert.SEARCHING if to == Alert.COMBAT else to)
+
+
+## Who he is, as his marker made him (LevelGameplay.guards): what a man who
+## follows you through a gate is made from again on the far side.
+func spec() -> Dictionary:
+	return {"name": given_name, "archetype": archetype, "temperament": temperament, "look_seed": look_seed, "light": rounds_light,
+		"keys": keys.duplicate()}
+
+
+## A man the district remembers down (knocked out, or dead), put down again
+## where his body lay, in silence: his body as knock_out or die leave it,
+## lying at `at`, found or not as it was; no sound, bark, alarm or word to
+## his squad. He is freed; his body is returned.
+func restore_downed(at: Transform3D, killed: bool, discovered: bool) -> RigidBody3D:
+	_knocked_out = true
+	remove_from_group(&"guards")
+	SoundBus.remove_listener(self)
+	collision_layer = 0
+	global_transform = at
+
+	# His lantern went out where he fell, long ago: not dropped (lit) anew.
+	if _hands != null and _hands.lantern != null and is_instance_valid(_hands.lantern):
+		_hands.lantern.queue_free()
+		_hands.lantern = null
+		_hands.call("_light_gone")
+
+	_let_go()
+	visible = false
+	var body: RigidBody3D = GuardBodyScript.spawn(self, killed, Vector3.ZERO)
+	_rig.transfer_to(body, Vector3.ZERO, at.origin + Vector3.UP)
+	body.set("discovered", discovered)
+
+	if not body.lay_down(at):
+		body.global_transform = at
+
+	body.reset_physics_interpolation()
+	queue_free()
+	return body
+
+
 ## Off his feet: physics has him (Ragdoll.gd), all of him moving at `push`
 ## plus how he was already moving, the part at `at` the most. He stands in
 ## for himself where his hips are until he gets up.

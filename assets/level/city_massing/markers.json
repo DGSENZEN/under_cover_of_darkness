@@ -263,8 +263,18 @@
    "required": [
     "label"
    ],
-   "optional": {},
+   "optional": {
+    "to": "",
+    "arrive": ""
+   },
    "box": true
+  },
+  "arrival": {
+   "required": [],
+   "optional": {
+    "label": ""
+   },
+   "box": false
   },
   "secret": {
    "required": [],
