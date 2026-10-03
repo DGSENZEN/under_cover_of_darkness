@@ -637,6 +637,10 @@ import kit_town  # noqa: E402,F401
 # walls, stair-lanes, arches over lanes, vaults, cisterns, hatches).
 import kit_terrace  # noqa: E402,F401
 
+# Its street furniture (kit_street: corner lamps' arms, shrines, the comet's
+# and the forgotten king's tile panels, fountains).
+import kit_street  # noqa: E402,F401
+
 # Dense structure found by no one by name, joined at export (merge_groups) in
 # the levels that ask for it (export.MERGE_LEVELS): floors, the city's
 # walls, quays, the Terreiro's arcade bays (the naves' are flagged in

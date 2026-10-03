@@ -558,10 +558,24 @@ def _flat(width, depth, y, slot, surface):
 CARRIED = ("budget", "doors", "entries", "climbs", "ways", "roofed", "places", "seats", "beds", "eaves", "front", "door", "rooms_at")
 
 
+def _size(design):
+    """A piece's size as the kit reads it (about its pivot: twice its reach
+    each way across, its height): a town piece stands on its front's middle
+    and reaches back, so its drawn reach decides, not its lot's depth."""
+    built = ks.build(design["shapes"]) if design["shapes"] else {"verts": []}
+    reach = [0.0, 0.0, 0.0]
+
+    for v in built["verts"]:
+        reach = [max(reach[0], abs(v[0])), max(reach[1], v[1]), max(reach[2], abs(v[2]))]
+
+    given = design.get("size", [0.0, 0.0, 0.0])
+    return [max(2.0 * reach[0], given[0]), max(reach[1], given[1]), max(2.0 * reach[2], given[2])]
+
+
 def register(name, family, slot, design, surface="stone"):
     """`design` (shapes, cols, size; and any of CARRIED, chimneys) made the
     kit piece `name`; returns the name."""
-    k.piece(name, family, slot, surface, [], cols=design["cols"], size=design["size"])
+    k.piece(name, family, slot, surface, [], cols=design["cols"], size=_size(design))
     k.model(name, design["shapes"])
     recipe = k.PIECES[name]
 

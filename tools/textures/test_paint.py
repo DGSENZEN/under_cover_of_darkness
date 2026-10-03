@@ -110,6 +110,26 @@ class Foliage(unittest.TestCase):
         self.assertGreater(blue, 0.15)
         self.assertGreater(white, 0.3)
 
+    def test_the_comet_and_the_king_are_painted_in_the_glaze(self):
+        # (The old town's panels, 4 x 6 tiles of 32 px: cobalt on the tin
+        # glaze's white; the comet's red-brown in its own.)
+        for name in ("azulejo_comet", "azulejo_king"):
+            with self.subTest(name):
+                image = paint.PAINTINGS[name]()
+                self.assertEqual(image.size, (128, 192))
+                pixels = np.asarray(image.convert("RGB")).astype(float)
+                self.assertGreater((pixels[:, :, 2] > pixels[:, :, 0] + 40).mean(), 0.12)
+                self.assertGreater((pixels.min(axis=2) > 170).mean(), 0.3)
+
+        comet = np.asarray(paint.PAINTINGS["azulejo_comet"]().convert("RGB")).astype(float)
+        self.assertGreater(((comet[:, :, 0] > comet[:, :, 2] + 50) & (comet[:, :, 0] > 120)).mean(), 0.01)
+
+    def test_the_tile_frame_is_a_strip_of_four_tiles(self):
+        image = paint.PAINTINGS["tile_frame"]()
+        self.assertEqual(image.size, (128, 32))
+        pixels = np.asarray(image.convert("RGB")).astype(float)
+        self.assertGreater((pixels[:, :, 2] > pixels[:, :, 0] + 40).mean(), 0.2)
+
     def test_the_royal_arms_are_a_cut_out_shield_with_its_quinas(self):
         image = np.asarray(paint.PAINTINGS["arms_royal"]())
         alpha = image[:, :, 3]

@@ -138,6 +138,11 @@ const SLOTS := {
 	# azulejo panel of a caravel, the king's arms over its door.
 	&"azulejo_ship": {"photo": "azulejo_ship", "painted": true, "colour": Color("8C9AB8"), "metallic": 0.0, "roughness": 0.35},
 	&"arms_royal": {"photo": "arms_royal", "painted": true, "colour": Color("A08A70"), "metallic": 0.0, "roughness": 0.8, "cut": true},
+	# The old town's (its spec, section 16): the city under the red comet,
+	# the forgotten king as a saint, their tiled frames (paint.py).
+	&"azulejo_comet": {"photo": "azulejo_comet", "painted": true, "colour": Color("8C9AB8"), "metallic": 0.0, "roughness": 0.35},
+	&"azulejo_king": {"photo": "azulejo_king", "painted": true, "colour": Color("7C8CB4"), "metallic": 0.0, "roughness": 0.35},
+	&"tile_frame": {"photo": "tile_frame", "painted": true, "colour": Color("3E5E8C"), "metallic": 0.0, "roughness": 0.35},
 	# Rooms lived in (tools/level/kit_interiors.py): a portolan chart, a
 	# written page, a shelf of ledgers' spines (paint.py).
 	&"sea_chart": {"photo": "sea_chart", "painted": true, "colour": Color("C8B48C"), "metallic": 0.0, "roughness": 0.85},

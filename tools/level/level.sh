@@ -96,6 +96,8 @@ case "$verb" in
     python3 "$HERE/test_town.py"
     python3 "$HERE/test_houses.py"
     python3 "$HERE/test_terrace.py"
+    python3 "$HERE/test_street.py"
+    python3 "$HERE/../textures/test_paint.py"
     "$HERE/test_guard.sh"
     ;;
   *)
