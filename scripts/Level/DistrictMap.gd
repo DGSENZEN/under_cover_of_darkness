@@ -472,8 +472,9 @@ func _hails() -> Array:
 	return []
 
 
-## Each pair near enough, both up and not already talking: the one hails the
-## other (TalkDirector.call_pair: a conversation of theirs, if one is due).
+## Each pair near enough and both up: the one hails the other
+## (TalkDirector.hail: a conversation of theirs, if one is due and neither is
+## talking or fighting).
 func _hail_tick() -> void:
 	for hail in _hails():
 		# (A man may be gone: knocked out and laid down, or followed away.)
@@ -490,12 +491,9 @@ func _hail_tick() -> void:
 			continue
 
 		var apart := a.global_position.distance_to(b.global_position)
-		var director: RefCounted = TalkDirectorScript.of(a)
 
-		if apart > float(hail[2]) or director.in_talk(a) or director.in_talk(b):
-			continue
-
-		director.call_pair(&"hail", a, {"b": b, "quiet": apart <= HAIL_QUIET})
+		if apart <= float(hail[2]):
+			TalkDirectorScript.of(a).hail(a, b, apart <= HAIL_QUIET)
 
 
 func _on_frobbed(target: Node) -> void:

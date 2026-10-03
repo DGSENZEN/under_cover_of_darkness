@@ -50,6 +50,8 @@ const MISSING_COMPANY := 6.0
 ## At the end of a line one man listening may nod or shake his head
 ## (GuardLife._take_line, by his temperament).
 const REACTIONS := ["nods", "shakes"]
+## Guard.Alert.COMBAT.
+const COMBAT_STATE := 4
 ## A rash man's grief turns to rage for this long (s).
 const RAGE_FOR := 20.0
 
@@ -320,6 +322,19 @@ func call_pair(situation: StringName, caller: Node, facts := {}) -> bool:
 
 	return _urgent(near, extra, fixed, func(conv: Dictionary) -> bool:
 		return (conv["when"] as Array).any(func(term): return (term as Array).has("situation:%s" % situation)))
+
+
+## One of a district's pairs hails the other (DistrictMap._hails): a
+## conversation of theirs whose `when:` names `situation:hail`, spoken if
+## `quiet`, else called out. Never over a talk either is already in (a call
+## or not: a hail running is said to its end) nor in a fight. False if none
+## began.
+func hail(a: Node, b: Node, quiet := false) -> bool:
+	for man in [a, b]:
+		if not _talk_of(man).is_empty() or int(man.get("state")) == COMBAT_STATE:
+			return false
+
+	return call_pair(&"hail", a, {"b": b, "quiet": quiet})
 
 
 ## `man` calls the name of the dead man he knew (kin or friend), and grieves:

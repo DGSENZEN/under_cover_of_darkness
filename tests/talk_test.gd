@@ -1198,6 +1198,26 @@ func _harbour_talk() -> void:
 	var theft_talk: bool = director.played().any(func(id): return String(id).begins_with("harbour_theft_"))
 	_check("T58 after a theft, the hail is the theft's", after and theft_talk, "hailed %s, played %s" % [after, director.played()])
 	await _until(func(): return director.talks().is_empty(), 60 * 20)
+
+	# T59 a hail running is not cut by the next pair's hail (the hint is on
+	# its last line)
+	await _fresh()
+	CityState.begin()
+	CityState.job.arrive(&"harbour")
+	TalkScript.reload()
+	director = TalkDirector.of(self)
+	director.use_library(TalkScript.load_dir())
+	var baltasar := _guard(Vector3(180, 0, 0), 0.0, &"steady", "Baltasar")
+	var duarte := _guard(Vector3(183, 0, 0), 0.0, &"steady", "Duarte")
+	var inigo := _guard(Vector3(186, 0, 0), 0.0, &"steady", "Inigo")
+	await _frames(20)
+	var began: bool = director.hail(baltasar, duarte)
+	await _frames(60 * 2)
+	var cut_in: bool = director.hail(duarte, inigo)
+	await _until(func(): return director.talks().is_empty(), 60 * 30)
+	_check("T59 a hail running is not cut short by another pair's hail: it is said to its last line", began and not cut_in
+		and director.lines_of(baltasar).size() == 2 and director.lines_of(duarte).size() == 2,
+		"began %s, cut in %s, Baltasar said %d, Duarte %d" % [began, cut_in, director.lines_of(baltasar).size(), director.lines_of(duarte).size()])
 	CityState.begin()
 	await _fresh()
 
