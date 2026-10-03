@@ -30,6 +30,8 @@ const REACT := 1.6
 ## the light it needs beyond arm's length.
 const NOTICE := 0.9
 const DOOR_RANGE := 11.0
+## A chest left open is seen from this far (an office seen through its door).
+const CHEST_RANGE := 12.0
 const ARROW_RANGE := 7.0
 const TORCH_RANGE := 14.0
 const ODD_LIGHT := 0.08
@@ -534,6 +536,21 @@ func _look_for_oddities(step: float) -> void:
 	# Stirred: only what is near what stirred him.
 	var near: Vector3 = guard.last_known_position if int(guard.state) == SUSPICIOUS else Vector3.INF
 
+	# A chest left open (before the door that let him see it: he goes to the
+	# chest, not to shut the door on it).
+	for chest in tree.get_nodes_in_group(&"chests"):
+		if chest.has_method("left_open") and chest.left_open() and not _noticed(chest):
+			var lid: Vector3 = (chest as Node3D).global_position + Vector3.UP * 0.3
+
+			if near != Vector3.INF and lid.distance_to(near) > ODD_NEAR:
+				continue
+
+			if _watch_for(chest, [lid], CHEST_RANGE, eye, step):
+				_notice(chest, &"chest", (chest as Node3D).global_position)
+				return
+		else:
+			_noticing.erase(chest)
+
 	for door in tree.get_nodes_in_group(&"doors"):
 		if door.has_method("left_open") and door.left_open() and not _noticed(door):
 			var way: Vector3 = door.doorway() if door.has_method("doorway") else door.global_position
@@ -638,14 +655,14 @@ func _notice(thing: Node3D, kind: StringName, where: Vector3) -> void:
 	var garrison: RefCounted = _garrison()
 
 	match kind:
-		&"door":
+		&"door", &"chest":
 			guard.say(&"odd_door")
 		&"arrow":
 			guard.say(&"odd_arrow")
 
 	if garrison != null:
 		match kind:
-			&"door":
+			&"door", &"chest":
 				garrison.raise_alarm(DOOR_ALARM)
 			&"arrow":
 				garrison.raise_alarm(ARROW_ALARM)
@@ -667,6 +684,8 @@ func _notice(thing: Node3D, kind: StringName, where: Vector3) -> void:
 			go = where + side.normalized() * 1.1
 	elif kind == &"torch":
 		go = NavigationServer3D.map_get_closest_point(guard.get_world_3d().navigation_map, where + Vector3.DOWN * 2.0)
+	elif kind == &"chest":
+		go = NavigationServer3D.map_get_closest_point(guard.get_world_3d().navigation_map, where)
 
 	guard.notice(go, &"oddity")
 
@@ -701,6 +720,13 @@ func deal_with_oddity() -> bool:
 		&"torch":
 			if thing.get("lit") == false:
 				guard._hands.relight(thing)
+		&"chest":
+			# Robbed: the alarm (left open, as it was found). Only left open:
+			# shut.
+			if thing.has_method("robbed") and thing.robbed():
+				guard.discover_theft(thing)
+			elif thing.get("is_open") == true:
+				thing.frob(guard)
 
 	return true
 

@@ -41,6 +41,8 @@ const FLOOR_MARK := 0.05
 const BAR_GAP := 0.3
 const BAR := 0.07
 const RAISED_SHOWS := 0.35
+## Something precious this near a chest's middle lies in it (m).
+const INSIDE := 0.7
 
 
 ## Creates marker-driven nodes under parent and returns collections keyed by system name (world.md), chimney smoke included.
@@ -55,6 +57,7 @@ static func build_all(parent: Node3D, level) -> Dictionary:
 		"smokes": smokes(parent, level), "readables": readables(parent, level),
 	}
 	mission_marks(parent, level)
+	fill_chests(made["chests"], made["pickups"])
 	return made
 
 
@@ -233,6 +236,7 @@ static func bells(parent: Node3D, level) -> Array:
 	for m in level.of("bell"):
 		var at: Transform3D = m["transform"]
 		var bell: StaticBody3D = AlarmBellScript.build(parent, at.origin, at.basis.get_euler().y)
+		bell.name = m["name"]
 		bell.set("ring_db", float(m["props"].get("db", 90.0)))
 		out.append(bell)
 
@@ -482,6 +486,19 @@ static func readables(parent: Node3D, level) -> Dictionary:
 		out[m["name"]] = node
 
 	return out
+
+
+## Each chest holds the precious things (loot marked special) lying within
+## INSIDE of its middle: taken, the chest is robbed (Chest.robbed).
+static func fill_chests(chests: Dictionary, pickups: Dictionary) -> void:
+	for chest_name in chests:
+		var chest: Node3D = chests[chest_name]
+
+		for loot_name in pickups:
+			var loot: Node = pickups[loot_name]
+
+			if loot is Node3D and loot.has_meta(&"special") and (loot as Node3D).global_position.distance_to(chest.global_position) <= INSIDE:
+				chest.hold_special(loot)
 
 
 ## Things to throw (crates) where their markers are.
