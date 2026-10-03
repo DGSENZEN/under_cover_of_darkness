@@ -10,6 +10,7 @@ const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
 const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const Props := preload("res://scripts/Interaction/Props.gd")
+const DistrictState := preload("res://scripts/Level/DistrictState.gd")
 const FIXTURE := "res://assets/level/fixture"
 ## Guard.Alert.SEARCHING.
 const SEARCHING := 3
@@ -32,6 +33,7 @@ func _ready() -> void:
 	await _frames(3)
 	await _things()
 	await _men()
+	await _district()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -237,6 +239,42 @@ func _men() -> void:
 			two.inventory.purse, two.inventory.has_key(&"room"), belt_two, belt_one, drawn, float(two.get("health"))])
 	two.queue_free()
 	await _frames(2)
+
+
+# ---------------------------------------------------------------------------
+# S10: a district captured whole, and applied to a fresh build of it
+# ---------------------------------------------------------------------------
+
+func _district() -> void:
+	var a := await _build_guarded("state_g")
+	var made: Dictionary = a[2]
+	var door: Node = made["doors"]["door_room"]
+	player.global_position = door.global_position + Vector3(0.0, 0.1, 1.5)
+	door.frob(player)
+	made["pickups"]["purse"].frob(player)
+	var torch: Node = made["lights"]["torch_door"]
+	torch.put_out(&"douse")
+	var hendrik: Node = a[3]["Hendrik"]
+	player.global_position = hendrik.global_position + Vector3(0.0, 0.0, 1.2)
+	hendrik.knock_out(player, true)
+	await _seconds(2.0)
+	var state := DistrictState.capture(a[0], {"fixture": made}, a[3])
+	await _drop(a)
+
+	var b := await _build_guarded("state_h")
+	made = b[2]
+	DistrictState.apply(b[0], {"fixture": made}, b[3], state)
+	await _seconds(1.0)
+	var door_b: Node = made["doors"]["door_room"]
+	var torch_b: Node = made["lights"]["torch_door"]
+	# (Gone from the level, not only from the map's list.)
+	var standing: bool = get_tree().get_nodes_in_group(&"guards").any(func(g): return (b[0] as Node).is_ancestor_of(g) and g.name == "Hendrik")
+	var ok: bool = bool(door_b.is_open) and not is_instance_valid(made["pickups"]["purse"]) and not torch_b.is_lit() \
+		and not standing and not b[3].has("Hendrik") and _body_of(b[0], "Hendrik") != null
+	_check("S10 a district captured and applied is as it was left (door open, loot gone, lamp out, a body for a guard)", ok,
+		"door open %s, purse gone %s, lamp out %s, guard standing %s, body %s" % [door_b.is_open, not is_instance_valid(made["pickups"]["purse"]),
+			not torch_b.is_lit(), standing, _body_of(b[0], "Hendrik") != null])
+	await _drop(b)
 
 
 ## The body of the man called `who` under `holder`, or null.
