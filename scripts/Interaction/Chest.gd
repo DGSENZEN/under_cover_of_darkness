@@ -93,8 +93,10 @@ func left_open() -> bool:
 	if not is_open:
 		return false
 
+	# (A man knocked out has left the guards' group: what he opened is still a
+	# guard's doing, as with doors.)
 	var who := opened_by()
-	return who == null or not who.is_in_group(&"guards")
+	return who == null or not who.is_in_group(&"guards") and who.get("_knocked_out") == null
 
 
 ## `loot` (something precious) lies in it.

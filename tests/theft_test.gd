@@ -71,9 +71,21 @@ func _chests() -> void:
 	add_child(a_guard)
 	by_player.frob(player)
 	by_guard.frob(a_guard)
-	_check("R1 a chest the player left open is an oddity; one a guard opened is not", by_player.left_open() and not by_guard.left_open(),
-		"player's %s, guard's %s" % [by_player.left_open(), by_guard.left_open()])
+	# (A man knocked out is out of the guards' group, as a door knows: what he
+	# opened is still a guard's doing.)
+	var by_downed: Node3D = Props.chest(self, Vector3(-3, 0, -10))
+	var downed_script := GDScript.new()
+	downed_script.source_code = "extends Node3D\nvar _knocked_out := true\n"
+	downed_script.reload()
+	var downed := Node3D.new()
+	downed.set_script(downed_script)
+	add_child(downed)
+	by_downed.frob(downed)
+	_check("R1 a chest the player left open is an oddity; one a guard opened is not, even once he is knocked out",
+		by_player.left_open() and not by_guard.left_open() and not by_downed.left_open(),
+		"player's %s, guard's %s, a downed man's %s" % [by_player.left_open(), by_guard.left_open(), by_downed.left_open()])
 	a_guard.free()
+	downed.free()
 
 	var chest: Node3D = Props.chest(self, Vector3(6, 0, -10))
 	var inside: RigidBody3D = Props.loot(self, Vector3(6, 0.15, -10.2), 250, "seal")
