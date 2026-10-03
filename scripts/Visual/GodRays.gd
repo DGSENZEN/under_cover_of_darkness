@@ -4,6 +4,8 @@ extends Node3D
 ## Night moon/cloud/rain/lightning state scales the shafts and companion lights from their calm energy.
 
 const SHADER := preload("res://scripts/Visual/god_rays.gdshader")
+## The shader's own tint (moonlight through clear glass).
+const TINT := Color(0.6, 0.78, 1.25)
 
 ## The way the light goes (normalised when used).
 @export var direction := Vector3(0.62, -0.5, 0.6)
@@ -17,6 +19,12 @@ const SHADER := preload("res://scripts/Visual/god_rays.gdshader")
 ## However the weather (a cloud over the moon, rain), never less than this
 ## share of their brightness: the chapel is never without them.
 @export var least := 0.6
+## Driven by the moon's share (the night's); false: a lamp's shafts, whose
+## strength their owner sets (Windows).
+@export var follow_moon := true
+## The light's colour through clear glass, and how much the shafts add.
+@export var tint := TINT
+@export var gain := 0.14
 ## The glass's picture (null: plain moonlight).
 var glass: Texture2D
 ## The room the shafts stay in: each plane's normal points inside it.
@@ -39,27 +47,39 @@ func _ready() -> void:
 	_material.shader = SHADER
 	_material.set_shader_parameter(&"glass", glass if glass != null else _white())
 	_material.set_shader_parameter(&"dust", _dust())
+	# (The shader's own tint unless given another: the chapel's as it was.)
+	if tint != TINT:
+		_material.set_shader_parameter(&"tint", tint)
+
+	_material.set_shader_parameter(&"gain", gain)
 	strength = brightness
 
 
 ## Builds a shaft from matching local outline/UV arrays; outline must contain at least three points.
-## Sweeps vertices to inward-facing planes and returns a child MeshInstance3D; caller provides the glass texture/material inputs.
-func add_window(outline: PackedVector3Array, uvs: PackedVector2Array) -> MeshInstance3D:
-	var way := direction.normalized()
+## Each corner goes `direction` (or, from a finite `source`, away from that point: a lamp's) to its
+## own reach in `reaches` (else to the nearest of the node's planes); `weight` scales this shaft
+## among the node's. Returns a child MeshInstance3D; caller provides the glass texture/material inputs.
+func add_window(outline: PackedVector3Array, uvs: PackedVector2Array, reaches := PackedFloat32Array(), source := Vector3.INF,
+		weight := 1.0) -> MeshInstance3D:
+	var ways := PackedVector3Array()
 	var far := PackedVector3Array()
 	var middle := Vector3.ZERO
+	var own := reaches.size() == outline.size()
 
-	for p in outline:
-		far.append(p + way * _reach(p, way))
+	for i in outline.size():
+		var p := outline[i]
+		var way := (p - source).normalized() if source.is_finite() else direction.normalized()
+		ways.append(way)
+		far.append(p + way * (reaches[i] if own else _reach(p, way)))
 		middle += p / float(outline.size())
 
 	# Each corner's normal points straight out from the shaft's axis (round,
 	# not faceted: its edge-on softening shows no creases).
 	var round := PackedVector3Array()
 
-	for p in outline:
-		var out := p - middle
-		round.append((out - way * out.dot(way)).normalized())
+	for i in outline.size():
+		var out := outline[i] - middle
+		round.append((out - ways[i] * out.dot(ways[i])).normalized())
 
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -74,7 +94,7 @@ func add_window(outline: PackedVector3Array, uvs: PackedVector2Array) -> MeshIns
 		for k in [0, 1, 2, 0, 2, 3]:
 			st.set_normal(normals[k])
 			st.set_uv(glass_uv[k])
-			st.set_uv2(Vector2(along[k], 0.0))
+			st.set_uv2(Vector2(along[k], weight))
 			st.add_vertex(quad[k])
 
 	var beam := MeshInstance3D.new()
@@ -102,10 +122,12 @@ func _reach(p: Vector3, way: Vector3) -> float:
 
 
 func _process(_delta: float) -> void:
-	var share := _light_share()
-	var steady := lerpf(least, 1.0, smoothstep(fade_from, 1.0, minf(share, 1.0)))
-	var flare := maxf(share - 1.0, 0.0)
-	strength = brightness * (steady + flare_gain * flare)
+	if follow_moon:
+		var share := _light_share()
+		var steady := lerpf(least, 1.0, smoothstep(fade_from, 1.0, minf(share, 1.0)))
+		var flare := maxf(share - 1.0, 0.0)
+		strength = brightness * (steady + flare_gain * flare)
+
 	_material.set_shader_parameter(&"strength", strength)
 
 	for light in lights:

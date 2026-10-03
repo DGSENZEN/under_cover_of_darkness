@@ -10,6 +10,7 @@ const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const SightRay := preload("res://scripts/StimuliSystem/SightRay.gd")
 const Materials := preload("res://scripts/Visual/Materials.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
+const GodRaysScript := preload("res://scripts/Visual/GodRays.gd")
 
 const FIXTURE := "user://glass_fixture"
 const IDENTITY := [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
@@ -26,7 +27,7 @@ func _ready() -> void:
 		if arg.begins_with("--only="):
 			only = arg.trim_prefix("--only=")
 
-	var steps := [["loader", _loader], ["sight", _sight]]
+	var steps := [["loader", _loader], ["sight", _sight], ["rays", _rays]]
 
 	for step in steps:
 		if only == "" or step[0] == only:
@@ -149,6 +150,39 @@ func _sight() -> void:
 	_check("GW3 the probe reads the moon through the glass on the patch, and none a step beside under the ceiling", lit > dark + 0.3,
 		"%.2f on the patch, %.2f beside" % [lit, dark])
 	moon.queue_free()
+
+
+# ---------------------------------------------------------------------------
+# GW4: god rays from a point, to each corner's own reach, weighted
+# ---------------------------------------------------------------------------
+
+func _rays() -> void:
+	var rays: Node3D = GodRaysScript.new()
+	rays.set("follow_moon", false)
+	add_child(rays)
+	var outline := PackedVector3Array([Vector3(-0.5, 1, 0), Vector3(0.5, 1, 0), Vector3(0.5, 2, 0), Vector3(-0.5, 2, 0)])
+	var uvs := PackedVector2Array([Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), Vector2(0, 0)])
+	var source := Vector3(0, 1.5, -2)
+	var reaches := PackedFloat32Array([1.0, 2.0, 3.0, 4.0])
+	var beam: MeshInstance3D = rays.call("add_window", outline, uvs, reaches, source, 0.5)
+	var arrays := (beam.mesh as ArrayMesh).surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uv2: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	var missing: Array[int] = []
+
+	for i in outline.size():
+		var far := outline[i] + (outline[i] - source).normalized() * reaches[i]
+
+		if not Array(verts).any(func(v): return (v as Vector3).distance_to(far) < 0.001):
+			missing.append(i)
+
+	var weighted := uv2.size() == verts.size() and Array(uv2).all(func(u): return absf((u as Vector2).y - 0.5) < 0.0001)
+	rays.set("strength", 0.7)
+	await _frames(2)
+	var given := float((beam.material_override as ShaderMaterial).get_shader_parameter(&"strength"))
+	_check("GW4 a point-sourced shaft spreads from its lamp to each corner's own reach, carries its weight, and a lamp's node keeps the strength it is given",
+		missing.is_empty() and weighted and absf(given - 0.7) < 0.0001, "corners not reached %s, weighted %s, strength %.3f" % [missing, weighted, given])
+	rays.queue_free()
 
 
 # ---------------------------------------------------------------------------

@@ -41,5 +41,6 @@ void fragment() {
 	// (A shaft the eye stands in, or all but, thins away: no wall of light
 	// across the lens.)
 	float near = smoothstep(0.6, 3.0, -VERTEX.z);
-	ALBEDO = colour * tint * strength * gain * fall * edge * motes * soft * near;
+	// (UV2.y: this shaft's weight among its node's, a window's share of sky.)
+	ALBEDO = colour * tint * strength * gain * fall * edge * motes * soft * near * UV2.y;
 }
