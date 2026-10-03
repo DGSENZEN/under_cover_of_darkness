@@ -225,6 +225,18 @@ def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surfa
         if y0 > 0.01:
             shapes.append(facing([[x0, y0, back], [x1, y0, back], [x1, y0, face], [x0, y0, face]], (0.0, 1.0, 0.0), slot))
 
+        # (Walked in, an honest opening is a niche from the room too: its
+        # reveals on in to the inner face, so no eye looks into the wall's
+        # hollow and out past the back of its outer face.)
+        if inside and not o.live:
+            room, inner = -face, inner_slot(slot)
+            shapes += [facing([[x0, y0, room], [x0, y0, back], [x0, y1, back], [x0, y1, room]], (1.0, 0.0, 0.0), inner),
+                       facing([[x1, y0, room], [x1, y0, back], [x1, y1, back], [x1, y1, room]], (-1.0, 0.0, 0.0), inner),
+                       facing([[x0, y1, room], [x1, y1, room], [x1, y1, back], [x0, y1, back]], (0.0, -1.0, 0.0), inner)]
+
+            if y0 > 0.01:
+                shapes.append(facing([[x0, y0, room], [x1, y0, room], [x1, y0, back], [x0, y0, back]], (0.0, 1.0, 0.0), inner))
+
     cols = [col((a0 + a1) / 2.0, (b0 + b1) / 2.0, 0.0, a1 - a0, b1 - b0, thickness, surface)
             for a0, a1, b0, b1 in split(-length / 2.0, length / 2.0, 0.0, height, live)]
 
@@ -499,6 +511,34 @@ def _slope_col(length, span, rise, y, along_z=False, side=1.0, surface="stone", 
     return col(0.0, centre_y, side * out, length, k.ROOF_THICK, slope, surface, 0.0, side * pitch, 0.0)
 
 
+# A gable's verge coping (m: across, thick): over the canal tiles' open ends
+# (the sky shows between them where the neighbour is lower), standing a
+# little over the tiles, as a party wall's coping does.
+COPING = (0.3, 0.18)
+
+
+def _copings(width, depth, rise, eaves_y, slot, surface):
+    """A stone coping down each slope of each verge of a gable roof, from
+    its ridge out to the tiles' overhang, lying on the roof; solid."""
+    half = depth / 2.0
+    a = math.atan2(rise, half)
+    lift = k.ROOF_THICK / math.cos(a)
+    w, t = COPING
+    length = (half + OVERHANG) / math.cos(a)
+    d = (half - OVERHANG) / 2.0
+    shapes, cols = [], []
+
+    for side in (-1.0, 1.0):
+        for s in (-1.0, 1.0):
+            x = side * (width / 2.0 - w / 2.0)
+            y = eaves_y + d * math.tan(a) + lift + t / 2.0 * math.cos(a)
+            z = s * (half - d) + s * t / 2.0 * math.sin(a)
+            shapes.append(ks.box(x, y, z, w, t, length, slot, 0.0, s * math.degrees(a), 0.0))
+            cols.append(col(x, y, z, w, t, length, surface, 0.0, s * math.degrees(a), 0.0))
+
+    return shapes, cols
+
+
 # A hipped roof's colliders come in strips this deep (m, level across): a
 # slab can only stand under a slope where that slope is the roof's top.
 HIP_STRIP = 0.75
@@ -591,7 +631,8 @@ def roof(kind, width, depth, eaves_y, pitch, slot, surface="stone", tiles="roof_
         for s in (-1.0, 1.0):
             shapes.append(ks.gable(s * (width / 2.0 - 0.1), eaves_y, 0.0, depth, rise, 0.2, slot, 90.0))
 
-        return shapes, cols
+        s2, c2 = _copings(width, depth, rise, eaves_y, slot, surface)
+        return shapes + s2, cols + c2
 
     if kind in ("hipped", "four"):
         # (A ridge along the longer side, short by the shorter's span.)

@@ -14,7 +14,7 @@ by the layout (layouts/old_town places each lot, its doors and its ways).
     all_lots     every quarter's lots (town/<quarter>.py, LOTS)
     slits        neighbours that leave a slit a foot falls into (0.05-1.0 m)
     terrace_pieces  every terrace piece the quarters ask for (TERRACE)
-    ground_holes    the ground's vertices the quarters leave out (HOLES)
+    ground_holes    the ground's cells the quarters leave out (HOLES)
 
 Godot's axes: x east, y up, z south (the harbour to +z); a quarter's
 "north" is -z.
@@ -41,13 +41,11 @@ QUARTERS = {
 # z0 (north)). Each quarter steps up to the north; the steps between plates
 # are the quarters' retaining walls and stairs (Tasks 14-18).
 TERRACES = [
-    # The Baixa: level behind the Sea Gate at the quays' height under its
-    # square and its blocks, the Rossio rising north to +6 under the
-    # Carmo's 20 m wall.
-    # (Its edges whole cells of the ground's from the Rossio's: a hatch's
-    # hole is a vertex's cells.)
-    ("baixa_low", "baixa", -100.0, -150.0, 15.0, -72.5, 2.5, 2.5),
-    ("baixa_rossio", "baixa", -100.0, -170.0, 15.0, -150.0, 2.5, 6.0),
+    # The Baixa: level behind the Sea Gate at the quays' height, under its
+    # square, its blocks and the Rossio (a square's fountain stands level),
+    # the Carmo's wall 23.5 m over its north edge. (Its edges whole cells
+    # of the ground's: a hatch's hole is one cell.)
+    ("baixa_low", "baixa", -100.0, -170.0, 15.0, -72.5, 2.5, 2.5),
     # The Carmo hill: its lookout terrace 20 m over the Baixa's north edge,
     # the ruin's square, a step up toward the upper town.
     ("carmo_lookout", "carmo", -100.0, -185.0, 15.0, -170.0, 26.0, 26.0),
@@ -202,8 +200,8 @@ def all_lots():
 
 
 def ground_holes():
-    """The ground's vertices every quarter leaves out (a hatch's cells):
-    [(x, z)]."""
+    """The ground's cells every quarter leaves out (a hatch's), by their
+    middles: [(x, z)]."""
     from town import baixa, carmo, judiaria, stairs, upper
     out = []
 

@@ -279,7 +279,9 @@ def _inside(out, width, depth, storeys, rooms, party, door_x, back_x, eaves, qui
     if top < eaves - 0.01:
         cols.append(town.col(0.0, (top + eaves) / 2.0, -depth / 2.0, inner, eaves - top, room_depth))
 
-    out["doors"].insert(0, [door_x, 0.0, -FRONT_WALL / 2.0, 0.0])
+    # (The door hung there its opening's size: a slot house's narrow.)
+    front = [o for o in out["openings"] if o[0] == 0 and o[1] == "front" and o[6] == "door"][0]
+    out["doors"].insert(0, [door_x, 0.0, -FRONT_WALL / 2.0, 0.0, front[4], front[5]])
     out["entries"].insert(0, "door")
     # (Each room's place: on the side away from the first stair.)
     out["rooms_at"] = [[inner / 4.0, levels[r], -depth / 2.0] for r in range(rooms)]

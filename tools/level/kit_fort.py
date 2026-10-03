@@ -291,13 +291,38 @@ for _height in (12, 10):
 
 # Towers: a drum 8 m across and a square one 8 m, both 20 m, battered.
 
+def _batter_cols(sides, foot, top, tiers=1):
+    """The colliders of a tower's battered foot (a frustum of `sides` flats,
+    its flats `foot` out at the ground and `top` out at BATTER[0] up, the
+    first flat facing +x): slabs leaning on each flat, their faces on the
+    drawn face, as the walls' batters are; in `tiers` up it, each as wide
+    as its flat at its middle (a square's corners stand out no further)."""
+    lean = math.degrees(math.atan2(foot - top, BATTER[0]))
+    t = 0.3
+    out = []
+
+    for k in range(tiers):
+        y0, y1 = BATTER[0] * k / tiers, BATTER[0] * (k + 1) / tiers
+        a0, a1 = foot + (top - foot) * k / tiers, foot + (top - foot) * (k + 1) / tiers
+        middle = (a0 + a1) / 2.0
+        width = 2.0 * middle * math.tan(math.pi / sides)
+
+        for i in range(sides):
+            angle = i * 360.0 / sides
+            a = math.radians(angle)
+            r = middle - t / 2.0
+            out.append(col(r * math.cos(a), (y0 + y1) / 2.0, r * math.sin(a), width, math.hypot(y1 - y0, a0 - a1), t, _yaw_out(angle), -lean))
+
+    return out
+
+
 def _drum():
     r = 4.0
     shapes = [_polygon_prism(r + 0.5, 0.0, BATTER[0], 16, "granite_rough", top=r), _polygon_prism(r, BATTER[0], 20.0 - BATTER[0], 16, "granite"),
               ks.lathe(0.0, BATTER[0], 0.0, [[r / math.cos(math.pi / 16) - 0.01, 0.0], [r / math.cos(math.pi / 16) + 0.1, 0.0],
                                               [r / math.cos(math.pi / 16) + 0.1, 0.2], [r / math.cos(math.pi / 16) - 0.01, 0.2]], 16, "ashlar_gold",
                        yaw=180.0 / 16, closed=True)]
-    cols = _polygon_cols(16, r, 0.0, 20.0)
+    cols = _polygon_cols(16, r, 0.0, 20.0) + _batter_cols(16, r + 0.5, r)
     top, top_cols = _ring_battlements(r, 20.0, 16, 8, "granite")
 
     for i, y in enumerate((8.0, 15.0)):
@@ -314,7 +339,7 @@ def _square_tower():
     corner = half * math.sqrt(2.0)
     shapes = [ks.prism(0.0, BATTER[0] / 2.0, 0.0, corner + 0.6, BATTER[0], 4, "granite_rough", yaw=45.0, top=corner),
               ks.prism(0.0, BATTER[0] + (20.0 - BATTER[0]) / 2.0, 0.0, corner, 20.0 - BATTER[0], 4, "granite", yaw=45.0)]
-    cols = [col(0.0, 10.0, 0.0, 8.0, 20.0, 8.0)]
+    cols = [col(0.0, 10.0, 0.0, 8.0, 20.0, 8.0)] + _batter_cols(4, (corner + 0.6) * math.cos(math.pi / 4.0), half, 4)
 
     for sx, sz in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
         shapes.append(ks.box(sx * (half - 0.15), 12.0, sz * (half - 0.15), 0.4, 16.0, 0.4, "ashlar_gold"))

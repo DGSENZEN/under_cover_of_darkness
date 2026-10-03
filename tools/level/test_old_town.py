@@ -18,6 +18,7 @@ import math  # noqa: E402
 import geo  # noqa: E402
 import kit_porto  # noqa: E402
 import kit_recipes  # noqa: E402
+import kit_terrace  # noqa: E402
 import kit_town  # noqa: E402
 import old_town  # noqa: E402
 import old_town as town_layout  # noqa: E402
@@ -232,6 +233,26 @@ class Baixa(unittest.TestCase):
                     self.assertNotEqual(dict(each.params).get("kind"), "corner", each.name)
                     self.assertNotEqual(each.quirk, "mansard", each.name)
 
+    def test_neighbours_read_as_two_buildings(self):
+        # (Two houses side by side on a street in one cladding run together
+        # into one front: down each row, and the two corners meeting on a
+        # block's short face, they differ.)
+        lots = {each.name: each for each in baixa.LOTS}
+        front = {name: dict(each.params)["front"] for name, each in lots.items()}
+
+        for block, face, names in baixa.ROWS:
+            for a, b in zip(names, names[1:]):
+                self.assertNotEqual(front[a], front[b], (a, b))
+                self.assertFalse(lots[a].quirk == lots[b].quirk == "mansard", (a, b))
+
+        for block in baixa.BLOCKS:
+            east = [n for b, f, n in baixa.ROWS if b == block and f == "e"][0]
+            west = [n for b, f, n in baixa.ROWS if b == block and f == "w"][0]
+            # (South face: the east row's first and the west row's last;
+            # north face: the east row's last and the west row's first.)
+            self.assertNotEqual(front[east[0]], front[west[-1]], block)
+            self.assertNotEqual(front[east[-1]], front[west[0]], block)
+
     def test_the_sewer_runs_under_the_main_street_with_two_hatches(self):
         main = (baixa.MAIN[0] + baixa.MAIN[1]) / 2.0
         street = (baixa.MAIN[0], baixa.SEA_GATE_SQUARE[1] - 60.0, baixa.MAIN[1], baixa.SEA_GATE_SQUARE[3])
@@ -241,9 +262,9 @@ class Baixa(unittest.TestCase):
 
         for p in vaults:
             recipe = kit_recipes.PIECES[p["piece"]]
-            # (Half a metre off the axis: its hatches stand on the ground's
-            # vertices.)
-            self.assertAlmostEqual(p["position"][0], main, delta=0.6)
+            # (Off the axis by its hatches' cells: its 3 m wholly under the
+            # street's 13.2.)
+            self.assertAlmostEqual(p["position"][0], main, delta=1.0)
             # (Its barrel's top under the street.)
             self.assertLess(p["position"][1] + recipe["size"][1], baixa.GROUND)
             reach += [p["position"][2] - recipe["size"][2] / 2.0, p["position"][2] + recipe["size"][2] / 2.0]
@@ -258,6 +279,26 @@ class Baixa(unittest.TestCase):
             self.assertEqual(points[0]["props"]["way"], "below")
             self.assertIn("climb", [m["props"]["move"] for m in points])
             self.assertLess(points[-1]["position"][1], baixa.GROUND - 3.0)
+
+    def test_a_hatch_takes_one_cell_of_the_street(self):
+        # (Its collar paves the one cell of ground cut round it, flush with
+        # the street: no wide pale square, no lip.)
+        ground = rules.ground_of(layout())
+        hatches = pieces_in((-100.0, -170.0, 15.0, -73.0), "grate_hatch_")
+
+        for p in hatches:
+            x, y, z = p["position"]
+            self.assertEqual(ground.heights(x, z), [], p["name"])
+
+            for dx, dz in ((1.4, 0.0), (-1.4, 0.0), (0.0, 1.4), (0.0, -1.4)):
+                self.assertTrue(ground.heights(x + dx, z + dz), (p["name"], dx, dz))
+
+            # (Its paving one cell: the grate leans aside past it.)
+            recipe = kit_recipes.PIECES[p["piece"]]
+            self.assertLessEqual(max(abs(c[0]) + c[3] / 2.0 for c in recipe["cols"] if not any(c[7:10])), 1.26)
+
+        self.assertEqual(len(hatches), 2)
+        self.assertEqual(kit_terrace.COLLAR_PROUD, 0.0)
 
     def test_a_marker_in_the_sewer_is_not_buried(self):
         found = rules.problems(layout(), "stage2")
@@ -331,6 +372,14 @@ class Baixa(unittest.TestCase):
         fountains = pieces_in(baixa.ROSSIO, "fountain_bowls")
         self.assertEqual(len(fountains), 1)
         self.assertAlmostEqual(fountains[0]["position"][0], (baixa.MAIN[0] + baixa.MAIN[1]) / 2.0, delta=0.5)
+        # (Level ground under its whole platform: no step buried uphill or
+        # floating downhill.)
+        x, y, z = fountains[0]["position"]
+        reach = kit_recipes.PIECES["fountain_bowls"]["size"][0] / 2.0
+
+        for dx, dz in ((reach, 0.0), (-reach, 0.0), (0.0, reach), (0.0, -reach)):
+            self.assertAlmostEqual(town.height(x + dx, z + dz), y, delta=0.03, msg=(dx, dz))
+
         noise = markers_named("baixa_fountain", "noise_zone")
         self.assertEqual(len(noise), 1)
         self.assertLess(math.hypot(noise[0]["position"][0] - fountains[0]["position"][0], noise[0]["position"][2] - fountains[0]["position"][2]), 0.5)

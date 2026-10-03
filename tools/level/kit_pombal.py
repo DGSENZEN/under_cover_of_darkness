@@ -196,10 +196,12 @@ def design(bays, depth, storeys=4, kind="mid", fire_walls=(False, False), quirk=
     rs, rc = town.roof(roof, width, depth, eaves, PITCH, side)
     rs, rc = town.placed(rs, rc, z=-depth / 2.0)
     shapes += rs + [ks.box(0.0, eaves - 0.15, 0.1, width, 0.3, 0.25, "brick")]
-    cols += rc
+    # (The cornice solid as drawn: a climber's hands meet it.)
+    cols += rc + [town.col(0.0, eaves - 0.15, 0.1, width, 0.3, 0.25)]
 
     if kind == "corner":
         shapes.append(ks.box(width / 2.0 + 0.1, eaves - 0.15, -depth / 2.0, 0.25, 0.3, depth, "brick"))
+        cols.append(town.col(width / 2.0 + 0.1, eaves - 0.15, -depth / 2.0, 0.25, 0.3, depth))
 
     if roof != "mansard":
         _dormers(shapes, cols, bays, eaves, rng)
@@ -209,7 +211,7 @@ def design(bays, depth, storeys=4, kind="mid", fire_walls=(False, False), quirk=
     for x in ([-(bays - 1) / 2.0 * BAY_PITCH, (bays - 1) / 2.0 * BAY_PITCH] if bays >= 4 else [-(bays - 1) / 2.0 * BAY_PITCH]):
         z, top = -depth * 0.55, ridge + 0.8
         shapes += [ks.box(x, (eaves + top) / 2.0, z, 0.8, top - eaves, 0.8, side), ks.box(x, top + 0.08, z, 1.0, 0.16, 1.0, "granite")]
-        cols.append(town.col(x, (eaves + top) / 2.0, z, 0.8, top - eaves, 0.8))
+        cols += [town.col(x, (eaves + top) / 2.0, z, 0.8, top - eaves, 0.8), town.col(x, top + 0.08, z, 1.0, 0.16, 1.0)]
         out.setdefault("chimneys", []).append([x, top + 0.3, z])
 
     out.update({"shapes": shapes, "cols": cols, "size": [width, ridge - eaves + eaves + 1.5, depth], "front": front})
@@ -287,14 +289,18 @@ def _inside(out, width, depth, heights, levels, rooms, kind, eaves):
             hole = (f[0], z0 + f[1], f[2], z0 + f[3])
 
         centre = -depth / 2.0 - (FRONT_WALL - BACK_WALL) / 2.0
-        s, c = town.floors(inner, room_depth, [y], hole and (hole[0] - middle, hole[1] - centre, hole[2] - middle, hole[3] - centre))
+        # (The shop floor stone, the floors over it boards.)
+        slot, surface = ("flagstone", "stone") if r == 0 else ("boards", "wood")
+        s, c = town.floors(inner, room_depth, [y], hole and (hole[0] - middle, hole[1] - centre, hole[2] - middle, hole[3] - centre), slot, surface)
         s, c = town.placed(s, c, middle, centre)
         shapes, cols = shapes + s, cols + c
         holes.append(hole)
 
     for r in range(rooms - 1):
+        # (The stair up from the shop floor a solid stone flight; those over
+        # it slabs, each in its stairwell's hole.)
         s, c = town.stair("two_flight", STAIR_WIDTH, heights[r], (0.0, levels[r], z0), 0.0, "flagstone" if r == 0 else "boards",
-                          "stone" if r == 0 else "wood", solid=False)
+                          "stone" if r == 0 else "wood", solid=r == 0)
         shapes, cols = shapes + s, cols + c
 
     top = levels[rooms] if rooms < len(levels) else eaves
@@ -303,7 +309,8 @@ def _inside(out, width, depth, heights, levels, rooms, kind, eaves):
         cols.append(town.col(middle, (top + eaves) / 2.0, -depth / 2.0, inner, eaves - top, room_depth))
 
     door = [o for o in out["openings"] if o[0] == 0 and o[1] == "front" and o[6] == "door"][0]
-    out["doors"].insert(0, [door[2], 0.0, -FRONT_WALL / 2.0, 0.0])
+    # (The door hung there its opening's size: no gap round or over it.)
+    out["doors"].insert(0, [door[2], 0.0, -FRONT_WALL / 2.0, 0.0, door[4], door[5]])
     out["entries"].insert(0, "door")
     room_x = middle + inner / 2.0 - 1.2
     out["rooms_at"] = [[room_x, levels[r], -depth / 2.0] for r in range(rooms)]

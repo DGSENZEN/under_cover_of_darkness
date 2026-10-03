@@ -81,6 +81,21 @@ class Fort(unittest.TestCase):
             corner = max(math.hypot(abs(c[0]) + c[3] / 2.0, abs(c[2]) + c[5] / 2.0) for c in body if c[7] == 0.0)
             self.assertLessEqual(corner, radius / math.cos(math.pi / (16 if "drum" in name else 12)) + 0.05, name)
 
+    def test_a_towers_batter_is_solid_where_drawn(self):
+        # (Walking into a tower's battered foot from any side, a man meets
+        # the stone where it is drawn, not half a metre inside it.)
+        import kit_fort
+        for name, foot, top, sides in (("tower_drum_8", 4.5, 4.0, 16), ("tower_square_8", (4.0 * math.sqrt(2.0) + 0.6) * math.cos(math.pi / 4.0), 4.0, 4)):
+            boxes = geo.piece_boxes(kit_recipes.PIECES[name], [0.0, 0.0, 0.0], geo.IDENTITY)
+
+            for i in range(sides):
+                a = math.radians(i * 360.0 / sides)
+
+                for y in (0.2, 1.0, 2.0, 3.0, 3.8):
+                    drawn = foot + (top - foot) * y / kit_fort.BATTER[0]
+                    hits = [t for t in (b.ray([8.0 * math.cos(a), y, 8.0 * math.sin(a)], [-math.cos(a), 0.0, -math.sin(a)]) for b in boxes) if t is not None]
+                    self.assertAlmostEqual(8.0 - min(hits), drawn, delta=0.08, msg=(name, i, y))
+
     def test_the_gold_ladder_comes_up_through_the_breastwork(self):
         # Its top meets a gap in the terrace's breastwork, no merlon over it:
         # a man comes up onto the terrace, and a guard's ladder link (which

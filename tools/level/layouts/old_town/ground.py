@@ -2,8 +2,8 @@
 for each plate, flat (the Baixa's rising gently), CELL a vertex, the Sea
 Gate's passage left out (its own floor is its floor). The steps between
 plates are the quarters' retaining walls and stairs. A quarter's HOLES
-(vertices) are left out: the cells round each (a hatch's collar paves
-them)."""
+(the middles of cells) are left out, one cell each (a hatch's collar paves
+it)."""
 
 import terrain
 
@@ -35,23 +35,24 @@ def lay(L):
         name, quarter, x0, z0, x1, z1, _south, _north = plate
 
         for hx, hz in holes:
-            if x0 < hx < x1 and z0 < hz < z1 and (abs((hx - x0) / CELL - round((hx - x0) / CELL)) > 1e-6 or
-                                                  abs((hz - z0) / CELL - round((hz - z0) / CELL)) > 1e-6 or
+            fx, fz = (hx - x0) / CELL - 0.5, (hz - z0) / CELL - 0.5
+
+            if x0 < hx < x1 and z0 < hz < z1 and (abs(fx - round(fx)) > 1e-6 or abs(fz - round(fz)) > 1e-6 or
                                                   abs((x1 - x0) / CELL - round((x1 - x0) / CELL)) > 1e-6 or
                                                   abs((z1 - z0) / CELL - round((z1 - z0) / CELL)) > 1e-6):
-                raise ValueError("the hole at (%.2f, %.2f) is not on %s's vertices" % (hx, hz, name))
+                raise ValueError("the hole at (%.2f, %.2f) is not in the middle of one of %s's cells" % (hx, hz, name))
 
         def ground(x, z, plate=plate):
-            if _passage(x, z) or any(abs(x - hx) < 0.01 and abs(z - hz) < 0.01 for hx, hz in holes):
-                return town.HOLE
+            return town.HOLE if _passage(x, z) else town.plate_height(plate, z)
 
-            return town.plate_height(plate, z)
+        def cut(x, z):
+            return any(abs(x - hx) < 0.01 and abs(z - hz) < 0.01 for hx, hz in holes)
 
         def slot(x, y, z, slope, quarter=quarter):
             return SLOTS[quarter]
 
         L.terrain(terrain.grid("ground_" + name, town.sector_of((x0 + x1) / 2.0, (z0 + z1) / 2.0), x0, z0, x1, z1, CELL, ground, slot,
-                               surface="stone", keep=lambda ys: min(ys) > town.HOLE + 1.0))
+                               surface="stone", keep=lambda ys: min(ys) > town.HOLE + 1.0, cut=cut))
 
     # (The passage's floor through the Sea Gate, level with the square
     # before it: the harbour's own is not shared.)

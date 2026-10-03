@@ -43,9 +43,9 @@ ARCH_RISE = 0.6
 VAULT_WALL = 0.4
 CHANNEL = 0.8
 # A shaft's inside (the player's capsule is 1.0 m across), how proud of the
-# street a hatch's collar stands.
+# street a hatch's collar stands (flush: it fills the ground's cut cell).
 SHAFT = 1.2
-COLLAR_PROUD = 0.05
+COLLAR_PROUD = 0.0
 # A scaffold: its decks a lift apart, off the wall (clear of a balcony) and
 # deep; the hole a ladder comes up through.
 LIFT = 2.0
@@ -263,6 +263,8 @@ def grate_hatch(depth, collar=0.0):
     shapes += [ks.box(0.0, top + 0.01, s * rim, SHAFT + 0.2, 0.03, 0.1, "iron") for s in (-1.0, 1.0)]
     shapes += [ks.box(s * rim, top + 0.01, 0.0, 0.1, 0.03, SHAFT, "iron") for s in (-1.0, 1.0)]
     shapes.append(ks.card(SHAFT * 0.9, top + 0.4, 0.0, SHAFT, 0.8, "window_grille", 90.0, 60.0))
+    # (The grate leant aside is iron a man bumps into.)
+    cols.append(town.col(SHAFT * 0.9, top + 0.4, 0.0, SHAFT, 0.8, 0.04, "stone", 90.0, 60.0))
 
     # (The ladder down its +x wall: two rails, a rung every 0.3 m.)
     wall_x = SHAFT / 2.0 - 0.06

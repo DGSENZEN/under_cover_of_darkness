@@ -110,16 +110,18 @@ def mesh(name, sector, verts, faces, slots, surface="stone", tint=None, occluder
             "verts": [[float(c) for c in v] for v in verts], "faces": [list(f) for f in faces], "slots": list(slots), "tints": tints}
 
 
-def grid(name, sector, x0, z0, x1, z1, cell, height, slot, surface="stone", tint=None, keep=None, skirt=0.0, occluder=False):
+def grid(name, sector, x0, z0, x1, z1, cell, height, slot, surface="stone", tint=None, keep=None, skirt=0.0, occluder=False, cut=None):
     """A height field from (x0, z0) to (x1, z1), a vertex every `cell` m at
     height(x, z); a face's slot is slot(x, y, z, slope in degrees); keep(ys)
-    (the four corners' heights) False drops a quad; `skirt` m hangs down
-    round the edge of what is kept (hiding the crack against a neighbour)."""
+    (the four corners' heights) False drops a quad, and so does cut(x, z)
+    (the quad's middle) True; `skirt` m hangs down round the edge of what
+    is kept (hiding the crack against a neighbour)."""
     nx = max(1, int(round((x1 - x0) / cell)))
     nz = max(1, int(round((z1 - z0) / cell)))
     heights = [[height(x0 + (x1 - x0) * i / nx, z0 + (z1 - z0) * k / nz) for k in range(nz + 1)] for i in range(nx + 1)]
     kept = [(i, k) for i in range(nx) for k in range(nz)
-            if keep is None or keep([heights[i][k], heights[i + 1][k], heights[i][k + 1], heights[i + 1][k + 1]])]
+            if (keep is None or keep([heights[i][k], heights[i + 1][k], heights[i][k + 1], heights[i + 1][k + 1]]))
+            and (cut is None or not cut(x0 + (x1 - x0) * (i + 0.5) / nx, z0 + (z1 - z0) * (k + 0.5) / nz))]
     index = {}
     verts = []
 

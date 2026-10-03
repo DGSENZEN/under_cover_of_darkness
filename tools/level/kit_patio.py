@@ -222,8 +222,10 @@ def _inside(out, shapes, cols, plan, ladder_side, kind, dx, door_w, eaves, store
     mx, mz = (px0 + px1) / 2.0, (pz0 + pz1) / 2.0
     shapes += [ks.prism(mx, WELL / 2.0, mz, 0.55, WELL, 8, "granite"), ks.box(mx, 2.0, mz, 0.08, 2.0, 1.2, "iron")]
     cols.append(town.col(mx, WELL / 2.0, mz, 1.1, WELL, 1.1))
-    out["doors"].insert(0, [dx, 0.0, -WALL / 2.0, 0.0])
-    out["doors"].append([cancela, 0.0, pz1, 0.0])
+    # (Each door hung its opening's size.)
+    front = [o for o in out["openings"] if o[6] == "door"][0]
+    out["doors"].insert(0, [dx, 0.0, -WALL / 2.0, 0.0, front[4], front[5]])
+    out["doors"].append([cancela, 0.0, pz1, 0.0, CANCELA[0], CANCELA[1]])
     out["entries"].insert(0, "door")
     patio_at = [mx + 1.5 if px1 - px0 > 4.0 else mx, 0.0, mz - 1.5]
     out["rooms_at"] = [patio_at] + [[(r[0] + r[2]) / 2.0, 0.0, (r[1] + r[3]) / 2.0] for r, _e in live_rooms]

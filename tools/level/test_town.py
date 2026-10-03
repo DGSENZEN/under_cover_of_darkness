@@ -35,6 +35,11 @@ def clear(cols, a, b):
     return all(t is None or t > length for t in (box.ray(a, unit) for box in boxes(cols)))
 
 
+def first_hit_cols(cols, origin, direction):
+    hits = [t for t in (b.ray(origin, direction) for b in boxes(cols)) if t is not None]
+    return min(hits) if hits else None
+
+
 def stood_on(shapes, cols):
     """The roof faces (slot roof*, facing up) with no collider within 0.45 m
     under their middle: [] when every one is stood on."""
@@ -140,6 +145,76 @@ class Grammar(unittest.TestCase):
         tops = sorted({round(c[1] + c[4] / 2.0, 4) for c in cols})
         self.assertEqual(tops, [kit_town.GROUND_LIFT, 3.2])
         self.assertTrue(0.01 <= kit_town.GROUND_LIFT <= 0.05)
+
+    def test_a_walked_in_walls_honest_openings_are_closed_inside(self):
+        # (From the room, a barred door or a shut window is a niche closed
+        # at its back: no look into the wall's hollow and out past the back
+        # of its outer face, which is not drawn from inside.)
+        from test_terrace import _tri
+        for kind in ("barred", "shut", "lit"):
+            shapes, _cols = kit_town.wall(6.0, 3.0, 0.6, [Opening(0.0, 0.0, 1.2, 2.2, kind)], "render_ochre", inside=True)
+            built = kit_shapes.build(shapes)
+            v = built["verts"]
+
+            def first_front(origin, direction):
+                best = None
+
+                for face in built["faces"]:
+                    ring = face[0]
+                    n = kit_shapes._normal([v[i] for i in ring])
+
+                    if sum(n[i] * direction[i] for i in range(3)) >= 0.0:
+                        continue
+
+                    for i in range(1, len(ring) - 1):
+                        t = _tri(origin, direction, v[ring[0]], v[ring[i]], v[ring[i + 1]])
+
+                        if t is not None and (best is None or t < best):
+                            best = t
+
+                return best
+
+            for x in (0.3, 0.55, -0.55):
+                origin = [x - 1.5 * (1.0 if x > 0 else -1.0), 1.0, -2.0]
+                aim = [x + 0.3 * (1.0 if x > 0 else -1.0), 1.0, 0.1]
+                d = [aim[i] - origin[i] for i in range(3)]
+                length = sum(c * c for c in d) ** 0.5
+                d = [c / length for c in d]
+                t = first_front(origin, d)
+                self.assertIsNotNone(t, (kind, x))
+                self.assertLess(origin[2] + d[2] * t, 0.3 - 0.01, (kind, x))
+
+    def test_a_gables_verges_are_capped(self):
+        # (The canal tiles' open ends along a verge show the sky between
+        # them where the neighbour is lower: a coping covers them, solid.)
+        import math
+        from test_terrace import _tri
+        eaves, pitch, width, depth = 10.0, 27.0, 6.0, 12.0
+        shapes, cols = kit_town.roof("gable", width, depth, eaves, pitch, "granite")
+        built = kit_shapes.build(shapes)
+        v = built["verts"]
+        tan, lift = math.tan(math.radians(pitch)), kit_recipes.ROOF_THICK / math.cos(math.radians(pitch))
+
+        def meets(origin, direction, reach):
+            for face in built["faces"]:
+                ring = face[0]
+
+                for i in range(1, len(ring) - 1):
+                    t = _tri(origin, direction, v[ring[0]], v[ring[i]], v[ring[i + 1]])
+
+                    if t is not None and t <= reach:
+                        return True
+
+            return False
+
+        for side in (-1.0, 1.0):
+            for d in (0.5, 2.0, 4.0, 5.5):
+                for s in (-1.0, 1.0):
+                    y = eaves + d * tan + lift + 0.09
+                    z = s * (depth / 2.0 - d)
+                    self.assertTrue(meets([side * (width / 2.0 + 1.0), y, z], [-side, 0.0, 0.0], 1.35), (side, d, s))
+                    self.assertIsNotNone(first_hit_cols(cols, [side * (width / 2.0 - 0.1), y + 1.0, z], [0.0, -1.0, 0.0]))
+                    self.assertLess(first_hit_cols(cols, [side * (width / 2.0 - 0.1), y + 1.0, z], [0.0, -1.0, 0.0]), 1.0, (side, d, s))
 
     def test_a_mansard_is_closed_at_its_ends(self):
         # (Its steep lower slopes end at the party walls: an end drawn up

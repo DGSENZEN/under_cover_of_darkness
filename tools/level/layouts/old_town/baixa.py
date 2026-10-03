@@ -200,10 +200,10 @@ def _chains(L):
 
 
 def _places(L):
-    # The Rossio's fountain on the main street's axis, sunk on its slope;
-    # its water masks the player near it.
+    # The Rossio's fountain on the main street's axis; its water masks the
+    # player near it.
     x, z = (plan.MAIN[0] + plan.MAIN[1]) / 2.0, (plan.ROSSIO[1] + plan.ROSSIO[3]) / 2.0
-    y = town.height(x, z) - 0.25
+    y = town.height(x, z)
     L.put("fountain_bowls", (x, y, z), 0.0, _sector(x, z), name="baixa_rossio_fountain")
     water = world((x, y, z), 0.0, kit.PIECES["fountain_bowls"]["sockets"]["water"][0])
     L.mark("baixa_fountain", "noise_zone", water, 0.0, _sector(x, z), size=[10.0, 4.0, 10.0], db=50.0, label="the Rossio's fountain")

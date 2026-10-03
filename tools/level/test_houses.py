@@ -55,7 +55,20 @@ def toured(design, route):
                            "markers": points})
 
 
+def door_sizes(design):
+    """Its doors' marker sizes (1.2 x 2.2 unless given), sorted."""
+    return sorted((round(d[4], 2), round(d[5], 2)) if len(d) > 5 else (1.2, 2.2) for d in design["doors"])
+
+
 class Porto(unittest.TestCase):
+    def test_a_live_doors_marker_fills_its_opening(self):
+        # (The door hung at a marker is the marker's size: a slot house's
+        # narrow door is no wider than its opening.)
+        for quirk in ("", "slot", "two_level"):
+            design = kit_porto.design(4.5, 12.0, 4, quirk, enterable=True, rooms=2)
+            live = sorted((round(o[4], 2), round(o[5], 2)) for o in design["openings"] if o[6] == "door")
+            self.assertEqual(door_sizes(design), live, quirk)
+
     def tearDown(self):
         for name in (TEST, "test_street"):
             kit_recipes.PIECES.pop(name, None)
@@ -200,6 +213,49 @@ class Pombaline(unittest.TestCase):
                 design = kit_pombal.design(3 if kind == "hill" else 4, 12.0, 3 if kind in ("hill", "row") else 4, kind, quirk=quirk)
                 self.assertEqual(stood_on(design["shapes"], design["cols"]), [], (kind, quirk))
 
+    def test_its_shop_floor_is_stone_and_its_first_stair_solid(self):
+        # (A Pombaline shop floor is stone, its stair up from it a stone
+        # flight, not boards and floating treads.)
+        design = kit_pombal.design(4, 12.0, 4, "mid", enterable=True, rooms=2)
+        boxes_ = [sh for sh in design["shapes"] if sh["kind"] == "box"]
+        floor = [sh for sh in boxes_ if abs(sh["centre"][1] - (kit_town.GROUND_LIFT - kit_town.SLAB / 2.0)) < 1e-6]
+        self.assertTrue(floor and all(sh["slot"] == "flagstone" for sh in floor), {sh["slot"] for sh in floor})
+        self.assertTrue(any(sh["slot"] == "flagstone" and sh["size"][1] > 2.0 for sh in boxes_))
+
+    def test_a_live_doors_marker_fills_its_opening(self):
+        # (The door the game hangs at a marker is the marker's size, 1.2 x
+        # 2.2 unless it says otherwise: it fills its opening, no gap round
+        # or over it.)
+        for kind in ("mid", "corner", "hill", "row"):
+            design = kit_pombal.design(3, 12.0, 4 if kind != "row" else 2, kind, enterable=True, rooms=2)
+            live = [o for o in design["openings"] if o[6] == "door"]
+            self.assertEqual(len(live), len(design["doors"]), kind)
+
+            for o, d in zip(sorted(live, key=lambda o: o[2]), sorted(design["doors"], key=lambda d: d[0])):
+                width, height = (d[4], d[5]) if len(d) > 5 else (1.2, 2.2)
+                self.assertAlmostEqual(width, o[4], delta=0.01, msg=kind)
+                self.assertAlmostEqual(height, o[5], delta=0.01, msg=kind)
+
+    def test_its_cornice_and_chimney_caps_are_solid(self):
+        # (What juts out where a climber's hands or a man's feet go is solid
+        # as drawn: the paired-brick cornice along its fronts, the granite
+        # cap over each stack.)
+        for kind in ("mid", "corner"):
+            design = kit_pombal.design(4, 12.0, 4, kind)
+            eaves, width = design["eaves"], design["size"][0]
+            # (Down onto the cornice's top just out from the front.)
+            self.assertAlmostEqual((first_hit(design["cols"], [0.0, eaves + 0.5, 0.18], [0.0, -1.0, 0.0]) or 99.0), 0.5, delta=0.02, msg=kind)
+            # (Into it from the street, under the eaves.)
+            self.assertLess((first_hit(design["cols"], [0.0, eaves - 0.1, 2.0], [0.0, 0.0, -1.0]) or 99.0), 1.8, kind)
+
+            if kind == "corner":
+                self.assertAlmostEqual((first_hit(design["cols"], [width / 2.0 + 0.18, eaves + 0.5, -6.0], [0.0, -1.0, 0.0]) or 99.0), 0.5, delta=0.02)
+
+            for x, top, z in design["chimneys"]:
+                # (The cap's lip, 0.45 out from the stack's middle.)
+                cap = top - 0.3 + 0.16
+                self.assertAlmostEqual((first_hit(design["cols"], [x + 0.45, cap + 1.0, z], [0.0, -1.0, 0.0]) or 99.0), 1.0, delta=0.02, msg=kind)
+
     def test_pombaline_budget(self):
         for bays in (3, 4, 6):
             for kind in kit_pombal.KINDS:
@@ -214,6 +270,14 @@ def area(box):
 
 
 class Patio(unittest.TestCase):
+    def test_its_doors_markers_fill_their_openings(self):
+        # (Its street door and its cancela onto the patio, each hung its own
+        # opening's size.)
+        for width, depth, kind in ((6.0, 18.0, "small"), (10.0, 25.0, "merchant"), (16.0, 20.0, "corral")):
+            design = kit_patio.design(width, depth, kind)
+            front = [(round(o[4], 2), round(o[5], 2)) for o in design["openings"] if o[6] == "door"]
+            self.assertEqual(door_sizes(design), sorted(front + [kit_patio.CANCELA]), kind)
+
     def tearDown(self):
         for name in (TEST, "test_street"):
             kit_recipes.PIECES.pop(name, None)
