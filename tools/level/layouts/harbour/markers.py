@@ -7,6 +7,7 @@ import math
 
 import kit_customs
 import kit_harbour
+import kit_ships
 import kit_iberian
 import kit_recipes
 
@@ -189,7 +190,7 @@ def _things(L):
             ("arcade_purse", (-160.0, QUAY + 0.1, -9.5), 30, "a purse", {}, "ribeira"),
             ("copper_pan", (-110.0, QUAY + 0.1, -9.5), 25, "a copper pan", {}, "ribeira"),
             ("astrolabe", (-120.0, 1.6, 5.5), 45, "an astrolabe", {}, "ships"),
-            ("fish_money", (-150.0, 0.3, 3.6), 15, "fish money", {}, "ships"),
+            ("fish_money", (-145.5, 0.3, 3.6), 15, "fish money", {}, "ships"),
             ("offering", (GATE_X, QUAY + 3.6, -31.5), 35, "an offering purse", {}, "terreiro"),
             ("shipwrights_tools", (48.8, QUAY + 4.5, -40.0), 60, "a shipwright's tools", {}, "shipyard"),
             ("tar_money", (140.0, QUAY + 0.1, -22.0), 20, "tar money", {}, "shipyard")]
@@ -275,7 +276,7 @@ def _ways_in(L):
     # The carrack's: aboard over its bulwark, up the shrouds to the top, down
     # onto the main yard, along it over the sea wall, down onto the walk.
     _checks(L, "way_carrack", [((CARRACK_X, QUAY, -3.0), "walk"), ((CARRACK_X, 2.0, 2.6), "jump"), ((CARRACK_X, 20.0, CARRACK_Z - 1.4), "climb"),
-                               ((CARRACK_X, MAINYARD_Y + 0.25, 1.5), "drop"), ((CARRACK_X, MAINYARD_Y + 0.25, SEA_WALL - 0.3), "balance"),
+                               ((CARRACK_X + kit_ships.MAIN_YARD_X, MAINYARD_Y + 0.25, 1.5), "drop"), ((CARRACK_X + kit_ships.MAIN_YARD_X, MAINYARD_Y + 0.25, SEA_WALL - 0.3), "balance"),
                                ((CARRACK_X, WALK, SEA_WALL - 0.3), "drop")], "ships")
     # The roofs': up casa_d's old vine to its eaves, onto its roof, over its
     # ridge and a merlon onto the Ribeira wall's walk.

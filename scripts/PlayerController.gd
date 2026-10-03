@@ -212,6 +212,12 @@ enum MoveState {
 @export var climb_reattach_delay := 0.4
 ## While climbing upward, a top this close to the feet is mantled onto.
 @export var climb_top_mantle_height := 1.4
+## How far under a flat climb's top your body's middle is held (climbing
+## up never takes you off its top into the air).
+@export var climb_top_hold := 0.0
+## Round an open climb held from behind to its front, so fast at most (m/s):
+## out round the edge of a mast's top, as up its futtock shrouds.
+@export var climb_round_speed := 3.0
 
 
 @export_category("Stealth")
@@ -363,6 +369,9 @@ var drop_target := {}
 var _pending_drop_target := {}
 
 var current_climb: Area3D = null
+## Which side of a flat climb you hold: 1 its front; -1 behind it, an open
+## one (ratlines, a net) taken hold of from its back.
+var climb_side := 1.0
 var climb_volumes: Array[Area3D] = []
 ## The water you are in (WaterVolume), or null; the stroke count swimming.
 var water: Area3D = null
@@ -801,6 +810,11 @@ func _update_locomotion(delta: float) -> void:
 	var stairs_jump := jump_pressed and on_staircase
 
 	if forward_intent and can_grab and (jump_pressed or air_hold):
+		# Crouched at a rail with a drop beyond it (a ship's side, a balcony):
+		# over it into a hang, not a vault into the drop.
+		if jump_pressed and grounded and is_crouched and _try_lower_over(facing_direction):
+			return
+
 		if cached_profile != null and not stairs_jump and _try_traversal(cached_profile):
 			return
 
@@ -1819,13 +1833,16 @@ func _sync_scanner() -> void:
 	scanner.scan_distance = scan_distance
 
 
-func _try_traversal(profile: ObstacleProfile, chained := false) -> bool:
+func _try_traversal(profile: ObstacleProfile, chained := false, over_only := false) -> bool:
 	var candidates := planner.classify(
 		profile,
 		is_crouched,
 		_is_sprinting(),
 		variant_table
 	)
+
+	if over_only:
+		candidates = candidates.filter(func(v): return v.kind == MoveVariantRes.Kind.VAULT)
 
 	if candidates.is_empty():
 		_last_reject = "no variant matches height %.2f" % profile.height
@@ -1857,10 +1874,33 @@ func _try_lower(facing_direction: Vector3) -> bool:
 
 	var edge := scanner.edge_below(facing_direction, needed_drop)
 
+	# No edge at your feet, but a rail in front with the drop past it.
 	if edge.is_empty():
-		return false
+		return _try_lower_over(facing_direction)
 
 	var move := planner.lower(edge, global_position, rotation.y)
+
+	if move == null:
+		_last_reject = planner.last_reject
+		return false
+
+	_start_move(move)
+	return true
+
+
+## Over the rail in front of you into a hang on its far side (a ship's
+## bulwark, a balcony's rail): true when the move started.
+func _try_lower_over(facing_direction: Vector3) -> bool:
+	if _is_carrying():
+		return false
+
+	var needed_drop := planner.hang_eye_drop + _neck_stand_y + _standing_height * 0.5 + 0.1
+	var rail := scanner.rail_ahead(facing_direction, needed_drop)
+
+	if rail.is_empty():
+		return false
+
+	var move := planner.lower_over(rail, global_position, rotation.y)
 
 	if move == null:
 		_last_reject = planner.last_reject
@@ -2716,6 +2756,18 @@ func _climb_handover(volume: Area3D) -> Area3D:
 	return null
 
 
+## Out of the climb you are on toward you, level: its front's, or its
+## back's held from behind (climb_side); a rope's, from the rope to you.
+func climb_normal() -> Vector3:
+	if current_climb == null or not is_instance_valid(current_climb):
+		return Vector3.ZERO
+
+	if current_climb.has_method("rope_point") or current_climb.rope:
+		return current_climb.get_rope_normal(global_position)
+
+	return current_climb.get_climb_normal() * climb_side
+
+
 func _is_carrying() -> bool:
 	return frob != null and frob.is_carrying()
 
@@ -2975,6 +3027,7 @@ func _try_enter_climb(wish_direction: Vector3) -> bool:
 	# Overlapping volumes (a ladder beside a rope, two halves of a wall): the
 	# latest entered first, then any other one pushed into.
 	var volume: Area3D = null
+	var side := 1.0
 
 	for i in range(climb_volumes.size() - 1, -1, -1):
 		var candidate := climb_volumes[i]
@@ -2983,10 +3036,20 @@ func _try_enter_climb(wish_direction: Vector3) -> bool:
 			climb_volumes.remove_at(i)
 			continue
 
+		# (At its head, your feet at its top: not taken hold of again, as you
+		# go over a ship's rail onto her deck.)
+		if not candidate.rope and not candidate.has_method("rope_point") and candidate.top_y() <= get_feet_position().y + 0.35:
+			continue
+
 		var normal: Vector3 = candidate.get_climb_normal()
+		side = 1.0
 
 		if candidate.rope:
 			normal = candidate.get_rope_normal(global_position)
+		elif candidate.get("open") == true and (global_position - candidate.get_plane_point()).dot(candidate.get_face_normal()) < 0.0:
+			# An open climb (ratlines) taken hold of from behind.
+			side = -1.0
+			normal = -normal
 
 		# Only attach when pushing into the surface.
 		if wish_direction.dot(-normal) >= 0.3:
@@ -2998,6 +3061,7 @@ func _try_enter_climb(wish_direction: Vector3) -> bool:
 
 	movement_state = MoveState.CLIMBING
 	current_climb = volume
+	climb_side = side
 	rope_param = -1.0
 	_floor_valid = false
 	_clear_ground_state()
@@ -3052,11 +3116,8 @@ func _update_climb(_delta: float) -> void:
 		return
 
 	var is_rope: bool = current_climb.rope
-	var normal: Vector3 = current_climb.get_climb_normal()
+	var normal: Vector3 = climb_normal()
 	var wish_direction := _wish_direction()
-
-	if is_rope:
-		normal = current_climb.get_rope_normal(global_position)
 
 	if Input.is_action_just_pressed("jump"):
 		# Off a rope, jump the way you look; off a ladder, away from it.
@@ -3078,24 +3139,38 @@ func _update_climb(_delta: float) -> void:
 		return
 
 	# Hold a fixed gap to the surface with a spring rather than a teleport,
-	# so uneven walls do not make the view jitter.
+	# so uneven walls do not make the view jitter. An open climb, or one that
+	# leans, has no wall behind it to measure: its plane, square to it.
 	var gap: float
+	var face := normal
+	var up := Vector3.UP
+	var open: bool = not is_rope and current_climb.get("open") == true
 
 	if is_rope:
 		var axis: Vector3 = current_climb.global_position
 		gap = Vector3(global_position.x - axis.x, 0.0, global_position.z - axis.z).length()
 	else:
-		var wall := scanner.ray(global_position, global_position - normal * (_radius + 1.0))
+		up = current_climb.get_climb_up()
+		var wall := {}
+
+		if open or current_climb.is_leaning():
+			face = current_climb.get_face_normal() * climb_side
+		else:
+			wall = scanner.ray(global_position, global_position - normal * (_radius + 1.0))
 
 		if wall.is_empty():
 			var plane_point: Vector3 = current_climb.get_plane_point()
-			gap = (global_position - plane_point).dot(normal)
+			gap = (global_position - plane_point).dot(face)
 		else:
 			var wall_point: Vector3 = wall["position"]
 			gap = (global_position - wall_point).dot(normal)
 
 	var wanted_gap: float = _radius + current_climb.climb_distance
-	var spring := -normal * (gap - wanted_gap) * 10.0
+	var spring := -face * (gap - wanted_gap) * 10.0
+
+	# (Round an open climb to its front, through it: not in a snap.)
+	if open:
+		spring = spring.limit_length(climb_round_speed)
 
 	# Forward climbs the way you look: up normally, down when looking down.
 	var input_axis := Input.get_vector(
@@ -3113,9 +3188,25 @@ func _update_climb(_delta: float) -> void:
 	var max_vertical: float = current_climb.max_vel_vert
 	var max_horizontal: float = current_climb.max_vel_horiz
 
+	# Held from behind, an open climb (shrouds) in its upper half, at its top
+	# or stopped by what is over it (its mast's top): round to its front, from
+	# where what it leads up to is reached (out round the top's edge, as up
+	# its futtock shrouds).
+	if open and climb_side < 0.0 and vertical > 0.0:
+		var ends: Array = current_climb.face_ends()
+
+		if global_position.y > ((ends[0] as Vector3).y + (ends[1] as Vector3).y) * 0.5 and (
+				global_position.y >= current_climb.top_y() - climb_top_hold or test_move(global_transform, up * 0.1)):
+			climb_side = 1.0
+			normal = -normal
+			lateral = normal.cross(Vector3.UP).normalized()
+			sideways = wish_direction.dot(lateral)
+			spring = (current_climb.get_face_normal() * climb_round_speed)
+
 	# Near the top while climbing up: mantle onto whatever is in reach. On a
-	# ladder that is the wall it leans on; on a rope, whatever you face.
-	if vertical > 0.1 and _climb_scan_timer <= 0.0:
+	# ladder that is the wall it leans on; on a rope, whatever you face. (Not
+	# from behind an open climb: over it is only the way you came.)
+	if vertical > 0.1 and _climb_scan_timer <= 0.0 and climb_side > 0.0:
 		_climb_scan_timer = RESCAN_TIME
 		var profile: ObstacleProfile = null
 
@@ -3129,13 +3220,24 @@ func _update_climb(_delta: float) -> void:
 			profile = scanner.scan(-normal, Vector3.ZERO, true)
 
 		if profile != null and profile.height <= climb_top_mantle_height:
-			if _try_traversal(profile):
+			# (A rail at its head thinner than you, the floor close beyond it, a
+			# ship's bulwark: over it onto the deck, not up onto its top.)
+			var over: bool = profile.thickness < _radius and profile.has_far_floor and profile.far_drop() <= 1.5
+
+			if _try_traversal(profile, false, over):
 				_climb_reattach_timer = climb_reattach_delay
 				return
 
+	# At the top of the climb with nothing taken over it: hold on there. Off
+	# its top into the air you would only fall and catch it again (a top too
+	# small to stand on, a ledge the scan has not found yet); held at the top
+	# the scan goes on looking.
+	if not is_rope and vertical > 0.0 and global_position.y >= current_climb.top_y() - climb_top_hold:
+		vertical = 0.0
+
 	velocity = (
 		spring
-		+ Vector3.UP * vertical * max_vertical
+		+ up * vertical * max_vertical
 		+ lateral * sideways * max_horizontal
 	)
 
@@ -3238,6 +3340,7 @@ func teleport(xform: Transform3D) -> void:
 	cached_profile = null
 	_chain_buffered = false
 	current_climb = null
+	climb_side = 1.0
 	rope_param = -1.0
 	is_peeking = false
 	_shimmy_velocity = 0.0
@@ -3283,6 +3386,7 @@ func _leave_climb(exit_velocity: Vector3) -> void:
 
 	movement_state = MoveState.LOCOMOTION
 	current_climb = null
+	climb_side = 1.0
 	rope_param = -1.0
 	velocity = exit_velocity
 	_climb_reattach_timer = climb_reattach_delay

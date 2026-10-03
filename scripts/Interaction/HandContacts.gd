@@ -317,10 +317,13 @@ func _keep_move() -> void:
 
 func _ladder_hold(height: float, side: int) -> Transform3D:
 	var volume: Area3D = player.current_climb
-	var normal: Vector3 = volume.get_climb_normal()
+	var normal: Vector3 = player.climb_normal()
 	var lateral := _lateral(normal)
 	var wall: Vector3 = player.global_position - normal * (float(player._radius) + 0.05)
-	var at := Vector3(wall.x, height, wall.z) + lateral * (0.2 if side == LEFT else -0.2)
+	# (Up the climb's plane to that height: a leaning one's, shrouds', in or
+	# out with it.)
+	var up: Vector3 = volume.get_climb_up() if volume.has_method("get_climb_up") else Vector3.UP
+	var at := wall + up * ((height - wall.y) / maxf(up.y, 0.2)) + lateral * (0.2 if side == LEFT else -0.2)
 	return Transform3D(_palm_basis(normal), at)
 
 

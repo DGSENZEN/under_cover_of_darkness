@@ -75,7 +75,8 @@
   "ladder": {
    "required": [],
    "optional": {
-    "rope": false
+    "rope": false,
+    "open": false
    },
    "box": true
   },

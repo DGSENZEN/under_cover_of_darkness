@@ -181,6 +181,13 @@ func _generate_mantle(
 			path = _best_clear_path(PackedVector3Array([start, lift, landing]), crouched)
 			if not path.is_empty():
 				break
+			# Something lower juts out under the face (a water stair's
+			# submerged steps, a plinth): rise straight up from where you
+			# are before moving in over it.
+			var straight_up := Vector3(start.x, lift.y, start.z)
+			path = _best_clear_path(PackedVector3Array([start, straight_up, lift, landing]), crouched)
+			if not path.is_empty():
+				break
 
 		if path.is_empty():
 			continue
@@ -352,6 +359,47 @@ func lower(edge: Dictionary, start: Vector3, current_yaw: float) -> TraversalMov
 		last_reject = "lower: path blocked"
 		return null
 
+	return _lower_move(path, crouched, edge, current_yaw)
+
+
+## Builds a move over a rail into a hang on its far side, from rail
+## {face_point (its far face), normal (out), lip_y, thickness}
+## (TraversalScanner.rail_ahead): up where you stand till your feet clear
+## its top, over it, out past it, and down until your hands hold its top.
+## start is a world body origin. Returns null if blocked.
+func lower_over(rail: Dictionary, start: Vector3, current_yaw: float) -> TraversalMove:
+	last_reject = ""
+
+	var face_point: Vector3 = rail["face_point"]
+	var normal: Vector3 = rail["normal"]
+	var lip_y: float = rail["lip_y"]
+	var anchor := hang_anchor(face_point, normal, lip_y)
+
+	if not scanner.fits(anchor, false):
+		last_reject = "lower over: no room to hang"
+		return null
+
+	var over_y := lip_y + scanner.standing_height * 0.5 + scanner.floor_clearance + 0.05
+	var middle := face_point - normal * float(rail.get("thickness", 0.2)) * 0.5
+
+	for crouched in [false, true]:
+		var y := over_y if not crouched else lip_y + scanner.crouch_height * 0.5 + scanner.floor_clearance + 0.05
+		var raw := PackedVector3Array([start, Vector3(start.x, y, start.z), Vector3(middle.x, y, middle.z), Vector3(anchor.x, y, anchor.z), anchor])
+		var path := _best_clear_path(raw, crouched)
+
+		if not path.is_empty():
+			var move := _lower_move(path, crouched, rail, current_yaw)
+			move.label = "lower over"
+			return move
+
+	last_reject = "lower over: path blocked"
+	return null
+
+
+func _lower_move(path: PackedVector3Array, crouched: bool, edge: Dictionary, current_yaw: float) -> TraversalMove:
+	var face_point: Vector3 = edge["face_point"]
+	var normal: Vector3 = edge["normal"]
+	var lip_y: float = edge["lip_y"]
 	var move := TraversalMove.new()
 	move.label = _lower_variant.label
 	move.noise_db = 25.0
