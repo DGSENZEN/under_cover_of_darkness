@@ -386,6 +386,18 @@ def stair_tour(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0, riser=RISER, trea
     return [geo.add(geo.apply(turn, p[:3]), list(at)) + [p[3]] for p in local]
 
 
+def reverse_tour(points):
+    """A tour walked the other way (down a stair it went up): each point
+    reached by the move that reached the one after it before."""
+    rev = list(reversed(points))
+    out = [list(rev[0][:3]) + ["walk"]]
+
+    for prev, cur in zip(rev, rev[1:]):
+        out.append(list(cur[:3]) + [prev[3]])
+
+    return out
+
+
 # Triangles for a house: a bay's openings up its front, a storey's band
 # across it, and an enterable one's floors and stairs (a 2-bay 4-storey
 # house 2320, 3220 enterable; the harbour's casas are 5200).

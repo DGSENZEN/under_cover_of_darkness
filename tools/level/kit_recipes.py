@@ -647,6 +647,7 @@ import kit_tavern  # noqa: E402,F401
 import kit_watch  # noqa: E402,F401
 import kit_merchant  # noqa: E402,F401
 import kit_town_chapel  # noqa: E402,F401
+import kit_landmarks  # noqa: E402,F401
 
 # Dense structure found by no one by name, joined at export (merge_groups) in
 # the levels that ask for it (export.MERGE_LEVELS): floors, the city's

@@ -39,16 +39,23 @@ MACHICOLATION = (1.4, 1.2, 0.5)
 CHUTE = (1.0, 0.8)
 HATCH = (0.7, 1.2)
 DOVECOTE = (1.5, 1.2)
+# A balcony on corbels, its door (balcony=).
+BALCONY = (1.8, 1.0)
+BALCONY_DOOR = (1.0, 2.1)
 KINDS = ("cut", "full")
 QUIRKS = ("", "chute", "dovecote")
 # Triangles a storey walked in (its floor and flight) over its budget.
 INSIDE = 250
 
 
-def design(side=7.0, storeys=4, kind="cut", quirk="", enterable=False, front="granite", seed=0):
+def design(side=7.0, storeys=4, kind="cut", quirk="", enterable=False, front="granite", seed=0, balcony=None):
     """A tower-house: see the module's doc. A kit_town design with
     `openings`, `eaves`, `wall`, `doors`, `entries`, `rooms_at`, `tour`,
-    (chute) `climbs` and `chute_tour`, `places`."""
+    (chute) `climbs` and `chute_tour`, `places`. `balcony` (face, storey[,
+    along: its middle along the face's wall]):
+    a machicolated balcony on that face at that storey, a door onto it
+    (live in a tower walked in): places["balcony"] its outer edge's
+    middle."""
     if kind not in KINDS or quirk not in QUIRKS:
         raise ValueError("no tower %s / %s" % (kind, quirk))
 
@@ -75,7 +82,12 @@ def design(side=7.0, storeys=4, kind="cut", quirk="", enterable=False, front="gr
 
         for s in range(1, storeys):
             kind_of = "lit" if rng.random() < 0.2 else "shut"
-            openings.append(town.Opening(0.0, levels[s] + LANCET[2], LANCET[0], LANCET[1], kind_of))
+
+            if balcony and (face, s) == tuple(balcony[:2]):
+                along = balcony[2] if len(balcony) > 2 else 0.0
+                openings.append(town.Opening(along, levels[s], BALCONY_DOOR[0], BALCONY_DOOR[1], "door" if enterable else "shut"))
+            else:
+                openings.append(town.Opening(0.0, levels[s] + LANCET[2], LANCET[0], LANCET[1], kind_of))
 
         if face == "right" and quirk == "chute" and enterable:
             # (Turned 90 degrees the wall's x runs to -z.)
@@ -88,6 +100,16 @@ def design(side=7.0, storeys=4, kind="cut", quirk="", enterable=False, front="gr
         s, c = town.wall(length, eaves, WALL, openings, front, place, inside=enterable, frames=face == "front")
         shapes += s
         walls += c
+
+        if balcony and face == balcony[0]:
+            y = levels[balcony[1]]
+            along = balcony[2] if len(balcony) > 2 else 0.0
+            b, bc = town.balcony(along, y, BALCONY[0], BALCONY[1], WALL / 2.0)
+            b, bc = town.placed(b, bc, place[0], place[1], place[2])
+            shapes += b
+            cols += bc
+            edge = town.placed([ks.box(along, y, WALL / 2.0 + BALCONY[1], 0.1, 0.1, 0.1, "granite")], [], place[0], place[1], place[2])[0][0]
+            out["places"]["balcony"] = list(edge["centre"])
 
     if enterable:
         _inside(out, shapes, cols, side, storeys, levels, eaves)
@@ -236,7 +258,8 @@ def _chute(out, shapes, cols, side, levels, chute_z, enterable):
     # (The ladder through the wall into the room: the climber comes out on
     # the top room's floor.)
     top = levels[-1]
-    # (Turned to face the wall, the box's depth runs along x.)
-    out["climbs"].append([side / 2.0 - 0.1, (top + 0.6) / 2.0, chute_z, 0.8, top + 0.6, 1.8, 90.0])
+    # (Turned to face the wall, the box's depth runs along x: from the room's
+    # floor inside to the chute's housing, its middle out in the chute.)
+    out["climbs"].append([side / 2.0 + 0.2, (top + 0.6) / 2.0, chute_z, 0.8, top + 0.6, 1.6, 90.0])
     out["entries"].append("below")
-    out["chute_tour"] = [[x, 0.0, chute_z, "walk"], [side / 2.0 - WALL - 0.6, top, chute_z, "climb"]]
+    out["chute_tour"] = [[x, 0.0, chute_z, "walk"], [side / 2.0 - WALL - 0.4, top, chute_z, "climb"]]

@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import kit_recipes  # noqa: E402
 import kit_town_chapel  # noqa: E402,F401
+import kit_landmarks  # noqa: E402,F401
 import kit_merchant  # noqa: E402,F401
 import kit_tavern  # noqa: E402
 import kit_watch  # noqa: E402
@@ -187,6 +188,69 @@ class Chapel(Keys):
         recipe = PIECES["town_chapel"]
         self.assertIn("walled_altar", recipe["places"])
         self.assertLessEqual(tris(recipe), recipe["budget"])
+
+
+class Landmark(Keys):
+    def test_the_landmark_has_three_kinds(self):
+        self.assertEqual(sorted(w["kind"] for w in PIECES["landmark_tower"]["ways"]), ["below", "door", "leap"])
+
+    def test_every_way_into_the_landmark_checks(self):
+        for kind, problems in way_problems("landmark_tower").items():
+            self.assertEqual(problems, [], kind)
+
+        self.assertEqual(blocked("landmark_tower"), [])
+
+    def test_the_leap_to_the_landmark_is_a_jump(self):
+        leap = [w for w in PIECES["landmark_tower"]["ways"] if w["kind"] == "leap"][0]
+        jumps = [(a, b) for a, b in zip(leap["points"], leap["points"][1:]) if b[3] == "jump"]
+        self.assertEqual(len(jumps), 1)
+        a, b = jumps[0]
+        self.assertLessEqual(((a[0] - b[0]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5, rules.GAPS["jump"])
+
+    def test_the_landmark_stands_about_30_m(self):
+        self.assertTrue(29.0 <= PIECES["landmark_tower"]["size"][1] <= 34.0)
+        self.assertIn("top_room", PIECES["landmark_tower"]["places"])
+
+
+class Garden(Keys):
+    def test_the_garden_has_three_kinds(self):
+        self.assertEqual(sorted(w["kind"] for w in PIECES["garden_house"]["ways"]), ["below", "door", "wall"])
+
+    def test_every_way_into_the_garden_checks(self):
+        for kind, problems in way_problems("garden_house").items():
+            self.assertEqual(problems, [], kind)
+
+        self.assertEqual(blocked("garden_house"), [])
+
+    def test_the_corpse_lights_come_up_over_the_garden(self):
+        wisps = PIECES["garden_house"]["places"]["wisps"]
+        self.assertEqual(len(wisps), 6)
+        self.assertTrue(all(s > 2.0 for s in wisps[3:6]))
+
+
+class UpperGate(Keys):
+    def test_the_gate_is_passed_over_and_under(self):
+        recipe = PIECES["upper_gate"]
+        self.assertEqual(sorted(w["kind"] for w in recipe["ways"]), ["below", "roof"])
+
+        for kind, problems in way_problems("upper_gate").items():
+            self.assertEqual(problems, [], kind)
+
+        self.assertEqual(blocked("upper_gate"), [])
+        beyond = recipe["places"]["beyond"]
+
+        for way in recipe["ways"]:
+            end = way["points"][-1]
+            self.assertLess(((end[0] - beyond[0]) ** 2 + (end[2] - beyond[2]) ** 2) ** 0.5, 1.0, way["kind"])
+
+    def test_the_gate_tower_is_22_m(self):
+        recipe = PIECES["upper_gate"]
+        import geo
+        boxes = geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY)
+        x, z = recipe["places"]["walk"][0], recipe["places"]["walk"][2]
+        top = min(t for t in (b.ray([x, 40.0, z], [0.0, -1.0, 0.0]) for b in boxes) if t is not None)
+        self.assertAlmostEqual(40.0 - top, 22.0, delta=0.05)
+        self.assertTrue({"gate_door", "beyond", "balefire_target", "postern"} <= set(recipe["places"]))
 
 
 if __name__ == "__main__":
