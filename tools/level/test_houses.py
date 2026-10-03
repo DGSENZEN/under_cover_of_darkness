@@ -15,6 +15,7 @@ import kit_patio  # noqa: E402
 import kit_pombal  # noqa: E402
 import kit_porto  # noqa: E402
 import kit_recipes  # noqa: E402
+import kit_tower  # noqa: E402
 import kit_town  # noqa: E402
 import rules  # noqa: E402
 from test_kits import tris  # noqa: E402
@@ -40,7 +41,8 @@ def toured(design, route):
     to z +4), and `route` ([x, y, z, move], ...) as route checks: the
     rules' problems."""
     kit_town.register(TEST, "town", "render_ochre", design)
-    kit_recipes.piece("test_street", "floor", "cobble", "stone", [kit_recipes.box(0.0, -0.1, 2.0, 12.0, 0.2, 4.0, "cobble")])
+    # (A yard round the house: the street in front, lanes beside and behind.)
+    kit_recipes.piece("test_street", "floor", "cobble", "stone", [kit_recipes.box(0.0, -0.1, -10.0, 24.0, 0.2, 28.0, "cobble")])
     points = [marker("tour_%d" % (i + 1), "route_check", p[:3], {"route": "tour", "order": i + 1, "move": p[3]}) for i, p in enumerate(route)]
     # (Its climbs, ladders as the layout lays them, Layout.put climbs=True.)
     for i, c in enumerate(design.get("climbs", [])):
@@ -279,6 +281,70 @@ class Patio(unittest.TestCase):
                     design = kit_patio.design(width, depth, kind, quirk, enterable)
                     kit_town.register(TEST, "town", "whitewash", design)
                     self.assertLessEqual(tris(kit_recipes.PIECES[TEST]), kit_patio.BUDGET[kind], (kind, quirk, enterable))
+
+
+class Tower(unittest.TestCase):
+    def tearDown(self):
+        for name in (TEST, "test_street"):
+            kit_recipes.PIECES.pop(name, None)
+
+    def test_the_landmark_stands_30_m(self):
+        self.assertTrue(29.0 <= kit_tower.design(8.0, 9, "full")["size"][1] <= 32.0)
+
+    def test_a_full_tower_is_crenellated(self):
+        # (Just over its parapet's base, across its front edge: merlons and
+        # the crenels between them.)
+        design = kit_tower.design(8.0, 9, "full")
+        y = design["eaves"] + kit_tower.BASE + 0.3
+        hits = [first_hit(design["cols"], [x / 10.0, y, 2.0], [0.0, 0.0, -1.0]) for x in range(-35, 36, 2)]
+        near = [h is not None and h < 2.6 for h in hits]
+        self.assertTrue(any(near) and not all(near), near)
+
+    def test_a_cut_tower_is_a_platform(self):
+        design = kit_tower.design(7.0, 4, "cut")
+        top = design["eaves"]
+        self.assertAlmostEqual(40.0 - first_hit(design["cols"], [0.0, 40.0, -3.5], [0.0, -1.0, 0.0]), top, delta=0.05)
+        self.assertIsNotNone(first_hit(design["cols"], [0.0, top + 0.5, 2.0], [0.0, 0.0, -1.0]))
+        self.assertEqual(toured(design, [[-2.0, top, -3.5, "walk"], [2.0, top, -3.5, "walk"], [0.0, top, -5.5, "walk"]]), [])
+
+    def test_the_chute_climbs_from_the_street_to_the_top_room(self):
+        design = kit_tower.design(8.0, 9, "full", "chute", enterable=True)
+        climb = design["climbs"][0]
+        self.assertLessEqual(climb[1] - climb[4] / 2.0, 1.2)
+        self.assertGreaterEqual(climb[1] + climb[4] / 2.0, design["rooms_at"][-1][1])
+        self.assertEqual(toured(design, design["chute_tour"]), [])
+
+    def test_tower_walls_are_1_m(self):
+        design = kit_tower.design(7.0, 4, "full", enterable=True)
+        self.assertAlmostEqual(first_hit(design["cols"], [0.0, 1.5, -3.5], [1.0, 0.0, 0.0]), 3.5 - 1.0, places=2)
+
+    def test_an_enterable_tower_is_toured_to_its_top(self):
+        for side, storeys, kind in ((7.0, 4, "cut"), (8.0, 9, "full")):
+            design = kit_tower.design(side, storeys, kind, enterable=True)
+            self.assertEqual(len(design["rooms_at"]), storeys)
+            self.assertEqual(toured(design, design["tour"]), [], (side, storeys, kind))
+            self.assertAlmostEqual(design["tour"][-1][1], design["eaves"])
+            kit_recipes.PIECES.pop(TEST, None)
+
+    def test_every_tower_is_stood_on(self):
+        for kind in kit_tower.KINDS:
+            for quirk in kit_tower.QUIRKS:
+                for enterable in (False, True):
+                    design = kit_tower.design(7.0, 5, kind, quirk, enterable)
+                    self.assertEqual(stood_on(design["shapes"], design["cols"]), [], (kind, quirk, enterable))
+
+    def test_tower_budget(self):
+        for kind in kit_tower.KINDS:
+            for quirk in kit_tower.QUIRKS:
+                for enterable in (False, True):
+                    for side, storeys in ((7.0, 4), (8.0, 9)):
+                        design = kit_tower.design(side, storeys, kind, quirk, enterable)
+                        kit_town.register(TEST, "town", "granite", design)
+                        # (The plan's 1600, 2400 for the landmark, and a
+                        # storey's floor and flight a storey walked in.)
+                        budget = (2400 if storeys >= 9 else 1600) + (kit_tower.INSIDE * storeys if enterable else 0)
+                        self.assertEqual(design["budget"], budget)
+                        self.assertLessEqual(tris(kit_recipes.PIECES[TEST]), budget, (kind, quirk, enterable, storeys))
 
 
 if __name__ == "__main__":

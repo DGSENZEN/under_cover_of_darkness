@@ -268,25 +268,26 @@ def floors(width, depth, levels, hole=None, slot="boards", surface="wood"):
     return shapes, cols
 
 
-def _steps(rise):
-    n = max(1, int(math.ceil(rise / RISER - 1e-9)))
+def _steps(rise, riser=RISER):
+    n = max(1, int(math.ceil(rise / riser - 1e-9)))
     return n, rise / n
 
 
-def stair_reach(kind, width, rise):
+def stair_reach(kind, width, rise, riser=RISER, tread=TREAD):
     """Where a stair goes, laid at its place's origin facing +z: `run` (its
     first flight's length along z), `landing` (the half-landing's height,
-    or the top), `steps`, `riser` and `footprint` (x0, z0, x1, z1)."""
-    n, r = _steps(rise)
+    or the top), `steps`, `riser` and `footprint` (x0, z0, x1, z1); a
+    steeper flight by `riser` and `tread` (a tower's)."""
+    n, r = _steps(rise, riser)
 
     if kind == "straight":
-        return {"run": n * TREAD, "landing": rise, "steps": n, "riser": r, "footprint": (-width / 2.0, 0.0, width / 2.0, n * TREAD)}
+        return {"run": n * tread, "landing": rise, "steps": n, "riser": r, "footprint": (-width / 2.0, 0.0, width / 2.0, n * tread)}
 
     if kind == "two_flight":
         n1 = n // 2
-        run = n1 * TREAD
+        run = n1 * tread
         return {"run": run, "landing": n1 * r, "steps": n, "riser": r,
-                "footprint": (-width, min(0.0, run - (n - n1) * TREAD), width, run + width)}
+                "footprint": (-width, min(0.0, run - (n - n1) * tread), width, run + width)}
 
     if kind == "spiral":
         reach = width + 0.15
@@ -295,15 +296,15 @@ def stair_reach(kind, width, rise):
     raise ValueError("no stair '%s'" % kind)
 
 
-def _tread(x, top, z, width, solid):
+def _tread(x, top, z, width, solid, tread=TREAD):
     """A step whose top is `top`: from the floor (solid), or a slab."""
     if solid:
-        return (x, top / 2.0, z, width, top, TREAD, 0.0)
+        return (x, top / 2.0, z, width, top, tread, 0.0)
 
-    return (x, top - SLAB / 2.0, z, width, SLAB, TREAD, 0.0)
+    return (x, top - SLAB / 2.0, z, width, SLAB, tread, 0.0)
 
 
-def stair(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0, slot="flagstone", surface="stone", solid=True):
+def stair(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0, slot="flagstone", surface="stone", solid=True, riser=RISER, tread=TREAD):
     """A stair `width` wide climbing `rise` from its foot at `at` (x, y,
     z), facing +z turned by `yaw`:
         straight    one flight up +z
@@ -312,21 +313,21 @@ def stair(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0, slot="flagstone", surf
         spiral      round a post, sixteen steps a turn, starting toward +z
     Its steps stepped boxes from the floor, as stair_straight's; not
     `solid`, slabs (stairs stacked in a stairwell, a storey apart, each
-    under the one over it)."""
-    n, r = _steps(rise)
+    under the one over it). A steeper flight by `riser` and `tread`."""
+    n, r = _steps(rise, riser)
     boxes = []
 
     if kind == "straight":
-        boxes = [_tread(0.0, (i + 1) * r, i * TREAD + TREAD / 2.0, width, solid) for i in range(n)]
+        boxes = [_tread(0.0, (i + 1) * r, i * tread + tread / 2.0, width, solid, tread) for i in range(n)]
     elif kind == "two_flight":
         n1 = n // 2
-        run = n1 * TREAD
-        boxes = [_tread(-width / 2.0, (i + 1) * r, i * TREAD + TREAD / 2.0, width, solid) for i in range(n1)]
+        run = n1 * tread
+        boxes = [_tread(-width / 2.0, (i + 1) * r, i * tread + tread / 2.0, width, solid, tread) for i in range(n1)]
         boxes.append((0.0, n1 * r / 2.0, run + width / 2.0, 2.0 * width, n1 * r, width, 0.0) if solid else
                      (0.0, n1 * r - SLAB / 2.0, run + width / 2.0, 2.0 * width, SLAB, width, 0.0))
 
         for j in range(n - n1):
-            boxes.append(_tread(width / 2.0, (n1 + j + 1) * r, run - j * TREAD - TREAD / 2.0, width, solid))
+            boxes.append(_tread(width / 2.0, (n1 + j + 1) * r, run - j * tread - tread / 2.0, width, solid, tread))
     elif kind == "spiral":
         step = 360.0 / 16.0
         middle = 0.15 + width / 2.0
@@ -347,13 +348,13 @@ def stair(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0, slot="flagstone", surf
     return shapes, cols
 
 
-def stair_tour(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0):
+def stair_tour(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0, riser=RISER, tread=TREAD):
     """The way up a stair laid as stair() lays it: from a step before its
     foot to a step past its head (round its hole in the floor it comes out
     on), as [[x, y, z, move], ...] for route checks."""
-    reach = stair_reach(kind, width, rise)
+    reach = stair_reach(kind, width, rise, riser, tread)
     run, landing, r = reach["run"], reach["landing"], reach["riser"]
-    half = TREAD / 2.0
+    half = tread / 2.0
 
     # (Each flight from its first tread's middle to its last's, along its
     # nosings: over open treads a straight line from floor to landing would
@@ -367,7 +368,7 @@ def stair_tour(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0):
         # second from its far end to a step past its head, round the hole.)
         local = [[-width / 2.0, 0.0, -0.4, "walk"], [-width / 2.0, r, half, "stairs"], [-width / 2.0, landing, run - half, "stairs"],
                  [-width / 2.0, landing, run + 0.5, "walk"], [width / 2.0, landing, run + 0.5, "walk"],
-                 [width / 2.0, landing + r, run - half, "stairs"], [width / 2.0, rise, run - (n2 - 1) * TREAD - half, "stairs"],
+                 [width / 2.0, landing + r, run - half, "stairs"], [width / 2.0, rise, run - (n2 - 1) * tread - half, "stairs"],
                  [width / 2.0, rise, head - 0.3, "walk"], [width + 0.5, rise, head - 0.3, "walk"]]
     else:
         raise ValueError("no tour up a '%s' stair" % kind)
