@@ -42,7 +42,7 @@ func _ready() -> void:
 	CityState.begin()
 	CityState.job.arrive(&"harbour")
 
-	for note in ["office_key", "tower_bell", "blowhole"]:
+	for note in CityState.job.book["notes"].keys():
 		CityState.job.learn(note)
 
 	player = PLAYER.instantiate()
@@ -60,16 +60,13 @@ func _ready() -> void:
 	player.hand.turn_page()
 	await _frames(10)
 	await _shot("letter_back")
+	player.hand.turn_page()
+	await _frames(10)
+	await _shot("letter_back_2")
 	light.visible = false
 	environment.ambient_light_energy = 0.05
 	await _frames(10)
 	await _shot("letter_dark")
-	var material: StandardMaterial3D = player.hand.page().paper_material()
-	print("page material: albedo %s emission %s x%.2f shading %d transparency %d" % [material.albedo_color, material.emission,
-		material.emission_energy_multiplier, material.shading_mode, material.transparency])
-	material.emission_enabled = false
-	await _frames(4)
-	await _shot("letter_dark_noglow")
 	get_tree().quit()
 
 

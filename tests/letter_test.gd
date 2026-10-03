@@ -11,6 +11,7 @@ const HeldPage := preload("res://scripts/Interaction/HeldPage.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const CITY := preload("res://maps/city.tscn")
+const JobBook := preload("res://scripts/Level/JobBook.gd")
 
 var player: CharacterBody3D
 var results: Array[String] = []
@@ -99,11 +100,20 @@ func _letter() -> void:
 
 	await _frames(2)
 	var sides: int = page.side_count()
-	var side_1: PackedStringArray = _lines(page.text_of(1))
-	var side_2: PackedStringArray = _lines(page.text_of(2)) if sides > 2 else PackedStringArray()
-	var pencil: bool = side_1.size() == 10 and Array(side_1).all(func(l): return String(l).contains("— ")) and side_2.size() == 1
-	_check("L3 the back holds the notes in pencil, ten to a side", sides == 3 and pencil,
-		"%d sides, side 1 %d lines, side 2 %d" % [sides, side_1.size(), side_2.size()])
+	var all_notes: Array = CityState.job.notes.map(func(id): return String(CityState.job.book["notes"][id]["text"]))
+	var back := ""
+
+	for i in range(1, sides):
+		back += page.text_of(i) + "\n"
+
+	var every_note: bool = all_notes.all(func(t): return back.count(String(t)) == 1)
+	var all_fit := true
+
+	for i in sides:
+		all_fit = all_fit and page.fits(i)
+
+	_check("L3 the back holds the notes in pencil; what overflows goes onto further sheets, nothing cut", sides >= 3 and every_note and all_fit
+		and back.contains("— "), "%d sides, every note once %s, every side fits %s" % [sides, every_note, all_fit])
 
 	await _tap("throw")
 	await _frames(2)
@@ -265,6 +275,36 @@ func _readables() -> void:
 	_check("L14 a readable whose slot has no words reads as its placeholder", hand.is_page_up() and hand.page().text_of(0) == "<<nothing_here>>",
 		"up %s, words %s" % [hand.is_page_up(), hand.page().text_of(0) if hand.page() != null else "-"])
 	frob.put_page_away()
+	await _frames(2)
+
+	# L19 words longer than a page go on over more sheets, none cut
+	await _settle()
+	var long_words := PackedStringArray()
+
+	for i in 220:
+		long_words.append("word%d" % i)
+
+	JobBook.library()["readables"]["long_test"] = {"id": "long_test", "text": " ".join(long_words) + "\n\n" + " ".join(long_words), "note": ""}
+	var long_one: Node3D = Props.readable(self, Transform3D(Basis.IDENTITY, Vector3(-0.4, 0.8, -1.4)), &"paper", "long_test")
+	await _aim(long_one.global_position)
+	await _tap("frob")
+	await _frames(4)
+	var shown := ""
+	var fit := true
+
+	for i in hand.page().side_count():
+		shown += hand.page().text_of(i) + " "
+		fit = fit and hand.page().fits(i)
+
+	var every_word := true
+
+	for w in long_words:
+		every_word = every_word and shown.count(String(w) + " ") + shown.count(String(w) + "\n") >= 2
+
+	_check("L19 words longer than a page go on over more sheets, none cut", hand.is_page_up() and hand.page().side_count() >= 2 and fit and every_word,
+		"%d sides, all fit %s, every word twice %s" % [hand.page().side_count(), fit, every_word])
+	frob.put_page_away()
+	(JobBook.library()["readables"] as Dictionary).erase("long_test")
 	await _frames(2)
 
 

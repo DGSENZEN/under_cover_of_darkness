@@ -1,12 +1,12 @@
 extends RefCounted
 ## The letter's words, side by side (the harbour's job spec, section 4): the
 ## front the commission and the goals in ink (a done one struck through, the
-## side goals under a rule); then the thief's pencil notes, NOTES_PER_SIDE to
-## a side, newest last. BBCode for the held page's RichTextLabel.
+## side goals under a rule); then the thief's pencil notes, newest last
+## (HeldPage turns them over onto more sheets as they need). BBCode for the
+## held page's RichTextLabel.
 
 const JobBook := preload("res://scripts/Level/JobBook.gd")
 
-const NOTES_PER_SIDE := 10
 ## Pencil, against the ink.
 const PENCIL := Color(0.3, 0.3, 0.33)
 const RULE := "[center]―――――[/center]"
@@ -31,15 +31,14 @@ static func sides(job: RefCounted) -> PackedStringArray:
 		front += "\n" + RULE + "\n" + "\n".join(others)
 
 	out.append(front)
-	var notes: Array = job.notes
+	var lines := PackedStringArray()
 
-	for start in range(0, notes.size(), NOTES_PER_SIDE):
-		var lines := PackedStringArray()
+	for id in job.notes:
+		var text := String((book.get("notes", {}) as Dictionary).get(id, {}).get("text", JobBook.OPEN + String(id) + JobBook.CLOSE))
+		lines.append("[color=#%s][i]— %s[/i][/color]" % [PENCIL.to_html(false), escape(text)])
 
-		for id in notes.slice(start, start + NOTES_PER_SIDE):
-			var text := String((book.get("notes", {}) as Dictionary).get(id, {}).get("text", JobBook.OPEN + String(id) + JobBook.CLOSE))
-			lines.append("[color=#%s][i]— %s[/i][/color]" % [PENCIL.to_html(false), escape(text)])
-
+	# (The held page lays them out over as many sheets as they need.)
+	if not lines.is_empty():
 		out.append("\n".join(lines))
 
 	return out

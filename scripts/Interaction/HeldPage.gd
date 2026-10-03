@@ -16,6 +16,11 @@ const PAPERS := {&"letter": Color(0.74, 0.68, 0.54), &"paper": Color(0.7, 0.64, 
 const INK := Color(0.1, 0.07, 0.05)
 ## Pixels per metre of page (the words' sharpness).
 const DENSITY := 2400.0
+## The words' margin on the sheet (px of its picture).
+const MARGIN := 44.0
+## The foot of the sheet the hands hold it by, kept clear of words (of its
+## height): the thumbs would cover them.
+const HANDS_ROOM := 0.34
 ## How much of the light falling on it the page gives back.
 const LIGHT_TAKEN := 0.5
 ## A line of words is this much of a letter's width (its size).
@@ -23,10 +28,13 @@ const LINE := 14.0
 ## Its words glow this much of themselves: readable however dark it is.
 const LIGHT_FLOOR := 0.07
 ## Where along its height the hands hold it (from the middle, of its height).
-const HOLD_LOW := -0.3
+const HOLD_LOW := -0.44
 
 var side := 0
 var look: StringName = &"letter"
+## The sides as given (show_sides), and as laid out: each given side over as
+## many sheets as its words need.
+var _given := PackedStringArray()
 var _sides := PackedStringArray()
 var _viewport: SubViewport
 var _paper: ColorRect
@@ -47,7 +55,6 @@ func _ready() -> void:
 	_words = RichTextLabel.new()
 	_words.bbcode_enabled = true
 	_words.scroll_active = false
-	_words.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 44)
 	var serif := SystemFont.new()
 	serif.font_names = PackedStringArray(["Palatino", "Palatino Linotype", "Book Antiqua", "Georgia", "Times New Roman", "serif"])
 	# (Heavier than the HUD's: the page is small in the view, and thin
@@ -87,9 +94,8 @@ func _ready() -> void:
 ## Shows `sides` (BBCode, one per side) as a `look` (SIZES); the side shown
 ## kept if it still is one.
 func show_sides(sides: PackedStringArray, new_look: StringName) -> void:
-	_sides = sides
+	_given = sides
 	look = new_look if SIZES.has(new_look) else &"paper"
-	side = clampi(side, 0, maxi(_sides.size() - 1, 0))
 
 	if is_node_ready():
 		_lay_out()
@@ -108,6 +114,14 @@ func side_count() -> int:
 
 func text_of(i: int) -> String:
 	return _sides[i] if i >= 0 and i < _sides.size() else ""
+
+
+## Whether side `i`'s words fit the sheet as it is laid out (none cut).
+func fits(i: int) -> bool:
+	_words.text = text_of(i)
+	var ok := _words.get_content_height() <= _words.size.y + 0.5
+	_words.text = text_of(side)
+	return ok
 
 
 func paper_material() -> StandardMaterial3D:
@@ -135,12 +149,85 @@ func _lay_out() -> void:
 	var size: Vector2 = SIZES[look]
 	(_sheet.mesh as QuadMesh).size = size * ViewArmsScript.SCALE
 	_viewport.size = Vector2i(roundi(size.x * DENSITY), roundi(size.y * DENSITY))
+	# (Sized here, not left to the anchors: the words are measured at once.)
+	_paper.position = Vector2.ZERO
+	_paper.size = Vector2(_viewport.size)
+	_words.position = Vector2(MARGIN, MARGIN)
+	_words.size = Vector2(_viewport.size.x - MARGIN * 2.0, _viewport.size.y * (1.0 - HANDS_ROOM) - MARGIN)
 	_paper.color = PAPERS[look]
 	# (Sized to the sheet's width at full size: the same hand on every page.)
 	var words := roundi(0.21 * DENSITY / LINE)
 	_words.add_theme_font_size_override(&"normal_font_size", words)
 	_words.add_theme_font_size_override(&"italics_font_size", words)
+	_sides = _paginate(_given)
+	side = clampi(side, 0, maxi(_sides.size() - 1, 0))
 	_redraw()
+
+
+## `given`'s sides laid out sheet by sheet: a paragraph (a line) at a time
+## while they fit, a paragraph longer than a sheet word by word; nothing cut.
+func _paginate(given: PackedStringArray) -> PackedStringArray:
+	var out := PackedStringArray()
+	var room := _words.size.y
+
+	for whole in given:
+		var page := ""
+
+		for para in String(whole).split("\n"):
+			var trial := para if page == "" else page + "\n" + para
+
+			if _height(trial) <= room:
+				page = trial
+				continue
+
+			if page != "":
+				out.append(page)
+				page = ""
+
+			if _height(para) <= room:
+				page = para
+				continue
+
+			for piece in _split_paragraph(para, room):
+				if page != "":
+					out.append(page)
+
+				page = piece
+
+		out.append(page)
+
+	if out.is_empty():
+		out.append("")
+
+	return out
+
+
+## One paragraph too long for a sheet, in sheet-sized pieces of its words,
+## each wrapped in the paragraph's own tags (its ink or its pencil).
+func _split_paragraph(para: String, room: float) -> PackedStringArray:
+	var parts := RegEx.create_from_string("^((?:\\[[^\\]/][^\\]]*\\])*)(.*?)((?:\\[/[^\\]]*\\])*)$").search(para)
+	var open := parts.get_string(1) if parts != null else ""
+	var body := parts.get_string(2) if parts != null else para
+	var close := parts.get_string(3) if parts != null else ""
+	var out := PackedStringArray()
+	var chunk := ""
+
+	for word in body.split(" "):
+		var trial := word if chunk == "" else chunk + " " + word
+
+		if chunk != "" and _height(open + trial + close) > room:
+			out.append(open + chunk + close)
+			chunk = word
+		else:
+			chunk = trial
+
+	out.append(open + chunk + close)
+	return out
+
+
+func _height(text: String) -> float:
+	_words.text = text
+	return _words.get_content_height()
 
 
 static func _heavier(font: Font) -> Font:
