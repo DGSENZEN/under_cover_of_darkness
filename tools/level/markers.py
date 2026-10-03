@@ -19,10 +19,14 @@ SCHEMA = {
                                                       "voice": "", "look_seed": 0, "role": "", "light": ""}, "box": False},
     "route": {"required": [], "optional": {}, "box": False},
     "waypoint": {"required": ["route", "order"], "optional": {"wait": 0.0}, "box": False},
+    # A door shut at the curfew bell (the old town's spec, section 9): the
+    # sereno's keys open it (plan B1b).
     "door": {"required": [], "optional": {"kind": "hinged", "locked": False, "key": "", "label": "", "width": 1.2,
-                                          "height": 2.2, "barred": False, "pick": True}, "box": False},
+                                          "height": 2.2, "barred": False, "pick": True, "curfew": False}, "box": False},
+    # A light lit only on dark nights (dark_only: the night's moon decides at
+    # load; plan B1b).
     "light": {"required": ["kind"], "optional": {"lit": True, "energy": 0.0, "range": 0.0, "color": "", "cookie": "",
-                                                 "douse": True, "chain": 0.0}, "box": False},
+                                                 "douse": True, "chain": 0.0, "dark_only": False}, "box": False},
     "bell": {"required": [], "optional": {"db": 90.0}, "box": False},
     "ladder": {"required": [], "optional": {"rope": False}, "box": True},
     # A piece laid loose (Layout.put loose=): a body in the game, picked up
@@ -76,8 +80,26 @@ SCHEMA = {
     # A point the light is checked at: "moon", "shadow" or "lamp".
     "probe": {"required": ["expect"], "optional": {}, "box": False},
     # A point on a way through the level, and the move that reaches it from
-    # the one before (the check measures the move: rules.py).
-    "route_check": {"required": ["route", "order", "move"], "optional": {}, "box": False},
+    # the one before (the check measures the move: rules.py). A route's first
+    # point may say what the way is (rules.way_problems): a way `into` a
+    # household and its `kind`; a connector across a terrace `step` and its
+    # `way` (public or thief's); a roof chain or the ground below (`way`).
+    "route_check": {"required": ["route", "order", "move"], "optional": {"way": "", "step": "", "into": "", "kind": ""}, "box": False},
+    # The old town's (its spec, section 9). A key building's bounds: inside
+    # it its people's alarm stays (plan B1b); it is entered `ways` ways or
+    # more, each of a different kind.
+    "household": {"required": ["label"], "optional": {"ways": 3, "people": ""}, "box": True},
+    # Where one terrace steps up to the next: crossed by `public` connectors
+    # (stair-lanes, ramps) and `thief` ones (a climbable wall, a shaft, a
+    # house with doors on two levels).
+    "terrace_step": {"required": ["label"], "optional": {"public": 2, "thief": 1}, "box": True},
+    # Where the watch won't stand (the Carmo ruin's nave; plan B1b's rule).
+    "shunned": {"required": ["label"], "optional": {}, "box": True},
+    # The townsfolk's places, kept for their sub-project: a bed in a house
+    # lived in, a seat (the tavern's), a place of work (an oven, a tannery).
+    "home": {"required": [], "optional": {"label": ""}, "box": False},
+    "seat": {"required": [], "optional": {"label": ""}, "box": False},
+    "work": {"required": [], "optional": {"kind": ""}, "box": False},
 }
 
 # The mechanisms, one schema each: what they work, the state they start in,
@@ -89,7 +111,10 @@ for _kind in MECHANISMS:
                      "box": False}
 
 STATION_KINDS = ["sit", "eat", "sleep", "rummage", "carry", "chop", "lean", "pray", "drill"]
-LIGHT_KINDS = ["torch", "brazier", "candle", "lantern", "window", "chandelier", "window_shaft", "hearth", "fire", "glow", "lamp_post"]
+# (comet_shaft: the comet's red light through a window onto its marker, while
+# the comet is in the sky; the old town's spec, section 16.)
+LIGHT_KINDS = ["torch", "brazier", "candle", "lantern", "window", "chandelier", "window_shaft", "hearth", "fire", "glow", "lamp_post",
+               "comet_shaft"]
 ARCHETYPES = ["watchman", "swordsman", "archer", "duelist", "brute", "arms_master"]
 GRADES = ["outside", "indoors", "chapel", "cellar", "hearth"]
 DECAL_KINDS = ["leak_1", "leak_2", "moss", "grime", "soot", "dirt", "straw", "leaves", "salt"]
@@ -97,6 +122,10 @@ TOOL_KINDS = ["flask", "flash_bomb", "lockpick", "arrows"]
 PROP_KINDS = ["crate", "crate_small"]
 MOVES = ["walk", "stairs", "mantle", "hang", "jump", "sprint_jump", "assist_jump", "drop", "climb", "rope", "swim", "balance"]
 PROBE_EXPECT = ["moon", "shadow", "lamp"]
+# What a route is (its first route_check's `way`) and how a way into a
+# household goes in (its `kind`).
+WAYS = ["", "public", "thief", "roof", "below"]
+WAY_KINDS = ["", "door", "window", "roof", "below", "wall", "leap", "yard"]
 # What a guard carries on his rounds (Guard.rounds_light).
 ROUNDS_LIGHTS = ["", "lantern", "torch"]
 
@@ -153,6 +182,12 @@ def problems(marker):
 
     if ucd == "route_check" and props.get("move") not in MOVES:
         out.append("%s: no move '%s'" % (marker["name"], props.get("move")))
+
+    if ucd == "route_check" and props.get("way", "") not in WAYS:
+        out.append("%s: no way '%s'" % (marker["name"], props.get("way")))
+
+    if ucd == "route_check" and props.get("kind", "") not in WAY_KINDS:
+        out.append("%s: no kind of way in '%s'" % (marker["name"], props.get("kind")))
 
     if ucd == "guard" and props.get("light", "") not in ROUNDS_LIGHTS:
         out.append("%s: no rounds light '%s'" % (marker["name"], props.get("light")))

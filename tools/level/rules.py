@@ -20,7 +20,7 @@ from terrain import NAME as terrain_names
 # Triangle budget per sector (stage 1 blocks; the art pass raises it).
 BUDGET = {"stage1": 60000, "stage2": 120000}
 # Markers that stand on the floor, and how far below them it may be.
-STANDING = {"station", "hide", "guard", "spawn", "waypoint", "arrival"}
+STANDING = {"station", "hide", "guard", "spawn", "waypoint", "arrival", "home", "seat", "work"}
 FLOOR_BELOW = 1.0
 # An arrival stands at least this far out of every exit's box (m).
 ARRIVAL_CLEAR = 2.0
@@ -222,6 +222,7 @@ def problems(data, stage="stage1"):
                                                                                                                  ARRIVAL_CLEAR))
 
     out.extend(move_problems(data, boxes, ground))
+    out.extend(way_problems(data))
     out.extend(headroom_problems(data, boxes, ground))
     out.extend(key_problems(data))
 
@@ -463,6 +464,62 @@ def move_problems(data, boxes, ground):
 
             for problem in _move(near, ground, volumes, a, b, then["props"].get("move")):
                 out.append("%s: %s -> %s: %s" % (route, first["name"], then["name"], problem))
+
+    return out
+
+
+def way_problems(data):
+    """The old town's ways (its spec, sections 5.3 and 6): every household
+    entered by `ways` routes of different kinds, each ending inside it, and
+    every terrace step crossed by its public and thief's connectors. A route
+    says what it is on its first route check (into, kind; step, way)."""
+    out = []
+    routes = {}
+
+    for m in data["markers"]:
+        if m["ucd"] == "route_check":
+            routes.setdefault(m["props"].get("route"), []).append(m)
+
+    firsts = {}
+
+    for route, points in routes.items():
+        points.sort(key=lambda m: int(m["props"].get("order", 0)))
+        firsts[route] = (points[0]["props"], points[-1]["position"])
+
+    for m in data["markers"]:
+        if m["ucd"] == "household" and m.get("size"):
+            label = m["props"]["label"]
+            box = geo.Box(m["position"], m["basis"], m["size"])
+            kinds = set()
+
+            for route, (props, end) in sorted(firsts.items()):
+                if props.get("into") != label:
+                    continue
+
+                if not box.contains(end, 0.0):
+                    out.append("route %s ends outside %s" % (route, label))
+                else:
+                    kinds.add(props.get("kind", ""))
+
+            needs = int(m["props"].get("ways", 3))
+
+            if len(kinds) < needs:
+                out.append("%s (household): %d ways in (%s), needs %d of different kinds" % (label, len(kinds), ", ".join(sorted(kinds)),
+                                                                                             needs))
+
+        if m["ucd"] == "terrace_step":
+            label = m["props"]["label"]
+            count = {"public": 0, "thief": 0}
+
+            for props, _end in firsts.values():
+                if props.get("step") == label and props.get("way") in count:
+                    count[props["way"]] += 1
+
+            public, thief = int(m["props"].get("public", 2)), int(m["props"].get("thief", 1))
+
+            if count["public"] < public or count["thief"] < thief:
+                out.append("%s (terrace step): %d public and %d thief connectors, needs %d and %d" % (label, count["public"], count["thief"],
+                                                                                                    public, thief))
 
     return out
 
