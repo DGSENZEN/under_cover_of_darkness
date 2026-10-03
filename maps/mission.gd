@@ -13,6 +13,10 @@ const FADE := 0.3
 ## Exits ignore the player this long after he arrives (DistrictMap.GRACE).
 const GRACE := 1.0
 
+## A fresh mission opens with the letter up (DistrictMap.open_with_letter);
+## tests that walk and frob turn it off.
+static var open_with_letter := true
+
 ## A map is ready and the player in it, the screen up again.
 signal arrived(district: StringName)
 
@@ -48,6 +52,7 @@ func go(district: StringName, arrival := &"") -> void:
 
 	map = (load(String(Districts.entry(district)["map"])) as PackedScene).instantiate()
 	map.arrival = arrival
+	map.open_with_letter = open_with_letter
 	add_child(map)
 	await map.ready_to_play
 	await _fade(0.0)

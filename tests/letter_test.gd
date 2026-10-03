@@ -9,6 +9,8 @@ const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const HeldPage := preload("res://scripts/Interaction/HeldPage.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const CITY := preload("res://maps/city.tscn")
 
 var player: CharacterBody3D
 var results: Array[String] = []
@@ -32,6 +34,8 @@ func _ready() -> void:
 	await _frames(10)
 	await _letter()
 	await _readables()
+	await _special()
+	await _harbour()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -261,6 +265,79 @@ func _readables() -> void:
 	_check("L14 a readable whose slot has no words reads as its placeholder", hand.is_page_up() and hand.page().text_of(0) == "<<nothing_here>>",
 		"up %s, words %s" % [hand.is_page_up(), hand.page().text_of(0) if hand.page() != null else "-"])
 	frob.put_page_away()
+	await _frames(2)
+
+
+# ---------------------------------------------------------------------------
+# L15-L18: the seal in the hand; the goal's sting; the mission's letter
+# ---------------------------------------------------------------------------
+
+func _special() -> void:
+	var hand: Node = player.hand
+	await _settle()
+	var seal: RigidBody3D = Props.loot(self, Vector3(0.0, 0.9, -1.4), 250, "seal")
+	seal.set_meta(&"special", true)
+	seal.freeze = true
+	await _aim(seal.global_position)
+	await _tap("frob")
+	await _frames(2)
+	var kind := String(hand._job.get("kind", ""))
+	await _frames(32)
+	var shown: bool = hand._off_item.visible
+	var turned: float = absf(hand._off_item.rotation.y)
+	await _frames(74)
+	_check("L15 the seal turns in the hand, then goes", kind == "special" and shown and turned > 1.0 and hand._job.is_empty(),
+		"job %s, shown %s, turned %.2f rad, done %s" % [kind, shown, turned, hand._job.is_empty()])
+
+	await _settle()
+	var ring: RigidBody3D = Props.loot(self, Vector3(0.0, 0.9, -1.4), 150, "ring")
+	ring.set_meta(&"special", true)
+	ring.freeze = true
+	await _aim(ring.global_position)
+	await _tap("frob")
+	await _frames(18)
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _frames(24)
+	var cut: bool = hand._job.is_empty()
+	Input.action_release("sprint")
+	Input.action_release("move_forward")
+	_check("L16 sprinting cuts the turn short", cut, "job %s" % hand._job.get("kind", "none"))
+	await _settle()
+
+
+func _harbour() -> void:
+	# The letter test's own player gives way to the harbour's.
+	player.queue_free()
+	await _frames(2)
+	CityState.begin()
+	var city: Node3D = CITY.instantiate()
+	add_child(city)
+	await city.ready_to_play
+	player = city.player
+	await _frames(4)
+	var opened: bool = player.hand.is_page_up() and player.frob.letter_up()
+	var actions: Array = player.frob.current_actions()
+	_check("L18 a fresh mission opens with the letter up", opened and actions == [[&"letter", "Put away"]] and CityState.job.letter_opened,
+		"up %s, actions %s" % [opened, actions])
+	player.frob.put_page_away()
+	await _frames(10)
+
+	Sfx.recording = true
+	Sfx.recorded.clear()
+	var seal: Node = city.made["city_harbour"]["pickups"]["the_seal"]
+	player.frob.target = seal
+	player.frob._on_frob()
+	await _frames(4)
+	var sounds: Array = Sfx.recorded.map(func(r): return String(r[0]))
+	Sfx.recording = false
+	var tally: Dictionary = CityState.job.tally_of(&"harbour")
+	var caption: String = player.hud._caption.text if player.hud != null else ""
+	_check("L17 taking the seal: the goal's sting, the way up noted, the loot counted",
+		sounds.has("sting_goal") and CityState.job.done.has("seal") and CityState.job.notes.has("way_up") and caption == "Noted"
+		and int(tally.get("loot", 0)) == 250 and int(tally.get("specials", 0)) == 1,
+		"sounds %s, done %s, notes %s, caption '%s', tally %s" % [sounds, CityState.job.done, CityState.job.notes, caption, tally])
+	city.queue_free()
 	await _frames(2)
 
 

@@ -575,7 +575,10 @@ func _pickup_visual(node: Node) -> Dictionary:
 
 	var kind := "tool"
 
-	if node.get("value") != null:
+	# Something precious (a seal, a ring): turned over in the hand first.
+	if node.has_meta(&"special"):
+		kind = "special"
+	elif node.get("value") != null:
 		kind = "loot"
 	elif node.get("key_id") != null:
 		kind = "key"

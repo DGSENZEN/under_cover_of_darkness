@@ -27,7 +27,7 @@ const BUS_BODY := &"Body"
 const BUS_MUSIC := &"Music"
 const BUS_AMBIENCE := &"Ambience"
 ## Played on the Music bus rather than your Body's.
-const MUSICAL := [&"sting_suspicious", &"sting_combat", &"sting_escalate"]
+const MUSICAL := [&"sting_suspicious", &"sting_combat", &"sting_escalate", &"sting_goal"]
 ## The room: [room size, damping, wet, spread, hi-pass] for each "acoustics".
 const ACOUSTICS := {
 	"stone": [0.62, 0.45, 0.2, 1.0, 0.1],
@@ -220,6 +220,11 @@ const GAIN := {
 	&"sting_suspicious": -13.1,
 	&"sting_combat": -5.1,
 	&"sting_escalate": -6.9,
+	# The job: a goal done (target -24, a hum, not a hit); paper raised,
+	# lowered and turned (-30); the pencil noting something (-32).
+	&"sting_goal": -13.3,
+	&"paper": -8.7,
+	&"pencil": -14.1,
 }
 
 

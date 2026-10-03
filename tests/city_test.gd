@@ -44,6 +44,7 @@ class Ear:
 func _ready() -> void:
 	var started := Time.get_ticks_msec()
 	city = CITY.instantiate()
+	city.set("open_with_letter", false)
 	add_child(city)
 	# (The loading screen from the first frame; what it says while the
 	# navmesh bakes; gone once the map is played.)

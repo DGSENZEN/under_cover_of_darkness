@@ -39,6 +39,7 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 	AudioServer.set_bus_mute(0, true)
 	var city: Node3D = City.instantiate()
+	city.set("open_with_letter", false)
 	add_child(city)
 	await city.ready_to_play
 	# (The thief out of it: his HUD hidden, him still.)

@@ -24,6 +24,11 @@ const PAGE_REST := Vector3(0.0, -0.045, -0.25)
 const PAGE_TILT := -0.18
 const PAGE_TIME := 0.25
 const PAGE_GLANCE := -0.6
+## Something precious taken: turned over in the off hand this long (s), this
+## far about and toward the eye, before it goes away.
+const REGARD_TIME := 1.2
+const REGARD_TURN := 3.5
+const REGARD_TILT := 0.44
 ## What a weapon's edge gets smeared with.
 const BLADE_BLOOD := preload("res://scripts/Visual/blade_blood.gdshader")
 ## The smear your blade leaves (SwingTrail.gd): steel catching the light, and
@@ -755,6 +760,9 @@ func _start_job() -> void:
 	_purse.visible = kind == "loot"
 	_keyring.visible = kind == "key"
 
+	if kind == "special":
+		_off_item.scale = Vector3.ONE * _fit_scale(mesh) * 0.9
+
 
 func _run_job() -> void:
 	var t: float = _job["t"]
@@ -762,6 +770,10 @@ func _run_job() -> void:
 
 	if kind == "key_turn":
 		_run_key_turn(t)
+		return
+
+	if kind == "special":
+		_run_regard(t)
 		return
 
 	# Taking something: it flies from where it lay into the raised off hand,
@@ -807,6 +819,54 @@ func _run_job() -> void:
 
 	if t > fly + stow + show + lower:
 		_job = {}
+
+
+## Something precious: into the off hand, turned over in the light, then
+## away. A run, a jump or a blow cuts the look short.
+func _run_regard(t: float) -> void:
+	var fly := 0.2
+	var stow := 0.16
+	var lower := 0.18
+	var regard := float(_job.get("cut", REGARD_TIME))
+
+	if t > fly and t < fly + regard and _cut_short():
+		_job["cut"] = t - fly
+		regard = t - fly
+
+	_off_lower = 1.0 - smoothstep(0.0, fly * 0.8, t)
+
+	if t < fly:
+		var start := _to_off_space(_job["from"])
+		_off_item.position = start.lerp(Vector3(0.0, 0.05, 0.0), _ease_out(t / fly))
+	elif t < fly + regard:
+		var u := _ease_out((t - fly) / REGARD_TIME)
+		_off_item.position = Vector3(0.0, 0.05 + 0.02 * sin(PI * u), 0.0)
+		_off_item.rotation = Vector3(REGARD_TILT * sin(PI * u), REGARD_TURN * u, 0.0)
+	elif t < fly + regard + stow:
+		var u := (t - fly - regard) / stow
+		_off_item.scale = Vector3.ONE * _fit_scale(_off_item.mesh) * 0.7 * (1.0 - u)
+	else:
+		_off_item.visible = false
+
+		if not _job.get("stowed", false):
+			_job["stowed"] = true
+			Sfx.play_flat(self, &"pickup")
+
+	if t > fly + regard + stow:
+		_off_lower = smoothstep(fly + regard + stow, fly + regard + stow + lower, t)
+
+	if t > fly + regard + stow + lower:
+		_job = {}
+
+
+## The player is off: running, in the air, in a blow.
+func _cut_short() -> bool:
+	if player == null:
+		return false
+
+	var fighting: Node = player.get("combat")
+	return player._is_sprinting() or (not player.is_on_floor() and absf(player.velocity.y) > 1.5) \
+		or (fighting != null and fighting.get("phase") != null and int(fighting.phase) != 0)
 
 
 func _run_key_turn(t: float) -> void:

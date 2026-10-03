@@ -44,7 +44,8 @@ separate sounds in one take: single breaths out of a sequence).
 
     python3 tools/prepare_sfx.py --only=murmur,laugh,...
 
-cuts only those groups and leaves every other file as it is;
+cuts only those groups (a sting's too: --only=sting_goal) and leaves every
+other file as it is;
 
     python3 tools/prepare_sfx.py --fire
 
@@ -397,6 +398,9 @@ STINGS = [
     # The fight turning for the worse.
     ("sting_escalate_1", W(MIXKIT + "1287_big_cinematic_impact.wav"), 0.2, 4.8, 1.2, False),
     ("sting_escalate_2", W(MIXKIT + "2353_cinematic_drama_riser.wav"), 0.4, 4.0, 1.2, False),
+    # The job's goal done (the seal taken): a low brass hum that settles, not
+    # a hit (the harbour's job; awaiting the user's ear).
+    ("sting_goal_1", W(MIXKIT + "1093_cinematic_transition_brass_hum.wav"), 0.0, 3.7, 1.2, False),
 ]
 
 SCORE_LOOPS = [
@@ -503,12 +507,22 @@ LAYERED = [
                                (FILMCOW + "splash big %d.wav" % spray, None, None, -4.0, 1.4, None, 1.0)], 1.2)
     for i, (waves, start, burst, spray) in enumerate(((6, 6.0, 3, 6), (7, 12.0, 1, 9), (4, 3.0, 5, 7)))
 ] + [
+    # The job's paper (the letter and the readables, raised, lowered, turned):
+    # FilmCow's paper handled and the 400 Sounds Pack's page and map; the
+    # pencil on the letter: the 400 Sounds Pack's scribble, two short strokes
+    # (the harbour's job; awaiting the user's ear).
+    ("paper_1", [(FILMCOW + "paper handled 1.wav", None, None, 0.0, 0.0, None, 1.0)], 0.12),
+    ("paper_2", [(FOUR_HUNDRED + "Items/page_turn.wav", None, None, 0.0, 0.0, None, 1.0)], 0.12),
+    ("paper_3", [(FOUR_HUNDRED + "Items/map_open.wav", None, None, 0.0, 0.0, None, 1.0)], 0.12),
+    ("pencil_1", [(FOUR_HUNDRED + "Items/pencil_scribble.wav", 0.0, 0.8, 0.0, 0.0, None, 1.0)], 0.1),
+    ("pencil_2", [(FOUR_HUNDRED + "Items/pencil_scribble.wav", 1.0, 1.8, 0.0, 0.0, None, 1.0)], 0.1),
+] + [
     # A lantern's bail rattling in the hand: FilmCow's chain, short.
     ("bail_rattle_%d" % (i + 1), [(FILMCOW + "chain %d.wav" % n, None, None, 0.0, 0.0, 4000, 1.15)], 0.05)
     for i, n in enumerate((2, 4, 6, 8))
 ]
 # Layered takes no longer than this (s); a bail rattle no longer than 0.25 s.
-LAYERED_LONGEST = {"bail_rattle": 0.25}
+LAYERED_LONGEST = {"bail_rattle": 0.25, "paper": 0.7, "pencil": 0.9}
 
 
 # Blows are squeezed a little: the first spike of an impact is far louder
@@ -879,10 +893,15 @@ def fade_stereo(x, fade_in, fade_out):
     return np.stack([fade(x[:, c], fade_in, fade_out) for c in range(2)], axis=1)
 
 
-def prepare_score():
+def prepare_score(only=None):
+    """The score's stings (only those groups when `only` is given) and, with
+    no `only`, its loops."""
     groups = {}
 
     for name, source, start, end, fade_out, backwards in STINGS:
+        if only is not None and re.sub(r"_\d+$", "", name) not in only:
+            continue
+
         x = decode_stereo(source, start, end)
 
         if backwards:
@@ -899,6 +918,9 @@ def prepare_score():
             write_wav_stereo(os.path.join(OUT, name + ".wav"), x * 10 ** ((level - own) / 20))
 
         print("%-18s sting, %d take(s), %.1f LUFS" % (group, len(members), level))
+
+    if only is not None:
+        return
 
     os.makedirs(MUSIC_OUT, exist_ok=True)
 
@@ -991,6 +1013,9 @@ def main():
         print("%-12s %d file(s), %.1f LUFS" % (group, len(members), level))
 
     if only is not None:
+        if any(group.startswith("sting_") for group in only):
+            prepare_score(only)
+
         return
 
     prepare_score()

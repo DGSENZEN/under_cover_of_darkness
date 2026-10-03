@@ -9,6 +9,7 @@ const HARBOUR := preload("res://maps/city.tscn")
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 
 const MISSION := preload("res://maps/mission.tscn")
+const MissionScript := preload("res://maps/mission.gd")
 ## The harbour's load before its navmesh was baked offline (s).
 const HARBOUR_LOAD_BEFORE := 13.8
 ## Exits ignore the player this long after he arrives (Mission.GRACE).
@@ -42,6 +43,7 @@ func _ready() -> void:
 
 func _alone() -> void:
 	var old: Node = OLD_TOWN.instantiate()
+	old.set("open_with_letter", false)
 	add_child(old)
 	await old.ready_to_play
 	var start: Transform3D = old.marker("old_town_start").get("transform", Transform3D())
@@ -56,6 +58,7 @@ func _alone() -> void:
 	await _frames(5)
 
 	var harbour: Node = HARBOUR.instantiate()
+	harbour.set("open_with_letter", false)
 	add_child(harbour)
 	await harbour.ready_to_play
 	var quick: bool = bool(harbour.baker.from_file) and float(harbour.load_seconds) < HARBOUR_LOAD_BEFORE
@@ -68,12 +71,14 @@ func _alone() -> void:
 	var stale_dir := "user://stale_nav"
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(stale_dir))
 	var snap: Node = (ResourceLoader.load(saved, "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene).instantiate()
+	snap.set("open_with_letter", false)
 	snap.set_meta(&"source_hash", "an older export")
 	var packed := PackedScene.new()
 	packed.pack(snap)
 	ResourceSaver.save(packed, stale_dir.path_join("harbour.scn"))
 	snap.free()
 	var again: Node = HARBOUR.instantiate()
+	again.set("open_with_letter", false)
 	again.set("navmesh_dir", stale_dir)
 	add_child(again)
 	await again.ready_to_play
@@ -92,6 +97,7 @@ var mission: Node
 
 
 func _mission() -> void:
+	MissionScript.open_with_letter = false
 	mission = MISSION.instantiate()
 	add_child(mission)
 	await mission.arrived

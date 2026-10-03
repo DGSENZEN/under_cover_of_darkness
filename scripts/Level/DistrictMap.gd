@@ -25,6 +25,9 @@ const NightScript := preload("res://scripts/Night/Night.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const DistanceScript := preload("res://scripts/Visual/Distance.gd")
+const SfxScript := preload("res://scripts/Audio/Sfx.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
+const MusicScript := preload("res://scripts/Audio/Music.gd")
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
 
@@ -55,6 +58,9 @@ signal ready_to_play
 
 ## This map's district (data/districts.json).
 @export var district: StringName = &""
+## A fresh mission opens with the letter up in the player's hands (the
+## harbour's job spec, section 4); tests that walk and frob turn it off.
+@export var open_with_letter := true
 ## Where the player arrives (an arrival marker's name), set before the map
 ## enters the tree; empty: the district's spawn.
 var arrival: StringName = &""
@@ -164,6 +170,8 @@ func _ready() -> void:
 	if _mission() != null:
 		CityState.enter(self)
 
+	_job_setup()
+
 	await screen.step(String(words.get("player", "")), 0.97)
 	screen.close()
 	load_seconds = (Time.get_ticks_msec() - started) / 1000.0
@@ -178,6 +186,14 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	TemperamentScript.rolling = _was_rolling
+	var job: RefCounted = CityState.job
+
+	for pair in [[job.noted, _on_noted], [job.goal_done, _on_goal_done]]:
+		if (pair[0] as Signal).is_connected(pair[1]):
+			(pair[0] as Signal).disconnect(pair[1])
+
+	if job.here == district:
+		job.here = &""
 
 
 ## Returns the first of this map's levels' markers named marker_name, or {}.
@@ -376,6 +392,61 @@ func _exit_reached(body: Node3D, area: Area3D) -> void:
 
 	if player.get("hud") != null:
 		player.hud.show_caption("On to %s" % label, 4.0)
+
+
+# The job (the harbour's job spec)
+
+## The player is here: the job knows it (its goals listed); what he takes is
+## counted and may do a goal; what is learnt is noted, a goal done heard;
+## a fresh mission opens with the letter up.
+func _job_setup() -> void:
+	var job: RefCounted = CityState.job
+	job.arrive(district)
+	job.noted.connect(_on_noted)
+	job.goal_done.connect(_on_goal_done)
+
+	if player == null:
+		return
+
+	player.frob.frobbed.connect(_on_frobbed)
+
+	if open_with_letter and not job.letter_opened:
+		player.frob.open_letter()
+
+
+func _on_frobbed(target: Node) -> void:
+	if not (target is Loot) or not target.taken:
+		return
+
+	var job: RefCounted = CityState.job
+	job.count("loot", int(target.value))
+
+	if target.has_meta(&"special"):
+		job.count("specials")
+
+	job.took_loot(String(target.name), int(target.value))
+
+
+func _on_noted(_id: String) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+
+	if player.get("hud") != null:
+		player.hud.show_caption("Noted", 1.6)
+
+	SfxScript.play_flat(player, &"pencil")
+
+
+## A main goal done: the score's goal sting (not over another's: Music's
+## gap); a side goal only the pencil.
+func _on_goal_done(_id: String, kind: StringName) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+
+	if kind == &"main" and TimeFx.real_time() - SfxScript.sting_at >= MusicScript.STING_GAP:
+		SfxScript.play_flat(player, &"sting_goal")
+	elif kind != &"main":
+		SfxScript.play_flat(player, &"pencil")
 
 
 # The player
