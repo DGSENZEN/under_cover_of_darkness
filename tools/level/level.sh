@@ -13,6 +13,8 @@
 #   tools/level/level.sh export <level>    checked, then glTF per sector, its proxy (proxy.glb) + the manifest, imported by Godot
 #   tools/level/level.sh preview <level> [out]  a plan and four bird's-eye pictures
 #   tools/level/level.sh all <level>       kit, build, export
+#   tools/level/level.sh navmesh <district>  its map's navmesh baked and saved
+#                                          (assets/level/navmesh/<district>.scn, data/districts.json)
 #   tools/level/level.sh test              the rules against broken levels, the terrain, the kit's shapes
 #                                          and pieces, the ships, occlusion, overlap, shading; the build's guard
 #
@@ -65,6 +67,12 @@ case "$verb" in
     need_level
     "$BLENDER" -b "$SOURCE/$level.blend" --python-exit-code 1 --python "$HERE/preview.py" -- "${3:-$ROOT/tmp_preview}"
     ;;
+  navmesh)
+    need_level
+    # (The district's map, from the registry: baked, saved, quit.)
+    map=$(python3 -c "import json,sys; print(json.load(open('$ROOT/data/districts.json'))['districts'][sys.argv[1]]['map'])" "$level")
+    perl -e 'alarm 1800; exec @ARGV' "$GODOT" --headless --fixed-fps 60 --path "$ROOT" "$map" -- --bake-navmesh
+    ;;
   all)
     need_level
     "$0" kit
@@ -85,7 +93,7 @@ case "$verb" in
     "$HERE/test_guard.sh"
     ;;
   *)
-    sed -n '2,19p' "$0"
+    sed -n '2,21p' "$0"
     exit 2
     ;;
 esac
