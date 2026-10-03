@@ -27,8 +27,8 @@ import math
 from dataclasses import dataclass
 
 import geo
+import kit_recipes as k  # (first: it registers every kit, kit_iberian among them)
 import kit_iberian as ib
-import kit_recipes as k
 import kit_shapes as ks
 
 # The plan grid (the spec's 5.1).
@@ -128,9 +128,8 @@ def honest(o, slot, z=0.0):
     cy = o.y + o.height / 2.0
 
     if o.kind == "shut":
-        leaf = o.width / 2.0 - 0.02
-        return [ks.box(o.x - o.width / 4.0, cy, back, leaf, o.height, 0.04, "shutters"),
-                ks.box(o.x + o.width / 4.0, cy, back, leaf, o.height, 0.04, "shutters")]
+        # (Both leaves in one board: the photo shows the pair.)
+        return [ks.box(o.x, cy, back, o.width - 0.04, o.height, 0.04, "shutters")]
 
     if o.kind == "barred":
         return [ks.box(o.x, cy, back, o.width, o.height, 0.06, "door_1"),
@@ -162,12 +161,13 @@ def honest(o, slot, z=0.0):
     raise ValueError("no honest opening '%s'" % o.kind)
 
 
-def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surface="stone"):
+def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surface="stone", frames=True):
     """A wall `length` along x (its middle at 0), `height` up from 0,
     `thickness` through z (its face at +thickness / 2), with `openings`:
     drawn round every one, its collider round the LIVE ones only; granite
     surrounds on its face; honest ones drawn shut, open windows on a sill.
-    Then turned and moved to `place` (x, z, yaw)."""
+    Then turned and moved to `place` (x, z, yaw). A back wall (frames False)
+    goes without its surrounds: fronts carry the detail (the spec's 10)."""
     every = [(o.x - o.width / 2.0, o.x + o.width / 2.0, o.y, o.y + o.height) for o in openings]
     live = [(o.x - o.width / 2.0, o.x + o.width / 2.0, o.y, o.y + o.height) for o in openings if o.live]
     face = thickness / 2.0
@@ -177,13 +177,17 @@ def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surfa
             for a0, a1, b0, b1 in split(-length / 2.0, length / 2.0, 0.0, height, live)]
 
     for o in openings:
-        if o.kind != "hatch":
+        if frames and o.kind != "hatch":
             shapes += ib._frame(o.x, o.y, face, o.width, o.height)
 
         if not o.live:
             shapes += honest(o, slot, face)
         elif o.kind == "window":
             shapes.append(ks.box(o.x, o.y - 0.04, face - 0.05, o.width + 0.2, 0.08, thickness * 0.5, "granite"))
+        elif o.kind == "door":
+            # (Its threshold: a floor through the wall's thickness.)
+            shapes.append(ks.box(o.x, o.y - SLAB / 2.0, 0.0, o.width, SLAB, thickness, "granite"))
+            cols.append(col(o.x, o.y - SLAB / 2.0, 0.0, o.width, SLAB, thickness, surface))
 
     x, z, yaw = place
     return placed(shapes, cols, x, z, yaw)
