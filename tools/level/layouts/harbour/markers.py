@@ -72,12 +72,25 @@ def _guards(L):
                             (40.0, QUAY, -3.0)], sector="terreiro")
     L.mark("Duarte", "guard", (-170.0, QUAY, -3.0), 90.0, "ribeira", archetype="watchman", route="quays_round", light="lantern", look_seed=13)
     L.mark("Inigo", "guard", (-40.0, QUAY, -3.0), -90.0, "terreiro", archetype="swordsman", route="quays_round", light="lantern", look_seed=14)
-    L.route("customs_round", [(0.0, QUAY, -12.0), (10.5, QUAY, -12.0), (10.5, QUAY, -24.0), (1.0, QUAY, -26.0)], sector="shipyard", wait=2.0)
+    # The customs watchman's round (the harbour's job): the hall, a stand
+    # inside the shut front door (the lantern men pass outside it: they talk
+    # through it), up the stair to the office landing (looking in through
+    # its door: a strongbox left open is seen from there), and down again.
+    up = CUSTOMS_UPPER
+    L.route("customs_round", [(0.0, QUAY, -12.0, 0.0, 2.0), (5.0, QUAY, -11.4, 0.0, 4.0), (10.5, QUAY, -12.0, 0.0, 2.0),
+                              (10.5, QUAY, -24.0, 0.0, 2.0), (1.0, QUAY, -26.0, 0.0, 2.0), (-8.75, QUAY, -32.4, 0.0, 0.0),
+                              (-8.75, up, -25.4, 0.0, 0.0), (0.0, up, -23.0, 0.0, 0.0), (6.2, up, -20.6, 0.0, 2.0), (0.0, up, -23.0, 0.0, 0.0),
+                              (-8.75, up, -25.4, 0.0, 0.0),
+                              (-8.75, QUAY, -32.4, 0.0, 0.0), (1.0, QUAY, -26.0, 0.0, 0.0)], sector="shipyard", wait=2.0)
     L.mark("Baltasar", "guard", (0.0, QUAY, -12.0), 0.0, "shipyard", archetype="watchman", route="customs_round", look_seed=15)
     L.route("deck_round", [(35.5, 2.0, CARRACK_Z - 1.5), (46.5, 2.0, CARRACK_Z - 1.5)], sector="ships", wait=3.0)
     L.mark("Leonor", "guard", (35.5, 2.0, CARRACK_Z - 1.5), -90.0, "ships", archetype="duelist", route="deck_round", look_seed=16)
     L.mark("Gaspar", "guard", _terrace(5.7, 150.0), 60.0, "mole", archetype="archer", lookout=True, look_seed=17)
-    L.route("mole_round", [(161.0, MOLE_TOP, 8.0), (161.0, MOLE_TOP, 138.0), (104.0, MOLE_TOP, 188.0), (161.0, MOLE_TOP, 140.0)], sector="mole")
+    # (Its far end at the golden tower's door, where Fernao calls up to the
+    # lookout: the harbour's job.)
+    door_foot = _tower_local(0.0, 0.0, -8.6)
+    L.route("mole_round", [(161.0, MOLE_TOP, 8.0), (161.0, MOLE_TOP, 138.0), (104.0, MOLE_TOP, 188.0), door_foot + (0.0, 4.0),
+                           (104.0, MOLE_TOP, 188.0), (161.0, MOLE_TOP, 140.0)], sector="mole")
     L.mark("Fernao", "guard", (161.0, MOLE_TOP, 8.0), 180.0, "mole", archetype="watchman", route="mole_round", look_seed=18)
     L.route("shipyard_round", [(37.4, QUAY, -14.0), (37.4, QUAY, -62.0), (54.2, QUAY, -62.0), (54.2, QUAY, -14.0)], sector="shipyard")
     L.mark("Afonso", "guard", (37.4, QUAY, -14.0), 0.0, "shipyard", archetype="brute", route="shipyard_round", look_seed=19)
@@ -177,12 +190,14 @@ def _things(L):
             ("wine", (-3.0, QUAY + 0.95, -24.0), 70, "a flask of wine", {}, "shipyard"),
             ("candlesticks", (9.0, QUAY + 1.45, -28.0), 120, "silver candlesticks", {}, "shipyard"),
             ("captains_gold", (CARRACK_X - 13.0, 2.2, CARRACK_Z + 2.2), 200, "the captain's gold", {}, "ships"),
-            ("captains_ring", (CARRACK_X - 12.8, 2.2, CARRACK_Z + 2.2), 150, "a gold ring", {}, "ships"),
+            ("captains_ring", (CARRACK_X - 12.8, 2.2, CARRACK_Z + 2.2), 150, "a gold ring", {"special": True}, "ships"),
             ("spyglass", (CARRACK_X - 13.0, 8.1, CARRACK_Z), 60, "a spyglass", {}, "ships"),
             ("lookouts_purse", _terrace(5.9, 60.0), 40, "a purse", {}, "mole"),
             ("chainmasters_purse", (MOLE_HEAD[0] + 2.0, MOLE_TOP + 0.1, MOLE_HEAD[1] + 1.0), 50, "the chainmaster's purse", {}, "mole"),
-            ("powder_money", (-80.0, 4.1, 196.0), 120, "the powder money", {}, "fort"),
-            ("signet", (-70.0, 4.1, 196.0), 80, "a signet ring", {}, "fort"),
+            # (Behind the tower on the bastion's deck, its seaward side: they
+            # lay inside the tower's solid body before, out of reach.)
+            ("powder_money", (-80.0, 4.1, 209.5), 120, "the powder money", {}, "fort"),
+            ("signet", (-70.0, 4.1, 209.5), 80, "a signet ring", {"special": True}, "fort"),
             ("brandy", (227.5, 2.7, 20.0), 90, "smuggled brandy", {}, "cave"),
             ("lace", (229.0, 2.2, 11.0), 110, "smuggled lace", {}, "cave"),
             ("silver_dish", (233.0, 2.3, 16.0), 140, "a silver dish", {}, "cave"),
@@ -206,7 +221,22 @@ def _things(L):
         L.mark(name, "prop", at, 0.0, sector, kind="crate")
 
     L.mark("rope_down_the_wall", "rope", (147.0, WALK - 0.1, SEA_WALL - 2.6), 0.0, "shipyard", length=11.5)
-    L.mark("powder_room", "secret", (-75.0, 5.0, 196.0), 0.0, "fort", size=[14.0, 2.0, 4.0], label="the powder room")
+    L.mark("powder_room", "secret", (-75.0, 5.0, 209.5), 0.0, "fort", size=[14.0, 2.0, 4.0], label="the powder room")
+
+    # The job's readables (their words: data/jobs/harbour.job, by slot): the
+    # night orders by the golden tower's door under its lantern, the
+    # watchman's duty orders on the hall's long table, a curfew notice on
+    # the Terreiro arcade's back wall, the captain's log open on his table,
+    # a smugglers' scrawl nailed to their crates, a note on the fort's deck
+    # before the tower, the harbourmaster's letter on his desk.
+    for name, at, yaw, sector, kind in (("night_orders", _tower_local(1.45, 1.55, -7.5), head_yaw() + 180.0, "mole", "notice"),
+                                        ("duty_orders", (6.0, QUAY + 0.79, -14.6), 90.0, "shipyard", "paper"),
+                                        ("curfew", (-95.0, QUAY + 1.55, -40.0), 90.0, "terreiro", "notice"),
+                                        ("captains_log", (CARRACK_X - 12.6, 2.82, CARRACK_Z + 0.3), 90.0, "ships", "ledger"),
+                                        ("smugglers_scrawl", (228.4, 1.75, 20.0), 90.0, "cave", "notice"),
+                                        ("fort_note", (-77.5, 4.0, 194.2), 20.0, "fort", "paper"),
+                                        ("harbourmasters_letter", (9.55, office + 0.84, -28.1), 0.0, "shipyard", "paper")):
+        L.mark(name, "readable", at, yaw, sector, slot=name, kind=kind)
 
 
 def _exits_and_views(L):

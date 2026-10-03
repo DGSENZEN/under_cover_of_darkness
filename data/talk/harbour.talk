@@ -31,10 +31,11 @@ where: harbour
 when: situation:hail, at_ease
 cast: A = name(Baltasar); B = name(Duarte)|name(Inigo)
 cooldown: 4m
-# intent: The customs watchman and a quay lantern man at the customs house's door. It comes out that the office key is kept on the customs house's ground floor.
-A: <<Baltasar hails the lantern man>>
+# intent: The customs watchman inside the customs house's shut front door, a quay lantern man outside it: they talk through the door. It comes out that the office key is kept on the customs house's ground floor (said by the lantern man, outside, where the player can hear it).
+A: <<Baltasar, through the door>>
 B: <<the lantern man answers>>
-A [note:office_key]: <<Baltasar: the office key, downstairs>>
+A: <<Baltasar again>>
+B [note:office_key]: <<the lantern man: the office key, downstairs>>
 
 == harbour_dark_bays
 where: harbour

@@ -90,7 +90,9 @@ def _customs(L):
     wx, wz = _house(mx, mz)
     L.put("customs_hall_frame", (wx, QUAY + my, wz), 0.0, "shipyard")
     # More of what has been seized, along the walls and between the posts.
-    for piece, (x, z), yaw in (("keg_rack", (-7.0, -32.7), 0.0), ("crate_stack", (-6.5, -28.0), 30.0), ("chest", (11.5, -32.8), 0.0),
+    # (The keg rack clear of the stair's foot: the customs watchman goes up
+    # and down it on his round.)
+    for piece, (x, z), yaw in (("keg_rack", (-5.6, -32.7), 0.0), ("crate_stack", (-6.5, -28.0), 30.0), ("chest", (11.5, -32.8), 0.0),
                                ("sacks", (7.5, -33.0), 0.0), ("crate_stack", (12.6, -14.0), 0.0), ("anchor_small", (-7.5, -20.0), 40.0),
                                ("crate", (4.6, -16.6), 10.0), ("sacks", (1.8, -21.0), -20.0), ("barrel", (4.4, -29.0), 0.0), ("stool", (-4.6, -13.4), 0.0)):
         L.put(piece, (x, QUAY, z), yaw, "shipyard")

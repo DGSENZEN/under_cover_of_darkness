@@ -150,13 +150,14 @@ class Layout:
                              "props": props})
 
     def route(self, name, points, sector="courtyard", wait=0.0):
-        """A route and its waypoints [(x, y, z, yaw), ...] in order."""
+        """A route and its waypoints [(x, y, z, yaw, wait), ...] in order;
+        yaw and wait optional (wait: the route's own when not given)."""
         first = points[0]
         self.mark(name, "route", first[:3], sector=sector)
 
         for i, p in enumerate(points):
             self.mark("%s_%d" % (name, i + 1), "waypoint", p[:3], yaw=p[3] if len(p) > 3 else 0.0, sector=sector,
-                      route=name, order=i + 1, wait=wait)
+                      route=name, order=i + 1, wait=p[4] if len(p) > 4 else wait)
 
     # Ground
 
