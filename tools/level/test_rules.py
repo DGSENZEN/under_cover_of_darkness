@@ -173,6 +173,23 @@ class Rules(unittest.TestCase):
                             marker("cave_cup", "loot", (11, 0.3, 1), {"value": 10})]
         self.assertEqual(rules.problems(data), [])
 
+    def test_a_marker_in_a_tunnel_under_the_terrain_is_not_buried(self):
+        # (A sewer under a street: the first thing over him is its vault,
+        # not the ground; the ground over the vault is the street's.)
+        data = good()
+        name = "test_tunnel_roof"
+        kit_recipes.piece(name, "wall", "ashlar", "stone", [kit_recipes.box(10.0, 2.6, 0.0, 4.0, 0.2, 4.0, "ashlar"),
+                                                             kit_recipes.box(10.0, -0.1, 0.0, 4.0, 0.2, 4.0, "ashlar")])
+        TEST_PIECES.append(name)
+        data["pieces"].append(piece("tunnel", name, (0, 0, 0)))
+        data["terrain"] = [flat_terrain("street", y=3.5, x0=6, x1=14)]
+        data["markers"] += [marker("in_the_sewer", "hide", (10, 0.0, 0)), marker("sewer_cup", "loot", (11, 0.3, 1), {"value": 10})]
+        self.assertEqual([p for p in rules.problems(data) if "under the ground" in p], [])
+        # (Out of the tunnel, under the same ground, he is buried.)
+        data["markers"].append(marker("beside_it", "loot", (13.0, 0.3, 3.0), {"value": 10}))
+        data["pieces"][-1] = piece("tunnel", name, (0, 0, -5))
+        self.assertTrue(any("sewer_cup" in p and "under the ground" in p for p in rules.problems(data)))
+
     def test_the_ground_faces_up(self):
         # The generator's ground is wound to face the sky (what the rules
         # take as its top).

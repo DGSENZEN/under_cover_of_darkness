@@ -25,6 +25,18 @@ class Proxy(unittest.TestCase):
     def test_the_shared_edge_is_left_out(self):
         self.assertEqual(proxy.boxes(level(piece("wall", "city_wall_12_6", (0, 0, 0)))), [])
 
+    def test_nothing_stands_in_a_shared_passage(self):
+        # (The harbour shuts the Sea Gate's passage at its city end; the old
+        # town opens it: its proxy, drawn in the old town, draws no shut.)
+        import city_harbour
+        import edges
+
+        for box, _slot in proxy.boxes(city_harbour.layout()):
+            for x0, z0, x1, z1 in edges.PASSAGES:
+                self.assertFalse(x0 < box.centre[0] < x1 and z0 < box.centre[2] < z1, box.centre)
+
+        self.assertEqual(proxy.boxes(level(piece("shut", "wall_granite_4", (-55.0, 2.5, -91.2)))), [])
+
     def test_a_house_keeps_its_slot(self):
         found = proxy.boxes(level(piece("house", "casa_a", (0, 0, 0))))
         self.assertGreater(len(found), 0)

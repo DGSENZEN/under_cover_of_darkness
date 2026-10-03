@@ -40,6 +40,9 @@ LIVE = ("door", "window", "hatch")
 REVEAL = 0.15
 # A floor's slab; a stair's rise and going; a partition and its door.
 SLAB = 0.2
+# A ground floor's top over the street's (the ground runs on under a house:
+# a floor on it would flicker with it).
+GROUND_LIFT = 0.03
 RISER = 0.18
 TREAD = 0.25
 PARTITION = 0.1
@@ -168,6 +171,15 @@ def facing(points, normal, slot):
     return ks.polygon(points if ok else list(reversed(points)), slot)
 
 
+# A wall's room side: a tiled, rendered or limewashed front is plastered
+# inside; a stone wall is stone through.
+PLASTERED = ("azulejo", "render", "limewash", "plaster")
+
+
+def inner_slot(slot):
+    return "plaster" if slot.startswith(PLASTERED) else slot
+
+
 # What a flat honest opening shows on a plain wall's face (a back's).
 FLAT = {"shut": "shutters", "lit": "glass_lit", "barred": "door_1", "boarded": "boards"}
 
@@ -176,7 +188,8 @@ def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surfa
     """A wall `length` along x (its middle at 0), `height` up from 0,
     `thickness` through z (its face at +thickness / 2), with `openings`;
     its collider cut round the LIVE ones only. Drawn as its faces: its face
-    round its openings (and, `inside`, its back: a house walked in), each
+    round its openings (and, `inside`, its back: a house walked in, in
+    inner_slot), each
     opening's reveals (an honest one's only as deep as its recess), its
     ends and its top; granite surrounds on its face (not on a plain wall,
     `frames` False: fronts carry the detail, the spec's 10); honest
@@ -193,7 +206,7 @@ def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surfa
         shapes.append(facing([[a0, b0, face], [a1, b0, face], [a1, b1, face], [a0, b1, face]], (0.0, 0.0, 1.0), slot))
 
         if inside:
-            shapes.append(facing([[a0, b0, -face], [a1, b0, -face], [a1, b1, -face], [a0, b1, -face]], (0.0, 0.0, -1.0), slot))
+            shapes.append(facing([[a0, b0, -face], [a1, b0, -face], [a1, b1, -face], [a0, b1, -face]], (0.0, 0.0, -1.0), inner_slot(slot)))
 
     for s in (-1.0, 1.0):
         x = s * length / 2.0
@@ -262,13 +275,15 @@ def balcony(x, y, width, depth, wall_z=0.0, slot="granite"):
 
 
 def floors(width, depth, levels, hole=None, slot="boards", surface="wood"):
-    """A slab at each of `levels` (its top there) over width x depth about
-    the middle, less `hole` (x0, z0, x1, z1) where a stair comes up (or a
-    list of them)."""
+    """A slab at each of `levels` (its top there; a ground floor's
+    GROUND_LIFT up) over width x depth about the middle, less `hole` (x0,
+    z0, x1, z1) where a stair comes up (or a list of them)."""
     holes = hole if isinstance(hole, list) else [hole] if hole else []
     shapes, cols = [], []
 
     for y in levels:
+        y = GROUND_LIFT if abs(y) < 1e-9 else y
+
         for x0, x1, z0, z1 in split(-width / 2.0, width / 2.0, -depth / 2.0, depth / 2.0,
                                     [(h[0], h[2], h[1], h[3]) for h in holes]):
             shapes.append(ks.box((x0 + x1) / 2.0, y - SLAB / 2.0, (z0 + z1) / 2.0, x1 - x0, SLAB, z1 - z0, slot))
@@ -484,6 +499,47 @@ def _slope_col(length, span, rise, y, along_z=False, side=1.0, surface="stone", 
     return col(0.0, centre_y, side * out, length, k.ROOF_THICK, slope, surface, 0.0, side * pitch, 0.0)
 
 
+# A hipped roof's colliders come in strips this deep (m, level across): a
+# slab can only stand under a slope where that slope is the roof's top.
+HIP_STRIP = 0.75
+
+
+def _hip_cols(ex, ez, eaves_y, pitch, surface):
+    """The colliders of a hipped roof over +-ex by +-ez, its four slopes at
+    `pitch`: each slope in strips HIP_STRIP deep up from its eaves, a strip
+    as long as its slope is at the strip's upper edge (so it never stands
+    over the hip beside it); along each hip, the squares no strip covers
+    filled level with the strip's foot (at most a strip's rise under the
+    tiles)."""
+    tan = math.tan(math.radians(pitch))
+    cos = math.cos(math.radians(pitch))
+    lift = k.ROOF_THICK / 2.0 / cos
+    run = min(ex, ez)
+    out = []
+    n = int(math.ceil(run / HIP_STRIP - 1e-9))
+
+    for i in range(n):
+        d0, d1 = i * HIP_STRIP, min((i + 1) * HIP_STRIP, run)
+        dm = (d0 + d1) / 2.0
+        y = eaves_y + dm * tan + lift - 0.02
+        slope = (d1 - d0) / cos
+
+        for s in (-1.0, 1.0):
+            # (Down to +-z, as long as x allows at d1; down to +-x likewise.)
+            if ex - d1 > 1e-6:
+                out.append(col(0.0, y, s * (ez - dm), 2.0 * (ex - d1), k.ROOF_THICK, slope, surface, 0.0, s * pitch, 0.0))
+
+            if ez - d1 > 1e-6:
+                out.append(col(s * (ex - dm), y, 0.0, slope, k.ROOF_THICK, 2.0 * (ez - d1), surface, 0.0, 0.0, -s * pitch))
+
+            # (The hip's squares, level with the strip's foot.)
+            for t in (-1.0, 1.0):
+                top = eaves_y + d0 * tan + 2.0 * lift
+                out.append(col(s * (ex - dm), (eaves_y + top) / 2.0, t * (ez - dm), d1 - d0, top - eaves_y, d1 - d0, surface))
+
+    return out
+
+
 def roof(kind, width, depth, eaves_y, pitch, slot, surface="stone", tiles="roof_spanish"):
     """A roof over walls width (x) by depth (z) whose top is at eaves_y:
         gable    ridge along x, slopes to the front and back, the ends
@@ -494,7 +550,7 @@ def roof(kind, width, depth, eaves_y, pitch, slot, surface="stone", tiles="roof_
                  gable at MANSARD[1]
         flat     an azotea: a floor at eaves_y inside a PARAPET
     Every slope a man can stand on has a slab under it (the kit's
-    roof_cols for the long slopes, pitched slabs for the ends)."""
+    roof_cols for a gable's slopes; a hipped roof's in strips, _hip_cols)."""
     if kind == "flat":
         return _flat(width, depth, eaves_y, slot, surface)
 
@@ -507,10 +563,22 @@ def roof(kind, width, depth, eaves_y, pitch, slot, surface="stone", tiles="roof_
         for s in (-1.0, 1.0):
             shapes.append(_up_face([[-width / 2.0, eaves_y, s * depth / 2.0], [width / 2.0, eaves_y, s * depth / 2.0],
                                     [width / 2.0, top, s * (depth / 2.0 - inset)], [-width / 2.0, top, s * (depth / 2.0 - inset)]], tiles))
+            # (Its end under the gable, walled up as the gable is.)
+            x = s * (width / 2.0 - 0.1)
+            shapes.append(facing([[x, eaves_y, -depth / 2.0], [x, eaves_y, depth / 2.0], [x, top, depth / 2.0 - inset],
+                                  [x, top, -(depth / 2.0 - inset)]], (s, 0.0, 0.0), slot))
 
-        # (The steep slopes are walls to a climber: an upright face under
-        # them, its top the gable's eaves.)
+        # (The steep slopes are walls to a climber: an upright core under
+        # the gable, its top the gable's eaves, and a slab under each steep
+        # slope where it leans out over the eaves.)
         cols.append(col(0.0, (eaves_y + top) / 2.0, 0.0, width, MANSARD_HEIGHT, depth - 2.0 * inset, surface))
+
+        # (Its top on the drawn slope: the tiles there are drawn without
+        # thickness.)
+        sunk = k.ROOF_THICK / math.cos(math.radians(lower)) - 0.02
+
+        for s in (-1.0, 1.0):
+            cols.append(_slope_col(width, 2.0 * inset, MANSARD_HEIGHT, eaves_y - sunk, False, s, surface, depth / 2.0))
         s2, c2 = roof("gable", width, depth - 2.0 * inset, top, upper, slot, surface, tiles)
         return shapes + s2, cols + c2
 
@@ -541,18 +609,14 @@ def roof(kind, width, depth, eaves_y, pitch, slot, surface="stone", tiles="roof_
             for s in (-1.0, 1.0):
                 shapes.append(_up_face([[-ex, eaves_y, s * ez], [ex, eaves_y, s * ez], r1, r0], tiles))
                 shapes.append(_up_face([[s * ex, eaves_y, -ez], [s * ex, eaves_y, ez], r1 if s > 0 else r0], tiles))
-                cols.append(_slope_col(width, depth, rise, eaves_y, False, s, surface))
-                cols.append(_slope_col(depth, depth, rise, eaves_y, True, s, surface, ex))
         else:
             r0, r1 = [0.0, y1, -ridge], [0.0, y1, ridge]
 
             for s in (-1.0, 1.0):
                 shapes.append(_up_face([[s * ex, eaves_y, -ez], [s * ex, eaves_y, ez], r1, r0], tiles))
                 shapes.append(_up_face([[-ex, eaves_y, s * ez], [ex, eaves_y, s * ez], r1 if s > 0 else r0], tiles))
-                cols.append(_slope_col(depth, width, rise, eaves_y, True, s, surface))
-                cols.append(_slope_col(width, width, rise, eaves_y, False, s, surface, ez))
 
-        return shapes, cols
+        return shapes, _hip_cols(ex, ez, eaves_y, pitch, surface)
 
     raise ValueError("no roof '%s'" % kind)
 

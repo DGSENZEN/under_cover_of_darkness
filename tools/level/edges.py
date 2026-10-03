@@ -9,6 +9,11 @@ import copy
 # corners, the postern, the Sea Gate's front and passage, its drum towers,
 # the wall stair. (Not the passage's closing wall: the harbour shuts the
 # passage at its city end, the old town opens it.)
+# The passages through the shared edge (x0, z0, x1, z1): the harbour shuts
+# each at the city's end, the old town opens it; a proxy draws nothing that
+# stands in one (it would shut the passage in the other district's map).
+PASSAGES = [(-58.0, -92.0, -52.0, -74.0)]
+
 SHARED_EDGE = ("city_wall_12_3", "city_wall_12_6", "city_wall_12_corner", "city_wall_12_postern", "gate_front", "gate_passage_16",
                "tower_drum_8", "wall_stair_12")
 

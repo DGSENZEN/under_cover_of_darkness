@@ -27,6 +27,10 @@ from harbour.ground import far_headland, river, west_land
 # inside the west wall, wall C and the east wall.
 X0, X1, Z0, Z1, CELL = -599.0, 601.0, -722.2, -2.2, 10.0
 SUNK = -40.0
+# The old town's footprint on the rock's grid lines (x0, z0, x1, z1): the
+# rock there is its own terrain in the old_town sector, which the old
+# town's map leaves out (its own ground and houses stand there).
+OLD_TOWN = (-179.0, -382.2, 151.0, -22.2)
 # Where the old town's terraces step up (each a row), 6.8 m a step.
 STEPS = [-102.2, -142.2, -182.2, -222.2]
 STEP = 6.8
@@ -532,7 +536,18 @@ def layout():
     L = Layout("city_massing")
     rock = terrain.grid("rock", "rock", X0, Z0, X1, Z1, CELL, height, _slot, surface="stone", keep=lambda ys: min(ys) > SUNK / 2.0,
                         skirt=1.5, occluder=True)
-    L.terrain(rock)
+
+    # (Laid in two: the rock round the old town, and the rock over it.)
+    def inside(x, z):
+        return OLD_TOWN[0] + 1e-6 < x < OLD_TOWN[2] - 1e-6 and OLD_TOWN[1] + 1e-6 < z < OLD_TOWN[3] - 1e-6
+
+    def outside(x, z):
+        return not (OLD_TOWN[0] - 1e-6 <= x <= OLD_TOWN[2] + 1e-6 and OLD_TOWN[1] - 1e-6 <= z <= OLD_TOWN[3] + 1e-6)
+
+    for name, sector, gone in (("rock", "rock", inside), ("rock_old_town", "old_town", outside)):
+        L.terrain(terrain.grid(name, sector, X0, Z0, X1, Z1, CELL, lambda x, z, gone=gone: 4.0 * SUNK if gone(x, z) else height(x, z), _slot,
+                               surface="stone", keep=lambda ys: min(ys) > SUNK / 2.0, skirt=1.5, occluder=True))
+
     ground = geo.TriGrid(terrain.triangles(rock))
     rng = random.Random(1947)
     _cliffs(L)

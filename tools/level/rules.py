@@ -201,7 +201,9 @@ def problems(data, stage="stage1"):
     # Every point marker (a key, loot, a probe, a guard on a quay): not
     # under the ground, however deep the ground sculpted over it.
     for m in data["markers"]:
-        if ground is not None and not m.get("size") and m["name"] not in buried and ground.under(geo.add(m["position"], [0.0, 0.05, 0.0])):
+        point = geo.add(m["position"], [0.0, 0.05, 0.0])
+
+        if ground is not None and not m.get("size") and m["name"] not in buried and ground.under(point) and not _tunnelled(boxes, ground, point):
             out.append("%s (%s): it is under the ground" % (m["name"], m["ucd"]))
 
     # Arrivals: clear of every exit's box, or the player is sent straight
@@ -244,6 +246,14 @@ def problems(data, stage="stage1"):
             out.append("sector %s: %d triangles, over its %d" % (sector, count, BUDGET[stage]))
 
     return out
+
+
+def _tunnelled(boxes, ground, point):
+    """Whether something built is over `point` under the ground's face over
+    it (a sewer's vault, a cellar's ceiling): in a tunnel, not buried."""
+    faces = [y for y in ground.heights(point[0], point[2]) if y >= point[1] - 1e-6]
+    reach = min(faces) - point[1] if faces else 0.0
+    return any(t is not None and t <= reach for t in (box.ray(point, [0.0, 1.0, 0.0]) for box in boxes))
 
 
 # Rays against the level: its colliders and (when it has one) its ground, a

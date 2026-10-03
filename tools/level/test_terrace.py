@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import geo  # noqa: E402
 import kit_recipes  # noqa: E402
+import kit_shapes  # noqa: E402
 import kit_terrace  # noqa: E402
 import rules  # noqa: E402
 from test_rules import marker, piece  # noqa: E402
@@ -39,6 +40,42 @@ def hit(name, origin, direction):
     boxes = geo.piece_boxes(kit_recipes.PIECES[name], [0.0, 0.0, 0.0], geo.IDENTITY)
     hits = [t for t in (b.ray(origin, direction) for b in boxes) if t is not None]
     return min(hits) if hits else None
+
+
+def _tri(origin, direction, a, b, c):
+    """Where the ray meets the triangle abc (its distance), or None."""
+    e1 = [b[i] - a[i] for i in range(3)]
+    e2 = [c[i] - a[i] for i in range(3)]
+    p = [direction[1] * e2[2] - direction[2] * e2[1], direction[2] * e2[0] - direction[0] * e2[2], direction[0] * e2[1] - direction[1] * e2[0]]
+    det = sum(e1[i] * p[i] for i in range(3))
+
+    if abs(det) < 1e-9:
+        return None
+
+    t0 = [origin[i] - a[i] for i in range(3)]
+    u = sum(t0[i] * p[i] for i in range(3)) / det
+    q = [t0[1] * e1[2] - t0[2] * e1[1], t0[2] * e1[0] - t0[0] * e1[2], t0[0] * e1[1] - t0[1] * e1[0]]
+    v = sum(direction[i] * q[i] for i in range(3)) / det
+    t = sum(e2[i] * q[i] for i in range(3)) / det
+    return t if u >= 0.0 and v >= 0.0 and u + v <= 1.0 and t > 0.0 else None
+
+
+def drawn(name, origin, direction, reach=100.0):
+    """Whether anything drawn of the piece (at the origin) crosses the ray
+    within reach: what the eye meets, not what stops a man."""
+    built = kit_shapes.build(kit_recipes.PIECES[name]["shapes"])
+    v = built["verts"]
+
+    for face in built["faces"]:
+        ring = face[0]
+
+        for i in range(1, len(ring) - 1):
+            t = _tri(origin, direction, v[ring[0]], v[ring[i]], v[ring[i + 1]])
+
+            if t is not None and t <= reach:
+                return True
+
+    return False
 
 
 class Terrace(unittest.TestCase):
@@ -108,6 +145,57 @@ class Terrace(unittest.TestCase):
         climb = kit_recipes.PIECES[name]["climbs"][0]
         self.assertLessEqual(climb[1] - climb[4] / 2.0, -4.0 + 0.05)
         self.assertGreaterEqual(climb[1] + climb[4] / 2.0, 0.5)
+
+    def test_a_hatch_has_its_collar_and_an_open_mouth(self):
+        # (The ground leaves a hole of whole cells round it: its collar
+        # paves them, a little proud; nothing drawn or solid across the
+        # shaft's mouth, its grate lying aside.)
+        name = kit_terrace.grate_hatch(2.0, collar=5.0)
+        self.assertAlmostEqual(1.0 - hit(name, [2.3, 1.0, 2.3], [0.0, -1.0, 0.0]), kit_terrace.COLLAR_PROUD, places=3)
+        self.assertIsNone(hit(name, [2.7, 1.0, 0.0], [0.0, -1.0, 0.0]))
+        self.assertIsNone(hit(name, [0.0, 1.0, 0.0], [0.0, -1.0, 0.0]))
+        self.assertFalse(drawn(name, [0.0, 1.0, 0.0], [0.0, -1.0, 0.0], 3.5))
+        # (Its ladder drawn on a wall of its shaft.)
+        self.assertTrue(drawn(name, [0.0, -1.0, 0.0], [1.0, 0.0, 0.0], kit_terrace.SHAFT / 2.0))
+
+    def test_a_hatch_chamber_opens_under_its_shaft(self):
+        name = kit_terrace.hatch_chamber(2.2, 3.1, 2.0)
+        recipe = kit_recipes.PIECES[name]
+        self.assertIsNone(hit(name, [0.0, 1.0, 0.0], [0.0, 1.0, 0.0]))
+        self.assertIsNone(hit(name, [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]))
+        self.assertAlmostEqual(hit(name, [-0.6, 1.0, 0.0], [0.0, 1.0, 0.0]) + 1.0, 3.1, delta=0.01)
+        self.assertAlmostEqual(hit(name, [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]), 1.1, delta=0.01)
+        self.assertEqual(walked([piece("chamber", name, (0, 0, 0))], [[0.0, 0.0, -0.9, "walk"], [0.0, 0.0, 0.9, "walk"]]), [])
+        climb = recipe["climbs"][0]
+        self.assertLessEqual(climb[1] - climb[4] / 2.0, 0.05)
+        self.assertGreaterEqual(climb[1] + climb[4] / 2.0, recipe["roof"])
+        # (Its ends close round the vault's barrel: open on its arch, shut
+        # in the corners over it.)
+        self.assertFalse(drawn(name, [0.0, 1.5, 3.0], [0.0, 0.0, -1.0], 2.5))
+        self.assertTrue(drawn(name, [1.0, 2.95, 3.0], [0.0, 0.0, -1.0], 2.5))
+
+    def test_a_vault_end_shuts_it(self):
+        name = kit_terrace.vault_end(2.2, 3.1)
+        self.assertIsNotNone(hit(name, [0.0, 1.5, 1.0], [0.0, 0.0, -1.0]))
+        self.assertTrue(drawn(name, [1.0, 2.95, 1.0], [0.0, 0.0, -1.0], 2.0))
+
+    def test_a_scaffold_climbs_to_the_eaves(self):
+        # (A front still being rebuilt: decks a lift apart, ladders between
+        # them, the top deck under the eaves; off the wall, clear of its
+        # balconies.)
+        name = kit_terrace.scaffold(14.2, 4.0)
+        recipe = kit_recipes.PIECES[name]
+        self.assertTrue(14.2 - 0.6 <= recipe["top"] <= 14.2 - 0.1, recipe["top"])
+        ladders = [dict(marker("climb_%d" % i, "ladder", c[0:3], size=list(c[3:6])), basis=geo.rotation(c[6])) for i, c in enumerate(recipe["climbs"])]
+        pieces = [piece("scaffold", name, (0, 0, 0)), floor("street", -4.0, 0.0, 4.0, 4.0, 0.0)]
+        self.assertEqual(walked(pieces, recipe["tour"], ladders), [])
+        self.assertIsNone(hit(name, [0.0, 4.2, 0.55], [1.0, 0.0, 0.0]))
+
+        # (Nothing across a ladder: up its middle from its foot to the deck it reaches.)
+        for c in recipe["climbs"]:
+            foot = c[1] - c[4] / 2.0
+            t = hit(name, [c[0], foot + 0.3, c[2]], [0.0, 1.0, 0.0])
+            self.assertTrue(t is None or t > kit_terrace.LIFT - 0.3, c)
 
     def test_pieces_are_named_by_their_measures(self):
         self.assertEqual(kit_terrace.stair_lane(1.5, 24), kit_terrace.stair_lane(1.5, 24))

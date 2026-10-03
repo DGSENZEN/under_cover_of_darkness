@@ -123,6 +123,86 @@ class Grammar(unittest.TestCase):
             self.assertTrue(shapes, kind)
             self.assertEqual(stood_on(shapes, cols), [], kind)
 
+    def test_a_walked_in_wall_is_plastered_inside(self):
+        # (A tiled or rendered front is plaster on its room's side; a stone
+        # wall is stone through.)
+        for slot, inner in (("azulejo_blue", "plaster"), ("render_ochre", "plaster"), ("granite", "granite")):
+            shapes, _cols = kit_town.wall(6.0, 3.0, 0.6, [Opening(0.0, 0.0, 1.2, 2.2, "door")], slot, inside=True)
+            back = [sh["slot"] for sh in shapes if sh.get("kind") == "polygon" and all(abs(p[2] + 0.3) < 1e-6 for p in sh["points"])]
+            front = [sh["slot"] for sh in shapes if sh.get("kind") == "polygon" and all(abs(p[2] - 0.3) < 1e-6 for p in sh["points"])]
+            self.assertTrue(back and set(back) == {inner}, (slot, set(back)))
+            self.assertEqual(set(front), {slot})
+
+    def test_a_ground_floor_stands_proud_of_the_street(self):
+        # (The street's ground runs on under a house: a floor drawn on it
+        # would flicker with it.)
+        _shapes, cols = kit_town.floors(4.0, 4.0, [0.0, 3.2])
+        tops = sorted({round(c[1] + c[4] / 2.0, 4) for c in cols})
+        self.assertEqual(tops, [kit_town.GROUND_LIFT, 3.2])
+        self.assertTrue(0.01 <= kit_town.GROUND_LIFT <= 0.05)
+
+    def test_a_mansard_is_closed_at_its_ends(self):
+        # (Its steep lower slopes end at the party walls: an end drawn up
+        # from the eaves to its gable, or the sky shows through beside a
+        # lower neighbour.)
+        from test_terrace import _tri
+        shapes, _cols = kit_town.roof("mansard", 6.0, 12.0, 10.0, 27.0, "render_ochre")
+        built = kit_shapes.build(shapes)
+        v = built["verts"]
+
+        def meets(origin, direction):
+            for face in built["faces"]:
+                ring = face[0]
+
+                for i in range(1, len(ring) - 1):
+                    if _tri(origin, direction, v[ring[0]], v[ring[i]], v[ring[i + 1]]) is not None:
+                        return True
+
+            return False
+
+        for side in (-1.0, 1.0):
+            for y, z in ((10.5, 5.0), (11.5, -4.5), (12.2, 0.0)):
+                self.assertTrue(meets([side * 8.0, y, z], [-side, 0.0, 0.0]), (side, y, z))
+
+    def test_a_mansards_steep_slopes_stop_a_man_where_drawn(self):
+        # (Its lower slopes lean out 65 degrees over its eaves: what stops
+        # a man there is the slope, not the wall's top under it.)
+        import math
+        eaves, (lower, _upper) = 10.0, kit_town.MANSARD
+        _shapes, cols = kit_town.roof("mansard", 6.0, 12.0, eaves, 27.0, "render_ochre")
+        under = boxes(cols)
+        inset = kit_town.MANSARD_HEIGHT / math.tan(math.radians(lower))
+
+        for side in (-1.0, 1.0):
+            for k in range(1, 8):
+                d = inset * k / 8.0
+                drawn = eaves + d * math.tan(math.radians(lower))
+                hits = [t for t in (box.ray([0.5, 30.0, side * (6.0 - d)], [0.0, -1.0, 0.0]) for box in under) if t is not None]
+                top = 30.0 - min(hits) if hits else eaves
+                self.assertGreaterEqual(top, drawn - 0.4, (side, d))
+                self.assertLessEqual(top, drawn + 0.35, (side, d))
+
+    def test_a_hipped_roof_is_stood_on_where_it_is_drawn(self):
+        # (Its colliders' top over every point of its plan: never over its
+        # tiles, never more than a hand's breadth under them; a slab under
+        # a hip's slope stops at the hip, not at the roof's side.)
+        import math
+
+        for kind, width, depth in (("four", 13.0, 7.5), ("hipped", 7.5, 13.0), ("four", 10.0, 10.0)):
+            eaves, pitch = 10.0, 27.0
+            _shapes, cols = kit_town.roof(kind, width, depth, eaves, pitch, "render_ochre")
+            under = boxes(cols)
+            tan, lift = math.tan(math.radians(pitch)), kit_recipes.ROOF_THICK / math.cos(math.radians(pitch))
+
+            for i in range(1, 26):
+                for j in range(1, 26):
+                    x, z = -width / 2.0 + width * i / 26.0, -depth / 2.0 + depth * j / 26.0
+                    true = eaves + min(width / 2.0 - abs(x), depth / 2.0 - abs(z)) * tan + lift
+                    hits = [t for t in (box.ray([x, 30.0, z], [0.0, -1.0, 0.0]) for box in under) if t is not None]
+                    top = 30.0 - min(hits)
+                    self.assertLessEqual(top, true + 0.03, (kind, x, z))
+                    self.assertGreaterEqual(top, true - 0.4, (kind, x, z))
+
     def test_register_carries_the_designs_keys(self):
         shapes, cols = kit_town.wall(6.0, 3.0, 0.6, [Opening(0.0, 0.0, 1.2, 2.2, "door")], "render_ochre")
         name = kit_town.register("test_stair", "town", "render_ochre", {"shapes": shapes, "cols": cols, "size": [6.0, 3.0, 0.6],

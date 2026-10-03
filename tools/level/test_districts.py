@@ -133,6 +133,27 @@ class City(unittest.TestCase):
         self.assertTrue(all(p["sector"] == "wall" for p in pieces))
         self.assertTrue(all(p["sector"] != "wall" for p in self.harbour["pieces"]), "the harbour's own pieces untouched")
 
+    def test_the_massings_rock_over_the_old_town_is_its_sector(self):
+        # (The old town's map leaves the massing's old_town sector out: its
+        # own ground and houses stand there, not the rock's old terraces.)
+        import city_massing
+        x0, z0, x1, z1 = city_massing.OLD_TOWN
+        inside = []
+
+        # (The rock; the unbuilt districts' cliffs move out in Task 19.)
+        for t in [t for t in self.massing["terrain"] if t["name"].startswith("rock")]:
+            for face in t["faces"]:
+                cx = sum(t["verts"][i][0] for i in face) / 3.0
+                cz = sum(t["verts"][i][2] for i in face) / 3.0
+
+                if x0 < cx < x1 and z0 < cz < z1 and t["sector"] != "old_town":
+                    inside.append(t["name"])
+                    break
+
+        self.assertEqual(inside, [])
+        self.assertTrue(any(t["sector"] == "old_town" for t in self.massing["terrain"]))
+        self.assertTrue(x0 <= -179.0 and x1 >= 150.0 and z0 <= -380.0 and z1 >= -22.2, city_massing.OLD_TOWN)
+
     def test_the_old_town_stand_in_checks_clean(self):
         self.assertEqual(rules.problems(self.old_town, "stage2"), [])
 

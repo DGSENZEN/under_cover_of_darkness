@@ -14,6 +14,7 @@ by the layout (layouts/old_town places each lot, its doors and its ways).
     all_lots     every quarter's lots (town/<quarter>.py, LOTS)
     slits        neighbours that leave a slit a foot falls into (0.05-1.0 m)
     terrace_pieces  every terrace piece the quarters ask for (TERRACE)
+    ground_holes    the ground's vertices the quarters leave out (HOLES)
 
 Godot's axes: x east, y up, z south (the harbour to +z); a quarter's
 "north" is -z.
@@ -40,10 +41,13 @@ QUARTERS = {
 # z0 (north)). Each quarter steps up to the north; the steps between plates
 # are the quarters' retaining walls and stairs (Tasks 14-18).
 TERRACES = [
-    # The Baixa: low behind the Sea Gate at the quays' height, rising
-    # gently north to its square.
-    ("baixa_low", "baixa", -100.0, -115.0, 15.0, -73.0, 2.5, 2.5),
-    ("baixa_slope", "baixa", -100.0, -170.0, 15.0, -115.0, 2.5, 6.0),
+    # The Baixa: level behind the Sea Gate at the quays' height under its
+    # square and its blocks, the Rossio rising north to +6 under the
+    # Carmo's 20 m wall.
+    # (Its edges whole cells of the ground's from the Rossio's: a hatch's
+    # hole is a vertex's cells.)
+    ("baixa_low", "baixa", -100.0, -150.0, 15.0, -72.5, 2.5, 2.5),
+    ("baixa_rossio", "baixa", -100.0, -170.0, 15.0, -150.0, 2.5, 6.0),
     # The Carmo hill: its lookout terrace 20 m over the Baixa's north edge,
     # the ruin's square, a step up toward the upper town.
     ("carmo_lookout", "carmo", -100.0, -185.0, 15.0, -170.0, 26.0, 26.0),
@@ -63,19 +67,22 @@ TERRACES = [
     ("stairs_10", "stairs", -180.0, -290.0, -100.0, -260.0, 60.0, 60.0),
     # The Judiaria: behind the east wall at its walk's height, up to the
     # upper town.
-    ("judiaria_1", "judiaria", 15.0, -100.0, 150.0, -73.0, 14.0, 14.0),
-    ("judiaria_2", "judiaria", 15.0, -130.0, 150.0, -100.0, 19.0, 19.0),
-    ("judiaria_3", "judiaria", 15.0, -160.0, 150.0, -130.0, 24.0, 24.0),
-    ("judiaria_4", "judiaria", 15.0, -190.0, 150.0, -160.0, 29.0, 29.0),
-    ("judiaria_5", "judiaria", 15.0, -220.0, 150.0, -190.0, 35.0, 35.0),
-    ("judiaria_6", "judiaria", 15.0, -250.0, 150.0, -220.0, 41.0, 41.0),
-    ("judiaria_7", "judiaria", 15.0, -265.0, 150.0, -250.0, 48.0, 48.0),
-    ("judiaria_8", "judiaria", 15.0, -290.0, 150.0, -265.0, 55.0, 55.0),
+    # (Its east edge on the massing rock's grid line, x 151: no crack.)
+    ("judiaria_1", "judiaria", 15.0, -100.0, 151.0, -73.0, 14.0, 14.0),
+    ("judiaria_2", "judiaria", 15.0, -130.0, 151.0, -100.0, 19.0, 19.0),
+    ("judiaria_3", "judiaria", 15.0, -160.0, 151.0, -130.0, 24.0, 24.0),
+    ("judiaria_4", "judiaria", 15.0, -190.0, 151.0, -160.0, 29.0, 29.0),
+    ("judiaria_5", "judiaria", 15.0, -220.0, 151.0, -190.0, 35.0, 35.0),
+    ("judiaria_6", "judiaria", 15.0, -250.0, 151.0, -220.0, 41.0, 41.0),
+    ("judiaria_7", "judiaria", 15.0, -265.0, 151.0, -250.0, 48.0, 48.0),
+    ("judiaria_8", "judiaria", 15.0, -290.0, 151.0, -265.0, 55.0, 55.0),
     # The upper town, up to the upper gate at +85.
 ] + [("upper_%d%s" % (i + 1, side), "upper", x0, z0, x1, z1, y, y)
-     for i, (z0, z1, y) in enumerate(((-310.0, -290.0, 62.0), (-335.0, -310.0, 68.0), (-355.0, -335.0, 75.0), (-380.0, -355.0, 85.0)))
-     # (Its plates halved at x -15: the upper town's two sectors.)
-     for side, x0, x1 in (("w", -180.0, -15.0), ("e", -15.0, 150.0))]
+     for i, (z0, z1, y) in enumerate(((-310.0, -290.0, 62.0), (-335.0, -310.0, 68.0), (-355.0, -335.0, 75.0), (-382.5, -355.0, 85.0)))
+     # (Its plates halved at x -15: the upper town's two sectors; its north
+     # and east edges on or past the massing rock's grid lines, whole cells
+     # north: no crack.)
+     for side, x0, x1 in (("w", -180.0, -15.0), ("e", -15.0, 151.0))]
 
 # The level's sectors (at most about 100 m): each quarter's halves, the
 # ground below, the shared wall.
@@ -192,6 +199,18 @@ def all_lots():
     """Every quarter's lots, in quarter order."""
     from town import baixa, carmo, judiaria, stairs, upper
     return list(baixa.LOTS) + list(stairs.LOTS) + list(judiaria.LOTS) + list(carmo.LOTS) + list(upper.LOTS)
+
+
+def ground_holes():
+    """The ground's vertices every quarter leaves out (a hatch's cells):
+    [(x, z)]."""
+    from town import baixa, carmo, judiaria, stairs, upper
+    out = []
+
+    for q in (baixa, stairs, judiaria, carmo, upper):
+        out += list(getattr(q, "HOLES", []))
+
+    return out
 
 
 def terrace_pieces():

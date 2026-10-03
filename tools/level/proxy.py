@@ -4,7 +4,8 @@ in their slots' preview colours, a lit box at each lit window, and its
 terrain thinned. Pure Python; export.write_proxy builds it in Blender.
 
 Proxies leave out the shared edge (edges.py: each district draws its own
-wall at full detail) and anything too small to read at a distance."""
+wall at full detail), what stands in its passages (shut in one district,
+open in the other) and anything too small to read at a distance."""
 
 import edges
 import geo
@@ -21,12 +22,14 @@ WINDOW = (0.8, 1.2, 0.1)
 
 def boxes(data):
     """Return list[(geo.Box, slot)]: the colliders of every piece of `data`
-    outside the shared edge whose largest side is at least PROXY_MIN, each
+    outside the shared edge and its passages whose largest side is at least PROXY_MIN, each
     with its recipe's slot."""
     out = []
 
     for p in data["pieces"]:
-        if p["piece"] in edges.SHARED_EDGE:
+        x, z = p["position"][0], p["position"][2]
+
+        if p["piece"] in edges.SHARED_EDGE or any(x0 < x < x1 and z0 < z < z1 for x0, z0, x1, z1 in edges.PASSAGES):
             continue
 
         recipe = kit_recipes.PIECES[p["piece"]]

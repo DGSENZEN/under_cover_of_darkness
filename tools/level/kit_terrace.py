@@ -14,7 +14,15 @@ when asked for (and, from the lot plan, when the kit is built).
                 vaulted stream (a channel beside a walkway ledge)
     cistern     a cistern's vault, 3.0 wide, its walkway along its water
     grate_hatch a way down from the street: a shaft and its ladder, the
-                grate lifted aside
+                grate lifted aside; a paved collar round it where the
+                ground leaves a hole of whole cells
+    hatch_chamber  where a hatch's shaft comes down into a vault: a square
+                chamber its width and height, a flat roof with the shaft's
+                hole, its ends closed round the vault's barrel
+    vault_end   a vault's end walled up, a grating in it
+    scaffold    a builder's scaffold up a front (the Baixa still rebuilding
+                after the fire): decks a LIFT apart off the wall, ladders
+                between them, the top deck under the eaves
 """
 
 import math
@@ -34,7 +42,16 @@ CLEAR = 2.2
 ARCH_RISE = 0.6
 VAULT_WALL = 0.4
 CHANNEL = 0.8
-SHAFT = 1.0
+# A shaft's inside (the player's capsule is 1.0 m across), how proud of the
+# street a hatch's collar stands.
+SHAFT = 1.2
+COLLAR_PROUD = 0.05
+# A scaffold: its decks a lift apart, off the wall (clear of a balcony) and
+# deep; the hole a ladder comes up through.
+LIFT = 2.0
+DECK_OFF = 0.65
+DECK = 1.6
+LADDER_HOLE = 1.2
 
 
 def _cm(v):
@@ -209,23 +226,166 @@ def cistern(length):
     return vault(3.0, 3.0, length, ledge=0.8, prefix="cistern", slot="stone_moss")
 
 
-def grate_hatch(depth):
+def grate_hatch(depth, collar=0.0):
     """A way down from the street `depth` deep: a shaft SHAFT square, its
-    ladder from its foot to over the street, the grate lifted aside."""
-    name = "grate_hatch_%d" % _cm(depth)
+    ladder drawn down a wall from its foot to the street (its climb over
+    the street), the grate lifted aside, nothing across its mouth; with a
+    `collar`, the paving round it that wide, COLLAR_PROUD over the street
+    (the ground's hole is whole cells)."""
+    name = "grate_hatch_%d%s" % (_cm(depth), "_c%d" % _cm(collar) if collar else "")
 
     if name in k.PIECES:
         return name
 
     t = 0.2
+    top = COLLAR_PROUD if collar else 0.0
     shapes, cols = [], []
+
+    def add(box, slot):
+        shapes.append(ks.box(*box, slot))
+        cols.append(town.col(*box))
 
     for x, z, w, d in ((0.0, SHAFT / 2.0 + t / 2.0, SHAFT + 2.0 * t, t), (0.0, -SHAFT / 2.0 - t / 2.0, SHAFT + 2.0 * t, t),
                        (SHAFT / 2.0 + t / 2.0, 0.0, t, SHAFT), (-SHAFT / 2.0 - t / 2.0, 0.0, t, SHAFT)):
-        shapes.append(ks.box(x, -depth / 2.0, z, w, depth, d, "stone_moss"))
-        cols.append(town.col(x, -depth / 2.0, z, w, depth, d))
+        add((x, (top - depth) / 2.0, z, w, depth + top, d), "stone_moss")
 
-    shapes += [ks.box(0.0, 0.02, 0.0, SHAFT + 0.5, 0.04, SHAFT + 0.5, "iron"),
-               ks.card(SHAFT * 0.9, 0.4, 0.0, SHAFT, 0.8, "window_grille", 90.0, 60.0)]
+    if collar:
+        c, inner = collar / 2.0, SHAFT / 2.0 + t
+        y, h = top - 0.125, 0.25
+
+        # (Paved as the street round it.)
+        for box in ((0.0, y, (inner + c) / 2.0, collar, h, c - inner), (0.0, y, -(inner + c) / 2.0, collar, h, c - inner),
+                    ((inner + c) / 2.0, y, 0.0, c - inner, h, 2.0 * inner), (-(inner + c) / 2.0, y, 0.0, c - inner, h, 2.0 * inner)):
+            add(box, "calcada")
+
+    # (The grate's iron rim round the mouth, the grate leant aside.)
+    rim = SHAFT / 2.0 + 0.05
+    shapes += [ks.box(0.0, top + 0.01, s * rim, SHAFT + 0.2, 0.03, 0.1, "iron") for s in (-1.0, 1.0)]
+    shapes += [ks.box(s * rim, top + 0.01, 0.0, 0.1, 0.03, SHAFT, "iron") for s in (-1.0, 1.0)]
+    shapes.append(ks.card(SHAFT * 0.9, top + 0.4, 0.0, SHAFT, 0.8, "window_grille", 90.0, 60.0))
+
+    # (The ladder down its +x wall: two rails, a rung every 0.3 m.)
+    wall_x = SHAFT / 2.0 - 0.06
+    shapes += [ks.box(wall_x, (top - depth) / 2.0, s * 0.22, 0.05, depth + top, 0.05, "iron") for s in (-1.0, 1.0)]
+    shapes += [ks.box(wall_x, -depth + 0.3 * (i + 1), 0.0, 0.03, 0.03, 0.44, "iron") for i in range(int((depth + top) / 0.3))]
     climbs = [[0.0, (-depth + 0.6) / 2.0, 0.0, 0.8, depth + 0.6, 0.8, 0.0]]
-    return _register(name, "vault", "stone_moss", shapes, cols, [SHAFT + 0.4, depth, SHAFT + 0.4], climbs=climbs)
+    reach = max(collar, SHAFT + 2.0 * t)
+    return _register(name, "vault", "stone_moss", shapes, cols, [reach, depth, reach], climbs=climbs)
+
+
+def hatch_chamber(width, height, length):
+    """Where a hatch's shaft comes down into a vault `width` x `height`: a
+    chamber `length` long, square in section, its walls the vault's, a flat
+    roof (its top `roof`) with the shaft's hole SHAFT square against its +x
+    wall (the hatch over it stands SHAFT/2 - width/2 off the vault's axis),
+    a ladder up that wall; each end walled round the vault's barrel (its
+    arch open)."""
+    name = "hatch_chamber_%d_%d_%d" % (_cm(width), _cm(height), _cm(length))
+
+    if name in k.PIECES:
+        return name
+
+    r = width / 2.0
+    outer = width + 2.0 * VAULT_WALL
+    roof = height + 0.3
+    hole = SHAFT / 2.0
+    west = r - SHAFT
+    shapes, cols = [], []
+
+    def add(box, slot):
+        shapes.append(ks.box(*box, slot))
+        cols.append(town.col(*box))
+
+    add((0.0, -0.15, 0.0, outer, 0.3, length), "flagstone")
+
+    for s in (-1.0, 1.0):
+        add((s * (r + VAULT_WALL / 2.0), height / 2.0, 0.0, VAULT_WALL, height, length), "brick")
+        # (The roof round the hole: across its ends, then either side of it.)
+        add((0.0, height + 0.15, s * (hole + length / 2.0) / 2.0, outer, 0.3, length / 2.0 - hole), "brick")
+        shapes += ks.arched_wall(outer, roof, 0.1, width, height - r, r, 0.0, "brick", z=s * (length / 2.0 - 0.05))
+
+    add(((-outer / 2.0 + west) / 2.0, height + 0.15, 0.0, west + outer / 2.0, 0.3, 2.0 * hole), "brick")
+    add(((r + outer / 2.0) / 2.0, height + 0.15, 0.0, outer / 2.0 - r, 0.3, 2.0 * hole), "brick")
+    # (The ladder up its +x wall: rails and rungs.)
+    wall_x = r - 0.06
+    shapes += [ks.box(wall_x, roof / 2.0, s * 0.22, 0.05, roof, 0.05, "iron") for s in (-1.0, 1.0)]
+    shapes += [ks.box(wall_x, 0.3 * (i + 1), 0.0, 0.03, 0.03, 0.44, "iron") for i in range(int(roof / 0.3))]
+    climbs = [[r - 0.4, roof / 2.0, 0.0, 0.8, roof + 0.2, 0.8, 0.0]]
+    return _register(name, "vault", "brick", shapes, cols, [outer, roof, length], climbs=climbs, roof=roof)
+
+
+def vault_end(width, height):
+    """A vault `width` x `height` walled up at its end (the wall 0.3 thick
+    about z 0), an iron grating in it over the dark."""
+    name = "vault_end_%d_%d" % (_cm(width), _cm(height))
+
+    if name in k.PIECES:
+        return name
+
+    outer = width + 2.0 * VAULT_WALL
+    box = (0.0, (height + 0.5) / 2.0 - 0.3, 0.0, outer, height + 0.8, 0.3)
+    shapes = [ks.box(*box, "brick"), ks.card(0.0, 1.0, 0.17, 1.2, 1.4, "pitch"), ks.card(0.0, 1.0, 0.19, 1.2, 1.4, "window_grille")]
+    return _register(name, "vault", "brick", shapes, [town.col(*box)], [outer, height + 0.5, 0.3])
+
+
+def scaffold(height, width):
+    """A builder's scaffold `width` wide up a front whose eaves are `height`
+    up (its back on the wall at z 0, standing out to +z): poles, a deck
+    every LIFT to the last under the eaves (`top`), DECK_OFF off the wall
+    and DECK deep, ladders between them turn about at its ends (each deck
+    holed where the ladder from under it comes up), a rail along its front;
+    its `tour` from the street to the top deck."""
+    name = "scaffold_%d_%d" % (_cm(height), _cm(width))
+
+    if name in k.PIECES:
+        return name
+
+    lifts = int((height - 0.1) / LIFT)
+    top = lifts * LIFT
+    z0, z1 = DECK_OFF, DECK_OFF + DECK
+    zm = (z0 + z1) / 2.0
+    half = width / 2.0
+    side = half - LADDER_HOLE / 2.0 - 0.1
+    shapes, cols = [], []
+
+    def add(box, slot, solid=True):
+        shapes.append(ks.box(*box, slot))
+
+        if solid:
+            cols.append(town.col(*box, "wood"))
+
+    for x in (-half, 0.0, half):
+        for z in (z0, z1):
+            add((x, (top + 1.2) / 2.0, z, 0.08, top + 1.2, 0.08), "timber", x != 0.0 or z == z1)
+
+    climbs, tour = [], []
+    ladder_x = [(side if n % 2 == 0 else -side) for n in range(lifts)]
+    tour += [[ladder_x[0], 0.0, z1 + 1.0, "walk"], [ladder_x[0], 0.0, zm, "walk"]]
+
+    for n in range(1, lifts + 1):
+        y = n * LIFT
+        below = ladder_x[n - 1]
+        h0, h1 = below - LADDER_HOLE / 2.0, below + LADDER_HOLE / 2.0
+        # (The deck either side of the hole the ladder from under it comes up through.)
+        for a, b in ((-half, h0), (h1, half)):
+            if b - a > 0.01:
+                add(((a + b) / 2.0, y - 0.04, zm, b - a, 0.08, DECK), "boards")
+
+        for z in (z0 + 0.1, z1 - 0.1):
+            add((below, y - 0.04, z, LADDER_HOLE, 0.08, 0.2), "boards")
+
+        add((0.0, y + 1.0, z1 - 0.04, width, 0.06, 0.06), "timber")
+        # (The ladder up to it from the deck under it, drawn: rails and rungs.)
+        y0 = y - LIFT
+        shapes += [ks.box(below + s * 0.25, (y0 + y + 0.9) / 2.0, zm, 0.06, LIFT + 0.9, 0.06, "timber") for s in (-1.0, 1.0)]
+        shapes += [ks.box(below, y0 + 0.3 * (i + 1), zm, 0.5, 0.04, 0.04, "timber") for i in range(int((LIFT + 0.6) / 0.3))]
+        climbs.append([below, y0 + (LIFT + 0.6) / 2.0, zm, 1.0, LIFT + 0.6, 1.0, 0.0])
+        step = -0.8 if below > 0.0 else 0.8
+        tour.append([below + step, y, zm, "climb"])
+
+        if n < lifts:
+            tour.append([ladder_x[n], y, zm, "walk"])
+
+    tour.append([0.0, top, zm, "walk"])
+    # (Half a house's front of timber: its own budget.)
+    return _register(name, "street", "timber", shapes, cols, [width + 0.2, top + 1.2, z1 + 0.1], climbs=climbs, tour=tour, top=top, budget=1500)

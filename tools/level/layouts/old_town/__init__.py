@@ -14,7 +14,7 @@ from lay import Layout
 import city_harbour
 import town
 from harbour import GATE_X, QUAY, WALK, WALL_E, WALL_W, stair_y
-from old_town import ground
+from old_town import baixa, ground
 
 height = town.height
 
@@ -63,8 +63,17 @@ def layout():
         L.mark("to_harbour_" + gate, "exit", out, 0.0, sector, size=size, label="the harbour", to="harbour", arrive="from_old_town_" + gate)
 
     L.mark("old_town_start", "spawn", (GATE_X, QUAY, -105.0), 0.0, town.sector_of(GATE_X, -105.0))
+    # (The way back to the harbour: from the arrival on the square through
+    # the Sea Gate's passage to its exit.)
+    arrival = GATES["sea_gate"][0]
+
+    for i, z in enumerate((arrival[2], -91.0, GATES["sea_gate"][2][2] - 1.5)):
+        L.mark("sea_gate_way_%d" % (i + 1), "route_check", (GATE_X, QUAY, z), 0.0, "wall", route="sea_gate_way", order=i + 1, move="walk",
+               way="public")
 
     for lot in town.all_lots():
         place(L, lot)
 
+    # The quarters' own streets, stairs and ways (over their lots).
+    baixa.lay(L)
     return L.data()
