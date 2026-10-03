@@ -20,7 +20,7 @@ from terrain import NAME as terrain_names
 # Triangle budget per sector (stage 1 blocks; the art pass raises it).
 BUDGET = {"stage1": 60000, "stage2": 120000}
 # Markers that stand on the floor, and how far below them it may be.
-STANDING = {"station", "hide", "guard", "spawn", "waypoint"}
+STANDING = {"station", "hide", "guard", "spawn", "waypoint", "arrival"}
 FLOOR_BELOW = 1.0
 # A man stands up to this high; a marker whose body is in a wall is wrong.
 BODY_HEIGHTS = (0.5, 1.2, 1.7)
@@ -506,6 +506,51 @@ def key_problems(data):
     for m in data["markers"]:
         if m["ucd"] == "key" and m["props"].get("key_id") not in wanted:
             out.append("%s: its key '%s' opens nothing" % (m["name"], m["props"].get("key_id")))
+
+    return out
+
+
+def district_problems(registry, datas):
+    """Return list[str]: the gates between districts, checked across their
+    levels; [] passes.
+
+    registry is data/districts.json's (districts.load()); datas maps each
+    level's name to its data. An exit's `to` names a district (it must then
+    say where it arrives, and that district must have the arrival) or an
+    unbuilt one (sealed); every marker name is in one level only, since a
+    district's state and a guard following the player keep their names."""
+    out = []
+    arrivals = {}
+    where = {}
+
+    for level, data in datas.items():
+        for m in data["markers"]:
+            where.setdefault(m["name"], []).append(level)
+
+            if m["ucd"] == "arrival":
+                arrivals.setdefault(m["name"], set()).add(level)
+
+    for level, data in datas.items():
+        for m in data["markers"]:
+            to = m.get("props", {}).get("to", "") if m["ucd"] == "exit" else ""
+
+            if not to or to in registry.get("unbuilt", []):
+                continue
+
+            if to not in registry["districts"]:
+                out.append("%s: goes to '%s', which is no district" % (m["name"], to))
+                continue
+
+            arrive = m["props"].get("arrive", "")
+
+            if not arrive:
+                out.append("%s: goes to %s but does not say where it arrives" % (m["name"], to))
+            elif not arrivals.get(arrive, set()) & set(registry["districts"][to]["levels"]):
+                out.append("%s: arrives at '%s', which %s does not have" % (m["name"], arrive, to))
+
+    for name, levels in where.items():
+        if len(set(levels)) > 1:
+            out.append("%s: in %s" % (name, " and ".join(sorted(set(levels)))))
 
     return out
 

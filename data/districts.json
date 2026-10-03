@@ -1,0 +1,8 @@
+{
+ "start": "harbour",
+ "districts": {
+  "harbour": {"map": "res://maps/city.tscn", "levels": ["city_harbour"], "massing": "", "proxy": true},
+  "old_town": {"map": "res://maps/old_town.tscn", "levels": ["old_town"], "massing": "old_town", "proxy": false}
+ },
+ "unbuilt": ["cathedral", "palace", "gorge", "undercroft", "aqueduct", "castle"]
+}

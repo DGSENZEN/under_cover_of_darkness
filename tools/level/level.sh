@@ -80,6 +80,7 @@ case "$verb" in
     python3 "$HERE/test_ships.py"
     python3 "$HERE/test_overlap.py"
     python3 "$HERE/test_shade.py"
+    python3 "$HERE/test_districts.py"
     "$HERE/test_guard.sh"
     ;;
   *)
