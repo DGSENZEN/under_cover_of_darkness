@@ -377,6 +377,30 @@ static func guards(parent: Node3D, level, route_nodes: Dictionary, station_nodes
 	return out
 
 
+## A man who followed the player through a gate (CityState), made again on
+## this side from his spec (Guard.spec): who he was, with no route and no
+## stations here; at `at`, named as he was.
+static func visitor(parent: Node3D, spec: Dictionary, at: Transform3D, scene: PackedScene) -> CharacterBody3D:
+	var g: CharacterBody3D = scene.instantiate()
+	g.name = String(spec["name"])
+	g.set("given_name", String(spec["name"]))
+	g.set("archetype", StringName(spec.get("archetype", &"")))
+	g.set("temperament", StringName(spec.get("temperament", &"")))
+	g.set("look_seed", int(spec.get("look_seed", 0)))
+	g.set("rounds_light", StringName(spec.get("light", &"")))
+	g.set("debug_ai", false)
+	var keys: Array[StringName] = []
+
+	for key in spec.get("keys", []):
+		keys.append(StringName(key))
+
+	g.set("keys", keys)
+	g.position = at.origin - parent.global_position
+	g.rotation.y = at.basis.get_euler().y
+	parent.add_child(g)
+	return g
+
+
 ## Loot, keys and tools lying where their markers are: {name: node}. Loot
 ## marked special is in the group "specials" (a seal: "seals" too).
 static func pickups(parent: Node3D, level) -> Dictionary:

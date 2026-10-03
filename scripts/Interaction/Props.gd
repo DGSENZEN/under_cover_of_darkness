@@ -281,6 +281,34 @@ static func blackjack_mesh() -> Mesh:
 	return mesh
 
 
+## The mesh an item on the belt is drawn with (as its kit or its pickup gives
+## it), for a belt rebuilt from what was saved (Inventory.load_state): a key
+## (`is_key`) its brass bar, the tools theirs, the weapons their models.
+## Null for an id nothing gives.
+static func belt_mesh(id: StringName, is_key := false) -> Mesh:
+	if is_key:
+		var bar := mesh_box(Vector3(0.12, 0.03, 0.05), Color(0.8, 0.7, 0.35))
+		var mesh: Mesh = bar.mesh
+		bar.free()
+		return mesh
+
+	match id:
+		&"blackjack":
+			return blackjack_mesh()
+		&"flashbomb":
+			return tool_mesh("ball", Color(0.3, 0.28, 0.26))
+		&"waterflask":
+			return tool_mesh("flask", Color(0.4, 0.6, 0.9))
+		&"lockpick":
+			return tool_mesh("rod", Color(0.6, 0.6, 0.65))
+		&"arrows":
+			return WeaponScript.arrow_mesh()
+		&"sword", &"dagger", &"bow":
+			return WeaponScript.find(id).mesh
+
+	return null
+
+
 ## Sword, dagger, bow and a quiver, straight onto a player's belt.
 static func give_weapons(player: Node, arrows := 12) -> void:
 	for weapon_id in [&"sword", &"dagger", &"bow"]:

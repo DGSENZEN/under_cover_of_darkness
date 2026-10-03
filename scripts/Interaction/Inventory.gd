@@ -3,6 +3,8 @@ extends Node
 ## HandSlot renders the selected entry; -1 selects empty hands.
 ## Mutation signals are synchronous and selected_item() returns the stored dictionary.
 
+const PropsScript := preload("res://scripts/Interaction/Props.gd")
+
 signal changed
 signal loot_taken(value: int, total: int)
 signal key_taken(key_id: StringName)
@@ -131,3 +133,34 @@ func take_one(id: StringName) -> void:
 
 		changed.emit()
 		return
+
+
+## What the player carries through a gate (CityState): the purse, the keys,
+## the belt's items and counts (not their meshes) and which is in hand.
+func save_state() -> Dictionary:
+	var items := []
+
+	for entry in belt:
+		items.append({"id": entry["id"], "name": entry["name"], "count": int(entry["count"])})
+
+	return {"purse": purse, "keys": keys.duplicate(), "belt": items, "belt_index": belt_index}
+
+
+## Carries what was saved (save_state): the belt rebuilt with each item's
+## own mesh (Props.belt_mesh), the same item in hand.
+func load_state(state: Dictionary) -> void:
+	purse = int(state.get("purse", 0))
+	keys.clear()
+
+	for key in state.get("keys", []):
+		keys.append(StringName(key))
+
+	belt.clear()
+
+	for item in state.get("belt", []):
+		var id := StringName(item["id"])
+		belt.append({"id": id, "name": String(item["name"]), "mesh": PropsScript.belt_mesh(id, keys.has(id)), "count": int(item["count"])})
+
+	belt_index = int(state.get("belt_index", -1)) if int(state.get("belt_index", -1)) < belt.size() else -1
+	belt_selection_changed.emit(selected_item())
+	changed.emit()

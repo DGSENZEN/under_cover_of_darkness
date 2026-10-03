@@ -3207,6 +3207,20 @@ func _update_rope_climb(delta: float) -> void:
 	LanternBody.slide_character(self)
 
 
+## What the player carries through a gate (CityState): his health and his
+## inventory (purse, keys, belt).
+func save_state() -> Dictionary:
+	return {"health": health, "inventory": inventory.save_state()}
+
+
+## Carries what was saved (save_state) into this district.
+func load_state(state: Dictionary) -> void:
+	health = float(state.get("health", health))
+
+	if state.has("inventory"):
+		inventory.load_state(state["inventory"])
+
+
 ## Sets the world transform and clears movement, traversal, velocity, jump, and shove state.
 ## Releases a simulated-rope grip and resets interpolation. Registered overlaps remain;
 ## old area contacts cannot attach during the next physics tick.

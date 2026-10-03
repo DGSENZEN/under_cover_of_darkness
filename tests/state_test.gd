@@ -7,7 +7,15 @@ extends Node3D
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const LevelGameplay := preload("res://scripts/Level/LevelGameplay.gd")
 const PLAYER := preload("res://Player.tscn")
+const GUARD := preload("res://Guard.tscn")
+const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
+const Props := preload("res://scripts/Interaction/Props.gd")
 const FIXTURE := "res://assets/level/fixture"
+## Guard.Alert.SEARCHING.
+const SEARCHING := 3
+## A body put back lies within this of where it lay (m): it is a limp man
+## laid down, his hips where the body was.
+const BODY_SLACK := 0.6
 
 var results: Array[String] = []
 var player: CharacterBody3D
@@ -23,6 +31,7 @@ func _ready() -> void:
 	player.global_position = Vector3(0.0, 0.1, 4.0)
 	await _frames(3)
 	await _things()
+	await _men()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -123,6 +132,120 @@ func _things() -> void:
 
 	_check("S4 a doused lamp stays out", out, "state %s" % [torch_state])
 	await _drop(b)
+
+
+# ---------------------------------------------------------------------------
+# S6-S9: guards, bodies, a man who followed the player in, what he carries
+# ---------------------------------------------------------------------------
+
+## The fixture built with its navmesh and its guard: [holder, level, made, guards].
+func _build_guarded(root_name: String, with_guards := true) -> Array:
+	var built := await _build(root_name)
+	var baker := NavigationRegion3D.new()
+	baker.set_script(NavBakerScript)
+	baker.bake_bounds = AABB(Vector3(-8.0, -2.0, -12.0), Vector3(24.0, 8.0, 20.0))
+	(built[0] as Node).add_child(baker)
+	await baker.baked
+	var made: Dictionary = built[2]
+	built.append(LevelGameplay.guards(built[0], built[1], made["routes"], made["stations"], GUARD) if with_guards else {})
+	await _frames(10)
+	return built
+
+
+func _men() -> void:
+	# S6 a man searching is searching again, where he was
+	var a := await _build_guarded("state_c")
+	var hendrik: Node = a[3]["Hendrik"]
+	hendrik.set("last_known_position", Vector3(2.0, 0.0, 2.0))
+	hendrik.set("has_last_known", true)
+	hendrik.set("alert", 60.0)
+	hendrik.call("_set_state", SEARCHING)
+	await _frames(30)
+	var searching: Dictionary = hendrik.save_state()
+	var stood: Vector3 = hendrik.global_position
+	await _drop(a)
+	var b := await _build_guarded("state_d")
+	var hendrik_b: Node = b[3]["Hendrik"]
+	hendrik_b.load_state(searching)
+	var at6: Vector3 = hendrik_b.global_position
+	await _frames(1)
+	_check("S6 a guard searching is still searching where he was", int(hendrik_b.get("state")) == SEARCHING and bool(hendrik_b.get("has_last_known"))
+		and at6.distance_to(stood) < 0.1, "state %d, knows %s, %.2f m from where he stood" % [int(hendrik_b.get("state")),
+			hendrik_b.get("has_last_known"), at6.distance_to(stood)])
+
+	# S7 a man knocked out is a body where he fell, and nobody is told
+	player.global_position = hendrik_b.global_position + Vector3(0.0, 0.0, 1.2)
+	hendrik_b.knock_out(player, true)
+	await _seconds(3.0)
+	var body: Node = _body_of(b[0], "Hendrik")
+	var fallen: Dictionary = body.save_state() if body != null else {}
+	await _drop(b)
+	var c := await _build_guarded("state_e")
+	var hendrik_c: Node = c[3]["Hendrik"]
+	var barks := [0]
+	hendrik_c.barked.connect(func(_text: String) -> void: barks[0] += 1)
+
+	if not fallen.is_empty():
+		hendrik_c.restore_downed(fallen["transform"], bool(fallen["dead"]), bool(fallen["discovered"]))
+
+	await _seconds(2.0)
+	var again: Node = _body_of(c[0], "Hendrik")
+	var lies: float = again.global_position.distance_to((fallen["transform"] as Transform3D).origin) if again != null and not fallen.is_empty() else -1.0
+	_check("S7 a guard knocked out is a body where he fell, and nobody is told", not fallen.is_empty() and not is_instance_valid(hendrik_c)
+		and again != null and lies >= 0.0 and lies < BODY_SLACK and barks[0] == 0, "saved %s, guard gone %s, body %s, %.2f m from where it lay, barks %d" % [
+			not fallen.is_empty(), not is_instance_valid(hendrik_c), again != null, lies, barks[0]])
+	var spec: Dictionary = {}
+
+	if not fallen.is_empty():
+		spec = {"name": "Wanderer", "archetype": &"", "temperament": &"", "look_seed": 3, "light": &"", "keys": []}
+
+	await _drop(c)
+
+	# S8 a man who followed the player in: a guard with no route, standing
+	var d := await _build_guarded("state_f", false)
+	var wanderer: Node = LevelGameplay.visitor(d[0], spec, Transform3D(Basis(), Vector3(2.0, 0.1, 2.0)), GUARD) if not spec.is_empty() else null
+	await _seconds(1.0)
+	var on_mesh := wanderer != null and NavigationServer3D.map_get_closest_point(get_world_3d().navigation_map, wanderer.global_position) \
+		.distance_to(wanderer.global_position) < 0.6
+	_check("S8 a visitor is a guard with no route, standing on the navmesh", wanderer != null and wanderer.is_in_group(&"guards")
+		and wanderer.name == "Wanderer" and on_mesh, "made %s, named %s, on the mesh %s" % [wanderer != null,
+			wanderer.name if wanderer != null else "-", on_mesh])
+	await _drop(d)
+
+	# S9 what the player carries survives: purse, keys, belt, health
+	var one: CharacterBody3D = PLAYER.instantiate()
+	one.set("show_hud", false)
+	add_child(one)
+	await _frames(2)
+	Props.give_blackjack(one)
+	Props.give_tools(one)
+	one.inventory.add_key(&"room", "the room's key")
+	one.inventory.add_loot(120)
+	one.set("health", 63.0)
+	var carried: Dictionary = one.save_state()
+	var belt_one: Array = one.inventory.belt.map(func(e): return [e["id"], e["count"]])
+	one.queue_free()
+	var two: CharacterBody3D = PLAYER.instantiate()
+	two.set("show_hud", false)
+	add_child(two)
+	await _frames(2)
+	two.load_state(carried)
+	var belt_two: Array = two.inventory.belt.map(func(e): return [e["id"], e["count"]])
+	var drawn: bool = two.inventory.belt.all(func(e): return e["mesh"] != null)
+	_check("S9 the player's carried things survive", int(two.inventory.purse) == 120 and two.inventory.has_key(&"room") and belt_two == belt_one
+		and drawn and is_equal_approx(float(two.get("health")), 63.0), "purse %d, key %s, belt %s / %s, meshes %s, health %.0f" % [
+			two.inventory.purse, two.inventory.has_key(&"room"), belt_two, belt_one, drawn, float(two.get("health"))])
+	two.queue_free()
+	await _frames(2)
+
+
+## The body of the man called `who` under `holder`, or null.
+func _body_of(holder: Node, who: String) -> Node:
+	for body in get_tree().get_nodes_in_group(&"bodies"):
+		if holder.is_ancestor_of(body) and String(body.get("called")) == who:
+			return body
+
+	return null
 
 
 # ---------------------------------------------------------------------------
