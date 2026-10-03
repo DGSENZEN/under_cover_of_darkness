@@ -50,9 +50,7 @@ func _run() -> void:
 	await _switch_checks()
 
 
-# --------------------------------------------------------------------------
 # The body on its own
-# --------------------------------------------------------------------------
 
 func _model_checks() -> void:
 	# Y1 camera feel at 0 switches the body off completely (and the same
@@ -312,9 +310,7 @@ func _model_checks() -> void:
 		"most a tick: sprinting %.4f m, flicking %.4f m" % [calm, flicked])
 
 
-# --------------------------------------------------------------------------
 # Momentum: the same speeds, with weight
-# --------------------------------------------------------------------------
 
 func _momentum_checks() -> void:
 	# Y7 a press answers at once and builds to walking pace; a sprint gathers
@@ -458,9 +454,7 @@ func _momentum_checks() -> void:
 		"old -> new m/s: %s; walk 10 deg %.2f; too slow: %s" % [", ".join(slides), shallow, slow])
 
 
-# --------------------------------------------------------------------------
 # The body carries the camera
-# --------------------------------------------------------------------------
 
 ## Calls `read` after every node has done its _process this frame (the
 ## smooth suite's recorder): what is drawn.
@@ -616,9 +610,7 @@ func _camera_checks() -> void:
 		"after the teleport %.4f m; inside caps %s; doubled landing peak %.3f m" % [jolt, held, peak])
 
 
-# --------------------------------------------------------------------------
 # The hands ride the body
-# --------------------------------------------------------------------------
 
 func _hand_checks() -> void:
 	var body: RefCounted = player.get("body_motion")
@@ -670,9 +662,7 @@ func _hand_checks() -> void:
 		"sword dips %.4f at frame %d, shoulders (in the view's miniature) %.4f at %d; hop new %.4f old %.4f" % [hand_dip, hand_low, shoulder_dip, shoulder_low, hop_new, hop_old])
 
 
-# --------------------------------------------------------------------------
 # F10: the old feel and the new, side by side
-# --------------------------------------------------------------------------
 
 func _switch_checks() -> void:
 	var hud: Node = player.hud
@@ -929,9 +919,7 @@ func _jump_rise(legacy: bool) -> Array:
 	return [left, top - start]
 
 
-# --------------------------------------------------------------------------
 # Helpers
-# --------------------------------------------------------------------------
 
 func _place(at: Vector3, yaw: float) -> void:
 	_release()

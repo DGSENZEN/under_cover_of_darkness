@@ -1,43 +1,7 @@
 extends RefCounted
-## The night the NPC showcase plays (ShowDirector runs it): five acts of
-## beats over the garrison yard (maps/npc_showcase.gd). What the guards do is
-## their own; the beats move only the intruder (IntruderBrain), wait for the
-## world to come true, and ask the camera for its shots.
-##
-##   I.   The Watch at Rest   no intruder: a stretch of the night at its
-##                             ease, condensed: talk by the fire, dice, the
-##                             captain's round (the sleeper booted), the fire
-##                             burning low and fed, a story, the watch
-##                             changing (Jory takes the postern from Hendrik),
-##                             the wall, the lookout.
-##   II.  A Knife in the Dark  in over the east wall and along the alley; he
-##                             waits for the archer to be far along the wall
-##                             and the carrier to be coming round the store,
-##                             then the knife in the back of the man at the
-##                             postern, and the carrier sees him over the body.
-##   III. The Cry             the camp rouses; he sprints down the dark alley
-##                             (faster than they run), goes to ground in its
-##                             far corner, and is lost to them: the bell, the
-##                             lanterns, the hunt.
-##   IV.  Steel               he steps into the firelight and fights them,
-##                             drawing out the squad: a steady exchange (they
-##                             take their places round him), a turtle (they
-##                             send the brute to break it), parries (the man in
-##                             front of him thrown open and cut down), the captain
-##                             (the brute goes berserk), then the wavering
-##                             (a man throws down his blade and begs).
-##   V.   The ending          overwhelmed (his armour lifted, they cut him
-##                             down), the victor (he spares the man begging him
-##                             and walks away), or over the wall (up the
-##                             stairs, over, off the roofs and into the canal,
-##                             and they come after him).
-##
-## A scene (for the camera, CineEditor): {"mode": observe | drama, "subjects":
-## [names], "pin": {kind, seconds}}. Act I is observed; from the knife it is
-## drama; each ending's last beat is observed again. A subject is a cast
-## name, "intruder", "nearest", "@talk" (the men of the latest conversation),
-## "@gathering:<kind>" (the men of that gathering) or "@hunt" (the men
-## searching or fighting).
+## Five-act story for maps/npc_showcase.gd, executed by ShowDirector.
+## Beats cue intruder actions, world predicates, cinematic subjects, and weather while guard AI remains live.
+## subjects() resolves story names/groups; ending methods report the resulting escape, defeat, or victory.
 
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const TalkDirectorScript := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
@@ -140,9 +104,7 @@ func acts() -> Array:
 	return [_act_one(), _act_two(), _act_three(), _act_four(), _act_five()]
 
 
-# ---------------------------------------------------------------------------
 # I. The Watch at Rest
-# ---------------------------------------------------------------------------
 
 func _act_one() -> Dictionary:
 	return {
@@ -280,9 +242,7 @@ func _after_the_watch_change() -> void:
 				man.reset_physics_interpolation())
 
 
-# ---------------------------------------------------------------------------
 # II. A Knife in the Dark
-# ---------------------------------------------------------------------------
 
 func _act_two() -> Dictionary:
 	return {
@@ -339,9 +299,7 @@ func _his_moment() -> bool:
 	return archer_far and coming
 
 
-# ---------------------------------------------------------------------------
 # III. The Cry
-# ---------------------------------------------------------------------------
 
 func _act_three() -> Dictionary:
 	return {
@@ -377,9 +335,7 @@ func _act_three() -> Dictionary:
 	}
 
 
-# ---------------------------------------------------------------------------
 # IV. Steel
-# ---------------------------------------------------------------------------
 
 func _act_four() -> Dictionary:
 	return {
@@ -459,9 +415,7 @@ func _stage_fight(for_the_end: bool) -> void:
 			man.has_last_known = true
 
 
-# ---------------------------------------------------------------------------
 # V. The ending
-# ---------------------------------------------------------------------------
 
 func _act_five() -> Dictionary:
 	return {
@@ -588,9 +542,7 @@ func _lost_him() -> bool:
 	return _brain() != null and _brain().done() and _unseen >= LOST_FOR
 
 
-# ---------------------------------------------------------------------------
 # Beats, shots, and what is true
-# ---------------------------------------------------------------------------
 
 ## A beat that only looks: `length` s of its scene.
 func _look(beat_name: StringName, length: float, mode: StringName, names: Array, pin := {}) -> Dictionary:

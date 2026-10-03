@@ -1,16 +1,7 @@
 extends "res://scripts/Visual/Torch.gd"
-## A light fixture: a burner (Torch.gd) with a model round it, built by the
-## props pipeline (tools/props): assets/props/lights/<fixture>.glb and its
-## .json (sockets, slots, the burner's settings). Its flames stand at the
-## model's flame sockets, its halo at the corona socket; its surfaces are the
-## shared slot materials (Materials.gd: the user's photos or flat colours)
-## shaded by the model's baked colours; parts that glow from inside (a pitch
-## head, coals, horn panes) glow with the flame and char once it is cold.
-## A wall fixture leaves soot on the wall above it.
-##
-## Everything that holds a torch holds a fixture the same way: it is one.
-##
-##   Lights.wall_torch(parent, flame_at, wall_normal)   (Lights.gd builds them)
+## Torch burner with a GLB model and JSON recipe from assets/props/lights.
+## Recipes supply sockets, shared material slots, burner settings, glow/shadow parts, mounting, and wall soot.
+## Flames/corona attach to recipe sockets; glowing parts use instance parameters and char when extinguished.
 
 const Materials := preload("res://scripts/Visual/Materials.gd")
 const FOLDER := "res://assets/props/lights/"

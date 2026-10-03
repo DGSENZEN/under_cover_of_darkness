@@ -457,9 +457,7 @@ func _parry_next(g: CharacterBody3D) -> void:
 	await _frames(2)
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 ## A guard already fighting you, facing you, who will not strike first and
 ## does not defend unless told to.

@@ -225,9 +225,7 @@ func _run(door: Node3D) -> void:
 	_check("S13 guard opens a door on its route", door.is_open and walker.global_position.z < -8.0,
 		"door open %s guard z %.2f" % [door.is_open, walker.global_position.z])
 
-	# ------------------------------------------------------------------
 	# Knockouts, bodies, and the rest. Fresh guards from here on.
-	# ------------------------------------------------------------------
 	guard.queue_free()
 	walker.queue_free()
 	await _frames(3)
@@ -670,7 +668,6 @@ func _approach_from_behind(sprint: bool, crouch: bool) -> float:
 	return heard
 
 
-# --------------------------------------------------------------------------
 ## Put the guard on post at `guard_at` facing -Z, calm, and the player at
 ## `player_at` with the given light level.
 func _stage(guard_at: Vector3, player_at: Vector3, light: float, reset_wariness: bool) -> void:

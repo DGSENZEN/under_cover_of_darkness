@@ -1,23 +1,8 @@
 extends PhysicalBoneSimulator3D
-## Going limp: a body of bones laid over the skeleton (PhysicalBone3D), which
-## takes over from the animation when he falls and lets physics have him:
-## killed, knocked out, kicked off his feet, flung by a blast. Until then the
-## bones touch nothing and cost next to nothing.
-##
-## Built with the person (Humanoid.add_ragdoll), while he still stands in his
-## rest pose: arms out, legs straight. Each joint's limits are measured from
-## that pose and about the bone's own axes, so a knee bends about its +X by up
-## to 140 degrees and never the other way.
-##
-##   man.ragdoll.go_limp(velocity)             # falls as he was moving
-##   man.ragdoll.shove(push, at)               # the struck part the most
-##   man.ragdoll.recover(0.35)                 # back under the animation
-##   man.ragdoll.centre()                      # his hips (world)
-##
-## Bodies are on the bodies' physics layer (GuardBody.LAYER): they rest on the
-## world and on each other, the player walks through them, and whatever finds
-## one of them (a blade, a hazard, the frob ray) asks `owner_node` what it
-## belongs to: the guard while he lives, his body once he is dead.
+## PhysicalBoneSimulator3D built by Humanoid.add_ragdoll() in the rest pose.
+## Inactive bones do not collide; go_limp() hands the pose to physics and recover() blends back to animation.
+## Joint limits use each bone's rest axes. Layer 4 bodies collide with world/other bodies, while the player passes through.
+## owner_node metadata routes hits, hazards, and interaction to the living guard or dead body.
 
 const LAYER := 4
 const MASK := 1 | 4
@@ -159,9 +144,7 @@ static func _basis_along(along: Vector3) -> Basis:
 	return Basis(x, y, z)
 
 
-# ---------------------------------------------------------------------------
 # Falling and getting up
-# ---------------------------------------------------------------------------
 
 ## Lets physics have him from the pose he is in, every part moving at
 ## `velocity` (how he was moving).
@@ -326,10 +309,9 @@ func is_recovering() -> bool:
 	return _limp and _recover_left > 0.0
 
 
-# ---------------------------------------------------------------------------
 # Where he is
-# ---------------------------------------------------------------------------
 
+## Returns the PhysicalBone3D for bone, or null when that bone has no body.
 func body(bone: StringName) -> PhysicalBone3D:
 	return _bodies.get(bone) as PhysicalBone3D
 
@@ -396,7 +378,7 @@ func rids() -> Array[RID]:
 	return found
 
 
-## All of him, moved by `shift` and brought to a stop (put somewhere).
+## Translates all physical bodies by a world shift and clears linear/angular velocities; joints are unchanged.
 func move_by(shift: Vector3) -> void:
 	for part in _bodies.values():
 		var body := part as PhysicalBone3D

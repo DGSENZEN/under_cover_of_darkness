@@ -1,18 +1,8 @@
 extends RefCounted
-## What in the world can kill a man, and what lies about to be picked up and
-## used: for guards to keep clear of, and to turn on you.
-##   lit_powder_near   a fizzing barrel whose blast would reach a place.
-##   powder_near       unlit barrels near a place (for an archer to set off
-##                     beside you).
-##   behind            what waits behind a man driven one way: spikes, fire,
-##                     a drop, a lit barrel. A boot sends him into it.
-##   throwables_near   loose things a man could pick up and throw.
-##   weapons_near      blades lying where they fell.
-##   weight_over       a hanging weight whose load hangs over a place.
-##   bell_near         an alarm bell (AlarmBell.gd).
-## Everything is found through groups its own script joins ("explosives",
-## "hazards", "hanging_weights", "dropped_weapons", "alarm_bells") or by a
-## physics query, never by walking the tree.
+## Queries hazards, explosives, loose throwables, weapons, weights and bells.
+## Uses registered groups and physics queries. Item claims identify the reserving
+## guard via weak metadata; nearby-item queries exclude items claimed by others.
+## Queries return null, empty arrays or an empty StringName when no match exists.
 
 ## A blast this much past its own reach still counts: nobody stands at the
 ## very edge of one on purpose.
@@ -200,7 +190,7 @@ static func weapons_near(tree: SceneTree, point: Vector3, radius: float, kinds: 
 	return found
 
 
-## Another man is already going for it.
+## Returns whether a live guard other than by has reserved thing; stale claims are free.
 static func claimed(thing: Object, by: Node3D) -> bool:
 	if not thing.has_meta(&"claimed_by"):
 		return false
@@ -210,11 +200,13 @@ static func claimed(thing: Object, by: Node3D) -> bool:
 	return other != null and other != by and is_instance_valid(other) and other.get("_knocked_out") != true
 
 
+## Stores a weak guard reservation in claimed_by metadata; null/freed things are ignored.
 static func claim(thing: Object, by: Node3D) -> void:
 	if thing != null and is_instance_valid(thing):
 		thing.set_meta(&"claimed_by", weakref(by))
 
 
+## Removes claimed_by only when owned by by; null/freed things are ignored.
 static func unclaim(thing: Object, by: Node3D) -> void:
 	if thing == null or not is_instance_valid(thing) or not thing.has_meta(&"claimed_by"):
 		return

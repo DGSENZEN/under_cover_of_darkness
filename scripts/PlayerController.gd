@@ -1,18 +1,9 @@
 extends CharacterBody3D
-## First-person controller.
-##
-## LOCOMOTION  walking, sprinting, crouching, jumping. Velocity driven.
-## MOVING      a choreographed TraversalMove: mantle, vault, pull up, lowering
-##             over an edge, or reaching for a hang. Position driven, no input.
-## HANGING     holding a ledge. Shimmy, peek, pull up or drop.
-## CLIMBING    attached to a ClimbVolume (ladder, vines). Velocity driven, no gravity.
-## SWIMMING    in water too deep to stand in (WaterVolume): afloat with the eyes
-##             over the surface, swimming the way you face, diving (crouch) and
-##             coming up (jump); jump at a bank low enough to climb out.
-##             Shallower water is waded: slower, and every step splashes.
-##
-## The traversal pipeline is: scan -> classify -> generate -> play.
-## See scripts/PlayerUtils for each stage.
+## First-person movement, traversal, health, and stealth controller.
+## Physics ticks advance LOCOMOTION, MOVING, HANGING, CLIMBING, or SWIMMING.
+## Traversal scans geometry, classifies variants, validates a path, then plays it.
+## Gameplay aim uses the leaning neck; camera and body offsets are presentation.
+## See docs/systems/movement.md for state, input, and integration contracts.
 
 const ObstacleProfile := preload("res://scripts/PlayerUtils/ObstacleProfile.gd")
 const MoveVariantRes := preload("res://scripts/PlayerUtils/MoveVariant.gd")
@@ -629,8 +620,7 @@ func _unhandled_input(event: InputEvent) -> void:
 var _swallow_mouse_until := -1
 
 
-## The old movement feel on or off (F10): the body under the view starts
-## afresh, and the HUD says which feel you are on.
+## Sets the comparison movement feel, resets body motion, and updates the HUD.
 func set_legacy_feel(on: bool) -> void:
 	legacy_feel = on
 	body_motion.reset()
@@ -644,6 +634,7 @@ func _recapture_mouse() -> void:
 	_swallow_mouse_until = Engine.get_physics_frames() + 3
 
 
+## Returns whether the mouse-recapture suppression window is still active.
 func is_mouse_input_swallowed() -> bool:
 	return Engine.get_physics_frames() <= _swallow_mouse_until
 
@@ -654,10 +645,12 @@ func is_mouse_input_swallowed() -> bool:
 var _attack_press_spent := false
 
 
+## Consumes the shared throw/attack press until the button is released.
 func spend_attack_press() -> void:
 	_attack_press_spent = true
 
 
+## Returns whether the current held attack press was consumed by another action.
 func is_attack_press_spent() -> bool:
 	if _attack_press_spent and not Input.is_action_pressed("throw"):
 		_attack_press_spent = false
@@ -672,8 +665,7 @@ func _sync_held_exclusion() -> void:
 		scanner.extra_exclude.append(frob.held.get_rid())
 
 
-## Where the head really is: the neck, leaning included, without any of the
-## camera's bob, shake, punch or smoothing. Gameplay aims from here.
+## Returns the world-space neck transform including lean, without cosmetic offsets.
 func aim_transform() -> Transform3D:
 	var basis := neck.global_transform.basis.orthonormalized()
 	return Transform3D(basis, neck.global_transform * Vector3(juice.lean_offset, 0.0, 0.0))
@@ -751,9 +743,7 @@ func _step_body(delta: float) -> void:
 	body_motion.step(delta, frame)
 
 
-# ---------------------------------------------------------------------------
 # Locomotion
-# ---------------------------------------------------------------------------
 
 func _update_locomotion(delta: float) -> void:
 	var wish_direction := _wish_direction()
@@ -1100,12 +1090,8 @@ func _apply_horizontal_movement(
 	velocity.z = horizontal_velocity.z
 
 
-## Momentum on the ground, at the same speeds. Along the way you want to go,
-## the push closes the gap to `target_speed` in proportion to it (hardest from
-## a standstill, easing off near the pace; more slowly above walking pace, so
-## a sprint gathers); moving faster than asked eases off. Speed across the way
-## you want to go is taken away quickly at walking pace and less quickly at a
-## sprint, so a hard turn carves a little. With no input, a planted stop.
+## Returns ground velocity with pace-dependent acceleration, braking, and turn drag.
+## current/wish are horizontal world vectors; target_speed is m/s and delta is game seconds.
 func _ground_velocity(current: Vector3, wish: Vector3, target_speed: float, delta: float) -> Vector3:
 	var pace := clampf((current.length() - walk_speed) / maxf(sprint_speed - walk_speed, 0.01), 0.0, 1.0)
 
@@ -1161,9 +1147,7 @@ func _apply_vertical_movement(delta: float) -> void:
 	)
 
 
-# ---------------------------------------------------------------------------
 # Stealth: what guards can see and hear of the player
-# ---------------------------------------------------------------------------
 
 func _track_motion(delta: float) -> void:
 	var moved := global_position.distance_to(_last_motion_position)
@@ -1176,14 +1160,13 @@ func _track_motion(delta: float) -> void:
 	_motion_speed = lerpf(_motion_speed, moved / delta, 1.0 - exp(-12.0 * delta))
 
 
+## Returns world feet position using half the standing capsule height.
 func get_feet_position() -> Vector3:
 	return global_position - Vector3.UP * _standing_height * 0.5
 
 
-## Where your climb comes out, for a guard after you (Guard.goal_of): up a
-## ladder or a rope, its top (going down it, its foot); hanging off an edge,
-## over it; pulling yourself over one, where the move ends. INF on your feet
-## (or swimming).
+## Returns a world pursuit destination for a climb, hang, or traversal move.
+## Returns Vector3.INF in ordinary locomotion or swimming.
 func climb_goal() -> Vector3:
 	match movement_state:
 		MoveState.CLIMBING:
@@ -1235,8 +1218,7 @@ func get_exposure() -> float:
 	return clampf(light * stance * (1.0 + motion_exposure * moving), 0.0, 1.0)
 
 
-## The points a guard aims sight rays at: head, chest, shins. Cover that
-## hides some of them hides that fraction of you.
+## Returns Array of world Vector3 samples [head, chest, shins]; only head includes lean.
 func get_sight_points() -> Array:
 	var feet := global_position - Vector3.UP * _standing_height * 0.5
 	var height := crouch_height if is_crouched else _standing_height
@@ -1356,10 +1338,11 @@ static func _land_sound(surface: String) -> StringName:
 	return Sfx.step(surface, false, "land")
 
 
-# ---------------------------------------------------------------------------
 # Health
-# ---------------------------------------------------------------------------
 
+## Filters amount through combat defence, then reduces health and emits damaged.
+## Dead/nonpositive/invulnerable damage does not reduce health; invalid from becomes null.
+## Defence may still have effects while invulnerable. Zero health triggers died/reload.
 func take_damage(amount: float, from: Node) -> void:
 	if is_dead or amount <= 0.0:
 		return
@@ -1402,13 +1385,14 @@ func _recover(delta: float) -> void:
 	health = minf(health + recover_rate * delta, minf(top, max_health))
 
 
-## The top of the shield `health` is in: as far as rest brings it back.
+## Returns the current shield ceiling; fully lost shields stay lost.
 func recover_limit() -> float:
 	var shield := max_health / float(maxi(shields, 1))
 	return minf(ceilf(health / shield - 0.001) * shield, max_health)
 
 
-## Spikes and the like: running into them hurts; flung into them, worse.
+## Deals 40 damage when entry speed exceeds lethal_speed; at most once per game second.
+## Uses _hazard.into_speed(velocity) when available, otherwise horizontal magnitude.
 func hazard_hit(_hazard: Node, lethal_speed: float) -> void:
 	if _hazard_cooldown > _game_time:
 		return
@@ -1484,9 +1468,7 @@ func _ensure_action(action: StringName, key: Key) -> void:
 	InputMap.action_add_event(action, key_event)
 
 
-# ---------------------------------------------------------------------------
 # Stairs
-# ---------------------------------------------------------------------------
 
 ## A wet step uses the same hold as a dry one, until the capsule crosses it.
 func _advance_step_lock(delta: float) -> bool:
@@ -1640,9 +1622,7 @@ func _smooth_ground_steps(y_before: float, was_grounded: bool) -> void:
 	_was_grounded = grounded
 
 
-# ---------------------------------------------------------------------------
 # Wall kick
-# ---------------------------------------------------------------------------
 
 func _try_wall_kick(facing_direction: Vector3) -> bool:
 	var best_normal := Vector3.ZERO
@@ -1695,9 +1675,7 @@ func _try_wall_kick(facing_direction: Vector3) -> bool:
 	return true
 
 
-# ---------------------------------------------------------------------------
 # Assisted jump
-# ---------------------------------------------------------------------------
 
 func _try_jump_assist() -> void:
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
@@ -1783,9 +1761,7 @@ func _update_jump_assist(wish_direction: Vector3, grounded: bool) -> void:
 		_assist_active = false
 
 
-# ---------------------------------------------------------------------------
 # Crouch
-# ---------------------------------------------------------------------------
 
 ## True when a crouch press started climbing down instead: the rest of the
 ## frame's locomotion must then not run.
@@ -1833,9 +1809,7 @@ func _set_crouched(crouched: bool) -> void:
 	collider.position.y = _collider_base_y - (_standing_height - height) * 0.5
 
 
-# ---------------------------------------------------------------------------
 # Traversal: choosing and starting a move
-# ---------------------------------------------------------------------------
 
 func _sync_scanner() -> void:
 	# Copied every frame so the values can be tuned live in the Remote tree.
@@ -1896,9 +1870,7 @@ func _try_lower(facing_direction: Vector3) -> bool:
 	return true
 
 
-# ---------------------------------------------------------------------------
 # MOVING: playing a TraversalMove
-# ---------------------------------------------------------------------------
 
 func _start_move(move: TraversalMove, chained := false) -> void:
 	if chained:
@@ -2111,9 +2083,7 @@ func _finish_move() -> void:
 	apply_floor_snap()
 
 
-# ---------------------------------------------------------------------------
 # HANGING
-# ---------------------------------------------------------------------------
 
 func _enter_hang(normal: Vector3, lip_y: float, caught := true, buffered_action: StringName = &"") -> void:
 	movement_state = MoveState.HANGING
@@ -2281,9 +2251,7 @@ func _shimmy(direction: Vector3, delta: float) -> void:
 		_shimmy_velocity = 0.0
 
 
-# ---------------------------------------------------------------------------
 # Targeted drop: let go, fall, catch the ledge below
-# ---------------------------------------------------------------------------
 
 ## Letting go starts with a short push away from the wall, so nothing that
 ## sticks out below can catch the body before it falls.
@@ -2396,9 +2364,7 @@ func _update_drop_catch() -> bool:
 	return true
 
 
-# ---------------------------------------------------------------------------
 # Hang leaps: finding the target
-# ---------------------------------------------------------------------------
 
 func _find_hang_target(wish_direction: Vector3) -> Dictionary:
 	var looked_at := _find_looked_at_target()
@@ -2709,17 +2675,15 @@ func _leap_target_from(face_point: Vector3, normal: Vector3, lip_y: float) -> Di
 	}
 
 
-# ---------------------------------------------------------------------------
 # CLIMBING
-# ---------------------------------------------------------------------------
 
-## Called by ClimbVolume when the player enters it.
+## Registers an overlapping climb Area3D once; does not immediately attach.
 func add_climb_volume(volume: Area3D) -> void:
 	if not climb_volumes.has(volume):
 		climb_volumes.append(volume)
 
 
-## Called by ClimbVolume when the player leaves it.
+## Unregisters a climb volume; detaches or hands over if it was the active climb.
 func remove_climb_volume(volume: Area3D) -> void:
 	climb_volumes.erase(volume)
 
@@ -2756,9 +2720,7 @@ func _is_carrying() -> bool:
 	return frob != null and frob.is_carrying()
 
 
-# ---------------------------------------------------------------------------
 # SWIMMING
-# ---------------------------------------------------------------------------
 
 ## Into the water, out of it: chest deep with nothing to stand on, you swim;
 ## where you can stand again, you wade.
@@ -2818,12 +2780,13 @@ func _swim_floor_depth() -> float:
 	return water.surface_y() - bottom
 
 
-## Called by WaterVolume when the body goes in, and comes out.
+## Registers overlapping water once; selection is resolved by _update_water().
 func add_water_volume(volume: Area3D) -> void:
 	if not _water_volumes.has(volume):
 		_water_volumes.append(volume)
 
 
+## Unregisters a water overlap; _update_water() resolves the selected volume on a later tick.
 func remove_water_volume(volume: Area3D) -> void:
 	_water_volumes.erase(volume)
 
@@ -2862,12 +2825,13 @@ func _leave_swim() -> void:
 	_strokes = 0.0
 
 
-## The eyes are under the surface.
+## Returns whether the smoothed neck base is over 0.05 m below the selected surface.
+## Uses _neck_base_y, excluding the cosmetic view offset.
 func is_underwater() -> bool:
 	return water != null and global_position.y + _neck_base_y < water.surface_y() - 0.05
 
 
-## Wading: the share of your speed the water leaves you (1 out of it).
+## Returns the depth-scaled movement multiplier, or 1 outside locomotion/water.
 func wade_scale() -> float:
 	if water == null or movement_state != MoveState.LOCOMOTION:
 		return 1.0
@@ -2982,15 +2946,14 @@ func _swim_sounds(at_top: bool) -> void:
 	Sfx.play_flat(self, Sfx.step("water", speed > swim_speed + 0.3), Sfx.loudness(db))
 
 
-## Pushes the body along `push` (m/s, horizontal) for `seconds`, easing off:
-## a dodge, a kick, a blast. Movement input waits until it is over.
+## Stores horizontal world push velocity for seconds; ignores push.y and replaces the prior shove.
 func shove(push: Vector3, seconds: float) -> void:
 	_shove_velocity = Vector3(push.x, 0.0, push.z)
 	_shove_time = seconds
 	_shove_length = seconds
 
 
-## A guard started a blow at you. If he is out of sight the HUD says so.
+## Forwards an attacker warning to a compatible HUD; the HUD decides presentation.
 func warn_attack(from: Node3D) -> void:
 	if hud != null and hud.has_method("warn_attack"):
 		hud.warn_attack(from)
@@ -3244,8 +3207,9 @@ func _update_rope_climb(delta: float) -> void:
 	LanternBody.slide_character(self)
 
 
-## Puts the player at `xform` (the gym's bays): on his feet, with no move to
-## finish, no ledge, ladder or rope held, no stair lock, and still.
+## Sets the world transform and clears movement, traversal, velocity, jump, and shove state.
+## Releases a simulated-rope grip and resets interpolation. Registered overlaps remain;
+## old area contacts cannot attach during the next physics tick.
 func teleport(xform: Transform3D) -> void:
 	if current_climb != null and is_instance_valid(current_climb) and current_climb.has_method("release"):
 		current_climb.release()
@@ -3314,9 +3278,7 @@ func _leave_climb(exit_velocity: Vector3) -> void:
 	coyote_timer = 0.0
 
 
-# ---------------------------------------------------------------------------
 # View: eye height and camera feel
-# ---------------------------------------------------------------------------
 
 func _update_view(delta: float) -> void:
 	# Eye height follows the stance, plus the peek while hanging.
@@ -3453,9 +3415,7 @@ func _update_lean(delta: float) -> void:
 	juice.lean_roll = -lean * deg_to_rad(lean_roll_degrees)
 
 
-# ---------------------------------------------------------------------------
 # Debug
-# ---------------------------------------------------------------------------
 
 func _debug_draw() -> void:
 	var state_name: String = MoveState.keys()[movement_state]

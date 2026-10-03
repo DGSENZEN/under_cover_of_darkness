@@ -104,9 +104,7 @@ func _run() -> void:
 		"bodies %d, fallen %s, dread %.2f" % [bodies.size(), garrison4.fallen, garrison4.dread])
 
 
-	# ------------------------------------------------------------------
 	# Answering to the guards as the player does (Intruder, IntruderCombat)
-	# ------------------------------------------------------------------
 
 	# I5 seen in the light, he is taken on
 	await _fresh()
@@ -258,9 +256,7 @@ func _run() -> void:
 		"health %.1f -> %.1f" % [health13, i13.health])
 
 
-	# ------------------------------------------------------------------
 	# His brain (IntruderBrain), and the sound and time around him
-	# ------------------------------------------------------------------
 
 	# I14 he sneaks where he is sent
 	await _fresh()

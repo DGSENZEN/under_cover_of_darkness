@@ -1,18 +1,6 @@
 extends CanvasLayer
-## What a fight does to your sight (adrenaline.gdshader), in one pass under
-## the retro screen (layer 4) and the HUD (layer 5):
-##  - full adrenaline: the edges of the view warm and darken with a slow
-##    heartbeat, stronger while you wind up the power blow that would spend it;
-##  - a blow landing, yours or his: the view jolts for an instant;
-##  - cut: red floods in from the side it came from;
-##  - near death: the colour drains out of everything.
-##
-##   var view := AdrenalineView.new()
-##   add_child(view)
-##   view.show_state(fraction, primed, delta)   # every frame
-##   view.set_health(fraction)                  # every frame
-##   AdrenalineView.jolt(get_tree(), 1.0)       # a heavy blow landed
-##   AdrenalineView.cut(get_tree(), 0.8, -1.0)  # hurt, from the left
+## Combat screen effects: adrenaline heartbeat, impact jolt, directional hurt, and low-health desaturation.
+## Drawn below Retro (layer 4) and the HUD (layer 5); show_state() and set_health() are frame inputs.
 
 const SHADER := preload("res://scripts/Visual/adrenaline.gdshader")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")

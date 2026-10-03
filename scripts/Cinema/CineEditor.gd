@@ -1,29 +1,8 @@
 extends Node
-## The director: given a scene (who matters, and how to watch them), it
-## chooses the shots and cuts between them as a film editor would, told what
-## happens by CineEvents, and hands each shot to its operator (CineOperator)
-## to take. Two ways of watching:
-##   observe  Tarkovsky: long takes (15 to 45 s) from far off on a long lens,
-##            or drifting slowly round the men; it moves rather than cuts,
-##            never cuts in the middle of a line, pushes in over a long talk,
-##            holds a while after it, and in a long quiet drifts to the fire
-##            or a torch.
-##   drama    Kurosawa: short shots (2 to 7 s) cut on what happens, the
-##            camera kept to one side of the line between the two men it is
-##            on; over the shoulder onto whoever speaks, and the listener's
-##            face as a hard line lands; three cuts straight in on a man
-##            stirred; a face-off held still, side on, on a long lens, until
-##            the first blow; the hunt from far off or alongside; slow motion
-##            on the knife, a parry or a death (once in 8 s); a wipe into a
-##            scene of other men; the letterbox in, and shake from blows.
-## Either way: no jump cut, a new shot when the man it is on is hidden (by a
-## wall or another man), out of the frame, or gone, never a cut before FLOOR,
-## and a pinned shot held whatever happens; a camera crowded (a man walked
-## into it, the stones at its lens) is a new shot at once. Nowhere watches
-## them all: the first of them, from wherever he is seen, near him in close
-## quarters; from on high only under an open sky.
-## Knows nothing of any level's story: a scene is {mode, subjects (the men,
-## or a Callable giving them, asked once a second), pin, letterbox}.
+## Scene-driven shot selection independent of level stories: observe long takes or drama event-driven cuts.
+## CineEvents drives interest; CineShot frames subjects, CineVantage tests placement/occlusion, and CineOperator moves the camera.
+## Pinned shots, minimum age, jump-cut rules, conversation continuity, crowding, and loss of subject govern cuts.
+## Scene dictionaries and event schemas are documented in docs/systems/cinematics.md.
 
 signal shot_started(shot: Dictionary)
 
@@ -237,7 +216,8 @@ func _init() -> void:
 	_rng.seed = randi()
 
 
-## Takes `camera`: an operator and a screen of its own, and it listens.
+## Attaches camera, creates operator/screen children, and subscribes to CineEvents.
+## The editor must be in a tree; release() restores the camera lens/attributes and unsubscribes.
 func take_over(camera: Camera3D) -> void:
 	_camera = camera
 	_screen = CineScreen.new()
@@ -425,9 +405,8 @@ func _carry_on() -> bool:
 	return true
 
 
-## A shot asked for now, in the scene as it is: `kind` of `men` (`context` as
-## CineShot's: "toward" for a portrait), from its setup if it has one; else
-## the nearest to it that stands clear and sees him.
+## Requests a shot kind for a Node3D subject Array, with framing context (cinematics.md).
+## Without an attached camera it is ignored; shot selection mutates camera state and shot history.
 func cut_to(kind: StringName, men: Array, context := {}) -> void:
 	var live := men.filter(_valid)
 
@@ -446,7 +425,7 @@ func mode() -> StringName:
 	return _mode
 
 
-## The shot being taken: {kind, size, subjects, cause, how, at, real_at, ...}.
+## Returns the live current shot Dictionary (empty before any shot); treat it as read-only.
 func current() -> Dictionary:
 	return _shot
 
@@ -581,9 +560,7 @@ func _next_shot(cause: StringName) -> void:
 		_fresh_take(cause)
 
 
-# ---------------------------------------------------------------------------
 # Observe
-# ---------------------------------------------------------------------------
 
 func _observe_step(age: float) -> void:
 	if _subjects.is_empty():
@@ -771,9 +748,7 @@ func _element() -> Node3D:
 	return best
 
 
-# ---------------------------------------------------------------------------
 # Conversations
-# ---------------------------------------------------------------------------
 
 ## The listener a line is spoken to, if the line is between two of the
 ## scene's men standing, and no fight on (a line of a conversation); else
@@ -943,9 +918,7 @@ func _talk_cut(next: Dictionary, cause: StringName) -> void:
 				_pick([[&"close", [man]], [&"medium", [man]]], cause, side, SHOT.y, false, &"cut", false)
 
 
-# ---------------------------------------------------------------------------
 # Drama
-# ---------------------------------------------------------------------------
 
 ## What an event does in drama at once (shake, slow motion), and what it
 ## leaves for the next cut.
@@ -1499,9 +1472,7 @@ func _flat_speed(man: Node3D) -> float:
 	return Vector2((going as Vector3).x, (going as Vector3).z).length() if going is Vector3 else 0.0
 
 
-# ---------------------------------------------------------------------------
 # Taking a shot
-# ---------------------------------------------------------------------------
 
 ## Begins the shot `kind` of `men`, taken `how` ("cut", "glide", "path",
 ## "wipe"), planned to run `planned` s; tells whoever listens.
@@ -1664,9 +1635,7 @@ func _watch(live: Array, dt: float) -> void:
 	_outrun_dir = toward.normalized() if toward.length() > 0.1 else Vector3.ZERO
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 func _resolve() -> void:
 	_resolve_in = RESOLVE_EVERY

@@ -81,9 +81,7 @@ func _night(start: StringName = &"clear", seed := 5) -> Node:
 	return night
 
 
-# ---------------------------------------------------------------------------
 # N: the moon and its clouds
-# ---------------------------------------------------------------------------
 
 func _moon_and_clouds() -> void:
 	var night := _night(&"clear")
@@ -185,9 +183,7 @@ func _moon_and_clouds() -> void:
 	await _frames(2)
 
 
-# ---------------------------------------------------------------------------
 # W: the states
-# ---------------------------------------------------------------------------
 
 func _states() -> void:
 	var night := _night(&"clear")
@@ -340,9 +336,7 @@ func _wind_over(seconds: float) -> float:
 	return total / float(maxi(n, 1))
 
 
-# ---------------------------------------------------------------------------
 # L: lightning
-# ---------------------------------------------------------------------------
 
 func _lightning() -> void:
 	# Previous cases reuse this light and may leave it partly clouded. Give
@@ -394,9 +388,7 @@ func _lightning() -> void:
 	await _frames(2)
 
 
-# ---------------------------------------------------------------------------
 # G: the ground: wetness, the roof
-# ---------------------------------------------------------------------------
 
 func _ground() -> void:
 	var night := _night(&"clear")
@@ -487,9 +479,7 @@ func _ground() -> void:
 	await _frames(2)
 
 
-# ---------------------------------------------------------------------------
 # D: its own dice
-# ---------------------------------------------------------------------------
 
 func _dice() -> void:
 	# (made with the level, before the world's dice are seeded: a particle
@@ -509,7 +499,6 @@ func _dice() -> void:
 	_check("D1 the weather rolls its own dice: rain starting, a stormy minute's lightning and clearing leave the world's where they were", kept, "")
 
 
-# ---------------------------------------------------------------------------
 
 func _seconds(seconds: float) -> void:
 	for f in int(round(seconds * 60.0)):

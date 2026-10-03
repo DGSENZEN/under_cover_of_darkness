@@ -1,32 +1,8 @@
 extends RefCounted
-## A man's own ways at his ease: what he does with himself when there is
-## nothing to do (GuardLife does the talking and notices what is out of
-## place; this does the rest). Each man has his own leanings, from his
-## temperament and a quirk of his own (roll), so no two keep their watch
-## alike:
-##   sit     a seat near his post (IdleSpot "seat"): down, a while, and up
-##           again; two sat near each other talk. A dozy man in the dark nods
-##           off, head down: he sees nothing and hears little until a noise
-##           or a touch wakes him with a start (a man given to it, "dozes",
-##           nods off wherever he sits).
-##   lean    back against a wall: a "lean" spot, or the wall right behind
-##           where he stands.
-##   rail    forearms on a rail, looking out over it.
-##   eat     bread off the provisions, eaten there.
-##   chop    wood split at the block with an axe, blow on blow (heard well
-##           off).
-##   tend    down on his knees at the fire, or at a job of work (a cart).
-##   carry   a crate from one pile to the other, and back another time.
-##   visit   over to a friend at his ease nearby, for a word (GuardLife).
-##   pace    a few steps out and back: a restless man (GuardPastimes walks
-##           it, facing his ground).
-##   fidget  where he stands: arms folded, a pull from his flask, a look
-##           about or up at the sky, a nod or a shake of the head, a
-##           mutter to himself, a few steps of a dance (a merry man alone).
-## Carrying a light on his rounds (Guard.rounds_light), he has his head
-## free only: looks and mutters. Anything that stirs him ends whatever it is
-## at once: up off his seat, the crate let fall, the axe away, and he is a
-## guard again.
+## Owns individual idle activities and their equipment/spot claims.
+## Temperament, quirk and configured habits weight sitting, dozing, leaning, eating,
+## working, carrying, visiting and fidgeting. GuardLife owns conversation/oddities;
+## GuardPastimes fills idle gaps. Interrupting releases spots and drops carried props.
 
 const IdleSpotScript := preload("res://scripts/Interaction/IdleSpot.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
@@ -251,9 +227,7 @@ func roll() -> void:
 		fidgets[quirk] = float(fidgets[quirk]) * QUIRK_PULL + 0.5
 
 
-# ---------------------------------------------------------------------------
 # Every frame
-# ---------------------------------------------------------------------------
 
 ## Every physics frame: stirred, whatever he was about is over; his light on
 ## his rounds kept lit. (A word to himself, alone, is the TalkDirector's:
@@ -313,8 +287,7 @@ func activity() -> StringName:
 	return _pose
 
 
-## Which way his head is turned by what he is doing (yaw, pitch; radians,
-## pitch up positive): a look about, up at the sky, down asleep.
+## Returns local head yaw/pitch in radians (positive pitch up), including doze pose.
 func head() -> Vector2:
 	if _dozing:
 		return Vector2(0.0, -0.5)
@@ -370,8 +343,8 @@ func walking() -> void:
 	_rested = 0.0
 
 
-## Everything he was about, dropped at once (stirred, struck): off his seat
-## in a hurry, the crate let fall, the axe away.
+## Stops the current habit, releases spot reservations and drops carried work props.
+## May begin a quick stand-up exit and restore equipment/temporary collision state.
 func interrupt() -> void:
 	if habit == &"":
 		return
@@ -408,9 +381,7 @@ func wake(startled := true) -> void:
 		_t = maxf(_t, float(_steps[_step].get("time", 0.0)) - 3.0)
 
 
-# ---------------------------------------------------------------------------
 # Choosing
-# ---------------------------------------------------------------------------
 
 func _choose(on_rounds: bool) -> void:
 	var hands: RefCounted = guard.get("_hands")
@@ -772,9 +743,7 @@ func _begin(each: StringName, steps: Array) -> void:
 	_next()
 
 
-# ---------------------------------------------------------------------------
 # Doing it
-# ---------------------------------------------------------------------------
 
 ## Every physics frame while something has him (Guard._do_patrol): the next
 ## of its steps.
@@ -1106,9 +1075,7 @@ func _wall_behind() -> Dictionary:
 	return {"stand": stand, "out": out}
 
 
-# ---------------------------------------------------------------------------
 # Things in his hands
-# ---------------------------------------------------------------------------
 
 ## His hands wanted for his ways at ease (a seat, the axe, bread, a crate,
 ## kneeling at his work): his blade put by for them if it was out, and free
@@ -1364,9 +1331,7 @@ func _drop_crate() -> void:
 	crate.linear_velocity = guard.velocity * 0.5 + Vector3.DOWN
 
 
-# ---------------------------------------------------------------------------
 # A light on his rounds
-# ---------------------------------------------------------------------------
 
 ## A man set to walk his rounds with a light (Guard.rounds_light) has it lit:
 ## at once at first, and again a while after a fight took it from him.

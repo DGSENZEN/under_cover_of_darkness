@@ -173,9 +173,7 @@ func _run() -> void:
 		"drops on the view %d -> %d, killed %s" % [drops_before, player.hud.splatter_count(), not is_instance_valid(g9)])
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 func _guard(archetype: StringName, at: Vector3) -> CharacterBody3D:
 	# A new fight: no dread carried over from the last one's dead.

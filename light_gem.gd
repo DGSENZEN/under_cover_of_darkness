@@ -1,5 +1,8 @@
 class_name LightGem
 extends Node3D
+## Samples two rendered views for player illumination. raw_value is the brightest
+## opaque quadrant average; value is calibration_curve.sample(raw_value).
+## Requires both viewports and a calibration curve; headless runs keep prior values.
 
 @export var viewport_top: Viewport
 @export var viewport_bottom: Viewport
@@ -9,12 +12,11 @@ var raw_value = 0.0
 var value = 0.0
 var frame_counter = 0
 
-# Called when the node enters the scene tree for the first time.
 func _ready() -> void:
-	pass # Replace with function body.
+	pass
 
 
-# Called every frame. 'delta' is the elapsed time since the previous frame.
+## Reads the GPU images every frames_between_samples process frames.
 func _process(delta: float) -> void:
 	# No renderer (a headless run): nothing to read, and asking only errors.
 	if DisplayServer.get_name() == "headless":
@@ -30,6 +32,8 @@ func _process(delta: float) -> void:
 	raw_value = max(vport_top, vport_bot)
 	value = calibration_curve.sample(raw_value)
 	
+## Returns brightest opaque quadrant mean, or 0.0 when no image was rendered.
+## viewport is untyped and must provide get_texture().get_image(); image must be square.
 func sample_viewport(viewport) -> float:
 	var image = viewport.get_texture().get_image()
 
@@ -59,12 +63,15 @@ func sample_viewport(viewport) -> float:
 			brightest = max(brightest, avg)
 	return brightest
 	
+## Returns quadrant index 0..3 for pixel coordinates; N is image width minus one.
+## x/y/N are untyped numeric arguments. Diagonals define four triangular regions.
 func classify(x, y, N) -> int:
 	if y <= x and x + y >= N: return 0
 	elif y < x: return 1
 	elif y > N - x: return 2
 	else: return 3
 	
+## Returns weighted RGB luminance; untyped color must expose numeric r/g/b fields.
 func luminance(color) -> float:
 	return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
 			

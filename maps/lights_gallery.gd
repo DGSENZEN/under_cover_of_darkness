@@ -1,19 +1,7 @@
 extends Node3D
-## Every light fixture, lit, in a stone hall of four bays, each lit only by
-## its own family: torches, lanterns, candles, open fires. A pillar in each
-## bay to pass behind (the halos), a door that swings every 6 s (the candles
-## shiver), and two watchmen on each bay's walk, one with a lantern and one
-## with a torch (blind and deaf here: you are only looking).
-##
-##   Godot --path . res://maps/lights_gallery.tscn [-- --verbose]
-##
-##   L  every light: lit, snuffed, lit, doused, lit     (debug builds)
-##   K  the wind from the east: off, gentle, strong
-##   J  halos on and off
-##   H  the fires burning low, and back up
-##
-## With --verbose: the frame time every 5 s, and once, which slots have no
-## photo (Materials.fallbacks: flat colours).
+## Fixture gallery for light states, wind, corona occlusion and carried-light motion.
+## L cycles light states, K changes wind, J toggles coronas and H changes fuel.
+## Run res://maps/lights_gallery.tscn with -- --verbose for timing and asset diagnostics.
 
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
@@ -128,7 +116,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					burner.set_strength(STRENGTHS[_strength])
 
 
-## Every burner in the hall (the watchmen's lights too).
+## Returns descendant nodes in the torches group, including watchmen's lights.
 func burners() -> Array[Node3D]:
 	var found: Array[Node3D] = []
 
@@ -139,7 +127,7 @@ func burners() -> Array[Node3D]:
 	return found
 
 
-## The L key: every light lit, snuffed, lit, doused, lit, a step a press.
+## Advances descendant fixtures through the lit/snuffed/doused cycle (the L key).
 func cycle_lights() -> void:
 	var step: StringName = CYCLE[_cycle % CYCLE.size()]
 	_cycle += 1
@@ -157,9 +145,7 @@ func _swing_doors() -> void:
 			door.frob(self)
 
 
-# ---------------------------------------------------------------------------
 # The hall
-# ---------------------------------------------------------------------------
 
 func _hall() -> void:
 	_brush(Vector3(0, -0.25, 0), Vector3(40.8, 0.5, 12.8), STONE_ROAD, 2.0)
@@ -199,9 +185,7 @@ func _environment() -> void:
 	add_child(world)
 
 
-# ---------------------------------------------------------------------------
 # The bays
-# ---------------------------------------------------------------------------
 
 func _torches(x: float) -> void:
 	# Two sconces on the back wall, the pillar between them.
@@ -278,9 +262,7 @@ func _watchmen(bay: int, x: float) -> void:
 		man.global_position = ends[0]
 
 
-# ---------------------------------------------------------------------------
 # Building blocks
-# ---------------------------------------------------------------------------
 
 ## A solid block with a texture laid on in world space (retro_showcase's).
 func _brush(center: Vector3, size: Vector3, texture: Texture2D, tile: float, surface := "stone") -> StaticBody3D:
@@ -310,4 +292,3 @@ func _sign(at: Vector3, yaw: float, text: String) -> void:
 	label.shaded = false
 	add_child(label)
 	label.global_position = at
-

@@ -1,19 +1,8 @@
 extends Node3D
-## The night over a level: the moon and its clouds, and the weather (clear,
-## cloudy, drizzle, shower, storm, fog). It draws the sky (NightSky), lets
-## the rain fall (Rain), wets the ground, sets how hard the wind blows
-## (Atmosphere), throws lightning, thickens the fog and raises the noise
-## floor (SoundBus.masking_db), easing from one state to the next.
-##
-## The clouds the sky draws are this node's cloud field, and the moon's light
-## reads it here with the sky shader's own projection across the moon: a cloud
-## seen crossing the moon is the cloud that dims its light (to CLOUDED of it,
-## the ambient to AMBIENT_CLOUDED). The weather rolls its own dice, so it
-## never shifts the world's.
-##
-## A level adds one beside its moon light and its environment:
-##   night.moon = moon; night.environment = environment; add_child(night)
-##   night.to(&"storm", 30.0)        # a storm, eased in over 30 s
+## Level weather: shared cloud field/sky, moon and ambient light, rain, wet surfaces, wind, fog, lightning, and noise masking.
+## Transitions use scaled game time and a private weather RNG; moon dimming samples the same cloud projection as the sky.
+## Set moon/environment before adding to the tree. Exit dries registered shared materials and resets SoundBus masking.
+## Zones supplies zone_fog/zone_fog_color; weather multiplies that local atmosphere.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Materials := preload("res://scripts/Visual/Materials.gd")
@@ -203,8 +192,9 @@ func _exit_tree() -> void:
 			material.roughness = float(dry[1])
 
 
-## To `to_state` over `seconds` (0: at once), `after` s from now (a change
-## asked for now drops any still waiting).
+## Transitions to a STATES key over seconds (game time); nonpositive duration jumps immediately.
+## after > 0 queues a delayed change; an immediate request clears pending changes. Unknown keys warn and leave state unchanged.
+## Updates state/emits state_changed when the transition starts, before its eased values finish.
 func to(to_state: StringName, seconds: float, after := 0.0) -> void:
 	if not STATES.has(to_state):
 		push_warning("Night: no weather '%s'" % to_state)
@@ -366,9 +356,8 @@ func splashes_at(point: Vector3) -> bool:
 	return false
 
 
-## `material` darkens and shines as the ground gets wet. Its dry look is
-## kept on it (a shared surface outlives a level, and the next night must not
-## take it wet as dry).
+## Registers a shared BaseMaterial3D for wetness edits, storing its dry colour/roughness in night_dry metadata.
+## Null/already-registered resources are ignored; exit restores dry values so later levels do not inherit wet materials.
 func register_wet(material: BaseMaterial3D) -> void:
 	if material == null or _wet.has(material):
 		return

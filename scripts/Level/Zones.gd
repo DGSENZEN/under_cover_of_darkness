@@ -1,15 +1,7 @@
 extends Node
-## A level's atmosphere zones (tools/level `zone` markers): boxes, each with a
-## colour grade, a fog density (times the level's) and a fog colour. The
-## camera's zone (the smallest box it is in; "outside" in none) is eased in
-## over EASE seconds: the environment's colour correction (a per-channel
-## curve from the grade's shadow, mid and high colours) and its saturation,
-## and the fog through Night (which weighs it with the weather's) or the
-## environment itself when there is no Night.
-##
-## The grades are the look's (the garrison spec, sections 6.3 and 11): cold
-## blue-teal outside, warm amber indoors, red and gold in the chapel, a sick
-## green-black in the cellar, deep orange at the hearth.
+## Camera atmosphere zones: smallest containing transformed box wins; outside uses the default grade.
+## Eases shadow/mid/high colours, saturation, fog multiplier, and fog colour into the current look.
+## Applies colour correction to the environment; Night combines zone fog with weather, or this node applies fog directly.
 
 const GRADES := {
 	"outside": {"shadow": Color(0.006, 0.02, 0.05), "mid": Color(0.4, 0.5, 0.6), "high": Color(0.92, 0.97, 1.0), "saturation": 0.92, "fog_color": Color(0.55, 0.62, 0.78)},
@@ -40,8 +32,8 @@ func _ready() -> void:
 	_lut.width = 256
 
 
-## A zone: its box (a transform and a size), grade, fog (times the level's)
-## and fog colour ("" for the grade's).
+## Adds a transformed box centred at at.origin, with size in metres and fog as a multiplier.
+## Unknown grade colours fall back to outside; fog_color is a Color string or empty for grade colour.
 func add_zone(zone_name: String, at: Transform3D, size: Vector3, grade: String, fog: float, fog_color: String) -> void:
 	var entry := (GRADES.get(grade, GRADES[DEFAULT]) as Dictionary).duplicate()
 	entry["fog"] = fog
@@ -65,7 +57,8 @@ func grade_at(point: Vector3) -> String:
 	return found["grade"] if not found.is_empty() else DEFAULT
 
 
-## The look now (shadow, mid, high, saturation, fog, fog_color).
+## Returns the live look Dictionary: shadow/mid/high/fog_color (Color), saturation/fog (float).
+## This is shared mutable state; treat it as read-only or duplicate it before edits.
 func look() -> Dictionary:
 	return _now
 

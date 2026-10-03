@@ -935,9 +935,7 @@ func _run() -> void:
 	await _frames(20)
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 ## A guard already fighting you, facing you, who will not strike first and
 ## does not defend unless told to.

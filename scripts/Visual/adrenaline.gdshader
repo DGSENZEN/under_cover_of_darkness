@@ -1,13 +1,6 @@
 shader_type canvas_item;
-// What a fight does to your sight, in one pass (AdrenalineView.gd):
-//  - adrenaline: the rim of the view warms and darkens and loses its colour
-//    in time with your heartbeat, a faint fringe running round it on each
-//    beat; the middle, where you fight, is left alone;
-//  - a blow landing: for an instant the picture jolts in toward the middle,
-//    its colours torn a little apart at the edges;
-//  - cut: red floods in from the side the blow came from and drains away;
-//  - near death: the colour goes out of everything.
-// Drawn under the retro screen, so it is pixelated with everything.
+// AdrenalineView combat pass below Retro: heartbeat rim, impact jolt/chromatic split,
+// directional red hurt flood, and low-health desaturation. The central fight view stays clear.
 
 uniform sampler2D screen : hint_screen_texture, filter_linear_mipmap;
 // 0..1: how much of the adrenaline to show (full adrenaline, faded in).

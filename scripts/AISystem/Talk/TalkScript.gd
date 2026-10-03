@@ -1,35 +1,9 @@
 extends RefCounted
-## What the men say to each other, written down: plain-text files in
-## data/talk, one conversation to a block, read once at the start
-## (`library`). A fault in a file names the file and the line.
-##
-##   == dice_debt                        a block, by its id (unique across files)
-##   when: at_ease, night:early|middle   all must hold; | is "or"
-##   cast: A = any; B = owes(A); C? = friend(A)|friend(B)
-##                                       the parts; ? may be left empty
-##   place: dice                         only chosen there (a gathering, a station)
-##   cooldown: 10m                       30s, 10m, or once (a night); else 5m
-##   priority: 10                        the higher first
-##   group: dice                         all of a group used before any repeats
-##   again: yes                          a man may say its lines twice a night
-##   A: You still owe me four pennies.   a line: PART [emotes] {if cond}: text
-##   B [shrugs]: It's a kind of winning.
-##   -- interrupt                        said instead, if it is broken off
-##   A: Hush. What was that?
-##
-## Lines of one part straight after each other, all but the last with an
-## {if ...}, are one turn: the first whose condition holds for the speaker is
-## said, else the last. The cast sheet is the block "== cast": a line a man,
-## "Name: rank 4; kin Jory; captain" (ties: kin, friend, rival, owes, suspects;
-## any other word is a trait).
-##
-## Each conversation comes out as a Dictionary:
-##   {id, when, cast, place, cooldown, priority, group, again, lines,
-##    interrupt, source, sources (the file:line of each key)}
-## where `when` is an Array of terms (each an Array of its alternatives),
-## `cast` an Array of {key, optional, reqs} (reqs shaped like `when`), and
-## `lines`/`interrupt` Arrays of turns {part, choices: [{if, emotes, text,
-## source}]}.
+## Parses data/talk/*.talk into {conversations, cast, errors} dictionaries.
+## Conversation blocks define conditions, parts, place, cooldown and ordered turns;
+## turn choices carry text/emotes/conditions/source. Adjacent conditional lines by
+## one part form alternatives. Library loading validates terms and closes mutual ties.
+## Errors include file:line; malformed input can still return partially parsed data.
 
 const TalkFactsScript := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
 
@@ -55,7 +29,8 @@ const PLACEHOLDERS := ["dead", "place", "missing", "spared", "slain"]
 static var _library: Dictionary = {}
 
 
-## Everything in the talk folder, read once.
+## Returns cached {conversations: Array, cast: Dictionary, errors: Array}; lazily loads
+## files. Returned dictionaries are shared; reload() clears the cache for next access.
 static func library() -> Dictionary:
 	if _library.is_empty():
 		_library = load_dir()
@@ -63,12 +38,13 @@ static func library() -> Dictionary:
 	return _library
 
 
-## Read it all again (the files were changed).
+## Invalidates cached library; the next library() call reads files again.
 static func reload() -> void:
 	_library = {}
 
 
-## Every .talk file in `path`, merged: {conversations, cast, errors}.
+## Loads sorted .talk files from path (String default), merges/validates data and
+## prints errors. Returns {conversations, cast, errors}, including partial results.
 static func load_dir(path := FOLDER) -> Dictionary:
 	var merged := {"conversations": [], "cast": {}, "errors": []}
 	var seen := {}
@@ -157,7 +133,8 @@ static func validate(conv: Dictionary, traits: Array, names := []) -> Array[Stri
 	return errors
 
 
-## One file's text: {conversations, cast, errors}.
+## Parses text into {conversations, cast, errors}; file labels source locations.
+## Malformed blocks accumulate file:line errors rather than returning null.
 static func parse(text: String, file: String) -> Dictionary:
 	var out := {"conversations": [], "cast": {}, "errors": []}
 	var ids := {}
@@ -254,9 +231,7 @@ static func terms(text: String) -> Array:
 	return result
 
 
-# ---------------------------------------------------------------------------
 # Reading a block
-# ---------------------------------------------------------------------------
 
 static func _key(block: Dictionary, key: String, value: String, at: String, out: Dictionary) -> void:
 	match key:

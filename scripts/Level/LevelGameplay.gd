@@ -1,17 +1,8 @@
 extends RefCounted
-## The game's nodes made from a level's markers (tools/level; LevelLoader):
-## any level's, shared by the maps that load them (the city's districts).
-## Lifted from the garrison's own map (maps/garrison.gd, which keeps its
-## own): doors, lights, water, ladders and ropes, bells, decals, routes,
-## stations and the guards on them; and the city's: things to take (loot,
-## keys, tools), chests, things to throw, the air's noise, the mechanisms
-## (stubs until their sub-project: a portcullis's bars, up or down), the
-## mission's places (objectives, exits, secrets) and the light probes.
-##
-##   var level := LevelLoader.load_level(self, "res://assets/level/city_harbour", "city_harbour")
-##   var made := LevelGameplay.build_all(self, level)      # all but the guards
-##   # ... once the navmesh is baked:
-##   LevelGameplay.guards(self, level, made["routes"], made["stations"], GUARD)
+## Builds gameplay nodes from LevelLoader marker records: doors, lights, water/climbing, routes/stations, pickups, and mission places.
+## build_all() creates everything except guards; create guards after navigation baking.
+## Mechanisms expose metadata stubs, with physical raised/lowered portcullis grids.
+## Marker props and returned collections are documented in docs/systems/world.md.
 
 const Props := preload("res://scripts/Interaction/Props.gd")
 const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
@@ -52,10 +43,8 @@ const BAR := 0.07
 const RAISED_SHOWS := 0.35
 
 
-## Everything a level's markers make but its guards (they want the navmesh
-## baked first): {doors, lights, water, ladders, ropes, bells, decals,
-## routes, stations, pickups, chests, props, noise_zones, mechanisms,
-## smokes}.
+## Creates marker-driven nodes under parent and returns collections keyed by system name (world.md), chimney smoke included.
+## level is a dynamic Level-like object exposing of(), marks, and marker dictionaries. Guards require a separate call after navigation baking.
 static func build_all(parent: Node3D, level) -> Dictionary:
 	var made := {
 		"doors": doors(parent, level), "lights": lights(parent, level), "water": water(parent, level),
@@ -337,8 +326,8 @@ static func stations(parent: Node3D, level) -> Dictionary:
 	return out
 
 
-## The guards where their markers stand, each on his route and stations,
-## as his marker says. After the navmesh is baked.
+## Instantiates scene as CharacterBody3D guards after navigation baking; returns marker-name -> guard.
+## level is dynamic; route_nodes/station_nodes supply existing nodes by name. Missing optional references are ignored.
 static func guards(parent: Node3D, level, route_nodes: Dictionary, station_nodes: Dictionary, scene: PackedScene) -> Dictionary:
 	var out := {}
 
@@ -448,10 +437,6 @@ static func props(parent: Node3D, level) -> Array:
 	return out
 
 
-## Each noise zone (SoundBus: what is made inside is masked by its dB): a
-## steady one's id (taken away again when `parent` leaves the tree); one with
-## a period roars now and then: a Blowhole at its box's top, masking the box
-## only while it roars.
 ## The chimneys' smoke ("smoke" markers: over their pots).
 static func smokes(parent: Node3D, level) -> Array:
 	var out := []
@@ -466,6 +451,8 @@ static func smokes(parent: Node3D, level) -> Array:
 	return out
 
 
+## Returns a mixed Array of SoundBus integer zone IDs and periodic Blowhole nodes.
+## Steady zones are removed on parent.tree_exiting; periodic nodes own their masking lifetime.
 static func noise_zones(parent: Node3D, level) -> Array:
 	var out := []
 	var ids := []
@@ -563,7 +550,7 @@ static func _portcullis(node: Node3D, width: float, height: float) -> void:
 	node.set_meta(&"height", height)
 
 
-## A portcullis up (all but its foot drawn up into its slot) or down.
+## Moves a portcullis Grid and updates state metadata to up/down. Missing Grid is a no-op.
 static func raise(node: Node3D, up: bool) -> void:
 	var grid := node.get_node_or_null("Grid") as Node3D
 

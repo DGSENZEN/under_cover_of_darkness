@@ -1,18 +1,9 @@
 extends RefCounted
-## A guard's stations (GuardStation), when he is at his ease: he walks to his
-## station and does its thing, the next one of his rota when he is done with
-## one (rummaging through one chest after another). Getting up is part of it:
-## whatever stirs him (Guard._set_state leaving RELAXED: stir) ends it the way
-## the station ends: a sitter stands, a sleeper scrambles up (slowest to react
-## of anyone), the carrier drops his crate where he is (loose: something to
-## throw), the quartermaster lets the lid bang shut. He does not go back until
-## he has been at his ease a while (STATION_RETURN).
-##
-## Asleep, he sees nothing (Guard._sense_vision) and hears only loud things
-## (Guard.hear_sound: SLEEP_HEARING of what an awake man hears).
-##
-## Pure behaviour: what the rig shows comes from `activity()` (GuardRig's
-## activity clips), timed to the clips by the lengths below.
+## Owns a guard's station sequence: NONE -> GOING -> ENTER -> DOING -> EXIT.
+## Claims stations exclusively, times activities and exposes activity to GuardRig.
+## Stirring releases props/stations and plays the appropriate exit; sleeping reduces
+## hearing and disables sight. Gathering can temporarily lend a station and restore
+## this guard's own rota when the loan ends.
 
 const GuardStationScript := preload("res://scripts/AISystem/GuardStation.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
@@ -222,8 +213,7 @@ func set_stations(nodes: Array) -> void:
 	_lent = false
 
 
-## Lent `station` for a while (a gathering): he goes to it and does its
-## thing; his own rota waits.
+## Temporarily replaces own stations with a supplied station; end_loan restores them.
 func lend(station: Node3D) -> void:
 	if not _lent:
 		_own = _stations.duplicate()
@@ -301,8 +291,8 @@ func _leave_station() -> void:
 		_activity = &""
 
 
-## Down or dead (Guard._let_go): the crate in his arms falls loose, an open
-## lid is shut, his station is free for another.
+## Releases station ownership, drops carried cargo, closes an open work chest and
+## clears activity; used on incapacitation/death.
 func release() -> void:
 	if carried != null and is_instance_valid(carried):
 		_drop(carried, guard.velocity)
@@ -324,7 +314,8 @@ func release() -> void:
 	_activity = &""
 
 
-## Something stirred him: his station is over, the way it ends.
+## Interrupts station work, releases claims/props and starts applicable exit/wake
+## animation. Resets calm time before a later return to stations.
 func stir() -> void:
 	var station := _held()
 
@@ -367,9 +358,7 @@ func stir() -> void:
 	_activity = &""
 
 
-# ---------------------------------------------------------------------------
 # At a station
-# ---------------------------------------------------------------------------
 
 ## The station of his rota he is on, claimed; the next free one if another
 ## man has it; null if none is free.

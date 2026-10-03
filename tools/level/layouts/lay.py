@@ -19,7 +19,6 @@ class Layout:
         self.ground = []
         self._count = {}
 
-    # ------------------------------------------------------------------
     # Pieces
 
     def put(self, piece, at, yaw=0.0, sector="courtyard", pitch=0.0, roll=0.0, name=None, climbs=False):
@@ -137,7 +136,6 @@ class Layout:
         going away along its yaw."""
         self.put(piece, foot, yaw, sector)
 
-    # ------------------------------------------------------------------
     # Markers
 
     def mark(self, name, ucd, at, yaw=0.0, sector="courtyard", size=None, pitch=0.0, roll=0.0, **props):
@@ -154,7 +152,6 @@ class Layout:
             self.mark("%s_%d" % (name, i + 1), "waypoint", p[:3], yaw=p[3] if len(p) > 3 else 0.0, sector=sector,
                       route=name, order=i + 1, wait=wait)
 
-    # ------------------------------------------------------------------
     # Ground
 
     def terrain(self, t):

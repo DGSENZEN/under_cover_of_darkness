@@ -112,7 +112,6 @@ func _physics_process(_d: float) -> void:
 			labels.append(String(_last_move.label))
 
 
-# --------------------------------------------------------------------------
 func _run() -> void:
 	# T0 plain jump
 	await _place(Vector3(-8, 1.05, 6), 0.0)
@@ -675,7 +674,6 @@ func _run() -> void:
 		"crouched h %.2f standing h %.2f feet %.2f" % [crouched_h, player.collider.shape.height, _feet_y()])
 
 
-# --------------------------------------------------------------------------
 func _box(center: Vector3, size: Vector3) -> void:
 	var body := StaticBody3D.new()
 	var shape := CollisionShape3D.new()

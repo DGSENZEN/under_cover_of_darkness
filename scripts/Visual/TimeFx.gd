@@ -2,7 +2,7 @@ extends RefCounted
 ## The one owner of Engine.time_scale. Hit-stop (a blow freezes the world for
 ## a few hundredths of a second) and slow motion (the finisher) both ask for
 ## time to slow; the slowest request running wins, and when every request is
-## over, time runs at 1 again. Nothing else should write Engine.time_scale.
+## over, time returns to base. Nothing else should write Engine.time_scale.
 ##
 ## Durations are real seconds: the timers ignore the time scale they set.
 
@@ -119,7 +119,7 @@ static func is_active(id: StringName) -> bool:
 	return _requests.has(id)
 
 
-## Everything back to normal speed at once (death, level change, tests).
+## Removes all requests and reapplies base (death, level change, tests); base is unchanged.
 static func clear() -> void:
 	_requests.clear()
 	_apply()

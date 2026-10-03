@@ -1,22 +1,7 @@
 extends Control
-## The words over men's heads, drawn sharp over the retro screen rather than
-## through it: its big pixels break small text into blocks. Retro draws this
-## just over its grid, under the HUD, while the grid is on.
-##
-## Any Label3D in the group "crisp_text" (a guard's "Bark", the NPC gym's
-## thinking labels) is drawn here in 2D, where it is on the screen: in its
-## own font, colour and outline, centred on it; as big as it is in the world
-## (a little bigger: BOOST), but never smaller than MIN_PX nor bigger than
-## MAX_PX; and faded out where the world would draw it too small to read
-## (READ_PX to GONE_PX: a guard's words from about 19 m to 24 m off). It is
-## hidden behind anything solid between your eye and it (a ray every
-## WALL_EVERY s), unless it shows through walls anyway (no_depth_test).
-## While a label is drawn here the 3D one is kept off every render layer, and
-## given back its layers when it is not (the grid off: `drawing` false).
-##
-##   CrispText.top_of(label, camera, view)   the top of its words on the
-##                                           screen (the HUD's marks go
-##                                           above them)
+## Projects grouped Label3D nodes (crisp_text) into sharp 2D text above Retro and below the HUD.
+## Preserves fonts, colours, outlines, projected size, and no_depth_test behavior; solid-world rays test occlusion.
+## While drawing, hides each Label3D by clearing its render layers and restores them when released.
 
 const GROUP := &"crisp_text"
 const BOOST := 1.3
@@ -146,7 +131,7 @@ func _draw() -> void:
 			Color(ink.r, ink.g, ink.b, ink.a * presence), TextServer.BREAK_MANDATORY)
 
 
-## What is drawn now (tests): {"label", "at", "px", "presence", "depth"} each.
+## Returns current projected label records for inspection; does not change Label3D layer ownership.
 func shown() -> Array:
 	return _shown.duplicate()
 

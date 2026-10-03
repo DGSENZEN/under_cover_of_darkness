@@ -1,13 +1,7 @@
 extends RefCounted
-## How each weapon is held in your view, pose by pose. A pose is
-## [grip, blade, edge]: where the grip is (camera space, metres: x right,
-## y up, -z ahead of your eye), which way the blade points, and which way its
-## true edge faces (the knuckle side of the fist). The weapon is always in the
-## fist and the fist always on the grip: your arm reaches for whatever this
-## says (ViewArms.gd), so these are the arm's poses as much as the blade's.
-##
-## Every pose here was set by looking at it in the view
-## (tests/visual/stage_arms.tscn), with a wrist that bends the way wrists do.
+## Camera-space weapon poses: [grip: Vector3, blade: Vector3, edge: Vector3].
+## Positions use metres, +X right, +Y up, -Z ahead. Blade models use +Y along
+## the blade and +X along its true edge; bow poses use [grip, up, shooting].
 
 ## A one-handed sword. A swing is a sweep (see sweep_frame): the fist
 ## carried round a wide arc by the turn of your body, not flicked from the
@@ -134,6 +128,7 @@ const ITEM := {
 }
 
 
+## Returns shared pose data for id; unknown IDs use generic ITEM poses.
 static func set_of(id: StringName) -> Dictionary:
 	match id:
 		&"sword":
@@ -148,8 +143,8 @@ static func set_of(id: StringName) -> Dictionary:
 	return ITEM
 
 
-## A pose as the weapon's frame: its grip at the origin, the blade +Y, the
-## true edge +X. A bow: the stave +Y, the way it shoots -Z.
+## Converts [grip, blade, edge] Vector3 entries to a camera-space weapon transform.
+## Requires valid nonparallel direction vectors; does not validate malformed arrays.
 static func frame(pose: Array) -> Transform3D:
 	var blade: Vector3 = (pose[1] as Vector3).normalized()
 	var edge: Vector3 = pose[2]
@@ -157,8 +152,7 @@ static func frame(pose: Array) -> Transform3D:
 	return Transform3D(Basis(edge, blade, edge.cross(blade)), pose[0])
 
 
-## A bow's pose: [grip, stave up, shooting direction] as the bow's frame
-## (the stave +Y, the string toward you +Z).
+## Converts [grip, up, shooting_direction] Vector3 entries to a camera-space bow transform.
 static func bow_frame(pose: Array) -> Transform3D:
 	var up: Vector3 = (pose[1] as Vector3).normalized()
 	var ahead: Vector3 = pose[2]

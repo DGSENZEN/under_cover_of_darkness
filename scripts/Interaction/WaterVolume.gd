@@ -1,20 +1,8 @@
 extends Area3D
-## A body of water: a box, its top the surface (the node's origin is the
-## middle of the box, `size` its extent, not turned). What it does:
-##   deep       deeper than a man can stand in (SWIM_DEPTH): he swims. The
-##              player floats with his eyes above the surface, dives and comes
-##              up; a guard swims after you along its own navmesh (NavBaker
-##              bakes one per body of water, dearer to cross than land) and
-##              climbs out where the bank is low enough (NavLinks).
-##   shallow    up to the thigh: slow going, and every step splashes.
-##   splash     anything coming into it fast is heard (SoundBus) and seen.
-##   afloat     loose things (a crate, a stool) float, and are slowed.
-##   murk       under the surface you are hard to see.
-## Levels place them with build() or as nodes with a BoxShape3D child; the
-## navmesh must be baked after (NavBaker does it on load).
-##
-##   WaterVolume.build(parent, centre, size)
-##   WaterVolume.at(tree, point)   the water `point` is in, or null
+## Axis-aligned water Area3D; origin is box centre, size is full XYZ extent.
+## Its top is the surface; terrain below determines standable depth. Water
+## registers movement contacts, floats loose bodies, emits splashes, and
+## provides shoreline/light data to shaders. Bake navigation after placement.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -71,7 +59,7 @@ var render_clock := 0.0
 var _moon: DirectionalLight3D
 
 
-## Water filling a `size` box centred on `centre`, its top the surface.
+## Attaches an axis-aligned water box centred at world centre with full XYZ box_size.
 static func build(parent: Node, centre: Vector3, box_size: Vector3) -> Area3D:
 	var water: Area3D = (load("res://scripts/Interaction/WaterVolume.gd") as GDScript).new()
 	water.name = "Water"
@@ -81,9 +69,8 @@ static func build(parent: Node, centre: Vector3, box_size: Vector3) -> Area3D:
 	return water
 
 
-## The water `point` is in (below its surface, above its bottom, inside it),
-## or null. `above`: count this far over the surface as in it (a man's feet
-## just clear of it).
+## Returns the first grouped water volume containing world point, or null.
+## above extends only the upper boundary in metres.
 static func at(tree: SceneTree, point: Vector3, above := 0.0) -> Area3D:
 	for water in tree.get_nodes_in_group(&"water"):
 		if water.has_method("holds") and water.holds(point, above):
@@ -150,8 +137,8 @@ func depth_of(point: Vector3) -> float:
 	return surface_y() - point.y
 
 
-## The floor under the water at `point` (a ray down from the surface), or
-## the bottom of the box if nothing is there.
+## Raycasts down from the surface on terrain layer 1; returns world floor Y
+## or bottom_y() on miss. exclude contains body RIDs.
 func floor_under(point: Vector3, exclude: Array[RID] = []) -> float:
 	var from := Vector3(point.x, surface_y() + 0.05, point.z)
 	var to := Vector3(point.x, bottom_y() - 0.5, point.z)
@@ -166,8 +153,8 @@ func deep_at(point: Vector3) -> bool:
 	return surface_y() - floor_under(point) > SWIM_DEPTH
 
 
-## Something went in at `at`, this fast: a splash, heard as far as it was
-## hard (`db` over the base), and a spray.
+## Emits noise/spray at surface-projected world at, scaled by speed; body may be null.
+## This method has no minimum-speed guard; body-entry callers apply SPLASH_SPEED.
 func splash(at: Vector3, speed: float, body: Node = null) -> void:
 	var on_top := Vector3(at.x, surface_y(), at.z)
 	var hard := clampf((speed - SPLASH_SPEED) / 8.0, 0.0, 1.0)
@@ -429,9 +416,8 @@ func _surface_parameter(parameter: StringName, value: Variant) -> void:
 		_shore_paint.set_shader_parameter(parameter, value)
 
 
-## Rebuild after changing static bank geometry. Rays start just above the
-## water, so bridges overhead cannot be mistaken for its bed. Layer 1 is
-## the level's solid terrain, matching floor_under; actors are excluded.
+## Restarts the terrain-only shoreline survey after static bank geometry changes.
+## Rays start above the water to avoid overhead bridges; work spans physics ticks.
 func refresh_shoreline() -> void:
 	await get_tree().physics_frame
 	await get_tree().physics_frame

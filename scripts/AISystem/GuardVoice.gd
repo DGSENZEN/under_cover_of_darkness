@@ -1,33 +1,8 @@
 extends RefCounted
-## A man's voice and breath.
-##   heart     his heart rate, 60 asleep to 170 fighting, running, terrified:
-##             it eases toward what his state asks (GOAL), plus running, fear
-##             (the garrison's dread weighing on his nerve) and wounds; up
-##             fast, down at his own pace. Kept up there, it tires him
-##             (exhaustion, three steps, each raising where it settles).
-##   breath    how fast he breathes follows his heart; racing, you hear it,
-##             each breath out (frightened breathing if he is afraid). A
-##             sleeper breathes slow and soft. Where the level is cold (its
-##             `cold` meta), now and then a breath out is heard on the cold
-##             air, softly, under everything else. Expression.gd lifts his
-##             chest with it and Atmosphere.gd shows it on the cold air.
-##   at ease   now and then he sighs.
-##   the ladder  breath < chatter < call-out < pain < death: a louder thing
-##             stops a quieter one on the same man, and nothing quieter
-##             starts over a louder one until it has passed.
-##   murmur    a line of a conversation is heard as his nods and "hm"s,
-##             whole takes one after another with a breath between, as many
-##             as fit the line; pitched to him, softer whispered, harder
-##             shouted, from his head; the subtitle carries the words.
-##   emotes    a laugh, a sigh, a cough, a spit (the throat cleared), a
-##             grunt, a nod: their own sounds.
-##   whose     every voice is one of NOX's Voices Essentials: a big man the
-##             deep one (plain names), others the deep one or the lighter
-##             ("_b") by his seed, a woman hers ("_f"); `voiced`. What one
-##             never recorded he says in the other man's voice.
-##
-## Every sound is a recording (Sfx): with none for a name, it is silent, and
-## the rest works the same.
+## Owns voice priority, heart rate, breathing and conversation murmurs.
+## Priority rises from BREATH through CHATTER, CALL, PAIN and DEATH; louder events
+## interrupt quieter playback. Heart and exhaustion follow state, movement and fear.
+## Sfx recordings provide audio; missing recordings are silent without stopping logic.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
@@ -184,9 +159,8 @@ func hold_heart(bpm: float) -> void:
 		heart = bpm
 
 
-## Says something on rung `rung` of the ladder: false (nothing said) if
-## something louder is sounding. A line of chatter is murmured; anything
-## louder stops a murmur.
+## Attempts text playback at a priority rung; returns false if higher-priority audio
+## blocks it. Accepted playback can replace quieter audio and start a murmur.
 func utter(rung: int, text: String, delivery: StringName) -> bool:
 	if sounding() > rung:
 		return false
@@ -274,9 +248,7 @@ func delivery_for(marked: StringName, uneasy: bool) -> StringName:
 	return &"whisper" if uneasy else &""
 
 
-# ---------------------------------------------------------------------------
 # The heart
-# ---------------------------------------------------------------------------
 
 func _update_heart(delta: float) -> void:
 	if _held >= 0.0:
@@ -338,9 +310,7 @@ func _fear() -> float:
 	return float(garrison.fear_of(float(fighter.temper.nerve))) if garrison != null else 0.0
 
 
-# ---------------------------------------------------------------------------
 # Breath
-# ---------------------------------------------------------------------------
 
 func _update_breath(delta: float) -> void:
 	var was_out := out_breath()
@@ -412,9 +382,7 @@ func _cold() -> bool:
 	return level != null and bool(level.get_meta(&"cold", false))
 
 
-# ---------------------------------------------------------------------------
 # The murmur
-# ---------------------------------------------------------------------------
 
 func _murmur(length: float, delivery: StringName) -> void:
 	_murmur_start = clock

@@ -105,9 +105,7 @@ func _ready() -> void:
 
 
 func _run() -> void:
-	# ------------------------------------------------------------------
 	# Getting about
-	# ------------------------------------------------------------------
 
 	# W1 two men meeting in a passage pass each other
 	await _fresh()
@@ -162,9 +160,7 @@ func _run() -> void:
 	_check("W4 chasing a runner he makes for where you will be, not where you are", run.length() > 3.0 and lead > 0.8,
 		"your speed %.1f, his goal %.2f m ahead of you" % [run.length(), lead])
 
-	# ------------------------------------------------------------------
 	# Word, and lookouts
-	# ------------------------------------------------------------------
 
 	# W5 a lookout who sees you stays at his post and calls where you are
 	await _fresh()
@@ -241,9 +237,7 @@ func _run() -> void:
 		talking and turns and not talker._life.talking() and not listener._life.talking(),
 		"talking %s lines %s, after the noise %s/%s" % [talking, said_by.map(func(e): return e[1]), talker._life.talking(), listener._life.talking()])
 
-	# ------------------------------------------------------------------
 	# Things out of place
-	# ------------------------------------------------------------------
 
 	# W9 a door you left open is noticed and shut
 	await _fresh()
@@ -311,9 +305,7 @@ func _run() -> void:
 	_check("W12 searching in the dark with the garrison roused, he lights a lantern (and it lights him)",
 		searcher._hands.lantern != null and lit > 0.1, "lantern %s light %.2f" % [searcher._hands.lantern != null, lit])
 
-	# ------------------------------------------------------------------
 	# The world, turned on you
-	# ------------------------------------------------------------------
 
 	# W13 lit powder near him in a fight: he gets clear and shouts it
 	await _fresh()
@@ -444,9 +436,7 @@ func _run() -> void:
 	_check("W19 your back to spikes: he sees them and puts his boot into you", saw_it[0] and kicked[0], "saw the spikes %s kicked %s" % [saw_it[0], kicked[0]])
 	player.invulnerable = true
 
-	# ------------------------------------------------------------------
 	# Their blows, and how they read you
-	# ------------------------------------------------------------------
 
 	# W20 what follows a blow answers how it went
 	await _fresh()
@@ -488,9 +478,7 @@ func _run() -> void:
 		float(squad21.read[&"parry"]) >= 0.85 and squad21.bonus(&"feint") > feint_before + 0.2 and squad21.bonus(&"delay") > 0.25 and squad21.bonus(&"perilous") > 0.45,
 		"read %.2f feint %.2f -> %.2f delay %.2f perilous %.2f" % [squad21.read[&"parry"], feint_before, squad21.bonus(&"feint"), squad21.bonus(&"delay"), squad21.bonus(&"perilous")])
 
-	# ------------------------------------------------------------------
 	# The hunt
-	# ------------------------------------------------------------------
 
 	# W22 one who still sees you tells the one who cannot where you are
 	await _fresh()
@@ -571,9 +559,7 @@ func _run() -> void:
 	_check("W26 a man sent for help makes for the bell when it is nearer than any man", help == bell26, "fetching %s" % [help])
 	bell26.queue_free()
 
-	# ------------------------------------------------------------------
 	# At your mercy
-	# ------------------------------------------------------------------
 
 	# W27 broken and caught, badly hurt: his blade thrown down, on his knees
 	await _fresh()
@@ -827,7 +813,6 @@ func _wall_torch(at: Vector3) -> Node3D:
 	return torch
 
 
-# --------------------------------------------------------------------------
 
 ## A guard of `archetype` at `at`, facing `yaw`. Engaged: fighting you, not
 ## striking until told.

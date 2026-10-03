@@ -905,7 +905,6 @@ func _run() -> void:
 		"remarks on the way %s, talked %s" % [muttered, together])
 
 
-# ---------------------------------------------------------------------------
 
 ## His blade put by (in its scabbard, or slung), none in his hand.
 func _at_hip(man: Node) -> bool:

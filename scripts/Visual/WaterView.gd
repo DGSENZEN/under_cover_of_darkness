@@ -9,6 +9,8 @@ var visible_effect := false
 var _quad: MeshInstance3D
 var _material: ShaderMaterial
 
+## Schedules one WaterView child for viewport, guarded by a pending metadata flag.
+## The view survives level replacement and tracks the active camera/water; null viewport is not supported.
 static func ensure(viewport: Viewport) -> void:
 	if viewport.get_node_or_null("WaterView") != null or viewport.has_meta("water_view_pending"):
 		return

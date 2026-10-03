@@ -227,7 +227,6 @@ func _run() -> void:
 		"per-frame steps %.4f..%.4f m" % [crate_steps.min(), crate_steps.max()])
 
 
-# --------------------------------------------------------------------------
 
 ## Keeps what `read` gives after every frame's _process, for `frames` frames.
 func _record(read: Callable, frames: int) -> Array:

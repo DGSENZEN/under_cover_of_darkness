@@ -1,14 +1,6 @@
-// The wardrobe's PS2 look (Wardrobe.gd), shared by wardrobe.gdshader and its
-// two-sided twin. The light is already painted into the albedo (baked in
-// Blender: ambient occlusion and a soft top light), so the game adds only
-// diffuse light and shadow on top: no specular, a soft terminator. Each
-// guard is his own through instance uniforms: his tabard's dye and how
-// faded it is, his skin under his face's, how dirty he is. All the guards
-// of a kind share one material.
-//
-// The mask says where each applies: red the dye, green bare skin, blue the
-// dirt. Nearest sampling is set here: the Retro autoload only converts
-// standard materials.
+// Shared wardrobe shading for closed and two-sided parts. Baked albedo contains AO/top light;
+// runtime adds diffuse light/shadow, without specular. Instance dye/fade/skin/grime vary each guard.
+// Mask red=dye, green=skin, blue=dirt. Shader nearest sampling is explicit because Retro converts standard materials only.
 
 uniform sampler2D albedo : source_color, filter_nearest_mipmap, repeat_disable;
 uniform sampler2D mask : filter_nearest_mipmap, repeat_disable;

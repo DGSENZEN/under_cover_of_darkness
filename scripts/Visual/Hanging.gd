@@ -1,16 +1,7 @@
 extends Node3D
-## Something hanging from a hand by its bail (a lantern): kept straight down
-## under where it is held, whichever way the hand turns, and swinging a
-## little as the hand moves, as a pendulum would. Its children hang below it.
-##
-##   var grip := Node3D.new()                 # where the fist holds the bail
-##   man.attach(&"hand_r", grip, Humanoid.FIST_R)
-##   var hanging := Hanging.new()
-##   grip.add_child(hanging)
-##   hanging.add_child(lantern)               # below it: lantern.position.y < 0
-##
-## It follows the hand once the skeleton has its pose for the frame
-## (Skeleton3D.skeleton_updated), so it never lags the fist it hangs from.
+## Hand-held pendulum anchor: children hang beneath the grip, stay upright, and swing with hand movement.
+## Updates from Skeleton3D.skeleton_updated so its world transform follows the final hand pose.
+## Humanoid.attach() supplies the grip; children use negative local Y below it.
 
 ## How far below the bail its weight hangs (m): the pendulum's length.
 @export var length := 0.22

@@ -1,9 +1,7 @@
 extends RefCounted
-## A validated, choreographed movement. The controller carries the body along
-## `points` over `duration` seconds, then hands back `exit_velocity`.
-##
-## The planner validates the path before it starts. Playback checks it again
-## so a door or actor entering the path can safely interrupt the move.
+## Validated traversal path of world-space body origins, played over duration.
+## Call bake() after changing points. Playback rechecks collision so moving
+## actors and doors can interrupt a path that was clear when planned.
 
 var label: StringName = &""
 var kind := 0
@@ -52,6 +50,7 @@ var total_length := 0.0
 var _cumulative := PackedFloat32Array()
 
 
+## Rebuilds cumulative segment lengths and total_length after points change.
 func bake() -> void:
 	_cumulative.clear()
 	_cumulative.append(0.0)
@@ -62,7 +61,8 @@ func bake() -> void:
 		_cumulative.append(total_length)
 
 
-## s is the normalized distance along the whole path, 0..1.
+## Samples clamped normalized distance s in 0..1 after bake().
+## Empty points return Vector3.ZERO; a zero-length path returns its final point.
 func position_at(s: float) -> Vector3:
 	if points.is_empty():
 		return Vector3.ZERO

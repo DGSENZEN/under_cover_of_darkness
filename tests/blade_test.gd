@@ -405,9 +405,7 @@ func _run() -> void:
 	await _frames(20)
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 ## A guard fighting you, facing you, who throws only `kind` when told to
 ## (_attack_timer = 0), one at a time, and does not defend.

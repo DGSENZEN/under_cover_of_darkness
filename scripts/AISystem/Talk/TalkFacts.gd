@@ -1,16 +1,9 @@
 extends RefCounted
-## What a conversation's conditions read: the night, the garrison, the men
-## there. All of it plain data, gathered when a conversation is weighed
-## (`world`, `man`) and read by `holds` (a `when:` term) and `meets` (a part's
-## requirement, or a line's {if}). Casting (`cast_parts`) and how specific a
-## conversation is (`specificity`) work on the same data, so they can be
-## checked without anyone in the yard (`sheet_man`).
-##
-## A man, as the talk sees him:
-##   {name, temper, rank, kind, traits, ties, states, station, near,
-##    quiet_for, node}
-## where `states` is {tired, hungry, cold, hurt (0..1), grieving, afraid,
-## asleep (bools)}.
+## Builds plain dictionary facts for conversation selection and casting.
+## man()/sheet_man() describe participants; world() describes level conditions.
+## holds()/meets() evaluate terms, known() validates vocabulary, and cast_parts()
+## assigns distinct participants. Sheet facts permit checks without live guard nodes.
+## Measured states are tired/hungry/cold/hurt; grieving/afraid/asleep are booleans.
 
 const GuardLifeScript := preload("res://scripts/AISystem/GuardLife.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
@@ -53,9 +46,7 @@ const SITUATIONS := ["status", "excuse", "spotted_ask", "man_down", "last_man", 
 	"tactic_envelop", "tactic_press", "tactic_break", "tactic_rush", "tactic_fall_back", "tactic_rout"]
 
 
-# ---------------------------------------------------------------------------
 # Gathering
-# ---------------------------------------------------------------------------
 
 ## Asleep: on his bed (GuardRota), or nodded off in his seat (GuardHabits).
 static func asleep(guard: Node) -> bool:
@@ -104,8 +95,8 @@ static func man(guard: Node, sheet: Dictionary) -> Dictionary:
 	return facts
 
 
-## A man known only from the cast sheet (no one in the yard): for checks, and
-## the start of `man`.
+## Returns participant facts from name-keyed sheet data; node is null.
+## temper/kind default to StringNames; states include numeric needs and boolean moods.
 static func sheet_man(name: String, sheet: Dictionary, temper := &"steady", kind := &"") -> Dictionary:
 	var entry: Dictionary = sheet.get(name, {})
 	# Unranked on the sheet, a man is ranked by his kind.
@@ -250,9 +241,7 @@ static func world(men: Array, tree: SceneTree, extra := {}) -> Dictionary:
 	return facts
 
 
-# ---------------------------------------------------------------------------
 # Reading
-# ---------------------------------------------------------------------------
 
 ## Whether a `when:` term (one alternative) holds.
 static func holds(term: String, world: Dictionary, cast := {}) -> bool:
@@ -394,14 +383,11 @@ static func known(term: String, as_requirement: bool, traits := [], names := [])
 	return term == "any" or term == "captain" or TEMPERS.has(term) or STATES.has(term) or traits.has(term)
 
 
-# ---------------------------------------------------------------------------
 # Casting
-# ---------------------------------------------------------------------------
 
-## The men of `men` (in the order given: the quietest first) in the parts of
-## `conv`, {part: man}, the assignment meeting most requirements; {} if a part
-## that must be filled cannot be. `allowed.call(man, part)` can refuse a man
-## a part.
+## Returns part -> participant-facts Dictionary; {} if required parts cannot be cast.
+## men is an untyped Array of fact dictionaries; optional allowed Callable filters
+## assignments. Each participant is used once; optional parts may be omitted.
 static func cast_parts(conv: Dictionary, men: Array, world: Dictionary, allowed := Callable()) -> Dictionary:
 	var best := {"score": -1, "cast": {}}
 	_search(conv["cast"], 0, men, {}, 0, world, allowed, best)
@@ -466,9 +452,7 @@ static func _fits(m: Dictionary, reqs: Array, cast: Dictionary, world: Dictionar
 	return true
 
 
-# ---------------------------------------------------------------------------
 # Words
-# ---------------------------------------------------------------------------
 
 ## "dead>=2" is ["dead", ">=", 2.0]; [] if it is no comparison.
 static func _compare(term: String) -> Array:

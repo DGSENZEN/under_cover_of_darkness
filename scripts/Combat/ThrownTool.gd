@@ -1,17 +1,7 @@
 extends Node3D
-## A tool thrown off your belt (PlayerFrob): it flies itself under gravity, a
-## ray along each step of its path (as Arrow.gd, so it never passes through a
-## thin wall), turning over as it goes, and bursts where it lands (or in the
-## air, its fuse run out):
-##
-##   flashbomb   a flash of white fire and a bang. A guard who has it in his
-##               eyes (in his view, nothing between, near enough) is blinded
-##               a few seconds (Guard.dazzle: more the nearer, and the more
-##               squarely he looked at it); everyone near hears it. Your own
-##               eyes too, if you are looking at it (StealthHUD.dazzle).
-##   waterflask  glass breaking and a splash. A torch on a wall in the splash
-##               goes out (Torch.put_out, by you: the guards treat it as one
-##               you put out by hand); the breaking glass is heard.
+## Ray-swept belt projectile; set kind before launch(). Flash bombs blind
+## visible nearby guards and the thrower; water flasks douse nearby torches.
+## A hit or the 3 s fuse applies the effect once and frees the projectile.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -50,7 +40,8 @@ var _visual: MeshInstance3D
 var _burst := false
 
 
-## Off it goes from `from` along `aim` (a direction), shown as `mesh`.
+## Sets world start and normalized aim velocity; by is the thrower, mesh may be null.
+## Adds an optional visual and resets interpolation; kind selects the burst effect.
 func launch(from: Vector3, aim: Vector3, mesh: Mesh, by: Node3D) -> void:
 	thrower = by
 	global_position = from
@@ -129,8 +120,8 @@ func _go_off(at: Vector3, normal: Vector3, struck: Object) -> void:
 	queue_free()
 
 
-## A flash bomb going off at `at`: the flash and the bang; every guard who
-## has it in his eyes blinded as far as he does; your own eyes too.
+## Emits flash/bang at world at and blinds visible guards/thrower where supported.
+## Without a physics world, presentation still runs but visibility checks stop.
 static func flash(context: Node, at: Vector3, by: Node3D) -> void:
 	Fx.flash(context, at, Color(1.0, 0.97, 0.9), 14.0, 13.0, 0.4)
 	Fx.sparks(context, at, Vector3.UP, 1.4, false)
@@ -179,8 +170,8 @@ static func flash(context: Node, at: Vector3, by: Node3D) -> void:
 				hud.dazzle(smoothstep(0.3, 0.9, squarely) * (1.0 - 0.6 * smoothstep(FLASH_FULL, FLASH_REACH, to.length())))
 
 
-## A water flask breaking at `at`: glass and a splash; a torch whose flame is
-## in the splash goes out, put out by `by`.
+## Emits glass/splash at world at and douses lit torches within reach and line of sight.
+## Optional struck identifies a directly hit flame; no physics world skips occlusion.
 static func splash(context: Node, at: Vector3, normal: Vector3, by: Node3D, struck: Object = null) -> void:
 	Sfx.play(context, &"ting", at, -4.0, 1.6)
 	Sfx.play(context, &"step_water_run", at, -2.0, 1.3)

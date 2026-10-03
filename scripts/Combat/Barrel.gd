@@ -1,13 +1,8 @@
 extends RigidBody3D
-## A barrel of lamp oil and black powder. An arrow, a heavy blow, fire, or
-## another barrel going up next to it lights the fuse; a moment later it
-## bursts and throws everyone near it off their feet. Quick cuts and kicks
-## only knock it about, so it can be rolled into place first, or picked up
-## and thrown.
-##
-## Guards caught in it are hurt by how close they stood (a wall between them
-## and it takes most of the blast) and flung like a kick; you are too. Every
-## guard in earshot hears it, and none of them knows who did it.
+## Carryable explosive RigidBody3D. Power, arrow, blast, and fire strikes light
+## the fuse; quick cuts and kicks can reposition it. explode() damages and
+## pushes nearby receivers, attenuates blasts behind walls, chains barrels,
+## emits presentation/noise, and frees the barrel.
 
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const RagdollScript := preload("res://scripts/Visual/Ragdoll.gd")
@@ -91,7 +86,7 @@ func strike(kind: StringName, _point: Vector3, _direction := Vector3.ZERO) -> vo
 		light()
 
 
-## Starts the fuse. A shorter one when set off by another blast.
+## Starts the fuse once; negative seconds uses fuse, nonnegative seconds overrides it.
 func light(seconds := -1.0) -> void:
 	if lit or _gone:
 		return
@@ -122,6 +117,8 @@ func _physics_process(delta: float) -> void:
 		explode()
 
 
+## Applies one blast and emits exploded(world position), then queues deletion.
+## Repeated calls are ignored; wall occlusion reduces nonstatic target strength to 35%.
 func explode() -> void:
 	if _gone:
 		return

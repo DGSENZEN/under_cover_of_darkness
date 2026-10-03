@@ -1,66 +1,6 @@
 extends Node3D
-## The NPC gym: every kind of guard on his own, and all of them together, to
-## watch what they do and try what works against them.
-##
-##   Godot --path . res://maps/npc_gym.tscn
-##
-##   A corridor runs north from the hub, eight bays off it, each behind its
-##   own walls (a fight in one is not heard in the next):
-##   1 WATCHMAN   a patrol through light and dark, a noisy floor and a quiet
-##                one, a crate to throw: his alert, his sight, his search. A
-##                second man stands his post by the patrol's corner: they
-##                talk when the patrol stops there, and when one hears
-##                something he goes to look while the other covers him. The
-##                storeroom door: open it and leave it, and it is noticed.
-##                Shoot an arrow into a wall and it is found.
-##   2 SWORDSMAN  guards, trades blows, reads a rhythm, kicks a turtle. Parry
-##                right on his blow (a perfect deflect), or cut as his comes (a
-##                counter); after his glint a cut of yours no longer stops his.
-##   3 SWORDMASTER parries and answers, feints, steps out of long swings.
-##                Step into her thrust as it comes (forward and Q): Mikiri.
-##   4 BRUTE      the blow no guard stops (dodge it: Q), cuts do not stop him.
-##   5 ARCHER     keeps his distance behind cover, shoots; kicks you off.
-##   6 SQUAD      a swordmaster, a swordsman, a brute and an archer together:
-##                a leader and a plan (Squad.gd), called out as it changes.
-##   7 BODIES     weak men, spikes, powder, a hanging weight, a ledge: kick
-##                them (running, or while they swing), cut them apart.
-##   8 ARMS MASTER a steady beat to parry, deflect, counter and Mikiri, and
-##                straw men to cut.
-##   9 GUARDHOUSE through the hub's south wall: a squad in a lit yard, off-duty
-##                men in a barracks down a passage (a man who breaks runs to
-##                fetch them: catch him and he throws his blade down and begs
-##                for his life; walk away and he runs to his own), and a dark
-##                loop of corridors behind to lose them in and watch them hunt
-##                you. A lookout on a platform in
-##                the yard's far corner calls where you are and rings the bell
-##                (and the barracks wakes); crates to be thrown, powder to be
-##                shot; landmarks they call you by (the well, the gate, the
-##                barracks, the dark passage).
-##   10 CLIMB & SWIM at the corridor's north end: a block, a tower with a
-##                ladder, two roofs with a gap between, and a pool. Get up,
-##                across or into the water and they come after you: they
-##                climb, drop, leap, and swim (NavLinks, GuardClimb,
-##                GuardWater). Nobody strikes afloat: in the water they swim
-##                after you and wait for you to climb out. Hit a man on the
-##                ladder and he falls.
-##   11 GARRISON  through a door in bay 10's west wall: a courtyard at night
-##                and its men at their ease, none of them looking for you,
-##                each in his own way (GuardHabits): a patrol with a torch, one
-##                on the walkway with a lantern, a man at the gate leaning on
-##                the wall, one splitting logs and shifting crates, one at the
-##                mess table eating and gossiping, one dozing on a bench in the
-##                dark, one at the campfire. A rope and a chain go up to a
-##                tower and the walkway. Stir them and it is all dropped.
-##
-##   1-9  go to that bay and start it (again)     -  bay 10     =  bay 11     0  back to the hub
-##   F1   what each of them is thinking, over his head: his temperament,
-##        his place, his resolve
-##   F2   you cannot be hurt      F4  everyone freezes      R  rest
-##   F3   sight cones (the debug overlays)
-##   F5   the garrison forgets you (starting a bay does not: what they
-##        learn of you, and their dread, carry from one bay to the next)
-##
-## A lever at each bay's mouth starts it too.
+## Builds isolated practice bays for guard senses, life, combat and traversal.
+## Each bay uses production guard helpers; navigation and routes belong to this scene.
 
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
@@ -151,9 +91,7 @@ func _ready() -> void:
 	_say("The NPC gym. Press 1-9, - or = (or pull a lever) to start a bay. F1 shows what they think.")
 
 
-# ---------------------------------------------------------------------------
 # The place
-# ---------------------------------------------------------------------------
 
 func _hall() -> void:
 	# The hub, lit, with the notice.
@@ -494,9 +432,7 @@ func _wall_along_x(z: float, x0: float, x1: float) -> void:
 	Props.block(self, Vector3((x0 + x1) * 0.5, 2.1, z), Vector3(x1 - x0, 4.2, 0.6), STONE)
 
 
-# ---------------------------------------------------------------------------
 # Starting a bay
-# ---------------------------------------------------------------------------
 
 func _start_bay(index: int) -> void:
 	var spec: Array = BAYS[index]
@@ -798,9 +734,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
-# ---------------------------------------------------------------------------
 # What they are thinking
-# ---------------------------------------------------------------------------
 
 func _info_label(g: CharacterBody3D) -> void:
 	var label := Label3D.new()
@@ -1012,9 +946,7 @@ func _update_panel() -> void:
 	_panel.text = text + "   ".join(places)
 
 
-# ---------------------------------------------------------------------------
 # Calling it out (as the proving grounds do)
-# ---------------------------------------------------------------------------
 
 func _hook_player() -> void:
 	var combat: Node = player.combat
@@ -1141,9 +1073,7 @@ func _banner_text(text: String) -> void:
 		_banner_timer = 2.0
 
 
-# ---------------------------------------------------------------------------
 # Building bits
-# ---------------------------------------------------------------------------
 
 func _stairs(start: Vector3, direction: Vector3, count: int, rise: float, run: float, width: float) -> void:
 	var across := Vector3.UP.cross(direction).abs()

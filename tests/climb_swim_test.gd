@@ -86,9 +86,7 @@ func _ready() -> void:
 
 
 func _run() -> void:
-	# ------------------------------------------------------------------
 	# The ways across
-	# ------------------------------------------------------------------
 
 	# L1 found: onto the block and down again, off the tower, up the ladder,
 	#    across the gap, into the water and out; not up the bare wall
@@ -112,9 +110,7 @@ func _run() -> void:
 		bottom.y > POOL_SURFACE - 0.2 and not swims and round_path.size() > 0,
 		"nearest navmesh to the bottom at %.2f (surface %.2f); across the pool swims %s" % [bottom.y, POOL_SURFACE, swims])
 
-	# ------------------------------------------------------------------
 	# Guards after you
-	# ------------------------------------------------------------------
 
 	# G1 you up on the block: he climbs up after you
 	await _fresh()
@@ -244,9 +240,7 @@ func _run() -> void:
 		stayed and waited and waiter.global_position.y > 3.3 and did_wait.has(&"ladder"),
 		"you stayed %s, he waited %s (at %s, nearest below you %.2f), then at %s, did %s" % [stayed, waited, waited_at, closest, waiter.global_position, did_wait])
 
-	# ------------------------------------------------------------------
 	# Water
-	# ------------------------------------------------------------------
 
 	# W1 you in deep water: afloat with your eyes out, swimming; under at
 	#    crouch; out onto the bank with a jump at it
@@ -360,7 +354,6 @@ func _run() -> void:
 			player.scanner.last_reject])
 
 
-# --------------------------------------------------------------------------
 
 ## A house 6 m to its eaves with its front (+z) 3 m from `at`, a roof of two
 ## 20-degree slopes (their colliders stopping at the walls, as the city's

@@ -66,9 +66,7 @@ RAMPS = {
 }
 
 
-# ---------------------------------------------------------------------------
 # PNG out (exact bytes: no colour management between the numbers and the file)
-# ---------------------------------------------------------------------------
 
 def write_png(path, pixels, backup_dir=BACKUP):
     """8-bit PNG from a uint8 array, (h, w) grey or (h, w, 4) RGBA, top row
@@ -99,9 +97,7 @@ def quantise(values, levels):
     return (np.round(np.clip(values, 0.0, 1.0) * steps) * (255 // steps)).astype(np.uint8)
 
 
-# ---------------------------------------------------------------------------
 # The noise, rendered by Cycles
-# ---------------------------------------------------------------------------
 
 class NoiseStage:
     """A plane in the XZ plane (x across the frame, z up from the fuel at 0 to
@@ -199,9 +195,7 @@ class NoiseStage:
         return pixels[::-1, :, :3]
 
 
-# ---------------------------------------------------------------------------
 # Flames
-# ---------------------------------------------------------------------------
 
 def smoothstep(edge0, edge1, x):
     t = np.clip((x - edge0) / (edge1 - edge0), 0.0, 1.0)
@@ -252,9 +246,7 @@ def make_flame(name):
     print("flame_%s: %d frames of %dx%d" % (name, make["frames"], width, height))
 
 
-# ---------------------------------------------------------------------------
 # Smoke, corona, soot, ramps
-# ---------------------------------------------------------------------------
 
 def make_smoke(seed=11):
     rng = np.random.default_rng(seed)

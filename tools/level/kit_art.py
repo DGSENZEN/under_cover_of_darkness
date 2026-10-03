@@ -17,10 +17,8 @@ RAIL = 0.12
 PROUD = 0.05
 
 
-# ---------------------------------------------------------------------------
 # Banners: the garrison's arms on cloth, hung from an iron rod on two
 # brackets into the wall behind (local -z), its tails at its foot (y 0).
-# ---------------------------------------------------------------------------
 
 BANNER = (1.0, 2.5)
 
@@ -33,13 +31,11 @@ k.model("banner", [ks.card(0.0, BANNER[1] / 2.0, 0.035, BANNER[0], BANNER[1], "b
                    ks.box(BANNER[0] / 2.0 - 0.05, BANNER[1] + 0.03, 0.02, 0.03, 0.03, 0.07, "iron")])
 
 
-# ---------------------------------------------------------------------------
 # The gate's arches: a round arch over each end of the passage, standing
 # proud of the gatehouse's faces up to their tops, its hood of voussoirs, a
 # keystone, imposts at its springing, a course at the walk's level. Its top
 # (over the walk's floor) is the walk's parapet there, and solid; the rest
 # hangs over the passage, never in it.
-# ---------------------------------------------------------------------------
 
 GATE = {"width": 5.0, "height": 6.0, "depth": 0.3, "opening": 3.9, "spring": 2.55, "walk": 4.8}
 
@@ -66,11 +62,9 @@ k.piece("gate_arch", "column", "ashlar", "stone", [],
 k.model("gate_arch", _gate_arch())
 
 
-# ---------------------------------------------------------------------------
 # Framed walls: the barracks' plaster between dark oak posts, rails and
 # braces; its board partitions between posts and plates. On both faces
 # (which one is indoors depends on how a run is laid).
-# ---------------------------------------------------------------------------
 
 def _timber(x0, y0, x1, y1, z, width):
     length = math.hypot(x1 - x0, y1 - y0)
@@ -155,11 +149,9 @@ for _suffix, _depth in (("", k.OUTER), ("_thin", k.INNER)):
                 + framing(2.4, _depth, "arch", k.ARCH[0], _braced))
 
 
-# ---------------------------------------------------------------------------
 # Joists under the barracks' upper floor (three to a 2 m strip, their tops
 # at the pivot: the floor's underside), and trusses across the mess hall.
 # Drawn only.
-# ---------------------------------------------------------------------------
 
 JOIST = (0.14, 0.2)
 

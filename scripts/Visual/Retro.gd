@@ -1,32 +1,8 @@
 extends CanvasLayer
-## The look: PS1 grit with PS2 light. Autoloaded as "Retro", so every scene
-## gets it without doing anything.
-##
-##   the screen   drawn on a coarse grid of big pixels (virtual_height lines),
-##                each a flat block of colour, quantised to color_levels a
-##                channel with an ordered 4x4 dither: the PS1's crunch. The
-##                HUD sits above it and stays sharp, and so do the words over
-##                men's heads: drawn just above the grid (CrispText), so the
-##                big pixels never break them into blocks.
-##   textures     every material in the tree samples its textures nearest-
-##                neighbour, with mipmaps, so texels are crisp squares and
-##                distant walls do not crawl.
-##   light        left modern: shadows, volumetric fog, glow. Godrays through
-##                big pixels are the PS2 half of the mix.
-##   motion       smooth. No vertex wobble or texture swim by default; the
-##                retro_psx shader has both, for props that want them.
-##
-## The 3D view is rendered at a fraction of the window (render_scale), just
-## enough for the grid, which pays for all of this.
-##
-## Switch it all off with Retro.enabled = false, or tune it live:
-## Retro.virtual_height = 240 (PS1) .. 448 (PS2) .. 0 (off).
-##
-## In debug builds, anywhere in the game:
-##   F3  debug overlays: guards' senses, the traversal readout, sound events
-##   F6  grid lines: 360 / 240 (PS1) / 448 (PS2) / off
-##   F7  colour depth: 24 / 32 / full
-##   F8  dither on / off
+## Retro autoload: coarse screen grid and Bayer colour dither, nearest/mipmapped standard-material textures,
+## and reduced 3D render scale. Modern shadows, fog, and glow remain part of the scene.
+## HUD and CrispText draw above the grid; optional retro_psx materials add vertex snap and affine texture mapping.
+## enabled restores converted resources when disabled; shared shader materials are not converted.
 
 const SCREEN_SHADER := preload("res://scripts/Visual/retro_screen.gdshader")
 const CrispTextScript := preload("res://scripts/Visual/CrispText.gd")
@@ -144,9 +120,7 @@ func _toggle_debug() -> void:
 	SoundBus.debug = on
 
 
-# ---------------------------------------------------------------------------
 # The screen
-# ---------------------------------------------------------------------------
 
 ## The grid for the window as it is now: square cells, virtual_height tall.
 func virtual_size() -> Vector2:
@@ -183,9 +157,7 @@ func _fit() -> void:
 	root.scaling_3d_scale = scale
 
 
-# ---------------------------------------------------------------------------
 # Materials
-# ---------------------------------------------------------------------------
 
 func _on_node_added(node: Node) -> void:
 	if not enabled:
@@ -290,9 +262,7 @@ func retro_material(material: Material) -> void:
 	retro_material(material.next_pass)
 
 
-# ---------------------------------------------------------------------------
 # Atmosphere
-# ---------------------------------------------------------------------------
 
 ## An environment for dark interiors in this look: volumetric fog that turns
 ## every shadowed light into shafts, glow on flames and sparks, a filmic curve

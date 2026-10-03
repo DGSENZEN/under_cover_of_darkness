@@ -1,9 +1,7 @@
 extends StaticBody3D
-## A straw man on a post, to practise on. It rocks with every blow and says
-## what the blow was (the arena shows it): a quick cut, a power blow, a
-## backstab from behind, a riposte. With `guards` it holds a shield up:
-## quick cuts from the front are caught, and a power blow or a kick knocks
-## the shield aside for a moment. It never fights back and never dies.
+## Bloodless practice target with optional frontal guard and damage tally.
+## It reports hit/blocked results, briefly breaks guard on power hits or kicks,
+## and never loses health or dies.
 
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -112,6 +110,8 @@ func _ready() -> void:
 		_shield.add_child(boss)
 
 
+## Reports blocked for frontal quick/thrown hits while guarded; otherwise adds damage
+## to tally and returns hit. Power hits break guard; attacker may be null.
 func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3, direction: Vector3) -> StringName:
 	_since_hit = 0.0
 
@@ -132,6 +132,7 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 	return &"hit"
 
 
+## Rocks the dummy, breaks optional guard, and emits a zero-damage kick hit.
 func kick(push: Vector3, _attacker: Node3D) -> void:
 	_rock(push.normalized(), 1.8)
 

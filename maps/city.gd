@@ -1,15 +1,7 @@
 extends Node3D
-## The city on the rock (the city spec; sub-project 1, the harbour): the
-## harbour's level and the rest of the city as massing loaded together (each
-## under its own root), the game's nodes made from their markers
-## (LevelGameplay), the moon from the south-south-west, the night changing
-## over the harbour (Night: weather on a schedule, wind carrying the clouds),
-## the palms stirring, bats round the golden tower's lantern,
-## the navmesh baked, the nine guards on their rounds, and the thief in his
-## rowboat by the mole's boulders with his blackjack and tools.
-##   Godot --path . res://maps/city.tscn
-##   Godot --path . res://maps/city.tscn -- --vantage=view_ribeira
-##   Godot --headless --path . res://maps/city.tscn -- --fps-report=40
+## Loads harbour and city massing, instantiates marker gameplay and bakes navigation.
+## The level roots own imported geometry; this map owns player/guard spawns and night setup.
+## Run res://maps/city.tscn; scene options and diagnostics are in docs/systems/development.md.
 
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const LevelGameplay := preload("res://scripts/Level/LevelGameplay.gd")
@@ -171,7 +163,7 @@ func _exit_tree() -> void:
 	TemperamentScript.rolling = _was_rolling
 
 
-## A marker by name from whichever district has it ({} if none does).
+## Returns the first district's marker matching marker_name, or {} when absent.
 func marker(marker_name: String) -> Dictionary:
 	for district in levels:
 		var m: Dictionary = (levels[district] as LevelLoader.Level).get_marker(marker_name)

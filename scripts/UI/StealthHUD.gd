@@ -1,52 +1,7 @@
 extends CanvasLayer
-## The HUD. Built in code, so Player.tscn stays simple. Deliberately small:
-## your hands show what you carry and what you have stolen, so the screen
-## only carries what the body cannot show.
-##
-##   centre         a dot that warms over anything usable, and under it the
-##                  keys and what they do: [E] Open door   [LMB] Throw
-##   bottom centre  the lightgem, a cut jewel: dark when hidden, amber when
-##                  lit; its rim brightens with exposure (stance, movement)
-##   above the gem  who is speaking (by name) and what they said
-##   bottom left    health, as shields that only show when you are hurt
-##   everywhere     a red vignette when hit, with an arc on the side the
-##                  blow came from; the colour drains during a finisher; a
-##                  white-out when a flash goes off in your eyes (dazzle); a
-##                  fade to black when caught, and a pause screen on Esc
-##   centre         picking a lock: the crosshair's ring closing as it gives
-##   over a man     fighting you: his balance (GuardFighter's posture), a bar
-##                  filling from the middle, amber to red, once it is shaken;
-##                  a red mark when he is open (the next blow a deathblow)
-##   over a man     noticing you: a ring that fills as he makes you out
-##                  (Guard.alert, to Guard.combat_at: then he has you),
-##                  notched where he grows suspicious and where he comes to
-##                  look, round an eye while he is looking at you, a "?"
-##                  while he has only heard something or is looking for you,
-##                  and a red "!" once he has you, bursting as he calls it.
-##                  The man nearest to having you is drawn biggest, and
-##                  beside his mark, for a few seconds after it changes (and
-##                  while his ring climbs), what he is doing about you, in a
-##                  few words: "Merek sees you", "Merek heard something",
-##                  "Merek is coming to look", "Merek is searching", "Merek
-##                  is giving up" (doing()); the first of them to have you,
-##                  "Merek has you". The ring's edge glows while it is
-##                  rising, so you see how fast, and a tick sounds, quicker
-##                  and higher as it fills. Off the screen, his mark sits at
-##                  its edge, the way he is; a man behind a wall is marked
-##                  fainter. A man stirred by something not you (a door left
-##                  open, a torch out, a man missing) and who has not seen
-##                  you since gets only a small grey "?": never the biggest,
-##                  no words, no tick. The pause screen can hide them all
-##                  (Settings).
-##
-## Any size of window: the project stretches the 2D (display/window/stretch,
-## canvas_items, expand) from 1152x648, so everything here is laid out in
-## those units, at least 1152 wide and 648 high, and drawn as sharp as the
-## window is. Every piece is placed from the edges or the middle of the
-## screen as it is now, text that could run long is cut short or wrapped,
-## and nothing is placed outside the screen (layout_rects, for tests).
-##
-## Nothing here is read by gameplay. Hide the layer and the game is unchanged.
+## Player HUD built in code: prompts, lightgem, speech/awareness, health, combat feedback, dazzle, death, and pause settings.
+## setup() binds the player and its component signals. Small Control subclasses draw individual indicators.
+## Awareness/layout query methods expose current presentation for tests and callers.
 
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const AdrenalineViewScript := preload("res://scripts/Visual/AdrenalineView.gd")
@@ -189,9 +144,7 @@ var _stab_at := -100.0
 var _last_item_name := ""
 
 
-# ---------------------------------------------------------------------------
 # Drawn pieces
-# ---------------------------------------------------------------------------
 
 class Crosshair:
 	extends Control
@@ -602,10 +555,10 @@ class Shields:
 			draw_polyline(outline, DIM, 1.2, true)
 
 
-# ---------------------------------------------------------------------------
 # Building
-# ---------------------------------------------------------------------------
 
+## Builds Controls and binds p_player's gameplay/component signals; call once with a fully configured player.
+## Adds child nodes, sets layer/process mode, reads Settings, and manages pause input.
 func setup(p_player: CharacterBody3D) -> void:
 	player = p_player
 	layer = 5
@@ -891,9 +844,7 @@ func _label(font_size: int, colour: Color, align: HorizontalAlignment) -> Label:
 	return label
 
 
-# ---------------------------------------------------------------------------
 # Every frame
-# ---------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
 	if player == null or not is_instance_valid(player):
@@ -1175,9 +1126,7 @@ func _place(control: Control, at: Vector2, extent: Vector2) -> void:
 	control.size = extent
 
 
-# ---------------------------------------------------------------------------
 # Events
-# ---------------------------------------------------------------------------
 
 func _on_bark(text: String, guard: Node3D) -> void:
 	if not is_instance_valid(guard) or not is_instance_valid(player):
@@ -1621,7 +1570,7 @@ func layout_rects() -> Dictionary:
 	return rects
 
 
-## A line under the lightgem for a moment: which movement feel is on.
+## Replaces caption text and its display timer in seconds; requires setup() first.
 func show_caption(text: String, seconds: float) -> void:
 	_caption.text = text
 	_caption_timer = seconds
@@ -1810,6 +1759,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+## Unpauses the SceneTree and asks a compatible player to recapture the mouse.
 func resume() -> void:
 	get_tree().paused = false
 

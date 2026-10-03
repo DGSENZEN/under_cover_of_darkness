@@ -1,34 +1,8 @@
 extends RefCounted
-## A guard's life when there is no fight: his rounds as more than a walk.
-##   talk      men at their ease and near each other talk: written
-##             conversations chosen to fit the moment (TalkDirector, the
-##             files in data/talk). The one listening nods along, or shakes
-##             his head (by his temperament). You can listen. Anything that
-##             stirs one of them ends it. Talking, each looks at the other.
-##   glances   at his ease, he looks round at a man going by, a moment.
-##   greeting  going by a man at his ease, a word to him now and then
-##             ("Evening, Hendrik."); he looks round and nods, and may say
-##             something back. Not the same two again for a good while.
-##   idle      what he does with himself standing about, sat, leaning: his
-##             own ways (GuardHabits.gd), and between them he passes the time
-##             where he stands: warms his hands, stamps his feet, paces...
-##             (GuardPastimes).
-##   oddities  a door you left open, your arrow in a wall, a torch you put
-##             out: he notices it (it takes light, and a look; a torch dark
-##             where it should burn takes only the look), goes to it and deals
-##             with it (shuts the door, pulls the arrow out, lights the torch
-##             again), then searches about it; the garrison is roused a little,
-##             and more by a second torch out not long after the first (it is
-##             no draught: Garrison.light_found_out).
-##   missing   a man who knew another looks at his post and he is not there
-##             (Garrison.fallen): "Where's Hendrik got to?", and he goes to see.
-##   noises    a man who hears something with a friend at hand says so, and
-##             goes to look; the friend covers him from where he stands, and
-##             stands easy when he calls that it was nothing.
-##   lantern   searching somewhere dark with the garrison roused, he lights one
-##             (GuardHands); at his ease a while, he puts it out (not the light
-##             he walks his rounds with).
-##   lookout   a man set to watch (Guard.lookout) sweeps his ground slowly.
+## Coordinates noncombat conversation, greetings, idle activities and oddities.
+## Notices doors, arrows, extinguished torches and missing colleagues, and raises alarm.
+## Garrison claims keep one investigator per noise while other guards cover him.
+## Also manages lookout scanning and search lanterns; Guard owns movement/state.
 
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const GuardPastimesScript := preload("res://scripts/AISystem/GuardPastimes.gd")
@@ -247,9 +221,7 @@ func activity() -> StringName:
 	return _pastimes.activity()
 
 
-# ---------------------------------------------------------------------------
 # Standing about
-# ---------------------------------------------------------------------------
 
 ## Standing (or sat, or leaning) still at his post or a waypoint (or settled
 ## at a station). About something of his own (GuardHabits), that is what he
@@ -293,9 +265,7 @@ func watch_yaw(home_yaw: float, delta: float) -> float:
 	return home_yaw + sin(_watch_time * TAU / LOOKOUT_PERIOD) * deg_to_rad(LOOKOUT_ARC)
 
 
-# ---------------------------------------------------------------------------
 # Talk
-# ---------------------------------------------------------------------------
 
 func talking() -> bool:
 	var talk := _director()
@@ -370,9 +340,7 @@ func _director() -> RefCounted:
 	return _talk_script.of(guard) if guard.is_inside_tree() else null
 
 
-# ---------------------------------------------------------------------------
 # Glances and greetings
-# ---------------------------------------------------------------------------
 
 ## Which way the man he looks at is (Guard._update_head turns his head to
 ## him): the man he talks with, one going by, one who greets him. Zero when
@@ -558,9 +526,7 @@ func _greet_passing() -> void:
 		return
 
 
-# ---------------------------------------------------------------------------
 # Things out of place
-# ---------------------------------------------------------------------------
 
 func _look_for_oddities(step: float) -> void:
 	var tree := guard.get_tree()
@@ -760,9 +726,7 @@ func stirred_to_fight() -> void:
 		garrison.looked(guard)
 
 
-# ---------------------------------------------------------------------------
 # A man missing from his post
-# ---------------------------------------------------------------------------
 
 func _look_for_missing(step: float) -> void:
 	var garrison: RefCounted = _garrison()
@@ -811,13 +775,10 @@ func _look_for_missing(step: float) -> void:
 			return
 
 
-# ---------------------------------------------------------------------------
 # Noises: one looks, the others cover him
-# ---------------------------------------------------------------------------
 
-## Something heard is worth a look: either another man is already looking
-## into it (true: this one covers him), or it is his to look into (false),
-## and he tells whichever friend is at hand.
+## Claims a world-space investigation through Garrison or covers the existing owner.
+## Returns true when covering another guard, false when this guard investigates.
 func claim_or_cover(where: Vector3) -> bool:
 	var garrison: RefCounted = _garrison()
 
@@ -875,7 +836,7 @@ func covering() -> bool:
 	return _covering != null and _covering.get_ref() != null
 
 
-## The place the friend he covers went to look at (INF when he covers nobody).
+## Returns the covered guard's last-known position; INF if missing or unknown.
 func covered_place() -> Vector3:
 	var looker: Node3D = _covering.get_ref() as Node3D if _covering != null else null
 	return looker.last_known_position if looker != null and bool(looker.get("has_last_known")) else Vector3.INF
@@ -946,9 +907,7 @@ func done_looking() -> void:
 		Comms.call_out(guard, &"clear", guard.last_known_position, {}, Comms.SPEECH_DB)
 
 
-# ---------------------------------------------------------------------------
 # The lantern
-# ---------------------------------------------------------------------------
 
 func _update_lantern(delta: float) -> void:
 	var hands: RefCounted = guard.get("_hands")

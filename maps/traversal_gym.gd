@@ -1,10 +1,7 @@
 extends Node3D
-## A playable gym for the traversal system. Every fixture is built here in
-## code, so heights are exact and the file is easy to read. Walk the lanes
-## from the start line; each sign says what the lane tests.
-##
-## Run it from the editor, or from the terminal:
-##   Godot --path . res://maps/traversal_gym.tscn
+## Builds sixteen movement stress stations using production traversal and collision.
+## Owns resets, checkpoints, optional relay encounters and practice physics/time settings.
+## See maps/MOVEMENT_GYM.md for controls, station routes and verification scenes.
 
 const PLAYER := preload("res://Player.tscn")
 const CLIMB := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
@@ -94,9 +91,7 @@ func _exit_tree() -> void:
 	TimeFx.clear()
 	TimeFx.set_base(_saved_scale)
 
-# ---------------------------------------------------------------------------
 # Lanes
-# ---------------------------------------------------------------------------
 
 func _lane_stairs(x: float) -> void:
 	_sign(x, "STEPS & STAIRS\nwalk: 0.15, 0.25, 0.35 steps\nthen 0.2 x 0.3 and 0.3 x 0.3 stairs")
@@ -202,9 +197,7 @@ func _lane_facade(x: float) -> void:
 	_molding(x + 0.9, 7.1)
 
 
-# ---------------------------------------------------------------------------
 # Builders
-# ---------------------------------------------------------------------------
 
 func _block(x: float, z: float, depth: float, height: float, material: String) -> void:
 	_box(Vector3(x, height * 0.5, z), Vector3(LANE_WIDTH, height, depth), material)
@@ -339,14 +332,15 @@ func _material(name: String) -> StandardMaterial3D:
 	_materials[name] = material
 	return material
 
-# ---------------------------------------------------------------------------
 # Practice harness
-# ---------------------------------------------------------------------------
 
+## Wraps zero-based index to the available station range and resets player/course state.
 func select_station(index: int) -> void:
 	selected = posmod(index, stations.size())
 	reset_station()
 
+## Restores practice actors, health/stamina, input guards and deterministic mover phase.
+## Retains course records; clears transient encounters and gameplay time effects.
 func reset_station() -> void:
 	_resets += 1
 	TimeFx.clear()
@@ -453,6 +447,8 @@ func _update_obstacles() -> void:
 	for mover in movers:
 		mover.body.position = mover.origin + mover.axis * sin(_obstacle_time * mover.speed) * mover.distance
 
+## station/gate are zero-based; body must be this gym's player in the selected station.
+## Ignores other bodies/stations, then advances ordered run timing and refreshes the HUD.
 func checkpoint_reached(station: int, gate: int, body: Node3D) -> void:
 	if body != player or station != selected:
 		return
@@ -567,6 +563,9 @@ func _spawn_guard() -> void:
 	_guard.debug_ai = false
 	_encounter.add_child(_guard)
 
+## at and size are station-local metres; axis is the motion direction.
+## distance is amplitude in metres, speed is radians per game second; axis is used as supplied.
+## Adds a scripted collision blocker; normalize axis for distance to equal travel amplitude.
 func add_mover(at: Vector3, size: Vector3, axis: Vector3, distance: float, speed: float) -> void:
 	var body := AnimatableBody3D.new()
 	# Updated in the physics tick; no render-to-physics transform buffering.

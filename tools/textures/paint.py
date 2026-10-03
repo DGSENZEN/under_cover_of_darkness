@@ -342,9 +342,7 @@ def moon():
     return _finish(image, (128, 128), 24, mask)
 
 
-# ---------------------------------------------------------------------------
 # Nature: leaves, needles, twigs, grass, weeds, reeds, ivy (cut out), bark
-# ---------------------------------------------------------------------------
 
 def _tinted(colour, bright):
     return tuple(int(max(0, min(255, c * bright))) for c in colour)
@@ -779,11 +777,9 @@ def bat():
     return _finish(image, (128, 64), 8, mask_image)
 
 
-# ---------------------------------------------------------------------------
 # The ground lived on: decals laid on the floors (garrison_markers.decals).
 # Each fades out well inside its square; soot and dirt in a few steps of
 # alpha (a PS2's soft edge), straw and leaves cut clean.
-# ---------------------------------------------------------------------------
 
 ALPHA_STEPS = [0, 72, 140, 200, 255]
 
@@ -974,10 +970,8 @@ def carpet():
     return image.resize((size, size), Image.Resampling.BOX).quantize(colors=16, dither=Image.Dither.NONE).convert("RGB")
 
 
-# ---------------------------------------------------------------------------
 # The harbour's: wrought iron, a ship's ratlines, the rope coil's mask, salt
 # on the quays; Mediterranean planting
-# ---------------------------------------------------------------------------
 
 IRON_LIT = (84, 80, 74)
 

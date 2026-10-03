@@ -41,9 +41,7 @@ PIECE_TRIS = 800
 ARCH_SEGMENTS = 8
 
 
-# ---------------------------------------------------------------------------
 # The shapes, as data
-# ---------------------------------------------------------------------------
 
 def box(cx, cy, cz, sx, sy, sz, slot, yaw=0.0, pitch=0.0, roll=0.0):
     return {"kind": "box", "centre": [cx, cy, cz], "size": [sx, sy, sz], "slot": slot, "turn": [yaw, pitch, roll]}
@@ -167,9 +165,7 @@ def moved(shapes, yaw=0.0, offset=(0.0, 0.0, 0.0)):
     return out
 
 
-# ---------------------------------------------------------------------------
 # Building
-# ---------------------------------------------------------------------------
 
 def build(shapes):
     """The shapes' corners and faces: {verts, faces: [(indices, slot, uvs)],

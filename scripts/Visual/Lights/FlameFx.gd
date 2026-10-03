@@ -1,14 +1,7 @@
 extends Node3D
-## A flame at one point: two flipbook sprites (the main one solid, so its
-## shape holds over a lit wall; the other mirrored, half a loop behind and
-## added on as shimmer) and a small hot heart that blooms. Drawn from a heat sheet through a colour ramp
-## (flame.gdshaderinc), on the effects layer, so the lightgem never sees it.
-##
-## The flipbook runs on its own clock in _process, which Engine.time_scale
-## already slows, so slow motion slows the fire too. Its burner (Torch.gd)
-## calls `shape` every frame with how it wavers, how strongly it burns, the
-## wind, a flare and a fire's jump. Put the node where the fuel is: the flame
-## stands up from it.
+## Flame sprites: solid main layer, offset/mirrored additive shimmer, and a bright core.
+## Heat-sheet colour ramps and instance uniforms allow shared materials; sprites use Layers.FX.
+## Torch calls shape() each frame; the local flipbook clock uses scaled game time.
 
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")

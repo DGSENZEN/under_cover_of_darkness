@@ -86,9 +86,7 @@ def guard(path, force):
         common.fail("%s was edited by hand since the last build; use --force to build over it" % path.name)
 
 
-# ---------------------------------------------------------------------------
 # A kind
-# ---------------------------------------------------------------------------
 
 class Kind:
     """What one build knows: the recipe, the skeleton, the full body, and
@@ -318,9 +316,7 @@ def smoothstep(a, b, x):
     return t * t * (3.0 - 2.0 * t)
 
 
-# ---------------------------------------------------------------------------
 # Garments
-# ---------------------------------------------------------------------------
 
 def shell(kind, g, part):
     """Body regions copied from the low-poly base and pushed out by the
@@ -1793,9 +1789,7 @@ BUILDERS = {"shell": shell, "mittens": mittens, "boots": boots, "collar": collar
             "mantle": mantle, "puff": puff, "half_cape": half_cape}
 
 
-# ---------------------------------------------------------------------------
 # Putting him together
-# ---------------------------------------------------------------------------
 
 def hide_body(kind, garments=None):
     """The body faces a garment hides, gone (spec §6.3 step 4): under every
@@ -2023,9 +2017,7 @@ def probes(outfit, reference):
     return out
 
 
-# ---------------------------------------------------------------------------
 # Heads
-# ---------------------------------------------------------------------------
 
 def start(name, body="male"):
     """A fresh scene with the Quaternius skeleton and its full body kept as
@@ -2318,9 +2310,7 @@ def finish(path, made, reference):
     print("wardrobe: built %s: %s" % (path.name, ", ".join("%s %d" % (o.name, common.tri_count(o)) for o in made)))
 
 
-# ---------------------------------------------------------------------------
 # Headgear
-# ---------------------------------------------------------------------------
 
 def build_hair(force, body="male"):
     """Every hair and beard of `body` (recipes.HAIR) into its own file, on its

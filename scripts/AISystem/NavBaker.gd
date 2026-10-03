@@ -1,34 +1,10 @@
 class_name NavBaker
 extends NavigationRegion3D
-## Bakes the navigation mesh when the level loads, from the level's static
-## collision. Add one of these to a map, point `source_root` at the node that
-## holds the geometry (it defaults to this node's parent), and guards can
-## path-find. TrenchBroom brushes arrive as static bodies, so they just work.
-##
-## Doors are left out of the bake on purpose: a closed door would cut the mesh
-## at every doorway. Guards path through doorways and open the door. Each
-## doorway (Door.footprint) is cut out of the mesh and baked as a region of
-## its own, on the layers its door says (Door.nav_layers): locked, it is off
-## the navmesh of a guard without the key, and he goes round.
-##
-## Furniture low enough to pass for a step (group "nav_blocks": a chair's
-## seat, a stump; Furnishings) is kept off, with room round it, instead of
-## being walked over.
-##
-## The baker sees the faces of what it bakes, not that a block is solid: a
-## block taller than a man leaves a scrap of floor sealed inside it, which
-## anything asking for the floor nearest a point could be sent to. Every
-## polygon with something solid just over it (a static body, SEALED_PROBE m
-## above its middle) is dropped.
-##
-## Deep water (WaterVolume) is cut out of the mesh, and baked as a swim region
-## of its own, dearer to cross (SWIM_COST). Then the ways across that walking
-## cannot take are found and linked (NavLinks: climbing, dropping, leaping,
-## ladders, into and out of water) before `baked` is emitted.
-##
-## With drop_unreached, any island of floor nobody can get to or from the
-## rest (a house's flat roof, a far bank), links and all, is left out: no man
-## asked for the floor nearest a point is ever sent up there.
+## Bakes walk/swim navigation from level geometry and emits baked when ready.
+## Doors have separate navigation-layer regions so locks depend on the guard's keys.
+## Furniture footprints, deep water and sealed floor scraps are removed from walking.
+## NavLinks adds traversal; optional reachability pruning removes isolated islands.
+## World home selects an island; bake_bounds is region-local. Source defaults to parent.
 
 const NavLinksScript := preload("res://scripts/AISystem/NavLinks.gd")
 
@@ -102,6 +78,9 @@ func _ready() -> void:
 		bake.call_deferred()
 
 
+## Rebuilds geometry/navmesh, doorway/swim regions and optional traversal links.
+## Resets counters/is_baked; completion publishes navigation and emits baked.
+## A nonempty source_root must resolve; bake_bounds is local to this region.
 func bake() -> void:
 	is_baked = false
 

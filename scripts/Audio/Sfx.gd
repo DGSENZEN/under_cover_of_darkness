@@ -1,39 +1,9 @@
 extends Node
-## Sound effects, by name: "clang", "flesh", "whoosh", "twang"...
-##
-##   Sfx.play(self, &"clang", point)              at a place in the world
-##   Sfx.play(self, &"whoosh", point, -6.0, 1.2)  quieter, higher
-##   Sfx.play_flat(self, &"hurt")                 inside your own head
-##
-## Every sound is a recording: res://audio/sfx/<name>.wav, or <name>_1.wav,
-## <name>_2.wav... for variations picked at random, cut and levelled from the
-## sound packs by tools/prepare_sfx.py (their sources and licences are in
-## CREDITS.md). A name with no recording plays nothing.
-##
-## Up close every sound is heard as if a little way off (NEAR), and the mix
-## goes through a limiter: a blow at arm's length plays as loud as the table
-## says, never clipped.
-##
-## Depth. Sounds in the world play on the World bus, in the room's acoustics
-## (the level root's "acoustics" meta: "stone", the default, a keep's halls;
-## "cave"; "wood"; "outdoors"): a reverb, and a sound behind a wall is heard
-## through it, muffled and quieter; far off, duller. Your own body's sounds
-## (feet, breath, gear) play on the Body bus, close and dry but for a touch
-## of the same room. The score and the place duck under the fight (Music and
-## Ambience, sidechained to World). A sound's variations never play the same
-## one twice running, and each is played a hair differently (pitch and
-## level), never the same way twice.
-##
-## The space shapes it as you move: the room around you is sounded out
-## (probe_room: a dozen rays) and the reverb follows it, tight in a passage,
-## long in a hall, all but gone in the open. Far off (FAR), a sound plays on
-## WorldFar, wetter and duller. A sound round a corner (a way to it along the
-## floor, not much longer than straight) comes through the doorway, less
-## muffled than one through solid wall. And your body: cut badly, the world
-## goes dull and your heart is loud in your chest (world_cutoff_for, the
-## heartbeat); a heavy blow deadens your hearing for a moment (body_hit).
-##
-## Only audio. What guards hear is the SoundBus, which is separate.
+## Recorded effect bank with pooled positional/flat players and background warm-up.
+## Loads audio/sfx/<name>.wav or numbered variations; missing recordings are silent. Sources/licences are in CREDITS.md.
+## World/WorldFar/Body routing, room probes, wall/corner attenuation, reverb, and injury filters shape playback.
+## Playback does not publish SoundBus stimuli; callers supply gameplay noise separately.
+## Headless playback is disabled by default; recording still captures requested names, levels, and positional flags.
 
 const AmbienceScript := preload("res://scripts/Audio/Ambience.gd")
 const MusicScript := preload("res://scripts/Audio/Music.gd")
@@ -338,10 +308,10 @@ var _cursor_flat := 0
 var _task := -1
 
 
-# ---------------------------------------------------------------------------
 # Playing
-# ---------------------------------------------------------------------------
 
+## Plays a named recording at world at; volume is additional dB, pitch is a multiplier, jitter is fractional pitch variation.
+## Uses a level-owned positional pool; disabled audio, detached context, or missing recordings produce no playback.
 static func play(context: Node, sound: StringName, at: Vector3, volume := 0.0, pitch := 1.0, jitter := 0.04) -> void:
 	if recording:
 		recorded.append([sound, volume, true])
@@ -355,6 +325,8 @@ static func play(context: Node, sound: StringName, at: Vector3, volume := 0.0, p
 	node._play_3d(sound, at, volume + float(GAIN.get(sound, 0.0)) + randf_range(-1.0, 1.0), pitch * (1.0 + randf_range(-jitter, jitter)))
 
 
+## Plays a non-positional recording; volume is additional dB and pitch/jitter are multipliers.
+## Musical stings keep authored pitch/gain and update sting_at; recording logs requests even when playback is disabled.
 static func play_flat(context: Node, sound: StringName, volume := 0.0, pitch := 1.0, jitter := 0.03) -> void:
 	if recording:
 		recorded.append([sound, volume, false])
@@ -375,8 +347,8 @@ static func play_flat(context: Node, sound: StringName, volume := 0.0, pitch := 
 	node._play_flat(sound, level, pitch * (1.0 + (0.0 if musical else wobble)))
 
 
-## Loads every recording in the background, so the first blow of a fight
-## does not wait for its sound to be read off disk.
+## Starts background bank loading plus level ambience, acoustics, and score; detached/disabled contexts are ignored.
+## The scene-owned player node waits for its loading task on exit.
 static func warm(context: Node) -> void:
 	var node := _node_for(context)
 
@@ -434,7 +406,7 @@ static func stream(sound: StringName) -> AudioStream:
 	return variants[pick]
 
 
-## Stops everything at once.
+## Stops pooled effect players and hushes the level ambience/music; cached takes remain loaded.
 static func silence() -> void:
 	if _node == null or not is_instance_valid(_node):
 		return
@@ -602,11 +574,8 @@ static func body_hit(amount: float) -> void:
 	_ringing = maxf(_ringing, clampf((amount - 10.0) / 30.0, 0.0, 1.0))
 
 
-## Sounds out the room around `origin`: [size 0..1, enclosed 0..1], from a
-## dozen rays (the walls, the ceiling) out to PROBE_REACH. Its size is how far
-## off the walls it found are (a small room with its door open is still
-## small); how enclosed, how many of the rays found one (the open sky, a
-## doorway, a long hall let the sound away).
+## Samples layer-1 room geometry from world origin, excluding the supplied RIDs.
+## Returns Vector2(size, enclosure), both normalized; caller applies the result with shape_room().
 static func probe_room(space: PhysicsDirectSpaceState3D, origin: Vector3, exclude: Array[RID]) -> Vector2:
 	var directions: Array[Vector3] = []
 
@@ -839,10 +808,8 @@ func _listener_exclude() -> Array[RID]:
 	return exclude
 
 
-## How whole "you" are for what your hurt does to the sound (0 all but dead,
-## 1 unhurt): your health; unhurt when dead, when nobody is there, or when
-## the one they are after is not you (a puppet: the showcase's intruder).
-## `dead_is_whole` false: a dead man's health counts as it is (Music).
+## Returns clamped health/max_health for a compatible node; absent health data or puppet actors return 1.
+## dead_is_whole makes dead actors return 1 instead of their remaining fraction.
 static func health_of(you: Node, dead_is_whole := true) -> float:
 	if you == null or you.get("puppet") == true or you.get("health") == null or you.get("max_health") == null:
 		return 1.0

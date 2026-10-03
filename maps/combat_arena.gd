@@ -1,29 +1,7 @@
 extends Node3D
-## The proving grounds: everything the fighting can do, in one walled yard
-## at night.
-##
-##   Godot --path . res://maps/combat_arena.tscn
-##
-##   THE RING      (north of the start) pull a lever and they come through
-##                 the gate: a swordsman, a duelist, a brute, an archer, a
-##                 swordsman with an archer behind him, or the gauntlet (waves,
-##                 harder each time). Braziers, spikes,
-##                 powder barrels and a hanging weight are in there with you.
-##                 The gallery on its west side overlooks it: drop on them.
-##   TRAINING YARD (west) straw men to cut, shielded ones to break, an arms
-##                 master who swings on a steady beat (parry practice) and a
-##                 fencer who parries everything (feint practice).
-##   HAZARD GARDEN (east) spikes, a ledge, barrels, a hanging cage, a brazier:
-##                 a guard at each, to be sent into it.
-##   THE CELLS     (north-west, dark) patrols to sneak past, backstab or drop
-##                 on from the balcony.
-##
-##   1-7   the ring's levers from anywhere: swordsman, duelist, brute, archer,
-##         swordsman + archer, gauntlet, clear.   R  rest (health, stamina, arrows).
-##
-## Every parry, block, feint, riposte and broken guard is called out where it
-## happened, and the log in the corner says how it went (how early a parry
-## was, what a block cost).
+## Combat practice scene with wave encounters, weapons and environmental hazards.
+## Owns encounter resets and navigation; actors use the normal gameplay systems.
+## Controls and station layout are documented in maps/COMBAT_PRACTICE.md.
 
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
@@ -113,9 +91,7 @@ func _ready() -> void:
 	_say("The proving grounds. Pull a lever at the ring, or press 1-7.")
 
 
-# ---------------------------------------------------------------------------
 # The yard
-# ---------------------------------------------------------------------------
 
 func _outer_walls() -> void:
 	Props.block(self, Vector3(0, 3, 26), Vector3(92, 6, 1), STONE)
@@ -350,9 +326,7 @@ func _cells() -> void:
 	_sign(hall + Vector3(0, 2.6, 8.0), "THE CELLS\nstay dark, get behind them\nthe balcony (stairs west): drop on the watchman", 24)
 
 
-# ---------------------------------------------------------------------------
 # The ring
-# ---------------------------------------------------------------------------
 
 func _release(kinds: Array) -> void:
 	_wave = -1
@@ -502,9 +476,7 @@ func _build_portcullis(at: Vector3) -> void:
 		_portcullis.add_child(rail)
 
 
-# ---------------------------------------------------------------------------
 # People
-# ---------------------------------------------------------------------------
 
 func _spawn(archetype: StringName, at: Vector3, yaw: float) -> CharacterBody3D:
 	var g: CharacterBody3D = GUARD.instantiate()
@@ -577,9 +549,7 @@ func _hang(beam: Vector3, rope: float) -> void:
 	weight.crushed.connect(func(victim): _popup(victim.global_position + Vector3.UP * 2.2, "CRUSHED", Color(1.0, 0.5, 0.2)))
 
 
-# ---------------------------------------------------------------------------
 # Calling it out
-# ---------------------------------------------------------------------------
 
 func _hook_player() -> void:
 	var combat: Node = player.combat
@@ -764,9 +734,7 @@ func _banner_text(text: String) -> void:
 		_banner_timer = 2.0
 
 
-# ---------------------------------------------------------------------------
 # Building bits
-# ---------------------------------------------------------------------------
 
 ## Solid steps from the floor: `count` of them, each `rise` up and `run`
 ## along `direction` from `start` (the foot of the first).

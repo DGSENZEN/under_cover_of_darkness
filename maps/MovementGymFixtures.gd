@@ -4,6 +4,8 @@ extends RefCounted
 
 const Water := preload("res://scripts/Interaction/WaterVolume.gd")
 
+## gym is the active traversal gym; index is the zero-based advanced station (8..15).
+## Adds collision/visual fixtures under gym._fixture_root and updates that station's gates.
 static func build(gym: Node3D, index: int) -> void:
 	match index:
 		8:

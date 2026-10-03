@@ -88,6 +88,12 @@ def rounded(v, digits=4):
 
 
 def manifest(data):
+    """Return runtime JSON-ready metadata from a validated level dictionary.
+
+    Includes level, sectors, colliders, markers, sockets, piece count, ranges,
+    terrain and shadowless names. World vectors/bases are rounded; marker
+    props include schema defaults. Does not write files or change data.
+    """
     colliders = []
 
     for p in data["pieces"]:

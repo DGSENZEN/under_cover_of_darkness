@@ -214,9 +214,7 @@ func _run() -> void:
 		"crates at the store %d, Ned %s at %s" % [_crates_near(drop, 2.2), map.cast["Ned"].activity(), map.cast["Ned"].global_position])
 	await _unload(map)
 
-	# ------------------------------------------------------------------
 	# The director
-	# ------------------------------------------------------------------
 
 	# D2 a beat that never comes true is let go, and the show goes on
 	var story2 := TestStory.new()
@@ -333,9 +331,7 @@ func _run() -> void:
 		ambience_node.queue_free()
 	await _unload(map19)
 
-	# ------------------------------------------------------------------
 	# The camera
-	# ------------------------------------------------------------------
 
 	var map13 := await _map(false)
 	var camera: Camera3D = CameraScript.new()
@@ -456,9 +452,7 @@ func _run() -> void:
 	camera.queue_free()
 	await _unload(map13)
 
-	# ------------------------------------------------------------------
 	# The overlay
-	# ------------------------------------------------------------------
 
 	var map16 := await _map(false)
 	var eye := Camera3D.new()
@@ -539,9 +533,7 @@ func _run() -> void:
 	eye.queue_free()
 	await _unload(map16)
 
-	# ------------------------------------------------------------------
 	# The night (ShowNight), act by act from each act's own start
-	# ------------------------------------------------------------------
 
 	# D4 Act I: the watch at rest
 	DirectorScript.start_act = 1

@@ -28,9 +28,7 @@ import recipes  # noqa: E402
 SHARP = math.radians(50.0)
 
 
-# ---------------------------------------------------------------------------
 # The parts: each returns a bmesh and the slots of its material indices
-# ---------------------------------------------------------------------------
 
 def _circle(radius, segments, z=0.0, turn=0.0):
     return [Vector((radius * math.cos(turn + math.tau * i / segments), radius * math.sin(turn + math.tau * i / segments), z)) for i in range(segments)]
@@ -319,9 +317,7 @@ def _merge(into, other):
     bpy.data.meshes.remove(mesh)
 
 
-# ---------------------------------------------------------------------------
 # Finishing a part
-# ---------------------------------------------------------------------------
 
 def _place(bm, part):
     rotate = part.get("rotate", (0.0, 0.0, 0.0))

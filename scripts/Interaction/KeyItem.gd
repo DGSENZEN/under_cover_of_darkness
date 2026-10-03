@@ -1,7 +1,7 @@
 class_name KeyItem
 extends RigidBody3D
-## A key. Frob it and it joins the belt; doors and chests with a matching
-## key_id unlock themselves when frobbed while you carry it.
+## Frobbable rigid key transferring key_id and its mesh to player.inventory once.
+## Matching doors/chests can then unlock. It cannot be carried; frob queues deletion.
 
 @export var key_id: StringName = &"key"
 @export var key_name := "key"

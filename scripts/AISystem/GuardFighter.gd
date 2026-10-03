@@ -1,45 +1,8 @@
 extends RefCounted
-## How a guard fights. Guard.gd decides that he is fighting and whom; this
-## decides how: where he stands, which blow he throws and when, and how he
-## meets yours. GuardRig shows all of it.
-##
-## Guards fight by your rules. A blow is telegraphed: the blade goes up, and
-## a glint says it is really coming. A raised guard catches quick cuts, but a
-## power blow or a kick breaks it, and so do enough quick ones. A parry at the
-## last instant throws the blow aside and leaves the attacker open. A feint
-## (a blow abandoned on the way up) baits a parry out too early.
-##
-## Archetypes play those rules differently:
-##   swordsman  guards, trades blows, strings two together, kicks a turtle.
-##   duelist    quick; feints, parries and ripostes, sidesteps a charge.
-##   brute      slow and heavy: his blows break a guard, and quick cuts do
-##              not stop him mid-swing. Parry him and he reels for a long time.
-##   archer     keeps his distance and shoots; the draw is the warning. Get
-##              close and he kicks you off and backs away again.
-##   trainer    stands still and swings on a steady beat: parry practice.
-## A guard with no archetype is the plain watchman of the stealth levels.
-##
-## A crowd takes turns: only `max_attackers` guards swing at one target at a
-## time, and one behind you waits a moment longer, so a fight against three
-## is hard but readable. The rest spread round you to your sides and back, so
-## a man who stands still is surrounded; when one of them is parried or cut,
-## another steps in while you are busy.
-##
-## And they learn you. Blows thrown hard on each other's heels, or the same
-## cut again and again, are read: a trained man parries them and answers. A
-## light-footed one steps out of a long swing and punishes the miss. Their
-## own blows come on no steady beat, a swordsman or a duelist can lunge in
-## from out of reach, and the brute's great blow cannot be caught at all:
-## get out of its way.
-##
-## Who he is shapes it (`temper`, Temperament.gd): a man rasher than his kind
-## rests less between blows, guards less and stands closer in; a slyer one
-## feints more and circles to his place quicker; a stubborn one is planted.
-## The man his class describes fights exactly as ARCHETYPES says. The dread
-## the garrison holds of you turns to anger in a bold man (drive_now). And his
-## place in the hunt (Squad.gd) decides the rest: hold (at the edge of your
-## reach, guard up, calling for help), fetch (running for help), flee,
-## desperate (all in), and a rash flanker whose patience runs out.
+## Owns attack phases, defence, posture and combat decisions for one Guard.
+## Archetypes set combat parameters; temperament and Squad roles modify decisions.
+## Attack tokens limit simultaneous attackers. Timers also drive GuardRig telegraphs.
+## Guard decides the target and alert state; this helper moves and attacks it.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -500,12 +463,10 @@ func _init(p_guard: CharacterBody3D) -> void:
 	_spot_timer = randf() * 0.5
 
 
-# ---------------------------------------------------------------------------
 # Archetypes
-# ---------------------------------------------------------------------------
 
-## Makes the guard one of ARCHETYPES. Call before he enters the tree (or in
-## his _ready, before health is set).
+## Applies a known archetype to guard/helper combat settings; unknown names are no-op.
+## Call before initializing health. Does not refill health itself.
 func apply(archetype: StringName) -> void:
 	if not ARCHETYPES.has(archetype):
 		return
@@ -560,10 +521,10 @@ static func look_of(archetype: StringName) -> Dictionary:
 	return (ARCHETYPES.get(archetype, {}) as Dictionary).get("look", {})
 
 
-# ---------------------------------------------------------------------------
 # The fight, every physics frame while he is in combat
-# ---------------------------------------------------------------------------
 
+## Advances combat decisions/phases for delta seconds; moves the guard, acquires
+## attack turns, updates the squad and invokes weapon/target effects when attacks land.
 func fight(delta: float) -> void:
 	var now: float = guard._game_time
 	var target: Node3D = _target_now()
@@ -723,9 +684,7 @@ func watch(delta: float) -> void:
 	_read_threat(delta, target, dist, now)
 
 
-# ---------------------------------------------------------------------------
 # Reading your blows, and answering them
-# ---------------------------------------------------------------------------
 
 func _combat_of(target: Node3D) -> Node:
 	var combat: Variant = target.get("combat") if target != null else null
@@ -948,8 +907,9 @@ func _answer_threat(delta: float, target: Node3D, dist: float, now: float) -> vo
 			guarding = false
 
 
-## Called by the guard when a weapon reaches him, before it does anything.
-## "parried", "blocked", or "" to let it land.
+## Returns parried, blocked or empty StringName (let the hit land). kind and attacker
+## identify the incoming attack. Can consume parry/poise, add posture or break guard;
+## only frontal quick/power/thrown attacks with suitable combat state are defended.
 func defend(kind: StringName, attacker: Node3D) -> StringName:
 	if attacker == null or not (kind in [&"quick", &"power", &"thrown"]):
 		return &""
@@ -1028,6 +988,8 @@ func punishable_by(attacker: Node3D) -> bool:
 	return guard._game_time <= _exposed_until and attacker.get_instance_id() == _punish_target_id and _target_now() == attacker
 
 
+## Consumes this attacker's temporary recovery opening once and adds posture;
+## returns false if no matching opening. Distinct from the posture deathblow window.
 func consume_punish(attacker: Node3D) -> bool:
 	if not punishable_by(attacker):
 		return false
@@ -1431,9 +1393,7 @@ func on_died(killed := true) -> void:
 		squad = null
 
 
-# ---------------------------------------------------------------------------
 # Footwork
-# ---------------------------------------------------------------------------
 
 func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: float, level: float) -> void:
 	if stays_put:
@@ -2422,9 +2382,7 @@ func _update_dodge(delta: float) -> void:
 		guard._face(target.global_position - guard.global_position, delta)
 
 
-# ---------------------------------------------------------------------------
 # Throwing blows
-# ---------------------------------------------------------------------------
 
 func _consider_attack(delta: float, target: Node3D, to: Vector3, dist: float, level: float) -> void:
 	# Recovery openings take precedence over retaliation and improvised throws.
@@ -3122,8 +3080,8 @@ func _hit_reach(kind: StringName) -> float:
 	return _reach(kind)
 
 
-## What his blow is, for whoever it lands on: a raised guard reads this to
-## know what catching it costs.
+## Returns {type: StringName, call: StringName, guard_damage: float, unblockable: bool,
+## heavy: bool, low: bool, thrust: bool, ranged: bool}; defaults to overhead when idle.
 func attack_info() -> Dictionary:
 	var kind: StringName = guard._attack if guard._attack != &"" else &"overhead"
 	var a: Dictionary = ATTACKS.get(kind, ATTACKS[&"overhead"])
@@ -3395,9 +3353,7 @@ func _slam() -> void:
 			target.juice.add_trauma(0.35 * (1.0 - near / 5.0))
 
 
-# ---------------------------------------------------------------------------
 # Taking turns
-# ---------------------------------------------------------------------------
 
 ## How much sooner than usual he goes again: berserk much, an archer told to
 ## keep you from shooting somewhat.
@@ -3445,6 +3401,7 @@ func _take_token(target: Node3D, extra := 0) -> bool:
 	return true
 
 
+## Releases attack and held-shot flags so other attackers can take their turn.
 func release_token() -> void:
 	_hold_token = false
 	_hold_shot = false

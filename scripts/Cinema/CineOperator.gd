@@ -1,20 +1,8 @@
 extends Node
-## The hands on the camera: puts it where a shot's framing says, the way the
-## editor asks (a cut, a glide, a path, a wipe), as a dolly and a crane
-## would: critically damped springs (no floating, no overshoot) held to each
-## mode's speeds, the lens eased, focus pulled onto the subject, a little
-## handheld sway, and shake from blows. A shot's aim, once settled, holds
-## while its man shifts his weight or sways where he stands (a dead zone, as
-## an operator's eye allows), and turns only to keep him in it: smoothly, its
-## turn gathering speed no faster than the mode's acceleration, quicker as he
-## nears the frame's edge (never a snap: a whip pan up close shakes the whole
-## picture; a man who outruns it is the editor's to cut from). Up close an
-## eye light, a hand's breadth off the lens, lifts the actors' faces out of
-## the dark (it lights nothing else, and no guard reckons with it). It runs
-## on real time (TimeFx.real_time), so a slowed world does not slow the
-## camera.
-##   observe  a slow dolly (0.4 m/s, 8 deg/s), all but still in the hand.
-##   drama    quick (6 m/s, 60 deg/s), handheld up close.
+## Moves a Camera3D from framing dictionaries using damped translation/aim, eased lens/focus, sway, and impact shake.
+## Uses real time so cinematography continues during slow motion. Observe and drama select speed/turn limits.
+## An actor-only eye light belongs to fx_light and is excluded from gameplay light arithmetic.
+## attach() saves lens/attributes; stand_down() restores them. CineScreen handles captured-frame transitions.
 
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")

@@ -1,22 +1,9 @@
 extends RefCounted
-## The night at a garrison: its duties, its hour, and what the men need. One
-## for each scene tree, and only where a level sets one up (`setup`: the
-## showcase); elsewhere men keep the posts and rounds they were given.
-##   duties  a post (where he stands), a round (a route he walks), stations
-##           (his rota of GuardStations), the bench, a bed. `assign` puts a
-##           man on one (Guard.take_duty); `swap` exchanges two men's.
-##   hour    early, middle, late, dawn: it runs on game time, `hour_length`
-##           seconds an hour (condensed for the showcase).
-##   needs   tired, hungry, cold, each 0..1, for every man: tired grows
-##           awake and falls asleep; hungry grows, and falls eating; cold
-##           grows away from a fire and falls near one.
-##   wants   a man on a post too long (post_turn), or worn out on it, wants
-##           relieving; a man whose need has run full wants seeing to. They
-##           are queued for whoever sees to them (Gathering: the watch
-##           change, the bench, the bed, the fire), once until the need
-##           eases.
-## The alarm suspends it: needs still grow, but nobody is moved until the
-## garrison is at its ease again.
+## Optional level-scoped duty schedule with a compressed night clock.
+## assign()/swap() call Guard.take_duty; needs track tired/hungry/cold in 0..1.
+## Requests for relief/rest queue once until eased or forgotten. Alarm, searching
+## or combat suspend new requests, while needs continue changing.
+## Levels must call setup(); of() returns null when no schedule exists.
 
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 
@@ -64,7 +51,8 @@ var _wanted: Array = []
 var _asked := {}
 
 
-## Sets one up for `node`'s level.
+## Creates/replaces this level's rota, clamps hour length to at least one second.
+## start_hour selects early/middle/late/dawn (unknown names use early).
 static func setup(node: Node, p_hour_length: float, start_hour := &"early") -> RefCounted:
 	var rota: RefCounted = (load("res://scripts/AISystem/NightRota.gd") as GDScript).new()
 	rota.hour_length = maxf(p_hour_length, 1.0)
@@ -98,11 +86,13 @@ static func clear_all() -> void:
 	_rotas.clear()
 
 
+## Stores/replaces id -> {kind: StringName, data: Dictionary}. Guard.take_duty
+## interprets transform for post, route for round, or paths for station duties.
 func add_duty(id: StringName, kind: StringName, data: Dictionary) -> void:
 	_duties[id] = {"kind": kind, "data": data}
 
 
-## `man` on duty `id` (he goes to it now).
+## Records a valid known duty and calls man.take_duty now; invalid man/id is no-op.
 func assign(man: Node, id: StringName) -> void:
 	if not _duties.has(id) or man == null or not is_instance_valid(man):
 		return
@@ -160,7 +150,8 @@ func hour() -> StringName:
 	return HOURS[clampi(_start + int(clock / hour_length), 0, HOURS.size() - 1)]
 
 
-## {tired, hungry, cold}, each 0..1.
+## Returns live {tired: float, hungry: float, cold: float} values in 0..1;
+## lazily initializes the participant. Mutating it changes stored needs.
 func needs_of(man: Node) -> Dictionary:
 	var key := man.get_instance_id()
 

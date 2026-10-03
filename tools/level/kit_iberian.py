@@ -517,12 +517,10 @@ def _iberian(name, slot, shapes, cols, size, budget=None):
         k.PIECES[name]["budget"] = budget
 
 
-# ---------------------------------------------------------------------------
 # The Ribeira's arcade: a bay of low heavy granite (a segmental arch 4.4 m
 # wide on piers, 2.6 m to its springing), a barrel vault over the walkway
 # behind it. Its pivot is the middle of the walkway (the arch at +z), the
 # house's ground floor at its back.
-# ---------------------------------------------------------------------------
 
 def _arcade():
     width, height, walk = 6.0, GROUND, ARCADE
@@ -547,12 +545,10 @@ _shapes, _cols = _arcade()
 _iberian("arcade_ribeira_6", "granite", _shapes, _cols, [6.0, GROUND, ARCADE], budget=600)
 
 
-# ---------------------------------------------------------------------------
 # The Terreiro: a bay of its arcade (round arches 6 m high in Lisbon's
 # yellow, granite dressings, a walkway 4 m deep, rooms behind; a balconied
 # window over each arch, a cornice, a low roof), and the corner where two
 # arcades meet. Pivot: the bay's middle on the ground, the arches at +z.
-# ---------------------------------------------------------------------------
 
 BAY = {"width": 6.0, "arcade": 6.5, "top": 11.0, "depth": 8.0, "walk": 4.0, "opening": 4.0, "spring": 4.0}
 
@@ -677,10 +673,8 @@ _shapes, _cols = _terreiro_corner()
 _iberian("terreiro_corner", "render_ochre", _shapes, _cols, [9.6, BAY["top"] + 2.4, 9.6], budget=1700)
 
 
-# ---------------------------------------------------------------------------
 # The water stair and its two columns (the Cais das Colunas), the granite
 # flights of the Guindais stair with their landings and parapets.
-# ---------------------------------------------------------------------------
 
 def _columns():
     shapes, cols = [], []
@@ -718,10 +712,8 @@ k.piece("granite_parapet_3", "iberian", "granite", "stone",
         [k.box(0.0, 1.0 + 0.55, 1.5, 0.3, 1.1, math.hypot(3.0, 2.0) + 0.1, "granite", 0.0, -_rake, 0.0)], size=[0.3, 3.2, 3.2])
 
 
-# ---------------------------------------------------------------------------
 # The king on his horse (bronze) on a stone pedestal; a wall shrine (an
 # alminha: a tiled panel of the souls, a niche for a candle).
-# ---------------------------------------------------------------------------
 
 def _statue():
     shapes = [ks.box(0.0, 1.0, 0.0, 3.2, 2.0, 5.2, "granite"), ks.box(0.0, 2.6, 0.0, 2.6, 1.2, 4.4, "ashlar_gold"),

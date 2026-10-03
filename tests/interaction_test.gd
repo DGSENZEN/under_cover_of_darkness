@@ -365,7 +365,6 @@ func _tool_checks() -> void:
 	box.queue_free()
 
 
-# --------------------------------------------------------------------------
 func _place(pos: Vector3, yaw: float) -> void:
 	_release_all()
 	await _frames(2)

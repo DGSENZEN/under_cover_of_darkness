@@ -1,46 +1,11 @@
 class_name Guard
 extends CharacterBody3D
-## A guard: two senses feeding one number, and behaviour that follows it.
-##
-##   SENSES      vision (light x distance x view cone x cover) and hearing
-##               (SoundBus events, carried along the navmesh) both push `alert`.
-##   ALERT       0..100. It rises fast, holds, then decays slowly. Hearing
-##               alone can never reach combat: that takes actually seeing you.
-##   BEHAVIOUR   RELAXED patrols. SUSPICIOUS stops and looks. INVESTIGATING
-##               walks to where the stimulus was. SEARCHING checks around it.
-##               COMBAT fights you (GuardFighter.gd).
-##   THE HUNT    Once he has taken you on he is one of a hunt (Squad.gd) until
-##               he dies or gives the search up: losing sight of you, he
-##               searches the ground the hunt gives him (where you could be
-##               hiding: SearchSpots.gd); a friend who finds you again calls
-##               him in (hear_call), and a runner can fetch him to it from his
-##               post (join_hunt).
-##   WHO HE IS   his temperament (`temperament`, Temperament.gd), and what the
-##               whole garrison knows and dreads of you (Garrison.gd, ticked
-##               by every guard).
-##   HIS LIFE    between fights he talks with the man beside him, notices what
-##               is out of place, misses a friend gone from his post, covers a
-##               friend who goes to look at a noise, and lights a lantern in
-##               the dark once the garrison is roused (GuardLife.gd). A lookout
-##               sweeps his ground; stirred, he watches from his post and
-##               sends a man down to look, rings the bell when they fight
-##               below, and comes down when he is needed (_holds_post).
-##   HIS HANDS   what he holds and picks up: his weapon, lost and recovered;
-##               things to throw; the bell rope; the lantern (GuardHands.gd).
-##   GETTING     round men and things the navmesh does not know of, doors
-##   ABOUT       opened as he reaches them, a runner led, a lost man's trail
-##               followed a few steps (GuardNav.gd); clear of lit powder. Up
-##               onto what he can reach, down off it, across gaps, up and down
-##               ladders, into water and out (GuardClimb.gd, NavLinks.gd).
-##   WORD        what they call to each other, out loud (Comms.gd): where you
-##               are, where you went, powder, a noise, all clear, the bell.
-##   HIS OWN     at his ease, what he does with himself, in his own way
-##   WAYS        (GuardHabits.gd): sits, dozes, leans on a wall or a rail,
-##               eats, chops wood, tends the fire, carries crates, goes over
-##               to a friend, paces, fidgets; walks his rounds with a light.
-##
-## The body origin is at the FEET. The capsule floats above step height and
-## the body hovers on a ray, so stairs need no special handling.
+## Owns sensing, alert transitions, movement and damage for one guard.
+## Vision and gameplay sound update alert; combat requires sufficient visibility.
+## GuardFighter handles combat; helper objects own navigation, life and equipment.
+## Squad/Garrison share target state; TalkDirector/Gathering/NightRota share level state.
+## The origin is at the feet: the capsule is raised above step height and ground rays
+## support the body. Callers must distinguish feet from capsule or chest coordinates.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
@@ -938,8 +903,7 @@ func _physics_process(delta: float) -> void:
 		_debug_draw()
 
 
-## What he wears and carries: his kind's look (GuardFighter.look_of), with
-## look_override over it.
+## Returns archetype appearance settings merged with look_override; no scene mutation.
 func look() -> Dictionary:
 	return (GuardFighterScript.look_of(archetype) as Dictionary).merged(look_override, true)
 
@@ -951,10 +915,9 @@ func _puppet_drive(_delta: float) -> void:
 	pass
 
 
-# ---------------------------------------------------------------------------
 # Senses
-# ---------------------------------------------------------------------------
 
+## Returns world-space feet + eye_height; rig/head animation does not move this origin.
 func eye_position() -> Vector3:
 	return global_position + Vector3.UP * eye_height
 
@@ -1030,7 +993,9 @@ func _follow_through() -> void:
 	_seen_off_feet = _target.has_method("is_off_feet") and _target.is_off_feet()
 
 
-## Light, distance, view cone and cover, multiplied together.
+## Returns target visibility in 0..1 from exposure, sight points, cone and ray cover.
+## Target supplies get_exposure() and get_sight_points(); absent exposure yields 0.
+## Coordinates are world space; contact/close combat impose a visibility floor.
 func _visibility_of(target: Node3D) -> float:
 	if target == null or not target.has_method("get_exposure"):
 		return 0.0
@@ -1139,7 +1104,9 @@ func _line_of_sight(from: Vector3, to: Vector3, target: Node3D) -> bool:
 	return target != null and blocker != null and target.is_ancestor_of(blocker)
 
 
-## SoundBus calls this for every gameplay sound in the level.
+## Consumes SoundBus event {position: Vector3, db: float, range: float, source: Object,
+## kind: StringName, message?: Dictionary}. Applies hearing/navmesh range, then
+## updates stimulus, alert and last-known position. Ignores incapacitated guards.
 func hear_sound(event: Dictionary) -> void:
 	if _knocked_out:
 		return
@@ -1242,9 +1209,7 @@ func _sound_distance(position: Vector3) -> float:
 	return maxf(length, straight)
 
 
-# ---------------------------------------------------------------------------
 # Word from his own (Comms.gd)
-# ---------------------------------------------------------------------------
 
 ## Something called out (or the bell), heard if it carries this far round the
 ## walls to him.
@@ -1388,8 +1353,8 @@ func _heard_look(message: Dictionary, where: Vector3) -> void:
 	_set_state(Alert.INVESTIGATING)
 
 
-## Something to look into at `where` (a thing out of place, a missing man, a
-## friend gone quiet): he goes.
+## Records world-space stimulus where and reason why, raises alert to investigate,
+## and redirects an existing investigation/search. State promotion occurs in update.
 func notice(where: Vector3, why: StringName) -> void:
 	last_known_position = where
 	has_last_known = true
@@ -1518,9 +1483,7 @@ func activity() -> StringName:
 	return &""
 
 
-# ---------------------------------------------------------------------------
 # Bodies, shouting, and being knocked out
-# ---------------------------------------------------------------------------
 
 ## A body is only a problem if it can be SEEN, and that takes light. The
 ## lightgem only measures the player, so bodies are measured by arithmetic.
@@ -1708,9 +1671,7 @@ func join_hunt(where: Vector3) -> void:
 		bark(said)
 
 
-# ---------------------------------------------------------------------------
 # Being fought
-# ---------------------------------------------------------------------------
 
 func is_unaware() -> bool:
 	return state <= Alert.SUSPICIOUS
@@ -2065,7 +2026,7 @@ func is_evading() -> bool:
 	return _evade_left > 0.0
 
 
-## What his current blow is: its type, and what a block of it costs.
+## Returns GuardFighter attack metadata (type/call, guard_damage and defence flags).
 func attack_info() -> Dictionary:
 	return _fighter.attack_info()
 
@@ -2370,7 +2331,9 @@ func can_be_knocked_out_by(attacker: Node3D) -> bool:
 	return _cone_factor(attacker.global_position - eye_position()) <= 0.0
 
 
-## True when he goes down. A failed attempt tells him exactly where you are.
+## Returns true after spawning unconscious remains, emitting knocked_out and queueing
+## this guard for deletion. force bypasses awareness checks. Failure reveals the valid
+## attacker position, raises alert and emits clang/speech; attacker must be supplied.
 func knock_out(attacker: Node3D, force := false) -> bool:
 	# `force`: dropped on from above, awareness does not save him.
 	if not force and not can_be_knocked_out_by(attacker):
@@ -2413,9 +2376,7 @@ func knock_out(attacker: Node3D, force := false) -> bool:
 	return true
 
 
-# ---------------------------------------------------------------------------
 # Off his feet
-# ---------------------------------------------------------------------------
 
 ## Whether a kick takes him off his feet: caught in the middle of something,
 ## reeling, nearly done for, or met by a boot with a run or a leap behind
@@ -2666,10 +2627,11 @@ static func _pin(part: PhysicalBone3D) -> void:
 	pin.node_a = pin.get_path_to(part)
 
 
-# ---------------------------------------------------------------------------
 # The alert ladder
-# ---------------------------------------------------------------------------
 
+## Decays only relaxed/suspicious alert after hold time; promotes by thresholds.
+## Combat additionally requires visibility >= combat_needs_visibility. Investigation
+## and search end through behaviour, rather than numeric alert decay.
 func _update_alert(delta: float) -> void:
 	# Set to watch and stirred, and nothing of you to be seen from up there.
 	if lookout and state >= Alert.INVESTIGATING and not can_see_target:
@@ -2877,6 +2839,9 @@ func _send_to_look(where: Vector3) -> bool:
 	return true
 
 
+## Applies Alert transition, resets search/talk timers and emits alert_changed.
+## Interrupts relaxed activities, releases combat state or hunt membership as needed,
+## and sets movement/search goals. Entering combat drops carried lights and shouts.
 func _set_state(new_state: int) -> void:
 	if new_state == state:
 		return
@@ -3111,8 +3076,7 @@ func take_duty(duty: Dictionary) -> void:
 			_rota.set_stations(nodes)
 
 
-## Calls out (or says anything that is not part of a conversation): a man
-## calling out has left whatever he was talking about.
+## Speaks text as a call and leaves any current conversation; suppressed for puppets.
 func bark(text: String) -> void:
 	if puppet:
 		return
@@ -3123,9 +3087,8 @@ func bark(text: String) -> void:
 	_utter(text, &"", GuardVoiceScript.CALL)
 
 
-## A line of a conversation (TalkDirector), said `delivery` ("whisper",
-## "murmur", "shout", or "" as he would), to `listeners`, lasting `seconds`
-## (by its length if not given).
+## Speaks conversation text to listener nodes; delivery is whisper/murmur/shout or
+## empty. seconds < 0 selects duration from text. Updates subtitle/audio presentation.
 func speak(text: String, delivery: StringName = &"", listeners: Array = [], seconds := -1.0) -> void:
 	if puppet:
 		return
@@ -3162,9 +3125,7 @@ func _utter(text: String, delivery: StringName, rung: int, listeners: Array = []
 	CineEvents.emit(&"line", {"speaker": self, "listeners": listeners, "seconds": seconds, "delivery": delivery, "text": text, "where": global_position})
 
 
-# ---------------------------------------------------------------------------
 # Behaviours
-# ---------------------------------------------------------------------------
 
 func _do_patrol(delta: float) -> void:
 	# At his ease with a station to go to: there, and at it (GuardRota);
@@ -3534,7 +3495,7 @@ func send_to_bell() -> void:
 		_set_state(Alert.SEARCHING)
 
 
-## His orders to search a hunt area are over: anywhere is his ground again.
+## Removes hunt_area/hunt_group metadata; subsequent search may use any ground.
 func call_off_search() -> void:
 	remove_meta(&"hunt_area") if has_meta(&"hunt_area") else null
 	remove_meta(&"hunt_group") if has_meta(&"hunt_group") else null
@@ -3899,9 +3860,7 @@ func _look_around(delta: float) -> bool:
 	return _look_timer <= 0.0
 
 
-# ---------------------------------------------------------------------------
 # Moving
-# ---------------------------------------------------------------------------
 
 func _go_to(point: Vector3, force := false) -> void:
 	if _agent == null:
@@ -3925,8 +3884,7 @@ func _go_to(point: Vector3, force := false) -> void:
 		_nav.new_path()
 
 
-## His path has come to a way across it cannot walk (NavLinks): he makes the
-## move (GuardClimb), unless he cannot just now (on the floor, flying).
+## Forwards NavigationAgent link details to GuardClimb; active traversal owns position.
 func _on_link_reached(details: Dictionary) -> void:
 	if _climb.active() or _knock > 0.0 or _downed or _stagger > 0.0 or _knocked_out:
 		return
@@ -4133,9 +4091,7 @@ func _use_door(door: Object) -> void:
 	_door_wait = 0.9
 
 
-# ---------------------------------------------------------------------------
 # Presentation
-# ---------------------------------------------------------------------------
 
 func _update_head(delta: float) -> void:
 	if _head == null:

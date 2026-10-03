@@ -1,15 +1,7 @@
 extends Node3D
-## The smugglers' cave's blowhole (after Peniscola's Bufador): every `period`
-## s the sea surges up through the rock and bursts out of it, roaring (Sfx
-## "blowhole", cut from FilmCow's sea by tools/prepare_sfx.py) and throwing
-## a column of spray. While it roars, what is made round it is masked by
-## `roar_db` (its SoundBus zone, `reach` across): the thief's moment to
-## move. The spray is our own: soft round puffs drawn in code (a radial
-## gradient), no bought or borrowed sprite.
-##
-##   var blowhole := BlowholeScript.new()
-##   add_child(blowhole)
-##   blowhole.global_position = top_of_its_shaft
+## Periodic cave spray and recorded roar (FilmCow sea; tools/prepare_sfx.py).
+## During roar_time, a SoundBus box masks gameplay noise by roar_db; exit removes the zone.
+## The radial spray texture is generated locally.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")

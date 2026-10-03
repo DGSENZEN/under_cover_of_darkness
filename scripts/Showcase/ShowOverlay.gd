@@ -1,17 +1,7 @@
 extends CanvasLayer
-## What the viewer of the NPC showcase reads, over the picture:
-##   subtitles   what the men say (their barks, their gossip), over the
-##               speaker's head, with his name: only men in view and near, at
-##               most three at once, each fading after a few seconds. With
-##               the letterbox up (the camera's drama), in the lower bar, as
-##               a film's are.
-##   marks       over a man whose mind changes, for a moment: "?" suspicious,
-##               an eye looking (investigating, searching), "!" when he sees
-##               the intruder; a white flag while he begs.
-##   titles      a card as each act begins; a name card while the camera
-##               follows a man; a word when the ending or the speed changes.
-## H hides all of it, for clean footage. Timed on real time
-## (TimeFx.real_time), like the camera.
+## Showcase subtitles, alert/mercy marks, act titles, actor names, and ending/speed messages.
+## Shows up to three nearby visible speakers; letterboxed drama places subtitles in the lower bar.
+## Real-time fades follow the camera clock; H toggles the overlay.
 
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
@@ -100,6 +90,8 @@ func setup(p_map: Node3D) -> void:
 		watch(map.cast[name], String(map.roles.get(name, "")))
 
 
+## Connects a compatible actor's barked/alert_changed signals and records its display role.
+## Caller supplies a live actor and should register it once.
 func watch(man: Node3D, role: String) -> void:
 	_roles[man] = role
 	man.barked.connect(_on_barked.bind(man))
@@ -144,9 +136,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-# ---------------------------------------------------------------------------
 # Every frame
-# ---------------------------------------------------------------------------
 
 func _process(_delta: float) -> void:
 	var now := TimeFx.real_time()
@@ -230,9 +220,7 @@ func _head(man: Node3D, above: float) -> Vector3:
 	return man.global_position + Vector3.UP * (1.75 * size + above)
 
 
-# ---------------------------------------------------------------------------
 # Drawing
-# ---------------------------------------------------------------------------
 
 func _draw_canvas() -> void:
 	var camera := get_viewport().get_camera_3d()
@@ -316,9 +304,7 @@ func _draw_mark(font: Font, at: Vector2, glyph: String, alpha: float) -> void:
 			_canvas.draw_colored_polygon(cloth, ink)
 
 
-# ---------------------------------------------------------------------------
 # Heard and seen
-# ---------------------------------------------------------------------------
 
 ## How big a line is shown, by how it was said.
 static func size_for(delivery: StringName) -> int:
@@ -382,7 +368,7 @@ static func _hold(control: Control, anchors: Rect2, offsets: Rect2) -> void:
 	control.offset_bottom = offsets.size.y
 
 
-## Where the title, the name card and the toast are on the screen (tests).
+## Returns named Rect2 screen rectangles for visible title/name/toast labels (layout inspection).
 func label_rects() -> Dictionary:
 	return {"title": _title.get_global_rect(), "card": _card.get_global_rect(), "toast": _toast.get_global_rect()}
 

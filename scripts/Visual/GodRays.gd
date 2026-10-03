@@ -1,22 +1,7 @@
 extends Node3D
-## Shafts of light through windows, the PS2 way: a volume per window, its
-## opening swept along the light's way until it meets the room's floor or a
-## wall, drawn additive in the glass's own colours (god_rays.gdshader), soft
-## where it touches what it falls on and where it is seen edge-on, dust
-## drifting in it.
-##
-## They are as bright as the light that makes them: a Night's moon (clouds
-## crossing it and rain dim them, never below `least`; lightning flares
-## them), and the
-## lights given in `lights` (the coloured pools the glass throws on the floor)
-## follow them, each from its own calm energy.
-##
-##   var rays := GodRays.new()
-##   rays.direction = Vector3(0.62, -0.5, 0.6)
-##   rays.planes = [Plane(Vector3.UP, 0.0), ...]    # the room: normals inward
-##   rays.glass = Materials.photo(&"stained_glass")
-##   add_child(rays)
-##   rays.add_window(outline, uvs)                   # the opening, and where each corner is on the glass
+## Window shafts swept along direction to inward-facing room planes and drawn with glass colours.
+## The depth shader softens contact and edge-on views; dust drifts within each volume.
+## Night moon/cloud/rain/lightning state scales the shafts and companion lights from their calm energy.
 
 const SHADER := preload("res://scripts/Visual/god_rays.gdshader")
 
@@ -57,8 +42,8 @@ func _ready() -> void:
 	strength = brightness
 
 
-## A shaft through the opening `outline` (its corners on the glass, in order
-## round it), `uvs` where each is on the glass's picture.
+## Builds a shaft from matching local outline/UV arrays; outline must contain at least three points.
+## Sweeps vertices to inward-facing planes and returns a child MeshInstance3D; caller provides the glass texture/material inputs.
 func add_window(outline: PackedVector3Array, uvs: PackedVector2Array) -> MeshInstance3D:
 	var way := direction.normalized()
 	var far := PackedVector3Array()

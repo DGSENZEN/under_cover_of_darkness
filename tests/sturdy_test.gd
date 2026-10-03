@@ -315,7 +315,6 @@ func _run() -> void:
 		"carrying %s dead %s weapon up %s" % [carrying, player.is_dead, raised])
 
 
-# --------------------------------------------------------------------------
 
 func _spikes() -> Node:
 	for node in find_children("*", "Area3D", true, false):

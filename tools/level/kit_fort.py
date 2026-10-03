@@ -172,10 +172,8 @@ def _ring_battlements(apothem, top, sides, merlons, slot, pyramids=False, phase=
     return shapes, cols
 
 
-# ---------------------------------------------------------------------------
 # The city's walls: 12 m (the sea wall, the wall behind the Terreiro) and
 # 10 m (the older wall behind the Ribeira), 6 and 3 m runs and a corner.
-# ---------------------------------------------------------------------------
 
 def _city_wall(height, length):
     d = DEPTH
@@ -243,10 +241,8 @@ for _height in (12, 10):
           [DEPTH + 2.0 * BATTER[1], _height + BREAST + MERLON_UP + 0.1, DEPTH + 2.0 * BATTER[1]])
 
 
-# ---------------------------------------------------------------------------
 # A stair up a wall's inner face to its walk: along x, rising to +x, 1.5 m
 # wide; risers 0.2, treads 0.3, a landing (1.2 m) every ten risers.
-# ---------------------------------------------------------------------------
 
 LANDING = 1.2
 STAIR_WIDTH = 1.5
@@ -271,9 +267,7 @@ for _height in (12, 10):
     k.piece("wall_stair_%d" % _height, "fort", "granite", "stone", _boxes, size=[_run, float(_height), STAIR_WIDTH])
 
 
-# ---------------------------------------------------------------------------
 # Towers: a drum 8 m across and a square one 8 m, both 20 m, battered.
-# ---------------------------------------------------------------------------
 
 def _drum():
     r = 4.0
@@ -320,13 +314,11 @@ _shapes, _cols = _square_tower()
 _fort("tower_square_8", "granite", _shapes, _cols, [9.2, 21.9, 9.2])
 
 
-# ---------------------------------------------------------------------------
 # The golden tower: three twelve-sided stages in straw-coloured lime, their
 # corners dressed in golden stone, blind horseshoe arches on the first
 # two, Moorish pyramid merlons round their terraces, a domed lantern on the
 # third. The first stage is hollow at the ground (the windlass's room, its
 # door looking -z), an iron ladder up its -z face to its terrace.
-# ---------------------------------------------------------------------------
 
 ROOM = 5.0
 WALL = 1.5
@@ -461,12 +453,10 @@ for _index in (1, 2):
           budget=1200)
 
 
-# ---------------------------------------------------------------------------
 # The fort at the harbour's mouth: a bastion in the water (a prow to +z),
 # embrasures at the waterline, a parapet of merlons with shields; its tower,
 # pale limestone, a loggia to the sea, a rope band round it; domed garitas
 # for the bastion's corners.
-# ---------------------------------------------------------------------------
 
 BASTION = [(-15.0, -12.0), (15.0, -12.0), (15.0, 4.0), (6.0, 12.0), (-6.0, 12.0), (-15.0, 4.0)]
 BASTION_TOP = 4.0
@@ -588,12 +578,10 @@ _shapes, _cols = _garita()
 _fort("turret_domed", "ashlar_gold", _shapes, _cols, [2.7, 5.3, 2.7])
 
 
-# ---------------------------------------------------------------------------
 # The Sea Gate: its arched front between its drum towers (a passage 4 m wide
 # and 5 m high, the portcullis's groove in its reveals, a machicolation
 # gallery over it, the arms of the city), and the vaulted passage through
 # the wall (16 m, three murder holes in the vault).
-# ---------------------------------------------------------------------------
 
 GATE = {"width": 12.0, "height": 14.0, "depth": 3.0, "opening": 4.0, "spring": 3.0}
 
@@ -664,12 +652,10 @@ _shapes, _cols = _machicolation(6.0, 0.0, 0.0)
 _fort("machicolation_6", "granite", _shapes, _cols, [6.0, 3.1, 2.4])
 
 
-# ---------------------------------------------------------------------------
 # The Nasrid water gate: a piece of the sea wall standing in the water (its
 # foot at the sea, its walk at 14.5 like the wall's on the quay), a
 # horseshoe arch through it under an alfiz, its voussoirs brick and stone
 # in turn.
-# ---------------------------------------------------------------------------
 
 def _nasrid_gate():
     width, height = 12.0, 14.5
@@ -704,10 +690,8 @@ _shapes, _cols = _nasrid_gate()
 _fort("nasrid_gate", "granite", _shapes, _cols, [12.0, 14.5 + BREAST + MERLON_UP + 0.1, DEPTH + 0.4], budget=1000)
 
 
-# ---------------------------------------------------------------------------
 # The harbour chain: a span of great links on a float, sagging into the sea
 # between floats (the next span's); and the windlass that hauls it.
-# ---------------------------------------------------------------------------
 
 def _chain_span():
     length = 12.0

@@ -1,11 +1,7 @@
 extends Node3D
-## A heavy load hung from a beam by one rope: a cage of stones, a crate of
-## iron. Cut the rope (a blade, an arrow, a blast) and it drops. Whoever is
-## under it when it comes down is crushed; guards under it die.
-##
-##   var weight := HangingWeight.new()
-##   weight.drop = 4.0            # metres of rope, beam to load
-##   add_child(weight); weight.global_position = beam_point
+## Load suspended below the node origin by a strikeable rope.
+## Quick/power/arrow/blast contacts release the load once; falling overlap
+## checks crush each victim once. drop is beam-to-load-top distance in metres.
 
 const StrikeableScript := preload("res://scripts/Combat/Strikeable.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -83,6 +79,8 @@ func _on_rope_struck(kind: StringName, point: Vector3) -> void:
 		release(point)
 
 
+## Cuts once, frees the rope, enables load physics, and emits released.
+## at == Vector3.ZERO uses the rope position for sound.
 func release(at := Vector3.ZERO) -> void:
 	if cut:
 		return

@@ -1,17 +1,9 @@
 extends Node3D
-## The frob: look at something, press a key, and it responds. One ray from the
-## camera, one highlight, one dispatch. Anything with a `frob(player)` method
-## can be frobbed; `get_prompt(player)` is optional.
-##
-## Also carries physics objects: frob a RigidBody3D to pick it up, frob again
-## to set it down, throw to hurl it. Carrying blocks climbing. What you hold
-## is in the group "in_hand": no guard takes it from you, no door shuts on it.
-##
-## What is in your hand is used with the attack button: the blackjack swung; a
-## flash bomb or a water flask thrown (ThrownTool.gd), one off the belt each
-## time. A lock you have no key for, with a lockpick on your belt, is picked:
-## a few seconds at it, the pick clicking (heard close by), undone if you
-## move off or look away.
+## Gameplay-aim frob ray, target highlight, dispatch, carrying, and belt-tool use.
+## Targets implement frob(player); get_prompt(player) is optional. Carrying
+## marks bodies in_hand and blocks traversal. Keys turn through HandSlot jobs;
+## lockpicking requires a lockpick, continued aim, and near-still locomotion.
+## See docs/systems/interaction.md for target, carry, and inventory contracts.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const GuardBodyScript := preload("res://scripts/AISystem/GuardBody.gd")
@@ -226,9 +218,7 @@ func _combat_idle() -> bool:
 	return player.combat == null or player.combat.phase == player.combat.Phase.IDLE
 
 
-# ---------------------------------------------------------------------------
 # Finding and highlighting
-# ---------------------------------------------------------------------------
 
 func _find_target() -> Node:
 	var space := get_world_3d().direct_space_state
@@ -298,6 +288,7 @@ func _apply_highlight(node: Node, on: bool) -> void:
 		_apply_highlight(child, on)
 
 
+## Returns current HUD prompt, or an empty String when no prompt applies.
 func current_prompt() -> String:
 	if held != null:
 		return "Set down"
@@ -318,8 +309,8 @@ func current_prompt() -> String:
 	return "Use"
 
 
-## What the HUD shows: pairs of [input action, what it does]. An empty
-## action means a state to read ("Locked", "Too heavy"), not a key to press.
+## Returns Array of [action: StringName, label: String] HUD rows.
+## An empty action denotes status text; an empty array means no available rows.
 func current_actions() -> Array:
 	if _unlocking:
 		return []
@@ -345,9 +336,7 @@ func current_actions() -> Array:
 	return [[&"frob", prompt]]
 
 
-# ---------------------------------------------------------------------------
 # Frob dispatch
-# ---------------------------------------------------------------------------
 
 func _on_frob() -> void:
 	if held != null:
@@ -454,9 +443,7 @@ func _can_carry(body: RigidBody3D) -> bool:
 	return body.mass <= max_carry_mass
 
 
-# ---------------------------------------------------------------------------
 # Carrying
-# ---------------------------------------------------------------------------
 
 func _pick_up(body: RigidBody3D) -> void:
 	Sfx.play_flat(player, &"pickup", -2.0)
@@ -613,7 +600,8 @@ func _fits_down(body: RigidBody3D, at: Transform3D, down: float) -> bool:
 	return true
 
 
-## How far a body's collision reaches below its origin.
+## Approximate half-height from the first supported direct-child shape;
+## ignores child transforms and returns 0.25 m without a supported shape.
 func _half_height(body: RigidBody3D) -> float:
 	for child in body.get_children():
 		if not (child is CollisionShape3D) or (child as CollisionShape3D).shape == null:
@@ -670,7 +658,7 @@ func _arm_impact_noise(body: RigidBody3D) -> void:
 	}
 
 
-## Anything sent flying (thrown, dropped, kicked) is heard where it lands.
+## Tracks a body’s prior velocity so later impacts emit noise at the landing point.
 func arm_impact_noise(body: RigidBody3D) -> void:
 	_arm_impact_noise(body)
 
@@ -741,6 +729,7 @@ func _strike_guard_with(body: RigidBody3D, velocity: Vector3) -> void:
 			return
 
 
+## Releases hand-held and shouldered bodies; no-op if neither is carried.
 func drop_held() -> void:
 	if held != null:
 		_release(false)
@@ -749,10 +738,11 @@ func drop_held() -> void:
 		put_down_body()
 
 
-# ---------------------------------------------------------------------------
 # Bodies over the shoulder
-# ---------------------------------------------------------------------------
 
+## Carries a valid body only when hands are empty, locomotion permits it, and combat is idle.
+## Freezes/hides the body, disables its collision layers/mask, and emits picked_up.
+## An already carried body or unavailable hands cause a no-op.
 func shoulder(body: RigidBody3D) -> void:
 	if held != null or shouldered != null or not _hands_free() or not _combat_idle():
 		return
@@ -774,6 +764,9 @@ func shoulder(body: RigidBody3D) -> void:
 	picked_up.emit(body)
 
 
+## Clears shoulder ownership and tries nearby free floor placements. If none fits,
+## uses a fallback point in front; restores visibility/collision, lays down or
+## unfreezes the body, emits landing noise and released. Invalid bodies stop early.
 func put_down_body() -> void:
 	var body := shouldered
 	shouldered = null
@@ -843,9 +836,7 @@ func _body_fits(space: PhysicsDirectSpaceState3D, rest: Transform3D, exclude: Ar
 	return space.intersect_shape(query, 1).is_empty()
 
 
-# ---------------------------------------------------------------------------
 # The blackjack
-# ---------------------------------------------------------------------------
 
 func _use_item() -> void:
 	if _swing_cooldown > 0.0 or _swing_windup >= 0.0 or not _hands_free():
@@ -898,7 +889,7 @@ func _release_tool() -> void:
 	_tool_kind = &""
 
 
-## Whether a lock you have no key for can be picked: a lockpick on your belt.
+## Returns whether player.inventory contains at least one lockpick.
 func can_pick() -> bool:
 	return player.inventory.count_of(&"lockpick") > 0
 
@@ -912,8 +903,8 @@ func _pick_lock(lock: Node) -> void:
 	player.inventory.select_by_id(&"lockpick")
 
 
-## At the lock: clicks, heard close by; still looking at it and not moving
-## off, it gives (unlocked, and turned like a key); else it is left.
+## Advances clicks/progress while the target is locked, aimed at, and the player stays still.
+## Cancellation clears picking; completion unlocks and emits frobbed without opening the lock.
 func _update_picking(delta: float) -> void:
 	var lock := _picking
 
@@ -939,11 +930,12 @@ func _update_picking(delta: float) -> void:
 	frobbed.emit(lock)
 
 
-## Picking a lock now, and how far through it (0..1): for the HUD.
+## Returns whether a lockpick target is active.
 func picking() -> bool:
 	return _picking != null
 
 
+## Returns active lockpick progress clamped to 0..1, or 0 when inactive.
 func pick_progress() -> float:
 	return clampf(_pick_t / PICK_TIME, 0.0, 1.0) if _picking != null else 0.0
 
@@ -981,9 +973,7 @@ func _blackjack_lands() -> void:
 		Fx.dust(player, point, hit.get("normal", Vector3.UP), 0.4)
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 ## Where you look from: the head, leaning included, without the camera's
 ## bob, shake and smoothing, which are only for show.
@@ -993,8 +983,7 @@ func _eye() -> Transform3D:
 
 	return camera.global_transform
 
-## Registers an input action at runtime if the project does not define it.
-## Add these properly in Project Settings when you get a chance.
+## Registers a missing runtime input action with key or mouse button fallback.
 func _ensure_action(action: StringName, key: Key, mouse_button := -1) -> void:
 	if InputMap.has_action(action):
 		return

@@ -1,8 +1,6 @@
 extends Node3D
-## The rain round the camera: streaks falling through a box that follows it,
-## slanted by the wind, stopped by roofs and overhangs (particle collision
-## with a heightfield that follows the camera), a small splash where each
-## lands. Night sets `amount` (0..1) and `wind` (m/s).
+## Camera-following rain streaks and splashes, driven by amount [0,1] and wind in m/s.
+## A camera-following heightfield stops drops at roofs/overhangs; periodic rays report camera shelter.
 
 ## The box the rain falls through round the camera (m), the most drops seen
 ## at once, how fast they fall (m/s) and how long each lives (s).
@@ -127,7 +125,7 @@ func _process(delta: float) -> void:
 		_sheltered = not get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 
-## Whether the camera has a roof over it (the rain heard indoors).
+## Returns the latest periodic roof-ray result for the active camera, not a fresh physics query.
 func sheltered() -> bool:
 	return _sheltered
 

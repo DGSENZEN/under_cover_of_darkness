@@ -1,28 +1,8 @@
 extends Node3D
-## A person: one of the Universal Base Characters, dressed from the wardrobe
-## (a guard) or in a painted outfit (your arms), moved by
-## the Universal Animation Library (both Quaternius, CC0). Guards are made of
-## this, and so are your own arms. Presentation only: nothing here decides
-## anything.
-##
-##   var man := Humanoid.new()
-##   man.build(&"swordsman")            # outfit (tools/dress_characters.py)
-##   add_child(man)
-##   man.set_motion(velocity, fighting, delta) # every frame: walking, running
-##   man.show_action(&"Sword_Attack", t)      # every frame an action shows
-##   man.clear_action()                       # back to walking
-##   man.play_once(&"Death01")                # plays itself out, and stays
-##   man.add_ragdoll()                        # once, straight after build
-##   man.go_limp(velocity)                    # physics has him (Ragdoll.gd)
-##
-## Walking blends idle, walk, jog and sprint by speed, played at the pace the
-## feet need, backwards when he backs off; stepping sideways, his hips turn
-## to the way he goes while his chest stays on his enemy (Posture.gd). In a
-## fight his arms keep his guard up while his legs walk. Over it, two action
-## slots crossfade: an attack, a guard, a flinch, a fall. An action is shown
-## at whatever time the caller asks for, so a swing's frames follow the
-## fight's own clock: the blade meets you when the guard's code says it does,
-## whatever the animation's own pace.
+## Animated person shared by GuardRig and first-person arms, using Quaternius Universal Base Characters
+## and Universal Animation Library (CC0). build() loads a painted outfit; dress() assembles Wardrobe parts.
+## Presentation only: locomotion and action layers are driven by callers, then skeleton modifiers apply posture/physics.
+## Build ragdolls in the rest pose; driven actions use caller-supplied time rather than clip playback speed.
 
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -331,9 +311,7 @@ static func _walking(idle: StringName) -> AnimationNodeBlendSpace1D:
 	return space
 
 
-# ---------------------------------------------------------------------------
 # Driving it
-# ---------------------------------------------------------------------------
 
 ## Walking, running or standing, ready to fight or not. `velocity` is in his
 ## own space (he looks down -Z), at his own size. Call every frame.
@@ -493,6 +471,7 @@ func is_acting() -> bool:
 	return _action > 0.01
 
 
+## Returns the named animation length in seconds, or 0 when absent.
 func action_length(animation: StringName) -> float:
 	return library().get_animation(animation).length if library().has_animation(animation) else 0.0
 
@@ -524,9 +503,7 @@ func _process(delta: float) -> void:
 	mixer.set(&"parameters/upper/blend_amount", _upper)
 
 
-# ---------------------------------------------------------------------------
 # Going limp
-# ---------------------------------------------------------------------------
 
 ## The body he falls as. Made once, straight after build, while he still
 ## stands in his rest pose (its joints are measured from it).
@@ -613,9 +590,7 @@ func show_pose(animation: StringName, time := 0.0) -> void:
 	mixer.active = false
 
 
-# ---------------------------------------------------------------------------
 # Cut apart
-# ---------------------------------------------------------------------------
 
 ## What a blade can take off him, by the bone it hangs from: [the stump's
 ## radius, the piece's mass (kg), the bone at its far end, how far past it
@@ -983,9 +958,7 @@ static func _stump_mesh(radius: float) -> MeshInstance3D:
 	return cap
 
 
-# ---------------------------------------------------------------------------
 # Dressing: hair, helmets, plates
-# ---------------------------------------------------------------------------
 
 const HAIR := "res://assets/characters/hair/%s.gltf"
 ## Boots over the base body's bare feet (made in Blender: assets/characters/
@@ -1216,7 +1189,8 @@ static func forget_shared() -> void:
 	_armour_meshes.clear()
 
 
-## Puts `node` on `bone`, at `offset` in the bone's own space.
+## Adds a BoneAttachment3D and parents node beneath it at bone-local offset; returns the attachment.
+## Requires a built skeleton and a valid bone name; caller relinquishes node parenting.
 func attach(bone: StringName, node: Node3D, offset := Transform3D.IDENTITY) -> BoneAttachment3D:
 	var holder := BoneAttachment3D.new()
 	holder.name = "On_" + bone
@@ -1242,14 +1216,10 @@ func set_layers(layers: int) -> void:
 		(mesh as MeshInstance3D).layers = layers
 
 
-# ---------------------------------------------------------------------------
 # Dressed from the wardrobe
-# ---------------------------------------------------------------------------
 
-## Builds him as a low-poly PS2 character of `kind` (Wardrobe.gd, made by
-## tools/wardrobe): his outfit, a face, headgear, rolled from `seed` (the same
-## seed, the same man). False, with nothing built, if the kind cannot be
-## dressed: the caller builds him as the plain base body instead (GuardRig).
+## Builds a wardrobe kind using deterministic seed and fighting idle; returns false when the wardrobe cannot dress the kind.
+## Adds model/skeleton/meshes and per-instance appearance state; intended as the initial build path.
 func dress(kind: StringName, seed: int, fighting_idle: StringName = &"Sword_Idle") -> bool:
 	if not WardrobeScript.can_dress(kind):
 		return false

@@ -1,32 +1,8 @@
 extends RefCounted
-## What a guard has in his hands, and what he picks up (GuardFighter decides
-## when; this does it, and the rig shows it: GuardRig.activity):
-##   his weapon  knocked off his feet a man may lose his grip on it (never the
-##               brute: `grip_loss`); it clatters away and he goes back for it,
-##               or for any blade lying near that he can use, unless you stand
-##               over it. Without one he fights with fists and boots, and with
-##               whatever he can throw.
-##   throwing    a crate, a stool, a stone: picked up (a stoop, open to
-##               anything), drawn back overhead (your warning), and thrown at
-##               a man he cannot reach. It hurts (Thrown.gd), and a raised
-##               guard knocks it aside.
-##   the bell    a pull on its rope (AlarmBell.gd).
-##   a torch     gone out on its wall (Torch.gd): he reaches up to it with his
-##               tinder and lights it again (relight).
-##   a lantern   searching somewhere dark with the garrison roused, he lights
-##               one and holds it up, hanging from his fist by its bail
-##               (Hanging.gd); it lights you (and a body in a corner) as any
-##               light does. Into a fight he drops it, still burning.
-##   his rounds  a man set to walk them with a light (Guard.rounds_light)
-##               carries it lit (GuardHabits keeps it so): a lantern held out
-##               before him in his sword hand, hanging and swinging from his
-##               fist, his blade in its scabbard; or a torch held up in the
-##               other, his sword hand free for his blade. Into a fight he
-##               drops it as he would the lantern (a torch lies where it
-##               falls, still burning).
-##   his blade   drawn when he needs it and put by when he does not: GuardRig
-##               shows it, from what is in his hands here.
-##   evidence    your arrow in a wall, pulled out and taken (GuardLife).
+## Owns a guard's weapon, pickup timers, throwable, bell and carried lights.
+## GuardFighter/GuardLife choose actions; this helper claims items and completes them.
+## GuardRig displays hand activities. Interrupted pickups release claims; entering
+## combat drops the carried light into the world, still burning.
 
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
@@ -200,12 +176,11 @@ func relight_progress() -> float:
 	return clampf(1.0 - _relighting / RELIGHT_TIME, 0.0, 1.0)
 
 
-# ---------------------------------------------------------------------------
 # Picking things up
-# ---------------------------------------------------------------------------
 
-## Stoops for `item` (a "weapon", a "throwable", or "evidence"): it is his,
-## once he has straightened, if it is still within reach.
+## Reserves valid item for weapon/throwable/evidence pickup and starts stoop timing.
+## No-op while busy or for null/freed items. Stops horizontal velocity; completion
+## rechecks reach/availability before taking or freeing evidence.
 func stoop_for(item: Node3D, what: StringName) -> void:
 	if busy() or item == null or not is_instance_valid(item):
 		return
@@ -223,8 +198,8 @@ func stooping_for() -> StringName:
 	return _item_kind if _stoop > 0.0 and _item != null else &""
 
 
-## Struck, knocked about: whatever he was stooping for or pulling at, he
-## leaves (the bell, if it had not rung yet, stays silent).
+## Releases pickup claim, cancels unfinished bell pull and stops relighting.
+## An already rung bell remains rung.
 func interrupt() -> void:
 	if _item != null and is_instance_valid(_item):
 		Dangers.unclaim(_item, guard)
@@ -287,7 +262,7 @@ func _still_there(item: Node3D) -> bool:
 	return true
 
 
-## The weapons he can fight with: his own kind, and what is near enough to it.
+## Returns an untyped Array of weapon-kind StringNames this guard can use.
 func usable() -> Array:
 	match kind:
 		&"crossbow":
@@ -342,9 +317,9 @@ func drop_held() -> void:
 	Dangers.unclaim(item, guard)
 
 
-## Throws what he holds at `aim` (where he wants it to meet `target`, or to
-## land). Let go over his shoulder, flat and fast if the way is clear, lobbed
-## higher if not (onto a roof, over a wall). True if there was anything.
+## Releases a valid held item at world aim, optionally aiming at target. Tries three
+## arc checks with increasing flight time; launches even if all are blocked. Returns
+## false only without a valid held item. Restores collision and sets throw damage.
 func throw_held(aim: Vector3, target: Node3D = null) -> bool:
 	var item := held
 	held = null
@@ -429,9 +404,7 @@ func _arc_clear(from: Vector3, velocity: Vector3, gravity: float, flight: float,
 	return true
 
 
-# ---------------------------------------------------------------------------
 # His weapon
-# ---------------------------------------------------------------------------
 
 ## His grip goes (thrown off his feet): the weapon clatters away along
 ## `push`. Returns it, lying in the world. Put by (in its scabbard), it stays
@@ -461,9 +434,7 @@ static func mark_dropped(dropped: RigidBody3D, weapon_kind: StringName) -> void:
 	dropped.set_meta(&"weapon_kind", weapon_kind)
 
 
-# ---------------------------------------------------------------------------
 # The bell
-# ---------------------------------------------------------------------------
 
 ## A pull on `bell`'s rope, calling everyone to `where`.
 ## Lighting a torch again, left off (struck, or into a fight): not lit yet,
@@ -510,9 +481,7 @@ func ring_bell(bell: Node3D, where: Vector3) -> void:
 	guard.velocity.z = 0.0
 
 
-# ---------------------------------------------------------------------------
 # The lantern
-# ---------------------------------------------------------------------------
 
 func light_lantern() -> void:
 	if lantern != null or guard._rig == null or guard._rig.get("man") == null:

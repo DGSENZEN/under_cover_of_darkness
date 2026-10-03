@@ -1,62 +1,9 @@
 extends RefCounted
-## Everyone after one enemy together, the way Halo's squads do it: one of
-## them leads and calls the plan out loud, the whole group follows it, and
-## each has a place in it by what he is and where he stands. They read you
-## together and change the plan when you change how you fight; they lose
-## heart when their leader falls, and the brute loses his temper.
-##
-## The plan (`tactic`):
-##   envelop    one holds you in front; others work round to your sides and
-##              back, and strike when you commit to someone else; an archer
-##              shoots from behind them; the rest wait their turn at the ring.
-##   press      you are hurt: two come at once.
-##   break      you hide behind your blade: the brute comes in with the blow it
-##              cannot stop; the others feint and kick.
-##   rush       you keep away (a bow, backing off): they close fast, and an
-##              archer shoots whenever you stand still.
-##   fall_back  half of them are down: back together round the leader, guards
-##              up, calling for help; then at you again. A rash man keeps
-##              pressing regardless.
-##   rout       most of them have broken: the call goes up to run for help,
-##              and whoever has not broken holds you off while they go.
-## A place (`role_of`): engage, flank, reserve, support (an archer), bodyguard
-## (between you and an archer you are going for), breaker (the brute, to break
-## a turtle), rally, berserk (the brute, his captain cut down), hold (at the
-## edge of your reach, guard up, calling for help: a man alone who will not
-## face you, or the rearguard), flee (broken), desperate (a rash man broken:
-## all in), lookout (a man set to watch: he keeps his post, rings the bell and
-## calls where you are while the others have you in hand, and comes down to
-## them when he is needed: _keeps_post), intercept (you running: he goes where
-## you are going while another comes straight after you). Something thrown is
-## one man's turn at a time (may_throw).
-##
-## They read how you fight: turtle, spam, kite and bow as the plan's triggers;
-## parry (you turn their blows aside: they feint more, hold blows back late,
-## and use the ones no parry is for) and dodge (you step out of them: they use
-## the blows that reach and go low). While they hunt you in numbers, one of
-## them keeps watch from a vantage near where you were last seen
-## (watch_point_for). Whoever sees you calls it to the ones who do not (at
-## most every SPOT_EVERY: may_call).
-##
-## Each man's resolve (`resolve_of`) is their heart as he feels it: less the
-## fear the garrison's dread puts in a man short of nerve, less his wounds,
-## more for friends fighting beside him and a captain over him. Below his
-## break point (lower the more nerve he has) he breaks, one man at a time, the
-## craven first; he is whole again only well above it. A stubborn man never
-## breaks; a rash one breaks into an all-in charge.
-##
-## A squad is a hunt, not a moment of one. A man is in it from when he first
-## takes you on (or is fetched to it) until he dies or gives up the search
-## and goes back to his rounds: searching for you, running for help, off his
-## feet, he is still one of them, and what they have learned of you and how
-## their heart stands carry on through every lull. Only when the last of them
-## is gone is it over; the next hunt starts from what the whole garrison knows
-## of you (Garrison.gd). `members` is everyone in the hunt, `fighting` the men
-## at you now: the plan and the places are theirs.
-##
-## One is made for each target (`Squad.of`). Its men call `think` every frame,
-## whatever they are doing; the plan is made again a few times a second, on
-## the squad's own clock (the men's clocks each start when the man does).
+## Target-scoped hunt shared by combatants, hunters, runners and lookouts.
+## Selects a leader, tactic and roles; coordinates attack/throw turns and search areas.
+## Local observed habits fade, while Garrison learns persistent habits and dread.
+## Resolve combines morale, temperament, wounds and allies. Casualties can trigger
+## rally/rout; leaving combat alone does not leave the hunt. Last departure dissolves it.
 
 ## How often the plan is made again (seconds), and the least time a plan is
 ## kept before another is chosen.
@@ -284,9 +231,8 @@ var _watch_point := Vector3.INF
 var _watch_until := -100.0
 
 
-## The hunt for `target`: the one under way, or a new one when the last is
-## over. A new hunt comes knowing what the garrison knows of you, and with
-## the heart your deeds have left them.
+## Returns the active hunt for target or creates a new one seeded by Garrison.
+## Returns null for null/freed target; dissolved hunts are replaced.
 static func of(target: Node3D) -> RefCounted:
 	if target == null or not is_instance_valid(target):
 		return null
@@ -316,7 +262,7 @@ static func _prune() -> void:
 			_squads.erase(key)
 
 
-## Forget every squad (a clean start: tests, a new level).
+## Clears the static hunt cache; invoke separately from Garrison.clear_all().
 static func clear_all() -> void:
 	_squads.clear()
 
@@ -367,10 +313,9 @@ func called() -> void:
 	_last_spot_call = clock
 
 
-# ---------------------------------------------------------------------------
 # Who is in it
-# ---------------------------------------------------------------------------
 
+## Adds a guard weak reference to this hunt without duplicating membership.
 func join(guard: Node3D) -> void:
 	for w in _members:
 		if w.get_ref() == guard:
@@ -397,8 +342,7 @@ func leave(guard: Node3D) -> void:
 		(kept as Dictionary).erase(id)
 
 
-## He gave up the search and went back to his rounds: out of the hunt. The
-## last one out ends it.
+## Removes a returning guard from the hunt; last member leaving dissolves it.
 func stand_down(guard: Node3D) -> void:
 	leave(guard)
 
@@ -632,9 +576,7 @@ func _committed_away_from(guard: Node3D) -> bool:
 	return busy
 
 
-# ---------------------------------------------------------------------------
 # Making the plan
-# ---------------------------------------------------------------------------
 
 func think(delta: float) -> void:
 	var frame := Engine.get_physics_frames()
@@ -1154,9 +1096,7 @@ func _give_places(alive: Array, now: float) -> void:
 			waiting += 1
 
 
-# ---------------------------------------------------------------------------
 # Resolve: who holds and who breaks
-# ---------------------------------------------------------------------------
 
 ## His will to fight on, as it was last judged.
 func resolve_of(guard: Node3D) -> float:
@@ -1374,9 +1314,7 @@ func _broken_place(guard: Node3D) -> StringName:
 	return &"fetch" if _assign_fetch(guard) else &"flee"
 
 
-# ---------------------------------------------------------------------------
 # Help
-# ---------------------------------------------------------------------------
 
 ## Sends `runner` for help: true if he has (or now has) someone to fetch.
 func _assign_fetch(runner: Node3D) -> bool:
@@ -1638,9 +1576,7 @@ func help_coming() -> bool:
 	return clock < _help_until
 
 
-# ---------------------------------------------------------------------------
 # The hunt
-# ---------------------------------------------------------------------------
 
 ## Where `guard` searches next, as the hunt shares the ground out: his own
 ## piece round where he thinks you are (at least SEARCH_SPREAD from anyone
@@ -1719,7 +1655,7 @@ func search_spot_for(guard: Node3D) -> Dictionary:
 	return spot
 
 
-## Where `guard` searches next (search_spot_for): where he goes, or null.
+## Returns search_spot_for(guard).stand as Variant (Vector3), or null on failure.
 func search_point_for(guard: Node3D) -> Variant:
 	var spot := search_spot_for(guard)
 	return spot["stand"] if not spot.is_empty() else null
@@ -1788,13 +1724,8 @@ func _door_to_hold(guard: Node3D) -> Dictionary:
 	return {}
 
 
-## Where `guard` keeps watch from while the others search, if the hunt makes
-## him its watcher: three or more of them hunting (two, if one is an archer),
-## and he the one to do it (an archer, else the man with the most guile and
-## the least drive): a vantage near where you were last seen that sees the
-## place, higher and more open the better. null: he searches as the rest do
-## (and none, while a man set to watch is in the hunt on his post: that is
-## its eyes).
+## Returns a watcher's world-space vantage as Variant (Vector3), or null if this
+## guard should search normally. Reserves the shared watcher role/point.
 func watch_point_for(guard: Node3D) -> Variant:
 	var hunters := members().filter(func(man: Node3D) -> bool: return status_of(man) == &"hunting")
 	var watcher: Node3D = _watcher.get_ref() as Node3D if _watcher != null else null
@@ -1932,9 +1863,7 @@ static func _flat(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x - b.x, a.z - b.z).length()
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 static func _temper_of(guard: Node) -> RefCounted:
 	var fighter = guard.get("_fighter") if guard != null else null

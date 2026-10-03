@@ -1,8 +1,7 @@
 extends RefCounted
-## All the physics queries of the traversal system live here: measuring the
-## obstacle ahead, finding an edge to lower over, and fit-testing the capsule.
-##
-## The scanner never moves the player. It only answers questions.
+## Measures traversal geometry and checks capsule clearance without moving the body.
+## Call setup() before querying. Body origins use the standing capsule centre;
+## crouched queries lower their centre to keep the feet at the same position.
 
 const ObstacleProfile := preload("res://scripts/PlayerUtils/ObstacleProfile.gd")
 
@@ -52,6 +51,7 @@ var _stand_shape := CapsuleShape3D.new()
 var _crouch_shape := CapsuleShape3D.new()
 
 
+## Stores the body and capsule dimensions in metres; rebuilds reusable skin-shrunk shapes.
 func setup(
 	p_body: CharacterBody3D,
 	p_radius: float,
@@ -79,17 +79,16 @@ func origin_for_feet(surface_point: Vector3) -> Vector3:
 	return surface_point + Vector3.UP * (standing_height * 0.5 + floor_clearance)
 
 
-# ---------------------------------------------------------------------------
 # Obstacle scan
-# ---------------------------------------------------------------------------
 
+## Scans from the current body origin; returns an ObstacleProfile or null and sets last_reject.
 func scan(direction: Vector3, velocity: Vector3, airborne: bool) -> ObstacleProfile:
 	return scan_from(body.global_position, direction, velocity, airborne)
 
 
-## The same scan from any body-origin position. Chained moves scan from
-## mid-air, and hang leaps scan from points along the view direction.
-## `velocity` may be a carried velocity rather than the body's real one.
+## Scans at world body origin with forward direction and world velocity.
+## Negative lookahead_time uses scan_lookahead_time; max_top_y limits world top height.
+## Returns null on rejection and updates last_reject; never moves the body.
 func scan_from(
 	origin: Vector3,
 	direction: Vector3,
@@ -328,9 +327,7 @@ func scan_from(
 	return profile
 
 
-# ---------------------------------------------------------------------------
 # Edge below the player, for lowering into a hang
-# ---------------------------------------------------------------------------
 
 ## Returns {} when there is no edge, otherwise
 ## { "face_point": Vector3, "normal": Vector3, "lip_y": float }.
@@ -375,9 +372,7 @@ func edge_below(direction: Vector3, needed_drop: float) -> Dictionary:
 	}
 
 
-# ---------------------------------------------------------------------------
 # Landing target for an assisted jump
-# ---------------------------------------------------------------------------
 
 ## Looks along `direction` for a gap followed by a standable surface.
 ## Returns {} or { "point": Vector3, "distance": float }.
@@ -472,9 +467,7 @@ func _landing_edge(feet: Vector3, direction: Vector3, gap_at: float, land_at: fl
 	return far
 
 
-# ---------------------------------------------------------------------------
 # Primitives
-# ---------------------------------------------------------------------------
 
 func _exclude() -> Array[RID]:
 	var list: Array[RID] = [body.get_rid()]
@@ -482,6 +475,8 @@ func _exclude() -> Array[RID]:
 	return list
 
 
+## Returns a Godot ray-hit Dictionary, or {} on miss. Excludes player/extra_exclude;
+## uses mask, solid bodies only, and does not detect hits from inside geometry.
 func ray(from: Vector3, to: Vector3, hit_back_faces := true) -> Dictionary:
 	var space := body.get_world_3d().direct_space_state
 	var query := PhysicsRayQueryParameters3D.create(from, to, mask, _exclude())
@@ -539,7 +534,8 @@ func motion_is_clear(from: Vector3, to: Vector3, crouched: bool) -> bool:
 	return fractions.size() == 2 and fractions[0] >= 1.0
 
 
-## Fit-tests the capsule along a whole path of origin positions.
+## Sweeps each consecutive pair of world body origins with the chosen capsule.
+## Empty/single-point paths return true without checking the isolated point.
 func path_is_clear(points: PackedVector3Array, crouched: bool) -> bool:
 
 	for i in range(1, points.size()):

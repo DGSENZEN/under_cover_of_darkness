@@ -94,9 +94,7 @@ def cycles(gpu=True):
     scene.world.light_settings.distance = AO_DISTANCE
 
 
-# ---------------------------------------------------------------------------
 # Passes
-# ---------------------------------------------------------------------------
 
 def working_copy(obj):
     """A copy to bake from, alone in its material slot, no modifiers."""
@@ -263,9 +261,7 @@ def bounds(obj):
     return xs.min(0) - 0.01, xs.max(0) + 0.01
 
 
-# ---------------------------------------------------------------------------
 # Painting
-# ---------------------------------------------------------------------------
 
 def smoothstep(a, b, x):
     t = np.clip((x - a) / (b - a), 0.0, 1.0)
@@ -535,9 +531,7 @@ def finish(lit, covered, path):
     save_png(palettize(rgb), path)
 
 
-# ---------------------------------------------------------------------------
 # What gets baked
-# ---------------------------------------------------------------------------
 
 def bake_kind(recipe):
     outfit = bpy.data.objects["Outfit"]

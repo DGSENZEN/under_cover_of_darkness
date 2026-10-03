@@ -1,12 +1,7 @@
 extends "res://scripts/PlayerUtils/ClimbVolume.gd"
-## A simulated rope or chain the player can climb and swing on.
-##
-## Hangs from this node's origin. Simulated as a chain of points with distance
-## constraints (verlet), which is stable, cheap, and swings like a pendulum
-## under the player's input. Rendered as a MultiMesh: cylinders for a rope,
-## alternating flat links for a chain.
-##
-## It is also its own ClimbVolume: the detection box follows the rope.
+## ClimbVolume with a simulated rope or chain anchored at the node origin.
+## World-space points obey distance constraints; the overlap box follows them.
+## Grip parameters measure metres from the top; MultiMesh renders the links.
 
 enum Style {
 	ROPE,
@@ -79,9 +74,7 @@ func _physics_process(delta: float) -> void:
 	_update_visual()
 
 
-# ---------------------------------------------------------------------------
 # Simulation
-# ---------------------------------------------------------------------------
 
 func _simulate(delta: float) -> void:
 	if delta <= 0.0:
@@ -130,11 +123,10 @@ func _simulate(delta: float) -> void:
 				points[i + 1] = b - correction * 0.5
 
 
-# ---------------------------------------------------------------------------
 # Climber interface
-# ---------------------------------------------------------------------------
 
-## Distance along the rope from the anchor to the point nearest `position`.
+## Returns the nearest simulated point’s distance from the anchor in metres.
+## Requires initialized points; this chooses a point, not a continuous segment projection.
 func closest_param(position: Vector3) -> float:
 	var best := 0.0
 	var best_distance := INF
@@ -149,7 +141,7 @@ func closest_param(position: Vector3) -> float:
 	return best
 
 
-## World position of the rope at `param` metres from the anchor.
+## Returns interpolated world position at param metres from the anchor, clamped to 0..length.
 func rope_point(param: float) -> Vector3:
 	var clamped := clampf(param, 0.0, length)
 	var scaled := clamped / segment_length
@@ -158,9 +150,8 @@ func rope_point(param: float) -> Vector3:
 	return points[index].lerp(points[index + 1], t)
 
 
-## Velocity of the rope at `param`, per second of game time: the last tick's
-## travel over the step it integrated (`_delta` is not it during a hit-stop
-## that began or ended between the two), never faster than max_swing_speed.
+## Returns capped nearest-point world velocity using the last integrated game-time step.
+## _delta is unused; returns Vector3.ZERO before a positive step has been integrated.
 func rope_velocity(param: float, _delta: float) -> Vector3:
 	var index := _index_for_param(param)
 
@@ -170,13 +161,14 @@ func rope_velocity(param: float, _delta: float) -> Vector3:
 	return ((points[index] - previous[index]) / _last_step).limit_length(max_swing_speed)
 
 
-## Hold on at `param`. Call every frame while attached; pass the climber's
-## desired swing acceleration in world space.
+## Sets the grip parameter in metres and desired world swing acceleration.
+## Call while attached; negative grip parameter means no climber.
 func grip(param: float, push: Vector3) -> void:
 	_grip_param = param
 	_grip_push = push
 
 
+## Clears grip and input push; the rope keeps its simulated momentum.
 func release() -> void:
 	_grip_param = -1.0
 	_grip_push = Vector3.ZERO
@@ -198,9 +190,7 @@ func _index_for_param(param: float) -> int:
 	return clampi(int(round(param / segment_length)), 1, segments)
 
 
-# ---------------------------------------------------------------------------
 # Detection box and rendering
-# ---------------------------------------------------------------------------
 
 func _update_collision_box() -> void:
 	var low := points[0]

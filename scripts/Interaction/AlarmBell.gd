@@ -1,15 +1,7 @@
 extends StaticBody3D
-## An alarm bell hung from a post. A guard who has seen you (a lookout above
-## all, or a man sent for help) runs to it and rings it; it tolls for a few
-## seconds, and every guard who hears it comes to where the man who rang it
-## last saw you, or, rung by nobody who saw you, to the bell. The whole
-## garrison is roused (Garrison.raise_alarm): lanterns come out, and the
-## talk is of nothing else.
-##
-## You can ring it too (frob), to bring them all to it while you are
-## somewhere else. Once rung it needs a while before it can be again.
-##
-##   AlarmBell.build(parent, position, yaw)
+## Frobbable/guard-operated alarm with cooldown and timed tolls.
+## ring() broadcasts the supplied destination, raises the player garrison
+## alarm, and emits rung; player frob uses the bell position as destination.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -113,16 +105,18 @@ func frob(player: Node) -> void:
 	ring(player, global_position)
 
 
+## Returns whether cooldown has elapsed.
 func can_ring() -> bool:
 	return _since_rung >= cooldown
 
 
-## Where a man ringing it stands: at the rope.
+## Returns the world standing point 0.55 m along the bell’s +Z.
 func rope_point() -> Vector3:
 	return global_position + global_basis.z * 0.55
 
 
-## Rung by `by`, who wants everyone at `where`.
+## Broadcasts an alarm message targeting world where, raises the player’s garrison alarm,
+## starts tolling/cooldown, and emits rung(by). No-op during cooldown.
 func ring(by: Node, where: Vector3) -> void:
 	if not can_ring():
 		return

@@ -14,6 +14,8 @@ var attempts := {}
 var preset := "60 Hz / 1.0x"
 var _records := {}
 
+## Selects zero-based station index and count gates; setting identifies the physics/time preset.
+## Clears the current run, retains per-preset best records and increments attempts.
 func reset(index: int, count := 3, setting := "60 Hz / 1.0x") -> void:
 	station = index
 	gate_count = count
@@ -26,10 +28,13 @@ func reset(index: int, count := 3, setting := "60 Hz / 1.0x") -> void:
 	best = _records.get(preset, {})
 	attempts[index] = attempts.get(index, 0) + 1
 
+## Adds simulation seconds delta only while a run is active.
 func tick(delta: float) -> void:
 	if running:
 		elapsed += delta
 
+## Accepts the next zero-based gate; returns false for out-of-order or finished runs.
+## Gate zero starts timing; the final gate stores the best elapsed time for this preset.
 func reach(gate: int) -> bool:
 	if finished or gate != next_gate:
 		return false

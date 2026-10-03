@@ -1,14 +1,7 @@
 extends Node3D
-## A flame's corona (Thief: Deadly Shadows): a halo that stays the same size
-## on screen, drawn over the fog, breathing with the light's flicker and dying
-## with it. Walls and men hide it: up to three rays a tick from the camera to
-## its middle and to either side of it (the world and the guards' bodies),
-## its visibility easing toward the share of them that get through over FADE
-## seconds, so a man walking across a torch dims it rather than cutting it.
-## Off screen it is gone at once, so turning round never shows a stale halo.
-## It fades out between 1.5 and 3 times its light's reach.
-##
-## An effect: on its own layer, the lightgem never sees it.
+## Screen-sized flame halo on Layers.FX, drawn above fog without depth testing.
+## Three camera rays against world/bodies determine visibility; it eases over FADE and disappears immediately off screen.
+## Distance fading spans 1.5 to 3 times the light reach. Caller supplies carrier RIDs to exclude.
 
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const SHADER := preload("res://scripts/Visual/Lights/corona.gdshader")

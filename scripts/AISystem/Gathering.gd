@@ -1,31 +1,9 @@
 extends RefCounted
-## The things the men do together: small scenes, each with its parts, its
-## place, its time and its own conversations (TalkScript `place:`). One
-## director for each scene tree (`of`), ticked by every guard's GuardLife.
-##   dice    two or three at the crate by the bench: throws, groans, cheers.
-##   flask   two men: a hand held out, a pull, handed back.
-##   story   a teller and his listeners round the fire: the longest talk,
-##           a laugh at the end.
-##   watch_change  the relief walks over to the man on a post: "Anything?"
-##           "Nothing but the cold." Their duties swap (NightRota).
-##   round   the captain goes from man to man, a word for each by who he is;
-##           men straighten as she passes; a sleeper gets a boot.
-##   wake    a man nudges a sleeper awake to take his turn; up he gets,
-##           grumbling.
-##   fire    the fire burning low, a man fetches a log from the woodpile,
-##           kneels and feeds it; it flares.
-## And the rota's other wants: a hungry man goes to eat, a cold one to the
-## fire, a tired one to bed.
-## A gathering starts when it is asked for (`request`) or, where the level
-## keeps a night rota (NightRota), when its men are free and near. It asks
-## them first ("Dice?" "Go on then."), lends each a station at his spot
-## (GuardRota.lend: he walks there and settles), plays its conversations,
-## and lets them go. Anything that stirs one of them ends it for all.
-##
-## A place is a node in the group "gathering_places" with its kind in the
-## meta "gathering"; its spots are its Marker3D children (meta "activity":
-## squat, stand, sit; meta "role": teller, listener, any), each facing its
-## -Z.
+## Level-scoped director for shared activities and relief/rest requests.
+## Requests or NightRota needs select members, reserve temporary stations, play
+## TalkDirector conversations and restore duties. Standard gatherings include dice,
+## flask and story; relief, rounds, waking and fire-tending use specialised states.
+## Stirred members end the gathering. Place markers provide spots and facing.
 
 const TalkFacts := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
 const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
@@ -105,8 +83,7 @@ var _live: Array = []
 var _history: Array[StringName] = []
 
 
-## The director for `node`'s level (made the first time it is asked for): a
-## level loaded again starts afresh.
+## Returns the level director, lazily created; null for a node outside the tree.
 static func of(node: Node) -> RefCounted:
 	if node == null or not node.is_inside_tree():
 		return null
@@ -139,7 +116,8 @@ func request(kind: StringName, names := []) -> void:
 	_start_in = minf(_start_in, 0.0)
 
 
-## What is asked for and not yet begun: [{kind, names, at}].
+## Returns the live request Array of {kind: StringName, names: Array, at: float}.
+## Treat it as read-only; it is not a defensive copy.
 func queued() -> Array:
 	return _queue
 
@@ -165,7 +143,8 @@ func end_all() -> void:
 		_end(g)
 
 
-## The gatherings going on, for tests and the showcase.
+## Returns live gathering dictionaries; specialised activities have different keys.
+## Treat returned arrays/dictionaries as read-only views of director state.
 func live() -> Array:
 	return _live
 
@@ -175,7 +154,7 @@ func history() -> Array[StringName]:
 	return _history
 
 
-## The gathering he is in; {} if none.
+## Returns this participant's live gathering dictionary, or {} when absent.
 func member_of(man: Node) -> Dictionary:
 	for g in _live:
 		if (g["members"] as Array).has(man):
@@ -264,9 +243,7 @@ func tick(delta: float) -> void:
 			return
 
 
-# ---------------------------------------------------------------------------
 # Starting
-# ---------------------------------------------------------------------------
 
 func _start(kind: StringName, names: Array) -> bool:
 	if SPECIAL.has(kind):
@@ -449,9 +426,7 @@ func _lend(g: Dictionary) -> void:
 	g["started_at"] = clock
 
 
-# ---------------------------------------------------------------------------
 # Going on
-# ---------------------------------------------------------------------------
 
 func _advance(g: Dictionary) -> void:
 	match g["kind"]:
@@ -565,9 +540,7 @@ func _given_up(q: Dictionary) -> void:
 		rota.forget(man, &"relief")
 
 
-# ---------------------------------------------------------------------------
 # The watch, the round, the sleeper, the fire
-# ---------------------------------------------------------------------------
 
 func _start_special(kind: StringName, names: Array) -> bool:
 	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
@@ -1071,9 +1044,7 @@ func _advance_rest(g: Dictionary) -> void:
 		_end(g)
 
 
-# ---------------------------------------------------------------------------
 # Places
-# ---------------------------------------------------------------------------
 
 ## A station for a while (freed with the gathering), at `at` facing `look`.
 func _make_station(kind: StringName, at: Vector3, look: Vector3) -> Node3D:

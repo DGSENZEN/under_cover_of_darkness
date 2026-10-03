@@ -1,8 +1,7 @@
 class_name Loot
 extends RigidBody3D
-## Something worth stealing. Frob it and its value goes into the purse. It is
-## a RigidBody3D so it can also sit in a chest, fall off a shelf, or be
-## knocked over, but it is never carried: taking it is the whole point.
+## Frobbable rigid pickup transferring value to player.inventory.purse once.
+## It cannot be carried; successful frob marks taken and queues the body for deletion.
 
 @export var value := 25
 @export var loot_name := "trinket"

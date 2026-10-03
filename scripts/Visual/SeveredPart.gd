@@ -1,11 +1,7 @@
 extends RigidBody3D
-## A part of a man cut away from him (Humanoid.sever): a head, an arm, a leg.
-## It flies off the blade bleeding, tumbles, and lies where it lands: a thing
-## like any other to pick up and throw, and a guard who sees one lying in the
-## light knows what happened here (it is one of the "bodies").
-##
-## Drawn by a copy of his skeleton, posed as he was the instant it was cut,
-## with everything but the part itself shrunk to nothing.
+## Detached rigid body created by Humanoid.sever(), with a frozen skeleton copy showing only the cut part.
+## Bleeds, tumbles, can be carried/thrown, and joins the bodies group for guard discovery.
+## The oldest part is removed above MAX_PARTS; physics uses body layer 4.
 
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")

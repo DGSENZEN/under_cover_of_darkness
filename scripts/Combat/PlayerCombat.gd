@@ -1,67 +1,8 @@
 extends Node
-## Fighting: Dark Messiah's weight, Chivalry's call and answer, Sekiro's
-## deflects and posture. Lives on the player as "Combat".
-##
-##   LMB        attack at once; keep holding to charge a power attack.
-##              The way you move the view as you swing picks the swing:
-##              across for a side cut, down for an overhead chop, up for a
-##              thrust (still: a forehand, and a chained one comes back from
-##              the other side).
-##              Click again while a swing plays and the next one follows as
-##              soon as it can: a combo, each wound up quicker than the last.
-##   RMB        block (sword). Raise it just before a blow lands: a parry,
-##              and the blow you answer with comes fast and hard (a riposte).
-##              Right on the blow (perfect_window) it is a perfect deflect:
-##              free, and it throws him further off his balance, and your
-##              riposte is quicker still. Pressing it again straight away
-##              does not parry again: a parry is a commitment. Pressed
-##              during your own windup, the attack is abandoned: a feint. Release
-##              guard, change attack direction, and click quickly: a faster
-##              follow-through. Feinting that follow-through earns no new boost.
-##   Q          dodge: a quick step the way you are moving (back if still).
-##   F          kick. Guards stagger back, off ledges and onto spikes, and a
-##              raised guard is knocked aside; crates fly; doors burst open.
-##   bow        hold LMB to draw, release to loose. Drawing slows you and
-##              narrows the view; RMB lets the string down.
-##   falling    onto a guard with LMB pressed: a drop attack.
-##
-## Every blow of his asks for an answer (its call, in the colour of his
-## blade: GuardFighter.CALLS), and once his blade is let go (the glint) a cut
-## of yours no longer stops it: answer it, or trade.
-##   parry      any cut or point (a point only partly on a held guard).
-##   counter    a blow of yours begun as his comes (counter_window), a cut
-##              against a cut, a point against a point: his is turned aside
-##              as by a parry, and yours goes on into him as a riposte.
-##   clash      yours already on its way when his arrives: the blades meet,
-##              neither lands, both are thrown back.
-##   Mikiri     his point: step into it (dodge toward him as it comes) and
-##              pin his blade. He is thrown hard off his balance.
-##   jump       his sweep at your legs. dodge  his great blow, his kick.
-##
-##   momentum   a blow thrown at a run is a running blow: you are carried
-##              into it, it hits harder and wears his guard like a heavy
-##              one, and a miss carries you on. One thrown backing away has
-##              less of your weight in it.
-##   stamina    blocking a blow costs it (a brute's costs a lot), and so do
-##              dodges, kicks and swings, and being parried (your balance
-##              thrown). A blow on a guard with none left breaks through it.
-##              It comes back quickly when you stop.
-##   adrenaline fills as you fight. Full, your next power attack is a
-##              slow-motion finisher.
-##
-## His balance (his posture, over his head: StealthHUD) fills as you parry,
-## counter, Mikiri and cut into his guard. Full, he is open: the next blow is
-## a deathblow.
-##
-## Weight comes from the moment of contact. A blow that lands freezes the
-## world for a few hundredths of a second (hit-stop), the blade drags through
-## him, the view jolts against the cut and the swing carries on. A blow that
-## is stopped (a wall, his blade) stops dead and bounces back, with sparks.
-## The victim's side, blood, wounds and flinching, is the guard's own
-## business (Guard.gd, GuardFighter.gd, GuardRig.gd).
-##
-## Blows and arrows are aimed from the head, not the camera: the camera's
-## shake and punch are for show and never move a blow.
+## Player combat state machine: melee, defence, bow, kick, dodge, and drop attacks.
+## Runs as the player Combat child and uses the inventory selection as weapon.
+## Blows and projectiles use gameplay head aim, independent of camera effects.
+## See docs/systems/combat.md for controls, phases, attack schemas, and signals.
 
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
@@ -78,7 +19,7 @@ signal deflected(point: Vector3)
 signal kicked(target: Object)
 signal fired(arrow: Node3D)
 signal finisher_started
-## You met a blow: "parry", "block" or "broken" (no stamina left to hold it).
+## Defence outcome: parry, block, broken, counter, clash, or mikiri.
 signal defended(result: StringName)
 signal feinted
 signal dodged(direction: Vector3)
@@ -374,6 +315,8 @@ func _ready() -> void:
 	stamina = stamina_max
 
 
+## Resolves the selected inventory ID to a shared weapon Resource; null for missing
+## inventory, empty hands, or an ID absent from Weapon.find().
 func current_weapon() -> Resource:
 	if player.inventory == null:
 		return null
@@ -386,9 +329,7 @@ func current_weapon() -> Resource:
 	return WeaponScript.find(item["id"])
 
 
-# ---------------------------------------------------------------------------
 # Every frame
-# ---------------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
 	_game_time += delta
@@ -700,8 +641,7 @@ func _reset() -> void:
 	_t = 0.0
 
 
-## A gym restart restores resources and forgets opportunities from the last
-## attempt. Ordinary action cancellation uses _reset() and keeps those costs.
+## Resets phases, buffers, cooldowns, targets, stamina, adrenaline, and combo for practice.
 func reset_for_practice() -> void:
 	_reset()
 	stamina = stamina_max
@@ -750,16 +690,12 @@ func speed_scale() -> float:
 	return 1.0
 
 
-## Where blows and arrows come from and go: the head, without the camera's
-## bob, shake and punch, which are only for show. Leaning counts: it is
-## where your head really is.
+## Returns the gameplay head transform, including lean but excluding cosmetic camera motion.
 func aim() -> Transform3D:
 	return player.aim_transform()
 
 
-# ---------------------------------------------------------------------------
 # Stamina
-# ---------------------------------------------------------------------------
 
 func _spend(amount: float) -> void:
 	if amount <= 0.0:
@@ -777,16 +713,14 @@ func _regain_stamina(delta: float) -> void:
 	stamina = minf(stamina + stamina_regen * delta * (0.5 if blocking else 1.0), stamina_max)
 
 
-# ---------------------------------------------------------------------------
 # What a guard can read off you
-# ---------------------------------------------------------------------------
 
-## Changes with every blow you start.
+## Returns the serial identifying the most recently begun melee blow.
 func threat_serial() -> int:
 	return _serial
 
 
-## "windup", "charging", "strike" or "" for a blow coming his way.
+## Returns windup, charging, strike, or an empty StringName when no melee threat is active.
 func threat_phase() -> StringName:
 	if weapon == null or weapon.kind != WeaponScript.Kind.MELEE:
 		return &""
@@ -802,8 +736,7 @@ func threat_phase() -> StringName:
 	return &""
 
 
-## Seconds until the blade reaches the middle of its cut; -1 if nobody can
-## tell (a charge is loosed when you let go).
+## Returns estimated game seconds to the cut’s contact point; -1 when unknown/inactive.
 func time_to_contact() -> float:
 	if weapon == null:
 		return -1.0
@@ -817,6 +750,7 @@ func time_to_contact() -> float:
 	return -1.0
 
 
+## Returns styled weapon reach in metres, or 0 without a weapon.
 func threat_reach() -> float:
 	return weapon.reach * float(_style()["reach"]) if weapon != null else 0.0
 
@@ -856,8 +790,7 @@ func is_running_blow() -> bool:
 	return _running and (phase == Phase.WINDUP or phase == Phase.STRIKE or phase == Phase.RECOVER)
 
 
-## The guard you would land on, if you are falling toward one with
-## something to drop on him with.
+## Returns the currently tracked drop-attack Node3D or null.
 func drop_target() -> Node3D:
 	if _drop_target == null or not is_instance_valid(_drop_target) or not _can_drop_attack():
 		return null
@@ -882,9 +815,7 @@ func block_cost_near() -> float:
 	return cost
 
 
-# ---------------------------------------------------------------------------
 # Melee
-# ---------------------------------------------------------------------------
 
 func _start_strike(power: bool) -> void:
 	_power = power
@@ -988,8 +919,8 @@ func _swing_direction(fresh := false, chained := false) -> StringName:
 	return &"overhead" if motion.y < 0.0 else &"thrust"
 
 
-## Adds look motion as if the view had turned (radians: yaw left +, pitch up
-## +). Your own turning is tracked on its own; tests and pads can push it.
+## Accumulates input look radians: positive X yaw-left, positive Y pitch-up.
+## Used with measured player rotation to select melee direction.
 func add_look_motion(motion: Vector2) -> void:
 	_look_motion += motion
 
@@ -1490,9 +1421,7 @@ func _feint() -> void:
 		_guard_sound()
 
 
-# ---------------------------------------------------------------------------
 # The dodge
-# ---------------------------------------------------------------------------
 
 func _try_buffered_dodge() -> void:
 	if _game_time - _dodge_pressed_at <= dodge_buffer:
@@ -1540,9 +1469,8 @@ func dodged_within(seconds: float) -> bool:
 	return _game_time - _dodged_at <= seconds
 
 
-## You answered his blow as it asked (a dodge out of it at the last moment, a
-## jump over his sweep): he is left overreaching. The moment hangs, your breath
-## comes back, and your answer to him comes fast and hard, like a riposte.
+## Rewards an enemy-reported dodge/jump answer with stamina, adrenaline, and riposte time.
+## Emits answered(how); _by is unused.
 func on_answered(how: StringName, _by: Node) -> void:
 	TimeFx.request(get_tree(), &"answer", 0.45, 0.3)
 	CombatView.jolt(get_tree(), 0.45)
@@ -1554,13 +1482,11 @@ func on_answered(how: StringName, _by: Node) -> void:
 	answered.emit(how)
 
 
-# ---------------------------------------------------------------------------
 # Defence: called by the player when something hits them
-# ---------------------------------------------------------------------------
 
-## How much of an incoming blow gets through. A raised guard facing the
-## attacker takes most of it, for stamina; raised just in time, all of it,
-## and the attacker reels. A kick goes through any guard.
+## Returns damage that passes defence (0 means fully defended). May spend/refund
+## stamina, change phase/adrenaline/riposte state, answer the attacker, and emit effects.
+## from may be null; optional from.attack_info() supplies defence metadata.
 func filter_incoming(amount: float, from: Node) -> float:
 	var info: Dictionary = from.attack_info() if from != null and from.has_method("attack_info") else {}
 
@@ -1877,7 +1803,8 @@ func _stagger(seconds: float, why: StringName) -> void:
 	staggered.emit(why)
 
 
-## A blow got through to you: called by the player once it has landed.
+## Applies feedback for actual post-defence damage and may stagger an attack/draw.
+## from may be null; this does not subtract player health.
 func on_hurt(amount: float, from: Node) -> void:
 	var info: Dictionary = from.attack_info() if from != null and from.has_method("attack_info") else {}
 	# A boot, a blast, a flame, a thrown crate: it hurts, but nothing cut you.
@@ -1921,9 +1848,7 @@ func on_hurt(amount: float, from: Node) -> void:
 	Fx.blood(player, at.origin + at.basis * Vector3(0.0, -0.45, -0.4), spray, 0.45)
 
 
-# ---------------------------------------------------------------------------
 # The drop attack
-# ---------------------------------------------------------------------------
 
 ## Falling toward a guard below: remembers him, and a click while he is
 ## there is a drop attack when you land. True when the click was taken.
@@ -2041,9 +1966,7 @@ func _drop_attack(target: Node3D) -> void:
 	drop_attacked.emit(target)
 
 
-# ---------------------------------------------------------------------------
 # The kick
-# ---------------------------------------------------------------------------
 
 func _start_kick() -> void:
 	_kick_momentum = Vector2(player.velocity.x, player.velocity.z).length() > 4.0 or not player.is_on_floor()
@@ -2209,9 +2132,7 @@ func _kick_contact() -> void:
 	SoundBus.emit_sound(player.global_position + forward, kick_db if struck else kick_db - 12.0, player, &"kick")
 
 
-# ---------------------------------------------------------------------------
 # The bow
-# ---------------------------------------------------------------------------
 
 func _update_draw(delta: float, attack_held: bool) -> void:
 	draw = clampf(draw + delta / maxf(weapon.draw_time, 0.01), 0.0, 1.0)
@@ -2270,6 +2191,7 @@ func _loose() -> void:
 	fired.emit(arrow)
 
 
+## Returns the arrows belt count, or 0 when absent; requires player.inventory.
 func arrow_count() -> int:
 	for entry in player.inventory.belt:
 		if entry["id"] == &"arrows":
@@ -2286,9 +2208,7 @@ func _consume_arrow() -> void:
 			return
 
 
-# ---------------------------------------------------------------------------
 # How the weapon hand looks
-# ---------------------------------------------------------------------------
 
 ## Poses the weapon in your view (ViewPoses.gd). A swing follows its arc
 ## exactly: cocked, cut (faster and faster), followed through (slowing); a

@@ -1,21 +1,8 @@
 extends RefCounted
-## What a man at his ease does with himself standing about (at his post, a
-## waypoint, between bites of his supper): warms his hands at the fire,
-## squats by it, stamps his feet, scratches, takes a drink, folds his arms,
-## leans on a wall, looks his blade over, looks up at the tower, paces a few
-## steps, spits, rolls his shoulders.
-##
-## Chosen by dual utility: the most pressing kind first (cold, then tired,
-## then plain idleness), then a pick by weight among the options near the
-## best, weighted by his temperament and less for what he did lately. Never
-## the same twice running, never three times in five. Each has what it
-## needs (a fire near, a wall behind him, his blade out, the tower in
-## view, room to pace), a length, and a rest before it comes again.
-##
-## What he does is `activity()` (GuardRig and Expression show it); pacing
-## moves him (`wants_step`: Guard walks him there and back). His own ways
-## (GuardHabits: a seat, a wall, a friend) come first: he passes the time
-## between them, and they wait for it.
+## Selects short idle activities by need priority, then weighted utility.
+## Requirements, cooldowns and recent history avoid unsuitable or repeated choices.
+## Activity drives presentation; wants_step supplies optional pacing destinations.
+## GuardHabits activities take precedence; Guard performs requested movement.
 
 ## Reached at run time (it reads the guard scripts too).
 const NIGHT_ROTA := "res://scripts/AISystem/NightRota.gd"
@@ -144,13 +131,13 @@ func activity() -> StringName:
 	return _doing
 
 
-## Pacing: where he is walking to now; else null.
+## Returns pacing destination as Variant (Vector3), or null when not pacing.
 func wants_step() -> Variant:
 	return (_pace_from if _pacing_back else _pace_to) if _doing == &"pace" else null
 
 
-## `id` begun now, if what it needs is there (GuardHabits hands him its
-## "pace": a few steps out and back, facing his ground). False if not.
+## Starts id after checking known option and environmental needs. Returns false
+## for unknown/unsuitable options or failed start; ends the prior activity first.
 func start(id: StringName) -> bool:
 	if not OPTIONS.has(id) or not _has(StringName(OPTIONS[id]["needs"]), _needs()):
 		return false
@@ -167,8 +154,8 @@ func stop() -> void:
 		_end()
 
 
-## A pick now (for checks): what he would choose, remembered as if done,
-## whatever the rests between them.
+## Selects an available pastime without starting it; returns empty StringName if none.
+## A successful selection is recorded in history, so this query has a side effect.
 func choose() -> StringName:
 	var pick := _pick(false)
 
@@ -183,9 +170,7 @@ func history() -> Array[StringName]:
 	return _history
 
 
-# ---------------------------------------------------------------------------
 # Choosing
-# ---------------------------------------------------------------------------
 
 func _pick(rested_only: bool) -> StringName:
 	var needs := _needs()
@@ -290,9 +275,7 @@ func _has(need: StringName, needs: Dictionary) -> bool:
 	return false
 
 
-# ---------------------------------------------------------------------------
 # Doing
-# ---------------------------------------------------------------------------
 
 func _begin(id: StringName) -> void:
 	var option: Dictionary = OPTIONS[id]
@@ -351,9 +334,7 @@ func _remember(id: StringName) -> void:
 		_history.pop_front()
 
 
-# ---------------------------------------------------------------------------
 # Where he is
-# ---------------------------------------------------------------------------
 
 func _needs() -> Dictionary:
 	if _rota_script == null:

@@ -1,11 +1,7 @@
 extends Node3D
-## Something a guard threw (GuardHands.gd): a crate, a stool, a stone. While
-## it flies fast it hurts whoever it meets, you or one of his own, once each,
-## and knocks a light man back. To a raised guard it is a missile, cheap to
-## knock aside (as an arrow is). It rides on the thing thrown, and goes once
-## the thing slows.
-##
-##   Thrown.launch(crate, guard, velocity, damage)
+## Damage rider for a guard-thrown RigidBody3D. launch() attaches the rider and
+## sets the body velocity; each victim can be hit once. The rider frees itself
+## after 4 s or after 0.3 s once speed falls below HARMLESS_SPEED.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
@@ -23,8 +19,8 @@ var _heading := Vector3.FORWARD
 var _hit := {}
 
 
-## Sends `item` off at `velocity`, thrown by `by`, to hurt whoever it meets for
-## `hit_damage`. Returns what rides on it.
+## Attaches a damage rider to item and sets its world linear/random angular velocity.
+## Returns the rider Node3D; by is the excluded thrower and hit_damage is base damage.
 static func launch(item: RigidBody3D, by: Node3D, velocity: Vector3, hit_damage: float) -> Node3D:
 	var rider: Node3D = (load("res://scripts/Combat/Thrown.gd") as GDScript).new()
 	rider.name = "Thrown"

@@ -1,8 +1,9 @@
 extends RefCounted
-## Prototype props built in code: doors, chests, loot, keys, crates. Used by
-## the interaction gym and the tests, and handy for greyboxing until real
-## assets exist. Every builder returns the root node, already added to
-## `parent` and placed at `position`.
+## Procedural interaction/combat props for levels, gyms, and tests.
+## Builders attach their root to parent; mesh/material/shape helpers return
+## unattached resources or nodes. door() sets parent-local position before
+## attachment and expects an identity parent; most other positions are world-space.
+## Door positions are hinge feet; chest positions are footprint centres.
 
 const DoorScript := preload("res://scripts/Interaction/Door.gd")
 const ChestScript := preload("res://scripts/Interaction/Chest.gd")
@@ -173,7 +174,8 @@ static func key(parent: Node, position: Vector3, key_id: StringName, key_name :=
 	return body
 
 
-## A belt tool lying in the world. `shape` is "sphere", "rod" or "box".
+## Builds a counted belt pickup at world position; color is required.
+## shape selects rod, box, flask, or a ball fallback; returns the attached body.
 static func tool(
 	parent: Node,
 	position: Vector3,

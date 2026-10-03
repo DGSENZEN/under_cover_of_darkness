@@ -32,9 +32,7 @@ def _solid(name, slot, shapes, size, surface="wood"):
     k.model(name, shapes)
 
 
-# ---------------------------------------------------------------------------
 # Crockery and food (small lathes: pewter and glazed pottery, bread, cheese)
-# ---------------------------------------------------------------------------
 
 def plate(x, y, z, slot="pewter"):
     return ks.lathe(x, y, z, [[0.08, 0.0], [0.12, 0.012], [0.135, 0.022]], 8, slot)
@@ -125,10 +123,8 @@ def _spread():
 _drawn("kitchen_spread", "pottery", _spread(), [3.9, 0.4, 0.9], budget=1000)
 
 
-# ---------------------------------------------------------------------------
 # Against the walls: a dresser of plates, kegs on their cradle, shields and
 # spears; hams hung from the joists
-# ---------------------------------------------------------------------------
 
 def _dresser():
     out = [ks.box(0.0, 0.42, 0.0, 1.8, 0.84, 0.45, "boards"), ks.box(0.0, 0.86, 0.02, 1.86, 0.04, 0.49, "beam"),
@@ -227,9 +223,7 @@ def _hanging():
 _drawn("hanging_food", "meat", _hanging(), [1.6, 0.6, 0.3])
 
 
-# ---------------------------------------------------------------------------
 # By the hearth: a cauldron on its tripod, a basket of logs; stools
-# ---------------------------------------------------------------------------
 
 def _cauldron():
     out = [ks.lathe(0.0, 0.0, 0.0, [[0.18, 0.2], [0.27, 0.28], [0.3, 0.4], [0.28, 0.55], [0.3, 0.58]], 10, "iron"),
@@ -263,9 +257,7 @@ _solid("stool", "boards", [ks.lathe(0.0, 0.42, 0.0, [[0.16, 0.0], [0.16, 0.05]],
        [0.36, 0.47, 0.36])
 
 
-# ---------------------------------------------------------------------------
 # The dressing that was still boxes, modelled (their colliders stay)
-# ---------------------------------------------------------------------------
 
 k.model("table_long", [ks.box(0.0, 0.75, 0.0, 4.0, 0.08, 0.9, "boards"), ks.box(0.0, 0.3, 0.0, 3.2, 0.08, 0.08, "beam")]
         + [s for x in (-1.6, 1.6) for s in (ks.box(x, 0.05, 0.0, 0.12, 0.1, 0.8, "beam"), ks.box(x, 0.38, 0.0, 0.12, 0.6, 0.14, "beam"),

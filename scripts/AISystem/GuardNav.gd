@@ -1,18 +1,8 @@
 extends RefCounted
-## How a guard gets about, on top of the navmesh (Guard._go_to and _walk):
-##   crowd    men near one another ease apart, so a squad spreads round you
-##            instead of stacking, and two men in a doorway do not walk one
-##            inside the other.
-##   detours  walking into something the navmesh does not know of (a crate you
-##            pushed there, a barrel, a man coming the other way in a passage),
-##            he steps round it instead of calling that as far as he goes. Two
-##            men nose to nose: one of them gives way. Only with no way round
-##            at all does he give it up.
-##   doors    a closed door on his way is opened as he comes to it, not
-##            walked into.
-##   pursuit  chasing a man who runs, he goes for where the man will be, not
-##            where he is (lead); losing him round a corner, he follows the
-##            way he went a few steps before he stops to look (scent).
+## Navigation support for Guard walking: crowd velocity, temporary detours,
+## closed-door detection and pursuit prediction. Positions are world-space feet.
+## Detours handle obstacles absent from the baked mesh; doors are returned for Guard
+## to open. Lead/scent fall back to the supplied position if prediction is unusable.
 
 ## Men nearer each other than this ease apart, at most this fast (m/s).
 const CROWD_RADIUS := 1.1
@@ -52,9 +42,7 @@ func _init(p_guard: CharacterBody3D) -> void:
 	guard = p_guard
 
 
-# ---------------------------------------------------------------------------
 # The crowd
-# ---------------------------------------------------------------------------
 
 ## The push away from the men standing too close (flat, m/s). Going
 ## `forward`, a man coming the other way just ahead is passed on the right,
@@ -112,9 +100,7 @@ static func _men(tree: SceneTree) -> Array:
 	return _crowd
 
 
-# ---------------------------------------------------------------------------
 # Detours
-# ---------------------------------------------------------------------------
 
 ## A new path: its ways round are its own.
 func new_path() -> void:
@@ -223,9 +209,7 @@ func _clear_to(point: Vector3) -> bool:
 	return space.intersect_shape(room, 1).is_empty()
 
 
-# ---------------------------------------------------------------------------
 # Doors
-# ---------------------------------------------------------------------------
 
 ## A closed door he is about to walk through on his way to `next`; null if
 ## none (looked for a few times a second).
@@ -270,9 +254,7 @@ func door_ahead(next: Vector3, delta: float) -> Node3D:
 	return null
 
 
-# ---------------------------------------------------------------------------
 # Pursuit
-# ---------------------------------------------------------------------------
 
 ## Where to run to catch `target`, whose feet are at `feet`, `dist` away:
 ## where he will be by the time you get there (not further ahead than
