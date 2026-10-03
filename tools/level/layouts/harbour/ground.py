@@ -7,7 +7,7 @@ import math
 
 import terrain
 
-from . import BLOWHOLE, stair_y
+from . import BLOWHOLE, CAUSEWAY, CAUSEWAY_DECK, stair_y
 
 # The east coast (the cliff's line), from its seaward end (the headland's
 # south-east corner, the ground's edge) back to the mole's root: the cliff
@@ -23,6 +23,19 @@ HEADLAND_NORTH = -11.5
 HEADLAND_EAST = 300.0
 NORTH_SHORE_TOP = 27.0
 SPIT = ((-215.0, 10.0), (-85.0, 195.0))
+# The coast on past the ground's old edge, east to the world's (its cliff
+# the far ground's own steep fall, no strata): from its seaward end back to
+# the east coast's.
+FAR_COAST = [(630.0, 170.0), (575.0, 166.0), (520.0, 160.0), (465.0, 151.0), (410.0, 140.0), (360.0, 131.0), (325.0, 124.0)]
+# The harbour's own sea bed (x0, z0, x1, z1); the far ground round it, out
+# past the world's wall (maps/city.gd WORLD), coarse and under the near
+# ground where they meet.
+NEAR_SEA = (-260.0, -10.0, 300.0, 420.0)
+FAR = (-620.0, -10.0, 620.0, 900.0)
+# The west land: its coast leaves the spit's root at z 70 (x -237) and runs
+# south-west; its top 40 m, rising to the rock's 45 (city_massing) at its
+# north (0.4 m under it where they overlap).
+WEST_COAST = (70.0, 0.5)
 
 
 def _cave():
@@ -66,12 +79,51 @@ def _segment(p, a, b):
     return math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dz * t), t
 
 
+def _smooth(t):
+    t = max(0.0, min(1.0, t))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def west_land(x, z):
+    """The land west of the river's mouth (x < -237): up from the river at
+    2.5 in 1 to its top; its coast south-west from the spit's root, falling
+    to the sea at 1.2 in 1 (steeper than the bank, a slope of rock); the
+    sea's bed past it."""
+    far = _smooth((-262.0 - x) / 30.0)
+    coast = WEST_COAST[0] + WEST_COAST[1] * max(0.0, -237.0 - x) + (6.0 * math.sin(x * 0.023) + 3.0 * math.sin(x * 0.071 + 1.3)) * far
+    top = 40.0 + (4.4 * _smooth((40.0 - z) / 40.0) + 2.2 * math.sin(x * 0.037) * math.sin(z * 0.029)) * far
+    rise = (-237.0 - x) * 2.5
+    # (Away from the spit's root, its fall to the sea in strata: a face of
+    # rock over a ledge, as the river's west bank.)
+    d = coast - z
+    k = math.floor(d / 5.0)
+    stepped = k * 6.0 + 6.0 * min(1.0, (d / 5.0 - k) / 0.45)
+    fall = d * 1.2 + (stepped - d * 1.2) * far
+    return max(min(top, rise, fall), sea_bed(x, z))
+
+
 def spit(x, z):
     d, t = _segment((x, z), SPIT[0], SPIT[1])
     crest = 2.0 + 2.2 * math.sin(t * math.pi) * (1.0 - 0.4 * t) + _ripple(x, z, 0.5)
     rock = crest - (d / 10.0) ** 2 * 8.0
-    land = min(40.0, (-237.0 - x) * 2.5) if x < -237.0 and z < 70.0 else -99.0
+
+    # (Under the causeway, the rock kept under its deck: it is built on it.)
+    if min(_segment((x, z), a, b)[0] for a, b in zip(CAUSEWAY, CAUSEWAY[1:])) < 4.0:
+        rock = min(rock, CAUSEWAY_DECK - 0.6)
+    land = west_land(x, z) if x < -237.0 else -99.0
     return max(rock, land, sea_bed(x, z))
+
+
+def far_sea_bed(x, z):
+    """The sea's bed past the harbour's: 0.6 m under it where they meet,
+    shelving away to 22 m; well inside the harbour's, none (-999: dropped)."""
+    x0, z0, x1, z1 = NEAR_SEA
+
+    if x0 + 48.0 < x < x1 - 48.0 and z < z1 - 48.0:
+        return -999.0
+
+    out = math.hypot(max(x0 - x, 0.0, x - x1), max(z - z1, 0.0))
+    return sea_bed(x, z) - 0.6 - 12.0 * _smooth(out / 400.0)
 
 
 def river(x, z):
@@ -129,11 +181,12 @@ def _heath(x, y, z, slope):
     return "rock_shore" if slope > 22.0 else "grass"
 
 
-def inland(x, z):
+def inland(x, z, coast=None):
     """How far (m) (x, z) lies inland of the east coast (negative: at sea)."""
     best = None
+    coast = coast or COAST
 
-    for a, b in zip(COAST, COAST[1:]):
+    for a, b in zip(coast, coast[1:]):
         d, t = _segment((x, z), a, b)
         # The cliff faces the sea on its left (terrain.cliff: (dz, -dx)):
         # inland is to its right, (-dz, dx).
@@ -171,6 +224,26 @@ def headland(x, z):
     return -6.0
 
 
+def far_headland(x, z):
+    """The headland on east past the old ground's edge (x 300, where its
+    plateau is flat at the cliff's top): the plateau, a long swell over it
+    further east, its coast (FAR_COAST) a steep fall of rock to the sea, no
+    cliff of strata; 0.08 m under the near ground where they overlap."""
+    d = inland(x, z, FAR_COAST + COAST)
+
+    if z < HEADLAND_NORTH - 1e-6:
+        return -60.0
+
+    far = _smooth((x - 320.0) / 60.0)
+    swell = (2.6 * math.sin(x * 0.019 + 0.4) * math.sin(z * 0.031 + 1.1) + 1.2 * math.sin(x * 0.047 - z * 0.029)) * far * _smooth(d / 25.0)
+    top = CLIFF_TOP + _ripple(x, z, 0.8) + swell
+    north = min(1.0, (z - HEADLAND_NORTH) / 10.0)
+    top = NORTH_SHORE_TOP + (top - NORTH_SHORE_TOP) * north
+    # (The coast: from the plateau 3 m in to the bed 3 m out.)
+    h = sea_bed(x, z) + (top - sea_bed(x, z)) * _smooth((d + 3.0) / 6.0)
+    return h - (0.08 if x < 300.5 else 0.0)
+
+
 def _slope_slot(ground):
     # (The shore's rock: banded by height, wet under high water, black with
     # lichen over it.)
@@ -179,6 +252,14 @@ def _slope_slot(ground):
 
 def lay(L):
     L.terrain(terrain.grid("sea_bed", "sea", -260.0, -10.0, 300.0, 420.0, 8.0, sea_bed, "gravel", surface="gravel"))
+    # The far ground, out past the world's wall: the open sea's bed, the
+    # west land, the headland on east.
+    L.terrain(terrain.grid("far_sea_bed", "sea", FAR[0], FAR[1], FAR[2], FAR[3], 40.0, far_sea_bed, "gravel", surface="gravel",
+                           keep=lambda ys: min(ys) > -500.0))
+    L.terrain(terrain.grid("west_land", "fort", FAR[0], -10.0, -260.0, 330.0, 10.0, west_land, _slope_slot("gravel"), surface="stone",
+                           keep=lambda ys: max(ys) > -2.5, skirt=2.0))
+    L.terrain(terrain.grid("far_headland", "cave", 297.5, HEADLAND_NORTH, FAR[2] - 12.5, 180.0, 5.0, far_headland, _heath, surface="stone",
+                           keep=lambda ys: max(ys) > -2.5, skirt=2.0))
     L.terrain(terrain.grid("west_spit", "fort", -260.0, -10.0, -70.0, 215.0, 2.5, spit, _slope_slot("gravel"), surface="stone",
                            keep=lambda ys: max(ys) > -2.5, skirt=0.8))
     # (To the massing's first row at its north end, and in under the west
@@ -201,12 +282,9 @@ def lay(L):
                             step=1.6, blocks=(2, 0.7)))
     L.terrain(terrain.cliff("east_cliff_b", "cave", COAST[MOUTH[1]:], -4.0, CLIFF_TOP, band=2.8, jitter=0.6, seed=12, slot="cliff_shore",
                             step=1.6, blocks=(2, 0.7)))
-    # (Rock over the cave's mouth down to its arch, and down the ground's
-    # east edge.)
+    # (Rock over the cave's mouth down to its arch.)
     L.terrain(terrain.cliff("cave_lintel", "cave", [COAST[MOUTH[0]], COAST[MOUTH[1]]], LINTEL_FOOT, CLIFF_TOP, band=2.8, jitter=0.4, seed=15,
                             slot="cliff_shore", step=1.6, blocks=(2, 0.5)))
-    L.terrain(terrain.cliff("east_edge", "cave", [(HEADLAND_EAST, HEADLAND_NORTH), (HEADLAND_EAST, COAST[0][1])], -4.0, CLIFF_TOP + 0.9,
-                            band=2.8, jitter=0.5, seed=16, slot="cliff_shore", step=2.0, blocks=(2, 0.6)))
     cave = terrain.tunnel("smugglers_cave", "cave", CAVE, CAVE_RADII, floor=-1.5, sides=CAVE_SIDES, seed=13, slot="rock_shore")
     L.terrain(cave)
     # The rock round its arch, filling the cliff's gap from the cliff's foot

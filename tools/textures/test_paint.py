@@ -103,6 +103,22 @@ class Foliage(unittest.TestCase):
                 self.assertGreater(solid, 0.15, "hardly anything painted")
                 self.assertLess(solid, 0.9, "no gaps: a card, not leaves")
 
+    def test_the_customs_azulejos_are_cobalt_on_white_glaze(self):
+        pixels = np.asarray(paint.PAINTINGS["azulejo_ship"]().convert("RGB")).astype(float)
+        blue = (pixels[:, :, 2] > pixels[:, :, 0] + 40).mean()
+        white = (pixels.min(axis=2) > 170).mean()
+        self.assertGreater(blue, 0.15)
+        self.assertGreater(white, 0.3)
+
+    def test_the_royal_arms_are_a_cut_out_shield_with_its_quinas(self):
+        image = np.asarray(paint.PAINTINGS["arms_royal"]())
+        alpha = image[:, :, 3]
+        self.assertTrue(set(np.unique(alpha)) <= {0, 255})
+        # Its field's red bordure and blue quinas both show.
+        rgb = image[:, :, :3].astype(float)[alpha == 255]
+        self.assertGreater(((rgb[:, 0] > rgb[:, 2] + 60)).mean(), 0.1)
+        self.assertGreater(((rgb[:, 2] > rgb[:, 0] + 30)).mean(), 0.03)
+
     def test_a_painting_is_a_power_of_two_on_each_side(self):
         for name in FOLIAGE + ["bark"]:
             with self.subTest(name):
@@ -316,6 +332,30 @@ class Bark(unittest.TestCase):
         # Rougher across (x) than up (y): its furrows run up the trunk.
         image = np.asarray(paint.PAINTINGS["bark"]().convert("L")).astype(float)
         self.assertGreater(np.abs(np.diff(image, axis=1)).mean(), np.abs(np.diff(image, axis=0)).mean() * 1.3)
+
+
+class Facades(unittest.TestCase):
+    def test_a_house_front_is_its_render_round_dark_windows_where_the_kit_puts_them(self):
+        # (kit_massing lights its windows in the openings: FACADE_WINDOWS
+        # along it, FACADE_FLOORS up it, FACADE_OPENING's sill and head.)
+        per = paint.FACADE_PX[0] / paint.FACADE[0]
+        self.assertAlmostEqual(paint.FACADE_PX[1] / paint.FACADE[1], per, places=6)
+
+        for wall, colour in paint.FACADE_WALLS.items():
+            image = np.asarray(paint.PAINTINGS["facade_" + wall]().convert("RGB")).astype(float)
+            self.assertEqual(image.shape[:2], (paint.FACADE_PX[1], paint.FACADE_PX[0]), wall)
+            h = image.shape[0]
+
+            for floor in paint.FACADE_FLOORS:
+                y = int(h - (floor + (paint.FACADE_OPENING[0] + paint.FACADE_OPENING[1]) / 2.0) * per)
+
+                for u in paint.FACADE_WINDOWS:
+                    # A window: dark glass or a shutter, never the render.
+                    self.assertLess(image[y, int(u * per) + 2].mean(), np.mean(colour) * 0.6, (wall, floor, u))
+
+            # Between the storeys' windows, the render.
+            between = image[int(h - 3.2 * per), int(3.0 * per)]
+            self.assertLess(np.abs(between - np.array(colour)).max(), 50.0, wall)
 
 
 if __name__ == "__main__":

@@ -44,6 +44,11 @@ TOWERS_X = (-62.0, -48.0)
 # The customs house (outside the wall, on the quay), the shipyard's west
 # wall with its postern, the sea wall and the naves inside it.
 CUSTOMS = (-10.0, 14.0, -34.0, -6.0)
+# Its frame's origin (kit_customs.HOUSE: the middle of its walls, on the
+# quay); its upper floor and its eaves over the quay's top.
+CUSTOMS_AT = ((CUSTOMS[0] + CUSTOMS[1]) / 2.0, (CUSTOMS[2] + CUSTOMS[3]) / 2.0)
+CUSTOMS_UPPER = QUAY + 4.0
+CUSTOMS_EAVES = QUAY + 7.5
 WALL_F = 15.2
 SEA_WALL = -7.2
 NAVE = 8.4
@@ -64,6 +69,13 @@ MOLE_HEAD = (92.0, 203.0)
 # tower.
 FORT = (-75.0, 205.0)
 CHAIN_Z = 204.0
+
+# The way to the fort: a bridge from the Ribeira quay's west end due south
+# over the water to the spit, the causeway along the spit's crest, then a
+# dog-leg before the bastion (south, east along its front, south again into
+# its gate, west of its tower); its deck at the bastion's top.
+CAUSEWAY = [(-183.0, 0.0), (-183.0, 55.5), (-98.0, 176.5), (-98.0, 184.0), (-84.5, 184.0), (-84.5, 193.0)]
+CAUSEWAY_DECK = 4.0
 
 # The carrack alongside the sea wall's quay: its mainmast at x CARRACK_X.
 CARRACK_X = 40.0
@@ -103,11 +115,12 @@ def mole_path():
     return [(MOLE_X, 0.0), (MOLE_X, MOLE_BEND), MOLE_HEAD]
 
 
-def wall_run(L, a, b, sector, y=QUAY, height=12, outward=1.0, ground=None):
+def wall_run(L, a, b, sector, y=QUAY, height=12, outward=1.0, ground=None, plain=None):
     """City wall from a to b ((x, z), straight along x or z) in 6 m runs, a 3
     m run to finish; its outer face (+z of the piece) to the right of a -> b
     (outward 1) or the left (-1); each piece at y, or at ground(x, z) (a
-    wall climbing a slope)."""
+    wall climbing a slope); `plain` (x, z) True: that run without its
+    batter (a house built against it)."""
     dx, dz = b[0] - a[0], b[1] - a[1]
     length = math.hypot(dx, dz)
     ux, uz = dx / length, dz / length
@@ -119,7 +132,8 @@ def wall_run(L, a, b, sector, y=QUAY, height=12, outward=1.0, ground=None):
         size = 6.0 if length - done >= 5.5 else 3.0
         mid = done + size / 2.0
         x, z = a[0] + ux * mid, a[1] + uz * mid
-        names.append(L.put("city_wall_%d_%d" % (height, int(size)), (x, y if ground is None else ground(x, z), z), yaw, sector))
+        piece = "city_wall_%d_%d%s" % (height, int(size), "_plain" if plain is not None and plain(x, z) else "")
+        names.append(L.put(piece, (x, y if ground is None else ground(x, z), z), yaw, sector))
         done += size
 
     return names

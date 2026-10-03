@@ -1063,7 +1063,7 @@ def _waist():
         shapes.append(ks.disc(x, y + 0.04 if x > -6.0 else CASTLE_DECK + 0.04, z, 0.42, 8, "rope_coil", pitch=-90.0))
         shapes.append(ks.lathe(x, (y if x > -6.0 else CASTLE_DECK) - 0.02, z, [[0.43, 0.0], [0.43, 0.08]], 8, "rope", caps=False))
 
-    # The cabin: table (the level's candles stand on it at 2.85), bench, cot,
+    # The cabin: table (the level's candles stand on it at 2.85), bench,
     # a carpet, a shelf, the frames up its sides; the deckhead and its beams.
     shapes.append(_face([[-13.4, MAIN_DECK + 0.035, -1.3], [-10.4, MAIN_DECK + 0.035, -1.3], [-10.4, MAIN_DECK + 0.035, 1.3],
                          [-13.4, MAIN_DECK + 0.035, 1.3]], "carpet", [0.0, 1.0, 0.0]))
@@ -1085,8 +1085,7 @@ def _waist():
     shapes.append(ks.box(-12.0, 2.15, 0.0, 1.4, 0.06, 0.1, "wood_old"))
     shapes.append(ks.box(-12.0, 2.45, -0.95, 1.5, 0.06, 0.36, "wood_old"))
     shapes += [ks.box(-12.0 + dx, 2.22, -0.95, 0.06, 0.44, 0.3, "wood_old") for dx in (-0.6, 0.6)]
-    shapes.append(ks.box(-13.9, 2.35, -2.75, 1.9, 0.7, 0.9, "wood_old"))
-    shapes.append(ks.box(-13.9, 2.74, -2.75, 1.8, 0.1, 0.8, "cloth"))
+    # (His box bed is the level's: kit_interiors cot_box.)
     deckhead = _deck_rows([STERN + SKIN, -12.4, POOP_FRONT, -8.5, CASTLE_FRONT - 0.1], CASTLE_DECK - 0.04, 0.0, 2)
     shapes += _loft(deckhead, "boards", lambda q: [0.0, -1.0, 0.0])
 
@@ -1189,8 +1188,7 @@ def _hull_cols():
     # On the deck: the boat on its hatch, the capstan, the bitts, the pump.
     y = MAIN_DECK
     cols += [col(4.1, y + 0.55, 0.75, 4.7, 1.1, 1.75), col(-3.4, y + 0.5, 1.3, 1.0, 1.0, 1.0), col(0.85, y + 0.55, 0.6, 0.3, 1.1, 0.3),
-             col(0.85, y + 0.55, -0.6, 0.3, 1.1, 0.3), col(-1.9, y + 0.5, 1.45, 0.35, 1.0, 0.35), col(-12.0, 2.4, 0.0, 1.8, 0.84, 1.0),
-             col(-13.9, 2.35, -2.75, 1.9, 0.7, 0.9)]
+             col(0.85, y + 0.55, -0.6, 0.3, 1.1, 0.3), col(-1.9, y + 0.5, 1.45, 0.35, 1.0, 0.35), col(-12.0, 2.4, 0.0, 1.8, 0.84, 1.0)]
     return cols
 
 

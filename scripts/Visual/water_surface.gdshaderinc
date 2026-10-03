@@ -16,6 +16,14 @@ uniform float water_clock = 0.0;
 uniform vec3 moon_direction = vec3(0.0, 1.0, 0.0);
 uniform vec3 moon_colour : source_color = vec3(0.6, 0.7, 0.9);
 uniform float moon_visibility = 0.0;
+// Where the moon can be seen from the water (WaterVolume.survey_moon, over
+// the survey; white before it is cast): its glade glints only there.
+uniform sampler2D moon_mask : hint_default_white, filter_linear, repeat_disable;
+// The moon's glade: its width as an angle seen from the eye near by and far
+// off; how bright its broken column is.
+uniform float glade_near = 0.11;
+uniform float glade_far = 0.035;
+uniform float glade_gain = 0.55;
 // Rain on it (0..1): rings, and the surface roughened.
 uniform float rain = 0.0;
 // The box seen from above (half its width and length, m): the scum line
@@ -41,6 +49,11 @@ uniform sampler2D shore_depth : filter_linear, repeat_disable;
 uniform bool shore_ready = false;
 uniform vec2 shore_texel = vec2(0.01);
 uniform float shore_fade = 0.75;
+// Where the survey lies (world x, z of its corner, its width and length): the
+// whole box unless only part of it is near anything (an open sea's harbour).
+// Past it the water is deep.
+uniform vec2 shore_low = vec2(-3.0, -3.0);
+uniform vec2 shore_span = vec2(6.0, 6.0);
 varying vec3 world_pos;
 varying vec2 local_pos;
 
@@ -83,8 +96,9 @@ vec2 drops(vec2 p, float cell, float t) {
 
 void fragment() {
 	if (!FRONT_FACING) { discard; }
-	vec2 shore_uv = local_pos / (half_size * 2.0) + 0.5;
-	float bed_depth = shore_ready ? texture(shore_depth, shore_uv).r : 100.0;
+	vec2 shore_uv = (world_pos.xz - shore_low) / shore_span;
+	bool surveyed = shore_uv.x >= 0.0 && shore_uv.y >= 0.0 && shore_uv.x <= 1.0 && shore_uv.y <= 1.0;
+	float bed_depth = shore_ready && surveyed ? texture(shore_depth, shore_uv).r : 100.0;
 	#ifdef WATER_SHORE
 	if (!shore_ready || bed_depth >= shore_fade) { discard; }
 	#else
@@ -98,7 +112,7 @@ void fragment() {
 			texture(shore_depth, shore_uv - vec2(shore_texel.x, 0.0)).r),
 		min(texture(shore_depth, shore_uv + vec2(0.0, shore_texel.y)).r,
 			texture(shore_depth, shore_uv - vec2(0.0, shore_texel.y)).r)));
-	float contact = shore_ready ? 1.0 - smoothstep(0.02, 0.35, bank_depth) : 0.0;
+	float contact = shore_ready && surveyed ? 1.0 - smoothstep(0.02, 0.35, bank_depth) : 0.0;
 	// The ripples: two layers flowing at different speeds, drawn out along
 	// the flow, their slopes added.
 	vec2 along = normalize(flow + vec2(0.0001, 0.0));
@@ -168,10 +182,26 @@ void fragment() {
 		columns += light_colours[i].rgb * column * carry;
 	}
 
-	// A broken moon trail moves with the real moon and disappears under clouds.
+	// The moon's glade: a column of glints on the water from under the moon to
+	// the eye (its mirror image at infinity), as a lamp's column: narrow far
+	// off, wider near, shivered side to side and broken into dashes across the
+	// swell, brighter where the water looks at the eye aslant; and sharp glints
+	// of its own in the ripples close by. Only where the moon can be seen from
+	// the water (moon_mask), under a clear moon.
+	vec2 moonward = normalize(moon_direction.xz + vec2(0.0001, 0.0));
+	vec2 from_eye = world_pos.xz - eye.xz;
+	float glade_depth = dot(from_eye, moonward);
+	float glade_side = dot(from_eye, vec2(-moonward.y, moonward.x));
+	float shiver = (texture(patches, vec2(glade_depth * 0.35 - water_clock * 0.25, glade_side * 0.05)).r - 0.5) * 0.05;
+	float half_width = mix(glade_near, glade_far, smoothstep(10.0, 300.0, length(from_eye)));
+	float bearing = glade_side / max(glade_depth, 0.5) + shiver;
+	float glade = glade_depth > 0.0 ? exp(-bearing * bearing / (half_width * half_width)) : 0.0;
+	float glade_dash = smoothstep(0.42, 0.8, texture(patches, vec2(glade_depth * 1.7 + water_clock * 0.4, glade_side * 0.3)).r);
 	float alignment = max(dot(r, moon_direction), 0.0);
 	float glitter = pow(alignment, 180.0) * (0.3 + 0.7 * texture(patches, world_pos.xz * 1.3 - flow * water_clock).r);
-	vec3 moon_trail = moon_colour * glitter * moon_visibility * smoothstep(0.0, 0.12, moon_direction.y) * 0.65;
+	float seen = surveyed ? texture(moon_mask, shore_uv).r : 1.0;
+	vec3 moon_trail = moon_colour * moon_visibility * smoothstep(0.0, 0.12, moon_direction.y) * seen
+		* (glade * (0.06 + glade_dash) * (0.25 + fresnel) * glade_gain + glitter * 0.65);
 	vec3 body = mix(deep, mix(scum, weed, skin), film);
 	ALBEDO = body;
 	ROUGHNESS = mix(0.05 + 0.12 * rain, 0.7, max(film, shallows * 0.4));

@@ -686,8 +686,97 @@ def _terreiro_corner():
     return shapes, cols
 
 
+def _terreiro_end(side):
+    """The end of an arcade's run where it meets the quay (a bay's slice
+    would show): an end wall over the bay's whole section (its outer face a
+    little proud of the bay's end, out along x by `side`), its granite
+    quoins, plinth and cornice, an arch letting the walkway out onto the
+    quay, the back rooms walled, a window to the storey over it, the gable
+    under the roof's end with its coping and an oculus."""
+    b = BAY
+    front, depth = b["depth"] / 2.0, b["depth"]
+    t = 0.5
+    x0, x1 = (-t, 0.02) if side > 0 else (-0.02, t)
+    xc, xo = (x0 + x1) / 2.0, (x1 if side > 0 else x0)
+    walk0, walk1 = front - 0.5 - 0.5 - b["walk"], front - 1.0
+    r = b["walk"] / 2.0 - 0.3
+    spring = b["spring"]
+    middle = (walk0 + walk1) / 2.0
+    shapes, cols = [], []
+
+    # The wall in strips across the section (z), leaving the walkway's arch.
+    def strip(z0, z1, y0, y1):
+        shapes.append(ks.box(xc, (y0 + y1) / 2.0, (z0 + z1) / 2.0, x1 - x0, y1 - y0, z1 - z0, "render_ochre"))
+        cols.append(col(xc, (y0 + y1) / 2.0, (z0 + z1) / 2.0, x1 - x0, y1 - y0, z1 - z0))
+
+    strip(-front, middle - r, 0.0, b["top"])
+    strip(middle + r, front + 0.2, 0.0, b["top"])
+    strip(middle - r, middle + r, spring + r, b["top"])
+    # The arch's head over the opening, filled to its springing's square.
+    for i in range(8):
+        a0, a1 = math.pi * i / 8.0, math.pi * (i + 1) / 8.0
+        za, zb = middle + r * math.cos(a0), middle + r * math.cos(a1)
+        ya, yb = spring + r * math.sin(a0), spring + r * math.sin(a1)
+        for z, y, zz, yy in ((za, ya, zb, yb),):
+            quad = [[xo, y, z], [xo, yy, zz], [xo, spring + r, zz], [xo, spring + r, z]]
+
+            if ks._normal(quad)[0] * side < 0.0:
+                quad = quad[::-1]
+
+            shapes.append(ks.polygon(quad, "render_ochre"))
+            inner = [[x0, y, z], [x0, yy, zz], [x1, yy, zz], [x1, y, z]]
+
+            if ks._normal(inner)[1] > 0.0:
+                inner = inner[::-1]
+
+            shapes.append(ks.polygon(inner, "granite"))
+
+    for s in (-1.0, 1.0):
+        shapes.append(ks.box(xc, spring / 2.0, middle + s * r, x1 - x0 + 0.04, spring, 0.02, "granite"))
+
+    shapes.append(ks.ring(0.0, spring, 0.0, r, r + 0.45, 0.1, 0.0, 180.0, 8, "granite", 90.0 * side))
+    shapes[-1]["centre"] = [xo + side * 0.04, spring, middle]
+    # Granite: its quoins at both corners, its plinth, a course at the
+    # storey, its cornice.
+    for z in (-front + 0.25, front - 0.05):
+        shapes.append(ks.box(xc + side * 0.04, b["top"] / 2.0, z, x1 - x0 + 0.08, b["top"], 0.5, "granite"))
+
+    shapes += [ks.box(xc + side * 0.04, 0.3, 0.0, x1 - x0 + 0.08, 0.6, depth, "granite"),
+               ks.box(xc + side * 0.05, b["arcade"], 0.0, x1 - x0 + 0.1, 0.2, depth, "granite"),
+               ks.box(xc + side * 0.12, b["top"] - 0.2, 0.0, x1 - x0 + 0.24, 0.4, depth + 0.6, "granite")]
+    # The window over it, its jambs, lintel and sill.
+    wz = 0.0
+    shapes += [ks.card(xo + side * 0.01, b["arcade"] + 1.8, wz, 1.2, 2.4, "glass_dark", 90.0 * side),
+               ks.card(xo + side * 0.02, b["arcade"] + 1.8, wz, 1.2, 2.4, "casement", 90.0 * side)]
+
+    for s in (-1.0, 1.0):
+        shapes.append(ks.box(xo + side * 0.04, b["arcade"] + 1.8, wz + s * 0.7, 0.1, 2.6, 0.2, "granite"))
+
+    shapes += [ks.box(xo + side * 0.05, b["arcade"] + 3.2, wz, 0.12, 0.28, 1.7, "granite"),
+               ks.box(xo + side * 0.08, b["arcade"] + 0.55, wz, 0.18, 0.12, 1.6, "granite")]
+    # The gable over the cornice under the roof's end, its coping, an
+    # oculus in it.
+    rise = 2.0
+    shapes.append(ks.gable(xc, b["top"], 0.0, depth + 0.2, rise, x1 - x0, "render_ochre", 90.0))
+
+    for s in (-1.0, 1.0):
+        slope = math.degrees(math.atan2(rise, depth / 2.0))
+        shapes.append(ks.box(xc + side * 0.06, b["top"] + rise / 2.0 + 0.1, s * depth / 4.0, x1 - x0 + 0.14, 0.16,
+                             math.hypot(depth / 2.0, rise) + 0.3, "granite", 0.0, s * slope, 0.0))
+
+    shapes.append(ks.ring(0.0, 0.0, 0.0, 0.32, 0.46, 0.12, 0.0, 360.0, 10, "granite", 90.0 * side))
+    shapes[-1]["centre"] = [xo + side * 0.04, b["top"] + 0.8, 0.0]
+    shapes.append(ks.disc(xo + side * 0.01, b["top"] + 0.8, 0.0, 0.32, 10, "glass_dark", 90.0 * side))
+    return shapes, cols
+
+
 _shapes, _cols = _terreiro_bay()
 _iberian("terreiro_bay_6", "render_ochre", _shapes, _cols, [BAY["width"] + 0.2, BAY["top"] + 2.4, BAY["depth"] + 1.6], budget=1300)
+# The ends of the side arcades at the quay: outward along +x, and along -x.
+_shapes, _cols = _terreiro_end(1.0)
+_iberian("terreiro_end_r", "render_ochre", _shapes, _cols, [1.6, BAY["top"] + 2.6, BAY["depth"] + 1.2], budget=700)
+_shapes, _cols = _terreiro_end(-1.0)
+_iberian("terreiro_end_l", "render_ochre", _shapes, _cols, [1.6, BAY["top"] + 2.6, BAY["depth"] + 1.2], budget=700)
 _shapes, _cols = _terreiro_corner()
 _iberian("terreiro_corner", "render_ochre", _shapes, _cols, [9.6, BAY["top"] + 2.4, 9.6], budget=1700)
 

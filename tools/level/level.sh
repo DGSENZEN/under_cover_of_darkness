@@ -87,6 +87,8 @@ case "$verb" in
     python3 "$HERE/test_occlusion.py"
     python3 "$HERE/test_ships.py"
     python3 "$HERE/test_overlap.py"
+    python3 "$HERE/test_mole.py"
+    python3 "$HERE/test_spit.py"
     python3 "$HERE/test_shade.py"
     python3 "$HERE/test_districts.py"
     python3 "$HERE/test_proxy.py"

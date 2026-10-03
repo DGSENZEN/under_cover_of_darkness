@@ -4,7 +4,7 @@ in Lisbon's yellow; its water stair between two columns; the king on his
 horse; the Sea Gate at its back through the city wall, between its drum
 towers, its passage vaulted and murder-holed."""
 
-from . import GATE_X, QUAY, TER_X, TER_Z, TOWERS_X, WALL_D, wall_run
+from . import CUSTOMS, GATE_X, QUAY, TER_X, TER_Z, TOWERS_X, WALL_D, wall_run
 
 ARCADE = 8.0
 WEST = TER_X[0] + ARCADE / 2.0
@@ -19,6 +19,8 @@ def lay(L):
     L.floor(TER_X[0], -76.0, TER_X[1], -6.0, kind="calcada", y=QUAY, sector="terreiro")
     # (Out to the water stair's top, between its quays.)
     L.floor(-62.0, -6.0, -48.0, 0.0, kind="calcada", y=QUAY, sector="terreiro")
+    # (The lane between the east arcade and the customs house, to the wall.)
+    L.floor(TER_X[1], -76.0, CUSTOMS[0], -6.0, kind="calcada", y=QUAY, sector="terreiro")
 
     for z in SIDE_BAYS:
         L.put("terreiro_bay_6", (WEST, QUAY, z), 90.0, "terreiro")
@@ -26,6 +28,11 @@ def lay(L):
 
     for x in NORTH_BAYS:
         L.put("terreiro_bay_6", (x, QUAY, NORTH), 0.0, "terreiro")
+
+    # The side arcades' ends at the quay, walled (each bay its own slice).
+    end = SIDE_BAYS[-1] + 3.0
+    L.put("terreiro_end_l", (WEST, QUAY, end), 90.0, "terreiro")
+    L.put("terreiro_end_r", (EAST, QUAY, end), -90.0, "terreiro")
 
     L.put("terreiro_corner", (WEST, QUAY, NORTH), 0.0, "terreiro")
     L.put("terreiro_corner", (EAST, QUAY, NORTH), -90.0, "terreiro")

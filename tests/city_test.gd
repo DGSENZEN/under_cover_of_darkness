@@ -11,6 +11,7 @@ extends Node3D
 
 const CITY := preload("res://maps/city.tscn")
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const LightBudget := preload("res://scripts/Visual/Lights/LightBudget.gd")
@@ -75,7 +76,7 @@ func _ready() -> void:
 
 	var steps := [["markers", _markers], ["douse", _douse], ["reach", _reach], ["locks", _locks], ["freeze", _freeze.bind(true)], ["probes", _probes],
 		["sea_gate", _sea_gate], ["carrack", _carrack], ["roofs", _roofs], ["swim", _swim], ["spit", _spit], ["blowhole", _blowhole],
-		["zones", _zones], ["light_budget", _light_budget], ["chase", _chase]]
+		["zones", _zones], ["light_budget", _light_budget], ["chase", _chase], ["holes", _holes], ["loose", _loose], ["roofed", _roofed], ["distance", _distance]]
 
 	for step in steps:
 		if only == "" or step[0] == only or step[0] == "freeze":
@@ -546,6 +547,264 @@ func _chase() -> void:
 
 
 ## The guards' alert at which a hunt is searching, not fighting (Guard.Alert).
+## The built front of the harbour (x0, z0, x1, z1), looked under from these
+## heights for a hole a man could drop through.
+const FRONT := [-200.0, -80.0, 160.0, 10.0]
+const UNDER := [4.0, 7.5]
+
+
+# ---------------------------------------------------------------------------
+# C17-C18: nowhere to fall out of the world
+# ---------------------------------------------------------------------------
+
+func _holes() -> void:
+	var space := get_world_3d().direct_space_state
+	var world: Rect2 = city.WORLD
+	var void_at: Array[String] = []
+	var x := world.position.x + 1.0
+
+	while x < world.end.x:
+		var z := world.position.y + 1.0
+
+		while z < world.end.y:
+			if _floor_under(space, Vector3(x, 400.0, z)) == null:
+				void_at.append("(%d, %d)" % [x, z])
+
+			z += 2.0
+
+		x += 2.0
+
+	# Walking out any way, he meets the world's wall (at the sea's surface, a
+	# man's height over the land, high over the rock).
+	var open: Array[String] = []
+	var middle := world.get_center()
+
+	for out in [Vector3.LEFT, Vector3.RIGHT, Vector3.FORWARD, Vector3.BACK]:
+		for y in [0.5, 60.0, 180.0]:
+			var edge := Vector3(middle.x + out.x * (world.size.x * 0.5 - 6.0), y, middle.y + out.z * (world.size.y * 0.5 - 6.0))
+			var q := PhysicsRayQueryParameters3D.create(edge, edge + out * 20.0, 1)
+
+			if space.intersect_ray(q).is_empty():
+				open.append("%s at %d" % [out, y])
+
+	_check("C17 the world is closed: a wall round it every way, and under any point inside it the ground (a ray down every 2 m)",
+		void_at.is_empty() and open.is_empty(), "void at %d points %s; open %s" % [void_at.size(), ", ".join(void_at.slice(0, 12)), open])
+	var holes: Array[String] = []
+
+	for h in UNDER:
+		x = FRONT[0] + 0.5
+
+		while x < FRONT[2]:
+			var z := FRONT[1] + 0.5
+
+			while z < FRONT[3]:
+				var at := Vector3(x, h, z)
+
+				if _open_air(space, at) and _floor_under(space, at) == null:
+					holes.append("(%.1f, %.1f, %.1f)" % [x, h, z])
+
+				z += 1.0
+
+			x += 1.0
+
+	_check("C18 nowhere on the harbour's built front can a man drop through: from 4 and 7.5 m up, wherever there is room, a floor or the water's bed is under him",
+		holes.is_empty(), "%d holes: %s" % [holes.size(), ", ".join(holes.slice(0, 16))])
+	# The slipway runs down between the floors beside it: walled both sides
+	# (it once ran under 0.2 m floors over nothing).
+	var open_sides: Array[String] = []
+	var z := -31.5
+
+	# (Where the ramp is a man's height under the floors beside it.)
+	while z < -26.0:
+		var ramp_y := 2.5 - 4.5 * (z + 34.0) / 8.0
+
+		for side in [-1.0, 1.0]:
+			var from := Vector3(71.0, ramp_y + 1.0, z)
+			var q := PhysicsRayQueryParameters3D.create(from, from + Vector3(side * 6.0, 0.0, 0.0), 1)
+			var hit := space.intersect_ray(q)
+
+			if hit.is_empty() or absf(hit["position"].x - 71.0) > 4.5:
+				open_sides.append("z %.1f side %d" % [z, side])
+
+		z += 0.5
+
+	_check("C18b the slipway is walled both sides all the way down (no way under the floors beside it)", open_sides.is_empty(), ", ".join(open_sides))
+
+
+# ---------------------------------------------------------------------------
+# C19: loose things
+# ---------------------------------------------------------------------------
+
+func _loose() -> void:
+	var level = city.levels["city_harbour"]
+	var bodies: Array = level.loose
+	var heavy: Array[String] = []
+	var moved: Array[String] = []
+	var start := {}
+
+	for b in bodies:
+		start[b] = (b as Node3D).global_position
+
+		if not (b is RigidBody3D) or (b as RigidBody3D).mass > float(player.frob.max_carry_mass):
+			heavy.append(String((b as Node).name))
+
+	# Woken and left a while: each rests where it was laid (nothing through
+	# a table or a floor, nothing thrown off by its neighbours).
+	for b in bodies:
+		(b as RigidBody3D).sleeping = false
+
+	await _seconds(3.0)
+
+	for b in bodies:
+		var d := (b as Node3D).global_position.distance_to(start[b])
+
+		if d > 0.25:
+			moved.append("%s %.2f m" % [(b as Node).name, d])
+
+	_check("C19 loose things lie about to be taken: 40 or more bodies a man can carry, each resting where it was laid when woken",
+		bodies.size() >= 40 and heavy.is_empty() and moved.is_empty(), "%d bodies; too heavy %s; moved %s" % [bodies.size(), heavy, moved.slice(0, 12)])
+
+
+# ---------------------------------------------------------------------------
+# C20: what stands under a roof spares the moon's shadow pass
+# ---------------------------------------------------------------------------
+
+func _roofed() -> void:
+	var root: Node3D = (city.levels["city_harbour"] as LevelLoader.Level).root
+	var moon := city.find_child("Moon", true, false) as DirectionalLight3D
+	var wrong: Array[String] = []
+
+	# Under roofs: the naves' vaults and inner arches (merged a cell at a
+	# time), the office's desk, the yard's forge, a crate in the customs hall
+	# (by its box).
+	var vaults: Array = root.find_children("merged_shipyard_roofed_*", "", true, false)
+	var arcades: Array = root.find_children("merged_shipyard_open_*", "", true, false)
+	var under: Array[String] = ["desk_writing_001", "forge_001", "crate_stack_005"]
+
+	for node in vaults:
+		under.append(String(node.name))
+
+	for name in under:
+		for mesh in _drawn(root, name):
+			if mesh.layers != Layers.ROOFED:
+				wrong.append("%s under a roof on %d" % [mesh.name, mesh.layers])
+
+	# In the moonlight: the naves' piers and east arcade, a quay's bollard,
+	# the king's beam in the open loggia, crates stacked out of doors.
+	var open: Array[String] = ["bollard_001", "kings_beam_001", "crate_stack_001"]
+
+	for node in arcades:
+		open.append(String(node.name))
+
+	for name in open:
+		for mesh in _drawn(root, name):
+			if mesh.layers & Layers.ROOFED:
+				wrong.append("%s in the open on the roofed layer" % mesh.name)
+
+	var counted := vaults.size() + arcades.size() + _drawn(root, "bollard_001").size()
+	_check("C20 what stands under a roof is drawn on its own layer, which the moon casts no shadow from; what stands in the open casts",
+		moon != null and moon.shadow_caster_mask & Layers.ROOFED == 0 and moon.shadow_caster_mask & Layers.WORLD != 0 and counted >= 2 and wrong.is_empty(),
+		"%d meshes looked at; %s" % [counted, wrong])
+
+
+# ---------------------------------------------------------------------------
+# C21-C22: the distance
+# ---------------------------------------------------------------------------
+
+func _distance() -> void:
+	var env: Environment = city.environment
+	var sky := env.sky.sky_material as ShaderMaterial if env.sky != null else null
+	var far: Node = city.distance
+	var counts: Dictionary = far.counts() if far != null else {}
+	var massing = city.levels["city_massing"]
+	var colossus: Node = massing.root.find_child("mass_colossus_001", true, false)
+	var farland: Node = massing.root.find_child("terrain_far_land", true, false)
+	_check("C21 the distance hazes, the far land and the colossus stand round the rock, the comet crosses the sky, torches and the balefire burn far off, mist lies low, chimneys smoke",
+		env.fog_enabled and env.fog_mode == Environment.FOG_MODE_DEPTH and env.fog_depth_begin >= 60.0 and env.fog_sky_affect == 0.0
+		and sky != null and float(sky.get_shader_parameter("comet")) > 0.0 and colossus != null and farland != null
+		and int(counts.get("torches", 0)) >= 15 and bool(counts.get("balefire", false)) and int(counts.get("mist", 0)) >= 10
+		and int(counts.get("smoke", 0)) >= 10 and int(counts.get("wisps", 0)) >= 5,
+		"fog %s depth %s; comet %s; colossus %s; far land %s; %s" % [env.fog_enabled, env.fog_mode == Environment.FOG_MODE_DEPTH,
+			sky.get_shader_parameter("comet") if sky != null else null, colossus != null, farland != null, counts])
+
+	# A corpse-light stared at goes out, and comes back after a while.
+	var eye := Camera3D.new()
+	city.add_child(eye)
+	eye.current = true
+	var low := 1.0
+
+	for i in int((far.STARE + 1.5) * Engine.physics_ticks_per_second):
+		var at: Vector3 = far.wisp(0)[0]
+		eye.global_position = at + Vector3(0.0, 2.0, 30.0)
+		eye.look_at(at, Vector3.UP)
+		await get_tree().process_frame
+		low = minf(low, float(far.wisp(0)[1]))
+
+	eye.global_position += Vector3(0.0, 400.0, 0.0)
+	eye.look_at(eye.global_position + Vector3(0.0, 0.0, -1.0), Vector3.UP)
+
+	for i in int((far.GONE + 6.0) * Engine.physics_ticks_per_second):
+		await get_tree().process_frame
+
+	var back := float(far.wisp(0)[1])
+	eye.queue_free()
+	_check("C22 a corpse-light looked at too long goes out, and drifts back after a while", low < 0.1 and back > 0.9, "lowest %.2f, then %.2f" % [low, back])
+
+
+## The drawn meshes of the piece named `name` (itself or under it).
+func _drawn(root: Node, name: String) -> Array[GeometryInstance3D]:
+	var out: Array[GeometryInstance3D] = []
+	var node := root.find_child(name, true, false)
+
+	if node is GeometryInstance3D:
+		out.append(node)
+
+	if node != null:
+		for child in node.find_children("*", "GeometryInstance3D", true, false):
+			out.append(child)
+
+	return out
+
+
+## The first thing under `at` (layer 1), or null.
+func _floor_under(space: PhysicsDirectSpaceState3D, at: Vector3) -> Variant:
+	var q := PhysicsRayQueryParameters3D.create(at, Vector3(at.x, -120.0, at.z), 1)
+	var hit := space.intersect_ray(q)
+	return null if hit.is_empty() else hit["position"]
+
+
+## `at` is in the open: inside nothing solid, under no rock.
+func _open_air(space: PhysicsDirectSpaceState3D, at: Vector3) -> bool:
+	var p := PhysicsPointQueryParameters3D.new()
+	p.position = at
+	p.collision_mask = 1
+
+	if not space.intersect_point(p, 1).is_empty():
+		return false
+
+	var from := Vector3(at.x, 400.0, at.z)
+
+	# (The terrain's trimesh is met only from above: what is over the point,
+	# coming down from the sky.)
+	for i in 12:
+		if from.y <= at.y + 0.05:
+			break
+
+		var q := PhysicsRayQueryParameters3D.create(from, at, 1)
+		q.hit_from_inside = false
+		var over := space.intersect_ray(q)
+
+		if over.is_empty():
+			break
+
+		if String((over["collider"] as Node).name).begins_with("terrain_"):
+			return false
+
+		from = Vector3(at.x, over["position"].y - 0.02, at.z)
+
+	return true
+
+
 const SEARCHING := 3
 
 

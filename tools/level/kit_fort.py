@@ -175,30 +175,37 @@ def _ring_battlements(apothem, top, sides, merlons, slot, pyramids=False, phase=
 # The city's walls: 12 m (the sea wall, the wall behind the Terreiro) and
 # 10 m (the older wall behind the Ribeira), 6 and 3 m runs and a corner.
 
-def _city_wall(height, length):
+def _city_wall(height, length, batter=True):
+    """A run of the city wall; without its `batter` where a house is built
+    against its outer face (the customs house)."""
     d = DEPTH
-    shapes = [ks.box(0.0, height / 2.0, 0.0, length, height, d, "granite"),
-              ks.slab([[-length / 2.0, BATTER[0], d / 2.0], [length / 2.0, BATTER[0], d / 2.0], [length / 2.0, 0.0, d / 2.0 + BATTER[1]],
-                       [-length / 2.0, 0.0, d / 2.0 + BATTER[1]]], 0.3, "granite_rough", up=(0.0, 0.15, 1.0), tile=2.5),
-              ks.box(0.0, BATTER[0] + 0.1, d / 2.0 + 0.06, length, 0.2, 0.12, "ashlar_gold")]
-    lean = math.degrees(math.atan2(BATTER[1], BATTER[0]))
-    cols = [col(0.0, height / 2.0, 0.0, length, height, d),
-            col(0.0, BATTER[0] / 2.0, d / 2.0 + BATTER[1] / 2.0 - 0.1, length, BATTER[0] + 0.05, 0.3, 0.0, -lean)]
+    shapes = [ks.box(0.0, height / 2.0, 0.0, length, height, d, "granite")]
+    cols = [col(0.0, height / 2.0, 0.0, length, height, d)]
+
+    if batter:
+        shapes += [ks.slab([[-length / 2.0, BATTER[0], d / 2.0], [length / 2.0, BATTER[0], d / 2.0], [length / 2.0, 0.0, d / 2.0 + BATTER[1]],
+                            [-length / 2.0, 0.0, d / 2.0 + BATTER[1]]], 0.3, "granite_rough", up=(0.0, 0.15, 1.0), tile=2.5),
+                   ks.box(0.0, BATTER[0] + 0.1, d / 2.0 + 0.06, length, 0.2, 0.12, "ashlar_gold")]
+        lean = math.degrees(math.atan2(BATTER[1], BATTER[0]))
+        cols.append(col(0.0, BATTER[0] / 2.0, d / 2.0 + BATTER[1] / 2.0 - 0.1, length, BATTER[0] + 0.05, 0.3, 0.0, -lean))
     more, more_cols = _battlements(length, height, d / 2.0 - PARAPET / 2.0)
     return shapes + more, cols + more_cols
 
 
-def _city_corner(height):
+def _city_corner(height, battered=(0.0, 90.0)):
     d = DEPTH
     shapes = [ks.box(0.0, height / 2.0, 0.0, d, height, d, "granite")]
     cols = [col(0.0, height / 2.0, 0.0, d, height, d)]
 
     # Batter and battlements on its two outer faces (+z, and +x: the same
-    # turned a quarter; the two batters meet at the corner).
+    # turned a quarter; the two batters meet at the corner); a face a house
+    # is built against without its batter.
     for yaw in (0.0, 90.0):
         batter = [[-d / 2.0, BATTER[0], d / 2.0], [d / 2.0 + BATTER[1], BATTER[0], d / 2.0],
                   [d / 2.0 + BATTER[1], 0.0, d / 2.0 + BATTER[1]], [-d / 2.0, 0.0, d / 2.0 + BATTER[1]]]
-        shapes += ks.moved([ks.slab(batter, 0.3, "granite_rough", up=(0.0, 0.15, 1.0), tile=2.5)], yaw)
+
+        if yaw in battered:
+            shapes += ks.moved([ks.slab(batter, 0.3, "granite_rough", up=(0.0, 0.15, 1.0), tile=2.5)], yaw)
         top, top_cols = _battlements(d, height, d / 2.0 - PARAPET / 2.0)
         shapes += ks.moved(top, yaw)
 
@@ -209,16 +216,18 @@ def _city_corner(height):
     return shapes, cols
 
 
-def _postern(height):
+def _postern(height, batter=True):
     """A 3 m run of wall with a door's passage through it (1.2 x 2.2, a
     round head), the walk carrying on over it."""
     length, d = 3.0, DEPTH
     door_w, door_h = k.DOOR
     shapes = ks.arched_wall(length, height, d, door_w, door_h - door_w / 2.0, door_w / 2.0, 0.0, "granite")
-    shapes.append(ks.slab([[-length / 2.0, BATTER[0], d / 2.0], [-door_w / 2.0, BATTER[0], d / 2.0], [-door_w / 2.0, 0.0, d / 2.0 + BATTER[1]],
-                           [-length / 2.0, 0.0, d / 2.0 + BATTER[1]]], 0.3, "granite_rough", up=(0.0, 0.15, 1.0), tile=2.5))
-    shapes.append(ks.slab([[door_w / 2.0, BATTER[0], d / 2.0], [length / 2.0, BATTER[0], d / 2.0], [length / 2.0, 0.0, d / 2.0 + BATTER[1]],
-                           [door_w / 2.0, 0.0, d / 2.0 + BATTER[1]]], 0.3, "granite_rough", up=(0.0, 0.15, 1.0), tile=2.5))
+
+    if batter:
+        shapes.append(ks.slab([[-length / 2.0, BATTER[0], d / 2.0], [-door_w / 2.0, BATTER[0], d / 2.0], [-door_w / 2.0, 0.0, d / 2.0 + BATTER[1]],
+                               [-length / 2.0, 0.0, d / 2.0 + BATTER[1]]], 0.3, "granite_rough", up=(0.0, 0.15, 1.0), tile=2.5))
+        shapes.append(ks.slab([[door_w / 2.0, BATTER[0], d / 2.0], [length / 2.0, BATTER[0], d / 2.0], [length / 2.0, 0.0, d / 2.0 + BATTER[1]],
+                               [door_w / 2.0, 0.0, d / 2.0 + BATTER[1]]], 0.3, "granite_rough", up=(0.0, 0.15, 1.0), tile=2.5))
     side = (length - door_w) / 2.0
     cols = [col(-(length / 2.0 - side / 2.0), height / 2.0, 0.0, side, height, d), col(length / 2.0 - side / 2.0, height / 2.0, 0.0, side, height, d),
             col(0.0, (height + door_h) / 2.0, 0.0, door_w, height - door_h, d)]
@@ -239,6 +248,19 @@ for _height in (12, 10):
     _shapes, _cols = _city_corner(float(_height))
     _fort("city_wall_%d_corner" % _height, "granite", _shapes, _cols,
           [DEPTH + 2.0 * BATTER[1], _height + BREAST + MERLON_UP + 0.1, DEPTH + 2.0 * BATTER[1]])
+
+# Where a house is built against the wall's outer face (the customs house
+# against the shipyard's west wall): runs, the postern and the corner
+# without the batter on that face.
+for _length in (6, 3):
+    _shapes, _cols = _city_wall(12.0, float(_length), batter=False)
+    _fort("city_wall_12_%d_plain" % _length, "granite", _shapes, _cols, [float(_length), 12.0 + BREAST + MERLON_UP + 0.1, DEPTH + 2.0 * BATTER[1]])
+
+_shapes, _cols = _postern(12.0, batter=False)
+_fort("city_wall_12_postern_plain", "granite", _shapes, _cols, [3.0, 12.0 + BREAST + MERLON_UP + 0.1, DEPTH + 2.0 * BATTER[1]])
+k.PIECES["city_wall_12_postern_plain"]["opening"] = list(k.DOOR)
+_shapes, _cols = _city_corner(12.0, battered=(90.0,))
+_fort("city_wall_12_corner_x", "granite", _shapes, _cols, [DEPTH + 2.0 * BATTER[1], 12.0 + BREAST + MERLON_UP + 0.1, DEPTH + 2.0 * BATTER[1]])
 
 
 # A stair up a wall's inner face to its walk: along x, rising to +x, 1.5 m
@@ -460,6 +482,11 @@ for _index in (1, 2):
 
 BASTION = [(-15.0, -12.0), (15.0, -12.0), (15.0, 4.0), (6.0, 12.0), (-6.0, 12.0), (-15.0, 4.0)]
 BASTION_TOP = 4.0
+# Its gate in its landward (north, -z) face, west of its tower, where the
+# causeway meets it (layouts/harbour: CAUSEWAY): the gap in the parapet
+# (x), the portal over its deck (its opening, springing, crown).
+GATE = (-12.3, -6.7)
+PORTAL = (4.6, 2.5, 3.2)
 
 
 def _bastion():
@@ -482,13 +509,24 @@ def _bastion():
 
         angle = math.degrees(math.atan2(nz, nx))
         yaw = _yaw_out(angle)
-        px, pz = (x0 + x1) / 2.0 - nx * PARAPET / 2.0, (z0 + z1) / 2.0 - nz * PARAPET / 2.0
-        shapes.append(ks.box(px, BASTION_TOP + BREAST / 2.0, pz, length, BREAST, PARAPET, "ashlar_gold", yaw))
-        cols.append(col(px, BASTION_TOP + BREAST / 2.0, pz, length, BREAST, PARAPET, yaw))
+        # (The landward face's parapet broken by the gate: a run each side.)
+        gate = (x0, z0) == BASTION[0]
+        runs = [(0.0, (GATE[0] - x0) / dx), ((GATE[1] - x0) / dx, 1.0)] if gate else [(0.0, 1.0)]
+
+        for f0, f1 in runs:
+            fm = (f0 + f1) / 2.0
+            px, pz = x0 + dx * fm - nx * PARAPET / 2.0, z0 + dz * fm - nz * PARAPET / 2.0
+            shapes.append(ks.box(px, BASTION_TOP + BREAST / 2.0, pz, length * (f1 - f0), BREAST, PARAPET, "ashlar_gold", yaw))
+            cols.append(col(px, BASTION_TOP + BREAST / 2.0, pz, length * (f1 - f0), BREAST, PARAPET, yaw))
+
         bays = max(1, int(round(length / BAY)))
 
         for i in range(bays):
             f = (i + 0.5) / bays
+
+            if gate and GATE[0] - 1.0 < x0 + dx * f < GATE[1] + 1.0:
+                continue
+
             mx, mz = x0 + dx * f - nx * PARAPET / 2.0, z0 + dz * f - nz * PARAPET / 2.0
             shapes.append(ks.box(mx, BASTION_TOP + BREAST + 0.4, mz, 1.3, 0.8, PARAPET, "ashlar_gold", yaw))
             shapes.append(ks.box(mx + nx * (PARAPET / 2.0 + 0.03), BASTION_TOP + BREAST + 0.4, mz + nz * (PARAPET / 2.0 + 0.03), 0.6, 0.6, 0.06,
@@ -500,8 +538,29 @@ def _bastion():
                           "granite", tile=2.0))
     shapes.append(ks.slab([[-15.0, BASTION_TOP, 4.0], [15.0, BASTION_TOP, 4.0], [6.0, BASTION_TOP, 12.0], [-6.0, BASTION_TOP, 12.0]], 0.3,
                           "granite", tile=2.0))
+    # The portal over the gate: an arch through a wall the parapet's depth,
+    # the rope carving over it, a ball on each pier.
+    width = GATE[1] - GATE[0]
+    middle = (GATE[0] + GATE[1]) / 2.0
+    opening, spring, crown = PORTAL
+    shapes += ks.arched_wall(width, crown + opening / 2.0 + 0.3, PARAPET, opening, spring, opening / 2.0, 0.0, "ashlar_gold", x=middle,
+                             z=-12.0 + PARAPET / 2.0, y=BASTION_TOP)
+    shapes.append(ks.box(middle, BASTION_TOP + crown + opening / 2.0 + 0.36, -12.0 + PARAPET / 2.0, width + 0.2, 0.12, PARAPET + 0.2, "ashlar_gold"))
+    shapes.append(ks.card(middle, BASTION_TOP + spring + opening / 2.0 + 0.7, -12.0 - 0.02, 1.4, 1.4, "manueline", 180.0))
+
+    for x in (GATE[0] + 0.3, GATE[1] - 0.3):
+        shapes.append(ks.lathe(x, BASTION_TOP + crown + opening / 2.0 + 0.42, -12.0 + PARAPET / 2.0,
+                               [[0.12, 0.0], [0.2, 0.08], [0.24, 0.25], [0.18, 0.42], [0.0, 0.5]], 8, "ashlar_gold"))
+
+    side = (width - opening) / 2.0
+    cols.append(col(GATE[0] + side / 2.0, BASTION_TOP + (crown + opening / 2.0) / 2.0, -12.0 + PARAPET / 2.0, side, crown + opening / 2.0, PARAPET))
+    cols.append(col(GATE[1] - side / 2.0, BASTION_TOP + (crown + opening / 2.0) / 2.0, -12.0 + PARAPET / 2.0, side, crown + opening / 2.0, PARAPET))
+    cols.append(col(middle, BASTION_TOP + spring + opening / 2.0 + (crown - spring) / 2.0, -12.0 + PARAPET / 2.0, opening,
+                    crown - spring + 0.3, PARAPET))
+
     # Its colliders: the body behind the prow, the prow's middle, its two
-    # chamfers (a box laid along each, inward).
+    # chamfers (a box laid along each, inward: deep enough to meet the
+    # middle's, no hole in the top between them).
     cols.append(col(0.0, (BASTION_TOP - 1.0) / 2.0, -4.0, 30.0, BASTION_TOP + 1.0, 16.0))
     cols.append(col(0.0, (BASTION_TOP - 1.0) / 2.0, 8.0, 12.0, BASTION_TOP + 1.0, 8.0))
 
@@ -510,8 +569,8 @@ def _bastion():
         length = math.hypot(x1 - x0, z1 - z0)
         inward = (-(z1 - z0) / length * sx, (x1 - x0) / length * sx)
         angle = math.degrees(math.atan2(z1 - z0, x1 - x0))
-        cx, cz = (x0 + x1) / 2.0 + inward[0] * 1.5, (z0 + z1) / 2.0 + inward[1] * 1.5
-        cols.append(col(cx, (BASTION_TOP - 1.0) / 2.0, cz, length, BASTION_TOP + 1.0, 3.0, -angle))
+        cx, cz = (x0 + x1) / 2.0 + inward[0] * 3.25, (z0 + z1) / 2.0 + inward[1] * 3.25
+        cols.append(col(cx, (BASTION_TOP - 1.0) / 2.0, cz, length, BASTION_TOP + 1.0, 6.5, -angle))
 
     return shapes, cols
 
@@ -533,6 +592,7 @@ def _fort_tower():
     shapes.append(ks.box(0.0, 15.6, front + 1.0, 9.0, 0.4, 2.0, "ashlar_gold"))
     shapes.append(ks.box(0.0, 13.9, front + 0.01, 8.6, 3.2, 0.03, "pitch"))
     cols.append(col(0.0, 12.0, front + 1.0, 9.0, 0.3, 2.0))
+    cols.append(col(0.0, 15.6, front + 1.0, 9.0, 0.4, 2.0))
 
     for i in range(5):
         shapes.append(ks.prism(-4.0 + i * 2.0, 13.8, front + 1.8, 0.14, 3.3, 6, "ashlar_gold"))
@@ -571,7 +631,7 @@ def _garita():
 
 
 _shapes, _cols = _bastion()
-_fort("fort_bastion", "granite_rough", _shapes, _cols, [31.2, BASTION_TOP + 2.8, 25.2], budget=1200)
+_fort("fort_bastion", "granite_rough", _shapes, _cols, [31.2, BASTION_TOP + 2.8, 25.2], budget=1400)
 _shapes, _cols = _fort_tower()
 _fort("fort_tower", "ashlar_gold", _shapes, _cols, [12.6, 31.9, 16.4], budget=1600)
 _shapes, _cols = _garita()

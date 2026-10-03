@@ -97,9 +97,26 @@ def manifest(data):
     props include schema defaults. Does not write files or change data.
     """
     colliders = []
+    # Loose pieces (a "loose" marker names each): their colliders their own
+    # body's, in its frame, not the level's.
+    loose = {m["props"]["piece"]: m for m in data["markers"] if m["ucd"] == "loose"}
+    bodies = []
 
     for p in data["pieces"]:
         recipe = kit_recipes.PIECES[p["piece"]]
+
+        if p["name"] in loose:
+            boxes = [{"centre": rounded(b.centre), "basis": [rounded(r) for r in b.basis], "size": rounded([h * 2.0 for h in b.half]),
+                      "surface": b.surface} for b in geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY)]
+            size = recipe.get("size") or [0.5, 0.5, 0.5]
+
+            if not boxes:
+                boxes = [{"centre": [0.0, round(size[1] / 2.0, 4), 0.0], "basis": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                          "size": rounded([max(0.05, size[0] * 0.8), max(0.05, size[1]), max(0.05, size[2] * 0.8)]), "surface": recipe["surface"]}]
+
+            bodies.append({"name": p["name"], "sector": p["sector"], "mass": float(loose[p["name"]]["props"]["mass"]), "boxes": boxes,
+                           "surface": recipe["surface"]})
+            continue
 
         for box in geo.piece_boxes(recipe, p["position"], p["basis"]):
             collider = {"sector": p["sector"], "centre": rounded(box.centre), "basis": [rounded(r) for r in box.basis],
@@ -138,7 +155,10 @@ def manifest(data):
               for t in data.get("terrain", [])]
 
     return {"level": data["level"], "sectors": data["sectors"], "colliders": colliders, "markers": found, "sockets": sockets,
-            "pieces": len(data["pieces"]), "ranges": ranges, "terrain": ground, "shadowless": kit_recipes.shadowless(data["pieces"])}
+            "pieces": len(data["pieces"]), "ranges": ranges, "terrain": ground, "shadowless": kit_recipes.shadowless(data["pieces"]),
+            "roofed": _roofed_and_merged(data),
+            "merged": [{"name": g["name"], "members": g["members"]} for g in _groups(data)],
+            "loose": bodies}
 
 
 def _subdivide(mesh):
@@ -358,6 +378,64 @@ def bake(data):
     print("level: shading baked into %d pieces (%d corners measured)" % (len(objects), len(memo)))
 
 
+# The levels whose dense structure is joined at export (kit_recipes.merge_groups).
+MERGE_LEVELS = ("city_harbour",)
+
+
+def _groups(data):
+    """The level's merged groups (none unless it is in MERGE_LEVELS)."""
+    if data.get("level") not in MERGE_LEVELS:
+        return []
+
+    return kit_recipes.merge_groups(data["pieces"], kit_recipes.roofed(data["pieces"], data["markers"]))
+
+
+def _roofed_and_merged(data):
+    """The roofed pieces' names, and the merged meshes made of roofed ones."""
+    return kit_recipes.roofed(data["pieces"], data["markers"]) + [g["name"] for g in _groups(data) if g["roofed"]]
+
+
+def _merge(group):
+    """`group`'s pieces (kit_recipes.merge_groups) copied and joined into one
+    object named for it (their own kept for the .blend): the merged object."""
+    copies = []
+
+    for name in group["members"]:
+        obj = bpy.data.objects.get(name)
+
+        if obj is None or obj.type != "MESH":
+            continue
+
+        copy = obj.copy()
+        copy.data = obj.data.copy()
+
+        for collection in obj.users_collection:
+            collection.objects.link(copy)
+
+        copies.append(copy)
+
+    if not copies:
+        return None
+
+    bpy.ops.object.select_all(action="DESELECT")
+
+    for copy in copies:
+        copy.select_set(True)
+
+    bpy.context.view_layer.objects.active = copies[0]
+    bpy.ops.object.join()
+    merged = bpy.context.view_layer.objects.active
+    merged.name = group["name"]
+    merged.data.name = group["name"]
+    colours = merged.data.color_attributes.get("Col")
+
+    if colours is not None:
+        merged.data.color_attributes.active_color = colours
+        merged.data.color_attributes.render_color_index = merged.data.color_attributes.active_color_index
+
+    return merged
+
+
 def _box_mesh(name, items, slot):
     """A mesh of oriented boxes: `items` (geo.Box, colour) in Godot's axes,
     each box's corners coloured (the vertex colour Godot's proxy material
@@ -454,12 +532,22 @@ def export(stage="stage1"):
     out.mkdir(parents=True, exist_ok=True)
     bake(data)
 
+    groups = _groups(data)
+
     for sector in data["sectors"]:
         names = {p["name"] for p in data["pieces"] if p["sector"] == sector} | {t["name"] for t in data.get("terrain", []) if t["sector"] == sector}
 
         if not names:
             continue
 
+        # Merged groups: their pieces leave, one joined object each comes in.
+        merged = [m for m in (_merge(g) for g in groups if g["sector"] == sector) if m is not None]
+
+        for g in groups:
+            if g["sector"] == sector:
+                names -= set(g["members"])
+
+        names |= {m.name for m in merged}
         bpy.ops.object.select_all(action="DESELECT")
 
         for obj in bpy.context.scene.objects:
@@ -472,6 +560,12 @@ def export(stage="stage1"):
             export_image_format="NONE", export_vertex_color="ACTIVE", export_yup=True, export_apply=True,
             export_texcoords=True, export_normals=True, export_animations=False, export_skins=False, export_extras=False,
         )
+
+        for m in merged:
+            mesh = m.data
+            bpy.data.objects.remove(m, do_unlink=True)
+            bpy.data.meshes.remove(mesh)
+
         settings = path.with_suffix(".glb.import")
 
         if not settings.exists():

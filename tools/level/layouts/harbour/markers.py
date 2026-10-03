@@ -5,14 +5,19 @@ ways into the walled city as route checks (each move the rules measure)."""
 
 import math
 
+import kit_customs
+import kit_harbour
 import kit_iberian
 import kit_recipes
 
 from lay import facing
 
-from . import (ARCADE_FRONT, CARRACK_X, CARRACK_Z, CUSTOMS, GATE_X, MAINYARD_Y, MOLE_HEAD, MOLE_X, QUAY, SEA_WALL, WALK, WALL_D, WALL_E, WALL_F,
-               WALL_RIB, WALL_W, STAIR_X, along, rib_x, stair_y)
-from .mole import TOP as MOLE_TOP, head_yaw
+from .ground import FAR, NEAR_SEA
+from . import (ARCADE_FRONT, CARRACK_X, CARRACK_Z, CUSTOMS, CUSTOMS_AT, CUSTOMS_EAVES, CUSTOMS_UPPER, GATE_X, MAINYARD_Y, MOLE_HEAD, MOLE_X, QUAY, SEA_WALL, WALK, WALL_D, WALL_E, WALL_F,
+               NAVE_BAYS, NAVES, WALL_RIB, WALL_W, STAIR_X, along, nave_x, nave_z, rib_x, stair_y)
+from .mole import CAP, PARAPET, TOP as MOLE_TOP, head_yaw, line as mole_line
+
+MOLE_CAP = PARAPET[2] + CAP[1]
 from .ribeira import ROOF_HOUSE
 from .ships import START_BOAT
 
@@ -45,12 +50,14 @@ def _tower_local(x, y, z):
 
 
 def _boulder_near(z):
-    """The top of a boulder at the mole's seaward foot near z: (x, top, z)."""
-    points, _ = along((MOLE_X, 140.0), (MOLE_X, 0.0), 8.0)
-    px, pz = min(points, key=lambda p: abs(p[1] - z))
-    best = max((c for c in kit_recipes.PIECES["mole_8"]["cols"] if c[2] > 7.0), key=lambda c: c[1] + c[4] / 2.0 - abs(c[0]) * 0.1)
-    # (The straight mole is turned a quarter: its local z runs east, x north.)
-    return (px + best[2], best[1] + best[4] / 2.0, pz - best[0])
+    """The top of a boulder in the riprap at the mole's seaward foot (its
+    straight run) near z: (x, top, z)."""
+    laid = [st for k, st in enumerate(mole_line()[:-2]) if k % 2 == 1 and abs(st[0] - MOLE_X) < 1e-6]
+    px, pz = min(((st[0], st[1]) for st in laid), key=lambda p: abs(p[1] - z))
+    best = max(kit_recipes.PIECES["riprap_8"]["cols"], key=lambda c: c[1] + c[4] / 2.0 - abs(c[0]) * 0.1)
+    # (Along the straight run the riprap is turned a quarter: its local z
+    # runs east, x north.)
+    return (px + kit_harbour.RIPRAP + best[2], best[1] + best[4] / 2.0, pz - best[0])
 
 
 def _checks(L, route, points, sector):
@@ -65,8 +72,8 @@ def _guards(L):
                             (40.0, QUAY, -3.0)], sector="terreiro")
     L.mark("Duarte", "guard", (-170.0, QUAY, -3.0), 90.0, "ribeira", archetype="watchman", route="quays_round", light="lantern", look_seed=13)
     L.mark("Inigo", "guard", (-40.0, QUAY, -3.0), -90.0, "terreiro", archetype="swordsman", route="quays_round", light="lantern", look_seed=14)
-    L.route("customs_round", [(0.0, QUAY, -9.0), (10.5, QUAY, -9.0), (10.5, QUAY, -24.0), (1.0, QUAY, -26.0)], sector="shipyard", wait=2.0)
-    L.mark("Baltasar", "guard", (0.0, QUAY, -9.0), 0.0, "shipyard", archetype="watchman", route="customs_round", look_seed=15)
+    L.route("customs_round", [(0.0, QUAY, -12.0), (10.5, QUAY, -12.0), (10.5, QUAY, -24.0), (1.0, QUAY, -26.0)], sector="shipyard", wait=2.0)
+    L.mark("Baltasar", "guard", (0.0, QUAY, -12.0), 0.0, "shipyard", archetype="watchman", route="customs_round", look_seed=15)
     L.route("deck_round", [(35.5, 2.0, CARRACK_Z - 1.5), (46.5, 2.0, CARRACK_Z - 1.5)], sector="ships", wait=3.0)
     L.mark("Leonor", "guard", (35.5, 2.0, CARRACK_Z - 1.5), -90.0, "ships", archetype="duelist", route="deck_round", look_seed=16)
     L.mark("Gaspar", "guard", _terrace(5.7, 150.0), 60.0, "mole", archetype="archer", lookout=True, look_seed=17)
@@ -95,10 +102,13 @@ def _lights(L):
     L.mark("nave_brazier_w", "light", (29.0, QUAY, -30.0), 0.0, "shipyard", kind="brazier")
     L.mark("nave_brazier_e", "light", (96.0, QUAY, -40.0), 0.0, "shipyard", kind="brazier")
     L.mark("galley_torch", "light", (42.4, QUAY + 2.4, -25.2), 0.0, "shipyard", kind="torch", energy=1.0)
-    L.mark("customs_lantern", "light", (2.0, QUAY + 2.75, -20.0), 0.0, "shipyard", kind="lantern")
-    L.mark("office_candle", "light", (9.0, QUAY + 3.0 + 0.8, -28.0), 0.0, "shipyard", kind="candle")
+    L.mark("customs_lantern", "light", (2.0, QUAY + 3.2, -20.0), 0.0, "shipyard", kind="lantern")
+    L.mark("office_candle", "light", (9.15, CUSTOMS_UPPER + 1.0, -28.28), 0.0, "shipyard", kind="candle")
+    # (By the customs house's portal in the loggia, over the king's beam.)
+    L.mark("portal_lantern", "light", (6.4, QUAY + 2.9, -9.6), 0.0, "shipyard", kind="lantern")
     L.mark("stern_lantern", "light", (CARRACK_X - 15.8, 10.2, CARRACK_Z), 0.0, "ships", kind="lantern")
     L.mark("cabin_candle", "light", (CARRACK_X - 12.0, 2.85, CARRACK_Z), 0.0, "ships", kind="candle", energy=0.6)
+    L.mark("cabin_lantern", "light", (CARRACK_X - 9.6, 4.45, CARRACK_Z), 0.0, "ships", kind="lantern", energy=0.7)
     L.mark("caravel_lantern", "light", (-110.5, 5.0, 5.5), 0.0, "ships", kind="lantern")
     L.mark("beacon", "light", (MOLE_HEAD[0] - 3.2, TERRACE + 9.0, MOLE_HEAD[1] - 1.2), 0.0, "mole", kind="brazier")
     L.mark("tower_door_lantern", "light", _tower_local(1.2, 3.1, -8.1), 0.0, "mole", kind="lantern")
@@ -107,9 +117,16 @@ def _lights(L):
 
 
 def _water_and_air(L):
-    L.mark("the_sea", "water", (20.0, -6.0, 205.0), size=[560.0, 12.0, 430.0], sector="sea", murk=0.5)
+    # (The open sea out past the world's wall; its shore surveyed and its
+    # guards' swim baked over the harbour's own bed.)
+    x0, z0, x1, z1 = FAR
+    L.mark("the_sea", "water", ((x0 + x1) / 2.0, -6.0, (z0 + z1) / 2.0), size=[x1 - x0, 12.0, z1 - z0], sector="sea", murk=0.5,
+           shore_area=list(NEAR_SEA), swim_area=list(NEAR_SEA))
     L.mark("the_river", "water", (-215.0, -1.5, -80.0), size=[42.0, 3.0, 140.0], sector="river", murk=0.7)
-    L.mark("the_basin", "water", (71.0, -2.0, -18.0), size=[8.4, 4.0, 20.0], sector="shipyard", murk=0.7)
+    # (The slip's basin: up its slipway past where the ramp goes under, its
+    # surface running in under the stone, no edge of water short of it; out
+    # to the sea's own, meeting it without overlapping.)
+    L.mark("the_basin", "water", (71.0, -2.0, -20.5), size=[8.4, 4.0, 21.0], sector="shipyard", murk=0.7)
     # The blowhole: its shaft's mouth up on the headland, the cave and the
     # headland round it masked while it roars.
     L.mark("blowhole_roar", "noise_zone", (232.0, 12.0, 0.0), size=[34.0, 32.0, 44.0], sector="cave", db=45.0, period=11.0,
@@ -117,7 +134,8 @@ def _water_and_air(L):
     L.mark("zone_terreiro", "zone", (-55.0, 10.0, -38.0), size=[86.0, 18.0, 76.0], sector="terreiro", grade="outside", fog=1.0)
     L.mark("zone_sea_gate", "zone", (GATE_X, 5.0, WALL_D - 9.8), size=[4.0, 5.0, 16.0], sector="terreiro", grade="indoors", fog=1.2)
     L.mark("zone_shipyard", "zone", (66.8, 8.0, -37.8), size=[100.8, 12.0, 58.8], sector="shipyard", grade="indoors", fog=1.3)
-    L.mark("zone_customs", "zone", (2.0, 5.5, -20.0), size=[24.0, 6.0, 28.0], sector="shipyard", grade="indoors", fog=1.1)
+    L.mark("zone_customs", "zone", (2.0, (QUAY + CUSTOMS_EAVES) / 2.0, -20.0), size=[24.0, CUSTOMS_EAVES - QUAY, 28.0], sector="shipyard",
+           grade="indoors", fog=1.1)
     L.mark("zone_cave", "zone", (230.0, 4.0, 20.0), size=[30.0, 14.0, 80.0], sector="cave", grade="cellar", fog=1.5)
     L.mark("zone_cabin", "zone", (CARRACK_X - 10.5, 3.5, CARRACK_Z), size=[9.0, 3.0, 7.6], sector="ships", grade="hearth", fog=1.0)
     L.mark("zone_tower_room", "zone", (MOLE_HEAD[0], MOLE_TOP + 2.5, MOLE_HEAD[1]), size=[12.0, 5.0, 12.0], sector="mole", grade="indoors")
@@ -132,9 +150,14 @@ def _water_and_air(L):
 
 def _things(L):
     x0, x1, z0, z1 = CUSTOMS
-    office = QUAY + 3.0
-    L.mark("customs_front", "door", (1.6, QUAY, z1 - 0.2), 0.0, "shipyard", locked=True, key="customs_front", label="the customs house")
-    L.mark("customs_back", "door", (10.0, QUAY, z0 + 0.2), 0.0, "shipyard", label="the yard door")
+    office = CUSTOMS_UPPER
+    # (Its portal in the hall's front behind the loggia; its back door.)
+    L.mark("customs_front", "door", (CUSTOMS_AT[0] + kit_customs.PORTAL[0], QUAY, CUSTOMS_AT[1] + kit_customs.HALL_FRONT - kit_customs.WALL / 2.0), 0.0,
+           "shipyard", locked=True, key="customs_front", label="the customs house", width=kit_customs.PORTAL[1], height=kit_customs.PORTAL[2])
+    L.mark("customs_back", "door", (10.0, QUAY, z0 + kit_customs.WALL / 2.0), 0.0, "shipyard", label="the yard door")
+    # The hoist's rope down before the loading door (a way into the upper
+    # floor: up it, across onto the door's sill).
+    L.mark("hoist_rope", "rope", (CUSTOMS_AT[0] + kit_customs.LOADING[0], QUAY + kit_customs.EAVES - 0.8, z1 + 1.65), 0.0, "shipyard", length=5.6)
     L.mark("customs_postern", "door", (WALL_F, QUAY, -20.0), 90.0, "shipyard", label="the postern")
     L.mark("office_door", "door", (7.0, office, -22.0), 0.0, "shipyard", locked=True, key="customs_office", pick=False, label="the office")
     L.mark("cabin_door", "door", (CARRACK_X - 6.0, 2.0, CARRACK_Z), 90.0, "ships", label="the cabin")
@@ -145,11 +168,10 @@ def _things(L):
     L.mark("cabin_strongbox", "chest", (CARRACK_X - 13.0, 2.0, CARRACK_Z + 2.2), 90.0, "ships", locked=True, key="cabin", pick=False,
            label="the captain's strongbox")
     L.mark("smugglers_chest", "chest", (234.0, 1.35, 21.0), -90.0, "cave", label="a smugglers' chest")
-    L.put("table_long", (9.0, office, -28.0), 90.0, "shipyard")
 
     loot = [("the_seal", (12.0, office + 0.15, -30.0), 250, "the harbourmaster's seal", {"special": True, "kind": "seal"}, "shipyard"),
-            ("office_purse", (9.0, office + 0.85, -28.4), 60, "a purse", {}, "shipyard"),
-            ("inkwell", (9.2, office + 0.85, -27.4), 80, "a silver inkwell", {}, "shipyard"),
+            ("office_purse", (9.0, office + 0.86, -28.15), 60, "a purse", {}, "shipyard"),
+            ("inkwell", (9.95, office + 0.86, -27.85), 80, "a silver inkwell", {}, "shipyard"),
             ("silk", (-4.0, QUAY + 0.8, -12.0), 100, "a bolt of silk", {}, "shipyard"),
             ("pepper", (-5.2, QUAY + 1.45, -18.0), 90, "a sack of pepper", {}, "shipyard"),
             ("wine", (-3.0, QUAY + 0.95, -24.0), 70, "a flask of wine", {}, "shipyard"),
@@ -271,11 +293,11 @@ def _ways_in(L):
     # The mole's: from the boat onto a boulder, up the parapet, down on top.
     boulder = _boulder_near(START_BOAT[2])
     _checks(L, "way_mole", [((START_BOAT[0], START_BOAT[1] - 0.12, START_BOAT[2]), "walk"), (boulder, "mantle"),
-                            ((MOLE_X + 6.2, MOLE_TOP + 2.0, boulder[2]), "hang"), ((MOLE_X + 3.0, MOLE_TOP, boulder[2]), "drop")], "mole")
+                            ((MOLE_X + 6.2, MOLE_CAP, boulder[2]), "hang"), ((MOLE_X + 3.0, MOLE_TOP, boulder[2]), "drop")], "mole")
     # The Sea Gate's and the customs house's: walked.
     _checks(L, "way_gate", [((GATE_X, QUAY, -60.0), "walk"), ((GATE_X, QUAY, WALL_D - 6.0), "walk"), ((GATE_X, QUAY, WALL_D - 15.0), "walk")],
             "terreiro")
-    _checks(L, "way_customs", [((1.6, QUAY, -3.0), "walk"), ((1.6, QUAY, -8.0), "walk"), ((10.0, QUAY, -20.0), "walk"),
+    _checks(L, "way_customs", [((1.6, QUAY, -3.0), "walk"), ((5.0, QUAY, -8.0), "walk"), ((5.0, QUAY, -14.0), "walk"), ((10.0, QUAY, -20.0), "walk"),
                                ((WALL_F + 2.5, QUAY, -20.0), "walk")], "shipyard")
 
 
@@ -285,10 +307,28 @@ def _probes(L):
                                      ("probe_mole", (163.0, MOLE_TOP + 1.0, 60.0), "moon", "mole"),
                                      ("probe_nave", (58.6, QUAY + 1.0, -45.0), "shadow", "shipyard"),
                                      ("probe_deck", (CARRACK_X + 3.0, 3.0, CARRACK_Z), "moon", "ships"),
-                                     ("probe_office", (10.0, QUAY + 4.0, -28.0), "lamp", "shipyard"),
+                                     ("probe_office", (10.0, CUSTOMS_UPPER + 1.0, -28.0), "lamp", "shipyard"),
                                      ("probe_beach", (231.0, 1.8, 8.0), "shadow", "cave"),
                                      ("probe_bastion", (-75.0, 5.0, 214.0), "moon", "fort")):
         L.mark(name, "probe", at, 0.0, sector, expect=expect)
+
+
+def _roofs(L):
+    # Under roofs (kit_recipes.roofed: no shadow from them in moonlight):
+    # what is stored in the customs house's hall and up in its store, not
+    # in its loggia, open to the harbour; the yard's work under the naves'
+    # vaults (not on their terrace).
+    # (Inside its walls' faces: the hoist hangs outside its front.)
+    wall = kit_customs.WALL
+    x0, x1, z0, z1 = CUSTOMS[0] + wall, CUSTOMS[1] - wall, CUSTOMS[2] + wall, CUSTOMS[3] - wall
+    front = CUSTOMS_AT[1] + kit_customs.HALL_FRONT - wall
+    L.mark("roofed_customs_hall", "roofed", ((x0 + x1) / 2.0, QUAY + kit_customs.UP / 2.0, (z0 + front) / 2.0), 0.0, "shipyard",
+           size=[x1 - x0, kit_customs.UP, front - z0])
+    L.mark("roofed_customs_store", "roofed", ((x0 + x1) / 2.0, (CUSTOMS_UPPER + CUSTOMS_EAVES) / 2.0, (z0 + z1) / 2.0), 0.0, "shipyard",
+           size=[x1 - x0, CUSTOMS_EAVES - CUSTOMS_UPPER, z1 - z0])
+    height = kit_harbour.TERRACE - 0.5
+    L.mark("roofed_naves", "roofed", ((nave_x(0) + nave_x(NAVES)) / 2.0, QUAY + height / 2.0, (nave_z(0) + nave_z(NAVE_BAYS)) / 2.0), 0.0,
+           "shipyard", size=[nave_x(NAVES) - nave_x(0), height, nave_z(0) - nave_z(NAVE_BAYS)])
 
 
 def lay(L):
@@ -299,3 +339,4 @@ def lay(L):
     _exits_and_views(L)
     _ways_in(L)
     _probes(L)
+    _roofs(L)

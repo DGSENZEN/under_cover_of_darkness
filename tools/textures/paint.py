@@ -1461,6 +1461,303 @@ def laundry():
     return _finish(image, (128, 64), 24, mask_image)
 
 
+COBALT = (34, 58, 132)
+GLAZE = (226, 222, 204)
+
+
+def azulejo_ship():
+    """A panel of azulejos for the customs house's front (5 x 4 tiles): a
+    caravel under sail on cobalt waves in a cobalt-and-ochre frame, painted
+    in the tin glaze's blues on its white, the joints between the tiles, a
+    little crazing and wear."""
+    tw, th = 5, 4
+    tile = 32 * SCALE
+    w, h = tw * tile, th * tile
+    image = Image.new("RGB", (w, h), GLAZE)
+    draw = ImageDraw.Draw(image)
+    rng = np.random.default_rng(1500)
+    # The frame: a cobalt band, an ochre line inside it.
+    b = int(tile * 0.32)
+    draw.rectangle([0, 0, w, h], outline=COBALT, width=b)
+    draw.rectangle([b, b, w - b, h - b], outline=(176, 132, 52), width=int(SCALE * 2.5))
+    # The sea: rows of cobalt waves, darker below.
+    for row in range(5):
+        y = h * 0.66 + row * h * 0.055
+        for x in range(b, w - b, int(SCALE * 14)):
+            draw.arc([x, y - SCALE * 4, x + SCALE * 14, y + SCALE * 4], 200, 340, fill=COBALT, width=int(SCALE * (1.6 + row * 0.4)))
+    # The caravel: her hull, castles, lateen and square sails, her flag.
+    cx, sea = w * 0.5, h * 0.66
+    hull = [(cx - w * 0.2, sea - h * 0.1), (cx + w * 0.22, sea - h * 0.12), (cx + w * 0.16, sea + h * 0.02), (cx - w * 0.15, sea + h * 0.02)]
+    draw.polygon(hull, fill=COBALT)
+    draw.rectangle([cx - w * 0.2, sea - h * 0.16, cx - w * 0.1, sea - h * 0.1], fill=COBALT)
+    for mx, top, sail in ((cx - w * 0.06, 0.5, "square"), (cx + w * 0.08, 0.56, "lateen"), (cx - w * 0.17, 0.32, "lateen")):
+        draw.line([(mx, sea - h * 0.1), (mx, sea - h * top)], fill=COBALT, width=int(SCALE * 2))
+        if sail == "square":
+            draw.polygon([(mx - w * 0.07, sea - h * (top - 0.04)), (mx + w * 0.07, sea - h * (top - 0.04)), (mx + w * 0.08, sea - h * 0.17),
+                          (mx - w * 0.08, sea - h * 0.17)], fill=(70, 96, 168), outline=COBALT)
+            # (The cross of the Order of Christ on her mainsail.)
+            c = w * 0.022
+            draw.rectangle([mx - c * 0.35, sea - h * 0.39, mx + c * 0.35, sea - h * 0.27], fill=(156, 34, 30))
+            draw.rectangle([mx - c, sea - h * 0.345, mx + c, sea - h * 0.315], fill=(156, 34, 30))
+        else:
+            draw.polygon([(mx - w * 0.06, sea - h * (top - 0.02)), (mx + w * 0.05, sea - h * 0.16), (mx - w * 0.01, sea - h * 0.16)],
+                         fill=(70, 96, 168), outline=COBALT)
+        draw.polygon([(mx, sea - h * top), (mx + w * 0.035, sea - h * (top - 0.02)), (mx, sea - h * (top - 0.04))], fill=COBALT)
+    # Gulls, a sun of the Order's ochre.
+    draw.ellipse([w * 0.72, h * 0.2, w * 0.8, h * 0.31], outline=(176, 132, 52), width=int(SCALE * 3))
+    for gx, gy in ((0.25, 0.25), (0.33, 0.2), (0.62, 0.3)):
+        draw.arc([w * gx, h * gy, w * gx + SCALE * 8, h * gy + SCALE * 5], 200, 340, fill=COBALT, width=int(SCALE * 1.5))
+    # The joints, a little crazing and wear.
+    pixels = np.asarray(image, dtype=np.float64)
+    pixels *= (0.93 + 0.07 * rng.random((h, w)))[:, :, None]
+    image = Image.fromarray(np.clip(pixels, 0, 255).astype(np.uint8), "RGB")
+    draw = ImageDraw.Draw(image)
+    for i in range(1, tw):
+        draw.line([(i * tile, 0), (i * tile, h)], fill=(150, 146, 132), width=int(SCALE * 1.2))
+    for j in range(1, th):
+        draw.line([(0, j * tile), (w, j * tile)], fill=(150, 146, 132), width=int(SCALE * 1.2))
+    return _finish(image, (tw * 32, th * 32), 16)
+
+
+def arms_royal():
+    """The king's arms over the customs house's door, painted on the stone
+    of its tympanum: the shield of the five quinas (five blue escutcheons in
+    a cross on white, each with its white roundels) in a red bordure of
+    gold castles, a closed crown over it."""
+    size = 64 * SCALE
+    image = Image.new("RGB", (size, size), (120, 112, 96))
+    draw = ImageDraw.Draw(image)
+    mask = Image.new("L", (size, size), 0)
+    m = ImageDraw.Draw(mask)
+    top, bottom, left, right = size * 0.26, size * 0.96, size * 0.18, size * 0.82
+    shape = [(left, top), (right, top), (right, size * 0.7), (size / 2, bottom), (left, size * 0.7)]
+    draw.polygon(shape, fill=(150, 26, 26))
+    m.polygon(shape, fill=255)
+    inner = [(left + size * 0.07, top + size * 0.06), (right - size * 0.07, top + size * 0.06), (right - size * 0.07, size * 0.68),
+             (size / 2, bottom - size * 0.08), (left + size * 0.07, size * 0.68)]
+    draw.polygon(inner, fill=(232, 228, 214))
+    # The castles round the bordure.
+    for x, y in ((0.22, 0.32), (0.22, 0.48), (0.22, 0.64), (0.78, 0.32), (0.78, 0.48), (0.78, 0.64), (0.5, 0.29), (0.36, 0.85), (0.64, 0.85)):
+        cx, cy, c = size * x, size * y, size * 0.03
+        draw.rectangle([cx - c, cy - c * 0.6, cx + c, cy + c], fill=(214, 172, 60))
+        draw.rectangle([cx - c * 0.4, cy - c * 1.2, cx + c * 0.4, cy], fill=(214, 172, 60))
+    # The quinas.
+    for x, y in ((0.5, 0.42), (0.37, 0.55), (0.5, 0.55), (0.63, 0.55), (0.5, 0.68)):
+        cx, cy, q = size * x, size * y, size * 0.058
+        draw.polygon([(cx - q, cy - q), (cx + q, cy - q), (cx + q, cy + q * 0.6), (cx, cy + q * 1.3), (cx - q, cy + q * 0.6)], fill=(22, 46, 156))
+        for dx, dy in ((-0.5, -0.5), (0.5, -0.5), (0.0, 0.0), (-0.5, 0.5), (0.5, 0.5)):
+            r = q * 0.16
+            draw.ellipse([cx + dx * q * 0.9 - r, cy + dy * q * 0.9 - r, cx + dx * q * 0.9 + r, cy + dy * q * 0.9 + r], fill=(232, 228, 214))
+    # The crown over it.
+    crown = [(size * 0.3, size * 0.22), (size * 0.7, size * 0.22), (size * 0.72, size * 0.1), (size * 0.62, size * 0.15), (size * 0.5, size * 0.04),
+             (size * 0.38, size * 0.15), (size * 0.28, size * 0.1)]
+    draw.polygon(crown, fill=(214, 172, 60))
+    m.polygon(crown, fill=255)
+    rng = np.random.default_rng(1521)
+    pixels = np.asarray(image, dtype=np.float64) * (0.8 + 0.2 * rng.random((size, size)))[:, :, None]
+    image = Image.fromarray(np.clip(pixels, 0, 255).astype(np.uint8), "RGB")
+    return _finish(image, (64, 64), 24, mask)
+
+
+VELLUM = (204, 186, 146)
+INK = (52, 40, 30)
+
+
+def sea_chart():
+    """A portolan chart on vellum: a coast in ink with its capes and bays
+    named in scribbles, rhumb lines from two compass roses, a wind rose in
+    red and gold, a cartouche, the vellum stained and worn."""
+    w, h = 128 * SCALE, 96 * SCALE
+    image = Image.new("RGB", (w, h), VELLUM)
+    draw = ImageDraw.Draw(image)
+    rng = np.random.default_rng(1492)
+    # Rhumb lines from two roses.
+    for cx, cy in ((w * 0.36, h * 0.5), (w * 0.72, h * 0.42)):
+        for i in range(32):
+            a = i * math.tau / 32
+            colour = (150, 40, 34) if i % 4 == 0 else ((60, 96, 60) if i % 2 == 0 else (130, 112, 80))
+            draw.line([(cx, cy), (cx + math.cos(a) * w, cy + math.sin(a) * w)], fill=colour, width=max(1, SCALE // 2))
+    # The coast: a long ragged line across, land shaded behind it.
+    pts = []
+    for i in range(41):
+        x = w * i / 40
+        y = h * (0.28 + 0.12 * math.sin(i * 0.5) + 0.05 * math.sin(i * 1.7 + 1.0)) + rng.uniform(-3, 3) * SCALE
+        pts.append((x, y))
+    draw.polygon(pts + [(w, 0), (0, 0)], fill=(186, 166, 120))
+    draw.line(pts, fill=INK, width=int(SCALE * 1.5))
+    # Names along the coast: ink scribbles square to it.
+    for x, y in pts[2:-2:3]:
+        for k in range(int(rng.integers(3, 7))):
+            draw.line([(x + k * SCALE * 1.5, y - SCALE * 3), (x + k * SCALE * 1.5, y - SCALE * (3 + rng.uniform(2, 6)))], fill=INK, width=SCALE // 2)
+    # The roses.
+    for cx, cy, r in ((w * 0.36, h * 0.5, h * 0.14), (w * 0.72, h * 0.42, h * 0.09)):
+        for i in range(8):
+            a = i * math.tau / 8
+            tip = (cx + math.cos(a) * r, cy + math.sin(a) * r)
+            side = r * (0.18 if i % 2 == 0 else 0.12)
+            l = (cx + math.cos(a + math.pi / 2) * side, cy + math.sin(a + math.pi / 2) * side)
+            rr = (cx + math.cos(a - math.pi / 2) * side, cy + math.sin(a - math.pi / 2) * side)
+            draw.polygon([tip, l, (cx, cy)], fill=(196, 152, 64) if i % 2 == 0 else (150, 40, 34))
+            draw.polygon([tip, rr, (cx, cy)], fill=INK)
+        draw.ellipse([cx - r * 0.12, cy - r * 0.12, cx + r * 0.12, cy + r * 0.12], fill=(150, 40, 34))
+    # A cartouche, a ship drawn at sea.
+    draw.rectangle([w * 0.06, h * 0.72, w * 0.3, h * 0.92], outline=INK, width=SCALE)
+    for j in range(3):
+        draw.line([(w * 0.08, h * (0.77 + j * 0.05)), (w * 0.28, h * (0.77 + j * 0.05))], fill=INK, width=SCALE // 2)
+    sx, sy = w * 0.58, h * 0.75
+    draw.polygon([(sx - SCALE * 8, sy), (sx + SCALE * 8, sy), (sx + SCALE * 5, sy + SCALE * 4), (sx - SCALE * 5, sy + SCALE * 4)], fill=INK)
+    draw.polygon([(sx, sy - SCALE * 12), (sx + SCALE * 6, sy - SCALE * 3), (sx, sy - SCALE * 2)], fill=(232, 222, 196), outline=INK)
+    # Stains and wear.
+    pixels = np.asarray(image, dtype=np.float64)
+    for _ in range(6):
+        cx, cy, r = rng.uniform(0, w), rng.uniform(0, h), rng.uniform(0.05, 0.2) * w
+        yy, xx = np.mgrid[0:h, 0:w]
+        pixels *= 1.0 - 0.1 * np.exp(-((xx - cx) ** 2 + (yy - cy) ** 2) / (r * r))[:, :, None]
+    pixels *= (0.92 + 0.08 * rng.random((h, w)))[:, :, None]
+    image = Image.fromarray(np.clip(pixels, 0, 255).astype(np.uint8), "RGB")
+    return _finish(image, (128, 96), 40)
+
+
+def parchment():
+    """A written page: lines of ink in a clerk's hand, a seal's red at its
+    foot, the paper browned at its edges."""
+    w, h = 64 * SCALE, 64 * SCALE
+    image = Image.new("RGB", (w, h), (214, 198, 160))
+    draw = ImageDraw.Draw(image)
+    rng = np.random.default_rng(1530)
+    for j in range(13):
+        y = h * (0.1 + j * 0.06)
+        x = w * 0.1
+        while x < w * 0.88:
+            word = rng.uniform(4, 12) * SCALE
+            draw.line([(x, y), (min(x + word, w * 0.9), y + rng.uniform(-1, 1) * SCALE)], fill=INK, width=SCALE // 2 + 1)
+            x += word + 2.5 * SCALE
+    draw.ellipse([w * 0.66, h * 0.86, w * 0.8, h * 0.98], fill=(150, 30, 26))
+    yy, xx = np.mgrid[0:h, 0:w]
+    edge = np.minimum(np.minimum(xx, w - xx), np.minimum(yy, h - yy)) / (w * 0.12)
+    pixels = np.asarray(image, dtype=np.float64) * (0.7 + 0.3 * np.clip(edge, 0, 1))[:, :, None]
+    pixels *= (0.92 + 0.08 * rng.random((h, w)))[:, :, None]
+    return _finish(Image.fromarray(np.clip(pixels, 0, 255).astype(np.uint8), "RGB"), (64, 64), 20)
+
+
+def book_spines():
+    """A shelf's worth of ledgers and books seen end on: leather spines in
+    browns, reds and greens, their bands and gilt titles, some leaning."""
+    w, h = 128 * SCALE, 64 * SCALE
+    image = Image.new("RGB", (w, h), (22, 16, 12))
+    draw = ImageDraw.Draw(image)
+    rng = np.random.default_rng(1543)
+    colours = [(92, 52, 30), (120, 36, 30), (60, 70, 40), (70, 46, 28), (140, 104, 60), (40, 40, 50), (100, 72, 40)]
+    x = 0.0
+    while x < w:
+        bw = rng.uniform(5, 11) * SCALE
+        top = h * rng.uniform(0.05, 0.3)
+        c = colours[int(rng.integers(0, len(colours)))]
+        draw.rectangle([x + SCALE * 0.5, top, x + bw - SCALE * 0.5, h], fill=c)
+        for band in (top + h * 0.08, h * 0.82):
+            draw.rectangle([x + SCALE * 0.5, band, x + bw - SCALE * 0.5, band + SCALE * 1.5], fill=tuple(int(v * 0.6) for v in c))
+        draw.rectangle([x + bw * 0.3, top + h * 0.2, x + bw * 0.7, top + h * 0.3], fill=(190, 150, 70))
+        x += bw
+    pixels = np.asarray(image, dtype=np.float64) * (0.85 + 0.15 * rng.random((h, w)))[:, :, None]
+    return _finish(Image.fromarray(np.clip(pixels, 0, 255).astype(np.uint8), "RGB"), (128, 64), 24)
+
+
+# The massing's house fronts: FACADE metres across and up (two storeys of
+# four windows), FACADE_PX pixels; each window's middle along it, its
+# storeys' floors, its opening's sill and head over its floor, its width.
+FACADE = (12.0, 7.0)
+FACADE_PX = (192, 112)
+FACADE_WINDOWS = (1.5, 4.5, 7.5, 10.5)
+FACADE_FLOORS = (0.0, 3.5)
+FACADE_OPENING = (0.9, 2.5, 0.9)
+FACADE_WALLS = {"white": (184, 178, 166), "ochre": (178, 132, 64), "salmon": (170, 102, 76), "blue": (142, 160, 170)}
+FACADE_SHUTTERS = {"white": [(48, 74, 54), (82, 58, 40)], "ochre": [(58, 72, 86), (90, 42, 34)], "salmon": [(48, 74, 54), (64, 60, 52)],
+                   "blue": [(82, 58, 40), (40, 52, 70)]}
+
+
+def _facade(wall):
+    """A house front in `wall` render (FACADE: two storeys of four
+    windows): stone surrounds and sills, shutters open, closed or ajar in
+    two colours, one window's glass bare, an iron balcony upstairs, grime
+    run down from the sills; the render mottled."""
+    w, h = FACADE_PX[0] * SCALE, FACADE_PX[1] * SCALE
+    per = w / FACADE[0]
+    rng = np.random.default_rng(1640 + sum(FACADE_WALLS[wall]))
+    base = np.array(FACADE_WALLS[wall], dtype=np.float64)
+    field = _noise(max(w, h), rng, octaves=5, base=3)[:h, :w]
+    pixels = base[None, None, :] * (0.86 + 0.2 * field[:, :, None])
+    image = Image.fromarray(np.clip(pixels, 0, 255).astype(np.uint8), "RGB")
+    draw = ImageDraw.Draw(image)
+    px = lambda u: u * per
+    py = lambda y: h - y * per
+    stone, glass, iron = (204, 196, 180), (22, 20, 26), (30, 28, 28)
+    width, sill, head = FACADE_OPENING[2], FACADE_OPENING[0], FACADE_OPENING[1]
+    states = ["open", "closed", "ajar", "open", "bare", "open", "closed", "open"]
+
+    for k, floor in enumerate(FACADE_FLOORS):
+        for i, u in enumerate(FACADE_WINDOWS):
+            x0, x1, y0, y1 = px(u - width / 2.0), px(u + width / 2.0), py(floor + head), py(floor + sill)
+            # Grime run down from the sill.
+            for g in range(int(per * 1.2)):
+                shade = 0.9 + 0.1 * g / (per * 1.2)
+                row = int(y1 + per * 0.1 + g)
+                if row < h:
+                    strip = np.asarray(image.crop((int(x0), row, int(x1), row + 1)), dtype=np.float64) * shade
+                    image.paste(Image.fromarray(strip.astype(np.uint8), "RGB"), (int(x0), row))
+            band = per * 0.14
+            draw.rectangle([x0 - band, y0 - band, x1 + band, y1], fill=stone)
+            draw.rectangle([x0 - band * 1.6, y1, x1 + band * 1.6, y1 + per * 0.1], fill=stone)
+            draw.rectangle([x0, y0, x1, y1], fill=glass)
+            draw.line([((x0 + x1) / 2.0, y0), ((x0 + x1) / 2.0, y1)], fill=(54, 48, 44), width=SCALE)
+            draw.line([(x0, (y0 + y1) / 2.0), (x1, (y0 + y1) / 2.0)], fill=(54, 48, 44), width=SCALE)
+            colour = FACADE_SHUTTERS[wall][(i + k) % 2]
+            state = states[(k * 4 + i) % len(states)]
+            leaf = (x1 - x0) / 2.0
+
+            def boards(a, b):
+                draw.rectangle([a, y0, b, y1], fill=colour)
+                for r in range(1, 6):
+                    yy = y0 + (y1 - y0) * r / 6.0
+                    draw.line([(a, yy), (b, yy)], fill=tuple(int(c * 0.7) for c in colour), width=max(1, SCALE // 2))
+
+            if state == "open":
+                boards(x0 - band - leaf, x0 - band)
+                boards(x1 + band, x1 + band + leaf)
+            elif state == "closed":
+                boards(x0, x1)
+            elif state == "ajar":
+                boards(x0, x0 + leaf)
+                boards(x1 + band, x1 + band + leaf)
+
+    # An iron balcony on the second window upstairs: its slab, its rail.
+    u = FACADE_WINDOWS[1]
+    floor = FACADE_FLOORS[1]
+    x0, x1 = px(u - 0.75), px(u + 0.75)
+    draw.rectangle([x0, py(floor + 0.95), x1, py(floor + 0.85)], fill=stone)
+    draw.rectangle([x0, py(floor + 1.9), x1, py(floor + 1.85)], fill=iron)
+    for b in range(9):
+        bx = x0 + (x1 - x0) * b / 8.0
+        draw.line([(bx, py(floor + 1.9)), (bx, py(floor + 0.95))], fill=iron, width=SCALE)
+
+    return _finish(image, FACADE_PX, 28)
+
+
+def facade_white():
+    return _facade("white")
+
+
+def facade_ochre():
+    return _facade("ochre")
+
+
+def facade_salmon():
+    return _facade("salmon")
+
+
+def facade_blue():
+    return _facade("blue")
+
+
 PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_frontal": altar_frontal,
              "shield_1": shield_1, "shield_2": shield_2, "shield_3": shield_3,
              "leaf_crown": leaf_crown, "leaf_shrub": leaf_shrub, "yew": yew, "twigs": twigs, "grass": grass,
@@ -1469,7 +1766,9 @@ PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_
              "carpet": carpet,
              "iron_rail": iron_rail, "window_grille": window_grille, "casement": casement, "sash": sash, "lattice": lattice, "ratlines": ratlines, "coil_mask": coil_mask,
              "decal_salt": decal_salt, "palm_frond": palm_frond, "cypress": cypress, "agave": agave, "orange_leaves": orange_leaves,
-             "gorse": gorse, "fennel": fennel, "pine": pine, "laundry": laundry}
+             "gorse": gorse, "fennel": fennel, "pine": pine, "laundry": laundry, "azulejo_ship": azulejo_ship, "arms_royal": arms_royal,
+             "sea_chart": sea_chart, "parchment": parchment, "book_spines": book_spines,
+             "facade_white": facade_white, "facade_ochre": facade_ochre, "facade_salmon": facade_salmon, "facade_blue": facade_blue}
 
 
 def main(argv):

@@ -22,7 +22,8 @@ void fragment() {
 	#endif
 	vec4 view = INV_PROJECTION_MATRIX * vec4(ndc, 1.0);
 	vec3 endpoint = view.xyz / view.w;
-	float scene_distance = min(length(endpoint), 70.0);
+	float scene_far = length(endpoint);
+	float scene_distance = min(scene_far, 70.0);
 	vec3 dir = normalize((INV_VIEW_MATRIX * vec4(normalize(endpoint), 0.0)).xyz);
 	vec3 eye = INV_VIEW_MATRIX[3].xyz;
 	// Clip the optical path to this water's box, including the clear sky above it.
@@ -38,26 +39,50 @@ void fragment() {
 	vec3 original = texture(scene, SCREEN_UV).rgb;
 	vec2 sample_uv = SCREEN_UV + distortion;
 	bool internal_reflection = false;
-	// The sky is seen through the surface's refracted window. Screen-space
-	// sampling falls back at its limits rather than stretching an off-screen moon.
-	if (depth < 0.00002 && dir.y > 0.0) {
-		vec3 air = refract(dir, vec3(0.0, -1.0, 0.0), 1.333);
+	float window = 1.0;
+	float ripple_light = 0.0;
+	// The surface seen from under it: wherever the ray meets it before the
+	// scene (the sky, or anything standing over the water), inside the box.
+	// Rippled; inside Snell's window the world above, refracted (squeezed into
+	// the window, dimmer toward its rim); outside it the surface mirrors the
+	// dark water, its ripples catching the window's light.
+	float to_surface = dir.y > 0.0001 ? (surface_y - eye.y) / dir.y : -1.0;
+	vec3 under = eye + dir * max(to_surface, 0.0);
+	bool ceiling = to_surface > 0.0 && (depth < 0.00002 || to_surface < scene_far)
+		&& abs(under.x - water_center.x) < half_size.x && abs(under.z - water_center.y) < half_size.y;
+	if (ceiling) {
+		vec2 q = under.xz * 0.22 + water_clock * vec2(0.02, -0.014);
+		float h0 = texture(caustics, q).r;
+		vec3 n = normalize(vec3((h0 - texture(caustics, q + vec2(0.03, 0.0)).r) * 0.8, -1.0, (h0 - texture(caustics, q + vec2(0.0, 0.03)).r) * 0.8));
+		ripple_light = clamp(0.5 + (n.x * dir.x + n.z * dir.z) * 6.0, 0.0, 1.0);
+		vec3 air = refract(dir, n, 1.333);
 		if (length(air) > 0.1) {
 			vec4 projected = PROJECTION_MATRIX * VIEW_MATRIX * vec4(air, 0.0);
-			vec2 sky_uv = projected.xy / max(projected.w, 0.0001) * 0.5 + 0.5;
-			float margin = min(min(sky_uv.x, sky_uv.y), min(1.0 - sky_uv.x, 1.0 - sky_uv.y));
-			if (margin > 0.002 && projected.w > 0.0) {
-				sample_uv = sky_uv + distortion;
-			}
+			vec2 above_uv = projected.xy / max(projected.w, 0.0001) * 0.5 + 0.5;
+			float margin = min(min(above_uv.x, above_uv.y), min(1.0 - above_uv.x, 1.0 - above_uv.y));
+			sample_uv = projected.w > 0.0 && margin > 0.002 ? above_uv + distortion : SCREEN_UV + distortion;
+			// (Toward the window's rim less gets through: Schlick's reflectance.)
+			float cosine = clamp(dot(-dir, -n), 0.0, 1.0);
+			window = 1.0 - pow(1.0 - cosine, 5.0) * 0.98;
+			window *= 0.4 + 0.6 * smoothstep(0.0, 0.35, 1.0 - length(air.xz));
 		} else {
 			internal_reflection = true;
 		}
 	}
-	vec3 colour = texture(scene, clamp(sample_uv, vec2(0.002), vec2(0.998))).rgb;
+	vec3 colour = texture(scene, clamp(sample_uv, vec2(0.002), vec2(0.998))).rgb * window;
+	if (ceiling && !internal_reflection) {
+		// (The night sky's own light through the window: it is the brightest
+		// thing under the water, moon or none.)
+		colour += (water_tint * 0.12 + moon_colour * 0.03) * window * (0.7 + 0.3 * ripple_light);
+		// The moon itself through the surface, rippled into a blur (its image
+		// on the screen is rarely where the refracted ray looks).
+		float toward_moon = max(dot(dir, moon_inside), 0.0);
+		colour += moon_colour * (pow(toward_moon, 300.0) * 0.9 + pow(toward_moon, 30.0) * 0.07) * window * ray_strength;
+	}
 	if (internal_reflection) {
-		// Outside Snell's window the surface reflects the dark water body;
-		// showing the un-refracted sky here would draw a second moon.
-		colour = water_tint * 0.06;
+		// Outside Snell's window the surface mirrors the dark water body, its
+		// ripples catching a little of the window's light.
+		colour = water_tint * (0.025 + 0.025 * ripple_light);
 	}
 	colour = colour * transmission + water_tint * 0.22 * (vec3(1.0) - transmission);
 	// Surface caustics advect above samples along the refracted moon direction.
@@ -71,14 +96,16 @@ void fragment() {
 			vec2 entry = p.xz + moon_inside.xz * below / max(moon_inside.y, 0.05);
 			float a = texture(caustics, entry * 0.19 + water_clock * vec2(0.007, -0.004)).r;
 			float b = texture(caustics, entry * 0.33 + water_clock * vec2(-0.003, 0.005)).r;
-			float lattice = pow(clamp(1.0 - abs(a - b) * 5.0, 0.0, 1.0), 5.0);
+			// (Soft beams, not a net: broad bands where the two drifting
+			// fields meet, shimmering.)
+			float lattice = pow(clamp(1.0 - abs(a - b) * 2.2, 0.0, 1.0), 2.5) * (0.6 + 0.4 * a);
 			vec2 edge = half_size - abs(entry - water_center);
 			float in_water = smoothstep(0.0, 0.3, min(edge.x, edge.y));
 			shafts += lattice * exp(-below * density * 1.8) * exp(-travel * density * 0.5) * in_water;
 		}
 	}
 	float phase = 0.12 + 0.88 * pow(max(dot(dir, moon_inside), 0.0), 12.0);
-	colour += moon_colour * shafts / 8.0 * min(path, 8.0) * 0.12 * ray_strength * phase;
+	colour += moon_colour * shafts / 8.0 * min(path, 8.0) * 0.07 * ray_strength * phase;
 	ALBEDO = mix(original, colour, wet);
 	ALPHA = 1.0;
 }

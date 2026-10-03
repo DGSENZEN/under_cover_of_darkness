@@ -655,7 +655,11 @@ func _bake_water(land: NavigationMesh) -> void:
 		source.append_arrays(_source.get_vertices(), _source.get_indices())
 		var local := global_transform.affine_inverse()
 		var surface: float = float(water.surface_y()) - global_position.y
-		var c := _local_corners(water)
+		var c := PackedVector3Array()
+
+		# (Only its swim area, where it has one: an open sea's harbour.)
+		for corner in (water.swim_footprint() if water.has_method("swim_footprint") else water.footprint()):
+			c.append(local * corner)
 
 		# The surface, as though it were a floor (both faces, whichever way
 		# up the baker reads them).
@@ -675,6 +679,10 @@ func _bake_water(land: NavigationMesh) -> void:
 
 		for band in [[-far, low, -far, far], [high, far, -far, far], [low, high, -far, near], [low, high, back, far]]:
 			source.add_projected_obstruction(PackedVector3Array([Vector3(band[0], 0, band[2]), Vector3(band[1], 0, band[2]), Vector3(band[1], 0, band[3]), Vector3(band[0], 0, band[3])]), -far, far * 2.0, true)
+
+		# (Baked over its own surface only: the level's ground may run far
+		# past it, an open sea's far shores.)
+		mesh.filter_baking_aabb = AABB(Vector3(low - 2.0, surface - 2.0, near - 2.0), Vector3(high - low + 4.0, 4.0, back - near + 4.0))
 
 		NavigationServer3D.bake_from_source_geometry_data(mesh, source)
 		var region := NavigationRegion3D.new()

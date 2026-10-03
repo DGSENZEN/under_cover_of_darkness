@@ -23,6 +23,8 @@ const Props := preload("res://scripts/Interaction/Props.gd")
 const LoadingScreen := preload("res://scripts/UI/LoadingScreen.gd")
 const NightScript := preload("res://scripts/Night/Night.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
+const DistanceScript := preload("res://scripts/Visual/Distance.gd")
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
 
@@ -33,6 +35,19 @@ const MASSING := "city_massing"
 const NAVMESH_DIR := "res://assets/level/navmesh"
 ## The same night every run: nobody reseeds the dice as the guards are made.
 const SEED := 1947
+## The haze over the city's distance (none before HAZE_FROM m, all of HAZE at
+## HAZE_TO; HAZE_CURVE eases it in): the far tiers of the rock paler than the
+## near, the hills beyond paler still. Its colour paler than the night, so
+## what is far pales; the sky's own taken through it (HAZE_SKY); thicker low
+## (HAZE_LOW per m under HAZE_LINE).
+const HAZE_FROM := 90.0
+const HAZE_TO := 1600.0
+const HAZE_CURVE := 1.6
+const HAZE := 0.8
+const HAZE_COLOR := Color(0.17, 0.2, 0.28)
+const HAZE_SKY := 0.5
+const HAZE_LINE := 18.0
+const HAZE_LOW := 0.02
 ## Exits ignore the player this long after he arrives (s).
 const GRACE := 1.0
 
@@ -58,6 +73,9 @@ var night: Node3D = null
 var baker: NavBaker = null
 var load_seconds := 0.0
 var environment: Environment = null
+## The distance's effects (scripts/Visual/Distance.gd, from the massing):
+## far torches, the balefire, mist, corpse-lights, chimney smoke.
+var distance: Node3D = null
 var _was_rolling := true
 ## The physics frame it was ready on (the exits' grace counts from it).
 var _ready_frame := 0
@@ -92,6 +110,10 @@ func _ready() -> void:
 
 	await screen.step(String(words.get("night", "")), 0.4)
 	_dress()
+	distance = DistanceScript.new()
+	distance.name = "Distance"
+	add_child(distance)
+	distance.build(levels[MASSING], _sea_mist(), 0.0)
 	_exits()
 
 	baker = NavBakerScript.new()
@@ -195,6 +217,12 @@ func _nav(_baker: NavBaker) -> void:
 	pass
 
 
+## Where low mist lies over this district's water (world x, z; none: an
+## empty Rect2).
+func _sea_mist() -> Rect2:
+	return Rect2()
+
+
 # The city's night, for a district's _dress
 
 ## The retro night environment (`ambient` its fill) and the moon from
@@ -207,6 +235,17 @@ func _moonlit(toward: Vector3, energy: float, shadows: float, ambient: float) ->
 	environment.tonemap_exposure = 1.25
 	environment.volumetric_fog_density = 0.006
 	environment.ssr_enabled = true
+	environment.fog_enabled = true
+	environment.fog_mode = Environment.FOG_MODE_DEPTH
+	environment.fog_depth_begin = HAZE_FROM
+	environment.fog_depth_end = HAZE_TO
+	environment.fog_depth_curve = HAZE_CURVE
+	environment.fog_density = HAZE
+	environment.fog_light_color = HAZE_COLOR
+	environment.fog_aerial_perspective = HAZE_SKY
+	environment.fog_sky_affect = 0.0
+	environment.fog_height = HAZE_LINE
+	environment.fog_height_density = HAZE_LOW
 	var world := WorldEnvironment.new()
 	world.environment = environment
 	add_child(world)
@@ -215,6 +254,8 @@ func _moonlit(toward: Vector3, energy: float, shadows: float, ambient: float) ->
 	moon.light_color = Color(0.55, 0.65, 0.95)
 	moon.light_energy = energy
 	moon.shadow_enabled = true
+	# (Not from what stands under a roof: it could never cast in moonlight.)
+	moon.shadow_caster_mask = 0xFFFFFFFF & ~Layers.ROOFED
 	moon.light_volumetric_fog_energy = 4.0
 	moon.directional_shadow_max_distance = shadows
 	add_child(moon)
@@ -234,6 +275,9 @@ func _night_over(moon: DirectionalLight3D, skyline: String, weather: Array, pudd
 	night.seed = SEED
 	night.start = &"clear"
 	night.skyline = skyline
+	# (An omen over the city: the red comet; the aurora low over the castle.)
+	night.comet = 1.0
+	night.aurora = 1.0
 	var pools: Array[Vector3] = []
 
 	for at in puddles:

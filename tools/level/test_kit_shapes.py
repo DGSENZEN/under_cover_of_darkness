@@ -70,6 +70,18 @@ class Shapes(unittest.TestCase):
         moved = kit_shapes.moved([kit_shapes.polygon([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]], "brick", uvs=uvs)], 90.0)
         self.assertEqual(kit_shapes.build(moved)["faces"][0][2], uvs)
 
+    def test_a_polygon_carries_its_own_normals_and_they_turn(self):
+        # (A vault's web shaded round its curve: a normal at each corner.)
+        normals = [[0.0, -1.0, 0.0], [0.0, -0.8, 0.6], [0.0, -0.8, 0.6]]
+        shape = kit_shapes.polygon([[0.0, 3.0, 0.0], [1.0, 2.0, 0.0], [0.0, 2.0, 1.0]], "brick", normals=normals)
+        part = kit_shapes.build([shape])
+        self.assertEqual(part["normals"][0], normals)
+        moved = kit_shapes.build(kit_shapes.moved([shape], 90.0))
+        # (A quarter turn: +z goes to +x.)
+        self.assertAlmostEqual(moved["normals"][0][1][0], 0.6, places=6)
+        self.assertAlmostEqual(moved["normals"][0][1][2], 0.0, places=6)
+        self.assertEqual(kit_shapes.build([kit_shapes.polygon([[0.0, 3.0, 0.0], [1.0, 2.0, 0.0], [0.0, 2.0, 1.0]], "brick")])["normals"], {})
+
     def test_an_arched_wall_moves_and_turns(self):
         # Set 1 m forward and turned a quarter: it runs along z, 0.4 thick
         # about x = 1.

@@ -25,14 +25,24 @@ SCHEMA = {
                                                  "douse": True, "chain": 0.0}, "box": False},
     "bell": {"required": [], "optional": {"db": 90.0}, "box": False},
     "ladder": {"required": [], "optional": {"rope": False}, "box": True},
+    # A piece laid loose (Layout.put loose=): a body in the game, picked up
+    # and thrown; `piece` its name, `mass` its weight (kg).
+    "loose": {"required": ["piece", "mass"], "optional": {}, "box": False},
     "landmark": {"required": ["label"], "optional": {}, "box": False},
     "trigger": {"required": ["event"], "optional": {}, "box": True},
     "sector": {"required": [], "optional": {"label": ""}, "box": True},
-    "water": {"required": [], "optional": {"murk": 0.6}, "box": True},
+    "water": {"required": [], "optional": {"murk": 0.6, "shore_area": [], "swim_area": []}, "box": True},
     # The garrison's own (the garrison spec, section 5.3).
     "station": {"required": ["kind"], "optional": {"chest": "", "drop_to": ""}, "box": False},
     "hide": {"required": [], "optional": {"label": ""}, "box": False},
     "hunt_area": {"required": ["label"], "optional": {}, "box": True},
+    # Under a roof: the dressing inside it casts no shadow in moonlight
+    # (kit_recipes.roofed).
+    "roofed": {"required": [], "optional": {}, "box": True},
+    # The distance's effects (scripts/Visual/Distance.gd): a far light (a
+    # torch on a wall far off, the balefire), its air (mist, corpse-lights).
+    "far_light": {"required": ["kind"], "optional": {}, "box": False},
+    "far_air": {"required": ["kind"], "optional": {}, "box": True},
     "vantage": {"required": [], "optional": {"lens": ""}, "box": False},
     "zone": {"required": ["grade"], "optional": {"fog": 1.0, "fog_color": ""}, "box": True},
     "mark": {"required": [], "optional": {}, "box": False},

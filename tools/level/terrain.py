@@ -96,6 +96,20 @@ def _made(name, sector, surface, occluder, verts, faces, slot, tint):
             "verts": [[float(c) for c in v] for v in verts], "faces": faces, "slots": slots, "tints": tints}
 
 
+def mesh(name, sector, verts, faces, slots, surface="stone", tint=None, occluder=False):
+    """A built thing laid as terrain (its mesh its collider, exactly): its
+    triangles (each looking out as wound) and a slot for each; its tint
+    `tint` (x, y, z) or none."""
+    _check(name, faces)
+
+    if len(slots) != len(faces):
+        raise ValueError("terrain '%s': %d slots for %d faces" % (name, len(slots), len(faces)))
+
+    tints = [(tint or (lambda x, y, z: [1.0, 1.0, 1.0]))(v[0], v[1], v[2]) for v in verts]
+    return {"name": name, "sector": sector, "surface": surface, "occluder": bool(occluder),
+            "verts": [[float(c) for c in v] for v in verts], "faces": [list(f) for f in faces], "slots": list(slots), "tints": tints}
+
+
 def grid(name, sector, x0, z0, x1, z1, cell, height, slot, surface="stone", tint=None, keep=None, skirt=0.0, occluder=False):
     """A height field from (x0, z0) to (x1, z1), a vertex every `cell` m at
     height(x, z); a face's slot is slot(x, y, z, slope in degrees); keep(ys)
