@@ -53,6 +53,9 @@ const HAZE_LINE := 18.0
 const HAZE_LOW := 0.02
 ## Exits ignore the player this long after he arrives (s).
 const GRACE := 1.0
+## A way turning the player back (the job's gate) says so at most this
+## often (s).
+const REFUSE_GAP := 4.0
 
 signal ready_to_play
 
@@ -85,6 +88,8 @@ var distance: Node3D = null
 var _was_rolling := true
 ## The physics frame it was ready on (the exits' grace counts from it).
 var _ready_frame := 0
+## When a gate last turned the player back (s, game time).
+var _refused_at := -100.0
 
 
 func _ready() -> void:
@@ -377,6 +382,23 @@ func _exits() -> void:
 
 func _exit_reached(body: Node3D, area: Area3D) -> void:
 	if body != player or player == null:
+		return
+
+	# The job's gate: not this way until its goal is done (the thief's own
+	# thought says why).
+	var gate: Dictionary = CityState.job.gate_for(area)
+
+	if not gate.is_empty():
+		# (Game time: frame-exact under a test's fixed frame rate.)
+		var now := Engine.get_physics_frames() / float(Engine.physics_ticks_per_second)
+
+		if now - _refused_at >= REFUSE_GAP:
+			_refused_at = now
+			print("city: gate: refused (%s)" % area.name)
+
+			if player.get("hud") != null:
+				player.hud.show_caption(String(gate["text"]), 4.0)
+
 		return
 
 	var mission := _mission()

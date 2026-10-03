@@ -103,6 +103,36 @@ func _mission() -> void:
 	await mission.arrived
 	var gates := ["sea_gate", "wall_walk", "guindais", "west_wall"]
 
+	# T15 without the seal no way up leads on (said once, not again for a
+	# while); with it, it does
+	var first: Node = mission.map.player
+	var sea_gate := _exit("exit_sea_gate")
+	var outside: Transform3D = mission.map.marker("from_old_town_sea_gate")["transform"]
+	await _seconds(GRACE + 0.2)
+	first.teleport(Transform3D(first.global_basis, sea_gate.global_position))
+	await _seconds(3.0)
+	var refused: bool = is_instance_valid(first) and mission.map.district == &"harbour"
+
+	if not refused:
+		_check("T15 without the seal no way up leads on (said once, not again at once); with it, it does", false,
+			"went up to %s without the seal" % mission.map.district)
+		await _through("to_harbour_sea_gate")
+	else:
+		var said: String = first.hud._caption.text if first.hud != null else ""
+		first.teleport(Transform3D(first.global_basis, outside.origin))
+		await _seconds(0.5)
+		first.teleport(Transform3D(first.global_basis, sea_gate.global_position))
+		await _seconds(0.5)
+		var again: float = float(first.hud._caption_timer) if first.hud != null else 9.0
+		first.teleport(Transform3D(first.global_basis, outside.origin))
+		await _seconds(0.5)
+		CityState.job.took_loot("the_seal", 250)
+		await _through("exit_sea_gate")
+		var went: bool = mission.map.district == &"old_town"
+		_check("T15 without the seal no way up leads on (said once, not again at once); with it, it does",
+			said.begins_with("<<") and again < 1.5 and went, "said '%s', said again %.1f s, went up %s" % [said, again, went])
+		await _through("to_harbour_sea_gate")
+
 	# T3 the Sea Gate both ways, standing where each side's arrival is
 	await _through("exit_sea_gate")
 	var there: bool = mission.map.district == &"old_town" and _at("from_harbour_sea_gate")
