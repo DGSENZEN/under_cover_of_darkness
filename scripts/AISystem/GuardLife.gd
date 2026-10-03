@@ -713,6 +713,14 @@ func deal_with_oddity() -> bool:
 
 	match _odd_kind:
 		&"door":
+			# Before he shuts it, a look in through it: a chest left open in
+			# there is what he goes to next (the door left as it is).
+			var inside := _open_chest_through(at, thing)
+
+			if inside != null:
+				_notice(inside, &"chest", inside.global_position)
+				return true
+
 			if thing.get("is_open") == true:
 				thing.frob(guard)
 		&"arrow":
@@ -729,6 +737,37 @@ func deal_with_oddity() -> bool:
 				thing.frob(guard)
 
 	return true
+
+
+## A chest left open seen from `doorway` (looking in at a man's height
+## through `door`, which does not hide it however it has swung): in reach,
+## in sight, lit enough unless near; or null.
+func _open_chest_through(doorway: Vector3, door: Node) -> Node3D:
+	var eye := doorway + Vector3.UP * 1.5
+	var space: PhysicsDirectSpaceState3D = guard.get_world_3d().direct_space_state
+
+	for chest in guard.get_tree().get_nodes_in_group(&"chests"):
+		if not chest.has_method("left_open") or not chest.left_open() or _noticed(chest):
+			continue
+
+		var lid: Vector3 = (chest as Node3D).global_position + Vector3.UP * 0.3
+		var far := eye.distance_to(lid)
+
+		if far > CHEST_RANGE or (far > 3.0 and LightProbe.light_at(guard, lid, []) < ODD_LIGHT):
+			continue
+
+		var exclude: Array[RID] = [guard.get_rid()]
+
+		if door is CollisionObject3D:
+			exclude.append((door as CollisionObject3D).get_rid())
+
+		var query := PhysicsRayQueryParameters3D.create(eye, lid, guard.sight_mask, exclude)
+		var hit := space.intersect_ray(query)
+
+		if hit.is_empty() or chest.is_ancestor_of(hit["collider"] as Node):
+			return chest
+
+	return null
 
 
 ## The oddity he is on his way to (for tests and the gym's labels).

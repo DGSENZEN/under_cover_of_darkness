@@ -969,26 +969,24 @@ func _job() -> void:
 
 	var baltasar: Node3D = city.guards["Baltasar"]
 	var gaspar: Node3D = city.guards["Gaspar"]
-	# On his round, just come onto the landing: waiting there, as he does,
-	# looking in at the office door.
-	var landing_at := 0
-
-	for i in points.size():
-		if (points[i] as Vector3).distance_to(office) < 2.0:
-			landing_at = i
-
-	baltasar.global_position = points[landing_at]
+	# On his round from the hall, as he walks it: he finds the office door
+	# open, looks in before he shuts it, and sees the strongbox.
+	baltasar.global_position = points[0]
 	baltasar.reset_physics_interpolation()
-	baltasar.set("_waypoint_index", landing_at)
-	baltasar.set("_wait_timer", float(baltasar.get("patrol_wait")))
+	baltasar.set("alert", 0.0)
+	baltasar.set("has_last_known", false)
+	baltasar.call("_set_state", 0)
+	baltasar.set("_wait_timer", 0.0)
+	baltasar.set("_waypoint_index", 1)
+	baltasar.call("_go_to", points[1], true)
 	LightProbe.invalidate()
 
 	for g in [baltasar, gaspar]:
 		g.set_physics_process(true)
 		g.set_process(true)
 
-	await _until(func(): return CityState.job.fact(&"harbour", &"theft_noticed") == true and not rung.is_empty(), 60 * 30)
-	_check("C29 a careless theft in the harbour is found: the alarm, the tower's bell", CityState.job.fact(&"harbour", &"theft_noticed") == true
+	await _until(func(): return CityState.job.fact(&"harbour", &"theft_noticed") == true and not rung.is_empty(), 60 * 150)
+	_check("C29 a careless theft in the harbour is found on the watchman's round (the office door looked through): the alarm, the tower's bell", CityState.job.fact(&"harbour", &"theft_noticed") == true
 		and not rung.is_empty(), "theft %s, bell %s rung by %s" % [CityState.job.fact(&"harbour", &"theft_noticed"), bell != null,
 			rung.map(func(r): return r.name if r != null else "-")])
 	_freeze(true)

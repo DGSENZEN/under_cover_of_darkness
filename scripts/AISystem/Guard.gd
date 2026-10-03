@@ -3355,9 +3355,12 @@ func _do_investigate(delta: float) -> void:
 	var pace := maxf(investigate_speed, chase_speed * HOT_PACE) if _stimulus in URGENT else investigate_speed
 
 	if _walk(pace, delta):
-		# Come to something out of place: he deals with it, then looks about.
+		# Come to something out of place: he deals with it, then looks about
+		# (unless what he saw there is another to see to: on to it).
 		_life.deal_with_oddity()
-		_start_looking()
+
+		if _life.oddity() == null:
+			_start_looking()
 
 
 func _do_search(delta: float) -> void:

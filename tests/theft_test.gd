@@ -52,6 +52,7 @@ func _ready() -> void:
 	await _shut()
 	await _tally()
 	await _counted_once()
+	await _looked_in()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -271,6 +272,39 @@ func _counted_once() -> void:
 	_check("R9 a theft and the bell rung for it are one alarm; a body two men find is one body found", not rung.is_empty() and alarms == 1
 		and bodies == 1, "rung %d, alarms %d, bodies found %d" % [rung.size(), alarms, bodies])
 	tally.queue_free()
+
+
+# ---------------------------------------------------------------------------
+# R10: a door left open is looked through before it is shut
+# ---------------------------------------------------------------------------
+
+func _looked_in() -> void:
+	await _fresh()
+	CityState.job.reset()
+	CityState.job.arrive(&"fixture")
+	# A wall across the way with a door in it; behind it, out of his sight,
+	# a robbed chest left open (seen only from the doorway).
+	Props.block(self, Vector3(337.25, 1.25, 0), Vector3(4.5, 2.5, 0.3))
+	Props.block(self, Vector3(342.75, 1.25, 0), Vector3(4.5, 2.5, 0.3))
+	Props.block(self, Vector3(340.0, 2.3, 0), Vector3(1.0, 0.4, 0.3))
+	var door: Node3D = Props.door(self, Vector3(339.5, 0, 0), 0.0, 1.0, 2.1)
+	_light(Vector3(340, 2.6, 2.5))
+	_light(Vector3(342, 2.6, -5.0))
+	var chest: Node3D = Props.chest(self, Vector3(342.5, 0, -6))
+	var seal: RigidBody3D = Props.loot(self, Vector3(342.5, 0.15, -6), 250, "seal")
+	seal.set_meta(&"special", true)
+	LevelGameplay.fill_chests({"box": chest}, {"the_seal": seal})
+	var g := _guard(Vector3(340, 0, 7), 0.0)
+	await _frames(60)
+	var eye: Vector3 = g.eye_position()
+	var hidden: bool = not g._line_of_sight(eye, chest.global_position + Vector3.UP * 0.3, chest)
+	chest.frob(player)
+	seal.frob(player)
+	door.frob(player)
+	await _until(func(): return CityState.job.fact(&"fixture", &"theft_noticed") == true, 60 * 30)
+	_check("R10 a door left open is looked through before it is shut: the robbed chest beyond it is found", hidden
+		and CityState.job.fact(&"fixture", &"theft_noticed") == true, "hidden at first %s, theft %s, door open %s, his state %d" % [hidden,
+			CityState.job.fact(&"fixture", &"theft_noticed"), door.get("is_open"), g.state])
 
 
 # ---------------------------------------------------------------------------
