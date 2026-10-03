@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import kit_recipes  # noqa: E402
 import kit_town_chapel  # noqa: E402,F401
+import kit_carmo  # noqa: E402,F401
 import kit_landmarks  # noqa: E402,F401
 import kit_merchant  # noqa: E402,F401
 import kit_tavern  # noqa: E402
@@ -251,6 +252,51 @@ class UpperGate(Keys):
         top = min(t for t in (b.ray([x, 40.0, z], [0.0, -1.0, 0.0]) for b in boxes) if t is not None)
         self.assertAlmostEqual(40.0 - top, 22.0, delta=0.05)
         self.assertTrue({"gate_door", "beyond", "balefire_target", "postern"} <= set(recipe["places"]))
+
+
+class Ruin(Keys):
+    PARTS = ["carmo_front", "carmo_bay_whole", "carmo_bay_broken", "carmo_transept", "carmo_apse", "carmo_buttress"]
+
+    def test_the_ruin_is_72_m_long(self):
+        # (Its front, five bays (the last its transept's), its apse, along
+        # its axis.)
+        length = PIECES["carmo_front"]["length"] + 4 * PIECES["carmo_bay_whole"]["length"] + PIECES["carmo_transept"]["length"] \
+            + PIECES["carmo_apse"]["length"]
+        self.assertAlmostEqual(length, 72.0, delta=0.5)
+
+    def test_the_ruin_is_open_to_the_sky(self):
+        import geo
+        for name in ("carmo_bay_whole", "carmo_bay_broken", "carmo_transept"):
+            boxes = geo.piece_boxes(PIECES[name], [0.0, 0.0, 0.0], geo.IDENTITY)
+            middle = -PIECES[name]["length"] / 2.0
+
+            for x in (0.0, -8.0, 8.0):
+                hits = [t for t in (b.ray([x, 0.5, middle], [0.0, 1.0, 0.0]) for b in boxes) if t is not None]
+                self.assertEqual(hits, [], (name, x))
+
+    def test_two_nave_arches_stand_whole(self):
+        whole = PIECES["carmo_bay_whole"]["arch_crown"]
+        self.assertAlmostEqual(whole, 24.64, delta=0.1)
+        self.assertLess(PIECES["carmo_bay_broken"]["arch_crown"], 20.0)
+
+    def test_the_altar_stands_under_the_east_window(self):
+        apse = PIECES["carmo_apse"]
+        altar = apse["places"]["altar"]
+        window = apse["east_window"]
+        self.assertTrue(-apse["length"] <= altar[2] <= 0.0)
+        self.assertLessEqual(abs(altar[0] - window[0]), window[2] / 2.0)
+        self.assertGreater(window[1], 1.0)
+        self.assertIn("cloister_door", apse["places"])
+
+    def test_ruin_budget(self):
+        total = 0
+
+        for name in self.PARTS:
+            n = tris(PIECES[name])
+            self.assertLessEqual(n, 4000, name)
+            total += n * (5 if name == "carmo_buttress" else 2 if name.startswith("carmo_bay") else 1)
+
+        self.assertLessEqual(total, 18000)
 
 
 if __name__ == "__main__":
