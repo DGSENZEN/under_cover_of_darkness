@@ -56,6 +56,8 @@ signal baked
 @export var home := Vector3.INF
 
 var is_baked := false
+## Its navmesh was loaded from a saved bake (load_baked), not baked here.
+var from_file := false
 ## How many ways across were linked in the last bake; how many scraps of
 ## floor sealed inside blocks were dropped from it.
 var link_count := 0
@@ -109,13 +111,7 @@ func bake() -> void:
 	else:
 		mesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
 
-	# The map's cell size has to match the mesh's, or edges fail to connect.
-	var map := get_world_3d().navigation_map
-	NavigationServer3D.map_set_cell_size(map, cell_size)
-	NavigationServer3D.map_set_cell_height(map, cell_size)
-	# Its updates made on the main thread, a frame after each change (links
-	# and regions added after the bake are in it the frame after: _map_synced).
-	NavigationServer3D.map_set_use_async_iterations(map, false)
+	_map_settings()
 
 	# Hide everything that must not shape the mesh, parse, then put it back.
 	var hidden: Array = []
@@ -173,6 +169,195 @@ func bake() -> void:
 			source.add_projected_obstruction(corners, float(block["bottom"]) - global_position.y, float(block["height"]), false)
 
 	NavigationServer3D.bake_from_source_geometry_data_async(mesh, source, _on_baked.bind(mesh))
+
+
+## The map's cell size has to match the mesh's, or edges fail to connect;
+## its updates made on the main thread, a frame after each change (links and
+## regions added after the bake are in it the frame after: _map_synced).
+func _map_settings() -> void:
+	var map := get_world_3d().navigation_map
+	NavigationServer3D.map_set_cell_size(map, cell_size)
+	NavigationServer3D.map_set_cell_height(map, cell_size)
+	NavigationServer3D.map_set_use_async_iterations(map, false)
+
+
+# Baked once, offline (the districts-as-maps plan): saved beside the level's
+# export with a hash of what it was baked from, and loaded when that matches.
+
+## Writes what the last bake made to `path` (a .scn): the land's mesh, each
+## swim and doorway region, every link (a ladder's or rope's volume by its
+## path from the level), and `source_hash`. OK, or the saver's error.
+func save_baked(path: String, source_hash: String) -> Error:
+	var root := _root()
+	var snap := Node3D.new()
+	snap.name = "BakedNav"
+	snap.set_meta(&"source_hash", source_hash)
+	snap.set_meta(&"counts", [link_count, sealed_count, unreached_count])
+	var land := NavigationRegion3D.new()
+	land.name = "Land"
+	land.navigation_mesh = navigation_mesh
+	snap.add_child(land)
+	land.owner = snap
+
+	for child in get_children():
+		if child is NavigationRegion3D and (child.name.begins_with("Swim") or child.name.begins_with("Doorway")):
+			var region := NavigationRegion3D.new()
+			region.name = child.name
+			region.navigation_mesh = (child as NavigationRegion3D).navigation_mesh
+			region.travel_cost = (child as NavigationRegion3D).travel_cost
+			region.transform = (child as Node3D).transform
+			snap.add_child(region)
+			region.owner = snap
+		elif child.name == "TraversalLinks":
+			var holder := Node3D.new()
+			holder.name = "TraversalLinks"
+			holder.transform = (child as Node3D).transform
+			snap.add_child(holder)
+			holder.owner = snap
+
+			for link: NavigationLink3D in child.get_children():
+				var copy := NavigationLink3D.new()
+				copy.name = link.name
+
+				for property in ["start_position", "end_position", "bidirectional", "travel_cost", "enter_cost", "navigation_layers"]:
+					copy.set(property, link.get(property))
+
+				for key in link.get_meta_list():
+					var value: Variant = link.get_meta(key)
+
+					if value is Node:
+						copy.set_meta(StringName(String(key) + "_path"), String(root.get_path_to(value)))
+					else:
+						copy.set_meta(key, value)
+
+				holder.add_child(copy)
+				copy.owner = snap
+
+	var packed := PackedScene.new()
+	var err := packed.pack(snap)
+
+	if err == OK:
+		err = ResourceSaver.save(packed, path)
+
+	snap.free()
+	return err
+
+
+## Takes the bake saved at `path` (save_baked) instead of baking, if it was
+## baked from what `source_hash` names: its regions and links put back, the
+## water, doors and climbs they belong to found again by name. False (and
+## nothing changed) when there is no file or it is stale. `baked` is emitted
+## once the map has it.
+func load_baked(path: String, source_hash: String) -> bool:
+	if not ResourceLoader.exists(path):
+		return false
+
+	var packed := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+
+	if packed == null:
+		return false
+
+	var snap := packed.instantiate()
+
+	if String(snap.get_meta(&"source_hash", "")) != source_hash:
+		snap.free()
+		return false
+
+	is_baked = false
+	_map_settings()
+
+	for child in get_children():
+		if child.name.begins_with("Swim") or child.name.begins_with("Doorway") or child.name == "TraversalLinks":
+			remove_child(child)
+			child.queue_free()
+
+	var counts: Array = snap.get_meta(&"counts", [0, 0, 0])
+	link_count = int(counts[0])
+	sealed_count = int(counts[1])
+	unreached_count = int(counts[2])
+	navigation_mesh = (snap.get_node("Land") as NavigationRegion3D).navigation_mesh
+	var root := _root()
+	var waters := {}
+	var doors := {}
+
+	for water in get_tree().get_nodes_in_group(&"water"):
+		waters[String(water.name)] = water
+
+	for door in _doors():
+		doors[String(door.name)] = door
+
+	for child in snap.get_children():
+		if child.name == "Land":
+			continue
+
+		snap.remove_child(child)
+		add_child(child)
+
+		if child is NavigationRegion3D:
+			NavigationServer3D.region_set_use_async_iterations((child as NavigationRegion3D).get_rid(), false)
+
+		if child.name.begins_with("Swim_") and waters.has(String(child.name).trim_prefix("Swim_")):
+			waters[String(child.name).trim_prefix("Swim_")].set_meta(&"swim_region", child)
+		elif child.name.begins_with("Doorway_") and doors.has(String(child.name).trim_prefix("Doorway_")):
+			var door: Node = doors[String(child.name).trim_prefix("Doorway_")]
+			(child as NavigationRegion3D).navigation_layers = door.nav_layers()
+			door.set_meta(&"nav_region", child)
+		elif child.name == "TraversalLinks":
+			for link: NavigationLink3D in child.get_children():
+				if not link.has_meta(&"volume_path"):
+					continue
+
+				var volume := root.get_node_or_null(NodePath(String(link.get_meta(&"volume_path"))))
+				link.remove_meta(&"volume_path")
+
+				if volume != null:
+					link.set_meta(&"volume", volume)
+					var holder := child as Node3D
+					volume.set_meta(&"climb_ends", [holder.global_transform * link.start_position, holder.global_transform * link.end_position])
+
+	snap.free()
+	from_file = true
+	_loaded.call_deferred()
+	return true
+
+
+func _loaded() -> void:
+	await _map_synced()
+
+	if not is_inside_tree():
+		return
+
+	is_baked = true
+	baked.emit()
+
+
+## What the bake of `folders` (levels' export folders) with `settings` (the
+## baker's) is made from, as one hash: each level's manifest and sector
+## meshes (its proxy left out: it is not walked) and the settings.
+static func source_hash(folders: Array, settings: Dictionary) -> String:
+	var parts := PackedStringArray()
+
+	for folder: String in folders:
+		var files: Array[String] = []
+
+		for file in DirAccess.get_files_at(folder):
+			var manifest := file.ends_with(".json") and file != "markers.json"
+			var walked := file.ends_with(".glb") and file != "proxy.glb"
+
+			if manifest or walked:
+				files.append(file)
+
+		files.sort()
+
+		for file in files:
+			parts.append("%s/%s:%s" % [folder.get_file(), file, FileAccess.get_md5(folder.path_join(file))])
+
+	parts.append(var_to_str(settings))
+	return "|".join(parts).md5_text()
+
+
+func _root() -> Node:
+	return get_parent() if source_root.is_empty() else get_node(source_root)
 
 
 func _on_baked(mesh: NavigationMesh) -> void:

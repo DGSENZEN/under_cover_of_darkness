@@ -293,6 +293,55 @@ func _gameplay() -> void:
 	var up14 := _ray(Vector3(0, 1.0, 4.5), Vector3(0, 1.0, 6.5)).is_empty()
 	_check("K14 a portcullis down bars the way; raised, it lets through", down14 and up14, "down blocks %s, up clear %s" % [down14, up14])
 
+	# K24 the bake saved and loaded is the bake: its mesh, its links, the
+	# door's and the rope's ties, and a way through the door the same length
+	# (the rest of these checks run on the loaded one)
+	var map := baker.get_world_3d().navigation_map
+	var from24 := Vector3(0.0, 0.0, 4.0)
+	var to24 := Vector3(0.0, 0.0, -9.0)
+	var length := func(path: PackedVector3Array) -> float:
+		var total := 0.0
+
+		for i in range(1, path.size()):
+			total += path[i - 1].distance_to(path[i])
+
+		return total
+	var polygons: int = baker.navigation_mesh.get_polygon_count()
+	var links: int = baker.get_node("TraversalLinks").get_child_count() if baker.has_node("TraversalLinks") else 0
+	var baked_way: float = length.call(NavigationServer3D.map_get_path(map, from24, to24, true))
+	var saved: int = baker.save_baked("user://fixture_nav.scn", "fixture")
+	holder.remove_child(baker)
+	baker.queue_free()
+	baker = NavigationRegion3D.new()
+	baker.set_script(NavBakerScript)
+	baker.bake_on_ready = false
+	baker.bake_bounds = AABB(Vector3(-8.0, -2.0, -12.0), Vector3(24.0, 8.0, 20.0))
+	holder.add_child(baker)
+	var loaded: bool = baker.load_baked("user://fixture_nav.scn", "fixture")
+
+	if loaded:
+		await baker.baked
+
+	var door24: Node = made["doors"]["door_room"]
+	var rope24: Node = made["ropes"][0]
+	var loaded_links: int = baker.get_node("TraversalLinks").get_child_count() if baker.has_node("TraversalLinks") else -1
+	var loaded_way: float = length.call(NavigationServer3D.map_get_path(map, from24, to24, true))
+	var ties: bool = door24.has_meta(&"nav_region") and is_instance_valid(door24.get_meta(&"nav_region")) \
+		and (not rope24.has_meta(&"climb_ends") or (rope24.get_meta(&"climb_ends") as Array).size() == 2)
+	_check("K24 a navmesh saved and loaded is the one baked", saved == OK and loaded and bool(baker.from_file) and baker.navigation_mesh.get_polygon_count() == polygons
+		and loaded_links == links and ties and baked_way > 0.0 and absf(loaded_way - baked_way) < 0.01,
+		"saved %s, loaded %s, polygons %d/%d, links %d/%d, ties %s, way %.2f/%.2f m" % [saved == OK, loaded, baker.navigation_mesh.get_polygon_count(),
+			polygons, loaded_links, links, ties, loaded_way, baked_way])
+
+	# K25 a navmesh saved from other sources is refused, and nothing changes
+	var stale := NavigationRegion3D.new()
+	stale.set_script(NavBakerScript)
+	stale.bake_on_ready = false
+	holder.add_child(stale)
+	_check("K25 a stale navmesh is refused", not stale.load_baked("user://fixture_nav.scn", "another export") and stale.navigation_mesh == null
+		and not bool(stale.from_file), "from file %s" % [stale.from_file])
+	stale.queue_free()
+
 	# K15 a guard made by LevelGameplay walks his route
 	var guards: Dictionary = LevelGameplay.guards(holder, level, made["routes"], made["stations"], GUARD)
 	var hendrik: Node3D = guards.get("Hendrik")
