@@ -12,6 +12,8 @@ extends CanvasLayer
 ##   await baker.baked
 ##   screen.close()
 
+const StealthHUD := preload("res://scripts/UI/StealthHUD.gd")
+
 const INK := Color(0.93, 0.88, 0.78)
 const DIM := Color(0.62, 0.58, 0.5)
 const AMBER := Color(1.0, 0.78, 0.36)
@@ -25,7 +27,20 @@ const CREEP := 0.06
 ## How long the ellipsis takes a dot (s); how long it fades away (s).
 const DOT := 0.35
 
+## Whether a tally shown waits for the player (hold); tests that travel
+## turn it off.
+static var holds := true
+
+## The player pressed on (hold).
+signal go_on
+
 var fraction := 0.0
+## The tally shown (show_tally): its district's name and its rows.
+var tally_title := ""
+var tally_rows: Array = []
+var _holding := false
+var _column: VBoxContainer
+var _font: Font
 var _shown := 0.0
 var _creep_to := -1.0
 var _clock := 0.0
@@ -74,6 +89,46 @@ func close(seconds := 0.6) -> void:
 	tween.tween_callback(queue_free)
 
 
+## Under the rule, the district just left and what was done there
+## ([[label, value]], JobState.tally_rows).
+func show_tally(title: String, rows: Array) -> void:
+	tally_title = title
+	tally_rows = rows.duplicate(true)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", 10)
+	box.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	box.add_child(_label(title, _font, 26, INK))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override(&"h_separation", 28)
+	grid.add_theme_constant_override(&"v_separation", 4)
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+
+	for row in rows:
+		var name := _label(String(row[0]), _font, 20, DIM)
+		name.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		grid.add_child(name)
+		var value := _label(String(row[1]), _font, 20, INK)
+		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		grid.add_child(value)
+
+	box.add_child(grid)
+	_column.add_child(box)
+
+
+## Ready: the world held still (paused) until the player presses on.
+func hold() -> void:
+	if not holds or not is_inside_tree():
+		return
+
+	_text = ""
+	_status.text = "[%s] Go on" % StealthHUD.key_name(&"frob")
+	_holding = true
+	get_tree().paused = true
+	await go_on
+	get_tree().paused = false
+
+
 func _build(title: String) -> void:
 	layer = 100
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -94,6 +149,8 @@ func _build(title: String) -> void:
 	column.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	column.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_root.add_child(column)
+	_column = column
+	_font = font
 	_title = _label(title, font, 46, INK)
 	column.add_child(_title)
 	var rule := Control.new()
@@ -124,6 +181,10 @@ func _label(text: String, font: Font, size: int, colour: Color) -> Label:
 
 func _process(delta: float) -> void:
 	_clock += delta
+
+	if _holding and Input.is_action_just_pressed(&"frob"):
+		_holding = false
+		go_on.emit()
 
 	if _creep_to > fraction:
 		fraction = minf(_creep_to, fraction + (_creep_to - fraction) * CREEP * delta * 10.0)

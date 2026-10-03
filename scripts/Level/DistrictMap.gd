@@ -29,6 +29,7 @@ const SfxScript := preload("res://scripts/Audio/Sfx.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const MusicScript := preload("res://scripts/Audio/Music.gd")
 const TalkDirectorScript := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
+const TallyScript := preload("res://scripts/Level/Tally.gd")
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
 
@@ -109,6 +110,11 @@ func _ready() -> void:
 	var words := _loading_words()
 	# (Up from the first frame, saying what is being done.)
 	var screen := LoadingScreen.open(self, String(words.get("title", "")))
+	# Come through a gate: the district left, and what was done there.
+	var left: StringName = CityState.job.last_left if _mission() != null else &""
+
+	if left != &"":
+		screen.show_tally(Districts.label(left), CityState.job.tally_rows(left))
 	var own: Array = Districts.entry(district).get("levels", [])
 
 	for i in own.size():
@@ -184,6 +190,10 @@ func _ready() -> void:
 	_job_setup()
 
 	await screen.step(String(words.get("player", "")), 0.97)
+
+	if left != &"":
+		await screen.hold()
+
 	screen.close()
 	load_seconds = (Time.get_ticks_msec() - started) / 1000.0
 	_report()
@@ -432,6 +442,11 @@ func _job_setup() -> void:
 	job.arrive(district)
 	job.noted.connect(_on_noted)
 	job.goal_done.connect(_on_goal_done)
+
+	var tally: Node = TallyScript.new()
+	tally.name = "Tally"
+	add_child(tally)
+	tally.setup(player, TallyScript.totals_of(Districts.entry(district).get("levels", []).map(func(l): return levels[String(l)])))
 
 	if not _hails().is_empty():
 		var timer := Timer.new()

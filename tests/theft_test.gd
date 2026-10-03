@@ -16,6 +16,7 @@ const AlarmBellScript := preload("res://scripts/Interaction/AlarmBell.gd")
 const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const LevelGameplay := preload("res://scripts/Level/LevelGameplay.gd")
+const TallyScript := preload("res://scripts/Level/Tally.gd")
 
 const SEARCHING := 3
 
@@ -49,6 +50,7 @@ func _ready() -> void:
 	await _noticed()
 	await _robbed()
 	await _shut()
+	await _tally()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -184,6 +186,40 @@ func _shut() -> void:
 	var fact: Variant = CityState.job.fact(&"fixture", &"theft_noticed")
 	_check("R7 a robbed chest shut behind you goes unnoticed", fact == null and GarrisonScript.of(player).alarm == 0.0 and not chest.is_open,
 		"theft %s, alarm %.2f, his state %d" % [fact, GarrisonScript.of(player).alarm, g.state])
+
+
+# ---------------------------------------------------------------------------
+# R8: the tally counts what happens
+# ---------------------------------------------------------------------------
+
+func _tally() -> void:
+	await _fresh()
+	CityState.job.reset()
+	CityState.job.arrive(&"fixture")
+	var tally: Node = TallyScript.new()
+	add_child(tally)
+	tally.setup(player, {"loot_total": 100, "specials_total": 1, "read_total": 2})
+	var sleeper := _guard(Vector3(200, 0, 0), 0.0)
+	var watcher := _guard(Vector3(205, 0, 6), 0.0)
+	await _frames(70)
+	sleeper.knock_out(player, true)
+	await _frames(10)
+	watcher._engage(player)
+	await _frames(60 * 3)
+	watcher._give_up()
+	await _frames(10)
+	watcher._engage(player)
+	await _frames(10)
+	var merged := int(CityState.job.tally_of(&"fixture").get("seen", 0))
+	watcher._give_up()
+	await _frames(60 * 11)
+	watcher._engage(player)
+	await _frames(10)
+	var t: Dictionary = CityState.job.tally_of(&"fixture")
+	_check("R8 the tally counts a knockout, sightings (one a moment), the totals and the time", int(t.get("knockouts", 0)) == 1 and merged == 1
+		and int(t.get("seen", 0)) == 2 and int(t.get("loot_total", 0)) == 100 and int(t.get("seconds", 0)) >= 14,
+		"tally %s, seen after the second sighting %d" % [t, merged])
+	tally.queue_free()
 
 
 # ---------------------------------------------------------------------------
