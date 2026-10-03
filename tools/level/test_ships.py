@@ -19,7 +19,7 @@ import kit_shapes  # noqa: E402
 import kit_ships  # noqa: E402
 
 PIECES = kit_recipes.PIECES
-BUDGETS = {"carrack_hull": 9000, "carrack_rig": 7000, "carrack_mainyard": 600, "caravel": 4500, "boat_fishing": 900, "rowboat": 350}
+BUDGETS = {"carrack_hull": 9200, "carrack_rig": 7000, "carrack_mainyard": 600, "caravel": 4500, "boat_fishing": 900, "rowboat": 350}
 # The quay's edge is at world z 0, the carrack's middle at 4.8: nothing of
 # hers low down may reach past 0.15 (local -4.65).
 QUAY_SIDE = -4.65

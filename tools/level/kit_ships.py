@@ -27,6 +27,7 @@ laid between each pair of shrouds by their own UVs (kit_shapes.polygon's
 
 import math
 
+import kit_glazing as kg
 import kit_recipes as k
 import kit_shapes as ks
 
@@ -351,6 +352,12 @@ FORE_TOP_SOLID = 6.95
 FORE_RAIL = 7.6
 NOSE = 18.2
 SKIN = 0.22
+# The great cabin's glazed windows (kit_glazing): (the wall's outer face x,
+# which way it looks along x, middle z, middle y, width, height, the wall's
+# thickness): two in the transom looking astern, two in the bulkhead onto
+# the waist.
+CABIN_WINDOWS = [(STERN, -1.0, z, 3.6, 0.6, 0.72, SKIN) for z in (1.25, -1.25)] + \
+    [(CASTLE_FRONT + 0.1, 1.0, z, 3.55, 0.5, 0.6, 0.2) for z in (1.4, -1.4)]
 # Heights the hull's stations are drawn through (the waterline's wet band
 # from WET to DRY), clipped to each part's top.
 WET, DRY = -0.35, 0.3
@@ -461,6 +468,39 @@ def _hull_slot(quad):
     return "limewash" if y < WET else "pitch" if y < DRY else "hull_tarred" if y < 2.45 else "hull_bare"
 
 
+def _cabin_holes(look):
+    """The cabin's windows in the wall looking `look` along x, as holes
+    (z0, z1, y0, y1)."""
+    return [(z - w / 2.0, z + w / 2.0, y - h / 2.0, y + h / 2.0) for _x, out, z, y, w, h, _d in CABIN_WINDOWS if out == look]
+
+
+def _cabin_glazing():
+    """The cabin's windows glazed through their walls (kit_glazing, built
+    facing +z and turned to look along x), their timber surrounds; and their
+    records, in the hull's frame."""
+    shapes, records = [], []
+
+    for x, out, z, y, w, h, depth in CABIN_WINDOWS:
+        glass, _cols, record = kg.glazed(0.0, y - h / 2.0, w, h, 0.0, depth, lead="quarries", setback=depth / 2.0, slot="timber", inner_slot="wood_old")
+        yaw = 90.0 if out > 0.0 else -90.0
+        shapes += ks.moved(glass, yaw, (x, 0.0, z))
+        records += kg.moved([record], yaw, (x, 0.0, z))
+        # (Its surround on the outer face: jambs, head and sill.)
+        fx = x + out * 0.03
+
+        for dz in (-1.0, 1.0):
+            shapes.append(ks.box(fx, y, z + dz * (w / 2.0 + 0.05), 0.06, h + 0.2, 0.1, "timber"))
+
+        for dy in (-1.0, 1.0):
+            shapes.append(ks.box(fx, y + dy * (h / 2.0 + 0.05), z, 0.06, 0.1, w + 0.2, "timber"))
+
+    return shapes, records
+
+
+def _cabin_glass_cols():
+    return [[x + out * -depth / 2.0, y, z, depth, h, w, "glass", 0.0, 0.0, 0.0] for x, out, z, y, w, h, depth in CABIN_WINDOWS]
+
+
 def _skin():
     """The hull's planking from the keel up each part, both sides, and the
     transom."""
@@ -480,7 +520,13 @@ def _skin():
     for y0, y1, slot in bands:
         left = [_hull_point(STERN, y, 1.0) for y in heights if y0 - 1e-6 <= y <= y1 + 1e-6]
         right = [_hull_point(STERN, y, -1.0) for y in heights if y0 - 1e-6 <= y <= y1 + 1e-6]
-        shapes.append(_face(left + right[::-1], slot, [-1.0, 0.0, 0.0]))
+        holes = [h for h in _cabin_holes(-1.0) if y0 < h[2] and h[3] < y1]
+
+        if holes:
+            # (Cut round the cabin's windows.)
+            shapes += kg.around(left + right[::-1], holes, "x", slot, (-1.0, 0.0, 0.0))
+        else:
+            shapes.append(_face(left + right[::-1], slot, [-1.0, 0.0, 0.0]))
 
     # The keel under it all, the stem and the sternpost.
     keel = [[x, KEEL, 0.0] for x in (_x_at(STERN, KEEL), 0.0, _x_at(STEM, KEEL))]
@@ -835,7 +881,10 @@ def _castles():
     for face, out in ((CASTLE_FRONT + 0.1, 1.0), (CASTLE_FRONT - 0.1, -1.0)):
         for s in (1.0, -1.0):
             edge = [[face, y, s * abs(_hull_point(CASTLE_FRONT, y)[2])] for y in (MAIN_DECK, 2.45, WAIST_RAIL, FORE_SOLID, CASTLE_DECK)]
-            shapes.append(_face([[face, MAIN_DECK, s * DOOR[0] / 2.0]] + edge + [[face, CASTLE_DECK, s * DOOR[0] / 2.0]], "hull_bare", [out, 0.0, 0.0]))
+            # (Cut round the cabin's window on this side.)
+            holes = [h for h in _cabin_holes(1.0) if (h[0] + h[1]) * s > 0.0]
+            shapes += kg.around([[face, MAIN_DECK, s * DOOR[0] / 2.0]] + edge + [[face, CASTLE_DECK, s * DOOR[0] / 2.0]], holes, "x", "hull_bare",
+                                (out, 0.0, 0.0))
 
         shapes.append(_face([[face, MAIN_DECK + DOOR[1], -DOOR[0] / 2.0], [face, MAIN_DECK + DOOR[1], DOOR[0] / 2.0],
                              [face, CASTLE_DECK, DOOR[0] / 2.0], [face, CASTLE_DECK, -DOOR[0] / 2.0]], "hull_bare", [out, 0.0, 0.0]))
@@ -845,8 +894,6 @@ def _castles():
         shapes.append(_face([[CASTLE_FRONT - 0.1, MAIN_DECK, z], [CASTLE_FRONT + 0.1, MAIN_DECK, z], [CASTLE_FRONT + 0.1, MAIN_DECK + DOOR[1], z],
                              [CASTLE_FRONT - 0.1, MAIN_DECK + DOOR[1], z]], "timber", [0.0, 0.0, -s]))
         shapes.append(_post(CASTLE_FRONT + 0.16, MAIN_DECK, CASTLE_DECK, s * (DOOR[0] / 2.0 + 0.12), 0.2, "beam"))
-        shapes.append(ks.box(CASTLE_FRONT + 0.13, 3.55, s * 1.4, 0.06, 0.8, 0.7, "timber"))
-        shapes.append(ks.card(CASTLE_FRONT + 0.17, 3.55, s * 1.4, 0.5, 0.6, "glass_dark", 90.0))
 
     shapes.append(_face([[CASTLE_FRONT - 0.1, MAIN_DECK + DOOR[1], -DOOR[0] / 2.0], [CASTLE_FRONT + 0.1, MAIN_DECK + DOOR[1], -DOOR[0] / 2.0],
                          [CASTLE_FRONT + 0.1, MAIN_DECK + DOOR[1], DOOR[0] / 2.0], [CASTLE_FRONT - 0.1, MAIN_DECK + DOOR[1], DOOR[0] / 2.0]],
@@ -976,9 +1023,7 @@ def _stern():
         shapes.append(ks.box(x, y, 0.0, 0.12, h, 2.0 * w + 0.1, "timber"))
 
     for s in (1.0, -1.0):
-        shapes.append(ks.box(STERN - 0.02, 3.6, s * 1.25, 0.06, 0.95, 0.8, "timber"))
-        shapes.append(ks.card(STERN - 0.07, 3.6, s * 1.25, 0.6, 0.72, "glass_lit", 90.0))
-        shapes.append(ks.card(STERN + SKIN + 0.03, 3.6, s * 1.25, 0.6, 0.72, "glass_lit", 90.0))
+        # (The cabin's windows are glazed through the transom: _cabin_glazing.)
         shapes.append(ks.box(STERN - 0.02, 6.6, s * 0.95, 0.06, 0.66, 0.56, "timber"))
         shapes.append(ks.card(STERN - 0.06, 6.6, s * 0.95, 0.4, 0.48, "glass_dark", 90.0))
 
@@ -990,7 +1035,7 @@ def _stern():
     # The cabin's back: the transom's inside.
     heights = [MAIN_DECK, 3.5, CASTLE_DECK]
     left = [_inside(STERN + SKIN, y, 1.0) for y in heights]
-    shapes.append(_face(left + [[p[0], p[1], -p[2]] for p in reversed(left)], "wood_old", [1.0, 0.0, 0.0]))
+    shapes += kg.around(left + [[p[0], p[1], -p[2]] for p in reversed(left)], _cabin_holes(-1.0), "x", "wood_old", (1.0, 0.0, 0.0))
     # The helm port, the rudder's head in it.
     shapes.append(ks.box(STERN - 0.01, 1.45, 0.0, 0.06, 0.6, 0.56, "pitch"))
     fwd = lambda y: _x_at(STERN, y) - 0.12 if y < TUCK else STERN - 0.12
@@ -1156,10 +1201,19 @@ def _hull_cols():
     # The cabin: its back, its bulkhead either side of the door and over it,
     # its deckhead (the aftcastle's deck), the poop over its after part.
     w = abs(_inside(CASTLE_FRONT, MAIN_DECK)[2])
-    cols += [col(STERN + 0.1, (MAIN_DECK + POOP_DECK) / 2.0, 0.0, 0.3, POOP_DECK - MAIN_DECK, 2.0 * abs(_hull_point(STERN, 3.0)[2])),
-             col(CASTLE_FRONT, (MAIN_DECK + CASTLE_DECK) / 2.0, (w + DOOR[0] / 2.0) / 2.0, 0.2, CASTLE_DECK - MAIN_DECK, w - DOOR[0] / 2.0),
-             col(CASTLE_FRONT, (MAIN_DECK + CASTLE_DECK) / 2.0, -(w + DOOR[0] / 2.0) / 2.0, 0.2, CASTLE_DECK - MAIN_DECK, w - DOOR[0] / 2.0),
-             col(CASTLE_FRONT, (MAIN_DECK + DOOR[1] + CASTLE_DECK) / 2.0, 0.0, 0.2, CASTLE_DECK - MAIN_DECK - DOOR[1], DOOR[0]),
+    # (The transom and the bulkhead split round the cabin's windows: no
+    # collider stops sight through the glass or hides the view out.)
+    back = abs(_hull_point(STERN, 3.0)[2])
+
+    for z0, z1, y0, y1 in kg.split(-back, back, MAIN_DECK, POOP_DECK, _cabin_holes(-1.0)):
+        cols.append(col(STERN + 0.1, (y0 + y1) / 2.0, (z0 + z1) / 2.0, 0.3, y1 - y0, z1 - z0))
+
+    for z0, z1 in ((DOOR[0] / 2.0, w), (-w, -DOOR[0] / 2.0)):
+        for a0, a1, y0, y1 in kg.split(z0, z1, MAIN_DECK, CASTLE_DECK, [h for h in _cabin_holes(1.0) if z0 < h[0] < z1]):
+            cols.append(col(CASTLE_FRONT, (y0 + y1) / 2.0, (a0 + a1) / 2.0, 0.2, y1 - y0, a1 - a0))
+
+    cols += _cabin_glass_cols()
+    cols += [col(CASTLE_FRONT, (MAIN_DECK + DOOR[1] + CASTLE_DECK) / 2.0, 0.0, 0.2, CASTLE_DECK - MAIN_DECK - DOOR[1], DOOR[0]),
              col((STERN + CASTLE_FRONT) / 2.0, CASTLE_DECK - 0.05, 0.0, CASTLE_FRONT - STERN, 0.1, 2.0 * abs(_inside(-9.0, CASTLE_DECK)[2])),
              col((STERN + POOP_FRONT) / 2.0, (CASTLE_DECK + POOP_DECK) / 2.0, 0.0, POOP_FRONT - STERN, POOP_DECK - CASTLE_DECK,
                  2.0 * abs(_inside(-13.0, POOP_DECK)[2]))]
@@ -1193,7 +1247,7 @@ def _hull_cols():
 
 
 def _carrack_hull():
-    shapes = _skin() + _decks() + _bulwarks() + _sides() + _castles() + _forecastle() + _stern() + _waist()
+    shapes = _skin() + _decks() + _bulwarks() + _sides() + _castles() + _forecastle() + _stern() + _waist() + _cabin_glazing()[0]
 
     # Ladders up to the aftcastle's deck, the forecastle's, and (last, so the
     # others keep their markers' names) the poop's from the aftcastle's.
@@ -1527,8 +1581,9 @@ def _mainyard():
 
 
 _shapes, _cols, _climbs = _carrack_hull()
-_ship("carrack_hull", "hull_tarred", _shapes, _cols, [36.6, 12.5, 10.6], 9000, _climbs)
+_ship("carrack_hull", "hull_tarred", _shapes, _cols, [36.6, 12.5, 10.6], 9200, _climbs)
 k.PIECES["carrack_hull"]["door"] = list(DOOR)
+k.PIECES["carrack_hull"]["windows"] = _cabin_glazing()[1]
 _shapes, _cols, _climbs = _carrack_rig()
 _ship("carrack_rig", "hull_bare", _shapes, _cols, [54.6, 28.5, 25.2], 7000, _climbs)
 _shapes, _cols = _mainyard()

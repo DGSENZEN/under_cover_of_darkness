@@ -201,5 +201,33 @@ class Customs(unittest.TestCase):
             self.assertLessEqual(tris(recipe), recipe.get("budget", kit_shapes.PIECE_TRIS), name)
 
 
+class Carrack(unittest.TestCase):
+    # (normal x, middle z, middle y) of her four windows: two in the
+    # transom looking astern, two in the cabin's bulkhead onto the waist.
+    EXPECTED = [(-1.0, 1.25, 3.6), (-1.0, -1.25, 3.6), (1.0, 1.4, 3.55), (1.0, -1.4, 3.55)]
+
+    def setUp(self):
+        self.recipe = kit_recipes.PIECES["carrack_hull"]
+
+    def test_her_cabin_has_four_glazed_windows(self):
+        recs = self.recipe.get("windows", [])
+        self.assertEqual(len(recs), 4)
+        self.assertEqual({r["lead"] for r in recs}, {"quarries"})
+        found = sorted((round(r["normal"][0]), round(middle_of(r)[2], 2), round(middle_of(r)[1], 2)) for r in recs)
+        self.assertEqual(found, sorted((n, z, y) for n, z, y in self.EXPECTED))
+
+    def test_no_collider_but_glass_spans_a_window(self):
+        for rec in self.recipe.get("windows", []):
+            mid = middle_of(rec)
+            inside = [mid[i] - 0.15 * rec["normal"][i] for i in range(3)]
+
+            for box in geo.piece_boxes(self.recipe, [0.0, 0.0, 0.0], geo.IDENTITY):
+                if box.surface != "glass":
+                    self.assertFalse(box_holds(box, mid) or box_holds(box, inside), mid)
+
+    def test_her_budget_holds(self):
+        self.assertLessEqual(tris(self.recipe), self.recipe.get("budget", kit_shapes.PIECE_TRIS))
+
+
 if __name__ == "__main__":
     unittest.main()
