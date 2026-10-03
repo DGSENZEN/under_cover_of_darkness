@@ -1,7 +1,8 @@
 # The City on the Rock: Program Design
 
 **Date:** 2026-09-28
-**Status:** sub-project 1 built (the harbour, `docs/superpowers/plans/2026-09-29-city-harbour.md`, Oct 2026: the district playable in `maps/city.tscn` with the rest of the city as massing, its look polished after the user's review); sub-project 2 (the city in blocks: the other seven districts greyboxed with their ways in, guards and puzzles) next.
+**Status:** sub-project 1 built (the harbour, `docs/superpowers/plans/2026-09-29-city-harbour.md`, Oct 2026: the district playable in `maps/city.tscn` with the rest of the city as massing, its look polished after the user's review). Sub-project 2 is now **districts as maps, then the old town finished**: `docs/superpowers/specs/2026-10-02-old-town-design.md`.
+**Amended 2026-10-02** (the user's decisions; details in the old town's spec, section 15): program step 2 ("the city in blocks") is replaced by districts as separate maps joined by loading transitions, each remembering what was done, then the old town finished, then the other districts one at a time, each finished; the scale systems of section 10 reduce to the offline navmesh; the period is a timeless Iberian mix, medieval to the 19th century, Pombaline Lisbon and azulejo fronts included; the old town grows to about 330 × 360 m and 82 m of climb (30-40 minutes); townsfolk (a civilian system) become their own sub-project after the old town. Where this file disagrees with those decisions, they win.
 **Supersedes:** the mission concept of `2026-09-26-canal-quarter-mission-design.md` (its sections 1–4, 7 and 12). That spec's level metrics (section 5) and Blender-to-Godot contract (section 6) still hold: the garrison program built the contract as `tools/level`, and this program extends it.
 **Working names:** the city (unnamed yet), the Moon-Glass (the target), the districts below.
 
