@@ -66,6 +66,7 @@ func travel(exit: Area3D) -> void:
 
 	if map.player != null and map.player.get("frob") != null:
 		map.player.frob.drop_held()
+		map.player.frob.put_page_away()
 
 	CityState.leave(map, exit)
 	go(StringName(exit.get_meta(&"to")), StringName(exit.get_meta(&"arrive", &"")))

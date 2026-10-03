@@ -31,6 +31,7 @@ func _ready() -> void:
 	CityState.job.arrive(&"harbour")
 	await _frames(10)
 	await _letter()
+	await _readables()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -192,6 +193,73 @@ func _letter() -> void:
 	var now: String = page.text_of(1)
 	_check("L11 a note learnt while reading shows at once", hand.is_page_up() and not before.contains(blowhole) and now.contains(blowhole),
 		"up %s, before %s, now %s" % [hand.is_page_up(), before.contains(blowhole), now.contains(blowhole)])
+	frob.put_page_away()
+	await _frames(2)
+
+
+# ---------------------------------------------------------------------------
+# L12-L14: readables
+# ---------------------------------------------------------------------------
+
+func _readables() -> void:
+	var hand: Node = player.hand
+	var frob: Node = player.frob
+	CityState.begin()
+	CityState.job.arrive(&"harbour")
+	await _settle()
+
+	# A paper lying on a desk in front.
+	Props.block(self, Vector3(0.0, 0.4, -1.4), Vector3(1.0, 0.8, 0.6))
+	var lying := Transform3D(Basis.IDENTITY, Vector3(0.0, 0.8, -1.4))
+	var paper: Node3D = Props.readable(self, lying, &"paper", "duty_orders")
+	var was: Transform3D = paper.global_transform
+	await _aim(paper.global_position)
+	var prompt: Array = frob.current_actions()
+	await _tap("frob")
+	await _frames(4)
+	var held: bool = hand.is_page_up() and hand.page_look() == &"paper" and not paper.visible and frob.reading() == paper
+	var taken: bool = CityState.job.read_slots == ["duty_orders"] and CityState.job.notes.has("office_key")
+	var words: String = hand.page().text_of(0)
+	await _tap("frob")
+	await _frames(4)
+	_check("L12 reading a paper holds it up, adds its note, and puts it back", prompt == [[&"frob", "Read"]] and held and taken
+		and words.contains("<<the duty orders>>") and not hand.is_page_up() and paper.visible and paper.global_transform.is_equal_approx(was),
+		"prompt %s, held %s, read %s notes %s, back %s %s" % [prompt, held, CityState.job.read_slots, CityState.job.notes,
+			not hand.is_page_up(), paper.visible])
+
+	# A notice on a wall to the left: read, then walked away from.
+	await _settle()
+	Props.block(self, Vector3(-1.6, 1.5, 0.0), Vector3(0.2, 3.0, 2.0))
+	var on_wall := Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(-1.5, 1.6, 0.0))
+	var notice: Node3D = Props.readable(self, on_wall, &"notice", "curfew")
+	await _aim(notice.global_position)
+	await _tap("frob")
+	await _frames(4)
+	var reading_notice: bool = hand.is_page_up() and hand.page_look() == &"notice" and notice.visible
+	var look_away: Array = frob.current_actions()
+	player.global_position += Vector3(2.1, 0.0, 0.0)
+	await _frames(3)
+	var walked_off: bool = not hand.is_page_up()
+	await _settle()
+	await _aim(paper.global_position)
+	await _tap("frob")
+	await _frames(4)
+	var paper_up: bool = hand.is_page_up() and not paper.visible
+	frob.drop_held()
+	frob.put_page_away()
+	await _frames(2)
+	_check("L13 walking 2 m away lowers a notice; the hands put away for a journey lower any page, the paper put back",
+		reading_notice and look_away == [[&"frob", "Look away"]] and walked_off and paper_up and not hand.is_page_up() and paper.visible,
+		"notice %s %s, walked off %s, paper up %s, after %s %s" % [reading_notice, look_away, walked_off, paper_up, hand.is_page_up(),
+			paper.visible])
+
+	await _settle()
+	var nothing: Node3D = Props.readable(self, Transform3D(Basis.IDENTITY, Vector3(0.4, 0.8, -1.4)), &"paper", "nothing_here")
+	await _aim(nothing.global_position)
+	await _tap("frob")
+	await _frames(4)
+	_check("L14 a readable whose slot has no words reads as its placeholder", hand.is_page_up() and hand.page().text_of(0) == "<<nothing_here>>",
+		"up %s, words %s" % [hand.is_page_up(), hand.page().text_of(0) if hand.page() != null else "-"])
 	frob.put_page_away()
 	await _frames(2)
 

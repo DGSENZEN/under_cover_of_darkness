@@ -269,6 +269,19 @@ func open_letter() -> void:
 	hands.hold_page(LetterText.sides(CityState.job), &"letter")
 
 
+## A readable's words up in both hands (its paper taken up with them), read:
+## its pencil note added.
+func read(readable: Node) -> void:
+	if not can_raise_page():
+		return
+
+	_reading = readable
+	_read_from = player.global_position
+	readable.set_held(true)
+	player.hand.hold_page(readable.sides(), readable.look)
+	CityState.job.read_slot(String(readable.slot))
+
+
 ## Whatever page is up, put away (a readable back where it was).
 func put_page_away() -> void:
 	var hands: Node = player.hand

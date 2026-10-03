@@ -52,7 +52,7 @@ static func build_all(parent: Node3D, level) -> Dictionary:
 		"decals": decals(parent, level), "routes": routes(parent, level), "stations": stations(parent, level),
 		"pickups": pickups(parent, level), "chests": chests(parent, level), "props": props(parent, level),
 		"noise_zones": noise_zones(parent, level), "mechanisms": mechanisms(parent, level),
-		"smokes": smokes(parent, level),
+		"smokes": smokes(parent, level), "readables": readables(parent, level),
 	}
 	mission_marks(parent, level)
 	return made
@@ -465,6 +465,21 @@ static func chests(parent: Node3D, level) -> Dictionary:
 		chest.name = m["name"]
 		chest.set("pickable", bool(props.get("pick", true)))
 		out[m["name"]] = chest
+
+	return out
+
+
+## Words to read where their markers are (Readable): {name: node}; a
+## marker's `kind` how it is held, its `slot` its words in the district's
+## job file.
+static func readables(parent: Node3D, level) -> Dictionary:
+	var out := {}
+
+	for m in level.of("readable"):
+		var props: Dictionary = m["props"]
+		var node: StaticBody3D = Props.readable(parent, m["transform"], StringName(String(props.get("kind", "paper"))), String(props["slot"]))
+		node.name = m["name"]
+		out[m["name"]] = node
 
 	return out
 
