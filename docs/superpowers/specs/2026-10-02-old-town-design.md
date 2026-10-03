@@ -302,7 +302,7 @@ The harbour's targets, for one district per map: **60 fps average, 99th-percenti
 Each plan is reviewed by the user before the next begins. Work happens in a worktree of its own (the harbour's polish continues separately in `city-harbour`).
 
 1. **Plan A: districts as maps** (about 8-10 tasks): section 3A, tested with the stand-in old town.
-2. **Plan B1: the old town playable** (Arkane's order: the shell first, then the routes dug in): the generators, the room kit, the six key buildings, the terraces; the layout quarter by quarter; the watch, households, the night's states, moon lamps, the sereno's keys, readables, jobs, the upper gate's four ways, loot and secrets. The user walks it before any art.
+2. **Plan B1: the old town playable** (split into B1a, the shell, and B1b, the night: section 16) (Arkane's order: the shell first, then the routes dug in): the generators, the room kit, the six key buildings, the terraces; the layout quarter by quarter; the watch, households, the night's states, moon lamps, the sereno's keys, readables, jobs, the upper gate's four ways, loot and secrets. The user walks it before any art.
 3. **Plan B2: the old town's art pass:** textures and painted textures, detail on fronts, interiors furnished, shrines, signs, laundry and plants, light and sound; stills judged at full size; the benchmark.
 
 ## 13. Risks
@@ -321,6 +321,20 @@ Each plan is reviewed by the user before the next begins. Work happens in a work
 1. **Plan A:** the harbour and the stand-in old town join both ways through every gate, remembering what was done and carrying purse, tools and health; a chasing watchman follows; the harbour loads faster than its 13.8 s; every suite green.
 2. **Plan B1:** the user walks the old town from each of the harbour's gates to the upper gate, through each of its four ways, and into each key building by at least three ways; every suite green.
 3. **Plan B2:** the old town passes the user's look review at full size; 60 fps average, p99 under 25 ms, load under 15 s; every suite green, with no script errors.
+
+## 16. Amendments of Oct 3 2026
+
+After plan A (merged, `origin/main` 5795638), the user decided:
+
+1. **The harbour's polish lands on main first.** That work, `docs/superpowers/specs/2026-10-02-harbour-polish-design.md`, is not yet merged. It brings the haze, the far land, the colossus, the comet, the keep's balefire and its pillar, the gorge's corpse-lights, lit windows, chimney smoke, loose bodies, the roofed shadow layer, `kit_interiors` and our painted facades. Plan B1 starts from a main that has it, merged with plan A's district maps. The city's sky and distance belong to every district map.
+2. **Plan B1 splits in two**, each reviewed by the user:
+   - **B1a, the shell:** the four house generators, the room kit, the terraces and the ground below, the street furniture, the six key buildings and the Carmo ruin, all five quarters with their streets, roof chains, terrace connectors and ways in and out, the massing redrawn round the old town, and the old town seen from the harbour. The user walks it empty, with no guards and no puzzles.
+   - **B1b, the night:** the watch, households, curfew and alarm, moon lamps, the sereno's keys, readables, jobs, the upper gate's lock and key, loot and secrets, and visible memory.
+3. **The old town's own uncanny touches.** These sit beside what it sees in the distance: the comet, the colossus, the balefire and the gorge's corpse-lights. Like the harbour's, they stay restrained and are never explained:
+   - **The comet in the tiles.** Azulejo panels and wall shrines show the red comet over the city, and the forgotten king (the colossus) as a saint. They are painted by us. After 1755 small devotional panels were put on buildings to ward off new disasters (`old_town_lisbon.md` §6). Here the city has lived under the comet a long time.
+   - **The ruin's red light.** While the comet is in the sky, the roofless Carmo nave's altar is lit red by it through the broken tracery. The watch won't stand inside the nave (B1b).
+   - **Corpse-lights on the rim.** The gorge's corpse-lights drift up into the walled garden houses on the west rim. Stared at, they go out, as in the gorge.
+   - **The balefire on the towers.** From the upper town the keep is close. Its cold green-white light falls on the tower-house tops and the upper gate, and its pillar stands over the whole district.
 
 ## 15. Amendments to the city spec
 
