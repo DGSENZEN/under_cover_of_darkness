@@ -28,6 +28,7 @@ import common  # noqa: E402
 import geo  # noqa: E402
 import kit_recipes  # noqa: E402
 import markers as schema  # noqa: E402
+import proxy  # noqa: E402
 import overlap  # noqa: E402
 import shade  # noqa: E402
 
@@ -356,6 +357,91 @@ def bake(data):
     print("level: shading baked into %d pieces (%d corners measured)" % (len(objects), len(memo)))
 
 
+def _box_mesh(name, items, slot):
+    """A mesh of oriented boxes: `items` (geo.Box, colour) in Godot's axes,
+    each box's corners coloured (the vertex colour Godot's proxy material
+    shows), in material `slot`."""
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    colour = bm.loops.layers.float_color.new("Col")
+
+    for box, rgb in items:
+        corners = []
+
+        for sx in (-1.0, 1.0):
+            for sy in (-1.0, 1.0):
+                for sz in (-1.0, 1.0):
+                    local = [sx * box.half[0], sy * box.half[1], sz * box.half[2]]
+                    corners.append(bm.verts.new(geo.to_blender(geo.add(box.centre, geo.apply(box.basis, local)))))
+
+        faces = [bm.faces.new([corners[i] for i in quad]) for quad in
+                 ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3))]
+        bmesh.ops.recalc_face_normals(bm, faces=faces)
+
+        for face in faces:
+            for loop in face.loops:
+                loop[colour] = (*rgb, 1.0)
+
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.materials.append(common.material(slot))
+    mesh.color_attributes.active_color = mesh.color_attributes.get("Col")
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def write_proxy(data, out):
+    """The level's proxy (proxy.py) as out/proxy.glb: its colliders as boxes
+    in their slots' preview colours (material "proxy"), a lit box at each
+    window (material "proxy_lit"), its terrain decimated (material "proxy",
+    its baked colour kept). Run after bake (the terrain carries its colour);
+    what it adds to the scene is removed again."""
+    made = [_box_mesh("proxy_boxes", [(box, common.SLOT_COLOURS.get(slot, (0.5, 0.5, 0.5))) for box, slot in proxy.boxes(data)], "proxy")]
+    lit = [geo.Box(at, geo.IDENTITY, list(proxy.WINDOW), "") for at in proxy.windows(data)]
+
+    if lit:
+        made.append(_box_mesh("proxy_windows", [(box, (1.0, 0.8, 0.5)) for box in lit], "proxy_lit"))
+
+    for obj in [o for o in bpy.context.scene.objects if o.type == "MESH" and o.get("terrain")]:
+        copy = obj.copy()
+        copy.data = obj.data.copy()
+        copy.name = "proxy_" + obj.name
+        copy.data.materials.clear()
+        copy.data.materials.append(common.material("proxy"))
+
+        for polygon in copy.data.polygons:
+            polygon.material_index = 0
+
+        bpy.context.scene.collection.objects.link(copy)
+        thin = copy.modifiers.new("thin", "DECIMATE")
+        thin.ratio = proxy.PROXY_TERRAIN
+        made.append(copy)
+
+    bpy.ops.object.select_all(action="DESELECT")
+
+    for obj in made:
+        obj.select_set(True)
+
+    path = out / "proxy.glb"
+    bpy.ops.export_scene.gltf(
+        filepath=str(path), export_format="GLB", use_selection=True, export_materials="EXPORT",
+        export_image_format="NONE", export_vertex_color="ACTIVE", export_yup=True, export_apply=True,
+        export_texcoords=False, export_normals=True, export_animations=False, export_skins=False, export_extras=False,
+    )
+    settings = path.with_suffix(".glb.import")
+
+    if not settings.exists():
+        settings.write_text(IMPORT.format(source="res://" + str(path.relative_to(common.ROOT)).replace(os.sep, "/")))
+
+    for obj in made:
+        mesh = obj.data
+        bpy.data.objects.remove(obj)
+        bpy.data.meshes.remove(mesh)
+
+    print("level: proxy of %d boxes, %d windows -> %s" % (len(proxy.boxes(data)), len(lit), path.relative_to(common.ROOT)))
+
+
 def export(stage="stage1"):
     data, problems = checker.check(stage)
 
@@ -390,6 +476,7 @@ def export(stage="stage1"):
         if not settings.exists():
             settings.write_text(IMPORT.format(source="res://" + str(path.relative_to(common.ROOT)).replace(os.sep, "/")))
 
+    write_proxy(data, out)
     (out / (level + ".json")).write_text(json.dumps(manifest(data), indent=None, separators=(",", ":")) + "\n")
     schema.write_json(out / "markers.json")
     print("level: exported %s: %d sectors -> %s" % (level, len(data["sectors"]), out.relative_to(common.ROOT)))

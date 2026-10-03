@@ -10,7 +10,7 @@
 #                                          user's: not built over once edited, its ground's paint
 #                                          included, unless --force)
 #   tools/level/level.sh check <level>     the rules, nothing written
-#   tools/level/level.sh export <level>    checked, then glTF per sector + the manifest, imported by Godot
+#   tools/level/level.sh export <level>    checked, then glTF per sector, its proxy (proxy.glb) + the manifest, imported by Godot
 #   tools/level/level.sh preview <level> [out]  a plan and four bird's-eye pictures
 #   tools/level/level.sh all <level>       kit, build, export
 #   tools/level/level.sh test              the rules against broken levels, the terrain, the kit's shapes
@@ -81,6 +81,7 @@ case "$verb" in
     python3 "$HERE/test_overlap.py"
     python3 "$HERE/test_shade.py"
     python3 "$HERE/test_districts.py"
+    python3 "$HERE/test_proxy.py"
     "$HERE/test_guard.sh"
     ;;
   *)
