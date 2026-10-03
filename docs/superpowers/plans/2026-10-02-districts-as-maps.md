@@ -14,7 +14,7 @@
 
 - Godot: `/Users/tinkertailorr/Desktop/Godot.app/Contents/MacOS/Godot`; suites run `--headless --fixed-fps 60 --quit-after 40000 --path . res://tests/<suite>.tscn` and print `N pass, 0 fail`; the long suites (cinema, intruder, showcase, talk) are run one at a time with `--quit-after 3000000`.
 - Blender: `/Applications/Blender.app/Contents/MacOS/Blender` (via `tools/level/level.sh`). A full harbour build and export takes about 22 minutes.
-- Work in a worktree of its own: branch `old-town` from `dfb2c53` at `.claude/worktrees/old-town`. Another session polishes the harbour, uncommitted, in `.claude/worktrees/city-harbour`; before Task 9 merge `city-harbour` into `old-town` if it has new commits.
+- Work in a worktree of its own: branch `old-town` from the commit that adds this plan (`0d8ad0d` or later on `city-harbour`) at `.claude/worktrees/old-town`. Another session polishes the harbour, uncommitted, in `.claude/worktrees/city-harbour`; before Task 9 merge `city-harbour` into `old-town` if it has new commits.
 - The repository is public: never commit textures.com photos or anything rendered from them (`textures/source`, `textures/ps2` stay gitignored; stills showing them stay out of git).
 - `maps/garrison.gd` and the garrison level are not modified; every garrison suite still passes.
 - Comments and docstrings follow the codebase: prose sentences saying what a thing does; `snake_case`; GDScript `##` doc comments.
