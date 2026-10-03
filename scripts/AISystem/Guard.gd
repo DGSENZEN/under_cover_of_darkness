@@ -9,6 +9,7 @@ extends CharacterBody3D
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
+const SightRay := preload("res://scripts/StimuliSystem/SightRay.gd")
 const GuardBodyScript := preload("res://scripts/AISystem/GuardBody.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const GuardRigScript := preload("res://scripts/AISystem/GuardRig.gd")
@@ -1095,7 +1096,8 @@ func _line_of_sight(from: Vector3, to: Vector3, target: Node3D) -> bool:
 
 	var query := PhysicsRayQueryParameters3D.create(from, to, sight_mask, exclude)
 	query.collide_with_areas = false
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	# (Through a window's glass: he sees you as you see him.)
+	var hit := SightRay.first_solid(get_world_3d().direct_space_state, query)
 	if hit.is_empty():
 		return true
 	# Fixtures own their collision bodies. Seeing the target's own shell

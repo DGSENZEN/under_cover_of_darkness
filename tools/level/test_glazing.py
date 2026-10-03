@@ -12,6 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import geo  # noqa: E402
 import kit_glazing  # noqa: E402
 import kit_shapes  # noqa: E402
 
@@ -114,6 +115,32 @@ class Walls(unittest.TestCase):
             self.assertTrue(all(abs(a[i] - b[i]) < 1e-6 for i in range(3)))
 
         self.assertAlmostEqual(abs(turned["normal"][0]), 1.0, places=6)
+
+
+class Manifest(unittest.TestCase):
+    def setUp(self):
+        shapes, cols, rec = kit_glazing.glazed(0.0, 1.0, 1.0, 1.5, 0.0, 0.6)
+        wall = [0.0, 3.0, -0.3, 4.0, 1.0, 0.6, "stone", 0, 0, 0]
+        self.recipe = {"family": "dressing", "slot": "stone", "surface": "stone", "boxes": [], "cols": cols + [wall], "windows": [rec],
+                       "sockets": {}, "size": None, "opening": None, "shapes": shapes}
+        self.rec = rec
+
+    def test_windows_are_put_in_the_world(self):
+        basis = [[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [-1.0, 0.0, 0.0]]  # turned 90 degrees
+        pieces = [{"name": "probe", "piece": "glazing_probe", "sector": "s", "position": [10.0, 0.0, 5.0], "basis": basis},
+                  {"name": "plain", "piece": "plain_probe", "sector": "s", "position": [0.0, 0.0, 0.0], "basis": geo.IDENTITY}]
+        out = kit_glazing.world_windows(pieces, {"glazing_probe": self.recipe, "plain_probe": dict(self.recipe, windows=[])})
+        self.assertEqual(len(out), 1)
+        w = out[0]
+        self.assertEqual((w["piece"], w["sector"], w["lead"]), ("probe", "s", "casement"))
+        self.assertEqual(w["normal"], [round(v, 4) for v in geo.apply(basis, [0.0, 0.0, 1.0])])
+        first = geo.add([10.0, 0.0, 5.0], geo.apply(basis, self.rec["outline"][0]))
+        self.assertEqual(w["outline"][0], [round(v, 4) for v in first])
+
+    def test_glass_never_occludes(self):
+        boxes = geo.piece_boxes(self.recipe, [0.0, 0.0, 0.0], geo.IDENTITY)
+        self.assertEqual([b.occluder for b in boxes if b.surface == "glass"], [False])
+        self.assertEqual([b.occluder for b in boxes if b.surface == "stone"], [True])
 
 
 if __name__ == "__main__":

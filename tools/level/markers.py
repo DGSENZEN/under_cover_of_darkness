@@ -39,6 +39,9 @@ SCHEMA = {
     # Under a roof: the dressing inside it casts no shadow in moonlight
     # (kit_recipes.roofed).
     "roofed": {"required": [], "optional": {}, "box": True},
+    # A room (the real-windows spec, 4): its windows' lamps are the lights
+    # inside it, and what they throw out goes through its windows.
+    "room": {"required": [], "optional": {}, "box": True},
     # The distance's effects (scripts/Visual/Distance.gd): a far light (a
     # torch on a wall far off, the balefire), its air (mist, corpse-lights).
     "far_light": {"required": ["kind"], "optional": {}, "box": False},

@@ -232,3 +232,18 @@ def moved(records, yaw=0.0, offset=(0.0, 0.0, 0.0)):
         out.append(r)
 
     return out
+
+
+def world_windows(pieces, recipes):
+    """Every placed piece's records in the world, for the manifest: each
+    {piece, sector, lead, outline, normal}, rounded to 4 places (its points
+    through the piece's position and basis, its normal through its basis)."""
+    out = []
+
+    for p in pieces:
+        for r in recipes[p["piece"]].get("windows", []):
+            out.append({"piece": p["name"], "sector": p["sector"], "lead": r["lead"],
+                        "outline": [[round(v, 4) for v in geo.add(p["position"], geo.apply(p["basis"], q))] for q in r["outline"]],
+                        "normal": [round(v, 4) for v in geo.apply(p["basis"], r["normal"])]})
+
+    return out

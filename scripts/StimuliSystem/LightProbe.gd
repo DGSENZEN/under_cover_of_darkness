@@ -5,6 +5,7 @@ extends RefCounted
 ## refreshes on scene/light/environment changes or after REFRESH_SECONDS.
 
 const REFRESH_SECONDS := 2.0
+const SightRay := preload("res://scripts/StimuliSystem/SightRay.gd")
 
 static var _lights: Array = []
 static var _ambient := 0.0
@@ -72,7 +73,8 @@ static func light_at(asker: Node3D, point: Vector3, exclude: Array[RID] = []) ->
 			var query := PhysicsRayQueryParameters3D.create(from, point + toward * reach, 1, shadow_exclude)
 			query.collide_with_areas = false
 
-			if not space.intersect_ray(query).is_empty():
+			# (A window's glass lets the light through.)
+			if not SightRay.first_solid(space, query).is_empty():
 				continue
 
 		var contribution: float = strength * light.light_energy * _luminance(light.light_color)
