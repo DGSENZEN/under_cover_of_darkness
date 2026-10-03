@@ -12,6 +12,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import geo  # noqa: E402
+import kit_harbour  # noqa: E402
 import kit_recipes  # noqa: E402
 import kit_shapes  # noqa: E402
 import rules  # noqa: E402
@@ -553,17 +554,18 @@ class Harbour(unittest.TestCase):
             self.assertLessEqual(hangs - half, 1.0, c)
 
     def test_the_mole_is_walked_and_its_parapet_climbed(self):
-        cols = kit_recipes.PIECES["mole_8"]["cols"]
-        body = max(cols, key=lambda c: c[3] * c[4] * c[5])
-        self.assertAlmostEqual(top_of(body), 3.5, places=3)
-        parapet = [c for c in cols if abs(top_of(c) - 5.5) < 1e-3]
-        self.assertTrue(parapet)
-        # From the boulders at its seaward foot a mantle up, then a hang to
-        # the parapet's top.
-        boulders = [c for c in cols if c[2] > 7.0]
+        # (The mole is swept along its line, layouts/harbour/mole.py; its
+        # riprap the kit's.) From the riprap at its seaward foot a mantle up,
+        # then a hang to the parapet's cap.
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "layouts"))
+        from harbour import mole
+        boulders = kit_recipes.PIECES["riprap_8"]["cols"]
         self.assertTrue(boulders)
         self.assertLessEqual(max(top_of(c) for c in boulders), rules.MANTLE)
-        self.assertLessEqual(5.5 - max(top_of(c) for c in boulders), rules.HANG)
+        self.assertLessEqual(mole.PARAPET[2] + mole.CAP[1] - max(top_of(c) for c in boulders), rules.HANG)
+        # The riprap is piled against the mole's battered face, its stones'
+        # middles out beyond its foot.
+        self.assertGreaterEqual(kit_harbour.RIPRAP - 0.6, mole.BATTER[0])
 
     def test_nave_bays_tile(self):
         pier = kit_recipes.PIECES["nave_pier"]
@@ -573,12 +575,142 @@ class Harbour(unittest.TestCase):
         self.assertAlmostEqual(vault["size"][0], 8.4, places=3)
         self.assertAlmostEqual(vault["size"][2], 8.4, places=3)
         self.assertAlmostEqual(max(top_of(c) for c in vault["cols"]), 13.0, places=3)
-        # (Slightly pointed arches over 7.2 m to an apex at 10.9 spring at
-        # 7.1: the piers' tops.)
-        self.assertAlmostEqual(max(top_of(c) for c in pier["cols"]), 7.1, places=3)
-        # The arch leaves the nave clear under its apex.
+        # (A pier is solid to the terrace: its head, over the springing at
+        # 7.1, is in the arches it carries.)
+        self.assertAlmostEqual(max(top_of(c) for c in pier["cols"]), 13.0, places=3)
+        # The arch leaves the nave clear under its apex; it is a pier deep.
         for c in arch["cols"]:
             self.assertGreaterEqual(c[1] - c[4] / 2.0, 10.9 - 1e-3)
+
+        self.assertAlmostEqual(arch["size"][2], 1.2, places=3)
+
+    def _bay_faces(self, placed):
+        """The triangles of pieces placed [(name, (x, y, z), yaw)]: [(a, b,
+        c, name, slot)]."""
+        out = []
+
+        for name, at, yaw in placed:
+            part = kit_shapes.build(kit_recipes.PIECES[name]["shapes"])
+            turn = geo.rotation(yaw)
+
+            for indices, slot, _ in part["faces"]:
+                p = [geo.add(geo.apply(turn, part["verts"][i]), list(at)) for i in indices]
+
+                for k in range(1, len(p) - 1):
+                    out.append((p[0], p[k], p[k + 1], name, slot))
+
+        return out
+
+    def _first_up(self, faces, x, y, z):
+        """The first face a ray straight up from (x, y, z) meets: (height,
+        name, slot), or None."""
+        best = None
+
+        for a, b, c, name, slot in faces:
+            # (Möller-Trumbore, the ray along +y.)
+            e1, e2 = geo.sub(b, a), geo.sub(c, a)
+            p = [e2[2], 0.0, -e2[0]]
+            det = geo.dot(e1, p)
+
+            if abs(det) < 1e-12:
+                continue
+
+            t0 = [x - a[0], y - a[1], z - a[2]]
+            u = geo.dot(t0, p) / det
+
+            if u < -1e-9 or u > 1.0 + 1e-9:
+                continue
+
+            q = [t0[1] * e1[2] - t0[2] * e1[1], t0[2] * e1[0] - t0[0] * e1[2], t0[0] * e1[1] - t0[1] * e1[0]]
+            v = q[1] / det
+
+            if v < -1e-9 or u + v > 1.0 + 1e-9:
+                continue
+
+            t = geo.dot(e2, q) / det
+
+            if t > 1e-6 and (best is None or t < best[0] - y):
+                best = (y + t, name, slot)
+
+        return best
+
+    def _looked_up(self, faces, xs, zs, solid):
+        """Every point (x, 5, z) not inside `solid` (x, z) -> bool, looking
+        up: what it sees first; the faults (sky, or the terrace's slab)."""
+        faults = []
+
+        for x in xs:
+            for z in zs:
+                if solid(x, z):
+                    continue
+
+                hit = self._first_up(faces, x, 5.0, z)
+
+                if hit is None or hit[0] > 12.6:
+                    faults.append((round(x, 2), round(z, 2), hit))
+
+        return faults
+
+    def test_looking_up_in_a_bay_you_see_its_vault_and_arches(self):
+        # A bay among others: its vault, the four arches round it, the four
+        # piers at its corners. From anywhere under it, straight up: brick
+        # (the webs, the arches' soffits and faces) or an impost; never the
+        # terrace's slab over the vault, nor the sky between them.
+        h = kit_harbour.NAVE / 2.0
+        placed = [("nave_vault", (0.0, 0.0, 0.0), 0.0), ("nave_arch_x", (0.0, 0.0, h), 0.0), ("nave_arch_x", (0.0, 0.0, -h), 0.0),
+                  ("nave_arch_z", (h, 0.0, 0.0), 0.0), ("nave_arch_z", (-h, 0.0, 0.0), 0.0)]
+        placed += [("nave_pier", (sx * h, 0.0, sz * h), 0.0) for sx in (-1, 1) for sz in (-1, 1)]
+        faces = self._bay_faces(placed)
+        grid = [-h + 0.07 + i * 0.29 for i in range(29)]
+        inside = lambda x, z: abs(abs(x) - h) < 0.61 and abs(abs(z) - h) < 0.61
+        self.assertEqual(self._looked_up(faces, grid, grid, inside), [])
+
+    def test_against_a_wall_the_vault_meets_its_wall_arch(self):
+        # A bay on the west wall (its face at x -h): responds against it at
+        # the bay's corners, a wall arch between them; the arches and piers
+        # on the bay's other sides. Looking up: no slab, no sky by the wall.
+        h = kit_harbour.NAVE / 2.0
+        placed = [("nave_vault", (0.0, 0.0, 0.0), 0.0), ("nave_wall_arch", (-h, 0.0, 0.0), 90.0), ("nave_arch_x", (0.0, 0.0, h), 0.0),
+                  ("nave_arch_x", (0.0, 0.0, -h), 0.0), ("nave_arch_z", (h, 0.0, 0.0), 0.0),
+                  ("nave_respond", (-h, 0.0, h), 90.0), ("nave_respond", (-h, 0.0, -h), 90.0),
+                  ("nave_pier", (h, 0.0, h), 0.0), ("nave_pier", (h, 0.0, -h), 0.0)]
+        faces = self._bay_faces(placed)
+        xs = [-h + 0.03 + i * 0.29 for i in range(29)]
+        zs = [-h + 0.07 + i * 0.29 for i in range(29)]
+        inside = lambda x, z: (abs(abs(z) - h) < 0.61 and (x < -h + 0.61 or abs(x - h) < 0.61))
+        self.assertEqual(self._looked_up(faces, xs, zs, inside), [])
+
+    def test_in_a_corner_the_vault_meets_both_wall_arches(self):
+        # The bay in the corner of the west wall and the sea wall (x -h and
+        # z +h): a corner respond, two wall arches.
+        h = kit_harbour.NAVE / 2.0
+        placed = [("nave_vault", (0.0, 0.0, 0.0), 0.0), ("nave_wall_arch", (-h, 0.0, 0.0), 90.0), ("nave_wall_arch", (0.0, 0.0, h), 180.0),
+                  ("nave_arch_x", (0.0, 0.0, -h), 0.0), ("nave_arch_z", (h, 0.0, 0.0), 0.0),
+                  ("nave_respond_corner", (-h, 0.0, h), 90.0), ("nave_respond", (-h, 0.0, -h), 90.0), ("nave_respond", (h, 0.0, h), 180.0),
+                  ("nave_pier", (h, 0.0, -h), 0.0)]
+        faces = self._bay_faces(placed)
+        grid = [-h + 0.03 + i * 0.29 for i in range(29)]
+        inside = lambda x, z: (x < -h + 0.61 and (z > h - 0.61 or abs(z + h) < 0.61)) or (z > h - 0.61 and abs(x - h) < 0.61) \
+            or (abs(x - h) < 0.61 and abs(z + h) < 0.61)
+        self.assertEqual(self._looked_up(faces, grid, grid, inside), [])
+
+    def test_the_webs_meet_at_the_groins(self):
+        # Each web's corners on a diagonal are another web's: no slit
+        # along a groin.
+        part = kit_shapes.build(kit_recipes.PIECES["nave_vault"]["shapes"])
+        on = {}
+
+        for indices, slot, _ in part["faces"]:
+            for i in indices:
+                x, y, z = part["verts"][i]
+
+                if slot == "brick_coursed" and abs(abs(x) - abs(z)) < 1e-6 and abs(x) > 1e-6:
+                    on.setdefault((round(x, 4), round(z, 4)), set()).add(round(y, 4))
+
+        self.assertTrue(on)
+
+        for key, ys in on.items():
+            self.assertEqual(len(ys), 1, key)
 
     def test_the_galley_scaffold_climbs(self):
         galley = kit_recipes.PIECES["galley_stocks"]
@@ -665,7 +797,7 @@ class Ships(unittest.TestCase):
 
 
 PLANTS = ["palm_date", "cypress", "orange_tree", "agave"]
-MASSING = ["mass_houses_20", "mass_houses_tall_20", "mass_terrace_wall_40", "mass_cathedral", "mass_belltower", "mass_palace", "mass_mirador",
+MASSING = ["mass_houses_20", "mass_houses_tall_20", "mass_houses_low_20", "mass_houses_mixed_20", "mass_tower_house", "mass_parish", "mass_terrace_wall_40", "mass_cathedral", "mass_belltower", "mass_palace", "mass_mirador",
            "mass_aqueduct_40", "mass_bridge", "mass_curtain_30", "mass_castle_tower", "mass_keep"]
 
 
@@ -685,6 +817,71 @@ class PlantingAndMassing(unittest.TestCase):
     def test_massing_casts_no_shadow(self):
         pieces = [{"name": "keep.001", "piece": "mass_keep"}, {"name": "quay.001", "piece": "quay_8"}]
         self.assertEqual(kit_recipes.shadowless(pieces), ["keep.001"])
+
+    def test_what_stands_under_a_roof_casts_no_moon_shadow(self):
+        # A room's furniture and the naves' vaults wherever they stand;
+        # other dressing only inside a roofed box (turned with it); never
+        # the walls inside one.
+        box = {"ucd": "roofed", "position": [10.0, 2.0, 0.0], "basis": geo.rotation(90.0, 0.0, 0.0), "size": [2.0, 4.0, 8.0]}
+        pieces = [{"name": "desk.001", "piece": "desk_writing", "position": [99.0, 0.0, 0.0]},
+                  {"name": "vault.001", "piece": "nave_vault", "position": [99.0, 0.0, 0.0]},
+                  {"name": "crate.001", "piece": "crate", "position": [13.5, 0.0, 0.5]},
+                  {"name": "crate.002", "piece": "crate", "position": [10.5, 0.0, 3.5]},
+                  {"name": "quay.001", "piece": "quay_8", "position": [13.5, 0.0, 0.5]}]
+        self.assertEqual(kit_recipes.roofed(pieces, [box]), ["desk.001", "vault.001", "crate.001"])
+        self.assertEqual(kit_recipes.roofed(pieces), ["desk.001", "vault.001"])
+
+    def test_a_massing_house_is_closed_under_its_roof_from_every_side(self):
+        # (The roofs that looked culled from the Terreiro: gable prisms in
+        # tile over plain boxes, open where a neighbour stood lower.) From
+        # either end, between its eaves and its ridge, a ray meets its gable
+        # wall; from in front and behind, under its eaves, its wall; from
+        # below the eaves, the eaves' underside.
+        import kit_massing as km
+        from test_mole import _hit
+
+        for name in ("mass_houses_20", "mass_houses_tall_20", "mass_houses_low_20", "mass_houses_mixed_20"):
+            part = kit_shapes.build(kit_recipes.PIECES[name]["shapes"])
+            faces = [(f, slot) for f, slot, _ in part["faces"]]
+            tris_ = [(part["verts"][f[0]], part["verts"][f[i]], part["verts"][f[i + 1]]) for f, _ in faces for i in range(1, len(f) - 1)]
+            slots = [slot for f, slot in faces for i in range(1, len(f) - 1)]
+            # (Its end houses' gables: the lower of the eaves either end, a
+            # metre over them.)
+            ends = [(min(v[1] for v in part["verts"] if v[0] < -9.0 and v[1] > 3.0 and abs(v[2]) > 5.0), -1.0),
+                    (min(v[1] for v in part["verts"] if v[0] > 9.0 and v[1] > 3.0 and abs(v[2]) > 5.0), 1.0)]
+
+            for eaves, side in ends:
+                hit = _hit(tris_, [side * 30.0, eaves + 1.0, 0.0], [-side, 0.0, 0.0])
+                self.assertIsNotNone(hit, (name, side))
+                self.assertTrue(slots[hit[1]].startswith("facade_"), (name, side, slots[hit[1]]))
+
+            for x in (-6.0, 0.0, 6.0):
+                for side in (1.0, -1.0):
+                    hit = _hit(tris_, [x, 4.0, side * 30.0], [0.0, 0.0, -side])
+                    self.assertTrue(hit is not None and slots[hit[1]].startswith(("facade_", "glass_lit")), (name, x, side))
+
+    def test_a_massing_houses_lit_windows_sit_in_its_painted_openings(self):
+        # (paint.py FACADE: a window every 3 m from 1.5 m along each wall,
+        # its opening's middle 1.7 m over each 3.5 m storey's floor.)
+        import kit_massing as km
+        for name in ("mass_houses_20", "mass_houses_tall_20", "mass_houses_low_20", "mass_houses_mixed_20"):
+            lit = [sh for sh in kit_recipes.PIECES[name]["shapes"] if sh.get("slot") == "glass_lit"]
+            self.assertGreater(len(lit), 2, name)
+
+            for sh in lit:
+                up = sh["centre"][1] % km.STOREY
+                self.assertAlmostEqual(up, (km.OPENING[0] + km.OPENING[1]) / 2.0, places=6, msg=name)
+
+    def test_dense_structure_is_merged_a_cell_at_a_time_roofed_apart(self):
+        pieces = [{"name": "pier.001", "piece": "nave_pier", "sector": "shipyard", "position": [20.0, 0.0, -10.0]},
+                  {"name": "pier.002", "piece": "nave_pier", "sector": "shipyard", "position": [30.0, 0.0, -12.0]},
+                  {"name": "vault.001", "piece": "nave_vault", "sector": "shipyard", "position": [25.0, 0.0, -14.0]},
+                  {"name": "pier.003", "piece": "nave_pier", "sector": "shipyard", "position": [80.0, 0.0, -10.0]},
+                  {"name": "crate.001", "piece": "crate", "sector": "shipyard", "position": [21.0, 0.0, -10.0]}]
+        groups = kit_recipes.merge_groups(pieces, ["vault.001"])
+        self.assertEqual([(g["name"], g["roofed"], g["members"]) for g in groups],
+                         [("merged_shipyard_open_0_-1", False, ["pier.001", "pier.002"]), ("merged_shipyard_open_2_-1", False, ["pier.003"]),
+                          ("merged_shipyard_roofed_0_-1", True, ["vault.001"])])
 
     def test_the_keep_is_the_crown(self):
         part = kit_shapes.build(kit_recipes.PIECES["mass_keep"]["shapes"])

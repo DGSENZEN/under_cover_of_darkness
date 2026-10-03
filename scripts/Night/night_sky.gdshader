@@ -27,6 +27,17 @@ uniform float cirrus = 0.0;
 // The night's clock (s), for the stars' twinkle (not the engine's clock: a
 // sky reading that re-filters its radiance map every frame).
 uniform float clock = 0.0;
+// The comet (a map's omen; 0 none): its head's direction, the way its tail
+// streams across the sky from it, the tail's length (rad), its colour.
+uniform float comet = 0.0;
+uniform vec3 comet_head = vec3(-0.42, 0.52, -0.74);
+uniform vec3 comet_tail = vec3(0.55, 0.75, 0.1);
+uniform float comet_length = 0.5;
+uniform vec3 comet_color : source_color = vec3(1.0, 0.36, 0.26);
+// The galaxy's richness (its gas, its core, its finer stars; 0 the plain
+// band), and the aurora low in the north (a map's; 0 none).
+uniform float galaxy = 1.0;
+uniform float aurora = 0.0;
 
 uniform vec3 zenith_color : source_color = vec3(0.004, 0.007, 0.022);
 uniform vec3 middle_color : source_color = vec3(0.014, 0.022, 0.052);
@@ -58,6 +69,8 @@ const float BRIGHT_RARITY = 0.992;
 // The Milky Way: its pole, how wide its band (rad).
 const vec3 GALAXY_POLE = vec3(0.35, 0.55, 0.76);
 const float GALAXY_WIDTH = 0.22;
+// Its core, on the band, north-east and 28 degrees up.
+const vec3 GALAXY_CORE = vec3(0.625, 0.468, -0.626);
 // A moon halo in thin ice cloud, 22 degrees out.
 const float HALO_RING = 0.384;
 
@@ -154,6 +167,44 @@ void sky() {
 		float lanes = smoothstep(0.4, 0.7, texture(cloud_field, along * 1.2 + vec2(0.7, 0.2)).r);
 		vec3 behind = col + vec3(0.008, 0.0095, 0.014) * band * (0.75 + 0.5 * grainy) * (1.0 - 0.6 * lanes) * seen;
 
+		// Its gas: muted violet and teal clouds along it and a rose blush,
+		// wider than the band; its core warm and bright, cut by dark rifts;
+		// a finer field of faint stars in it.
+		float gas_a = texture(cloud_field, along * 0.7 + vec2(0.21, 0.63)).r;
+		float gas_b = texture(cloud_field, along * 1.6 + vec2(0.55, 0.12)).r;
+		vec3 gas = mix(vec3(0.016, 0.010, 0.024), vec3(0.006, 0.016, 0.020), smoothstep(0.35, 0.65, gas_a));
+		gas = mix(gas, vec3(0.022, 0.009, 0.014), smoothstep(0.62, 0.86, gas_b) * 0.7);
+		float wide = exp(-(lat * lat) / (GALAXY_WIDTH * GALAXY_WIDTH * 1.8));
+		float core = exp(-pow(acos(clamp(dot(d, normalize(GALAXY_CORE)), -1.0, 1.0)) / 0.32, 2.0));
+		float rifts = 1.0 - 0.75 * lanes * smoothstep(0.2, 0.8, band);
+		behind += (gas * wide * (0.55 + 0.9 * grainy) + vec3(0.034, 0.027, 0.02) * core * band * (0.7 + 0.6 * grainy)) * rifts * seen * galaxy;
+		vec2 fine = floor(sph / (STAR_CELL * 0.6));
+		float faint = step(0.992 - 0.03 * band, hash(fine + 31.0)) * (0.35 + 0.65 * hash(fine + 13.0));
+		behind += vec3(0.7, 0.75, 0.9) * faint * 0.16 * band * seen * galaxy;
+
+		// The aurora: slow curtains low in the north, teal at their folding
+		// hems and violet above, rayed, two veils one over the other; behind
+		// the clouds, gone in fog.
+		if (aurora > 0.0) {
+			float az = atan(d.x, -d.z);
+			float north = smoothstep(1.05, 0.25, abs(az));
+			float el = asin(clamp(d.y, -1.0, 1.0));
+			vec3 veil = vec3(0.0);
+
+			for (int k = 0; k < 2; k++) {
+				float fk = float(k);
+				float hem = 0.15 + 0.07 * fk + 0.045 * sin(az * 3.1 + clock * 0.04 + fk * 2.0) + 0.025 * sin(az * 7.3 - clock * 0.07 + fk)
+					+ 0.012 * sin(az * 17.0 + clock * 0.11);
+				float above = el - hem;
+				float curtain = smoothstep(-0.008, 0.012, above) * exp(-max(above, 0.0) / (0.1 + 0.05 * fk));
+				float rays = 0.5 + 0.5 * sin(az * (80.0 + 30.0 * fk) + sin(az * 9.0 + clock * 0.09 + fk) * 3.0);
+				vec3 hue = mix(vec3(0.05, 0.40, 0.42), vec3(0.30, 0.10, 0.44), smoothstep(0.0, 0.16, above));
+				veil += hue * curtain * (0.35 + 0.65 * rays) * (1.0 - 0.45 * fk);
+			}
+
+			behind += veil * north * aurora * 0.06 * (1.0 - fog) * smoothstep(-0.02, 0.06, d.y);
+		}
+
 		// Stars: fine ones in a few hundred cells (more in the band), twinkling a
 		// little; a few bright ones, blue-white, gold or red; none near the moon,
 		// in the haze or in fog.
@@ -169,6 +220,30 @@ void sky() {
 		float kind = hash(big + 9.0);
 		vec3 hue = kind < 0.6 ? vec3(0.8, 0.88, 1.0) : (kind < 0.85 ? vec3(1.0, 0.9, 0.68) : vec3(1.0, 0.7, 0.55));
 		behind += hue * bright * spot * (0.7 + 0.3 * sin(clock * 1.7 + kind * 40.0)) * 0.9 * seen;
+
+		// The comet: its head a hard point in a small coma, its tail streaming
+		// away across the stars, curving a little, widening and fading, faint
+		// streaks along it; behind the clouds, gone in fog.
+		if (comet > 0.0) {
+			vec3 h = normalize(comet_head);
+			vec3 away = normalize(comet_tail - h * dot(comet_tail, h));
+			vec3 aside = cross(h, away);
+			float along = atan(dot(d, away), dot(d, h));
+			float t = along / comet_length;
+			float off = asin(clamp(dot(d, aside), -1.0, 1.0)) - along * along * 0.35;
+			float wide = 0.004 + 0.075 * clamp(t, 0.0, 1.0);
+			float inside = t > 0.0 && t < 1.0 && dot(d, h) > 0.0 ? 1.0 : 0.0;
+			// (Past its end 1 - t is below 0: pow of it is NaN, and a NaN times
+			// nothing still blacks out the sky.)
+			float left = clamp(1.0 - t, 0.0, 1.0);
+			float tail = exp(-pow(off / wide, 2.0)) * pow(left, 1.5) * (0.85 + 0.15 * sin(off / wide * 5.0 + t * 12.0));
+			// (Its dust fanned faintly round it.)
+			float fan = exp(-pow(off / (wide * 2.6), 2.0)) * pow(left, 2.2) * 0.3;
+			float from_head = acos(clamp(dot(d, h), -1.0, 1.0));
+			float head = exp(-from_head / 0.0014) + exp(-from_head / 0.009) * 0.22;
+			float shows = comet * (1.0 - fog) * smoothstep(0.0, 0.12, d.y);
+			behind += (comet_color * (tail + fan) * inside * 0.11 + mix(comet_color, vec3(1.0), 0.65) * head * 0.7) * shows;
+		}
 
 		// The moon: its painted face 2.8 degrees across, a glow round it.
 		vec3 t1 = normalize(cross(m, vec3(0.0, 1.0, 0.0)));

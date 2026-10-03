@@ -349,6 +349,64 @@ def names():
     return sorted(PIECES)
 
 
+def roofed(pieces, markers=()):
+    """The placed pieces (a level's, by name) that stand under a roof: a
+    recipe made only for under one ("roofed": a room's furniture, the
+    naves' vaults), or dressing inside a "roofed" box marker (what is stored
+    in a hall). The city's moon casts no shadow from them (Layers.ROOFED):
+    its shadow pass is spared what it could never reach."""
+    boxes = []
+
+    for m in markers:
+        if m["ucd"] == "roofed":
+            boxes.append((m["position"], m["basis"], [s / 2.0 for s in m["size"]]))
+
+    def inside(at):
+        for centre, basis, half in boxes:
+            d = [at[i] - centre[i] for i in range(3)]
+            # (Into the box's frame: its basis's columns are its axes.)
+            if all(abs(sum(basis[r][c] * d[r] for r in range(3))) <= half[c] for c in range(3)):
+                return True
+
+        return False
+
+    out = []
+
+    for p in pieces:
+        recipe = PIECES.get(p["piece"], {})
+
+        if recipe.get("roofed") or (recipe.get("family") == "dressing" and boxes and inside(p["position"])):
+            out.append(p["name"])
+
+    return out
+
+
+# Merged pieces are joined a MERGE_CELL m square at a time (culling still
+# finds each cell).
+MERGE_CELL = 34.0
+
+
+def merge_groups(pieces, roofed=()):
+    """The placed pieces (a level's) joined into one mesh at export: those of a
+    recipe flagged "merge" (dense structure found by no one by name: the
+    naves' piers, arches and vaults), by sector, by MERGE_CELL m cell, those
+    under a roof (`roofed`, names) apart from those in the open:
+    [{"name", "sector", "roofed", "members": [names]}]. A cell's pieces are
+    then a draw a material, not a draw a piece."""
+    under = set(roofed)
+    groups = {}
+
+    for p in pieces:
+        if not PIECES.get(p["piece"], {}).get("merge"):
+            continue
+
+        cell = (int(math.floor(p["position"][0] / MERGE_CELL)), int(math.floor(p["position"][2] / MERGE_CELL)))
+        groups.setdefault((p["sector"], p["name"] in under, cell), []).append(p["name"])
+
+    return [{"name": "merged_%s_%s_%d_%d" % (sector, "roofed" if is_roofed else "open", cx, cz), "sector": sector, "roofed": is_roofed,
+             "members": sorted(members)} for (sector, is_roofed, (cx, cz)), members in sorted(groups.items())]
+
+
 def shadowless(pieces):
     """The placed pieces (a level's, by name) drawn without a shadow: the
     city's far massing (the moon's shadow pass need not draw a district
@@ -552,6 +610,13 @@ import kit_iberian  # noqa: E402,F401
 # the galley on the stocks, a crane, the quays' dressing).
 import kit_harbour  # noqa: E402,F401
 
+# The customs house (kit_customs: Manueline, after Lisbon's Casa dos Bicos).
+import kit_customs  # noqa: E402,F401
+
+# Rooms lived in: the harbourmaster's office, the customs hall, the great
+# cabin (kit_interiors).
+import kit_interiors  # noqa: E402,F401
+
 # The harbour's ships (kit_ships: the carrack, a caravel, boats).
 import kit_ships  # noqa: E402,F401
 
@@ -563,3 +628,11 @@ import kit_massing  # noqa: E402,F401
 # The coast's rock, plants and life (kit_coast: tors, ledges, boulders;
 # gorse, fennel, pines, a fig; gulls, nets, washing, a tavern's bush).
 import kit_coast  # noqa: E402,F401
+
+# Dense structure found by no one by name, joined at export (merge_groups) in
+# the levels that ask for it (export.MERGE_LEVELS): floors, the city's
+# walls, quays, the Terreiro's arcade bays (the naves' are flagged in
+# kit_harbour).
+for _name in PIECES:
+    if _name.startswith(("floor_", "city_wall_", "quay_", "terreiro_bay", "terreiro_corner")):
+        PIECES[_name]["merge"] = True

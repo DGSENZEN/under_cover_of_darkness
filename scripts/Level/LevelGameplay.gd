@@ -160,6 +160,14 @@ static func water(parent: Node3D, level) -> Array:
 		var body: Area3D = WaterScript.build(parent, (m["transform"] as Transform3D).origin, m["size"])
 		body.name = m["name"]
 		body.set("clarity", 1.0 - float(m["props"].get("murk", 0.6)))
+
+		# (An open sea: its shore surveyed and its guards' swim baked only over
+		# the harbour, [x0, z0, x1, z1].)
+		for area in ["shore_area", "swim_area"]:
+			var r: Array = m["props"].get(area, [])
+
+			if r.size() == 4:
+				body.set(area, Rect2(float(r[0]), float(r[1]), float(r[2]) - float(r[0]), float(r[3]) - float(r[1])))
 		body.call_deferred(&"ripple")
 		out.append(body)
 

@@ -22,6 +22,13 @@ const WATER_DRAG := 2.5
 ## How much of what is under the surface can be seen (0 none, 1 clear).
 @export_range(0.0, 1.0, 0.05) var clarity := 0.25
 @export var tint := Color(0.1, 0.2, 0.22, 0.72)
+## The part of it near anything, seen from above (world x, z): its shoreline
+## surveyed only there, the rest deep (an open sea round a harbour). Empty:
+## the whole box.
+@export var shore_area := Rect2()
+## The part of it the guards swim (world x, z): their swim region baked only
+## there (NavBaker). Empty: the whole box.
+@export var swim_area := Rect2()
 
 var _floating: Array[RigidBody3D] = []
 var _surface_mesh: MeshInstance3D
@@ -40,6 +47,12 @@ const SHORE_SHADER := preload("res://scripts/Visual/water_shore.gdshader")
 const SHORE_CELL := 0.4
 const SHORE_TEXELS := 768
 const SHORE_RAYS_PER_TICK := 4096
+## Where the moon can be seen from the water (its glade glints only there:
+## not under a vault, an arch, a hull): a ray toward it every MOON_CELL m of
+## the survey, MOON_REACH m long, MOON_RAYS_PER_TICK a physics tick.
+const MOON_CELL := 1.6
+const MOON_REACH := 400.0
+const MOON_RAYS_PER_TICK := 2048
 ## The night sky seen in it at a glancing look: overhead, and low.
 const SKY_ZENITH := Color(0.03, 0.04, 0.075)
 const SKY_HORIZON := Color(0.09, 0.1, 0.13)
@@ -55,6 +68,11 @@ var _columns: Array[Light3D] = []
 var _paint: ShaderMaterial
 var _shore_paint: ShaderMaterial
 var _night: Node = null
+## The shoreline surveyed; the moon's direction its mask was cast toward (ZERO:
+## none yet); a cast under way.
+var _shore_done := false
+var _moon_surveyed := Vector3.ZERO
+var _moon_surveying := false
 var render_clock := 0.0
 var _moon: DirectionalLight3D
 
@@ -119,6 +137,14 @@ func footprint() -> PackedVector3Array:
 	var half := Vector3(size.x * 0.5, 0.0, size.z * 0.5)
 	var c := Vector3(global_position.x, surface_y(), global_position.z)
 	return PackedVector3Array([c + Vector3(-half.x, 0, -half.z), c + Vector3(half.x, 0, -half.z), c + Vector3(half.x, 0, half.z), c + Vector3(-half.x, 0, half.z)])
+
+
+## Its swim_area seen from above: its corners, in the world, at the surface
+## (as footprint()).
+func swim_footprint() -> PackedVector3Array:
+	var a := swum_area()
+	var y := surface_y()
+	return PackedVector3Array([Vector3(a.position.x, y, a.position.y), Vector3(a.end.x, y, a.position.y), Vector3(a.end.x, y, a.end.y), Vector3(a.position.x, y, a.end.y)])
 
 
 ## `point` is over the box (seen from above), `margin` in from its sides.
@@ -230,9 +256,14 @@ func _process(delta: float) -> void:
 
 	_show_columns()
 	_surface_parameter("water_clock", render_clock)
-	_surface_parameter("moon_direction", moon_direction())
+	var toward_moon := moon_direction()
+	_surface_parameter("moon_direction", toward_moon)
 	_surface_parameter("moon_visibility", moon_visibility())
 	_surface_parameter("moon_colour", moon_colour())
+
+	# (Once the shore is known and the moon is up: where it can be seen.)
+	if _shore_done and not _moon_surveying and toward_moon.y > 0.02 and toward_moon.dot(_moon_surveyed) < 0.9999:
+		survey_moon(toward_moon)
 
 	if _night == null or not is_instance_valid(_night):
 		_night = null
@@ -283,6 +314,7 @@ func moon_colour() -> Color:
 func gather_lights() -> void:
 	_columns.clear()
 	var found := []
+	var area := surveyed_area()
 
 	for node in get_tree().root.find_children("*", "Light3D", true, false):
 		var light := node as Light3D
@@ -291,7 +323,7 @@ func gather_lights() -> void:
 			continue
 
 		var at := light.global_position
-		var outside := Vector2(maxf(absf(at.x - global_position.x) - size.x * 0.5, 0.0), maxf(absf(at.z - global_position.z) - size.z * 0.5, 0.0)).length()
+		var outside := Vector2(maxf(maxf(area.position.x - at.x, at.x - area.end.x), 0.0), maxf(maxf(area.position.y - at.z, at.z - area.end.y), 0.0)).length()
 		var over := at.y - surface_y()
 
 		if outside <= COLUMN_REACH and over > 0.0 and over <= COLUMN_HIGH:
@@ -421,8 +453,9 @@ func _surface_parameter(parameter: StringName, value: Variant) -> void:
 func refresh_shoreline() -> void:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
-	var width := clampi(int(ceil(size.x / SHORE_CELL)), 8, SHORE_TEXELS)
-	var height := clampi(int(ceil(size.z / SHORE_CELL)), 8, SHORE_TEXELS)
+	var area := surveyed_area()
+	var width := clampi(int(ceil(area.size.x / SHORE_CELL)), 8, SHORE_TEXELS)
+	var height := clampi(int(ceil(area.size.y / SHORE_CELL)), 8, SHORE_TEXELS)
 	var image := Image.create(width, height, false, Image.FORMAT_RF)
 	var land: PackedByteArray = await _concave_land(width, height)
 	var space := get_world_3d().direct_space_state
@@ -433,9 +466,8 @@ func refresh_shoreline() -> void:
 	var rays := 0
 	for z in height:
 		for x in width:
-			var at := global_position + Vector3(
-				((float(x) + 0.5) / width - 0.5) * size.x, 0.0,
-				((float(z) + 0.5) / height - 0.5) * size.z)
+			var at := Vector3(area.position.x + (float(x) + 0.5) / width * area.size.x, 0.0,
+				area.position.y + (float(z) + 0.5) / height * area.size.y)
 			query.from = Vector3(at.x, surface_y() + 0.03, at.z)
 			query.to = Vector3(at.x, bottom_y() - 0.5, at.z)
 			var hit := space.intersect_ray(query)
@@ -449,8 +481,73 @@ func refresh_shoreline() -> void:
 			if rays % SHORE_RAYS_PER_TICK == 0:
 				await get_tree().physics_frame
 	_surface_parameter("shore_depth", ImageTexture.create_from_image(image))
+	_surface_parameter("shore_low", area.position)
+	_surface_parameter("shore_span", area.size)
 	_surface_parameter("shore_texel", Vector2(1.0 / width, 1.0 / height))
 	_surface_parameter("shore_ready", true)
+	_shore_done = true
+
+
+## Casts the moon's mask over the survey: from just over the water toward the
+## moon (`toward`), whether anything stands in the way (1 open, 0 shaded),
+## spread over physics ticks; the surface's moon_mask once done.
+func survey_moon(toward: Vector3) -> void:
+	_moon_surveying = true
+	var area := surveyed_area()
+	var width := clampi(int(ceil(area.size.x / MOON_CELL)), 4, SHORE_TEXELS / 2)
+	var height := clampi(int(ceil(area.size.y / MOON_CELL)), 4, SHORE_TEXELS / 2)
+	var mask := Image.create(width, height, false, Image.FORMAT_L8)
+	var space := get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.new()
+	query.collision_mask = 1
+	query.collide_with_areas = false
+	var rays := 0
+
+	for z in height:
+		for x in width:
+			var from := Vector3(area.position.x + (float(x) + 0.5) / width * area.size.x, surface_y() + 0.05,
+				area.position.y + (float(z) + 0.5) / height * area.size.y)
+			query.from = from
+			query.to = from + toward * MOON_REACH
+			mask.set_pixel(x, z, Color.WHITE if space.intersect_ray(query).is_empty() else Color.BLACK)
+			rays += 1
+
+			if rays % MOON_RAYS_PER_TICK == 0:
+				await get_tree().physics_frame
+
+				if not is_inside_tree():
+					return
+
+	_surface_parameter("moon_mask", ImageTexture.create_from_image(mask))
+	_moon_surveyed = toward
+	_moon_surveying = false
+
+
+## How much of the moon the water at `point` sees (the mask; 1 before it is
+## cast or outside the survey).
+func moon_seen_at(point: Vector3) -> float:
+	var mask: Texture2D = _paint.get_shader_parameter("moon_mask") if _paint != null else null
+	var area := surveyed_area()
+
+	if mask == null or not area.has_point(Vector2(point.x, point.z)):
+		return 1.0
+
+	var image := mask.get_image()
+	var u := (point.x - area.position.x) / area.size.x
+	var v := (point.z - area.position.y) / area.size.y
+	return image.get_pixel(clampi(int(u * image.get_width()), 0, image.get_width() - 1), clampi(int(v * image.get_height()), 0, image.get_height() - 1)).r
+
+
+## The box seen from above (world x, z), or its shore_area within it.
+func surveyed_area() -> Rect2:
+	var whole := Rect2(global_position.x - size.x * 0.5, global_position.z - size.z * 0.5, size.x, size.z)
+	return whole if shore_area.has_area() == false else whole.intersection(shore_area)
+
+
+## Its swim_area within it, or the whole box (world x, z).
+func swum_area() -> Rect2:
+	var whole := Rect2(global_position.x - size.x * 0.5, global_position.z - size.z * 0.5, size.x, size.z)
+	return whole if swim_area.has_area() == false else whole.intersection(swim_area)
 
 
 ## Rays starting inside a concave mesh cannot detect its interior. Recover
@@ -465,8 +562,9 @@ func _concave_land(width: int, height: int) -> PackedByteArray:
 	closest.fill(INF)
 	var contained := PackedByteArray()
 	contained.resize(width * height)
-	var low := Vector2(global_position.x - size.x * 0.5, global_position.z - size.z * 0.5)
-	var cell := Vector2(size.x / width, size.z / height)
+	var area := surveyed_area()
+	var low := area.position
+	var cell := Vector2(area.size.x / width, area.size.y / height)
 	var surface := surface_y() + 0.03
 	var work := 0
 	for node in get_tree().root.find_children("*", "CollisionShape3D", true, false):
@@ -482,7 +580,7 @@ func _concave_land(width: int, height: int) -> PackedByteArray:
 			bounds = bounds.expand(point)
 		var transform := shape.global_transform
 		bounds = transform * bounds
-		if bounds.position.y > surface or bounds.end.y < surface or bounds.end.x < low.x or bounds.position.x > low.x + size.x or bounds.end.z < low.y or bounds.position.z > low.y + size.z:
+		if bounds.position.y > surface or bounds.end.y < surface or bounds.end.x < low.x or bounds.position.x > low.x + area.size.x or bounds.end.z < low.y or bounds.position.z > low.y + area.size.y:
 			continue
 		# Classify each solid independently. A nearer underside belonging to
 		# another bridge must not clear land inside an overlapping pier.

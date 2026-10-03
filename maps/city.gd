@@ -5,11 +5,13 @@ extends Node3D
 
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 const LevelGameplay := preload("res://scripts/Level/LevelGameplay.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const NightScript := preload("res://scripts/Night/Night.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const WindScript := preload("res://scripts/Visual/Wind.gd")
 const WildlifeScript := preload("res://scripts/Visual/Wildlife.gd")
+const DistanceScript := preload("res://scripts/Visual/Distance.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GuardScript := preload("res://scripts/AISystem/Guard.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
@@ -38,6 +40,22 @@ const MOON_TOWARD := Vector3(0.3, -0.57, -0.77)
 const MOON_ENERGY := 0.36
 const SHADOW_DISTANCE := 120.0
 const AMBIENT := 0.40
+## The haze over the distance (none before HAZE_FROM m, all of HAZE at
+## HAZE_TO; HAZE_CURVE eases it in): the far tiers of the rock paler than the
+## near, the hills beyond paler still. Its colour the night's at the
+## horizon, the sky's own taken through it (HAZE_SKY); thicker low (the
+## mist over the water and in the gorge: HAZE_LOW per m under HAZE_LINE).
+const HAZE_FROM := 90.0
+const HAZE_TO := 1600.0
+const HAZE_CURVE := 1.6
+const HAZE := 0.8
+const HAZE_COLOR := Color(0.17, 0.2, 0.28)
+const HAZE_SKY := 0.5
+const HAZE_LINE := 18.0
+const HAZE_LOW := 0.02
+## Where low mist lies over the harbour's water between the quays and the
+## mole (world x, z; Distance.gd).
+const SEA_MIST := Rect2(-170.0, 30.0, 330.0, 230.0)
 ## The navmesh over the land and 25 m of water round it (the guards'), its
 ## agent the garrison's.
 const BAKE_BOUNDS := AABB(Vector3(-240.0, -12.0, -130.0), Vector3(520.0, 60.0, 360.0))
@@ -57,6 +75,12 @@ const SEED := 1947
 const PUDDLES := [Vector3(-70, 2.52, -30), Vector3(-40, 2.52, -50), Vector3(-55, 2.52, -14), Vector3(-82, 2.52, -8), Vector3(-130, 2.52, -3),
 	Vector3(-95, 2.52, -3), Vector3(8, 2.52, -3), Vector3(128, 2.52, -24)]
 const MIST := [AABB(Vector3(-190.0, -0.5, 0.0), Vector3(355.0, 3.0, 200.0))]
+## The world's edge (x, z): a wall round it no one sees, from under the sea
+## to over the castle (the land and the sea go on past it, out of reach).
+const WORLD := Rect2(-590.0, -700.0, 1180.0, 1560.0)
+const WORLD_WALL := Vector2(-60.0, 320.0)
+## The ground out past it (tools/level/layouts/harbour/ground.py): no guard's.
+const FAR_GROUND := ["far_sea_bed", "west_land", "far_headland"]
 ## Bats round the golden tower's lantern.
 const TOWER_BATS := Vector3(92.0, 37.0, 203.0)
 const SKYLINE := "res://assets/sky/skyline_city.png"
@@ -65,6 +89,9 @@ signal ready_to_play
 
 ## Each district's Level (LevelLoader) by its folder's name.
 var levels := {}
+## The distance's effects (scripts/Visual/Distance.gd): far torches, the
+## balefire, mist, corpse-lights, chimney smoke.
+var distance: Node3D
 var made := {}
 var guards := {}
 var player: CharacterBody3D = null
@@ -102,7 +129,12 @@ func _ready() -> void:
 	var life := WildlifeScript.new()
 	add_child(life)
 	life.bats(TOWER_BATS, 5, 6.0)
+	distance = DistanceScript.new()
+	distance.name = "Distance"
+	add_child(distance)
+	distance.build(levels["city_massing"], SEA_MIST, 0.0)
 	_exits()
+	_bounds()
 	set_meta(&"acoustics", "stone")
 	set_meta(&"cold", true)
 	Sfx.warm(self)
@@ -117,9 +149,14 @@ func _ready() -> void:
 	baker.home = HOME
 	baker.bake_bounds = BAKE_BOUNDS
 
-	# (The massing is no guard's: left out of the bake, still solid.)
+	# (The massing is no guard's: left out of the bake, still solid; nor is
+	# the far ground round the harbour, out past the world's wall.)
 	for body in (levels["city_massing"] as LevelLoader.Level).root.find_children("*", "CollisionObject3D", true, false):
 		body.add_to_group(&"nav_ignore")
+
+	for ground in FAR_GROUND:
+		for body in (levels["city_harbour"] as LevelLoader.Level).root.find_children("terrain_" + ground, "CollisionObject3D", true, false):
+			body.add_to_group(&"nav_ignore")
 
 	await screen.step(String(LOADING["navmesh"]), 0.45)
 	screen.creep_to(0.9)
@@ -182,6 +219,17 @@ func _environment() -> DirectionalLight3D:
 	environment.tonemap_exposure = 1.25
 	environment.volumetric_fog_density = 0.006
 	environment.ssr_enabled = true
+	environment.fog_enabled = true
+	environment.fog_mode = Environment.FOG_MODE_DEPTH
+	environment.fog_depth_begin = HAZE_FROM
+	environment.fog_depth_end = HAZE_TO
+	environment.fog_depth_curve = HAZE_CURVE
+	environment.fog_density = HAZE
+	environment.fog_light_color = HAZE_COLOR
+	environment.fog_aerial_perspective = HAZE_SKY
+	environment.fog_sky_affect = 0.0
+	environment.fog_height = HAZE_LINE
+	environment.fog_height_density = HAZE_LOW
 	var world := WorldEnvironment.new()
 	world.environment = environment
 	add_child(world)
@@ -190,6 +238,8 @@ func _environment() -> DirectionalLight3D:
 	moon.light_color = Color(0.55, 0.65, 0.95)
 	moon.light_energy = MOON_ENERGY
 	moon.shadow_enabled = true
+	# (Not from what stands under a roof: it could never cast in moonlight.)
+	moon.shadow_caster_mask = 0xFFFFFFFF & ~Layers.ROOFED
 	moon.light_volumetric_fog_energy = 4.0
 	moon.directional_shadow_max_distance = SHADOW_DISTANCE
 	add_child(moon)
@@ -207,6 +257,10 @@ func _night(moon: DirectionalLight3D) -> void:
 	night.seed = SEED
 	night.start = &"clear"
 	night.skyline = SKYLINE
+	# (An omen over the city: the red comet.)
+	night.comet = 1.0
+	# (And the aurora low over the castle, in the north.)
+	night.aurora = 1.0
 	var puddles: Array[Vector3] = []
 
 	for at in PUDDLES:
@@ -244,6 +298,30 @@ func _exits() -> void:
 
 				if player.get("hud") != null:
 					player.hud.show_caption("On to %s" % label, 4.0))
+
+
+## The world's wall: four boxes no one sees round WORLD, solid, left out of
+## the navmesh.
+func _bounds() -> void:
+	var body := StaticBody3D.new()
+	body.name = "WorldWall"
+	body.collision_layer = 1
+	body.set_meta(&"surface", "stone")
+	body.add_to_group(&"nav_ignore")
+	add_child(body)
+	var height := WORLD_WALL.y - WORLD_WALL.x
+	var thick := 4.0
+
+	for side in [[WORLD.get_center().x, WORLD.position.y - thick * 0.5, WORLD.size.x + thick * 2.0, thick],
+			[WORLD.get_center().x, WORLD.end.y + thick * 0.5, WORLD.size.x + thick * 2.0, thick],
+			[WORLD.position.x - thick * 0.5, WORLD.get_center().y, thick, WORLD.size.y],
+			[WORLD.end.x + thick * 0.5, WORLD.get_center().y, thick, WORLD.size.y]]:
+		var shape := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(side[2], height, side[3])
+		shape.shape = box
+		shape.position = Vector3(side[0], (WORLD_WALL.x + WORLD_WALL.y) * 0.5, side[1])
+		body.add_child(shape)
 
 
 ## The thief: in his rowboat (or at a vantage: --vantage=<name>), his

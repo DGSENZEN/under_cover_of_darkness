@@ -107,6 +107,13 @@ const SLOTS := {
 	&"render_salmon": {"photo": "render_salmon", "colour": Color("A8654A"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
 	&"render_blue": {"photo": "render_blue", "colour": Color("8C9EA8"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
 	&"render_straw": {"photo": "render_straw", "colour": Color("C2AC7C"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	# The massing's house fronts (our paintings: windows, shutters, a
+	# balcony): laid by the kit's own coordinates (metres along and up each
+	# wall, "uv_tile" m a painting), so its lit windows sit in their openings.
+	&"facade_white": {"photo": "facade_white", "painted": true, "colour": Color("B8B2A6"), "metallic": 0.0, "roughness": 0.9, "uv_tile": [12.0, 7.0]},
+	&"facade_ochre": {"photo": "facade_ochre", "painted": true, "colour": Color("B28440"), "metallic": 0.0, "roughness": 0.9, "uv_tile": [12.0, 7.0]},
+	&"facade_salmon": {"photo": "facade_salmon", "painted": true, "colour": Color("AA664C"), "metallic": 0.0, "roughness": 0.9, "uv_tile": [12.0, 7.0]},
+	&"facade_blue": {"photo": "facade_blue", "painted": true, "colour": Color("8EA0AA"), "metallic": 0.0, "roughness": 0.9, "uv_tile": [12.0, 7.0]},
 	&"whitewash": {"photo": "whitewash", "colour": Color("B4AEA2"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0},
 	&"azulejo_green": {"photo": "azulejo_green", "colour": Color("2E6A3A"), "metallic": 0.0, "roughness": 0.45, "tile": 0.6},
 	&"azulejo_cube": {"photo": "azulejo_cube", "colour": Color("7E8870"), "metallic": 0.0, "roughness": 0.45, "tile": 0.6},
@@ -119,6 +126,19 @@ const SLOTS := {
 	&"terracotta": {"photo": "terracotta", "colour": Color("8E4A30"), "metallic": 0.0, "roughness": 0.8, "tile": 1.2},
 	&"terracotta_hex": {"photo": "terracotta_hex", "colour": Color("6E3828"), "metallic": 0.0, "roughness": 0.8, "tile": 1.2},
 	&"brick": {"photo": "brick", "colour": Color("7A4A38"), "metallic": 0.0, "roughness": 0.9, "tile": [1.5, 0.75]},
+	# Brick laid by the piece's own UVs (kit_harbour: a photo every 1.5 x
+	# 0.75 m): a vault's courses along its barrels, an arch's soffit round
+	# its curve, its voussoirs out from it.
+	&"brick_coursed": {"photo": "brick", "colour": Color("7A4A38"), "metallic": 0.0, "roughness": 0.9},
+	# The customs house's own paintings (tools/textures/paint.py): its
+	# azulejo panel of a caravel, the king's arms over its door.
+	&"azulejo_ship": {"photo": "azulejo_ship", "painted": true, "colour": Color("8C9AB8"), "metallic": 0.0, "roughness": 0.35},
+	&"arms_royal": {"photo": "arms_royal", "painted": true, "colour": Color("A08A70"), "metallic": 0.0, "roughness": 0.8, "cut": true},
+	# Rooms lived in (tools/level/kit_interiors.py): a portolan chart, a
+	# written page, a shelf of ledgers' spines (paint.py).
+	&"sea_chart": {"photo": "sea_chart", "painted": true, "colour": Color("C8B48C"), "metallic": 0.0, "roughness": 0.85},
+	&"parchment": {"photo": "parchment", "painted": true, "colour": Color("D2C29C"), "metallic": 0.0, "roughness": 0.85},
+	&"book_spines": {"photo": "book_spines", "painted": true, "colour": Color("5A3C24"), "metallic": 0.0, "roughness": 0.8},
 	# The shore's rock and cliffs, banded by height (shore.gdshader): wet under
 	# high water, black with lichen over it.
 	&"rock_shore": {"photo": "rock", "colour": Color("7C7A74"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0, "shore": true, "tint": 0.68},
@@ -162,6 +182,7 @@ const SLOTS := {
 }
 
 const GLOW := preload("res://scripts/Visual/Lights/glow.gdshader")
+const LIT_WINDOW := preload("res://scripts/Visual/lit_window.gdshader")
 const FOLIAGE := preload("res://scripts/Visual/foliage.gdshader")
 const SHORE := preload("res://scripts/Visual/shore.gdshader")
 ## How a glowing slot glows: [the flame's share of its colour, brightness,
@@ -236,6 +257,15 @@ static func level_surface(slot: StringName) -> Material:
 
 	var entry: Dictionary = SLOTS.get(slot, {})
 
+	# A window lit from within: each house's its own light (lit_window).
+	if slot == &"glass_lit":
+		var lit := ShaderMaterial.new()
+		lit.shader = LIT_WINDOW
+		lit.set_shader_parameter(&"colour", entry["colour"])
+		lit.set_shader_parameter(&"bright", float(entry["glow"]))
+		_level[slot] = lit
+		return lit
+
 	# Leaves, grass, reeds and ivy: our own paintings, stirred by the wind.
 	if entry.has("sway"):
 		_level[slot] = _foliage(slot, entry)
@@ -259,6 +289,10 @@ static func level_surface(slot: StringName) -> Material:
 		# "offset" m (the side projections read v = -(y * scale + offset)).
 		if entry.has("offset"):
 			material.uv1_offset = Vector3(0.0, -float(entry["offset"]) / tile.y, 0.0)
+
+	# A painting laid by the mesh's own metres (not the world's).
+	if entry.has("uv_tile"):
+		material.uv1_scale = Vector3(1.0 / float(entry["uv_tile"][0]), 1.0 / float(entry["uv_tile"][1]), 1.0)
 
 	# Glass the moon shines through: drawn unlit, as the PS2 drew it, in its
 	# own colours ("glow" as bright) whatever light falls on it.

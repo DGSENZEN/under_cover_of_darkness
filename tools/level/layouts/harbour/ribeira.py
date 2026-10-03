@@ -24,6 +24,9 @@ def lay(L):
     wall_run(L, (WALL_W, WALL_RIB - 1.2), (WALL_W, -120.0), "ribeira", outward=-1.0, ground=lambda x, z: stair_y(z) - 0.5)
     L.put("city_wall_12_corner", (WALL_C, QUAY, WALL_RIB), 0.0, "ribeira")
     wall_run(L, (WALL_C, WALL_RIB - 1.2), (WALL_C, WALL_D - 0.2), "ribeira")
+    # (The slot between the last house and the Terreiro's west arcade, up to
+    # the wall's corner.)
+    L.floor(rib_x(RIB_BAYS - 1) + 3.0, WALL_RIB, rib_x(RIB_BAYS - 1) + 5.0, ARCADE_FRONT, kind="granite", y=QUAY, sector="ribeira")
 
     # The Guindais stair: flights of ten risers, each on to a landing, up
     # beside the west wall; a parapet on its river side; walled across at its

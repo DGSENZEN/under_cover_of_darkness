@@ -3,11 +3,22 @@ extends Node3D
 ## a volume or scene cannot strand a tint on the next camera.
 const Water := preload("res://scripts/Interaction/WaterVolume.gd")
 const OPTICS := preload("res://scripts/Visual/underwater.gdshader")
+const Fx := preload("res://scripts/Visual/Fx.gd")
 var active_water: Area3D
 var ray_strength := 0.0
 var visible_effect := false
 var _quad: MeshInstance3D
 var _material: ShaderMaterial
+## What hangs in the water round the eye when under (specks drifting, faint,
+## fading a few metres off): MOTES of them in a cube MOTE_SPAN m a side that
+## wraps round the camera.
+const MOTES := 160
+const MOTE_SPAN := 10.0
+const MOTE_SIZE := 0.022
+var _motes: MultiMeshInstance3D
+var _mote_seeds: Array[Vector3] = []
+var _mote_drift: Array[Vector3] = []
+var _clock := 0.0
 
 ## Schedules one WaterView child for viewport, guarded by a pending metadata flag.
 ## The view survives level replacement and tracks the active camera/water; null viewport is not supported.
@@ -36,6 +47,56 @@ func _ready() -> void:
 	_quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_quad.visible = false
 	add_child(_quad)
+	_make_motes()
+
+
+func _make_motes() -> void:
+	var look := StandardMaterial3D.new()
+	look.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	look.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	look.billboard_keep_scale = true
+	look.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	look.albedo_color = Color(0.55, 0.62, 0.58, 0.32)
+	look.albedo_texture = Fx.texture(&"puff")
+	look.disable_fog = true
+	# (Fading out as they get further: min past max reverses the fade.)
+	look.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
+	look.distance_fade_min_distance = MOTE_SPAN * 0.5
+	look.distance_fade_max_distance = 0.6
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE * MOTE_SIZE
+	quad.material = look
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.mesh = quad
+	multi.instance_count = MOTES
+	_motes = MultiMeshInstance3D.new()
+	_motes.name = "Motes"
+	_motes.multimesh = multi
+	_motes.layers = 1 << 18
+	_motes.top_level = true
+	_motes.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_motes.extra_cull_margin = 16384.0
+	_motes.visible = false
+	add_child(_motes)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4711
+
+	for i in MOTES:
+		_mote_seeds.append(Vector3(rng.randf(), rng.randf(), rng.randf()) * MOTE_SPAN)
+		_mote_drift.append(Vector3(rng.randf_range(-0.06, 0.06), rng.randf_range(-0.02, 0.03), rng.randf_range(-0.06, 0.06)))
+
+
+## The specks round the eye (each wrapped into the cube about it), drifting;
+## none over the surface (`surface`).
+func _drift_motes(eye: Vector3, delta: float, surface: float) -> void:
+	_clock += delta
+
+	for i in MOTES:
+		var p := _mote_seeds[i] + _mote_drift[i] * _clock + Vector3(sin(_clock * 0.4 + i), 0.0, cos(_clock * 0.3 + i * 1.7)) * 0.05
+		var wrapped := Vector3(fposmod(p.x - eye.x, MOTE_SPAN), fposmod(p.y - eye.y, MOTE_SPAN), fposmod(p.z - eye.z, MOTE_SPAN)) - Vector3.ONE * MOTE_SPAN * 0.5
+		var at := eye + wrapped
+		_motes.multimesh.set_instance_transform(i, Transform3D(Basis.IDENTITY if at.y < surface - 0.05 else Basis.from_scale(Vector3.ZERO), at))
 
 func _process(_delta: float) -> void:
 	var camera := get_viewport().get_camera_3d()
@@ -47,11 +108,13 @@ func _process(_delta: float) -> void:
 				break
 	visible_effect = active_water != null
 	_quad.visible = visible_effect
+	_motes.visible = visible_effect
 	ray_strength = 0.0
 	if not visible_effect:
 		return
 	global_transform = camera.global_transform
 	var eye := camera.global_position
+	_drift_motes(eye, _delta, active_water.surface_y())
 	var direction: Vector3 = active_water.moon_direction()
 	var inside := -Vector3(-direction.x / 1.333, -sqrt(maxf(0.0, 1.0 - (direction.x * direction.x + direction.z * direction.z) / (1.333 * 1.333))), -direction.z / 1.333)
 	var surface: float = active_water.surface_y()

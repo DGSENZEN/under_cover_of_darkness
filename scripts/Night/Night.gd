@@ -59,6 +59,9 @@ const PUDDLE_FROM := 0.1
 const PUDDLE_SPLASH := 0.3
 const PUDDLE_SIZE := 2.4
 
+## How far a map's haze (its depth fog) still reaches in thick fog, as a
+## share of its clear night's.
+const HAZE_CLOSED := 0.3
 ## The mist banks' density in thick fog.
 const MIST := 0.2
 ## Thick fog greys the level's fog colour toward moonlit silver (this much
@@ -101,6 +104,10 @@ signal thundered(delay: float)
 ## The map's own skyline (tools/skyline: a picture round the horizon); ""
 ## the showcase's.
 @export var skyline := ""
+## The comet across this map's sky (night_sky.gdshader; 0 none): an omen.
+@export var comet := 0.0
+## The aurora low in this map's north (night_sky.gdshader; 0 none).
+@export var aurora := 0.0
 
 var state: StringName = &"clear"
 var wetness := 0.0
@@ -135,6 +142,7 @@ var _thunder_delay := 0.0
 var _moon_base := 1.0
 var _ambient_base := 1.0
 var _fog_base := 0.01
+var _haze_end_base := 0.0
 var _wet := {}
 var _wet_shown := -1.0
 var _registered_in := 0.0
@@ -166,8 +174,11 @@ func _ready() -> void:
 		_fog_base = environment.volumetric_fog_density
 		_fog_albedo_base = environment.volumetric_fog_albedo
 		_exposure_base = environment.tonemap_exposure
+		_haze_end_base = environment.fog_depth_end if environment.fog_enabled and environment.fog_mode == Environment.FOG_MODE_DEPTH else 0.0
 		_sky = NightSkyScript.new(environment, _field_texture, skyline)
 		_sky.material.set_shader_parameter("moon_radius", MOON_RADIUS)
+		_sky.material.set_shader_parameter("comet", comet)
+		_sky.material.set_shader_parameter("aurora", aurora)
 
 	_rain = RainScript.new()
 	_rain.name = "Rain"
@@ -512,6 +523,11 @@ func _apply(air: Vector3) -> void:
 		# Thick fog in moonlight is silver-grey, whatever the place's own.
 		var own := zone_fog_color if zone_fog_color.a > 0.0 else _fog_albedo_base
 		environment.volumetric_fog_albedo = own.lerp(FOG_SILVER, FOG_GREYED * thick)
+
+		# A map's haze over the distance (a depth fog) closes in as the fog
+		# thickens: in thick fog the far shore is gone.
+		if _haze_end_base > 0.0:
+			environment.fog_depth_end = _haze_end_base * lerpf(1.0, HAZE_CLOSED, thick)
 		environment.tonemap_exposure = _exposure_base * lerpf(1.0, WET_EYE, rain())
 
 	SoundBus.masking_db = masking_db()

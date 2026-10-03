@@ -5,6 +5,7 @@ extends RefCounted
 ## Manifest/marker schemas and failure behavior are documented in docs/systems/world.md.
 
 const Materials := preload("res://scripts/Visual/Materials.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 ## A collider's surface that marks a ceiling (never walked on).
 const CEILING := "ceiling"
 ## Small dressing fades out over this much past its range (m); a collider
@@ -27,6 +28,8 @@ class Level:
 	## Sockets on pieces: {piece, kind, sector, position}.
 	var sockets: Array = []
 	var zones: Node = null
+	## Its loose things: bodies picked up and thrown (each its piece's mesh).
+	var loose: Array = []
 
 	## Every marker of `ucd`.
 	func of(ucd: String) -> Array:
@@ -69,8 +72,10 @@ static func load_level(parent: Node3D, folder: String, root_name := "Level") -> 
 	_colliders(level, manifest.get("colliders", []))
 	_ranges(level, manifest.get("ranges", {}))
 	_shadowless(level, manifest.get("shadowless", []))
+	_roofed(level, manifest.get("roofed", []))
 	_occluders(level, manifest.get("colliders", []))
 	_terrain(level, manifest.get("terrain", []))
+	level.loose = _loose(level, manifest.get("loose", []))
 	level.sockets = manifest.get("sockets", [])
 
 	for raw in manifest.get("markers", []):
@@ -172,6 +177,22 @@ static func _shadowless(level: Level, names: Array) -> void:
 			(mesh as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
+## What stands under a roof (the manifest's "roofed") on its own layer: a
+## moon leaves it out of its shadow pass (Layers.ROOFED).
+static func _roofed(level: Level, names: Array) -> void:
+	if names.is_empty():
+		return
+
+	var wanted := {}
+
+	for name in names:
+		wanted[String(name).replace(".", "_")] = true
+
+	for mesh in level.root.find_children("*", "GeometryInstance3D", true, false):
+		if wanted.has(String((mesh as Node).name)) or wanted.has(String((mesh as Node).get_parent().name)):
+			(mesh as GeometryInstance3D).layers = Layers.ROOFED
+
+
 ## The big walls occlude what is behind them: a box occluder for every
 ## collider at least OCCLUDER_SIZE across and up (the kit's walls, the
 ## curtain), under one node.
@@ -243,6 +264,46 @@ static func _terrain(level: Level, ground: Array) -> void:
 			occluder.occluder = mesh
 			occluders.add_child(occluder)
 			occluder.global_transform = drawn.global_transform
+
+
+## Each loose piece (the manifest's "loose": its name, sector, mass, its
+## boxes in its own frame) made a body: its drawn node moved into it where it
+## stands, its colliders its own, asleep until touched.
+static func _loose(level: Level, entries: Array) -> Array:
+	var out := []
+
+	for e in entries:
+		var holder: Node3D = level.sectors.get(String(e["sector"]), level.root)
+		var drawn := holder.find_child(String(e["name"]).replace(".", "_"), true, false) as Node3D
+
+		if drawn == null:
+			push_error("LevelLoader: no mesh for the loose %s" % e["name"])
+			continue
+
+		var body := RigidBody3D.new()
+		body.name = "loose_" + String(e["name"]).replace(".", "_")
+		body.mass = float(e["mass"])
+		body.collision_layer = 1
+		body.collision_mask = 1
+		body.set_meta(&"surface", String(e.get("surface", "wood")))
+		body.add_to_group(&"loose")
+		holder.add_child(body)
+		body.global_transform = drawn.global_transform
+
+		for b in e["boxes"]:
+			var shape := CollisionShape3D.new()
+			var box := BoxShape3D.new()
+			box.size = _vector(b["size"])
+			shape.shape = box
+			shape.transform = Transform3D(_basis(b["basis"]), _vector(b["centre"]))
+			body.add_child(shape)
+
+		drawn.reparent(body, true)
+		body.sleeping = true
+		body.reset_physics_interpolation()
+		out.append(body)
+
+	return out
 
 
 static func _marker(raw: Dictionary) -> Dictionary:

@@ -124,14 +124,18 @@ def ring(cx, cy, cz, inner, outer, depth, start, end, segments, slot, yaw=0.0):
             "segments": int(segments), "slot": slot, "turn": [yaw, 0.0, 0.0]}
 
 
-def polygon(points, slot, uvs=None):
+def polygon(points, slot, uvs=None, normals=None):
     """One face through `points` (in the piece's frame), drawn from the side
     they wind counter-clockwise toward only: a vault's web, a hull's panel.
-    `uvs` one per point (metres on its own plane if not given)."""
+    `uvs` one per point (metres on its own plane if not given); `normals`
+    one per point (shaded round a curve: a vault's web) or its flat one."""
     shape = {"kind": "polygon", "points": [list(p) for p in points], "slot": slot}
 
     if uvs is not None:
         shape["uvs"] = [list(uv) for uv in uvs]
+
+    if normals is not None:
+        shape["normals"] = [list(n) for n in normals]
 
     return shape
 
@@ -153,6 +157,9 @@ def moved(shapes, yaw=0.0, offset=(0.0, 0.0, 0.0)):
             shape["up"] = geo.apply(turn, shape["up"])
         elif shape["kind"] == "polygon":
             shape["points"] = [geo.add(geo.apply(turn, p), offset) for p in shape["points"]]
+
+            if "normals" in shape:
+                shape["normals"] = [geo.apply(turn, n) for n in shape["normals"]]
         else:
             shape["centre"] = geo.add(geo.apply(turn, shape["centre"]), offset)
             shape["turn"] = [shape["turn"][0] + yaw, shape["turn"][1], shape["turn"][2]]
@@ -173,12 +180,19 @@ def build(shapes):
     their own (rounded cards), the rest flat}."""
     part = {"verts": [], "faces": [], "normals": {}}
     makers = {"box": _box, "prism": _prism, "arched": _arched, "gable": _gable, "card": _card, "lathe": _lathe, "disc": _disc,
-              "slab": _slab, "ring": _ring, "polygon": lambda part, shape: _add_face(part, shape["points"], shape["slot"], shape.get("uvs"))}
+              "slab": _slab, "ring": _ring, "polygon": _polygon}
 
     for shape in shapes:
         makers[shape["kind"]](part, shape)
 
     return part
+
+
+def _polygon(part, shape):
+    _add_face(part, shape["points"], shape["slot"], shape.get("uvs"))
+
+    if "normals" in shape:
+        part["normals"][len(part["faces"]) - 1] = [list(n) for n in shape["normals"]]
 
 
 def _add_face(part, points, slot, uvs=None):
