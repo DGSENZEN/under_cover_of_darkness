@@ -8,6 +8,7 @@ extends Node3D
 
 const JobBook := preload("res://scripts/Level/JobBook.gd")
 const JobState := preload("res://scripts/Level/JobState.gd")
+const LoadingScreen := preload("res://scripts/UI/LoadingScreen.gd")
 
 var results: Array[String] = []
 
@@ -15,6 +16,7 @@ var results: Array[String] = []
 func _ready() -> void:
 	_files()
 	_progress()
+	await _hold()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -191,6 +193,31 @@ func _progress() -> void:
 	var had: bool = not CityState.job.took.is_empty()
 	CityState.begin()
 	_check("J14 a new mission starts a new job", had and CityState.job.took.is_empty(), "had %s, after %s" % [had, CityState.job.took])
+
+
+# ---------------------------------------------------------------------------
+# J16: the tally's hold keeps the world still, and lets it go if it is gone
+# ---------------------------------------------------------------------------
+
+func _hold() -> void:
+	LoadingScreen.holds = true
+	var screen: CanvasLayer = LoadingScreen.open(self, "")
+	screen.hold()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var held: bool = get_tree().paused
+	# (The pause screen's resume, Esc, under the held screen.)
+	get_tree().paused = false
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var kept: bool = get_tree().paused
+	screen.queue_free()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var freed: bool = not get_tree().paused
+	get_tree().paused = false
+	_check("J16 the tally's hold keeps the world still (resumed under it, it stills it again) and lets it go when gone", held and kept and freed,
+		"held %s, kept %s, let go %s" % [held, kept, freed])
 
 
 func _check(test_name: String, ok: bool, detail: String) -> void:

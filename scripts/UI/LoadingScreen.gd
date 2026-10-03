@@ -129,6 +129,13 @@ func hold() -> void:
 	get_tree().paused = false
 
 
+## Gone while holding: the world let go, not left paused for good.
+func _exit_tree() -> void:
+	if _holding and is_inside_tree():
+		_holding = false
+		get_tree().paused = false
+
+
 func _build(title: String) -> void:
 	layer = 100
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -182,9 +189,15 @@ func _label(text: String, font: Font, size: int, colour: Color) -> Label:
 func _process(delta: float) -> void:
 	_clock += delta
 
-	if _holding and Input.is_action_just_pressed(&"frob"):
-		_holding = false
-		go_on.emit()
+	if _holding:
+		# (Still: nothing under the screen moves until the player goes on, not
+		# even resumed by the pause screen's Esc.)
+		if not get_tree().paused:
+			get_tree().paused = true
+
+		if Input.is_action_just_pressed(&"frob"):
+			_holding = false
+			go_on.emit()
 
 	if _creep_to > fraction:
 		fraction = minf(_creep_to, fraction + (_creep_to - fraction) * CREEP * delta * 10.0)
