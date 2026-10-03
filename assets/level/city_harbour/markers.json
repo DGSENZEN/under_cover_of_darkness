@@ -146,6 +146,11 @@
    "optional": {},
    "box": true
   },
+  "room": {
+   "required": [],
+   "optional": {},
+   "box": true
+  },
   "far_light": {
    "required": [
     "kind"

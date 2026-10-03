@@ -13,6 +13,15 @@ const Layers := preload("res://scripts/Visual/Layers.gd")
 const GodRaysScript := preload("res://scripts/Visual/GodRays.gd")
 const WindowsScript := preload("res://scripts/Visual/Windows.gd")
 const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
+const CITY := preload("res://maps/city.tscn")
+
+## The harbour's: its quay's top, the customs house's upper floor, the
+## carrack's place and her stern's and cabin bulkhead's x in her frame.
+const QUAY := 2.5
+const CUSTOMS_UPPER := QUAY + 4.0
+const CARRACK_X := 40.0
+const STERN := -15.2
+const CASTLE_FRONT := -6.0
 
 const FIXTURE := "user://glass_fixture"
 const IDENTITY := [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
@@ -29,7 +38,7 @@ func _ready() -> void:
 		if arg.begins_with("--only="):
 			only = arg.trim_prefix("--only=")
 
-	var steps := [["loader", _loader], ["sight", _sight], ["rays", _rays], ["moon", _moon_shafts], ["lamps", _lamps]]
+	var steps := [["loader", _loader], ["sight", _sight], ["rays", _rays], ["moon", _moon_shafts], ["lamps", _lamps], ["harbour", _harbour]]
 
 	for step in steps:
 		if only == "" or step[0] == only:
@@ -399,6 +408,198 @@ func _lamps() -> void:
 			lamp.queue_free()
 
 	await _frames(1)
+
+
+# ---------------------------------------------------------------------------
+# GW12-GW20: the harbour, as it is played
+# ---------------------------------------------------------------------------
+
+func _harbour() -> void:
+	var city: Node3D = CITY.instantiate()
+	add_child(city)
+
+	while not city.get("player"):
+		await get_tree().process_frame
+
+	if not city.get("load_seconds"):
+		await city.ready_to_play
+
+	await _seconds(1.0)
+
+	# The guards held still: the checks measure the place.
+	for g in city.guards.values():
+		(g as Node).set_physics_process(false)
+		(g as Node).set_process(false)
+
+	var windows: Node3D = city.get("windows")
+	var level: LevelLoader.Level = city.levels["city_harbour"]
+	var all: Array = windows.get("windows")
+	var glass := level.root.find_children("*", "StaticBody3D", true, false).filter(func(b): return (b as Node).is_in_group(&"glass"))
+	var occluding: Array[String] = []
+
+	for occluder in level.root.get_node("Occluders").get_children():
+		var box := (occluder as OccluderInstance3D).occluder as BoxOccluder3D
+
+		if box == null:
+			continue
+
+		for w in all:
+			var local: Vector3 = (occluder as Node3D).global_transform.affine_inverse() * (w["middle"] as Vector3)
+
+			if absf(local.x) < box.size.x / 2.0 and absf(local.y) < box.size.y / 2.0 and absf(local.z) < box.size.z / 2.0:
+				occluding.append(String(w["piece"]))
+
+	_check("GW12 the harbour's 21 windows are loaded; their glass is in 'glass'; no occluder stands in a window", level.windows.size() == 21
+		and all.size() == 21 and not glass.is_empty() and occluding.is_empty(), "records %d, windows %d, glass bodies %d, occluders in windows %s" % [
+			level.windows.size(), all.size(), glass.size(), occluding])
+
+	# The moon in.
+	var front := all.filter(func(w): return (w["normal"] as Vector3).z > 0.9 and (w["middle"] as Vector3).y > CUSTOMS_UPPER)
+	var back_lit := all.filter(func(w): return (w["normal"] as Vector3).z < -0.5 and w["shaft"] != null)
+	var odd := all.filter(func(w): return w["shaft"] != null and (float(w["facing"]) <= 0.1 or float(w["sky"]) < 5.0 / 9.0))
+	_check("GW13 the store front's three windows have moon shafts; no back window has one; every shaft's window faces the moon and sees it",
+		front.size() == 3 and front.all(func(w): return w["shaft"] != null) and back_lit.is_empty() and odd.is_empty(),
+		"front %d (with shafts %d), back with shafts %d, odd %d; shafts in all %d" % [front.size(), front.filter(func(w): return w["shaft"] != null).size(),
+			back_lit.size(), odd.size(), all.filter(func(w): return w["shaft"] != null).size()])
+
+	if front.size() == 3 and front.all(func(w): return w["shaft"] != null):
+		front.sort_custom(func(a, b): return (a["middle"] as Vector3).x < (b["middle"] as Vector3).x)
+		var middle_window: Dictionary = front[1]
+		var far: Array = _ends(middle_window["shaft"])[1]
+		var patch := Vector3.ZERO
+
+		for v in far:
+			patch += v / float(far.size())
+
+		patch += Vector3.UP * 0.05
+		var beside := patch - Vector3(1.2, 0.0, 0.0)
+		var lit := LightProbe.light_at(self, patch)
+		var dark := LightProbe.light_at(self, beside)
+		_check("GW14 the probe reads the store's moon patch lit, a step along the wall darker", lit >= dark + 0.15, "%.2f on the patch %s, %.2f beside" % [lit,
+			patch.snapped(Vector3.ONE * 0.01), dark])
+
+		# Sight through the glass, and not through the stone beside it.
+		var guard: Node3D = city.guards.values()[0]
+		var normal: Vector3 = middle_window["normal"]
+		var target: Vector3 = (middle_window["middle"] as Vector3) - normal * (float(middle_window["inside"]) + 1.5) + Vector3.UP * 0.5
+		var eye: Vector3 = (middle_window["middle"] as Vector3) + ((middle_window["middle"] as Vector3) - target).normalized() * 8.0
+		var along := Vector3(2.25, 0.0, 0.0)
+		var through: bool = guard.call("_line_of_sight", eye, target, null)
+		var stone: bool = guard.call("_line_of_sight", eye + along, target + along, null)
+		_check("GW15 a guard on the quay sees into the store through its glass, not through the stone beside it", through and not stone,
+			"through the glass %s, through the stone %s" % [through, stone])
+
+		# A thing thrown at the glass from inside stays in.
+		var body := RigidBody3D.new()
+		body.mass = 2.0
+		body.collision_layer = 1
+		body.collision_mask = 1
+		var shape := CollisionShape3D.new()
+		shape.shape = BoxShape3D.new()
+		(shape.shape as BoxShape3D).size = Vector3.ONE * 0.2
+		body.add_child(shape)
+		add_child(body)
+		body.global_position = (middle_window["middle"] as Vector3) - normal * (float(middle_window["inside"]) + 0.5)
+		body.linear_velocity = normal * 6.0
+		await _seconds(1.0)
+		var kept_in := (body.global_position - (middle_window["middle"] as Vector3)).dot(normal) < 0.0
+		body.queue_free()
+
+		# You, walking and jumping at a west window of the hall, stay in.
+		var player: CharacterBody3D = city.player
+		var west := all.filter(func(w): return (w["normal"] as Vector3).x < -0.9 and w["room"] == "room_customs_hall")
+		var stayed := false
+
+		if not west.is_empty():
+			var ww: Dictionary = west[0]
+			var n: Vector3 = ww["normal"]
+			var at: Vector3 = (ww["middle"] as Vector3) - n * 1.0
+			at.y = QUAY + 0.05
+			player.movement_state = player.MoveState.LOCOMOTION
+			player.current_move = null
+			player.velocity = Vector3.ZERO
+			player.global_position = at
+			player.rotation.y = atan2(-n.x, -n.z)
+			player.reset_physics_interpolation()
+			Input.action_press("move_forward")
+
+			for i in 120:
+				if i % 20 == 0:
+					Input.action_press("jump")
+				elif i % 20 == 5:
+					Input.action_release("jump")
+
+				await get_tree().physics_frame
+
+			Input.action_release("move_forward")
+			Input.action_release("jump")
+			stayed = (player.global_position - (ww["middle"] as Vector3)).dot(n) < 0.0
+
+		_check("GW16 a thing thrown at a window from inside stays in; so do you, walking and jumping at a hall window", kept_in and stayed,
+			"thrown thing in %s, you in %s (west windows %d)" % [kept_in, stayed, west.size()])
+
+	# The office's candle out through its window, doused and relit.
+	var made: Dictionary = city.made["city_harbour"]
+	var candle: Node3D = made["lights"].get("office_candle")
+	var office := all.filter(func(w): return w["room"] == "room_customs_office")
+	var spot_of := func(w: Dictionary) -> float: return (w["spot"] as SpotLight3D).light_energy if w["spot"] != null and is_instance_valid(w["spot"]) else 0.0
+	var outside := office.size() == 1 and office[0]["spot"] != null and (office[0]["spot"] as Node3D).global_position.z < -34.0
+	var notes := ["office windows %d, spot outside %s, shaft %s" % [office.size(), outside, office.size() == 1 and office[0]["lamp_shaft"] != null]]
+	var follows := false
+	var remembered := false
+
+	if candle != null and office.size() == 1:
+		await _until(func(): return spot_of.call(office[0]) > 0.05, 60)
+		var lit_first: bool = spot_of.call(office[0]) > 0.05
+		candle.call("put_out", &"douse")
+		await _until(func(): return spot_of.call(office[0]) < 0.01, 30)
+		var doused: bool = spot_of.call(office[0]) < 0.01
+		candle.call("relight")
+		await _until(func(): return spot_of.call(office[0]) > 0.05, 30)
+		var relit: bool = spot_of.call(office[0]) > 0.05
+		follows = lit_first and doused and relit
+		notes.append("lit %s, doused %s, relit %s" % [lit_first, doused, relit])
+
+		# As a district remembers it.
+		candle.call("load_state", {"lit": false})
+		await _until(func(): return spot_of.call(office[0]) < 0.01, 30)
+		var out_again: bool = spot_of.call(office[0]) < 0.01
+		candle.call("load_state", {"lit": true})
+		await _until(func(): return spot_of.call(office[0]) > 0.05, 30)
+		remembered = out_again and spot_of.call(office[0]) > 0.05
+
+	_check("GW17 the office's candle throws its window out onto the yard; doused, dark; relit, back", outside and follows and office[0]["lamp_shaft"] != null,
+		"; ".join(notes))
+	_check("GW20 a district's remembered candle (load_state) darkens and lights its window", remembered, "remembered %s" % remembered)
+
+	# The cabin's lamps astern and onto the waist.
+	var cabin := all.filter(func(w): return w["room"] == "room_carrack_cabin")
+	var astern := cabin.filter(func(w): return w["spot"] != null and (w["spot"] as Node3D).global_position.x < CARRACK_X + STERN)
+	var waist := cabin.filter(func(w): return w["spot"] != null and (w["spot"] as Node3D).global_position.x > CARRACK_X + CASTLE_FRONT)
+	_check("GW18 the cabin's lamps throw out through its four windows: two astern, two onto the waist", cabin.size() == 4 and astern.size() == 2
+		and waist.size() == 2, "cabin windows %d, astern %d, waist %d" % [cabin.size(), astern.size(), waist.size()])
+
+	# Under a roof, in a shaft: casting again.
+	var shafts: Array[AABB] = []
+
+	for w in all:
+		if w["shaft"] != null:
+			shafts.append((w["shaft"] as MeshInstance3D).global_transform * (w["shaft"] as MeshInstance3D).get_aabb())
+
+	var left_out := 0
+
+	for node in level.root.find_children("*", "GeometryInstance3D", true, false):
+		var mesh := node as GeometryInstance3D
+
+		if mesh.layers == Layers.ROOFED and shafts.any(func(b): return (b as AABB).intersects(mesh.global_transform * mesh.get_aabb())):
+			left_out += 1
+
+	var recast: Array = windows.get("recast")
+	var all_in := recast.all(func(m): return shafts.any(func(b): return (b as AABB).intersects((m as GeometryInstance3D).global_transform * (m as GeometryInstance3D).get_aabb())))
+	_check("GW19 nothing under a roof stands in a moon shaft without casting; what was made to cast stands in one", left_out == 0 and all_in,
+		"recast %d, left under the roof in a shaft %d" % [recast.size(), left_out])
+	city.queue_free()
+	await _frames(2)
 
 
 # ---------------------------------------------------------------------------

@@ -331,6 +331,24 @@ def _roofs(L):
            "shipyard", size=[nave_x(NAVES) - nave_x(0), height, nave_z(0) - nave_z(NAVE_BAYS)])
 
 
+def _rooms(L):
+    # Rooms (the real-windows spec, 4): a window's lamps are the lights in
+    # its room, and they throw out through its glass. The hall and the store
+    # are the roofed boxes; the office (upstairs, the north-east corner)
+    # inside the store's, from its walls; the carrack's cabin, its zone.
+    wall = kit_customs.WALL
+    x0, x1, z0, z1 = CUSTOMS[0] + wall, CUSTOMS[1] - wall, CUSTOMS[2] + wall, CUSTOMS[3] - wall
+    front = CUSTOMS_AT[1] + kit_customs.HALL_FRONT - wall
+    L.mark("room_customs_hall", "room", ((x0 + x1) / 2.0, QUAY + kit_customs.UP / 2.0, (z0 + front) / 2.0), 0.0, "shipyard",
+           size=[x1 - x0, kit_customs.UP, front - z0])
+    L.mark("room_customs_store", "room", ((x0 + x1) / 2.0, (CUSTOMS_UPPER + CUSTOMS_EAVES) / 2.0, (z0 + z1) / 2.0), 0.0, "shipyard",
+           size=[x1 - x0, CUSTOMS_EAVES - CUSTOMS_UPPER, z1 - z0])
+    ox, oz = CUSTOMS_AT[0] + kit_customs.OFFICE[0], CUSTOMS_AT[1] + kit_customs.OFFICE[1]
+    L.mark("room_customs_office", "room", ((ox + x1) / 2.0, (CUSTOMS_UPPER + CUSTOMS_EAVES) / 2.0, (z0 + oz) / 2.0), 0.0, "shipyard",
+           size=[x1 - ox, CUSTOMS_EAVES - CUSTOMS_UPPER, oz - z0])
+    L.mark("room_carrack_cabin", "room", (CARRACK_X - 10.5, 3.5, CARRACK_Z), 0.0, "ships", size=[9.0, 3.0, 7.6])
+
+
 def lay(L):
     _guards(L)
     _lights(L)
@@ -340,3 +358,4 @@ def lay(L):
     _ways_in(L)
     _probes(L)
     _roofs(L)
+    _rooms(L)
