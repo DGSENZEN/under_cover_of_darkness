@@ -176,6 +176,10 @@ const SLOTS := {
 	# The Ribeira's windows: pale-painted glazing (the glass behind shows
 	# through) and green lattice shutters (rotulas).
 	&"casement": {"photo": "casement", "painted": true, "colour": Color("D4CEBE"), "metallic": 0.0, "roughness": 0.7, "cut": true},
+	# A real window (kit_glazing): its glass, which the moon goes through
+	# (glazing.gdshader: its painting is how much grime hides), and its lead.
+	&"glazing": {"photo": "glazing", "painted": true, "colour": Color("8C9E8F"), "metallic": 0.0, "roughness": 0.08},
+	&"quarries": {"photo": "quarries", "painted": true, "colour": Color("2A2B2C"), "metallic": 0.3, "roughness": 0.6, "cut": true},
 	&"sash": {"photo": "sash", "painted": true, "colour": Color("D4CEBE"), "metallic": 0.0, "roughness": 0.7, "cut": true},
 	&"lattice": {"photo": "lattice", "painted": true, "colour": Color("30483A"), "metallic": 0.0, "roughness": 0.9, "cut": true},
 	&"ratlines": {"photo": "ratlines", "painted": true, "colour": Color("26201A"), "metallic": 0.0, "roughness": 0.95, "cut": true},
@@ -187,6 +191,7 @@ const SLOTS := {
 
 const GLOW := preload("res://scripts/Visual/Lights/glow.gdshader")
 const LIT_WINDOW := preload("res://scripts/Visual/lit_window.gdshader")
+const GLAZING := preload("res://scripts/Visual/glazing.gdshader")
 const FOLIAGE := preload("res://scripts/Visual/foliage.gdshader")
 const SHORE := preload("res://scripts/Visual/shore.gdshader")
 ## How a glowing slot glows: [the flame's share of its colour, brightness,
@@ -269,6 +274,16 @@ static func level_surface(slot: StringName) -> Material:
 		lit.set_shader_parameter(&"bright", float(entry["glow"]))
 		_level[slot] = lit
 		return lit
+
+	# A real window's glass: blended, so out of the shadow pass (the moon
+	# shines through it), grimier to its edges, a sheen of sky at a slant.
+	if slot == &"glazing":
+		var glass := ShaderMaterial.new()
+		glass.shader = GLAZING
+		glass.set_shader_parameter(&"grime", photo(slot))
+		glass.set_shader_parameter(&"sky", Color(0.16, 0.2, 0.3))
+		_level[slot] = glass
+		return glass
 
 	# Leaves, grass, reeds and ivy: our own paintings, stirred by the wind.
 	if entry.has("sway"):

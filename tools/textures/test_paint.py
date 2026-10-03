@@ -357,6 +357,24 @@ class Facades(unittest.TestCase):
             between = image[int(h - 3.2 * per), int(3.0 * per)]
             self.assertLess(np.abs(between - np.array(colour)).max(), 50.0, wall)
 
+class Glazing(unittest.TestCase):
+    def test_quarries_are_dark_lead_diamonds_cut_clean(self):
+        image = paint.PAINTINGS["quarries"]()
+        w, h = image.size
+        self.assertEqual((w & (w - 1), h & (h - 1)), (0, 0))
+        pixels = np.asarray(image)
+        alpha = pixels[:, :, 3]
+        self.assertTrue(set(np.unique(alpha)) <= {0, 255})
+        self.assertTrue(0.08 < (alpha == 255).mean() < 0.35, "lead covers a small share")
+        self.assertLess(pixels[alpha == 255][:, :3].mean(), 90.0, "lead is dark")
+
+    def test_glazing_is_grime_thicker_at_the_edges(self):
+        g = np.asarray(paint.PAINTINGS["glazing"]().convert("L"), dtype=float)
+        h, w = g.shape
+        edge = np.concatenate([g[:, : w // 8].ravel(), g[:, -w // 8:].ravel(), g[-h // 8:, :].ravel()])
+        middle = g[h // 4: 3 * h // 4, w // 4: 3 * w // 4]
+        self.assertGreater(edge.mean(), middle.mean() + 20.0)
+
 
 if __name__ == "__main__":
     unittest.main()
