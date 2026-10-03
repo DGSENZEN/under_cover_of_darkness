@@ -10,6 +10,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import kit_pombal  # noqa: E402
 import kit_porto  # noqa: E402
 import kit_recipes  # noqa: E402
 import kit_town  # noqa: E402
@@ -110,6 +111,91 @@ class Porto(unittest.TestCase):
                         design = kit_porto.design(width, 15.0, storeys, quirk, enterable, 3 if enterable else 0)
                         kit_town.register(TEST, "town", "render_ochre", design)
                         self.assertLessEqual(tris(kit_recipes.PIECES[TEST]), design["budget"], (width, storeys, quirk, enterable))
+
+
+def roof_pitches(shapes):
+    """The pitches (degrees, rounded) of the faces drawn in a roof slot."""
+    import math
+    import kit_shapes
+    built = kit_shapes.build(shapes)
+    out = set()
+
+    for face in built["faces"]:
+        if face[1].startswith("roof"):
+            n = kit_shapes._normal([built["verts"][i] for i in face[0]])
+            length = sum(c * c for c in n) ** 0.5
+
+            if length > 1e-9 and n[1] > 0.0:
+                out.add(round(math.degrees(math.acos(n[1] / length))))
+
+    return out
+
+
+class Pombaline(unittest.TestCase):
+    def tearDown(self):
+        for name in (TEST, "test_street"):
+            kit_recipes.PIECES.pop(name, None)
+
+    def test_four_bays_are_12_7_wide(self):
+        self.assertAlmostEqual(kit_pombal.facade_width(4), 12.65)
+        self.assertAlmostEqual(kit_pombal.design(4, 12.0)["size"][0], 13.0)
+        # (Each opening 1.35 wide, 2.70 apart.)
+        xs = sorted(o[2] for o in openings(kit_pombal.design(4, 12.0), 2))
+        self.assertEqual([round(b - a, 3) for a, b in zip(xs, xs[1:])], [2.7, 2.7, 2.7])
+
+    def test_a_fire_wall_stands_0_6_over_the_roof(self):
+        design = kit_pombal.design(4, 12.0, fire_walls=(True, False))
+        x = -design["size"][0] / 2.0 + 0.25
+        roof_at = lambda z: kit_pombal.roof_at(design, z)  # noqa: E731
+
+        for z in (-6.0, -2.5, -9.5):
+            top = 30.0 - first_hit(design["cols"], [x, 30.0, z], [0.0, -1.0, 0.0])
+            self.assertAlmostEqual(top, roof_at(z) + 0.6, delta=0.12)
+
+        # (None on the other side: the roof's own slope there.)
+        top = 30.0 - first_hit(design["cols"], [-x, 30.0, -6.0], [0.0, -1.0, 0.0])
+        self.assertLess(top, roof_at(-6.0) + 0.35)
+
+    def test_sacadas_on_the_first_floor_only(self):
+        design = kit_pombal.design(4, 12.0)
+        self.assertTrue(all(abs(o[5] - 2.9) < 1e-6 for o in openings(design, 1)))
+        self.assertEqual(len(design["balconies"]), 4)
+        self.assertTrue(all(abs(b[1] - 4.0) < 1e-6 for b in design["balconies"]))
+        self.assertTrue(all(o[5] <= 2.2 + 1e-6 for s in (2, 3) for o in openings(design, s)))
+
+    def test_a_corner_building_has_four_pitches_and_two_fronts(self):
+        design = kit_pombal.design(4, 12.0, kind="corner")
+        self.assertEqual(design["roof"], "four")
+        self.assertTrue(openings(design, 2, "side"))
+        self.assertEqual(stood_on(design["shapes"], design["cols"]), [])
+
+    def test_a_mansard_is_65_then_25(self):
+        design = kit_pombal.design(4, 12.0, quirk="mansard")
+        # (Its steep slopes drawn at 65; its upper roof's tiles are round, so
+        # its 25 is read from the slabs under them.)
+        self.assertIn(65, roof_pitches(design["shapes"]))
+        self.assertIn(25, {round(abs(c[8])) for c in design["cols"]})
+
+    def test_an_enterable_building_is_toured(self):
+        for rooms in (1, 2, 3):
+            design = kit_pombal.design(4, 12.0, enterable=True, rooms=rooms)
+            self.assertEqual(len(design["rooms_at"]), rooms)
+            self.assertEqual(toured(design, design["tour"]), [], rooms)
+            kit_recipes.PIECES.pop(TEST, None)
+
+    def test_every_kind_is_stood_on(self):
+        for kind in kit_pombal.KINDS:
+            for quirk in kit_pombal.QUIRKS:
+                design = kit_pombal.design(3 if kind == "hill" else 4, 12.0, 3 if kind in ("hill", "row") else 4, kind, quirk=quirk)
+                self.assertEqual(stood_on(design["shapes"], design["cols"]), [], (kind, quirk))
+
+    def test_pombaline_budget(self):
+        for bays in (3, 4, 6):
+            for kind in kit_pombal.KINDS:
+                for enterable in (False, True):
+                    design = kit_pombal.design(bays, 12.0, 4, kind, enterable=enterable, rooms=3 if enterable else 0)
+                    kit_town.register(TEST, "town", "azulejo_blue", design)
+                    self.assertLessEqual(tris(kit_recipes.PIECES[TEST]), design["budget"], (bays, kind, enterable))
 
 
 if __name__ == "__main__":

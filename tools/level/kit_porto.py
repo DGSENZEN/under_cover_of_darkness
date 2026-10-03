@@ -54,16 +54,6 @@ TWO_FLIGHT_DEPTH = 15.0
 # Up the front past the first floor, a balcony this often.
 BALCONIES = 0.35
 QUIRKS = ("", "jetty", "mirante", "dormer", "privy_tower", "against_wall", "corner_shrine", "two_level", "slot")
-# Triangles: a bay's openings up the front, a storey's band across it, and
-# an enterable house's floors and stairs (a 2-bay 4-storey house 2320, 3220
-# enterable).
-BUDGET_BAY = 400
-BUDGET_STOREY = 380
-BUDGET_INSIDE = 900
-
-
-def budget(n, storeys, enterable):
-    return BUDGET_BAY * n + BUDGET_STOREY * storeys + (BUDGET_INSIDE if enterable else 0)
 
 
 def bays(width):
@@ -112,7 +102,7 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
     pitch = inner / n
     xs = [(i - (n - 1) / 2.0) * pitch for i in range(n)]
     leaf = min(BAY, pitch - 0.35) if quirk != "slot" else 0.6
-    out = {"openings": [], "balconies": [], "doors": [], "entries": [], "places": {}, "eaves": eaves, "budget": budget(n, storeys, enterable)}
+    out = {"openings": [], "balconies": [], "doors": [], "entries": [], "places": {}, "eaves": eaves, "budget": town.house_budget(n, storeys, enterable)}
     shapes, cols = [], []
 
     # The ground floor's openings: the door, the shop, a window.
@@ -155,9 +145,9 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
 
     # The front: the ground floor's band, the storeys' over it (out over the
     # street on a jetty, a tabique front).
-    s1, c1 = town.wall(width, SHOP, FRONT_WALL, ground, front, (0.0, -FRONT_WALL / 2.0, 0.0))
+    s1, c1 = town.wall(width, SHOP, FRONT_WALL, ground, front, (0.0, -FRONT_WALL / 2.0, 0.0), inside=enterable)
     thick = TABIQUE if jet else FRONT_WALL
-    s2, c2 = town.wall(width, eaves - SHOP, thick, upper, front, (0.0, jet - thick / 2.0, 0.0))
+    s2, c2 = town.wall(width, eaves - SHOP, thick, upper, front, (0.0, jet - thick / 2.0, 0.0), inside=enterable)
     s2, c2 = town.placed(s2, c2, y=SHOP)
     shapes += s1 + s2
 
@@ -182,7 +172,7 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
         back[-1] = town.Opening(back_x, top, DOOR[0], DOOR[1], "barred")
         out["places"]["wall_door"] = [-back_x, top, -depth]
 
-    s3, c3 = town.wall(width, eaves, BACK_WALL, back, side, (0.0, -depth + BACK_WALL / 2.0, 180.0), frames=False)
+    s3, c3 = town.wall(width, eaves, BACK_WALL, back, side, (0.0, -depth + BACK_WALL / 2.0, 180.0), frames=False, inside=enterable, flat=True)
     shapes += s3
 
     for o in back:
@@ -197,9 +187,9 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
     # Balconies: their slabs, rails and corbels, their colliders.
     for x, top, wide, deep in out["balconies"]:
         face = jet if top > SHOP - 0.01 else 0.0
-        shapes += ib._balcony(x, top, wide, True, face, deep)
-        cols.append(town.col(x, top - BALCONY[1] / 2.0, face + deep / 2.0, wide, BALCONY[1], deep))
-        cols += ib._rail_cols(x, top, wide, face, deep)
+        b, bc = town.balcony(x, top, wide, deep, face)
+        shapes += b
+        cols += bc
 
     if enterable:
         inside = _inside(out, width, depth, storeys, rooms, party, door_x, back_x, eaves, quirk)
@@ -296,22 +286,7 @@ def _inside(out, width, depth, storeys, rooms, party, door_x, back_x, eaves, qui
     tour = [[door_x, 0.0, 1.0, "walk"], [door_x, 0.0, -FRONT_WALL - 0.8, "walk"], out["rooms_at"][0] + ["walk"]]
 
     for (kind, x, z, yaw, rise, y), r in zip(stairs, range(1, rooms)):
-        reach = town.stair_reach(kind, STAIR_WIDTH, rise)
-        ahead = -1.0 if yaw else 1.0
-
-        if kind == "two_flight":
-            # (Up the first flight to the landing's middle, across it, down
-            # the second from its far end to a step past its head.)
-            head = reach["footprint"][1]
-            tour += [[x - STAIR_WIDTH / 2.0, y, z - 0.4, "walk"], [x - STAIR_WIDTH / 2.0, y + reach["landing"], z + reach["run"] + 0.5, "stairs"],
-                     [x + STAIR_WIDTH / 2.0, y + reach["landing"], z + reach["run"] + 0.5, "walk"],
-                     [x + STAIR_WIDTH / 2.0, y + reach["landing"], z + reach["run"] + 0.3, "walk"],
-                     [x + STAIR_WIDTH / 2.0, y + rise, z + head - 0.3, "stairs"],
-                     # (Round the stair's hole, not over it.)
-                     [x + STAIR_WIDTH + 0.5, y + rise, z + head - 0.3, "walk"]]
-        else:
-            tour += [[x, y, z - ahead * 0.25, "walk"], [x, y + rise, z + ahead * (reach["run"] + 0.4), "stairs"]]
-
+        tour += town.stair_tour(kind, STAIR_WIDTH, rise, (x, y, z), yaw)
         tour.append(out["rooms_at"][r] + ["walk"])
 
     out["tour"] = tour

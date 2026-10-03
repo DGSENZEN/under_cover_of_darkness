@@ -161,18 +161,57 @@ def honest(o, slot, z=0.0):
     raise ValueError("no honest opening '%s'" % o.kind)
 
 
-def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surface="stone", frames=True):
+def facing(points, normal, slot):
+    """A face through `points` wound to face along `normal`."""
+    n = ks._normal(points)
+    ok = sum(n[i] * normal[i] for i in range(3)) >= 0.0
+    return ks.polygon(points if ok else list(reversed(points)), slot)
+
+
+# What a flat honest opening shows on a plain wall's face (a back's).
+FLAT = {"shut": "shutters", "lit": "glass_lit", "barred": "door_1", "boarded": "boards"}
+
+
+def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surface="stone", frames=True, inside=False, flat=False):
     """A wall `length` along x (its middle at 0), `height` up from 0,
-    `thickness` through z (its face at +thickness / 2), with `openings`:
-    drawn round every one, its collider round the LIVE ones only; granite
-    surrounds on its face; honest ones drawn shut, open windows on a sill.
-    Then turned and moved to `place` (x, z, yaw). A back wall (frames False)
-    goes without its surrounds: fronts carry the detail (the spec's 10)."""
-    every = [(o.x - o.width / 2.0, o.x + o.width / 2.0, o.y, o.y + o.height) for o in openings]
-    live = [(o.x - o.width / 2.0, o.x + o.width / 2.0, o.y, o.y + o.height) for o in openings if o.live]
+    `thickness` through z (its face at +thickness / 2), with `openings`;
+    its collider cut round the LIVE ones only. Drawn as its faces: its face
+    round its openings (and, `inside`, its back: a house walked in), each
+    opening's reveals (an honest one's only as deep as its recess), its
+    ends and its top; granite surrounds on its face (not on a plain wall,
+    `frames` False: fronts carry the detail, the spec's 10); honest
+    openings drawn shut in their recess, or (`flat`, a back's) on its face
+    with the wall not cut round them; open windows on a sill, doors on a
+    threshold. Then turned and moved to `place` (x, z, yaw)."""
     face = thickness / 2.0
-    shapes = [ks.box((a0 + a1) / 2.0, (b0 + b1) / 2.0, 0.0, a1 - a0, b1 - b0, thickness, slot)
-              for a0, a1, b0, b1 in split(-length / 2.0, length / 2.0, 0.0, height, every)]
+    cut = [o for o in openings if o.live or not flat]
+    holes = [(o.x - o.width / 2.0, o.x + o.width / 2.0, o.y, o.y + o.height) for o in cut]
+    live = [(o.x - o.width / 2.0, o.x + o.width / 2.0, o.y, o.y + o.height) for o in openings if o.live]
+    shapes = []
+
+    for a0, a1, b0, b1 in split(-length / 2.0, length / 2.0, 0.0, height, holes):
+        shapes.append(facing([[a0, b0, face], [a1, b0, face], [a1, b1, face], [a0, b1, face]], (0.0, 0.0, 1.0), slot))
+
+        if inside:
+            shapes.append(facing([[a0, b0, -face], [a1, b0, -face], [a1, b1, -face], [a0, b1, -face]], (0.0, 0.0, -1.0), slot))
+
+    for s in (-1.0, 1.0):
+        x = s * length / 2.0
+        shapes.append(facing([[x, 0.0, -face], [x, 0.0, face], [x, height, face], [x, height, -face]], (s, 0.0, 0.0), slot))
+
+    shapes.append(facing([[-length / 2.0, height, -face], [length / 2.0, height, -face], [length / 2.0, height, face],
+                          [-length / 2.0, height, face]], (0.0, 1.0, 0.0), slot))
+
+    for o in cut:
+        x0, x1, y0, y1 = o.x - o.width / 2.0, o.x + o.width / 2.0, o.y, o.y + o.height
+        back = -face if o.live else face - REVEAL - 0.02
+        shapes += [facing([[x0, y0, back], [x0, y0, face], [x0, y1, face], [x0, y1, back]], (1.0, 0.0, 0.0), slot),
+                   facing([[x1, y0, back], [x1, y0, face], [x1, y1, face], [x1, y1, back]], (-1.0, 0.0, 0.0), slot),
+                   facing([[x0, y1, back], [x1, y1, back], [x1, y1, face], [x0, y1, face]], (0.0, -1.0, 0.0), slot)]
+
+        if y0 > 0.01:
+            shapes.append(facing([[x0, y0, back], [x1, y0, back], [x1, y0, face], [x0, y0, face]], (0.0, 1.0, 0.0), slot))
+
     cols = [col((a0 + a1) / 2.0, (b0 + b1) / 2.0, 0.0, a1 - a0, b1 - b0, thickness, surface)
             for a0, a1, b0, b1 in split(-length / 2.0, length / 2.0, 0.0, height, live)]
 
@@ -181,7 +220,10 @@ def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surfa
             shapes += ib._frame(o.x, o.y, face, o.width, o.height)
 
         if not o.live:
-            shapes += honest(o, slot, face)
+            if not flat:
+                shapes += honest(o, slot, face)
+            elif o.kind in FLAT:
+                shapes.append(ks.card(o.x, o.y + o.height / 2.0, face + 0.01, o.width, o.height, FLAT[o.kind]))
         elif o.kind == "window":
             shapes.append(ks.box(o.x, o.y - 0.04, face - 0.05, o.width + 0.2, 0.08, thickness * 0.5, "granite"))
         elif o.kind == "door":
@@ -191,6 +233,24 @@ def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surfa
 
     x, z, yaw = place
     return placed(shapes, cols, x, z, yaw)
+
+
+def balcony(x, y, width, depth, wall_z=0.0, slot="granite"):
+    """A balcony on the storey whose floor is y, `width` across, `depth`
+    out from a wall's face at wall_z (facing +z): its slab on two corbels,
+    iron rails (cards) round it under a handrail; its colliders, the slab
+    and the rails (kit_iberian's)."""
+    t = 0.15
+    shapes = [ks.box(x, y - t / 2.0, wall_z + depth / 2.0, width, t, depth, slot),
+              ks.card(x, y + ib.RAIL / 2.0, wall_z + depth - 0.03, width - 0.04, ib.RAIL - 0.05, "iron_rail"),
+              ks.box(x, y + ib.RAIL, wall_z + depth - 0.03, width, 0.05, 0.05, "iron")]
+
+    for s in (-1.0, 1.0):
+        shapes += [ks.box(x + s * (width / 2.0 - 0.2), y - t - 0.15, wall_z + depth * 0.4, 0.15, 0.3, depth * 0.7, slot),
+                   ks.card(x + s * (width / 2.0 - 0.02), y + ib.RAIL / 2.0, wall_z + depth / 2.0, depth - 0.04, ib.RAIL - 0.05, "iron_rail", 90.0)]
+
+    cols = [col(x, y - t / 2.0, wall_z + depth / 2.0, width, t, depth)] + ib._rail_cols(x, y, width, wall_z, depth)
+    return shapes, cols
 
 
 def floors(width, depth, levels, hole=None, slot="boards", surface="wood"):
@@ -235,29 +295,38 @@ def stair_reach(kind, width, rise):
     raise ValueError("no stair '%s'" % kind)
 
 
-def stair(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0, slot="flagstone", surface="stone"):
+def _tread(x, top, z, width, solid):
+    """A step whose top is `top`: from the floor (solid), or a slab."""
+    if solid:
+        return (x, top / 2.0, z, width, top, TREAD, 0.0)
+
+    return (x, top - SLAB / 2.0, z, width, SLAB, TREAD, 0.0)
+
+
+def stair(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0, slot="flagstone", surface="stone", solid=True):
     """A stair `width` wide climbing `rise` from its foot at `at` (x, y,
     z), facing +z turned by `yaw`:
         straight    one flight up +z
         two_flight  up +z on the left (x < 0) to a half-landing a width
                     deep, then back down -z on the right to the top
         spiral      round a post, sixteen steps a turn, starting toward +z
-    Its steps stepped boxes from the floor (a spiral's slabs, one per
-    step), as stair_straight's."""
+    Its steps stepped boxes from the floor, as stair_straight's; not
+    `solid`, slabs (stairs stacked in a stairwell, a storey apart, each
+    under the one over it)."""
     n, r = _steps(rise)
     boxes = []
 
     if kind == "straight":
-        boxes = [(0.0, (i + 1) * r / 2.0, i * TREAD + TREAD / 2.0, width, (i + 1) * r, TREAD, 0.0) for i in range(n)]
+        boxes = [_tread(0.0, (i + 1) * r, i * TREAD + TREAD / 2.0, width, solid) for i in range(n)]
     elif kind == "two_flight":
         n1 = n // 2
         run = n1 * TREAD
-        boxes = [(-width / 2.0, (i + 1) * r / 2.0, i * TREAD + TREAD / 2.0, width, (i + 1) * r, TREAD, 0.0) for i in range(n1)]
-        boxes.append((0.0, n1 * r / 2.0, run + width / 2.0, 2.0 * width, n1 * r, width, 0.0))
+        boxes = [_tread(-width / 2.0, (i + 1) * r, i * TREAD + TREAD / 2.0, width, solid) for i in range(n1)]
+        boxes.append((0.0, n1 * r / 2.0, run + width / 2.0, 2.0 * width, n1 * r, width, 0.0) if solid else
+                     (0.0, n1 * r - SLAB / 2.0, run + width / 2.0, 2.0 * width, SLAB, width, 0.0))
 
         for j in range(n - n1):
-            top = (n1 + j + 1) * r
-            boxes.append((width / 2.0, top / 2.0, run - j * TREAD - TREAD / 2.0, width, top, TREAD, 0.0))
+            boxes.append(_tread(width / 2.0, (n1 + j + 1) * r, run - j * TREAD - TREAD / 2.0, width, solid))
     elif kind == "spiral":
         step = 360.0 / 16.0
         middle = 0.15 + width / 2.0
@@ -276,6 +345,47 @@ def stair(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0, slot="flagstone", surf
     cols = [col(b[0], b[1], b[2], b[3], b[4], b[5], surface, b[6]) for b in boxes]
     shapes, cols = placed(shapes, cols, at[0], at[2], yaw, at[1])
     return shapes, cols
+
+
+def stair_tour(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0):
+    """The way up a stair laid as stair() lays it: from a step before its
+    foot to a step past its head (round its hole in the floor it comes out
+    on), as [[x, y, z, move], ...] for route checks."""
+    reach = stair_reach(kind, width, rise)
+    run, landing, r = reach["run"], reach["landing"], reach["riser"]
+    half = TREAD / 2.0
+
+    # (Each flight from its first tread's middle to its last's, along its
+    # nosings: over open treads a straight line from floor to landing would
+    # pass under them.)
+    if kind == "straight":
+        local = [[0.0, 0.0, -0.25, "walk"], [0.0, r, half, "stairs"], [0.0, rise, run - half, "stairs"], [0.0, rise, run + 0.4, "walk"]]
+    elif kind == "two_flight":
+        head = reach["footprint"][1]
+        n2 = reach["steps"] - reach["steps"] // 2
+        # (Up the first flight to the landing's middle, across it, down the
+        # second from its far end to a step past its head, round the hole.)
+        local = [[-width / 2.0, 0.0, -0.4, "walk"], [-width / 2.0, r, half, "stairs"], [-width / 2.0, landing, run - half, "stairs"],
+                 [-width / 2.0, landing, run + 0.5, "walk"], [width / 2.0, landing, run + 0.5, "walk"],
+                 [width / 2.0, landing + r, run - half, "stairs"], [width / 2.0, rise, run - (n2 - 1) * TREAD - half, "stairs"],
+                 [width / 2.0, rise, head - 0.3, "walk"], [width + 0.5, rise, head - 0.3, "walk"]]
+    else:
+        raise ValueError("no tour up a '%s' stair" % kind)
+
+    turn = geo.rotation(yaw)
+    return [geo.add(geo.apply(turn, p[:3]), list(at)) + [p[3]] for p in local]
+
+
+# Triangles for a house: a bay's openings up its front, a storey's band
+# across it, and an enterable one's floors and stairs (a 2-bay 4-storey
+# house 2320, 3220 enterable; the harbour's casas are 5200).
+BUDGET_BAY = 400
+BUDGET_STOREY = 380
+BUDGET_INSIDE = 900
+
+
+def house_budget(bays, storeys, enterable):
+    return BUDGET_BAY * bays + BUDGET_STOREY * storeys + (BUDGET_INSIDE if enterable else 0)
 
 
 def rooms(plan, y, height, doors, slot="plaster", surface="stone"):
