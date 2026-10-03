@@ -47,14 +47,6 @@ DOOR_X = -2.0
 WINDOW_X = 2.0
 
 
-def _wall(length, base, top, thick, openings, slot, place, inside=True, frames=True):
-    """A wall from `base` to `top` (its openings' feet given from the
-    ground), placed."""
-    shifted = [town.Opening(o.x, o.y - base, o.width, o.height, o.kind) for o in openings]
-    s, c = town.wall(length, top - base, thick, shifted, slot, place, inside=inside, frames=frames)
-    return town.placed(s, c, y=base)
-
-
 def design():
     shapes, cols = [], []
     doors, ways, places = [], [], {}
@@ -69,7 +61,7 @@ def design():
         for x, kind in ((-1.8, "shut"), (1.8, "lit" if s == 1 else "shut")):
             front.append(town.Opening(x, y + WINDOW[2], WINDOW[0], WINDOW[1], kind))
 
-    s, c = _wall(WIDTH, -CELLAR, EAVES, FRONT, front, "render_ochre", (0.0, -FRONT / 2.0, 0.0))
+    s, c = town.band(WIDTH, -CELLAR, EAVES, FRONT, front, "render_ochre", (0.0, -FRONT / 2.0, 0.0))
     shapes, cols = shapes + s, cols + c
     doors.append([DOOR_X, 0.0, -FRONT / 2.0, 0.0])
 
@@ -78,7 +70,7 @@ def design():
     back = [town.Opening(-0.0, -CELLAR, DOOR[0], DOOR[1], "door"), town.Opening(-DOOR_X, 0.0, DOOR[0], DOOR[1], "door"),
             town.Opening(-WINDOW_X, SHOP + WINDOW[2], WINDOW[0], WINDOW[1], "window"), town.Opening(2.0, SHOP + UPPER + WINDOW[2], WINDOW[0],
                                                                                                    WINDOW[1], "shut")]
-    s, c = _wall(WIDTH, -CELLAR, EAVES, BACK, back, "render_ochre", (0.0, -DEPTH + BACK / 2.0, 180.0), frames=False)
+    s, c = town.band(WIDTH, -CELLAR, EAVES, BACK, back, "render_ochre", (0.0, -DEPTH + BACK / 2.0, 180.0), frames=False)
     shapes, cols = shapes + s, cols + c
     doors += [[0.0, -CELLAR, -DEPTH + BACK / 2.0, 180.0], [DOOR_X, 0.0, -DEPTH + BACK / 2.0, 180.0]]
 
@@ -132,7 +124,7 @@ def design():
     # right wall (its roof the way up to the back window).
     yard_z = -DEPTH - YARD / 2.0
     wall_h, wall_t = YARD_WALL
-    s, c = _wall(WIDTH, 0.0, wall_h, wall_t, [town.Opening(0.0, 0.0, DOOR[0], DOOR[1], "door")], "whitewash",
+    s, c = town.band(WIDTH, 0.0, wall_h, wall_t, [town.Opening(0.0, 0.0, DOOR[0], DOOR[1], "door")], "whitewash",
                  (0.0, YARD_END + wall_t / 2.0, 180.0), inside=True, frames=False)
     shapes, cols = shapes + s, cols + c
     doors.append([0.0, 0.0, YARD_END + wall_t / 2.0, 180.0])

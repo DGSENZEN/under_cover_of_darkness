@@ -235,6 +235,14 @@ def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surfa
     return placed(shapes, cols, x, z, yaw)
 
 
+def band(length, base, top, thickness, openings, slot, place=(0.0, 0.0, 0.0), inside=True, frames=True, flat=False):
+    """A wall from `base` up to `top` (a cellar's walls go below the
+    street), its openings' feet given from the street, placed."""
+    shifted = [Opening(o.x, o.y - base, o.width, o.height, o.kind, o.face) for o in openings]
+    s, c = wall(length, top - base, thickness, shifted, slot, place, inside=inside, frames=frames, flat=flat)
+    return placed(s, c, y=base)
+
+
 def balcony(x, y, width, depth, wall_z=0.0, slot="granite"):
     """A balcony on the storey whose floor is y, `width` across, `depth`
     out from a wall's face at wall_z (facing +z): its slab on two corbels,
@@ -255,8 +263,9 @@ def balcony(x, y, width, depth, wall_z=0.0, slot="granite"):
 
 def floors(width, depth, levels, hole=None, slot="boards", surface="wood"):
     """A slab at each of `levels` (its top there) over width x depth about
-    the middle, less `hole` (x0, z0, x1, z1) where a stair comes up."""
-    holes = [hole] if hole else []
+    the middle, less `hole` (x0, z0, x1, z1) where a stair comes up (or a
+    list of them)."""
+    holes = hole if isinstance(hole, list) else [hole] if hole else []
     shapes, cols = [], []
 
     for y in levels:

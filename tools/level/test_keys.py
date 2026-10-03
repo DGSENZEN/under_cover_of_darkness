@@ -12,6 +12,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import kit_recipes  # noqa: E402
+import kit_town_chapel  # noqa: E402,F401
+import kit_merchant  # noqa: E402,F401
 import kit_tavern  # noqa: E402
 import kit_watch  # noqa: E402
 import rules  # noqa: E402
@@ -65,8 +67,25 @@ def blocked(name):
     boxes = geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY)
     out = []
 
+    ladders = [geo.Box(c[0:3], geo.rotation(c[6]), c[3:6]) for c in recipe.get("climbs", [])]
+
     for way in recipe["ways"]:
         for a, b in zip(way["points"], way["points"][1:]):
+            if b[3] == "climb":
+                # (Up its ladder's middle from the lower end to the upper:
+                # nothing across it, a floor or a roof without its hole.)
+                middle = [(a[i] + b[i]) / 2.0 for i in range(3)]
+                ladder = [box for box in ladders if box.contains(middle)]
+                low, high = min(a[1], b[1]) + 0.3, max(a[1], b[1]) - 0.05
+
+                if ladder and high > low:
+                    start = [ladder[0].centre[0], low, ladder[0].centre[2]]
+
+                    if any(t is not None and t < high - low for t in (box.ray(start, [0.0, 1.0, 0.0]) for box in boxes)):
+                        out.append((way["kind"], a[:3], b[:3]))
+
+                continue
+
             if b[3] not in ("walk", "stairs", "drop"):
                 continue
 
@@ -131,6 +150,42 @@ class WatchHouse(Keys):
         self.assertEqual(len(beds), 4)
         self.assertTrue(all(abs(b[1] - kit_watch.GROUND) < 0.01 for b in beds), beds)
         self.assertTrue({"drum", "office", "armoury", "lookout"} <= set(recipe["places"]))
+        self.assertLessEqual(tris(recipe), recipe["budget"])
+
+
+class Merchant(Keys):
+    def test_the_merchant_has_five_ways_of_three_kinds(self):
+        ways = PIECES["merchant_house"]["ways"]
+        self.assertEqual(len(ways), 5)
+        self.assertEqual(sorted({w["kind"] for w in ways}), ["door", "roof", "yard"])
+
+    def test_every_way_into_the_merchants_checks(self):
+        for kind, problems in way_problems("merchant_house").items():
+            self.assertEqual(problems, [], kind)
+
+        self.assertEqual(blocked("merchant_house"), [])
+
+    def test_the_merchant_keeps_his_places(self):
+        recipe = PIECES["merchant_house"]
+        self.assertTrue({"strongbox", "ledger_chest", "key_place"} <= set(recipe["places"]))
+        # (His key at the top of the house, his strongbox at its foot.)
+        self.assertGreater(recipe["places"]["key_place"][1], recipe["places"]["strongbox"][1] + 6.0)
+        self.assertLessEqual(tris(recipe), recipe["budget"])
+
+
+class Chapel(Keys):
+    def test_the_chapel_has_three_kinds(self):
+        self.assertEqual(sorted(w["kind"] for w in PIECES["town_chapel"]["ways"]), ["door", "roof", "window"])
+
+    def test_every_way_into_the_chapel_checks(self):
+        for kind, problems in way_problems("town_chapel").items():
+            self.assertEqual(problems, [], kind)
+
+        self.assertEqual(blocked("town_chapel"), [])
+
+    def test_the_chapel_keeps_its_walled_altar(self):
+        recipe = PIECES["town_chapel"]
+        self.assertIn("walled_altar", recipe["places"])
         self.assertLessEqual(tris(recipe), recipe["budget"])
 
 
