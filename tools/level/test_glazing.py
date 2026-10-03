@@ -13,6 +13,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import geo  # noqa: E402
+import kit_recipes  # noqa: E402  (first: it registers every kit)
+import kit_customs  # noqa: E402
 import kit_glazing  # noqa: E402
 import kit_shapes  # noqa: E402
 
@@ -28,6 +30,21 @@ def polygon_area(points):
         sz += a[0] * b[1] - a[1] * b[0]
 
     return 0.5 * (sx * sx + sy * sy + sz * sz) ** 0.5
+
+
+def tris(recipe):
+    return sum(len(f[0]) - 2 for f in kit_shapes.build(recipe["shapes"])["faces"]) if recipe.get("shapes") else len(recipe["boxes"]) * 12
+
+
+def box_holds(box, point):
+    """`point` strictly inside a geo box."""
+    d = [point[i] - box.centre[i] for i in range(3)]
+    axes = box.axes()
+    return all(abs(sum(d[i] * axes[k][i] for i in range(3))) < box.half[k] - 1e-6 for k in range(3))
+
+
+def middle_of(record):
+    return [sum(p[i] for p in record["outline"]) / len(record["outline"]) for i in range(3)]
 
 
 class Glazed(unittest.TestCase):
@@ -146,6 +163,42 @@ class Manifest(unittest.TestCase):
         boxes = geo.piece_boxes(self.recipe, [0.0, 0.0, 0.0], geo.IDENTITY)
         self.assertEqual([b.occluder for b in boxes if b.surface == "glass"], [False])
         self.assertEqual([b.occluder for b in boxes if b.surface == "stone"], [True])
+
+
+class Customs(unittest.TestCase):
+    EXPECTED = {"customs_upper_front": (3, {"quarries"}), "customs_west_wall": (6, {"casement", "grille"}),
+                "customs_back_wall": (6, {"casement", "grille"}), "customs_portal_wall": (2, {"grille"})}
+
+    def test_each_wall_carries_its_windows(self):
+        for name, (count, leads) in self.EXPECTED.items():
+            recs = kit_recipes.PIECES[name].get("windows", [])
+            self.assertEqual(len(recs), count, name)
+            self.assertEqual({r["lead"] for r in recs}, leads, name)
+
+    def test_no_collider_but_glass_spans_a_window(self):
+        for name in self.EXPECTED:
+            recipe = kit_recipes.PIECES[name]
+
+            for rec in recipe["windows"]:
+                mid = middle_of(rec)
+                inside = [mid[i] - 0.25 * rec["normal"][i] for i in range(3)]
+
+                for box in geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY):
+                    if box.surface != "glass":
+                        self.assertFalse(box_holds(box, mid) or box_holds(box, inside), (name, mid))
+
+    def test_the_back_walls_door_is_open(self):
+        # (The back wall is turned 180 degrees about its east end: its door,
+        # 4 m from that end along the side, stands at x X1 - 4 in the house.)
+        recipe = kit_recipes.PIECES["customs_back_wall"]
+        at = kit_customs.PIECE_AT["customs_back_wall"]
+        door = [kit_customs.X1 - 4.0 - at[0], 1.1 - at[1], kit_customs.Z0 + kit_customs.WALL / 2.0 - at[2]]
+        self.assertFalse(any(box_holds(b, door) for b in geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY)))
+
+    def test_budgets_hold(self):
+        for name in self.EXPECTED:
+            recipe = kit_recipes.PIECES[name]
+            self.assertLessEqual(tris(recipe), recipe.get("budget", kit_shapes.PIECE_TRIS), name)
 
 
 if __name__ == "__main__":
