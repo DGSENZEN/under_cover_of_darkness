@@ -421,10 +421,19 @@ func _surface_parameter(parameter: StringName, value: Variant) -> void:
 func refresh_shoreline() -> void:
 	await get_tree().physics_frame
 	await get_tree().physics_frame
+
+	if not is_inside_tree():
+		return
+
 	var width := clampi(int(ceil(size.x / SHORE_CELL)), 8, SHORE_TEXELS)
 	var height := clampi(int(ceil(size.z / SHORE_CELL)), 8, SHORE_TEXELS)
 	var image := Image.create(width, height, false, Image.FORMAT_RF)
 	var land: PackedByteArray = await _concave_land(width, height)
+
+	# (Its level gone meanwhile, at a district's gate: no more.)
+	if not is_inside_tree() or land.size() < width * height:
+		return
+
 	var space := get_world_3d().direct_space_state
 	var query := PhysicsRayQueryParameters3D.new()
 	query.collision_mask = 1
@@ -448,6 +457,9 @@ func refresh_shoreline() -> void:
 			rays += 1
 			if rays % SHORE_RAYS_PER_TICK == 0:
 				await get_tree().physics_frame
+
+				if not is_inside_tree():
+					return
 	_surface_parameter("shore_depth", ImageTexture.create_from_image(image))
 	_surface_parameter("shore_texel", Vector2(1.0 / width, 1.0 / height))
 	_surface_parameter("shore_ready", true)
@@ -470,6 +482,11 @@ func _concave_land(width: int, height: int) -> PackedByteArray:
 	var surface := surface_y() + 0.03
 	var work := 0
 	for node in get_tree().root.find_children("*", "CollisionShape3D", true, false):
+		# (The work spans frames: a level freed meanwhile, at a district's
+		# gate, takes its shapes with it.)
+		if not is_instance_valid(node):
+			continue
+
 		var shape := node as CollisionShape3D
 		var body := shape.get_parent() as CollisionObject3D
 		if shape.disabled or not shape.shape is ConcavePolygonShape3D or body == null or (body.collision_layer & 1) == 0 or body.get_world_3d() != get_world_3d():
@@ -518,6 +535,9 @@ func _concave_land(width: int, height: int) -> PackedByteArray:
 					work += 1
 					if work % SHORE_RAYS_PER_TICK == 0:
 						await get_tree().physics_frame
+
+						if not is_inside_tree():
+							return PackedByteArray()
 		for index in touched:
 			if contained[index] != 0:
 				land[index] = 1

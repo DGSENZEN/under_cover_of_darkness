@@ -8,14 +8,24 @@ const OLD_TOWN := preload("res://maps/old_town.tscn")
 const HARBOUR := preload("res://maps/city.tscn")
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 
+const MISSION := preload("res://maps/mission.tscn")
 ## The harbour's load before its navmesh was baked offline (s).
 const HARBOUR_LOAD_BEFORE := 13.8
+## Exits ignore the player this long after he arrives (Mission.GRACE).
+const GRACE := 1.0
+## Guard.Alert.COMBAT.
+const COMBAT := 4
+## A body put back lies within this of where it lay (a limp man laid down).
+const BODY_SLACK := 1.0
+## A gate's crossing at most (s): dark, the next map built, up again.
+const CROSSING := 3.0
 
 var results: Array[String] = []
 
 
 func _ready() -> void:
 	await _alone()
+	await _mission()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -72,6 +82,222 @@ func _alone() -> void:
 		quick and live, "from file %s in %.1f s (was %.1f s); stale baked live %s" % [quick, loaded_in, HARBOUR_LOAD_BEFORE, live])
 	again.queue_free()
 	await _frames(5)
+
+
+# ---------------------------------------------------------------------------
+# T3-T12: the mission, through the gates
+# ---------------------------------------------------------------------------
+
+var mission: Node
+
+
+func _mission() -> void:
+	mission = MISSION.instantiate()
+	add_child(mission)
+	await mission.arrived
+	var gates := ["sea_gate", "wall_walk", "guindais", "west_wall"]
+
+	# T3 the Sea Gate both ways, standing where each side's arrival is
+	await _through("exit_sea_gate")
+	var there: bool = mission.map.district == &"old_town" and _at("from_harbour_sea_gate")
+	# T6 standing still on arrival does not send him back
+	await _seconds(3.0)
+	var stays: bool = mission.map.district == &"old_town"
+	await _through("to_harbour_sea_gate")
+	var back: bool = mission.map.district == &"harbour" and _at("from_old_town_sea_gate")
+	_check("T3 the Sea Gate leads to the old town and back, to each side's arrival, facing in", there and back, "there %s, back %s" % [there, back])
+	_check("T6 standing still on arrival does not send him back", stays, "still in the old town after 3 s %s" % [stays])
+
+	# T4 the other three gates, both ways
+	var paired: Array[String] = []
+
+	for gate in gates.slice(1):
+		await _through("exit_" + gate)
+		var out: bool = mission.map.district == &"old_town" and _at("from_harbour_" + gate)
+		await _through("to_harbour_" + gate)
+		var home: bool = mission.map.district == &"harbour" and _at("from_old_town_" + gate)
+
+		if out and home:
+			paired.append(gate)
+
+	_check("T4 the wall-walk, Guindais and west wall gates pair both ways", paired.size() == 3, "paired %s" % [paired])
+
+	# T5 the purse, tools, keys and health go with him
+	var player: Node = mission.map.player
+	player.inventory.add_loot(50)
+	player.inventory.take_one(&"waterflask")
+	player.inventory.add_key(&"customs", "the customs key")
+	player.set("health", 70.0)
+	var before := _carried(player)
+	await _through("exit_sea_gate")
+	var after := _carried(mission.map.player)
+	# (His shield refills while nothing hurts him: as he had it at the gate,
+	# give or take what fills during the crossing.)
+	var at_gate := float(CityState.carried.get("health", -1.0))
+	var health := float(mission.map.player.get("health"))
+	var refill := float(mission.map.player.get("recover_rate")) * CROSSING
+	_check("T5 the purse, tools, keys and health travel", before == after and at_gate >= 70.0 and health >= at_gate and health <= at_gate + refill,
+		"before %s, after %s, health %.1f at the gate, %.1f after" % [before, after, at_gate, health])
+	await _through("to_harbour_sea_gate")
+
+	# T7 the harbour remembers loot, a door, a lamp
+	var built: Dictionary = mission.map.made["city_harbour"]
+	var loot_name: String = built["pickups"].keys().filter(func(n): return built["pickups"][n] is Loot)[0]
+	built["pickups"][loot_name].frob(mission.map.player)
+	var door_name: String = built["doors"].keys().filter(func(n): return not bool(built["doors"][n].locked))[0]
+	built["doors"][door_name].frob(mission.map.player)
+	var lamp_name := _lit_lamp(built["lights"])
+	built["lights"][lamp_name].put_out(&"douse")
+	await _seconds(1.5)
+	await _through("exit_sea_gate")
+	await _through("to_harbour_sea_gate")
+	built = mission.map.made["city_harbour"]
+	var remembered: bool = not is_instance_valid(built["pickups"][loot_name]) and bool(built["doors"][door_name].is_open) \
+		and not built["lights"][lamp_name].is_lit()
+	_check("T7 the harbour remembers: loot taken, a door open, a lamp out", remembered, "%s gone %s, %s open %s, %s out %s" % [loot_name,
+		not is_instance_valid(built["pickups"][loot_name]), door_name, built["doors"][door_name].is_open, lamp_name, not built["lights"][lamp_name].is_lit()])
+
+	# T8 a guard knocked out stays down
+	var inigo: Node = mission.map.guards["Inigo"]
+	inigo.knock_out(mission.map.player, true)
+	await _seconds(2.5)
+	var fell: Vector3 = _body("Inigo").global_position if _body("Inigo") != null else Vector3.INF
+	await _through("exit_sea_gate")
+	await _through("to_harbour_sea_gate")
+	var lies: Node = _body("Inigo")
+	_check("T8 a guard knocked out stays down: no Inigo, his body where he fell", not _standing("Inigo") and lies != null
+		and lies.global_position.distance_to(fell) < BODY_SLACK, "standing %s, body %s, %.2f m from where he fell" % [_standing("Inigo"), lies != null,
+			lies.global_position.distance_to(fell) if lies != null else -1.0])
+
+	# T9 a body on the shoulder is left at the gate
+	mission.map.player.inventory.holster()
+	await _frames(2)
+	mission.map.player.frob.shoulder(_body("Inigo"))
+	var carried: bool = mission.map.player.frob.shouldered != null
+	await _through("exit_sea_gate")
+	var empty: bool = mission.map.player.frob.shouldered == null
+	await _through("to_harbour_sea_gate")
+	var gate_at: Vector3 = _exit("exit_sea_gate").global_position
+	var left: Node = _body("Inigo")
+	_check("T9 a body on the shoulder is left at the gate", carried and empty and left != null and _flat(left.global_position, gate_at) < 3.0,
+		"carried %s, hands empty there %s, body %.1f m from the gate" % [carried, empty, _flat(left.global_position, gate_at) if left != null else -1.0])
+
+	# T10 a chasing watchman follows through the gate
+	var duarte: Node = mission.map.guards["Duarte"]
+	duarte.global_position = Vector3(-55.0, 2.6, -70.0)
+	duarte.reset_physics_interpolation()
+	await _frames(2)
+	duarte.call("_engage", mission.map.player)
+	await _seconds(0.5)
+	await _through("exit_sea_gate")
+	var arrival: Vector3 = (mission.map.marker("from_harbour_sea_gate")["transform"] as Transform3D).origin
+	var follower: Node = null
+
+	for i in 60 * 12:
+		await get_tree().physics_frame
+		follower = mission.map.guards.get("Duarte")
+
+		if follower != null and is_instance_valid(follower) and int(follower.get("state")) == COMBAT:
+			break
+
+	var close: bool = follower != null and is_instance_valid(follower) and follower.global_position.distance_to(arrival) < 15.0
+	var away: bool = CityState.districts.get(&"harbour", {}).get("guards", {}).get("Duarte", {}).has("away")
+	_check("T10 a chasing watchman follows through the gate", close and int(follower.get("state")) == COMBAT and away,
+		"followed %s, in combat %s, near the arrival %s, away at home %s" % [follower != null and is_instance_valid(follower),
+			int(follower.get("state")) == COMBAT if follower != null and is_instance_valid(follower) else false, close, away])
+
+	# T11 a follower knocked out in the old town is not raised at home
+	if follower != null and is_instance_valid(follower):
+		follower.knock_out(mission.map.player, true)
+
+	await _seconds(1.5)
+	await _through("to_harbour_sea_gate")
+	_check("T11 a follower knocked out in the old town is not raised at home", not _standing("Duarte") and not mission.map.guards.has("Duarte"),
+		"standing %s" % [_standing("Duarte")])
+
+	# T12 a sealed way says where it goes and goes nowhere
+	var harbour_map: Node = mission.map
+	await _seconds(GRACE + 0.2)
+	mission.map.player.teleport(Transform3D(Basis(), _exit("exit_river").global_position))
+	await _seconds(2.0)
+	_check("T12 a sealed way goes nowhere", mission.map == harbour_map and mission.map.district == &"harbour", "still in the harbour %s" % [
+		mission.map == harbour_map])
+	mission.queue_free()
+	await _frames(5)
+
+
+## Through `exit` (an exit of the map in hand), once the arrival's grace is
+## over: the next map, ready.
+func _through(exit_name: String) -> void:
+	await _seconds(GRACE + 0.2)
+	var area := _exit(exit_name)
+
+	if area == null:
+		push_error("transitions_test: no exit %s in %s" % [exit_name, mission.map.district])
+		return
+
+	var from: int = mission.map.get_instance_id()
+	mission.map.player.teleport(Transform3D(mission.map.player.global_basis, area.global_position))
+
+	for i in 60 * 30:
+		await get_tree().process_frame
+
+		if bool(mission.get("settled")) and mission.map != null and is_instance_valid(mission.map) and mission.map.get_instance_id() != from:
+			break
+
+	await _frames(2)
+
+
+func _exit(exit_name: String) -> Area3D:
+	return mission.map.get_node_or_null(exit_name) as Area3D
+
+
+## The player stands at `arrival` (a marker of the map in hand), facing as it does.
+func _at(arrival: String) -> bool:
+	var m: Dictionary = mission.map.marker(arrival)
+
+	if m.is_empty():
+		return false
+
+	var at: Transform3D = m["transform"]
+	var player: Node3D = mission.map.player
+	var turned := absf(wrapf(player.rotation.y - at.basis.get_euler().y, -PI, PI))
+	return player.global_position.distance_to(at.origin + Vector3.UP * 1.05) < 1.0 and turned < deg_to_rad(10.0)
+
+
+func _standing(who: String) -> bool:
+	return get_tree().get_nodes_in_group(&"guards").any(func(g): return mission.map.is_ancestor_of(g) and g.name == who)
+
+
+func _body(who: String) -> Node3D:
+	for body in get_tree().get_nodes_in_group(&"bodies"):
+		if mission.map.is_ancestor_of(body) and String(body.get("called")) == who:
+			return body
+
+	return null
+
+
+## What `player` carries, as plain text: purse, keys, belt (id and count).
+func _carried(player: Node) -> String:
+	var keys: Array = player.inventory.keys.map(func(k): return String(k))
+	keys.sort()
+	var belt: Array = player.inventory.belt.map(func(e): return "%s x%d" % [e["id"], int(e["count"])])
+	return "purse %d, keys %s, belt %s" % [player.inventory.purse, keys, belt]
+
+
+## The first lamp of `lights` (name → node) that burns and can be doused.
+func _lit_lamp(lights: Dictionary) -> String:
+	for lamp_name in lights:
+		var lamp: Variant = lights[lamp_name]
+
+		if lamp is Node and is_instance_valid(lamp) and bool(lamp.get("can_douse")) and lamp.has_method("is_lit") and lamp.is_lit():
+			return String(lamp_name)
+
+	return ""
+
+
+func _flat(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
 
 
 # ---------------------------------------------------------------------------

@@ -619,6 +619,12 @@ static func mission_marks(parent: Node3D, level) -> void:
 			area.name = m["name"]
 			area.add_to_group(pair[1])
 			area.set_meta(&"label", String(m["props"].get("label", "")))
+
+			# An exit: the district it leads to and the arrival there.
+			if pair[0] == "exit":
+				area.set_meta(&"to", StringName(String(m["props"].get("to", ""))))
+				area.set_meta(&"arrive", StringName(String(m["props"].get("arrive", ""))))
+
 			area.collision_layer = 0
 			area.collision_mask = 1 | 2
 			var shape := CollisionShape3D.new()

@@ -291,6 +291,12 @@ func load_baked(path: String, source_hash: String) -> bool:
 			continue
 
 		snap.remove_child(child)
+		# (Owned by the saved scene no longer: the baker's now.)
+		child.owner = null
+
+		for part in child.find_children("*", "", true, false):
+			part.owner = null
+
 		add_child(child)
 
 		if child is NavigationRegion3D:

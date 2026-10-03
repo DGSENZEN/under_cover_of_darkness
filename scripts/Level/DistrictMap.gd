@@ -33,6 +33,8 @@ const MASSING := "city_massing"
 const NAVMESH_DIR := "res://assets/level/navmesh"
 ## The same night every run: nobody reseeds the dice as the guards are made.
 const SEED := 1947
+## Exits ignore the player this long after he arrives (s).
+const GRACE := 1.0
 
 signal ready_to_play
 
@@ -57,6 +59,8 @@ var baker: NavBaker = null
 var load_seconds := 0.0
 var environment: Environment = null
 var _was_rolling := true
+## The physics frame it was ready on (the exits' grace counts from it).
+var _ready_frame := 0
 
 
 func _ready() -> void:
@@ -139,6 +143,7 @@ func _ready() -> void:
 	screen.close()
 	load_seconds = (Time.get_ticks_msec() - started) / 1000.0
 	_report()
+	_ready_frame = Engine.get_physics_frames()
 	ready_to_play.emit()
 
 	for arg in OS.get_cmdline_user_args():
@@ -298,19 +303,32 @@ func _nav_settings() -> Dictionary:
 
 # The ways out
 
-## Each exit: said, and printed, when the player reaches it.
+## Each exit, when the player reaches it: through it to its district, if that
+## is built and a Mission holds this map (not for GRACE s after he arrives:
+## he does not walk straight back); else said, and printed, where it leads.
 func _exits() -> void:
 	for area in get_tree().get_nodes_in_group(&"district_exit"):
-		if not is_ancestor_of(area):
-			continue
+		if is_ancestor_of(area):
+			(area as Area3D).body_entered.connect(_exit_reached.bind(area))
 
-		(area as Area3D).body_entered.connect(func(body: Node3D) -> void:
-			if body == player:
-				var label := String(area.get_meta(&"label", "somewhere"))
-				print("city: exit: %s" % label)
 
-				if player.get("hud") != null:
-					player.hud.show_caption("On to %s" % label, 4.0))
+func _exit_reached(body: Node3D, area: Area3D) -> void:
+	if body != player or player == null:
+		return
+
+	var mission := _mission()
+
+	if mission != null and Districts.is_built(StringName(area.get_meta(&"to", &""))):
+		if Engine.get_physics_frames() >= _ready_frame + int(GRACE * Engine.physics_ticks_per_second):
+			mission.travel(area)
+
+		return
+
+	var label := String(area.get_meta(&"label", "somewhere"))
+	print("city: exit: %s" % label)
+
+	if player.get("hud") != null:
+		player.hud.show_caption("On to %s" % label, 4.0)
 
 
 # The player
