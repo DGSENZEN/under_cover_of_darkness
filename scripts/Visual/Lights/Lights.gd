@@ -201,6 +201,20 @@ class Resolver:
 				push_warning("Lights.torch_at: nothing to stand a torch on at %s: a bare flame" % flame_at)
 
 		if built != null:
+			built.set("can_douse", bare.get("can_douse"))
+
+			# A level's light (LevelGameplay.lights): the fixture takes the
+			# flame's name and its place in the level's lights.
+			if bare.has_meta(&"marker"):
+				var marker_name := String(bare.get_meta(&"marker"))
+				bare.name = marker_name + "_flame"
+				built.name = marker_name
+				built.set_meta(&"marker", marker_name)
+				var into: Variant = bare.get_meta(&"made_in") if bare.has_meta(&"made_in") else null
+
+				if into is Dictionary:
+					into[marker_name] = built
+
 			bare.queue_free()
 
 		queue_free()

@@ -81,14 +81,28 @@ static func doors(parent: Node3D, level) -> Dictionary:
 	return out
 
 
-static func lights(parent: Node3D, level) -> Array:
-	var out := []
+## Every light marker made into its light, named after its marker (the
+## district's memory finds it by name), dousable as its marker says: marker
+## name → node. A torch is a bare flame for two ticks, then its fixture
+## (Lights.torch_at), which takes over its name and its place here.
+static func lights(parent: Node3D, level) -> Dictionary:
+	var out := {}
 
 	for m in level.of("light"):
 		var made := _light(parent, m)
 
-		if made != null:
-			out.append(made)
+		if made == null:
+			continue
+
+		var marker_name := String(m["name"])
+		made.name = marker_name
+		made.set_meta(&"marker", marker_name)
+		made.set_meta(&"made_in", out)
+
+		if made.get("can_douse") != null:
+			made.set("can_douse", bool(m["props"].get("douse", true)))
+
+		out[marker_name] = made
 
 	return out
 

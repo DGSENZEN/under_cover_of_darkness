@@ -21,6 +21,8 @@ signal rattled
 var is_open := false
 var _target_angle := 0.0
 var _lid: AnimatableBody3D
+## load_state's: set the lid at its target on the next tick.
+var _snap := false
 
 
 func _ready() -> void:
@@ -73,6 +75,20 @@ func frob(player: Node) -> void:
 	_target_angle = deg_to_rad(open_degrees) if is_open else 0.0
 
 
+## What was done to it, for the district's memory: open or shut, locked or not.
+func save_state() -> Dictionary:
+	return {"open": is_open, "locked": locked}
+
+
+## Puts it as it was left (save_state), its lid set on the next physics tick
+## (where a body that moves with the physics takes its turn): no sound.
+func load_state(state: Dictionary) -> void:
+	locked = bool(state.get("locked", locked))
+	is_open = bool(state.get("open", false))
+	_target_angle = deg_to_rad(open_degrees) if is_open else 0.0
+	_snap = true
+
+
 func _physics_process(delta: float) -> void:
 	# The lid may be added after this node is ready (Props builds it that way).
 	if _lid == null:
@@ -80,6 +96,12 @@ func _physics_process(delta: float) -> void:
 
 		if _lid == null:
 			return
+
+	if _snap:
+		_snap = false
+		_lid.rotation.x = _target_angle
+		_lid.reset_physics_interpolation()
+		return
 
 	var current := _lid.rotation.x
 
