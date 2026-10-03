@@ -25,6 +25,7 @@ const NightScript := preload("res://scripts/Night/Night.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const DistanceScript := preload("res://scripts/Visual/Distance.gd")
+const WindowsScript := preload("res://scripts/Visual/Windows.gd")
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
 
@@ -76,6 +77,8 @@ var environment: Environment = null
 ## The distance's effects (scripts/Visual/Distance.gd, from the massing):
 ## far torches, the balefire, mist, corpse-lights, chimney smoke.
 var distance: Node3D = null
+## Its windows' light (scripts/Visual/Windows.gd).
+var windows: Node3D = null
 var _was_rolling := true
 ## The physics frame it was ready on (the exits' grace counts from it).
 var _ready_frame := 0
@@ -146,6 +149,20 @@ func _ready() -> void:
 		get_tree().quit(0 if err == OK else 1)
 		return
 
+	# Its windows: the moon's shafts in, its rooms' lamps out (a physics
+	# frame has passed: the rays find the level).
+	windows = WindowsScript.new()
+	windows.name = "Windows"
+	add_child(windows)
+	var own_levels := []
+	var own_made := []
+
+	for level in levels:
+		if level != MASSING:
+			own_levels.append(levels[level])
+			own_made.append(made[level])
+
+	windows.build(own_levels, own_made, night.moon if night != null else null)
 	LightProbe.invalidate()
 	await screen.step(String(words.get("guards", "")), 0.92)
 	GuardScript.randomize_on = false

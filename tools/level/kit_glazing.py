@@ -15,7 +15,8 @@ wall's whole thickness with leaded glass set back in it, for any kit.
 
 A wall's frame: x along it, y up, its outer face at `face_z` looking +z, its
 inner face at `face_z - thickness`. A record: {"outline": the glass's
-corners, "normal": out of the building, "lead"}; a piece carries its own as
+corners, "normal": out of the building, "lead", "outside"/"inside": the
+wall's outer/inner face from the glass}; a piece carries its own as
 PIECES[name]["windows"], and world_windows puts them in the world for the
 manifest. Pure data, as the kits.
 """
@@ -118,7 +119,8 @@ def glazed(x, sill, width, height, face_z, thickness, shape="square", lead="case
         shapes.append(ks.polygon(list(reversed(ring)), s, list(reversed(uvs))))
 
     cols = [[x, sill + height / 2.0, middle, width, height, thickness, "glass", 0.0, 0.0, 0.0]]
-    record = {"outline": [[p[0], p[1], glass_z] for p in pts], "normal": [0.0, 0.0, 1.0], "lead": lead}
+    record = {"outline": [[p[0], p[1], glass_z] for p in pts], "normal": [0.0, 0.0, 1.0], "lead": lead,
+              "outside": setback, "inside": thickness - setback}
     return shapes, cols, record
 
 
@@ -243,6 +245,7 @@ def world_windows(pieces, recipes):
     for p in pieces:
         for r in recipes[p["piece"]].get("windows", []):
             out.append({"piece": p["name"], "sector": p["sector"], "lead": r["lead"],
+                        "outside": round(r.get("outside", 0.0), 4), "inside": round(r.get("inside", 0.0), 4),
                         "outline": [[round(v, 4) for v in geo.add(p["position"], geo.apply(p["basis"], q))] for q in r["outline"]],
                         "normal": [round(v, 4) for v in geo.apply(p["basis"], r["normal"])]})
 

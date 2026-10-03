@@ -75,6 +75,10 @@ class Glazed(unittest.TestCase):
         self.assertEqual(self.rec["lead"], "quarries")
         self.assertEqual(len(self.rec["outline"]), 11)
         self.assertTrue(all(abs(p[2] + 0.15) < 1e-6 for p in self.rec["outline"]))
+        # (How far the wall's faces are from the glass: a shaft's mouth is
+        # the beam's cross-section at the room's face.)
+        self.assertAlmostEqual(self.rec["outside"], 0.15, places=6)
+        self.assertAlmostEqual(self.rec["inside"], 0.45, places=6)
 
 
 class Walls(unittest.TestCase):
@@ -133,6 +137,7 @@ class Manifest(unittest.TestCase):
         self.assertEqual(len(out), 1)
         w = out[0]
         self.assertEqual((w["piece"], w["sector"], w["lead"]), ("probe", "s", "casement"))
+        self.assertEqual((w["outside"], w["inside"]), (0.15, 0.45))
         self.assertEqual(w["normal"], [round(v, 4) for v in geo.apply(basis, [0.0, 0.0, 1.0])])
         first = geo.add([10.0, 0.0, 5.0], geo.apply(basis, self.rec["outline"][0]))
         self.assertEqual(w["outline"][0], [round(v, 4) for v in first])
