@@ -5,12 +5,25 @@ Level runtime construction has two stages: [LevelLoader](../../scripts/Level/Lev
 ## Lifecycle and callers
 
 1. Export a level into `res://assets/level/<name>/`, including `<name>.json` and optional `<sector>.glb` files.
-2. Call `LevelLoader.load_level(parent: Node3D, folder: String, root_name="Level") -> Level`. The returned RefCounted record refers to newly added scene nodes; freeing the record does not free the root.
+2. Call `LevelLoader.load_level(parent: Node3D, folder: String, root_name="Level", skip_sectors: Array = []) -> Level`. The returned RefCounted record refers to newly added scene nodes; freeing the record does not free the root. A sector in `skip_sectors` is left out whole (no holder, mesh, collider, terrain, socket or marker). `LevelLoader.load_proxy(parent, folder, near := 60.0) -> Node3D` draws a district's `proxy.glb` only from `near` metres out, shadowless, with no collision.
 3. Call `LevelGameplay.build_all(parent: Node3D, level) -> Dictionary` for doors, fixtures, water/climbing, routes/stations, loot, and mission places. `level` is dynamically typed and expected to expose `of()`, `marks`, and marker records.
 4. Bake navigation before `LevelGameplay.guards(parent, level, route_nodes: Dictionary, station_nodes: Dictionary, scene: PackedScene) -> Dictionary`.
 5. Configure Night with moon/environment and weather resources before adding it to the tree. Its child rain/audio/sky helpers start in `_ready()`. Zones and Wind can consume the resulting weather.
 
 The loader creates one shared Zones controller for levels beneath the same map parent, preventing multiple districts from grading the same camera independently. The first night node in the tree's `night` group is the weather used by `Night.of()` and group lookups; the implementation does not perform spatial selection among multiple Nights.
+
+## Districts as maps
+
+The city is played one district at a time (`docs/superpowers/specs/2026-10-02-old-town-design.md`, section 3A). The registry `data/districts.json` names each district's map, levels, massing sector and whether other maps draw its proxy; the level pipeline (`tools/level/districts.py`, `rules.district_problems`) and Godot (`scripts/Level/Districts.gd`) both read it.
+
+| Piece | What it does |
+| --- | --- |
+| [DistrictMap](../../scripts/Level/DistrictMap.gd) | The base of every district's map: loads its levels, the massing without its own sector (or those of districts drawn by proxy), the other districts' proxies; calls the district's `_dress()` (night, wind, life) and `_nav(baker)`; loads its navmesh from `assets/level/navmesh/<district>.scn` when the source hash matches, else bakes live (and says so); makes its guards; puts the player at `arrival`, `--vantage=<marker>` or its first spawn. Options: `--fps-report=<s>`, `--bake-navmesh` (bake, save, quit). [city.gd](../../maps/city.gd) is the harbour's, [old_town.gd](../../maps/old_town.gd) the stand-in old town's. |
+| [Mission](../../maps/mission.gd) (`res://maps/mission.tscn`) | Holds the map in hand. At an exit whose `to` is a built district: what the player holds or shoulders is set down at the gate, `CityState.leave`, dark, the next map built with the player at the exit's `arrive`, up again. Exits ignore the player for 1 s after he arrives; an exit to an unbuilt district only says where it leads. |
+| [CityState](../../scripts/Level/CityState.gd) (autoload) | The city's memory: each district's state as the player left it, what he carries (`PlayerController.save_state`: health, purse, keys, belt) and the watchmen following him. A man fighting the player within 30 m of the gate follows: away from his district, made again on the far side (`LevelGameplay.visitor`) a pace behind the arrival, as long after the player as his run takes. |
+| [DistrictState](../../scripts/Level/DistrictState.gd) | One district's state, keyed by marker name: `capture(parent, made, guards, visitors)` and `apply(...)` over doors, chests, pickups, lamps (`save_state`/`load_state` on each), props, mechanisms, guards (up, down or away), bodies and visitors. This is the save contract: saving writes the same to disk. |
+
+The navmesh is baked offline with `tools/level/level.sh navmesh <district>` after a district is exported; `NavBaker.save_baked(path, hash)` keeps its land mesh, swim and doorway regions and links (a climb's volume by its path), `load_baked(path, hash)` puts them back and re-ties water, doors and climbs by name. `NavBaker.source_hash(folders, settings)` hashes the levels' manifests and sector meshes and the baker's settings.
 
 ## Export schema
 
