@@ -46,7 +46,8 @@
     "width": 1.2,
     "height": 2.2,
     "barred": false,
-    "pick": true
+    "pick": true,
+    "curfew": false
    },
    "box": false
   },
@@ -61,7 +62,8 @@
     "color": "",
     "cookie": "",
     "douse": true,
-    "chain": 0.0
+    "chain": 0.0,
+    "dark_only": false
    },
    "box": false
   },
@@ -311,7 +313,60 @@
     "order",
     "move"
    ],
+   "optional": {
+    "way": "",
+    "step": "",
+    "into": "",
+    "kind": ""
+   },
+   "box": false
+  },
+  "household": {
+   "required": [
+    "label"
+   ],
+   "optional": {
+    "ways": 3,
+    "people": ""
+   },
+   "box": true
+  },
+  "terrace_step": {
+   "required": [
+    "label"
+   ],
+   "optional": {
+    "public": 2,
+    "thief": 1
+   },
+   "box": true
+  },
+  "shunned": {
+   "required": [
+    "label"
+   ],
    "optional": {},
+   "box": true
+  },
+  "home": {
+   "required": [],
+   "optional": {
+    "label": ""
+   },
+   "box": false
+  },
+  "seat": {
+   "required": [],
+   "optional": {
+    "label": ""
+   },
+   "box": false
+  },
+  "work": {
+   "required": [],
+   "optional": {
+    "kind": ""
+   },
    "box": false
   },
   "lever": {
@@ -409,7 +464,8 @@
   "hearth",
   "fire",
   "glow",
-  "lamp_post"
+  "lamp_post",
+  "comet_shaft"
  ],
  "grades": [
   "outside",

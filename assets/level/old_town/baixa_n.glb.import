@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://cdbsoyobdd5uy"
-path="res://.godot/imported/ground.glb-0ce201743a03284929c5c7bad30b5dc7.scn"
+uid="uid://rglqwxvjn0e8"
+path="res://.godot/imported/baixa_n.glb-c39667b6e33d1edc1643cbe9ccfa5d7c.scn"
 
 [deps]
 
-source_file="res://assets/level/old_town/ground.glb"
-dest_files=["res://.godot/imported/ground.glb-0ce201743a03284929c5c7bad30b5dc7.scn"]
+source_file="res://assets/level/old_town/baixa_n.glb"
+dest_files=["res://.godot/imported/baixa_n.glb-c39667b6e33d1edc1643cbe9ccfa5d7c.scn"]
 
 [params]
 

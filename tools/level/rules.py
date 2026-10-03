@@ -223,6 +223,7 @@ def problems(data, stage="stage1"):
 
     out.extend(move_problems(data, boxes, ground))
     out.extend(way_problems(data))
+    out.extend(door_problems(data))
     out.extend(headroom_problems(data, boxes, ground))
     out.extend(key_problems(data))
 
@@ -522,6 +523,49 @@ def way_problems(data):
                                                                                                     public, thief))
 
     return out
+
+
+def door_problems(data):
+    """The old town's doors (its spec's rule 22): every live door of a
+    placed town piece (its recipe's `doors`) has a door marker within 0.3 m
+    of it, and no door marker stands in a town piece's colliders (on a shut
+    front) but at one of its live doors."""
+    out = []
+    doors = [m for m in data["markers"] if m["ucd"] == "door"]
+    live, solid = [], []
+
+    for p in data["pieces"]:
+        recipe = kit_recipes.PIECES.get(p["piece"])
+
+        if not recipe or recipe.get("family") != "town":
+            continue
+
+        for d in recipe.get("doors", []):
+            where = geo.add(p["position"], geo.apply(p["basis"], d[0:3]))
+            live.append(where)
+
+            if not any(_apart(m["position"], where) <= 0.3 for m in doors):
+                out.append("%s: its door at (%.1f, %.1f, %.1f) has no door marker" % (p["name"], where[0], where[1], where[2]))
+
+        solid.append((p["name"], geo.piece_boxes(recipe, p["position"], p["basis"])))
+
+    for m in doors:
+        if any(_apart(m["position"], where) <= 0.3 for where in live):
+            continue
+
+        # (A door's middle, a metre over its foot: in a wall drawn shut.)
+        middle = geo.add(m["position"], [0.0, 1.0, 0.0])
+
+        for name, boxes in solid:
+            if any(box.contains(middle, 0.05) for box in boxes):
+                out.append("%s (door): on a shut front of %s" % (m["name"], name))
+                break
+
+    return out
+
+
+def _apart(a, b):
+    return sum((a[i] - b[i]) ** 2 for i in range(3)) ** 0.5
 
 
 def headroom_problems(data, boxes, ground):

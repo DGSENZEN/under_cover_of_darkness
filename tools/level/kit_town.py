@@ -593,6 +593,58 @@ def _size(design):
     return [max(2.0 * reach[0], given[0]), max(reach[1], given[1]), max(2.0 * reach[2], given[2])]
 
 
+def _family_args(lot):
+    """A lot as its family's design call: its common fields where the family
+    takes them, the rest from lot.params (the pre-flight ruling)."""
+    params = dict(lot.params)
+
+    if lot.family == "porto":
+        import kit_porto
+        return kit_porto.design, dict(width=lot.width, depth=lot.depth, storeys=lot.storeys, quirk=lot.quirk, enterable=lot.enterable,
+                                      rooms=lot.rooms, **params)
+
+    if lot.family == "pombal":
+        import kit_pombal
+        return kit_pombal.design, dict(depth=lot.depth, storeys=lot.storeys, quirk=lot.quirk, enterable=lot.enterable, rooms=lot.rooms, **params)
+
+    if lot.family == "patio":
+        import kit_patio
+        return kit_patio.design, dict(width=lot.width, depth=lot.depth, quirk=lot.quirk, enterable=lot.enterable, **params)
+
+    if lot.family == "tower":
+        import kit_tower
+        return kit_tower.design, dict(side=lot.width, storeys=lot.storeys, quirk=lot.quirk, enterable=lot.enterable, **params)
+
+    raise ValueError("no house family '%s'" % lot.family)
+
+
+def register_lot(lot):
+    """The piece a lot (town.Lot) is built as, registered if new; its name."""
+    import town as lot_plan
+    key = lot_plan.design_key(lot)
+
+    if key not in k.PIECES:
+        call, args = _family_args(lot)
+        design = call(**args)
+        register(key, "town", design.get("front", "render_ochre"), design)
+
+    return key
+
+
+def register_town():
+    """Every house the old town's lot plan asks for, and every terrace piece
+    its quarters ask for (kit_recipes calls this at its end, so the kit
+    builds them all)."""
+    import kit_terrace
+    import town as lot_plan
+
+    for lot in lot_plan.all_lots():
+        register_lot(lot)
+
+    for kind, args in lot_plan.terrace_pieces():
+        getattr(kit_terrace, kind)(*args)
+
+
 def register(name, family, slot, design, surface="stone"):
     """`design` (shapes, cols, size; and any of CARRIED, chimneys) made the
     kit piece `name`; returns the name."""

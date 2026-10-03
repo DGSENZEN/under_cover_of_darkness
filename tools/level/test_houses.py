@@ -44,6 +44,10 @@ def toured(design, route):
     # (A yard round the house: the street in front, lanes beside and behind.)
     kit_recipes.piece("test_street", "floor", "cobble", "stone", [kit_recipes.box(0.0, -0.1, -10.0, 24.0, 0.2, 28.0, "cobble")])
     points = [marker("tour_%d" % (i + 1), "route_check", p[:3], {"route": "tour", "order": i + 1, "move": p[3]}) for i, p in enumerate(route)]
+    # (Its doors' markers, as the layout lays them: rules.door_problems.)
+    for i, d in enumerate(design.get("doors", [])):
+        points.append(marker("door_%d" % (i + 1), "door", d[0:3]))
+
     # (Its climbs, ladders as the layout lays them, Layout.put climbs=True.)
     for i, c in enumerate(design.get("climbs", [])):
         points.append(dict(marker("climb_%d" % (i + 1), "ladder", c[0:3], size=list(c[3:6])), basis=geo.rotation(c[6])))

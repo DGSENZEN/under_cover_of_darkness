@@ -650,6 +650,10 @@ import kit_town_chapel  # noqa: E402,F401
 import kit_landmarks  # noqa: E402,F401
 import kit_carmo  # noqa: E402,F401
 
+# Every house of the old town's lot plan, one piece per design, and the
+# terrace pieces its quarters ask for (kit_town.register_town).
+kit_town.register_town()
+
 # Dense structure found by no one by name, joined at export (merge_groups) in
 # the levels that ask for it (export.MERGE_LEVELS): floors, the city's
 # walls, quays, the Terreiro's arcade bays (the naves' are flagged in

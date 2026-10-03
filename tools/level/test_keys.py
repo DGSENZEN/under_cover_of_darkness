@@ -53,6 +53,8 @@ def way_problems(name):
         points = [marker("%s_%d" % (route, j + 1), "route_check", p[:3], {"route": route, "order": j + 1, "move": p[3]})
                   for j, p in enumerate(way["points"])]
         ladders = [dict(marker("climb_%d" % j, "ladder", c[0:3], size=list(c[3:6])), basis=_basis(c[6])) for j, c in enumerate(recipe.get("climbs", []))]
+        # (Its doors' markers, as the layout lays them: rules.door_problems.)
+        ladders += [marker("door_%d" % j, "door", d[0:3]) for j, d in enumerate(recipe.get("doors", []))]
         problems = rules.problems({"level": "fixture", "pieces": pieces + extra, "markers": points + ladders})
         out.setdefault(way["kind"], []).extend(problems)
 
