@@ -11,13 +11,18 @@ import kit_recipes
 from lay import facing
 
 from . import (ARCADE_FRONT, CARRACK_X, CARRACK_Z, CUSTOMS, GATE_X, MAINYARD_Y, MOLE_HEAD, MOLE_X, QUAY, SEA_WALL, WALK, WALL_D, WALL_E, WALL_F,
-               WALL_RIB, WALL_W, along, rib_x, stair_y)
+               WALL_RIB, WALL_W, STAIR_X, along, rib_x, stair_y)
 from .mole import TOP as MOLE_TOP, head_yaw
 from .ribeira import ROOF_HOUSE
 from .ships import START_BOAT
 
 TERRACE = MOLE_TOP + 18.0
 ROOF_EAVES = QUAY + kit_recipes.PIECES["casa_d"]["eaves"]
+# Where each exit leads (data/districts.json): the old town's four gates to
+# their arrivals there; the river and the undercroft sealed until built.
+LEADS = {"exit_sea_gate": ("old_town", "from_harbour_sea_gate"), "exit_wall_walk": ("old_town", "from_harbour_wall_walk"),
+         "exit_guindais": ("old_town", "from_harbour_guindais"), "exit_west_wall": ("old_town", "from_harbour_west_wall"),
+         "exit_river": ("gorge", ""), "exit_undercroft": ("undercroft", "")}
 
 
 def _terrace(radius, angle):
@@ -190,7 +195,15 @@ def _exits_and_views(L):
             ("exit_west_wall", (WALL_W, stair_y(-116.0) + 12.0, -116.0), [3.0, 3.0, 3.0], "the old town (the west wall)", "ribeira"),
             ("exit_river", (-215.0, 0.0, -147.0), [40.0, 4.0, 4.0], "the gorge (the river)", "river"),
             ("exit_undercroft", (232.0, 2.0, -9.0), [5.0, 3.0, 2.0], "the undercroft (sealed)", "cave")):
-        L.mark(name, "exit", at, 0.0, sector, size=size, label=label)
+        to, arrive = LEADS[name]
+        L.mark(name, "exit", at, 0.0, sector, size=size, label=label, to=to, arrive=arrive)
+
+    # Coming back from the old town: just outside each gate, facing the harbour.
+    for name, at, sector in (("from_old_town_sea_gate", (GATE_X, QUAY, -62.0), "terreiro"),
+                             ("from_old_town_wall_walk", (WALL_E, WALK, -64.0), "shipyard"),
+                             ("from_old_town_guindais", (STAIR_X, stair_y(-85.0), -85.0), "ribeira"),
+                             ("from_old_town_west_wall", (WALL_W, stair_y(-109.4) + 12.0, -109.4), "ribeira")):
+        L.mark(name, "arrival", at, 180.0, sector)
 
     L.mark("start", "spawn", (START_BOAT[0], START_BOAT[1] - 0.12, START_BOAT[2]), facing(START_BOAT, (160.0, 0.0, 60.0)), "ships")
     L.mark("blowhole", "mark", (232.0, 26.0, 0.0), 0.0, "cave")

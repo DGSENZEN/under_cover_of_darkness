@@ -93,5 +93,66 @@ class Districts(unittest.TestCase):
         self.assertIn("gorge", registry["unbuilt"])
 
 
+class City(unittest.TestCase):
+    """The city's own levels: the harbour, the massing and the stand-in old
+    town, made once."""
+
+    @classmethod
+    def setUpClass(cls):
+        import city_harbour
+        import city_massing
+        import old_town
+        cls.harbour = city_harbour.layout()
+        cls.massing = city_massing.layout()
+        cls.old_town = old_town.layout()
+
+    def test_the_registry_names_levels_with_layouts(self):
+        import importlib
+
+        for entry in districts.load()["districts"].values():
+            for level in entry["levels"]:
+                self.assertEqual(importlib.import_module(level).layout()["level"], level)
+
+    def test_the_shared_edge_is_the_wall_and_the_gate(self):
+        import edges
+        pieces = edges.shared_edge(self.harbour)
+        kinds = {p["piece"] for p in pieces}
+        self.assertTrue({"gate_front", "gate_passage_16", "tower_drum_8", "city_wall_12_6"} <= kinds)
+        # Not the passage's closing wall, nor the harbour's towers.
+        self.assertFalse(kinds & {"wall_granite_4", "gold_stage_1", "fort_tower"})
+        self.assertTrue(all(p["sector"] == "wall" for p in pieces))
+        self.assertTrue(all(p["sector"] != "wall" for p in self.harbour["pieces"]), "the harbour's own pieces untouched")
+
+    def test_the_old_town_stand_in_checks_clean(self):
+        self.assertEqual(rules.problems(self.old_town, "stage2"), [])
+
+    def test_the_city_checks_clean_across_districts(self):
+        datas = {d["level"]: d for d in (self.harbour, self.massing, self.old_town)}
+        self.assertEqual(rules.district_problems(districts.load(), datas), [])
+
+    def test_every_gate_leads_back(self):
+        # Each harbour exit to the old town arrives by an old-town exit that
+        # leads back to a harbour arrival, and the other way round.
+        def by_name(data):
+            return {m["name"]: m for m in data["markers"]}
+
+        harbour, old = by_name(self.harbour), by_name(self.old_town)
+        gates = [m for m in self.harbour["markers"] if m["ucd"] == "exit" and m["props"].get("to") == "old_town"]
+        self.assertEqual(len(gates), 4)
+
+        for m in gates:
+            gate = m["props"]["arrive"][len("from_harbour_"):]
+            back = old["to_harbour_" + gate]
+            self.assertEqual(back["props"]["to"], "harbour")
+            self.assertEqual(back["props"]["arrive"], "from_old_town_" + gate)
+            self.assertEqual(harbour["from_old_town_" + gate]["ucd"], "arrival")
+            self.assertEqual(old["from_harbour_" + gate]["ucd"], "arrival")
+
+    def test_the_sealed_ways_name_their_districts(self):
+        harbour = {m["name"]: m for m in self.harbour["markers"]}
+        self.assertEqual(harbour["exit_river"]["props"]["to"], "gorge")
+        self.assertEqual(harbour["exit_undercroft"]["props"]["to"], "undercroft")
+
+
 if __name__ == "__main__":
     unittest.main()
