@@ -11,6 +11,7 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const ThrownToolScript := preload("res://scripts/Combat/ThrownTool.gd")
+const LetterText := preload("res://scripts/UI/LetterText.gd")
 
 ## The tools thrown from your hand (ThrownTool.kind).
 const THROWN_TOOLS := [&"flashbomb", &"waterflask"]
@@ -20,6 +21,10 @@ const PICK_TIME := 3.2
 const PICK_CLICK := 0.4
 const PICK_DB := 28.0
 const PICK_STILL := 0.8
+## A page up is put away if you were hurt this recently (s), or (a readable)
+## you have gone this far from where you took it up (m).
+const HURT_LOWERS := 0.2
+const READ_LEAVE := 2.0
 
 signal frobbed(target: Node)
 signal picked_up(body: RigidBody3D)
@@ -102,6 +107,9 @@ var _carry_strain := 0.0
 ## Where what you hold was when you took it: moved from there (into a guard's
 ## hand), it is no longer yours.
 var _held_parent: Node = null
+## The readable whose page is up (Readable), null for the letter.
+var _reading: Node = null
+var _read_from := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -118,6 +126,18 @@ func _ready() -> void:
 	_ensure_action("throw", -1, MOUSE_BUTTON_LEFT)
 	_ensure_action("belt_next", -1, MOUSE_BUTTON_WHEEL_DOWN)
 	_ensure_action("belt_prev", -1, MOUSE_BUTTON_WHEEL_UP)
+	_ensure_action("letter", KEY_J)
+
+	# The letter up shows what is learnt as it is learnt.
+	CityState.job.noted.connect(_on_job_changed)
+	CityState.job.goal_shown.connect(_on_job_changed)
+	CityState.job.goal_done.connect(_on_job_changed)
+
+
+func _exit_tree() -> void:
+	for sig in [CityState.job.noted, CityState.job.goal_shown, CityState.job.goal_done]:
+		if (sig as Signal).is_connected(_on_job_changed):
+			(sig as Signal).disconnect(_on_job_changed)
 
 
 ## Something is in your hands (tracked apart from `held`, which reads as
@@ -140,6 +160,10 @@ func _physics_process(delta: float) -> void:
 	if player.is_dead:
 		_set_target(null)
 		_swing_windup = -1.0
+
+		if _page_up():
+			put_page_away()
+
 		return
 
 	# What you held is gone (it burst in your hands): the hands are free.
@@ -173,11 +197,36 @@ func _physics_process(delta: float) -> void:
 	if _picking != null:
 		_update_picking(delta)
 
+	var hands: Node = player.hand
+
+	# A page up (the letter, a readable): put away by J or E or by whatever
+	# wants the hands; a click turns it over; nothing else meanwhile.
+	if _page_up() and page_must_lower():
+		put_page_away()
+
+	if Input.is_action_just_pressed("letter") and not _unlocking:
+		if _page_up():
+			put_page_away()
+		elif can_raise_page():
+			open_letter()
+
+	if _page_up():
+		_set_target(null)
+		hands.set_checking(false)
+
+		if Input.is_action_just_pressed("frob"):
+			put_page_away()
+
+		if not player.is_mouse_input_swallowed() and Input.is_action_just_pressed("throw"):
+			hands.turn_page()
+			player.spend_attack_press()
+
+		return
+
 	if Input.is_action_just_pressed("frob") and not _unlocking:
 		_on_frob()
 
 	# Holding Tab: raise the purse and key ring to see what you carry.
-	var hands: Node = player.hand
 
 	if hands != null and hands.has_method("set_checking"):
 		var free := held == null and shouldered == null and _hands_free()
@@ -204,6 +253,87 @@ func _physics_process(delta: float) -> void:
 
 	if mouse_free and Input.is_action_just_pressed("belt_prev"):
 		player.inventory.select_next(-1)
+
+
+# A page held up in both hands
+
+## The letter up in both hands (LetterText's sides of the job).
+func open_letter() -> void:
+	var hands: Node = player.hand
+
+	if hands == null or not hands.has_method("hold_page"):
+		return
+
+	_reading = null
+	CityState.job.letter_opened = true
+	hands.hold_page(LetterText.sides(CityState.job), &"letter")
+
+
+## Whatever page is up, put away (a readable back where it was).
+func put_page_away() -> void:
+	var hands: Node = player.hand
+
+	if hands != null and hands.has_method("lower_page"):
+		hands.lower_page()
+
+	if _reading != null and is_instance_valid(_reading) and _reading.has_method("set_held"):
+		_reading.set_held(false)
+
+	_reading = null
+
+
+## The letter (not a readable) is up.
+func letter_up() -> bool:
+	return _page_up() and _reading == null and player.hand.page_look() == &"letter"
+
+
+## The readable whose page is up, or null.
+func reading() -> Node:
+	return _reading if _page_up() else null
+
+
+## Hands free for a page: nothing held or shouldered, no key turning or lock
+## being picked, no blow, on your feet.
+func can_raise_page() -> bool:
+	var hands: Node = player.hand
+	return hands != null and held == null and shouldered == null and not _unlocking and _picking == null and _hands_free() \
+		and _combat_idle() and not hands.is_busy() and not player.is_dead
+
+
+## What puts a page away: the hands wanted (a carry, a climb, a hang, a
+## swim), a run, a jump or a fall, a blow struck or taken, death; a
+## readable left behind.
+func page_must_lower() -> bool:
+	if player.is_dead or held != null or shouldered != null or _picking != null:
+		return true
+
+	if player.movement_state != player.MoveState.LOCOMOTION or player._is_sprinting():
+		return true
+
+	# Off the ground and going somewhere (a jump, a fall), not the settle of
+	# a step down.
+	if not player.is_on_floor() and absf(player.velocity.y) > 1.5:
+		return true
+
+	if not _combat_idle():
+		return true
+
+	var hurt_at: Variant = player.get("_hurt_at")
+
+	if hurt_at != null and float(player.get("_game_time")) - float(hurt_at) < HURT_LOWERS:
+		return true
+
+	return _reading != null and (not is_instance_valid(_reading) or player.global_position.distance_to(_read_from) > READ_LEAVE)
+
+
+func _page_up() -> bool:
+	var hands: Node = player.hand
+	return hands != null and hands.has_method("is_page_up") and hands.is_page_up()
+
+
+func _on_job_changed(_a: Variant = null, _b: Variant = null) -> void:
+	if letter_up():
+		player.hand.update_page(LetterText.sides(CityState.job))
 
 
 ## On the ground and not mid-move. Hanging, climbing and vaulting all need
@@ -314,6 +444,17 @@ func current_prompt() -> String:
 func current_actions() -> Array:
 	if _unlocking:
 		return []
+
+	if _page_up():
+		if _reading != null:
+			return [[&"frob", "Put down" if player.hand.page_look() == &"paper" else "Look away"]]
+
+		var rows := [[&"letter", "Put away"]]
+
+		if player.hand.page() != null and player.hand.page().side_count() > 1:
+			rows.append([&"throw", "Turn over"])
+
+		return rows
 
 	# At a lock with the pick: what you are doing, not a key to press.
 	if _picking != null:

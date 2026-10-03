@@ -29,6 +29,8 @@ const BARK_TOP := 0.13
 ## A mark at the bottom edge is kept this far to the side of the lightgem's
 ## middle (px).
 const GEM_CLEAR := 48.0
+## While a page is held up, its prompts sit this far down the screen, above it.
+const READING_PROMPTS := 0.27
 ## A man with a wall between your eyes and his: his mark this faint (of
 ## its alpha), looked for every WALLED_EVERY (s).
 const WALLED_ALPHA := 0.42
@@ -875,11 +877,16 @@ func _process(delta: float) -> void:
 	_crosshair.warm = lerpf(_crosshair.warm, 1.0 if not actions.is_empty() else 0.0, 1.0 - exp(-14.0 * delta))
 	_crosshair.size = Vector2(52, 52)
 	_crosshair.position = centre - _crosshair.size * 0.5
+	# A page held up to read: nothing is aimed at, and the prompts go above
+	# it (READING_PROMPTS of the height down) rather than over its words.
+	var reading: bool = player.hand != null and player.hand.has_method("is_page_up") and player.hand.is_page_up()
+	_crosshair.visible = not reading
 	_crosshair.queue_redraw()
 	# Centred under it however many there are, and kept on the screen.
 	var row := _prompts.get_combined_minimum_size()
 	_prompts.size = row
-	_prompts.position = Vector2(clampf(centre.x - row.x * 0.5, EDGE, maxf(view.x - EDGE - row.x, EDGE)), centre.y + 26)
+	_prompts.position = Vector2(clampf(centre.x - row.x * 0.5, EDGE, maxf(view.x - EDGE - row.x, EDGE)),
+		view.y * READING_PROMPTS if reading else centre.y + 26)
 	_prompts.modulate.a = _prompt_alpha
 
 	# The lightgem.

@@ -1,0 +1,249 @@
+extends Node3D
+## The letter and the readables in both hands (the harbour's job plan, Tasks
+## 4-6): J raises and lowers the letter, its front the job and its back the
+## pencil notes; what lowers it; both hands on the page; readables held and
+## put back; the seal turned in the hand; the goal's sting.
+##   Godot --headless --fixed-fps 60 --path . res://tests/letter_test.tscn
+
+const PLAYER := preload("res://Player.tscn")
+const Props := preload("res://scripts/Interaction/Props.gd")
+const HeldPage := preload("res://scripts/Interaction/HeldPage.gd")
+const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
+
+var player: CharacterBody3D
+var results: Array[String] = []
+
+
+func _ready() -> void:
+	TemperamentScript.rolling = false
+	var world := WorldEnvironment.new()
+	world.environment = Environment.new()
+	add_child(world)
+	Props.block(self, Vector3(0, -0.5, 0), Vector3(40, 1, 40))
+	CityState.begin()
+	player = PLAYER.instantiate()
+	player.set("show_hud", false)
+	add_child(player)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	player.reload_on_death = false
+	player.global_position = Vector3(0, 1.05, 0)
+	Props.give_blackjack(player)
+	CityState.job.arrive(&"harbour")
+	await _frames(10)
+	await _letter()
+	print("\n==== RESULTS ====")
+
+	for line in results:
+		print(line)
+
+	var failed := results.filter(func(r): return r.begins_with("FAIL")).size()
+	print("\n%d pass, %d fail" % [results.size() - failed, failed])
+	get_tree().quit()
+
+
+# ---------------------------------------------------------------------------
+# L1-L11: the letter
+# ---------------------------------------------------------------------------
+
+func _letter() -> void:
+	var hand: Node = player.hand
+	var frob: Node = player.frob
+
+	await _tap("letter")
+	var up: bool = hand.is_page_up() and frob.letter_up()
+	await _frames(10)
+	await _tap("letter")
+	await _frames(2)
+	_check("L1 J raises the letter and J lowers it", up and not hand.is_page_up() and not frob.letter_up(),
+		"up %s, after %s" % [up, hand.is_page_up()])
+
+	await _raise()
+	var page: Node = hand.page()
+	var front: String = page.text_of(0)
+	var commission := String(CityState.job.book["letter"]["text"])
+	var listed: bool = CityState.job.goals_listed().all(func(g): return front.contains(String(g["text"])))
+	CityState.job.took_loot("the_seal", 250)
+	await _frames(2)
+	var seal_text := ""
+
+	for g in CityState.job.goals_listed():
+		if g["id"] == "seal":
+			seal_text = String(g["text"])
+
+	var struck: bool = page.text_of(0).contains("[s]" + seal_text)
+	_check("L2 the front lists the job, a done goal struck through", front.contains(commission) and listed and struck,
+		"commission %s, listed %s, struck %s" % [front.contains(commission), listed, struck])
+
+	CityState.begin()
+	CityState.job.arrive(&"harbour")
+	var ids: Array = (CityState.job.book["notes"] as Dictionary).keys()
+
+	for i in ids.size():
+		CityState.job.learn(String(ids[i]))
+
+	# Eleven notes: the harbour's eight and three more from a book of its own.
+	var extra: Dictionary = CityState.job.book.duplicate(true)
+
+	for n in ["n_a", "n_b", "n_c"]:
+		extra["notes"][n] = {"id": n, "text": "<<%s>>" % n}
+
+	CityState.job.book = extra
+
+	for n in ["n_a", "n_b", "n_c"]:
+		CityState.job.learn(n)
+
+	await _frames(2)
+	var sides: int = page.side_count()
+	var side_1: PackedStringArray = _lines(page.text_of(1))
+	var side_2: PackedStringArray = _lines(page.text_of(2)) if sides > 2 else PackedStringArray()
+	var pencil: bool = side_1.size() == 10 and Array(side_1).all(func(l): return String(l).contains("— ")) and side_2.size() == 1
+	_check("L3 the back holds the notes in pencil, ten to a side", sides == 3 and pencil,
+		"%d sides, side 1 %d lines, side 2 %d" % [sides, side_1.size(), side_2.size()])
+
+	await _tap("throw")
+	await _frames(2)
+	_check("L4 a click turns the sheet; it is not an attack", page.side == 1 and frob._swing_windup < 0.0 and float(hand._swing) == 0.0,
+		"side %d, windup %.2f, swing %.2f" % [page.side, frob._swing_windup, hand._swing])
+
+	var door: Node3D = Props.door(self, Vector3(0.0, 0.0, -1.6))
+	await _aim(Vector3(0.0, 1.0, -1.6))
+	await _tap("frob")
+	await _frames(20)
+	_check("L5 E puts the letter away and opens nothing", not hand.is_page_up() and door.get("is_open") == false,
+		"up %s, door open %s" % [hand.is_page_up(), door.get("is_open")])
+	door.queue_free()
+	await _frames(2)
+
+	await _raise()
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _frames(20)
+	var sprint_lowers: bool = not hand.is_page_up()
+	Input.action_release("sprint")
+	Input.action_release("move_forward")
+	await _settle()
+	await _raise()
+	await _tap("jump")
+	await _frames(6)
+	var jump_lowers: bool = not hand.is_page_up()
+	await _settle()
+	await _raise()
+	player.movement_state = player.MoveState.CLIMBING
+	var climb_lowers: bool = frob.page_must_lower()
+	player.movement_state = player.MoveState.LOCOMOTION
+	_check("L6 sprinting, jumping and climbing lower it", sprint_lowers and jump_lowers and climb_lowers,
+		"sprint %s, jump %s, climb %s" % [sprint_lowers, jump_lowers, climb_lowers])
+
+	await _raise()
+	await _frames(30)
+	var weights: Array = hand._grip_weights
+	_check("L7 both hands hold the page; what the right held goes down", float(weights[0]) > 0.9 and float(weights[1]) > 0.9
+		and float(hand._main_lower) > 0.9, "grips %.2f %.2f, main lowered %.2f" % [weights[0], weights[1], hand._main_lower])
+
+	var material: Variant = page.paper_material()
+	var lit: bool = material is StandardMaterial3D and (material as StandardMaterial3D).emission_enabled \
+		and (material as StandardMaterial3D).emission_energy_multiplier >= HeldPage.LIGHT_FLOOR \
+		and (material as StandardMaterial3D).albedo_texture is ViewportTexture
+	_check("L8 the page reads in the dark: its own words lit to a floor", lit, "material %s" % material)
+
+	player.take_damage(5.0, null)
+	await _frames(12)
+	_check("L9 getting hit puts the page away", not hand.is_page_up(), "up %s" % hand.is_page_up())
+	player.health = player.max_health if player.get("max_health") != null else player.health
+	await _settle()
+
+	var crate: RigidBody3D = Props.crate(self, Vector3(0.0, 0.3, -1.3))
+	await _aim(crate.global_position)
+	await _tap("frob")
+	await _frames(4)
+	var carrying: bool = frob.held != null
+	await _tap("letter")
+	await _frames(2)
+	var no_page_carrying: bool = not hand.is_page_up()
+	await _tap("frob")
+	await _frames(10)
+	crate.queue_free()
+	var locked: Node3D = Props.door(self, Vector3(0.0, 0.0, -1.6), 0.0, 1.0, 2.1, true, &"study", "study door")
+	player.inventory.add_key(&"study", "study key")
+	await _settle()
+	await _aim(Vector3(0.0, 1.0, -1.6))
+	await _tap("frob")
+	await _frames(2)
+	var unlocking: bool = frob._unlocking
+	await _tap("letter")
+	await _frames(60)
+	_check("L10 J does nothing while the hands are busy (carrying, turning a key); the key still turns",
+		carrying and no_page_carrying and unlocking and not hand.is_page_up() and locked.get("locked") == false,
+		"carrying %s, page %s; unlocking %s, page %s, unlocked %s" % [carrying, not no_page_carrying, unlocking, hand.is_page_up(),
+			locked.get("locked") == false])
+	locked.queue_free()
+	await _settle()
+
+	await _raise()
+	await _tap("throw")
+	await _frames(2)
+	var blowhole := "<<pencil: the blowhole>>"
+	CityState.begin()
+	CityState.job.arrive(&"harbour")
+	CityState.job.learn("office_key")
+	await _frames(1)
+	var before: String = page.text_of(1)
+	CityState.job.learn("blowhole")
+	var now: String = page.text_of(1)
+	_check("L11 a note learnt while reading shows at once", hand.is_page_up() and not before.contains(blowhole) and now.contains(blowhole),
+		"up %s, before %s, now %s" % [hand.is_page_up(), before.contains(blowhole), now.contains(blowhole)])
+	frob.put_page_away()
+	await _frames(2)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+## The letter up, from rest.
+func _raise() -> void:
+	if not player.hand.is_page_up():
+		await _tap("letter")
+
+	await _frames(2)
+
+
+## Standing still on the floor again, nothing pressed, the page down.
+func _settle() -> void:
+	for a in ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "crouch", "frob", "throw", "letter"]:
+		if InputMap.has_action(a):
+			Input.action_release(a)
+
+	if player.hand.is_page_up():
+		player.frob.put_page_away()
+
+	player.velocity = Vector3.ZERO
+	player.global_position = Vector3(0, 1.05, 0)
+	await _frames(30)
+
+
+func _aim(at: Vector3) -> void:
+	var eye: Vector3 = player.get_node("Neck/Camera3D").global_position
+	var to := at - eye
+	player.rotation.y = atan2(-to.x, -to.z)
+	player.get_node("Neck").rotation.x = atan2(to.y, Vector2(to.x, to.z).length())
+	await _frames(3)
+
+
+func _lines(text: String) -> PackedStringArray:
+	return text.strip_edges().split("\n", false)
+
+
+func _tap(action: String) -> void:
+	Input.action_press(action)
+	await _frames(2)
+	Input.action_release(action)
+
+
+func _frames(n: int) -> void:
+	for i in n:
+		await get_tree().physics_frame
+
+
+func _check(test_name: String, ok: bool, detail: String) -> void:
+	results.append("%s  %s   [%s]" % ["PASS" if ok else "FAIL", test_name, detail])

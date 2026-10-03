@@ -3,7 +3,7 @@ extends RefCounted
 ## Each grip plants on geometry, then travels in a short arc to its next hold;
 ## weights ease contact changes. HandSlot reads hand(), weight(), and curl().
 
-enum State { FREE, HANG, MANTLE, VAULT, LADDER, ROPE, CARRY }
+enum State { FREE, HANG, MANTLE, VAULT, LADDER, ROPE, CARRY, READ }
 
 const LEFT := 0
 const RIGHT := 1
@@ -140,6 +140,8 @@ func update(delta: float) -> void:
 			_keep_rope()
 		State.CARRY:
 			_keep_carry()
+		State.READ:
+			_keep_read()
 
 	for grip in grips:
 		var g := grip as Grip
@@ -181,6 +183,12 @@ func _state_now() -> int:
 	if player.get("frob") != null and player.frob.held != null:
 		return State.CARRY
 
+	# A page held up to read (the letter, a notice): both hands on it.
+	var hand: Node = player.get("hand")
+
+	if hand != null and hand.has_method("is_page_up") and hand.is_page_up():
+		return State.READ
+
 	return State.FREE
 
 
@@ -218,6 +226,8 @@ func _enter(next: int) -> void:
 			_plant_rope()
 		State.CARRY:
 			_keep_carry()
+		State.READ:
+			_keep_read()
 
 
 # Edges: a ledge hung from, climbed onto, vaulted
@@ -442,6 +452,21 @@ func _keep_carry() -> void:
 		var sign := -1.0 if side == LEFT else 1.0
 		# Palms in on its sides, fingers forward.
 		g.at = Transform3D(basis * Basis(Vector3.FORWARD, sign * PI * 0.5), held.global_position + side_axis * sign * size)
+		g.travel = 1.0
+		g.planted = true
+		g.wanted = true
+
+
+## Both hands on the page held up, at its side edges (HandSlot.page_edge).
+func _keep_read() -> void:
+	var hand: Node = player.get("hand")
+
+	if hand == null:
+		return
+
+	for side in [LEFT, RIGHT]:
+		var g := grips[side] as Grip
+		g.at = hand.page_edge(side)
 		g.travel = 1.0
 		g.planted = true
 		g.wanted = true
