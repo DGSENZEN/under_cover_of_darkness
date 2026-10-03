@@ -822,8 +822,8 @@ func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary
 		# To himself: under his breath.
 		delivery = &"murmur"
 
-	if delivery == &"" and (talk["extra"] as Dictionary).has("call"):
-		# Called out.
+	if delivery == &"" and (talk["extra"] as Dictionary).has("call") and not bool((talk["extra"] as Dictionary).get("quiet", false)):
+		# Called out (not to a man at his elbow: a hail at close quarters).
 		delivery = &"shout"
 
 	if delivery == &"":

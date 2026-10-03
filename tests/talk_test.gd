@@ -189,6 +189,7 @@ func _run() -> void:
 	await _fight_talk()
 	await _review_fixes()
 	await _job_talk()
+	await _harbour_talk()
 	GuardScript.randomize_on = true
 
 
@@ -198,8 +199,8 @@ func _files() -> void:
 	# T1 the talk files load clean
 	var lib := TalkScript.load_dir()
 	var cast: Dictionary = lib["cast"]
-	_check("T1 the talk files load clean, the cast sheet has all twelve and its ties run both ways where they should",
-		lib["errors"].is_empty() and lib["conversations"].size() >= 13 and cast.size() == 12
+	_check("T1 the talk files load clean, the cast sheet has the garrison's twelve and the harbour's nine, its ties run both ways where they should",
+		lib["errors"].is_empty() and lib["conversations"].size() >= 13 and cast.size() == 21
 		and "Jory" in cast["Osric"]["ties"]["kin"] and "Osric" in cast["Jory"]["ties"]["kin"]
 		and "Col" in cast["Piers"]["ties"]["owes"] and not ("Piers" in cast["Col"]["ties"]["owes"])
 		and cast["Mirelle"]["rank"] == 4 and "captain" in cast["Mirelle"]["traits"],
@@ -238,16 +239,20 @@ func _writing() -> void:
 	var sheet: Dictionary = lib["cast"]
 	var cast: Array = (load("res://maps/npc_showcase.gd") as GDScript).get("CAST")
 
-	# T34 every conversation can be cast from the showcase's men
+	# T34 every conversation can be cast from the showcase's men (those had in
+	# the garrison: a district's are cast from its own men)
 	var uncastable := []
 
 	for conv in lib["conversations"]:
+		if not StringName(conv["where"]) in [&"", &"garrison"]:
+			continue
+
 		var men := _showcase_men(cast, sheet, StringName(conv["place"]))
 
 		if TalkFacts.cast_parts(conv, men, {}).is_empty():
 			uncastable.append(conv["id"])
 
-	_check("T34 every conversation, remark and call can be cast from the showcase's men", uncastable.is_empty(), str(uncastable))
+	_check("T34 every conversation, remark and call had in the garrison can be cast from the showcase's men", uncastable.is_empty(), str(uncastable))
 
 	# T35 enough of each
 	var counts := {}
@@ -1151,6 +1156,48 @@ func _job_talk() -> void:
 	shut.queue_free()
 	_check("T55 a subtitle stops at a wall: heard in the open, not behind one", open_air and not behind and not shown.contains("Through the wall"),
 		"open %s, behind %s, subtitle '%s'" % [open_air, behind, shown])
+	CityState.begin()
+	await _fresh()
+
+
+# The harbour's talk (the harbour's job plan, Task 10)
+
+const HARBOUR_TALK := ["harbour_tower_bell", "harbour_office_key", "harbour_dark_bays", "harbour_ways_up", "harbour_cabin_key",
+	"harbour_theft_1", "harbour_theft_2", "harbour_theft_3"]
+
+
+func _harbour_talk() -> void:
+	await _fresh()
+	CityState.begin()
+	TalkScript.reload()
+	var lib := TalkScript.load_dir()
+	var found := HARBOUR_TALK.filter(func(id): return not _conv(lib, id).is_empty() and StringName(_conv(lib, id)["where"]) == &"harbour")
+	_check("T56 the harbour's talk loads clean, each of it had only in the harbour", lib["errors"].is_empty() and found.size() == HARBOUR_TALK.size(),
+		"errors %s, found %s" % [lib["errors"], found])
+
+	var director: RefCounted = TalkDirector.of(self)
+	director.use_library(lib)
+	CityState.job.arrive(&"harbour")
+	var rodrigo := _guard(Vector3(170, 0, 0), 0.0, &"steady", "Rodrigo")
+	var tome := _guard(Vector3(175, 0, 0), 0.0, &"steady", "Tome")
+	await _frames(20)
+	var hailed: bool = director.call_pair(&"hail", rodrigo, {"b": tome})
+	await _frames(5)
+	_check("T57 a hail plays the pair's own conversation", hailed and director.played().has("harbour_ways_up"),
+		"hailed %s, played %s" % [hailed, director.played()])
+	await _until(func(): return director.talks().is_empty(), 60 * 20)
+
+	CityState.job.notice_theft()
+
+	for g in [rodrigo, tome]:
+		g.alert = g.suspicious_at
+
+	await _frames(5)
+	var after: bool = director.call_pair(&"hail", rodrigo, {"b": tome})
+	await _frames(5)
+	var theft_talk: bool = director.played().any(func(id): return String(id).begins_with("harbour_theft_"))
+	_check("T58 after a theft, the hail is the theft's", after and theft_talk, "hailed %s, played %s" % [after, director.played()])
+	await _until(func(): return director.talks().is_empty(), 60 * 20)
 	CityState.begin()
 	await _fresh()
 

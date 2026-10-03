@@ -28,6 +28,7 @@ const DistanceScript := preload("res://scripts/Visual/Distance.gd")
 const SfxScript := preload("res://scripts/Audio/Sfx.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const MusicScript := preload("res://scripts/Audio/Music.gd")
+const TalkDirectorScript := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
 
@@ -56,6 +57,11 @@ const GRACE := 1.0
 ## A way turning the player back (the job's gate) says so at most this
 ## often (s).
 const REFUSE_GAP := 4.0
+## The district's pairs of men hail each other (_hails) when their rounds
+## bring them together, looked for this often (s); nearer than HAIL_QUIET (m)
+## they speak, further they call out.
+const HAIL_EVERY := 2.0
+const HAIL_QUIET := 7.6
 
 signal ready_to_play
 
@@ -427,6 +433,14 @@ func _job_setup() -> void:
 	job.noted.connect(_on_noted)
 	job.goal_done.connect(_on_goal_done)
 
+	if not _hails().is_empty():
+		var timer := Timer.new()
+		timer.name = "Hails"
+		timer.wait_time = HAIL_EVERY
+		timer.timeout.connect(_hail_tick)
+		add_child(timer)
+		timer.start()
+
 	if player == null:
 		return
 
@@ -434,6 +448,39 @@ func _job_setup() -> void:
 
 	if open_with_letter and not job.letter_opened:
 		player.frob.open_letter()
+
+
+## The district's pairs who hail each other: [[a man's name, another's, how
+## near (m)]]. Their conversations are the district's talk file's, `when:
+## situation:hail` and cast by name (data/talk/harbour.talk).
+func _hails() -> Array:
+	return []
+
+
+## Each pair near enough, both up and not already talking: the one hails the
+## other (TalkDirector.call_pair: a conversation of theirs, if one is due).
+func _hail_tick() -> void:
+	for hail in _hails():
+		# (A man may be gone: knocked out and laid down, or followed away.)
+		var first: Variant = guards.get(String(hail[0]))
+		var second: Variant = guards.get(String(hail[1]))
+
+		if first == null or second == null or not is_instance_valid(first) or not is_instance_valid(second):
+			continue
+
+		var a: Node3D = first
+		var b: Node3D = second
+
+		if a.get("_knocked_out") == true or b.get("_knocked_out") == true or a.get("dead") == true or b.get("dead") == true:
+			continue
+
+		var apart := a.global_position.distance_to(b.global_position)
+		var director: RefCounted = TalkDirectorScript.of(a)
+
+		if apart > float(hail[2]) or director.in_talk(a) or director.in_talk(b):
+			continue
+
+		director.call_pair(&"hail", a, {"b": b, "quiet": apart <= HAIL_QUIET})
 
 
 func _on_frobbed(target: Node) -> void:

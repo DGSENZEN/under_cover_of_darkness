@@ -124,3 +124,12 @@ func _bounds() -> void:
 		shape.shape = box
 		shape.position = Vector3(side[0], (WORLD_WALL.x + WORLD_WALL.y) * 0.5, side[1])
 		body.add_child(shape)
+
+
+## The harbour's pairs who hail each other as their rounds bring them
+## together (their talk: data/talk/harbour.talk): the mole's man calling up
+## to the tower's lookout, the lantern pair crossing, the Sea Gate's two, the
+## customs watchman and the deck watch with a lantern man.
+func _hails() -> Array:
+	return [["Fernao", "Gaspar", 30.0], ["Duarte", "Inigo", 12.0], ["Rodrigo", "Tome", 8.0], ["Baltasar", "Duarte", 10.0],
+		["Baltasar", "Inigo", 10.0], ["Leonor", "Duarte", 9.0], ["Leonor", "Inigo", 9.0]]
