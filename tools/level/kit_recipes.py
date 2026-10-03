@@ -641,6 +641,11 @@ import kit_terrace  # noqa: E402,F401
 # and the forgotten king's tile panels, fountains).
 import kit_street  # noqa: E402,F401
 
+# Its key buildings, made by hand, each entered several ways (kit_tavern,
+# kit_watch).
+import kit_tavern  # noqa: E402,F401
+import kit_watch  # noqa: E402,F401
+
 # Dense structure found by no one by name, joined at export (merge_groups) in
 # the levels that ask for it (export.MERGE_LEVELS): floors, the city's
 # walls, quays, the Terreiro's arcade bays (the naves' are flagged in
