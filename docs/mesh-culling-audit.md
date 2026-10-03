@@ -79,7 +79,7 @@ The second rendered diagnostic extracts the actual carrack's boards surface and 
 
 | Imported two-sided surface | Runtime slot material |
 | --- | --- |
-| ![The deck's reverse side is present](diagnostics/deck-imported.png) | ![The deck's reverse side disappears](diagnostics/deck-runtime.png) |
+| ![The deck's reverse side is present](diagnostics/deck-imported.png) | The deck's reverse side disappears (not kept here: the capture shows the bought plank texture, which stays out of this public repo; `tools/diagnostics/backface_audit.gd` writes it to `/tmp/deck-runtime.png`) |
 
 The same replacement pattern exists in `scripts/Visual/Lights/LightFixture.gd:220`. Some other systems already handle this deliberately: wardrobe cloth strips and armour shells use two-sided materials; foliage cards contain faces in both directions. Those paths should retain their specific treatment.
 
