@@ -71,8 +71,8 @@ One call makes a glazed window in a wall, for any kit:
   surfaces draw in the opaque and shadow passes, so the bars cast their
   lattice into the moonlight patch.
 - **The collider** fills the opening (bodies stop: player, guards, loose
-  things, arrows), surface `glass`, its index added to the recipe's
-  `occlusion_exclude` so it never becomes an occluder.
+  things, arrows), surface `glass`; a glass box is never an occluder
+  (geo.piece_boxes, which the manifest's `occluder` flag follows).
 - **A helper for the walls round it:** `split(x0, x1, y0, y1, holes)` (a
   copy of kit_town's; kit_town keeps its own until its session adopts
   this) and `around(outline, holes, normal, slot)`, a planar outline less rectangular holes, cut into bands at the
@@ -122,8 +122,10 @@ One call makes a glazed window in a wall, for any kit:
 - **Rooms** are box markers, ucd `room` (markers.py: a box, no props),
   laid where a building's rooms are: room_customs_hall,
   room_customs_store, room_customs_office, room_carrack_cabin. A window
-  belongs to the room whose box holds a point 0.3 m inside its glass.
-- **export.manifest** writes `"windows"`: each record turned into the world
+  belongs to the smallest room box holding a point 0.3 m inside its
+  glass (the office's box lies inside the store's), a lamp likewise.
+- **export.manifest** writes `"windows"` (kit_glazing.world_windows, pure
+  Python so it is tested outside Blender): each record turned into the world
   (outline and normal through the piece's position and basis, as sockets
   are), with its piece's name and sector. Rooms travel as ordinary markers.
 - **LevelLoader**: `Level.windows` (the manifest's list, the skip_sectors
@@ -141,15 +143,17 @@ over the district's own levels (the massing has no windows).
   outside the glass toward the moon (200 m, layer 1, glass skipped); a
   shaft is built only if at least 5 of the 9 reach the sky. Its brightness
   is scaled by the share that does.
-- **How far it reaches:** a ray from each corner and the middle, along the
-  moon's way into the room (30 m at most, layer 1, glass and loose bodies
-  skipped); each hit's plane (its normal and point) is one of the shaft's
-  planes, so the shaft ends where the real patch lies on the floor or the
-  far wall.
+- **How far it reaches:** a ray from each corner along the moon's way into
+  the room (30 m at most, layer 1, glass and loose bodies skipped); each
+  corner reaches its own hit, so the shaft ends where the real patch lies
+  on the floor or the far wall, and a small thing one corner meets does not
+  cut the others short (as an infinite plane from it would).
 - **GodRays gains** (the chapel's calls unchanged):
-  - `add_window(outline, uvs, planes := [], source := Vector3.INF)`:
-    planes for this shaft alone (else the node's); a finite `source` makes
-    a point light's shaft, each corner swept along (corner - source).
+  - `add_window(outline, uvs, reaches := [], source := Vector3.INF,
+    weight := 1.0)`: each corner's own reach (else the node's planes); a
+    finite `source` makes a point light's shaft, each corner swept along
+    (corner - source); `weight` its brightness among the node's shafts
+    (the window's share of clear sky).
   - `follow_moon := true`: false for a lamplight node, whose strength
     Windows sets.
   - `tint` exported to the shader's.
@@ -174,8 +178,9 @@ pieces in a shaft pay for it.
 - **A room's lamps:** the light markers inside its box (office_candle,
   cabin_candle, cabin_lantern), as LevelGameplay made them (Torch /
   LightFixture: `is_lit()`, `lit_changed`).
-- **For each window of a room with a lamp**, from the room's brightest lit
-  lamp (when it goes out, the next lit one; none lit, the window is dark):
+- **For each window of a room with a lamp**, from the room's lit lamp
+  nearest its windows (when it goes out, the next lit one; none lit, the
+  window is dark):
   - **A warm shaft:** one GodRays node per room (`follow_moon` false, warm
     tint, a third of the moon shafts' gain), its shafts point-sourced at
     the lamp; their reach outside from rays to the ground, deck or water,
@@ -205,7 +210,9 @@ pieces in a shaft pay for it.
   quarries; the wall's strips already cut, the collider split round them);
   _side draws its wall round its openings (kit_glazing.split) instead of
   one box, its windows glazed (casements over, grilles under), its
-  colliders split; the portal wall's barred windows likewise.
+  colliders split; the portal wall's barred windows likewise. The back
+  wall's yard door is cut through too: today the wall's collider runs
+  across it and the door's panel sits inside the wall's box.
 - The tower's flush window stays as it is (a solid body behind it, no
   room). The loading door's dark card stays (a door, not a window: for
   later).
@@ -235,7 +242,9 @@ nothing more: any district with records gets shafts and lamplight.
   outline exactly; the customs and carrack pieces carry their records; the
   manifest's windows are in world space (a piece moved and turned moves
   them).
-- **Godot** (`tests/windows_test.tscn`, checks GW1-GW12, on the harbour):
+- **Godot** (`tests/windows_test.tscn`; the plan numbers its checks
+  GW1-GW20: a small fixture room first, then the harbour; these are what
+  they cover):
   - GW1 every record loaded; the glass bodies are in `glass`, never
     occluders.
   - GW2 the store front's three windows have moon shafts; no back-wall
