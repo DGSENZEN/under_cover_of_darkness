@@ -41,6 +41,8 @@ signal ready_to_play
 ## Where the player arrives (an arrival marker's name), set before the map
 ## enters the tree; empty: the district's spawn.
 var arrival: StringName = &""
+## Where its baked navmesh is kept (NAVMESH_DIR; a test points elsewhere).
+var navmesh_dir := NAVMESH_DIR
 ## Each level's Level (LevelLoader) and what LevelGameplay made of it, by
 ## the level's name.
 var levels := {}
@@ -100,7 +102,7 @@ func _ready() -> void:
 	screen.creep_to(0.9)
 	add_child(baker)
 	var baking := OS.get_cmdline_user_args().has("--bake-navmesh")
-	var saved := NAVMESH_DIR.path_join(String(district) + ".scn")
+	var saved := navmesh_dir.path_join(String(district) + ".scn")
 	var hash := NavBakerScript.source_hash(_baked_from(), _nav_settings())
 
 	if baking or not baker.load_baked(saved, hash):
@@ -112,7 +114,7 @@ func _ready() -> void:
 	await baker.baked
 
 	if baking:
-		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(NAVMESH_DIR))
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(navmesh_dir))
 		var err := baker.save_baked(saved, hash)
 		print("navmesh: %s baked and saved to %s (%s)" % [district, saved, error_string(err)])
 		get_tree().quit(0 if err == OK else 1)
