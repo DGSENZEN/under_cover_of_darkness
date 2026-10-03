@@ -11,6 +11,9 @@ const CEILING := "ceiling"
 ## occludes when its two bigger sides are at least these (m).
 const RANGE_MARGIN := 4.0
 const OCCLUDER_SIZE := Vector2(3.0, 4.0)
+## A district's proxy is drawn only this far out (m); nearer, the district
+## itself (or the shared wall) is what is seen.
+const PROXY_NEAR := 60.0
 const ZonesScript := preload("res://scripts/Level/Zones.gd")
 
 ## A level put together: its root, its sectors, its markers.
@@ -40,7 +43,10 @@ class Level:
 ## Loads folder/<folder-name>.json and optional sector GLBs beneath parent using root_name.
 ## Returns Level records and creates collision/occlusion/marker nodes. An unreadable or empty manifest reports an error and returns a Level with null root.
 ## JSON structure is trusted: malformed JSON or missing required fields are not validated here.
-static func load_level(parent: Node3D, folder: String, root_name := "Level") -> Level:
+## The sectors in skip_sectors are left out whole: no holder, mesh, collider,
+## terrain, socket or marker of theirs (a district's map leaves out its own
+## massing, and the massing of districts drawn by their proxies).
+static func load_level(parent: Node3D, folder: String, root_name := "Level", skip_sectors: Array = []) -> Level:
 	var level := Level.new()
 	level.name = folder.get_file()
 	var text := FileAccess.get_file_as_string(folder.path_join(level.name + ".json"))
@@ -50,6 +56,10 @@ static func load_level(parent: Node3D, folder: String, root_name := "Level") -> 
 		return level
 
 	var manifest: Dictionary = JSON.parse_string(text)
+
+	if not skip_sectors.is_empty():
+		manifest = _without(manifest, skip_sectors.map(func(s): return String(s)))
+
 	level.root = Node3D.new()
 	level.root.name = root_name
 	parent.add_child(level.root)
@@ -80,6 +90,42 @@ static func load_level(parent: Node3D, folder: String, root_name := "Level") -> 
 
 	_own_markers(level)
 	return level
+
+
+## A manifest with the sectors in `skip` taken out of every list that names
+## them.
+static func _without(manifest: Dictionary, skip: Array) -> Dictionary:
+	var kept := manifest.duplicate()
+	kept["sectors"] = manifest.get("sectors", []).filter(func(s): return not skip.has(String(s)))
+
+	for key in ["colliders", "terrain", "sockets", "markers"]:
+		kept[key] = manifest.get(key, []).filter(func(item): return not skip.has(String(item.get("sector", ""))))
+
+	return kept
+
+
+## A district's proxy (folder/proxy.glb: its pieces as boxes, its lit windows,
+## its ground thinned), drawn only from `near` m out, casting no shadow and
+## colliding with nothing; under parent, named "<level>_proxy". Null (with a
+## warning) when the district has none.
+static func load_proxy(parent: Node3D, folder: String, near := PROXY_NEAR) -> Node3D:
+	var path := folder.path_join("proxy.glb")
+
+	if not ResourceLoader.exists(path):
+		push_warning("LevelLoader: no proxy in %s" % folder)
+		return null
+
+	var proxy := (load(path) as PackedScene).instantiate() as Node3D
+	proxy.name = folder.get_file() + "_proxy"
+	parent.add_child(proxy)
+	_dress(proxy)
+
+	for node in proxy.find_children("*", "GeometryInstance3D", true, false):
+		var drawn := node as GeometryInstance3D
+		drawn.visibility_range_begin = near
+		drawn.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+	return proxy
 
 
 ## Each surface drawn with its slot's shared material (the glTF's material

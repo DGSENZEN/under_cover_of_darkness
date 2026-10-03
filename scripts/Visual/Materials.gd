@@ -53,6 +53,10 @@ const SLOTS := {
 	&"cloth": {"photo": "", "colour": Color("6E1414"), "metallic": 0.0, "roughness": 0.95},
 	# A window lit from within: glows its own colour whatever falls on it.
 	&"glass_lit": {"photo": "", "colour": Color("FFB765"), "metallic": 0.0, "roughness": 0.4, "glow": 0.9},
+	# A district's proxy, seen far off (LevelLoader.load_proxy): its colours
+	# are its vertex colours; its lit windows glow.
+	&"proxy": {"photo": "", "colour": Color.WHITE, "metallic": 0.0, "roughness": 1.0},
+	&"proxy_lit": {"photo": "", "colour": Color("FFB765"), "metallic": 0.0, "roughness": 0.4, "glow": 0.9},
 	# Photos drawn on a piece's own face (its UVs): the chapel's glass, reliefs,
 	# arcade and bands; shutters.
 	&"stained_glass": {"photo": "stained_glass", "colour": Color("7A3A2A"), "metallic": 0.0, "roughness": 0.4, "glow": 0.75},

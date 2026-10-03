@@ -169,6 +169,24 @@ func _fixture() -> void:
 	_check("K8 two levels load side by side under their own roots, their zones shared", ok8,
 		"roots %s %s, bodies %d %d, guards %d, zones shared %s" % [level_a.root.name, level_b.root.name, bodies_a.size(), bodies_b.size(),
 			level_b.of("guard").size(), level_a.zones == level_b.zones])
+
+	# K22 a level loaded without one of its sectors has nothing of it (a
+	# district's map leaves out its own massing)
+	var level_c: RefCounted = LevelLoader.load_level(holder, "res://assets/level/fixture", "fixture_skip", ["yard"])
+	await _frames(2)
+	var yard_bodies: Array = level_c.root.find_children("yard_*", "StaticBody3D", true, false)
+	var yard_markers: Array = level_c.markers.filter(func(m): return String(m["sector"]) == "yard")
+	_check("K22 a level loaded skipping a sector has none of it", level_c.root.get_node_or_null("yard") == null and yard_bodies.is_empty()
+		and yard_markers.is_empty() and level_c.root.get_node_or_null("room") != null,
+		"yard holder %s, yard bodies %d, yard markers %d" % [level_c.root.get_node_or_null("yard") != null, yard_bodies.size(), yard_markers.size()])
+
+	# K23 a district's proxy: drawn only from 60 m out, never colliding
+	var far: Node3D = LevelLoader.load_proxy(holder, "res://assets/level/fixture")
+	var far_meshes: Array = far.find_children("*", "GeometryInstance3D", true, false) if far != null else []
+	var near_ok: bool = not far_meshes.is_empty() and far_meshes.all(func(g): return is_equal_approx((g as GeometryInstance3D).visibility_range_begin, 60.0))
+	var collides: bool = far != null and not far.find_children("*", "CollisionObject3D", true, false).is_empty()
+	_check("K23 a proxy draws only from 60 m and never collides", far != null and far.name == "fixture_proxy" and near_ok and not collides,
+		"proxy %s, meshes %d, all from 60 m %s, collides %s" % [far.name if far != null else "none", far_meshes.size(), near_ok, collides])
 	holder.queue_free()
 	world.queue_free()
 	await _frames(2)
