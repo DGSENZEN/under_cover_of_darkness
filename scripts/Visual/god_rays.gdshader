@@ -14,6 +14,13 @@ uniform float gain = 0.14;
 uniform float blur = 3.5;
 // It softens this close (m) to what it falls on.
 uniform float soft_depth = 0.5;
+// A face seen this square-on (the dot of its round normal and the view) is
+// whole, this oblique gone: a window's shafts fade well before their edges
+// (soft, not slabs); the chapel's keep these.
+uniform float edge_from = 0.03;
+uniform float edge_to = 0.45;
+// How fast it dims along its length (a lamp's out in the mist, fast).
+uniform float fall_power = 0.7;
 
 varying vec3 world_pos;
 
@@ -28,9 +35,9 @@ void fragment() {
 	float grey = dot(colour, vec3(0.3, 0.59, 0.11));
 	colour = max(mix(vec3(grey), colour, 1.6), vec3(0.0)) * 1.45;
 	float along = UV2.x;
-	float fall = pow(1.0 - along, 0.7) * smoothstep(0.0, 0.04, along);
+	float fall = pow(1.0 - along, fall_power) * smoothstep(0.0, 0.04, along);
 	float facing = abs(dot(normalize(NORMAL), normalize(VIEW)));
-	float edge = smoothstep(0.03, 0.45, facing);
+	float edge = smoothstep(edge_from, edge_to, facing);
 	vec2 drift = vec2(TIME * 0.011, TIME * -0.007);
 	float motes = texture(dust, world_pos.xz * 0.23 + vec2(world_pos.y * 0.17, 0.0) + drift).r;
 	motes = 0.55 + 0.9 * motes * texture(dust, world_pos.zy * 0.41 - drift * 1.7).r;

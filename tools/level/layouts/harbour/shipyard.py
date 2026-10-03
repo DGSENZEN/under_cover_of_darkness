@@ -107,10 +107,11 @@ def _customs(L):
         L.put(piece, (x, CUSTOMS_UPPER, z), yaw, "shipyard")
 
     # The harbourmaster's office: his desk on a rug, his chair, his
-    # pigeonholes and his ledgers, a chart on the partition, the chart table,
-    # a globe, a bench for those who wait.
+    # pigeonholes and his ledgers (either side of his window, clear of its
+    # frame), a chart on the partition, the chart table, a globe, a bench for
+    # those who wait.
     office = [("rug_3", (9.5, -28.2), 0.0), ("desk_writing", (9.5, -28.0), 0.0), ("armchair", (9.5, -28.95), 0.0),
-              ("cabinet_pigeonholes", (13.75, -25.5), -90.0), ("shelves_ledgers", (7.0, -33.15), 0.0), ("shelves_ledgers", (9.2, -33.15), 0.0),
+              ("cabinet_pigeonholes", (13.75, -25.5), -90.0), ("shelves_ledgers", (6.35, -33.15), 0.0), ("shelves_ledgers", (9.65, -33.15), 0.0),
               ("chart_table", (5.4, -26.0), 90.0), ("globe_stand", (5.2, -32.3), 0.0), ("bench_plain", (11.5, -22.45), 0.0),
               ("rug_3", (5.4, -26.0), 90.0), ("dresser", (12.0, -33.0), 0.0), ("candle_stand", (8.0, -29.4), 0.0), ("candle_stand", (4.6, -24.3), 0.0),
               ("stool", (12.8, -24.6), 0.0), ("chest", (4.8, -30.6), 90.0)]

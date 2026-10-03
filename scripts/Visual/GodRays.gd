@@ -4,8 +4,11 @@ extends Node3D
 ## Night moon/cloud/rain/lightning state scales the shafts and companion lights from their calm energy.
 
 const SHADER := preload("res://scripts/Visual/god_rays.gdshader")
-## The shader's own tint (moonlight through clear glass).
+## The shader's own tint (moonlight through clear glass), edge fade and
+## fall-off.
 const TINT := Color(0.6, 0.78, 1.25)
+const EDGE := Vector2(0.03, 0.45)
+const FALL := 0.7
 
 ## The way the light goes (normalised when used).
 @export var direction := Vector3(0.62, -0.5, 0.6)
@@ -25,6 +28,12 @@ const TINT := Color(0.6, 0.78, 1.25)
 ## The light's colour through clear glass, and how much the shafts add.
 @export var tint := TINT
 @export var gain := 0.14
+## A face is whole from this square-on to the view, gone below edge_from
+## (a window's: soft, not slabs); how fast a shaft dims along its length.
+## Left as made, the shader's own (the chapel's look).
+@export var edge_from := EDGE.x
+@export var edge_to := EDGE.y
+@export var fall_power := FALL
 ## The glass's picture (null: plain moonlight).
 var glass: Texture2D
 ## The room the shafts stay in: each plane's normal points inside it.
@@ -52,6 +61,13 @@ func _ready() -> void:
 		_material.set_shader_parameter(&"tint", tint)
 
 	_material.set_shader_parameter(&"gain", gain)
+
+	if Vector2(edge_from, edge_to) != EDGE:
+		_material.set_shader_parameter(&"edge_from", edge_from)
+		_material.set_shader_parameter(&"edge_to", edge_to)
+
+	if fall_power != FALL:
+		_material.set_shader_parameter(&"fall_power", fall_power)
 	strength = brightness
 
 

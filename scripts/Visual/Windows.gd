@@ -27,14 +27,21 @@ const ROOM_REACH := 30.0
 ## A window's room is the one holding a point this far past the room's face.
 const INSIDE := 0.3
 const MOON_TINT := Color(0.6, 0.78, 1.25)
+## A window's shafts are dust caught in a little light, not the chapel's
+## coloured columns: fainter, soft to their edges (a face whole only seen
+## square-on), the moon's dimming along their length, a lamp's fast.
+const MOON_GAIN := 0.05
+const SOFT_EDGE := Vector2(0.55, 1.0)
+const MOON_FALL := 1.0
+const LAMP_FALL := 2.5
 ## What a shaft's rays pass through: glass, and what lies loose.
 const SKIP: Array[StringName] = [&"glass", &"loose"]
 ## A lamp's light out through its window: its shaft's reach; its patch, a
 ## spot this far out from the wall's face, its cone the glass seen from the
 ## lamp and this much more (degrees), its range, its share of the lamp's
 ## energy; how fast both follow the lamp (s); how often the lamps are looked
-## at (s); the shaft's colour and gain (a third of the moon's).
-const OUT_REACH := 10.0
+## at (s); the shaft's colour and gain.
+const OUT_REACH := 4.0
 const SPOT_OUT := 0.05
 const SPOT_PAD := 4.0
 const SPOT_RANGE := 8.0
@@ -42,7 +49,13 @@ const SPOT_GAIN := 0.5
 const FADE := 0.3
 const POLL := 0.25
 const LAMP_TINT := Color(1.0, 0.62, 0.3)
-const LAMP_GAIN := 0.14 / 3.0
+const LAMP_GAIN := 0.03
+## A lit window's glow from within (its reveal warm, seen from outside even
+## where the lamp is far from the glass): this far inside the room's face,
+## this reach, this share of the lamp's energy. For show: it lights no one up.
+const GLOW_IN := 0.35
+const GLOW_RANGE := 1.4
+const GLOW_GAIN := 0.35
 ## A window's lead, as its patch's picture.
 const PAINTINGS := {"quarries": &"quarries", "casement": &"casement", "grille": &"window_grille"}
 
@@ -94,7 +107,7 @@ func build(levels: Array, made: Array, moon: DirectionalLight3D) -> void:
 			var inside := float(raw.get("inside", 0.0))
 			windows.append({"piece": String(raw.get("piece", "")), "lead": String(raw.get("lead", "casement")), "outline": outline,
 				"normal": normal, "middle": middle, "outside": float(raw.get("outside", 0.0)), "inside": inside,
-				"room": room_of(middle - normal * (inside + INSIDE)), "facing": 0.0, "sky": 0.0, "shaft": null, "spot": null, "lamp_shaft": null})
+				"room": room_of(middle - normal * (inside + INSIDE)), "facing": 0.0, "sky": 0.0, "shaft": null, "spot": null, "lamp_shaft": null, "glow": null})
 
 	# Each room's lamps: the lights standing in it.
 	for record in made:
@@ -144,6 +157,10 @@ func rebuild() -> void:
 	moon_rays.set("direction", way)
 	moon_rays.set("tint", MOON_TINT)
 	moon_rays.set("least", 0.0)
+	moon_rays.set("gain", MOON_GAIN)
+	moon_rays.set("edge_from", SOFT_EDGE.x)
+	moon_rays.set("edge_to", SOFT_EDGE.y)
+	moon_rays.set("fall_power", MOON_FALL)
 	add_child(moon_rays)
 	var space := get_world_3d().direct_space_state
 
@@ -198,8 +215,14 @@ func _process(delta: float) -> void:
 		(room["rays"] as Node3D).set("strength", float(room["fade"]))
 
 		for w in windows:
-			if w["room"] == room_name and w["spot"] != null and is_instance_valid(w["spot"]):
+			if w["room"] != room_name:
+				continue
+
+			if w["spot"] != null and is_instance_valid(w["spot"]):
 				(w["spot"] as SpotLight3D).light_energy = SPOT_GAIN * energy * float(room["fade"])
+
+			if w["glow"] != null and is_instance_valid(w["glow"]):
+				(w["glow"] as OmniLight3D).light_energy = GLOW_GAIN * energy * float(room["fade"])
 
 
 func _lamp_changed(_lit: bool, room: String) -> void:
@@ -253,6 +276,9 @@ func _light_out(room_name: String, lamp: Node3D) -> void:
 	rays.set("follow_moon", false)
 	rays.set("tint", LAMP_TINT)
 	rays.set("gain", LAMP_GAIN)
+	rays.set("edge_from", SOFT_EDGE.x)
+	rays.set("edge_to", SOFT_EDGE.y)
+	rays.set("fall_power", LAMP_FALL)
 	add_child(rays)
 	rays.set("strength", 0.0)
 	room["rays"] = rays
@@ -265,10 +291,12 @@ func _light_out(room_name: String, lamp: Node3D) -> void:
 		if w["room"] != room_name:
 			continue
 
-		if w["spot"] != null and is_instance_valid(w["spot"]):
-			(w["spot"] as Node).queue_free()
+		for key in ["spot", "glow"]:
+			if w[key] != null and is_instance_valid(w[key]):
+				(w[key] as Node).queue_free()
 
-		w["spot"] = null
+			w[key] = null
+
 		w["lamp_shaft"] = null
 		var normal: Vector3 = w["normal"]
 		var middle: Vector3 = w["middle"]
@@ -293,6 +321,18 @@ func _light_out(room_name: String, lamp: Node3D) -> void:
 		spot.look_at(spot.global_position + aim, Vector3.UP if absf(aim.y) < 0.99 else Vector3.FORWARD)
 		w["spot"] = spot
 		w["lamp_shaft"] = _lamp_shaft(space, w, frame, source, rays)
+		var glow := OmniLight3D.new()
+		glow.name = "WindowGlow"
+		glow.light_color = spot.light_color
+		glow.light_energy = 0.0
+		glow.omni_range = GLOW_RANGE
+		glow.shadow_enabled = false
+		# (For show: the probe and the lightgem leave it out.)
+		glow.add_to_group(&"fx_light")
+		glow.light_cull_mask = Layers.ALL_BUT_PROBE
+		add_child(glow)
+		glow.global_position = middle - normal * (float(w["inside"]) + GLOW_IN)
+		w["glow"] = glow
 
 
 ## A lamp's shaft out through a window: its mouth at the wall's outer face

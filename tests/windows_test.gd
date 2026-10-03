@@ -196,9 +196,24 @@ func _rays() -> void:
 	rays.set("strength", 0.7)
 	await _frames(2)
 	var given := float((beam.material_override as ShaderMaterial).get_shader_parameter(&"strength"))
-	_check("GW4 a point-sourced shaft spreads from its lamp to each corner's own reach, carries its weight, and a lamp's node keeps the strength it is given",
-		missing.is_empty() and weighted and absf(given - 0.7) < 0.0001, "corners not reached %s, weighted %s, strength %.3f" % [missing, weighted, given])
+	# A window's soft shafts: its edge fade and fall-off reach the shader; a
+	# node left as made (the chapel's) leaves the shader's own.
+	var soft: Node3D = GodRaysScript.new()
+	soft.set("edge_from", 0.55)
+	soft.set("edge_to", 1.0)
+	soft.set("fall_power", 2.5)
+	add_child(soft)
+	var soft_beam: MeshInstance3D = soft.call("add_window", outline, uvs)
+	var soft_material := soft_beam.material_override as ShaderMaterial
+	var plain_material := beam.material_override as ShaderMaterial
+	var pushed := is_equal_approx(float(soft_material.get_shader_parameter(&"edge_from")), 0.55) \
+		and is_equal_approx(float(soft_material.get_shader_parameter(&"fall_power")), 2.5)
+	var kept := plain_material.get_shader_parameter(&"edge_from") == null and plain_material.get_shader_parameter(&"fall_power") == null
+	_check("GW4 a point-sourced shaft spreads from its lamp to each corner's own reach, carries its weight, and a lamp's node keeps the strength it is given; a window's soft edges and fall-off reach its shader, the chapel's stay the shader's own",
+		missing.is_empty() and weighted and absf(given - 0.7) < 0.0001 and pushed and kept, "corners not reached %s, weighted %s, strength %.3f, soft pushed %s, plain kept %s" % [
+			missing, weighted, given, pushed, kept])
 	rays.queue_free()
+	soft.queue_free()
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +366,18 @@ func _spot_energy(windows: Node3D) -> float:
 	return (spot as SpotLight3D).light_energy if spot != null and is_instance_valid(spot) else 0.0
 
 
+## The window's glow (lit from within): its energy, and whether it is for
+## show only (no one is lit up by it: fx_light, not on the gem's layer).
+func _glow(windows: Node3D) -> Array:
+	var glow: Variant = windows.get("windows")[0].get("glow")
+
+	if glow == null or not is_instance_valid(glow):
+		return [0.0, false]
+
+	var light := glow as OmniLight3D
+	return [light.light_energy, light.is_in_group(&"fx_light") and (light.light_cull_mask & Layers.GEM_PROBE) == 0]
+
+
 func _lamps() -> void:
 	var level := _fixture([["room_fixture", Vector3(0.0, 1.5, 0.0), Vector3(6.0, 3.0, 6.0)]], "LampRoom")
 	var a: Node3D = Lights.candle(self, Vector3(0, 1.0, 0))
@@ -366,8 +393,10 @@ func _lamps() -> void:
 	var w: Dictionary = windows.get("windows")[0]
 	var spot: Variant = w["spot"]
 	var outside: bool = spot != null and (spot as SpotLight3D).global_position.z > 3.4
-	var first: bool = room["lamp"] == a and outside and _spot_energy(windows) > 0.05 and w["lamp_shaft"] != null
-	var notes := ["a: lamp %s, spot outside %s, energy %.2f, shaft %s" % [room["lamp"] == a, outside, _spot_energy(windows), w["lamp_shaft"] != null]]
+	var glow_lit: Array = _glow(windows)
+	var first: bool = room["lamp"] == a and outside and _spot_energy(windows) > 0.05 and w["lamp_shaft"] != null and float(glow_lit[0]) > 0.05 and bool(glow_lit[1])
+	var notes := ["a: lamp %s, spot outside %s, energy %.2f, shaft %s, glow %.2f for show %s" % [room["lamp"] == a, outside, _spot_energy(windows),
+		w["lamp_shaft"] != null, float(glow_lit[0]), glow_lit[1]]]
 
 	a.call("put_out", &"douse")
 	await _until(func(): return room["lamp"] == b and _spot_energy(windows) > 0.05, 30)
@@ -376,7 +405,7 @@ func _lamps() -> void:
 
 	b.call("put_out", &"douse")
 	await _until(func(): return _spot_energy(windows) < 0.01 and float(room["fade"]) < 0.01, 30)
-	var dark: bool = _spot_energy(windows) < 0.01 and float(room["fade"]) < 0.01 and room["lamp"] == null
+	var dark: bool = _spot_energy(windows) < 0.01 and float(room["fade"]) < 0.01 and room["lamp"] == null and float(_glow(windows)[0]) < 0.01
 	a.call("relight")
 	await _until(func(): return _spot_energy(windows) > 0.05, 30)
 	var back: bool = _spot_energy(windows) > 0.05 and room["lamp"] == a

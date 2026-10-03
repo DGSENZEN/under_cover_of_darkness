@@ -1,5 +1,20 @@
 # Real windows, and the light through them (Oct 3 2026)
 
+**Status: built** on branch `real-windows` (plan
+docs/superpowers/plans/2026-10-03-real-windows.md, Tasks 1-10; ledger in
+.superpowers/sdd). windows_test GW1-GW20 green; all 57 suites green (sound
+M18 flakes only under six-at-once load). Bench: fps 101-103 (main 101.8),
+p99 16.9-18.0 ms, one run 22 ms (main 16.6). Taken beyond the text below,
+each for the reason given: a shaft's mouth is the beam's cross-section at
+the room's (or, for a lamp, the outer) face, so records carry `outside` and
+`inside`; a window's room is found 0.3 m past the room's face; a room throws
+its lit lamp nearest its windows; the patch's spot stands outside the wall's
+face; window shafts are softer and fainter than the chapel's (GodRays
+edge_from/edge_to/fall_power; moon gain 0.05, lamp 0.03, lamp reach 4 m)
+after the first night stills showed slabs; a lit window glows from within
+(a small warm light for show: fx_light, not on the gem's layer); the
+carrack's budget 9200; the office's ledger shelves moved off its window.
+
 The user: "Can we make the windows of the buildings we can go in real? And
 make them actually project godrays if applicable?"
 
