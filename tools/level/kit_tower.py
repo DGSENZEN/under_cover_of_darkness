@@ -263,3 +263,7 @@ def _chute(out, shapes, cols, side, levels, chute_z, enterable):
     out["climbs"].append([side / 2.0 + 0.2, (top + 0.6) / 2.0, chute_z, 0.8, top + 0.6, 1.6, 90.0])
     out["entries"].append("below")
     out["chute_tour"] = [[x, 0.0, chute_z, "walk"], [side / 2.0 - WALL - 0.4, top, chute_z, "climb"]]
+
+
+# (Its lots, if the kit was entered through this module and passed them by.)
+town.register_town()

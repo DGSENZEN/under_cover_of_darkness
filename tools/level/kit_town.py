@@ -698,6 +698,18 @@ def _size(design):
     return [max(2.0 * reach[0], given[0]), max(reach[1], given[1]), max(2.0 * reach[2], given[2])]
 
 
+class NotReady(Exception):
+    """A house family's module is still being imported (the kit was entered
+    through it): its lots wait for its own call to register_town."""
+
+
+def _ready(module):
+    if not hasattr(module, "design"):
+        raise NotReady(module.__name__)
+
+    return module
+
+
 def _family_args(lot):
     """A lot as its family's design call: its common fields where the family
     takes them, the rest from lot.params (the pre-flight ruling)."""
@@ -705,20 +717,20 @@ def _family_args(lot):
 
     if lot.family == "porto":
         import kit_porto
-        return kit_porto.design, dict(width=lot.width, depth=lot.depth, storeys=lot.storeys, quirk=lot.quirk, enterable=lot.enterable,
+        return _ready(kit_porto).design, dict(width=lot.width, depth=lot.depth, storeys=lot.storeys, quirk=lot.quirk, enterable=lot.enterable,
                                       rooms=lot.rooms, **params)
 
     if lot.family == "pombal":
         import kit_pombal
-        return kit_pombal.design, dict(depth=lot.depth, storeys=lot.storeys, quirk=lot.quirk, enterable=lot.enterable, rooms=lot.rooms, **params)
+        return _ready(kit_pombal).design, dict(depth=lot.depth, storeys=lot.storeys, quirk=lot.quirk, enterable=lot.enterable, rooms=lot.rooms, **params)
 
     if lot.family == "patio":
         import kit_patio
-        return kit_patio.design, dict(width=lot.width, depth=lot.depth, quirk=lot.quirk, enterable=lot.enterable, **params)
+        return _ready(kit_patio).design, dict(width=lot.width, depth=lot.depth, quirk=lot.quirk, enterable=lot.enterable, **params)
 
     if lot.family == "tower":
         import kit_tower
-        return kit_tower.design, dict(side=lot.width, storeys=lot.storeys, quirk=lot.quirk, enterable=lot.enterable, **params)
+        return _ready(kit_tower).design, dict(side=lot.width, storeys=lot.storeys, quirk=lot.quirk, enterable=lot.enterable, **params)
 
     raise ValueError("no house family '%s'" % lot.family)
 
@@ -744,7 +756,10 @@ def register_town():
     import town as lot_plan
 
     for lot in lot_plan.all_lots():
-        register_lot(lot)
+        try:
+            register_lot(lot)
+        except NotReady:
+            continue
 
     for kind, args in lot_plan.terrace_pieces():
         getattr(kit_terrace, kind)(*args)

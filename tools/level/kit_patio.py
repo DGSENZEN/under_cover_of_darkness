@@ -349,3 +349,7 @@ def _quirk(out, shapes, cols, quirk, kind, width, depth, eaves, plan):
         x, y = -width / 2.0 + 0.7, 2.5
         shapes.append(ks.box(x, y + 0.45, 0.01, 0.62, 0.92, 0.04, "pitch"))
         out["places"]["shrine"] = [x, y, 0.05]
+
+
+# (Its lots, if the kit was entered through this module and passed them by.)
+town.register_town()

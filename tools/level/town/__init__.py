@@ -86,7 +86,7 @@ TERRACES = [
 # ground below, the shared wall.
 SECTORS = {
     "baixa": [("baixa_s", -115.0), ("baixa_n", -1000.0)],
-    "stairs": [("stairs_lo", -160.0), ("stairs_hi", -1000.0)],
+    "stairs": [("stairs_lo", -110.0), ("stairs_mid", -200.0), ("stairs_hi", -1000.0)],
     "judiaria": [("judiaria_lo", -180.0), ("judiaria_hi", -1000.0)],
     "carmo": [("carmo", -1000.0)],
     "upper": [("upper_w", None), ("upper_e", None)],

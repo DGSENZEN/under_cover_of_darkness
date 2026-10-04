@@ -25,6 +25,7 @@ import old_town as town_layout  # noqa: E402
 import rules  # noqa: E402
 import town  # noqa: E402
 from town import baixa  # noqa: E402
+from town import stairs as stairs_plan  # noqa: E402
 from test_rules import marker, piece  # noqa: E402
 
 LAYOUT = None
@@ -427,6 +428,403 @@ class Baixa(unittest.TestCase):
     def test_the_baixa_checks_clean(self):
         self.assertGreaterEqual(len(baixa.LOTS), 20)
         self.assertEqual([p for p in rules.problems(layout(), "stage2") if "baixa" in p], [])
+
+
+# The stairs quarter (plan B1a, Task 15)
+
+def edge_faults(quarter, openings, step=1.0):
+    """Where a terrace of `quarter` ends over lower ground (or none) with
+    nothing guarding the drop at a man's waist within a metre and a half of
+    it, or (over lower ground) no face down it: [(x, z, what)]. Openings:
+    boxes (x0, z0, x1, z1) where a stair or a door leads on over the edge."""
+    boxes = rules.colliders(layout())
+    out = []
+
+    for plate in [t for t in town.TERRACES if t[1] == quarter]:
+        _name, _q, x0, z0, x1, z1, ys, yn = plate
+        y = (ys + yn) / 2.0
+
+        for (ax, az), (bx, bz), (nx, nz) in (((x0, z1), (x1, z1), (0.0, 1.0)), ((x0, z0), (x1, z0), (0.0, -1.0)),
+                                             ((x0, z0), (x0, z1), (-1.0, 0.0)), ((x1, z0), (x1, z1), (1.0, 0.0))):
+            length = math.hypot(bx - ax, bz - az)
+            n = max(1, int(length / step))
+
+            for i in range(n):
+                t = (i + 0.5) / n
+                ex, ez = ax + (bx - ax) * t, az + (bz - az) * t
+
+                if any(o[0] <= ex <= o[2] and o[1] <= ez <= o[3] for o in openings):
+                    continue
+
+                # (What is underfoot past the edge: the ground there, or
+                # anything built, a wall's walk.)
+                there = town.height(ex + nx * 0.6, ez + nz * 0.6)
+                over = [h for h in (b.ray([ex + nx * 0.6, y + 3.0, ez + nz * 0.6], [0.0, -1.0, 0.0]) for b in boxes) if h is not None]
+
+                if over:
+                    there = max(there, y + 3.0 - min(over))
+
+                if there > y - 1.0:
+                    continue
+
+                # (Either side of the point by 2 cm: a ray along the face two
+                # neighbours' walls share meets neither.)
+                hits = []
+
+                for side in (-0.02, 0.02):
+                    start = [ex - nx * 1.0 + nz * side, y + 0.7, ez - nz * 1.0 + nx * side]
+                    hits += [h for h in (b.ray(start, [nx, 0.0, nz]) for b in boxes) if h is not None]
+
+                if not hits or min(hits) > 1.3:
+                    out.append((round(ex, 1), round(ez, 1), "unguarded"))
+
+                if there > town.HOLE + 1.0:
+                    mid = [ex + nx * 0.6, (y + there) / 2.0, ez + nz * 0.6]
+                    hits = [h for h in (b.ray(mid, [-nx, 0.0, -nz]) for b in boxes) if h is not None]
+
+                    if not hits or min(hits) > 0.9:
+                        out.append((round(ex, 1), round(ez, 1), "faceless"))
+
+    return out
+
+
+def lot_rect(each):
+    """A lot's footprint (x0, z0, x1, z1): its front at z, deep behind it
+    (yaw 0: to -z; yaw 180: to +z)."""
+    if abs(each.yaw - 180.0) < 0.01:
+        return (each.x - each.width / 2.0, each.z, each.x + each.width / 2.0, each.z + each.depth)
+
+    return (each.x - each.width / 2.0, each.z - each.depth, each.x + each.width / 2.0, each.z)
+
+
+def stairs_openings():
+    """The stairs quarter's openings over its edges: each stair-lane's head,
+    each two-level house's back door (phase 1-2)."""
+    out = []
+
+    for step in stairs_plan.STEPS:
+        for c in step["gaps"]:
+            out.append((c - stairs_plan.GAP / 2.0, step["z"] - 0.6, c + stairs_plan.GAP / 2.0, step["z"] + 0.6))
+
+    for _plate, z, _ground, _quarter in stairs_plan.TOWERS:
+        out.append((stairs_plan.EAST - 0.6, z - 0.6, stairs_plan.EAST + 0.6, z + 0.6))
+
+    for lot in stairs_plan.LOTS:
+        if lot.quirk == "two_level":
+            for d in kit_recipes.PIECES[town.design_key(lot)]["doors"]:
+                if d[1] > 0.5:
+                    x = lot.x + d[0]
+                    out.append((x - 0.9, lot.z - lot.depth - 0.6, x + 0.9, lot.z - lot.depth + 0.6))
+
+    return out
+
+
+class Stairs(unittest.TestCase):
+    def test_its_sectors_are_about_100_m(self):
+        for name in ("stairs_lo", "stairs_mid", "stairs_hi"):
+            zs = [z for t in town.TERRACES if t[1] == "stairs" for z in (t[3], t[5]) if town.sector_of(-140.0, (t[3] + t[5]) / 2.0) == name]
+            self.assertTrue(zs, name)
+            self.assertLessEqual(max(zs) - min(zs), 100.0, name)
+
+    def test_each_step_is_climbed_by_two_stair_lanes(self):
+        # (Their heads level with the terrace above, on its edge; their feet
+        # on the terrace below.)
+        lanes = [p for p in layout()["pieces"] if p["piece"].startswith("stair_lane_") and town.quarter_of(p["position"][0], p["position"][2]) == "stairs"]
+
+        for step in stairs_plan.STEPS:
+            mine = []
+
+            for p in lanes:
+                head = geo.add(p["position"], geo.apply(p["basis"], kit_recipes.PIECES[p["piece"]]["head"]))
+
+                if abs(head[2] - step["z"]) < 0.05:
+                    mine.append(p)
+                    self.assertAlmostEqual(head[1], step["y"] + step["rise"], delta=0.02)
+                    self.assertAlmostEqual(p["position"][1], step["y"], delta=0.02)
+
+            self.assertEqual(len(mine), 2, step["z"])
+
+    def test_each_step_has_a_two_level_house(self):
+        # (Its front door on the lane below, its back door on the lane above,
+        # on the step's line: a thief's way up through it.)
+        for step in stairs_plan.STEPS:
+            found = []
+
+            for lot in stairs_plan.LOTS:
+                if lot.quirk != "two_level" or abs(lot.z - lot.depth - step["z"]) > 0.05:
+                    continue
+
+                doors = kit_recipes.PIECES[town.design_key(lot)]["doors"]
+                ys = sorted(lot.y + d[1] for d in doors)
+                found.append(ys)
+
+            self.assertEqual(len(found), 1, step["z"])
+            self.assertAlmostEqual(found[0][0], step["y"], delta=0.02)
+            self.assertAlmostEqual(found[0][-1], step["y"] + step["rise"], delta=0.02)
+
+    def test_the_wall_pieces_are_the_harbours(self):
+        import edges
+        import city_harbour
+        theirs = sorted((round(p["position"][2], 2), round(p["position"][1], 2)) for p in edges.shared_edge(city_harbour.layout())
+                        if abs(p["position"][0] - stairs_plan.WALL_X) < 0.01 and p["piece"].startswith("city_wall_12_") and p["position"][2] < -22.0)
+        ours = sorted((round(z, 2), round(base, 2)) for z, _length, base in stairs_plan.WALL_PIECES)
+        self.assertEqual(ours, theirs)
+
+    def test_the_city_wall_stands_on_its_footing(self):
+        # (Where its foot steps up over a terrace, nothing open under it.)
+        boxes = rules.colliders(layout())
+        # (But the Guindais postern's passage, open into the footing.)
+        postern = [p for p in layout()["pieces"] if p["piece"].startswith("postern_")][0]
+        door = geo.add(postern["position"], geo.apply(postern["basis"], kit_recipes.PIECES[postern["piece"]]["door"]))
+
+        for z, length, base in stairs_plan.WALL_PIECES:
+            ground = min(town.height(-176.0, z + dz) for dz in (-length / 2.0 + 0.2, length / 2.0 - 0.2))
+
+            for k in range(1, 6):
+                y = ground + (base - ground) * k / 6.0
+
+                if base - ground > 0.3 and not (abs(z - door[2]) < kit_recipes.DOOR[0] / 2.0 and y < door[1] + kit_recipes.DOOR[1]):
+                    self.assertTrue(any(b.contains([stairs_plan.WALL_X, y, z]) for b in boxes), (z, y))
+
+    def test_its_edges_are_walled(self):
+        self.assertEqual(edge_faults("stairs", stairs_openings())[:8], [])
+
+    def test_its_lanes_run_clear(self):
+        # (Along each terrace's lane at a man's chest, from end to end:
+        # nothing in the way.)
+        boxes = rules.colliders(layout())
+
+        for plate in stairs_plan.PLATES:
+            if not stairs_plan.ROWS[plate[0]]:
+                continue
+
+            z = stairs_plan.south(plate) - stairs_plan.LANE / 2.0
+            start = [stairs_plan.WEST + 0.6, stairs_plan.level(plate) + 1.2, z]
+            hits = [h for h in (b.ray(start, [1.0, 0.0, 0.0]) for b in boxes) if h is not None]
+            reach = stairs_plan.east(plate) - stairs_plan.WEST - 1.2
+            self.assertTrue(not hits or min(hits) >= reach, (plate[0], min(hits) if hits else None))
+
+    def test_seven_lanes_meet_at_the_fountain(self):
+        # (The wall fountain on the square; a way from before it out along
+        # each of seven lanes, their mouths on the square's edge 2 m apart
+        # at least, each clear at a man's chest all its way.)
+        x0, z0, x1, z1 = stairs_plan.SQUARE
+        fountains = [p for p in layout()["pieces"] if p["piece"] == "fountain_wall" and x0 <= p["position"][0] <= x1
+                     and z0 - 0.5 <= p["position"][2] <= z1]
+        self.assertEqual(len(fountains), 1)
+        lanes = routes("stairs_square_lane_")
+        self.assertEqual(len(lanes), 7)
+        boxes = rules.colliders(layout())
+        mouths = []
+
+        for name, points in lanes.items():
+            self.assertLess(math.dist(points[0]["position"], fountains[0]["position"]), 6.0, name)
+            mouth = points[1]["position"]
+            self.assertLess(min(abs(mouth[0] - x0), abs(mouth[0] - x1), abs(mouth[2] - z0), abs(mouth[2] - z1)), 0.4, name)
+            mouths.append(mouth)
+
+            for a, b in zip(points, points[1:]):
+                pa = geo.add(a["position"], [0.0, 1.5, 0.0])
+                pb = geo.add(b["position"], [0.0, 1.5, 0.0])
+                length = math.dist(pa, pb)
+                d = [(pb[i] - pa[i]) / length for i in range(3)]
+                hits = [t for t in (box.ray(pa, d) for box in boxes) if t is not None and t < length]
+                self.assertEqual(hits, [], (name, a["name"]))
+
+        for i, a in enumerate(mouths):
+            for b in mouths[i + 1:]:
+                self.assertGreater(math.hypot(a[0] - b[0], a[2] - b[2]), 2.0)
+
+    def test_the_stream_is_vaulted_with_houses_on_it(self):
+        # (From a grating in the Ribeira wall north under the bottom three
+        # terraces, 3 m under each, unbroken; walled at both ends; houses
+        # over it; the tavern's cellar door opening onto it.)
+        parts = [p for p in layout()["pieces"] if p["name"].startswith("stairs_stream_")]
+        ends = [p for p in parts if p["piece"].startswith("vault_end_")]
+        chain = sorted([p for p in parts if p not in ends], key=lambda p: -p["position"][2])
+        self.assertEqual(len(ends), 2)
+        spans = []
+
+        levels = [stairs_plan.level(t) - stairs_plan.STREAM_DEPTH for t in stairs_plan.PLATES]
+        floor = None
+
+        for p in chain:
+            self.assertAlmostEqual(p["position"][0], stairs_plan.STREAM_X, delta=0.01)
+            recipe = kit_recipes.PIECES[p["piece"]]
+            length = recipe["size"][2]
+            spans.append((p["position"][2] - length / 2.0, p["position"][2] + length / 2.0))
+            # (Each floor a terrace's level less STREAM_DEPTH, on from the one
+            # before, up a cascade's drop.)
+            y = p["position"][1]
+            self.assertTrue(any(abs(y - level) < 0.01 for level in levels), p["name"])
+
+            if floor is not None:
+                self.assertAlmostEqual(y, floor, delta=0.01, msg=p["name"])
+
+            drop = recipe["tour"][-1][1] if p["piece"].startswith("cascade_") else 0.0
+            floor = y + drop
+            # (Under the ground all its length, a hand's breadth of it over
+            # its roof.)
+            top = y + drop + stairs_plan.STREAM_SIZE[1] + 0.3
+
+            for z in (spans[-1][0] + 0.05, p["position"][2], spans[-1][1] - 0.05):
+                self.assertLessEqual(top, town.height(p["position"][0], z) - 0.25 + 0.01, (p["name"], z))
+
+        self.assertAlmostEqual(spans[0][1], stairs_plan.RIBEIRA, delta=0.05)
+
+        for (a0, _a1), (_b0, b1) in zip(spans, spans[1:]):
+            self.assertAlmostEqual(a0, b1, delta=0.05)
+
+        tips = sorted(e["position"][2] for e in ends)
+        self.assertLess(abs(tips[0] - spans[-1][0]), 0.3)
+        self.assertLess(abs(tips[1] - spans[0][1]), 0.3)
+        # (Half its length and more under houses and the tavern's yard, a
+        # house over it on each terrace it runs under.)
+        over = [lot_rect(each) for each in stairs_plan.LOTS if lot_rect(each)[0] < stairs_plan.STREAM_X < lot_rect(each)[2]]
+        tx, tz, _yaw = stairs_plan.TAVERN
+        depth, width = stairs_plan.TAVERN_SIZE
+        yard = (tx - depth - 6.0, tz - width / 2.0, tx - depth, tz + width / 2.0)
+        self.assertTrue(yard[0] < stairs_plan.STREAM_X < yard[2])
+        covered = sorted((max(r[1], spans[-1][0]), min(r[3], spans[0][1])) for r in over + [yard])
+        length, end = 0.0, spans[-1][0]
+
+        for a, b in covered:
+            a = max(a, end)
+
+            if b > a:
+                length += b - a
+                end = b
+
+        self.assertGreater(length, (spans[0][1] - spans[-1][0]) / 2.0)
+
+        for plate in stairs_plan.PLATES[:3]:
+            self.assertTrue(any(r[1] < plate[5] and r[3] > plate[3] for r in over), plate[0])
+        tavern = [p for p in layout()["pieces"] if p["piece"] == "tavern"][0]
+        door = [geo.add(tavern["position"], geo.apply(tavern["basis"], d[0:3])) for d in kit_recipes.PIECES["tavern"]["doors"] if d[1] < -1.0][0]
+        chamber = [p for p in chain if "_door" in p["piece"]][0]
+        theirs = geo.add(chamber["position"], geo.apply(chamber["basis"], kit_recipes.PIECES[chamber["piece"]]["door"][0:3]))
+        self.assertLess(math.dist(door, theirs), 0.5)
+
+    def test_the_tavern_is_entered_four_ways(self):
+        house = [m for m in layout()["markers"] if m["ucd"] == "household" and m["props"]["label"] == "tavern"]
+        self.assertEqual(len(house), 1)
+        self.assertEqual(int(house[0]["props"]["ways"]), 4)
+        kinds = {points[0]["props"]["kind"] for points in routes("stairs_tavern_way_").values() if points[0]["props"].get("into") == "tavern"}
+        self.assertEqual(kinds, {"door", "yard", "window", "below"})
+        self.assertEqual([p for p in rules.way_problems(layout()) if "tavern" in p], [])
+        self.assertEqual(len(markers_named("stairs_tavern_seat_", "seat")), 12)
+        tavern = [p for p in layout()["pieces"] if p["piece"] == "tavern"][0]
+        self.assertEqual(town.quarter_of(tavern["position"][0], tavern["position"][2]), "stairs")
+
+    def test_two_level_houses_join_terraces(self):
+        # (A thief's way through each: in at its front door off the lane
+        # below, up its stair, out at its back door onto the lane above.)
+        for each in stairs_plan.LOTS:
+            if each.quirk != "two_level":
+                continue
+
+            points = routes("stairs_through_%s" % each.name).get("stairs_through_%s" % each.name)
+            self.assertTrue(points, each.name)
+            first, last = points[0], points[-1]
+            self.assertEqual(first["props"]["way"], "thief")
+            self.assertAlmostEqual(first["position"][1], each.y, delta=0.05)
+            self.assertGreater(first["position"][2], each.z)
+            step = [st for st in stairs_plan.STEPS if abs(st["z"] - (each.z - each.depth)) < 0.05][0]
+            self.assertAlmostEqual(last["position"][1], step["y"] + step["rise"], delta=0.05)
+            self.assertLess(last["position"][2], step["z"])
+
+    def test_the_undercroft_is_sealed(self):
+        # (The tavern cellar's barred door: a way to the undercroft, sealed
+        # until it is built, about where the spec puts it.)
+        exits = [m for m in layout()["markers"] if m["ucd"] == "exit" and m["props"].get("to") == "undercroft"]
+        self.assertEqual(len(exits), 1)
+        self.assertIn("sealed", exits[0]["props"]["label"])
+        tavern = [p for p in layout()["pieces"] if p["piece"] == "tavern"][0]
+        door = geo.add(tavern["position"], geo.apply(tavern["basis"], kit_recipes.PIECES["tavern"]["places"]["undercroft_door"]))
+        self.assertLess(math.dist(exits[0]["position"], door), 1.5)
+        self.assertLess(math.hypot(door[0] + 140.0, door[2] + 60.0), 8.0)
+
+    def test_the_guindais_gate_opens_into_its_postern(self):
+        # (The way back to the harbour's Guindais stair: through a postern
+        # in the city wall's footing, its gate open, dark beyond.)
+        posterns = [p for p in layout()["pieces"] if p["piece"].startswith("postern_")]
+        self.assertEqual(len(posterns), 1)
+        p = posterns[0]
+        mouth = geo.add(p["position"], geo.apply(p["basis"], kit_recipes.PIECES[p["piece"]]["door"]))
+        out = markers_named("to_harbour_guindais", "exit")[0]
+        box = geo.Box(out["position"], out["basis"], out["size"])
+        self.assertTrue(box.contains(geo.add(mouth, [0.3, 1.0, 0.0])))
+
+    def test_the_west_wall_is_climbed_from_the_first_lane(self):
+        points = routes("stairs_west_wall").get("stairs_west_wall")
+        self.assertTrue(points)
+        first, last = points[0]["position"], points[-1]["position"]
+        lane = stairs_plan.PLATES[0]
+        self.assertAlmostEqual(first[1], stairs_plan.level(lane), delta=0.05)
+        self.assertTrue(stairs_plan.south(lane) - stairs_plan.LANE <= first[2] <= stairs_plan.south(lane))
+        self.assertLess(abs(last[0] - stairs_plan.WALL_X), 1.0)
+        walk = [base + 12.0 for mid, length, base in stairs_plan.WALL_PIECES if mid - length / 2.0 <= last[2] <= mid + length / 2.0]
+        self.assertAlmostEqual(last[1], walk[0], delta=0.05)
+
+    def test_the_tannery_is_kept_for_its_tanners(self):
+        works = [m for m in layout()["markers"] if m["ucd"] == "work" and m["props"].get("kind") == "tannery"]
+        self.assertEqual(len(works), 1)
+        x0, z0, x1, z1 = stairs_plan.TANNERY
+        self.assertTrue(x0 < works[0]["position"][0] < x1 and z0 < works[0]["position"][2] < z1)
+        self.assertEqual(town.quarter_of(works[0]["position"][0], works[0]["position"][2]), "stairs")
+
+    def test_the_slot_house_and_the_bricked_alley_are_secrets(self):
+        secrets = [m for m in layout()["markers"] if m["ucd"] == "secret"]
+        slots = [each for each in stairs_plan.LOTS if each.quirk == "slot"]
+        self.assertEqual(len(slots), 1)
+        a = lot_rect(slots[0])
+        middle = [(a[0] + a[2]) / 2.0, slots[0].y + 1.5, (a[1] + a[3]) / 2.0]
+        self.assertTrue(any(geo.Box(m["position"], m["basis"], m["size"]).contains(middle) for m in secrets))
+        x0, z0, x1, z1 = stairs_plan.ALLEY
+        y = stairs_plan.level([t for t in stairs_plan.PLATES if t[0] == "stairs_4"][0])
+        inside = [(x0 + x1) / 2.0, y + 1.5, (z0 + z1) / 2.0]
+        self.assertTrue(any(geo.Box(m["position"], m["basis"], m["size"]).contains(inside) for m in secrets))
+        boxes = rules.colliders(layout())
+        hits = [t for t in (b.ray([(x0 + x1) / 2.0, y + 1.5, z1 + 1.0], [0.0, 0.0, -1.0]) for b in boxes) if t is not None]
+        self.assertTrue(hits and min(hits) < 1.5)
+
+    def test_the_baixa_and_the_carmo_are_climbed_from_the_stairs(self):
+        # (Each boundary step: two stair towers up its cliff, public; corbels
+        # beside one of them, a thief's; each way from the lower quarter's
+        # ground up to a terrace of the stairs.)
+        found = {}
+
+        for points in routes("stairs_").values():
+            props = points[0]["props"]
+
+            if props.get("step") in ("stairs_step_baixa", "stairs_step_carmo"):
+                found.setdefault(props["step"], []).append(points)
+
+        for step, low, quarter in (("stairs_step_baixa", 2.5, "baixa"), ("stairs_step_carmo", 28.0, "carmo")):
+            ways = found.get(step, [])
+            self.assertEqual(sorted(w[0]["props"]["way"] for w in ways), ["public", "public", "thief"], step)
+
+            for points in ways:
+                first, last = points[0]["position"], points[-1]["position"]
+                self.assertAlmostEqual(first[1], low, delta=0.05)
+                self.assertEqual(town.quarter_of(first[0], first[2]), quarter)
+                self.assertEqual(town.quarter_of(last[0], last[2]), "stairs")
+                self.assertTrue(any(abs(last[1] - stairs_plan.level(t)) < 0.05 for t in stairs_plan.PLATES))
+
+    def test_each_tower_opens_at_its_terrace(self):
+        # (Its top door where the plan puts it, on its terrace's edge.)
+        towers = sorted((p for p in layout()["pieces"] if p["piece"].startswith("stair_tower_")), key=lambda p: -p["position"][2])
+        self.assertEqual(len(towers), len(stairs_plan.TOWERS))
+
+        for p, (plate, top_z, _ground, _quarter) in zip(towers, stairs_plan.TOWERS):
+            door = geo.add(p["position"], geo.apply(p["basis"], kit_recipes.PIECES[p["piece"]]["doors"][1]))
+            self.assertAlmostEqual(door[2], top_z, delta=0.05)
+            self.assertAlmostEqual(door[1], stairs_plan.level([t for t in stairs_plan.PLATES if t[0] == plate][0]), delta=0.05)
+            self.assertLess(abs(door[0] - stairs_plan.EAST), 0.6)
+
+    def test_the_stairs_checks_clean(self):
+        self.assertGreaterEqual(len(stairs_plan.LOTS), 60)
+        self.assertEqual([p for p in rules.problems(layout(), "stage2") if "stairs" in p], [])
 
 
 if __name__ == "__main__":

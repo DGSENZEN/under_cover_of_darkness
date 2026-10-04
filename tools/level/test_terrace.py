@@ -5,6 +5,7 @@ lane, the stream's vault and the sewer, cisterns, hatches down to them.
     python3 tools/level/test_terrace.py
 """
 
+import math
 import os
 import sys
 import unittest
@@ -196,6 +197,150 @@ class Terrace(unittest.TestCase):
             foot = c[1] - c[4] / 2.0
             t = hit(name, [c[0], foot + 0.3, c[2]], [0.0, 1.0, 0.0])
             self.assertTrue(t is None or t > kit_terrace.LIFT - 0.3, c)
+
+    def test_a_stair_lane_meets_any_step_exactly(self):
+        # (Its riser divides the step: its head level with the terrace above,
+        # no lip.)
+        for rise in (4.23, 4.5, 5.0, 8.27):
+            steps = int(math.ceil(rise / kit_terrace.RISER - 1e-9))
+            recipe = kit_recipes.PIECES[kit_terrace.stair_lane(2.5, steps, rise / steps)]
+            self.assertAlmostEqual(recipe["head"][1], rise, places=4)
+            self.assertLessEqual(rise / steps, kit_terrace.RISER + 1e-9)
+
+    def test_a_parapet_guards_a_drop(self):
+        name = kit_terrace.parapet(6.0)
+        self.assertIsNotNone(hit(name, [0.0, 0.6, 1.0], [0.0, 0.0, -1.0]))
+        self.assertIsNone(hit(name, [0.0, kit_terrace.PARAPET[0] + 0.12, 1.0], [0.0, 0.0, -1.0]))
+
+    def test_a_footing_fills_under_a_wall(self):
+        name = kit_terrace.footing(6.0, 5.5, 2.4)
+        self.assertAlmostEqual(hit(name, [0.0, 7.0, 0.0], [0.0, -1.0, 0.0]), 1.5, places=3)
+        self.assertIsNotNone(hit(name, [0.0, 0.1, 2.0], [0.0, 0.0, -1.0]))
+
+    def test_a_rampart_stands_over_its_rim(self):
+        name = kit_terrace.rampart(10.0, 4.0, 6.0)
+        recipe = kit_recipes.PIECES[name]
+        self.assertAlmostEqual(10.0 - hit(name, [0.0, 10.0, 0.0], [0.0, -1.0, 0.0]), 4.0, delta=0.12)
+        self.assertIsNotNone(hit(name, [0.0, -5.0, 3.0], [0.0, 0.0, -1.0]))
+        self.assertGreaterEqual(recipe["size"][1], 10.0)
+
+    def test_a_yard_front_has_its_gate(self):
+        name = kit_terrace.yard_front(5.0)
+        self.assertIsNotNone(hit(name, [-2.0, 1.0, 1.0], [0.0, 0.0, -1.0]))
+        gate = [sh for sh in kit_recipes.PIECES[name]["shapes"] if sh.get("slot") == "door_1"]
+        self.assertTrue(gate)
+
+    def test_a_vaults_door_opens_its_side(self):
+        # (The stream's vault where a cellar opens onto it: a doorway in its
+        # +x wall at its middle, the wall whole either side.)
+        name = kit_terrace.vault(3.0, 2.4, 6.0, ledge=0.8, door=1.4)
+        self.assertIsNone(hit(name, [0.5, 1.0, 0.0], [1.0, 0.0, 0.0]))
+        self.assertIsNotNone(hit(name, [0.5, 1.0, 2.0], [1.0, 0.0, 0.0]))
+        self.assertIsNotNone(hit(name, [0.5, 1.0, -2.0], [1.0, 0.0, 0.0]))
+        self.assertIsNotNone(hit(name, [0.5, 2.3, 0.0], [1.0, 0.0, 0.0]))
+
+    def test_a_cascade_joins_two_levels_of_a_stream(self):
+        # (Its foot level with the lower tunnel, open to it at -z; its top
+        # level with the upper, open to it at +z... up its ladder.)
+        name = kit_terrace.cascade(3.0, 2.4, 4.5)
+        recipe = kit_recipes.PIECES[name]
+        lx = recipe["ledge"]
+        tour = recipe["tour"]
+        pieces = [piece("cascade", name, (0, 0, 0)), floor("low", lx - 1.0, -4.0, lx + 1.0, -1.6, 0.0),
+                  floor("high", lx - 1.0, 1.6, lx + 1.0, 4.0, 4.5)]
+        ladders = [dict(marker("climb_%d" % i, "ladder", c[0:3], size=list(c[3:6])), basis=geo.rotation(c[6])) for i, c in enumerate(recipe["climbs"])]
+        self.assertEqual(walked(pieces, tour, ladders), [])
+        self.assertAlmostEqual(tour[0][1], 0.0)
+        self.assertAlmostEqual(tour[-1][1], 4.5)
+
+    def test_wall_steps_climb_their_rise_over_their_run(self):
+        name = kit_terrace.wall_steps(11.8, 19.7, 1.5)
+        recipe = kit_recipes.PIECES[name]
+        self.assertAlmostEqual(recipe["head"][1], 11.8, places=3)
+        self.assertAlmostEqual(recipe["head"][2], 19.7, places=3)
+        pieces = [piece("steps", name, (0, 0, 0)), floor("foot", -1.0, -2.0, 1.0, 0.0, 0.0), floor("top", -1.0, 19.7, 1.0, 22.0, 11.8)]
+        self.assertEqual(walked(pieces, recipe["tour"]), [])
+
+    def test_a_stair_tower_climbs_its_cliff(self):
+        # (Its foot door on the street, its top door onto the terrace at
+        # the cliff's top, a switchback up inside walked from one to the
+        # other; roofed, its walls whole.)
+        name = kit_terrace.stair_tower(24.27)
+        recipe = kit_recipes.PIECES[name]
+        foot, top = recipe["foot"], recipe["top"]
+        self.assertAlmostEqual(foot[1], 0.0)
+        self.assertAlmostEqual(top[1], 24.27, places=3)
+        pieces = [piece("tower", name, (0, 0, 0)), floor("street", foot[0] - 1.5, foot[2] - 1.5, foot[0] + 1.5, foot[2] + 1.5, 0.0),
+                  floor("terrace", top[0] - 1.5, top[2] - 1.5, top[0] + 1.5, top[2] + 1.5, 24.27)]
+        doors = [marker("door_%d" % i, "door", d[0:3]) for i, d in enumerate(recipe["doors"])]
+        self.assertEqual(walked(pieces, recipe["tour"], doors), [])
+        self.assertIsNotNone(hit(name, [0.0, 40.0, 0.0], [0.0, -1.0, 0.0]))
+
+    def test_corbels_are_hung_up_a_cliff(self):
+        # (Ledges a hang apart up a cliff's face, each deep enough to hold:
+        # the thief's way up where the stairs are watched.)
+        name = kit_terrace.corbels(24.27)
+        recipe = kit_recipes.PIECES[name]
+        tops = sorted({round(c[1] + c[4] / 2.0, 3) for c in recipe["cols"]})
+        self.assertTrue(all(b - a <= rules.HANG for a, b in zip([0.0] + tops, tops)), tops)
+        self.assertGreaterEqual(tops[-1], 24.27 - rules.HANG)
+
+    def test_a_posterns_door_is_dark_and_deep(self):
+        name = kit_terrace.postern(3.03, 2.4)
+        recipe = kit_recipes.PIECES[name]
+        self.assertTrue(any(sh.get("slot") == "pitch" for sh in recipe["shapes"]))
+        self.assertIsNotNone(hit(name, [0.0, 2.8, 3.0], [0.0, 0.0, -1.0]))
+
+    def test_a_cascade_climbs_north_too(self):
+        # (Its upper level to -z: a stream running north up the terraces,
+        # its ledge still on its +x side.)
+        name = kit_terrace.cascade(3.0, 2.4, 8.27, ledge=1.2, up=-1.0)
+        recipe = kit_recipes.PIECES[name]
+        lx, tour = recipe["ledge"], recipe["tour"]
+        self.assertGreater(lx, 0.0)
+        pieces = [piece("cascade_n", name, (0, 0, 0)), floor("low_n", lx - 1.0, 1.6, lx + 1.0, 4.0, 0.0),
+                  floor("high_n", lx - 1.0, -4.0, lx + 1.0, -1.6, 8.27)]
+        ladders = [dict(marker("climb_n_%d" % i, "ladder", c[0:3], size=list(c[3:6])), basis=geo.rotation(c[6])) for i, c in enumerate(recipe["climbs"])]
+        self.assertEqual(walked(pieces, tour, ladders), [])
+        self.assertAlmostEqual(tour[-1][1], 8.27)
+        self.assertLess(tour[-1][2], 0.0)
+
+    def test_a_hatch_chamber_keeps_the_streams_channel(self):
+        # (Under a hatch on the stream: its ledge under the shaft, the
+        # channel running on through it.)
+        name = kit_terrace.hatch_chamber(3.0, 2.4, 2.0, ledge=1.2)
+        self.assertAlmostEqual(hit(name, [0.9, 1.0, 0.0], [0.0, -1.0, 0.0]), 1.0, places=2)
+        self.assertAlmostEqual(hit(name, [-0.6, 1.0, 0.0], [0.0, -1.0, 0.0]), 1.0 + kit_terrace.CHANNEL, places=2)
+
+    def test_a_vault_end_closes_its_channel(self):
+        name = kit_terrace.vault_end(3.0, 2.4, channel=True)
+        self.assertIsNotNone(hit(name, [-0.6, -0.5, 1.0], [0.0, 0.0, -1.0]))
+
+    def test_a_tannery_has_its_vats_and_racks(self):
+        # (Six vats a man walks between, hides drying on two racks, the
+        # tanners' work spot.)
+        name = kit_terrace.tannery()
+        recipe = kit_recipes.PIECES[name]
+        self.assertEqual(len(recipe["vats"]), 6)
+        self.assertTrue(any(sh.get("slot") == "leather" for sh in recipe["shapes"]))
+        self.assertIn("work", recipe)
+
+        for x, z in recipe["vats"]:
+            self.assertIsNotNone(hit(name, [x, 2.0, z], [0.0, -1.0, 0.0]))
+
+    def test_a_bricked_alley_is_shut_to_a_mans_chest(self):
+        name = kit_terrace.bricked(2.5, 3.4)
+        self.assertIsNotNone(hit(name, [0.0, 1.5, 1.0], [0.0, 0.0, -1.0]))
+        self.assertIsNone(hit(name, [0.0, 3.6, 1.0], [0.0, 0.0, -1.0]))
+
+    def test_a_fill_is_solid_and_paved_at_its_top(self):
+        # (A terrace carried forward between its retaining walls: solid to
+        # its top, which is paved as a street.)
+        name = kit_terrace.fill(10.9, 9.2, 4.23)
+        self.assertAlmostEqual(hit(name, [0.0, 5.23, 0.0], [0.0, -1.0, 0.0]), 1.0, places=3)
+        self.assertIsNotNone(hit(name, [0.0, 2.0, 6.0], [0.0, 0.0, -1.0]))
+        tops = [sh for sh in kit_recipes.PIECES[name]["shapes"] if sh.get("slot") == "calcada"]
+        self.assertTrue(tops)
 
     def test_pieces_are_named_by_their_measures(self):
         self.assertEqual(kit_terrace.stair_lane(1.5, 24), kit_terrace.stair_lane(1.5, 24))

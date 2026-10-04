@@ -77,11 +77,14 @@ def _honest(rng, storey, top):
     return "shut"
 
 
-def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="render_ochre", side="granite", seed=0):
+def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="render_ochre", side="granite", seed=0, shop=SHOP,
+           back_storey=1):
     """A Porto house: see the module's doc. Returns a kit_town design with
     `openings` ([storey, face, x, y, w, h, kind]), `balconies` ([x, top,
     width, depth]), `eaves`, `doors`, `entries`, `rooms_at`, `tour` and (a
-    two_level house) `out_back`, `places`."""
+    two_level house) `out_back`, `places`. Its ground storey `shop` high (a
+    two_level house's as tall as the terrace step it straddles, its back
+    door on `back_storey`)."""
     if quirk not in QUIRKS:
         raise ValueError("no Porto quirk '%s'" % quirk)
 
@@ -92,10 +95,10 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
         width, party = SLOT_WIDTH, SLOT_PARTY
 
     if quirk == "two_level":
-        enterable, rooms, storeys = True, max(rooms, 2), max(storeys, 2)
+        enterable, rooms, storeys = True, max(rooms, back_storey + 1), max(storeys, back_storey + 1)
 
     rooms = min(max(rooms, 1), 3, storeys) if enterable else 0
-    eaves = SHOP + (storeys - 1) * UPPER
+    eaves = shop + (storeys - 1) * UPPER
     jet = JETTY if quirk == "jetty" else 0.0
     inner = width - 2.0 * party
     n = bays(width) if quirk != "slot" else 1
@@ -120,7 +123,7 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
     upper = []
 
     for s in range(1, storeys):
-        y = SHOP + (s - 1) * UPPER - SHOP
+        y = (s - 1) * UPPER
 
         for i, x in enumerate(xs):
             balcony = s == 1 or rng.random() < BALCONIES
@@ -129,7 +132,7 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
 
             if balcony:
                 upper.append(town.Opening(x, y, leaf, BALCONY_DOOR, kind))
-                out["balconies"].append([x, SHOP + (s - 1) * UPPER, leaf + 0.4, BALCONY[0]])
+                out["balconies"].append([x, shop + (s - 1) * UPPER, leaf + 0.4, BALCONY[0]])
             else:
                 upper.append(town.Opening(x, y + SILL, leaf, HEAD - SILL, kind))
 
@@ -141,34 +144,37 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
 
     for o in upper:
         storey = 1 + int((o.y + 1e-6) // UPPER)
-        out["openings"].append([storey, "front", o.x, o.y + SHOP, o.width, o.height, o.kind])
+        out["openings"].append([storey, "front", o.x, o.y + shop, o.width, o.height, o.kind])
 
     # The front: the ground floor's band, the storeys' over it (out over the
     # street on a jetty, a tabique front).
-    s1, c1 = town.wall(width, SHOP, FRONT_WALL, ground, front, (0.0, -FRONT_WALL / 2.0, 0.0), inside=enterable)
+    s1, c1 = town.wall(width, shop, FRONT_WALL, ground, front, (0.0, -FRONT_WALL / 2.0, 0.0), inside=enterable)
     thick = TABIQUE if jet else FRONT_WALL
-    s2, c2 = town.wall(width, eaves - SHOP, thick, upper, front, (0.0, jet - thick / 2.0, 0.0), inside=enterable)
-    s2, c2 = town.placed(s2, c2, y=SHOP)
+    s2, c2 = town.wall(width, eaves - shop, thick, upper, front, (0.0, jet - thick / 2.0, 0.0), inside=enterable)
+    s2, c2 = town.placed(s2, c2, y=shop)
     shapes += s1 + s2
 
     if jet:
         # (The jetty's beam ends under its overhang.)
-        shapes += [ks.box(x, SHOP - 0.12, jet / 2.0, 0.18, 0.24, jet + 0.3, "timber") for x in (-width / 2.0 + 0.3, 0.0, width / 2.0 - 0.3)]
+        shapes += [ks.box(x, shop - 0.12, jet / 2.0, 0.18, 0.24, jet + 0.3, "timber") for x in (-width / 2.0 + 0.3, 0.0, width / 2.0 - 0.3)]
 
     # The back: a window a storey, shut; a two_level house's door a storey
     # up; against the wall, its top floor's door onto the wall-walk.
     back_x = xs[-1]
-    back = [town.Opening(back_x, s * UPPER - (UPPER - SHOP if s else 0.0) + SILL if s else SILL, leaf, HEAD - SILL, _honest(rng, s, storeys - 1))
+    back = [town.Opening(back_x, shop + (s - 1) * UPPER + SILL if s else SILL, leaf, HEAD - SILL, _honest(rng, s, storeys - 1))
             for s in range(storeys)]
 
     if quirk == "two_level":
-        back[1] = town.Opening(back_x, SHOP, DOOR[0], DOOR[1], "door")
-        out["doors"].append([-back_x, SHOP, -depth + BACK_WALL / 2.0, 180.0])
+        # (In the bay away from the stairs, which climb by the left party
+        # wall: not over their well.)
+        up = shop + (back_storey - 1) * UPPER
+        back[back_storey] = town.Opening(xs[0], up, DOOR[0], DOOR[1], "door")
+        out["doors"].append([-xs[0], up, -depth + BACK_WALL / 2.0, 180.0])
         out["entries"].append("door")
 
     if quirk == "against_wall":
         # (Barred: it opens in the night's plan, if ever.)
-        top = SHOP + (storeys - 2) * UPPER
+        top = shop + (storeys - 2) * UPPER
         back[-1] = town.Opening(back_x, top, DOOR[0], DOOR[1], "barred")
         out["places"]["wall_door"] = [-back_x, top, -depth]
 
@@ -176,7 +182,7 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
     shapes += s3
 
     for o in back:
-        out["openings"].append([0 if o.y < SHOP else 1 + int((o.y - SHOP + 1e-6) // UPPER), "back", o.x, o.y, o.width, o.height, o.kind])
+        out["openings"].append([0 if o.y < shop else 1 + int((o.y - shop + 1e-6) // UPPER), "back", o.x, o.y, o.width, o.height, o.kind])
 
     # The party walls, plain granite.
     for sx in (-1.0, 1.0):
@@ -186,38 +192,39 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
 
     # Balconies: their slabs, rails and corbels, their colliders.
     for x, top, wide, deep in out["balconies"]:
-        face = jet if top > SHOP - 0.01 else 0.0
+        face = jet if top > shop - 0.01 else 0.0
         b, bc = town.balcony(x, top, wide, deep, face)
         shapes += b
         cols += bc
 
     if enterable:
-        inside = _inside(out, width, depth, storeys, rooms, party, door_x, back_x, eaves, quirk)
+        inside = _inside(out, width, depth, storeys, rooms, party, door_x, back_x, eaves, quirk, shop, back_storey)
         shapes += inside[0]
         cols += c1 + c2 + c3 + inside[1]
     else:
         cols.append(town.col(0.0, eaves / 2.0, -depth / 2.0, width - 2.0 * party + 0.02, eaves, depth))
 
         if jet:
-            cols.append(town.col(0.0, SHOP + (eaves - SHOP) / 2.0, jet / 2.0, width, eaves - SHOP, jet))
+            cols.append(town.col(0.0, shop + (eaves - shop) / 2.0, jet / 2.0, width, eaves - shop, jet))
 
     # The roof, its eaves' cornice, its chimney.
     rs, rc = town.roof("hipped", width, depth + jet, eaves, PITCH, side)
     rs, rc = town.placed(rs, rc, z=-(depth - jet) / 2.0)
     shapes += rs + [ks.box(0.0, eaves - 0.1, jet + 0.12, width, 0.2, 0.3, "granite"), ks.box(0.0, eaves - 0.1, -depth - 0.12, width, 0.2, 0.3, "granite")]
-    cols += rc
+    # (The eaves' cornices solid as drawn: a climber's hands meet them.)
+    cols += rc + [town.col(0.0, eaves - 0.1, jet + 0.12, width, 0.2, 0.3), town.col(0.0, eaves - 0.1, -depth - 0.12, width, 0.2, 0.3)]
     rise = min(width, depth + jet) / 2.0 * math.tan(math.radians(PITCH))
     cx, cz = -width / 2.0 + party + 0.5, -depth * 0.7
     top = eaves + rise + 0.6
     shapes += [ks.box(cx, (eaves + top) / 2.0, cz, 0.7, top - eaves, 0.7, side), ks.box(cx, top + 0.08, cz, 0.9, 0.16, 0.9, "granite")]
-    cols.append(town.col(cx, (eaves + top) / 2.0, cz, 0.7, top - eaves, 0.7))
+    cols += [town.col(cx, (eaves + top) / 2.0, cz, 0.7, top - eaves, 0.7), town.col(cx, top + 0.08, cz, 0.9, 0.16, 0.9)]
     out["chimneys"] = [[cx, top + 0.3, cz]]
-    _quirk(out, shapes, cols, quirk, width, depth, eaves, rise, jet, party)
+    _quirk(out, shapes, cols, quirk, width, depth, eaves, rise, jet, party, shop)
     out.update({"shapes": shapes, "cols": cols, "size": [width, eaves + rise + 1.5, depth + jet], "front": front})
     return out
 
 
-def _stairs(depth, rooms, party, width):
+def _stairs(depth, rooms, party, width, shop=SHOP):
     """Where the stairs go: [(kind, x, foot z, yaw, rise, y)], one up to
     each room over the first."""
     inner = width - 2.0 * party
@@ -226,12 +233,12 @@ def _stairs(depth, rooms, party, width):
     if rooms >= 2:
         # (Two flights take two stairs' width and leave a way past them.)
         if depth >= TWO_FLIGHT_DEPTH and inner >= 2.0 * STAIR_WIDTH + 1.0:
-            out.append(("two_flight", -inner / 2.0 + STAIR_WIDTH, -depth + BACK_WALL + 1.2, 0.0, SHOP, 0.0))
+            out.append(("two_flight", -inner / 2.0 + STAIR_WIDTH, -depth + BACK_WALL + 1.2, 0.0, shop, 0.0))
         else:
-            out.append(("straight", -inner / 2.0 + STAIR_WIDTH / 2.0, -depth + BACK_WALL + 0.3, 0.0, SHOP, 0.0))
+            out.append(("straight", -inner / 2.0 + STAIR_WIDTH / 2.0, -depth + BACK_WALL + 0.3, 0.0, shop, 0.0))
 
     if rooms >= 3:
-        out.append(("straight", inner / 2.0 - STAIR_WIDTH / 2.0, -FRONT_WALL - 0.4, 180.0, UPPER, SHOP))
+        out.append(("straight", inner / 2.0 - STAIR_WIDTH / 2.0, -FRONT_WALL - 0.4, 180.0, UPPER, shop))
 
     return out
 
@@ -246,13 +253,13 @@ def _hole(kind, x, z, yaw, rise):
     return (x + f[0], z + f[1], x + f[2], z + f[3])
 
 
-def _inside(out, width, depth, storeys, rooms, party, door_x, back_x, eaves, quirk):
+def _inside(out, width, depth, storeys, rooms, party, door_x, back_x, eaves, quirk, shop=SHOP, back_storey=1):
     """An enterable house's inside: a floor at each room's foot, a ceiling
     over the last, the stairs between, the storeys over them sealed; its
     rooms' standing places, its door, its tour."""
     inner = width - 2.0 * party
-    levels = [0.0] + [SHOP + i * UPPER for i in range(storeys - 1)]
-    stairs = _stairs(depth, rooms, party, width)
+    levels = [0.0] + [shop + i * UPPER for i in range(storeys - 1)]
+    stairs = _stairs(depth, rooms, party, width, shop)
     shapes, cols = [], []
     room_depth = depth - FRONT_WALL - BACK_WALL
 
@@ -296,12 +303,13 @@ def _inside(out, width, depth, storeys, rooms, party, door_x, back_x, eaves, qui
     if quirk == "two_level":
         # (Out to the back door's threshold: the terrace behind is the
         # layout's.)
-        out["out_back"] = [[-back_x, SHOP, -depth + BACK_WALL + 0.8, "walk"], [-back_x, SHOP, -depth + BACK_WALL / 2.0, "walk"]]
+        up = shop + (back_storey - 1) * UPPER
+        out["out_back"] = [[-door_x, up, -depth + BACK_WALL + 0.8, "walk"], [-door_x, up, -depth + BACK_WALL / 2.0, "walk"]]
 
     return shapes, cols
 
 
-def _quirk(out, shapes, cols, quirk, width, depth, eaves, rise, jet, party):
+def _quirk(out, shapes, cols, quirk, width, depth, eaves, rise, jet, party, shop=SHOP):
     """The house's one quirk on its roof or its back (the doors' are in
     design)."""
     if quirk == "mirante":
@@ -320,10 +328,14 @@ def _quirk(out, shapes, cols, quirk, width, depth, eaves, rise, jet, party):
         cols.append(town.col(0.0, (y0 + h + 0.2 + eaves) / 2.0, z, w + 0.4, y0 + h + 0.2 - eaves, d + 0.2))
     elif quirk == "privy_tower":
         x, z = width / 2.0 - party - PRIVY / 2.0, -depth - PRIVY / 2.0
-        shapes += [ks.box(x, (SHOP + eaves) / 2.0, z, PRIVY, eaves - SHOP, PRIVY, "plaster"),
-                   ks.box(x, SHOP - 0.15, z, PRIVY + 0.2, 0.3, PRIVY + 0.2, "granite")]
-        cols.append(town.col(x, (SHOP + eaves) / 2.0, z, PRIVY, eaves - SHOP, PRIVY))
+        shapes += [ks.box(x, (shop + eaves) / 2.0, z, PRIVY, eaves - shop, PRIVY, "plaster"),
+                   ks.box(x, shop - 0.15, z, PRIVY + 0.2, 0.3, PRIVY + 0.2, "granite")]
+        cols.append(town.col(x, (shop + eaves) / 2.0, z, PRIVY, eaves - shop, PRIVY))
     elif quirk == "corner_shrine":
         x, y = -width / 2.0 + 0.6, 2.4
         shapes.append(ks.box(x, y + 0.45, 0.01, 0.62, 0.92, 0.04, "pitch"))
         out["places"]["shrine"] = [x, y, 0.05]
+
+
+# (Its lots, if the kit was entered through this module and passed them by.)
+town.register_town()

@@ -119,6 +119,29 @@ class Porto(unittest.TestCase):
         self.assertTrue(clear(design["cols"], [back[0][0], 4.8, -14.0], [back[0][0], 4.8, -10.0]))
         self.assertEqual(toured(design, design["tour"] + design["out_back"]), [])
 
+    def test_its_cornices_and_chimney_cap_are_solid(self):
+        # (The granite cornice along its eaves, front and back, and the cap
+        # over its stack: solid as drawn.)
+        design = kit_porto.design(6.0, 14.0, 4)
+        eaves = design["eaves"]
+        self.assertAlmostEqual(first_hit(design["cols"], [0.0, eaves + 0.5, 0.22], [0.0, -1.0, 0.0]) or 99.0, 0.5, delta=0.02)
+        self.assertAlmostEqual(first_hit(design["cols"], [0.0, eaves + 0.5, -14.22], [0.0, -1.0, 0.0]) or 99.0, 0.5, delta=0.02)
+        x, top, z = design["chimneys"][0]
+        cap = top - 0.3 + 0.16
+        self.assertAlmostEqual(first_hit(design["cols"], [x + 0.42, cap + 1.0, z], [0.0, -1.0, 0.0]) or 99.0, 1.0, delta=0.02)
+
+    def test_a_two_level_house_meets_any_terrace_step(self):
+        # (Its ground storey as tall as the step it straddles, or its back
+        # door a storey higher still: the stairs quarter's steps of 4.23 to
+        # 8.27 m. Walked in at the front, out at the back.)
+        for rise, back_storey in ((4.23, 1), (4.5, 1), (5.0, 1), (8.27, 2)):
+            shop = rise - (back_storey - 1) * kit_porto.UPPER
+            design = kit_porto.design(6.0, 20.0, 4, "two_level", shop=shop, back_storey=back_storey)
+            back = [d for d in design["doors"] if abs(d[3] - 180.0) < 1e-6]
+            self.assertEqual(len(back), 1, rise)
+            self.assertAlmostEqual(back[0][1], rise, places=3)
+            self.assertEqual(toured(design, design["tour"] + design["out_back"]), [], rise)
+
     def test_every_quirk_builds_and_its_roof_is_stood_on(self):
         for quirk in kit_porto.QUIRKS:
             design = kit_porto.design(4.5, 12.0, 4, quirk)

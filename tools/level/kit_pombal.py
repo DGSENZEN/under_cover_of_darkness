@@ -323,3 +323,7 @@ def _inside(out, width, depth, heights, levels, rooms, kind, eaves):
 
     out["tour"] = tour
     return shapes, cols
+
+
+# (Its lots, if the kit was entered through this module and passed them by.)
+town.register_town()
