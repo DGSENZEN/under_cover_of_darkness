@@ -181,6 +181,12 @@ class Porto(unittest.TestCase):
             self.assertTrue(drawn(TEST, origin, [-sx, 0.0, 0.0], reach=1.05), sx)
             self.assertAlmostEqual(first_hit(design["cols"], origin, [-sx, 0.0, 0.0]), 1.0, places=2)
 
+    def test_its_party_walls_and_back_are_weathered_ashlar(self):
+        design = kit_porto.design(6.0, 12.0, 4)
+        slots = {sh.get("slot") for sh in design["shapes"]}
+        self.assertIn("ashlar_weathered", slots)
+        self.assertNotIn("granite", {sh.get("slot") for sh in design["shapes"] if sh.get("kind") == "box" and sh["size"][1] > 6.0})
+
     def test_the_slot_house_is_1_5_wide(self):
         self.assertAlmostEqual(kit_porto.design(4.5, 10.0, 3, "slot")["size"][0], 1.5)
 
@@ -217,6 +223,15 @@ class Pombaline(unittest.TestCase):
     def tearDown(self):
         for name in (TEST, "test_street"):
             kit_recipes.PIECES.pop(name, None)
+
+    def test_its_openings_are_framed_in_lioz_and_its_back_plastered(self):
+        # (Lisbon's cream limestone round its windows and doors, not the
+        # north's grey granite; its back and party walls rendered.)
+        design = kit_pombal.design(4, 12.0)
+        slots = {sh.get("slot") for sh in design["shapes"]}
+        self.assertIn("lioz", slots)
+        tall = {sh.get("slot") for sh in design["shapes"] if sh.get("kind") == "box" and sh["size"][1] > 8.0}
+        self.assertNotIn("granite", tall)
 
     def test_four_bays_are_12_7_wide(self):
         self.assertAlmostEqual(kit_pombal.facade_width(4), 12.65)

@@ -7,6 +7,9 @@ render_mode unshaded, cull_disabled;
 
 uniform vec3 colour : source_color = vec3(1.0, 0.72, 0.4);
 uniform float bright = 0.9;
+// The room seen through the panes (our painting, window_lit), if found.
+uniform sampler2D panes : source_color, filter_nearest;
+uniform bool has_panes = false;
 
 void fragment() {
 	vec3 at = NODE_POSITION_WORLD;
@@ -15,5 +18,6 @@ void fragment() {
 	float own = 0.7 + 0.45 * h;
 	vec3 warmth = mix(colour, vec3(1.0, 0.86, 0.62), h2 * 0.6);
 	float flicker = h2 > 0.68 ? 0.86 + 0.1 * sin(TIME * (2.0 + 3.0 * h) + h * 20.0) + 0.04 * sin(TIME * 11.0 + h * 7.0) : 1.0;
-	ALBEDO = warmth * bright * own * flicker;
+	vec3 room = has_panes ? texture(panes, UV).rgb * 1.35 : vec3(1.0);
+	ALBEDO = warmth * room * bright * own * flicker;
 }

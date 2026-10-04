@@ -172,7 +172,7 @@ class Street(unittest.TestCase):
         niche = kit_street.NICHE
         self.assertLessEqual(abs(lamp[0]), niche[0] / 2.0)
         self.assertTrue(kit_street.NICHE_SILL <= lamp[1] <= kit_street.NICHE_SILL + niche[1])
-        self.assertTrue(cards("shrine_alminha", "azulejo_king"))
+        self.assertTrue(cards("shrine_alminha", "azulejo_souls"))
         retablo = PIECES["shrine_retablo"]["sockets"]["lamp"][0]
         self.assertAlmostEqual(retablo[1], 2.5, delta=0.3)
         self.assertTrue(cards("shrine_retablo", "azulejo_comet"))
@@ -181,7 +181,7 @@ class Street(unittest.TestCase):
         # (The shrine is laid on a solid front, its wall's face at z 0: its
         # painting lies on that face, the surround and sill standing out
         # round it, the votive lamp before the painting on the sill.)
-        king = cards("shrine_alminha", "azulejo_king")[0]
+        king = cards("shrine_alminha", "azulejo_souls")[0]
         surround = [sh for sh in PIECES["shrine_alminha"]["shapes"] if sh["kind"] == "box" and sh["slot"] == "granite"]
         front = min(sh["centre"][2] + sh["size"][2] / 2.0 for sh in surround)
         self.assertTrue(0.0 < king["centre"][2] < 0.05, king["centre"])

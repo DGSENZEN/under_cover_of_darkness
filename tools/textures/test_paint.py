@@ -111,18 +111,49 @@ class Foliage(unittest.TestCase):
         self.assertGreater(white, 0.3)
 
     def test_the_comet_and_the_king_are_painted_in_the_glaze(self):
-        # (The old town's panels, 4 x 6 tiles of 32 px: cobalt on the tin
-        # glaze's white; the comet's red-brown in its own.)
+        # (The old town's panels, 4 x 6 tiles of 32 px: cobalt washed and
+        # drawn on the tin glaze, its white left bare in places; the
+        # comet's red-brown in its own.)
         for name in ("azulejo_comet", "azulejo_king"):
             with self.subTest(name):
                 image = paint.PAINTINGS[name]()
                 self.assertEqual(image.size, (128, 192))
                 pixels = np.asarray(image.convert("RGB")).astype(float)
-                self.assertGreater((pixels[:, :, 2] > pixels[:, :, 0] + 40).mean(), 0.12)
-                self.assertGreater((pixels.min(axis=2) > 170).mean(), 0.3)
+                self.assertGreater((pixels[:, :, 2] > pixels[:, :, 0] + 40).mean(), 0.3)
+                self.assertGreater((pixels.min(axis=2) > 170).mean(), 0.15)
 
         comet = np.asarray(paint.PAINTINGS["azulejo_comet"]().convert("RGB")).astype(float)
         self.assertGreater(((comet[:, :, 0] > comet[:, :, 2] + 50) & (comet[:, :, 0] > 120)).mean(), 0.01)
+
+    def test_the_souls_burn_under_the_king(self):
+        # (The alminha: the comet's red fire in its lower third, cobalt
+        # heavens above, the king's face a blank in the glaze.)
+        image = paint.PAINTINGS["azulejo_souls"]()
+        self.assertEqual(image.size, (128, 192))
+        pixels = np.asarray(image.convert("RGB")).astype(float)
+        low, high = pixels[128:], pixels[:64]
+        self.assertGreater(((low[:, :, 0] > low[:, :, 2] + 50) & (low[:, :, 0] > 120)).mean(), 0.25)
+        self.assertGreater((high[:, :, 2] > high[:, :, 0] + 40).mean(), 0.2)
+
+    def test_the_kings_face_is_left_blank(self):
+        # (A patch of bare glaze where his face is: nothing painted in it.)
+        pixels = np.asarray(paint.PAINTINGS["azulejo_king"]().convert("RGB")).astype(float)
+        face = pixels[58:66, 59:64]
+        self.assertGreater(face.min(), 170.0)
+
+    def test_a_lit_window_is_panes_of_warm_light(self):
+        # (Through small panes in a dark frame: a room's warm light falling
+        # off from its lamp, a curtain drawn to one side.)
+        image = paint.PAINTINGS["window_lit"]()
+        w, h = image.size
+        self.assertEqual((w & (w - 1), h & (h - 1)), (0, 0))
+        pixels = np.asarray(image.convert("RGB")).astype(float)
+        warm = (pixels[:, :, 0] > pixels[:, :, 2] + 40).mean()
+        self.assertGreater(warm, 0.6)
+        lum = pixels.mean(axis=2)
+        self.assertGreater(lum.max() - lum.min(), 120.0)
+        # (Its frame's bars: whole dark rows and columns.)
+        self.assertTrue(any(lum[y, 4:-4].mean() < 50 for y in range(h // 4, 3 * h // 4)))
 
     def test_the_tile_frame_is_a_strip_of_four_tiles(self):
         image = paint.PAINTINGS["tile_frame"]()

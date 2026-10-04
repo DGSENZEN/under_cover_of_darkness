@@ -373,6 +373,28 @@ class Terrace(unittest.TestCase):
         self.assertTrue(paved)
         self.assertTrue(all(sh["size"][1] <= 0.12 for sh in paved), [sh["size"] for sh in paved])
 
+    def test_stone_follows_its_use(self):
+        # (Treads and landings in worn granite flags, retaining walls in
+        # warm rubble with a mossy coping, parapets in weathered ashlar
+        # with the same coping, a stair tower's walls in ashlar: not one
+        # granite on all of them.)
+        def slots(name):
+            return {sh.get("slot") for sh in kit_recipes.PIECES[name]["shapes"]}
+
+        lane = slots(kit_terrace.stair_lane(2.5, 24))
+        self.assertIn("stair_stone", lane)
+        self.assertNotIn("granite", lane)
+        self.assertEqual(slots(kit_terrace.retaining(10.0, 4.0)), {"rubble_warm", "coping_moss"})
+        self.assertEqual(slots(kit_terrace.parapet(5.0)), {"ashlar_weathered", "coping_moss"})
+        self.assertIn("stair_stone", slots(kit_terrace.wall_steps(11.8, 19.6, 1.5)))
+        # (Its doors' sills granite; its walls, spine and steps not.)
+        tower = kit_recipes.PIECES[kit_terrace.stair_tower(24.27)]["shapes"]
+        self.assertIn("ashlar_weathered", {sh.get("slot") for sh in tower})
+        self.assertIn("stair_stone", {sh.get("slot") for sh in tower})
+        self.assertFalse([sh for sh in tower if sh.get("slot") == "granite" and sh.get("kind") == "box" and max(sh["size"]) > 2.0])
+        # (A dressed face where asked: the bastion's, round its fountain.)
+        self.assertIn("granite_rough", slots(kit_terrace.retaining(12.5, 4.23, False, "granite_rough")))
+
     def test_pieces_are_named_by_their_measures(self):
         self.assertEqual(kit_terrace.stair_lane(1.5, 24), kit_terrace.stair_lane(1.5, 24))
         self.assertNotEqual(kit_terrace.retaining(10.0, 3.5), kit_terrace.retaining(10.0, 3.0))

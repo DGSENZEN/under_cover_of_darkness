@@ -42,7 +42,8 @@ RIBEIRA = -22.4
 LANE = 3.0
 GAP = 2.5
 RISER = 0.18
-FRONTS = ("render_ochre", "render_salmon", "render_straw", "render_blue", "azulejo_green", "azulejo_ship", "limewash", "plaster_ochre")
+FRONTS = ("render_ochre", "render_salmon", "render_straw", "render_blue", "render_pink", "render_green", "render_white", "azulejo_green",
+          "azulejo_blue", "azulejo_cube", "limewash", "plaster_ochre")
 QUIRKS = ("", "", "", "jetty", "mirante", "dormer", "privy_tower", "corner_shrine")
 
 PLATES = sorted([t for t in TERRACES if t[1] == "stairs"], key=lambda t: -t[5])
@@ -688,7 +689,7 @@ def _places():
     pt = 0.3
     # (Its retaining walls, the fill between them paved, a parapet round its
     # three open sides, the side ones ending at the front one's back.)
-    out["bastion"] += [{"kind": "retaining", "args": (round(x1 - x0, 3), rise), "at": ((x0 + x1) / 2.0, y3, z1), "yaw": 0.0},
+    out["bastion"] += [{"kind": "retaining", "args": (round(x1 - x0, 3), rise, False, "granite_rough"), "at": ((x0 + x1) / 2.0, y3, z1), "yaw": 0.0},
                        {"kind": "retaining", "args": (round(z1 - t - z0, 3), rise), "at": (x0, y3, (z0 + z1 - t) / 2.0), "yaw": -90.0},
                        {"kind": "retaining", "args": (round(z1 - t - z0, 3), rise), "at": (x1, y3, (z0 + z1 - t) / 2.0), "yaw": 90.0},
                        {"kind": "fill", "args": (round(x1 - x0 - 2.0 * t, 3), round(z1 - t - z0, 3), rise),

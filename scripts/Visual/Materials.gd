@@ -143,6 +143,23 @@ const SLOTS := {
 	&"azulejo_comet": {"photo": "azulejo_comet", "painted": true, "colour": Color("8C9AB8"), "metallic": 0.0, "roughness": 0.35},
 	&"azulejo_king": {"photo": "azulejo_king", "painted": true, "colour": Color("7C8CB4"), "metallic": 0.0, "roughness": 0.35},
 	&"tile_frame": {"photo": "tile_frame", "painted": true, "colour": Color("3E5E8C"), "metallic": 0.0, "roughness": 0.35},
+	# The old town's material pass (plan B1a): stone by its use, more
+	# renders, the Judiaria's tiles and stucco, a real azulejo mural, the
+	# souls' panel (paint.py).
+	&"ashlar_weathered": {"photo": "ashlar_weathered", "colour": Color("6E6C68"), "metallic": 0.0, "roughness": 0.85, "tile": 3.0},
+	&"rubble_warm": {"photo": "rubble_warm", "colour": Color("6A6450"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0},
+	&"coping_moss": {"photo": "coping_moss", "colour": Color("565A3C"), "metallic": 0.0, "roughness": 0.9, "tile": 1.5},
+	&"stair_stone": {"photo": "stair_stone", "colour": Color("8A8274"), "metallic": 0.0, "roughness": 0.85, "tile": 2.0},
+	&"zellige_diamond": {"photo": "zellige_diamond", "colour": Color("8A6E74"), "metallic": 0.0, "roughness": 0.4, "tile": 0.8},
+	&"zellige_star": {"photo": "zellige_star", "colour": Color("6E6A5C"), "metallic": 0.0, "roughness": 0.4, "tile": 0.8},
+	&"stucco_carved": {"photo": "stucco_carved", "colour": Color("9A7A5E"), "metallic": 0.0, "roughness": 0.85, "tile": 1.0},
+	&"stucco_lattice": {"photo": "stucco_lattice", "colour": Color("C2BCAE"), "metallic": 0.0, "roughness": 0.85, "tile": 1.0},
+	&"azulejo_mural": {"photo": "azulejo_mural", "colour": Color("8C9AB8"), "metallic": 0.0, "roughness": 0.35, "tile": 1.0},
+	&"render_pink": {"photo": "render_pink", "colour": Color("B4706A"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	&"render_green": {"photo": "render_green", "colour": Color("8EB09A"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	&"lioz": {"photo": "lioz", "colour": Color("CFC6B0"), "metallic": 0.0, "roughness": 0.8, "tile": 1.5},
+	&"render_white": {"photo": "render_white", "colour": Color("D6D0C4"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	&"azulejo_souls": {"photo": "azulejo_souls", "painted": true, "colour": Color("8C7A90"), "metallic": 0.0, "roughness": 0.35},
 	# Rooms lived in (tools/level/kit_interiors.py): a portolan chart, a
 	# written page, a shelf of ledgers' spines (paint.py).
 	&"sea_chart": {"photo": "sea_chart", "painted": true, "colour": Color("C8B48C"), "metallic": 0.0, "roughness": 0.85},
@@ -272,6 +289,12 @@ static func level_surface(slot: StringName) -> Material:
 		lit.shader = LIT_WINDOW
 		lit.set_shader_parameter(&"colour", entry["colour"])
 		lit.set_shader_parameter(&"bright", float(entry["glow"]))
+		var room := picture("window_lit")
+		lit.set_shader_parameter(&"has_panes", room != null)
+
+		if room != null:
+			lit.set_shader_parameter(&"panes", room)
+
 		_level[slot] = lit
 		return lit
 

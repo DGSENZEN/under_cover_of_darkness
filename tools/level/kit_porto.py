@@ -80,7 +80,7 @@ def _honest(rng, storey, top):
     return "shut"
 
 
-def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="render_ochre", side="granite", seed=0, shop=SHOP,
+def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="render_ochre", side="ashlar_weathered", seed=0, shop=SHOP,
            back_storey=1, corner=""):
     """A Porto house: see the module's doc. Returns a kit_town design with
     `openings` ([storey, face, x, y, w, h, kind]), `balconies` ([x, top,

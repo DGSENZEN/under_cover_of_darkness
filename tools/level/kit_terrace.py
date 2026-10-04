@@ -140,7 +140,7 @@ def stair_lane(width, steps, riser=RISER):
         for s in range(n):
             top = y + (s + 1) * riser
             box = (0.0, top / 2.0, z + s * TREAD + TREAD / 2.0, width, top, TREAD)
-            shapes.append(ks.box(*box, "granite"))
+            shapes.append(ks.box(*box, "stair_stone"))
             cols.append(town.col(*box))
 
         tour += [[0.0, y + riser, z + TREAD / 2.0, "stairs"], [0.0, y + n * riser, z + (n - 1) * TREAD + TREAD / 2.0, "stairs"]]
@@ -151,7 +151,7 @@ def stair_lane(width, steps, riser=RISER):
             # (Granite like its steps, paved on top.)
             box = (0.0, (y - 0.1) / 2.0, z + LANDING / 2.0, width, y - 0.1, LANDING)
             top = (0.0, y - 0.05, z + LANDING / 2.0, width, 0.1, LANDING)
-            shapes += [ks.box(*box, "granite"), ks.box(*top, "calcada")]
+            shapes += [ks.box(*box, "stair_stone"), ks.box(*top, "calcada")]
             cols += [town.col(*box), town.col(*top)]
             tour.append([0.0, y, z + LANDING / 2.0, "walk"])
             z += LANDING
@@ -160,11 +160,12 @@ def stair_lane(width, steps, riser=RISER):
     return _register(name, "stair", "granite", shapes, cols, [width, y, z], head=[0.0, y, z], tour=tour, flights=runs)
 
 
-def retaining(length, height, parapet=False):
+def retaining(length, height, parapet=False, slot="rubble_warm"):
     """A retaining wall `length` along x, `height` high, its face at z 0 to
-    the lower terrace (+z), its body WALL_THICK behind, a coping at its top
-    standing COPING[1] proud (the upper terrace's lip), a PARAPET on it."""
-    name = "retaining_%d_%d%s" % (_cm(length), _cm(height), "_parapet" if parapet else "")
+    the lower terrace (+z), its body WALL_THICK behind in `slot` (rubble; a
+    dressed face where asked), a mossy coping at its top standing COPING[1]
+    proud (the upper terrace's lip), a PARAPET on it."""
+    name = "retaining_%d_%d%s%s" % (_cm(length), _cm(height), "_parapet" if parapet else "", "" if slot == "rubble_warm" else "_" + slot)
 
     if name in k.PIECES:
         return name
@@ -172,16 +173,16 @@ def retaining(length, height, parapet=False):
     t, (ct, proud) = WALL_THICK, COPING
     body = (0.0, (height - ct) / 2.0, -t / 2.0, length, height - ct, t)
     coping = (0.0, height - ct / 2.0, -t / 2.0 + proud / 2.0, length, ct, t + proud)
-    shapes = [ks.box(*body, "granite_rough"), ks.box(*coping, "granite")]
+    shapes = [ks.box(*body, slot), ks.box(*coping, "coping_moss")]
     cols = [town.col(*body), town.col(*coping)]
 
     if parapet:
         ph, pt = PARAPET
         wall = (0.0, height + ph / 2.0, -pt / 2.0 - 0.05, length, ph, pt)
-        shapes.append(ks.box(*wall, "granite"))
+        shapes.append(ks.box(*wall, "ashlar_weathered"))
         cols.append(town.col(*wall))
 
-    return _register(name, "wall", "granite_rough", shapes, cols, [length, height + (PARAPET[0] if parapet else 0.0), t + proud])
+    return _register(name, "wall", slot, shapes, cols, [length, height + (PARAPET[0] if parapet else 0.0), t + proud])
 
 
 def parapet(length):
@@ -194,8 +195,8 @@ def parapet(length):
 
     ph, pt = PARAPET
     box = (0.0, ph / 2.0, -pt / 2.0, length, ph, pt)
-    shapes = [ks.box(*box, "granite"), ks.box(0.0, ph + 0.04, -pt / 2.0, length + 0.02, 0.08, pt + 0.08, "granite")]
-    return _register(name, "wall", "granite", shapes, [town.col(*box), town.col(0.0, ph + 0.04, -pt / 2.0, length + 0.02, 0.08, pt + 0.08)],
+    shapes = [ks.box(*box, "ashlar_weathered"), ks.box(0.0, ph + 0.04, -pt / 2.0, length + 0.02, 0.08, pt + 0.08, "coping_moss")]
+    return _register(name, "wall", "ashlar_weathered", shapes, [town.col(*box), town.col(0.0, ph + 0.04, -pt / 2.0, length + 0.02, 0.08, pt + 0.08)],
                      [length, ph + 0.08, pt + 0.08])
 
 
@@ -620,17 +621,17 @@ def wall_steps(rise, run, width):
 
     for i in range(steps):
         top = (i + 1) * riser
-        add((0.0, top / 2.0, i * tread + tread / 2.0, width, top, tread), "granite")
+        add((0.0, top / 2.0, i * tread + tread / 2.0, width, top, tread), "stair_stone")
 
-    add((0.0, rise / 2.0, run - WALL_LANDING / 2.0, width, rise, WALL_LANDING), "granite")
+    add((0.0, rise / 2.0, run - WALL_LANDING / 2.0, width, rise, WALL_LANDING), "stair_stone")
     t, h = RAIL
     x = -width / 2.0 + t / 2.0
     # (Its parapet rakes with the steps' nosings, as high over them as a
     # landing's is.)
     pitch = math.degrees(math.atan2(rise, flight))
-    add((x, rise / 2.0, flight / 2.0, t, 2.0 * h, math.hypot(flight, rise)), "granite", -pitch)
-    add((x, rise + h / 2.0, run - WALL_LANDING / 2.0, t, h, WALL_LANDING), "granite")
-    add((t / 2.0, rise + h / 2.0, run - t / 2.0, width - t, h, t), "granite")
+    add((x, rise / 2.0, flight / 2.0, t, 2.0 * h, math.hypot(flight, rise)), "ashlar_weathered", -pitch)
+    add((x, rise + h / 2.0, run - WALL_LANDING / 2.0, t, h, WALL_LANDING), "ashlar_weathered")
+    add((t / 2.0, rise + h / 2.0, run - t / 2.0, width - t, h, t), "ashlar_weathered")
     side = t / 2.0 + 0.1
     tour = [[side, 0.0, -0.6, "walk"], [side, riser, tread / 2.0, "stairs"], [side, rise, flight - tread / 2.0, "stairs"],
             [side, rise, run - WALL_LANDING / 2.0 - 0.1, "walk"]]
@@ -681,11 +682,11 @@ def stair_tower(height):
 
     land_z = run / 2.0 + TOWER_LANDING / 2.0
     # (Its floor, lifted off the street that runs on under it.)
-    add((0.0, town.GROUND_LIFT - 0.15, 0.0, inner_x, 0.3, inner_z), "flagstone")
+    add((0.0, town.GROUND_LIFT - 0.15, 0.0, inner_x, 0.3, inner_z), "stair_stone")
 
     for n in range(1, flights + 1):
         y = n * lift
-        add((0.0, y - 0.15, end(n) * land_z, inner_x, 0.3, TOWER_LANDING), "flagstone")
+        add((0.0, y - 0.15, end(n) * land_z, inner_x, 0.3, TOWER_LANDING), "stair_stone")
 
     for n in range(flights):
         sx, dz = (1.0, 1.0) if n % 2 == 0 else (-1.0, -1.0)
@@ -695,9 +696,9 @@ def stair_tower(height):
             top = y0 + (i + 1) * riser
             z = -dz * run / 2.0 + dz * (i + 0.5) * TOWER_TREAD
             low = 0.0 if n == 0 else top - 0.35
-            add((sx * middle, (low + top) / 2.0, z, TOWER_FLIGHT, top - low, TOWER_TREAD), "granite")
+            add((sx * middle, (low + top) / 2.0, z, TOWER_FLIGHT, top - low, TOWER_TREAD), "stair_stone")
 
-    add((0.0, height / 2.0, 0.0, TOWER_SPINE, height, run), "granite")
+    add((0.0, height / 2.0, 0.0, TOWER_SPINE, height, run), "ashlar_weathered")
     # (The top landing's edge over the well, railed where no flight comes up.)
     last = flights - 1
     rail_x = 1.0 if last % 2 == 1 else -1.0
@@ -715,15 +716,16 @@ def stair_tower(height):
                                                      town.Opening(_along(-90.0, -top_z), height + 0.9, 0.6, 1.0, "barred")]))
 
     for x, yaw, length, openings in walls:
-        s, c = town.wall(length, eaves, w, openings, "granite", (x, 0.0, yaw), inside=True, frames=False)
+        s, c = town.wall(length, eaves, w, openings, "ashlar_weathered", (x, 0.0, yaw), inside=True, frames=False)
         shapes, cols = shapes + s, cols + c
 
     for sz in (-1.0, 1.0):
         openings = [town.Opening(0.0, y + 1.0, 0.3, 1.0, "barred") for y in slits[1:]]
-        s, c = town.wall(inner_x, eaves, w, openings, "granite", (0.0, sz * (outer_z - w) / 2.0, 0.0 if sz > 0 else 180.0), inside=True)
+        s, c = town.wall(inner_x, eaves, w, openings, "ashlar_weathered", (0.0, sz * (outer_z - w) / 2.0, 0.0 if sz > 0 else 180.0), inside=True,
+                         frames=False)
         shapes, cols = shapes + s, cols + c
 
-    rs, rc = town.roof("hipped", outer_x, outer_z, eaves, 30.0, "granite")
+    rs, rc = town.roof("hipped", outer_x, outer_z, eaves, 30.0, "ashlar_weathered")
     shapes, cols = shapes + rs, cols + rc
     doors = [[(outer_x - w) / 2.0, 0.0, foot_z, 90.0], [-(outer_x - w) / 2.0, height, top_z, -90.0]]
     foot = [outer_x / 2.0 + 1.0, 0.0, foot_z]
@@ -739,7 +741,7 @@ def stair_tower(height):
 
     tour += [[-middle, height, top_z, "walk"], top + ["walk"]]
     budget = 1500 + 30 * flights * per
-    return _register(name, "town", "granite", shapes, cols, [outer_x, eaves + 3.0, outer_z], doors=doors, foot=foot, top=top, tour=tour,
+    return _register(name, "town", "ashlar_weathered", shapes, cols, [outer_x, eaves + 3.0, outer_z], doors=doors, foot=foot, top=top, tour=tour,
                      budget=budget)
 
 

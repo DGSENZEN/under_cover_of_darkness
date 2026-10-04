@@ -22,6 +22,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 
+import azulejo
+
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "textures" / "painted"
 SCALE = 4
@@ -1558,153 +1560,6 @@ def _jointed(image, tw, th, seed, colours=20):
     return _finish(image, (tw * 32, th * 32), colours)
 
 
-def azulejo_comet():
-    """The old town's devotional panel (4 x 6 tiles; its spec, section 16):
-    the city on its rock over the sea, the castle and its keep on the
-    summit, and over them the red comet: a hard head in a ring of light, its
-    tail streaming away in curved strands; stars about it. Put up on houses
-    after the great fire against what comes next."""
-    tw, th = 4, 6
-    image, draw, b = _glazed(tw, th, 1600)
-    w, h = image.size
-    rng = np.random.default_rng(1601)
-    # The sea: rows of cobalt waves along the foot.
-    for row in range(4):
-        y = h * 0.86 + row * h * 0.03
-        for x in range(b, w - b, int(SCALE * 12)):
-            draw.arc([x, y - SCALE * 3, x + SCALE * 12, y + SCALE * 3], 200, 340, fill=COBALT, width=int(SCALE * (1.4 + row * 0.4)))
-    # The rock and its city: rising from the sea at the left to the summit
-    # at the right, houses stepping up it, the castle's walls and keep on top.
-    rock = [(b, h * 0.86), (b, h * 0.8), (w * 0.22, h * 0.76), (w * 0.42, h * 0.7), (w * 0.58, h * 0.64), (w * 0.7, h * 0.6),
-            (w - b, h * 0.58), (w - b, h * 0.86)]
-    draw.polygon(rock, fill=SKY_BLUE, outline=COBALT)
-    xs, ys = [p[0] for p in rock[1:7]], [p[1] for p in rock[1:7]]
-
-    for i in range(11):
-        x = b + SCALE * 6 + (w * 0.6 - b) * i / 11.0
-        top = float(np.interp(x, xs, ys))
-        hh = SCALE * (7 + 5 * rng.random())
-        draw.rectangle([x - SCALE * 4, top - hh, x + SCALE * 4, top + SCALE * 2], fill=GLAZE, outline=COBALT, width=SCALE)
-        draw.polygon([(x - SCALE * 5, top - hh), (x + SCALE * 5, top - hh), (x, top - hh - SCALE * 4)], fill=COBALT)
-        draw.rectangle([x - SCALE, top - hh * 0.6, x + SCALE, top - hh * 0.3], fill=COBALT)
-
-    kx, ky = w * 0.8, h * 0.59
-    draw.rectangle([kx - SCALE * 16, ky - SCALE * 9, kx + SCALE * 14, ky + SCALE * 2], fill=COBALT)
-    draw.rectangle([kx - SCALE * 4, ky - SCALE * 26, kx + SCALE * 6, ky - SCALE * 9], fill=COBALT)
-
-    for i in range(-4, 4):
-        draw.rectangle([kx + i * SCALE * 4 - SCALE, ky - SCALE * 12, kx + i * SCALE * 4 + SCALE, ky - SCALE * 9], fill=GLAZE)
-
-    for i in range(-1, 2):
-        draw.rectangle([kx + 1 + i * SCALE * 3 - SCALE, ky - SCALE * 29, kx + 1 + i * SCALE * 3 + SCALE, ky - SCALE * 26], fill=COBALT)
-    # The comet: its head high at the left, its tail streaming away to the
-    # right in curved strands, widest and palest at their ends.
-    hx, hy = w * 0.26, h * 0.15
-
-    for k, (bend, length, colour, width) in enumerate(((0.05, 0.62, COMET, 5.0), (0.09, 0.58, COMET_PALE, 3.0), (0.0, 0.66, COMET, 3.5),
-                                                       (0.13, 0.5, COMET_PALE, 2.0), (-0.03, 0.55, COMET_PALE, 2.0))):
-        points = []
-
-        for i in range(24):
-            s = i / 23.0
-            points.append((hx + s * w * length, hy + s * h * 0.1 + np.sin(s * np.pi * 0.8) * h * bend))
-
-        for i in range(len(points) - 1):
-            draw.line([points[i], points[i + 1]], fill=colour, width=int(SCALE * (width * (0.5 + i / 23.0))))
-
-    draw.ellipse([hx - SCALE * 11, hy - SCALE * 11, hx + SCALE * 11, hy + SCALE * 11], outline=COMET_PALE, width=int(SCALE * 2))
-    draw.ellipse([hx - SCALE * 6, hy - SCALE * 6, hx + SCALE * 6, hy + SCALE * 6], fill=COMET, outline=COBALT, width=int(SCALE * 1.5))
-
-    for a in range(8):
-        r0, r1 = SCALE * 13, SCALE * 17
-        x0, y0 = hx + np.cos(a * np.pi / 4 + 0.4) * r0, hy + np.sin(a * np.pi / 4 + 0.4) * r0
-        x1, y1 = hx + np.cos(a * np.pi / 4 + 0.4) * r1, hy + np.sin(a * np.pi / 4 + 0.4) * r1
-        draw.line([(x0, y0), (x1, y1)], fill=COBALT, width=SCALE)
-    # Stars: small cobalt crosses about it.
-    for sx, sy in ((0.66, 0.1), (0.82, 0.3), (0.13, 0.36), (0.46, 0.07), (0.52, 0.42), (0.3, 0.46), (0.88, 0.14)):
-        x, y = w * sx, h * sy
-        draw.line([(x - SCALE * 3, y), (x + SCALE * 3, y)], fill=COBALT, width=SCALE)
-        draw.line([(x, y - SCALE * 3), (x, y + SCALE * 3)], fill=COBALT, width=SCALE)
-
-    return _jointed(image, tw, th, 1602, 32)
-
-
-def azulejo_king():
-    """The forgotten king as a saint (4 x 6 tiles; the old town's spec,
-    section 16): standing on the rock under an arch of leaves, robed in
-    cobalt, haloed in ochre, crowned; his face left blank; his right arm out
-    holding his sword point down, broken, its point lying at his feet, as
-    the colossus in the hills holds his."""
-    tw, th = 4, 6
-    image, draw, b = _glazed(tw, th, 1610)
-    w, h = image.size
-    cx = w * 0.46
-    # An arch of cobalt leaves over him.
-    draw.arc([b + SCALE * 6, b + SCALE * 6, w - b - SCALE * 6, h * 0.66], 180, 360, fill=COBALT, width=int(SCALE * 4))
-
-    for i in range(11):
-        a = np.pi + np.pi * (i + 0.5) / 11.0
-        rx, ry = w * 0.5 - b - SCALE * 6, h * 0.33 - b - SCALE * 6
-        x, y = w * 0.5 + np.cos(a) * rx, h * 0.33 + np.sin(a) * ry
-        draw.ellipse([x - SCALE * 4, y - SCALE * 2, x + SCALE * 4, y + SCALE * 2], fill=SKY_BLUE)
-    # The rock he stands on; his sword's point broken off on it.
-    draw.polygon([(b, h - b), (w * 0.16, h * 0.86), (w * 0.84, h * 0.86), (w - b, h - b)], fill=SKY_BLUE, outline=COBALT)
-    draw.polygon([(w * 0.7, h * 0.855), (w * 0.82, h * 0.845), (w * 0.84, h * 0.852), (w * 0.71, h * 0.862)], fill=GLAZE, outline=COBALT)
-    # His robe from the shoulders, wide to the rock, its folds; a mantle
-    # edge in ochre.
-    top, foot = h * 0.3, h * 0.86
-    draw.polygon([(cx - w * 0.13, top), (cx + w * 0.13, top), (cx + w * 0.21, foot), (cx - w * 0.21, foot)], fill=COBALT)
-
-    for f in (-0.1, -0.03, 0.05, 0.12):
-        draw.line([(cx + w * f * 0.6, top + h * 0.06), (cx + w * f * 1.4, foot)], fill=SKY_BLUE, width=int(SCALE * 1.5))
-
-    draw.line([(cx - w * 0.13, top), (cx - w * 0.2, foot)], fill=OCHRE, width=int(SCALE * 2))
-    draw.polygon([(cx - w * 0.04, top), (cx + w * 0.04, top), (cx, top + h * 0.05)], fill=GLAZE)
-    # His halo, his face blank in it, his crown on his head.
-    head = (cx, h * 0.24)
-    draw.ellipse([head[0] - w * 0.14, head[1] - w * 0.15, head[0] + w * 0.14, head[1] + w * 0.13], outline=OCHRE, width=int(SCALE * 3))
-    draw.ellipse([head[0] - w * 0.055, head[1] - w * 0.06, head[0] + w * 0.055, head[1] + w * 0.07], fill=GLAZE, outline=COBALT,
-                 width=int(SCALE * 1.5))
-    crown = head[1] - w * 0.055
-    draw.polygon([(head[0] - w * 0.07, crown), (head[0] - w * 0.07, crown - w * 0.07), (head[0] - w * 0.035, crown - w * 0.035),
-                  (head[0], crown - w * 0.085), (head[0] + w * 0.035, crown - w * 0.035), (head[0] + w * 0.07, crown - w * 0.07),
-                  (head[0] + w * 0.07, crown)], fill=OCHRE, outline=COBALT)
-    # His right arm out from the shoulder, his hand on the hilt, the blade
-    # point down and broken short.
-    shoulder, hand = (cx + w * 0.11, top + h * 0.02), (cx + w * 0.3, h * 0.48)
-    draw.line([shoulder, hand], fill=COBALT, width=int(SCALE * 7))
-    draw.ellipse([hand[0] - SCALE * 4, hand[1] - SCALE * 4, hand[0] + SCALE * 4, hand[1] + SCALE * 4], fill=GLAZE, outline=COBALT, width=SCALE)
-    draw.line([(hand[0] - SCALE * 8, hand[1] + SCALE * 5), (hand[0] + SCALE * 8, hand[1] + SCALE * 5)], fill=OCHRE, width=int(SCALE * 3))
-    end = hand[1] + h * 0.12
-    draw.polygon([(hand[0] - SCALE * 2.5, hand[1] + SCALE * 6), (hand[0] + SCALE * 2.5, hand[1] + SCALE * 6), (hand[0] + SCALE * 2.5, end),
-                  (hand[0] + SCALE * 0.5, end + SCALE * 3), (hand[0] - SCALE * 1, end - SCALE * 2), (hand[0] - SCALE * 2.5, end)],
-                 fill=SKY_BLUE, outline=COBALT)
-    # His left hand on his breast.
-    draw.line([(cx - w * 0.11, top + h * 0.02), (cx - w * 0.02, h * 0.4)], fill=COBALT, width=int(SCALE * 6))
-    draw.ellipse([cx - w * 0.02 - SCALE * 3, h * 0.4 - SCALE * 3, cx - w * 0.02 + SCALE * 3, h * 0.4 + SCALE * 3], fill=GLAZE,
-                 outline=COBALT, width=SCALE)
-    return _jointed(image, tw, th, 1611)
-
-
-def tile_frame():
-    """A frame's strip of azulejos (4 tiles in a row): a cobalt border
-    either side, an ochre rope running between them."""
-    tw, th = 4, 1
-    tile = 32 * SCALE
-    w, h = tw * tile, th * tile
-    image = Image.new("RGB", (w, h), GLAZE)
-    draw = ImageDraw.Draw(image)
-    draw.rectangle([0, 0, w, h * 0.22], fill=COBALT)
-    draw.rectangle([0, h * 0.78, w, h], fill=COBALT)
-
-    for i in range(16):
-        x = (i + 0.5) * w / 16.0
-        draw.ellipse([x - tile * 0.2, h * 0.32, x + tile * 0.2, h * 0.68], outline=OCHRE, width=int(SCALE * 3))
-        draw.line([(x - tile * 0.12, h * 0.68), (x + tile * 0.12, h * 0.32)], fill=COBALT, width=int(SCALE * 2))
-
-    return _jointed(image, tw, th, 1620)
-
-
 def arms_royal():
     """The king's arms over the customs house's door, painted on the stone
     of its tympanum: the shield of the five quinas (five blue escutcheons in
@@ -1953,7 +1808,8 @@ PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_
              "iron_rail": iron_rail, "window_grille": window_grille, "casement": casement, "sash": sash, "lattice": lattice, "ratlines": ratlines, "coil_mask": coil_mask,
              "decal_salt": decal_salt, "palm_frond": palm_frond, "cypress": cypress, "agave": agave, "orange_leaves": orange_leaves,
              "gorse": gorse, "fennel": fennel, "pine": pine, "laundry": laundry, "azulejo_ship": azulejo_ship, "arms_royal": arms_royal,
-             "azulejo_comet": azulejo_comet, "azulejo_king": azulejo_king, "tile_frame": tile_frame,
+             "azulejo_comet": azulejo.azulejo_comet, "azulejo_king": azulejo.azulejo_king, "azulejo_souls": azulejo.azulejo_souls,
+             "tile_frame": azulejo.tile_frame, "window_lit": azulejo.window_lit,
              "sea_chart": sea_chart, "parchment": parchment, "book_spines": book_spines,
              "facade_white": facade_white, "facade_ochre": facade_ochre, "facade_salmon": facade_salmon, "facade_blue": facade_blue}
 

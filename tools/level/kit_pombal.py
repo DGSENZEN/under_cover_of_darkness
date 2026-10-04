@@ -121,7 +121,7 @@ def _front(rng, n, heights, enterable, rooms, kind, quirk, face):
 
 
 def design(bays, depth, storeys=4, kind="mid", fire_walls=(False, False), quirk="", enterable=False, rooms=0, front="azulejo_blue",
-           side="granite", seed=0):
+           side="plaster", seed=0):
     """A Pombaline building: see the module's doc. A kit_town design with
     `openings`, `balconies`, `eaves`, `roof`, `doors`, `entries`, `rooms_at`,
     `tour`."""
@@ -148,7 +148,7 @@ def design(bays, depth, storeys=4, kind="mid", fire_walls=(False, False), quirk=
 
     for face, n, place, length in fronts:
         band = _front(rng, n, heights, enterable, rooms, kind, quirk, face)
-        s, c = town.wall(length, eaves, FRONT_WALL, [o for _s, o in band], front, place, inside=enterable)
+        s, c = town.wall(length, eaves, FRONT_WALL, [o for _s, o in band], front, place, inside=enterable, trim="lioz")
         shapes += s
         walls += c
         turn = place[2]

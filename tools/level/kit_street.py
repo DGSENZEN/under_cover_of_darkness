@@ -133,7 +133,7 @@ def _alminha():
     w, h = NICHE
     y = NICHE_SILL
     d = 0.2
-    shapes = [ks.box(0.0, y + h / 2.0, 0.006, w, h, 0.012, "pitch"), ks.card(0.0, y + h / 2.0, 0.015, w * 0.9, h * 0.9, "azulejo_king"),
+    shapes = [ks.box(0.0, y + h / 2.0, 0.006, w, h, 0.012, "pitch"), ks.card(0.0, y + h / 2.0, 0.015, w * 0.9, h * 0.9, "azulejo_souls"),
               ks.box(-w / 2.0 - 0.06, y + h / 2.0, d / 2.0, 0.12, h + 0.2, d, "granite"), ks.box(w / 2.0 + 0.06, y + h / 2.0, d / 2.0, 0.12, h + 0.2, d, "granite"),
               ks.box(0.0, y + h + 0.06, d / 2.0, w + 0.24, 0.12, d, "granite"), ks.box(0.0, y - 0.05, 0.14, w + 0.3, 0.1, 0.28, "granite")]
     # (Its surround and sill solid as drawn.)

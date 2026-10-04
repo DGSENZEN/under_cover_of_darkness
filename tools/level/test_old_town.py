@@ -954,6 +954,14 @@ class Stairs(unittest.TestCase):
 
         self.assertEqual(bare, [])
 
+    def test_no_story_panel_clads_a_front(self):
+        # (The comet's, the king's, the souls' and the customs' panels are
+        # pictures for a frame, not tiles for a house's front.)
+        panels = {"azulejo_ship", "azulejo_comet", "azulejo_king", "azulejo_souls", "azulejo_mural"}
+
+        for each in town.all_lots():
+            self.assertNotIn(dict(each.params).get("front"), panels, each.name)
+
     def test_the_stairs_checks_clean(self):
         self.assertGreaterEqual(len(stairs_plan.LOTS), 60)
         self.assertEqual([p for p in rules.problems(layout(), "stage2") if "stairs" in p], [])

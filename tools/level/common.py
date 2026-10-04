@@ -19,6 +19,8 @@ KIT_PREFIX = "kit_"
 
 # A preview colour per slot (the .blend only; the game's are Materials').
 SLOT_COLOURS = {
+    "lioz": (0.81, 0.78, 0.69),
+    "ashlar_weathered": (0.43, 0.42, 0.41), "rubble_warm": (0.42, 0.39, 0.31), "coping_moss": (0.34, 0.35, 0.24), "stair_stone": (0.54, 0.51, 0.45), "zellige_diamond": (0.54, 0.43, 0.45), "zellige_star": (0.43, 0.42, 0.36), "stucco_carved": (0.6, 0.48, 0.37), "stucco_lattice": (0.76, 0.74, 0.68), "azulejo_mural": (0.55, 0.6, 0.72), "render_pink": (0.71, 0.44, 0.42), "render_green": (0.56, 0.69, 0.6), "render_white": (0.84, 0.82, 0.77), "azulejo_souls": (0.55, 0.48, 0.56),
     "ashlar": (0.42, 0.40, 0.37), "stone": (0.37, 0.35, 0.33), "plaster": (0.62, 0.58, 0.50), "timber": (0.30, 0.21, 0.14),
     "cobble": (0.33, 0.32, 0.30), "flagstone": (0.40, 0.38, 0.35), "boards": (0.36, 0.26, 0.17), "grass": (0.20, 0.26, 0.14),
     "mud": (0.24, 0.19, 0.13), "gravel": (0.38, 0.36, 0.33), "carpet": (0.45, 0.10, 0.08), "slate": (0.18, 0.19, 0.22),

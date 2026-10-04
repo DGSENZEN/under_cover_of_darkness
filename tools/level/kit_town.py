@@ -184,7 +184,7 @@ def inner_slot(slot):
 FLAT = {"shut": "shutters", "lit": "glass_lit", "barred": "door_1", "boarded": "boards"}
 
 
-def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surface="stone", frames=True, inside=False, flat=False):
+def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surface="stone", frames=True, inside=False, flat=False, trim="granite"):
     """A wall `length` along x (its middle at 0), `height` up from 0,
     `thickness` through z (its face at +thickness / 2), with `openings`;
     its collider cut round the LIVE ones only. Drawn as its faces: its face
@@ -242,7 +242,7 @@ def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surfa
 
     for o in openings:
         if frames and o.kind != "hatch":
-            shapes += ib._frame(o.x, o.y, face, o.width, o.height)
+            shapes += ib._frame(o.x, o.y, face, o.width, o.height, trim)
 
         if not o.live:
             if not flat:
@@ -260,11 +260,11 @@ def wall(length, height, thickness, openings, slot, place=(0.0, 0.0, 0.0), surfa
     return placed(shapes, cols, x, z, yaw)
 
 
-def band(length, base, top, thickness, openings, slot, place=(0.0, 0.0, 0.0), inside=True, frames=True, flat=False):
+def band(length, base, top, thickness, openings, slot, place=(0.0, 0.0, 0.0), inside=True, frames=True, flat=False, trim="granite"):
     """A wall from `base` up to `top` (a cellar's walls go below the
     street), its openings' feet given from the street, placed."""
     shifted = [Opening(o.x, o.y - base, o.width, o.height, o.kind, o.face) for o in openings]
-    s, c = wall(length, top - base, thickness, shifted, slot, place, inside=inside, frames=frames, flat=flat)
+    s, c = wall(length, top - base, thickness, shifted, slot, place, inside=inside, frames=frames, flat=flat, trim=trim)
     return placed(s, c, y=base)
 
 
