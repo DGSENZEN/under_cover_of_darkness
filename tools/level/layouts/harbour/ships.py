@@ -10,7 +10,9 @@ from . import CARRACK_X, CARRACK_Z, MAINYARD_Y
 # The thief's rowboat, by the mole's seaward boulders: where the night
 # begins.
 START_BOAT = (178.0, 0.25, 120.0)
-BOATS = [((-160.0, 0.2, 4.0), 90.0), ((-150.0, 0.2, 3.6), 80.0), ((-140.0, 0.2, 4.2), 95.0), ((-106.0, 0.2, 3.8), 88.0)]
+# (Moored bow in along the Ribeira, clear of its water stair at x -150..-154:
+# a swimmer comes to its foot.)
+BOATS = [((-160.0, 0.2, 4.0), 90.0), ((-145.5, 0.2, 3.6), 80.0), ((-140.0, 0.2, 4.2), 95.0), ((-106.0, 0.2, 3.8), 88.0)]
 ROWBOATS = [((-62.0, 0.25, 8.0), 10.0), ((-49.0, 0.25, 8.5), -8.0), ((-82.0, 0.25, 223.0), 60.0), ((230.0, 0.25, 36.0), 90.0),
             (START_BOAT, 0.0), ((68.0, 0.25, 2.5), 90.0)]
 
@@ -18,7 +20,7 @@ ROWBOATS = [((-62.0, 0.25, 8.0), 10.0), ((-49.0, 0.25, 8.5), -8.0), ((-82.0, 0.2
 def lay(L):
     L.ship("carrack_hull", (CARRACK_X, 0.0, CARRACK_Z), 0.0, "ships")
     L.ship("carrack_rig", (CARRACK_X, 0.0, CARRACK_Z), 0.0, "ships")
-    L.put("carrack_mainyard", (CARRACK_X, MAINYARD_Y, CARRACK_Z), 90.0, "ships")
+    L.put("carrack_mainyard", (CARRACK_X + kit_ships.MAIN_YARD_X, MAINYARD_Y, CARRACK_Z), 90.0, "ships")
     # Her brow from the quay's edge onto her waist (her deck's way ashore).
     L.put("carrack_brow", (CARRACK_X + kit_ships.BROW_X, 0.0, 0.0), 0.0, "ships")
     L.ship("caravel", (-120.0, 0.0, 5.5), 180.0, "ships")

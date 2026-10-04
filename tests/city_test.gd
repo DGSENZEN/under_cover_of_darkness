@@ -75,7 +75,7 @@ func _ready() -> void:
 			only = arg.trim_prefix("--only=")
 
 	var steps := [["markers", _markers], ["douse", _douse], ["reach", _reach], ["locks", _locks], ["freeze", _freeze.bind(true)], ["probes", _probes],
-		["sea_gate", _sea_gate], ["carrack", _carrack], ["roofs", _roofs], ["swim", _swim], ["spit", _spit], ["blowhole", _blowhole],
+		["sea_gate", _sea_gate], ["carrack", _carrack], ["rigging", _rigging], ["roofs", _roofs], ["swim", _swim], ["spit", _spit], ["blowhole", _blowhole],
 		["zones", _zones], ["light_budget", _light_budget], ["chase", _chase], ["holes", _holes], ["loose", _loose], ["roofed", _roofed], ["distance", _distance]]
 
 	for step in steps:
@@ -311,7 +311,7 @@ func _sea_gate() -> void:
 
 
 func _carrack() -> void:
-	var shrouds := _ladder_through(Vector3(40.0, 11.0, 3.0))
+	var shrouds := _ladder_through(Vector3(39.6, 11.0, 1.5))
 	var hurt := [0.0]
 
 	if shrouds == null:
@@ -319,10 +319,12 @@ func _carrack() -> void:
 			"no shrouds' climb by the mainmast")
 		return
 
-	await _face_ladder(shrouds, 2.0)
+	# (On her deck at the port bulwark, under the main shrouds, facing them:
+	# up them from behind, round them under the top, onto it.)
+	_put(Vector3(39.6, 3.0, 1.4), 0.0)
+	await _until(func(): return player.is_on_floor(), 120)
+	await _frames(10)
 	trace.clear()
-	# (Up beside the yard, which crosses the shrouds' middle overhead.)
-	player.global_position.x -= 0.9
 	var start := Time.get_ticks_msec()
 	var health: float = player.health
 	Input.action_press("move_forward")
@@ -335,7 +337,7 @@ func _carrack() -> void:
 	_release_all()
 	# Along the yard (it runs north over the sea wall) to above the walk,
 	# then off its side, straight down onto the walk.
-	var balanced := await _steer([Vector3(40.0, 0.0, 3.6), Vector3(40.0, 0.0, -7.6)],
+	var balanced := await _steer([Vector3(41.05, 0.0, 3.6), Vector3(41.05, 0.0, -7.6)],
 		func(): return player.global_position.z < -7.0 and player.global_position.y > 18.5, 1800)
 	await _frames(20)
 	Input.action_press("move_right")
@@ -351,6 +353,96 @@ func _carrack() -> void:
 		climbed and topped and walked and absf(at.y - 15.4) < 0.6 and hurt[0] <= 0.0 and seconds < 60.0,
 		"climbed %s, on the top %s, off the yard %s, at %s, hurt %.0f, %.0f s; went %s" % [climbed, topped, walked, at.snapped(Vector3.ONE * 0.1), hurt[0],
 			seconds, " > ".join(trace.slice(0, 16))])
+
+
+# ---------------------------------------------------------------------------
+# C23-C25: aboard her from the sea, off her tops and yard, out of the water
+# ---------------------------------------------------------------------------
+
+func _rigging() -> void:
+	# C23 swum to her starboard waist: up her rope ladder, over her rail onto
+	#     her deck
+	_put(Vector3(43.15, 0.3, 10.8), 0.0)
+	var held := [false]
+	var aboard := func() -> bool:
+		held[0] = held[0] or player.movement_state == player.MoveState.CLIMBING
+		return player.is_on_floor() and player.movement_state == player.MoveState.LOCOMOTION and absf(player.get_feet_position().y - 2.0) < 0.15 \
+			and player.global_position.z < 9.0
+
+	Input.action_press("move_forward")
+	await _until(aboard, 1200)
+	_release_all()
+	var feet: Vector3 = player.get_feet_position()
+	_check("C23 swum to the carrack's starboard waist: up her rope ladder and over her rail onto her deck", held[0] and absf(feet.y - 2.0) < 0.15 and feet.z < 9.0,
+		"on the ladder %s, feet at %s (%s)" % [held[0], feet.snapped(Vector3.ONE * 0.01), player._last_reject])
+
+	# C24 off the main top's open side, and off the main yard's side, into a
+	#     hang from its edge (thin floors, nothing under them)
+	var top := await _lower_off(Vector3(39.6, 21.05, 5.6), PI)
+	var yard := await _lower_off(Vector3(41.05, 19.3, 1.8), -PI * 0.5)
+	_check("C24 crouched at the edge of the carrack's main top, and of her main yard, a jump: over it into a hang", top and yard,
+		"off the top %s, off the yard %s (%s)" % [top, yard, player._last_reject])
+
+	# C25 swum to the Ribeira's quay stair (a fishing boat moored clear of
+	#     it): out onto its steps and up onto the quay
+	_put(Vector3(-148.4, 0.3, 1.1), 0.0)
+	var target := Vector3(-153.9, 2.5, -0.8)
+	Input.action_press("move_forward")
+
+	for i in 900:
+		var at := player.global_position
+		var flat := Vector2(target.x - at.x, target.z - at.z)
+
+		if flat.length() > 0.3 and player.movement_state in [player.MoveState.LOCOMOTION, player.MoveState.SWIMMING]:
+			player.rotation.y = atan2(-flat.x, -flat.y)
+
+		if player.get_feet_position().y > 2.3 and player.is_on_floor():
+			break
+
+		if i % 20 == 19:
+			Input.action_press("jump")
+			await get_tree().physics_frame
+			Input.action_release("jump")
+		else:
+			await get_tree().physics_frame
+
+	_release_all()
+	feet = player.get_feet_position()
+	_check("C25 swum to the Ribeira's quay stair: out onto its steps and up onto the quay", feet.y > 2.3 and player.is_on_floor(),
+		"feet at %s, %s" % [feet.snapped(Vector3.ONE * 0.01), player.movement_state])
+	_release_all()
+
+
+## You put at `at` facing `yaw`, crouched, walking to the edge ahead; at it, a
+## jump pressed (again each second) till you hang or 5 s pass: whether you hung.
+func _lower_off(at: Vector3, yaw: float) -> bool:
+	_put(at, yaw)
+	await _until(func(): return player.is_on_floor(), 60)
+	Input.action_press("crouch")
+	await _frames(10)
+	Input.action_press("move_forward")
+	var edge := -1
+
+	for i in 300:
+		if player.movement_state == player.MoveState.HANGING:
+			break
+
+		var feet: Vector3 = player.get_feet_position()
+		var ahead: Vector3 = feet + player._facing_direction() * 0.75 + Vector3.UP * 0.3
+
+		if edge < 0 and player.is_on_floor() and player.scanner.ray(ahead, ahead + Vector3.DOWN * 1.2).is_empty():
+			edge = i
+
+		if edge >= 0 and (i - edge) % 60 == 5:
+			Input.action_press("jump")
+			await get_tree().physics_frame
+			Input.action_release("jump")
+		else:
+			await get_tree().physics_frame
+
+	var hung: bool = player.movement_state == player.MoveState.HANGING
+	_release_all()
+	return hung
 
 
 func _roofs() -> void:

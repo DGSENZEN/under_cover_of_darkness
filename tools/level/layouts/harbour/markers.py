@@ -7,6 +7,7 @@ import math
 
 import kit_customs
 import kit_harbour
+import kit_ships
 import kit_iberian
 import kit_recipes
 
@@ -104,6 +105,9 @@ def _lights(L):
     L.mark("galley_torch", "light", (42.4, QUAY + 2.4, -25.2), 0.0, "shipyard", kind="torch", energy=1.0)
     L.mark("customs_lantern", "light", (2.0, QUAY + 3.2, -20.0), 0.0, "shipyard", kind="lantern")
     L.mark("office_candle", "light", (9.15, CUSTOMS_UPPER + 1.0, -28.28), 0.0, "shipyard", kind="candle")
+    # A lantern hung from the rafters by the office's window, over its head:
+    # its light falls through the glass onto the yard behind (real windows).
+    L.mark("office_lantern", "light", (8.0, CUSTOMS_UPPER + 3.4, -32.6), 0.0, "shipyard", kind="lantern", energy=0.8)
     # (By the customs house's portal in the loggia, over the king's beam.)
     L.mark("portal_lantern", "light", (6.4, QUAY + 2.9, -9.6), 0.0, "shipyard", kind="lantern")
     L.mark("stern_lantern", "light", (CARRACK_X - 15.8, 10.2, CARRACK_Z), 0.0, "ships", kind="lantern")
@@ -189,7 +193,7 @@ def _things(L):
             ("arcade_purse", (-160.0, QUAY + 0.1, -9.5), 30, "a purse", {}, "ribeira"),
             ("copper_pan", (-110.0, QUAY + 0.1, -9.5), 25, "a copper pan", {}, "ribeira"),
             ("astrolabe", (-120.0, 1.6, 5.5), 45, "an astrolabe", {}, "ships"),
-            ("fish_money", (-150.0, 0.3, 3.6), 15, "fish money", {}, "ships"),
+            ("fish_money", (-145.5, 0.3, 3.6), 15, "fish money", {}, "ships"),
             ("offering", (GATE_X, QUAY + 3.6, -31.5), 35, "an offering purse", {}, "terreiro"),
             ("shipwrights_tools", (48.8, QUAY + 4.5, -40.0), 60, "a shipwright's tools", {}, "shipyard"),
             ("tar_money", (140.0, QUAY + 0.1, -22.0), 20, "tar money", {}, "shipyard")]
@@ -275,7 +279,7 @@ def _ways_in(L):
     # The carrack's: aboard over its bulwark, up the shrouds to the top, down
     # onto the main yard, along it over the sea wall, down onto the walk.
     _checks(L, "way_carrack", [((CARRACK_X, QUAY, -3.0), "walk"), ((CARRACK_X, 2.0, 2.6), "jump"), ((CARRACK_X, 20.0, CARRACK_Z - 1.4), "climb"),
-                               ((CARRACK_X, MAINYARD_Y + 0.25, 1.5), "drop"), ((CARRACK_X, MAINYARD_Y + 0.25, SEA_WALL - 0.3), "balance"),
+                               ((CARRACK_X + kit_ships.MAIN_YARD_X, MAINYARD_Y + 0.25, 1.5), "drop"), ((CARRACK_X + kit_ships.MAIN_YARD_X, MAINYARD_Y + 0.25, SEA_WALL - 0.3), "balance"),
                                ((CARRACK_X, WALK, SEA_WALL - 0.3), "drop")], "ships")
     # The roofs': up casa_d's old vine to its eaves, onto its roof, over its
     # ridge and a merlon onto the Ribeira wall's walk.

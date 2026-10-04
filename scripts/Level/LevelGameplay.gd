@@ -196,6 +196,7 @@ static func ladders(parent: Node3D, level) -> Array:
 		volume.set_script(ClimbScript)
 		volume.name = m["name"]
 		volume.set("rope", bool(m["props"].get("rope", false)))
+		volume.set("open", bool(m["props"].get("open", false)))
 		var shape := CollisionShape3D.new()
 		var box := BoxShape3D.new()
 		box.size = m["size"]

@@ -43,8 +43,13 @@ const SKIP: Array[StringName] = [&"glass", &"loose"]
 const OUT_REACH := 4.0
 const SPOT_OUT := 0.05
 const SPOT_PAD := 4.0
-const SPOT_RANGE := 8.0
-const SPOT_GAIN := 0.5
+const SPOT_RANGE := 12.0
+const SPOT_GAIN := 0.8
+## Its patch as bright landing far below a high window as near a low one:
+## a gentle decay, its energy raised for every THROW metres it must carry
+## past the first few.
+const SPOT_DECAY := 0.5
+const THROW := 3.0
 const FADE := 0.3
 const POLL := 0.25
 const LAMP_TINT := Color(1.0, 0.62, 0.3)
@@ -216,7 +221,7 @@ func _process(delta: float) -> void:
 				continue
 
 			if w["spot"] != null and is_instance_valid(w["spot"]):
-				(w["spot"] as SpotLight3D).light_energy = SPOT_GAIN * energy * float(room["fade"])
+				(w["spot"] as SpotLight3D).light_energy = SPOT_GAIN * energy * float(room["fade"]) * float(w.get("spot_gain", 1.0))
 
 			if w["glow"] != null and is_instance_valid(w["glow"]):
 				(w["glow"] as OmniLight3D).light_energy = GLOW_GAIN * energy * float(room["fade"])
@@ -314,12 +319,14 @@ func _light_out(room_name: String, lamp: Node3D) -> void:
 		# counts it unshadowed, as it is drawn.)
 		spot.shadow_enabled = false
 		spot.spot_angle_attenuation = 1.6
+		spot.spot_attenuation = SPOT_DECAY
 		spot.set_meta(&"casts_shadow", false)
 		add_child(spot)
 		spot.global_position = middle + normal * (float(w["outside"]) + SPOT_OUT)
 		var aim := toward.normalized()
 		spot.look_at(spot.global_position + aim, Vector3.UP if absf(aim.y) < 0.99 else Vector3.FORWARD)
 		w["spot"] = spot
+		w["spot_gain"] = maxf(1.0, _reach_out(space, spot.global_position, aim, SPOT_RANGE) / THROW)
 		w["lamp_shaft"] = _lamp_shaft(space, w, frame, source, rays)
 		var glow := OmniLight3D.new()
 		glow.name = "WindowGlow"
@@ -373,21 +380,26 @@ func _lamp_shaft(space: PhysicsDirectSpaceState3D, w: Dictionary, frame: Diction
 		var way := (p - source).normalized()
 		mouth.append(p)
 		uvs.append(Vector2((q.x - box.position.x) / maxf(box.size.x, 0.001), (box.end.y - q.y) / maxf(box.size.y, 0.001)))
-		var from := p + way * 0.02
-		var hit := SightRay.first_solid(space, PhysicsRayQueryParameters3D.create(from, from + way * OUT_REACH, 1), SKIP)
-		var reach := 0.02 + (from.distance_to(hit["position"]) if not hit.is_empty() else OUT_REACH)
-
-		# (Over water, its top.)
-		for water in get_tree().get_nodes_in_group(&"water"):
-			if way.y < -0.001 and water.has_method("over") and bool(water.call("over", p)):
-				var down := (p.y - float(water.call("surface_y"))) / -way.y
-
-				if down > 0.0:
-					reach = minf(reach, down)
-
-		reaches.append(reach)
+		reaches.append(_reach_out(space, p, way, OUT_REACH))
 
 	return rays.call("add_window", mouth, uvs, reaches, source)
+
+
+## How far light from `from` carries along `way` before it meets something
+## solid or the top of the water (`most` at the most).
+func _reach_out(space: PhysicsDirectSpaceState3D, from: Vector3, way: Vector3, most: float) -> float:
+	var start := from + way * 0.02
+	var hit := SightRay.first_solid(space, PhysicsRayQueryParameters3D.create(start, start + way * most, 1), SKIP)
+	var reach := 0.02 + (start.distance_to(hit["position"]) if not hit.is_empty() else most)
+
+	for water in get_tree().get_nodes_in_group(&"water"):
+		if way.y < -0.001 and water.has_method("over") and bool(water.call("over", from)):
+			var down := (from.y - float(water.call("surface_y"))) / -way.y
+
+			if down > 0.0:
+				reach = minf(reach, down)
+
+	return reach
 
 
 # The moon in

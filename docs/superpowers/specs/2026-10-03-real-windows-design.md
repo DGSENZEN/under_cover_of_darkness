@@ -21,6 +21,15 @@ reveals (kit_glazing.reveal); your marks and a lamp's halo see through glass
 too (SightRay). Bench, main and branch alternated on one machine: p99 is
 set by shader warm-up in the flight's first seconds on both; after 8 s,
 p99 15.2 ms (main 14.9), 107.0 fps (main 107.8).
+Merged with main's db55b90 (the carrack boarded): the carrack's budget
+9300 (base 8896, boarding +102, windows +272). The user's follow-ups: the
+loading door open through (its dark card gone), the portal's tympanum a
+half round on its lintel, and a lantern hung from the rafters by the
+office's window (its desk candle sat under the window: its light went up)
+so the office throws its light down onto the yard; a window's patch now
+reaches 12 m with a gentle decay (0.5), its energy 0.8 of the lamp's and
+raised for every 3 m it carries, so a high window's patch shows as a low
+one's does.
 
 The user: "Can we make the windows of the buildings we can go in real? And
 make them actually project godrays if applicable?"

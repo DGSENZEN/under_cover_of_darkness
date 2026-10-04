@@ -232,6 +232,30 @@ class Customs(unittest.TestCase):
         door = [kit_customs.X1 - 4.0 - at[0], 1.1 - at[1], kit_customs.Z0 + kit_customs.WALL / 2.0 - at[2]]
         self.assertFalse(any(box_holds(b, door) for b in geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY)))
 
+    def test_the_loading_door_is_open_through(self):
+        # (Its doorway shows the harbour from the store and the store from
+        # the quay: nothing drawn across it at any depth.)
+        lx, lw, lh = kit_customs.LOADING
+        at = kit_customs.PIECE_AT["customs_upper_front"]
+        shapes = kit_recipes.PIECES["customs_upper_front"]["shapes"]
+
+        for z in (kit_customs.Z1 - 0.01, kit_customs.Z1 - 0.25, kit_customs.Z1 - 0.48, kit_customs.Z1 - 0.6):
+            for dx in (-0.3, 0.0, 0.3):
+                point = [lx + dx - at[0], kit_customs.UP + lh / 2.0 - at[1], z - at[2]]
+                self.assertFalse(face_holds(shapes, point), (dx, z))
+
+    def test_the_portals_tympanum_stays_over_its_lintel(self):
+        # (A half round over the door, not a whole disc hanging into it.)
+        px, pw, ph = kit_customs.PORTAL
+        at = kit_customs.PIECE_AT["customs_portal_wall"]
+        shapes = kit_recipes.PIECES["customs_portal_wall"]["shapes"]
+        z = kit_customs.HALL_FRONT + 0.02 - at[2]
+
+        for dx in (-0.3, 0.0, 0.3):
+            self.assertFalse(face_holds(shapes, [px + dx - at[0], ph - 0.2 - at[1], z]), ("in the doorway", dx))
+
+        self.assertTrue(face_holds(shapes, [px - at[0], ph + 0.6 - at[1], z]), "the tympanum over the lintel")
+
     def test_budgets_hold(self):
         for name in self.EXPECTED:
             recipe = kit_recipes.PIECES[name]

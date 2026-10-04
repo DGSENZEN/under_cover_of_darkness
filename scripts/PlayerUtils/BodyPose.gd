@@ -158,10 +158,11 @@ func _update_climb(player: CharacterBody3D) -> void:
 		return
 
 	pose = &"climb_ladder"
-	var normal: Vector3 = volume.get_climb_normal()
+	var normal: Vector3 = player.climb_normal()
 	var lateral := normal.cross(Vector3.UP).normalized()
 	var basis := _grip_basis(normal)
 	var wall: Vector3 = player.global_position - normal * (player._radius + 0.05)
+	var up: Vector3 = volume.get_climb_up() if volume.has_method("get_climb_up") else Vector3.UP
 
 	# Hands snap to rungs, one rung apart, swapping as the body climbs: the
 	# higher one about eye level, where you can see it take the rung.
@@ -171,8 +172,11 @@ func _update_climb(player: CharacterBody3D) -> void:
 	var high := rung * rung_spacing
 	var low := (rung - 1.0) * rung_spacing
 
-	left_target = Transform3D(basis, Vector3(wall.x, high if left_high else low, wall.z) + lateral * 0.2)
-	right_target = Transform3D(basis, Vector3(wall.x, low if left_high else high, wall.z) - lateral * 0.2)
+	# (Up the climb's plane to each rung: a leaning one's, in or out with it.)
+	var left_y := high if left_high else low
+	var right_y := low if left_high else high
+	left_target = Transform3D(basis, wall + up * ((left_y - wall.y) / maxf(up.y, 0.2)) + lateral * 0.2)
+	right_target = Transform3D(basis, wall + up * ((right_y - wall.y) / maxf(up.y, 0.2)) - lateral * 0.2)
 	_left_goal = 1.0
 	_right_goal = 1.0
 

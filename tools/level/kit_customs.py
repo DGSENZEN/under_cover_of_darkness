@@ -292,7 +292,10 @@ def _portal_wall():
                    ks.prism(px, door_h + 0.55, z1 + 0.06, 0.09, 0.5, 4, "ashlar_gold", 45.0, top=0.0)]
 
     shapes.append(ks.box(door_x, door_h + 0.12, z1 + 0.06, door_w + 0.2, 0.24, 0.14, "ashlar_gold"))
-    shapes.append(ks.disc(door_x, door_h + 0.24, z1 + 0.02, r, 10, "ashlar_gold"))
+    # (The tympanum a half round on the lintel: a whole disc hung down into
+    # the doorway.)
+    shapes.append(ks.polygon([[door_x + r * math.cos(math.pi * i / 10), door_h + 0.24 + r * math.sin(math.pi * i / 10), z1 + 0.02]
+                              for i in range(11)], "ashlar_gold"))
     shapes.append(ks.card(door_x, door_h + 0.24 + r * 0.42, z1 + 0.06, r * 1.15, r * 1.15, "arms_royal"))
     shapes.append(ks.ring(door_x, door_h + 0.24, z1 + 0.08, r, r + 0.13, 0.12, 0.0, 180.0, 10, "rope_lay"))
     return shapes, cols, records
@@ -339,11 +342,11 @@ def _upper_front():
         shapes.append(ks.box(px + dx, py + dy, z1 + 0.05, sx, sy, 0.1, "granite"))
 
     # The loading door: its frame, its threshold out over the loggia's
-    # course, the dark of the store inside, its leaves folded back in.
+    # course, its leaves folded back in; open through (the harbour seen
+    # from the store, the store from the quay).
     # (Its frame stands on the face, 1 mm proud: not in the reveal's plane.)
     shapes += ki._frame(lx, UP, z1 + 0.011, lw, lh)
     shapes.append(ks.box(lx, UP + 0.05, z1 + 0.15, lw + 0.3, 0.1, 0.3, "granite"))
-    shapes.append(ks.card(lx, UP + lh / 2.0, z0 + 0.02, lw, lh, "glass_dark"))
 
     for s in (-1.0, 1.0):
         shapes.append(ks.box(lx + s * (lw / 2.0 - 0.04), UP + lh / 2.0, z0 - 0.3, 0.06, lh, 0.68, "door_1"))

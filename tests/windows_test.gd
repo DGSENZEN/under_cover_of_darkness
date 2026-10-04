@@ -614,38 +614,71 @@ func _harbour() -> void:
 			"thrown thing in %s, you in %s (west windows %d)" % [kept_in, stayed, west.size()])
 
 	# The office's candle out through its window, doused and relit.
-	var made: Dictionary = city.made["city_harbour"]
-	var candle: Node3D = made["lights"].get("office_candle")
+	# (The office's lamp at its window: the lantern hung from the rafters by
+	# it, the nearest lit, its light down through the glass onto the yard.)
+	var office_room: Dictionary = windows.get("rooms").get("room_customs_office", {})
+	var candle: Node3D = office_room.get("lamp")
 	var office := all.filter(func(w): return w["room"] == "room_customs_office")
 	var spot_of := func(w: Dictionary) -> float: return (w["spot"] as SpotLight3D).light_energy if w["spot"] != null and is_instance_valid(w["spot"]) else 0.0
 	var outside := office.size() == 1 and office[0]["spot"] != null and (office[0]["spot"] as Node3D).global_position.z < -34.0
-	var notes := ["office windows %d, spot outside %s, shaft %s" % [office.size(), outside, office.size() == 1 and office[0]["lamp_shaft"] != null]]
+	var notes := ["office lamp %s, windows %d, spot outside %s, shaft %s" % [candle.name if candle != null else "none", office.size(), outside,
+		office.size() == 1 and office[0]["lamp_shaft"] != null]]
 	var follows := false
 	var remembered := false
 
-	if candle != null and office.size() == 1:
+	var desk: Node3D = city.made["city_harbour"]["lights"].get("office_candle")
+
+	if candle != null and desk != null and office.size() == 1:
 		await _until(func(): return spot_of.call(office[0]) > 0.05, 60)
 		var lit_first: bool = spot_of.call(office[0]) > 0.05
+		# Its lantern doused: the office falls back on the candle on his desk;
+		# that doused too: dark; the lantern relit: its light again.
 		candle.call("put_out", &"douse")
+		await _until(func(): return office_room.get("lamp") == desk, 30)
+		var fell_back: bool = office_room.get("lamp") == desk
+		desk.call("put_out", &"douse")
 		await _until(func(): return spot_of.call(office[0]) < 0.01, 30)
-		var doused: bool = spot_of.call(office[0]) < 0.01
+		var doused: bool = spot_of.call(office[0]) < 0.01 and office_room.get("lamp") == null
 		candle.call("relight")
-		await _until(func(): return spot_of.call(office[0]) > 0.05, 30)
-		var relit: bool = spot_of.call(office[0]) > 0.05
-		follows = lit_first and doused and relit
-		notes.append("lit %s, doused %s, relit %s" % [lit_first, doused, relit])
+		await _until(func(): return office_room.get("lamp") == candle and spot_of.call(office[0]) > 0.05, 30)
+		var relit: bool = office_room.get("lamp") == candle and spot_of.call(office[0]) > 0.05
+		follows = lit_first and fell_back and doused and relit
+		notes.append("lit %s, the lantern out: back on the desk's candle %s, both out: dark %s, the lantern relit %s" % [lit_first, fell_back, doused, relit])
 
-		# As a district remembers it.
+		# As a district remembers them.
 		candle.call("load_state", {"lit": false})
 		await _until(func(): return spot_of.call(office[0]) < 0.01, 30)
 		var out_again: bool = spot_of.call(office[0]) < 0.01
 		candle.call("load_state", {"lit": true})
-		await _until(func(): return spot_of.call(office[0]) > 0.05, 30)
-		remembered = out_again and spot_of.call(office[0]) > 0.05
+		await _until(func(): return office_room.get("lamp") == candle and spot_of.call(office[0]) > 0.05, 30)
+		remembered = out_again and office_room.get("lamp") == candle and spot_of.call(office[0]) > 0.05
+		desk.call("relight")
+		await _frames(20)
 
-	_check("GW17 the office's candle throws its window out onto the yard; doused, dark; relit, back", outside and follows and office[0]["lamp_shaft"] != null,
-		"; ".join(notes))
-	_check("GW20 a district's remembered candle (load_state) darkens and lights its window", remembered, "remembered %s" % remembered)
+	_check("GW17 the office's lantern throws its window out onto the yard; doused, dark; relit, back", candle != null and String(candle.name) == "office_lantern"
+		and outside and follows and office[0]["lamp_shaft"] != null, "; ".join(notes))
+
+	# Down onto the yard: the patch's spot aims down, and the yard where it
+	# lands is lit by it (more than a few metres along the wall).
+	var aims_down := false
+	var yard_lit := 0.0
+	var yard_beside := 0.0
+
+	if office.size() == 1 and office[0]["spot"] != null:
+		var office_spot := office[0]["spot"] as SpotLight3D
+		var aim := -office_spot.global_basis.z
+		aims_down = aim.y < -0.3
+		var lands := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(office_spot.global_position,
+			office_spot.global_position + aim * 12.0, 1))
+
+		if not lands.is_empty():
+			var on_yard: Vector3 = (lands["position"] as Vector3) + Vector3.UP * 0.05
+			yard_lit = LightProbe.light_at(self, on_yard)
+			yard_beside = LightProbe.light_at(self, on_yard + Vector3(4.0, 0.0, 0.0))
+
+	_check("GW23 the office's window throws its lamplight down onto the yard", aims_down and yard_lit >= yard_beside + 0.05,
+		"aims down %s, the yard where it lands %.2f, 4 m along %.2f" % [aims_down, yard_lit, yard_beside])
+	_check("GW20 a district's remembered lamp (load_state) darkens and lights its window", remembered, "remembered %s" % remembered)
 
 	# The cabin's lamps astern and onto the waist.
 	var cabin := all.filter(func(w): return w["room"] == "room_carrack_cabin")
