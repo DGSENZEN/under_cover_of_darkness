@@ -342,6 +342,28 @@ class Terrace(unittest.TestCase):
         tops = [sh for sh in kit_recipes.PIECES[name]["shapes"] if sh.get("slot") == "calcada"]
         self.assertTrue(tops)
 
+    def test_a_bridge_spans_its_lane_between_two_houses(self):
+        # (A room over a lane `span` wide, borne on its neighbours' party
+        # walls: solid over the lane, nothing hanging under its floor, its
+        # walls shut to the lane, a roof over it.)
+        name = kit_terrace.bridge(2.5, 3.0)
+        recipe = kit_recipes.PIECES[name]
+        self.assertIsNotNone(hit(name, [0.0, -1.0, 0.0], [0.0, 1.0, 0.0]))
+        self.assertIsNone(hit(name, [0.0, -0.05, 4.0], [0.0, 0.0, -1.0]))
+        self.assertIsNotNone(hit(name, [0.0, 1.5, 4.0], [0.0, 0.0, -1.0]))
+        self.assertIsNotNone(hit(name, [0.0, 10.0, 0.0], [0.0, -1.0, 0.0]))
+        self.assertGreaterEqual(recipe["size"][0], 2.5 + 0.3)
+        self.assertLess(recipe["top"], 4.0)
+
+    def test_a_yard_gate_can_open(self):
+        # (A yard's gate a man walks through: its opening clear, its door
+        # where the layout hangs one.)
+        name = kit_terrace.yard_front(15.0, True)
+        recipe = kit_recipes.PIECES[name]
+        self.assertIsNone(hit(name, [0.0, 1.0, 1.0], [0.0, 0.0, -1.0]))
+        self.assertEqual(len(recipe["doors"]), 1)
+        self.assertIsNotNone(hit(kit_terrace.yard_front(15.0), [0.0, 1.0, 1.0], [0.0, 0.0, -1.0]))
+
     def test_pieces_are_named_by_their_measures(self):
         self.assertEqual(kit_terrace.stair_lane(1.5, 24), kit_terrace.stair_lane(1.5, 24))
         self.assertNotEqual(kit_terrace.retaining(10.0, 3.5), kit_terrace.retaining(10.0, 3.0))

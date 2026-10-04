@@ -7,9 +7,12 @@ laid by hand: the fountain square and its bastion, the vaulted stream, the
 tavern, the tannery, the Guindais postern, the west wall's stair, the
 bricked-up alley; and the ways through them."""
 
+import math
+
 import geo
 import kit_recipes as kit
 import kit_terrace
+import rules
 
 import town
 from town import stairs as plan
@@ -50,6 +53,13 @@ def lay(L):
     _square(L)
     _places(L)
     _ways(L)
+    _steps(L)
+    vantages = _vantages(L)
+    _torches(L, vantages)
+    _shrines(L, vantages)
+    _zones(L)
+    _chains(L)
+    _payoffs(L)
 
 
 def _stream(L):
@@ -181,6 +191,13 @@ def _places(L):
     work = world(tannery["at"], tannery["yaw"], kit.PIECES["tannery"]["work"])
     L.mark("stairs_tannery_work", "work", work, 0.0, _sector(work[0], work[2]), kind="tannery")
 
+    for i, gate in enumerate(w for w in plan.WALLS["tannery"] if w["kind"] == "yard_front"):
+        name = getattr(kit_terrace, gate["kind"])(*gate["args"])
+
+        for d in kit.PIECES[name]["doors"]:
+            where = world(gate["at"], gate["yaw"], d)
+            L.mark("stairs_tannery_gate_%d" % (i + 1), "door", where, gate["yaw"] + d[3], _sector(where[0], where[2]), width=d[4], height=d[5])
+
 
 def _stair_tour(k, c):
     """The tour up the stair-lane at c on step k, in the world."""
@@ -275,3 +292,236 @@ def _downstream(points):
         out.append(p[:3] + ["climb" if abs(p[1] - out[-1][1]) > 1.0 else "walk"])
 
     return out
+
+
+def _steps(L):
+    """Each terrace step's box and its public ways up (its two stair-lanes;
+    its thief's, the two-level house through it, laid with the ways); the
+    boundary steps down to the Baixa and the Carmo (their towers and corbels,
+    laid with them)."""
+    middle = (plan.WEST + plan.EAST) / 2.0
+
+    for k, step in enumerate(plan.STEPS):
+        label = "stairs_step_%d" % (k + 1)
+        L.mark(label, "terrace_step", (middle, step["y"] + step["rise"] / 2.0, step["z"]), 0.0, _sector(middle, step["z"]),
+               size=[plan.EAST - plan.WEST, step["rise"] + 2.0, 6.0], label=label, public=2, thief=1)
+
+        for j, c in enumerate(step["gaps"]):
+            checks(L, "%s_lane_%d" % (label, j + 1), _stair_tour(k, c), way="public", step=label)
+
+    for label, y0, y1, z0, z1 in (("stairs_step_baixa", plan.BAIXA_G, plan.level(plan.PLATES[4]), -170.0, -72.5),
+                                  ("stairs_step_carmo", plan.CARMO_G, plan.level(plan.PLATES[-1]), -290.0, -170.0)):
+        L.mark(label, "terrace_step", (plan.EAST, (y0 + y1) / 2.0, (z0 + z1) / 2.0), 0.0, _sector(plan.EAST, (z0 + z1) / 2.0),
+               size=[6.0, y1 - y0 + 2.0, z1 - z0], label=label, public=2, thief=1)
+
+
+def _vantages(L):
+    """Unlit, parapeted spots to scout from: at each stair-lane's head, at
+    each terrace's lane's end over the cliff, on the miradouro; the
+    bastion's laid with the square. Their places."""
+    out = []
+
+    for w in plan.WALLS["stair"]:
+        name = getattr(kit_terrace, w["kind"])(*w["args"])
+        head = world(w["at"], w["yaw"], kit.PIECES[name]["head"])
+        out.append(geo.add(head, [0.0, 0.0, -1.0]))
+
+    for plate in plan.PLATES:
+        out.append([plan.EAST - 1.0, plan.level(plate), plan.south(plate) - plan.LANE / 2.0])
+
+    out.append([plan.EAST - 1.5, plan.level(plan.PLATES[2]), plan.CORBEL_CLIMBS[0][1]])
+
+    for i, at in enumerate(out):
+        L.mark("stairs_vantage_%d" % (i + 1), "vantage", at, 0.0, _sector(at[0], at[2]))
+
+    x0, _z0, x1, z1 = plan.BASTION
+    return out + [[(x0 + x1) / 2.0, plan.level(plan.PLATES[3]), z1 - 1.2]]
+
+
+# Torches on the fronts along each lane: this far from the lane's ends and
+# apart, snapped to a party line or a house's corner; none near a vantage.
+TORCH_TARGETS = (14.0, 0.5, 14.0)
+TORCH_SNAP = 8.0
+TORCH_CLEAR = 5.0
+
+
+def _torches(L, vantages):
+    """Torches on the house fronts (or backs) lining each terrace's lane,
+    about 25 m apart, 2.6 m up, the player can douse them; one on the
+    square."""
+    n = 0
+
+    for plate in plan.PLATES:
+        y = plan.level(plate)
+        face = plan.south(plate) - plan.LANE
+        lining = [plan.lot_rect(each) for each in plan.LOTS if abs(each.y - y) < 0.01 and abs(plan.lot_rect(each)[3] - face) < 0.01]
+        # (Spots: the party lines and corners on the faces along the lane,
+        # and the row's last gable where it stops short of the cliff.)
+        spots = sorted({(x, face + 0.3, 0.0) for r in lining for x in (r[0], r[2])})
+        last_x = max(r[2] for r in lining)
+
+        if last_x < plan.EAST - 2.0:
+            spots.append((last_x + 0.3, face - 0.8, 90.0))
+
+        spots = [sp for sp in spots if all(math.hypot(sp[0] - v[0], sp[1] - v[2]) >= TORCH_CLEAR or abs(v[1] - y) > 1.0 for v in vantages)]
+        first, middle, last = TORCH_TARGETS
+        targets = [plan.WEST + first, (plan.WEST + plan.EAST) / 2.0, plan.EAST - last]
+
+        for target in targets:
+            near = [sp for sp in spots if abs(sp[0] - target) <= TORCH_SNAP]
+
+            if not near:
+                continue
+
+            x, z, yaw = min(near, key=lambda sp: abs(sp[0] - target))
+            n += 1
+            L.mark("stairs_torch_%d" % n, "light", (x, y + 2.6, z), yaw, _sector(x, z), kind="torch", douse=True)
+
+    # (The square's: on the middle block's front, between its first two
+    # houses.)
+    ms = sorted((each for each in plan.LOTS if each.name.startswith("stairs_ms_") and not each.name.startswith("stairs_ms_east")),
+                key=lambda each: each.x)
+    x = plan.lot_rect(ms[0])[2]
+    n += 1
+    L.mark("stairs_torch_%d" % n, "light", (x, plan.level(plan.PLATES[2]) + 2.6, plan.SQUARE[3] - 0.3), 180.0, _sector(x, plan.SQUARE[3]),
+           kind="torch", douse=True)
+
+
+def _shrines(L, vantages):
+    """A candle in each corner shrine's niche, burning all night (none so
+    near a vantage it would light it)."""
+    for each in plan.LOTS:
+        if each.quirk != "corner_shrine":
+            continue
+
+        recipe = kit.PIECES[town.design_key(each)]
+        at = world((each.x, each.y, each.z), each.yaw, geo.add(recipe["places"]["shrine"], [0.0, 0.3, 0.1]))
+
+        if any(math.dist(at, v) < 4.5 for v in vantages):
+            continue
+
+        L.mark("%s_candle" % each.name, "light", at, each.yaw, _sector(at[0], at[2]), kind="candle", douse=True)
+
+
+def _zones(L):
+    """The quarter outside; inside the tavern (its cellar a cellar), its
+    stair towers, the stream (the smallest box a point is in is its)."""
+    middle = (plan.WEST + plan.EAST) / 2.0
+    L.mark("stairs_zone", "zone", (middle, 45.0, -155.5), 0.0, "stairs_mid", size=[plan.EAST - plan.WEST, 110.0, 269.0], grade="outside")
+    import kit_tavern
+    at, yaw = tavern_at()
+    depth, eaves, cellar = kit_tavern.DEPTH, kit_tavern.EAVES, kit_tavern.CELLAR
+    sector = _sector(at[0], at[2])
+    L.mark("stairs_tavern_zone", "zone", world(at, yaw, [0.0, eaves / 2.0, -depth / 2.0]), yaw, sector, size=[kit_tavern.WIDTH, eaves, depth],
+           grade="indoors")
+    L.mark("stairs_tavern_cellar_zone", "zone", world(at, yaw, [0.0, -cellar / 2.0, -depth / 2.0]), yaw, sector,
+           size=[kit_tavern.WIDTH, cellar, depth], grade="cellar")
+
+    for n, tower in enumerate(plan.WALLS["towers"]):
+        name = getattr(kit_terrace, tower["kind"])(*tower["args"])
+        size = kit.PIECES[name]["size"]
+        x, y, z = tower["at"]
+        L.mark("stairs_tower_%d_zone" % (n + 1), "zone", (x, y + size[1] / 2.0, z), 0.0, _sector(x, z), size=size, grade="indoors")
+
+    w, h = plan.STREAM_SIZE
+
+    for i, (kind, args, z, y) in enumerate(plan.STREAM):
+        length = kit.PIECES[getattr(kit_terrace, kind)(*args)]["size"][2]
+        drop = args[2] if kind == "cascade" else 0.0
+        low, high = y - kit_terrace.CHANNEL, y + drop + h
+        L.mark("stairs_stream_zone_%d" % (i + 1), "zone", (plan.STREAM_X, (low + high) / 2.0, z), 0.0, _sector(plan.STREAM_X, z),
+               size=[w, high - low, length], grade="cellar")
+
+
+def _payoffs(L):
+    """Each lane's west end, where it meets the city wall or the old
+    rampart with no way on: a payoff kept for B1b's loot (the first
+    terrace's lane goes on up the wall's stair)."""
+    for k, plate in enumerate(plan.PLATES[1:]):
+        L.mark("payoff_%d" % (k + 2), "mark", (plan.WEST + 1.0, plan.level(plate), plan.south(plate) - plan.LANE / 2.0), 0.0,
+               _sector(plan.WEST, plan.south(plate)))
+
+
+# The roof chains: up a scaffold against the gable of a row's last house
+# where it faces the open ground by the cliff, near its front's eaves (a
+# gable is low there), then west along the row's roofs a little behind
+# their ridges, across a stair-lane by a leap, to the chain's end.
+# (terrace, the scaffold's z, the row's x where the chain ends.)
+CHAINS = [("stairs_3", -87.25, -129.2), ("stairs_5", -140.0, -136.0)]
+SCAFFOLD_WIDTH = 4.0
+
+
+def _chains(L):
+    from old_town.baixa import roof_route
+    n = 0
+
+    for plate_name, sz, end in CHAINS:
+        plate = [p for p in plan.PLATES if p[0] == plate_name][0]
+        y = plan.level(plate)
+        x = plan.MIRADOURO[0] if plate_name == "stairs_3" else [r for r in plan.RESERVED[plate_name] if r[2] == "tower"][0][0]
+        lots = [each for each in plan.LOTS if abs(each.y - y) < 0.01 and plan.lot_rect(each)[1] <= sz <= plan.lot_rect(each)[3]
+                and abs(plan.lot_rect(each)[2] - x) < 0.01]
+        corner = lots[0]
+        eaves = kit.PIECES[town.design_key(corner)]["eaves"]
+        scaffold = kit_terrace.scaffold(eaves, SCAFFOLD_WIDTH)
+        recipe = kit.PIECES[scaffold]
+        n += 1
+        name = L.put(scaffold, (x, y, sz), 90.0, _sector(x, sz), name="stairs_scaffold_%d" % n, climbs=True)
+        up = placed((x, y, sz), 90.0, recipe["tour"])
+        row = [each for each in plan.LOTS if abs(each.y - y) < 0.01 and plan.lot_rect(each)[1] <= sz <= plan.lot_rect(each)[3]
+               and end - 0.01 <= plan.lot_rect(each)[0] and plan.lot_rect(each)[2] <= x + 0.01]
+        names = {each.name for each in row}
+        boxes = [b for p in L.pieces if p["name"] in names for b in geo.piece_boxes(kit.PIECES[p["piece"]], p["position"], p["basis"])]
+        route = _chain(boxes, row, x, end, corner, sz)
+        checks(L, "roof_stairs_%d" % n, up + route, way="roof")
+        L.mark("stairs_scaffold_%d_vantage" % n, "vantage", world((x, y, sz), 90.0, [0.0, recipe["top"], kit_terrace.DECK_OFF + kit_terrace.DECK / 2.0]),
+               270.0, _sector(x, sz))
+        assert name
+
+
+def _chain(boxes, row, x, end, corner, sz):
+    """The way along a row's roofs from its scaffold at x, z sz, up the
+    gable's slope, then west to end along a line a little behind the
+    ridges (tried at a few depths), the roofs sampled; where it meets a
+    stair-lane's gap, a leap across (never more than a leap's rise up)."""
+    from old_town.baixa import roof_route
+    r = plan.lot_rect(corner)
+    spans = sorted(((plan.lot_rect(each)[0], plan.lot_rect(each)[2]) for each in row), reverse=True)
+    runs = []
+
+    for a, b in spans:
+        if runs and abs(runs[-1][0] - b) < 0.01:
+            runs[-1][0] = a
+        else:
+            runs.append([a, b])
+
+    # (Behind the ridge: toward the house's back, which for a house facing
+    # north is to +z.)
+    back = 1.0 if abs(corner.yaw - 180.0) < 0.01 else -1.0
+
+    for off in (0.6, 1.0, 1.5, 0.3, 2.0):
+        z = (r[1] + r[3]) / 2.0 + back * off
+        route = []
+
+        try:
+            for i, (a, b) in enumerate(runs):
+                path = [(min(b, x) - 0.6, z), (max(a, end) + 0.6, z)]
+
+                if i == 0:
+                    path.insert(0, (min(b, x) - 0.6, sz))
+
+                part = roof_route(boxes, path)
+
+                if i > 0:
+                    if part[0][1] - route[-1][1] > rules.LEAP_RISE:
+                        raise ValueError("a leap up")
+
+                    part[0][3] = "jump"
+
+                route += part
+        except ValueError:
+            continue
+
+        return route
+
+    raise ValueError("no roof chain over %s" % [each.name for each in row])

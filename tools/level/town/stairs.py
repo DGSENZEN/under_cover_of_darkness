@@ -648,8 +648,8 @@ def _places():
                        {"kind": "parapet", "args": (round(z1 - pt - z0, 3),), "at": (x0, y4, (z0 + z1 - pt) / 2.0), "yaw": -90.0},
                        {"kind": "parapet", "args": (round(z1 - pt - z0, 3),), "at": (x1, y4, (z0 + z1 - pt) / 2.0), "yaw": 90.0}]
     tx0, tz0, tx1, tz1 = TANNERY
-    out["tannery"] += [{"kind": "yard_front", "args": (round(tx1 - tx0, 3),), "at": ((tx0 + tx1) / 2.0, y3, tz1), "yaw": 0.0},
-                       {"kind": "yard_front", "args": (round(TANNERY_ALLEY[1] - TANNERY_ALLEY[0], 3),),
+    out["tannery"] += [{"kind": "yard_front", "args": (round(tx1 - tx0, 3), True), "at": ((tx0 + tx1) / 2.0, y3, tz1), "yaw": 0.0},
+                       {"kind": "yard_front", "args": (round(TANNERY_ALLEY[1] - TANNERY_ALLEY[0], 3), True),
                         "at": (tx1, y3, (TANNERY_ALLEY[0] + TANNERY_ALLEY[1]) / 2.0), "yaw": 90.0},
                        {"kind": "tannery", "args": (), "at": ((tx0 + tx1) / 2.0, y3, (tz0 + tz1) / 2.0), "yaw": 0.0}]
     ax0, az0, ax1, az1 = ALLEY
@@ -680,7 +680,48 @@ def _places():
                       ]
     # (Turned so its grate leans aside along the lane's north edge.)
     out["hatch"] = [{"kind": "grate_hatch", "args": (HATCH_DEPTH, 2.5), "at": (HATCH[0], y3, HATCH[1]), "yaw": 90.0}]
+    out["bridges"] = [{"kind": "bridge", "args": (GAP, BRIDGE_DEPTH), "at": (c, y, z), "yaw": 0.0} for _k, c, z, y in BRIDGES]
     return out
+
+
+# Houses over the stair-lanes (the spec's "houses built over the stairs"):
+# a room bridging an alley's mouth between the houses either side, a storey
+# up, where both are houses of three storeys or more not walked in and the
+# alley runs level far enough in from the lane before its stair. (step k,
+# x, z of its middle, y of its foot.)
+BRIDGE_DEPTH = 3.0
+BRIDGE_STOREY = 3.8
+
+
+def _bridges():
+    named = {each.name: each for each in LOTS}
+    out = []
+
+    for k, step in enumerate(STEPS):
+        plate = PLATES[k]
+        row = ROWS[plate[0]]
+        front = south(plate) - LANE
+        foot = step["z"] + _stair_run(step)
+
+        for c in sorted(step["gaps"], reverse=True):
+            west = [i for i in row if i["kind"] == "house" and abs(i["x1"] - (c - GAP / 2.0)) < 0.01]
+            east = [i for i in row if i["kind"] == "house" and abs(i["x0"] - (c + GAP / 2.0)) < 0.01]
+
+            if not west or not east or front - foot < BRIDGE_DEPTH + 1.0:
+                continue
+
+            sides = [named[i["lot"]] for i in west + east]
+
+            if any(each.enterable or each.storeys < 3 for each in sides):
+                continue
+
+            out.append((k, c, front - 0.6 - BRIDGE_DEPTH / 2.0, level(plate) + BRIDGE_STOREY))
+            break
+
+    return out
+
+
+BRIDGES = _bridges()
 
 
 WALLS = _walls()

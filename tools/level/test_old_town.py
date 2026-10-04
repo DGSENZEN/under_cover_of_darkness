@@ -822,6 +822,107 @@ class Stairs(unittest.TestCase):
             self.assertAlmostEqual(door[1], stairs_plan.level([t for t in stairs_plan.PLATES if t[0] == plate][0]), delta=0.05)
             self.assertLess(abs(door[0] - stairs_plan.EAST), 0.6)
 
+    def test_each_step_is_crossed_publicly_and_by_a_thief(self):
+        labels = {m["props"]["label"] for m in layout()["markers"] if m["ucd"] == "terrace_step" and m["props"]["label"].startswith("stairs_step_")}
+        self.assertEqual(labels, {"stairs_step_%d" % (k + 1) for k in range(len(stairs_plan.STEPS))} | {"stairs_step_baixa", "stairs_step_carmo"})
+        self.assertEqual([p for p in rules.way_problems(layout()) if "stairs_step_" in p], [])
+
+    def test_the_lanes_are_torch_lit(self):
+        # (Torches on the fronts along each terrace's lane, 40 m apart at
+        # most and 20 m from its ends; each one the player can douse.)
+        torches = [m for m in layout()["markers"] if m["ucd"] == "light" and m["props"]["kind"] == "torch" and m["name"].startswith("stairs_")]
+        self.assertTrue(all(m["props"].get("douse", True) for m in torches))
+
+        for plate in stairs_plan.PLATES:
+            z1 = stairs_plan.south(plate)
+            xs = sorted(m["position"][0] for m in torches if z1 - stairs_plan.LANE - 1.0 <= m["position"][2] <= z1 + 0.5
+                        and abs(m["position"][1] - stairs_plan.level(plate) - 2.6) < 0.5)
+            self.assertTrue(xs, plate[0])
+            self.assertLessEqual(xs[0] - stairs_plan.WEST, 20.0, plate[0])
+            self.assertLessEqual(stairs_plan.EAST - xs[-1], 20.0, plate[0])
+            self.assertTrue(all(b - a <= 40.0 for a, b in zip(xs, xs[1:])), (plate[0], xs))
+
+    def test_the_stairs_have_their_vantages(self):
+        # (At each stair-lane's head, at each terrace's east end, on the
+        # bastion and the miradouro: unlit.)
+        vantages = [m["position"] for m in layout()["markers"] if m["ucd"] == "vantage" and m["name"].startswith("stairs_")]
+        lights = [m["position"] for m in layout()["markers"] if m["ucd"] == "light"]
+
+        def near(point, reach):
+            return any(math.dist(v, point) <= reach for v in vantages)
+
+        for w in stairs_plan.WALLS["stair"]:
+            name = getattr(kit_terrace, w["kind"])(*w["args"])
+            head = geo.add(list(w["at"]), geo.apply(geo.rotation(w["yaw"]), kit_recipes.PIECES[name]["head"]))
+            self.assertTrue(near(head, 3.0), head)
+
+        for plate in stairs_plan.PLATES:
+            self.assertTrue(near([stairs_plan.EAST - 1.0, stairs_plan.level(plate), stairs_plan.south(plate) - stairs_plan.LANE / 2.0], 3.0), plate[0])
+
+        for v in vantages:
+            self.assertFalse(any(math.dist(v, light) < 4.0 for light in lights), v)
+
+    def test_the_stairs_is_outside(self):
+        zones = [m for m in layout()["markers"] if m["ucd"] == "zone" and m["name"].startswith("stairs_")]
+        grades = {m["props"]["grade"] for m in zones}
+        self.assertEqual(grades, {"outside", "indoors", "cellar"})
+
+        def graded(point):
+            # (As the game reads them: the smallest box a point is in.)
+            inside = [m for m in zones if geo.Box(m["position"], m["basis"], m["size"]).contains(point)]
+            return min(inside, key=lambda m: m["size"][0] * m["size"][1] * m["size"][2])["props"]["grade"] if inside else None
+
+        self.assertEqual(graded([-140.0, 32.0, -120.0]), "outside")
+        tx, tz, _yaw = stairs_plan.TAVERN
+        self.assertEqual(graded([tx - 5.0, stairs_plan.level(stairs_plan.PLATES[1]) + 1.0, tz]), "indoors")
+        self.assertEqual(graded([stairs_plan.STREAM_X, stairs_plan.level(stairs_plan.PLATES[0]) - 2.0, -35.0]), "cellar")
+
+    def test_the_stairs_roofs_chain(self):
+        # (Two or three chains over the roofs, each 3-6 houses and 25-60 m,
+        # each got onto from a lane.)
+        chains = routes("roof_stairs_")
+        self.assertTrue(2 <= len(chains) <= 3, sorted(chains))
+        rects = [(lot_rect(each), each) for each in stairs_plan.LOTS]
+
+        for name, points in chains.items():
+            self.assertEqual(points[0]["props"]["way"], "roof")
+            houses = {each.name for r, each in rects for m in points if r[0] <= m["position"][0] <= r[2] and r[1] <= m["position"][2] <= r[3]
+                      and m["position"][1] > each.y + 3.0}
+            self.assertTrue(3 <= len(houses) <= 6, (name, sorted(houses)))
+            length = sum(math.hypot(b["position"][0] - a["position"][0], b["position"][2] - a["position"][2]) for a, b in zip(points, points[1:]))
+            self.assertTrue(25.0 <= length <= 60.0, (name, length))
+            # (Its way up from a lane: a scaffold's ladders or a mantle.)
+            self.assertTrue(any(abs(points[0]["position"][1] - stairs_plan.level(t)) < 0.05 for t in stairs_plan.PLATES), name)
+            self.assertTrue(any(m["props"]["move"] in ("climb", "mantle", "hang") for m in points[1:4]), name)
+
+    def test_houses_bridge_the_stair_lanes(self):
+        # (Rooms over two stair-lanes at least, each between two houses, a
+        # man's height and more clear over the steps under it.)
+        bridges = [p for p in layout()["pieces"] if p["piece"].startswith("bridge_")]
+        self.assertGreaterEqual(len(bridges), 2)
+        boxes = rules.colliders(layout())
+
+        for p in bridges:
+            x, y, z = p["position"]
+            under = [t for t in (b.ray([x, y - 0.5, z], [0.0, -1.0, 0.0]) for b in boxes) if t is not None]
+            clear = min(under) + 0.5 if under else y - town.height(x, z)
+            self.assertGreaterEqual(clear, 2.4, p["name"])
+
+            for sx in (-1.0, 1.0):
+                beside = [each for each in stairs_plan.LOTS if lot_rect(each)[0] - 0.05 <= x + sx * 1.6 <= lot_rect(each)[2] + 0.05
+                          and lot_rect(each)[1] <= z <= lot_rect(each)[3]]
+                self.assertTrue(beside, (p["name"], sx))
+
+    def test_each_lanes_dead_end_has_its_end(self):
+        # (Where a terrace's lane ends at the city wall or the old rampart: a
+        # payoff, a hatch, a vantage, a way on, or a secret.)
+        ends = [m for m in layout()["markers"] if m["name"].startswith("payoff_") or m["ucd"] in ("vantage", "exit", "secret")
+                or (m["ucd"] == "route_check" and m["props"].get("route", "").startswith(("stairs_west_wall",)))]
+
+        for plate in stairs_plan.PLATES:
+            end = [stairs_plan.WEST + 1.0, stairs_plan.level(plate), stairs_plan.south(plate) - stairs_plan.LANE / 2.0]
+            self.assertTrue(any(math.dist(m["position"], end) < 6.0 for m in ends), plate[0])
+
     def test_the_stairs_checks_clean(self):
         self.assertGreaterEqual(len(stairs_plan.LOTS), 60)
         self.assertEqual([p for p in rules.problems(layout(), "stage2") if "stairs" in p], [])

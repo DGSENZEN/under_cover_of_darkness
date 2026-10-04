@@ -45,6 +45,8 @@ when asked for (and, from the lot plan, when the kit is built).
     bricked     an alley's mouth bricked up
     fill        a terrace carried forward between its retaining walls:
                 solid, paved at its top
+    bridge      a room over a stair-lane between two houses, borne on their
+                party walls
 """
 
 import math
@@ -226,20 +228,22 @@ def rampart(length, height, below, thick=WALL_THICK + 1.2):
 YARD_WALL = (2.6, 0.3)
 
 
-def yard_front(width):
+def yard_front(width, live=False):
     """A light plot's front on its lane: a whitewashed wall `width` along x
-    YARD_WALL high, its face at z 0, a coping, a barred gate in its middle."""
-    name = "yard_front_%d" % _cm(width)
+    YARD_WALL high, its face at z 0, a coping, a barred gate in its middle;
+    `live`, a gate a man walks through (its door hung by the layout)."""
+    name = "yard_front_%d%s" % (_cm(width), "_gate" if live else "")
 
     if name in k.PIECES:
         return name
 
     h, t = YARD_WALL
-    gate = town.Opening(0.0, 0.0, min(1.4, width - 1.0), 2.2, "barred")
+    gate = town.Opening(0.0, 0.0, min(1.4, width - 1.0), 2.2, "door" if live else "barred")
     shapes, cols = town.wall(width, h, t, [gate], "whitewash", (0.0, -t / 2.0, 0.0), frames=False)
     shapes.append(ks.box(0.0, h + 0.05, -t / 2.0, width + 0.04, 0.1, t + 0.1, "granite"))
     cols.append(town.col(0.0, h + 0.05, -t / 2.0, width + 0.04, 0.1, t + 0.1))
-    return _register(name, "wall", "whitewash", shapes, cols, [width, h + 0.1, t + 0.1])
+    keys = {"doors": [[0.0, 0.0, -t / 2.0, 0.0, gate.width, gate.height]]} if live else {}
+    return _register(name, "wall", "whitewash", shapes, cols, [width, h + 0.1, t + 0.1], **keys)
 
 
 def ramp(width, length, rise):
@@ -709,7 +713,7 @@ def stair_tower(height):
                                                      town.Opening(_along(-90.0, -top_z), height + 0.9, 0.6, 1.0, "barred")]))
 
     for x, yaw, length, openings in walls:
-        s, c = town.wall(length, eaves, w, openings, "granite", (x, 0.0, yaw), inside=True, frames=True)
+        s, c = town.wall(length, eaves, w, openings, "granite", (x, 0.0, yaw), inside=True, frames=False)
         shapes, cols = shapes + s, cols + c
 
     for sz in (-1.0, 1.0):
@@ -841,8 +845,8 @@ def tannery():
         for pz in (-5.0, -1.5, 2.0, 5.5):
             add((rx, 1.1, pz, 0.12, 2.2, 0.12), "timber")
 
-        add((rx, 2.0, 0.25, 0.08, 0.08, 10.6), "timber", False)
-        add((rx, 1.3, 0.25, 0.06, 0.06, 10.6), "timber", False)
+        add((rx, 2.0, 0.25, 0.08, 0.08, 10.6), "timber")
+        add((rx, 1.3, 0.25, 0.06, 0.06, 10.6), "timber")
 
         for i in range(9):
             z = -4.6 + i * 1.2
@@ -895,3 +899,56 @@ def fill(width, depth, height):
     top = (0.0, height - 0.05, 0.0, width, 0.1, depth)
     shapes = [ks.box(*body, "granite_rough"), ks.box(*top, "calcada")]
     return _register(name, "floor", "calcada", shapes, [town.col(*body), town.col(*top)], [width, height, depth])
+
+
+# A bridge's room: its floor's beams and boards, its walls' height and
+# thickness, how far it bears into each neighbour's party wall.
+BRIDGE_FLOOR = (0.2, 0.25)
+BRIDGE_ROOM = (2.4, 0.25)
+BRIDGE_BEARING = 0.15
+
+
+def bridge(span, depth):
+    """A room over a lane `span` wide (the lane along z) between two
+    houses, borne `BRIDGE_BEARING` into their party walls: beams across
+    under its boards (their feet at 0), plastered walls to the lane each
+    side with a shut or lit window, granite corbels under its ends, a tiled
+    roof falling to the lane each way; its `top`."""
+    name = "bridge_%d_%d" % (_cm(span), _cm(depth))
+
+    if name in k.PIECES:
+        return name
+
+    beam, boards = BRIDGE_FLOOR
+    room, t = BRIDGE_ROOM
+    width = span + 2.0 * BRIDGE_BEARING
+    floor = beam + boards
+    shapes, cols = [], []
+
+    def add(box, slot, solid=True):
+        shapes.append(ks.box(*box, slot))
+
+        if solid:
+            cols.append(town.col(*box))
+
+    for i in range(4):
+        z = -depth / 2.0 + 0.3 + i * (depth - 0.6) / 3.0
+        add((0.0, beam / 2.0, z, width, beam, 0.18), "timber")
+
+    add((0.0, beam + boards / 2.0, 0.0, width, boards, depth), "boards")
+
+    for sz, kind in ((1.0, "shut"), (-1.0, "lit")):
+        s, c = town.wall(width, room, t, [town.Opening(0.0, 0.8, 0.9, 1.1, kind)], "plaster", (0.0, sz * (depth / 2.0 - t / 2.0), 0.0 if sz > 0 else 180.0),
+                         frames=False)
+        s, c = town.placed(s, c, y=floor)
+        shapes, cols = shapes + s, cols + c
+
+    for sx in (-1.0, 1.0):
+        for sz in (-1.0, 1.0):
+            shapes.append(ks.box(sx * (span / 2.0 - 0.1), -0.25, sz * (depth / 2.0 - 0.3), 0.2, 0.5, 0.3, "granite"))
+
+    # (Its ridge across the lane, its gables in its neighbours' walls.)
+    rs, rc = town.roof("gable", width, depth, floor + room, 27.0, "plaster")
+    shapes, cols = shapes + rs, cols + rc
+    top = floor + room + (depth / 2.0) * math.tan(math.radians(27.0)) + 0.3
+    return _register(name, "town", "plaster", shapes, cols, [width, top, depth], top=top, budget=900)
