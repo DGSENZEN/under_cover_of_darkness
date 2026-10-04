@@ -23,7 +23,9 @@ class Layout:
 
     def put(self, piece, at, yaw=0.0, sector="courtyard", pitch=0.0, roll=0.0, name=None, climbs=False, loose=0.0):
         """A piece; with `climbs`, a ladder marker for each of its recipe's
-        climbs (a ship's shrouds, a scaffold's ladders), named after it;
+        climbs (a ship's shrouds, a scaffold's ladders: [x, y, z, size x, y,
+        z, yaw] and, for one that leans, its pitch, then its props), named
+        after it;
         `loose` (kg), a loose thing: a "loose" marker naming it, so it is a
         body of that weight in the game, picked up and thrown (its colliders
         its own, not the level's)."""
@@ -39,7 +41,8 @@ class Layout:
 
         for i, c in enumerate(kit.PIECES[piece].get("climbs", []) if climbs else []):
             where = geo.add([float(v) for v in at], geo.apply(basis, c[0:3]))
-            self.mark("%s_climb_%d" % (name.replace(".", "_"), i + 1), "ladder", where, yaw + c[6], sector, size=c[3:6])
+            self.mark("%s_climb_%d" % (name.replace(".", "_"), i + 1), "ladder", where, yaw + c[6], sector, size=c[3:6],
+                      pitch=c[7] if len(c) > 7 else 0.0, **(c[8] if len(c) > 8 else {}))
 
         if loose > 0.0:
             self.mark("%s_loose" % name.replace(".", "_"), "loose", at, yaw, sector, piece=name, mass=float(loose))
@@ -150,13 +153,14 @@ class Layout:
                              "props": props})
 
     def route(self, name, points, sector="courtyard", wait=0.0):
-        """A route and its waypoints [(x, y, z, yaw), ...] in order."""
+        """A route and its waypoints [(x, y, z, yaw, wait), ...] in order;
+        yaw and wait optional (wait: the route's own when not given)."""
         first = points[0]
         self.mark(name, "route", first[:3], sector=sector)
 
         for i, p in enumerate(points):
             self.mark("%s_%d" % (name, i + 1), "waypoint", p[:3], yaw=p[3] if len(p) > 3 else 0.0, sector=sector,
-                      route=name, order=i + 1, wait=wait)
+                      route=name, order=i + 1, wait=p[4] if len(p) > 4 else wait)
 
     # Ground
 

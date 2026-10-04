@@ -121,4 +121,14 @@ static func default_table() -> Array[Resource]:
 	high.noise_db = 48.0
 	table.append(high)
 
+	# Thin, the floor close beyond, met slowly (at the top of a ladder over a
+	# ship's side, standing at her rail): climbed over, a leg at a time. Last,
+	# so standing on its top or running over it wins.
+	var over = make(&"climb over", Kind.VAULT, 0.35, 1.25, 2.4, 0.55, 0.95, 1.0, 0.0)
+	over.needs_thin = true
+	over.thickness_per_speed = 0.0
+	over.max_drop = 1.5
+	over.noise_db = 36.0
+	table.append(over)
+
 	return table

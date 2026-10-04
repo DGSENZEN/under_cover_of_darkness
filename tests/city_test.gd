@@ -16,6 +16,10 @@ const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const LightBudget := preload("res://scripts/Visual/Lights/LightBudget.gd")
 const ZonesScript := preload("res://scripts/Level/Zones.gd")
+const JobBook := preload("res://scripts/Level/JobBook.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
+const Comms := preload("res://scripts/AISystem/Comms.gd")
+const TalkDirector := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
 
 ## What each kind of marker is made into (C2): its list in LevelGameplay's
 ## made, or the group it joins.
@@ -44,6 +48,7 @@ class Ear:
 func _ready() -> void:
 	var started := Time.get_ticks_msec()
 	city = CITY.instantiate()
+	city.set("open_with_letter", false)
 	add_child(city)
 	# (The loading screen from the first frame; what it says while the
 	# navmesh bakes; gone once the map is played.)
@@ -75,8 +80,9 @@ func _ready() -> void:
 			only = arg.trim_prefix("--only=")
 
 	var steps := [["markers", _markers], ["douse", _douse], ["reach", _reach], ["locks", _locks], ["freeze", _freeze.bind(true)], ["probes", _probes],
-		["sea_gate", _sea_gate], ["carrack", _carrack], ["roofs", _roofs], ["swim", _swim], ["spit", _spit], ["blowhole", _blowhole],
-		["zones", _zones], ["light_budget", _light_budget], ["chase", _chase], ["holes", _holes], ["loose", _loose], ["roofed", _roofed], ["distance", _distance]]
+		["sea_gate", _sea_gate], ["carrack", _carrack], ["rigging", _rigging], ["roofs", _roofs], ["swim", _swim], ["spit", _spit], ["blowhole", _blowhole],
+		["zones", _zones], ["light_budget", _light_budget], ["chase", _chase], ["holes", _holes], ["loose", _loose], ["roofed", _roofed], ["distance", _distance],
+		["job", _job]]
 
 	for step in steps:
 		if only == "" or step[0] == only or step[0] == "freeze":
@@ -311,7 +317,7 @@ func _sea_gate() -> void:
 
 
 func _carrack() -> void:
-	var shrouds := _ladder_through(Vector3(40.0, 11.0, 3.0))
+	var shrouds := _ladder_through(Vector3(39.6, 11.0, 1.5))
 	var hurt := [0.0]
 
 	if shrouds == null:
@@ -319,10 +325,12 @@ func _carrack() -> void:
 			"no shrouds' climb by the mainmast")
 		return
 
-	await _face_ladder(shrouds, 2.0)
+	# (On her deck at the port bulwark, under the main shrouds, facing them:
+	# up them from behind, round them under the top, onto it.)
+	_put(Vector3(39.6, 3.0, 1.4), 0.0)
+	await _until(func(): return player.is_on_floor(), 120)
+	await _frames(10)
 	trace.clear()
-	# (Up beside the yard, which crosses the shrouds' middle overhead.)
-	player.global_position.x -= 0.9
 	var start := Time.get_ticks_msec()
 	var health: float = player.health
 	Input.action_press("move_forward")
@@ -335,7 +343,7 @@ func _carrack() -> void:
 	_release_all()
 	# Along the yard (it runs north over the sea wall) to above the walk,
 	# then off its side, straight down onto the walk.
-	var balanced := await _steer([Vector3(40.0, 0.0, 3.6), Vector3(40.0, 0.0, -7.6)],
+	var balanced := await _steer([Vector3(41.05, 0.0, 3.6), Vector3(41.05, 0.0, -7.6)],
 		func(): return player.global_position.z < -7.0 and player.global_position.y > 18.5, 1800)
 	await _frames(20)
 	Input.action_press("move_right")
@@ -351,6 +359,96 @@ func _carrack() -> void:
 		climbed and topped and walked and absf(at.y - 15.4) < 0.6 and hurt[0] <= 0.0 and seconds < 60.0,
 		"climbed %s, on the top %s, off the yard %s, at %s, hurt %.0f, %.0f s; went %s" % [climbed, topped, walked, at.snapped(Vector3.ONE * 0.1), hurt[0],
 			seconds, " > ".join(trace.slice(0, 16))])
+
+
+# ---------------------------------------------------------------------------
+# C23-C25: aboard her from the sea, off her tops and yard, out of the water
+# ---------------------------------------------------------------------------
+
+func _rigging() -> void:
+	# C23 swum to her starboard waist: up her rope ladder, over her rail onto
+	#     her deck
+	_put(Vector3(43.15, 0.3, 10.8), 0.0)
+	var held := [false]
+	var aboard := func() -> bool:
+		held[0] = held[0] or player.movement_state == player.MoveState.CLIMBING
+		return player.is_on_floor() and player.movement_state == player.MoveState.LOCOMOTION and absf(player.get_feet_position().y - 2.0) < 0.15 \
+			and player.global_position.z < 9.0
+
+	Input.action_press("move_forward")
+	await _until(aboard, 1200)
+	_release_all()
+	var feet: Vector3 = player.get_feet_position()
+	_check("C23 swum to the carrack's starboard waist: up her rope ladder and over her rail onto her deck", held[0] and absf(feet.y - 2.0) < 0.15 and feet.z < 9.0,
+		"on the ladder %s, feet at %s (%s)" % [held[0], feet.snapped(Vector3.ONE * 0.01), player._last_reject])
+
+	# C24 off the main top's open side, and off the main yard's side, into a
+	#     hang from its edge (thin floors, nothing under them)
+	var top := await _lower_off(Vector3(39.6, 21.05, 5.6), PI)
+	var yard := await _lower_off(Vector3(41.05, 19.3, 1.8), -PI * 0.5)
+	_check("C24 crouched at the edge of the carrack's main top, and of her main yard, a jump: over it into a hang", top and yard,
+		"off the top %s, off the yard %s (%s)" % [top, yard, player._last_reject])
+
+	# C25 swum to the Ribeira's quay stair (a fishing boat moored clear of
+	#     it): out onto its steps and up onto the quay
+	_put(Vector3(-148.4, 0.3, 1.1), 0.0)
+	var target := Vector3(-153.9, 2.5, -0.8)
+	Input.action_press("move_forward")
+
+	for i in 900:
+		var at := player.global_position
+		var flat := Vector2(target.x - at.x, target.z - at.z)
+
+		if flat.length() > 0.3 and player.movement_state in [player.MoveState.LOCOMOTION, player.MoveState.SWIMMING]:
+			player.rotation.y = atan2(-flat.x, -flat.y)
+
+		if player.get_feet_position().y > 2.3 and player.is_on_floor():
+			break
+
+		if i % 20 == 19:
+			Input.action_press("jump")
+			await get_tree().physics_frame
+			Input.action_release("jump")
+		else:
+			await get_tree().physics_frame
+
+	_release_all()
+	feet = player.get_feet_position()
+	_check("C25 swum to the Ribeira's quay stair: out onto its steps and up onto the quay", feet.y > 2.3 and player.is_on_floor(),
+		"feet at %s, %s" % [feet.snapped(Vector3.ONE * 0.01), player.movement_state])
+	_release_all()
+
+
+## You put at `at` facing `yaw`, crouched, walking to the edge ahead; at it, a
+## jump pressed (again each second) till you hang or 5 s pass: whether you hung.
+func _lower_off(at: Vector3, yaw: float) -> bool:
+	_put(at, yaw)
+	await _until(func(): return player.is_on_floor(), 60)
+	Input.action_press("crouch")
+	await _frames(10)
+	Input.action_press("move_forward")
+	var edge := -1
+
+	for i in 300:
+		if player.movement_state == player.MoveState.HANGING:
+			break
+
+		var feet: Vector3 = player.get_feet_position()
+		var ahead: Vector3 = feet + player._facing_direction() * 0.75 + Vector3.UP * 0.3
+
+		if edge < 0 and player.is_on_floor() and player.scanner.ray(ahead, ahead + Vector3.DOWN * 1.2).is_empty():
+			edge = i
+
+		if edge >= 0 and (i - edge) % 60 == 5:
+			Input.action_press("jump")
+			await get_tree().physics_frame
+			Input.action_release("jump")
+		else:
+			await get_tree().physics_frame
+
+	var hung: bool = player.movement_state == player.MoveState.HANGING
+	_release_all()
+	return hung
 
 
 func _roofs() -> void:
@@ -752,6 +850,267 @@ func _distance() -> void:
 
 
 ## The drawn meshes of the piece named `name` (itself or under it).
+# ---------------------------------------------------------------------------
+# C26-C33: the harbour's job (the harbour's job plan, Task 12)
+# ---------------------------------------------------------------------------
+
+func _job() -> void:
+	# (After the steps before: the garrison's memory and the talk's cooldowns
+	# cleared, the men of these checks home and at their ease, a new job.)
+	GarrisonScript.clear_all()
+
+	for who in ["Baltasar", "Rodrigo", "Tome", "Gaspar", "Duarte", "Inigo"]:
+		var man: Node3D = city.guards[who]
+		man.global_transform = man.get("_home")
+		man.reset_physics_interpolation()
+		man.set("velocity", Vector3.ZERO)
+		man.set("alert", 0.0)
+		man.set("has_last_known", false)
+		man.call("_set_state", 0)
+		man.set("_wait_timer", 0.0)
+
+	CityState.job.reset()
+	CityState.job.arrive(&"harbour")
+	await _frames(5)
+	var level: LevelLoader.Level = city.levels["city_harbour"]
+	var made: Dictionary = city.made["city_harbour"]
+	var lib: Dictionary = JobBook.library()
+
+	# C27 the readables
+	var readables: Dictionary = made.get("readables", {})
+	var slots: Array = readables.values().map(func(r): return String(r.get("slot")))
+	_check("C27 the harbour's seven readables are built, each with its words' slot", readables.size() == 7
+		and slots.all(func(slot): return (lib["readables"] as Dictionary).has(slot)), "%d readables, slots %s" % [readables.size(), slots])
+
+	# C28 every word the harbour points at exists
+	var loot_names: Array = level.of("loot").map(func(m): return String(m["name"]))
+	var specials: Array = level.of("loot").filter(func(m): return bool(m["props"].get("special", false))).map(func(m): return String(m["name"]))
+	var took: Array = []
+
+	for goal in lib["goals"]:
+		if StringName(goal["district"]) == &"harbour":
+			for found in RegEx.create_from_string("took\\(([A-Za-z0-9_]+)\\)").search_all(String(goal["done"]) + " " + String(goal["shows"])):
+				took.append(found.get_string(1))
+
+	var leads: Array = level.of("exit").map(func(m): return "to(%s)" % String(m["props"].get("to", "")))
+	var bad_gates: Array = []
+
+	for gate in lib["gates"]:
+		if StringName(gate["district"]) == &"harbour":
+			for exit in gate["exits"]:
+				if String(exit).begins_with("to(") and not leads.has(exit):
+					bad_gates.append(exit)
+				elif not String(exit).begins_with("to(") and level.get_marker(String(exit)).is_empty():
+					bad_gates.append(exit)
+
+	var unknown: Array = took.filter(func(n): return not loot_names.has(n))
+	var unsought: Array = specials.filter(func(n): return not took.has(n))
+	_check("C28 every word the harbour points at exists: what a goal takes, each special a goal, each gate's way", unknown.is_empty()
+		and unsought.is_empty() and bad_gates.is_empty() and specials.size() == 3, "unknown %s, specials no goal takes %s, gates %s, specials %s" % [
+			unknown, unsought, bad_gates, specials])
+
+	# C29 each hail pair's rounds bring them within reach
+	var far: Array = []
+
+	for hail in city._hails():
+		# (A man's points against the way the other walks between his.)
+		var beat_a := _beat_of(level, String(hail[0]))
+		var beat_b := _beat_of(level, String(hail[1]))
+		var nearest := minf(_nearest_on_beat(beat_a, beat_b), _nearest_on_beat(beat_b, beat_a))
+
+		if nearest > float(hail[2]):
+			far.append("%s-%s %.1f m" % [hail[0], hail[1], nearest])
+
+	_check("C29 each hail pair's rounds bring them within reach of each other", far.is_empty() and not city._hails().is_empty(), "too far %s" % [far])
+
+	# (Baltasar's round, its points in order: C31, C32.)
+	var round: Array = level.of("waypoint").filter(func(m): return String(m["props"]["route"]) == "customs_round")
+	round.sort_custom(func(a, b): return int(a["props"]["order"]) < int(b["props"]["order"]))
+	var points: Array = round.map(func(m): return (m["transform"] as Transform3D).origin)
+	var office: Vector3 = (level.get_marker("office_door")["transform"] as Transform3D).origin
+	var landing := points.any(func(p): return (p as Vector3).distance_to(office) < 2.0 and (p as Vector3).y > office.y - 0.2)
+
+	# C33 the guards name the golden tower
+	var tower: Vector3 = (level.get_marker("lm_golden_tower")["transform"] as Transform3D).origin
+	var named := Comms.landmark_near(get_tree(), tower + Vector3(2.0, 0.0, 0.0))
+	_check("C33 a harbour guard's call-out names the golden tower", named == "the golden tower", "named '%s'" % named)
+
+	# C26 the ways up turn the player back without the seal (the map alone)
+	var hud: Node = player.get("hud")
+	var spawn: Vector3 = player.global_position
+	var said: Array = []
+
+	for area in get_tree().get_nodes_in_group(&"district_exit"):
+		if city.is_ancestor_of(area) and StringName(area.get_meta(&"to", &"")) == &"old_town":
+			city.set("_refused_at", -100.0)
+			hud.show_caption("", 0.0)
+			_put((area as Node3D).global_position, 0.0)
+			await _frames(6)
+			said.append(String(hud._caption.text))
+			_put(spawn, 0.0)
+			await _frames(4)
+
+	CityState.job.took_loot("the_seal", 250)
+	var sea_gate: Area3D = city.get_node_or_null("exit_sea_gate") as Area3D
+	hud.show_caption("", 0.0)
+	_put(sea_gate.global_position, 0.0)
+	await _frames(6)
+	var with_seal := String(hud._caption.text)
+	_put(spawn, 0.0)
+	await _frames(4)
+	_check("C26 by itself, no way up leads on without the seal (the thought said); with it, on", said.size() == 4
+		and said.all(func(t): return String(t).begins_with("<<")) and with_seal == "On to %s" % String(sea_gate.get_meta(&"label")),
+		"said %s, with the seal '%s'" % [said, with_seal])
+
+	# C30 the Sea Gate pair's hint is overheard
+	var rodrigo: Node = city.guards["Rodrigo"]
+	var tome: Node = city.guards["Tome"]
+	var dark := float(player.get("debug_light_level"))
+	player.set("debug_light_level", 0.0)
+	_put(Vector3(-55.0, 3.6, -63.5), PI)
+	await _frames(4)
+
+	for g in [rodrigo, tome]:
+		g.set_physics_process(true)
+		g.set_process(true)
+
+	var director: RefCounted = TalkDirector.of(rodrigo)
+	await _until(func(): return CityState.job.notes.has("ways_up"), 60 * 90)
+	_check("C30 the Sea Gate pair hail each other; the player in earshot learns the ways up", CityState.job.notes.has("ways_up")
+		and director.played().has("harbour_ways_up"), "notes %s, played %s" % [CityState.job.notes, director.played()])
+
+	for g in [rodrigo, tome]:
+		g.set_physics_process(false)
+		g.set_process(false)
+
+	player.set("debug_light_level", dark)
+
+	# C31 Baltasar's round walks, up to the office landing and out to the quay
+	var nav: RID = city.baker.get_navigation_map()
+	var gaps: Array = []
+
+	for i in points.size():
+		var from: Vector3 = points[i]
+		var to: Vector3 = points[(i + 1) % points.size()]
+		var path := NavigationServer3D.map_get_path(nav, from, to, true)
+		var reach := NavigationServer3D.map_get_closest_point(nav, to)
+
+		if path.is_empty() or path[path.size() - 1].distance_to(reach) > 0.5 or reach.distance_to(to) > 1.0:
+			gaps.append("%d->%d" % [i + 1, (i + 1) % points.size() + 1])
+
+	var front: Vector3 = (level.get_marker("customs_front")["transform"] as Transform3D).origin
+	var quay := points.any(func(p): return Vector2((p as Vector3).x - front.x, (p as Vector3).z - front.z).length() < 1.5)
+	# Walked, from its start, by the man himself: every point reached in turn
+	# and back to the first (a stair's foot once caught him: the navmesh's
+	# way is not always a body's).
+	var walker: Node3D = city.guards["Baltasar"]
+	walker.global_position = points[0]
+	walker.reset_physics_interpolation()
+	walker.set("_wait_timer", 0.0)
+	walker.set("_waypoint_index", 1)
+	walker.call("_go_to", points[1], true)
+	walker.set_physics_process(true)
+	walker.set_process(true)
+	var reached := {}
+	var walked := func() -> bool:
+		reached[int(walker.get("_waypoint_index"))] = true
+		return reached.size() == points.size() and int(walker.get("_waypoint_index")) == 1 and reached.has(0)
+	await _until(walked, 60 * 150)
+	walker.set_physics_process(false)
+	walker.set_process(false)
+	_check("C31 Baltasar's round walks all the way, on his feet: up to the office landing, to the shut front door (the quay's men pass outside it)",
+		gaps.is_empty() and landing and quay and reached.size() == points.size(), "%d points, navmesh gaps %s, landing %s, at the front door %s, reached %s" % [
+			points.size(), gaps, landing, quay, reached.keys()])
+
+	# C32 a careless theft is found: office door and strongbox left open
+	var door: Node = made["doors"]["office_door"]
+	var chest: Node = made["chests"]["seal_chest"]
+	var seal: Node = made["pickups"]["the_seal"]
+	var candle: Node = made["lights"].get("office_candle")
+
+	if candle != null and is_instance_valid(candle) and candle.has_method("is_lit") and not candle.is_lit():
+		candle.relight()
+
+	_put(door.global_position + Vector3(0.0, 1.05, 1.5), 0.0)
+	await _frames(2)
+	door.set("locked", false)
+
+	if not bool(door.get("is_open")):
+		door.frob(player)
+
+	chest.set("locked", false)
+
+	if not bool(chest.get("is_open")):
+		chest.frob(player)
+
+	if is_instance_valid(seal) and seal.get("taken") != true:
+		seal.frob(player)
+
+	_put(spawn, 0.0)
+	# (The office door swung open, before he comes.)
+	await _seconds(1.5)
+	var rung: Array = []
+	var bell: Node = null
+
+	for b in get_tree().get_nodes_in_group(&"alarm_bells"):
+		if city.is_ancestor_of(b) and b.name == "tower_bell":
+			bell = b
+
+	if bell != null:
+		bell.rung.connect(func(by): rung.append(by))
+
+	var baltasar: Node3D = city.guards["Baltasar"]
+	var gaspar: Node3D = city.guards["Gaspar"]
+	# On his round from the hall, as he walks it: he finds the office door
+	# open, looks in before he shuts it, and sees the strongbox.
+	baltasar.global_position = points[0]
+	baltasar.reset_physics_interpolation()
+	baltasar.set("alert", 0.0)
+	baltasar.set("has_last_known", false)
+	baltasar.call("_set_state", 0)
+	baltasar.set("_wait_timer", 0.0)
+	baltasar.set("_waypoint_index", 1)
+	baltasar.call("_go_to", points[1], true)
+	LightProbe.invalidate()
+
+	for g in [baltasar, gaspar]:
+		g.set_physics_process(true)
+		g.set_process(true)
+
+	await _until(func(): return CityState.job.fact(&"harbour", &"theft_noticed") == true and not rung.is_empty(), 60 * 150)
+	_check("C32 a careless theft in the harbour is found on the watchman's round (the office door looked through): the alarm, the tower's bell", CityState.job.fact(&"harbour", &"theft_noticed") == true
+		and not rung.is_empty(), "theft %s, bell %s rung by %s" % [CityState.job.fact(&"harbour", &"theft_noticed"), bell != null,
+			rung.map(func(r): return r.name if r != null else "-")])
+	_freeze(true)
+
+
+## The nearest any of `points` comes to the way walked round `beat` (its
+## waypoints in order, the last back to the first).
+func _nearest_on_beat(points: Array, beat: Array) -> float:
+	var nearest := INF
+
+	for p in points:
+		for i in beat.size():
+			var a: Vector3 = beat[i]
+			var b: Vector3 = beat[(i + 1) % beat.size()]
+			nearest = minf(nearest, (p as Vector3).distance_to(Geometry3D.get_closest_point_to_segment(p, a, b)))
+
+	return nearest
+
+
+## Where `who` (a guard's marker) goes: his round's waypoints, or his post.
+func _beat_of(level: LevelLoader.Level, who: String) -> Array:
+	var m: Dictionary = level.get_marker(who)
+	var route := String(m["props"].get("route", ""))
+
+	if route == "":
+		return [(m["transform"] as Transform3D).origin]
+
+	var round: Array = level.of("waypoint").filter(func(w): return String(w["props"]["route"]) == route)
+	round.sort_custom(func(a, b): return int(a["props"]["order"]) < int(b["props"]["order"]))
+	return round.map(func(w): return (w["transform"] as Transform3D).origin)
+
+
 func _drawn(root: Node, name: String) -> Array[GeometryInstance3D]:
 	var out: Array[GeometryInstance3D] = []
 	var node := root.find_child(name, true, false)

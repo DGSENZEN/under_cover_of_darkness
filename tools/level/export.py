@@ -27,6 +27,7 @@ from mathutils.bvhtree import BVHTree  # noqa: E402
 import check as checker  # noqa: E402
 import common  # noqa: E402
 import geo  # noqa: E402
+import kit_glazing  # noqa: E402
 import kit_recipes  # noqa: E402
 import markers as schema  # noqa: E402
 import proxy  # noqa: E402
@@ -158,7 +159,8 @@ def manifest(data):
             "pieces": len(data["pieces"]), "ranges": ranges, "terrain": ground, "shadowless": kit_recipes.shadowless(data["pieces"]),
             "roofed": _roofed_and_merged(data),
             "merged": [{"name": g["name"], "members": g["members"]} for g in _groups(data)],
-            "loose": bodies}
+            "loose": bodies,
+            "windows": kit_glazing.world_windows(data["pieces"], kit_recipes.PIECES)}
 
 
 def _subdivide(mesh):

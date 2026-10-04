@@ -19,6 +19,12 @@ signal rattled
 @export var container_name := "chest"
 
 var is_open := false
+## The precious things that lay in it when the level was made (their names;
+## LevelGameplay.fill_chests): taken, the chest is robbed.
+var held_specials: Array[String] = []
+var _held: Array[WeakRef] = []
+## Who last opened or shut it (a guard shutting what you left open).
+var _opened_by: WeakRef = null
 var _target_angle := 0.0
 var _lid: AnimatableBody3D
 ## load_state's: set the lid at its target on the next tick.
@@ -26,6 +32,8 @@ var _snap := false
 
 
 func _ready() -> void:
+	# (The guards look over every chest for one left open: GuardLife.)
+	add_to_group(&"chests")
 	_lid = get_node_or_null("Lid") as AnimatableBody3D
 
 
@@ -69,10 +77,44 @@ func frob(player: Node) -> void:
 			return
 
 	is_open = not is_open
+	_opened_by = weakref(player) if player != null else null
 
 	if is_open:
 		Sfx.play(self, &"chest_open", global_position)
 	_target_angle = deg_to_rad(open_degrees) if is_open else 0.0
+
+
+func opened_by() -> Node:
+	return _opened_by.get_ref() as Node if _opened_by != null else null
+
+
+## Open, and not by one of the guards: someone has been in it.
+func left_open() -> bool:
+	if not is_open:
+		return false
+
+	# (A man knocked out has left the guards' group: what he opened is still a
+	# guard's doing, as with doors.)
+	var who := opened_by()
+	return who == null or not who.is_in_group(&"guards") and who.get("_knocked_out") == null
+
+
+## `loot` (something precious) lies in it.
+func hold_special(loot: Node) -> void:
+	held_specials.append(String(loot.name))
+	_held.append(weakref(loot))
+
+
+## Something precious that lay in it is gone: taken, or never made again
+## (the district come back to remembers it taken).
+func robbed() -> bool:
+	for ref in _held:
+		var loot: Object = ref.get_ref()
+
+		if loot == null or (loot as Node).is_queued_for_deletion() or loot.get("taken") == true:
+			return true
+
+	return false
 
 
 ## What was done to it, for the district's memory: open or shut, locked or not.

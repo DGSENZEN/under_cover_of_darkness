@@ -20,6 +20,7 @@ to the quay, y up from the quay's top; its walls' outer faces at x -12 and
 import math
 
 import geo
+import kit_glazing as kg
 import kit_iberian as ki
 import kit_recipes as k
 import kit_shapes as ks
@@ -62,13 +63,17 @@ def col(cx, cy, cz, sx, sy, sz, yaw=0.0, pitch=0.0, roll=0.0, surface="stone"):
     return [cx, cy, cz, sx, sy, sz, surface, yaw, pitch, roll]
 
 
-def _piece(name, slot, shapes, cols, middle, size, budget, surface="stone"):
-    """A piece drawn in the house's frame, stored about `middle`."""
+def _piece(name, slot, shapes, cols, middle, size, budget, surface="stone", windows=None):
+    """A piece drawn in the house's frame, stored about `middle`; its glazed
+    windows' records (kit_glazing) moved with it."""
     offset = (-middle[0], -middle[1], -middle[2])
     k.piece(name, "iberian", slot, surface, [], cols=[[c[0] + offset[0], c[1] + offset[1], c[2] + offset[2]] + c[3:] for c in cols], size=size)
     k.model(name, ks.moved(shapes, 0.0, offset))
     k.PIECES[name]["budget"] = budget
     PIECE_AT[name] = list(middle)
+
+    if windows:
+        k.PIECES[name]["windows"] = kg.moved(windows, 0.0, offset)
 
 
 # Ornament: rope, spheres, points
@@ -131,15 +136,13 @@ def _bicos(x0, x1, y0, y1, z, holes):
 
 def _window(x, sill, z, width=1.0, height=1.7, lit=False, flush=False):
     """A Manueline window in a face at z (looking +z): its round head, a
-    carved rope up its jambs and round its head, its sill on a corbel, its
-    casement back in the reveal (`flush`: on the face of a solid body), an
-    armillary sphere over it."""
+    carved rope up its jambs and round its head, its sill on a corbel, an
+    armillary sphere over it. Glazed through the wall (kit_glazing, the
+    caller's) unless `flush`: a casement on the face of a solid body (the
+    tower's), lit or dark."""
     r = width / 2.0
     spring = sill + height - r
-    back = 0.015 if flush else 0.2
-    out = [ks.card(x, sill + (height - r) / 2.0, z - back, width, height - r, "glass_lit" if lit else "glass_dark"),
-           ks.card(x, sill + (height - r) / 2.0, z - back + 0.01, width, height - r, "casement"),
-           ks.disc(x, spring, z - back - 0.015, r, 8, "glass_lit" if lit else "glass_dark")]
+    out = []
 
     if flush:
         out = [ks.card(x, sill + (height - r) / 2.0, z + 0.01, width, height - r, "glass_lit" if lit else "glass_dark"),
@@ -148,15 +151,8 @@ def _window(x, sill, z, width=1.0, height=1.7, lit=False, flush=False):
     out += _rope([[x - r - 0.08, sill, z + 0.05], [x - r - 0.08, spring, z + 0.05]], 0.07)
     out += _rope([[x + r + 0.08, sill, z + 0.05], [x + r + 0.08, spring, z + 0.05]], 0.07)
     out.append(ks.ring(x, spring, z + 0.05, r + 0.02, r + 0.16, 0.12, 0.0, 180.0, 8, "rope_lay"))
-
-    if not flush:
-        # The reveal's head (the round's soffit), its jambs.
-        out.append(ks.ring(x, spring, z - 0.1, r, r + 0.02, 0.2, 0.0, 180.0, 8, "ashlar_gold"))
-
-        for s in (-1.0, 1.0):
-            out.append(ks.box(x + s * (r + 0.01), sill + (height - r) / 2.0, z - 0.1, 0.02, height - r, 0.2, "ashlar_gold"))
-
-    out.append(ks.box(x, sill - 0.06, z + 0.06, width + 0.4, 0.12, 0.26, "granite"))
+    # (The sill stands out from the face, 1 mm proud of the reveal's.)
+    out.append(ks.box(x, sill - 0.06, z + 0.131, width + 0.4, 0.12, 0.26, "granite"))
     out.append(ks.box(x, sill - 0.24, z + 0.05, 0.36, 0.24, 0.16, "granite"))
     out += _sphere(x, spring + r + 0.42, z + 0.1, 0.17)
     return out
@@ -263,35 +259,23 @@ def _triangles(outline):
 # The hall's front behind the loggia: the portal, the barred windows
 
 def _portal_wall():
-    shapes, cols = [], []
     z0, z1 = HALL_FRONT - WALL, HALL_FRONT
     zc = (z0 + z1) / 2.0
     door_x, door_w, door_h = PORTAL
     sill, head, ww = 1.0, 2.4, 1.0
-    cuts = [(x - ww / 2.0, x + ww / 2.0, sill, head) for x in BARRED] + [(door_x - door_w / 2.0, door_x + door_w / 2.0, 0.0, door_h)]
-    cuts.sort()
-    x = BAYS[0]
+    # The wall round its barred windows (glazed behind their grilles) and
+    # the portal; its colliders split round them, the glass's in each.
+    cuts = [kg.hole(x, sill, ww, head - sill) for x in BARRED] + [(door_x - door_w / 2.0, door_x + door_w / 2.0, 0.0, door_h)]
+    shapes, cols = kg.strips(BAYS[0], BAYS[-1], 0.0, UP, zc, WALL, cuts, "granite", open=[cuts[-1]])
+    records = []
 
-    for c0, c1, lo, hi in cuts + [(BAYS[-1], BAYS[-1], 0.0, 0.0)]:
-        if c0 > x + 1e-6:
-            shapes.append(ks.box((x + c0) / 2.0, UP / 2.0, zc, c0 - x, UP, WALL, "granite"))
-            cols.append(col((x + c0) / 2.0, UP / 2.0, zc, c0 - x, UP, WALL))
-
-        if c1 > c0:
-            if lo > 0.0:
-                shapes.append(ks.box((c0 + c1) / 2.0, lo / 2.0, zc, c1 - c0, lo, WALL, "granite"))
-            shapes.append(ks.box((c0 + c1) / 2.0, (hi + UP) / 2.0, zc, c1 - c0, UP - hi, WALL, "granite"))
-            # (A barred window stops a man: its whole height solid.)
-            cols.append(col((c0 + c1) / 2.0, (hi + UP) / 2.0 if lo == 0.0 else UP / 2.0, zc, c1 - c0, UP - hi if lo == 0.0 else UP, WALL))
-
-        x = max(x, c1)
-
-    # The barred windows: granite frames, the grille, dark behind.
     for x in BARRED:
-        shapes += ki._frame(x, sill, z1, ww, head - sill)
-        shapes.append(ks.card(x, (sill + head) / 2.0, zc, ww, head - sill, "window_grille"))
-        shapes.append(ks.card(x, (sill + head) / 2.0, z0 + 0.05, ww, head - sill, "glass_dark"))
-        shapes.append(ks.box(x, sill - 0.05, z1 + 0.08, ww + 0.36, 0.1, 0.18, "granite"))
+        glass, glass_cols, record = kg.glazed(x, sill, ww, head - sill, z1, WALL, lead="grille", slot="granite", inner_slot="granite")
+        shapes += glass
+        cols += glass_cols
+        records.append(record)
+        shapes += ki._frame(x, sill, z1 + 0.011, ww, head - sill)
+        shapes.append(ks.box(x, sill - 0.05, z1 + 0.091, ww + 0.36, 0.1, 0.18, "granite"))
 
     # The portal: twisted colonnettes on their bases, capitals with a
     # sphere on each, the lintel, the king's arms in the tympanum under a
@@ -308,16 +292,18 @@ def _portal_wall():
                    ks.prism(px, door_h + 0.55, z1 + 0.06, 0.09, 0.5, 4, "ashlar_gold", 45.0, top=0.0)]
 
     shapes.append(ks.box(door_x, door_h + 0.12, z1 + 0.06, door_w + 0.2, 0.24, 0.14, "ashlar_gold"))
-    shapes.append(ks.disc(door_x, door_h + 0.24, z1 + 0.02, r, 10, "ashlar_gold"))
+    # (The tympanum a half round on the lintel: a whole disc hung down into
+    # the doorway.)
+    shapes.append(ks.polygon([[door_x + r * math.cos(math.pi * i / 10), door_h + 0.24 + r * math.sin(math.pi * i / 10), z1 + 0.02]
+                              for i in range(11)], "ashlar_gold"))
     shapes.append(ks.card(door_x, door_h + 0.24 + r * 0.42, z1 + 0.06, r * 1.15, r * 1.15, "arms_royal"))
     shapes.append(ks.ring(door_x, door_h + 0.24, z1 + 0.08, r, r + 0.13, 0.12, 0.0, 180.0, 10, "rope_lay"))
-    return shapes, cols
+    return shapes, cols, records
 
 
 # Over the loggia: the diamond-pointed front
 
 def _upper_front():
-    shapes, cols = [], []
     z0, z1 = Z1 - 0.5, Z1
     zc = (z0 + z1) / 2.0
     lx, lw, lh = LOADING
@@ -325,44 +311,19 @@ def _upper_front():
     sill = UP + 0.6
     wr = 0.5
     head = sill + 1.7
-    # The body in strips across, cut for each window (to its round's top)
-    # and the loading door; its colliders whole (a window stops a man).
-    cuts = [(x - wr, x + wr, sill, head) for x in WINDOWS] + [(lx - lw / 2.0, lx + lw / 2.0, UP, UP + lh)]
-    cuts.sort()
-    x = x0
-
-    for c0, c1, lo, hi in cuts + [(x1, x1, 0.0, 0.0)]:
-        if c0 > x + 1e-6:
-            shapes.append(ks.box((x + c0) / 2.0, (UP + EAVES) / 2.0, zc, c0 - x, EAVES - UP, 0.5, "ashlar_gold"))
-
-        if c1 > c0:
-            if lo > UP:
-                shapes.append(ks.box((c0 + c1) / 2.0, (UP + lo) / 2.0, zc, c1 - c0, lo - UP, 0.5, "ashlar_gold"))
-
-            shapes.append(ks.box((c0 + c1) / 2.0, (hi + EAVES) / 2.0, zc, c1 - c0, EAVES - hi, 0.5, "ashlar_gold"))
-
-        x = max(x, c1)
+    # The body round its windows (glazed through it: the moon goes in) and
+    # the loading door; its colliders split round them, the glass's in each.
+    cuts = [kg.hole(x, sill, 2.0 * wr, head - sill) for x in WINDOWS] + [(lx - lw / 2.0, lx + lw / 2.0, UP, UP + lh)]
+    shapes, cols = kg.strips(x0, x1, UP, EAVES, zc, 0.5, cuts, "ashlar_gold", open=[cuts[-1]])
+    records = []
 
     for x in WINDOWS:
-        # (Over the round head, the square's two corners filled, both faces.)
-        spring = head - wr
+        glass, glass_cols, record = kg.glazed(x, sill, 2.0 * wr, head - sill, z1, 0.5, shape="round", lead="quarries", slot="ashlar_gold",
+                                              inner_slot="ashlar_gold")
+        shapes += glass
+        cols += glass_cols
+        records.append(record)
 
-        for side in (-1.0, 1.0):
-            corner = [(x + side * wr, spring), (x + side * wr, head)] + [(x + wr * math.cos(math.radians(a)), spring + wr * math.sin(math.radians(a)))
-                                                                         for a in ([90.0 - 15.0 * i for i in range(7)] if side > 0
-                                                                                   else [90.0 + 15.0 * i for i in range(7)])]
-            for zz, look in ((z1, 1.0), (z0, -1.0)):
-                for tri in _triangles(corner):
-                    pts = [[corner[t][0], corner[t][1], zz] for t in tri]
-
-                    if ks._normal(pts)[2] * look < 0.0:
-                        pts = pts[::-1]
-
-                    shapes.append(ks.polygon(pts, "ashlar_gold"))
-
-    cols.append(col((x0 + lx - lw / 2.0) / 2.0, (UP + EAVES) / 2.0, zc, lx - lw / 2.0 - x0, EAVES - UP, 0.5))
-    cols.append(col((lx + lw / 2.0 + x1) / 2.0, (UP + EAVES) / 2.0, zc, x1 - lx - lw / 2.0, EAVES - UP, 0.5))
-    cols.append(col(lx, (UP + lh + EAVES) / 2.0, zc, lw, EAVES - UP - lh, 0.5))
     holes = [(x - 0.75, x + 0.75, sill - 0.5, sill + 2.4) for x in WINDOWS]
     px, pw, ph = PANEL
     py = UP + 1.6
@@ -381,10 +342,11 @@ def _upper_front():
         shapes.append(ks.box(px + dx, py + dy, z1 + 0.05, sx, sy, 0.1, "granite"))
 
     # The loading door: its frame, its threshold out over the loggia's
-    # course, the dark of the store inside, its leaves folded back in.
-    shapes += ki._frame(lx, UP, z1 - 0.04, lw, lh)
+    # course, its leaves folded back in; open through (the harbour seen
+    # from the store, the store from the quay).
+    # (Its frame stands on the face, 1 mm proud: not in the reveal's plane.)
+    shapes += ki._frame(lx, UP, z1 + 0.011, lw, lh)
     shapes.append(ks.box(lx, UP + 0.05, z1 + 0.15, lw + 0.3, 0.1, 0.3, "granite"))
-    shapes.append(ks.card(lx, UP + lh / 2.0, z0 + 0.02, lw, lh, "glass_dark"))
 
     for s in (-1.0, 1.0):
         shapes.append(ks.box(lx + s * (lw / 2.0 - 0.04), UP + lh / 2.0, z0 - 0.3, 0.06, lh, 0.68, "door_1"))
@@ -393,7 +355,7 @@ def _upper_front():
     for bottom, top, reach in ki.CORNICE:
         shapes.append(ks.box((x0 + x1) / 2.0, EAVES - (bottom + top) / 2.0, z1 + (reach - 0.15) / 2.0, x1 - x0, bottom - top, reach + 0.15, "granite"))
 
-    return shapes, cols
+    return shapes, cols, records
 
 
 # The tower on the front's west corner
@@ -491,56 +453,74 @@ def _side(length, openings, door=None):
     """A side wall along x from 0 to `length`, its outer face at z 0
     (looking +z), WALL thick back to -WALL, two storeys: `openings` [x]
     (barred below, a casement above), `door` (x) a door on the ground."""
-    shapes = [ks.box(length / 2.0, EAVES / 2.0, -WALL / 2.0, length, EAVES, WALL, "whitewash"),
-              ks.box(length / 2.0, 0.3, 0.05, length, 0.6, 0.1, "granite"), ks.box(length / 2.0, UP, 0.06, length, 0.16, 0.12, "granite")]
-    cols = [col(length / 2.0, EAVES / 2.0, -WALL / 2.0, length, EAVES, WALL)]
+    holes = [h for x in openings for h in (kg.hole(x, 1.2, 0.9, 1.2), kg.hole(x, UP + 0.9, 0.9, 1.5))]
+
+    if door is not None:
+        holes.append(kg.hole(door, 0.0, 1.2, 2.2))
+
+    shapes, cols = kg.strips(0.0, length, 0.0, EAVES, -WALL / 2.0, WALL, holes, "whitewash", open=holes[-1:] if door is not None else [])
+    shapes.append(ks.box(length / 2.0, UP, 0.06, length, 0.16, 0.12, "granite"))
+    records = []
+
+    # The plinth along its foot, broken for the door.
+    runs = [(0.0, length)] if door is None else [(0.0, door - 0.6), (door + 0.6, length)]
+
+    for a, b in runs:
+        shapes.append(ks.box((a + b) / 2.0, 0.3, 0.05, b - a, 0.6, 0.1, "granite"))
 
     for x in openings:
-        shapes += ki._frame(x, 1.2, 0.0, 0.9, 1.2)
-        shapes.append(ks.card(x, 1.8, -0.2, 0.9, 1.2, "window_grille"))
-        shapes.append(ks.card(x, 1.8, -0.25, 0.9, 1.2, "glass_dark"))
-        shapes.append(ks.box(x, 1.15, 0.08, 1.2, 0.1, 0.18, "granite"))
-        shapes += ki._frame(x, UP + 0.9, 0.0, 0.9, 1.5)
-        shapes.append(ks.card(x, UP + 1.65, -0.2, 0.9, 1.5, "casement"))
-        shapes.append(ks.card(x, UP + 1.65, -0.21, 0.9, 1.5, "glass_dark"))
-        shapes.append(ks.box(x, UP + 0.85, 0.1, 1.2, 0.1, 0.22, "granite"))
+        # Barred below, a casement above, both glazed through the wall.
+        for sill, height, lead in ((1.2, 1.2, "grille"), (UP + 0.9, 1.5, "casement")):
+            glass, glass_cols, record = kg.glazed(x, sill, 0.9, height, 0.0, WALL, lead=lead, slot="whitewash", inner_slot="whitewash")
+            shapes += glass
+            cols += glass_cols
+            records.append(record)
+
+        # (Frames and sills on the face, 1 mm proud: not in the reveals'
+        # planes, where they would flicker.)
+        shapes += ki._frame(x, 1.2, 0.011, 0.9, 1.2)
+        shapes.append(ks.box(x, 1.15, 0.091, 1.2, 0.1, 0.18, "granite"))
+        shapes += ki._frame(x, UP + 0.9, 0.011, 0.9, 1.5)
+        shapes.append(ks.box(x, UP + 0.85, 0.111, 1.2, 0.1, 0.22, "granite"))
 
         for s in (-1.0, 1.0):
             shapes.append(ks.card(x + s * 0.72, UP + 1.65, 0.03, 0.45, 1.5, "shutters"))
 
     if door is not None:
-        shapes += ki._frame(door, 0.0, 0.0, 1.2, 2.2)
+        shapes += ki._frame(door, 0.0, 0.011, 1.2, 2.2)
         shapes.append(ks.box(door, 2.6, 0.08, 1.6, 0.1, 0.18, "granite"))
 
-    return shapes, cols
+    return shapes, cols, records
 
 
 def _west_wall():
     x0, x1, z0, z1 = TOWER
     length = z0 - Z0
-    shapes, cols = _side(length, [length - 4.0, length - 10.0, length - 16.0])
+    shapes, cols, records = _side(length, [length - 4.0, length - 10.0, length - 16.0])
     # (Turned so its face looks west, from the back's corner to the tower.)
     shapes = ks.moved(shapes, -90.0, (X0, 0.0, Z0))
     cols = [_turned(c, -90.0, (X0, 0.0, Z0)) for c in cols]
+    records = kg.moved(records, -90.0, (X0, 0.0, Z0))
     shapes += _quoins(X0, Z0, 0.6, EAVES, -1.0, -1.0)
 
     for bottom, top, reach in ki.CORNICE:
         shapes.append(ks.box(X0 - (reach - 0.15) / 2.0, EAVES - (bottom + top) / 2.0, (Z0 + z0) / 2.0, reach + 0.15, bottom - top, z0 - Z0, "granite"))
 
-    return shapes, cols
+    return shapes, cols, records
 
 
 def _back_wall():
     length = X1 - X0
     # (Its door at x 8: turned, the side's x runs back from the east.)
-    shapes, cols = _side(length, [6.0, 12.0, 18.0], door=X1 - 8.0)
+    shapes, cols, records = _side(length, [6.0, 12.0, 18.0], door=X1 - 8.0)
     shapes = ks.moved(shapes, 180.0, (X1, 0.0, Z0))
     cols = [_turned(c, 180.0, (X1, 0.0, Z0)) for c in cols]
+    records = kg.moved(records, 180.0, (X1, 0.0, Z0))
 
     for bottom, top, reach in ki.CORNICE:
         shapes.append(ks.box(0.0, EAVES - (bottom + top) / 2.0, Z0 - (reach - 0.15) / 2.0, length, bottom - top, reach + 0.15, "granite"))
 
-    return shapes, cols
+    return shapes, cols, records
 
 
 def _turned(c, yaw, offset):
@@ -814,13 +794,14 @@ for _name, _maker, _slot, _budget in (("customs_loggia", _loggia, "granite", 290
                                       ("customs_west_wall", _west_wall, "whitewash", 900), ("customs_back_wall", _back_wall, "whitewash", 900),
                                       ("customs_roof", _roof, "roof_spanish", 9000), ("customs_office", _office, "whitewash", 300),
                                       ("customs_hall_frame", _hall_frame, "beam", 600)):
-    _shapes, _cols = _maker()
+    _made = _maker()
+    _shapes, _cols = _made[0], _made[1]
     _part = ks.build(_shapes)
     _lo = [min(v[i] for v in _part["verts"]) for i in range(3)]
     _hi = [max(v[i] for v in _part["verts"]) for i in range(3)]
     _middle = [(_lo[0] + _hi[0]) / 2.0, 0.0, (_lo[2] + _hi[2]) / 2.0]
     _size = [_hi[0] - _lo[0] + 0.1, _hi[1] - _lo[1] + 0.1, _hi[2] - _lo[2] + 0.1]
-    _piece(_name, _slot, _shapes, _cols, _middle, _size, _budget)
+    _piece(_name, _slot, _shapes, _cols, _middle, _size, _budget, windows=_made[2] if len(_made) > 2 else None)
 
 _shapes, _cols = _stair()
 k.piece("customs_stair", "iberian", "granite", "stone", [], cols=_cols, size=[STAIR[3] + 0.4, STAIR[0] * STAIR[1] + 1.0, STAIR[0] * STAIR[2] + 0.2])

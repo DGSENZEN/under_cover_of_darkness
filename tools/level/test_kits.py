@@ -15,6 +15,7 @@ import geo  # noqa: E402
 import kit_harbour  # noqa: E402
 import kit_recipes  # noqa: E402
 import kit_shapes  # noqa: E402
+import kit_ships  # noqa: E402
 import rules  # noqa: E402
 
 
@@ -563,19 +564,23 @@ class Harbour(unittest.TestCase):
         self.assertTrue(all(abs(b[0] - a[0] - kit_recipes.RISER) < 1e-6 for a, b in zip(steps, steps[1:])))
 
     def test_a_shroud_climber_comes_up_within_reach_of_his_top(self):
-        # A climb's wall is its box's middle (ClimbVolume.get_plane_point):
-        # the climber hangs 0.38 m out from it (his radius and climb_distance).
-        # Up the shrouds he must pass the top clear of it overhead, and come
-        # up within the scanner's reach (1.2 m) of its edge to mantle onto it.
+        # A climb's plane is its box's middle (ClimbVolume.get_plane_point):
+        # the climber on its front hangs kit_ships.CLIMBER_OUT square off it
+        # (his radius, 0.5, and climb_distance). Up the shrouds he must pass
+        # the top clear of it overhead, and come up within the scanner's reach
+        # (1.2 m) of its edge, its floor within a mantle (1.4 m) of his feet.
         rig = kit_recipes.PIECES["carrack_rig"]
         tops = [c for c in rig["cols"] if c[4] <= 0.15]
 
         for c in rig["climbs"]:
             top = min(tops, key=lambda t: abs(t[0] - c[0]))
             half = top[5] / 2.0
-            hangs = abs(c[2]) + 0.38
-            self.assertGreaterEqual(hangs - 0.3, half + 0.05, c)
-            self.assertLessEqual(hangs - half, 1.0, c)
+            lean = math.radians(-c[7])
+            out = abs(c[2]) - math.sin(lean) * c[4] / 2.0 + math.cos(lean) * kit_ships.CLIMBER_OUT
+            middle = c[1] + math.cos(lean) * c[4] / 2.0 + math.sin(lean) * kit_ships.CLIMBER_OUT
+            self.assertGreaterEqual(out - 0.5, half + 0.05, c)
+            self.assertLessEqual(out - half, 1.0, c)
+            self.assertLessEqual(top[1] + top[4] / 2.0 - (middle - 1.0), 1.4, c)
 
     def test_the_mole_is_walked_and_its_parapet_climbed(self):
         # (The mole is swept along its line, layouts/harbour/mole.py; its

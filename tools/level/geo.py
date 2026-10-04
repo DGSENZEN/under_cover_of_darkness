@@ -210,7 +210,8 @@ def piece_boxes(recipe, position, basis, which="cols"):
         centre = add(position, apply(basis, b[0:3]))
         box = Box(centre, mul(basis, local_rot), b[3:6], b[6] if len(b) > 6 else "")
         if which == "cols":
-            box.occluder = index not in recipe.get("occlusion_exclude", [])
+            # (Glass is seen through: it never hides what is behind it.)
+            box.occluder = index not in recipe.get("occlusion_exclude", []) and box.surface != "glass"
         out.append(box)
 
     return out

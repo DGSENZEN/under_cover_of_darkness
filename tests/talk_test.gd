@@ -22,6 +22,9 @@ const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const GuardStationScript := preload("res://scripts/AISystem/GuardStation.gd")
 const GuardVoiceScript := preload("res://scripts/AISystem/GuardVoice.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const JobBook := preload("res://scripts/Level/JobBook.gd")
+const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
+const Earshot := preload("res://scripts/AISystem/Talk/Earshot.gd")
 
 ## Conversations for the director's own checks, so they do not hang on the
 ## writing.
@@ -185,6 +188,8 @@ func _run() -> void:
 	await _voices_of_men()
 	await _fight_talk()
 	await _review_fixes()
+	await _job_talk()
+	await _harbour_talk()
 	GuardScript.randomize_on = true
 
 
@@ -194,8 +199,8 @@ func _files() -> void:
 	# T1 the talk files load clean
 	var lib := TalkScript.load_dir()
 	var cast: Dictionary = lib["cast"]
-	_check("T1 the talk files load clean, the cast sheet has all twelve and its ties run both ways where they should",
-		lib["errors"].is_empty() and lib["conversations"].size() >= 13 and cast.size() == 12
+	_check("T1 the talk files load clean, the cast sheet has the garrison's twelve and the harbour's nine, its ties run both ways where they should",
+		lib["errors"].is_empty() and lib["conversations"].size() >= 13 and cast.size() == 21
 		and "Jory" in cast["Osric"]["ties"]["kin"] and "Osric" in cast["Jory"]["ties"]["kin"]
 		and "Col" in cast["Piers"]["ties"]["owes"] and not ("Piers" in cast["Col"]["ties"]["owes"])
 		and cast["Mirelle"]["rank"] == 4 and "captain" in cast["Mirelle"]["traits"],
@@ -234,16 +239,20 @@ func _writing() -> void:
 	var sheet: Dictionary = lib["cast"]
 	var cast: Array = (load("res://maps/npc_showcase.gd") as GDScript).get("CAST")
 
-	# T34 every conversation can be cast from the showcase's men
+	# T34 every conversation can be cast from the showcase's men (those had in
+	# the garrison: a district's are cast from its own men)
 	var uncastable := []
 
 	for conv in lib["conversations"]:
+		if not StringName(conv["where"]) in [&"", &"garrison"]:
+			continue
+
 		var men := _showcase_men(cast, sheet, StringName(conv["place"]))
 
 		if TalkFacts.cast_parts(conv, men, {}).is_empty():
 			uncastable.append(conv["id"])
 
-	_check("T34 every conversation, remark and call can be cast from the showcase's men", uncastable.is_empty(), str(uncastable))
+	_check("T34 every conversation, remark and call had in the garrison can be cast from the showcase's men", uncastable.is_empty(), str(uncastable))
 
 	# T35 enough of each
 	var counts := {}
@@ -1018,6 +1027,201 @@ A: Hm.
 
 
 ## The file a conversation comes from ("at_ease", "unease"...).
+# The job's talk (the harbour's job plan, Task 9)
+
+## Conversations that know where they are, and lines worth noting.
+const JOB_FIXTURES := """
+== in_the_yard
+where: garrison
+cast: A = any; B = any
+cooldown: 0s
+A: The yard is cold.
+B: The yard is always cold.
+
+== on_the_quay
+where: harbour
+cast: A = any; B = any
+cooldown: 0s
+A: The quay is cold.
+B: The quay is always cold.
+
+== anywhere
+cast: A = any; B = any
+cooldown: 0s
+A: Cold.
+B: Always.
+
+== noted_pair
+cast: A = any; B = any
+cooldown: 0s
+A [note:office_key]: The key's kept downstairs.
+B: Is it now.
+"""
+
+
+func _job_talk() -> void:
+	await _fresh()
+	CityState.begin()
+	var lib := TalkScript.parse(JOB_FIXTURES, "job_fixtures")
+	var director: RefCounted = TalkDirector.of(self)
+	director.use_library(lib)
+	var conv := func(id: String) -> Dictionary: return _conv(lib, id)
+	CityState.job.here = &"harbour"
+	var in_harbour := [director._available(conv.call("in_the_yard")), director._available(conv.call("on_the_quay")),
+		director._available(conv.call("anywhere"))]
+	CityState.job.here = &""
+	var in_garrison := [director._available(conv.call("in_the_yard")), director._available(conv.call("on_the_quay")),
+		director._available(conv.call("anywhere"))]
+	_check("T50 where: keeps a conversation to its place (the garrison's out of the harbour, the harbour's out of the garrison)",
+		lib["errors"].is_empty() and in_harbour == [false, true, true] and in_garrison == [true, false, true],
+		"errors %s, in the harbour %s, in the garrison %s" % [lib["errors"], in_harbour, in_garrison])
+
+	CityState.job.arrive(&"harbour")
+	var before := TalkFacts.holds("done(seal)", TalkFacts.world([], get_tree()))
+	CityState.job.took_loot("the_seal", 250)
+	var after := TalkFacts.holds("done(seal)", TalkFacts.world([], get_tree()))
+	var quiet := TalkFacts.holds("theft_noticed", TalkFacts.world([], get_tree()))
+	CityState.job.notice_theft()
+	var stolen := TalkFacts.holds("theft_noticed", TalkFacts.world([], get_tree()))
+	var known := TalkFacts.known("done(seal)", false) and TalkFacts.known("theft_noticed", false) and TalkFacts.known("situation:hail", false)
+	_check("T51 done() and theft_noticed are facts a conversation can ask", not before and after and not quiet and stolen and known,
+		"done %s->%s, theft %s->%s, known %s" % [before, after, quiet, stolen, known])
+
+	# T52 a noted line is learnt in earshot, not through a wall, not far off
+	CityState.begin()
+	CityState.job.arrive(&"harbour")
+	var a := _guard(Vector3(160, 0, 0), 0.0)
+	var b := _guard(Vector3(161.5, 0, 0), 0.0)
+	await _frames(10)
+	player.global_position = Vector3(160.5, 1.05, 5.0)
+	await _frames(3)
+	director.play("noted_pair", {"A": a, "B": b})
+	await _until(func(): return director.played().has("noted_pair") and director.talks().is_empty(), 60 * 15)
+	var near_heard: bool = CityState.job.notes.has("office_key")
+	CityState.begin()
+	CityState.job.arrive(&"harbour")
+	var wall: StaticBody3D = Props.block(self, Vector3(160.5, 2.0, 2.5), Vector3(8.0, 4.0, 0.4))
+	await _frames(3)
+	director.play("noted_pair", {"A": a, "B": b})
+	await _until(func(): return director.talks().is_empty(), 60 * 15)
+	var walled: bool = CityState.job.notes.has("office_key")
+	wall.queue_free()
+	player.global_position = Vector3(160.5, 1.05, 25.0)
+	await _frames(3)
+	director.play("noted_pair", {"A": a, "B": b})
+	await _until(func(): return director.talks().is_empty(), 60 * 15)
+	var far: bool = CityState.job.notes.has("office_key")
+	_check("T52 a line carrying a note is learnt in earshot, not through a wall, not 25 m off", near_heard and not walled and not far,
+		"near %s, through a wall %s, far %s" % [near_heard, walled, far])
+
+	# T53 every note a talk file names is a note of the job
+	var notes: Dictionary = JobBook.library()["notes"]
+	var unknown: Array[String] = []
+
+	for c in TalkScript.library()["conversations"]:
+		for turn in c["lines"] + c["interrupt"]:
+			for choice in turn["choices"]:
+				for emote in choice["emotes"]:
+					if String(emote).begins_with("note:") and not notes.has(String(emote).trim_prefix("note:")):
+						unknown.append("%s: %s" % [c["id"], emote])
+
+	_check("T53 every [note:] in the talk files names a note of the job", unknown.is_empty(), "unknown %s" % [unknown])
+
+	# T54 a level's landmarks are named where the guards look for them
+	var level: LevelLoader.Level = LevelLoader.Level.new()
+	level.root = Node3D.new()
+	add_child(level.root)
+	level.markers = [{"name": "lm_test", "ucd": "landmark", "sector": "", "transform": Transform3D(Basis.IDENTITY, Vector3(200, 0, 10)),
+		"size": null, "props": {"label": "the test tower"}}]
+	LevelLoader._own_markers(level)
+	var named := Comms.landmark_near(get_tree(), Vector3(202, 0, 10))
+	level.root.queue_free()
+	_check("T54 a level's landmark is named by the guards' call-outs", named == "the test tower", "named '%s'" % named)
+
+	# T55 a subtitle does not come through a wall
+	var hud: Node = player.get("hud")
+	player.global_position = Vector3(160.5, 1.05, 5.0)
+	await _frames(3)
+	var open_air: bool = Earshot.heard(a, player)
+	var shut: StaticBody3D = Props.block(self, Vector3(160.5, 2.0, 2.5), Vector3(8.0, 4.0, 0.4))
+	await _frames(3)
+	var behind: bool = Earshot.heard(a, player)
+	var shown := ""
+
+	if hud != null:
+		hud._subtitle.text = ""
+		hud._on_bark("Through the wall.", a)
+		shown = String(hud._subtitle.text)
+
+	shut.queue_free()
+	_check("T55 a subtitle stops at a wall: heard in the open, not behind one", open_air and not behind and not shown.contains("Through the wall"),
+		"open %s, behind %s, subtitle '%s'" % [open_air, behind, shown])
+	CityState.begin()
+	await _fresh()
+
+
+# The harbour's talk (the harbour's job plan, Task 10)
+
+const HARBOUR_TALK := ["harbour_tower_bell", "harbour_office_key", "harbour_dark_bays", "harbour_ways_up", "harbour_cabin_key",
+	"harbour_theft_1", "harbour_theft_2", "harbour_theft_3"]
+
+
+func _harbour_talk() -> void:
+	await _fresh()
+	CityState.begin()
+	TalkScript.reload()
+	var lib := TalkScript.load_dir()
+	var found := HARBOUR_TALK.filter(func(id): return not _conv(lib, id).is_empty() and StringName(_conv(lib, id)["where"]) == &"harbour")
+	_check("T56 the harbour's talk loads clean, each of it had only in the harbour", lib["errors"].is_empty() and found.size() == HARBOUR_TALK.size(),
+		"errors %s, found %s" % [lib["errors"], found])
+
+	var director: RefCounted = TalkDirector.of(self)
+	director.use_library(lib)
+	CityState.job.arrive(&"harbour")
+	var rodrigo := _guard(Vector3(170, 0, 0), 0.0, &"steady", "Rodrigo")
+	var tome := _guard(Vector3(175, 0, 0), 0.0, &"steady", "Tome")
+	await _frames(20)
+	var hailed: bool = director.call_pair(&"hail", rodrigo, {"b": tome})
+	await _frames(5)
+	_check("T57 a hail plays the pair's own conversation", hailed and director.played().has("harbour_ways_up"),
+		"hailed %s, played %s" % [hailed, director.played()])
+	await _until(func(): return director.talks().is_empty(), 60 * 20)
+
+	CityState.job.notice_theft()
+
+	for g in [rodrigo, tome]:
+		g.alert = g.suspicious_at
+
+	await _frames(5)
+	var after: bool = director.call_pair(&"hail", rodrigo, {"b": tome})
+	await _frames(5)
+	var theft_talk: bool = director.played().any(func(id): return String(id).begins_with("harbour_theft_"))
+	_check("T58 after a theft, the hail is the theft's", after and theft_talk, "hailed %s, played %s" % [after, director.played()])
+	await _until(func(): return director.talks().is_empty(), 60 * 20)
+
+	# T59 a hail running is not cut by the next pair's hail (the hint is on
+	# its last line)
+	await _fresh()
+	CityState.begin()
+	CityState.job.arrive(&"harbour")
+	TalkScript.reload()
+	director = TalkDirector.of(self)
+	director.use_library(TalkScript.load_dir())
+	var baltasar := _guard(Vector3(180, 0, 0), 0.0, &"steady", "Baltasar")
+	var duarte := _guard(Vector3(183, 0, 0), 0.0, &"steady", "Duarte")
+	var inigo := _guard(Vector3(186, 0, 0), 0.0, &"steady", "Inigo")
+	await _frames(20)
+	var began: bool = director.hail(baltasar, duarte)
+	await _frames(60 * 2)
+	var cut_in: bool = director.hail(duarte, inigo)
+	await _until(func(): return director.talks().is_empty(), 60 * 30)
+	_check("T59 a hail running is not cut short by another pair's hail: it is said to its last line", began and not cut_in
+		and director.lines_of(baltasar).size() == 2 and director.lines_of(duarte).size() == 2,
+		"began %s, cut in %s, Baltasar said %d, Duarte %d" % [began, cut_in, director.lines_of(baltasar).size(), director.lines_of(duarte).size()])
+	CityState.begin()
+	await _fresh()
+
+
 func _file_of(lib: Dictionary, id: String) -> String:
 	for c in lib["conversations"]:
 		if c["id"] == id:

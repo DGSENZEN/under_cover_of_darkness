@@ -12,6 +12,10 @@ const KeyScript := preload("res://scripts/Interaction/KeyItem.gd")
 const ToolScript := preload("res://scripts/Interaction/ToolItem.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const HazardScript := preload("res://scripts/Combat/Hazard.gd")
+const ReadableScript := preload("res://scripts/Interaction/Readable.gd")
+## Aged paper, and the nail a notice hangs on.
+const PAPER := Color(0.78, 0.72, 0.58)
+const NAIL := Color(0.22, 0.2, 0.18)
 
 
 static func material(color: Color, metallic := 0.0) -> StandardMaterial3D:
@@ -407,6 +411,54 @@ static func give_blackjack(player: Node) -> void:
 
 ## `surface` names what the floor is made of: "carpet", "grass", "wood",
 ## "stone", "tile" or "metal". It changes how loud footsteps on it are.
+## Words to read (Readable) at `at`: a `notice` stands in `at`'s XY plane
+## facing its +Z (pinned on a wall just in front of it), a `paper` lies flat
+## on what is under `at`, a `ledger` lies open there; `slot` names its words
+## in the district's job file.
+static func readable(parent: Node, at: Transform3D, look: StringName, slot: String) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.set_script(ReadableScript)
+	body.slot = slot
+	body.look = look
+
+	match look:
+		&"notice":
+			var sheet := mesh_box(Vector3(0.24, 0.32, 0.004), PAPER)
+			sheet.position = Vector3(0.0, 0.0, 0.006)
+			body.add_child(sheet)
+			var nail := mesh_box(Vector3(0.012, 0.012, 0.02), NAIL)
+			nail.position = Vector3(0.0, 0.14, 0.012)
+			body.add_child(nail)
+			var hold := shape_box(Vector3(0.24, 0.32, 0.02))
+			hold.position = Vector3(0.0, 0.0, 0.01)
+			body.add_child(hold)
+		&"ledger":
+			for side in [-1.0, 1.0]:
+				var leaf := mesh_box(Vector3(0.18, 0.012, 0.25), PAPER)
+				leaf.position = Vector3(side * 0.09, 0.006 + 0.016, 0.0)
+				leaf.rotation.z = -side * deg_to_rad(10.0)
+				body.add_child(leaf)
+
+			var cover := mesh_box(Vector3(0.38, 0.012, 0.27), Color(0.32, 0.18, 0.12))
+			cover.position = Vector3(0.0, 0.006, 0.0)
+			body.add_child(cover)
+			var hold := shape_box(Vector3(0.38, 0.05, 0.27))
+			hold.position = Vector3(0.0, 0.025, 0.0)
+			body.add_child(hold)
+		_:
+			var sheet := mesh_box(Vector3(0.21, 0.002, 0.28), PAPER)
+			sheet.position = Vector3(0.0, 0.001, 0.0)
+			body.add_child(sheet)
+			var hold := shape_box(Vector3(0.21, 0.02, 0.28))
+			hold.position = Vector3(0.0, 0.01, 0.0)
+			body.add_child(hold)
+
+	parent.add_child(body)
+	body.global_transform = at
+	body.reset_physics_interpolation()
+	return body
+
+
 static func block(parent: Node, center: Vector3, size: Vector3, color := Color(0.5, 0.5, 0.52), surface := "") -> StaticBody3D:
 	var body := StaticBody3D.new()
 

@@ -1,6 +1,7 @@
 # Men at their ease: tired, grumbling, teasing, gossiping.
 
 == tam_resting
+where: garrison
 when: at_ease, asleep(Tam)
 cast: A = any; B = any
 cooldown: once
@@ -10,6 +11,7 @@ A: For three hours?
 B [shrugs]: They're very tired eyes.
 
 == wat_sings
+where: garrison
 when: at_ease, present(Wat), present(Aldous)
 cast: A = name(Aldous); B = name(Wat)
 cooldown: 15m
@@ -19,6 +21,7 @@ B: You haven't got a bow, old man.
 A: I'll find one.
 
 == the_moon_glass
+where: garrison
 when: at_ease, night:early|middle
 cast: A = recruit; B = friend(A)|any
 cooldown: once
@@ -29,6 +32,7 @@ B {if stubborn}: Brand says a lot of things. None of them sober.
 B: Brand says a lot of things. Eat your supper.
 
 == hendriks_girl
+where: garrison
 when: at_ease
 cast: A = name(Hendrik); B = friend(A)
 cooldown: once
@@ -39,6 +43,7 @@ A [sighs]: Wants silver I haven't got. She'll mend. They mend.
 B [nods]: She'll mend.
 
 == oil_gone
+where: garrison
 when: at_ease
 cast: A = name(Gideon); B = name(Wat)
 cooldown: 20m
@@ -48,6 +53,7 @@ A: Rats that climb shelves and pull corks?
 B [shrugs]: Clever rats.
 
 == mothers_letter
+where: garrison
 when: at_ease, night:early|middle
 cast: A = name(Osric); B = kin(A)
 cooldown: once
@@ -83,6 +89,7 @@ A: When's the relief due?
 B: Not soon enough.
 
 == foul_mood
+where: garrison
 when: at_ease
 cast: A = not(captain); B = not(captain)
 cooldown: 2m
@@ -125,6 +132,7 @@ B: Only your stomach.
 # The men of the yard, and what is between them.
 
 == brand_rats
+where: garrison
 when: at_ease
 cast: A = name(Brand); B = name(Ned)
 cooldown: once
@@ -135,6 +143,7 @@ B {if craven}: You're making that up. Aren't you?
 B: I'll keep that in mind.
 
 == col_supper
+where: garrison
 when: at_ease
 cast: A = name(Col); B = friend(A)
 cooldown: once
@@ -161,6 +170,7 @@ B: Which fishmonger?
 A: Does it matter? It's a good story either way.
 
 == hendrik_wall
+where: garrison
 when: at_ease
 cast: A = name(Hendrik); B = name(Ned)
 cooldown: once
@@ -186,6 +196,7 @@ B: South's a long way on a guard's pay.
 A [shrugs]: Then we'll walk slow.
 
 == captain_from
+where: garrison
 when: at_ease, present(Mirelle)
 cast: A = not(captain); B = not(captain)
 cooldown: once
@@ -212,6 +223,7 @@ A: I paid last time.
 B: Then you know how it's done.
 
 == canal_smell
+where: garrison
 when: at_ease, present(Brand)
 cast: A = not(name(Brand)); B = not(name(Brand))
 cooldown: 15m
@@ -219,6 +231,7 @@ A: Smell that? The canal's up again.
 B: That's not the canal. That's Brand's boots.
 
 == hollin_emeralds
+where: garrison
 when: at_ease
 cast: A = any; B = any
 cooldown: once
@@ -228,6 +241,7 @@ A: Good thing we've no emeralds here.
 B [looks:the tower]: No. Just the glass.
 
 == tam_saw
+where: garrison
 when: at_ease, asleep(Tam)
 cast: A = any; B = any
 cooldown: once
@@ -243,6 +257,7 @@ B [shrugs]: Clean living.
 A: You've never lived clean a day in your life.
 
 == wat_aldous_tower
+where: garrison
 when: at_ease, present(Aldous)
 cast: A = name(Wat); B = name(Aldous)
 cooldown: 15m
@@ -250,6 +265,7 @@ A [shouts]: Still up your tower, old man?
 B [shouts]: Still down on your arse, boy?
 
 == osric_brother
+where: garrison
 when: at_ease, present(Jory)
 cast: A = name(Osric); B = not(kin(A))
 cooldown: once

@@ -28,7 +28,7 @@ SCHEMA = {
     "light": {"required": ["kind"], "optional": {"lit": True, "energy": 0.0, "range": 0.0, "color": "", "cookie": "",
                                                  "douse": True, "chain": 0.0, "dark_only": False}, "box": False},
     "bell": {"required": [], "optional": {"db": 90.0}, "box": False},
-    "ladder": {"required": [], "optional": {"rope": False}, "box": True},
+    "ladder": {"required": [], "optional": {"rope": False, "open": False}, "box": True},
     # A piece laid loose (Layout.put loose=): a body in the game, picked up
     # and thrown; `piece` its name, `mass` its weight (kg).
     "loose": {"required": ["piece", "mass"], "optional": {}, "box": False},
@@ -43,6 +43,9 @@ SCHEMA = {
     # Under a roof: the dressing inside it casts no shadow in moonlight
     # (kit_recipes.roofed).
     "roofed": {"required": [], "optional": {}, "box": True},
+    # A room (the real-windows spec, 4): its windows' lamps are the lights
+    # inside it, and what they throw out goes through its windows.
+    "room": {"required": [], "optional": {}, "box": True},
     # The distance's effects (scripts/Visual/Distance.gd): a far light (a
     # torch on a wall far off, the balefire), its air (mist, corpse-lights).
     "far_light": {"required": ["kind"], "optional": {}, "box": False},
@@ -77,6 +80,9 @@ SCHEMA = {
     "noise_zone": {"required": ["db"], "optional": {"period": 0.0, "label": ""}, "box": True},
     # A chimney's smoke, breathed off its pots (over them).
     "smoke": {"required": [], "optional": {}, "box": False},
+    # Words to read where it lies or hangs: `slot` names its text in the
+    # district's job file (data/jobs/<district>.job); `kind` how it is held.
+    "readable": {"required": ["slot"], "optional": {"kind": "paper"}, "box": False},
     # A point the light is checked at: "moon", "shadow" or "lamp".
     "probe": {"required": ["expect"], "optional": {}, "box": False},
     # A point on a way through the level, and the move that reaches it from
@@ -126,6 +132,7 @@ PROBE_EXPECT = ["moon", "shadow", "lamp"]
 # household goes in (its `kind`).
 WAYS = ["", "public", "thief", "roof", "below"]
 WAY_KINDS = ["", "door", "window", "roof", "below", "wall", "leap", "yard"]
+READABLE_KINDS = ["notice", "paper", "ledger"]
 # What a guard carries on his rounds (Guard.rounds_light).
 ROUNDS_LIGHTS = ["", "lantern", "torch"]
 
@@ -158,6 +165,9 @@ def problems(marker):
 
     if ucd == "station" and props.get("kind") not in STATION_KINDS:
         out.append("%s: no station kind '%s'" % (marker["name"], props.get("kind")))
+
+    if ucd == "readable" and props.get("kind", "paper") not in READABLE_KINDS:
+        out.append("%s: no readable kind '%s' (%s)" % (marker["name"], props.get("kind"), ", ".join(READABLE_KINDS)))
 
     if ucd == "light" and props.get("kind") not in LIGHT_KINDS:
         out.append("%s: no light kind '%s'" % (marker["name"], props.get("kind")))

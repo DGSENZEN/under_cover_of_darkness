@@ -12,7 +12,9 @@ Everything in Godot's axes. `problems(data)` lists what is wrong, one
 sentence each, naming the object and the rule; an empty list passes.
 """
 
+import districts
 import geo
+import jobs
 import kit_recipes
 import markers as schema
 from terrain import NAME as terrain_names
@@ -228,6 +230,8 @@ def problems(data, stage="stage1"):
     out.extend(door_problems(data))
     out.extend(headroom_problems(data, boxes, ground))
     out.extend(key_problems(data))
+    district = districts.district_of(districts.load(), data["level"])
+    out.extend(readable_problems(data, jobs.readable_slots(district) if district else None))
 
     # Budgets.
     tris = data.get("tris", {})
@@ -636,6 +640,23 @@ def key_problems(data):
     for m in data["markers"]:
         if m["ucd"] == "key" and m["props"].get("key_id") not in wanted:
             out.append("%s: its key '%s' opens nothing" % (m["name"], m["props"].get("key_id")))
+
+    return out
+
+
+def readable_problems(data, slots):
+    """Every readable marker names a slot in its district's job file; `slots`
+    is that file's readable ids, None for a level of no district."""
+    out = []
+
+    for m in data["markers"]:
+        if m["ucd"] != "readable":
+            continue
+
+        if slots is None:
+            out.append("%s: a readable in a level of no district" % m["name"])
+        elif m["props"].get("slot") not in slots:
+            out.append("%s: reads slot '%s', not in the district's job file" % (m["name"], m["props"].get("slot")))
 
     return out
 

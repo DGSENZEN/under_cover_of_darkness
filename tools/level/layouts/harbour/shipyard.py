@@ -90,7 +90,9 @@ def _customs(L):
     wx, wz = _house(mx, mz)
     L.put("customs_hall_frame", (wx, QUAY + my, wz), 0.0, "shipyard")
     # More of what has been seized, along the walls and between the posts.
-    for piece, (x, z), yaw in (("keg_rack", (-7.0, -32.7), 0.0), ("crate_stack", (-6.5, -28.0), 30.0), ("chest", (11.5, -32.8), 0.0),
+    # (The keg rack clear of the stair's foot: the customs watchman goes up
+    # and down it on his round.)
+    for piece, (x, z), yaw in (("keg_rack", (-5.6, -32.7), 0.0), ("crate_stack", (-6.5, -28.0), 30.0), ("chest", (11.5, -32.8), 0.0),
                                ("sacks", (7.5, -33.0), 0.0), ("crate_stack", (12.6, -14.0), 0.0), ("anchor_small", (-7.5, -20.0), 40.0),
                                ("crate", (4.6, -16.6), 10.0), ("sacks", (1.8, -21.0), -20.0), ("barrel", (4.4, -29.0), 0.0), ("stool", (-4.6, -13.4), 0.0)):
         L.put(piece, (x, QUAY, z), yaw, "shipyard")
@@ -107,10 +109,11 @@ def _customs(L):
         L.put(piece, (x, CUSTOMS_UPPER, z), yaw, "shipyard")
 
     # The harbourmaster's office: his desk on a rug, his chair, his
-    # pigeonholes and his ledgers, a chart on the partition, the chart table,
-    # a globe, a bench for those who wait.
+    # pigeonholes and his ledgers (either side of his window, clear of its
+    # frame), a chart on the partition, the chart table, a globe, a bench for
+    # those who wait.
     office = [("rug_3", (9.5, -28.2), 0.0), ("desk_writing", (9.5, -28.0), 0.0), ("armchair", (9.5, -28.95), 0.0),
-              ("cabinet_pigeonholes", (13.75, -25.5), -90.0), ("shelves_ledgers", (7.0, -33.15), 0.0), ("shelves_ledgers", (9.2, -33.15), 0.0),
+              ("cabinet_pigeonholes", (13.75, -25.5), -90.0), ("shelves_ledgers", (6.35, -33.15), 0.0), ("shelves_ledgers", (9.65, -33.15), 0.0),
               ("chart_table", (5.4, -26.0), 90.0), ("globe_stand", (5.2, -32.3), 0.0), ("bench_plain", (11.5, -22.45), 0.0),
               ("rug_3", (5.4, -26.0), 90.0), ("dresser", (12.0, -33.0), 0.0), ("candle_stand", (8.0, -29.4), 0.0), ("candle_stand", (4.6, -24.3), 0.0),
               ("stool", (12.8, -24.6), 0.0), ("chest", (4.8, -30.6), 90.0)]

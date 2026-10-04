@@ -1167,6 +1167,58 @@ def lattice():
     return _finish(image, (64, 128), 8, mask_image)
 
 
+def quarries():
+    """Leaded lights, as a 16th-century window was glazed: small diamond
+    panes (quarries) set in lead cames on the diagonal, a lead frame round
+    them; the lead dark, a little lit along one edge; the panes clear (the
+    glass behind shows through)."""
+    w, h = 64 * SCALE, 128 * SCALE
+    image, mask_image, draw, mask = _canvas(w, h, LEAD)
+    came = int(1.5 * SCALE)
+    lit = (64, 60, 58)
+    # Diamonds 16 px across, 24 up: lines rising and falling on that slope.
+    across, up = 16 * SCALE, 24 * SCALE
+    slope = up / across
+
+    for k in range(-h, w + h, across):
+        for direction in (1.0, -1.0):
+            a = (k, 0.0)
+            b = (k + direction * h / slope, float(h))
+            _bar(draw, mask, [a, b], came, LEAD)
+            draw.line([(a[0] + came / 3.0, a[1]), (b[0] + came / 3.0, b[1])], fill=lit, width=max(1, SCALE // 2))
+
+    frame = 2 * SCALE
+
+    for box in ([0, 0, w, frame], [0, h - frame, w, h], [0, 0, frame, h], [w - frame, 0, w, h]):
+        draw.rectangle(box, fill=LEAD)
+        mask.rectangle(box, fill=255)
+
+    return _finish(image, (64, 128), 8, mask_image)
+
+
+def glazing():
+    """Crown glass seen close: grey for how much it hides (the glazing
+    shader's grime), faint waves and a few seeds across it, grime gathered
+    toward its edges and thickest along its foot where the rain runs."""
+    w, h = 64, 128
+    rng = np.random.default_rng(41)
+    y, x = np.mgrid[0:h, 0:w].astype(float)
+    base = 24.0 + 10.0 * np.sin(y / 9.0 + 2.0 * np.sin(x / 13.0)) + 6.0 * np.sin(x / 5.0 + y / 21.0)
+    edge = np.minimum(np.minimum(x, w - 1 - x) / (w * 0.18), 1.0)
+    foot = np.clip((y - h * 0.82) / (h * 0.18), 0.0, 1.0)
+    top = np.minimum(y / (h * 0.08), 1.0)
+    grime = 150.0 * (1.0 - edge) ** 1.5 + 120.0 * foot ** 1.2 + 60.0 * (1.0 - top)
+    out = base + grime + rng.normal(0.0, 4.0, (h, w))
+
+    # Seeds: little bubbles caught in the glass.
+    for _ in range(14):
+        cx, cy = rng.integers(4, w - 4), rng.integers(6, h - 6)
+        out[max(cy - 1, 0):cy + 1, max(cx - 1, 0):cx + 1] += 40.0
+
+    grey = np.clip(out, 0, 255).astype(np.uint8)
+    return Image.fromarray(np.stack([grey] * 3, axis=-1), "RGB")
+
+
 def ratlines():
     """A ship's shrouds and ratlines on a clear card: the shrouds running up
     from the channel and drawing in toward the masthead, tarred black, the
@@ -1805,7 +1857,7 @@ PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_
              "weed_broad": weed_broad, "reeds": reeds, "ivy": ivy, "bark": bark, "bat": bat,
              "decal_soot": decal_soot, "decal_dirt": decal_dirt, "decal_straw": decal_straw, "decal_leaves": decal_leaves,
              "carpet": carpet,
-             "iron_rail": iron_rail, "window_grille": window_grille, "casement": casement, "sash": sash, "lattice": lattice, "ratlines": ratlines, "coil_mask": coil_mask,
+             "iron_rail": iron_rail, "window_grille": window_grille, "casement": casement, "quarries": quarries, "glazing": glazing, "sash": sash, "lattice": lattice, "ratlines": ratlines, "coil_mask": coil_mask,
              "decal_salt": decal_salt, "palm_frond": palm_frond, "cypress": cypress, "agave": agave, "orange_leaves": orange_leaves,
              "gorse": gorse, "fennel": fennel, "pine": pine, "laundry": laundry, "azulejo_ship": azulejo_ship, "arms_royal": arms_royal,
              "azulejo_comet": azulejo.azulejo_comet, "azulejo_king": azulejo.azulejo_king, "azulejo_souls": azulejo.azulejo_souls,

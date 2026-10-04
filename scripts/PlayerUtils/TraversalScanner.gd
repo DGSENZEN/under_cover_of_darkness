@@ -31,6 +31,15 @@ var max_far_drop := 3.0
 ## Tops thinner than this cannot be stood on.
 var min_standable_thickness := 0.15
 var landing_margin := 0.05
+## A rise behind a top at least this high and within this far of it is a step
+## of stairs going on up (ObstacleProfile.on_stairs).
+const MIN_STAIR_RISE := 0.08
+const STAIR_BEHIND := 0.9
+## A rail to lower over (rail_ahead): its top this high over your feet,
+## no thicker than this.
+const RAIL_LOW := 0.5
+const RAIL_HIGH := 1.4
+const RAIL_THICK := 0.45
 var floor_clearance := 0.03
 var min_top_normal_y := 0.7
 var max_wall_normal_y := 0.25
@@ -172,16 +181,23 @@ func scan_from(
 		contact_height = clampf(rest_point.y, bottom + 0.02, top_limit - 0.02)
 
 	# A ray at the contact height gives a clean point and normal. The contact
-	# can sit exactly on an edge, so try a few heights around it.
+	# can sit exactly on an edge, so try a few heights around it: close ones
+	# first, for a thin edge (a top's plank, a deck with no bulwark), whose
+	# contact is on its top or bottom face, which a ray there only grazes.
 	var face := {}
 
-	for offset in [0.0, -0.1, 0.1, -0.25, 0.25]:
+	for offset in [0.0, -0.03, 0.03, -0.06, 0.06, -0.1, 0.1, -0.25, 0.25]:
 		var height := clampf(contact_height + offset, bottom + 0.02, top_limit - 0.02)
 		var ray_from := Vector3(origin.x, height, origin.z)
 		face = ray(ray_from, ray_from + direction * (reach + 0.3))
 
 		if not face.is_empty():
 			break
+
+	# Still missed (the contact on the sweep's side, off the ray's line): the
+	# sweep's own contact is the face.
+	if face.is_empty() and not rest.is_empty() and absf((rest["normal"] as Vector3).y) < min_top_normal_y:
+		face = {"position": rest["point"], "normal": rest["normal"]}
 
 	if face.is_empty():
 		last_reject = "face ray missed"
@@ -252,6 +268,8 @@ func scan_from(
 	#
 	var step_size := 0.1
 	var steps := int(max_thickness_walk / step_size)
+	# (A step's rise behind the top, if stairs go on up from it.)
+	var stair_rise := 0.0
 
 	for i in range(1, steps + 1):
 		var walked := step_size * i
@@ -264,6 +282,10 @@ func scan_from(
 			break
 
 		var under_point: Vector3 = under["position"]
+
+		if stair_rise == 0.0 and walked <= STAIR_BEHIND and under_point.y - top_point.y >= MIN_STAIR_RISE \
+				and under_point.y - top_point.y <= step_height + 0.05:
+			stair_rise = under_point.y - top_point.y
 
 		# Something rises out of the top: a wall or a higher step. Not thin.
 		if under_point.y > top_point.y + 0.2:
@@ -324,6 +346,22 @@ func scan_from(
 	else:
 		profile.headroom = ObstacleProfile.Headroom.BLOCKED
 
+	# Stairs going on up from the top (a water stair out of the sea, a flight
+	# met from its side): the capsule never fits flat on a tread with the next
+	# riser behind it, but stands across the next tread's nose, a rise or two
+	# up, as it does walking a staircase. (A step walked up to is walking's,
+	# a jump on a staircase a jump; out of the water, any step is a way out.)
+	if profile.headroom == ObstacleProfile.Headroom.BLOCKED and stair_rise > 0.0 and profile.thickness >= min_standable_thickness \
+			and (height > step_height * 2.5 or body.get("water") != null):
+		for lift in [stair_rise, stair_rise * 2.0]:
+			var raised: Vector3 = profile.landing + Vector3.UP * lift
+
+			if fits(origin_for_feet(raised), false):
+				profile.landing = raised
+				profile.headroom = ObstacleProfile.Headroom.STANDING
+				profile.on_stairs = true
+				break
+
 	return profile
 
 
@@ -339,9 +377,17 @@ func edge_below(direction: Vector3, needed_drop: float) -> Dictionary:
 	if not ray(ahead + Vector3.UP * 0.1, ahead - Vector3.UP * needed_drop).is_empty():
 		return {}
 
-	# Look back at the face of the ledge we are standing on.
-	var from := ahead - Vector3.UP * 0.3
-	var back := ray(from, from - direction * (radius + 0.35 + 0.4))
+	# Look back at the face of the ledge we are standing on: a wall's, or a
+	# thin floor's edge just under its lip (a mast's top, a yard, a plank
+	# walk), hung from with nothing under it.
+	var back := {}
+
+	for depth in [0.3, 0.05]:
+		var from: Vector3 = ahead - Vector3.UP * depth
+		back = ray(from, from - direction * (radius + 0.35 + 0.4))
+
+		if not back.is_empty():
+			break
 
 	if back.is_empty():
 		return {}
@@ -370,6 +416,75 @@ func edge_below(direction: Vector3, needed_drop: float) -> Dictionary:
 		"normal": normal,
 		"lip_y": lip_y,
 	}
+
+
+# A rail in front of the player, for lowering over it into a hang
+
+## A low thin barrier in front of you with a drop beyond it (a ship's
+## bulwark, a balcony's rail, a parapet over a street): its top RAIL_LOW to
+## RAIL_HIGH over your feet, no thicker than RAIL_THICK, and under its far
+## face at least `needed_drop` of air. Returns {} or the edge to hang from:
+## { "face_point": its far face at its top, "normal": out (away from you),
+## "lip_y": its top, "thickness": float }.
+func rail_ahead(direction: Vector3, needed_drop: float) -> Dictionary:
+	var feet := feet_position()
+	var origin := body.global_position
+	var near := {}
+
+	for h in [RAIL_LOW * 0.5, RAIL_LOW + 0.1]:
+		var from := Vector3(origin.x, feet.y + h, origin.z)
+		near = ray(from, from + direction * (radius + 0.6))
+
+		if not near.is_empty():
+			break
+
+	if near.is_empty() or absf((near["normal"] as Vector3).y) > max_wall_normal_y:
+		return {}
+
+	var near_point: Vector3 = near["position"]
+	var probe := near_point + direction * 0.04
+	var top := ray(Vector3(probe.x, feet.y + RAIL_HIGH + 0.2, probe.z), Vector3(probe.x, feet.y + RAIL_LOW * 0.5, probe.z), false)
+
+	if top.is_empty():
+		return {}
+
+	var lip_y: float = (top["position"] as Vector3).y
+
+	if lip_y < feet.y + RAIL_LOW or lip_y > feet.y + RAIL_HIGH or (top["normal"] as Vector3).y < min_top_normal_y:
+		return {}
+
+	# Across its top to where it ends: thin, or it is a wall to climb.
+	var thickness := INF
+
+	for i in range(1, int(RAIL_THICK / 0.04) + 2):
+		var sample := near_point + direction * (0.04 * i)
+
+		if ray(Vector3(sample.x, lip_y + 0.1, sample.z), Vector3(sample.x, lip_y - 0.15, sample.z), false).is_empty():
+			thickness = 0.04 * i
+			break
+
+	if thickness > RAIL_THICK:
+		return {}
+
+	# Beyond it a drop, not a deck to step down onto.
+	var beyond := near_point + direction * (thickness + 0.3)
+
+	if not ray(Vector3(beyond.x, lip_y - 0.05, beyond.z), Vector3(beyond.x, lip_y - needed_drop, beyond.z)).is_empty():
+		return {}
+
+	# Its far face, looking back at it under its top.
+	var from := Vector3(beyond.x, lip_y - 0.12, beyond.z)
+	var back := ray(from, from - direction * 0.6)
+
+	if back.is_empty():
+		return {}
+
+	var normal := Vector3((back["normal"] as Vector3).x, 0.0, (back["normal"] as Vector3).z).normalized()
+
+	if normal.dot(direction) < min_facing_dot:
+		return {}
+
+	return {"face_point": back["position"], "normal": normal, "lip_y": lip_y, "thickness": thickness}
 
 
 # Landing target for an assisted jump

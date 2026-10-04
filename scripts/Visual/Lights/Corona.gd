@@ -5,6 +5,7 @@ extends Node3D
 
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const SHADER := preload("res://scripts/Visual/Lights/corona.gdshader")
+const SightRay := preload("res://scripts/StimuliSystem/SightRay.gd")
 
 ## Its size on the 360-line screen.
 @export var size_px := 48.0:
@@ -115,7 +116,8 @@ func _clear_share(camera: Camera3D, exclude: Array[RID]) -> float:
 	for target in [global_position, global_position + side, global_position - side]:
 		_query.to = target
 
-		if space.intersect_ray(_query).is_empty():
+		# (Seen through a window's glass too.)
+		if SightRay.first_solid(space, _query).is_empty():
 			clear += 1
 
 	return float(clear) / float(RAYS)

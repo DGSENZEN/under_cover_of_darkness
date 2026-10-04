@@ -9,6 +9,7 @@ extends Node
 const DistrictStateScript := preload("res://scripts/Level/DistrictState.gd")
 
 const LevelGameplayScript := preload("res://scripts/Level/LevelGameplay.gd")
+const JobStateScript := preload("res://scripts/Level/JobState.gd")
 
 ## A man chasing the player within this of a gate (flat, m) when he goes
 ## through it follows him; he comes through this far behind the player's
@@ -27,6 +28,9 @@ var districts := {}
 var carried := {}
 ## The men following him through a gate: [{"spec", "to", "arrive", "delay"}].
 var followers: Array = []
+## What he has done of the job (JobState: goals, notes, readables, the
+## districts' facts and tallies).
+var job: RefCounted = JobStateScript.new()
 
 
 ## A new mission: nothing remembered, nothing carried.
@@ -34,6 +38,7 @@ func begin() -> void:
 	districts.clear()
 	carried.clear()
 	followers.clear()
+	job.reset()
 
 
 ## The player leaves `map` (a DistrictMap: district, made, guards, visitors,
@@ -87,6 +92,7 @@ func leave(map: Node, exit: Area3D) -> void:
 			state["guards"][guard_name] = {"away": true}
 
 	districts[map.district] = state
+	job.leave(map.district)
 
 	if map.player != null and is_instance_valid(map.player):
 		carried = map.player.save_state()

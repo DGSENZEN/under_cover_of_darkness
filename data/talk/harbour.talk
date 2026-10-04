@@ -1,0 +1,93 @@
+# The harbour's talk (the harbour's job, docs/systems/jobs.md): what its watch
+# say when one hails another on his round (DistrictMap._hails: the pairs the
+# rounds bring together), and what they say once a theft is found. Every line
+# is yours to write: replace each <<...>>, keep the rest. A line carrying
+# [note:<id>] teaches the player that pencil note (data/jobs/harbour.job) if
+# he hears it: in 22 m, nothing solid between.
+
+# The harbour's men (their posts), so a conversation can name them.
+== cast
+Rodrigo: sea_gate; swordsman
+Tome: sea_gate; watchman
+Duarte: quays; watchman
+Inigo: quays; swordsman
+Baltasar: customs; watchman
+Leonor: carrack; duelist
+Gaspar: tower; archer
+Fernao: mole; watchman
+Afonso: shipyard; brute
+
+== harbour_tower_bell
+where: harbour
+when: situation:hail, at_ease
+cast: A = name(Fernao); B = name(Gaspar)
+cooldown: 4m
+# intent: Fernao, at the golden tower's foot at the end of his round on the mole, calls up to the lookout; Gaspar answers from the terrace. Between them it comes out that the lookout has a bell, and rings it at anything amiss.
+A: <<Fernao calls up to the tower>>
+B [note:tower_bell]: <<Gaspar answers: the bell>>
+
+== harbour_office_key
+where: harbour
+when: situation:hail, at_ease
+cast: A = name(Baltasar); B = name(Duarte)|name(Inigo)
+cooldown: 4m
+# intent: The customs watchman inside the customs house's shut front door, a quay lantern man outside it: they talk through the door. It comes out that the office key is kept on the customs house's ground floor (said by the lantern man, outside, where the player can hear it).
+A: <<Baltasar, through the door>>
+B: <<the lantern man answers>>
+A: <<Baltasar again>>
+B [note:office_key]: <<the lantern man: the office key, downstairs>>
+
+== harbour_dark_bays
+where: harbour
+when: situation:hail, at_ease
+cast: A = name(Duarte); B = name(Inigo)
+cooldown: 4m
+# intent: The two lantern men pass each other on the quays. Some of the Ribeira arcade's bays are left dark, and whoever finds a lamp out lights it again.
+A: <<Duarte, passing>>
+B [note:dark_bays]: <<Inigo: the dark bays, the lamps relit>>
+
+== harbour_ways_up
+where: harbour
+when: situation:hail, at_ease
+cast: A = name(Rodrigo); B = name(Tome)
+cooldown: 4m
+# intent: The two at the Sea Gate. The gate stays shut and watched at night; anyone going up takes the Guindais stair or the wall-walk.
+A: <<Rodrigo, at the Sea Gate>>
+B [note:ways_up]: <<Tome: the ways up at night>>
+
+== harbour_cabin_key
+where: harbour
+when: situation:hail, at_ease
+cast: A = name(Leonor); B = name(Duarte)|name(Inigo)
+cooldown: 4m
+# intent: The carrack's deck watch and a quay man at the gangway. The captain is ashore; he left his cabin key with the quay; his strongbox is in the cabin.
+A: <<Leonor, from the deck>>
+B: <<the quay man answers>>
+A [note:cabin_key]: <<Leonor: the cabin key left on the quay>>
+
+== harbour_theft_1
+where: harbour
+when: situation:hail, theft_noticed
+cast: A = any; B = any
+cooldown: once
+# intent: After the theft is found: two of the watch, hunting, on what was taken.
+A: <<after the theft: one>>
+B: <<after the theft: the other>>
+
+== harbour_theft_2
+where: harbour
+when: situation:hail, theft_noticed
+cast: A = any; B = any
+cooldown: once
+# intent: After the theft is found: two of the watch on who could have done it, and how.
+A: <<after the theft: one>>
+B: <<after the theft: the other>>
+
+== harbour_theft_3
+where: harbour
+when: situation:hail, theft_noticed
+cast: A = any; B = any
+cooldown: once
+# intent: After the theft is found: two of the watch on what the harbourmaster will do to them.
+A: <<after the theft: one>>
+B: <<after the theft: the other>>

@@ -66,6 +66,7 @@ A: I keep hearing footsteps.
 B: That's me, you fool.
 
 == killed_the_captain
+where: garrison
 priority: 1
 when: captain_dead
 cast: A = any; B = any

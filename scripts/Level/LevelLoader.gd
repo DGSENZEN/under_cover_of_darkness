@@ -8,6 +8,8 @@ const Materials := preload("res://scripts/Visual/Materials.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 ## A collider's surface that marks a ceiling (never walked on).
 const CEILING := "ceiling"
+## A collider's surface that is a window's glass (kit_glazing).
+const GLASS := "glass"
 ## Small dressing fades out over this much past its range (m); a collider
 ## occludes when its two bigger sides are at least these (m).
 const RANGE_MARGIN := 4.0
@@ -33,6 +35,9 @@ class Level:
 	var zones: Node = null
 	## Its loose things: bodies picked up and thrown (each its piece's mesh).
 	var loose: Array = []
+	## Its glazed windows (kit_glazing's records in the world): {piece,
+	## sector, lead, outline [[x, y, z]...], normal [x, y, z]}.
+	var windows: Array = []
 
 	## Every marker of `ucd`.
 	func of(ucd: String) -> Array:
@@ -87,6 +92,7 @@ static func load_level(parent: Node3D, folder: String, root_name := "Level", ski
 	_terrain(level, manifest.get("terrain", []))
 	level.loose = _loose(level, manifest.get("loose", []))
 	level.sockets = manifest.get("sockets", [])
+	level.windows = manifest.get("windows", [])
 
 	for raw in manifest.get("markers", []):
 		var marker := _marker(raw)
@@ -103,7 +109,7 @@ static func _without(manifest: Dictionary, skip: Array) -> Dictionary:
 	var kept := manifest.duplicate()
 	kept["sectors"] = manifest.get("sectors", []).filter(func(s): return not skip.has(String(s)))
 
-	for key in ["colliders", "terrain", "sockets", "markers", "loose"]:
+	for key in ["colliders", "terrain", "sockets", "markers", "loose", "windows"]:
 		kept[key] = manifest.get(key, []).filter(func(item): return not skip.has(String(item.get("sector", ""))))
 
 	return kept
@@ -172,6 +178,11 @@ static func _colliders(level: Level, colliders: Array) -> void:
 			if String(c["surface"]) == CEILING:
 				body.set_meta(&"surface", "wood")
 				body.add_to_group(&"nav_ignore")
+
+			# A window's glass stops bodies; sight and light go through it
+			# (SightRay).
+			if String(c["surface"]) == GLASS:
+				body.add_to_group(&"glass")
 			var holder: Node3D = level.sectors.get(String(c["sector"]), level.root)
 			holder.add_child(body)
 			bodies[key] = body
@@ -387,8 +398,11 @@ static func _own_markers(level: Level) -> void:
 				var node := _placed(level, m, at)
 				level.marks[m["name"]] = node
 
+				# Landmarks, where the guards' call-outs and talk look for
+				# them (Comms, TalkFacts): named by their label.
 				if m["ucd"] == "landmark":
-					node.add_to_group(&"landmark")
+					node.add_to_group(&"landmarks")
+					node.set_meta(&"landmark", String(m["props"].get("label", "")))
 					node.set_meta(&"label", String(m["props"].get("label", "")))
 			"zone":
 				zones.append(m)

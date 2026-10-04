@@ -62,7 +62,7 @@ An empty/unreadable manifest reports an error and returns a Level with null root
 
 ## Gameplay marker contracts
 
-`build_all()` returns `{doors,lights,water,ladders,ropes,bells,decals,routes,stations,pickups,chests,props,smokes,noise_zones,mechanisms}` and also calls `mission_marks()` (void). It does not build guards. Dictionaries are name -> node; Array collections preserve creation order rather than name indexing.
+`build_all()` returns `{doors,lights,water,ladders,ropes,bells,decals,routes,stations,pickups,chests,props,smokes,noise_zones,mechanisms,readables}`, calls `mission_marks()` (void) and `fill_chests(chests, pickups)` (each chest holds the special loot within 0.7 m of it: taken, the chest is robbed). It does not build guards. Dictionaries are name -> node; Array collections preserve creation order rather than name indexing.
 
 | Builder -> result | Markers / props consumed and side effects |
 | --- | --- |
@@ -71,13 +71,14 @@ An empty/unreadable manifest reports an error and returns a Level with null root
 | water -> Array | water size and murk .6; builds WaterVolume, sets clarity to 1-murk, and defers ripple setup. |
 | ladders -> Array | ladder size and rope false; Area3D with ClimbVolume script, at marker transform. |
 | ropes -> Array | rope length required, chain false; VerletRope positioned before adding so links hang from the correct origin. |
-| bells -> Array | bell markers create alarm interaction at their placement. |
+| bells -> Array | bell markers create alarm interaction at their placement, each named after its marker (`tower_bell`). |
 | decals -> Array | decal kinds/textures/size create wall decals or ground-stain cards; optional missing images can be skipped. |
-| routes -> Dictionary | route plus waypoint props.route/order; creates `<route>_route` Node3D with ordered Marker3D children. |
+| routes -> Dictionary | route plus waypoint props.route/order; creates `<route>_route` Node3D with ordered Marker3D children. A guard faces a waypoint's marker -Z while he waits there; he waits his own `patrol_wait` (a waypoint's `wait` prop is recorded but not read). |
 | stations -> Dictionary | station props.kind required; optional drop_to name resolves through Level.marks and becomes a NodePath. |
 | guards -> Dictionary | guard scene instantiated as CharacterBody3D; archetype/temperament/look_seed/lookout/light, comma-separated stations, optional route; watchman maps to default archetype, arms_master to trainer. Missing optional route/station references are ignored. Requires navigation ready. |
 | pickups -> Dictionary | loot value required, label/special/kind (seal groups); key key_id required; tool required kind/count/label. Supported tool kinds use TOOLS; arrows build quiver contents. Unknown tool is skipped. |
-| chests -> Dictionary | chest large/locked/key/label/pick; default dimensions .9×.55×.55 m, large 1.2×.7×.7 m. |
+| chests -> Dictionary | chest large/locked/key/label/pick; default dimensions .9×.55×.55 m, large 1.2×.7×.7 m. Every Chest is in group `chests`: one the player left open is an oddity the guards shut; one robbed of a special raises the full alarm (docs/systems/jobs.md). |
+| readables -> Dictionary | readable: slot required (its words' id in the district's `data/jobs/<district>.job`, checked by `rules.readable_problems`), kind paper (default), notice or ledger. A Readable (StaticBody3D, prompt "Read") whose words are held up in both hands; a paper is taken up and put back. |
 | props -> Array | prop kind/mass; crate or crate_small size/mass presets; unknown kind uses crate preset. Positive mass overrides preset. |
 | smokes -> Array | smoke markers (no properties): a ChimneySmoke at each, breathing FireParticles smoke off its pots on the night's wind within 110 m of the player. |
 | noise_zones -> Array | noise_zone size/db and optional period; steady entries return SoundBus IDs and register parent-exit cleanup. Positive period builds a Blowhole at box top; results mix IDs and nodes. |
