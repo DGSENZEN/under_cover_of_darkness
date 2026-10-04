@@ -14,7 +14,7 @@ from lay import Layout
 import city_harbour
 import town
 from harbour import GATE_X, QUAY, WALK, WALL_E, WALL_W, stair_y
-from old_town import baixa, ground, stairs
+from old_town import baixa, ground, judiaria, stairs
 
 height = town.height
 
@@ -77,4 +77,5 @@ def layout():
     # The quarters' own streets, stairs and ways (over their lots).
     baixa.lay(L)
     stairs.lay(L)
+    judiaria.lay(L)
     return L.data()

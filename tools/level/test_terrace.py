@@ -159,6 +159,16 @@ class Terrace(unittest.TestCase):
         # (Its ladder drawn on a wall of its shaft.)
         self.assertTrue(drawn(name, [0.0, -1.0, 0.0], [1.0, 0.0, 0.0], kit_terrace.SHAFT / 2.0))
 
+    def test_a_hatchs_collar_fills_a_cell_longer_one_way(self):
+        # (A ground's cells are its extent over a whole number of them: a
+        # collar (across x, along z) paves one exactly, to its edges.)
+        name = kit_terrace.grate_hatch(2.0, collar=(2.519, 2.5))
+        self.assertIsNotNone(hit(name, [1.25, 1.0, 1.0], [0.0, -1.0, 0.0]))
+        self.assertIsNone(hit(name, [1.27, 1.0, 1.0], [0.0, -1.0, 0.0]))
+        self.assertIsNotNone(hit(name, [0.0, 1.0, 1.24], [0.0, -1.0, 0.0]))
+        self.assertIsNone(hit(name, [0.0, 1.0, 1.26], [0.0, -1.0, 0.0]))
+        self.assertNotEqual(name, kit_terrace.grate_hatch(2.0, collar=2.5))
+
     def test_a_hatch_chamber_opens_under_its_shaft(self):
         name = kit_terrace.hatch_chamber(2.2, 3.1, 2.0)
         recipe = kit_recipes.PIECES[name]
@@ -333,6 +343,19 @@ class Terrace(unittest.TestCase):
         self.assertIsNotNone(hit(name, [0.0, 1.5, 1.0], [0.0, 0.0, -1.0]))
         self.assertIsNone(hit(name, [0.0, 3.6, 1.0], [0.0, 0.0, -1.0]))
 
+    def test_a_garden_wall_stands_its_length_over_a_mans_reach(self):
+        # (A walled garden's end: whitewash about z 0, its length along x,
+        # too high to mantle, a granite coping, no way through.)
+        name = kit_terrace.garden_wall(3.0)
+        recipe = kit_recipes.PIECES[name]
+
+        for x in (-1.4, 0.0, 1.4):
+            self.assertAlmostEqual(hit(name, [x, 1.2, 1.0], [0.0, 0.0, -1.0]), 1.0 - kit_terrace.YARD_WALL[1] / 2.0, places=3)
+
+        self.assertGreater(recipe["size"][1], rules.MANTLE)
+        self.assertIsNone(hit(name, [1.6, 1.2, 1.0], [0.0, 0.0, -1.0]))
+        self.assertTrue([sh for sh in recipe["shapes"] if sh.get("slot") == "granite"])
+
     def test_a_fill_is_solid_and_paved_at_its_top(self):
         # (A terrace carried forward between its retaining walls: solid to
         # its top, which is paved as a street.)
@@ -394,6 +417,20 @@ class Terrace(unittest.TestCase):
         self.assertFalse([sh for sh in tower if sh.get("slot") == "granite" and sh.get("kind") == "box" and max(sh["size"]) > 2.0])
         # (A dressed face where asked: the bastion's, round its fountain.)
         self.assertIn("granite_rough", slots(kit_terrace.retaining(12.5, 4.23, False, "granite_rough")))
+
+    def test_a_gateway_opens_or_bars_its_arch(self):
+        # (A whitewashed wall across a lane or an alley, an arch in it:
+        # live, its gate hung by the layout; barred, solid.)
+        live = kit_terrace.gateway(6.0, 4.0, 2.5, 3.2)
+        recipe = kit_recipes.PIECES[live]
+        self.assertIsNone(hit(live, [0.0, 1.5, 1.0], [0.0, 0.0, -1.0]))
+        self.assertIsNotNone(hit(live, [2.0, 1.5, 1.0], [0.0, 0.0, -1.0]))
+        self.assertIsNotNone(hit(live, [0.0, 3.6, 1.0], [0.0, 0.0, -1.0]))
+        self.assertEqual(len(recipe["doors"]), 1)
+        self.assertAlmostEqual(recipe["doors"][0][4], 2.5)
+        barred = kit_terrace.gateway(4.0, 4.0, 2.5, 3.2, False)
+        self.assertIsNotNone(hit(barred, [0.0, 1.5, 1.0], [0.0, 0.0, -1.0]))
+        self.assertTrue(any(sh.get("slot") == "window_grille" for sh in kit_recipes.PIECES[barred]["shapes"]))
 
     def test_pieces_are_named_by_their_measures(self):
         self.assertEqual(kit_terrace.stair_lane(1.5, 24), kit_terrace.stair_lane(1.5, 24))

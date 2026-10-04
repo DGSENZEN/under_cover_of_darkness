@@ -157,6 +157,7 @@ const SLOTS := {
 	&"azulejo_mural": {"photo": "azulejo_mural", "colour": Color("8C9AB8"), "metallic": 0.0, "roughness": 0.35, "tile": 1.0},
 	&"render_pink": {"photo": "render_pink", "colour": Color("B4706A"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
 	&"render_green": {"photo": "render_green", "colour": Color("8EB09A"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
+	&"band_ochre": {"photo": "band_ochre", "colour": Color("8A4A32"), "metallic": 0.0, "roughness": 0.9, "tile": 1.5},
 	&"lioz": {"photo": "lioz", "colour": Color("CFC6B0"), "metallic": 0.0, "roughness": 0.8, "tile": 1.5},
 	&"render_white": {"photo": "render_white", "colour": Color("D6D0C4"), "metallic": 0.0, "roughness": 0.9, "tile": 2.5},
 	&"azulejo_souls": {"photo": "azulejo_souls", "painted": true, "colour": Color("8C7A90"), "metallic": 0.0, "roughness": 0.35},

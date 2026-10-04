@@ -39,6 +39,8 @@ CORNER_RANGE = 3.0
 CELL = 3.0
 STREET_DOOR = (2.2, 3.2)
 SMALL_DOOR = (1.6, 2.6)
+# (A one-storey house's: a fifth of its front at most, however narrow.)
+CORNER_DOOR = (1.2, 2.4)
 CANCELA = (1.6, 2.6)
 GRILLE = (0.8, 1.2, 1.5)
 WINDOW = (0.9, 1.4, 1.0)
@@ -46,6 +48,11 @@ WELL = 1.0
 MIRADOR = (2.5, 2.5, 3.0)
 BRIDGE = (3.0, 4.0)
 LINK = 1.4
+# A linked roof's gaps stand this far in from its back wall (neighbours
+# whose backs share a step line up theirs however deep their lots).
+LINK_BACK = 2.0
+# The whitewash's red-ochre band at the foot of a front.
+BAND = 0.8
 LADDER_GAP = 1.0
 BUDGET = {"small": 2400, "corner": 2400, "merchant": 3600, "corral": 3600}
 
@@ -116,7 +123,7 @@ def design(width, depth, kind="small", quirk="", enterable=True, front="whitewas
     shapes, cols = [], []
 
     # The front: its door near one end, a grilled window or two, blank.
-    door_w, door_h = SMALL_DOOR if width < 9.0 else STREET_DOOR
+    door_w, door_h = CORNER_DOOR if kind == "corner" else SMALL_DOOR if width < 9.0 else STREET_DOOR
     dx = ix0 + door_w / 2.0 + 0.4
     openings = [town.Opening(dx, 0.0, door_w, door_h, "door" if enterable else "barred")]
 
@@ -134,6 +141,11 @@ def design(width, depth, kind="small", quirk="", enterable=True, front="whitewas
     s, c = town.wall(width, eaves, WALL, openings, front, (0.0, -WALL / 2.0, 0.0), frames=False, inside=enterable)
     shapes += s
     walls = c
+
+    # (Its red-ochre foot, either side of its door.)
+    for a, b in ((-width / 2.0, dx - door_w / 2.0), (dx + door_w / 2.0, width / 2.0)):
+        if b - a > 0.05:
+            shapes.append(ks.card((a + b) / 2.0, BAND / 2.0, 0.012, b - a, BAND, "band_ochre"))
     s, c = town.wall(width, eaves, WALL, [], side, (0.0, -depth + WALL / 2.0, 180.0), frames=False, inside=enterable)
     shapes += s
     walls += c
@@ -282,12 +294,12 @@ def _roof(out, shapes, cols, plan, width, depth, eaves, enterable, ladder_side, 
 
     # Parapets: round the roof's edge (a gap for the linked neighbour), and
     # round the patio's (a gap at the ladder's head).
-    link_z = (plan[0][1] + plan[0][3]) / 2.0
+    link_z = -depth + WALL + LINK_BACK
     edges = [(-width / 2.0, 0.0 - t / 2.0 + t, width / 2.0, -t, "x"), (-width / 2.0, -depth + t, width / 2.0, -depth, "x"),
              (-width / 2.0, 0.0, -width / 2.0 + t, -depth, "z"), (width / 2.0 - t, 0.0, width / 2.0, -depth, "z")]
 
     for i, (x0, z0, x1, z1, along) in enumerate(edges):
-        gaps = [(link_z + LINK / 2.0, link_z - LINK / 2.0)] if quirk == "linked" and i == 3 else []
+        gaps = [(link_z + LINK / 2.0, link_z - LINK / 2.0)] if quirk == "linked" and i in (2, 3) else []
         _parapet(shapes, cols, x0, z0, x1, z1, along, eaves, gaps)
 
     if enterable:
@@ -302,6 +314,7 @@ def _roof(out, shapes, cols, plan, width, depth, eaves, enterable, ladder_side, 
 
     if quirk == "linked":
         out["places"]["link"] = [width / 2.0, eaves, link_z]
+        out["places"]["link_west"] = [-width / 2.0, eaves, link_z]
 
 
 def _parapet(shapes, cols, x0, z0, x1, z1, along, eaves, gaps):
@@ -329,7 +342,9 @@ def _quirk(out, shapes, cols, quirk, kind, width, depth, eaves, plan):
     a shrine on its corner (linked is the roof's)."""
     if quirk == "lookout":
         w, d, h = MIRADOR
-        x, z = -width / 2.0 + WALL + w / 2.0 + 0.3, -depth + WALL + d / 2.0 + 0.3
+        # (Over the hall at the front, off the strip along its back that
+        # the roofs' way runs.)
+        x, z = -width / 2.0 + WALL + w / 2.0 + 0.3, -WALL - d / 2.0 - 0.3
         shapes += [ks.box(x, eaves + h / 2.0, z, w, h, d, "whitewash"), ks.box(x, eaves + h + 0.1, z, w + 0.3, 0.2, d + 0.3, "terracotta")]
 
         for yaw in (0.0, 90.0, 180.0, 270.0):

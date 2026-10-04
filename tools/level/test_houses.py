@@ -396,6 +396,42 @@ class Patio(unittest.TestCase):
         self.assertLess(first_hit(shut["cols"], *across), 2.1)
         self.assertGreater(first_hit(linked["cols"], *across) or 99.0, 4.0)
 
+    def test_a_linked_roof_opens_both_ways_near_its_back(self):
+        # (A gap in its parapet on each side, a set distance in from its
+        # back wall: neighbours whose backs stand on one step line up their
+        # gaps however deep their lots.)
+        for width, depth in ((6.0, 18.0), (10.0, 20.5), (7.5, 15.5)):
+            linked = kit_patio.design(width, depth, quirk="linked")
+            z = linked["places"]["link"][2]
+            self.assertAlmostEqual(z, -depth + kit_patio.WALL + kit_patio.LINK_BACK, places=3)
+            y = linked["eaves"] + 0.5
+
+            for sx in (-1.0, 1.0):
+                hit = first_hit(linked["cols"], [sx * (width / 2.0 + 1.0), y, z], [-sx, 0.0, 0.0])
+                self.assertTrue(hit is None or hit > width / 2.0 + 0.5, (width, sx, hit))
+
+    def test_a_lookout_stands_over_the_hall(self):
+        # (Off the strip along its back that the roofs' way runs.)
+        design = kit_patio.design(10.0, 25.0, "merchant")
+        self.assertGreater(design["places"]["lookout"][2], -kit_patio.RANGE - kit_patio.WALL - 0.01)
+
+    def test_a_corner_houses_door_suits_its_one_storey(self):
+        # (A low door on a one-storey front: a fifth of it open at most,
+        # however narrow; still a man's door.)
+        for width in (4.5, 6.0, 8.0):
+            design = kit_patio.design(width, 8.0, "corner", enterable=False)
+            door = [o for o in design["openings"] if o[1] == "front" and o[6] in ("door", "barred")][0]
+            self.assertLessEqual(door[4] * door[5], 0.2 * width * design["eaves"])
+            self.assertGreaterEqual(door[4], 1.1)
+            self.assertGreaterEqual(door[5], 2.2)
+
+    def test_its_front_has_a_red_ochre_foot(self):
+        # (The Judiaria's whitewash over a red-ochre band at the foot.)
+        design = kit_patio.design(6.0, 18.0)
+        band = [sh for sh in design["shapes"] if sh.get("slot") == "band_ochre"]
+        self.assertTrue(band)
+        self.assertTrue(all(sh["centre"][1] + sh["size"][1] / 2.0 <= 1.0 for sh in band if sh["kind"] == "box"))
+
     def test_an_enterable_patio_house_is_toured(self):
         for kind, (width, depth) in kit_patio.LOTS.items():
             design = kit_patio.design(width, depth, kind)

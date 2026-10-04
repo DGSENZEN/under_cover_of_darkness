@@ -74,9 +74,13 @@ static func doors(parent: Node3D, level) -> Dictionary:
 		door.set("pickable", bool(props.get("pick", true)))
 		out[m["name"]] = door
 
+		# (An iron gate, a quarter's or an alley's, is wrought iron; a door
+		# studded wood.)
+		var skin := &"window_grille" if String(props.get("kind", "hinged")) == "gate" else &"wood_studded"
+
 		for panel in door.find_children("*", "MeshInstance3D", true, false):
 			if (panel as MeshInstance3D).get_aabb().size.y > 1.0:
-				(panel as MeshInstance3D).material_override = Materials.surface(&"wood_studded")
+				(panel as MeshInstance3D).material_override = Materials.surface(skin)
 
 	return out
 

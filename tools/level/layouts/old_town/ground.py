@@ -11,7 +11,15 @@ import town
 
 CELL = 2.5
 # What each quarter is paved with.
-SLOTS = {"baixa": "calcada", "stairs": "cobble", "judiaria": "calcada", "carmo": "flagstone", "upper": "cobble"}
+# (The Judiaria's granite flags until its river pebbles' photos come.)
+SLOTS = {"baixa": "calcada", "stairs": "cobble", "judiaria": "flagstone", "carmo": "flagstone", "upper": "cobble"}
+
+
+def cells(plate):
+    """A plate's ground's cells across x and along z (terrain.grid's: its
+    extent over the whole number of CELLs nearest)."""
+    _name, _q, x0, z0, x1, z1, _s, _n = plate
+    return (x1 - x0) / max(1, int(round((x1 - x0) / CELL))), (z1 - z0) / max(1, int(round((z1 - z0) / CELL)))
 
 
 def _passage(x, z):
@@ -35,11 +43,11 @@ def lay(L):
         name, quarter, x0, z0, x1, z1, _south, _north = plate
 
         for hx, hz in holes:
-            fx, fz = (hx - x0) / CELL - 0.5, (hz - z0) / CELL - 0.5
+            # (The grid's cells: its extent over a whole number of them.)
+            cx, cz = cells(plate)
+            fx, fz = (hx - x0) / cx - 0.5, (hz - z0) / cz - 0.5
 
-            if x0 < hx < x1 and z0 < hz < z1 and (abs(fx - round(fx)) > 1e-6 or abs(fz - round(fz)) > 1e-6 or
-                                                  abs((x1 - x0) / CELL - round((x1 - x0) / CELL)) > 1e-6 or
-                                                  abs((z1 - z0) / CELL - round((z1 - z0) / CELL)) > 1e-6):
+            if x0 < hx < x1 and z0 < hz < z1 and (abs(fx - round(fx)) > 1e-6 or abs(fz - round(fz)) > 1e-6):
                 raise ValueError("the hole at (%.2f, %.2f) is not in the middle of one of %s's cells" % (hx, hz, name))
 
         def ground(x, z, plate=plate):

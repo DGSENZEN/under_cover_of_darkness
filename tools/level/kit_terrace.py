@@ -43,6 +43,9 @@ when asked for (and, from the lot plan, when the kit is built).
     tannery     a tannery's yard: vats of liquor, hides drying on racks, a
                 lean-to against its back wall, the tanners' work spot
     bricked     an alley's mouth bricked up
+    gateway     a whitewashed wall across a lane, a segmental arch in it, an
+                iron fanlight over its gate (live: hung by the layout; or
+                barred shut)
     fill        a terrace carried forward between its retaining walls:
                 solid, paved at its top
     bridge      a room over a stair-lane between two houses, borne on their
@@ -249,6 +252,21 @@ def yard_front(width, live=False):
     return _register(name, "wall", "whitewash", shapes, cols, [width, h + 0.1, t + 0.1], **keys)
 
 
+def garden_wall(length):
+    """A walled garden's end: a whitewashed wall `length` along x YARD_WALL
+    high about z 0, a granite coping, shut."""
+    name = "garden_wall_%d" % _cm(length)
+
+    if name in k.PIECES:
+        return name
+
+    h, t = YARD_WALL
+    body = (0.0, h / 2.0, 0.0, length, h, t)
+    coping = (0.0, h + 0.05, 0.0, length + 0.04, 0.1, t + 0.1)
+    shapes = [ks.box(*body, "whitewash"), ks.box(*coping, "granite")]
+    return _register(name, "wall", "whitewash", shapes, [town.col(*body), town.col(*coping)], [length + 0.04, h + 0.1, t + 0.1])
+
+
 def ramp(width, length, rise):
     """A lane `width` wide sloping up `rise` over `length` along +z from the
     origin."""
@@ -429,9 +447,12 @@ def grate_hatch(depth, collar=0.0):
     """A way down from the street `depth` deep: a shaft SHAFT square, its
     ladder drawn down a wall from its foot to the street (its climb over
     the street), the grate lifted aside, nothing across its mouth; with a
-    `collar`, the paving round it that wide, COLLAR_PROUD over the street
-    (the ground's hole is whole cells)."""
-    name = "grate_hatch_%d%s" % (_cm(depth), "_c%d" % _cm(collar) if collar else "")
+    `collar`, the paving round it that wide (or (across x, along z): a
+    ground's cell longer one way), COLLAR_PROUD over the street (the
+    ground's hole is whole cells)."""
+    cx, cz = collar if isinstance(collar, (tuple, list)) else (collar, collar)
+    tag = "" if not cx else "_c%d" % _cm(cx) if abs(cx - cz) < 1e-9 else "_c%dx%d" % (_cm(cx), _cm(cz))
+    name = "grate_hatch_%d%s" % (_cm(depth), tag)
 
     if name in k.PIECES:
         return name
@@ -448,13 +469,13 @@ def grate_hatch(depth, collar=0.0):
                        (SHAFT / 2.0 + t / 2.0, 0.0, t, SHAFT), (-SHAFT / 2.0 - t / 2.0, 0.0, t, SHAFT)):
         add((x, (top - depth) / 2.0, z, w, depth + top, d), "stone_moss")
 
-    if collar:
-        c, inner = collar / 2.0, SHAFT / 2.0 + t
+    if cx:
+        ax, az, inner = cx / 2.0, cz / 2.0, SHAFT / 2.0 + t
         y, h = top - 0.125, 0.25
 
         # (Paved as the street round it.)
-        for box in ((0.0, y, (inner + c) / 2.0, collar, h, c - inner), (0.0, y, -(inner + c) / 2.0, collar, h, c - inner),
-                    ((inner + c) / 2.0, y, 0.0, c - inner, h, 2.0 * inner), (-(inner + c) / 2.0, y, 0.0, c - inner, h, 2.0 * inner)):
+        for box in ((0.0, y, (inner + az) / 2.0, cx, h, az - inner), (0.0, y, -(inner + az) / 2.0, cx, h, az - inner),
+                    ((inner + ax) / 2.0, y, 0.0, ax - inner, h, 2.0 * inner), (-(inner + ax) / 2.0, y, 0.0, ax - inner, h, 2.0 * inner)):
             add(box, "calcada")
 
     # (The grate's iron rim round the mouth, the grate leant aside.)
@@ -470,8 +491,7 @@ def grate_hatch(depth, collar=0.0):
     shapes += [ks.box(wall_x, (top - depth) / 2.0, s * 0.22, 0.05, depth + top, 0.05, "iron") for s in (-1.0, 1.0)]
     shapes += [ks.box(wall_x, -depth + 0.3 * (i + 1), 0.0, 0.03, 0.03, 0.44, "iron") for i in range(int((depth + top) / 0.3))]
     climbs = [[0.0, (-depth + 0.6) / 2.0, 0.0, 0.8, depth + 0.6, 0.8, 0.0]]
-    reach = max(collar, SHAFT + 2.0 * t)
-    return _register(name, "vault", "stone_moss", shapes, cols, [reach, depth, reach], climbs=climbs)
+    return _register(name, "vault", "stone_moss", shapes, cols, [max(cx, SHAFT + 2.0 * t), depth, max(cz, SHAFT + 2.0 * t)], climbs=climbs)
 
 
 def hatch_chamber(width, height, length, ledge=0.0):
@@ -956,3 +976,45 @@ def bridge(span, depth):
     shapes, cols = shapes + rs, cols + rc
     top = floor + room + (depth / 2.0) * math.tan(math.radians(27.0)) + 0.3
     return _register(name, "town", "plaster", shapes, cols, [width, top, depth], top=top, budget=900)
+
+
+GATE_ARCH = 0.6
+GATE_WALL = 0.5
+
+
+def gateway(width, height, opening, opening_h, live=True, slot="whitewash"):
+    """A wall `width` along x, `height` high, GATE_WALL thick about z 0 (its
+    faces to either side), an opening `opening` wide `opening_h` high at its
+    crown under a segmental arch GATE_ARCH high, an iron fanlight filling
+    the arch over the gate; `live`, the gate (hung by the layout: its
+    `doors`) under the springing; else barred shut, solid; a granite
+    coping."""
+    name = "gateway_%d_%d_%d_%d%s%s" % (_cm(width), _cm(height), _cm(opening), _cm(opening_h), "" if live else "_barred",
+                                      "" if slot == "whitewash" else "_" + slot)
+
+    if name in k.PIECES:
+        return name
+
+    t = GATE_WALL
+    spring = opening_h - GATE_ARCH
+    shapes = ks.arched_wall(width, height, t, opening, spring, GATE_ARCH, 0.0, slot)
+    side = (width - opening) / 2.0
+    cols = [town.col(s * (opening + side) / 2.0, height / 2.0, 0.0, side, height, t) for s in (-1.0, 1.0)]
+    cols.append(town.col(0.0, (spring + height) / 2.0, 0.0, opening, height - spring, t))
+
+    for s in (-1.0, 1.0):
+        shapes.append(ks.card(0.0, spring + GATE_ARCH / 2.0, s * 0.03, opening, GATE_ARCH, "window_grille", 0.0 if s > 0 else 180.0))
+
+    shapes.append(ks.box(0.0, height + 0.06, 0.0, width + 0.06, 0.12, t + 0.1, "granite"))
+    cols.append(town.col(0.0, height + 0.06, 0.0, width + 0.06, 0.12, t + 0.1))
+    keys = {}
+
+    if live:
+        keys["doors"] = [[0.0, 0.0, 0.0, 0.0, opening, spring]]
+    else:
+        for s in (-1.0, 1.0):
+            shapes.append(ks.card(0.0, spring / 2.0, s * 0.05, opening, spring, "window_grille", 0.0 if s > 0 else 180.0))
+
+        cols.append(town.col(0.0, spring / 2.0, 0.0, opening, spring, 0.1))
+
+    return _register(name, "wall", slot, shapes, cols, [width + 0.06, height + 0.12, t + 0.1], **keys)

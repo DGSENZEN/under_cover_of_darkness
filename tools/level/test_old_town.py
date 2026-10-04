@@ -25,6 +25,7 @@ import old_town as town_layout  # noqa: E402
 import rules  # noqa: E402
 import town  # noqa: E402
 from town import baixa  # noqa: E402
+from town import judiaria as jud_plan  # noqa: E402
 from town import stairs as stairs_plan  # noqa: E402
 from test_rules import marker, piece  # noqa: E402
 
@@ -822,7 +823,8 @@ class Stairs(unittest.TestCase):
 
     def test_each_tower_opens_at_its_terrace(self):
         # (Its top door where the plan puts it, on its terrace's edge.)
-        towers = sorted((p for p in layout()["pieces"] if p["piece"].startswith("stair_tower_")), key=lambda p: -p["position"][2])
+        towers = sorted((p for p in layout()["pieces"] if p["piece"].startswith("stair_tower_") and p["name"].startswith("stairs_")),
+                        key=lambda p: -p["position"][2])
         self.assertEqual(len(towers), len(stairs_plan.TOWERS))
 
         for p, (plate, top_z, _ground, _quarter) in zip(towers, stairs_plan.TOWERS):
@@ -965,6 +967,367 @@ class Stairs(unittest.TestCase):
     def test_the_stairs_checks_clean(self):
         self.assertGreaterEqual(len(stairs_plan.LOTS), 60)
         self.assertEqual([p for p in rules.problems(layout(), "stage2") if "stairs" in p], [])
+
+
+# The Judiaria (plan B1a, Task 16)
+
+def placed_head(w):
+    """A plan wall's stair's head in the world."""
+    name = getattr(kit_terrace, w["kind"])(*w["args"])
+    return geo.add(list(w["at"]), geo.apply(geo.rotation(w["yaw"]), kit_recipes.PIECES[name]["head"]))
+
+
+def judiaria_openings():
+    """The Judiaria's openings over its edges: each stair's head, each
+    tower's top door, each Carmo stair's landing, the wall-walk's arrival."""
+    out = []
+
+    for w in jud_plan.WALLS["stair"]:
+        head = placed_head(w)
+        z = jud_plan.STEPS[w["step"]]["z"]
+
+        if w["kind"] == "stair_lane":
+            half = w["args"][0] / 2.0
+            out.append((w["c"] - half, z - 0.6, w["c"] + half, z + 0.6))
+        else:
+            out.append((head[0] - 1.6, z - 0.6, head[0] + 0.4, z + 0.6))
+
+    for name, z in jud_plan.TOWERS:
+        door = jud_plan.tower_at(name, z)[2]
+        out.append((jud_plan.WEST - 0.6, door - 0.8, jud_plan.WEST + 0.6, door + 0.8))
+
+    for name, ground, foot in jud_plan.CARMO_STAIRS:
+        head = jud_plan.carmo_head(foot, jud_plan.level(jud_plan.plate_named(name)) - ground)
+        out.append((jud_plan.WEST - 0.6, head - 0.8, jud_plan.WEST + 0.6, head + 0.8))
+
+    out.append((jud_plan.WALK[0] - 0.5, -76.0, 151.5, -72.0))
+    return out
+
+
+def jud_lot(name):
+    return [each for each in jud_plan.LOTS if each.name == name][0]
+
+
+class Judiaria(unittest.TestCase):
+    def test_its_sectors_are_about_100_m(self):
+        for name in ("judiaria_lo", "judiaria_hi"):
+            zs = [z for t in jud_plan.PLATES for z in (t[3], t[5]) if town.sector_of(80.0, (t[3] + t[5]) / 2.0) == name]
+            self.assertTrue(zs, name)
+            self.assertLessEqual(max(zs) - min(zs), 120.0, name)
+
+    def test_its_houses_turn_inward_behind_blank_walls(self):
+        # (Patio houses all; a front a door and iron grilles, no more, at
+        # most 15% of it open (a one-storey house's door alone a fifth).)
+        self.assertGreaterEqual(len(jud_plan.LOTS), 200)
+        self.assertEqual({each.family for each in jud_plan.LOTS}, {"patio"})
+
+        for each in jud_plan.LOTS:
+            recipe = kit_recipes.PIECES[town.design_key(each)]
+            fronts = [o for o in recipe["openings"] if o[1] == "front"]
+            self.assertTrue(all(o[6] in ("door", "barred", "shut") for o in fronts), each.name)
+            self.assertEqual(len([o for o in fronts if o[6] in ("door", "barred")]), 1, each.name)
+            share = 0.15 if each.storeys > 1 else 0.2
+            self.assertLessEqual(sum(o[4] * o[5] for o in fronts), share * each.width * recipe["eaves"] + 1e-6, each.name)
+
+    def test_each_step_is_climbed_by_two_stairs(self):
+        # (Their heads level with the terrace above on the step's line,
+        # their feet on the terrace below.)
+        for k, step in enumerate(jud_plan.STEPS):
+            mine = [w for w in jud_plan.WALLS["stair"] if w["step"] == k]
+            self.assertEqual(len(mine), 2, k)
+
+            for w in mine:
+                head = placed_head(w)
+                self.assertAlmostEqual(head[1], step["y"] + step["rise"], delta=0.02)
+                self.assertAlmostEqual(w["at"][1], step["y"], delta=0.02)
+                self.assertLess(abs(head[2] - step["z"]), 2.0, (k, head))
+
+    def test_its_edges_are_walled(self):
+        self.assertEqual(edge_faults("judiaria", judiaria_openings())[:8], [])
+
+    def test_its_lanes_dog_leg(self):
+        # (Each terrace's lane in segments of 25 m at most, each jogging
+        # its own width off the next: a view along it stops at the next
+        # segment's fronts.)
+        boxes = rules.colliders(layout())
+
+        for plate in jud_plan.PLATES:
+            y = jud_plan.level(plate) + 1.6
+            segments = jud_plan.SEGMENTS[plate[0]]
+            self.assertGreaterEqual(len(segments), 5, plate[0])
+
+            for (x0, x1, s), (_a, _b, t) in zip(segments, segments[1:]):
+                self.assertLessEqual(x1 - x0, 25.5, (plate[0], x0))
+                self.assertGreaterEqual(abs(s - t), jud_plan.LANE - 1e-6, (plate[0], x0))
+                z = jud_plan.south(plate) - s - jud_plan.LANE / 2.0
+                hits = [h for h in (b.ray([x0 + 0.6, y, z], [1.0, 0.0, 0.0]) for b in boxes) if h is not None]
+                self.assertTrue(hits, (plate[0], x0))
+                self.assertLessEqual(min(hits), x1 - x0 + 0.5, (plate[0], x0, min(hits)))
+                self.assertGreaterEqual(min(hits), x1 - x0 - 1.2, (plate[0], x0, min(hits)))
+
+    def test_lanes_narrow_to_one_metre(self):
+        # (The adarves: the narrowest a metre and a bit, none too narrow to
+        # pass; measured wall to wall at a man's chest.)
+        boxes = rules.colliders(layout())
+        widths = []
+
+        for name, (x0, w) in jud_plan.ADARVES.items():
+            plate = jud_plan.plate_named(name)
+            zn, _zs = jud_plan.lane(plate, x0 + w / 2.0)
+            width = across(boxes, x0 + w / 2.0, jud_plan.level(plate) + 1.2, zn - 4.0)
+            self.assertGreaterEqual(width, 1.0, name)
+            widths.append(width)
+
+        self.assertLessEqual(min(widths), 1.3)
+
+    def test_adarves_are_gated_dead_ends(self):
+        # (An iron gate across each one's mouth, shut at curfew; a payoff
+        # at its end.)
+        gates = [m for m in layout()["markers"] if m["ucd"] == "door" and m["props"].get("curfew")]
+        payoffs = [m for m in layout()["markers"] if m["name"].startswith("payoff_")]
+
+        for name, (x0, w) in jud_plan.ADARVES.items():
+            plate = jud_plan.plate_named(name)
+            y = jud_plan.level(plate)
+            zn, _zs = jud_plan.lane(plate, x0 + w / 2.0)
+            mouth = [x0 + w / 2.0, y, zn]
+            gate = [m for m in gates if math.dist(m["position"], mouth) < 0.5]
+            self.assertEqual(len(gate), 1, name)
+            self.assertEqual(gate[0]["props"]["kind"], "gate")
+            end = [x0 + w / 2.0, y, jud_plan.north(plate) + 1.0]
+            self.assertTrue(any(math.dist(m["position"], end) < 2.0 for m in payoffs), name)
+
+    def test_two_quarter_gates_shut_at_curfew(self):
+        # (Iron gates 2.5 m wide across the courts the Baixa's towers open
+        # into, shut at the curfew bell; each tower's way in passes one.)
+        gates = [m for m in layout()["markers"] if m["ucd"] == "door" and m["props"].get("label") == "the Judiaria's gate"]
+        self.assertEqual(len(gates), 2)
+        ways = routes("judiaria_tower_")
+        self.assertEqual(len(ways), 2)
+
+        for m in gates:
+            self.assertEqual(m["props"]["kind"], "gate")
+            self.assertTrue(m["props"]["curfew"])
+            self.assertGreaterEqual(m["props"]["width"], 2.5)
+            self.assertTrue(any(p["piece"].startswith("gateway_") and math.dist(p["position"], m["position"]) < 0.3 for p in layout()["pieces"]))
+            self.assertTrue(any(any(math.dist(c["position"], m["position"]) < 1.5 for c in points) for points in ways.values()), m["name"])
+
+    def test_the_palace_is_sealed(self):
+        # (Its garden wall shuts the quarter's east; its gate at x 150, z
+        # -230 barred, a sealed exit there.)
+        exits = [m for m in layout()["markers"] if m["ucd"] == "exit" and m["props"].get("to") == "palace"]
+        self.assertEqual(len(exits), 1)
+        m = exits[0]
+        self.assertLess(math.hypot(m["position"][0] - 150.0, m["position"][2] + 230.0), 2.5)
+        self.assertTrue(m["props"]["label"].endswith("(sealed)"))
+        self.assertTrue(any(p["piece"].startswith("gateway_") and "_barred" in p["piece"] and math.dist(p["position"], m["position"]) < 1.5
+                            for p in layout()["pieces"]))
+        boxes = rules.colliders(layout())
+
+        for plate in jud_plan.PLATES:
+            y = jud_plan.level(plate) + 1.2
+
+            for i in range(int(jud_plan.south(plate) - jud_plan.north(plate))):
+                z = jud_plan.north(plate) + i + 0.5
+
+                if z > jud_plan.WALK[1]:
+                    continue
+
+                hits = [h for h in (b.ray([147.0, y, z], [1.0, 0.0, 0.0]) for b in boxes) if h is not None]
+                self.assertTrue(hits and min(hits) < 4.5, (plate[0], z))
+
+    def test_the_azotea_highway_runs_house_to_house(self):
+        # (Two or three chains of linked roofs, each 3-6 houses and 25-60 m,
+        # each up a stair from a plazuela, a lookout on one of its houses,
+        # every linked roof walked.)
+        chains = routes("roof_judiaria_")
+        self.assertTrue(2 <= len(chains) <= 3, sorted(chains))
+        rects = [(jud_plan.lot_rect(each), each) for each in jud_plan.LOTS]
+
+        for name, points in chains.items():
+            self.assertEqual(points[0]["props"]["way"], "roof")
+            houses = {each.name for r, each in rects for m in points if r[0] <= m["position"][0] <= r[2] and r[1] <= m["position"][2] <= r[3]
+                      and m["position"][1] > each.y + 3.0}
+            self.assertTrue(3 <= len(houses) <= 6, (name, sorted(houses)))
+            self.assertTrue(all(jud_lot(h).quirk == "linked" for h in houses), name)
+            self.assertTrue(any("lookout" in kit_recipes.PIECES[town.design_key(jud_lot(h))]["places"] for h in houses), name)
+            length = sum(math.hypot(b["position"][0] - a["position"][0], b["position"][2] - a["position"][2]) for a, b in zip(points, points[1:]))
+            self.assertTrue(25.0 <= length <= 60.0, (name, length))
+            self.assertTrue(any(abs(points[0]["position"][1] - jud_plan.level(t)) < 0.05 for t in jud_plan.PLATES), name)
+
+        linked = {each.name for each in jud_plan.LOTS if each.quirk == "linked"}
+        walked = {each.name for r, each in rects for points in chains.values() for m in points
+                  if r[0] <= m["position"][0] <= r[2] and r[1] <= m["position"][2] <= r[3] and m["position"][1] > each.y + 3.0}
+        self.assertEqual(sorted(linked - walked), [])
+
+    def test_cobertizos_bridge_the_stair_lanes(self):
+        # (Houses bridging two stair-lanes at least, a room over the lane's
+        # foot clear of a man's head, its far end on the next house.)
+        boxes = rules.colliders(layout())
+        bridges = [each for each in jud_plan.LOTS if each.quirk == "bridge"]
+        self.assertGreaterEqual(len(bridges), 2)
+
+        for each in bridges:
+            r = jud_plan.lot_rect(each)
+            k = [k for k, step in enumerate(jud_plan.STEPS) if abs(step["z"] - r[1]) < 0.05][0]
+            self.assertIn((r[2] + jud_plan.COBERTIZO / 2.0, jud_plan.COBERTIZO), [tuple(s) for s in jud_plan.STEPS[k]["stairs"]], each.name)
+            x, z = r[2] + jud_plan.COBERTIZO / 2.0, each.z - 2.0
+            over = [h for h in (b.ray([x, each.y + 0.2, z], [0.0, 1.0, 0.0]) for b in boxes) if h is not None]
+            self.assertTrue(over and 3.5 <= min(over) + 0.2 <= 4.5, (each.name, over and min(over)))
+
+    def test_the_corral_is_kept_for_the_townsfolk(self):
+        corral = [each for each in jud_plan.LOTS if dict(each.params).get("kind") == "corral"]
+        self.assertEqual(len(corral), 1)
+        each = corral[0]
+        self.assertTrue(each.lived and each.enterable)
+        r = jud_plan.lot_rect(each)
+        homes = [m for m in layout()["markers"] if m["ucd"] == "home" and r[0] <= m["position"][0] <= r[2] and r[1] <= m["position"][2] <= r[3]]
+        self.assertGreaterEqual(len(homes), 4)
+
+    def test_cisterns_lie_under_two_plazuelas(self):
+        # (Down a hatch in each, along a vaulted cistern's ledge over its
+        # water: below, a cellar.)
+        ways = routes("judiaria_cistern_")
+        self.assertEqual(len(ways), 2)
+        holes = town.ground_holes()
+        waters = [m for m in layout()["markers"] if m["ucd"] == "water" and m["name"].startswith("judiaria_cistern_")]
+        self.assertEqual(len(waters), 2)
+
+        ground = rules.ground_of(layout())
+
+        for k, points in zip(jud_plan.CISTERNS, [ways[n] for n in sorted(ways)]):
+            hx, hz = jud_plan.cistern(k)[2]
+            self.assertIn((hx, hz), holes)
+            # (Its hatch takes one cell of the ground, its collar paving it.)
+            self.assertEqual(ground.heights(hx, hz), [])
+
+            for dx, dz in ((1.4, 0.0), (-1.4, 0.0), (0.0, 1.4), (0.0, -1.4)):
+                self.assertTrue(ground.heights(hx + dx, hz + dz), (k, dx, dz))
+            self.assertEqual(points[0]["props"]["way"], "below")
+            p = jud_plan.PLAZUELAS[k]
+            self.assertTrue(p <= hx <= p + jud_plan.PLAZUELA)
+            self.assertLess(points[-1]["position"][1], jud_plan.level(jud_plan.PLATES[k]) - 2.0)
+
+    def test_the_baixa_and_the_carmo_climb_to_it(self):
+        # (Each boundary step: two public ways up from the lower quarter's
+        # ground to a terrace of the Judiaria, a thief's beside them.)
+        found = {}
+
+        for points in routes("judiaria_").values():
+            props = points[0]["props"]
+
+            if props.get("step") in ("judiaria_step_baixa", "judiaria_step_carmo"):
+                found.setdefault(props["step"], []).append(points)
+
+        for step, quarter in (("judiaria_step_baixa", "baixa"), ("judiaria_step_carmo", "carmo")):
+            ways = found.get(step, [])
+            self.assertEqual(sorted(w[0]["props"]["way"] for w in ways), ["public", "public", "thief"], step)
+
+            for points in ways:
+                first, last = points[0]["position"], points[-1]["position"]
+                self.assertEqual(town.quarter_of(first[0], first[2]), quarter)
+                self.assertAlmostEqual(first[1], town.height(first[0], first[2]), delta=0.05)
+                self.assertEqual(town.quarter_of(last[0], last[2]), "judiaria")
+                self.assertTrue(any(abs(last[1] - jud_plan.level(t)) < 0.05 for t in jud_plan.PLATES))
+
+    def test_each_tower_opens_at_its_terrace(self):
+        towers = sorted((p for p in layout()["pieces"] if p["piece"].startswith("stair_tower_") and p["name"].startswith("judiaria_")),
+                        key=lambda p: -p["position"][2])
+        self.assertEqual(len(towers), 2)
+
+        for p, (plate, z) in zip(towers, jud_plan.TOWERS):
+            doors = [geo.add(p["position"], geo.apply(p["basis"], d)) for d in kit_recipes.PIECES[p["piece"]]["doors"]]
+            self.assertAlmostEqual(doors[0][1], jud_plan.BAIXA_G, delta=0.05)
+            self.assertAlmostEqual(doors[1][1], jud_plan.level(jud_plan.plate_named(plate)), delta=0.05)
+            self.assertAlmostEqual(doors[1][2], jud_plan.tower_at(plate, z)[2], delta=0.05)
+            self.assertLess(abs(doors[1][0] - jud_plan.WEST), 0.6)
+            self.assertLess(doors[0][0], jud_plan.WEST - 3.0)
+
+    def test_each_step_is_crossed_publicly_and_by_a_thief(self):
+        labels = {m["props"]["label"] for m in layout()["markers"] if m["ucd"] == "terrace_step" and m["props"]["label"].startswith("judiaria_step_")}
+        self.assertEqual(labels, {"judiaria_step_%d" % (k + 1) for k in range(len(jud_plan.STEPS))} | {"judiaria_step_baixa", "judiaria_step_carmo"})
+        self.assertEqual([p for p in rules.way_problems(layout()) if "judiaria_step_" in p], [])
+
+    def test_the_lanes_are_lamp_lit(self):
+        # (Corner lamps on the fronts along each terrace's lane, 40 m apart
+        # at most and 25 m from its ends, lit on dark nights only.)
+        lamps = [p for p in layout()["pieces"] if p["piece"] == "corner_lamp" and p["name"].startswith("judiaria_")]
+        lights = [m for m in layout()["markers"] if m["ucd"] == "light" and m["name"].startswith("judiaria_lamp_")]
+        self.assertTrue(lights and all(m["props"].get("dark_only") for m in lights))
+
+        for plate in jud_plan.PLATES:
+            xs = sorted(p["position"][0] for p in lamps if abs(p["position"][1] - jud_plan.level(plate)) < 0.05)
+            self.assertTrue(xs, plate[0])
+            self.assertLessEqual(xs[0] - jud_plan.WEST, 25.0, plate[0])
+            self.assertLessEqual(jud_plan.EAST - xs[-1], 25.0, plate[0])
+            self.assertTrue(all(b - a <= 40.0 for a, b in zip(xs, xs[1:])), (plate[0], xs))
+
+    def test_the_shrines_burn_all_night(self):
+        lights = [m for m in layout()["markers"] if m["ucd"] == "light" and m["props"]["kind"] == "candle"]
+        vantages = [m["position"] for m in layout()["markers"] if m["ucd"] == "vantage"]
+
+        for each in jud_plan.LOTS:
+            if each.quirk != "shrine":
+                continue
+
+            r = jud_plan.lot_rect(each)
+            near = [m for m in lights if r[0] - 0.5 <= m["position"][0] <= r[2] + 0.5 and abs(m["position"][2] - each.z) < 0.6]
+
+            if not any(r[0] - 4.5 <= v[0] <= r[2] + 4.5 and abs(v[2] - each.z) < 4.5 for v in vantages):
+                self.assertTrue(near and all(m["props"]["douse"] for m in near), each.name)
+
+    def test_the_judiaria_has_its_vantages(self):
+        # (At each stair's head, each lane's west end over the cliff, each
+        # corbels' top: unlit.)
+        vantages = [m["position"] for m in layout()["markers"] if m["ucd"] == "vantage" and m["name"].startswith("judiaria_")]
+        lights = [m["position"] for m in layout()["markers"] if m["ucd"] == "light"]
+
+        def near(point, reach):
+            return any(math.dist(v, point) <= reach for v in vantages)
+
+        for w in jud_plan.WALLS["stair"]:
+            self.assertTrue(near(placed_head(w), 3.5), w["at"])
+
+        for plate in jud_plan.PLATES:
+            zn, zs = jud_plan.lane(plate, jud_plan.WEST + 1.0)
+            self.assertTrue(near([jud_plan.WEST + 1.0, jud_plan.level(plate), (zn + zs) / 2.0], 3.0), plate[0])
+
+        for v in vantages:
+            self.assertFalse(any(math.dist(v, light) < 4.0 for light in lights), v)
+
+    def test_the_judiaria_is_outside(self):
+        zones = [m for m in layout()["markers"] if m["ucd"] == "zone" and m["name"].startswith("judiaria_")]
+        self.assertEqual({m["props"]["grade"] for m in zones}, {"outside", "indoors", "cellar"})
+
+        def graded(point):
+            inside = [m for m in zones if geo.Box(m["position"], m["basis"], m["size"]).contains(point)]
+            return min(inside, key=lambda m: m["size"][0] * m["size"][1] * m["size"][2])["props"]["grade"] if inside else None
+
+        for plate in jud_plan.PLATES:
+            zn, zs = jud_plan.lane(plate, 80.0)
+            self.assertEqual(graded([80.0, jud_plan.level(plate) + 1.0, (zn + zs) / 2.0]), "outside", plate[0])
+
+        (x, z), _h, _door = jud_plan.tower_at(*jud_plan.TOWERS[0])
+        self.assertEqual(graded([x, 8.0, z]), "indoors")
+        cx, cy, _hatch, back = jud_plan.cistern(jud_plan.CISTERNS[0])
+        self.assertEqual(graded([cx, cy + 1.0, back + 2.0]), "cellar")
+
+    def test_the_wall_walks_arrival_is_kept(self):
+        # (The harbour's east wall-walk comes in at the first terrace's
+        # south-east corner: open ground there, a public way on into the
+        # lane.)
+        at = [m for m in layout()["markers"] if m["name"] == "from_harbour_wall_walk"][0]["position"]
+        boxes = rules.colliders(layout())
+        self.assertFalse(any(b.contains([at[0], at[1] + 1.0, at[2]], 0.4) for b in boxes))
+        way = routes("judiaria_walk_way")
+        self.assertEqual(len(way), 1)
+        points = list(way.values())[0]
+        self.assertLess(math.dist(points[0]["position"], at), 1.0)
+        zn, zs = jud_plan.lane(jud_plan.PLATES[0], points[-1]["position"][0])
+        self.assertTrue(zn <= points[-1]["position"][2] <= zs)
+
+    def test_the_judiaria_checks_clean(self):
+        self.assertEqual([p for p in rules.problems(layout(), "stage2") if "judiaria" in p], [])
 
 
 if __name__ == "__main__":
