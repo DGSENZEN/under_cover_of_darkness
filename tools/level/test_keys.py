@@ -138,6 +138,19 @@ class Tavern(Keys):
         self.assertLessEqual(tris(recipe), recipe["budget"])
 
 
+    def test_its_side_to_the_lane_is_rendered_and_windowed(self):
+        # (Its -x side faces the terrace's lane: clad as its front, a shut,
+        # lit or barred window a storey, solid as a wall.)
+        recipe = PIECES["tavern"]
+        side = recipe["side_openings"]
+        self.assertGreaterEqual(len({round(o[1], 1) for o in side}), kit_tavern.STOREYS)
+        cols = recipe["cols"]
+        from test_houses import first_hit
+
+        for o in side:
+            self.assertAlmostEqual(first_hit(cols, [-kit_tavern.WIDTH / 2.0 - 1.0, o[1] + 0.7, o[0]], [1.0, 0.0, 0.0]), 1.0, places=2)
+
+
 class WatchHouse(Keys):
     def test_the_watch_house_has_three_ways(self):
         self.assertEqual(sorted(w["kind"] for w in PIECES["watch_house"]["ways"]), ["door", "roof", "wall"])

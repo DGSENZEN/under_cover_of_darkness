@@ -297,6 +297,7 @@ def _plan():
         rows[name] = row
 
     lots += _hand_lots(rows)
+    lots = _corners(lots)
 
     # About one ordinary house in five or six walked in, a third lived in.
     plain = [i for i, each in enumerate(lots) if not each.enterable]
@@ -396,15 +397,63 @@ def _hand_lots(rows):
     return lots
 
 
-LOTS, ROWS = _plan()
-
-
 def lot_rect(lot):
     """A lot's footprint (x0, z0, x1, z1): its front at z, deep behind it."""
     if abs(lot.yaw - 180.0) < 0.01:
         return (lot.x - lot.width / 2.0, lot.z, lot.x + lot.width / 2.0, lot.z + lot.depth)
 
     return (lot.x - lot.width / 2.0, lot.z - lot.depth, lot.x + lot.width / 2.0, lot.z)
+
+
+def _corners(lots):
+    """Each lot with a side that stands open (no lot of its terrace within
+    CORNER_REACH of it over CORNER_COVER of its depth, not the city wall)
+    made a corner house on that side (no jetty: its side wall would not
+    close one)."""
+    out = []
+
+    for lot in lots:
+        r = lot_rect(lot)
+        depth = r[3] - r[1]
+        letters = ""
+
+        for side, edge, beyond in (("w", r[0], (r[0] - CORNER_REACH, r[0])), ("e", r[2], (r[2], r[2] + CORNER_REACH))):
+            # (Against the city wall, closed; past its end, over the old
+            # rampart, open to the gorge.)
+            if side == "w" and edge <= WEST + 0.01 and (r[1] + r[3]) / 2.0 > WALL_END:
+                continue
+
+            covered = 0.0
+
+            for other in lots:
+                o = lot_rect(other)
+
+                if other is lot or abs(other.y - lot.y) > 0.01 or o[2] <= beyond[0] + 0.01 or o[0] >= beyond[1] - 0.01:
+                    continue
+
+                covered += max(0.0, min(o[3], r[3]) - max(o[1], r[1]))
+
+            if covered < CORNER_COVER * depth:
+                # (A house facing north has its east side to -x.)
+                letters += side if abs(lot.yaw) < 0.01 else {"w": "e", "e": "w"}[side]
+
+        if letters:
+            quirk = "" if lot.quirk == "jetty" else lot.quirk
+            lot = Lot(lot.name, lot.family, lot.x, lot.z, lot.y, lot.yaw, lot.width, lot.depth, lot.storeys, quirk, lot.enterable, lot.rooms,
+                      lot.lived, lot.sector, lot.params + (("corner", "".join(sorted(letters, reverse=True))),))
+
+        out.append(lot)
+
+    return out
+
+
+# A side stands open with no lot within this of it over this much of its
+# depth (a stair-lane or a narrow light plot is closed).
+CORNER_REACH = 3.5
+CORNER_COVER = 0.9
+
+
+LOTS, ROWS = _plan()
 
 
 # The vaulted stream (old_town_porto.md section 1, the Rio da Vila; the

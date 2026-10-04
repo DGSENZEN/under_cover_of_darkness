@@ -48,6 +48,9 @@ MIRANTE = (2.0, 2.0, 2.2)
 DORMER = (1.0, 1.4, 1.2)
 PRIVY = 1.2
 SLOT_WIDTH = 1.5
+# A corner house's side windows: their width, the triangles each costs.
+SIDE_WINDOW = 1.0
+SIDE_BUDGET = 70
 STAIR_WIDTH = 0.9
 # A house this deep turns its first stair about a half-landing.
 TWO_FLIGHT_DEPTH = 15.0
@@ -78,13 +81,15 @@ def _honest(rng, storey, top):
 
 
 def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="render_ochre", side="granite", seed=0, shop=SHOP,
-           back_storey=1):
+           back_storey=1, corner=""):
     """A Porto house: see the module's doc. Returns a kit_town design with
     `openings` ([storey, face, x, y, w, h, kind]), `balconies` ([x, top,
     width, depth]), `eaves`, `doors`, `entries`, `rooms_at`, `tour` and (a
     two_level house) `out_back`, `places`. Its ground storey `shop` high (a
     two_level house's as tall as the terrace step it straddles, its back
-    door on `back_storey`)."""
+    door on `back_storey`). A corner house's open sides (`corner`: "w",
+    "e" or both) are clad as its front, a window on every storey (their
+    openings' faces "west", "east"; their x the piece's z)."""
     if quirk not in QUIRKS:
         raise ValueError("no Porto quirk '%s'" % quirk)
 
@@ -155,8 +160,14 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
     shapes += s1 + s2
 
     if jet:
-        # (The jetty's beam ends under its overhang.)
+        # (The jetty's beam ends under its overhang; its sides closed, the
+        # party walls carried on out to its front.)
         shapes += [ks.box(x, shop - 0.12, jet / 2.0, 0.18, 0.24, jet + 0.3, "timber") for x in (-width / 2.0 + 0.3, 0.0, width / 2.0 - 0.3)]
+
+        for sx in (-1.0, 1.0):
+            cheek = (sx * (width / 2.0 - party / 2.0), (shop + eaves) / 2.0, (jet - thick) / 2.0, party, eaves - shop, jet - thick)
+            shapes.append(ks.box(*cheek, side))
+            cols.append(town.col(*cheek))
 
     # The back: a window a storey, shut; a two_level house's door a storey
     # up; against the wall, its top floor's door onto the wall-walk.
@@ -184,11 +195,32 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
     for o in back:
         out["openings"].append([0 if o.y < shop else 1 + int((o.y - shop + 1e-6) // UPPER), "back", o.x, o.y, o.width, o.height, o.kind])
 
-    # The party walls, plain granite.
-    for sx in (-1.0, 1.0):
+    # The party walls, plain granite; a corner's open side clad as the
+    # front, a barred window on the ground floor and one or two shut or lit
+    # on each storey over it (drawn flat on a slot house's thin wall).
+    for sx, letter, face in ((-1.0, "w", "west"), (1.0, "e", "east")):
         x = sx * (width / 2.0 - party / 2.0)
-        shapes.append(ks.box(x, eaves / 2.0, -depth / 2.0, party, eaves, depth, side))
-        cols.append(town.col(x, eaves / 2.0, -depth / 2.0, party, eaves, depth))
+
+        if letter not in corner:
+            shapes.append(ks.box(x, eaves / 2.0, -depth / 2.0, party, eaves, depth, side))
+            cols.append(town.col(x, eaves / 2.0, -depth / 2.0, party, eaves, depth))
+            continue
+
+        along = [0.0] if depth < 10.0 else [-depth / 4.0, depth / 4.0]
+        sides = [town.Opening(0.0, SILL, SIDE_WINDOW, HEAD - SILL, "barred")]
+
+        for s in range(1, storeys):
+            sides += [town.Opening(a, shop + (s - 1) * UPPER + SILL, SIDE_WINDOW, HEAD - SILL, _honest(rng, s, storeys - 1)) for a in along]
+
+        s4, c4 = town.wall(depth, eaves, party, sides, front, (x, -depth / 2.0, 90.0 * sx), frames=False, inside=enterable,
+                           flat=party < 0.3)
+        shapes += s4
+        cols += c4
+        out["budget"] += SIDE_BUDGET * len(sides)
+
+        for o in sides:
+            storey = 0 if o.y < shop else 1 + int((o.y - shop + 1e-6) // UPPER)
+            out["openings"].append([storey, face, -depth / 2.0 - sx * o.x, o.y, o.width, o.height, o.kind])
 
     # Balconies: their slabs, rails and corbels, their colliders.
     for x, top, wide, deep in out["balconies"]:

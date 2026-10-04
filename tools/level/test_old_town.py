@@ -932,6 +932,28 @@ class Stairs(unittest.TestCase):
             end = [stairs_plan.WEST + 1.0, stairs_plan.level(plate), stairs_plan.south(plate) - stairs_plan.LANE / 2.0]
             self.assertTrue(any(math.dist(m["position"], end) < 6.0 for m in ends), plate[0])
 
+    def test_no_blank_side_stands_open(self):
+        # (Every side of a stairs house with nothing within 4 m of it at its
+        # first floor (a square, a yard, the tannery, the cliff, a strip by
+        # it) has its windows: a corner house's; narrow lanes and alleys
+        # keep their party walls.)
+        boxes = rules.colliders(layout())
+        bare = []
+
+        for each in stairs_plan.LOTS:
+            recipe = kit_recipes.PIECES[town.design_key(each)]
+            r = lot_rect(each)
+            y = each.y + kit_porto.SHOP + kit_porto.UPPER / 2.0
+            # (A house facing north has its east side at -x.)
+            for name, x, out in (("west", r[0] - 0.05, -1.0), ("east", r[2] + 0.05, 1.0)):
+                local = name if abs(each.yaw) < 0.01 else {"west": "east", "east": "west"}[name]
+                hits = [h for h in (b.ray([x, y, (r[1] + r[3]) / 2.0], [out, 0.0, 0.0]) for b in boxes) if h is not None]
+
+                if (not hits or min(hits) > 4.0) and not any(o[1] == local for o in recipe["openings"]):
+                    bare.append((each.name, name))
+
+        self.assertEqual(bare, [])
+
     def test_the_stairs_checks_clean(self):
         self.assertGreaterEqual(len(stairs_plan.LOTS), 60)
         self.assertEqual([p for p in rules.problems(layout(), "stage2") if "stairs" in p], [])

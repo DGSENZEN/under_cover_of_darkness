@@ -74,11 +74,17 @@ def design():
     shapes, cols = shapes + s, cols + c
     doors += [[0.0, -CELLAR, -DEPTH + BACK / 2.0, 180.0], [DOOR_X, 0.0, -DEPTH + BACK / 2.0, 180.0]]
 
-    # The party walls, down to the cellar's floor.
-    for sx in (-1.0, 1.0):
-        x = sx * (WIDTH / 2.0 - PARTY / 2.0)
-        shapes.append(ks.box(x, (EAVES - CELLAR) / 2.0, -DEPTH / 2.0, PARTY, EAVES + CELLAR, DEPTH, "granite"))
-        cols.append(town.col(x, (EAVES - CELLAR) / 2.0, -DEPTH / 2.0, PARTY, EAVES + CELLAR, DEPTH))
+    # The party walls, down to the cellar's floor; its -x side (to the
+    # terrace's lane) rendered as its front, a window a storey, shut.
+    x = WIDTH / 2.0 - PARTY / 2.0
+    shapes.append(ks.box(x, (EAVES - CELLAR) / 2.0, -DEPTH / 2.0, PARTY, EAVES + CELLAR, DEPTH, "granite"))
+    cols.append(town.col(x, (EAVES - CELLAR) / 2.0, -DEPTH / 2.0, PARTY, EAVES + CELLAR, DEPTH))
+    side = [town.Opening(a, WINDOW[2], 1.0, WINDOW[1], "barred") for a in (-3.5, 3.5)]
+    side += [town.Opening(a, SHOP + (s - 1) * UPPER + WINDOW[2], 1.0, WINDOW[1], kind) for s in range(1, STOREYS)
+             for a, kind in ((-3.5, "shut"), (3.5, "lit" if s == 1 else "shut"))]
+    s, c = town.band(DEPTH, -CELLAR, EAVES, PARTY, side, "render_ochre", (-x, -DEPTH / 2.0, -90.0), frames=False)
+    shapes, cols = shapes + s, cols + c
+    side_openings = [[-DEPTH / 2.0 + o.x, o.y] for o in side]
 
     # The undercroft's door, barred, in the cellar's right wall.
     shapes += [ks.box(INNER / 2.0 - 0.02, -CELLAR + 1.1, -9.0, 0.06, 2.2, 1.2, "door_1"),
@@ -172,7 +178,7 @@ def design():
     ]
     places["stream_door"] = [0.0, -CELLAR, -DEPTH]
     return {"shapes": shapes, "cols": cols, "size": [WIDTH, EAVES + 4.0, 2.0 * DEPTH + 2.0 * YARD], "doors": doors, "ways": ways,
-            "entries": [w["kind"] for w in ways], "seats": seats, "places": places, "budget": BUDGET,
+            "entries": [w["kind"] for w in ways], "seats": seats, "places": places, "budget": BUDGET, "side_openings": side_openings,
             "footprint": (-WIDTH / 2.0, YARD_END, WIDTH / 2.0, 0.0), "chimneys": [[-2.5, EAVES + 2.6, -10.0]]}
 
 

@@ -148,9 +148,11 @@ def stair_lane(width, steps, riser=RISER):
         y += n * riser
 
         if i < len(runs) - 1:
-            box = (0.0, y / 2.0, z + LANDING / 2.0, width, y, LANDING)
-            shapes.append(ks.box(*box, "calcada"))
-            cols.append(town.col(*box))
+            # (Granite like its steps, paved on top.)
+            box = (0.0, (y - 0.1) / 2.0, z + LANDING / 2.0, width, y - 0.1, LANDING)
+            top = (0.0, y - 0.05, z + LANDING / 2.0, width, 0.1, LANDING)
+            shapes += [ks.box(*box, "granite"), ks.box(*top, "calcada")]
+            cols += [town.col(*box), town.col(*top)]
             tour.append([0.0, y, z + LANDING / 2.0, "walk"])
             z += LANDING
 

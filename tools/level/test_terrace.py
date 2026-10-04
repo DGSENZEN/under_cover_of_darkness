@@ -364,6 +364,15 @@ class Terrace(unittest.TestCase):
         self.assertEqual(len(recipe["doors"]), 1)
         self.assertIsNotNone(hit(kit_terrace.yard_front(15.0), [0.0, 1.0, 1.0], [0.0, 0.0, -1.0]))
 
+    def test_a_stair_lanes_landing_is_paved_on_top_only(self):
+        # (Its body granite like its steps, the paving a slab on it: a
+        # landing's side seen from a lane beside it is not a wall of
+        # cobbles.)
+        name = kit_terrace.stair_lane(2.5, 24)
+        paved = [sh for sh in kit_recipes.PIECES[name]["shapes"] if sh.get("slot") == "calcada"]
+        self.assertTrue(paved)
+        self.assertTrue(all(sh["size"][1] <= 0.12 for sh in paved), [sh["size"] for sh in paved])
+
     def test_pieces_are_named_by_their_measures(self):
         self.assertEqual(kit_terrace.stair_lane(1.5, 24), kit_terrace.stair_lane(1.5, 24))
         self.assertNotEqual(kit_terrace.retaining(10.0, 3.5), kit_terrace.retaining(10.0, 3.0))

@@ -147,6 +147,40 @@ class Porto(unittest.TestCase):
             design = kit_porto.design(4.5, 12.0, 4, quirk)
             self.assertEqual(stood_on(design["shapes"], design["cols"]), [], quirk)
 
+    def test_a_corner_house_has_windows_on_its_open_side(self):
+        # (Its side to a square, a yard or a drop clad as its front, a window
+        # shut, lit or barred on every storey, the wall still solid; its
+        # other side a plain party wall.)
+        for width, enterable in ((6.0, False), (6.0, True), (1.5, True)):
+            quirk = "slot" if width < 2.0 else ""
+            design = kit_porto.design(width, 12.0, 4, quirk, enterable, 2 if enterable else 0, front="azulejo_green", corner="e")
+            plain = kit_porto.design(width, 12.0, 4, quirk, enterable, 2 if enterable else 0, front="azulejo_green")
+            east = [o for o in design["openings"] if o[1] == "east"]
+            self.assertEqual({o[0] for o in east}, {0, 1, 2, 3}, width)
+            self.assertFalse([o for o in design["openings"] if o[1] == "west"])
+            self.assertTrue(all(o[6] in kit_town.HONEST for o in east))
+            half = design["size"][0] / 2.0
+
+            for o in east:
+                self.assertAlmostEqual(first_hit(design["cols"], [half + 1.0, o[3] + o[5] / 2.0, o[2]], [-1.0, 0.0, 0.0]), 1.0, places=2)
+
+            clad = [sh for sh in design["shapes"] if sh.get("slot") == "azulejo_green"]
+            self.assertGreater(len(clad), len([sh for sh in plain["shapes"] if sh.get("slot") == "azulejo_green"]))
+
+    def test_a_jettys_sides_are_closed(self):
+        # (Between its party walls' ends and its jettied front, each side
+        # drawn and solid from the first floor to the eaves.)
+        from test_terrace import drawn
+        design = kit_porto.design(6.0, 12.0, 4, "jetty")
+        kit_town.register(TEST, "town", "render_ochre", design)
+        y = kit_porto.SHOP + 2.0
+        z = (kit_porto.JETTY - kit_porto.TABIQUE) / 2.0
+
+        for sx in (-1.0, 1.0):
+            origin = [sx * 4.0, y, z]
+            self.assertTrue(drawn(TEST, origin, [-sx, 0.0, 0.0], reach=1.05), sx)
+            self.assertAlmostEqual(first_hit(design["cols"], origin, [-sx, 0.0, 0.0]), 1.0, places=2)
+
     def test_the_slot_house_is_1_5_wide(self):
         self.assertAlmostEqual(kit_porto.design(4.5, 10.0, 3, "slot")["size"][0], 1.5)
 
@@ -155,9 +189,10 @@ class Porto(unittest.TestCase):
             for storeys in (3, 5):
                 for quirk in kit_porto.QUIRKS:
                     for enterable in (False, True):
-                        design = kit_porto.design(width, 15.0, storeys, quirk, enterable, 3 if enterable else 0)
-                        kit_town.register(TEST, "town", "render_ochre", design)
-                        self.assertLessEqual(tris(kit_recipes.PIECES[TEST]), design["budget"], (width, storeys, quirk, enterable))
+                        for corner in ("", "we"):
+                            design = kit_porto.design(width, 15.0, storeys, quirk, enterable, 3 if enterable else 0, corner=corner)
+                            kit_town.register(TEST, "town", "render_ochre", design)
+                            self.assertLessEqual(tris(kit_recipes.PIECES[TEST]), design["budget"], (width, storeys, quirk, enterable, corner))
 
 
 def roof_pitches(shapes):
