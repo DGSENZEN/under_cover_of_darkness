@@ -39,6 +39,17 @@ TOP = 20.0
 TOP_RADIUS = 1.6
 DOOR = (1.2, 2.2)
 YARD = 26.0
+# The main yard hangs this far forward of the mainmast (the layout puts it
+# there): the shrouds' climb goes up aft of it, clear of it.
+MAIN_YARD_X = 1.05
+# A rope ladder over the starboard waist into the sea (its rungs' middle
+# along x, their spacing, how deep it reaches): the way aboard from the
+# water. Its line (y, out from the middle line) as it hangs: off the rail's
+# cap (its top 3.06), over the upper wale, clear of a chain plate's beam and
+# the middle wale to the lower wale, then plumb into the water (measured off
+# the hull's faces; test_ships keeps each rope and rung clear of them).
+JACOB = (3.15, 0.36, -0.9)
+JACOB_DRAPE = [(3.09, 4.30), (2.55, 4.445), (0.8, 4.595), (-0.9, 4.595)]
 
 
 def col(cx, cy, cz, sx, sy, sz, yaw=0.0, pitch=0.0, roll=0.0):
@@ -1136,8 +1147,14 @@ def _hull_cols():
         return out
 
     for side in (1.0, -1.0):
-        # (The test of the decks knows the waist's bulwark by its top at 3.0.)
-        for a, b in ((CASTLE_FRONT, -1.5), (-1.5, 3.5), (3.5, FORE_BACK)):
+        # (The test of the decks knows the waist's bulwark by its top at 3.0.
+        # Where it sweeps up to the castles a box a metre or so long, each as
+        # high as its higher end: none stands much over the rail beside it,
+        # as one long box would over the rope ladder's head, JACOB.)
+        aft = [CASTLE_FRONT + (-1.5 - CASTLE_FRONT) * i / 3.0 for i in range(4)]
+        fore = [3.5 + (FORE_BACK - 3.5) * i / 4.0 for i in range(5)]
+
+        for a, b in list(zip(aft, aft[1:])) + [(-1.5, 3.5)] + list(zip(fore, fore[1:])):
             cols += along([a, b], MAIN_DECK, max(_waist_top(a), _waist_top(b)), side, SKIN / 2.0, 0.25)
 
         cols += along([STERN + SKIN, -12.4, -9.4, CASTLE_FRONT], MAIN_DECK, CASTLE_DECK, side, 0.1, 0.2)
@@ -1207,7 +1224,48 @@ def _carrack_hull():
     climbs.append([7.6, (MAIN_DECK + FORE_DECK + 0.3) / 2.0, 0.0, 0.8, FORE_DECK + 0.3 - MAIN_DECK, 0.5, -90.0])
     shapes += _ladder(POOP_FRONT + 0.3, CASTLE_DECK, POOP_DECK + 0.3, 1.6, 90.0)
     climbs.append([POOP_FRONT + 0.4, (CASTLE_DECK + POOP_DECK + 0.3) / 2.0, 1.6, 0.8, POOP_DECK + 0.3 - CASTLE_DECK, 0.5, 90.0])
+    # The rope ladder down the starboard waist into the sea: up it from the
+    # water, over the bulwark onto the deck.
+    shapes += _jacob()
+    # (Upright, its wall the hull: the climber is held off the hull itself,
+    # in and out with the wales the ladder rests on.)
+    x, _, deep = JACOB
+    top = _waist_top(x) + 0.3
+    climbs.append([x, (deep - 0.3 + top) / 2.0, 4.45, 0.8, top - deep + 0.3, 0.6, 0.0])
     return shapes, _hull_cols(), climbs
+
+
+def _drape_at(y):
+    """How far out the rope ladder hangs at height y (JACOB_DRAPE)."""
+    for (ya, za), (yb, zb) in zip(JACOB_DRAPE, JACOB_DRAPE[1:]):
+        if yb <= y <= ya:
+            return za + (zb - za) * (ya - y) / (ya - yb)
+
+    return JACOB_DRAPE[0][1] if y > JACOB_DRAPE[0][0] else JACOB_DRAPE[-1][1]
+
+
+def _jacob():
+    """The rope ladder over the starboard waist (JACOB): its two ropes lying
+    over the rail's cap and down the side along JACOB_DRAPE into the water,
+    wooden rungs between them on that line."""
+    x, every, deep = JACOB
+    shapes = []
+
+    for dx in (-0.22, 0.22):
+        line = [[x + dx, 3.09, 4.02]] + [[x + dx, y, z] for y, z in JACOB_DRAPE]
+
+        for a, b in zip(line, line[1:]):
+            shapes += _rope(a, b, 0.025, "rope", 3)
+
+    y = _waist_top(x) - every
+
+    # (Rungs down to a swimmer's reach under the surface, its ropes deeper.)
+    while y > deep + 0.4:
+        z = _drape_at(y)
+        shapes += _rope([x - 0.25, y, z], [x + 0.25, y, z], 0.03, "wood_old", 3)
+        y -= every
+
+    return shapes
 
 
 # ---------------------------------------------------------------------------
@@ -1223,13 +1281,40 @@ def _carrack_hull():
 # and aft, or 180: all round); the topmast (x, heel, head, radius) and the
 # height of its own small top.
 MASTS = {"main": (0.0, MAIN_DECK, 21.6, 0.38, 0.27, (TOP, TOP_RADIUS, 26.0), (0.6, 19.8, 30.6, 0.21), 27.6),
-         "fore": (10.0, FORE_DECK, 17.5, 0.3, 0.22, (16.0, 1.3, 22.0), (10.5, 15.8, 24.4, 0.16), 22.4),
+         "fore": (10.0, FORE_DECK, 17.5, 0.3, 0.22, (16.0, 1.45, 22.0), (10.5, 15.8, 24.4, 0.16), 22.4),
          "mizzen": (-9.0, CASTLE_DECK, 16.2, 0.24, 0.16, (14.5, 0.8, 180.0), None, None),
          "bonaventure": (-13.9, POOP_DECK, 15.2, 0.17, 0.12, None, None, None)}
 # The shrouds' heads: how high under the top, how far out from the mast,
 # their spread fore and aft.
 HEADS = {"main": (TOP - 0.45, 1.35, 1.2), "fore": (15.55, 1.15, 0.9), "mizzen": (14.3, 0.6, 0.5)}
-CLIMB_FORE = 1.5
+# A climber on a shroud climb's front hangs this far out from its plane
+# (the player's capsule's radius and its gap, PlayerController/ClimbVolume);
+# how deep a shroud climb's box is (either side of its plane: it takes hold
+# of a man on the deck at the bulwark, behind it).
+CLIMBER_OUT = 0.58
+SHROUD_DEPTH = 3.4
+
+
+def _shroud_climb(x, width, foot, low, top, side):
+    """An open climb leaning up a set of shrouds on one side (`side` +1 the
+    ship's +z): its plane through the shrouds at `foot` (y, out from the
+    middle line), down to the deck at `low`, up to `top` (y, out), out past
+    the shrouds' heads there, so a climber on its front comes up clear of the
+    top's edge and mantles onto it. Ratlines are climbed from behind too
+    (from the deck): round to the front near the top (ClimbVolume.open).
+    [x, y, z, size x, y, z, yaw, pitch, props] about `x`, `width` wide."""
+    (fy, fz), (ty, tz) = foot, top
+    lean = math.atan2(fz - tz, ty - fy)
+    bottom = fz + (fy - low) * math.tan(lean)
+    length = (ty - low) / math.cos(lean)
+    return [x, (low + ty) / 2.0, side * (bottom + tz) / 2.0, width, length, SHROUD_DEPTH, 0.0 if side > 0 else 180.0,
+            -math.degrees(lean), {"open": True}]
+
+
+def _shroud_foot(mast, x):
+    """Where a mast's shrouds leave their upper deadeyes (y, out) at x."""
+    p = _foot(mast, x, 1.0)
+    return p[1] + DEADEYE, p[2]
 
 
 def _yard(path, radius, sail, slot="hull_bare"):
@@ -1446,13 +1531,14 @@ def _carrack_rig():
         shapes += _rope([0.75, 30.2, side * 0.15], [0.95, 26.7, side * 5.8], 0.02, "rope", 3)
         shapes += _rope([10.6, 24.1, side * 0.12], [10.8, 21.5, side * 4.0], 0.018, "rope", 3)
         shapes += _rope([10.45, 14.5, side * 8.4], [2.0, 16.4, side * 0.5], 0.022, "rope", 3, sag=0.25, steps=3)
-        shapes += _rope([0.0, 17.85, side * 12.5], [-14.6, POOP_RAIL + 0.3, side * 2.6], 0.025, "rope", 3, sag=0.35, steps=3)
+        shapes += _rope([MAIN_YARD_X, 17.85, side * 12.5], [-14.6, POOP_RAIL + 0.3, side * 2.6], 0.025, "rope", 3, sag=0.35, steps=3)
         shapes += _rope([0.95, 26.5, side * 5.9], [-9.0, 15.0, side * 0.6], 0.02, "rope", 3, sag=0.3, steps=3)
         shapes += _rope([23.6, 9.1, side * 4.4], [15.6, 7.9, side * 1.4], 0.02, "rope", 3, sag=0.2, steps=2)
         shapes += _rope([0.45, TOP - 0.7, side * 0.25], [0.85, MAIN_DECK + 1.1, side * 0.6], 0.03, "rope", 3)
 
-    shapes += _rope([0.0, 21.5, 0.3], [0.0, 18.15, 12.4], 0.025, "rope", 3)
-    shapes += _rope([0.32, 18.2, 0.0], [0.42, TOP - 0.3, 0.0], 0.07, "rope", 4)
+    shapes += _rope([0.0, 21.5, 0.3], [MAIN_YARD_X, 18.15, 12.4], 0.025, "rope", 3)
+    # (The tie from the yard's middle up to the masthead.)
+    shapes += _rope([MAIN_YARD_X - 0.2, 18.2, 0.0], [0.42, TOP - 0.3, 0.0], 0.07, "rope", 4)
     # A long streamer from the main topmast, the banner of the castle on
     # the fore and mizzen.
     shapes += _streamer([0.6, 32.6, 0.0], 7.0, "cloth")
@@ -1462,16 +1548,18 @@ def _carrack_rig():
     cols = _tub_cols(0.0, *MASTS["main"][5]) + _tub_cols(10.0, *MASTS["fore"][5])
     cols += [col(0.0, 15.0, 0.0, 0.6, 26.0, 0.6), col(0.6, 25.2, 0.0, 0.4, 10.8, 0.4), col(10.0, 14.25, 0.0, 0.5, 15.5, 0.5),
              col(-9.0, 11.0, 0.0, 0.4, 12.0, 0.4)]
-    # The climbs: upright, inside the shrouds' lean, from the deck to a
-    # mantle under the top. A climb's wall is its box's middle (the climber
-    # hangs 0.38 m out from it): 0.2 m past the top's edge, so he comes up
-    # clear of the top and within the scanner's reach of its edge; no wider
-    # than the gap in the tub's sides.
+    # The climbs: up the shrouds in their lean, from the deck to the top,
+    # its plane out past the shrouds' heads up there (at the top's edge, so
+    # a climber on its front comes up clear of the top and within the
+    # scanner's reach of its edge); no wider than the gap in the tub's
+    # sides; the main's aft of the main yard (it hangs at MAIN_YARD_X), so no
+    # climber's head meets it.
     climbs = []
 
-    for side, yaw in ((1.0, 0.0), (-1.0, 180.0)):
-        climbs.append([0.0, (MAIN_DECK + TOP - 0.4) / 2.0, side * (TOP_RADIUS + 0.2), 2.2, TOP - 0.4 - MAIN_DECK, 2.3, yaw])
-        climbs.append([10.0, (FORE_DECK + 15.7) / 2.0, side * CLIMB_FORE, 1.2, 15.7 - FORE_DECK, 1.8, yaw])
+    for side in (1.0, -1.0):
+        climbs.append(_shroud_climb(-0.4, 1.4, _shroud_foot("main", -0.4), MAIN_DECK, (TOP, TOP_RADIUS), side))
+        fore = MASTS["fore"][5]
+        climbs.append(_shroud_climb(10.0, 1.2, _shroud_foot("fore", 10.0), FORE_DECK, (fore[0], fore[1]), side))
 
     return shapes, cols, climbs
 
@@ -1826,9 +1914,9 @@ def _caravel_rig():
     shapes += _tube([[head[0], CV_NEST + 1.4, 0.0], [head[0], CV_NEST + 3.6, 0.0]], [0.07, 0.04], "hull_bare", 4)
     cols = _tub_cols(nest[0], nest[1], CV_NEST_RADIUS, 18.0)
     cols += [col(CV_MAST + 0.25, (CV_DECK + CV_NEST) / 2.0, 0.0, 0.55, CV_NEST - CV_DECK, 0.55), col(-4.55, 6.5, 0.0, 0.45, 10.0, 0.45)]
-    # Up her shrouds on the quay's side: upright, in their lean, to a mantle
-    # into the basket (its sides fore and aft, open over the shrouds).
-    climbs = [[nest[0], (CV_DECK + CV_NEST - 0.4) / 2.0, CV_NEST_RADIUS + 0.3, 1.0, CV_NEST - 0.4 - CV_DECK, 1.6, 0.0]]
+    # Up her shrouds on the quay's side, in their lean, to a mantle into the
+    # basket (its sides fore and aft, open over the shrouds).
+    climbs = [_shroud_climb(nest[0], 1.0, (3.07, abs(_cv_point(nest[0], 2.0)[2]) + 0.12), CV_DECK, (CV_NEST, CV_NEST_RADIUS), 1.0)]
     return shapes, cols, climbs
 
 

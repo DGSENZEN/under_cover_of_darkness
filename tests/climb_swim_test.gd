@@ -23,6 +23,11 @@ const AWAY := Vector3(250, 1.05, 30)
 ## bank.
 const POOL := Vector3(334, 0, 0)
 const POOL_SURFACE := -0.5
+## The water stair down its west side: how many steps (the top one 0.2 m
+## under the bank).
+const STAIR_STEPS := 8
+## A mast's foot, its shrouds on its +z side (P2, P3).
+const MAST := Vector3(240, 0, -25)
 ## How long a guard goes on after you unseen before he starts to search
 ## (Guard.lose_time, as it comes).
 const GUARD_LOSE_TIME := 4.0
@@ -54,6 +59,11 @@ func _ready() -> void:
 	Props.block(self, Vector3(120, 1.5, -6), Vector3(3, 3.0, 3))
 	Props.block(self, Vector3(160, 1.75, -6), Vector3(3, 3.5, 3))
 	pool = WaterScript.build(self, Vector3(334, -1.55, 0), Vector3(8, 2.1, 8))
+	# F: a water stair down the pool's west side, as the harbour's (0.2 m up,
+	# 0.3 m deep), its lowest steps under the surface.
+	for k in STAIR_STEPS:
+		var top := -0.2 - 0.2 * k
+		Props.block(self, Vector3(330.15 + 0.3 * k, (top - 2.6) * 0.5, -2.5), Vector3(0.3, top + 2.6, 3.0))
 	# Shallows: 0.8 m of water standing on the floor.
 	shallows = WaterScript.build(self, Vector3(280, 0.4, 0), Vector3(8, 0.8, 8))
 
@@ -320,6 +330,33 @@ func _run() -> void:
 		"crate at %.2f (surface %.2f, bottom -2.6)" % [crate.global_position.y, POOL_SURFACE])
 	crate.queue_free()
 
+	# W6 swum to a water stair, a jump at it: out onto its steps and up them
+	#    onto the bank (the harbour's water stairs)
+	await _fresh()
+	_put_player(Vector3(334.5, POOL_SURFACE - 0.7, -2.5))
+	player.rotation.y = PI * 0.5
+	await _frames(20)
+	Input.action_press("move_forward")
+	var stepped := [false]
+
+	for i in 480:
+		if i % 10 == 0:
+			Input.action_press("jump")
+		elif i % 10 == 2:
+			Input.action_release("jump")
+
+		await _frames(1)
+		stepped[0] = stepped[0] or (player.movement_state == player.MoveState.LOCOMOTION and player.global_position.x < 333.0)
+
+		if player.global_position.x < 329.5 and player.is_on_floor():
+			break
+
+	_release_all()
+	await _frames(30)
+	_check("W6 swum to a water stair, a jump at it: out onto its steps and up them onto the bank",
+		stepped[0] and player.movement_state == player.MoveState.LOCOMOTION and player.get_feet_position().y > -0.05 and player.global_position.x < 330.0,
+		"out %s, %s at %s (feet %.2f)" % [stepped[0], player.movement_state, player.global_position.snapped(Vector3.ONE * 0.01), player.get_feet_position().y])
+
 	# P1 up a wall under a pitched roof (the Ribeira's vine): forward held,
 	#    onto the roof, never falling back onto the climb at the eaves (the
 	#    scanner meeting the roof's slope over the wall's top and turning it
@@ -353,6 +390,47 @@ func _run() -> void:
 		"climbed %s, on the roof %s at %s, took hold again up top %d times (%s)" % [held[0], roofed, player.global_position, held[1],
 			player.scanner.last_reject])
 
+	# P2/P3 up a ship's shrouds (an open climb leaning in to its mast, its
+	#    top over it): from the deck behind them, up them close in their
+	#    lean, round to their front under the top and onto it; from their
+	#    front, up and onto it
+	await _fresh()
+	var shrouds := _shrouds(MAST)
+	await _frames(2)
+
+	for front in [false, true]:
+		_put_player(MAST + Vector3(0, 1.05, 5.6 if front else 3.4))
+		player.rotation.y = 0.0 if front else PI
+		await _frames(5)
+		Input.action_press("move_forward")
+		var seen := {"behind": false, "off": 0.0, "climbed": false}
+
+		for i in 1500:
+			if player.movement_state == player.MoveState.CLIMBING:
+				seen["climbed"] = true
+				seen["behind"] = seen["behind"] or player.climb_side < 0.0
+				var off: float = (player.global_position - shrouds.global_position).dot(shrouds.get_face_normal())
+
+				if player.global_position.y > 4.0 and player.global_position.y < 14.0:
+					seen["off"] = maxf(seen["off"], absf(absf(off) - 0.58))
+
+			if player.is_on_floor() and player.global_position.y > 18.5:
+				break
+
+			await get_tree().physics_frame
+
+		_release_all()
+		var topped: bool = player.is_on_floor() and player.global_position.y > 18.5 and player.movement_state == player.MoveState.LOCOMOTION
+
+		if front:
+			_check("P3 up a ship's shrouds from their front: up them and onto the top", seen["climbed"] and not seen["behind"] and topped and seen["off"] < 0.15,
+				"climbed %s, on the top %s at %s, off the shrouds' lean %.2f m at most (%s)" % [seen["climbed"], topped,
+					player.global_position.snapped(Vector3.ONE * 0.01), seen["off"], player.scanner.last_reject])
+		else:
+			_check("P2 up a ship's shrouds from the deck behind them: close in their lean, round to their front under the top, onto it",
+				seen["behind"] and topped and seen["off"] < 0.15, "behind them %s, on the top %s at %s, off their lean %.2f m at most (%s)" % [
+					seen["behind"], topped, player.global_position.snapped(Vector3.ONE * 0.01), seen["off"], player.scanner.last_reject])
+
 
 
 ## A house 6 m to its eaves with its front (+z) 3 m from `at`, a roof of two
@@ -384,6 +462,29 @@ func _house_with_vine(at: Vector3) -> void:
 	vine.add_child(vine_shape)
 	add_child(vine)
 	vine.global_position = at + Vector3(0, 3.0, 3.25)
+
+
+## A mast at `at` and its top (its floor 18 m up, 3 m square), its shrouds
+## on its +z side an open climb leaning in to it as a ship's
+## (kit_ships._shroud_climb): their plane 4.5 m out 1.6 m up, at the top's
+## edge 18 m up, down to the deck.
+func _shrouds(at: Vector3) -> Area3D:
+	Props.block(self, at + Vector3(0, 9, 0), Vector3(0.6, 18, 0.6))
+	Props.block(self, at + Vector3(0, 17.95, 0), Vector3(3, 0.1, 3))
+	var lean := atan((4.5 - 1.6) / (18.0 - 1.6))
+	var bottom := 4.5 + 1.6 * tan(lean)
+	var volume := Area3D.new()
+	volume.set_script(CLIMB)
+	volume.set("open", true)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(1.4, 18.0 / cos(lean), 3.4)
+	shape.shape = box
+	volume.add_child(shape)
+	add_child(volume)
+	volume.global_position = at + Vector3(0, 9.0, (bottom + 1.6) / 2.0)
+	volume.rotation.x = -lean
+	return volume
 
 
 ## A ladder up a south face: a ClimbVolume `height` tall centred at `at`.

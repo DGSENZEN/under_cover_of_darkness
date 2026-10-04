@@ -283,16 +283,32 @@ static func _ladder(ctx: Dictionary, volume: Node) -> void:
 
 	var out: Vector3 = volume.get_climb_normal()
 	var centre: Vector3 = (volume as Area3D).global_position
-	var bottom := box.position.y
-	var top := box.end.y
-	var foot_at := Vector3(centre.x, bottom + 0.6, centre.z) + out * 0.55
+	var low := Vector3(centre.x, box.position.y, centre.z)
+	var high := Vector3(centre.x, box.end.y, centre.z)
+
+	# (A leaning climb, shrouds: from the foot of its plane to its top.)
+	if volume.has_method("is_leaning") and volume.is_leaning():
+		var face: Array = volume.face_ends()
+		low = face[0]
+		high = face[1]
+
+	var foot_at := low + Vector3.UP * 0.6 + out * 0.55
 	var foot := _ray(ctx, foot_at, foot_at + Vector3.DOWN * 2.0)
+
+	var nudge := out * 0.2
+
+	# (An open one, ratlines, from behind it if there is no floor before it:
+	# a ship's shrouds, over her side.)
+	if foot.is_empty() and bool(volume.get("open")):
+		foot_at = low + Vector3.UP * 0.6 - out * 1.0
+		foot = _ray(ctx, foot_at, foot_at + Vector3.DOWN * 2.0)
+		nudge = -out * 0.2
 
 	if foot.is_empty():
 		return
 
-	var start := _on_mesh(ctx, (foot["position"] as Vector3) + out * 0.2, (foot["position"] as Vector3).y)
-	var over_at := Vector3(centre.x, top + 0.7, centre.z) - out * 0.7
+	var start := _on_mesh(ctx, (foot["position"] as Vector3) + nudge, (foot["position"] as Vector3).y)
+	var over_at := high + Vector3.UP * 0.7 - out * 0.7
 	var over := _ray(ctx, over_at, over_at + Vector3.DOWN * 1.8)
 
 	if start == Vector3.INF or over.is_empty():

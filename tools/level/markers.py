@@ -24,7 +24,7 @@ SCHEMA = {
     "light": {"required": ["kind"], "optional": {"lit": True, "energy": 0.0, "range": 0.0, "color": "", "cookie": "",
                                                  "douse": True, "chain": 0.0}, "box": False},
     "bell": {"required": [], "optional": {"db": 90.0}, "box": False},
-    "ladder": {"required": [], "optional": {"rope": False}, "box": True},
+    "ladder": {"required": [], "optional": {"rope": False, "open": False}, "box": True},
     # A piece laid loose (Layout.put loose=): a body in the game, picked up
     # and thrown; `piece` its name, `mass` its weight (kg).
     "loose": {"required": ["piece", "mass"], "optional": {}, "box": False},

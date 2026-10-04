@@ -30,6 +30,16 @@ BROW_X = kit_ships.BROW_X
 RADIUS, TALL = 0.5, 1.8
 
 
+def shroud_top(c):
+    """A leaning climb's (kit_ships._shroud_climb) plane at its top (x, y,
+    out from the middle line), and where a climber on its front is there
+    (his body's middle, kit_ships.CLIMBER_OUT square off the plane)."""
+    lean = math.radians(-c[7]) if len(c) > 7 else 0.0
+    out = abs(c[2]) - math.sin(lean) * c[4] / 2.0
+    y = c[1] + math.cos(lean) * c[4] / 2.0
+    return [c[0], y, out], [c[0], y + math.sin(lean) * kit_ships.CLIMBER_OUT, out + math.cos(lean) * kit_ships.CLIMBER_OUT]
+
+
 def tris(name):
     return sum(len(points) - 2 for points, _ in faces(name))
 
@@ -259,14 +269,20 @@ class Rig(unittest.TestCase):
                                   [1.1, kit_ships.TOP + TALL, -0.8 if s < 0 else 2.4]))
 
     def test_the_shroud_climbs_keep_their_place(self):
-        # C6 finds the climb through (40, 11, 3.0) and climbs it 0.9 m west of
-        # its middle; each main climb no wider than the gap in the top's
-        # sides (a climber, 0.5 m round, passes their ends).
-        climbs = [c for c in PIECES["carrack_rig"]["climbs"] if abs(c[0]) < 0.1]
+        # C6 finds the port climb through (39.6, 11, 1.5) (local -0.4, 11,
+        # -3.3) and climbs it from the deck; each main climb no wider than the
+        # gap in the top's sides (a climber, 0.5 m round, passes their ends),
+        # and aft of the main yard, so no climber's head meets it anywhere
+        # along it.
+        climbs = [c for c in PIECES["carrack_rig"]["climbs"] if abs(c[0] + 0.4) < 0.1]
         self.assertEqual(len(climbs), 2)
-        x, y, z, sx, sy, sz, yaw = min(climbs, key=lambda c: c[2])
-        self.assertTrue(abs(0.0 - x) <= sx / 2.0 and abs(11.0 - y) <= sy / 2.0 and abs(-1.8 - z) <= sz / 2.0)
-        self.assertGreaterEqual(sx / 2.0, 0.9)
+        port = min(climbs, key=lambda c: c[2])
+        box = geo.Box(port[0:3], geo.rotation(port[6], port[7]), port[3:6])
+        self.assertTrue(box.contains([-0.4, 11.0, -3.3]))
+        yard = PIECES["carrack_mainyard"]["cols"][0]
+
+        for c in climbs:
+            self.assertLess(c[0] + c[3] / 2.0 + RADIUS, kit_ships.MAIN_YARD_X - yard[5] / 2.0, c)
         ends = [c for c in PIECES["carrack_rig"]["cols"] if c[1] - c[4] / 2.0 >= kit_ships.TOP - 1e-3 and c[4] >= 0.8]
 
         for c in climbs:
@@ -295,8 +311,84 @@ class Rig(unittest.TestCase):
     def test_the_fore_top_is_climbed_to(self):
         for c in PIECES["carrack_rig"]["climbs"]:
             if abs(c[0] - 10.0) < 0.1:
-                self.assertLessEqual(c[1] - c[4] / 2.0, kit_ships.FORE_DECK + 0.05)
+                lean = math.radians(-c[7])
+                self.assertLessEqual(c[1] - math.cos(lean) * c[4] / 2.0, kit_ships.FORE_DECK + 0.05)
                 self.assertAlmostEqual(floor_under("carrack_rig", [10.0, 16.0, 0.8]), 16.0, places=3)
+
+    def test_the_shroud_climbs_lean_with_their_shrouds(self):
+        # Each set's climb is open (ratlines: climbed from the deck behind
+        # them, or from outboard) and leans in with its shrouds: its plane on
+        # them low down, out past their heads only up under the top, where a
+        # climber on its front comes up clear of the top.
+        for mast, x in (("main", -0.4), ("fore", 10.0)):
+            y_head, head_out, _ = kit_ships.HEADS[mast]
+            fy, fz = kit_ships._shroud_foot(mast, x)
+
+            for c in PIECES["carrack_rig"]["climbs"]:
+                if abs(c[0] - x) > 0.1:
+                    continue
+
+                self.assertEqual(c[8], {"open": True})
+                top, _ = shroud_top(c)
+                lean = math.radians(-c[7])
+                at_foot = top[2] + (top[1] - fy) * math.tan(lean)
+                self.assertAlmostEqual(at_foot, fz, delta=0.01, msg=mast)
+                shrouds = math.degrees(math.atan2(fz - head_out, y_head - fy))
+                self.assertLess(abs(math.degrees(lean) - shrouds), 4.0, mast)
+
+
+class RopeLadder(unittest.TestCase):
+    def test_it_hangs_clear_of_her_side(self):
+        # Every rope and rung of the rope ladder over her starboard waist
+        # stands off the hull it hangs on (built without it), its rail's cap
+        # and wales: a ray in from beyond each, along z, meets the hull no
+        # nearer than the ladder's own surface.
+        saved = kit_ships._jacob
+        kit_ships._jacob = lambda: []
+
+        try:
+            hull = kit_shapes.build(kit_ships._carrack_hull()[0])
+        finally:
+            kit_ships._jacob = saved
+
+        tris = [[hull["verts"][f[0][0]], hull["verts"][f[0][k]], hull["verts"][f[0][k + 1]]] for f in hull["faces"] for k in range(1, len(f[0]) - 1)]
+        x, every, deep = kit_ships.JACOB
+
+        def outermost(px, py):
+            # (The hull's furthest out at (px, py): its triangles crossing that
+            # line along z.)
+            best = None
+
+            for a, b, c in tris:
+                d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+
+                if abs(d) < 1e-12:
+                    continue
+
+                l1 = ((b[1] - c[1]) * (px - c[0]) + (c[0] - b[0]) * (py - c[1])) / d
+                l2 = ((c[1] - a[1]) * (px - c[0]) + (a[0] - c[0]) * (py - c[1])) / d
+                l3 = 1.0 - l1 - l2
+
+                if min(l1, l2, l3) >= -1e-9:
+                    z = l1 * a[2] + l2 * b[2] + l3 * c[2]
+
+                    if z > 0.0 and (best is None or z > best):
+                        best = z
+
+            return best
+
+        y = kit_ships._waist_top(x) - every
+
+        while y > deep + 0.4:
+            for dx in (-0.25, -0.22, 0.0, 0.22, 0.25):
+                hull_z = outermost(x + dx, y)
+                self.assertTrue(hull_z is None or kit_ships._drape_at(y) - 0.03 >= hull_z + 0.005, (y, dx, hull_z))
+            y -= every
+
+        for y in [deep + 0.05 + 0.05 * i for i in range(int((3.05 - deep) / 0.05))]:
+            for dx in (-0.22, 0.22):
+                hull_z = outermost(x + dx, y)
+                self.assertTrue(hull_z is None or kit_ships._drape_at(y) - 0.025 >= hull_z + 0.005, (y, dx, hull_z))
 
 
 class Caravel(unittest.TestCase):
@@ -317,13 +409,14 @@ class Caravel(unittest.TestCase):
         # up clear of its floor overhead and within reach of its edge.
         climbs = PIECES["caravel"]["climbs"]
         self.assertEqual(len(climbs), 1)
-        x, y, z, sx, sy, sz, yaw = climbs[0]
         floors = [c for c in PIECES["caravel"]["cols"] if c[4] <= 0.15 and abs(top_of(c) - kit_ships.CV_NEST) < 1e-3]
         self.assertEqual(len(floors), 1)
-        hangs = abs(z) + 0.38
-        self.assertGreaterEqual(hangs - 0.3, floors[0][5] / 2.0 + 0.05)
-        self.assertLessEqual(hangs - floors[0][5] / 2.0, 1.0)
-        self.assertLessEqual(y - sy / 2.0, kit_ships.CV_DECK + 0.05)
+        top, climber = shroud_top(climbs[0])
+        self.assertGreaterEqual(climber[2] - RADIUS, floors[0][5] / 2.0 + 0.05)
+        self.assertLessEqual(climber[2] - floors[0][5] / 2.0, 1.0)
+        self.assertLessEqual(kit_ships.CV_NEST - (climber[1] - TALL / 2.0 - 0.1), 1.4)
+        lean = math.radians(-climbs[0][7])
+        self.assertLessEqual(climbs[0][1] - math.cos(lean) * climbs[0][4] / 2.0, kit_ships.CV_DECK + 0.05)
 
     def test_her_yards_are_longer_than_she_is(self):
         hull = [p for points, slot in faces("caravel") for p in points if p[1] < 3.0]

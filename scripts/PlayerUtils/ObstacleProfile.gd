@@ -35,6 +35,9 @@ var far_floor := Vector3.ZERO
 
 ## Surface point where a mantle would place the feet.
 var landing := Vector3.ZERO
+## Stairs rise behind the top (a step up within reach of it): the landing is
+## on them, lifted onto the next tread as a body stands on a staircase.
+var on_stairs := false
 var headroom := Headroom.BLOCKED
 
 ## Horizontal speed toward the face, never negative.
