@@ -77,7 +77,8 @@
   "ladder": {
    "required": [],
    "optional": {
-    "rope": false
+    "rope": false,
+    "open": false
    },
    "box": true
   },
@@ -144,6 +145,11 @@
    "box": true
   },
   "roofed": {
+   "required": [],
+   "optional": {},
+   "box": true
+  },
+  "room": {
    "required": [],
    "optional": {},
    "box": true
@@ -298,6 +304,15 @@
   "smoke": {
    "required": [],
    "optional": {},
+   "box": false
+  },
+  "readable": {
+   "required": [
+    "slot"
+   ],
+   "optional": {
+    "kind": "paper"
+   },
    "box": false
   },
   "probe": {
