@@ -48,6 +48,15 @@ class OldTown(unittest.TestCase):
     def test_the_old_town_checks_clean(self):
         self.assertEqual(rules.problems(layout(), "stage2"), [])
 
+    def test_every_piece_laid_is_in_the_kit(self):
+        # (The kit is built in a process of its own, from kit_recipes alone:
+        # a piece the layout makes as it runs is missing from it.)
+        import subprocess
+        code = "import sys; sys.path.insert(0, %r); import kit_recipes; print('\\n'.join(sorted(kit_recipes.PIECES)))" % HERE
+        kit = set(subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True).stdout.split())
+        laid = {p["piece"] for p in layout()["pieces"]}
+        self.assertEqual(sorted(laid - kit), [])
+
     def test_the_gates_keep_their_names(self):
         names = {m["name"] for m in layout()["markers"]}
 

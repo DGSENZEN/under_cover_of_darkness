@@ -442,31 +442,17 @@ def _payoffs(L):
                _sector(plan.WEST, plan.south(plate)))
 
 
-# The roof chains: up a scaffold against the gable of a row's last house
-# where it faces the open ground by the cliff, near its front's eaves (a
-# gable is low there), then west along the row's roofs a little behind
-# their ridges, across a stair-lane by a leap, to the chain's end.
-# (terrace, the scaffold's z, the row's x where the chain ends.)
-CHAINS = [("stairs_3", -87.25, -129.2), ("stairs_5", -140.0, -136.0)]
-SCAFFOLD_WIDTH = 4.0
-
-
 def _chains(L):
-    from old_town.baixa import roof_route
-    n = 0
+    """The roof chains (the plan's CHAINS): up each scaffold (laid with the
+    plan's pieces), along its row's roofs."""
+    named = {each.name: each for each in plan.LOTS}
 
-    for plate_name, sz, end in CHAINS:
-        plate = [p for p in plan.PLATES if p[0] == plate_name][0]
-        y = plan.level(plate)
-        x = plan.MIRADOURO[0] if plate_name == "stairs_3" else [r for r in plan.RESERVED[plate_name] if r[2] == "tower"][0][0]
-        lots = [each for each in plan.LOTS if abs(each.y - y) < 0.01 and plan.lot_rect(each)[1] <= sz <= plan.lot_rect(each)[3]
-                and abs(plan.lot_rect(each)[2] - x) < 0.01]
-        corner = lots[0]
-        eaves = kit.PIECES[town.design_key(corner)]["eaves"]
-        scaffold = kit_terrace.scaffold(eaves, SCAFFOLD_WIDTH)
-        recipe = kit.PIECES[scaffold]
+    for n, ((_plate, _sz, end), scaffold) in enumerate(zip(plan.CHAINS, plan.WALLS["scaffolds"])):
+        x, y, sz = scaffold["at"]
+        corner = named[scaffold["corner"]]
+        assert abs(kit.PIECES[town.design_key(corner)]["eaves"] - scaffold["args"][0]) < 0.01, corner.name
+        recipe = kit.PIECES[kit_terrace.scaffold(*scaffold["args"])]
         n += 1
-        name = L.put(scaffold, (x, y, sz), 90.0, _sector(x, sz), name="stairs_scaffold_%d" % n, climbs=True)
         up = placed((x, y, sz), 90.0, recipe["tour"])
         row = [each for each in plan.LOTS if abs(each.y - y) < 0.01 and plan.lot_rect(each)[1] <= sz <= plan.lot_rect(each)[3]
                and end - 0.01 <= plan.lot_rect(each)[0] and plan.lot_rect(each)[2] <= x + 0.01]
@@ -476,7 +462,6 @@ def _chains(L):
         checks(L, "roof_stairs_%d" % n, up + route, way="roof")
         L.mark("stairs_scaffold_%d_vantage" % n, "vantage", world((x, y, sz), 90.0, [0.0, recipe["top"], kit_terrace.DECK_OFF + kit_terrace.DECK / 2.0]),
                270.0, _sector(x, sz))
-        assert name
 
 
 def _chain(boxes, row, x, end, corner, sz):

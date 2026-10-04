@@ -681,6 +681,35 @@ def _places():
     # (Turned so its grate leans aside along the lane's north edge.)
     out["hatch"] = [{"kind": "grate_hatch", "args": (HATCH_DEPTH, 2.5), "at": (HATCH[0], y3, HATCH[1]), "yaw": 90.0}]
     out["bridges"] = [{"kind": "bridge", "args": (GAP, BRIDGE_DEPTH), "at": (c, y, z), "yaw": 0.0} for _k, c, z, y in BRIDGES]
+    out["scaffolds"] = [{"kind": "scaffold", "args": (eaves, SCAFFOLD_WIDTH), "at": (x, y, z), "yaw": 90.0, "corner": corner}
+                        for x, y, z, eaves, corner in _chain_scaffolds()]
+    return out
+
+
+# The roof chains: up a builders' scaffold against the gable of a row's
+# last house where it faces the open ground by the cliff, near its front's
+# eaves (a gable is low there), then west along the row's roofs to the
+# chain's end (laid by the layout). (terrace, the scaffold's z, the row's x
+# where the chain ends.)
+CHAINS = [("stairs_3", -87.25, -129.2), ("stairs_5", -140.0, -136.0)]
+SCAFFOLD_WIDTH = 4.0
+# (kit_porto's: a house's shop floor and upper storeys.)
+PORTO_SHOP, PORTO_UPPER = 3.8, 3.2
+
+
+def _chain_scaffolds():
+    """Each chain's scaffold: (x, y, z, the corner house's eaves over its
+    terrace, the corner lot's name)."""
+    out = []
+
+    for plate_name, sz, _end in CHAINS:
+        plate = [p for p in PLATES if p[0] == plate_name][0]
+        y = level(plate)
+        x = MIRADOURO[0] if plate_name == "stairs_3" else [r for r in RESERVED[plate_name] if r[2] == "tower"][0][0]
+        corner = [each for each in LOTS if abs(each.y - y) < 0.01 and lot_rect(each)[1] <= sz <= lot_rect(each)[3]
+                  and abs(lot_rect(each)[2] - x) < 0.01][0]
+        out.append((x, y, sz, round(PORTO_SHOP + (corner.storeys - 1) * PORTO_UPPER, 3), corner.name))
+
     return out
 
 
