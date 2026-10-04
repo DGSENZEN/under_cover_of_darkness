@@ -8,6 +8,7 @@ extends RefCounted
 const TalkScript := preload("res://scripts/AISystem/Talk/TalkScript.gd")
 const TalkFacts := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
 const GuardLifeScript := preload("res://scripts/AISystem/GuardLife.gd")
+const Earshot := preload("res://scripts/AISystem/Talk/Earshot.gd")
 
 ## The things they do together (reached at run time: it reads this script).
 const GATHERING := "res://scripts/AISystem/Gathering.gd"
@@ -49,6 +50,8 @@ const MISSING_COMPANY := 6.0
 ## At the end of a line one man listening may nod or shake his head
 ## (GuardLife._take_line, by his temperament).
 const REACTIONS := ["nods", "shakes"]
+## Guard.Alert.COMBAT.
+const COMBAT_STATE := 4
 ## A rash man's grief turns to rage for this long (s).
 const RAGE_FOR := 20.0
 
@@ -321,6 +324,19 @@ func call_pair(situation: StringName, caller: Node, facts := {}) -> bool:
 		return (conv["when"] as Array).any(func(term): return (term as Array).has("situation:%s" % situation)))
 
 
+## One of a district's pairs hails the other (DistrictMap._hails): a
+## conversation of theirs whose `when:` names `situation:hail`, spoken if
+## `quiet`, else called out. Never over a talk either is already in (a call
+## or not: a hail running is said to its end) nor in a fight. False if none
+## began.
+func hail(a: Node, b: Node, quiet := false) -> bool:
+	for man in [a, b]:
+		if not _talk_of(man).is_empty() or int(man.get("state")) == COMBAT_STATE:
+			return false
+
+	return call_pair(&"hail", a, {"b": b, "quiet": quiet})
+
+
 ## `man` calls the name of the dead man he knew (kin or friend), and grieves:
 ## kin for the night, a friend for a while; a rash man is enraged by it.
 ## False if he did not know him, or has already.
@@ -538,6 +554,13 @@ func _choose_for(group: Array, tree: SceneTree) -> void:
 ## once a night, not yet played), and its group not waiting to be used up.
 func _available(conv: Dictionary) -> bool:
 	var id := String(conv["id"])
+
+	# Had only where it belongs (the garrison's in the garrison, a district's
+	# in it).
+	var where := StringName(conv.get("where", &""))
+
+	if where != &"" and where != TalkFacts.place_now():
+		return false
 
 	if float(conv["cooldown"]) == TalkScript.ONCE:
 		if _once.has(id):
@@ -814,8 +837,8 @@ func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary
 		# To himself: under his breath.
 		delivery = &"murmur"
 
-	if delivery == &"" and (talk["extra"] as Dictionary).has("call"):
-		# Called out.
+	if delivery == &"" and (talk["extra"] as Dictionary).has("call") and not bool((talk["extra"] as Dictionary).get("quiet", false)):
+		# Called out (not to a man at his elbow: a hail at close quarters).
 		delivery = &"shout"
 
 	if delivery == &"":
@@ -837,6 +860,11 @@ func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary
 	speaker.speak(text, delivery, listeners, length)
 
 	for emote in choice["emotes"]:
+		# A note for the player (the job): learnt if he heard it; no gesture.
+		if String(emote).begins_with("note:"):
+			_note_heard(speaker, String(emote).trim_prefix("note:"))
+			continue
+
 		# A nod he already gave as the last line ended is not given twice.
 		if nodded and REACTIONS.has(emote):
 			continue
@@ -852,6 +880,19 @@ func _say(speaker: Node, choice: Dictionary, talk: Dictionary, world: Dictionary
 	_lines[id].append(String(choice["text"]))
 	_last_spoke[id] = clock
 	return length
+
+
+## The player, if he heard `speaker` (Earshot), learns the pencil note `id`.
+func _note_heard(speaker: Node, id: String) -> void:
+	var tree: SceneTree = _tree.get_ref() as SceneTree if _tree != null else null
+
+	if tree == null:
+		return
+
+	for listener in tree.get_nodes_in_group(&"player"):
+		if Earshot.heard(speaker as Node3D, listener as Node3D):
+			CityState.job.learn(id)
+			return
 
 
 ## Names and places put in: {A}..{D}, {dead} (the one they speak of, or the

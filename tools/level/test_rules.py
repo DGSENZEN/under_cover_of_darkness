@@ -7,11 +7,13 @@ import copy
 import math
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import geo  # noqa: E402
+import jobs  # noqa: E402
 import kit_recipes  # noqa: E402
 import rules  # noqa: E402
 import terrain  # noqa: E402
@@ -418,6 +420,42 @@ class Rules(unittest.TestCase):
             for b in recipe["boxes"] + recipe["cols"]:
                 self.assertGreaterEqual(len(b), 7, name)
                 self.assertTrue(all(s > 0.0 for s in b[3:6]), name)
+
+
+class Readables(unittest.TestCase):
+    """A readable marker names a slot in its district's job file (the
+    harbour's job plan, Task 3)."""
+
+    def _harbour(self, slot, kind="notice"):
+        data = good()
+        data["level"] = "city_harbour"
+        data["markers"].append(marker("r", "readable", (0.5, 0, 0.5), {"slot": slot, "kind": kind}))
+        return data
+
+    def test_readable_slot_known(self):
+        found = rules.problems(self._harbour("curfew"))
+        self.assertEqual([p for p in found if p.startswith("r")], [])
+
+    def test_readable_slot_unknown(self):
+        found = rules.problems(self._harbour("nope"))
+        self.assertIn("r: reads slot 'nope', not in the district's job file", found)
+
+    def test_readable_kind_checked(self):
+        found = rules.problems(self._harbour("curfew", "scroll"))
+        self.assertTrue(any(p.startswith("r:") and "scroll" in p for p in found), found)
+
+    def test_readable_outside_a_district(self):
+        data = good()
+        data["markers"].append(marker("r", "readable", (0.5, 0, 0.5), {"slot": "curfew"}))
+        self.assertIn("r: a readable in a level of no district", rules.problems(data))
+
+    def test_jobs_reads_headers(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with open(os.path.join(folder, "x.job"), "w") as f:
+                f.write("# a comment\n== readable a\ntext: hm\n\n== note b\ntext: hm\n")
+
+            self.assertEqual(jobs.readable_slots("x", folder), {"a"})
+            self.assertEqual(jobs.readable_slots("nowhere", folder), set())
 
 
 if __name__ == "__main__":

@@ -1,0 +1,18 @@
+# The mission's own words (docs/systems/jobs.md): the commission the player
+# holds from the start, the city's goals, and what the guards shout.
+# Every text in <<...>> is still to write; replace it, keep the rest.
+
+== letter commission
+intent: The commission, from whoever sends the thief: the job (the Moon-Glass, through the keep's three seals), the pay, and where to begin (the harbour). Read in the rowboat at the start.
+text:
+<<the commission>>
+
+== goal loot
+kind: side
+done: loot>=1000
+intent: The city's loot goal, a side goal on the letter for the whole mission. The value (1000) is yours to tune.
+text: <<the loot goal>>
+
+== shout theft
+intent: What a guard shouts when he finds a chest robbed of something precious (the seal), loud enough for the harbour to hear.
+text: <<the theft shout>>

@@ -9,6 +9,8 @@ const HARBOUR := preload("res://maps/city.tscn")
 const LevelLoader := preload("res://scripts/Level/LevelLoader.gd")
 
 const MISSION := preload("res://maps/mission.tscn")
+const MissionScript := preload("res://maps/mission.gd")
+const LoadingScreenScript := preload("res://scripts/UI/LoadingScreen.gd")
 ## The harbour's load before its navmesh was baked offline (s).
 const HARBOUR_LOAD_BEFORE := 13.8
 ## Exits ignore the player this long after he arrives (Mission.GRACE).
@@ -24,6 +26,8 @@ var results: Array[String] = []
 
 
 func _ready() -> void:
+	# (The tally on the way between districts waits for a key: only T16 waits.)
+	LoadingScreenScript.holds = false
 	await _alone()
 	await _mission()
 	print("\n==== RESULTS ====")
@@ -42,6 +46,7 @@ func _ready() -> void:
 
 func _alone() -> void:
 	var old: Node = OLD_TOWN.instantiate()
+	old.set("open_with_letter", false)
 	add_child(old)
 	await old.ready_to_play
 	var start: Transform3D = old.marker("old_town_start").get("transform", Transform3D())
@@ -56,6 +61,7 @@ func _alone() -> void:
 	await _frames(5)
 
 	var harbour: Node = HARBOUR.instantiate()
+	harbour.set("open_with_letter", false)
 	add_child(harbour)
 	await harbour.ready_to_play
 	var quick: bool = bool(harbour.baker.from_file) and float(harbour.load_seconds) < HARBOUR_LOAD_BEFORE
@@ -68,12 +74,14 @@ func _alone() -> void:
 	var stale_dir := "user://stale_nav"
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(stale_dir))
 	var snap: Node = (ResourceLoader.load(saved, "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene).instantiate()
+	snap.set("open_with_letter", false)
 	snap.set_meta(&"source_hash", "an older export")
 	var packed := PackedScene.new()
 	packed.pack(snap)
 	ResourceSaver.save(packed, stale_dir.path_join("harbour.scn"))
 	snap.free()
 	var again: Node = HARBOUR.instantiate()
+	again.set("open_with_letter", false)
 	again.set("navmesh_dir", stale_dir)
 	add_child(again)
 	await again.ready_to_play
@@ -92,10 +100,41 @@ var mission: Node
 
 
 func _mission() -> void:
+	MissionScript.open_with_letter = false
 	mission = MISSION.instantiate()
 	add_child(mission)
 	await mission.arrived
 	var gates := ["sea_gate", "wall_walk", "guindais", "west_wall"]
+
+	# T15 without the seal no way up leads on (said once, not again for a
+	# while); with it, it does
+	var first: Node = mission.map.player
+	var sea_gate := _exit("exit_sea_gate")
+	var outside: Transform3D = mission.map.marker("from_old_town_sea_gate")["transform"]
+	await _seconds(GRACE + 0.2)
+	first.teleport(Transform3D(first.global_basis, sea_gate.global_position))
+	await _seconds(3.0)
+	var refused: bool = is_instance_valid(first) and mission.map.district == &"harbour"
+
+	if not refused:
+		_check("T15 without the seal no way up leads on (said once, not again at once); with it, it does", false,
+			"went up to %s without the seal" % mission.map.district)
+		await _through("to_harbour_sea_gate")
+	else:
+		var said: String = first.hud._caption.text if first.hud != null else ""
+		first.teleport(Transform3D(first.global_basis, outside.origin))
+		await _seconds(0.5)
+		first.teleport(Transform3D(first.global_basis, sea_gate.global_position))
+		await _seconds(0.5)
+		var again: float = float(first.hud._caption_timer) if first.hud != null else 9.0
+		first.teleport(Transform3D(first.global_basis, outside.origin))
+		await _seconds(0.5)
+		CityState.job.took_loot("the_seal", 250)
+		await _through("exit_sea_gate")
+		var went: bool = mission.map.district == &"old_town"
+		_check("T15 without the seal no way up leads on (said once, not again at once); with it, it does",
+			said.begins_with("<<") and again < 1.5 and went, "said '%s', said again %.1f s, went up %s" % [said, again, went])
+		await _through("to_harbour_sea_gate")
 
 	# T3 the Sea Gate both ways, standing where each side's arrival is
 	await _through("exit_sea_gate")
@@ -282,6 +321,47 @@ func _mission() -> void:
 	await _seconds(2.0)
 	_check("T12 a sealed way goes nowhere", mission.map == harbour_map and mission.map.district == &"harbour", "still in the harbour %s" % [
 		mission.map == harbour_map])
+
+	# T16 the harbour's tally greets the player on the way up, and waits for him
+	var looted := int(CityState.job.tally_of(&"harbour").get("loot", 0))
+	CityState.job.count("loot", 250, &"harbour")
+	var total := int(CityState.job.tally_of(&"harbour").get("loot_total", 0))
+	LoadingScreenScript.holds = true
+	await _seconds(GRACE + 0.2)
+	var leaving: Node = mission.map
+	mission.map.player.teleport(Transform3D(mission.map.player.global_basis, _exit("exit_sea_gate").global_position))
+	var loading := func() -> bool: return mission.map != leaving and mission.map != null and is_instance_valid(mission.map) and mission.map.get_node_or_null("LoadingScreen") != null
+	await _until_frames(loading, 60 * 10)
+	var screen: Node = mission.map.get_node_or_null("LoadingScreen") if mission.map != null else null
+	var shown_title := String(screen.get("tally_title")) if screen != null else ""
+	var shown_rows: Array = screen.get("tally_rows") if screen != null else []
+	await _until_frames(func(): return get_tree().paused, 60 * 30)
+	var waiting16: bool = get_tree().paused and not bool(mission.get("settled"))
+	Input.action_press("frob")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	Input.action_release("frob")
+	var on := func() -> bool: return not get_tree().paused and bool(mission.get("settled")) and (screen == null or not is_instance_valid(screen))
+	await _until_frames(on, 60 * 3)
+	var gone: bool = not get_tree().paused and (screen == null or not is_instance_valid(screen))
+	LoadingScreenScript.holds = false
+	_check("T16 the harbour's tally greets the player on the way up, and waits for him", shown_title == "The harbour"
+		and shown_rows.has(["Loot", "%d of %d" % [looted + 250, total]]) and waiting16 and gone and mission.map.district == &"old_town",
+		"title '%s', rows %s, waited %s, gone %s (paused %s)" % [shown_title, shown_rows.slice(0, 2), waiting16, gone, get_tree().paused])
+
+	# T17 the tally adds up over visits; a theft counts once
+	await _through("to_harbour_sea_gate")
+	CityState.job.notice_theft()
+	await _seconds(2.0)
+	await _through("exit_sea_gate")
+	var first_seconds := int(CityState.job.tally_of(&"harbour").get("seconds", 0))
+	await _through("to_harbour_sea_gate")
+	await _seconds(3.0)
+	CityState.job.notice_theft()
+	await _through("exit_sea_gate")
+	var tally17: Dictionary = CityState.job.tally_of(&"harbour")
+	_check("T17 the tally adds up over visits; a theft counts once", int(tally17.get("alarms", 0)) == 1 and int(tally17.get("seconds", 0)) > first_seconds,
+		"alarms %d, seconds %d after the first visit, %d after the second" % [int(tally17.get("alarms", 0)), first_seconds, int(tally17.get("seconds", 0))])
 	mission.queue_free()
 	await _frames(5)
 
@@ -390,6 +470,16 @@ func _flat(a: Vector3, b: Vector3) -> float:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+## Until `cond` holds, or `max_frames` frames pass (process frames: they run
+## while the tree is paused).
+func _until_frames(cond: Callable, max_frames: int) -> void:
+	for i in max_frames:
+		if cond.call():
+			return
+
+		await get_tree().process_frame
+
 
 func _frames(n: int) -> void:
 	for i in n:

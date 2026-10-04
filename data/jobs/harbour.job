@@ -1,0 +1,117 @@
+# The harbour's words (docs/systems/jobs.md): its goals, the thief's pencil
+# notes, the texts of its readables, and the gate up to the old town.
+# Every text in <<...>> is still to write; replace it, keep the rest.
+
+# Goals
+
+== goal seal
+kind: main
+done: took(the_seal)
+intent: The job itself: the harbourmaster's seal, in his office in the customs house.
+text: <<take the seal>>
+
+== goal up
+kind: main
+shows: done(seal)
+done: arrived(old_town)
+note: way_up
+intent: Bring the seal up to the old town.
+text: <<the onward goal>>
+
+== goal captains_ring
+kind: side
+done: took(captains_ring)
+intent: A special: the captain's ring, in the carrack's cabin strongbox.
+text: <<the captain's ring>>
+
+== goal signet
+kind: side
+done: took(signet)
+intent: A special: a signet ring, hidden in the fort by the powder room.
+text: <<the signet>>
+
+# Pencil notes (the back of the letter)
+
+== note tower_bell
+intent: The lookout on the golden tower has a bell, and rings it at anything amiss.
+text: <<pencil: the tower's bell>>
+
+== note office_key
+intent: The office key is kept on the customs house's ground floor.
+text: <<pencil: the office key>>
+
+== note dark_bays
+intent: Some of the Ribeira arcade's bays are left dark; the lamps that go out get relit.
+text: <<pencil: the arcade's dark bays>>
+
+== note ways_up
+intent: The ways up to the old town: the Sea Gate is shut and watched at night; the Guindais stair and the wall-walk.
+text: <<pencil: the ways up>>
+
+== note cabin_key
+intent: The captain left his cabin key on the quay; his strongbox is in the cabin.
+text: <<pencil: the cabin key>>
+
+== note blowhole
+intent: The blowhole's roar in the smugglers' cave covers sound.
+text: <<pencil: the blowhole>>
+
+== note powder_room
+intent: There is something hidden behind the fort's powder room.
+text: <<pencil: the powder room>>
+
+== note way_up
+intent: With the seal in hand: up to the old town, and why the seal matters there.
+text: <<pencil: the way up>>
+
+# Readables (their markers in the harbour name these slots)
+
+== readable night_orders
+note: tower_bell
+intent: The harbour's night orders, pinned by the golden tower's door: the tower lookout rings the bell at anything amiss; lamps stay lit and are relit.
+text:
+<<the night orders>>
+
+== readable duty_orders
+note: office_key
+intent: The customs watchman's duty orders on his desk: his round, and that the office key stays on the ground floor.
+text:
+<<the duty orders>>
+
+== readable curfew
+note: ways_up
+intent: A curfew notice in the Terreiro arcade: the Sea Gate shut and watched at night; anyone going up by the Guindais stair or the wall.
+text:
+<<the curfew notice>>
+
+== readable captains_log
+note: cabin_key
+intent: A page of the captain's log in the carrack's cabin: the strongbox, and the cabin key left with the quay.
+text:
+<<the captain's log>>
+
+== readable smugglers_scrawl
+note: blowhole
+intent: A smugglers' scrawl on the cave beach: they move and talk only when the blowhole roars.
+text:
+<<the smugglers' scrawl>>
+
+== readable fort_note
+note: powder_room
+intent: A note in the fort hinting at the money hidden behind the powder room.
+text:
+<<the fort's note>>
+
+== readable harbourmasters_letter
+note: way_up
+intent: The harbourmaster's letter on his desk: why the seal matters (one of the keep's three), and what lies up the hill.
+text:
+<<the harbourmaster's letter>>
+
+# The gate
+
+== gate old_town
+exits: to(old_town)
+needs: seal
+intent: The thief's thought when a way up turns them back without the seal.
+text: <<turned back>>

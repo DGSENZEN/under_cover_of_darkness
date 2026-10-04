@@ -1,6 +1,7 @@
 # After the murder: fear, names called into the dark, grief.
 
 == where_is_jory
+where: garrison
 priority: 1
 when: missing(Jory)
 cast: A = any; B? = any
@@ -20,6 +21,7 @@ B: Asleep in the shed, likely. Go and look.
 # Grief by name, for each tie (TalkDirector.grieve): A the man who knew him.
 
 == grief_jory_osric
+where: garrison
 when: dead(Jory)
 cast: A = kin(Jory); B? = any
 cooldown: once
@@ -30,6 +32,7 @@ A {if rash}: I'll open him like a sack!
 A: Find him. Find him for me.
 
 == grief_osric_jory
+where: garrison
 when: dead(Osric)
 cast: A = kin(Osric); B? = any
 cooldown: once
@@ -38,6 +41,7 @@ A [shouts]: Osric! Get up! Get up, damn you!
 B: He's gone, lad. Stay down.
 
 == grief_col_piers
+where: garrison
 when: dead(Col)
 cast: A = friend(Col); B? = any
 cooldown: once
@@ -46,6 +50,7 @@ A [shouts]: Col? Col! Oh gods, oh gods...
 B: Quiet! You want to be next?
 
 == grief_piers_col
+where: garrison
 when: dead(Piers)
 cast: A = friend(Piers); B? = any
 cooldown: once
@@ -54,6 +59,7 @@ A: Piers... you owed me three pennies, you fool.
 B: Leave him. Leave him!
 
 == grief_ned_hendrik
+where: garrison
 when: dead(Ned)
 cast: A = friend(Ned); B? = any
 cooldown: once
@@ -62,6 +68,7 @@ A [shouts]: Ned! Two weeks in. Two weeks!
 B: Hendrik, he's gone.
 
 == grief_hendrik_ned
+where: garrison
 when: dead(Hendrik)
 cast: A = friend(Hendrik); B? = any
 cooldown: once

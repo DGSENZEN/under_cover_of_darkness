@@ -26,6 +26,11 @@ const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const DistanceScript := preload("res://scripts/Visual/Distance.gd")
 const WindowsScript := preload("res://scripts/Visual/Windows.gd")
+const SfxScript := preload("res://scripts/Audio/Sfx.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
+const MusicScript := preload("res://scripts/Audio/Music.gd")
+const TalkDirectorScript := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
+const TallyScript := preload("res://scripts/Level/Tally.gd")
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
 
@@ -51,11 +56,22 @@ const HAZE_LINE := 18.0
 const HAZE_LOW := 0.02
 ## Exits ignore the player this long after he arrives (s).
 const GRACE := 1.0
+## A way turning the player back (the job's gate) says so at most this
+## often (s).
+const REFUSE_GAP := 4.0
+## The district's pairs of men hail each other (_hails) when their rounds
+## bring them together, looked for this often (s); nearer than HAIL_QUIET (m)
+## they speak, further they call out.
+const HAIL_EVERY := 2.0
+const HAIL_QUIET := 7.6
 
 signal ready_to_play
 
 ## This map's district (data/districts.json).
 @export var district: StringName = &""
+## A fresh mission opens with the letter up in the player's hands (the
+## harbour's job spec, section 4); tests that walk and frob turn it off.
+@export var open_with_letter := true
 ## Where the player arrives (an arrival marker's name), set before the map
 ## enters the tree; empty: the district's spawn.
 var arrival: StringName = &""
@@ -82,6 +98,8 @@ var windows: Node3D = null
 var _was_rolling := true
 ## The physics frame it was ready on (the exits' grace counts from it).
 var _ready_frame := 0
+## When a gate last turned the player back (s, game time).
+var _refused_at := -100.0
 
 
 func _ready() -> void:
@@ -95,6 +113,11 @@ func _ready() -> void:
 	var words := _loading_words()
 	# (Up from the first frame, saying what is being done.)
 	var screen := LoadingScreen.open(self, String(words.get("title", "")))
+	# Come through a gate: the district left, and what was done there.
+	var left: StringName = CityState.job.last_left if _mission() != null else &""
+
+	if left != &"":
+		screen.show_tally(Districts.label(left), CityState.job.tally_rows(left))
 	var own: Array = Districts.entry(district).get("levels", [])
 
 	for i in own.size():
@@ -181,7 +204,13 @@ func _ready() -> void:
 	if _mission() != null:
 		CityState.enter(self)
 
+	_job_setup()
+
 	await screen.step(String(words.get("player", "")), 0.97)
+
+	if left != &"":
+		await screen.hold()
+
 	screen.close()
 	load_seconds = (Time.get_ticks_msec() - started) / 1000.0
 	_report()
@@ -195,6 +224,14 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	TemperamentScript.rolling = _was_rolling
+	var job: RefCounted = CityState.job
+
+	for pair in [[job.noted, _on_noted], [job.goal_done, _on_goal_done]]:
+		if (pair[0] as Signal).is_connected(pair[1]):
+			(pair[0] as Signal).disconnect(pair[1])
+
+	if job.here == district:
+		job.here = &""
 
 
 ## Returns the first of this map's levels' markers named marker_name, or {}.
@@ -380,6 +417,23 @@ func _exit_reached(body: Node3D, area: Area3D) -> void:
 	if body != player or player == null:
 		return
 
+	# The job's gate: not this way until its goal is done (the thief's own
+	# thought says why).
+	var gate: Dictionary = CityState.job.gate_for(area)
+
+	if not gate.is_empty():
+		# (Game time: frame-exact under a test's fixed frame rate.)
+		var now := Engine.get_physics_frames() / float(Engine.physics_ticks_per_second)
+
+		if now - _refused_at >= REFUSE_GAP:
+			_refused_at = now
+			print("city: gate: refused (%s)" % area.name)
+
+			if player.get("hud") != null:
+				player.hud.show_caption(String(gate["text"]), 4.0)
+
+		return
+
 	var mission := _mission()
 
 	if mission != null and Districts.is_built(StringName(area.get_meta(&"to", &""))):
@@ -393,6 +447,105 @@ func _exit_reached(body: Node3D, area: Area3D) -> void:
 
 	if player.get("hud") != null:
 		player.hud.show_caption("On to %s" % label, 4.0)
+
+
+# The job (the harbour's job spec)
+
+## The player is here: the job knows it (its goals listed); what he takes is
+## counted and may do a goal; what is learnt is noted, a goal done heard;
+## a fresh mission opens with the letter up.
+func _job_setup() -> void:
+	var job: RefCounted = CityState.job
+	job.arrive(district)
+	job.noted.connect(_on_noted)
+	job.goal_done.connect(_on_goal_done)
+
+	var tally: Node = TallyScript.new()
+	tally.name = "Tally"
+	add_child(tally)
+	tally.setup(player, TallyScript.totals_of(Districts.entry(district).get("levels", []).map(func(l): return levels[String(l)])))
+
+	if not _hails().is_empty():
+		var timer := Timer.new()
+		timer.name = "Hails"
+		timer.wait_time = HAIL_EVERY
+		timer.timeout.connect(_hail_tick)
+		add_child(timer)
+		timer.start()
+
+	if player == null:
+		return
+
+	player.frob.frobbed.connect(_on_frobbed)
+
+	if open_with_letter and not job.letter_opened:
+		player.frob.open_letter()
+
+
+## The district's pairs who hail each other: [[a man's name, another's, how
+## near (m)]]. Their conversations are the district's talk file's, `when:
+## situation:hail` and cast by name (data/talk/harbour.talk).
+func _hails() -> Array:
+	return []
+
+
+## Each pair near enough and both up: the one hails the other
+## (TalkDirector.hail: a conversation of theirs, if one is due and neither is
+## talking or fighting).
+func _hail_tick() -> void:
+	for hail in _hails():
+		# (A man may be gone: knocked out and laid down, or followed away.)
+		var first: Variant = guards.get(String(hail[0]))
+		var second: Variant = guards.get(String(hail[1]))
+
+		if first == null or second == null or not is_instance_valid(first) or not is_instance_valid(second):
+			continue
+
+		var a: Node3D = first
+		var b: Node3D = second
+
+		if a.get("_knocked_out") == true or b.get("_knocked_out") == true or a.get("dead") == true or b.get("dead") == true:
+			continue
+
+		var apart := a.global_position.distance_to(b.global_position)
+
+		if apart <= float(hail[2]):
+			TalkDirectorScript.of(a).hail(a, b, apart <= HAIL_QUIET)
+
+
+func _on_frobbed(target: Node) -> void:
+	if not (target is Loot) or not target.taken:
+		return
+
+	var job: RefCounted = CityState.job
+	job.count("loot", int(target.value))
+
+	if target.has_meta(&"special"):
+		job.count("specials")
+
+	job.took_loot(String(target.name), int(target.value))
+
+
+func _on_noted(_id: String) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+
+	if player.get("hud") != null:
+		player.hud.show_caption("Noted", 1.6)
+
+	SfxScript.play_flat(player, &"pencil")
+
+
+## A main goal done: the score's goal sting (not over another's: Music's
+## gap); a side goal only the pencil.
+func _on_goal_done(_id: String, kind: StringName) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+
+	if kind == &"main" and TimeFx.real_time() - SfxScript.sting_at >= MusicScript.STING_GAP:
+		SfxScript.play_flat(player, &"sting_goal")
+	elif kind != &"main":
+		SfxScript.play_flat(player, &"pencil")
 
 
 # The player

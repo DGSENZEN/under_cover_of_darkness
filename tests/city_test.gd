@@ -16,6 +16,10 @@ const LightProbe := preload("res://scripts/StimuliSystem/LightProbe.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const LightBudget := preload("res://scripts/Visual/Lights/LightBudget.gd")
 const ZonesScript := preload("res://scripts/Level/Zones.gd")
+const JobBook := preload("res://scripts/Level/JobBook.gd")
+const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
+const Comms := preload("res://scripts/AISystem/Comms.gd")
+const TalkDirector := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
 
 ## What each kind of marker is made into (C2): its list in LevelGameplay's
 ## made, or the group it joins.
@@ -44,6 +48,7 @@ class Ear:
 func _ready() -> void:
 	var started := Time.get_ticks_msec()
 	city = CITY.instantiate()
+	city.set("open_with_letter", false)
 	add_child(city)
 	# (The loading screen from the first frame; what it says while the
 	# navmesh bakes; gone once the map is played.)
@@ -76,7 +81,8 @@ func _ready() -> void:
 
 	var steps := [["markers", _markers], ["douse", _douse], ["reach", _reach], ["locks", _locks], ["freeze", _freeze.bind(true)], ["probes", _probes],
 		["sea_gate", _sea_gate], ["carrack", _carrack], ["rigging", _rigging], ["roofs", _roofs], ["swim", _swim], ["spit", _spit], ["blowhole", _blowhole],
-		["zones", _zones], ["light_budget", _light_budget], ["chase", _chase], ["holes", _holes], ["loose", _loose], ["roofed", _roofed], ["distance", _distance]]
+		["zones", _zones], ["light_budget", _light_budget], ["chase", _chase], ["holes", _holes], ["loose", _loose], ["roofed", _roofed], ["distance", _distance],
+		["job", _job]]
 
 	for step in steps:
 		if only == "" or step[0] == only or step[0] == "freeze":
@@ -844,6 +850,267 @@ func _distance() -> void:
 
 
 ## The drawn meshes of the piece named `name` (itself or under it).
+# ---------------------------------------------------------------------------
+# C26-C33: the harbour's job (the harbour's job plan, Task 12)
+# ---------------------------------------------------------------------------
+
+func _job() -> void:
+	# (After the steps before: the garrison's memory and the talk's cooldowns
+	# cleared, the men of these checks home and at their ease, a new job.)
+	GarrisonScript.clear_all()
+
+	for who in ["Baltasar", "Rodrigo", "Tome", "Gaspar", "Duarte", "Inigo"]:
+		var man: Node3D = city.guards[who]
+		man.global_transform = man.get("_home")
+		man.reset_physics_interpolation()
+		man.set("velocity", Vector3.ZERO)
+		man.set("alert", 0.0)
+		man.set("has_last_known", false)
+		man.call("_set_state", 0)
+		man.set("_wait_timer", 0.0)
+
+	CityState.job.reset()
+	CityState.job.arrive(&"harbour")
+	await _frames(5)
+	var level: LevelLoader.Level = city.levels["city_harbour"]
+	var made: Dictionary = city.made["city_harbour"]
+	var lib: Dictionary = JobBook.library()
+
+	# C27 the readables
+	var readables: Dictionary = made.get("readables", {})
+	var slots: Array = readables.values().map(func(r): return String(r.get("slot")))
+	_check("C27 the harbour's seven readables are built, each with its words' slot", readables.size() == 7
+		and slots.all(func(slot): return (lib["readables"] as Dictionary).has(slot)), "%d readables, slots %s" % [readables.size(), slots])
+
+	# C28 every word the harbour points at exists
+	var loot_names: Array = level.of("loot").map(func(m): return String(m["name"]))
+	var specials: Array = level.of("loot").filter(func(m): return bool(m["props"].get("special", false))).map(func(m): return String(m["name"]))
+	var took: Array = []
+
+	for goal in lib["goals"]:
+		if StringName(goal["district"]) == &"harbour":
+			for found in RegEx.create_from_string("took\\(([A-Za-z0-9_]+)\\)").search_all(String(goal["done"]) + " " + String(goal["shows"])):
+				took.append(found.get_string(1))
+
+	var leads: Array = level.of("exit").map(func(m): return "to(%s)" % String(m["props"].get("to", "")))
+	var bad_gates: Array = []
+
+	for gate in lib["gates"]:
+		if StringName(gate["district"]) == &"harbour":
+			for exit in gate["exits"]:
+				if String(exit).begins_with("to(") and not leads.has(exit):
+					bad_gates.append(exit)
+				elif not String(exit).begins_with("to(") and level.get_marker(String(exit)).is_empty():
+					bad_gates.append(exit)
+
+	var unknown: Array = took.filter(func(n): return not loot_names.has(n))
+	var unsought: Array = specials.filter(func(n): return not took.has(n))
+	_check("C28 every word the harbour points at exists: what a goal takes, each special a goal, each gate's way", unknown.is_empty()
+		and unsought.is_empty() and bad_gates.is_empty() and specials.size() == 3, "unknown %s, specials no goal takes %s, gates %s, specials %s" % [
+			unknown, unsought, bad_gates, specials])
+
+	# C29 each hail pair's rounds bring them within reach
+	var far: Array = []
+
+	for hail in city._hails():
+		# (A man's points against the way the other walks between his.)
+		var beat_a := _beat_of(level, String(hail[0]))
+		var beat_b := _beat_of(level, String(hail[1]))
+		var nearest := minf(_nearest_on_beat(beat_a, beat_b), _nearest_on_beat(beat_b, beat_a))
+
+		if nearest > float(hail[2]):
+			far.append("%s-%s %.1f m" % [hail[0], hail[1], nearest])
+
+	_check("C29 each hail pair's rounds bring them within reach of each other", far.is_empty() and not city._hails().is_empty(), "too far %s" % [far])
+
+	# (Baltasar's round, its points in order: C31, C32.)
+	var round: Array = level.of("waypoint").filter(func(m): return String(m["props"]["route"]) == "customs_round")
+	round.sort_custom(func(a, b): return int(a["props"]["order"]) < int(b["props"]["order"]))
+	var points: Array = round.map(func(m): return (m["transform"] as Transform3D).origin)
+	var office: Vector3 = (level.get_marker("office_door")["transform"] as Transform3D).origin
+	var landing := points.any(func(p): return (p as Vector3).distance_to(office) < 2.0 and (p as Vector3).y > office.y - 0.2)
+
+	# C33 the guards name the golden tower
+	var tower: Vector3 = (level.get_marker("lm_golden_tower")["transform"] as Transform3D).origin
+	var named := Comms.landmark_near(get_tree(), tower + Vector3(2.0, 0.0, 0.0))
+	_check("C33 a harbour guard's call-out names the golden tower", named == "the golden tower", "named '%s'" % named)
+
+	# C26 the ways up turn the player back without the seal (the map alone)
+	var hud: Node = player.get("hud")
+	var spawn: Vector3 = player.global_position
+	var said: Array = []
+
+	for area in get_tree().get_nodes_in_group(&"district_exit"):
+		if city.is_ancestor_of(area) and StringName(area.get_meta(&"to", &"")) == &"old_town":
+			city.set("_refused_at", -100.0)
+			hud.show_caption("", 0.0)
+			_put((area as Node3D).global_position, 0.0)
+			await _frames(6)
+			said.append(String(hud._caption.text))
+			_put(spawn, 0.0)
+			await _frames(4)
+
+	CityState.job.took_loot("the_seal", 250)
+	var sea_gate: Area3D = city.get_node_or_null("exit_sea_gate") as Area3D
+	hud.show_caption("", 0.0)
+	_put(sea_gate.global_position, 0.0)
+	await _frames(6)
+	var with_seal := String(hud._caption.text)
+	_put(spawn, 0.0)
+	await _frames(4)
+	_check("C26 by itself, no way up leads on without the seal (the thought said); with it, on", said.size() == 4
+		and said.all(func(t): return String(t).begins_with("<<")) and with_seal == "On to %s" % String(sea_gate.get_meta(&"label")),
+		"said %s, with the seal '%s'" % [said, with_seal])
+
+	# C30 the Sea Gate pair's hint is overheard
+	var rodrigo: Node = city.guards["Rodrigo"]
+	var tome: Node = city.guards["Tome"]
+	var dark := float(player.get("debug_light_level"))
+	player.set("debug_light_level", 0.0)
+	_put(Vector3(-55.0, 3.6, -63.5), PI)
+	await _frames(4)
+
+	for g in [rodrigo, tome]:
+		g.set_physics_process(true)
+		g.set_process(true)
+
+	var director: RefCounted = TalkDirector.of(rodrigo)
+	await _until(func(): return CityState.job.notes.has("ways_up"), 60 * 90)
+	_check("C30 the Sea Gate pair hail each other; the player in earshot learns the ways up", CityState.job.notes.has("ways_up")
+		and director.played().has("harbour_ways_up"), "notes %s, played %s" % [CityState.job.notes, director.played()])
+
+	for g in [rodrigo, tome]:
+		g.set_physics_process(false)
+		g.set_process(false)
+
+	player.set("debug_light_level", dark)
+
+	# C31 Baltasar's round walks, up to the office landing and out to the quay
+	var nav: RID = city.baker.get_navigation_map()
+	var gaps: Array = []
+
+	for i in points.size():
+		var from: Vector3 = points[i]
+		var to: Vector3 = points[(i + 1) % points.size()]
+		var path := NavigationServer3D.map_get_path(nav, from, to, true)
+		var reach := NavigationServer3D.map_get_closest_point(nav, to)
+
+		if path.is_empty() or path[path.size() - 1].distance_to(reach) > 0.5 or reach.distance_to(to) > 1.0:
+			gaps.append("%d->%d" % [i + 1, (i + 1) % points.size() + 1])
+
+	var front: Vector3 = (level.get_marker("customs_front")["transform"] as Transform3D).origin
+	var quay := points.any(func(p): return Vector2((p as Vector3).x - front.x, (p as Vector3).z - front.z).length() < 1.5)
+	# Walked, from its start, by the man himself: every point reached in turn
+	# and back to the first (a stair's foot once caught him: the navmesh's
+	# way is not always a body's).
+	var walker: Node3D = city.guards["Baltasar"]
+	walker.global_position = points[0]
+	walker.reset_physics_interpolation()
+	walker.set("_wait_timer", 0.0)
+	walker.set("_waypoint_index", 1)
+	walker.call("_go_to", points[1], true)
+	walker.set_physics_process(true)
+	walker.set_process(true)
+	var reached := {}
+	var walked := func() -> bool:
+		reached[int(walker.get("_waypoint_index"))] = true
+		return reached.size() == points.size() and int(walker.get("_waypoint_index")) == 1 and reached.has(0)
+	await _until(walked, 60 * 150)
+	walker.set_physics_process(false)
+	walker.set_process(false)
+	_check("C31 Baltasar's round walks all the way, on his feet: up to the office landing, to the shut front door (the quay's men pass outside it)",
+		gaps.is_empty() and landing and quay and reached.size() == points.size(), "%d points, navmesh gaps %s, landing %s, at the front door %s, reached %s" % [
+			points.size(), gaps, landing, quay, reached.keys()])
+
+	# C32 a careless theft is found: office door and strongbox left open
+	var door: Node = made["doors"]["office_door"]
+	var chest: Node = made["chests"]["seal_chest"]
+	var seal: Node = made["pickups"]["the_seal"]
+	var candle: Node = made["lights"].get("office_candle")
+
+	if candle != null and is_instance_valid(candle) and candle.has_method("is_lit") and not candle.is_lit():
+		candle.relight()
+
+	_put(door.global_position + Vector3(0.0, 1.05, 1.5), 0.0)
+	await _frames(2)
+	door.set("locked", false)
+
+	if not bool(door.get("is_open")):
+		door.frob(player)
+
+	chest.set("locked", false)
+
+	if not bool(chest.get("is_open")):
+		chest.frob(player)
+
+	if is_instance_valid(seal) and seal.get("taken") != true:
+		seal.frob(player)
+
+	_put(spawn, 0.0)
+	# (The office door swung open, before he comes.)
+	await _seconds(1.5)
+	var rung: Array = []
+	var bell: Node = null
+
+	for b in get_tree().get_nodes_in_group(&"alarm_bells"):
+		if city.is_ancestor_of(b) and b.name == "tower_bell":
+			bell = b
+
+	if bell != null:
+		bell.rung.connect(func(by): rung.append(by))
+
+	var baltasar: Node3D = city.guards["Baltasar"]
+	var gaspar: Node3D = city.guards["Gaspar"]
+	# On his round from the hall, as he walks it: he finds the office door
+	# open, looks in before he shuts it, and sees the strongbox.
+	baltasar.global_position = points[0]
+	baltasar.reset_physics_interpolation()
+	baltasar.set("alert", 0.0)
+	baltasar.set("has_last_known", false)
+	baltasar.call("_set_state", 0)
+	baltasar.set("_wait_timer", 0.0)
+	baltasar.set("_waypoint_index", 1)
+	baltasar.call("_go_to", points[1], true)
+	LightProbe.invalidate()
+
+	for g in [baltasar, gaspar]:
+		g.set_physics_process(true)
+		g.set_process(true)
+
+	await _until(func(): return CityState.job.fact(&"harbour", &"theft_noticed") == true and not rung.is_empty(), 60 * 150)
+	_check("C32 a careless theft in the harbour is found on the watchman's round (the office door looked through): the alarm, the tower's bell", CityState.job.fact(&"harbour", &"theft_noticed") == true
+		and not rung.is_empty(), "theft %s, bell %s rung by %s" % [CityState.job.fact(&"harbour", &"theft_noticed"), bell != null,
+			rung.map(func(r): return r.name if r != null else "-")])
+	_freeze(true)
+
+
+## The nearest any of `points` comes to the way walked round `beat` (its
+## waypoints in order, the last back to the first).
+func _nearest_on_beat(points: Array, beat: Array) -> float:
+	var nearest := INF
+
+	for p in points:
+		for i in beat.size():
+			var a: Vector3 = beat[i]
+			var b: Vector3 = beat[(i + 1) % beat.size()]
+			nearest = minf(nearest, (p as Vector3).distance_to(Geometry3D.get_closest_point_to_segment(p, a, b)))
+
+	return nearest
+
+
+## Where `who` (a guard's marker) goes: his round's waypoints, or his post.
+func _beat_of(level: LevelLoader.Level, who: String) -> Array:
+	var m: Dictionary = level.get_marker(who)
+	var route := String(m["props"].get("route", ""))
+
+	if route == "":
+		return [(m["transform"] as Transform3D).origin]
+
+	var round: Array = level.of("waypoint").filter(func(w): return String(w["props"]["route"]) == route)
+	round.sort_custom(func(a, b): return int(a["props"]["order"]) < int(b["props"]["order"]))
+	return round.map(func(w): return (w["transform"] as Transform3D).origin)
+
+
 func _drawn(root: Node, name: String) -> Array[GeometryInstance3D]:
 	var out: Array[GeometryInstance3D] = []
 	var node := root.find_child(name, true, false)

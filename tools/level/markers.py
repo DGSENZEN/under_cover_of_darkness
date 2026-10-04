@@ -76,6 +76,9 @@ SCHEMA = {
     "noise_zone": {"required": ["db"], "optional": {"period": 0.0, "label": ""}, "box": True},
     # A chimney's smoke, breathed off its pots (over them).
     "smoke": {"required": [], "optional": {}, "box": False},
+    # Words to read where it lies or hangs: `slot` names its text in the
+    # district's job file (data/jobs/<district>.job); `kind` how it is held.
+    "readable": {"required": ["slot"], "optional": {"kind": "paper"}, "box": False},
     # A point the light is checked at: "moon", "shadow" or "lamp".
     "probe": {"required": ["expect"], "optional": {}, "box": False},
     # A point on a way through the level, and the move that reaches it from
@@ -100,6 +103,7 @@ TOOL_KINDS = ["flask", "flash_bomb", "lockpick", "arrows"]
 PROP_KINDS = ["crate", "crate_small"]
 MOVES = ["walk", "stairs", "mantle", "hang", "jump", "sprint_jump", "assist_jump", "drop", "climb", "rope", "swim", "balance"]
 PROBE_EXPECT = ["moon", "shadow", "lamp"]
+READABLE_KINDS = ["notice", "paper", "ledger"]
 # What a guard carries on his rounds (Guard.rounds_light).
 ROUNDS_LIGHTS = ["", "lantern", "torch"]
 
@@ -132,6 +136,9 @@ def problems(marker):
 
     if ucd == "station" and props.get("kind") not in STATION_KINDS:
         out.append("%s: no station kind '%s'" % (marker["name"], props.get("kind")))
+
+    if ucd == "readable" and props.get("kind", "paper") not in READABLE_KINDS:
+        out.append("%s: no readable kind '%s' (%s)" % (marker["name"], props.get("kind"), ", ".join(READABLE_KINDS)))
 
     if ucd == "light" and props.get("kind") not in LIGHT_KINDS:
         out.append("%s: no light kind '%s'" % (marker["name"], props.get("kind")))

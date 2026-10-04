@@ -13,9 +13,22 @@ const SwingTrailScript := preload("res://scripts/Visual/SwingTrail.gd")
 const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 const ViewPosesScript := preload("res://scripts/Combat/ViewPoses.gd")
 const HandContactsScript := preload("res://scripts/Interaction/HandContacts.gd")
+const HeldPageScript := preload("res://scripts/Interaction/HeldPage.gd")
 
 ## Visual layer 19. The lightgem cameras' cull masks leave it out.
 const VIEWMODEL_LAYER := 1 << 18
+## A page held up to read (the letter, a notice): where it sits in the view's
+## miniature, tipped back to face the eye; how long it takes to come up or go
+## down (s); how hard the head glances down to it as it comes (rad/s).
+const PAGE_REST := Vector3(0.0, -0.045, -0.25)
+const PAGE_TILT := -0.18
+const PAGE_TIME := 0.25
+const PAGE_GLANCE := -0.6
+## Something precious taken: turned over in the off hand this long (s), this
+## far about and toward the eye, before it goes away.
+const REGARD_TIME := 1.2
+const REGARD_TURN := 3.5
+const REGARD_TILT := 0.44
 ## What a weapon's edge gets smeared with.
 const BLADE_BLOOD := preload("res://scripts/Visual/blade_blood.gdshader")
 ## The smear your blade leaves (SwingTrail.gd): steel catching the light, and
@@ -170,6 +183,11 @@ var _grip_weights: Array[float] = [0.0, 0.0]
 var _grip_curls: Array[float] = [0.5, 0.5]
 ## Your arms.
 var _arms: Node3D
+## The page held up to read (HeldPage), made the first time; wanted up or
+## not, and how far up it is (0..1).
+var _page: Node3D = null
+var _page_wanted := false
+var _page_up := 0.0
 ## Where your hands hold on to the world (HandContacts.gd).
 var _contacts: RefCounted
 
@@ -631,6 +649,71 @@ func set_checking(checking: bool) -> void:
 	_checking = checking
 
 
+# A page held up in both hands
+
+## Raises a page (`sides` BBCode, one per side; `look` a HeldPage.SIZES key)
+## in both hands, or shows these on the one already up.
+func hold_page(sides: PackedStringArray, look: StringName) -> void:
+	if _page == null:
+		_page = HeldPageScript.new()
+		_page.name = "Page"
+		_page.visible = false
+		add_child(_page)
+		_squeeze(_page.paper_material())
+
+	_page.side = 0 if not _page_wanted else _page.side
+	_page.show_sides(sides, look)
+
+	if not _page_wanted:
+		_page_wanted = true
+		Sfx.play_flat(self, &"paper")
+
+		# The head goes down to it first.
+		if player != null and player.get("juice") != null:
+			player.juice.punch(PAGE_GLANCE, 0.0)
+
+
+## New words on the page up (the side kept).
+func update_page(sides: PackedStringArray) -> void:
+	if _page != null and _page_wanted:
+		_page.show_sides(sides, _page.look)
+
+
+func turn_page() -> void:
+	if _page != null and _page_wanted and _page.side_count() > 1:
+		_page.turn()
+		Sfx.play_flat(self, &"paper")
+
+
+func lower_page() -> void:
+	if _page_wanted:
+		_page_wanted = false
+		Sfx.play_flat(self, &"paper")
+
+
+func is_page_up() -> bool:
+	return _page_wanted
+
+
+## The page (HeldPage), or null if none was ever held.
+func page() -> Node3D:
+	return _page
+
+
+## What the page up is (HeldPage.SIZES' key), or &"" with none up.
+func page_look() -> StringName:
+	return _page.look if _page != null and _page_wanted else &""
+
+
+## Where a hand holds the page (world, a HandContacts hold).
+func page_edge(side: int) -> Transform3D:
+	return _page.edge(side) if _page != null else global_transform
+
+
+func _update_page(delta: float) -> void:
+	_page_up = move_toward(_page_up, 1.0 if _page_wanted else 0.0, delta / PAGE_TIME)
+
+
 func is_busy() -> bool:
 	return not _job.is_empty() or not _jobs.is_empty()
 
@@ -660,7 +743,7 @@ func _update_off(delta: float) -> void:
 	_purse.visible = true
 	_keyring.visible = true
 	_refresh_purse()
-	var want := 0.0 if _checking and not _suppressed and _gripping < 0.2 else 1.0
+	var want := 0.0 if _checking and not _suppressed and _gripping < 0.2 and not _page_wanted else 1.0
 	_off_lower = move_toward(_off_lower, want, delta / maxf(switch_time, 0.01))
 
 
@@ -677,6 +760,9 @@ func _start_job() -> void:
 	_purse.visible = kind == "loot"
 	_keyring.visible = kind == "key"
 
+	if kind == "special":
+		_off_item.scale = Vector3.ONE * _fit_scale(mesh) * 0.9
+
 
 func _run_job() -> void:
 	var t: float = _job["t"]
@@ -684,6 +770,10 @@ func _run_job() -> void:
 
 	if kind == "key_turn":
 		_run_key_turn(t)
+		return
+
+	if kind == "special":
+		_run_regard(t)
 		return
 
 	# Taking something: it flies from where it lay into the raised off hand,
@@ -729,6 +819,54 @@ func _run_job() -> void:
 
 	if t > fly + stow + show + lower:
 		_job = {}
+
+
+## Something precious: into the off hand, turned over in the light, then
+## away. A run, a jump or a blow cuts the look short.
+func _run_regard(t: float) -> void:
+	var fly := 0.2
+	var stow := 0.16
+	var lower := 0.18
+	var regard := float(_job.get("cut", REGARD_TIME))
+
+	if t > fly and t < fly + regard and _cut_short():
+		_job["cut"] = t - fly
+		regard = t - fly
+
+	_off_lower = 1.0 - smoothstep(0.0, fly * 0.8, t)
+
+	if t < fly:
+		var start := _to_off_space(_job["from"])
+		_off_item.position = start.lerp(Vector3(0.0, 0.05, 0.0), _ease_out(t / fly))
+	elif t < fly + regard:
+		var u := _ease_out((t - fly) / REGARD_TIME)
+		_off_item.position = Vector3(0.0, 0.05 + 0.02 * sin(PI * u), 0.0)
+		_off_item.rotation = Vector3(REGARD_TILT * sin(PI * u), REGARD_TURN * u, 0.0)
+	elif t < fly + regard + stow:
+		var u := (t - fly - regard) / stow
+		_off_item.scale = Vector3.ONE * _fit_scale(_off_item.mesh) * 0.7 * (1.0 - u)
+	else:
+		_off_item.visible = false
+
+		if not _job.get("stowed", false):
+			_job["stowed"] = true
+			Sfx.play_flat(self, &"pickup")
+
+	if t > fly + regard + stow:
+		_off_lower = smoothstep(fly + regard + stow, fly + regard + stow + lower, t)
+
+	if t > fly + regard + stow + lower:
+		_job = {}
+
+
+## The player is off: running, in the air, in a blow.
+func _cut_short() -> bool:
+	if player == null:
+		return false
+
+	var fighting: Node = player.get("combat")
+	return player._is_sprinting() or (not player.is_on_floor() and absf(player.velocity.y) > 1.5) \
+		or (fighting != null and fighting.get("phase") != null and int(fighting.phase) != 0)
 
 
 func _run_key_turn(t: float) -> void:
@@ -824,6 +962,7 @@ func _process(delta: float) -> void:
 	_kick = move_toward(_kick, 0.0, delta / 0.42)
 	_update_main(delta)
 	_update_off(delta)
+	_update_page(delta)
 	_update_weight(delta, real_delta)
 	_update_motion(delta)
 	_place_hands()
@@ -1019,6 +1158,13 @@ func _place_hands() -> void:
 	_off.rotation = motion_rotation * 0.8
 	_off.visible = _off_lower < 0.99
 	_main.visible = _main_lower < 0.99
+
+	if _page != null:
+		var page_low := _ease_in_out(1.0 - _page_up)
+		_page.position = PAGE_REST + Vector3.DOWN * lowered_drop * page_low + sway * 0.5 + motion_position * 0.6
+		_page.rotation = Vector3(PAGE_TILT - 0.7 * page_low, 0.0, 0.0) + motion_rotation * 0.5
+		_page.visible = _page_up > 0.01
+
 	_place_grips()
 	_place_arms()
 

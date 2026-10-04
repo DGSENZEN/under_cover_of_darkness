@@ -304,6 +304,15 @@
    "optional": {},
    "box": false
   },
+  "readable": {
+   "required": [
+    "slot"
+   ],
+   "optional": {
+    "kind": "paper"
+   },
+   "box": false
+  },
   "probe": {
    "required": [
     "expect"

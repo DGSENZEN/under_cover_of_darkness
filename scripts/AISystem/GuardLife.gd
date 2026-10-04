@@ -30,6 +30,8 @@ const REACT := 1.6
 ## the light it needs beyond arm's length.
 const NOTICE := 0.9
 const DOOR_RANGE := 11.0
+## A chest left open is seen from this far (an office seen through its door).
+const CHEST_RANGE := 12.0
 const ARROW_RANGE := 7.0
 const TORCH_RANGE := 14.0
 const ODD_LIGHT := 0.08
@@ -534,6 +536,21 @@ func _look_for_oddities(step: float) -> void:
 	# Stirred: only what is near what stirred him.
 	var near: Vector3 = guard.last_known_position if int(guard.state) == SUSPICIOUS else Vector3.INF
 
+	# A chest left open (before the door that let him see it: he goes to the
+	# chest, not to shut the door on it).
+	for chest in tree.get_nodes_in_group(&"chests"):
+		if chest.has_method("left_open") and chest.left_open() and not _noticed(chest):
+			var lid: Vector3 = (chest as Node3D).global_position + Vector3.UP * 0.3
+
+			if near != Vector3.INF and lid.distance_to(near) > ODD_NEAR:
+				continue
+
+			if _watch_for(chest, [lid], CHEST_RANGE, eye, step):
+				_notice(chest, &"chest", (chest as Node3D).global_position)
+				return
+		else:
+			_noticing.erase(chest)
+
 	for door in tree.get_nodes_in_group(&"doors"):
 		if door.has_method("left_open") and door.left_open() and not _noticed(door):
 			var way: Vector3 = door.doorway() if door.has_method("doorway") else door.global_position
@@ -638,14 +655,14 @@ func _notice(thing: Node3D, kind: StringName, where: Vector3) -> void:
 	var garrison: RefCounted = _garrison()
 
 	match kind:
-		&"door":
+		&"door", &"chest":
 			guard.say(&"odd_door")
 		&"arrow":
 			guard.say(&"odd_arrow")
 
 	if garrison != null:
 		match kind:
-			&"door":
+			&"door", &"chest":
 				garrison.raise_alarm(DOOR_ALARM)
 			&"arrow":
 				garrison.raise_alarm(ARROW_ALARM)
@@ -667,6 +684,8 @@ func _notice(thing: Node3D, kind: StringName, where: Vector3) -> void:
 			go = where + side.normalized() * 1.1
 	elif kind == &"torch":
 		go = NavigationServer3D.map_get_closest_point(guard.get_world_3d().navigation_map, where + Vector3.DOWN * 2.0)
+	elif kind == &"chest":
+		go = NavigationServer3D.map_get_closest_point(guard.get_world_3d().navigation_map, where)
 
 	guard.notice(go, &"oddity")
 
@@ -694,6 +713,14 @@ func deal_with_oddity() -> bool:
 
 	match _odd_kind:
 		&"door":
+			# Before he shuts it, a look in through it: a chest left open in
+			# there is what he goes to next (the door left as it is).
+			var inside := _open_chest_through(at, thing)
+
+			if inside != null:
+				_notice(inside, &"chest", inside.global_position)
+				return true
+
 			if thing.get("is_open") == true:
 				thing.frob(guard)
 		&"arrow":
@@ -701,8 +728,46 @@ func deal_with_oddity() -> bool:
 		&"torch":
 			if thing.get("lit") == false:
 				guard._hands.relight(thing)
+		&"chest":
+			# Robbed: the alarm (left open, as it was found). Only left open:
+			# shut.
+			if thing.has_method("robbed") and thing.robbed():
+				guard.discover_theft(thing)
+			elif thing.get("is_open") == true:
+				thing.frob(guard)
 
 	return true
+
+
+## A chest left open seen from `doorway` (looking in at a man's height
+## through `door`, which does not hide it however it has swung): in reach,
+## in sight, lit enough unless near; or null.
+func _open_chest_through(doorway: Vector3, door: Node) -> Node3D:
+	var eye := doorway + Vector3.UP * 1.5
+	var space: PhysicsDirectSpaceState3D = guard.get_world_3d().direct_space_state
+
+	for chest in guard.get_tree().get_nodes_in_group(&"chests"):
+		if not chest.has_method("left_open") or not chest.left_open() or _noticed(chest):
+			continue
+
+		var lid: Vector3 = (chest as Node3D).global_position + Vector3.UP * 0.3
+		var far := eye.distance_to(lid)
+
+		if far > CHEST_RANGE or (far > 3.0 and LightProbe.light_at(guard, lid, []) < ODD_LIGHT):
+			continue
+
+		var exclude: Array[RID] = [guard.get_rid()]
+
+		if door is CollisionObject3D:
+			exclude.append((door as CollisionObject3D).get_rid())
+
+		var query := PhysicsRayQueryParameters3D.create(eye, lid, guard.sight_mask, exclude)
+		var hit := space.intersect_ray(query)
+
+		if hit.is_empty() or chest.is_ancestor_of(hit["collider"] as Node):
+			return chest
+
+	return null
 
 
 ## The oddity he is on his way to (for tests and the gym's labels).

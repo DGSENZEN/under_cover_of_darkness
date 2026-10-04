@@ -1,12 +1,14 @@
 # A man alone at his station or his post, now and then, to himself.
 
 == brand_block
+where: garrison
 place: chop
 cast: A = name(Brand)
 cooldown: 2m
 A [murmurs]: Come on, you knotted bastard.
 
 == tam_sleeptalk
+where: garrison
 place: sleep
 cast: A = name(Tam)
 cooldown: 3m
@@ -19,6 +21,7 @@ cooldown: 5m
 A: My backside's gone to sleep.
 
 == solo_sit_2
+where: garrison
 place: sit
 cast: A = any
 cooldown: 5m
@@ -325,156 +328,187 @@ cooldown: 5m
 A: Wind's turned.
 
 == solo_aldous_1
+where: garrison
 cast: A = name(Aldous)
 cooldown: 5m
 A: My knees. Oh, my knees.
 
 == solo_aldous_2
+where: garrison
 cast: A = name(Aldous)
 cooldown: 5m
 A: Thirty years of stairs.
 
 == solo_aldous_3
+where: garrison
 cast: A = name(Aldous)
 cooldown: 5m
 A: Glass that looks at the moon. Unnatural, that is.
 
 == solo_aldous_4
+where: garrison
 cast: A = name(Aldous)
 cooldown: 5m
 A: In my day we had a bell and a stick.
 
 == solo_aldous_5
+where: garrison
 cast: A = name(Aldous)
 cooldown: 5m
 A: Young captain. Young ideas.
 
 == solo_aldous_6
+where: garrison
 cast: A = name(Aldous)
 cooldown: 5m
 A: Nothing out there. Never is, till there is.
 
 == solo_wat_1
+where: garrison
 cast: A = name(Wat)
 cooldown: 5m
 A [murmurs]: Oh, the eel-wife of the Low Bridge...
 
 == solo_wat_2
+where: garrison
 cast: A = name(Wat)
 cooldown: 5m
 A [murmurs]: She had a crooked leg, and a crookeder smile...
 
 == solo_wat_3
+where: garrison
 cast: A = name(Wat)
 cooldown: 5m
 A [murmurs]: Down by the water, where the lanterns drown...
 
 == solo_wat_4
+where: garrison
 cast: A = name(Wat)
 cooldown: 5m
 A [murmurs]: Tra-la, the bargeman's daughter...
 
 == solo_wat_5
+where: garrison
 cast: A = name(Wat)
 cooldown: 5m
 A: Wonder what's in the store tonight.
 
 == solo_wat_6
+where: garrison
 cast: A = name(Wat)
 cooldown: 5m
 A: Lamp oil fetches a good price in the Lower Town.
 
 == solo_hendrik_1
+where: garrison
 cast: A = name(Hendrik)
 cooldown: 5m
 A: She'll mend. They always mend.
 
 == solo_hendrik_2
+where: garrison
 cast: A = name(Hendrik)
 cooldown: 5m
 A: Silver. Always silver.
 
 == solo_hendrik_3
+where: garrison
 cast: A = name(Hendrik)
 cooldown: 5m
 A: I should have been a baker.
 
 == solo_hendrik_4
+where: garrison
 cast: A = name(Hendrik)
 cooldown: 5m
 A: Round and round. Round and round.
 
 == solo_hendrik_5
+where: garrison
 cast: A = name(Hendrik)
 cooldown: 5m
 A: Keep your eyes open, Hendrik.
 
 == solo_jory_1
+where: garrison
 cast: A = name(Jory)
 cooldown: 5m
 A: South. Where it's warm.
 
 == solo_jory_2
+where: garrison
 cast: A = name(Jory)
 cooldown: 5m
 A: She laughed at my joke. She actually laughed.
 
 == solo_jory_3
+where: garrison
 cast: A = name(Jory)
 cooldown: 5m
 A: Two more months and I'm gone.
 
 == solo_jory_4
+where: garrison
 cast: A = name(Jory)
 cooldown: 5m
 A: Cold post, this. Coldest in the yard.
 
 == solo_jory_5
+where: garrison
 cast: A = name(Jory)
 cooldown: 5m
 A: Wonder if she's thinking of me.
 
 == solo_mirelle_1
+where: garrison
 cast: A = name(Mirelle)
 cooldown: 5m
 A: Idlers. The lot of them.
 
 == solo_mirelle_2
+where: garrison
 cast: A = name(Mirelle)
 cooldown: 5m
 A: The glass stays where it is.
 
 == solo_mirelle_3
+where: garrison
 cast: A = name(Mirelle)
 cooldown: 5m
 A: Two men short and a wall to watch.
 
 == solo_mirelle_4
+where: garrison
 cast: A = name(Mirelle)
 cooldown: 5m
 A: Tomorrow I'll have the roster changed.
 
 == solo_mirelle_5
+where: garrison
 cast: A = name(Mirelle)
 cooldown: 5m
 A: Not one of them would last a week in the south.
 
 == solo_osric_1
+where: garrison
 cast: A = name(Osric)
 cooldown: 5m
 A: Mother would have a fit if she saw this place.
 
 == solo_osric_2
+where: garrison
 cast: A = name(Osric)
 cooldown: 5m
 A: Keep your head down, Jory.
 
 == solo_osric_3
+where: garrison
 cast: A = name(Osric)
 cooldown: 5m
 A: Warm bed. One day.
 
 == solo_osric_4
+where: garrison
 cast: A = name(Osric)
 cooldown: 5m
 A: I'll write her tomorrow.
@@ -594,6 +628,7 @@ cooldown: 5m
 A: Could murder a pie.
 
 == solo_at_ease_6
+where: garrison
 when: at_ease
 cast: A = any
 cooldown: 5m

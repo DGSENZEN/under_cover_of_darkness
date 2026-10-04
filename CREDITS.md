@@ -21,7 +21,7 @@ Every sound in the game is a recording, cut and levelled from the packs below by
   and a woman), CC0 ("All these sounds are under CC0 license").
 
 - **The score's stings and layers, and your heartbeat when badly hurt**
-  (`sting_suspicious`, `sting_combat`, `sting_escalate`, `music_drone`,
+  (`sting_suspicious`, `sting_combat`, `sting_escalate`, `sting_goal`, `music_drone`,
   `music_pulse`, `music_severe`, `heartbeat`): from
   [Mixkit](https://mixkit.co/free-sound-effects/cinematic/) under the Mixkit Sound
   Effects Free License ("Deep cinematic wind hum", "Terror sweep of darkness",
@@ -65,3 +65,7 @@ Every sound in the game is a recording, cut and levelled from the packs below by
 - **Settling logs, a lantern's creak and its bail rattling**: "FilmCow Recorded SFX"
   by **FilmCow** (branches snapping, a metal latch, chains), with Kenney's chop and
   creaks; used with the user's approval (Sept 27 2026).
+- **The letter and the readables' paper, the pencil noting something** (`paper`,
+  `pencil`): "FilmCow Recorded SFX" by **FilmCow** (paper handled) and the "400 Sounds
+  Pack" (a page turned, a map opened, a pencil's scribble); awaiting the user's ear
+  (Oct 3 2026).

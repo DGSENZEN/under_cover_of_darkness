@@ -32,6 +32,7 @@ const GuardRotaScript := preload("res://scripts/AISystem/GuardRota.gd")
 const GuardVoiceScript := preload("res://scripts/AISystem/GuardVoice.gd")
 const GuardPastimesScript := preload("res://scripts/AISystem/GuardPastimes.gd")
 const TalkDirectorScript := preload("res://scripts/AISystem/Talk/TalkDirector.gd")
+const JobBookScript := preload("res://scripts/Level/JobBook.gd")
 const GuardHabitsScript := preload("res://scripts/AISystem/GuardHabits.gd")
 const CineEvents := preload("res://scripts/Cinema/CineEvents.gd")
 const SearchSpotsScript := preload("res://scripts/AISystem/SearchSpots.gd")
@@ -3356,9 +3357,12 @@ func _do_investigate(delta: float) -> void:
 	var pace := maxf(investigate_speed, chase_speed * HOT_PACE) if _stimulus in URGENT else investigate_speed
 
 	if _walk(pace, delta):
-		# Come to something out of place: he deals with it, then looks about.
+		# Come to something out of place: he deals with it, then looks about
+		# (unless what he saw there is another to see to: on to it).
 		_life.deal_with_oddity()
-		_start_looking()
+
+		if _life.oddity() == null:
+			_start_looking()
 
 
 func _do_search(delta: float) -> void:
@@ -3536,6 +3540,71 @@ func send_to_search(area: AABB, group: StringName = &"") -> void:
 		_next_search_point()
 	else:
 		_set_state(Alert.SEARCHING)
+
+
+## A chest found robbed of something precious (the harbour's job spec,
+## section 6.3): he searches from it, shouting (the job's own words), the
+## alarm full; the first time in this district the man nearest the nearest
+## bell is sent to ring it.
+func discover_theft(chest: Node3D) -> void:
+	last_known_position = chest.global_position
+	has_last_known = true
+	_since_stimulus = 0.0
+	_stimulus = &"alarm"
+	alert = maxf(alert, hearing_alert_cap)
+
+	if state == Alert.SEARCHING:
+		_search_left = search_points
+		_look_timer = 0.0
+		_next_search_point()
+	elif state != Alert.COMBAT:
+		_set_state(Alert.SEARCHING)
+
+	_chorus(&"theft", JobBookScript.shout("theft"), 1, 0.0, true)
+	shout()
+	var garrison: RefCounted = _life._garrison() if _life != null else null
+
+	if garrison != null:
+		garrison.raise_alarm(1.0)
+
+	if CityState.job.notice_theft():
+		var keeper := _bell_keeper(chest.global_position)
+
+		if keeper != null:
+			keeper.send_to_bell_for(chest.global_position)
+
+
+## Sent to ring the alarm for a theft found at `where` (the theft is the
+## alarm counted: the bell he rings for it is not counted again, Tally).
+func send_to_bell_for(where: Vector3) -> void:
+	last_known_position = where
+	has_last_known = true
+	set_meta(&"bell_for_theft", true)
+	send_to_bell()
+
+
+## The able man (not down, not fighting; anyone but this one if there is
+## another) nearest the bell nearest `where`; null with no bell.
+func _bell_keeper(where: Vector3) -> Node:
+	var bell: Node3D = null
+
+	for b in get_tree().get_nodes_in_group(&"alarm_bells"):
+		if bell == null or (b as Node3D).global_position.distance_to(where) < bell.global_position.distance_to(where):
+			bell = b
+
+	if bell == null:
+		return null
+
+	var best: Node = null
+
+	for g in get_tree().get_nodes_in_group(&"guards"):
+		if g == self or g.get("_knocked_out") == true or g.get("dead") == true or int(g.get("state")) == Alert.COMBAT:
+			continue
+
+		if best == null or (g as Node3D).global_position.distance_to(bell.global_position) < (best as Node3D).global_position.distance_to(bell.global_position):
+			best = g
+
+	return best if best != null else self
 
 
 ## Sent to ring the alarm (the captain's word: ShowNight): to the nearest

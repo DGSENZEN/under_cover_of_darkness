@@ -6,6 +6,7 @@ extends RefCounted
 ## Errors include file:line; malformed input can still return partially parsed data.
 
 const TalkFactsScript := preload("res://scripts/AISystem/Talk/TalkFacts.gd")
+const Districts := preload("res://scripts/Level/Districts.gd")
 
 const FOLDER := "res://data/talk"
 ## Once a night.
@@ -14,11 +15,16 @@ const DEFAULT_COOLDOWN := 300.0
 const PARTS := ["A", "B", "C", "D"]
 const EMOTES := ["laughs", "sighs", "nods", "shakes", "shrugs", "spits", "coughs", "drinks", "kicks",
 	"whispers", "shouts", "murmurs", "throws", "nudges"]
-const EMOTE_PREFIXES := ["points:", "looks:"]
+## (note:<id>: the line teaches the player that pencil note, if he hears
+## it: TalkDirector, the job.)
+const EMOTE_PREFIXES := ["points:", "looks:", "note:"]
 const TIES := ["kin", "friend", "rival", "owes", "suspects"]
 ## Ties that run both ways.
 const MUTUAL := ["kin", "friend", "rival"]
-const KEYS := ["when", "cast", "place", "cooldown", "priority", "group", "again"]
+const KEYS := ["when", "cast", "place", "cooldown", "priority", "group", "again", "where"]
+## Where a conversation is had (`where:`): the garrison, or a district of the
+## city (data/districts.json); none, anywhere.
+const GARRISON := &"garrison"
 ## Where a conversation may belong: the things they do together, and the
 ## stations.
 const PLACES := ["dice", "flask", "story", "watch_change", "round", "wake", "fire", "invite",
@@ -171,7 +177,7 @@ static func parse(text: String, file: String) -> Dictionary:
 				continue
 
 			ids[id] = at
-			block = {"id": id, "when": [], "cast": [], "place": &"", "cooldown": DEFAULT_COOLDOWN, "priority": 0,
+			block = {"id": id, "when": [], "cast": [], "place": &"", "where": &"", "cooldown": DEFAULT_COOLDOWN, "priority": 0,
 				"group": &"", "again": false, "lines": [], "interrupt": [], "source": at, "sources": {}, "_parts": {}}
 			continue
 
@@ -260,6 +266,11 @@ static func _key(block: Dictionary, key: String, value: String, at: String, out:
 
 				block["cast"].append({"key": name, "optional": optional, "reqs": terms(part.substr(eq + 1))})
 				block["_parts"][name] = true
+		"where":
+			if StringName(value) != GARRISON and not Districts.is_built(StringName(value)):
+				out["errors"].append("%s: no such place to talk '%s' (garrison or a district)" % [at, value])
+
+			block["where"] = StringName(value)
 		"place":
 			if not PLACES.has(value):
 				out["errors"].append("%s: no such place '%s'" % [at, value])
