@@ -915,6 +915,16 @@ class PlantingAndMassing(unittest.TestCase):
         part = kit_shapes.build(kit_recipes.PIECES["mass_belltower"]["shapes"])
         self.assertAlmostEqual(45.0 + max(v[1] for v in part["verts"]), 140.0, delta=1.0)
 
+    def test_an_orange_trees_crown_holds_together(self):
+        # (Its leaves one mass: every card overlaps its nearest neighbour by
+        # a good part of its size, none a clump standing clear of the rest.)
+        cards = [sh for sh in kit_recipes.PIECES["orange_tree"]["shapes"] if sh["kind"] == "card" and sh["slot"] == "orange_leaves"]
+        self.assertGreaterEqual(len(cards), 12)
+
+        for a in cards:
+            nearest = min(math.dist(a["centre"], b["centre"]) for b in cards if b is not a)
+            self.assertLessEqual(nearest, 0.6 * a["size"][0], (a["centre"], nearest))
+
     def test_trees_stand_on_their_trunks_and_plants_stop_nobody(self):
         for name in ("palm_date", "cypress", "orange_tree"):
             self.assertTrue(kit_recipes.PIECES[name]["cols"], name)

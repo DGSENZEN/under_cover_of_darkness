@@ -84,12 +84,23 @@ def _eight_bit(image):
 
 
 def _grime(size, strength, seed=7):
-    """Dark blotches the size of a few texels: 8 px cells, smoothed up."""
+    """Dark blotches the size of a few texels: 8 px cells, smoothed up, and
+    wrapping round the tile (its left edge runs on into its right, its top
+    into its bottom: a wall it tiles shows no seam)."""
     width, height = size
     rng = np.random.default_rng(seed)
-    cells = rng.random((max(height // 8, 1) + 1, max(width // 8, 1) + 1))
-    blotch = Image.fromarray((cells * 255).astype(np.uint8), "L").resize((width, height), Image.Resampling.BILINEAR)
-    return 1.0 - strength * (1.0 - np.asarray(blotch, dtype=np.float64) / 255.0)
+    ny, nx = max(height // 8, 1), max(width // 8, 1)
+    cells = rng.random((ny, nx))
+    u = (np.arange(width) + 0.5) / width * nx - 0.5
+    v = (np.arange(height) + 0.5) / height * ny - 0.5
+    i0, j0 = np.floor(u).astype(int), np.floor(v).astype(int)
+    fu, fv = (u - i0)[None, :], (v - j0)[:, None]
+    i0, j0 = i0 % nx, j0 % ny
+    i1, j1 = (i0 + 1) % nx, (j0 + 1) % ny
+    top = cells[j0][:, i0] * (1.0 - fu) + cells[j0][:, i1] * fu
+    bottom = cells[j1][:, i0] * (1.0 - fu) + cells[j1][:, i1] * fu
+    blotch = top * (1.0 - fv) + bottom * fv
+    return 1.0 - strength * (1.0 - blotch)
 
 
 def _seamless(image):

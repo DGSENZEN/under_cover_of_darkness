@@ -415,6 +415,61 @@ class Patio(unittest.TestCase):
         design = kit_patio.design(10.0, 25.0, "merchant")
         self.assertGreater(design["places"]["lookout"][2], -kit_patio.RANGE - kit_patio.WALL - 0.01)
 
+    def test_its_azotea_stays_behind_its_walls_faces(self):
+        # (The roof's terracotta over the walls' tops is set in from their
+        # outer faces: no stripe of it along a whitewashed front.)
+        for width, depth, kind, enterable in ((6.0, 18.0, "small", False), (10.0, 25.0, "merchant", True), (8.0, 8.0, "corner", False)):
+            design = kit_patio.design(width, depth, kind, enterable=enterable)
+
+            for sh in design["shapes"]:
+                if sh.get("slot") != "terracotta" or sh["kind"] != "box":
+                    continue
+
+                (cx, _cy, cz), (sx, _sy, sz) = sh["centre"], sh["size"]
+                self.assertLessEqual(abs(cx) + sx / 2.0, width / 2.0 - 0.005, (kind, sh["centre"], sh["size"]))
+                self.assertLessEqual(cz + sz / 2.0, -0.005, (kind, sh["centre"], sh["size"]))
+                self.assertGreaterEqual(cz - sz / 2.0, -depth + 0.005, (kind, sh["centre"], sh["size"]))
+
+    def test_its_walls_meet_without_cracks(self):
+        # (Its side walls run between its front and back walls, not over
+        # them: no face lies over another's on a corner; its parapets sit a
+        # little down into the walls' tops: no seam of sky at their foot.)
+        for width, depth, kind, enterable in ((6.0, 18.0, "small", False), (10.0, 25.0, "merchant", True), (8.0, 8.0, "corner", False)):
+            design = kit_patio.design(width, depth, kind, enterable=enterable)
+            eaves = design["eaves"]
+            top = eaves + kit_town.PARAPET
+            sides = [sh for sh in design["shapes"] if sh["kind"] == "box" and abs(abs(sh["centre"][0]) - (width / 2.0 - kit_patio.WALL / 2.0)) < 1e-6
+                     and abs(sh["size"][0] - kit_patio.WALL) < 1e-6 and sh["size"][1] > eaves - 0.01]
+            self.assertEqual(len(sides), 2, kind)
+
+            for sh in sides:
+                self.assertLessEqual(sh["centre"][2] + sh["size"][2] / 2.0, -kit_patio.WALL + 1e-6, kind)
+                self.assertGreaterEqual(sh["centre"][2] - sh["size"][2] / 2.0, -depth + kit_patio.WALL - 1e-6, kind)
+                # (Its parapet its wall run up past the roof: one face.)
+                self.assertAlmostEqual(sh["centre"][1] + sh["size"][1] / 2.0, top, places=6)
+                self.assertAlmostEqual(sh["centre"][1] - sh["size"][1] / 2.0, 0.0, places=6)
+
+            for z in (0.0, -depth):
+                faces = [sh for sh in design["shapes"] if sh["kind"] == "polygon" and all(abs(p[2] - z) < 1e-6 for p in sh["points"])]
+                self.assertTrue(faces and max(p[1] for sh in faces for p in sh["points"]) >= top - 1e-6, (kind, z))
+
+            # (No box laid on an outer wall's top: no seam at a parapet's foot.)
+            for sh in design["shapes"]:
+                if sh["kind"] != "box" or abs(sh["centre"][1] - sh["size"][1] / 2.0 - eaves) > 0.05:
+                    continue
+
+                (cx, _cy, cz), (sx, _sy, sz) = sh["centre"], sh["size"]
+                on_edge = abs(cx) + sx / 2.0 > width / 2.0 - 0.3 or cz + sz / 2.0 > -0.3 or cz - sz / 2.0 < -depth + 0.3
+                self.assertFalse(on_edge and sh.get("slot") == "whitewash", (kind, sh["centre"], sh["size"]))
+
+    def test_its_cancela_is_an_iron_gate(self):
+        # (The street door wood; the gate onto the patio iron, seen through:
+        # its door entry says so.)
+        design = kit_patio.design(6.0, 18.0, enterable=True)
+        street, cancela = design["doors"][0], design["doors"][1]
+        self.assertEqual(cancela[6:], ["gate"])
+        self.assertEqual(street[6:], [])
+
     def test_a_corner_houses_door_suits_its_one_storey(self):
         # (A low door on a one-storey front: a fifth of it open at most,
         # however narrow; still a man's door.)

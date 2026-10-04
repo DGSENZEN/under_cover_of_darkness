@@ -54,6 +54,8 @@ LINK_BACK = 2.0
 # The whitewash's red-ochre band at the foot of a front.
 BAND = 0.8
 LADDER_GAP = 1.0
+# How far a parapet sits down into the wall's top under it.
+SINK = 0.03
 BUDGET = {"small": 2400, "corner": 2400, "merchant": 3600, "corral": 3600}
 
 
@@ -138,7 +140,10 @@ def design(width, depth, kind="small", quirk="", enterable=True, front="whitewas
     for o in openings:
         out["openings"].append([0, "front", o.x, o.y, o.width, o.height, o.kind])
 
-    s, c = town.wall(width, eaves, WALL, openings, front, (0.0, -WALL / 2.0, 0.0), frames=False, inside=enterable)
+    # (Its walls run up past the roof as its parapet: one face from the
+    # lane to the parapet's top, no seam at the parapet's foot.)
+    top = eaves + town.PARAPET
+    s, c = town.wall(width, top, WALL, openings, front, (0.0, -WALL / 2.0, 0.0), frames=False, inside=enterable)
     shapes += s
     walls = c
 
@@ -146,14 +151,30 @@ def design(width, depth, kind="small", quirk="", enterable=True, front="whitewas
     for a, b in ((-width / 2.0, dx - door_w / 2.0), (dx + door_w / 2.0, width / 2.0)):
         if b - a > 0.05:
             shapes.append(ks.card((a + b) / 2.0, BAND / 2.0, 0.012, b - a, BAND, "band_ochre"))
-    s, c = town.wall(width, eaves, WALL, [], side, (0.0, -depth + WALL / 2.0, 180.0), frames=False, inside=enterable)
+    s, c = town.wall(width, top, WALL, [], side, (0.0, -depth + WALL / 2.0, 180.0), frames=False, inside=enterable)
     shapes += s
     walls += c
 
+    # (An honest house's parapets' faces to its roof.)
+    if not enterable:
+        x0, x1 = -width / 2.0 + WALL, width / 2.0 - WALL
+        shapes += [town.facing([[x0, eaves, -WALL], [x1, eaves, -WALL], [x1, top, -WALL], [x0, top, -WALL]], (0.0, 0.0, -1.0), front),
+                   town.facing([[x0, eaves, -depth + WALL], [x1, eaves, -depth + WALL], [x1, top, -depth + WALL], [x0, top, -depth + WALL]],
+                               (0.0, 0.0, 1.0), side)]
+
+    # (Its sides between its front and back walls, not over their ends: no
+    # face lies over another's at a corner; a linked roof's gap through the
+    # parapet a stretch of the wall only roof high.)
+    link_z = -depth + WALL + LINK_BACK
+    gap = (link_z - LINK / 2.0, link_z + LINK / 2.0) if quirk == "linked" else None
+
     for sx in (-1.0, 1.0):
         x = sx * (width / 2.0 - WALL / 2.0)
-        shapes.append(ks.box(x, eaves / 2.0, -depth / 2.0, WALL, eaves, depth, side))
-        cols.append(town.col(x, eaves / 2.0, -depth / 2.0, WALL, eaves, depth))
+        runs = [(-depth + WALL, -WALL, top)] if gap is None else [(-depth + WALL, gap[0], top), (gap[0], gap[1], eaves), (gap[1], -WALL, top)]
+
+        for z0, z1, h in runs:
+            shapes.append(ks.box(x, h / 2.0, (z0 + z1) / 2.0, WALL, h, z1 - z0, side))
+            cols.append(town.col(x, h / 2.0, (z0 + z1) / 2.0, WALL, h, z1 - z0))
 
     if enterable:
         _inside(out, shapes, cols, plan, ladder_side, kind, dx, door_w, eaves, storeys, rng, side)
@@ -237,7 +258,8 @@ def _inside(out, shapes, cols, plan, ladder_side, kind, dx, door_w, eaves, store
     # (Each door hung its opening's size.)
     front = [o for o in out["openings"] if o[6] == "door"][0]
     out["doors"].insert(0, [dx, 0.0, -WALL / 2.0, 0.0, front[4], front[5]])
-    out["doors"].append([cancela, 0.0, pz1, 0.0, CANCELA[0], CANCELA[1]])
+    # (The cancela iron: its entry's kind, a gate seen through.)
+    out["doors"].append([cancela, 0.0, pz1, 0.0, CANCELA[0], CANCELA[1], "gate"])
     out["entries"].insert(0, "door")
     patio_at = [mx + 1.5 if px1 - px0 > 4.0 else mx, 0.0, mz - 1.5]
     out["rooms_at"] = [patio_at] + [[(r[0] + r[2]) / 2.0, 0.0, (r[1] + r[3]) / 2.0] for r, _e in live_rooms]
@@ -268,9 +290,9 @@ def _inside(out, shapes, cols, plan, ladder_side, kind, dx, door_w, eaves, store
 
 def _roof(out, shapes, cols, plan, width, depth, eaves, enterable, ladder_side, quirk):
     """The azotea: a floor at the eaves over the rooms (over the patio too,
-    on an honest house, under an awning), a PARAPET round its edge and the
-    patio's, gaps where the ladder comes up and (linked) onto the
-    neighbour's roof."""
+    on an honest house, under an awning), inside its walls run up a PARAPET
+    over it (linked: a gap each side onto the neighbour's roof), a parapet
+    round the patio's well, a gap where the ladder comes up."""
     patio = plan[1]
     t = town.PARAPET_THICK
     rects = plan if not enterable else [r for i, r in enumerate(plan) if i != 1]
@@ -282,35 +304,28 @@ def _roof(out, shapes, cols, plan, width, depth, eaves, enterable, ladder_side, 
         shapes += s
         cols += c
 
-    # (The roof over the walls' tops, round the inner floors.)
-    for x, z, w, d in ((0.0, -WALL / 2.0, width, WALL), (0.0, -depth + WALL / 2.0, width, WALL),
-                       (-width / 2.0 + WALL / 2.0, -depth / 2.0, WALL, depth), (width / 2.0 - WALL / 2.0, -depth / 2.0, WALL, depth)):
-        shapes.append(ks.box(x, eaves - town.SLAB / 2.0, z, w, town.SLAB, d, "terracotta"))
-        cols.append(town.col(x, eaves - town.SLAB / 2.0, z, w, town.SLAB, d))
-
     if not enterable:
         px0, pz0, px1, pz1 = patio
         shapes.append(ks.card((px0 + px1) / 2.0, eaves + 0.02, (pz0 + pz1) / 2.0, px1 - px0, pz1 - pz0, "sailcloth", 0.0, 90.0))
 
-    # Parapets: round the roof's edge (a gap for the linked neighbour), and
-    # round the patio's (a gap at the ladder's head).
+    # (Its parapet round its roof is its walls run up; round the patio's
+    # open well, a parapet, a gap at the ladder's head.)
     link_z = -depth + WALL + LINK_BACK
-    edges = [(-width / 2.0, 0.0 - t / 2.0 + t, width / 2.0, -t, "x"), (-width / 2.0, -depth + t, width / 2.0, -depth, "x"),
-             (-width / 2.0, 0.0, -width / 2.0 + t, -depth, "z"), (width / 2.0 - t, 0.0, width / 2.0, -depth, "z")]
-
-    for i, (x0, z0, x1, z1, along) in enumerate(edges):
-        gaps = [(link_z + LINK / 2.0, link_z - LINK / 2.0)] if quirk == "linked" and i in (2, 3) else []
-        _parapet(shapes, cols, x0, z0, x1, z1, along, eaves, gaps)
 
     if enterable:
         px0, pz0, px1, pz1 = patio
         lx, lz = out["places"]["ladder"][0], out["places"]["ladder"][2]
         back_gap = [(lx - LADDER_GAP / 2.0, lx + LADDER_GAP / 2.0)] if ladder_side == "back" else []
         left_gap = [(lz + LADDER_GAP / 2.0, lz - LADDER_GAP / 2.0)] if ladder_side == "left" else []
-        _parapet(shapes, cols, px0, pz1 + t, px1, pz1, "x", eaves, [])
-        _parapet(shapes, cols, px0, pz0, px1, pz0 - t, "x", eaves, back_gap)
-        _parapet(shapes, cols, px0 - t, pz1, px0, pz0, "z", eaves, left_gap)
-        _parapet(shapes, cols, px1, pz1, px1 + t, pz0, "z", eaves, [])
+        # (None where the patio's edge is a wall's inner face: the wall runs
+        # up past the roof there.)
+        ix0, ix1, iz0, iz1 = -width / 2.0 + WALL, width / 2.0 - WALL, -(depth - WALL), -WALL
+        sides = [(abs(pz1 - iz1) > 1e-6, (px0, pz1 + t, px1, pz1, "x"), []), (abs(pz0 - iz0) > 1e-6, (px0, pz0, px1, pz0 - t, "x"), back_gap),
+                 (abs(px0 - ix0) > 1e-6, (px0 - t, pz1, px0, pz0, "z"), left_gap), (abs(px1 - ix1) > 1e-6, (px1, pz1, px1 + t, pz0, "z"), [])]
+
+        for open_edge, (x0, z0, x1, z1, along), gaps in sides:
+            if open_edge:
+                _parapet(shapes, cols, x0, z0, x1, z1, along, eaves, gaps)
 
     if quirk == "linked":
         out["places"]["link"] = [width / 2.0, eaves, link_z]
@@ -325,16 +340,16 @@ def _parapet(shapes, cols, x0, z0, x1, z1, along, eaves, gaps):
 
         for a0, a1 in runs:
             box = ((a0 + a1) / 2.0, (z0 + z1) / 2.0, a1 - a0, abs(z1 - z0))
-            shapes.append(ks.box(box[0], eaves + town.PARAPET / 2.0, box[1], box[2], town.PARAPET, box[3], "whitewash"))
-            cols.append(town.col(box[0], eaves + town.PARAPET / 2.0, box[1], box[2], town.PARAPET, box[3]))
+            shapes.append(ks.box(box[0], eaves + (town.PARAPET - SINK) / 2.0, box[1], box[2], town.PARAPET + SINK, box[3], "whitewash"))
+            cols.append(town.col(box[0], eaves + (town.PARAPET - SINK) / 2.0, box[1], box[2], town.PARAPET + SINK, box[3]))
     else:
         lo, hi = min(z0, z1), max(z0, z1)
         runs = [(a0, a1) for a0, a1, _b0, _b1 in town.split(lo, hi, 0.0, 1.0, [(min(g), max(g), 0.0, 1.0) for g in gaps])]
 
         for a0, a1 in runs:
             box = ((x0 + x1) / 2.0, (a0 + a1) / 2.0, abs(x1 - x0), a1 - a0)
-            shapes.append(ks.box(box[0], eaves + town.PARAPET / 2.0, box[1], box[2], town.PARAPET, box[3], "whitewash"))
-            cols.append(town.col(box[0], eaves + town.PARAPET / 2.0, box[1], box[2], town.PARAPET, box[3]))
+            shapes.append(ks.box(box[0], eaves + (town.PARAPET - SINK) / 2.0, box[1], box[2], town.PARAPET + SINK, box[3], "whitewash"))
+            cols.append(town.col(box[0], eaves + (town.PARAPET - SINK) / 2.0, box[1], box[2], town.PARAPET + SINK, box[3]))
 
 
 def _quirk(out, shapes, cols, quirk, kind, width, depth, eaves, plan):

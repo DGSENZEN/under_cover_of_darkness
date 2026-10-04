@@ -126,6 +126,16 @@ class Ps2ifyTest(unittest.TestCase):
         self.assertLess(np.abs(out[:, 0] - out[:, -1]).mean(), 8.0)
         self.assertLess(np.abs(out[0] - out[-1]).mean(), 8.0)
 
+    def test_grime_wraps_round_the_tile(self):
+        # (A flat photo grimed: its left edge runs on into its right, its top
+        # into its bottom, as a tiled wall shows them, no seam between.)
+        flat = Image.new("RGB", (128, 128), (200, 200, 200))
+        out = np.asarray(ps2ify.convert(flat, recipe(size=[128, 128], colours=256, grime=0.5)).convert("RGB")).astype(float)
+        inside = np.abs(out[:, 1:] - out[:, :-1]).mean()
+        self.assertLess(np.abs(out[:, 0] - out[:, -1]).mean(), 2.0 * inside + 1.0)
+        self.assertLess(np.abs(out[0] - out[-1]).mean(), 2.0 * inside + 1.0)
+        self.assertGreater(out.std(), 5.0)
+
     def test_a_recipe_names_its_mask_file(self):
         with tempfile.TemporaryDirectory() as folder:
             source, recipes = Path(folder) / "source", Path(folder) / "recipes"

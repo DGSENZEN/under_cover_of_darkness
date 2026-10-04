@@ -1,1 +1,1 @@
-{"source": "TCom_Wall_Plaster2_3x3_1K_albedo.tif", "size": [256, 256], "colours": 24, "grime": 0.08, "desaturate": 0.6, "brightness": 1.45, "contrast": 0.85, "tint": [1.0, 0.99, 0.95]}
+{"source": "TCom_Wall_Plaster2_3x3_1K_albedo.tif", "size": [256, 256], "colours": 24, "grime": 0.08, "desaturate": 0.6, "brightness": 1.45, "contrast": 0.85, "tint": [1.0, 0.99, 0.95], "seamless": true}

@@ -76,6 +76,8 @@ GATE = (4.0, 2.5, 3.2)
 ADARVE_GATE = (3.6, 3.0)
 # A garden's end wall's thickness (kit_terrace.garden_wall's).
 GARDEN_WALL = 0.3
+# The palace's garden seen through its barred gate (across, back).
+GLIMPSE = (6.0, 5.0)
 
 PLATES = sorted([t for t in TERRACES if t[1] == "judiaria"], key=lambda t: -t[5])
 
@@ -639,10 +641,17 @@ def _walls():
     for k, step in enumerate(STEPS):
         low, high = PLATES[k], PLATES[k + 1]
         cuts = [] if step["along"] else [(c - w / 2.0, c + w / 2.0) for c, w in step["stairs"]]
+        # (Where a stair climbs along the face, its coping flush.)
+        run = wall_run(step["rise"])
+        flush = [(c - run / 2.0, c + run / 2.0) for c, _w in step["stairs"]] if step["along"] else []
 
-        for a, b in _intervals(WEST, EDGE, cuts):
+        for a, b in _intervals(WEST, EDGE, cuts + flush):
             out["retaining"].append({"kind": "retaining", "args": (round(b - a, 3), step["rise"]), "at": ((a + b) / 2.0, step["y"], step["z"]),
                                      "yaw": 0.0})
+
+        for a, b in flush:
+            out["retaining"].append({"kind": "retaining", "args": (round(b - a, 3), step["rise"], False, "rubble_warm", True),
+                                     "at": ((a + b) / 2.0, step["y"], step["z"]), "yaw": 0.0})
 
         for c, w in step["stairs"]:
             if step["along"]:
@@ -650,7 +659,7 @@ def _walls():
                 # (Up the step's face eastward, against it; off its landing
                 # north onto the terrace above.)
                 out["stair"].append({"kind": "wall_steps", "args": (step["rise"], run, w),
-                                     "at": (c - run / 2.0, step["y"], step["z"] + PROUD + w / 2.0), "yaw": 90.0, "step": k, "c": c})
+                                     "at": (c - run / 2.0, step["y"], step["z"] + w / 2.0), "yaw": 90.0, "step": k, "c": c})
             else:
                 out["stair"].append({"kind": "stair_lane", "args": (w, step["steps"], step["riser"]),
                                      "at": (c, step["y"], step["z"] + stair_run(step)), "yaw": 180.0, "step": k, "c": c})
@@ -673,14 +682,19 @@ def _walls():
         # (The west cliff, split where the ground under it changes; the
         # first terrace's from the harbour's wall north.)
         top = min(z1, CITY_WALL[1]) if plate is PLATES[0] else z1
-        splits = sorted({z0, top} | {c for c in (-170.0, -185.0, -265.0) if z0 < c < top})
+        # (Where a Carmo stair climbs along it, its coping flush.)
+        flush = [(foot, foot + wall_run(y - ground)) for name, ground, foot in CARMO_STAIRS if name == plate[0]]
+        splits = sorted({z0, top} | {c for c in (-170.0, -185.0, -265.0) if z0 < c < top} | {c for span in flush for c in span})
 
         for a, b in zip(splits, splits[1:]):
             below = _neighbour((a + b) / 2.0)
+            args = (round(b - a, 3), round(y - below, 3))
+
+            if any(f0 - 0.01 <= (a + b) / 2.0 <= f1 + 0.01 for f0, f1 in flush):
+                args += (False, "rubble_warm", True)
 
             if y - below > 0.3:
-                out["west"].append({"kind": "retaining", "args": (round(b - a, 3), round(y - below, 3)), "at": (WEST, below, (a + b) / 2.0),
-                                    "yaw": -90.0})
+                out["west"].append({"kind": "retaining", "args": args, "at": (WEST, below, (a + b) / 2.0), "yaw": -90.0})
 
         # (Its parapet along the west edge where no house stands on it: but
         # where a tower's top door or a Carmo stair's landing opens.)
@@ -716,6 +730,8 @@ def _walls():
         if gate is not None:
             out["gate"].append({"kind": "gateway", "args": (GATE[0], BOUNDARY_H, GATE[1], GATE[2], False, "ashlar_weathered"),
                                 "at": (EAST + 0.4, y, gate), "yaw": 90.0, "palace": True})
+            # (What its bars show beyond the wall: the palace's garden.)
+            out["gate"].append({"kind": "garden_glimpse", "args": GLIMPSE, "at": (EDGE, y, gate), "yaw": -90.0, "glimpse": True})
 
     # The first terrace's south edge over the harbour's shipyard: its cliff
     # from the harbour's wall east to the walk's, a parapet where no house
@@ -742,7 +758,7 @@ def _walls():
     for name, ground, foot in CARMO_STAIRS:
         rise = round(level(plate_named(name)) - ground, 3)
         out["carmo"].append({"kind": "wall_steps", "args": (rise, round(wall_run(rise), 3), CARMO_STAIR_WIDTH),
-                             "at": (WEST - PROUD - CARMO_STAIR_WIDTH / 2.0, ground, foot), "yaw": 0.0, "plate": name})
+                             "at": (WEST - CARMO_STAIR_WIDTH / 2.0, ground, foot), "yaw": 0.0, "plate": name})
 
     # The quarter's two gates: across each tower's court's mouth on its lane.
     for name, z in TOWERS:

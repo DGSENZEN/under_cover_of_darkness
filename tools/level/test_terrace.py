@@ -120,6 +120,14 @@ class Terrace(unittest.TestCase):
         self.assertIsNotNone(hit(name, [0.0, 20.5, 1.0], [0.0, 0.0, -1.0]))
         self.assertIsNone(hit(name, [0.0, 21.2, 1.0], [0.0, 0.0, -1.0]))
 
+    def test_a_retaining_wall_behind_a_stair_has_its_coping_flush(self):
+        # (Where a stair stands against it: no lip over the stair's side,
+        # its coping's face on the wall's.)
+        name = kit_terrace.retaining(10.0, 7.0, flush=True)
+        self.assertNotEqual(name, kit_terrace.retaining(10.0, 7.0))
+        self.assertAlmostEqual(hit(name, [0.0, 6.9, 1.0], [0.0, 0.0, -1.0]), 1.0, places=3)
+        self.assertAlmostEqual(hit(kit_terrace.retaining(10.0, 7.0), [0.0, 6.9, 1.0], [0.0, 0.0, -1.0]), 1.0 - kit_terrace.COPING[1], places=3)
+
     def test_the_sewer_is_2_2_by_3_1(self):
         name = kit_terrace.vault(2.2, 3.1, 20.0)
         self.assertAlmostEqual(hit(name, [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]), 1.1, places=2)
@@ -271,6 +279,20 @@ class Terrace(unittest.TestCase):
         pieces = [piece("steps", name, (0, 0, 0)), floor("foot", -1.0, -2.0, 1.0, 0.0, 0.0), floor("top", -1.0, 19.7, 1.0, 22.0, 11.8)]
         self.assertEqual(walked(pieces, recipe["tour"]), [])
 
+    def test_a_wall_stairs_parapet_stands_proud_of_its_steps(self):
+        # (Its raking parapet and its landing's rail a little proud of the
+        # steps' open side: no two faces on one plane fighting there.)
+        width = 1.6
+        name = kit_terrace.wall_steps(7.0, 12.32, width)
+        shapes = kit_recipes.PIECES[name]["shapes"]
+        steps = [sh for sh in shapes if sh.get("slot") == "stair_stone"]
+        rails = [sh for sh in shapes if sh.get("slot") == "ashlar_weathered" and sh["centre"][0] < 0.0]
+        self.assertTrue(steps and len(rails) == 2)
+        side = min(sh["centre"][0] - sh["size"][0] / 2.0 for sh in steps)
+
+        for sh in rails:
+            self.assertLessEqual(sh["centre"][0] - sh["size"][0] / 2.0, side - 0.005, sh["centre"])
+
     def test_a_stair_tower_climbs_its_cliff(self):
         # (Its foot door on the street, its top door onto the terrace at
         # the cliff's top, a switchback up inside walked from one to the
@@ -342,6 +364,21 @@ class Terrace(unittest.TestCase):
         name = kit_terrace.bricked(2.5, 3.4)
         self.assertIsNotNone(hit(name, [0.0, 1.5, 1.0], [0.0, 0.0, -1.0]))
         self.assertIsNone(hit(name, [0.0, 3.6, 1.0], [0.0, 0.0, -1.0]))
+
+    def test_a_garden_glimpse_is_hedged_round_its_gravel(self):
+        # (What a barred gate shows of a garden beyond it: gravel from the
+        # gate (z 0) back to -depth, hedged along its back and both sides
+        # over a man's eye.)
+        name = kit_terrace.garden_glimpse(6.0, 5.0)
+        recipe = kit_recipes.PIECES[name]
+        self.assertAlmostEqual(hit(name, [0.0, 1.0, -2.0], [0.0, -1.0, 0.0]), 1.0, places=3)
+        self.assertTrue([sh for sh in recipe["shapes"] if sh.get("slot") == "gravel"])
+
+        for start, direction in (([0.0, 1.7, -1.0], [0.0, 0.0, -1.0]), ([0.0, 1.7, -2.5], [1.0, 0.0, 0.0]), ([0.0, 1.7, -2.5], [-1.0, 0.0, 0.0])):
+            self.assertIsNotNone(hit(name, start, direction), direction)
+
+        self.assertTrue([sh for sh in recipe["shapes"] if sh.get("slot") == "hedge"])
+        self.assertGreater(recipe["size"][1], 2.0)
 
     def test_a_garden_wall_stands_its_length_over_a_mans_reach(self):
         # (A walled garden's end: whitewash about z 0, its length along x,

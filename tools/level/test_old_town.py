@@ -1045,6 +1045,25 @@ class Judiaria(unittest.TestCase):
     def test_its_edges_are_walled(self):
         self.assertEqual(edge_faults("judiaria", judiaria_openings())[:8], [])
 
+    def test_wall_stairs_stand_against_their_cliffs(self):
+        # (Each stair up a step's face or the Carmo's cliff stands on the
+        # face, no crack between; the wall behind it has its coping flush.)
+        def flush_over(walls, along_x, lo, hi, at):
+            return any(w["args"][-1] is True and abs(w["at"][2 if along_x else 0] - at) < 0.01
+                       and w["at"][0 if along_x else 2] - w["args"][0] / 2.0 <= lo + 0.01 and hi - 0.01 <= w["at"][0 if along_x else 2] + w["args"][0] / 2.0
+                       for w in walls if w["kind"] == "retaining" and len(w["args"]) == 5)
+
+        for w in [w for w in jud_plan.WALLS["stair"] if w["kind"] == "wall_steps"]:
+            rise, run, width = w["args"]
+            z = jud_plan.STEPS[w["step"]]["z"]
+            self.assertAlmostEqual(w["at"][2] - width / 2.0, z, delta=0.005)
+            self.assertTrue(flush_over(jud_plan.WALLS["retaining"], True, w["at"][0], w["at"][0] + run, z), w["at"])
+
+        for w in jud_plan.WALLS["carmo"]:
+            rise, run, width = w["args"]
+            self.assertAlmostEqual(w["at"][0] + width / 2.0, jud_plan.WEST, delta=0.005)
+            self.assertTrue(flush_over(jud_plan.WALLS["west"], False, w["at"][2], w["at"][2] + run, jud_plan.WEST), w["at"])
+
     def test_its_lanes_dog_leg(self):
         # (Each terrace's lane in segments of 25 m at most, each jogging
         # its own width off the next: a view along it stops at the next
@@ -1112,6 +1131,17 @@ class Judiaria(unittest.TestCase):
             self.assertTrue(any(p["piece"].startswith("gateway_") and math.dist(p["position"], m["position"]) < 0.3 for p in layout()["pieces"]))
             self.assertTrue(any(any(math.dist(c["position"], m["position"]) < 1.5 for c in points) for points in ways.values()), m["name"])
 
+    def test_the_patios_gates_are_iron(self):
+        # (Each walked-in patio house's cancela an iron gate: its marker's
+        # kind; its street door wood.)
+        doors = {m["name"]: m for m in layout()["markers"] if m["ucd"] == "door"}
+        walked = [each for each in jud_plan.LOTS if each.enterable]
+        self.assertTrue(walked)
+
+        for each in walked:
+            self.assertEqual(doors["%s_door_1" % each.name]["props"].get("kind", "hinged"), "hinged", each.name)
+            self.assertEqual(doors["%s_door_2" % each.name]["props"].get("kind"), "gate", each.name)
+
     def test_the_palace_is_sealed(self):
         # (Its garden wall shuts the quarter's east; its gate at x 150, z
         # -230 barred, a sealed exit there.)
@@ -1122,6 +1152,10 @@ class Judiaria(unittest.TestCase):
         self.assertTrue(m["props"]["label"].endswith("(sealed)"))
         self.assertTrue(any(p["piece"].startswith("gateway_") and "_barred" in p["piece"] and math.dist(p["position"], m["position"]) < 1.5
                             for p in layout()["pieces"]))
+        # (Its bars show the palace's garden beyond the wall, not the sky.)
+        glimpse = [p for p in layout()["pieces"] if p["piece"].startswith("garden_glimpse_") and abs(p["position"][2] - m["position"][2]) < 1.0
+                   and jud_plan.EDGE - 0.05 <= p["position"][0] <= jud_plan.EDGE + 0.5]
+        self.assertEqual(len(glimpse), 1)
         boxes = rules.colliders(layout())
 
         for plate in jud_plan.PLATES:

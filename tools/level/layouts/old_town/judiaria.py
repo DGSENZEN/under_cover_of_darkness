@@ -215,6 +215,15 @@ def _planting(L):
                     n += 1
                     L.put("cypress", (x, y, (zf + back) / 2.0), 30.0 * n, _sector(x, zf), name="judiaria_cypress_%d" % n)
 
+    # (Two cypresses at the back of the palace's garden, over its hedges.)
+    for w in [w for w in plan.WALLS["gate"] if w.get("glimpse")]:
+        x, y, z = w["at"]
+        _across, back = w["args"]
+
+        for i, dz in enumerate((-1.6, 1.6)):
+            n += 1
+            L.put("cypress", (x + back - 1.4, y, z + dz), 30.0 * n, _sector(x, z), name="judiaria_cypress_%d" % n)
+
     for k, step in enumerate(plan.STEPS):
         if k in plan.CISTERNS:
             continue

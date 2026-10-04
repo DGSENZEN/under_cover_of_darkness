@@ -404,6 +404,38 @@ func _gameplay() -> void:
 		and is_equal_approx(loud17, 45.0) and is_zero_approx(beside17), "roar %s; masked %.1f, roaring %.1f, beside %.1f" % [roar != null, quiet17,
 			loud17, beside17])
 
+	# K27 an iron gate (a quarter's, an alley's, a patio's cancela) is
+	# wrought iron seen through: its slab not drawn (its collider kept), its
+	# bars cut out over it both ways, an iron frame round them
+	var gated := Markers.new()
+	gated.markers = [{"name": "gate_test", "ucd": "door", "transform": Transform3D(Basis(), Vector3(-30, 0, 30)),
+		"props": {"kind": "gate", "width": 2.5, "height": 2.6, "curfew": true}}]
+	var gate27: Node = LevelGameplay.doors(holder, gated).get("gate_test")
+	var meshes27: Array = gate27.find_children("*", "MeshInstance3D", true, false) if gate27 != null else []
+	var slabs27 := []
+	var bars27 := []
+	var frame27 := []
+
+	for m in meshes27:
+		var mesh27 := m as MeshInstance3D
+		var size27: Vector3 = mesh27.get_aabb().size
+		var look27: BaseMaterial3D = mesh27.material_override as BaseMaterial3D
+
+		if mesh27.mesh is BoxMesh and mesh27.visible and size27.x > 2.0 and size27.y > 2.0:
+			slabs27.append(mesh27)
+
+		if mesh27.mesh is QuadMesh and look27 != null and look27.transparency == BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR \
+				and look27.cull_mode == BaseMaterial3D.CULL_DISABLED:
+			bars27.append(mesh27)
+
+		if mesh27.mesh is BoxMesh and mesh27.visible and minf(size27.x, size27.y) < 0.1:
+			frame27.append(mesh27)
+
+	var solid27: bool = gate27 != null and not gate27.find_children("*", "CollisionShape3D", true, false).is_empty()
+	_check("K27 an iron gate is wrought iron seen through: no slab drawn, its bars cut out both ways, an iron frame, still solid",
+		gate27 != null and slabs27.is_empty() and bars27.size() == 1 and frame27.size() >= 4 and solid27,
+		"gate %s, slabs %d, bars %d, frame %d, solid %s" % [gate27 != null, slabs27.size(), bars27.size(), frame27.size(), solid27])
+
 	# K18 the baker keeps the island its home is on, and what is reached from
 	# it: not the biggest (the city: the harbour, not the rock behind it)
 	var yard := Node3D.new()

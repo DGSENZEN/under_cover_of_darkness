@@ -85,6 +85,7 @@ CASCADE = 3.2
 # A wall stair's landing at its head; its parapet's thickness and height.
 WALL_LANDING = 1.4
 RAIL = (0.25, 0.9)
+RAIL_PROUD = 0.01
 # A stair tower: its walls, its flights' width and their spine between,
 # the most steps a flight, their tread, its landings' depth, its top
 # storey's height.
@@ -163,17 +164,20 @@ def stair_lane(width, steps, riser=RISER):
     return _register(name, "stair", "granite", shapes, cols, [width, y, z], head=[0.0, y, z], tour=tour, flights=runs)
 
 
-def retaining(length, height, parapet=False, slot="rubble_warm"):
+def retaining(length, height, parapet=False, slot="rubble_warm", flush=False):
     """A retaining wall `length` along x, `height` high, its face at z 0 to
     the lower terrace (+z), its body WALL_THICK behind in `slot` (rubble; a
     dressed face where asked), a mossy coping at its top standing COPING[1]
-    proud (the upper terrace's lip), a PARAPET on it."""
-    name = "retaining_%d_%d%s%s" % (_cm(length), _cm(height), "_parapet" if parapet else "", "" if slot == "rubble_warm" else "_" + slot)
+    proud (the upper terrace's lip; `flush` where a stair stands against
+    it), a PARAPET on it."""
+    name = "retaining_%d_%d%s%s%s" % (_cm(length), _cm(height), "_parapet" if parapet else "", "" if slot == "rubble_warm" else "_" + slot,
+                                      "_flush" if flush else "")
 
     if name in k.PIECES:
         return name
 
     t, (ct, proud) = WALL_THICK, COPING
+    proud = 0.0 if flush else proud
     body = (0.0, (height - ct) / 2.0, -t / 2.0, length, height - ct, t)
     coping = (0.0, height - ct / 2.0, -t / 2.0 + proud / 2.0, length, ct, t + proud)
     shapes = [ks.box(*body, slot), ks.box(*coping, "coping_moss")]
@@ -265,6 +269,27 @@ def garden_wall(length):
     coping = (0.0, h + 0.05, 0.0, length + 0.04, 0.1, t + 0.1)
     shapes = [ks.box(*body, "whitewash"), ks.box(*coping, "granite")]
     return _register(name, "wall", "whitewash", shapes, [town.col(*body), town.col(*coping)], [length + 0.04, h + 0.1, t + 0.1])
+
+
+HEDGE = (2.4, 0.8)
+
+
+def garden_glimpse(width, depth):
+    """What a barred gate shows of a garden beyond it: gravel `width` along
+    x from the gate (z 0) back to -depth, its top at 0, box hedges HEDGE
+    high and thick along its back and both sides."""
+    name = "garden_glimpse_%d_%d" % (_cm(width), _cm(depth))
+
+    if name in k.PIECES:
+        return name
+
+    h, t = HEDGE
+    boxes = [((0.0, -0.1, -depth / 2.0, width, 0.2, depth), "gravel"),
+             ((0.0, h / 2.0, -depth + t / 2.0, width, h, t), "hedge"),
+             ((-width / 2.0 + t / 2.0, h / 2.0, -(depth - t) / 2.0, t, h, depth - t), "hedge"),
+             ((width / 2.0 - t / 2.0, h / 2.0, -(depth - t) / 2.0, t, h, depth - t), "hedge")]
+    shapes = [ks.box(*box, slot) for box, slot in boxes]
+    return _register(name, "wall", "hedge", shapes, [town.col(*box) for box, _slot in boxes], [width, h, depth])
 
 
 def ramp(width, length, rise):
@@ -645,7 +670,8 @@ def wall_steps(rise, run, width):
 
     add((0.0, rise / 2.0, run - WALL_LANDING / 2.0, width, rise, WALL_LANDING), "stair_stone")
     t, h = RAIL
-    x = -width / 2.0 + t / 2.0
+    # (A hair proud of the steps' open side: no two faces on one plane.)
+    x = -width / 2.0 + t / 2.0 - RAIL_PROUD
     # (Its parapet rakes with the steps' nosings, as high over them as a
     # landing's is.)
     pitch = math.degrees(math.atan2(rise, flight))

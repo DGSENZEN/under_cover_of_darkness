@@ -74,15 +74,53 @@ static func doors(parent: Node3D, level) -> Dictionary:
 		door.set("pickable", bool(props.get("pick", true)))
 		out[m["name"]] = door
 
-		# (An iron gate, a quarter's or an alley's, is wrought iron; a door
-		# studded wood.)
-		var skin := &"window_grille" if String(props.get("kind", "hinged")) == "gate" else &"wood_studded"
-
-		for panel in door.find_children("*", "MeshInstance3D", true, false):
-			if (panel as MeshInstance3D).get_aabb().size.y > 1.0:
-				(panel as MeshInstance3D).material_override = Materials.surface(skin)
+		# (An iron gate, a quarter's, an alley's or a patio's, is wrought iron;
+		# a door studded wood.)
+		if String(props.get("kind", "hinged")) == "gate":
+			_wrought(door, width, float(props.get("height", 2.2)))
+		else:
+			for panel in door.find_children("*", "MeshInstance3D", true, false):
+				if (panel as MeshInstance3D).get_aabb().size.y > 1.0:
+					(panel as MeshInstance3D).material_override = Materials.surface(&"wood_studded")
 
 	return out
+
+
+## A window grille's painting's size in the world (kit_patio's GRILLE): an
+## iron gate's bars repeat it.
+const GRILLE := Vector2(0.8, 1.2)
+const GATE_FRAME := 0.06
+
+
+## An iron gate's look on its door: its slab not drawn (its collider kept),
+## the grille's bars cut out over it (seen through from either side), an
+## iron frame round them.
+static func _wrought(door: Node3D, width: float, height: float) -> void:
+	for panel in door.find_children("*", "MeshInstance3D", true, false):
+		if (panel as MeshInstance3D).get_aabb().size.y > 1.0:
+			(panel as MeshInstance3D).visible = false
+
+	var bars := MeshInstance3D.new()
+	var quad := QuadMesh.new()
+	quad.size = Vector2(width, height)
+	bars.mesh = quad
+	var iron: StandardMaterial3D = (Materials.level_surface(&"window_grille") as StandardMaterial3D).duplicate()
+	iron.uv1_scale = Vector3(maxf(1.0, roundf(width / GRILLE.x)), maxf(1.0, roundf(height / GRILLE.y)), 1.0)
+	bars.material_override = iron
+	bars.position = Vector3(width * 0.5, height * 0.5, 0.0)
+	door.add_child(bars)
+	var t := GATE_FRAME
+
+	for piece in [[Vector3(width, t, t), Vector3(width * 0.5, height - t * 0.5, 0.0)], [Vector3(width, t, t), Vector3(width * 0.5, t * 0.5, 0.0)],
+			[Vector3(t, height, t), Vector3(t * 0.5, height * 0.5, 0.0)], [Vector3(t, height, t), Vector3(width - t * 0.5, height * 0.5, 0.0)],
+			[Vector3(width, t, t), Vector3(width * 0.5, height * 0.45, 0.0)]]:
+		var rail := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = piece[0]
+		rail.mesh = box
+		rail.material_override = Materials.surface(&"iron")
+		rail.position = piece[1]
+		door.add_child(rail)
 
 
 ## Every light marker made into its light, named after its marker (the

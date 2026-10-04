@@ -45,7 +45,7 @@ def _cypress():
 def _orange_tree():
     return ([ks.box(0.0, 0.3, 0.0, 1.6, 0.6, 1.6, "granite"), ks.box(0.0, 0.58, 0.0, 1.4, 0.05, 1.4, "mud"),
              ks.lathe(0.0, 0.6, 0.0, [[0.14, 0.0], [0.1, 1.1], [0.08, 1.6]], 6, "bark")]
-            + _crown(71, [0.0, 2.6, 0.0], [1.3, 1.05, 1.3], 18, "orange_leaves", (1.0, 1.4), shell=(0.4, 1.0), droop=15.0))
+            + _crown(71, [0.0, 2.6, 0.0], [1.3, 1.05, 1.3], 28, "orange_leaves", (1.0, 1.4), shell=(0.6, 0.95), droop=15.0))
 
 
 _plant("palm_date", "palm_frond", "wood", [7.2, 10.2, 7.2], _palm(), cols=[[0.2, 4.5, 0.0, 0.5, 9.0, 0.5, "wood", 0, 0, 0]], budget=400)

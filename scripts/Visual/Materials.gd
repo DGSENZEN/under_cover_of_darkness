@@ -32,6 +32,7 @@ const SLOTS := {
 	&"roof_clay": {"photo": "roof_clay", "colour": Color("6A3A28"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
 	&"mud": {"photo": "mud", "colour": Color("3A2E20"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0},
 	&"gravel": {"photo": "gravel", "colour": Color("55514B"), "metallic": 0.0, "roughness": 0.95, "tile": 2.0},
+	&"hedge": {"photo": "hedge", "colour": Color("3A4A2E"), "metallic": 0.0, "roughness": 0.95, "tile": 2.0},
 	&"stone_moss": {"photo": "stone_moss", "colour": Color("4F5244"), "metallic": 0.0, "roughness": 0.9, "tile": 2.0},
 	&"wood_studded": {"photo": "wood_studded", "colour": Color("3A2A1E"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
 	&"carpet": {"photo": "carpet", "painted": true, "colour": Color("5E1712"), "metallic": 0.0, "roughness": 0.95, "tile": 1.0},

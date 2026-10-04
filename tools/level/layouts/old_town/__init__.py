@@ -43,6 +43,11 @@ def place(L, lot):
     for i, d in enumerate(recipe.get("doors", [])):
         where = geo.add(list(at), geo.apply(basis, d[0:3]))
         size = {"width": d[4], "height": d[5]} if len(d) > 5 else {}
+
+        # (A door its recipe calls a gate is iron, seen through.)
+        if len(d) > 6:
+            size["kind"] = d[6]
+
         L.mark("%s_door_%d" % (lot.name, i + 1), "door", where, lot.yaw + d[3], sector, **size)
 
     if lot.lived and recipe.get("rooms_at"):
