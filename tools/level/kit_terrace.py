@@ -889,7 +889,7 @@ def tannery():
                 add((cx + sx * (outer - rim) / 2.0, high / 2.0, cz + sz * (outer - rim) / 2.0, w, high, d), "granite_rough")
 
             # (The liquor, stood in to the knee: solid to its face.)
-            add((cx, liquor / 2.0, cz, inner, liquor, inner), "mud")
+            add((cx, liquor / 2.0, cz, inner, liquor, inner), "tannery_liquor")
 
     for rx in (3.4, 5.2):
         for pz in (-5.0, -1.5, 2.0, 5.5):

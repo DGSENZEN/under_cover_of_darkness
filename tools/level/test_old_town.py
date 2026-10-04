@@ -1015,6 +1015,13 @@ class Judiaria(unittest.TestCase):
             self.assertTrue(zs, name)
             self.assertLessEqual(max(zs) - min(zs), 120.0, name)
 
+    def test_its_lanes_are_paved_in_river_pebbles(self):
+        # (Santa Cruz's empedrado: the user's bought Gravel0037, its recipe
+        # committed, the photo never.)
+        from old_town import ground
+        self.assertEqual(ground.SLOTS["judiaria"], "pebbles")
+        self.assertTrue(os.path.exists(os.path.join(HERE, "../textures/recipes/pebbles.json")))
+
     def test_its_houses_turn_inward_behind_blank_walls(self):
         # (Patio houses all; a front a door and iron grilles, no more, at
         # most 15% of it open (a one-storey house's door alone a fifth).)

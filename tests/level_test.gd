@@ -247,6 +247,15 @@ func _fixture() -> void:
 
 	_check("K12 every new painted slot finds its painting (and the salt decal its picture)", missing12.is_empty(), "missing %s" % [missing12])
 
+	# K28 the tannery's vats hold their liquor, drawn by our own shader (no
+	# photo): murky, scummed, stirring with time
+	var liquor: Material = Materials.level_surface(&"tannery_liquor")
+	var drawn28: bool = liquor is ShaderMaterial and (liquor as ShaderMaterial).shader != null \
+		and String((liquor as ShaderMaterial).shader.resource_path).ends_with("liquor.gdshader")
+	var code28: String = (liquor as ShaderMaterial).shader.code if drawn28 else ""
+	_check("K28 the tannery's liquor is our own shader, stirring with TIME, no photo",
+		drawn28 and code28.contains("TIME") and not code28.contains("sampler2D"), "shader %s" % [liquor])
+
 
 ## The fixture's markers made into the game's nodes by LevelGameplay (any
 ## level's, not the garrison's own map).

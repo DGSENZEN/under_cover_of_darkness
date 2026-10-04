@@ -32,6 +32,8 @@ const SLOTS := {
 	&"roof_clay": {"photo": "roof_clay", "colour": Color("6A3A28"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
 	&"mud": {"photo": "mud", "colour": Color("3A2E20"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0},
 	&"gravel": {"photo": "gravel", "colour": Color("55514B"), "metallic": 0.0, "roughness": 0.95, "tile": 2.0},
+	&"tannery_liquor": {"colour": Color("3A2C18"), "metallic": 0.0, "roughness": 0.4, "liquor": true},
+	&"pebbles": {"photo": "pebbles", "colour": Color("6B655B"), "metallic": 0.0, "roughness": 0.9, "tile": 3.0},
 	&"hedge": {"photo": "hedge", "colour": Color("3A4A2E"), "metallic": 0.0, "roughness": 0.95, "tile": 2.0},
 	&"stone_moss": {"photo": "stone_moss", "colour": Color("4F5244"), "metallic": 0.0, "roughness": 0.9, "tile": 2.0},
 	&"wood_studded": {"photo": "wood_studded", "colour": Color("3A2A1E"), "metallic": 0.0, "roughness": 0.85, "tile": 1.5},
@@ -213,6 +215,7 @@ const GLOW := preload("res://scripts/Visual/Lights/glow.gdshader")
 const LIT_WINDOW := preload("res://scripts/Visual/lit_window.gdshader")
 const FOLIAGE := preload("res://scripts/Visual/foliage.gdshader")
 const SHORE := preload("res://scripts/Visual/shore.gdshader")
+const LIQUOR := preload("res://scripts/Visual/liquor.gdshader")
 ## How a glowing slot glows: [the flame's share of its colour, brightness,
 ## how much in hot spots rather than evenly].
 const GLOW_LOOK := {
@@ -299,6 +302,13 @@ static func level_surface(slot: StringName) -> Material:
 
 		_level[slot] = lit
 		return lit
+
+	# A tannery's liquor: our own shader, no photo (liquor.gdshader).
+	if entry.has("liquor"):
+		var vat := ShaderMaterial.new()
+		vat.shader = LIQUOR
+		_level[slot] = vat
+		return vat
 
 	# Leaves, grass, reeds and ivy: our own paintings, stirred by the wind.
 	if entry.has("sway"):
@@ -460,7 +470,8 @@ static func clear_cache() -> void:
 static func _photo_name(slot: StringName) -> String:
 	if photo_names.is_empty():
 		for key in SLOTS:
-			photo_names[key] = SLOTS[key]["photo"]
+			# (A shader's slot has no photo: the tannery's liquor.)
+			photo_names[key] = SLOTS[key].get("photo", "")
 
 	var name = photo_names.get(slot, "")
 	return "" if name == null else String(name)

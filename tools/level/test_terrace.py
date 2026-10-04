@@ -356,6 +356,9 @@ class Terrace(unittest.TestCase):
         self.assertEqual(len(recipe["vats"]), 6)
         self.assertTrue(any(sh.get("slot") == "leather" for sh in recipe["shapes"]))
         self.assertIn("work", recipe)
+        # (Its vats full of liquor, our own shader's, not mud.)
+        self.assertEqual(len([sh for sh in recipe["shapes"] if sh.get("slot") == "tannery_liquor"]), 6)
+        self.assertFalse(any(sh.get("slot") == "mud" for sh in recipe["shapes"]))
 
         for x, z in recipe["vats"]:
             self.assertIsNotNone(hit(name, [x, 2.0, z], [0.0, -1.0, 0.0]))

@@ -11,8 +11,8 @@ import town
 
 CELL = 2.5
 # What each quarter is paved with.
-# (The Judiaria's granite flags until its river pebbles' photos come.)
-SLOTS = {"baixa": "calcada", "stairs": "cobble", "judiaria": "flagstone", "carmo": "flagstone", "upper": "cobble"}
+# (The Judiaria's lanes river pebbles, Santa Cruz's empedrado.)
+SLOTS = {"baixa": "calcada", "stairs": "cobble", "judiaria": "pebbles", "carmo": "flagstone", "upper": "cobble"}
 
 
 def cells(plate):
