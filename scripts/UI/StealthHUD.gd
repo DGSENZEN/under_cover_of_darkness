@@ -10,6 +10,7 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const GuardFighterScript := preload("res://scripts/AISystem/GuardFighter.gd")
 const SettingsScript := preload("res://scripts/UI/Settings.gd")
 const CrispTextScript := preload("res://scripts/Visual/CrispText.gd")
+const SightRay := preload("res://scripts/StimuliSystem/SightRay.gd")
 
 const SUBTITLE_RANGE := 22.0
 ## A man noticing you is marked this near (m). One fighting you this near
@@ -1462,7 +1463,8 @@ func _walled_off(camera: Camera3D, guard: Node3D) -> bool:
 
 	var query := PhysicsRayQueryParameters3D.create(camera.global_position, guard.eye_position(), 1, exclude)
 	query.collide_with_areas = false
-	return not camera.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+	# (A window's glass is no wall: he watches you through it.)
+	return not SightRay.first_solid(camera.get_world_3d().direct_space_state, query).is_empty()
 
 
 ## Where a mark goes: over him, or off the screen at its edge the way he is:

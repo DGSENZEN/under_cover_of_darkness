@@ -13,6 +13,7 @@ const Layers := preload("res://scripts/Visual/Layers.gd")
 const GodRaysScript := preload("res://scripts/Visual/GodRays.gd")
 const WindowsScript := preload("res://scripts/Visual/Windows.gd")
 const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
+const CoronaScript := preload("res://scripts/Visual/Lights/Corona.gd")
 const CITY := preload("res://maps/city.tscn")
 
 ## The harbour's: its quay's top, the customs house's upper floor, the
@@ -164,6 +165,25 @@ func _sight() -> void:
 	_check("GW3 the probe reads the moon through the glass on the patch, and none a step beside under the ceiling", lit > dark + 0.3,
 		"%.2f on the patch, %.2f beside" % [lit, dark])
 	moon.queue_free()
+
+	# A lamp's halo outside, seen from in the room through the glass; and
+	# from behind the wall beside it, not.
+	var corona: Node3D = CoronaScript.new()
+	add_child(corona)
+	corona.global_position = Vector3(0, 1.75, 6.0)
+	var eye := Camera3D.new()
+	add_child(eye)
+	eye.global_position = Vector3(0, 1.75, 1.0)
+	await _frames(2)
+	var seen := float(corona.call("_clear_share", eye, [] as Array[RID]))
+	eye.global_position = Vector3(2.0, 1.75, 1.0)
+	corona.global_position = Vector3(2.0, 1.75, 6.0)
+	await _frames(1)
+	var hidden := float(corona.call("_clear_share", eye, [] as Array[RID]))
+	_check("GW21 a lamp's halo is seen through a window's glass, not through the wall beside it", seen > 0.99 and hidden < 0.01,
+		"through the glass %.2f, through the wall %.2f" % [seen, hidden])
+	corona.queue_free()
+	eye.queue_free()
 	level.root.queue_free()
 	await _frames(1)
 
@@ -393,10 +413,13 @@ func _lamps() -> void:
 	var w: Dictionary = windows.get("windows")[0]
 	var spot: Variant = w["spot"]
 	var outside: bool = spot != null and (spot as SpotLight3D).global_position.z > 3.4
+	# (The engine draws a projector only through a light's shadow: a patch
+	# with one and no shadow would light nothing yet count as light.)
+	var drawn: bool = spot != null and ((spot as SpotLight3D).light_projector == null or (spot as SpotLight3D).shadow_enabled)
 	var glow_lit: Array = _glow(windows)
-	var first: bool = room["lamp"] == a and outside and _spot_energy(windows) > 0.05 and w["lamp_shaft"] != null and float(glow_lit[0]) > 0.05 and bool(glow_lit[1])
-	var notes := ["a: lamp %s, spot outside %s, energy %.2f, shaft %s, glow %.2f for show %s" % [room["lamp"] == a, outside, _spot_energy(windows),
-		w["lamp_shaft"] != null, float(glow_lit[0]), glow_lit[1]]]
+	var first: bool = room["lamp"] == a and outside and drawn and _spot_energy(windows) > 0.05 and w["lamp_shaft"] != null and float(glow_lit[0]) > 0.05 and bool(glow_lit[1])
+	var notes := ["a: lamp %s, spot outside %s drawn %s, energy %.2f, shaft %s, glow %.2f for show %s" % [room["lamp"] == a, outside, drawn,
+		_spot_energy(windows), w["lamp_shaft"] != null, float(glow_lit[0]), glow_lit[1]]]
 
 	a.call("put_out", &"douse")
 	await _until(func(): return room["lamp"] == b and _spot_energy(windows) > 0.05, 30)
@@ -517,6 +540,29 @@ func _harbour() -> void:
 		var stone: bool = guard.call("_line_of_sight", eye + along, target + along, null)
 		_check("GW15 a guard on the quay sees into the store through its glass, not through the stone beside it", through and not stone,
 			"through the glass %s, through the stone %s" % [through, stone])
+
+		# Your marks: a guard watching you through the glass is not behind a
+		# wall (his mark not dimmed); one behind the stone is.
+		var hud: Node = city.player.get("hud")
+		var view := Camera3D.new()
+		add_child(view)
+		var guard_at: Vector3 = (middle_window["middle"] as Vector3) + normal * 6.0
+		guard_at.y = QUAY
+		guard.global_position = guard_at
+		await _frames(2)
+		var guard_eye: Vector3 = guard.call("eye_position")
+		view.global_position = (middle_window["middle"] as Vector3) + ((middle_window["middle"] as Vector3) - guard_eye).normalized() * (float(middle_window["inside"]) + 1.5)
+		await _frames(1)
+		var walled_glass: bool = hud.call("_walled_off", view, guard)
+		# (Both moved along the wall: the line now through the stone between
+		# two windows.)
+		guard.global_position = guard_at + along
+		view.global_position += along
+		await _frames(2)
+		var walled_stone: bool = hud.call("_walled_off", view, guard)
+		view.queue_free()
+		_check("GW22 your marks: a guard watching through the glass is not behind a wall; one behind the stone is", not walled_glass and walled_stone,
+			"through the glass walled %s, behind the stone walled %s" % [walled_glass, walled_stone])
 
 		# A thing thrown at the glass from inside stays in.
 		var body := RigidBody3D.new()

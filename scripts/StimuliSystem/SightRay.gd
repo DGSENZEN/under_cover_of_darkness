@@ -9,20 +9,44 @@ const CASTS := 8
 
 ## The first hit of `query` that is not in a `skip` group, or {} if none:
 ## each skipped collider is excluded and the ray cast again.
+## The query's own exclusions are given back as they were (a caller that
+## keeps one query, a halo's, sees no change).
 static func first_solid(space: PhysicsDirectSpaceState3D, query: PhysicsRayQueryParameters3D, skip: Array[StringName] = [&"glass"]) -> Dictionary:
-	for i in CASTS:
-		var hit := space.intersect_ray(query)
+	var hit := space.intersect_ray(query)
 
-		if hit.is_empty():
-			return hit
+	# (Nothing, or something solid, at the first cast: the common case,
+	# nothing copied.)
+	if hit.is_empty() or not _skipped(hit, skip):
+		return hit
 
-		var collider := hit.get("collider") as Node
+	var given := query.exclude
+	var exclude := given.duplicate()
+	var found := {}
 
-		if collider == null or not skip.any(func(group): return collider.is_in_group(group)):
-			return hit
-
-		var exclude := query.exclude
+	for i in CASTS - 1:
 		exclude.append(hit["rid"])
 		query.exclude = exclude
+		hit = space.intersect_ray(query)
 
-	return {}
+		if hit.is_empty():
+			break
+
+		if not _skipped(hit, skip):
+			found = hit
+			break
+
+	query.exclude = given
+	return found
+
+
+static func _skipped(hit: Dictionary, skip: Array[StringName]) -> bool:
+	var collider := hit.get("collider") as Node
+
+	if collider == null:
+		return false
+
+	for group in skip:
+		if collider.is_in_group(group):
+			return true
+
+	return false

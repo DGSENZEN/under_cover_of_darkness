@@ -13,7 +13,6 @@ extends Node3D
 const GodRaysScript := preload("res://scripts/Visual/GodRays.gd")
 const SightRay := preload("res://scripts/StimuliSystem/SightRay.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
-const Materials := preload("res://scripts/Visual/Materials.gd")
 
 ## The moon stands in front of a window when its way into the glass is at
 ## least this much along the glass's inward normal.
@@ -56,8 +55,6 @@ const LAMP_GAIN := 0.03
 const GLOW_IN := 0.35
 const GLOW_RANGE := 1.4
 const GLOW_GAIN := 0.35
-## A window's lead, as its patch's picture.
-const PAINTINGS := {"quarries": &"quarries", "casement": &"casement", "grille": &"window_grille"}
 
 ## Each window: {piece, lead, outline (the glass's corners), normal (out),
 ## middle, outside, inside (the wall's faces from the glass), room, facing,
@@ -312,9 +309,12 @@ func _light_out(room_name: String, lamp: Node3D) -> void:
 		spot.light_energy = 0.0
 		spot.spot_range = SPOT_RANGE
 		spot.spot_angle = rad_to_deg(atan((frame["box"] as Rect2).size.length() * 0.5 / maxf(toward.length(), 0.01))) + SPOT_PAD
+		# (No projector: the engine draws one only through a shadow, and a
+		# shadowed light a window costs too much. A soft warm patch; the probe
+		# counts it unshadowed, as it is drawn.)
 		spot.shadow_enabled = false
+		spot.spot_angle_attenuation = 1.6
 		spot.set_meta(&"casts_shadow", false)
-		spot.light_projector = Materials.photo(PAINTINGS.get(String(w["lead"]), &"casement"))
 		add_child(spot)
 		spot.global_position = middle + normal * (float(w["outside"]) + SPOT_OUT)
 		var aim := toward.normalized()

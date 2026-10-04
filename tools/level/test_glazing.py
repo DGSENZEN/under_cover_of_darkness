@@ -16,6 +16,7 @@ import geo  # noqa: E402
 import kit_recipes  # noqa: E402  (first: it registers every kit)
 import kit_customs  # noqa: E402
 import kit_glazing  # noqa: E402
+import overlap  # noqa: E402
 import kit_shapes  # noqa: E402
 
 
@@ -45,6 +46,42 @@ def box_holds(box, point):
 
 def middle_of(record):
     return [sum(p[i] for p in record["outline"]) / len(record["outline"]) for i in range(3)]
+
+
+def face_holds(shapes, point, tol=1e-3):
+    """Some face of `shapes` passes through `point` (on its plane, inside it)."""
+    built = kit_shapes.build(shapes)
+    verts = built["verts"]
+
+    for indices, _slot, _uvs in built["faces"]:
+        pts = [verts[i] for i in indices]
+        n = kit_shapes._normal(pts)
+        length = sum(c * c for c in n) ** 0.5
+
+        if length < 1e-9:
+            continue
+
+        n = [c / length for c in n]
+
+        if abs(sum(n[i] * (point[i] - pts[0][i]) for i in range(3))) > tol:
+            continue
+
+        drop = max(range(3), key=lambda i: abs(n[i]))
+        keep = [i for i in range(3) if i != drop]
+        flat = [(p[keep[0]], p[keep[1]]) for p in pts]
+        x, y = point[keep[0]], point[keep[1]]
+        inside = False
+
+        for k in range(len(flat)):
+            (ax, ay), (bx, by) = flat[k], flat[(k + 1) % len(flat)]
+
+            if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
+                inside = not inside
+
+        if inside:
+            return True
+
+    return False
 
 
 class Glazed(unittest.TestCase):
@@ -227,6 +264,79 @@ class Carrack(unittest.TestCase):
 
     def test_her_budget_holds(self):
         self.assertLessEqual(tris(self.recipe), self.recipe.get("budget", kit_shapes.PIECE_TRIS))
+
+
+class Doors(unittest.TestCase):
+    """A doorway cut through a wall of strips (kit_glazing.strips' `open`)
+    has its reveals through the wall's whole thickness: no seeing into the
+    wall's hollow at its jambs or head."""
+
+    def test_an_open_hole_is_closed_through_the_wall(self):
+        hole = kit_glazing.hole(4.0, 0.0, 1.2, 2.2)
+        shapes, _cols = kit_glazing.strips(0.0, 8.0, 0.0, 4.0, -0.3, 0.6, [hole], "whitewash", open=[hole])
+
+        for point in ([3.4, 1.1, -0.3], [4.6, 1.1, -0.3], [4.0, 2.2, -0.3], [3.4, 1.1, -0.05], [4.6, 1.1, -0.55]):
+            self.assertTrue(face_holds(shapes, point), point)
+
+    def test_the_customs_doorways_have_their_reveals(self):
+        # (In the house's frame: the portal in the hall's front, the loading
+        # door over the loggia, the yard door in the back wall.)
+        px, pw, ph = kit_customs.PORTAL
+        lx, lw, lh = kit_customs.LOADING
+        up, zf = kit_customs.UP, kit_customs.HALL_FRONT - kit_customs.WALL / 2.0
+        doors = {"customs_portal_wall": [[px - pw / 2.0, ph / 2.0, zf], [px + pw / 2.0, ph / 2.0, zf], [px, ph, zf]],
+                 "customs_upper_front": [[lx - lw / 2.0, up + lh / 2.0, kit_customs.Z1 - 0.25], [lx + lw / 2.0, up + lh / 2.0, kit_customs.Z1 - 0.25],
+                                         [lx, up + lh, kit_customs.Z1 - 0.25]],
+                 "customs_back_wall": [[kit_customs.X1 - 4.6, 1.1, kit_customs.Z0 + 0.3], [kit_customs.X1 - 3.4, 1.1, kit_customs.Z0 + 0.3],
+                                       [kit_customs.X1 - 4.0, 2.2, kit_customs.Z0 + 0.3]]}
+
+        for name, points in doors.items():
+            at = kit_customs.PIECE_AT[name]
+            shapes = kit_recipes.PIECES[name]["shapes"]
+
+            for p in points:
+                self.assertTrue(face_holds(shapes, [p[i] - at[i] for i in range(3)]), (name, p))
+
+
+class Seams(unittest.TestCase):
+    def test_no_frame_or_sill_fights_a_windows_reveal(self):
+        # Coplanar faces facing the same way flicker (z-fighting): none of a
+        # window's own (frames, sills, reveals) may overlap another there.
+        for name in ("customs_upper_front", "customs_west_wall", "customs_back_wall", "customs_portal_wall"):
+            recipe = kit_recipes.PIECES[name]
+            faces = []
+
+            for owner, shape in enumerate(recipe["shapes"]):
+                built = kit_shapes.build([shape])
+
+                for indices, _slot, _uvs in built["faces"]:
+                    pts = [built["verts"][i] for i in indices]
+                    faces.append({"points": pts, "normal": kit_shapes._normal(pts), "owner": owner, "kind": shape["kind"]})
+
+            near = []
+
+            for rec in recipe["windows"]:
+                lo = [min(p[i] for p in rec["outline"]) for i in range(3)]
+                hi = [max(p[i] for p in rec["outline"]) for i in range(3)]
+                n = rec["normal"]
+                a = [lo[i] - 0.3 - abs(n[i]) * (rec["inside"] + 0.1) for i in range(3)]
+                b = [hi[i] + 0.3 + abs(n[i]) * (rec["outside"] + 0.3) for i in range(3)]
+                near.append((a, b))
+
+            bad = []
+
+            for loser, winner, area in overlap.fights(faces):
+                # (The window's own faces are kit_glazing's polygons; an
+                # ornament against an ornament is the kit's own business.)
+                if faces[loser]["kind"] != "polygon" and faces[winner]["kind"] != "polygon":
+                    continue
+
+                mid = [sum(p[i] for p in faces[loser]["points"]) / len(faces[loser]["points"]) for i in range(3)]
+
+                if any(all(a[i] <= mid[i] <= b[i] for i in range(3)) for a, b in near):
+                    bad.append((name, [round(v, 2) for v in mid], round(area, 4)))
+
+            self.assertEqual(bad, [], name)
 
 
 if __name__ == "__main__":

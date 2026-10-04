@@ -151,12 +151,35 @@ def split(x0, x1, y0, y1, holes):
     return out
 
 
-def strips(x0, x1, y0, y1, zc, thickness, holes, slot, surface="stone", inner_slot=None):
+def reveal(hole, front, back, slot, inner_slot=None, floor=None):
+    """A doorway's (an open hole's) reveals through a wall from `front` (its
+    outer face, +z) to `back`: its jambs and its head, its sill unless it
+    stands on `floor`; the outer half in `slot`, the inner in `inner_slot`."""
+    x0, x1, y0, y1 = hole
+    middle = (front + back) / 2.0
+    out = []
+
+    for z0, z1, s in ((front, middle, slot), (middle, back, inner_slot or slot)):
+        out += [facing([[x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [x0, y0, z1]], (1.0, 0.0, 0.0), s),
+                facing([[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]], (-1.0, 0.0, 0.0), s),
+                facing([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], (0.0, -1.0, 0.0), s)]
+
+        if floor is None or y0 > floor + 1e-6:
+            out.append(facing([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], (0.0, 1.0, 0.0), s))
+
+    return out
+
+
+def strips(x0, x1, y0, y1, zc, thickness, holes, slot, surface="stone", inner_slot=None, open=()):
     """A wall x0..x1 by y0..y1, `thickness` through z about zc, less its
     holes: its outer face (+z) and inner face round them, its ends and its
-    top; a collider for each rectangle of `split`."""
+    top; a collider for each rectangle of `split`. The holes in `open` are
+    doorways: their reveals drawn here (a glazed hole's are glazed's)."""
     front, back = zc + thickness / 2.0, zc - thickness / 2.0
     shapes, cols = [], []
+
+    for hole in open:
+        shapes += reveal(hole, front, back, slot, inner_slot, floor=y0)
 
     for a0, a1, b0, b1 in split(x0, x1, y0, y1, holes):
         shapes.append(facing([[a0, b0, front], [a1, b0, front], [a1, b1, front], [a0, b1, front]], (0.0, 0.0, 1.0), slot))

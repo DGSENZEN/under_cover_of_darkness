@@ -14,6 +14,13 @@ edge_from/edge_to/fall_power; moon gain 0.05, lamp 0.03, lamp reach 4 m)
 after the first night stills showed slabs; a lit window glows from within
 (a small warm light for show: fx_light, not on the gem's layer); the
 carrack's budget 9200; the office's ledger shelves moved off its window.
+After the final review: the patch outside is a plain warm spot (Godot draws
+a projector only through a shadow, and the lead's clear panes pass no
+light: no bars on the ground); the customs house's doorways keep their
+reveals (kit_glazing.reveal); your marks and a lamp's halo see through glass
+too (SightRay). Bench, main and branch alternated on one machine: p99 is
+set by shader warm-up in the flight's first seconds on both; after 8 s,
+p99 15.2 ms (main 14.9), 107.0 fps (main 107.8).
 
 The user: "Can we make the windows of the buildings we can go in real? And
 make them actually project godrays if applicable?"
