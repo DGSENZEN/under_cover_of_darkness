@@ -184,6 +184,24 @@ class Grammar(unittest.TestCase):
                 self.assertIsNotNone(t, (kind, x))
                 self.assertLess(origin[2] + d[2] * t, 0.3 - 0.01, (kind, x))
 
+    def test_a_gable_is_solid_to_its_tiles_edge(self):
+        # (The user's call: the tiles' overhang past the walls is solid, its
+        # edge an upright fascia a man hangs from.)
+        import math
+        eaves, pitch, width, depth = 10.0, 27.0, 6.0, 12.0
+        _shapes, cols = kit_town.roof("gable", width, depth, eaves, pitch, "granite")
+        tan, lift = math.tan(math.radians(pitch)), kit_recipes.ROOF_THICK / math.cos(math.radians(pitch))
+        edge = depth / 2.0 + kit_town.OVERHANG
+
+        for s in (-1.0, 1.0):
+            for out in (0.05, 0.15, kit_town.OVERHANG - 0.05):
+                drawn = eaves - out * tan + lift
+                top = 20.0 - first_hit_cols(cols, [0.0, 20.0, s * (depth / 2.0 + out)], [0.0, -1.0, 0.0])
+                self.assertAlmostEqual(top, drawn, delta=0.12, msg=(s, out))
+
+            hit = first_hit_cols(cols, [0.0, eaves - 0.05, s * (edge + 1.0)], [0.0, 0.0, -s])
+            self.assertAlmostEqual(hit, 1.0, delta=0.03, msg=s)
+
     def test_a_gables_verges_are_capped(self):
         # (The canal tiles' open ends along a verge show the sky between
         # them where the neighbour is lower: a coping covers them, solid.)
@@ -248,9 +266,10 @@ class Grammar(unittest.TestCase):
         under = boxes(cols)
         inset = kit_town.MANSARD_HEIGHT / math.tan(math.radians(lower))
 
+        # (Out of the reach of the gable's tiles overhanging it.)
         for side in (-1.0, 1.0):
             for k in range(1, 8):
-                d = inset * k / 8.0
+                d = (inset - kit_town.OVERHANG) * k / 8.0
                 drawn = eaves + d * math.tan(math.radians(lower))
                 hits = [t for t in (box.ray([0.5, 30.0, side * (6.0 - d)], [0.0, -1.0, 0.0]) for box in under) if t is not None]
                 top = 30.0 - min(hits) if hits else eaves

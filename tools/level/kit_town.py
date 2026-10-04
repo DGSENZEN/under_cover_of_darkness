@@ -626,7 +626,7 @@ def roof(kind, width, depth, eaves_y, pitch, slot, surface="stone", tiles="roof_
 
     if kind == "gable":
         shapes = ib._tiled_roof(width, depth, rise, eaves_y, OVERHANG)
-        cols = ib.roof_cols(width, depth, rise, eaves_y)
+        cols = ib.roof_cols(width, depth, rise, eaves_y, overhang=OVERHANG)
 
         for s in (-1.0, 1.0):
             shapes.append(ks.gable(s * (width / 2.0 - 0.1), eaves_y, 0.0, depth, rise, 0.2, slot, 90.0))

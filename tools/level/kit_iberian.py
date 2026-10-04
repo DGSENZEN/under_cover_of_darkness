@@ -49,6 +49,10 @@ VINE_X = 1.4
 # The wall plate along each eaves (m over the wall's top): hidden under the
 # drawn eaves, it covers the roof slab's tilted end.
 EAVES_PLATE = 0.3
+# A roof's overhang ends on a fascia this tall and deep (m); a casa's tiles
+# reach this far past its walls.
+FASCIA = (0.3, 0.08)
+CASA_OVERHANG = 0.12
 
 # The front, after Porto's casa burguesa (docs/superpowers/refs/
 # houses_ribeira.md): a skin of tiles or render SKIN thick over the body, its
@@ -91,24 +95,39 @@ def col(cx, cy, cz, sx, sy, sz, yaw=0.0, pitch=0.0, roll=0.0):
     return [cx, cy, cz, sx, sy, sz, "stone", yaw, pitch, roll]
 
 
-def roof_cols(length, span, rise, y, yaw=0.0):
+def roof_cols(length, span, rise, y, yaw=0.0, overhang=0.0):
     """The colliders of a double-pitched roof (`length` along its ridge,
     `span` across its walls, `rise` to the ridge, its walls' top at y): a slab
     under each slope, stopping short of its eaves by what its tilted end would
     stand out past the wall, and a wall plate along each eaves flush with the
     wall, so a climber at the eaves meets an upright face to mantle over
-    (the scanner turns a sloped one away). Stood on everywhere it is drawn."""
+    (the scanner turns a sloped one away). Its tiles' `overhang` past the
+    walls solid too (the user's call): a slab under it out to the tiles'
+    edge, the edge an upright FASCIA (a ledge a man hangs from, the scanner
+    finding a wall there, not a slab's tilted end). Stood on everywhere it
+    is drawn."""
     half = span / 2.0
     pitch = math.degrees(math.atan2(rise, half))
     slope = math.hypot(half, rise)
     lift = k.ROOF_THICK / 2.0 / math.cos(math.radians(pitch))
     trim = k.ROOF_THICK * math.tan(math.radians(pitch))
     inward, up = trim / 2.0 * math.cos(math.radians(pitch)), trim / 2.0 * math.sin(math.radians(pitch))
+    tan = math.tan(math.radians(pitch))
     out = []
 
     for s in (-1.0, 1.0):
         out.append(col(0.0, y + rise / 2.0 + lift + up, s * (half / 2.0 - inward), length, k.ROOF_THICK, slope - trim, 0.0, s * pitch))
         out.append(col(0.0, y + EAVES_PLATE / 2.0, s * (half - 0.1), length, EAVES_PLATE, 0.2))
+
+        if overhang > 0.0:
+            # (The slab under the overhang, short of the fascia by its tilt;
+            # the fascia upright at the tiles' edge, its top the tiles'.)
+            run = overhang - FASCIA[1]
+            d = -run / 2.0
+            out.append(col(0.0, y + d * tan + lift, s * (half + run / 2.0), length, k.ROOF_THICK, run / math.cos(math.radians(pitch)), 0.0,
+                           s * pitch))
+            edge = y - (overhang - FASCIA[1] / 2.0) * tan + 2.0 * lift
+            out.append(col(0.0, edge - FASCIA[0] / 2.0, s * (half + overhang - FASCIA[1] / 2.0), length, FASCIA[0], FASCIA[1]))
 
     return [_turned_col(c, yaw) for c in out] if yaw else out
 
@@ -335,7 +354,7 @@ def _roof(eaves, rise, side):
     out = []
 
     for s in (-1.0, 1.0):
-        reach = FRONT + 0.12
+        reach = FRONT + CASA_OVERHANG
         start = [0.0, eaves + lift + rise - 0.45 * CAP, 0.0]
         end = [0.0, eaves + lift + rise - 0.45 * CAP - reach * math.tan(a), s * reach]
         out += _tiles(-inside, inside, start, end, [0.0, math.cos(a), s * math.sin(a)])
@@ -485,7 +504,7 @@ def casa(storeys, front, side, balconies, lit, chimney=1.0, vine=False, upper="d
     # on their cornices, its party walls to the neighbours; a chimney at the
     # back.
     shapes += _roof(eaves, rise, side)
-    cols += roof_cols(WIDTH, DEPTH, rise, eaves)
+    cols += roof_cols(WIDTH, DEPTH, rise, eaves, overhang=CASA_OVERHANG)
 
     top = eaves + rise + 1.0
     shapes += kit_houses._chimney(chimney * 1.8, -FRONT + 1.5, top, side)[:2]
@@ -637,7 +656,7 @@ def _terreiro_bay():
             col(0.0, b["arcade"] / 2.0, -front + back / 2.0, b["width"], b["arcade"], back),
             col(0.0, b["arcade"] - 0.25, walk_mid, b["width"], 0.5, b["walk"]),
             col(0.0, b["arcade"] - 0.08, front + 0.4, 1.8, 0.16, 0.8)]
-    cols += roof_cols(b["width"], b["depth"], 2.0, b["top"])
+    cols += roof_cols(b["width"], b["depth"], 2.0, b["top"], overhang=0.35)
     return shapes, cols
 
 
@@ -682,7 +701,7 @@ def _terreiro_corner():
     cols += [col(-half / 2.0, b["arcade"] / 2.0, -half / 2.0, half, b["arcade"], half),
              col(0.0, b["arcade"] + upper / 2.0, 0.0, size, upper, size),
              col(0.0, b["arcade"] - 0.25, 0.0, size, 0.5, size)]
-    cols += roof_cols(size, size, 2.2, b["top"])
+    cols += roof_cols(size, size, 2.2, b["top"], overhang=0.35)
     return shapes, cols
 
 

@@ -271,19 +271,27 @@ class Iberian(unittest.TestCase):
 
         self.assertEqual(sunk, [])
 
-    def test_the_roofs_stop_at_the_walls(self):
-        # A climber at the eaves (casa_d's vine) must meet the wall's upright
-        # face, not the tilted end of a roof's collider standing out past it
-        # (the scanner turns a sloped face away: "not a wall").
+    def test_the_roofs_reach_their_eaves_on_an_upright_fascia(self):
+        # (The user's call: a man walking a roof walks to the tiles' drawn
+        # edge, not 0.12 m short of it; the edge is an upright fascia, a
+        # ledge a man hangs from, not a slab's tilted end.)
+        import kit_iberian
         for name in CASAS:
             recipe = kit_recipes.PIECES[name]
+            boxes = geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY)
+            edge = recipe["front"] + kit_iberian.CASA_OVERHANG
 
-            for box in geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY):
-                if box.centre[1] < recipe["eaves"]:
-                    continue
-
-                for corner in _corners(box):
-                    self.assertLessEqual(abs(corner[2]), recipe["front"] + 1e-3, "%s: %s" % (name, [round(v, 3) for v in corner]))
+            for s in (1.0, -1.0):
+                for x in (-2.0, 0.0, 2.0):
+                    # (Down onto the overhang just in from its edge: stone
+                    # under the tiles.)
+                    t = [h for h in (b.ray([x, recipe["eaves"] + 3.0, s * (edge - 0.03)], [0.0, -1.0, 0.0]) for b in boxes) if h is not None]
+                    self.assertTrue(t and 3.0 - min(t) > -0.3, (name, s, x))
+                    # (In at the edge from outside: an upright face.)
+                    hits = [(b.ray([x, recipe["eaves"] - 0.05, s * (edge + 1.0)], [0.0, 0.0, -s]), b) for b in boxes]
+                    hits = [(h, b) for h, b in hits if h is not None]
+                    self.assertTrue(hits, (name, s, x))
+                    self.assertAlmostEqual(1.0 - min(hits)[0], 0.0, delta=0.03, msg=(name, s, x))
 
     def test_the_eaves_show_a_climber_a_wall(self):
         # Just over the wall's top a climber's scan meets an upright wall plate
@@ -504,8 +512,9 @@ class Iberian(unittest.TestCase):
 
     def test_roofs_are_walkable(self):
         for name in CASAS:
+            # (Two slopes and their overhangs past the walls.)
             roof = [c for c in kit_recipes.PIECES[name]["cols"] if abs(c[8]) > 1.0]
-            self.assertEqual(len(roof), 2, name)
+            self.assertEqual(len(roof), 4, name)
             self.assertTrue(all(abs(c[8]) <= 25.0 for c in roof), name)
 
     def test_the_houses_differ(self):
