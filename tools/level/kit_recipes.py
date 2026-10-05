@@ -661,3 +661,10 @@ kit_town.register_town()
 for _name in PIECES:
     if _name.startswith(("floor_", "city_wall_", "quay_", "terreiro_bay", "terreiro_corner")):
         PIECES[_name]["merge"] = True
+
+# Your edits from the workshops (workshop.py, read back by yours.py into
+# yours.json): your colliders in place of a piece's recipe's, and the pieces
+# whose mesh is yours (kit.py builds them from the workshop).
+import yours_data  # noqa: E402
+
+ORPHANS = yours_data.apply(PIECES, yours_data.load())

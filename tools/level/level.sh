@@ -4,8 +4,12 @@
 # layouts in tools/level/layouts: garrison, city_harbour, city_massing (and
 # fixture, the tests' own).
 #
-#   tools/level/level.sh kit               the kit's pieces -> assets/level/source/kit.blend
+#   tools/level/level.sh kit               your edits read back (yours), then the kit's pieces ->
+#                                          assets/level/source/kit.blend, yours in place of the generated
 #                                          (LEVEL_KIT_OUT: another .blend; LEVEL_KIT_ONLY: those pieces, a,b,c)
+#   tools/level/level.sh workshop <district>  harbour|old_town: its buildings and their kit pieces to edit
+#                                          -> assets/level/source/workshop_<district>.blend (yours kept)
+#   tools/level/level.sh yours             your edited pieces read out of the workshops -> yours.json
 #   tools/level/level.sh build <level> [--force]  its layout -> assets/level/source/<level>.blend (then the
 #                                          user's: not built over once edited, its ground's paint
 #                                          included, unless --force)
@@ -40,7 +44,25 @@ need_level() {
 
 case "$verb" in
   kit)
+    "$0" yours
     "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/kit.py"
+    ;;
+  yours)
+    # (Every workshop's edits; none yet, nothing to read.)
+    workshops=()
+    for f in "$SOURCE"/workshop_*.blend; do
+      [ -f "$f" ] && workshops+=("$f")
+    done
+    if [ ${#workshops[@]} -gt 0 ]; then
+      said=$("$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/yours.py" -- "${workshops[@]}" 2>&1) || { echo "$said" >&2; exit 1; }
+      echo "$said" | grep -E "^yours" || true
+    fi
+    ;;
+  workshop)
+    need_level
+    "$0" yours
+    said=$("$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/workshop.py" -- "$level" 2>&1) || { echo "$said" >&2; exit 1; }
+    echo "$said" | grep -E "^workshop" || true
     ;;
   build)
     need_level
@@ -100,11 +122,13 @@ case "$verb" in
     python3 "$HERE/test_street.py"
     python3 "$HERE/test_keys.py"
     python3 "$HERE/test_old_town.py"
+    python3 "$HERE/test_workshop.py"
     python3 "$HERE/../textures/test_paint.py"
     "$HERE/test_guard.sh"
+    "$HERE/test_workshop.sh"
     ;;
   *)
-    sed -n '2,21p' "$0"
+    sed -n '2,25p' "$0"
     exit 2
     ;;
 esac

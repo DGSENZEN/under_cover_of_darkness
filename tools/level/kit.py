@@ -9,7 +9,9 @@ the meshes, so building the kit again updates every level.
 """
 
 import os
+import re
 import sys
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -20,6 +22,7 @@ import geo  # noqa: E402
 import kit_recipes  # noqa: E402
 import kit_shapes  # noqa: E402
 
+SUFFIX = re.compile(r"\.\d{3}$")
 # A box's corners, by (x > 0) + 2 (y > 0) + 4 (z > 0); its faces, outward.
 FACES = [(0, 4, 6, 2), (1, 3, 7, 5), (0, 1, 5, 4), (2, 6, 7, 3), (0, 2, 3, 1), (4, 5, 7, 6)]
 
@@ -37,6 +40,51 @@ def box_corners(b):
 
 
 material = common.material
+
+
+def yours_mesh(name, file, folder=None):
+    """Your mesh of `name` from the workshop `file` (workshop.py; yours.py
+    found it edited): appended, its materials the kit's own slots (the
+    workshop's show photos: those never reach the kit)."""
+    path = Path(folder or os.environ.get("LEVEL_WORKSHOP_DIR") or common.SOURCE) / file
+
+    if not path.exists():
+        common.fail("your %s is in %s, which is not there" % (name, path))
+
+    with bpy.data.libraries.load(str(path), link=False) as (source, target):
+        if common.KIT_PREFIX + name not in source.meshes:
+            common.fail("your %s is not in %s" % (name, path))
+
+        target.meshes = [common.KIT_PREFIX + name]
+
+    mesh = target.meshes[0]
+
+    for i, m in enumerate(mesh.materials):
+        if m is not None and m.get("workshop"):
+            slot = SUFFIX.sub("", m.name.removeprefix("__ws_"))
+
+            # (Out of the slot's name: the kit's own plain one takes it.)
+            if not m.name.startswith("__ws_"):
+                m.name = "__ws_" + m.name
+
+            mesh.materials[i] = material(slot)
+
+    mesh.name = common.KIT_PREFIX + name
+    return mesh
+
+
+def _photos_out():
+    """The workshops' materials and photos brought in with your meshes,
+    gone: the kit's materials are plain (the glTF must carry no photo)."""
+    for m in [m for m in bpy.data.materials if m.get("workshop")]:
+        bpy.data.materials.remove(m)
+
+    for image in list(bpy.data.images):
+        bpy.data.images.remove(image)
+
+    # (Appended: nothing is linked from the workshops.)
+    for library in list(bpy.data.libraries):
+        bpy.data.libraries.remove(library)
 
 
 def make_modelled(name, recipe):
@@ -128,7 +176,9 @@ def main():
             continue
 
         recipe = kit_recipes.PIECES[name]
-        mesh = make_mesh(name, recipe)
+        # (A piece you edited in a workshop: yours, not the generator's.)
+        mesh = yours_mesh(name, recipe["yours_mesh"]) if recipe.get("yours_mesh") else make_mesh(name, recipe)
+        mesh.use_fake_user = True
         family = recipe["family"]
 
         if family not in families:
@@ -143,9 +193,15 @@ def main():
         collection.objects.link(obj)
         families[family][1] = count + 1
 
+    _photos_out()
     common.SOURCE.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=out)
     print("level: kit of %d pieces -> %s" % (sum(c for _, c in families.values()), out))
+    mine = [n for n in kit_recipes.PIECES if kit_recipes.PIECES[n].get("yours_mesh") and (not only or n in only)]
+
+    if mine:
+        print("level: yours: " + ", ".join(mine))
 
 
-main()
+if __name__ == "__main__":
+    main()
