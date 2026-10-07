@@ -30,6 +30,10 @@ MAIN = (-61.6, -48.4)
 EAST = (-22.4, -13.6)
 WEST = (-100.0, -87.6)
 BLOCKS = {"baixa_w": (-87.6, -150.0, -61.6, -104.0), "baixa_e": (-48.4, -150.0, -22.4, -104.0), "baixa_f": (-13.6, -150.0, 12.4, -80.0)}
+# The blocks whose roofs a thief's chain runs the length of, past their fire
+# walls: no mansard on them (its body stands over a fire wall's top, nothing
+# past the wall to climb over onto).
+CHAINED = ("baixa_e", "baixa_f")
 SEA_GATE_SQUARE = (-100.0, -104.0, -22.4, -74.4)
 ROSSIO = (-100.0, -170.0, 15.0, -150.0)
 FRONTS = ("azulejo_blue", "azulejo_green", "azulejo_cube", "render_ochre", "render_salmon", "render_straw", "limewash")
@@ -43,7 +47,7 @@ CORNER_SIDE = (8.0, 13.0)
 # out, the hatch's collar paves it flush), a chamber under each; the sewer
 # runs half a shaft off the hatches, its +x wall under their ladders.
 SEWER_SIZE = (2.2, 3.1)
-SEWER_X = -54.25
+SEWER_X = -54.05
 SEWER_FLOOR = -1.2
 SEWER_Z = (-95.0, -152.0)
 HATCHES = [(-53.75, -106.25), (-53.75, -146.25)]
@@ -55,7 +59,7 @@ CHAMBER_TOP = SEWER_FLOOR + SEWER_SIZE[1] + 0.3
 HATCH_DEPTH = round(GROUND - CHAMBER_TOP, 3)
 COLLAR = 2.5
 # A scaffold up a front (to its eaves), its width.
-EAVES = 4.0 + 3.7 + 3.4 + 3.1
+EAVES = 3.85 + 3.7 + 3.4 + 3.1
 SCAFFOLD_WIDTH = 4.0
 
 
@@ -207,6 +211,9 @@ def _plan():
                     beside = i > 0 and row[i - 1]["quirk"] == "mansard"
                     quirk = "arched_shop" if main and roll < 0.45 else "mansard" if roll > 0.8 and not beside else ""
 
+                    if quirk == "mansard" and block in CHAINED:
+                        quirk = ""
+
                 each["quirk"] = quirk
 
             fire = _fire_walls(rng, row)
@@ -215,10 +222,15 @@ def _plan():
             for i, each in enumerate(row):
                 name = "%s_%s%d" % (block, face, i + 1)
                 walls = (fire.get(i) == 0, fire.get(i) == 1)
+                # (Its verges under its neighbours' fire walls left bare.)
+                bare = (fire.get(i - 1) == 1, fire.get(i + 1) == 0)
                 params = [("bays", each["bays"]), ("kind", each["kind"]), ("front", fronts[i]), ("seed", rng.randrange(1000))]
 
                 if any(walls):
                     params.append(("fire_walls", walls))
+
+                if any(bare):
+                    params.append(("bare", bare))
 
                 lots.append(Lot(name, "pombal", each["x"], each["z"], GROUND, each["yaw"], each["width"], each["depth"], 4, each["quirk"],
                                 params=tuple(params)))

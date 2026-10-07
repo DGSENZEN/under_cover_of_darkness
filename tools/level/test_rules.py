@@ -59,13 +59,42 @@ def gap_level(gap):
                        piece("far_2", "floor_cobble_4", (2.0 + gap + 6.0, 0, 0))]}
 
 
-def ledge_level(top):
-    """A floor in front (z > 0) of a ledge `top` high and 0.4 deep (z -0.4 to 0)."""
-    name = "test_ledge_%d" % int(round(top * 100))
-    kit_recipes.piece(name, "wall", "ashlar", "stone", [kit_recipes.box(0.0, top / 2.0, -0.2, 4.0, top, 0.4, "ashlar")])
+def ledge_level(top, deep=1.6, wall=False):
+    """A floor in front (z > 0) of a ledge `top` high and `deep` (z -deep to
+    0); with a `wall`, a wall rising behind the ledge (a corbel on a cliff)."""
+    name = "test_ledge_%d_%d%s" % (int(round(top * 100)), int(round(deep * 100)), "_w" if wall else "")
+    boxes = [kit_recipes.box(0.0, top / 2.0, -deep / 2.0, 4.0, top, deep, "ashlar")]
+
+    if wall:
+        boxes.append(kit_recipes.box(0.0, top + 3.0, -deep - 0.5, 4.0, 6.0 + top, 1.0, "ashlar"))
+
+    kit_recipes.piece(name, "wall", "ashlar", "stone", boxes)
     TEST_PIECES.append(name)
     return {"level": "fixture", "markers": [],
             "pieces": [piece("front", "floor_cobble_4", (0, 0, 2)), piece("ledge", name, (0, 0, 0))]}
+
+
+def course_level(top, gap=False):
+    """A wall's face at z 0 rising over `top`, a string course 0.2 deep along
+    it with its top at `top` (broken at its middle, a `gap`), a floor in
+    front (z > 0)."""
+    name = "test_course_%d%s" % (int(round(top * 100)), "_gap" if gap else "")
+    boxes = [kit_recipes.box(0.0, (top + 3.0) / 2.0, -0.5, 4.0, top + 3.0, 1.0, "ashlar")]
+    runs = [(-2.0, -0.5), (0.5, 2.0)] if gap else [(-2.0, 2.0)]
+    boxes += [kit_recipes.box((a + b) / 2.0, top - 0.09, 0.1, b - a, 0.18, 0.2, "granite") for a, b in runs]
+    kit_recipes.piece(name, "wall", "ashlar", "stone", boxes)
+    TEST_PIECES.append(name)
+    return {"level": "fixture", "markers": [], "pieces": [piece("front", "floor_cobble_4", (0, 0, 2)), piece("course", name, (0, 0, 0))]}
+
+
+def corridor_level(width):
+    """A floor 8 m long along x between two walls `width` apart."""
+    name = "test_walls_%d" % int(round(width * 100))
+    kit_recipes.piece(name, "wall", "ashlar", "stone", [kit_recipes.box(4.0, 1.5, s * (width / 2.0 + 0.25), 8.0, 3.0, 0.5, "ashlar")
+                                                       for s in (-1.0, 1.0)])
+    TEST_PIECES.append(name)
+    return {"level": "fixture", "markers": [], "pieces": [piece("a", "floor_cobble_4", (2, 0, 0)), piece("b", "floor_cobble_4", (6, 0, 0)),
+                                                        piece("walls", name, (0, 0, 0))]}
 
 
 def flat_terrain(name, y, x0, x1, z0=-4.0, z1=4.0):
@@ -111,6 +140,86 @@ class Rules(unittest.TestCase):
         self.assertEqual(rules.problems(data), [])
         data["pieces"].append(piece("crate_in_the_way", "crate_stack", (0, 0, 0.6)))
         self.assertTrue(any("room under" in p for p in rules.problems(data)))
+
+    def test_a_mantle_lands_where_a_man_can_stand(self):
+        # (The controller lands a mantle radius and a margin in from the lip
+        # and needs a man's body to fit there: a corbel jutting 0.8 m from its
+        # cliff has no room on it; 1.2 m has.)
+        for deep, ok in ((0.8, False), (1.2, True)):
+            data = ledge_level(2.0, deep, wall=True)
+            data["markers"] += checks("up", [((0, 0, 1.0), "walk"), ((0, 2.0, -0.3), "mantle")])
+            found = [p for p in rules.problems(data) if "room to stand" in p]
+            self.assertEqual(found == [], ok, (deep, found))
+
+    def test_a_man_stands_on_a_pitched_roof(self):
+        # (The controller's body is a capsule: its round foot stands on a
+        # roof's slope; a wall within his radius still leaves no room.)
+        slope = geo.Box([0.0, 0.0, 0.0], geo.rotation(0.0, 27.0, 0.0), [6.0, 1.0, 6.0])
+        up = slope.axes()[1]
+        foot = [0.5 * up[0], 0.5 * up[1], 0.5 * up[2]]
+        self.assertTrue(rules._fits([slope], foot))
+        floor = geo.Box([0.0, -0.5, 0.0], geo.rotation(), [6.0, 1.0, 6.0])
+        wall = geo.Box([0.4, 1.0, 0.0], geo.rotation(), [0.2, 2.0, 2.0])
+        self.assertFalse(rules._fits([floor, wall], [0.0, 0.0, 0.0]))
+
+    def test_a_man_on_a_flat_floor_stands_on_it(self):
+        # (Only on a slope does his round foot ride over the floor: on a
+        # flat one he fits under a lintel 2.02 m over it (a belfry's
+        # opening), not under one at 1.95.)
+        floor = geo.Box([0.0, -0.5, 0.0], geo.rotation(), [6.0, 1.0, 6.0])
+
+        for clear, ok in ((2.02, True), (1.95, False)):
+            lintel = geo.Box([0.0, clear + 0.5, 0.0], geo.rotation(), [3.0, 1.0, 3.0])
+            self.assertEqual(rules._fits([floor, lintel], [0.0, 0.0, 0.0]), ok, clear)
+
+    def test_a_grab_hangs_where_none_stands(self):
+        # (A string course 0.2 deep on a wall: hung from, never stood on.)
+        for move, ok in (("grab", True), ("hang", False)):
+            data = course_level(3.6)
+            data["markers"] += checks("up", [((0, 0, 1.5), "walk"), ((0, 3.6, 0.1), move)])
+            found = rules.problems(data)
+            self.assertEqual(found == [], ok, (move, found))
+
+    def test_a_shimmy_runs_along_its_ledge(self):
+        # (Hung from a course and moved along it: the course unbroken all the
+        # way, a hanging man's room under it.)
+        for gap, ok in ((False, True), (True, False)):
+            data = course_level(3.6, gap)
+            data["markers"] += checks("along", [((-1.5, 0, 1.5), "walk"), ((-1.5, 3.6, 0.1), "grab"), ((1.5, 3.6, 0.1), "shimmy")])
+            found = rules.problems(data)
+            self.assertEqual(found == [], ok, (gap, found))
+
+    def test_a_slope_too_steep_is_not_stood_on(self):
+        # (A mansard's lower slope, 65 degrees, is no floor: a man slides off
+        # it; a roof's 27 is walked. The controller stands on 45 at most.)
+        for pitch, ok in ((27.0, True), (65.0, False)):
+            name = "test_slope_%d" % int(pitch)
+            up = [0.0, math.cos(math.radians(pitch)), math.sin(math.radians(pitch))]
+            centre = [0.0, 1.0 - 0.1 * up[1], -0.1 * up[2]]
+            kit_recipes.piece(name, "wall", "ashlar", "stone", [kit_recipes.box(centre[0], centre[1], centre[2], 4.0, 0.2, 6.0, "ashlar", 0.0, pitch, 0.0)])
+            TEST_PIECES.append(name)
+            data = {"level": "fixture", "markers": [], "pieces": [piece("front", "floor_cobble_4", (0, 0, 4)), piece("slope", name, (0, 0, 0))]}
+            data["markers"] += checks("on", [((0, 1.0, 0.0), "walk"), ((1.0, 1.0, 0.0), "walk")])
+            found = [p for p in rules.problems(data) if "steep" in p]
+            self.assertEqual(found == [], ok, (pitch, found))
+
+        # (A hipped roof's slope laid in narrow strips: walked over, its
+        # strips' edges are no steep faces.)
+        up = [0.0, math.cos(math.radians(27.0)), math.sin(math.radians(27.0))]
+        strips = [kit_recipes.box(x, 1.0 - 0.1 * up[1], -0.1 * up[2], 0.42, 0.2, 6.0, "ashlar", 0.0, 27.0, 0.0) for x in (-0.21, 0.21, 0.63, 1.05)]
+        kit_recipes.piece("test_strips", "wall", "ashlar", "stone", strips)
+        TEST_PIECES.append("test_strips")
+        data = {"level": "fixture", "markers": [], "pieces": [piece("front", "floor_cobble_4", (0, 0, 4)), piece("strips", "test_strips", (0, 0, 0))]}
+        data["markers"] += checks("on", [((-0.2, 1.0, 0.0), "walk"), ((1.0, 1.0, 0.0), "walk")])
+        self.assertEqual([p for p in rules.problems(data) if "steep" in p], [])
+
+    def test_a_walk_needs_a_mans_width(self):
+        # (A man is a metre across: a way narrower than that stops him.)
+        for width, ok in ((0.9, False), (1.2, True)):
+            data = corridor_level(width)
+            data["markers"] += checks("along", [((0.5, 0, 0), "walk"), ((7.5, 0, 0), "walk")])
+            found = [p for p in rules.problems(data) if "narrower than a man" in p]
+            self.assertEqual(found == [], ok, (width, found))
 
     def test_a_mantle_too_high(self):
         data = ledge_level(2.6)

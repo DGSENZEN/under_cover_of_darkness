@@ -242,6 +242,7 @@ static func ladders(parent: Node3D, level) -> Array:
 		volume.name = m["name"]
 		volume.set("rope", bool(m["props"].get("rope", false)))
 		volume.set("open", bool(m["props"].get("open", false)))
+		volume.set("plane_back", float(m["props"].get("plane_back", 0.0)))
 		var shape := CollisionShape3D.new()
 		var box := BoxShape3D.new()
 		box.size = m["size"]

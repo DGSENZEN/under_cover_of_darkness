@@ -1833,6 +1833,23 @@ func _sync_scanner() -> void:
 	scanner.scan_distance = scan_distance
 
 
+## Whether a top some vault takes (thin enough at its speed) is only still
+## too high over the climber for one: climbing on, he will go over it.
+func _vault_waits(profile: ObstacleProfile) -> bool:
+	var thin := false
+
+	for v in variant_table:
+		if v.kind != MoveVariantRes.Kind.VAULT:
+			continue
+
+		if profile.height >= v.min_height and profile.height <= v.max_height:
+			return false
+
+		thin = thin or profile.thickness <= v.thickness_base + v.thickness_per_speed * profile.approach_speed
+
+	return thin
+
+
 func _try_traversal(profile: ObstacleProfile, chained := false, over_only := false) -> bool:
 	var candidates := planner.classify(
 		profile,
@@ -3224,9 +3241,19 @@ func _update_climb(_delta: float) -> void:
 			# ship's bulwark: over it onto the deck, not up onto its top.)
 			var over: bool = profile.thickness < _radius and profile.has_far_floor and profile.far_drop() <= 1.5
 
-			if _try_traversal(profile, false, over):
+			# (Not gone over, a wall's parapet too thick or something over it
+			# in the way: up onto its top instead. A rail thin enough, only
+			# still too high over the climber to vault, waits for him to climb
+			# on: gone over, not stood on.)
+			if _try_traversal(profile, false, over) or over and not _vault_waits(profile) and _try_traversal(profile):
 				_climb_reattach_timer = climb_reattach_delay
 				return
+
+			if OS.has_environment("TRAV_DEBUG"):
+				print("climb top refused: ", _last_reject, "  height=%.2f thickness=%.2f far=%s over=%s" % [profile.height, profile.thickness,
+					profile.has_far_floor, over])
+		elif OS.has_environment("TRAV_DEBUG") and global_position.y >= current_climb.top_y() - 0.1:
+			print("climb top: ", "no profile (%s)" % scanner.last_reject if profile == null else "too high %.2f" % profile.height)
 
 	# At the top of the climb with nothing taken over it: hold on there. Off
 	# its top into the air you would only fall and catch it again (a top too

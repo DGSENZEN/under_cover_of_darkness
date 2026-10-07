@@ -53,6 +53,7 @@ when asked for (and, from the lot plan, when the kit is built).
 """
 
 import math
+import random
 
 import kit_recipes as k
 import kit_shapes as ks
@@ -71,14 +72,27 @@ VAULT_WALL = 0.4
 CHANNEL = 0.8
 # A shaft's inside (the player's capsule is 1.0 m across), how proud of the
 # street a hatch's collar stands (flush: it fills the ground's cut cell).
-SHAFT = 1.2
+# (A man a metre across down it with room round him.)
+SHAFT = 1.6
 COLLAR_PROUD = 0.0
+# A hatch's grate dragged aside: how far off its shaft's wall, its bars each
+# way.
+GRATE_GAP = 0.15
+GRATE_BARS = 5
 # A scaffold: its decks a lift apart, off the wall (clear of a balcony) and
 # deep; the hole a ladder comes up through.
-LIFT = 2.0
+# (A man walks upright under the deck over him: his body 2.0 m tall.)
+LIFT = 2.3
 DECK_OFF = 0.65
-DECK = 1.6
+# (Its hole at its back, its front walk before it.)
+DECK_WALK = 1.25
+DECK = 1.2 + DECK_WALK
 LADDER_HOLE = 1.2
+# (Along the deck, wider: a man takes hold of a ladder a little to one side.)
+LADDER_HOLE_ALONG = 1.8
+# (How far in front of a climb's plane the controller holds a climber's
+# middle: his radius and its gap.)
+CLIMB_HOLD = 0.58
 # A door chamber's door's height; a cascade's length (its step at z 0).
 STREAM_DOOR = 2.2
 CASCADE = 3.2
@@ -235,25 +249,44 @@ def rampart(length, height, below, thick=WALL_THICK + 1.2):
     return _register(name, "wall", "granite_rough", shapes, [town.col(*body), town.col(*coping)], [length, height + below + 0.12, thick + 0.12])
 
 
-YARD_WALL = (2.6, 0.3)
+# (A garden's wall a thief mantles from the lane standing, its coping
+# 0.1 over it; a gateway's piers and lintel GATEWAY high round its gate.)
+YARD_WALL = (2.1, 0.3)
+GATEWAY = (2.7, 0.45)
+YARD_GATE = 2.2
 
 
 def yard_front(width, live=False):
     """A light plot's front on its lane: a whitewashed wall `width` along x
-    YARD_WALL high, its face at z 0, a coping, a barred gate in its middle;
-    `live`, a gate a man walks through (its door hung by the layout)."""
+    YARD_WALL high, its face at z 0, a coping; in its middle a gateway, its
+    piers and lintel GATEWAY high round a barred gate YARD_GATE high (`live`,
+    a gate a man walks through: its door hung by the layout)."""
     name = "yard_front_%d%s" % (_cm(width), "_gate" if live else "")
 
     if name in k.PIECES:
         return name
 
     h, t = YARD_WALL
-    gate = town.Opening(0.0, 0.0, min(1.4, width - 1.0), 2.2, "door" if live else "barred")
-    shapes, cols = town.wall(width, h, t, [gate], "whitewash", (0.0, -t / 2.0, 0.0), frames=False)
-    shapes.append(ks.box(0.0, h + 0.05, -t / 2.0, width + 0.04, 0.1, t + 0.1, "granite"))
-    cols.append(town.col(0.0, h + 0.05, -t / 2.0, width + 0.04, 0.1, t + 0.1))
+    high, pier = GATEWAY
+    gate = town.Opening(0.0, 0.0, min(1.4, width - 1.0), YARD_GATE, "door" if live else "barred")
+    pier = min(pier, (width - gate.width) / 2.0)
+    span = gate.width + 2.0 * pier
+    shapes, cols = town.wall(span, high, t, [gate], "whitewash", (0.0, -t / 2.0, 0.0), frames=False)
+    shapes.append(ks.box(0.0, high + 0.05, -t / 2.0, span + 0.04, 0.1, t + 0.1, "granite"))
+    cols.append(town.col(0.0, high + 0.05, -t / 2.0, span + 0.04, 0.1, t + 0.1))
+    run = (width - span) / 2.0
+
+    # (Its runs either side of the gateway, low.)
+    if run > 0.01:
+        for s in (-1.0, 1.0):
+            x = s * (span + run) / 2.0
+            body = (x, h / 2.0, -t / 2.0, run, h, t)
+            coping = (x, h + 0.05, -t / 2.0, run + 0.02, 0.1, t + 0.1)
+            shapes += [ks.box(*body, "whitewash"), ks.box(*coping, "granite")]
+            cols += [town.col(*body), town.col(*coping)]
+
     keys = {"doors": [[0.0, 0.0, -t / 2.0, 0.0, gate.width, gate.height]]} if live else {}
-    return _register(name, "wall", "whitewash", shapes, cols, [width, h + 0.1, t + 0.1], **keys)
+    return _register(name, "wall", "whitewash", shapes, cols, [width, high + 0.1, t + 0.1], **keys)
 
 
 def garden_wall(length):
@@ -503,19 +536,35 @@ def grate_hatch(depth, collar=0.0):
                     ((inner + ax) / 2.0, y, 0.0, ax - inner, h, 2.0 * inner), (-(inner + ax) / 2.0, y, 0.0, ax - inner, h, 2.0 * inner)):
             add(box, "calcada")
 
-    # (The grate's iron rim round the mouth, the grate leant aside.)
+    # (The grate's iron rim round the mouth, the grate leant aside on its
+    # -z side: a man takes hold from -x and climbs out to +x.)
     rim = SHAFT / 2.0 + 0.05
     shapes += [ks.box(0.0, top + 0.01, s * rim, SHAFT + 0.2, 0.03, 0.1, "iron") for s in (-1.0, 1.0)]
     shapes += [ks.box(s * rim, top + 0.01, 0.0, 0.1, 0.03, SHAFT, "iron") for s in (-1.0, 1.0)]
-    shapes.append(ks.card(SHAFT * 0.9, top + 0.4, 0.0, SHAFT, 0.8, "window_grille", 90.0, 60.0))
-    # (The grate leant aside is iron a man bumps into.)
-    cols.append(town.col(SHAFT * 0.9, top + 0.4, 0.0, SHAFT, 0.8, 0.04, "stone", 90.0, 60.0))
+    # (The grate dragged off it onto the paving: a frame, bars both ways,
+    # solid underfoot.)
+    near = SHAFT / 2.0 + t + GRATE_GAP
+    mid = -(near + SHAFT / 2.0)
+    frame, bar, high = 0.06, 0.03, 0.05
+    shapes += [ks.box(s * (SHAFT - frame) / 2.0, top + high / 2.0, mid, frame, high, SHAFT, "iron") for s in (-1.0, 1.0)]
+    shapes += [ks.box(0.0, top + high / 2.0, mid + s * (SHAFT - frame) / 2.0, SHAFT - 2.0 * frame, high, frame, "iron") for s in (-1.0, 1.0)]
+
+    for i in range(1, GRATE_BARS + 1):
+        at = -SHAFT / 2.0 + SHAFT * i / (GRATE_BARS + 1)
+        shapes += [ks.box(at, top + high / 2.0, mid, bar, high * 0.8, SHAFT - 2.0 * frame, "iron"),
+                   ks.box(0.0, top + high / 2.0, mid + at, SHAFT - 2.0 * frame, high * 0.8, bar, "iron")]
+
+    cols.append(town.col(0.0, top + high / 2.0, mid, SHAFT, high, SHAFT, "metal"))
 
     # (The ladder down its +x wall: two rails, a rung every 0.3 m.)
     wall_x = SHAFT / 2.0 - 0.06
     shapes += [ks.box(wall_x, (top - depth) / 2.0, s * 0.22, 0.05, depth + top, 0.05, "iron") for s in (-1.0, 1.0)]
     shapes += [ks.box(wall_x, -depth + 0.3 * (i + 1), 0.0, 0.03, 0.03, 0.44, "iron") for i in range(int((depth + top) / 0.3))]
-    climbs = [[0.0, (-depth + 0.6) / 2.0, 0.0, 0.8, depth + 0.6, 0.8, 0.0]]
+    # (Its climb faces the ladder (its normal -x), across the shaft and out
+    # over the street on its -x side, where a man takes hold of it; its
+    # plane the ladder's wall, behind the box's middle.)
+    reach = SHAFT + 0.6
+    climbs = [[SHAFT / 2.0 - reach / 2.0, (-depth + 0.6) / 2.0, 0.0, SHAFT, depth + 0.6, reach, -90.0, 0.0, {"plane_back": reach / 2.0}]]
     return _register(name, "vault", "stone_moss", shapes, cols, [max(cx, SHAFT + 2.0 * t), depth, max(cz, SHAFT + 2.0 * t)], climbs=climbs)
 
 
@@ -558,7 +607,7 @@ def hatch_chamber(width, height, length, ledge=0.0):
     wall_x = r - 0.06
     shapes += [ks.box(wall_x, roof / 2.0, s * 0.22, 0.05, roof, 0.05, "iron") for s in (-1.0, 1.0)]
     shapes += [ks.box(wall_x, 0.3 * (i + 1), 0.0, 0.03, 0.03, 0.44, "iron") for i in range(int(roof / 0.3))]
-    climbs = [[r - 0.4, roof / 2.0, 0.0, 0.8, roof + 0.2, 0.8, 0.0]]
+    climbs = [[r - 0.4, roof / 2.0, 0.0, SHAFT, roof + 0.2, 0.8, -90.0]]
     return _register(name, "vault", "brick", shapes, cols, [outer, roof, length], climbs=climbs, roof=roof)
 
 
@@ -582,9 +631,12 @@ def scaffold(height, width):
     """A builder's scaffold `width` wide up a front whose eaves are `height`
     up (its back on the wall at z 0, standing out to +z): poles, a deck
     every LIFT to the last under the eaves (`top`), DECK_OFF off the wall
-    and DECK deep, ladders between them turn about at its ends (each deck
-    holed where the ladder from under it comes up), a rail along its front;
-    its `tour` from the street to the top deck."""
+    (clear of its balconies) and DECK deep, a rail along its front; ladders
+    between them turn about at its ends, each at the street's edge of a hole
+    LADDER_HOLE deep and LADDER_HOLE_ALONG long at the deck's back, its climber behind it in the hole
+    (held CLIMB_HOLD off it) and up off its top forward onto the deck's
+    front walk (DECK_WALK deep, a man stands there). Its `tour` from the
+    street to the top deck."""
     name = "scaffold_%d_%d" % (_cm(height), _cm(width))
 
     if name in k.PIECES:
@@ -593,9 +645,10 @@ def scaffold(height, width):
     lifts = int((height - 0.1) / LIFT)
     top = lifts * LIFT
     z0, z1 = DECK_OFF, DECK_OFF + DECK
-    zm = (z0 + z1) / 2.0
+    plane = z0 + LADDER_HOLE
+    walk, held = plane + DECK_WALK / 2.0, plane - CLIMB_HOLD
     half = width / 2.0
-    side = half - LADDER_HOLE / 2.0 - 0.1
+    side = half - LADDER_HOLE_ALONG / 2.0 - 0.1
     shapes, cols = [], []
 
     def add(box, slot, solid=True):
@@ -608,35 +661,42 @@ def scaffold(height, width):
         for z in (z0, z1):
             add((x, (top + 1.2) / 2.0, z, 0.08, top + 1.2, 0.08), "timber", x != 0.0 or z == z1)
 
-    climbs, tour = [], []
+    climbs = []
     ladder_x = [(side if n % 2 == 0 else -side) for n in range(lifts)]
-    tour += [[ladder_x[0], 0.0, z1 + 1.0, "walk"], [ladder_x[0], 0.0, zm, "walk"]]
+    # (Round a ladder's end, from its deck's front walk to behind it.)
+    round_x = [x - (1.0 if x > 0.0 else -1.0) for x in ladder_x]
+    tour = [[ladder_x[0], 0.0, z1 + 1.0, "walk"], [round_x[0], 0.0, z1 - 0.5, "walk"], [round_x[0], 0.0, held, "walk"],
+            [ladder_x[0], 0.0, held, "walk"]]
 
     for n in range(1, lifts + 1):
         y = n * LIFT
         below = ladder_x[n - 1]
-        h0, h1 = below - LADDER_HOLE / 2.0, below + LADDER_HOLE / 2.0
-        # (The deck either side of the hole the ladder from under it comes up through.)
+        h0, h1 = below - LADDER_HOLE_ALONG / 2.0, below + LADDER_HOLE_ALONG / 2.0
+        zm = (z0 + z1) / 2.0
+        # (The deck round the hole the ladder from under it comes up through,
+        # at its back: either side of it, and its front walk before it.)
         for a, b in ((-half, h0), (h1, half)):
             if b - a > 0.01:
                 add(((a + b) / 2.0, y - 0.04, zm, b - a, 0.08, DECK), "boards")
 
-        for z in (z0 + 0.1, z1 - 0.1):
-            add((below, y - 0.04, z, LADDER_HOLE, 0.08, 0.2), "boards")
-
+        add((below, y - 0.04, (plane + z1) / 2.0, LADDER_HOLE_ALONG, 0.08, z1 - plane), "boards")
         add((0.0, y + 1.0, z1 - 0.04, width, 0.06, 0.06), "timber")
-        # (The ladder up to it from the deck under it, drawn: rails and rungs.)
+        # (The ladder up to it from the deck under it at the hole's street
+        # edge, its rails and rungs to the deck (nothing over it to go round
+        # going off it forward); solid, what its climber is held to.)
         y0 = y - LIFT
-        shapes += [ks.box(below + s * 0.25, (y0 + y + 0.9) / 2.0, zm, 0.06, LIFT + 0.9, 0.06, "timber") for s in (-1.0, 1.0)]
-        shapes += [ks.box(below, y0 + 0.3 * (i + 1), zm, 0.5, 0.04, 0.04, "timber") for i in range(int((LIFT + 0.6) / 0.3))]
-        climbs.append([below, y0 + (LIFT + 0.6) / 2.0, zm, 1.0, LIFT + 0.6, 1.0, 0.0])
-        step = -0.8 if below > 0.0 else 0.8
-        tour.append([below + step, y, zm, "climb"])
+        rungs = plane + 0.03
+        shapes += [ks.box(below + s * 0.25, (y0 + y) / 2.0, rungs, 0.06, LIFT, 0.06, "timber") for s in (-1.0, 1.0)]
+        shapes += [ks.box(below, y0 + 0.3 * (i + 1), rungs, 0.5, 0.04, 0.04, "timber") for i in range(int((LIFT - 0.1) / 0.3))]
+        cols.append(town.col(below, (y0 + y) / 2.0, rungs, 0.56, LIFT, 0.06, "wood"))
+        # (Its climb faces the house (normal -z), its plane on the ladder.)
+        climbs.append([below, y0 + (LIFT + 0.6) / 2.0, plane - 0.4, 1.0, LIFT + 0.6, 1.2, 180.0, 0.0, {"plane_back": 0.4}])
+        tour.append([below, y, walk, "climb"])
 
         if n < lifts:
-            tour.append([ladder_x[n], y, zm, "walk"])
+            tour += [[round_x[n], y, walk, "walk"], [round_x[n], y, held, "walk"], [ladder_x[n], y, held, "walk"]]
 
-    tour.append([0.0, top, zm, "walk"])
+    tour.append([0.0, top, walk, "walk"])
     # (Half a house's front of timber: its own budget.)
     return _register(name, "street", "timber", shapes, cols, [width + 0.2, top + 1.2, z1 + 0.1], climbs=climbs, tour=tour, top=top, budget=1500)
 
@@ -699,7 +759,8 @@ def stair_tower(height):
     TOWER_STEPS either side of a spine wall, a landing at each end; its door
     at the top through its back onto the terrace over the cliff; a top
     storey TOWER_TOP high under a hipped roof, slits up its faces. Its
-    `foot` and `top` (outside its doors), `doors`, `tour` up it."""
+    `foot` and `top` (outside its doorways), `arches` (its doorways, open:
+    no leaf), `tour` up it."""
     name = "stair_tower_%d" % _cm(height)
 
     if name in k.PIECES:
@@ -785,9 +846,15 @@ def stair_tower(height):
                  [sx * middle, y0 + lift, dz * run / 2.0 - dz * TOWER_TREAD / 2.0, "stairs"],
                  [sx * middle, y0 + lift, dz * land_z, "walk"]]
 
+        # (Across the landing round the spine's end to the next flight.)
+        if n < flights - 1:
+            tour.append([0.0, y0 + lift, dz * land_z, "walk"])
+
     tour += [[-middle, height, top_z, "walk"], top + ["walk"]]
     budget = 1500 + 30 * flights * per
-    return _register(name, "town", "ashlar_weathered", shapes, cols, [outer_x, eaves + 3.0, outer_z], doors=doors, foot=foot, top=top, tour=tour,
+    # (Its doorways open arches: a leaf swung in across a landing shuts the
+    # flight off.)
+    return _register(name, "town", "ashlar_weathered", shapes, cols, [outer_x, eaves + 3.0, outer_z], arches=doors, foot=foot, top=top, tour=tour,
                      budget=budget)
 
 
@@ -819,6 +886,144 @@ def corbels(height):
         tops.append([x, top, out * 0.6])
 
     return _register(name, "wall", "granite", shapes, cols, [2.0 * CORBEL_SWAY + along, height, out], tops=tops)
+
+
+# (Its underside never over 1.3 m above what a man stands on under it: the
+# controller's head meets a higher overhang before its face, and takes it
+# for a stair.)
+LEDGE = (1.6, 1.2, 0.7)
+LEDGE_RISE = 2.0
+
+
+def ledges(height):
+    """Stone ledges up a cliff's face `height` high (the face at z 0, the
+    drop to +z): each LEDGE long along the face, out from it and thick (a
+    man stands on one: the controller lands a mantle half a metre in and
+    needs his body to fit), at most LEDGE_RISE over the last (a mantle),
+    marching along +x from x 0 so the next is always straight ahead (not
+    zig-zagging back: the one two over would stand over a man mantling).
+    The first a mantle from the street, the top a mantle from the last. A bracket under each. Its `tops` (where a man
+    stands on each), `span` along the face, `tour` up it (the street in
+    front of the first to the top behind the face over the last)."""
+    name = "ledges_%d" % _cm(height)
+
+    if name in k.PIECES:
+        return name
+
+    along, out, thick = LEDGE
+    count = int(math.ceil(height / LEDGE_RISE - 1e-9)) - 1
+    rise = height / (count + 1)
+    shapes, cols, tops = [], [], []
+    tour = [[along / 2.0, 0.0, out + 1.2, "walk"]]
+
+    for i in range(count):
+        top = (i + 1) * rise
+        x0 = i * along
+
+        for box, slot in (((x0 + along / 2.0, top - thick / 2.0, out / 2.0, along, thick, out), "granite"),
+                          ((x0 + along / 2.0, top - thick - 0.2, out * 0.35, along * 0.6, 0.4, out * 0.7), "granite_rough")):
+            shapes.append(ks.box(*box, slot))
+            cols.append(town.col(*box))
+
+        tops.append([x0 + along / 2.0, top, out / 2.0])
+
+        if i == 0:
+            tour.append([along / 2.0, top, out / 2.0, "mantle"])
+        else:
+            # (From the last one's far end onto this one, straight ahead.)
+            tour += [[x0 - 0.55, top - rise, out / 2.0, "walk"], [x0 + 0.6, top, out / 2.0, "mantle"]]
+
+    last = tops[-1]
+    tour += [[last[0], last[1], out / 2.0, "walk"], [last[0], height, -0.6, "mantle"]]
+    span = count * along
+    return _register(name, "wall", "granite", shapes, cols, [span, height, out], tops=tops, tour=tour, span=span,
+                     arrival=[last[0], height, -0.6])
+
+
+# A lead downpipe: its radius, its middle out from the wall; a bracket every
+# PIPE_BRACKET up it.
+PIPE = (0.055, 0.1)
+PIPE_BRACKET = 1.6
+
+
+def drainpipe(height):
+    """A lead downpipe up a wall's face to its eaves `height` up (the face at
+    z 0, out to +z): brackets every PIPE_BRACKET, a hopper head under the
+    eaves, a shoe at its foot; drawn only (a man walks by it). Its climb from
+    the street to the eaves out from the wall, facing out (a thief's way up);
+    its `tour` (the street, up it, onto the roof behind its top)."""
+    name = "drainpipe_%d" % _cm(height)
+
+    if name in k.PIECES:
+        return name
+
+    r, out = PIPE
+    foot, head = 0.25, height - 0.55
+    shapes = [ks.prism(0.0, (foot + head) / 2.0, out, r, head - foot, 6, "iron"),
+              ks.box(0.0, foot / 2.0 + 0.02, out + 0.06, 2.0 * r, foot, 2.0 * r + 0.12, "iron"),
+              ks.box(0.0, head + 0.15, out + 0.03, 0.32, 0.3, 0.26, "iron")]
+    y = 1.0
+
+    while y < head - 0.3:
+        shapes.append(ks.box(0.0, y, out / 2.0, 0.16, 0.05, out + 0.06, "iron"))
+        y += PIPE_BRACKET
+
+    climbs = [[0.0, height / 2.0, 0.3, 0.8, height, 0.6, 0.0]]
+    # (Its climb point against the wall: up it pushing into it, as one takes hold.)
+    tour = [[0.0, 0.0, 1.2, "walk"], [0.0, 0.0, 0.5, "walk"], [0.0, height - 0.6, 0.2, "climb"], [0.0, height, -0.6, "mantle"]]
+    return _register(name, "wall", "iron", shapes, [], [0.4, height, 0.4], climbs=climbs, tour=tour)
+
+
+# Ivy's cards: about this square, the photo's own scale (its leaves never
+# stretched), each a little over its cell so they overlap.
+IVY_CARD = 1.1
+# How far apart its cards are laid: closer than they are big, their clumps
+# (each card cut to one, paint.ivy_clump) running together.
+IVY_STEP = 0.75
+
+
+def ivy(width, height):
+    """Ivy over a wall's face `width` along x and `height` up (the face at z
+    0, out to +z): the user's Ivy0024 cut out ("leaves"), cards IVY_CARD
+    about laid over it, a little off the wall and each other, ragged at its
+    top; drawn only. Its climb over it, facing out; its `tour` (the street,
+    up it, onto what is behind its top)."""
+    name = "ivy_%d_%d" % (_cm(width), _cm(height))
+
+    if name in k.PIECES:
+        return name
+
+    rng = random.Random(_cm(width) * 31 + _cm(height))
+    shapes = []
+    rows = max(2, int(math.ceil(height / IVY_STEP)))
+
+    for j in range(rows):
+        y = (j + 0.5) * height / rows
+        # (Each row reaches out its own way either side, and narrows to a
+        # crown over the top third: grown, not a panel.)
+        crown = min(1.0, max(0.0, (y - height * 0.65) / (height * 0.35)))
+        half = width / 2.0 * (1.0 - 0.55 * crown)
+        lo = -half + rng.uniform(-0.35, 0.35)
+        hi = half + rng.uniform(-0.35, 0.35)
+        across = max(1, int(round((hi - lo) / IVY_STEP)))
+
+        for i in range(across):
+            if crown > 0.0 and rng.random() < 0.3 * crown:
+                continue
+
+            size = IVY_CARD * rng.uniform(1.0, 1.35)
+            x = lo + (hi - lo) * (i + 0.5) / across + rng.uniform(-0.12, 0.12)
+            cy = min(y + rng.uniform(-0.15, 0.15), height + 0.3 - size / 2.0)
+            # (A third of them leaning off the wall at their top, kept off
+            # it at their foot; the rest flat, each a little off the next.)
+            pitch = rng.uniform(4.0, 6.0) if rng.random() < 0.35 else 0.0
+            z = 0.03 + math.sin(math.radians(pitch)) * size / 2.0 if pitch else 0.03 + 0.012 * ((i + 2 * j) % 6)
+            shapes.append(ks.card(x, cy, z, size * rng.uniform(0.95, 1.05), size, "leaves", 0.0, -pitch))
+
+    climbs = [[0.0, height / 2.0, 0.3, width, height, 0.6, 0.0]]
+    # (Its climb point against the wall: up it pushing into it, as one takes hold.)
+    tour = [[0.0, 0.0, 1.2, "walk"], [0.0, 0.0, 0.5, "walk"], [0.0, height - 0.6, 0.2, "climb"], [0.0, height, -0.6, "mantle"]]
+    return _register(name, "wall", "leaves", shapes, [], [width, height, 0.2], climbs=climbs, tour=tour)
 
 
 def postern(height, thick, length=6.0):

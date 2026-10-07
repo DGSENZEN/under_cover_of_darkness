@@ -445,6 +445,17 @@ func _gameplay() -> void:
 		gate27 != null and slabs27.is_empty() and bars27.size() == 1 and frame27.size() >= 4 and solid27,
 		"gate %s, slabs %d, bars %d, frame %d, solid %s" % [gate27 != null, slabs27.size(), bars27.size(), frame27.size(), solid27])
 
+	# K29 a climb whose box reaches out past its wall (a hatch's, out over
+	# the street) holds the climber to its wall: its plane plane_back behind
+	# the box's middle, against its normal
+	var shafted := Markers.new()
+	shafted.markers = [{"name": "ladder_test", "ucd": "ladder", "transform": Transform3D(Basis(Vector3.UP, deg_to_rad(-90.0)), Vector3(-30, 0, -30)),
+		"size": Vector3(1.6, 4.0, 2.2), "props": {"plane_back": 1.1}}]
+	var ladder29: Array = LevelGameplay.ladders(holder, shafted)
+	var plane29: Vector3 = (ladder29[0] as Node).call(&"get_plane_point") if not ladder29.is_empty() else Vector3.ZERO
+	_check("K29 a climb's plane_back puts its wall behind its box's middle", not ladder29.is_empty() and plane29.distance_to(Vector3(-28.9, 0, -30)) < 0.01,
+		"plane %s" % [plane29])
+
 	# K18 the baker keeps the island its home is on, and what is reached from
 	# it: not the biggest (the city: the harbour, not the rock behind it)
 	var yard := Node3D.new()

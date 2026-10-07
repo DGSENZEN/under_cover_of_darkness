@@ -23,6 +23,10 @@ extends Area3D
 @export var max_vel_horiz := 1.4
 ## Gap kept between the player's capsule and the volume's back plane.
 @export var climb_distance := 0.08
+## Where its wall is, behind its origin against its normal (m): a box that
+## reaches out past its wall (a hatch's, out over the street where a man
+## takes hold of it) still holds him to the wall. 0: the box's middle.
+@export var plane_back := 0.0
 
 
 func _ready() -> void:
@@ -123,7 +127,7 @@ func get_climb_normal() -> Vector3:
 
 ## A point on the wall plane.
 func get_plane_point() -> Vector3:
-	return global_position
+	return global_position - global_transform.basis.z.normalized() * plane_back
 
 
 func _on_body_entered(body: Node3D) -> void:

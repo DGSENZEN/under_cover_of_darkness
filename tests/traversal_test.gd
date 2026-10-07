@@ -87,6 +87,66 @@ func _ready() -> void:
 	add_child(ladder)
 	ladder.global_position = Vector3(42, 2.5, -2.65)
 
+	# V a 2 m wall under a roof pitched 27 degrees back from its top's edge
+	# (z -3): a town's eaves, mantled onto.
+	_box(Vector3(150, 1.0, -4.5), Vector3(3, 2.0, 3))
+	var pitch := deg_to_rad(27.0)
+	var up := Vector3(0.0, cos(pitch), sin(pitch))
+	var slope := Vector3(0.0, sin(pitch), -cos(pitch))
+	var roof := StaticBody3D.new()
+	var roof_shape := CollisionShape3D.new()
+	var roof_box := BoxShape3D.new()
+	roof_box.size = Vector3(3.0, 0.5, 4.0)
+	roof_shape.shape = roof_box
+	roof.add_child(roof_shape)
+	add_child(roof)
+	roof.global_transform = Transform3D(Basis(Vector3.RIGHT, pitch), Vector3(150, 2.0, -3.0) + slope * 2.0 - up * 0.25)
+
+	# W a 4 m wall, a parapet 0.47 thick and 1 m high on its front, a ladder
+	# up both: over the parapet onto the wall's top.
+	_box(Vector3(160, 2.0, -4.5), Vector3(3, 4.0, 3))
+	_box(Vector3(160, 4.5, -3.235), Vector3(3, 1.0, 0.47))
+	var ladder_w := Area3D.new()
+	ladder_w.set_script(CLIMB)
+	var ladder_w_shape := CollisionShape3D.new()
+	var ladder_w_box := BoxShape3D.new()
+	ladder_w_box.size = Vector3(1.4, 5.0, 0.7)
+	ladder_w_shape.shape = ladder_w_box
+	ladder_w.add_child(ladder_w_shape)
+	add_child(ladder_w)
+	ladder_w.global_position = Vector3(160, 2.5, -2.65)
+
+	# X a fire wall 0.4 thick across the way, its top rising sideways at 27
+	# degrees (a gable's): 0.8 over the floor where it is met.
+	var fire := StaticBody3D.new()
+	var fire_shape := CollisionShape3D.new()
+	var fire_box := BoxShape3D.new()
+	fire_box.size = Vector3(6.0, 1.2, 0.4)
+	fire_shape.shape = fire_box
+	fire.add_child(fire_shape)
+	add_child(fire)
+	fire.global_transform = Transform3D(Basis(Vector3.BACK, deg_to_rad(27.0)), Vector3(170, 0.8 - 0.6 / cos(deg_to_rad(27.0)), -3.2))
+
+	# Y the same wall on a roof: the floor either side sloping sideways at
+	# 27 degrees, the wall's top with it, 0.6 over the roof.
+	var roof_y := StaticBody3D.new()
+	var roof_y_shape := CollisionShape3D.new()
+	var roof_y_box := BoxShape3D.new()
+	roof_y_box.size = Vector3(8.0, 0.4, 10.0)
+	roof_y_shape.shape = roof_y_box
+	roof_y.add_child(roof_y_shape)
+	add_child(roof_y)
+	var tilt := Basis(Vector3.BACK, deg_to_rad(27.0))
+	roof_y.global_transform = Transform3D(tilt, Vector3(180, 2.0, -3.0) - tilt.y * 0.2)
+	var wall_y := StaticBody3D.new()
+	var wall_y_shape := CollisionShape3D.new()
+	var wall_y_box := BoxShape3D.new()
+	wall_y_box.size = Vector3(8.0, 1.2, 0.4)
+	wall_y_shape.shape = wall_y_box
+	wall_y.add_child(wall_y_shape)
+	add_child(wall_y)
+	wall_y.global_transform = Transform3D(tilt, Vector3(180, 2.0, -3.2) + tilt.y * 0.0)
+
 	player = PLAYER.instantiate()
 	add_child(player)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -643,6 +703,51 @@ func _run() -> void:
 	_release_all()
 	_check("T27 rope swing", swung_x > 0.4 and vx > 0.5 and player.movement_state == 0,
 		"swing dx %.2f vx after jump %.2f state %d" % [swung_x, vx, player.movement_state])
+
+	# T34 a 2 m wall with a roof pitched back from its edge: mantled onto
+	# the slope (a capsule rides over a slope, it does not sink into it)
+	await _place(Vector3(150, 1.05, -1.0), 0.0)
+	Input.action_press("move_forward")
+	await _frames(45)
+	await _tap("jump")
+	await _until_locomotion(240)
+	_release_all()
+	_check("T34 high mantle onto a pitched roof", labels == ["high mantle"] and _feet_y() > 2.0 and player.global_position.z < -3.2,
+		"labels %s feet %.2f z %.2f" % [labels, _feet_y(), player.global_position.z])
+
+	# T35 up a ladder to a parapet too thick to climb over: onto its top
+	await _place(Vector3(160, 1.05, -1.6), 0.0)
+	Input.action_press("move_forward")
+	await _until(func(): return player.movement_state == 3, 180)
+	var on_w: bool = player.movement_state == 3
+	await _until(func(): return player.movement_state == 0 and _feet_y() > 3.9, 600)
+	_release_all()
+	_check("T35 a ladder's top over a thick parapet", on_w and player.movement_state == 0 and _feet_y() > 3.9 and player.global_position.z < -3.0,
+		"climbed %s state %d labels %s feet %.2f z %.2f" % [on_w, player.movement_state, labels, _feet_y(), player.global_position.z])
+
+	# T36 over a wall whose top slopes across the way: the body clears its
+	# higher side
+	await _place(Vector3(170, 1.05, -1.2), 0.0)
+	Input.action_press("move_forward")
+	await _frames(30)
+	await _tap("jump")
+	await _until_locomotion(240)
+	await _frames(30)
+	_release_all()
+	_check("T36 over a wall whose top slopes sideways", (labels.has("climb over") or labels.has("vault") or labels.has("step-up")) and player.global_position.z < -3.6,
+		"labels %s z %.2f feet %.2f" % [labels, player.global_position.z, _feet_y()])
+
+	# T37 over that wall on the roof: off a slope, onto a slope
+	var on_roof := Vector3(180, 2.0 + 0.0, -1.6)
+	await _place(on_roof + Vector3.UP * 1.1, 0.0)
+	Input.action_press("move_forward")
+	await _frames(30)
+	await _tap("jump")
+	await _until_locomotion(240)
+	await _frames(30)
+	_release_all()
+	_check("T37 over a wall across a sloping roof", (labels.has("climb over") or labels.has("vault") or labels.has("step-up")) and player.global_position.z < -3.6,
+		"labels %s z %.2f feet %.2f" % [labels, player.global_position.z, _feet_y()])
 
 	# P4 locomotion pose names, and hands let go when nothing is held
 	await _place(Vector3(-8, 1.05, 6), 0.0)

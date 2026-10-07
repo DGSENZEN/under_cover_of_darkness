@@ -35,7 +35,9 @@ import kit_town as town
 OPENING = 1.35
 END_PIER = 1.6
 BAY_PITCH = 2.7
-STOREYS = (4.0, 3.7, 3.4, 3.1)
+# (Its ground storey's top, its sacadas' slabs, within a jump's grab of the
+# street: 3.9 m.)
+STOREYS = (3.85, 3.7, 3.4, 3.1)
 ROW_STOREY = 3.2
 SACADA = 2.9
 WINDOW = 2.2
@@ -48,9 +50,11 @@ BACK_WALL = 0.5
 PARTY = 0.5
 FIRE_RISE = 0.6
 FIRE_THICK = 0.8
+# (Its wall over the eaves: a thief climbs over it a leg at a time.)
+FIRE_WALL = 0.4
 PITCH = 27.0
 DORMER = (1.0, 1.4, 1.2)
-STAIR_WIDTH = 1.0
+STAIR_WIDTH = 1.3
 KINDS = ("mid", "corner", "hill", "row")
 QUIRKS = ("", "mansard", "arched_shop")
 
@@ -120,7 +124,7 @@ def _front(rng, n, heights, enterable, rooms, kind, quirk, face):
     return out
 
 
-def design(bays, depth, storeys=4, kind="mid", fire_walls=(False, False), quirk="", enterable=False, rooms=0, front="azulejo_blue",
+def design(bays, depth, storeys=4, kind="mid", fire_walls=(False, False), quirk="", enterable=False, rooms=0, front="azulejo_blue", bare=(False, False),
            side="plaster", seed=0):
     """A Pombaline building: see the module's doc. A kit_town design with
     `openings`, `balconies`, `eaves`, `roof`, `doors`, `entries`, `rooms_at`,
@@ -193,7 +197,10 @@ def design(bays, depth, storeys=4, kind="mid", fire_walls=(False, False), quirk=
         cols.append(town.col((PARTY - right) / 2.0, eaves / 2.0, -depth / 2.0, width - PARTY - right + 0.02, eaves, depth))
 
     # The roof, the paired-brick cornice, dormers, chimneys.
-    rs, rc = town.roof(roof, width, depth, eaves, PITCH, side)
+    # (No verge coping under a fire wall, its own or the neighbour's on the
+    # party line, `bare`: the wall covers the tiles' ends.)
+    verges = tuple(not (fire_walls[i] or bare[i]) for i in range(2))
+    rs, rc = town.roof(roof, width, depth, eaves, PITCH, side, verges=verges)
     rs, rc = town.placed(rs, rc, z=-depth / 2.0)
     shapes += rs + [ks.box(0.0, eaves - 0.15, 0.1, width, 0.3, 0.25, "brick")]
     # (The cornice solid as drawn: a climber's hands meet it.)
@@ -250,8 +257,8 @@ def _fire_wall(out, x, slot):
     rise = half * math.tan(a)
     lift = k.ROOF_THICK / math.cos(a)
     base = eaves + lift + FIRE_RISE
-    out["shapes"] += [ks.box(x, (eaves + base) / 2.0, -half, PARTY, base - eaves, depth, slot),
-                      ks.gable(x, base, -half, depth, rise, PARTY, slot, 90.0)]
+    out["shapes"] += [ks.box(x, (eaves + base) / 2.0, -half, FIRE_WALL, base - eaves, depth, slot),
+                      ks.gable(x, base, -half, depth, rise, FIRE_WALL, slot, 90.0)]
 
     for s in (-1.0, 1.0):
         # (The slope's top line, from the eaves' end to the ridge, and the
@@ -260,8 +267,8 @@ def _fire_wall(out, x, slot):
         top = [(z_eaves + z_ridge) / 2.0, base + rise / 2.0]
         n = (math.cos(a), s * math.sin(a))
         cy, cz = top[1] - FIRE_THICK / 2.0 * n[0], top[0] - FIRE_THICK / 2.0 * n[1]
-        out["cols"].append(town.col(x, cy, cz, PARTY, FIRE_THICK, math.hypot(half, rise), "stone", 0.0, s * PITCH, 0.0))
-        out["shapes"].append(ks.box(x, top[1] + 0.04, top[0], PARTY + 0.1, 0.08, math.hypot(half, rise), "roof_spanish", 0.0,
+        out["cols"].append(town.col(x, cy, cz, FIRE_WALL, FIRE_THICK, math.hypot(half, rise), "stone", 0.0, s * PITCH, 0.0))
+        out["shapes"].append(ks.box(x, top[1] + 0.04, top[0], FIRE_WALL + 0.1, 0.08, math.hypot(half, rise), "roof_spanish", 0.0,
                                     s * PITCH, 0.0))
 
 
@@ -317,7 +324,9 @@ def _inside(out, width, depth, heights, levels, rooms, kind, eaves):
     tour = [[door[2], 0.0, 1.0, "walk"], [door[2], 0.0, -FRONT_WALL - 0.8, "walk"], out["rooms_at"][0] + ["walk"]]
 
     for r in range(1, rooms):
-        tour.append([0.0 - STAIR_WIDTH / 2.0 + 0.0, levels[r - 1], z0 - 0.8, "walk"])
+        # (Behind the stairwell, round its second flight, to its foot.)
+        behind = z0 - 0.6
+        tour += [[room_x, levels[r - 1], behind, "walk"], [-STAIR_WIDTH / 2.0, levels[r - 1], behind, "walk"]]
         tour += town.stair_tour("two_flight", STAIR_WIDTH, heights[r - 1], (0.0, levels[r - 1], z0), 0.0)
         tour.append(out["rooms_at"][r] + ["walk"])
 

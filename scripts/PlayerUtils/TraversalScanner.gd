@@ -316,6 +316,7 @@ func scan_from(
 			if far_normal.y >= min_top_normal_y:
 				profile.has_far_floor = true
 				profile.far_floor = far["position"]
+				profile.far_normal = far_normal
 
 	#
 	# 5. Landing spot for a mantle, and how much headroom it has.

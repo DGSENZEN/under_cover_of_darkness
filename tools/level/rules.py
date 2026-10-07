@@ -13,6 +13,8 @@ sentence each, naming the object and the rule; an empty list passes.
 """
 
 import districts
+import math
+
 import geo
 import jobs
 import kit_recipes
@@ -110,6 +112,19 @@ HEADROOM = 1.95
 STEP_DOWN = 0.45
 WALK_STEP = 0.5
 EDGE_STEP = 0.02
+# The player's body as the controller has it (scripts/PlayerUtils/
+# TraversalScanner.gd): its radius, the margin a mantle lands in from the
+# lip past it, its height standing; how far below a thin top the floor
+# beyond may lie for him to climb over it.
+BODY_RADIUS = 0.5
+LANDING_MARGIN = 0.05
+BODY_HEIGHT = 2.0
+CLIMB_OVER_DROP = 1.5
+# (A man stood on a slope rides this far over it at his middle: a roof's
+# 27 degrees, a little over.)
+STANDING_LIFT = 0.1
+# The steepest built slope stood on (the controller's floor, 45 degrees).
+MAX_SLOPE = 45.0
 
 
 def problems(data, stage="stage1"):
@@ -283,6 +298,31 @@ def _ray(boxes, ground, point, sign, reach):
     return best
 
 
+def _steep(boxes, point, floor):
+    """Whether the floor at `floor` under `point` is a built slope a man
+    cannot stand on (over MAX_SLOPE: a mansard's lower slope): a slab's
+    face across its thinnest side, wherever on it (its edge too) the ray
+    down meets it. A bulky box's top is no slope."""
+    start = [point[0], floor + 0.05, point[2]]
+
+    for box in boxes:
+        t = box.ray(start, [0.0, -1.0, 0.0])
+
+        if t is None or abs(t - 0.05) > 0.02:
+            continue
+
+        thin = min(range(3), key=lambda i: box.half[i])
+        others = [box.half[i] for i in range(3) if i != thin]
+
+        tilt = abs(box.axes()[thin][1])
+
+        # (Tilted past a floor, not yet a wall: a wall's top is an edge.)
+        if box.half[thin] <= 0.2 and min(others) >= 2.0 * box.half[thin] and math.cos(math.radians(80.0)) < tilt < math.cos(math.radians(MAX_SLOPE)):
+            return True
+
+    return False
+
+
 def _floor_y(boxes, ground, point, above=0.05, reach=STEP_DOWN):
     """The height of the floor under `point` (looked for from `above` over
     it to `reach` under it), or None."""
@@ -336,6 +376,130 @@ def _lip(boxes, ground, top, back, limit=1.0):
     ahead = _edge(boxes, ground, top, [-back[0], 0.0, -back[2]], limit)
     lip = [top[0] + back[0] * behind, top[1], top[2] + back[2] * behind]
     return lip, behind + ahead
+
+
+def _width(boxes, foot, direction):
+    """How wide the way is across `direction` at a man's knee and chest over
+    `foot` (the narrower), each side looked at to a metre and a half."""
+    across = [-direction[2], 0.0, direction[0]]
+    out = None
+
+    for h in (0.5, 1.4):
+        start = [foot[0], foot[1] + h, foot[2]]
+        sides = []
+
+        for sign in (1.0, -1.0):
+            hits = [t for t in (box.ray(start, [sign * across[0], 0.0, sign * across[2]]) for box in boxes) if t is not None and t <= 1.5]
+            sides.append(min(hits) if hits else 1.5)
+
+        out = sum(sides) if out is None else min(out, sum(sides))
+
+    return out
+
+
+def _sloped(boxes, foot):
+    """Whether what `foot` stands on (the box whose face a ray down meets
+    there) is tilted off level."""
+    start = [foot[0], foot[1] + 0.05, foot[2]]
+
+    for box in boxes:
+        t = box.ray(start, [0.0, -1.0, 0.0])
+
+        if t is not None and abs(t - 0.05) <= 0.03:
+            return max(abs(axis[1]) for axis in box.axes()) < 0.999
+
+    return False
+
+
+def _fits(boxes, foot):
+    """Whether a man stands at `foot`: his body (a capsule, its foot and head
+    round) clear of everything built."""
+    r = BODY_RADIUS * 0.95
+    # (Through him: his middle, rings at half his radius and at it, eight
+    # ways round, each from the capsule's round foot to its round head
+    # there; on a slope the whole of him STANDING_LIFT over `foot`, as a
+    # capsule resting on a roof's slope rides over it, touching it uphill
+    # of him; on a flat floor, on it.)
+    spots = [(0.0, 0.0)] + [(f * r * math.cos(a), f * r * math.sin(a)) for f in (0.5, 1.0) for a in (i * math.pi / 4.0 for i in range(8))]
+    lift = STANDING_LIFT if _sloped(boxes, foot) else 0.0
+
+    for dx, dz in spots:
+        round_off = BODY_RADIUS - math.sqrt(BODY_RADIUS ** 2 - dx * dx - dz * dz)
+        low, high = lift + round_off + 0.02, lift + BODY_HEIGHT - round_off - 0.02
+
+        for k in range(7):
+            p = [foot[0] + dx, foot[1] + low + (high - low) * k / 6.0, foot[2] + dz]
+
+            if any(box.contains(p) for box in boxes):
+                return False
+
+    return True
+
+
+def _stands_on_top(boxes, ground, lip, back, depth):
+    """Whether a mantle or a pull-up from a hang at `lip` lands a man: as the
+    controller does, a body's radius and a margin in from the lip (half the
+    top on a narrower one), standing there; else a thin top with a floor
+    just beyond it, climbed over."""
+    inward = [-back[0], 0.0, -back[2]]
+    reach = BODY_RADIUS + LANDING_MARGIN
+    land = reach if depth >= 2.0 * reach else max(depth * 0.5, 0.05)
+    spot = [lip[0] + inward[0] * land, lip[1], lip[2] + inward[2] * land]
+    floor = _floor_y(boxes, ground, spot, 0.3, 0.5)
+
+    if floor is not None and _fits(boxes, [spot[0], floor, spot[2]]):
+        return True
+
+    # (Over a thin top, down onto the floor beyond it.)
+    beyond = [lip[0] + inward[0] * (depth + BODY_RADIUS + 0.1), lip[1] + 0.5, lip[2] + inward[2] * (depth + BODY_RADIUS + 0.1)]
+
+    if any(box.contains(beyond) for box in boxes):
+        return False
+
+    below = _floor_y(boxes, ground, beyond, 0.0, CLIMB_OVER_DROP + 0.5)
+    return below is not None and lip[1] - below <= CLIMB_OVER_DROP + 1e-6
+
+
+def _shimmy(boxes, ground, a, b, d, total):
+    """What is wrong with moving hand over hand from a hang at a to one at b
+    along a ledge: level, its top and lip all the way, a hanging man's room
+    under it on its open side."""
+    if abs(b[1] - a[1]) > 0.1:
+        return ["a shimmy %.2f m up or down" % (b[1] - a[1])]
+
+    across = [-d[2], 0.0, d[0]]
+    middle = [(a[i] + b[i]) / 2.0 for i in range(3)]
+    # (Its open side: where, under the ledge, nothing is built.)
+    out = None
+
+    for sign in (1.0, -1.0):
+        p = [middle[0] + sign * across[0] * 0.5, middle[1] - 0.6, middle[2] + sign * across[2] * 0.5]
+
+        if not any(box.contains(p) for box in boxes):
+            out = [sign * across[0], 0.0, sign * across[2]]
+            break
+
+    if out is None:
+        return ["no open side to hang from"]
+
+    steps = max(1, int(total / 0.25))
+
+    for k in range(steps + 1):
+        p = [a[i] + (b[i] - a[i]) * k / steps for i in range(3)]
+        top = _floor_y(boxes, ground, p, 0.15, 0.3)
+
+        if top is None or abs(top - a[1]) > 0.1:
+            return ["no ledge to hang from at (%.1f, %.1f)" % (p[0], p[2])]
+
+        lip, depth = _lip(boxes, ground, [p[0], top, p[2]], out)
+
+        if depth < LIP:
+            return ["its lip is %.2f m deep at (%.1f, %.1f), under %.2f" % (depth, p[0], p[2], LIP)]
+
+        if not _hanging_room(boxes, lip, out, -1e9):
+            return ["no room for a hanging man at (%.1f, %.1f)" % (p[0], p[2])]
+
+    return []
 
 
 def _hanging_room(boxes, lip, back, floor):
@@ -401,7 +565,7 @@ def _jump(boxes, ground, a, b, move):
     return out
 
 
-def _move(boxes, ground, volumes, a, b, move):
+def _move(boxes, ground, volumes, a, b, move, doors=()):
     """What is wrong with reaching b from a by `move` (sentences)."""
     rise = b[1] - a[1]
     d, total = _flat(a, b)
@@ -427,7 +591,28 @@ def _move(boxes, ground, volumes, a, b, move):
         if move == "hang" and not _hanging_room(boxes, lip, back, a[1]):
             return ["no room under its lip for a hanging man (%.2f x %.1f m)" % HANG_CLEAR]
 
+        if not _stands_on_top(boxes, ground, lip, back, depth):
+            return ["no room to stand on its top past the lip (%.2f m deep), nor a floor just beyond to climb over onto" % depth]
+
         return []
+
+    if move == "grab":
+        # (Hung from, not pulled up onto: a string course, a sill.)
+        if rise > HANG:
+            return ["a grab of %.2f m, over %.1f" % (rise, HANG)]
+
+        if _floor_y(boxes, ground, b) is None:
+            return ["nothing to grab"]
+
+        lip, depth = _lip(boxes, ground, b, back)
+
+        if depth < LIP:
+            return ["its lip is %.2f m deep, under %.2f" % (depth, LIP)]
+
+        return [] if _hanging_room(boxes, lip, back, a[1]) else ["no room under its lip for a hanging man (%.2f x %.1f m)" % HANG_CLEAR]
+
+    if move == "shimmy":
+        return _shimmy(boxes, ground, a, b, d, total)
 
     if move == "drop":
         fall = a[1] - b[1]
@@ -442,9 +627,23 @@ def _move(boxes, ground, volumes, a, b, move):
 
         for k in range(steps + 1):
             p = [a[i] + (b[i] - a[i]) * k / steps for i in range(3)]
+            floor = _floor_y(boxes, ground, p)
 
-            if _floor_y(boxes, ground, p) is None:
+            if floor is None:
                 return ["no floor at (%.1f, %.1f) on the %s" % (p[0], p[2], move)]
+
+            if _steep(boxes, p, floor):
+                return ["too steep to stand on at (%.1f, %.1f) on the %s" % (p[0], p[2], move)]
+
+            # (A man a body across: a beam is balanced, not walked; in a
+            # doorway its door's width is the way.)
+            in_door = any(math.hypot(p[0] - dx, p[2] - dz) <= half + 0.6 for dx, dz, half in doors)
+
+            if move != "balance" and total > 1e-6 and not in_door:
+                width = _width(boxes, [p[0], floor, p[2]], d)
+
+                if width < 2.0 * BODY_RADIUS + 0.02:
+                    return ["narrower than a man (%.2f m) at (%.1f, %.1f) on the %s" % (width, p[0], p[2], move)]
 
         return []
 
@@ -465,6 +664,7 @@ def move_problems(data, boxes, ground):
     out = []
     routes = {}
     volumes = _volumes(data)
+    doors = [(m["position"][0], m["position"][2], float(m.get("props", {}).get("width", 1.2)) / 2.0) for m in data["markers"] if m["ucd"] == "door"]
 
     for m in data["markers"]:
         if m["ucd"] == "route_check":
@@ -477,7 +677,7 @@ def move_problems(data, boxes, ground):
             a, b = first["position"], then["position"]
             near = _near(boxes, a, b, 3.0)
 
-            for problem in _move(near, ground, volumes, a, b, then["props"].get("move")):
+            for problem in _move(near, ground, volumes, a, b, then["props"].get("move"), doors):
                 out.append("%s: %s -> %s: %s" % (route, first["name"], then["name"], problem))
 
     return out

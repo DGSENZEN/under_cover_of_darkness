@@ -111,6 +111,18 @@ class Ps2ifyTest(unittest.TestCase):
         self.assertTrue((alpha[:, :16] == 255).all())
         self.assertTrue((alpha[:, 16:] == 0).all())
 
+    def test_luma_and_a_mask_both_cut(self):
+        # (The ivy: its photo's dark gaps cut by brightness, and our painted
+        # clump's outline round it, so a card is never a rectangle.)
+        pixels = np.full((64, 64, 3), (90, 140, 60), dtype=np.uint8)
+        pixels[40:48, 4:12] = 20
+        mask = Image.new("L", (64, 64), 0)
+        mask.paste(255, (0, 0, 32, 64))
+        out = np.asarray(ps2ify.convert(Image.fromarray(pixels, "RGB"), recipe(size=[64, 64], alpha="luma", threshold=50, _mask=mask)).convert("RGBA"))
+        self.assertEqual(out[20, 20, 3], 255)
+        self.assertEqual(out[44, 8, 3], 0, "the photo's gap is cut")
+        self.assertEqual(out[20, 50, 3], 0, "outside the mask is cut")
+
     def test_seams_darken_columns(self):
         flat = Image.new("RGB", (64, 64), (200, 200, 200))
         out = np.asarray(ps2ify.convert(flat, recipe(size=[64, 64], seams=[16, 2, 0.5])).convert("RGB")).astype(float)

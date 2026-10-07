@@ -21,6 +21,7 @@ roof walked across it). The piece's frame: x along its front, the front's
 face at z 0, the house to -z, its foot on the lane.
 """
 
+import math
 import random
 
 import kit_recipes as k  # noqa: F401 (first: it registers every kit)
@@ -45,6 +46,8 @@ CANCELA = (1.6, 2.6)
 GRILLE = (0.8, 1.2, 1.5)
 WINDOW = (0.9, 1.4, 1.0)
 WELL = 1.0
+# (A man's middle no nearer the well-head's middle than this.)
+WELL_CLEAR = 1.2
 MIRADOR = (2.5, 2.5, 3.0)
 BRIDGE = (3.0, 4.0)
 LINK = 1.4
@@ -61,7 +64,8 @@ BUDGET = {"small": 2400, "corner": 2400, "merchant": 3600, "corral": 3600}
 
 def _plan(kind, ix0, ix1, iz0, iz1):
     """The ground floor's rooms (x0, z0, x1, z1): the hall first, the patio
-    second, then the rest; the side the ladder climbs from the patio."""
+    second, then the rest; the side the ladder climbs from the patio (its
+    back: no room's door is there)."""
     r = CORNER_RANGE if kind == "corner" else RANGE
     hall = (ix0, iz1 - r, ix1, iz1)
 
@@ -74,7 +78,7 @@ def _plan(kind, ix0, ix1, iz0, iz1):
                 (ix0, iz0, ix1, iz0 + r)], "back", []
 
     if kind == "corner":
-        return [hall, (ix0 + r, iz0, ix1, iz1 - r), (ix0, iz0, ix0 + r, iz1 - r)], "left", []
+        return [hall, (ix0 + r, iz0, ix1, iz1 - r), (ix0, iz0, ix0 + r, iz1 - r)], "back", []
 
     # The corral: cells CELL along each side, the court between them to the
     # back wall.
@@ -85,7 +89,8 @@ def _plan(kind, ix0, ix1, iz0, iz1):
         cells += [(ix0, z - CELL, ix0 + r, z), (ix1 - r, z - CELL, ix1, z)]
         z -= CELL
 
-    return [hall, (ix0 + r, iz0, ix1 - r, iz1 - r)] + cells, "left", cells
+    # (The ladder up the court's back wall: its sides are the cells' doors.)
+    return [hall, (ix0 + r, iz0, ix1 - r, iz1 - r)] + cells, "back", cells
 
 
 def _edge(a, b):
@@ -176,9 +181,12 @@ def design(width, depth, kind="small", quirk="", enterable=True, front="whitewas
             shapes.append(ks.box(x, h / 2.0, (z0 + z1) / 2.0, WALL, h, z1 - z0, side))
             cols.append(town.col(x, h / 2.0, (z0 + z1) / 2.0, WALL, h, z1 - z0))
 
+    # (Its front and back walls solid to their faces and their parapets'
+    # tops, walked in or not.)
+    cols += walls
+
     if enterable:
         _inside(out, shapes, cols, plan, ladder_side, kind, dx, door_w, eaves, storeys, rng, side)
-        cols += walls
     else:
         cols.append(town.col(0.0, eaves / 2.0, -depth / 2.0, ix1 - ix0, eaves, iz1 - iz0))
 
@@ -190,6 +198,28 @@ def design(width, depth, kind="small", quirk="", enterable=True, front="whitewas
 
     out.update({"shapes": shapes, "cols": cols, "size": [width, eaves + 4.0, depth], "front": front})
     return out
+
+
+def _round_well(a, b, well):
+    """The way from a to b across the patio round its well-head (a man
+    clear of its kerb): a point beside it where the straight way passes
+    too near, or none."""
+    dx, dz = b[0] - a[0], b[2] - a[2]
+    length = math.hypot(dx, dz)
+
+    if length < 1e-6:
+        return []
+
+    s = max(0.0, min(1.0, ((well[0] - a[0]) * dx + (well[1] - a[2]) * dz) / (length * length)))
+    near = [a[0] + s * dx - well[0], a[2] + s * dz - well[1]]
+    off = math.hypot(*near)
+
+    if off >= WELL_CLEAR:
+        return []
+
+    # (Out from the kerb on the way's side of it, or to its left.)
+    side = [near[0] / off, near[1] / off] if off > 1e-6 else [-dz / length, dx / length]
+    return [[well[0] + side[0] * (WELL_CLEAR + 0.4), 0.0, well[1] + side[1] * (WELL_CLEAR + 0.4), "walk"]]
 
 
 def _inside(out, shapes, cols, plan, ladder_side, kind, dx, door_w, eaves, storeys, rng, slot):
@@ -261,15 +291,18 @@ def _inside(out, shapes, cols, plan, ladder_side, kind, dx, door_w, eaves, store
     # (The cancela iron: its entry's kind, a gate seen through.)
     out["doors"].append([cancela, 0.0, pz1, 0.0, CANCELA[0], CANCELA[1], "gate"])
     out["entries"].insert(0, "door")
-    patio_at = [mx + 1.5 if px1 - px0 > 4.0 else mx, 0.0, mz - 1.5]
+    # (Its place off the well and the walls, a small patio's in its corner.)
+    patio_at = [mx + min(1.5, (px1 - px0) / 2.0 - 0.7), 0.0, mz - min(1.5, (pz1 - pz0) / 2.0 - 0.7)]
     out["rooms_at"] = [patio_at] + [[(r[0] + r[2]) / 2.0, 0.0, (r[1] + r[3]) / 2.0] for r, _e in live_rooms]
     hall_z = (hall[1] + hall[3]) / 2.0
-    tour = [[dx, 0.0, 1.0, "walk"], [dx, 0.0, hall_z, "walk"], [cancela, 0.0, hall_z, "walk"], [cancela, 0.0, pz1 - 0.8, "walk"],
-            patio_at + ["walk"]]
+    gate = [cancela, 0.0, pz1 - 0.8, "walk"]
+    tour = [[dx, 0.0, 1.0, "walk"], [dx, 0.0, hall_z, "walk"], [cancela, 0.0, hall_z, "walk"], gate] + _round_well(gate, patio_at, (mx, mz)) + \
+        [patio_at + ["walk"]]
 
     for room, edge in live_rooms:
-        tour += [[edge[0], 0.0, edge[1], "walk"], [(room[0] + room[2]) / 2.0, 0.0, (room[1] + room[3]) / 2.0, "walk"],
-                 [edge[0], 0.0, edge[1], "walk"], patio_at + ["walk"]]
+        door = [edge[0], 0.0, edge[1], "walk"]
+        tour += _round_well(patio_at, door, (mx, mz)) + [door, [(room[0] + room[2]) / 2.0, 0.0, (room[1] + room[3]) / 2.0, "walk"], door]
+        tour += _round_well(door, patio_at, (mx, mz)) + [patio_at + ["walk"]]
 
     # The ladder up the patio's wall to the azotea, through a gap in the
     # parapet round the patio.
@@ -285,7 +318,7 @@ def _inside(out, shapes, cols, plan, ladder_side, kind, dx, door_w, eaves, store
     shapes += [ks.box(lx + (0.0 if ladder_side == "back" else 0.18), (eaves + 1.0) / 2.0, lz + (0.18 if ladder_side == "back" else 0.0),
                       0.6 if ladder_side == "back" else 0.06, eaves + 1.0, 0.06 if ladder_side == "back" else 0.6, "timber")]
     out["places"]["ladder"] = [lx, 0.0, lz]
-    out["tour"] = tour + [foot + ["walk"], top + ["climb"]]
+    out["tour"] = tour + _round_well(patio_at, foot, (mx, mz)) + [foot + ["walk"], top + ["climb"]]
 
 
 def _roof(out, shapes, cols, plan, width, depth, eaves, enterable, ladder_side, quirk):

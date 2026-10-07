@@ -69,7 +69,8 @@ def _sewer(L):
         # (Down from its collar to the chamber's floor against its ladder,
         # then along the sewer to its far end.)
         ladder_x = x + plan.SEWER_SIZE[0] / 2.0 - 0.4
-        checks(L, "below_baixa_%d" % (i + 1), [[hx, G + kit_terrace.COLLAR_PROUD, hz + 1.0, "walk"], [ladder_x, floor, hz - 0.3, "climb"],
+        checks(L, "below_baixa_%d" % (i + 1), [[hx - 1.2, G + kit_terrace.COLLAR_PROUD, hz, "walk"], [hx + 0.2, G - 0.2, hz, "climb"],
+                                               [ladder_x, floor, hz - 0.3, "climb"],
                                                [x, floor, hz - 1.5 if i == 0 else hz + 1.5, "walk"], [x, floor, ends[i], "walk"]],
                "below", _sector(hx, hz))
 
@@ -172,11 +173,12 @@ def roof_route(boxes, path):
 # scaffold, the path after it.)
 def _chain_plans():
     w, e, f = plan.BLOCKS["baixa_w"], plan.BLOCKS["baixa_e"], plan.BLOCKS["baixa_f"]
-    d, off = plan.DEPTH, 0.3
+    # (Off the valley onto the rows' gentle slopes: a mansard's steep lower
+    # slope comes down to it, on the blocks that keep theirs.)
+    d, off = plan.DEPTH, 1.5
     return [("baixa_w", (w[0] + d / 2.0, w[3], 0.0), [(w[0] + d / 2.0, w[3] - 0.6), (w[0] + d - off, w[3] - 0.6), (w[0] + d - off, w[1] + 0.6)]),
             ("baixa_e", (e[2] - d / 2.0, e[1], 180.0), [(e[2] - d / 2.0, e[1] + 0.6), (e[2] - d + off, e[1] + 0.6), (e[2] - d + off, e[3] - 0.6)]),
-            # (Down the east row's side: a mansard on the west row leans its
-            # steep slope into the valley.)
+            # (Down the east row's side.)
             ("baixa_f", (f[0] + d / 2.0, f[3], 0.0), [(f[0] + d / 2.0, f[3] - 0.6), (f[0] + d + off, f[3] - 0.6), (f[0] + d + off, f[3] - 46.0)])]
 
 

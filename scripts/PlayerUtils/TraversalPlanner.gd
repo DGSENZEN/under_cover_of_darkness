@@ -224,7 +224,10 @@ func _generate_vault(
 	rise.y = over_y
 
 	var past := Vector3(p.far_floor.x, over_y, p.far_floor.z)
-	var landing := scanner.origin_for_feet(p.far_floor)
+	# (A capsule stood on a slope rides over it at its axis, touching it
+	# uphill: landed there, not sunk into it.)
+	var ride := scanner.radius * (1.0 / maxf(p.far_normal.y, 0.5) - 1.0) + 0.02 if p.far_normal.y < 0.999 else 0.0
+	var landing := scanner.origin_for_feet(p.far_floor + Vector3.UP * ride)
 
 	var raw := PackedVector3Array([start, rise, past, landing])
 

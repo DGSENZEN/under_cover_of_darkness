@@ -1252,6 +1252,44 @@ def coil_mask():
     return image.resize((128, 128), Image.Resampling.BOX).point(lambda v: 255 if v >= 128 else 0)
 
 
+def ivy_clump():
+    """The ivy's mask (ps2ify: leaves): a clump of it, lobed, its outline
+    eaten ragged and leaves poking out of it, clear of the card's edges (the
+    photo's ivy is a seamless sheet: cut to this, a card is never a
+    rectangle)."""
+    size = 128 * SCALE
+    rng = np.random.default_rng(171)
+    y, x = np.mgrid[0:size, 0:size] / float(size) - 0.5
+    thick = np.zeros((size, size))
+
+    for _ in range(7):
+        cx, cy = rng.uniform(-0.16, 0.16, 2)
+        r = rng.uniform(0.2, 0.28)
+        thick = np.maximum(thick, 1.0 - np.hypot(x - cx, y - cy) / r)
+
+    thick = np.where(thick > 0.0, thick - 0.9 * (_noise(size, rng, octaves=5, base=6) - 0.5), 0.0)
+    image = Image.fromarray(np.where(thick > 0.2, 255, 0).astype(np.uint8), "L")
+    draw = ImageDraw.Draw(image)
+    solid = np.asarray(image) > 0
+    edge = np.argwhere(solid & ~np.roll(solid, 6, axis=0) | solid & ~np.roll(solid, 6, axis=1)
+                       | solid & ~np.roll(solid, -6, axis=0) | solid & ~np.roll(solid, -6, axis=1))
+
+    # Leaves poking out past its outline, and bites out of it.
+    for k in range(110):
+        py, px = edge[int(rng.integers(len(edge)))]
+        out = math.atan2(py - size / 2.0, px - size / 2.0) + rng.uniform(-0.6, 0.6)
+        leaf = size * rng.uniform(0.025, 0.05)
+        lx, ly = px + math.cos(out) * leaf * 0.7, py + math.sin(out) * leaf * 0.7
+        points = [(lx + math.cos(a / 20.0 * math.tau + out) * leaf * (0.62 + 0.38 * abs(math.cos(a / 20.0 * math.tau * 2.5))),
+                   ly + math.sin(a / 20.0 * math.tau + out) * leaf * (0.62 + 0.38 * abs(math.cos(a / 20.0 * math.tau * 2.5)))) for a in range(20)]
+        draw.polygon(points, fill=0 if k % 4 == 3 else 255)
+
+    small = image.resize((128, 128), Image.Resampling.BOX).point(lambda v: 255 if v >= 128 else 0)
+    cut = np.asarray(small).copy()
+    cut[:3], cut[-3:], cut[:, :3], cut[:, -3:] = 0, 0, 0, 0
+    return Image.fromarray(cut, "L")
+
+
 def decal_salt():
     """Salt dried on a quay's face or a hull: pale tide marks, bands of white
     bloom one over another, fading out raggedly."""
@@ -1857,7 +1895,7 @@ PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_
              "weed_broad": weed_broad, "reeds": reeds, "ivy": ivy, "bark": bark, "bat": bat,
              "decal_soot": decal_soot, "decal_dirt": decal_dirt, "decal_straw": decal_straw, "decal_leaves": decal_leaves,
              "carpet": carpet,
-             "iron_rail": iron_rail, "window_grille": window_grille, "casement": casement, "quarries": quarries, "glazing": glazing, "sash": sash, "lattice": lattice, "ratlines": ratlines, "coil_mask": coil_mask,
+             "iron_rail": iron_rail, "window_grille": window_grille, "casement": casement, "quarries": quarries, "glazing": glazing, "sash": sash, "lattice": lattice, "ratlines": ratlines, "coil_mask": coil_mask, "ivy_clump": ivy_clump,
              "decal_salt": decal_salt, "palm_frond": palm_frond, "cypress": cypress, "agave": agave, "orange_leaves": orange_leaves,
              "gorse": gorse, "fennel": fennel, "pine": pine, "laundry": laundry, "azulejo_ship": azulejo_ship, "arms_royal": arms_royal,
              "azulejo_comet": azulejo.azulejo_comet, "azulejo_king": azulejo.azulejo_king, "azulejo_souls": azulejo.azulejo_souls,
