@@ -46,6 +46,19 @@ def rotation(yaw=0.0, pitch=0.0, roll=0.0):
     return mul(mul(ry, rx), rz)
 
 
+def yxz_angles(basis):
+    """rotation()'s yaw, pitch and roll (degrees) back from its basis (3x3
+    rows; at a pitch of +-90 the roll is folded into the yaw)."""
+    pitch = math.asin(max(-1.0, min(1.0, -basis[1][2])))
+
+    if abs(math.cos(pitch)) < 1e-9:
+        return [math.degrees(math.atan2(-basis[2][0], basis[0][0])), math.degrees(pitch), 0.0]
+
+    yaw = math.atan2(basis[0][2], basis[2][2])
+    roll = math.atan2(basis[1][0], basis[1][1])
+    return [math.degrees(yaw), math.degrees(pitch), math.degrees(roll)]
+
+
 def to_blender_basis(basis):
     return mul(mul(TO_BLENDER, basis), transpose(TO_BLENDER))
 
