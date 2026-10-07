@@ -112,8 +112,9 @@ class Box:
         for i in range(3):
             if abs(d[i]) < 1e-9:
                 # (On a face, within rounding: a ray down the seam between two
-                # boxes laid flush hits them.)
-                if abs(o[i]) > self.half[i] + 1e-6:
+                # boxes laid flush hits them, their places rounded to float32
+                # in the export (some 1e-5 at a hundred metres).)
+                if abs(o[i]) > self.half[i] + 1e-4:
                     return None
                 continue
 

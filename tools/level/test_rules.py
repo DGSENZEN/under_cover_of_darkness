@@ -162,6 +162,14 @@ class Rules(unittest.TestCase):
         wall = geo.Box([0.4, 1.0, 0.0], geo.rotation(), [0.2, 2.0, 2.0])
         self.assertFalse(rules._fits([floor, wall], [0.0, 0.0, 0.0]))
 
+    def test_a_ray_down_a_seam_hits_through_float32_rounding(self):
+        # (Two roofs laid flush at x -71, their places rounded to float32 in
+        # the export: a ray straight down the seam still meets one.)
+        left = geo.Box([-77.25 - 4e-6, 43.0, -189.5], geo.rotation(), [12.5, 1.5, 4.0])
+        right = geo.Box([-67.25 + 4e-6, 43.0, -189.5], geo.rotation(), [7.5, 1.5, 4.0])
+        hits = [t for t in (b.ray([-71.0, 46.0, -189.5], [0.0, -1.0, 0.0]) for b in (left, right)) if t is not None]
+        self.assertTrue(hits)
+
     def test_a_man_on_a_flat_floor_stands_on_it(self):
         # (Only on a slope does his round foot ride over the floor: on a
         # flat one he fits under a lintel 2.02 m over it (a belfry's

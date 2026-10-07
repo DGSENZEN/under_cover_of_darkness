@@ -470,6 +470,18 @@ class Terrace(unittest.TestCase):
         self.assertLessEqual(top, 6.0 + 0.3)
         self.assertTrue(any(abs(sh["turn"][1]) > 3.0 for sh in cards), "every card flat on the wall")
 
+    def test_a_buttress_steps_back_up_its_cliff(self):
+        # (A granite pier against a cliff's face (at z 0, out to +z), in
+        # stages each shallower than the one under it, from the ground to
+        # under the cliff's top; solid as drawn.)
+        name = kit_terrace.buttress(23.5)
+        out = [hit(name, [0.0, y, 5.0], [0.0, 0.0, -1.0]) for y in (1.0, 12.0, 21.0)]
+        self.assertTrue(all(t is not None for t in out), out)
+        self.assertTrue(5.0 - out[0] > 5.0 - out[1] > 5.0 - out[2] > 0.3, out)
+        self.assertIsNone(hit(name, [0.0, 23.6, 5.0], [0.0, 0.0, -1.0]))
+        self.assertIsNone(hit(name, [0.0, 1.0, -0.1], [0.0, 0.0, -1.0]))
+        self.assertTrue(drawn(name, [0.0, 12.0, 5.0], [0.0, 0.0, -1.0]))
+
     def test_a_posterns_door_is_dark_and_deep(self):
         name = kit_terrace.postern(3.03, 2.4)
         recipe = kit_recipes.PIECES[name]

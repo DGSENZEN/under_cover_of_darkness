@@ -26,6 +26,7 @@ import old_town as town_layout  # noqa: E402
 import rules  # noqa: E402
 import town  # noqa: E402
 from town import baixa  # noqa: E402
+from town import carmo as carmo_plan  # noqa: E402
 from town import judiaria as jud_plan  # noqa: E402
 from town import stairs as stairs_plan  # noqa: E402
 from test_rules import marker, piece  # noqa: E402
@@ -372,6 +373,25 @@ class Baixa(unittest.TestCase):
             self.assertTrue(3 <= len(houses) <= 6, (route, sorted(houses)))
             span = max(math.hypot(a[0] - b[0], a[2] - b[2]) for a in high for b in high)
             self.assertTrue(25.0 <= span <= 60.0, (route, span))
+
+    def test_a_roof_route_keeps_its_corners(self):
+        # (Round an L of flat roofs: the way turns where its path turns,
+        # never cut straight across the air inside the L.)
+        from old_town.baixa import roof_route
+        roofs = [geo.Box([5.0, 9.5, 1.0], geo.rotation(), [12.0, 1.0, 2.0]), geo.Box([10.0, 9.5, -5.0], geo.rotation(), [2.0, 1.0, 10.0])]
+        points = roof_route(roofs, [(0.0, 1.0), (10.0, 1.0), (10.0, -9.0)])
+        self.assertTrue(any(abs(p[0] - 10.0) < 0.3 and abs(p[2] - 1.0) < 0.3 for p in points), points)
+
+    def test_a_roof_routes_small_step_is_walked(self):
+        # (A step a man walks up, a quarter metre: walked, not mantled; one
+        # he cannot, mantled.)
+        from old_town.baixa import roof_route
+
+        for rise, move in ((0.25, "walk"), (0.8, "mantle")):
+            roofs = [geo.Box([2.0, 9.5, 0.0], geo.rotation(), [4.0, 1.0, 2.0]), geo.Box([6.0, 9.5 + rise, 0.0], geo.rotation(), [4.0, 1.0, 2.0])]
+            moves = [p[3] for p in roof_route(roofs, [(0.5, 0.0), (7.5, 0.0)])[1:]]
+            self.assertIn(move, moves, (rise, moves))
+            self.assertEqual("mantle" in moves, move == "mantle", (rise, moves))
 
     def test_the_lanes_are_lamp_lit(self):
         # The main street and the secondaries: a lamp at least every 40 m
@@ -1415,6 +1435,197 @@ class Judiaria(unittest.TestCase):
     def test_the_judiaria_checks_clean(self):
         self.assertEqual([p for p in rules.problems(layout(), "stage2") if "judiaria" in p], [])
 
+
+
+class Carmo(unittest.TestCase):
+    def test_the_lookout_stands_20_m_over_the_baixa(self):
+        # (The lookout terrace at 26 over the Baixa's north edge: a wall more
+        # than 20 m high under it all along, a parapet on it but where the
+        # towers' and the ledges' ways come up; benches and its lamps.)
+        self.assertAlmostEqual(town.height(-50.0, -177.0), carmo_plan.LOOK, delta=0.01)
+        self.assertGreaterEqual(carmo_plan.LOOK - carmo_plan.BAIXA_G, 20.0)
+        boxes = rules.colliders(layout())
+        openings = carmo_plan.cliff_openings()
+
+        for x in range(-98, 14, 2):
+            hits = [t for t in (b.ray([x + 0.5, 14.0, -165.0], [0.0, 0.0, -1.0]) for b in boxes) if t is not None]
+            self.assertTrue(hits and min(hits) <= 5.05, x)
+
+            if not any(a - 0.5 <= x + 0.5 <= b + 0.5 for a, b in openings):
+                hits = [t for t in (b.ray([x + 0.5, carmo_plan.LOOK + 0.5, -173.0], [0.0, 0.0, 1.0]) for b in boxes) if t is not None]
+                self.assertTrue(hits and min(hits) <= 3.05, ("no parapet", x))
+
+        # (Its face broken by granite buttresses.)
+        self.assertGreaterEqual(len(pieces_in((carmo_plan.WEST, carmo_plan.CLIFF_Z - 0.1, carmo_plan.EAST, carmo_plan.CLIFF_Z + 0.1), "buttress_")), 4)
+        x0, z0, x1, z1 = carmo_plan.LOOKOUT
+        benches = pieces_in(carmo_plan.LOOKOUT, "bench_azulejo")
+        self.assertGreaterEqual(len(benches), 4)
+        lamps = [m for m in layout()["markers"] if m["ucd"] == "light" and m["props"]["kind"] == "lamp_post"
+                 and x0 <= m["position"][0] <= x1 and z0 <= m["position"][2] <= z1]
+        self.assertTrue(1 <= len(lamps) <= 2, len(lamps))
+        self.assertEqual(len(pieces_in(carmo_plan.LOOKOUT, "pergola")), 1)
+
+    def test_the_ruin_is_on_its_square(self):
+        # (Its front, four bays (the second and the fourth arches whole), its
+        # transept and its apse along its axis, five buttresses on its
+        # south, on the square's ground; its portal onto the Largo, the
+        # dolphin fountain there; the watch's shunned box over its nave.)
+        parts = [p for p in layout()["pieces"] if p["piece"].startswith("carmo_")]
+        names = sorted(p["piece"] for p in parts)
+        self.assertEqual(names.count("carmo_buttress"), 5)
+        self.assertEqual([n for n in names if n != "carmo_buttress"],
+                         sorted(["carmo_front", "carmo_bay_broken", "carmo_bay_whole", "carmo_bay_broken", "carmo_bay_whole", "carmo_transept",
+                                 "carmo_apse"]))
+
+        for p in parts:
+            self.assertEqual(town.quarter_of(p["position"][0], p["position"][2]), "carmo", p["name"])
+            self.assertAlmostEqual(p["position"][1], carmo_plan.SQUARE, delta=0.01, msg=p["name"])
+
+        boxes = rules.colliders(layout())
+        portal = carmo_plan.ruin_at([0.0, 1.6, 3.0])
+        self.assertFalse(any(b.contains(portal, 0.5) for b in boxes))
+        fountain = pieces_in(carmo_plan.LARGO, "fountain_carmo")
+        self.assertEqual(len(fountain), 1)
+        x, y, z = fountain[0]["position"]
+
+        for dx, dz in ((3.0, 0.0), (-3.0, 0.0), (0.0, 3.0), (0.0, -3.0)):
+            self.assertAlmostEqual(town.height(x + dx, z + dz), y, delta=0.03)
+
+        shunned = markers_named("carmo_nave", "shunned")
+        self.assertEqual(len(shunned), 1)
+        box = geo.Box(shunned[0]["position"], shunned[0]["basis"], shunned[0]["size"])
+        self.assertTrue(box.contains(carmo_plan.ruin_at([0.0, 1.0, -30.0])))
+
+    def test_the_altar_has_its_comet_light(self):
+        # (The comet's red light down the roofless nave onto the altar: its
+        # marker on the altar (Task 20 hangs the shaft 30 m off it toward
+        # the comet's head and aims it back), nothing in those 30 m.)
+        lights = [m for m in markers_named("carmo_", "light") if m["props"]["kind"] == "comet_shaft"]
+        self.assertEqual(len(lights), 1)
+        apse = [p for p in layout()["pieces"] if p["piece"] == "carmo_apse"][0]
+        altar = geo.add(apse["position"], geo.apply(apse["basis"], kit_recipes.PIECES["carmo_apse"]["places"]["altar"]))
+        self.assertLess(math.dist(lights[0]["position"], altar), 0.05)
+        n = math.sqrt(sum(v * v for v in carmo_plan.COMET))
+        d = [v / n for v in carmo_plan.COMET]
+        start = [altar[0], altar[1] + 0.3, altar[2]]
+        hits = [t for t in (b.ray(start, d) for b in rules.colliders(layout())) if t is not None]
+        self.assertFalse(hits and min(hits) < 30.0, min(hits) if hits else None)
+
+    def test_the_watch_house_is_entered_three_ways(self):
+        house = [m for m in layout()["markers"] if m["ucd"] == "household" and m["props"]["label"] == "watch_house"]
+        self.assertEqual(len(house), 1)
+        self.assertEqual(int(house[0]["props"]["ways"]), 3)
+        kinds = {points[0]["props"]["kind"] for points in routes("carmo_watch_way_").values() if points[0]["props"].get("into") == "watch_house"}
+        self.assertEqual(kinds, {"door", "wall", "roof"})
+        self.assertEqual([p for p in rules.way_problems(layout()) if "watch_house" in p], [])
+        watch = [p for p in layout()["pieces"] if p["piece"] == "watch_house"][0]
+        self.assertEqual(town.quarter_of(watch["position"][0], watch["position"][2]), "carmo")
+        # (Its cloister's broken wall faces the ruin: its way over it starts
+        # by the apse's cloister door.)
+        apse = [p for p in layout()["pieces"] if p["piece"] == "carmo_apse"][0]
+        door = geo.add(apse["position"], geo.apply(apse["basis"], kit_recipes.PIECES["carmo_apse"]["places"]["cloister_door"]))
+        start = routes("carmo_watch_way_wall")["carmo_watch_way_wall"][0]["position"]
+        self.assertLess(math.hypot(start[0] - door[0], start[2] - door[2]), 8.0)
+
+    def test_each_step_is_crossed_publicly_and_by_a_thief(self):
+        labels = {m["props"]["label"] for m in layout()["markers"] if m["ucd"] == "terrace_step" and m["props"]["label"].startswith("carmo_step_")}
+        self.assertEqual(labels, {"carmo_step_baixa", "carmo_step_1", "carmo_step_2"})
+        self.assertEqual([p for p in rules.way_problems(layout()) if "carmo_step_" in p], [])
+
+    def test_the_baixa_climbs_to_it(self):
+        # (Two stair towers up from the Rossio, a thief's ledges beside
+        # them: the Baixa's ground to the lookout's.)
+        ways = [points for points in routes("carmo_").values() if points[0]["props"].get("step") == "carmo_step_baixa"]
+        kinds = [w[0]["props"]["way"] for w in ways]
+        self.assertEqual(kinds.count("public"), 2)
+        self.assertGreaterEqual(kinds.count("thief"), 1)
+
+        for points in ways:
+            first, last = points[0]["position"], points[-1]["position"]
+            self.assertEqual(town.quarter_of(first[0], first[2]), "baixa")
+            self.assertAlmostEqual(first[1], town.height(first[0], first[2]), delta=0.05)
+            self.assertEqual(town.quarter_of(last[0], last[2]), "carmo")
+            self.assertAlmostEqual(last[1], carmo_plan.LOOK, delta=0.05)
+
+    def test_the_carmo_roofs_chain(self):
+        # 2-3 chains, each on the roofs of 3-6 houses over 25-60 m, a way up
+        # to it in sight.
+        chains = routes("roof_carmo_")
+        self.assertTrue(2 <= len(chains) <= 3, sorted(chains))
+        rects = [(each.name, town._rect(each)) for each in carmo_plan.LOTS]
+        rects.append(("watch_house", carmo_plan.watch_rect()))
+
+        for route, points in chains.items():
+            self.assertEqual(points[0]["props"]["way"], "roof", route)
+            first = points[0]["position"]
+            self.assertAlmostEqual(first[1], town.height(first[0], first[2]), delta=0.05, msg=route)
+            self.assertTrue({"climb", "mantle"} & {m["props"]["move"] for m in points[:6]}, route)
+            high = [m["position"] for m in points if m["position"][1] > town.height(m["position"][0], m["position"][2]) + 5.0]
+            houses = {name for name, r in rects for p in high if r[0] <= p[0] <= r[2] and r[1] <= p[2] <= r[3]}
+            self.assertTrue(3 <= len(houses) <= 6, (route, sorted(houses)))
+            span = max(math.hypot(a[0] - b[0], a[2] - b[2]) for a in high for b in high)
+            self.assertTrue(25.0 <= span <= 60.0, (route, span))
+
+    def test_the_lanes_are_lamp_lit(self):
+        # (Watched at the top: a corner lamp every 40 m at most along the
+        # square's south street, the north lane and the high terrace's
+        # lane, their lanterns lit on dark nights only.)
+        lamps = [p for p in layout()["pieces"] if p["piece"] == "corner_lamp" and p["name"].startswith("carmo_")]
+        lights = markers_named("carmo_lamp_", "light")
+        self.assertEqual(len(lights), 2 * len(lamps))
+        self.assertTrue(all(m["props"]["dark_only"] for m in lights))
+
+        for (z0, z1) in carmo_plan.LANES:
+            xs = sorted([p["position"][0] for p in lamps if z0 - 1.0 <= p["position"][2] <= z1 + 1.0] + [carmo_plan.WEST + 10.0, carmo_plan.EAST - 10.0])
+            self.assertTrue(len(xs) >= 3, (z0, z1))
+            self.assertTrue(all(b - a <= 40.0 for a, b in zip(xs, xs[1:])), (z0, z1, xs))
+
+    def test_the_carmo_has_its_vantages(self):
+        # (Unlit spots to scout from: the lookout's edge, each step's head,
+        # the watch house's roof lookout.)
+        vantages = markers_named("carmo_vantage_", "vantage")
+        self.assertGreaterEqual(len(vantages), 5)
+        lights = [m["position"] for m in layout()["markers"] if m["ucd"] == "light"]
+
+        for v in vantages:
+            self.assertTrue(all(math.dist(v["position"], q) > 4.5 for q in lights), v["name"])
+
+    def test_the_carmo_is_outside(self):
+        zones = markers_named("carmo_zone", "zone")
+        self.assertEqual({m["props"]["grade"] for m in zones}, {"outside", "indoors"})
+
+        def graded(point):
+            inside = [m for m in zones if geo.Box(m["position"], m["basis"], m["size"]).contains(point)]
+            return min(inside, key=lambda m: m["size"][0] * m["size"][1] * m["size"][2])["props"]["grade"] if inside else None
+
+        self.assertEqual(graded([-50.0, carmo_plan.LOOK + 1.0, -177.0]), "outside")
+        self.assertEqual(graded(carmo_plan.ruin_at([0.0, 1.0, -30.0])), "outside")
+        self.assertEqual(graded(carmo_plan.watch_point([0.0, 1.0, -6.0])), "indoors")
+
+    def test_about_one_house_in_five_or_six_is_entered(self):
+        entered = [each for each in carmo_plan.LOTS if each.enterable]
+        self.assertTrue(len(carmo_plan.LOTS) / 7.0 <= len(entered) <= len(carmo_plan.LOTS) / 4.0, (len(entered), len(carmo_plan.LOTS)))
+        self.assertTrue(all(1 <= each.rooms <= 3 for each in entered))
+        self.assertTrue(1 <= sum(each.lived for each in entered) <= len(entered) / 2.0 + 0.5)
+
+    def test_the_neighbours_ways_down_stay_open(self):
+        # (The stairs' towers' feet, its ivy, the Judiaria's stairs and
+        # ledges arrive on the Carmo's ground: nothing of the Carmo's stands
+        # in a man's way at their foot.)
+        boxes = [b for p in layout()["pieces"] if p["name"].startswith("carmo_") or p["name"] in {each.name for each in carmo_plan.LOTS}
+                 for b in geo.piece_boxes(kit_recipes.PIECES[p["piece"]], p["position"], p["basis"])]
+
+        for points in list(routes("stairs_").values()) + list(routes("judiaria_").values()):
+            step = points[0]["props"].get("step")
+
+            if step not in ("stairs_step_carmo", "judiaria_step_carmo"):
+                continue
+
+            first = points[0]["position"]
+            self.assertFalse(any(b.contains([first[0], first[1] + 1.0, first[2]], 0.45) for b in boxes), points[0]["props"]["route"])
+
+    def test_the_carmo_checks_clean(self):
+        self.assertEqual([p for p in rules.problems(layout(), "stage2") if "carmo" in p], [])
 
 
 class Climbs(unittest.TestCase):

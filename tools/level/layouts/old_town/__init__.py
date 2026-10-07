@@ -14,7 +14,7 @@ from lay import Layout
 import city_harbour
 import town
 from harbour import GATE_X, QUAY, WALK, WALL_E, WALL_W, stair_y
-from old_town import baixa, climbs, ground, judiaria, stairs
+from old_town import baixa, carmo, climbs, ground, judiaria, stairs
 
 height = town.height
 
@@ -83,6 +83,7 @@ def layout():
     baixa.lay(L)
     stairs.lay(L)
     judiaria.lay(L)
+    carmo.lay(L)
     # (Their ways up the walls: over the houses and walls laid.)
     climbs.lay(L)
     return L.data()

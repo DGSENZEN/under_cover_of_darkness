@@ -252,6 +252,54 @@ def _bowls():
     return shapes, cols, [[0.0, water, 0.0]]
 
 
+def _bench():
+    """A miradouro's bench: a granite seat on two blocks, its back a
+    granite slab faced with blue tiles (a box: the tiles at their own
+    size), coped."""
+    length, seat, depth = BENCH
+    box = [(0.0, seat - 0.05, 0.0, length, 0.1, depth, "granite")] + [(s * (length / 2.0 - 0.25), (seat - 0.1) / 2.0, 0.0, 0.3, seat - 0.1, depth - 0.1,
+                                                                       "granite") for s in (-1.0, 1.0)]
+    box += [(0.0, seat + 0.4, -depth / 2.0 + 0.05, length, 0.8, 0.1, "azulejo_blue"), (0.0, seat + 0.83, -depth / 2.0 + 0.05, length + 0.1, 0.06, 0.16,
+                                                                                         "granite")]
+    shapes = [ks.box(*b) for b in box]
+    cols = [town.col(*b[:6]) for b in box]
+    return shapes, cols
+
+
+def _pergola():
+    """The lookout's pergola: granite piers along its two sides every
+    PERGOLA_BAY, timber beams across them, joists along over them; a man
+    walks under it."""
+    length, depth, height = PERGOLA
+    bays = int(round(length / PERGOLA_BAY))
+    shapes, cols = [], []
+
+    def add(*b):
+        shapes.append(ks.box(*b))
+        cols.append(town.col(*b[:6]))
+
+    for i in range(bays + 1):
+        x = -length / 2.0 + 0.2 + (length - 0.4) * i / bays
+
+        for s in (-1.0, 1.0):
+            add(x, height / 2.0, s * (depth / 2.0 - 0.2), 0.4, height, 0.4, "granite")
+
+        add(x, height + 0.1, 0.0, 0.2, 0.2, depth + 0.4, "timber")
+
+    for j in range(5):
+        add(0.0, height + 0.26, -depth / 2.0 + 0.3 + (depth - 0.6) * j / 4.0, length + 0.4, 0.12, 0.1, "timber")
+
+    return shapes, cols
+
+
+BENCH = (2.4, 0.45, 0.5)
+PERGOLA = (12.0, 3.0, 2.6)
+PERGOLA_BAY = 3.0
+
+_shapes, _cols = _bench()
+_piece("bench_azulejo", "street", "granite", _shapes, _cols, [BENCH[0] + 0.1, BENCH[1] + 0.9, BENCH[2]], 300)
+_shapes, _cols = _pergola()
+_piece("pergola", "street", "timber", _shapes, _cols, [PERGOLA[0] + 0.4, PERGOLA[2] + 0.4, PERGOLA[1] + 0.4], 1200)
 _shapes, _cols, _hooks = _corner_lamp()
 _piece("corner_lamp", "street", "iron", _shapes, _cols, [1.0, ARM_HEIGHT + 0.2, ARM_OUT], 300, {"lamp": _hooks})
 _shapes, _cols, _lamp = _alminha()

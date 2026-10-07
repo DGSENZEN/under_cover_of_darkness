@@ -34,6 +34,7 @@ CLOISTER_WALL = (4.0, 0.6)
 RUINED = 2.5
 STAIR = 1.3
 HATCH = (5.0, -3.0)
+HATCH_HOLE = (1.6, 1.5)
 LOOKOUT = (3.0, 2.6)
 BUDGET = 9000
 
@@ -83,7 +84,9 @@ def design():
     reach = town.stair_reach("two_flight", STAIR, GROUND)
     f = reach["footprint"]
     stair_hole = (stair[0] + f[0], stair[1] + f[1], stair[0] + f[2], stair[1] + f[3])
-    hatch_hole = (HATCH[0] - 0.5, HATCH[1] - 0.5, HATCH[0] + 0.5, HATCH[1] + 0.5)
+    # (From its ladder's plank to past a man held on it: his body a metre
+    # across goes through.)
+    hatch_hole = (HATCH[0] - HATCH_HOLE[0] / 2.0, HATCH[1] - 0.42, HATCH[0] + HATCH_HOLE[0] / 2.0, HATCH[1] - 0.42 + HATCH_HOLE[1])
     middle = (z0 + z1) / 2.0
 
     for y, hole, slot in ((0.0, None, "flagstone"), (GROUND, stair_hole, "boards"), (EAVES, hatch_hole, "terracotta")):

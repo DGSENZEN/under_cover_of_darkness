@@ -895,6 +895,39 @@ LEDGE = (1.6, 1.2, 0.7)
 LEDGE_RISE = 2.0
 
 
+# A buttress against a high cliff: its stages (up to a share of its height,
+# width along the face, depth out from it), each set back from the one under
+# it; its top this far under the cliff's.
+BUTTRESS_STAGES = ((0.4, 1.8, 1.3), (0.75, 1.5, 0.9), (1.0, 1.2, 0.55))
+BUTTRESS_UNDER = 0.6
+
+
+def buttress(height):
+    """A granite buttress against a cliff's face `height` high (the face at
+    z 0, out to +z): BUTTRESS_STAGES, each shallower than the one under it,
+    a weathered setback on each, its top BUTTRESS_UNDER under the cliff's."""
+    name = "buttress_%d" % _cm(height)
+
+    if name in k.PIECES:
+        return name
+
+    shapes, cols = [], []
+    y0, top = 0.0, height - BUTTRESS_UNDER
+
+    for share, width, depth in BUTTRESS_STAGES:
+        y1 = top * share
+        box = (0.0, (y0 + y1) / 2.0, depth / 2.0, width, y1 - y0, depth)
+        shapes.append(ks.box(*box, "granite_rough"))
+        cols.append(town.col(*box))
+        # (Its setback's coping, a little proud.)
+        cap = (0.0, y1 - 0.06, depth / 2.0 + 0.03, width + 0.08, 0.12, depth + 0.06)
+        shapes.append(ks.box(*cap, "granite"))
+        cols.append(town.col(*cap))
+        y0 = y1
+
+    return _register(name, "wall", "granite_rough", shapes, cols, [BUTTRESS_STAGES[0][1] + 0.1, height, BUTTRESS_STAGES[0][2] + 0.1])
+
+
 def ledges(height):
     """Stone ledges up a cliff's face `height` high (the face at z 0, the
     drop to +z): each LEDGE long along the face, out from it and thick (a
