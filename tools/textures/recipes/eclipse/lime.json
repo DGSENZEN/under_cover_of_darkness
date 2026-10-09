@@ -12,6 +12,7 @@
  "scan": {
   "name": "white_rough_plaster",
   "tint": 0.85,
-  "contrast": 0.9
- }
+  "contrast": 0.45
+ },
+ "bands": 4
 }
