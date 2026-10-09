@@ -245,7 +245,7 @@ func _ground() -> void:
 			for k in [0, 1, 2, 0, 2, 3]:
 				tool.set_normal(Vector3.UP)
 				tool.set_tangent(Plane(1, 0, 0, 1))
-				tool.set_uv(Vector2(corners[k].x, corners[k].z) / 2.0)
+				tool.set_uv(Vector2(corners[k].x, corners[k].z) / 1.5)
 				tool.add_vertex(corners[k])
 
 			var shape := CollisionShape3D.new()
@@ -261,16 +261,24 @@ func _ground() -> void:
 	ground.add_child(mesh)
 
 
-## A small basalt texture for the lab's floor (not part of any kit).
+## The lab's floor: the cobblestone scan darkened toward basalt (not part of
+## any kit; textures/scans is fetched by tools/textures/fetch_scans.py), or
+## plain basalt grey if the scans are not here.
 func _basalt() -> Texture2D:
-	var image := Image.create(32, 32, false, Image.FORMAT_RGB8)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 23
+	var path := "res://textures/scans/cobblestone_floor_04/diffuse.jpg"
+	var image := Image.load_from_file(path) if FileAccess.file_exists(path) else null
 
-	for y in 32:
-		for x in 32:
-			var k := rng.randf_range(0.0, 1.0)
-			image.set_pixel(x, y, Color("#3a3340").lerp(Color("#5a5560"), k * k))
+	if image == null:
+		image = Image.create(8, 8, false, Image.FORMAT_RGB8)
+		image.fill(Color("#3a3340"))
+	else:
+		image.convert(Image.FORMAT_RGB8)
+		image.resize(256, 256, Image.INTERPOLATE_CUBIC)
+
+		for y in image.get_height():
+			for x in image.get_width():
+				var c := image.get_pixel(x, y)
+				image.set_pixel(x, y, Color("#2a2730").lerp(Color("#6a6670"), c.get_luminance()))
 
 	image.generate_mipmaps()
 	return ImageTexture.create_from_image(image)

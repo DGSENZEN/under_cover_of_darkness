@@ -4,20 +4,18 @@
  "dark": "#b9b4b0",
  "grime": 0.6,
  "wear": 0.2,
- "mottle": 4,
+ "mottle": 1,
  "band": {
   "colour": "#2f4c7a",
   "from": -1.4,
   "to": -0.9
  },
  "relief": {
-  "brush": 0.05,
-  "blocks": {
-   "course": 0.15,
-   "length": 0.15,
-   "joint": 0.008,
-   "colour": "#9a958a",
-   "stagger": false
-  }
+  "brush": 0.15
+ },
+ "scan": {
+  "name": "long_white_tiles",
+  "tint": 0.35,
+  "contrast": 1.0
  }
 }

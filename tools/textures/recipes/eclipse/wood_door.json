@@ -4,9 +4,14 @@
  "dark": "#2a1610",
  "grime": 0.3,
  "wear": 0.4,
- "mottle": 8,
+ "mottle": 1,
  "relief": {
-  "brush": 0.6,
-  "bevel": 0.5
+  "bevel": 0.5,
+  "brush": 0.15
+ },
+ "scan": {
+  "name": "stained_pine",
+  "tint": 0.6,
+  "contrast": 1.1
  }
 }

@@ -22,3 +22,6 @@ textures/ps2/
 
 # Props build backups (tools/props)
 assets/props/source/backup/
+
+# CC0 photo scans, fetched by tools/textures/fetch_scans.py (only baked atlases are committed)
+textures/scans/

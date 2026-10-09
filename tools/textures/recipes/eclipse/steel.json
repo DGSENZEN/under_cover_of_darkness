@@ -4,9 +4,14 @@
  "dark": "#2a2830",
  "grime": 0.3,
  "wear": 0.5,
- "mottle": 3,
+ "mottle": 1,
  "relief": {
-  "brush": 0.1,
-  "bevel": 0.5
+  "bevel": 0.5,
+  "brush": 0.15
+ },
+ "scan": {
+  "name": "metal_plate_02",
+  "tint": 0.5,
+  "contrast": 1.0
  }
 }

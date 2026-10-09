@@ -4,18 +4,14 @@
  "dark": "#3d1f1c",
  "grime": 0.6,
  "wear": 0.3,
- "mottle": 10,
+ "mottle": 2,
  "relief": {
-  "pores": 6,
-  "brush": 0.3,
   "bevel": 0.4,
-  "blocks": {
-   "course": 0.32,
-   "length": 0.42,
-   "joint": 0.018,
-   "colour": "#8a5c4e",
-   "irregular": true,
-   "tone": 0.45
-  }
+  "brush": 0.15
+ },
+ "scan": {
+  "name": "japanese_stone_wall",
+  "tint": 0.85,
+  "contrast": 1.2
  }
 }

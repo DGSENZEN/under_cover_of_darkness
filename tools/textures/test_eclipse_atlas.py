@@ -135,5 +135,68 @@ class Atlas(unittest.TestCase):
         self.assertLess(np.abs(normals[4:-4, PX // 2 + 4:-4] - np.array([128, 128, 255])).max(), 3)
 
 
+class Scans(unittest.TestCase):
+    """A scan projected by world position: the same wall as above, the scan a
+    1 m square of horizontal stripes (bright rows on dark), its normals tilted
+    toward the scan's up."""
+
+    def setUp(self):
+        self.base = Atlas("test_deterministic")
+        self.base.setUp()
+        self.scans = Path(tempfile.mkdtemp())
+        folder = self.scans / "stripes"
+        folder.mkdir()
+        rows = np.zeros((64, 64, 3), dtype=np.uint8)
+        rows[:32] = 220                                   # the top half of the scan bright
+        rows[32:] = 40
+        Image.fromarray(rows, "RGB").save(folder / "diffuse.jpg", quality=98)
+        up = np.zeros((64, 64, 3), dtype=np.uint8)
+        up[...] = (128, 200, 230)                         # tilted toward the scan's +y (up)
+        Image.fromarray(up, "RGB").save(folder / "normal.jpg", quality=98)
+        (folder / "info.json").write_text(json.dumps({"name": "stripes", "dimensions_mm": [1000, 1000]}))
+        self.recipes = {k: dict(v, scan={"name": "stripes", "tint": 0.0}) for k, v in RECIPES.items()}
+
+    def tearDown(self):
+        self.base.tearDown()
+        shutil.rmtree(self.scans)
+
+    def paint(self):
+        path = eclipse_atlas.paint_atlas("piece", self.base.src, self.base.out, recipes=self.recipes,
+                                         scans_dir=self.scans)
+        return np.asarray(Image.open(path).convert("RGB"), dtype=np.float64)
+
+    def test_scan_lies_along_world_height(self):
+        """The scan's bright half is the upper half of each metre of the
+        wall, whichever way V runs: here V runs down it."""
+        z = (np.arange(PX) + 0.5) / PX * WALL
+        self.base.texels(z)
+        pixels = self.paint()[:, 4:PX // 2 - 4].mean(axis=(1, 2))
+        frac = z % 1.0
+        upper = pixels[(frac > 0.6) & (frac < 0.9)].mean()
+        lower = pixels[(frac > 0.1) & (frac < 0.4)].mean()
+        self.assertGreater(upper, lower + 40)
+
+    def test_scan_normals_turn_into_the_islands_frame(self):
+        """The scan's normals lean toward world up; with +V running down the
+        wall, the atlas's normals lean toward -V (green below 128)."""
+        z = (np.arange(PX) + 0.5) / PX * WALL
+        self.base.texels(z)
+        tangent_v = np.broadcast_to(np.array([0, 0, -1], np.float32), (PX, PX, 3))
+        with np.load(self.base.src / "piece_texels.npz") as d:
+            data = {k: d[k] for k in d.files}
+        data["tangent_v"] = tangent_v
+        np.savez(self.base.src / "piece_texels.npz", **data)
+        self.paint()
+        normals = np.asarray(Image.open(self.base.out / "piece_normal_base.png").convert("RGB"), dtype=np.float64)
+        self.assertLess(normals[8:-8, 8:PX // 2 - 8, 1].mean(), 110)
+
+    def test_tint_pulls_toward_the_slot(self):
+        tinted = {k: dict(v, scan={"name": "stripes", "tint": 1.0}) for k, v in RECIPES.items()}
+        self.recipes = tinted
+        pixels = self.paint()
+        left = pixels[:, 4:PX // 2 - 4].reshape(-1, 3).mean(axis=0)
+        self.assertGreater(left[0], left[2] + 20)          # tezontle's red, though the scan is grey
+
+
 if __name__ == "__main__":
     unittest.main()

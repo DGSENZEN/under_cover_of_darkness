@@ -26,7 +26,9 @@ A recipe: {"base", "light", "dark": "#rrggbb", "grime", "wear": 0-1,
 "mottle": dabs per 64 texels, "band": {"colour", "from", "to" (m)},
 "relief": {"pores": pits per 64 texels, "brush": impasto 0-1,
 "bevel": rim softening 0-1, "blocks": {"course", "length", "joint" (m),
-"colour", "stagger": bool, "irregular": bool, "tone": 0-1}}}.
+"colour", "stagger": bool, "irregular": bool, "tone": 0-1}},
+"scan": {"name": a scan in textures/scans, "tint": 0-1 toward the slot's
+colours, "contrast": the scan's light and dark, 1 as photographed}}.
 """
 
 import json
@@ -42,6 +44,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "assets" / "eclipse" / "source"
 OUT = ROOT / "textures" / "painted" / "eclipse"
 RECIPES = Path(__file__).resolve().parent / "recipes" / "eclipse"
+# The CC0 photo scans (fetch_scans.py).
+SCANS = ROOT / "textures" / "scans"
 SCALE = 4
 COLOURS = 64
 # Damp and dirt reach this high above the street (m).
@@ -161,18 +165,66 @@ def _hash(*keys):
     return (h % np.uint64(10007)).astype(np.float64) / 10007.0
 
 
+def _frame(texels):
+    """Each texel's world frame for laying a material on it: B runs up the
+    wall (north on floors and ceilings), A across it, N out of it, with
+    A x B = N; and its coordinates (a, b) in metres along A and B."""
+    position, normal = texels["position"].astype(np.float64), texels["normal"].astype(np.float64)
+    flat = np.abs(normal[..., 2]) > 0.7
+    b_axis = np.where(flat[..., None], NORTH, UP)
+    a_axis = np.cross(b_axis, normal)
+    a_axis /= np.maximum(np.linalg.norm(a_axis, axis=-1, keepdims=True), 1e-6)
+    b_axis = np.cross(normal, a_axis)
+    return a_axis, b_axis, normal, (position * a_axis).sum(-1), (position * b_axis).sum(-1)
+
+
+def _sample(image, u, v):
+    """An image (rows from the top) sampled bilinearly and wrapped at (u, v),
+    v up."""
+    h, w = image.shape[:2]
+    x = (u % 1.0) * w - 0.5
+    y = (1.0 - (v % 1.0)) * h - 0.5
+    x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
+    fx, fy = (x - x0)[..., None], (y - y0)[..., None]
+    x0, y0 = x0 % w, y0 % h
+    x1, y1 = (x0 + 1) % w, (y0 + 1) % h
+    top = image[y0, x0] * (1 - fx) + image[y0, x1] * fx
+    bottom = image[y1, x0] * (1 - fx) + image[y1, x1] * fx
+    return top * (1 - fy) + bottom * fy
+
+
+def _scan(scans_dir, name):
+    folder = Path(scans_dir) / name
+    info = json.loads((folder / "info.json").read_text())
+    size = np.array(info.get("dimensions_mm") or [1000, 1000], dtype=np.float64)[:2] / 1000.0
+    colour = np.asarray(Image.open(folder / "diffuse.jpg").convert("RGB"), dtype=np.float64)
+    normal = np.asarray(Image.open(folder / "normal.jpg").convert("RGB"), dtype=np.float64) / 255.0 * 2 - 1
+    return colour, normal, size
+
+
+def _project(texels, big, scan, tu, tv):
+    """A scan laid on the texels by world position: its colour, and its
+    normals turned into each island's own UV frame (x along +U, y along +V)."""
+    colour, normal, size = scan
+    a_axis, b_axis, n_axis, a, b = _frame(texels)
+    up = lambda m: _up(m, big, smooth=True)
+    u, v = up(a) / size[0], up(b) / size[1]
+    painted = _sample(colour, u, v)
+    n = _sample(normal, u, v)
+    near = lambda m: np.dstack([_up(m[..., k], big) for k in range(3)])
+    world = n[..., 0:1] * near(a_axis) + n[..., 1:2] * near(b_axis) + n[..., 2:3] * near(n_axis)
+    framed = np.dstack([(world * near(tu)).sum(-1), (world * near(tv)).sum(-1), (world * near(n_axis)).sum(-1)])
+    framed /= np.maximum(np.linalg.norm(framed, axis=-1, keepdims=True), 1e-6)
+    return painted, framed
+
+
 def _courses(texels, blocks, big, rng):
     """How much of a mortar joint lies on each texel (0-1), and each stone's
     own tone (-1..1): horizontal joints every `course` of world height,
     vertical ones every `length` along the wall, staggered course by course;
     on floors, a grid in x and y. Irregular stones (tezontle) vary in length
     course by course, and their joints wander a little."""
-    position, normal = texels["position"].astype(np.float64), texels["normal"].astype(np.float64)
-    flat = np.abs(normal[..., 2]) > 0.7
-    across = np.cross(normal, UP)
-    across /= np.maximum(np.linalg.norm(across, axis=-1, keepdims=True), 1e-6)
-    a = np.where(flat, position[..., 0], (position * across).sum(-1))
-    b = np.where(flat, position[..., 1], position[..., 2])
+    a, b = _frame(texels)[3:]
     a, b = _up(a, big, smooth=True), _up(b, big, smooth=True)
     course, length, joint = blocks["course"], blocks["length"], blocks["joint"]
     irregular = blocks.get("irregular", False)
@@ -197,18 +249,24 @@ def _courses(texels, blocks, big, rng):
     return np.clip(lines * 2.0, 0.0, 1.0), tone
 
 
-def _normals(height, px):
-    """The relief's tangent-space normals at the atlas's size, encoded 0-255."""
+def _normals(height, px, base=None):
+    """The relief's tangent-space normals, folded over `base` (the scans'
+    normals, x along +U, y along +V) if given, at the atlas's size, 0-255."""
     gy, gx = np.gradient(height)                 # per drawn texel; rows run down
     n = np.dstack([-gx * STEEPNESS, gy * STEEPNESS, np.ones_like(height)])
     n /= np.linalg.norm(n, axis=-1, keepdims=True)
+
+    if base is not None:   # whiteout blend: the slopes add, the depths multiply
+        n = np.dstack([n[..., 0] + base[..., 0], n[..., 1] + base[..., 1], n[..., 2] * base[..., 2]])
+        n /= np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-6)
+
     image = Image.fromarray(((n * 0.5 + 0.5) * 255).round().astype(np.uint8), "RGB")
     small = np.asarray(image.resize((px, px), Image.Resampling.BOX), dtype=np.float64) / 255.0 * 2 - 1
     small /= np.maximum(np.linalg.norm(small, axis=-1, keepdims=True), 1e-6)
     return ((small * 0.5 + 0.5) * 255).round().astype(np.uint8)
 
 
-def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None):
+def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None, scans_dir=SCANS):
     """The piece's atlas painted to out_dir/<piece>_base.png and its normal
     map to <piece>_normal_base.png; the atlas's path."""
     source_dir, out_dir = Path(source_dir), Path(out_dir)
@@ -229,6 +287,8 @@ def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None):
 
     canvas = np.zeros((big, big, 3))
     relief = np.zeros((big, big))
+    scan_normals = np.dstack([np.zeros((big, big)), np.zeros((big, big)), np.ones((big, big))])
+    scans = {}
     grime = np.zeros((big, big))
     damp = _up(np.clip(1.0 - height / DAMP, 0.0, 1.0), big, smooth=True)
     height_big = _up(height, big, smooth=True)
@@ -249,6 +309,21 @@ def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None):
         if "band" in recipe:   # a stripe at a world height (the Metro's line-colour band)
             band = recipe["band"]
             base_map[(height_big >= band["from"]) & (height_big <= band["to"])] = _rgb(band["colour"])
+
+        if "scan" in recipe:   # the photo under the paint: its detail, pulled toward the slot's colours
+            spec = recipe["scan"]
+
+            if spec["name"] not in scans:
+                scans[spec["name"]] = _project(texels, big, _scan(scans_dir, spec["name"]),
+                                               texels["tangent_u"], texels["tangent_v"])
+
+            photo, photo_normals = scans[spec["name"]]
+            luma = photo @ np.array([0.299, 0.587, 0.114])
+            mean = max(float(luma[mask_big].mean()), 1.0)
+            relative = (luma / mean) ** spec.get("contrast", 1.0)
+            tint = spec.get("tint", 0.8)
+            base_map = photo * (1 - tint) + base_map * relative[..., None] * tint
+            scan_normals[mask_big] = photo_normals[mask_big]
 
         area = mask.sum()
         count = int(recipe.get("mottle", 4) * area / 64)
@@ -290,7 +365,7 @@ def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None):
     small = image.resize((px, px), Image.Resampling.BOX)
     path = out_dir / (piece + "_base.png")
     small.quantize(colors=COLOURS, dither=Image.Dither.NONE).convert("RGB").save(path)
-    Image.fromarray(_normals(relief, px), "RGB").save(out_dir / (piece + "_normal_base.png"))
+    Image.fromarray(_normals(relief, px, scan_normals), "RGB").save(out_dir / (piece + "_normal_base.png"))
     return path
 
 
