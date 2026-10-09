@@ -1,0 +1,511 @@
+"""What every style-lab piece's Blender script shares (tools/eclipse): making
+meshes from boxes, prisms, tubes and fans; material slots by the card's
+names; one atlas for the whole piece (UVs projected, averaged to one texel
+density, packed with identical islands merged); the baked ambient occlusion
+and the region map the atlas painter reads; the glTF and the .blend; and the
+piece's faces for the geometry gate.
+
+Runs inside Blender (bpy, bmesh, numpy). Blender is Z up; the card's metres
+are Blender's, with the stair's run along +Y. The glTF is exported Y up.
+"""
+
+import json
+import math
+import os
+import sys
+from pathlib import Path
+
+import bmesh
+import bpy
+import numpy as np
+from mathutils import Vector
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+OUT = ROOT / "assets" / "eclipse" / "lab"
+# The .blend and the maps the atlas painter reads: kept from Godot (.gdignore).
+SOURCE = ROOT / "assets" / "eclipse" / "source"
+
+sys.path.insert(0, str(HERE))
+
+import gate  # noqa: E402
+
+# Viewport colours for the joint renders, by slot (not the game's look).
+SHOW = {
+    "iron": (0.08, 0.14, 0.10), "brass": (0.55, 0.40, 0.14), "glass": (0.6, 0.75, 0.8),
+    "tile_line2": (0.2, 0.3, 0.55), "stone_step": (0.5, 0.5, 0.52), "sign": (0.45, 0.45, 0.45),
+    "tezontle": (0.42, 0.14, 0.11), "chiluca": (0.58, 0.57, 0.6), "lime": (0.85, 0.82, 0.72),
+    "steel": (0.3, 0.3, 0.33), "wood_door": (0.3, 0.17, 0.1), "tile_floor": (0.45, 0.4, 0.3),
+}
+MARGIN = 0.006
+# Slots drawn by their own material, not the atlas: no room in it for them.
+ATLAS_FREE = ("glass",)
+
+
+# Scene
+
+def reset():
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+
+
+def slot(name):
+    """The material for a card slot, made once."""
+    material = bpy.data.materials.get(name)
+
+    if material is None:
+        material = bpy.data.materials.new(name)
+        material.diffuse_color = (*SHOW.get(name, (0.5, 0.5, 0.5)), 1.0)
+
+    return material
+
+
+class Mesh:
+    """A piece's object being built: faces added with their slot."""
+
+    def __init__(self, name):
+        self.name = name
+        self.bm = bmesh.new()
+        self.slots = []
+        self.smooth = False
+
+    def _index(self, slot_name):
+        if slot_name not in self.slots:
+            self.slots.append(slot_name)
+
+        return self.slots.index(slot_name)
+
+    def face(self, points, slot_name):
+        verts = [self.bm.verts.new(p) for p in points]
+        f = self.bm.faces.new(verts)
+        f.material_index = self._index(slot_name)
+        return f
+
+    def box(self, lo, hi, slot_name, skip=()):
+        """An axis-aligned box from corner lo to hi; `skip` names faces left
+        out (hidden against another piece): -x +x -y +y -z +z."""
+        x0, y0, z0 = lo
+        x1, y1, z1 = hi
+        quads = {
+            "-x": [(x0, y0, z0), (x0, y0, z1), (x0, y1, z1), (x0, y1, z0)],
+            "+x": [(x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)],
+            "-y": [(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)],
+            "+y": [(x0, y1, z0), (x0, y1, z1), (x1, y1, z1), (x1, y1, z0)],
+            "-z": [(x0, y0, z0), (x0, y1, z0), (x1, y1, z0), (x1, y0, z0)],
+            "+z": [(x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)],
+        }
+
+        for key, quad in quads.items():
+            if key not in skip:
+                self.face(quad, slot_name)
+
+    def prism(self, outline, z0, z1, slot_name, caps=(True, True)):
+        """A flat outline (x, y, counter-clockwise from above) stood up from
+        z0 to z1: its walls, and its caps unless left out."""
+        n = len(outline)
+
+        for i in range(n):
+            (ax, ay), (bx, by) = outline[i], outline[(i + 1) % n]
+            self.face([(ax, ay, z0), (bx, by, z0), (bx, by, z1), (ax, ay, z1)], slot_name)
+
+        if caps[0]:
+            self.face([(x, y, z0) for x, y in reversed(outline)], slot_name)
+
+        if caps[1]:
+            self.face([(x, y, z1) for x, y in outline], slot_name)
+
+    def tube(self, a, b, radius, sides, slot_name, caps=(False, True), twist=0.0):
+        """A prism of `sides` round the line a-b, open at its ends unless capped."""
+        a, b = Vector(a), Vector(b)
+        axis = (b - a).normalized()
+        side = axis.orthogonal().normalized()
+        up = axis.cross(side)
+        rings = []
+
+        for end in (a, b):
+            ring = []
+
+            for i in range(sides):
+                t = twist + 2 * math.pi * i / sides
+                ring.append(end + (side * math.cos(t) + up * math.sin(t)) * radius)
+
+            rings.append(ring)
+
+        for i in range(sides):
+            j = (i + 1) % sides
+            self.face([rings[0][i], rings[0][j], rings[1][j], rings[1][i]], slot_name)
+
+        if caps[0]:
+            self.face(list(reversed(rings[0])), slot_name)
+
+        if caps[1]:
+            self.face(rings[1], slot_name)
+
+    def bar(self, a, b, width, height, slot_name, caps=(False, False)):
+        """A rectangular bar along a-b, `width` across and `height` up."""
+        a, b = Vector(a), Vector(b)
+        axis = (b - a).normalized()
+        across = axis.cross(Vector((0, 0, 1)))
+
+        if across.length < 1e-6:
+            across = Vector((1, 0, 0))
+
+        across.normalize()
+        # (across, up, axis) right-handed, so the faces wind outward.
+        up = axis.cross(across).normalized()
+        w, h = across * (width / 2), up * (height / 2)
+        ring = lambda p: [p - w - h, p + w - h, p + w + h, p - w + h]
+        ra, rb = ring(a), ring(b)
+
+        for i in range(4):
+            j = (i + 1) % 4
+            self.face([ra[i], ra[j], rb[j], rb[i]], slot_name)
+
+        if caps[0]:
+            self.face(list(reversed(ra)), slot_name)
+
+        if caps[1]:
+            self.face(rb, slot_name)
+
+    def sphere(self, centre, radius, rings, segments, slot_name):
+        c = Vector(centre)
+        pts = [[c + Vector((math.sin(math.pi * r / rings) * math.cos(2 * math.pi * s / segments),
+                            math.sin(math.pi * r / rings) * math.sin(2 * math.pi * s / segments),
+                            math.cos(math.pi * r / rings))) * radius
+                for s in range(segments)] for r in range(rings + 1)]
+
+        for r in range(rings):
+            for s in range(segments):
+                t = (s + 1) % segments
+
+                if r == 0:
+                    self.face([pts[0][0], pts[1][s], pts[1][t]], slot_name)
+                elif r == rings - 1:
+                    self.face([pts[r][s], pts[r + 1][0], pts[r][t]], slot_name)
+                else:
+                    self.face([pts[r][s], pts[r + 1][s], pts[r + 1][t], pts[r][t]], slot_name)
+
+        self.smooth = True
+
+    def make(self):
+        """The object, its faces welded where they share corners."""
+        bmesh.ops.remove_doubles(self.bm, verts=self.bm.verts, dist=1e-5)
+        mesh = bpy.data.meshes.new(self.name)
+        self.bm.to_mesh(mesh)
+        self.bm.free()
+
+        for name in self.slots:
+            mesh.materials.append(slot(name))
+
+        for poly in mesh.polygons:
+            poly.use_smooth = self.smooth
+
+        obj = bpy.data.objects.new(self.name, mesh)
+        bpy.context.scene.collection.objects.link(obj)
+        return obj
+
+
+def mirror_faces(obj, select):
+    """Copies of the faces `select` picks, mirrored across x = 0 and turned to
+    face the other way, their UVs kept (a wall and its mirror share one
+    island)."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    chosen = [f for f in bm.faces if select(f)]
+    made = bmesh.ops.duplicate(bm, geom=chosen)["geom"]
+    verts = [g for g in made if isinstance(g, bmesh.types.BMVert)]
+    faces = [g for g in made if isinstance(g, bmesh.types.BMFace)]
+
+    for v in verts:
+        v.co.x = -v.co.x
+
+    bmesh.ops.reverse_faces(bm, faces=faces)
+    bm.to_mesh(obj.data)
+    bm.free()
+
+
+def repeat_faces(obj, offsets):
+    """Copies of all of `obj`'s faces at each offset, their UVs kept (so
+    identical pieces, a stair's steps, share one island of the atlas)."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    original = bm.faces[:]
+
+    for offset in offsets:
+        made = bmesh.ops.duplicate(bm, geom=original)["geom"]
+        bmesh.ops.translate(bm, verts=[g for g in made if isinstance(g, bmesh.types.BMVert)], vec=offset)
+
+    bm.to_mesh(obj.data)
+    bm.free()
+
+
+# The atlas
+
+def meshes():
+    return [o for o in bpy.context.scene.objects if o.type == "MESH"]
+
+
+def _edit_all(objects):
+    bpy.ops.object.mode_set(mode="OBJECT") if bpy.context.object and bpy.context.object.mode != "OBJECT" else None
+    bpy.ops.object.select_all(action="DESELECT")
+
+    for o in objects:
+        o.select_set(True)
+
+    bpy.context.view_layer.objects.active = objects[0]
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+
+
+def unwrap(objects):
+    """Each object's UVs projected by angle into islands at one scale (the
+    same metres per UV unit everywhere). Run before repeat_faces."""
+    _edit_all(objects)
+    bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.0, scale_to_bounds=False,
+                             correct_aspect=True)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def _uv_area(mesh):
+    uv = mesh.uv_layers.active.data
+    total = 0.0
+
+    for poly in mesh.polygons:
+        pts = [Vector(uv[i].uv) for i in poly.loop_indices]
+        total += sum(abs((pts[k] - pts[0]).cross(pts[k + 1] - pts[0])) / 2 for k in range(1, len(pts) - 1))
+
+    return total
+
+
+def _free(o):
+    """Wholly of slots that draw without the atlas (glass)."""
+    return all(m.name in ATLAS_FREE for m in o.data.materials)
+
+
+def to_metres(objects):
+    """Each object's UVs scaled to one UV unit a metre (smart_project fits
+    each object to the square on its own, so their scales differ); objects
+    that draw without the atlas shrunk to a speck of it."""
+    for o in objects:
+        mesh = o.data
+        uv_area = _uv_area(mesh)
+        world = sum(p.area for p in mesh.polygons)
+
+        if uv_area > 0:
+            k = 0.002 if _free(o) else math.sqrt(world / uv_area)
+
+            for loop in mesh.uv_layers.active.data:
+                loop.uv = (loop.uv[0] * k, loop.uv[1] * k)
+
+
+def pack(objects):
+    """All islands packed into one atlas, the same texel density everywhere,
+    identical islands (a stair's steps) merged into one."""
+    _edit_all(objects)
+    bpy.ops.uv.select_all(action="SELECT")
+    bpy.ops.uv.pack_islands(rotate=True, scale=True, merge_overlap=True, margin_method="FRACTION",
+                            margin=MARGIN, shape_method="CONCAVE")
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def density(objects, atlas_px):
+    """Atlas pixels per metre: the UV length of each edge over its length in
+    the world, the median over every edge longer than 10 cm."""
+    ratios = []
+
+    for o in [o for o in objects if not _free(o)]:
+        mesh = o.data
+        uv = mesh.uv_layers.active.data
+
+        for poly in mesh.polygons:
+            loops = list(poly.loop_indices)
+
+            for k in range(len(loops)):
+                a, b = loops[k], loops[(k + 1) % len(loops)]
+                va = o.matrix_world @ mesh.vertices[mesh.loops[a].vertex_index].co
+                vb = o.matrix_world @ mesh.vertices[mesh.loops[b].vertex_index].co
+                world = (va - vb).length
+
+                if world > 0.1:
+                    ratios.append((Vector(uv[a].uv) - Vector(uv[b].uv)).length * atlas_px / world)
+
+    return float(np.median(ratios)) if ratios else 0.0
+
+
+def _image(name, px, colour):
+    image = bpy.data.images.get(name) or bpy.data.images.new(name, px, px, alpha=False)
+    image.generated_color = colour
+    return image
+
+
+def bake_ao(objects, name, px, skip_slots=("glass",)):
+    """Ambient occlusion baked into the atlas (Cycles), white where open.
+    Objects wholly of a skipped slot neither take it nor cast it."""
+    scene = bpy.context.scene
+    scene.render.engine = "CYCLES"
+    scene.cycles.samples = 64
+    scene.cycles.device = "CPU"
+
+    if scene.world is None:
+        scene.world = bpy.data.worlds.new("lab")
+
+    scene.world.light_settings.distance = 1.0
+    image = _image(name + "_ao", px, (1, 1, 1, 1))
+    takers = []
+
+    for o in objects:
+        only_skipped = all(m.name in skip_slots for m in o.data.materials)
+        o.hide_render = only_skipped
+
+        if not only_skipped:
+            takers.append(o)
+
+    for m in {m for o in takers for m in o.data.materials}:
+        m.use_nodes = True
+        node = m.node_tree.nodes.get("bake") or m.node_tree.nodes.new("ShaderNodeTexImage")
+        node.name = "bake"
+        node.image = image
+        m.node_tree.nodes.active = node
+
+    bpy.ops.object.select_all(action="DESELECT")
+
+    for o in takers:
+        o.select_set(True)
+
+    bpy.context.view_layer.objects.active = takers[0]
+    bpy.ops.object.bake(type="AO", margin=4, use_clear=True)
+
+    for o in objects:
+        o.hide_render = False
+
+    for m in {m for o in takers for m in o.data.materials}:
+        m.node_tree.nodes.remove(m.node_tree.nodes["bake"])
+
+    return image
+
+
+def _fill_triangle(grid, a, b, c, value):
+    """Every texel whose centre is inside the UV triangle abc set to value."""
+    px = grid.shape[0]
+    pts = np.array([a, b, c]) * px - 0.5
+    lo = np.floor(pts.min(axis=0)).astype(int).clip(0, px - 1)
+    hi = np.ceil(pts.max(axis=0)).astype(int).clip(0, px - 1)
+    xs, ys = np.meshgrid(np.arange(lo[0], hi[0] + 1), np.arange(lo[1], hi[1] + 1))
+    (ax, ay), (bx, by), (cx, cy) = pts
+    d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+
+    if abs(d) < 1e-12:
+        return
+
+    l1 = ((by - cy) * (xs - cx) + (cx - bx) * (ys - cy)) / d
+    l2 = ((cy - ay) * (xs - cx) + (ax - cx) * (ys - cy)) / d
+    inside = (l1 >= -1e-3) & (l2 >= -1e-3) & (1 - l1 - l2 >= -1e-3)
+    grid[ys[inside], xs[inside]] = value
+
+
+def regions(objects, slots, px):
+    """The region map: each texel the index of the slot drawn there (+1;
+    0 where nothing is), grown by two texels so the painter's margins match
+    the bake's. Row 0 is the atlas's bottom (V = 0)."""
+    grid = np.zeros((px, px), dtype=np.int32)
+
+    for o in objects:
+        mesh = o.data
+        uv = mesh.uv_layers.active.data
+
+        for poly in mesh.polygons:
+            value = slots.index(mesh.materials[poly.material_index].name) + 1
+            loops = list(poly.loop_indices)
+
+            for k in range(1, len(loops) - 1):
+                _fill_triangle(grid, uv[loops[0]].uv, uv[loops[k]].uv, uv[loops[k + 1]].uv, value)
+
+    for _ in range(2):
+        grown = grid.copy()
+
+        for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+            shifted = np.roll(grid, (dy, dx), axis=(0, 1))
+            grown = np.where(grown == 0, shifted, grown)
+
+        grid = grown
+
+    return grid
+
+
+def _save_png(path, rgba, px):
+    image = bpy.data.images.new(path.stem, px, px, alpha=True)
+    image.pixels.foreach_set(rgba.astype(np.float32).ravel())
+    image.filepath_raw = str(path)
+    image.file_format = "PNG"
+    image.save()
+    bpy.data.images.remove(image)
+
+
+def dump_faces(objects):
+    """Every face in the world, as overlap.py takes them; the triangle count
+    and every UV, for the gate."""
+    faces, uvs, tris = [], [], 0
+
+    for o in objects:
+        mesh = o.data
+        uv = mesh.uv_layers.active.data if mesh.uv_layers.active else None
+
+        for poly in mesh.polygons:
+            points = [tuple(o.matrix_world @ mesh.vertices[v].co) for v in poly.vertices]
+            normal = tuple((o.matrix_world.to_3x3() @ poly.normal).normalized())
+            faces.append({"owner": o.name, "normal": normal, "points": points})
+            tris += len(poly.vertices) - 2
+
+            if uv is not None:
+                uvs.extend(tuple(uv[i].uv) for i in poly.loop_indices)
+
+    return faces, tris, uvs
+
+
+def export_piece(name, atlas_px, slots, merge=None):
+    """The piece's atlas made (unwrap, any repeats, pack), its AO and region
+    maps, glTF and .blend written; then the gate. `merge` is a function run
+    between unwrap and pack (repeat_faces for identical parts). Exits
+    non-zero if the gate finds a problem."""
+    OUT.mkdir(parents=True, exist_ok=True)
+    SOURCE.mkdir(parents=True, exist_ok=True)
+    (SOURCE / ".gdignore").touch()
+    objects = meshes()
+    unwrap(objects)
+    to_metres(objects)
+
+    if merge is not None:
+        merge()
+
+    pack(objects)
+    px_per_m = density(objects, atlas_px)
+
+    ao = bake_ao(objects, name, atlas_px)
+    ao.filepath_raw = str(SOURCE / (name + "_ao.png"))
+    ao.file_format = "PNG"
+    ao.save()
+
+    grid = regions(objects, slots, atlas_px)
+    rgba = np.zeros((atlas_px, atlas_px, 4))
+    rgba[..., 0] = np.where(grid > 0, (grid - 1) * 16, 0) / 255.0
+    rgba[..., 3] = np.where(grid > 0, 1.0, 0.0)
+    _save_png(SOURCE / (name + "_regions.png"), rgba, atlas_px)
+    (SOURCE / (name + "_regions.json")).write_text(json.dumps({"slots": slots, "atlas_px": atlas_px,
+                                                            "px_per_m": round(px_per_m, 2)}, indent=1))
+
+    bpy.ops.export_scene.gltf(filepath=str(OUT / (name + ".glb")), export_format="GLB", export_yup=True,
+                              export_materials="EXPORT", export_texcoords=True, export_normals=True,
+                              use_selection=False)
+    bpy.context.preferences.filepaths.save_version = 0   # no .blend1 beside it
+    bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / (name + ".blend")))
+
+    faces, tris, uvs = dump_faces(objects)
+    problems = gate.check(faces, tris, uvs)
+
+    for p in problems:
+        print("%s: %s" % (name, p))
+
+    if problems:
+        sys.exit(1)
+
+    print("%s: clean, %d tris, %.1f px/m" % (name, tris, px_per_m))
+    return tris, px_per_m

@@ -1,0 +1,12 @@
+{
+ "slots": [
+  "iron",
+  "brass",
+  "glass",
+  "tile_line2",
+  "stone_step",
+  "sign"
+ ],
+ "atlas_px": 512,
+ "px_per_m": 49.94
+}
