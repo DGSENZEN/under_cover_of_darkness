@@ -24,7 +24,11 @@ OUT = "/tmp/eclipse-joints"
 
 def main():
     piece = sys.argv[sys.argv.index("--") + 1]
-    joints = importlib.import_module(piece).JOINTS
+    module = importlib.import_module(piece)
+    joints = module.JOINTS
+    # Alternatives for one place are never seen together: a joint shows the
+    # objects not hidden by default, or the ones its third entry names hidden.
+    hidden_by_default = set(getattr(module, "HIDDEN", ()))
     bpy.ops.wm.open_mainfile(filepath=str(common.SOURCE / (piece + ".blend")))
     scene = bpy.context.scene
 
@@ -60,7 +64,24 @@ def main():
     scene.camera = camera
     os.makedirs(OUT, exist_ok=True)
 
-    for name, (eye, target) in joints.items():
+    for name, view in joints.items():
+        eye, target = view[0], view[1]
+        hidden = set(view[2]) if len(view) > 2 else hidden_by_default
+
+        for o in [o for o in scene.objects if o.name.startswith("copy_")]:
+            bpy.data.objects.remove(o)
+
+        for o in scene.objects:
+            if o.type == "MESH":
+                o.hide_render = o.name in hidden
+
+        # A fourth entry places a copy of what is shown that far along (a bay's neighbour).
+        if len(view) > 3:
+            for o in [o for o in scene.objects if o.type == "MESH" and not o.hide_render]:
+                copy = bpy.data.objects.new("copy_" + o.name, o.data)
+                copy.location = Vector(view[3])
+                scene.collection.objects.link(copy)
+
         camera.location = Vector(eye)
         camera.rotation_euler = (Vector(target) - Vector(eye)).to_track_quat("-Z", "Y").to_euler()
         scene.render.filepath = os.path.join(OUT, "%s_%s.png" % (piece, name))

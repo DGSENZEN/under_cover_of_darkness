@@ -1,0 +1,14 @@
+{
+ "slots": [
+  "tezontle",
+  "chiluca",
+  "lime",
+  "steel",
+  "iron",
+  "brass",
+  "wood_door",
+  "tile_floor"
+ ],
+ "atlas_px": 768,
+ "px_per_m": 54.35
+}

@@ -204,10 +204,10 @@ class Mesh:
         return obj
 
 
-def mirror_faces(obj, select):
-    """Copies of the faces `select` picks, mirrored across x = 0 and turned to
-    face the other way, their UVs kept (a wall and its mirror share one
-    island)."""
+def mirror_faces(obj, select, about=0.0):
+    """Copies of the faces `select` picks, mirrored across x = `about` and
+    turned to face the other way, their UVs kept (a wall and its mirror share
+    one island)."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     chosen = [f for f in bm.faces if select(f)]
@@ -216,11 +216,29 @@ def mirror_faces(obj, select):
     faces = [g for g in made if isinstance(g, bmesh.types.BMFace)]
 
     for v in verts:
-        v.co.x = -v.co.x
+        v.co.x = 2 * about - v.co.x
 
     bmesh.ops.reverse_faces(bm, faces=faces)
     bm.to_mesh(obj.data)
     bm.free()
+
+
+def turned_copy(obj, name):
+    """A new object of `obj`'s faces facing the other way, its UVs kept (the
+    same island: a run's start caps are its end caps turned round)."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+
+    for m in obj.data.materials:
+        mesh.materials.append(m)
+
+    copy = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(copy)
+    return copy
 
 
 def repeat_faces(obj, offsets):
@@ -461,7 +479,7 @@ def dump_faces(objects):
     return faces, tris, uvs
 
 
-def export_piece(name, atlas_px, slots, merge=None):
+def export_piece(name, atlas_px, slots, merge=None, gate_sets=None):
     """The piece's atlas made (unwrap, any repeats, pack), its AO and region
     maps, glTF and .blend written; then the gate. `merge` is a function run
     between unwrap and pack (repeat_faces for identical parts). Exits
@@ -475,6 +493,7 @@ def export_piece(name, atlas_px, slots, merge=None):
 
     if merge is not None:
         merge()
+        objects = meshes()
 
     pack(objects)
     px_per_m = density(objects, atlas_px)
@@ -498,8 +517,15 @@ def export_piece(name, atlas_px, slots, merge=None):
     bpy.context.preferences.filepaths.save_version = 0   # no .blend1 beside it
     bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / (name + ".blend")))
 
-    faces, tris, uvs = dump_faces(objects)
-    problems = gate.check(faces, tris, uvs)
+    # Alternatives for one place (a stone or a steel column) are never seen
+    # together: each set that can be is gated on its own.
+    problems = []
+    tris = 0
+
+    for names in gate_sets or [[o.name for o in objects]]:
+        faces, set_tris, uvs = dump_faces([o for o in objects if o.name in names])
+        problems += [p for p in gate.check(faces, set_tris, uvs) if p not in problems]
+        tris = max(tris, set_tris)
 
     for p in problems:
         print("%s: %s" % (name, p))

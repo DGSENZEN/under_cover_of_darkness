@@ -13,7 +13,7 @@ BLENDER=${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}
 GODOT=${GODOT:-/Users/tinkertailorr/Desktop/Godot.app/Contents/MacOS/Godot}
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-PIECES="kiosk"
+PIECES="kiosk arcade_bay"
 
 piece() {
   "$BLENDER" -b --factory-startup --python "$HERE/$1.py" 2>&1 | grep -E "^$1:|Error|Traceback|line [0-9]+" || true
