@@ -19,6 +19,21 @@ uniform float stroke_scale = 0.75;
 uniform float roughness : hint_range(0.0, 1.0) = 0.9;
 uniform float specular : hint_range(0.0, 1.0) = 0.3;
 
+// Linear RGB to Oklab (Björn Ottosson): equal steps look equal, so the
+// nearest palette colour is the one that looks nearest.
+vec3 oklab(vec3 c) {
+	c = max(c, vec3(0.0));
+	vec3 lms = vec3(
+		0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b,
+		0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b,
+		0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b);
+	lms = pow(lms, vec3(1.0 / 3.0));
+	return vec3(
+		0.2104542553 * lms.x + 0.7936177850 * lms.y - 0.0040720468 * lms.z,
+		1.9779984951 * lms.x - 2.4285922050 * lms.y + 0.4505937099 * lms.z,
+		0.0259040371 * lms.x + 0.7827717662 * lms.y - 0.8086757660 * lms.z);
+}
+
 varying vec3 world_pos;
 varying vec3 world_normal;
 
@@ -38,13 +53,15 @@ void fragment() {
 		+ texture(brush, world_pos.xy / stroke_scale).r * w.z;
 	vec3 pushed = base + (s - 0.5) * stroke_strength;
 
-	// The nearest of the palette's colours.
+	// The nearest of the palette's colours, as the eye judges it (Oklab).
+	vec3 want = oklab(pushed);
 	vec3 best = texelFetch(palette, ivec2(0, 0), 0).rgb;
 	float d = 1e9;
 
 	for (int i = 0; i < 16; i++) {
 		vec3 c = texelFetch(palette, ivec2(i, 0), 0).rgb;
-		float e = dot(pushed - c, pushed - c);
+		vec3 gap = oklab(c) - want;
+		float e = dot(gap, gap);
 
 		if (e < d) {
 			d = e;

@@ -40,6 +40,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
+import kuwahara
+import scan_prep
+
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "assets" / "eclipse" / "source"
 OUT = ROOT / "textures" / "painted" / "eclipse"
@@ -56,6 +59,18 @@ AO_FLOOR = 0.35
 EMPTY = (128, 128, 128)
 # How steep the relief's slopes come out in the normal map.
 STEEPNESS = 2.5
+# The painterly brief (docs/superpowers/refs/mexico_city/painterly_texturing.md):
+# values in a few bands, ramps that cool into shadow and warm into light, the
+# scan's fine detail laid back over the bands, one light Kuwahara to fuse it
+# all, then each slot cut to a few colours of its own (in Oklab, no dither).
+BANDS = 5
+COOL_HUE, COOL_TURN, COOL_PUSH = 264.0, 20.0, 0.025
+WARM_HUE, WARM_TURN, WARM_PUSH = 80.0, 15.0, 0.015
+DETAIL = 0.35
+DETAIL_SIGMA = 6.0
+FUSE_RADIUS = 2
+FUSE_TILE = 512
+SLOT_COLOURS = 10
 UP = np.array([0.0, 0.0, 1.0])
 NORTH = np.array([0.0, 1.0, 0.0])
 
@@ -205,7 +220,7 @@ def _scan(scans_dir, name):
 def _project(texels, big, scan, tu, tv):
     """A scan laid on the texels by world position: its colour, and its
     normals turned into each island's own UV frame (x along +U, y along +V)."""
-    colour, normal, size = scan
+    colour, normal, size = scan       # scan_prep.prepare: colour 0-1, normals -1..1, metres
     a_axis, b_axis, n_axis, a, b = _frame(texels)
     up = lambda m: _up(m, big, smooth=True)
     u, v = up(a) / size[0], up(b) / size[1]
@@ -266,9 +281,110 @@ def _normals(height, px, base=None):
     return ((small * 0.5 + 0.5) * 255).round().astype(np.uint8)
 
 
-def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None, scans_dir=SCANS):
+# Oklab (Björn Ottosson, 2020): lightness and two opponent axes, where equal
+# steps look equal.
+
+_M1 = np.array([[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566],
+                [0.0883024619, 0.2817188376, 0.6299787005]])
+_M2 = np.array([[0.2104542553, 0.7936177850, -0.0040720468], [1.9779984951, -2.4285922050, 0.4505937099],
+                [0.0259040371, 0.7827717662, -0.8086757660]])
+
+
+def to_oklab(rgb):
+    """sRGB 0-1 to Oklab."""
+    linear = np.where(rgb <= 0.04045, rgb / 12.92, ((np.clip(rgb, 0, None) + 0.055) / 1.055) ** 2.4)
+    return np.cbrt(linear @ _M1.T) @ _M2.T
+
+
+def from_oklab(lab):
+    """Oklab to sRGB 0-1."""
+    linear = np.clip((lab @ np.linalg.inv(_M2).T) ** 3 @ np.linalg.inv(_M1).T, 0.0, 1.0)
+    return np.where(linear <= 0.0031308, linear * 12.92, 1.055 * linear ** (1 / 2.4) - 0.055)
+
+
+def _turned(lab, hue, degrees, push):
+    """Colours turned up to `degrees` toward a hue and nudged toward it by
+    `push` of chroma (a grey takes the nudge; a colour takes both)."""
+    a, b = lab[..., 1], lab[..., 2]
+    own = np.arctan2(b, a)
+    gap = (np.radians(hue) - own + np.pi) % (2 * np.pi) - np.pi
+    turn = np.clip(gap, -np.radians(degrees), np.radians(degrees))
+    c, s = np.cos(turn), np.sin(turn)
+    out = lab.copy()
+    out[..., 1] = a * c - b * s + push * math.cos(math.radians(hue))
+    out[..., 2] = a * s + b * c + push * math.sin(math.radians(hue))
+    return out
+
+
+def _ramp(value, base_lab, dark_lab, light_lab):
+    """A value (0 dark, 0.5 the base, 1 light) on the slot's ramp: dark to
+    base to light in Oklab, the shadow end turned cool, the light end warm."""
+    t = value[..., None]
+    cool = _turned(dark_lab, COOL_HUE, COOL_TURN, COOL_PUSH)
+    warm = _turned(light_lab, WARM_HUE, WARM_TURN, WARM_PUSH)
+    below = cool + (base_lab - cool) * np.clip(t * 2, 0, 1)
+    above = base_lab + (warm - base_lab) * np.clip(t * 2 - 1, 0, 1)
+    return np.where(t < 0.5, below, above)
+
+
+def _fuse(canvas):
+    """One light anisotropic Kuwahara over the whole drawing, in tiles."""
+    out = canvas.copy()
+    reach = FUSE_RADIUS * 2 + 2
+    h, w = canvas.shape[:2]
+
+    for y in range(0, h, FUSE_TILE):
+        for x in range(0, w, FUSE_TILE):
+            ys = np.arange(y - reach, min(h, y + FUSE_TILE) + reach) % h
+            xs = np.arange(x - reach, min(w, x + FUSE_TILE) + reach) % w
+            tile = kuwahara.anisotropic(canvas[np.ix_(ys, xs)], FUSE_RADIUS)
+            out[y:y + FUSE_TILE, x:x + FUSE_TILE] = tile[reach:reach + min(FUSE_TILE, h - y), reach:reach + min(FUSE_TILE, w - x)]
+
+    return out
+
+
+def _kmeans(lab, k, rounds=10):
+    """`lab` (n x 3) cut to k colours: their centres, and each one's centre."""
+    order = np.argsort(lab[:, 0], kind="stable")
+    centres = lab[order[np.linspace(0, len(lab) - 1, k).astype(int)]].copy()
+
+    for _ in range(rounds):
+        nearest = np.argmin(((lab[:, None, :] - centres[None]) ** 2).sum(-1), axis=1)
+
+        for j in range(k):
+            if np.any(nearest == j):
+                centres[j] = lab[nearest == j].mean(axis=0)
+
+    return centres, np.argmin(((lab[:, None, :] - centres[None]) ** 2).sum(-1), axis=1)
+
+
+def _despeckle(lab, cells, rounds=2):
+    """A texel unlike all four of its neighbours (in its slot) takes the
+    colour most of them share: marks are shapes, not grain."""
+    for _ in range(rounds):
+        changed = False
+        neighbours = [np.roll(lab, (dy, dx), axis=(0, 1)) for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0))]
+        inside = [np.roll(cells, (dy, dx), axis=(0, 1)) for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0))]
+        same = [np.all(np.abs(n - lab) < 1e-9, axis=-1) | ~c for n, c in zip(neighbours, inside)]
+        alone = cells & ~np.logical_or.reduce(same)
+
+        for y, x in zip(*np.nonzero(alone)):
+            seen = [tuple(np.round(n[y, x], 9)) for n, c in zip(neighbours, inside) if c[y, x]]
+
+            if seen:
+                lab[y, x] = max(set(seen), key=seen.count)
+                changed = True
+
+        if not changed:
+            break
+
+    return lab
+
+
+def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None, scans_dir=SCANS, prep=None):
     """The piece's atlas painted to out_dir/<piece>_base.png and its normal
-    map to <piece>_normal_base.png; the atlas's path."""
+    map to <piece>_normal_base.png; the atlas's path. `prep` overrides the
+    scans' preparation (scan_prep.prepare's settings)."""
     source_dir, out_dir = Path(source_dir), Path(out_dir)
     meta = json.loads((source_dir / (piece + "_regions.json")).read_text())
     slots, px = meta["slots"], meta["atlas_px"]
@@ -281,18 +397,21 @@ def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None, scans_dir=S
 
     index = texels["slot"].astype(np.int32)
     filled = index >= 0
-    ao = _grey(source_dir / (piece + "_ao.png"), px)
+    ao = _up(_grey(source_dir / (piece + "_ao.png"), px), big, smooth=True)
     height = texels["position"][..., 2].astype(np.float64)
     angle = _upright(texels)
+    wear_map = _up(texels.get("wear", np.zeros((px, px))).astype(np.float64), big, smooth=True)
+    cavity = _up(texels.get("cavity", np.zeros((px, px))).astype(np.float64), big, smooth=True)
+    damp = _up(np.clip(1.0 - height / DAMP, 0.0, 1.0), big, smooth=True)
+    height_big = _up(height, big, smooth=True)
+    stain = 0.6 + 0.4 * _noise(big, rng)
+    # Wear tells its story in a few places: every convex edge a little, those a lot.
+    story = 0.35 + 0.65 * np.clip((_noise(big, rng, 6) - 0.45) * 3.0, 0.0, 1.0)
 
     canvas = np.zeros((big, big, 3))
     relief = np.zeros((big, big))
     scan_normals = np.dstack([np.zeros((big, big)), np.zeros((big, big)), np.ones((big, big))])
     scans = {}
-    grime = np.zeros((big, big))
-    damp = _up(np.clip(1.0 - height / DAMP, 0.0, 1.0), big, smooth=True)
-    height_big = _up(height, big, smooth=True)
-    stain = 0.6 + 0.4 * _noise(big, rng)
 
     for i, slot_name in enumerate(slots):
         mask = index == i
@@ -303,68 +422,96 @@ def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None, scans_dir=S
         recipe = recipes[slot_name]
         shape = recipe.get("relief", {})
         mask_big = _up(mask.astype(np.float64), big) > 0.5
-        base, light, dark = _rgb(recipe["base"]), _rgb(recipe["light"]), _rgb(recipe["dark"])
-        base_map = np.broadcast_to(base, (big, big, 3)).copy()
+        base_rgb = np.broadcast_to(_rgb(recipe["base"]) / 255.0, (big, big, 3)).copy()
 
         if "band" in recipe:   # a stripe at a world height (the Metro's line-colour band)
             band = recipe["band"]
-            base_map[(height_big >= band["from"]) & (height_big <= band["to"])] = _rgb(band["colour"])
+            base_rgb[(height_big >= band["from"]) & (height_big <= band["to"])] = _rgb(band["colour"]) / 255.0
 
-        if "scan" in recipe:   # the photo under the paint: its detail, pulled toward the slot's colours
+        base_lab = to_oklab(base_rgb)
+        dark_lab = base_lab + (to_oklab(_rgb(recipe["dark"]) / 255.0) - to_oklab(_rgb(recipe["base"]) / 255.0))
+        light_lab = base_lab + (to_oklab(_rgb(recipe["light"]) / 255.0) - to_oklab(_rgb(recipe["base"]) / 255.0))
+
+        # The value: the scan's own light and dark round the slot's middle...
+        value = np.full((big, big), 0.5)
+        detail = np.zeros((big, big))
+        photo = None
+
+        if "scan" in recipe:
             spec = recipe["scan"]
 
             if spec["name"] not in scans:
-                scans[spec["name"]] = _project(texels, big, _scan(scans_dir, spec["name"]),
-                                               texels["tangent_u"], texels["tangent_v"])
+                prepared = scan_prep.prepare(spec["name"], scans_dir, **(prep or {}))
+                scans[spec["name"]] = _project(texels, big, prepared, texels["tangent_u"], texels["tangent_v"])
 
             photo, photo_normals = scans[spec["name"]]
-            luma = photo @ np.array([0.299, 0.587, 0.114])
-            mean = max(float(luma[mask_big].mean()), 1.0)
-            relative = (luma / mean) ** spec.get("contrast", 1.0)
-            tint = spec.get("tint", 0.8)
-            base_map = photo * (1 - tint) + base_map * relative[..., None] * tint
+            lightness = to_oklab(photo)[..., 0]
+            mean, spread = lightness[mask_big].mean(), max(float(lightness[mask_big].std()), 1e-3)
+            value = 0.5 + 0.18 * spec.get("contrast", 1.0) * (lightness - mean) / spread
+            detail = (lightness - kuwahara.gaussian(lightness, DETAIL_SIGMA)) * spec.get("detail", DETAIL)
             scan_normals[mask_big] = photo_normals[mask_big]
 
         area = mask.sum()
-        count = int(recipe.get("mottle", 4) * area / 64)
-        lit = _dabs(mask_big, count, rng, big, angle) * 0.6
-        shade = _dabs(mask_big, count, rng, big, angle) * 0.6
-        colour = base_map * (1 - lit - shade)[..., None] + light * lit[..., None] + dark * shade[..., None]
-        rim = _up(_rim(mask), big, smooth=True)
-        worn = rim * recipe.get("wear", 0.0) * 0.6
-        colour = colour * (1 - worn[..., None]) + light * worn[..., None]
-        bump = shape.get("brush", 0.0) * (lit - shade) - shape.get("bevel", 0.0) * rim ** 2
+        count = int(recipe.get("mottle", 0) * area / 64)
+
+        if count:
+            value += 0.15 * (_dabs(mask_big, count, rng, big, angle) - _dabs(mask_big, count, rng, big, angle))
+
+        # ...shaded by what the place did to it: occlusion and cavities darken,
+        # damp rises from the street, wear lifts the convex edges it reached.
+        worn = wear_map * story * recipe.get("wear", 0.0)
+        value = (value - 0.35 * (1.0 - ao) - 0.25 * cavity - 0.4 * recipe.get("grime", 0.0) * damp * stain
+                 + 0.45 * worn)
+
+        # Big shapes first: a few value bands, each a colour off the ramp.
+        bands = recipe.get("bands", BANDS)
+        banded = (np.floor(np.clip(value, 0.0, 0.999) * bands) + 0.5) / bands
+        lab = _ramp(banded, base_lab, dark_lab, light_lab)
+        lab[..., 0] += detail
+        colour = from_oklab(lab) * 255.0
+
+        if photo is not None and recipe["scan"].get("tint", 1.0) < 1.0:   # the photograph itself, in part
+            tint = recipe["scan"]["tint"]
+            colour = colour * tint + photo * 255.0 * (1 - tint)
+
+        bump = shape.get("brush", 0.0) * detail * 4.0 - shape.get("bevel", 0.0) * wear_map ** 2
 
         if shape.get("pores", 0):
             pits = _dabs(mask_big, int(shape["pores"] * area / 64), rng, big, angle, (0.6, 1.4), (0.5, 1.1), 0.35)
             bump -= pits * 0.9
-            colour = colour * (1 - 0.35 * pits[..., None]) + dark * 0.35 * pits[..., None]
 
         if "blocks" in shape:
             joints, tone = _courses(texels, shape["blocks"], big, rng)
             bump -= joints
-            # Each stone a shade of its own, toward the light or the dark.
-            toward = np.where(tone[..., None] > 0, light, dark)
-            k = np.abs(tone)[..., None] * shape["blocks"].get("tone", 0.0)
-            colour = colour * (1 - k) + toward * k
             mortar = _rgb(shape["blocks"].get("colour", recipe["light"]))
             colour = colour * (1 - joints[..., None]) + mortar * joints[..., None]
 
         canvas[mask_big] = colour[mask_big]
         relief[mask_big] = bump[mask_big]
-        grime[mask_big] = recipe.get("grime", 0.0)
 
-    canvas *= (1.0 - GRIME_DARK * grime * damp * stain)[..., None]
-    canvas *= (AO_FLOOR + (1.0 - AO_FLOOR) * _up(ao, big, smooth=True))[..., None]
     empty = ~(_up(filled.astype(np.float64), big) > 0.5)
+    canvas[empty] = EMPTY
+    canvas = _fuse(canvas / 255.0) * 255.0
     canvas[empty] = EMPTY
     relief[empty] = 0.0
 
+    # Shrunk to the atlas, then each slot cut to a few colours of its own.
+    small = np.asarray(Image.fromarray(np.clip(canvas, 0, 255).astype(np.uint8), "RGB")
+                       .resize((px, px), Image.Resampling.BOX), dtype=np.float64) / 255.0
+    lab = to_oklab(small)
+
+    for i in range(len(slots)):
+        cells = index == i
+
+        if cells.sum() > SLOT_COLOURS:
+            centres, nearest = _kmeans(lab[cells], SLOT_COLOURS)
+            lab[cells] = centres[nearest]
+            lab = _despeckle(lab, cells)
+
+    out = np.where(filled[..., None], from_oklab(lab), np.array(EMPTY) / 255.0)
     out_dir.mkdir(parents=True, exist_ok=True)
-    image = Image.fromarray(np.clip(canvas, 0, 255).astype(np.uint8), "RGB")
-    small = image.resize((px, px), Image.Resampling.BOX)
     path = out_dir / (piece + "_base.png")
-    small.quantize(colors=COLOURS, dither=Image.Dither.NONE).convert("RGB").save(path)
+    Image.fromarray(np.clip(np.round(out * 255), 0, 255).astype(np.uint8), "RGB").save(path)
     Image.fromarray(_normals(relief, px, scan_normals), "RGB").save(out_dir / (piece + "_normal_base.png"))
     return path
 

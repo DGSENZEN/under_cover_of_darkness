@@ -4,7 +4,7 @@ extends Node3D
 ## and a lab that still opens when its pieces are not built. Headless.
 
 const LAB := preload("res://maps/style_lab.tscn")
-const MIXES := {&"painted_led": 0.25, &"even": 0.5, &"shader_led": 0.85}
+const MIXES := {&"painted_led": 0.1, &"even": 0.25, &"shader_led": 0.45}
 
 var results: Array[String] = []
 

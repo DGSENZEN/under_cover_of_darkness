@@ -502,14 +502,27 @@ def texels(objects, slots, px):
     nothing is), world position, normal, and the world directions of +U and
     +V, grown by two texels so the painter's margins match the bake's. In
     image order: row 0 is the top (V = 1). For the atlas painter."""
-    grid = np.full((px, px, 13), np.nan)
+    grid = np.full((px, px, 14), np.nan)
+    edges = []   # by polygon id: [(a, b, convexity -1..1), ...] in the world
 
     for o in objects:
         mesh = o.data
         uv = mesh.uv_layers.active.data
         to_world = o.matrix_world
+        bm = bmesh.new()
+        bm.from_mesh(mesh)
+        bm.faces.ensure_lookup_table()
 
         for poly in mesh.polygons:
+            face_edges = []
+
+            for e in bm.faces[poly.index].edges:
+                bend = e.calc_face_angle_signed() if len(e.link_faces) == 2 else 0.0
+                ends = [np.array(to_world @ v.co) for v in e.verts]
+                face_edges.append((ends[0], ends[1], max(-1.0, min(1.0, bend / (math.pi / 2)))))
+
+            pid = len(edges)
+            edges.append(face_edges)
             index = slots.index(mesh.materials[poly.material_index].name)
             normal = np.array(to_world.to_3x3() @ poly.normal)
             normal /= max(np.linalg.norm(normal), 1e-9)
@@ -520,8 +533,10 @@ def texels(objects, slots, px):
             for k in range(1, len(loops) - 1):
                 tri = [0, k, k + 1]
                 tu, tv = _tangents([world[j] for j in tri], [uvs[j] for j in tri])
-                rows = [np.concatenate([[index], world[j], normal, tu, tv]) for j in tri]
+                rows = [np.concatenate([[index], world[j], normal, tu, tv, [pid]]) for j in tri]
                 _fill_triangle_vectors(grid, uvs[0], uvs[k], uvs[k + 1], rows)
+
+        bm.free()
 
     for _ in range(2):
         for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
@@ -532,8 +547,54 @@ def texels(objects, slots, px):
     empty = np.isnan(grid[..., 0])
     grid = np.nan_to_num(grid)
     slot = np.where(empty, -1, np.round(grid[..., 0])).astype(np.int16)
+    wear, cavity = _bends(grid[..., 1:4], np.where(empty, -1, np.round(grid[..., 13])).astype(np.int64), edges)
     return {"slot": slot, "position": grid[..., 1:4].astype(np.float32), "normal": grid[..., 4:7].astype(np.float32),
-            "tangent_u": grid[..., 7:10].astype(np.float32), "tangent_v": grid[..., 10:13].astype(np.float32)}
+            "tangent_u": grid[..., 7:10].astype(np.float32), "tangent_v": grid[..., 10:13].astype(np.float32),
+            "wear": wear.astype(np.float32), "cavity": cavity.astype(np.float32)}
+
+
+# How far from an edge (m) its wear and its cavity reach.
+WEAR_REACH = 0.05
+CAVITY_REACH = 0.12
+
+
+def _bends(position, poly, edges):
+    """For every texel: how near it lies to a convex edge of its own face
+    (where paint and stone wear), and to a concave one (where dirt sits),
+    each 0-1, by distance in the world along the face."""
+    wear = np.zeros(poly.shape)
+    cavity = np.zeros(poly.shape)
+    flat = poly.ravel()
+    order = np.argsort(flat, kind="stable")
+    ids, starts = np.unique(flat[order], return_index=True)
+    ends = list(starts[1:]) + [len(order)]
+
+    for pid, start, end in zip(ids, starts, ends):
+        if pid < 0:
+            continue
+
+        cells = order[start:end]
+        p = position.reshape(-1, 3)[cells]
+        near_convex = np.zeros(len(cells))
+        near_concave = np.zeros(len(cells))
+
+        for a, b, bend in edges[pid]:
+            if abs(bend) < 0.05:
+                continue
+
+            ab = b - a
+            t = np.clip(((p - a) @ ab) / max(ab @ ab, 1e-12), 0.0, 1.0)
+            d = np.linalg.norm(p - (a + t[:, None] * ab), axis=1)
+
+            if bend > 0:
+                near_convex = np.maximum(near_convex, bend * np.clip(1.0 - d / WEAR_REACH, 0.0, 1.0))
+            else:
+                near_concave = np.maximum(near_concave, -bend * np.clip(1.0 - d / CAVITY_REACH, 0.0, 1.0))
+
+        wear.ravel()[cells] = near_convex
+        cavity.ravel()[cells] = near_concave
+
+    return wear, cavity
 
 
 def _save_png(path, rgba, px):

@@ -23,6 +23,8 @@ import eclipse_atlas  # noqa: E402
 PX = 64
 WALL = 4.0
 FLAT = {"pores": 0, "brush": 0.0, "bevel": 0.0}
+# Scans prepared small and quick for the tests.
+FAST_PREP = {"px_per_m": 64, "radius": 2, "iterations": 1}
 RECIPES = {
     "tezontle": {"base": "#6e2f26", "light": "#9a4a3a", "dark": "#3d1f1c", "grime": 0.0, "wear": 0.0, "mottle": 2,
                  "relief": FLAT},
@@ -135,6 +137,64 @@ class Atlas(unittest.TestCase):
         self.assertLess(np.abs(normals[4:-4, PX // 2 + 4:-4] - np.array([128, 128, 255])).max(), 3)
 
 
+class Painting(unittest.TestCase):
+    """The painter's own manners, on the synthetic wall: a scan that ramps
+    from dark to light up each metre, so every value is there to be banded."""
+
+    def setUp(self):
+        self.base = Atlas("test_deterministic")
+        self.base.setUp()
+        self.scans = Path(tempfile.mkdtemp())
+        folder = self.scans / "ramp"
+        folder.mkdir()
+        ramp = np.repeat(np.linspace(30, 230, 64)[::-1, None], 64, axis=1)   # light at the top
+        Image.fromarray(np.dstack([ramp] * 3).astype(np.uint8), "RGB").save(folder / "diffuse.jpg", quality=98)
+        Image.new("RGB", (64, 64), (128, 128, 255)).save(folder / "normal.jpg", quality=98)
+        (folder / "info.json").write_text(json.dumps({"name": "ramp", "dimensions_mm": [1000, 1000]}))
+        self.recipes = {k: dict(v, scan={"name": "ramp", "detail": 0.0}) for k, v in RECIPES.items()}
+
+    def tearDown(self):
+        self.base.tearDown()
+        shutil.rmtree(self.scans)
+
+    def paint(self):
+        path = eclipse_atlas.paint_atlas("piece", self.base.src, self.base.out, recipes=self.recipes,
+                                         scans_dir=self.scans, prep=FAST_PREP)
+        return np.asarray(Image.open(path).convert("RGB"), dtype=np.int64)
+
+    def test_each_slot_keeps_a_few_colours(self):
+        pixels = self.paint()
+        left = {tuple(c) for c in pixels[:, : PX // 2 - 2].reshape(-1, 3)}
+        self.assertLessEqual(len(left), eclipse_atlas.SLOT_COLOURS)
+
+    def test_shadows_cool_lights_warm(self):
+        pixels = self.paint()[:, 4:PX // 2 - 4].reshape(-1, 3).astype(np.float64)
+        luma = pixels @ np.array([0.299, 0.587, 0.114])
+        dark, light = pixels[luma <= np.percentile(luma, 15)], pixels[luma >= np.percentile(luma, 85)]
+        # Blue's share of the colour: darkening alone leaves it as it is.
+        cool = lambda c: (c[:, 2] / (c.sum(axis=1) + 1)).mean()
+        self.assertGreater(cool(dark), cool(light) + 0.02)
+
+    def test_few_lone_specks(self):
+        """Marks of a texel on their own are under 2%: shapes, not grain."""
+        pixels = self.paint()[2:-2, 2:PX // 2 - 2]
+        same = lambda dy, dx: np.all(pixels == np.roll(pixels, (dy, dx), axis=(0, 1)), axis=-1)
+        alone = ~(same(0, 1) | same(0, -1) | same(1, 0) | same(-1, 0))
+        self.assertLess(alone[1:-1, 1:-1].mean(), 0.02)
+
+    def test_wear_lightens_convex_edges(self):
+        with np.load(self.base.src / "piece_texels.npz") as d:
+            data = {k: d[k] for k in d.files}
+        wear = np.zeros((PX, PX), np.float32)
+        wear[:, 4:8] = 1.0                                  # a convex edge running up the wall
+        data["wear"] = wear
+        np.savez(self.base.src / "piece_texels.npz", **data)
+        story = {k: dict(v, wear=1.0) for k, v in self.recipes.items()}
+        self.recipes = story
+        pixels = self.paint().astype(np.float64)
+        self.assertGreater(pixels[:, 4:8].mean(), pixels[:, 12:24].mean() + 6)
+
+
 class Scans(unittest.TestCase):
     """A scan projected by world position: the same wall as above, the scan a
     1 m square of horizontal stripes (bright rows on dark), its normals tilted
@@ -162,7 +222,7 @@ class Scans(unittest.TestCase):
 
     def paint(self):
         path = eclipse_atlas.paint_atlas("piece", self.base.src, self.base.out, recipes=self.recipes,
-                                         scans_dir=self.scans)
+                                         scans_dir=self.scans, prep=FAST_PREP)
         return np.asarray(Image.open(path).convert("RGB"), dtype=np.float64)
 
     def test_scan_lies_along_world_height(self):

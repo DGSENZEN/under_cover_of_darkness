@@ -4,14 +4,14 @@
  "dark": "#b9b4b0",
  "grime": 0.8,
  "wear": 0.2,
- "mottle": 2,
+ "mottle": 0,
  "relief": {
   "bevel": 0.3,
-  "brush": 0.15
+  "brush": 0.25
  },
  "scan": {
   "name": "white_rough_plaster",
-  "tint": 0.5,
+  "tint": 0.85,
   "contrast": 0.9
  }
 }

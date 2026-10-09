@@ -4,14 +4,14 @@
  "dark": "#14121a",
  "grime": 0.2,
  "wear": 0.6,
- "mottle": 1,
+ "mottle": 0,
  "relief": {
   "bevel": 0.6,
-  "brush": 0.15
+  "brush": 0.25
  },
  "scan": {
   "name": "green_metal_rust",
-  "tint": 0.4,
+  "tint": 0.6,
   "contrast": 1.0
  }
 }

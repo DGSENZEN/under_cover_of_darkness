@@ -4,10 +4,10 @@
  "dark": "#3d1f1c",
  "grime": 0.6,
  "wear": 0.3,
- "mottle": 2,
+ "mottle": 0,
  "relief": {
   "bevel": 0.4,
-  "brush": 0.15
+  "brush": 0.25
  },
  "scan": {
   "name": "japanese_stone_wall",

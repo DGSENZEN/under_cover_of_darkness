@@ -22,9 +22,9 @@ func _ready() -> void:
 func _run() -> void:
 	# P1 the even blend
 	var even: ShaderMaterial = Painterly.material(Painterly.BRUSH, &"even")
-	_check("P1 the even preset: paint_mix 0.5, stroke_strength 0.12",
-		even is ShaderMaterial and is_equal_approx(even.get_shader_parameter("paint_mix"), 0.5)
-		and is_equal_approx(even.get_shader_parameter("stroke_strength"), 0.12),
+	_check("P1 the even preset: paint_mix 0.25, stroke_strength 0.08 (the painterly brief: the atlas carries the paint)",
+		even is ShaderMaterial and is_equal_approx(even.get_shader_parameter("paint_mix"), 0.25)
+		and is_equal_approx(even.get_shader_parameter("stroke_strength"), 0.08),
 		"%s" % [even])
 
 	# P2 every preset's values reach its material

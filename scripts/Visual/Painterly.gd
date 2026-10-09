@@ -8,11 +8,13 @@ const SHADER := preload("res://scripts/Visual/painterly.gdshader")
 const BRUSH: Texture2D = preload("res://textures/painted/eclipse/brush.png")
 const ZOCALO: Texture2D = preload("res://textures/painted/eclipse/palette_zocalo.png")
 
-## How much the shader does over the painted atlas.
+## How much the shader does over the painted atlas. The atlas carries the
+## paint now (docs/superpowers/refs/mexico_city/painterly_texturing.md), so
+## the shader's share is light.
 const PRESETS := {
-	&"painted_led": {"paint_mix": 0.25, "stroke_strength": 0.06},
-	&"even": {"paint_mix": 0.5, "stroke_strength": 0.12},
-	&"shader_led": {"paint_mix": 0.85, "stroke_strength": 0.2},
+	&"painted_led": {"paint_mix": 0.1, "stroke_strength": 0.04},
+	&"even": {"paint_mix": 0.25, "stroke_strength": 0.08},
+	&"shader_led": {"paint_mix": 0.45, "stroke_strength": 0.12},
 }
 
 
