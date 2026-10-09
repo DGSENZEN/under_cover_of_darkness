@@ -69,3 +69,22 @@ Every sound in the game is a recording, cut and levelled from the packs below by
   `pencil`): "FilmCow Recorded SFX" by **FilmCow** (paper handled) and the "400 Sounds
   Pack" (a page turned, a map opened, a pencil's scribble); awaiting the user's ear
   (Oct 3 2026).
+
+## Textures
+
+### Free to use (CC0, credited with thanks)
+
+The Eclipse city's atlases are laid from these photo scans from
+[Poly Haven](https://polyhaven.com) (CC0), fetched by `tools/textures/fetch_scans.py`
+and painted over by `tools/textures/eclipse_atlas.py`:
+
+- [cobblestone_floor_04](https://polyhaven.com/a/cobblestone_floor_04) by **Rob Tuytel**
+- [green_metal_rust](https://polyhaven.com/a/green_metal_rust) by **Rob Tuytel**
+- [japanese_stone_wall](https://polyhaven.com/a/japanese_stone_wall) by **Charlotte Baglioni, Dario Barresi, Rico Cilliers**
+- [long_white_tiles](https://polyhaven.com/a/long_white_tiles) by **Jenelle van Heerden, Sergej Majboroda**
+- [metal_plate_02](https://polyhaven.com/a/metal_plate_02) by **Rob Tuytel**
+- [sandstone_cracks](https://polyhaven.com/a/sandstone_cracks) by **Rob Tuytel**
+- [square_tiles_03](https://polyhaven.com/a/square_tiles_03) by **Charlotte Baglioni**
+- [stained_pine](https://polyhaven.com/a/stained_pine) by **Dario Barresi, Jenelle van Heerden**
+- [terrazzo_tiles](https://polyhaven.com/a/terrazzo_tiles) by **Amal Kumar**
+- [white_rough_plaster](https://polyhaven.com/a/white_rough_plaster) by **Rob Tuytel**
