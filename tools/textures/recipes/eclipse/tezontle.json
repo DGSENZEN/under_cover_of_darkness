@@ -4,5 +4,18 @@
  "dark": "#3d1f1c",
  "grime": 0.6,
  "wear": 0.3,
- "mottle": 10
+ "mottle": 10,
+ "relief": {
+  "pores": 6,
+  "brush": 0.3,
+  "bevel": 0.4,
+  "blocks": {
+   "course": 0.32,
+   "length": 0.42,
+   "joint": 0.025,
+   "colour": "#a8968a",
+   "irregular": true,
+   "tone": 0.45
+  }
+ }
 }

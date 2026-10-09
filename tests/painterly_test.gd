@@ -59,6 +59,17 @@ func _run() -> void:
 		"retro %s" % [retro != null])
 
 
+	# P4 a painted normal map reaches the material, at full depth; without
+	#    one the shader's flat default stands
+	var normals := ImageTexture.create_from_image(Image.create(4, 4, false, Image.FORMAT_RGB8))
+	var bumped: ShaderMaterial = Painterly.material(Painterly.BRUSH, &"even", Painterly.ZOCALO, normals)
+	var smooth: ShaderMaterial = Painterly.material(Painterly.BRUSH, &"even")
+	_check("P4 a painted normal map reaches the material at depth 1; none leaves the flat default",
+		bumped.get_shader_parameter("normal_atlas") == normals and is_equal_approx(bumped.get_shader_parameter("normal_depth"), 1.0)
+		and smooth.get_shader_parameter("normal_atlas") == null,
+		"bumped %s smooth %s" % [bumped.get_shader_parameter("normal_atlas"), smooth.get_shader_parameter("normal_atlas")])
+
+
 func _frames(n: int) -> void:
 	for i in n:
 		await get_tree().physics_frame

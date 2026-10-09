@@ -16,13 +16,18 @@ const PRESETS := {
 }
 
 
-## A material drawing `atlas` in the preset's blend, mapped onto `palette`.
-static func material(atlas: Texture2D, preset: StringName, palette: Texture2D = ZOCALO) -> ShaderMaterial:
+## A material drawing `atlas` in the preset's blend, mapped onto `palette`,
+## its relief from the painted `normal` map if one is given.
+static func material(atlas: Texture2D, preset: StringName, palette: Texture2D = ZOCALO, normal: Texture2D = null) -> ShaderMaterial:
 	var out := ShaderMaterial.new()
 	out.shader = SHADER
 	out.set_shader_parameter("atlas", atlas)
 	out.set_shader_parameter("palette", palette)
 	out.set_shader_parameter("brush", BRUSH)
+
+	if normal != null:
+		out.set_shader_parameter("normal_atlas", normal)
+		out.set_shader_parameter("normal_depth", 1.0)
 
 	for key in PRESETS[preset]:
 		out.set_shader_parameter(key, PRESETS[preset][key])

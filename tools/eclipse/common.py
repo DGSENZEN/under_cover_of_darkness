@@ -460,13 +460,9 @@ def regions(objects, slots, px):
     return grid
 
 
-# The height map's range: world z from LOW to HIGH (m) across 0-255.
-HEIGHT_RANGE = (-4.0, 12.0)
-
-
-def _fill_triangle_values(grid, a, b, c, values):
+def _fill_triangle_vectors(grid, a, b, c, values):
     """Every texel whose centre is inside the UV triangle abc set to the
-    values at its corners, interpolated."""
+    vectors at its corners (3 x k), interpolated."""
     px = grid.shape[0]
     pts = np.array([a, b, c]) * px - 0.5
     lo = np.floor(pts.min(axis=0)).astype(int).clip(0, px - 1)
@@ -482,32 +478,62 @@ def _fill_triangle_values(grid, a, b, c, values):
     l2 = ((cy - ay) * (xs - cx) + (ax - cx) * (ys - cy)) / d
     l3 = 1 - l1 - l2
     inside = (l1 >= -1e-3) & (l2 >= -1e-3) & (l3 >= -1e-3)
-    grid[ys[inside], xs[inside]] = (l1 * values[0] + l2 * values[1] + l3 * values[2])[inside]
+    v = np.asarray(values, dtype=np.float64)
+    grid[ys[inside], xs[inside]] = (l1[..., None] * v[0] + l2[..., None] * v[1] + l3[..., None] * v[2])[inside]
 
 
-def heights(objects, px):
-    """The height map: each texel the world height (m) of the surface drawn
-    there, grown by two texels as the region map is. Row 0 is V = 0."""
-    grid = np.full((px, px), np.nan)
+def _tangents(p, uv):
+    """The world directions of +U and +V across a triangle."""
+    e1, e2 = p[1] - p[0], p[2] - p[0]
+    du1, dv1 = uv[1] - uv[0]
+    du2, dv2 = uv[2] - uv[0]
+    det = du1 * dv2 - du2 * dv1
+
+    if abs(det) < 1e-12:
+        return np.zeros(3), np.zeros(3)
+
+    t = (e1 * dv2 - e2 * dv1) / det
+    b = (e2 * du1 - e1 * du2) / det
+    return t / max(np.linalg.norm(t), 1e-9), b / max(np.linalg.norm(b), 1e-9)
+
+
+def texels(objects, slots, px):
+    """What every texel of the atlas shows: its slot's index (-1 where
+    nothing is), world position, normal, and the world directions of +U and
+    +V, grown by two texels so the painter's margins match the bake's. In
+    image order: row 0 is the top (V = 1). For the atlas painter."""
+    grid = np.full((px, px, 13), np.nan)
 
     for o in objects:
         mesh = o.data
         uv = mesh.uv_layers.active.data
+        to_world = o.matrix_world
 
         for poly in mesh.polygons:
+            index = slots.index(mesh.materials[poly.material_index].name)
+            normal = np.array(to_world.to_3x3() @ poly.normal)
+            normal /= max(np.linalg.norm(normal), 1e-9)
             loops = list(poly.loop_indices)
-            z = [(o.matrix_world @ mesh.vertices[mesh.loops[i].vertex_index].co).z for i in loops]
+            world = [np.array(to_world @ mesh.vertices[mesh.loops[i].vertex_index].co) for i in loops]
+            uvs = [np.array(uv[i].uv) for i in loops]
 
             for k in range(1, len(loops) - 1):
-                _fill_triangle_values(grid, uv[loops[0]].uv, uv[loops[k]].uv, uv[loops[k + 1]].uv,
-                                      (z[0], z[k], z[k + 1]))
+                tri = [0, k, k + 1]
+                tu, tv = _tangents([world[j] for j in tri], [uvs[j] for j in tri])
+                rows = [np.concatenate([[index], world[j], normal, tu, tv]) for j in tri]
+                _fill_triangle_vectors(grid, uvs[0], uvs[k], uvs[k + 1], rows)
 
     for _ in range(2):
         for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
             shifted = np.roll(grid, (dy, dx), axis=(0, 1))
             grid = np.where(np.isnan(grid), shifted, grid)
 
-    return np.nan_to_num(grid, nan=HEIGHT_RANGE[1])
+    grid = grid[::-1]
+    empty = np.isnan(grid[..., 0])
+    grid = np.nan_to_num(grid)
+    slot = np.where(empty, -1, np.round(grid[..., 0])).astype(np.int16)
+    return {"slot": slot, "position": grid[..., 1:4].astype(np.float32), "normal": grid[..., 4:7].astype(np.float32),
+            "tangent_u": grid[..., 7:10].astype(np.float32), "tangent_v": grid[..., 10:13].astype(np.float32)}
 
 
 def _save_png(path, rgba, px):
@@ -570,15 +596,12 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None):
     rgba[..., 3] = np.where(grid > 0, 1.0, 0.0)
     _save_png(SOURCE / (name + "_regions.png"), rgba, atlas_px)
     (SOURCE / (name + "_regions.json")).write_text(json.dumps({"slots": slots, "atlas_px": atlas_px,
-                                                               "px_per_m": round(px_per_m, 2),
-                                                               "height_range": list(HEIGHT_RANGE)}, indent=1))
-    low, high = HEIGHT_RANGE
-    level = np.clip((heights(objects, atlas_px) - low) / (high - low), 0, 1)
-    _save_png(SOURCE / (name + "_height.png"), np.dstack([level, level, level, np.ones_like(level)]), atlas_px)
+                                                               "px_per_m": round(px_per_m, 2)}, indent=1))
+    np.savez_compressed(SOURCE / (name + "_texels.npz"), **texels(objects, slots, atlas_px))
 
     bpy.ops.export_scene.gltf(filepath=str(OUT / (name + ".glb")), export_format="GLB", export_yup=True,
                               export_materials="EXPORT", export_texcoords=True, export_normals=True,
-                              use_selection=False)
+                              export_tangents=True, use_selection=False)
     bpy.context.preferences.filepaths.save_version = 0   # no .blend1 beside it
     bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / (name + ".blend")))
 

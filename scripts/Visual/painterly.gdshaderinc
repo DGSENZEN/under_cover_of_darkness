@@ -2,12 +2,16 @@
 // then brush strokes projected from the world's three axes nudge it, and the
 // result is mapped onto the district's palette. paint_mix is how much of the
 // shader's version shows over the painted one. Included by painterly.gdshader
-// (lit) and painterly_unshaded.gdshader (the pixel check).
+// (lit) and painterly_unshaded.gdshader (the pixel check). A painted normal
+// map gives the painted relief its depth under the lamps.
 
 uniform sampler2D atlas : source_color, filter_nearest_mipmap, repeat_enable;
 // A district's colours, one texel each, 16 wide.
 uniform sampler2D palette : source_color, filter_nearest;
 uniform sampler2D brush : filter_linear_mipmap, repeat_enable;
+// The painted normal map (the atlas's relief); flat when none is given.
+uniform sampler2D normal_atlas : hint_normal, filter_nearest_mipmap, repeat_enable;
+uniform float normal_depth : hint_range(0.0, 4.0) = 1.0;
 uniform float paint_mix : hint_range(0.0, 1.0) = 0.5;
 uniform float stroke_strength : hint_range(0.0, 1.0) = 0.12;
 // Metres of wall per brush tile.
@@ -49,6 +53,10 @@ void fragment() {
 	}
 
 	ALBEDO = mix(base, best, paint_mix);
+#ifndef PAINTERLY_UNSHADED
+	NORMAL_MAP = texture(normal_atlas, UV).rgb;
+	NORMAL_MAP_DEPTH = normal_depth;
+#endif
 	ROUGHNESS = roughness;
 	SPECULAR = specular;
 }

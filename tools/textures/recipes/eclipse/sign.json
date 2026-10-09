@@ -4,5 +4,6 @@
  "dark": "#808080",
  "grime": 0.0,
  "wear": 0.0,
- "mottle": 0
+ "mottle": 0,
+ "relief": {}
 }

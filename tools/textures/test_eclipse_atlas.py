@@ -1,5 +1,6 @@
-"""The style lab's painted atlases (eclipse_atlas.py): pure Python, on a
-synthetic piece's maps.
+"""The style lab's painted atlases and normal maps (eclipse_atlas.py): pure
+Python, on a synthetic piece: a 4 x 4 m wall facing -y, its left half
+tezontle and its right half chiluca, U along +x and V up.
 
     python3 tools/textures/test_eclipse_atlas.py
 """
@@ -20,9 +21,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import eclipse_atlas  # noqa: E402
 
 PX = 64
+WALL = 4.0
+FLAT = {"pores": 0, "brush": 0.0, "bevel": 0.0}
 RECIPES = {
-    "tezontle": {"base": "#6e2f26", "light": "#9a4a3a", "dark": "#3d1f1c", "grime": 0.0, "wear": 0.0, "mottle": 2},
-    "chiluca": {"base": "#8a8790", "light": "#b9b4b0", "dark": "#5a5560", "grime": 0.0, "wear": 0.0, "mottle": 2},
+    "tezontle": {"base": "#6e2f26", "light": "#9a4a3a", "dark": "#3d1f1c", "grime": 0.0, "wear": 0.0, "mottle": 2,
+                 "relief": FLAT},
+    "chiluca": {"base": "#8a8790", "light": "#b9b4b0", "dark": "#5a5560", "grime": 0.0, "wear": 0.0, "mottle": 2,
+                "relief": FLAT},
 }
 
 
@@ -34,28 +39,38 @@ class Atlas(unittest.TestCase):
     def setUp(self):
         self.src = Path(tempfile.mkdtemp())
         self.out = Path(tempfile.mkdtemp())
-        regions = np.zeros((PX, PX, 4), dtype=np.uint8)
-        regions[:, :, 3] = 255
-        regions[:, PX // 2:, 0] = 16                      # left: slot 0, right: slot 1
-        Image.fromarray(regions, "RGBA").save(self.src / "piece_regions.png")
         (self.src / "piece_regions.json").write_text(json.dumps(
-            {"slots": ["tezontle", "chiluca"], "atlas_px": PX, "height_range": [-4.0, 12.0]}))
+            {"slots": ["tezontle", "chiluca"], "atlas_px": PX, "px_per_m": PX / WALL}))
+        self.texels()
         self.ao(np.full((PX, PX), 255))
-        self.height(np.full((PX, PX), 5.0))
 
     def tearDown(self):
         shutil.rmtree(self.src)
         shutil.rmtree(self.out)
 
+    def texels(self, z_of_row=None):
+        """Rows top to bottom (V high to low), as an image is."""
+        u = (np.arange(PX) + 0.5) / PX
+        v = 1.0 - (np.arange(PX) + 0.5) / PX
+        uu, vv = np.meshgrid(u, v)
+        slot = np.where(uu < 0.5, 0, 1).astype(np.int16)
+        z = vv * WALL if z_of_row is None else np.repeat(z_of_row[:, None], PX, axis=1)
+        position = np.dstack([uu * WALL, np.zeros_like(uu), z]).astype(np.float32)
+        normal = np.broadcast_to(np.array([0, -1, 0], np.float32), (PX, PX, 3))
+        tangent_u = np.broadcast_to(np.array([1, 0, 0], np.float32), (PX, PX, 3))
+        tangent_v = np.broadcast_to(np.array([0, 0, 1], np.float32), (PX, PX, 3))
+        np.savez(self.src / "piece_texels.npz", slot=slot, position=position, normal=normal,
+                 tangent_u=tangent_u, tangent_v=tangent_v)
+
     def ao(self, values):
         Image.fromarray(values.astype(np.uint8), "L").save(self.src / "piece_ao.png")
-
-    def height(self, metres):
-        Image.fromarray(((metres + 4.0) / 16.0 * 255).round().astype(np.uint8), "L").save(self.src / "piece_height.png")
 
     def paint(self, recipes=RECIPES):
         path = eclipse_atlas.paint_atlas("piece", self.src, self.out, recipes=recipes)
         return np.asarray(Image.open(path).convert("RGB"), dtype=np.float64)
+
+    def normals(self):
+        return np.asarray(Image.open(self.out / "piece_normal_base.png").convert("RGB"), dtype=np.float64)
 
     def test_regions_take_their_slot_colours(self):
         pixels = self.paint()
@@ -72,25 +87,52 @@ class Atlas(unittest.TestCase):
         self.assertLess(pixels[: PX // 2 - 4, 4:PX // 2 - 4].mean(), pixels[PX // 2 + 4:, 4:PX // 2 - 4].mean())
 
     def test_grime_rises_from_the_ground(self):
-        metres = np.full((PX, PX), 5.0)
-        metres[PX // 2:] = 0.1                             # the lower half of the map at the street
-        self.height(metres)
+        z = np.where(np.arange(PX) >= PX // 2, 0.1, 5.0)    # the lower half of the map at the street
+        self.texels(z)
         grimy = {k: dict(v, grime=1.0) for k, v in RECIPES.items()}
         pixels = self.paint(grimy)
         self.assertLess(pixels[PX // 2 + 4:, 4:PX // 2 - 4].mean(), pixels[4:PX // 2 - 4, 4:PX // 2 - 4].mean() - 8)
 
-    def test_never_writes_the_users_file(self):
-        mine = self.out / "piece.png"
+    def test_never_writes_the_users_files(self):
+        mine, my_normals = self.out / "piece.png", self.out / "piece_normal.png"
         Image.new("RGB", (PX, PX), (1, 2, 3)).save(mine)
-        before = mine.read_bytes()
+        Image.new("RGB", (PX, PX), (4, 5, 6)).save(my_normals)
+        before = mine.read_bytes(), my_normals.read_bytes()
         path = eclipse_atlas.paint_atlas("piece", self.src, self.out, recipes=RECIPES)
         self.assertEqual(path.name, "piece_base.png")
-        self.assertEqual(mine.read_bytes(), before)
+        self.assertTrue((self.out / "piece_normal_base.png").exists())
+        self.assertEqual((mine.read_bytes(), my_normals.read_bytes()), before)
 
     def test_deterministic(self):
         a = eclipse_atlas.paint_atlas("piece", self.src, self.out, recipes=RECIPES).read_bytes()
+        n = (self.out / "piece_normal_base.png").read_bytes()
         b = eclipse_atlas.paint_atlas("piece", self.src, self.out, recipes=RECIPES).read_bytes()
-        self.assertEqual(a, b)
+        self.assertEqual((a, n), (b, (self.out / "piece_normal_base.png").read_bytes()))
+
+    def test_no_relief_is_a_flat_normal_map(self):
+        self.paint()
+        normals = self.normals()[4:-4, 4:-4]
+        self.assertLess(np.abs(normals - np.array([128, 128, 255])).max(), 3)
+
+    def test_courses_follow_world_height(self):
+        """Mortar joints lie where world height crosses a course, whichever
+        way the island lies: with V running down the wall, they still do."""
+        coursed = dict(RECIPES)
+        coursed["tezontle"] = dict(RECIPES["tezontle"], relief=dict(FLAT, blocks={"course": 0.5, "length": 0.8,
+                                                                                 "joint": 0.06}))
+        z = (np.arange(PX) + 0.5) / PX * WALL                # V runs DOWN the wall here
+        self.texels(z)
+        self.paint(coursed)
+        normals = self.normals()
+        # The joints' edges tilt the normal up and down the wall (green), the
+        # field between them faces out: rows near course lines differ most.
+        tilt = np.abs(normals[:, 4:PX // 2 - 4, 1] - 128).mean(axis=1)
+        at_course = [r for r in range(PX) if abs(((r + 0.5) / PX * WALL) % 0.5) < 0.07 or
+                     abs(((r + 0.5) / PX * WALL) % 0.5 - 0.5) < 0.07]
+        between = [r for r in range(PX) if abs(((r + 0.5) / PX * WALL) % 0.5 - 0.25) < 0.07]
+        self.assertGreater(np.mean(tilt[at_course]), np.mean(tilt[between]) + 10)
+        # The chiluca half, with no relief, stays flat.
+        self.assertLess(np.abs(normals[4:-4, PX // 2 + 4:-4] - np.array([128, 128, 255])).max(), 3)
 
 
 if __name__ == "__main__":

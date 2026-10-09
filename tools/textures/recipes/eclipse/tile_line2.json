@@ -9,5 +9,15 @@
   "colour": "#2f4c7a",
   "from": -1.4,
   "to": -0.9
+ },
+ "relief": {
+  "brush": 0.05,
+  "blocks": {
+   "course": 0.15,
+   "length": 0.15,
+   "joint": 0.008,
+   "colour": "#9a958a",
+   "stagger": false
+  }
  }
 }

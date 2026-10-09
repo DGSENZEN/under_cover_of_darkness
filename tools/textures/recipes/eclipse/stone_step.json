@@ -4,5 +4,10 @@
  "dark": "#5a5560",
  "grime": 0.4,
  "wear": 0.5,
- "mottle": 14
+ "mottle": 14,
+ "relief": {
+  "pores": 10,
+  "brush": 0.1,
+  "bevel": 0.7
+ }
 }

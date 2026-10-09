@@ -8,9 +8,5 @@
   "sign"
  ],
  "atlas_px": 512,
- "px_per_m": 49.94,
- "height_range": [
-  -4.0,
-  12.0
- ]
+ "px_per_m": 49.94
 }

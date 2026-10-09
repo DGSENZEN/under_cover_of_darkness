@@ -4,5 +4,16 @@
  "dark": "#4a4440",
  "grime": 0.5,
  "wear": 0.2,
- "mottle": 6
+ "mottle": 6,
+ "relief": {
+  "brush": 0.1,
+  "bevel": 0.2,
+  "blocks": {
+   "course": 0.3,
+   "length": 0.3,
+   "joint": 0.012,
+   "colour": "#4a4440",
+   "stagger": false
+  }
+ }
 }
