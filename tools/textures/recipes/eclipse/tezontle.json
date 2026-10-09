@@ -1,0 +1,8 @@
+{
+ "base": "#6e2f26",
+ "light": "#9a4a3a",
+ "dark": "#3d1f1c",
+ "grime": 0.6,
+ "wear": 0.3,
+ "mottle": 10
+}

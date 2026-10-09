@@ -10,5 +10,9 @@
   "tile_floor"
  ],
  "atlas_px": 768,
- "px_per_m": 54.35
+ "px_per_m": 54.35,
+ "height_range": [
+  -4.0,
+  12.0
+ ]
 }

@@ -355,9 +355,13 @@ def _image(name, px, colour):
     return image
 
 
-def bake_ao(objects, name, px, skip_slots=("glass",)):
+def bake_ao(objects, name, px, skip_slots=ATLAS_FREE, sets=None):
     """Ambient occlusion baked into the atlas (Cycles), white where open.
-    Objects wholly of a skipped slot neither take it nor cast it."""
+    Objects wholly of a skipped slot neither take it nor cast it. With
+    `sets` (lists of object names seen together), each set is baked with only
+    itself present, so alternatives for one place (a stone and a steel
+    column) do not shade each other; an object takes the bake of the first
+    set it is in."""
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
     scene.cycles.samples = 64
@@ -368,35 +372,42 @@ def bake_ao(objects, name, px, skip_slots=("glass",)):
 
     scene.world.light_settings.distance = 1.0
     image = _image(name + "_ao", px, (1, 1, 1, 1))
-    takers = []
+    free = {o.name for o in objects if all(m.name in skip_slots for m in o.data.materials)}
+    sets = list(sets) if sets is not None else [[o.name for o in objects]]
+    baked = set()
+    first = True
 
-    for o in objects:
-        only_skipped = all(m.name in skip_slots for m in o.data.materials)
-        o.hide_render = only_skipped
+    for names in sets:
+        takers = [o for o in objects if o.name in names and o.name not in free and o.name not in baked]
 
-        if not only_skipped:
-            takers.append(o)
+        if not takers:
+            continue
 
-    for m in {m for o in takers for m in o.data.materials}:
-        m.use_nodes = True
-        node = m.node_tree.nodes.get("bake") or m.node_tree.nodes.new("ShaderNodeTexImage")
-        node.name = "bake"
-        node.image = image
-        m.node_tree.nodes.active = node
+        for o in objects:
+            o.hide_render = o.name not in names or o.name in free
 
-    bpy.ops.object.select_all(action="DESELECT")
+        for m in {m for o in takers for m in o.data.materials}:
+            m.use_nodes = True
+            node = m.node_tree.nodes.get("bake") or m.node_tree.nodes.new("ShaderNodeTexImage")
+            node.name = "bake"
+            node.image = image
+            m.node_tree.nodes.active = node
 
-    for o in takers:
-        o.select_set(True)
+        bpy.ops.object.select_all(action="DESELECT")
 
-    bpy.context.view_layer.objects.active = takers[0]
-    bpy.ops.object.bake(type="AO", margin=4, use_clear=True)
+        for o in takers:
+            o.select_set(True)
+
+        bpy.context.view_layer.objects.active = takers[0]
+        bpy.ops.object.bake(type="AO", margin=4, use_clear=first)
+        first = False
+        baked |= {o.name for o in takers}
+
+        for m in {m for o in takers for m in o.data.materials}:
+            m.node_tree.nodes.remove(m.node_tree.nodes["bake"])
 
     for o in objects:
         o.hide_render = False
-
-    for m in {m for o in takers for m in o.data.materials}:
-        m.node_tree.nodes.remove(m.node_tree.nodes["bake"])
 
     return image
 
@@ -449,6 +460,56 @@ def regions(objects, slots, px):
     return grid
 
 
+# The height map's range: world z from LOW to HIGH (m) across 0-255.
+HEIGHT_RANGE = (-4.0, 12.0)
+
+
+def _fill_triangle_values(grid, a, b, c, values):
+    """Every texel whose centre is inside the UV triangle abc set to the
+    values at its corners, interpolated."""
+    px = grid.shape[0]
+    pts = np.array([a, b, c]) * px - 0.5
+    lo = np.floor(pts.min(axis=0)).astype(int).clip(0, px - 1)
+    hi = np.ceil(pts.max(axis=0)).astype(int).clip(0, px - 1)
+    xs, ys = np.meshgrid(np.arange(lo[0], hi[0] + 1), np.arange(lo[1], hi[1] + 1))
+    (ax, ay), (bx, by), (cx, cy) = pts
+    d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy)
+
+    if abs(d) < 1e-12:
+        return
+
+    l1 = ((by - cy) * (xs - cx) + (cx - bx) * (ys - cy)) / d
+    l2 = ((cy - ay) * (xs - cx) + (ax - cx) * (ys - cy)) / d
+    l3 = 1 - l1 - l2
+    inside = (l1 >= -1e-3) & (l2 >= -1e-3) & (l3 >= -1e-3)
+    grid[ys[inside], xs[inside]] = (l1 * values[0] + l2 * values[1] + l3 * values[2])[inside]
+
+
+def heights(objects, px):
+    """The height map: each texel the world height (m) of the surface drawn
+    there, grown by two texels as the region map is. Row 0 is V = 0."""
+    grid = np.full((px, px), np.nan)
+
+    for o in objects:
+        mesh = o.data
+        uv = mesh.uv_layers.active.data
+
+        for poly in mesh.polygons:
+            loops = list(poly.loop_indices)
+            z = [(o.matrix_world @ mesh.vertices[mesh.loops[i].vertex_index].co).z for i in loops]
+
+            for k in range(1, len(loops) - 1):
+                _fill_triangle_values(grid, uv[loops[0]].uv, uv[loops[k]].uv, uv[loops[k + 1]].uv,
+                                      (z[0], z[k], z[k + 1]))
+
+    for _ in range(2):
+        for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+            shifted = np.roll(grid, (dy, dx), axis=(0, 1))
+            grid = np.where(np.isnan(grid), shifted, grid)
+
+    return np.nan_to_num(grid, nan=HEIGHT_RANGE[1])
+
+
 def _save_png(path, rgba, px):
     image = bpy.data.images.new(path.stem, px, px, alpha=True)
     image.pixels.foreach_set(rgba.astype(np.float32).ravel())
@@ -498,7 +559,7 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None):
     pack(objects)
     px_per_m = density(objects, atlas_px)
 
-    ao = bake_ao(objects, name, atlas_px)
+    ao = bake_ao(objects, name, atlas_px, sets=list(gate_sets) if gate_sets is not None else None)
     ao.filepath_raw = str(SOURCE / (name + "_ao.png"))
     ao.file_format = "PNG"
     ao.save()
@@ -509,7 +570,11 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None):
     rgba[..., 3] = np.where(grid > 0, 1.0, 0.0)
     _save_png(SOURCE / (name + "_regions.png"), rgba, atlas_px)
     (SOURCE / (name + "_regions.json")).write_text(json.dumps({"slots": slots, "atlas_px": atlas_px,
-                                                            "px_per_m": round(px_per_m, 2)}, indent=1))
+                                                               "px_per_m": round(px_per_m, 2),
+                                                               "height_range": list(HEIGHT_RANGE)}, indent=1))
+    low, high = HEIGHT_RANGE
+    level = np.clip((heights(objects, atlas_px) - low) / (high - low), 0, 1)
+    _save_png(SOURCE / (name + "_height.png"), np.dstack([level, level, level, np.ones_like(level)]), atlas_px)
 
     bpy.ops.export_scene.gltf(filepath=str(OUT / (name + ".glb")), export_format="GLB", export_yup=True,
                               export_materials="EXPORT", export_texcoords=True, export_normals=True,

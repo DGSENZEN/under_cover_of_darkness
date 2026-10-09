@@ -1,0 +1,13 @@
+{
+ "base": "#e4dfd2",
+ "light": "#f2eee4",
+ "dark": "#b9b4b0",
+ "grime": 0.6,
+ "wear": 0.2,
+ "mottle": 4,
+ "band": {
+  "colour": "#2f4c7a",
+  "from": -1.4,
+  "to": -0.9
+ }
+}
