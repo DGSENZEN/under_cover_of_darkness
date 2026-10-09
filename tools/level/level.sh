@@ -126,6 +126,7 @@ case "$verb" in
     python3 "$HERE/../textures/test_paint.py"
     python3 "$HERE/../textures/test_painterly.py"
     python3 "$HERE/../textures/test_eclipse_atlas.py"
+    python3 "$HERE/../textures/test_kuwahara.py"
     "$HERE/test_guard.sh"
     "$HERE/test_workshop.sh"
     ;;
