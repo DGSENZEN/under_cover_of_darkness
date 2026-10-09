@@ -12,8 +12,8 @@
   "blocks": {
    "course": 0.32,
    "length": 0.42,
-   "joint": 0.025,
-   "colour": "#a8968a",
+   "joint": 0.018,
+   "colour": "#8a5c4e",
    "irregular": true,
    "tone": 0.45
   }
