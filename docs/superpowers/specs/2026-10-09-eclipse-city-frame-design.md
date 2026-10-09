@@ -136,6 +136,8 @@ The station lists are to be checked against the current official network map whe
 
 One hero piece, **the Metro kiosk plus one Zócalo arcade bay**, is built and textured in the blended style. Variants differ in **how much the shader does over the painted base**: for example painted-led with a light brush pass; an even blend; shader-led with flat painted colour fields. They are shown side by side in-game, at night under the cornered moon and in a daylight check. The user picks or adjusts, and the result becomes **the texturing pipeline for every kit after it**: atlas size and texel density, what is painted versus what the shader adds, and the palette mapping per district. Nothing else is built at volume until the lab is settled.
 
+**Result (the user, Oct 9 2026): the "even" blend, the paint as it is.** Shader: paint_mix 0.25, stroke_strength 0.08, palette matched in Oklab. Atlases: CC0 scans prepared (light out, anisotropic Kuwahara over colour and normals), painted in five value bands on Oklab ramps (shadows cool, lights warm), 35% scan detail back, wear on baked convex edges, dirt in occlusion and cavities, damp from the street, a light Kuwahara fuse, ten colours per slot, no dither (docs/superpowers/refs/mexico_city/painterly_texturing.md). Density about 50 px/m: 512 atlases for small pieces, 768 for a façade bay. Open: the user reports jitter (flicker, texel crawl, camera shake, shadow shimmer) and culling (see-through walls, pops at screen edge, clipping up close, far things vanishing), under investigation.
+
 ### 7.3 The kit: modular, well made, not overkill
 
 - **One grid** across all kits, with storey heights true to each style. Pieces snap together edge to edge, never overlapping.
