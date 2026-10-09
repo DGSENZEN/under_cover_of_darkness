@@ -275,7 +275,7 @@ func _run() -> void:
 
 ## R12-R13 PS1-inspired, not a copy: the world drawn smooth (no vertex
 ## snapping: its materials left as they are, its own shaders placing their
-## vertices where they are), and the dither that reads.
+## vertices where they are), and no dither.
 func _psx_checks(retro: CanvasLayer) -> void:
 	var stone := StandardMaterial3D.new()
 	var wall := MeshInstance3D.new()
@@ -297,10 +297,10 @@ func _psx_checks(retro: CanvasLayer) -> void:
 	_check("R12 the world is drawn smooth: no vertex snapping (its materials left alone, its shaders unsnapped)",
 		left_alone and snapping.is_empty() and no_snap, "left alone %s, snapping %s, no snap setting %s" % [left_alone, snapping.keys(), no_snap])
 
-	# R13 the PS1's crunch reads: colour cut to 24 levels a channel or fewer,
-	# the dither at full strength
-	_check("R13 the dither reads: 24 levels a channel or fewer, dithered at full strength",
-		retro.color_levels <= 24.0 and retro.color_levels > 0.0 and retro.dither >= 0.95, "levels %.0f dither %.2f" % [retro.color_levels, retro.dither])
+	# R13 no dither (the user, Oct 9 2026: it detracts from the look), and so
+	#    no colour cut either: without the dither its bands would show
+	_check("R13 no dither, and the colour left whole: the screen keeps only its grid",
+		retro.dither == 0.0 and retro.color_levels == 0.0, "levels %.0f dither %.2f" % [retro.color_levels, retro.dither])
 	wall.queue_free()
 	await _frames(2)
 

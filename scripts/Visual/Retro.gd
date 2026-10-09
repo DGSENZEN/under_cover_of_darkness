@@ -13,14 +13,15 @@ const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 	set(value):
 		virtual_height = value
 		_fit()
-## Levels per colour channel: 32 is the PS1's 15-bit colour; fewer, and its
-## dither reads in the night's dark gradients. 0 is off.
-@export var color_levels := 24.0:
+## Levels per colour channel: 32 is the PS1's 15-bit colour. 0 is off, the
+## default: the dither that hid its bands is gone (the user, Oct 9 2026).
+@export var color_levels := 0.0:
 	set(value):
 		color_levels = value
 		_fit()
-## How strongly the ordered dither breaks up banding, 0..1.
-@export_range(0.0, 1.0, 0.05) var dither := 1.0:
+## How strongly the ordered dither breaks up banding, 0..1; off by default
+## (it detracted from the look). F8 still tries it.
+@export_range(0.0, 1.0, 0.05) var dither := 0.0:
 	set(value):
 		dither = value
 		_fit()
