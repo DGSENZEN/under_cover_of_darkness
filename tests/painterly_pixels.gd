@@ -198,6 +198,31 @@ func _ready() -> void:
 	_check("X17 hex-tiled relief leans the way its colour runs", plain_agree > 0.9 and hex_agree > 0.8,
 		"pixels agreeing within 25 degrees: plain %.2f, hex %.2f" % [plain_agree, hex_agree])
 
+	# X18 where a lamp's light has died, it adds nothing: the ground there is
+	#     as dark as with no lamp at all (Godot runs a light over whole screen
+	#     tiles; a floor added there showed as blocky bands round each lamp)
+	var lit_ground := await _lamp_ground(true)
+	var unlit_ground := await _lamp_ground(false)
+	var px_per_m := lit_ground.get_width() / LAMP_VIEW_M
+	var centre := lit_ground.get_width() / 2
+	var far_lit := lit_ground.get_pixel(centre + int(9.0 * px_per_m), centre).get_luminance()
+	var far_unlit := unlit_ground.get_pixel(centre + int(9.0 * px_per_m), centre).get_luminance()
+	_check("X18 past a lamp's reach the ground is as dark as with no lamp", absf(far_lit - far_unlit) < 2.0 / 255.0,
+		"9 m out: with the lamp %.4f, without %.4f" % [far_lit, far_unlit])
+
+	# X19 a lamp's light falls off smoothly: no hard step as you walk away
+	var steepest := 0.0
+	var profile := []
+
+	for k in range(2, 30):
+		var a := lit_ground.get_pixel(centre + int(k * 0.25 * px_per_m), centre).get_luminance()
+		var b := lit_ground.get_pixel(centre + int((k + 1) * 0.25 * px_per_m), centre).get_luminance()
+		steepest = maxf(steepest, absf(a - b))
+		profile.append("%.2f" % a)
+
+	_check("X19 a lamp's light falls off smoothly (no step over 0.06 in a quarter metre)", steepest < 0.06,
+		"steepest %.3f, profile %s" % [steepest, profile.slice(0, 16)])
+
 	# X16 the macro layer: one quad drawn at two places half a macro scale
 	#     apart differs with it on, and is the same with it off
 	var flat := {"vertex_paint": 0.0, "stroke_strength": 0.0}
@@ -282,6 +307,61 @@ func _tiled_plane(tile: Texture2D, settings: Dictionary, grazing: bool) -> Image
 	ground.mesh = mesh
 	ground.material_override = material
 	view.add_child(ground)
+
+	for i in 5:
+		await RenderingServer.frame_post_draw
+
+	var image := view.get_texture().get_image()
+	view.queue_free()
+	return image
+
+
+const LAMP_VIEW_M := 20.0
+const LAMP_RANGE := 8.0
+const LAMP_HEIGHT := 3.0
+
+
+## A white ground seen from straight above in the shader-led look (painted
+## light and ramp; no ambient, rim, macro or strokes), lit by one lamp
+## LAMP_HEIGHT over its middle, LAMP_RANGE its range, nothing else.
+func _lamp_ground(lamp_on: bool) -> Image:
+	var view := SubViewport.new()
+	view.size = Vector2i(320, 320)
+	view.own_world_3d = true
+	view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(view)
+	var world := WorldEnvironment.new()
+	world.environment = Environment.new()
+	world.environment.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	world.environment.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	world.environment.background_mode = Environment.BG_COLOR
+	world.environment.background_color = Color.BLACK
+	view.add_child(world)
+	var camera := Camera3D.new()
+	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.size = LAMP_VIEW_M
+	camera.position = Vector3(0, 10, 0)
+	camera.rotation = Vector3(-PI / 2, 0, 0)
+	view.add_child(camera)
+	var lamp := OmniLight3D.new()
+	lamp.position = Vector3(0, LAMP_HEIGHT, 0)
+	lamp.omni_range = LAMP_RANGE
+	lamp.light_energy = 1.6
+	lamp.visible = lamp_on
+	view.add_child(lamp)
+	var white := Image.create(4, 4, false, Image.FORMAT_RGB8)
+	white.fill(Color.WHITE)
+	var material: ShaderMaterial = Painterly.material(ImageTexture.create_from_image(white), &"shader_led")
+
+	for key in {"paint_mix": 0.0, "stroke_strength": 0.0, "terminator_break": 0.0, "specular": 0.0,
+			"ambient_amount": 0.0, "rim_amount": 0.0, "macro_amount": 0.0}:
+		material.set_shader_parameter(key, 0.0)
+
+	var plane := MeshInstance3D.new()
+	plane.mesh = PlaneMesh.new()
+	(plane.mesh as PlaneMesh).size = Vector2(LAMP_VIEW_M, LAMP_VIEW_M)
+	plane.material_override = material
+	view.add_child(plane)
 
 	for i in 5:
 		await RenderingServer.frame_post_draw

@@ -101,7 +101,8 @@ func _views(x: float, kiosk_z: float, bays_z: float) -> Array:
 
 ## Tuning rounds: the shader-led station drawn as each variant, by night and
 ## day, in the views that judge a look. A variant is "name|key=value;..."
-## (shader parameters, atlas_dir=<folder> for other painted atlases, or
+## (shader parameters, ground.<parameter> for the ground's alone,
+## atlas_dir=<folder> for other painted atlases, or
 ## screen_pull=<0-1> to pull the whole frame toward the Zócalo palette, or
 ## pools=1 for the lamps' painted pools).
 ##   -- --out=/tmp/round1 --variant="A|" --variant="B|painted_light=1"
@@ -153,6 +154,10 @@ func _compare(lab: Node3D, eye: Camera3D, variants: Array) -> void:
 					if retro != null:
 						retro.palette = preload("res://scripts/Visual/Painterly.gd").ZOCALO
 						retro.palette_pull = float(kv[1])
+				elif kv[0].begins_with("ground."):
+					# The ground alone (ground.ramp_amount=0, ...).
+					if key == "ground":
+						m.set_shader_parameter(kv[0].trim_prefix("ground."), float(kv[1]))
 				elif kv[0] == "atlas_dir":
 					var before: String = lab.atlas_dir
 					lab.atlas_dir = kv[1].trim_suffix("/") + "/"

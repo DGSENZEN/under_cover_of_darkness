@@ -303,8 +303,17 @@ void light() {
 	// The side turned away and the edges of shadow take a cool fill, so
 	// shadow is a colour, not grey.
 	vec3 banded = painted * tint + (1.0 - painted) * shadow_fill * painted_light * shadow_cool * ATTENUATION;
-	// Or the painted ramp's colour for this much light.
+	// Or the painted ramp's colour for this much light. The sun and moon take
+	// it whole, its violet floor the colour of their shadows. A lamp takes
+	// only its colour, its brightness the lamp's own smooth falloff: Godot
+	// runs a lamp over whole screen tiles round it, and a floor added where
+	// its light has died drew blocky bands there, and the ramp's steps hard
+	// rings on the way out.
 	vec3 ramped = texture(light_ramp, vec2(clamp(level, 0.01, 0.99), 0.5)).rgb;
+
+	if (!LIGHT_IS_DIRECTIONAL) {
+		ramped *= amount / max(dot(ramped, vec3(0.2126, 0.7152, 0.0722)), 1e-4);
+	}
 	DIFFUSE_LIGHT += hue * energy * mix(banded, ramped, ramp_amount) / PI;
 	// A soft highlight, as the standard light would give.
 	vec3 halfway = normalize(VIEW + LIGHT);
