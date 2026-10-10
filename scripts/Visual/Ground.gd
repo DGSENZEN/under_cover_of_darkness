@@ -52,6 +52,7 @@ const RELAID := 0.65
 ##   "patches": [Rect2]      stone relaid in another stone
 ##   "cell": float           the grid (CELL)
 ##   "paths": Array          walking lines [[Vector2, Vector2]] (else from the footprints)
+##   "depth": float          the collider's depth (DEPTH)
 static func build(area: Rect2, openings: Array[Rect2], footprints: Array[Dictionary], seed: int,
 		options := {}) -> Ground:
 	var ground := Ground.new()
@@ -62,6 +63,7 @@ static func build(area: Rect2, openings: Array[Rect2], footprints: Array[Diction
 	var inlays: Array = options.get("inlays", [])
 	var covered: Array = options.get("covered", [])
 	var patches: Array = options.get("patches", [])
+	var depth: float = options.get("depth", DEPTH)
 	# Lines at every opening's edges, and at every footprint's edges and BANK
 	# out from them, so the stories have vertices where they start and end;
 	# at rectangular inlays' and covers' edges, so they cut along grid lines.
@@ -148,7 +150,7 @@ static func build(area: Rect2, openings: Array[Rect2], footprints: Array[Diction
 				if run_from < 0:
 					run_from = i
 			elif run_from >= 0:
-				ground._collider(Rect2(xs[run_from], zs[j], xs[i] - xs[run_from], zs[j + 1] - zs[j]), level)
+				ground._collider(Rect2(xs[run_from], zs[j], xs[i] - xs[run_from], zs[j + 1] - zs[j]), level, depth)
 				run_from = -1
 
 	var mesh := MeshInstance3D.new()
@@ -276,12 +278,12 @@ static func _lines(from: float, to: float, edges: Array, cell := CELL) -> Array:
 	return lines
 
 
-func _collider(cell: Rect2, level := 0.0) -> void:
+func _collider(cell: Rect2, level := 0.0, depth := DEPTH) -> void:
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(cell.size.x, DEPTH, cell.size.y)
+	box.size = Vector3(cell.size.x, depth, cell.size.y)
 	shape.shape = box
-	shape.position = Vector3(cell.get_center().x, level - DEPTH / 2, cell.get_center().y)
+	shape.position = Vector3(cell.get_center().x, level - depth / 2, cell.get_center().y)
 	add_child(shape)
 
 

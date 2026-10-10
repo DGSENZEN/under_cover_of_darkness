@@ -12,6 +12,9 @@ extends Node3D
 
 ## How far round a chunk a footprint still weathers it (Ground.BANK and its corners).
 const REACH := 2.0
+## The ground's colliders' depth: thin, so none reaches down into a space
+## under the street (the canal walkway's ceiling is 0.1 under the quay).
+const DEPTH := 0.08
 
 
 static func build(ground: Dictionary, seed: int) -> DistrictGround:
@@ -53,8 +56,14 @@ static func build(ground: Dictionary, seed: int) -> DistrictGround:
 					"inlays": inlays.filter(func(p): return Ground._box(p).intersects(piece)),
 					"covered": covered.filter(func(p): return Ground._box(p).intersects(piece)),
 					"patches": near_patches,
-					"paths": paths.filter(func(p): return _segment_box(p).grow(Ground.PATH).intersects(near))}
+					"paths": paths.filter(func(p): return _segment_box(p).grow(Ground.PATH).intersects(near)), "depth": DEPTH}
 				var g := Ground.build(piece, near_openings, near_footprints, seed, options)
+
+				# A chunk wholly under buildings or open lays nothing.
+				if (g.get_node("mesh") as MeshInstance3D).mesh.get_surface_count() == 0:
+					g.free()
+					continue
+
 				g.name = "%s_%d_%d_%d" % [area.get("tile", "ground"), a, i, j]
 				out.add_child(g)
 

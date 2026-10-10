@@ -1,8 +1,10 @@
 extends Node3D
 ## The Zócalo (docs/superpowers/specs/2026-10-10-zocalo-district-design.md),
-## for now its greybox: the plan (assets/eclipse/zocalo/plan.json) as plain
-## blocks to walk (greybox.json, from tools/level/level.sh zocalo). F11 day
-## and night.
+## its greybox: the plan (assets/eclipse/zocalo/plan.json) as plain blocks
+## to walk (greybox.json, from tools/level/level.sh zocalo), dressed in the
+## kits built so far (dressing.json: the street and canal kit's pieces and
+## the ground round them). F11 day and night.
+##   --undressed       the greybox alone
 ##   --fps-report=<s>  flies a camera through the plan's cameras for s
 ##                     seconds, prints "fps: average <a> worst <w>", quits.
 
@@ -10,10 +12,15 @@ const PLAYER := preload("res://Player.tscn")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const PLAN := "res://assets/eclipse/zocalo/plan.json"
 const GREYBOX := "res://assets/eclipse/zocalo/greybox.json"
+const DRESSING := "res://assets/eclipse/zocalo/dressing.json"
 const MOON_COLOUR := Color("#d8e4f0")
 
 var plan: Dictionary
 var greybox: GreyboxLoader
+## The dressing laid (empty when undressed), its pieces and its ground.
+var dressing: Dictionary
+var kit: KitLoader
+var district_ground: DistrictGround
 var player: CharacterBody3D
 var world: WorldEnvironment
 var sun: DirectionalLight3D
@@ -25,9 +32,21 @@ var _night: Environment
 
 func _ready() -> void:
 	reset_physics_interpolation.call_deferred()
+	var started := Time.get_ticks_msec()
 	plan = JSON.parse_string(FileAccess.get_file_as_string(PLAN))
-	greybox = GreyboxLoader.build(JSON.parse_string(FileAccess.get_file_as_string(GREYBOX)))
+
+	if FileAccess.file_exists(DRESSING) and not "--undressed" in OS.get_cmdline_user_args():
+		dressing = JSON.parse_string(FileAccess.get_file_as_string(DRESSING))
+
+	greybox = GreyboxLoader.build(JSON.parse_string(FileAccess.get_file_as_string(GREYBOX)), dressing.get("skip", []))
 	add_child(greybox)
+
+	if dressing:
+		district_ground = DistrictGround.build(dressing["ground"], 11)
+		add_child(district_ground)
+		kit = KitLoader.build(dressing)
+		add_child(kit)
+
 	_lights()
 	set_day(true)
 	player = PLAYER.instantiate()
@@ -38,6 +57,9 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--fps-report="):
 			_fps_report.call_deferred(float(arg.trim_prefix("--fps-report=")))
+		elif arg == "--load-report":
+			print("load: %.1f s" % ((Time.get_ticks_msec() - started) / 1000.0))
+			get_tree().quit.call_deferred()
 
 
 func _unhandled_input(event: InputEvent) -> void:

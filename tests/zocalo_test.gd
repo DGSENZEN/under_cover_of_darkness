@@ -38,19 +38,31 @@ func _run() -> void:
 		if mesh.get_meta("route", "") != "climb" and mesh.find_children("*", "CollisionShape3D", true, false).is_empty():
 			bare.append(String(mesh.name))
 
-	_check("Z1 the greybox loads every kind of mesh, each solid", KINDS.all(func(k): return kinds.has(k)) and bare.is_empty(),
+	# (Dressed, the street and the plaza are the kit's ground, not the greybox's.)
+	var expected := KINDS.filter(func(k): return not (map.dressing and k in ["ground", "raised"]))
+	_check("Z1 the greybox loads every kind of mesh, each solid", expected.all(func(k): return kinds.has(k)) and bare.is_empty(),
 		"kinds %s, without colliders %s" % [kinds.keys(), bare.slice(0, 4)])
 
 	# Z1b its ground faces up (clockwise from above: Godot's front)
-	var ground: MeshInstance3D = map.greybox.get_node("ground")
-	var arrays := (ground.mesh as ArrayMesh).surface_get_arrays(0)
-	var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var down := 0
+	var triangles := 0
+	var grounds: Array = map.district_ground.find_children("mesh", "MeshInstance3D", true, false) if map.dressing \
+		else [map.greybox.get_node("ground")]
 
-	for t in range(0, v.size(), 3):
-		down += int((v[t + 1] - v[t]).cross(v[t + 2] - v[t]).y > 0.0)
+	for ground: MeshInstance3D in grounds:
+		var arrays := (ground.mesh as ArrayMesh).surface_get_arrays(0)
+		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
 
-	_check("Z1b the ground faces up", down == 0 and v.size() > 0, "%d of %d triangles face down" % [down, v.size() / 3])
+		if index.is_empty():
+			index = PackedInt32Array(range(v.size()))
+
+		for t in range(0, index.size(), 3):
+			down += int((v[index[t + 1]] - v[index[t]]).cross(v[index[t + 2]] - v[index[t]]).y > 0.0)
+
+		triangles += index.size() / 3
+
+	_check("Z1b the ground faces up", down == 0 and triangles > 0, "%d of %d triangles face down" % [down, triangles])
 
 	# Z2 the spawn stands on street ground, not in a plot
 	await _frames(2)
@@ -163,6 +175,69 @@ func _run() -> void:
 		walk["ok"] and absf(walk["end"].y - 1.05 + 1.0) < 0.4 and landing.has_point(Vector2(walk["end"].x, walk["end"].z)),
 		"%s" % [walk])
 
+	if map.dressing:
+		await _dressed()
+
+
+## The street and canal kit laid over the greybox (the kit's plan, Task 9),
+## walked with the real player.
+func _dressed() -> void:
+	# Z8 every piece the dressing places is drawn, none of what it replaces is
+	var counts := {}
+
+	for p in map.dressing["pieces"]:
+		counts[p["piece"]] = counts.get(p["piece"], 0) + 1
+
+	var drawn := {}
+
+	for mm: MultiMeshInstance3D in map.kit.find_children("*", "MultiMeshInstance3D", true, false):
+		var piece: String = mm.get_meta("piece")
+		drawn[piece] = drawn.get(piece, 0) + mm.multimesh.instance_count
+
+	var left := (map.dressing["skip"] as Array).filter(func(n): return map.greybox.has_node(NodePath(n)))
+	_check("Z8 the dressing loads: every piece drawn, the greybox it replaces gone", drawn == counts and left.is_empty(),
+		"%d kinds placed, %d drawn, greybox left %s" % [counts.size(), drawn.size(), left])
+
+	# Z9 over a kerb from the street on to the plaza, away from a crossing
+	var walk := await _walk(Vector3(6, 1.05, 115), 0.0, func(p): return p.z < 104.0, 600)
+	_check("Z9 the player steps up a kerb on to the plaza", walk["ok"] and _floor(walk["end"]) > 0.15,
+		"%s, floor %.3f" % [walk, _floor(walk["end"])])
+
+	# Z10 through the south crossing's drop
+	walk = await _walk(Vector3(0, 1.05, 115), 0.0, func(p): return p.z < 104.0, 600)
+	_check("Z10 the player walks through a dropped kerb on to the plaza", walk["ok"] and _floor(walk["end"]) > 0.15,
+		"%s, floor %.3f" % [walk, _floor(walk["end"])])
+
+	# Z11 across the tram's south-east curve: never below the street, never stuck
+	walk = await _walk(Vector3(105, 1.05, 100), PI, func(p): return p.z > 126.0, 900)
+	_check("Z11 the player crosses a tram curve without falling or snagging", walk["ok"] and walk["lowest"] > 0.95
+		and walk["stall"] < 18, "%s" % [walk])
+
+	# Z12 over the stone bridge and the steel one, quay to quay, up to their crowns
+	for b in [[-150.0, 0.6], [150.0, 0.3]]:
+		walk = await _walk(Vector3(b[0], 1.05, 161.5), PI, func(p): return p.z > 187.0, 1200)
+		var rest: float = walk["start"].y
+		_check("Z12 the player crosses the bridge at x %d over its crown" % b[0], walk["ok"]
+			and absf(walk["highest"] - rest - b[1]) < 0.1, "%s, rose %.2f" % [walk, walk["highest"] - rest])
+
+	# Z13 from the quay over the west landing's wall on to its steps, down
+	#     them to the landing, then down to the water
+	walk = await _walk(Vector3(-62, 1.05, 160.75), -PI / 2, func(p): return p.x > -58.65, 300)
+	walk = await _walk(map.player.global_position, PI, func(p): return p.z > 163.2, 600)
+	var on_landing := _floor(walk["end"])
+	walk = await _walk(map.player.global_position, -PI / 2, func(p): return p.x > -48.2, 600)
+	walk = await _walk(map.player.global_position, PI, func(p): return p.z > 170.6, 600)
+	var on_floor := _floor(walk["end"])
+	_check("Z13 the player walks down a landing's steps and on down to the canal's floor", walk["ok"]
+		and absf(on_landing + 1.0) < 0.05 and absf(on_floor + 2.0) < 0.05,
+		"landing %.3f, canal %.3f, %s" % [on_landing, on_floor, walk])
+
+
+## The floor's height under a point.
+func _floor(at: Vector3) -> float:
+	var hit := _ray(at + Vector3(0, 0.5, 0), at + Vector3(0, -4, 0))
+	return hit["position"].y if not hit.is_empty() else -INF
+
 
 ## The player put at `start` facing `yaw` (0 north), walked forward until
 ## `done` holds of their position or `frames` pass: where they ended, the
@@ -173,13 +248,23 @@ func _walk(start: Vector3, yaw: float, done: Callable, frames: int) -> Dictionar
 	player.rotation.y = yaw
 	player.velocity = Vector3.ZERO
 	await _frames(10)
+	var rest := player.global_position
 	Input.action_press("move_forward")
 	var lowest := player.global_position.y
+	var highest := player.global_position.y
 	var arrived := false
+	# The most frames in a row it barely moved (snagged on something).
+	var stall := 0
+	var still := 0
+	var last := player.global_position
 
 	for i in frames:
 		await get_tree().physics_frame
 		lowest = minf(lowest, player.global_position.y)
+		highest = maxf(highest, player.global_position.y)
+		still = still + 1 if player.global_position.distance_to(last) < 0.005 else 0
+		stall = maxi(stall, still)
+		last = player.global_position
 
 		if done.call(player.global_position):
 			arrived = true
@@ -187,7 +272,8 @@ func _walk(start: Vector3, yaw: float, done: Callable, frames: int) -> Dictionar
 
 	Input.action_release("move_forward")
 	await _frames(20)
-	return {"ok": arrived and player.is_on_floor(), "end": player.global_position, "lowest": lowest}
+	return {"ok": arrived and player.is_on_floor(), "end": player.global_position, "lowest": lowest, "highest": highest,
+		"stall": stall, "start": rest}
 
 
 func _ray(from: Vector3, to: Vector3) -> Dictionary:

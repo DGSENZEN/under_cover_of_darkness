@@ -24,13 +24,17 @@ const LADDER_WIDTH := 1.2
 const LADDER_DEPTH := 0.7
 
 
-## The greybox's meshes and bodies, from greybox.json's data.
-static func build(greybox: Dictionary) -> GreyboxLoader:
+## The greybox's meshes and bodies, from greybox.json's data; `skip` names
+## the elements a district's dressing has taken over.
+static func build(greybox: Dictionary, skip: Array = []) -> GreyboxLoader:
 	var out := GreyboxLoader.new()
 	out.name = "greybox"
 	var materials := {}
 
 	for m in greybox["meshes"]:
+		if m["name"] in skip:
+			continue
+
 		var colour: Color = FAMILY_COLOURS.get(m.get("family", ""), OTHER_FAMILY) if m["kind"] == "plot" \
 			else KIND_COLOURS.get(m["kind"], OTHER_FAMILY)
 
