@@ -243,6 +243,95 @@ class CanalKit(unittest.TestCase):
         self.assertGreater(at.y, 0.3)
 
 
+class _BridgeChecks:
+    """The stone arch and the seeped steel bridge (cards/street_canal.md):
+    each built on its own (a build wipes the scene)."""
+
+    MODULE = None
+    CROWN = None
+    # Where along its width a ray down meets the parapet's (or railing's) top.
+    PARAPET_Y = 1.85
+
+    @classmethod
+    def setUpClass(cls):
+        import importlib
+        module = importlib.import_module(cls.MODULE)
+        module.build()
+        cls.o = bpy.data.objects[module.NAME]
+
+    def _deck(self):
+        """The deck's walking line along the bridge's middle: (x, z) where a
+        ray down at y 0 first meets the bridge, every 0.25 m."""
+        out = []
+
+        for k in range(-44, 45):
+            x = k * 0.25
+            # (At the very ends a millimetre in: a ray down the end's edge grazes it.)
+            probe = max(-10.999, min(10.999, x))
+            hit, at, _, _ = self.o.ray_cast((probe, 0.0, 5.0), (0.0, 0.0, -1.0))
+            out.append((x, at.z if hit else None))
+
+        return out
+
+    def test_closed_and_in_budget(self):
+        self.assertEqual(_closed(self.o), 0)
+        self.assertLessEqual(_tris(self.o), 3000)
+        self.assertGreater(_smallest_triangle(self.o), 1e-7)
+
+    def test_exported_budget(self):
+        import json
+        path = common.SOURCE / (self.MODULE + "_faces.json")
+
+        if not path.exists():
+            self.skipTest(self.MODULE + " not built")
+
+        self.assertLessEqual(json.loads(path.read_text())["tris"][self.MODULE], 3000)
+
+    def test_deck_ends_flush_with_the_quays(self):
+        line = dict(self._deck())
+        self.assertAlmostEqual(line[-11.0], 0.0, delta=1e-3)
+        self.assertAlmostEqual(line[11.0], 0.0, delta=1e-3)
+
+    def test_crown(self):
+        self.assertAlmostEqual(max(z for _, z in self._deck()), self.CROWN, delta=1e-3)
+
+    def test_deck_walkable(self):
+        """No stretch of the deck steeper than 8 degrees."""
+        line = self._deck()
+
+        for (x0, z0), (x1, z1) in zip(line, line[1:]):
+            self.assertLess(math.degrees(math.atan2(abs(z1 - z0), x1 - x0)), 8.0, x0)
+
+    def test_parapets_stand_their_height(self):
+        """At every station the parapet's top is 0.9 over the deck beside it."""
+        deck = dict(self._deck())
+
+        for x in (-10.0, -6.0, -3.0, 0.0, 3.0, 6.0, 10.0):
+            hit, at, _, _ = self.o.ray_cast((x, self.PARAPET_Y, 5.0), (0.0, 0.0, -1.0))
+            self.assertTrue(hit, x)
+            self.assertAlmostEqual(at.z - deck[x], 0.9, delta=0.03, msg=x)
+
+    def test_soffit_meets_the_walls_under_the_coping(self):
+        """Over the canal (walls' faces at x +-6) the bridge's underside meets
+        each wall below its coping's underside (-0.35), so the coping runs
+        into the bridge, never across its face."""
+        for x in (-5.95, 5.95):
+            hit, at, _, _ = self.o.ray_cast((x, 0.0, -1.9), (0.0, 0.0, 1.0))
+            self.assertTrue(hit)
+            self.assertLess(at.z, -0.35)
+
+
+class StoneBridge(_BridgeChecks, unittest.TestCase):
+    MODULE = "bridge_stone"
+    CROWN = 0.6
+
+
+class SteelBridge(_BridgeChecks, unittest.TestCase):
+    MODULE = "bridge_steel"
+    CROWN = 0.3
+    PARAPET_Y = 2.06
+
+
 if __name__ == "__main__":
     result = unittest.main(argv=["test_kit_bpy"], exit=False).result
     sys.exit(not result.wasSuccessful())
