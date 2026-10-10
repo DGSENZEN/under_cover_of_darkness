@@ -137,11 +137,170 @@ func _ready() -> void:
 	_check("G6 deterministic for one seed", again_colours == colours, "%d colours" % again_colours.size())
 	again.free()
 
+	await _district_checks(space)
+
 	print("\n==== RESULTS ====")
 	for r in results:
 		print(r)
 
 	get_tree().quit()
+
+
+## The options a district's ground takes (the street and canal kit's plan, Task 3).
+func _district_checks(space: PhysicsDirectSpaceState3D) -> void:
+	var area := Rect2(0, 0, 30, 30)
+
+	# G10 a level and a tile: every vertex at the level, the collider's top
+	#     there, the tile's texture drawn
+	var raised := Ground.build(area, [], [], 3, {"level": 0.2, "tile": &"ground_setts"})
+	raised.position = Vector3(100, 0, 0)
+	add_child(raised)
+	var raised_points: PackedVector3Array = _arrays(raised)[Mesh.ARRAY_VERTEX]
+	var level_ok := raised_points.size() > 0 and Array(raised_points).all(func(p): return absf(p.y - 0.2) < 1e-5)
+	var material: ShaderMaterial = (raised.get_node("mesh") as MeshInstance3D).material_override
+	var albedo: Texture2D = material.get_shader_parameter("atlas")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var top := _ray(space, Vector2(115, 15))
+	_check("G10 a ground at a level, in its tile", level_ok and not top.is_empty() and absf(top["position"].y - 0.2) < 1e-3
+		and albedo != null and albedo.resource_path.ends_with("ground_setts.png"),
+		"level %s, hit %s, texture %s" % [level_ok, top.get("position"), albedo.resource_path if albedo else "none"])
+	raised.queue_free()
+
+	# G11 a curved inlay (a quarter ring) is cut from the mesh exactly
+	var ring := _quarter_ring(Vector2(5, 5), 10.8, 13.2, 16)
+	var cut := Ground.build(area, [], [], 3, {"inlays": [ring]})
+	add_child(cut)
+	var arrays := _arrays(cut)
+	var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var inside := 0
+	var inside_area := 0.0
+	var smallest := INF
+	var total := 0.0
+	var down := 0
+
+	for t in range(0, indices.size(), 3):
+		var a := points[indices[t]]
+		var b := points[indices[t + 1]]
+		var c := points[indices[t + 2]]
+		var centre := (a + b + c) / 3.0
+		var n := (b - a).cross(c - a)
+		smallest = minf(smallest, n.length() / 2.0)
+
+		if Geometry2D.is_point_in_polygon(Vector2(centre.x, centre.z), ring):
+			inside += 1
+			inside_area += n.length() / 2.0
+
+		total += n.length() / 2.0
+		down += int(n.y > 0.0)
+
+	var expected := 900.0 - _polygon_area(ring)
+	# (Slivers along the arc's chords can put a centroid a hair inside: what
+	# counts is the area lying over the inlay.)
+	_check("G11 a curved inlay is cut from the ground, nothing over it, nothing else lost", inside_area < 1e-4 and down == 0
+		and absf(total - expected) < 0.01, "%d inside (%.6f m2), %d facing down, area %.4f of %.4f, smallest %s m2" % [inside, inside_area, down, total, expected, str(smallest)])
+
+	# G12 under the inlay the ground still holds the player up
+	await get_tree().physics_frame
+	var mid := Vector2(5, 5) + Vector2(12, 0).rotated(PI / 4)
+	var held := _ray(space, mid)
+	_check("G12 the collider holds under an inlay", not held.is_empty() and absf(held["position"].y) < 1e-3,
+		"hit %s at %s" % [held.get("position"), mid])
+	cut.queue_free()
+
+	# G13 a covered square holds no ground and wears no rim round it
+	var covered := PackedVector2Array([Vector2(10, 10), Vector2(20, 10), Vector2(20, 20), Vector2(10, 20)])
+	var under := Ground.build(area, [], [], 3, {"covered": [covered]})
+	under.position = Vector3(0, 0, 100)
+	add_child(under)
+	var under_arrays := _arrays(under)
+	var under_points: PackedVector3Array = under_arrays[Mesh.ARRAY_VERTEX]
+	var under_colours: PackedColorArray = under_arrays[Mesh.ARRAY_COLOR]
+	var under_indices: PackedInt32Array = under_arrays[Mesh.ARRAY_INDEX]
+	var in_square := 0
+	var rim_wear := []
+
+	for t in range(0, under_indices.size(), 3):
+		var centre := (under_points[under_indices[t]] + under_points[under_indices[t + 1]] + under_points[under_indices[t + 2]]) / 3.0
+		in_square += int(Rect2(10, 10, 10, 10).has_point(Vector2(centre.x, centre.z)))
+
+	for i in under_points.size():
+		if absf(_outside_distance(Vector2(under_points[i].x, under_points[i].z), Rect2(10, 10, 10, 10)) - 0.3) < 0.35 \
+				and not Rect2(10, 10, 10, 10).has_point(Vector2(under_points[i].x, under_points[i].z)):
+			rim_wear.append(under_colours[i].g)
+
+	_check("G13 a covered square holds no ground and wears no rim", in_square == 0 and rim_wear.size() > 0
+		and rim_wear.max() < 0.01, "%d triangles in it, rim wear max %.2f" % [in_square, rim_wear.max() if rim_wear else -1.0])
+	under.queue_free()
+
+	# G14 relaid patches: another stone (B 0.65), not worn through
+	var patched := Ground.build(area, [], [], 3, {"patches": [Rect2(4, 4, 6, 6)]})
+	var patch_arrays := _arrays(patched)
+	var patch_points: PackedVector3Array = patch_arrays[Mesh.ARRAY_VERTEX]
+	var patch_colours: PackedColorArray = patch_arrays[Mesh.ARRAY_COLOR]
+	var in_patch := []
+
+	for i in patch_points.size():
+		if Rect2(4, 4, 6, 6).grow(-0.01).has_point(Vector2(patch_points[i].x, patch_points[i].z)):
+			in_patch.append(patch_colours[i])
+
+	var relaid := in_patch.all(func(c): return absf(c.b - 0.65) < 0.01 and c.g < 0.01)
+	_check("G14 relaid patches are another stone", in_patch.size() > 0 and relaid, "%d vertices in the patch" % in_patch.size())
+	patched.free()
+
+	# G15 a district's ground in 50 m chunks: 3 x 2 over 120 x 60, none
+	#     wider than a chunk, solid every 7 m but over its opening
+	var district := DistrictGround.build({"chunk": 50, "areas": [{"tile": "ground_setts", "level": 0.0,
+		"rect": [-300, -300, -180, -240], "openings": [[-250, -280, -240, -270]], "covered": [], "inlays": [],
+		"patches": [], "footprints": []}]}, 5)
+	add_child(district)
+	var chunks := district.find_children("*", "MeshInstance3D", true, false)
+	var widest := 0.0
+
+	for m: MeshInstance3D in chunks:
+		var box := m.get_aabb()
+		widest = maxf(widest, maxf(box.size.x, box.size.z))
+
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var holes := []
+
+	for x in range(-298, -180, 7):
+		for z in range(-298, -240, 7):
+			var opening := Rect2(-250, -280, 10, 10).has_point(Vector2(x, z))
+
+			if _ray(space, Vector2(x, z)).is_empty() != opening:
+				holes.append(Vector2(x, z))
+
+	_check("G15 a district's ground lies in 50 m chunks, solid but for its openings", chunks.size() == 6
+		and widest <= 50.0 + 1e-4 and holes.is_empty(), "%d chunks, widest %.1f, wrong at %s" % [chunks.size(), widest, holes])
+	district.queue_free()
+
+
+func _arrays(ground: Node) -> Array:
+	return ((ground.get_node("mesh") as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0)
+
+
+func _quarter_ring(centre: Vector2, inner: float, outer: float, segments: int) -> PackedVector2Array:
+	var out := PackedVector2Array()
+
+	for i in segments + 1:
+		out.append(centre + Vector2(outer, 0).rotated(PI / 2 * i / segments))
+
+	for i in range(segments, -1, -1):
+		out.append(centre + Vector2(inner, 0).rotated(PI / 2 * i / segments))
+
+	return out
+
+
+func _polygon_area(p: PackedVector2Array) -> float:
+	var sum := 0.0
+
+	for i in p.size():
+		sum += p[i].x * p[(i + 1) % p.size()].y - p[(i + 1) % p.size()].x * p[i].y
+
+	return absf(sum) / 2.0
 
 
 func _ray(space: PhysicsDirectSpaceState3D, at: Vector2) -> Dictionary:
