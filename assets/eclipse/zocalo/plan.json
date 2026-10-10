@@ -9318,6 +9318,22 @@
    ]
   },
   {
+   "name": "climb_up_evangelistas_s",
+   "kind": "climb",
+   "points": [
+    [
+     -199.0,
+     0.0,
+     -222.5
+    ],
+    [
+     -201.0,
+     9.0,
+     -222.5
+    ]
+   ]
+  },
+  {
    "name": "climb_up_house_a_1",
    "kind": "climb",
    "points": [
@@ -9606,6 +9622,86 @@
    ]
   },
   {
+   "name": "climb_up_palace_back",
+   "kind": "climb",
+   "points": [
+    [
+     201.0,
+     0.0,
+     0.0
+    ],
+    [
+     199.0,
+     16.0,
+     0.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_palace_front_n",
+   "kind": "climb",
+   "points": [
+    [
+     130.0,
+     0.0,
+     -4.0
+    ],
+    [
+     130.0,
+     16.0,
+     -6.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_palace_front_s",
+   "kind": "climb",
+   "points": [
+    [
+     130.0,
+     0.0,
+     4.0
+    ],
+    [
+     130.0,
+     16.0,
+     6.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_palace_north",
+   "kind": "climb",
+   "points": [
+    [
+     160.0,
+     0.0,
+     -29.0
+    ],
+    [
+     160.0,
+     16.0,
+     -31.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_palace_south",
+   "kind": "climb",
+   "points": [
+    [
+     160.0,
+     0.0,
+     29.0
+    ],
+    [
+     160.0,
+     16.0,
+     31.0
+    ]
+   ]
+  },
+  {
    "name": "climb_up_pawnshop",
    "kind": "climb",
    "points": [
@@ -9618,6 +9714,102 @@
      -91.0,
      14.0,
      -180.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_portal_mercaderes_1",
+   "kind": "climb",
+   "points": [
+    [
+     -119.0,
+     0.0,
+     -77.5
+    ],
+    [
+     -121.0,
+     13.0,
+     -77.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_portal_mercaderes_2",
+   "kind": "climb",
+   "points": [
+    [
+     -119.0,
+     0.0,
+     -32.5
+    ],
+    [
+     -121.0,
+     13.0,
+     -32.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_portal_mercaderes_3",
+   "kind": "climb",
+   "points": [
+    [
+     -119.0,
+     0.0,
+     12.5
+    ],
+    [
+     -121.0,
+     13.0,
+     12.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_scribe_office",
+   "kind": "climb",
+   "points": [
+    [
+     -199.0,
+     0.0,
+     -242.5
+    ],
+    [
+     -201.0,
+     9.0,
+     -242.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_town_hall_e",
+   "kind": "climb",
+   "points": [
+    [
+     52.5,
+     0.0,
+     129.0
+    ],
+    [
+     52.5,
+     14.0,
+     131.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_town_hall_w",
+   "kind": "climb",
+   "points": [
+    [
+     -52.5,
+     0.0,
+     129.0
+    ],
+    [
+     -52.5,
+     14.0,
+     131.0
     ]
    ]
   }

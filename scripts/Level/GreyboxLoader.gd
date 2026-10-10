@@ -19,6 +19,9 @@ const FAMILY_COLOURS := {
 	"stall": Color8(200, 170, 90), "town_hall": Color8(170, 120, 100),
 }
 const OTHER_FAMILY := Color8(150, 150, 150)
+## A ladder's climbable box (m): across the wall, and out from it.
+const LADDER_WIDTH := 1.2
+const LADDER_DEPTH := 0.7
 
 
 ## The greybox's meshes and bodies, from greybox.json's data.
@@ -62,7 +65,14 @@ static func build(greybox: Dictionary) -> GreyboxLoader:
 		mesh.mesh = tool.commit()
 		mesh.material_override = materials[colour]
 		mesh.set_meta("kind", m["kind"])
+		mesh.set_meta("route", m.get("route", ""))
 		out.add_child(mesh)
+
+		# A climb is a ladder to take hold of, its board only to be seen.
+		if m.get("route", "") == "climb":
+			out.add_child(_ladder(m["points"]))
+			continue
+
 		var body := StaticBody3D.new()
 		var shape := CollisionShape3D.new()
 		var concave := ConcavePolygonShape3D.new()
@@ -73,3 +83,25 @@ static func build(greybox: Dictionary) -> GreyboxLoader:
 		mesh.add_child(body)
 
 	return out
+
+
+## A ladder (ClimbVolume) up the wall a climb crosses: from its lower end
+## to its upper, standing out from the wall on the side it is climbed from,
+## its local -Z into the wall.
+static func _ladder(points: Array) -> ClimbVolume:
+	var a := Vector3(points[0][0], points[0][1], points[0][2])
+	var b := Vector3(points[-1][0], points[-1][1], points[-1][2])
+	var lower := a if a.y <= b.y else b
+	var upper := b if a.y <= b.y else a
+	var into := Vector3(upper.x - lower.x, 0, upper.z - lower.z).normalized()
+	var wall := Vector3((a.x + b.x) * 0.5, 0, (a.z + b.z) * 0.5)
+	var volume := ClimbVolume.new()
+	volume.name = "ladder"
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(LADDER_WIDTH, upper.y - lower.y, LADDER_DEPTH)
+	shape.shape = box
+	volume.add_child(shape)
+	volume.transform = Transform3D(Basis.looking_at(into, Vector3.UP),
+		wall - into * LADDER_DEPTH * 0.5 + Vector3(0, (lower.y + upper.y) * 0.5, 0))
+	return volume

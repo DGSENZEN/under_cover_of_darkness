@@ -1,7 +1,7 @@
 """The roofs' routes: wherever two walkable roofs of different heights meet,
 a climb from the lower to the higher; then one climb up from the street to
 every cluster of roofs not yet reached (roofs of one height that meet are
-one surface already)."""
+one surface already), and one to every landmark's roof."""
 
 import math
 
@@ -83,7 +83,8 @@ def lay(P):
     for i, p in sorted(enumerate(roofs), key=lambda e: e[1]["name"]):
         root = find(i)
 
-        if root in done:
+        # Every landmark's roof has its own way up; a run of houses one.
+        if root in done and p["family"] == "house":
             continue
 
         for a, b in plan_check._edges(p["polygon"]):

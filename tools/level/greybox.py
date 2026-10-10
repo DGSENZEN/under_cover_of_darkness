@@ -34,7 +34,9 @@ STAIR_WIDTH = 2.4
 BRIDGE = (4.0, 0.4)
 PLANK = (0.8, 0.15)
 PROUD = 0.1
-BOARD = (0.6, 0.2)
+BOARD = (0.6, 0.05)
+# The board stands this far off the wall (m).
+BOARD_OFF = 0.02
 TUNNEL = (3.0, 3.0)
 # Same-facing faces nearer than this (m) fight (tools/eclipse/gate.py's
 # LAYER_GAP; checked by bucket here, there pair by pair).
@@ -313,14 +315,19 @@ def _route(r):
         return _box((a[0], a[2]), (b[0], b[2]), PLANK[0], (a[1] + PROUD, b[1] + PROUD), PLANK[1])
 
     if r["kind"] == "climb":
-        # A board up the wall between its ends, to its top end and a metre on.
+        # The ladder's board against the wall, on the side it is climbed
+        # from (Godot makes it a ladder; the board has no collider).
+        lower, upper = (a, b) if a[1] <= b[1] else (b, a)
         mx, mz = (a[0] + b[0]) / 2, (a[2] + b[2]) / 2
-        dx, dz = b[0] - a[0], b[2] - a[2]
+        dx, dz = upper[0] - lower[0], upper[2] - lower[2]
         length = math.hypot(dx, dz)
-        ux, uz = dx / length * BOARD[1] / 2, dz / length * BOARD[1] / 2
-        lo, hi = min(a[1], b[1]), max(a[1], b[1]) + 1.0
-        faces = []
-        return _box((mx - ux, mz - uz), (mx + ux, mz + uz), BOARD[0], hi, hi - lo) if length > 1e-6 else faces
+
+        if length < 1e-6:
+            return []
+
+        ux, uz = dx / length, dz / length
+        near, far = (mx - ux * (BOARD_OFF + BOARD[1]), mz - uz * (BOARD_OFF + BOARD[1])), (mx - ux * BOARD_OFF, mz - uz * BOARD_OFF)
+        return _box(near, far, BOARD[0], upper[1], upper[1] - lower[1])
 
     if r["kind"] == "tunnel":
         w, h = TUNNEL
@@ -345,7 +352,8 @@ def build(data):
     meshes += [{"name": g["name"], "kind": "sunken", "faces": _sunken(g, sunken, data["plots"], openings)} for g in sunken]
     meshes += [{"name": p["name"], "kind": "plot", "family": p["family"], "faces": _plot(p)} for p in data["plots"]]
     meshes += [{"name": s["name"], "kind": "space", "faces": _space(s, data)} for s in data["spaces"]]
-    meshes += [{"name": r["name"], "kind": "route", "route": r["kind"], "faces": _route(r)} for r in data["routes"]]
+    meshes += [{"name": r["name"], "kind": "route", "route": r["kind"], "points": r["points"], "faces": _route(r)}
+               for r in data["routes"]]
     return {"name": data["name"], "meshes": meshes}
 
 

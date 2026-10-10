@@ -34,7 +34,8 @@ func _run() -> void:
 	for mesh: MeshInstance3D in map.greybox.find_children("*", "MeshInstance3D", true, false):
 		kinds[mesh.get_meta("kind", "")] = true
 
-		if mesh.find_children("*", "CollisionShape3D", true, false).is_empty():
+		# (A ladder's board is only seen: its ladder is taken hold of.)
+		if mesh.get_meta("route", "") != "climb" and mesh.find_children("*", "CollisionShape3D", true, false).is_empty():
 			bare.append(String(mesh.name))
 
 	_check("Z1 the greybox loads every kind of mesh, each solid", KINDS.all(func(k): return kinds.has(k)) and bare.is_empty(),
@@ -98,10 +99,23 @@ func _run() -> void:
 		walk["ok"] and absf(walk["end"].y - 1.05 + 14.0) < 0.5 and platform.has_point(Vector2(walk["end"].x, walk["end"].z)),
 		"%s" % [walk])
 
-	# Z6 across the plank between the town hall's two roofs
-	walk = await _walk(Vector3(-11, 14 + 1.05, 145), -PI / 2, func(p): return p.x > 10.0, 600)
-	_check("Z6 the player crosses the town hall's roof plank", walk["ok"] and walk["lowest"] > 14.0 - 0.5,
-		"%s" % [walk])
+	# Z6 from the street up the town hall's ladder on to its roof, along it
+	#    and across the plank to the other roof (no teleport on to a roof)
+	var climb := _route("climb_up_town_hall_w")
+	var foot := Vector3(climb["points"][0][0], 1.05, climb["points"][0][2])
+	var into := Vector3(climb["points"][1][0] - climb["points"][0][0], 0, climb["points"][1][2] - climb["points"][0][2])
+	var up := await _walk(foot - into.normalized() * 0.6, atan2(-into.x, -into.z),
+		func(p): return p.y > 14.5 and map.player.movement_state == map.player.MoveState.LOCOMOTION, 900)
+	var along := await _walk(map.player.global_position, PI, func(p): return p.z > 144.8, 600)
+	var across := await _walk(map.player.global_position, -PI / 2, func(p): return p.x > 10.0, 600)
+	_check("Z6 the player climbs the town hall's ladder from the street and crosses its roof plank",
+		up["ok"] and along["ok"] and across["ok"] and along["lowest"] > 14.0 and across["lowest"] > 14.0 - 0.5,
+		"up %s along %s across %s" % [up, along, across])
+
+	# Z6b every climb is a ladder the player can take hold of
+	var climbs: int = map.plan["routes"].filter(func(r): return r["kind"] == "climb").size()
+	var volumes: int = map.greybox.find_children("*", "Area3D", true, false).filter(func(a): return a is ClimbVolume).size()
+	_check("Z6b every climb is a ladder", climbs > 0 and volumes == climbs, "%d climbs, %d ladders" % [climbs, volumes])
 
 	# Z7 down to the canal's west landing
 	var landing := _rect("landing_w")
@@ -158,6 +172,10 @@ func _centre_of(points: Array) -> Vector2:
 		sum += Vector2(p[0], p[1])
 
 	return sum / points.size()
+
+
+func _route(name: String) -> Dictionary:
+	return _find("routes", name)
 
 
 func _find(key: String, name: String) -> Dictionary:
