@@ -1,6 +1,6 @@
 # Card: the street's life and its uncanny (Zócalo family 1b)
 
-**Status:** awaiting the user's approval (Oct 10 2026). This is the detail pass over family 1, the street and canal kit, which the user approved the same day. The user asked for bollards, tram poles, overhead wire, blank signs and posters, carts, kiosks, and "a few more supernatural details added to the general feel of the place". Their standing rule applies: detail a lot, because this is a big, dense city.
+**Status:** revised after the user's note (Oct 10 2026): the supernatural needs "more of that Hellboy and Deadlock taste". Awaiting approval. This is the detail pass over family 1, the street and canal kit, which the user approved the same day. The user asked for bollards, tram poles, overhead wire, blank signs and posters, carts, kiosks, and "a few more supernatural details added to the general feel of the place". Their standing rule applies: detail a lot, because this is a big, dense city.
 
 ## Source: what it should look like
 
@@ -21,7 +21,11 @@
 - **Thief:** clutter you can hide behind. Carts and kiosks are cover; poster columns break sightlines; every lamp is a choice to douse.
 - **Dishonored:** chunky, readable props with painted weight, and the Company's ironwork as a visible authority (Dunwall's walls of light, here the ward poles).
 - **Grim Fandango:** deco-noir kiosks and booths, and folk death imagery kept matter-of-fact (marigolds and candles as part of daily life).
-- **Deadlock:** occult industry in the street. Ward hardware bolted to Company poles; the seeped future crashed into colonial stone and repurposed.
+- **Deadlock:** the rupture made the occult **public and ordinary**. A god is a civic monument, and the ward is municipal infrastructure. Mundane things have turned uncanny: pickle jars with hands growing in them, sentient book stacks (`art_direction_case_studies.md`, Deadlock's "niche sauce"). Here the Eclipse of 1923 is the rupture, and Madero's dead and the reburied gods are its public face.
+- **Hellboy (Mignola), above all *Hellboy in Mexico*:**
+  - Aztec gods, brujos, vampires and pulp monsters fought by luchadores; the occult as pulp, not hush.
+  - A bureau that contains it all in crates, cages, chains and stencilled seals. Here that is El Secreto, the Holy Office that never closed (bible lie 5).
+  - Mignola's look: big blunt stone faces, heavy black shapes, chains, candles by the hundred, a single colour carrying a meaning.
 - **Game of Thrones:** everything is used and mended. Patched canvas, a wheel replaced with a different wheel, posters pasted over posters.
 
 ## Change: what the world did to it (every mark from an event)
@@ -33,17 +37,36 @@
   - A parking meter standing in the setts with a coin slot nobody can use.
   - A concrete traffic bollard, yellow-striped, among the colonial guard stones.
   - All of it looks foreign and repurposed, never seamless.
-- **Light is owned, and light guides the dead** (bible lie 3: the Company's lamps are wards; a street gone dark belongs to the dead):
-  - The Company's poles carry **ward fittings**: a polished obsidian disc on a bracket, turned towards the dark side-streets, and a brass ward plate whose text is blank for the user.
-  - Where a lamp has died, the ward goes with it: the glass is cracked, and the neighbours have laid **marigold petals** under the pole to guide the dead past their doors.
-- **Madero's spirits were real** (lie 2: the dead testify, and the state keeps séance registries):
-  - The street photographer's booth also takes **spirit photographs**: a box camera on a tripod, a black hood, a painted backdrop (blank for the user).
-  - **The registry's letter boxes for the dead**: iron posts where petitions and testimonies are posted, run by El Secreto (lie 5).
-  - **Votive candles** cluster at the foot of walls where someone died: revenant justice, the dead remembered so they stay quiet.
-- **Mictlán is the basement, and idols will not stay buried** (lie 4 and the sinking city):
-  - Where the ground sank hardest, **a carved stone (an invented god, not a copied one) has surfaced through the relaid setts**.
-  - El Secreto has roped it off with sawhorses and a sealed tag (blank).
-  - Candles, flowers and copal at its foot show who comes at night: the real Coatlicue story of 1790.
+The uncanny is not a few hushed traces. Since the Eclipse it has been public, policed and sold, as Deadlock's Maelstrom made it in New York. Each piece still has its cause in the bible's lies; none is magic sprinkled on top.
+
+- **The Bound God: the idol that will not stay buried, made a civic monument** (lie 4 and the real Coatlicue, dug up in the Zócalo in 1790, worshipped at night and reburied twice):
+  - El Secreto has given up reburying it. A colossal basalt god (an invented one, 6 m) stands chained upright in an iron cage on the plaza. Brass seal plates are riveted to its chains.
+  - It is ringed by the Company's ward lamps, which are never let go dark.
+  - At its foot, every night, are marigolds, candles by the hundred, copal and petitions. It is the Zócalo's Patron, as Deadlock's effigies are.
+  - Elsewhere, smaller heads still surface through the sinking setts, roped off and tagged.
+- **Light is owned, and light guides the dead** (lie 3):
+  - The ward is municipal hardware. The Company's poles carry **ward cages**: brass-caged lamps with obsidian lenses. **Sigil discs** cast in iron are stamped with the Company's ward and the year of the Eclipse.
+  - Painted **ward hoardings** (huge sigil boards, blank for the user) close off the dark ends of side streets.
+  - Where a lamp has died, the street belongs to the dead: marigold paths, and **claw-scored stone** round the cracked globe where something came down the pole (the Tzitzimimeh descend in the dark, `folklore_myth_occult.md`).
+- **The dead are public** (lie 2: Madero's spirits, séance registries):
+  - **The Line of the Dead.** The seeped 1980s payphones were found to ring with the dead. The Company boxed them in brass and wood as public booths with a registry clerk's slot: call your dead for a centavo.
+  - **El Secreto's testimony booth.** An iron confessional on the plaza with a speaking grille, where the dead give evidence under seal.
+  - **The spirit photographer's booth.** Box camera, black hood, a painted backdrop (blank). The proofs pinned round it show what stood behind the sitters (blank).
+  - **Votive candles in drifts**, not clusters, wherever someone died badly.
+- **El Secreto contains it** (lie 5: Hellboy's bureau, made colonial):
+  - **Sealed hatches.** The Line 2 service hatches over the shafts nearest Mictlán are chained, padlocked and sealed with sigil discs, their iron scored from below.
+  - **Containment cages** on posts: iron birdcage-traps hung with wards, some holding things (a desiccated chaneque, a lechuza owl-witch, its feathers like knives).
+  - **Crated relics.** Secreto crates on a handcart, stencilled with seals (blank), chained shut, one lid pushed up from inside.
+- **Pulp sold in the street** (Hellboy in Mexico; Deadlock's mundane uncanny):
+  - **The curiosity stand:** jars with hands growing in them, a pickled ahuízotl (the canal's water-dog), dried hummingbird love charms (chuparrosas), snakes, obsidian blades and ex-voto milagros.
+  - **The monster wagon:** a travelling show's iron-barred wagon with a glass tank in which a live ahuízotl circles. A barker's board and blank posters advertise it.
+  - **Luchador bills.** Wrestlers who fight monsters on the poster columns (blank for the user), and a masked-luchador shrine (mask, candles, a cracked belt). Lucha libre arrived in the 1930s, so this is a deliberate anachronism, labelled as the bible allows.
+- **Colour carries meaning** (del Toro's rule, `art_direction_case_studies.md`):
+  - marigold amber is the dead's;
+  - the Company's cold cyan-white is the ward's;
+  - oxblood red is the old gods';
+  - the seeped future is a sickly phosphor green.
+  Nothing else in the street wears these colours.
 - **Use** (the market, the ring, Madero):
   - Carts are patched and kiosks repainted over older paint.
   - Posters are pasted over posters, some torn back to the layer under.
@@ -102,19 +125,31 @@
 | `kiosk_lottery` | A lottery booth: a tiny painted cabin, blank ticket boards |
 | `kiosk_sweets` | A sweets stand under a canvas awning, jars and trays |
 | `shoeshine_stand` | A shoeshine chair on a box, a footrest, a brass tin |
-| `booth_photographer` | The spirit photographer's booth: a box camera on a tripod, a black hood, a painted backdrop on a frame (blank) |
 | `parking_meter` | Seepage: a 1980s parking meter in the setts |
 
-**The uncanny (few, but everywhere you look)**
+**The uncanny (public, policed and sold)**
 
 | Object | What it is |
 |---|---|
-| `petals_marigold` | A heap of marigold petals (mounded, 5 cm) at a threshold or under a dead lamp |
-| `candles_votive` | Candles in glass cups clustered at a wall's foot, wax runs, a photo frame (blank) |
-| `deadletter_post` | The registry's letter box for the dead: an iron post box with El Secreto's seal (blank) |
-| `idol_surfacing` | A carved basalt god's head and hand breaking up through relaid setts (an invented god) |
-| `secreto_barrier` | El Secreto's sawhorse barrier with rope and a sealed tag (blank) |
-| `copal_burner` | A clay copal burner with ash, set at the idol's foot |
+| `bound_god` | The Zócalo's Patron: a 6 m invented basalt god chained upright in an iron cage, brass seals on its chains, on a stepped plinth (the plinth's plaque blank) |
+| `offerings_heap` | Its foot: marigold banks, candle drifts by the hundred, copal burners, pinned petitions (blank), a ring of kneeling cushions |
+| `idol_surfacing` | A smaller god's head and hand breaking up through relaid setts |
+| `secreto_barrier` | El Secreto's sawhorse barrier with chain and a sealed tag (blank) |
+| `ward_cage_lamp` | A Company lamp in a brass cage with obsidian lenses (replaces the plain pole lamp near the god and the dark streets) |
+| `sigil_disc` | A cast-iron ward disc bolted to a pole or a hatch, stamped with the Company's ward (relief, its glyph the user's) |
+| `ward_hoarding` | A painted sigil board closing a dark side-street's end, 4 × 3 m on timber legs (blank for the user's sigil) |
+| `claw_scored_slab` | Setts scored by claws round a dead lamp's foot (an inlay, flush) |
+| `petals_marigold` | Marigold petal paths and heaps at thresholds and under dead lamps |
+| `candles_drift` | A drift of votive candles at a wall's foot, wax runs, photo frames (blank) |
+| `booth_line_of_dead` | The Line of the Dead: a seeped payphone boxed by the Company in brass and carved wood, a clerk's slot, a centavo box |
+| `booth_testimony` | El Secreto's iron testimony booth: a confessional with a speaking grille and a seal (blank) |
+| `booth_photographer` | The spirit photographer's booth (moved here from the kiosks), proofs pinned round it (blank) |
+| `hatch_sealed` | A Line 2 hatch chained, padlocked and sealed with a sigil disc, its iron scored from below |
+| `cage_trap` | An iron birdcage trap on a post, hung with wards, holding a dried thing (variants: empty, chaneque, lechuza) |
+| `crates_relics` | Secreto crates chained on a handcart, stencilled seals (blank), one lid pushed up from inside |
+| `stand_curiosities` | The curiosity stand: jars with hands growing in them, a pickled ahuízotl, hummingbird charms, snakes, obsidian blades, milagros |
+| `wagon_monster` | A travelling show's barred wagon with a glass tank (an ahuízotl circling), a barker's board (blank) |
+| `shrine_luchador` | A masked luchador's shrine: a mask on a post, candles, a cracked belt, blank bills |
 
 ## Density (how much the dresser lays; the user's rule: a lot)
 
@@ -128,12 +163,17 @@
 | Market lanes | A cart every 6 m on alternating sides (flower, tamale, ice, firewood, hand) |
 | Plaza, market, Madero | Poster columns (8 on the plaza, 6 in the market, 4 on Madero); poster clusters on one plot wall in three facing a street |
 | Seepage field ≥ 0.5 | The future's objects: payphones, dead traffic lights, parking meters, concrete bollards, bus-stop signs (about 12 in all) |
-| Dark spots (no lamp within 20 m, or a dead lamp) | Marigold petals; a dead lamp in every eighth pole where seepage is low |
-| Death places (about 12, seeded, at wall feet) | Votive candles |
-| Subsidence ≥ 0.6 | The surfacing idol (3), each with a barrier and a copal burner |
-| Before El Secreto (Santo Domingo) and the plaza's corners | Dead-letter posts (4) and notice boards (4) |
+| The plaza's middle (over the station hall, where the causeway band ends) | The Bound God on its plinth, its offerings heap, eight ward-cage lamps round it |
+| Dark spots (no lamp within 20 m, or a dead lamp) | Marigold paths, claw-scored slabs under dead lamps (a dead lamp in every eighth pole where seepage is low), a cage trap |
+| Side streets' dark ends off the ring and Madero | Ward hoardings (about 10) |
+| Every pole facing a side street | A sigil disc; ward-cage lamps on the poles nearest the god and the dark ends |
+| Death places (about 20, seeded, at wall feet) | Candle drifts |
+| Subsidence ≥ 0.6 | Surfacing idols (3), each with a barrier and copal |
+| The four hatches over the corridors nearest the crypt | Sealed hatches (the rest stay plain) |
+| The plaza's corners and before Santo Domingo | Lines of the Dead (4), testimony booths (2), notice boards (4) |
+| The market | Curiosity stands (4), the monster wagon (1), luchador shrines (2), spirit photographers (2), relic crates (2 carts) |
 
-Roughly 1,500 more pieces across the map, drawn as MultiMeshes like family 1.
+Roughly 1,600 more pieces across the map, drawn as MultiMeshes like family 1.
 
 ## Dimensions (metres)
 
@@ -148,8 +188,9 @@ Roughly 1,500 more pieces across the map, drawn as MultiMeshes like family 1.
 - signs and plaques ≤ 150;
 - carts ≤ 800;
 - kiosks and booths ≤ 1,500;
-- uncanny props ≤ 600;
-- the idol ≤ 1,500.
+- uncanny props ≤ 600, booths and the wagon ≤ 1,500;
+- the surfacing idol ≤ 1,500;
+- the Bound God, cage and plinth ≤ 5,000 (a landmark seen across the plaza).
 
 ## Slots: material regions, with the Zócalo palette
 
@@ -167,7 +208,10 @@ Roughly 1,500 more pieces across the map, drawn as MultiMeshes like family 1.
 | `obsidian` | The ward mirrors: black, glossy |
 | `marigold` | Petals and flower heaps (`#F2A20C`, `#D9660A`) |
 | `wax` | Candles, faintly lit at night |
-| `glass` | Lamp globes, candle cups |
+| `glass` | Lamp globes, candle cups, the wagon's tank |
+| `flesh` | What grows in the jars and dries in the cages (pale, waxy) |
+
+Colour carries meaning: marigold amber is the dead's, cyan-white the ward's, oxblood the gods', phosphor green the seeped future's.
 
 ## Joints the joint renders must frame
 
@@ -180,13 +224,17 @@ Roughly 1,500 more pieces across the map, drawn as MultiMeshes like family 1.
 7. Chain to a chain post; a post to the coping
 8. The idol breaking through the setts (the broken stones round it)
 9. Petals and candles to the ground and to a wall's foot
+10. The Bound God's chains to its cage and its cage to the plinth; the offerings heap to the flags
+11. A sealed hatch's chain and padlock to its frame
+12. The Line of the Dead's brass box round the seeped phone
 
 ## What I need from you
 
 - **Approval** of this card (or changes). Above all, the uncanny set: is it the right amount, and the right things?
+- **The Bound God's place:** the plaza's middle, at the end of the causeway band over the station hall, seen from every side. Is that right, or should it wait for the Templo Mayor family?
 - **Words and pictures:** every plaque, plate, poster, notice, ward plate, tag, headline board, ticket board and backdrop is a blank canvas for you.
 - **Textures:**
   - Canvas and burlap: I'd fetch one CC0 Poly Haven fabric scan for the awnings, cart covers and the photographer's hood. Or you source it.
   - Wood: the stained_pine scan we have.
   - Marigolds, wax and obsidian: painted by me.
-- **The idol's god:** I'll design an invented deity's head and hand (not a copied INAH sculpture, per the bible). If you have a sketch or a description of the god, I'll follow it.
+- **The gods:** I'll design invented deities, the Bound God and the surfacing heads (not copied INAH sculpture, per the bible). Mignola-blunt: big stone faces, heavy shapes. If you have a sketch or a description, I'll follow it.
