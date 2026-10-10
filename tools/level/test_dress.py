@@ -79,7 +79,8 @@ class Dressing(unittest.TestCase):
         self.assertEqual(len(_pieces("tram_track_curve")), 4)
 
     def test_every_stretch_within_five_percent(self):
-        self.assertTrue(all(0.95 <= p.get("stretch", 1.0) <= 1.05 for p in DRESSING["pieces"]))
+        self.assertTrue(all(0.95 <= p.get("stretch", 1.0) <= 1.05 for p in DRESSING["pieces"]
+                            if p["piece"] not in dress.STRETCHY))
 
     def test_drops_at_the_four_gates(self):
         middles = sorted((round(x, 1), round(z, 1)) for x, z in map(_middle, _pieces("kerb_drop")))

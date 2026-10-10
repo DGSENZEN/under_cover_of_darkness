@@ -35,7 +35,8 @@ import plan  # noqa: E402
 import street_dims as D  # noqa: E402
 
 SOURCE = ROOT / "assets" / "eclipse" / "source"
-KITS = ("street_kit", "canal_kit", "bridge_stone", "bridge_steel")
+KITS = ("street_kit", "canal_kit", "bridge_stone", "bridge_steel", "furniture_kit", "trade_kit", "uncanny_kit",
+        "bound_god")
 # How far a run's pieces may be stretched (or squeezed) to fill it.
 STRETCH = (0.95, 1.05)
 # The events' thresholds: subsidence heaves a kerb or shims a track; the
@@ -56,7 +57,10 @@ RING_EVERY = 4              # wall pieces: a ring at every fourth one's middle
 # Culverts and rings keep this far from a bridge's or a landing's edge (m).
 CLEAR = 6.0
 # Flush pieces: set into the ground, which is cut round them.
-FLUSH = ("tram_track", "tram_track_shimmed", "tram_track_curve", "causeway_band", "hatch", "gutter_grate")
+FLUSH = ("tram_track", "tram_track_shimmed", "tram_track_curve", "causeway_band", "hatch", "gutter_grate",
+         "claw_scored_slab", "hatch_sealed")
+# Pieces cut to their span (wires, chain): stretched freely, not held to STRETCH.
+STRETCHY = ("span_wire", "trolley_wire", "chain_span")
 # The greybox the dressing takes over (its routes by kind, its grounds by kind).
 SKIP_GROUNDS = ("plaza", "canal", "landing")
 SKIP_ROUTES = ("bridge",)
@@ -70,6 +74,10 @@ LAYER_GAP = 0.03
 
 # Kits and placements
 
+# Which kit holds each piece (filled from the loaded kits' faces).
+_KIT_OF = {}
+
+
 def load_faces(source=SOURCE):
     """Each built kit's faces and triangles, by object, in its Godot axes."""
     out = {}
@@ -79,16 +87,14 @@ def load_faces(source=SOURCE):
 
         if path.exists():
             out[kit] = json.loads(path.read_text())
+            _KIT_OF.update({name: kit for name in out[kit]["objects"]})
 
     return out
 
 
 def kit_of(piece):
-    if piece in ("bridge_stone", "bridge_steel"):
-        return piece
-
-    canal = ("canal_wall", "culvert", "canal_landing_steps", "mooring_ring")
-    return "canal_kit" if piece.startswith(canal) else "street_kit"
+    """The kit holding a piece: whichever loaded kit has an object of that name."""
+    return _KIT_OF[piece]
 
 
 def place(piece, at, yaw, stretch=1.0, collider=None):
@@ -220,6 +226,8 @@ class Dresser:
         self.canal = next(g for g in grounds if g["kind"] == "canal")
         self.landings = [g for g in grounds if g["kind"] == "landing"]
         self.bridges = [r for r in data["routes"] if r["kind"] == "bridge"]
+        self.lights = []
+        _KIT_OF.update({name: kit for kit in faces for name in faces[kit]["objects"]})
 
     def field(self, kind, at):
         return plan.field(self.data, kind, at[0], at[1])
@@ -551,7 +559,10 @@ def dress(data, faces):
         d.landing(g)
 
     d.bridges_()
-    return {"skip": d.skip(), "pieces": d.pieces, "colliders": d.boxes, "ground": d.ground()}
+    import dress_life
+
+    dress_life.life(d)
+    return {"skip": d.skip(), "pieces": d.pieces, "colliders": d.boxes, "ground": d.ground(), "lights": d.lights}
 
 
 # Geometry
@@ -710,10 +721,13 @@ def main(argv):
     for p in problems[:40]:
         print("dress:", p)
 
-    print("dress: %d pieces, %d colliders, %d ground areas, %d problems -> %s" % (
-        len(dressing["pieces"]), len(dressing["colliders"]), len(dressing["ground"]["areas"]), len(problems), argv[2]))
+    print("dress: %d pieces, %d colliders, %d lights, %d ground areas, %d problems -> %s" % (
+        len(dressing["pieces"]), len(dressing["colliders"]), len(dressing["lights"]), len(dressing["ground"]["areas"]),
+        len(problems), argv[2]))
     return 1 if problems else 0
 
 
 if __name__ == "__main__":
+    # dress_life imports this module as `dress`: one module, one kit index.
+    sys.modules["dress"] = sys.modules[__name__]
     sys.exit(main(sys.argv[1:]))

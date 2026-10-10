@@ -17,7 +17,8 @@ def lay(P):
     # The tram runs the ring's middle; its east and west runs a metre out, so
     # each straight between radius-12 curves is whole 4.5 m track pieces.
     P.tram([(-111, -120), (111, -120), (111, 120), (-111, 120)])
-    # The Iztapalapa causeway's line, up Calle 20 de Noviembre to the station.
-    P.causeway([(0, 160), (0, 0)])
+    # The Iztapalapa causeway's line, up Calle 20 de Noviembre to the station
+    # under the plaza's middle, where it ends at the Bound God's plinth.
+    P.causeway([(0, 160), (0, 3)])
     P.landmark("tram_stop_south", "tram_stop", (0, 120))
     P.landmark("spawn", "spawn", (0, 120))

@@ -69,7 +69,7 @@ class Plan(unittest.TestCase):
 
     def test_causeway_runs_to_the_station(self):
         self.assertEqual(DATA["causeway"][0], [0.0, 160.0])
-        self.assertEqual(DATA["causeway"][-1], [0.0, 0.0])
+        self.assertEqual(DATA["causeway"][-1], [0.0, 3.0])
 
     def test_canal(self):
         canal = _ground("canal")
