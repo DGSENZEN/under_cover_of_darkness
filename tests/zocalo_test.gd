@@ -199,6 +199,7 @@ func _dressed() -> void:
 		"%d kinds placed, %d drawn, greybox left %s" % [counts.size(), drawn.size(), left])
 
 	_ground_clear()
+	await _street_life()
 
 	# Z9 over a kerb from the street on to the plaza, away from a crossing
 	var walk := await _walk(Vector3(6, 1.05, 115), 0.0, func(p): return p.z < 104.0, 600)
@@ -235,6 +236,65 @@ func _dressed() -> void:
 		"landing %.3f, canal %.3f, %s" % [on_landing, on_floor, walk])
 
 
+## The street's life (the street-life plan, Task 7): lit, walked among.
+func _street_life() -> void:
+	# Z15 one light a lit lamp
+	var lights: Array = map.kit.find_children("*", "OmniLight3D", true, false)
+	_check("Z15 the Company's lamps are lit, one light each", lights.size() == map.dressing["lights"].size()
+		and lights.size() > 40, "%d lights for %d lamps" % [lights.size(), map.dressing["lights"].size()])
+
+	# Z16 round the Bound God, then down a market lane, never snagged
+	var stall := 0
+	var arrived := true
+	map.player.global_position = Vector3(7.0 * cos(PI / 8), 1.25, 7.0 * sin(PI / 8))
+
+	for k in 9:
+		var a := PI / 8 + PI / 4 * (k + 1)
+		var to := Vector3(7.0 * cos(a), 0, 7.0 * sin(a))
+		var from: Vector3 = map.player.global_position
+		var walk := await _walk(from, atan2(-(to.x - from.x), -(to.z - from.z)),
+			func(p): return Vector2(p.x - to.x, p.z - to.z).length() < 0.7, 300)
+		stall = maxi(stall, walk["stall"])
+		arrived = arrived and walk["ok"]
+
+	var lane := await _walk(Vector3(-46, 1.05, 207), PI, func(p): return p.z > 278.0, 1800)
+	_check("Z16 the player walks round the god and down a market lane without snagging", arrived and lane["ok"]
+		and stall < 18 and lane["stall"] < 18, "round stall %d, lane %s" % [stall, lane])
+
+	# Z17 a pole stops the player; marigold petals do not
+	var pole: Dictionary = map.dressing["pieces"].filter(func(p): return p["piece"] == "tram_pole")[0]
+	var at := Vector3(pole["at"][0], pole["at"][1], pole["at"][2])
+	var toward := await _walk(at + Vector3(3, 1.05, 0), PI / 2, func(p): return p.x < at.x - 1.0, 240)
+	# (A heap clear of any pole: the ones under dead lamps lie beside them.)
+	var poles: Array = map.dressing["pieces"].filter(func(p): return p["piece"].contains("pole") or p["piece"].contains("lamp"))
+	var petal: Dictionary = {}
+
+	for p in map.dressing["pieces"]:
+		if p["piece"] != "petals_marigold":
+			continue
+
+		var clear := true
+
+		for q in poles:
+			clear = clear and Vector2(q["at"][0] - p["at"][0], q["at"][2] - p["at"][2]).length() > 6.0
+
+		if clear:
+			petal = p
+			break
+
+	var over := Vector3(petal["at"][0], petal["at"][1], petal["at"][2])
+	var across := await _walk(over + Vector3(2.5, 1.05, 0), PI / 2, func(p): return p.x < over.x - 2.0, 300)
+	_check("Z17 a pole stops the player, petals do not", not toward["ok"] and toward["end"].x > at.x + 0.2
+		and across["ok"], "pole at %s, ended %s; petals %s" % [at, toward["end"], across])
+
+	# Z18 lit at night, dark by day
+	map.set_day(false)
+	var lit := lights.all(func(l): return l.visible and l.light_energy > 0.0)
+	map.set_day(true)
+	var dark := lights.all(func(l): return not l.visible)
+	_check("Z18 the lamps light at night and go out by day", lit and dark, "night %s, day %s" % [lit, dark])
+
+
 ## Z14 no ground over a flush piece or in an opening, at the ground's own
 ## level: every chunk's triangles against its area's rectangular inlays and
 ## openings (bucketed by 10 m).
@@ -246,7 +306,8 @@ func _ground_clear() -> void:
 		var area: Dictionary = map.dressing["ground"]["areas"][a]
 		var buckets := {}
 
-		for r in area["openings"] + area["inlays"].filter(func(p): return p.size() == 4).map(_rect_of):
+		# (Axis-aligned rectangles only: a turned one's box is more than it.)
+		for r in area["openings"] + area["inlays"].filter(_axis_aligned).map(_rect_of):
 			var rect := Rect2(r[0], r[1], r[2] - r[0], r[3] - r[1]).grow(-1e-3)
 
 			for i in range(floori(rect.position.x / 10.0), floori(rect.end.x / 10.0) + 1):
@@ -272,6 +333,22 @@ func _ground_clear() -> void:
 					break
 
 	_check("Z14 no ground lies over a flush piece or in an opening", over == 0, "%d triangles" % over)
+
+
+func _axis_aligned(points: Array) -> bool:
+	if points.size() != 4:
+		return false
+
+	var r := _rect_of(points)
+
+	for p in points:
+		var on_x: bool = is_equal_approx(p[0], r[0]) or is_equal_approx(p[0], r[2])
+		var on_z: bool = is_equal_approx(p[1], r[1]) or is_equal_approx(p[1], r[3])
+
+		if not (on_x and on_z):
+			return false
+
+	return true
 
 
 func _rect_of(points: Array) -> Array:

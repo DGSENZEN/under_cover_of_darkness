@@ -12,6 +12,14 @@ const ATLASES := "res://textures/painted/eclipse/"
 ## Pieces are drawn together within cells this wide (m), so the camera can
 ## leave out what it does not see.
 const CELL := 100.0
+## The Company's lit lamps: their globes glow in the light's colour at night.
+const LIT := {"tram_pole_lamp": Color("#e8d8a8"), "ward_cage_lamp": Color("#CFE8F0")}
+const LAMP_ENERGY := 1.6
+const GLOW := 2.5
+
+## The lamps' lights and their glowing globes, switched by night and day.
+var lights: Array[OmniLight3D] = []
+var globes: Array[StandardMaterial3D] = []
 
 static var _materials := {}
 static var _meshes := {}
@@ -49,7 +57,7 @@ static func build(dressing: Dictionary) -> KitLoader:
 
 		var multi := MultiMesh.new()
 		multi.transform_format = MultiMesh.TRANSFORM_3D
-		multi.mesh = mesh
+		multi.mesh = out._dressed(g["kit"], g["piece"], mesh)
 		multi.instance_count = g["transforms"].size()
 
 		for i in multi.instance_count:
@@ -58,9 +66,23 @@ static func build(dressing: Dictionary) -> KitLoader:
 		var draw := MultiMeshInstance3D.new()
 		draw.name = key.replace("/", "_")
 		draw.multimesh = multi
-		draw.material_override = material(g["kit"])
 		draw.set_meta("piece", g["piece"])
 		out.add_child(draw)
+
+	var lamps := Node3D.new()
+	lamps.name = "lights"
+	out.add_child(lamps)
+
+	for l in dressing.get("lights", []):
+		var light := OmniLight3D.new()
+		light.light_color = Color(l["colour"])
+		light.omni_range = l["range"]
+		light.light_energy = LAMP_ENERGY
+		light.shadow_enabled = l.get("shadow", false)
+		light.position = Vector3(l["at"][0], l["at"][1], l["at"][2])
+		light.visible = false
+		lamps.add_child(light)
+		out.lights.append(light)
 
 	var body := StaticBody3D.new()
 	body.name = "colliders"
@@ -74,6 +96,43 @@ static func build(dressing: Dictionary) -> KitLoader:
 		shape.shape = box
 		shape.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(c["yaw"])), Vector3(b[0], b[1], b[2]))
 		body.add_child(shape)
+
+	return out
+
+
+## The Company's lamps lit (night) or out (day): their lights and globes.
+func set_lights(on: bool) -> void:
+	for light in lights:
+		light.visible = on
+
+	for glass in globes:
+		glass.emission_energy_multiplier = GLOW if on else 0.0
+
+
+## A piece's mesh as the kit draws it: each surface in the kit's painterly
+## material, but glass as glass (a lit lamp's globe glowing in its colour).
+func _dressed(kit: String, piece: String, mesh: Mesh) -> Mesh:
+	var out: Mesh = mesh.duplicate()
+
+	for i in out.get_surface_count():
+		var slot: Material = mesh.surface_get_material(i)
+
+		if slot != null and slot.resource_name == "glass":
+			var glass := StandardMaterial3D.new()
+			glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			glass.albedo_color = Color(0.72, 0.8, 0.82, 0.35)
+			glass.roughness = 0.15
+
+			if LIT.has(piece):
+				glass.albedo_color = Color(LIT[piece], 0.6)
+				glass.emission_enabled = true
+				glass.emission = LIT[piece]
+				glass.emission_energy_multiplier = 0.0
+				globes.append(glass)
+
+			out.surface_set_material(i, glass)
+		else:
+			out.surface_set_material(i, material(kit))
 
 	return out
 

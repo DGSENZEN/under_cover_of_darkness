@@ -95,6 +95,9 @@ func set_day(day: bool) -> void:
 	sun.visible = day
 	moon.visible = not day
 
+	if kit:
+		kit.set_lights(not day)
+
 
 func _lights() -> void:
 	_night = RetroScript.night_environment()
