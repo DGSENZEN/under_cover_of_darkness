@@ -25,6 +25,17 @@ const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 	set(value):
 		dither = value
 		_fit()
+## A district's palette (16 x 1, like Painterly.ZOCALO) the whole frame is
+## pulled toward, and how far (0 off, the default): the frame reads as one
+## painting. Per pixel, nearest colour in Oklab; no blur, so the grid holds.
+@export var palette: Texture2D = null:
+	set(value):
+		palette = value
+		_fit()
+@export_range(0.0, 1.0, 0.05) var palette_pull := 0.0:
+	set(value):
+		palette_pull = value
+		_fit()
 ## Render the 3D view only as sharp as the grid needs.
 @export var auto_render_scale := true:
 	set(value):
@@ -144,6 +155,8 @@ func _fit() -> void:
 	_material.set_shader_parameter("virtual_size", cells)
 	_material.set_shader_parameter("levels", color_levels)
 	_material.set_shader_parameter("dither_strength", dither)
+	_material.set_shader_parameter("palette", palette)
+	_material.set_shader_parameter("palette_pull", palette_pull if palette != null else 0.0)
 
 	# Two rendered pixels to each cell is plenty: the rest would be averaged
 	# away. Pixels of the window itself: the visible rect is in the HUD's

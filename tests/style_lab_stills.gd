@@ -98,7 +98,8 @@ func _views(x: float, kiosk_z: float, bays_z: float) -> Array:
 
 ## Tuning rounds: the shader-led station drawn as each variant, by night and
 ## day, in the views that judge a look. A variant is "name|key=value;..."
-## (shader parameters, or atlas_dir=<folder> for other painted atlases).
+## (shader parameters, atlas_dir=<folder> for other painted atlases, or
+## screen_pull=<0-1> to pull the whole frame toward the Zócalo palette).
 ##   -- --out=/tmp/round1 --variant="A|" --variant="B|painted_light=1"
 func _compare(lab: Node3D, eye: Camera3D, variants: Array) -> void:
 	var views := _views(lab.STATION_X[2], lab.KIOSK_Z, lab.BAYS_Z)
@@ -118,9 +119,15 @@ func _compare(lab: Node3D, eye: Camera3D, variants: Array) -> void:
 		for uniform in m.shader.get_shader_uniform_list():
 			originals[key][uniform["name"]] = m.get_shader_parameter(uniform["name"])
 
+	var retro: Node = get_node_or_null("/root/Retro")
+
 	for spec in variants:
 		var name: String = spec.split("|")[0]
 		var settings: String = spec.split("|")[1] if spec.contains("|") else ""
+
+		if retro != null:
+			retro.palette = null
+			retro.palette_pull = 0.0
 
 		for key in materials:
 			var m: ShaderMaterial = materials[key]
@@ -131,7 +138,11 @@ func _compare(lab: Node3D, eye: Camera3D, variants: Array) -> void:
 			for pair in settings.split(";", false):
 				var kv: PackedStringArray = pair.split("=")
 
-				if kv[0] == "atlas_dir":
+				if kv[0] == "screen_pull":
+					if retro != null:
+						retro.palette = preload("res://scripts/Visual/Painterly.gd").ZOCALO
+						retro.palette_pull = float(kv[1])
+				elif kv[0] == "atlas_dir":
 					var before: String = lab.atlas_dir
 					lab.atlas_dir = kv[1].trim_suffix("/") + "/"
 					var piece := StringName(String(key).split("/")[0])

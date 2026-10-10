@@ -301,6 +301,19 @@ func _psx_checks(retro: CanvasLayer) -> void:
 	#    no colour cut either: without the dither its bands would show
 	_check("R13 no dither, and the colour left whole: the screen keeps only its grid",
 		retro.dither == 0.0 and retro.color_levels == 0.0, "levels %.0f dither %.2f" % [retro.color_levels, retro.dither])
+	# R14 the frame can be pulled toward a district's palette (the Eclipse
+	#     city's painterly look), off unless a map asks for it
+	var pull_before: float = retro.palette_pull
+	var palette := ImageTexture.create_from_image(Image.create(16, 1, false, Image.FORMAT_RGB8))
+	retro.palette = palette
+	retro.palette_pull = 0.6
+	var material: ShaderMaterial = retro._material
+	_check("R14 the frame's palette pull: off by default, and what is set reaches the screen",
+		pull_before == 0.0 and is_equal_approx(material.get_shader_parameter("palette_pull"), 0.6)
+		and material.get_shader_parameter("palette") == palette,
+		"default %.2f, set %s" % [pull_before, material.get_shader_parameter("palette_pull")])
+	retro.palette_pull = 0.0
+	retro.palette = null
 	wall.queue_free()
 	await _frames(2)
 

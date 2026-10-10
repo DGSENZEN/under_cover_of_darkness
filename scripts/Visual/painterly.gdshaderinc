@@ -46,7 +46,7 @@ uniform float band_softness : hint_range(0.0, 0.5) = 0.08;
 uniform float terminator_break : hint_range(0.0, 1.0) = 0.35;
 uniform vec3 lit_warm = vec3(1.04, 1.0, 0.92);
 uniform vec3 shadow_cool = vec3(0.75, 0.85, 1.15);
-uniform float shadow_fill : hint_range(0.0, 0.5) = 0.12;
+uniform float shadow_fill : hint_range(0.0, 1.0) = 0.3;
 
 varying vec3 world_pos;
 varying vec3 world_normal;
@@ -111,15 +111,23 @@ void fragment() {
 void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float lambert = clamp(ndl, 0.0, 1.0);
-	// The edge where light turns to shadow, pushed about by the strokes.
-	float shade = clamp(ndl + (stroke_value - 0.5) * terminator_break, 0.0, 1.0);
-	float x = shade * light_bands;
+	// All the light that reaches here (facing, falloff and cast shadow), so
+	// on flat walls too the lamps' pools and the shadows' edges are painted:
+	// banded, the bands' edges pushed about by the strokes.
+	float energy = max(max(LIGHT_COLOR.r, LIGHT_COLOR.g), LIGHT_COLOR.b);
+	float amount = lambert * ATTENUATION;
+	float level = clamp(amount + (stroke_value - 0.5) * terminator_break * min(amount * 4.0 + 0.15, 1.0), 0.0, 1.0);
+	float x = level * light_bands;
 	float stepped = (floor(x) + smoothstep(0.5 - band_softness, 0.5 + band_softness, fract(x))) / light_bands;
-	float diffuse = mix(lambert, stepped, painted_light);
-	vec3 tint = mix(vec3(1.0), mix(shadow_cool, lit_warm, diffuse), painted_light);
-	DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * diffuse * tint / PI;
-	// The side turned away takes a cool fill, so form shadow is a colour.
-	DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * (1.0 - diffuse) * shadow_fill * painted_light * shadow_cool / PI;
+	float painted = mix(amount, stepped, painted_light);
+	vec3 hue = LIGHT_COLOR / max(energy, 1e-4);
+	// Only the darkest band goes cool; the rest keeps the light's own colour
+	// (a lamp's pool stays amber to its edge), a little warmer where full.
+	vec3 tint = mix(vec3(1.0), mix(shadow_cool, lit_warm, smoothstep(0.0, 1.0 / light_bands, painted)), painted_light);
+	DIFFUSE_LIGHT += hue * energy * painted * tint / PI;
+	// The side turned away and the edges of shadow take a cool fill, so
+	// shadow is a colour, not grey.
+	DIFFUSE_LIGHT += hue * energy * (1.0 - painted) * shadow_fill * painted_light * shadow_cool * ATTENUATION / PI;
 	// A soft highlight, as the standard light would give.
 	vec3 halfway = normalize(VIEW + LIGHT);
 	float shine = pow(clamp(dot(NORMAL, halfway), 0.0, 1.0), mix(64.0, 4.0, ROUGHNESS));
