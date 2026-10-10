@@ -151,6 +151,41 @@ class Measure(unittest.TestCase):
         outside = _corner(measured["left"], (0.0, 2.0, 1.5), (-1.0, 0.0, 0.0))
         self.assertLess(measured["roof"]["open_sky"][soffit], measured["left"]["open_sky"][outside] - 0.2)
 
+    def test_alternates_do_not_shade_each_other(self):
+        # A stone column and a steel one stand in one place, never seen
+        # together: each is measured with its own set, as the AO bake does.
+        wall = _box("wall", (0.0, 0.0, 0.0), (3.0, 0.3, 3.0))
+        stone = _box("stone", (1.0, -0.6, 0.0), (1.5, -0.1, 3.0))
+        steel = _box("steel", (1.05, -0.55, 0.0), (1.45, -0.15, 3.0), "steel")
+        objects = [wall, stone, steel]
+        weather.densify(objects)
+        sets = [["wall", "stone"], ["wall", "steel"]]
+        together = weather.measure(objects, sets=sets)["steel"]["open_sky"]
+        alone = weather.measure([wall, steel])["steel"]["open_sky"]
+        np.testing.assert_allclose(together, alone)
+
+    def test_glass_does_not_shade(self):
+        # Glass over a wall lets the sky through: it is left out of the rays.
+        wall = _box("wall", (0.0, 0.0, 0.0), (3.0, 0.3, 2.0))
+        pane = _box("pane", (-0.5, -1.0, 2.5), (3.5, 1.0, 2.52), "glass")
+        objects = [wall, pane]
+        weather.densify(objects)
+        under_glass = weather.measure(objects, free=["pane"])["wall"]["open_sky"]
+        open_sky = weather.measure([wall])["wall"]["open_sky"]
+        np.testing.assert_allclose(under_glass, open_sky)
+
+    def test_a_thin_bar_is_not_darkened_by_its_joints(self):
+        # A thin bar has corners only at its ends, where it meets other bars:
+        # its sky is sampled in from the joint, so a post on its end does not
+        # darken the whole bar (the kiosk canopy's ribs went dark).
+        bar = _box("bar", (0.0, 0.0, 2.0), (2.0, 0.05, 2.05))
+        post = _box("post", (-0.05, -0.05, 2.05), (0.1, 0.1, 3.0))
+        objects = [bar, post]
+        weather.densify(objects)
+        measured = weather.measure(objects)["bar"]
+        joint = _corner(measured, (0.0, 0.0, 2.05), (0.0, 0.0, 1.0))
+        self.assertGreater(measured["open_sky"][joint], 0.6)
+
     def test_convex_edges_found(self):
         slab = _box("slab", (0.0, 0.0, 0.0), (2.0, 2.0, 0.5))
         weather.densify([slab])

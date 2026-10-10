@@ -36,6 +36,10 @@ RAYS = 24
 REACH = 3.0
 # Off the surface before a ray sets out (m).
 LIFT = 1e-3
+# A thin face's sky is sampled this share of the way in from a corner toward
+# its centre, and at most this far (m).
+SKY_INWARD = 0.25
+SKY_INWARD_MAX = 0.25
 # The stand-in ground the occlusion rays see (the piece stands on the
 # district's ground at z 0): its cell size (m) and how far it reaches past
 # the piece (m).
@@ -246,7 +250,7 @@ def _frame(n):
     return Vector((0.0, 0.0, 1.0)).rotation_difference(n).to_matrix()
 
 
-def measure(objects, ground_holes=()):
+def measure(objects, ground_holes=(), sets=None, free=()):
     """By object name, per face corner (the mesh's loop order): points and
     normals in the world, and
       floor_gap     down to an up-facing face (or to z 0 when nothing is
@@ -254,12 +258,22 @@ def measure(objects, ground_holes=()):
       overhang_gap  up to a down-facing face; inf if none
       convex, concave  proximity to bent edges, 0-1
       open_sky      the share of RAYS cosine-weighted rays that see out
-                    within REACH (the stand-in ground blocks them)."""
-    pieces, grounded = _world(objects, ground_holes)
+                    within REACH (the stand-in ground blocks them).
+    Each object is measured among the first of `sets` (lists of names) that
+    holds it, as the AO bake does (alternates for one place never shade
+    each other); objects named in `free` (glass) shade nothing."""
     hemisphere = _hemisphere()
+    worlds = {}
     out = {}
 
     for o in objects:
+        group = next((tuple(names) for names in (sets or []) if o.name in names), None)
+
+        if group not in worlds:
+            among = [b for b in objects if (group is None or b.name in group) and b.name not in free]
+            worlds[group] = _world(among, ground_holes)
+
+        pieces, grounded = worlds[group]
         mesh = o.data
         to_world = o.matrix_world
         turn = to_world.to_3x3().inverted().transposed()
@@ -274,13 +288,19 @@ def measure(objects, ground_holes=()):
         for poly in mesh.polygons:
             n = (turn @ poly.normal).normalized()
             frame = _frame(n)
+            corners = [to_world @ mesh.vertices[v].co for v in poly.vertices]
+            centre = sum(corners, Vector((0.0, 0.0, 0.0))) / len(corners)
+            # A thin face (left whole by densify) has corners only where it
+            # meets other parts: its sky is sampled in from them, or every
+            # joint would darken the whole bar.
+            thin = _thickness(corners) < MIN_WIDTH
 
             for li in poly.loop_indices:
                 vi = mesh.loops[li].vertex_index
                 p = to_world @ mesh.vertices[vi].co
                 points[li] = tuple(p)
                 normals[li] = tuple(n)
-                key = (vi, round(n.x, 3), round(n.y, 3), round(n.z, 3))
+                key = (vi, round(n.x, 3), round(n.y, 3), round(n.z, 3)) + ((poly.index,) if thin else ())
 
                 if key in seen:
                     floor_gap[li], overhang_gap[li], open_sky[li] = seen[key]
@@ -304,7 +324,13 @@ def measure(objects, ground_holes=()):
                 # Each corner's rays turned about its normal by its own angle.
                 angle = (math.sin(p.x * 12.9898 + p.y * 78.233 + p.z * 37.719) * 43758.5453) % 1.0 * 2 * math.pi
                 spin = frame @ Matrix.Rotation(angle, 3, "Z")
-                blocked = sum(1 for h in hemisphere if grounded.ray_cast(start, spin @ h, REACH)[0] is not None)
+                sky_from = start
+
+                if thin:
+                    inward = centre - p
+                    sky_from = start + inward * min(SKY_INWARD, SKY_INWARD_MAX / max(inward.length, 1e-9))
+
+                blocked = sum(1 for h in hemisphere if grounded.ray_cast(sky_from, spin @ h, REACH)[0] is not None)
                 open_sky[li] = 1.0 - blocked / RAYS
                 seen[key] = (floor_gap[li], overhang_gap[li], open_sky[li])
 
@@ -342,12 +368,12 @@ def read(mesh, name):
     return values.reshape(-1, 4).astype(np.float64)
 
 
-def bake(objects, name, blendable_slots=(), soot=None, ground_holes=(), foot_slots=None):
+def bake(objects, name, blendable_slots=(), soot=None, ground_holes=(), foot_slots=None, sets=None, free=()):
     """The rules baked into each object's corner colour attribute `rules`;
     walls wear through at their foot only in `foot_slots` (plaster; by
     default every blendable slot)."""
     foot_slots = blendable_slots if foot_slots is None else foot_slots
-    measured = measure(objects, ground_holes)
+    measured = measure(objects, ground_holes, sets, free)
     soot = soot_origins() if soot is None else soot
     seed = weather_rules.seed_of(name)
 

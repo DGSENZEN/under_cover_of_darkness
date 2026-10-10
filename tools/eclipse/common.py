@@ -646,16 +646,20 @@ def dump_faces(objects):
     return faces, tris, uvs
 
 
-def _weather(objects, name, settings):
+def _weather(objects, name, settings, gate_sets=None):
     """The piece densified and its vertex paint baked: the rules, then the
     user's strokes over them (any lost listed), then fresh painting layers;
     `rules` is what goes out as COLOR_0. The soot empties go once baked."""
     import weather
 
     weather.densify(objects, lines=settings.get("lines", ()), coarse=settings.get("coarse"))
+    # Measured as the AO bake is: each set seen together on its own, glass
+    # shading nothing.
     weather.bake(objects, name, blendable_slots=tuple(settings.get("blendable", ())),
                  ground_holes=tuple(settings.get("ground_holes", ())),
-                 foot_slots=tuple(settings.get("foot", settings.get("blendable", ()))))
+                 foot_slots=tuple(settings.get("foot", settings.get("blendable", ()))),
+                 sets=[list(names) for names in gate_sets] if gate_sets is not None else None,
+                 free=[o.name for o in objects if _free(o)])
 
     for line in weather.apply(objects, name):
         print("%s: %s" % (name, line))
@@ -742,7 +746,7 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
         sys.exit(1)
 
     if weather is not None:
-        _weather(objects, name, weather)
+        _weather(objects, name, weather, gate_sets)
 
     bpy.ops.export_scene.gltf(filepath=str(OUT / (name + ".glb")), export_format="GLB", export_yup=True,
                               export_materials="EXPORT", export_texcoords=True, export_normals=True,
