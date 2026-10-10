@@ -150,21 +150,51 @@ def _box(centre_a, centre_b, width, y_top, thickness):
 
 # The parts of a greybox
 
-def _ground(data, sunken):
-    xs = sorted({p[0] for p in data["brink"]} | {v for g in sunken for v in (g["box"][0], g["box"][2])})
-    zs = sorted({p[1] for p in data["brink"]} | {v for g in sunken for v in (g["box"][1], g["box"][3])})
+def _grid(box, cuts, y, extra_xs=(), extra_zs=()):
+    """Up-facing cells over box (x0, z0, x1, z1) at height y, lines at every
+    cut's edges, the cells inside a cut left out."""
+    xs = sorted({box[0], box[2]} | {v for c in cuts for v in (c[0], c[2]) if box[0] < v < box[2]} | set(extra_xs))
+    zs = sorted({box[1], box[3]} | {v for c in cuts for v in (c[1], c[3]) if box[1] < v < box[3]} | set(extra_zs))
     faces = []
 
     for x0, x1 in zip(xs, xs[1:]):
         for z0, z1 in zip(zs, zs[1:]):
             cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
 
-            if any(g["box"][0] < cx < g["box"][2] and g["box"][1] < cz < g["box"][3] for g in sunken):
+            if any(c[0] < cx < c[2] and c[1] < cz < c[3] for c in cuts):
                 continue
 
-            faces.append(face([(x0, 0, z0), (x1, 0, z0), (x1, 0, z1), (x0, 0, z1)], (0, 1, 0)))
+            faces.append(face([(x0, y, z0), (x1, y, z0), (x1, y, z1), (x0, y, z1)], (0, 1, 0)))
 
     return faces
+
+
+def _ground(data, cut):
+    """The street at 0, cut round the sunken and raised places."""
+    brink = _bounds(data["brink"])
+    return _grid(brink, [g["box"] for g in cut], 0.0, [p[0] for p in data["brink"]], [p[1] for p in data["brink"]])
+
+
+def _raised(g, sunken):
+    """A pavement up: its top at its level, cut round the sunken places in
+    it, its sides from the street up facing out."""
+    inside = [s["box"] for s in sunken if _within(s["box"], g["box"])]
+    faces = _grid(g["box"], inside, g["level"])
+
+    for a, b in _edges(g["polygon"]):
+        n = _outward(a, b)
+        faces.append(_quad(a, b, 0.0, g["level"], (n[0], 0, n[1])))
+
+    return faces
+
+
+def _within(inner, outer):
+    return outer[0] <= inner[0] and outer[1] <= inner[1] and inner[2] <= outer[2] and inner[3] <= outer[3]
+
+
+def _top_of(g, raised):
+    """The level a sunken place's walls rise to: the pavement it is cut in, else the street."""
+    return next((r["level"] for r in raised if _within(g["box"], r["box"])), 0.0)
 
 
 def _brink(data):
@@ -211,7 +241,7 @@ def _gaps(a, b, openings, y_of):
     return out
 
 
-def _sunken(g, sunken, plots, openings):
+def _sunken(g, sunken, plots, openings, raised=()):
     """A sunken place: its floor, and its walls up to the street except
     where another sunken place or a plot standing in it takes over."""
     faces = [face([(x, g["level"], z) for x, z in g["polygon"]], (0, 1, 0))]
@@ -253,7 +283,7 @@ def _sunken(g, sunken, plots, openings):
         # room's own wall's does.
         mine = [o for o in openings if o["to"] == g["name"]]
         gaps = _gaps(a, b, mine, lambda o: max(g["level"], o.get("floor", g["level"])))
-        faces += _wall(a, b, g["level"], 0.0, inward, gaps, solid)
+        faces += _wall(a, b, g["level"], _top_of(g, raised), inward, gaps, solid)
 
         for (t0, t1), level in steps:
             length = math.hypot(b[0] - a[0], b[1] - a[1])
@@ -356,10 +386,14 @@ def _route(r):
 def build(data):
     """The plan's greybox: {"meshes": [{"name", "kind", "faces": [...]}]}."""
     sunken = [dict(g, box=_bounds(g["polygon"])) for g in data["ground"] if g["kind"] in plan.SUNKEN_KINDS]
+    raised = [dict(g, box=_bounds(g["polygon"])) for g in data["ground"]
+              if g["kind"] in plan.RAISED_KINDS and g["level"] > 1e-6]
     openings = [dict(o, floor=s["floor"]) for s in data["spaces"] for o in s["openings"]]
-    meshes = [{"name": "ground", "kind": "ground", "faces": _ground(data, sunken)},
+    meshes = [{"name": "ground", "kind": "ground", "faces": _ground(data, sunken + raised)},
               {"name": "brink", "kind": "brink", "faces": _brink(data)}]
-    meshes += [{"name": g["name"], "kind": "sunken", "faces": _sunken(g, sunken, data["plots"], openings)} for g in sunken]
+    meshes += [{"name": g["name"], "kind": "raised", "faces": _raised(g, sunken)} for g in raised]
+    meshes += [{"name": g["name"], "kind": "sunken", "faces": _sunken(g, sunken, data["plots"], openings, raised)}
+               for g in sunken]
     meshes += [{"name": p["name"], "kind": "plot", "family": p["family"], "faces": _plot(p)} for p in data["plots"]]
     meshes += [{"name": s["name"], "kind": "space", "faces": _space(s, data)} for s in data["spaces"]]
     meshes += [{"name": r["name"], "kind": "route", "route": r["kind"], "points": r["points"], "faces": _route(r)}

@@ -8,6 +8,8 @@ from plan import rect
 
 HALL_FLOOR = -8.0
 CORRIDOR_HEIGHT = 3.5
+# The plaza's pavement the kiosks stand on.
+PAVEMENT = 0.2
 
 
 def lay(P):
@@ -26,7 +28,7 @@ def lay(P):
         # The well under the kiosk, its stair down from the plaza.
         P.ground("well_" + corner, "well", rect(sx * 85, sz * 91, sx * 95, sz * 105), level=HALL_FLOOR)
         P.landmark("kiosk_" + corner, "metro_entrance", (sx * 90, sz * 98))
-        P.route("kiosk_%s_stair" % corner, "stair", [(sx * 90, 0, sz * 105), (sx * 90, HALL_FLOOR, sz * 92)])
+        P.route("kiosk_%s_stair" % corner, "stair", [(sx * 90, PAVEMENT, sz * 105), (sx * 90, HALL_FLOOR, sz * 92)])
         # Along under the plaza, then across to the hall.
         a, b = "corridor_%s_a" % corner, "corridor_%s_b" % corner
         P.space(a, rect(sx * 25, sz * 96, sx * 85, sz * 100), floor=HALL_FLOOR, height=CORRIDOR_HEIGHT,

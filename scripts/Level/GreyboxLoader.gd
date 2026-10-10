@@ -6,7 +6,7 @@ extends Node3D
 ## The geometry and its overlap gate are Python's; this only loads it.
 
 const KIND_COLOURS := {
-	"ground": Color("#8f8a84"), "sunken": Color("#6d6f78"), "space": Color("#4c4658"),
+	"ground": Color("#8f8a84"), "raised": Color("#a39d96"), "sunken": Color("#6d6f78"), "space": Color("#4c4658"),
 	"route": Color("#c47a3a"), "brink": Color("#3a3434"),
 }
 ## A plot's colour by its kit family (tools/level/plan_draw.py's, so the

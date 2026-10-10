@@ -148,6 +148,10 @@ def _sheet(data, sheet, px_per_m):
         if data["tram"]:
             draw.line([to_px(*p) for p in data["tram"] + data["tram"][:1]], fill=(150, 40, 40), width=2)
 
+        # The causeway's band of darker stone.
+        if data.get("causeway"):
+            draw.line([to_px(*p) for p in data["causeway"]], fill=(60, 50, 70), width=4)
+
         for m in data["landmarks"]:
             px, py = to_px(m["at"][0], m["at"][-1])
             draw.ellipse([px - 4, py - 4, px + 4, py + 4], fill=(30, 30, 160))

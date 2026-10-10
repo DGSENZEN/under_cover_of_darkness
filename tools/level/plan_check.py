@@ -179,8 +179,8 @@ def touching(p1, p2):
 def walkable(data):
     """Every surface one can stand on: ground areas at their level, walkable
     roofs at their top, underground spaces' floors."""
-    out = [{"name": g["name"], "polygon": g["polygon"], "y": g["level"], "street": g["kind"] in ("plaza", "street")
-            and abs(g["level"]) < 1e-6} for g in data["ground"]]
+    out = [{"name": g["name"], "polygon": g["polygon"], "y": g["level"], "street": (g["kind"] == "street" and abs(g["level"]) < 1e-6)
+            or g["kind"] in plan.RAISED_KINDS} for g in data["ground"]]
     out += [{"name": p["name"], "polygon": p["polygon"], "y": plan.top(p), "street": False}
             for p in data["plots"] if p["roof"]]
     out += [{"name": s["name"], "polygon": s["polygon"], "y": s["floor"], "street": False} for s in data["spaces"]]

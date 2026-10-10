@@ -6,7 +6,7 @@ extends Node3D
 ##   Godot --headless --fixed-fps 60 --path . res://tests/zocalo_test.tscn
 
 const MAP := preload("res://maps/zocalo.tscn")
-const KINDS := ["ground", "sunken", "plot", "space", "route", "brink"]
+const KINDS := ["ground", "raised", "sunken", "plot", "space", "route", "brink"]
 
 var results: Array[String] = []
 var map: Node3D
@@ -59,6 +59,11 @@ func _run() -> void:
 	var in_plot: bool = map.plan["plots"].any(func(p): return Geometry2D.is_point_in_polygon(Vector2(spawn.x, spawn.z), _poly(p["polygon"])))
 	_check("Z2 the spawn stands on street ground", not hit.is_empty() and absf(hit["position"].y) < 0.05 and not in_plot,
 		"spawn %s, hit %s, in a plot %s" % [spawn, hit.get("position"), in_plot])
+
+	# Z2b the plaza is a pavement 0.2 up (its kerbs 0.2 proud of the ring)
+	var pavement := [_ray(Vector3(50, 3, 50), Vector3(50, -3, 50)), _ray(Vector3(-60, 3, -40), Vector3(-60, -3, -40))]
+	_check("Z2b the plaza stands 0.2 above the street", pavement.all(func(h): return not h.is_empty()
+		and absf(h["position"].y - 0.2) < 0.01), "%s" % [pavement.map(func(h): return h.get("position"))])
 
 	# Z3 the canal lies 2 m down, the dig 6 m
 	# (Midway between bridges: one crosses the canal's middle.)

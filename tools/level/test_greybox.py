@@ -130,6 +130,36 @@ class Greybox(unittest.TestCase):
         point = (100.0, -1.0, 113.0)
         self.assertTrue([f for f in walls if _in_plane(f, point) and _covers(f, point)])
 
+    def test_raised_ground_stands_on_the_street(self):
+        """A plaza a pavement up: its top at its level (none over the well
+        cut in it), its sides from the street up facing out, the well's
+        walls up to the plaza."""
+        P = plan.Plan("pavement")
+        P.brink(plan.rect(-40, -40, 40, 40))
+        P.ground("square", "plaza", plan.rect(-10, -10, 10, 10), level=0.2)
+        P.ground("street", "street", plan.rect(-40, -40, 40, -10))
+        P.ground("well", "well", plan.rect(-2, -2, 2, 2), level=-8.0)
+        box = greybox.build(P.data())
+        raised = _mesh(box, "square")
+        self.assertEqual(raised["kind"], "raised")
+        tops = [f for f in raised["faces"] if f["normal"][1] > 0.99]
+        self.assertTrue(tops)
+        self.assertTrue(all(abs(p[1] - 0.2) < 1e-9 for f in tops for p in f["points"]))
+        self.assertFalse(any(_covers(f, (0, 0.2, 0)) for f in tops))
+        self.assertAlmostEqual(sum(_area(f) for f in tops), 400 - 16, places=6)
+
+        for n, at in (((1, 0, 0), (10, 0.1, 0)), ((-1, 0, 0), (-10, 0.1, 0)), ((0, 0, 1), (0, 0.1, 10)),
+                      ((0, 0, -1), (0, 0.1, -10))):
+            sides = [f for f in raised["faces"] if sum(f["normal"][k] * n[k] for k in range(3)) > 0.99
+                     and _in_plane(f, at) and _covers(f, at)]
+            self.assertTrue(sides, n)
+
+        walls = [f for f in _mesh(box, "well")["faces"] if abs(f["normal"][1]) < 0.01]
+        self.assertAlmostEqual(max(p[1] for f in walls for p in f["points"]), 0.2)
+        covering = [f for f in _mesh(box, "ground")["faces"] if _in_plane(f, (0, 0, 5)) and _covers(f, (0, 0, 5))]
+        self.assertEqual(covering, [])
+        self.assertEqual(greybox.gate(box), [])
+
     def test_layered_faces_caught(self):
         # Two roofs 2 cm apart over one footprint fight at a distance; 4 cm do not.
         def roofs(gap):

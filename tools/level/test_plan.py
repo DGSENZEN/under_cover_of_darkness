@@ -44,6 +44,10 @@ class Builder(unittest.TestCase):
         self.assertEqual(d["events"][0]["kind"], "subsidence")
         self.assertEqual(len(d["brink"]), 4)
 
+    def test_causeway_is_kept(self):
+        self.P.causeway([(0, 5), (0, 0)])
+        self.assertEqual(self.P.data()["causeway"], [[0.0, 5.0], [0.0, 0.0]])
+
     def test_data_is_json(self):
         self.P.ground("square", "plaza", plan.rect(0, 0, 1, 1))
         self.P.event("water", line=[(0, 0), (10, 0)], reach=5, strength=1)

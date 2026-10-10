@@ -57,6 +57,20 @@ class Plan(unittest.TestCase):
         for p in DATA["tram"]:
             self.assertTrue(any(plan_check.near(p, r, 0.01) for r in ring), p)
 
+    def test_plaza_is_a_pavement(self):
+        self.assertAlmostEqual(_ground("plaza")["level"], 0.2)
+
+    def test_tram_straights_are_whole_pieces(self):
+        loop = DATA["tram"]
+
+        for a, b in zip(loop, loop[1:] + loop[:1]):
+            side = abs(b[0] - a[0]) + abs(b[1] - a[1])
+            self.assertAlmostEqual(((side - 24) / 4.5) % 1.0, 0.0, places=9, msg=(a, b))
+
+    def test_causeway_runs_to_the_station(self):
+        self.assertEqual(DATA["causeway"][0], [0.0, 160.0])
+        self.assertEqual(DATA["causeway"][-1], [0.0, 0.0])
+
     def test_canal(self):
         canal = _ground("canal")
         x0, z0, x1, z1 = _bounds([canal["polygon"]])

@@ -15,6 +15,9 @@ import math
 GROUND_KINDS = ("plaza", "street", "atrium", "courtyard", "market", "canal", "landing", "dig", "well")
 # Below the street: cut out of the ground as rectangles.
 SUNKEN_KINDS = ("canal", "landing", "dig", "well")
+# Above the street, a pavement up (the plaza: its kerbs 0.2 proud): cut out of
+# the street as rectangles, standing on it.
+RAISED_KINDS = ("plaza",)
 # What a plot may face.
 # (A tower may stand in a dig, facing it on every side.)
 FRONTAGE_KINDS = ("plaza", "street", "atrium", "market", "canal", "landing", "courtyard", "dig")
@@ -75,6 +78,7 @@ class Plan:
         self.name = name
         self.grounds, self.plots, self.routes, self.spaces = [], [], [], []
         self.landmarks, self.loop, self.events, self.edge = [], [], [], []
+        self.band = []
 
     def ground(self, name, kind, polygon, level=0.0):
         if kind not in GROUND_KINDS:
@@ -113,6 +117,11 @@ class Plan:
     def tram(self, points):
         self.loop = [[float(p[0]), float(p[1])] for p in points]
 
+    def causeway(self, points):
+        """The old causeway's line under the colonial grid (x, z), which the
+        street kit's band of darker stone follows."""
+        self.band = [[float(p[0]), float(p[1])] for p in points]
+
     def event(self, kind, **shape):
         if kind not in EVENT_KINDS:
             raise ValueError("no event kind " + kind)
@@ -131,7 +140,7 @@ class Plan:
 
     def data(self):
         return {"name": self.name, "ground": self.grounds, "plots": self.plots, "routes": self.routes,
-                "spaces": self.spaces, "landmarks": self.landmarks, "tram": self.loop, "events": self.events,
+                "spaces": self.spaces, "landmarks": self.landmarks, "tram": self.loop, "causeway": self.band, "events": self.events,
                 "brink": self.edge}
 
 
