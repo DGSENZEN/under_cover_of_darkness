@@ -71,3 +71,63 @@ def bevelled_box(m, lo, hi, slot_name, bevel, top_only=True):
         m.face([tuple(v.co) for v in f.verts], slot_name)
 
     bm.free()
+
+
+def _fan(m, centre, ring, slot_name):
+    """A cap of triangles from `centre` to each edge of `ring`."""
+    n = len(ring)
+
+    for j in range(n):
+        tri = [tuple(centre), tuple(ring[j]), tuple(ring[(j + 1) % n])]
+
+        if _area(tri) > 1e-9:
+            m.face(tri, slot_name)
+
+
+def lathe(m, profile, sides, slot_name, twist=0.0, at=(0.0, 0.0, 0.0)):
+    """A closed solid turned about the Z axis (through `at`) from a profile
+    [(r, z)] read from its bottom up: a point at r 0 closes it there, an end
+    with r > 0 is capped flat."""
+    import math
+
+    ox, oy, oz = at
+    rings = [[(ox + r * math.cos(twist + 2 * math.pi * k / sides), oy + r * math.sin(twist + 2 * math.pi * k / sides),
+               oz + z) for k in range(sides)] for r, z in profile]
+    loft(m, rings, slot_name, caps=False)
+
+    for (r, z), ring in ((profile[0], rings[0]), (profile[-1], rings[-1])):
+        if r > 1e-9:
+            _fan(m, (ox, oy, oz + z), ring, slot_name)
+
+
+def sag(m, a, b, radius, sides, drop, segments, slot_name):
+    """A closed tube from a to b hanging `drop` at its middle (a parabola,
+    as a wire or chain hangs), `sides` round, capped at both ends."""
+    import math
+
+    a, b = Vector(a), Vector(b)
+    centres = []
+
+    for k in range(segments + 1):
+        t = k / segments
+        centres.append(a.lerp(b, t) - Vector((0.0, 0.0, 4.0 * drop * t * (1.0 - t))))
+
+    rings = []
+
+    for k, c in enumerate(centres):
+        ahead = centres[min(k + 1, segments)] - centres[max(k - 1, 0)]
+        ahead.normalize()
+        side = ahead.cross(Vector((0.0, 0.0, 1.0)))
+
+        if side.length < 1e-6:
+            side = Vector((1.0, 0.0, 0.0))
+
+        side.normalize()
+        up = side.cross(ahead).normalized()
+        # A vertex straight down, so the tube's lowest point is radius under its line.
+        rings.append([tuple(c + (side * math.sin(2 * math.pi * j / sides) - up * math.cos(2 * math.pi * j / sides)) * radius)
+                      for j in range(sides)])
+
+    loft(m, rings, slot_name, caps=False)
+    _fan(m, centres[0], rings[0], slot_name)
+    _fan(m, centres[-1], rings[-1], slot_name)

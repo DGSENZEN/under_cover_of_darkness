@@ -342,6 +342,46 @@ class SteelBridge(_BridgeChecks, unittest.TestCase):
     PARAPET_Y = 2.06
 
 
+class Shapes(unittest.TestCase):
+    """shapes.lathe and shapes.sag: closed, the size they were asked."""
+
+    def setUp(self):
+        common.reset()
+
+    def test_lathe_closed_with_its_volume(self):
+        import shapes
+        m = common.Mesh("post", outward=True)
+        n, r, h = 16, 0.2, 1.0
+        shapes.lathe(m, [(r, 0.0), (r, h)], n, "iron")
+        o = m.make()
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        volume = bm.calc_volume()
+        bm.free()
+        expected = 0.5 * n * r * r * math.sin(2 * math.pi / n) * h
+        self.assertEqual(_closed(o), 0)
+        self.assertAlmostEqual(volume, expected, delta=0.02 * expected)
+        self.assertGreater(_smallest_triangle(o), 1e-7)
+
+    def test_lathe_to_a_point(self):
+        import shapes
+        m = common.Mesh("cone", outward=True)
+        shapes.lathe(m, [(0.3, 0.0), (0.0, 0.5)], 12, "iron")
+        o = m.make()
+        self.assertEqual(_closed(o), 0)
+        self.assertGreater(_smallest_triangle(o), 1e-7)
+
+    def test_sag_closed_and_hanging(self):
+        import shapes
+        m = common.Mesh("wire", outward=True)
+        shapes.sag(m, (0.0, 0.0, 5.5), (30.0, 0.0, 5.5), 0.02, 6, 0.15, 12, "steel")
+        o = m.make()
+        self.assertEqual(_closed(o), 0)
+        self.assertGreater(_smallest_triangle(o), 1e-7)
+        lowest = min(v.z for v in _world(o))
+        self.assertAlmostEqual(lowest, 5.5 - 0.15 - 0.02, delta=0.005)
+
+
 if __name__ == "__main__":
     result = unittest.main(argv=["test_kit_bpy"], exit=False).result
     sys.exit(not result.wasSuccessful())
