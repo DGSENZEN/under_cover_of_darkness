@@ -24,14 +24,36 @@ func _ready() -> void:
 	# X1 paint_mix 0: the atlas, texel for texel
 	var off := 0
 
-	for y in VIEW:
-		for x in VIEW:
-			var want: Color = atlas.get_image().get_pixel(x * CELLS / VIEW, y * CELLS / VIEW)
+	# At each texel's centre (bilinear filtering blends between them, as the
+	# PS2 did, so only there is a texel itself). The centre falls up to a
+	# pixel off the read grid, so the best of the 3 x 3 pixels round it,
+	# within a few percent's blend (half a pixel each way is 3% of a
+	# neighbour per axis, 0.05 at most in linear light, where the filter
+	# blends); a palette mapping or stroke moves it far more.
+	var step := VIEW / CELLS
 
-			if not _near(plain.get_pixel(x, y), want):
+	for cy in CELLS:
+		for cx in CELLS:
+			var want: Color = atlas.get_image().get_pixel(cx, cy)
+			var best := INF
+
+			for dy in [-1, 0, 1]:
+				for dx in [-1, 0, 1]:
+					var got: Color = plain.get_pixel(cx * step + step / 2 + dx, cy * step + step / 2 + dy).srgb_to_linear()
+					var lin := want.srgb_to_linear()
+					best = minf(best, maxf(maxf(absf(got.r - lin.r), absf(got.g - lin.g)), absf(got.b - lin.b)))
+
+			if best > 0.06:
 				off += 1
 
-	_check("X1 paint_mix 0 draws the painted atlas as it is", off == 0, "%d of %d pixels off" % [off, VIEW * VIEW])
+	_check("X1 paint_mix 0 draws the painted atlas as it is", off == 0, "%d of %d texel centres off" % [off, CELLS * CELLS])
+
+	# X7 PS2-style smooth filtering: between two texels the colour blends
+	var edge: Color = plain.get_pixel(step - 1, step / 2)
+	var left: Color = atlas.get_image().get_pixel(0, 0)
+	var right: Color = atlas.get_image().get_pixel(1, 0)
+	_check("X7 the atlas is filtered smoothly (PS2): between texels the colours blend",
+		not _near(edge, left) and not _near(edge, right), "edge %s between %s and %s" % [edge, left, right])
 
 	# X2 paint_mix 1, no strokes: only the palette's colours
 	var palette := Painterly.ZOCALO.get_image()

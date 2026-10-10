@@ -10,7 +10,8 @@ const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
 const GemEnvironment := preload("res://scripts/Visual/GemEnvironment.gd")
 
-const NEAREST_MIPS := BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+# PS2-style smooth filtering (the user, Oct 9 2026): bilinear with mipmaps.
+const NEAREST_MIPS := BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 var results: Array[String] = []
 

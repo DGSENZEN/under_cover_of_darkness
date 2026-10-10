@@ -43,7 +43,8 @@ const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 		auto_render_scale = value
 		_fit()
 ## How textures are sampled everywhere.
-@export var texture_filter := BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+## PS2-style: bilinear with mipmaps (the user, Oct 9 2026), not the PS1's nearest.
+@export var texture_filter := BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 var enabled := true:
 	set(value):

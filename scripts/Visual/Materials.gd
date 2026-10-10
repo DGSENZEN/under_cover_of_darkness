@@ -258,7 +258,7 @@ static func surface(slot: StringName) -> StandardMaterial3D:
 
 	var material := StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true
-	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 	if SLOTS.has(slot):
 		var entry: Dictionary = SLOTS[slot]

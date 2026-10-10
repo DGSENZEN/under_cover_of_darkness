@@ -193,7 +193,7 @@ func _plain(station: Node) -> Array:
 			if drawn is ShaderMaterial:
 				var plain := StandardMaterial3D.new()
 				plain.albedo_texture = drawn.get_shader_parameter("atlas")
-				plain.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+				plain.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 				swapped.append([mesh, i, drawn])
 				mesh.set_surface_override_material(i, plain)
 

@@ -92,8 +92,8 @@ func _materials() -> void:
 	Materials.photo_names[&"stone"] = "stone_brick_1"
 	Materials.clear_cache()
 	var stone: StandardMaterial3D = Materials.surface(&"stone")
-	_check("L2 a slot whose photo exists is drawn with it, sampled nearest",
-		stone != null and stone.albedo_texture != null and stone.texture_filter == BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS,
+	_check("L2 a slot whose photo exists is drawn with it, filtered smoothly (PS2)",
+		stone != null and stone.albedo_texture != null and stone.texture_filter == BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
 		"texture %s filter %d" % [stone.albedo_texture if stone else null, stone.texture_filter if stone else -1])
 	Materials.photo_names[&"stone"] = stone_before
 	Materials.folder = folder_before
