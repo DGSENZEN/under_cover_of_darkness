@@ -7,12 +7,15 @@ const AREA := Rect2(-10, -8, 20, 16)
 const OPENING := Rect2(-1.5, -6.0, 3.0, 6.0)
 const ROOFED := Rect2(4.0, -7.0, 4.0, 3.0)
 const OPEN_BLOCK := Rect2(-8.0, 2.0, 4.0, 3.0)
+## Off the metre grid, as the lab's bays and copings are.
+const OFF_GRID := Rect2(3.35, 2.35, 3.3, 2.2)
 
 var results: Array[String] = []
 
 
 func _ready() -> void:
-	var footprints: Array[Dictionary] = [{"rect": ROOFED, "roofed": true}, {"rect": OPEN_BLOCK, "roofed": false}]
+	var footprints: Array[Dictionary] = [{"rect": ROOFED, "roofed": true}, {"rect": OPEN_BLOCK, "roofed": false},
+		{"rect": OFF_GRID, "roofed": false}]
 	var ground := Ground.build(AREA, [OPENING], footprints, 7)
 	add_child(ground)
 	var mesh: ArrayMesh = (ground.get_node("mesh") as MeshInstance3D).mesh
@@ -71,6 +74,38 @@ func _ready() -> void:
 
 	_check("G3 grime is higher against a footprint than out in the open", near.size() > 0 and far.size() > 0
 		and _mean(near) > _mean(far) + 0.2, "near %.2f far %.2f" % [_mean(near), _mean(far)])
+
+	# G8 a footprint off the metre grid still has ground along its edges,
+	#    grimed where its wall meets the street
+	var on_edges := [0, 0, 0, 0]
+	var edge_grime := []
+
+	for i in points.size():
+		var at := Vector2(points[i].x, points[i].z)
+		var along_x := at.x >= OFF_GRID.position.x - 1e-3 and at.x <= OFF_GRID.end.x + 1e-3
+		var along_z := at.y >= OFF_GRID.position.y - 1e-3 and at.y <= OFF_GRID.end.y + 1e-3
+		var sides := [along_z and absf(at.x - OFF_GRID.position.x) < 1e-3, along_z and absf(at.x - OFF_GRID.end.x) < 1e-3,
+			along_x and absf(at.y - OFF_GRID.position.y) < 1e-3, along_x and absf(at.y - OFF_GRID.end.y) < 1e-3]
+
+		for k in 4:
+			if sides[k]:
+				on_edges[k] += 1
+				edge_grime.append(colours[i].r)
+
+	_check("G8 a footprint off the grid has ground along all four edges, grimed", on_edges.all(func(n): return n >= 2)
+		and _mean(edge_grime) > 0.5, "vertices per edge %s, mean grime %.2f" % [on_edges, _mean(edge_grime)])
+
+	# G9 the ground wears through round an opening's rim
+	var rim := []
+
+	for i in points.size():
+		var at := Vector2(points[i].x, points[i].z)
+
+		if _outside_distance(at, OPENING) < 1e-3 and not OPENING.grow(-0.01).has_point(at):
+			rim.append(colours[i].g)
+
+	_check("G9 the ground wears through round an opening's rim", rim.size() > 0 and _mean(rim) > 0.45,
+		"%d rim vertices, mean wear %.2f" % [rim.size(), _mean(rim)])
 
 	# G4 under a roofed footprint the ground is in shadow
 	var under := []

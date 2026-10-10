@@ -39,8 +39,18 @@ const DEPTH := 0.5
 static func build(area: Rect2, openings: Array[Rect2], footprints: Array[Dictionary], seed: int) -> Ground:
 	var ground := Ground.new()
 	ground.name = "ground"
-	var xs := _lines(area.position.x, area.end.x, openings.map(func(o): return [o.position.x, o.end.x]))
-	var zs := _lines(area.position.y, area.end.y, openings.map(func(o): return [o.position.y, o.end.y]))
+	# Lines at every opening's edges, and at every footprint's edges and BANK
+	# out from them, so the stories have vertices where they start and end.
+	var x_edges := openings.map(func(o): return [o.position.x, o.end.x])
+	var z_edges := openings.map(func(o): return [o.position.y, o.end.y])
+
+	for f in footprints:
+		var r: Rect2 = f["rect"]
+		x_edges.append([r.position.x - BANK, r.position.x, r.end.x, r.end.x + BANK])
+		z_edges.append([r.position.y - BANK, r.position.y, r.end.y, r.end.y + BANK])
+
+	var xs := _lines(area.position.x, area.end.x, x_edges)
+	var zs := _lines(area.position.y, area.end.y, z_edges)
 	var noise := FastNoiseLite.new()
 	noise.seed = seed
 	noise.frequency = 0.35
@@ -191,10 +201,9 @@ static func _paint(c: Vector2, footprints: Array[Dictionary], openings: Array[Re
 		worn = maxf(worn, clampf(1.0 - c.distance_to(along) / PATH, 0.0, 1.0))
 
 	for o in openings:
-		var d := _outside(c, o)
-
-		if d > 0.0:
-			worn = maxf(worn, clampf(1.0 - d / RIM, 0.0, 1.0))
+		# On the rim too (d 0), not in the opening itself.
+		if not o.grow(-0.01).has_point(c):
+			worn = maxf(worn, clampf(1.0 - _outside(c, o) / RIM, 0.0, 1.0))
 
 	var wet := clampf((damp.get_noise_2d(c.x, c.y) - 0.15) * 2.5, 0.0, 1.0)
 	return Color(grime * (0.6 + 0.4 * patch), worn * (0.5 + 0.5 * patch), 0.5 - 0.3 * wet, light)
