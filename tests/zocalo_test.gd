@@ -86,18 +86,48 @@ func _run() -> void:
 	_check("Z4 every underground space has its floor and ceiling", open.is_empty(), "open: %s" % [open])
 
 	# Z5 down the north-west kiosk's stair into its well
+	var platform := _rect("platform_w")
 	var well := _rect("well_nw")
 	var walk := await _walk(Vector3(-90, 1.05, -106.5), PI, func(p): return p.z > well.end.y - 1.5, 600)
 	_check("Z5 the player walks down a kiosk's stair into the station's well",
 		walk["ok"] and absf(walk["end"].y - 1.05 + 8.0) < 0.5 and well.has_point(Vector2(walk["end"].x, walk["end"].z)),
 		"%s" % [walk])
 
-	# Z5b from the ticket hall down to the west platform
-	var platform := _rect("platform_w")
-	walk = await _walk(Vector3(-24, -8 + 1.05, -6), PI / 2, func(p): return p.x < -50.0, 600)
-	_check("Z5b the player walks from the ticket hall down to a platform",
-		walk["ok"] and absf(walk["end"].y - 1.05 + 14.0) < 0.5 and platform.has_point(Vector2(walk["end"].x, walk["end"].z)),
+	# Z5b on from the well, never put anywhere: along the corridors into the
+	#     ticket hall, then down to the west platform
+	var legs := [
+		[-PI / 2, func(p): return p.x > -87.5],      # east, off the stair's line
+		[0.0, func(p): return p.z < -97.5],          # north on the well's floor, level with its corridor
+		[-PI / 2, func(p): return p.x > -27.0],      # east along the first corridor
+		[PI, func(p): return p.z > -12.0],           # south down the second, into the hall
+		[PI, func(p): return p.z > -6.2],            # on, level with the platform stair
+		[PI / 2, func(p): return p.x < -50.0],       # west, down to the platform
+	]
+	var route_ok := true
+	var stops := []
+
+	for leg in legs:
+		walk = await _walk(map.player.global_position, leg[0], leg[1], 900)
+		route_ok = route_ok and walk["ok"]
+		stops.append(walk["end"])
+
+	var hall := _rect("station_hall")
+	_check("Z5b the player walks on from the well through the corridors into the ticket hall and down to a platform",
+		route_ok and absf(stops[1].y - 1.05 + 8.0) < 0.5 and hall.has_point(Vector2(stops[3].x, stops[3].z))
+		and absf(stops[3].y - 1.05 + 8.0) < 0.5
+		and platform.has_point(Vector2(walk["end"].x, walk["end"].z)) and absf(walk["end"].y - 1.05 + 14.0) < 0.5,
+		"stops %s" % [stops])
+
+	# Z5c through the tunnel from the ticket hall to the crypt
+	var crypt := _rect("crypt")
+	walk = await _walk(Vector3(0, -8 + 1.05, -10), 0.0, func(p): return p.z < crypt.end.y - 3.0, 1800)
+	_check("Z5c the player walks the tunnel from the ticket hall to the crypt",
+		walk["ok"] and crypt.has_point(Vector2(walk["end"].x, walk["end"].z)) and absf(walk["end"].y - 1.05 + 8.0) < 0.5,
 		"%s" % [walk])
+
+	# Z5d across a bridge over the canal
+	walk = await _walk(Vector3(-150, 1.05, 161.5), PI, func(p): return p.z > 185.0, 900)
+	_check("Z5d the player crosses a bridge over the canal", walk["ok"] and walk["lowest"] > 0.9, "%s" % [walk])
 
 	# Z6 from the street up the town hall's ladder on to its roof, along it
 	#    and across the plank to the other roof (no teleport on to a roof)
