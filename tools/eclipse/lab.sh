@@ -27,7 +27,8 @@ import() {
 }
 
 case "${1:-}" in
-  test) python3 "$HERE/test_gate.py"; python3 "$HERE/test_weather_rules.py" ;;
+  test) python3 "$HERE/test_gate.py"; python3 "$HERE/test_weather_rules.py"
+    "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_weather_bpy.py" 2>&1 | grep -E "^(FAIL|ERROR)|^Ran|^OK|FAILED|Error" ;;
   joints)
     mkdir -p /tmp/eclipse-joints
     "$BLENDER" -b --factory-startup --python "$HERE/joints.py" -- "${2:?a piece}" 2>&1 | grep -E "^joints|Error|Traceback" || true ;;
