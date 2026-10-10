@@ -101,6 +101,17 @@ case "$verb" in
     "$0" build "$level"
     "$0" export "$level"
     ;;
+  zocalo)
+    # The Zócalo's plan: its data, its six sheets (and, once greybox.py
+    # exists, its greybox), into assets/eclipse/zocalo/.
+    mkdir -p "$ROOT/assets/eclipse/zocalo/plan"
+    touch "$ROOT/assets/eclipse/zocalo/plan/.gdignore"
+    (cd "$HERE/layouts" && python3 city_zocalo.py "$ROOT/assets/eclipse/zocalo/plan.json")
+    python3 "$HERE/plan_draw.py" "$ROOT/assets/eclipse/zocalo/plan.json" "$ROOT/assets/eclipse/zocalo/plan"
+    if [ -f "$HERE/greybox.py" ]; then
+      python3 "$HERE/greybox.py" "$ROOT/assets/eclipse/zocalo/plan.json" "$ROOT/assets/eclipse/zocalo/greybox.json"
+    fi
+    ;;
   test)
     python3 "$HERE/test_rules.py"
     python3 "$HERE/test_terrain.py"
@@ -130,6 +141,7 @@ case "$verb" in
     python3 "$HERE/test_plan.py"
     python3 "$HERE/test_plan_check.py"
     python3 "$HERE/test_plan_draw.py"
+    python3 "$HERE/test_zocalo_plan.py"
     python3 "$HERE/../textures/test_kuwahara.py"
     python3 "$HERE/../textures/test_scan_prep.py"
     "$HERE/test_guard.sh"

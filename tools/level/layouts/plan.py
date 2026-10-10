@@ -16,7 +16,8 @@ GROUND_KINDS = ("plaza", "street", "atrium", "courtyard", "market", "canal", "la
 # Below the street: cut out of the ground as rectangles.
 SUNKEN_KINDS = ("canal", "landing", "dig", "well")
 # What a plot may face.
-FRONTAGE_KINDS = ("plaza", "street", "atrium", "market", "canal", "landing", "courtyard")
+# (A tower may stand in a dig, facing it on every side.)
+FRONTAGE_KINDS = ("plaza", "street", "atrium", "market", "canal", "landing", "courtyard", "dig")
 ROUTE_KINDS = ("roof_link", "climb", "stair", "bridge", "tunnel")
 EVENT_KINDS = ("subsidence", "water", "seepage", "use")
 
@@ -85,14 +86,20 @@ class Plan:
         self.plots.append({"name": name, "family": family, "polygon": _pts(polygon), "storeys": int(storeys),
                            "height": float(height), "base": float(base), "roof": bool(roof), "interior": bool(interior)})
 
-    def route(self, name, kind, points):
+    def route(self, name, kind, points, between=None):
+        """A route; a tunnel names the two spaces it joins in `between`."""
         if kind not in ROUTE_KINDS:
             raise ValueError("no route kind " + kind)
 
         if len(points) < 2:
             raise ValueError("a route needs two ends: " + name)
 
-        self.routes.append({"name": name, "kind": kind, "points": [[float(v) for v in p] for p in points]})
+        entry = {"name": name, "kind": kind, "points": [[float(v) for v in p] for p in points]}
+
+        if between is not None:
+            entry["between"] = list(between)
+
+        self.routes.append(entry)
 
     def space(self, name, polygon, floor, height, openings=(), interior=False):
         self.spaces.append({"name": name, "polygon": _pts(polygon), "floor": float(floor), "height": float(height),

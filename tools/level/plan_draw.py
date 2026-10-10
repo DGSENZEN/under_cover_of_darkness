@@ -41,6 +41,9 @@ ROUTE_COLOURS = {"roof_link": (220, 120, 40), "climb": (240, 200, 40), "stair": 
                  "bridge": (60, 60, 60), "tunnel": (200, 80, 200)}
 EVENT_COLOURS = {"subsidence": (230, 60, 50), "water": (50, 110, 240), "seepage": (60, 220, 110),
                  "use": (240, 170, 40)}
+# What each sheet names (its own layer only, so names do not pile up).
+LABELS = {"street": ("ground", "plots"), "roofs": ("plots",), "underground": ("spaces",), "canal": ("ground",),
+          "events": (), "all": ("ground", "plots")}
 # The event sheet samples the fields every this many metres.
 EVENT_STEP = 4.0
 
@@ -178,7 +181,7 @@ def _sheet(data, sheet, px_per_m):
     if len(data["brink"]) >= 3:
         _poly(draw, to_px, data["brink"], outline=ink, width=3)
 
-    _labels(draw, data, to_px, ink)
+    _labels(draw, data, to_px, ink, LABELS[sheet])
     _furniture(draw, data, to_px, px_per_m, ink)
     return image
 

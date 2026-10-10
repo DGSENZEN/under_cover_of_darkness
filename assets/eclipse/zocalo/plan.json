@@ -1,0 +1,10578 @@
+{
+ "name": "zocalo",
+ "ground": [
+  {
+   "name": "plaza",
+   "kind": "plaza",
+   "polygon": [
+    [
+     -100.0,
+     -110.0
+    ],
+    [
+     100.0,
+     -110.0
+    ],
+    [
+     100.0,
+     110.0
+    ],
+    [
+     -100.0,
+     110.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "north_street",
+   "kind": "street",
+   "polygon": [
+    [
+     -120.0,
+     -130.0
+    ],
+    [
+     120.0,
+     -130.0
+    ],
+    [
+     120.0,
+     -110.0
+    ],
+    [
+     -120.0,
+     -110.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "south_street",
+   "kind": "street",
+   "polygon": [
+    [
+     -120.0,
+     110.0
+    ],
+    [
+     120.0,
+     110.0
+    ],
+    [
+     120.0,
+     130.0
+    ],
+    [
+     -120.0,
+     130.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "west_street",
+   "kind": "street",
+   "polygon": [
+    [
+     -120.0,
+     -110.0
+    ],
+    [
+     -100.0,
+     -110.0
+    ],
+    [
+     -100.0,
+     110.0
+    ],
+    [
+     -120.0,
+     110.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "east_street",
+   "kind": "street",
+   "polygon": [
+    [
+     100.0,
+     -110.0
+    ],
+    [
+     120.0,
+     -110.0
+    ],
+    [
+     120.0,
+     110.0
+    ],
+    [
+     100.0,
+     110.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "atrium",
+   "kind": "atrium",
+   "polygon": [
+    [
+     -70.0,
+     -145.0
+    ],
+    [
+     40.0,
+     -145.0
+    ],
+    [
+     40.0,
+     -130.0
+    ],
+    [
+     -70.0,
+     -130.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "calle_monte_de_piedad",
+   "kind": "street",
+   "polygon": [
+    [
+     -90.0,
+     -265.0
+    ],
+    [
+     -70.0,
+     -265.0
+    ],
+    [
+     -70.0,
+     -130.0
+    ],
+    [
+     -90.0,
+     -130.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "calle_seminario",
+   "kind": "street",
+   "polygon": [
+    [
+     40.0,
+     -265.0
+    ],
+    [
+     60.0,
+     -265.0
+    ],
+    [
+     60.0,
+     -130.0
+    ],
+    [
+     40.0,
+     -130.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "calle_guatemala",
+   "kind": "street",
+   "polygon": [
+    [
+     -120.0,
+     -285.0
+    ],
+    [
+     310.0,
+     -285.0
+    ],
+    [
+     310.0,
+     -265.0
+    ],
+    [
+     -120.0,
+     -265.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "dig_n",
+   "kind": "dig",
+   "polygon": [
+    [
+     60.0,
+     -225.0
+    ],
+    [
+     150.0,
+     -225.0
+    ],
+    [
+     150.0,
+     -200.0
+    ],
+    [
+     60.0,
+     -200.0
+    ]
+   ],
+   "level": -6.0
+  },
+  {
+   "name": "dig_s",
+   "kind": "dig",
+   "polygon": [
+    [
+     60.0,
+     -170.0
+    ],
+    [
+     150.0,
+     -170.0
+    ],
+    [
+     150.0,
+     -145.0
+    ],
+    [
+     60.0,
+     -145.0
+    ]
+   ],
+   "level": -6.0
+  },
+  {
+   "name": "dig_w",
+   "kind": "dig",
+   "polygon": [
+    [
+     60.0,
+     -200.0
+    ],
+    [
+     90.0,
+     -200.0
+    ],
+    [
+     90.0,
+     -170.0
+    ],
+    [
+     60.0,
+     -170.0
+    ]
+   ],
+   "level": -6.0
+  },
+  {
+   "name": "dig_e",
+   "kind": "dig",
+   "polygon": [
+    [
+     120.0,
+     -200.0
+    ],
+    [
+     150.0,
+     -200.0
+    ],
+    [
+     150.0,
+     -170.0
+    ],
+    [
+     120.0,
+     -170.0
+    ]
+   ],
+   "level": -6.0
+  },
+  {
+   "name": "dig_walk",
+   "kind": "street",
+   "polygon": [
+    [
+     60.0,
+     -145.0
+    ],
+    [
+     310.0,
+     -145.0
+    ],
+    [
+     310.0,
+     -130.0
+    ],
+    [
+     60.0,
+     -130.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "santo_domingo",
+   "kind": "plaza",
+   "polygon": [
+    [
+     -200.0,
+     -290.0
+    ],
+    [
+     -140.0,
+     -290.0
+    ],
+    [
+     -140.0,
+     -210.0
+    ],
+    [
+     -200.0,
+     -210.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "calle_brasil",
+   "kind": "street",
+   "polygon": [
+    [
+     -140.0,
+     -310.0
+    ],
+    [
+     -120.0,
+     -310.0
+    ],
+    [
+     -120.0,
+     -110.0
+    ],
+    [
+     -140.0,
+     -110.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "calle_cuba",
+   "kind": "street",
+   "polygon": [
+    [
+     -310.0,
+     -325.0
+    ],
+    [
+     -120.0,
+     -325.0
+    ],
+    [
+     -120.0,
+     -305.0
+    ],
+    [
+     -310.0,
+     -305.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "calle_chile",
+   "kind": "street",
+   "polygon": [
+    [
+     -235.0,
+     -305.0
+    ],
+    [
+     -215.0,
+     -305.0
+    ],
+    [
+     -215.0,
+     -110.0
+    ],
+    [
+     -235.0,
+     -110.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "palace_gate",
+   "kind": "courtyard",
+   "polygon": [
+    [
+     120.0,
+     -5.0
+    ],
+    [
+     140.0,
+     -5.0
+    ],
+    [
+     140.0,
+     5.0
+    ],
+    [
+     120.0,
+     5.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "palace_courtyard",
+   "kind": "courtyard",
+   "polygon": [
+    [
+     140.0,
+     -30.0
+    ],
+    [
+     180.0,
+     -30.0
+    ],
+    [
+     180.0,
+     30.0
+    ],
+    [
+     140.0,
+     30.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "calle_correo_mayor",
+   "kind": "street",
+   "polygon": [
+    [
+     200.0,
+     -285.0
+    ],
+    [
+     220.0,
+     -285.0
+    ],
+    [
+     220.0,
+     160.0
+    ],
+    [
+     200.0,
+     160.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "madero",
+   "kind": "street",
+   "polygon": [
+    [
+     -310.0,
+     -125.0
+    ],
+    [
+     -120.0,
+     -125.0
+    ],
+    [
+     -120.0,
+     -110.0
+    ],
+    [
+     -310.0,
+     -110.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "calle_isabel",
+   "kind": "street",
+   "polygon": [
+    [
+     -235.0,
+     -110.0
+    ],
+    [
+     -215.0,
+     -110.0
+    ],
+    [
+     -215.0,
+     160.0
+    ],
+    [
+     -235.0,
+     160.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "calle_16_sept",
+   "kind": "street",
+   "polygon": [
+    [
+     -310.0,
+     35.0
+    ],
+    [
+     -120.0,
+     35.0
+    ],
+    [
+     -120.0,
+     50.0
+    ],
+    [
+     -310.0,
+     50.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "calle_20_nov",
+   "kind": "street",
+   "polygon": [
+    [
+     -5.0,
+     130.0
+    ],
+    [
+     5.0,
+     130.0
+    ],
+    [
+     5.0,
+     160.0
+    ],
+    [
+     -5.0,
+     160.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "quay_n",
+   "kind": "street",
+   "polygon": [
+    [
+     -310.0,
+     160.0
+    ],
+    [
+     310.0,
+     160.0
+    ],
+    [
+     310.0,
+     167.0
+    ],
+    [
+     -310.0,
+     167.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "canal",
+   "kind": "canal",
+   "polygon": [
+    [
+     -310.0,
+     167.0
+    ],
+    [
+     310.0,
+     167.0
+    ],
+    [
+     310.0,
+     179.0
+    ],
+    [
+     -310.0,
+     179.0
+    ]
+   ],
+   "level": -2.0
+  },
+  {
+   "name": "quay_s",
+   "kind": "street",
+   "polygon": [
+    [
+     -310.0,
+     179.0
+    ],
+    [
+     310.0,
+     179.0
+    ],
+    [
+     310.0,
+     186.0
+    ],
+    [
+     -310.0,
+     186.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "landing_w",
+   "kind": "landing",
+   "polygon": [
+    [
+     -60.0,
+     160.0
+    ],
+    [
+     -45.0,
+     160.0
+    ],
+    [
+     -45.0,
+     167.0
+    ],
+    [
+     -60.0,
+     167.0
+    ]
+   ],
+   "level": -1.0
+  },
+  {
+   "name": "landing_e",
+   "kind": "landing",
+   "polygon": [
+    [
+     45.0,
+     160.0
+    ],
+    [
+     60.0,
+     160.0
+    ],
+    [
+     60.0,
+     167.0
+    ],
+    [
+     45.0,
+     167.0
+    ]
+   ],
+   "level": -1.0
+  },
+  {
+   "name": "market_lanes_n",
+   "kind": "market",
+   "polygon": [
+    [
+     -310.0,
+     186.0
+    ],
+    [
+     310.0,
+     186.0
+    ],
+    [
+     310.0,
+     205.0
+    ],
+    [
+     -310.0,
+     205.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "market_lanes_s",
+   "kind": "market",
+   "polygon": [
+    [
+     -310.0,
+     280.0
+    ],
+    [
+     310.0,
+     280.0
+    ],
+    [
+     310.0,
+     300.0
+    ],
+    [
+     -310.0,
+     300.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "market_lane_w",
+   "kind": "market",
+   "polygon": [
+    [
+     -310.0,
+     240.0
+    ],
+    [
+     -60.0,
+     240.0
+    ],
+    [
+     -60.0,
+     250.0
+    ],
+    [
+     -310.0,
+     250.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "market_lane_e",
+   "kind": "market",
+   "polygon": [
+    [
+     60.0,
+     240.0
+    ],
+    [
+     310.0,
+     240.0
+    ],
+    [
+     310.0,
+     250.0
+    ],
+    [
+     60.0,
+     250.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "market_lane_hall_w",
+   "kind": "market",
+   "polygon": [
+    [
+     -60.0,
+     205.0
+    ],
+    [
+     -40.0,
+     205.0
+    ],
+    [
+     -40.0,
+     280.0
+    ],
+    [
+     -60.0,
+     280.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "market_lane_hall_e",
+   "kind": "market",
+   "polygon": [
+    [
+     40.0,
+     205.0
+    ],
+    [
+     60.0,
+     205.0
+    ],
+    [
+     60.0,
+     280.0
+    ],
+    [
+     40.0,
+     280.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
+   "name": "well_nw",
+   "kind": "well",
+   "polygon": [
+    [
+     -95.0,
+     -105.0
+    ],
+    [
+     -85.0,
+     -105.0
+    ],
+    [
+     -85.0,
+     -91.0
+    ],
+    [
+     -95.0,
+     -91.0
+    ]
+   ],
+   "level": -8.0
+  },
+  {
+   "name": "well_ne",
+   "kind": "well",
+   "polygon": [
+    [
+     85.0,
+     -105.0
+    ],
+    [
+     95.0,
+     -105.0
+    ],
+    [
+     95.0,
+     -91.0
+    ],
+    [
+     85.0,
+     -91.0
+    ]
+   ],
+   "level": -8.0
+  },
+  {
+   "name": "well_sw",
+   "kind": "well",
+   "polygon": [
+    [
+     -95.0,
+     91.0
+    ],
+    [
+     -85.0,
+     91.0
+    ],
+    [
+     -85.0,
+     105.0
+    ],
+    [
+     -95.0,
+     105.0
+    ]
+   ],
+   "level": -8.0
+  },
+  {
+   "name": "well_se",
+   "kind": "well",
+   "polygon": [
+    [
+     85.0,
+     91.0
+    ],
+    [
+     95.0,
+     91.0
+    ],
+    [
+     95.0,
+     105.0
+    ],
+    [
+     85.0,
+     105.0
+    ]
+   ],
+   "level": -8.0
+  }
+ ],
+ "plots": [
+  {
+   "name": "cathedral",
+   "family": "cathedral",
+   "polygon": [
+    [
+     -70.0,
+     -265.0
+    ],
+    [
+     5.0,
+     -265.0
+    ],
+    [
+     5.0,
+     -145.0
+    ],
+    [
+     -70.0,
+     -145.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 30.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "sagrario",
+   "family": "sagrario",
+   "polygon": [
+    [
+     5.0,
+     -215.0
+    ],
+    [
+     40.0,
+     -215.0
+    ],
+    [
+     40.0,
+     -145.0
+    ],
+    [
+     5.0,
+     -145.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 22.0,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "cathedral_chapter",
+   "family": "house",
+   "polygon": [
+    [
+     5.0,
+     -265.0
+    ],
+    [
+     40.0,
+     -265.0
+    ],
+    [
+     40.0,
+     -215.0
+    ],
+    [
+     5.0,
+     -215.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "deco_tower",
+   "family": "deco_tower",
+   "polygon": [
+    [
+     90.0,
+     -200.0
+    ],
+    [
+     120.0,
+     -200.0
+    ],
+    [
+     120.0,
+     -170.0
+    ],
+    [
+     90.0,
+     -170.0
+    ]
+   ],
+   "storeys": 18,
+   "height": 72.0,
+   "base": -6.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "santo_domingo_church",
+   "family": "church",
+   "polygon": [
+    [
+     -195.0,
+     -305.0
+    ],
+    [
+     -145.0,
+     -305.0
+    ],
+    [
+     -145.0,
+     -290.0
+    ],
+    [
+     -195.0,
+     -290.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 20.0,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "evangelistas_n",
+   "family": "evangelistas",
+   "polygon": [
+    [
+     -215.0,
+     -290.0
+    ],
+    [
+     -200.0,
+     -290.0
+    ],
+    [
+     -200.0,
+     -250.0
+    ],
+    [
+     -215.0,
+     -250.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "scribe_office",
+   "family": "evangelistas",
+   "polygon": [
+    [
+     -215.0,
+     -250.0
+    ],
+    [
+     -200.0,
+     -250.0
+    ],
+    [
+     -200.0,
+     -235.0
+    ],
+    [
+     -215.0,
+     -235.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": true
+  },
+  {
+   "name": "evangelistas_s",
+   "family": "evangelistas",
+   "polygon": [
+    [
+     -215.0,
+     -235.0
+    ],
+    [
+     -200.0,
+     -235.0
+    ],
+    [
+     -200.0,
+     -210.0
+    ],
+    [
+     -215.0,
+     -210.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "inquisition_rooms",
+   "family": "inquisition",
+   "polygon": [
+    [
+     -170.0,
+     -210.0
+    ],
+    [
+     -146.0,
+     -210.0
+    ],
+    [
+     -140.0,
+     -204.0
+    ],
+    [
+     -140.0,
+     -180.0
+    ],
+    [
+     -170.0,
+     -180.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 14.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": true
+  },
+  {
+   "name": "palace_front_n",
+   "family": "palace",
+   "polygon": [
+    [
+     120.0,
+     -105.0
+    ],
+    [
+     140.0,
+     -105.0
+    ],
+    [
+     140.0,
+     -5.0
+    ],
+    [
+     120.0,
+     -5.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 16.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "palace_front_s",
+   "family": "palace",
+   "polygon": [
+    [
+     120.0,
+     5.0
+    ],
+    [
+     140.0,
+     5.0
+    ],
+    [
+     140.0,
+     105.0
+    ],
+    [
+     120.0,
+     105.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 16.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "palace_north",
+   "family": "palace",
+   "polygon": [
+    [
+     140.0,
+     -105.0
+    ],
+    [
+     180.0,
+     -105.0
+    ],
+    [
+     180.0,
+     -30.0
+    ],
+    [
+     140.0,
+     -30.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 16.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "palace_south",
+   "family": "palace",
+   "polygon": [
+    [
+     140.0,
+     30.0
+    ],
+    [
+     180.0,
+     30.0
+    ],
+    [
+     180.0,
+     105.0
+    ],
+    [
+     140.0,
+     105.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 16.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "palace_back",
+   "family": "palace",
+   "polygon": [
+    [
+     180.0,
+     -105.0
+    ],
+    [
+     200.0,
+     -105.0
+    ],
+    [
+     200.0,
+     105.0
+    ],
+    [
+     180.0,
+     105.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 16.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "portal_mercaderes_1",
+   "family": "arcade",
+   "polygon": [
+    [
+     -140.0,
+     -100.0
+    ],
+    [
+     -120.0,
+     -100.0
+    ],
+    [
+     -120.0,
+     -55.0
+    ],
+    [
+     -140.0,
+     -55.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "portal_mercaderes_2",
+   "family": "arcade",
+   "polygon": [
+    [
+     -140.0,
+     -55.0
+    ],
+    [
+     -120.0,
+     -55.0
+    ],
+    [
+     -120.0,
+     -10.0
+    ],
+    [
+     -140.0,
+     -10.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "portal_mercaderes_3",
+   "family": "arcade",
+   "polygon": [
+    [
+     -140.0,
+     -10.0
+    ],
+    [
+     -120.0,
+     -10.0
+    ],
+    [
+     -120.0,
+     35.0
+    ],
+    [
+     -140.0,
+     35.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "iturbide",
+   "family": "iturbide",
+   "polygon": [
+    [
+     -280.0,
+     -160.0
+    ],
+    [
+     -240.0,
+     -160.0
+    ],
+    [
+     -240.0,
+     -125.0
+    ],
+    [
+     -280.0,
+     -125.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 16.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "pawnshop",
+   "family": "pawnshop",
+   "polygon": [
+    [
+     -120.0,
+     -210.0
+    ],
+    [
+     -90.0,
+     -210.0
+    ],
+    [
+     -90.0,
+     -150.0
+    ],
+    [
+     -120.0,
+     -150.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 14.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": true
+  },
+  {
+   "name": "town_hall_w",
+   "family": "town_hall",
+   "polygon": [
+    [
+     -100.0,
+     130.0
+    ],
+    [
+     -5.0,
+     130.0
+    ],
+    [
+     -5.0,
+     160.0
+    ],
+    [
+     -100.0,
+     160.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 14.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "town_hall_e",
+   "family": "town_hall",
+   "polygon": [
+    [
+     5.0,
+     130.0
+    ],
+    [
+     100.0,
+     130.0
+    ],
+    [
+     100.0,
+     160.0
+    ],
+    [
+     5.0,
+     160.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 14.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "market_hall",
+   "family": "market_hall",
+   "polygon": [
+    [
+     -40.0,
+     215.0
+    ],
+    [
+     40.0,
+     215.0
+    ],
+    [
+     40.0,
+     265.0
+    ],
+    [
+     -40.0,
+     265.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 14.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "stalls_w1_n",
+   "family": "stall",
+   "polygon": [
+    [
+     -300.0,
+     205.0
+    ],
+    [
+     -280.0,
+     205.0
+    ],
+    [
+     -280.0,
+     240.0
+    ],
+    [
+     -300.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w1_s",
+   "family": "stall",
+   "polygon": [
+    [
+     -300.0,
+     250.0
+    ],
+    [
+     -280.0,
+     250.0
+    ],
+    [
+     -280.0,
+     280.0
+    ],
+    [
+     -300.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w2_n",
+   "family": "stall",
+   "polygon": [
+    [
+     -276.0,
+     205.0
+    ],
+    [
+     -256.0,
+     205.0
+    ],
+    [
+     -256.0,
+     240.0
+    ],
+    [
+     -276.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w2_s",
+   "family": "stall",
+   "polygon": [
+    [
+     -276.0,
+     250.0
+    ],
+    [
+     -256.0,
+     250.0
+    ],
+    [
+     -256.0,
+     280.0
+    ],
+    [
+     -276.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w3_n",
+   "family": "stall",
+   "polygon": [
+    [
+     -252.0,
+     205.0
+    ],
+    [
+     -232.0,
+     205.0
+    ],
+    [
+     -232.0,
+     240.0
+    ],
+    [
+     -252.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w3_s",
+   "family": "stall",
+   "polygon": [
+    [
+     -252.0,
+     250.0
+    ],
+    [
+     -232.0,
+     250.0
+    ],
+    [
+     -232.0,
+     280.0
+    ],
+    [
+     -252.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w4_n",
+   "family": "stall",
+   "polygon": [
+    [
+     -228.0,
+     205.0
+    ],
+    [
+     -208.0,
+     205.0
+    ],
+    [
+     -208.0,
+     240.0
+    ],
+    [
+     -228.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w4_s",
+   "family": "stall",
+   "polygon": [
+    [
+     -228.0,
+     250.0
+    ],
+    [
+     -208.0,
+     250.0
+    ],
+    [
+     -208.0,
+     280.0
+    ],
+    [
+     -228.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w5_n",
+   "family": "stall",
+   "polygon": [
+    [
+     -204.0,
+     205.0
+    ],
+    [
+     -184.0,
+     205.0
+    ],
+    [
+     -184.0,
+     240.0
+    ],
+    [
+     -204.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w5_s",
+   "family": "stall",
+   "polygon": [
+    [
+     -204.0,
+     250.0
+    ],
+    [
+     -184.0,
+     250.0
+    ],
+    [
+     -184.0,
+     280.0
+    ],
+    [
+     -204.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w6_n",
+   "family": "stall",
+   "polygon": [
+    [
+     -180.0,
+     205.0
+    ],
+    [
+     -160.0,
+     205.0
+    ],
+    [
+     -160.0,
+     240.0
+    ],
+    [
+     -180.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w6_s",
+   "family": "stall",
+   "polygon": [
+    [
+     -180.0,
+     250.0
+    ],
+    [
+     -160.0,
+     250.0
+    ],
+    [
+     -160.0,
+     280.0
+    ],
+    [
+     -180.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w7_n",
+   "family": "stall",
+   "polygon": [
+    [
+     -156.0,
+     205.0
+    ],
+    [
+     -136.0,
+     205.0
+    ],
+    [
+     -136.0,
+     240.0
+    ],
+    [
+     -156.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w7_s",
+   "family": "stall",
+   "polygon": [
+    [
+     -156.0,
+     250.0
+    ],
+    [
+     -136.0,
+     250.0
+    ],
+    [
+     -136.0,
+     280.0
+    ],
+    [
+     -156.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w8_n",
+   "family": "stall",
+   "polygon": [
+    [
+     -132.0,
+     205.0
+    ],
+    [
+     -112.0,
+     205.0
+    ],
+    [
+     -112.0,
+     240.0
+    ],
+    [
+     -132.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w8_s",
+   "family": "stall",
+   "polygon": [
+    [
+     -132.0,
+     250.0
+    ],
+    [
+     -112.0,
+     250.0
+    ],
+    [
+     -112.0,
+     280.0
+    ],
+    [
+     -132.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w9_n",
+   "family": "stall",
+   "polygon": [
+    [
+     -108.0,
+     205.0
+    ],
+    [
+     -88.0,
+     205.0
+    ],
+    [
+     -88.0,
+     240.0
+    ],
+    [
+     -108.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w9_s",
+   "family": "stall",
+   "polygon": [
+    [
+     -108.0,
+     250.0
+    ],
+    [
+     -88.0,
+     250.0
+    ],
+    [
+     -88.0,
+     280.0
+    ],
+    [
+     -108.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w10_n",
+   "family": "stall",
+   "polygon": [
+    [
+     -84.0,
+     205.0
+    ],
+    [
+     -64.0,
+     205.0
+    ],
+    [
+     -64.0,
+     240.0
+    ],
+    [
+     -84.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_w10_s",
+   "family": "stall",
+   "polygon": [
+    [
+     -84.0,
+     250.0
+    ],
+    [
+     -64.0,
+     250.0
+    ],
+    [
+     -64.0,
+     280.0
+    ],
+    [
+     -84.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e1_n",
+   "family": "stall",
+   "polygon": [
+    [
+     60.0,
+     205.0
+    ],
+    [
+     80.0,
+     205.0
+    ],
+    [
+     80.0,
+     240.0
+    ],
+    [
+     60.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e1_s",
+   "family": "stall",
+   "polygon": [
+    [
+     60.0,
+     250.0
+    ],
+    [
+     80.0,
+     250.0
+    ],
+    [
+     80.0,
+     280.0
+    ],
+    [
+     60.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e2_n",
+   "family": "stall",
+   "polygon": [
+    [
+     84.0,
+     205.0
+    ],
+    [
+     104.0,
+     205.0
+    ],
+    [
+     104.0,
+     240.0
+    ],
+    [
+     84.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e2_s",
+   "family": "stall",
+   "polygon": [
+    [
+     84.0,
+     250.0
+    ],
+    [
+     104.0,
+     250.0
+    ],
+    [
+     104.0,
+     280.0
+    ],
+    [
+     84.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e3_n",
+   "family": "stall",
+   "polygon": [
+    [
+     108.0,
+     205.0
+    ],
+    [
+     128.0,
+     205.0
+    ],
+    [
+     128.0,
+     240.0
+    ],
+    [
+     108.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e3_s",
+   "family": "stall",
+   "polygon": [
+    [
+     108.0,
+     250.0
+    ],
+    [
+     128.0,
+     250.0
+    ],
+    [
+     128.0,
+     280.0
+    ],
+    [
+     108.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e4_n",
+   "family": "stall",
+   "polygon": [
+    [
+     132.0,
+     205.0
+    ],
+    [
+     152.0,
+     205.0
+    ],
+    [
+     152.0,
+     240.0
+    ],
+    [
+     132.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e4_s",
+   "family": "stall",
+   "polygon": [
+    [
+     132.0,
+     250.0
+    ],
+    [
+     152.0,
+     250.0
+    ],
+    [
+     152.0,
+     280.0
+    ],
+    [
+     132.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e5_n",
+   "family": "stall",
+   "polygon": [
+    [
+     156.0,
+     205.0
+    ],
+    [
+     176.0,
+     205.0
+    ],
+    [
+     176.0,
+     240.0
+    ],
+    [
+     156.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e5_s",
+   "family": "stall",
+   "polygon": [
+    [
+     156.0,
+     250.0
+    ],
+    [
+     176.0,
+     250.0
+    ],
+    [
+     176.0,
+     280.0
+    ],
+    [
+     156.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e6_n",
+   "family": "stall",
+   "polygon": [
+    [
+     180.0,
+     205.0
+    ],
+    [
+     200.0,
+     205.0
+    ],
+    [
+     200.0,
+     240.0
+    ],
+    [
+     180.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e6_s",
+   "family": "stall",
+   "polygon": [
+    [
+     180.0,
+     250.0
+    ],
+    [
+     200.0,
+     250.0
+    ],
+    [
+     200.0,
+     280.0
+    ],
+    [
+     180.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e7_n",
+   "family": "stall",
+   "polygon": [
+    [
+     204.0,
+     205.0
+    ],
+    [
+     224.0,
+     205.0
+    ],
+    [
+     224.0,
+     240.0
+    ],
+    [
+     204.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e7_s",
+   "family": "stall",
+   "polygon": [
+    [
+     204.0,
+     250.0
+    ],
+    [
+     224.0,
+     250.0
+    ],
+    [
+     224.0,
+     280.0
+    ],
+    [
+     204.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e8_n",
+   "family": "stall",
+   "polygon": [
+    [
+     228.0,
+     205.0
+    ],
+    [
+     248.0,
+     205.0
+    ],
+    [
+     248.0,
+     240.0
+    ],
+    [
+     228.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e8_s",
+   "family": "stall",
+   "polygon": [
+    [
+     228.0,
+     250.0
+    ],
+    [
+     248.0,
+     250.0
+    ],
+    [
+     248.0,
+     280.0
+    ],
+    [
+     228.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e9_n",
+   "family": "stall",
+   "polygon": [
+    [
+     252.0,
+     205.0
+    ],
+    [
+     272.0,
+     205.0
+    ],
+    [
+     272.0,
+     240.0
+    ],
+    [
+     252.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e9_s",
+   "family": "stall",
+   "polygon": [
+    [
+     252.0,
+     250.0
+    ],
+    [
+     272.0,
+     250.0
+    ],
+    [
+     272.0,
+     280.0
+    ],
+    [
+     252.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e10_n",
+   "family": "stall",
+   "polygon": [
+    [
+     276.0,
+     205.0
+    ],
+    [
+     296.0,
+     205.0
+    ],
+    [
+     296.0,
+     240.0
+    ],
+    [
+     276.0,
+     240.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "stalls_e10_s",
+   "family": "stall",
+   "polygon": [
+    [
+     276.0,
+     250.0
+    ],
+    [
+     296.0,
+     250.0
+    ],
+    [
+     296.0,
+     280.0
+    ],
+    [
+     276.0,
+     280.0
+    ]
+   ],
+   "storeys": 1,
+   "height": 3.5,
+   "base": 0.0,
+   "roof": false,
+   "interior": false
+  },
+  {
+   "name": "house_a_1",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     -110.0
+    ],
+    [
+     -196.25,
+     -110.0
+    ],
+    [
+     -196.25,
+     -96.0
+    ],
+    [
+     -215.0,
+     -96.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_2",
+   "family": "house",
+   "polygon": [
+    [
+     -196.25,
+     -110.0
+    ],
+    [
+     -177.5,
+     -110.0
+    ],
+    [
+     -177.5,
+     -96.0
+    ],
+    [
+     -196.25,
+     -96.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_3",
+   "family": "house",
+   "polygon": [
+    [
+     -177.5,
+     -110.0
+    ],
+    [
+     -158.75,
+     -110.0
+    ],
+    [
+     -158.75,
+     -96.0
+    ],
+    [
+     -177.5,
+     -96.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_4",
+   "family": "house",
+   "polygon": [
+    [
+     -158.75,
+     -110.0
+    ],
+    [
+     -140.0,
+     -110.0
+    ],
+    [
+     -140.0,
+     -96.0
+    ],
+    [
+     -158.75,
+     -96.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_5",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     21.0
+    ],
+    [
+     -196.25,
+     21.0
+    ],
+    [
+     -196.25,
+     35.0
+    ],
+    [
+     -215.0,
+     35.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_6",
+   "family": "house",
+   "polygon": [
+    [
+     -196.25,
+     21.0
+    ],
+    [
+     -177.5,
+     21.0
+    ],
+    [
+     -177.5,
+     35.0
+    ],
+    [
+     -196.25,
+     35.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_7",
+   "family": "house",
+   "polygon": [
+    [
+     -177.5,
+     21.0
+    ],
+    [
+     -158.75,
+     21.0
+    ],
+    [
+     -158.75,
+     35.0
+    ],
+    [
+     -177.5,
+     35.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_8",
+   "family": "house",
+   "polygon": [
+    [
+     -158.75,
+     21.0
+    ],
+    [
+     -140.0,
+     21.0
+    ],
+    [
+     -140.0,
+     35.0
+    ],
+    [
+     -158.75,
+     35.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_9",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     -96.0
+    ],
+    [
+     -201.0,
+     -96.0
+    ],
+    [
+     -201.0,
+     -76.5
+    ],
+    [
+     -215.0,
+     -76.5
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_10",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     -76.5
+    ],
+    [
+     -201.0,
+     -76.5
+    ],
+    [
+     -201.0,
+     -57.0
+    ],
+    [
+     -215.0,
+     -57.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_11",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     -57.0
+    ],
+    [
+     -201.0,
+     -57.0
+    ],
+    [
+     -201.0,
+     -37.5
+    ],
+    [
+     -215.0,
+     -37.5
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_12",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     -37.5
+    ],
+    [
+     -201.0,
+     -37.5
+    ],
+    [
+     -201.0,
+     -18.0
+    ],
+    [
+     -215.0,
+     -18.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_13",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     -18.0
+    ],
+    [
+     -201.0,
+     -18.0
+    ],
+    [
+     -201.0,
+     1.5
+    ],
+    [
+     -215.0,
+     1.5
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_a_14",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     1.5
+    ],
+    [
+     -201.0,
+     1.5
+    ],
+    [
+     -201.0,
+     21.0
+    ],
+    [
+     -215.0,
+     21.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_1",
+   "family": "house",
+   "polygon": [
+    [
+     -310.0,
+     -110.0
+    ],
+    [
+     -291.25,
+     -110.0
+    ],
+    [
+     -291.25,
+     -96.0
+    ],
+    [
+     -310.0,
+     -96.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_2",
+   "family": "house",
+   "polygon": [
+    [
+     -291.25,
+     -110.0
+    ],
+    [
+     -272.5,
+     -110.0
+    ],
+    [
+     -272.5,
+     -96.0
+    ],
+    [
+     -291.25,
+     -96.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_3",
+   "family": "house",
+   "polygon": [
+    [
+     -272.5,
+     -110.0
+    ],
+    [
+     -253.75,
+     -110.0
+    ],
+    [
+     -253.75,
+     -96.0
+    ],
+    [
+     -272.5,
+     -96.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_4",
+   "family": "house",
+   "polygon": [
+    [
+     -253.75,
+     -110.0
+    ],
+    [
+     -235.0,
+     -110.0
+    ],
+    [
+     -235.0,
+     -96.0
+    ],
+    [
+     -253.75,
+     -96.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_5",
+   "family": "house",
+   "polygon": [
+    [
+     -310.0,
+     21.0
+    ],
+    [
+     -291.25,
+     21.0
+    ],
+    [
+     -291.25,
+     35.0
+    ],
+    [
+     -310.0,
+     35.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_6",
+   "family": "house",
+   "polygon": [
+    [
+     -291.25,
+     21.0
+    ],
+    [
+     -272.5,
+     21.0
+    ],
+    [
+     -272.5,
+     35.0
+    ],
+    [
+     -291.25,
+     35.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_7",
+   "family": "house",
+   "polygon": [
+    [
+     -272.5,
+     21.0
+    ],
+    [
+     -253.75,
+     21.0
+    ],
+    [
+     -253.75,
+     35.0
+    ],
+    [
+     -272.5,
+     35.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_8",
+   "family": "house",
+   "polygon": [
+    [
+     -253.75,
+     21.0
+    ],
+    [
+     -235.0,
+     21.0
+    ],
+    [
+     -235.0,
+     35.0
+    ],
+    [
+     -253.75,
+     35.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_9",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     -96.0
+    ],
+    [
+     -235.0,
+     -96.0
+    ],
+    [
+     -235.0,
+     -76.5
+    ],
+    [
+     -249.0,
+     -76.5
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_10",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     -76.5
+    ],
+    [
+     -235.0,
+     -76.5
+    ],
+    [
+     -235.0,
+     -57.0
+    ],
+    [
+     -249.0,
+     -57.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_11",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     -57.0
+    ],
+    [
+     -235.0,
+     -57.0
+    ],
+    [
+     -235.0,
+     -37.5
+    ],
+    [
+     -249.0,
+     -37.5
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_12",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     -37.5
+    ],
+    [
+     -235.0,
+     -37.5
+    ],
+    [
+     -235.0,
+     -18.0
+    ],
+    [
+     -249.0,
+     -18.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_13",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     -18.0
+    ],
+    [
+     -235.0,
+     -18.0
+    ],
+    [
+     -235.0,
+     1.5
+    ],
+    [
+     -249.0,
+     1.5
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_b_14",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     1.5
+    ],
+    [
+     -235.0,
+     1.5
+    ],
+    [
+     -235.0,
+     21.0
+    ],
+    [
+     -249.0,
+     21.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_c_1",
+   "family": "house",
+   "polygon": [
+    [
+     -310.0,
+     50.0
+    ],
+    [
+     -291.25,
+     50.0
+    ],
+    [
+     -291.25,
+     64.0
+    ],
+    [
+     -310.0,
+     64.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_c_2",
+   "family": "house",
+   "polygon": [
+    [
+     -291.25,
+     50.0
+    ],
+    [
+     -272.5,
+     50.0
+    ],
+    [
+     -272.5,
+     64.0
+    ],
+    [
+     -291.25,
+     64.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_c_3",
+   "family": "house",
+   "polygon": [
+    [
+     -272.5,
+     50.0
+    ],
+    [
+     -253.75,
+     50.0
+    ],
+    [
+     -253.75,
+     64.0
+    ],
+    [
+     -272.5,
+     64.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_c_4",
+   "family": "house",
+   "polygon": [
+    [
+     -253.75,
+     50.0
+    ],
+    [
+     -235.0,
+     50.0
+    ],
+    [
+     -235.0,
+     64.0
+    ],
+    [
+     -253.75,
+     64.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_c_5",
+   "family": "house",
+   "polygon": [
+    [
+     -310.0,
+     146.0
+    ],
+    [
+     -291.25,
+     146.0
+    ],
+    [
+     -291.25,
+     160.0
+    ],
+    [
+     -310.0,
+     160.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_c_6",
+   "family": "house",
+   "polygon": [
+    [
+     -291.25,
+     146.0
+    ],
+    [
+     -272.5,
+     146.0
+    ],
+    [
+     -272.5,
+     160.0
+    ],
+    [
+     -291.25,
+     160.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_c_7",
+   "family": "house",
+   "polygon": [
+    [
+     -272.5,
+     146.0
+    ],
+    [
+     -253.75,
+     146.0
+    ],
+    [
+     -253.75,
+     160.0
+    ],
+    [
+     -272.5,
+     160.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_c_8",
+   "family": "house",
+   "polygon": [
+    [
+     -253.75,
+     146.0
+    ],
+    [
+     -235.0,
+     146.0
+    ],
+    [
+     -235.0,
+     160.0
+    ],
+    [
+     -253.75,
+     160.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_c_9",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     64.0
+    ],
+    [
+     -235.0,
+     64.0
+    ],
+    [
+     -235.0,
+     84.5
+    ],
+    [
+     -249.0,
+     84.5
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_c_10",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     84.5
+    ],
+    [
+     -235.0,
+     84.5
+    ],
+    [
+     -235.0,
+     105.0
+    ],
+    [
+     -249.0,
+     105.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_c_11",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     105.0
+    ],
+    [
+     -235.0,
+     105.0
+    ],
+    [
+     -235.0,
+     125.5
+    ],
+    [
+     -249.0,
+     125.5
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_c_12",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     125.5
+    ],
+    [
+     -235.0,
+     125.5
+    ],
+    [
+     -235.0,
+     146.0
+    ],
+    [
+     -249.0,
+     146.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_1",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     50.0
+    ],
+    [
+     -196.0,
+     50.0
+    ],
+    [
+     -196.0,
+     64.0
+    ],
+    [
+     -215.0,
+     64.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_2",
+   "family": "house",
+   "polygon": [
+    [
+     -196.0,
+     50.0
+    ],
+    [
+     -177.0,
+     50.0
+    ],
+    [
+     -177.0,
+     64.0
+    ],
+    [
+     -196.0,
+     64.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_3",
+   "family": "house",
+   "polygon": [
+    [
+     -177.0,
+     50.0
+    ],
+    [
+     -158.0,
+     50.0
+    ],
+    [
+     -158.0,
+     64.0
+    ],
+    [
+     -177.0,
+     64.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_4",
+   "family": "house",
+   "polygon": [
+    [
+     -158.0,
+     50.0
+    ],
+    [
+     -139.0,
+     50.0
+    ],
+    [
+     -139.0,
+     64.0
+    ],
+    [
+     -158.0,
+     64.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_5",
+   "family": "house",
+   "polygon": [
+    [
+     -139.0,
+     50.0
+    ],
+    [
+     -120.0,
+     50.0
+    ],
+    [
+     -120.0,
+     64.0
+    ],
+    [
+     -139.0,
+     64.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_6",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     146.0
+    ],
+    [
+     -196.0,
+     146.0
+    ],
+    [
+     -196.0,
+     160.0
+    ],
+    [
+     -215.0,
+     160.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_7",
+   "family": "house",
+   "polygon": [
+    [
+     -196.0,
+     146.0
+    ],
+    [
+     -177.0,
+     146.0
+    ],
+    [
+     -177.0,
+     160.0
+    ],
+    [
+     -196.0,
+     160.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_8",
+   "family": "house",
+   "polygon": [
+    [
+     -177.0,
+     146.0
+    ],
+    [
+     -158.0,
+     146.0
+    ],
+    [
+     -158.0,
+     160.0
+    ],
+    [
+     -177.0,
+     160.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_9",
+   "family": "house",
+   "polygon": [
+    [
+     -158.0,
+     146.0
+    ],
+    [
+     -139.0,
+     146.0
+    ],
+    [
+     -139.0,
+     160.0
+    ],
+    [
+     -158.0,
+     160.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_10",
+   "family": "house",
+   "polygon": [
+    [
+     -139.0,
+     146.0
+    ],
+    [
+     -120.0,
+     146.0
+    ],
+    [
+     -120.0,
+     160.0
+    ],
+    [
+     -139.0,
+     160.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_11",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     64.0
+    ],
+    [
+     -201.0,
+     64.0
+    ],
+    [
+     -201.0,
+     84.5
+    ],
+    [
+     -215.0,
+     84.5
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_12",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     84.5
+    ],
+    [
+     -201.0,
+     84.5
+    ],
+    [
+     -201.0,
+     105.0
+    ],
+    [
+     -215.0,
+     105.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_13",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     105.0
+    ],
+    [
+     -201.0,
+     105.0
+    ],
+    [
+     -201.0,
+     125.5
+    ],
+    [
+     -215.0,
+     125.5
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_14",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     125.5
+    ],
+    [
+     -201.0,
+     125.5
+    ],
+    [
+     -201.0,
+     146.0
+    ],
+    [
+     -215.0,
+     146.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_15",
+   "family": "house",
+   "polygon": [
+    [
+     -134.0,
+     64.0
+    ],
+    [
+     -120.0,
+     64.0
+    ],
+    [
+     -120.0,
+     84.5
+    ],
+    [
+     -134.0,
+     84.5
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_16",
+   "family": "house",
+   "polygon": [
+    [
+     -134.0,
+     84.5
+    ],
+    [
+     -120.0,
+     84.5
+    ],
+    [
+     -120.0,
+     105.0
+    ],
+    [
+     -134.0,
+     105.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d_17",
+   "family": "house",
+   "polygon": [
+    [
+     -134.0,
+     105.0
+    ],
+    [
+     -120.0,
+     105.0
+    ],
+    [
+     -120.0,
+     125.5
+    ],
+    [
+     -134.0,
+     125.5
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d2_1",
+   "family": "house",
+   "polygon": [
+    [
+     -120.0,
+     130.0
+    ],
+    [
+     -100.0,
+     130.0
+    ],
+    [
+     -100.0,
+     144.0
+    ],
+    [
+     -120.0,
+     144.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_d2_2",
+   "family": "house",
+   "polygon": [
+    [
+     -120.0,
+     146.0
+    ],
+    [
+     -100.0,
+     146.0
+    ],
+    [
+     -100.0,
+     160.0
+    ],
+    [
+     -120.0,
+     160.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_1",
+   "family": "house",
+   "polygon": [
+    [
+     -310.0,
+     -305.0
+    ],
+    [
+     -291.25,
+     -305.0
+    ],
+    [
+     -291.25,
+     -291.0
+    ],
+    [
+     -310.0,
+     -291.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_2",
+   "family": "house",
+   "polygon": [
+    [
+     -291.25,
+     -305.0
+    ],
+    [
+     -272.5,
+     -305.0
+    ],
+    [
+     -272.5,
+     -291.0
+    ],
+    [
+     -291.25,
+     -291.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_3",
+   "family": "house",
+   "polygon": [
+    [
+     -272.5,
+     -305.0
+    ],
+    [
+     -253.75,
+     -305.0
+    ],
+    [
+     -253.75,
+     -291.0
+    ],
+    [
+     -272.5,
+     -291.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_4",
+   "family": "house",
+   "polygon": [
+    [
+     -253.75,
+     -305.0
+    ],
+    [
+     -235.0,
+     -305.0
+    ],
+    [
+     -235.0,
+     -291.0
+    ],
+    [
+     -253.75,
+     -291.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_5",
+   "family": "house",
+   "polygon": [
+    [
+     -310.0,
+     -139.0
+    ],
+    [
+     -291.25,
+     -139.0
+    ],
+    [
+     -291.25,
+     -125.0
+    ],
+    [
+     -310.0,
+     -125.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_9",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     -291.0
+    ],
+    [
+     -235.0,
+     -291.0
+    ],
+    [
+     -235.0,
+     -272.0
+    ],
+    [
+     -249.0,
+     -272.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_10",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     -272.0
+    ],
+    [
+     -235.0,
+     -272.0
+    ],
+    [
+     -235.0,
+     -253.0
+    ],
+    [
+     -249.0,
+     -253.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_11",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     -253.0
+    ],
+    [
+     -235.0,
+     -253.0
+    ],
+    [
+     -235.0,
+     -234.0
+    ],
+    [
+     -249.0,
+     -234.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_12",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     -234.0
+    ],
+    [
+     -235.0,
+     -234.0
+    ],
+    [
+     -235.0,
+     -215.0
+    ],
+    [
+     -249.0,
+     -215.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_13",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     -215.0
+    ],
+    [
+     -235.0,
+     -215.0
+    ],
+    [
+     -235.0,
+     -196.0
+    ],
+    [
+     -249.0,
+     -196.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_14",
+   "family": "house",
+   "polygon": [
+    [
+     -249.0,
+     -196.0
+    ],
+    [
+     -235.0,
+     -196.0
+    ],
+    [
+     -235.0,
+     -177.0
+    ],
+    [
+     -249.0,
+     -177.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_sds_1",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     -210.0
+    ],
+    [
+     -196.25,
+     -210.0
+    ],
+    [
+     -196.25,
+     -196.0
+    ],
+    [
+     -215.0,
+     -196.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_sds_2",
+   "family": "house",
+   "polygon": [
+    [
+     -196.25,
+     -210.0
+    ],
+    [
+     -177.5,
+     -210.0
+    ],
+    [
+     -177.5,
+     -196.0
+    ],
+    [
+     -196.25,
+     -196.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_sds_5",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     -139.0
+    ],
+    [
+     -196.25,
+     -139.0
+    ],
+    [
+     -196.25,
+     -125.0
+    ],
+    [
+     -215.0,
+     -125.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_sds_6",
+   "family": "house",
+   "polygon": [
+    [
+     -196.25,
+     -139.0
+    ],
+    [
+     -177.5,
+     -139.0
+    ],
+    [
+     -177.5,
+     -125.0
+    ],
+    [
+     -196.25,
+     -125.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_sds_7",
+   "family": "house",
+   "polygon": [
+    [
+     -177.5,
+     -139.0
+    ],
+    [
+     -158.75,
+     -139.0
+    ],
+    [
+     -158.75,
+     -125.0
+    ],
+    [
+     -177.5,
+     -125.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_sds_8",
+   "family": "house",
+   "polygon": [
+    [
+     -158.75,
+     -139.0
+    ],
+    [
+     -140.0,
+     -139.0
+    ],
+    [
+     -140.0,
+     -125.0
+    ],
+    [
+     -158.75,
+     -125.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_sds_9",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     -196.0
+    ],
+    [
+     -201.0,
+     -196.0
+    ],
+    [
+     -201.0,
+     -177.0
+    ],
+    [
+     -215.0,
+     -177.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_sds_10",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     -177.0
+    ],
+    [
+     -201.0,
+     -177.0
+    ],
+    [
+     -201.0,
+     -158.0
+    ],
+    [
+     -215.0,
+     -158.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_sds_11",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     -158.0
+    ],
+    [
+     -201.0,
+     -158.0
+    ],
+    [
+     -201.0,
+     -139.0
+    ],
+    [
+     -215.0,
+     -139.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_sds_13",
+   "family": "house",
+   "polygon": [
+    [
+     -154.0,
+     -177.0
+    ],
+    [
+     -140.0,
+     -177.0
+    ],
+    [
+     -140.0,
+     -158.0
+    ],
+    [
+     -154.0,
+     -158.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_sds_14",
+   "family": "house",
+   "polygon": [
+    [
+     -154.0,
+     -158.0
+    ],
+    [
+     -140.0,
+     -158.0
+    ],
+    [
+     -140.0,
+     -139.0
+    ],
+    [
+     -154.0,
+     -139.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_pawn_1",
+   "family": "house",
+   "polygon": [
+    [
+     -120.0,
+     -265.0
+    ],
+    [
+     -105.0,
+     -265.0
+    ],
+    [
+     -105.0,
+     -251.0
+    ],
+    [
+     -120.0,
+     -251.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_pawn_2",
+   "family": "house",
+   "polygon": [
+    [
+     -105.0,
+     -265.0
+    ],
+    [
+     -90.0,
+     -265.0
+    ],
+    [
+     -90.0,
+     -251.0
+    ],
+    [
+     -105.0,
+     -251.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_pawn_3",
+   "family": "house",
+   "polygon": [
+    [
+     -120.0,
+     -144.0
+    ],
+    [
+     -105.0,
+     -144.0
+    ],
+    [
+     -105.0,
+     -130.0
+    ],
+    [
+     -120.0,
+     -130.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_pawn_4",
+   "family": "house",
+   "polygon": [
+    [
+     -105.0,
+     -144.0
+    ],
+    [
+     -90.0,
+     -144.0
+    ],
+    [
+     -90.0,
+     -130.0
+    ],
+    [
+     -105.0,
+     -130.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_pawn_5",
+   "family": "house",
+   "polygon": [
+    [
+     -120.0,
+     -251.0
+    ],
+    [
+     -106.0,
+     -251.0
+    ],
+    [
+     -106.0,
+     -229.6
+    ],
+    [
+     -120.0,
+     -229.6
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_pawn_10",
+   "family": "house",
+   "polygon": [
+    [
+     -104.0,
+     -251.0
+    ],
+    [
+     -90.0,
+     -251.0
+    ],
+    [
+     -90.0,
+     -229.6
+    ],
+    [
+     -104.0,
+     -229.6
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_strip_1",
+   "family": "house",
+   "polygon": [
+    [
+     -310.0,
+     -339.0
+    ],
+    [
+     -291.0,
+     -339.0
+    ],
+    [
+     -291.0,
+     -325.0
+    ],
+    [
+     -310.0,
+     -325.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_strip_2",
+   "family": "house",
+   "polygon": [
+    [
+     -291.0,
+     -339.0
+    ],
+    [
+     -272.0,
+     -339.0
+    ],
+    [
+     -272.0,
+     -325.0
+    ],
+    [
+     -291.0,
+     -325.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_strip_3",
+   "family": "house",
+   "polygon": [
+    [
+     -272.0,
+     -339.0
+    ],
+    [
+     -253.0,
+     -339.0
+    ],
+    [
+     -253.0,
+     -325.0
+    ],
+    [
+     -272.0,
+     -325.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_strip_4",
+   "family": "house",
+   "polygon": [
+    [
+     -253.0,
+     -339.0
+    ],
+    [
+     -234.0,
+     -339.0
+    ],
+    [
+     -234.0,
+     -325.0
+    ],
+    [
+     -253.0,
+     -325.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_strip_5",
+   "family": "house",
+   "polygon": [
+    [
+     -234.0,
+     -339.0
+    ],
+    [
+     -215.0,
+     -339.0
+    ],
+    [
+     -215.0,
+     -325.0
+    ],
+    [
+     -234.0,
+     -325.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_strip_6",
+   "family": "house",
+   "polygon": [
+    [
+     -215.0,
+     -339.0
+    ],
+    [
+     -196.0,
+     -339.0
+    ],
+    [
+     -196.0,
+     -325.0
+    ],
+    [
+     -215.0,
+     -325.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_strip_7",
+   "family": "house",
+   "polygon": [
+    [
+     -196.0,
+     -339.0
+    ],
+    [
+     -177.0,
+     -339.0
+    ],
+    [
+     -177.0,
+     -325.0
+    ],
+    [
+     -196.0,
+     -325.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_strip_8",
+   "family": "house",
+   "polygon": [
+    [
+     -177.0,
+     -339.0
+    ],
+    [
+     -158.0,
+     -339.0
+    ],
+    [
+     -158.0,
+     -325.0
+    ],
+    [
+     -177.0,
+     -325.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_strip_9",
+   "family": "house",
+   "polygon": [
+    [
+     -158.0,
+     -339.0
+    ],
+    [
+     -139.0,
+     -339.0
+    ],
+    [
+     -139.0,
+     -325.0
+    ],
+    [
+     -158.0,
+     -325.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_nw_strip_10",
+   "family": "house",
+   "polygon": [
+    [
+     -139.0,
+     -339.0
+    ],
+    [
+     -120.0,
+     -339.0
+    ],
+    [
+     -120.0,
+     -325.0
+    ],
+    [
+     -139.0,
+     -325.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_1",
+   "family": "house",
+   "polygon": [
+    [
+     -120.0,
+     -299.0
+    ],
+    [
+     -100.45454545454545,
+     -299.0
+    ],
+    [
+     -100.45454545454545,
+     -285.0
+    ],
+    [
+     -120.0,
+     -285.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_2",
+   "family": "house",
+   "polygon": [
+    [
+     -100.45454545454545,
+     -299.0
+    ],
+    [
+     -80.9090909090909,
+     -299.0
+    ],
+    [
+     -80.9090909090909,
+     -285.0
+    ],
+    [
+     -100.45454545454545,
+     -285.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_3",
+   "family": "house",
+   "polygon": [
+    [
+     -80.9090909090909,
+     -299.0
+    ],
+    [
+     -61.36363636363636,
+     -299.0
+    ],
+    [
+     -61.36363636363636,
+     -285.0
+    ],
+    [
+     -80.9090909090909,
+     -285.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_4",
+   "family": "house",
+   "polygon": [
+    [
+     -61.36363636363636,
+     -299.0
+    ],
+    [
+     -41.81818181818181,
+     -299.0
+    ],
+    [
+     -41.81818181818181,
+     -285.0
+    ],
+    [
+     -61.36363636363636,
+     -285.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_5",
+   "family": "house",
+   "polygon": [
+    [
+     -41.81818181818181,
+     -299.0
+    ],
+    [
+     -22.272727272727266,
+     -299.0
+    ],
+    [
+     -22.272727272727266,
+     -285.0
+    ],
+    [
+     -41.81818181818181,
+     -285.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_6",
+   "family": "house",
+   "polygon": [
+    [
+     -22.272727272727266,
+     -299.0
+    ],
+    [
+     -2.7272727272727195,
+     -299.0
+    ],
+    [
+     -2.7272727272727195,
+     -285.0
+    ],
+    [
+     -22.272727272727266,
+     -285.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_7",
+   "family": "house",
+   "polygon": [
+    [
+     -2.7272727272727195,
+     -299.0
+    ],
+    [
+     16.818181818181813,
+     -299.0
+    ],
+    [
+     16.818181818181813,
+     -285.0
+    ],
+    [
+     -2.7272727272727195,
+     -285.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_8",
+   "family": "house",
+   "polygon": [
+    [
+     16.818181818181813,
+     -299.0
+    ],
+    [
+     36.363636363636374,
+     -299.0
+    ],
+    [
+     36.363636363636374,
+     -285.0
+    ],
+    [
+     16.818181818181813,
+     -285.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_9",
+   "family": "house",
+   "polygon": [
+    [
+     36.363636363636374,
+     -299.0
+    ],
+    [
+     55.909090909090935,
+     -299.0
+    ],
+    [
+     55.909090909090935,
+     -285.0
+    ],
+    [
+     36.363636363636374,
+     -285.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_10",
+   "family": "house",
+   "polygon": [
+    [
+     55.909090909090935,
+     -299.0
+    ],
+    [
+     75.45454545454547,
+     -299.0
+    ],
+    [
+     75.45454545454547,
+     -285.0
+    ],
+    [
+     55.909090909090935,
+     -285.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_11",
+   "family": "house",
+   "polygon": [
+    [
+     75.45454545454547,
+     -299.0
+    ],
+    [
+     95.0,
+     -299.0
+    ],
+    [
+     95.0,
+     -285.0
+    ],
+    [
+     75.45454545454547,
+     -285.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_12",
+   "family": "house",
+   "polygon": [
+    [
+     95.0,
+     -299.0
+    ],
+    [
+     114.54545454545456,
+     -299.0
+    ],
+    [
+     114.54545454545456,
+     -285.0
+    ],
+    [
+     95.0,
+     -285.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_13",
+   "family": "house",
+   "polygon": [
+    [
+     114.54545454545456,
+     -299.0
+    ],
+    [
+     134.09090909090912,
+     -299.0
+    ],
+    [
+     134.09090909090912,
+     -285.0
+    ],
+    [
+     114.54545454545456,
+     -285.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_14",
+   "family": "house",
+   "polygon": [
+    [
+     134.09090909090912,
+     -299.0
+    ],
+    [
+     153.63636363636363,
+     -299.0
+    ],
+    [
+     153.63636363636363,
+     -285.0
+    ],
+    [
+     134.09090909090912,
+     -285.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_15",
+   "family": "house",
+   "polygon": [
+    [
+     153.63636363636363,
+     -299.0
+    ],
+    [
+     173.1818181818182,
+     -299.0
+    ],
+    [
+     173.1818181818182,
+     -285.0
+    ],
+    [
+     153.63636363636363,
+     -285.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_16",
+   "family": "house",
+   "polygon": [
+    [
+     173.1818181818182,
+     -299.0
+    ],
+    [
+     192.72727272727275,
+     -299.0
+    ],
+    [
+     192.72727272727275,
+     -285.0
+    ],
+    [
+     173.1818181818182,
+     -285.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_17",
+   "family": "house",
+   "polygon": [
+    [
+     192.72727272727275,
+     -299.0
+    ],
+    [
+     212.2727272727273,
+     -299.0
+    ],
+    [
+     212.2727272727273,
+     -285.0
+    ],
+    [
+     192.72727272727275,
+     -285.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_18",
+   "family": "house",
+   "polygon": [
+    [
+     212.2727272727273,
+     -299.0
+    ],
+    [
+     231.81818181818187,
+     -299.0
+    ],
+    [
+     231.81818181818187,
+     -285.0
+    ],
+    [
+     212.2727272727273,
+     -285.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_19",
+   "family": "house",
+   "polygon": [
+    [
+     231.81818181818187,
+     -299.0
+    ],
+    [
+     251.36363636363637,
+     -299.0
+    ],
+    [
+     251.36363636363637,
+     -285.0
+    ],
+    [
+     231.81818181818187,
+     -285.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_20",
+   "family": "house",
+   "polygon": [
+    [
+     251.36363636363637,
+     -299.0
+    ],
+    [
+     270.90909090909093,
+     -299.0
+    ],
+    [
+     270.90909090909093,
+     -285.0
+    ],
+    [
+     251.36363636363637,
+     -285.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_21",
+   "family": "house",
+   "polygon": [
+    [
+     270.90909090909093,
+     -299.0
+    ],
+    [
+     290.4545454545455,
+     -299.0
+    ],
+    [
+     290.4545454545455,
+     -285.0
+    ],
+    [
+     270.90909090909093,
+     -285.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_n_strip_22",
+   "family": "house",
+   "polygon": [
+    [
+     290.4545454545455,
+     -299.0
+    ],
+    [
+     310.0,
+     -299.0
+    ],
+    [
+     310.0,
+     -285.0
+    ],
+    [
+     290.4545454545455,
+     -285.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_1",
+   "family": "house",
+   "polygon": [
+    [
+     60.0,
+     -265.0
+    ],
+    [
+     80.0,
+     -265.0
+    ],
+    [
+     80.0,
+     -251.0
+    ],
+    [
+     60.0,
+     -251.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_2",
+   "family": "house",
+   "polygon": [
+    [
+     80.0,
+     -265.0
+    ],
+    [
+     100.0,
+     -265.0
+    ],
+    [
+     100.0,
+     -251.0
+    ],
+    [
+     80.0,
+     -251.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_3",
+   "family": "house",
+   "polygon": [
+    [
+     100.0,
+     -265.0
+    ],
+    [
+     120.0,
+     -265.0
+    ],
+    [
+     120.0,
+     -251.0
+    ],
+    [
+     100.0,
+     -251.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_4",
+   "family": "house",
+   "polygon": [
+    [
+     120.0,
+     -265.0
+    ],
+    [
+     140.0,
+     -265.0
+    ],
+    [
+     140.0,
+     -251.0
+    ],
+    [
+     120.0,
+     -251.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_5",
+   "family": "house",
+   "polygon": [
+    [
+     140.0,
+     -265.0
+    ],
+    [
+     160.0,
+     -265.0
+    ],
+    [
+     160.0,
+     -251.0
+    ],
+    [
+     140.0,
+     -251.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_6",
+   "family": "house",
+   "polygon": [
+    [
+     160.0,
+     -265.0
+    ],
+    [
+     180.0,
+     -265.0
+    ],
+    [
+     180.0,
+     -251.0
+    ],
+    [
+     160.0,
+     -251.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_7",
+   "family": "house",
+   "polygon": [
+    [
+     180.0,
+     -265.0
+    ],
+    [
+     200.0,
+     -265.0
+    ],
+    [
+     200.0,
+     -251.0
+    ],
+    [
+     180.0,
+     -251.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_8",
+   "family": "house",
+   "polygon": [
+    [
+     60.0,
+     -239.0
+    ],
+    [
+     80.0,
+     -239.0
+    ],
+    [
+     80.0,
+     -225.0
+    ],
+    [
+     60.0,
+     -225.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_9",
+   "family": "house",
+   "polygon": [
+    [
+     80.0,
+     -239.0
+    ],
+    [
+     100.0,
+     -239.0
+    ],
+    [
+     100.0,
+     -225.0
+    ],
+    [
+     80.0,
+     -225.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_10",
+   "family": "house",
+   "polygon": [
+    [
+     100.0,
+     -239.0
+    ],
+    [
+     120.0,
+     -239.0
+    ],
+    [
+     120.0,
+     -225.0
+    ],
+    [
+     100.0,
+     -225.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_11",
+   "family": "house",
+   "polygon": [
+    [
+     120.0,
+     -239.0
+    ],
+    [
+     140.0,
+     -239.0
+    ],
+    [
+     140.0,
+     -225.0
+    ],
+    [
+     120.0,
+     -225.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_12",
+   "family": "house",
+   "polygon": [
+    [
+     140.0,
+     -239.0
+    ],
+    [
+     160.0,
+     -239.0
+    ],
+    [
+     160.0,
+     -225.0
+    ],
+    [
+     140.0,
+     -225.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_14",
+   "family": "house",
+   "polygon": [
+    [
+     180.0,
+     -239.0
+    ],
+    [
+     200.0,
+     -239.0
+    ],
+    [
+     200.0,
+     -225.0
+    ],
+    [
+     180.0,
+     -225.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_15",
+   "family": "house",
+   "polygon": [
+    [
+     60.0,
+     -251.0
+    ],
+    [
+     74.0,
+     -251.0
+    ],
+    [
+     74.0,
+     -239.0
+    ],
+    [
+     60.0,
+     -239.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_dn_16",
+   "family": "house",
+   "polygon": [
+    [
+     186.0,
+     -251.0
+    ],
+    [
+     200.0,
+     -251.0
+    ],
+    [
+     200.0,
+     -239.0
+    ],
+    [
+     186.0,
+     -239.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_de_1",
+   "family": "house",
+   "polygon": [
+    [
+     150.0,
+     -225.0
+    ],
+    [
+     175.0,
+     -225.0
+    ],
+    [
+     175.0,
+     -211.0
+    ],
+    [
+     150.0,
+     -211.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_de_2",
+   "family": "house",
+   "polygon": [
+    [
+     175.0,
+     -225.0
+    ],
+    [
+     200.0,
+     -225.0
+    ],
+    [
+     200.0,
+     -211.0
+    ],
+    [
+     175.0,
+     -211.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_de_3",
+   "family": "house",
+   "polygon": [
+    [
+     150.0,
+     -159.0
+    ],
+    [
+     175.0,
+     -159.0
+    ],
+    [
+     175.0,
+     -145.0
+    ],
+    [
+     150.0,
+     -145.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_de_4",
+   "family": "house",
+   "polygon": [
+    [
+     175.0,
+     -159.0
+    ],
+    [
+     200.0,
+     -159.0
+    ],
+    [
+     200.0,
+     -145.0
+    ],
+    [
+     175.0,
+     -145.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_de_5",
+   "family": "house",
+   "polygon": [
+    [
+     150.0,
+     -211.0
+    ],
+    [
+     164.0,
+     -211.0
+    ],
+    [
+     164.0,
+     -193.66666666666666
+    ],
+    [
+     150.0,
+     -193.66666666666666
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_de_6",
+   "family": "house",
+   "polygon": [
+    [
+     150.0,
+     -193.66666666666666
+    ],
+    [
+     164.0,
+     -193.66666666666666
+    ],
+    [
+     164.0,
+     -176.33333333333334
+    ],
+    [
+     150.0,
+     -176.33333333333334
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_de_7",
+   "family": "house",
+   "polygon": [
+    [
+     150.0,
+     -176.33333333333334
+    ],
+    [
+     164.0,
+     -176.33333333333334
+    ],
+    [
+     164.0,
+     -159.0
+    ],
+    [
+     150.0,
+     -159.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_de_8",
+   "family": "house",
+   "polygon": [
+    [
+     186.0,
+     -211.0
+    ],
+    [
+     200.0,
+     -211.0
+    ],
+    [
+     200.0,
+     -193.66666666666666
+    ],
+    [
+     186.0,
+     -193.66666666666666
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_de_9",
+   "family": "house",
+   "polygon": [
+    [
+     186.0,
+     -193.66666666666666
+    ],
+    [
+     200.0,
+     -193.66666666666666
+    ],
+    [
+     200.0,
+     -176.33333333333334
+    ],
+    [
+     186.0,
+     -176.33333333333334
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_de_10",
+   "family": "house",
+   "polygon": [
+    [
+     186.0,
+     -176.33333333333334
+    ],
+    [
+     200.0,
+     -176.33333333333334
+    ],
+    [
+     200.0,
+     -159.0
+    ],
+    [
+     186.0,
+     -159.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_pn_1",
+   "family": "house",
+   "polygon": [
+    [
+     120.0,
+     -130.0
+    ],
+    [
+     140.0,
+     -130.0
+    ],
+    [
+     140.0,
+     -117.5
+    ],
+    [
+     120.0,
+     -117.5
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_pn_2",
+   "family": "house",
+   "polygon": [
+    [
+     140.0,
+     -130.0
+    ],
+    [
+     160.0,
+     -130.0
+    ],
+    [
+     160.0,
+     -117.5
+    ],
+    [
+     140.0,
+     -117.5
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_pn_3",
+   "family": "house",
+   "polygon": [
+    [
+     160.0,
+     -130.0
+    ],
+    [
+     180.0,
+     -130.0
+    ],
+    [
+     180.0,
+     -117.5
+    ],
+    [
+     160.0,
+     -117.5
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_pn_4",
+   "family": "house",
+   "polygon": [
+    [
+     180.0,
+     -130.0
+    ],
+    [
+     200.0,
+     -130.0
+    ],
+    [
+     200.0,
+     -117.5
+    ],
+    [
+     180.0,
+     -117.5
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_pn_5",
+   "family": "house",
+   "polygon": [
+    [
+     120.0,
+     -117.5
+    ],
+    [
+     140.0,
+     -117.5
+    ],
+    [
+     140.0,
+     -105.0
+    ],
+    [
+     120.0,
+     -105.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_pn_8",
+   "family": "house",
+   "polygon": [
+    [
+     180.0,
+     -117.5
+    ],
+    [
+     200.0,
+     -117.5
+    ],
+    [
+     200.0,
+     -105.0
+    ],
+    [
+     180.0,
+     -105.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_se_1",
+   "family": "house",
+   "polygon": [
+    [
+     120.0,
+     105.0
+    ],
+    [
+     140.0,
+     105.0
+    ],
+    [
+     140.0,
+     119.0
+    ],
+    [
+     120.0,
+     119.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_se_4",
+   "family": "house",
+   "polygon": [
+    [
+     180.0,
+     105.0
+    ],
+    [
+     200.0,
+     105.0
+    ],
+    [
+     200.0,
+     119.0
+    ],
+    [
+     180.0,
+     119.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_se_5",
+   "family": "house",
+   "polygon": [
+    [
+     120.0,
+     146.0
+    ],
+    [
+     140.0,
+     146.0
+    ],
+    [
+     140.0,
+     160.0
+    ],
+    [
+     120.0,
+     160.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_se_6",
+   "family": "house",
+   "polygon": [
+    [
+     140.0,
+     146.0
+    ],
+    [
+     160.0,
+     146.0
+    ],
+    [
+     160.0,
+     160.0
+    ],
+    [
+     140.0,
+     160.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_se_7",
+   "family": "house",
+   "polygon": [
+    [
+     160.0,
+     146.0
+    ],
+    [
+     180.0,
+     146.0
+    ],
+    [
+     180.0,
+     160.0
+    ],
+    [
+     160.0,
+     160.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_se_8",
+   "family": "house",
+   "polygon": [
+    [
+     180.0,
+     146.0
+    ],
+    [
+     200.0,
+     146.0
+    ],
+    [
+     200.0,
+     160.0
+    ],
+    [
+     180.0,
+     160.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_se_10",
+   "family": "house",
+   "polygon": [
+    [
+     186.0,
+     119.0
+    ],
+    [
+     200.0,
+     119.0
+    ],
+    [
+     200.0,
+     146.0
+    ],
+    [
+     186.0,
+     146.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e0_1",
+   "family": "house",
+   "polygon": [
+    [
+     100.0,
+     130.0
+    ],
+    [
+     120.0,
+     130.0
+    ],
+    [
+     120.0,
+     144.0
+    ],
+    [
+     100.0,
+     144.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e0_2",
+   "family": "house",
+   "polygon": [
+    [
+     100.0,
+     146.0
+    ],
+    [
+     120.0,
+     146.0
+    ],
+    [
+     120.0,
+     160.0
+    ],
+    [
+     100.0,
+     160.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_1",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -265.0
+    ],
+    [
+     242.5,
+     -265.0
+    ],
+    [
+     242.5,
+     -251.0
+    ],
+    [
+     220.0,
+     -251.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_2",
+   "family": "house",
+   "polygon": [
+    [
+     242.5,
+     -265.0
+    ],
+    [
+     265.0,
+     -265.0
+    ],
+    [
+     265.0,
+     -251.0
+    ],
+    [
+     242.5,
+     -251.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_3",
+   "family": "house",
+   "polygon": [
+    [
+     265.0,
+     -265.0
+    ],
+    [
+     287.5,
+     -265.0
+    ],
+    [
+     287.5,
+     -251.0
+    ],
+    [
+     265.0,
+     -251.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_4",
+   "family": "house",
+   "polygon": [
+    [
+     287.5,
+     -265.0
+    ],
+    [
+     310.0,
+     -265.0
+    ],
+    [
+     310.0,
+     -251.0
+    ],
+    [
+     287.5,
+     -251.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_5",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -159.0
+    ],
+    [
+     242.5,
+     -159.0
+    ],
+    [
+     242.5,
+     -145.0
+    ],
+    [
+     220.0,
+     -145.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_6",
+   "family": "house",
+   "polygon": [
+    [
+     242.5,
+     -159.0
+    ],
+    [
+     265.0,
+     -159.0
+    ],
+    [
+     265.0,
+     -145.0
+    ],
+    [
+     242.5,
+     -145.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_7",
+   "family": "house",
+   "polygon": [
+    [
+     265.0,
+     -159.0
+    ],
+    [
+     287.5,
+     -159.0
+    ],
+    [
+     287.5,
+     -145.0
+    ],
+    [
+     265.0,
+     -145.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_8",
+   "family": "house",
+   "polygon": [
+    [
+     287.5,
+     -159.0
+    ],
+    [
+     310.0,
+     -159.0
+    ],
+    [
+     310.0,
+     -145.0
+    ],
+    [
+     287.5,
+     -145.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_9",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -251.0
+    ],
+    [
+     234.0,
+     -251.0
+    ],
+    [
+     234.0,
+     -232.6
+    ],
+    [
+     220.0,
+     -232.6
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_10",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -232.6
+    ],
+    [
+     234.0,
+     -232.6
+    ],
+    [
+     234.0,
+     -214.2
+    ],
+    [
+     220.0,
+     -214.2
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_11",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -214.2
+    ],
+    [
+     234.0,
+     -214.2
+    ],
+    [
+     234.0,
+     -195.8
+    ],
+    [
+     220.0,
+     -195.8
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_12",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -195.8
+    ],
+    [
+     234.0,
+     -195.8
+    ],
+    [
+     234.0,
+     -177.4
+    ],
+    [
+     220.0,
+     -177.4
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e1_13",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -177.4
+    ],
+    [
+     234.0,
+     -177.4
+    ],
+    [
+     234.0,
+     -159.0
+    ],
+    [
+     220.0,
+     -159.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e2_1",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -130.0
+    ],
+    [
+     242.5,
+     -130.0
+    ],
+    [
+     242.5,
+     -116.0
+    ],
+    [
+     220.0,
+     -116.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e2_2",
+   "family": "house",
+   "polygon": [
+    [
+     242.5,
+     -130.0
+    ],
+    [
+     265.0,
+     -130.0
+    ],
+    [
+     265.0,
+     -116.0
+    ],
+    [
+     242.5,
+     -116.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e2_3",
+   "family": "house",
+   "polygon": [
+    [
+     265.0,
+     -130.0
+    ],
+    [
+     287.5,
+     -130.0
+    ],
+    [
+     287.5,
+     -116.0
+    ],
+    [
+     265.0,
+     -116.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e2_4",
+   "family": "house",
+   "polygon": [
+    [
+     287.5,
+     -130.0
+    ],
+    [
+     310.0,
+     -130.0
+    ],
+    [
+     310.0,
+     -116.0
+    ],
+    [
+     287.5,
+     -116.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e2_5",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -14.0
+    ],
+    [
+     242.5,
+     -14.0
+    ],
+    [
+     242.5,
+     0.0
+    ],
+    [
+     220.0,
+     0.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e2_9",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -116.0
+    ],
+    [
+     234.0,
+     -116.0
+    ],
+    [
+     234.0,
+     -95.6
+    ],
+    [
+     220.0,
+     -95.6
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e2_10",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -95.6
+    ],
+    [
+     234.0,
+     -95.6
+    ],
+    [
+     234.0,
+     -75.2
+    ],
+    [
+     220.0,
+     -75.2
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e2_11",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -75.2
+    ],
+    [
+     234.0,
+     -75.2
+    ],
+    [
+     234.0,
+     -54.800000000000004
+    ],
+    [
+     220.0,
+     -54.800000000000004
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e2_12",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -54.800000000000004
+    ],
+    [
+     234.0,
+     -54.800000000000004
+    ],
+    [
+     234.0,
+     -34.400000000000006
+    ],
+    [
+     220.0,
+     -34.400000000000006
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e2_13",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     -34.400000000000006
+    ],
+    [
+     234.0,
+     -34.400000000000006
+    ],
+    [
+     234.0,
+     -14.0
+    ],
+    [
+     220.0,
+     -14.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e3_1",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     15.0
+    ],
+    [
+     242.5,
+     15.0
+    ],
+    [
+     242.5,
+     29.0
+    ],
+    [
+     220.0,
+     29.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e3_5",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     146.0
+    ],
+    [
+     242.5,
+     146.0
+    ],
+    [
+     242.5,
+     160.0
+    ],
+    [
+     220.0,
+     160.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e3_6",
+   "family": "house",
+   "polygon": [
+    [
+     242.5,
+     146.0
+    ],
+    [
+     265.0,
+     146.0
+    ],
+    [
+     265.0,
+     160.0
+    ],
+    [
+     242.5,
+     160.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e3_7",
+   "family": "house",
+   "polygon": [
+    [
+     265.0,
+     146.0
+    ],
+    [
+     287.5,
+     146.0
+    ],
+    [
+     287.5,
+     160.0
+    ],
+    [
+     265.0,
+     160.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e3_8",
+   "family": "house",
+   "polygon": [
+    [
+     287.5,
+     146.0
+    ],
+    [
+     310.0,
+     146.0
+    ],
+    [
+     310.0,
+     160.0
+    ],
+    [
+     287.5,
+     160.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e3_9",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     29.0
+    ],
+    [
+     234.0,
+     29.0
+    ],
+    [
+     234.0,
+     48.5
+    ],
+    [
+     220.0,
+     48.5
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e3_10",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     48.5
+    ],
+    [
+     234.0,
+     48.5
+    ],
+    [
+     234.0,
+     68.0
+    ],
+    [
+     220.0,
+     68.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e3_11",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     68.0
+    ],
+    [
+     234.0,
+     68.0
+    ],
+    [
+     234.0,
+     87.5
+    ],
+    [
+     220.0,
+     87.5
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e3_12",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     87.5
+    ],
+    [
+     234.0,
+     87.5
+    ],
+    [
+     234.0,
+     107.0
+    ],
+    [
+     220.0,
+     107.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e3_13",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     107.0
+    ],
+    [
+     234.0,
+     107.0
+    ],
+    [
+     234.0,
+     126.5
+    ],
+    [
+     220.0,
+     126.5
+    ]
+   ],
+   "storeys": 2,
+   "height": 9.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "house_e3_14",
+   "family": "house",
+   "polygon": [
+    [
+     220.0,
+     126.5
+    ],
+    [
+     234.0,
+     126.5
+    ],
+    [
+     234.0,
+     146.0
+    ],
+    [
+     220.0,
+     146.0
+    ]
+   ],
+   "storeys": 3,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  }
+ ],
+ "routes": [
+  {
+   "name": "dig_stair",
+   "kind": "stair",
+   "points": [
+    [
+     60.0,
+     0.0,
+     -160.0
+    ],
+    [
+     72.0,
+     -6.0,
+     -160.0
+    ]
+   ]
+  },
+  {
+   "name": "town_hall_plank",
+   "kind": "roof_link",
+   "points": [
+    [
+     -7.0,
+     14.0,
+     145.0
+    ],
+    [
+     7.0,
+     14.0,
+     145.0
+    ]
+   ]
+  },
+  {
+   "name": "landing_w_stair",
+   "kind": "stair",
+   "points": [
+    [
+     -60.0,
+     0.0,
+     163.5
+    ],
+    [
+     -51.0,
+     -1.0,
+     163.5
+    ]
+   ]
+  },
+  {
+   "name": "landing_e_stair",
+   "kind": "stair",
+   "points": [
+    [
+     45.0,
+     0.0,
+     163.5
+    ],
+    [
+     54.0,
+     -1.0,
+     163.5
+    ]
+   ]
+  },
+  {
+   "name": "bridge_1",
+   "kind": "bridge",
+   "points": [
+    [
+     -150.0,
+     0.0,
+     162.0
+    ],
+    [
+     -150.0,
+     0.0,
+     184.0
+    ]
+   ]
+  },
+  {
+   "name": "bridge_2",
+   "kind": "bridge",
+   "points": [
+    [
+     0.0,
+     0.0,
+     162.0
+    ],
+    [
+     0.0,
+     0.0,
+     184.0
+    ]
+   ]
+  },
+  {
+   "name": "bridge_3",
+   "kind": "bridge",
+   "points": [
+    [
+     150.0,
+     0.0,
+     162.0
+    ],
+    [
+     150.0,
+     0.0,
+     184.0
+    ]
+   ]
+  },
+  {
+   "name": "platform_w_stair",
+   "kind": "stair",
+   "points": [
+    [
+     -30.2,
+     -8.0,
+     -6.0
+    ],
+    [
+     -45.0,
+     -14.0,
+     -6.0
+    ]
+   ]
+  },
+  {
+   "name": "platform_e_stair",
+   "kind": "stair",
+   "points": [
+    [
+     30.2,
+     -8.0,
+     -6.0
+    ],
+    [
+     45.0,
+     -14.0,
+     -6.0
+    ]
+   ]
+  },
+  {
+   "name": "kiosk_nw_stair",
+   "kind": "stair",
+   "points": [
+    [
+     -90.0,
+     0.0,
+     -105.0
+    ],
+    [
+     -90.0,
+     -8.0,
+     -92.0
+    ]
+   ]
+  },
+  {
+   "name": "kiosk_ne_stair",
+   "kind": "stair",
+   "points": [
+    [
+     90.0,
+     0.0,
+     -105.0
+    ],
+    [
+     90.0,
+     -8.0,
+     -92.0
+    ]
+   ]
+  },
+  {
+   "name": "kiosk_sw_stair",
+   "kind": "stair",
+   "points": [
+    [
+     -90.0,
+     0.0,
+     105.0
+    ],
+    [
+     -90.0,
+     -8.0,
+     92.0
+    ]
+   ]
+  },
+  {
+   "name": "kiosk_se_stair",
+   "kind": "stair",
+   "points": [
+    [
+     90.0,
+     0.0,
+     105.0
+    ],
+    [
+     90.0,
+     -8.0,
+     92.0
+    ]
+   ]
+  },
+  {
+   "name": "tunnel_hall_crypt",
+   "kind": "tunnel",
+   "points": [
+    [
+     0.0,
+     -8.0,
+     -15.0
+    ],
+    [
+     0.0,
+     -8.0,
+     -160.0
+    ]
+   ],
+   "between": [
+    "station_hall",
+    "crypt"
+   ]
+  },
+  {
+   "name": "tunnel_crypt_shells",
+   "kind": "tunnel",
+   "points": [
+    [
+     10.0,
+     -8.0,
+     -200.0
+    ],
+    [
+     70.0,
+     -14.0,
+     -200.0
+    ]
+   ],
+   "between": [
+    "crypt",
+    "templo_shells"
+   ]
+  },
+  {
+   "name": "tunnel_crypt_vault",
+   "kind": "tunnel",
+   "points": [
+    [
+     -50.0,
+     -8.0,
+     -180.0
+    ],
+    [
+     -95.0,
+     -8.0,
+     -180.0
+    ]
+   ],
+   "between": [
+    "crypt",
+    "pawn_vault"
+   ]
+  },
+  {
+   "name": "climb_cathedral_chapter_cathedral",
+   "kind": "climb",
+   "points": [
+    [
+     6.0,
+     13.0,
+     -240.0
+    ],
+    [
+     4.0,
+     30.0,
+     -240.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_pn_5_palace_front_n",
+   "kind": "climb",
+   "points": [
+    [
+     130.0,
+     9.0,
+     -106.0
+    ],
+    [
+     130.0,
+     16.0,
+     -104.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_se_1_palace_front_s",
+   "kind": "climb",
+   "points": [
+    [
+     130.0,
+     9.0,
+     106.0
+    ],
+    [
+     130.0,
+     16.0,
+     104.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_pn_8_palace_back",
+   "kind": "climb",
+   "points": [
+    [
+     190.0,
+     13.0,
+     -106.0
+    ],
+    [
+     190.0,
+     16.0,
+     -104.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_se_4_palace_back",
+   "kind": "climb",
+   "points": [
+    [
+     190.0,
+     13.0,
+     106.0
+    ],
+    [
+     190.0,
+     16.0,
+     104.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_a_4_portal_mercaderes_1",
+   "kind": "climb",
+   "points": [
+    [
+     -141.0,
+     9.0,
+     -98.0
+    ],
+    [
+     -139.0,
+     13.0,
+     -98.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_d2_1_town_hall_w",
+   "kind": "climb",
+   "points": [
+    [
+     -101.0,
+     13.0,
+     137.0
+    ],
+    [
+     -99.0,
+     14.0,
+     137.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_d2_2_town_hall_w",
+   "kind": "climb",
+   "points": [
+    [
+     -101.0,
+     13.0,
+     153.0
+    ],
+    [
+     -99.0,
+     14.0,
+     153.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e0_1_town_hall_e",
+   "kind": "climb",
+   "points": [
+    [
+     101.0,
+     9.0,
+     137.0
+    ],
+    [
+     99.0,
+     14.0,
+     137.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e0_2_town_hall_e",
+   "kind": "climb",
+   "points": [
+    [
+     101.0,
+     9.0,
+     153.0
+    ],
+    [
+     99.0,
+     14.0,
+     153.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_a_4_house_a_3",
+   "kind": "climb",
+   "points": [
+    [
+     -157.75,
+     9.0,
+     -103.0
+    ],
+    [
+     -159.75,
+     13.0,
+     -103.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_a_7_house_a_8",
+   "kind": "climb",
+   "points": [
+    [
+     -159.75,
+     9.0,
+     28.0
+    ],
+    [
+     -157.75,
+     13.0,
+     28.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_a_14_house_a_13",
+   "kind": "climb",
+   "points": [
+    [
+     -208.0,
+     9.0,
+     2.5
+    ],
+    [
+     -208.0,
+     13.0,
+     0.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_b_3_house_b_4",
+   "kind": "climb",
+   "points": [
+    [
+     -254.75,
+     9.0,
+     -103.0
+    ],
+    [
+     -252.75,
+     13.0,
+     -103.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_b_9_house_b_4",
+   "kind": "climb",
+   "points": [
+    [
+     -242.0,
+     9.0,
+     -95.0
+    ],
+    [
+     -242.0,
+     13.0,
+     -97.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_b_8_house_b_7",
+   "kind": "climb",
+   "points": [
+    [
+     -252.75,
+     9.0,
+     28.0
+    ],
+    [
+     -254.75,
+     13.0,
+     28.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_b_9_house_b_10",
+   "kind": "climb",
+   "points": [
+    [
+     -242.0,
+     9.0,
+     -77.5
+    ],
+    [
+     -242.0,
+     13.0,
+     -75.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_b_14_house_b_13",
+   "kind": "climb",
+   "points": [
+    [
+     -242.0,
+     9.0,
+     2.5
+    ],
+    [
+     -242.0,
+     13.0,
+     0.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_c_4_house_c_3",
+   "kind": "climb",
+   "points": [
+    [
+     -252.75,
+     9.0,
+     57.0
+    ],
+    [
+     -254.75,
+     13.0,
+     57.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_c_4_house_c_9",
+   "kind": "climb",
+   "points": [
+    [
+     -242.0,
+     9.0,
+     63.0
+    ],
+    [
+     -242.0,
+     13.0,
+     65.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_c_7_house_c_8",
+   "kind": "climb",
+   "points": [
+    [
+     -254.75,
+     9.0,
+     153.0
+    ],
+    [
+     -252.75,
+     13.0,
+     153.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_c_12_house_c_8",
+   "kind": "climb",
+   "points": [
+    [
+     -242.0,
+     9.0,
+     145.0
+    ],
+    [
+     -242.0,
+     13.0,
+     147.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_c_10_house_c_9",
+   "kind": "climb",
+   "points": [
+    [
+     -242.0,
+     9.0,
+     85.5
+    ],
+    [
+     -242.0,
+     13.0,
+     83.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_d_1_house_d_11",
+   "kind": "climb",
+   "points": [
+    [
+     -208.0,
+     9.0,
+     63.0
+    ],
+    [
+     -208.0,
+     13.0,
+     65.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_d_3_house_d_4",
+   "kind": "climb",
+   "points": [
+    [
+     -159.0,
+     9.0,
+     57.0
+    ],
+    [
+     -157.0,
+     13.0,
+     57.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_d_15_house_d_5",
+   "kind": "climb",
+   "points": [
+    [
+     -127.0,
+     9.0,
+     65.0
+    ],
+    [
+     -127.0,
+     13.0,
+     63.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_d_14_house_d_6",
+   "kind": "climb",
+   "points": [
+    [
+     -208.0,
+     9.0,
+     145.0
+    ],
+    [
+     -208.0,
+     13.0,
+     147.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_d_8_house_d_7",
+   "kind": "climb",
+   "points": [
+    [
+     -176.0,
+     9.0,
+     153.0
+    ],
+    [
+     -178.0,
+     13.0,
+     153.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_d_9_house_d_10",
+   "kind": "climb",
+   "points": [
+    [
+     -140.0,
+     9.0,
+     153.0
+    ],
+    [
+     -138.0,
+     13.0,
+     153.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_d_14_house_d_13",
+   "kind": "climb",
+   "points": [
+    [
+     -208.0,
+     9.0,
+     126.5
+    ],
+    [
+     -208.0,
+     13.0,
+     124.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_nw_3_house_nw_4",
+   "kind": "climb",
+   "points": [
+    [
+     -254.75,
+     9.0,
+     -298.0
+    ],
+    [
+     -252.75,
+     13.0,
+     -298.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_nw_9_house_nw_4",
+   "kind": "climb",
+   "points": [
+    [
+     -242.0,
+     9.0,
+     -290.0
+    ],
+    [
+     -242.0,
+     13.0,
+     -292.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_nw_9_house_nw_10",
+   "kind": "climb",
+   "points": [
+    [
+     -242.0,
+     9.0,
+     -273.0
+    ],
+    [
+     -242.0,
+     13.0,
+     -271.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_nw_14_house_nw_13",
+   "kind": "climb",
+   "points": [
+    [
+     -242.0,
+     9.0,
+     -195.0
+    ],
+    [
+     -242.0,
+     13.0,
+     -197.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_sds_8_house_sds_7",
+   "kind": "climb",
+   "points": [
+    [
+     -157.75,
+     9.0,
+     -132.0
+    ],
+    [
+     -159.75,
+     13.0,
+     -132.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_sds_9_house_sds_10",
+   "kind": "climb",
+   "points": [
+    [
+     -208.0,
+     9.0,
+     -178.0
+    ],
+    [
+     -208.0,
+     13.0,
+     -176.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_sds_14_house_sds_13",
+   "kind": "climb",
+   "points": [
+    [
+     -147.0,
+     9.0,
+     -157.0
+    ],
+    [
+     -147.0,
+     13.0,
+     -159.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_pawn_1_house_pawn_5",
+   "kind": "climb",
+   "points": [
+    [
+     -113.0,
+     9.0,
+     -252.0
+    ],
+    [
+     -113.0,
+     13.0,
+     -250.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_pawn_2_house_pawn_10",
+   "kind": "climb",
+   "points": [
+    [
+     -97.0,
+     9.0,
+     -252.0
+    ],
+    [
+     -97.0,
+     13.0,
+     -250.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_pawn_3_house_pawn_4",
+   "kind": "climb",
+   "points": [
+    [
+     -106.0,
+     9.0,
+     -137.0
+    ],
+    [
+     -104.0,
+     13.0,
+     -137.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_nw_strip_3_house_nw_strip_4",
+   "kind": "climb",
+   "points": [
+    [
+     -254.0,
+     9.0,
+     -332.0
+    ],
+    [
+     -252.0,
+     13.0,
+     -332.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_nw_strip_8_house_nw_strip_7",
+   "kind": "climb",
+   "points": [
+    [
+     -176.0,
+     9.0,
+     -332.0
+    ],
+    [
+     -178.0,
+     13.0,
+     -332.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_nw_strip_9_house_nw_strip_10",
+   "kind": "climb",
+   "points": [
+    [
+     -140.0,
+     9.0,
+     -332.0
+    ],
+    [
+     -138.0,
+     13.0,
+     -332.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_n_strip_3_house_n_strip_4",
+   "kind": "climb",
+   "points": [
+    [
+     -62.36363636363636,
+     9.0,
+     -292.0
+    ],
+    [
+     -60.36363636363636,
+     13.0,
+     -292.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_n_strip_8_house_n_strip_7",
+   "kind": "climb",
+   "points": [
+    [
+     17.818181818181813,
+     9.0,
+     -292.0
+    ],
+    [
+     15.818181818181813,
+     13.0,
+     -292.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_n_strip_9_house_n_strip_10",
+   "kind": "climb",
+   "points": [
+    [
+     54.909090909090935,
+     9.0,
+     -292.0
+    ],
+    [
+     56.909090909090935,
+     13.0,
+     -292.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_n_strip_14_house_n_strip_13",
+   "kind": "climb",
+   "points": [
+    [
+     135.09090909090912,
+     9.0,
+     -292.0
+    ],
+    [
+     133.09090909090912,
+     13.0,
+     -292.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_n_strip_17_house_n_strip_18",
+   "kind": "climb",
+   "points": [
+    [
+     211.2727272727273,
+     9.0,
+     -292.0
+    ],
+    [
+     213.2727272727273,
+     13.0,
+     -292.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_n_strip_20_house_n_strip_19",
+   "kind": "climb",
+   "points": [
+    [
+     252.36363636363637,
+     9.0,
+     -292.0
+    ],
+    [
+     250.36363636363637,
+     13.0,
+     -292.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_dn_15_house_dn_1",
+   "kind": "climb",
+   "points": [
+    [
+     67.0,
+     9.0,
+     -250.0
+    ],
+    [
+     67.0,
+     13.0,
+     -252.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_dn_4_house_dn_3",
+   "kind": "climb",
+   "points": [
+    [
+     121.0,
+     9.0,
+     -258.0
+    ],
+    [
+     119.0,
+     13.0,
+     -258.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_dn_15_house_dn_8",
+   "kind": "climb",
+   "points": [
+    [
+     67.0,
+     9.0,
+     -240.0
+    ],
+    [
+     67.0,
+     13.0,
+     -238.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_de_1_house_dn_12",
+   "kind": "climb",
+   "points": [
+    [
+     155.0,
+     9.0,
+     -224.0
+    ],
+    [
+     155.0,
+     13.0,
+     -226.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_de_1_house_de_5",
+   "kind": "climb",
+   "points": [
+    [
+     157.0,
+     9.0,
+     -212.0
+    ],
+    [
+     157.0,
+     13.0,
+     -210.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_de_3_house_de_4",
+   "kind": "climb",
+   "points": [
+    [
+     174.0,
+     9.0,
+     -152.0
+    ],
+    [
+     176.0,
+     13.0,
+     -152.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_de_3_house_de_7",
+   "kind": "climb",
+   "points": [
+    [
+     157.0,
+     9.0,
+     -158.0
+    ],
+    [
+     157.0,
+     13.0,
+     -160.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_de_10_house_de_4",
+   "kind": "climb",
+   "points": [
+    [
+     193.0,
+     9.0,
+     -160.0
+    ],
+    [
+     193.0,
+     13.0,
+     -158.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_pn_5_house_pn_1",
+   "kind": "climb",
+   "points": [
+    [
+     130.0,
+     9.0,
+     -116.5
+    ],
+    [
+     130.0,
+     13.0,
+     -118.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_pn_4_house_pn_3",
+   "kind": "climb",
+   "points": [
+    [
+     181.0,
+     9.0,
+     -123.75
+    ],
+    [
+     179.0,
+     13.0,
+     -123.75
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_pn_4_house_pn_8",
+   "kind": "climb",
+   "points": [
+    [
+     190.0,
+     9.0,
+     -118.5
+    ],
+    [
+     190.0,
+     13.0,
+     -116.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_se_10_house_se_4",
+   "kind": "climb",
+   "points": [
+    [
+     193.0,
+     9.0,
+     120.0
+    ],
+    [
+     193.0,
+     13.0,
+     118.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e0_2_house_se_5",
+   "kind": "climb",
+   "points": [
+    [
+     119.0,
+     9.0,
+     153.0
+    ],
+    [
+     121.0,
+     13.0,
+     153.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_se_8_house_se_7",
+   "kind": "climb",
+   "points": [
+    [
+     181.0,
+     9.0,
+     153.0
+    ],
+    [
+     179.0,
+     13.0,
+     153.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e1_4_house_e1_3",
+   "kind": "climb",
+   "points": [
+    [
+     288.5,
+     9.0,
+     -258.0
+    ],
+    [
+     286.5,
+     13.0,
+     -258.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e1_5_house_e1_13",
+   "kind": "climb",
+   "points": [
+    [
+     227.0,
+     9.0,
+     -158.0
+    ],
+    [
+     227.0,
+     13.0,
+     -160.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e1_7_house_e1_8",
+   "kind": "climb",
+   "points": [
+    [
+     286.5,
+     9.0,
+     -152.0
+    ],
+    [
+     288.5,
+     13.0,
+     -152.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e2_3_house_e2_4",
+   "kind": "climb",
+   "points": [
+    [
+     286.5,
+     9.0,
+     -123.0
+    ],
+    [
+     288.5,
+     13.0,
+     -123.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e2_9_house_e2_10",
+   "kind": "climb",
+   "points": [
+    [
+     227.0,
+     9.0,
+     -96.6
+    ],
+    [
+     227.0,
+     13.0,
+     -94.6
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e3_5_house_e3_14",
+   "kind": "climb",
+   "points": [
+    [
+     227.0,
+     9.0,
+     147.0
+    ],
+    [
+     227.0,
+     13.0,
+     145.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e3_7_house_e3_8",
+   "kind": "climb",
+   "points": [
+    [
+     286.5,
+     9.0,
+     153.0
+    ],
+    [
+     288.5,
+     13.0,
+     153.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e3_10_house_e3_9",
+   "kind": "climb",
+   "points": [
+    [
+     227.0,
+     9.0,
+     49.5
+    ],
+    [
+     227.0,
+     13.0,
+     47.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e3_13_house_e3_14",
+   "kind": "climb",
+   "points": [
+    [
+     227.0,
+     9.0,
+     125.5
+    ],
+    [
+     227.0,
+     13.0,
+     127.5
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_cathedral",
+   "kind": "climb",
+   "points": [
+    [
+     -32.5,
+     0.0,
+     -266.0
+    ],
+    [
+     -32.5,
+     30.0,
+     -264.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_evangelistas_n",
+   "kind": "climb",
+   "points": [
+    [
+     -199.0,
+     0.0,
+     -270.0
+    ],
+    [
+     -201.0,
+     9.0,
+     -270.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_a_1",
+   "kind": "climb",
+   "points": [
+    [
+     -205.625,
+     0.0,
+     -111.0
+    ],
+    [
+     -205.625,
+     13.0,
+     -109.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_b_1",
+   "kind": "climb",
+   "points": [
+    [
+     -300.625,
+     0.0,
+     -111.0
+    ],
+    [
+     -300.625,
+     9.0,
+     -109.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_c_1",
+   "kind": "climb",
+   "points": [
+    [
+     -300.625,
+     0.0,
+     49.0
+    ],
+    [
+     -300.625,
+     13.0,
+     51.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_d2_1",
+   "kind": "climb",
+   "points": [
+    [
+     -110.0,
+     0.0,
+     129.0
+    ],
+    [
+     -110.0,
+     13.0,
+     131.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_de_10",
+   "kind": "climb",
+   "points": [
+    [
+     201.0,
+     0.0,
+     -167.66666666666669
+    ],
+    [
+     199.0,
+     9.0,
+     -167.66666666666669
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_e0_1",
+   "kind": "climb",
+   "points": [
+    [
+     110.0,
+     0.0,
+     129.0
+    ],
+    [
+     110.0,
+     9.0,
+     131.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_e1_1",
+   "kind": "climb",
+   "points": [
+    [
+     231.25,
+     0.0,
+     -266.0
+    ],
+    [
+     231.25,
+     13.0,
+     -264.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_e2_1",
+   "kind": "climb",
+   "points": [
+    [
+     231.25,
+     0.0,
+     -131.0
+    ],
+    [
+     231.25,
+     9.0,
+     -129.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_e3_1",
+   "kind": "climb",
+   "points": [
+    [
+     219.0,
+     0.0,
+     22.0
+    ],
+    [
+     221.0,
+     13.0,
+     22.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_n_strip_1",
+   "kind": "climb",
+   "points": [
+    [
+     -110.22727272727272,
+     0.0,
+     -284.0
+    ],
+    [
+     -110.22727272727272,
+     9.0,
+     -286.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_nw_1",
+   "kind": "climb",
+   "points": [
+    [
+     -300.625,
+     0.0,
+     -306.0
+    ],
+    [
+     -300.625,
+     9.0,
+     -304.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_nw_5",
+   "kind": "climb",
+   "points": [
+    [
+     -300.625,
+     0.0,
+     -124.0
+    ],
+    [
+     -300.625,
+     13.0,
+     -126.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_nw_strip_1",
+   "kind": "climb",
+   "points": [
+    [
+     -300.5,
+     0.0,
+     -324.0
+    ],
+    [
+     -300.5,
+     9.0,
+     -326.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_pawn_1",
+   "kind": "climb",
+   "points": [
+    [
+     -112.5,
+     0.0,
+     -266.0
+    ],
+    [
+     -112.5,
+     9.0,
+     -264.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_house_pawn_3",
+   "kind": "climb",
+   "points": [
+    [
+     -112.5,
+     0.0,
+     -129.0
+    ],
+    [
+     -112.5,
+     9.0,
+     -131.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_inquisition_rooms",
+   "kind": "climb",
+   "points": [
+    [
+     -158.0,
+     0.0,
+     -211.0
+    ],
+    [
+     -158.0,
+     14.0,
+     -209.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_iturbide",
+   "kind": "climb",
+   "points": [
+    [
+     -260.0,
+     0.0,
+     -124.0
+    ],
+    [
+     -260.0,
+     16.0,
+     -126.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_market_hall",
+   "kind": "climb",
+   "points": [
+    [
+     41.0,
+     0.0,
+     240.0
+    ],
+    [
+     39.0,
+     14.0,
+     240.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_pawnshop",
+   "kind": "climb",
+   "points": [
+    [
+     -89.0,
+     0.0,
+     -180.0
+    ],
+    [
+     -91.0,
+     14.0,
+     -180.0
+    ]
+   ]
+  }
+ ],
+ "spaces": [
+  {
+   "name": "station_hall",
+   "polygon": [
+    [
+     -30.0,
+     -15.0
+    ],
+    [
+     30.0,
+     -15.0
+    ],
+    [
+     30.0,
+     15.0
+    ],
+    [
+     -30.0,
+     15.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 5.0,
+   "interior": false,
+   "openings": [
+    {
+     "to": "corridor_nw_b",
+     "at": [
+      -27.0,
+      -15.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_ne_b",
+     "at": [
+      27.0,
+      -15.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_sw_b",
+     "at": [
+      -27.0,
+      15.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_se_b",
+     "at": [
+      27.0,
+      15.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "platform_w",
+     "at": [
+      -30.0,
+      -6.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "platform_e",
+     "at": [
+      30.0,
+      -6.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "crypt",
+     "at": [
+      0.0,
+      -15.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "platform_w",
+   "polygon": [
+    [
+     -130.0,
+     -10.0
+    ],
+    [
+     -30.0,
+     -10.0
+    ],
+    [
+     -30.0,
+     -2.0
+    ],
+    [
+     -130.0,
+     -2.0
+    ]
+   ],
+   "floor": -14.0,
+   "height": 9.0,
+   "interior": false,
+   "openings": [
+    {
+     "to": "station_hall",
+     "at": [
+      -30.0,
+      -6.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "platform_e",
+   "polygon": [
+    [
+     30.0,
+     -10.0
+    ],
+    [
+     130.0,
+     -10.0
+    ],
+    [
+     130.0,
+     -2.0
+    ],
+    [
+     30.0,
+     -2.0
+    ]
+   ],
+   "floor": -14.0,
+   "height": 9.0,
+   "interior": false,
+   "openings": [
+    {
+     "to": "station_hall",
+     "at": [
+      30.0,
+      -6.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_nw_a",
+   "polygon": [
+    [
+     -85.0,
+     -100.0
+    ],
+    [
+     -25.0,
+     -100.0
+    ],
+    [
+     -25.0,
+     -96.0
+    ],
+    [
+     -85.0,
+     -96.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "openings": [
+    {
+     "to": "well_nw",
+     "at": [
+      -85.0,
+      -98.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_nw_b",
+     "at": [
+      -27.0,
+      -96.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_nw_b",
+   "polygon": [
+    [
+     -29.0,
+     -96.0
+    ],
+    [
+     -25.0,
+     -96.0
+    ],
+    [
+     -25.0,
+     -15.0
+    ],
+    [
+     -29.0,
+     -15.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "openings": [
+    {
+     "to": "corridor_nw_a",
+     "at": [
+      -27.0,
+      -96.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "station_hall",
+     "at": [
+      -27.0,
+      -15.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_ne_a",
+   "polygon": [
+    [
+     25.0,
+     -100.0
+    ],
+    [
+     85.0,
+     -100.0
+    ],
+    [
+     85.0,
+     -96.0
+    ],
+    [
+     25.0,
+     -96.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "openings": [
+    {
+     "to": "well_ne",
+     "at": [
+      85.0,
+      -98.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_ne_b",
+     "at": [
+      27.0,
+      -96.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_ne_b",
+   "polygon": [
+    [
+     25.0,
+     -96.0
+    ],
+    [
+     29.0,
+     -96.0
+    ],
+    [
+     29.0,
+     -15.0
+    ],
+    [
+     25.0,
+     -15.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "openings": [
+    {
+     "to": "corridor_ne_a",
+     "at": [
+      27.0,
+      -96.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "station_hall",
+     "at": [
+      27.0,
+      -15.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_sw_a",
+   "polygon": [
+    [
+     -85.0,
+     96.0
+    ],
+    [
+     -25.0,
+     96.0
+    ],
+    [
+     -25.0,
+     100.0
+    ],
+    [
+     -85.0,
+     100.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "openings": [
+    {
+     "to": "well_sw",
+     "at": [
+      -85.0,
+      98.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_sw_b",
+     "at": [
+      -27.0,
+      96.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_sw_b",
+   "polygon": [
+    [
+     -29.0,
+     15.0
+    ],
+    [
+     -25.0,
+     15.0
+    ],
+    [
+     -25.0,
+     96.0
+    ],
+    [
+     -29.0,
+     96.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "openings": [
+    {
+     "to": "corridor_sw_a",
+     "at": [
+      -27.0,
+      96.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "station_hall",
+     "at": [
+      -27.0,
+      15.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_se_a",
+   "polygon": [
+    [
+     25.0,
+     96.0
+    ],
+    [
+     85.0,
+     96.0
+    ],
+    [
+     85.0,
+     100.0
+    ],
+    [
+     25.0,
+     100.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "openings": [
+    {
+     "to": "well_se",
+     "at": [
+      85.0,
+      98.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_se_b",
+     "at": [
+      27.0,
+      96.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_se_b",
+   "polygon": [
+    [
+     25.0,
+     15.0
+    ],
+    [
+     29.0,
+     15.0
+    ],
+    [
+     29.0,
+     96.0
+    ],
+    [
+     25.0,
+     96.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "openings": [
+    {
+     "to": "corridor_se_a",
+     "at": [
+      27.0,
+      96.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "station_hall",
+     "at": [
+      27.0,
+      15.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "crypt",
+   "polygon": [
+    [
+     -50.0,
+     -250.0
+    ],
+    [
+     10.0,
+     -250.0
+    ],
+    [
+     10.0,
+     -160.0
+    ],
+    [
+     -50.0,
+     -160.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 4.0,
+   "interior": false,
+   "openings": [
+    {
+     "to": "station_hall",
+     "at": [
+      0.0,
+      -160.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "templo_shells",
+     "at": [
+      10.0,
+      -200.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "pawn_vault",
+     "at": [
+      -50.0,
+      -180.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "templo_shells",
+   "polygon": [
+    [
+     70.0,
+     -215.0
+    ],
+    [
+     140.0,
+     -215.0
+    ],
+    [
+     140.0,
+     -155.0
+    ],
+    [
+     70.0,
+     -155.0
+    ]
+   ],
+   "floor": -14.0,
+   "height": 6.0,
+   "interior": false,
+   "openings": [
+    {
+     "to": "crypt",
+     "at": [
+      70.0,
+      -200.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "pawn_vault",
+   "polygon": [
+    [
+     -115.0,
+     -205.0
+    ],
+    [
+     -95.0,
+     -205.0
+    ],
+    [
+     -95.0,
+     -155.0
+    ],
+    [
+     -115.0,
+     -155.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 4.0,
+   "interior": true,
+   "openings": [
+    {
+     "to": "crypt",
+     "at": [
+      -95.0,
+      -180.0
+     ],
+     "width": 3.0
+    }
+   ]
+  }
+ ],
+ "landmarks": [
+  {
+   "name": "tram_stop_south",
+   "kind": "tram_stop",
+   "at": [
+    0.0,
+    120.0
+   ],
+   "props": {}
+  },
+  {
+   "name": "spawn",
+   "kind": "spawn",
+   "at": [
+    0.0,
+    120.0
+   ],
+   "props": {}
+  },
+  {
+   "name": "kiosk_nw",
+   "kind": "metro_entrance",
+   "at": [
+    -90.0,
+    -98.0
+   ],
+   "props": {}
+  },
+  {
+   "name": "kiosk_ne",
+   "kind": "metro_entrance",
+   "at": [
+    90.0,
+    -98.0
+   ],
+   "props": {}
+  },
+  {
+   "name": "kiosk_sw",
+   "kind": "metro_entrance",
+   "at": [
+    -90.0,
+    98.0
+   ],
+   "props": {}
+  },
+  {
+   "name": "kiosk_se",
+   "kind": "metro_entrance",
+   "at": [
+    90.0,
+    98.0
+   ],
+   "props": {}
+  },
+  {
+   "name": "camera_plaza_south",
+   "kind": "camera",
+   "at": [
+    0.0,
+    1.7,
+    122.0
+   ],
+   "props": {
+    "look_at": [
+     0,
+     12,
+     -200
+    ]
+   }
+  },
+  {
+   "name": "camera_plaza_ne",
+   "kind": "camera",
+   "at": [
+    108.0,
+    1.7,
+    -105.0
+   ],
+   "props": {
+    "look_at": [
+     -60,
+     6,
+     10
+    ]
+   }
+  },
+  {
+   "name": "camera_cathedral_atrium",
+   "kind": "camera",
+   "at": [
+    -15.0,
+    1.7,
+    -136.0
+   ],
+   "props": {
+    "look_at": [
+     -15,
+     22,
+     -205
+    ]
+   }
+  },
+  {
+   "name": "camera_madero",
+   "kind": "camera",
+   "at": [
+    -260.0,
+    1.7,
+    -117.0
+   ],
+   "props": {
+    "look_at": [
+     -110,
+     6,
+     -117
+    ]
+   }
+  },
+  {
+   "name": "camera_santo_domingo",
+   "kind": "camera",
+   "at": [
+    -170.0,
+    1.7,
+    -215.0
+   ],
+   "props": {
+    "look_at": [
+     -170,
+     8,
+     -295
+    ]
+   }
+  },
+  {
+   "name": "camera_canal",
+   "kind": "camera",
+   "at": [
+    -100.0,
+    1.7,
+    163.0
+   ],
+   "props": {
+    "look_at": [
+     100,
+     -2,
+     173
+    ]
+   }
+  },
+  {
+   "name": "camera_market",
+   "kind": "camera",
+   "at": [
+    -50.0,
+    1.7,
+    196.0
+   ],
+   "props": {
+    "look_at": [
+     0,
+     7,
+     240
+    ]
+   }
+  },
+  {
+   "name": "camera_dig",
+   "kind": "camera",
+   "at": [
+    58.0,
+    1.7,
+    -138.0
+   ],
+   "props": {
+    "look_at": [
+     105,
+     20,
+     -185
+    ]
+   }
+  },
+  {
+   "name": "camera_town_hall_roof",
+   "kind": "camera",
+   "at": [
+    -50.0,
+    15.7,
+    145.0
+   ],
+   "props": {
+    "look_at": [
+     0,
+     5,
+     0
+    ]
+   }
+  },
+  {
+   "name": "camera_station_hall",
+   "kind": "camera",
+   "at": [
+    0.0,
+    -6.3,
+    12.0
+   ],
+   "props": {
+    "look_at": [
+     0,
+     -7,
+     -15
+    ]
+   }
+  }
+ ],
+ "tram": [
+  [
+   -110.0,
+   -120.0
+  ],
+  [
+   110.0,
+   -120.0
+  ],
+  [
+   110.0,
+   120.0
+  ],
+  [
+   -110.0,
+   120.0
+  ]
+ ],
+ "events": [
+  {
+   "kind": "subsidence",
+   "strength": 0.9,
+   "centre": [
+    -32.0,
+    -205.0
+   ],
+   "radius": 150.0
+  },
+  {
+   "kind": "subsidence",
+   "strength": 0.6,
+   "centre": [
+    -170.0,
+    -250.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "kind": "subsidence",
+   "strength": 0.4,
+   "line": [
+    [
+     -310.0,
+     173.0
+    ],
+    [
+     310.0,
+     173.0
+    ]
+   ],
+   "reach": 50.0
+  },
+  {
+   "kind": "water",
+   "strength": 1.0,
+   "line": [
+    [
+     -310.0,
+     173.0
+    ],
+    [
+     310.0,
+     173.0
+    ]
+   ],
+   "reach": 40.0
+  },
+  {
+   "kind": "water",
+   "strength": 0.4,
+   "centre": [
+    0.0,
+    240.0
+   ],
+   "radius": 100.0
+  },
+  {
+   "kind": "seepage",
+   "strength": 1.0,
+   "centre": [
+    0.0,
+    0.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "kind": "seepage",
+   "strength": 0.9,
+   "centre": [
+    160.0,
+    0.0
+   ],
+   "radius": 100.0
+  },
+  {
+   "kind": "seepage",
+   "strength": 0.8,
+   "centre": [
+    105.0,
+    -185.0
+   ],
+   "radius": 60.0
+  },
+  {
+   "kind": "use",
+   "strength": 0.9,
+   "centre": [
+    0.0,
+    240.0
+   ],
+   "radius": 150.0
+  },
+  {
+   "kind": "use",
+   "strength": 0.6,
+   "line": [
+    [
+     -110.0,
+     -120.0
+    ],
+    [
+     110.0,
+     -120.0
+    ],
+    [
+     110.0,
+     120.0
+    ],
+    [
+     -110.0,
+     120.0
+    ],
+    [
+     -110.0,
+     -120.0
+    ]
+   ],
+   "reach": 30.0
+  },
+  {
+   "kind": "use",
+   "strength": 0.7,
+   "line": [
+    [
+     -310.0,
+     -117.0
+    ],
+    [
+     -120.0,
+     -117.0
+    ]
+   ],
+   "reach": 25.0
+  },
+  {
+   "kind": "use",
+   "strength": 0.6,
+   "centre": [
+    -170.0,
+    -250.0
+   ],
+   "radius": 60.0
+  }
+ ],
+ "brink": [
+  [
+   -310.0,
+   -340.0
+  ],
+  [
+   310.0,
+   -340.0
+  ],
+  [
+   310.0,
+   300.0
+  ],
+  [
+   -310.0,
+   300.0
+  ]
+ ]
+}
