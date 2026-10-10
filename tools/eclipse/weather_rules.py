@@ -46,6 +46,22 @@ CHIP_CELL = 0.12
 EDGE_CHIPS = 0.68
 
 
+# The waterline's band fades out this far above its top (m).
+TIDE_FADE = 0.1
+TIDE_GRIME = 0.65
+TIDE_TINT = 0.3
+
+
+def tide(z, band):
+    """The canal's tide line (the water event): grime and a damp-green tint
+    in the band (lo, hi) of height, fading out TIDE_FADE above it; nothing
+    elsewhere (grime 0, tint 0.5)."""
+    lo, hi = band
+    z = np.asarray(z, dtype=np.float64)
+    weight = np.where((z >= lo) & (z <= hi), 1.0, np.clip(1.0 - (z - hi) / TIDE_FADE, 0.0, 1.0) * (z > hi))
+    return TIDE_GRIME * weight, 0.5 + (TIDE_TINT - 0.5) * weight
+
+
 def seed_of(name):
     """A piece's seed, from its name."""
     return zlib.crc32(name.encode()) & 0x7FFFFFFF

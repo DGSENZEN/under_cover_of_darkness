@@ -378,10 +378,12 @@ def read(mesh, name):
     return values.reshape(-1, 4).astype(np.float64)
 
 
-def bake(objects, name, blendable_slots=(), soot=None, ground_holes=(), foot_slots=None, sets=None, free=()):
+def bake(objects, name, blendable_slots=(), soot=None, ground_holes=(), foot_slots=None, sets=None, free=(),
+         tide=None):
     """The rules baked into each object's corner colour attribute `rules`;
     walls wear through at their foot only in `foot_slots` (plaster; by
-    default every blendable slot)."""
+    default every blendable slot); `tide` (lo, hi) lays the waterline's band
+    over them."""
     foot_slots = blendable_slots if foot_slots is None else foot_slots
     measured = measure(objects, ground_holes, sets, free)
     soot = soot_origins() if soot is None else soot
@@ -400,6 +402,12 @@ def bake(objects, name, blendable_slots=(), soot=None, ground_holes=(), foot_slo
 
         rgba = weather_rules.rules(m["points"], m["normals"], m["floor_gap"], m["overhang_gap"], m["convex"],
                                    m["concave"], m["open_sky"], corner_slot, soot, seed, foot=corner_foot)
+
+        if tide is not None:
+            band_grime, band_tint = weather_rules.tide(m["points"][:, 2], tide)
+            rgba[:, 0] = np.maximum(rgba[:, 0], band_grime)
+            rgba[:, 2] = np.clip(rgba[:, 2] + (band_tint - 0.5), 0.0, 1.0)
+
         _write(mesh, "rules", rgba)
 
 

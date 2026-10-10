@@ -437,6 +437,41 @@ def _glb(path):
     return json.loads(data[20:20 + length])
 
 
+class FacesExport(unittest.TestCase):
+    """What export_piece leaves for the district's overlap gate."""
+
+    def setUp(self):
+        import tempfile
+        common.reset()
+        self.tmp = Path(tempfile.mkdtemp())
+        self.saved = common.SOURCE
+        common.SOURCE = self.tmp
+
+    def tearDown(self):
+        common.SOURCE = self.saved
+
+    def test_faces_json_written_in_godot_axes(self):
+        import json
+        _box("block", (0.0, 0.0, 0.0), (1.0, 1.0, 1.0), "chiluca")
+        common.export_piece("facetest", 64, ["chiluca"], out=self.tmp)
+        faces = json.loads((self.tmp / "facetest_faces.json").read_text())
+        self.assertEqual(len(faces["objects"]["block"]), 6)
+        self.assertEqual(faces["tris"]["block"], 12)
+        top = [f for f in faces["objects"]["block"] if f["normal"][1] > 0.99]
+        self.assertEqual(len(top), 1)
+        self.assertTrue(all(abs(p[1] - 1.0) < 1e-6 for p in top[0]["points"]))
+        # Blender +Y is Godot -Z.
+        back = [f for f in faces["objects"]["block"] if f["normal"][2] < -0.99]
+        self.assertTrue(all(abs(p[2] + 1.0) < 1e-6 for p in back[0]["points"]))
+
+    def test_sets_each_gates_alternates_apart(self):
+        """Two pieces built in one place are gated each on its own."""
+        _box("one", (0.0, 0.0, 0.0), (1.0, 1.0, 1.0), "chiluca")
+        _box("two", (0.0, 0.0, 0.0), (1.0, 1.0, 1.0), "chiluca")
+        tris, _ = common.export_piece("setstest", 64, ["chiluca"], out=self.tmp, sets_each=True)
+        self.assertEqual(tris, 12)
+
+
 if __name__ == "__main__":
     result = unittest.main(argv=["test_weather_bpy"], exit=False).result
     sys.exit(not result.wasSuccessful())

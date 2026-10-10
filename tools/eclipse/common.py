@@ -659,7 +659,8 @@ def _weather(objects, name, settings, gate_sets=None):
                  ground_holes=tuple(settings.get("ground_holes", ())),
                  foot_slots=tuple(settings.get("foot", settings.get("blendable", ()))),
                  sets=[list(names) for names in gate_sets] if gate_sets is not None else None,
-                 free=[o.name for o in objects if _free(o)])
+                 free=[o.name for o in objects if _free(o)],
+                 tide=tuple(settings["tide"]) if "tide" in settings else None)
 
     for line in weather.apply(objects, name):
         print("%s: %s" % (name, line))
@@ -699,18 +700,47 @@ def _probe(objects, name, weather):
                                                                "normal": best[3], "rgba": best[4]}, indent=1))
 
 
-def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, weather=None):
+def dump_godot_faces(objects, path):
+    """Every face of the pieces in Godot's axes (x, z, -y), by object, and
+    each object's triangles: what the district's overlap gate places."""
+    out = {"objects": {}, "tris": {}}
+
+    for o in objects:
+        faces = []
+        to_godot = lambda v: [round(v.x, 6), round(v.z, 6), round(-v.y, 6)]
+
+        for poly in o.data.polygons:
+            n = (o.matrix_world.to_3x3() @ poly.normal).normalized()
+            faces.append({"normal": to_godot(n),
+                          "points": [to_godot(o.matrix_world @ o.data.vertices[v].co) for v in poly.vertices]})
+
+        out["objects"][o.name] = faces
+        out["tris"][o.name] = sum(len(poly.vertices) - 2 for poly in o.data.polygons)
+
+    Path(path).write_text(json.dumps(out))
+
+
+def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, weather=None, out=None,
+                 sets_each=False):
     """The piece's atlas made (unwrap, any repeats, pack), its AO and region
     maps, glTF and .blend written; then the gate. `merge` is a function run
     between unwrap and pack (repeat_faces for identical parts). `weather`
     ({"lines", "coarse", "blendable", "foot", "ground_holes"}) densifies the piece
     after its atlas is made and bakes its vertex paint, the user's strokes
-    over the rules (tools/eclipse/weather.py). Exits non-zero if the gate
+    over the rules (tools/eclipse/weather.py). `out` is where the glTF goes (OUT);
+    `sets_each` makes every object a set of its own (a kit's pieces, built
+    in one place, never seen together). Its faces in Godot's axes go to
+    <name>_faces.json for the district's gate. Exits non-zero if the gate
     finds a problem."""
-    OUT.mkdir(parents=True, exist_ok=True)
+    out = Path(out) if out is not None else OUT
+    out.mkdir(parents=True, exist_ok=True)
     SOURCE.mkdir(parents=True, exist_ok=True)
     (SOURCE / ".gdignore").touch()
     objects = meshes()
+
+    if sets_each:
+        gate_sets = [[o.name] for o in objects]
+
     unwrap(objects)
     to_metres(objects)
 
@@ -748,7 +778,7 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
     if weather is not None:
         _weather(objects, name, weather, gate_sets)
 
-    bpy.ops.export_scene.gltf(filepath=str(OUT / (name + ".glb")), export_format="GLB", export_yup=True,
+    bpy.ops.export_scene.gltf(filepath=str(out / (name + ".glb")), export_format="GLB", export_yup=True,
                               export_materials="EXPORT", export_texcoords=True, export_normals=True,
                               export_tangents=True, use_selection=False,
                               export_vertex_color="NAME" if weather is not None else "NONE",
@@ -759,6 +789,7 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
         for o in objects:
             o.data.color_attributes.active_color = o.data.color_attributes["yours_grime"]
 
+    dump_godot_faces(objects, SOURCE / (name + "_faces.json"))
     bpy.context.preferences.filepaths.save_version = 0   # no .blend1 beside it
     bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / (name + ".blend")))
 

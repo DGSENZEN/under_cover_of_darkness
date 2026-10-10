@@ -39,7 +39,7 @@ import() {
 }
 
 case "${1:-}" in
-  test) python3 "$HERE/test_gate.py"; python3 "$HERE/test_weather_rules.py"; "$HERE/test_lab_sh.sh"
+  test) python3 "$HERE/test_gate.py"; python3 "$HERE/test_weather_rules.py"; python3 "$HERE/test_street_dims.py"; "$HERE/test_lab_sh.sh"
     "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_weather_bpy.py" 2>&1 | grep -E "^(FAIL|ERROR)|^Ran|^OK|FAILED|Error"
     "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_kit_bpy.py" 2>&1 | grep -E "^(FAIL|ERROR)|^Ran|^OK|FAILED|Error" ;;
   joints)

@@ -27,6 +27,16 @@ def wall(n=200, height=3.0, width=4.0, facing=(0.0, 1.0, 0.0)):
     return points, normals, z
 
 
+class Tide(unittest.TestCase):
+    def test_tide_band(self):
+        """The canal's waterline: a grimed, damp-green band, nothing above it."""
+        grime, tint = weather_rules.tide(np.array([-1.8, -1.0]), (-2.0, -1.55))
+        self.assertGreaterEqual(grime[0], 0.6)
+        self.assertAlmostEqual(tint[0], 0.3)
+        self.assertEqual(grime[1], 0.0)
+        self.assertEqual(tint[1], 0.5)
+
+
 class Grime(unittest.TestCase):
     def test_grime_falls_with_height(self):
         points, _, z = wall()
