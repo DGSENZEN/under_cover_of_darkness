@@ -103,12 +103,16 @@ case "$verb" in
     ;;
   zocalo)
     # The Zócalo's plan: checked (it stops here if not clean), then its data,
-    # its six sheets and its greybox, into assets/eclipse/zocalo/.
+    # its six sheets, its greybox and its dressing (the kits built so far,
+    # tools/eclipse/lab.sh all; stops if their overlap gate fails), into
+    # assets/eclipse/zocalo/.
     mkdir -p "$ROOT/assets/eclipse/zocalo/plan"
     touch "$ROOT/assets/eclipse/zocalo/plan/.gdignore"
     (cd "$HERE/layouts" && python3 city_zocalo.py "$ROOT/assets/eclipse/zocalo/plan.json")
     python3 "$HERE/plan_draw.py" "$ROOT/assets/eclipse/zocalo/plan.json" "$ROOT/assets/eclipse/zocalo/plan"
     python3 "$HERE/greybox.py" "$ROOT/assets/eclipse/zocalo/plan.json" "$ROOT/assets/eclipse/zocalo/greybox.json"
+    python3 "$HERE/dress.py" "$ROOT/assets/eclipse/zocalo/plan.json" "$ROOT/assets/eclipse/zocalo/greybox.json" \
+      "$ROOT/assets/eclipse/zocalo/dressing.json"
     ;;
   test)
     python3 "$HERE/test_rules.py"
@@ -141,6 +145,8 @@ case "$verb" in
     python3 "$HERE/test_plan_draw.py"
     python3 "$HERE/test_zocalo_plan.py"
     python3 "$HERE/test_greybox.py"
+    python3 "$HERE/test_dress.py"
+    python3 "$HERE/../eclipse/test_street_dims.py"
     "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/../eclipse/test_weather_bpy.py" 2>&1 | grep -E "^Ran|^OK|FAILED|^(FAIL|ERROR):"
     "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/../eclipse/test_kit_bpy.py" 2>&1 | grep -E "^Ran|^OK|FAILED|^(FAIL|ERROR):"
     python3 "$HERE/../textures/test_kuwahara.py"
