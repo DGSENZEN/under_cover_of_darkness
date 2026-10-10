@@ -12,10 +12,10 @@ const ZOCALO: Texture2D = preload("res://textures/painted/eclipse/palette_zocalo
 ## paint now (docs/superpowers/refs/mexico_city/painterly_texturing.md), so
 ## the shader's share is light.
 const PRESETS := {
-	&"painted_led": {"paint_mix": 0.1, "stroke_strength": 0.04},
-	&"even": {"paint_mix": 0.25, "stroke_strength": 0.08},
+	&"painted_led": {"paint_mix": 0.1, "stroke_strength": 0.12},
+	&"even": {"paint_mix": 0.25, "stroke_strength": 0.24},
 	# The user's choice (Oct 9 2026).
-	&"shader_led": {"paint_mix": 0.45, "stroke_strength": 0.12, "painted_light": 0.0},
+	&"shader_led": {"paint_mix": 0.45, "stroke_strength": 0.36, "painted_light": 0.0},
 }
 
 

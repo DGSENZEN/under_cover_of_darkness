@@ -15,7 +15,7 @@ uniform float normal_depth : hint_range(0.0, 4.0) = 1.0;
 uniform float paint_mix : hint_range(0.0, 1.0) = 0.5;
 uniform float stroke_strength : hint_range(0.0, 1.0) = 0.12;
 // Metres of wall per brush tile.
-uniform float stroke_scale = 0.75;
+uniform float stroke_scale = 1.2;
 uniform float roughness : hint_range(0.0, 1.0) = 0.9;
 uniform float specular : hint_range(0.0, 1.0) = 0.3;
 
@@ -40,7 +40,7 @@ vec3 oklab(vec3 c) {
 uniform float painted_light : hint_range(0.0, 1.0) = 0.0;
 uniform float light_bands : hint_range(1.0, 8.0) = 3.0;
 uniform float band_softness : hint_range(0.0, 0.5) = 0.08;
-uniform float terminator_break : hint_range(0.0, 1.0) = 0.35;
+uniform float terminator_break : hint_range(0.0, 2.0) = 1.0;
 uniform vec3 lit_warm = vec3(1.04, 1.0, 0.92);
 uniform vec3 shadow_cool = vec3(0.75, 0.85, 1.15);
 uniform float shadow_fill : hint_range(0.0, 1.0) = 0.3;
