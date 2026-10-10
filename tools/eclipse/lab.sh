@@ -16,6 +16,10 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 PIECES="kiosk arcade_bay"
 
 piece() {
+  # The user's vertex-paint strokes read from the piece's last .blend first.
+  if [ -f "$ROOT/assets/eclipse/source/$1.blend" ]; then
+    "$BLENDER" -b "$ROOT/assets/eclipse/source/$1.blend" --python-exit-code 1 --python "$HERE/harvest.py" -- "$1" 2>&1 | grep -E "^harvest|Error|Traceback" || true
+  fi
   "$BLENDER" -b --factory-startup --python "$HERE/$1.py" 2>&1 | grep -E "^$1:|Error|Traceback|line [0-9]+" || true
   test -f "$ROOT/assets/eclipse/lab/$1.glb"
 }

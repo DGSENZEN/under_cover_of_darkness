@@ -324,3 +324,157 @@ def bake(objects, name, blendable_slots=(), soot=None, ground_holes=()):
         rgba = weather_rules.rules(m["points"], m["normals"], m["floor_gap"], m["overhang_gap"], m["convex"],
                                    m["concave"], m["open_sky"], corner_slot, soot, seed)
         _write(mesh, "rules", rgba)
+
+
+# The user's touch-ups (spec section 7)
+
+# One greyscale layer per story, R G B A in order, for painting in Blender's
+# Vertex Paint mode; each begins as a copy of what the rules baked.
+LAYERS = ("yours_grime", "yours_blend", "yours_tint", "yours_light")
+STARTS = tuple(name.replace("yours_", "start_") for name in LAYERS)
+STORIES = tuple(name.replace("yours_", "") for name in LAYERS)
+YOURS = HERE / "yours"
+# A stroke: a value that moved from where it began by more than this.
+TOUCHED = 1.0 / 255.0
+# How near a rebuilt corner must lie to a stroke's (m), and face the same way.
+MATCH = 1e-3
+FACING = 0.99
+PAINTING_NOTE = """# Painting a kit piece's weathering
+
+Each piece's .blend here holds four greyscale colour layers, one story each.
+Open it, pick a mesh, Vertex Paint mode, and choose the layer in the mesh's
+Color Attributes:
+
+- `yours_grime`  black clean, white grimy (rising damp, soot, dirt in corners)
+- `yours_blend`  black whole, white worn through to what is under it
+                 (plaster to tezontle, paint to bare metal)
+- `yours_tint`   mid grey neutral; darker damp and rain streaks, lighter sun-bleached
+- `yours_light`  white open, black occluded (baked light)
+
+Leave the `start_*` and `rules` layers alone: they are how the build tells
+your strokes from its own. Save, then run `tools/eclipse/lab.sh <piece>`.
+Your strokes are kept in tools/eclipse/yours/<piece>.npz and win over the
+rules on every build; any stroke whose corner no longer exists is listed in
+the build's output.
+"""
+
+
+def _corners(mesh):
+    """Every corner's local position and its face's local normal."""
+    points = np.zeros((len(mesh.loops), 3))
+    normals = np.zeros((len(mesh.loops), 3))
+    co = np.zeros(len(mesh.vertices) * 3)
+    mesh.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3)
+    index = np.zeros(len(mesh.loops), dtype=np.int64)
+    mesh.loops.foreach_get("vertex_index", index)
+    points[:] = co[index]
+
+    for poly in mesh.polygons:
+        normals[list(poly.loop_indices)] = tuple(poly.normal)
+
+    return points, normals
+
+
+def paint_layers(objects):
+    """The four painting layers and their starting copies, from `rules`."""
+    for o in objects:
+        rules = read(o.data, "rules")
+
+        for i, (layer, start) in enumerate(zip(LAYERS, STARTS)):
+            grey = np.ones((len(rules), 4))
+            grey[:, :3] = rules[:, i:i + 1]
+            _write(o.data, layer, grey)
+            _write(o.data, start, grey)
+
+
+def _load(name):
+    path = YOURS / (name + ".npz")
+
+    if not path.exists():
+        return {"object": np.zeros(0, dtype="<U64"), "point": np.zeros((0, 3)), "normal": np.zeros((0, 3)),
+                "channel": np.zeros(0, dtype=np.int64), "value": np.zeros(0)}
+
+    with np.load(path) as data:
+        return {k: data[k] for k in data.files}
+
+
+def harvest(objects, name):
+    """The user's strokes read from the painting layers (where they moved
+    from their starting copies) and merged into YOURS/<name>.npz; how many
+    values were touched. Objects without the layers give nothing, and the
+    saved strokes are left as they are."""
+    found = []
+
+    for o in objects:
+        mesh = o.data
+
+        if any(mesh.color_attributes.get(layer) is None or mesh.color_attributes.get(start) is None
+               for layer, start in zip(LAYERS, STARTS)):
+            continue
+
+        points, normals = _corners(mesh)
+
+        for channel, (layer, start) in enumerate(zip(LAYERS, STARTS)):
+            now = read(mesh, layer)[:, :3].mean(axis=1)
+            then = read(mesh, start)[:, :3].mean(axis=1)
+
+            # Coplanar corners round one vertex are one stroke.
+            strokes = {}
+
+            for li in np.nonzero(np.abs(now - then) > TOUCHED)[0]:
+                key = (*np.round(points[li], 4), *np.round(normals[li], 3))
+                strokes.setdefault(key, (o.name, points[li], normals[li], channel, now[li]))
+
+            found.extend(strokes.values())
+
+    if not found:
+        return 0
+
+    saved = _load(name)
+    keep = np.ones(len(saved["value"]), dtype=bool)
+
+    for obj, point, normal, channel, _ in found:
+        same = ((saved["object"] == obj) & (saved["channel"] == channel)
+                & (np.linalg.norm(saved["point"] - point, axis=1) < MATCH) & (saved["normal"] @ normal > FACING))
+        keep &= ~same
+
+    YOURS.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(YOURS / (name + ".npz"),
+                        object=np.concatenate([saved["object"][keep], np.array([f[0] for f in found], dtype="<U64")]),
+                        point=np.concatenate([saved["point"][keep], np.array([f[1] for f in found])]),
+                        normal=np.concatenate([saved["normal"][keep], np.array([f[2] for f in found])]),
+                        channel=np.concatenate([saved["channel"][keep], np.array([f[3] for f in found])]),
+                        value=np.concatenate([saved["value"][keep], np.array([f[4] for f in found])]))
+    return len(found)
+
+
+def apply(objects, name):
+    """The saved strokes written over each object's `rules`, channel by
+    channel; one line for every stroke whose corner is gone."""
+    saved = _load(name)
+    lost = []
+    by_name = {o.name: o for o in objects}
+    rules = {}
+
+    for k in range(len(saved["value"])):
+        obj, point, normal = str(saved["object"][k]), saved["point"][k], saved["normal"][k]
+        channel, value = int(saved["channel"][k]), float(saved["value"][k])
+        o = by_name.get(obj)
+        hit = np.zeros(0, dtype=bool)
+
+        if o is not None:
+            if obj not in rules:
+                rules[obj] = (read(o.data, "rules"), *_corners(o.data))
+
+            values, points, normals = rules[obj]
+            hit = (np.linalg.norm(points - point, axis=1) < MATCH) & (normals @ normal > FACING)
+            values[hit, channel] = value
+
+        if not hit.any():
+            lost.append("%s (%.3f, %.3f, %.3f): %s lost" % (obj, *point, STORIES[channel]))
+
+    for obj, (values, _, _) in rules.items():
+        _write(by_name[obj].data, "rules", values)
+
+    return lost

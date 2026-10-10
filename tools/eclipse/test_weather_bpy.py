@@ -7,6 +7,7 @@ what is round each face corner, baking the rules, the user's touch-ups.
 import os
 import sys
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -179,6 +180,121 @@ class Bake(unittest.TestCase):
         weather.bake(second, "test", blendable_slots=("lime",))
         b = np.array([tuple(c.color) for c in second[0].data.color_attributes["rules"].data])
         np.testing.assert_array_equal(a, b)
+
+
+class Yours(unittest.TestCase):
+    """The user's touch-ups: four greyscale layers, harvested to an npz and
+    laid over the rules on every build."""
+
+    def setUp(self):
+        import tempfile
+        common.reset()
+        self.kept = weather.YOURS
+        self.folder = tempfile.mkdtemp()
+        weather.YOURS = Path(self.folder)
+
+    def tearDown(self):
+        weather.YOURS = self.kept
+
+    def _scene(self, height=2.5, front=0.0, soot=()):
+        wall = _box("wall", (0.0, front, 0.0), (3.0, 0.2, height))
+        weather.densify([wall])
+        weather.bake([wall], "test", blendable_slots=("lime",), soot=list(soot))
+        return [wall]
+
+    def _paint(self, objects, layer, point, normal, value):
+        mesh = objects[0].data
+        measured = {"points": np.array([tuple(mesh.vertices[l.vertex_index].co) for l in mesh.loops]),
+                    "normals": np.array([tuple(mesh.polygons[p.index].normal) for p in mesh.polygons
+                                         for _ in p.loop_indices])}
+        # Corners in loop order: rebuild normals by loop.
+        normals = np.zeros((len(mesh.loops), 3))
+
+        for poly in mesh.polygons:
+            normals[list(poly.loop_indices)] = tuple(poly.normal)
+
+        measured["normals"] = normals
+        d = np.linalg.norm(measured["points"] - np.array(point), axis=1)
+        hit = (d < 1e-4) & (normals @ np.array(normal) > 0.99)
+        values = weather.read(mesh, layer)
+        values[hit, :3] = value
+        mesh.color_attributes[layer].data.foreach_set("color", values.astype(np.float32).ravel())
+        return hit
+
+    def _rules_at(self, objects, point, normal):
+        mesh = objects[0].data
+        normals = np.zeros((len(mesh.loops), 3))
+
+        for poly in mesh.polygons:
+            normals[list(poly.loop_indices)] = tuple(poly.normal)
+
+        points = np.array([tuple(mesh.vertices[l.vertex_index].co) for l in mesh.loops])
+        hit = (np.linalg.norm(points - np.array(point), axis=1) < 1e-3) & (normals @ np.array(normal) > 0.99)
+        return weather.read(mesh, "rules")[hit]
+
+    def test_paint_layers_start_as_rules(self):
+        objects = self._scene()
+        weather.paint_layers(objects)
+        mesh = objects[0].data
+        np.testing.assert_allclose(weather.read(mesh, "yours_tint")[:, 0], weather.read(mesh, "rules")[:, 2], atol=1e-6)
+        np.testing.assert_allclose(weather.read(mesh, "start_light")[:, 0], weather.read(mesh, "rules")[:, 3], atol=1e-6)
+
+    def test_stroke_survives_a_rebuild(self):
+        objects = self._scene()
+        weather.paint_layers(objects)
+        self._paint(objects, "yours_grime", (1.0, 0.0, 2.0), (0.0, -1.0, 0.0), 1.0)
+        self.assertGreater(weather.harvest(objects, "test"), 0)
+        neighbour_before = self._rules_at(objects, (1.5, 0.0, 2.0), (0.0, -1.0, 0.0))
+        common.reset()
+        rebuilt = self._scene()
+        self.assertEqual(weather.apply(rebuilt, "test"), [])
+        self.assertTrue(np.allclose(self._rules_at(rebuilt, (1.0, 0.0, 2.0), (0.0, -1.0, 0.0))[:, 0], 1.0))
+        np.testing.assert_allclose(self._rules_at(rebuilt, (1.5, 0.0, 2.0), (0.0, -1.0, 0.0)), neighbour_before)
+
+    def test_apply_matches_within_a_millimetre(self):
+        objects = self._scene()
+        weather.paint_layers(objects)
+        self._paint(objects, "yours_grime", (1.0, 0.0, 2.0), (0.0, -1.0, 0.0), 1.0)
+        weather.harvest(objects, "test")
+        common.reset()
+        near = self._scene(front=0.0004)
+        self.assertEqual(weather.apply(near, "test"), [])
+        self.assertTrue(np.allclose(self._rules_at(near, (1.0, 0.0004, 2.0), (0.0, -1.0, 0.0))[:, 0], 1.0))
+        common.reset()
+        far = self._scene(front=0.003)
+        self.assertEqual(len(weather.apply(far, "test")), 1)
+
+    def test_removed_vertex_is_reported(self):
+        objects = self._scene()
+        weather.paint_layers(objects)
+        self._paint(objects, "yours_grime", (1.0, 0.0, 2.0), (0.0, -1.0, 0.0), 1.0)
+        weather.harvest(objects, "test")
+        common.reset()
+        lost = weather.apply(self._scene(height=1.5), "test")
+        self.assertEqual(len(lost), 1)
+        self.assertIn("grime lost", lost[0])
+
+    def test_harvest_without_layers_keeps_saved(self):
+        objects = self._scene()
+        weather.paint_layers(objects)
+        self._paint(objects, "yours_grime", (1.0, 0.0, 2.0), (0.0, -1.0, 0.0), 1.0)
+        weather.harvest(objects, "test")
+        saved = (weather.YOURS / "test.npz").read_bytes()
+        common.reset()
+        self.assertEqual(weather.harvest(self._scene(), "test"), 0)
+        self.assertEqual((weather.YOURS / "test.npz").read_bytes(), saved)
+
+    def test_untouched_vertices_follow_new_rules(self):
+        objects = self._scene()
+        weather.paint_layers(objects)
+        self._paint(objects, "yours_grime", (1.0, 0.0, 2.0), (0.0, -1.0, 0.0), 1.0)
+        weather.harvest(objects, "test")
+        common.reset()
+        # A soot plume now rises past the neighbour: the rules change there.
+        rebuilt = self._scene(soot=[np.array([2.0, -0.05, 1.6])])
+        weather.apply(rebuilt, "test")
+        self.assertGreater(self._rules_at(rebuilt, (2.0, 0.0, 2.0), (0.0, -1.0, 0.0))[:, 0].min(), 0.2)
+        self.assertTrue(np.allclose(self._rules_at(rebuilt, (1.0, 0.0, 2.0), (0.0, -1.0, 0.0))[:, 0], 1.0))
 
 
 if __name__ == "__main__":
