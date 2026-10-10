@@ -382,6 +382,67 @@ class Shapes(unittest.TestCase):
         self.assertAlmostEqual(lowest, 5.5 - 0.15 - 0.02, delta=0.005)
 
 
+class FurnitureKit(unittest.TestCase):
+    """The furniture kit (cards/street_life.md) as built."""
+
+    POSTS = ["bollard_guardstone", "bollard_cannon", "bollard_company", "bollard_chain_post", "bollard_seeped",
+             "tram_pole", "tram_pole_lamp", "lamp_dead", "ward_cage_lamp", "tram_stop", "parking_meter",
+             "sign_bus_stop", "poster_column", "notice_board", "ward_hoarding"]
+    BUDGET = dict({n: 200 for n in ["bollard_guardstone", "bollard_cannon", "bollard_company", "bollard_chain_post",
+                                    "bollard_seeped", "chain_span", "span_wire", "trolley_wire"]},
+                  **{n: 400 for n in ["tram_pole", "tram_stop", "parking_meter", "sign_bus_stop", "traffic_light_dead",
+                                      "payphone_seeped"]},
+                  **{n: 600 for n in ["tram_pole_lamp", "lamp_dead", "ward_cage_lamp", "poster_column", "notice_board",
+                                      "ward_hoarding", "poster_cluster"]},
+                  **{n: 150 for n in ["ward_plate", "sigil_disc", "plaque_talavera", "plate_street"]})
+
+    @classmethod
+    def setUpClass(cls):
+        import furniture_kit
+        furniture_kit.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_no_degenerate_triangles(self):
+        self.assertEqual({n: _smallest_triangle(o) for n, o in self.objects.items() if _smallest_triangle(o) < 1e-7}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_exported_budgets(self):
+        import json
+        path = common.SOURCE / "furniture_kit_faces.json"
+
+        if not path.exists():
+            self.skipTest("furniture_kit not built")
+
+        tris = json.loads(path.read_text())["tris"]
+        self.assertEqual({n: t for n, t in tris.items() if t > self.BUDGET[n]}, {})
+
+    def test_posts_stand_on_the_ground(self):
+        """A post rises from the ground, its foot at most 0.5 m buried."""
+        for name in self.POSTS:
+            zs = [v.z for v in _world(self.objects[name])]
+            self.assertTrue(-0.5 <= min(zs) <= 1e-4 and max(zs) > 0.3, (name, min(zs), max(zs)))
+
+    def test_trolley_wire_hangs(self):
+        points = _world(self.objects["trolley_wire"])
+        ends = [v.z for v in points if v.x < 0.05]
+        self.assertAlmostEqual(sum(ends) / len(ends), 5.5, delta=0.01)
+        self.assertAlmostEqual(min(v.z for v in points), 5.5 - 0.15 - 0.015, delta=0.005)
+
+    def test_wires_and_chain_are_thick_enough(self):
+        for name in ("trolley_wire", "span_wire", "chain_span"):
+            points = [v for v in _world(self.objects[name]) if v.x < 0.3 * min(1.0, max(p.x for p in _world(self.objects[name])))]
+            ys = [v.y for v in points]
+            self.assertGreaterEqual(max(ys) - min(ys), 0.025, name)
+
+
 if __name__ == "__main__":
     result = unittest.main(argv=["test_kit_bpy"], exit=False).result
     sys.exit(not result.wasSuccessful())

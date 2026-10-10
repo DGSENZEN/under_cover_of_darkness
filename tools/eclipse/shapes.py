@@ -128,6 +128,58 @@ def sag(m, a, b, radius, sides, drop, segments, slot_name):
         rings.append([tuple(c + (side * math.sin(2 * math.pi * j / sides) - up * math.cos(2 * math.pi * j / sides)) * radius)
                       for j in range(sides)])
 
-    loft(m, rings, slot_name, caps=False)
-    _fan(m, centres[0], rings[0], slot_name)
-    _fan(m, centres[-1], rings[-1], slot_name)
+    # Each end one polygon: a fan's triangles on a wire this thin are slivers.
+    loft(m, rings, slot_name, caps=True)
+
+
+def panel(m, lo, hi, inset, frame_slot, face_slot):
+    """A box from lo to hi whose front (-Y) face is a frame `inset` wide
+    round a field in `face_slot` (a blank canvas), one closed solid."""
+    x0, y0, z0 = lo
+    x1, y1, z1 = hi
+    o = [(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)]
+    i = [(x0 + inset, y0, z0 + inset), (x1 - inset, y0, z0 + inset), (x1 - inset, y0, z1 - inset), (x0 + inset, y0, z1 - inset)]
+
+    for k in range(4):
+        j = (k + 1) % 4
+        m.face([o[k], o[j], i[j], i[k]], frame_slot)
+
+    m.face(i, face_slot)
+    m.box(lo, hi, frame_slot, skip=("-y",))
+
+
+def disc(m, centre, radius, depth, sides, rim, rim_slot, face_slot):
+    """A disc standing in an XZ plane, its back at centre's y, its front
+    `depth` towards -Y: a rim `rim` wide round a field in `face_slot`."""
+    import math
+
+    cx, cy, cz = centre
+    ring = lambda r, y: [(cx + r * math.cos(2 * math.pi * k / sides), y, cz + r * math.sin(2 * math.pi * k / sides))
+                         for k in range(sides)]
+    back, front, inner = ring(radius, cy), ring(radius, cy - depth), ring(radius - rim, cy - depth)
+    loft(m, [back, front], rim_slot, caps=False)
+    _fan(m, (cx, cy, cz), back, rim_slot)
+
+    for k in range(sides):
+        j = (k + 1) % sides
+        m.face([front[k], front[j], inner[j], inner[k]], rim_slot)
+
+    _fan(m, (cx, cy - depth, cz), inner, face_slot)
+
+
+def obox(m, centre, size, rotation, slot_name):
+    """A box `size` (x, y, z) about `centre`, turned by `rotation` (Euler
+    radians, XYZ): a stone heaved askew, a frame leaning on a wall."""
+    from mathutils import Euler
+
+    r = Euler(rotation, "XYZ").to_matrix()
+    c = Vector(centre)
+    hx, hy, hz = (s / 2 for s in size)
+    corner = lambda x, y, z: tuple(c + r @ Vector((x, y, z)))
+    p = {(i, j, k): corner(i * hx, j * hy, k * hz) for i in (-1, 1) for j in (-1, 1) for k in (-1, 1)}
+    quads = [[(-1, -1, -1), (-1, 1, -1), (-1, 1, 1), (-1, -1, 1)], [(1, -1, -1), (1, -1, 1), (1, 1, 1), (1, 1, -1)],
+             [(-1, -1, -1), (-1, -1, 1), (1, -1, 1), (1, -1, -1)], [(-1, 1, -1), (1, 1, -1), (1, 1, 1), (-1, 1, 1)],
+             [(-1, -1, -1), (1, -1, -1), (1, 1, -1), (-1, 1, -1)], [(-1, -1, 1), (-1, 1, 1), (1, 1, 1), (1, -1, 1)]]
+
+    for q in quads:
+        m.face([p[k] for k in q], slot_name)

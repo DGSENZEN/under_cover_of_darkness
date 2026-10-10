@@ -16,7 +16,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 PIECES="kiosk arcade_bay"
 # The Zócalo's kits (one atlas each, exported to assets/eclipse/kit/).
-KITS="street_kit canal_kit bridge_stone bridge_steel"
+KITS="street_kit canal_kit bridge_stone bridge_steel furniture_kit trade_kit uncanny_kit bound_god"
 
 piece() {
   # The user's vertex-paint strokes read from the piece's last .blend first;
