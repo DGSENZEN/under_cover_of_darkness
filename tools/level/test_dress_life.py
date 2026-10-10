@@ -94,7 +94,13 @@ class Life(unittest.TestCase):
             for g in DATA["plots"] + sunken:
                 b = plan_check._bounds(g["polygon"])
 
-                if _meet(f, b, 0.05):
+                if not _meet(f, b, 0.05):
+                    continue
+
+                # A plot's own outline (a cut corner is open ground), its box only if not convex.
+                rect = [(f[0], f[1]), (f[2], f[1]), (f[2], f[3]), (f[0], f[3])]
+
+                if not plan_check.convex(g["polygon"]) or plan_check.overlap_area(rect, g["polygon"]) > 0.01:
                     clashes.append((p["piece"], p["at"][0], p["at"][2], g["name"]))
 
         self.assertEqual(clashes[:10], [])
