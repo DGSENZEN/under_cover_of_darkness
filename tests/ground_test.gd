@@ -39,6 +39,17 @@ func _ready() -> void:
 				longest = maxf(longest, d.length())
 
 	_check("G1 the opening holds no ground", inside == 0 and indices.size() > 0, "%d triangles inside" % inside)
+
+	# G7 the ground faces up: Godot draws a triangle's front where its corners
+	#    run clockwise, so (b - a) x (c - a) points down for one seen from above
+	var facing_down := 0
+
+	for t in range(0, indices.size(), 3):
+		var a := points[indices[t]]
+		facing_down += int((points[indices[t + 1]] - a).cross(points[indices[t + 2]] - a).y > 0.0)
+
+	_check("G7 every ground triangle faces up (drawn from above, culled from below)", facing_down == 0,
+		"%d of %d facing down" % [facing_down, indices.size() / 3])
 	# G2 every vertex coloured, the grid no coarser than a metre
 	_check("G2 every vertex has a colour and the grid is a metre or finer", colours.size() == points.size() and longest <= 1.0 + 1e-4,
 		"%d colours for %d vertices, longest side %.3f m" % [colours.size(), points.size(), longest])

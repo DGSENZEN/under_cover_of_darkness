@@ -364,6 +364,7 @@ JOINTS = {
 # coarser grid, the lamps' soot rising from their globes, the stair's
 # opening cut from the stand-in ground the occlusion rays see.
 WEATHER = {"lines": [("z", 0.3), ("z", 1.2)], "coarse": {"kiosk_stair": 1.0}, "blendable": ["iron", "stone_step"],
+           "foot": [],
            "ground_holes": [(-HALF, 0.0, HALF, RUN)]}
 
 

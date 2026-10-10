@@ -654,7 +654,8 @@ def _weather(objects, name, settings):
 
     weather.densify(objects, lines=settings.get("lines", ()), coarse=settings.get("coarse"))
     weather.bake(objects, name, blendable_slots=tuple(settings.get("blendable", ())),
-                 ground_holes=tuple(settings.get("ground_holes", ())))
+                 ground_holes=tuple(settings.get("ground_holes", ())),
+                 foot_slots=tuple(settings.get("foot", settings.get("blendable", ()))))
 
     for line in weather.apply(objects, name):
         print("%s: %s" % (name, line))
@@ -698,7 +699,7 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
     """The piece's atlas made (unwrap, any repeats, pack), its AO and region
     maps, glTF and .blend written; then the gate. `merge` is a function run
     between unwrap and pack (repeat_faces for identical parts). `weather`
-    ({"lines", "coarse", "blendable", "ground_holes"}) densifies the piece
+    ({"lines", "coarse", "blendable", "foot", "ground_holes"}) densifies the piece
     after its atlas is made and bakes its vertex paint, the user's strokes
     over the rules (tools/eclipse/weather.py). Exits non-zero if the gate
     finds a problem."""

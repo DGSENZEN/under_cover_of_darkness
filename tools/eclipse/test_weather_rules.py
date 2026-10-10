@@ -56,13 +56,49 @@ class Blend(unittest.TestCase):
         self.assertEqual(b.max(), 0.0)
 
     def test_blend_at_wall_foot_and_convex_edges(self):
-        points = np.array([[1.0, 0.0, 0.1], [1.0, 0.0, 2.0], [2.0, 0.0, 2.0]])
-        gap = np.array([0.1, 2.0, 2.0])
-        convex = np.array([0.0, 1.0, 0.0])
-        b = weather_rules.blend(points, gap, convex, np.ones(3, dtype=bool), 1)
+        # At the foot of a wall; somewhere along a convex edge (edges chip in
+        # places); never on a flat face up the wall.
+        edge = np.stack([np.linspace(0.0, 4.0, 80), np.zeros(80), np.full(80, 2.0)], axis=1)
+        points = np.vstack([[[1.0, 0.0, 0.1]], edge, [[2.0, 0.0, 2.0]]])
+        gap = np.concatenate([[0.1], np.full(80, 2.0), [2.0]])
+        convex = np.concatenate([[0.0], np.ones(80), [0.0]])
+        b = weather_rules.blend(points, gap, convex, np.ones(82, dtype=bool), 1)
         self.assertGreater(b[0], 0.5)
-        self.assertGreater(b[1], 0.5)
-        self.assertLess(b[2], 0.1)
+        self.assertGreater(b[1:81].max(), 0.5)
+        self.assertLess(b[81], 0.1)
+
+
+    def test_edges_wear_in_patches_not_everywhere(self):
+        # A thin bar is all edge: its paint chips in places, it is not
+        # stripped (the kiosk's ironwork went bare, Oct 9 2026).
+        rng = np.random.default_rng(4)
+        points = rng.uniform(0.0, 6.0, (2000, 3))
+        b = weather_rules.blend(points, np.full(2000, INF), np.ones(2000), np.ones(2000, dtype=bool), 1)
+        worn = (b > 0.5).mean()
+        self.assertGreater(worn, 0.05)
+        self.assertLess(worn, 0.4)
+
+
+    def test_a_short_bar_is_never_stripped(self):
+        # One 1.2 m bar, all edge, across many seeds: its paint chips in
+        # small places, never comes off over most of it.
+        x = np.linspace(0.0, 1.2, 200)
+        points = np.stack([x + 3.0, np.full(200, 0.5), np.full(200, 2.0)], axis=1)
+        shares = []
+
+        for seed in range(1, 41):
+            b = weather_rules.blend(points, np.full(200, INF), np.ones(200), np.ones(200, dtype=bool), seed)
+            shares.append((b > 0.5).mean())
+
+        self.assertLess(np.mean(shares), 0.3)
+        self.assertLess(max(shares), 0.6)
+
+    def test_foot_wear_only_where_named(self):
+        # Plaster wears through at the foot of a wall; an iron post standing
+        # on a kerb does not.
+        points = np.array([[1.0, 0.0, 0.1]])
+        b = weather_rules.blend(points, np.array([0.1]), np.zeros(1), np.ones(1, dtype=bool), 1, foot=np.zeros(1, dtype=bool))
+        self.assertEqual(b[0], 0.0)
 
 
 class Tint(unittest.TestCase):

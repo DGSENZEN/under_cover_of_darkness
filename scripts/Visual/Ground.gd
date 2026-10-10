@@ -79,7 +79,8 @@ static func build(area: Rect2, openings: Array[Rect2], footprints: Array[Diction
 
 					ids.append(index[c])
 
-				for k in [0, 2, 1, 0, 3, 2]:
+				# Clockwise from above: Godot's front, so it faces up.
+				for k in [0, 1, 2, 0, 2, 3]:
 					tool.add_index(ids[k])
 
 				if run_from < 0:

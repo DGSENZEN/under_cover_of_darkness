@@ -137,6 +137,51 @@ func _run() -> void:
 	_check("L11b vertex paint is on where a mesh carries it and off where it does not",
 		painted_wrong.is_empty() and painted_on > 0, "%d on, wrong: %s" % [painted_on, painted_wrong.slice(0, 4)])
 
+	# L11 copies differ: every shader-led piece takes the world macro layer,
+	#     and the bays stand at different places in it (X16 renders the rest)
+	var macro_off := []
+	var bay_x := []
+
+	for key in lab._materials:
+		if String(key).ends_with("/shader_led") and float(lab._materials[key].get_shader_parameter("macro_amount")) < 0.5:
+			macro_off.append(key)
+
+	for i in 3:
+		bay_x.append(lab.get_node("shader_led/bay_%d" % i).global_position.x)
+
+	_check("L11 the shader-led bays lie in the macro layer at different places", macro_off.is_empty()
+		and bay_x[0] != bay_x[1] and bay_x[1] != bay_x[2], "off %s, bays at %s" % [macro_off, bay_x])
+
+	# L12 F1, F2 and F4 flip vertex paint, the macro layer and hex-tiling on
+	#     every lab material (and the ground's), and the line says so
+	var flips := {KEY_F1: "vertex_paint", KEY_F2: "macro_amount", KEY_F4: "hex_tiling"}
+	var flipped := true
+
+	for key in flips:
+		var before: Array = lab.layer_materials(StringName(flips[key])).map(func(m): return float(m.get_shader_parameter(flips[key])))
+		var text_before: String = lab.layer_label.text
+		var press := InputEventKey.new()
+		press.keycode = key
+		press.pressed = true
+		lab._unhandled_input(press)
+		var after: Array = lab.layer_materials(StringName(flips[key])).map(func(m): return float(m.get_shader_parameter(flips[key])))
+		flipped = flipped and before.size() > 0 and before.all(func(v): return v > 0.5) and after.all(func(v): return v < 0.5) \
+			and lab.layer_label.text != text_before
+		lab._unhandled_input(press)
+
+	_check("L12 F1, F2 and F4 flip their layers on every lab material, and the line says so", flipped,
+		"line: %s" % lab.layer_label.text)
+
+	# L13 the ground is the painted Ground, solid under the player's start
+	var ground: Node = lab.get_node_or_null("ground")
+	await get_tree().physics_frame
+	var start_space: PhysicsDirectSpaceState3D = lab.get_world_3d().direct_space_state
+	# (Not the player standing there.)
+	var below := start_space.intersect_ray(PhysicsRayQueryParameters3D.create(Vector3(0, 5, 14), Vector3(0, -5, 14),
+		0xFFFFFFFF, [lab.player.get_rid()]))
+	_check("L13 the ground is the painted Ground, solid under the player's start", ground is Ground
+		and not below.is_empty() and absf(below["position"].y) < 1e-3, "%s, hit %s" % [ground, below.get("position")])
+
 	# L7 the stair is walked: the player goes down to the landing and back up
 	#    to the street (it wedged on the old one, 1.7 m in)
 	var player: CharacterBody3D = lab.player

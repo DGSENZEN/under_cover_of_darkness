@@ -40,6 +40,10 @@ WEAR_REACH = 0.3
 CAVITY_REACH = 0.12
 # Patches: the noise that breaks every story into places, its cell size (m).
 PATCH = 0.8
+# Edges chip in small places: noise this fine (m), and where along its
+# range the paint starts to come away (0-1; above it chips, below it holds).
+CHIP_CELL = 0.12
+EDGE_CHIPS = 0.68
 
 
 def seed_of(name):
@@ -61,10 +65,10 @@ def _noise1(t, seed, cell, salt=0.0):
     return _hash(i, seed, salt) * (1 - f) + _hash(i + 1, seed, salt) * f
 
 
-def _patches(points, seed, salt):
+def _patches(points, seed, salt, cell=PATCH):
     """Smooth 3D value noise over the piece, 0-1: where a story is told
     strongly and where weakly."""
-    k = points / PATCH
+    k = points / cell
     i = np.floor(k)
     f = k - i
     f = f * f * (3 - 2 * f)
@@ -103,13 +107,18 @@ def grime(points, floor_gap, concave, soot, seed):
     return np.clip(1 - (1 - damp) * (1 - corners) * (1 - smoke), 0.0, 1.0)
 
 
-def blend(points, floor_gap, convex, blendable, seed):
-    """G: the top material worn through at the foot of walls and on convex
-    edges, only where there is something under it."""
+def blend(points, floor_gap, convex, blendable, seed, foot=None):
+    """G: the top material worn through at the foot of walls (only where
+    `foot`, plaster: by default wherever it is blendable) and chipped on
+    convex edges, only where there is something under it."""
     along = points[:, 0] + points[:, 1]
     top = FOOT_WEAR + 0.2 * (2 * _noise1(along, seed, DAMP_WOBBLE, 3.0) - 1)
-    foot = np.clip(1.0 - floor_gap / top, 0.0, 1.0)
-    worn = np.maximum(foot, np.asarray(convex, dtype=np.float64))
+    at_foot = np.clip(1.0 - floor_gap / top, 0.0, 1.0) * (blendable if foot is None else np.asarray(foot))
+    # Edges chip in small places, not all along: a thin bar is all edge, and
+    # its paint must not come off whole.
+    chips = np.clip((_patches(points, seed, 9.0, CHIP_CELL) - EDGE_CHIPS) * 6.0, 0.0, 1.0)
+    chipped = np.asarray(convex, dtype=np.float64) * chips
+    worn = np.maximum(at_foot, chipped)
     worn *= 0.7 + 0.3 * _patches(points, seed, 4.0)
     return np.where(blendable, np.clip(worn, 0.0, 1.0), 0.0)
 
@@ -139,12 +148,13 @@ def light(open_sky, normals):
     return np.clip(seen + bounce, 0.0, 1.0)
 
 
-def rules(points, normals, floor_gap, overhang_gap, convex, concave, open_sky, blendable, soot, seed):
-    """Every vertex's RGBA (n, 4), 0-1."""
+def rules(points, normals, floor_gap, overhang_gap, convex, concave, open_sky, blendable, soot, seed, foot=None):
+    """Every vertex's RGBA (n, 4), 0-1; `foot` where walls wear through at
+    their foot (by default wherever blendable)."""
     points = np.asarray(points, dtype=np.float64)
     normals = np.asarray(normals, dtype=np.float64)
     out = np.stack([grime(points, floor_gap, concave, soot, seed),
-                    blend(points, floor_gap, convex, blendable, seed),
+                    blend(points, floor_gap, convex, blendable, seed, foot),
                     tint(points, normals, overhang_gap, seed),
                     light(open_sky, normals)], axis=1)
     return np.clip(out, 0.0, 1.0)

@@ -333,7 +333,7 @@ JOINTS = {
 WINDOW_X = (CENTRE - WINDOW[0] / 2, CENTRE + WINDOW[0] / 2)
 WINDOW_HEAD = 6.0 + WINDOW[1]
 WEATHER = {"lines": [("z", 0.3), ("z", 1.2), ("x", WINDOW_X[0]), ("x", WINDOW_X[1]), ("z", WINDOW_HEAD)],
-           "blendable": ["lime", "iron"]}
+           "blendable": ["lime", "iron"], "foot": ["lime"]}
 
 
 def soot():

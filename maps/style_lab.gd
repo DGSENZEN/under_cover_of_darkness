@@ -31,6 +31,12 @@ const POOL_ANGLE := 55.0
 const POOL_GLOW := 0.5
 const MOON_COLOUR := Color("#d8e4f0")
 const GROUND := Rect2(-35, -15, 70, 30)
+## The kiosk's coping round its opening (m), and a bay's depth behind its
+## façade line and in front of it, and the run's end column (m).
+const COPING := 0.375
+const BAY_BACK := 4.3
+const BAY_FRONT := 0.35
+const END_COLUMN := 0.5
 
 ## Where the pieces and the painted files are (the suites point these elsewhere).
 var lab_dir := "res://assets/eclipse/lab/"
@@ -46,6 +52,17 @@ var player: Node3D
 var _night: Environment
 var _day: Environment
 var _materials := {}
+## The painted ground (scripts/Visual/Ground.gd).
+var ground: Ground
+## The line naming which look layers are on (F1, F2, F4).
+var layer_label: Label
+## The layers F1, F2 and F4 flip, by key: the shader parameter, whether on,
+## and the materials it was on in (a mesh without vertex colours never gets it).
+var _layers := {
+	KEY_F1: {"name": "vertex paint", "param": &"vertex_paint", "on": true, "materials": []},
+	KEY_F2: {"name": "macro", "param": &"macro_amount", "on": true, "materials": []},
+	KEY_F4: {"name": "hex", "param": &"hex_tiling", "on": true, "materials": []},
+}
 
 
 func _ready() -> void:
@@ -58,6 +75,7 @@ func _ready() -> void:
 		_station(STATIONS[k], STATION_X[k], kiosk, bay)
 
 	_ground()
+	_look_layers()
 	# Variant D (the user's choice): the lamps throw their painted pools.
 	set_pools(true)
 	player = PLAYER.instantiate()
@@ -69,6 +87,64 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11:
 		set_day(not sun.visible)
+	elif event is InputEventKey and event.pressed and not event.echo and _layers.has(event.keycode):
+		set_layer(event.keycode, not _layers[event.keycode]["on"])
+
+
+# The look's layers (the vertex-paint spec, section 9): played live
+
+## The materials a layer (by its shader parameter) is laid on.
+func layer_materials(param: StringName) -> Array:
+	for key in _layers:
+		if _layers[key]["param"] == param:
+			return _layers[key]["materials"]
+
+	return []
+
+
+## A layer (by its key, F1, F2 or F4) on or off on every material it is laid on.
+func set_layer(key: Key, on: bool) -> void:
+	var layer: Dictionary = _layers[key]
+	layer["on"] = on
+
+	for m: ShaderMaterial in layer["materials"]:
+		m.set_shader_parameter(layer["param"], 1.0 if on else 0.0)
+
+	_name_layers()
+
+
+## Which materials each layer is laid on: vertex paint where a piece's
+## meshes carry it, the macro layer where the preset lays it, hex-tiling on
+## every painterly material; the ground takes all three.
+func _look_layers() -> void:
+	var painterly: Array = _materials.values() + [ground.get_node("mesh").material_override]
+
+	for m: ShaderMaterial in painterly:
+		for key in _layers:
+			var param: StringName = _layers[key]["param"]
+			var value: Variant = m.get_shader_parameter(param)
+
+			if param == &"hex_tiling" or (value != null and float(value) > 0.5):
+				_layers[key]["materials"].append(m)
+
+	var screen := CanvasLayer.new()
+	add_child(screen)
+	layer_label = Label.new()
+	layer_label.position = Vector2(12, 8)
+	layer_label.add_theme_font_size_override("font_size", 14)
+	screen.add_child(layer_label)
+
+	for key in _layers:
+		set_layer(key, true)
+
+
+func _name_layers() -> void:
+	var parts := []
+
+	for key in _layers:
+		parts.append("%s %s %s" % [OS.get_keycode_string(key), _layers[key]["name"], "ON" if _layers[key]["on"] else "off"])
+
+	layer_label.text = "  ·  ".join(parts) + "  ·  F11 day/night"
 
 
 # The look
@@ -117,6 +193,15 @@ func normal_for(piece: StringName) -> Texture2D:
 	return _painted([String(piece) + "_normal.png", String(piece) + "_normal_base.png"], true)
 
 
+## What a piece wears through to under vertex paint, and its relief.
+func under_for(piece: StringName) -> Texture2D:
+	return _painted([String(piece) + "_under.png"], false)
+
+
+func under_normal_for(piece: StringName) -> Texture2D:
+	return _painted([String(piece) + "_under_normal.png"], true)
+
+
 func _painted(names: Array, normal: bool) -> Texture2D:
 	for file in names:
 		var path: String = atlas_dir + file
@@ -135,7 +220,8 @@ func _painterly(piece: StringName, preset: StringName) -> ShaderMaterial:
 	var key := "%s/%s" % [piece, preset]
 
 	if not _materials.has(key):
-		_materials[key] = Painterly.material(atlas_for(piece), preset, Painterly.ZOCALO, normal_for(piece))
+		_materials[key] = Painterly.material(atlas_for(piece), preset, Painterly.ZOCALO, normal_for(piece),
+			under_for(piece), under_normal_for(piece))
 
 	return _materials[key]
 
@@ -252,76 +338,22 @@ func _place(scene: PackedScene, parent: Node3D, node_name: String, at: Vector3, 
 
 # The ground and the sky
 
-## Basalt paving round the stations, open over each kiosk's stair.
+## The painted ground round the stations, open over each kiosk's stair,
+## weathered against the bays and the kiosks' copings.
 func _ground() -> void:
-	var xs := [GROUND.position.x, GROUND.end.x]
-	var zs := [GROUND.position.y, GROUND.end.y]
-	var holes := []
+	var openings: Array[Rect2] = []
+	var footprints: Array[Dictionary] = []
 
 	for x in STATION_X:
 		var hole := Rect2(OPENING.position + Vector2(x, KIOSK_Z), OPENING.size)
-		holes.append(hole)
-		xs += [hole.position.x, hole.end.x]
-		zs += [hole.position.y, hole.end.y]
+		openings.append(hole)
+		footprints.append({"rect": hole.grow(COPING), "roofed": false})
+		# The run of bays, the arcade roofed, from the first bay to the end piece.
+		footprints.append({"rect": Rect2(x - 1.5 * BAY, BAYS_Z - BAY_BACK, 3 * BAY + END_COLUMN, BAY_BACK + BAY_FRONT),
+			"roofed": true})
 
-	xs.sort()
-	zs.sort()
-	var tool := SurfaceTool.new()
-	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var ground := StaticBody3D.new()
-	ground.name = "ground"
+	ground = Ground.build(GROUND, openings, footprints, 7)
 	add_child(ground)
-
-	for i in xs.size() - 1:
-		for j in zs.size() - 1:
-			var cell := Rect2(xs[i], zs[j], xs[i + 1] - xs[i], zs[j + 1] - zs[j])
-
-			if cell.size.x <= 0.0 or cell.size.y <= 0.0 or holes.any(func(h): return h.encloses(cell)):
-				continue
-
-			var corners := [Vector3(cell.position.x, 0, cell.position.y), Vector3(cell.end.x, 0, cell.position.y),
-				Vector3(cell.end.x, 0, cell.end.y), Vector3(cell.position.x, 0, cell.end.y)]
-
-			for k in [0, 1, 2, 0, 2, 3]:
-				tool.set_normal(Vector3.UP)
-				tool.set_tangent(Plane(1, 0, 0, 1))
-				tool.set_uv(Vector2(corners[k].x, corners[k].z) / 1.5)
-				tool.add_vertex(corners[k])
-
-			var shape := CollisionShape3D.new()
-			var box := BoxShape3D.new()
-			box.size = Vector3(cell.size.x, 0.5, cell.size.y)
-			shape.shape = box
-			shape.position = Vector3(cell.get_center().x, -0.25, cell.get_center().y)
-			ground.add_child(shape)
-
-	var mesh := MeshInstance3D.new()
-	mesh.mesh = tool.commit()
-	mesh.material_override = Painterly.material(_basalt(), &"even")
-	ground.add_child(mesh)
-
-
-## The lab's floor: the cobblestone scan darkened toward basalt (not part of
-## any kit; textures/scans is fetched by tools/textures/fetch_scans.py), or
-## plain basalt grey if the scans are not here.
-func _basalt() -> Texture2D:
-	var path := "res://textures/scans/cobblestone_floor_04/diffuse.jpg"
-	var image := Image.load_from_file(path) if FileAccess.file_exists(path) else null
-
-	if image == null:
-		image = Image.create(8, 8, false, Image.FORMAT_RGB8)
-		image.fill(Color("#3a3340"))
-	else:
-		image.convert(Image.FORMAT_RGB8)
-		image.resize(256, 256, Image.INTERPOLATE_CUBIC)
-
-		for y in image.get_height():
-			for x in image.get_width():
-				var c := image.get_pixel(x, y)
-				image.set_pixel(x, y, Color("#2a2730").lerp(Color("#6a6670"), c.get_luminance()))
-
-	image.generate_mipmaps()
-	return ImageTexture.create_from_image(image)
 
 
 func _lights() -> void:

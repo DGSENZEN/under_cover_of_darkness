@@ -342,8 +342,11 @@ def read(mesh, name):
     return values.reshape(-1, 4).astype(np.float64)
 
 
-def bake(objects, name, blendable_slots=(), soot=None, ground_holes=()):
-    """The rules baked into each object's corner colour attribute `rules`."""
+def bake(objects, name, blendable_slots=(), soot=None, ground_holes=(), foot_slots=None):
+    """The rules baked into each object's corner colour attribute `rules`;
+    walls wear through at their foot only in `foot_slots` (plaster; by
+    default every blendable slot)."""
+    foot_slots = blendable_slots if foot_slots is None else foot_slots
     measured = measure(objects, ground_holes)
     soot = soot_origins() if soot is None else soot
     seed = weather_rules.seed_of(name)
@@ -352,13 +355,15 @@ def bake(objects, name, blendable_slots=(), soot=None, ground_holes=()):
         m = measured[o.name]
         mesh = o.data
         corner_slot = np.zeros(len(mesh.loops), dtype=bool)
+        corner_foot = np.zeros(len(mesh.loops), dtype=bool)
 
         for poly in mesh.polygons:
             material = mesh.materials[poly.material_index] if mesh.materials else None
             corner_slot[list(poly.loop_indices)] = material is not None and material.name in blendable_slots
+            corner_foot[list(poly.loop_indices)] = material is not None and material.name in foot_slots
 
         rgba = weather_rules.rules(m["points"], m["normals"], m["floor_gap"], m["overhang_gap"], m["convex"],
-                                   m["concave"], m["open_sky"], corner_slot, soot, seed)
+                                   m["concave"], m["open_sky"], corner_slot, soot, seed, foot=corner_foot)
         _write(mesh, "rules", rgba)
 
 

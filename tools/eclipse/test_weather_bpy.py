@@ -188,6 +188,23 @@ class Bake(unittest.TestCase):
         sill = np.array([tuple(c.color) for c in objects[1].data.color_attributes["rules"].data])
         self.assertEqual(sill[:, 1].max(), 0.0)   # chiluca has nothing under it
 
+    def test_foot_wear_only_on_named_slots(self):
+        # The wall is lime but not named for foot wear: its face low down,
+        # clear of every edge (edges chip whatever the slot), stays whole;
+        # named, it wears.
+        def low_face(foot):
+            common.reset()
+            objects = self._scene()
+            weather.bake(objects, "test", blendable_slots=("lime",), foot_slots=foot)
+            rules = weather.read(objects[0].data, "rules")
+            points, normals = weather._corners(objects[0].data)
+            face = ((np.abs(points[:, 2] - 0.5) < 1e-4) & (points[:, 0] > 0.8) & (points[:, 0] < 2.2)
+                    & (normals[:, 1] < -0.99))
+            return rules[face, 1]
+
+        self.assertEqual(low_face(()).max(), 0.0)
+        self.assertGreater(low_face(("lime",)).max(), 0.0)
+
     def test_bake_is_deterministic(self):
         first = self._scene()
         weather.bake(first, "test", blendable_slots=("lime",))

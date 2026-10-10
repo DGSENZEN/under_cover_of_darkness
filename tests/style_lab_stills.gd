@@ -33,6 +33,7 @@ func _ready() -> void:
 	add_child(lab)
 	await _frames(4)
 	lab.player.queue_free()
+	lab.layer_label.visible = false     # the stills show the look, not the keys
 	var eye := Camera3D.new()
 	eye.fov = 66.0
 	add_child(eye)
@@ -93,6 +94,8 @@ func _views(x: float, kiosk_z: float, bays_z: float) -> Array:
 		["grazing", Vector3(x - 12.0, 4.5, bays_z + 2.2), Vector3(x + 6.0, 4.5, bays_z + 0.3)],
 		["stair_down", Vector3(x, 1.7, kiosk_z + 1.0), Vector3(x, -2.0, kiosk_z - 5.0)],
 		["stair_up", Vector3(x, -1.4, kiosk_z - 7.2), Vector3(x, 0.6, kiosk_z)],
+		# Along the whole ground from its west end, across every station.
+		["ground_long", Vector3(-34.0, 1.7, kiosk_z + 5.0), Vector3(30.0, 0.0, bays_z + 3.0)],
 	]
 
 
@@ -104,12 +107,15 @@ func _views(x: float, kiosk_z: float, bays_z: float) -> Array:
 ##   -- --out=/tmp/round1 --variant="A|" --variant="B|painted_light=1"
 func _compare(lab: Node3D, eye: Camera3D, variants: Array) -> void:
 	var views := _views(lab.STATION_X[2], lab.KIOSK_Z, lab.BAYS_Z)
-	var keep := ["front", "arcade", "kiosk_close", "grazing", "stair_down"]
+	var keep := ["front", "arcade", "kiosk_close", "grazing", "stair_down", "ground_long"]
 	var materials := {}
 
 	for key in lab._materials:
 		if String(key).ends_with("/shader_led"):
 			materials[key] = lab._materials[key]
+
+	# And the ground, which every station stands on.
+	materials["ground"] = lab.ground.get_node("mesh").material_override
 
 	var originals := {}
 
