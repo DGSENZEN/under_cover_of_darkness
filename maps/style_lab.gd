@@ -233,7 +233,13 @@ func _place(scene: PackedScene, parent: Node3D, node_name: String, at: Vector3, 
 			if slot != null and slot.resource_name == "glass":
 				mesh.set_surface_override_material(i, _glass(String(mesh.name).ends_with("_globe")))
 			else:
-				mesh.set_surface_override_material(i, _painterly(piece, preset))
+				var painterly := _painterly(piece, preset)
+
+				# Vertex paint only on what carries it (a mesh without reads white).
+				if Painterly.has_vertex_colours(mesh.mesh):
+					painterly.set_shader_parameter("vertex_paint", 1.0)
+
+				mesh.set_surface_override_material(i, painterly)
 
 		var body := StaticBody3D.new()
 		var shape := CollisionShape3D.new()

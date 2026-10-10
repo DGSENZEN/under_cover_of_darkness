@@ -118,11 +118,147 @@ func _ready() -> void:
 	_check("X6 painted ambient: sky from above, ground's bounce from below",
 		top.b > top.r and bottom.r > bottom.b, "top %s bottom %s" % [top, bottom])
 
+	# Vertex paint (the vertex-paint plan, Task 6): a quad whose corners
+	# carry colours, drawn unshaded over the checker with a pure green under
+	# layer, strokes and palette off unless named.
+	var green := Image.create(4, 4, false, Image.FORMAT_RGB8)
+	green.fill(Color(0, 1, 0))
+	var under := ImageTexture.create_from_image(green)
+	var neutral := func(_x: float) -> Color: return Color(0.0, 0.0, 0.5, 1.0)
+
+	# X8 vertex_paint 0: whatever the colours, today's image
+	var odd := await _painted_quad(atlas, under, func(_x: float) -> Color: return Color(1, 1, 0, 0.3),
+		{"vertex_paint": 0.0, "stroke_strength": 0.12})
+	var drift := 0.0
+
+	for y in VIEW:
+		for x in VIEW:
+			var a := odd.get_pixel(x, y)
+			var b := plain.get_pixel(x, y)
+			drift = maxf(drift, maxf(absf(a.r - b.r), maxf(absf(a.g - b.g), absf(a.b - b.b))))
+
+	_check("X8 vertex_paint 0 reproduces today's image", drift <= 1.0 / 255.0 + 1e-4, "largest difference %.4f" % drift)
+
+	# X9 G = 1: the under layer everywhere
+	var worn := await _painted_quad(atlas, under, func(_x: float) -> Color: return Color(0, 1, 0.5, 1),
+		{"vertex_paint": 1.0, "stroke_strength": 0.0})
+	_check("X9 G = 1 shows the under layer", _share(worn, _is_green) > 0.9, "%.2f green" % _share(worn, _is_green))
+
+	# X10 G rising left to right: the edge where it wears through is ragged,
+	#     not a straight line (the brush breaks it)
+	var ramp := await _painted_quad(atlas, under, func(x: float) -> Color: return Color(0, (x + 1.0) / 2.0, 0.5, 1),
+		{"vertex_paint": 1.0, "stroke_strength": 0.0})
+	var edges := []
+
+	for y in VIEW:
+		for x in VIEW:
+			if _is_green(ramp.get_pixel(x, y)):
+				edges.append(x)
+				break
+
+	var spread: int = (edges.max() - edges.min()) if edges.size() == VIEW else -1
+	_check("X10 the wear-through's edge is ragged", spread > 3, "edge column spread %d px over %d rows" % [spread, edges.size()])
+
+	# X11 R: grime darkens
+	var clean := await _painted_quad(atlas, under, neutral, {"vertex_paint": 1.0, "stroke_strength": 0.0})
+	var grimy := await _painted_quad(atlas, under, func(_x: float) -> Color: return Color(1, 0, 0.5, 1),
+		{"vertex_paint": 1.0, "stroke_strength": 0.0})
+	var darker := _mean_value(clean) - _mean_value(grimy)
+	_check("X11 R grime darkens", darker > 0.1, "mean value drops %.3f" % darker)
+
+	# X12 A: baked light pulls the lit sphere toward the ramp's shadow end
+	#     (red: no light, green: full, as X5)
+	var open_reds := _reds(await _sphere({"painted_light": 1.0, "ramp_amount": 1.0, "vertex_paint": 1.0,
+		"light_ramp": ImageTexture.create_from_image(ramp_image)}, true, Color(0, 0, 0.5, 1.0)))
+	var shut_reds := _reds(await _sphere({"painted_light": 1.0, "ramp_amount": 1.0, "vertex_paint": 1.0,
+		"light_ramp": ImageTexture.create_from_image(ramp_image)}, true, Color(0, 0, 0.5, 0.3)))
+	_check("X12 A baked light takes light away: more of the sphere reads unlit", shut_reds > open_reds + 200,
+		"red pixels open %d, occluded %d" % [open_reds, shut_reds])
+
 	print("\n==== RESULTS ====")
 	for r in results:
 		print(r)
 
 	get_tree().quit()
+
+
+## The quad of _draw with vertex colours: `colour_at` gives each corner's
+## colour from its x (-1 to 1); unshaded, its under layer `under`.
+func _painted_quad(atlas: Texture2D, under: Texture2D, colour_at: Callable, settings: Dictionary) -> Image:
+	var view := SubViewport.new()
+	view.size = Vector2i(VIEW, VIEW)
+	view.own_world_3d = true
+	view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(view)
+	var camera := Camera3D.new()
+	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.size = 2.0
+	view.add_child(camera)
+	var material: ShaderMaterial = Painterly.material(atlas, &"even", Painterly.ZOCALO, null, under)
+	material.shader = UNSHADED
+	material.set_shader_parameter("paint_mix", 0.0)
+
+	for key in settings:
+		material.set_shader_parameter(key, settings[key])
+
+	var quad := QuadMesh.new()
+	quad.size = Vector2(2, 2)
+	var arrays := quad.get_mesh_arrays()
+	var colours := PackedColorArray()
+
+	for v: Vector3 in arrays[Mesh.ARRAY_VERTEX]:
+		colours.append(colour_at.call(v.x))
+
+	arrays[Mesh.ARRAY_COLOR] = colours
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var shape := MeshInstance3D.new()
+	shape.mesh = mesh
+	shape.position = Vector3(0, 0, -1)
+	shape.material_override = material
+	view.add_child(shape)
+
+	for i in 5:
+		await RenderingServer.frame_post_draw
+
+	var image := view.get_texture().get_image()
+	view.queue_free()
+	return image
+
+
+func _is_green(c: Color) -> bool:
+	return c.g > 0.85 and c.r < 0.15 and c.b < 0.15
+
+
+func _share(image: Image, test: Callable) -> float:
+	var n := 0
+
+	for y in image.get_height():
+		for x in image.get_width():
+			n += int(test.call(image.get_pixel(x, y)))
+
+	return float(n) / (image.get_width() * image.get_height())
+
+
+func _mean_value(image: Image) -> float:
+	var sum := 0.0
+
+	for y in image.get_height():
+		for x in image.get_width():
+			sum += image.get_pixel(x, y).get_luminance()
+
+	return sum / (image.get_width() * image.get_height())
+
+
+func _reds(image: Image) -> int:
+	var n := 0
+
+	for y in image.get_height():
+		for x in image.get_width():
+			var c := image.get_pixel(x, y)
+			n += int(c.r + c.g + c.b > 0.02 and c.r > c.g * 2.0)
+
+	return n
 
 
 func _checker() -> ImageTexture:
@@ -256,7 +392,7 @@ func _band_colour(image: Image, from: float, to: float) -> Color:
 
 ## A white sphere drawn with the lit painterly shader set by `settings`
 ## (paint_mix and strokes off), under one light or none; the image.
-func _sphere(settings: Dictionary, lit: bool) -> Image:
+func _sphere(settings: Dictionary, lit: bool, paint: Variant = null) -> Image:
 	var view := SubViewport.new()
 	view.size = Vector2i(96, 96)
 	view.own_world_3d = true
@@ -291,6 +427,17 @@ func _sphere(settings: Dictionary, lit: bool) -> Image:
 
 	var ball := MeshInstance3D.new()
 	ball.mesh = SphereMesh.new()
+
+	if paint != null:
+		var arrays := (ball.mesh as SphereMesh).get_mesh_arrays()
+		var colours := PackedColorArray()
+		colours.resize((arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size())
+		colours.fill(paint)
+		arrays[Mesh.ARRAY_COLOR] = colours
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		ball.mesh = mesh
+
 	ball.material_override = material
 	view.add_child(ball)
 

@@ -20,6 +20,23 @@ uniform float stroke_scale = 1.2;
 uniform float roughness : hint_range(0.0, 1.0) = 0.9;
 uniform float specular : hint_range(0.0, 1.0) = 0.3;
 
+// Vertex paint (the vertex-paint spec, section 5): the kit's corners carry
+// R grime and soot, G how far the top has worn through to the under layer,
+// B tint (0.5 neutral, below damp, above bleached), A baked light. Godot
+// hands them over linear (Painterly.VERTEX_COLOUR_SRGB). 0 is today's image;
+// set only on meshes that carry colours (a mesh without them reads white).
+uniform float vertex_paint : hint_range(0.0, 1.0) = 0.0;
+uniform sampler2D under_atlas : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2D under_normal : hint_normal, filter_linear_mipmap, repeat_enable;
+// The wear-through's edge: how sharp (G either side of 0.5) and how far the
+// strokes push it about.
+uniform float blend_edge : hint_range(0.0, 0.5) = 0.06;
+uniform float blend_break : hint_range(0.0, 2.0) = 0.5;
+uniform float tint_amount : hint_range(0.0, 1.0) = 0.5;
+uniform float grime_amount : hint_range(0.0, 1.0) = 0.6;
+uniform vec3 grime_colour : source_color = vec3(0.239, 0.122, 0.110);
+uniform float baked_light_amount : hint_range(0.0, 1.0) = 1.0;
+
 // Linear RGB to Oklab (Björn Ottosson): equal steps look equal, so the
 // nearest palette colour is the one that looks nearest.
 vec3 oklab(vec3 c) {
@@ -33,6 +50,18 @@ vec3 oklab(vec3 c) {
 		0.2104542553 * lms.x + 0.7936177850 * lms.y - 0.0040720468 * lms.z,
 		1.9779984951 * lms.x - 2.4285922050 * lms.y + 0.4505937099 * lms.z,
 		0.0259040371 * lms.x + 0.7827717662 * lms.y - 0.8086757660 * lms.z);
+}
+
+vec3 linear_of_oklab(vec3 lab) {
+	vec3 lms = vec3(
+		lab.x + 0.3963377774 * lab.y + 0.2158037573 * lab.z,
+		lab.x - 0.1055613458 * lab.y - 0.0638541728 * lab.z,
+		lab.x - 0.0894841775 * lab.y - 1.2914855480 * lab.z);
+	lms = lms * lms * lms;
+	return vec3(
+		4.0767416621 * lms.x - 3.3077115913 * lms.y + 0.2309699292 * lms.z,
+		-1.2684380046 * lms.x + 2.6097574011 * lms.y - 0.3413193965 * lms.z,
+		-0.0041960863 * lms.x - 0.7034186147 * lms.y + 1.7076147010 * lms.z);
 }
 
 // Painted light (the user's direction, Oct 9 2026): the diffuse in a few soft
@@ -63,6 +92,8 @@ varying vec3 world_pos;
 varying vec3 world_normal;
 // The strokes' value here, handed to the light pass.
 varying float stroke_value;
+// The vertex paint's baked light, handed to the light pass.
+varying float baked_light;
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -78,8 +109,28 @@ void fragment() {
 	float s = texture(brush, world_pos.zy / stroke_scale).r * w.x
 		+ texture(brush, world_pos.xz / stroke_scale).r * w.y
 		+ texture(brush, world_pos.xy / stroke_scale).r * w.z;
-	vec3 pushed = base + (s - 0.5) * stroke_strength;
 	stroke_value = s;
+
+	// The vertex paint: worn through, tinted, grimed, each broken by the strokes.
+	float edge = 0.0;
+	baked_light = mix(1.0, COLOR.a, vertex_paint * baked_light_amount);
+
+	if (vertex_paint > 0.0) {
+		edge = smoothstep(0.5 - blend_edge, 0.5 + blend_edge, COLOR.g + (s - 0.5) * blend_break) * vertex_paint;
+		// The broken lip: a darker band where the top gives way.
+		float lip = 1.0 - 0.25 * smoothstep(0.0, 0.3, edge) * smoothstep(1.0, 0.7, edge);
+		base = mix(base, texture(under_atlas, UV).rgb, edge) * lip;
+		vec3 lab = oklab(base);
+		float t = (COLOR.b - 0.5) * 2.0 * tint_amount * vertex_paint * clamp(0.7 + (s - 0.5) * 2.0, 0.0, 1.3);
+		lab.x += t * 0.25;
+		lab.yz *= t < 0.0 ? 1.0 - t * 0.3 : 1.0 - t * 0.6;
+		lab.z -= min(t, 0.0) * -0.02;
+		base = max(linear_of_oklab(lab), vec3(0.0));
+		float grime = COLOR.r * grime_amount * vertex_paint * clamp(0.75 + (s - 0.5) * 2.0, 0.0, 1.0);
+		base = mix(base, grime_colour, grime);
+	}
+
+	vec3 pushed = base + (s - 0.5) * stroke_strength;
 
 	// The nearest of the palette's colours, as the eye judges it (Oklab).
 	vec3 want = oklab(pushed);
@@ -101,11 +152,11 @@ void fragment() {
 #ifndef PAINTERLY_UNSHADED
 	// Painted ambient and rim, laid on as light of their own.
 	float up = clamp(world_normal.y * 0.5 + 0.5, 0.0, 1.0);
-	EMISSION = ALBEDO * mix(ambient_ground, ambient_sky, up) * ambient_amount;
+	EMISSION = ALBEDO * mix(ambient_ground, ambient_sky, up) * ambient_amount * baked_light;
 	EMISSION += rim_colour * pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), rim_width) * rim_amount;
 #endif
 #ifndef PAINTERLY_UNSHADED
-	NORMAL_MAP = texture(normal_atlas, UV).rgb;
+	NORMAL_MAP = mix(texture(normal_atlas, UV).rgb, texture(under_normal, UV).rgb, edge);
 	NORMAL_MAP_DEPTH = normal_depth;
 #endif
 	ROUGHNESS = roughness;
@@ -120,7 +171,7 @@ void light() {
 	// on flat walls too the lamps' pools and the shadows' edges are painted:
 	// banded, the bands' edges pushed about by the strokes.
 	float energy = max(max(LIGHT_COLOR.r, LIGHT_COLOR.g), LIGHT_COLOR.b);
-	float amount = lambert * ATTENUATION;
+	float amount = lambert * ATTENUATION * baked_light;
 	float level = clamp(amount + (stroke_value - 0.5) * terminator_break * min(amount * 4.0 + 0.15, 1.0), 0.0, 1.0);
 	float x = level * light_bands;
 	float stepped = (floor(x) + smoothstep(0.5 - band_softness, 0.5 + band_softness, fract(x))) / light_bands;

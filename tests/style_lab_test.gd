@@ -4,6 +4,7 @@ extends Node3D
 ## and a lab that still opens when its pieces are not built. Headless.
 
 const LAB := preload("res://maps/style_lab.tscn")
+const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const MIXES := {&"painted_led": 0.1, &"even": 0.25, &"shader_led": 0.45}
 
 var results: Array[String] = []
@@ -108,6 +109,33 @@ func _run() -> void:
 	_check("L10 the lamps' painted pools are on by default (variant D), and come and go",
 		lamps.size() == 6 and pools_by_default and pooled and cleared,
 		"%d lamps, by default %s, pooled %s, cleared %s" % [lamps.size(), pools_by_default, pooled, cleared])
+
+	# L11b vertex paint only where a mesh carries it: Godot reads a mesh
+	#      without vertex colours as white, which would be full grime, full
+	#      wear-through and full bleach (the vertex-paint plan, Review Focus 1)
+	var painted_wrong := []
+	var painted_on := 0
+
+	for mesh: MeshInstance3D in lab.find_children("*", "MeshInstance3D", true, false):
+		if mesh.mesh == null or mesh.is_queued_for_deletion():
+			continue
+
+		for i in mesh.mesh.get_surface_count():
+			var m := mesh.get_active_material(i) as ShaderMaterial
+
+			if m == null or m.get_shader_parameter("paint_mix") == null:
+				continue
+
+			var vp: Variant = m.get_shader_parameter("vertex_paint")    # null: never set, so 0
+			var on: bool = vp != null and float(vp) > 0.5
+			var carries: bool = Painterly.has_vertex_colours(mesh.mesh)
+			painted_on += int(on)
+
+			if on != carries:
+				painted_wrong.append("%s %s/%s" % [mesh.name, on, carries])
+
+	_check("L11b vertex paint is on where a mesh carries it and off where it does not",
+		painted_wrong.is_empty() and painted_on > 0, "%d on, wrong: %s" % [painted_on, painted_wrong.slice(0, 4)])
 
 	# L7 the stair is walked: the player goes down to the landing and back up
 	#    to the street (it wedged on the old one, 1.7 m in)

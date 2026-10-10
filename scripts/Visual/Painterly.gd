@@ -30,8 +30,12 @@ const PRESETS := {
 
 
 ## A material drawing `atlas` in the preset's blend, mapped onto `palette`,
-## its relief from the painted `normal` map if one is given.
-static func material(atlas: Texture2D, preset: StringName, palette: Texture2D = ZOCALO, normal: Texture2D = null) -> ShaderMaterial:
+## its relief from the painted `normal` map if one is given; `under` and
+## `under_normal` are what it wears through to under vertex paint (the top
+## itself when none is given). Vertex paint stays off: turn it on
+## ("vertex_paint" 1) only on meshes that carry colours (has_vertex_colours).
+static func material(atlas: Texture2D, preset: StringName, palette: Texture2D = ZOCALO, normal: Texture2D = null,
+		under: Texture2D = null, under_normal: Texture2D = null) -> ShaderMaterial:
 	var out := ShaderMaterial.new()
 	out.shader = SHADER
 	out.set_shader_parameter("atlas", atlas)
@@ -43,7 +47,24 @@ static func material(atlas: Texture2D, preset: StringName, palette: Texture2D = 
 		out.set_shader_parameter("normal_atlas", normal)
 		out.set_shader_parameter("normal_depth", 1.0)
 
+	out.set_shader_parameter("under_atlas", under if under != null else atlas)
+
+	if under_normal != null or normal != null:
+		out.set_shader_parameter("under_normal", under_normal if under_normal != null else normal)
+
 	for key in PRESETS[preset]:
 		out.set_shader_parameter(key, PRESETS[preset][key])
 
 	return out
+
+
+## Whether any of the mesh's surfaces carries vertex colours.
+static func has_vertex_colours(mesh: Mesh) -> bool:
+	if mesh == null:
+		return false
+
+	for i in mesh.get_surface_count():
+		if mesh.surface_get_format(i) & Mesh.ARRAY_FORMAT_COLOR:
+			return true
+
+	return false
