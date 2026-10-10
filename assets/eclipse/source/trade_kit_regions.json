@@ -1,0 +1,17 @@
+{
+ "slots": [
+  "wood",
+  "iron",
+  "canvas",
+  "brass",
+  "glass",
+  "sign",
+  "flesh",
+  "obsidian",
+  "marigold",
+  "steel",
+  "wax"
+ ],
+ "atlas_px": 1536,
+ "px_per_m": 51.34
+}

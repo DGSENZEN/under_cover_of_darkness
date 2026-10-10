@@ -443,6 +443,48 @@ class FurnitureKit(unittest.TestCase):
             self.assertGreaterEqual(max(ys) - min(ys), 0.025, name)
 
 
+class TradeKit(unittest.TestCase):
+    """The trade kit (cards/street_life.md) as built."""
+
+    BUDGET = dict({n: 800 for n in ["cart_hand", "cart_flower", "cart_tamale", "cart_ice", "cart_firewood",
+                                    "shoeshine_stand", "stand_curiosities", "shrine_luchador", "crates_relics",
+                                    "kiosk_sweets"]},
+                  **{n: 1500 for n in ["kiosk_news", "kiosk_lottery", "booth_photographer", "wagon_monster"]})
+
+    @classmethod
+    def setUpClass(cls):
+        import trade_kit
+        trade_kit.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_no_degenerate_triangles(self):
+        self.assertEqual({n: _smallest_triangle(o) for n, o in self.objects.items() if _smallest_triangle(o) < 1e-7}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_exported_budgets(self):
+        import json
+        path = common.SOURCE / "trade_kit_faces.json"
+
+        if not path.exists():
+            self.skipTest("trade_kit not built")
+
+        tris = json.loads(path.read_text())["tris"]
+        self.assertEqual({n: t for n, t in tris.items() if t > self.BUDGET[n]}, {})
+
+    def test_everything_rests_on_the_ground(self):
+        """Wheels, legs and bases touch the ground: none floats, none sinks."""
+        lows = {n: min(v.z for v in _world(o)) for n, o in self.objects.items()}
+        self.assertEqual({n: z for n, z in lows.items() if abs(z) > 1e-4}, {})
+
+
 if __name__ == "__main__":
     result = unittest.main(argv=["test_kit_bpy"], exit=False).result
     sys.exit(not result.wasSuccessful())
