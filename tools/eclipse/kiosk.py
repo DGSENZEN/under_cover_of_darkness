@@ -18,7 +18,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common  # noqa: E402
 
 NAME = "kiosk"
-ATLAS = 512
+# 768: with its landing and passage under the street the kiosk outgrew 512 at ~50 px/m.
+ATLAS = 768
 # The card's slots, in the card's order (the region map's indices).
 SLOTS = ["iron", "brass", "glass", "tile_line2", "stone_step", "sign"]
 
@@ -76,29 +77,62 @@ def coping():
     return m.make()
 
 
+# The landing at the stair's foot and the passage over it, under the street.
+LANDING = 1.8
+FOOT = -RISE * STEPS                # the landing's floor
+CEILING = -0.45                     # the street slab's underside over the passage
+SLAB = 0.2                          # the landing slab's depth
+
+
 def stair():
-    """One step (its riser and tread); the other 19 are copies sharing its UVs."""
+    """One step: a solid block under its tread (tread on top, the riser below
+    it at the back, the riser facing down the stair the way one walks), its
+    ends and underside closed. The other 19 are copies sharing its UVs."""
     m = common.Mesh("kiosk_stair")
-    m.face([(-HALF, 0, 0), (-HALF, 0, -RISE), (HALF, 0, -RISE), (HALF, 0, 0)], "stone_step")  # riser, -y
-    m.face([(-HALF, 0, -RISE), (-HALF, TREAD, -RISE), (HALF, TREAD, -RISE), (HALF, 0, -RISE)], "stone_step")
+    m.box((-HALF, 0.0, -2 * RISE), (HALF, TREAD, -RISE), "stone_step")
+    return m.make()
+
+
+def stair_ends():
+    """The rise from the street down onto the first tread, and the landing
+    at the foot: solid, their tops the floor walked on."""
+    m = common.Mesh("kiosk_stair_ends")
+    # The first riser: the street's edge, facing down the stair.
+    m.face([(-HALF, 0.0, -RISE), (HALF, 0.0, -RISE), (HALF, 0.0, 0.0), (-HALF, 0.0, 0.0)][::-1], "stone_step")
+    m.box((-HALF, RUN, FOOT - SLAB), (HALF, RUN + LANDING, FOOT), "stone_step", skip=("-y",))
     return m.make()
 
 
 def stair_walls():
+    """The tiled walls down the stair and along the passage at its foot, the
+    passage's ceiling (the street slab's underside) and its end wall."""
     m = common.Mesh("kiosk_stair_walls")
-    low = -RISE - RUN * RISE / TREAD   # under the line of the inner corners
-    left = [(-HALF, 0, -RISE), (-HALF, RUN, low), (-HALF, RUN, 0), (-HALF, 0, 0)]     # faces +x
-    m.face(left, "tile_line2")                   # the right wall is its mirror, made after unwrapping
-    bottom = -RISE * STEPS
-    m.face([(-HALF, RUN, bottom), (HALF, RUN, bottom), (HALF, RUN, 0), (-HALF, RUN, 0)], "tile_line2")  # -y
+    far = RUN + LANDING
+    under = -2 * RISE - RUN * RISE / TREAD      # below the steps' undersides
+    # The left wall, faces +x; the right is its mirror, made after unwrapping.
+    left = [(0.0, -2 * RISE), (RUN, under), (far, under), (far, CEILING), (RUN, CEILING), (RUN, 0.0), (0.0, 0.0)]
+    m.face([(-HALF, y, z) for y, z in ccw_yz(left)], "tile_line2")
+    # The fascia over the passage's mouth (under the far coping), facing the stair.
+    m.face([(-HALF, RUN, CEILING), (HALF, RUN, CEILING), (HALF, RUN, 0.0), (-HALF, RUN, 0.0)], "tile_line2")
+    # The passage's ceiling, facing down.
+    m.face([(-HALF, RUN, CEILING), (-HALF, far, CEILING), (HALF, far, CEILING), (HALF, RUN, CEILING)], "tile_line2")
+    # The passage's end wall, facing back up it (the ticket hall comes with the station kit).
+    m.face([(-HALF, far, FOOT), (-HALF, far, CEILING), (HALF, far, CEILING), (HALF, far, FOOT)], "tile_line2")
     return m.make()
+
+
+def ccw_yz(points):
+    """(y, z) points ordered counter-clockwise, so a face in x = const faces +x."""
+    area = sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(points, points[1:] + points[:1]))
+    return points if area > 0 else list(reversed(points))
 
 
 def patches():
     """Brass plates over the joint of 1920s coping and 1969 wall, a little crooked."""
     m = common.Mesh("kiosk_patches")
     plates = [(-1, 1.2, 3), (-1, 3.3, -4), (-1, 5.1, 2), (1, 2.1, -3), (1, 4.4, 5)]
-    half_y, z_lo, z_hi, t = 0.2, -0.18, 0.12, 0.012
+    # Plates 4 cm thick: a thinner one laid on the wall fights it for depth at a distance.
+    half_y, z_lo, z_hi, t = 0.2, -0.18, 0.12, 0.04
     zc = (z_lo + z_hi) / 2
 
     for side, y, degrees in plates:
@@ -260,7 +294,8 @@ def canopy():
     reach = LINE - apothem(COLLAR[0], 8)
     girder.box((-reach, LAMP_Y - 0.05, COLLAR[1]), (reach, LAMP_Y + 0.05, 3.3), "iron", skip=("-x", "+x"))
     girder.bar((0, LAMP_Y, HUB[2]), rims[3], 0.1, 0.16, "iron", caps=(False, True))
-    girder.tube((0, LAMP_Y, 3.3), (0, LAMP_Y, 3.52), 0.08, 8, "brass", caps=(False, True), twist=EIGHT)
+    # The hub well wider than the girder through it, so their sides never lie a hair apart.
+    girder.tube((0, LAMP_Y, 3.3), (0, LAMP_Y, 3.52), 0.12, 8, "brass", caps=(False, True), twist=EIGHT)
     girder.make()
 
     frame = common.Mesh("kiosk_canopy_frame")
@@ -277,10 +312,31 @@ def canopy():
     glass = common.Mesh("kiosk_canopy_glass")
 
     for a, b in zip(rims, rims[1:]):
-        # Counter-clockwise from above: hub, then the rim point further round.
-        glass.face([HUB, b, a], "glass")
+        # Each pane between its ribs, not through them (glass laid on iron
+        # fights it for depth): the triangle drawn in from every edge.
+        glass.face(inset([HUB, b, a], PANE_INSET), "glass")
 
     glass.make()
+
+
+# How far each canopy pane stands in from its ribs and rim (m): past the
+# ribs' half-width, so pane and rib never overlap.
+PANE_INSET = 0.03
+
+
+def inset(triangle, width):
+    """A triangle drawn in by `width` from each of its edges (shrunk about its
+    incentre: every edge moves in by the same distance)."""
+    from mathutils import Vector
+
+    p = [Vector(c) for c in triangle]
+    sides = [(p[1] - p[2]).length, (p[2] - p[0]).length, (p[0] - p[1]).length]
+    perimeter = sum(sides)
+    centre = (p[0] * sides[0] + p[1] * sides[1] + p[2] * sides[2]) / perimeter
+    area = (p[1] - p[0]).cross(p[2] - p[0]).length / 2
+    radius = 2 * area / perimeter
+    k = max(0.0, (radius - width) / radius)
+    return [tuple(centre + (c - centre) * k) for c in p]
 
 
 # Where to look at each of the card's joints: (eye, target), Blender metres.
@@ -296,6 +352,9 @@ JOINTS = {
     "09_walls_coping_patches": ((0.3, 1.3, 0.6), (1.5, 2.1, -0.1)),
     "10_walls_steps": ((0.0, 2.0, -0.4), (-1.5, 3.0, -1.6)),
     "11_landing_walls": ((0.0, 4.8, -1.6), (1.5, 6.0, -2.5)),
+    "12_steps_from_below": ((0.0, 6.6, -1.6), (0.0, 3.0, -2.2)),
+    "13_passage": ((0.0, 5.2, -1.4), (0.0, 7.8, -1.9)),
+    "14_landing_last_step": ((-1.0, 5.2, -2.2), (0.0, 6.0, -3.0)),
 }
 
 
@@ -303,6 +362,7 @@ def build():
     common.reset()
     coping()
     step = stair()
+    stair_ends()
     walls = stair_walls()
     patches()
     balustrade()

@@ -80,8 +80,44 @@ func _run() -> void:
 	var theirs: Texture2D = lab.atlas_for(&"kiosk")
 	lab.atlas_dir = default_dir
 	_check("L5 the painted base without an overpaint; the user's kiosk.png when there is one",
-		base != null and base.get_width() == 512 and theirs != null and theirs.get_width() == 8,
+		base != null and base.get_width() == _atlas_px(&"kiosk") and theirs != null and theirs.get_width() == 8,
 		"base %s theirs %s" % [base.get_size() if base else null, theirs.get_size() if theirs else null])
+	# L7 the stair is walked: the player goes down to the landing and back up
+	#    to the street (it wedged on the old one, 1.7 m in)
+	var player: CharacterBody3D = lab.player
+	var kiosk: Node3D = lab.get_node("even/kiosk")
+	var top: Vector3 = kiosk.global_position + Vector3(0, 1.05, 1.0)
+	player.global_position = top
+	player.rotation.y = 0.0
+	player.velocity = Vector3.ZERO
+	await _frames(10)
+	Input.action_press("move_forward")
+	var lowest := player.global_position.y
+
+	for i in 360:
+		await get_tree().physics_frame
+		lowest = minf(lowest, player.global_position.y)
+
+		if player.global_position.z < kiosk.global_position.z - 6.6:
+			break
+
+	Input.action_release("move_forward")
+	var landed: bool = player.global_position.z < kiosk.global_position.z - 6.6 and player.is_on_floor()
+	var down_at := player.global_position
+	player.rotation.y = PI
+	await _frames(5)
+	Input.action_press("move_forward")
+
+	for i in 480:
+		await get_tree().physics_frame
+
+		if player.global_position.z > kiosk.global_position.z + 0.5:
+			break
+
+	Input.action_release("move_forward")
+	var back: bool = player.global_position.z > kiosk.global_position.z + 0.5 and player.global_position.y > 0.9
+	_check("L7 the player walks down the kiosk's stair to its landing and back up to the street",
+		landed and back and lowest < -1.8, "down at %s (lowest %.2f), back at %s" % [down_at, lowest, player.global_position])
 	lab.queue_free()
 	await _frames(2)
 
@@ -96,6 +132,12 @@ func _run() -> void:
 		is_instance_valid(bare) and said.size() == 2 and said[0].ends_with("kiosk.glb") and said[1].ends_with("arcade_bay.glb"),
 		"%s" % [said])
 	bare.queue_free()
+
+
+## A piece's atlas size, as its build wrote it.
+func _atlas_px(piece: StringName) -> int:
+	var meta: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://assets/eclipse/source/%s_regions.json" % piece))
+	return int(meta["atlas_px"]) if meta is Dictionary else -1
 
 
 func _frames(n: int) -> void:

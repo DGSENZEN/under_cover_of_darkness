@@ -59,5 +59,27 @@ class Gate(unittest.TestCase):
         self.assertIn("degenerate", problems[0])
 
 
+class Layered(unittest.TestCase):
+    """Faces stacked a hair apart, facing the same way, fight for depth at a
+    distance (a plate laid on a wall): within LAYER_GAP they are refused,
+    whether two objects or one."""
+
+    def test_a_plate_a_centimetre_off_a_wall_fails(self):
+        problems = gate.check([quad(0, 0, 0, 2, 2), quad(1, 0.5, 0.5, 1.0, 1.0, z=0.01)], 4, UV)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("layered", problems[0])
+
+    def test_within_one_object_fails_too(self):
+        problems = gate.check([quad(0, 0, 0, 2, 2), quad(0, 0.5, 0.5, 1.0, 1.0, z=0.01)], 4, UV)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("layered", problems[0])
+
+    def test_well_apart_passes(self):
+        self.assertEqual(gate.check([quad(0, 0, 0, 2, 2), quad(1, 0.5, 0.5, 1.0, 1.0, z=0.05)], 4, UV), [])
+
+    def test_side_by_side_in_one_plane_passes(self):
+        self.assertEqual(gate.check([quad(0, 0, 0, 1, 1), quad(0, 1, 0, 2, 1)], 4, UV), [])
+
+
 if __name__ == "__main__":
     unittest.main()

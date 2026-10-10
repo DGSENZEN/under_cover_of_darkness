@@ -303,16 +303,21 @@ def to_metres(objects):
     """Each object's UVs scaled to one UV unit a metre (smart_project fits
     each object to the square on its own, so their scales differ); objects
     that draw without the atlas shrunk to a speck of it."""
-    for o in objects:
+    for i, o in enumerate(objects):
         mesh = o.data
         uv_area = _uv_area(mesh)
         world = sum(p.area for p in mesh.polygons)
+        # Each object's islands start far from every other's: the packer merges
+        # islands that overlap, which must only be an object's own copies (a
+        # stair's steps, a wall's mirror), never two objects that happen to
+        # lie on each other after unwrapping.
+        apart = 1000.0 * (i + 1)
 
         if uv_area > 0:
             k = 0.002 if _free(o) else math.sqrt(world / uv_area)
 
             for loop in mesh.uv_layers.active.data:
-                loop.uv = (loop.uv[0] * k, loop.uv[1] * k)
+                loop.uv = (loop.uv[0] * k + apart, loop.uv[1] * k)
 
 
 def pack(objects):
@@ -504,8 +509,11 @@ def texels(objects, slots, px):
     image order: row 0 is the top (V = 1). For the atlas painter."""
     grid = np.full((px, px, 14), np.nan)
     edges = []   # by polygon id: [(a, b, convexity -1..1), ...] in the world
+    # Which object first drew each texel, and texels another object drew too.
+    owner = np.full((px, px), -1, dtype=np.int64)
+    clashes = {}
 
-    for o in objects:
+    for oi, o in enumerate(objects):
         mesh = o.data
         uv = mesh.uv_layers.active.data
         to_world = o.matrix_world
@@ -535,6 +543,16 @@ def texels(objects, slots, px):
                 tu, tv = _tangents([world[j] for j in tri], [uvs[j] for j in tri])
                 rows = [np.concatenate([[index], world[j], normal, tu, tv, [pid]]) for j in tri]
                 _fill_triangle_vectors(grid, uvs[0], uvs[k], uvs[k + 1], rows)
+                mark = np.full((px, px), np.nan)
+                _fill_triangle_vectors(mark[..., None], uvs[0], uvs[k], uvs[k + 1], [[1.0], [1.0], [1.0]])
+                drawn = ~np.isnan(mark)
+                theirs = drawn & (owner >= 0) & (owner != oi)
+
+                for other in np.unique(owner[theirs]):
+                    pair = tuple(sorted((objects[other].name, o.name)))
+                    clashes[pair] = clashes.get(pair, 0) + int((owner[theirs] == other).sum())
+
+                owner[drawn & (owner < 0)] = oi
 
         bm.free()
 
@@ -548,6 +566,7 @@ def texels(objects, slots, px):
     grid = np.nan_to_num(grid)
     slot = np.where(empty, -1, np.round(grid[..., 0])).astype(np.int16)
     wear, cavity = _bends(grid[..., 1:4], np.where(empty, -1, np.round(grid[..., 13])).astype(np.int64), edges)
+    texels.clashes = clashes
     return {"slot": slot, "position": grid[..., 1:4].astype(np.float32), "normal": grid[..., 4:7].astype(np.float32),
             "tangent_u": grid[..., 7:10].astype(np.float32), "tangent_v": grid[..., 10:13].astype(np.float32),
             "wear": wear.astype(np.float32), "cavity": cavity.astype(np.float32)}
@@ -627,7 +646,7 @@ def dump_faces(objects):
     return faces, tris, uvs
 
 
-def export_piece(name, atlas_px, slots, merge=None, gate_sets=None):
+def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None):
     """The piece's atlas made (unwrap, any repeats, pack), its AO and region
     maps, glTF and .blend written; then the gate. `merge` is a function run
     between unwrap and pack (repeat_faces for identical parts). Exits
@@ -659,6 +678,16 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None):
     (SOURCE / (name + "_regions.json")).write_text(json.dumps({"slots": slots, "atlas_px": atlas_px,
                                                                "px_per_m": round(px_per_m, 2)}, indent=1))
     np.savez_compressed(SOURCE / (name + "_texels.npz"), **texels(objects, slots, atlas_px))
+    # Two objects painted on the same texels show each other's paint (the
+    # kiosk's risers drew the brass plates'): only declared pairs may share.
+    shared = {tuple(sorted(pair)) for pair in (share or [])}
+    clashes = {pair: n for pair, n in texels.clashes.items() if pair not in shared and n > 0}
+
+    for (a, b), n in sorted(clashes.items()):
+        print("%s: atlas overlap: %s and %s share %d texels" % (name, a, b, n))
+
+    if clashes:
+        sys.exit(1)
 
     bpy.ops.export_scene.gltf(filepath=str(OUT / (name + ".glb")), export_format="GLB", export_yup=True,
                               export_materials="EXPORT", export_texcoords=True, export_normals=True,

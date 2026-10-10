@@ -29,8 +29,52 @@ def _area(face):
     return abs(overlap._area(flat))
 
 
+# Faces facing the same way closer than this (m), and overlapping, fight for
+# depth at a distance however carefully they were placed (a plate laid a
+# centimetre off a wall): details are joined into the surface, not stacked on it.
+LAYER_GAP = 0.03
+
+
+def layered(faces, gap=LAYER_GAP):
+    """Pairs of faces, of one object or two, facing the same way in planes
+    `gap` or nearer, overlapping by overlap.LEAST or more: (i, j, gap, area)."""
+    found = []
+    normals = [overlap._unit(f["normal"]) for f in faces]
+    distances = [overlap._dot(n, f["points"][0]) for n, f in zip(normals, faces)]
+    boxes = [overlap._box(overlap._flat(f["points"], overlap._axes(n))) for f, n in zip(faces, normals)]
+
+    for i in range(len(faces)):
+        for j in range(i + 1, len(faces)):
+            if overlap._dot(normals[i], normals[j]) < overlap.SAME_WAY:
+                continue
+
+            apart = abs(distances[i] - distances[j])
+
+            if apart > gap or (apart <= overlap.TOLERANCE and faces[i]["owner"] != faces[j]["owner"]):
+                continue   # far enough apart; or one plane across two objects, which fights() reports
+
+            axes = overlap._axes(normals[i])
+            bi = overlap._box(overlap._flat(faces[i]["points"], axes))
+            bj = overlap._box(overlap._flat(faces[j]["points"], axes))
+
+            if bi[2] <= bj[0] or bj[2] <= bi[0] or bi[3] <= bj[1] or bj[3] <= bi[1]:
+                continue
+
+            shared = overlap._clipped(overlap._flat(faces[i]["points"], axes), overlap._flat(faces[j]["points"], axes))
+            area = abs(overlap._area(shared)) if len(shared) >= 3 else 0.0
+
+            if area >= overlap.LEAST:
+                found.append((i, j, apart, area))
+
+    return found
+
+
 def check(faces, tris, uvs):
     problems = []
+
+    for i, j, apart, area in layered(faces):
+        problems.append("layered: %s over %s, %.1f cm apart, %.4f m2" % (faces[j]["owner"], faces[i]["owner"],
+                                                                         apart * 100, area))
 
     for loser, winner, shared in overlap.fights(faces):
         problems.append("overlap: %s and %s share %.4f m2 in one plane"

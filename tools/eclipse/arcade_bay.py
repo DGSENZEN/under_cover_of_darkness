@@ -151,7 +151,14 @@ def column_steel():
     c = (0.0, (z1 + SPRING) / 2)
     pts = [(-0.24, -0.08), (0.24, -0.08), (0.24, 0.08), (-0.24, 0.08)]
     rot = [(c[0] + x * math.cos(a) - z * math.sin(a), c[1] + x * math.sin(a) + z * math.cos(a)) for x, z in pts]
-    m.face([(x, -0.337, z) for x, z in rot], "brass")
+    # A plate 4 cm thick on the bracket's face (laid flat on it, it would
+    # fight it for depth at a distance).
+    back, front = -0.325, -0.365
+    m.face([(x, front, z) for x, z in rot], "brass")
+
+    for i in range(4):
+        (ax, az), (bx, bz) = rot[i], rot[(i + 1) % 4]
+        m.face([(ax, back, az), (bx, back, bz), (bx, front, bz), (ax, front, az)], "brass")
     return m.make()
 
 
@@ -381,10 +388,13 @@ def main():
 
     def merge():
         _tiles(*tiles)
-        common.mirror_faces(back, lambda f: True, about=CENTRE)
+        # Only the left half: the pieces across the middle (the band, the
+        # lintel, the head) mirrored onto themselves would lie twice in one place.
+        common.mirror_faces(back, lambda f: f.calc_center_median().x < CENTRE - 0.01, about=CENTRE)
         common.turned_copy(caps, "bay_start_caps")
 
-    common.export_piece(NAME, ATLAS, SLOTS, merge=merge, gate_sets=_Sets())
+    common.export_piece(NAME, ATLAS, SLOTS, merge=merge, gate_sets=_Sets(),
+                        share=[("bay_end_caps", "bay_start_caps")])
     _gate_two_bays()
 
 
