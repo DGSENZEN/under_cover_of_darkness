@@ -36,6 +36,7 @@ SHOW = {
     "tile_line2": (0.2, 0.3, 0.55), "stone_step": (0.5, 0.5, 0.52), "sign": (0.45, 0.45, 0.45),
     "tezontle": (0.42, 0.14, 0.11), "chiluca": (0.58, 0.57, 0.6), "lime": (0.85, 0.82, 0.72),
     "steel": (0.3, 0.3, 0.33), "wood_door": (0.3, 0.17, 0.1), "tile_floor": (0.45, 0.4, 0.3),
+    "basalt": (0.16, 0.14, 0.18), "granite": (0.42, 0.41, 0.44), "rubble": (0.3, 0.27, 0.25),
 }
 MARGIN = 0.006
 # Slots drawn by their own material, not the atlas: no room in it for them.
@@ -62,11 +63,17 @@ def slot(name):
 class Mesh:
     """A piece's object being built: faces added with their slot."""
 
-    def __init__(self, name):
+    def __init__(self, name, outward=False):
         self.name = name
         self.bm = bmesh.new()
         self.slots = []
         self.smooth = False
+        # A closed piece built without minding its faces' winding: turned to
+        # face out once welded.
+        self.outward = outward
+        # Solids welded each on its own (shell()), so two that touch keep
+        # their own corners and stay closed.
+        self.shells = [[]]
 
     def _index(self, slot_name):
         if slot_name not in self.slots:
@@ -74,8 +81,13 @@ class Mesh:
 
         return self.slots.index(slot_name)
 
+    def shell(self):
+        """Faces from here on are another solid, welded apart from the rest."""
+        self.shells.append([])
+
     def face(self, points, slot_name):
         verts = [self.bm.verts.new(p) for p in points]
+        self.shells[-1].extend(verts)
         f = self.bm.faces.new(verts)
         f.material_index = self._index(slot_name)
         return f
@@ -188,7 +200,12 @@ class Mesh:
 
     def make(self):
         """The object, its faces welded where they share corners."""
-        bmesh.ops.remove_doubles(self.bm, verts=self.bm.verts, dist=1e-5)
+        for verts in self.shells:
+            bmesh.ops.remove_doubles(self.bm, verts=[v for v in verts if v.is_valid], dist=1e-5)
+
+        if self.outward:
+            bmesh.ops.recalc_face_normals(self.bm, faces=self.bm.faces[:])
+
         mesh = bpy.data.meshes.new(self.name)
         self.bm.to_mesh(mesh)
         self.bm.free()
@@ -660,7 +677,7 @@ def _weather(objects, name, settings, gate_sets=None):
                  foot_slots=tuple(settings.get("foot", settings.get("blendable", ()))),
                  sets=[list(names) for names in gate_sets] if gate_sets is not None else None,
                  free=[o.name for o in objects if _free(o)],
-                 tide=tuple(settings["tide"]) if "tide" in settings else None)
+                 tide=settings.get("tide"))
 
     for line in weather.apply(objects, name):
         print("%s: %s" % (name, line))

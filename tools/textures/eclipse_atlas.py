@@ -714,7 +714,7 @@ GROUND_PX = {"ground_flags": 320}
 
 def main(argv):
     """Pieces to paint; --style=<name> one of STYLES, --out=<dir> elsewhere; --tiles
-    the ground tiles instead."""
+    the ground tiles instead; --under only the pieces' under atlases."""
     style = next((a.split("=", 1)[1] for a in argv if a.startswith("--style=")), None)
     out = next((Path(a.split("=", 1)[1]) for a in argv if a.startswith("--out=")), OUT)
 
@@ -728,6 +728,12 @@ def main(argv):
         return
 
     for piece in [a for a in argv if not a.startswith("--")] or ["kiosk", "arcade_bay"]:
+        if "--under" in argv:   # only what the slots wear through to, the top kept
+            slots = json.loads((SOURCE / (piece + "_regions.json")).read_text())["slots"]
+            _under(piece, SOURCE, out, load_recipes(slots), SCANS, None)
+            print("eclipse_atlas:", out / (piece + "_under.png"))
+            continue
+
         print("eclipse_atlas:", paint_atlas(piece, out_dir=out, style=style))
 
 

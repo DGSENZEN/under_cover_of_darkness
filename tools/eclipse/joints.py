@@ -65,6 +65,11 @@ def main():
     os.makedirs(OUT, exist_ok=True)
 
     for name, view in joints.items():
+        if isinstance(view, dict):
+            _stage(scene, view)
+            _shoot(scene, camera, piece, name, view["eye"], view["target"])
+            continue
+
         eye, target = view[0], view[1]
         hidden = set(view[2]) if len(view) > 2 else hidden_by_default
 
@@ -82,11 +87,45 @@ def main():
                 copy.location = Vector(view[3])
                 scene.collection.objects.link(copy)
 
-        camera.location = Vector(eye)
-        camera.rotation_euler = (Vector(target) - Vector(eye)).to_track_quat("-Z", "Y").to_euler()
-        scene.render.filepath = os.path.join(OUT, "%s_%s.png" % (piece, name))
-        bpy.ops.render.render(write_still=True)
-        print("joints: %s_%s" % (piece, name))
+        _shoot(scene, camera, piece, name, eye, target)
+
+
+def _shoot(scene, camera, piece, name, eye, target):
+    camera.location = Vector(eye)
+    camera.rotation_euler = (Vector(target) - Vector(eye)).to_track_quat("-Z", "Y").to_euler()
+    scene.render.filepath = os.path.join(OUT, "%s_%s.png" % (piece, name))
+    bpy.ops.render.render(write_still=True)
+    print("joints: %s_%s" % (piece, name))
+
+
+def _stage(scene, view):
+    """A kit's joint as the dresser lays it: every piece hidden, copies of
+    those `show` names placed and turned, and stand-in ground planes
+    (x0, y0, x1, y1, z, colour) round them."""
+    for o in [o for o in scene.objects if o.name.startswith(("copy_", "plane_"))]:
+        bpy.data.objects.remove(o)
+
+    for o in scene.objects:
+        if o.type == "MESH":
+            o.hide_render = True
+
+    for k, (name, at, turn) in enumerate(view["show"]):
+        copy = bpy.data.objects.new("copy_%d_%s" % (k, name), bpy.data.objects[name].data)
+        copy.location = Vector(at)
+        copy.rotation_euler = (0.0, 0.0, math.radians(turn))
+        scene.collection.objects.link(copy)
+
+    for k, (x0, y0, x1, y1, z, colour) in enumerate(view.get("planes", [])):
+        mesh = bpy.data.meshes.new("plane_%d" % k)
+        mesh.from_pydata([(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)], [], [(0, 1, 2, 3)])
+        material = bpy.data.materials.new("plane_%d" % k)
+        material.use_nodes = True
+        bsdf = next(n for n in material.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+        bsdf.inputs["Base Color"].default_value = (*colour, 1)
+        bsdf.inputs["Roughness"].default_value = 0.9
+        mesh.materials.append(material)
+        plane = bpy.data.objects.new("plane_%d" % k, mesh)
+        scene.collection.objects.link(plane)
 
 
 main()

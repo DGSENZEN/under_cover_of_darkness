@@ -1,0 +1,13 @@
+{
+ "slots": [
+  "basalt",
+  "chiluca",
+  "granite",
+  "steel",
+  "iron",
+  "brass",
+  "sign"
+ ],
+ "atlas_px": 1024,
+ "px_per_m": 41.4
+}

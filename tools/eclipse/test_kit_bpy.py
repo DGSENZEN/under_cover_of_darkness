@@ -4,6 +4,7 @@ their side of the wall looks.
     Blender -b --factory-startup --python tools/eclipse/test_kit_bpy.py
 """
 
+import math
 import os
 import sys
 import unittest
@@ -14,6 +15,7 @@ import bpy
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import arcade_bay  # noqa: E402
+import common  # noqa: E402
 
 
 class ArcadeBay(unittest.TestCase):
@@ -59,6 +61,102 @@ class ArcadeBay(unittest.TestCase):
                            for _ in [0]) for l in bm.calc_loop_triangles())
         bm.free()
         self.assertGreater(smallest, 1e-6)
+
+
+def _closed(o):
+    """Every edge shared by exactly two faces: each solid closed as built
+    (common.Mesh welds each of its shells on its own)."""
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    open_edges = sum(1 for e in bm.edges if len(e.link_faces) != 2)
+    bm.free()
+    return open_edges
+
+
+def _smallest_triangle(o):
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    smallest = min(((l[1].vert.co - l[0].vert.co).cross(l[2].vert.co - l[0].vert.co)).length / 2
+                   for l in bm.calc_loop_triangles())
+    bm.free()
+    return smallest
+
+
+def _tris(o):
+    return sum(len(p.vertices) - 2 for p in o.data.polygons)
+
+
+def _world(o):
+    return [o.matrix_world @ v.co for v in o.data.vertices]
+
+
+class StreetKit(unittest.TestCase):
+    """The street kit (cards/street_canal.md) as built."""
+
+    PIECES = ["kerb_straight", "kerb_heaved", "kerb_corner", "kerb_drop", "gutter_grate", "causeway_band",
+              "tram_track", "tram_track_shimmed", "tram_track_curve", "tram_conductor", "hatch", "junction_box"]
+    BUDGET = {"kerb_straight": 150, "kerb_heaved": 150, "kerb_corner": 150, "kerb_drop": 150, "gutter_grate": 150,
+              "causeway_band": 400, "hatch": 200, "junction_box": 200, "tram_track": 400, "tram_track_shimmed": 400,
+              "tram_track_curve": 900, "tram_conductor": 200}
+
+    @classmethod
+    def setUpClass(cls):
+        import street_kit
+        street_kit.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_card_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.PIECES))
+
+    def test_every_object_is_closed(self):
+        open_edges = {n: _closed(o) for n, o in self.objects.items() if _closed(o)}
+        self.assertEqual(open_edges, {})
+
+    def test_no_degenerate_triangles(self):
+        thin = {n: _smallest_triangle(o) for n, o in self.objects.items() if _smallest_triangle(o) < 1e-7}
+        self.assertEqual(thin, {})
+
+    def test_budgets(self):
+        over = {n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}
+        self.assertEqual(over, {})
+
+    def test_exported_budgets(self):
+        """The budgets hold for what went out, densified for its paint."""
+        import json
+        path = common.SOURCE / "street_kit_faces.json"
+
+        if not path.exists():
+            self.skipTest("street_kit not built")
+
+        tris = json.loads(path.read_text())["tris"]
+        over = {n: t for n, t in tris.items() if t > self.BUDGET[n]}
+        self.assertEqual(over, {})
+
+    def test_flush_pieces_top_at_zero(self):
+        """What one walks on lies flush with the setts (a bolt head's few
+        millimetres aside: faces under 0.01 m2 are details)."""
+        for name in ("causeway_band", "tram_track", "tram_track_curve", "hatch", "gutter_grate"):
+            o = self.objects[name]
+            tops = [max((o.matrix_world @ o.data.vertices[v].co).z for v in p.vertices)
+                    for p in o.data.polygons if p.normal.z > 0.99 and p.area > 0.01]
+            self.assertAlmostEqual(max(tops), 0.0, delta=1e-4, msg=name)
+
+    def test_kerb_proud(self):
+        top = max(v.z for v in _world(self.objects["kerb_straight"]))
+        self.assertAlmostEqual(top, 0.2, delta=1e-6)
+        back_top = [v for v in _world(self.objects["kerb_heaved"]) if abs(v.y - 0.3) < 1e-3]
+        self.assertAlmostEqual(max(v.z for v in back_top), 0.2, delta=1e-3)
+        front = [v for v in _world(self.objects["kerb_heaved"]) if abs(v.y) < 2e-3 and v.z > 0.0]
+        self.assertLess(max(v.z for v in front), 0.2 - 0.005)
+
+    def test_curve_matches_its_footprint(self):
+        import street_dims
+        o = self.objects["tram_track_curve"]
+        tops = [o.matrix_world @ v.co for v in o.data.vertices if abs(v.co.z) < 1e-5]
+
+        for x, y in street_dims.footprint("tram_track_curve"):
+            nearest = min(((v.x - x) ** 2 + (v.y - y) ** 2) ** 0.5 for v in tops)
+            self.assertLess(nearest, 1e-4, (x, y))
 
 
 if __name__ == "__main__":

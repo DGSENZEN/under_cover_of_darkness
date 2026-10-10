@@ -4,6 +4,7 @@
 # and held to the geometry gate; then Godot imports what changed.
 #
 #   tools/eclipse/lab.sh kiosk|arcade_bay   that piece (exits non-zero if the gate fails)
+#   tools/eclipse/lab.sh street_kit         a Zócalo kit, into assets/eclipse/kit/
 #   tools/eclipse/lab.sh all                every piece
 #   tools/eclipse/lab.sh joints <piece>     close-ups of the card's joints -> /tmp/eclipse-joints/
 #   tools/eclipse/lab.sh test               the gate's own tests
@@ -14,6 +15,8 @@ GODOT=${GODOT:-/Users/tinkertailorr/Desktop/Godot.app/Contents/MacOS/Godot}
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 PIECES="kiosk arcade_bay"
+# The Zócalo's kits (one atlas each, exported to assets/eclipse/kit/).
+KITS="street_kit"
 
 piece() {
   # The user's vertex-paint strokes read from the piece's last .blend first;
@@ -29,7 +32,7 @@ piece() {
     echo "$log" | grep -E "^harvest" || true
   fi
   "$BLENDER" -b --factory-startup --python "$HERE/$1.py" 2>&1 | grep -E "^$1:|Error|Traceback|line [0-9]+" || true
-  test -f "$ROOT/assets/eclipse/lab/$1.glb"
+  test -f "$ROOT/assets/eclipse/lab/$1.glb" || test -f "$ROOT/assets/eclipse/kit/$1.glb"
 }
 
 import() {
@@ -45,7 +48,7 @@ case "${1:-}" in
   joints)
     mkdir -p /tmp/eclipse-joints
     "$BLENDER" -b --factory-startup --python "$HERE/joints.py" -- "${2:?a piece}" 2>&1 | grep -E "^joints|Error|Traceback" || true ;;
-  all) for p in $PIECES; do piece "$p"; done; import ;;
+  all) for p in $PIECES $KITS; do piece "$p"; done; import ;;
   "") echo "lab.sh <piece>|all|joints <piece>|test" >&2; exit 2 ;;
   *) piece "$1"; import ;;
 esac

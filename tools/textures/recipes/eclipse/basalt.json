@@ -14,5 +14,20 @@
   "tint": 0.75,
   "contrast": 1.0
  },
- "under": "ground_earth"
+ "under": {
+  "base": "#5a5560",
+  "light": "#7a7580",
+  "dark": "#3a3340",
+  "grime": 0.0,
+  "wear": 0.2,
+  "relief": {
+   "bevel": 0.4,
+   "brush": 0.15
+  },
+  "scan": {
+   "name": "volcanic_rock_tiles",
+   "tint": 0.75,
+   "contrast": 0.6
+  }
+ }
 }
