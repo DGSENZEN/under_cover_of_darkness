@@ -167,6 +167,18 @@ func _district_checks(space: PhysicsDirectSpaceState3D) -> void:
 		"level %s, hit %s, texture %s" % [level_ok, top.get("position"), albedo.resource_path if albedo else "none"])
 	raised.queue_free()
 
+	# G16 slabs in courses are tiled straight: hex-tiling's turned, blended
+	#     patches break their joints into scratches
+	var flags := Ground.build(area, [], [], 3, {"tile": &"ground_flags"})
+	var flags_material: ShaderMaterial = (flags.get_node("mesh") as MeshInstance3D).material_override
+	var setts := Ground.build(area, [], [], 3, {"tile": &"ground_setts"})
+	var setts_material: ShaderMaterial = (setts.get_node("mesh") as MeshInstance3D).material_override
+	_check("G16 the flags are tiled straight, the setts hex-tiled", flags_material.get_shader_parameter("hex_tiling") == 0.0
+		and setts_material.get_shader_parameter("hex_tiling") == 1.0, "flags %s, setts %s" % [
+		flags_material.get_shader_parameter("hex_tiling"), setts_material.get_shader_parameter("hex_tiling")])
+	flags.free()
+	setts.free()
+
 	# G11 a curved inlay (a quarter ring) is cut from the mesh exactly
 	var ring := _quarter_ring(Vector2(5, 5), 10.8, 13.2, 16)
 	var cut := Ground.build(area, [], [], 3, {"inlays": [ring]})

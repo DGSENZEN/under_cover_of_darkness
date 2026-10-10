@@ -10573,6 +10573,102 @@
      -15
     ]
    }
+  },
+  {
+   "name": "camera_kerb_drop_south",
+   "kind": "camera",
+   "at": [
+    4.0,
+    1.7,
+    116.0
+   ],
+   "props": {
+    "look_at": [
+     0,
+     0,
+     108
+    ]
+   }
+  },
+  {
+   "name": "camera_tram_curve_se",
+   "kind": "camera",
+   "at": [
+    100.0,
+    1.7,
+    112.0
+   ],
+   "props": {
+    "look_at": [
+     111,
+     0,
+     120
+    ]
+   }
+  },
+  {
+   "name": "camera_landing_w",
+   "kind": "camera",
+   "at": [
+    -38.0,
+    1.7,
+    162.0
+   ],
+   "props": {
+    "look_at": [
+     -54,
+     -1.5,
+     165
+    ]
+   }
+  },
+  {
+   "name": "camera_bridge_stone",
+   "kind": "camera",
+   "at": [
+    -140.0,
+    1.7,
+    161.0
+   ],
+   "props": {
+    "look_at": [
+     -150,
+     0,
+     173
+    ]
+   }
+  },
+  {
+   "name": "camera_bridge_steel",
+   "kind": "camera",
+   "at": [
+    162.0,
+    -0.3,
+    171.0
+   ],
+   "props": {
+    "look_at": [
+     150,
+     -0.5,
+     173
+    ]
+   }
+  },
+  {
+   "name": "camera_hatches",
+   "kind": "camera",
+   "at": [
+    50.0,
+    1.9,
+    95.0
+   ],
+   "props": {
+    "look_at": [
+     55,
+     0.2,
+     98
+    ]
+   }
   }
  ],
  "tram": [

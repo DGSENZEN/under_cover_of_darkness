@@ -36,6 +36,9 @@ const DEPTH := 0.5
 
 ## Metres one tile covers, by tile (eclipse_atlas.GROUND_PERIODS); TILE_M otherwise.
 const TILE_METRES := {&"ground_flags": 2.4}
+## Tiles laid in regular courses (slabs): tiled straight, since hex-tiling's
+## turned, blended patches would break their joints into scratches.
+const STRAIGHT := [&"ground_flags"]
 ## Relaid stone's tint (B) in a patch.
 const RELAID := 0.65
 
@@ -160,7 +163,7 @@ static func build(area: Rect2, openings: Array[Rect2], footprints: Array[Diction
 	var material := Painterly.material(load(root + tile + ".png"), &"shader_led", Painterly.ZOCALO,
 		load(root + tile + "_normal.png"), EARTH, EARTH_NORMAL)
 	material.set_shader_parameter("tiled", 1.0)
-	material.set_shader_parameter("hex_tiling", 1.0)
+	material.set_shader_parameter("hex_tiling", 0.0 if tile in STRAIGHT else 1.0)
 	material.set_shader_parameter("vertex_paint", 1.0)
 	mesh.material_override = material
 	ground.add_child(mesh)
