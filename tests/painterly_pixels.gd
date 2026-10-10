@@ -223,6 +223,14 @@ func _ready() -> void:
 	_check("X19 a lamp's light falls off smoothly (no step over 0.06 in a quarter metre)", steepest < 0.06,
 		"steepest %.3f, profile %s" % [steepest, profile.slice(0, 16)])
 
+	# X20 baked light dims the highlight too (an occluded corner keeps no shine)
+	var shine := {"painted_light": 0.0, "ramp_amount": 0.0, "ambient_amount": 0.0, "rim_amount": 0.0,
+		"macro_amount": 0.0, "specular": 1.0, "roughness": 0.15, "vertex_paint": 1.0}
+	var bright_open := _brightest(await _sphere(shine, true, Color(0, 0, 0.5, 1.0)))
+	var bright_shut := _brightest(await _sphere(shine, true, Color(0, 0, 0.5, 0.0)))
+	_check("X20 baked light dims the highlight as well as the light", bright_shut < bright_open * 0.5,
+		"brightest open %.3f, occluded %.3f" % [bright_open, bright_shut])
+
 	# X16 the macro layer: one quad drawn at two places half a macro scale
 	#     apart differs with it on, and is the same with it off
 	var flat := {"vertex_paint": 0.0, "stroke_strength": 0.0}
@@ -573,6 +581,16 @@ func _painted_quad(atlas: Texture2D, under: Texture2D, colour_at: Callable, sett
 	var image := view.get_texture().get_image()
 	view.queue_free()
 	return image
+
+
+func _brightest(image: Image) -> float:
+	var best := 0.0
+
+	for y in image.get_height():
+		for x in image.get_width():
+			best = maxf(best, image.get_pixel(x, y).get_luminance())
+
+	return best
 
 
 func _is_green(c: Color) -> bool:

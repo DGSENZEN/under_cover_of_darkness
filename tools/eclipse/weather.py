@@ -283,6 +283,7 @@ def measure(objects, ground_holes=(), sets=None, free=()):
         floor_gap = np.full(n_loops, np.inf)
         overhang_gap = np.full(n_loops, np.inf)
         open_sky = np.ones(n_loops)
+        rising = np.zeros(n_loops)
         seen = {}
 
         for poly in mesh.polygons:
@@ -303,7 +304,7 @@ def measure(objects, ground_holes=(), sets=None, free=()):
                 key = (vi, round(n.x, 3), round(n.y, 3), round(n.z, 3)) + ((poly.index,) if thin else ())
 
                 if key in seen:
-                    floor_gap[li], overhang_gap[li], open_sky[li] = seen[key]
+                    floor_gap[li], overhang_gap[li], open_sky[li], rising[li] = seen[key]
                     continue
 
                 start = p + n * LIFT
@@ -332,10 +333,19 @@ def measure(objects, ground_holes=(), sets=None, free=()):
 
                 blocked = sum(1 for h in hemisphere if grounded.ray_cast(sky_from, spin @ h, REACH)[0] is not None)
                 open_sky[li] = 1.0 - blocked / RAYS
-                seen[key] = (floor_gap[li], overhang_gap[li], open_sky[li])
+                # Dirt where a surface rises from this one, of this object or
+                # another (a wall standing on a floor): rays along the face.
+                for k in range(4):
+                    along = frame @ Matrix.Rotation(k * math.pi / 2, 3, "Z") @ Vector((1.0, 0.0, 0.0))
+                    hit, hit_n, _, d = pieces.ray_cast(start, along, weather_rules.CAVITY_REACH)
+
+                    if hit is not None and abs(hit_n.dot(n)) < 0.5:
+                        rising[li] = max(rising[li], 1.0 - d / weather_rules.CAVITY_REACH)
+                seen[key] = (floor_gap[li], overhang_gap[li], open_sky[li], rising[li])
 
         a, b, bend = _edges(o)
         convex, concave = _near_edges(points, a, b, bend)
+        concave = np.maximum(concave, rising)
         out[o.name] = {"points": points, "normals": normals, "floor_gap": floor_gap, "overhang_gap": overhang_gap,
                        "convex": convex, "concave": concave, "open_sky": open_sky}
 

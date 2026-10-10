@@ -14,13 +14,13 @@ const POOL: Texture2D = preload("res://textures/painted/eclipse/lamp_pool.png")
 ## The world macro layer's blotches (tools/textures/painterly.py).
 const MACRO: Texture2D = preload("res://textures/painted/eclipse/macro.png")
 
-## How much the shader does over the painted atlas. The atlas carries the
-## paint now (docs/superpowers/refs/mexico_city/painterly_texturing.md), so
-## the shader's share is light.
 ## How Godot hands the kit's vertex paint to shaders: as linear values, as
 ## Blender baked them (tests/vertex_colour_import.gd pins it).
 const VERTEX_COLOUR_SRGB := false
 
+## How much the shader does over the painted atlas. The atlas carries the
+## paint now (docs/superpowers/refs/mexico_city/painterly_texturing.md), so
+## the shader's share is light.
 const PRESETS := {
 	&"painted_led": {"paint_mix": 0.1, "stroke_strength": 0.12},
 	&"even": {"paint_mix": 0.25, "stroke_strength": 0.24},

@@ -186,6 +186,18 @@ class Measure(unittest.TestCase):
         joint = _corner(measured, (0.0, 0.0, 2.05), (0.0, 0.0, 1.0))
         self.assertGreater(measured["open_sky"][joint], 0.6)
 
+    def test_concave_where_two_objects_meet(self):
+        # A wall standing on a separate floor: dirt gathers where they meet,
+        # though no edge of either object runs there.
+        floor = _box("floor", (0.0, 0.0, -0.2), (4.0, 4.0, 0.0))
+        wall = _box("wall_on_floor", (1.8, 0.0, 0.0), (2.2, 4.0, 3.0))
+        weather.densify([floor, wall], lines=[("x", 1.8)])
+        measured = weather.measure([floor, wall])["floor"]
+        foot = _corner(measured, (1.8, 2.0, 0.0), (0.0, 0.0, 1.0))
+        clear = _corner(measured, (0.5, 2.0, 0.0), (0.0, 0.0, 1.0))
+        self.assertGreater(measured["concave"][foot], 0.5)
+        self.assertLess(measured["concave"][clear], 0.1)
+
     def test_convex_edges_found(self):
         slab = _box("slab", (0.0, 0.0, 0.0), (2.0, 2.0, 0.5))
         weather.densify([slab])

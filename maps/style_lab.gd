@@ -216,12 +216,18 @@ func _painted(names: Array, normal: bool) -> Texture2D:
 	return null
 
 
-func _painterly(piece: StringName, preset: StringName) -> ShaderMaterial:
-	var key := "%s/%s" % [piece, preset]
+## A piece's material in a preset: one for its meshes that carry vertex
+## paint (turned on), another for any that do not (a mesh without colours
+## reads white: full grime and wear), so they never share one.
+func _painterly(piece: StringName, preset: StringName, painted := false) -> ShaderMaterial:
+	var key := "%s/%s%s" % [piece, "" if painted else "plain/", preset]
 
 	if not _materials.has(key):
 		_materials[key] = Painterly.material(atlas_for(piece), preset, Painterly.ZOCALO, normal_for(piece),
 			under_for(piece), under_normal_for(piece))
+
+		if painted:
+			_materials[key].set_shader_parameter("vertex_paint", 1.0)
 
 	return _materials[key]
 
@@ -322,13 +328,7 @@ func _place(scene: PackedScene, parent: Node3D, node_name: String, at: Vector3, 
 				# inside their globes, under the canopy's panes).
 				mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			else:
-				var painterly := _painterly(piece, preset)
-
-				# Vertex paint only on what carries it (a mesh without reads white).
-				if Painterly.has_vertex_colours(mesh.mesh):
-					painterly.set_shader_parameter("vertex_paint", 1.0)
-
-				mesh.set_surface_override_material(i, painterly)
+				mesh.set_surface_override_material(i, _painterly(piece, preset, Painterly.has_vertex_colours(mesh.mesh)))
 
 		var body := StaticBody3D.new()
 		var shape := CollisionShape3D.new()

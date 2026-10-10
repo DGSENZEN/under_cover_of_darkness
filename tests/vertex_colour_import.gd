@@ -7,6 +7,7 @@ extends Node3D
 ## colour there, read either as linear or as sRGB (which one tells the
 ## painterly shader whether to convert: Painterly.VERTEX_COLOUR_SRGB).
 
+const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const PROBE := "res://assets/eclipse/source/kiosk_probe.json"
 const PIECE := "res://assets/eclipse/lab/kiosk.glb"
 const TOLERANCE := 2.0 / 255.0
@@ -53,7 +54,9 @@ func _ready() -> void:
 
 	var linear := _near(got, want)
 	var srgb := _near(got.srgb_to_linear(), want)
-	_check("V2 the probe corner keeps its colour", best < 1e-3 and (linear or srgb),
+	# ...in the colour space the painterly shader is told it comes in.
+	_check("V2 the probe corner keeps its colour, in the space Painterly expects",
+		best < 1e-3 and (linear or srgb) and (srgb and not linear) == Painterly.VERTEX_COLOUR_SRGB,
 		"got %s want %s at %.4f m; as linear %s, as sRGB %s" % [got, want, best, linear, srgb])
 	print("VERTEX_COLOUR_SRGB ", srgb and not linear)
 	scene.free()

@@ -141,6 +141,8 @@ case "$verb" in
     python3 "$HERE/test_plan_draw.py"
     python3 "$HERE/test_zocalo_plan.py"
     python3 "$HERE/test_greybox.py"
+    "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/../eclipse/test_weather_bpy.py" 2>&1 | grep -E "^Ran|^OK|FAILED|^(FAIL|ERROR):"
+    "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/../eclipse/test_kit_bpy.py" 2>&1 | grep -E "^Ran|^OK|FAILED|^(FAIL|ERROR):"
     python3 "$HERE/../textures/test_kuwahara.py"
     python3 "$HERE/../textures/test_scan_prep.py"
     "$HERE/test_guard.sh"

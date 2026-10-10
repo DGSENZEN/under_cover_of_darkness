@@ -123,7 +123,8 @@ vec4 hex_sample(sampler2D tex, vec2 uv, bool turn) {
 }
 
 // A tangent-space normal map hex-tiled: each sample's normal turned back by
-// its hexagon's turn before the blend (weights from the colour tile's).
+// its hexagon's turn before the blend (plain hexagon weights, w^7: no
+// colour to weigh them by here).
 vec3 hex_normal(sampler2D tex, vec2 uv) {
 	vec3 w;
 	vec2 v1, v2, v3;
@@ -225,7 +226,7 @@ void fragment() {
 	if (vertex_paint > 0.0) {
 		edge = smoothstep(0.5 - blend_edge, 0.5 + blend_edge, COLOR.g + (s - 0.5) * blend_break) * vertex_paint;
 		// The broken lip: a darker band where the top gives way.
-		float lip = 1.0 - 0.25 * smoothstep(0.0, 0.3, edge) * smoothstep(1.0, 0.7, edge);
+		float lip = 1.0 - 0.25 * smoothstep(0.0, 0.3, edge) * (1.0 - smoothstep(0.7, 1.0, edge));
 		base = mix(base, painted(under_atlas, UV), edge) * lip;
 		vec3 lab = oklab(base);
 		float t = (COLOR.b - 0.5) * 2.0 * tint_amount * vertex_paint * clamp(0.7 + (s - 0.5) * 2.0, 0.0, 1.3);
@@ -276,7 +277,12 @@ void fragment() {
 	EMISSION += rim_colour * pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), rim_width) * rim_amount;
 #endif
 #ifndef PAINTERLY_UNSHADED
-	NORMAL_MAP = mix(painted_normal(normal_atlas, UV), painted_normal(under_normal, UV), edge);
+	NORMAL_MAP = painted_normal(normal_atlas, UV);
+
+	// The under layer's relief only where the top has worn through to it.
+	if (edge > 0.0) {
+		NORMAL_MAP = mix(NORMAL_MAP, painted_normal(under_normal, UV), edge);
+	}
 	NORMAL_MAP_DEPTH = normal_depth;
 #endif
 	ROUGHNESS = roughness;
@@ -329,6 +335,7 @@ void light() {
 	// A soft highlight, as the standard light would give.
 	vec3 halfway = normalize(VIEW + LIGHT);
 	float shine = pow(clamp(dot(NORMAL, halfway), 0.0, 1.0), mix(64.0, 4.0, ROUGHNESS));
-	SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * shine * specular * 0.25 * lambert;
+	// Baked light takes the shine with the light: an occluded corner keeps none.
+	SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * shine * specular * 0.25 * lambert * baked_light;
 }
 #endif
