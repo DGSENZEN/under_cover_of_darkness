@@ -15,7 +15,7 @@ const PRESETS := {
 	&"painted_led": {"paint_mix": 0.1, "stroke_strength": 0.04, "stroke_relief": 0.25},
 	&"even": {"paint_mix": 0.25, "stroke_strength": 0.08, "stroke_relief": 0.4},
 	# The user's choice (Oct 9 2026).
-	&"shader_led": {"paint_mix": 0.45, "stroke_strength": 0.12, "stroke_relief": 0.6},
+	&"shader_led": {"paint_mix": 0.45, "stroke_strength": 0.12, "stroke_relief": 0.6, "painted_light": 0.0},
 }
 
 

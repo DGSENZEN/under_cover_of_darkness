@@ -199,6 +199,17 @@ class Painting(unittest.TestCase):
         stroked = self.paint().astype(np.float64)
         self.assertGreater(np.abs(stroked - plain)[:, 4:PX // 2 - 4].mean(), 2.0)
 
+    def test_a_style_overrides_the_painting(self):
+        """A calmer style (fewer bands) leaves fewer colours in a slot."""
+        def colours(style):
+            path = eclipse_atlas.paint_atlas("piece", self.base.src, self.base.out, recipes=self.recipes,
+                                             scans_dir=self.scans, prep=FAST_PREP, style=style)
+            pixels = np.asarray(Image.open(path).convert("RGB"))[4:-4, 4:PX // 2 - 4]
+            return len({tuple(c) for c in pixels.reshape(-1, 3)})
+
+        self.assertLess(colours({"BANDS": 2, "STROKES": 0}), colours({"BANDS": 6, "STROKES": 0}))
+        self.assertEqual(eclipse_atlas.BANDS, 5)          # the default left as it was
+
     def test_wear_lightens_convex_edges(self):
         with np.load(self.base.src / "piece_texels.npz") as d:
             data = {k: d[k] for k in d.files}

@@ -56,6 +56,13 @@ func _ready() -> void:
 		and mapped.get_pixel(32, 32) != Color(0, 0, 0, 1) and Painterly.SHADER.get_mode() == Shader.MODE_SPATIAL,
 		"centre %s / %s" % [plain.get_pixel(32, 32), mapped.get_pixel(32, 32)])
 
+	# X4 painted light: a white sphere under one light falls into a few
+	#    bands with it on, a smooth ramp of shades with it off
+	var smooth_levels := await _sphere_levels(0.0)
+	var banded_levels := await _sphere_levels(1.0)
+	_check("X4 painted light bands the shading (3 bands: a handful of shades, against a smooth ramp)",
+		banded_levels <= 6 and smooth_levels >= 20, "painted %d shades, plain %d" % [banded_levels, smooth_levels])
+
 	print("\n==== RESULTS ====")
 	for r in results:
 		print(r)
@@ -104,6 +111,60 @@ func _draw(atlas: Texture2D, paint_mix: float, stroke_strength: float) -> Image:
 	var image := view.get_texture().get_image()
 	view.queue_free()
 	return image
+
+
+## The distinct greys on a lit white sphere, drawn with the lit painterly
+## shader (paint_mix 0, no strokes) at this much painted light.
+func _sphere_levels(painted: float) -> int:
+	var view := SubViewport.new()
+	view.size = Vector2i(96, 96)
+	view.own_world_3d = true
+	view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(view)
+	var world := WorldEnvironment.new()
+	world.environment = Environment.new()
+	world.environment.background_mode = Environment.BG_COLOR
+	world.environment.background_color = Color.BLACK
+	world.environment.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	world.environment.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	view.add_child(world)
+	var camera := Camera3D.new()
+	camera.position = Vector3(0, 0, 3)
+	view.add_child(camera)
+	var sun := DirectionalLight3D.new()
+	sun.rotation = Vector3(-0.4, 0.6, 0)
+	view.add_child(sun)
+	var white := Image.create(4, 4, false, Image.FORMAT_RGB8)
+	white.fill(Color.WHITE)
+	var material: ShaderMaterial = Painterly.material(ImageTexture.create_from_image(white), &"shader_led")
+	material.set_shader_parameter("paint_mix", 0.0)
+	material.set_shader_parameter("stroke_strength", 0.0)
+	material.set_shader_parameter("stroke_relief", 0.0)
+	material.set_shader_parameter("terminator_break", 0.0)
+	material.set_shader_parameter("band_softness", 0.0)
+	material.set_shader_parameter("light_bands", 3.0)
+	material.set_shader_parameter("painted_light", painted)
+	material.set_shader_parameter("specular", 0.0)   # the highlight is meant to stay smooth
+	var ball := MeshInstance3D.new()
+	ball.mesh = SphereMesh.new()
+	ball.material_override = material
+	view.add_child(ball)
+
+	for i in 5:
+		await RenderingServer.frame_post_draw
+
+	var image := view.get_texture().get_image()
+	view.queue_free()
+	var seen := {}
+
+	for y in image.get_height():
+		for x in image.get_width():
+			var c := image.get_pixel(x, y)
+
+			if c.r > 0.02:
+				seen[snappedf(c.r, 1.0 / 255.0)] = true
+
+	return seen.size()
 
 
 func _near(a: Color, b: Color) -> bool:

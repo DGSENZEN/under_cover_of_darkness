@@ -437,10 +437,33 @@ def _despeckle(lab, cells, rounds=2):
     return lab
 
 
-def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None, scans_dir=SCANS, prep=None):
+# Named ways of painting, for comparing in the lab: each overrides some of the
+# module's settings for one painting.
+STYLES = {
+    # Calmer surfaces: fewer value bands, less of the scan's grain, fewer
+    # and bigger strokes, a broader fuse.
+    "calm": {"BANDS": 4, "DETAIL": 0.12, "STROKES": 3, "STROKE_LENGTH": (32, 64), "STROKE_WIDTH": (11, 17),
+             "FUSE_RADIUS": 3},
+}
+
+
+def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None, scans_dir=SCANS, prep=None, style=None):
     """The piece's atlas painted to out_dir/<piece>_base.png and its normal
     map to <piece>_normal_base.png; the atlas's path. `prep` overrides the
-    scans' preparation (scan_prep.prepare's settings)."""
+    scans' preparation (scan_prep.prepare's settings); `style` (a dict, or
+    the name of one of STYLES) overrides this module's settings for this
+    painting only."""
+    style = STYLES[style] if isinstance(style, str) else (style or {})
+    kept = {k: globals()[k] for k in style}
+    globals().update(style)
+
+    try:
+        return _paint(piece, source_dir, out_dir, recipes, scans_dir, prep)
+    finally:
+        globals().update(kept)
+
+
+def _paint(piece, source_dir, out_dir, recipes, scans_dir, prep):
     source_dir, out_dir = Path(source_dir), Path(out_dir)
     meta = json.loads((source_dir / (piece + "_regions.json")).read_text())
     slots, px = meta["slots"], meta["atlas_px"]
@@ -520,7 +543,7 @@ def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None, scans_dir=S
                  + 0.45 * worn)
 
         # Big shapes first: a few value bands, each a colour off the ramp.
-        bands = recipe.get("bands", BANDS)
+        bands = min(recipe.get("bands", BANDS), BANDS)
         banded = (np.floor(np.clip(value, 0.0, 0.999) * bands) + 0.5) / bands
         lab = _ramp(banded, base_lab, dark_lab, light_lab)
         lab[..., 0] += detail
@@ -577,8 +600,12 @@ def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None, scans_dir=S
 
 
 def main(argv):
-    for piece in argv or ["kiosk", "arcade_bay"]:
-        print("eclipse_atlas:", paint_atlas(piece))
+    """Pieces to paint; --style=<name> one of STYLES, --out=<dir> elsewhere."""
+    style = next((a.split("=", 1)[1] for a in argv if a.startswith("--style=")), None)
+    out = next((Path(a.split("=", 1)[1]) for a in argv if a.startswith("--out=")), OUT)
+
+    for piece in [a for a in argv if not a.startswith("--")] or ["kiosk", "arcade_bay"]:
+        print("eclipse_atlas:", paint_atlas(piece, out_dir=out, style=style))
 
 
 if __name__ == "__main__":

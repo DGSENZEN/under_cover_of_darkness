@@ -37,8 +37,21 @@ vec3 oklab(vec3 c) {
 		0.0259040371 * lms.x + 0.7827717662 * lms.y - 0.8086757660 * lms.z);
 }
 
+// Painted light (the user's direction, Oct 9 2026): the diffuse in a few soft
+// bands, the light/shadow edge broken by the strokes, the lit side a little
+// warm and the side turned away a cool fill, not grey. 0 is the standard light.
+uniform float painted_light : hint_range(0.0, 1.0) = 0.0;
+uniform float light_bands : hint_range(1.0, 8.0) = 3.0;
+uniform float band_softness : hint_range(0.0, 0.5) = 0.08;
+uniform float terminator_break : hint_range(0.0, 1.0) = 0.35;
+uniform vec3 lit_warm = vec3(1.04, 1.0, 0.92);
+uniform vec3 shadow_cool = vec3(0.75, 0.85, 1.15);
+uniform float shadow_fill : hint_range(0.0, 0.5) = 0.12;
+
 varying vec3 world_pos;
 varying vec3 world_normal;
+// The strokes' value here, handed to the light pass.
+varying float stroke_value;
 
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -55,6 +68,7 @@ void fragment() {
 		+ texture(brush, world_pos.xz / stroke_scale).r * w.y
 		+ texture(brush, world_pos.xy / stroke_scale).r * w.z;
 	vec3 pushed = base + (s - 0.5) * stroke_strength;
+	stroke_value = s;
 
 	// The nearest of the palette's colours, as the eye judges it (Oklab).
 	vec3 want = oklab(pushed);
@@ -92,3 +106,23 @@ void fragment() {
 	ROUGHNESS = roughness;
 	SPECULAR = specular;
 }
+
+#ifndef PAINTERLY_UNSHADED
+void light() {
+	float ndl = dot(NORMAL, LIGHT);
+	float lambert = clamp(ndl, 0.0, 1.0);
+	// The edge where light turns to shadow, pushed about by the strokes.
+	float shade = clamp(ndl + (stroke_value - 0.5) * terminator_break, 0.0, 1.0);
+	float x = shade * light_bands;
+	float stepped = (floor(x) + smoothstep(0.5 - band_softness, 0.5 + band_softness, fract(x))) / light_bands;
+	float diffuse = mix(lambert, stepped, painted_light);
+	vec3 tint = mix(vec3(1.0), mix(shadow_cool, lit_warm, diffuse), painted_light);
+	DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * diffuse * tint / PI;
+	// The side turned away takes a cool fill, so form shadow is a colour.
+	DIFFUSE_LIGHT += LIGHT_COLOR * ATTENUATION * (1.0 - diffuse) * shadow_fill * painted_light * shadow_cool / PI;
+	// A soft highlight, as the standard light would give.
+	vec3 halfway = normalize(VIEW + LIGHT);
+	float shine = pow(clamp(dot(NORMAL, halfway), 0.0, 1.0), mix(64.0, 4.0, ROUGHNESS));
+	SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * shine * specular * 0.25 * lambert;
+}
+#endif

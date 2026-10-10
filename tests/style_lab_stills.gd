@@ -16,12 +16,15 @@ var out := "/tmp/style-lab/"
 
 func _ready() -> void:
 	var only := ""
+	var variants := []
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
 			out = arg.trim_prefix("--out=").trim_suffix("/") + "/"
 		elif arg.begins_with("--only="):
 			only = arg.trim_prefix("--only=")
+		elif arg.begins_with("--variant="):
+			variants.append(arg.trim_prefix("--variant="))
 
 	DirAccess.make_dir_recursive_absolute(out)
 	AudioServer.set_bus_mute(0, true)
@@ -34,6 +37,11 @@ func _ready() -> void:
 	eye.fov = 66.0
 	add_child(eye)
 	eye.make_current()
+
+	if not variants.is_empty():
+		await _compare(lab, eye, variants)
+		get_tree().quit()
+		return
 
 	for k in lab.STATIONS.size():
 		var preset: StringName = lab.STATIONS[k]
@@ -86,6 +94,65 @@ func _views(x: float, kiosk_z: float, bays_z: float) -> Array:
 		["stair_down", Vector3(x, 1.7, kiosk_z + 1.0), Vector3(x, -2.0, kiosk_z - 5.0)],
 		["stair_up", Vector3(x, -1.4, kiosk_z - 7.2), Vector3(x, 0.6, kiosk_z)],
 	]
+
+
+## Tuning rounds: the shader-led station drawn as each variant, by night and
+## day, in the views that judge a look. A variant is "name|key=value;..."
+## (shader parameters, or atlas_dir=<folder> for other painted atlases).
+##   -- --out=/tmp/round1 --variant="A|" --variant="B|painted_light=1"
+func _compare(lab: Node3D, eye: Camera3D, variants: Array) -> void:
+	var views := _views(lab.STATION_X[2], lab.KIOSK_Z, lab.BAYS_Z)
+	var keep := ["front", "arcade", "kiosk_close", "grazing", "stair_down"]
+	var materials := {}
+
+	for key in lab._materials:
+		if String(key).ends_with("/shader_led"):
+			materials[key] = lab._materials[key]
+
+	var originals := {}
+
+	for key in materials:
+		var m: ShaderMaterial = materials[key]
+		originals[key] = {}
+
+		for uniform in m.shader.get_shader_uniform_list():
+			originals[key][uniform["name"]] = m.get_shader_parameter(uniform["name"])
+
+	for spec in variants:
+		var name: String = spec.split("|")[0]
+		var settings: String = spec.split("|")[1] if spec.contains("|") else ""
+
+		for key in materials:
+			var m: ShaderMaterial = materials[key]
+
+			for uniform in originals[key]:
+				m.set_shader_parameter(uniform, originals[key][uniform])
+
+			for pair in settings.split(";", false):
+				var kv: PackedStringArray = pair.split("=")
+
+				if kv[0] == "atlas_dir":
+					var before: String = lab.atlas_dir
+					lab.atlas_dir = kv[1].trim_suffix("/") + "/"
+					var piece := StringName(String(key).split("/")[0])
+					m.set_shader_parameter("atlas", lab.atlas_for(piece))
+					m.set_shader_parameter("normal_atlas", lab.normal_for(piece))
+					lab.atlas_dir = before
+				else:
+					m.set_shader_parameter(kv[0], float(kv[1]))
+
+		for day in [false, true]:
+			lab.set_day(day)
+
+			for view in views:
+				if not view[0] in keep:
+					continue
+
+				eye.global_transform = Transform3D(Basis(), view[1]).looking_at(view[2], Vector3.UP)
+				await _frames(10)
+				var file := "%s%s_%s_%s.png" % [out, name, "day" if day else "night", view[0]]
+				get_viewport().get_texture().get_image().save_png(file)
+				print("still: ", file)
 
 
 ## Mean milliseconds a frame over FRAMES frames.
