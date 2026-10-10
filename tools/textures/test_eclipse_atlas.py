@@ -357,6 +357,22 @@ class ZocaloTiles(unittest.TestCase):
         self.assertAlmostEqual(slabs, round(slabs))
 
 
+class StreetLifeRecipes(unittest.TestCase):
+    def test_street_life_recipes(self):
+        """The street life kits' slots each have a recipe; any scan they
+        name is one fetch_scans knows."""
+        import fetch_scans
+
+        names = ["wood", "canvas", "talavera", "obsidian", "marigold", "wax", "flesh", "glass"]
+        recipes = eclipse_atlas.load_recipes(names)
+        self.assertEqual(sorted(recipes), sorted(names))
+
+        for name, recipe in recipes.items():
+            for r in (recipe, recipe.get("under") if isinstance(recipe.get("under"), dict) else {}):
+                if "scan" in r:
+                    self.assertIn(r["scan"]["name"], fetch_scans.SCANS, name)
+
+
 class Tile(unittest.TestCase):
     """A seamless ground tile painted from a recipe (paint_tile): a scan of
     soft blobs laid flat, painted as an atlas is, its wrap closed."""

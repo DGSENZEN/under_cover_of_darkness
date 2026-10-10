@@ -1,0 +1,29 @@
+{
+ "base": "#4a2a1c",
+ "light": "#7a5a24",
+ "dark": "#2a1610",
+ "grime": 0.4,
+ "wear": 0.5,
+ "mottle": 0,
+ "relief": {
+  "bevel": 0.5,
+  "brush": 0.25
+ },
+ "scan": {
+  "name": "stained_pine",
+  "tint": 0.85,
+  "contrast": 1.1
+ },
+ "under": {
+  "base": "#6a6458",
+  "light": "#8a8478",
+  "dark": "#3a3630",
+  "grime": 0.2,
+  "wear": 0.2,
+  "scan": {
+   "name": "stained_pine",
+   "tint": 0.6,
+   "contrast": 0.8
+  }
+ }
+}

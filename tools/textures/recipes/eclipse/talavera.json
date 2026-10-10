@@ -1,0 +1,26 @@
+{
+ "base": "#e8e2d0",
+ "light": "#f4efe2",
+ "dark": "#1e3a7a",
+ "grime": 0.3,
+ "wear": 0.4,
+ "mottle": 0,
+ "relief": {
+  "bevel": 0.3,
+  "brush": 0.15,
+  "blocks": {
+   "course": 0.12,
+   "length": 0.12,
+   "joint": 0.01,
+   "colour": "#1e3a7a",
+   "stagger": false
+  }
+ },
+ "under": {
+  "base": "#b8a890",
+  "light": "#cfc2a8",
+  "dark": "#7a6a58",
+  "grime": 0.2,
+  "wear": 0.1
+ }
+}
