@@ -142,6 +142,7 @@ case "$verb" in
     python3 "$HERE/test_plan_check.py"
     python3 "$HERE/test_plan_draw.py"
     python3 "$HERE/test_zocalo_plan.py"
+    python3 "$HERE/test_greybox.py"
     python3 "$HERE/../textures/test_kuwahara.py"
     python3 "$HERE/../textures/test_scan_prep.py"
     "$HERE/test_guard.sh"
