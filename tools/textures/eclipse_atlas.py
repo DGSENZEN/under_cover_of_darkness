@@ -88,6 +88,25 @@ def load_recipes(slots):
     return {s: json.loads((RECIPES / (s + ".json")).read_text()) for s in slots if (RECIPES / (s + ".json")).exists()}
 
 
+def under_recipe(recipes, slot):
+    """What a slot wears through to (the vertex-paint spec, section 4): its
+    recipe's `under`, either another recipe's name (looked up in `recipes`,
+    then on disk) or a block laid over the slot's own recipe; None if it
+    names none."""
+    recipe = recipes.get(slot, {})
+    under = recipe.get("under")
+
+    if under is None:
+        return None
+
+    if isinstance(under, str):
+        return recipes[under] if under in recipes else load_recipes([under])[under]
+
+    out = {k: v for k, v in recipe.items() if k != "under"}
+    out.update(under)
+    return out
+
+
 def _grey(path, px):
     image = Image.open(path).convert("L")
 
@@ -449,12 +468,37 @@ def paint_atlas(piece, source_dir=SOURCE, out_dir=OUT, recipes=None, scans_dir=S
     globals().update(style)
 
     try:
-        return _paint(piece, source_dir, out_dir, recipes, scans_dir, prep)
+        recipes = recipes or load_recipes(json.loads((Path(source_dir) / (piece + "_regions.json")).read_text())["slots"])
+        top = _paint(piece, source_dir, out_dir, recipes, scans_dir, prep, "_base", "_normal_base")
+        _under(piece, source_dir, out_dir, recipes, scans_dir, prep)
+        return top
     finally:
         globals().update(kept)
 
 
-def _paint(piece, source_dir, out_dir, recipes, scans_dir, prep):
+def _under(piece, source_dir, out_dir, recipes, scans_dir, prep):
+    """The under atlas and its normal map: each slot painted as what it
+    wears through to, and every slot with nothing under it copied texel for
+    texel from the top."""
+    source_dir, out_dir = Path(source_dir), Path(out_dir)
+    slots = json.loads((source_dir / (piece + "_regions.json")).read_text())["slots"]
+    unders = {slot: under_recipe(recipes, slot) for slot in slots}
+    _paint(piece, source_dir, out_dir, {s: unders[s] or recipes[s] for s in slots if s in recipes},
+           scans_dir, prep, "_under", "_under_normal")
+
+    with np.load(source_dir / (piece + "_texels.npz")) as data:
+        index = data["slot"].astype(np.int32)
+
+    plain = np.isin(index, [i for i, s in enumerate(slots) if unders[s] is None]) | (index < 0)
+
+    for top, under in (("_base", "_under"), ("_normal_base", "_under_normal")):
+        a = np.asarray(Image.open(out_dir / (piece + top + ".png")).convert("RGB"))
+        b = np.asarray(Image.open(out_dir / (piece + under + ".png")).convert("RGB")).copy()
+        b[plain] = a[plain]
+        Image.fromarray(b, "RGB").save(out_dir / (piece + under + ".png"))
+
+
+def _paint(piece, source_dir, out_dir, recipes, scans_dir, prep, colour_name, normal_name):
     source_dir, out_dir = Path(source_dir), Path(out_dir)
     meta = json.loads((source_dir / (piece + "_regions.json")).read_text())
     slots, px = meta["slots"], meta["atlas_px"]
@@ -583,9 +627,9 @@ def _paint(piece, source_dir, out_dir, recipes, scans_dir, prep):
 
     out = np.where(filled[..., None], from_oklab(lab), np.array(EMPTY) / 255.0)
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / (piece + "_base.png")
+    path = out_dir / (piece + colour_name + ".png")
     Image.fromarray(np.clip(np.round(out * 255), 0, 255).astype(np.uint8), "RGB").save(path)
-    Image.fromarray(_normals(relief, px, scan_normals), "RGB").save(out_dir / (piece + "_normal_base.png"))
+    Image.fromarray(_normals(relief, px, scan_normals), "RGB").save(out_dir / (piece + normal_name + ".png"))
     return path
 
 

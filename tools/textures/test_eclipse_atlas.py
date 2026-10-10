@@ -137,6 +137,53 @@ class Atlas(unittest.TestCase):
         self.assertLess(np.abs(normals[4:-4, PX // 2 + 4:-4] - np.array([128, 128, 255])).max(), 3)
 
 
+class Under(unittest.TestCase):
+    """The under atlas: what each slot wears through to (the vertex-paint
+    plan, Task 5). Tezontle here wears through to chiluca; chiluca has
+    nothing under it. Atlas's synthetic wall, not its tests."""
+
+    setUp, tearDown, texels, ao = Atlas.setUp, Atlas.tearDown, Atlas.texels, Atlas.ao
+
+    UNDER = {**RECIPES, "tezontle": {**RECIPES["tezontle"], "under": "chiluca"}}
+
+    def images(self):
+        eclipse_atlas.paint_atlas("piece", self.src, self.out, recipes=self.UNDER)
+        load = lambda name: np.asarray(Image.open(self.out / name).convert("RGB"), dtype=np.float64)
+        return (load("piece_base.png"), load("piece_under.png"), load("piece_normal_base.png"),
+                load("piece_under_normal.png"))
+
+    def test_under_atlases_written(self):
+        self.images()
+        self.assertTrue((self.out / "piece_under.png").exists())
+        self.assertTrue((self.out / "piece_under_normal.png").exists())
+
+    def test_slot_without_under_copies_top(self):
+        top, under, top_n, under_n = self.images()
+        right = slice(PX // 2 + 2, None)        # chiluca, clear of the seam
+        np.testing.assert_array_equal(under[:, right], top[:, right])
+        np.testing.assert_array_equal(under_n[:, right], top_n[:, right])
+
+    def test_slot_with_under_differs(self):
+        top, under, _, _ = self.images()
+        left = slice(0, PX // 2 - 2)            # tezontle
+        gap = np.linalg.norm(eclipse_atlas.to_oklab(top[:, left] / 255) - eclipse_atlas.to_oklab(under[:, left] / 255),
+                             axis=-1)
+        self.assertGreater(gap.mean(), 0.05)
+
+    def test_under_recipe_by_name_and_inline(self):
+        recipes = {"lime": {"base": "#eeeeee", "light": "#ffffff", "dark": "#cccccc", "under": "chiluca"},
+                   "iron": {"base": "#204030", "light": "#305040", "dark": "#102010", "grime": 0.2,
+                            "under": {"base": "#777777"}},
+                   "brass": {"base": "#c49a40", "light": "#e8d8a8", "dark": "#7a5a24"},
+                   "chiluca": RECIPES["chiluca"]}
+        self.assertEqual(eclipse_atlas.under_recipe(recipes, "lime"), RECIPES["chiluca"])
+        iron = eclipse_atlas.under_recipe(recipes, "iron")
+        self.assertEqual(iron["base"], "#777777")
+        self.assertEqual(iron["grime"], 0.2)
+        self.assertNotIn("under", iron)
+        self.assertIsNone(eclipse_atlas.under_recipe(recipes, "brass"))
+
+
 class Painting(unittest.TestCase):
     """The painter's own manners, on the synthetic wall: a scan that ramps
     from dark to light up each metre, so every value is there to be banded."""

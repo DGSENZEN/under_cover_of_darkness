@@ -13,5 +13,16 @@
   "name": "terrazzo_tiles",
   "tint": 0.85,
   "contrast": 1.0
+ },
+ "under": {
+  "base": "#a7a3a8",
+  "light": "#d0ccc6",
+  "dark": "#7a7680",
+  "grime": 0.0,
+  "scan": {
+   "name": "terrazzo_tiles",
+   "tint": 0.85,
+   "contrast": 0.7
+  }
  }
 }

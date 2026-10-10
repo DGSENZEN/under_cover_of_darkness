@@ -14,5 +14,6 @@
   "tint": 0.85,
   "contrast": 0.45
  },
- "bands": 4
+ "bands": 4,
+ "under": "tezontle"
 }

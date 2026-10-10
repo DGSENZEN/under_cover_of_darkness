@@ -13,5 +13,17 @@
   "name": "green_metal_rust",
   "tint": 0.6,
   "contrast": 1.0
+ },
+ "under": {
+  "base": "#5a5660",
+  "light": "#8a8790",
+  "dark": "#2f2c34",
+  "grime": 0.1,
+  "wear": 0.3,
+  "scan": {
+   "name": "metal_plate_02",
+   "tint": 0.9,
+   "contrast": 0.8
+  }
  }
 }
