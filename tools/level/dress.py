@@ -443,6 +443,9 @@ class Dresser:
             yaw = yaw_of(u)
             centre = world({"at": [a[0], y, a[1]], "yaw": yaw}, (length / 2, low[0] / 2, -D.WALL_THICK / 2))
             self.boxes.append({"box": [*centre, length, -low[0], D.WALL_THICK], "yaw": yaw})
+            # Its coping, proud of its face.
+            lip = world({"at": [a[0], y, a[1]], "yaw": yaw}, (length / 2, -D.COPING_DEPTH / 2, D.COPING_PROUD / 2))
+            self.boxes.append({"box": [*lip, length, D.COPING_DEPTH, D.COPING_PROUD], "yaw": yaw})
 
         # From the quay down to the landing beside its west wall (its back
         # wall stands against the town hall), reached over that wall's coping;
@@ -479,7 +482,11 @@ class Dresser:
         flags = [g for g in self.data["ground"] if g["kind"] in ("atrium", "courtyard")]
         sunken = [g for g in self.data["ground"] if g["kind"] in plan.SUNKEN_KINDS and g["kind"] not in ("canal", "landing")]
         openings = [[px0, pz0, px1, pz1], [cx0, cz0 - back, cx1, cz1 + back]]
-        openings += [[x0 - back, z0 - back, x1 + back, z1] for x0, z0, x1, z1 in (_bounds(g["polygon"]) for g in self.landings)]
+        # A landing: its floor and back wall's coping; its side walls' copings
+        # only as far as they run (the corners by its mouth keep the setts).
+        for x0, z0, x1, z1 in (_bounds(g["polygon"]) for g in self.landings):
+            openings += [[x0, z0 - back, x1, z1], [x0 - back, z0 - back, x0, z1 - D.CORNER],
+                         [x1, z0 - back, x1 + back, z1 - D.CORNER]]
         openings += [list(_bounds(g["polygon"])) for g in flags + sunken]
         openings += self.openings[0.0]
         footprints = [{"rect": list(_bounds(p["polygon"])), "roofed": False} for p in self.data["plots"] if p["base"] >= 0]

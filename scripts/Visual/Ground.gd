@@ -39,6 +39,9 @@ const TILE_METRES := {&"ground_flags": 2.4}
 ## Tiles laid in regular courses (slabs): tiled straight, since hex-tiling's
 ## turned, blended patches would break their joints into scratches.
 const STRAIGHT := [&"ground_flags"]
+## How near a cell's edge may come to an opening's or inlay's and still count
+## as inside it (m): the grid's lines are snapped to 1e-4, the edges are not.
+const EDGE := 1e-3
 ## Relaid stone's tint (B) in a patch.
 const RELAID := 0.65
 
@@ -143,11 +146,12 @@ static func build(area: Rect2, openings: Array[Rect2], footprints: Array[Diction
 
 			if solid:
 				cell_rect = Rect2(xs[i], zs[j], xs[i + 1] - xs[i], zs[j + 1] - zs[j])
-				solid = not openings.any(func(o: Rect2): return o.encloses(cell_rect)) \
+				# (Within EDGE: grid lines are snapped, the rectangles' edges not.)
+				solid = not openings.any(func(o: Rect2): return o.grow(EDGE).encloses(cell_rect)) \
 					and not covered.any(func(p): return _covers(p, cell_rect))
 
 			if solid:
-				if not rect_inlays.any(func(r: Rect2): return r.encloses(cell_rect)):
+				if not rect_inlays.any(func(r: Rect2): return r.grow(EDGE).encloses(cell_rect)):
 					_add_cell(tool, vertex, cell_rect, curved, curved_boxes, level)
 
 				if run_from < 0:

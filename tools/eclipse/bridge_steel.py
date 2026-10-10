@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import common  # noqa: E402
 import shapes  # noqa: E402
-from bridges import HALF, SPAN, deck, stations  # noqa: E402
+from bridges import HALF, QUAY_FOOT, SPAN, deck, stations  # noqa: E402
 from street_dims import BRIDGE_WIDTH, PARAPET, WALL_THICK, WATER  # noqa: E402
 
 NAME = "bridge_steel"
@@ -64,8 +64,13 @@ def build():
     m = common.Mesh(NAME, outward=True)
     xs = stations()
     half = BRIDGE_WIDTH / 2
-    shapes.loft_x(m, [(x, [(-half, deck(x, CROWN) - PLATE), (half, deck(x, CROWN) - PLATE), (half, deck(x, CROWN)),
-                           (-half, deck(x, CROWN))]) for x in xs], "steel")
+    # The plate over the canal; over the quays, behind the walls, the deck
+    # closes down to the quays' foot, so no slit opens under it.
+    def underside(x):
+        return QUAY_FOOT if abs(x) >= SPAN + WALL_THICK - 1e-9 else deck(x, CROWN) - PLATE
+
+    shapes.loft_x(m, [(x, [(-half, underside(x)), (half, underside(x)), (half, deck(x, CROWN)), (-half, deck(x, CROWN))])
+                      for x in xs], "steel")
     # Through every station the deck is, so the flanges keep their distance
     # from its plate; their ends short of the abutments' ends.
     girder_xs = [x for x in xs if abs(x) < GIRDER_END - 1e-9]

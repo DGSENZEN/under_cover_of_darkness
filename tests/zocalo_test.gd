@@ -198,6 +198,8 @@ func _dressed() -> void:
 	_check("Z8 the dressing loads: every piece drawn, the greybox it replaces gone", drawn == counts and left.is_empty(),
 		"%d kinds placed, %d drawn, greybox left %s" % [counts.size(), drawn.size(), left])
 
+	_ground_clear()
+
 	# Z9 over a kerb from the street on to the plaza, away from a crossing
 	var walk := await _walk(Vector3(6, 1.05, 115), 0.0, func(p): return p.z < 104.0, 600)
 	_check("Z9 the player steps up a kerb on to the plaza", walk["ok"] and _floor(walk["end"]) > 0.15,
@@ -231,6 +233,51 @@ func _dressed() -> void:
 	_check("Z13 the player walks down a landing's steps and on down to the canal's floor", walk["ok"]
 		and absf(on_landing + 1.0) < 0.05 and absf(on_floor + 2.0) < 0.05,
 		"landing %.3f, canal %.3f, %s" % [on_landing, on_floor, walk])
+
+
+## Z14 no ground over a flush piece or in an opening, at the ground's own
+## level: every chunk's triangles against its area's rectangular inlays and
+## openings (bucketed by 10 m).
+func _ground_clear() -> void:
+	var over := 0
+	var area_of := {}
+
+	for a in map.dressing["ground"]["areas"].size():
+		var area: Dictionary = map.dressing["ground"]["areas"][a]
+		var buckets := {}
+
+		for r in area["openings"] + area["inlays"].filter(func(p): return p.size() == 4).map(_rect_of):
+			var rect := Rect2(r[0], r[1], r[2] - r[0], r[3] - r[1]).grow(-1e-3)
+
+			for i in range(floori(rect.position.x / 10.0), floori(rect.end.x / 10.0) + 1):
+				for j in range(floori(rect.position.y / 10.0), floori(rect.end.y / 10.0) + 1):
+					var key := Vector2i(i, j)
+					buckets[key] = buckets.get(key, []) + [rect]
+
+		area_of[a] = buckets
+
+	for chunk: Node in map.district_ground.get_children():
+		var a := int(String(chunk.name).split("_")[-3])
+		var arrays := ((chunk.get_node("mesh") as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0)
+		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+
+		for t in range(0, index.size(), 3):
+			var c := (v[index[t]] + v[index[t + 1]] + v[index[t + 2]]) / 3.0
+			var at := Vector2(c.x, c.z)
+
+			for rect: Rect2 in area_of[a].get(Vector2i(floori(c.x / 10.0), floori(c.z / 10.0)), []):
+				if rect.has_point(at):
+					over += 1
+					break
+
+	_check("Z14 no ground lies over a flush piece or in an opening", over == 0, "%d triangles" % over)
+
+
+func _rect_of(points: Array) -> Array:
+	var xs := points.map(func(p): return p[0])
+	var zs := points.map(func(p): return p[1])
+	return [xs.min(), zs.min(), xs.max(), zs.max()]
 
 
 ## The floor's height under a point.

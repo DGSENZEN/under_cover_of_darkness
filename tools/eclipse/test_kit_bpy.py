@@ -311,6 +311,16 @@ class _BridgeChecks:
             self.assertTrue(hit, x)
             self.assertAlmostEqual(at.z - deck[x], 0.9, delta=0.03, msg=x)
 
+    def test_solid_down_to_the_quays(self):
+        """Over the quays (behind the canal walls) the bridge is solid down to
+        the quays' foot: no slit under its deck."""
+        from bridges import QUAY_FOOT
+
+        for x in (-9.0, -7.0, 7.0, 9.0):
+            hit, at, _, _ = self.o.ray_cast((x, 0.0, -0.3), (0.0, 0.0, 1.0))
+            self.assertTrue(hit, x)
+            self.assertAlmostEqual(at.z, QUAY_FOOT, delta=0.01, msg=x)
+
     def test_soffit_meets_the_walls_under_the_coping(self):
         """Over the canal (walls' faces at x +-6) the bridge's underside meets
         each wall below its coping's underside (-0.35), so the coping runs

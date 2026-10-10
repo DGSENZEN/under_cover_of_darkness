@@ -32,6 +32,16 @@ def _pieces(name):
     return [p for p in DRESSING["pieces"] if p["piece"] == name]
 
 
+def _in_box(collider, point):
+    cx, cy, cz, sx, sy, sz = collider["box"]
+    r = math.radians(collider["yaw"])
+    dx, dz = point[0] - cx, point[2] - cz
+    # Into the box's own axes (its local x along (cos, -sin), z along (sin, cos)).
+    lx = dx * math.cos(r) - dz * math.sin(r)
+    lz = dx * math.sin(r) + dz * math.cos(r)
+    return abs(lx) <= sx / 2 and abs(point[1] - cy) <= sy / 2 and abs(lz) <= sz / 2
+
+
 def _middle(p):
     """A placement's middle on the ground (x, z), its stretch counted."""
     lo, hi = dress.box(p, FACES)
@@ -125,6 +135,28 @@ class Dressing(unittest.TestCase):
 
             outline = [tuple(round(v, 3) for v in q) for q in dress.outline(p)]
             self.assertIn(outline, cut.get(round(p["at"][1], 3), []), (p["piece"], p["at"]))
+
+    def test_landing_mouth_corners_have_ground(self):
+        """Beside a landing's mouth, between its side wall's coping and the
+        canal's, the quay's setts lie (no pit)."""
+        setts = next(a for a in DRESSING["ground"]["areas"] if a["tile"] == "ground_setts" and a["level"] == 0.0)
+
+        for g in [g for g in DATA["ground"] if g["kind"] == "landing"]:
+            x0, z0, x1, z1 = plan_check._bounds(g["polygon"])
+
+            for x in (x0 - 0.1, x1 + 0.1):
+                inside = [o for o in setts["openings"] if o[0] < x < o[2] and o[1] < z1 - 0.4 < o[3]]
+                self.assertEqual(inside, [], (g["name"], x))
+
+    def test_landing_copings_are_solid(self):
+        """The landings' copings, proud of their walls, are solid where seen."""
+        for g in [g for g in DATA["ground"] if g["kind"] == "landing"]:
+            x0, z0, x1, z1 = plan_check._bounds(g["polygon"])
+            mid = (z0 + z1) / 2
+
+            for point in ((x0 + 0.07, -0.1, mid), (x1 - 0.07, -0.1, mid), ((x0 + x1) / 2, -0.1, z0 + 0.07),
+                          ((x0 + x1) / 2, -1.1, z1 + 0.07)):
+                self.assertTrue(any(_in_box(c, point) for c in DRESSING["colliders"]), (g["name"], point))
 
     def test_the_greybox_it_replaces(self):
         self.assertLessEqual({"ground", "plaza", "canal", "landing_w", "landing_e", "bridge_1", "bridge_2", "bridge_3"},

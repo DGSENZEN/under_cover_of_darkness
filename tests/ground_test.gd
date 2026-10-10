@@ -167,6 +167,25 @@ func _district_checks(space: PhysicsDirectSpaceState3D) -> void:
 		"level %s, hit %s, texture %s" % [level_ok, top.get("position"), albedo.resource_path if albedo else "none"])
 	raised.queue_free()
 
+	# G17 inlays and openings off any grid hold no ground (an edge snapped
+	#     the wrong way drew the cell under them)
+	var odd_opening := Rect2(3.123457, 5.431819, 2.2, 1.3)
+	var odd_inlay := Rect2(10.431819, 12.987654, 3.000001, 1.5)
+	var odd := Ground.build(area, [odd_opening], [], 3, {"inlays": [PackedVector2Array([odd_inlay.position,
+		Vector2(odd_inlay.end.x, odd_inlay.position.y), odd_inlay.end, Vector2(odd_inlay.position.x, odd_inlay.end.y)])]})
+	var odd_arrays := _arrays(odd)
+	var odd_points: PackedVector3Array = odd_arrays[Mesh.ARRAY_VERTEX]
+	var odd_index: PackedInt32Array = odd_arrays[Mesh.ARRAY_INDEX]
+	var over := 0
+
+	for t in range(0, odd_index.size(), 3):
+		var c := (odd_points[odd_index[t]] + odd_points[odd_index[t + 1]] + odd_points[odd_index[t + 2]]) / 3.0
+		var at := Vector2(c.x, c.z)
+		over += int(odd_opening.grow(-1e-3).has_point(at) or odd_inlay.grow(-1e-3).has_point(at))
+
+	_check("G17 off-grid inlays and openings hold no ground", over == 0, "%d triangles over them" % over)
+	odd.free()
+
 	# G16 slabs in courses are tiled straight: hex-tiling's turned, blended
 	#     patches break their joints into scratches
 	var flags := Ground.build(area, [], [], 3, {"tile": &"ground_flags"})
