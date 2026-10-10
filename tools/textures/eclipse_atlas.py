@@ -702,8 +702,14 @@ def paint_tile(slot, px=256, out_dir=OUT, recipes=None, scans_dir=SCANS, prep=No
 
 # The ground's tiles and the period they share (the cobbles'; the earth
 # under them stretched a little to it).
-GROUND_TILES = ("ground_cobbles", "ground_earth")
+GROUND_TILES = ("ground_cobbles", "ground_earth", "ground_flags", "ground_setts")
 GROUND_PERIOD = 1.5
+# A tile whose slabs are bigger than that has a period of its own
+# (Ground.gd's TILE_METRES), so no slab is cut by the wrap.
+# The flags: 1.2 x 0.6 m slabs, four staggered courses a period so the
+# stagger meets itself across the wrap.
+GROUND_PERIODS = {"ground_flags": 2.4}
+GROUND_PX = {"ground_flags": 320}
 
 
 def main(argv):
@@ -713,8 +719,11 @@ def main(argv):
     out = next((Path(a.split("=", 1)[1]) for a in argv if a.startswith("--out=")), OUT)
 
     if "--tiles" in argv:
-        for slot in GROUND_TILES:
-            print("eclipse_atlas:", paint_tile(slot, out_dir=out, period=GROUND_PERIOD))
+        named = [a for a in argv if not a.startswith("--")]
+
+        for slot in named or GROUND_TILES:
+            print("eclipse_atlas:", paint_tile(slot, px=GROUND_PX.get(slot, 256), out_dir=out,
+                                                   period=GROUND_PERIODS.get(slot, GROUND_PERIOD)))
 
         return
 

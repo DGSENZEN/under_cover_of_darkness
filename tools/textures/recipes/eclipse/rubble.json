@@ -1,0 +1,18 @@
+{
+ "base": "#5a5560",
+ "light": "#7a6a50",
+ "dark": "#3a3340",
+ "grime": 0.6,
+ "wear": 0.3,
+ "mottle": 0,
+ "relief": {
+  "bevel": 0.4,
+  "brush": 0.3
+ },
+ "scan": {
+  "name": "stone_wall_04",
+  "tint": 0.75,
+  "contrast": 1.1
+ },
+ "under": "lime"
+}

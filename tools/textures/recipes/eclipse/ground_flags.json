@@ -1,0 +1,26 @@
+{
+ "base": "#3a3340",
+ "light": "#5a5560",
+ "dark": "#14121a",
+ "grime": 0.0,
+ "wear": 0.0,
+ "mottle": 0,
+ "relief": {
+  "brush": 0.25,
+  "bevel": 0.3,
+  "blocks": {
+   "course": 0.6,
+   "length": 1.2,
+   "joint": 0.03,
+   "colour": "#14121a",
+   "stagger": true
+  }
+ },
+ "scan": {
+  "name": "sandstone_cracks",
+  "tint": 0.85,
+  "contrast": 0.9
+ },
+ "bands": 4,
+ "under": "ground_earth"
+}

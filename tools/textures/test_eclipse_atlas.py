@@ -334,6 +334,29 @@ class Scans(unittest.TestCase):
 
 
 
+class ZocaloTiles(unittest.TestCase):
+    def test_ground_tiles_include_the_zocalo_tiles(self):
+        """The plaza's flags and the streets' setts are painted with the
+        ground's tiles, each from a recipe naming a scan fetch_scans knows."""
+        import fetch_scans
+
+        self.assertLessEqual({"ground_flags", "ground_setts"}, set(eclipse_atlas.GROUND_TILES))
+
+        for tile in ("ground_flags", "ground_setts"):
+            recipe = eclipse_atlas.load_recipes([tile])[tile]
+            self.assertIn(recipe["scan"]["name"], fetch_scans.SCANS, tile)
+
+    def test_flag_courses_wrap_with_their_stagger(self):
+        """An even number of staggered courses and whole slabs fit a period,
+        or the stagger breaks at the tile's wrap."""
+        blocks = eclipse_atlas.load_recipes(["ground_flags"])["ground_flags"]["relief"]["blocks"]
+        period = eclipse_atlas.GROUND_PERIODS["ground_flags"]
+        courses, slabs = period / blocks["course"], period / blocks["length"]
+        self.assertAlmostEqual(courses, round(courses))
+        self.assertEqual(round(courses) % 2, 0)
+        self.assertAlmostEqual(slabs, round(slabs))
+
+
 class Tile(unittest.TestCase):
     """A seamless ground tile painted from a recipe (paint_tile): a scan of
     soft blobs laid flat, painted as an atlas is, its wrap closed."""

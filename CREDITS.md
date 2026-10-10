@@ -85,7 +85,9 @@ and painted over by `tools/textures/eclipse_atlas.py`:
 - [long_white_tiles](https://polyhaven.com/a/long_white_tiles) by **Jenelle van Heerden, Sergej Majboroda**
 - [metal_plate_02](https://polyhaven.com/a/metal_plate_02) by **Rob Tuytel**
 - [sandstone_cracks](https://polyhaven.com/a/sandstone_cracks) by **Rob Tuytel**
+- [stone_wall_04](https://polyhaven.com/a/stone_wall_04) by **Amal Kumar**
 - [square_tiles_03](https://polyhaven.com/a/square_tiles_03) by **Charlotte Baglioni**
 - [stained_pine](https://polyhaven.com/a/stained_pine) by **Dario Barresi, Jenelle van Heerden**
 - [terrazzo_tiles](https://polyhaven.com/a/terrazzo_tiles) by **Amal Kumar**
+- [volcanic_rock_tiles](https://polyhaven.com/a/volcanic_rock_tiles) by **Charlotte Baglioni**
 - [white_rough_plaster](https://polyhaven.com/a/white_rough_plaster) by **Rob Tuytel**
