@@ -159,6 +159,90 @@ class StreetKit(unittest.TestCase):
             self.assertLess(nearest, 1e-4, (x, y))
 
 
+class CanalKit(unittest.TestCase):
+    """The canal kit (cards/street_canal.md) as built."""
+
+    PIECES = ["canal_wall", "canal_wall_short", "canal_wall_low", "canal_wall_low_short", "canal_wall_low_wet",
+              "canal_wall_low_wet_short", "canal_wall_corner",
+              "culvert", "culvert_open", "canal_landing_steps", "mooring_ring"]
+    BUDGET = {"canal_wall": 600, "canal_wall_short": 600, "canal_wall_low": 600, "canal_wall_low_wet": 600,
+              "canal_wall_low_short": 600, "canal_wall_low_wet_short": 600,
+              "canal_wall_corner": 600, "culvert": 600, "culvert_open": 600, "canal_landing_steps": 500,
+              "mooring_ring": 200}
+
+    @classmethod
+    def setUpClass(cls):
+        import canal_kit
+        canal_kit.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.PIECES))
+
+    def test_every_object_is_closed(self):
+        open_edges = {n: _closed(o) for n, o in self.objects.items() if _closed(o)}
+        self.assertEqual(open_edges, {})
+
+    def test_no_degenerate_triangles(self):
+        thin = {n: _smallest_triangle(o) for n, o in self.objects.items() if _smallest_triangle(o) < 1e-7}
+        self.assertEqual(thin, {})
+
+    def test_budgets(self):
+        over = {n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}
+        self.assertEqual(over, {})
+
+    def test_exported_budgets(self):
+        import json
+        path = common.SOURCE / "canal_kit_faces.json"
+
+        if not path.exists():
+            self.skipTest("canal_kit not built")
+
+        tris = json.loads(path.read_text())["tris"]
+        self.assertEqual({n: t for n, t in tris.items() if t > self.BUDGET[n]}, {})
+
+    def test_coping_flush_and_proud(self):
+        """The coping's top lies at the street, its front 0.15 out over the water."""
+        o = self.objects["canal_wall"]
+        points = _world(o)
+        self.assertAlmostEqual(max(v.z for v in points), 0.0, delta=1e-6)
+        self.assertAlmostEqual(min(v.y for v in points), -0.15, delta=1e-6)
+
+    def test_water_face_from_the_floor_to_the_coping(self):
+        """A ray at the wall from the water meets its face at y 0 from the
+        canal's floor up to the coping's underside (the rubble set back)."""
+        o = self.objects["canal_wall"]
+        hits = []
+
+        for z in (-1.95, -1.5, -1.2):
+            hit, at, _, _ = o.ray_cast((2.25, -1.0, z), (0.0, 1.0, 0.0))
+            hits.append(round(at.y, 3) if hit else None)
+
+        self.assertEqual(hits, [0.0, 0.0, 0.0])
+        hit, at, _, _ = o.ray_cast((2.25, -1.0, -0.6), (0.0, 1.0, 0.0))
+        self.assertTrue(hit)
+        self.assertAlmostEqual(at.y, 0.04, delta=1e-3)
+
+    def test_steps(self):
+        o = self.objects["canal_landing_steps"]
+        tops = sorted({round((o.matrix_world @ o.data.vertices[p.vertices[0]].co).z, 4)
+                       for p in o.data.polygons if p.normal.z > 0.99})
+        self.assertAlmostEqual(tops[-1], 0.0, delta=1e-4)
+        self.assertAlmostEqual(tops[0], -5.0 / 6.0, delta=1e-4)
+
+    def test_culvert_open_goes_through(self):
+        o = self.objects["culvert_open"]
+        hit, _, _, _ = o.ray_cast((2.25, -1.0, -1.2), (0.0, 1.0, 0.0))
+        self.assertFalse(hit)
+
+    def test_culvert_is_choked(self):
+        """The drain's mouth is dark inside: a ray in meets its back or its silt."""
+        o = self.objects["culvert"]
+        hit, at, _, _ = o.ray_cast((2.25, -1.0, -1.5), (0.0, 1.0, 0.0))
+        self.assertTrue(hit)
+        self.assertGreater(at.y, 0.3)
+
+
 if __name__ == "__main__":
     result = unittest.main(argv=["test_kit_bpy"], exit=False).result
     sys.exit(not result.wasSuccessful())

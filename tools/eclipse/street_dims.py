@@ -67,7 +67,8 @@ CANAL_WIDTH = 12.0
 PITCH = {"kerb_straight": KERB_LENGTH, "kerb_heaved": KERB_LENGTH, "gutter_grate": GRATE_LENGTH,
          "causeway_band": BAND, "tram_track": TRACK_LENGTH, "tram_track_shimmed": TRACK_LENGTH,
          "tram_conductor": TRACK_LENGTH, "canal_wall": WALL_LENGTH, "canal_wall_short": WALL_SHORT,
-         "canal_wall_low": WALL_LENGTH, "culvert": WALL_LENGTH, "culvert_open": WALL_LENGTH}
+         "canal_wall_low": WALL_LENGTH, "canal_wall_low_short": WALL_SHORT, "canal_wall_low_wet": WALL_LENGTH,
+         "canal_wall_low_wet_short": WALL_SHORT, "culvert": WALL_LENGTH, "culvert_open": WALL_LENGTH}
 
 
 def curve_centreline(segments=CURVE_SEGMENTS):

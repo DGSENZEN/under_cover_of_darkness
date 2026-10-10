@@ -35,14 +35,17 @@ func _ready() -> void:
 		piece.mesh = mesh
 		piece.material_override = KitLoader.material(kit)
 		add_child(piece)
-		piece.position = Vector3(x - box.position.x, 0, 0)
+		# Pieces that reach far under the street (walls down to the water)
+		# stand on the ground, to be seen whole.
+		var lift := -box.position.y if box.position.y < -0.5 else 0.0
+		piece.position = Vector3(x - box.position.x, lift, 0)
 		spots[name] = piece.position + box.get_center()
 		x += box.size.x + GAP
 
 		# Pieces let into the ground (their tops at the setts') are set in it,
 		# as the dresser lays them; the curve's ring is no rectangle, so the
 		# ground lies a hair under it instead.
-		if box.end.y < 0.01 and not String(name).ends_with("curve"):
+		if box.end.y < 0.01 and box.position.y > -0.5 and not String(name).ends_with("curve"):
 			var r := Rect2(piece.position.x + box.position.x, box.position.z, box.size.x, box.size.z)
 			inlays.append(PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]))
 

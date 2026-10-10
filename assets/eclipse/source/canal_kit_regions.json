@@ -1,0 +1,12 @@
+{
+ "slots": [
+  "chiluca",
+  "ashlar",
+  "rubble",
+  "basalt",
+  "iron",
+  "brass"
+ ],
+ "atlas_px": 1024,
+ "px_per_m": 52.44
+}
