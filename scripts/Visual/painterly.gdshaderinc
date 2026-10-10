@@ -284,6 +284,11 @@ void fragment() {
 }
 
 #ifndef PAINTERLY_UNSHADED
+// A lamp's ramp is sampled this far either side, twice (a soft band in place
+// of the steps), and fades in from nothing over this much of its light.
+const float LAMP_RAMP_SPREAD = 0.06;
+const float LAMP_GATE = 0.25;
+
 void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float lambert = clamp(ndl, 0.0, 1.0);
@@ -304,15 +309,21 @@ void light() {
 	// shadow is a colour, not grey.
 	vec3 banded = painted * tint + (1.0 - painted) * shadow_fill * painted_light * shadow_cool * ATTENUATION;
 	// Or the painted ramp's colour for this much light. The sun and moon take
-	// it whole, its violet floor the colour of their shadows. A lamp takes
-	// only its colour, its brightness the lamp's own smooth falloff: Godot
-	// runs a lamp over whole screen tiles round it, and a floor added where
-	// its light has died drew blocky bands there, and the ramp's steps hard
-	// rings on the way out.
+	// it whole, its violet floor the colour of their shadows. A lamp takes it
+	// softened (sampled across a band, so its steps lay no hard rings on the
+	// way out) and gated to nothing where its own light dies: Godot runs a
+	// lamp over whole screen tiles round it, and the floor added there drew
+	// blocky bands that moved with the player.
 	vec3 ramped = texture(light_ramp, vec2(clamp(level, 0.01, 0.99), 0.5)).rgb;
 
 	if (!LIGHT_IS_DIRECTIONAL) {
-		ramped *= amount / max(dot(ramped, vec3(0.2126, 0.7152, 0.0722)), 1e-4);
+		vec3 soft = vec3(0.0);
+
+		for (int k = -2; k <= 2; k++) {
+			soft += texture(light_ramp, vec2(clamp(level + float(k) * LAMP_RAMP_SPREAD, 0.01, 0.99), 0.5)).rgb;
+		}
+
+		ramped = soft / 5.0 * smoothstep(0.0, LAMP_GATE, amount);
 	}
 	DIFFUSE_LIGHT += hue * energy * mix(banded, ramped, ramp_amount) / PI;
 	// A soft highlight, as the standard light would give.

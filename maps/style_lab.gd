@@ -318,6 +318,9 @@ func _place(scene: PackedScene, parent: Node3D, node_name: String, at: Vector3, 
 
 			if slot != null and slot.resource_name == "glass":
 				mesh.set_surface_override_material(i, _glass(String(mesh.name).ends_with("_globe")))
+				# Glass lets light through: it casts no shadow (the lamps sit
+				# inside their globes, under the canopy's panes).
+				mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			else:
 				var painterly := _painterly(piece, preset)
 

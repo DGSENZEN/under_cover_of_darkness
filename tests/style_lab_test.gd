@@ -182,6 +182,27 @@ func _run() -> void:
 	_check("L13 the ground is the painted Ground, solid under the player's start", ground is Ground
 		and not below.is_empty() and absf(below["position"].y) < 1e-3, "%s, hit %s" % [ground, below.get("position")])
 
+	# L14 glass lets the lamps through: no glass casts a shadow (the kiosk's
+	#     glass canopy threw an opaque octagon of shade under its own lamps)
+	var shading_glass := []
+	var glass_seen := 0
+
+	for mesh: MeshInstance3D in lab.find_children("*", "MeshInstance3D", true, false):
+		if mesh.mesh == null or mesh.is_queued_for_deletion():
+			continue
+
+		for i in mesh.mesh.get_surface_count():
+			var m := mesh.get_active_material(i) as StandardMaterial3D
+
+			if m != null and m.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
+				glass_seen += 1
+
+				if mesh.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+					shading_glass.append(String(mesh.name))
+
+	_check("L14 no glass casts a shadow", glass_seen > 0 and shading_glass.is_empty(),
+		"%d glass surfaces, casting: %s" % [glass_seen, shading_glass.slice(0, 4)])
+
 	# L7 the stair is walked: the player goes down to the landing and back up
 	#    to the street (it wedged on the old one, 1.7 m in)
 	var player: CharacterBody3D = lab.player
