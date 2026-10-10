@@ -37,6 +37,14 @@ uniform float grime_amount : hint_range(0.0, 1.0) = 0.6;
 uniform vec3 grime_colour : source_color = vec3(0.239, 0.122, 0.110);
 uniform float baked_light_amount : hint_range(0.0, 1.0) = 1.0;
 
+// The world macro layer (the vertex-paint spec, section 6.2): our own soft
+// blotches (R value, G warmth, B grime) laid by world position at two
+// scales that never line up, so no two copies of a piece look alike.
+uniform sampler2D macro : filter_linear_mipmap, repeat_enable;
+uniform float macro_amount : hint_range(0.0, 1.0) = 0.0;
+// Metres a macro tile covers, twice.
+uniform vec2 macro_scales = vec2(23.0, 7.3);
+
 // Linear RGB to Oklab (Björn Ottosson): equal steps look equal, so the
 // nearest palette colour is the one that looks nearest.
 vec3 oklab(vec3 c) {
@@ -225,6 +233,19 @@ void fragment() {
 		base = max(linear_of_oklab(lab), vec3(0.0));
 		float grime = COLOR.r * grime_amount * vertex_paint * clamp(0.75 + (s - 0.5) * 2.0, 0.0, 1.0);
 		base = mix(base, grime_colour, grime);
+	}
+
+	// The macro layer: a little lighter or darker, warmer or cooler, dirtier
+	// or cleaner, place by place (at most 6% in lightness).
+	if (macro_amount > 0.0) {
+		vec2 place = world_pos.xz + vec2(world_pos.y * 0.37, -world_pos.y * 0.29);
+		vec3 m = (texture(macro, place / macro_scales.x).rgb + texture(macro, place / macro_scales.y).rgb) * 0.5 - 0.5;
+		vec3 lab = oklab(base);
+		lab.x += m.r * 0.12 * macro_amount;
+		float turn = m.g * 0.3 * macro_amount;
+		lab.yz = mat2(vec2(cos(turn), sin(turn)), vec2(-sin(turn), cos(turn))) * lab.yz;
+		base = max(linear_of_oklab(lab), vec3(0.0));
+		base = mix(base, grime_colour, clamp(m.b * 0.3 * macro_amount, 0.0, 1.0));
 	}
 
 	vec3 pushed = base + (s - 0.5) * stroke_strength;

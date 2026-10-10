@@ -121,6 +121,43 @@ class Pool(unittest.TestCase):
         self.assertGreater(self.pool[ring].std(), 25)
 
 
+class Macro(unittest.TestCase):
+    """The world macro layer (the vertex-paint plan, Task 8): soft blotches
+    the shader lays over everything at tens of metres, so no two copies of
+    a kit piece match. R value, G warmth, B grime."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.pixels = np.asarray(painterly.macro(), dtype=np.float64)
+
+    def test_macro_is_seamless(self):
+        self.assertEqual(self.pixels.shape, (painterly.MACRO_SIZE, painterly.MACRO_SIZE, 3))
+
+        for c in range(3):
+            channel = self.pixels[..., c]
+            self.assertLess(np.abs(channel[:, 0] - channel[:, -1]).mean(), np.abs(np.diff(channel, axis=1)).mean() * 1.5)
+            self.assertLess(np.abs(channel[0, :] - channel[-1, :]).mean(), np.abs(np.diff(channel, axis=0)).mean() * 1.5)
+
+    def test_macro_is_soft(self):
+        """Nine tenths of its energy below an eighth of the tile's frequencies
+        (8 cycles across 256 px): big blotches, not grain."""
+        n = painterly.MACRO_SIZE
+        f = np.fft.fftfreq(n)
+        radius = np.hypot(*np.meshgrid(f, f))
+
+        for c in range(3):
+            power = np.abs(np.fft.fft2(self.pixels[..., c] - self.pixels[..., c].mean())) ** 2
+            self.assertGreater(power[radius <= 0.5 / 16].sum() / power.sum(), 0.9)
+
+    def test_macro_channels_centred(self):
+        for c in range(3):
+            self.assertLess(abs(self.pixels[..., c].mean() - 128), 6)
+            self.assertGreater(self.pixels[..., c].std(), 12)
+
+    def test_macro_is_deterministic(self):
+        self.assertEqual(_bytes(painterly.macro()), _bytes(painterly.macro()))
+
+
 class Palette(unittest.TestCase):
     def test_palette_zocalo(self):
         image = painterly.palette(painterly.ZOCALO)

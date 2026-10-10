@@ -11,6 +11,8 @@ const ZOCALO: Texture2D = preload("res://textures/painted/eclipse/palette_zocalo
 ## drew them; the user may repaint either).
 const RAMP: Texture2D = preload("res://textures/painted/eclipse/ramp_zocalo.png")
 const POOL: Texture2D = preload("res://textures/painted/eclipse/lamp_pool.png")
+## The world macro layer's blotches (tools/textures/painterly.py).
+const MACRO: Texture2D = preload("res://textures/painted/eclipse/macro.png")
 
 ## How much the shader does over the painted atlas. The atlas carries the
 ## paint now (docs/superpowers/refs/mexico_city/painterly_texturing.md), so
@@ -25,7 +27,7 @@ const PRESETS := {
 	# The user's choice (Oct 9 2026): variant D, painted light through the
 	# warm ramp, painted ambient and rim (the lamps' painted pools are the map's).
 	&"shader_led": {"paint_mix": 0.45, "stroke_strength": 0.36, "painted_light": 1.0, "ramp_amount": 1.0,
-		"ambient_amount": 0.15, "rim_amount": 0.25},
+		"ambient_amount": 0.15, "rim_amount": 0.25, "macro_amount": 1.0},
 }
 
 
@@ -42,6 +44,7 @@ static func material(atlas: Texture2D, preset: StringName, palette: Texture2D = 
 	out.set_shader_parameter("palette", palette)
 	out.set_shader_parameter("brush", BRUSH)
 	out.set_shader_parameter("light_ramp", RAMP)
+	out.set_shader_parameter("macro", MACRO)
 
 	if normal != null:
 		out.set_shader_parameter("normal_atlas", normal)

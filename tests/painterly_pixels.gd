@@ -189,6 +189,18 @@ func _ready() -> void:
 	_check("X15 no seams at a distance: hex-tiling's sharpest steps no worse than plain tiling's",
 		plain_far > 0.0 and hex_far <= plain_far * 1.5, "99th-percentile neighbour step: hex %.4f, plain %.4f" % [hex_far, plain_far])
 
+	# X16 the macro layer: one quad drawn at two places half a macro scale
+	#     apart differs with it on, and is the same with it off
+	var flat := {"vertex_paint": 0.0, "stroke_strength": 0.0}
+	var here := await _painted_quad(atlas, under, neutral, flat.merged({"macro_amount": 1.0}))
+	var there := await _painted_quad(atlas, under, neutral, flat.merged({"macro_amount": 1.0}), Vector3(11.5, 0, 0))
+	var here_off := await _painted_quad(atlas, under, neutral, flat.merged({"macro_amount": 0.0}))
+	var there_off := await _painted_quad(atlas, under, neutral, flat.merged({"macro_amount": 0.0}), Vector3(11.5, 0, 0))
+	var apart := absf(_mean_value(here) - _mean_value(there))
+	var apart_off := absf(_mean_value(here_off) - _mean_value(there_off))
+	_check("X16 one quad at two places differs through the macro layer, and not without it",
+		apart > 2.0 / 255.0 and apart_off <= 1.0 / 255.0, "mean value apart: on %.4f, off %.4f" % [apart, apart_off])
+
 	print("\n==== RESULTS ====")
 	for r in results:
 		print(r)
@@ -319,7 +331,8 @@ func _rough_edges(image: Image) -> float:
 
 ## The quad of _draw with vertex colours: `colour_at` gives each corner's
 ## colour from its x (-1 to 1); unshaded, its under layer `under`.
-func _painted_quad(atlas: Texture2D, under: Texture2D, colour_at: Callable, settings: Dictionary) -> Image:
+func _painted_quad(atlas: Texture2D, under: Texture2D, colour_at: Callable, settings: Dictionary,
+		at := Vector3.ZERO) -> Image:
 	var view := SubViewport.new()
 	view.size = Vector2i(VIEW, VIEW)
 	view.own_world_3d = true
@@ -328,6 +341,7 @@ func _painted_quad(atlas: Texture2D, under: Texture2D, colour_at: Callable, sett
 	var camera := Camera3D.new()
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	camera.size = 2.0
+	camera.position = at
 	view.add_child(camera)
 	var material: ShaderMaterial = Painterly.material(atlas, &"even", Painterly.ZOCALO, null, under)
 	material.shader = UNSHADED
@@ -349,7 +363,7 @@ func _painted_quad(atlas: Texture2D, under: Texture2D, colour_at: Callable, sett
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var shape := MeshInstance3D.new()
 	shape.mesh = mesh
-	shape.position = Vector3(0, 0, -1)
+	shape.position = at + Vector3(0, 0, -1)
 	shape.material_override = material
 	view.add_child(shape)
 

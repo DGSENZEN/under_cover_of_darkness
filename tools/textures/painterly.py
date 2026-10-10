@@ -219,6 +219,43 @@ def pool() -> Image.Image:
     return Image.fromarray(np.clip(np.round(light * 255), 0, 255).astype(np.uint8), "L")
 
 
+# The world macro layer (the vertex-paint spec, section 6.2): soft blotches
+# the shader lays over every surface at tens of metres (23 m and 7.3 m), so
+# the same kit piece never looks the same twice. R value, G warmth, B grime.
+MACRO_SIZE = 256
+# Blotches at a few sizes: cells across the tile and each one's weight.
+MACRO_OCTAVES = ((3, 0.65), (5, 0.3), (9, 0.05))
+# The spread of each channel once painted (grey levels, standard deviation).
+MACRO_CONTRAST = 30.0
+
+
+def _wrapped_noise(rng, cells, size):
+    """Smooth value noise on a lattice of `cells` that wraps at the tile's
+    edges, 0-1."""
+    lattice = rng.random((cells, cells))
+    k = np.arange(size) * cells / size
+    i = np.floor(k).astype(int)
+    f = k - i
+    f = f * f * (3 - 2 * f)
+    i0, i1 = i % cells, (i + 1) % cells
+    rows = lattice[i0][:, i0] * (1 - f)[None, :] + lattice[i0][:, i1] * f[None, :]
+    rows_next = lattice[i1][:, i0] * (1 - f)[None, :] + lattice[i1][:, i1] * f[None, :]
+    return rows * (1 - f)[:, None] + rows_next * f[:, None]
+
+
+def macro(seed: int = 23) -> Image.Image:
+    """The macro tile: MACRO_SIZE square, RGB, seamless, each channel soft
+    blotches round a mid grey."""
+    rng = np.random.default_rng(seed)
+    out = np.zeros((MACRO_SIZE, MACRO_SIZE, 3))
+
+    for c in range(3):
+        channel = sum(weight * _wrapped_noise(rng, cells, MACRO_SIZE) for cells, weight in MACRO_OCTAVES)
+        out[..., c] = 128.0 + (channel - channel.mean()) * (MACRO_CONTRAST / max(channel.std(), 1e-6))
+
+    return Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8), "RGB")
+
+
 def palette(colours: list) -> Image.Image:
     """A district's palette: one pixel per colour, dark to light, 16 x 1."""
     image = Image.new("RGB", (len(colours), 1))
@@ -235,7 +272,8 @@ def main(argv):
     palette(ZOCALO).save(OUT / "palette_zocalo.png")
     ramp().save(OUT / "ramp_zocalo.png")
     pool().save(OUT / "lamp_pool.png")
-    print("painterly: brush.png, palette_zocalo.png, ramp_zocalo.png, lamp_pool.png ->", OUT)
+    macro().save(OUT / "macro.png")
+    print("painterly: brush.png, palette_zocalo.png, ramp_zocalo.png, lamp_pool.png, macro.png ->", OUT)
 
 
 if __name__ == "__main__":
