@@ -333,5 +333,44 @@ class Scans(unittest.TestCase):
         self.assertGreater(left[0], left[2] + 20)          # tezontle's red, though the scan is grey
 
 
+
+class Tile(unittest.TestCase):
+    """A seamless ground tile painted from a recipe (paint_tile): a scan of
+    soft blobs laid flat, painted as an atlas is, its wrap closed."""
+
+    def setUp(self):
+        self.scans = Path(tempfile.mkdtemp())
+        self.out = Path(tempfile.mkdtemp())
+        folder = self.scans / "blobs"
+        folder.mkdir()
+        rng = np.random.default_rng(5)
+        small = Image.fromarray((rng.random((8, 8, 3)) * 255).astype(np.uint8), "RGB")
+        big = np.asarray(small.resize((64, 64), Image.Resampling.BICUBIC))
+        Image.fromarray(big, "RGB").save(folder / "diffuse.jpg", quality=98)
+        Image.fromarray(np.full((64, 64, 3), (128, 128, 255), np.uint8), "RGB").save(folder / "normal.jpg", quality=98)
+        (folder / "info.json").write_text(json.dumps({"name": "blobs", "dimensions_mm": [1000, 1000]}))
+        self.recipes = {"ground": {**RECIPES["chiluca"], "mottle": 0, "strokes": 3, "scan": {"name": "blobs", "tint": 0.5}}}
+
+    def tearDown(self):
+        shutil.rmtree(self.scans)
+        shutil.rmtree(self.out)
+
+    def paint(self):
+        eclipse_atlas.paint_tile("ground", 64, self.out, recipes=self.recipes, scans_dir=self.scans, prep=FAST_PREP)
+        load = lambda name: np.asarray(Image.open(self.out / name).convert("RGB"), dtype=np.float64)
+        return load("ground.png"), load("ground_normal.png")
+
+    def test_paint_tile_sizes(self):
+        colour, normal = self.paint()
+        self.assertEqual(colour.shape, (64, 64, 3))
+        self.assertEqual(normal.shape, (64, 64, 3))
+
+    def test_paint_tile_is_seamless(self):
+        colour, _ = self.paint()
+        across_x = np.abs(colour[:, 0] - colour[:, -1]).mean()
+        across_y = np.abs(colour[0, :] - colour[-1, :]).mean()
+        self.assertLess(across_x, np.abs(np.diff(colour, axis=1)).mean() * 1.5)
+        self.assertLess(across_y, np.abs(np.diff(colour, axis=0)).mean() * 1.5)
+
 if __name__ == "__main__":
     unittest.main()

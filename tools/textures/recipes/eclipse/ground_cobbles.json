@@ -1,0 +1,18 @@
+{
+ "base": "#4a4650",
+ "light": "#6e6a74",
+ "dark": "#2a2730",
+ "grime": 0.0,
+ "wear": 0.0,
+ "mottle": 0,
+ "relief": {
+  "brush": 0.25
+ },
+ "scan": {
+  "name": "cobblestone_floor_04",
+  "tint": 0.7,
+  "contrast": 1.2
+ },
+ "bands": 4,
+ "under": "ground_earth"
+}

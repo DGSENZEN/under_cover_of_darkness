@@ -34,6 +34,7 @@ colours, "contrast": the scan's light and dark, 1 as photographed}}.
 import json
 import math
 import sys
+import tempfile
 import zlib
 from pathlib import Path
 
@@ -633,10 +634,89 @@ def _paint(piece, source_dir, out_dir, recipes, scans_dir, prep, colour_name, no
     return path
 
 
+# Ground tiles (the vertex-paint spec, section 6.3): painted as an atlas is,
+# over a flat plane two periods wide, the middle period kept and its wrap
+# closed with a cross-fade this share of the tile wide.
+TILE_FADE = 0.1
+
+
+def _tile_source(folder, slot, px, period):
+    """A flat, up-facing plane two periods square, as a piece's texels,
+    regions and occlusion, for the painter."""
+    big = 2 * px
+    (folder / (slot + "_regions.json")).write_text(json.dumps({"slots": [slot], "atlas_px": big,
+                                                               "px_per_m": px / period}))
+    u = (np.arange(big) + 0.5) / big
+    v = 1.0 - (np.arange(big) + 0.5) / big
+    uu, vv = np.meshgrid(u, v)
+    position = np.dstack([uu * 2 * period, vv * 2 * period, np.zeros_like(uu)]).astype(np.float32)
+    np.savez(folder / (slot + "_texels.npz"), slot=np.zeros((big, big), np.int16), position=position,
+             normal=np.broadcast_to(np.array([0, 0, 1], np.float32), (big, big, 3)),
+             tangent_u=np.broadcast_to(np.array([1, 0, 0], np.float32), (big, big, 3)),
+             tangent_v=np.broadcast_to(np.array([0, 1, 0], np.float32), (big, big, 3)))
+    Image.fromarray(np.full((big, big), 255, np.uint8), "L").save(folder / (slot + "_ao.png"))
+
+
+def _closed(image, px):
+    """The middle period of a two-period painting, its wrap closed: near each
+    edge it fades to an even mix with the painting one period over, so the
+    left edge meets the right and the top the bottom."""
+    out = image.astype(np.float64)
+    k = np.arange(px)
+    fade = max(1, int(px * TILE_FADE))
+    # 0.5 at the edges, 1 inside, a cosine between.
+    w = 0.5 + 0.5 * np.sin(np.clip(np.minimum(k + 0.5, px - k - 0.5) / fade, 0.0, 1.0) * np.pi / 2)
+    middle = slice(px // 2, px // 2 + px)
+    rows = out[middle]
+    # The painting one period over (wrapped in the two).
+    other_rows = out[(np.arange(px) + px // 2 + px) % (2 * px)]
+    blended = rows * w[:, None, None] + other_rows * (1 - w[:, None, None])
+    cols = blended[:, middle]
+    other_cols = blended[:, (np.arange(px) + px // 2 + px) % (2 * px)]
+    return cols * w[None, :, None] + other_cols * (1 - w[None, :, None])
+
+
+def paint_tile(slot, px=256, out_dir=OUT, recipes=None, scans_dir=SCANS, prep=None, period=None):
+    """A seamless tile of `slot` painted from its recipe: <slot>.png and
+    <slot>_normal.png in out_dir, px square, one `period` (m; the scan's own
+    size unless given) across. Its path."""
+    recipes = recipes or load_recipes([slot])
+    recipe = {k: v for k, v in recipes[slot].items() if k != "under"}
+    info = json.loads((Path(scans_dir) / recipe["scan"]["name"] / "info.json").read_text())
+    period = period or (info.get("dimensions_mm") or [1000])[0] / 1000.0
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory() as work:
+        work = Path(work)
+        _tile_source(work, slot, px, period)
+        _paint(slot, work, work, {slot: recipe}, scans_dir, prep, "_base", "_normal_base")
+
+        for name, out in (("_base", ""), ("_normal_base", "_normal")):
+            painted = np.asarray(Image.open(work / (slot + name + ".png")).convert("RGB"))
+            tile = np.clip(np.round(_closed(painted, px)), 0, 255).astype(np.uint8)
+            Image.fromarray(tile, "RGB").save(out_dir / (slot + out + ".png"))
+
+    return out_dir / (slot + ".png")
+
+
+# The ground's tiles and the period they share (the cobbles'; the earth
+# under them stretched a little to it).
+GROUND_TILES = ("ground_cobbles", "ground_earth")
+GROUND_PERIOD = 1.5
+
+
 def main(argv):
-    """Pieces to paint; --style=<name> one of STYLES, --out=<dir> elsewhere."""
+    """Pieces to paint; --style=<name> one of STYLES, --out=<dir> elsewhere; --tiles
+    the ground tiles instead."""
     style = next((a.split("=", 1)[1] for a in argv if a.startswith("--style=")), None)
     out = next((Path(a.split("=", 1)[1]) for a in argv if a.startswith("--out=")), OUT)
+
+    if "--tiles" in argv:
+        for slot in GROUND_TILES:
+            print("eclipse_atlas:", paint_tile(slot, out_dir=out, period=GROUND_PERIOD))
+
+        return
 
     for piece in [a for a in argv if not a.startswith("--")] or ["kiosk", "arcade_bay"]:
         print("eclipse_atlas:", paint_atlas(piece, out_dir=out, style=style))

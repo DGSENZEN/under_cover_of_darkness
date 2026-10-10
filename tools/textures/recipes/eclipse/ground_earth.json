@@ -1,0 +1,17 @@
+{
+ "base": "#5e4a3a",
+ "light": "#7d6650",
+ "dark": "#3a2c22",
+ "grime": 0.0,
+ "wear": 0.0,
+ "mottle": 0,
+ "relief": {
+  "brush": 0.25
+ },
+ "scan": {
+  "name": "brown_mud_dry",
+  "tint": 0.7,
+  "contrast": 1.0
+ },
+ "bands": 4
+}

@@ -78,6 +78,7 @@ The Eclipse city's atlases are laid from these photo scans from
 [Poly Haven](https://polyhaven.com) (CC0), fetched by `tools/textures/fetch_scans.py`
 and painted over by `tools/textures/eclipse_atlas.py`:
 
+- [brown_mud_dry](https://polyhaven.com/a/brown_mud_dry) by **Rob Tuytel**
 - [cobblestone_floor_04](https://polyhaven.com/a/cobblestone_floor_04) by **Rob Tuytel**
 - [green_metal_rust](https://polyhaven.com/a/green_metal_rust) by **Rob Tuytel**
 - [japanese_stone_wall](https://polyhaven.com/a/japanese_stone_wall) by **Charlotte Baglioni, Dario Barresi, Rico Cilliers**
