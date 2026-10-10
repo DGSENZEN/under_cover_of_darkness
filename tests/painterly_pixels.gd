@@ -177,6 +177,10 @@ func _sphere_levels(painted: float) -> int:
 	material.set_shader_parameter("light_bands", 3.0)
 	material.set_shader_parameter("painted_light", painted)
 	material.set_shader_parameter("specular", 0.0)   # the highlight is meant to stay smooth
+	# The bands alone: no ramp, ambient or rim (the shader-led preset has them).
+	material.set_shader_parameter("ramp_amount", 0.0)
+	material.set_shader_parameter("ambient_amount", 0.0)
+	material.set_shader_parameter("rim_amount", 0.0)
 	var ball := MeshInstance3D.new()
 	ball.mesh = SphereMesh.new()
 	ball.material_override = material

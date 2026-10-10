@@ -170,9 +170,10 @@ def brush(seed: int = 11) -> Image.Image:
 # and joined in soft steps. A starting point for the user to repaint.
 RAMP_SIZE = 64
 # The stops are sRGB; the shader reads the ramp as linear light, so they are
-# chosen for their linear values: about 0.07 cool, 0.31 cool-neutral, 0.66
-# warm-neutral, 0.95 warm.
-RAMP_STOPS = [(0.0, "#454a63"), (0.3, "#9494a1"), (0.55, "#d9d4cf"), (0.8, "#fffaf2")]
+# chosen for their linear values. Warmer, by the user's word (Oct 9 2026):
+# a dusky violet shadow with only a little cool in it, warm stone in the
+# middle, amber cream at full light.
+RAMP_STOPS = [(0.0, "#4c4a58"), (0.3, "#a19694"), (0.55, "#e3d3bf"), (0.8, "#fff2db")]
 RAMP_STEP = 0.05
 
 

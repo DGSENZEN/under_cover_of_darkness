@@ -18,8 +18,10 @@ const POOL: Texture2D = preload("res://textures/painted/eclipse/lamp_pool.png")
 const PRESETS := {
 	&"painted_led": {"paint_mix": 0.1, "stroke_strength": 0.12},
 	&"even": {"paint_mix": 0.25, "stroke_strength": 0.24},
-	# The user's choice (Oct 9 2026).
-	&"shader_led": {"paint_mix": 0.45, "stroke_strength": 0.36, "painted_light": 0.0},
+	# The user's choice (Oct 9 2026): variant D, painted light through the
+	# warm ramp, painted ambient and rim (the lamps' painted pools are the map's).
+	&"shader_led": {"paint_mix": 0.45, "stroke_strength": 0.36, "painted_light": 1.0, "ramp_amount": 1.0,
+		"ambient_amount": 0.15, "rim_amount": 0.25},
 }
 
 

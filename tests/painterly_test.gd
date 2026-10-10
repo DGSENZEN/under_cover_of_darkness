@@ -78,6 +78,14 @@ func _run() -> void:
 		not "stroke_relief" in names and keys.all(func(k): return not "stroke_relief" in k), "uniforms %s" % [names])
 
 
+	# P6 the shader-led look is variant D (the user's choice, Oct 9 2026):
+	#    painted light through the ramp, painted ambient and rim
+	var d: Dictionary = Painterly.PRESETS[&"shader_led"]
+	_check("P6 shader-led is variant D: painted light, the ramp, ambient 0.15, rim 0.25",
+		d.get("painted_light") == 1.0 and d.get("ramp_amount") == 1.0 and d.get("ambient_amount") == 0.15
+		and d.get("rim_amount") == 0.25, "%s" % [d])
+
+
 func _frames(n: int) -> void:
 	for i in n:
 		await get_tree().physics_frame

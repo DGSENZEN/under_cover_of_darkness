@@ -85,7 +85,11 @@ func _run() -> void:
 	# L10 painted lamp pools: on, every Company lamp throws its painted pool
 	#     down (a spot with the pool as its projector) and dims its own glow;
 	#     off, they are gone and the glow is back
+	# Pools are on by default (variant D); off first, to know the plain glow.
 	var lamps: Array = lab.find_children("lamp_*", "OmniLight3D", true, false)
+	var pools_by_default: bool = lamps.all(func(l): return l.get_node_or_null("pool") != null)
+	lab.set_pools(false)
+	await _frames(2)
 	var glow: float = lamps[0].light_energy
 	lab.set_pools(true)
 	var pooled := true
@@ -101,8 +105,9 @@ func _run() -> void:
 
 	for lamp in lamps:
 		cleared = cleared and lamp.get_node_or_null("pool") == null and is_equal_approx(lamp.light_energy, glow)
-	_check("L10 the lamps' painted pools come and go", lamps.size() == 6 and pooled and cleared,
-		"%d lamps, pooled %s, cleared %s" % [lamps.size(), pooled, cleared])
+	_check("L10 the lamps' painted pools are on by default (variant D), and come and go",
+		lamps.size() == 6 and pools_by_default and pooled and cleared,
+		"%d lamps, by default %s, pooled %s, cleared %s" % [lamps.size(), pools_by_default, pooled, cleared])
 
 	# L7 the stair is walked: the player goes down to the landing and back up
 	#    to the street (it wedged on the old one, 1.7 m in)

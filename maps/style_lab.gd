@@ -58,6 +58,8 @@ func _ready() -> void:
 		_station(STATIONS[k], STATION_X[k], kiosk, bay)
 
 	_ground()
+	# Variant D (the user's choice): the lamps throw their painted pools.
+	set_pools(true)
 	player = PLAYER.instantiate()
 	player.debug_traversal = false
 	add_child(player)

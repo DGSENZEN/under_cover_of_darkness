@@ -85,6 +85,12 @@ class Ramp(unittest.TestCase):
         self.assertTrue(np.all(np.diff(luma) >= -0.5))
         self.assertGreater(luma[-1], luma[0] + 150)
 
+    def test_ramp_is_warm_where_lit(self):
+        """The user asked for it warmer (Oct 9 2026): its lit half leans red
+        over blue, and its middle too."""
+        for i in (self.ramp.shape[1] // 2 + 4, self.ramp.shape[1] - 2):
+            self.assertGreater(self.ramp[0, i, 0], self.ramp[0, i, 2] + 25)
+
     def test_ramp_cools_into_shadow_and_warms_into_light(self):
         cool = lambda c: c[2] / (c.sum() + 1)
         self.assertGreater(cool(self.ramp[0, 2]), cool(self.ramp[0, -2]) + 0.05)
