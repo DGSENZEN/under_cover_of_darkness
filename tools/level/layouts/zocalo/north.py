@@ -39,3 +39,7 @@ def lay(P):
     # The Holy Office's corner, cut to face the plaza.
     P.plot("inquisition_rooms", "inquisition", [(-170, -210), (-146, -210), (-140, -204), (-140, -180), (-170, -180)],
            storeys=3, height=14.0, interior=True)
+    # The street's corner before the Holy Office's door, on its cut corner.
+    P.ground("inquisition_corner", "street", [(-146, -210), (-140, -210), (-140, -204)])
+    P.landmark("inquisition_door", "door", (-143, -207))
+    P.landmark("scribe_office_door", "door", (-200, -242.5))

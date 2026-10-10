@@ -29,6 +29,8 @@ FRONTAGE = 0.5
 # far outside its outline (m); an opening lies on a wall within ON_WALL (m).
 ROUTE_REST = 0.05
 ON_WALL = 0.05
+# An opening joins two floors no further apart than a step down (m).
+STEP = 0.6
 EDGE_SLACK = 0.3
 # Surfaces at one height closer than this (m) are joined.
 JOIN = 0.01
@@ -212,7 +214,7 @@ def _graph(data):
         for b in surfaces[i + 1:]:
             if a["name"] in spaces or b["name"] in spaces:
                 # Rooms are walled: only an opening joins them to what is beside.
-                if (a["name"], b["name"]) not in opens or abs(a["y"] - b["y"]) > ROUTE_REST + 0.01:
+                if (a["name"], b["name"]) not in opens or abs(a["y"] - b["y"]) > STEP:
                     continue
             elif abs(a["y"] - b["y"]) > 1e-6 or not touching(a["polygon"], b["polygon"]):
                 continue

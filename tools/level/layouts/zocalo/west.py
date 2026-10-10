@@ -22,3 +22,4 @@ def lay(P):
     P.ground("calle_16_sept", "street", rect(-310, 35, -120, 50))
     P.plot("iturbide", "iturbide", rect(-280, -160, -240, -125), storeys=3, height=16.0)
     P.plot("pawnshop", "pawnshop", rect(-120, -210, -90, -150), storeys=3, height=14.0, interior=True)
+    P.landmark("pawnshop_door", "door", (-90, -180))

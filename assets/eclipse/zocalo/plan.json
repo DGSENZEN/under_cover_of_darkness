@@ -416,6 +416,25 @@
    "level": 0.0
   },
   {
+   "name": "inquisition_corner",
+   "kind": "street",
+   "polygon": [
+    [
+     -146.0,
+     -210.0
+    ],
+    [
+     -140.0,
+     -210.0
+    ],
+    [
+     -140.0,
+     -204.0
+    ]
+   ],
+   "level": 0.0
+  },
+  {
    "name": "palace_gate",
    "kind": "courtyard",
    "polygon": [
@@ -7863,6 +7882,22 @@
    ]
   },
   {
+   "name": "landing_w_steps",
+   "kind": "stair",
+   "points": [
+    [
+     -48.0,
+     -1.0,
+     167.0
+    ],
+    [
+     -48.0,
+     -2.0,
+     172.0
+    ]
+   ]
+  },
+  {
    "name": "landing_e_stair",
    "kind": "stair",
    "points": [
@@ -7875,6 +7910,22 @@
      54.0,
      -1.0,
      163.5
+    ]
+   ]
+  },
+  {
+   "name": "landing_e_steps",
+   "kind": "stair",
+   "points": [
+    [
+     57.0,
+     -1.0,
+     167.0
+    ],
+    [
+     57.0,
+     -2.0,
+     172.0
     ]
    ]
   },
@@ -9573,6 +9624,48 @@
  ],
  "spaces": [
   {
+   "name": "canal_walkway",
+   "polygon": [
+    [
+     -200.0,
+     179.0
+    ],
+    [
+     200.0,
+     179.0
+    ],
+    [
+     200.0,
+     190.0
+    ],
+    [
+     -200.0,
+     190.0
+    ]
+   ],
+   "floor": -2.5,
+   "height": 2.4,
+   "interior": false,
+   "openings": [
+    {
+     "to": "canal",
+     "at": [
+      -100.0,
+      179.0
+     ],
+     "width": 4.0
+    },
+    {
+     "to": "canal",
+     "at": [
+      100.0,
+      179.0
+     ],
+     "width": 4.0
+    }
+   ]
+  },
+  {
    "name": "station_hall",
    "polygon": [
     [
@@ -10193,6 +10286,33 @@
    "at": [
     0.0,
     120.0
+   ],
+   "props": {}
+  },
+  {
+   "name": "inquisition_door",
+   "kind": "door",
+   "at": [
+    -143.0,
+    -207.0
+   ],
+   "props": {}
+  },
+  {
+   "name": "scribe_office_door",
+   "kind": "door",
+   "at": [
+    -200.0,
+    -242.5
+   ],
+   "props": {}
+  },
+  {
+   "name": "pawnshop_door",
+   "kind": "door",
+   "at": [
+    -90.0,
+    -180.0
    ],
    "props": {}
   },

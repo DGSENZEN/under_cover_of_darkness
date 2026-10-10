@@ -169,6 +169,43 @@ class Plan(unittest.TestCase):
             self.assertTrue(into, r["name"])
             self.assertLessEqual(plan_check.boundary_distance((top[0], top[2]), lower[into[0]]), 0.05, r["name"])
 
+    def test_canal_walkway(self):
+        """The canal's lower walkway (spec 3.3): a room along the canal's
+        south side under the quay and market, a step below the canal's floor,
+        tall enough to walk, opening on to the canal, which the street's
+        landings reach."""
+        walk = _space("canal_walkway")
+        reached = plan_check.reach(DATA)
+        _, cz0, _, cz1 = _bounds([_ground("canal")["polygon"]])
+        _, wz0, _, _ = _bounds([walk["polygon"]])
+        self.assertAlmostEqual(wz0, cz1, delta=0.01)
+        self.assertLessEqual(walk["floor"], -2.0)
+        self.assertGreaterEqual(walk["height"], 2.2)
+        self.assertLess(walk["floor"] + walk["height"], 0.0)
+        self.assertGreaterEqual(sum(1 for o in walk["openings"] if o["to"] == "canal"), 2)
+        self.assertIn("canal", reached)
+        self.assertIn("canal_walkway", reached)
+
+    def test_doors(self):
+        """Every interior a player goes into has a door on its outline that
+        opens on to the street (or a plaza, courtyard or atrium)."""
+        doors = [m for m in DATA["landmarks"] if m["kind"] == "door"]
+        street = [g for g in DATA["ground"] if g["kind"] in plan.FRONTAGE_KINDS and abs(g["level"]) < 1e-6]
+
+        for p in DATA["plots"]:
+            if not p["interior"]:
+                continue
+
+            mine = [d for d in doors if plan_check.boundary_distance((d["at"][0], d["at"][-1]), p["polygon"]) <= 0.05]
+            self.assertTrue(mine, p["name"])
+            c = plan.centroid(p["polygon"])
+            at = (mine[0]["at"][0], mine[0]["at"][-1])
+            dx, dz = at[0] - c[0], at[1] - c[1]
+            length = (dx * dx + dz * dz) ** 0.5
+            # Look outward along the face it sits on: a metre out is street.
+            out = (at[0] + dx / length * 0.01, at[1] + dz / length * 0.01)
+            self.assertTrue(any(plan_check.near(out, g["polygon"], 1.0) for g in street), p["name"])
+
     def test_interiors(self):
         inside = {p["name"] for p in DATA["plots"] if p["interior"]} | {s["name"] for s in DATA["spaces"]
                                                                          if s["interior"]}
