@@ -136,9 +136,11 @@ vec3 hex_normal(sampler2D tex, vec2 uv) {
 	vec3 n1 = hex_one(tex, uv, v1, r1, dx, dy).rgb * 2.0 - 1.0;
 	vec3 n2 = hex_one(tex, uv, v2, r2, dx, dy).rgb * 2.0 - 1.0;
 	vec3 n3 = hex_one(tex, uv, v3, r3, dx, dy).rgb * 2.0 - 1.0;
-	n1.xy = transpose(r1) * n1.xy;
-	n2.xy = transpose(r2) * n2.xy;
-	n3.xy = transpose(r3) * n3.xy;
+	// Turned back in the tangent frame, whose y runs down the UV's v (Godot's
+	// binormal), so the inverse turn in UV is the turn itself here.
+	n1.xy = r1 * n1.xy;
+	n2.xy = r2 * n2.xy;
+	n3.xy = r3 * n3.xy;
 	vec3 k = pow(max(w, vec3(0.0)), vec3(7.0));
 	k /= max(k.x + k.y + k.z, 1e-6);
 	return normalize(n1 * k.x + n2 * k.y + n3 * k.z) * 0.5 + 0.5;

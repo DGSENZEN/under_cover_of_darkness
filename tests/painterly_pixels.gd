@@ -189,6 +189,15 @@ func _ready() -> void:
 	_check("X15 no seams at a distance: hex-tiling's sharpest steps no worse than plain tiling's",
 		plain_far > 0.0 and hex_far <= plain_far * 1.5, "99th-percentile neighbour step: hex %.4f, plain %.4f" % [hex_far, plain_far])
 
+	# X17 hex-tiled relief turns with its colour: in every hexagon the
+	#     relief leans the way the colour runs (a tile whose red rises along u,
+	#     its normals leaning +u). Plain tiling must agree too (it fixes the
+	#     conventions); a normal turned the wrong way leans 2a off.
+	var plain_agree := await _relief_follows_colour({"tiled": 1.0, "hex_tiling": 0.0})
+	var hex_agree := await _relief_follows_colour({"tiled": 1.0, "hex_tiling": 1.0})
+	_check("X17 hex-tiled relief leans the way its colour runs", plain_agree > 0.9 and hex_agree > 0.8,
+		"pixels agreeing within 25 degrees: plain %.2f, hex %.2f" % [plain_agree, hex_agree])
+
 	# X16 the macro layer: one quad drawn at two places half a macro scale
 	#     apart differs with it on, and is the same with it off
 	var flat := {"vertex_paint": 0.0, "stroke_strength": 0.0}
@@ -265,6 +274,117 @@ func _tiled_plane(tile: Texture2D, settings: Dictionary, grazing: bool) -> Image
 
 	for i in uvs.size():
 		uvs[i] *= PLANE_M
+
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var ground := MeshInstance3D.new()
+	ground.mesh = mesh
+	ground.material_override = material
+	view.add_child(ground)
+
+	for i in 5:
+		await RenderingServer.frame_post_draw
+
+	var image := view.get_texture().get_image()
+	view.queue_free()
+	return image
+
+
+## The share of pixels where the relief leans the way the colour runs, on
+## a 10 m plane seen from above: the colour's direction from an unlit draw
+## (red rising along u), the relief's from four lit draws (from +x, -x, +z,
+## -z: their differences give the lean's x and z).
+func _relief_follows_colour(settings: Dictionary) -> float:
+	var ramp := Image.create(64, 64, false, Image.FORMAT_RGB8)
+
+	for y in 64:
+		for x in 64:
+			ramp.set_pixel(x, y, Color(x / 63.0, 0.0, 0.0))
+
+	ramp.generate_mipmaps()
+	var lean := Image.create(8, 8, false, Image.FORMAT_RGB8)
+	lean.fill(Color(0.85, 0.5, 0.85))
+	lean.generate_mipmaps()
+	var colour := ImageTexture.create_from_image(ramp)
+	var relief := ImageTexture.create_from_image(lean)
+	var flat := await _seen_plane(colour, relief, settings, -1.0)
+	var lit := []
+
+	for yaw in [PI / 2, -PI / 2, 0.0, PI]:          # lit from +x, -x, +z, -z
+		lit.append(await _seen_plane(colour, relief, settings, yaw))
+
+	var agree := 0
+	var counted := 0
+
+	for y in range(2, flat.get_height() - 2):
+		for x in range(2, flat.get_width() - 2):
+			var gx := flat.get_pixel(x + 1, y).r - flat.get_pixel(x - 1, y).r
+			var gz := flat.get_pixel(x, y + 1).r - flat.get_pixel(x, y - 1).r
+
+			# Only where the ramp runs smoothly (not across its wrap).
+			if Vector2(gx, gz).length() < 0.004 or Vector2(gx, gz).length() > 0.08:
+				continue
+
+			var nx: float = lit[0].get_pixel(x, y).r - lit[1].get_pixel(x, y).r
+			var nz: float = lit[2].get_pixel(x, y).r - lit[3].get_pixel(x, y).r
+
+			if Vector2(nx, nz).length() < 0.02:
+				continue
+
+			counted += 1
+			agree += int(absf(angle_difference(Vector2(gx, gz).angle(), Vector2(nx, nz).angle())) < deg_to_rad(25.0))
+
+	return float(agree) / maxi(counted, 1)
+
+
+## A 10 m plane at 32 px a metre seen from straight above (image x is world
+## x, image y world z), its colour `colour` and relief `relief` a metre a
+## tile: lit by one sun at 57 degrees turned `yaw`, or unshaded when `yaw`
+## is -1.
+func _seen_plane(colour: Texture2D, relief: Texture2D, settings: Dictionary, yaw: float) -> Image:
+	var size := 10.0
+	var view := SubViewport.new()
+	view.size = Vector2i(320, 320)
+	view.own_world_3d = true
+	view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(view)
+	var world := WorldEnvironment.new()
+	world.environment = Environment.new()
+	world.environment.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	world.environment.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	view.add_child(world)
+	var camera := Camera3D.new()
+	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.size = size
+	camera.position = Vector3(0, 10, 0)
+	camera.rotation = Vector3(-PI / 2, 0, 0)
+	view.add_child(camera)
+	var white := Image.create(4, 4, false, Image.FORMAT_RGB8)
+	white.fill(Color.WHITE)
+	var material: ShaderMaterial = Painterly.material(colour if yaw == -1.0 else ImageTexture.create_from_image(white),
+		&"even", Painterly.ZOCALO, relief)
+
+	if yaw == -1.0:
+		material.shader = UNSHADED
+	else:
+		var sun := DirectionalLight3D.new()
+		sun.rotation = Vector3(-1.0, yaw, 0)
+		view.add_child(sun)
+
+	for key in {"paint_mix": 0.0, "stroke_strength": 0.0, "terminator_break": 0.0, "specular": 0.0}:
+		material.set_shader_parameter(key, 0.0)
+
+	for key in settings:
+		material.set_shader_parameter(key, settings[key])
+
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(size, size)
+	var arrays := plane.get_mesh_arrays()
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+
+	for i in uvs.size():
+		uvs[i] *= size
 
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	var mesh := ArrayMesh.new()
