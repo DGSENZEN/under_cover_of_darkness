@@ -182,14 +182,14 @@ class Painting(unittest.TestCase):
         alone = ~(same(0, 1) | same(0, -1) | same(1, 0) | same(-1, 0))
         self.assertLess(alone[1:-1, 1:-1].mean(), 0.02)
 
-    def test_strokes_give_the_paint_depth(self):
-        """Brush strokes raise impasto: the normal map leans where they lie."""
-        stroked = {k: dict(v, strokes=12) for k, v in self.recipes.items()}
-        self.recipes = stroked
+    def test_strokes_are_colour_only(self):
+        """Brush strokes paint colour and raise nothing: with no other relief
+        the normal map stays flat under them (the user, Oct 9 2026: brush-stroke
+        normals made it gritty)."""
+        self.recipes = {k: dict(v, strokes=12, relief=FLAT) for k, v in self.recipes.items()}
         self.paint()
         normals = np.asarray(Image.open(self.base.out / "piece_normal_base.png").convert("RGB"), dtype=np.float64)
-        lean = np.abs(normals[6:-6, 6:PX // 2 - 6, :2] - 128).mean()
-        self.assertGreater(lean, 3.0)
+        self.assertLess(np.abs(normals[6:-6, 6:PX // 2 - 6, :2] - 128).mean(), 1.0)
 
     def test_strokes_follow_band_edges(self):
         """Strokes gather where the value bands meet: the colour there varies

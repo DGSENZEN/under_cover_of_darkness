@@ -70,17 +70,12 @@ func _run() -> void:
 		"bumped %s smooth %s" % [bumped.get_shader_parameter("normal_atlas"), smooth.get_shader_parameter("normal_atlas")])
 
 
-	# P5 the shader's strokes have depth: every preset raises them, the
-	#    shader-led look (the user's choice) the most
-	var relief := {}
-
-	for preset in Painterly.PRESETS:
-		relief[preset] = Painterly.material(Painterly.BRUSH, preset).get_shader_parameter("stroke_relief")
-
-	_check("P5 the shader's strokes raise relief, shader-led the most",
-		relief.values().all(func(r): return r != null and r > 0.0)
-		and relief[&"shader_led"] >= relief[&"even"] and relief[&"even"] >= relief[&"painted_led"],
-		"%s" % [relief])
+	# P5 the strokes are colour only: no brush-stroke normals (the user, Oct 9
+	#    2026: they made everything gritty)
+	var names := Painterly.SHADER.get_shader_uniform_list().map(func(u): return u["name"])
+	var keys := Painterly.PRESETS.values().map(func(p): return p.keys())
+	_check("P5 the shader's strokes bend no normals: no stroke_relief, in the shader or a preset",
+		not "stroke_relief" in names and keys.all(func(k): return not "stroke_relief" in k), "uniforms %s" % [names])
 
 
 func _frames(n: int) -> void:

@@ -139,7 +139,6 @@ func _sphere_levels(painted: float) -> int:
 	var material: ShaderMaterial = Painterly.material(ImageTexture.create_from_image(white), &"shader_led")
 	material.set_shader_parameter("paint_mix", 0.0)
 	material.set_shader_parameter("stroke_strength", 0.0)
-	material.set_shader_parameter("stroke_relief", 0.0)
 	material.set_shader_parameter("terminator_break", 0.0)
 	material.set_shader_parameter("band_softness", 0.0)
 	material.set_shader_parameter("light_bands", 3.0)

@@ -76,7 +76,6 @@ SLOT_COLOURS = 10
 STROKES = 5
 STROKE_LENGTH = (20, 44)
 STROKE_WIDTH = (7, 12)
-STROKE_RELIEF = 0.8
 UP = np.array([0.0, 0.0, 1.0])
 NORTH = np.array([0.0, 1.0, 0.0])
 
@@ -367,12 +366,9 @@ def _kmeans(lab, k, rounds=10):
 def _strokes(colour, banded, mask, rng, count):
     """Brush strokes over a slot: gathered where its value bands meet, lying
     along the edges (the image's own structure), each dragging the paint of
-    the band beside it; and the impasto they leave, a ridge along each one.
-    Works on the slot's bounding box. Returns (colour, height 0-1)."""
-    height = np.zeros(mask.shape)
-
+    the band beside it. Colour only. Works on the slot's bounding box."""
     if count <= 0 or not mask.any():
-        return colour, height
+        return colour
 
     ys, xs = np.nonzero(mask)
     pad = STROKE_LENGTH[1]
@@ -388,8 +384,7 @@ def _strokes(colour, banded, mask, rng, count):
     picks = rng.choice(weight.size, size=count, p=weight / weight.sum())
     h, w = box_mask.shape
     paint = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    ridge = Image.new("L", (w, h), 0)
-    draw, raise_ = ImageDraw.Draw(paint), ImageDraw.Draw(ridge)
+    draw = ImageDraw.Draw(paint)
 
     for k in picks:
         y, x = divmod(int(k), w)
@@ -402,16 +397,12 @@ def _strokes(colour, banded, mask, rng, count):
         sx = int(np.clip(x - math.sin(along) * side, 0, w - 1))
         r, g, b = (int(c) for c in np.clip(box_colour[sy, sx], 0, 255))
         _dab(draw, x, y, length, width, along, (r, g, b, int(rng.uniform(150, 210))))
-        _dab(raise_, x, y, length, width, along, 110)
-        _dab(raise_, x, y, length * 0.85, width * 0.4, along, 255)
 
     layer = np.asarray(paint, dtype=np.float64)
     alpha = (layer[..., 3:4] / 255.0) * box_mask[..., None]
     out = colour.copy()
     out[y0:y1, x0:x1] = box_colour * (1 - alpha) + layer[..., :3] * alpha
-    soft = np.asarray(ridge.filter(ImageFilter.GaussianBlur(1.5)), dtype=np.float64) / 255.0
-    height[y0:y1, x0:x1] = soft * box_mask
-    return out, height
+    return out
 
 
 def _despeckle(lab, cells, rounds=2):
@@ -553,11 +544,10 @@ def _paint(piece, source_dir, out_dir, recipes, scans_dir, prep):
             tint = recipe["scan"]["tint"]
             colour = colour * tint + photo * 255.0 * (1 - tint)
 
-        # Strokes over the bands, and the ridges of paint they leave.
+        # Strokes over the bands: colour only (their relief made it all gritty).
         count = int(recipe.get("strokes", STROKES) * area / 64)
-        colour, ridges = _strokes(colour, banded, mask_big, rng, count)
-        bump = (shape.get("brush", 0.0) * detail * 4.0 - shape.get("bevel", 0.0) * wear_map ** 2
-                + recipe.get("stroke_relief", STROKE_RELIEF) * ridges)
+        colour = _strokes(colour, banded, mask_big, rng, count)
+        bump = shape.get("brush", 0.0) * detail * 4.0 - shape.get("bevel", 0.0) * wear_map ** 2
 
         if shape.get("pores", 0):
             pits = _dabs(mask_big, int(shape["pores"] * area / 64), rng, big, angle, (0.6, 1.4), (0.5, 1.1), 0.35)
