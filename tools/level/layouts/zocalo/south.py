@@ -1,5 +1,5 @@
-"""South of the plaza: the town hall and its Portal de las Flores, split by
-a passage; behind it the canal (the Acequia Real come back) between two
+"""South of the plaza: the Portal de las Flores and the town hall behind it,
+split by a passage; behind it the canal (the Acequia Real come back) between two
 quays, with landings cut into the north quay and three bridges; beyond it
 the market quarter: the iron-and-glass hall and rows of stalls on lanes."""
 
@@ -7,8 +7,11 @@ from plan import rect
 
 
 def lay(P):
-    P.plot("town_hall_w", "town_hall", rect(-100, 130, -5, 160), storeys=3, height=14.0)
-    P.plot("town_hall_e", "town_hall", rect(5, 130, 100, 160), storeys=3, height=14.0)
+    # The Portal de las Flores along the plaza, the town hall behind it.
+    P.plot("portal_flores_w", "arcade", rect(-100, 130, -5, 138), storeys=2, height=13.0)
+    P.plot("portal_flores_e", "arcade", rect(5, 130, 100, 138), storeys=2, height=13.0)
+    P.plot("town_hall_w", "town_hall", rect(-100, 138, -5, 160), storeys=3, height=14.0)
+    P.plot("town_hall_e", "town_hall", rect(5, 138, 100, 160), storeys=3, height=14.0)
     P.ground("calle_20_nov", "street", rect(-5, 130, 5, 160))
     P.route("town_hall_plank", "roof_link", [(-7, 14, 145), (7, 14, 145)])
 

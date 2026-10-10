@@ -102,15 +102,13 @@ case "$verb" in
     "$0" export "$level"
     ;;
   zocalo)
-    # The Zócalo's plan: its data, its six sheets (and, once greybox.py
-    # exists, its greybox), into assets/eclipse/zocalo/.
+    # The Zócalo's plan: checked (it stops here if not clean), then its data,
+    # its six sheets and its greybox, into assets/eclipse/zocalo/.
     mkdir -p "$ROOT/assets/eclipse/zocalo/plan"
     touch "$ROOT/assets/eclipse/zocalo/plan/.gdignore"
     (cd "$HERE/layouts" && python3 city_zocalo.py "$ROOT/assets/eclipse/zocalo/plan.json")
     python3 "$HERE/plan_draw.py" "$ROOT/assets/eclipse/zocalo/plan.json" "$ROOT/assets/eclipse/zocalo/plan"
-    if [ -f "$HERE/greybox.py" ]; then
-      python3 "$HERE/greybox.py" "$ROOT/assets/eclipse/zocalo/plan.json" "$ROOT/assets/eclipse/zocalo/greybox.json"
-    fi
+    python3 "$HERE/greybox.py" "$ROOT/assets/eclipse/zocalo/plan.json" "$ROOT/assets/eclipse/zocalo/greybox.json"
     ;;
   test)
     python3 "$HERE/test_rules.py"

@@ -43,16 +43,40 @@ def _edges(polygon):
 
 
 def convex(polygon):
-    """True for a convex polygon (collinear corners allowed)."""
+    """True for a convex polygon (collinear corners allowed): every turn the
+    same way, and no edge crossing another (a star turns one way too)."""
     signs = set()
+    edges = _edges(polygon)
 
-    for (a, b), (_, c) in zip(_edges(polygon), _edges(polygon)[1:] + _edges(polygon)[:1]):
+    for (a, b), (_, c) in zip(edges, edges[1:] + edges[:1]):
         cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
 
         if abs(cross) > 1e-9:
             signs.add(cross > 0)
 
-    return len(signs) <= 1
+    if len(signs) > 1:
+        return False
+
+    n = len(edges)
+
+    for i in range(n):
+        for j in range(i + 2, n):
+            if i == 0 and j == n - 1:
+                continue
+
+            if _crossing(edges[i][0], edges[i][1], edges[j][0], edges[j][1]):
+                return False
+
+    return True
+
+
+def _crossing(a, b, c, d):
+    """Two segments crossing at a point inside both (not at their ends)."""
+    def orient(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+
+    o1, o2, o3, o4 = orient(a, b, c), orient(a, b, d), orient(c, d, a), orient(c, d, b)
+    return o1 * o2 < -1e-12 and o3 * o4 < -1e-12
 
 
 def _clip(subject, clipper):
@@ -289,6 +313,52 @@ def _bounds(polygon):
     return min(xs), min(zs), max(xs), max(zs)
 
 
+# Routes are walked every this many metres for what they pass through (m),
+# their ends' first and last stretch left out (they rest on something).
+ROUTE_STEP = 0.5
+ROUTE_END = 0.3
+
+
+def _through_solid(data):
+    """A stair, bridge or plank passing through a plot (below its roof) or
+    buried in solid ground (below the street, in no sunken place or room).
+    Tunnels carve their own way and climbs cross a wall by design."""
+    problems = []
+    holes = [g for g in data["ground"] if g["kind"] in plan.SUNKEN_KINDS]
+
+    for r in data["routes"]:
+        if r["kind"] not in ("stair", "bridge", "roof_link"):
+            continue
+
+        a, b = r["points"][0], r["points"][-1]
+        length = math.dist(a, b)
+        hit, buried = set(), False
+        k = ROUTE_END
+
+        while k <= length - ROUTE_END:
+            t = k / length
+            x, y, z = (a[i] + (b[i] - a[i]) * t for i in range(3))
+
+            for p in data["plots"]:
+                if y < plan.top(p) - 0.05 and convex(p["polygon"]) and inside((x, z), p["polygon"]) \
+                        and boundary_distance((x, z), p["polygon"]) > 0.05:
+                    hit.add(p["name"])
+
+            if y < -0.05 and not any(near((x, z), h["polygon"], 0.05) and h["level"] <= y + 0.01 for h in holes) \
+                    and not any(near((x, z), s["polygon"], 0.05) and s["floor"] - 0.01 <= y <= s["floor"] + s["height"]
+                                for s in data["spaces"]):
+                buried = True
+
+            k += ROUTE_STEP
+
+        problems += ["route %s passes through plot %s" % (r["name"], n) for n in sorted(hit)]
+
+        if buried:
+            problems.append("route %s runs through solid ground" % r["name"])
+
+    return problems
+
+
 def check(data):
     problems = []
     plots = data["plots"]
@@ -317,9 +387,16 @@ def check(data):
 
     for p in plots:
         middles = [((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) for a, b in _edges(p["polygon"])]
+        # A dig is frontage only for what stands down in it.
+        faces = [g for g in frontage if g["kind"] != "dig" or p["base"] < -1e-6]
 
-        if not any(near(m, g["polygon"], FRONTAGE) for m in middles for g in frontage):
+        if not any(near(m, g["polygon"], FRONTAGE) for m in middles for g in faces):
             problems.append("plot %s faces no street" % p["name"])
+
+        for g in grounds:
+            if g["kind"] in plan.SUNKEN_KINDS and p["base"] > g["level"] + 1e-6 and convex(p["polygon"]) \
+                    and overlap_area(g["polygon"], p["polygon"]) >= OVERLAP:
+                problems.append("plot %s stands over %s" % (p["name"], g["name"]))
 
     # Sunken ground.
     for g in grounds:
@@ -333,6 +410,7 @@ def check(data):
     _, _, dangling = _graph(data)
     problems += dangling
     problems += _openings_on_walls(data)
+    problems += _through_solid(data)
     reached = reach(data)
 
     for p in plots:

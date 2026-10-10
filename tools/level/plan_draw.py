@@ -71,7 +71,9 @@ def _poly(draw, to_px, polygon, fill=None, outline=None, width=1):
     draw.polygon([to_px(*p) for p in polygon], fill=fill, outline=outline, width=width)
 
 
-def _grid(draw, data, to_px, colour):
+def _grid(draw, data, to_px, colour, hundred=None):
+    """Lines every 10 m in `colour`, every 100 m in `hundred` (ink)."""
+    HUNDRED = hundred or _fade(INK, 0.55)
     xs = [p[0] for p in data["brink"]]
     zs = [p[1] for p in data["brink"]]
     x0, x1, z0, z1 = min(xs), max(xs), min(zs), max(zs)
@@ -79,14 +81,14 @@ def _grid(draw, data, to_px, colour):
 
     while x0 + k * 10 <= x1 + 1e-6:
         x = x0 + k * 10
-        draw.line([to_px(x, z0), to_px(x, z1)], fill=colour if k % 10 else _fade(colour, -0.6, INK), width=1)
+        draw.line([to_px(x, z0), to_px(x, z1)], fill=colour if k % 10 else HUNDRED, width=1)
         k += 1
 
     k = 0
 
     while z0 + k * 10 <= z1 + 1e-6:
         z = z0 + k * 10
-        draw.line([to_px(x0, z), to_px(x1, z)], fill=colour if k % 10 else _fade(colour, -0.6, INK), width=1)
+        draw.line([to_px(x0, z), to_px(x1, z)], fill=colour if k % 10 else HUNDRED, width=1)
         k += 1
 
 
@@ -134,7 +136,7 @@ def _sheet(data, sheet, px_per_m):
     if sheet == "events":
         _event_fields(image, data, to_px, px_per_m)
         draw = ImageDraw.Draw(image)
-        _grid(draw, data, to_px, (40, 40, 48))
+        _grid(draw, data, to_px, (40, 40, 48), (90, 90, 104))
 
         for p in data["plots"]:
             _poly(draw, to_px, p["polygon"], outline=(200, 200, 200))

@@ -56,6 +56,13 @@ class Sheets(unittest.TestCase):
     def test_events_sheet_reddens_at_subsidence_centre(self):
         self.assertGreater(self.pixel("events", -2, -2)[0], self.pixel("events", 0, 200)[0] + 40)
 
+    def test_hundred_metre_lines_are_darker_than_the_grid(self):
+        # x -160 is a 100 m line (the brink starts at -260); z -195 is open
+        # paper between 10 m rows.
+        on = self.pixel("street", -160, -195)
+        off = self.pixel("street", -155, -195)
+        self.assertLess(int(on.sum()), int(off.sum()) - 60, (on, off))
+
     def test_north_is_up(self):
         self.assertLess(self.to_px(0, -100)[1], self.to_px(0, 100)[1])
         self.assertLess(self.to_px(-100, 0)[0], self.to_px(100, 0)[0])

@@ -1460,8 +1460,8 @@
    "interior": true
   },
   {
-   "name": "town_hall_w",
-   "family": "town_hall",
+   "name": "portal_flores_w",
+   "family": "arcade",
    "polygon": [
     [
      -100.0,
@@ -1470,6 +1470,60 @@
     [
      -5.0,
      130.0
+    ],
+    [
+     -5.0,
+     138.0
+    ],
+    [
+     -100.0,
+     138.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "portal_flores_e",
+   "family": "arcade",
+   "polygon": [
+    [
+     5.0,
+     130.0
+    ],
+    [
+     100.0,
+     130.0
+    ],
+    [
+     100.0,
+     138.0
+    ],
+    [
+     5.0,
+     138.0
+    ]
+   ],
+   "storeys": 2,
+   "height": 13.0,
+   "base": 0.0,
+   "roof": true,
+   "interior": false
+  },
+  {
+   "name": "town_hall_w",
+   "family": "town_hall",
+   "polygon": [
+    [
+     -100.0,
+     138.0
+    ],
+    [
+     -5.0,
+     138.0
     ],
     [
      -5.0,
@@ -1492,11 +1546,11 @@
    "polygon": [
     [
      5.0,
-     130.0
+     138.0
     ],
     [
      100.0,
-     130.0
+     138.0
     ],
     [
      100.0,
@@ -6050,114 +6104,6 @@
    "interior": false
   },
   {
-   "name": "house_dn_9",
-   "family": "house",
-   "polygon": [
-    [
-     80.0,
-     -239.0
-    ],
-    [
-     100.0,
-     -239.0
-    ],
-    [
-     100.0,
-     -225.0
-    ],
-    [
-     80.0,
-     -225.0
-    ]
-   ],
-   "storeys": 3,
-   "height": 13.0,
-   "base": 0.0,
-   "roof": true,
-   "interior": false
-  },
-  {
-   "name": "house_dn_10",
-   "family": "house",
-   "polygon": [
-    [
-     100.0,
-     -239.0
-    ],
-    [
-     120.0,
-     -239.0
-    ],
-    [
-     120.0,
-     -225.0
-    ],
-    [
-     100.0,
-     -225.0
-    ]
-   ],
-   "storeys": 3,
-   "height": 13.0,
-   "base": 0.0,
-   "roof": true,
-   "interior": false
-  },
-  {
-   "name": "house_dn_11",
-   "family": "house",
-   "polygon": [
-    [
-     120.0,
-     -239.0
-    ],
-    [
-     140.0,
-     -239.0
-    ],
-    [
-     140.0,
-     -225.0
-    ],
-    [
-     120.0,
-     -225.0
-    ]
-   ],
-   "storeys": 3,
-   "height": 13.0,
-   "base": 0.0,
-   "roof": true,
-   "interior": false
-  },
-  {
-   "name": "house_dn_12",
-   "family": "house",
-   "polygon": [
-    [
-     140.0,
-     -239.0
-    ],
-    [
-     160.0,
-     -239.0
-    ],
-    [
-     160.0,
-     -225.0
-    ],
-    [
-     140.0,
-     -225.0
-    ]
-   ],
-   "storeys": 3,
-   "height": 13.0,
-   "base": 0.0,
-   "roof": true,
-   "interior": false
-  },
-  {
    "name": "house_dn_14",
    "family": "house",
    "polygon": [
@@ -6239,33 +6185,6 @@
    "interior": false
   },
   {
-   "name": "house_de_1",
-   "family": "house",
-   "polygon": [
-    [
-     150.0,
-     -225.0
-    ],
-    [
-     175.0,
-     -225.0
-    ],
-    [
-     175.0,
-     -211.0
-    ],
-    [
-     150.0,
-     -211.0
-    ]
-   ],
-   "storeys": 2,
-   "height": 9.0,
-   "base": 0.0,
-   "roof": true,
-   "interior": false
-  },
-  {
    "name": "house_de_2",
    "family": "house",
    "polygon": [
@@ -6338,87 +6257,6 @@
     [
      175.0,
      -145.0
-    ]
-   ],
-   "storeys": 3,
-   "height": 13.0,
-   "base": 0.0,
-   "roof": true,
-   "interior": false
-  },
-  {
-   "name": "house_de_5",
-   "family": "house",
-   "polygon": [
-    [
-     150.0,
-     -211.0
-    ],
-    [
-     164.0,
-     -211.0
-    ],
-    [
-     164.0,
-     -193.66666666666666
-    ],
-    [
-     150.0,
-     -193.66666666666666
-    ]
-   ],
-   "storeys": 3,
-   "height": 13.0,
-   "base": 0.0,
-   "roof": true,
-   "interior": false
-  },
-  {
-   "name": "house_de_6",
-   "family": "house",
-   "polygon": [
-    [
-     150.0,
-     -193.66666666666666
-    ],
-    [
-     164.0,
-     -193.66666666666666
-    ],
-    [
-     164.0,
-     -176.33333333333334
-    ],
-    [
-     150.0,
-     -176.33333333333334
-    ]
-   ],
-   "storeys": 3,
-   "height": 13.0,
-   "base": 0.0,
-   "roof": true,
-   "interior": false
-  },
-  {
-   "name": "house_de_7",
-   "family": "house",
-   "polygon": [
-    [
-     150.0,
-     -176.33333333333334
-    ],
-    [
-     164.0,
-     -176.33333333333334
-    ],
-    [
-     164.0,
-     -159.0
-    ],
-    [
-     150.0,
-     -159.0
     ]
    ],
    "storeys": 3,
@@ -8230,18 +8068,66 @@
    ]
   },
   {
+   "name": "climb_portal_flores_w_town_hall_w",
+   "kind": "climb",
+   "points": [
+    [
+     -52.5,
+     13.0,
+     137.0
+    ],
+    [
+     -52.5,
+     14.0,
+     139.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_portal_flores_e_town_hall_e",
+   "kind": "climb",
+   "points": [
+    [
+     52.5,
+     13.0,
+     137.0
+    ],
+    [
+     52.5,
+     14.0,
+     139.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_house_e0_1_portal_flores_e",
+   "kind": "climb",
+   "points": [
+    [
+     101.0,
+     9.0,
+     134.0
+    ],
+    [
+     99.0,
+     13.0,
+     134.0
+    ]
+   ]
+  },
+  {
    "name": "climb_house_d2_1_town_hall_w",
    "kind": "climb",
    "points": [
     [
      -101.0,
      13.0,
-     137.0
+     141.0
     ],
     [
      -99.0,
      14.0,
-     137.0
+     141.0
     ]
    ]
   },
@@ -8268,12 +8154,12 @@
     [
      101.0,
      9.0,
-     137.0
+     141.0
     ],
     [
      99.0,
      14.0,
-     137.0
+     141.0
     ]
    ]
   },
@@ -8966,38 +8852,6 @@
    ]
   },
   {
-   "name": "climb_house_de_1_house_dn_12",
-   "kind": "climb",
-   "points": [
-    [
-     155.0,
-     9.0,
-     -224.0
-    ],
-    [
-     155.0,
-     13.0,
-     -226.0
-    ]
-   ]
-  },
-  {
-   "name": "climb_house_de_1_house_de_5",
-   "kind": "climb",
-   "points": [
-    [
-     157.0,
-     9.0,
-     -212.0
-    ],
-    [
-     157.0,
-     13.0,
-     -210.0
-    ]
-   ]
-  },
-  {
    "name": "climb_house_de_3_house_de_4",
    "kind": "climb",
    "points": [
@@ -9010,22 +8864,6 @@
      176.0,
      13.0,
      -152.0
-    ]
-   ]
-  },
-  {
-   "name": "climb_house_de_3_house_de_7",
-   "kind": "climb",
-   "points": [
-    [
-     157.0,
-     9.0,
-     -158.0
-    ],
-    [
-     157.0,
-     13.0,
-     -160.0
     ]
    ]
   },
@@ -9718,6 +9556,38 @@
    ]
   },
   {
+   "name": "climb_up_portal_flores_e",
+   "kind": "climb",
+   "points": [
+    [
+     52.5,
+     0.0,
+     129.0
+    ],
+    [
+     52.5,
+     13.0,
+     131.0
+    ]
+   ]
+  },
+  {
+   "name": "climb_up_portal_flores_w",
+   "kind": "climb",
+   "points": [
+    [
+     -52.5,
+     0.0,
+     129.0
+    ],
+    [
+     -52.5,
+     13.0,
+     131.0
+    ]
+   ]
+  },
+  {
    "name": "climb_up_portal_mercaderes_1",
    "kind": "climb",
    "points": [
@@ -9786,14 +9656,14 @@
    "kind": "climb",
    "points": [
     [
-     52.5,
+     4.0,
      0.0,
-     129.0
+     149.0
     ],
     [
-     52.5,
+     6.0,
      14.0,
-     131.0
+     149.0
     ]
    ]
   },
@@ -9802,14 +9672,14 @@
    "kind": "climb",
    "points": [
     [
-     -52.5,
+     -4.0,
      0.0,
-     129.0
+     149.0
     ],
     [
-     -52.5,
+     -6.0,
      14.0,
-     131.0
+     149.0
     ]
    ]
   }

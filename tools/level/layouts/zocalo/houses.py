@@ -72,7 +72,8 @@ def lots(x0, z0, x1, z1, sides):
 
 def lay(P):
     data = P.data()
-    frontage = [g for g in data["ground"] if g["kind"] in plan.FRONTAGE_KINDS]
+    # A house faces a street, a plaza or the canal, never only a dig.
+    frontage = [g for g in data["ground"] if g["kind"] in plan.FRONTAGE_KINDS and g["kind"] != "dig"]
 
     for name, x0, z0, x1, z1, sides in BLOCKS:
         for i, lot in enumerate(lots(x0, z0, x1, z1, sides)):

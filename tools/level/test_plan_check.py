@@ -76,6 +76,33 @@ class Checks(unittest.TestCase):
         P.plot("lonely", "house", rect(100, 100, 120, 120), storeys=2, height=9.0, roof=False)
         self.assertIn("faces no street", self.one_problem(P, "lonely"))
 
+    def test_house_facing_only_a_dig_faces_no_street(self):
+        # A dig is frontage only for what stands down in it.
+        P = _town()
+        P.ground("pit", "dig", rect(100, 100, 140, 140), level=-6.0)
+        P.plot("pit_house", "house", rect(100, 140, 120, 155), storeys=2, height=9.0, roof=False)
+        self.assertIn("faces no street", self.one_problem(P, "pit_house"))
+
+    def test_plot_standing_over_a_well(self):
+        P = _town()
+        P.plot("kiosk_hut", "stall", rect(-5, -55, 5, -51), storeys=1, height=3.0, roof=False)
+        problems = plan_check.check(P.data())
+        self.assertTrue(any("kiosk_hut" in p and "well_a" in p for p in problems), problems)
+
+    def test_star_is_not_convex(self):
+        import math
+        star = [(150 + 10 * math.cos(math.radians(90 + 144 * k)), 150 + 10 * math.sin(math.radians(90 + 144 * k)))
+                for k in range(5)]
+        self.assertFalse(plan_check.convex(star))
+
+    def test_route_through_a_wall(self):
+        # A stair from the street running through house_a's wall.
+        P = _town()
+        P.ground("cellar", "well", rect(82, -36, 92, -24), level=-4.0)
+        P.route("bad_stair", "stair", [(55, 0, -30), (87, -4, -30)])
+        problems = plan_check.check(P.data())
+        self.assertTrue(any("bad_stair" in p and "house_a" in p for p in problems), problems)
+
     def test_concave_plot_refused(self):
         P = _town()
         P.plot("ell", "house", [(60, 0), (80, 0), (80, 20), (70, 20), (70, 10), (60, 10)], storeys=2, height=9.0,

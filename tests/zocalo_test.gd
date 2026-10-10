@@ -136,7 +136,10 @@ func _run() -> void:
 	var into := Vector3(climb["points"][1][0] - climb["points"][0][0], 0, climb["points"][1][2] - climb["points"][0][2])
 	var up := await _walk(foot - into.normalized() * 0.6, atan2(-into.x, -into.z),
 		func(p): return p.y > 14.5 and map.player.movement_state == map.player.MoveState.LOCOMOTION, 900)
-	var along := await _walk(map.player.global_position, PI, func(p): return p.z > 144.8, 600)
+	# To the plank's line (145), from whichever side the ladder came up.
+	var north: bool = map.player.global_position.z > 145.0
+	var along := await _walk(map.player.global_position, 0.0 if north else PI,
+		func(p): return p.z < 145.2 if north else p.z > 144.8, 600)
 	var across := await _walk(map.player.global_position, -PI / 2, func(p): return p.x > 10.0, 600)
 	_check("Z6 the player climbs the town hall's ladder from the street and crosses its roof plank",
 		up["ok"] and along["ok"] and across["ok"] and along["lowest"] > 14.0 and across["lowest"] > 14.0 - 0.5,

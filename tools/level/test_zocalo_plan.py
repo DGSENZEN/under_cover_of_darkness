@@ -119,6 +119,17 @@ class Plan(unittest.TestCase):
         self.assertLess(mx0, plaza_x0 - 100)
         self.assertTrue(_plots("pawnshop") and _plots("iturbide"))
 
+    def test_portal_de_las_flores(self):
+        """The south side's arcade is an arcade (build step 3.3 completes both
+        portales): arcade plots between the south ring and the canal, along
+        150 m or more of the plaza's south side, the town hall behind them."""
+        _, _, _, pz1 = _bounds([_ground("plaza")["polygon"]])
+        _, cz0, _, _ = _bounds([_ground("canal")["polygon"]])
+        south = [p for p in _plots("arcade") if pz1 < plan.centroid(p["polygon"])[1] < cz0]
+        x0, _, x1, _ = _bounds([p["polygon"] for p in south])
+        self.assertGreaterEqual(x1 - x0, 150)
+        self.assertTrue(_plots("town_hall"))
+
     def test_station(self):
         hall = _space("station_hall")
         x0, z0, x1, z1 = _bounds([hall["polygon"]])

@@ -32,6 +32,16 @@ def layout():
 
 
 if __name__ == "__main__":
+    import plan_check
+
+    problems = plan_check.check(plan())
+
+    for p in problems:
+        print("zocalo plan:", p)
+
+    if problems:
+        sys.exit(1)
+
     out = Path(sys.argv[1])
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(plan(), indent=1))

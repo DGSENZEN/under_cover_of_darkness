@@ -78,6 +78,8 @@ def lay(P):
                         [(lo[0], plan.top(lower), lo[1]), (hi[0], plan.top(higher), hi[1])])
 
     streets = [g for g in data["ground"] if abs(g["level"]) < 1e-6 and g["kind"] in plan.FRONTAGE_KINDS]
+    # A ladder's foot never stands over a pit cut in the street.
+    pits = [g for g in data["ground"] if g["kind"] in plan.SUNKEN_KINDS]
     done = set()
 
     for i, p in sorted(enumerate(roofs), key=lambda e: e[1]["name"]):
@@ -93,7 +95,8 @@ def lay(P):
             out = (mx + nx * REACH, mz + nz * REACH)
             into = (mx - nx * REACH, mz - nz * REACH)
 
-            if any(plan_check.inside(out, g["polygon"]) for g in streets):
+            if any(plan_check.inside(out, g["polygon"]) for g in streets) \
+                    and not any(plan_check.near(out, g["polygon"], REACH) for g in pits):
                 P.route("climb_up_%s" % p["name"], "climb", [(out[0], 0.0, out[1]), (into[0], plan.top(p), into[1])])
                 done.add(root)
                 break
