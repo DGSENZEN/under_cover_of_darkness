@@ -23,6 +23,12 @@ const OPENING := Rect2(-1.5, -6.0, 3.0, 6.0)
 ## The lamp globes, from the kiosk's origin.
 const LAMPS := [Vector3(-1.6875, 3.5, -0.15), Vector3(1.6875, 3.5, -0.15)]
 const LAMP_COLOUR := Color("#e8d8a8")
+## Variant D's painted pools: the spot's strength, reach and cone, and the
+## lamp's own glow while it throws one.
+const POOL_ENERGY := 6.0
+const POOL_RANGE := 8.0
+const POOL_ANGLE := 55.0
+const POOL_GLOW := 0.5
 const MOON_COLOUR := Color("#d8e4f0")
 const GROUND := Rect2(-35, -15, 70, 30)
 
@@ -72,6 +78,32 @@ func set_day(day: bool) -> void:
 
 	for light in find_children("lamp_*", "OmniLight3D", true, false):
 		light.visible = not day
+
+
+## Variant D's painted lamp pools: each Company lamp throws its painted pool
+## down (a spot with the pool as its projector) and dims its own round glow,
+## or the pools go and the glow comes back.
+func set_pools(on: bool) -> void:
+	for lamp: OmniLight3D in find_children("lamp_*", "OmniLight3D", true, false):
+		var pool: Node = lamp.get_node_or_null("pool")
+
+		if on and pool == null:
+			lamp.set_meta(&"glow", lamp.light_energy)
+			lamp.light_energy = POOL_GLOW
+			var spot := SpotLight3D.new()
+			spot.name = "pool"
+			spot.light_color = LAMP_COLOUR
+			spot.light_energy = POOL_ENERGY
+			spot.spot_range = POOL_RANGE
+			spot.spot_angle = POOL_ANGLE
+			spot.light_projector = Painterly.POOL
+			spot.shadow_enabled = true
+			lamp.add_child(spot)
+			spot.rotation_degrees = Vector3(-90, 0, 0)   # straight down
+		elif not on and pool != null:
+			lamp.remove_child(pool)
+			pool.queue_free()
+			lamp.light_energy = lamp.get_meta(&"glow", lamp.light_energy)
 
 
 ## The atlas to paint `piece` with: the user's overpaint, else the painter's.

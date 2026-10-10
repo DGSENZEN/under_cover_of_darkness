@@ -45,6 +45,19 @@ uniform vec3 lit_warm = vec3(1.04, 1.0, 0.92);
 uniform vec3 shadow_cool = vec3(0.75, 0.85, 1.15);
 uniform float shadow_fill : hint_range(0.0, 1.0) = 0.3;
 
+// Variant D: the light ramp (after TF2's warped diffuse), a painted strip
+// from no light to full that the user may repaint, in place of the bands.
+uniform sampler2D light_ramp : source_color, filter_linear, repeat_disable;
+uniform float ramp_amount : hint_range(0.0, 1.0) = 0.0;
+// Painted ambient: sky colour from above, the ground's bounce from below.
+uniform vec3 ambient_sky : source_color = vec3(0.40, 0.44, 0.58);
+uniform vec3 ambient_ground : source_color = vec3(0.42, 0.30, 0.24);
+uniform float ambient_amount : hint_range(0.0, 1.0) = 0.0;
+// A thin light round the silhouettes, against the dark.
+uniform vec3 rim_colour : source_color = vec3(0.62, 0.70, 0.95);
+uniform float rim_amount : hint_range(0.0, 1.0) = 0.0;
+uniform float rim_width : hint_range(1.0, 8.0) = 3.0;
+
 varying vec3 world_pos;
 varying vec3 world_normal;
 // The strokes' value here, handed to the light pass.
@@ -85,6 +98,12 @@ void fragment() {
 
 	ALBEDO = mix(base, best, paint_mix);
 #ifndef PAINTERLY_UNSHADED
+	// Painted ambient and rim, laid on as light of their own.
+	float up = clamp(world_normal.y * 0.5 + 0.5, 0.0, 1.0);
+	EMISSION = ALBEDO * mix(ambient_ground, ambient_sky, up) * ambient_amount;
+	EMISSION += rim_colour * pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), rim_width) * rim_amount;
+#endif
+#ifndef PAINTERLY_UNSHADED
 	NORMAL_MAP = texture(normal_atlas, UV).rgb;
 	NORMAL_MAP_DEPTH = normal_depth;
 #endif
@@ -109,10 +128,12 @@ void light() {
 	// Only the darkest band goes cool; the rest keeps the light's own colour
 	// (a lamp's pool stays amber to its edge), a little warmer where full.
 	vec3 tint = mix(vec3(1.0), mix(shadow_cool, lit_warm, smoothstep(0.0, 1.0 / light_bands, painted)), painted_light);
-	DIFFUSE_LIGHT += hue * energy * painted * tint / PI;
 	// The side turned away and the edges of shadow take a cool fill, so
 	// shadow is a colour, not grey.
-	DIFFUSE_LIGHT += hue * energy * (1.0 - painted) * shadow_fill * painted_light * shadow_cool * ATTENUATION / PI;
+	vec3 banded = painted * tint + (1.0 - painted) * shadow_fill * painted_light * shadow_cool * ATTENUATION;
+	// Or the painted ramp's colour for this much light.
+	vec3 ramped = texture(light_ramp, vec2(clamp(level, 0.01, 0.99), 0.5)).rgb;
+	DIFFUSE_LIGHT += hue * energy * mix(banded, ramped, ramp_amount) / PI;
 	// A soft highlight, as the standard light would give.
 	vec3 halfway = normalize(VIEW + LIGHT);
 	float shine = pow(clamp(dot(NORMAL, halfway), 0.0, 1.0), mix(64.0, 4.0, ROUGHNESS));

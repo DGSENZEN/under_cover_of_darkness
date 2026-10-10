@@ -99,7 +99,8 @@ func _views(x: float, kiosk_z: float, bays_z: float) -> Array:
 ## Tuning rounds: the shader-led station drawn as each variant, by night and
 ## day, in the views that judge a look. A variant is "name|key=value;..."
 ## (shader parameters, atlas_dir=<folder> for other painted atlases, or
-## screen_pull=<0-1> to pull the whole frame toward the Zócalo palette).
+## screen_pull=<0-1> to pull the whole frame toward the Zócalo palette, or
+## pools=1 for the lamps' painted pools).
 ##   -- --out=/tmp/round1 --variant="A|" --variant="B|painted_light=1"
 func _compare(lab: Node3D, eye: Camera3D, variants: Array) -> void:
 	var views := _views(lab.STATION_X[2], lab.KIOSK_Z, lab.BAYS_Z)
@@ -129,6 +130,8 @@ func _compare(lab: Node3D, eye: Camera3D, variants: Array) -> void:
 			retro.palette = null
 			retro.palette_pull = 0.0
 
+		lab.set_pools(false)
+
 		for key in materials:
 			var m: ShaderMaterial = materials[key]
 
@@ -138,7 +141,9 @@ func _compare(lab: Node3D, eye: Camera3D, variants: Array) -> void:
 			for pair in settings.split(";", false):
 				var kv: PackedStringArray = pair.split("=")
 
-				if kv[0] == "screen_pull":
+				if kv[0] == "pools":
+					lab.set_pools(float(kv[1]) > 0.0)
+				elif kv[0] == "screen_pull":
 					if retro != null:
 						retro.palette = preload("res://scripts/Visual/Painterly.gd").ZOCALO
 						retro.palette_pull = float(kv[1])

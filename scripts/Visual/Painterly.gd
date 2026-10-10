@@ -7,6 +7,10 @@ extends RefCounted
 const SHADER := preload("res://scripts/Visual/painterly.gdshader")
 const BRUSH: Texture2D = preload("res://textures/painted/eclipse/brush.png")
 const ZOCALO: Texture2D = preload("res://textures/painted/eclipse/palette_zocalo.png")
+## Variant D's light ramp and the Company lamps' painted pool (painterly.py
+## drew them; the user may repaint either).
+const RAMP: Texture2D = preload("res://textures/painted/eclipse/ramp_zocalo.png")
+const POOL: Texture2D = preload("res://textures/painted/eclipse/lamp_pool.png")
 
 ## How much the shader does over the painted atlas. The atlas carries the
 ## paint now (docs/superpowers/refs/mexico_city/painterly_texturing.md), so
@@ -27,6 +31,7 @@ static func material(atlas: Texture2D, preset: StringName, palette: Texture2D = 
 	out.set_shader_parameter("atlas", atlas)
 	out.set_shader_parameter("palette", palette)
 	out.set_shader_parameter("brush", BRUSH)
+	out.set_shader_parameter("light_ramp", RAMP)
 
 	if normal != null:
 		out.set_shader_parameter("normal_atlas", normal)

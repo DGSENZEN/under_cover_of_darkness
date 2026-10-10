@@ -70,6 +70,51 @@ class Brush(unittest.TestCase):
         self.assertEqual(_bytes(painterly.brush()), _bytes(painterly.brush()))
 
 
+class Ramp(unittest.TestCase):
+    """The light ramp (variant D): how much light a surface takes, as a
+    colour, from no light to full; the user may repaint it."""
+
+    def setUp(self):
+        self.ramp = np.asarray(painterly.ramp(), dtype=np.float64)
+
+    def test_ramp_is_a_strip(self):
+        self.assertEqual(self.ramp.shape, (1, painterly.RAMP_SIZE, 3))
+
+    def test_ramp_never_darkens_toward_the_light(self):
+        luma = self.ramp[0] @ np.array([0.299, 0.587, 0.114])
+        self.assertTrue(np.all(np.diff(luma) >= -0.5))
+        self.assertGreater(luma[-1], luma[0] + 150)
+
+    def test_ramp_cools_into_shadow_and_warms_into_light(self):
+        cool = lambda c: c[2] / (c.sum() + 1)
+        self.assertGreater(cool(self.ramp[0, 2]), cool(self.ramp[0, -2]) + 0.05)
+
+    def test_ramp_steps_in_a_few_soft_bands(self):
+        """Most of it lies on a few plateaus, not a smooth slope."""
+        luma = self.ramp[0] @ np.array([0.299, 0.587, 0.114])
+        flat = np.abs(np.diff(luma)) < 1.0
+        self.assertGreater(flat.mean(), 0.6)
+
+
+class Pool(unittest.TestCase):
+    """A Company lamp's painted pool of light (variant D)."""
+
+    def setUp(self):
+        self.pool = np.asarray(painterly.pool(), dtype=np.float64)
+
+    def test_pool_is_bright_at_its_heart_and_dark_at_its_rim(self):
+        n = self.pool.shape[0]
+        self.assertGreater(self.pool[n // 2 - 4:n // 2 + 4, n // 2 - 4:n // 2 + 4].mean(), 200)
+        self.assertLess(np.concatenate([self.pool[:4].ravel(), self.pool[-4:].ravel()]).max(), 5)
+
+    def test_pool_edge_is_broken_by_strokes(self):
+        """Not a clean disc: round the middle radius, light and dark mix."""
+        n = self.pool.shape[0]
+        yy, xx = np.mgrid[:n, :n] - (n - 1) / 2
+        ring = np.abs(np.hypot(yy, xx) - n * 0.32) < 2
+        self.assertGreater(self.pool[ring].std(), 25)
+
+
 class Palette(unittest.TestCase):
     def test_palette_zocalo(self):
         image = painterly.palette(painterly.ZOCALO)

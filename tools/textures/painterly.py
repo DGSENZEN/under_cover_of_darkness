@@ -165,6 +165,59 @@ def brush(seed: int = 11) -> Image.Image:
     return Image.fromarray(np.clip(np.round(small), 0, 255).astype(np.uint8), "L")
 
 
+# The light ramp (variant D, after TF2's warped diffuse): from no light to
+# full, the colour a surface takes. Stops (position 0-1, colour) held flat
+# and joined in soft steps. A starting point for the user to repaint.
+RAMP_SIZE = 64
+# The stops are sRGB; the shader reads the ramp as linear light, so they are
+# chosen for their linear values: about 0.07 cool, 0.31 cool-neutral, 0.66
+# warm-neutral, 0.95 warm.
+RAMP_STOPS = [(0.0, "#454a63"), (0.3, "#9494a1"), (0.55, "#d9d4cf"), (0.8, "#fffaf2")]
+RAMP_STEP = 0.05
+
+
+def ramp() -> Image.Image:
+    """The ramp: RAMP_SIZE x 1, plateaus at each stop, soft steps between."""
+    stops = [(t, np.array([int(c[k:k + 2], 16) for k in (1, 3, 5)], dtype=np.float64)) for t, c in RAMP_STOPS]
+    out = np.zeros((1, RAMP_SIZE, 3))
+
+    for i in range(RAMP_SIZE):
+        t = i / (RAMP_SIZE - 1)
+        colour = stops[0][1]
+
+        for (t0, _), (t1, c1) in zip(stops, stops[1:]):
+            # Each step sits halfway between two stops, RAMP_STEP wide.
+            mid = (t0 + t1) / 2
+            k = np.clip((t - (mid - RAMP_STEP / 2)) / RAMP_STEP, 0.0, 1.0)
+            k = k * k * (3 - 2 * k)
+            colour = colour * (1 - k) + c1 * k
+
+        out[0, i] = colour
+
+    return Image.fromarray(np.clip(np.round(out), 0, 255).astype(np.uint8), "RGB")
+
+
+# A Company lamp's painted pool of light (variant D): a splash, its edge broken
+# by the brush tile.
+POOL_SIZE = 128
+POOL_EDGE = 0.32        # the edge's radius, of the tile's width
+POOL_BREAK = 0.5        # how far the brush pushes the edge in and out
+
+
+def pool() -> Image.Image:
+    """The pool: POOL_SIZE square, greyscale, bright at its heart, its edge
+    stroked, nothing at its rim."""
+    tile = np.asarray(brush().resize((POOL_SIZE, POOL_SIZE), Image.Resampling.BOX), dtype=np.float64) / 255.0
+    yy, xx = np.mgrid[:POOL_SIZE, :POOL_SIZE] - (POOL_SIZE - 1) / 2
+    r = np.hypot(yy, xx) / POOL_SIZE
+    # The edge pushed in and out by the strokes, stronger the further out.
+    edge = POOL_EDGE + (tile - 0.5) * POOL_BREAK * 0.6
+    light = np.clip(1.0 - (r - edge * 0.55) / (edge * 0.6), 0.0, 1.0)
+    light = light * light * (3 - 2 * light)
+    light *= np.clip((0.5 - r) / 0.05, 0.0, 1.0)            # nothing at the rim
+    return Image.fromarray(np.clip(np.round(light * 255), 0, 255).astype(np.uint8), "L")
+
+
 def palette(colours: list) -> Image.Image:
     """A district's palette: one pixel per colour, dark to light, 16 x 1."""
     image = Image.new("RGB", (len(colours), 1))
@@ -179,7 +232,9 @@ def main(argv):
     OUT.mkdir(parents=True, exist_ok=True)
     brush().save(OUT / "brush.png")
     palette(ZOCALO).save(OUT / "palette_zocalo.png")
-    print("painterly: brush.png, palette_zocalo.png ->", OUT)
+    ramp().save(OUT / "ramp_zocalo.png")
+    pool().save(OUT / "lamp_pool.png")
+    print("painterly: brush.png, palette_zocalo.png, ramp_zocalo.png, lamp_pool.png ->", OUT)
 
 
 if __name__ == "__main__":

@@ -82,6 +82,28 @@ func _run() -> void:
 	_check("L5 the painted base without an overpaint; the user's kiosk.png when there is one",
 		base != null and base.get_width() == _atlas_px(&"kiosk") and theirs != null and theirs.get_width() == 8,
 		"base %s theirs %s" % [base.get_size() if base else null, theirs.get_size() if theirs else null])
+	# L10 painted lamp pools: on, every Company lamp throws its painted pool
+	#     down (a spot with the pool as its projector) and dims its own glow;
+	#     off, they are gone and the glow is back
+	var lamps: Array = lab.find_children("lamp_*", "OmniLight3D", true, false)
+	var glow: float = lamps[0].light_energy
+	lab.set_pools(true)
+	var pooled := true
+
+	for lamp in lamps:
+		var spot: Node = lamp.get_node_or_null("pool")
+		pooled = pooled and spot is SpotLight3D and lamp.light_energy < glow
+		pooled = pooled and spot.light_projector == preload("res://scripts/Visual/Painterly.gd").POOL
+
+	lab.set_pools(false)
+	await _frames(2)
+	var cleared := true
+
+	for lamp in lamps:
+		cleared = cleared and lamp.get_node_or_null("pool") == null and is_equal_approx(lamp.light_energy, glow)
+	_check("L10 the lamps' painted pools come and go", lamps.size() == 6 and pooled and cleared,
+		"%d lamps, pooled %s, cleared %s" % [lamps.size(), pooled, cleared])
+
 	# L7 the stair is walked: the player goes down to the landing and back up
 	#    to the street (it wedged on the old one, 1.7 m in)
 	var player: CharacterBody3D = lab.player

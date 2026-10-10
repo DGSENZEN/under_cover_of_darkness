@@ -63,6 +63,39 @@ func _ready() -> void:
 	_check("X4 painted light bands the shading (3 bands: a handful of shades, against a smooth ramp)",
 		banded_levels <= 6 and smooth_levels >= 20, "painted %d shades, plain %d" % [banded_levels, smooth_levels])
 
+	# X5 the light ramp: with a ramp from red (no light) to green (full),
+	#    the sphere's shadow side reads red and its lit side green
+	var ramp_image := Image.create(64, 1, false, Image.FORMAT_RGB8)
+
+	for i in 64:
+		ramp_image.set_pixel(i, 0, Color(1, 0, 0) if i < 32 else Color(0, 1, 0))
+
+	var ramped := await _sphere({"painted_light": 1.0, "ramp_amount": 1.0,
+		"light_ramp": ImageTexture.create_from_image(ramp_image)}, true)
+	var reds := 0
+	var greens := 0
+	var drawn := 0
+
+	for y in ramped.get_height():
+		for x in ramped.get_width():
+			var c := ramped.get_pixel(x, y)
+
+			if c.r + c.g + c.b > 0.02:
+				drawn += 1
+				reds += int(c.r > c.g * 2.0)
+				greens += int(c.g > c.r * 2.0)
+
+	_check("X5 the light ramp colours the light: red where none falls, green where it is full",
+		drawn > 400 and reds > drawn * 0.15 and greens > drawn * 0.15, "%d drawn: %d red, %d green" % [drawn, reds, greens])
+
+	# X6 painted ambient: with no light at all, the sphere's top takes the sky
+	#    colour and its underside the ground's
+	var hemi := await _sphere({"ambient_amount": 1.0, "ambient_sky": Color(0, 0, 1), "ambient_ground": Color(1, 0.5, 0)}, false)
+	var top := _band_colour(hemi, 0.0, 0.3)
+	var bottom := _band_colour(hemi, 0.7, 1.0)
+	_check("X6 painted ambient: sky from above, ground's bounce from below",
+		top.b > top.r and bottom.r > bottom.b, "top %s bottom %s" % [top, bottom])
+
 	print("\n==== RESULTS ====")
 	for r in results:
 		print(r)
@@ -164,6 +197,83 @@ func _sphere_levels(painted: float) -> int:
 				seen[snappedf(c.r, 1.0 / 255.0)] = true
 
 	return seen.size()
+
+
+## The mean colour of the drawn pixels (not black) in a band of rows, from
+## `from` to `to` of the way down the sphere's own height.
+func _band_colour(image: Image, from: float, to: float) -> Color:
+	var rows := []
+
+	for y in image.get_height():
+		for x in image.get_width():
+			var c := image.get_pixel(x, y)
+
+			if c.r + c.g + c.b > 0.02:
+				rows.append(y)
+				break
+
+	var first: int = rows.min() if not rows.is_empty() else 0
+	var last: int = rows.max() if not rows.is_empty() else 0
+	var sum := Color(0, 0, 0)
+	var n := 0
+
+	for y in range(first + int((last - first) * from), first + int((last - first) * to) + 1):
+		for x in image.get_width():
+			var c := image.get_pixel(x, y)
+
+			if c.r + c.g + c.b > 0.02:
+				sum += c
+				n += 1
+
+	return sum / maxf(n, 1)
+
+
+## A white sphere drawn with the lit painterly shader set by `settings`
+## (paint_mix and strokes off), under one light or none; the image.
+func _sphere(settings: Dictionary, lit: bool) -> Image:
+	var view := SubViewport.new()
+	view.size = Vector2i(96, 96)
+	view.own_world_3d = true
+	view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(view)
+	var world := WorldEnvironment.new()
+	world.environment = Environment.new()
+	world.environment.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	world.environment.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	world.environment.background_mode = Environment.BG_COLOR
+	world.environment.background_color = Color.BLACK
+	view.add_child(world)
+	var camera := Camera3D.new()
+	camera.position = Vector3(0, 0, 3)
+	camera.fov = 24.0
+	view.add_child(camera)
+
+	if lit:
+		var sun := DirectionalLight3D.new()
+		sun.rotation = Vector3(-0.4, 0.6, 0)
+		view.add_child(sun)
+
+	var white := Image.create(4, 4, false, Image.FORMAT_RGB8)
+	white.fill(Color.WHITE)
+	var material: ShaderMaterial = Painterly.material(ImageTexture.create_from_image(white), &"shader_led")
+
+	for key in {"paint_mix": 0.0, "stroke_strength": 0.0, "terminator_break": 0.0, "specular": 0.0}:
+		material.set_shader_parameter(key, 0.0)
+
+	for key in settings:
+		material.set_shader_parameter(key, settings[key])
+
+	var ball := MeshInstance3D.new()
+	ball.mesh = SphereMesh.new()
+	ball.material_override = material
+	view.add_child(ball)
+
+	for i in 5:
+		await RenderingServer.frame_post_draw
+
+	var image := view.get_texture().get_image()
+	view.queue_free()
+	return image
 
 
 func _near(a: Color, b: Color) -> bool:
