@@ -52,6 +52,103 @@ vec3 oklab(vec3 c) {
 		0.0259040371 * lms.x + 0.7827717662 * lms.y - 0.8086757660 * lms.z);
 }
 
+// Hex-tiling (Mikkelsen, "Practical Real-Time Hex-Tiling", JCGT 11(2),
+// 2022): the plane cut into hexagons, each sampling the tile at its own
+// offset (and turn, where allowed), three blended with a weight that keeps
+// the contrast, so a tile's repeat stops showing. hex_tiling 1 does it for
+// the brush; `tiled` 1 marks a material whose atlas is a tile (a ground),
+// not a kit piece's own atlas, so its atlas is hex-tiled too.
+uniform float hex_tiling : hint_range(0.0, 1.0) = 0.0;
+uniform float tiled : hint_range(0.0, 1.0) = 0.0;
+
+vec2 hex_hash(vec2 p) {
+	return fract(sin(mat2(vec2(127.1, 311.7), vec2(269.5, 183.3)) * p) * 43758.5453);
+}
+
+// The triangle of hex centres round st, and each one's weight.
+void hex_grid(vec2 st, out vec3 w, out vec2 v1, out vec2 v2, out vec2 v3) {
+	vec2 skewed = mat2(vec2(1.0, 0.0), vec2(-0.57735027, 1.15470054)) * (st * 3.46410162);
+	vec2 base = floor(skewed);
+	vec3 t = vec3(fract(skewed), 0.0);
+	t.z = 1.0 - t.x - t.y;
+	float s = step(0.0, -t.z);
+	float s2 = 2.0 * s - 1.0;
+	w = vec3(-t.z * s2, s - t.y * s2, s - t.x * s2);
+	v1 = base + vec2(s, s);
+	v2 = base + vec2(s, 1.0 - s);
+	v3 = base + vec2(1.0 - s, s);
+}
+
+vec2 hex_centre(vec2 v) {
+	return mat2(vec2(1.0, 0.0), vec2(0.5, 0.8660254)) * v / 3.46410162;
+}
+
+mat2 hex_turn(vec2 v, bool turn) {
+	float a = turn ? 6.2831853 * hex_hash(v + 7.0).x : 0.0;
+	return mat2(vec2(cos(a), sin(a)), vec2(-sin(a), cos(a)));
+}
+
+// One hexagon's sample: turned about its centre, moved by its offset,
+// filtered with the turned derivatives so no seam shows in the mips.
+vec4 hex_one(sampler2D tex, vec2 uv, vec2 v, mat2 r, vec2 dx, vec2 dy) {
+	vec2 c = hex_centre(v);
+	return textureGrad(tex, r * (uv - c) + c + hex_hash(v), r * dx, r * dy);
+}
+
+vec3 hex_weights(vec3 w, vec3 a, vec3 b, vec3 c) {
+	vec3 luma = vec3(dot(a, vec3(0.299, 0.587, 0.114)), dot(b, vec3(0.299, 0.587, 0.114)), dot(c, vec3(0.299, 0.587, 0.114)));
+	vec3 weights = mix(vec3(1.0), luma, 0.6) * pow(max(w, vec3(0.0)), vec3(7.0));
+	return weights / max(weights.x + weights.y + weights.z, 1e-6);
+}
+
+vec4 hex_sample(sampler2D tex, vec2 uv, bool turn) {
+	vec3 w;
+	vec2 v1, v2, v3;
+	hex_grid(uv, w, v1, v2, v3);
+	vec2 dx = dFdx(uv);
+	vec2 dy = dFdy(uv);
+	vec4 c1 = hex_one(tex, uv, v1, hex_turn(v1, turn), dx, dy);
+	vec4 c2 = hex_one(tex, uv, v2, hex_turn(v2, turn), dx, dy);
+	vec4 c3 = hex_one(tex, uv, v3, hex_turn(v3, turn), dx, dy);
+	vec3 k = hex_weights(w, c1.rgb, c2.rgb, c3.rgb);
+	return c1 * k.x + c2 * k.y + c3 * k.z;
+}
+
+// A tangent-space normal map hex-tiled: each sample's normal turned back by
+// its hexagon's turn before the blend (weights from the colour tile's).
+vec3 hex_normal(sampler2D tex, vec2 uv) {
+	vec3 w;
+	vec2 v1, v2, v3;
+	hex_grid(uv, w, v1, v2, v3);
+	vec2 dx = dFdx(uv);
+	vec2 dy = dFdy(uv);
+	mat2 r1 = hex_turn(v1, true);
+	mat2 r2 = hex_turn(v2, true);
+	mat2 r3 = hex_turn(v3, true);
+	vec3 n1 = hex_one(tex, uv, v1, r1, dx, dy).rgb * 2.0 - 1.0;
+	vec3 n2 = hex_one(tex, uv, v2, r2, dx, dy).rgb * 2.0 - 1.0;
+	vec3 n3 = hex_one(tex, uv, v3, r3, dx, dy).rgb * 2.0 - 1.0;
+	n1.xy = transpose(r1) * n1.xy;
+	n2.xy = transpose(r2) * n2.xy;
+	n3.xy = transpose(r3) * n3.xy;
+	vec3 k = pow(max(w, vec3(0.0)), vec3(7.0));
+	k /= max(k.x + k.y + k.z, 1e-6);
+	return normalize(n1 * k.x + n2 * k.y + n3 * k.z) * 0.5 + 0.5;
+}
+
+// The atlas (or a ground's tile), the brush: plainly, or hex-tiled.
+vec3 painted(sampler2D tex, vec2 uv) {
+	return tiled > 0.5 && hex_tiling > 0.5 ? hex_sample(tex, uv, true).rgb : texture(tex, uv).rgb;
+}
+
+vec3 painted_normal(sampler2D tex, vec2 uv) {
+	return tiled > 0.5 && hex_tiling > 0.5 ? hex_normal(tex, uv) : texture(tex, uv).rgb;
+}
+
+float stroke(vec2 uv) {
+	return hex_tiling > 0.5 ? hex_sample(brush, uv, false).r : texture(brush, uv).r;
+}
+
 vec3 linear_of_oklab(vec3 lab) {
 	vec3 lms = vec3(
 		lab.x + 0.3963377774 * lab.y + 0.2158037573 * lab.z,
@@ -101,14 +198,14 @@ void vertex() {
 }
 
 void fragment() {
-	vec3 base = texture(atlas, UV).rgb;
+	vec3 base = painted(atlas, UV);
 
 	// The strokes, from whichever axes the surface faces.
 	vec3 w = abs(world_normal);
 	w /= (w.x + w.y + w.z);
-	float s = texture(brush, world_pos.zy / stroke_scale).r * w.x
-		+ texture(brush, world_pos.xz / stroke_scale).r * w.y
-		+ texture(brush, world_pos.xy / stroke_scale).r * w.z;
+	float s = stroke(world_pos.zy / stroke_scale) * w.x
+		+ stroke(world_pos.xz / stroke_scale) * w.y
+		+ stroke(world_pos.xy / stroke_scale) * w.z;
 	stroke_value = s;
 
 	// The vertex paint: worn through, tinted, grimed, each broken by the strokes.
@@ -119,7 +216,7 @@ void fragment() {
 		edge = smoothstep(0.5 - blend_edge, 0.5 + blend_edge, COLOR.g + (s - 0.5) * blend_break) * vertex_paint;
 		// The broken lip: a darker band where the top gives way.
 		float lip = 1.0 - 0.25 * smoothstep(0.0, 0.3, edge) * smoothstep(1.0, 0.7, edge);
-		base = mix(base, texture(under_atlas, UV).rgb, edge) * lip;
+		base = mix(base, painted(under_atlas, UV), edge) * lip;
 		vec3 lab = oklab(base);
 		float t = (COLOR.b - 0.5) * 2.0 * tint_amount * vertex_paint * clamp(0.7 + (s - 0.5) * 2.0, 0.0, 1.3);
 		lab.x += t * 0.25;
@@ -156,7 +253,7 @@ void fragment() {
 	EMISSION += rim_colour * pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), rim_width) * rim_amount;
 #endif
 #ifndef PAINTERLY_UNSHADED
-	NORMAL_MAP = mix(texture(normal_atlas, UV).rgb, texture(under_normal, UV).rgb, edge);
+	NORMAL_MAP = mix(painted_normal(normal_atlas, UV), painted_normal(under_normal, UV), edge);
 	NORMAL_MAP_DEPTH = normal_depth;
 #endif
 	ROUGHNESS = roughness;

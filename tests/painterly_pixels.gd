@@ -175,11 +175,146 @@ func _ready() -> void:
 	_check("X12 A baked light takes light away: more of the sphere reads unlit", shut_reds > open_reds + 200,
 		"red pixels open %d, occluded %d" % [open_reds, shut_reds])
 
+	# Hex-tiling (Task 7): a 20 m plane of a 1 m noise tile, seen from above
+	# at 16 px a tile, then along it at a grazing angle
+	var noise := _noise_tile()
+	var plain_top := await _tiled_plane(noise, {"tiled": 0.0, "hex_tiling": 0.0}, false)
+	var hex_top := await _tiled_plane(noise, {"tiled": 1.0, "hex_tiling": 1.0}, false)
+	var plain_repeat := _shift_correlation(plain_top, PLANE_TILE_PX)
+	var hex_repeat := _shift_correlation(hex_top, PLANE_TILE_PX)
+	_check("X13 plain tiling repeats at its period", plain_repeat > 0.9, "correlation one tile along %.3f" % plain_repeat)
+	_check("X14 hex-tiling breaks the repeat", hex_repeat < 0.5, "correlation one tile along %.3f" % hex_repeat)
+	var plain_far := _rough_edges(await _tiled_plane(noise, {"tiled": 0.0, "hex_tiling": 0.0}, true))
+	var hex_far := _rough_edges(await _tiled_plane(noise, {"tiled": 1.0, "hex_tiling": 1.0}, true))
+	_check("X15 no seams at a distance: hex-tiling's sharpest steps no worse than plain tiling's",
+		plain_far > 0.0 and hex_far <= plain_far * 1.5, "99th-percentile neighbour step: hex %.4f, plain %.4f" % [hex_far, plain_far])
+
 	print("\n==== RESULTS ====")
 	for r in results:
 		print(r)
 
 	get_tree().quit()
+
+
+const PLANE_M := 20.0
+const PLANE_TILE_PX := 16
+
+
+## A 64 px tile of soft seeded blobs.
+func _noise_tile() -> Texture2D:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 13
+	var small := Image.create(16, 16, false, Image.FORMAT_RGB8)
+
+	for y in 16:
+		for x in 16:
+			var v := rng.randf()
+			small.set_pixel(x, y, Color(v, 1.0 - v, rng.randf()))
+
+	small.resize(64, 64, Image.INTERPOLATE_CUBIC)
+	small.generate_mipmaps()
+	return ImageTexture.create_from_image(small)
+
+
+## A PLANE_M square plane of `tile`, one tile a metre (UV in metres), drawn
+## unshaded from straight above at PLANE_TILE_PX a tile, or from a grazing
+## eye looking along it.
+func _tiled_plane(tile: Texture2D, settings: Dictionary, grazing: bool) -> Image:
+	var px := int(PLANE_M) * PLANE_TILE_PX
+	var view := SubViewport.new()
+	view.size = Vector2i(px, px) if not grazing else Vector2i(320, 180)
+	view.own_world_3d = true
+	view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(view)
+	var camera := Camera3D.new()
+
+	if grazing:
+		camera.position = Vector3(0, 1.7, PLANE_M / 2)
+		camera.rotation = Vector3(-0.12, 0, 0)
+	else:
+		camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+		camera.size = PLANE_M
+		camera.position = Vector3(0, 10, 0)
+		camera.rotation = Vector3(-PI / 2, 0, 0)
+
+	view.add_child(camera)
+	var material: ShaderMaterial = Painterly.material(tile, &"even")
+	material.shader = UNSHADED
+	material.set_shader_parameter("paint_mix", 0.0)
+	material.set_shader_parameter("stroke_strength", 0.0)
+
+	for key in settings:
+		material.set_shader_parameter(key, settings[key])
+
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(PLANE_M, PLANE_M)
+	var arrays := plane.get_mesh_arrays()
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+
+	for i in uvs.size():
+		uvs[i] *= PLANE_M
+
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var ground := MeshInstance3D.new()
+	ground.mesh = mesh
+	ground.material_override = material
+	view.add_child(ground)
+
+	for i in 5:
+		await RenderingServer.frame_post_draw
+
+	var image := view.get_texture().get_image()
+	view.queue_free()
+	return image
+
+
+## How alike the image is to itself moved `shift` px along x (Pearson's r
+## of the luminance, over the middle of the image).
+func _shift_correlation(image: Image, shift: int) -> float:
+	var a := PackedFloat32Array()
+	var b := PackedFloat32Array()
+	var w := image.get_width()
+
+	for y in range(w / 8, w - w / 8, 2):
+		for x in range(w / 8, w - w / 8 - shift, 2):
+			a.append(image.get_pixel(x, y).get_luminance())
+			b.append(image.get_pixel(x + shift, y).get_luminance())
+
+	var ma := 0.0
+	var mb := 0.0
+
+	for i in a.size():
+		ma += a[i]
+		mb += b[i]
+
+	ma /= a.size()
+	mb /= b.size()
+	var sab := 0.0
+	var saa := 0.0
+	var sbb := 0.0
+
+	for i in a.size():
+		sab += (a[i] - ma) * (b[i] - mb)
+		saa += (a[i] - ma) * (a[i] - ma)
+		sbb += (b[i] - mb) * (b[i] - mb)
+
+	return sab / sqrt(maxf(saa * sbb, 1e-12))
+
+
+## The 99th-percentile step between neighbouring pixels across the plane's
+## far stretch, just under the horizon (mip seams show as lines of sharp
+## steps).
+func _rough_edges(image: Image) -> float:
+	var steps := []
+
+	for y in range(int(image.get_height() * 0.45), int(image.get_height() * 0.75)):
+		for x in range(1, image.get_width()):
+			steps.append(absf(image.get_pixel(x, y).get_luminance() - image.get_pixel(x - 1, y).get_luminance()))
+
+	steps.sort()
+	return steps[int(steps.size() * 0.99)]
 
 
 ## The quad of _draw with vertex colours: `colour_at` gives each corner's
