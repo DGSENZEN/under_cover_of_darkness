@@ -753,6 +753,12 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
                               export_tangents=True, use_selection=False,
                               export_vertex_color="NAME" if weather is not None else "NONE",
                               export_vertex_color_name="rules", export_all_vertex_colors=False)
+    if weather is not None:
+        # The .blend opens on a layer harvest reads: Vertex Paint mode paints
+        # the active one, and strokes on `rules` would be lost.
+        for o in objects:
+            o.data.color_attributes.active_color = o.data.color_attributes["yours_grime"]
+
     bpy.context.preferences.filepaths.save_version = 0   # no .blend1 beside it
     bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / (name + ".blend")))
 

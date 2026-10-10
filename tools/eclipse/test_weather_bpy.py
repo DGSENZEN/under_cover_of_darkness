@@ -401,7 +401,20 @@ class Export(unittest.TestCase):
 
     def test_painting_note_written(self):
         self._export()
-        self.assertIn("yours_grime", (common.SOURCE / "PAINTING.md").read_text())
+        note = (common.SOURCE / "PAINTING.md").read_text()
+        self.assertIn("yours_grime", note)
+        # The layers hold linear values: a picker's 50% grey is not neutral.
+        self.assertIn("eyedropper", note)
+
+    def test_saved_blend_opens_on_a_painting_layer(self):
+        # Vertex Paint mode paints the active layer: it must be one harvest
+        # reads, not `rules` (the user's strokes there would be lost).
+        import bpy
+        self._export()
+        wall = bpy.data.objects["wall"]
+        self.assertEqual(wall.data.color_attributes.active_color.name, "yours_grime")
+        gltf = _glb(common.OUT / "test.glb")
+        self.assertTrue(all("COLOR_0" in p["attributes"] for m in gltf["meshes"] for p in m["primitives"]))
 
 
 def _glb(path):
