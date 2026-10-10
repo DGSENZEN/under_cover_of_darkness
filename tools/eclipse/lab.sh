@@ -16,9 +16,17 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 PIECES="kiosk arcade_bay"
 
 piece() {
-  # The user's vertex-paint strokes read from the piece's last .blend first.
+  # The user's vertex-paint strokes read from the piece's last .blend first;
+  # if that fails the piece is not rebuilt, since the rebuild would save over
+  # the only copy of the strokes.
   if [ -f "$ROOT/assets/eclipse/source/$1.blend" ]; then
-    "$BLENDER" -b "$ROOT/assets/eclipse/source/$1.blend" --python-exit-code 1 --python "$HERE/harvest.py" -- "$1" 2>&1 | grep -E "^harvest|Error|Traceback" || true
+    local log
+    log="$("$BLENDER" -b "$ROOT/assets/eclipse/source/$1.blend" --python-exit-code 1 --python "$HERE/harvest.py" -- "$1" 2>&1)" || {
+      echo "$log" | grep -E "^harvest|Error|Traceback" >&2
+      echo "lab.sh: reading $1's vertex paint failed; not rebuilding it (its .blend holds strokes not yet saved)" >&2
+      return 1
+    }
+    echo "$log" | grep -E "^harvest" || true
   fi
   "$BLENDER" -b --factory-startup --python "$HERE/$1.py" 2>&1 | grep -E "^$1:|Error|Traceback|line [0-9]+" || true
   test -f "$ROOT/assets/eclipse/lab/$1.glb"
@@ -31,7 +39,7 @@ import() {
 }
 
 case "${1:-}" in
-  test) python3 "$HERE/test_gate.py"; python3 "$HERE/test_weather_rules.py"
+  test) python3 "$HERE/test_gate.py"; python3 "$HERE/test_weather_rules.py"; "$HERE/test_lab_sh.sh"
     "$BLENDER" -b --factory-startup --python-exit-code 1 --python "$HERE/test_weather_bpy.py" 2>&1 | grep -E "^(FAIL|ERROR)|^Ran|^OK|FAILED|Error" ;;
   joints)
     mkdir -p /tmp/eclipse-joints
