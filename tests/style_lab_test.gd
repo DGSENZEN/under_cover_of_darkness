@@ -118,6 +118,32 @@ func _run() -> void:
 	var back: bool = player.global_position.z > kiosk.global_position.z + 0.5 and player.global_position.y > 0.9
 	_check("L7 the player walks down the kiosk's stair to its landing and back up to the street",
 		landed and back and lowest < -1.8, "down at %s (lowest %.2f), back at %s" % [down_at, lowest, player.global_position])
+	# L8 no hole in the passage under the street: from its landing every ray
+	#    going on into it or down meets a face turned toward it (a face wound
+	#    backwards is culled and lets the sky through; the old end wall did)
+	var escaped := _escapes(kiosk.global_position + Vector3(0, -1.6, -7.0), 6.0)
+	_check("L8 the passage under the street is closed: every ray on into it or down meets a front face",
+		escaped.is_empty(), "%d rays escape, e.g. %s" % [escaped.size(), escaped.slice(0, 3)])
+	# L9 the arcade's building is closed from behind: rays from behind the row
+	#    to points across its back meet a face turned toward them
+	var row: Node3D = lab.get_node("even/bay_1")
+	var holes := []
+	var space := get_world_3d().direct_space_state
+
+	# The row runs from 4.5 m left of the middle bay to 9 m right of it.
+	for gx in range(-4, 9):
+		for gy in range(1, 9):
+			var target: Vector3 = row.global_position + Vector3(gx, gy, -4.0)
+			var from: Vector3 = row.global_position + Vector3(gx * 0.5, 4.0, -12.0)
+			var query := PhysicsRayQueryParameters3D.create(from, target + (target - from).normalized() * 1.0)
+			query.hit_back_faces = true
+			var hit := space.intersect_ray(query)
+
+			if hit.is_empty() or (hit["normal"] as Vector3).dot(target - from) > 0.0:
+				holes.append(Vector2(gx, gy))
+
+	_check("L9 the arcade's building is closed from behind", holes.is_empty(),
+		"%d of 104 rays through: %s" % [holes.size(), holes])
 	lab.queue_free()
 	await _frames(2)
 
@@ -132,6 +158,32 @@ func _run() -> void:
 		is_instance_valid(bare) and said.size() == 2 and said[0].ends_with("kiosk.glb") and said[1].ends_with("arcade_bay.glb"),
 		"%s" % [said])
 	bare.queue_free()
+
+
+## Rays from `at` heading on down the passage (Godot -z) or downward that
+## meet nothing within `reach`, or meet a face from behind: their directions.
+func _escapes(at: Vector3, reach: float) -> Array:
+	var space := get_world_3d().direct_space_state
+	var out := []
+
+	for i in 400:
+		# A spiral of directions over the sphere, kept to those going on or down.
+		var y := 1.0 - 2.0 * (i + 0.5) / 400.0
+		var r := sqrt(maxf(0.0, 1.0 - y * y))
+		var t := PI * (3.0 - sqrt(5.0)) * i
+		var dir := Vector3(cos(t) * r, y, sin(t) * r)
+
+		if dir.z > -0.2 and dir.y > -0.2:
+			continue
+
+		var query := PhysicsRayQueryParameters3D.create(at, at + dir * reach)
+		query.hit_back_faces = true
+		var hit := space.intersect_ray(query)
+
+		if hit.is_empty() or (hit["normal"] as Vector3).dot(dir) > 0.0:
+			out.append(dir.snapped(Vector3.ONE * 0.01))
+
+	return out
 
 
 ## A piece's atlas size, as its build wrote it.

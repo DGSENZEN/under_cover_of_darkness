@@ -117,7 +117,7 @@ def stair_walls():
     # The passage's ceiling, facing down.
     m.face([(-HALF, RUN, CEILING), (-HALF, far, CEILING), (HALF, far, CEILING), (HALF, RUN, CEILING)], "tile_line2")
     # The passage's end wall, facing back up it (the ticket hall comes with the station kit).
-    m.face([(-HALF, far, FOOT), (-HALF, far, CEILING), (HALF, far, CEILING), (HALF, far, FOOT)], "tile_line2")
+    m.face([(-HALF, far, FOOT), (HALF, far, FOOT), (HALF, far, CEILING), (-HALF, far, CEILING)], "tile_line2")
     return m.make()
 
 

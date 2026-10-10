@@ -119,6 +119,15 @@ def roof():
     return m.make()
 
 
+def rear():
+    """The block's rear façade: plain lime-plaster from the street to the
+    roof, facing away from the plaza (without it the block stands open
+    behind). One 1.5 m tile; _tiles lays the rest, sharing its island."""
+    m = common.Mesh("bay_back_exterior")
+    m.face([(FLOOR_TILE, BACK_OUT, 0.0), (0.0, BACK_OUT, 0.0), (0.0, BACK_OUT, 1.5), (FLOOR_TILE, BACK_OUT, 1.5)], "lime")
+    return m.make()
+
+
 def column_stone(name="bay_column_stone"):
     m = common.Mesh(name)
     m.box((-0.3, -0.3, FLOOR), (0.3, 0.3, FLOOR + 0.2), "chiluca", skip=("-z",))
@@ -320,7 +329,7 @@ JOINTS = {
 
 def build():
     common.reset()
-    tiles = (floor(), ceiling(), roof())
+    tiles = (floor(), ceiling(), roof(), rear())
     column_stone()
     column_steel()
     arch()
@@ -332,7 +341,7 @@ def build():
     return tiles, back, caps
 
 
-def _tiles(floor_tile, ceiling_strip, roof_tile):
+def _tiles(floor_tile, ceiling_strip, roof_tile, back_tile):
     """The floor, ceiling and roof laid from their one tile each."""
     along = [i * FLOOR_TILE for i in range(3)]
     common.repeat_faces(floor_tile, [(x, y * FLOOR_TILE, 0) for x in along for y in range(3)
@@ -340,6 +349,7 @@ def _tiles(floor_tile, ceiling_strip, roof_tile):
     w = BEAMS_X[1] - BEAMS_X[0]
     common.repeat_faces(ceiling_strip, [(x * w, y * 1.85, 0) for x in range(3) for y in range(2) if (x, y) != (0, 0)])
     common.repeat_faces(roof_tile, [(x, y * 1.433, 0) for x in along for y in range(3) if (x, y) != (0, 0)])
+    common.repeat_faces(back_tile, [(x, 0, z * 1.5) for x in along for z in range(6) if (x, z) != (0, 0)])
 
 
 ALTERNATES = ("bay_column_stone", "bay_column_steel", "bay_end_column", "bay_end_caps", "bay_start_caps")
