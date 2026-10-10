@@ -62,8 +62,8 @@ func _run() -> void:
 
 	# Z2b the plaza is a pavement 0.2 up (its kerbs 0.2 proud of the ring)
 	var pavement := [_ray(Vector3(50, 3, 50), Vector3(50, -3, 50)), _ray(Vector3(-60, 3, -40), Vector3(-60, -3, -40))]
-	_check("Z2b the plaza stands 0.2 above the street", pavement.all(func(h): return not h.is_empty()
-		and absf(h["position"].y - 0.2) < 0.01), "%s" % [pavement.map(func(h): return h.get("position"))])
+	var on_pavement := pavement.all(func(h): return not h.is_empty() and absf(h["position"].y - 0.2) < 0.01)
+	_check("Z2b the plaza stands 0.2 above the street", on_pavement, "%s" % [pavement.map(func(h): return h.get("position"))])
 
 	# Z3 the canal lies 2 m down, the dig 6 m
 	# (Midway between bridges: one crosses the canal's middle.)
