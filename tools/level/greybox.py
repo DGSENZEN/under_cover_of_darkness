@@ -221,8 +221,16 @@ def _sunken(g, sunken, plots, openings):
         inward = (-n[0], 0, -n[1])
         solid, steps = [], []
 
+        mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+
         for other in sunken:
             if other is g:
+                continue
+
+            # Only a pit across the line (outside this one) takes over its wall.
+            ox, oz = plan.centroid(other["polygon"])
+
+            if (ox - mid[0]) * n[0] + (oz - mid[1]) * n[1] <= 0:
                 continue
 
             for c, d in _edges(other["polygon"]):
@@ -241,8 +249,10 @@ def _sunken(g, sunken, plots, openings):
                     if span:
                         solid.append(span)
 
+        # An opening's gap starts at the higher of the two floors, as the
+        # room's own wall's does.
         mine = [o for o in openings if o["to"] == g["name"]]
-        gaps = _gaps(a, b, mine, lambda o: g["level"])
+        gaps = _gaps(a, b, mine, lambda o: max(g["level"], o.get("floor", g["level"])))
         faces += _wall(a, b, g["level"], 0.0, inward, gaps, solid)
 
         for (t0, t1), level in steps:
@@ -346,7 +356,7 @@ def _route(r):
 def build(data):
     """The plan's greybox: {"meshes": [{"name", "kind", "faces": [...]}]}."""
     sunken = [dict(g, box=_bounds(g["polygon"])) for g in data["ground"] if g["kind"] in plan.SUNKEN_KINDS]
-    openings = [o for s in data["spaces"] for o in s["openings"]]
+    openings = [dict(o, floor=s["floor"]) for s in data["spaces"] for o in s["openings"]]
     meshes = [{"name": "ground", "kind": "ground", "faces": _ground(data, sunken)},
               {"name": "brink", "kind": "brink", "faces": _brink(data)}]
     meshes += [{"name": g["name"], "kind": "sunken", "faces": _sunken(g, sunken, data["plots"], openings)} for g in sunken]

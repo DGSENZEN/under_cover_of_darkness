@@ -107,6 +107,42 @@ class Greybox(unittest.TestCase):
         ys = [p[1] for f in _mesh(self.box, "brink")["faces"] for p in f["points"]]
         self.assertAlmostEqual(min(ys), -greybox.CLIFF, delta=1e-6)
 
+    def test_gaps_match_across_an_opening(self):
+        # A passage floored a metre above the well it opens into: the well's
+        # wall opens from the passage's floor, as the passage's does.
+        P = _town()
+        P.space("ledge", plan.rect(10, -56, 20, -50), floor=-7.0, height=3.0, openings=[{"to": "well_a", "at": (10, -53)}])
+        box = greybox.build(P.data())
+        walls = [f for f in _mesh(box, "well_a")["faces"] if abs(f["normal"][1]) < 0.01]
+        below = (10.0, -7.5, -53.0)
+        above = (10.0, -6.5, -53.0)
+        self.assertTrue([f for f in walls if _in_plane(f, below) and _covers(f, below)])
+        self.assertEqual([f for f in walls if _in_plane(f, above) and _covers(f, above)], [])
+
+    def test_pit_keeps_its_wall_beside_a_pit_on_the_same_side(self):
+        # A small pit inside a bigger one, both meeting x 100: the big pit's
+        # west wall stands its whole length.
+        P = _town()
+        P.ground("big_pit", "dig", plan.rect(100, 100, 130, 130), level=-6.0)
+        P.ground("small_pit", "landing", plan.rect(100, 110, 106, 116), level=-3.0)
+        box = greybox.build(P.data())
+        walls = [f for f in _mesh(box, "big_pit")["faces"] if f["normal"][0] > 0.99]
+        point = (100.0, -1.0, 113.0)
+        self.assertTrue([f for f in walls if _in_plane(f, point) and _covers(f, point)])
+
+    def test_layered_faces_caught(self):
+        # Two roofs 2 cm apart over one footprint fight at a distance; 4 cm do not.
+        def roofs(gap):
+            P = _town()
+            P.plot("roof_a", "house", plan.rect(100, -40, 110, -30), storeys=2, height=9.0, roof=False)
+            P.plot("roof_b", "house", plan.rect(100, -40, 110, -30), storeys=2, height=9.0 + gap, base=0.0, roof=False)
+            box = greybox.build(P.data())
+            return [f for f in greybox._layered(greybox.faces(box))
+                    if {greybox.faces(box)[f[0]]["owner"], greybox.faces(box)[f[1]]["owner"]} == {"roof_a", "roof_b"}]
+
+        self.assertTrue(roofs(0.02))
+        self.assertFalse(roofs(0.04))
+
     def test_overlap_caught(self):
         P = _town()
         P.plot("house_twin", "house", plan.rect(60, -40, 80, -20), storeys=2, height=9.0)

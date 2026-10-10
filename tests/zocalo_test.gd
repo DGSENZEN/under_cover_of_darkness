@@ -90,7 +90,8 @@ func _run() -> void:
 	var well := _rect("well_nw")
 	var walk := await _walk(Vector3(-90, 1.05, -106.5), PI, func(p): return p.z > well.end.y - 1.5, 600)
 	_check("Z5 the player walks down a kiosk's stair into the station's well",
-		walk["ok"] and absf(walk["end"].y - 1.05 + 8.0) < 0.5 and well.has_point(Vector2(walk["end"].x, walk["end"].z)),
+		walk["ok"] and absf(walk["end"].y - 1.05 + 8.0) < 0.5 and well.has_point(Vector2(walk["end"].x, walk["end"].z))
+		and walk["lowest"] > -8.0 + 1.05 - 0.5,
 		"%s" % [walk])
 
 	# Z5b on from the well, never put anywhere: along the corridors into the
