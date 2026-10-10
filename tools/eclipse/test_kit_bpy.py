@@ -485,6 +485,89 @@ class TradeKit(unittest.TestCase):
         self.assertEqual({n: z for n, z in lows.items() if abs(z) > 1e-4}, {})
 
 
+class UncannyKit(unittest.TestCase):
+    """The uncanny kit (cards/street_life.md) as built."""
+
+    BUDGET = dict({n: 600 for n in ["secreto_barrier", "claw_scored_slab", "petals_marigold", "candles_drift",
+                                    "hatch_sealed", "cage_trap", "cage_trap_chaneque", "cage_trap_lechuza"]},
+                  **{n: 1500 for n in ["idol_surfacing", "booth_line_of_dead", "booth_testimony", "offerings_heap"]})
+
+    @classmethod
+    def setUpClass(cls):
+        import uncanny_kit
+        uncanny_kit.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_no_degenerate_triangles(self):
+        self.assertEqual({n: _smallest_triangle(o) for n, o in self.objects.items() if _smallest_triangle(o) < 1e-7}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_exported_budgets(self):
+        import json
+        path = common.SOURCE / "uncanny_kit_faces.json"
+
+        if not path.exists():
+            self.skipTest("uncanny_kit not built")
+
+        tris = json.loads(path.read_text())["tris"]
+        self.assertEqual({n: t for n, t in tris.items() if t > self.BUDGET[n]}, {})
+
+    def test_flush_pieces(self):
+        """The claw-scored slab's top and the sealed hatch's plate lie at the setts' height."""
+        for name in ("claw_scored_slab", "hatch_sealed"):
+            o = self.objects[name]
+            tops = [p for p in o.data.polygons if p.normal.z > 0.99 and p.area > 0.1]
+            self.assertTrue(tops, name)
+            self.assertAlmostEqual(max(max(o.data.vertices[v].co.z for v in p.vertices) for p in tops), 0.0, delta=1e-4,
+                                   msg=name)
+
+    def test_traces_are_not_films(self):
+        """Petals and candles stand 4 cm or more off the ground (never a film on it)."""
+        for name in ("petals_marigold", "candles_drift", "offerings_heap"):
+            self.assertGreaterEqual(max(v.z for v in _world(self.objects[name])), 0.04, name)
+
+
+class BoundGod(unittest.TestCase):
+    """The Bound God's placeholder: a blocky god chained in its cage on its plinth."""
+
+    @classmethod
+    def setUpClass(cls):
+        import bound_god
+        bound_god.build()
+        cls.o = bpy.data.objects["bound_god"]
+
+    def _slot(self, poly):
+        return self.o.data.materials[poly.material_index].name
+
+    def test_closed_and_in_budget(self):
+        self.assertEqual(_closed(self.o), 0)
+        self.assertLessEqual(_tris(self.o), 5000)
+        self.assertGreater(_smallest_triangle(self.o), 1e-7)
+
+    def test_plinth_top(self):
+        tops = [p for p in self.o.data.polygons if p.normal.z > 0.99 and self._slot(p) == "chiluca" and p.area > 1.0]
+        self.assertAlmostEqual(max(p.center.z for p in tops), 1.2, delta=1e-4)
+
+    def test_the_god_inside_its_cage(self):
+        god = [self.o.data.vertices[v].co for p in self.o.data.polygons if self._slot(p) == "basalt" for v in p.vertices]
+        self.assertLess(max(max(abs(c.x), abs(c.y)) for c in god), 1.9)
+        self.assertGreaterEqual(min(c.z for c in god), 1.2 - 1e-4)
+
+    def test_open_side_shows_the_god(self):
+        """From the south (-Y) the god is seen through the cage's open side."""
+        hit, _, _, index = self.o.ray_cast((0.0, -4.0, 3.0), (0.0, 1.0, 0.0))
+        self.assertTrue(hit)
+        self.assertEqual(self._slot(self.o.data.polygons[index]), "basalt")
+
+
 if __name__ == "__main__":
     result = unittest.main(argv=["test_kit_bpy"], exit=False).result
     sys.exit(not result.wasSuccessful())

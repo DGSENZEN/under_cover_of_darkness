@@ -1,0 +1,20 @@
+{
+ "slots": [
+  "basalt",
+  "chiluca",
+  "iron",
+  "brass",
+  "wood",
+  "marigold",
+  "wax",
+  "sign",
+  "glass",
+  "obsidian",
+  "flesh",
+  "steel",
+  "canvas",
+  "seeped"
+ ],
+ "atlas_px": 1024,
+ "px_per_m": 54.16
+}

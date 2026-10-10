@@ -102,5 +102,7 @@ def footprint(piece):
         "hatch": lambda: _rect(-HATCH / 2, -HATCH / 2, HATCH / 2, HATCH / 2),
         "gutter_grate": lambda: _rect(0, -GRATE_DEPTH, GRATE_LENGTH, 0),
         "kerb_drop": lambda: _rect(0, 0, DROP_LENGTH, KERB_DEPTH + DROP_RAMP),
+        "hatch_sealed": lambda: _rect(-HATCH / 2, -HATCH / 2, HATCH / 2, HATCH / 2),
+        "claw_scored_slab": lambda: _rect(-0.75, -0.75, 0.75, 0.75),
     }
     return outlines[piece]()
