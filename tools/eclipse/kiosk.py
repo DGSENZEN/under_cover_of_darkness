@@ -15,6 +15,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import bpy  # noqa: E402
+
 import common  # noqa: E402
 
 NAME = "kiosk"
@@ -358,6 +360,20 @@ JOINTS = {
 }
 
 
+# The vertex paint (tools/eclipse/weather.py): the stair's 20 blocks on a
+# coarser grid, the lamps' soot rising from their globes, the stair's
+# opening cut from the stand-in ground the occlusion rays see.
+WEATHER = {"lines": [("z", 0.3), ("z", 1.2)], "coarse": {"kiosk_stair": 1.0}, "blendable": ["iron", "stone_step"],
+           "ground_holes": [(-HALF, 0.0, HALF, RUN)]}
+
+
+def soot():
+    for side in (-1, 1):
+        empty = bpy.data.objects.new("soot_lamp_%d" % side, None)
+        bpy.context.scene.collection.objects.link(empty)
+        empty.location = (side * LINE, LAMP_Y, GLOBE_Z + GLOBE_R)
+
+
 def build():
     common.reset()
     coping()
@@ -371,6 +387,7 @@ def build():
     lamp(1)
     sign()
     canopy()
+    soot()
     return step, walls
 
 
@@ -382,7 +399,7 @@ def main():
         common.repeat_faces(step, [(0, TREAD * i, -RISE * i) for i in range(1, STEPS)])
         common.mirror_faces(walls, lambda f: abs(f.normal.x) > 0.5)
 
-    common.export_piece(NAME, ATLAS, SLOTS, merge=merge)
+    common.export_piece(NAME, ATLAS, SLOTS, merge=merge, weather=WEATHER)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,9 @@ import weather_rules  # noqa: E402
 # existing edge (m): nearer, and the face is left uncut there (no slivers).
 GRID = 0.5
 SNAP = 0.02
+# Faces thinner than this (m) are left whole: rails, posts and bars have no
+# room for colour to change across them, and cutting them only costs.
+MIN_WIDTH = 0.2
 # Ambient occlusion: rays per corner and how far they look (m).
 RAYS = 24
 REACH = 3.0
@@ -64,15 +67,48 @@ def _planes(lo, hi, size, lines):
     return sorted(planes)
 
 
-def _crossed(face, axis, value):
-    """A face the plane passes through, every corner on the plane or at
-    least SNAP from it."""
-    c = [v.co[axis] - value for v in face.verts]
+def _thickness(points):
+    """A flat polygon's thinnest extent: its area over its longest edge."""
+    if len(points) < 3:
+        return 0.0
 
-    if not (min(c) < -1e-6 and max(c) > 1e-6):
+    normal = Vector((0.0, 0.0, 0.0))
+
+    for i, a in enumerate(points):     # Newell's area vector
+        normal += a.cross(points[(i + 1) % len(points)])
+
+    longest = max((points[i] - points[(i + 1) % len(points)]).length for i in range(len(points)))
+    return normal.length / 2 / max(longest, 1e-12)
+
+
+def _half(points, axis, value, sign):
+    """The part of a polygon on one side of the plane (Sutherland-Hodgman)."""
+    out = []
+
+    for i, a in enumerate(points):
+        b = points[(i + 1) % len(points)]
+        da, db = sign * (a[axis] - value), sign * (b[axis] - value)
+
+        if da >= 0:
+            out.append(a)
+
+        if (da < 0) != (db < 0) and abs(da - db) > 1e-12:
+            out.append(a.lerp(b, da / (da - db)))
+
+    return out
+
+
+def _crossed(face, axis, value):
+    """A face to cut: the plane passes through it, the face is wide enough
+    for colour to change across (MIN_WIDTH), and both its halves stay at
+    least SNAP thick (no slivers, slanted edges included)."""
+    points = [v.co.copy() for v in face.verts]
+    c = [p[axis] - value for p in points]
+
+    if not (min(c) < -1e-6 and max(c) > 1e-6) or _thickness(points) < MIN_WIDTH:
         return False
 
-    return all(abs(d) <= 1e-6 or abs(d) >= SNAP for d in c)
+    return all(_thickness(_half(points, axis, value, sign)) >= SNAP for sign in (1, -1))
 
 
 def densify(objects, lines=(), grid=GRID, coarse=None):

@@ -43,9 +43,22 @@ class Gate(unittest.TestCase):
         self.assertIn("1", problems[0])
 
     def test_triangle_budget(self):
-        problems = gate.check(box(0, 0, 0, 0, 1, 1, 1), 2501, UV)
+        problems = gate.check(box(0, 0, 0, 0, 1, 1, 1), 5001, UV)
         self.assertEqual(len(problems), 1)
         self.assertIn("over budget", problems[0])
+
+    def test_budget_is_5000(self):
+        """Densified for vertex paint (Oct 9 2026): 5000 triangles a piece."""
+        self.assertEqual(gate.check(box(0, 0, 0, 0, 1, 1, 1), 5000, UV), [])
+
+    def test_sliver_under_a_centimetre_fails(self):
+        strip = quad(1, 5, 5, 6, 5.005)
+        problems = gate.check(box(0, 0, 0, 0, 1, 1, 1) + [strip], 14, UV)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("sliver", problems[0])
+
+    def test_a_flange_a_centimetre_and_a_half_thick_passes(self):
+        self.assertEqual(gate.check(box(0, 0, 0, 0, 1, 1, 1) + [quad(1, 5, 5, 6, 5.015)], 14, UV), [])
 
     def test_uv_outside(self):
         problems = gate.check(box(0, 0, 0, 0, 1, 1, 1), 12, [(0.5, 0.5), (1.02, 0.5)])

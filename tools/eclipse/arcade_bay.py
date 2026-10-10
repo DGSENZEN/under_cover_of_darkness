@@ -327,6 +327,23 @@ JOINTS = {
 }
 
 
+# The vertex paint (tools/eclipse/weather.py): damp lines from the street,
+# the balcony window's jambs and head (the door's sit on the grid already);
+# soot over the shop door and the window.
+WINDOW_X = (CENTRE - WINDOW[0] / 2, CENTRE + WINDOW[0] / 2)
+WINDOW_HEAD = 6.0 + WINDOW[1]
+WEATHER = {"lines": [("z", 0.3), ("z", 1.2), ("x", WINDOW_X[0]), ("x", WINDOW_X[1]), ("z", WINDOW_HEAD)],
+           "blendable": ["lime", "iron"]}
+
+
+def soot():
+    for name, place in (("soot_door", (CENTRE, DEEP - 0.05, FLOOR + DOOR[1])),
+                        ("soot_window", (CENTRE, UPPER_BACK - 0.05, WINDOW_HEAD))):
+        empty = bpy.data.objects.new(name, None)
+        bpy.context.scene.collection.objects.link(empty)
+        empty.location = place
+
+
 def build():
     common.reset()
     tiles = (floor(), ceiling(), roof(), rear())
@@ -338,6 +355,7 @@ def build():
     upper()
     back = shop()
     caps = end_column()
+    soot()
     return tiles, back, caps
 
 
@@ -404,7 +422,7 @@ def main():
         common.turned_copy(caps, "bay_start_caps")
 
     common.export_piece(NAME, ATLAS, SLOTS, merge=merge, gate_sets=_Sets(),
-                        share=[("bay_end_caps", "bay_start_caps")])
+                        share=[("bay_end_caps", "bay_start_caps")], weather=WEATHER)
     _gate_two_bays()
 
 

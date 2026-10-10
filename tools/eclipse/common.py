@@ -646,11 +646,62 @@ def dump_faces(objects):
     return faces, tris, uvs
 
 
-def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None):
+def _weather(objects, name, settings):
+    """The piece densified and its vertex paint baked: the rules, then the
+    user's strokes over them (any lost listed), then fresh painting layers;
+    `rules` is what goes out as COLOR_0. The soot empties go once baked."""
+    import weather
+
+    weather.densify(objects, lines=settings.get("lines", ()), coarse=settings.get("coarse"))
+    weather.bake(objects, name, blendable_slots=tuple(settings.get("blendable", ())),
+                 ground_holes=tuple(settings.get("ground_holes", ())))
+
+    for line in weather.apply(objects, name):
+        print("%s: %s" % (name, line))
+
+    weather.paint_layers(objects)
+
+    for o in objects:
+        rules = o.data.color_attributes["rules"]
+        o.data.color_attributes.active_color = rules
+        o.data.color_attributes.render_color_index = o.data.color_attributes.find("rules")
+
+    for o in [o for o in bpy.context.scene.objects if o.type == "EMPTY" and o.name.startswith("soot_")]:
+        bpy.data.objects.remove(o)
+
+    (SOURCE / "PAINTING.md").write_text(weather.PAINTING_NOTE)
+    _probe(objects, name, weather)
+
+
+def _probe(objects, name, weather):
+    """One corner whose colour is most mid-grey (so sRGB and linear tell
+    apart), written for Godot's import test: its place and facing in the
+    glTF's Y-up axes, and its RGBA."""
+    best = None
+
+    for o in objects:
+        rules = weather.read(o.data, "rules")
+        points, normals = weather._corners(o.data)
+        middle = np.minimum(rules, 1.0 - rules)[:, :3].max(axis=1)
+        i = int(np.argmax(middle))
+
+        if best is None or middle[i] > best[0]:
+            p = o.matrix_world @ Vector(points[i])
+            n = (o.matrix_world.to_3x3() @ Vector(normals[i])).normalized()
+            best = (middle[i], o.name, [p.x, p.z, -p.y], [n.x, n.z, -n.y], list(rules[i]))
+
+    (SOURCE / (name + "_probe.json")).write_text(json.dumps({"object": best[1], "position": best[2],
+                                                               "normal": best[3], "rgba": best[4]}, indent=1))
+
+
+def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, weather=None):
     """The piece's atlas made (unwrap, any repeats, pack), its AO and region
     maps, glTF and .blend written; then the gate. `merge` is a function run
-    between unwrap and pack (repeat_faces for identical parts). Exits
-    non-zero if the gate finds a problem."""
+    between unwrap and pack (repeat_faces for identical parts). `weather`
+    ({"lines", "coarse", "blendable", "ground_holes"}) densifies the piece
+    after its atlas is made and bakes its vertex paint, the user's strokes
+    over the rules (tools/eclipse/weather.py). Exits non-zero if the gate
+    finds a problem."""
     OUT.mkdir(parents=True, exist_ok=True)
     SOURCE.mkdir(parents=True, exist_ok=True)
     (SOURCE / ".gdignore").touch()
@@ -689,9 +740,14 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None):
     if clashes:
         sys.exit(1)
 
+    if weather is not None:
+        _weather(objects, name, weather)
+
     bpy.ops.export_scene.gltf(filepath=str(OUT / (name + ".glb")), export_format="GLB", export_yup=True,
                               export_materials="EXPORT", export_texcoords=True, export_normals=True,
-                              export_tangents=True, use_selection=False)
+                              export_tangents=True, use_selection=False,
+                              export_vertex_color="NAME" if weather is not None else "NONE",
+                              export_vertex_color_name="rules", export_all_vertex_colors=False)
     bpy.context.preferences.filepaths.save_version = 0   # no .blend1 beside it
     bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / (name + ".blend")))
 

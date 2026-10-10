@@ -16,10 +16,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import overlap  # noqa: E402
 
-# Triangles per piece (the style lab's plan, global constraints).
-BUDGET = 2500
-# Faces smaller than this (m2) are slivers.
+# Triangles per piece: densified on a 0.5 m grid for vertex paint (the
+# vertex-paint plan, Oct 9 2026; it was 2500).
+BUDGET = 5000
+# Faces smaller than this (m2) are degenerate.
 LEAST_AREA = 1e-6
+# Faces thinner than this (m: area over longest edge) are slivers. A steel
+# column's flange is 1.5 cm by design; weather.densify keeps its own cuts
+# 2 cm from any edge.
+SLIVER = 0.01
 # UVs this far outside [0, 1] still count as inside (float noise).
 UV_SLACK = 1e-4
 
@@ -27,6 +32,14 @@ UV_SLACK = 1e-4
 def _area(face):
     flat = overlap._flat(face["points"], overlap._axes(face["normal"]))
     return abs(overlap._area(flat))
+
+
+def _thickness(face):
+    """A face's thinnest extent: its area over its longest edge."""
+    points = face["points"]
+    longest = max(sum((a - b) ** 2 for a, b in zip(points[i], points[(i + 1) % len(points)])) ** 0.5
+                  for i in range(len(points)))
+    return _area(face) / max(longest, 1e-12)
 
 
 # Faces facing the same way closer than this (m), and overlapping, fight for
@@ -83,6 +96,8 @@ def check(faces, tris, uvs):
     for face in faces:
         if _area(face) < LEAST_AREA:
             problems.append("degenerate: a face of %s has %.2e m2" % (face["owner"], _area(face)))
+        elif _thickness(face) < SLIVER:
+            problems.append("sliver: a face of %s is %.1f cm thin" % (face["owner"], _thickness(face) * 100))
 
     outside = [uv for uv in uvs if not (-UV_SLACK <= uv[0] <= 1 + UV_SLACK and -UV_SLACK <= uv[1] <= 1 + UV_SLACK)]
 

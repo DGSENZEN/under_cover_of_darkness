@@ -90,6 +90,23 @@ class Densify(unittest.TestCase):
         weather.densify([wall])
         self.assertGreaterEqual(_thickness(wall).min(), weather.SNAP - 1e-6)
 
+    def test_thin_faces_are_not_cut(self):
+        # A rail 5 cm square and 3 m long: nothing for colour to change
+        # across, so it keeps its six faces.
+        rail = _box("rail", (0.0, 0.0, 1.0), (3.0, 0.05, 1.05))
+        weather.densify([rail])
+        self.assertEqual(len(rail.data.polygons), 6)
+
+    def test_no_sliver_on_a_slanted_face(self):
+        # One edge crosses the grid line x 0.5 at a shallow slant: every
+        # corner is at least 2 cm off it, but the strip it would cut off is
+        # not, so that cut is left out.
+        m = common.Mesh("slant")
+        m.face([(0.48, 0.0, 0.0), (1.5, 0.0, 0.0), (1.5, 0.0, 2.0), (0.53, 0.0, 2.0)], "lime")
+        slant = m.make()
+        weather.densify([slant])
+        self.assertGreaterEqual(_thickness(slant).min(), weather.SNAP - 1e-6)
+
     def test_coarse_object_uses_its_own_grid(self):
         fine = _box("fine", (0.0, 0.0, 0.0), (3.0, 0.2, 2.0))
         stairs = _box("stairs", (0.0, 5.0, 0.0), (3.0, 5.2, 2.0))
@@ -295,6 +312,52 @@ class Yours(unittest.TestCase):
         weather.apply(rebuilt, "test")
         self.assertGreater(self._rules_at(rebuilt, (2.0, 0.0, 2.0), (0.0, -1.0, 0.0))[:, 0].min(), 0.2)
         self.assertTrue(np.allclose(self._rules_at(rebuilt, (1.0, 0.0, 2.0), (0.0, -1.0, 0.0))[:, 0], 1.0))
+
+
+class Export(unittest.TestCase):
+    """common.export_piece with weathering: vertex colour out as COLOR_0,
+    soot empties baked and gone."""
+
+    def setUp(self):
+        import tempfile
+        common.reset()
+        self.kept = common.OUT, common.SOURCE, weather.YOURS
+        folder = Path(tempfile.mkdtemp())
+        common.OUT, common.SOURCE, weather.YOURS = folder / "lab", folder / "source", folder / "yours"
+
+    def tearDown(self):
+        common.OUT, common.SOURCE, weather.YOURS = self.kept
+
+    def _export(self):
+        import bpy
+        _box("wall", (0.0, 0.0, 0.0), (2.0, 0.2, 2.0))
+        soot = bpy.data.objects.new("soot_a", None)
+        bpy.context.scene.collection.objects.link(soot)
+        soot.location = (1.0, -0.1, 1.0)
+        common.export_piece("test", 64, ["lime"], weather={"lines": [("z", 0.3)], "blendable": ["lime"]})
+        return _glb(common.OUT / "test.glb")
+
+    def test_export_has_color_0(self):
+        gltf = self._export()
+        attributes = [set(p["attributes"]) for m in gltf["meshes"] for p in m["primitives"]]
+        self.assertTrue(all("COLOR_0" in a for a in attributes), attributes)
+        self.assertTrue(all("COLOR_1" not in a for a in attributes), attributes)
+
+    def test_no_soot_nodes_exported(self):
+        gltf = self._export()
+        self.assertEqual([n["name"] for n in gltf["nodes"] if n.get("name", "").startswith("soot_")], [])
+
+    def test_painting_note_written(self):
+        self._export()
+        self.assertIn("yours_grime", (common.SOURCE / "PAINTING.md").read_text())
+
+
+def _glb(path):
+    import json
+    import struct
+    data = path.read_bytes()
+    length = struct.unpack("<I", data[12:16])[0]
+    return json.loads(data[20:20 + length])
 
 
 if __name__ == "__main__":
