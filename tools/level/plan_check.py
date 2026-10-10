@@ -26,8 +26,9 @@ OVERLAP = 0.5
 # A plot faces a street if an edge's middle lies this near one (m).
 FRONTAGE = 0.5
 # A route's end rests on a surface within this of its height (m), and this
-# far outside its outline (m).
-ROUTE_REST = 0.6
+# far outside its outline (m); an opening lies on a wall within ON_WALL (m).
+ROUTE_REST = 0.05
+ON_WALL = 0.05
 EDGE_SLACK = 0.3
 # Surfaces at one height closer than this (m) are joined.
 JOIN = 0.01
@@ -118,24 +119,35 @@ def near(p, polygon, slack):
     return inside(p, polygon) or boundary_distance(p, polygon) <= slack
 
 
-def _segments_meet(a, b, c, d):
-    def orient(p, q, r):
-        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
-
-    return (orient(a, b, c) * orient(a, b, d) <= 0) and (orient(c, d, a) * orient(c, d, b) <= 0)
+# Two surfaces are one if they overlap or share this much edge (m): a corner
+# or a line they merely both lie on is not a way across.
+SHARED_EDGE = 0.5
 
 
-def touching(p1, p2, slack=JOIN):
-    """Two polygons that share an edge, cross or overlap."""
-    if any(near(v, p2, slack) for v in p1) or any(near(v, p1, slack) for v in p2):
+def _collinear_overlap(a, b, c, d):
+    """How long a stretch c-d shares with a-b when both lie on one line."""
+    length = math.hypot(b[0] - a[0], b[1] - a[1])
+
+    if length < 1e-9:
+        return 0.0
+
+    for p in (c, d):
+        if abs((p[0] - a[0]) * (b[1] - a[1]) - (p[1] - a[1]) * (b[0] - a[0])) / length > 1e-4:
+            return 0.0
+
+    t = [((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / length for p in (c, d)]
+    return max(0.0, min(length, max(t)) - max(0.0, min(t)))
+
+
+def touching(p1, p2):
+    """Two surfaces one can walk between: they overlap, or share an edge
+    SHARED_EDGE long or longer."""
+    clipper, subject = (p2, p1) if convex(p2) else (p1, p2)
+
+    if convex(clipper) and overlap_area(subject, clipper) > 0.01:
         return True
 
-    for a, b in _edges(p1):
-        for c, d in _edges(p2):
-            if _segments_meet(a, b, c, d):
-                return True
-
-    return False
+    return any(_collinear_overlap(a, b, c, d) >= SHARED_EDGE for a, b in _edges(p1) for c, d in _edges(p2))
 
 
 def walkable(data):
@@ -149,20 +161,64 @@ def walkable(data):
     return out
 
 
-def _rests_on(point, surfaces):
+def _rests_on(point, surfaces, holes):
+    """The surfaces a route's end rests on: within ROUTE_REST of its height,
+    inside its outline (or EDGE_SLACK off it), and not over a hole another
+    level cuts through it."""
     x, y, z = point
-    return [s["name"] for s in surfaces if abs(y - s["y"]) <= ROUTE_REST and near((x, z), s["polygon"], EDGE_SLACK)]
+    out = []
+
+    for s in surfaces:
+        if abs(y - s["y"]) > ROUTE_REST or not near((x, z), s["polygon"], EDGE_SLACK):
+            continue
+
+        if any(h["name"] != s["name"] and abs(h["level"] - s["y"]) > 1e-6 and inside((x, z), _inset(h["polygon"]))
+               for h in holes):
+            continue
+
+        out.append(s["name"])
+
+    return out
+
+
+def _inset(polygon, by=0.05):
+    """An axis-aligned rectangle shrunk on every side (a point on its edge is
+    not over its hole)."""
+    xs = [p[0] for p in polygon]
+    zs = [p[1] for p in polygon]
+    return plan.rect(min(xs) + by, min(zs) + by, max(xs) - by, max(zs) - by)
+
+
+def _opens(data):
+    """Pairs (space, other) that an opening joins, both ways."""
+    out = set()
+
+    for s in data["spaces"]:
+        for o in s["openings"]:
+            out.add((s["name"], o["to"]))
+            out.add((o["to"], s["name"]))
+
+    return out
 
 
 def _graph(data):
     surfaces = walkable(data)
     links = {s["name"]: set() for s in surfaces}
+    spaces = {s["name"] for s in data["spaces"]}
+    opens = _opens(data)
+    holes = [g for g in data["ground"] if g["kind"] in plan.SUNKEN_KINDS]
 
     for i, a in enumerate(surfaces):
         for b in surfaces[i + 1:]:
-            if abs(a["y"] - b["y"]) < 1e-6 and touching(a["polygon"], b["polygon"]):
-                links[a["name"]].add(b["name"])
-                links[b["name"]].add(a["name"])
+            if a["name"] in spaces or b["name"] in spaces:
+                # Rooms are walled: only an opening joins them to what is beside.
+                if (a["name"], b["name"]) not in opens or abs(a["y"] - b["y"]) > ROUTE_REST + 0.01:
+                    continue
+            elif abs(a["y"] - b["y"]) > 1e-6 or not touching(a["polygon"], b["polygon"]):
+                continue
+
+            links[a["name"]].add(b["name"])
+            links[b["name"]].add(a["name"])
 
     dangling = []
 
@@ -173,7 +229,7 @@ def _graph(data):
             if i not in (0, len(r["points"]) - 1):
                 continue
 
-            on = _rests_on(point, surfaces)
+            on = _rests_on(point, surfaces, holes)
 
             if not on:
                 dangling.append("route %s end %d dangles at (%.1f, %.1f, %.1f)" % (r["name"], i, *point))
@@ -187,6 +243,27 @@ def _graph(data):
                     links[b].add(a)
 
     return surfaces, links, dangling
+
+
+def _openings_on_walls(data):
+    """An opening lies on its room's wall and, unless a tunnel joins the two,
+    on the wall of what it opens to."""
+    outlines = {g["name"]: g["polygon"] for g in data["ground"]}
+    outlines.update({s["name"]: s["polygon"] for s in data["spaces"]})
+    tunnels = {tuple(sorted(r["between"])) for r in data["routes"] if r["kind"] == "tunnel" and "between" in r}
+    problems = []
+
+    for s in data["spaces"]:
+        for o in s["openings"]:
+            at = tuple(o["at"])
+
+            if boundary_distance(at, s["polygon"]) > ON_WALL:
+                problems.append("opening of %s to %s is not on its wall" % (s["name"], o["to"]))
+            elif o["to"] in outlines and tuple(sorted((s["name"], o["to"]))) not in tunnels \
+                    and boundary_distance(at, outlines[o["to"]]) > ON_WALL:
+                problems.append("opening of %s to %s is not on %s's wall" % (s["name"], o["to"], o["to"]))
+
+    return problems
 
 
 def reach(data):
@@ -253,6 +330,7 @@ def check(data):
     # Routes and reach.
     _, _, dangling = _graph(data)
     problems += dangling
+    problems += _openings_on_walls(data)
     reached = reach(data)
 
     for p in plots:

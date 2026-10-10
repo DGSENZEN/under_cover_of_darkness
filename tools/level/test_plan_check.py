@@ -20,7 +20,7 @@ from plan import rect  # noqa: E402
 def _town(brink=260.0, stair=True, events=plan.EVENT_KINDS):
     """A plaza ringed by streets; two houses east whose roofs a plank joins,
     a climb up to the first from the street; a well north with a stair down
-    to a hall under the street; every event kind; a 520 m brink."""
+    to the hall under the street beside it; every event kind; a 520 m brink."""
     P = plan.Plan("town")
     P.brink(rect(-brink, -brink, brink, brink))
     P.ground("square", "plaza", rect(-40, -40, 40, 40))
@@ -28,7 +28,7 @@ def _town(brink=260.0, stair=True, events=plan.EVENT_KINDS):
     P.ground("south_street", "street", rect(-60, 40, 60, 60))
     P.ground("west_street", "street", rect(-60, -40, -40, 40))
     P.ground("east_street", "street", rect(40, -40, 60, 40))
-    P.ground("well_a", "well", rect(-10, -58, 10, -52), level=-8.0)
+    P.ground("well_a", "well", rect(-10, -56, 10, -50), level=-8.0)
     P.plot("house_a", "house", rect(60, -40, 80, -20), storeys=2, height=9.0)
     P.plot("house_b", "house", rect(60, -20, 80, 0), storeys=2, height=9.0)
     P.route("plank_ab", "roof_link", [(75, 9, -25), (75, 9, -15)])
@@ -36,7 +36,7 @@ def _town(brink=260.0, stair=True, events=plan.EVENT_KINDS):
     P.space("hall", rect(-10, -50, 10, -30), floor=-8.0, height=5.0, openings=[{"to": "well_a", "at": (0, -50)}])
 
     if stair:
-        P.route("stair_a", "stair", [(0, 0, -59.5), (0, -8, -45)])
+        P.route("stair_a", "stair", [(0, 0, -56), (0, -8, -51)])
 
     P.landmark("way_in", "metro_entrance", (0, -55))
     P.tram([(-50, -50), (50, -50), (50, 50), (-50, 50)])
@@ -101,6 +101,42 @@ class Checks(unittest.TestCase):
         self.assertEqual(len(problems), 2, problems)
         self.assertTrue(any("house_c" in p and "reached" in p for p in problems))
         self.assertTrue(any("house_d" in p and "reached" in p for p in problems))
+
+    def test_collinear_roof_island_is_unreachable(self):
+        # Its west edge lies on house_a's line (x 60) but 100 m away: lining
+        # up is not touching.
+        P = _town()
+        P.plot("house_far", "house", rect(60, 100, 80, 120), storeys=2, height=9.0)
+        P.ground("far_street", "street", rect(40, 100, 60, 120))
+        problems = plan_check.check(P.data())
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("house_far", problems[0])
+
+    def test_sealed_room_is_unreachable(self):
+        # A room beside the hall at its floor, with no opening between them:
+        # the greybox walls it off, so the check must too.
+        P = _town()
+        P.space("sealed", rect(10, -50, 20, -30), floor=-8.0, height=5.0)
+        problems = plan_check.check(P.data())
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("sealed", problems[0])
+
+    def test_opening_off_its_wall(self):
+        P = _town()
+        P.space("annex", rect(10, -50, 20, -30), floor=-8.0, height=5.0, openings=[{"to": "hall", "at": (15, -40)}])
+        problems = plan_check.check(P.data())
+        self.assertTrue(any("annex" in p and "wall" in p for p in problems), problems)
+
+    def test_plank_half_a_metre_up_dangles(self):
+        P = _town()
+        P.route("high_plank", "roof_link", [(65, 9, -25), (65, 9.5, -15)])
+        self.assertIn("dangles", self.one_problem(P, "high_plank"))
+
+    def test_end_over_a_well_dangles(self):
+        # (0, 0, -55) lies in the north street's outline, but over the well's hole.
+        P = _town()
+        P.route("over_hole", "roof_link", [(0, 0, -55), (0, 0, -45)])
+        self.assertIn("dangles", self.one_problem(P, "over_hole"))
 
     def test_space_unreachable_without_its_stair(self):
         self.assertIn("reached", self.one_problem(_town(stair=False), "hall"))

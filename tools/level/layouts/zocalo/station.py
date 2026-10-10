@@ -20,7 +20,7 @@ def lay(P):
     for sx, side in ((-1, "w"), (1, "e")):
         P.space("platform_" + side, rect(sx * 30, -10, sx * 130, -2), floor=-14.0, height=9.0,
                 openings=[{"to": "station_hall", "at": (sx * 30, -6)}])
-        P.route("platform_%s_stair" % side, "stair", [(sx * 30.2, HALL_FLOOR, -6), (sx * 45, -14.0, -6)])
+        P.route("platform_%s_stair" % side, "stair", [(sx * 30.0, HALL_FLOOR, -6), (sx * 45, -14.0, -6)])
 
     for corner, sx, sz in (("nw", -1, -1), ("ne", 1, -1), ("sw", -1, 1), ("se", 1, 1)):
         # The well under the kiosk, its stair down from the plaza.

@@ -146,6 +146,29 @@ class Plan(unittest.TestCase):
         self.assertIn(("crypt", "station_hall"), tunnels)
         self.assertIn(("crypt", "templo_shells"), tunnels)
 
+    def test_platform_cut_off_without_its_stair(self):
+        # The east platform lines up with the west one; that must not join them.
+        cut = dict(DATA, routes=[r for r in DATA["routes"] if r["name"] != "platform_e_stair"],
+                   spaces=[dict(s, openings=[o for o in s["openings"] if o["to"] != "platform_e"]) for s in DATA["spaces"]])
+        problems = plan_check.check(cut)
+        self.assertTrue(any("platform_e" in p for p in problems), problems)
+
+    def test_stairs_start_at_the_edge_they_drop_from(self):
+        # A stair's top lies on the edge of what it goes down into (no slot
+        # between the floor it leaves and the stair).
+        lower = {g["name"]: g["polygon"] for g in DATA["ground"]}
+        lower.update({s["name"]: s["polygon"] for s in DATA["spaces"]})
+
+        for r in DATA["routes"]:
+            if r["kind"] != "stair":
+                continue
+
+            top, bottom = sorted(r["points"], key=lambda p: -p[1])[0], sorted(r["points"], key=lambda p: p[1])[0]
+            into = [n for n, poly in lower.items() if plan_check.inside((bottom[0], bottom[2]), poly)
+                    and n in plan_check.reach(DATA) and _level(n) == bottom[1]]
+            self.assertTrue(into, r["name"])
+            self.assertLessEqual(plan_check.boundary_distance((top[0], top[2]), lower[into[0]]), 0.05, r["name"])
+
     def test_interiors(self):
         inside = {p["name"] for p in DATA["plots"] if p["interior"]} | {s["name"] for s in DATA["spaces"]
                                                                          if s["interior"]}
@@ -190,6 +213,14 @@ class Plan(unittest.TestCase):
         spawn = [m for m in DATA["landmarks"] if m["kind"] == "spawn"]
         self.assertEqual(len(spawn), 1)
         self.assertTrue(plan_check.near((spawn[0]["at"][0], spawn[0]["at"][-1]), _ground("south_street")["polygon"], 0))
+
+
+def _level(name):
+    for g in DATA["ground"]:
+        if g["name"] == name:
+            return g["level"]
+
+    return next(s["floor"] for s in DATA["spaces"] if s["name"] == name)
 
 
 def _bounds_poly(polygons):
