@@ -301,6 +301,13 @@ func _psx_checks(retro: CanvasLayer) -> void:
 	#    no colour cut either: without the dither its bands would show
 	_check("R13 no dither, and the colour left whole: the screen keeps only its grid",
 		retro.dither == 0.0 and retro.color_levels == 0.0, "levels %.0f dither %.2f" % [retro.color_levels, retro.dither])
+	# R15 the grid is the PS2's 480 lines (the user, Oct 9 2026: 360 was too
+	#     low for the mixed look); F6 still steps down through 360 and 240
+	var fresh: CanvasLayer = load("res://scripts/Visual/Retro.gd").new()
+	_check("R15 the screen grid is 480 lines by default, F6 stepping 480 / 360 / 240 / off",
+		fresh.virtual_height == 480 and fresh._grids == [480, 360, 240, 0], "default %d, steps %s" % [fresh.virtual_height, fresh._grids])
+	fresh.free()
+
 	# R14 the frame can be pulled toward a district's palette (the Eclipse
 	#     city's painterly look), off unless a map asks for it
 	var pull_before: float = retro.palette_pull

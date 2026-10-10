@@ -42,7 +42,7 @@ func _ready() -> void:
 	Props.give_weapons(player)
 	player.inventory.select_by_id(&"sword")
 
-	_sign(Vector3(-7.9, 2.3, 3.6), PI * 0.5, "THE LOOK\nF6  grid lines: 360 / 240 (PS1) / 448 (PS2) / off\nF7  colour depth: 32 / 64 / full\nF8  dither on / off")
+	_sign(Vector3(-7.9, 2.3, 3.6), PI * 0.5, "THE LOOK\nF6  grid lines: 480 (PS2) / 360 / 240 (PS1) / off\nF7  colour depth: 32 / 64 / full\nF8  dither on / off")
 
 
 func _process(delta: float) -> void:
