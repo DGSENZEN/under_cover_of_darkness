@@ -191,9 +191,19 @@ def spandrels():
     """The wall round the ring, up to the cornice: tezontle outside, lime in."""
     m = common.Mesh("bay_spandrels")
     outer = _arc(RADIUS + RING)
-    outline = [(0, CORNICE[0]), (0, SPRING)] + outer[1:-1] + [(BAY, SPRING), (BAY, CORNICE[0])]
-    _xz(m, list(reversed(outline)), FRONT, "tezontle", -1)
-    _xz(m, list(reversed(outline)), WALL_BACK, "lime", 1)
+    # The ring's crown touches the cornice: a spandrel either side of it (one
+    # outline through the crown would pinch to nothing there). Each runs
+    # counter-clockwise seen from the street, from its outer top corner: the
+    # texel bake fans each face from its first corner, and from there the
+    # fan stays on the spandrel (from the crown it swept the arch's opening).
+    crown = ARC // 2
+    left = [(0, CORNICE[0]), (0, SPRING)] + outer[1:crown + 1]
+    right = [(BAY, CORNICE[0])] + outer[crown:-1] + [(BAY, SPRING)]
+
+    for outline in (left, right):
+        _xz(m, outline, FRONT, "tezontle", -1)
+        _xz(m, outline, WALL_BACK, "lime", 1)
+
     return m.make()
 
 
