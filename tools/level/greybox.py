@@ -132,10 +132,9 @@ def _box(centre_a, centre_b, width, y_top, thickness):
     dx, dz = centre_b[0] - centre_a[0], centre_b[1] - centre_a[1]
     length = math.hypot(dx, dz)
     px, pz = -dz / length * width / 2, dx / length * width / 2
-    corners = [(centre_a[0] + px, centre_a[1] + pz, tops[0]), (centre_b[0] + px, centre_b[1] + pz, tops[1]),
-               (centre_b[0] - px, centre_b[1] - pz, tops[1]), (centre_a[0] - px, centre_a[1] - pz, tops[0])]
-    top = [(x, y, z) for x, y, z in corners]
-    bottom = [(x, y - thickness, z) for x, y, z in corners]
+    top = [(centre_a[0] + px, tops[0], centre_a[1] + pz), (centre_b[0] + px, tops[1], centre_b[1] + pz),
+           (centre_b[0] - px, tops[1], centre_b[1] - pz), (centre_a[0] - px, tops[0], centre_a[1] - pz)]
+    bottom = [(x, y - thickness, z) for x, y, z in top]
     faces = [face(top, (0, 1, 0)), face(bottom, (0, -1, 0))]
 
     for i in range(4):

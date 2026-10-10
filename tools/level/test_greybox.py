@@ -92,6 +92,17 @@ class Greybox(unittest.TestCase):
         self.assertAlmostEqual(min(ys), -8.0, delta=0.01)
         self.assertAlmostEqual(max(ys), 0.0, delta=0.01)
 
+    def test_plank_rests_on_its_roofs(self):
+        # plank_ab runs (75, 9, -25) to (75, 9, -15): its deck a little proud
+        # of the roofs, along z, 0.8 m wide across x.
+        plank = _mesh(self.box, "plank_ab")
+        top = max(plank["faces"], key=lambda f: f["normal"][1])
+        self.assertGreater(top["normal"][1], 0.99)
+        self.assertTrue(all(abs(p[1] - (9.0 + greybox.PROUD)) < 1e-6 for p in top["points"]), top["points"])
+        self.assertAlmostEqual(min(p[2] for p in top["points"]), -25.0, delta=1e-6)
+        self.assertAlmostEqual(max(p[2] for p in top["points"]), -15.0, delta=1e-6)
+        self.assertAlmostEqual(max(p[0] for p in top["points"]) - min(p[0] for p in top["points"]), greybox.PLANK[0], delta=1e-6)
+
     def test_brink_falls_away(self):
         ys = [p[1] for f in _mesh(self.box, "brink")["faces"] for p in f["points"]]
         self.assertAlmostEqual(min(ys), -greybox.CLIFF, delta=1e-6)
