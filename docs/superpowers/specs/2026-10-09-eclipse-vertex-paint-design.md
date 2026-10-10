@@ -194,7 +194,7 @@ A reusable ground builder (the style lab uses it; district maps will):
 ## 7. The user's touch-ups (round trip)
 
 - Every build writes the piece's source .blend
-  (`tools/eclipse/source/<piece>.blend`) with four greyscale painting
+  (`assets/eclipse/source/<piece>.blend`) with four greyscale painting
   layers, one story each, so the user never paints in false colour:
   `yours_grime`, `yours_blend`, `yours_tint` (mid grey neutral),
   `yours_light`. Each starts as a copy of what the rules baked.
