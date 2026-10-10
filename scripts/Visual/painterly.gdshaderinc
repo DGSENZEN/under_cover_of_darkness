@@ -16,6 +16,9 @@ uniform float paint_mix : hint_range(0.0, 1.0) = 0.5;
 uniform float stroke_strength : hint_range(0.0, 1.0) = 0.12;
 // Metres of wall per brush tile.
 uniform float stroke_scale = 0.75;
+// How much the shader's strokes stand out from the surface: their slopes
+// lean the normal, so each stroke catches the light.
+uniform float stroke_relief : hint_range(0.0, 2.0) = 0.4;
 uniform float roughness : hint_range(0.0, 1.0) = 0.9;
 uniform float specular : hint_range(0.0, 1.0) = 0.3;
 
@@ -71,6 +74,18 @@ void fragment() {
 
 	ALBEDO = mix(base, best, paint_mix);
 #ifndef PAINTERLY_UNSHADED
+	// The strokes' slopes, from each projection, as a lean in the world.
+	float e = 1.0 / 128.0;
+	vec2 px_ = world_pos.zy / stroke_scale, py_ = world_pos.xz / stroke_scale, pz_ = world_pos.xy / stroke_scale;
+	vec2 sx = vec2(texture(brush, px_ + vec2(e, 0)).r - texture(brush, px_ - vec2(e, 0)).r,
+		texture(brush, px_ + vec2(0, e)).r - texture(brush, px_ - vec2(0, e)).r);
+	vec2 sy = vec2(texture(brush, py_ + vec2(e, 0)).r - texture(brush, py_ - vec2(e, 0)).r,
+		texture(brush, py_ + vec2(0, e)).r - texture(brush, py_ - vec2(0, e)).r);
+	vec2 sz = vec2(texture(brush, pz_ + vec2(e, 0)).r - texture(brush, pz_ - vec2(e, 0)).r,
+		texture(brush, pz_ + vec2(0, e)).r - texture(brush, pz_ - vec2(0, e)).r);
+	vec3 slope = w.x * vec3(0.0, sx.y, sx.x) + w.y * vec3(sy.x, 0.0, sy.y) + w.z * vec3(sz.x, sz.y, 0.0);
+	vec3 leaned = normalize(world_normal - slope * stroke_relief * 2.0);
+	NORMAL = normalize((VIEW_MATRIX * vec4(leaned, 0.0)).xyz);
 	NORMAL_MAP = texture(normal_atlas, UV).rgb;
 	NORMAL_MAP_DEPTH = normal_depth;
 #endif

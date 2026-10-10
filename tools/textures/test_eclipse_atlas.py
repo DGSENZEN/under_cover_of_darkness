@@ -27,9 +27,9 @@ FLAT = {"pores": 0, "brush": 0.0, "bevel": 0.0}
 FAST_PREP = {"px_per_m": 64, "radius": 2, "iterations": 1}
 RECIPES = {
     "tezontle": {"base": "#6e2f26", "light": "#9a4a3a", "dark": "#3d1f1c", "grime": 0.0, "wear": 0.0, "mottle": 2,
-                 "relief": FLAT},
+                 "strokes": 0, "relief": FLAT},
     "chiluca": {"base": "#8a8790", "light": "#b9b4b0", "dark": "#5a5560", "grime": 0.0, "wear": 0.0, "mottle": 2,
-                "relief": FLAT},
+                "strokes": 0, "relief": FLAT},
 }
 
 
@@ -181,6 +181,23 @@ class Painting(unittest.TestCase):
         same = lambda dy, dx: np.all(pixels == np.roll(pixels, (dy, dx), axis=(0, 1)), axis=-1)
         alone = ~(same(0, 1) | same(0, -1) | same(1, 0) | same(-1, 0))
         self.assertLess(alone[1:-1, 1:-1].mean(), 0.02)
+
+    def test_strokes_give_the_paint_depth(self):
+        """Brush strokes raise impasto: the normal map leans where they lie."""
+        stroked = {k: dict(v, strokes=12) for k, v in self.recipes.items()}
+        self.recipes = stroked
+        self.paint()
+        normals = np.asarray(Image.open(self.base.out / "piece_normal_base.png").convert("RGB"), dtype=np.float64)
+        lean = np.abs(normals[6:-6, 6:PX // 2 - 6, :2] - 128).mean()
+        self.assertGreater(lean, 3.0)
+
+    def test_strokes_follow_band_edges(self):
+        """Strokes gather where the value bands meet: the colour there varies
+        more than with no strokes."""
+        plain = self.paint().astype(np.float64)
+        self.recipes = {k: dict(v, strokes=12) for k, v in self.recipes.items()}
+        stroked = self.paint().astype(np.float64)
+        self.assertGreater(np.abs(stroked - plain)[:, 4:PX // 2 - 4].mean(), 2.0)
 
     def test_wear_lightens_convex_edges(self):
         with np.load(self.base.src / "piece_texels.npz") as d:

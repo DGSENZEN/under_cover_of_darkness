@@ -1,7 +1,8 @@
 extends Node3D
 ## The style lab staged for judging (its plan, Task 6): for each station (each
-## blend), by night and by day, five views: the front at 9 m, along under the
-## arcade, the kiosk close, the whole at 30 m, and grazing along the façade.
+## blend), by night and by day, seven views: the front at 9 m, along under the
+## arcade, the kiosk close, the whole at 30 m, grazing along the façade, and
+## the stair from its head and from its landing.
 ## Then, by night, each station's front drawn 240 frames with its painterly
 ## materials and again with plain ones, the frame times printed.
 ##   Godot --path . --resolution 1920x1080 res://tests/style_lab_stills.tscn -- --out=/tmp/style-lab
@@ -82,6 +83,8 @@ func _views(x: float, kiosk_z: float, bays_z: float) -> Array:
 		["kiosk_close", Vector3(x + 1.8, 1.6, kiosk_z + 2.5), Vector3(x, 1.2, kiosk_z - 1.0)],
 		["far", Vector3(x, 3.0, kiosk_z + 30.0), Vector3(x, 3.0, bays_z)],
 		["grazing", Vector3(x - 12.0, 4.5, bays_z + 2.2), Vector3(x + 6.0, 4.5, bays_z + 0.3)],
+		["stair_down", Vector3(x, 1.7, kiosk_z + 1.0), Vector3(x, -2.0, kiosk_z - 5.0)],
+		["stair_up", Vector3(x, -1.4, kiosk_z - 7.2), Vector3(x, 0.6, kiosk_z)],
 	]
 
 
