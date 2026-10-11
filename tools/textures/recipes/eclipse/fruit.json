@@ -1,0 +1,12 @@
+{
+ "base": "#8a2a1c",
+ "light": "#7a9a3a",
+ "dark": "#4a5a1e",
+ "grime": 0.1,
+ "wear": 0.0,
+ "mottle": 4,
+ "relief": {
+  "bevel": 0.5,
+  "brush": 0.2
+ }
+}

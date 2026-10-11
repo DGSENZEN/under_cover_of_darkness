@@ -1,0 +1,20 @@
+{
+ "slots": [
+  "wood",
+  "iron",
+  "brass",
+  "canvas",
+  "clay_pot",
+  "wax",
+  "marigold",
+  "sign",
+  "glass",
+  "chiluca",
+  "steel",
+  "coal",
+  "fruit",
+  "laundry"
+ ],
+ "atlas_px": 1536,
+ "px_per_m": 91.85
+}

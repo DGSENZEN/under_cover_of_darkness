@@ -721,6 +721,48 @@ class TreesKit(unittest.TestCase):
             self.assertGreaterEqual(low, 2.2, n)
 
 
+class SceneKit(unittest.TestCase):
+    """The scene kit (specs/2026-10-10-zocalo-scenes-design.md): the props the
+    scenes are staged with."""
+
+    PROPS = ["typewriter_desk", "stool", "chair", "brazier", "comal_pots", "basket", "baskets_stack", "crate",
+             "canary_box", "censer", "lantern_carried", "lantern_set", "cart_overturned", "crates_spilled",
+             "pulque_barrels", "cart_covered", "laundry_line", "exvoto_plate", "crate_soapbox", "camera_tripod",
+             "firewood_stack", "firewood_bundle", "atole_pot", "flowers_bucket"]
+    BUDGET = dict({n: 600 for n in PROPS}, barrel_organ=800, coffin_on_chairs=800, typewriter_desk=500)
+    HUNG = ["laundry_line"]
+
+    @classmethod
+    def setUpClass(cls):
+        import scene_kit
+        scene_kit.build()
+        cls.cards = scene_kit.CARDS
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_solids_closed(self):
+        self.assertEqual({n: _solid_open_edges(o, self.cards) for n, o in self.objects.items()
+                          if _solid_open_edges(o, self.cards)}, {})
+
+    def test_no_degenerate_triangles(self):
+        self.assertEqual({n: _smallest_triangle(o) for n, o in self.objects.items() if _smallest_triangle(o) < 1e-7}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_everything_rests_on_the_ground(self):
+        lows = {n: min(v.z for v in _world(o)) for n, o in self.objects.items() if n not in self.HUNG}
+        self.assertEqual({n: z for n, z in lows.items() if abs(z) > 1e-4}, {})
+
+    def test_the_laundry_hangs_from_its_line(self):
+        o = self.objects["laundry_line"]
+        top = max(v.z for v in _world(o))
+        self.assertAlmostEqual(top, 3.2 + 0.015, delta=0.02)
+        self.assertGreater(min(v.z for v in _world(o)), 1.9)
+
+
 if __name__ == "__main__":
     result = unittest.main(argv=["test_kit_bpy"], exit=False).result
     sys.exit(not result.wasSuccessful())
