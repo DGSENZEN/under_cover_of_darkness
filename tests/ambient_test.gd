@@ -441,6 +441,13 @@ func _run() -> void:
 		"%d systems, driven %s" % [falling.size(), driven])
 	drift.free()
 
+	# A17b a petal lies on the ground, not over it: its collision size no more
+	# than half its 1.4 cm thickness (at 5 cm it rested 5 cm up)
+	var resting: Node3D = Vfx.system("petals")
+	var sizes: Array = resting.get_children().filter(func(c): return c is GPUParticles3D).map(func(c): return c.collision_base_size)
+	resting.free()
+	_check("A17b petals lie on the ground, not over it", sizes.all(func(z): return z <= 0.008), str(sizes))
+
 	# A18 the map's wind (an attractor pushing the drift) blows the way the
 	# Gusts blow, as hard
 	var zocalo: Node3D = load("res://maps/zocalo.tscn").instantiate()

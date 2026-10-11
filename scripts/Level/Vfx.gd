@@ -432,7 +432,8 @@ static func _drift(p: Dictionary) -> GPUParticles3D:
 	drift.local_coords = false
 	drift.emitting = false
 	drift.layers = Layers.FX | (Layers.BREATHED if p.get("breathed", false) else 0)
-	drift.collision_base_size = 0.05
+	# (Half a petal's thickness: it comes to rest this far over the ground.)
+	drift.collision_base_size = 0.007
 	var reach: Vector3 = p["box"] + Vector3(12, 0, 12)
 	drift.visibility_aabb = AABB(-reach - Vector3(0, 8, 0), reach * 2.0 + Vector3(0, 12, 0))
 	var how := ShaderMaterial.new()
