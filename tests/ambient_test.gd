@@ -266,6 +266,22 @@ func _run() -> void:
 	_check("A13w candles stand a flame on each wick", on_wicks, "%d flames at %s" % [flames_at.size(), flames_at])
 	wicked.free()
 
+	# A13x embers bounce on the ground under their spot: a brazier's 0.9 m
+	# down, the coals' 0.1 m (their floor sat a fixed metre down: the
+	# coals' embers fell 0.9 m into the street)
+	var floors := {}
+
+	for effect in [["brazier", 0.9], ["coals", 0.1]]:
+		var burning_at: Node3D = Vfx.system(effect[0])
+		add_child(burning_at)
+		Vfx.place(burning_at, Vector3.ZERO, {"ground": effect[1]})
+		var box: GPUParticlesCollisionBox3D = burning_at.get_node("ground")
+		floors[effect[0]] = snappedf(box.position.y + box.size.y / 2.0, 0.001)
+		burning_at.free()
+
+	_check("A13x embers bounce on the ground under their spot", is_equal_approx(floors["brazier"], -0.9)
+		and is_equal_approx(floors["coals"], -0.1), str(floors))
+
 	# A13a copal's stem is a thread of smoke, its noise in metres (in the
 	# quad's UVs on a tall quad it stretched into white drips)
 	var censer: Node3D = Vfx.system("copal")

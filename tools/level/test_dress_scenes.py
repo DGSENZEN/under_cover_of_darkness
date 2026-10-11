@@ -182,6 +182,12 @@ class Scenes(unittest.TestCase):
                 < 7.6 + math.hypot(c["box"][3], c["box"][5]) / 2]
         self.assertEqual(near[:5], [])
 
+    def test_emitters_know_their_ground(self):
+        """Every scene's emitter says how high it stands over its ground
+        (the coals' embers fell to a floor 0.9 m under the setts)."""
+        lost = [e["effect"] for e in DRESSING["emitters"] if e.get("scene") is not None and not 0.0 <= e.get("ground", -1.0) <= 3.0]
+        self.assertEqual(lost, [])
+
     def test_candle_flames_on_their_wicks(self):
         """Every candles emitter carries its flames' places, each the top of a
         candle of its scene (they floated a hand or two over the drift)."""

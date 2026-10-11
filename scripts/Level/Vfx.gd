@@ -650,6 +650,11 @@ static func place(node: Node3D, at: Vector3, emitter := {}) -> void:
 	if emitter.has("wicks"):
 		_on_wicks(node, at, emitter["wicks"])
 
+	# What falls from it lands on its ground (`ground` m under its spot).
+	if emitter.has("ground"):
+		for floor_box in node.find_children("ground", "GPUParticlesCollisionBox3D", false, false):
+			floor_box.position.y = -float(emitter["ground"]) - floor_box.size.y / 2.0
+
 	for child in node.get_children():
 		if child is GPUParticles3D and child.draw_pass_1 != null:
 			var look := (child.draw_pass_1 as Mesh).surface_get_material(0) as ShaderMaterial

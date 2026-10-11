@@ -519,7 +519,9 @@ class Stage:
 
         for effect, (ex, ey, ez) in r.emitters:
             x, z = world(ex, ez)
-            e = {"effect": effect, "at": [round(x, 3), round(level + ey, 3), round(z, 3)], "scene": index}
+            # (`ground`: how high it stands over its ground, for what falls.)
+            e = {"effect": effect, "at": [round(x, 3), round(level + ey, 3), round(z, 3)], "scene": index,
+                 "ground": round(ey, 3)}
 
             if when in ("day", "night"):
                 e["when"] = when
