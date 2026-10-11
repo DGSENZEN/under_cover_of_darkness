@@ -31,6 +31,20 @@ CAMERAS = [
     ("garden", (14, 1.7, 22), (60, 4.0, 60)),
     ("curandera", (44, 1.7, 4), (40, 1.0, 11)),
     ("rail_accident", (-109, 1.7, 92), (-115, 0.6, 85)),
+    # The effects' places (the effects plan, Task 8): close enough to read
+    # each effect.
+    ("fx_brazier", (8.2, 1.7, -91.0), (5, 1.2, -95)),
+    ("fx_copal", (2.5, 1.8, 9.5), (0, 3.2, 3)),
+    ("fx_steam", (13.5, 1.7, -53.5), (11, 1.4, -56.4)),
+    ("fx_atole", (-181.8, 2.4, -120.6), (-179.5, 0.6, -123.5)),
+    ("fx_petals", (3.0, 1.3, 8.2), (0, 0.6, 5.0)),
+    ("fx_leaves", (69, 1.7, 57.5), (73.6, 2.5, 62)),
+    ("fx_pigeons", (15, 2.0, -27), (8, 2.5, -36)),
+    ("fx_breath", (5.5, 3.0, 2.2), (0, 4.6, -0.6)),
+    # (Seen through a long lens, --fov=14, from past the 5 m where it stays written.)
+    ("fx_sigil", (-99, 2.1, 107.5), (-99, 2.3, 114.47)),
+    ("fx_ward", (8.6, 1.7, 4.6), (7.25, 6.5, 3.0)),
+    ("fx_halos", (100, 1.7, 2), (110, 5.5, -40)),
 ]
 
 

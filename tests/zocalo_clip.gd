@@ -1,7 +1,7 @@
 extends Node3D
 ## A clip of the Zócalo from one of its cameras (tools/level/layouts/zocalo/cameras.py),
 ## day or night, frames a tenth of a second apart (--every=s) (tools/eclipse/clip.py makes
-## them a GIF), or from anywhere (--at=x,y,z --look=x,y,z). In a window:
+## them a GIF), or from anywhere (--at=x,y,z --look=x,y,z), through any lens (--fov). In a window:
 ##   Godot --path . --resolution 960x540 res://tests/zocalo_clip.tscn -- --camera=brazier_watch --night --out=/tmp/clip
 
 const MAP := preload("res://maps/zocalo.tscn")
@@ -15,6 +15,7 @@ func _ready() -> void:
 	var warm := 1.5
 	var startle := Vector3.INF
 	var deep := false
+	var fov := 66.0
 	var every := 0.1
 	var at := Vector3.INF
 	var look := Vector3.INF
@@ -28,6 +29,8 @@ func _ready() -> void:
 			frames = int(arg.trim_prefix("--frames="))
 		elif arg.begins_with("--out="):
 			out = arg.trim_prefix("--out=").trim_suffix("/") + "/"
+		elif arg.begins_with("--fov="):
+			fov = float(arg.trim_prefix("--fov="))
 		elif arg == "--deep":
 			deep = true
 		elif arg.begins_with("--startle="):
@@ -50,7 +53,7 @@ func _ready() -> void:
 	map.player.visible = false
 	var spot: Dictionary = {"at": at, "look_at": look} if at != Vector3.INF else map.cameras().filter(func(c): return c["name"] == camera)[0]
 	var eye := Camera3D.new()
-	eye.fov = 66.0
+	eye.fov = fov
 	add_child(eye)
 	eye.make_current()
 	eye.global_transform = Transform3D(Basis(), spot["at"]).looking_at(spot["look_at"], Vector3.UP)
