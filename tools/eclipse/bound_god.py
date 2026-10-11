@@ -32,8 +32,14 @@ BAR = 0.04                       # a bar's half-width
 OPEN = 0.8                       # the open side's half-width (south)
 
 
+# El Secreto's seals on the chains, their middles (filled by build()): where
+# the chains spark on a deep exhale (scripts/Level/Occult.gd).
+SEALS = []
+
+
 def build():
     common.reset()
+    SEALS.clear()
     m = common.Mesh(NAME, outward=True)
 
     # The plinth, stepped, its plaque on the south face of the bottom step.
@@ -105,6 +111,7 @@ def build():
 
         for t in (0.35, 0.65):
             c = tuple(a[k] + (b[k] - a[k]) * t for k in range(3))
+            SEALS.append((c[0], c[1], c[2] - 0.5 * t))
             m.shell()
             m.box((c[0] - 0.12, c[1] - 0.12, c[2] - 0.5 * t - 0.15), (c[0] + 0.12, c[1] + 0.12, c[2] - 0.5 * t + 0.15),
                   "brass")
@@ -123,8 +130,16 @@ JOINTS = {
 WEATHER = {"coarse": {NAME: 3.0}, "blendable": ["basalt", "iron", "chiluca"], "foot": ["chiluca", "basalt"]}
 
 
+def write_seals(path=None):
+    """SEALS in Godot's axes (x, z, -y), over the god's spot, for the game."""
+    import json
+    path = path or common.SOURCE / (NAME + "_seals.json")
+    path.write_text(json.dumps([[round(x, 4), round(z, 4), round(-y, 4)] for x, y, z in SEALS], indent=1))
+
+
 def main():
     build()
+    write_seals()
     common.export_piece(NAME, ATLAS, SLOTS, weather=WEATHER, out=common.ROOT / "assets" / "eclipse" / "kit")
 
 

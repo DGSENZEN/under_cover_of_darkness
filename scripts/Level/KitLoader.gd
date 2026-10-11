@@ -41,6 +41,9 @@ var lights: Array[OmniLight3D] = []
 var globes: Array[StandardMaterial3D] = []
 ## One lit lamp in eight stutters at night (the Company's wiring).
 var stuttering: Array[OmniLight3D] = []
+## Lamps something else dims or swells (the god's breath, the wards' hum):
+## light -> its share of a lamp's energy, held through a stutter.
+var dims := {}
 ## The scenes' parts that keep to the day or the night ("when" metadata):
 ## their draws, decals and colliders, switched by set_day.
 var timed: Array[Node3D] = []
@@ -99,6 +102,10 @@ static func build(dressing: Dictionary) -> KitLoader:
 		draw.multimesh = multi
 		draw.set_meta("piece", g["piece"])
 		draw.set_meta("when", g["when"])
+
+		# (Where a lit lamp stands, kept: globes_near.)
+		if LIT.has(g["piece"]):
+			draw.set_meta("origins", PackedVector3Array(g["transforms"].map(func(t): return t.origin)))
 		out.add_child(draw)
 
 		if g["when"] != "":
@@ -208,7 +215,12 @@ func _process(delta: float) -> void:
 	for k in stuttering.size():
 		var t := _clock + k * 1.37
 		var dipping := fposmod(t / STUTTER_EVERY, 1.0) < 0.6 / STUTTER_EVERY
-		stuttering[k].light_energy = LAMP_ENERGY * (0.2 + 0.5 * absf(sin(t * 37.0)) if dipping else 1.0)
+		stuttering[k].light_energy = LAMP_ENERGY * (0.2 + 0.5 * absf(sin(t * 37.0)) if dipping else 1.0) \
+			* float(dims.get(stuttering[k], 1.0))
+
+	for light in dims:
+		if not stuttering.has(light):
+			light.light_energy = LAMP_ENERGY * float(dims[light])
 
 
 ## Whether a point (the player's feet, a man's height above) is in a box
@@ -220,6 +232,31 @@ func _inside(shape: CollisionShape3D, at: Vector3) -> bool:
 
 
 ## The Company's lamps lit (night) or out (day): their lights and globes.
+## The glowing glass of the lit lamps standing within `radius` of `at`: the
+## materials of their draws (a draw is one piece's in one cell; a cell's
+## other lamps of that piece share it).
+func globes_near(at: Vector3, radius: float) -> Array[StandardMaterial3D]:
+	var out: Array[StandardMaterial3D] = []
+
+	for draw in get_children():
+		if not (draw is MultiMeshInstance3D and LIT.has(draw.get_meta("piece", ""))):
+			continue
+
+		var multi: MultiMesh = draw.multimesh
+		var origins: PackedVector3Array = draw.get_meta("origins", PackedVector3Array())
+
+		if not Array(origins).any(func(o): return o.distance_to(at) < radius):
+			continue
+
+		for i in multi.mesh.get_surface_count():
+			var glass := multi.mesh.surface_get_material(i) as StandardMaterial3D
+
+			if glass != null and glass.emission_enabled and not out.has(glass):
+				out.append(glass)
+
+	return out
+
+
 func set_lights(on: bool) -> void:
 	for light in lights:
 		light.visible = on

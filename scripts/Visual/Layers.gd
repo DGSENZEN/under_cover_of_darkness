@@ -6,6 +6,7 @@ extends RefCounted
 ##
 ##   layers 1-16   the world: level geometry and props (layer 2: what stands
 ##                 under a roof, ROOFED; layer 3: the ground, GROUND;
+##                 layer 4: what the god's breath moves, BREATHED;
 ##                 layer 16: the parts of light
 ##                 fixtures that glow from inside, which their own burners do
 ##                 not light: GLOWING)
@@ -24,6 +25,10 @@ const ROOFED := 1 << 1
 ## The ground (layer 3): what drifting petals and leaves settle on; the
 ## particles' heightfield sees only this (a tree's crown would catch them).
 const GROUND := 1 << 2
+## What the caged god's breath draws in and pushes out (layer 4): copal,
+## dust, petals (their particles also draw on it; the breath's attractor
+## moves only these).
+const BREATHED := 1 << 3
 ## A fixture's glowing parts (a pitch head, coals, horn panes): they shine by
 ## their own glow, and a burner's light (a hand's breadth away) would blow
 ## them out, so burners leave this layer unlit.

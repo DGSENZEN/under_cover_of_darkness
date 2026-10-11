@@ -62,7 +62,7 @@ const PRESETS := {
 	"copal": [{"draw": "sprites", "sheet": PLUME, "sheet_b": PLUME_B, "grid": [8, 4], "tint": Color("ECE6DA"),
 		"opacity": 0.9, "amount": 40, "lifetime": 6.0, "size": [0.5, 2.4], "velocity": [0.4, 0.65], "spread": 8.0,
 		"gravity": Vector3(0, 0.12, 0), "box": Vector3(0.08, 0.05, 0.08), "offset": 0.8, "fps": 30, "erosion": 0.35,
-		"blown": 0.15, "anim": 1.0},
+		"blown": 0.15, "anim": 1.0, "breathed": true},
 		{"draw": "stem", "size": Vector2(0.5, 1.0)},
 		{"draw": "pool", "size": Vector3(3.0, 1.6, 3.0), "at": Vector3(0, 2.4, 0)}],
 	"smoke": [{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.42, 0.4, 0.38),
@@ -77,12 +77,14 @@ const PRESETS := {
 		"amount": 8, "lifetime": 5.0, "size": [0.8, 2.2], "velocity": [0.1, 0.3], "spread": 180.0, "flat": true,
 		"gravity": Vector3(0, -0.05, 0), "box": Vector3(0.5, 0.05, 0.5), "fps": 15, "erosion": 0.6, "anim": 1.0,
 		"glows": true, "ground": 0.1}],
-	"petals": [{"draw": "drift", "mesh": "petal_a", "amount": 24, "box": Vector3(2.0, 0.6, 2.0), "offset": 1.8},
-		{"draw": "drift", "mesh": "petal_b", "amount": 24, "box": Vector3(2.0, 0.6, 2.0), "offset": 1.8}],
+	"petals": [{"draw": "drift", "mesh": "petal_a", "amount": 24, "box": Vector3(2.0, 0.6, 2.0), "offset": 1.8,
+		"breathed": true},
+		{"draw": "drift", "mesh": "petal_b", "amount": 24, "box": Vector3(2.0, 0.6, 2.0), "offset": 1.8, "breathed": true}],
 	"leaves": [{"draw": "drift", "mesh": "leaf_ash", "amount": 24, "box": Vector3(2.5, 0.5, 2.5), "offset": 0.0},
 		{"draw": "drift", "mesh": "leaf_laurel", "amount": 16, "box": Vector3(2.5, 0.5, 2.5), "offset": 0.0}],
 	"dust": [{"draw": "motes", "tint": Color(1.0, 0.92, 0.75, 0.6), "amount": 40, "lifetime": 6.0, "size": [0.02, 0.02],
-		"velocity": [0.02, 0.06], "spread": 180.0, "gravity": Vector3.ZERO, "box": Vector3(2.0, 1.5, 2.0), "fps": 15}],
+		"velocity": [0.02, 0.06], "spread": 180.0, "gravity": Vector3.ZERO, "box": Vector3(2.0, 1.5, 2.0), "fps": 15,
+		"breathed": true}],
 	"canal_fog": [{"draw": "fog", "shader": FOG, "size": Vector3(40.0, 2.0, 12.0), "at": Vector3.ZERO}],
 	"candles": [{"draw": "candles"}, {"draw": "light", "colour": CANDLE_COLOUR, "range": 4.0, "at": Vector3(0, 0.4, 0)}],
 	"brazier": [{"draw": "flames"}, {"draw": "trailed"}, {"draw": "haze"},
@@ -224,8 +226,12 @@ static func _particles(p: Dictionary) -> GPUParticles3D:
 	process.set_meta("gravity", p["gravity"])
 	process.set_meta("blown", p.get("blown", 0.0))
 	# (The wind reaches it through its gravity, Vfx.blow, not the drift's
-	# attractor.)
-	process.attractor_interaction_enabled = false
+	# attractor; only the god's breath, its own attractor, moves what it
+	# breathes.)
+	process.attractor_interaction_enabled = p.get("breathed", false)
+
+	if p.get("breathed", false):
+		particles.layers |= Layers.BREATHED
 
 	if p.has("ground"):
 		process.collision_mode = ParticleProcessMaterial.COLLISION_RIGID
@@ -418,7 +424,7 @@ static func _drift(p: Dictionary) -> GPUParticles3D:
 	drift.interpolate = true
 	drift.local_coords = false
 	drift.emitting = false
-	drift.layers = Layers.FX
+	drift.layers = Layers.FX | (Layers.BREATHED if p.get("breathed", false) else 0)
 	drift.collision_base_size = 0.05
 	var reach: Vector3 = p["box"] + Vector3(12, 0, 12)
 	drift.visibility_aabb = AABB(-reach - Vector3(0, 8, 0), reach * 2.0 + Vector3(0, 12, 0))

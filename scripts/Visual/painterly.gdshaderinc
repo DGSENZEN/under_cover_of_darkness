@@ -211,12 +211,23 @@ uniform float full_wind = 8.0;
 
 #include "res://scripts/Visual/sway.gdshaderinc"
 
+// A swell (the caged god's chest on its inhale): the surface pushed out
+// along its normals by `swell` (m) at `swell_centre` (world), falling to
+// nothing by `swell_radius`; 0 leaves everything as it is.
+uniform float swell = 0.0;
+uniform vec3 swell_centre = vec3(0.0);
+uniform float swell_radius = 1.0;
+
 void vertex() {
 	// A shader built on this look moves its vertices first (the pigeon's
 	// wings): #define PAINTERLY_VERTEX before including this.
 #ifdef PAINTERLY_VERTEX
 	PAINTERLY_VERTEX
 #endif
+	if (swell > 0.0) {
+		vec3 here = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+		VERTEX += NORMAL * swell * (1.0 - smoothstep(0.0, swell_radius, distance(here, swell_centre)));
+	}
 	if (tree > 0.0) {
 		vec3 at = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 		VERTEX += inverse(mat3(MODEL_MATRIX)) * tree_sway(at, MODEL_MATRIX[3].xyz, tree, wind, full_wind, TIME);

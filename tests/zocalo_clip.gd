@@ -14,6 +14,7 @@ func _ready() -> void:
 	var out := "/tmp/clip/"
 	var warm := 1.5
 	var startle := Vector3.INF
+	var deep := false
 	var every := 0.1
 	var at := Vector3.INF
 	var look := Vector3.INF
@@ -27,6 +28,8 @@ func _ready() -> void:
 			frames = int(arg.trim_prefix("--frames="))
 		elif arg.begins_with("--out="):
 			out = arg.trim_prefix("--out=").trim_suffix("/") + "/"
+		elif arg == "--deep":
+			deep = true
 		elif arg.begins_with("--startle="):
 			startle = _vector(arg.trim_prefix("--startle="))
 		elif arg.begins_with("--every="):
@@ -60,9 +63,15 @@ func _ready() -> void:
 	while Time.get_ticks_msec() - started < warm * 1000.0:
 		await get_tree().process_frame
 
-	for k in frames:
-		var start := Time.get_ticks_msec()
+	# (--deep: the god's breath set to the start of a deep one as the clip
+	# begins, its exhale turning 3.5 s in.)
+	var begun := Time.get_ticks_msec()
 
+	if deep:
+		map.breath.time = Breath.PERIOD * (Breath.DEEP_EVERY - 1)
+		map.breath.deep_exhale.connect(func(): print("clip: the deep exhale at %.2f s" % ((Time.get_ticks_msec() - begun) / 1000.0)))
+
+	for k in frames:
 		# (--startle: the unseen player walks up to a spot a moment in, and
 		# away again after two seconds: the pigeons there lift, then settle.)
 		if startle != Vector3.INF and k == 5:
@@ -70,7 +79,9 @@ func _ready() -> void:
 		elif startle != Vector3.INF and k == 5 + int(2.0 / every):
 			map.player.global_position = spot["at"] + Vector3(0, -50, 0)
 
-		while Time.get_ticks_msec() - start < every * 1000.0:
+		# (Each frame on the clock from the clip's start: saving one takes a
+		# while, and timed from the last it slowed the clip's time.)
+		while Time.get_ticks_msec() - begun < (k + 1) * every * 1000.0:
 			await get_tree().process_frame
 
 		RenderingServer.force_draw()

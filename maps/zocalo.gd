@@ -30,6 +30,9 @@ var pigeons: Pigeons
 var gusts: Gusts
 ## The wind on what drifts down (Vfx.wind_attractor), steered by the Gusts.
 var wind_attractor: GPUParticlesAttractorBox3D
+## The caged god's breath, and all that breathes with it.
+var breath: Breath
+var occult: Occult
 var district_ground: DistrictGround
 var player: CharacterBody3D
 var world: WorldEnvironment
@@ -66,6 +69,11 @@ func _ready() -> void:
 		Vfx.heightfield(self)
 		wind_attractor = Vfx.wind_attractor()
 		add_child(wind_attractor)
+		breath = Breath.new()
+		breath.name = "breath"
+		add_child(breath)
+		occult = Occult.build(dressing, kit, breath)
+		add_child(occult)
 		pigeons = Pigeons.build(dressing.get("flocks", []), KitLoader.meshes("figures_kit")["pigeon"])
 		pigeons.get_child(0).material_override = Pigeons.look(KitLoader.material("figures_kit"))
 		add_child(pigeons)
