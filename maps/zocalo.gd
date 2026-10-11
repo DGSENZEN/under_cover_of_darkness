@@ -202,12 +202,21 @@ func _lights() -> void:
 
 func _fps_report(seconds: float) -> void:
 	player.process_mode = Node.PROCESS_MODE_DISABLED
+
+	# (--night: measured at night, its fog, lamps and fires lit.)
+	if "--night" in OS.get_cmdline_user_args():
+		set_day(false)
+
 	var eye := Camera3D.new()
 	eye.fov = 66.0
 	add_child(eye)
 	eye.make_current()
 	var stops := cameras()
 	var worst := INF
+	var worst_at := ""
+	# (The first two seconds build the effects round the first stop: their
+	# worst frame is the start's, reported apart.)
+	var flying := INF
 	var frames := 0
 	var elapsed := 0.0
 
@@ -223,8 +232,13 @@ func _fps_report(seconds: float) -> void:
 		elapsed += delta
 		frames += 1
 
-		if frames > 30:
-			worst = minf(worst, 1.0 / maxf(delta, 1e-6))
+		if frames > 30 and 1.0 / maxf(delta, 1e-6) < worst:
+			worst = 1.0 / maxf(delta, 1e-6)
+			worst_at = "%.1f s, nearing %s" % [elapsed, b["name"]]
 
-	print("fps: average %.1f worst %.1f over %d frames" % [frames / maxf(elapsed, 1e-6), worst, frames])
+		if elapsed > 2.0:
+			flying = minf(flying, 1.0 / maxf(delta, 1e-6))
+
+	print("fps: average %.1f worst %.1f over %d frames (the worst at %s); after the first 2 s the worst %.1f" % [
+		frames / maxf(elapsed, 1e-6), worst, frames, worst_at, flying])
 	get_tree().quit()
