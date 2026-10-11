@@ -218,35 +218,38 @@ class Scenes(unittest.TestCase):
 
         self.assertEqual(astray, [])
 
-    def test_figures_stand_clear_of_their_props(self):
-        """No figure's body passes through a prop of its own scene (the
-        warden stood in the god's candles), but what it holds and the
-        props its pose is made to touch."""
+    def test_scene_parts_stand_clear(self):
+        """No part of a scene passes through another of it (the warden stood
+        in the god's candles, kneelers knelt in each other, crates lay in the
+        overturned cart), but what a figure holds and the parts made to
+        touch (scenes_catalogue.TOUCHING)."""
         import mesh_cross
         import scenes_catalogue
         scenes = {}
 
         for p in DRESSING["pieces"]:
-            if p.get("scene") is not None:
+            if p.get("scene") is not None and not p.get("held"):
                 scenes.setdefault(p["scene"], []).append(p)
 
         through = []
 
         for parts in scenes.values():
-            for f in [p for p in parts if p["kit"] == "figures_kit"]:
-                for q in parts:
-                    if q["kit"] == "figures_kit" or q.get("held") or (f["piece"], q["piece"]) in scenes_catalogue.TOUCHING:
+            for i, a in enumerate(parts):
+                for b in parts[i + 1:]:
+                    pair = (a["piece"], b["piece"])
+
+                    if pair in scenes_catalogue.TOUCHING or pair[::-1] in scenes_catalogue.TOUCHING:
                         continue
 
-                    if abs(f["at"][0] - q["at"][0]) > 4 or abs(f["at"][2] - q["at"][2]) > 4:
+                    if abs(a["at"][0] - b["at"][0]) > 4 or abs(a["at"][2] - b["at"][2]) > 4:
                         continue
 
-                    n = mesh_cross.crossings(f, q)
+                    n = mesh_cross.crossings(a, b)
 
                     if n:
-                        through.append((f["piece"], q["piece"], round(f["at"][0], 1), round(f["at"][2], 1), n))
+                        through.append((a["piece"], b["piece"], round(a["at"][0], 1), round(a["at"][2], 1), n))
 
-        self.assertEqual(through, [])
+        self.assertEqual(sorted(set((a, b) for a, b, *_ in through)), [], through[:6])
 
     def test_garden_beds_planted(self):
         """Every bed of the garden is planted: shrubs round its edge and

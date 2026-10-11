@@ -57,12 +57,14 @@ def _ring(centre, radius, count, start=0.0, spread=360.0):
     return out
 
 
-# Poses made to touch a scene's prop (a seat sat on, a desk typed at, a
-# cart's handles, a camera's hood): their meshes may meet; every other
-# figure stands clear of its scene's props (what it holds aside).
+# Parts made to touch (a seat sat on, a desk typed at, a cart's handles, a
+# camera's hood, a bolero at his customer's shoes): their meshes may meet;
+# every other two parts of a scene stand clear of each other (what a figure
+# holds aside).
 TOUCHING = {("fig_sit_chair", "chair"), ("fig_sit_chair", "crate"), ("fig_sit_chair", "stool"),
             ("fig_sit_chair", "canary_box"), ("fig_type", "typewriter_desk"), ("fig_type", "stool"),
-            ("fig_push_cart", "pulque_barrels"), ("fig_photographer", "camera_tripod")}
+            ("fig_push_cart", "pulque_barrels"), ("fig_photographer", "camera_tripod"),
+            ("fig_crouch_inspect", "fig_sit_chair")}
 
 RECIPES = [
     # The landmarks, one each at their place.
@@ -70,8 +72,9 @@ RECIPES = [
            "El Secreto made the chained god the Zócalo's Patron, and the faithful keep it fed: they kneel at its "
            "offerings while a warden swings copal.",
            pieces=[("candles_drift", (-4.7, 1.2), 90), ("candles_drift", (4.7, 1.2), 270), ("petals_marigold", (0.0, 7.0), 0)],
+           # (Kneelers a body's width apart: closer, they knelt in each other.)
            figures=[("fig_kneel_pray", xz, _to(xz, (0.0, 0.0)), "devotee")
-                    for xz in ((-3.0, 3.6), (-3.5, 4.0), (3.0, 3.6), (3.5, 4.0), (-4.6, 2.9), (4.6, 2.9))]
+                    for xz in ((-3.0, 3.6), (-3.85, 3.9), (3.0, 3.6), (3.85, 3.9), (-4.6, 2.9), (4.6, 2.9))]
            # (The warden stands clear of the candles' drift, x -5.0 to -4.5.)
            + [("fig_hold_lantern", (-5.6, 0.8), _to((-5.6, 0.8), (0.0, 4.0)), "warden of El Secreto")],
            holds=[("censer", 6, "right", 0.65)],
@@ -243,7 +246,8 @@ RECIPES = [
     Recipe("rail_accident", ("rails",), "day",
            "A tram took a fruit cart at the rails: the cart on its side, fruit everywhere, a chalk ring, a gendarme "
            "taking it down, people staring, the seller picking up what she can.",
-           pieces=[("cart_overturned", (0.0, 0.0), 0), ("crates_spilled", (2.0, 1.5), 0)],
+           # (The crates spilled out past the cart's bed, not into it.)
+           pieces=[("cart_overturned", (0.0, 0.0), 0), ("crates_spilled", (2.4, 2.2), 0)],
            figures=[("fig_dictate", (-2.6, 1.6), 40, "gendarme"), ("fig_point", (0.5, 3.2), 180, "onlooker"),
                     ("fig_stand", (1.6, 3.4), 190, "onlooker"), ("fig_child", (-0.6, 3.3), 170, "onlooker"),
                     ("fig_crouch_inspect", (3.2, 0.6), 270, "fruit seller"), ("fig_stand", (-1.6, 3.5), 160, "onlooker"),
