@@ -212,8 +212,10 @@ uniform float full_wind = 8.0;
 #include "res://scripts/Visual/sway.gdshaderinc"
 
 // A swell (the caged god's chest on its inhale): the surface pushed out
-// along its normals by `swell` (m) at `swell_centre` (world), falling to
-// nothing by `swell_radius`; 0 leaves everything as it is.
+// from `swell_centre` (world) by `swell` (m), falling to nothing by
+// `swell_radius`; 0 leaves everything as it is. (Out from the centre, not
+// along each vertex's normal: corners split for flat shading move together
+// and no slit opens.)
 uniform float swell = 0.0;
 uniform vec3 swell_centre = vec3(0.0);
 uniform float swell_radius = 1.0;
@@ -226,7 +228,8 @@ void vertex() {
 #endif
 	if (swell > 0.0) {
 		vec3 here = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-		VERTEX += NORMAL * swell * (1.0 - smoothstep(0.0, swell_radius, distance(here, swell_centre)));
+		vec3 out_from = normalize(here - swell_centre + vec3(0.0, 1e-4, 0.0));
+		VERTEX += inverse(mat3(MODEL_MATRIX)) * out_from * swell * (1.0 - smoothstep(0.0, swell_radius, distance(here, swell_centre)));
 	}
 	if (tree > 0.0) {
 		vec3 at = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;

@@ -4,6 +4,7 @@ extends Node3D
 ##   Godot --path . --resolution 960x540 res://tests/vfx_test.tscn
 
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 
 var results: Array[String] = []
 var eye: Camera3D
@@ -23,6 +24,8 @@ func _ready() -> void:
 	await _mist()
 	await _shafts()
 	await _petals()
+	await _breath()
+	await _swell()
 
 	print("\n==== RESULTS ====")
 	for r in results:
@@ -168,6 +171,104 @@ func _petals() -> void:
 	floor_field.free()
 	sun.free()
 	eye.global_transform = kept
+
+
+## V6 the god's inhale draws smoke toward its mouth: copal beside an
+## attractor at the inhale's pull leans toward it, its smoke's middle on
+## the attractor's side.
+func _breath() -> void:
+	var lamp := OmniLight3D.new()
+	lamp.light_color = Color("#e8d8a8")
+	lamp.omni_range = 14.0
+	lamp.light_energy = 1.6
+	lamp.position = Vector3(0, 5.0, 2.0)
+	add_child(lamp)
+	var mouth := GPUParticlesAttractorSphere3D.new()
+	mouth.radius = Occult.REACH
+	mouth.cull_mask = Layers.BREATHED
+	mouth.position = Vector3(3.0, 2.5, 0)
+	mouth.strength = Occult.pull(1.0)
+	add_child(mouth)
+	var smoke: Node3D = Vfx.system("copal")
+	add_child(smoke)
+	Vfx.place(smoke, Vector3.ZERO)
+	Vfx.emit(smoke, true)
+	await _seconds(5.0)
+	var image := get_viewport().get_texture().get_image()
+	var p := _pixel(Vector3(-3.0, 4.0, 0), image)
+	var q := _pixel(Vector3(3.0, 1.2, 0), image)
+	var weight := 0.0
+	var across := 0.0
+
+	for y in range(int(p.y), int(q.y), 2):
+		for x in range(int(p.x), int(q.x), 2):
+			var lum := image.get_pixel(x, y).get_luminance()
+
+			if lum > 0.12:
+				weight += lum
+				across += lum * x
+
+	var middle := across / maxf(weight, 1e-6)
+	var source := _pixel(Vector3.ZERO, image).x
+	_check("V6 the god's inhale draws smoke toward its mouth", weight > 0.0 and middle > source + 8.0,
+		"smoke's middle %.0f px, its source %.0f px (the mouth to the right)" % [middle, source])
+	smoke.free()
+	mouth.free()
+	lamp.free()
+
+
+## V7 a swell stays whole: a box (each face its own normals, its corners
+## split, as the god's are) swollen in the god's material, seen corner-on
+## against a red wall, shows no red down its near edge (pushed along their
+## normals the faces parted there into a slit).
+func _swell() -> void:
+	var sun := DirectionalLight3D.new()
+	sun.rotation = Vector3(deg_to_rad(-30), deg_to_rad(10), 0)
+	add_child(sun)
+	var centre := Vector3(0, 3.0, 0)
+	var wall := MeshInstance3D.new()
+	var slab := QuadMesh.new()
+	slab.size = Vector2(60, 60)
+	var red := StandardMaterial3D.new()
+	red.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	red.albedo_color = Color(1, 0, 0)
+	slab.material = red
+	wall.mesh = slab
+	wall.position = centre + Vector3(-8, 0, -8)
+	wall.rotation.y = deg_to_rad(45)
+	add_child(wall)
+	var box := MeshInstance3D.new()
+	var shape := BoxMesh.new()
+	shape.size = Vector3.ONE
+	box.mesh = shape
+	box.position = centre
+	var look: ShaderMaterial = KitLoader.material("bound_god").duplicate()
+	look.set_shader_parameter(&"swell", 0.3)
+	look.set_shader_parameter(&"swell_centre", centre)
+	look.set_shader_parameter(&"swell_radius", Occult.CHEST_REACH)
+	box.material_override = look
+	add_child(box)
+	var kept := eye.global_transform
+	eye.global_transform = Transform3D(Basis(), centre + Vector3(2.2, 0.0, 2.2)).looking_at(centre, Vector3.UP)
+	await _seconds(0.5)
+	var image := get_viewport().get_texture().get_image()
+	# The near vertical edge (x 0.5, z 0.5), its middle stretch.
+	var top := _pixel(centre + Vector3(0.5, 0.3, 0.5), image)
+	var foot := _pixel(centre + Vector3(0.5, -0.3, 0.5), image)
+	var through := 0
+
+	for y in range(int(top.y), int(foot.y)):
+		for x in range(int(top.x) - 10, int(top.x) + 11):
+			var c := image.get_pixel(x, y)
+
+			if c.r > 0.8 and c.g < 0.2 and c.b < 0.2:
+				through += 1
+
+	_check("V7 a swell stays whole, no slits at split corners", through == 0, "%d red pixels down the near edge" % through)
+	eye.global_transform = kept
+	box.free()
+	wall.free()
+	sun.free()
 
 
 func _greenness(image: Image, top_left: Vector3, bottom_right: Vector3) -> float:

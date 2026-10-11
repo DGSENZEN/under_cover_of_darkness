@@ -33,7 +33,8 @@ func _run() -> void:
 	var drawing: float = occult.attractor.strength
 	occult.apply(-1.0, 0.0)
 	var pushing: float = occult.attractor.strength
-	_check("O1 the mouth draws in on the inhale, pushes out on the exhale", drawing < 0.0 and pushing > 0.0,
+	# (A sphere attractor draws in at a positive strength: V6 watches it.)
+	_check("O1 the mouth draws in on the inhale, pushes out on the exhale", drawing > 0.0 and pushing < 0.0,
 		"inhale %.2f, exhale %.2f" % [drawing, pushing])
 
 	# O2 the ward lamps dim on the inhale (the same moment of their hum)

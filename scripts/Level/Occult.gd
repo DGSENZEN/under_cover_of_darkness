@@ -135,7 +135,7 @@ static func build(dressing: Dictionary, loader: KitLoader, breathing: Breath) ->
 func apply(value: float, time: float) -> void:
 	var inhale := maxf(value, 0.0)
 	_hum = 0.75 + 0.25 * sin(time * TAU * HUM)
-	attractor.strength = -value * PULL
+	attractor.strength = pull(value)
 	var ward := _hum * (1.0 - WARD_DIM * inhale)
 	var dip := 1.0 - RING_DIP * inhale
 
@@ -151,6 +151,13 @@ func apply(value: float, time: float) -> void:
 
 	(cage_fog.material as FogMaterial).density = lerpf(HAZE, HAZE_IN, inhale)
 	god_look.set_shader_parameter(&"swell", SWELL * inhale)
+
+
+## The breath's pull at its mouth (an attractor's strength) for a breath
+## `value` (+1 drawn in, -1 out): a sphere attractor draws in at a positive
+## strength.
+static func pull(value: float) -> float:
+	return value * PULL
 
 
 ## The air round the nearest ward lamp bends when `eye` (the player) stands
