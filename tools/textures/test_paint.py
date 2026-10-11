@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import paint  # noqa: E402
 
 FOLIAGE = ["leaf_crown", "leaf_shrub", "yew", "twigs", "grass", "weed_broad", "reeds", "ivy",
-           "palm_frond", "cypress", "agave", "orange_leaves", "gorse", "fennel", "pine"]
+           "palm_frond", "cypress", "agave", "orange_leaves", "gorse", "fennel", "pine", "willow", "laurel"]
 IRONWORK = ["iron_rail", "window_grille", "ratlines"]
 
 

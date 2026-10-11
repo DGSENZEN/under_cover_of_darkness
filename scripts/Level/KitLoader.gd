@@ -16,12 +16,27 @@ const CELL := 100.0
 const LIT := {"tram_pole_lamp": Color("#e8d8a8"), "ward_cage_lamp": Color("#CFE8F0")}
 const LAMP_ENERGY := 1.6
 const GLOW := 2.5
+const FOLIAGE := preload("res://scripts/Visual/foliage.gdshader")
+const Materials := preload("res://scripts/Visual/Materials.gd")
+const PAINTED := "res://textures/painted/"
+## Leaf and washing cards (tools/eclipse/common.Mesh.card): each slot's own
+## painting cut out, its rustle (m), whether it hangs from its top edge
+## (washing on a line), and whether it rides its tree's sway.
+const CARDS := {
+	"leaf_crown": [0.06, false, true], "palm_frond": [0.09, false, true], "willow": [0.12, true, true],
+	"laurel": [0.04, false, true], "twigs": [0.04, false, true], "laundry": [0.14, true, false],
+}
+## Kits whose pieces are trees: their bark bends in the wind with their
+## leaves (sway.gdshaderinc), this far (m) for each square metre of height.
+const TREE_SWAY := 0.006
+const TREES := {"trees_kit": TREE_SWAY}
 
 ## The lamps' lights and their glowing globes, switched by night and day.
 var lights: Array[OmniLight3D] = []
 var globes: Array[StandardMaterial3D] = []
 
 static var _materials := {}
+static var _cards := {}
 static var _meshes := {}
 static var _shapes := {}
 
@@ -117,7 +132,9 @@ func _dressed(kit: String, piece: String, mesh: Mesh) -> Mesh:
 	for i in out.get_surface_count():
 		var slot: Material = mesh.surface_get_material(i)
 
-		if slot != null and slot.resource_name == "glass":
+		if slot != null and CARDS.has(slot.resource_name):
+			out.surface_set_material(i, card_material(slot.resource_name))
+		elif slot != null and slot.resource_name == "glass":
 			var glass := StandardMaterial3D.new()
 			glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			glass.albedo_color = Color(0.72, 0.8, 0.82, 0.35)
@@ -166,12 +183,36 @@ static func meshes(kit: String) -> Dictionary:
 	return _meshes[kit]
 
 
+## A card slot's material (foliage.gdshader): its painting cut out, swaying
+## in the wind (Materials.blow), one shared for every kit.
+static func card_material(slot: String) -> ShaderMaterial:
+	if not _cards.has(slot):
+		var m := ShaderMaterial.new()
+		m.shader = FOLIAGE
+		m.set_shader_parameter(&"albedo_texture", load(PAINTED + slot + ".png"))
+		m.set_shader_parameter(&"rustle", float(CARDS[slot][0]))
+		m.set_shader_parameter(&"bough", 0.0)
+		m.set_shader_parameter(&"hanging", bool(CARDS[slot][1]))
+		m.set_shader_parameter(&"tree", TREE_SWAY if CARDS[slot][2] else 0.0)
+		m.set_shader_parameter(&"wind", Vector3(0.6, 0.0, 0.6))
+		m.set_shader_parameter(&"vertex_colour", false)
+		Materials.swaying.append(m)
+		_cards[slot] = m
+
+	return _cards[slot]
+
+
 ## A kit's material in the shader-led blend, its vertex paint on.
 static func material(kit: String) -> ShaderMaterial:
 	if not _materials.has(kit):
 		var m := Painterly.material(atlas(kit, ""), &"shader_led", Painterly.ZOCALO, atlas(kit, "_normal"),
 			atlas(kit, "_under"), atlas(kit, "_under_normal"))
 		m.set_shader_parameter("vertex_paint", 1.0)
+
+		if TREES.has(kit):
+			m.set_shader_parameter("tree", float(TREES[kit]))
+			Materials.swaying.append(m)
+
 		_materials[kit] = m
 
 	return _materials[kit]

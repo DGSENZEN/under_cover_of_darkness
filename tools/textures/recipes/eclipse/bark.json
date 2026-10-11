@@ -1,0 +1,17 @@
+{
+ "base": "#5a5048",
+ "light": "#7a7064",
+ "dark": "#2a2420",
+ "grime": 0.35,
+ "wear": 0.2,
+ "mottle": 1,
+ "relief": {
+  "bevel": 0.5,
+  "brush": 0.3
+ },
+ "scan": {
+  "name": "bark_brown_02",
+  "tint": 0.85,
+  "contrast": 1.15
+ }
+}

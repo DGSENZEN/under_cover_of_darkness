@@ -4,6 +4,8 @@
 shader_type spatial;
 render_mode cull_back, specular_schlick_ggx;
 
+#include "res://scripts/Visual/sway.gdshaderinc"
+
 uniform sampler2D albedo_texture : source_color, filter_nearest_mipmap, repeat_disable;
 uniform vec4 albedo : source_color = vec4(1.0);
 uniform float alpha_scissor = 0.5;
@@ -18,6 +20,12 @@ uniform float full_wind = 8.0;
 uniform float translucency = 0.35;
 // A card hung from its top edge (washing on a line): its bottom edge stirs.
 uniform bool hanging = false;
+// The baked vertex colour shades the painting (the harbour's foliage); the
+// Eclipse kits' vertex colour carries their weathering instead, so it is off.
+uniform bool vertex_colour = true;
+// A whole tree bending from its foot (sway.gdshaderinc), its bark swaying the
+// same (painterly's `tree`); 0 keeps the boughs' own sway (`bough`).
+uniform float tree = 0.0;
 
 varying vec3 baked;
 
@@ -31,8 +39,12 @@ void vertex() {
 	float flutter = rustle * top * top * (0.25 + strength) * (0.6 * sin(phase * 2.3) + 0.4 * sin(phase * 3.7 + 1.3));
 	float lean = max(world.y - 1.8, 0.0) * bough * (strength * 0.8 + 0.2 * sin(TIME * 0.6 + world.x * 0.05 + world.z * 0.04) + 0.15 * strength * sin(TIME * 1.7 + world.z * 0.1));
 	vec3 offset = vec3(way.x, 0.0, way.y) * (flutter + lean) + vec3(0.0, flutter * 0.25, 0.0);
+	if (tree > 0.0) {
+		offset = vec3(way.x, 0.0, way.y) * flutter + vec3(0.0, flutter * 0.25, 0.0)
+			+ tree_sway(world, MODEL_MATRIX[3].xyz, tree, wind, full_wind, TIME);
+	}
 	VERTEX += (inverse(mat3(MODEL_MATRIX)) * offset);
-	baked = COLOR.rgb;
+	baked = vertex_colour ? COLOR.rgb : vec3(1.0);
 }
 
 void fragment() {

@@ -452,6 +452,61 @@ def leaf_crown():
     return _crown(size, 256, 1100, size * 0.05, size * 0.022, OAK, blobs, 43)
 
 
+WILLOW = [(88, 112, 44), (104, 128, 52), (120, 140, 60), (138, 150, 70), (76, 98, 40)]
+
+
+def willow():
+    """A weeping willow's strands hanging from its crown (a tall card, hung
+    from its top edge): long thin yellow-green leaves down drooping twigs,
+    lighter toward their tips."""
+    w, h = 128 * SCALE, 256 * SCALE
+    rng = np.random.default_rng(71)
+    image = Image.new("RGB", (w, h), (40, 52, 24))
+    mask_image = Image.new("L", (w, h), 0)
+    draw = ImageDraw.Draw(image)
+    mask = ImageDraw.Draw(mask_image)
+
+    for k in range(30):
+        x0 = w * (0.04 + 0.92 * (k + rng.uniform(0.0, 1.0)) / 30)
+        end = h * rng.uniform(0.55, 0.98)
+        bow = w * rng.uniform(-0.05, 0.05)
+        steps = 40
+        path = [(x0 + bow * math.sin(math.pi * t / steps), end * t / steps) for t in range(steps + 1)]
+        draw.line(path, fill=(62, 58, 34), width=max(1, int(w * 0.006)))
+        mask.line(path, fill=255, width=max(1, int(w * 0.006)))
+
+        for t in range(2, steps + 1):
+            if rng.random() < 0.75:
+                x, y = path[t]
+                down = h - y
+                side = rng.choice([-1.0, 1.0])
+                angle = math.pi / 2 + side * rng.uniform(0.25, 0.7)
+                bright = 0.75 + 0.35 * (t / steps) + rng.uniform(-0.1, 0.1)
+                colour = WILLOW[int(rng.integers(len(WILLOW)))]
+                _leaf(draw, mask, x, y, w * rng.uniform(0.05, 0.08), w * 0.016, angle, _tinted(colour, bright),
+                      _tinted(colour, bright * 0.7))
+
+    return _finish(image, (128, 256), 24, mask_image)
+
+
+LAUREL = [(18, 40, 22), (26, 52, 28), (34, 64, 32), (46, 78, 38), (60, 88, 44)]
+
+
+def laurel():
+    """A laurel de la India's crown: small, dense, glossy dark leaves in a
+    heavy round mass, a few twigs through the gaps."""
+    size = 256 * SCALE
+    rng = np.random.default_rng(91)
+    blobs = [(size * 0.5, size * 0.52, size * 0.3), (size * 0.5, size * 0.5, size * 0.16)]
+
+    for k in range(9):
+        a = k * math.tau / 9 + rng.uniform(-0.3, 0.3)
+        d = size * rng.uniform(0.2, 0.28)
+        blobs.append((size * 0.5 + math.cos(a) * d, size * 0.5 + math.sin(a) * d, size * rng.uniform(0.1, 0.15)))
+
+    return _crown(size, 256, 1700, size * 0.035, size * 0.018, LAUREL, blobs, 93, heart=0.12)
+
+
 def leaf_shrub():
     """A shrub's leaves, smaller and thicker together, in a rounder spray."""
     size = 128 * SCALE
@@ -1859,7 +1914,7 @@ PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_
              "carpet": carpet,
              "iron_rail": iron_rail, "window_grille": window_grille, "casement": casement, "quarries": quarries, "glazing": glazing, "sash": sash, "lattice": lattice, "ratlines": ratlines, "coil_mask": coil_mask,
              "decal_salt": decal_salt, "palm_frond": palm_frond, "cypress": cypress, "agave": agave, "orange_leaves": orange_leaves,
-             "gorse": gorse, "fennel": fennel, "pine": pine, "laundry": laundry, "azulejo_ship": azulejo_ship, "arms_royal": arms_royal,
+             "gorse": gorse, "fennel": fennel, "pine": pine, "willow": willow, "laurel": laurel, "laundry": laundry, "azulejo_ship": azulejo_ship, "arms_royal": arms_royal,
              "azulejo_comet": azulejo.azulejo_comet, "azulejo_king": azulejo.azulejo_king, "azulejo_souls": azulejo.azulejo_souls,
              "tile_frame": azulejo.tile_frame, "window_lit": azulejo.window_lit,
              "sea_chart": sea_chart, "parchment": parchment, "book_spines": book_spines,

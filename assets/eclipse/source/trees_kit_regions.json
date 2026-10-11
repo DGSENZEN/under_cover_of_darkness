@@ -1,0 +1,15 @@
+{
+ "slots": [
+  "bark",
+  "iron",
+  "wood",
+  "sign",
+  "leaf_crown",
+  "palm_frond",
+  "willow",
+  "laurel",
+  "twigs"
+ ],
+ "atlas_px": 1536,
+ "px_per_m": 48.36
+}

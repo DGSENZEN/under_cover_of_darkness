@@ -74,6 +74,9 @@ class Mesh:
         # Solids welded each on its own (shell()), so two that touch keep
         # their own corners and stay closed.
         self.shells = [[]]
+        # Leaf cards (card()): [(face, uvs, round)], never welded, never
+        # turned by the outward pass.
+        self.cards = []
 
     def _index(self, slot_name):
         if slot_name not in self.slots:
@@ -91,6 +94,23 @@ class Mesh:
         f = self.bm.faces.new(verts)
         f.material_index = self._index(slot_name)
         return f
+
+    def card(self, corners, slot_name, round=None):
+        """A leaf card: the quad `corners` (bottom-left, bottom-right,
+        top-right, top-left, seen from its front) drawn from both sides, its
+        painting across it (UV 0..1, the left edge at U 0, the bottom at V 0),
+        its normals rounded from `round` when the piece is exported (a crown's
+        cards light as one mass). Its faces are not part of any solid."""
+        uvs = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+        front = self.bm.faces.new([self.bm.verts.new(p) for p in corners])
+        back = self.bm.faces.new([self.bm.verts.new(p) for p in reversed(corners)])
+
+        for f in (front, back):
+            f.material_index = self._index(slot_name)
+
+        centre = round if round is not None else tuple(sum(c[k] for c in corners) / 4 for k in range(3))
+        self.cards.append((front, uvs, centre))
+        self.cards.append((back, list(reversed(uvs)), centre))
 
     def box(self, lo, hi, slot_name, skip=()):
         """An axis-aligned box from corner lo to hi; `skip` names faces left
@@ -203,8 +223,27 @@ class Mesh:
         for verts in self.shells:
             bmesh.ops.remove_doubles(self.bm, verts=[v for v in verts if v.is_valid], dist=1e-5)
 
+        card_faces = {f for f, _, _ in self.cards}
+
         if self.outward:
-            bmesh.ops.recalc_face_normals(self.bm, faces=self.bm.faces[:])
+            bmesh.ops.recalc_face_normals(self.bm, faces=[f for f in self.bm.faces if f not in card_faces])
+
+        uv_layer = rounds = None
+
+        if self.cards:
+            # (A new layer leaves the faces' Python references stale: by index.)
+            self.bm.faces.index_update()
+            cards = [(f.index, uvs, centre) for f, uvs, centre in self.cards]
+            uv_layer = self.bm.loops.layers.uv.new("UVMap")
+            rounds = self.bm.faces.layers.float_vector.new("round")
+            self.bm.faces.ensure_lookup_table()
+
+            for index, uvs, centre in cards:
+                f = self.bm.faces[index]
+                f[rounds] = centre
+
+                for loop, uv in zip(f.loops, uvs):
+                    loop[uv_layer].uv = uv
 
         mesh = bpy.data.meshes.new(self.name)
         self.bm.to_mesh(mesh)
@@ -347,9 +386,10 @@ def pack(objects):
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
-def density(objects, atlas_px):
+def density(objects, atlas_px, skip=()):
     """Atlas pixels per metre: the UV length of each edge over its length in
-    the world, the median over every edge longer than 10 cm."""
+    the world, the median over every edge longer than 10 cm (faces of the
+    `skip` slots, leaf cards, left out)."""
     ratios = []
 
     for o in [o for o in objects if not _free(o)]:
@@ -357,6 +397,9 @@ def density(objects, atlas_px):
         uv = mesh.uv_layers.active.data
 
         for poly in mesh.polygons:
+            if mesh.materials[poly.material_index].name in skip:
+                continue
+
             loops = list(poly.loop_indices)
 
             for k in range(len(loops)):
@@ -642,9 +685,10 @@ def _save_png(path, rgba, px):
     bpy.data.images.remove(image)
 
 
-def dump_faces(objects):
+def dump_faces(objects, skip=()):
     """Every face in the world, as overlap.py takes them; the triangle count
-    and every UV, for the gate."""
+    and every UV, for the gate. Faces of the `skip` slots (leaf cards: no
+    solid, their own painting) count their triangles and nothing else."""
     faces, uvs, tris = [], [], 0
 
     for o in objects:
@@ -652,6 +696,10 @@ def dump_faces(objects):
         uv = mesh.uv_layers.active.data if mesh.uv_layers.active else None
 
         for poly in mesh.polygons:
+            if mesh.materials[poly.material_index].name in skip:
+                tris += len(poly.vertices) - 2
+                continue
+
             points = [tuple(o.matrix_world @ mesh.vertices[v].co) for v in poly.vertices]
             normal = tuple((o.matrix_world.to_3x3() @ poly.normal).normalized())
             faces.append({"owner": o.name, "normal": normal, "points": points})
@@ -717,9 +765,10 @@ def _probe(objects, name, weather):
                                                                "normal": best[3], "rgba": best[4]}, indent=1))
 
 
-def dump_godot_faces(objects, path):
+def dump_godot_faces(objects, path, skip=()):
     """Every face of the pieces in Godot's axes (x, z, -y), by object, and
-    each object's triangles: what the district's overlap gate places."""
+    each object's triangles: what the district's overlap gate places (leaf
+    cards, the `skip` slots, counted but not placed)."""
     out = {"objects": {}, "tris": {}}
 
     for o in objects:
@@ -727,6 +776,9 @@ def dump_godot_faces(objects, path):
         to_godot = lambda v: [round(v.x, 6), round(v.z, 6), round(-v.y, 6)]
 
         for poly in o.data.polygons:
+            if o.data.materials[poly.material_index].name in skip:
+                continue
+
             n = (o.matrix_world.to_3x3() @ poly.normal).normalized()
             faces.append({"normal": to_godot(n),
                           "points": [to_godot(o.matrix_world @ o.data.vertices[v].co) for v in poly.vertices]})
@@ -737,8 +789,68 @@ def dump_godot_faces(objects, path):
     Path(path).write_text(json.dumps(out))
 
 
+def _card_loops(objects, cards):
+    """{object name: {loop index: uv}} of the leaf cards' loops."""
+    out = {}
+
+    for o in objects:
+        mesh = o.data
+
+        if not cards or mesh.uv_layers.active is None:
+            continue
+
+        uv = mesh.uv_layers.active.data
+        loops = {i: tuple(uv[i].uv) for p in mesh.polygons if mesh.materials[p.material_index].name in cards
+                 for i in p.loop_indices}
+
+        if loops:
+            out[o.name] = loops
+
+    return out
+
+
+def _set_card_uvs(objects, loops, speck=False):
+    """The cards' loops given their own UVs back; or (`speck`) shrunk to a
+    speck of the atlas, well away from the object's islands, while it is
+    packed, baked and mapped (a card draws its own painting, not the atlas)."""
+    for i, o in enumerate(objects):
+        if o.name not in loops:
+            continue
+
+        uv = o.data.uv_layers.active.data
+
+        for k, (index, value) in enumerate(loops[o.name].items()):
+            uv[index].uv = (1000.0 * (i + 1) - 50.0 + 0.002 * (k % 3), -50.0 + 0.002 * ((k + 1) % 3)) if speck \
+                else value
+
+
+def _round_card_normals(objects, cards):
+    """The cards' normals pointing out from their crown's middle (`round`)
+    on both faces, every other face's its own: a crown lit as one mass."""
+    for o in objects:
+        mesh = o.data
+
+        if "round" not in mesh.attributes:
+            continue
+
+        rounds = mesh.attributes["round"].data
+        normals = []
+
+        for poly in mesh.polygons:
+            card = mesh.materials[poly.material_index].name in cards
+
+            for i in poly.loop_indices:
+                if card:
+                    out = mesh.vertices[mesh.loops[i].vertex_index].co - Vector(rounds[poly.index].vector)
+                    normals.append(out.normalized() if out.length > 1e-6 else poly.normal.copy())
+                else:
+                    normals.append(poly.normal.copy())
+
+        mesh.normals_split_custom_set(normals)
+
+
 def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, weather=None, out=None,
-                 sets_each=False):
+                 sets_each=False, cards=()):
     """The piece's atlas made (unwrap, any repeats, pack), its AO and region
     maps, glTF and .blend written; then the gate. `merge` is a function run
     between unwrap and pack (repeat_faces for identical parts). `weather`
@@ -746,7 +858,9 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
     after its atlas is made and bakes its vertex paint, the user's strokes
     over the rules (tools/eclipse/weather.py). `out` is where the glTF goes (OUT);
     `sets_each` makes every object a set of its own (a kit's pieces, built
-    in one place, never seen together). Its faces in Godot's axes go to
+    in one place, never seen together). `cards` are the slots of leaf cards
+    (Mesh.card): their faces keep their own UVs out of the atlas, stay out of
+    the gate's checks, and go out with normals rounded from their crown. Its faces in Godot's axes go to
     <name>_faces.json for the district's gate. Exits non-zero if the gate
     finds a problem."""
     out = Path(out) if out is not None else OUT
@@ -758,15 +872,17 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
     if sets_each:
         gate_sets = [[o.name] for o in objects]
 
+    card_loops = _card_loops(objects, cards)
     unwrap(objects)
     to_metres(objects)
+    _set_card_uvs(objects, card_loops, speck=True)
 
     if merge is not None:
         merge()
         objects = meshes()
 
     pack(objects)
-    px_per_m = density(objects, atlas_px)
+    px_per_m = density(objects, atlas_px, skip=cards)
 
     ao = bake_ao(objects, name, atlas_px, sets=list(gate_sets) if gate_sets is not None else None)
     ao.filepath_raw = str(SOURCE / (name + "_ao.png"))
@@ -792,8 +908,12 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
     if clashes:
         sys.exit(1)
 
+    _set_card_uvs(objects, card_loops)
+
     if weather is not None:
         _weather(objects, name, weather, gate_sets)
+
+    _round_card_normals(objects, cards)
 
     bpy.ops.export_scene.gltf(filepath=str(out / (name + ".glb")), export_format="GLB", export_yup=True,
                               export_materials="EXPORT", export_texcoords=True, export_normals=True,
@@ -806,7 +926,7 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
         for o in objects:
             o.data.color_attributes.active_color = o.data.color_attributes["yours_grime"]
 
-    dump_godot_faces(objects, SOURCE / (name + "_faces.json"))
+    dump_godot_faces(objects, SOURCE / (name + "_faces.json"), skip=cards)
     bpy.context.preferences.filepaths.save_version = 0   # no .blend1 beside it
     bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / (name + ".blend")))
 
@@ -816,7 +936,7 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
     tris = 0
 
     for names in gate_sets or [[o.name for o in objects]]:
-        faces, set_tris, uvs = dump_faces([o for o in objects if o.name in names])
+        faces, set_tris, uvs = dump_faces([o for o in objects if o.name in names], skip=cards)
         problems += [p for p in gate.check(faces, set_tris, uvs) if p not in problems]
         tris = max(tris, set_tris)
 

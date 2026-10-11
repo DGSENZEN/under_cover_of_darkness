@@ -21,7 +21,7 @@ API = "https://api.polyhaven.com"
 SCANS = ["japanese_stone_wall", "sandstone_cracks", "white_rough_plaster", "green_metal_rust", "metal_plate_02",
          "stained_pine", "square_tiles_03", "long_white_tiles", "terrazzo_tiles", "cobblestone_floor_04",
          "brown_mud_dry", "volcanic_rock_tiles", "stone_wall_04",
-         "rough_linen"]
+         "rough_linen", "bark_brown_02"]
 
 
 def _get(url):

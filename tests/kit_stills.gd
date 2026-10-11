@@ -23,6 +23,7 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 	_lights()
 	var meshes := KitLoader.meshes(kit)
+	var loader := KitLoader.new()
 	var x := 0.0
 	var spots := {}
 	var inlays := []
@@ -32,8 +33,8 @@ func _ready() -> void:
 		var box := mesh.get_aabb()
 		var piece := MeshInstance3D.new()
 		piece.name = name
-		piece.mesh = mesh
-		piece.material_override = KitLoader.material(kit)
+		# Each surface as the game draws it (glass as glass, leaf cards cut out).
+		piece.mesh = loader._dressed(kit, name, mesh)
 		add_child(piece)
 		# Pieces that reach far under the street (walls down to the water)
 		# stand on the ground, to be seen whole.
@@ -68,6 +69,7 @@ func _ready() -> void:
 		await _frames(FRAMES)
 		_save("%s_%s.png" % [kit, name])
 
+	loader.free()
 	get_tree().quit()
 
 
@@ -93,9 +95,11 @@ func _save(file: String) -> void:
 	print("still: ", out + file)
 
 
-## n frames drawn (a window left behind others may stop drawing while it
-## still processes, and its image would be the frame before).
+## n frames, then one drawn now (a window left behind others may stop
+## drawing while it still processes, and its image would be an old frame;
+## waiting on the draw itself can stall, so the frames are processed ones).
 func _frames(n: int) -> void:
 	for i in n:
-		RenderingServer.force_draw()
-		await RenderingServer.frame_post_draw
+		await get_tree().process_frame
+
+	RenderingServer.force_draw()

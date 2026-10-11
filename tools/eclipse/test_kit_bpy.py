@@ -631,6 +631,96 @@ class FiguresKit(unittest.TestCase):
         self.assertEqual(problems, {})
 
 
+def _card_polys(o, cards):
+    return [p for p in o.data.polygons if o.data.materials[p.material_index].name in cards]
+
+
+def _solid_open_edges(o, cards):
+    """_closed() over the object's faces that are not leaf cards."""
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    names = [m.name for m in o.data.materials]
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if names[f.material_index] in cards], context="FACES")
+    open_edges = sum(1 for e in bm.edges if len(e.link_faces) != 2)
+    bm.free()
+    return open_edges
+
+
+class TreesKit(unittest.TestCase):
+    """The trees kit (specs/2026-10-10-zocalo-scenes-design.md): the garden's
+    trees and iron, leaf cards on lathed trunks (the plan's Ruling 1)."""
+
+    BUDGET = dict({n: 1300 for n in ["tree_ash", "tree_ash_young", "palm_canary", "tree_laurel", "tree_willow"]},
+                  ahuehuete_split=1800, tree_guard=300, garden_bench=300, garden_edging=300)
+    UNDER = ["tree_ash", "tree_laurel", "palm_canary"]
+
+    @classmethod
+    def setUpClass(cls):
+        import trees_kit
+        trees_kit.build()
+        cls.cards = trees_kit.CARDS
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_solids_closed(self):
+        self.assertEqual({n: _solid_open_edges(o, self.cards) for n, o in self.objects.items()
+                          if _solid_open_edges(o, self.cards)}, {})
+
+    def test_cards_two_faced(self):
+        """Every card face has its twin facing the other way on the same corners."""
+        lonely = {}
+
+        for n, o in self.objects.items():
+            polys = _card_polys(o, self.cards)
+            keys = {}
+
+            for p in polys:
+                key = tuple(sorted(tuple(round(c, 4) for c in o.data.vertices[v].co) for v in p.vertices))
+                keys.setdefault(key, []).append(p.normal.copy())
+
+            bad = [k for k, ns in keys.items() if len(ns) != 2 or ns[0].dot(ns[1]) > -0.99]
+
+            if bad:
+                lonely[n] = len(bad)
+
+        self.assertEqual(lonely, {})
+
+    def test_cards_uv_their_own_painting(self):
+        for n, o in self.objects.items():
+            if not _card_polys(o, self.cards):
+                continue
+
+            uv = o.data.uv_layers.active.data
+
+            for p in _card_polys(o, self.cards):
+                us = sorted({(round(uv[i].uv[0], 3), round(uv[i].uv[1], 3)) for i in p.loop_indices})
+                self.assertEqual(us, [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)], n)
+
+    def test_cards_rounded_from_their_crown(self):
+        """Each card face carries the point its normals round from (`round`)."""
+        for n, o in self.objects.items():
+            if _card_polys(o, self.cards):
+                self.assertIn("round", o.data.attributes, n)
+
+    def test_no_degenerate_triangles(self):
+        self.assertEqual({n: _smallest_triangle(o) for n, o in self.objects.items() if _smallest_triangle(o) < 1e-7}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_everything_rests_on_the_ground(self):
+        lows = {n: min(v.z for v in _world(o)) for n, o in self.objects.items()}
+        self.assertEqual({n: z for n, z in lows.items() if abs(z) > 1e-4}, {})
+
+    def test_a_man_walks_under_the_crowns(self):
+        for n in self.UNDER:
+            o = self.objects[n]
+            low = min(o.data.vertices[v].co.z for p in _card_polys(o, self.cards) for v in p.vertices)
+            self.assertGreaterEqual(low, 2.2, n)
+
+
 if __name__ == "__main__":
     result = unittest.main(argv=["test_kit_bpy"], exit=False).result
     sys.exit(not result.wasSuccessful())

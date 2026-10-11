@@ -84,6 +84,7 @@ and painted over by `tools/textures/eclipse_atlas.py`:
 - [japanese_stone_wall](https://polyhaven.com/a/japanese_stone_wall) by **Charlotte Baglioni, Dario Barresi, Rico Cilliers**
 - [long_white_tiles](https://polyhaven.com/a/long_white_tiles) by **Jenelle van Heerden, Sergej Majboroda**
 - [metal_plate_02](https://polyhaven.com/a/metal_plate_02) by **Rob Tuytel**
+- [bark_brown_02](https://polyhaven.com/a/bark_brown_02) by **Rob Tuytel**
 - [rough_linen](https://polyhaven.com/a/rough_linen) by **colormass, Rico Cilliers**
 - [sandstone_cracks](https://polyhaven.com/a/sandstone_cracks) by **Rob Tuytel**
 - [stone_wall_04](https://polyhaven.com/a/stone_wall_04) by **Amal Kumar**
