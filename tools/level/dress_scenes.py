@@ -322,10 +322,42 @@ def sites(d, life):
     return out
 
 
+def clearance(spot, x, z):
+    """How far (x, z) is outside a keep-clear spot: a point's circle, or a
+    way's band either side of its line ("a", "b")."""
+    if "a" in spot:
+        (ax, az), (bx, bz) = spot["a"], spot["b"]
+        length2 = (bx - ax) ** 2 + (bz - az) ** 2 or 1.0
+        t = max(0.0, min(1.0, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / length2))
+        d = math.hypot(x - (ax + t * (bx - ax)), z - (az + t * (bz - az)))
+    else:
+        d = math.hypot(x - spot["at"][0], z - spot["at"][1])
+
+    return d - spot["radius"] - 0.6
+
+
 def keep_clear(data, dressing):
     """Where no scene may stand: a ladder's or a stair's foot, a bridge's
-    ends, a door's front, a dropped kerb ({"at", "radius", "what"})."""
+    ends, a door's front, a dropped kerb ({"at", "radius", "what"}), and
+    the causeway, the plaza's processional way ({"a", "b", "radius", "what"})."""
     out = []
+    way = data.get("causeway", [])
+
+    # (It ends at the god, where the devotees kneel: clear only to 12 m from it.)
+    for a, b in zip(way, way[1:]):
+        a, b = list(a), list(b)
+
+        for end, other in ((a, b), (b, a)):
+            if math.hypot(*end) < 12.0 <= math.hypot(*other):
+                u = _unit((end[0] - other[0], end[1] - other[1]))
+                t = 0.0
+
+                while math.hypot(other[0] + u[0] * t, other[1] + u[1] * t) > 12.0:
+                    t += 0.5
+
+                end[0], end[1] = other[0] + u[0] * t, other[1] + u[1] * t
+
+        out.append({"a": tuple(a), "b": tuple(b), "radius": 6.0, "what": "the causeway"})
 
     for r in data["routes"]:
         if r["kind"] in ("climb", "stair", "bridge"):
@@ -362,7 +394,7 @@ class Stage:
         return world, yaw
 
     def _blocked(self, x, z, reach):
-        if any(math.hypot(x - c["at"][0], z - c["at"][1]) < reach + 0.6 + c["radius"] for c in self.clear):
+        if any(clearance(c, x, z) < reach for c in self.clear):
             return True
 
         r = math.hypot(x, z)

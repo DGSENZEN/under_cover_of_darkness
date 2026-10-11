@@ -3,7 +3,9 @@ extends Node3D
 ## its greybox: the plan (assets/eclipse/zocalo/plan.json) as plain blocks
 ## to walk (greybox.json, from tools/level/level.sh zocalo), dressed in the
 ## kits built so far (dressing.json: the street and canal kit's pieces and
-## the ground round them). F11 day and night.
+## the ground round them), its scenes staged (their stand-ins, trees,
+## effects, pigeons), the district's wind on them. F11 day and night; F1
+## labels the scenes near with their stories.
 ##   --undressed       the greybox alone
 ##   --fps-report=<s>  flies a camera through the plan's cameras for s
 ##                     seconds, prints "fps: average <a> worst <w>", quits.
@@ -20,6 +22,9 @@ var greybox: GreyboxLoader
 ## The dressing laid (empty when undressed), its pieces and its ground.
 var dressing: Dictionary
 var kit: KitLoader
+var ambient: Ambient
+var pigeons: Pigeons
+var gusts: Gusts
 var district_ground: DistrictGround
 var player: CharacterBody3D
 var world: WorldEnvironment
@@ -46,6 +51,14 @@ func _ready() -> void:
 		add_child(district_ground)
 		kit = KitLoader.build(dressing)
 		add_child(kit)
+		gusts = Gusts.new()
+		add_child(gusts)
+		ambient = Ambient.build(dressing.get("emitters", []))
+		ambient.gusts = gusts
+		add_child(ambient)
+		pigeons = Pigeons.build(dressing.get("flocks", []), KitLoader.meshes("figures_kit")["pigeon"])
+		pigeons.get_child(0).material_override = KitLoader.material("figures_kit")
+		add_child(pigeons)
 
 	_lights()
 	set_day(true)
@@ -65,6 +78,36 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F11:
 		set_day(not sun.visible)
+	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
+		_labels(get_node_or_null("labels") == null)
+
+
+## The scenes' labels (F1): each scene's name and story over it, seen within
+## 40 m; off again.
+func _labels(on: bool) -> void:
+	var old := get_node_or_null("labels")
+
+	if old:
+		old.free()
+
+	if not on or not dressing:
+		return
+
+	var group := Node3D.new()
+	group.name = "labels"
+	add_child(group)
+
+	for s in dressing.get("scenes", []):
+		var label := Label3D.new()
+		label.text = "%s — %s" % [s["name"], s["story"]]
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD
+		label.width = 900.0
+		label.pixel_size = 0.004
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.no_depth_test = true
+		label.visibility_range_end = 40.0
+		label.position = Vector3(s["at"][0], s["at"][1] + 2.6, s["at"][2])
+		group.add_child(label)
 
 
 ## Where the player arrives: the plan's spawn, on the street.
@@ -96,7 +139,10 @@ func set_day(day: bool) -> void:
 	moon.visible = not day
 
 	if kit:
-		kit.set_lights(not day)
+		kit.set_day(day)
+
+	if ambient:
+		ambient.set_day(day)
 
 
 func _lights() -> void:

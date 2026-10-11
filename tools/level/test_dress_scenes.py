@@ -154,7 +154,9 @@ class Scenes(unittest.TestCase):
         self.assertEqual(clashes[:10], [])
 
     def test_routes_clear(self):
-        """No scene's collider within 0.6 m of a street-level route's foot, a door's front or a kerb drop."""
+        """No scene's collider within 0.6 m of a street-level route's foot, a
+        door's front, a kerb drop, or the causeway (the plaza's processional
+        way, 6 m either side)."""
         blocked = []
 
         for c in DRESSING["colliders"]:
@@ -162,10 +164,10 @@ class Scenes(unittest.TestCase):
                 continue
 
             x, _, z, sx, _, sz = c["box"]
-            reach = math.hypot(sx, sz) / 2 + 0.6
+            reach = math.hypot(sx, sz) / 2   # (clearance() keeps the 0.6 m)
 
             for spot in dress_scenes.keep_clear(DATA, DRESSING):
-                if _apart((x, z), spot["at"]) < reach + spot["radius"]:
+                if dress_scenes.clearance(spot, x, z) < reach:
                     blocked.append((round(x, 1), round(z, 1), spot["what"]))
                     break
 

@@ -34,6 +34,16 @@ const TREES := {"trees_kit": TREE_SWAY}
 ## The lamps' lights and their glowing globes, switched by night and day.
 var lights: Array[OmniLight3D] = []
 var globes: Array[StandardMaterial3D] = []
+## One lit lamp in eight stutters at night (the Company's wiring).
+var stuttering: Array[OmniLight3D] = []
+## The scenes' parts that keep to the day or the night ("when" metadata):
+## their draws, decals and colliders, switched by set_day.
+var timed: Array[Node3D] = []
+var switched: Array[CollisionShape3D] = []
+## Colliders switched on while the player stood in them: on once they step out.
+var _waiting: Array[CollisionShape3D] = []
+var _night := false
+var _clock := 0.0
 
 static var _materials := {}
 static var _cards := {}
@@ -51,11 +61,12 @@ static func build(dressing: Dictionary) -> KitLoader:
 
 	for p in dressing["pieces"]:
 		var at := Vector3(p["at"][0], p["at"][1], p["at"][2])
-		var key := "%s/%s/%d/%d" % [p["kit"], p["piece"], floori(at.x / CELL), floori(at.z / CELL)]
+		var when: String = p.get("when", "")
+		var key := "%s/%s/%d/%d/%s" % [p["kit"], p["piece"], floori(at.x / CELL), floori(at.z / CELL), when]
 		var basis := Basis(Vector3.UP, deg_to_rad(p["yaw"])) * Basis.from_scale(Vector3(p.get("stretch", 1.0), 1, 1))
 
 		if not groups.has(key):
-			groups[key] = {"kit": p["kit"], "piece": p["piece"], "transforms": []}
+			groups[key] = {"kit": p["kit"], "piece": p["piece"], "when": when, "transforms": []}
 
 		groups[key]["transforms"].append(Transform3D(basis, at))
 
@@ -82,7 +93,11 @@ static func build(dressing: Dictionary) -> KitLoader:
 		draw.name = key.replace("/", "_")
 		draw.multimesh = multi
 		draw.set_meta("piece", g["piece"])
+		draw.set_meta("when", g["when"])
 		out.add_child(draw)
+
+		if g["when"] != "":
+			out.timed.append(draw)
 
 	var lamps := Node3D.new()
 	lamps.name = "lights"
@@ -99,6 +114,9 @@ static func build(dressing: Dictionary) -> KitLoader:
 		lamps.add_child(light)
 		out.lights.append(light)
 
+		if hash(Vector2i(roundi(light.position.x), roundi(light.position.z))) % 8 == 0:
+			out.stuttering.append(light)
+
 	var body := StaticBody3D.new()
 	body.name = "colliders"
 	out.add_child(body)
@@ -112,7 +130,82 @@ static func build(dressing: Dictionary) -> KitLoader:
 		shape.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(c["yaw"])), Vector3(b[0], b[1], b[2]))
 		body.add_child(shape)
 
+		if c.get("when", "") != "":
+			shape.set_meta("when", c["when"])
+			out.switched.append(shape)
+
+	# The chalk the scenes leave on the ground (our own painting).
+	for d in dressing.get("decals", []):
+		var decal := Decal.new()
+		decal.texture_albedo = load(PAINTED + String(d["texture"]) + ".png")
+		decal.size = Vector3(d["size"], 0.6, d["size"])
+		decal.position = Vector3(d["at"][0], d["at"][1], d["at"][2])
+		decal.rotation.y = deg_to_rad(d["yaw"])
+		decal.set_meta("when", d.get("when", ""))
+		out.add_child(decal)
+
+		if d.get("when", "") != "":
+			out.timed.append(decal)
+
 	return out
+
+
+## Day or night: the scenes of the other hidden and their colliders off (one
+## switched on under the player waits till they step out), the lamps lit at
+## night, their stutter with them.
+func set_day(day: bool) -> void:
+	var now := "day" if day else "night"
+
+	for node in timed:
+		node.visible = node.get_meta("when") == now
+
+	var player := get_tree().get_first_node_in_group(&"player") as Node3D if is_inside_tree() else null
+	_waiting.clear()
+
+	for shape in switched:
+		var on: bool = shape.get_meta("when") == now
+
+		if on and player != null and _inside(shape, player.global_position):
+			shape.disabled = true
+			_waiting.append(shape)
+		else:
+			shape.disabled = not on
+
+	_night = not day
+	set_lights(not day)
+
+
+func _physics_process(_delta: float) -> void:
+	if _waiting.is_empty():
+		return
+
+	var player := get_tree().get_first_node_in_group(&"player") as Node3D
+
+	for shape in _waiting.duplicate():
+		if player == null or not _inside(shape, player.global_position):
+			shape.disabled = false
+			_waiting.erase(shape)
+
+
+func _process(delta: float) -> void:
+	_clock += delta
+
+	if not _night:
+		return
+
+	# A stutter: steady, then now and then a dip and a flicker back.
+	for k in stuttering.size():
+		var t := _clock + k * 3.7
+		var drop := sin(t * 1.3) * sin(t * 0.47 + k)
+		stuttering[k].light_energy = LAMP_ENERGY * (1.0 if drop < 0.55 else 0.2 + 0.5 * absf(sin(t * 37.0)))
+
+
+## Whether a point (the player's feet, a man's height above) is in a box
+## collider, a hand's width round it.
+func _inside(shape: CollisionShape3D, at: Vector3) -> bool:
+	var local := shape.global_transform.affine_inverse() * at
+	var half: Vector3 = (shape.shape as BoxShape3D).size * 0.5 + Vector3(0.4, 1.0, 0.4)
+	return absf(local.x) <= half.x and absf(local.y) <= half.y and absf(local.z) <= half.z
 
 
 ## The Company's lamps lit (night) or out (day): their lights and globes.

@@ -103,6 +103,17 @@ class Foliage(unittest.TestCase):
                 self.assertGreater(solid, 0.15, "hardly anything painted")
                 self.assertLess(solid, 0.9, "no gaps: a card, not leaves")
 
+    def test_the_chalk_ring_is_chalk_lines_on_nothing(self):
+        """The wardens' and the gendarmes' chalk: pale broken lines, the
+        ground showing through nearly everywhere."""
+        image = paint.PAINTINGS["chalk_ring"]()
+        self.assertEqual(image.mode, "RGBA")
+        pixels = np.asarray(image).astype(float)
+        alpha = pixels[:, :, 3]
+        solid = (alpha > 0).mean()
+        self.assertTrue(0.03 < solid < 0.3, solid)
+        self.assertGreater(pixels[alpha > 0][:, :3].mean(), 180.0)
+
     def test_the_customs_azulejos_are_cobalt_on_white_glaze(self):
         pixels = np.asarray(paint.PAINTINGS["azulejo_ship"]().convert("RGB")).astype(float)
         blue = (pixels[:, :, 2] > pixels[:, :, 0] + 40).mean()

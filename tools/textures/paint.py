@@ -452,6 +452,50 @@ def leaf_crown():
     return _crown(size, 256, 1100, size * 0.05, size * 0.022, OAK, blobs, 43)
 
 
+def chalk_ring():
+    """Chalk on the setts (a ground decal): a ring drawn round by hand in
+    one go and a smaller one inside, broken where the chalk skipped, four
+    strokes across to the middle; grainy, pale, the ground showing through.
+    No words: what the wardens write is the user's."""
+    size = 256 * SCALE
+    rng = np.random.default_rng(301)
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    c = size / 2
+
+    def stroke(points, width):
+        for (ax, ay), (bx, by) in zip(points, points[1:]):
+            if rng.random() < 0.08:
+                continue   # the chalk skipped
+            shade = int(rng.uniform(205, 245))
+            draw.line([(ax, ay), (bx, by)], fill=(shade, shade, shade - 6, 255), width=int(width * rng.uniform(0.7, 1.1)))
+
+    for radius, wobble in ((0.44, 0.012), (0.3, 0.015)):
+        start = rng.uniform(0, math.tau)
+        points = []
+
+        for k in range(181):
+            a = start + math.tau * (k / 180) * 1.02
+            r = size * (radius + wobble * math.sin(a * 3 + start) + rng.uniform(-0.003, 0.003))
+            points.append((c + math.cos(a) * r, c + math.sin(a) * r))
+
+        stroke(points, size * 0.012)
+
+    for k in range(4):
+        a = math.radians(45 + 90 * k + rng.uniform(-6, 6))
+        stroke([(c + math.cos(a) * size * (0.3 + 0.14 * t / 10), c + math.sin(a) * size * (0.3 + 0.14 * t / 10))
+                for t in range(11)], size * 0.01)
+
+    # Grain: the chalk's tooth on the stone.
+    pixels = np.asarray(image).copy()
+    grain = rng.random(pixels.shape[:2]) < 0.35
+    pixels[grain, 3] = 0
+    small = Image.fromarray(pixels, "RGBA").resize((256, 256), Image.Resampling.BOX)
+    alpha = small.getchannel("A").point(lambda v: 255 if v >= 90 else 0)
+    small.putalpha(alpha)
+    return small
+
+
 WILLOW = [(88, 112, 44), (104, 128, 52), (120, 140, 60), (138, 150, 70), (76, 98, 40)]
 
 
@@ -1914,7 +1958,7 @@ PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_
              "carpet": carpet,
              "iron_rail": iron_rail, "window_grille": window_grille, "casement": casement, "quarries": quarries, "glazing": glazing, "sash": sash, "lattice": lattice, "ratlines": ratlines, "coil_mask": coil_mask,
              "decal_salt": decal_salt, "palm_frond": palm_frond, "cypress": cypress, "agave": agave, "orange_leaves": orange_leaves,
-             "gorse": gorse, "fennel": fennel, "pine": pine, "willow": willow, "laurel": laurel, "laundry": laundry, "azulejo_ship": azulejo_ship, "arms_royal": arms_royal,
+             "gorse": gorse, "fennel": fennel, "pine": pine, "willow": willow, "laurel": laurel, "chalk_ring": chalk_ring, "laundry": laundry, "azulejo_ship": azulejo_ship, "arms_royal": arms_royal,
              "azulejo_comet": azulejo.azulejo_comet, "azulejo_king": azulejo.azulejo_king, "azulejo_souls": azulejo.azulejo_souls,
              "tile_frame": azulejo.tile_frame, "window_lit": azulejo.window_lit,
              "sea_chart": sea_chart, "parchment": parchment, "book_spines": book_spines,

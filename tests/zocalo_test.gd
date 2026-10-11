@@ -200,6 +200,7 @@ func _dressed() -> void:
 
 	_ground_clear()
 	await _street_life()
+	await _scenes()
 
 	# Z9 over a kerb from the street on to the plaza, away from a crossing
 	var walk := await _walk(Vector3(6, 1.05, 115), 0.0, func(p): return p.z < 104.0, 600)
@@ -269,6 +270,8 @@ func _street_life() -> void:
 	var poles: Array = map.dressing["pieces"].filter(func(p): return p["piece"].contains("pole") or p["piece"].contains("lamp"))
 	var petal: Dictionary = {}
 
+	# (The petals the god's devotees strew are the only ones; the ward lamps
+	# ring the god 9 m out, clear of the walk across them.)
 	for p in map.dressing["pieces"]:
 		if p["piece"] != "petals_marigold":
 			continue
@@ -276,7 +279,7 @@ func _street_life() -> void:
 		var clear := true
 
 		for q in poles:
-			clear = clear and Vector2(q["at"][0] - p["at"][0], q["at"][2] - p["at"][2]).length() > 6.0
+			clear = clear and Vector2(q["at"][0] - p["at"][0], q["at"][2] - p["at"][2]).length() > 2.5
 
 		if clear:
 			petal = p
@@ -293,6 +296,128 @@ func _street_life() -> void:
 	map.set_day(true)
 	var dark := lights.all(func(l): return not l.visible)
 	_check("Z18 the lamps light at night and go out by day", lit and dark, "night %s, day %s" % [lit, dark])
+
+
+## The scenes (the scenes plan, Task 6): their stand-ins and trees drawn,
+## day and night swapped, a queue in the way, a night collider waiting for
+## the player to step out, the ambient running, a stuttering lamp, the F1
+## labels.
+func _scenes() -> void:
+	map.set_day(true)
+	await _frames(2)
+	var drawn := _drawn_figures()
+	var by_day: int = map.dressing["stations"].filter(func(st): return st["when"] != "night").size()
+	var trees := 0
+
+	for draw: MultiMeshInstance3D in map.kit.find_children("*", "MultiMeshInstance3D", true, false):
+		if String(draw.get_meta("piece", "")) in ["tree_ash", "tree_ash_young", "palm_canary", "tree_laurel", "tree_willow",
+				"ahuehuete_split"]:
+			trees += draw.multimesh.instance_count
+
+	var planted: int = map.dressing["pieces"].filter(func(p): return p["piece"] in ["tree_ash", "tree_ash_young",
+		"palm_canary", "tree_laurel", "tree_willow", "ahuehuete_split"]).size()
+	_check("Z19 the scenes load: the day's stand-ins drawn, every tree", drawn == by_day and trees == planted and planted > 100,
+		"%d drawn of %d stations by day; %d of %d trees" % [drawn, by_day, trees, planted])
+
+	# Z20 night swaps the day's scenes for the night's, colliders and all
+	var day_shapes: Array = map.kit.switched.filter(func(c): return c.get_meta("when") == "day")
+	var night_shapes: Array = map.kit.switched.filter(func(c): return c.get_meta("when") == "night")
+	map.player.global_position = Vector3(0, 1.05, 120)
+	map.set_day(false)
+	await _frames(3)
+	var at_night := [_drawn_figures(), day_shapes.all(func(c): return c.disabled), night_shapes.all(func(c): return not c.disabled)]
+	map.set_day(true)
+	await _frames(3)
+	var by_day_again := [_drawn_figures(), day_shapes.all(func(c): return not c.disabled), night_shapes.all(func(c): return c.disabled)]
+	var by_night: int = map.dressing["stations"].filter(func(st): return st["when"] != "day").size()
+	_check("Z20 night swaps the day's scenes for the night's, colliders too",
+		at_night[0] == by_night and at_night[1] and at_night[2] and by_day_again[0] == by_day and by_day_again[1] and by_day_again[2],
+		"night %s (%d stations), day %s" % [at_night, by_night, by_day_again])
+
+	# Z21 a queue stops the player
+	var scene_index := -1
+
+	for k in map.dressing["scenes"].size():
+		if map.dressing["scenes"][k]["name"] == "tamale_stop":
+			scene_index = k
+			break
+
+	var queued: Dictionary = map.dressing["stations"].filter(func(st): return st["scene"] == scene_index and st["pose"] == "fig_queue")[0]
+	var q := Vector3(queued["at"][0], queued["at"][1], queued["at"][2])
+	var yaw := deg_to_rad(float(map.dressing["scenes"][scene_index]["yaw"]))
+	var front := Vector3(sin(yaw), 0, cos(yaw))
+	var start := q + front * 3.0 + Vector3(0, 1.05, 0)
+	var into := await _walk(start, atan2(front.x, front.z), func(p): return Vector2(p.x - q.x, p.z - q.z).length() < 0.15, 240)
+	_check("Z21 a queue stops the player short of it", not into["ok"] and Vector2(into["end"].x - q.x, into["end"].z - q.z).length() > 0.2,
+		"queue at %s, ended %s" % [q, into["end"]])
+
+	# Z22 a night collider over the player at nightfall waits till they step out
+	var waiting: CollisionShape3D = night_shapes[0]
+	map.player.global_position = waiting.global_position + Vector3(0, 0.2, 0)
+	map.player.velocity = Vector3.ZERO
+	map.set_day(false)
+	await _frames(5)
+	var held := waiting.disabled
+	map.player.global_position = waiting.global_position + Vector3(4, 1.05, 4)
+	await _frames(5)
+	var on := not waiting.disabled
+	map.set_day(true)
+	await _frames(2)
+	_check("Z22 a night collider over the player at nightfall waits till they step out", held and on,
+		"held %s, then on %s" % [held, on])
+
+	# Z23 the ambient runs at the god, forty at most
+	map.player.global_position = Vector3(0, 1.25, 9.5)
+	await _frames(30)
+	var running: Array = map.ambient.running()
+	var copal := running.any(func(i): return map.dressing["emitters"][i]["effect"] == "copal")
+	_check("Z23 the ambient runs at the god (its copal), forty at most", copal and running.size() <= 40,
+		"%d running, copal %s" % [running.size(), copal])
+
+	# Z23b a stuttering lamp's light at night
+	map.set_day(false)
+	var lamp: OmniLight3D = map.kit.stuttering[0] if map.kit.stuttering.size() > 0 else null
+	var lo := INF
+	var hi := -INF
+
+	for i in 120:
+		await get_tree().process_frame
+
+		if lamp:
+			lo = minf(lo, lamp.light_energy)
+			hi = maxf(hi, lamp.light_energy)
+
+	map.set_day(true)
+	_check("Z23b a stuttering lamp's light wavers at night", lamp != null and hi - lo > 0.3,
+		"%d stuttering, energy %.2f..%.2f" % [map.kit.stuttering.size(), lo, hi])
+
+	# Z24 F1 labels the scenes near; F1 again takes them away
+	var key := InputEventKey.new()
+	key.keycode = KEY_F1
+	key.pressed = true
+	map._unhandled_input(key)
+	await _frames(2)
+	var group: Node = map.get_node_or_null("labels")
+	var labels: Array = group.get_children() if group else []
+	var named := labels.any(func(l): return (l as Label3D).text.begins_with("god_devotion"))
+	map._unhandled_input(key)
+	await _frames(2)
+	var gone: bool = map.get_node_or_null("labels") == null
+	_check("Z24 F1 labels the scenes with their stories, F1 again hides them", named and gone,
+		"%d labels, the god's %s, gone %s" % [labels.size(), named, gone])
+
+
+## The stand-ins drawn now: the instances of the visible figure draws.
+func _drawn_figures() -> int:
+	var out := 0
+
+	for draw: MultiMeshInstance3D in map.kit.find_children("*", "MultiMeshInstance3D", true, false):
+		var piece := String(draw.get_meta("piece", ""))
+
+		if (piece.begins_with("fig_") or piece.begins_with("dog_")) and draw.visible:
+			out += draw.multimesh.instance_count
+
+	return out
 
 
 ## Z14 no ground over a flush piece or in an opening, at the ground's own
