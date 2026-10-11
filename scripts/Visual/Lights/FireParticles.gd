@@ -1,12 +1,19 @@
 extends Node3D
-## Level-owned pools of ember, smoke, steam, and spark particles, created on first emission.
+## Level-owned pools of ember, smoke, steam, spark, mist, dust, petal and leaf particles, created on first emission.
 ## One camera-facing MultiMesh per kind uses Layers.FX; lightgem cameras exclude it.
 ## Simulation uses scaled frame delta so slow motion also slows particles.
 
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const SMOKE := preload("res://scripts/Visual/Lights/smoke.gdshader")
+const DRIFT := preload("res://scripts/Visual/Lights/drift.gdshader")
 
-const MAX := {&"ember": 400, &"smoke": 300, &"steam": 80, &"spark": 120}
+const MAX := {&"ember": 400, &"smoke": 300, &"steam": 200, &"spark": 120, &"mist": 150, &"fog": 120, &"dust": 150, &"petal": 200,
+	&"leaf": 200}
+## Kinds drawn as cut-out sprites from their sheet (tools/props/sprites.py),
+## kinds drawn as smoke's puffs, and kinds drawn as glowing specks.
+const SHEETS := {&"petal": "res://assets/vfx/petal.png", &"leaf": "res://assets/vfx/leaf.png"}
+const PUFFS := [&"smoke", &"steam", &"mist", &"fog"]
+const SPECKS := [&"ember", &"spark", &"dust"]
 ## Sizes are measured on this many lines (the Retro screen's grid).
 const GRID_LINES := 360.0
 const EMBER_HOT := Color("FFA040")
@@ -33,6 +40,8 @@ class Pool:
 	var alpha := PackedFloat32Array()
 	var puff := PackedInt32Array()
 	var tint := PackedColorArray()
+	## Where a falling thing comes to rest (-INF: nowhere).
+	var floor := PackedFloat32Array()
 	var draw: MultiMeshInstance3D
 
 	func _init(p_kind: StringName, capacity: int) -> void:
@@ -41,7 +50,7 @@ class Pool:
 		for array in [pos, vel]:
 			array.resize(capacity)
 
-		for array in [age, life, size, start_size, alpha]:
+		for array in [age, life, size, start_size, alpha, floor]:
 			array.resize(capacity)
 
 		puff.resize(capacity)
@@ -65,14 +74,17 @@ class Pool:
 		alpha[i] = alpha[count]
 		puff[i] = puff[count]
 		tint[i] = tint[count]
+		floor[i] = floor[count]
 
 
 # The API
 
-## Emits count particles of kind (ember/smoke/steam/spark) at world at, with world wind and tint.
+## Emits count particles of kind (ember/smoke/steam/spark/mist/dust/petal/leaf) at world at, with world wind and tint;
+## petals and leaves come to rest at `rest_on` (a height).
 ## size is optional world size; context selects the level-owned pool. Detached contexts/unknown kinds produce no particles.
 ## Nonpositive count spawns none; the emitted counter still adds count when the pool exists.
-static func emit(context: Node, kind: StringName, at: Vector3, count: int, wind := Vector3.ZERO, tint := Color.WHITE, size := 0.0) -> void:
+static func emit(context: Node, kind: StringName, at: Vector3, count: int, wind := Vector3.ZERO, tint := Color.WHITE, size := 0.0,
+		rest_on := -INF) -> void:
 	var world := _world_for(context)
 
 	if world == null or not world._pools.has(kind):
@@ -81,7 +93,7 @@ static func emit(context: Node, kind: StringName, at: Vector3, count: int, wind 
 	_emitted[kind] = int(_emitted.get(kind, 0)) + count
 
 	for i in count:
-		world._spawn(world._pools[kind], at, wind, tint, size)
+		world._spawn(world._pools[kind], at, wind, tint, size, rest_on)
 
 
 static func emitted(kind: StringName) -> int:
@@ -157,7 +169,7 @@ func _exit_tree() -> void:
 		_world = null
 
 
-func _spawn(pool: Pool, at: Vector3, wind: Vector3, tint: Color, size: float) -> void:
+func _spawn(pool: Pool, at: Vector3, wind: Vector3, tint: Color, size: float, rest_on := -INF) -> void:
 	if pool.count >= pool.capacity():
 		return
 
@@ -167,6 +179,7 @@ func _spawn(pool: Pool, at: Vector3, wind: Vector3, tint: Color, size: float) ->
 	pool.age[i] = 0.0
 	pool.tint[i] = tint
 	pool.puff[i] = _rng.randi_range(0, 3)
+	pool.floor[i] = rest_on
 	var side := Vector3(_rng.randf_range(-1.0, 1.0), 0.0, _rng.randf_range(-1.0, 1.0))
 
 	match pool.kind:
@@ -190,6 +203,22 @@ func _spawn(pool: Pool, at: Vector3, wind: Vector3, tint: Color, size: float) ->
 			pool.life[i] = 0.6
 			pool.size[i] = size if size > 0.0 else 0.2
 			pool.alpha[i] = 0.4
+		&"mist", &"fog":
+			# Low and slow, spreading over the ground.
+			pool.vel[i] = side * 0.25 + Vector3.UP * 0.04 + wind * 0.15
+			pool.life[i] = _rng.randf_range(3.0, 4.5)
+			pool.size[i] = size if size > 0.0 else 0.5
+			pool.alpha[i] = _rng.randf_range(0.18, 0.3)
+		&"dust":
+			pool.vel[i] = side * 0.05 + Vector3.UP * 0.02
+			pool.life[i] = _rng.randf_range(4.0, 7.0)
+			pool.size[i] = _rng.randf_range(0.8, 1.2)
+			pool.alpha[i] = _rng.randf_range(0.3, 0.6)
+		&"petal", &"leaf":
+			pool.vel[i] = Vector3.DOWN * 0.3 + side * 0.3 + wind * 0.35
+			pool.life[i] = _rng.randf_range(7.0, 10.0)
+			pool.size[i] = size if size > 0.0 else (0.12 if pool.kind == &"petal" else 0.16)
+			pool.alpha[i] = 1.0
 
 	pool.start_size[i] = pool.size[i]
 
@@ -225,6 +254,21 @@ func _step(pool: Pool, delta: float) -> void:
 				v = v * exp(-0.3 * delta)
 				var grown := 1.0 + 1.5 * (pool.age[i] / pool.life[i])
 				pool.size[i] = pool.start_size[i] * grown
+			&"mist", &"fog":
+				v = v * exp(-0.5 * delta)
+				pool.size[i] = pool.start_size[i] * (1.0 + 2.0 * (pool.age[i] / pool.life[i]))
+			&"dust":
+				var a := pool.age[i] * 0.7 + pool.puff[i] * 1.7
+				v = v * exp(-0.4 * delta) + Vector3(sin(a), 0.3 * sin(a * 1.3), cos(a * 0.8)) * 0.04 * delta
+			&"petal", &"leaf":
+				if pool.pos[i].y <= pool.floor[i] + 0.01:
+					# Come to rest: it lies where it fell.
+					v = Vector3.ZERO
+					pool.pos[i].y = pool.floor[i] + 0.01
+				else:
+					# Falling at about a metre a second, fluttering side to side.
+					var a := pool.age[i] * 2.6 + pool.puff[i] * 1.9
+					v = v * exp(-1.2 * delta) + (Vector3(sin(a), 0.0, cos(a * 0.8)) * 1.2 + Vector3.DOWN * 1.1) * delta
 
 		pool.vel[i] = v
 		pool.pos[i] += v * delta
@@ -249,7 +293,28 @@ func _render(pool: Pool, camera: Camera3D) -> void:
 		var t := pool.age[i] / pool.life[i]
 		var basis: Basis
 
-		if pool.kind == &"ember" or pool.kind == &"spark":
+		if pool.kind in SHEETS:
+			# Tumbling as it falls (the frames turn it too); flat on the ground at rest.
+			var s := pool.size[i]
+
+			if pool.vel[i] == Vector3.ZERO:
+				basis = Basis(Vector3.RIGHT * s, Vector3.FORWARD * s, Vector3.UP * s)
+			else:
+				var spin := pool.age[i] * (2.0 + pool.puff[i]) + pool.puff[i]
+				var turned := cam.basis.rotated(to_cam, spin)
+				basis = Basis(turned.x * s, turned.y * s * absf(cos(spin * 0.7)) + turned.y * s * 0.15, turned.z * s)
+
+			var fade := 1.0 - smoothstep(0.85, 1.0, t)
+			mm.set_instance_color(i, Color(pool.tint[i], fade))
+			mm.set_instance_custom_data(i, Color(float(pool.puff[i]), 0.0, 0.0, 0.0))
+		elif pool.kind == &"dust":
+			# A pale speck a pixel or so wide, twinkling as it turns.
+			var width := pool.size[i] * px * distance
+			basis = Basis(cam.basis.x * width, cam.basis.y * width, cam.basis.z * width)
+			var shown := pool.alpha[i] * minf(t / 0.2, 1.0) * (1.0 - smoothstep(0.7, 1.0, t)) * (0.7 + 0.3 * sin(pool.age[i] * 5.0 + pool.puff[i]))
+			var c := pool.tint[i]
+			mm.set_instance_color(i, Color(c.r * shown, c.g * shown, c.b * shown, 1.0))
+		elif pool.kind == &"ember" or pool.kind == &"spark":
 			# A streak along its motion, a pixel or two wide wherever it is.
 			var v := pool.vel[i]
 			var along := v - to_cam * v.dot(to_cam)
@@ -275,7 +340,7 @@ func _make_draw(kind: StringName, capacity: int) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
-	mm.use_custom_data = kind == &"smoke" or kind == &"steam"
+	mm.use_custom_data = kind in PUFFS or kind in SHEETS
 	var quad := QuadMesh.new()
 	quad.size = Vector2.ONE
 	mm.mesh = quad
@@ -290,13 +355,21 @@ func _make_draw(kind: StringName, capacity: int) -> MultiMeshInstance3D:
 	# Fires are all over the level: never cull the batch on its box.
 	draw.custom_aabb = AABB(Vector3(-4000, -4000, -4000), Vector3(8000, 8000, 8000))
 
-	if kind == &"smoke" or kind == &"steam":
+	if kind in SHEETS:
+		var drift := ShaderMaterial.new()
+		drift.shader = DRIFT
+		drift.set_shader_parameter(&"sheet", load(SHEETS[kind]))
+		draw.material_override = drift
+	elif kind in PUFFS:
 		var look := ShaderMaterial.new()
 		look.shader = SMOKE
 		look.set_shader_parameter(&"puffs", load("res://assets/vfx/smoke.png"))
 
-		if kind == &"steam":
+		if kind == &"steam" or kind == &"fog":
 			look.set_shader_parameter(&"body", Color(0.85, 0.85, 0.88))
+		elif kind == &"mist":
+			# The seeped future's phosphor green (cards/street_life.md's colour rule).
+			look.set_shader_parameter(&"body", Color("7FD36A"))
 
 		draw.material_override = look
 	else:

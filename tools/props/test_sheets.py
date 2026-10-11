@@ -95,6 +95,32 @@ class SheetsTest(unittest.TestCase):
             self.assertEqual(int(np.argmax(brightness)), 63, name)
 
 
+class Drift(unittest.TestCase):
+    """The drifting sprites (tools/props/sprites.py): marigold petals and
+    fallen leaves, four frames of 32 px in a 2 x 2 sheet, cut out clean."""
+
+    def frames(self, name):
+        sheet = np.asarray(Image.open(VFX / (name + ".png")).convert("RGBA"), dtype=np.float64)
+        self.assertEqual(sheet.shape[:2], (64, 64), name)
+        return [sheet[y:y + 32, x:x + 32] for y in (0, 32) for x in (0, 32)]
+
+    def test_cut_out_clean(self):
+        for name in ("petal", "leaf"):
+            for k, frame in enumerate(self.frames(name)):
+                alpha = frame[:, :, 3]
+                self.assertTrue(set(np.unique(alpha)) <= {0.0, 255.0}, (name, k))
+                self.assertTrue(0.05 < (alpha == 255).mean() < 0.6, (name, k, (alpha == 255).mean()))
+
+    def test_their_colours(self):
+        for frame in self.frames("petal"):
+            solid = frame[frame[:, :, 3] == 255]
+            self.assertGreater(solid[:, 0].mean(), solid[:, 2].mean() + 80)   # marigold
+
+        for frame in self.frames("leaf"):
+            solid = frame[frame[:, :, 3] == 255]
+            self.assertGreaterEqual(solid[:, 1].mean(), solid[:, 2].mean())   # green or brown, never blue
+
+
 class Backups(unittest.TestCase):
     """Every write backs up what it writes over (spec 12), sheets too."""
 
