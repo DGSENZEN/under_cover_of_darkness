@@ -110,7 +110,7 @@ func _pick() -> void:
 				continue
 
 			add_child(node)
-			Vfx.place(node, _at(emitters[i]))
+			Vfx.place(node, _at(emitters[i]), emitters[i])
 			_systems[i] = node
 
 		Vfx.emit(_systems[i], true)

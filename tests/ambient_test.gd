@@ -245,6 +245,27 @@ func _run() -> void:
 		and candles.find_children("*", "OmniLight3D", true, false).size() == 1, "%d multimeshes, %d flames" % [multis.size(), count])
 	candles.free()
 
+	# A13w candles stand a flame on each of their candles' wicks (they floated
+	# a hand or two over the drift)
+	var wicked: Node3D = Vfx.system("candles")
+	add_child(wicked)
+	var tops := [Vector3(1.0, 0.28, 2.0), Vector3(1.2, 0.36, 2.1), Vector3(0.8, 0.31, 1.9)]
+	Vfx.place(wicked, Vector3(1.0, 0.5, 2.0), {"wicks": tops.map(func(w): return [w.x, w.y, w.z])})
+	var flames_at: Array = []
+	var candle_draw: MultiMeshInstance3D = wicked.find_children("*", "MultiMeshInstance3D", true, false)[0]
+
+	# (Where its flames stand, kept on it: headless draws keep no instances.)
+	for flame in candle_draw.get_meta("flames", PackedVector3Array()):
+		flames_at.append(wicked.global_position + flame)
+
+	var on_wicks: bool = flames_at.size() == tops.size() and candle_draw.multimesh.instance_count == tops.size()
+
+	for w in tops:
+		on_wicks = on_wicks and flames_at.any(func(at): return at.distance_to(w) < 0.01)
+
+	_check("A13w candles stand a flame on each wick", on_wicks, "%d flames at %s" % [flames_at.size(), flames_at])
+	wicked.free()
+
 	# A13a copal's stem is a thread of smoke, its noise in metres (in the
 	# quad's UVs on a tall quad it stretched into white drips)
 	var censer: Node3D = Vfx.system("copal")

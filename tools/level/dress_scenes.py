@@ -30,6 +30,13 @@ import dress_life
 import plan_check
 import scenes_catalogue as catalogue
 import street_dims as D
+from pathlib import Path
+
+# The kits' candles' wicks (tools/eclipse/common.Mesh.wick), by piece.
+WICKS = {}
+
+for _path in sorted((Path(__file__).resolve().parents[2] / "assets" / "eclipse" / "source").glob("*_wicks.json")):
+    WICKS.update(json.loads(_path.read_text()))
 
 TREES = set(dress_life.TRUNKS)
 # Pieces with no footprint of their own: overhead (washing on a line).
@@ -407,6 +414,31 @@ class Stage:
         world = lambda x, z: (site.at[0] + right[0] * x + f[0] * z, site.at[1] + right[1] * x + f[1] * z)
         return world, yaw
 
+    def _wicks(self, index, x, z):
+        """The wicks (world) of scene `index`'s candle piece nearest (x, z):
+        where its candles' flames stand."""
+        tops = []
+        best = None
+
+        for p in self.d.pieces:
+            if p.get("scene") == index and p["piece"] in WICKS:
+                off = math.hypot(p["at"][0] - x, p["at"][2] - z)
+
+                if best is None or off < best[0]:
+                    best = (off, p)
+
+        if best is None:
+            return tops
+
+        p = best[1]
+        a = math.radians(p["yaw"])
+
+        for wx, wy, wz in WICKS[p["piece"]]:
+            tops.append([round(wx * math.cos(a) + wz * math.sin(a) + p["at"][0], 4), round(wy + p["at"][1], 4),
+                         round(-wx * math.sin(a) + wz * math.cos(a) + p["at"][2], 4)])
+
+        return tops
+
     def _blocked(self, x, z, reach):
         if any(clearance(c, x, z) < reach for c in self.clear):
             return True
@@ -491,6 +523,9 @@ class Stage:
 
             if when in ("day", "night"):
                 e["when"] = when
+
+            if effect == "candles":
+                e["wicks"] = self._wicks(index, x, z)
 
             self.d.emitters.append(e)
 

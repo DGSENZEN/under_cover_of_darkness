@@ -182,6 +182,36 @@ class Scenes(unittest.TestCase):
                 < 7.6 + math.hypot(c["box"][3], c["box"][5]) / 2]
         self.assertEqual(near[:5], [])
 
+    def test_candle_flames_on_their_wicks(self):
+        """Every candles emitter carries its flames' places, each the top of a
+        candle of its scene (they floated a hand or two over the drift)."""
+        import json
+        import mesh_cross
+        wicks = {}
+
+        for path in mesh_cross.SOURCE.glob("*_wicks.json"):
+            wicks.update(json.loads(path.read_text()))
+
+        candles = [e for e in DRESSING["emitters"] if e["effect"] == "candles"]
+        self.assertTrue(candles)
+        astray = []
+
+        for e in candles:
+            tops = []
+
+            for p in DRESSING["pieces"]:
+                if p.get("scene") == e.get("scene") and p["piece"] in wicks:
+                    a = math.radians(p["yaw"])
+                    tops += [(x * math.cos(a) + z * math.sin(a) + p["at"][0], y + p["at"][1],
+                              -x * math.sin(a) + z * math.cos(a) + p["at"][2]) for x, y, z in wicks[p["piece"]]]
+
+            placed = e.get("wicks", [])
+
+            if not placed or any(min(math.dist(w, t) for t in tops) > 0.01 for w in placed):
+                astray.append((e["at"], len(placed), len(tops)))
+
+        self.assertEqual(astray, [])
+
     def test_figures_stand_clear_of_their_props(self):
         """No figure's body passes through a prop of its own scene (the
         warden stood in the god's candles), but what it holds and the

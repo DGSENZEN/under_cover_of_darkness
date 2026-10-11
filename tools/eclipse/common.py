@@ -45,8 +45,14 @@ ATLAS_FREE = ("glass",)
 
 # Scene
 
+# The wicks of each piece's lit candles (Mesh.wick), by piece, its own axes:
+# written beside its faces for the flames to stand on (export_piece).
+WICKS = {}
+
+
 def reset():
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    WICKS.clear()
 
 
 def slot(name):
@@ -62,6 +68,10 @@ def slot(name):
 
 class Mesh:
     """A piece's object being built: faces added with their slot."""
+
+    def wick(self, point):
+        """A candle's wick here (its top's middle): a flame stands on it."""
+        WICKS.setdefault(self.name, []).append(tuple(point))
 
     def __init__(self, name, outward=False):
         self.name = name
@@ -952,6 +962,10 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
             o.data.color_attributes.active_color = o.data.color_attributes["yours_grime"]
 
     dump_godot_faces(objects, SOURCE / (name + "_faces.json"), skip=cards)
+    wicks = {o.name: [[round(x, 4), round(z, 4), round(-y, 4)] for x, y, z in WICKS[o.name]] for o in objects if o.name in WICKS}
+
+    if wicks:
+        (SOURCE / (name + "_wicks.json")).write_text(json.dumps(wicks, indent=1))
     bpy.context.preferences.filepaths.save_version = 0   # no .blend1 beside it
     bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / (name + ".blend")))
 

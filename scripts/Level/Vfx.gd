@@ -635,9 +635,13 @@ static func noise_3d() -> NoiseTexture3D:
 
 
 ## Puts an effect at `at` (world): what of it is placed by the world, too
-## (dust's lamp, DUST_UNDER_LAMP above it).
-static func place(node: Node3D, at: Vector3) -> void:
+## (dust's lamp, DUST_UNDER_LAMP above it; candles' flames on their
+## emitter's "wicks", world, from tools/level/dress_scenes.py).
+static func place(node: Node3D, at: Vector3, emitter := {}) -> void:
 	node.global_position = at
+
+	if emitter.has("wicks"):
+		_on_wicks(node, at, emitter["wicks"])
 
 	for child in node.get_children():
 		if child is GPUParticles3D and child.draw_pass_1 != null:
@@ -645,6 +649,31 @@ static func place(node: Node3D, at: Vector3) -> void:
 
 			if look != null and look.shader == DUST:
 				look.set_shader_parameter(&"lamp", at + Vector3(0, DUST_UNDER_LAMP, 0))
+
+
+## Candles' flames stood each on its wick (world), their light over them
+## all; where they stand kept on the draw ("flames", local).
+static func _on_wicks(node: Node3D, at: Vector3, wicks: Array) -> void:
+	for draw in node.find_children("candles", "MultiMeshInstance3D", false, false):
+		var multi: MultiMesh = draw.multimesh
+		multi.instance_count = wicks.size()
+		var places := PackedVector3Array()
+		var middle := Vector3.ZERO
+
+		for i in wicks.size():
+			var w := Vector3(wicks[i][0], wicks[i][1], wicks[i][2]) - at
+			places.append(w)
+			middle += w
+			# (Each flame its own size and phase, from where it stands.)
+			var seed := absf(sin(w.x * 12.9898 + w.z * 78.233) * 43758.5453)
+			multi.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3.ONE * (0.8 + 0.4 * fposmod(seed, 1.0))), w))
+			multi.set_instance_custom_data(i, Color(fposmod(seed * 7.0, 1.0), 0, 0, 0))
+
+		draw.set_meta("flames", places)
+
+		if wicks.size() > 0:
+			for light in node.find_children("*", "OmniLight3D", false, false):
+				light.position = middle / wicks.size() + Vector3(0, 0.3, 0)
 
 
 ## A climbing noise texture of our own (seamless), shared.

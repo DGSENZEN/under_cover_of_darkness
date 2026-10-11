@@ -144,6 +144,7 @@ def petals_marigold(m):
 def _candle(m, x, y, z, h, w=0.05):
     m.shell()
     m.box((x - w / 2, y - w / 2, z), (x + w / 2, y + w / 2, z + h), "wax")
+    m.wick((x, y, z + h))
 
 
 def candles_drift(m):
