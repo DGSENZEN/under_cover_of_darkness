@@ -30,6 +30,8 @@ var pigeons: Pigeons
 var gusts: Gusts
 ## The wind on what drifts down (Vfx.wind_attractor), steered by the Gusts.
 var wind_attractor: GPUParticlesAttractorBox3D
+## What effects throw stops at the player's head (Vfx.head), on the camera.
+var head: GPUParticlesCollisionSphere3D
 ## The caged god's breath, and all that breathes with it.
 var breath: Breath
 var occult: Occult
@@ -70,6 +72,8 @@ func _ready() -> void:
 		Vfx.walls(self, plan["plots"], dressing.get("emitters", []))
 		wind_attractor = Vfx.wind_attractor()
 		add_child(wind_attractor)
+		head = Vfx.head()
+		add_child(head)
 		breath = Breath.new()
 		breath.name = "breath"
 		add_child(breath)
@@ -98,6 +102,9 @@ func _process(_delta: float) -> void:
 	if wind_attractor != null:
 		var camera := get_viewport().get_camera_3d()
 		Vfx.steer(wind_attractor, gusts.wind(), camera.global_position if camera != null else Vector3.ZERO)
+
+		if camera != null:
+			head.global_position = camera.global_position
 
 
 func _unhandled_input(event: InputEvent) -> void:

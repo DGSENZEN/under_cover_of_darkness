@@ -5,6 +5,7 @@ extends Node3D
 ##   Godot --headless --fixed-fps 60 --path . res://tests/occult_test.tscn
 
 const MAP := preload("res://maps/zocalo.tscn")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 
 var results: Array[String] = []
 var map: Node3D
@@ -111,6 +112,17 @@ func _run() -> void:
 	occult.apply(-1.0, 0.0)
 	var empty: float = occult.god_look.get_shader_parameter(&"swell")
 	_check("O7 the god's chest swells on the inhale", full > 0.05 and empty == 0.0, "in %.3f, out %.3f" % [full, empty])
+
+	# O10 nothing an effect throws passes through the player's head: a
+	# particle collider round the camera, following it (sparks from the
+	# seals fly out to where a player stands)
+	var head: GPUParticlesCollisionSphere3D = map.get("head")
+	var viewer: Camera3D = get_viewport().get_camera_3d()
+	viewer.global_position += Vector3(0.7, 0, 0)
+	await _frames(2)
+	_check("O10 a collider round the player's head stops what effects throw", head != null and head.radius >= 0.3
+		and head.cull_mask & Layers.FX and head.global_position.distance_to(viewer.global_position) < 0.01,
+		"head %s" % (head.global_position if head else "none"))
 
 	# O9 the lightgem's cameras see none of the god's effects
 	var gem := 0

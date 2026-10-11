@@ -514,6 +514,16 @@ static func walls(map: Node3D, plots: Array, emitters: Array) -> void:
 			Vector3(centre.x, float(plot["base"]) + float(plot["height"]) / 2.0, centre.y))
 
 
+## The player's head to what effects throw (one a map, kept on the camera
+## by its map): sparks, embers, petals stop at it, never through it.
+static func head() -> GPUParticlesCollisionSphere3D:
+	var sphere := GPUParticlesCollisionSphere3D.new()
+	sphere.name = "head"
+	sphere.radius = 0.35
+	sphere.cull_mask = Layers.FX
+	return sphere
+
+
 ## The wind on what drifts (one a map): an attractor pushing every way the
 ## same (fully directional), steered by Vfx.steer.
 static func wind_attractor() -> GPUParticlesAttractorBox3D:
