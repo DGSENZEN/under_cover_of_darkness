@@ -824,6 +824,28 @@ def _set_card_uvs(objects, loops, speck=False):
                 else value
 
 
+def _hinge_uvs(o):
+    """An object whose vertices carry a "hinge" and a "side" (the pigeon's
+    wings) gets them as a second UV map, (hinge, side) at every corner:
+    Godot's UV2, read by its shader. The atlas's map stays the first."""
+    attributes = o.data.attributes
+
+    if "hinge" not in attributes or "side" not in attributes:
+        return
+
+    hinge = [d.value for d in attributes["hinge"].data]
+    side = [d.value for d in attributes["side"].data]
+    first = o.data.uv_layers[0]
+    uv = o.data.uv_layers.new(name="hinge")
+
+    # (glTF turns V over, 1 - v: written turned, Godot reads the side.)
+    for loop in o.data.loops:
+        uv.data[loop.index].uv = (hinge[loop.vertex_index], 1.0 - side[loop.vertex_index])
+
+    o.data.uv_layers.active = first
+    first.active_render = True
+
+
 def _round_card_normals(objects, cards):
     """The cards' normals pointing out from their crown's middle (`round`)
     on both faces, every other face's its own: a crown lit as one mass."""
@@ -914,6 +936,9 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
         _weather(objects, name, weather, gate_sets)
 
     _round_card_normals(objects, cards)
+
+    for o in objects:
+        _hinge_uvs(o)
 
     bpy.ops.export_scene.gltf(filepath=str(out / (name + ".glb")), export_format="GLB", export_yup=True,
                               export_materials="EXPORT", export_texcoords=True, export_normals=True,

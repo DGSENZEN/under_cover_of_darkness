@@ -575,7 +575,7 @@ class FiguresKit(unittest.TestCase):
     POSES = ["fig_stand", "fig_queue", "fig_walk", "fig_kneel_pray", "fig_sit_kerb", "fig_sit_chair", "fig_lean_wall",
              "fig_push_cart", "fig_carry_basket", "fig_point", "fig_crouch_inspect", "fig_hold_lantern", "fig_type",
              "fig_dictate", "fig_barker", "fig_photographer", "fig_mourner", "fig_child", "fig_sleep_wall"]
-    BUDGET = dict({n: 320 for n in POSES}, fig_child_held=560, dog_sit=200, dog_lie=200, dog_sniff=200, pigeon=48)
+    BUDGET = dict({n: 320 for n in POSES}, fig_child_held=560, dog_sit=200, dog_lie=200, dog_sniff=200, pigeon=90)
     STANDING = ["fig_stand", "fig_queue", "fig_walk", "fig_point", "fig_hold_lantern", "fig_dictate", "fig_carry_basket"]
 
     @classmethod
@@ -595,6 +595,23 @@ class FiguresKit(unittest.TestCase):
 
     def test_budgets(self):
         self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_pigeon_wings_hinged(self):
+        """The pigeon's two wings carry their hinge (0 at the shoulder, 1 at
+        the tip) and their side (-1 left, +1 right) for the pigeon shader;
+        its body neither."""
+        o = self.objects["pigeon"]
+        self.assertIn("hinge", o.data.attributes)
+        hinge = [d.value for d in o.data.attributes["hinge"].data]
+        side = [d.value for d in o.data.attributes["side"].data]
+        xs = [v.co.x for v in o.data.vertices]
+        wing = [k for k, h in enumerate(hinge) if h > 0.0]
+        self.assertTrue(wing)
+        self.assertEqual({side[k] for k in wing}, {-1.0, 1.0})
+        tip = max(range(len(xs)), key=lambda k: abs(xs[k]))
+        self.assertAlmostEqual(hinge[tip], 1.0, places=2)
+        self.assertTrue(all(0.0 <= h <= 1.0 for h in hinge))
+        self.assertTrue(all(side[k] == 0.0 for k, h in enumerate(hinge) if h == 0.0 and abs(xs[k]) < 0.05))
 
     def test_heights(self):
         tops = {n: max(v.z for v in _world(o)) for n, o in self.objects.items()}

@@ -107,6 +107,62 @@ func _run() -> void:
 		"settled %s, lifted %s, after %s" % [settled, lifted, pigeons.flying(0)])
 	pigeons.free()
 
+	# A19 flying birds flap (their custom's flap 1), grounded ones do not
+	watcher.global_position = Vector3(30, 0, 0)
+	var flock := Pigeons.build([{"at": [0, 0, 0], "count": 6, "radius": 2.0}], QuadMesh.new())
+	flock.watcher = watcher
+	add_child(flock)
+
+	for k in 10:
+		flock.step(0.1)
+
+	var grounded: Array = range(6).map(func(k): return flock.custom(k).g)
+	watcher.global_position = Vector3(1, 0, 0)
+
+	for k in 30:
+		flock.step(0.1)
+
+	var aloft: Array = range(6).map(func(k): return flock.custom(k).g)
+	_check("A19 flying pigeons flap, grounded ones not", grounded.all(func(v): return v == 0.0) and aloft.all(func(v): return v == 1.0),
+		"grounded %s, flying %s" % [grounded, aloft])
+
+	# A20 a landing pigeon glides down smoothly (no frame's drop past 0.5 m),
+	# wings still for its last 2 m, onto its spot
+	watcher.global_position = Vector3(30, 0, 0)
+	var heights: Array = []
+	var flapped_low := false
+
+	for k in 200:
+		flock.step(0.1)
+		heights.append(flock.bird_position(0).y)
+
+		if flock.bird_position(0).distance_to(flock.home(0)) < 2.0 and flock.bird_position(0).y > 0.05 and flock.custom(0).g > 0.0:
+			flapped_low = true
+
+	var worst := 0.0
+
+	for k in range(1, heights.size()):
+		worst = maxf(worst, heights[k - 1] - heights[k])
+
+	_check("A20 a landing pigeon glides down smoothly, wings still at the last, onto its spot", worst <= 0.5 and not flapped_low
+		and absf(heights[-1] - flock.home(0).y) < 0.05, "worst drop %.2f m, flapped low %s, ends %.2f" % [worst, flapped_low, heights[-1]])
+	flock.free()
+
+	# A19b the kit's pigeon carries its wings' hinge in UV2 (the shader's flap)
+	var arrays: Array = KitLoader.meshes("figures_kit")["pigeon"].surface_get_arrays(0)
+	var hinges: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2] if arrays[Mesh.ARRAY_TEX_UV2] != null else PackedVector2Array()
+	var tips := 0
+	var sides := {}
+
+	for h in hinges:
+		if h.x > 0.9:
+			tips += 1
+			# (stored compressed: near its side)
+			sides[roundi(h.y)] = true
+
+	_check("A19b the kit's pigeon carries its wings' hinge in UV2", tips > 0 and sides.keys().size() == 2 and sides.has(1) and sides.has(-1),
+		"%d uv2, %d tips, sides %s" % [hinges.size(), tips, sides.keys()])
+
 	# A6 petals, leaves and dust: their systems emit and draw.
 	ambient = Ambient.build([{"effect": "petals", "at": [2, 0, 2]}, {"effect": "leaves", "at": [-2, 6, 2], "floor": 0.0},
 		{"effect": "dust", "at": [0, 0, 3]}])

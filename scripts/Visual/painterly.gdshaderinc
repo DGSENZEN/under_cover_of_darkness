@@ -212,6 +212,11 @@ uniform float full_wind = 8.0;
 #include "res://scripts/Visual/sway.gdshaderinc"
 
 void vertex() {
+	// A shader built on this look moves its vertices first (the pigeon's
+	// wings): #define PAINTERLY_VERTEX before including this.
+#ifdef PAINTERLY_VERTEX
+	PAINTERLY_VERTEX
+#endif
 	if (tree > 0.0) {
 		vec3 at = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 		VERTEX += inverse(mat3(MODEL_MATRIX)) * tree_sway(at, MODEL_MATRIX[3].xyz, tree, wind, full_wind, TIME);

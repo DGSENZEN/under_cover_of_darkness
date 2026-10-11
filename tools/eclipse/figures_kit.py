@@ -275,15 +275,41 @@ def dog(name, kind):
     return obj
 
 
+# The pigeon's wings: each a thin swept slab from its root, sunk in the body
+# at x WING_ROOT, out to its tip at x WING_TIP, at height WING_Z (before the
+# bird is set on the ground: scripts/Visual/pigeon.gdshader's `shoulder`).
+WING_ROOT = 0.05
+WING_TIP = 0.3
+WING_Z = 0.15
+WING_THICK = 0.014
+
+
 def pigeon():
-    """A pigeon pecking, 0.3 m long: a body, a head, a tail."""
+    """A pigeon pecking, 0.3 m long: a body, a head, a tail, two wings whose
+    vertices carry their hinge (0 at the root, 1 at the tip) and side (-1
+    left, +1 right) for the pigeon shader's flap (the body: 0, 0)."""
     m = common.Mesh("pigeon", outward=True)
+    # (Layers first: adding one leaves the vertices made before it stale.)
+    hinge = m.bm.verts.layers.float.new("hinge")
+    side = m.bm.verts.layers.float.new("side")
     m.shell()
     m.sphere((0.0, 0.0, 0.11), 0.09, 3, 5, "clay")
     m.shell()
     m.bar((0.0, -0.05, 0.14), (0.0, -0.13, 0.17), 0.05, 0.05, "clay", caps=(True, True))
     m.shell()
     m.prism([(-0.035, 0.06), (0.035, 0.06), (0.0, 0.2)], 0.1, 0.13, "clay")
+
+    for way in (1.0, -1.0):
+        # Swept back: the leading edge out to the tip, the trailing edge home.
+        outline = [(WING_ROOT, -0.04), (WING_TIP, 0.06), (WING_TIP - 0.04, 0.12), (WING_ROOT, 0.08)]
+        outline = [(way * x, y) for x, y in outline]
+        m.shell()
+        m.prism(outline if way > 0 else list(reversed(outline)), WING_Z, WING_Z + WING_THICK, "clay")
+
+        for v in m.shells[-1]:
+            v[hinge] = min(max((abs(v.co.x) - WING_ROOT) / (WING_TIP - WING_ROOT), 0.0), 1.0)
+            v[side] = way
+
     obj = m.make()
     _settle(obj)
     return obj

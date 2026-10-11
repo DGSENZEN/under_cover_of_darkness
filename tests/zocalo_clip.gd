@@ -1,6 +1,6 @@
 extends Node3D
 ## A clip of the Zócalo from one of its cameras (tools/level/layouts/zocalo/cameras.py),
-## day or night, frames a tenth of a second apart (tools/eclipse/clip.py makes
+## day or night, frames a tenth of a second apart (--every=s) (tools/eclipse/clip.py makes
 ## them a GIF), or from anywhere (--at=x,y,z --look=x,y,z). In a window:
 ##   Godot --path . --resolution 960x540 res://tests/zocalo_clip.tscn -- --camera=brazier_watch --night --out=/tmp/clip
 
@@ -13,6 +13,8 @@ func _ready() -> void:
 	var frames := 50
 	var out := "/tmp/clip/"
 	var warm := 1.5
+	var startle := Vector3.INF
+	var every := 0.1
 	var at := Vector3.INF
 	var look := Vector3.INF
 
@@ -25,6 +27,10 @@ func _ready() -> void:
 			frames = int(arg.trim_prefix("--frames="))
 		elif arg.begins_with("--out="):
 			out = arg.trim_prefix("--out=").trim_suffix("/") + "/"
+		elif arg.begins_with("--startle="):
+			startle = _vector(arg.trim_prefix("--startle="))
+		elif arg.begins_with("--every="):
+			every = float(arg.trim_prefix("--every="))
 		elif arg.begins_with("--warm="):
 			warm = float(arg.trim_prefix("--warm="))
 		elif arg.begins_with("--at="):
@@ -57,7 +63,14 @@ func _ready() -> void:
 	for k in frames:
 		var start := Time.get_ticks_msec()
 
-		while Time.get_ticks_msec() - start < 100:
+		# (--startle: the unseen player walks up to a spot a moment in, and
+		# away again after two seconds: the pigeons there lift, then settle.)
+		if startle != Vector3.INF and k == 5:
+			map.player.global_position = startle
+		elif startle != Vector3.INF and k == 5 + int(2.0 / every):
+			map.player.global_position = spot["at"] + Vector3(0, -50, 0)
+
+		while Time.get_ticks_msec() - start < every * 1000.0:
 			await get_tree().process_frame
 
 		RenderingServer.force_draw()

@@ -67,7 +67,7 @@ func _ready() -> void:
 		wind_attractor = Vfx.wind_attractor()
 		add_child(wind_attractor)
 		pigeons = Pigeons.build(dressing.get("flocks", []), KitLoader.meshes("figures_kit")["pigeon"])
-		pigeons.get_child(0).material_override = KitLoader.material("figures_kit")
+		pigeons.get_child(0).material_override = Pigeons.look(KitLoader.material("figures_kit"))
 		add_child(pigeons)
 
 	_lights()
