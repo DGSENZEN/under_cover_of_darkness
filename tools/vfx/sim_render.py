@@ -20,23 +20,35 @@ import tempfile
 from pathlib import Path
 
 import bpy
-from mathutils import Vector
+from mathutils import Vector, noise
 
-# kind -> domain (half width, height), resolution, inflow frames, bake
-# frames, the frames rendered (first, step, count), px, fire or not.
+# kind -> domain (half width, height), resolution (noise upres doubles
+# it), inflow frames, bake frames, the frames rendered (first, step,
+# count), px, fire or not; the source: a lumpy ball (radius, squashed
+# to `flat` of its height, at `at` up) emitting through a cloud texture
+# (`lumps`: its size, so the smoke leaves in lumps, never a ball), with a
+# speed up (leaning `lean` to the side) and out along its faces
+# (`burst`); buoyancy `beta`; several
+# sources at `spots` (x, y) where it burns in separate places.
 KINDS = {
-    # Copal: a thick column from a small censer, curling and folding as it
-    # rises, sampled once it stands (it loops near enough).
-    "plume": {"domain": (1.5, 3.0), "res": 80, "inflow": 999, "bake": 110, "frames": (46, 2, 32), "px": 128,
-              "density": 12.0, "vorticity": 0.8, "fire": False, "speed": 0.9, "radius": 0.07, "dissolve": 28,
-              "temperature": 1.0},
-    "puff": {"domain": (0.9, 2.4), "res": 56, "inflow": 8, "bake": 40, "frames": (2, 2, 16), "px": 128,
-             "density": 14.0, "vorticity": 0.4, "fire": False, "speed": 0.5, "radius": 0.25, "dissolve": 60,
-             "temperature": 1.0},
-    "fire": {"domain": (0.7, 1.6), "res": 72, "inflow": 999, "bake": 60, "frames": (30, 2, 16), "px": 128,
-             "density": 2.0, "vorticity": 0.5, "fire": True, "speed": 0.6, "radius": 0.18, "dissolve": 30,
-             "temperature": 1.0, "samples": 96},
+    # Copal: a short gout of resin smoke rising slowly, curling over and
+    # breaking into curls (the particles stack them into a column).
+    "plume": {"domain": (1.3, 2.8), "res": 110, "inflow": 10, "bake": 56, "frames": (22, 1, 32), "px": 128,
+              "density": 60.0, "vorticity": 1.2, "fire": False, "speed": 0.35, "lean": 0.22, "radius": 0.16,
+              "dissolve": 90, "temperature": 1.0, "burst": 0.1, "beta": 0.6, "flat": 0.7, "at": 1.0, "lumps": 0.12},
+    # Steam and smoke: a quick puff rolling outward in lobes.
+    "puff": {"domain": (1.0, 2.0), "res": 64, "inflow": 5, "bake": 42, "frames": (9, 2, 16), "px": 128,
+             "density": 20.0, "vorticity": 0.9, "fire": False, "speed": 0.15, "radius": 0.18, "dissolve": 70,
+             "temperature": 0.6, "burst": 0.7, "beta": 0.2, "flat": 1.0, "at": 0.7, "lumps": 0.1},
+    # A brazier's bed of flames: a wide flat lumpy source, its fuel burning
+    # in separate tongues.
+    "fire": {"domain": (0.6, 1.3), "res": 72, "inflow": 999, "bake": 60, "frames": (30, 2, 16), "px": 128,
+             "density": 0.0, "vorticity": 0.6, "fire": True, "speed": 0.3, "radius": 0.07, "dissolve": 30,
+             "temperature": 1.0, "samples": 96, "burst": 0.0, "beta": 1.0, "flat": 0.6, "at": 0.1, "lumps": 0.08,
+             "spots": [(-0.21, 0.04), (-0.07, -0.08), (0.07, 0.07), (0.21, -0.03)]},
 }
+# Flame (0..1) to colour: deep red to orange to gold, never white.
+FLAME_RAMP = [(0.0, (0.25, 0.03, 0.0)), (0.35, (0.9, 0.25, 0.02)), (0.7, (1.0, 0.6, 0.12)), (1.0, (1.0, 0.8, 0.35))]
 # Where each of the six lights travels (the camera looks along +Y).
 LIGHTS = {"right": (-1, 0, 0), "top": (0, 0, -1), "back": (0, -1, 0), "left": (1, 0, 0), "bottom": (0, 0, 1),
           "front": (0, 1, 0)}
@@ -55,6 +67,11 @@ def _domain(kind):
     ds.domain_type = "GAS"
     ds.resolution_max = k["res"]
     ds.vorticity = k["vorticity"]
+    ds.beta = k["beta"]
+    # Upres noise: curls and wisps finer than the grid.
+    ds.use_noise = True
+    ds.noise_scale = 2
+    ds.noise_strength = 1.4
     ds.use_dissolve_smoke = True
     ds.dissolve_speed = k["dissolve"]
     # Open on every side: smoke leaves the domain, never piling up against it.
@@ -67,17 +84,27 @@ def _domain(kind):
     ds.cache_frame_end = k["bake"]
 
     if k["fire"]:
-        ds.flame_vorticity = 0.6
-        ds.burning_rate = 0.65
-        ds.flame_smoke = 0.3
+        ds.flame_vorticity = 0.8
+        ds.burning_rate = 0.85
+        # (The brazier's smoke is its own particles.)
+        ds.flame_smoke = 0.0
 
     return dom
 
 
 def _flow(kind):
+    return [_source(kind, x, y, n) for n, (x, y) in enumerate(KINDS[kind].get("spots", [(0.0, 0.0)]))]
+
+
+def _source(kind, x, y, n):
     k = KINDS[kind]
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=k["radius"], location=(0, 0, 0.3))
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=3, radius=k["radius"], location=(x, y, k["at"]))
     src = bpy.context.object
+    src.scale.z = k["flat"]
+    # Lumpy: pushed in and out by a smooth noise over its surface.
+    for v in src.data.vertices:
+        v.co *= 1.0 + 0.45 * noise.noise(v.co.normalized() * 2.2 + Vector((3.1 + n, 7.4, 1.9)))
+
     # (The source makes smoke; it is never seen.)
     src.hide_render = True
     mod = src.modifiers.new("fluid", "FLUID")
@@ -85,9 +112,22 @@ def _flow(kind):
     fs = mod.flow_settings
     fs.flow_type = "FIRE" if k["fire"] else "SMOKE"
     fs.flow_behavior = "INFLOW"
+    fs.flow_source = "MESH"
+    fs.volume_density = 1.0
+    fs.surface_distance = 0.05
     fs.use_initial_velocity = True
-    fs.velocity_coord = (0.0, 0.0, k["speed"])
+    fs.velocity_coord = (k.get("lean", 0.0), 0.0, k["speed"])
+    fs.velocity_normal = k["burst"]
     fs.temperature = k["temperature"]
+    # Through a cloud texture: the smoke (or fuel) leaves in lumps.
+    clouds = bpy.data.textures.new("lumps", "CLOUDS")
+    clouds.noise_scale = k["lumps"]
+    clouds.noise_depth = 2
+    clouds.contrast = 1.6
+    fs.use_texture = True
+    fs.noise_texture = clouds
+    fs.texture_map_type = "AUTO"
+    fs.texture_size = 1.0
 
     # The inflow stops after its frames (a puff, a curl), keyframed.
     if k["inflow"] < k["bake"]:
@@ -112,8 +152,27 @@ def _material(dom, kind):
     vol.inputs["Color"].default_value = (1, 1, 1, 1)
 
     if k["fire"]:
-        # The fire glows by its temperature, as Blender's own fire does.
-        vol.inputs["Blackbody Intensity"].default_value = 1.0
+        # The fire glows by its flame, through our own ramp (deep red to
+        # gold): never a white-hot ball at its foot.
+        flame = nodes.new("ShaderNodeAttribute")
+        flame.attribute_name = "flame"
+        ramp = nodes.new("ShaderNodeValToRGB")
+        ramp.color_ramp.elements.remove(ramp.color_ramp.elements[1])
+
+        for n, (at, colour) in enumerate(FLAME_RAMP):
+            e = ramp.color_ramp.elements[0] if n == 0 else ramp.color_ramp.elements.new(at)
+            e.position = at
+            e.color = colour + (1.0,)
+
+        links.new(flame.outputs["Fac"], ramp.inputs["Fac"])
+        links.new(ramp.outputs["Color"], vol.inputs["Emission Color"])
+        boost = nodes.new("ShaderNodeMath")
+        boost.operation = "MULTIPLY"
+        # (Emission adds up through the flames' depth: much more and every
+        # channel clips to white.)
+        boost.inputs[1].default_value = 2.0
+        links.new(flame.outputs["Fac"], boost.inputs[0])
+        links.new(boost.outputs["Value"], vol.inputs["Emission Strength"])
 
     links.new(vol.outputs["Volume"], out.inputs["Volume"])
     dom.data.materials.append(mat)

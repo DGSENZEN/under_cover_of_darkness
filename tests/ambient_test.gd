@@ -155,6 +155,87 @@ func _run() -> void:
 		"night %s, kept %s" % [lit, kept])
 	ambient.free()
 
+	# A11 a brazier: flames, colliding embers that spark, haze, a light
+	var brazier: Node3D = Vfx.system("brazier")
+	add_child(brazier)
+	var flames: Array = brazier.find_children("flames*", "MeshInstance3D", true, false)
+	var embers: GPUParticles3D = brazier.find_child("embers", true, false)
+	var haze: Array = brazier.find_children("haze*", "MeshInstance3D", true, false)
+	var light: Array = brazier.find_children("*", "OmniLight3D", true, false)
+	var collides: bool = embers != null and (embers.process_material as ParticleProcessMaterial).collision_mode \
+		!= ParticleProcessMaterial.COLLISION_DISABLED
+	var sparks: bool = embers != null and not embers.sub_emitter.is_empty() \
+		and (embers.process_material as ParticleProcessMaterial).sub_emitter_mode == ParticleProcessMaterial.SUB_EMITTER_AT_COLLISION
+	_check("A11 a brazier: flames, trailed embers that bounce and spark, haze, a light",
+		flames.size() >= 1 and collides and sparks and embers.trail_enabled and haze.size() == 1 and light.size() == 1,
+		"flames %d, embers %s (collide %s, spark %s), haze %d, lights %d" % [flames.size(), embers, collides, sparks, haze.size(), light.size()])
+
+	# A12 the flame and its light flicker from one noise
+	await _frames(3)
+	var f: float = brazier.flicker
+	var flame_uniform: float = (flames[0] as MeshInstance3D).get_surface_override_material(0).get_shader_parameter(&"flicker") \
+		if flames.size() > 0 and (flames[0] as MeshInstance3D).get_surface_override_material(0) else -1.0
+	_check("A12 the flames and the brazier's light flicker together", is_equal_approx(flame_uniform, f)
+		and is_equal_approx((light[0] as OmniLight3D).light_energy, Vfx.BRAZIER_ENERGY * f),
+		"flicker %.3f, flame %.3f, light %.3f" % [f, flame_uniform, (light[0] as OmniLight3D).light_energy])
+	brazier.free()
+
+	# A13 candles: one MultiMesh of flames, one light
+	var candles: Node3D = Vfx.system("candles")
+	add_child(candles)
+	var multis: Array = candles.find_children("*", "MultiMeshInstance3D", true, false)
+	var count: int = (multis[0] as MultiMeshInstance3D).multimesh.instance_count if multis.size() == 1 else 0
+	_check("A13 candles: one MultiMesh of five to nine flames, one light", multis.size() == 1 and count >= 5 and count <= 9
+		and candles.find_children("*", "OmniLight3D", true, false).size() == 1, "%d multimeshes, %d flames" % [multis.size(), count])
+	candles.free()
+
+	# A13a copal's stem is a thread of smoke, its noise in metres (in the
+	# quad's UVs on a tall quad it stretched into white drips)
+	var censer: Node3D = Vfx.system("copal")
+	add_child(censer)
+	var stem: MeshInstance3D = censer.get_node("stem")
+	var extent: Vector3 = stem.mesh.get_aabb().size
+	var sized: Variant = stem.get_surface_override_material(0).get_shader_parameter(&"size")
+	_check("A13a copal's stem samples its noise in metres", sized is Vector2 and sized.is_equal_approx(Vector2(maxf(extent.x, extent.z), extent.y)),
+		"stem %s, its shader's size %s" % [extent, sized])
+	censer.free()
+
+	# A13b a brazier's embers streak short (a long trail drew a stick of
+	# light), its flames stand a metre over the coals
+	var fire: Node3D = Vfx.system("brazier")
+	add_child(fire)
+	var trailed: GPUParticles3D = fire.get_node("embers")
+	var streak: float = trailed.trail_lifetime * (trailed.process_material as ParticleProcessMaterial).initial_velocity_max
+	var tall: float = (fire.get_node("flames") as MeshInstance3D).mesh.get_aabb().size.y
+	_check("A13b embers streak at most 15 cm; flames a metre tall", streak <= 0.15 and tall >= 0.95,
+		"streak %.2f m, flames %.2f m" % [streak, tall])
+	# A13e the flames rise from inside the coals: their faded foot (12 cm)
+	# sunk below the effect's spot, the heap's top (it hung in the air)
+	var sunk: float = -(fire.get_node("flames") as MeshInstance3D).position.y
+	_check("A13e the flames' faded foot sits in the coals", sunk >= 0.1, "sunk %.2f m" % sunk)
+	fire.free()
+
+	# A13d smoke drifts on the wind at most at its own pace (the wind adds
+	# to its gravity; uncapped, its oldest puffs sped off and the column
+	# broke into a string of balls)
+	var capped := []
+
+	for effect in ["copal", "steam", "smoke"]:
+		var puffs: Node3D = Vfx.system(effect)
+		var limit: CurveTexture = _particles(puffs).process_material.velocity_limit_curve
+		capped.append(limit != null and limit.curve.sample(0.5) <= 1.2)
+		puffs.free()
+
+	_check("A13d copal, steam and smoke drift no faster than 1.2 m/s on the wind", capped.all(func(c): return c), str(capped))
+
+	# A13c each of the flame's three heat bands its own warm colour, none
+	# near black (the ramp's stops sat just past the bands: the outer band
+	# took the ember's black)
+	var heat: Gradient = Vfx.ramp().gradient
+	var shades: Array = [1.0 / 3.0, 2.0 / 3.0, 1.0].map(func(b): return heat.sample(b))
+	_check("A13c the flame's three bands: three warm colours, none near black", shades[0].get_luminance() > 0.25
+		and shades[0] != shades[1] and shades[1] != shades[2] and shades.all(func(c): return c.r > c.b), str(shades))
+
 	# B1 the god's breath: in and out, about seven seconds a breath
 	var breath := Breath.new()
 	add_child(breath)

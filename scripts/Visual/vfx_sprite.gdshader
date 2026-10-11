@@ -15,6 +15,10 @@ uniform float opacity = 0.5;
 // How far it erodes away by the end of its life (0: it only fades).
 uniform float erosion = 0.0;
 uniform float bands_count = 3.0;
+// The darkest a six-way lit smoke goes on its shadowed side (light scatters
+// through smoke: at nothing, a column lit from above drew as a stack of
+// balls, each a bright cap over a black belly).
+uniform float shadow_floor = 0.35;
 uniform float fade_distance = 0.6;
 uniform bool glows = false;
 uniform sampler2D depth_texture : hint_depth_texture, filter_linear_mipmap;
@@ -64,7 +68,7 @@ void light() {
 	if (six_ways) {
 		vec2 uv = flipbook_uv(UV, progress, grid);
 		vec3 l = transpose(sprite_axes) * LIGHT;
-		lit = six_way(texture(sheet, uv), texture(sheet_b, uv), l);
+		lit = mix(shadow_floor, 1.0, six_way(texture(sheet, uv), texture(sheet_b, uv), l));
 	} else {
 		lit = dot(NORMAL, LIGHT);
 	}

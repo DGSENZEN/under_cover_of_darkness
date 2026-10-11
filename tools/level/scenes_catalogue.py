@@ -162,7 +162,7 @@ RECIPES = [
            figures=[("fig_stand", (-0.7, -0.5), 40, "atole seller"), ("fig_queue", (0.9, 0.7), 225, "drinker"),
                     ("fig_lean_wall", (1.2, -0.5), 270, "drinker"), ("fig_sit_kerb", (-0.5, 1.4), 160, "drinker"),
                     ("fig_stand", (1.9, 0.6), 250, "drinker"), ("fig_point", (2.4, -0.4), 280, "drinker")],
-           emitters=[("steam", (0.0, 0.75, 0.0)), ("embers", (0.0, 0.1, 0.0))], spacing=100.0),
+           emitters=[("steam", (0.0, 0.75, 0.0)), ("coals", (0.0, 0.1, 0.0))], spacing=100.0),
     Recipe("newsboy", ("metro_mouth", "tram_stop", "plaza_walk"), "day",
            "A voceador shouts the evening's crimes at the Metro's mouth; readers stop for the paper (its pages the "
            "user's).",
@@ -246,7 +246,7 @@ RECIPES = [
            figures=[("fig_stand", (1.0, 0.2), 260, "watcher"), ("fig_stand", (0.1, 1.1), 180, "watcher"),
                     ("fig_lean_wall", (-0.9, 0.9), 140, "watcher"), ("fig_sit_chair", (-1.2, -0.7), 60, "watcher"),
                     ("dog_lie", (1.4, -1.1), 300, "dog")],
-           emitters=[("smoke", (0.0, 1.0, 0.0)), ("embers", (0.0, 0.95, 0.0))], spacing=150.0),
+           emitters=[("brazier", (0.0, 0.9, 0.0))], spacing=150.0),
     Recipe("warden_inspection", ("claw_slab",), "night",
            "Wardens of El Secreto read the claw-scored stone under the dead lamp: one crouched over the scores with "
            "his lantern set down, one holding his up.",

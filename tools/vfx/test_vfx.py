@@ -22,6 +22,24 @@ def _sheet(name):
     return np.asarray(Image.open(VFX / (name + ".png")).convert("RGBA"), dtype=np.float64) / 255.0
 
 
+def _radial_variation(mask):
+    """How much a shape's edge strays from a circle: its radius from its
+    middle measured at 64 angles, their spread over their mean."""
+    ys, xs = np.nonzero(mask)
+    cy, cx = ys.mean(), xs.mean()
+    radii = []
+
+    for a in np.linspace(0, 2 * np.pi, 64, endpoint=False):
+        steps = np.arange(0, mask.shape[0], 0.5)
+        y, x = (cy - np.cos(a) * steps).astype(int), (cx + np.sin(a) * steps).astype(int)
+        inside = (y >= 0) & (y < mask.shape[0]) & (x >= 0) & (x < mask.shape[1])
+        hit = steps[inside][mask[y[inside], x[inside]]]
+        radii.append(hit.max() if len(hit) else 0.0)
+
+    radii = np.array(radii)
+    return radii.std() / max(radii.mean(), 1e-6)
+
+
 def _cells(sheet, meta):
     h, v = meta["grid"]
     px = meta["px"]
@@ -62,6 +80,47 @@ class Sheets(unittest.TestCase):
         fire = _sheet("fire")
         shown = fire[:, :, 3] > 0.3
         self.assertGreater(fire[:, :, 0][shown].mean(), fire[:, :, 2][shown].mean() + 0.15)
+
+    def test_billows_fill_their_frames(self):
+        # (A billow in a fifth of its frame draws a 2 m sprite as a disc of
+        # smoke a few hands wide: the copal seen as scattered balls.)
+        for name in SIX_WAY:
+            meta = json.loads((VFX / (name + ".json")).read_text())
+            cover = [(c[:, :, 3] > 0.3).mean() for c in _cells(_sheet(name + "_a"), meta)]
+            self.assertGreater(min(cover), 0.2, (name, "a frame mostly empty"))
+            self.assertGreater(float(np.median(cover)), 0.3, (name, "frames mostly empty"))
+
+    def test_billows_are_not_discs(self):
+        # Lumpy silhouettes, never the ball a sim starts from: their radius
+        # from the middle varies round them (a sphere's: 0.04; the in-game
+        # discs were small blobs in big sprites, which the fill test
+        # catches).
+        for name in SIX_WAY:
+            meta = json.loads((VFX / (name + ".json")).read_text())
+
+            for k, c in enumerate(_cells(_sheet(name + "_a"), meta)):
+                self.assertGreater(_radial_variation(c[:, :, 3] > 0.3), 0.05, (name, k, "a disc"))
+
+    def test_fire_has_tongues(self):
+        # A bed of flames, not a column on a white-hot ball: wider than a
+        # column, split into tongues (where it burns hot enough for the
+        # flame shader to draw: heat, its glow by its coverage, past 0.25),
+        # its foot not white.
+        meta = json.loads((VFX / "fire.json").read_text())
+        split = 0
+
+        for k, c in enumerate(_cells(_sheet("fire"), meta)):
+            shown = c[:, :, 3] > 0.3
+            ys, xs = np.nonzero(shown)
+            tall = ys.max() - ys.min()
+            self.assertGreater((xs.max() - xs.min()) / tall, 0.5, (k, "a column"))
+            foot = c[int(ys.max() - tall * 0.25):ys.max() + 1]
+            self.assertLess(foot[:, :, :3].min(axis=2)[foot[:, :, 3] > 0.3].mean(), 0.75, (k, "a white-hot foot"))
+            hot = (c[:, :, 0] * 0.3 + c[:, :, 1] * 0.59 + c[:, :, 2] * 0.11) * c[:, :, 3] > 0.25
+            row = hot[int(ys.min() + tall * 0.5)]
+            split += np.count_nonzero(np.diff(row.astype(int)) == 1) >= 2
+
+        self.assertGreaterEqual(split, meta["frames"] // 2, "one tongue")
 
     def test_sigil_strokes_draw_in_order(self):
         sigil = _sheet("sigil_strokes")

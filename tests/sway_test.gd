@@ -74,9 +74,15 @@ func _moved() -> Dictionary:
 		"foot": _changed(a, b, Vector3(-0.6, 1.0, 0), Vector3(0.6, 0.05, 0))}
 
 
+## Where a point falls in a captured image (the viewport's own size is the
+## project's window, not the window the run was given).
+func _pixel(at: Vector3, image: Image) -> Vector2:
+	return eye.unproject_position(at) * float(image.get_width()) / get_viewport().get_visible_rect().size.x
+
+
 func _changed(a: Image, b: Image, top_left: Vector3, bottom_right: Vector3) -> float:
-	var p := eye.unproject_position(top_left)
-	var q := eye.unproject_position(bottom_right)
+	var p := _pixel(top_left, a)
+	var q := _pixel(bottom_right, a)
 	var changed := 0
 	var total := 0
 
