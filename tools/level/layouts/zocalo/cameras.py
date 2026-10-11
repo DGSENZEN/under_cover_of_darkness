@@ -31,6 +31,8 @@ CAMERAS = [
     ("garden", (14, 1.7, 22), (60, 4.0, 60)),
     ("curandera", (44, 1.7, 4), (40, 1.0, 11)),
     ("rail_accident", (-109, 1.7, 92), (-115, 0.6, 85)),
+    ("ring_wires", (40, 1.7, 116), (-40, 5, 121)),
+    ("corner_plaques", (-174.5, 1.7, -120.5), (-177.5, 2.5, -125)),
     # The effects' places (the effects plan, Task 8): close enough to read
     # each effect.
     ("fx_brazier", (8.2, 1.7, -91.0), (5, 1.2, -95)),

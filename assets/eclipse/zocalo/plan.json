@@ -10847,6 +10847,38 @@
    }
   },
   {
+   "name": "camera_ring_wires",
+   "kind": "camera",
+   "at": [
+    40.0,
+    1.7,
+    116.0
+   ],
+   "props": {
+    "look_at": [
+     -40,
+     5,
+     121
+    ]
+   }
+  },
+  {
+   "name": "camera_corner_plaques",
+   "kind": "camera",
+   "at": [
+    -174.5,
+    1.7,
+    -120.5
+   ],
+   "props": {
+    "look_at": [
+     -177.5,
+     2.5,
+     -125
+    ]
+   }
+  },
+  {
    "name": "camera_fx_brazier",
    "kind": "camera",
    "at": [
