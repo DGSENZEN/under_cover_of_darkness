@@ -12,6 +12,8 @@ const REACH := 60.0
 const ACTIVE := 40
 ## Fog volumes cost the most: of those running, only the nearest FOG show.
 const FOG := 8
+## A running effect runs on this far past REACH (m), not on and off at it.
+const LINGER := 5.0
 const FULL := 20.0
 const THIN := 0.3
 ## Which emitters run is chosen again this often (s).
@@ -87,7 +89,7 @@ func _pick() -> void:
 
 		var d := _at(emitters[i]).distance_to(from)
 
-		if d <= REACH:
+		if d <= REACH or (_running.has(i) and d <= REACH + LINGER):
 			near.append([d, i])
 
 	near.sort_custom(func(a, b): return a[0] < b[0])
@@ -114,7 +116,8 @@ func _pick() -> void:
 			_systems[i] = node
 
 		Vfx.emit(_systems[i], true)
-		Vfx.thin(_systems[i], 1.0 if chosen[i] <= FULL else lerpf(1.0, THIN, (chosen[i] - FULL) / (REACH - FULL)))
+		Vfx.thin(_systems[i], 1.0 if chosen[i] <= FULL else lerpf(1.0, THIN, clampf((chosen[i] - FULL) / (REACH - FULL), 0.0, 1.0)))
+		Vfx.fade(_systems[i], 1.0 - smoothstep(Vfx.FADE_FROM, Vfx.FADE_FROM + Vfx.FADE_OVER, chosen[i]))
 		_running.append(i)
 
 	_running.sort()

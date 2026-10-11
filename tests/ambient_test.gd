@@ -198,6 +198,48 @@ func _run() -> void:
 		"10 m %.2f, 40 m %.2f" % [near_ratio, far_ratio])
 	ambient.free()
 
+	# A22 no effect pops at the edge of its reach: its lights, its drawn
+	# parts and its fog fade out with distance before Ambient's REACH
+	var pops := []
+
+	for effect in Vfx.PRESETS:
+		var node: Node3D = Vfx.system(effect)
+
+		for light: Light3D in node.find_children("*", "Light3D", true, false):
+			if not light.distance_fade_enabled or light.distance_fade_begin + light.distance_fade_length > Ambient.REACH:
+				pops.append("%s light" % effect)
+
+		for draw: GeometryInstance3D in node.find_children("*", "GeometryInstance3D", true, false):
+			if draw is GPUParticles3D:
+				continue
+
+			if draw.visibility_range_end <= 0.0 or draw.visibility_range_end + draw.visibility_range_end_margin > Ambient.REACH \
+					or draw.visibility_range_fade_mode != GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF:
+				pops.append("%s %s" % [effect, draw.name])
+
+		for fog: FogVolume in node.find_children("*", "FogVolume", true, false):
+			if not fog.has_meta("density"):
+				pops.append("%s %s" % [effect, fog.name])
+
+		node.free()
+
+	_check("A22 no effect pops at the edge of its reach", pops.is_empty(), str(pops))
+
+	# A23 a running effect keeps running a little past its reach (it went
+	# on and off as the camera crossed REACH)
+	ambient = Ambient.build([{"effect": "steam", "at": [Ambient.REACH - 2.0, 0, 0]}])
+	add_child(ambient)
+	ambient.step(0.3)
+	var started: bool = ambient.running().has(0)
+	ambient.emitters[0]["at"] = [Ambient.REACH + 2.0, 0, 0]
+	ambient.step(0.3)
+	var kept_on: bool = ambient.running().has(0)
+	ambient.emitters[0]["at"] = [Ambient.REACH + Ambient.LINGER + 1.0, 0, 0]
+	ambient.step(0.3)
+	_check("A23 a running effect keeps running a little past its reach", started and kept_on and not ambient.running().has(0),
+		"in %s, just past %s, well past %s" % [started, kept_on, ambient.running().has(0)])
+	ambient.free()
+
 	# A9 day stops a night system without freeing it
 	ambient = Ambient.build([{"effect": "embers", "at": [5, 0, 0], "when": "night"}])
 	add_child(ambient)

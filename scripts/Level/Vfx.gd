@@ -41,6 +41,10 @@ const DUST_UNDER_LAMP := 3.5
 const WIND_PUSH := 0.6
 ## How long a petal or a leaf lasts, falling and lying (s).
 const DRIFT_LIFE := 20.0
+## An effect fades out with the camera's distance from FADE_FROM over
+## FADE_OVER (m): gone before Ambient's REACH (60 m).
+const FADE_FROM := 45.0
+const FADE_OVER := 10.0
 ## How fast drift crosses the ground at most (m/s), and how near a
 ## building to what drifts stands a wall for it (Vfx.walls, m).
 const DRIFT_ACROSS := 1.2
@@ -76,7 +80,7 @@ const PRESETS := {
 	"embers": [{"draw": "specks", "tint": Color("FFA040"), "amount": 30, "lifetime": 1.4, "size": [0.035, 0.015],
 		"velocity": [0.8, 1.6], "spread": 25.0, "gravity": Vector3(0, 0.6, 0), "box": Vector3(0.2, 0.05, 0.2), "fps": 30,
 		"blown": 0.2}],
-	"mist": [{"draw": "fog", "shader": MIST, "size": Vector3(6.0, 1.2, 6.0), "at": Vector3(0, 0.5, 0)},
+	"mist": [{"draw": "fog", "shader": MIST, "size": Vector3(6.0, 1.2, 6.0), "at": Vector3(0, 0.5, 0), "density": 1.6},
 		{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": SEEPED, "opacity": 0.15,
 		"amount": 8, "lifetime": 5.0, "size": [0.8, 2.2], "velocity": [0.1, 0.3], "spread": 180.0, "flat": true,
 		"gravity": Vector3(0, -0.05, 0), "box": Vector3(0.5, 0.05, 0.5), "fps": 15, "erosion": 0.6, "anim": 1.0,
@@ -89,7 +93,7 @@ const PRESETS := {
 	"dust": [{"draw": "motes", "tint": Color(1.0, 0.92, 0.75, 0.6), "amount": 40, "lifetime": 6.0, "size": [0.02, 0.02],
 		"velocity": [0.02, 0.06], "spread": 180.0, "gravity": Vector3.ZERO, "box": Vector3(2.0, 1.5, 2.0), "fps": 15,
 		"breathed": true}],
-	"canal_fog": [{"draw": "fog", "shader": FOG, "size": Vector3(40.0, 2.0, 12.0), "at": Vector3.ZERO}],
+	"canal_fog": [{"draw": "fog", "shader": FOG, "size": Vector3(40.0, 2.0, 12.0), "at": Vector3.ZERO, "density": 1.5}],
 	"candles": [{"draw": "candles"}, {"draw": "light", "colour": CANDLE_COLOUR, "range": 4.0, "at": Vector3(0, 0.4, 0)}],
 	"brazier": [{"draw": "flames"}, {"draw": "trailed"}, {"draw": "haze"},
 		{"draw": "light", "colour": FIRE_COLOUR, "range": 9.0, "at": Vector3(0, 0.5, 0)},
@@ -144,7 +148,36 @@ static func system(effect: String) -> Node3D:
 		if not visual is Light3D:
 			Layers.effect(visual)
 
+	# Fading out with distance before Ambient stops it (no pop at its reach):
+	# its lights and drawn parts by themselves, its fog by Vfx.fade.
+	for light: Light3D in root.find_children("*", "Light3D", true, false):
+		light.distance_fade_enabled = true
+		light.distance_fade_begin = FADE_FROM
+		light.distance_fade_length = FADE_OVER
+
+	for draw: GeometryInstance3D in root.find_children("*", "GeometryInstance3D", true, false):
+		if not draw is GPUParticles3D:
+			draw.visibility_range_end = FADE_FROM
+			draw.visibility_range_end_margin = FADE_OVER
+			draw.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+
+	for fog: FogVolume in root.find_children("*", "FogVolume", true, false):
+		var thick: Material = fog.material
+		fog.set_meta("density", thick.density if thick is FogMaterial else float(thick.get_shader_parameter(&"density")))
+
 	return root
+
+
+## An effect's fog thinned to `share` of its own (1 near, 0 at its reach).
+static func fade(node: Node3D, share: float) -> void:
+	for fog: FogVolume in node.find_children("*", "FogVolume", true, false):
+		var thick: Material = fog.material
+		var full: float = fog.get_meta("density")
+
+		if thick is FogMaterial:
+			thick.density = full * share
+		else:
+			thick.set_shader_parameter(&"density", full * share)
 
 
 static func _part(p: Dictionary) -> Array:
@@ -553,6 +586,7 @@ static func _fog(p: Dictionary) -> FogVolume:
 	var look := ShaderMaterial.new()
 	look.shader = p["shader"]
 	look.set_shader_parameter(&"noise", noise_3d())
+	look.set_shader_parameter(&"density", p["density"])
 
 	if p["shader"] == MIST:
 		look.set_shader_parameter(&"colour", SEEPED)
