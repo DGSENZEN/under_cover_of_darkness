@@ -57,6 +57,13 @@ def _ring(centre, radius, count, start=0.0, spread=360.0):
     return out
 
 
+# Poses made to touch a scene's prop (a seat sat on, a desk typed at, a
+# cart's handles, a camera's hood): their meshes may meet; every other
+# figure stands clear of its scene's props (what it holds aside).
+TOUCHING = {("fig_sit_chair", "chair"), ("fig_sit_chair", "crate"), ("fig_sit_chair", "stool"),
+            ("fig_sit_chair", "canary_box"), ("fig_type", "typewriter_desk"), ("fig_type", "stool"),
+            ("fig_push_cart", "pulque_barrels"), ("fig_photographer", "camera_tripod")}
+
 RECIPES = [
     # The landmarks, one each at their place.
     Recipe("god_devotion", ("god_ring",), "both",
@@ -65,9 +72,11 @@ RECIPES = [
            pieces=[("candles_drift", (-4.7, 1.2), 90), ("candles_drift", (4.7, 1.2), 270), ("petals_marigold", (0.0, 7.0), 0)],
            figures=[("fig_kneel_pray", xz, _to(xz, (0.0, 0.0)), "devotee")
                     for xz in ((-3.0, 3.6), (-3.5, 4.0), (3.0, 3.6), (3.5, 4.0), (-4.6, 2.9), (4.6, 2.9))]
-           + [("fig_hold_lantern", (-4.9, 0.8), _to((-4.9, 0.8), (0.0, 4.0)), "warden of El Secreto")],
+           # (The warden stands clear of the candles' drift, x -5.0 to -4.5.)
+           + [("fig_hold_lantern", (-5.6, 0.8), _to((-5.6, 0.8), (0.0, 4.0)), "warden of El Secreto")],
            holds=[("censer", 6, "right", 0.65)],
-           emitters=[("copal", (0.0, 0.6, 4.2)), ("copal", (-5.1, 1.0, 1.2)), ("candles", (-4.7, 0.3, 1.2)),
+           # (The second copal: the warden's censer, in his right hand.)
+           emitters=[("copal", (0.0, 0.6, 4.2)), ("copal", (-5.38, 0.6, 1.28)), ("candles", (-4.7, 0.3, 1.2)),
                      ("candles", (4.7, 0.3, 1.2)), ("petals", (0.0, 0.0, 5.0))],
            landmark="god_ring"),
     Recipe("god_press", ("god_ring",), "day",
