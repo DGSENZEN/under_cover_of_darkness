@@ -27,7 +27,8 @@ const ROOFED := 1 << 1
 const GROUND := 1 << 2
 ## What the caged god's breath draws in and pushes out (layer 4): copal,
 ## dust, petals (their particles also draw on it; the breath's attractor
-## moves only these).
+## moves only these). Effects all the same: the lightgem's cameras leave
+## it out (Player.tscn).
 const BREATHED := 1 << 3
 ## A fixture's glowing parts (a pitch head, coals, horn panes): they shine by
 ## their own glow, and a burner's light (a hand's breadth away) would blow
@@ -37,6 +38,13 @@ const ACTORS := 1 << 16
 const FX := 1 << 17
 const VIEWMODEL := 1 << 18
 const GEM_PROBE := 1 << 19
+
+## What an effect draws on: FX unless it was put elsewhere (on BREATHED
+## alone, smoke the breath moves but the wind's attractor must not).
+static func effect(visual: VisualInstance3D) -> void:
+	if visual.layers == WORLD:
+		visual.layers = FX
+
 
 ## Every layer but the lightgem's probe: what an effect light may touch.
 const ALL_BUT_PROBE := ((1 << 20) - 1) & ~GEM_PROBE

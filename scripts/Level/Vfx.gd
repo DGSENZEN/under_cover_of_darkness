@@ -135,6 +135,11 @@ static func system(effect: String) -> Node3D:
 		if child is GPUParticles3D and child.has_meta("spark_with"):
 			child.sub_emitter = NodePath("../" + String(child.get_meta("spark_with")))
 
+	# Drawn where effects are: never seen by the lightgem.
+	for visual in root.find_children("*", "VisualInstance3D", true, false):
+		if not visual is Light3D:
+			Layers.effect(visual)
+
 	return root
 
 
@@ -230,8 +235,10 @@ static func _particles(p: Dictionary) -> GPUParticles3D:
 	# breathes.)
 	process.attractor_interaction_enabled = p.get("breathed", false)
 
+	# (Moved by the breath on its own layer, unseen by the wind's attractor:
+	# the wind reaches it through its gravity.)
 	if p.get("breathed", false):
-		particles.layers |= Layers.BREATHED
+		particles.layers = Layers.BREATHED
 
 	if p.has("ground"):
 		process.collision_mode = ParticleProcessMaterial.COLLISION_RIGID

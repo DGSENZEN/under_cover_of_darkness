@@ -112,6 +112,16 @@ func _run() -> void:
 	var empty: float = occult.god_look.get_shader_parameter(&"swell")
 	_check("O7 the god's chest swells on the inhale", full > 0.05 and empty == 0.0, "in %.3f, out %.3f" % [full, empty])
 
+	# O9 the lightgem's cameras see none of the god's effects
+	var gem := 0
+
+	for camera in map.player.find_children("*", "Camera3D", true, false):
+		if camera.get_parent() is SubViewport:
+			gem |= camera.cull_mask
+
+	var seen := occult.find_children("*", "VisualInstance3D", true, false).filter(func(v): return not v is Light3D and v.layers & gem)
+	_check("O9 the lightgem's cameras see none of the god's effects", gem != 0 and seen.is_empty(), "%d seen" % seen.size())
+
 	# O8 the wards' ring shows round a ward lamp within 3 m of the player, not further
 	var lamp: OmniLight3D = occult.ward_lights[0]
 	occult.ring_for(Vector3(lamp.global_position.x + 2.0, 1.6, lamp.global_position.z))

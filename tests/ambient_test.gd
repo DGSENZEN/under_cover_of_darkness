@@ -440,6 +440,47 @@ func _run() -> void:
 		"way %s, wind %s, strength %.2f" % [way, wind_now, pusher.strength])
 	zocalo.free()
 
+	# A18b the wind reaches each effect once: what takes it through its
+	# gravity (Vfx.blow) is never also pushed by the wind's attractor
+	var twice := []
+	var wind_mask := Vfx.wind_attractor().cull_mask
+
+	for effect in Vfx.PRESETS:
+		var node: Node3D = Vfx.system(effect)
+
+		for system in node.find_children("*", "GPUParticles3D", true, false):
+			var how := system.process_material as ParticleProcessMaterial
+
+			if how != null and how.has_meta("blown") and how.attractor_interaction_enabled and system.layers & wind_mask:
+				twice.append(effect)
+
+		node.free()
+
+	_check("A18b the wind reaches each effect once", twice.is_empty(), str(twice))
+
+	# A21 the lightgem never sees an effect (its cameras' masks, read from the
+	# player): every visual of every effect is drawn where they do not look
+	var gem := 0
+	var player: Node = load("res://Player.tscn").instantiate()
+
+	for camera in player.find_children("*", "Camera3D", true, false):
+		if camera.get_parent() is SubViewport:
+			gem |= camera.cull_mask
+
+	player.free()
+	var seen := []
+
+	for effect in Vfx.PRESETS:
+		var node: Node3D = Vfx.system(effect)
+
+		for visual in node.find_children("*", "VisualInstance3D", true, false):
+			if not visual is Light3D and visual.layers & gem:
+				seen.append("%s/%s" % [effect, visual.name])
+
+		node.free()
+
+	_check("A21 the lightgem's cameras see no effect", gem != 0 and seen.is_empty(), "gem mask %d, seen %s" % [gem, seen])
+
 	# B1 the god's breath: in and out, about seven seconds a breath
 	var breath := Breath.new()
 	add_child(breath)

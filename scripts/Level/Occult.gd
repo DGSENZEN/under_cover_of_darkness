@@ -127,6 +127,12 @@ static func build(dressing: Dictionary, loader: KitLoader, breathing: Breath) ->
 	out.ward_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	out.add_child(out.ward_ring)
 	breathing.deep_exhale.connect(out._throw)
+
+	# Drawn where effects are: never seen by the lightgem.
+	for visual in out.find_children("*", "VisualInstance3D", true, false):
+		if not visual is Light3D:
+			Layers.effect(visual)
+
 	return out
 
 
