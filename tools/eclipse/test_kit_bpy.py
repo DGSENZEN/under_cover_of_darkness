@@ -764,6 +764,41 @@ class SceneKit(unittest.TestCase):
         self.assertGreater(min(v.z for v in _world(o)), 1.9)
 
 
+class DriftKit(unittest.TestCase):
+    """The drift kit (the effects plan, Task 2): petals and leaves the wind
+    carries, thin closed solids."""
+
+    PIECES = ["petal_a", "petal_b", "leaf_ash", "leaf_laurel"]
+
+    @classmethod
+    def setUpClass(cls):
+        import drift_kit
+        drift_kit.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.PIECES))
+
+    def test_closed_and_small(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > 40}, {})
+
+    def test_thick_enough(self):
+        """No face under 1 cm across (the gate's sliver rule)."""
+        import gate
+        thin = {}
+
+        for n, o in self.objects.items():
+            faces = [{"points": [tuple(o.data.vertices[i].co) for i in p.vertices], "normal": tuple(p.normal), "owner": n}
+                     for p in o.data.polygons]
+            found = [p for p in gate.check(faces, 0, []) if "sliver" in p or "degenerate" in p]
+
+            if found:
+                thin[n] = found[:2]
+
+        self.assertEqual(thin, {})
+
+
 if __name__ == "__main__":
     result = unittest.main(argv=["test_kit_bpy"], exit=False).result
     sys.exit(not result.wasSuccessful())
