@@ -43,7 +43,6 @@ LAMP_RANGE = 14.0
 COMPANY = "#e8d8a8"
 WARD = "#CFE8F0"
 DARK = 20.0                      # a spot further than this from a lit lamp is dark
-CART_EVERY = 6.0
 CARTS = ["cart_hand", "cart_flower", "cart_tamale", "cart_ice", "cart_firewood"]
 COLLIDE = {"bollard_guardstone", "bollard_cannon", "bollard_company", "bollard_chain_post", "bollard_seeped",
            "tram_stop", "parking_meter", "sign_bus_stop", "poster_column", "notice_board", "ward_hoarding",
@@ -105,13 +104,24 @@ def within(w, p):
 
 # Footprints
 
+# A tree's trunk (half its width, m): its footprint and its collider; its
+# limbs and crown are overhead.
+TRUNKS = {"tree_ash": 0.35, "tree_ash_young": 0.25, "palm_canary": 0.55, "tree_laurel": 0.7, "tree_willow": 0.4,
+          "ahuehuete_split": 1.5}
+
+
 def foot(p, faces):
     """A placement's footprint (x0, z0, x1, z1): a pole's its shaft only
-    (its arm and lamp hang over the street), the god's its plinth."""
+    (its arm and lamp hang over the street), the god's its plinth, a tree's
+    its trunk."""
     x, z = p["at"][0], p["at"][2]
 
     if p["piece"] in POLES:
         return (x - 0.2, z - 0.2, x + 0.2, z + 0.2)
+
+    if p["piece"] in TRUNKS:
+        r = TRUNKS[p["piece"]]
+        return (x - r, z - r, x + r, z + r)
 
     lo, hi = dress.box(p, faces)
     return (lo[0], lo[2], hi[0], hi[2])
@@ -153,16 +163,21 @@ class Life:
 
     # Occupancy
 
-    def _index(self, table, f, name="", outline=None):
+    def _index(self, table, f, name="", outline=None, when=None):
         for i in range(math.floor(f[0] / 10), math.floor(f[2] / 10) + 1):
             for j in range(math.floor(f[1] / 10), math.floor(f[3] / 10) + 1):
-                table.setdefault((i, j), []).append((f, name, outline))
+                table.setdefault((i, j), []).append((f, name, outline, when))
 
-    def _clear(self, table, f, ignore=()):
+    def _clear(self, table, f, ignore=(), when=None):
+        """Whether `f` meets nothing in `table` but what it may (`ignore`'s
+        names; a day part meets a night part, never seen together)."""
         for i in range(math.floor(f[0] / 10), math.floor(f[2] / 10) + 1):
             for j in range(math.floor(f[1] / 10), math.floor(f[3] / 10) + 1):
-                for g, name, outline in table.get((i, j), []):
+                for g, name, outline, at in table.get((i, j), []):
                     if name.startswith(ignore) if ignore else False:
+                        continue
+
+                    if {when, at} == {"day", "night"}:
                         continue
 
                     if f[0] + 0.02 < g[2] and g[0] + 0.02 < f[2] and f[1] + 0.02 < g[3] and g[1] + 0.02 < f[3]:
@@ -191,9 +206,14 @@ class Life:
         r = self.plaza
         return self.d.level if r[0] < x < r[2] and r[1] < z < r[3] else 0.0
 
-    def put(self, piece, x, z, yaw, stretch=1.0, y=None, ground=True, collider=None):
+    def put(self, piece, x, z, yaw, stretch=1.0, y=None, ground=True, collider=None, when=None):
         """Lay a standing piece if it fits: its footprint on open ground (if
         `ground`), clear of every standing piece and (most) flush ones."""
+        p = self.fits(piece, x, z, yaw, stretch, y, ground, collider, when)
+        return self.commit(p, when) if p is not None else None
+
+    def fits(self, piece, x, z, yaw, stretch=1.0, y=None, ground=True, collider=None, when=None):
+        """The placement `put` would lay, if it fits; nothing laid."""
         p = dress.place(piece, (x, self.level(x, z) if y is None else y, z), yaw, stretch, collider=collider)
         f = foot(p, self.faces)
 
@@ -208,17 +228,28 @@ class Life:
             if len({self.level(*c) for c in corners}) > 1:
                 return None
 
-        if not self._clear(self.cells, f, COPING_PIECES if piece in ON_COPING else ()):
+        if not self._clear(self.cells, f, COPING_PIECES if piece in ON_COPING else (), when):
             return None
 
-        if piece not in ON_FLUSH and not self._clear(self.flush, f):
+        if piece not in ON_FLUSH and not self._clear(self.flush, f, (), when):
             return None
+
+        return p
+
+    def commit(self, p, when=None):
+        """Lays a placement `fits` gave: its footprint taken, its collider
+        made (a part of the day or the night tagged so)."""
+        if when in ("day", "night"):
+            p["when"] = when
 
         self.d.add(p)
-        self._index(self.cells, f, piece)
+        self._index(self.cells, foot(p, self.faces), p["piece"], None, when)
 
-        if piece in COLLIDE:
+        if p["piece"] in COLLIDE:
             self.collide(p)
+
+            if when in ("day", "night"):
+                self.d.boxes[-1]["when"] = when
 
         return p
 
@@ -235,6 +266,10 @@ class Life:
     def _local_box(self, p):
         if p["piece"] in POLES:
             return (-0.15, 0.0, -0.15), (0.15, 8.0, 0.15)
+
+        if p["piece"] in TRUNKS:
+            r = TRUNKS[p["piece"]]
+            return (-r, 0.0, -r), (r, 3.0, r)
 
         points = [q for f in self.faces[p["kit"]]["objects"][p["piece"]] for q in f["points"]]
         lo = [min(q[k] for q in points) for k in range(3)]
@@ -307,20 +342,6 @@ class Life:
             z = mid[1] - d[1] * 1.2 + n[1] * OFF_WALL
             base = self.level(mid[0] + n[0] * 0.5, mid[1] + n[1] * 0.5)
             self.hang("poster_cluster", (x, base + 1.2, z), facing(n))
-
-    def candles(self, count=20):
-        """Candle drifts at the feet of walls where someone died (seeded)."""
-        laid = 0
-
-        for k, w in enumerate(sorted(self.walls, key=lambda w: _hash(w["a"][0], w["a"][1], 7))):
-            if laid >= count:
-                break
-
-            n = w["n"]
-            mid = ((w["a"][0] + w["b"][0]) / 2, (w["a"][1] + w["b"][1]) / 2)
-
-            if self.put("candles_drift", mid[0] + n[0] * 0.34, mid[1] + n[1] * 0.34, facing(n)):
-                laid += 1
 
     # The Company's overhead
 
@@ -423,9 +444,6 @@ class Life:
                     self.d.add(slab)
                     self._index(self.flush, dress._bounds(dress.outline(slab)), "claw_scored_slab", dress.outline(slab))
 
-                beside = dress.world(p, (1.1, 0.0, 0.0))
-                self.put("petals_marigold", beside[0], beside[2], p["yaw"])
-
     def _ring(self, xz):
         ring = [g["polygon"] for g in self.data["ground"] if g["name"] in ("north_street", "south_street", "west_street",
                                                                            "east_street")]
@@ -463,46 +481,16 @@ class Life:
             for dx, dz in ((1.2, 0.5), (0.5, 1.2), (2.2, 0.5), (0.5, 2.2)):
                 self.put("bollard_company", cx + ix * dx, cz + iz * dz, facing((-ix, -iz)))
 
-        # Kiosks: the voceadores by the Metro corners, lottery and sweets
-        # round the edge, the tram stop's news kiosk and its stop.
-        for sx in (-1, 1):
-            for sz in (-1, 1):
-                self.put("kiosk_news", sx * 78.0, sz * 101.0, facing((0.0, sz)))
-
+        # The tram stop (its kiosk, the voceadores and the plaza's sellers are
+        # the scenes', dress_scenes.py).
         self.put("tram_stop", 9.0, 126.0, facing((0.0, -1.0)))
-        self.put("kiosk_news", -10.0, 127.0, facing((0.0, -1.0)))
-        edges = [((x0, z0), (x1, z0), (0.0, -1.0)), ((x0, z1), (x1, z1), (0.0, 1.0)), ((x0, z0), (x0, z1), (-1.0, 0.0)),
-                 ((x1, z0), (x1, z1), (1.0, 0.0))]
-        k = 0
-
-        for a, b, out in edges:
-            u, length = dress._unit(a, b)
-            t = 14.0
-
-            while t < length - 14.0:
-                p = dress._along(a, u, t)
-                x, z = p[0] - out[0] * 2.8, p[1] - out[1] * 2.8
-
-                if self.put("kiosk_lottery" if k % 2 else "kiosk_sweets", x, z, facing(out)):
-                    k += 1
-
-                t += 25.0
 
         # Poster columns ringing the plaza's middle.
         for k in range(8):
             a = math.radians(22.5 + 45 * k)
             self.put("poster_column", 45.0 * math.cos(a), 45.0 * math.sin(a), 0.0)
 
-        # The dead's booths and El Secreto's boards.
-        for sx in (-1, 1):
-            for sz in (-1, 1):
-                for x, z in ((sx * 96.0, sz * 82.0), (sx * 92.0, sz * 80.0), (sx * 70.0, sz * 104.0)):
-                    if self.put("booth_line_of_dead", x, z, facing((sx, 0.0))):
-                        break
-
-        for x in (-30.0, 30.0):
-            self.put("booth_testimony", x, -105.0, facing((0.0, 1.0)))
-
+        # El Secreto's boards (the dead's booths are the scenes').
         for x, z in ((-60.0, -104.0), (60.0, 104.0)):
             self.put("notice_board", x, z, facing((0.0, -1.0 if z < 0 else 1.0)))
 
@@ -538,20 +526,6 @@ class Life:
                 if self.d.field("seepage", (x, z)) >= 0.5 and self.put(seeped[k % 3], x, z, facing((-x, -z))):
                     k += 1
 
-    def shoeshine(self):
-        for w in self.walls:
-            if w["plot"]["family"] != "arcade":
-                continue
-
-            d = ((w["b"][0] - w["a"][0]) / w["length"], (w["b"][1] - w["a"][1]) / w["length"])
-            t = 4.5
-
-            while t < w["length"] - 2.0:
-                x = w["a"][0] + d[0] * t + w["n"][0] * 1.0
-                z = w["a"][1] + d[1] * t + w["n"][1] * 1.0
-                self.put("shoeshine_stand", x, z, facing(w["n"]))
-                t += 9.0
-
     # The canal's chains
 
     def chains(self):
@@ -584,70 +558,6 @@ class Life:
 
     # Streets and the market
 
-    def market(self):
-        lanes = [g for g in self.data["ground"] if g["kind"] == "market"]
-        pulp = ["stand_curiosities", "shrine_luchador", "booth_photographer", "crates_relics", "stand_curiosities",
-                "wagon_monster", "booth_photographer", "stand_curiosities", "crates_relics", "shrine_luchador",
-                "stand_curiosities"]
-        k = 0
-
-        for g in lanes:
-            x0, z0, x1, z1 = plan_check._bounds(g["polygon"])
-            along_x = (x1 - x0) >= (z1 - z0)
-            length = (x1 - x0) if along_x else (z1 - z0)
-            t = 3.0
-            row = 0
-
-            while t < length - 3.0:
-                for side in (0, 1):
-                    if along_x:
-                        x, z = x0 + t + side * 3.0, (z0 + 1.6) if side == row % 2 else (z1 - 1.6)
-                        face = (0.0, 1.0) if z < (z0 + z1) / 2 else (0.0, -1.0)
-                    else:
-                        x, z = (x0 + 1.6) if side == row % 2 else (x1 - 1.6), z0 + t + side * 3.0
-                        face = (1.0, 0.0) if x < (x0 + x1) / 2 else (-1.0, 0.0)
-
-                    if side == 0:
-                        self.put(CARTS[int(_hash(x, z) * len(CARTS))], x, z, facing(face))
-                    elif k < len(pulp) and _hash(x, z, 3) < 0.35:
-                        if self.put(pulp[k], x, z, facing(face)):
-                            k += 1
-
-                t += CART_EVERY
-                row += 1
-
-        # The rest of the pulp wherever the lanes still have room.
-        for g in lanes:
-            if k >= len(pulp):
-                break
-            x0, z0, x1, z1 = plan_check._bounds(g["polygon"])
-            cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
-
-            for dx in range(-40, 41, 4):
-                if k >= len(pulp):
-                    break
-                along_x = (x1 - x0) >= (z1 - z0)
-                x, z = (cx + dx, cz) if along_x else (cx, cz + dx)
-
-                if self.put(pulp[k], x, z, 0.0):
-                    k += 1
-
-        for k, g in enumerate(lanes[:3]):
-            x0, z0, x1, z1 = plan_check._bounds(g["polygon"])
-
-            for t in (0.3, 0.7):
-                along_x = (x1 - x0) >= (z1 - z0)
-                x, z = (x0 + (x1 - x0) * t, (z0 + z1) / 2) if along_x else ((x0 + x1) / 2, z0 + (z1 - z0) * t)
-                self.put("poster_column", x, z, 0.0)
-
-        madero = next((g for g in self.data["ground"] if g["name"] == "madero"), None)
-
-        if madero:
-            x0, z0, x1, z1 = plan_check._bounds(madero["polygon"])
-
-            for k in range(4):
-                self.put("poster_column", x0 + 25.0 + 45.0 * k, (z0 + z1) / 2, 0.0)
-
     def side_streets(self):
         """Ward hoardings along the dark ends of the streets off the ring and
         Madero, standing out from a side wall (never across the way)."""
@@ -675,35 +585,6 @@ class Life:
                     laid += 1
                     break
 
-    def dark(self):
-        """Where no lamp reaches, the dead's: petals laid at thresholds, cage
-        traps on posts (every third)."""
-        bx0, bz0, bx1, bz1 = plan_check._bounds(self.data["brink"])
-        petals = traps = 0
-        x = bx0 + 5.0
-
-        while x < bx1:
-            z = bz0 + 5.0
-
-            while z < bz1:
-                if petals < 50 and _hash(x, z, 11) < 0.12 and self.open(x, z) and \
-                        all(math.hypot(x - a, z - b) > DARK for a, b in self.lamps):
-                    piece = "petals_marigold"
-
-                    if petals % 3 == 2 and traps < 20:
-                        piece = ["cage_trap", "cage_trap_chaneque", "cage_trap_lechuza"][traps % 3]
-
-                    if self.put(piece, x, z, facing((0.0, 1.0))):
-                        if piece == "petals_marigold":
-                            petals += 1
-                        else:
-                            traps += 1
-                            petals += 1
-
-                z += 10.0
-
-            x += 10.0
-
     def idols(self):
         """Where the ground sank hardest, a god's head surfaces through the
         setts, El Secreto's barrier before it."""
@@ -724,9 +605,9 @@ class Life:
             if len(laid) >= 3:
                 break
 
+            # (Its barrier, its copal and the city come to look: the idol_surfacing scene.)
             if all(math.hypot(x - a, z - b) > 30.0 for a, b in laid) and self.put("idol_surfacing", x, z, 0.0):
                 laid.append((x, z))
-                self.put("secreto_barrier", x, z + 2.4, 0.0)
 
     def sealed(self):
         for p in self.d.pieces:
@@ -736,18 +617,17 @@ class Life:
 
 
 def life(d):
+    """The street's furniture by rule (the real city had these by rule);
+    its life is the scenes' (dress_scenes.py): no market carts, kiosks,
+    shoeshine stands, candles, petals or traps laid here."""
     L = Life(d)
     L.plaza_life()
     L.overhead()
     L.wards()
     L.corners()
     L.posters()
-    L.shoeshine()
     L.chains()
-    L.market()
     L.side_streets()
-    L.candles()
     L.idols()
-    L.dark()
     L.sealed()
     return L

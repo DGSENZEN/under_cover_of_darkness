@@ -52,18 +52,40 @@ class Life(unittest.TestCase):
 
     def test_density(self):
         self.assertTrue(50 <= _count("tram_pole", "tram_pole_lamp", "lamp_dead", "ward_cage_lamp") <= 90)
-        self.assertGreaterEqual(_count("cart_hand", "cart_flower", "cart_tamale", "cart_ice", "cart_firewood"), 60)
         self.assertGreaterEqual(_count("bollard_guardstone", "bollard_cannon"), 150)
         self.assertGreaterEqual(_count("plaque_talavera"), 150)
-        self.assertGreaterEqual(_count("kiosk_news", "kiosk_lottery", "kiosk_sweets"), 20)
+
+    def test_no_life_by_rule(self):
+        """The rules alone lay no life: that is the scenes' (dress_scenes.py)."""
+        d = dress.Dresser(DATA, FACES)
+        d.plaza_kerbs()
+        d.hatches()
+        d.tram()
+        d.causeway()
+        d.canal_walls()
+
+        for g in d.landings:
+            d.landing(g)
+
+        d.bridges_()
+        dress_life.life(d)
+        life = {"cart_hand", "cart_flower", "cart_tamale", "cart_ice", "cart_firewood", "kiosk_news", "kiosk_lottery",
+                "kiosk_sweets", "shoeshine_stand", "stand_curiosities", "wagon_monster", "shrine_luchador",
+                "booth_photographer", "crates_relics", "booth_line_of_dead", "booth_testimony", "candles_drift",
+                "petals_marigold", "cage_trap", "cage_trap_chaneque", "cage_trap_lechuza", "secreto_barrier"}
+        self.assertEqual(sorted({p["piece"] for p in d.pieces} & life), [])
 
     def test_nothing_stands_in_anything(self):
         """No standing piece of street life overlaps another standing piece, a
         plot, a sunken place or (but the offerings and petals) a flush piece."""
+        import dress_scenes
+        # (A scene's parts stand together as staged; a day part and a night
+        # part are never seen together; washing and held things have no foot.)
+        loose = lambda p: p["piece"] in dress_scenes.OVERHEAD or p.get("held")
         standing = [p for p in DRESSING["pieces"] if p["kit"] in LIFE and p["piece"] not in dress_life.ON_WALLS
-                    and p["piece"] not in dress_life.HUNG and p["piece"] not in dress.FLUSH]
+                    and p["piece"] not in dress_life.HUNG and p["piece"] not in dress.FLUSH and not loose(p)]
         others = [p for p in DRESSING["pieces"] if p["piece"] not in dress.FLUSH and p["piece"] not in dress_life.HUNG
-                  and p["piece"] not in dress_life.ON_WALLS]
+                  and p["piece"] not in dress_life.ON_WALLS and not loose(p)]
         clashes = []
         index = {}
 
@@ -83,6 +105,11 @@ class Life(unittest.TestCase):
                 q = others[k]
 
                 on_coping = p["piece"] in dress_life.ON_COPING and q["piece"].startswith(dress_life.COPING_PIECES)
+                together = p.get("scene") is not None and p.get("scene") == q.get("scene")
+                apart = {p.get("when"), q.get("when")} == {"day", "night"}
+
+                if together or apart:
+                    continue
 
                 if q is not p and _meet(f, _foot(q)) and (p["piece"], q["piece"]) not in dress_life.TOGETHER \
                         and not on_coping:

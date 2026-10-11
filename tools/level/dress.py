@@ -36,6 +36,7 @@ import street_dims as D  # noqa: E402
 
 SOURCE = ROOT / "assets" / "eclipse" / "source"
 KITS = ("street_kit", "canal_kit", "bridge_stone", "bridge_steel", "furniture_kit", "trade_kit", "uncanny_kit",
+        "figures_kit", "trees_kit", "scene_kit",
         "bound_god")
 # How far a run's pieces may be stretched (or squeezed) to fill it.
 STRETCH = (0.95, 1.05)
@@ -227,6 +228,10 @@ class Dresser:
         self.landings = [g for g in grounds if g["kind"] == "landing"]
         self.bridges = [r for r in data["routes"] if r["kind"] == "bridge"]
         self.lights = []
+        # The garden's beds on the plaza (earth, at its level), and the scenes'
+        # record (dress_scenes.py).
+        self.beds = []
+        self.scenes, self.stations, self.emitters, self.flocks, self.decals = [], [], [], [], []
         _KIT_OF.update({name: kit for kit in faces for name in faces[kit]["objects"]})
 
     def field(self, kind, at):
@@ -504,8 +509,10 @@ class Dresser:
         inset = D.KERB_DEPTH
         wells = [list(_bounds(g["polygon"])) for g in self.data["ground"] if g["kind"] == "well"]
         areas.append({"tile": "ground_flags", "level": self.level, "rect": [px0 + inset, pz0 + inset, px1 - inset, pz1 - inset],
-                      "openings": wells + self.openings[round(self.level, 3)], "covered": [],
+                      "openings": wells + self.openings[round(self.level, 3)] + [list(b) for b in self.beds], "covered": [],
                       "inlays": self.inlays[round(self.level, 3)], "patches": [], "footprints": []})
+        areas += [{"tile": "ground_earth", "level": self.level, "rect": list(b), "openings": [], "covered": [], "inlays": [],
+                   "patches": [], "footprints": []} for b in self.beds]
         areas += [{"tile": "ground_flags", "level": 0.0, "rect": list(_bounds(g["polygon"])), "openings": [], "covered": [],
                    "inlays": [], "patches": [], "footprints": []} for g in flags]
         areas += [{"tile": "ground_setts", "level": D.LANDING, "rect": [x0, z0, x1, z1 - back], "openings": [], "covered": [],
@@ -560,9 +567,13 @@ def dress(data, faces):
 
     d.bridges_()
     import dress_life
+    import dress_scenes
 
-    dress_life.life(d)
-    return {"skip": d.skip(), "pieces": d.pieces, "colliders": d.boxes, "ground": d.ground(), "lights": d.lights}
+    life = dress_life.life(d)
+    dress_scenes.garden(d, life)
+    dress_scenes.scenes(d, life)
+    return {"skip": d.skip(), "pieces": d.pieces, "colliders": d.boxes, "ground": d.ground(), "lights": d.lights,
+            "scenes": d.scenes, "stations": d.stations, "emitters": d.emitters, "flocks": d.flocks, "decals": d.decals}
 
 
 # Geometry
@@ -650,6 +661,8 @@ def gate(dressing, greybox_data, faces):
     placed = placed_faces(dressing, faces)
     every = placed + kept
     first_kept = len(placed)
+    # A day part and a night part are never seen together.
+    when = [dressing["pieces"][int(f["owner"].rsplit("#", 1)[1])].get("when", "") for f in placed]
     normals = [overlap._unit(f["normal"]) for f in every]
     distances = [overlap._dot(n, f["points"][0]) for n, f in zip(normals, every)]
     buckets = defaultdict(list)
@@ -678,6 +691,9 @@ def gate(dressing, greybox_data, faces):
                 pair = (min(i, j), max(i, j))
 
                 if pair in seen or every[i]["owner"] == every[j]["owner"]:
+                    continue
+
+                if i < first_kept and j < first_kept and {when[i], when[j]} == {"day", "night"}:
                     continue
 
                 seen.add(pair)
