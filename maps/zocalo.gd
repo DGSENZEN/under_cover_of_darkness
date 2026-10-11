@@ -28,6 +28,8 @@ var kit: KitLoader
 var ambient: Ambient
 var pigeons: Pigeons
 var gusts: Gusts
+## The wind on what drifts down (Vfx.wind_attractor), steered by the Gusts.
+var wind_attractor: GPUParticlesAttractorBox3D
 var district_ground: DistrictGround
 var player: CharacterBody3D
 var world: WorldEnvironment
@@ -59,6 +61,11 @@ func _ready() -> void:
 		ambient = Ambient.build(dressing.get("emitters", []))
 		ambient.gusts = gusts
 		add_child(ambient)
+		# What drifts down lands on the ground round the camera and blows
+		# with the Gusts.
+		Vfx.heightfield(self)
+		wind_attractor = Vfx.wind_attractor()
+		add_child(wind_attractor)
 		pigeons = Pigeons.build(dressing.get("flocks", []), KitLoader.meshes("figures_kit")["pigeon"])
 		pigeons.get_child(0).material_override = KitLoader.material("figures_kit")
 		add_child(pigeons)
@@ -76,6 +83,12 @@ func _ready() -> void:
 		elif arg == "--load-report":
 			print("load: %.1f s" % ((Time.get_ticks_msec() - started) / 1000.0))
 			get_tree().quit.call_deferred()
+
+
+func _process(_delta: float) -> void:
+	if wind_attractor != null:
+		var camera := get_viewport().get_camera_3d()
+		Vfx.steer(wind_attractor, gusts.wind(), camera.global_position if camera != null else Vector3.ZERO)
 
 
 func _unhandled_input(event: InputEvent) -> void:

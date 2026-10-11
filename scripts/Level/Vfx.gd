@@ -15,6 +15,8 @@ const MIST := preload("res://scripts/Visual/vfx_mist.gdshader")
 const FOG := preload("res://scripts/Visual/vfx_fog.gdshader")
 const DUST := preload("res://scripts/Visual/vfx_dust.gdshader")
 const Flicker := preload("res://scripts/Level/VfxFlicker.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
+const DRIFT := preload("res://scripts/Visual/vfx_drift.gdshader")
 const SMOKE := "res://assets/vfx/smoke.png"
 const PETAL := "res://assets/vfx/petal.png"
 const LEAF := "res://assets/vfx/leaf.png"
@@ -35,6 +37,10 @@ const FLAME_HEIGHT := 1.0
 const SEEPED := Color("7FD36A")
 ## Dust is laid this far under its lamp (tools/level/dress_scenes.py).
 const DUST_UNDER_LAMP := 3.5
+## The wind's push on what drifts (petals, leaves), per m/s of wind.
+const WIND_PUSH := 0.6
+## How long a petal or a leaf lasts, falling and lying (s).
+const DRIFT_LIFE := 20.0
 const CANDLE_COLOUR := Color("#ffc070")
 ## Fire's heat to colour, in hard bands: below the first band nothing is
 ## drawn; then deep red-orange, orange, pale gold (warm, never white).
@@ -71,12 +77,10 @@ const PRESETS := {
 		"amount": 8, "lifetime": 5.0, "size": [0.8, 2.2], "velocity": [0.1, 0.3], "spread": 180.0, "flat": true,
 		"gravity": Vector3(0, -0.05, 0), "box": Vector3(0.5, 0.05, 0.5), "fps": 15, "erosion": 0.6, "anim": 1.0,
 		"glows": true, "ground": 0.1}],
-	"petals": [{"draw": "sprites", "sheet": PETAL, "grid": [2, 2], "tint": Color.WHITE, "opacity": 1.0,
-		"amount": 20, "lifetime": 8.0, "size": [0.12, 0.12], "velocity": [0.1, 0.3], "spread": 180.0,
-		"gravity": Vector3(0, -0.8, 0), "box": Vector3(2.0, 0.6, 2.0), "offset": 1.8, "fps": 15, "blown": 0.4}],
-	"leaves": [{"draw": "sprites", "sheet": LEAF, "grid": [2, 2], "tint": Color.WHITE, "opacity": 1.0,
-		"amount": 8, "lifetime": 8.0, "size": [0.16, 0.16], "velocity": [0.1, 0.3], "spread": 180.0,
-		"gravity": Vector3(0, -0.9, 0), "box": Vector3(2.5, 0.5, 2.5), "fps": 15, "blown": 0.4}],
+	"petals": [{"draw": "drift", "mesh": "petal_a", "amount": 24, "box": Vector3(2.0, 0.6, 2.0), "offset": 1.8},
+		{"draw": "drift", "mesh": "petal_b", "amount": 24, "box": Vector3(2.0, 0.6, 2.0), "offset": 1.8}],
+	"leaves": [{"draw": "drift", "mesh": "leaf_ash", "amount": 24, "box": Vector3(2.5, 0.5, 2.5), "offset": 0.0},
+		{"draw": "drift", "mesh": "leaf_laurel", "amount": 16, "box": Vector3(2.5, 0.5, 2.5), "offset": 0.0}],
 	"dust": [{"draw": "motes", "tint": Color(1.0, 0.92, 0.75, 0.6), "amount": 40, "lifetime": 6.0, "size": [0.02, 0.02],
 		"velocity": [0.02, 0.06], "spread": 180.0, "gravity": Vector3.ZERO, "box": Vector3(2.0, 1.5, 2.0), "fps": 15}],
 	"canal_fog": [{"draw": "fog", "shader": FOG, "size": Vector3(40.0, 2.0, 12.0), "at": Vector3.ZERO}],
@@ -148,6 +152,8 @@ static func _part(p: Dictionary) -> Array:
 			return _trailed()
 		"fog":
 			return [_fog(p)]
+		"drift":
+			return [_drift(p)]
 		"pool":
 			return [_pool(p)]
 
@@ -217,6 +223,9 @@ static func _particles(p: Dictionary) -> GPUParticles3D:
 		process.anim_offset_max = 1.0
 	process.set_meta("gravity", p["gravity"])
 	process.set_meta("blown", p.get("blown", 0.0))
+	# (The wind reaches it through its gravity, Vfx.blow, not the drift's
+	# attractor.)
+	process.attractor_interaction_enabled = false
 
 	if p.has("ground"):
 		process.collision_mode = ParticleProcessMaterial.COLLISION_RIGID
@@ -396,6 +405,78 @@ static func _stem(size: Vector2) -> MeshInstance3D:
 	return stem
 
 
+## What drifts down (petals, leaves): one drift-kit mesh a system (a second
+## draw pass would draw both meshes on every particle), driven by the drift
+## shader, landing on the camera's heightfield (Vfx.heightfield), carried by
+## the map's wind (an attractor: only effects on Layers.FX feel it).
+static func _drift(p: Dictionary) -> GPUParticles3D:
+	var drift := GPUParticles3D.new()
+	drift.name = p["mesh"]
+	drift.amount = p["amount"]
+	drift.lifetime = DRIFT_LIFE
+	drift.fixed_fps = 30
+	drift.interpolate = true
+	drift.local_coords = false
+	drift.emitting = false
+	drift.layers = Layers.FX
+	drift.collision_base_size = 0.05
+	var reach: Vector3 = p["box"] + Vector3(12, 0, 12)
+	drift.visibility_aabb = AABB(-reach - Vector3(0, 8, 0), reach * 2.0 + Vector3(0, 12, 0))
+	var how := ShaderMaterial.new()
+	how.shader = DRIFT
+	how.set_shader_parameter(&"box", p["box"])
+	how.set_shader_parameter(&"offset", p["offset"])
+	how.set_shader_parameter(&"limit", 3.0)
+	drift.process_material = how
+	drift.draw_pass_1 = KitLoader.meshes("drift_kit")[p["mesh"]]
+	drift.material_override = KitLoader.material("drift_kit")
+	return drift
+
+
+## The ground under the camera for what drifts down to land on (one a map):
+## the ground layer only, 60 m round the camera, redrawn as it moves.
+static func heightfield(map: Node3D) -> GPUParticlesCollisionHeightField3D:
+	var field := GPUParticlesCollisionHeightField3D.new()
+	field.name = "drift_ground"
+	field.size = Vector3(60, 30, 60)
+	field.resolution = GPUParticlesCollisionHeightField3D.RESOLUTION_512
+	field.update_mode = GPUParticlesCollisionHeightField3D.UPDATE_MODE_WHEN_MOVED
+	field.follow_camera_enabled = true
+	# What it draws: the ground layer (a tree's crown would catch what falls
+	# through it); what lands on it: the effects (a collider's cull_mask is
+	# the particles it stops, not what it sees).
+	field.heightfield_mask = Layers.GROUND
+	field.cull_mask = Layers.FX
+	map.add_child(field)
+	# (Drawn when it moves: drawn once now, the camera perhaps standing still.)
+	RenderingServer.particles_collision_height_field_update(field.get_base())
+	return field
+
+
+## The wind on what drifts (one a map): an attractor pushing every way the
+## same (fully directional), steered by Vfx.steer.
+static func wind_attractor() -> GPUParticlesAttractorBox3D:
+	var wind := GPUParticlesAttractorBox3D.new()
+	wind.name = "wind"
+	wind.size = Vector3(160, 60, 160)
+	wind.directionality = 1.0
+	wind.attenuation = 0.0
+	wind.cull_mask = Layers.FX
+	return wind
+
+
+## Turns the wind's attractor to blow `wind` (m/s) round `at` (the camera).
+static func steer(attractor: GPUParticlesAttractorBox3D, wind: Vector3, at: Vector3) -> void:
+	var flat := Vector3(wind.x, 0, wind.z)
+	attractor.global_position = at
+
+	if flat.length() > 0.01:
+		# (A directional attractor pushes along its -Z.)
+		attractor.global_basis = Basis.looking_at(flat.normalized(), Vector3.UP)
+
+	attractor.strength = flat.length() * WIND_PUSH
+
+
 ## A fog volume (box) drawn by its own fog shader.
 static func _fog(p: Dictionary) -> FogVolume:
 	var look := ShaderMaterial.new()
@@ -475,6 +556,7 @@ static func _trailed() -> Array:
 	process.sub_emitter_amount_at_collision = 2
 	process.set_meta("gravity", process.gravity)
 	process.set_meta("blown", 0.15)
+	process.attractor_interaction_enabled = false
 	embers.process_material = process
 	var ribbon := RibbonTrailMesh.new()
 	ribbon.shape = RibbonTrailMesh.SHAPE_CROSS

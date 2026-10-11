@@ -1,6 +1,6 @@
 """The drift kit (the effects plan, Task 2): what the wind carries and the
 ground keeps: two cempasúchil petals, curled, and two fallen leaves (an
-ash's, a laurel's), each a thin closed solid at its middle, drawn by the
+ash's, a laurel's, dry), each a thin closed solid at its middle, drawn by the
 petals' and leaves' GPU particles (scripts/Level/Vfx.gd).
 
     Blender -b --factory-startup --python tools/eclipse/drift_kit.py
@@ -19,7 +19,8 @@ import shapes  # noqa: E402
 
 NAME = "drift_kit"
 ATLAS = 512
-SLOTS = ["marigold", "leaf", "leaf_dark"]
+# (The leaves are the dry season's: old leaves shed ochre and russet.)
+SLOTS = ["marigold", "leaf_dry", "leaf_dry_dark"]
 # Thin as a petal can be and still pass the 1 cm sliver rule.
 THICK = 0.014
 
@@ -50,11 +51,11 @@ def petal_b(m):
 
 
 def leaf_ash(m):
-    _blade(m, 0.13, [0.02, 0.04, 0.05, 0.04, 0.02], 0.01, "leaf")
+    _blade(m, 0.13, [0.02, 0.04, 0.05, 0.04, 0.02], 0.01, "leaf_dry")
 
 
 def leaf_laurel(m):
-    _blade(m, 0.15, [0.02, 0.05, 0.065, 0.05, 0.02], 0.016, "leaf_dark", twist=-0.008)
+    _blade(m, 0.15, [0.02, 0.05, 0.065, 0.05, 0.02], 0.016, "leaf_dry_dark", twist=-0.008)
 
 
 PIECES = [petal_a, petal_b, leaf_ash, leaf_laurel]

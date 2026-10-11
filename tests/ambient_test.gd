@@ -307,6 +307,41 @@ func _run() -> void:
 		"%d steady, %d stuttering" % [lit_steady.size(), kit.stuttering.size()])
 	kit.free()
 
+	# A17 petals: the drift kit's own petals (two systems, a mesh each: a
+	# second draw pass would draw both on every particle), driven by the
+	# drift shader, colliding, never faster than 3 m/s
+	var drift: Node3D = Vfx.system("petals")
+	add_child(drift)
+	var falling: Array = drift.get_children().filter(func(c): return c is GPUParticles3D)
+	var kit_meshes: Dictionary = KitLoader.meshes("drift_kit")
+	var petal_meshes: Array = falling.map(func(f): return f.draw_pass_1)
+	var driven := true
+
+	for system: GPUParticles3D in falling:
+		var by := system.process_material as ShaderMaterial
+		driven = driven and by != null and by.shader.resource_path == "res://scripts/Visual/vfx_drift.gdshader" \
+			and system.collision_base_size > 0.0 and float(by.get_shader_parameter(&"limit")) <= 3.0
+
+	_check("A17 petals: the drift kit's two petals, tumbling by the drift shader, colliding, at most 3 m/s",
+		falling.size() == 2 and kit_meshes["petal_a"] in petal_meshes and kit_meshes["petal_b"] in petal_meshes and driven,
+		"%d systems, driven %s" % [falling.size(), driven])
+	drift.free()
+
+	# A18 the map's wind (an attractor pushing the drift) blows the way the
+	# Gusts blow, as hard
+	var zocalo: Node3D = load("res://maps/zocalo.tscn").instantiate()
+	add_child(zocalo)
+	await _frames(3)
+	var wind_now: Vector3 = zocalo.gusts.wind()
+	var pusher: GPUParticlesAttractorBox3D = zocalo.wind_attractor
+	var way: Vector3 = -pusher.global_basis.z
+	_check("A18 the map's wind attractor blows with the Gusts", pusher != null
+		and way.dot(wind_now.normalized()) > 0.98
+		# (steered from the frame before's wind: within 5%)
+		and absf(pusher.strength - wind_now.length() * Vfx.WIND_PUSH) < 0.05 * wind_now.length() * Vfx.WIND_PUSH,
+		"way %s, wind %s, strength %.2f" % [way, wind_now, pusher.strength])
+	zocalo.free()
+
 	# B1 the god's breath: in and out, about seven seconds a breath
 	var breath := Breath.new()
 	add_child(breath)

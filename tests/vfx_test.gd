@@ -22,6 +22,7 @@ func _ready() -> void:
 	await _copal()
 	await _mist()
 	await _shafts()
+	await _petals()
 
 	print("\n==== RESULTS ====")
 	for r in results:
@@ -132,6 +133,41 @@ func _shafts() -> void:
 	_check("V4 a lamp lights the night air under it", under > between + 0.02, "under %.3f, between %.3f" % [under, between])
 	kit.free()
 	wall.free()
+
+
+## V5 petals fall, tumble and settle: after six seconds marigold lies on
+## the ground under their emitter (seen from above in a low sun: a petal
+## lying flat is a sliver from eye height).
+func _petals() -> void:
+	var floor_field := Vfx.heightfield(self)
+	var sun := DirectionalLight3D.new()
+	sun.rotation = Vector3(deg_to_rad(-60), deg_to_rad(20), 0)
+	add_child(sun)
+	var kept := eye.global_transform
+	eye.global_transform = Transform3D(Basis(), Vector3(0, 5.0, 2.5)).looking_at(Vector3.ZERO, Vector3.UP)
+	var drift: Node3D = Vfx.system("petals")
+	add_child(drift)
+	Vfx.place(drift, Vector3.ZERO)
+	Vfx.emit(drift, true)
+	await _seconds(6.0)
+	var image := get_viewport().get_texture().get_image()
+	image.save_png(OS.get_cache_dir() + "/vfx_test_petals.png")
+	var marigold := 0
+	var p := _pixel(Vector3(-2.2, 0.0, -2.2), image)
+	var q := _pixel(Vector3(2.2, 0.0, 2.2), image)
+
+	for y in range(int(p.y), int(q.y)):
+		for x in range(int(p.x), int(q.x)):
+			var c := image.get_pixel(x, y)
+
+			if c.r > 0.45 and c.r > c.g + 0.12 and c.g > c.b + 0.05:
+				marigold += 1
+
+	_check("V5 petals settle on the ground under their emitter", marigold >= 40, "%d marigold pixels on the ground" % marigold)
+	drift.free()
+	floor_field.free()
+	sun.free()
+	eye.global_transform = kept
 
 
 func _greenness(image: Image, top_left: Vector3, bottom_right: Vector3) -> float:

@@ -1,8 +1,8 @@
 {
  "slots": [
   "marigold",
-  "leaf",
-  "leaf_dark"
+  "leaf_dry",
+  "leaf_dry_dark"
  ],
  "atlas_px": 512,
  "px_per_m": 0.0

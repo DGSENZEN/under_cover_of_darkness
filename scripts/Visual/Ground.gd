@@ -10,6 +10,7 @@ extends StaticBody3D
 ##   A baked light: low under roofed footprints, a little low along walls
 ## Colliders: a box per run of cells, its top at y 0.
 
+const Layers := preload("res://scripts/Visual/Layers.gd")
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const COBBLES: Texture2D = preload("res://textures/painted/eclipse/ground_cobbles.png")
 const COBBLES_NORMAL: Texture2D = preload("res://textures/painted/eclipse/ground_cobbles_normal.png")
@@ -163,6 +164,8 @@ static func build(area: Rect2, openings: Array[Rect2], footprints: Array[Diction
 	var mesh := MeshInstance3D.new()
 	mesh.name = "mesh"
 	mesh.mesh = tool.commit()
+	# (What drift settles on: the particles' heightfield sees this layer.)
+	mesh.layers |= Layers.GROUND
 	var root := "res://textures/painted/eclipse/"
 	var material := Painterly.material(load(root + tile + ".png"), &"shader_led", Painterly.ZOCALO,
 		load(root + tile + "_normal.png"), EARTH, EARTH_NORMAL)

@@ -5,7 +5,8 @@ extends RefCounted
 ## lightgem's probe, and blood on the floor does not paint the guards.
 ##
 ##   layers 1-16   the world: level geometry and props (layer 2: what stands
-##                 under a roof, ROOFED; layer 16: the parts of light
+##                 under a roof, ROOFED; layer 3: the ground, GROUND;
+##                 layer 16: the parts of light
 ##                 fixtures that glow from inside, which their own burners do
 ##                 not light: GLOWING)
 ##   layer 17      actors: guards and their bodies (wounds paint only these)
@@ -20,6 +21,9 @@ const WORLD_ALL := (1 << 16) - 1
 ## drawn and lit as the world, but the moon, which could never reach them,
 ## leaves them out of its shadow pass (its shadow_caster_mask).
 const ROOFED := 1 << 1
+## The ground (layer 3): what drifting petals and leaves settle on; the
+## particles' heightfield sees only this (a tree's crown would catch them).
+const GROUND := 1 << 2
 ## A fixture's glowing parts (a pitch head, coals, horn panes): they shine by
 ## their own glow, and a burner's light (a hand's breadth away) would blow
 ## them out, so burners leave this layer unlit.
