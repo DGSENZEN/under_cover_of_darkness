@@ -31,14 +31,15 @@ Talavera plaques and 1921 plates at corners, Company bollards at drops and plaza
 corners, chain posts on canal copings, poster columns and poster clusters on
 walls, ward hoardings at dark side-street ends, the Bound God, its offerings
 heap and its eight ward-cage lamps, sealed hatches, claw-scored slabs under dead
-lamps.
+lamps, notice boards, and the seeped future's objects round the god (payphones,
+parking meters, bus-stop signs, concrete bollards: the seepage field put them
+there).
 
 **Becomes scenes** (removed from dress_life's rules, placed only inside a
 scene): carts, kiosks, shoeshine stands, curiosity stands, the monster wagon,
 luchador shrines, photographers' booths, relic crates, candle drifts, marigold
-petals, cage traps, payphones and the Line of the Dead booths, testimony booths,
-notice boards, the seeped future's small objects (meters, bus-stop signs, dead
-traffic lights stay on poles), surfacing idols' barriers and copal.
+petals, cage traps, the Line of the Dead booths, testimony booths, surfacing
+idols' barriers and copal.
 
 ## The scene system
 
