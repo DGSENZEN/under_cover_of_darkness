@@ -296,6 +296,27 @@ func _run() -> void:
 		"calm %s, blown %s" % [calm, smoke_puffs.process_material.gravity])
 	burning.free()
 
+	# A13h a smoke rises as one column: each puff born nearer the last than
+	# half its size (at its fastest, the wind's cap on), or the column draws
+	# as a string of beads (the brazier's did)
+	var beaded := []
+
+	for effect in ["copal", "steam", "smoke", "brazier"]:
+		var column: Node3D = Vfx.system(effect)
+
+		for puffs in column.get_children():
+			if puffs is GPUParticles3D and puffs.draw_pass_1 is QuadMesh and puffs.draw_pass_1.material is ShaderMaterial:
+				var how := puffs.process_material as ParticleProcessMaterial
+				var pace: float = how.velocity_limit_curve.curve.sample(0.0) if how.velocity_limit_curve else how.initial_velocity_max
+				var apart: float = pace * puffs.lifetime / puffs.amount
+
+				if apart >= how.scale_min / 2.0:
+					beaded.append("%s %.2f m apart, %.2f m puffs" % [effect, apart, how.scale_min])
+
+		column.free()
+
+	_check("A13h smoke rises as one column, its puffs overlapping as they are born", beaded.is_empty(), str(beaded))
+
 	# A13c each of the flame's three heat bands its own warm colour, none
 	# near black (the ramp's stops sat just past the bands: the outer band
 	# took the ember's black)
