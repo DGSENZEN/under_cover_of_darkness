@@ -124,6 +124,12 @@ func _run() -> void:
 		and head.cull_mask & Layers.FX and head.global_position.distance_to(viewer.global_position) < 0.01,
 		"head %s" % (head.global_position if head else "none"))
 
+	# O11 a sigil far off is neither drawn nor written (44 of them drew and
+	# were written every frame across the district)
+	var far_sigils: Array = occult.sigils.filter(func(g): return g.visibility_range_end <= 0.0 or g.visibility_range_end > 40.0)
+	_check("O11 the sigils are drawn only within 40 m", occult.sigils.size() > 0 and far_sigils.is_empty(),
+		"%d of %d without a range" % [far_sigils.size(), occult.sigils.size()])
+
 	# O9 the lightgem's cameras see none of the god's effects
 	var gem := 0
 

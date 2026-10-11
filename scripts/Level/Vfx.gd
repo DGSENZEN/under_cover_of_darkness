@@ -825,6 +825,9 @@ static func tint(particles: GPUParticles3D) -> Color:
 ## Starts or stops every part of an effect (stopped ones fade out, kept);
 ## a sub-emitter is started by its emitter, never here.
 static func emit(node: Node3D, on: bool) -> void:
+	# (A hidden fire's flicker stops with it.)
+	node.set_process(on)
+
 	for child in node.get_children():
 		if child is GPUParticles3D:
 			if not child.has_meta("sub"):

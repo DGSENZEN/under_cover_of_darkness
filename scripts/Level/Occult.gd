@@ -53,6 +53,8 @@ const CYCLE := 9.0
 const WRITTEN_NEAR := 5.0
 ## Within this far of a ward lamp (across the ground) the air bends.
 const RING_NEAR := 3.0
+## A sigil is drawn (and written) only this near the camera.
+const SIGIL_SEEN := 40.0
 
 var breath: Breath
 var kit: KitLoader
@@ -210,6 +212,10 @@ func _dim(light: OmniLight3D, share: float) -> void:
 func _write(eye: Vector3) -> void:
 	for k in sigils.size():
 		var sigil := sigils[k]
+
+		if sigil.global_position.distance_to(eye) > SIGIL_SEEN:
+			continue
+
 		var t := fposmod(_time + float(sigil.get_meta("phase")), CYCLE)
 		var near := sigil.global_position.distance_to(eye) < WRITTEN_NEAR
 		sigil.set_instance_shader_parameter(&"drawn", 1.0 if near else clampf(t / WRITE, 0.0, 1.0))
@@ -341,6 +347,9 @@ func _sigils(dressing: Dictionary) -> void:
 		var basis := Basis(Vector3.UP, deg_to_rad(p["yaw"]))
 		var sigil := MeshInstance3D.new()
 		sigil.mesh = quad
+		sigil.visibility_range_end = SIGIL_SEEN - 5.0
+		sigil.visibility_range_end_margin = 5.0
+		sigil.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 		sigil.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		sigil.transform = Transform3D(basis, Vector3(p["at"][0], p["at"][1], p["at"][2]) + basis * Vector3(0, 0, DISC_FACE + SIGIL_PROUD))
 		sigil.set_meta("phase", rng.randf() * CYCLE)

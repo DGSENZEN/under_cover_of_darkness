@@ -240,6 +240,17 @@ func _run() -> void:
 		"in %s, just past %s, well past %s" % [started, kept_on, ambient.running().has(0)])
 	ambient.free()
 
+	# A24 a hidden fire flickers no more (its flicker ran every frame, seen or
+	# not)
+	var banked: Node3D = Vfx.system("brazier")
+	add_child(banked)
+	Vfx.emit(banked, true)
+	var flickering := banked.is_processing()
+	Vfx.emit(banked, false)
+	_check("A24 a hidden fire stops flickering", flickering and not banked.is_processing(),
+		"lit %s, hidden %s" % [flickering, banked.is_processing()])
+	banked.free()
+
 	# A9 day stops a night system without freeing it
 	ambient = Ambient.build([{"effect": "embers", "at": [5, 0, 0], "when": "night"}])
 	add_child(ambient)
