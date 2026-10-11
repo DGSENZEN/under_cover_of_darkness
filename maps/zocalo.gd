@@ -67,6 +67,7 @@ func _ready() -> void:
 		# What drifts down lands on the ground round the camera and blows
 		# with the Gusts.
 		Vfx.heightfield(self)
+		Vfx.walls(self, plan["plots"], dressing.get("emitters", []))
 		wind_attractor = Vfx.wind_attractor()
 		add_child(wind_attractor)
 		breath = Breath.new()

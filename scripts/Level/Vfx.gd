@@ -41,6 +41,10 @@ const DUST_UNDER_LAMP := 3.5
 const WIND_PUSH := 0.6
 ## How long a petal or a leaf lasts, falling and lying (s).
 const DRIFT_LIFE := 20.0
+## How fast drift crosses the ground at most (m/s), and how near a
+## building to what drifts stands a wall for it (Vfx.walls, m).
+const DRIFT_ACROSS := 1.2
+const WALL_REACH := 20.0
 const CANDLE_COLOUR := Color("#ffc070")
 ## Fire's heat to colour, in hard bands: below the first band nothing is
 ## drawn; then deep red-orange, orange, pale gold (warm, never white).
@@ -441,6 +445,7 @@ static func _drift(p: Dictionary) -> GPUParticles3D:
 	how.set_shader_parameter(&"box", p["box"])
 	how.set_shader_parameter(&"offset", p["offset"])
 	how.set_shader_parameter(&"limit", 3.0)
+	how.set_shader_parameter(&"drift_limit", DRIFT_ACROSS)
 	drift.process_material = how
 	drift.draw_pass_1 = KitLoader.meshes("drift_kit")[p["mesh"]]
 	drift.material_override = KitLoader.material("drift_kit")
@@ -465,6 +470,48 @@ static func heightfield(map: Node3D) -> GPUParticlesCollisionHeightField3D:
 	# (Drawn when it moves: drawn once now, the camera perhaps standing still.)
 	RenderingServer.particles_collision_height_field_update(field.get_base())
 	return field
+
+
+## The buildings near what drifts down (petals', leaves' emitters within
+## WALL_REACH): a particle collision box over each plot (its footprint's
+## smallest enclosing rectangle, from its base to its roof), so drift and
+## sparks stop at a wall instead of passing through it.
+static func walls(map: Node3D, plots: Array, emitters: Array) -> void:
+	var drifting: Array = emitters.filter(func(e): return e["effect"] in ["petals", "leaves"])
+
+	for plot in plots:
+		var points: Array = plot["polygon"].map(func(pt): return Vector2(pt[0], pt[1]))
+		var middle := Vector2.ZERO
+
+		for pt in points:
+			middle += pt
+
+		middle /= points.size()
+
+		if not drifting.any(func(e): return Vector2(e["at"][0], e["at"][2]).distance_to(middle) < WALL_REACH):
+			continue
+
+		# The smallest rectangle round it lies along one of its edges.
+		var best := []
+
+		for k in points.size():
+			var along: Vector2 = (points[(k + 1) % points.size()] - points[k]).normalized()
+			var side := Vector2(-along.y, along.x)
+			var a := points.map(func(pt): return pt.dot(along))
+			var b := points.map(func(pt): return pt.dot(side))
+			var area: float = (a.max() - a.min()) * (b.max() - b.min())
+
+			if best.is_empty() or area < best[0]:
+				best = [area, along, side, a.min(), a.max(), b.min(), b.max()]
+
+		var centre: Vector2 = best[1] * (best[3] + best[4]) / 2.0 + best[2] * (best[5] + best[6]) / 2.0
+		var wall := GPUParticlesCollisionBox3D.new()
+		wall.name = "wall"
+		wall.size = Vector3(best[4] - best[3], float(plot["height"]), best[6] - best[5])
+		wall.cull_mask = Layers.FX
+		map.add_child(wall)
+		wall.global_transform = Transform3D(Basis(Vector3.UP, -atan2(best[1].y, best[1].x)),
+			Vector3(centre.x, float(plot["base"]) + float(plot["height"]) / 2.0, centre.y))
 
 
 ## The wind on what drifts (one a map): an attractor pushing every way the

@@ -448,6 +448,14 @@ func _run() -> void:
 	resting.free()
 	_check("A17b petals lie on the ground, not over it", sizes.all(func(z): return z <= 0.008), str(sizes))
 
+	# A17c drift crosses the ground no faster than it falls, near enough
+	# (at 3 m/s a gust carried petals 5-9 m and leaves 15-20 m)
+	var paced: Node3D = Vfx.system("leaves")
+	var across: Array = paced.get_children().filter(func(c): return c is GPUParticles3D).map(
+		func(c): return float(c.process_material.get_shader_parameter(&"drift_limit")))
+	paced.free()
+	_check("A17c drift crosses the ground at most 1.2 m/s", across.all(func(v): return v > 0.0 and v <= 1.2), str(across))
+
 	# A18 the map's wind (an attractor pushing the drift) blows the way the
 	# Gusts blow, as hard
 	var zocalo: Node3D = load("res://maps/zocalo.tscn").instantiate()

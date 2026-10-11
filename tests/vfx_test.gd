@@ -24,6 +24,7 @@ func _ready() -> void:
 	await _mist()
 	await _shafts()
 	await _petals()
+	await _against_a_wall()
 	await _breath()
 	await _swell()
 
@@ -171,6 +172,63 @@ func _petals() -> void:
 	floor_field.free()
 	sun.free()
 	eye.global_transform = kept
+
+
+## V5b petals blown against a wall slide down it: once they have had time
+## to fall, none hangs on its face above the ground (a collision laid them
+## to rest wherever it came).
+func _against_a_wall() -> void:
+	var floor_field := Vfx.heightfield(self)
+	var sun := DirectionalLight3D.new()
+	# (Lighting the wall's face toward the camera.)
+	sun.rotation = Vector3(deg_to_rad(-40), deg_to_rad(-90), 0)
+	add_child(sun)
+	var wall := MeshInstance3D.new()
+	var block := BoxMesh.new()
+	block.size = Vector3(0.4, 4, 8)
+	wall.mesh = block
+	wall.position = Vector3(1.8, 2, 0)
+	add_child(wall)
+	var stop := GPUParticlesCollisionBox3D.new()
+	stop.size = block.size
+	stop.position = wall.position
+	stop.cull_mask = Layers.FX
+	add_child(stop)
+	var gust := Vfx.wind_attractor()
+	add_child(gust)
+	Vfx.steer(gust, Vector3(6, 0, 0), Vector3.ZERO)
+	var drift: Node3D = Vfx.system("petals")
+	add_child(drift)
+	Vfx.place(drift, Vector3.ZERO)
+	Vfx.emit(drift, true)
+	var kept := eye.global_transform
+	eye.global_transform = Transform3D(Basis(), Vector3(-1.5, 1.4, 4.5)).looking_at(Vector3(1.6, 1.2, 0), Vector3.UP)
+	# (Blown at it a while, then stopped, and given time to finish falling:
+	# what is still on the wall's face hangs there.)
+	await _seconds(5.0)
+	Vfx.emit(drift, false)
+	await _seconds(4.0)
+	var image := get_viewport().get_texture().get_image()
+	image.save_png(OS.get_cache_dir() + "/vfx_test_wall.png")
+	var hung := 0
+	var p := _pixel(Vector3(1.55, 3.0, -2.0), image)
+	var q := _pixel(Vector3(1.55, 0.4, 2.0), image)
+
+	for y in range(int(minf(p.y, q.y)), int(maxf(p.y, q.y))):
+		for x in range(int(minf(p.x, q.x)), int(maxf(p.x, q.x))):
+			var c := image.get_pixel(x, y)
+
+			if c.r > 0.3 and c.r > c.g + 0.08 and c.g > c.b:
+				hung += 1
+
+	_check("V5b petals blown at a wall slide down it, none hangs on it", hung == 0, "%d marigold pixels on the wall's face" % hung)
+	eye.global_transform = kept
+	drift.free()
+	gust.free()
+	stop.free()
+	wall.free()
+	sun.free()
+	floor_field.free()
 
 
 ## V6 the god's inhale draws smoke toward its mouth: copal beside an

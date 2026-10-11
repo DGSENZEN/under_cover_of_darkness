@@ -392,6 +392,31 @@ func _scenes() -> void:
 	_check("Z23b a stuttering lamp's light wavers at night", lamp != null and hi - lo > 0.3,
 		"%d stuttering, energy %.2f..%.2f" % [map.kit.stuttering.size(), lo, hi])
 
+	# Z26 what drifts down stops at a building's walls: every plot within
+	# 20 m of a petals or leaves emitter stands in a particle collision box
+	# (petals blew through house fronts)
+	var drifting: Array = map.dressing["emitters"].filter(func(e): return e["effect"] in ["petals", "leaves"])
+	var walls: Array = map.find_children("*", "GPUParticlesCollisionBox3D", true, false)
+	var open := []
+
+	for plot in map.plan["plots"]:
+		var middle := Vector2.ZERO
+
+		for pt in plot["polygon"]:
+			middle += Vector2(pt[0], pt[1])
+
+		middle /= plot["polygon"].size()
+
+		if not drifting.any(func(e): return Vector2(e["at"][0], e["at"][2]).distance_to(middle) < 20.0):
+			continue
+
+		var inside := Vector3(middle.x, float(plot["base"]) + float(plot["height"]) / 2.0, middle.y)
+
+		if not walls.any(func(w): return AABB(-w.size / 2.0, w.size).has_point(w.global_transform.affine_inverse() * inside)):
+			open.append(plot["name"])
+
+	_check("Z26 drift stops at the walls near it", open.is_empty(), "%d plots open: %s" % [open.size(), open.slice(0, 6)])
+
 	# Z25 by day the volumetric fog runs, at no density: the seeped mist and
 	# the copal's haze (fog volumes) draw by day too
 	var day_env: Environment = map._day

@@ -10,6 +10,9 @@ uniform vec3 box = vec3(2.0, 0.6, 2.0);
 uniform float offset = 1.8;
 uniform float fall = 1.0;
 uniform float limit = 3.0;
+// How fast it crosses the ground at most (m/s): about its fall, so a gust
+// carries it a few metres, never across a street.
+uniform float drift_limit = 1.2;
 uniform float flutter = 0.6;
 // How fast the air brings it round to its fall and flutter (1/s).
 uniform float drag = 1.5;
@@ -59,8 +62,15 @@ void process() {
 	float phase = CUSTOM.x * 6.2832;
 
 	if (CUSTOM.z < 0.5 && COLLIDED) {
-		CUSTOM.z = 1.0;
 		TRANSFORM[3].xyz += COLLISION_NORMAL * COLLISION_DEPTH;
+
+		// At rest on ground that faces up; against a wall it loses what
+		// drove it in and falls on down the wall.
+		if (COLLISION_NORMAL.y > 0.7) {
+			CUSTOM.z = 1.0;
+		} else {
+			VELOCITY -= COLLISION_NORMAL * min(dot(VELOCITY, COLLISION_NORMAL), 0.0);
+		}
 	}
 
 	mat3 basis;
@@ -80,6 +90,10 @@ void process() {
 
 		if (length(VELOCITY) > limit) {
 			VELOCITY = normalize(VELOCITY) * limit;
+		}
+
+		if (length(VELOCITY.xz) > drift_limit) {
+			VELOCITY.xz = normalize(VELOCITY.xz) * drift_limit;
 		}
 
 		vec3 axis = normalize(vec3(hash(seed + 5u), hash(seed + 6u), hash(seed + 7u)) * 2.0 - 1.0);
