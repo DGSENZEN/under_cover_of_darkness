@@ -31,7 +31,7 @@ void fragment() {
 	heat *= smoothstep(1.0, 0.55, up) * smoothstep(0.0, 0.12, up) * (0.8 + 0.3 * flicker);
 	// Narrowing to the tips, the outline wobbling with the noise (the
 	// sheet's bed fills its frame: drawn edge to edge it stood in a box).
-	float half_width = mix(0.5, 0.14, pow(up, 0.8));
+	float half_width = mix(0.5, 0.08, pow(up, 0.5));
 	heat *= 1.0 - smoothstep(half_width * 0.6, half_width, abs(UV.x - 0.5 + (n - 0.5) * 0.14 * up));
 	float banded = bands(heat * 1.25, 3.0);
 	ALBEDO = texture(ramp, vec2(clamp(banded, 0.0, 0.999), 0.5)).rgb;

@@ -11,6 +11,9 @@ const FLAME := preload("res://scripts/Visual/vfx_flame.gdshader")
 const HAZE := preload("res://scripts/Visual/vfx_haze.gdshader")
 const CANDLE := preload("res://scripts/Visual/vfx_candle.gdshader")
 const STEM := preload("res://scripts/Visual/vfx_stem.gdshader")
+const MIST := preload("res://scripts/Visual/vfx_mist.gdshader")
+const FOG := preload("res://scripts/Visual/vfx_fog.gdshader")
+const DUST := preload("res://scripts/Visual/vfx_dust.gdshader")
 const Flicker := preload("res://scripts/Level/VfxFlicker.gd")
 const SMOKE := "res://assets/vfx/smoke.png"
 const PETAL := "res://assets/vfx/petal.png"
@@ -28,6 +31,10 @@ const CANDLES_ENERGY := 0.35
 const FIRE_COLOUR := Color("#ff9a3c")
 ## A brazier's flame tongues, their height over the coals (m).
 const FLAME_HEIGHT := 1.0
+## The seeped's colour (the colour rule: phosphor green).
+const SEEPED := Color("7FD36A")
+## Dust is laid this far under its lamp (tools/level/dress_scenes.py).
+const DUST_UNDER_LAMP := 3.5
 const CANDLE_COLOUR := Color("#ffc070")
 ## Fire's heat to colour, in hard bands: below the first band nothing is
 ## drawn; then deep red-orange, orange, pale gold (warm, never white).
@@ -50,7 +57,8 @@ const PRESETS := {
 		"opacity": 0.9, "amount": 40, "lifetime": 6.0, "size": [0.5, 2.4], "velocity": [0.4, 0.65], "spread": 8.0,
 		"gravity": Vector3(0, 0.12, 0), "box": Vector3(0.08, 0.05, 0.08), "offset": 0.8, "fps": 30, "erosion": 0.35,
 		"blown": 0.15, "anim": 1.0},
-		{"draw": "stem", "size": Vector2(0.5, 1.0)}],
+		{"draw": "stem", "size": Vector2(0.5, 1.0)},
+		{"draw": "pool", "size": Vector3(3.0, 1.6, 3.0), "at": Vector3(0, 2.4, 0)}],
 	"smoke": [{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.42, 0.4, 0.38),
 		"opacity": 0.6, "amount": 14, "lifetime": 3.2, "size": [0.4, 1.4], "velocity": [0.4, 0.7], "spread": 15.0,
 		"gravity": Vector3(0, 0.15, 0), "box": Vector3(0.15, 0.05, 0.15), "offset": 0.6, "fps": 30, "erosion": 0.4,
@@ -58,20 +66,20 @@ const PRESETS := {
 	"embers": [{"draw": "specks", "tint": Color("FFA040"), "amount": 30, "lifetime": 1.4, "size": [0.035, 0.015],
 		"velocity": [0.8, 1.6], "spread": 25.0, "gravity": Vector3(0, 0.6, 0), "box": Vector3(0.2, 0.05, 0.2), "fps": 30,
 		"blown": 0.2}],
-	"mist": [{"draw": "sprites", "sheet": SMOKE, "grid": [4, 1], "tint": Color("7FD36A"), "opacity": 0.3,
-		"amount": 30, "lifetime": 4.0, "size": [0.6, 2.0], "velocity": [0.1, 0.35], "spread": 180.0, "flat": true,
-		"gravity": Vector3(0, 0.02, 0), "box": Vector3(1.2, 0.15, 1.2), "fps": 15, "erosion": 0.3}],
+	"mist": [{"draw": "fog", "shader": MIST, "size": Vector3(6.0, 1.2, 6.0), "at": Vector3(0, 0.5, 0)},
+		{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": SEEPED, "opacity": 0.15,
+		"amount": 8, "lifetime": 5.0, "size": [0.8, 2.2], "velocity": [0.1, 0.3], "spread": 180.0, "flat": true,
+		"gravity": Vector3(0, -0.05, 0), "box": Vector3(0.5, 0.05, 0.5), "fps": 15, "erosion": 0.6, "anim": 1.0,
+		"glows": true, "ground": 0.1}],
 	"petals": [{"draw": "sprites", "sheet": PETAL, "grid": [2, 2], "tint": Color.WHITE, "opacity": 1.0,
 		"amount": 20, "lifetime": 8.0, "size": [0.12, 0.12], "velocity": [0.1, 0.3], "spread": 180.0,
 		"gravity": Vector3(0, -0.8, 0), "box": Vector3(2.0, 0.6, 2.0), "offset": 1.8, "fps": 15, "blown": 0.4}],
 	"leaves": [{"draw": "sprites", "sheet": LEAF, "grid": [2, 2], "tint": Color.WHITE, "opacity": 1.0,
 		"amount": 8, "lifetime": 8.0, "size": [0.16, 0.16], "velocity": [0.1, 0.3], "spread": 180.0,
 		"gravity": Vector3(0, -0.9, 0), "box": Vector3(2.5, 0.5, 2.5), "fps": 15, "blown": 0.4}],
-	"dust": [{"draw": "specks", "tint": Color(1.0, 0.92, 0.75, 0.6), "amount": 30, "lifetime": 6.0, "size": [0.02, 0.02],
-		"velocity": [0.02, 0.06], "spread": 180.0, "gravity": Vector3.ZERO, "box": Vector3(2.5, 1.5, 2.5), "fps": 15}],
-	"canal_fog": [{"draw": "sprites", "sheet": SMOKE, "grid": [4, 1], "tint": Color(0.7, 0.75, 0.8), "opacity": 0.25,
-		"amount": 20, "lifetime": 6.0, "size": [1.5, 3.5], "velocity": [0.05, 0.2], "spread": 180.0, "flat": true,
-		"gravity": Vector3.ZERO, "box": Vector3(4.0, 0.1, 1.5), "fps": 15, "erosion": 0.3}],
+	"dust": [{"draw": "motes", "tint": Color(1.0, 0.92, 0.75, 0.6), "amount": 40, "lifetime": 6.0, "size": [0.02, 0.02],
+		"velocity": [0.02, 0.06], "spread": 180.0, "gravity": Vector3.ZERO, "box": Vector3(2.0, 1.5, 2.0), "fps": 15}],
+	"canal_fog": [{"draw": "fog", "shader": FOG, "size": Vector3(40.0, 2.0, 12.0), "at": Vector3.ZERO}],
 	"candles": [{"draw": "candles"}, {"draw": "light", "colour": CANDLE_COLOUR, "range": 4.0, "at": Vector3(0, 0.4, 0)}],
 	"brazier": [{"draw": "flames"}, {"draw": "trailed"}, {"draw": "haze"},
 		{"draw": "light", "colour": FIRE_COLOUR, "range": 9.0, "at": Vector3(0, 0.5, 0)},
@@ -85,6 +93,7 @@ const PRESETS := {
 const FLICKERS := {"brazier": BRAZIER_ENERGY, "coals": COALS_ENERGY, "candles": CANDLES_ENERGY}
 
 static var _noise: NoiseTexture2D
+static var _noise_3d: NoiseTexture3D
 static var _ramp: GradientTexture1D
 
 
@@ -137,8 +146,25 @@ static func _part(p: Dictionary) -> Array:
 			return [_light(p)]
 		"trailed":
 			return _trailed()
+		"fog":
+			return [_fog(p)]
+		"pool":
+			return [_pool(p)]
+
+	if p.has("ground"):
+		return [_particles(p), _ground(p["ground"])]
 
 	return [_particles(p)]
+
+
+## The ground `depth` under an effect's spot, for what it gives off to
+## slide along (the plaza is flat under a booth: a box, not a heightfield).
+static func _ground(depth: float) -> GPUParticlesCollisionBox3D:
+	var ground := GPUParticlesCollisionBox3D.new()
+	ground.name = "ground"
+	ground.size = Vector3(6, 0.2, 6)
+	ground.position = Vector3(0, -depth - 0.1, 0)
+	return ground
 
 
 static func _particles(p: Dictionary) -> GPUParticles3D:
@@ -192,6 +218,12 @@ static func _particles(p: Dictionary) -> GPUParticles3D:
 	process.set_meta("gravity", p["gravity"])
 	process.set_meta("blown", p.get("blown", 0.0))
 
+	if p.has("ground"):
+		process.collision_mode = ParticleProcessMaterial.COLLISION_RIGID
+		process.collision_bounce = 0.0
+		process.collision_friction = 0.6
+		particles.collision_base_size = 0.2
+
 	# Carried on the wind (which adds to its gravity) at most a little past
 	# its own pace: the column bends over, never breaking into a string of
 	# puffs sped off one by one.
@@ -209,7 +241,14 @@ static func _particles(p: Dictionary) -> GPUParticles3D:
 	quad.size = Vector2.ONE
 	particles.draw_pass_1 = quad
 
-	if p["draw"] == "sprites":
+	if p["draw"] == "motes":
+		var mote := ShaderMaterial.new()
+		mote.shader = DUST
+		mote.set_shader_parameter(&"tint", p["tint"])
+		mote.set_shader_parameter(&"cone_axis", Vector3.DOWN)
+		mote.set_shader_parameter(&"cone_angle", 0.6)
+		quad.material = mote
+	elif p["draw"] == "sprites":
 		var look := ShaderMaterial.new()
 		look.shader = SPRITE
 		look.set_shader_parameter(&"sheet", load(p["sheet"]))
@@ -221,6 +260,8 @@ static func _particles(p: Dictionary) -> GPUParticles3D:
 		if p.has("sheet_b"):
 			look.set_shader_parameter(&"sheet_b", load(p["sheet_b"]))
 			look.set_shader_parameter(&"six_ways", true)
+
+		look.set_shader_parameter(&"glows", p.get("glows", false))
 
 		quad.material = look
 	else:
@@ -355,6 +396,41 @@ static func _stem(size: Vector2) -> MeshInstance3D:
 	return stem
 
 
+## A fog volume (box) drawn by its own fog shader.
+static func _fog(p: Dictionary) -> FogVolume:
+	var look := ShaderMaterial.new()
+	look.shader = p["shader"]
+	look.set_shader_parameter(&"noise", noise_3d())
+
+	if p["shader"] == MIST:
+		look.set_shader_parameter(&"colour", SEEPED)
+
+	var volume := FogVolume.new()
+	volume.name = "fog"
+	volume.shape = RenderingServer.FOG_VOLUME_SHAPE_BOX
+	volume.size = p["size"]
+	volume.position = p["at"]
+	volume.material = look
+	volume.visible = false
+	return volume
+
+
+## A small pool of haze over a smoke (copal's), catching the lamps.
+static func _pool(p: Dictionary) -> FogVolume:
+	var haze := FogMaterial.new()
+	haze.density = 0.12
+	haze.albedo = Color("ECE6DA")
+	haze.edge_fade = 0.6
+	var volume := FogVolume.new()
+	volume.name = "pool"
+	volume.shape = RenderingServer.FOG_VOLUME_SHAPE_ELLIPSOID
+	volume.size = p["size"]
+	volume.position = p["at"]
+	volume.material = haze
+	volume.visible = false
+	return volume
+
+
 static func _light(p: Dictionary) -> OmniLight3D:
 	var light := OmniLight3D.new()
 	light.light_color = p["colour"]
@@ -453,6 +529,36 @@ static func _trailed() -> Array:
 	return [embers, sparks, ground]
 
 
+## A 3D noise of our own (seamless), shared by the fog shaders.
+static func noise_3d() -> NoiseTexture3D:
+	if _noise_3d == null:
+		var fast := FastNoiseLite.new()
+		fast.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+		fast.frequency = 0.06
+		fast.fractal_octaves = 3
+		_noise_3d = NoiseTexture3D.new()
+		_noise_3d.width = 64
+		_noise_3d.height = 64
+		_noise_3d.depth = 64
+		_noise_3d.seamless = true
+		_noise_3d.noise = fast
+
+	return _noise_3d
+
+
+## Puts an effect at `at` (world): what of it is placed by the world, too
+## (dust's lamp, DUST_UNDER_LAMP above it).
+static func place(node: Node3D, at: Vector3) -> void:
+	node.global_position = at
+
+	for child in node.get_children():
+		if child is GPUParticles3D and child.draw_pass_1 != null:
+			var look := (child.draw_pass_1 as Mesh).surface_get_material(0) as ShaderMaterial
+
+			if look != null and look.shader == DUST:
+				look.set_shader_parameter(&"lamp", at + Vector3(0, DUST_UNDER_LAMP, 0))
+
+
 ## A climbing noise texture of our own (seamless), shared.
 static func noise() -> NoiseTexture2D:
 	if _noise == null:
@@ -516,6 +622,7 @@ static func thin(node: Node3D, ratio: float) -> void:
 ## Carries what an effect gives off on the wind.
 static func blow(node: Node3D, wind: Vector3) -> void:
 	for child in node.get_children():
-		if child is GPUParticles3D:
+		# (A sub-emitter, sparks, has no wind of its own.)
+		if child is GPUParticles3D and child.process_material.has_meta("blown"):
 			var process := child.process_material as ParticleProcessMaterial
 			process.gravity = process.get_meta("gravity") + Vector3(wind.x, 0, wind.z) * float(process.get_meta("blown"))

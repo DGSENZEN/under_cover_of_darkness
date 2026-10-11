@@ -10,6 +10,8 @@ extends Node3D
 
 const REACH := 60.0
 const ACTIVE := 40
+## Fog volumes cost the most: of those running, only the nearest FOG show.
+const FOG := 8
 const FULL := 20.0
 const THIN := 0.3
 ## Which emitters run is chosen again this often (s).
@@ -108,7 +110,7 @@ func _pick() -> void:
 				continue
 
 			add_child(node)
-			node.global_position = _at(emitters[i])
+			Vfx.place(node, _at(emitters[i]))
 			_systems[i] = node
 
 		Vfx.emit(_systems[i], true)
@@ -116,3 +118,15 @@ func _pick() -> void:
 		_running.append(i)
 
 	_running.sort()
+	# Of the running fog volumes only the nearest FOG show.
+	var foggy: Array = []
+
+	for i in _running:
+		if not _systems[i].find_children("*", "FogVolume", true, false).is_empty():
+			foggy.append([chosen[i], i])
+
+	foggy.sort_custom(func(a, b): return a[0] < b[0])
+
+	for k in foggy.size():
+		for volume in _systems[foggy[k][1]].find_children("*", "FogVolume", true, false):
+			volume.visible = k < FOG

@@ -151,6 +151,8 @@ func set_day(day: bool) -> void:
 func _lights() -> void:
 	_night = RetroScript.night_environment()
 	_night.background_color = Color(0.03, 0.035, 0.06)
+	# The night's fog reaches over the sky: each lamp a halo against it.
+	_night.volumetric_fog_sky_affect = 0.5
 	_day = Environment.new()
 	var sky := Sky.new()
 	sky.sky_material = ProceduralSkyMaterial.new()
@@ -158,6 +160,10 @@ func _lights() -> void:
 	_day.background_mode = Environment.BG_SKY
 	_day.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	_day.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	# Volumetric fog on at no density: the seeped mist and the copal's haze
+	# (fog volumes) draw by day too.
+	_day.volumetric_fog_enabled = true
+	_day.volumetric_fog_density = 0.0
 	world = WorldEnvironment.new()
 	add_child(world)
 	moon = DirectionalLight3D.new()

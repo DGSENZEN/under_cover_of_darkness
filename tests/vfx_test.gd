@@ -20,6 +20,8 @@ func _ready() -> void:
 	eye.global_transform = Transform3D(Basis(), Vector3(0, 1.6, 6)).looking_at(Vector3(0, 1.0, 0), Vector3.UP)
 	await _brazier()
 	await _copal()
+	await _mist()
+	await _shafts()
 
 	print("\n==== RESULTS ====")
 	for r in results:
@@ -48,8 +50,8 @@ func _brazier() -> void:
 	var foot := 0.0
 	var tips := 0.0
 
-	for k in 4:
-		await _seconds(0.2)
+	for k in 8:
+		await _seconds(0.15)
 		var shot := get_viewport().get_texture().get_image()
 		var rows := []
 		var high := int(_pixel(Vector3(0, 2.2, 0), shot).y)
@@ -66,7 +68,7 @@ func _brazier() -> void:
 			foot += rows[int(rows.size() * 0.8)]
 
 	_check("V1b the brazier's flames narrow to their tips", foot > 0.0 and tips < foot * 0.7,
-		"%.0f px wide at the foot, %.0f px near the tips" % [foot / 4.0, tips / 4.0])
+		"%.0f px wide at the foot, %.0f px near the tips" % [foot / 8.0, tips / 8.0])
 	fire.free()
 
 
@@ -90,6 +92,61 @@ func _copal() -> void:
 		"before %.3f, smoking %.3f" % [before, after])
 	smoke.free()
 	lamp.free()
+
+
+## V3 the seeped mist reads green round its booth: greener there than a
+## metre past the mist.
+func _mist() -> void:
+	var seeped: Node3D = Vfx.system("mist")
+	add_child(seeped)
+	Vfx.place(seeped, Vector3.ZERO)
+	Vfx.emit(seeped, true)
+	await _seconds(2.5)
+	var image := get_viewport().get_texture().get_image()
+	var round_booth := _greenness(image, Vector3(-1.0, 0.9, 0), Vector3(1.0, 0.1, 0))
+	var beyond := _greenness(image, Vector3(3.0, 0.9, 0), Vector3(4.0, 0.1, 0))
+	_check("V3 the seeped mist reads green round its booth", round_booth > beyond + 0.02,
+		"round the booth %.3f, beyond %.3f" % [round_booth, beyond])
+	seeped.free()
+
+
+## V4 a lamp lights the night air under it (its shaft in the fog): brighter
+## there than between two lamps.
+func _shafts() -> void:
+	var kit := KitLoader.build({"pieces": [], "colliders": [], "lights": [
+		{"at": [-5.0, 5.0, 0.0], "colour": "#e8d8a8", "range": 12.0}, {"at": [5.0, 5.0, 0.0], "colour": "#e8d8a8", "range": 12.0}]})
+	add_child(kit)
+	kit.set_day(false)
+	# A wall far behind, past the lamps' reach (the night's fog draws over
+	# geometry, not the sky).
+	var wall := MeshInstance3D.new()
+	var slab := BoxMesh.new()
+	slab.size = Vector3(60, 20, 1)
+	wall.mesh = slab
+	wall.position = Vector3(0, 10, -16)
+	add_child(wall)
+	await _seconds(2.0)
+	var image := get_viewport().get_texture().get_image()
+	var under := _luminance(image, Vector3(4.5, 4.0, 0), Vector3(5.5, 2.5, 0))
+	var between := _luminance(image, Vector3(-0.5, 4.0, 0), Vector3(0.5, 2.5, 0))
+	_check("V4 a lamp lights the night air under it", under > between + 0.02, "under %.3f, between %.3f" % [under, between])
+	kit.free()
+	wall.free()
+
+
+func _greenness(image: Image, top_left: Vector3, bottom_right: Vector3) -> float:
+	var p := _pixel(top_left, image)
+	var q := _pixel(bottom_right, image)
+	var sum := 0.0
+	var total := 0
+
+	for y in range(int(p.y), int(q.y), 2):
+		for x in range(int(p.x), int(q.x), 2):
+			var c := image.get_pixel(x, y)
+			sum += c.g - (c.r + c.b) / 2.0
+			total += 1
+
+	return sum / maxi(total, 1)
 
 
 func _pixel(at: Vector3, image: Image) -> Vector2:

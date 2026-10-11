@@ -30,6 +30,8 @@ const CARDS := {
 ## Kits whose pieces are trees: their bark bends in the wind with their
 ## leaves (sway.gdshaderinc), this far (m) for each square metre of height.
 const TREE_SWAY := 0.006
+## How brightly a lamp lights the night's fog round it.
+const LAMP_FOG := 1.5
 ## How often (s) a stuttering lamp dips.
 const STUTTER_EVERY := 4.0
 const TREES := {"trees_kit": TREE_SWAY}
@@ -117,8 +119,13 @@ static func build(dressing: Dictionary) -> KitLoader:
 		lamps.add_child(light)
 		out.lights.append(light)
 
+		# Lamps light the night air (shafts in the fog); a stuttering one
+		# would ghost in it.
+		light.light_volumetric_fog_energy = LAMP_FOG
+
 		if hash(Vector2i(roundi(light.position.x), roundi(light.position.z))) % 8 == 0:
 			out.stuttering.append(light)
+			light.light_volumetric_fog_energy = 0.0
 
 	var body := StaticBody3D.new()
 	body.name = "colliders"

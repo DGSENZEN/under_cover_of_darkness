@@ -228,6 +228,18 @@ func _run() -> void:
 
 	_check("A13d copal, steam and smoke drift no faster than 1.2 m/s on the wind", capped.all(func(c): return c), str(capped))
 
+	# A13f the wind carries a brazier's smoke (its sparks, a sub-emitter
+	# with no wind of their own, stopped the blowing short of the smoke)
+	var burning: Node3D = Vfx.system("brazier")
+	add_child(burning)
+	var smoke_puffs: GPUParticles3D = burning.get_children().filter(
+		func(c): return c is GPUParticles3D and c.draw_pass_1.material is ShaderMaterial)[0]
+	var calm: Vector3 = smoke_puffs.process_material.gravity
+	Vfx.blow(burning, Vector3(4, 0, 0))
+	_check("A13f the wind carries a brazier's smoke past its sparks", smoke_puffs.process_material.gravity.x > calm.x + 0.5,
+		"calm %s, blown %s" % [calm, smoke_puffs.process_material.gravity])
+	burning.free()
+
 	# A13c each of the flame's three heat bands its own warm colour, none
 	# near black (the ramp's stops sat just past the bands: the outer band
 	# took the ember's black)
@@ -235,6 +247,65 @@ func _run() -> void:
 	var shades: Array = [1.0 / 3.0, 2.0 / 3.0, 1.0].map(func(b): return heat.sample(b))
 	_check("A13c the flame's three bands: three warm colours, none near black", shades[0].get_luminance() > 0.25
 		and shades[0] != shades[1] and shades[1] != shades[2] and shades.all(func(c): return c.r > c.b), str(shades))
+
+	# A14 the seeped mist: a fog volume, its own fog shader, glowing the
+	# seeped's phosphor green
+	var seeped: Node3D = Vfx.system("mist")
+	add_child(seeped)
+	var volumes: Array = seeped.find_children("*", "FogVolume", true, false)
+	var mist_look: ShaderMaterial = volumes[0].material if volumes.size() == 1 and volumes[0].material is ShaderMaterial else null
+	_check("A14 the seeped mist is a fog volume in phosphor green", mist_look != null
+		and mist_look.shader.resource_path == "res://scripts/Visual/vfx_mist.gdshader"
+		and Color(mist_look.get_shader_parameter(&"colour")).is_equal_approx(Color("7FD36A")),
+		"%d volumes, %s" % [volumes.size(), mist_look.shader.resource_path if mist_look else "no shader"])
+	seeped.free()
+
+	# A15 fog volumes are costly: of twenty near, the nearest eight show
+	var foggy: Array = []
+
+	for k in 20:
+		foggy.append({"effect": "canal_fog", "at": [2.0 + 2.0 * k, 0, 0]})
+
+	ambient = Ambient.build(foggy)
+	add_child(ambient)
+	ambient.step(0.3)
+	var shown: Array = []
+
+	for i in 20:
+		var node := ambient.system(i)
+
+		if node != null and node.find_children("*", "FogVolume", true, false).any(func(v): return v.visible):
+			shown.append(i)
+
+	_check("A15 of twenty fog volumes near, the nearest eight show", shown == range(8), str(shown))
+	ambient.free()
+
+	# A16 dust motes show only in their lamp's cone (the lamp above them)
+	var motes: Node3D = Vfx.system("dust")
+	add_child(motes)
+	var mote_look: Material = (_particles(motes).draw_pass_1 as Mesh).surface_get_material(0)
+	_check("A16 dust shows in its lamp's cone", mote_look is ShaderMaterial
+		and Vector3(mote_look.get_shader_parameter(&"cone_axis")).is_equal_approx(Vector3.DOWN)
+		and float(mote_look.get_shader_parameter(&"cone_angle")) > 0.2,
+		str(mote_look.get_shader_parameter(&"cone_angle")) if mote_look is ShaderMaterial else "no shader")
+	motes.free()
+
+	# A16b the lamps light the night air (shafts in the fog), the
+	# stuttering ones not (they would ghost)
+	var lamps_at: Array = []
+
+	for k in 24:
+		lamps_at.append({"at": [k * 7.0, 5.0, k * 3.0], "colour": "#e8d8a8", "range": 12.0})
+
+	var kit := KitLoader.build({"pieces": [], "colliders": [], "lights": lamps_at})
+	add_child(kit)
+	kit.set_day(false)
+	var lit_steady: Array = kit.lights.filter(func(l): return not kit.stuttering.has(l))
+	_check("A16b at night the lamps light the fog, the stuttering ones not", kit.stuttering.size() > 0
+		and lit_steady.all(func(l): return is_equal_approx(l.light_volumetric_fog_energy, 1.5))
+		and kit.stuttering.all(func(l): return l.light_volumetric_fog_energy == 0.0),
+		"%d steady, %d stuttering" % [lit_steady.size(), kit.stuttering.size()])
+	kit.free()
 
 	# B1 the god's breath: in and out, about seven seconds a breath
 	var breath := Breath.new()

@@ -392,6 +392,17 @@ func _scenes() -> void:
 	_check("Z23b a stuttering lamp's light wavers at night", lamp != null and hi - lo > 0.3,
 		"%d stuttering, energy %.2f..%.2f" % [map.kit.stuttering.size(), lo, hi])
 
+	# Z25 by day the volumetric fog runs, at no density: the seeped mist and
+	# the copal's haze (fog volumes) draw by day too
+	var day_env: Environment = map._day
+	_check("Z25 by day the volumetric fog runs at no density", day_env.volumetric_fog_enabled
+		and day_env.volumetric_fog_density == 0.0, "on %s, density %.3f" % [day_env.volumetric_fog_enabled, day_env.volumetric_fog_density])
+	# Z25b at night the fog reaches over the sky: the lamps' halos show
+	# against it (at none they drew only where a wall stood behind)
+	var night_env: Environment = map._night
+	_check("Z25b at night the lamps' halos show against the sky", night_env.volumetric_fog_sky_affect >= 0.4,
+		"sky affect %.2f" % night_env.volumetric_fog_sky_affect)
+
 	# Z24 F1 labels the scenes near; F1 again takes them away
 	var key := InputEventKey.new()
 	key.keycode = KEY_F1

@@ -35,6 +35,7 @@ func _ready() -> void:
 	eye.global_transform = Transform3D(Basis(), Vector3(0, 1.6, 3.2)).looking_at(Vector3(0, 1.3, 0), Vector3.UP)
 	var node: Node3D = Vfx.system(effect)
 	add_child(node)
+	Vfx.place(node, Vector3.ZERO)
 	Vfx.emit(node, true)
 	await _seconds(4.0)
 	get_viewport().get_texture().get_image().save_png(out + effect + "_day.png")
