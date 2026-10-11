@@ -31,7 +31,7 @@ import shapes  # noqa: E402
 
 NAME = "trees_kit"
 ATLAS = 1536
-CARDS = ("leaf_crown", "palm_frond", "willow", "laurel", "twigs")
+CARDS = ("leaf_crown", "palm_frond", "willow", "laurel", "twigs", "leaf_shrub", "garden_flowers")
 SLOTS = ["bark", "iron", "wood", "sign"] + list(CARDS)
 
 UP = Vector((0.0, 0.0, 1.0))
@@ -393,6 +393,32 @@ def garden_bench(m):
         m.box((-0.9, 0.28, z), (0.9, 0.32, z + 0.1), "wood")
 
 
+def garden_shrub(m):
+    """A clipped garden shrub, 1 m: a short woody stem, a dome of leaf
+    cards (our leaf_shrub painting)."""
+    trunk(m, [(0.06, 0.0), (0.05, 0.3), (0.0, 0.42)], sides=5)
+    rng = random.Random(71)
+    centre = Vector((0.0, 0.0, 0.6))
+
+    for k in range(7):
+        up = 1.0 - 2.0 * (k + 0.5) / 7
+        a = k * 2.399963
+        flat = math.sqrt(max(1.0 - up * up, 0.0))
+        at = centre + Vector((math.cos(a) * flat * 0.32, math.sin(a) * flat * 0.32, max(up, -0.2) * 0.22))
+        card_at(m, at, (at - centre).normalized() + Vector((0.0, 0.0, 0.3)), 0.75, 0.7, "leaf_shrub",
+                round=tuple(centre - Vector((0.0, 0.0, 0.4))), roll=rng.uniform(-30, 30))
+
+
+def flower_clump(m):
+    """A clump of the garden's flowers, 0.6 m: three cards crossed round a
+    stub of a stem."""
+    trunk(m, [(0.04, 0.0), (0.0, 0.12)], sides=4)
+
+    for k in range(3):
+        a = math.radians(k * 60.0)
+        card_at(m, (0.0, 0.0, 0.31), (math.cos(a), math.sin(a), 0.0), 0.62, 0.62, "garden_flowers", round=(0.0, 0.0, -1.0))
+
+
 def garden_edging(m):
     """Low iron hoops edging a bed, 2 m from its origin along +X (stretched
     to fit), each hoop 0.5 m wide and 0.25 high."""
@@ -408,7 +434,7 @@ def garden_edging(m):
 
 
 PIECES = [tree_ash, tree_ash_young, palm_canary, tree_laurel, tree_willow, ahuehuete_split, tree_guard, garden_bench,
-          garden_edging]
+          garden_edging, garden_shrub, flower_clump]
 
 FLAGS = (0.62, 0.6, 0.56)
 JOINTS = {

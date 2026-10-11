@@ -154,3 +154,12 @@ the gradient map colours them; the dressed frame rate within 10% of the scenes'
 
 - The sigils' glyphs (a placeholder stroke pattern until they are painted).
 - The hum and the breath's sound (the approved packs, by ear).
+
+## After this
+
+The user (Oct 10 2026, approving this spec): "once we have those things,
+let's also apply that towards the buildings, the skybox, etc." The same
+register and the same tools (Blender sims and renders of our own, Godot's
+fog, particles and shaders, one wind and one breath) go next to the
+district's buildings (the house families) and its sky, each with its own
+spec.

@@ -25,6 +25,7 @@ const PAINTED := "res://textures/painted/"
 const CARDS := {
 	"leaf_crown": [0.06, false, true], "palm_frond": [0.09, false, true], "willow": [0.12, true, true],
 	"laurel": [0.04, false, true], "twigs": [0.04, false, true], "laundry": [0.14, true, false],
+	"leaf_shrub": [0.03, false, false], "garden_flowers": [0.05, false, false],
 }
 ## Kits whose pieces are trees: their bark bends in the wind with their
 ## leaves (sway.gdshaderinc), this far (m) for each square metre of height.

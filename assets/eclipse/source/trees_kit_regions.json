@@ -8,8 +8,10 @@
   "palm_frond",
   "willow",
   "laurel",
-  "twigs"
+  "twigs",
+  "leaf_shrub",
+  "garden_flowers"
  ],
  "atlas_px": 1536,
- "px_per_m": 48.36
+ "px_per_m": 48.33
 }

@@ -660,6 +660,31 @@ def _bed(d, life, bed, quarter, i, j, level):
             if (k + i + j) % 5 == 0 and piece == "tree_ash":
                 d.emitters.append({"effect": "leaves", "at": [round(x, 3), level + 6.5, round(z, 3)], "floor": level})
 
+    # Clipped shrubs round its edge, flowers through it (staggered), where
+    # the trees leave room.
+    for (ax, az), (bx, bz) in (((x0, z0), (x1, z0)), ((x1, z0), (x1, z1)), ((x1, z1), (x0, z1)), ((x0, z1), (x0, z0))):
+        u = _unit((bx - ax, bz - az))
+        inward = (-u[1], u[0])
+        length = math.hypot(bx - ax, bz - az)
+        t = 1.5
+
+        while t < length - 1.0:
+            life.put("garden_shrub", ax + u[0] * t + inward[0] * 0.9, az + u[1] * t + inward[1] * 0.9, (t * 41) % 360)
+            t += 3.5
+
+    row = 0
+    z = z0 + 3.0
+
+    while z < z1 - 2.5:
+        x = x0 + 3.0 + (2.0 if row % 2 else 0.0)
+
+        while x < x1 - 2.5:
+            life.put("flower_clump", x, z, (x * 17 + z * 7) % 360)
+            x += 4.0
+
+        z += 3.5
+        row += 1
+
     # A bench by the bed's side on a central walk, facing the walk.
     sx, sz = quarter
 

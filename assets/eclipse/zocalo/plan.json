@@ -10669,6 +10669,182 @@
      98
     ]
    }
+  },
+  {
+   "name": "camera_god_devotion",
+   "kind": "camera",
+   "at": [
+    6.0,
+    1.7,
+    14.0
+   ],
+   "props": {
+    "look_at": [
+     0,
+     2.5,
+     2
+    ]
+   }
+  },
+  {
+   "name": "camera_evangelistas",
+   "kind": "camera",
+   "at": [
+    -226.0,
+    1.7,
+    -236.0
+   ],
+   "props": {
+    "look_at": [
+     -216,
+     1.0,
+     -242.5
+    ]
+   }
+  },
+  {
+   "name": "camera_market_hall_doors",
+   "kind": "camera",
+   "at": [
+    55.0,
+    2.0,
+    235.0
+   ],
+   "props": {
+    "look_at": [
+     43,
+     1.0,
+     240
+    ]
+   }
+  },
+  {
+   "name": "camera_monster_wagon",
+   "kind": "camera",
+   "at": [
+    -2.0,
+    1.7,
+    197.0
+   ],
+   "props": {
+    "look_at": [
+     -6,
+     1.2,
+     188
+    ]
+   }
+  },
+  {
+   "name": "camera_wake",
+   "kind": "camera",
+   "at": [
+    -226.0,
+    1.7,
+    -223.0
+   ],
+   "props": {
+    "look_at": [
+     -233,
+     0.8,
+     -228
+    ]
+   }
+  },
+  {
+   "name": "camera_brazier_watch",
+   "kind": "camera",
+   "at": [
+    9.0,
+    1.7,
+    -88.0
+   ],
+   "props": {
+    "look_at": [
+     5,
+     0.8,
+     -95
+    ]
+   }
+  },
+  {
+   "name": "camera_line_of_the_dead",
+   "kind": "camera",
+   "at": [
+    -84.0,
+    1.7,
+    85.0
+   ],
+   "props": {
+    "look_at": [
+     -92,
+     1.0,
+     80
+    ]
+   }
+  },
+  {
+   "name": "camera_organillero",
+   "kind": "camera",
+   "at": [
+    58.0,
+    1.7,
+    94.0
+   ],
+   "props": {
+    "look_at": [
+     54,
+     1.0,
+     102
+    ]
+   }
+  },
+  {
+   "name": "camera_garden",
+   "kind": "camera",
+   "at": [
+    14.0,
+    1.7,
+    22.0
+   ],
+   "props": {
+    "look_at": [
+     60,
+     4.0,
+     60
+    ]
+   }
+  },
+  {
+   "name": "camera_curandera",
+   "kind": "camera",
+   "at": [
+    44.0,
+    1.7,
+    4.0
+   ],
+   "props": {
+    "look_at": [
+     40,
+     1.0,
+     11
+    ]
+   }
+  },
+  {
+   "name": "camera_rail_accident",
+   "kind": "camera",
+   "at": [
+    -109.0,
+    1.7,
+    92.0
+   ],
+   "props": {
+    "look_at": [
+     -115,
+     0.6,
+     85
+    ]
+   }
   }
  ],
  "tram": [

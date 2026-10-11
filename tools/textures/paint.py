@@ -496,6 +496,47 @@ def chalk_ring():
     return small
 
 
+BLOSSOMS = [(216, 106, 154), (240, 236, 222), (138, 90, 184), (200, 64, 70), (232, 210, 80)]
+
+
+def garden_flowers():
+    """A clump of the garden's flowers (a card): stems and leaves, blossoms
+    in pinks, whites, violets, reds and yellows at their tops; never
+    marigold orange or phosphor green, which mean the dead and the seeped."""
+    size = 128 * SCALE
+    rng = np.random.default_rng(311)
+    image = Image.new("RGB", (size, size), (30, 46, 24))
+    mask_image = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(image)
+    mask = ImageDraw.Draw(mask_image)
+    tops = []
+
+    for k in range(16):
+        x0 = size * rng.uniform(0.2, 0.8)
+        top = (x0 + size * rng.uniform(-0.18, 0.18), size * rng.uniform(0.12, 0.55))
+        draw.line([(x0, size), top], fill=(46, 72, 30), width=int(size * 0.012))
+        mask.line([(x0, size), top], fill=255, width=int(size * 0.012))
+
+        for t in (0.35, 0.6, 0.8):
+            y = size - (size - top[1]) * t
+            x = x0 + (top[0] - x0) * t
+            _leaf(draw, mask, x, y, size * 0.1, size * 0.035, math.pi + rng.uniform(-0.9, 0.9) * (1 if k % 2 else -1) - math.pi / 2,
+                  (58, 92, 38), (40, 64, 28))
+
+        tops.append(top)
+
+    for k, (x, y) in enumerate(tops):
+        colour = BLOSSOMS[k % len(BLOSSOMS)]
+
+        for b in range(5):
+            bx, by = x + rng.uniform(-1, 1) * size * 0.04, y + rng.uniform(-1, 1) * size * 0.04
+            r = size * rng.uniform(0.022, 0.034)
+            draw.ellipse([bx - r, by - r, bx + r, by + r], fill=_tinted(colour, rng.uniform(0.85, 1.05)), outline=_tinted(colour, 0.7))
+            mask.ellipse([bx - r, by - r, bx + r, by + r], fill=255)
+
+    return _finish(image, (128, 128), 24, mask_image)
+
+
 WILLOW = [(88, 112, 44), (104, 128, 52), (120, 140, 60), (138, 150, 70), (76, 98, 40)]
 
 
@@ -1958,7 +1999,7 @@ PAINTINGS = {"moon": moon, "banner": banner, "rose_window": rose_window, "altar_
              "carpet": carpet,
              "iron_rail": iron_rail, "window_grille": window_grille, "casement": casement, "quarries": quarries, "glazing": glazing, "sash": sash, "lattice": lattice, "ratlines": ratlines, "coil_mask": coil_mask,
              "decal_salt": decal_salt, "palm_frond": palm_frond, "cypress": cypress, "agave": agave, "orange_leaves": orange_leaves,
-             "gorse": gorse, "fennel": fennel, "pine": pine, "willow": willow, "laurel": laurel, "chalk_ring": chalk_ring, "laundry": laundry, "azulejo_ship": azulejo_ship, "arms_royal": arms_royal,
+             "gorse": gorse, "fennel": fennel, "pine": pine, "willow": willow, "laurel": laurel, "chalk_ring": chalk_ring, "garden_flowers": garden_flowers, "laundry": laundry, "azulejo_ship": azulejo_ship, "arms_royal": arms_royal,
              "azulejo_comet": azulejo.azulejo_comet, "azulejo_king": azulejo.azulejo_king, "azulejo_souls": azulejo.azulejo_souls,
              "tile_frame": azulejo.tile_frame, "window_lit": azulejo.window_lit,
              "sea_chart": sea_chart, "parchment": parchment, "book_spines": book_spines,

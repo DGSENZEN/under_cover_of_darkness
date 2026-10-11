@@ -651,7 +651,8 @@ class TreesKit(unittest.TestCase):
     trees and iron, leaf cards on lathed trunks (the plan's Ruling 1)."""
 
     BUDGET = dict({n: 1300 for n in ["tree_ash", "tree_ash_young", "palm_canary", "tree_laurel", "tree_willow"]},
-                  ahuehuete_split=1800, tree_guard=300, garden_bench=300, garden_edging=300)
+                  ahuehuete_split=1800, tree_guard=300, garden_bench=300, garden_edging=300, garden_shrub=200,
+                  flower_clump=120)
     UNDER = ["tree_ash", "tree_laurel", "palm_canary"]
 
     @classmethod

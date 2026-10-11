@@ -179,6 +179,22 @@ class Scenes(unittest.TestCase):
                 < 7.6 + math.hypot(c["box"][3], c["box"][5]) / 2]
         self.assertEqual(near[:5], [])
 
+    def test_garden_beds_planted(self):
+        """Every bed of the garden is planted: shrubs round its edge and
+        flowers through it, not bare earth under three trees."""
+        beds = [a["rect"] for a in DRESSING["ground"]["areas"] if a["tile"] == "ground_earth" and a["level"] > 0.1]
+        plants = [p for p in DRESSING["pieces"] if p["piece"] in ("garden_shrub", "flower_clump")]
+        bare = []
+
+        for r in beds:
+            inside = [p for p in plants if r[0] < p["at"][0] < r[2] and r[1] < p["at"][2] < r[3]]
+
+            if len(inside) < 12:
+                bare.append((r, len(inside)))
+
+        self.assertGreater(len(beds), 20)
+        self.assertEqual(bare[:5], [])
+
     def test_gate_clean(self):
         problems = dress.gate(DRESSING, greybox.build(DATA), FACES)
         self.assertEqual(problems, [], "\n".join(problems[:20]))
