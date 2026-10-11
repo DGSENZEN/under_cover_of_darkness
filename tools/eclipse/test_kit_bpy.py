@@ -568,6 +568,69 @@ class BoundGod(unittest.TestCase):
         self.assertEqual(self._slot(self.o.data.polygons[index]), "basalt")
 
 
+class FiguresKit(unittest.TestCase):
+    """The figures kit (specs/2026-10-10-zocalo-scenes-design.md): the clay
+    stand-ins, their dogs and a pigeon."""
+
+    POSES = ["fig_stand", "fig_queue", "fig_walk", "fig_kneel_pray", "fig_sit_kerb", "fig_sit_chair", "fig_lean_wall",
+             "fig_push_cart", "fig_carry_basket", "fig_point", "fig_crouch_inspect", "fig_hold_lantern", "fig_type",
+             "fig_dictate", "fig_barker", "fig_photographer", "fig_mourner", "fig_child", "fig_sleep_wall"]
+    BUDGET = dict({n: 320 for n in POSES}, fig_child_held=560, dog_sit=200, dog_lie=200, dog_sniff=200, pigeon=48)
+    STANDING = ["fig_stand", "fig_queue", "fig_walk", "fig_point", "fig_hold_lantern", "fig_dictate", "fig_carry_basket"]
+
+    @classmethod
+    def setUpClass(cls):
+        import figures_kit
+        figures_kit.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_no_degenerate_triangles(self):
+        self.assertEqual({n: _smallest_triangle(o) for n, o in self.objects.items() if _smallest_triangle(o) < 1e-7}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_heights(self):
+        tops = {n: max(v.z for v in _world(o)) for n, o in self.objects.items()}
+        self.assertEqual({n: round(tops[n], 3) for n in self.STANDING if abs(tops[n] - 1.70) > 0.05}, {})
+        self.assertAlmostEqual(tops["fig_child"], 1.15, delta=0.05)
+
+    def test_everything_rests_on_the_ground(self):
+        lows = {n: min(v.z for v in _world(o)) for n, o in self.objects.items()}
+        self.assertEqual({n: z for n, z in lows.items() if abs(z) > 1e-4}, {})
+
+    def test_hands_recorded(self):
+        """Each figure's hands (where a scene puts what it carries), in its own
+        frame: the lantern held out at a hip's height, the barker's right hand
+        high."""
+        import figures_kit
+        people = [n for n in self.objects if n.startswith("fig_")]
+        self.assertEqual(sorted(figures_kit.HANDS), sorted(people))
+        lantern = figures_kit.HANDS["fig_hold_lantern"]["right"]
+        self.assertTrue(0.8 < lantern[2] < 1.2 and lantern[1] < -0.15, lantern)
+        self.assertGreater(figures_kit.HANDS["fig_barker"]["right"][2], 1.9)
+
+    def test_gate_clean(self):
+        import gate
+        problems = {}
+
+        for n, o in self.objects.items():
+            faces = [{"points": [tuple(o.matrix_world @ o.data.vertices[i].co) for i in p.vertices],
+                      "normal": tuple(o.matrix_world.to_3x3() @ p.normal), "owner": n} for p in o.data.polygons]
+            found = [p for p in gate.check(faces, 0, []) if not p.startswith("overlap")]
+
+            if found:
+                problems[n] = found[:3]
+
+        self.assertEqual(problems, {})
+
+
 if __name__ == "__main__":
     result = unittest.main(argv=["test_kit_bpy"], exit=False).result
     sys.exit(not result.wasSuccessful())

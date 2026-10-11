@@ -93,6 +93,9 @@ func _save(file: String) -> void:
 	print("still: ", out + file)
 
 
+## n frames drawn (a window left behind others may stop drawing while it
+## still processes, and its image would be the frame before).
 func _frames(n: int) -> void:
 	for i in n:
-		await get_tree().process_frame
+		RenderingServer.force_draw()
+		await RenderingServer.frame_post_draw
