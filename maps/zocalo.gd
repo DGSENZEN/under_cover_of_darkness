@@ -17,6 +17,9 @@ const GREYBOX := "res://assets/eclipse/zocalo/greybox.json"
 const DRESSING := "res://assets/eclipse/zocalo/dressing.json"
 const MOON_COLOUR := Color("#d8e4f0")
 
+## The greybox alone (as --undressed), set before it enters the tree.
+@export var undressed := false
+
 var plan: Dictionary
 var greybox: GreyboxLoader
 ## The dressing laid (empty when undressed), its pieces and its ground.
@@ -40,7 +43,7 @@ func _ready() -> void:
 	var started := Time.get_ticks_msec()
 	plan = JSON.parse_string(FileAccess.get_file_as_string(PLAN))
 
-	if FileAccess.file_exists(DRESSING) and not "--undressed" in OS.get_cmdline_user_args():
+	if FileAccess.file_exists(DRESSING) and not undressed and not "--undressed" in OS.get_cmdline_user_args():
 		dressing = JSON.parse_string(FileAccess.get_file_as_string(DRESSING))
 
 	greybox = GreyboxLoader.build(JSON.parse_string(FileAccess.get_file_as_string(GREYBOX)), dressing.get("skip", []))

@@ -3,7 +3,6 @@ extends Node3D
 ## Task 4), from a made-up dressing. Headless:
 ##   Godot --headless --fixed-fps 60 --path . res://tests/ambient_test.tscn
 
-const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
 
 var results: Array[String] = []
 var eye: Camera3D
@@ -68,29 +67,17 @@ func _run() -> void:
 		"day %d, night %s" % [by_day, ambient.running()])
 	ambient.free()
 
-	# A4 copal is pale smoke; mist creeps low.
-	FireParticles.clear()
+	# A4 copal smokes pale; mist keeps low (its system's configuration:
+	# GPU particles are not read back, the plan's Ruling 2).
 	ambient = Ambient.build([{"effect": "copal", "at": [3, 0, 0]}, {"effect": "mist", "at": [-3, 0, 0]}])
 	add_child(ambient)
-	await _frames(2)
-
-	for k in 30:
-		ambient.step(1.0 / 30.0)
-
-	await _frames(1)
-	var world := FireParticles.world_node()
-	var smoke = world._pools[&"smoke"] if world else null
-	var mist = world._pools[&"mist"] if world and world._pools.has(&"mist") else null
-	var pale: bool = smoke != null and smoke.count > 0 and smoke.tint[0].is_equal_approx(Color("ECE6DA"))
-	var low: bool = mist != null and mist.count > 0
-
-	if low:
-		for i in mist.count:
-			if mist.pos[i].y > 0.3 + mist.age[i] * 0.2:
-				low = false
-
-	_check("A4 copal smokes pale, mist creeps low", pale and low,
-		"smoke %s, mist %s" % [smoke.count if smoke else -1, mist.count if mist else -1])
+	ambient.step(0.3)
+	var copal: GPUParticles3D = _particles(ambient.system(0))
+	var mist: GPUParticles3D = _particles(ambient.system(1))
+	var pale: bool = copal != null and Vfx.tint(copal).is_equal_approx(Color("ECE6DA")) and copal.emitting
+	var low: bool = mist != null and (mist.process_material as ParticleProcessMaterial).emission_box_extents.y <= 0.3 \
+		and (mist.process_material as ParticleProcessMaterial).initial_velocity_max <= 0.4
+	_check("A4 copal smokes pale, mist keeps low", pale and low, "copal %s, mist %s" % [copal, mist])
 	ambient.free()
 
 	# A5 the pigeons lift when someone comes close, and settle after.
@@ -120,26 +107,97 @@ func _run() -> void:
 		"settled %s, lifted %s, after %s" % [settled, lifted, pigeons.flying(0)])
 	pigeons.free()
 
-	# A6 petals, leaves and dust draw their own.
-	FireParticles.clear()
+	# A6 petals, leaves and dust: their systems emit and draw.
 	ambient = Ambient.build([{"effect": "petals", "at": [2, 0, 2]}, {"effect": "leaves", "at": [-2, 6, 2], "floor": 0.0},
 		{"effect": "dust", "at": [0, 0, 3]}])
 	add_child(ambient)
-	await _frames(2)
-
-	for k in 60:
-		ambient.step(1.0 / 30.0)
-
-	await _frames(1)
-	world = FireParticles.world_node()
+	ambient.step(0.3)
 	var drawn := {}
 
-	for kind in [&"petal", &"leaf", &"dust"]:
-		var pool = world._pools.get(kind) if world else null
-		drawn[kind] = pool != null and pool.count > 0 and pool.draw.material_override != null
+	for k in 3:
+		var p: GPUParticles3D = _particles(ambient.system(k))
+		drawn[k] = p != null and p.emitting and p.draw_pass_1 != null
 
-	_check("A6 petals, leaves and dust are emitted and drawn", drawn.values().all(func(v): return v), "%s" % [drawn])
+	_check("A6 petals, leaves and dust emit and draw", drawn.values().all(func(v): return v), "%s" % [drawn])
 	ambient.free()
+
+	# A7 every preset builds its system
+	var built := {}
+
+	for effect in Vfx.PRESETS:
+		var node: Node3D = Vfx.system(effect)
+		built[effect] = node != null and node.get_child_count() > 0
+		if node:
+			node.free()
+
+	_check("A7 every effect builds its system", built.values().all(func(v): return v) and built.size() >= 12, "%s" % [built])
+
+	# A8 thinner with distance
+	ambient = Ambient.build([{"effect": "steam", "at": [10, 0, 0]}, {"effect": "steam", "at": [40, 0, 0]}])
+	add_child(ambient)
+	ambient.step(0.3)
+	var near_ratio: float = _particles(ambient.system(0)).amount_ratio
+	var far_ratio: float = _particles(ambient.system(1)).amount_ratio
+	_check("A8 a system 40 m off runs thinner than one 10 m off", is_equal_approx(near_ratio, 1.0) and far_ratio < 0.7,
+		"10 m %.2f, 40 m %.2f" % [near_ratio, far_ratio])
+	ambient.free()
+
+	# A9 day stops a night system without freeing it
+	ambient = Ambient.build([{"effect": "embers", "at": [5, 0, 0], "when": "night"}])
+	add_child(ambient)
+	ambient.set_day(false)
+	ambient.step(0.3)
+	var lit: bool = _particles(ambient.system(0)).emitting
+	ambient.set_day(true)
+	ambient.step(0.3)
+	var kept := ambient.system(0) != null and is_instance_valid(ambient.system(0))
+	_check("A9 day stops a night system emitting, kept to start again", lit and kept and not _particles(ambient.system(0)).emitting,
+		"night %s, kept %s" % [lit, kept])
+	ambient.free()
+
+	# B1 the god's breath: in and out, about seven seconds a breath
+	var breath := Breath.new()
+	add_child(breath)
+	var lo := INF
+	var hi := -INF
+	var ups: Array[float] = []
+	var last := breath.value()
+	var deeps := [0]
+	breath.deep_exhale.connect(func(): deeps[0] += 1)
+
+	for k in 700:
+		breath.step(0.1)
+		var v := breath.value()
+		lo = minf(lo, v)
+		hi = maxf(hi, v)
+
+		if last < 0.0 and v >= 0.0:
+			ups.append((k + 1) * 0.1)
+
+		last = v
+
+	var periods: Array[float] = []
+
+	for k in range(1, ups.size()):
+		periods.append(ups[k] - ups[k - 1])
+
+	var steady := periods.size() >= 8 and periods.all(func(p): return absf(p - Breath.PERIOD) <= 0.5)
+	_check("B1 the god breathes in and out, about seven seconds a breath", lo <= -0.99 and hi >= 0.99 and steady,
+		"%.2f..%.2f, periods %s" % [lo, hi, periods])
+	_check("B2 every fourth breath is a deep one, its exhale signalled", deeps[0] == 2, "%d deep exhales in 70 s" % deeps[0])
+	breath.free()
+
+
+## A system's first particles node.
+func _particles(node: Node) -> GPUParticles3D:
+	if node == null:
+		return null
+
+	if node is GPUParticles3D:
+		return node
+
+	var found := node.find_children("*", "GPUParticles3D", true, false)
+	return found[0] if not found.is_empty() else null
 
 
 func _frames(n: int) -> void:
