@@ -155,8 +155,11 @@ class Scenes(unittest.TestCase):
 
     def test_routes_clear(self):
         """No scene's collider within 0.6 m of a street-level route's foot, a
-        door's front, a kerb drop, or the causeway (the plaza's processional
-        way, 6 m either side)."""
+        door's front, a kerb drop, the causeway (the plaza's processional
+        way, 6 m either side), or a market lane's walkway (1.5 m either side
+        of its middle)."""
+        walks = [s for s in dress_scenes.keep_clear(DATA, DRESSING) if s["what"].startswith("the walkway")]
+        self.assertGreaterEqual(len(walks), 6)
         blocked = []
 
         for c in DRESSING["colliders"]:

@@ -359,6 +359,20 @@ def keep_clear(data, dressing):
 
         out.append({"a": tuple(a), "b": tuple(b), "radius": 6.0, "what": "the causeway"})
 
+    # A walkway down every market lane's middle, 1.5 m either side.
+    for g in data["ground"]:
+        if g["kind"] != "market":
+            continue
+
+        bx0, bz0, bx1, bz1 = plan_check._bounds(g["polygon"])
+
+        if (bx1 - bx0) >= (bz1 - bz0):
+            a, b = (bx0, (bz0 + bz1) / 2), (bx1, (bz0 + bz1) / 2)
+        else:
+            a, b = ((bx0 + bx1) / 2, bz0), ((bx0 + bx1) / 2, bz1)
+
+        out.append({"a": a, "b": b, "radius": 1.5, "what": "the walkway of %s" % g["name"]})
+
     for r in data["routes"]:
         if r["kind"] in ("climb", "stair", "bridge"):
             for q in (r["points"][0], r["points"][-1]):

@@ -258,7 +258,8 @@ func _street_life() -> void:
 		stall = maxi(stall, walk["stall"])
 		arrived = arrived and walk["ok"]
 
-	var lane := await _walk(Vector3(-46, 1.05, 207), PI, func(p): return p.z > 278.0, 1800)
+	# (Down the lane's walkway, its middle kept clear of the scenes.)
+	var lane := await _walk(Vector3(-50, 1.05, 207), PI, func(p): return p.z > 278.0, 1800)
 	_check("Z16 the player walks round the god and down a market lane without snagging", arrived and lane["ok"]
 		and stall < 18 and lane["stall"] < 18, "round stall %d, lane %s" % [stall, lane])
 
@@ -380,7 +381,7 @@ func _scenes() -> void:
 	var lo := INF
 	var hi := -INF
 
-	for i in 120:
+	for i in 300:
 		await get_tree().process_frame
 
 		if lamp:

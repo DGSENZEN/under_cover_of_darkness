@@ -30,6 +30,8 @@ const CARDS := {
 ## Kits whose pieces are trees: their bark bends in the wind with their
 ## leaves (sway.gdshaderinc), this far (m) for each square metre of height.
 const TREE_SWAY := 0.006
+## How often (s) a stuttering lamp dips.
+const STUTTER_EVERY := 4.0
 const TREES := {"trees_kit": TREE_SWAY}
 
 ## The lamps' lights and their glowing globes, switched by night and day.
@@ -194,11 +196,12 @@ func _process(delta: float) -> void:
 	if not _night:
 		return
 
-	# A stutter: steady, then now and then a dip and a flicker back.
+	# A stutter: steady, then every four seconds or so a dip and a flicker
+	# back (0.6 s of it), each lamp at its own moment.
 	for k in stuttering.size():
-		var t := _clock + k * 3.7
-		var drop := sin(t * 1.3) * sin(t * 0.47 + k)
-		stuttering[k].light_energy = LAMP_ENERGY * (1.0 if drop < 0.55 else 0.2 + 0.5 * absf(sin(t * 37.0)))
+		var t := _clock + k * 1.37
+		var dipping := fposmod(t / STUTTER_EVERY, 1.0) < 0.6 / STUTTER_EVERY
+		stuttering[k].light_energy = LAMP_ENERGY * (0.2 + 0.5 * absf(sin(t * 37.0)) if dipping else 1.0)
 
 
 ## Whether a point (the player's feet, a man's height above) is in a box
