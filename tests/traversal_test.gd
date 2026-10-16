@@ -175,8 +175,9 @@ func _run() -> void:
 	await _tap("jump")
 	Input.action_release("move_forward")
 	await _until_locomotion(180)
-	_check("T4 sneak onto fence", labels == ["quiet step-up"] and _near(_feet_y(), 0.9, 0.1),
-		"labels %s feet %.2f" % [labels, _feet_y()])
+	# A thin fence with floor beyond is crossed, never stood on (Oct 16 2026).
+	_check("T4 sneak over fence", labels == ["climb over"] and _feet_y() < 0.2 and player.global_position.z < -6.4,
+		"labels %s feet %.2f z %.2f" % [labels, _feet_y(), player.global_position.z])
 
 	# T5 jump, hold, catch the 3.6 m ledge
 	await _place(Vector3(24, 1.05, -1.5), 0.0)
@@ -324,7 +325,7 @@ func _run() -> void:
 	await _frames(12)
 	await _tap("jump")
 	await _until_locomotion(180)
-	_check("T15 sneaking never chains", labels == ["quiet step-up"], "labels %s" % [labels])
+	_check("T15 sneaking never chains", labels == ["climb over"], "labels %s" % [labels])
 
 	# T16 the chain cap: three fences, three presses, two moves
 	await _place(Vector3(66, 1.05, 4.0), 0.0)

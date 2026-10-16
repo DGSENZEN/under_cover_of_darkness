@@ -401,6 +401,11 @@ var _collider_base_y := 0.0
 var _neck_stand_y := 0.8
 
 var _jump_hold_consumed := false
+## A tapped jump at a ledge only a catch can reach (above every grounded
+## mantle, inside the jump's reach) grabs as if jump were held, until we land.
+var _air_grab_armed := false
+## The lowest lip a catch out of the air takes (from the variant table).
+var _catch_min_height := INF
 ## Own edge detection for crouch, so the "climb down" check never loses a
 ## race with the crouch itself.
 var _crouch_held_last := false
@@ -560,6 +565,10 @@ func _ready() -> void:
 
 	if variant_table.is_empty():
 		variant_table = MoveVariantRes.default_table()
+
+	for variant in variant_table:
+		if variant.kind == MoveVariantRes.Kind.HANG_ENTER:
+			_catch_min_height = minf(_catch_min_height, variant.min_height)
 
 	if inventory != null and hand != null:
 		inventory.belt_selection_changed.connect(hand.show_item)
@@ -769,9 +778,13 @@ func _update_locomotion(delta: float) -> void:
 	var forward_intent := wish_direction.dot(facing_direction) > min_forward_input
 
 	var jump_pressed := Input.is_action_just_pressed("jump")
+
+	if grounded and not jump_pressed:
+		_air_grab_armed = false
+
 	var air_hold := (
 		not grounded
-		and Input.is_action_pressed("jump")
+		and (Input.is_action_pressed("jump") or _air_grab_armed)
 		and not _jump_hold_consumed
 		and velocity.y < air_grab_max_rise
 	)
@@ -817,6 +830,11 @@ func _update_locomotion(delta: float) -> void:
 
 		if cached_profile != null and not stairs_jump and _try_traversal(cached_profile):
 			return
+
+		# Out of a standing climb's height but inside a catch's: the jump
+		# goes ahead, and catches the lip on the way up even if released.
+		if jump_pressed and grounded and cached_profile != null and cached_profile.height >= _catch_min_height and cached_profile.height <= scanner.max_reach + 0.01:
+			_air_grab_armed = true
 
 		if OS.has_environment("TRAV_DEBUG") and jump_pressed:
 			var why := scanner.last_reject if cached_profile == null else _last_reject
@@ -1000,6 +1018,10 @@ func _update_timers(delta: float) -> void:
 	# A held jump may trigger one traversal. The next needs a fresh press.
 	if not Input.is_action_pressed("jump"):
 		_jump_hold_consumed = false
+
+	# An armed catch is spent by any move (and a drop from it is no tap).
+	if movement_state != MoveState.LOCOMOTION:
+		_air_grab_armed = false
 
 	var crouch_now := Input.is_action_pressed("crouch")
 	_crouch_just_pressed = crouch_now and not _crouch_held_last

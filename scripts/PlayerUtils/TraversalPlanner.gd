@@ -14,6 +14,10 @@ const KIND_LOWER := 101
 const KIND_CORNER := 102
 const KIND_LEAP := 103
 const KIND_DROP_RELEASE := 104
+## A top thinner than this with a floor close beyond is a fence or a rail:
+## crossed (vaulted, climbed over), never stood on. Garden walls stay walkable.
+const FENCE_THICKNESS := 0.3
+const FENCE_FAR_DROP := 1.5
 
 var scanner: TraversalScanner
 
@@ -126,6 +130,9 @@ func _matches(
 
 	if v.kind == MoveVariantRes.Kind.MANTLE:
 		if p.headroom == ObstacleProfile.Headroom.BLOCKED:
+			return false
+
+		if p.thickness < FENCE_THICKNESS and p.has_far_floor and p.far_drop() <= FENCE_FAR_DROP:
 			return false
 
 	return true
@@ -271,11 +278,25 @@ func _generate_hang(
 	return move
 
 
-## Body origin while hanging from a lip at lip_y on a face.
+## How far a hanging body may stand off its face to clear a bulge below the
+## measured point: a quay's coping, a battered foot, a string course.
+const HANG_STANDOFFS := [0.0, 0.04, 0.08, 0.14, 0.2]
+
+
+## Body origin while hanging from a lip at lip_y on a face: hard against the
+## face, or stood off it just enough to fit. Unfitted, the snug anchor (callers
+## check fits() and refuse).
 func hang_anchor(face_point: Vector3, normal: Vector3, lip_y: float) -> Vector3:
-	var anchor := face_point + normal * (scanner.radius + hang_gap)
-	anchor.y = lip_y - hang_eye_drop - eye_height
-	return anchor
+	var snug := face_point + normal * (scanner.radius + hang_gap)
+	snug.y = lip_y - hang_eye_drop - eye_height
+
+	for standoff in HANG_STANDOFFS:
+		var anchor: Vector3 = snug + normal * standoff
+
+		if scanner.fits(anchor, false):
+			return anchor
+
+	return snug
 
 
 ## Builds a bank/rail exit with world body start and minimum acceptable far-floor Y.
@@ -346,20 +367,23 @@ func lower(edge: Dictionary, start: Vector3, current_yaw: float) -> TraversalMov
 		last_reject = "lower: no room to hang"
 		return null
 
-	var out := Vector3(anchor.x, start.y, anchor.z)
-	var raw := PackedVector3Array([start, out, anchor])
-	var path := _best_clear_path(raw, false)
-	var crouched := false
+	# Straight down past the face, or, when something juts out above the
+	# hang (a coping along the lip), down a little further out and in again.
+	for standoff in HANG_STANDOFFS:
+		var out: Vector3 = Vector3(anchor.x, start.y, anchor.z) + normal * standoff
+		var raw := PackedVector3Array([start, out, anchor])
 
-	if path.is_empty():
-		path = _best_clear_path(raw, true)
-		crouched = true
+		if standoff > 0.0:
+			raw = PackedVector3Array([start, out, Vector3(out.x, anchor.y, out.z), anchor])
 
-	if path.is_empty():
-		last_reject = "lower: path blocked"
-		return null
+		for crouched in [false, true]:
+			var path := _best_clear_path(raw, crouched)
 
-	return _lower_move(path, crouched, edge, current_yaw)
+			if not path.is_empty():
+				return _lower_move(path, crouched, edge, current_yaw)
+
+	last_reject = "lower: path blocked"
+	return null
 
 
 ## Builds a move over a rail into a hang on its far side, from rail

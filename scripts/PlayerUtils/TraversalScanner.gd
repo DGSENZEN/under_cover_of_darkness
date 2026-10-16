@@ -229,7 +229,18 @@ func scan_from(
 	# floor instead. Keep the highest top at the face, including thin lips.
 	for depth in [SKIN, top_probe_depth]:
 		var probe: Vector3 = face_point + across * depth
-		var sample := ray(Vector3(probe.x, top_limit, probe.z), Vector3(probe.x, feet.y + step_height * 0.5, probe.z), false)
+		var low_y := feet.y + step_height * 0.5
+		var sample := _ray_down(probe, top_limit, low_y, across)
+		# Something over the ledge, flush with its face (a lintel, a balcony, a
+		# low ceiling inside): its top is not the ledge's. Look up through the
+		# wall for an underside, and down again from just under it. Nothing
+		# under it (a thin shelf, stacked shelves) keeps the first reading.
+		var over := ray(Vector3(probe.x, low_y, probe.z), Vector3(probe.x, top_limit + 0.1, probe.z), false)
+		if not over.is_empty() and (over["normal"] as Vector3).y < -min_top_normal_y:
+			var under_y: float = (over["position"] as Vector3).y - 0.02
+			var below := _ray_down(probe, under_y, low_y, across)
+			if not below.is_empty():
+				sample = below
 		if not sample.is_empty() and (top.is_empty() or (sample["position"] as Vector3).y > (top["position"] as Vector3).y):
 			top = sample
 			measured_depth = depth
@@ -588,6 +599,30 @@ func _exclude() -> Array[RID]:
 	var list: Array[RID] = [body.get_rid()]
 	list.append_array(extra_exclude)
 	return list
+
+
+## A ray straight down at probe's x/z from from_y to low_y, back faces
+## excluded. Standing exactly at a ledge's end, the ray runs down the plane of
+## the end face and grazes it: a hit with no normal. Then look again a
+## little to either side, along the face.
+func _ray_down(probe: Vector3, from_y: float, low_y: float, across: Vector3) -> Dictionary:
+	var along := across.cross(Vector3.UP).normalized()
+	var first := {}
+
+	for side in [0.0, 0.02, -0.02]:
+		var at: Vector3 = probe + along * side
+		var hit := ray(Vector3(at.x, from_y, at.z), Vector3(at.x, low_y, at.z), false)
+
+		if side == 0.0:
+			first = hit
+
+			if hit.is_empty():
+				return hit
+
+		if not hit.is_empty() and (hit["normal"] as Vector3) != Vector3.ZERO:
+			return hit
+
+	return first
 
 
 ## Returns a Godot ray-hit Dictionary, or {} on miss. Excludes player/extra_exclude;

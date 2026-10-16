@@ -33,6 +33,24 @@ func _ready() -> void:
 	_box(Vector3(82.5, 1.8, -1.5), Vector3(1, 3.6, 3))
 	_box(Vector3(89, 3.55, -4.5), Vector3(2, 0.1, 3))
 	_box(Vector3(91, 3.65, -4.5), Vector3(2, 0.1, 3))
+	_box(Vector3(140, -0.5, 0), Vector3(100, 1, 30))
+	# A 2.4 m lip: above the tallest grounded mantle, inside the jump's reach.
+	_box(Vector3(100, 1.2, -4.5), Vector3(4, 2.4, 3))
+	# Ledges under a slab flush with their face (a lintel, a balcony): the slab's
+	# underside exactly at full reach, and the slab wholly below full reach.
+	_box(Vector3(110, 0.6, -4.5), Vector3(4, 1.2, 3))
+	_box(Vector3(110, 2.7, -4.5), Vector3(4, 0.2, 3))
+	_box(Vector3(120, 0.5, -4.5), Vector3(4, 1.0, 3))
+	_box(Vector3(120, 2.4, -4.5), Vector3(4, 0.2, 3))
+	# Quays whose face bulges past where the edge is measured: 5 cm of coping
+	# along the top 12 cm (the harbour mole), and a 15 cm battered foot
+	# reaching up to the hanging body's knees.
+	_box(Vector3(130, 2.0, -4.5), Vector3(4, 4.0, 3))
+	_box(Vector3(130, 3.94, -2.975), Vector3(4, 0.12, 0.05))
+	_box(Vector3(140, 2.0, -4.5), Vector3(4, 4.0, 3))
+	_box(Vector3(140, 1.3, -2.925), Vector3(4, 2.6, 0.15))
+	# A 0.9 m fence, 17 cm thick, with floor beyond.
+	_box(Vector3(150, 0.45, -4.0), Vector3(4, 0.9, 0.17))
 	player = PLAYER.instantiate()
 	add_child(player)
 	player.debug_traversal = false
@@ -176,6 +194,75 @@ func _run() -> void:
 	await _frames(40)
 	_check("LP13 shimmy finds a slightly higher thin shelf", player.movement_state == 2 and player.global_position.x > 90.3 and absf(player.hang_lip_y - 3.7) < 0.03 and player.hang_normal.z > 0.9,
 		"position %s normal %s lip %.2f reject %s" % [player.global_position, player.hang_normal, player.hang_lip_y, player._last_reject])
+
+
+	# A tap of jump at a 2.4 m lip, walking in: it is in reach, so it is caught.
+	await _place(Vector3(100, 1.03, -2.48))
+	Input.action_press("move_forward")
+	await _frames(2)
+	Input.action_press("jump")
+	await _frames(2)
+	Input.action_release("jump")
+	var hung := false
+	for i in 90:
+		await _frames(1)
+		hung = hung or player.movement_state == 2
+	_release_all()
+	_check("LP14 a tapped jump catches a 2.4 m lip", hung,
+		"state %d position %s reject %s" % [player.movement_state, player.global_position, player._last_reject])
+
+	# Standing exactly at the end of the ledge (the gym's lintel lane): the
+	# top ray runs down the plane of its end face and grazes it.
+	await _place(Vector3(112, 1.03, -2.48))
+	profile = player.scanner.scan(Vector3.FORWARD, Vector3.ZERO, false)
+	planned = profile != null and player._try_traversal(profile)
+	await _frames(100)
+	_check("LP15 the very end of a ledge under a lintel can be mantled", planned and player.movement_state == 0 and absf(player.global_position.y - 2.2) < 0.08 and player.global_position.z < -3.0,
+		"planned %s position %s reject %s / %s" % [planned, player.global_position, player.scanner.last_reject, player._last_reject])
+
+	await _place(Vector3(120, 1.03, -2.48))
+	profile = player.scanner.scan(Vector3.FORWARD, Vector3.ZERO, false)
+	var measured: float = profile.height if profile != null else -1.0
+	planned = profile != null and player._try_traversal(profile)
+	await _frames(100)
+	_check("LP16 a slab over the ledge is not mistaken for its top", absf(measured - 1.0) < 0.05 and planned and absf(player.global_position.y - 2.0) < 0.08 and player.global_position.z < -3.0,
+		"height %.2f planned %s position %s reject %s / %s" % [measured, planned, player.global_position, player.scanner.last_reject, player._last_reject])
+
+	for x in [130.0, 140.0]:
+		await _place(Vector3(x, 5.03, -3.3))
+		player.rotation.y = PI
+		await _frames(2)
+		var lowered: bool = player._try_lower(Vector3.BACK)
+		await _frames(100)
+		_check("LP17 lower into a hang over a %s" % ("5 cm coping" if x == 130.0 else "15 cm battered foot"),
+			lowered and player.movement_state == 2 and player.hang_normal.z > 0.9 and player.scanner.fits(player.global_position, false),
+			"lowered %s state %d position %s reject %s" % [lowered, player.movement_state, player.global_position, player._last_reject])
+	# Hanging stood off the battered foot: still free to shimmy along it.
+	var hang_x: float = player.global_position.x
+	Input.action_press("move_left")
+	await _frames(40)
+	_check("LP17b shimmy while stood off a battered foot", player.movement_state == 2 and absf(player.global_position.x - hang_x) > 0.3 and player.scanner.fits(player.global_position, false),
+		"moved %.2f state %d position %s reject %s" % [player.global_position.x - hang_x, player.movement_state, player.global_position, player._last_reject])
+	_release_all()
+	player.rotation.y = 0.0
+
+	# Walking into a thin fence with a jump: over it, never left standing on it.
+	await _place(Vector3(150, 1.03, -3.0))
+	Input.action_press("move_forward")
+	await _frames(2)
+	Input.action_press("jump")
+	await _frames(2)
+	Input.action_release("jump")
+	var label := ""
+	for i in 30:
+		await _frames(1)
+		if player.current_move != null:
+			label = String(player.current_move.label)
+			break
+	Input.action_release("move_forward")
+	await _frames(120)
+	_check("LP18 a thin fence is climbed over, not stood on", label != "" and player.global_position.z < -4.3 and player.global_position.y < 1.1,
+		"move '%s' position %s reject %s" % [label, player.global_position, player._last_reject])
 
 
 func _box(center: Vector3, size: Vector3) -> StaticBody3D:
