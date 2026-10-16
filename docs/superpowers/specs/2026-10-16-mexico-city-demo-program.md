@@ -69,15 +69,22 @@ There are several schools, not Obsidian alone (a Hellboy and Deadlock mix). Each
 
 ## Order of projects
 
-1. **Traversal fixes:** reliable ledge hang and climb (failing test first for every fault).
-2. **A climbable Zócalo:** rooftop and azotea routes, balconies, ledges, drainpipes.
-3. **Talking and quests:** the dialogue box, menus that depend on NPC type, goals created at run time from talk, place and time, a world clock, and saving to disk.
-4. **Magic:** the four starting spells and the school framework.
-5. **The opening:** the Metro car, the familiar, the station walk-out.
-6. **The living Zócalo:** civilians with routines, staged scenes turned into people, side quests, easter eggs, creature quest lines (the user's words).
-7. **The street and foliage kit:** detailed roads with Deadlock's Greenwich-line texture work crossed with the Zócalo, and a family of painterly foliage.
+Revised by the user on 2026-10-16: movement, then powers, then combat, each tested as thoroughly as possible so the pieces are ready before the content work.
+
+1. **Free-run climbing:** AC 2 / Unity climbing in first person (`2026-10-16-freerun-climbing-design.md`). The Oct 16 ledge fixes (d2cfa2b) are its base.
+2. **Powers and magic:** the four starting spells and the school framework.
+3. **Combat revamp:** melee, ranged weapons and powers together.
+4. **A climbable Zócalo:** façades with handholds, rooftop and azotea routes, one model at a time.
+5. **Talking and quests:** the dialogue box, menus that depend on NPC type, goals created at run time from talk, place and time, a world clock, and saving to disk.
+6. **The opening:** the Metro car, the familiar, the station walk-out.
+7. **The living Zócalo:** civilians with routines, staged scenes turned into people, side quests, easter eggs, creature quest lines (the user's words).
+8. **The street and foliage kit:** detailed roads with Deadlock's Greenwich-line texture work crossed with the Zócalo, and a family of painterly foliage.
 
 Then Lomas, Roma and Condesa, one at a time.
+
+## The protagonist
+
+The Prosecutor is a super-powered investigator and detective, a Constantine × Ezio Auditore mix. Their job is to stop supernatural events from breaking reality's fragile peace, and doing it breaks an already flawed status quo.
 
 ## Standing rules
 
