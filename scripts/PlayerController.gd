@@ -274,6 +274,8 @@ enum MoveState {
 @export var freerun_max_roll_degrees := 4.0
 @export var reach_noise_db := 35.0
 @export var wall_run_noise_db := 52.0
+## How far a free-run leap from a hang reaches for the next hold (m).
+@export var freerun_leap_reach := 2.5
 @export_group("")
 @export var invulnerable := false
 ## When you die the level restarts after a moment. Off for tests.
@@ -505,6 +507,7 @@ var _hurt_at := -100.0
 var _target_ground_velocity := Vector3.ZERO
 var _assist_time := 0.0
 var _hang_scan_timer := 0.0
+var _freerun_timer := 0.0
 ## Measured climb rate of the current staircase, for the eye follower.
 var _stair_rate := 0.0
 var _last_step_time := -10.0
@@ -581,6 +584,7 @@ func _ready() -> void:
 	scanner.setup(self, _radius, _standing_height, crouch_height)
 	planner.scanner = scanner
 	planner.eye_height = _neck_stand_y
+	planner.reach_noise_db = reach_noise_db
 	holds.setup(scanner, planner, self)
 	holds.reach_up = reach_up
 	holds.reach_side = reach_side
@@ -2226,6 +2230,9 @@ func _update_hang(delta: float) -> void:
 		_drop_from_hang()
 		return
 
+	if free_running() and not jump_requested and _freerun_climb(delta):
+		return
+
 	# Where would a jump take us? Up to a hundred physics queries, so it is
 	# refreshed ten times a second, and at once when jump is pressed.
 	_hang_scan_timer -= delta
@@ -3391,6 +3398,54 @@ func _update_climb(_delta: float) -> void:
 	)
 
 	LanternBody.slide_character(self)
+
+
+## Sprint held, not crouched, hands free: the city is taken as it comes.
+func free_running() -> bool:
+	return Input.is_action_pressed("sprint") and not is_crouched and not _is_carrying()
+
+
+## Free-running on a hang: the move keys steer up, down and across the wall
+## (camera-relative), and the next hold that way is taken, hand over hand or
+## with a leap. Up with nothing above pulls up. True when a move started.
+func _freerun_climb(delta: float) -> bool:
+	var axis := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+
+	if axis.length() < 0.2:
+		return false
+
+	_freerun_timer -= delta
+
+	if _freerun_timer > 0.0:
+		return false
+
+	_freerun_timer = freerun_scan_interval
+	var right := (-hang_normal).cross(Vector3.UP).normalized()
+	var direction := Vector3.UP * -axis.y + right * axis.x
+	var target := holds.next_hold(global_position, hang_normal, hang_lip_y, direction, freerun_leap_reach)
+
+	# Across the same ledge is a shimmy, not a reach.
+	if not target.is_empty() and absf(axis.y) < 0.5 and absf(float(target["lip_y"]) - hang_lip_y) < 0.12 and target.get("hold") == hang_hold:
+		target = {}
+
+	if not target.is_empty():
+		var move: TraversalMove = planner.reach(global_position, target, hang_normal) if target["reach"] else planner.leap(global_position, target, hang_normal)
+
+		if move != null:
+			move.end_hold = target.get("hold")
+			_start_move(move)
+			return true
+
+		_last_reject = planner.last_reject
+
+	if -axis.y > 0.5:
+		var pull := planner.pull_up(hang_normal, global_position, hang_lip_y)
+
+		if pull != null:
+			_start_move(pull)
+			return true
+
+	return false
 
 
 ## From a pole to the hold beside it that way, if there is one in reach.

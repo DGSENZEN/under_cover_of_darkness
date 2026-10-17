@@ -14,6 +14,8 @@ const KIND_LOWER := 101
 const KIND_CORNER := 102
 const KIND_LEAP := 103
 const KIND_DROP_RELEASE := 104
+## Hand over hand to a hold within arm's reach (free-run).
+const KIND_REACH := 105
 ## A top thinner than this with a floor close beyond is a fence or a rail:
 ## crossed (vaulted, climbed over), never stood on. Garden walls stay walkable.
 const FENCE_THICKNESS := 0.3
@@ -27,6 +29,8 @@ var lift_extra := 0.12
 var vault_clearance := 0.08
 ## Gap between the capsule and the wall while hanging.
 var hang_gap := 0.02
+## How loud a reach to the next hold is (dB).
+var reach_noise_db := 35.0
 ## How far the eyes sit below the lip while hanging.
 var hang_eye_drop := 0.25
 ## Height of the eyes above the body origin when standing.
@@ -657,6 +661,35 @@ func leap(start: Vector3, target: Dictionary, from_normal: Vector3) -> Traversal
 	move.ends_in_hang = true
 	move.hang_normal = to_normal
 	move.hang_lip_y = target["lip_y"]
+	_set_contact_from_target(move, target)
+	return move
+
+
+## Hand over hand from a hang to a hold within arm's reach: a short pull with
+## the body a little off the wall at its middle. Null when the way is blocked.
+func reach(start: Vector3, target: Dictionary, from_normal: Vector3) -> TraversalMove:
+	last_reject = ""
+
+	var finish: Vector3 = target["anchor"]
+	var middle := (start + finish) * 0.5 + from_normal * 0.08
+	var path := _best_clear_path(PackedVector3Array([start, middle, finish]), false)
+
+	if path.is_empty():
+		last_reject = "reach: no clear path to that hold"
+		return null
+
+	var move := TraversalMove.new()
+	move.label = &"reach"
+	move.noise_db = reach_noise_db
+	move.kind = KIND_REACH
+	move.points = path
+	move.smoothing = 1.0
+	move.bake()
+	move.duration = clampf(move.total_length / 1.6, 0.25, 0.55)
+	move.ends_in_hang = true
+	move.hang_normal = target["normal"]
+	move.hang_lip_y = target["lip_y"]
+	move.end_hold = target.get("hold")
 	_set_contact_from_target(move, target)
 	return move
 

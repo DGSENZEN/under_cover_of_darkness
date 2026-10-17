@@ -41,6 +41,7 @@ func _run() -> void:
 	await _finder_checks()
 	await _placed_hang_checks()
 	await _pole_checks()
+	await _climb_checks()
 
 
 # Task 1: the hold finder.
@@ -160,6 +161,90 @@ func _pole_checks() -> void:
 	_check("FR11 step off a pipe onto a ledge beside it", player.movement_state == 2 and player.hang_hold == beside,
 		"state %d hold %s position %s reject %s" % [player.movement_state, player.hang_hold, player.global_position, player._last_reject])
 	await _frames(10)
+
+
+## A 9 m wall at x with LEDGE holds every 0.9 m from 2.4 m: the column of
+## sills a façade climb goes up. Returns the holds, lowest first.
+func _sill_column(x: float) -> Array:
+	_box(Vector3(x, 4.5, -4.5), Vector3(4, 9, 3))
+	var column := []
+	for i in 8:
+		column.append(_hold(HANDHOLD.Kind.LEDGE, Vector3(x, 2.4 + 0.9 * i, -3), 0.0, 1.0))
+	await _frames(2)
+	return column
+
+
+func _hang_on(hold: Node3D) -> void:
+	var lip: float = hold.global_position.y
+	var anchor: Vector3 = player.planner.hang_anchor(hold.global_position, Vector3.BACK, lip)
+	await _place(anchor)
+	player.global_position = anchor
+	player._enter_hang(Vector3.BACK, lip, false, &"", hold)
+	await _frames(2)
+	labels.clear()
+
+
+# Task 4: hand over hand with sprint held.
+func _climb_checks() -> void:
+	var column: Array = await _sill_column(120)
+	await _hang_on(column[0])
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var fell := false
+	for i in 600:
+		await _frames(1)
+		if player.movement_state == 0 and player.global_position.y - 1.0 < 8.5:
+			fell = true
+		if player.movement_state == 0 and player.global_position.y - 1.0 > 8.9:
+			break
+	_release_all()
+	_check("FR13 holding sprint+forward climbs a column of sills to the roof", labels.has("reach") and player.global_position.y - 1.0 >= 8.9 and not fell,
+		"labels %s feet %.2f fell %s reject %s" % [labels, player.global_position.y - 1.0, fell, player._last_reject])
+
+	_box(Vector3(130, 4.5, -4.5), Vector3(4, 9, 3))
+	var low := _hold(HANDHOLD.Kind.LEDGE, Vector3(130, 2.4, -3), 0.0, 1.0)
+	var high := _hold(HANDHOLD.Kind.LEDGE, Vector3(130, 4.4, -3), 0.0, 1.0)
+	await _frames(2)
+	await _hang_on(low)
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	await _until(func(): return player.movement_state == 2 and player.hang_hold == high, 200)
+	_release_all()
+	_check("FR14 a 2 m gap above is leapt", labels.has("leap") and player.hang_hold == high,
+		"labels %s hold %s" % [labels, player.hang_hold])
+
+	column = await _sill_column(140)
+	await _hang_on(column[0])
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var starts := 0
+	var last_move = null
+	for i in 300:
+		await _frames(1)
+		if player.current_move != null and player.current_move != last_move:
+			starts += 1
+			last_move = player.current_move
+			if starts == 2:
+				break
+	Input.action_release("sprint")
+	await _frames(90)
+	_release_all()
+	_check("FR15 releasing sprint stops on the hold", starts == 2 and player.movement_state == 2 and absf(player.hang_lip_y - 4.2) < 0.05,
+		"starts %d state %d lip %.2f" % [starts, player.movement_state, player.hang_lip_y])
+
+	_box(Vector3(150, 4.5, -4.5), Vector3(4, 9, 3))
+	var start := _hold(HANDHOLD.Kind.POINT, Vector3(150, 2.4, -3), 0.0, 1.0)
+	var up_right := _hold(HANDHOLD.Kind.POINT, Vector3(150.6, 3.0, -3), 0.0, 1.0)
+	_hold(HANDHOLD.Kind.POINT, Vector3(149.75, 3.35, -3), 0.0, 1.0)
+	await _frames(2)
+	await _hang_on(start)
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	Input.action_press("move_right")
+	await _until(func(): return player.movement_state == 2 and player.hang_hold != start and player.hang_hold != null, 200)
+	_release_all()
+	_check("FR13b diagonal reaches the up-right hold", player.hang_hold == up_right,
+		"hold %s at %s" % [player.hang_hold, player.global_position])
 
 
 func _until(condition: Callable, max_frames: int) -> void:
