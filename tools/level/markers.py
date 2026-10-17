@@ -29,6 +29,10 @@ SCHEMA = {
                                                  "douse": True, "chain": 0.0, "dark_only": False}, "box": False},
     "bell": {"required": [], "optional": {"db": 90.0}, "box": False},
     "ladder": {"required": [], "optional": {"rope": False, "open": False}, "box": True},
+    # A placed handhold (free-run climbing, scripts/PlayerUtils/Handhold.gd):
+    # a ledge along its local x, a pole up its local y, or a point; the
+    # climber hangs on its local +z side.
+    "handhold": {"required": ["kind"], "optional": {"length": 1.0}, "box": False},
     # A piece laid loose (Layout.put loose=): a body in the game, picked up
     # and thrown; `piece` its name, `mass` its weight (kg).
     "loose": {"required": ["piece", "mass"], "optional": {}, "box": False},
@@ -137,6 +141,9 @@ READABLE_KINDS = ["notice", "paper", "ledger"]
 ROUNDS_LIGHTS = ["", "lantern", "torch"]
 
 
+HOLD_KINDS = ("ledge", "pole", "point")
+
+
 def problems(marker):
     """Return list[str] schema failures; [] passes, without mutating marker.
 
@@ -198,6 +205,9 @@ def problems(marker):
 
     if ucd == "route_check" and props.get("kind", "") not in WAY_KINDS:
         out.append("%s: no kind of way in '%s'" % (marker["name"], props.get("kind")))
+
+    if ucd == "handhold" and props.get("kind") not in HOLD_KINDS:
+        out.append("%s: no handhold kind '%s' (%s)" % (marker["name"], props.get("kind"), ", ".join(HOLD_KINDS)))
 
     if ucd == "guard" and props.get("light", "") not in ROUNDS_LIGHTS:
         out.append("%s: no rounds light '%s'" % (marker["name"], props.get("light")))

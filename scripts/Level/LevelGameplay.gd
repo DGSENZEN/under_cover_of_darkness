@@ -11,6 +11,7 @@ const Layers := preload("res://scripts/Visual/Layers.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const WaterScript := preload("res://scripts/Interaction/WaterVolume.gd")
 const ClimbScript := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
+const HandholdScript := preload("res://scripts/PlayerUtils/Handhold.gd")
 const RopeScript := preload("res://scripts/PlayerUtils/VerletRope.gd")
 const AlarmBellScript := preload("res://scripts/Interaction/AlarmBell.gd")
 const GuardStationScript := preload("res://scripts/AISystem/GuardStation.gd")
@@ -51,6 +52,7 @@ static func build_all(parent: Node3D, level) -> Dictionary:
 	var made := {
 		"doors": doors(parent, level), "lights": lights(parent, level), "water": water(parent, level),
 		"ladders": ladders(parent, level), "ropes": ropes(parent, level), "bells": bells(parent, level),
+		"handholds": handholds(parent, level),
 		"decals": decals(parent, level), "routes": routes(parent, level), "stations": stations(parent, level),
 		"pickups": pickups(parent, level), "chests": chests(parent, level), "props": props(parent, level),
 		"noise_zones": noise_zones(parent, level), "mechanisms": mechanisms(parent, level),
@@ -250,6 +252,23 @@ static func ladders(parent: Node3D, level) -> Array:
 		parent.add_child(volume)
 		volume.global_transform = m["transform"]
 		out.append(volume)
+
+	return out
+
+
+## Placed handholds (free-run climbing): a ledge, a pole or a point each.
+static func handholds(parent: Node3D, level) -> Array:
+	var out := []
+	var kinds := {"ledge": HandholdScript.Kind.LEDGE, "pole": HandholdScript.Kind.POLE, "point": HandholdScript.Kind.POINT}
+
+	for m in level.of("handhold"):
+		var hold: Node3D = HandholdScript.new()
+		hold.name = m["name"]
+		hold.kind = kinds.get(String(m["props"].get("kind", "ledge")), HandholdScript.Kind.LEDGE)
+		hold.length = float(m["props"].get("length", 1.0))
+		parent.add_child(hold)
+		hold.global_transform = m["transform"]
+		out.append(hold)
 
 	return out
 

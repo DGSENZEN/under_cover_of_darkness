@@ -21,14 +21,17 @@ class Layout:
 
     # Pieces
 
-    def put(self, piece, at, yaw=0.0, sector="courtyard", pitch=0.0, roll=0.0, name=None, climbs=False, loose=0.0):
+    def put(self, piece, at, yaw=0.0, sector="courtyard", pitch=0.0, roll=0.0, name=None, climbs=False, loose=0.0,
+            holds=False):
         """A piece; with `climbs`, a ladder marker for each of its recipe's
         climbs (a ship's shrouds, a scaffold's ladders: [x, y, z, size x, y,
         z, yaw] and, for one that leans, its pitch, then its props), named
         after it;
         `loose` (kg), a loose thing: a "loose" marker naming it, so it is a
         body of that weight in the game, picked up and thrown (its colliders
-        its own, not the level's)."""
+        its own, not the level's);
+        with `holds`, a handhold marker for each of its recipe's holds ([x, y,
+        z, yaw, kind, length]: free-run climbing)."""
         if piece not in kit.PIECES:
             raise KeyError("no kit piece " + piece)
 
@@ -43,6 +46,11 @@ class Layout:
             where = geo.add([float(v) for v in at], geo.apply(basis, c[0:3]))
             self.mark("%s_climb_%d" % (name.replace(".", "_"), i + 1), "ladder", where, yaw + c[6], sector, size=c[3:6],
                       pitch=c[7] if len(c) > 7 else 0.0, **(c[8] if len(c) > 8 else {}))
+
+        for i, h in enumerate(kit.PIECES[piece].get("holds", []) if holds else []):
+            where = geo.add([float(v) for v in at], geo.apply(basis, h[0:3]))
+            self.mark("%s_hold_%d" % (name.replace(".", "_"), i + 1), "handhold", where, yaw + h[3], sector,
+                      kind=h[4], length=float(h[5]))
 
         if loose > 0.0:
             self.mark("%s_loose" % name.replace(".", "_"), "loose", at, yaw, sector, piece=name, mass=float(loose))

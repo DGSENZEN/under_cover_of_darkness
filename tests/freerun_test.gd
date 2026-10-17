@@ -5,6 +5,15 @@ extends Node3D
 const PLAYER := preload("res://Player.tscn")
 const HANDHOLD := preload("res://scripts/PlayerUtils/Handhold.gd")
 const PROPS := preload("res://scripts/Interaction/Props.gd")
+const LEVEL_GAMEPLAY := preload("res://scripts/Level/LevelGameplay.gd")
+
+
+## Just enough of a loaded level for a marker builder: its markers by ucd.
+class FakeLevel:
+	var markers: Array = []
+
+	func of(ucd: String) -> Array:
+		return markers.filter(func(m): return m["ucd"] == ucd)
 
 var player: CharacterBody3D
 var results: Array[String] = []
@@ -50,6 +59,7 @@ func _run() -> void:
 	await _down_checks()
 	await _roll_checks()
 	await _presentation_checks()
+	_marker_checks()
 
 
 # Task 1: the hold finder.
@@ -504,6 +514,26 @@ func _presentation_checks() -> void:
 		"shown %s hidden %s idle %s back %s state %d" % [shown_before, hidden, still, back, player.movement_state])
 	player.inventory.select_by_id(&"")
 	await _frames(20)
+
+
+# Task 12: handhold markers become Handholds.
+func _marker_checks() -> void:
+	var level := FakeLevel.new()
+	var kinds := ["ledge", "pole", "point"]
+	for i in 3:
+		level.markers.append({"name": "hold_%d" % i, "ucd": "handhold", "props": {"kind": kinds[i], "length": 1.5 + i},
+			"transform": Transform3D(Basis(Vector3.UP, 0.5), Vector3(400 + i, 3.0, 0)), "size": null})
+	var holder := Node3D.new()
+	add_child(holder)
+	var made: Array = LEVEL_GAMEPLAY.handholds(holder, level)
+	var ok := made.size() == 3
+	for i in mini(made.size(), 3):
+		var hold: Node3D = made[i]
+		ok = ok and hold.kind == [HANDHOLD.Kind.LEDGE, HANDHOLD.Kind.POLE, HANDHOLD.Kind.POINT][i]
+		ok = ok and is_equal_approx(hold.length, 1.5 + i) and hold.global_position.is_equal_approx(Vector3(400 + i, 3.0, 0))
+		ok = ok and is_equal_approx(hold.global_rotation.y, 0.5) and hold.is_in_group(HANDHOLD.GROUP)
+	_check("FR29 handhold markers build Handholds of each kind", ok, "made %s" % [made])
+	holder.queue_free()
 
 
 func _until(condition: Callable, max_frames: int) -> void:
