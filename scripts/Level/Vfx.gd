@@ -103,6 +103,11 @@ const PRESETS := {
 		"opacity": 0.6, "amount": 24, "lifetime": 3.2, "size": [0.4, 1.4], "velocity": [0.4, 0.7], "spread": 15.0,
 		"gravity": Vector3(0, 0.15, 0), "box": Vector3(0.15, 0.05, 0.15), "offset": 0.6, "fps": 30, "erosion": 0.4,
 		"blown": 0.3, "anim": 1.0}],
+	# A spectre's wisps (the nahual): dark smoke rising slow off its back, thinning as it climbs.
+	"spectre_wisps": [{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.2, 0.22, 0.24),
+		"opacity": 0.35, "amount": 22, "lifetime": 2.6, "size": [0.18, 0.6], "velocity": [0.08, 0.16], "spread": 12.0,
+		"gravity": Vector3(0, 0.18, 0), "box": Vector3(0.4, 0.05, 0.12), "fps": 15, "erosion": 0.6, "blown": 0.4,
+		"anim": 1.0}],
 	"embers": [{"draw": "specks", "tint": Color("FFA040"), "amount": 30, "lifetime": 1.4, "size": [0.035, 0.015],
 		"velocity": [0.8, 1.6], "spread": 25.0, "gravity": Vector3(0, 0.6, 0), "box": Vector3(0.2, 0.05, 0.2), "fps": 30,
 		"blown": 0.2}],

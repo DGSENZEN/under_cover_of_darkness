@@ -67,6 +67,8 @@ func _part(mesh: Mesh, look: Material, ember: Material, node_name: String) -> Me
 	var part := MeshInstance3D.new()
 	part.name = node_name
 	part.mesh = mesh
+	# (A spectre casts no shadow.)
+	part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 	for i in mesh.get_surface_count():
 		var slot: Material = mesh.surface_get_material(i)

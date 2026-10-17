@@ -696,6 +696,25 @@ func _run() -> void:
 		rare and smooth and darkened and guttered and hushed and restored,
 		"rare %s smooth %s dark %s guttered %s hushed %s restored %s" % [rare, smooth, darkened, guttered, hushed, restored])
 
+	# U51 the nahual a spectre: its body and head drawn by the spectre shader (black, its edges fraying into
+	#     rising smoke), its eyes still solid ember; dark wisps rise off its back, gone with it
+	var spectre: Node3D = lab.nahual
+	var haunted := true
+
+	for part: MeshInstance3D in [spectre.body, spectre.head]:
+		for i in part.mesh.get_surface_count():
+			var slot: Material = part.mesh.surface_get_material(i)
+			var drawn: Material = part.get_surface_override_material(i)
+			var ember_slot: bool = slot != null and slot.resource_name == "ember"
+			if ember_slot:
+				haunted = haunted and drawn is StandardMaterial3D
+			else:
+				haunted = haunted and drawn is ShaderMaterial and (drawn as ShaderMaterial).shader.resource_path.ends_with("spectre.gdshader")
+	var wisps: Array = spectre.find_children("wisps", "Node3D", true, false)
+	var rising: bool = wisps.size() == 1 and wisps[0].find_children("*", "GPUParticles3D", false, false).any(func(p): return p.emitting)
+	_check("U51 the nahual is a spectre: black fraying into rising smoke, ember eyes solid, dark wisps off its back",
+		haunted and rising, "spectre shader %s wisps %s" % [haunted, rising])
+
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")
 	_check("U8 the pixel grid is off", retro != null and retro.virtual_height == 0, "%s" % [retro.virtual_height if retro else null])

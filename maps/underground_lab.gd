@@ -108,6 +108,9 @@ const UNCANNY_KIT := "res://assets/eclipse/kit/underground_uncanny.glb"
 const NAHUAL_AT := Vector3(-5.0, 0.0, 4.35)
 ## Enormous, as the tellings have it: the kit's dog made half again as big (about 1.7 m long lying).
 const NAHUAL_SCALE := 1.35
+const SPECTRE := preload("res://scripts/Visual/spectre.gdshader")
+## Where its wisps rise from: along its back (its own axes, before its scale).
+const WISPS_AT := Vector3(0.45, 0.45, 0.0)
 const HAT_AT := Vector3(-3.9, 0.45, 4.25)
 const EMBER := Color("ff5a1e")
 ## The gaps between the drain's grate bars, along the grate (m from its middle): the floor kit's
@@ -1157,12 +1160,10 @@ func _nahual() -> void:
 
 	var meshes := _kit(UNCANNY_KIT)
 	var look := Painterly.material(_painted(["underground_uncanny.png", "underground_uncanny_base.png"]), &"bespoke")
-	# The dog is Mignola's black: one matte shape, no rim, no sheen, only the faintest form.
-	var black := StandardMaterial3D.new()
-	black.albedo_color = Color("0b0a0c")
-	black.roughness = 1.0
-	black.metallic_specular = 0.0
-	black.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
+	# The dog is a spectre in Mignola's black: one flat shape, its edges fraying into climbing smoke.
+	var black := ShaderMaterial.new()
+	black.shader = SPECTRE
+	black.set_shader_parameter(&"noise", Vfx.noise_3d())
 	var ember := StandardMaterial3D.new()
 	ember.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	ember.albedo_color = EMBER
@@ -1174,6 +1175,12 @@ func _nahual() -> void:
 	# Turned so it lies along the far wall's foot with its head toward the corridor's middle.
 	nahual.rotation.y = PI / 2.0
 	nahual.scale = Vector3.ONE * NAHUAL_SCALE
+	# Dark wisps rising off its back, drawn and gone with it (they are its own).
+	var wisps := Vfx.system("spectre_wisps")
+	wisps.name = "wisps"
+	nahual.add_child(wisps)
+	wisps.position = WISPS_AT
+	Vfx.emit(wisps, true)
 	old_hat = _place(meshes["old_hat"], look, "old_hat", HAT_AT, 0.7, false)
 
 
