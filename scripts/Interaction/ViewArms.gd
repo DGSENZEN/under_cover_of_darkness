@@ -6,6 +6,11 @@ extends Node3D
 
 const HumanoidScript := preload("res://scripts/Visual/Humanoid.gd")
 const ArmReachScript := preload("res://scripts/Visual/ArmReach.gd")
+const FPArmsScript := preload("res://scripts/Visual/FPArms.gd")
+
+## The Prosecutor's own arms (FPArms) instead of the guards' body's, until
+## they replace them: F12 in debug builds (HandSlot), or FP_ARMS=new.
+static var new_arms := OS.get_environment("FP_ARMS") == "new"
 
 ## How small the view's world is drawn: the scale the sword is held at.
 const SCALE := 0.62
@@ -24,6 +29,11 @@ enum Side { LEFT, RIGHT }
 
 var man: Node3D
 var reach: SkeletonModifier3D
+## With the new arms, the old body is kept for the kick: its right leg and
+## boot, everything else folded away. Null with the old arms (man kicks).
+var _leg_body: Node3D
+var _leg_reach: SkeletonModifier3D
+var _layer := 0
 ## The arms' own materials (not what they hold), for their depth.
 var _materials: Array[BaseMaterial3D] = []
 var _depth := Z_CLIP
@@ -39,8 +49,42 @@ const CLIMB_DOWN := 0.05
 func setup(layer: int) -> void:
 	name = "Arms"
 	scale = Vector3.ONE * SCALE
-	man = HumanoidScript.new()
-	man.build(&"player")
+	_layer = layer
+	_build()
+
+
+## The arms swapped for the other kind (F12), at once: a hand that holds keeps
+## holding, as HandSlot sets the targets again on the next frame.
+func use_new_arms(on: bool) -> void:
+	new_arms = on
+
+	for node in [man, _leg_body]:
+		if node != null:
+			# (Their solvers off first: an update may already be queued.)
+			for modifier in node.find_children("*", "SkeletonModifier3D", true, false):
+				(modifier as SkeletonModifier3D).active = false
+
+			remove_child(node)
+			node.queue_free()
+
+	man = null
+	reach = null
+	_leg_body = null
+	_leg_reach = null
+	_materials.clear()
+	_shoulders = Vector3.INF
+	_build()
+
+
+func _build() -> void:
+	if new_arms:
+		man = FPArmsScript.new()
+		man.name = "FPArms"
+		man.build()
+	else:
+		man = HumanoidScript.new()
+		man.build(&"player")
+
 	add_child(man)
 	man.position = -EYE
 	# Standing easy: only the arms move, by reaching.
@@ -49,18 +93,41 @@ func setup(layer: int) -> void:
 	reach = ArmReachScript.new()
 	reach.name = "Reach"
 	reach.set("man", man)
-	reach.set("arm_length", ARM_LENGTH)
-	reach.set("folded", [&"neck_01"] as Array[StringName])
-	man.skeleton.add_child(reach)
 
-	man.add_boots()
+	if new_arms:
+		# Their own length and their own fist.
+		reach.set("fist_from", [[&"Fist", 0.0], [&"Fist", 0.0]])
+		man.skeleton.add_child(reach)
+		_leg_body = HumanoidScript.new()
+		_leg_body.name = "Leg"
+		_leg_body.build(&"player")
+		add_child(_leg_body)
+		_leg_body.position = -EYE
+		_leg_body.show_action(&"Idle", 0.4, 0.001)
+		_leg_reach = ArmReachScript.new()
+		_leg_reach.name = "Reach"
+		_leg_reach.set("man", _leg_body)
+		_leg_reach.set("folded", [&"spine_01", &"thigh_l"] as Array[StringName])
+		_leg_body.skeleton.add_child(_leg_reach)
+		_leg_body.add_boots()
+	else:
+		reach.set("arm_length", ARM_LENGTH)
+		reach.set("folded", [&"neck_01"] as Array[StringName])
+		man.skeleton.add_child(reach)
+		man.add_boots()
 
-	for mesh in man.find_children("*", "MeshInstance3D", true, false):
+	for mesh in find_children("*", "MeshInstance3D", true, false):
 		var instance := mesh as MeshInstance3D
-		instance.layers = layer
+		instance.layers = _layer
 		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		instance.extra_cull_margin = 2.0
 		_viewmodel(instance)
+
+	# Where it was: held or free, and at that depth.
+	set_held(_held)
+	var depth := _depth
+	_depth = -1.0
+	set_depth_scale(depth)
 
 
 ## A hand to `target` (a transform in the parent's space, the view's small
@@ -73,8 +140,9 @@ func set_hand(side: int, target: Transform3D, weight: float, curl: float) -> voi
 
 ## The right foot to `target` (parent's space), by `weight`.
 func set_foot(target: Transform3D, weight: float) -> void:
-	reach.foot_target = _to_man(target)
-	reach.foot_weight = clampf(weight, 0.0, 1.0)
+	var legs := _leg_reach if _leg_reach != null else reach
+	legs.foot_target = _to_body(_leg_body if _leg_body != null else man, target)
+	legs.foot_weight = clampf(weight, 0.0, 1.0)
 
 
 ## Which way the forearm will run to a wrist at `wrist` (the parent's space,
@@ -121,9 +189,13 @@ static func shrink(camera_space: Transform3D) -> Transform3D:
 
 
 func _to_man(target: Transform3D) -> Transform3D:
+	return _to_body(man, target)
+
+
+func _to_body(body: Node3D, target: Transform3D) -> Transform3D:
 	# Parent space -> ours (scaled about the eye) -> his.
 	var ours := transform.affine_inverse() * target
-	return man.transform.affine_inverse() * Transform3D(ours.basis.orthonormalized(), ours.origin)
+	return body.transform.affine_inverse() * Transform3D(ours.basis.orthonormalized(), ours.origin)
 
 
 ## Every surface drawn in front of the world, depth-sorted among themselves.

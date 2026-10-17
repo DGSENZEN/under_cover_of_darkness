@@ -370,6 +370,21 @@ func _find_player() -> CharacterBody3D:
 
 ## Queues lowering/switching to item.mesh; {} or absent/null mesh selects empty hands.
 ## May play the previous item’s stow sound immediately.
+func _unhandled_input(event: InputEvent) -> void:
+	if (
+		event is InputEventKey
+		and (event as InputEventKey).pressed
+		and not (event as InputEventKey).echo
+		and (event as InputEventKey).keycode == KEY_F12
+		and OS.is_debug_build()
+		and _arms != null
+	):
+		# Compare the Prosecutor's own arms with the old (until they are
+		# signed off and replace them).
+		_arms.use_new_arms(not ViewArmsScript.new_arms)
+		get_viewport().set_input_as_handled()
+
+
 func show_item(item: Dictionary) -> void:
 	# What goes away is heard going: a blade into its sheath, a bow onto the
 	# back. A small blade rings higher.

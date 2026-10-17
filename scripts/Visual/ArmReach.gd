@@ -27,6 +27,9 @@ const FOREARM_ROLL := 0.7
 
 ## The person this belongs to.
 var man: Node3D
+## Where each hand's closed pose comes from, as FIST_FROM (the Prosecutor's
+## own arms have their own Fist: ViewArms).
+var fist_from: Array = FIST_FROM
 ## Per hand, left then right: where it goes (his space), how much it goes
 ## there (0 leaves the animation's), and how closed the fingers are.
 var targets: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
@@ -49,6 +52,8 @@ var elbow_hints: Array[Vector3] = [ELBOW_HINT[0], ELBOW_HINT[1]]
 ## restored after drawing, so this is the only record of it.
 var wrist_bend: Array[float] = [0.0, 0.0]
 var solved_hands: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+## Where the foot was put (world space), at the last solve of a kick.
+var solved_foot := Vector3.ZERO
 ## Shoulder to wrist (m, his space): the elbow and wrist joints are pushed
 ## out along the bones to make the arms this long. 0 keeps the model's own.
 ## (The first-person arms are given a real arm's length: ViewArms.)
@@ -95,7 +100,7 @@ func _learn_fist() -> void:
 	var library: AnimationLibrary = man.library()
 
 	for side in range(2):
-		var source: Array = FIST_FROM[side]
+		var source: Array = fist_from[side]
 
 		if not library.has_animation(source[0]):
 			continue
@@ -155,6 +160,10 @@ func _process_modification() -> void:
 	if foot_weight > 0.001:
 		var knee := into.basis * KNEE_HINT
 		_solve(skeleton, LEG[0], LEG[1], LEG[2], into * foot_target, foot_weight, knee, 0.0)
+		var foot := _bone(skeleton, LEG[2])
+
+		if foot >= 0:
+			solved_foot = skeleton.global_transform * skeleton.get_bone_global_pose(foot).origin
 
 
 func _reach(skeleton: Skeleton3D, side: int, into: Transform3D) -> void:
