@@ -339,11 +339,16 @@ func _run() -> void:
 	await _until(func(): return labels.size() >= 2, 60)
 	await _frames(6)
 	await _tap("jump")
-	await _until_locomotion(120)
+	# Presses chain one link at most. With sprint held, free-run (Oct 16
+	# 2026) then takes the third fence from the ground: a new move, no chain.
+	var most_links := 0
+	for i in 120:
+		await _frames(1)
+		most_links = maxi(most_links, player._chain_links)
 	_release_all()
 	await _frames(30)
-	_check("T16 chain capped at one link", labels == ["vault", "vault"] and player.global_position.z > -11.6,
-		"labels %s z %.2f" % [labels, player.global_position.z])
+	_check("T16 chain capped at one link", most_links <= 1 and labels == ["vault", "vault", "vault"],
+		"labels %s links %d z %.2f" % [labels, most_links, player.global_position.z])
 
 	# T17 wall kick: tall wall, second press in the air beside it
 	await _place(Vector3(74, 1.05, -0.5), 0.7)
