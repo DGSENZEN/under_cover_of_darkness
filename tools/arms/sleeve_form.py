@@ -28,6 +28,19 @@ ELBOW_CROOK = 0.015
 # Near the elbow the rings turn to its bisector, over this far each way (m),
 # so they never cross.
 ELBOW_TURN = 0.03
+# The crook's folds: soft ridges of cloth, always there (m).
+FOLD_DEPTH = 0.004
+FOLD_WAVE = 0.022
+FOLD_REACH = 0.04
+# The sleeve a touch long: two shallow rings bunched above the cuff, this far
+# from the coat's end (m).
+BUNCH_DEPTH = 0.0025
+BUNCHES = (0.055, 0.085)
+# The seam down the outer back of the arm: a groove this deep and this wide
+# each side (m of arc), its edges modelled.
+SEAM_DEPTH = 0.0012
+SEAM_HALF = 0.003
+SEAM_RADIUS = 0.055
 
 
 class Part:
@@ -93,6 +106,47 @@ def radius_at(share):
     return PROFILE[-1][1]
 
 
+def fold_offset(past, angle):
+    """How far the crook's folds push the cloth out, `past` metres beyond
+    the elbow, at `angle` round the sleeve (0 the crook, pi the point)."""
+    if abs(past) >= FOLD_REACH:
+        return 0.0
+
+    inner = max(math.cos(angle), 0.0) ** 2
+    window = math.cos(math.pi * past / (2.0 * FOLD_REACH)) ** 2
+    return FOLD_DEPTH * (0.5 + 0.5 * math.sin(math.tau * past / FOLD_WAVE)) * inner * window
+
+
+def bunch_offset(from_end):
+    """The cloth bunched above the cuff, `from_end` metres up from it."""
+    return BUNCH_DEPTH * sum(math.exp(-((from_end - c) / 0.006) ** 2) for c in BUNCHES)
+
+
+def seam_angle(side):
+    """Where the seam runs round the sleeve: the outer back of the arm."""
+    return math.pi - 0.6 if side == "r" else math.pi + 0.6
+
+
+def seam_offset(angle, seam, radius):
+    """The seam's groove at `angle` round a sleeve of `radius`."""
+    arc = abs(math.remainder(angle - seam, math.tau)) * radius
+
+    if arc >= SEAM_HALF:
+        return 0.0
+
+    return -SEAM_DEPTH * (1.0 - arc / SEAM_HALF)
+
+
+def ring_angles(side):
+    """The angles round a ring: evenly spaced, with the seam and its two
+    edges added (and any even one too near them left out)."""
+    seam = seam_angle(side)
+    edge = SEAM_HALF / SEAM_RADIUS
+    even = [i / SEGMENTS * math.tau for i in range(SEGMENTS)]
+    keep = [a for a in even if abs(math.remainder(a - seam, math.tau)) > 1.5 * edge]
+    return sorted(keep + [seam % math.tau, (seam - edge) % math.tau, (seam + edge) % math.tau])
+
+
 def lower_share(past, crook):
     """How much of a sleeve vertex `past` metres beyond the elbow's bisector
     follows the forearm. crook: 1 in the crook, -1 over the point."""
@@ -116,6 +170,8 @@ def sleeve(shoulder, elbow, wrist, side):
     part.elbow_s = upper
     count = max(int(round((upper + lower) / RING_STEP)), 2)
     clavicle, upperarm, lowerarm = "clavicle_" + side, "upperarm_" + side, "lowerarm_" + side
+    angles = ring_angles(side)
+    seam = seam_angle(side)
 
     for k in range(count + 1):
         s = (upper + lower) * k / count
@@ -130,10 +186,10 @@ def sleeve(shoulder, elbow, wrist, side):
         radius = radius_at(share)
         ring = []
 
-        for i in range(SEGMENTS):
-            a = i / SEGMENTS * math.tau
+        for a in angles:
             out = _add(_add((0.0, 0.0, 0.0), u, math.cos(a) * OVAL), v, math.sin(a) / OVAL)
-            point = _add(centre, out, radius)
+            cloth = radius + fold_offset(s - upper, a) + bunch_offset(upper + lower - s) + seam_offset(a, seam, radius)
+            point = _add(centre, out, cloth)
             ring.append(len(part.verts))
             part.verts.append(point)
 
@@ -149,8 +205,8 @@ def sleeve(shoulder, elbow, wrist, side):
         part.centres.append(centre)
 
     for k in range(count):
-        for i in range(SEGMENTS):
-            j = (i + 1) % SEGMENTS
+        for i in range(len(angles)):
+            j = (i + 1) % len(angles)
             # Wound so the normals face out.
             part.faces.append((part.rings[k][i], part.rings[k][j], part.rings[k + 1][j], part.rings[k + 1][i]))
             part.face_mats.append("coat")

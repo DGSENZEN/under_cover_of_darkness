@@ -203,6 +203,24 @@ class Sleeve(unittest.TestCase):
         for i in part.rings[0]:
             self.assertGreaterEqual(part.weights[i].get("clavicle_r", 0.0), 0.95)
 
+    def test_folds_only_in_the_crook(self):
+        import sleeve_form
+        for d in [x * 0.002 for x in range(-20, 21)]:
+            self.assertAlmostEqual(sleeve_form.fold_offset(d, math.pi), 0.0, delta=0.0005)
+        deepest = max(abs(sleeve_form.fold_offset(x * 0.001, 0.0)) for x in range(-40, 41))
+        self.assertGreater(deepest, 0.003)
+
+    def test_back_seam_is_a_groove(self):
+        import sleeve_form
+        for side in ("l", "r"):
+            a = sleeve_form.seam_angle(side)
+            self.assertTrue(-0.0015 <= sleeve_form.seam_offset(a, a, 0.06) <= -0.001)
+            self.assertEqual(sleeve_form.seam_offset(a + 0.5, a, 0.06), 0.0)
+            # Its edges are modelled: angles within 4 mm of arc each side.
+            angles = sleeve_form.ring_angles(side)
+            near = [x for x in angles if 0.0 < abs(x - a) * 0.06 <= 0.004]
+            self.assertGreaterEqual(len(near), 2)
+
     def test_triangle_budget(self):
         part = _right_sleeve()
         tris = sum(len(f) - 2 for f in part.faces)
