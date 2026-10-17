@@ -19,6 +19,12 @@ const VIEWS := [
 	["close_neon", Vector3(0.8, 2.35, 1.5), Vector3(0.0, 2.65, 0.0)],
 	["aisle", Vector3(1.15, 1.65, -1.0), Vector3(-1.0, 1.15, -1.5)],
 	["corridor_far", Vector3(-9.0, 1.8, 3.2), Vector3(0.0, 1.5, -0.8)],
+	["floor_litter", Vector3(0.9, 1.3, 1.9), Vector3(-0.15, 0.0, 0.5)],
+	["floor_trail", Vector3(-1.0, 1.7, 2.6), Vector3(-3.4, 0.0, -0.6)],
+	["floor_stock", Vector3(-2.5, 1.5, 0.4), Vector3(-3.7, 0.3, -2.0)],
+	["floor_cable", Vector3(3.2, 1.7, 0.2), Vector3(2.6, 0.7, -2.2)],
+	["floor_coil", Vector3(6.3, 1.4, -0.9), Vector3(7.4, 0.0, -2.1)],
+	["floor_papers", Vector3(-2.6, 1.4, 2.8), Vector3(-3.6, 0.0, 1.7)],
 ]
 
 var out := "/tmp/underground-lab/"

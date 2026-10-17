@@ -97,16 +97,20 @@ func _run() -> void:
 	_check("U6 F2 turns the bay to a neutral grey under a white form light, and back", form_on and back,
 		"grey %s on %s back %s" % [grey, form_on, back])
 
-	# U7 three grime decals, F3 hides and shows them
+	# U7 the grime decals, each named for its kind, F3 hides and shows them
 	var decals: Array = lab.decals
+	var named := {}
+
+	for d in decals:
+		named[String(d.name)] = true
 	lab.set_decals(false)
 	var hidden: bool = decals.all(func(d): return not d.visible)
 	lab.set_decals(true)
 	# Each keeps its transparency: without it a decal draws as a dark box.
 	var clear: bool = decals.all(func(d): return d.texture_albedo != null \
 		and d.texture_albedo.get_image().detect_alpha() != Image.ALPHA_NONE)
-	_check("U7 three grime decals (drip, soot, grime), see-through at their edges, F3 turns them off and on",
-		decals.size() == 3 and hidden and clear and decals.all(func(d): return d.visible),
+	_check("U7 five grime decals (drip, soot, grime, oil, wet), see-through at their edges, F3 turns them off and on",
+		["decal_drip", "decal_soot", "decal_grime", "decal_oil", "decal_wet"].all(func(k): return named.has(k)) and hidden and clear and decals.all(func(d): return d.visible),
 		"%d decals, hidden %s, see-through %s" % [decals.size(), hidden, clear])
 
 	# U10 the bulb sways in the corridor's draught, a few degrees at most, its light with it
@@ -319,6 +323,58 @@ func _run() -> void:
 	_check("U29 the junction box hums where the stall's cable is tapped",
 		box_hum != null and box_hum.playing and box_hum.global_position.distance_to(lab.JUNCTION_TOP) < 0.3
 		and box_hum.max_distance <= 6.0, "%s" % [box_hum])
+
+	# U30 the floor's clutter staged as scenes: customers' litter by the counter, her stock against the wall,
+	#     newspapers, a cable run to the next stall, a child's top in her aisle, a marigold trail
+	var kinds := {}
+
+	for piece: MeshInstance3D in lab.clutter:
+		var kind := String(piece.get_meta("kind"))
+		kinds[kind] = kinds.get(kind, 0) + 1
+
+	var wanted := {"cone_crushed": 2, "jarrito": 1, "news_spread": 1, "news_folded": 1, "sack_slumped": 1,
+		"sack_lying": 1, "crate": 2, "crate_corn": 1, "cable_run": 1, "trompo": 1, "marigold_head": 18}
+	var short := wanted.keys().filter(func(k): return kinds.get(k, 0) < wanted[k])
+	var solid := true
+	var in_gap := []
+
+	for p: MeshInstance3D in lab.clutter:
+		var stock: bool = p.get_meta("kind") in ["sack_slumped", "sack_lying", "crate", "crate_corn"]
+		solid = solid and stock == (p.find_children("*", "StaticBody3D", true, false).size() > 0)
+		var at := p.global_position
+		if at.x > 0.45 and at.x < 1.45 and at.z > -1.6 and at.z < 1.6:
+			in_gap.append(p)
+	_check("U30 the floor's clutter is staged as scenes (litter, stock, papers, a cable run, a top, marigolds), stock solid, the way in clear",
+		short.is_empty() and solid and in_gap.is_empty(), "short %s solid %s in the way %s" % [short, solid, in_gap])
+
+	# U31 the marigold trail leads from her ofrenda across the floor to the wall
+	var trail: Array = lab.clutter.filter(func(p): return p.get_meta("kind") == "marigold_head")
+	var towards := true
+
+	for i in range(1, trail.size()):
+		towards = towards and trail[i].global_position.distance_to(lab.TRAIL_END) < trail[i - 1].global_position.distance_to(lab.TRAIL_END)
+	_check("U31 a trail of marigold heads leads from her ofrenda across the floor to the wall",
+		trail.size() >= 8 and towards and trail[0].global_position.distance_to(lab.TRAIL_START) < 0.3
+		and trail[-1].global_position.distance_to(lab.TRAIL_END) < 0.5, "heads %d toward %s" % [trail.size(), towards])
+
+	# U32 an oil stain where a cart stands, a wet patch where the water runs
+	var stains: Array = lab.decals.filter(func(d): return d.name in ["decal_oil", "decal_wet"])
+	_check("U32 an oil stain and a wet patch on the floor, each where its cause is", stains.size() == 2,
+		"%s" % [stains])
+
+	# U33 loose petals strewn along the trail between the heads, not breadcrumbs
+	var petals: Array = lab.decals.filter(func(d): return String(d.name).begins_with("decal_petals"))
+	var strewn := true
+
+	for d in petals:
+		var nearest := 99.0
+
+		for head in trail:
+			nearest = minf(nearest, Vector2(d.global_position.x, d.global_position.z).distance_to(
+				Vector2(head.global_position.x, head.global_position.z)))
+		strewn = strewn and nearest < 0.6
+	_check("U33 loose marigold petals are strewn along the trail between its heads", petals.size() >= 6 and strewn,
+		"%d petal patches, along %s" % [petals.size(), strewn])
 
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")

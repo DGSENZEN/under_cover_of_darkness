@@ -55,8 +55,27 @@ class Decals(unittest.TestCase):
         a = self._alpha("drip")
         self.assertGreater(a[: a.shape[0] // 3].mean(), a[-a.shape[0] // 3:].mean())
 
+    def test_oil_and_wet_kinds(self):
+        self.assertIn("oil", decals.KINDS)
+        self.assertIn("wet", decals.KINDS)
+
+    def test_petals_strewn_marigold(self):
+        # Loose cempasuchil petals: many small flecks, marigold orange, not one blot.
+        image = np.asarray(decals.make("petals", self.brushes)).astype(float)
+        a = image[..., 3] / 255.0
+        lit = a > 0.5
+        self.assertGreater(lit.mean(), 0.08)
+        self.assertLess(lit.mean(), 0.6)
+        r, g, b = (image[..., i][lit].mean() for i in range(3))
+        self.assertGreater(r, 180.0)
+        self.assertGreater(r, g + 40.0)
+        self.assertGreater(g, b + 40.0)
+        rows = lit[:, 8:-8].mean(1)
+        self.assertGreater(rows.std(), 0.0)
+        self.assertGreater(len(np.unique(image[..., 1][lit].round(-1))), 3)
+
     def test_colour_is_dark_grime(self):
-        for kind in decals.KINDS:
+        for kind in decals.GRIME:
             rgb = np.asarray(decals.make(kind, self.brushes))[..., :3].astype(float)
             self.assertLess(rgb.mean(), 90.0, kind)
 

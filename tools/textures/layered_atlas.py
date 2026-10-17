@@ -6,7 +6,8 @@ in layers over each slot's texels:
   2. a light falling from the top (up-facing lighter) and with height,
   3. bright worn edges (the bake's convexity) and dark grime in crevices
      (its cavity, where the occlusion is deep),
-  4. brush-stroke breakup from the user's sheets, laid by world position,
+  4. brush-stroke breakup from the user's sheets, laid by world position
+     (with, where a material has them, cloth's weave and newsprint's type),
   5. Mignola's solid black in the deepest recesses.
 
 Beside eclipse_atlas.py (the Zócalo's scan painter), not instead of it. It
@@ -40,6 +41,8 @@ WEAR_FROM, WEAR_OVER = 0.2, 0.35
 # The Mignola black, and how much lighter than it everything else stays.
 BLACK = "#0b0a0c"
 BLACK_GAP = 0.03
+# Newsprint: the inked share of each line, lines per block, the headline's lines, the gutter's share.
+PRINT_INK, PRINT_BLOCK, PRINT_HEAD, PRINT_GUTTER = 0.5, 16, 3, 0.1
 # Texels each painted region is grown by into the empty atlas, for mipmaps.
 GROW = 4
 
@@ -84,6 +87,23 @@ def paint_slot(texels, mask, ao, recipe, brushes):
         scale = recipe["brush_scale_m"]
         stroke = _sample(brushes[recipe["brush"]][..., None], a / scale, b / scale)[..., 0]
         lab[..., 0] += recipe["brush_amount"] * np.clip((stroke - 0.5) * 2.0, -1.0, 1.0)
+
+    if recipe.get("weave", 0.0):
+        # Cloth's weave: a fine checker of warp over weft, laid by world position.
+        _, _, _, a, b = _frame(texels)
+        w = recipe["weave_m"]
+        lab[..., 0] += recipe["weave"] * np.sin(2 * np.pi * a / w) * np.sin(2 * np.pi * b / w)
+
+    if recipe.get("print", 0.0):
+        # Newsprint: columns of type, a bold band (a headline) heading every so many lines,
+        # a clear gutter between columns. Shapes of print only, no words.
+        _, _, _, a, b = _frame(texels)
+        line, column = recipe["print_line_m"], recipe["print_column_m"]
+        rows = b / line
+        typed = (rows % 1.0) < PRINT_INK
+        bold = (rows % PRINT_BLOCK) < PRINT_HEAD
+        inked = (typed | bold) & ((a / column) % 1.0 < 1.0 - PRINT_GUTTER)
+        lab = _mix(lab, _lab(recipe["print_colour"]), inked * recipe["print"])
 
     black = _lab(BLACK)
 

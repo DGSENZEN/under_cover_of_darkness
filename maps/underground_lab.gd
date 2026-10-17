@@ -50,6 +50,17 @@ const DRIP_SOUND := "res://audio/weather/drip.wav"
 ## A passing train: its rumble at full (dB), the jars' rattle, where the shelves stand.
 const RUMBLE := "res://audio/sfx/train_rumble_1.wav"
 const BOX_HUM := "res://audio/ambience/electric_box.wav"
+## What lies on the floor (tools/eclipse/underground_ground.py), and the marigold trail's ends:
+## from her ofrenda, curving across the floor to the wall where it leads.
+const GROUND_KIT := "res://assets/eclipse/kit/underground_ground.glb"
+const TRAIL_START := Vector3(-1.2, 0.0, 0.35)
+const TRAIL_END := Vector3(-5.5, 0.0, -2.2)
+const TRAIL_BEND := Vector3(-3.6, 0.0, 0.9)
+const TRAIL_HEADS := 18
+const TRAIL_PATCHES := 9
+## Where the cable run stands (tools/eclipse/underground_ground.py CABLE_AT): its riser up into the junction box.
+const CABLE_AT := Vector3(1.55, 0.0, -2.2)
+const STOCK := ["sack_slumped", "sack_lying", "crate", "crate_corn"]
 const RUMBLE_DB := -4.0
 const RATTLES := ["res://audio/sfx/jars_rattle_1.wav", "res://audio/sfx/jars_rattle_2.wav"]
 const SHELVES_AT := Vector3(0.0, 1.4, -1.9)
@@ -90,6 +101,9 @@ var moths: Moths
 var train: TrainPass
 var crowd: Crowd
 var junction_hum: AudioStreamPlayer3D
+var clutter: Array[MeshInstance3D] = []
+var _kit_meshes := {}
+var _kit_material: ShaderMaterial
 var rumble: AudioStreamPlayer
 var dust_sift: GPUParticles3D
 var rattles := 0
@@ -115,6 +129,7 @@ func _ready() -> void:
 	_stall()
 	_lights()
 	_decals()
+	_clutter()
 	_effects()
 	_keys()
 	player = PLAYER.instantiate()
@@ -671,6 +686,98 @@ func _drip() -> void:
 	drip_sound.position = puddle.position
 
 
+# What lies on the floor, staged as scenes, each with its cause
+
+func _clutter() -> void:
+	if not ResourceLoader.exists(GROUND_KIT):
+		missing.append(GROUND_KIT)
+		return
+
+	var kit: Node3D = (load(GROUND_KIT) as PackedScene).instantiate()
+
+	for mesh: MeshInstance3D in kit.find_children("*", "MeshInstance3D", true, false):
+		_kit_meshes[String(mesh.name)] = mesh.mesh
+
+	kit.free()
+	_kit_material = Painterly.material(_painted(["underground_ground.png", "underground_ground_base.png"]), &"bespoke")
+
+	# Her customers drop their emptied cones and cups by the counter.
+	_lay("cone_crushed", Vector3(-0.4, 0.0, 0.55), 0.7)
+	_lay("cone_crushed", Vector3(0.15, 0.0, 0.78), 2.1)
+	_lay("jarrito", Vector3(-0.15, 0.0, 0.42), 1.0)
+	# Commuters' newspapers, one dropped open, one folded and forgotten by the far wall.
+	_lay("news_spread", Vector3(-3.6, 0.0, 1.7), 0.3)
+	_lay("news_folded", Vector3(3.4, 0.0, 3.9), -0.6)
+	# Her stock against the wall, kept along past the drip's wet.
+	_lay("crate_corn", Vector3(-3.15, 0.0, -1.98), 0.1)
+	_lay("crate", Vector3(-3.72, 0.0, -2.0), -0.05)
+	_lay("crate", Vector3(-3.7, 0.3, -2.0), 0.12)
+	_lay("sack_slumped", Vector3(-4.25, 0.0, -2.08), 0.4)
+	_lay("sack_lying", Vector3(-3.45, 0.0, -1.55), 1.4)
+	# Her power drops from the junction box beside the post and runs on along the wall's foot,
+	# taped off where the next stall will stand, its spare coiled.
+	_lay("cable_run", CABLE_AT, 0.0)
+	# Her grandchild's top, left in her aisle.
+	_lay("trompo", Vector3(-0.3, 0.0, -1.5), 2.4)
+
+	# The marigold trail she lays for her dead, from her ofrenda across the floor to the wall:
+	# loose petals strewn thick along it, whole heads dropped among them in twos and threes.
+	var heads := []
+
+	for i in TRAIL_HEADS:
+		var ends := i == 0 or i == TRAIL_HEADS - 1
+		var t := clampf(float(i) / (TRAIL_HEADS - 1) + (0.0 if ends else sin(i * 3.7) * 0.025), 0.0, 1.0)
+		var at := _trail(t)
+		var across := _trail_tangent(t).cross(Vector3.UP).normalized()
+		heads.append(at + across * (0.0 if ends else sin(i * 2.3) * 0.09))
+
+	heads.sort_custom(func(a, b): return a.distance_to(TRAIL_END) > b.distance_to(TRAIL_END))
+
+	for i in heads.size():
+		_lay("marigold_head", heads[i], i * 1.9)
+
+	for i in TRAIL_PATCHES:
+		var t := (i + 0.5) / TRAIL_PATCHES
+		var ahead := _trail_tangent(t)
+		var patch := _decal("petals", _trail(t), Vector3(0.8, 0.3, 0.45), Vector3(0, rad_to_deg(atan2(-ahead.z, ahead.x)), 0))
+		patch.name = "decal_petals_%d" % i
+
+
+## The marigold trail at `t` (0 at her ofrenda, 1 at the wall): a curve bowed out into the corridor.
+func _trail(t: float) -> Vector3:
+	return TRAIL_START.lerp(TRAIL_BEND, t).lerp(TRAIL_BEND.lerp(TRAIL_END, t), t)
+
+
+func _trail_tangent(t: float) -> Vector3:
+	return (TRAIL_BEND - TRAIL_START).lerp(TRAIL_END - TRAIL_BEND, t).normalized()
+
+
+## One of the floor kit's pieces laid at `at`, turned `yaw` about the vertical;
+## stock solid to walk against, litter not.
+func _lay(kind: String, at: Vector3, yaw: float) -> MeshInstance3D:
+	var piece := MeshInstance3D.new()
+	piece.name = kind
+	piece.mesh = _kit_meshes[kind]
+	piece.set_meta("kind", kind)
+
+	for i in piece.mesh.get_surface_count():
+		piece.set_surface_override_material(i, _kit_material)
+
+	add_child(piece)
+	piece.position = at
+	piece.rotation.y = yaw
+
+	if kind in STOCK:
+		var body := StaticBody3D.new()
+		var shape := CollisionShape3D.new()
+		shape.shape = piece.mesh.create_convex_shape()
+		body.add_child(shape)
+		piece.add_child(body)
+
+	clutter.append(piece)
+	return piece
+
+
 # The grime, each with its cause
 
 func _decals() -> void:
@@ -680,9 +787,16 @@ func _decals() -> void:
 	_decal("soot", Vector3(0.0, 2.3, -0.22), Vector3(0.9, 0.5, 0.9), Vector3(180, 0, 0))
 	# Feet and spills have worn the floor in front of the counter.
 	_decal("grime", Vector3(0.0, 0.0, 0.7), Vector3(2.8, 0.4, 1.4), Vector3.ZERO)
+	# A tamale cart's axle grease, where it stands of a night.
+	_decal("oil", Vector3(4.2, 0.0, 2.6), Vector3(1.3, 0.4, 1.0), Vector3(0, 25, 0))
+	# The water off the conduit pools wet at the wall's foot, shining.
+	var wet := _decal("wet", Vector3(-2.3, 0.0, -1.95), Vector3(1.2, 0.4, 0.9), Vector3(0, -10, 0))
+	var shine := Image.create(4, 4, false, Image.FORMAT_RGB8)
+	shine.fill(Color(1.0, 0.12, 0.0))
+	wet.texture_orm = ImageTexture.create_from_image(shine)
 
 
-func _decal(kind: String, at: Vector3, size: Vector3, turn: Vector3) -> void:
+func _decal(kind: String, at: Vector3, size: Vector3, turn: Vector3) -> Decal:
 	var d := Decal.new()
 	d.name = "decal_" + kind
 	d.size = size
@@ -693,6 +807,7 @@ func _decal(kind: String, at: Vector3, size: Vector3, turn: Vector3) -> void:
 	d.position = at
 	d.rotation_degrees = turn
 	decals.append(d)
+	return d
 
 
 func _keys() -> void:

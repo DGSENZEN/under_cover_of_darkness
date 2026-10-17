@@ -1,0 +1,16 @@
+{
+ "slots": [
+  "paper_kraft",
+  "clay",
+  "newsprint",
+  "burlap",
+  "wood",
+  "corn",
+  "rubber",
+  "paint_red",
+  "marigold",
+  "steel"
+ ],
+ "atlas_px": 2048,
+ "px_per_m": 272.42
+}

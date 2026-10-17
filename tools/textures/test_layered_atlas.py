@@ -108,6 +108,26 @@ class Layers(unittest.TestCase):
         self.assertLessEqual(np.abs(brushed - plain).max(), 0.2 + 1e-6)
         self.assertGreater(brushed.std(), 0.0)
 
+    def test_print_in_columns(self):
+        # On the wall half (a along x, b up): lines of print across each column, a clear gutter between.
+        out = _l(_paint(print=1.0, print_colour="#222222", print_line_m=0.08, print_column_m=0.4))
+        plain = _l(_paint())
+        wall = out[8:-8, PX // 2:]
+        self.assertLess(wall.min(), plain.max() - 0.2)
+        x = np.arange(PX // 2, PX) * 0.02
+        gutter = ((x / 0.4) % 1.0) >= 0.9
+        self.assertTrue(np.allclose(wall[:, gutter], plain[8:-8, PX // 2:][:, gutter], atol=1e-3))
+        rows = wall[:, ~gutter].mean(1)
+        self.assertGreater(rows.max() - rows.min(), 0.1)
+
+    def test_weave_bounded_and_periodic(self):
+        plain = _l(_paint())
+        woven = _l(_paint(weave=0.1, weave_m=0.16))
+        self.assertLessEqual(np.abs(woven - plain).max(), 0.1 + 1e-6)
+        wall = woven[PX - 42, PX // 2:]          # b = 0.84 m, a crest of the weave across
+        self.assertAlmostEqual(wall[0], wall[8], places=3)
+        self.assertGreater(np.abs(wall - wall.mean()).max(), 0.02)
+
     def test_outside_the_mask_untouched(self):
         mask = np.zeros((PX, PX), bool)
         mask[:, :10] = True

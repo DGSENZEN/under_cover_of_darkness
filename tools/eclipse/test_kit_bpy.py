@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import arcade_bay  # noqa: E402
 import stall  # noqa: E402
+import underground_ground  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -922,6 +923,70 @@ class Stall(unittest.TestCase):
     def test_passes_the_gate(self):
         faces, tris, _ = common.dump_faces(list(self.objects.values()))
         self.assertEqual(gate.check(faces, tris, [], budget=40000), [])
+
+
+class UndergroundGround(unittest.TestCase):
+    """What lies on the Underground's floor (docs/superpowers/refs/underground/recipe.md):
+    each piece its own object at the origin, closed, resting on the floor,
+    in its budget, through the gate."""
+
+    BUDGET = {"cone_crushed": 300, "jarrito": 400, "news_spread": 500, "news_folded": 400, "sack_slumped": 600,
+              "sack_lying": 600, "crate": 1600, "crate_corn": 2400, "cable_run": 2400, "trompo": 500, "marigold_head": 200}
+
+    @classmethod
+    def setUpClass(cls):
+        underground_ground.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_everything_rests_on_the_floor(self):
+        low = {n: min(v.z for v in _world(o)) for n, o in self.objects.items()}
+        self.assertEqual({n: z for n, z in low.items() if abs(z) > 1e-4}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [max(v[i] for v in vs) - min(v[i] for v in vs) for i in range(3)]
+
+    def test_the_cone_lies_on_its_side_still_a_cone(self):
+        # Trodden on one side, it keeps its length: longer than it stands tall, twice over.
+        x, y, z = self._extent("cone_crushed")
+        self.assertGreaterEqual(max(x, y), 0.16)
+        self.assertLessEqual(z, max(x, y) / 2)
+
+    def test_the_cable_drops_from_the_junction_and_ends_in_slack(self):
+        # It rises up beside the post into the junction box's bottom (2.66 m), runs 4 m on, and its spare is coiled.
+        vs = _world(self.objects["cable_run"])
+        riser = [v for v in vs if v.z > 1.0]
+        self.assertGreaterEqual(max(v.z for v in riser), 2.68)
+        self.assertLess(max(abs(v.x) for v in riser), 0.05)
+        x, y, _ = self._extent("cable_run")
+        self.assertGreaterEqual(x, 4.0)
+        self.assertGreaterEqual(y, 0.3)
+
+    def test_the_lying_sack_is_squat(self):
+        # Laid on its side, longer than tall by half again, its neck folded short.
+        x, y, z = self._extent("sack_lying")
+        self.assertGreaterEqual(max(x, y), 1.5 * z)
+        self.assertLessEqual(max(x, y), 0.62)
+
+    def test_each_passes_the_gate(self):
+        problems = {}
+
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            found = gate.check(faces, tris, [], budget=self.BUDGET[n])
+            if found:
+                problems[n] = found[:3]
+
+        self.assertEqual(problems, {})
 
 
 if __name__ == "__main__":
