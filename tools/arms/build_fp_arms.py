@@ -40,23 +40,27 @@ SPEC = {
     # (tools/arms/extract_base_hand.py): HAND_JOINTS.
     # Joint curls (degrees, toward the pad), per pose: fingers 01/02/03, and
     # the thumb's three joints as (curl, twist, swing): a fist's thumb turns
-    # on its root to lie across the index and middle fingers.
+    # on its root to lie across the index and middle fingers. Thumbs found by
+    # tools/arms/check_fp_arms_bends.py: resting on the index, never in it.
     "poses": {
         "Open": ((0.0, 0.0, 0.0), ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))),
-        "Fist": ((85.0, 95.0, 70.0), ((30.0, -30.0, 0.0), (30.0, 0.0, 0.0), (40.0, 0.0, 0.0))),
+        "Fist": ((85.0, 95.0, 70.0), ((15.0, -40.0, 0.0), (15.0, 0.0, 0.0), (25.0, 0.0, 0.0))),
         "Hook": ((50.0, 70.0, 40.0), ((10.0, 0.0, 0.0), (20.0, 0.0, 0.0), (15.0, 0.0, 0.0))),
         # Round a 4 cm pipe, rung or rope: the thumb comes over to meet the
         # fingers.
-        "Wrap": ((55.0, 80.0, 50.0), ((25.0, -35.0, 0.0), (25.0, 0.0, 0.0), (30.0, 0.0, 0.0))),
+        "Wrap": ((55.0, 80.0, 50.0), ((15.0, -55.0, 0.0), (25.0, 0.0, 0.0), (10.0, 0.0, 0.0))),
         # Pressing down on a top to climb on: palm flat, fingers spread a
         # little back, the thumb out to the side.
         "Push": ((-8.0, 5.0, 5.0), ((-10.0, 15.0, 0.0), (0.0, 0.0, 0.0), (5.0, 0.0, 0.0))),
         # Round a sword's grip: a fist, the index a little looser along it.
-        "SwordGrip": ((80.0, 90.0, 60.0), ((30.0, -30.0, 0.0), (30.0, 0.0, 0.0), (35.0, 0.0, 0.0))),
+        "SwordGrip": ((80.0, 90.0, 60.0), ((15.0, -40.0, 0.0), (15.0, 0.0, 0.0), (25.0, 0.0, 0.0))),
     },
     # Fingers a pose sets apart from the rest (degrees, 01/02/03).
     "pose_fingers": {
         "SwordGrip": {"index": (65.0, 75.0, 50.0)},
+        # (The index a little less closed at its knuckle: its tip rests on
+        # the thumb's root instead of sinking into it.)
+        "Fist": {"index": (75.0, 95.0, 70.0)},
     },
     # The coat's chest under the shoulders: (centre, radii), Blender axes.
     "yoke": ((0.0, -0.01, 1.26), (0.21, 0.12, 0.21)),
@@ -122,10 +126,10 @@ def _smooth(edge0, edge1, x):
 # knuckle, the finger joints.
 WRIST_BLEND = 0.015
 KNUCKLE_BLEND = 0.010
-JOINT_BLEND = 0.005
+JOINT_BLEND = 0.006
 
 
-def hand_weights(co, finger):
+def hand_weights(co, finger, normal=None):
     """Skin weights of a base-hand vertex (right hand, local space) owned by
     finger (0 the palm and wrist, 1-5 index to thumb): {bone without side:
     weight}. Rigid along each bone, blended smoothly across each joint; palm
@@ -133,18 +137,23 @@ def hand_weights(co, finger):
     bone, never a neighbour's."""
     joints = HAND_JOINTS["fingers"]
 
-    def into(points):
-        """How far into each of the chain's three joints the vertex lies."""
+    def into(name):
+        """How far into each of the chain's three joints the vertex lies. The
+        back of a finger stretches round a bend (a wide blend), its pad folds
+        sharp (narrow): normal says which side the vertex is on."""
+        points = joints[name]
         d = [_norm(_sub(points[k + 1], points[k])) for k in range(3)]
         normals = (d[0], _norm(_add(d[0], d[1])), _norm(_add(d[1], d[2])))
-        blends = (KNUCKLE_BLEND, JOINT_BLEND, JOINT_BLEND)
+        back = 0.5 if normal is None else _smooth(-0.5, 0.5, _dot(normal, HAND_JOINTS["nails"][name]))
+        widen = 0.6 + 0.9 * back
+        blends = (KNUCKLE_BLEND * widen, JOINT_BLEND * widen, JOINT_BLEND * widen)
         return [_smooth(-blends[k], blends[k], _dot(_sub(co, points[k]), normals[k])) for k in range(3)]
 
     share = {}
 
     if finger:
         name = FINGERS[finger - 1]
-        share[name] = into(joints[name])[0]
+        share[name] = into(name)[0]
     else:
         for name in FINGERS:
             points = joints[name]
@@ -161,7 +170,7 @@ def hand_weights(co, finger):
                 near = 1.0 - _smooth(0.006, 0.016, abs(co[0] - _add(points[0], d0, t)[0]))
 
             if near > 0.0:
-                share[name] = near * into(points)[0]
+                share[name] = near * into(name)[0]
 
         total = sum(share.values())
 
@@ -171,7 +180,7 @@ def hand_weights(co, finger):
     weights = {"hand": 1.0 - sum(share.values())}
 
     for name, s in share.items():
-        a = into(joints[name])
+        a = into(name)
         weights[name + "_01"] = s * (1.0 - a[1])
         weights[name + "_02"] = s * a[1] * (1.0 - a[2])
         weights[name + "_03"] = s * a[1] * a[2]
@@ -541,7 +550,7 @@ def build(root_dir):
         finger_of = [d.value for d in hand.data.attributes["finger"].data]
 
         for v, local, finger in zip(hand.data.vertices, base_hand.vertices, finger_of):
-            for name, weight in hand_weights(tuple(local.co), finger).items():
+            for name, weight in hand_weights(tuple(local.co), finger, tuple(local.normal)).items():
                 group = hand.vertex_groups.get(name + "_" + side) or hand.vertex_groups.new(name=name + "_" + side)
                 group.add([v.index], weight, "REPLACE")
 

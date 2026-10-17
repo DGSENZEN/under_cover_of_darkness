@@ -85,6 +85,18 @@ class HandWeights(unittest.TestCase):
         self.assertAlmostEqual(w.get("index_02", 0.0), 0.5, delta=0.1)
         self.assertAlmostEqual(w.get("index_03", 0.0), 0.5, delta=0.1)
 
+    def test_back_of_a_joint_blends_wider(self):
+        # Just past a finger joint: the back of the finger stretches round it
+        # (wide), the pad side folds sharp (narrow).
+        a, b, c = self.J["middle"][1], self.J["middle"][2], self.J["middle"][3]
+        d = [(c[i] - b[i]) for i in range(3)]
+        n = math.sqrt(sum(x * x for x in d))
+        past = [b[i] + d[i] / n * 0.003 for i in range(3)]
+        nail = build_fp_arms.HAND_JOINTS["nails"]["middle"]
+        back = build_fp_arms.hand_weights(past, 2, tuple(nail))
+        pad = build_fp_arms.hand_weights(past, 2, tuple(-x for x in nail))
+        self.assertLess(back.get("middle_03", 0.0), pad.get("middle_03", 0.0) - 0.1)
+
     def test_back_of_the_hand_follows_the_hand(self):
         w = self.weights([0.0, 0.045, 0.012], 0)
         self.assertGreater(w.get("hand", 0.0), 0.99)
