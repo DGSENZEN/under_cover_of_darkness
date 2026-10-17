@@ -3305,7 +3305,7 @@ func _try_enter_climb(wish_direction: Vector3) -> bool:
 	movement_state = MoveState.CLIMBING
 	current_climb = volume
 	climb_side = side
-	climb_hold = volume.get_meta(&"handhold", null)
+	climb_hold = volume.get_meta(&"handhold") if volume.has_meta(&"handhold") else null
 	rope_param = -1.0
 	_floor_valid = false
 	_clear_ground_state()
