@@ -17,6 +17,7 @@ const Vfx := preload("res://scripts/Level/Vfx.gd")
 const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
+const AnimasScript := preload("res://scripts/Visual/Animas.gd")
 
 ## The corridor (m): its run along X, the wall the stall backs onto, the far wall, the vault.
 const RUN := 12.0
@@ -91,6 +92,9 @@ const MODULE := 1.2
 const EDGE_DEPTH := 0.9
 const TILE_DEPTH := 0.12
 const DRAIN_LOCAL := Vector3(0.6, 0.0, -0.6)
+## The gaps between the drain's grate bars, along the grate (m from its middle): the floor kit's
+## bars (tools/eclipse/underground_floor.py _drain) leave 12 of them, 4 cm apart.
+const GRATE_LANES := [-0.22, -0.18, -0.14, -0.1, -0.06, -0.02, 0.02, 0.06, 0.1, 0.14, 0.18, 0.22]
 ## The drain's column, beside her stall where the conduit's water pools; the worn modules' cells.
 const DRAIN_COLUMN := 8
 ## The tiled walls (tools/eclipse/underground_walls.py): how far the tiles' face stands off the
@@ -153,6 +157,7 @@ var _service_meshes := {}
 var _service_material: ShaderMaterial
 var furniture: Array[MeshInstance3D] = []
 var floor_tiles: Array[MeshInstance3D] = []
+var animas: Node3D
 var wall_panels: Array[MeshInstance3D] = []
 var vault_spans: Array[MeshInstance3D] = []
 var cart_steam: Node3D
@@ -199,6 +204,8 @@ func _ready() -> void:
 	player.debug_traversal = false
 	add_child(player)
 	player.global_position = Vector3(0.0, 1.05, 4.0)
+	# (After the player: the uncanny shy from it.)
+	_animas()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -1050,6 +1057,27 @@ func _wall_decal(kind: String, at: Vector3, size: Vector2, far: bool, roll: floa
 	var turn := Vector3(-90 if rising else 90, (0 if rising else 180) if far else (180 if rising else 0), 0)
 	d.basis = Basis(Vector3(0, 0, 1), deg_to_rad(roll)) * Basis.from_euler(turn * PI / 180.0)
 	return d
+
+
+# The uncanny
+
+## Ánimas in the drain (docs/superpowers/refs/underground/supernatural_refs.md): the old city's
+## drowned, come up the drain from its cistern, drawn by her candles.
+func _animas() -> void:
+	for module: MeshInstance3D in floor_tiles:
+		if module.get_meta("kind") != "floor_border_drain":
+			continue
+
+		animas = AnimasScript.new()
+		animas.name = "animas"
+		animas.seed = 23
+		animas.flee_from = player
+		animas.toward = flames
+		# The grate's bars run along the module's X; its gaps sit along its Z (Godot's -Y of the kit).
+		animas.lanes = PackedFloat32Array(GRATE_LANES)
+		add_child(animas)
+		animas.global_position = module.global_transform * DRAIN_LOCAL
+		animas.rotation.y = module.rotation.y
 
 
 # The floor, tiled

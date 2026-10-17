@@ -579,6 +579,47 @@ func _run() -> void:
 		and vault_box != null and vault_box.position.y - 0.1 >= lab.HEIGHT + 0.039,
 		"spans %d area %.2f of %.2f" % [soffit.size(), soffit_area, wide])
 
+	# U48 ánimas in the drain: cold lights wandering in its sump, under its grate, lighting the bars from below;
+	#     one rises through the grate and sinks again; they flee to the bottom from someone near, and come back
+	var animas: Node3D = lab.animas
+	var sump_at: Vector3 = Vector3.INF
+
+	for module: MeshInstance3D in lab.floor_tiles:
+		if module.get_meta("kind") == "floor_border_drain":
+			sump_at = module.global_transform * lab.DRAIN_LOCAL
+	var in_sump := func() -> bool:
+		return animas.lights.all(func(l): return Vector2(l.global_position.x - sump_at.x, l.global_position.z - sump_at.z).length() < 0.3 \
+			and l.global_position.y < -0.03 and l.global_position.y > -0.25)
+	var started: Array = animas.lights.map(func(l): return l.global_position)
+	lab.player.global_position = Vector3(6.0, 1.05, 3.0)
+	await _frames(120)
+	var wandered: bool = range(animas.lights.size()).any(func(i): return animas.lights[i].global_position.distance_to(started[i]) > 0.02)
+	var home: bool = in_sump.call() and animas.glow.global_position.y < 0.0 and animas.glow.light_energy > 0.05
+	# The one that rises leans toward the living's candles: her stall's flames.
+	var candles := Vector2(lab.flames.global_position.x, lab.flames.global_position.z)
+	var riser: Node3D = animas.rise_now()
+	var from_candles := Vector2(riser.global_position.x, riser.global_position.z).distance_to(candles)
+	var nearest := from_candles
+	var highest := -INF
+
+	for i in 360:
+		await get_tree().process_frame
+		for l in animas.lights:
+			highest = maxf(highest, l.global_position.y)
+		nearest = minf(nearest, Vector2(riser.global_position.x, riser.global_position.z).distance_to(candles))
+	var leaned: bool = from_candles - nearest > 0.05
+	var sank: bool = in_sump.call()
+	lab.player.global_position = sump_at + Vector3(-0.9, 1.05, 0.9)   # (on clear floor beside her stock)
+	await _frames(90)
+	var fled: bool = animas.lights.all(func(l): return l.global_position.y < -0.15) and animas.glow.light_energy < 0.05
+	lab.player.global_position = Vector3(6.0, 1.05, 3.0)
+	await _frames(240)
+	var returned: bool = animas.glow.light_energy > 0.05 and animas.lights.any(func(l): return l.global_position.y > -0.15)
+	_check("U48 ánimas wander in the drain's sump lighting its grate, one rises through and sinks, they flee from the near and return",
+		animas.lights.size() >= 3 and wandered and home and highest > 0.15 and highest < 0.6 and sank and leaned and fled and returned,
+		"lights %d wandered %s home %s rose to %.2f leaned %s sank %s fled %s returned %s" % [animas.lights.size(), wandered,
+		home, highest, leaned, sank, fled, returned])
+
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")
 	_check("U8 the pixel grid is off", retro != null and retro.virtual_height == 0, "%s" % [retro.virtual_height if retro else null])

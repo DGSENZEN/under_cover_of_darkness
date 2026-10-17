@@ -4,7 +4,8 @@ extends Node3D
 ## under the neutral form light.
 ##   Godot --path . --resolution 1920x1080 res://tests/underground_lab_stills.tscn -- --out=/tmp/underground-lab
 ##   (-- --only=front,close_counter  some views; -- --plain  the atlas drawn unshaded, to check its mapping;
-##    -- --train  shot as a train runs by; -- --settle=4  effects given 4 s to fill out first)
+##    -- --train  shot as a train runs by; -- --settle=4  effects given 4 s to fill out first;
+##    -- --rise  an ánima sent up from the drain first)
 
 const LAB := preload("res://maps/underground_lab.tscn")
 
@@ -41,6 +42,8 @@ const VIEWS := [
 	["wall_crack", Vector3(-4.6, 1.2, -0.7), Vector3(-5.4, 0.5, -2.35)],
 	["wall_bills", Vector3(5.4, 1.7, 0.6), Vector3(6.2, 1.9, -2.35)],
 	["wall_tablet", Vector3(-9.0, 1.7, 1.2), Vector3(-9.0, 1.8, -2.35)],
+	["uncanny_drain", Vector3(-2.3, 0.9, -0.9), Vector3(-1.8, 0.0, -1.75)],
+	["uncanny_rise", Vector3(-3.0, 1.0, 0.2), Vector3(-1.7, 0.25, -1.6)],
 ]
 
 var out := "/tmp/underground-lab/"
@@ -51,6 +54,7 @@ func _ready() -> void:
 	var plain := false
 	var passing := false
 	var settle := 0.0
+	var rising := false
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
@@ -61,6 +65,8 @@ func _ready() -> void:
 			plain = true
 		elif arg == "--train":
 			passing = true
+		elif arg == "--rise":
+			rising = true
 		elif arg.begins_with("--settle="):
 			settle = float(arg.trim_prefix("--settle="))
 
@@ -86,6 +92,13 @@ func _ready() -> void:
 		for mesh: MeshInstance3D in lab.stall.find_children("*", "MeshInstance3D", true, false):
 			if mesh.name != "stall_neon":
 				mesh.material_override = flat
+
+	if rising:
+		# An ánima sent up from the drain, shot leaning toward her candles.
+		lab.animas.rise_now()
+
+		for i in 150:
+			await get_tree().process_frame
 
 	if passing:
 		lab.train.start_pass()
