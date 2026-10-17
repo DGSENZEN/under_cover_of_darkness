@@ -136,6 +136,24 @@ func curl(side: int) -> float:
 	return 0.5
 
 
+## The hand pose a holding hand takes, for arms that have it (ArmReach.POSES),
+## and how far into it: [pose, amount]. A hook over a ledge (open on the way
+## to it), a wrap round a pipe, rung or rope, a flat push on a top.
+func grip_pose(side: int) -> Array:
+	match state:
+		State.HANG:
+			var g := grips[side] as Grip
+			return [&"Hook", lerpf(0.2, 1.0, smoothstep(0.6, 1.0, g.travel))]
+		State.LADDER, State.ROPE, State.POLE:
+			return [&"Wrap", 1.0]
+		State.MANTLE, State.VAULT:
+			return [&"Push", 1.0]
+		State.CARRY:
+			return [&"Fist", 0.35]
+
+	return [&"Fist", 0.5]
+
+
 ## How far below the middle of `view` (radians) the hands that are taking
 ## hold are: the view looks down to see them land (CameraJuice). 0 when none
 ## are, or they are above it.

@@ -207,6 +207,9 @@ const ROLL_TUCK: Array[Transform3D] = [
 	Transform3D(Basis(Vector3.FORWARD, 0.35) * Basis(Vector3.RIGHT, 0.25), Vector3(0.13, -0.19, -0.55)),
 ]
 var _grip_curls: Array[float] = [0.5, 0.5]
+## The pose each holding hand takes (HandContacts.grip_pose), for arms that
+## have it.
+var _grip_poses: Array[StringName] = [&"Fist", &"Fist"]
 ## Your arms.
 var _arms: Node3D
 ## The page held up to read (HeldPage), made the first time; wanted up or
@@ -1245,6 +1248,13 @@ func _place_grips() -> void:
 			_grip_palms[side] = _in_frame(true_palm)
 			_grip_clamped[side] = not _grip_palms[side].origin.is_equal_approx(true_palm.origin)
 			_grip_curls[side] = _contacts.curl(side)
+			var gripping: Array = _contacts.grip_pose(side)
+
+			if _arms != null and _arms.has_pose(gripping[0]):
+				_grip_poses[side] = gripping[0]
+				_grip_curls[side] = gripping[1]
+			else:
+				_grip_poses[side] = &"Fist"
 			strongest = maxf(strongest, weight)
 
 	_gripping = strongest
@@ -1347,6 +1357,11 @@ func _suppressed_for_grips() -> bool:
 ## Your arms, reaching for what each hand has: the right the grip of what you
 ## carry (a bow: its string, the bow itself in the left), the left the purse
 ## or whatever it is being handed, both the world when you hold on to it.
+## `pose` if these arms have it, else a fist (the old arms).
+func _pose_if_had(pose: StringName) -> StringName:
+	return pose if _arms != null and _arms.has_pose(pose) else &"Fist"
+
+
 func _place_arms() -> void:
 	if _arms == null:
 		return
@@ -1355,6 +1370,8 @@ func _place_arms() -> void:
 	var targets: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
 	var weights: Array[float] = [0.0, 0.0]
 	var curls: Array[float] = [0.35, 0.35]
+	# What each hand closes toward (a fist, for arms with no other poses).
+	var poses: Array[StringName] = [&"Fist", &"Fist"]
 	var bow := _main_item != null and _main_item.has_meta(&"draw_sound")
 
 	var braced := 0.0
@@ -1369,6 +1386,7 @@ func _place_arms() -> void:
 			targets[0] = _around_stave(_held_by(held, BOW_GRIP), held.basis.y)
 			weights[0] = 1.0
 			curls[0] = 1.0
+			poses[0] = _pose_if_had(&"Wrap")
 			var drawn := _main.transform * _main_mesh.transform * Transform3D(Basis.IDENTITY, _nock_point())
 			targets[1] = _held_by(Transform3D(held.basis, drawn.origin), STRING_GRIP)
 			weights[1] = 1.0
@@ -1381,6 +1399,8 @@ func _place_arms() -> void:
 			targets[1] = _held_by(held, HAND_GRIP)
 			weights[1] = 1.0
 			curls[1] = 1.0
+			# Round the handle: a sword's grip (the thumb along it).
+			poses[1] = _pose_if_had(&"SwordGrip")
 
 			# A braced block: the left palm on the flat.
 			_brace_shown = move_toward(_brace_shown, _brace if _view_id == &"sword" else 0.0, get_process_delta_time() / 0.08)
@@ -1391,6 +1411,11 @@ func _place_arms() -> void:
 				targets[0] = Transform3D(held.basis * BRACE.basis, held.origin + held.basis * (BRACE.origin * at))
 				weights[0] = smoothstep(0.0, 1.0, braced)
 				curls[0] = 0.2
+
+				# The palm flat on the blade.
+				if _arms.has_pose(&"Push"):
+					poses[0] = &"Push"
+					curls[0] = 1.0
 
 	if _off.visible and not dead and not (bow and _main.visible) and braced < 0.5:
 		if _off_item.visible:
@@ -1419,6 +1444,9 @@ func _place_arms() -> void:
 			weights[side] = maxf(weights[side], smoothstep(0.0, 0.5, grip))
 			curls[side] = lerpf(curls[side], _grip_curls[side], grip)
 
+			if grip > 0.5:
+				poses[side] = _grip_poses[side]
+
 	# Rolling out of a landing: forearms in, crossed low in front, hands loose.
 	var juice = player.get("juice") if player != null else null
 	var tuck: float = juice.tumble_amount() if juice != null and juice.has_method("tumble_amount") and not dead else 0.0
@@ -1429,6 +1457,9 @@ func _place_arms() -> void:
 			targets[side] = targets[side].interpolate_with(pose, tuck) if weights[side] > 0.0 else pose
 			weights[side] = maxf(weights[side], smoothstep(0.0, 0.4, tuck))
 			curls[side] = lerpf(curls[side], 0.45, tuck)
+
+			if tuck > 0.5:
+				poses[side] = &"Fist"
 
 	# Where the eye really is, in his space: held hands are drawn along the
 	# line from it (ArmReach.pull_to_eye).
@@ -1450,7 +1481,7 @@ func _place_arms() -> void:
 	_arms.set_held(_held_amount, _chest_under_hands())
 
 	for side in range(2):
-		_arms.set_hand(side, targets[side], weights[side], curls[side])
+		_arms.set_hand(side, targets[side], weights[side], curls[side], poses[side])
 
 		if _arms.reach != null:
 			# Held hands in view are the true-size rig's; nothing is brought in

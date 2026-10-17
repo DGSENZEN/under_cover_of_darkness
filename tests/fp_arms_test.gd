@@ -43,6 +43,7 @@ func _run() -> void:
 	_rig_checks()
 	await _pose_checks()
 	await _held_checks()
+	await _grip_pose_checks()
 	await _kick_checks()
 	await _switch_checks()
 	await _sword_checks()
@@ -169,6 +170,76 @@ func _held_checks() -> void:
 	await _frames(60)
 
 
+func _grip_pose_checks() -> void:
+	var arms = player.hand._arms
+	var shares: Array = arms.reach.pose_weights
+
+	# A sill: both hands hook over it.
+	var column := _sill_column(30.0)
+	await _frames(2)
+	await _hang_on(column[0])
+	await _frames(30)
+	var hooked: float = minf(shares[0].get(&"Hook", 0.0), shares[1].get(&"Hook", 0.0))
+	player._drop_from_hang()
+	await _frames(60)
+
+	# A drainpipe: the hands wrap round it.
+	_box(Vector3(40, 3, -4.5), Vector3(4, 6, 3))
+	var pole: Node3D = HANDHOLD.new()
+	pole.kind = HANDHOLD.Kind.POLE
+	pole.length = 6.0
+	add_child(pole)
+	pole.global_position = Vector3(40, 0, -2.9)
+	await _frames(2)
+	await _place(Vector3(40, 1.03, -1.6))
+	Input.action_press("move_forward")
+	var wrapped := 1.0
+	var looked := 0
+	var on_pole := 0
+	for i in 200:
+		await _frames(1)
+		on_pole = on_pole + 1 if player.movement_state == 3 else 0
+		# (Past the first moments on it: a hand crossing over to the wrap.)
+		if on_pole > 15 and i % 5 == 0:
+			for side in [0, 1]:
+				if arms.reach.weights[side] > 0.9 and player.hand._contacts.weight(side) > 0.95:
+					wrapped = minf(wrapped, shares[side].get(&"Wrap", 0.0))
+					looked += 1
+		if looked > 20:
+			break
+	_release_all()
+	_check("FA15 a sill is hooked, a drainpipe wrapped", hooked > 0.95 and looked > 10 and wrapped > 0.95,
+		"Hook %.2f; Wrap %.2f over %d held hand-frames" % [hooked, wrapped, looked])
+	await _place(Vector3(50, 0.1, 0))
+	await _frames(30)
+
+	# Pulling up onto a top: the hands press flat on it.
+	_box(Vector3(60, 1.2, -4.5), Vector3(4, 2.4, 3))
+	var lip: Node3D = HANDHOLD.new()
+	lip.kind = HANDHOLD.Kind.LEDGE
+	lip.length = 1.0
+	add_child(lip)
+	lip.global_position = Vector3(60, 2.4, -3)
+	await _frames(2)
+	await _hang_on(lip)
+	await _frames(20)
+	Input.action_press("jump")
+	var since := -1
+	var pushed := 0.0
+	for i in 120:
+		await _frames(1)
+		var label: String = String(player.current_move.label) if player.current_move != null else ""
+		if label == "pull up" and since < 0:
+			since = i
+		if since >= 0 and i - since <= 20:
+			pushed = maxf(pushed, minf(shares[0].get(&"Push", 0.0), shares[1].get(&"Push", 0.0)))
+	_release_all()
+	_check("FA16 pulling up, the hands press flat on the top", since >= 0 and pushed > 0.9,
+		"pull up from frame %d, Push %.2f" % [since, pushed])
+	await _place(Vector3(70, 0.1, 0))
+	await _frames(30)
+
+
 func _kick_checks() -> void:
 	var arms = player.hand._arms
 	var legs = arms.get("_leg_reach")
@@ -176,14 +247,17 @@ func _kick_checks() -> void:
 	var folded: bool = legs != null and &"spine_01" in legs.folded and &"thigh_l" in legs.folded
 	var travel := 0.0
 	if legs != null:
+		var before: Vector3 = legs.solved_foot
 		player.hand.play_kick()
 		var start := Vector3.INF
 		for i in 30:
 			await _frames(1)
-			if legs.foot_weight > 0.5:
+			# The foot as you see it (camera space), once it has been solved.
+			if legs.foot_weight > 0.5 and legs.solved_foot != before:
+				var seen: Vector3 = player.camera.global_transform.affine_inverse() * legs.solved_foot
 				if start == Vector3.INF:
-					start = legs.solved_foot
-				travel = maxf(travel, legs.solved_foot.distance_to(start))
+					start = seen
+				travel = maxf(travel, seen.distance_to(start))
 	var separate: bool = body != null and body != arms.man
 	_check("FA8 the kick swings the old body's leg, the rest of it folded away", separate and folded and travel > 0.2 * ViewArmsScript.SCALE,
 		"leg body %s folded %s foot travel %.3f m" % [separate, folded, travel])
@@ -206,6 +280,11 @@ func _switch_checks() -> void:
 			break
 	var old_now: bool = not ViewArmsScript.new_arms and arms.man != before and arms.get("_leg_body") == null
 	var gone: bool = not is_instance_valid(before) or before.get_parent() == null
+	await _frames(10)
+	var contacts = player.hand._contacts
+	var as_today: bool = absf(arms.reach.curls[0] - contacts.curl(0)) <= 0.01 and absf(arms.reach.curls[1] - contacts.curl(1)) <= 0.01
+	_check("FA18 the old arms hang with today's curls", as_today,
+		"curls %.2f/%.2f, contacts %.2f/%.2f" % [arms.reach.curls[0], arms.reach.curls[1], contacts.curl(0), contacts.curl(1)])
 	var old_poses: bool = not arms.has_pose(&"Hook") and not arms.has_pose(&"Wrap") and arms.has_pose(&"Fist")
 	_check("FA17 the old arms have only their fist", old_poses, "Hook %s Fist %s" % [arms.has_pose(&"Hook"), arms.has_pose(&"Fist")])
 	_press(KEY_F12)
@@ -228,6 +307,8 @@ func _sword_checks() -> void:
 	var gap: float = arms.hand_position(1).distance_to(grip)
 	_check("FA10 the sword is held in the new right hand", player.hand._main_item != null and arms.reach.weights[1] > 0.5 and gap <= 0.12,
 		"item %s weight %.2f hand to grip %.3f m" % [player.hand._main_item != null, arms.reach.weights[1], gap])
+	var sword_grip: float = arms.reach.pose_weights[1].get(&"SwordGrip", 0.0)
+	_check("FA16b the sword hand takes the sword grip", sword_grip > 0.95, "SwordGrip %.2f" % sword_grip)
 
 
 func _sill_column(x: float) -> Array:
