@@ -17,6 +17,8 @@ signal began
 signal peaked
 
 @export var seed := 0
+## Seconds between trains (the Company's, EVERY; the dark train's, far rarer).
+@export var every := EVERY
 
 ## Seconds until the next train.
 var next := 0.0
@@ -27,7 +29,7 @@ var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	_rng.seed = seed
-	next = _rng.randf_range(EVERY.x, EVERY.y)
+	next = _rng.randf_range(every.x, every.y)
 
 
 func _process(delta: float) -> void:
@@ -40,7 +42,7 @@ func _process(delta: float) -> void:
 
 		if _into >= BUILD + HOLD + FADE:
 			_into = -1.0
-			next = _rng.randf_range(EVERY.x, EVERY.y)
+			next = _rng.randf_range(every.x, every.y)
 
 		return
 

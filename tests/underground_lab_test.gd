@@ -665,6 +665,37 @@ func _run() -> void:
 		"by bench %s hat %s eyes %s watching %s gone %s stayed gone %s back %s" % [n_by_bench, n_hat_on, n_eyes_glow, n_watching, n_gone,
 		n_stayed_gone, n_back_unwatched])
 
+	# U50 the dark train: rare (far rarer than the Company's), no rumble, no brownout's flicker: every light sinks
+	#     smoothly near dark, the candles gutter, a hard cold draught, the ánimas sink away, only wind heard;
+	#     after it, all as it was
+	var dt: TrainPass = lab.dark_train
+	var rare: bool = dt != null and dt.every.x >= 4.0 * lab.train.every.y
+	var lamp: Light3D = lab.work_lights[0]
+	var lamp_full: float = lamp.light_energy
+	var flame_light: Light3D = lab.flames.find_children("*", "OmniLight3D", false, false)[0]
+	var flame_full: float = flame_light.light_energy
+	var rumble_before: bool = lab.rumble.playing
+	dt.start_pass()
+	var steps := []
+
+	for i in int((TrainPass.BUILD + 1.0) * 60.0):
+		await get_tree().process_frame
+		if i > 60 and i % 20 == 0:
+			steps.append(lamp.light_energy)
+	var smooth := true
+
+	for i in range(1, steps.size()):
+		smooth = smooth and steps[i] <= steps[i - 1] + 0.001
+	var darkened: bool = lamp.light_energy < 0.3 * lamp_full and flame_light.light_energy < 0.4 * flame_full
+	var guttered: bool = lab.flames.find_children("*", "MultiMeshInstance3D", false, false).all(func(m): return m.get_meta("gutter", 0.0) > 0.5)
+	var hushed: bool = lab.rumble.playing == rumble_before and lab.dark_wind.playing and lab.animas.presence < 0.3
+	for i in int((TrainPass.HOLD + TrainPass.FADE + 2.0) * 60.0):
+		await get_tree().process_frame
+	var restored: bool = absf(lamp.light_energy - lamp_full) < 0.05 * lamp_full and lab.animas.presence > 0.9
+	_check("U50 the dark train: rare, no rumble, lights sink smoothly near dark, candles gutter, the ánimas sink, wind only; then as it was",
+		rare and smooth and darkened and guttered and hushed and restored,
+		"rare %s smooth %s dark %s guttered %s hushed %s restored %s" % [rare, smooth, darkened, guttered, hushed, restored])
+
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")
 	_check("U8 the pixel grid is off", retro != null and retro.virtual_height == 0, "%s" % [retro.virtual_height if retro else null])

@@ -7,6 +7,7 @@ extends Node3D
 ##   F2  form light: everything neutral grey under one white light, to judge shape
 ##   F3  grime decals on / off
 ##   F4  a train now (they pass every 90-150 s on their own)
+##   F5  the dark train now (it runs every 10-20 min on its own)
 ##
 ## The stall's atlas is the committed painted file (the user's overpaint
 ## stall.png before the painter's stall_base.png); the bay never reads the
@@ -19,6 +20,14 @@ const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const AnimasScript := preload("res://scripts/Visual/Animas.gd")
 const NahualScript := preload("res://scripts/Visual/Nahual.gd")
+## The dark train (supernatural_refs.md): Ehécatl's wind running the line dug through his temple, rarely;
+## how rare (s), how far every light sinks, how hard the draught, and the wind heard (a stand-in until
+## the user's tunnel-wind recording, sound_list.md #10).
+const DARK_EVERY := Vector2(600.0, 1200.0)
+const DARK_SINK := 0.85
+const DARK_DRAUGHT := Vector3(2.2, 0.0, 0.0)
+const DARK_WIND := "res://audio/ambience/cave.ogg"
+const DARK_WIND_DB := -14.0
 
 ## The corridor (m): its run along X, the wall the stall backs onto, the far wall, the vault.
 const RUN := 12.0
@@ -167,6 +176,8 @@ var _service_material: ShaderMaterial
 var furniture: Array[MeshInstance3D] = []
 var floor_tiles: Array[MeshInstance3D] = []
 var animas: Node3D
+var dark_train: TrainPass
+var dark_wind: AudioStreamPlayer
 var nahual: Node3D
 var old_hat: MeshInstance3D
 var wall_panels: Array[MeshInstance3D] = []
@@ -216,6 +227,7 @@ func _ready() -> void:
 	add_child(player)
 	player.global_position = Vector3(0.0, 1.05, 4.0)
 	# (After the player: the uncanny shy from it, and watch it.)
+	_dark_train()
 	_animas()
 	_nahual()
 
@@ -233,6 +245,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			set_decals(not decals[0].visible)
 		KEY_F4:
 			train.start_pass()
+		KEY_F5:
+			if dark_train != null:
+				dark_train.start_pass()
 
 
 func set_work_lights(on: bool) -> void:
@@ -555,9 +570,11 @@ func _breathe(delta: float) -> void:
 
 	_clock += delta
 	var s := train.strength()
+	# The dark train: no rumble, no brownout; every light sinks smoothly, the candles gutter.
+	var d := dark_train.strength() if dark_train != null else 0.0
 	# The lights sag unevenly as the train draws on the Company's line.
 	var dip := clampf(0.5 + 0.5 * sin(_clock * 23.0) * sin(_clock * 7.3 + 1.1), 0.0, 1.0)
-	var sag := 1.0 - s * (BROWNOUT.x + BROWNOUT.y * dip)
+	var sag := (1.0 - s * (BROWNOUT.x + BROWNOUT.y * dip)) * (1.0 - DARK_SINK * d)
 
 	for light: Light3D in _full:
 		light.light_energy = _full[light] * sag
@@ -565,17 +582,56 @@ func _breathe(delta: float) -> void:
 	if neon != null:
 		neon.dim = sag
 
-	bulb_pivot.gust = GUST_SWING * s
-	Vfx.blow(censer, DRAUGHT * (1.0 + 4.0 * s))
+	bulb_pivot.gust = GUST_SWING * maxf(s, 1.6 * d)
+	var draught := DRAUGHT * (1.0 + 4.0 * s) + DARK_DRAUGHT * d
+	Vfx.blow(censer, draught)
 
 	for motes in dust:
-		Vfx.blow(motes, DRAUGHT * (1.0 + 4.0 * s))
+		Vfx.blow(motes, draught)
+
+	for candles in [flames, niche_flames]:
+		if candles != null:
+			_gutter(candles, d)
+
+	if animas != null:
+		animas.hush = d
+
+	if dark_wind != null:
+		dark_wind.volume_db = DARK_WIND_DB + linear_to_db(maxf(d, 0.001))
 
 	dust_sift.amount_ratio = clampf((s - 0.3) / 0.7, 0.0, 1.0)
 
 	if crowd != null:
 		crowd.duck = s
 	rumble.volume_db = RUMBLE_DB + linear_to_db(maxf(s, 0.001))
+
+
+## A cluster's flames guttered (0 none, 1 nearly out), their light with them.
+func _gutter(candles: Node3D, amount: float) -> void:
+	for draw: MultiMeshInstance3D in candles.find_children("*", "MultiMeshInstance3D", false, false):
+		draw.set_meta("gutter", amount)
+		((draw.multimesh.mesh as QuadMesh).material as ShaderMaterial).set_shader_parameter(&"gutter", amount)
+
+	# (Their light is their flicker's, VfxFlicker.energy.)
+	if "energy" in candles:
+		if not candles.has_meta("full"):
+			candles.set_meta("full", candles.energy)
+		candles.energy = float(candles.get_meta("full")) * (1.0 - 0.75 * amount)
+
+
+## The dark train: no light, no wheels, only Ehécatl's wind through the line.
+func _dark_train() -> void:
+	dark_train = TrainPass.new()
+	dark_train.name = "dark_train"
+	dark_train.seed = 913
+	dark_train.every = DARK_EVERY
+	add_child(dark_train)
+	dark_wind = AudioStreamPlayer.new()
+	dark_wind.name = "dark_wind"
+	dark_wind.stream = load(DARK_WIND)
+	dark_wind.volume_db = -80.0
+	add_child(dark_wind)
+	dark_train.began.connect(dark_wind.play)
 
 
 ## The train, its rumble, the dust its shaking sifts from the vault, the jars' rattle.
@@ -1201,5 +1257,5 @@ func _name_keys() -> void:
 	if keys_label == null or work_lights.is_empty() or decals.is_empty():
 		return
 
-	keys_label.text = "F1 work lights %s  ·  F2 form light %s  ·  F3 decals %s" % [
+	keys_label.text = "F1 work lights %s  ·  F2 form light %s  ·  F3 decals %s  ·  F4 a train  ·  F5 the dark train" % [
 		"ON" if work_lights[0].visible else "off", "ON" if _form else "off", "ON" if decals[0].visible else "off"]

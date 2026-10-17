@@ -5,7 +5,7 @@ extends Node3D
 ##   Godot --path . --resolution 1920x1080 res://tests/underground_lab_stills.tscn -- --out=/tmp/underground-lab
 ##   (-- --only=front,close_counter  some views; -- --plain  the atlas drawn unshaded, to check its mapping;
 ##    -- --train  shot as a train runs by; -- --settle=4  effects given 4 s to fill out first;
-##    -- --rise  an ánima sent up from the drain first)
+##    -- --rise  an ánima sent up from the drain first; -- --dark  shot as the dark train runs by)
 
 const LAB := preload("res://maps/underground_lab.tscn")
 
@@ -57,6 +57,7 @@ func _ready() -> void:
 	var passing := false
 	var settle := 0.0
 	var rising := false
+	var dark := false
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
@@ -67,6 +68,8 @@ func _ready() -> void:
 			plain = true
 		elif arg == "--train":
 			passing = true
+		elif arg == "--dark":
+			dark = true
 		elif arg == "--rise":
 			rising = true
 		elif arg.begins_with("--settle="):
@@ -102,13 +105,19 @@ func _ready() -> void:
 		for i in 150:
 			await get_tree().process_frame
 
+	if dark:
+		lab.dark_train.start_pass()
+
+		for i in int((TrainPass.BUILD + 1.0) * 60.0):
+			await get_tree().process_frame
+
 	if passing:
 		lab.train.start_pass()
 
 		for i in int((TrainPass.BUILD + 1.0) * 60.0):
 			await get_tree().process_frame
 
-	for form in ([false] if plain or passing else [false, true]):
+	for form in ([false] if plain or passing or dark else [false, true]):
 		if not plain:
 			lab.set_form(form)
 
@@ -121,7 +130,7 @@ func _ready() -> void:
 			if lab.nahual != null:
 				lab.nahual.appear()
 			await _frames(12)
-			var file := "%s%s_%s.png" % [out, view[0], "plain" if plain else ("train" if passing else ("form" if form else "lit"))]
+			var file := "%s%s_%s.png" % [out, view[0], "plain" if plain else ("train" if passing else ("dark" if dark else ("form" if form else "lit")))]
 			get_viewport().get_texture().get_image().save_png(file)
 			print("still: ", file)
 

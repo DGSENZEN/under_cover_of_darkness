@@ -58,6 +58,8 @@ var lights: Array[Node3D] = []
 var glow: OmniLight3D
 ## 1 when they are here; 0 when they have fled.
 var presence := 1.0
+## Something passing they fear (the dark train, 0-1): they sink from it as from the near.
+var hush := 0.0
 
 var _time := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -136,8 +138,8 @@ func rise_now() -> Node3D:
 
 func _process(delta: float) -> void:
 	_time += delta
-	var near := flee_from != null and Vector2(flee_from.global_position.x - global_position.x,
-		flee_from.global_position.z - global_position.z).length() < FLEE
+	var near := hush > 0.3 or (flee_from != null and Vector2(flee_from.global_position.x - global_position.x,
+		flee_from.global_position.z - global_position.z).length() < FLEE)
 
 	if near:
 		presence = maxf(0.0, presence - DIM_RATE * delta * maxf(presence, 0.1))
