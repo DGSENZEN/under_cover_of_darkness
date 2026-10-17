@@ -19,8 +19,9 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[2]
 BRUSHES = ROOT / "textures" / "brushes"
 SIZE = 1024
-# How wide the band is that hides each old border, in pixels.
-BAND = 64
+# How wide the band is, at each border, that hides the seam where a sheet's ends meet when tiled
+# (the user's sheets nearly tile already: their ends differ by a few percent at most).
+BAND = 24
 
 
 def _sources(src_dir):
@@ -37,18 +38,19 @@ def _sources(src_dir):
 
 
 def _seamless(values, axis):
-    """Turned half round along `axis`, so the old border sits in the middle
-    and the new borders meet as neighbours did; the old border then hidden by
-    blending in the unturned sheet, which is smooth there."""
+    """The seam where the sheet's two ends meet hidden by blending each end toward the other
+    across a narrow band, halfway at the very edge; the rest of the sheet left as painted."""
     n = values.shape[axis]
-    turned = np.roll(values, n // 2, axis=axis)
-    t = np.clip(1.0 - np.abs(np.arange(n) - n // 2) / (BAND / 2), 0.0, 1.0)
-    weight = t * t * (3 - 2 * t)
-    shape = [1] * values.ndim
-    shape[axis] = n
-    weight = weight.reshape(shape)
+    a = np.moveaxis(values, axis, 0).copy()
+    source = a.copy()
 
-    return turned * (1 - weight) + values * weight
+    for k in range(BAND):
+        t = 1.0 - k / BAND
+        w = 0.5 * t * t * (3 - 2 * t)
+        a[k] = source[k] * (1 - w) + source[n - 1 - k] * w
+        a[n - 1 - k] = source[n - 1 - k] * (1 - w) + source[k] * w
+
+    return np.moveaxis(a, 0, axis)
 
 
 def prepare(src_dir, out_dir=BRUSHES):

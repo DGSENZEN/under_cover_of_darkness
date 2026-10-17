@@ -74,6 +74,19 @@ class Brushes(unittest.TestCase):
             for axis in (0, 1):
                 self.assertLessEqual(_seam_ratio(values, axis), 1.5, "brush_%02d axis %d" % (i, axis))
 
+    def test_middle_left_as_the_user_painted_it(self):
+        # Hiding the seam must not touch the sheet's middle (a turned copy blended there leaves a
+        # soft cross that repeats across every surface it is laid on).
+        brushes.prepare(self.src, self.out)
+        for i in range(5):
+            name = "Texture_Abstract01 .png" if i == 1 else "Texture_Abstract%02d.png" % i
+            source = Image.open(self.src / name).convert("LA").resize((brushes.SIZE, brushes.SIZE), Image.LANCZOS)
+            grey, alpha = np.asarray(source).astype(np.float32).transpose(2, 0, 1) / 255.0
+            want = grey * alpha
+            got = brushes.load("brush_%02d" % i, self.out)
+            middle = slice(brushes.SIZE // 4, 3 * brushes.SIZE // 4)
+            self.assertLess(np.abs(got[middle, middle] - want[middle, middle]).max(), 2.5 / 255, "brush_%02d" % i)
+
     def test_load_premultiplies_alpha(self):
         brushes.prepare(self.src, self.out)
         values = brushes.load("brush_00", self.out)

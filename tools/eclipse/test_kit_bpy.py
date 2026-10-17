@@ -20,6 +20,8 @@ import underground_ground  # noqa: E402
 import underground_services  # noqa: E402
 import underground_furniture  # noqa: E402
 import underground_floor  # noqa: E402
+import underground_walls  # noqa: E402
+import underground_vault  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -1278,6 +1280,120 @@ class UndergroundFloor(unittest.TestCase):
         self.assertLess(min(v.z for f in self._faces_of("floor_field_worn", "tile_terra") + self._faces_of(
             "floor_field_worn", "tile_cream") for v in f if v.z > -0.02), -0.004)
         self.assertGreater(len(o.data.polygons), len(self.objects["floor_field"].data.polygons))
+
+
+class UndergroundWalls(unittest.TestCase):
+    """The Underground's tiled walls (tools/eclipse/underground_walls.py): panels 1.2 m
+    along x, from the wall's face (y = 0) out to the tiles' face (y = -FACE), floor to
+    vault; tiles in running bond seamless panel to panel; a dark skirting, the line's
+    band; worn panels, a crack showing the older stone behind; a name tablet."""
+
+    PANELS = ("wall_tiled", "wall_tiled_worn", "wall_crack")
+    BUDGET = {"wall_tiled": 4200, "wall_tiled_worn": 4600, "wall_crack": 5200, "name_tablet": 2400}
+
+    @classmethod
+    def setUpClass(cls):
+        underground_walls.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _faces_of(self, name, slot):
+        o = self.objects[name]
+        return [[o.matrix_world @ o.data.vertices[i].co for i in p.vertices] for p in o.data.polygons
+                if o.material_slots[p.material_index].material.name == slot]
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_each_passes_the_gate(self):
+        problems = {}
+
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            found = gate.check(faces, tris, [], budget=self.BUDGET[n])
+            if found:
+                problems[n] = found[:3]
+
+        self.assertEqual(problems, {})
+
+    def test_panels_fill_their_place_exactly(self):
+        # Floor to vault, edge to edge, from the wall's face to the tiles' face and no further.
+        for n in self.PANELS:
+            vs = _world(self.objects[n])
+            ext = [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+            self.assertAlmostEqual(ext[0][0], 0.0, delta=0.001, msg=n)
+            self.assertAlmostEqual(ext[0][1], underground_walls.PANEL, delta=0.001, msg=n)
+            self.assertAlmostEqual(ext[1][1], 0.0, delta=0.0005, msg=n)
+            self.assertAlmostEqual(ext[1][0], -underground_walls.FACE, delta=0.0005, msg=n)
+            self.assertAlmostEqual(ext[2][0], 0.0, delta=0.001, msg=n)
+            self.assertAlmostEqual(ext[2][1], underground_walls.HEIGHT, delta=0.001, msg=n)
+
+    def test_the_bond_runs_on_across_panels(self):
+        # Each course's tiles meet the panel's ends with half a joint, so the next panel carries it on.
+        for n in self.PANELS:
+            ends = [v.x for slot in ("tile_wall", "tile_dark", "tile_line") for f in self._faces_of(n, slot)
+                    for v in f if v.y < -underground_walls.FACE + 0.001]
+            self.assertAlmostEqual(min(ends), underground_walls.JOINT / 2, delta=0.001, msg=n)
+            self.assertAlmostEqual(max(ends), underground_walls.PANEL - underground_walls.JOINT / 2, delta=0.001, msg=n)
+
+    def test_the_skirting_and_the_band(self):
+        dark = self._faces_of("wall_tiled", "tile_dark")
+        line = self._faces_of("wall_tiled", "tile_line")
+        self.assertTrue(dark and line)
+        self.assertLessEqual(max(v.z for f in dark for v in f), underground_walls.SKIRTING + 0.001)
+        lo, hi = underground_walls.BAND
+        self.assertTrue(all(lo - 0.001 <= v.z <= hi + 0.001 for f in line for v in f))
+
+    def test_the_worn_panel_has_lost_and_odd_tiles(self):
+        plain, worn = (len(self._faces_of(n, "tile_wall")) for n in ("wall_tiled", "wall_tiled_worn"))
+        self.assertLess(worn, plain)
+        self.assertTrue(self._faces_of("wall_tiled_worn", "tile_odd"))
+
+    def test_the_crack_shows_the_older_stone_and_a_place_for_its_glyph(self):
+        stone = self._faces_of("wall_crack", "stone_old")
+        glyph = self._faces_of("wall_crack", "glyph_blank")
+        self.assertTrue(stone and glyph)
+        (x0, x1), (z0, z1) = underground_walls.CRACK
+        self.assertTrue(all(x0 - 0.001 <= v.x <= x1 + 0.001 and z0 - 0.001 <= v.z <= z1 + 0.001 for f in glyph for v in f))
+        tiles = [f for slot in ("tile_wall", "tile_dark", "tile_line") for f in self._faces_of("wall_crack", slot)
+                 if all(x0 + 0.05 < v.x < x1 - 0.05 and z0 + 0.05 < v.z < z1 - 0.05 for v in f)]
+        self.assertEqual(tiles, [])
+
+    def test_the_tablet_stands_on_the_tiles_and_leaves_its_name_blank(self):
+        vs = _world(self.objects["name_tablet"])
+        self.assertAlmostEqual(max(v.y for v in vs), 0.0, delta=0.0005)
+        self.assertTrue(self._faces_of("name_tablet", "sign"))
+
+
+class UndergroundVault(unittest.TestCase):
+    """The corridor's plastered vault in spans (tools/eclipse/underground_vault.py): its underside
+    at z = 0, from the back wall's face (y = 0) across to the far wall's, SPAN along x."""
+
+    @classmethod
+    def setUpClass(cls):
+        underground_vault.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_one_span_closed_in_budget_through_the_gate(self):
+        self.assertEqual(sorted(self.objects), ["vault_span"])
+        o = self.objects["vault_span"]
+        self.assertEqual(_closed(o), 0)
+        faces, tris, _ = common.dump_faces([o])
+        self.assertEqual(gate.check(faces, tris, [], budget=400), [])
+
+    def test_the_span_fills_its_place(self):
+        vs = _world(self.objects["vault_span"])
+        ext = [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+        self.assertAlmostEqual(ext[0][0], 0.0, delta=0.001)
+        self.assertAlmostEqual(ext[0][1], underground_vault.SPAN, delta=0.001)
+        self.assertAlmostEqual(ext[1][0], 0.0, delta=0.001)
+        self.assertAlmostEqual(ext[1][1], underground_vault.DEPTH, delta=0.001)
+        self.assertAlmostEqual(ext[2][0], 0.0, delta=0.001)
 
 
 if __name__ == "__main__":

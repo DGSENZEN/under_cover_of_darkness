@@ -1,0 +1,15 @@
+{
+ "slots": [
+  "tile_wall",
+  "tile_dark",
+  "tile_line",
+  "tile_odd",
+  "mortar",
+  "plaster",
+  "stone_old",
+  "glyph_blank",
+  "sign"
+ ],
+ "atlas_px": 2048,
+ "px_per_m": 129.64
+}

@@ -38,6 +38,9 @@ const VIEWS := [
 	["furn_niche_far", Vector3(1.2, 1.7, 1.2), Vector3(1.2, 1.9, 4.5)],
 	["floor_drain", Vector3(-2.5, 1.3, -0.3), Vector3(-1.8, 0.0, -1.75)],
 	["floor_worn", Vector3(-6.0, 1.6, 0.6), Vector3(-6.0, 0.0, 2.6)],
+	["wall_crack", Vector3(-4.6, 1.2, -0.7), Vector3(-5.4, 0.5, -2.35)],
+	["wall_bills", Vector3(5.4, 1.7, 0.6), Vector3(6.2, 1.9, -2.35)],
+	["wall_tablet", Vector3(-9.0, 1.7, 1.2), Vector3(-9.0, 1.8, -2.35)],
 ]
 
 var out := "/tmp/underground-lab/"

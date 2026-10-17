@@ -74,6 +74,19 @@ class Decals(unittest.TestCase):
         self.assertGreater(rows.std(), 0.0)
         self.assertGreater(len(np.unique(image[..., 1][lit].round(-1))), 3)
 
+    def test_poster_is_paper_torn_at_its_edges_and_blank(self):
+        # A pasted bill gone yellow: opaque paper, light, its edge torn ragged, nothing printed
+        # in its middle (what it says is the user's).
+        image = np.asarray(decals.make("poster", self.brushes)).astype(float)
+        a = image[..., 3] / 255.0
+        self.assertGreater((a > 0.9).mean(), 0.45)
+        self.assertGreater(image[..., :3][a > 0.9].mean(), 150.0)
+        middle = image[200:312, 200:312, :3]
+        self.assertLess(middle.std(axis=(0, 1)).max(), 25.0)
+        rows = [np.flatnonzero(a[r] > 0.5) for r in range(64, 448, 16)]
+        lefts = [r[0] for r in rows if r.size]
+        self.assertGreater(np.std(lefts), 2.0)
+
     def test_colour_is_dark_grime(self):
         for kind in decals.GRIME:
             rgb = np.asarray(decals.make(kind, self.brushes))[..., :3].astype(float)

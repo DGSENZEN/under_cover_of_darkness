@@ -93,6 +93,19 @@ const TILE_DEPTH := 0.12
 const DRAIN_LOCAL := Vector3(0.6, 0.0, -0.6)
 ## The drain's column, beside her stall where the conduit's water pools; the worn modules' cells.
 const DRAIN_COLUMN := 8
+## The tiled walls (tools/eclipse/underground_walls.py): how far the tiles' face stands off the
+## wall behind them (BACK_WALL and FAR_WALL are the tiles' face, where everything hangs); the
+## crack's opening along its panel (where the marigold trail ends), its column; the worn panels.
+const WALL_KIT := "res://assets/eclipse/kit/underground_walls.glb"
+const WALL_FACE := 0.067
+const CRACK_X := Vector2(0.36, 0.84)
+const CRACK_COLUMN := 5
+const WORN_BACK := [2, 9, 14, 17]
+const WORN_FAR := [1, 6, 12, 18]
+## The vault's plaster (tools/eclipse/underground_vault.py): its spans and their thickness under the vault.
+const VAULT_KIT := "res://assets/eclipse/kit/underground_vault.glb"
+const VAULT_SPAN := 4.8
+const VAULT_PLASTER := 0.04
 const WORN := [Vector2i(2, 1), Vector2i(5, 3), Vector2i(11, 4), Vector2i(13, 2), Vector2i(16, 1), Vector2i(18, 3)]
 const RUMBLE_DB := -4.0
 const RATTLES := ["res://audio/sfx/jars_rattle_1.wav", "res://audio/sfx/jars_rattle_2.wav"]
@@ -140,6 +153,8 @@ var _service_meshes := {}
 var _service_material: ShaderMaterial
 var furniture: Array[MeshInstance3D] = []
 var floor_tiles: Array[MeshInstance3D] = []
+var wall_panels: Array[MeshInstance3D] = []
+var vault_spans: Array[MeshInstance3D] = []
 var cart_steam: Node3D
 var cart_hiss: AudioStreamPlayer3D
 var niche_flames: Node3D
@@ -173,6 +188,7 @@ func _ready() -> void:
 	_stall()
 	_lights()
 	_tiles()
+	_walls()
 	_decals()
 	_clutter()
 	_services()
@@ -342,16 +358,17 @@ func _corridor() -> void:
 	walked.add_child(top)
 	add_child(walked)
 	walked.position = Vector3(0.0, -TILE_DEPTH / 2.0, (BACK_WALL + FAR_WALL) / 2.0)
-	_box(Vector3(-RUN, 0.0, BACK_WALL - WALL), Vector3(RUN, HEIGHT, BACK_WALL), tile, "back_wall")
-	_box(Vector3(-RUN, 0.0, FAR_WALL), Vector3(RUN, HEIGHT, FAR_WALL + WALL), tile, "far_wall")
-	_box(Vector3(-RUN, HEIGHT, BACK_WALL - WALL), Vector3(RUN, HEIGHT + 0.2, FAR_WALL + WALL), tile, "vault")
+	# The walls themselves, set back behind their tiles (_walls hangs them).
+	_box(Vector3(-RUN, 0.0, BACK_WALL - WALL_FACE - WALL), Vector3(RUN, HEIGHT, BACK_WALL - WALL_FACE), tile, "back_wall")
+	_box(Vector3(-RUN, 0.0, FAR_WALL + WALL_FACE), Vector3(RUN, HEIGHT, FAR_WALL + WALL_FACE + WALL), tile, "far_wall")
+	# The vault itself, over its plaster (_walls lays the plaster).
+	_box(Vector3(-RUN - WALL_FACE - WALL, HEIGHT + VAULT_PLASTER, BACK_WALL - WALL),
+		Vector3(RUN + WALL_FACE + WALL, HEIGHT + VAULT_PLASTER + 0.2, FAR_WALL + WALL), tile, "vault")
 
-	for x in [-RUN - WALL, RUN]:
+	# The end walls, set back behind their tiles too.
+	for x in [-RUN - WALL_FACE - WALL, RUN + WALL_FACE]:
 		_box(Vector3(x, 0.0, BACK_WALL - WALL), Vector3(x + WALL, HEIGHT, FAR_WALL + WALL), tile, "end_%d" % x)
 
-	# Line 2's blue band along both walls at shoulder height.
-	_box(Vector3(-RUN, 1.3, BACK_WALL), Vector3(RUN, 1.5, BACK_WALL + 0.02), _flat(LINE_2), "band_back")
-	_box(Vector3(-RUN, 1.3, FAR_WALL - 0.02), Vector3(RUN, 1.5, FAR_WALL), _flat(LINE_2), "band_far")
 
 
 
@@ -961,6 +978,78 @@ func _hang(kind: String, at: Vector3, far: bool, solid := false) -> MeshInstance
 	var piece := _place(_service_meshes[kind], _service_material, kind, at, PI if far else 0.0, solid)
 	services.append(piece)
 	return piece
+
+
+# The walls, tiled
+
+func _walls() -> void:
+	if not ResourceLoader.exists(WALL_KIT):
+		missing.append(WALL_KIT)
+		return
+
+	var meshes := _kit(WALL_KIT)
+	var look := Painterly.material(_painted(["underground_walls.png", "underground_walls_base.png"]), &"bespoke")
+	var columns := int(round(2.0 * RUN / MODULE))
+
+	for c in columns:
+		var x := -RUN + MODULE * c
+		# The back wall, where the marigold trail ends at the crack showing the older city's stone.
+		var kind := "wall_crack" if c == CRACK_COLUMN else ("wall_tiled_worn" if c in WORN_BACK else "wall_tiled")
+		wall_panels.append(_place(meshes[kind], look, kind, Vector3(x, 0.0, BACK_WALL - WALL_FACE), 0.0, true))
+		# The far wall, its panels turned to face back across the corridor.
+		kind = "wall_tiled_worn" if c in WORN_FAR else "wall_tiled"
+		wall_panels.append(_place(meshes[kind], look, kind, Vector3(x + MODULE, 0.0, FAR_WALL + WALL_FACE), PI, true))
+
+	# The corridor's ends: six panels across each, a little past its walls into their corners.
+	for k in 6:
+		var kind := "wall_tiled_worn" if k == 2 else "wall_tiled"
+		wall_panels.append(_place(meshes[kind], look, kind, Vector3(RUN + WALL_FACE, 0.0, BACK_WALL - 0.15 + MODULE * k), -PI / 2.0, true))
+		kind = "wall_tiled_worn" if k == 4 else "wall_tiled"
+		wall_panels.append(_place(meshes[kind], look, kind, Vector3(-RUN - WALL_FACE, 0.0, FAR_WALL + 0.15 - MODULE * k), PI / 2.0, true))
+
+	# The vault's plaster in spans, each turned one way or the other against repetition.
+	if ResourceLoader.exists(VAULT_KIT):
+		var soffit: Mesh = _kit(VAULT_KIT)["vault_span"]
+		var plaster := Painterly.material(_painted(["underground_vault.png", "underground_vault_base.png"]), &"bespoke")
+
+		for i in int(round(2.0 * RUN / VAULT_SPAN)):
+			var x := -RUN + VAULT_SPAN * i
+			var turned := i % 2 == 1
+			var at := Vector3(x + VAULT_SPAN, HEIGHT, BACK_WALL - WALL_FACE) if turned else Vector3(x, HEIGHT, FAR_WALL + WALL_FACE)
+			vault_spans.append(_place(soffit, plaster, "vault_span", at, PI if turned else 0.0, false))
+	else:
+		missing.append(VAULT_KIT)
+
+	# The station's name on each wall, framed in mosaic.
+	wall_panels.append(_place(meshes["name_tablet"], look, "name_tablet", Vector3(-9.5, 1.6, BACK_WALL), 0.0, false))
+	wall_panels.append(_place(meshes["name_tablet"], look, "name_tablet", Vector3(9.0, 1.6, FAR_WALL), PI, false))
+
+	# Bills pasted over the tiles, newer over older, a little askew; what they say is the user's.
+	# Each bill on its own coloured paper, faded: the street's fluorescent pinks, yellows and greens, a white.
+	var papers := [Color("e8a0b0"), Color("f0d878"), Color("a8d8a0"), Color("f2ece0"), Color("f0b888"), Color("e8a0b0")]
+	var bills := [[6.0, 1.95, false, 0.0], [6.36, 1.82, false, 4.0], [-7.6, 1.85, false, -2.5],
+			[4.6, 1.9, true, 2.0], [-7.0, 1.75, true, -5.0], [-6.62, 2.02, true, 3.0]]
+
+	for i in bills.size():
+		var bill: Array = bills[i]
+		var pasted := _wall_decal("poster", Vector3(bill[0], bill[1], 0.0), Vector2(0.58, 0.82), bill[2], bill[3], false)
+		pasted.name = "decal_poster"
+		pasted.modulate = papers[i]
+
+	# The floor's wet and dirt splashed up the walls' feet by mops and feet.
+	for foot in [[-10.5, false], [-7.2, false], [-3.0, false], [5.2, false], [9.0, false],
+			[-10.0, true], [-5.5, true], [0.0, true], [3.5, true], [8.5, true], [11.0, true]]:
+		_wall_decal("drip", Vector3(foot[0], 0.35, 0.0), Vector2(2.4, 0.7), foot[1], 0.0, true).name = "decal_splash"
+
+
+## A decal laid on a wall's tiles at `at` (its x and height), the image's top up (or down when
+## `rising`, for what climbs from the floor), rolled `roll` degrees in the wall's plane.
+func _wall_decal(kind: String, at: Vector3, size: Vector2, far: bool, roll: float, rising: bool) -> Decal:
+	var wall := FAR_WALL - 0.1 if far else BACK_WALL + 0.1
+	var d := _decal(kind, Vector3(at.x, at.y, wall), Vector3(size.x, 0.4, size.y), Vector3.ZERO)
+	var turn := Vector3(-90 if rising else 90, (0 if rising else 180) if far else (180 if rising else 0), 0)
+	d.basis = Basis(Vector3(0, 0, 1), deg_to_rad(roll)) * Basis.from_euler(turn * PI / 180.0)
+	return d
 
 
 # The floor, tiled

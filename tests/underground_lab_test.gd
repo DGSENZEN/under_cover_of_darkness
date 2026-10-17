@@ -511,6 +511,74 @@ func _run() -> void:
 		"modules %d overlaps %d area %.2f of %.2f hull %s back %d far %d drain %s" % [lab.floor_tiles.size(), overlaps,
 		area, corridor, hull, back_row.size(), far_row.size(), drain_at])
 
+	# U45 the walls tiled panel to panel, their face where the wall's things hang; worn panels among them,
+	#     the marigold trail ending at the crack where the old stone shows; a name tablet on each wall;
+	#     pasted bills and the floor's splash up the walls' feet
+	var wall_spans := {lab.BACK_WALL: [], lab.FAR_WALL: []}
+	var faced := true
+
+	for panel: MeshInstance3D in lab.wall_panels:
+		if panel.get_meta("kind") == "name_tablet" or absf(absf(panel.rotation.y) - PI / 2.0) < 0.01:
+			continue   # (the tablets, and the end walls' panels: U47)
+		var box := panel.global_transform * panel.get_aabb()
+		var wall: float = lab.BACK_WALL if box.position.z < 0.0 else lab.FAR_WALL
+		var face: float = box.end.z if wall == lab.BACK_WALL else box.position.z
+		faced = faced and absf(face - wall) < 0.001
+		wall_spans[wall].append(Vector2(box.position.x, box.end.x))
+	var covered := true
+
+	for wall in wall_spans:
+		var spans: Array = wall_spans[wall]
+		spans.sort_custom(func(a, b): return a.x < b.x)
+		var reach: float = -lab.RUN
+		for span in spans:
+			covered = covered and absf(span.x - reach) < 0.01
+			reach = span.y
+		covered = covered and absf(reach - lab.RUN) < 0.01
+	var crack: Array = lab.wall_panels.filter(func(p): return p.get_meta("kind") == "wall_crack")
+	var opening: Vector2 = Vector2(crack[0].global_position.x + lab.CRACK_X.x, crack[0].global_position.x + lab.CRACK_X.y) \
+		if crack.size() == 1 else Vector2.ZERO
+	var back_box: Node3D = lab.get_node_or_null("back_wall")
+	var bills: Array = lab.decals.filter(func(d): return String(d.name).begins_with("decal_poster"))
+	var splash: Array = lab.decals.filter(func(d): return String(d.name).begins_with("decal_splash"))
+	_check("U45 the walls tiled panel to panel, faced where things hang; worn panels, the trail ending at the old stone; tablets, bills, splash",
+		faced and covered and lab.wall_panels.filter(func(p): return p.get_meta("kind") == "wall_tiled_worn").size() >= 6
+		and crack.size() == 1 and absf(crack[0].global_position.z - (lab.BACK_WALL - lab.WALL_FACE)) < 0.001
+		and lab.TRAIL_END.x > opening.x and lab.TRAIL_END.x < opening.y
+		and lab.wall_panels.filter(func(p): return p.get_meta("kind") == "name_tablet").size() == 2
+		and back_box != null and absf(back_box.position.z + 0.5 * lab.WALL - (lab.BACK_WALL - lab.WALL_FACE)) < 0.001
+		and lab.get_node_or_null("band_back") == null and lab.get_node_or_null("band_far") == null
+		and bills.size() >= 4 and splash.size() >= 6,
+		"faced %s covered %s crack %d opening %s bills %d splash %d" % [faced, covered, crack.size(), opening, bills.size(), splash.size()])
+
+	# U47 the corridor's end walls tiled too, their tiles' face at the corridor's ends, the walls set back behind
+	var end_panels: Array = lab.wall_panels.filter(func(p): return absf(absf(p.rotation.y) - PI / 2.0) < 0.01)
+	var faces_at_ends := true
+
+	for panel: MeshInstance3D in end_panels:
+		var box := panel.global_transform * panel.get_aabb()
+		var face: float = box.position.x if panel.global_position.x > 0.0 else box.end.x
+		faces_at_ends = faces_at_ends and absf(absf(face) - lab.RUN) < 0.001
+	var east: Node3D = lab.get_node_or_null("end_%d" % int(lab.RUN))
+	_check("U47 the corridor's end walls tiled, their face at the corridor's ends, the walls set back behind",
+		end_panels.size() == 12 and faces_at_ends and east != null and east.position.x - 0.5 * lab.WALL >= lab.RUN + lab.WALL_FACE - 0.001,
+		"end panels %d faced %s" % [end_panels.size(), faces_at_ends])
+
+	# U46 the vault plastered in spans end to end, wall face to wall face, under the vault itself
+	var soffit := []
+	var soffit_area := 0.0
+
+	for span: MeshInstance3D in lab.vault_spans:
+		var box := span.global_transform * span.get_aabb()
+		soffit.append(box)
+		soffit_area += box.size.x * box.size.z
+	var vault_box: Node3D = lab.get_node_or_null("vault")
+	var wide: float = (lab.FAR_WALL - lab.BACK_WALL + 2.0 * lab.WALL_FACE) * 2.0 * lab.RUN
+	_check("U46 the vault plastered in spans end to end, wall face to wall face; nothing fighting it",
+		soffit.size() == 5 and absf(soffit_area - wide) < 0.01 and soffit.all(func(b): return absf(b.position.y - lab.HEIGHT) < 0.001)
+		and vault_box != null and vault_box.position.y - 0.1 >= lab.HEIGHT + 0.039,
+		"spans %d area %.2f of %.2f" % [soffit.size(), soffit_area, wide])
+
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")
 	_check("U8 the pixel grid is off", retro != null and retro.virtual_height == 0, "%s" % [retro.virtual_height if retro else null])

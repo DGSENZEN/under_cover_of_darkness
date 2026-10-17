@@ -128,6 +128,42 @@ class Layers(unittest.TestCase):
         self.assertAlmostEqual(wall[0], wall[8], places=3)
         self.assertGreater(np.abs(wall - wall.mean()).max(), 0.02)
 
+    def test_strokes_lay_the_sheet_in_a_second_colour(self):
+        # The user's sheet laid as brush marks: where it is high, the stroke's own colour; where low,
+        # the base; a mark, not a ripple.
+        sheet = np.zeros((128, 128), np.float32)
+        sheet[:, 64:] = 1.0
+        mask = np.ones((PX, PX), bool)
+        recipe = _recipe(stroke_colour="#203040", stroke_amount=1.0, stroke_brush="brush_02", stroke_scale_m=1.0)
+        out = layered_atlas.paint_slot(_texels(), mask, _ao(), recipe, {"brush_02": sheet})
+        base = np.array([0x7a, 0x5a, 0x3a]) / 255.0
+        stroke = np.array([0x20, 0x30, 0x40]) / 255.0
+        wall = out[8:-8, PX // 2:].reshape(-1, 3)
+        near_stroke = np.abs(wall - stroke).max(axis=1) < 2 / 255
+        near_base = np.abs(wall - base).max(axis=1) < 2 / 255
+        self.assertGreater(near_stroke.mean(), 0.2)
+        self.assertGreater(near_base.mean(), 0.2)
+
+    def test_a_dim_sheet_still_lays_its_marks(self):
+        # The user's sheets are mostly see-through (their values premultiplied by alpha run 0.04-0.22):
+        # their marks are read by rank within the sheet, so a dim sheet lays as many as a bright one.
+        rng = np.random.default_rng(9)
+        dim = (0.04 + 0.18 * rng.random((128, 128))).astype(np.float32)
+        mask = np.ones((PX, PX), bool)
+        recipe = _recipe(stroke_colour="#203040", stroke_amount=1.0, stroke_brush="brush_02", stroke_scale_m=0.5)
+        out = layered_atlas.paint_slot(_texels(), mask, _ao(), recipe, {"brush_02": dim})
+        stroke = np.array([0x20, 0x30, 0x40]) / 255.0
+        base = np.array([0x7a, 0x5a, 0x3a]) / 255.0
+        # Marked: moved at least a quarter of the way from the paint toward the stroke's colour.
+        moved = np.abs(out[8:-8].reshape(-1, 3) - base).max(axis=1) / np.abs(stroke - base).max()
+        marked = (moved > 0.25).mean()
+        self.assertGreater(marked, 0.25)
+        self.assertLess(marked, 0.65)
+        plain = _l(_paint())
+        broken = _l(layered_atlas.paint_slot(_texels(), mask, _ao(), _recipe(brush_amount=0.2), {"brush_02": dim}))
+        self.assertGreater((broken - plain).max(), 0.1)
+        self.assertLess((broken - plain).min(), -0.1)
+
     def test_outside_the_mask_untouched(self):
         mask = np.zeros((PX, PX), bool)
         mask[:, :10] = True

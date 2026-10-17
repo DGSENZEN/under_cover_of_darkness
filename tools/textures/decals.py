@@ -20,7 +20,7 @@ import brushes as brush_sheets
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "textures" / "painted" / "underground"
 GRIME = ("drip", "soot", "grime", "oil", "wet")
-KINDS = GRIME + ("petals",)
+KINDS = GRIME + ("petals", "poster")
 # Loose marigold petals strewn along a trail: how many, their size in px, their colours
 # (fresh orange to yellow, a few gone brown underfoot).
 PETALS = 1400
@@ -76,10 +76,47 @@ def _petals(brushes_dir):
     return Image.fromarray(out, "RGBA")
 
 
+def _poster(brushes_dir):
+    """A bill pasted to the tiles and gone yellow: its printed rule round a plain field
+    (what it says is the user's to paint), folded twice, stained by the damp from below,
+    its edge torn ragged and a corner bitten away by someone tearing it down."""
+    rng = np.random.default_rng(17)
+    y = np.linspace(0.0, 1.0, SIZE)[:, None]
+    x = np.linspace(0.0, 1.0, SIZE)[None, :]
+    chips = _sheet("brush_04", brushes_dir)
+    strokes = _sheet("brush_02", brushes_dir)
+    # The paper's edge, torn: its distance in from each side roughened by the chipped sheet.
+    edge = 0.08 + 0.025 * (chips - 0.5)
+    inside = np.minimum(np.minimum(x, 1 - x), np.minimum(y, 1 - y)) > edge
+    torn = 0.07 * (chips - 0.5) + 0.03 * (strokes - 0.5)
+    bite = np.sqrt((x - 0.12) ** 2 + (y - 0.1) ** 2) < 0.14 + torn
+    paper = inside & ~bite
+    # Pale paper, so each bill's own colour (the decal's modulate in game) shows on it.
+    rgb = np.broadcast_to(np.array([236.0, 230.0, 212.0]), (SIZE, SIZE, 3)).copy()
+    rgb *= (0.97 + 0.04 * (strokes - 0.5))[..., None]
+    # Yellowed toward its edges, stained by damp rising from below.
+    rim = np.clip(1.0 - np.minimum(np.minimum(x, 1 - x), np.minimum(y, 1 - y)) / 0.2, 0.0, 1.0)
+    damp = np.clip((y - 0.72) / 0.28, 0.0, 1.0) ** 1.5 * (0.6 + 0.4 * chips)
+    rgb *= (1.0 - 0.18 * rim - 0.35 * damp)[..., None]
+    # The printed rule round the field, and the two folds.
+    d = np.minimum(np.minimum(x, 1 - x), np.minimum(y, 1 - y))
+    rule = (d > 0.135) & (d < 0.15)
+    rgb[rule] = rgb[rule] * 0.35 + np.array([106.0, 42.0, 32.0]) * 0.65
+    for fold in (np.abs(x - 0.5) < 0.004, np.abs(y - 0.48) < 0.004):
+        rgb[np.broadcast_to(fold, (SIZE, SIZE))] *= 0.86
+    alpha = paper * 255.0
+    out = np.dstack([np.clip(rgb, 0, 255), alpha]).round().astype(np.uint8)
+    out[:BORDER, :, 3] = out[-BORDER:, :, 3] = 0
+    out[:, :BORDER, 3] = out[:, -BORDER:, 3] = 0
+    return Image.fromarray(out, "RGBA")
+
+
 def make(kind, brushes_dir=brush_sheets.BRUSHES):
     """A decal of `kind` as an RGBA image."""
     if kind == "petals":
         return _petals(brushes_dir)
+    if kind == "poster":
+        return _poster(brushes_dir)
 
     rng = np.random.default_rng({"drip": 3, "soot": 5, "grime": 7, "oil": 9, "wet": 11}[kind])
     y = np.linspace(0.0, 1.0, SIZE)[:, None]          # 0 at the top

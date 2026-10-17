@@ -7,7 +7,8 @@ in layers over each slot's texels:
   3. bright worn edges (the bake's convexity) and dark grime in crevices
      (its cavity, where the occlusion is deep),
   4. brush-stroke breakup from the user's sheets, laid by world position
-     (with, where a material has them, cloth's weave and newsprint's type),
+     (with, where a material has them, cloth's weave and newsprint's type,
+     and the sheets laid again as marks of a second paint),
   5. Mignola's solid black in the deepest recesses.
 
 Beside eclipse_atlas.py (the Zócalo's scan painter), not instead of it. It
@@ -43,6 +44,8 @@ BLACK = "#0b0a0c"
 BLACK_GAP = 0.03
 # Newsprint: the inked share of each line, lines per block, the headline's lines, the gutter's share.
 PRINT_INK, PRINT_BLOCK, PRINT_HEAD, PRINT_GUTTER = 0.5, 16, 3, 0.1
+# Where (by rank within its sheet) the stroke sheet starts laying the second paint, and over how much.
+STROKE_EDGE, STROKE_SOFT = 0.55, 0.2
 # Texels each painted region is grown by into the empty atlas, for mipmaps.
 GROW = 4
 
@@ -54,6 +57,29 @@ def _lab(colour):
 def _mix(lab, target, weight):
     w = weight[..., None]
     return lab * (1 - w) + target * w
+
+
+_RANKS = {}
+
+
+def _ranked(sheet):
+    """A sheet's values as their rank within it (0 to 1): the user's sheets are mostly
+    see-through, their premultiplied values crowded low (0.04-0.22 on some), so their marks
+    are read by rank, and every sheet lays its marks at the same strengths."""
+    key = id(sheet)
+
+    if key not in _RANKS:
+        flat = sheet.ravel()
+        order = np.argsort(flat, kind="stable")
+        ranks = np.empty(flat.size, np.float32)
+        ranks[order] = np.linspace(0.0, 1.0, flat.size, dtype=np.float32)
+        # Ties share their highest rank, so a flat run of one value is one tone.
+        values = flat[order]
+        last = np.searchsorted(values, values, side="right") - 1
+        ranks[order] = ranks[order][last]
+        _RANKS[key] = (sheet, ranks.reshape(sheet.shape))
+
+    return _RANKS[key][1]
 
 
 def paint_slot(texels, mask, ao, recipe, brushes):
@@ -85,7 +111,7 @@ def paint_slot(texels, mask, ao, recipe, brushes):
     if recipe.get("brush_amount", 0.0):
         _, _, _, a, b = _frame(texels)
         scale = recipe["brush_scale_m"]
-        stroke = _sample(brushes[recipe["brush"]][..., None], a / scale, b / scale)[..., 0]
+        stroke = _sample(_ranked(brushes[recipe["brush"]])[..., None], a / scale, b / scale)[..., 0]
         lab[..., 0] += recipe["brush_amount"] * np.clip((stroke - 0.5) * 2.0, -1.0, 1.0)
 
     if recipe.get("weave", 0.0):
@@ -104,6 +130,15 @@ def paint_slot(texels, mask, ao, recipe, brushes):
         bold = (rows % PRINT_BLOCK) < PRINT_HEAD
         inked = (typed | bold) & ((a / column) % 1.0 < 1.0 - PRINT_GUTTER)
         lab = _mix(lab, _lab(recipe["print_colour"]), inked * recipe["print"])
+
+    if recipe.get("stroke_amount", 0.0):
+        # The user's sheet laid as brush marks in a second paint: where the sheet runs high the
+        # stroke's colour, edged over STROKE_EDGE so each mark reads as laid, not as a ripple.
+        _, _, _, a, b = _frame(texels)
+        scale = recipe["stroke_scale_m"]
+        sheet = _sample(_ranked(brushes[recipe["stroke_brush"]])[..., None], a / scale, b / scale)[..., 0]
+        edge = recipe.get("stroke_edge", STROKE_EDGE)
+        lab = _mix(lab, _lab(recipe["stroke_colour"]), np.clip((sheet - edge) / STROKE_SOFT, 0.0, 1.0) * recipe["stroke_amount"])
 
     black = _lab(BLACK)
 
@@ -164,7 +199,9 @@ def paint(piece, source_dir=SOURCE, out_dir=OUT, recipes_dir=RECIPES / "undergro
 
         recipes[name] = json.loads(path.read_text())
 
-    sheets = {r["brush"]: brush_sheets.load(r["brush"], brushes_dir) for r in recipes.values() if r.get("brush")}
+    names = {r["brush"] for r in recipes.values() if r.get("brush")}
+    names |= {r["stroke_brush"] for r in recipes.values() if r.get("stroke_amount")}
+    sheets = {name: brush_sheets.load(name, brushes_dir) for name in names}
     ao = _grey(source_dir / (piece + "_ao.png"), px)
     index = texels["slot"].astype(np.int32)
     canvas = np.zeros((px, px, 3))

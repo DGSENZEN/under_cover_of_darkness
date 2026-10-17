@@ -8,6 +8,11 @@
  "grime_colour": "#3a3630",
  "brush": "brush_04",
  "brush_scale_m": 0.2,
- "brush_amount": 0.2,
- "black": 0.1
+ "brush_amount": 0.1,
+ "black": 0.1,
+ "stroke_brush": "brush_04",
+ "stroke_colour": "#726c66",
+ "stroke_scale_m": 0.4,
+ "stroke_amount": 0.275,
+ "stroke_edge": 0.5
 }
