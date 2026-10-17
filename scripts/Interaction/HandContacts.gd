@@ -9,6 +9,8 @@ const LEFT := 0
 const RIGHT := 1
 ## Hands this far either side of the body on an edge.
 const SPREAD := 0.24
+## Pressing down to climb on: closer in, under the shoulders.
+const PUSH_SPREAD := 0.17
 ## How far a planted hand may fall behind the body before it moves on.
 const SLACK := 0.2
 ## A hand moving to a new hold: how long, and how high it lifts.
@@ -58,6 +60,10 @@ var _one_handed := false
 ## The contact the current state was entered on (edges, rungs): a new one of
 ## the same kind is a new state.
 var _entered_on := Vector3.INF
+## Hand over hand: the hand still to follow the leading one (-1: none), and
+## how far through the move it goes.
+var _trail_side := -1
+const TRAIL_AFTER := 0.45
 
 
 func _init(p_player: CharacterBody3D) -> void:
@@ -91,7 +97,9 @@ func curl(side: int) -> float:
 		State.MANTLE, State.VAULT:
 			return 0.25
 		State.HANG:
-			return 0.62
+			# Open on the way to a hold, hooked over it once there.
+			var g := grips[side] as Grip
+			return lerpf(0.2, 0.88, smoothstep(0.6, 1.0, g.travel))
 		State.LADDER, State.ROPE:
 			return 0.92
 		State.CARRY:
@@ -120,6 +128,28 @@ func below(view: Transform3D) -> float:
 	var to := sum / count - view.origin
 	var basis := view.basis.orthonormalized()
 	return maxf(atan2(-to.dot(basis.y), -to.dot(basis.z)), 0.0)
+
+
+## How far above the middle of `view` (radians) the holds the hands are on
+## or going to are: on a climb the view looks up to them (CameraJuice). 0 when
+## nothing is held, or it is below.
+func above(view: Transform3D) -> float:
+	var sum := Vector3.ZERO
+	var count := 0
+
+	for grip in grips:
+		var g := grip as Grip
+
+		if g.wanted and g.planted:
+			sum += g.at.origin
+			count += 1
+
+	if count == 0:
+		return 0.0
+
+	var to := sum / count - view.origin
+	var basis := view.basis.orthonormalized()
+	return maxf(atan2(to.dot(basis.y), -to.dot(basis.z)), 0.0)
 
 
 ## Reads movement/carry state and advances grip targets, travel, and weights in game seconds.
@@ -179,11 +209,12 @@ func _state_now() -> int:
 			match int(move.kind):
 				0:
 					return State.VAULT
-				1:
+				1, 100:
+					# A mantle, and pulling up over a held lip: hands press flat.
 					return State.MANTLE
 				106:
-					# Running up a wall: the hands come up for the catch late.
-					if float(player.get("move_progress")) < 0.7:
+					# Running up a wall: the hands come up for the hold halfway.
+					if float(player.get("move_progress")) < 0.4:
 						return State.FREE
 
 			# Reaching for a hang, a pull-up, a leap to another ledge: the hands
@@ -204,6 +235,7 @@ func _state_now() -> int:
 
 func _enter(next: int) -> void:
 	state = next
+	_trail_side = -1
 	_one_handed = right_busy
 
 	for grip in grips:
@@ -269,14 +301,23 @@ func _nearest_on_edge(point: Vector3, lateral: Vector3) -> Vector3:
 	return point + lateral * along
 
 
+## One hand's hold on an edge: hooked over it, or pushing down on its top.
+func _edge_hold(side: int, edge: Array, lateral: Vector3, centre: Vector3, pushing: bool) -> Transform3D:
+	var inset := 0.15 if pushing else 0.03
+	var spread := PUSH_SPREAD if pushing else SPREAD
+	var hold := _on_top(centre + lateral * (spread if side == LEFT else -spread), edge[1], inset)
+	return _pushing(hold, side) if pushing else hold
+
+
 func _plant_edge_pair(pushing: bool) -> void:
 	var edge := _edge()
 	var lateral := _lateral(edge[1])
 	var centre := _nearest_on_edge(edge[0], lateral)
 	# Pushing down to climb on: flat on the top, well in from the edge.
 	var inset := 0.15 if pushing else 0.03
-	var left := _on_top(centre + lateral * SPREAD, edge[1], inset)
-	var right := _on_top(centre - lateral * SPREAD, edge[1], inset)
+	var spread := PUSH_SPREAD if pushing else SPREAD
+	var left := _on_top(centre + lateral * spread, edge[1], inset)
+	var right := _on_top(centre - lateral * spread, edge[1], inset)
 	_plant(LEFT, _pushing(left, LEFT) if pushing else left)
 	_plant(RIGHT, _pushing(right, RIGHT) if pushing else right)
 	_entered_on = centre
@@ -295,8 +336,36 @@ func _keep_hang() -> void:
 	var lateral := _lateral(edge[1])
 	var centre := _nearest_on_edge(edge[0], lateral)
 
+	# Hand over hand up a wall: the trailing hand follows once the leading one
+	# has the hold and the body is on its way.
+	if _trail_side >= 0:
+		if player.movement_state != player.MoveState.MOVING or float(player.move_progress) >= TRAIL_AFTER:
+			_plant(_trail_side, _edge_hold(_trail_side, edge, lateral, centre, false))
+			_trail_side = -1
+			_entered_on = centre
+
+		for grip in grips:
+			(grip as Grip).wanted = true
+
+		return
+
 	# A new edge (a leap, a corner): take hold of it afresh.
 	if _entered_on.distance_to(centre) > 1.2 or absf(_entered_on.y - centre.y) > 0.25:
+		var move = player.current_move
+
+		# Climbing on to it (a reach, a leap, the catch of a wall run): one
+		# hand leads, the one on the side it goes, else the other one's turn.
+		if player.movement_state == player.MoveState.MOVING and move != null and int(move.kind) in [103, 105, 106] and grips[LEFT].planted and grips[RIGHT].planted:
+			var lead := RIGHT if float(player.juice.reach_side) > 0.0 else LEFT
+			_plant(lead, _edge_hold(lead, edge, lateral, centre, false))
+			_trail_side = 1 - lead
+			_entered_on = centre
+
+			for grip in grips:
+				(grip as Grip).wanted = true
+
+			return
+
 		_plant_edge_pair(false)
 		return
 

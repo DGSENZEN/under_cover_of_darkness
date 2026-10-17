@@ -40,8 +40,14 @@ var vault_pitch_degrees := 4.0
 ## well, and the most the view tips down to see them. It comes back up as you
 ## go over them.
 var grip_below := 0.0
+## Climbing: how far above the view the holds are (radians). The view looks
+## up to the hands, leading them (the head leads the action), up to a point.
+var grip_above := 0.0
+var grip_above_comfort_degrees := 10.0
+var grip_look_up_max_degrees := 55.0
+var _climb_look := 0.0
 var grip_comfort_degrees := 22.0
-var grip_look_max_degrees := 30.0
+var grip_look_max_degrees := 40.0
 var vault_dip := 0.16
 var vault_roll_degrees := 7.0
 var vault_fov_add := 5.0
@@ -277,6 +283,12 @@ func on_kick_land(strength := 1.0) -> void:
 	_dip_velocity -= 0.3 * strength
 
 
+## How far through the landing roll's tumble the view is: 0 none, 1 at its
+## deepest (the arms tuck in through it).
+func tumble_amount() -> float:
+	return sin((1.0 - _tumble) * PI) if _tumble > 0.0 else 0.0
+
+
 ## A hand taking the next hold on a climb: a small sharp weight.
 func on_grip() -> void:
 	_dip_velocity -= 0.35
@@ -390,7 +402,8 @@ func update(
 	match move_kind:
 		1:
 			move_dip = -mantle_dip * arc
-			to_hands *= 1.0 - smoothstep(0.3, 0.85, move_s)
+			# Eyes on the hands pressing down until the body is nearly over.
+			to_hands *= 1.0 - smoothstep(0.55, 0.9, move_s)
 			move_pitch = -maxf(deg_to_rad(mantle_pitch_degrees) * arc, to_hands)
 		2:
 			move_dip = -vault_dip * arc
@@ -415,6 +428,10 @@ func update(
 			var up := 1.0 - smoothstep(0.55, 1.0, move_s)
 			move_pitch = deg_to_rad(wall_run_pitch_degrees) * up * smoothstep(0.0, 0.2, move_s)
 			target_fov += wall_run_fov_add * up
+
+	var look_up := clampf(grip_above - deg_to_rad(grip_above_comfort_degrees), 0.0, deg_to_rad(grip_look_up_max_degrees))
+	_climb_look = lerpf(_climb_look, look_up, 1.0 - exp(-9.0 * delta))
+	move_pitch += _climb_look
 
 	_roll = lerpf(_roll, target_roll, 1.0 - exp(-10.0 * delta))
 	_fov_add = lerpf(_fov_add, target_fov - _zoom, 1.0 - exp(-7.0 * delta))

@@ -182,6 +182,14 @@ var _right_wanted := false
 ## full size) and how firmly, left then right.
 var _grip_palms: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
 var _grip_weights: Array[float] = [0.0, 0.0]
+## How far inside the frame's edge a held hand is kept (degrees).
+const FRAME_MARGIN_DEGREES := 7.0
+## Where the hands go in a landing roll, in camera space (full size): low in
+## front, forearms crossing, palms in.
+const ROLL_TUCK: Array[Transform3D] = [
+	Transform3D(Basis(Vector3.FORWARD, -0.7) * Basis(Vector3.RIGHT, 0.5), Vector3(-0.1, -0.26, -0.42)),
+	Transform3D(Basis(Vector3.FORWARD, 0.7) * Basis(Vector3.RIGHT, 0.5), Vector3(0.12, -0.24, -0.4)),
+]
 var _grip_curls: Array[float] = [0.5, 0.5]
 ## Your arms.
 var _arms: Node3D
@@ -1202,11 +1210,43 @@ func _place_grips() -> void:
 
 			_grip_weights[side] = weight if weight >= 0.03 else 0.0
 			# In this node's space, which rides the camera: full size.
-			_grip_palms[side] = global_transform.affine_inverse() * _contacts.hand(side)
+			_grip_palms[side] = _in_frame(global_transform.affine_inverse() * _contacts.hand(side))
 			_grip_curls[side] = _contacts.curl(side)
 			strongest = maxf(strongest, weight)
 
 	_gripping = strongest
+
+
+## A hand on the world, drawn inside the frame: a hold higher (or wider) than
+## the view reaches is shown at the frame's edge, turned about the eye, its
+## distance kept. The view looks up to the holds as well (CameraJuice), so this
+## only takes up what is left over. In this node's (the camera's) space.
+func _in_frame(palm: Transform3D) -> Transform3D:
+	var camera: Camera3D = player.get("camera") if player != null else null
+
+	if camera == null:
+		return palm
+
+	var half_v := deg_to_rad(camera.fov * 0.5) - deg_to_rad(FRAME_MARGIN_DEGREES)
+	var aspect := 16.0 / 9.0
+
+	if camera.get_viewport() != null:
+		var size := camera.get_viewport().get_visible_rect().size
+		aspect = size.x / maxf(size.y, 1.0)
+
+	var half_h := atan(tan(half_v) * aspect)
+	var at := palm.origin
+	var forward := maxf(-at.z, 0.05)
+	var up := atan2(at.y, forward)
+	var across := atan2(at.x, forward)
+	var fixed_up := clampf(up, -half_v, half_v)
+	var fixed_across := clampf(across, -half_h, half_h)
+
+	if fixed_up == up and fixed_across == across:
+		return palm
+
+	var turn := Basis(Vector3.RIGHT, fixed_up - up).rotated(Vector3.UP, -(fixed_across - across))
+	return Transform3D(turn * palm.basis, turn * at)
 
 
 ## Both hands busy with nothing we draw (a body over the shoulder, dead).
@@ -1290,6 +1330,17 @@ func _place_arms() -> void:
 			targets[side] = shown
 			weights[side] = maxf(weights[side], smoothstep(0.0, 0.5, grip))
 			curls[side] = lerpf(curls[side], _grip_curls[side], grip)
+
+	# Rolling out of a landing: forearms in, crossed low in front, hands loose.
+	var juice = player.get("juice") if player != null else null
+	var tuck: float = juice.tumble_amount() if juice != null and juice.has_method("tumble_amount") and not dead else 0.0
+
+	if tuck > 0.01:
+		for side in range(2):
+			var pose: Transform3D = ViewArmsScript.shrink(ROLL_TUCK[side])
+			targets[side] = targets[side].interpolate_with(pose, tuck) if weights[side] > 0.0 else pose
+			weights[side] = maxf(weights[side], smoothstep(0.0, 0.4, tuck))
+			curls[side] = lerpf(curls[side], 0.45, tuck)
 
 	for side in range(2):
 		_arms.set_hand(side, targets[side], weights[side], curls[side])
@@ -1473,6 +1524,11 @@ func gripping() -> float:
 ## Returns contact angle below view in radians, or 0 when suppressed/unavailable.
 func grip_below(view: Transform3D) -> float:
 	return _contacts.below(view) if _contacts != null and not _suppressed_for_grips() else 0.0
+
+
+## How far above the view the held holds are (radians): see HandContacts.above.
+func grip_above(view: Transform3D) -> float:
+	return _contacts.above(view) if _contacts != null and not _suppressed_for_grips() else 0.0
 
 
 ## Where a world transform sits relative to the off hand's rest pose.

@@ -63,6 +63,7 @@ func _run() -> void:
 	_marker_checks()
 	await _review_checks()
 	await _flow_checks()
+	await _arms_checks()
 
 
 # Task 1: the hold finder.
@@ -474,17 +475,20 @@ func _presentation_checks() -> void:
 	Input.action_press("sprint")
 	Input.action_press("move_forward")
 	var early_free := true
+	var reaching := false
 	var ran := false
 	for i in 160:
 		await _frames(1)
 		if player.current_move != null and player.current_move.label == &"wall run":
 			ran = true
-			if player.move_progress < 0.6 and contacts.state != 0:
+			if player.move_progress < 0.25 and contacts.state != 0:
 				early_free = false
+			if player.move_progress > 0.45 and player.move_progress < 0.6 and contacts.state != 0:
+				reaching = true
 		if player.movement_state == 2:
 			break
 	_release_all()
-	_check("FR26b hands stay free running up a wall until the catch", ran and early_free, "ran %s free %s" % [ran, early_free])
+	_check("FR26b running up a wall, the hands come up for the hold halfway", ran and early_free and reaching, "ran %s free early %s reaching %s" % [ran, early_free, reaching])
 	player._drop_from_hang()
 	await _frames(60)
 
@@ -762,6 +766,126 @@ func _flow_checks() -> void:
 		dipped = minf(dipped, rad_to_deg(player.juice.view_rotation.x))
 	_release_all()
 	_check("FR43 a hard landing running forward rolls without sprint held", dipped <= -40.0, "lowest pitch %.1f deg" % dipped)
+
+
+# Arms (Mirror's Edge Catalyst, Oct 16): the hands are in frame on every climb.
+func _arms_checks() -> void:
+	var column: Array = await _sill_column(470)
+	await _hang_on(column[0])
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var cam: Camera3D = player.camera
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	var contacts = player.hand._contacts
+	var arms = player.hand._arms
+	var looked := 0
+	var seen := 0
+	var worst := Vector2.ZERO
+	for i in 240:
+		await _frames(1)
+		if player.movement_state == 0:
+			break
+		if contacts.weight(0) < 0.9 or contacts.weight(1) < 0.9:
+			continue
+		# Over the top the hands push down and leave out of the bottom, as a
+		# body rising past them does: that is the end of the climb.
+		if player.current_move != null and player.current_move.label == &"pull up":
+			continue
+		looked += 1
+		var both := true
+		for side in [0, 1]:
+			var at: Vector3 = arms.hand_position(side)
+			var on: Vector2 = cam.unproject_position(at)
+			if cam.is_position_behind(at) or on.x < 0 or on.y < 0 or on.x > size.x or on.y > size.y:
+				both = false
+				worst = on
+		if both:
+			seen += 1
+	_release_all()
+	_check("FR44 both hands are in frame through a climb", looked > 30 and seen >= looked * 0.95,
+		"in frame %d of %d (a miss at %s of %s)" % [seen, looked, worst.round(), size])
+	await _frames(30)
+
+	# Hand over hand, hooked; the pull-up's hands press at shoulder width.
+	column = await _sill_column(480)
+	await _hang_on(column[0])
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var apart := 0.0
+	var hooked := INF
+	var pull_seen := 0
+	var pull_planted := 0
+	var pull_framed := 0
+	var pull_out := 0
+	var widest := 0.0
+	for i in 400:
+		await _frames(1)
+		var label := String(player.current_move.label) if player.current_move != null else ""
+		if label == "reach":
+			apart = maxf(apart, absf(contacts.hand(0).origin.y - contacts.hand(1).origin.y))
+			if player.move_progress > 0.97:
+				hooked = minf(hooked, minf(contacts.curl(0), contacts.curl(1)))
+		if label == "pull up" and player.move_progress < 0.6:
+			pull_seen += 1
+			var lip: float = player.current_move.contact_point.y
+			var on_lip := true
+			for side in [0, 1]:
+				var at: Vector3 = contacts.hand(side).origin
+				on_lip = on_lip and contacts.weight(side) > 0.5 and absf(at.y - lip) < 0.08
+			if on_lip:
+				pull_planted += 1
+			widest = maxf(widest, absf(contacts.hand(0).origin.x - contacts.hand(1).origin.x))
+			if player.move_progress > 0.15:
+				pull_framed += 1
+				for side in [0, 1]:
+					var on: Vector2 = cam.unproject_position(arms.hand_position(side))
+					if on.x < size.x * 0.15 or on.x > size.x * 0.85 or on.y < size.y * 0.3 or on.y > size.y * 0.95:
+						pull_out += 1
+						break
+		if player.movement_state == 0 and player.global_position.y - 1.0 > 8.9:
+			break
+	_release_all()
+	_check("FR45 hand over hand: one hand leads the other up", apart >= 0.3, "most apart %.2f m" % apart)
+	_check("FR46 hands hook over the hold they reach", hooked != INF and hooked >= 0.8, "least curl %.2f" % hooked)
+	_check("FR47 pulling up, the hands press on the lip at shoulder width", pull_seen > 3 and pull_planted >= pull_seen * 0.9 and widest <= 0.6,
+		"planted %d of %d, widest %.2f m" % [pull_planted, pull_seen, widest])
+	_check("FR47b pulling up, the view is on the hands: lower middle of the frame", pull_framed > 3 and pull_out <= pull_framed * 0.2,
+		"%d of %d frames with a hand off the lower middle" % [pull_out, pull_framed])
+	await _frames(30)
+
+	# The roll: both forearms tuck in front of you.
+	await _place(Vector3(490, 10.03, 0))
+	Input.action_press("sprint")
+	var tucked := 0
+	for i in 150:
+		await _frames(1)
+		if player.juice.view_rotation.x < deg_to_rad(-20.0):
+			var both := true
+			for side in [0, 1]:
+				var at: Vector3 = arms.hand_position(side)
+				var on: Vector2 = cam.unproject_position(at)
+				both = both and arms.reach.weights[side] > 0.5 and not cam.is_position_behind(at) and on.x > 0 and on.y > 0 and on.x < size.x and on.y < size.y
+			if both:
+				tucked += 1
+	_release_all()
+	_check("FR48 the forearms tuck in front through the roll", tucked >= 10, "%d tumbling frames with both hands in front" % tucked)
+	PROPS.give_weapons(player)
+	player.inventory.select_by_id(&"sword")
+	await _frames(40)
+	await _place(Vector3(495, 10.03, 0))
+	Input.action_press("sprint")
+	var put_away := false
+	var apart_px := 0.0
+	for i in 150:
+		await _frames(1)
+		if player.juice.tumble_amount() > 0.6:
+			put_away = put_away or player.combat.stowed
+			apart_px = maxf(apart_px, cam.unproject_position(arms.hand_position(0)).distance_to(cam.unproject_position(arms.hand_position(1))))
+	_release_all()
+	await _frames(60)
+	_check("FR49 the sword is away through the roll, and both hands show", put_away and apart_px > size.x * 0.12 and player.hand.is_item_visible(),
+		"stowed %s hands %.0f px apart, back after %s" % [put_away, apart_px, player.hand.is_item_visible()])
+	player.inventory.select_by_id(&"")
 
 
 func _until(condition: Callable, max_frames: int) -> void:

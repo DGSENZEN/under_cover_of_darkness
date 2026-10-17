@@ -3581,6 +3581,9 @@ func _update_stowed() -> void:
 	if movement_state == MoveState.MOVING and current_move != null:
 		climbing = current_move.ends_in_hang or current_move.kind == TraversalPlanner.KIND_PULL_UP
 
+	# Rolling out of a landing: both hands go to the roll.
+	climbing = climbing or (juice != null and juice.tumble_amount() > 0.0)
+
 	if combat != null and combat.stowed != climbing:
 		combat.set_stowed(climbing)
 
@@ -4070,6 +4073,8 @@ func _update_view(delta: float) -> void:
 	var drawn_fraction := Engine.get_physics_interpolation_fraction() if get_tree().physics_interpolation else 1.0
 	juice.gait = lerpf(_gait_before, gait, drawn_fraction)
 	juice.grip_below = hand.grip_below(aim_transform()) if hand != null and hand.has_method("grip_below") else 0.0
+	var climbing := movement_state == MoveState.HANGING or movement_state == MoveState.CLIMBING or (movement_state == MoveState.MOVING and current_move != null and current_move.ends_in_hang)
+	juice.grip_above = hand.grip_above(aim_transform()) if climbing and hand != null and hand.has_method("grip_above") else 0.0
 	# The body under the view carries the walk (the old feel: the juice's bob).
 	juice.locomotion_from_body = not legacy_feel
 	juice.body_head = body_motion.head_offset(drawn_fraction) if not legacy_feel else Transform3D.IDENTITY
