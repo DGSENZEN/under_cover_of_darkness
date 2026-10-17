@@ -105,11 +105,23 @@ class Plan:
 
         self.routes.append(entry)
 
-    def space(self, name, polygon, floor, height, openings=(), interior=False):
+    def space(self, name, polygon, floor, height, openings=(), interior=False, layer=None):
+        """An underground space; `layer` 1-3 says which of a map's layers it
+        belongs to (the Metro: station, market, old), None for none. An
+        opening may say how tall its gap is (`height`, else the greybox's)."""
+        if layer not in (None, 1, 2, 3):
+            raise ValueError("no layer %r: %s" % (layer, name))
+
+        def opening(o):
+            out = {"to": o["to"], "at": [float(o["at"][0]), float(o["at"][1])], "width": float(o.get("width", 3.0))}
+
+            if "height" in o:
+                out["height"] = float(o["height"])
+
+            return out
+
         self.spaces.append({"name": name, "polygon": _pts(polygon), "floor": float(floor), "height": float(height),
-                            "interior": bool(interior),
-                            "openings": [{"to": o["to"], "at": [float(o["at"][0]), float(o["at"][1])],
-                                          "width": float(o.get("width", 3.0))} for o in openings]})
+                            "interior": bool(interior), "layer": layer, "openings": [opening(o) for o in openings]})
 
     def landmark(self, name, kind, at, **props):
         self.landmarks.append({"name": name, "kind": kind, "at": [float(v) for v in at], "props": props})
