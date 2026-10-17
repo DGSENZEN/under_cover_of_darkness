@@ -10,6 +10,8 @@ const MoveVariantRes := preload("res://scripts/PlayerUtils/MoveVariant.gd")
 const TraversalMove := preload("res://scripts/PlayerUtils/TraversalMove.gd")
 const TraversalScanner := preload("res://scripts/PlayerUtils/TraversalScanner.gd")
 const TraversalPlanner := preload("res://scripts/PlayerUtils/TraversalPlanner.gd")
+const HoldFinder := preload("res://scripts/PlayerUtils/HoldFinder.gd")
+const Handhold := preload("res://scripts/PlayerUtils/Handhold.gd")
 const CameraJuice := preload("res://scripts/PlayerUtils/CameraJuice.gd")
 const BodyPose := preload("res://scripts/PlayerUtils/BodyPose.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
@@ -249,6 +251,30 @@ enum MoveState {
 ## Landing faster than this hurts.
 @export var fall_damage_speed := 17.0
 @export var fall_damage_per_speed := 6.0
+
+@export_group("Free-run")
+## Hand over hand, from the grip held (m); further is a leap.
+@export var reach_up := 1.0
+@export var reach_side := 0.8
+@export var reach_down := 1.0
+## How far off the steered direction the next hold may lie.
+@export var hold_cone_degrees := 50.0
+## A hold this high over the feet (m), met at a run, is run up to.
+@export var wall_run_min_height := 2.6
+@export var wall_run_max_height := 3.8
+@export var wall_run_min_speed := 4.0
+## Free-run runs off drops no deeper than this (m) unless it is jumping to a
+## landing it has checked.
+@export var freerun_max_auto_drop := 3.0
+## A sprinting landing takes this much fall speed (m/s) before it hurts.
+@export var roll_relief_speed := 5.0
+## Fall speed (m/s) a sprinting landing rolls out of.
+@export var roll_min_speed := 9.0
+@export var freerun_scan_interval := 0.05
+@export var freerun_max_roll_degrees := 4.0
+@export var reach_noise_db := 35.0
+@export var wall_run_noise_db := 52.0
+@export_group("")
 @export var invulnerable := false
 ## When you die the level restarts after a moment. Off for tests.
 @export var reload_on_death := true
@@ -384,6 +410,7 @@ var rope_param := -1.0
 
 var scanner := TraversalScanner.new()
 var planner := TraversalPlanner.new()
+var holds := HoldFinder.new()
 var juice := CameraJuice.new()
 
 ## The body under the camera: the view and the hands ride it (BodyMotion.gd).
@@ -550,6 +577,11 @@ func _ready() -> void:
 	scanner.setup(self, _radius, _standing_height, crouch_height)
 	planner.scanner = scanner
 	planner.eye_height = _neck_stand_y
+	holds.setup(scanner, planner, self)
+	holds.reach_up = reach_up
+	holds.reach_side = reach_side
+	holds.reach_down = reach_down
+	holds.cone_degrees = hold_cone_degrees
 	juice.setup(camera)
 	body_motion.setup(footfall_curve if footfall_curve != null else BodyMotionScript.default_footfall(), view_height_speed)
 
