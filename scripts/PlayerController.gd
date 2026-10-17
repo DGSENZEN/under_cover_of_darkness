@@ -378,6 +378,8 @@ var move_windup := 0.0
 
 var hang_normal := Vector3.ZERO
 var hang_lip_y := 0.0
+## The placed Handhold held, if any (a bracket, a sill too thin to scan).
+var hang_hold: Node3D = null
 var is_peeking := false
 var _shimmy_velocity := 0.0
 ## A fresh press during a catch/corner is spent once the hands settle.
@@ -861,6 +863,9 @@ func _update_locomotion(delta: float) -> void:
 			return
 
 		if cached_profile != null and not stairs_jump and _try_traversal(cached_profile):
+			return
+
+		if not grounded and cached_profile == null and _try_catch_hold(facing_direction):
 			return
 
 		# Out of a standing climb's height but inside a catch's: the jump
@@ -1967,6 +1972,7 @@ func _try_lower_over(facing_direction: Vector3) -> bool:
 # MOVING: playing a TraversalMove
 
 func _start_move(move: TraversalMove, chained := false) -> void:
+	hang_hold = null
 	if chained:
 		_chain_links += 1
 	else:
@@ -2168,7 +2174,7 @@ func _finish_move() -> void:
 			move.kind == MoveVariantRes.Kind.HANG_ENTER
 			or move.kind == TraversalPlanner.KIND_LEAP
 		)
-		_enter_hang(move.hang_normal, move.hang_lip_y, caught, _hang_buffered_action)
+		_enter_hang(move.hang_normal, move.hang_lip_y, caught, _hang_buffered_action, move.end_hold)
 		return
 
 	movement_state = MoveState.LOCOMOTION
@@ -2179,8 +2185,9 @@ func _finish_move() -> void:
 
 # HANGING
 
-func _enter_hang(normal: Vector3, lip_y: float, caught := true, buffered_action: StringName = &"") -> void:
+func _enter_hang(normal: Vector3, lip_y: float, caught := true, buffered_action: StringName = &"", hold: Node3D = null) -> void:
 	movement_state = MoveState.HANGING
+	hang_hold = hold
 	# Hands slapping onto the ledge; softer when easing into the hang.
 	Sfx.play_flat(self, &"grab", 0.0 if caught else -6.0)
 	hang_normal = normal
@@ -2282,6 +2289,10 @@ func _update_hang(delta: float) -> void:
 ## Something to hold where the hands are: a few rays down onto the lip, just
 ## past the face and a little deeper.
 func _lip_under_hands() -> bool:
+	# A placed hold is there by definition, while it exists.
+	if hang_hold != null:
+		return is_instance_valid(hang_hold) and hang_hold.is_inside_tree()
+
 	for depth in [0.04, scanner.top_probe_depth, 0.3]:
 		var hands: Vector3 = global_position - hang_normal * (_radius + planner.hang_gap + depth)
 		var lip := scanner.ray(
@@ -2298,6 +2309,7 @@ func _lip_under_hands() -> bool:
 
 func _drop_from_hang() -> void:
 	movement_state = MoveState.LOCOMOTION
+	hang_hold = null
 	is_peeking = false
 	_shimmy_velocity = 0.0
 	_hang_buffered_action = &""
@@ -2314,6 +2326,9 @@ func _drop_from_hang() -> void:
 
 func _shimmy(direction: Vector3, delta: float) -> void:
 	var distance := absf(_shimmy_velocity) * delta
+
+	if hang_hold != null and _shimmy_on_hold(direction, distance):
+		return
 	var next := global_position + direction * distance
 	var hit := planner.probe_hang(next, hang_normal, hang_lip_y, 0.12)
 
@@ -2343,6 +2358,37 @@ func _shimmy(direction: Vector3, delta: float) -> void:
 		_start_move(move)
 	else:
 		_shimmy_velocity = 0.0
+
+
+## Along a placed hold: a ledge to its ends, a point not at all. True when the
+## hold decided the step (moved, or stopped at its end with nowhere to go).
+func _shimmy_on_hold(direction: Vector3, distance: float) -> bool:
+	if hang_hold.kind != Handhold.Kind.LEDGE:
+		_shimmy_velocity = 0.0
+		return true
+
+	var hands := global_position - hang_normal * (_radius + planner.hang_gap)
+	var grip: Vector3 = hang_hold.grip_near(hands + direction * distance)
+	var target := holds.hold_target(hang_hold, grip)
+	var moved := Vector3(grip.x - hands.x, 0.0, grip.z - hands.z).length()
+
+	if not target.is_empty() and moved > 0.001:
+		var step := global_position.move_toward(target["anchor"], distance)
+
+		if scanner.motion_is_clear(global_position, step, false):
+			global_position = step
+			return true
+
+	# The hold's end: round a corner of the stone if there is one, else stop.
+	var move := planner.corner(global_position, hang_normal, hang_lip_y, direction)
+
+	if move != null:
+		_start_move(move)
+	else:
+		_shimmy_velocity = 0.0
+		_last_reject = "shimmy: end of the hold"
+
+	return true
 
 
 # Targeted drop: let go, fall, catch the ledge below
@@ -2456,6 +2502,45 @@ func _update_drop_catch() -> bool:
 	_assist_active = false
 	_start_move(move)
 	return true
+
+
+## In the air beside a placed hold facing us, near enough for the hands: catch
+## it. A smooth wall gives the scanner nothing, so this is the hold's own path.
+func _try_catch_hold(facing_direction: Vector3) -> bool:
+	for hold in holds.holds_within(global_position + Vector3.UP * 1.0, 1.3):
+		if hold.kind == Handhold.Kind.POLE or hold.outward().dot(-facing_direction) < 0.3:
+			continue
+
+		var target := holds.hold_target(hold, global_position)
+
+		if target.is_empty():
+			continue
+
+		var anchor: Vector3 = target["anchor"]
+		var flat := Vector3(anchor.x - global_position.x, 0.0, anchor.z - global_position.z)
+
+		if absf(global_position.y - anchor.y) > 0.45 or flat.length() > 0.7:
+			continue
+
+		var move := TraversalMove.new()
+		move.label = &"catch"
+		move.noise_db = 45.0
+		move.kind = MoveVariantRes.Kind.HANG_ENTER
+		move.points = PackedVector3Array([global_position, anchor])
+		move.smoothing = 0.5
+		move.bake()
+		move.duration = 0.1
+		move.ends_in_hang = true
+		move.hang_normal = target["normal"]
+		move.hang_lip_y = target["lip_y"]
+		move.end_hold = hold
+		move.has_contact = true
+		move.contact_point = target["face_point"]
+		move.contact_normal = target["normal"]
+		_start_move(move)
+		return true
+
+	return false
 
 
 # Hang leaps: finding the target
@@ -3399,6 +3484,7 @@ func teleport(xform: Transform3D) -> void:
 	is_peeking = false
 	_shimmy_velocity = 0.0
 	_hang_buffered_action = &""
+	hang_hold = null
 	hang_target = {}
 	hang_aiming_elsewhere = false
 	drop_target = {}

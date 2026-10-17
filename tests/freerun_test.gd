@@ -39,6 +39,7 @@ func _physics_process(_delta: float) -> void:
 
 func _run() -> void:
 	await _finder_checks()
+	await _placed_hang_checks()
 
 
 # Task 1: the hold finder.
@@ -91,6 +92,42 @@ func _finder_checks() -> void:
 	target = player.holds.next_hold(anchor, normal, 2.0, Vector3.UP, 2.5)
 	_check("FR6 the cone excludes holds off to the side", target.is_empty(), "target %s" % target)
 	aside.queue_free()
+
+
+# Task 2: hanging on placed holds, careful layer.
+func _placed_hang_checks() -> void:
+	_box(Vector3(50, 3, -4.5), Vector3(4, 6, 3))
+	var bracket := _hold(HANDHOLD.Kind.POINT, Vector3(50, 2.3, -3), 0.0, 1.0)
+	await _catch_from(Vector3(50, 1.03, -1.2))
+	_check("FR7 a held jump catches a placed bracket", player.movement_state == 2 and player.hang_hold == bracket,
+		"state %d hold %s position %s reject %s" % [player.movement_state, player.hang_hold, player.global_position, player._last_reject])
+	await _frames(120)
+	_check("FR8 hanging on a placed hold does not drop for want of a lip ray", player.movement_state == 2 and player.hang_hold == bracket,
+		"state %d position %s" % [player.movement_state, player.global_position])
+	_release_all()
+
+	_box(Vector3(70, 3, -4.5), Vector3(6, 6, 3))
+	var sill := _hold(HANDHOLD.Kind.LEDGE, Vector3(70, 2.3, -3), 0.0, 2.0)
+	await _catch_from(Vector3(70, 1.03, -1.2))
+	var caught: bool = player.hang_hold == sill
+	Input.action_press("move_right")
+	await _frames(150)
+	_check("FR9 shimmy stops at a placed ledge's end", caught and player.movement_state == 2 and player.global_position.x <= 71.05 and player.global_position.x > 70.6,
+		"caught %s state %d position %s reject %s" % [caught, player.movement_state, player.global_position, player._last_reject])
+	_release_all()
+
+
+## Walk at the wall ahead holding jump, until hanging or 120 frames pass.
+func _catch_from(at: Vector3) -> void:
+	await _place(at)
+	Input.action_press("move_forward")
+	await _frames(4)
+	Input.action_press("jump")
+	for i in 120:
+		await _frames(1)
+		if player.movement_state == 2:
+			break
+	_release_all()
 
 
 func _hold(kind: int, at: Vector3, yaw: float, length: float) -> Node3D:

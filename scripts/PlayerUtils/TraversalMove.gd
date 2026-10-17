@@ -42,6 +42,8 @@ var contact_normal := Vector3.ZERO
 ## Loudness of the effort, in dB. Emitted once when the move starts.
 var noise_db := 0.0
 
+## The placed Handhold the move ends hanging from, if any.
+var end_hold: Node3D = null
 var ends_in_hang := false
 var hang_normal := Vector3.ZERO
 var hang_lip_y := 0.0
