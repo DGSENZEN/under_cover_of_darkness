@@ -66,6 +66,11 @@ func _process(delta: float) -> void:
 	_apply()
 
 
+## The tube's own material (a look-dev bay's form light swaps it out and back).
+func tube_material() -> ShaderMaterial:
+	return _tube_material
+
+
 ## The sign's level (0-1) at `t` seconds of game time.
 func energy_at(t: float) -> float:
 	if pattern.is_empty():
