@@ -277,7 +277,8 @@ func _shoulder_checks() -> void:
 	_check("FA19 the new shoulders sit where the old body's did", old != null and worst <= 0.03, "worst %.3f m apart" % worst)
 
 	# Pulling up onto a top, looking down at the hands: the coat's shoulders
-	# (their caps, 7 cm round) stay below the view.
+	# (their caps, 7 cm round; the yoke's collar and shoulder tops) stay below
+	# the view.
 	_box(Vector3(90, 1.2, -4.5), Vector3(4, 2.4, 3))
 	var lip: Node3D = HANDHOLD.new()
 	lip.kind = HANDHOLD.Kind.LEDGE
@@ -296,9 +297,14 @@ func _shoulder_checks() -> void:
 		if arms.held() < 0.5:
 			continue
 		var sk: Skeleton3D = arms.man.skeleton
+		var tops: Array[Vector3] = []
 		for bone in [&"upperarm_l", &"upperarm_r"]:
 			var cap: Vector3 = sk.global_transform * sk.get_bone_global_pose(sk.find_bone(bone)).origin
-			var top: Vector3 = cap + cam.global_transform.basis.y * 0.07
+			tops.append(cap + cam.global_transform.basis.y * 0.07)
+		# The coat's collar and the tops of its shoulders (sleeve_form.YOKE).
+		for at in [Vector3(0.0, 1.55, 0.01), Vector3(-0.2, 1.51, 0.01), Vector3(0.2, 1.51, 0.01)]:
+			tops.append(arms.man.global_transform * at)
+		for top in tops:
 			if not cam.is_position_behind(top):
 				highest = minf(highest, cam.unproject_position(top).y)
 	_release_all()

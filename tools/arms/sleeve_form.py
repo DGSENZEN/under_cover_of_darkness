@@ -321,3 +321,80 @@ def cuffs(shoulder, elbow, wrist, side):
     part.faces.append(tuple(base + sides + i for i in range(sides)))
     part.face_mats.append("button")
     return part
+
+
+# The coat's shoulders and chest, a squared, padded yoke the sleeves run into
+# (Blender axes, his own space): (height, half width, half depth), bottom to
+# collar. Its top stays under the eye (ViewArms.EYE, 1.62).
+YOKE = (
+    (1.04, 0.190, 0.120),
+    (1.20, 0.195, 0.125),
+    (1.32, 0.205, 0.130),
+    (1.42, 0.268, 0.132),
+    (1.49, 0.278, 0.128),
+    (1.52, 0.250, 0.118),
+    (1.54, 0.165, 0.092),
+    (1.548, 0.090, 0.078),
+    (1.55, 0.060, 0.060),
+)
+YOKE_FORWARD = -0.01
+YOKE_ROUND = 3.0
+YOKE_SEGMENTS = 32
+
+
+def _yoke_at(z):
+    """The yoke's half width and half depth at a height, or None outside."""
+    if z < YOKE[0][0] or z > YOKE[-1][0]:
+        return None
+
+    for (z0, a0, b0), (z1, a1, b1) in zip(YOKE, YOKE[1:]):
+        if z <= z1:
+            t = (z - z0) / (z1 - z0)
+            return a0 + (a1 - a0) * t, b0 + (b1 - b0) * t
+
+    return YOKE[-1][1], YOKE[-1][2]
+
+
+def inside_yoke(point):
+    """Whether a point lies inside the yoke."""
+    size = _yoke_at(point[2])
+
+    if size is None:
+        return False
+
+    a, b = size
+    return (abs(point[0]) / a) ** YOKE_ROUND + (abs(point[1] - YOKE_FORWARD) / b) ** YOKE_ROUND <= 1.0
+
+
+def yoke():
+    """The yoke: superellipse sections from the chest to the collar, closed
+    top and bottom, all on the root."""
+    part = Part()
+    rings = []
+
+    for z, a, b in YOKE:
+        ring = []
+
+        for i in range(YOKE_SEGMENTS):
+            t = i / YOKE_SEGMENTS * math.tau
+            c, s = math.cos(t), math.sin(t)
+            # A superellipse: squared, its corners rounded.
+            x = a * math.copysign(abs(c) ** (2.0 / YOKE_ROUND), c)
+            y = b * math.copysign(abs(s) ** (2.0 / YOKE_ROUND), s)
+            ring.append(len(part.verts))
+            part.verts.append((x, y + YOKE_FORWARD, z))
+            part.weights.append({"root": 1.0})
+
+        rings.append(ring)
+
+    for k in range(len(rings) - 1):
+        for i in range(YOKE_SEGMENTS):
+            j = (i + 1) % YOKE_SEGMENTS
+            part.faces.append((rings[k][i], rings[k][j], rings[k + 1][j], rings[k + 1][i]))
+            part.face_mats.append("coat")
+
+    part.faces.append(tuple(reversed(rings[0])))
+    part.face_mats.append("coat")
+    part.faces.append(tuple(rings[-1]))
+    part.face_mats.append("coat")
+    return part

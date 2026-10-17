@@ -65,8 +65,6 @@ SPEC = {
         # the thumb's root instead of sinking into it.)
         "Fist": {"index": (75.0, 95.0, 70.0)},
     },
-    # The coat's chest under the shoulders: (centre, radii), Blender axes.
-    "yoke": ((0.0, -0.01, 1.26), (0.21, 0.12, 0.21)),
     "sleeve_short_of_wrist": 0.04,
     "cuff_length": 0.025,
     "rings": (("middle", "l"), ("ring", "l")),
@@ -375,11 +373,6 @@ def build(root_dir):
     deform = bm.verts.layers.deform.verify()
     groups = bone_names()
 
-    def ball(centre, radius, bone_name, mat, segments=16):
-        result = bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=10, radius=radius,
-                                          matrix=Matrix.Translation(Vector(centre)))
-        _tag(result["verts"], bone_name, mat)
-
     def add_part(part):
         """A piece of the coat (sleeve_form.Part) into the mesh."""
         verts = []
@@ -396,16 +389,6 @@ def build(root_dir):
             f = bm.faces.new([verts[i] for i in face])
             f.material_index = mat_order.index(mat)
             f.select = True
-
-    def egg(centre, radii, bone_name, mat):
-        result = bmesh.ops.create_uvsphere(bm, u_segments=24, v_segments=14, radius=1.0,
-                                          matrix=Matrix.Translation(Vector(centre)) @ Matrix.Diagonal((*radii, 1.0)))
-        _tag(result["verts"], bone_name, mat)
-
-    def box(centre, size, along, bone_name, mat):
-        rot = Vector(along).to_track_quat("Y", "Z").to_matrix().to_4x4()
-        result = bmesh.ops.create_cube(bm, size=1.0, matrix=Matrix.Translation(Vector(centre)) @ rot @ Matrix.Diagonal((*size, 1.0)))
-        _tag(result["verts"], bone_name, mat)
 
     def ring(centre, axis, bone_name, inner):
         """A band whose inside sits on the skin (inner: the finger's radius)."""
@@ -450,18 +433,16 @@ def build(root_dir):
         for v in verts:
             v.tag = False
 
-    # The coat's yoke and chest: the arms run into a body, wherever the view
-    # finds the shoulders (looking up at a hold above), as the old body's did.
-    # Its top stays under the eye (ViewArms.EYE, 0.17 m above the shoulders).
-    egg(*SPEC["yoke"], "root", "coat")
+    # The coat's shoulders and chest (sleeve_form.yoke): the arms run into a
+    # body, wherever the view finds the shoulders (looking up at a hold).
+    add_part(sleeve_form.yoke())
 
     for side, sign in SIDES:
         j = joints(sign)
         sh, el, wr = Vector(j["shoulder"]), Vector(j["elbow"]), Vector(j["wrist"])
         # The trench sleeve: wide at the shoulder, a closed cap over it.
-        # The shoulder stays on the chest. The sleeve, shoulder to cuff, its top
-        # stretching from it (a shoulder the solver slides toward a far hold).
-        ball(sh, 0.070, "clavicle_" + side, "coat")
+        # The sleeve, shoulder to cuff, its top inside the yoke and stretching
+        # from it (a shoulder the solver slides toward a far hold).
         add_part(sleeve_form.sleeve(j["shoulder"], j["elbow"], j["wrist"], side))
         # The coat's turned cuff closing the sleeve, the shirt's cuff inside.
         add_part(sleeve_form.cuffs(j["shoulder"], j["elbow"], j["wrist"], side))

@@ -325,6 +325,41 @@ class Cuffs(unittest.TestCase):
         self.assertLess(shirt, lining)
 
 
+class Yoke(unittest.TestCase):
+    """The coat's shoulders: the sleeves run into them."""
+
+    def setUp(self):
+        import sleeve_form
+        self.sleeve_form = sleeve_form
+        self.part = sleeve_form.yoke()
+
+    def test_yoke_closed_and_facing_out(self):
+        self.assertEqual([e for e, n in _edges(self.part).items() if n != 2], [])
+        _wound_out(self, self.part)
+
+    def test_yoke_hides_the_sleeve_tops(self):
+        for side, sign in (("l", -1), ("r", 1)):
+            j = build_fp_arms.joints(sign)
+            sleeve = self.sleeve_form.sleeve(j["shoulder"], j["elbow"], j["wrist"], side)
+            near = [p for p in sleeve.verts if math.dist(p, j["shoulder"]) < 0.04 + self.sleeve_form.radius_at(0.0)]
+            ring = [sleeve.verts[i] for i in sleeve.rings[0]]
+            for p in ring + [p for p in near if math.dist(p, j["shoulder"]) <= 0.07 and self._close_to_top(p, j)]:
+                self.assertTrue(self.sleeve_form.inside_yoke(p), p)
+
+    def _close_to_top(self, p, j):
+        # Within 4 cm of the shoulder along the arm.
+        up = [j["elbow"][i] - j["shoulder"][i] for i in range(3)]
+        n = math.sqrt(sum(x * x for x in up))
+        return sum((p[i] - j["shoulder"][i]) * up[i] / n for i in range(3)) <= 0.04
+
+    def test_yoke_below_the_eye(self):
+        self.assertLess(max(v[2] for v in self.part.verts), 1.56)
+
+    def test_yoke_on_the_root(self):
+        for w in self.part.weights:
+            self.assertEqual(w, {"root": 1.0})
+
+
 FINGERS = build_fp_arms.FINGERS
 
 
