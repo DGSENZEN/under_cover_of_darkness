@@ -73,14 +73,17 @@ const PRESETS := {
 		"blown": 0.15, "anim": 1.0, "breathed": true},
 		{"draw": "stem", "size": Vector2(0.5, 1.0)},
 		{"draw": "pool", "size": Vector3(3.0, 1.6, 3.0), "at": Vector3(0, 2.4, 0)}],
-	# A censer's thread of copal (the Underground's curandera): the copal plume
-	# drawn small, rising slow off the resin, gathering in a haze under the canvas.
-	"censer": [{"draw": "sprites", "sheet": PLUME, "sheet_b": PLUME_B, "grid": [8, 4], "tint": Color("ECE6DA"),
-		"opacity": 0.85, "amount": 26, "lifetime": 6.0, "size": [0.1, 1.0], "velocity": [0.22, 0.38], "spread": 6.0,
-		"gravity": Vector3(0, 0.08, 0), "box": Vector3(0.03, 0.02, 0.03), "offset": 0.05, "fps": 30, "erosion": 0.4,
+	# A censer's thread of copal (the Underground's curandera): a thin, cool,
+	# see-through thread off the resin, widening and fraying as it rises to
+	# the canvas (its lift outweighs the particles' damping, 0.2-0.4, or it
+	# stalls over the bowl; it fades out just under the cloth, never through
+	# it), where it gathers in a haze.
+	"censer": [{"draw": "sprites", "sheet": PLUME, "sheet_b": PLUME_B, "grid": [8, 4], "tint": Color("B4B8C2"),
+		"opacity": 0.28, "amount": 72, "lifetime": 3.2, "size": [0.11, 0.65], "velocity": [0.16, 0.24], "spread": 7.0,
+		"gravity": Vector3(0, 0.4, 0), "box": Vector3(0.02, 0.02, 0.02), "offset": 0.04, "fps": 30, "erosion": 0.5,
 		"blown": 0.2, "anim": 1.0},
-		{"draw": "stem", "size": Vector2(0.16, 0.45)},
-		{"draw": "pool", "size": Vector3(1.4, 0.45, 1.4), "at": Vector3(0, 0.95, 0)}],
+		{"draw": "stem", "size": Vector2(0.08, 0.85)},
+		{"draw": "pool", "size": Vector3(1.6, 0.4, 1.6), "at": Vector3(0, 0.9, 0), "density": 1.4}],
 	"smoke": [{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.42, 0.4, 0.38),
 		"opacity": 0.6, "amount": 24, "lifetime": 3.2, "size": [0.4, 1.4], "velocity": [0.4, 0.7], "spread": 15.0,
 		"gravity": Vector3(0, 0.15, 0), "box": Vector3(0.15, 0.05, 0.15), "offset": 0.6, "fps": 30, "erosion": 0.4,
@@ -612,7 +615,7 @@ static func _fog(p: Dictionary) -> FogVolume:
 ## A small pool of haze over a smoke (copal's), catching the lamps.
 static func _pool(p: Dictionary) -> FogVolume:
 	var haze := FogMaterial.new()
-	haze.density = 0.12
+	haze.density = p.get("density", 0.12)
 	haze.albedo = Color("ECE6DA")
 	haze.edge_fade = 0.6
 	var volume := FogVolume.new()
