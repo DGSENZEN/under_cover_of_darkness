@@ -30,6 +30,20 @@ var man: Node3D
 ## Where each hand's closed pose comes from, as FIST_FROM (the Prosecutor's
 ## own arms have their own Fist: ViewArms).
 var fist_from: Array = FIST_FROM
+## The hand poses arms made for holding carry (FPArms): a hand closes toward
+## the one it is asked for, by its curl.
+const POSES := [&"Open", &"Fist", &"Hook", &"Wrap", &"Push", &"SwordGrip"]
+## Seconds a hand takes to go over from one pose to another.
+const POSE_FADE := 0.12
+## Whether the man's library has poses of its own to learn (the Prosecutor's
+## arms; a body's animations are not hand poses, whatever their names).
+var learns_poses := false
+## Per hand, the pose asked of it, and what it shows: pose -> share (sums
+## to 1), crossing over to the asked one in POSE_FADE.
+var poses: Array[StringName] = [&"Fist", &"Fist"]
+var pose_weights: Array[Dictionary] = [{}, {}]
+## Pose -> finger bone -> closed rotation.
+var _poses := {}
 ## Per hand, left then right: where it goes (his space), how much it goes
 ## there (0 leaves the animation's), and how closed the fingers are.
 var targets: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
@@ -128,6 +142,50 @@ func _learn_fist() -> void:
 
 				var closed: Quaternion = clip.rotation_track_interpolate(tracks[bone], source[1])
 				_fingers[bone] = [skeleton.get_bone_rest(index).basis.get_rotation_quaternion(), closed]
+
+	_poses.clear()
+
+	if learns_poses:
+		for pose in POSES:
+			if library.has_animation(pose):
+				_poses[pose] = _pose_rotations(skeleton, library.get_animation(pose))
+
+	if not _poses.has(&"Fist"):
+		var fist := {}
+
+		for bone in _fingers:
+			fist[bone] = _fingers[bone][1]
+
+		_poses[&"Fist"] = fist
+
+
+## Each finger bone's rotation in a one-frame pose clip.
+func _pose_rotations(skeleton: Skeleton3D, clip: Animation) -> Dictionary:
+	var out := {}
+
+	for i in range(clip.get_track_count()):
+		if clip.track_get_type(i) != Animation.TYPE_ROTATION_3D:
+			continue
+
+		var path := clip.track_get_path(i)
+
+		if path.get_subname_count() == 0:
+			continue
+
+		var bone := StringName(path.get_subname(0))
+
+		if skeleton.find_bone(bone) >= 0 and String(bone).split("_")[0] in ["index", "middle", "ring", "pinky", "thumb"]:
+			out[bone] = clip.rotation_track_interpolate(i, 0.0)
+
+	return out
+
+
+## Whether a hand can take this pose (else it closes as a fist).
+func has_pose(pose: StringName) -> bool:
+	if _fingers.is_empty():
+		_learn_fist()
+
+	return _poses.has(pose)
 
 
 func _process_modification() -> void:
@@ -361,9 +419,54 @@ func _set_global_rotation(skeleton: Skeleton3D, bone: int, basis: Basis) -> void
 	skeleton.set_bone_pose_rotation(bone, (parent_basis.inverse() * basis.orthonormalized()).get_rotation_quaternion())
 
 
+## The shown pose's shares move toward the asked one.
+func _fade_pose(side: int) -> void:
+	var want: StringName = poses[side] if _poses.has(poses[side]) else &"Fist"
+	var shares: Dictionary = pose_weights[side]
+
+	# A hand new to holding starts at its pose, not faded in from nothing.
+	if shares.is_empty():
+		shares[want] = 1.0
+		return
+
+	var delta := get_process_delta_time()
+	var step := (delta if delta > 0.0 else 1.0 / 60.0) / POSE_FADE
+
+	if not shares.has(want):
+		shares[want] = 0.0
+
+	var total := 0.0
+
+	for pose in shares.keys():
+		shares[pose] = move_toward(shares[pose], 1.0 if pose == want else 0.0, step)
+
+		if shares[pose] <= 0.0:
+			shares.erase(pose)
+		else:
+			total += shares[pose]
+
+	for pose in shares.keys():
+		shares[pose] /= total
+
+
+## A finger bone's closed rotation: the shown poses, by their shares.
+func _closed(side: int, bone: StringName) -> Quaternion:
+	var out := Quaternion.IDENTITY
+	var so_far := 0.0
+
+	for pose in pose_weights[side]:
+		var share: float = pose_weights[side][pose]
+		var rotation: Quaternion = _poses[pose].get(bone, _fingers[bone][1])
+		so_far += share
+		out = rotation if so_far <= share else out.slerp(rotation, share / so_far)
+
+	return out
+
+
 func _curl(skeleton: Skeleton3D, side: int) -> void:
 	var suffix := "l" if side == 0 else "r"
 	var amount := clampf(curls[side], 0.0, 1.0)
+	_fade_pose(side)
 
 	for finger in FINGERS:
 		for joint in ["01", "02", "03"]:
@@ -373,8 +476,8 @@ func _curl(skeleton: Skeleton3D, side: int) -> void:
 				continue
 
 			var index := _bone(skeleton, bone)
-			var poses: Array = _fingers[bone]
-			skeleton.set_bone_pose_rotation(index, (poses[0] as Quaternion).slerp(poses[1], amount))
+			var rest: Quaternion = _fingers[bone][0]
+			skeleton.set_bone_pose_rotation(index, rest.slerp(_closed(side, bone), amount))
 
 
 func _bone(skeleton: Skeleton3D, bone: StringName) -> int:

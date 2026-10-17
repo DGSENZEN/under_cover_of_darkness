@@ -97,6 +97,7 @@ func _build() -> void:
 	if new_arms:
 		# Their own length and their own fist.
 		reach.set("fist_from", [[&"Fist", 0.0], [&"Fist", 0.0]])
+		reach.set("learns_poses", true)
 		man.skeleton.add_child(reach)
 		_leg_body = HumanoidScript.new()
 		_leg_body.name = "Leg"
@@ -131,11 +132,18 @@ func _build() -> void:
 
 
 ## A hand to `target` (a transform in the parent's space, the view's small
-## world), by `weight`, the fingers closed by `curl`.
-func set_hand(side: int, target: Transform3D, weight: float, curl: float) -> void:
+## world), by `weight`, the fingers closed by `curl` toward `pose` (one of
+## ArmReach.POSES the arms have: has_pose; a fist otherwise).
+func set_hand(side: int, target: Transform3D, weight: float, curl: float, pose := &"Fist") -> void:
 	reach.targets[side] = _to_man(target)
 	reach.weights[side] = clampf(weight, 0.0, 1.0)
 	reach.curls[side] = clampf(curl, 0.0, 1.0)
+	reach.poses[side] = pose
+
+
+## Whether these arms' hands can take `pose` (the old arms have only a fist).
+func has_pose(pose: StringName) -> bool:
+	return reach != null and reach.has_pose(pose)
 
 
 ## The right foot to `target` (parent's space), by `weight`.

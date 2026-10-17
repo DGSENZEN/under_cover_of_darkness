@@ -41,6 +41,7 @@ func _ready() -> void:
 
 func _run() -> void:
 	_rig_checks()
+	await _pose_checks()
 	await _held_checks()
 	await _kick_checks()
 	await _switch_checks()
@@ -106,6 +107,33 @@ func _rig_checks() -> void:
 		axes.append("%s %s/%s" % [bone, palms[0].snapped(Vector3.ONE * 0.1), palms[1].snapped(Vector3.ONE * 0.1)])
 	old.queue_free()
 	_check("FA11 the new hands' bones turn as the old ones do (the palm on the same axis)", worst > 0.9, "; ".join(axes))
+
+
+func _pose_checks() -> void:
+	var arms = player.hand._arms
+	var all := true
+	for pose in [&"Open", &"Fist", &"Hook", &"Wrap", &"Push", &"SwordGrip"]:
+		all = all and arms.has_pose(pose)
+	_check("FA12 the new arms have the whole pose library", all, "")
+
+	# The hands out of HandSlot's: one asked for a pose, then another.
+	player.hand.set_process(false)
+	for i in 30:
+		arms.set_hand(0, Transform3D(Basis.IDENTITY, Vector3(-0.2, -0.2, -0.4)), 1.0, 1.0, &"Wrap")
+		await _frames(1)
+	var wrapped: float = arms.reach.pose_weights[0].get(&"Wrap", 0.0)
+	_check("FA13 a hand asked to wrap takes the Wrap pose", wrapped > 0.99, "Wrap share %.2f" % wrapped)
+	var mid := {}
+	for i in 30:
+		arms.set_hand(0, Transform3D(Basis.IDENTITY, Vector3(-0.2, -0.2, -0.4)), 1.0, 1.0, &"Push")
+		await _frames(1)
+		if i == 2:
+			mid = arms.reach.pose_weights[0].duplicate()
+	var pushed: float = arms.reach.pose_weights[0].get(&"Push", 0.0)
+	var between: bool = mid.get(&"Push", 0.0) > 0.05 and mid.get(&"Push", 0.0) < 0.95 and mid.get(&"Wrap", 0.0) > 0.05
+	player.hand.set_process(true)
+	_check("FA14 a hand changing pose cross-fades, no pop", between and pushed > 0.99,
+		"2 frames in %s, then Push %.2f" % [mid, pushed])
 
 
 func _held_checks() -> void:
@@ -178,6 +206,8 @@ func _switch_checks() -> void:
 			break
 	var old_now: bool = not ViewArmsScript.new_arms and arms.man != before and arms.get("_leg_body") == null
 	var gone: bool = not is_instance_valid(before) or before.get_parent() == null
+	var old_poses: bool = not arms.has_pose(&"Hook") and not arms.has_pose(&"Wrap") and arms.has_pose(&"Fist")
+	_check("FA17 the old arms have only their fist", old_poses, "Hook %s Fist %s" % [arms.has_pose(&"Hook"), arms.has_pose(&"Fist")])
 	_press(KEY_F12)
 	await _frames(10)
 	var back: bool = ViewArmsScript.new_arms and arms.man != null and String(arms.man.get_script().resource_path).ends_with("FPArms.gd")
