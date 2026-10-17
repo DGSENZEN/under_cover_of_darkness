@@ -103,8 +103,10 @@ class Bands(unittest.TestCase):
 
         for label, name in (("station", "upper"), ("market", "middle"), ("old", "lower")):
             image = np.asarray(Image.open(self.out / ("plan_underground_%s.png" % label)).convert("RGB"), dtype=np.int64)
-            # Coloured: far from grey (paper, grid and ink are greys).
+            # Coloured: far from grey (paper, grid and ink are greys); over
+            # the map, not the legend in the margin above it.
             coloured = (image.max(axis=2) - image.min(axis=2)) > 40
+            coloured[:plan_draw.MARGIN] = False
             ys, xs = np.nonzero(coloured)
             xs0 = [p[0] for p in spaces[name]["polygon"]]
             zs0 = [p[1] for p in spaces[name]["polygon"]]

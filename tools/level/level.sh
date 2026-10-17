@@ -19,6 +19,8 @@
 #   tools/level/level.sh all <level>       kit, build, export
 #   tools/level/level.sh navmesh <district>  its map's navmesh baked and saved
 #                                          (assets/level/navmesh/<district>.scn, data/districts.json)
+#   tools/level/level.sh metro             the Metro Underground's plan, sheets (one per depth band too) and
+#                                          greybox -> assets/eclipse/metro/ (no dressing yet)
 #   tools/level/level.sh test              the rules against broken levels, the terrain, the kit's shapes
 #                                          and pieces, the ships, occlusion, overlap, shading; the build's guard
 #
@@ -114,6 +116,16 @@ case "$verb" in
     python3 "$HERE/dress.py" "$ROOT/assets/eclipse/zocalo/plan.json" "$ROOT/assets/eclipse/zocalo/greybox.json" \
       "$ROOT/assets/eclipse/zocalo/dressing.json"
     ;;
+  metro)
+    # The Metro Underground's plan: checked under the underground rules (it
+    # stops here if not clean), then its data, its sheets (its depth bands'
+    # as well) and its greybox, into assets/eclipse/metro/.
+    mkdir -p "$ROOT/assets/eclipse/metro/plan"
+    touch "$ROOT/assets/eclipse/metro/plan/.gdignore"
+    (cd "$HERE/layouts" && python3 city_metro.py "$ROOT/assets/eclipse/metro/plan.json")
+    python3 "$HERE/plan_draw.py" "$ROOT/assets/eclipse/metro/plan.json" "$ROOT/assets/eclipse/metro/plan" 3
+    python3 "$HERE/greybox.py" "$ROOT/assets/eclipse/metro/plan.json" "$ROOT/assets/eclipse/metro/greybox.json"
+    ;;
   test)
     python3 "$HERE/test_rules.py"
     python3 "$HERE/test_terrain.py"
@@ -144,6 +156,7 @@ case "$verb" in
     python3 "$HERE/test_plan_check.py"
     python3 "$HERE/test_plan_draw.py"
     python3 "$HERE/test_zocalo_plan.py"
+    python3 "$HERE/test_metro_plan.py"
     python3 "$HERE/test_greybox.py"
     python3 "$HERE/test_dress.py"
     python3 "$HERE/../eclipse/test_street_dims.py"

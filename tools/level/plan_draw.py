@@ -10,7 +10,7 @@ space named with its floor; the other bands' spaces faint behind. The bands
 come from draw(bands=) or the plan's own "bands". A plan with no brink is
 drawn over the bounds of what it holds.
 
-    python3 tools/level/plan_draw.py <plan.json> <out dir>
+    python3 tools/level/plan_draw.py <plan.json> <out dir> [px per m, 2]
 """
 
 import json
@@ -285,8 +285,28 @@ def _band_sheet(data, band, px_per_m):
         draw.text((px + 3, py + 3), "%s %g" % (s["name"], s["floor"]), fill=INK)
 
     draw.text((MARGIN, 8), "%s: floors %g to %g m" % (band[2], band[0], band[1]), fill=INK)
+    _legend(draw, data, px_per_m)
     _furniture(draw, data, to_px, px_per_m, INK)
     return image
+
+
+def _legend(draw, data, px_per_m):
+    """What the band sheets' colours mean, along the head of the sheet."""
+    keys = [("station", LAYER_COLOURS[1], 6), ("market", LAYER_COLOURS[2], 6), ("old", LAYER_COLOURS[3], 6)]
+    keys += [(kind.replace("_", " "), LANDMARK_COLOURS[kind], 3) for kind in
+             ("arrival", "sign", "character_place", "scene", "puesto")]
+    keys += [(kind, ROUTE_COLOURS[kind], 0) for kind in ("stair", "climb", "tunnel")]
+    x = MARGIN + 180
+    y = 14
+
+    for label, colour, r in keys:
+        if r:
+            draw.ellipse([x, y - r, x + 2 * r, y + r], fill=colour)
+        else:
+            draw.line([(x, y), (x + 12, y)], fill=colour, width=3)
+
+        draw.text((x + 16, y - 6), label, fill=INK)
+        x += 16 + 6 * len(label) + 12
 
 
 def draw(data, out_dir, px_per_m=2.0, bands=None):
@@ -297,7 +317,8 @@ def draw(data, out_dir, px_per_m=2.0, bands=None):
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = []
 
-    for sheet in SHEETS:
+    # (With no brink there is no street, roof, canal or event to draw.)
+    for sheet in SHEETS if len(data["brink"]) >= 3 else ("underground", "all"):
         path = out_dir / ("plan_%s.png" % sheet)
         _sheet(data, sheet, px_per_m).save(path)
         paths.append(path)
@@ -311,4 +332,5 @@ def draw(data, out_dir, px_per_m=2.0, bands=None):
 
 
 if __name__ == "__main__":
-    print("\n".join(str(p) for p in draw(json.loads(Path(sys.argv[1]).read_text()), sys.argv[2])))
+    print("\n".join(str(p) for p in draw(json.loads(Path(sys.argv[1]).read_text()), sys.argv[2],
+                                         float(sys.argv[3]) if len(sys.argv) > 3 else 2.0)))
