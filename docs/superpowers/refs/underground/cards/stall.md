@@ -1,6 +1,6 @@
 # Card: the corridor stall (the Underground's hero piece)
 
-**Status:** awaiting the user's choice of option and the neon sign's words (Oct 16 2026).
+**Status:** option A (the curandera) chosen Oct 16 2026; the stall approved Oct 17 2026 (its rules: `../recipe.md`). Still the user's: the neon's words and colour, the saint's and the photograph's prints, the enamel sign's face.
 
 This is the first model built to the new standard (`docs/superpowers/specs/2026-10-16-metro-underground-design.md`, section 4). What it teaches becomes the recipe for every piece after it.
 
