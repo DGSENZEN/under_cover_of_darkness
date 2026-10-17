@@ -187,8 +187,8 @@ const FRAME_MARGIN_DEGREES := 7.0
 ## Where the hands go in a landing roll, in camera space (full size): low in
 ## front, forearms crossing, palms in.
 const ROLL_TUCK: Array[Transform3D] = [
-	Transform3D(Basis(Vector3.FORWARD, -0.7) * Basis(Vector3.RIGHT, 0.5), Vector3(-0.1, -0.26, -0.42)),
-	Transform3D(Basis(Vector3.FORWARD, 0.7) * Basis(Vector3.RIGHT, 0.5), Vector3(0.12, -0.24, -0.4)),
+	Transform3D(Basis(Vector3.FORWARD, -0.35) * Basis(Vector3.RIGHT, 0.25), Vector3(-0.13, -0.2, -0.55)),
+	Transform3D(Basis(Vector3.FORWARD, 0.35) * Basis(Vector3.RIGHT, 0.25), Vector3(0.13, -0.19, -0.55)),
 ]
 var _grip_curls: Array[float] = [0.5, 0.5]
 ## Your arms.
