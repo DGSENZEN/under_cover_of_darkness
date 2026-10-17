@@ -282,6 +282,44 @@ func _run() -> void:
 		and train.next >= TrainPass.EVERY.x, "strength %.2f lights %.2f next %.0f" % [train.strength(),
 		lab.work_lights[0].light_energy, train.next])
 
+	# U26 the crowd's murmur fills the corridor from both ends, sinking under a train
+	var crowd: Crowd = lab.crowd
+	var beds: Array = crowd.beds if crowd != null else []
+	var ends := beds.size() == 2 and beds.all(func(b): return b.playing and b.stream != null) \
+		and absf(beds[0].global_position.x) > 6.0 and absf(beds[1].global_position.x) > 6.0 \
+		and signf(beds[0].global_position.x) != signf(beds[1].global_position.x)
+	var calm: float = crowd.bed_volume(0.0) if crowd != null else 0.0
+	var masked: float = crowd.bed_volume(1.0) if crowd != null else 0.0
+	_check("U26 the crowd's murmur fills the corridor from both ends and sinks under a passing train",
+		ends and masked < calm - 6.0, "beds %d calm %.1f masked %.1f" % [beds.size(), calm, masked])
+
+	# U27 people pass: footsteps on the tile walk the corridor, never inside the stall
+	var steps_before: int = crowd.steps_played
+	var where := {}
+
+	for i in 600:
+		await get_tree().physics_frame
+		for w in crowd.walkers:
+			where[snappedf(w["x"], 0.5)] = true
+
+	var inside: bool = crowd.walkers.any(func(w): return w["z"] < 0.9)
+	_check("U27 passers-by's footsteps walk the corridor on the tile, out in front of the stall",
+		crowd.steps_played - steps_before >= 15 and where.size() >= 6 and not inside,
+		"steps %d places %d inside %s" % [crowd.steps_played - steps_before, where.size(), inside])
+
+	# U28 now and then someone coughs, laughs, sighs, clears their throat, somewhere down the corridor
+	var voices_before: int = crowd.voices_played
+	crowd.voice()
+	_check("U28 now and then a voice from the crowd: a cough, a laugh, a sigh, somewhere down the corridor",
+		crowd.voices_played == voices_before + 1 and crowd.next_voice >= Crowd.VOICE_EVERY.x
+		and crowd.next_voice <= Crowd.VOICE_EVERY.y, "next %.1f" % crowd.next_voice)
+
+	# U29 the junction box hums where the stall's cable is tapped
+	var box_hum: AudioStreamPlayer3D = lab.junction_hum
+	_check("U29 the junction box hums where the stall's cable is tapped",
+		box_hum != null and box_hum.playing and box_hum.global_position.distance_to(lab.JUNCTION_TOP) < 0.3
+		and box_hum.max_distance <= 6.0, "%s" % [box_hum])
+
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")
 	_check("U8 the pixel grid is off", retro != null and retro.virtual_height == 0, "%s" % [retro.virtual_height if retro else null])

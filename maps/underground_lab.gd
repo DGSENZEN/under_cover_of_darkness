@@ -49,6 +49,7 @@ const DRIP_AT := Vector3(-2.3, 3.15, -2.17)
 const DRIP_SOUND := "res://audio/weather/drip.wav"
 ## A passing train: its rumble at full (dB), the jars' rattle, where the shelves stand.
 const RUMBLE := "res://audio/sfx/train_rumble_1.wav"
+const BOX_HUM := "res://audio/ambience/electric_box.wav"
 const RUMBLE_DB := -4.0
 const RATTLES := ["res://audio/sfx/jars_rattle_1.wav", "res://audio/sfx/jars_rattle_2.wav"]
 const SHELVES_AT := Vector3(0.0, 1.4, -1.9)
@@ -87,6 +88,8 @@ var puddle: Decal
 var drip_sound: AudioStreamPlayer3D
 var moths: Moths
 var train: TrainPass
+var crowd: Crowd
+var junction_hum: AudioStreamPlayer3D
 var rumble: AudioStreamPlayer
 var dust_sift: GPUParticles3D
 var rattles := 0
@@ -409,6 +412,19 @@ func _effects() -> void:
 	_shafts()
 	_drip()
 	_train()
+	crowd = Crowd.new()
+	crowd.name = "crowd"
+	crowd.seed = 41
+	add_child(crowd)
+	junction_hum = AudioStreamPlayer3D.new()
+	junction_hum.name = "junction_hum"
+	junction_hum.stream = load(BOX_HUM)
+	junction_hum.max_distance = 5.0
+	junction_hum.unit_size = 1.0
+	junction_hum.volume_db = -6.0
+	junction_hum.autoplay = true
+	add_child(junction_hum)
+	junction_hum.position = JUNCTION_TOP
 	moths = Moths.new()
 	moths.name = "moths"
 	moths.seed = 5
@@ -470,6 +486,9 @@ func _breathe(delta: float) -> void:
 		Vfx.blow(motes, DRAUGHT * (1.0 + 4.0 * s))
 
 	dust_sift.amount_ratio = clampf((s - 0.3) / 0.7, 0.0, 1.0)
+
+	if crowd != null:
+		crowd.duck = s
 	rumble.volume_db = RUMBLE_DB + linear_to_db(maxf(s, 0.001))
 
 
