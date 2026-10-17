@@ -22,6 +22,7 @@ from mathutils import Matrix, Vector
 ELBOW_KEEP = 0.8
 SIDE_KEEP = 0.85
 SLAB = 0.006
+SHIRT_PAST = 0.025
 BENDS = (0.0, 90.0, 130.0)
 
 
@@ -89,6 +90,107 @@ def bend(rig, side, degrees):
 
     lower.matrix_basis = Matrix.Rotation(best[1] * math.radians(degrees), 4, "Z")
     bpy.context.view_layer.update()
+
+
+def material_verts(body, name):
+    index = [i for i, m in enumerate(body.data.materials) if m.name == name]
+    out = set()
+
+    for p in body.data.polygons:
+        if p.material_index in index:
+            out.update(p.vertices)
+
+    return out
+
+
+def through_cuff(points, skin, cuff, rig, side):
+    """Skin vertices outside the shirt cuff's outer wall, along its length.
+    The cuff's section, from its own vertices: per slice along the forearm,
+    its widest reach each way round."""
+    lower = rig.pose.bones["lowerarm_" + side]
+    mw = rig.matrix_world
+    a, b = mw @ lower.head, mw @ lower.tail
+    axis = (b - a).normalized()
+    mine = [i for i in cuff if ((points[i] - a) - axis * (points[i] - a).dot(axis)).length < 0.06]
+    span = [(points[i] - a).dot(axis) for i in mine]
+    low, high = min(span), max(span)
+    centre = sum((points[i] for i in mine), Vector()) / len(mine)
+    centre = a + axis * (centre - a).dot(axis)
+    # The cuff's outline round the axis: its furthest reach per 20 degrees
+    # (its vertices are 15 apart: every bin holds some).
+    ref = (points[mine[0]] - centre)
+    ref = (ref - axis * ref.dot(axis)).normalized()
+    other = axis.cross(ref)
+    reach = [0.0] * 18
+
+    for i in mine:
+        d = points[i] - centre
+        d = d - axis * d.dot(axis)
+        k = int((math.degrees(math.atan2(d.dot(other), d.dot(ref))) % 360.0) // 20)
+        reach[k] = max(reach[k], d.length)
+
+    poked = 0
+
+    for p in skin_samples(points, skin):
+        d = p - centre
+        along = d.dot(axis)
+
+        # Along the cuff where it shows: from the coat's end (the cuff shows
+        # SHIRT_PAST beyond it) to its own end. Under the coat the coat hides
+        # it (lining_hides).
+        if not (high - SHIRT_PAST <= (p - a).dot(axis) <= high - 0.004):
+            continue
+
+        d = d - axis * along
+
+        # (This arm's own wrist, not the other hand across the chest.)
+        if d.length > 0.08:
+            continue
+
+        k = int((math.degrees(math.atan2(d.dot(other), d.dot(ref))) % 360.0) // 20)
+
+        if d.length > reach[k] + 0.0005:
+            poked += 1
+
+    return poked
+
+
+SKIN_EDGES = []
+
+
+def skin_samples(points, skin):
+    """The skin's vertices and points along its edges (its faces can cross a
+    cuff with no vertex beyond it)."""
+    for i in skin:
+        yield points[i]
+
+    for a, b in SKIN_EDGES:
+        for t in (0.25, 0.5, 0.75):
+            yield points[a].lerp(points[b], t)
+
+
+def lining_hides(points, skin, lining, rig, side):
+    """Skin under the coat's cuff that reaches out past its lining (and so
+    could show between the cuffs): there must be none."""
+    lower = rig.pose.bones["lowerarm_" + side]
+    mw = rig.matrix_world
+    a, b = mw @ lower.head, mw @ lower.tail
+    axis = (b - a).normalized()
+    mine = [i for i in lining if ((points[i] - a) - axis * (points[i] - a).dot(axis)).length < 0.07]
+    span = [(points[i] - a).dot(axis) for i in mine]
+    inner = min(((points[i] - a) - axis * (points[i] - a).dot(axis)).length for i in mine)
+    low, high = min(span), max(span)
+    count = 0
+
+    for p in skin_samples(points, skin):
+        d = p - a
+        along = d.dot(axis)
+        out = (d - axis * along).length
+
+        if low <= along <= high and out < 0.08 and out > inner:
+            count += 1
+
+    return count
 
 
 def upper_weight(body, index, side):
@@ -163,6 +265,25 @@ def main():
 
             print("CROOK %s %d: %d of %d crook vertices pushed out through the far side" % (side, degrees, poked, len(crook_side)))
             failed = failed or poked > 0 or len(crook_side) < 50
+
+    # The wrist bent hard (a hook over a sill): no skin through the shirt's
+    # cuff, anywhere along it.
+    skin = [i for i in material_verts(body, "Skin")]
+    skin_set = set(skin)
+    SKIN_EDGES.extend(tuple(e.vertices) for e in body.data.edges if e.vertices[0] in skin_set and e.vertices[1] in skin_set)
+    cuff = material_verts(body, "ShirtCuff")
+
+    for side in ("l", "r"):
+        for axis in ("X", "Z"):
+            for degrees in (0.0, 40.0, -40.0):
+                rest_all(rig)
+                rig.pose.bones["hand_" + side].matrix_basis = Matrix.Rotation(math.radians(degrees), 4, axis)
+                bpy.context.view_layer.update()
+                points = evaluated(body)
+                poked = through_cuff(points, skin, cuff, rig, side)
+                hidden = lining_hides(points, skin, material_verts(body, "Lining"), rig, side)
+                print("WRIST %s %s %+d: %d skin vertices through the shirt cuff, %d out past the coat's lining" % (side, axis, degrees, poked, hidden))
+                failed = failed or poked > 0 or hidden > 0
 
     rest_all(rig)
     print("SLEEVES FAIL" if failed else "SLEEVES PASS")

@@ -35,12 +35,29 @@ FOLD_REACH = 0.04
 # The sleeve a touch long: two shallow rings bunched above the cuff, this far
 # from the coat's end (m).
 BUNCH_DEPTH = 0.0025
-BUNCHES = (0.055, 0.085)
+BUNCHES = (0.075, 0.105)
 # The seam down the outer back of the arm: a groove this deep and this wide
 # each side (m of arc), its edges modelled.
 SEAM_DEPTH = 0.0012
 SEAM_HALF = 0.003
 SEAM_RADIUS = 0.055
+# The coat's cuff, turned back: this long up the sleeve, this proud of it,
+# its edge rolled over into a lining this far in and this far back (m).
+CUFF_TURN = 0.05
+CUFF_PROUD = 0.0035
+LINING_IN = 0.0045
+LINING_BACK = 0.03
+# The shirt's barrel cuff: its radii, from 1 cm inside the coat to this far
+# past it (build_fp_arms.SPEC cuff_length), a horn button on the thumb side.
+SHIRT_IN = 0.031
+SHIRT_OUT = 0.037
+# The wrist is wider than it is deep: the shirt's cuff is too, snug on it
+# (depth over width of its section).
+SHIRT_FLAT = 0.86
+SHIRT_FROM = -0.010
+SHIRT_PAST = 0.025
+BUTTON_RADIUS = 0.005
+BUTTON_THICK = 0.002
 
 
 class Part:
@@ -214,4 +231,93 @@ def sleeve(shoulder, elbow, wrist, side):
     # The shoulder's cap.
     part.faces.append(tuple(reversed(part.rings[0])))
     part.face_mats.append("coat")
+    return part
+
+
+def _forearm(shoulder, elbow, wrist):
+    """The forearm's frame at the coat's end: its centre, the arm's line,
+    the crook side and the side across."""
+    up = _norm(_sub(elbow, shoulder))
+    fore = _norm(_sub(wrist, elbow))
+    turn = _sub(fore, up)
+    u = _norm(_sub(turn, _add((0.0, 0.0, 0.0), fore, _dot(turn, fore))))
+    return _add(wrist, fore, -SHORT_OF_WRIST), fore, u, _cross(fore, u)
+
+
+def _revolve(part, centre, axis, u, v, profile, mats, weights, oval=1.0, flat=1.0):
+    """A closed loop of (along, out) points turned round the axis: a closed
+    ring of cloth. mats: one per edge of the loop. Traced along +axis on the
+    outside, its faces face out."""
+    base = len(part.verts)
+    n = len(profile)
+
+    for x, r in profile:
+        for i in range(SEGMENTS):
+            a = i / SEGMENTS * math.tau
+            out = _add(_add((0.0, 0.0, 0.0), u, math.cos(a) * oval * flat), v, math.sin(a) / oval)
+            part.verts.append(_add(_add(centre, axis, x), out, r))
+            part.weights.append(dict(weights))
+
+    for k in range(n):
+        k2 = (k + 1) % n
+
+        for i in range(SEGMENTS):
+            j = (i + 1) % SEGMENTS
+            part.faces.append((base + k * SEGMENTS + i, base + k * SEGMENTS + j, base + k2 * SEGMENTS + j, base + k2 * SEGMENTS + i))
+            part.face_mats.append(mats[k])
+
+
+def _arc(cx, cr, radius, start, stop, steps):
+    return [(cx + radius * math.cos(math.radians(start + (stop - start) * t / steps)),
+             cr + radius * math.sin(math.radians(start + (stop - start) * t / steps))) for t in range(steps + 1)]
+
+
+def cuffs(shoulder, elbow, wrist, side):
+    """The coat's turned cuff, closing the sleeve's end with its rolled edge
+    and lining, and the shirt's barrel cuff inside it with its button: closed
+    rings, all on the forearm."""
+    end, fore, u, v = _forearm(shoulder, elbow, wrist)
+    weights = {"lowerarm_" + side: 1.0}
+    part = Part()
+    r = radius_at(2.0)
+
+    # The turned cuff: its top edge stepping out of the sleeve, the band, the
+    # rolled lip, the lining back inside, and closed behind it.
+    lip = _arc(-0.004, r - 0.0005, CUFF_PROUD + 0.0005, 90.0, -90.0, 6)
+    coat = [(-CUFF_TURN, r - 0.0005), (-CUFF_TURN, r + 0.0015), (-CUFF_TURN + 0.003, r + CUFF_PROUD)] + lip \
+        + [(-LINING_BACK, r - LINING_IN), (-LINING_BACK - 0.004, r - 0.003)]
+    # (The band and the outer half of the lip are the coat; the rest lining.)
+    mats = ["coat"] * 6 + ["lining"] * 6
+    _revolve(part, end, fore, u, v, coat, mats, weights, OVAL)
+
+    # The shirt's cuff: a rounded band.
+    c = 0.0025
+    x0, x1 = SHIRT_FROM, SHIRT_PAST
+    shirt = _arc(x1 - c, SHIRT_OUT - c, c, 90.0, 0.0, 3) + _arc(x1 - c, SHIRT_IN + c, c, 0.0, -90.0, 3) \
+        + _arc(x0 + c, SHIRT_IN + c, c, -90.0, -180.0, 3) + _arc(x0 + c, SHIRT_OUT - c, c, 180.0, 90.0, 3)
+    _revolve(part, end, fore, u, v, shirt, ["cuff"] * len(shirt), weights, flat=SHIRT_FLAT)
+
+    # The button, on the thumb side (toward the body: -v on the right).
+    a = 1.5 * math.pi if side == "r" else 0.5 * math.pi
+    out = _add(_add((0.0, 0.0, 0.0), u, math.cos(a)), v, math.sin(a))
+    across = _cross(out, fore)
+    middle = _add(_add(end, fore, 0.010), out, SHIRT_OUT - 0.0005)  # (the thumb side: full width)
+    base = len(part.verts)
+    sides = 10
+
+    for h in (0.0, BUTTON_THICK + 0.0005):
+        for i in range(sides):
+            t = i / sides * math.tau
+            part.verts.append(_add(_add(_add(middle, out, h), fore, math.cos(t) * BUTTON_RADIUS), across, math.sin(t) * BUTTON_RADIUS))
+            part.weights.append(dict(weights))
+
+    for i in range(sides):
+        j = (i + 1) % sides
+        part.faces.append((base + i, base + j, base + sides + j, base + sides + i))
+        part.face_mats.append("button")
+
+    part.faces.append(tuple(base + i for i in reversed(range(sides))))
+    part.face_mats.append("button")
+    part.faces.append(tuple(base + sides + i for i in range(sides)))
+    part.face_mats.append("button")
     return part

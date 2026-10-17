@@ -324,8 +324,10 @@ def build(root_dir):
         "cuff": material("ShirtCuff", (0.80, 0.77, 0.70)),
         "skin": material("Skin", (0.62, 0.43, 0.33)),
         "ring": material("RingMetal", (0.45, 0.45, 0.48), 1.0, 0.35),
+        "lining": material("Lining", (0.18, 0.07, 0.06)),
+        "button": material("Button", (0.12, 0.08, 0.05), 0.0, 0.4),
     }
-    mat_order = ["coat", "cuff", "skin", "ring"]
+    mat_order = ["coat", "cuff", "skin", "ring", "lining", "button"]
 
     # The base hand (CC0, tools/arms/extract_base_hand.py): a right hand, wrist
     # at the origin, each vertex marked with its finger.
@@ -372,18 +374,6 @@ def build(root_dir):
     bm = bmesh.new()
     deform = bm.verts.layers.deform.verify()
     groups = bone_names()
-
-    def tube(a, b, r0, r1, bone_name, mat, segments=16, cap=True):
-        """A tapered, capped tube from a to b."""
-        a = Vector(a)
-        b = Vector(b)
-        axis = (b - a)
-        length = axis.length
-        rot = axis.to_track_quat("Z", "Y").to_matrix().to_4x4()
-        result = bmesh.ops.create_cone(bm, cap_ends=cap, cap_tris=False, segments=segments,
-                                       radius1=r0, radius2=r1, depth=length,
-                                       matrix=Matrix.Translation((a + b) * 0.5) @ rot)
-        _tag(result["verts"], bone_name, mat)
 
     def ball(centre, radius, bone_name, mat, segments=16):
         result = bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=10, radius=radius,
@@ -468,16 +458,13 @@ def build(root_dir):
     for side, sign in SIDES:
         j = joints(sign)
         sh, el, wr = Vector(j["shoulder"]), Vector(j["elbow"]), Vector(j["wrist"])
-        fore_dir = (wr - el).normalized()
-        sleeve_end = wr - fore_dir * SPEC["sleeve_short_of_wrist"]
         # The trench sleeve: wide at the shoulder, a closed cap over it.
         # The shoulder stays on the chest. The sleeve, shoulder to cuff, its top
         # stretching from it (a shoulder the solver slides toward a far hold).
         ball(sh, 0.070, "clavicle_" + side, "coat")
         add_part(sleeve_form.sleeve(j["shoulder"], j["elbow"], j["wrist"], side))
-        # The shirt cuff showing past it. The hand (added below) runs on under
-        # both into the sleeve.
-        tube(sleeve_end, sleeve_end + fore_dir * SPEC["cuff_length"], 0.040, 0.039, "lowerarm_" + side, "cuff")
+        # The coat's turned cuff closing the sleeve, the shirt's cuff inside.
+        add_part(sleeve_form.cuffs(j["shoulder"], j["elbow"], j["wrist"], side))
 
         for finger, ring_side in SPEC["rings"]:
             if ring_side == side:

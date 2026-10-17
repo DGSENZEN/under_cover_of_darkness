@@ -159,6 +159,50 @@ def _edges(part):
     return count
 
 
+def _islands(part):
+    """Groups of faces joined by shared vertices."""
+    parent = list(range(len(part.verts)))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for face in part.faces:
+        for i in face[1:]:
+            parent[find(i)] = find(face[0])
+
+    groups = {}
+    for f, face in enumerate(part.faces):
+        groups.setdefault(find(face[0]), []).append(f)
+    return list(groups.values())
+
+
+def _wound_out(test, part, closed=True):
+    """Each edge walked once each way (wound alike), and each closed island
+    encloses a positive volume (its faces face out)."""
+    directed = {}
+    for face in part.faces:
+        for k in range(len(face)):
+            e = (face[k], face[(k + 1) % len(face)])
+            directed[e] = directed.get(e, 0) + 1
+    test.assertEqual([e for e, n in directed.items() if n > 1], [], "faces wound against each other")
+
+    if not closed:
+        return
+
+    for island in _islands(part):
+        volume = 0.0
+        for f in island:
+            face = part.faces[f]
+            a = part.verts[face[0]]
+            for k in range(1, len(face) - 1):
+                b, c = part.verts[face[k]], part.verts[face[k + 1]]
+                volume += (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0])) / 6.0
+        test.assertGreater(volume, 0.0, "an island faces in")
+
+
 def _right_sleeve():
     import sleeve_form
     j = build_fp_arms.joints(1)
@@ -187,6 +231,9 @@ class Sleeve(unittest.TestCase):
         elbow = min(range(len(part.rings)), key=lambda k: abs(part.ring_s[k] - part.elbow_s))
         self.assertGreater(mean_radius(0), mean_radius(elbow))
         self.assertGreater(mean_radius(elbow), mean_radius(len(part.rings) - 1))
+
+    def test_sleeve_faces_out(self):
+        _wound_out(self, _right_sleeve(), closed=False)
 
     def test_weights_sum_to_one(self):
         for w in _right_sleeve().weights:
@@ -225,6 +272,57 @@ class Sleeve(unittest.TestCase):
         part = _right_sleeve()
         tris = sum(len(f) - 2 for f in part.faces)
         self.assertLessEqual(tris * 2, 6000)
+
+
+def _right_cuffs():
+    import sleeve_form
+    j = build_fp_arms.joints(1)
+    return sleeve_form.cuffs(j["shoulder"], j["elbow"], j["wrist"], "r"), j
+
+
+class Cuffs(unittest.TestCase):
+    """The coat's turned cuff with its lining, the shirt's barrel cuff."""
+
+    def test_cuffs_closed(self):
+        part, _ = _right_cuffs()
+        self.assertTrue(part.faces)
+        self.assertEqual([e for e, n in _edges(part).items() if n != 2], [])
+
+    def test_cuffs_face_out(self):
+        for side in (1, -1):
+            import sleeve_form
+            j = build_fp_arms.joints(side)
+            _wound_out(self, sleeve_form.cuffs(j["shoulder"], j["elbow"], j["wrist"], "r" if side > 0 else "l"))
+
+    def test_lining_material_present(self):
+        part, _ = _right_cuffs()
+        for mat in ("coat", "lining", "cuff", "button"):
+            self.assertIn(mat, part.face_mats)
+
+    def _along(self, part, mat, j):
+        import sleeve_form
+        fore = sleeve_form._norm(sleeve_form._sub(j["wrist"], j["elbow"]))
+        end = sleeve_form._add(j["wrist"], fore, -sleeve_form.SHORT_OF_WRIST)
+        verts = {i for f, m in zip(part.faces, part.face_mats) if m == mat for i in f}
+        out = []
+        for i in verts:
+            d = sleeve_form._sub(part.verts[i], end)
+            x = sleeve_form._dot(d, fore)
+            r = math.sqrt(max(sleeve_form._dot(d, d) - x * x, 0.0))
+            out.append((x, r))
+        return out
+
+    def test_cuff_shows_past_the_coat(self):
+        part, j = _right_cuffs()
+        coat_end = max(x for x, _ in self._along(part, "coat", j) + self._along(part, "lining", j))
+        shirt_end = max(x for x, _ in self._along(part, "cuff", j))
+        self.assertTrue(0.020 <= shirt_end - coat_end <= 0.030, shirt_end - coat_end)
+
+    def test_shirt_cuff_inside_coat(self):
+        part, j = _right_cuffs()
+        lining = min(r for _, r in self._along(part, "lining", j))
+        shirt = max(r for _, r in self._along(part, "cuff", j))
+        self.assertLess(shirt, lining)
 
 
 FINGERS = build_fp_arms.FINGERS
