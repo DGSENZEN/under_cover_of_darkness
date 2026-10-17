@@ -44,6 +44,7 @@ func _run() -> void:
 	await _climb_checks()
 	await _ground_checks()
 	await _edge_checks()
+	await _eject_checks()
 
 
 # Task 1: the hold finder.
@@ -331,6 +332,32 @@ func _edge_checks() -> void:
 	await _run_at(Vector3(220, 2.03, 4), true, 100, -7.0)
 	_check("FR19c a 1 m step down is simply run off", player.global_position.y - 1.0 < 0.2 and player.global_position.z < -5.0,
 		"position %s" % player.global_position)
+
+
+# Task 7: back eject, across an alley 3 m wide.
+func _eject_checks() -> void:
+	for x in [230.0, 240.0]:
+		_box(Vector3(x, 4.5, -4.5), Vector3(4, 9, 3))
+		var start := _hold(HANDHOLD.Kind.LEDGE, Vector3(x, 3.0, -3), 0.0, 1.0)
+		var bracket: Node3D = null
+		if x == 230.0:
+			_box(Vector3(x, 1.5, 1.5), Vector3(4, 3, 3))
+		else:
+			_box(Vector3(x, 4.5, 1.5), Vector3(4, 9, 3))
+			bracket = _hold(HANDHOLD.Kind.POINT, Vector3(x, 3.0, 0), PI, 1.0)
+		await _frames(2)
+		await _hang_on(start)
+		_aim(Vector3(x, 3.0, 0.0))
+		await _frames(8)
+		Input.action_press("jump")
+		await _frames(2)
+		Input.action_release("jump")
+		await _until(func(): return player.movement_state == 2 and player.hang_normal.z < -0.9, 120)
+		var name := "FR20 back eject to a ledge across an alley" if bracket == null else "FR21 back eject to a placed bracket"
+		_check(name, player.movement_state == 2 and player.hang_normal.z < -0.9 and labels.has("leap") and (bracket == null or player.hang_hold == bracket),
+			"state %d normal %s labels %s hold %s reject %s" % [player.movement_state, player.hang_normal, labels, player.hang_hold, player._last_reject])
+		player._drop_from_hang()
+		await _frames(90)
 
 
 func _until(condition: Callable, max_frames: int) -> void:

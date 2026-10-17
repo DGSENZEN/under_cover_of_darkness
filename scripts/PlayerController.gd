@@ -2278,6 +2278,7 @@ func _update_hang(delta: float) -> void:
 			var leap := planner.leap(global_position, hang_target, hang_normal)
 
 			if leap != null:
+				leap.end_hold = hang_target.get("hold")
 				_start_move(leap)
 				return
 
@@ -2595,6 +2596,12 @@ func _find_looked_at_target() -> Dictionary:
 
 	flat = flat.normalized()
 
+	# A placed hold under the crosshair (a bracket on a smooth wall behind us).
+	var held_aim := _find_aimed_hold(forward)
+
+	if not held_aim.is_empty():
+		return held_aim
+
 	# First, whatever the crosshair actually rests on, whichever way it faces.
 	var aimed := _find_aimed_ledge()
 
@@ -2642,6 +2649,46 @@ func _find_looked_at_target() -> Dictionary:
 			break
 
 	return {}
+## The placed hold nearest the crosshair's line (within 0.4 m of it, in plain
+## view, facing us, in leap reach), as a leap target. {} if none.
+func _find_aimed_hold(forward: Vector3) -> Dictionary:
+	var eye := neck.global_position
+	var best := {}
+	var best_off := 0.4
+
+	for hold in holds.holds_within(eye, 8.0):
+		if hold == hang_hold or hold.kind == Handhold.Kind.POLE or hold.outward().dot(forward) > -0.2:
+			continue
+
+		var along: float = (hold.global_position - eye).dot(forward)
+
+		if along < 0.5:
+			continue
+
+		var on_line: Vector3 = eye + forward * along
+		var grip: Vector3 = hold.grip_near(on_line)
+		var off := grip.distance_to(eye + forward * (grip - eye).dot(forward))
+
+		if off >= best_off:
+			continue
+
+		var sight := scanner.ray(eye, grip + hold.outward() * 0.05)
+
+		if not sight.is_empty():
+			continue
+
+		var candidate := _leap_target_from(grip, hold.outward(), grip.y)
+
+		if candidate.is_empty() or not scanner.fits(candidate["anchor"], false):
+			continue
+
+		candidate["hold"] = hold
+		best = candidate
+		best_off = off
+
+	return best
+
+
 ## Is this surface part of the wall and ledge we are hanging from?
 func _is_own_wall(point: Vector3, normal: Vector3) -> bool:
 	var face := global_position - hang_normal * (_radius + planner.hang_gap)
