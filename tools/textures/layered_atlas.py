@@ -36,7 +36,7 @@ ATLAS_FREE = ("glass", "neon")
 TOP_LIGHT = 0.15
 HEIGHT_LIGHT = 0.1
 # Convexity from which an edge starts to wear, and over how much it is fully worn.
-WEAR_FROM, WEAR_OVER = 0.3, 0.4
+WEAR_FROM, WEAR_OVER = 0.2, 0.35
 # The Mignola black, and how much lighter than it everything else stays.
 BLACK = "#0b0a0c"
 BLACK_GAP = 0.03
