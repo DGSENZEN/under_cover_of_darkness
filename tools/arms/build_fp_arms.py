@@ -1,9 +1,10 @@
 """The Prosecutor's first-person arms, piece 1: the blockout.
 
 Shoulders to fingertips, no body: an armature with the bones the game's arm
-solver uses (scripts/Visual/ArmReach.gd), a real arm's proportions, and big
-simple forms (trench sleeve with a shoulder cap, shirt cuff, forearm, palm,
-finger segments, two rings) rigidly weighted, flat colours, and three poses.
+solver uses (scripts/Visual/ArmReach.gd), a real arm's proportions, the hands
+(the CC0 base hand from tools/arms/extract_base_hand.py, aged, its joints the
+rig's, weighted joint by joint), big simple forms for the trench sleeve with a
+shoulder cap and the shirt cuff, two rings, flat colours, and three poses.
 Saves assets/characters/fp_arms/source/fp_arms_blockout.blend and exports
 assets/characters/fp_arms/fp_arms.glb.
 
@@ -14,32 +15,36 @@ Blender's axes: +Y forward (the game's -Z), +Z up. Left is -X.
 Spec: docs/superpowers/specs/2026-10-16-prosecutor-fp-arms-design.md.
 """
 
+import json
 import math
 import os
 import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SOURCE = os.path.join(HERE, "..", "..", "assets", "characters", "fp_arms", "source")
+BASE_HAND = os.path.join(SOURCE, "base_hand.blend")
+with open(os.path.join(SOURCE, "base_hand_joints.json")) as _f:
+    # A right hand's joints, wrist at the origin, fingers along +Y, palm down.
+    HAND_JOINTS = json.load(_f)
 
 # Metres, full size. Shoulder to wrist 0.65 (a real arm's length).
 SPEC = {
     "upper": 0.34,
     "fore": 0.31,
     "hand": 0.09,
+    # Wrist to the middle fingertip: an adult man's hand.
+    "hand_length": 0.194,
     "shoulder_width": 0.38,
     "shoulder_height": 1.45,
-    "palm_width": 0.085,
-    # Per finger: (offset across the palm toward the little finger, the
-    # three joints' lengths).
-    "fingers": {
-        "index": (-0.030, (0.045, 0.027, 0.022)),
-        "middle": (-0.010, (0.050, 0.030, 0.024)),
-        "ring": (0.010, (0.046, 0.028, 0.022)),
-        "pinky": (0.030, (0.036, 0.022, 0.019)),
-    },
-    "thumb": (0.040, 0.032, 0.026),
-    # Joint curls (degrees, toward the palm), per pose: fingers 01/02/03, thumb.
+    # The hand itself, its knuckles and finger joints come from the base hand
+    # (tools/arms/extract_base_hand.py): HAND_JOINTS.
+    # Joint curls (degrees, toward the pad), per pose: fingers 01/02/03, and
+    # the thumb's three joints as (curl, twist, swing): a fist's thumb turns
+    # on its root to lie across the index and middle fingers.
     "poses": {
-        "Open": ((0.0, 0.0, 0.0), 0.0),
-        "Fist": ((85.0, 95.0, 70.0), 45.0),
-        "Hook": ((50.0, 70.0, 40.0), 15.0),
+        "Open": ((0.0, 0.0, 0.0), ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))),
+        "Fist": ((85.0, 95.0, 70.0), ((30.0, -30.0, 0.0), (30.0, 0.0, 0.0), (40.0, 0.0, 0.0))),
+        "Hook": ((50.0, 70.0, 40.0), ((10.0, 0.0, 0.0), (20.0, 0.0, 0.0), (15.0, 0.0, 0.0))),
     },
     "sleeve_short_of_wrist": 0.04,
     "cuff_length": 0.025,
@@ -73,41 +78,159 @@ def _add(a, b, scale=1.0):
 
 def joints(sign):
     """World points (Blender axes) of one arm's chain, sign -1 left, 1 right:
-    shoulder, elbow, wrist, knuckles and each finger's joints."""
+    shoulder, elbow, wrist, knuckles and each finger's joints (the base
+    hand's, mirrored for the left)."""
     shoulder = (sign * SPEC["shoulder_width"] * 0.5, 0.0, SPEC["shoulder_height"])
     elbow = _add(shoulder, _norm((0.0, 0.88, -0.47)), SPEC["upper"])
     wrist = _add(elbow, _norm((0.0, 1.0, 0.05)), SPEC["fore"])
-    knuckles = _add(wrist, (0.0, 1.0, 0.0), SPEC["hand"])
-    inward = -sign
-    fingers = {}
 
-    for finger, (across, lengths) in SPEC["fingers"].items():
-        base = _add(knuckles, (inward * -across, 0.0, 0.0))
-        points = [base]
-        direction = _norm((0.0, 1.0, -0.08))
+    def at(p):
+        return _add(wrist, (sign * p[0], p[1], p[2]))
 
-        for length in lengths:
-            points.append(_add(points[-1], direction, length))
+    fingers = {finger: [at(p) for p in points] for finger, points in HAND_JOINTS["fingers"].items()}
+    return {"shoulder": shoulder, "elbow": elbow, "wrist": wrist, "knuckles": at(HAND_JOINTS["knuckles"]), "fingers": fingers}
 
-        fingers[finger] = points
 
-    thumb_base = _add(wrist, (inward * 0.025, 0.028, -0.012))
-    # Along the side of the palm, a little in and down: at rest it lies by
-    # the index finger, not hanging.
-    thumb_dir = _norm((inward * 0.45, 0.85, -0.18))
-    thumb = [thumb_base]
+def _sub(a, b):
+    return tuple(a[i] - b[i] for i in range(3))
 
-    for length in SPEC["thumb"]:
-        thumb.append(_add(thumb[-1], thumb_dir, length))
 
-    fingers["thumb"] = thumb
-    return {"shoulder": shoulder, "elbow": elbow, "wrist": wrist, "knuckles": knuckles, "fingers": fingers}
+def _dot(a, b):
+    return sum(a[i] * b[i] for i in range(3))
+
+
+def _smooth(edge0, edge1, x):
+    t = min(max((x - edge0) / (edge1 - edge0), 0.0), 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+# How far each bend spreads either side of its joint (m): the wrist, a
+# knuckle, the finger joints.
+WRIST_BLEND = 0.015
+KNUCKLE_BLEND = 0.010
+JOINT_BLEND = 0.005
+
+
+def hand_weights(co, finger):
+    """Skin weights of a base-hand vertex (right hand, local space) owned by
+    finger (0 the palm and wrist, 1-5 index to thumb): {bone without side:
+    weight}. Rigid along each bone, blended smoothly across each joint; palm
+    skin near a knuckle or over the thumb's root shares its finger's first
+    bone, never a neighbour's."""
+    joints = HAND_JOINTS["fingers"]
+
+    def into(points):
+        """How far into each of the chain's three joints the vertex lies."""
+        d = [_norm(_sub(points[k + 1], points[k])) for k in range(3)]
+        normals = (d[0], _norm(_add(d[0], d[1])), _norm(_add(d[1], d[2])))
+        blends = (KNUCKLE_BLEND, JOINT_BLEND, JOINT_BLEND)
+        return [_smooth(-blends[k], blends[k], _dot(_sub(co, points[k]), normals[k])) for k in range(3)]
+
+    share = {}
+
+    if finger:
+        name = FINGERS[finger - 1]
+        share[name] = into(joints[name])[0]
+    else:
+        for name in FINGERS:
+            points = joints[name]
+            d0 = _norm(_sub(points[1], points[0]))
+            t = _dot(_sub(co, points[0]), d0)
+
+            if name == "thumb":
+                # The thumb's root bone lies in the palm's ball: skin near it.
+                along = _add(points[0], d0, min(max(t, 0.0), _dot(_sub(points[1], points[0]), d0)))
+                reach = math.sqrt(_dot(_sub(co, along), _sub(co, along)))
+                near = 1.0 - _smooth(0.012, 0.025, reach)
+            else:
+                # Across the hand only: the knuckle's skin above and below.
+                near = 1.0 - _smooth(0.006, 0.016, abs(co[0] - _add(points[0], d0, t)[0]))
+
+            if near > 0.0:
+                share[name] = near * into(points)[0]
+
+        total = sum(share.values())
+
+        if total > 1.0:
+            share = {k: v / total for k, v in share.items()}
+
+    weights = {"hand": 1.0 - sum(share.values())}
+
+    for name, s in share.items():
+        a = into(joints[name])
+        weights[name + "_01"] = s * (1.0 - a[1])
+        weights[name + "_02"] = s * a[1] * (1.0 - a[2])
+        weights[name + "_03"] = s * a[1] * a[2]
+
+    # The stump under the cuff follows the forearm.
+    hand_in = _smooth(-WRIST_BLEND, WRIST_BLEND, co[1])
+    weights = {k: v * hand_in for k, v in weights.items() if v * hand_in > 0.0}
+
+    if hand_in < 1.0:
+        weights["lowerarm"] = 1.0 - hand_in
+
+    return weights
+
+
+def _bump(distance, sigma):
+    """A soft round rise, nothing past three widths."""
+    return math.exp(-(distance / sigma) ** 2) if distance < 3.0 * sigma else 0.0
+
+
+def _along(co, a, b):
+    """(how far along a->b as 0..1, distance from the line) for a point."""
+    ab = _sub(b, a)
+    t = _dot(_sub(co, a), ab) / _dot(ab, ab)
+    off = _sub(co, _add(a, ab, t))
+    return t, math.sqrt(_dot(off, off))
+
+
+# An older man's hand (m): knuckle heads, extensor tendons, knobbed finger
+# joints. Sized to read at the mesh's density; veins, creases and scars are
+# painted and baked (pieces 2 and 5).
+KNUCKLE_RISE, KNUCKLE_WIDTH = 0.0022, 0.008
+TENDON_RISE, TENDON_WIDTH = 0.0012, 0.0035
+KNOB_RISE, KNOB_WIDTH = (0.0009, 0.0006), 0.004
+
+
+def age_offset(co, normal, finger=None):
+    """How far an older man's hand moves a base-hand vertex (right hand,
+    local space), along its normal: knuckle heads and tendons on the back of
+    the hand, knobs at each finger joint. finger (0-5, as hand_weights)
+    keeps the knobs to the vertex's own finger; None means any."""
+    joints = HAND_JOINTS["fingers"]
+    back = _smooth(0.2, 0.6, normal[2])
+    rise = 0.0
+
+    for f, name in enumerate(FINGERS):
+        points = joints[name]
+
+        if name != "thumb" and back > 0.0:
+            # The metacarpal's head, under the skin over the knuckle.
+            head = _add(points[0], (0.0, 0.0, 0.008))
+            gap = _sub(co, head)
+            rise += back * KNUCKLE_RISE * _bump(math.sqrt(_dot(gap, gap)), KNUCKLE_WIDTH)
+            # Its tendon, from the middle of the wrist to the knuckle.
+            flat = (co[0], co[1], 0.0)
+            t, lateral = _along(flat, (points[0][0] * 0.3, 0.012, 0.0), (points[0][0], points[0][1], 0.0))
+            rise += back * TENDON_RISE * _bump(lateral, TENDON_WIDTH) * _smooth(0.0, 0.25, t) * (1.0 - _smooth(0.85, 1.05, t))
+
+        if finger is None or finger == f + 1:
+            for k, height in ((1, KNOB_RISE[0]), (2, KNOB_RISE[1])):
+                d = _norm(_sub(points[k + 1], points[k - 1]))
+                axial = _dot(_sub(co, points[k]), d)
+                t, reach = _along(co, points[k - 1], points[k + 1])
+                rise += (0.4 + 0.6 * back) * height * _bump(abs(axial), KNOB_WIDTH) * (1.0 - _smooth(0.010, 0.013, reach))
+
+    # Nothing under the cuff.
+    rise *= _smooth(0.0, 0.02, co[1])
+    return tuple(n * rise for n in normal)
 
 
 def build(root_dir):
     import bpy
     import bmesh
-    from mathutils import Matrix, Quaternion, Vector
+    from mathutils import Euler, Matrix, Quaternion, Vector
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
@@ -143,11 +266,14 @@ def build(root_dir):
 
         for finger in FINGERS:
             points = j["fingers"][finger]
+            nail = HAND_JOINTS["nails"][finger]
 
             for k in range(3):
                 name = "%s_0%d_%s" % (finger, k + 1, side)
                 parent = "hand_" + side if k == 0 else "%s_0%d_%s" % (finger, k, side)
-                bone(name, points[k], points[k + 1], parent, k > 0)
+                # Each finger's bones turn with its nail: Z up the back of the
+                # finger, so a curl about X closes it toward its pad.
+                bone(name, points[k], points[k + 1], parent, k > 0).align_roll(Vector((sign * nail[0], nail[1], nail[2])))
 
     bpy.ops.object.mode_set(mode="OBJECT")
 
@@ -171,6 +297,47 @@ def build(root_dir):
         "ring": material("RingMetal", (0.45, 0.45, 0.48), 1.0, 0.35),
     }
     mat_order = ["coat", "cuff", "skin", "ring"]
+
+    # The base hand (CC0, tools/arms/extract_base_hand.py): a right hand, wrist
+    # at the origin, each vertex marked with its finger.
+    with bpy.data.libraries.load(BASE_HAND) as (src, dst):
+        dst.meshes = ["BaseHand"]
+
+    base_hand = dst.meshes[0]
+    base_finger = [d.value for d in base_hand.attributes["finger"].data]
+    # Made his: an older man's knuckles, tendons and joints.
+    aged = [age_offset(tuple(v.co), tuple(v.normal), f) for v, f in zip(base_hand.vertices, base_finger)]
+
+    for v, offset in zip(base_hand.vertices, aged):
+        v.co += Vector(offset)
+
+    # The bundle marks its faces flat: the skin is smooth.
+    if "sharp_face" in base_hand.attributes:
+        base_hand.attributes.remove(base_hand.attributes["sharp_face"])
+
+    base_hand.update()
+
+    def finger_radius(finger, side, centre, axis):
+        """The skin's furthest reach from a finger's axis around a point on it
+        (both hands are the base hand, mirrored)."""
+        sign = -1.0 if side == "l" else 1.0
+        wrist = Vector(joints(sign)["wrist"])
+        index = FINGERS.index(finger) + 1
+        axis = axis.normalized()
+        reach = []
+
+        for v, f in zip(base_hand.vertices, base_finger):
+            if f != index:
+                continue
+
+            p = wrist + Vector((sign * v.co.x, v.co.y, v.co.z)) - centre
+
+            if abs(p.dot(axis)) < 0.002:
+                reach.append((p - axis * p.dot(axis)).length)
+
+        # The band presses the skin a little: snug on the skin's middle reach.
+        reach.sort()
+        return reach[len(reach) * 3 // 4]
 
     # --- Forms, built into one bmesh, each tagged with its bone and material
     bm = bmesh.new()
@@ -199,10 +366,12 @@ def build(root_dir):
         result = bmesh.ops.create_cube(bm, size=1.0, matrix=Matrix.Translation(Vector(centre)) @ rot @ Matrix.Diagonal((*size, 1.0)))
         _tag(result["verts"], bone_name, mat)
 
-    def ring(centre, axis, bone_name):
+    def ring(centre, axis, bone_name, inner):
+        """A band whose inside sits on the skin (inner: the finger's radius)."""
         rot = Vector(axis).to_track_quat("Z", "Y").to_matrix().to_4x4()
         verts = []
-        major, minor, seg, sides = 0.0115, 0.0022, 20, 6
+        minor, seg, sides = 0.0022, 24, 8
+        major = inner + minor * 0.8
 
         for i in range(seg):
             for k in range(sides):
@@ -252,26 +421,15 @@ def build(root_dir):
         tube(el, sleeve_end - fore_dir * 0.05, 0.063, 0.058, "lowerarm_" + side, "coat")
         # The turned-back cuff of the coat: a little wider band.
         tube(sleeve_end - fore_dir * 0.05, sleeve_end, 0.064, 0.064, "lowerarm_" + side, "coat")
-        # The shirt cuff showing past it, then the wrist.
+        # The shirt cuff showing past it. The hand (added below) runs on under
+        # both into the sleeve.
         tube(sleeve_end, sleeve_end + fore_dir * SPEC["cuff_length"], 0.047, 0.046, "lowerarm_" + side, "cuff")
-        tube(sleeve_end - fore_dir * 0.02, wr, 0.034, 0.030, "lowerarm_" + side, "skin", 12)
-        # The palm and the back of the hand.
-        knuckles = Vector(j["knuckles"])
-        box((wr + knuckles) * 0.5, (SPEC["palm_width"], SPEC["hand"] + 0.01, 0.028), knuckles - wr, "hand_" + side, "skin")
-
-        for finger in FINGERS:
-            points = [Vector(p) for p in j["fingers"][finger]]
-            radius = 0.011 if finger == "thumb" else (0.0085 if finger == "pinky" else 0.0095)
-
-            for k in range(3):
-                name = "%s_0%d_%s" % (finger, k + 1, side)
-                tube(points[k], points[k + 1], radius, radius * 0.92, name, "skin", 10)
-                ball(points[k + 1], radius * 0.9, name, "skin", 10)
 
         for finger, ring_side in SPEC["rings"]:
             if ring_side == side:
                 points = [Vector(p) for p in j["fingers"][finger]]
-                ring(points[0].lerp(points[1], 0.55), points[1] - points[0], "%s_01_%s" % (finger, side))
+                centre = points[0].lerp(points[1], 0.62)
+                ring(centre, points[1] - points[0], "%s_01_%s" % (finger, side), finger_radius(finger, side, centre, points[1] - points[0]))
 
     for f in bm.faces:
         f.select = False
@@ -293,6 +451,45 @@ def build(root_dir):
     modifier = body.modifiers.new("Armature", "ARMATURE")
     modifier.object = rig
 
+    # --- The hands: the base hand placed at each wrist (mirrored for the
+    # left), weighted by bone heat, each finger's skin kept to its own bones.
+    hands = []
+
+    for side, sign in SIDES:
+        data = base_hand.copy()
+        data.transform(Matrix.Translation(Vector(joints(sign)["wrist"])) @ Matrix.Diagonal((sign, 1.0, 1.0, 1.0)))
+
+        if sign < 0:
+            data.flip_normals()
+
+        data.materials.clear()
+        data.materials.append(mats["skin"])
+        hand = bpy.data.objects.new("Hand_" + side, data)
+        scene.collection.objects.link(hand)
+        hands.append(hand)
+
+    for hand, (side, _) in zip(hands, SIDES):
+        finger_of = [d.value for d in hand.data.attributes["finger"].data]
+
+        for v, local, finger in zip(hand.data.vertices, base_hand.vertices, finger_of):
+            for name, weight in hand_weights(tuple(local.co), finger).items():
+                group = hand.vertex_groups.get(name + "_" + side) or hand.vertex_groups.new(name=name + "_" + side)
+                group.add([v.index], weight, "REPLACE")
+
+        for name in ("finger", ".sculpt_face_set"):
+            if name in hand.data.attributes:
+                hand.data.attributes.remove(hand.data.attributes[name])
+
+    bpy.ops.object.select_all(action="DESELECT")
+
+    for hand in hands:
+        hand.select_set(True)
+
+    body.select_set(True)
+    bpy.context.view_layer.objects.active = body
+    bpy.ops.object.join()
+    mesh = body.data
+
     # --- Poses: one-frame actions the solver reads its closed fist from.
     rig.animation_data_create()
 
@@ -306,14 +503,16 @@ def build(root_dir):
             pb.rotation_mode = "QUATERNION"
             pb.rotation_quaternion = Quaternion()
 
-        for side, _ in SIDES:
+        for side, sign in SIDES:
             for finger in FINGERS:
                 for k in range(3):
-                    angle = thumb if finger == "thumb" else curls[k]
+                    curl, twist, swing = thumb[k] if finger == "thumb" else (curls[k], 0.0, 0.0)
                     pb = rig.pose.bones["%s_0%d_%s" % (finger, k + 1, side)]
-                    # Toward the palm: the palm faces down (-Z), the bones run
-                    # along their own +Y, so a curl is negative about local X.
-                    pb.rotation_quaternion = Quaternion((1.0, 0.0, 0.0), -math.radians(angle))
+                    # Toward the pad: the bones run along their own +Y with Z
+                    # out of the nail, so a curl is negative about local X.
+                    # The left hand's bones are mirrored: its twist and swing
+                    # turn the other way.
+                    pb.rotation_quaternion = Euler((-math.radians(curl), sign * math.radians(twist), sign * math.radians(swing))).to_quaternion()
 
         for pb in rig.pose.bones:
             pb.keyframe_insert("rotation_quaternion", frame=1)

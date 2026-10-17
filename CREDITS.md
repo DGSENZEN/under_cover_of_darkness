@@ -93,3 +93,11 @@ and painted over by `tools/textures/eclipse_atlas.py`:
 - [terrazzo_tiles](https://polyhaven.com/a/terrazzo_tiles) by **Amal Kumar**
 - [volcanic_rock_tiles](https://polyhaven.com/a/volcanic_rock_tiles) by **Charlotte Baglioni**
 - [white_rough_plaster](https://polyhaven.com/a/white_rough_plaster) by **Rob Tuytel**
+
+## Models
+
+- **The Prosecutor's hands** (`assets/characters/fp_arms/`) start from "Hand -
+  Realistic" in **Blender Studio's Human Base Meshes** (v1.4.1), CC0
+  ([blender.org](https://www.blender.org/download/demo-files/)). Turned, scaled,
+  rigged, aged and painted for the game by `tools/arms/extract_base_hand.py` and
+  `tools/arms/build_fp_arms.py`.
