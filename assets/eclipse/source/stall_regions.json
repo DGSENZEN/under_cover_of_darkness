@@ -18,8 +18,14 @@
   "enamel",
   "sign",
   "stone",
-  "chile"
+  "chile",
+  "glass_amber",
+  "glass_green",
+  "seal",
+  "bread",
+  "picado",
+  "picado_b"
  ],
  "atlas_px": 2048,
- "px_per_m": 115.1
+ "px_per_m": 92.17
 }

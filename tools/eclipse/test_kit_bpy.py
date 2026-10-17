@@ -880,14 +880,30 @@ class Stall(unittest.TestCase):
         self.assertAlmostEqual(lowest, 0.0, places=4)
 
     def test_budget(self):
-        self.assertLessEqual(sum(_tris(o) for o in self.objects.values()), 30000)
+        self.assertLessEqual(sum(_tris(o) for o in self.objects.values()), 40000)
 
     def test_footprint(self):
         points = [p for o in self.objects.values() for p in _world(o)]
         size = [max(p[k] for p in points) - min(p[k] for p in points) for k in range(3)]
-        self.assertTrue(2.2 <= size[0] <= 2.6, size)
-        self.assertTrue(1.2 <= size[1] <= 1.6, size)
-        self.assertTrue(2.4 <= size[2] <= 2.8, size)
+        self.assertTrue(2.9 <= size[0] <= 3.4, size)
+        self.assertTrue(2.2 <= size[1] <= 2.6, size)
+        self.assertTrue(2.6 <= size[2] <= 3.0, size)
+
+    def _clear(self, lo, hi):
+        """The vertices of the stall inside the box lo..hi (Blender axes)."""
+        return [p for o in self.objects.values() for p in _world(o)
+                if all(lo[k] < p[k] < hi[k] for k in range(3))]
+
+    def test_room_for_her(self):
+        """A person stands behind the counter (the game's body too, a capsule
+        1 m across and 2 m tall): an aisle a metre deep and long, clear from
+        the floor to 2.05 m (her stool and crates stand outside it)."""
+        self.assertEqual(self._clear((-0.6, 0.62, 0.02), (0.3, 1.62, 2.05)), [])
+
+    def test_a_way_in(self):
+        """She walks in past the counter's right end: a gap over a metre wide,
+        clear to 2.1 m (the game's body too), from the corridor into the aisle."""
+        self.assertEqual(self._clear((0.45, -0.3, 0.02), (1.38, 1.6, 2.1)), [])
 
     def test_bevelled(self):
         """No edge longer than 10 cm between faces meeting harder than 60
@@ -905,7 +921,7 @@ class Stall(unittest.TestCase):
 
     def test_passes_the_gate(self):
         faces, tris, _ = common.dump_faces(list(self.objects.values()))
-        self.assertEqual(gate.check(faces, tris, [], budget=30000), [])
+        self.assertEqual(gate.check(faces, tris, [], budget=40000), [])
 
 
 if __name__ == "__main__":

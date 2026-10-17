@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "assets" / "eclipse" / "source"
 OUT = ROOT / "textures" / "painted" / "underground"
 RECIPES = Path(__file__).resolve().parent / "recipes"
-# Slots drawn by their own materials in game (glass, the neon's tubes).
+# Slots drawn by their own materials in game (glass of every tint, the neon's tubes).
 ATLAS_FREE = ("glass", "neon")
 # How far each layer can move Oklab lightness at full strength.
 TOP_LIGHT = 0.15
@@ -134,7 +134,7 @@ def paint(piece, source_dir=SOURCE, out_dir=OUT, recipes_dir=RECIPES / "undergro
     recipes = {}
 
     for name in slots:
-        if name in ATLAS_FREE:
+        if name in ATLAS_FREE or name.startswith("glass"):
             continue
 
         path = recipes_dir / (name + ".json")

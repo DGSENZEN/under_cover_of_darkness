@@ -9,13 +9,15 @@ const LAB := preload("res://maps/underground_lab.tscn")
 
 ## name, eye, looking at (Godot: the stall's front faces +Z, its counter at z 0).
 const VIEWS := [
-	["front", Vector3(0.0, 1.6, 3.9), Vector3(0.0, 1.35, -0.5)],
-	["three_quarter", Vector3(2.8, 1.7, 3.2), Vector3(0.0, 1.3, -0.5)],
-	["side", Vector3(3.6, 1.6, 0.4), Vector3(0.0, 1.3, -0.6)],
-	["close_counter", Vector3(0.9, 1.5, 1.3), Vector3(0.1, 1.0, -0.3)],
-	["close_awning", Vector3(0.6, 1.75, 1.0), Vector3(0.0, 2.1, -0.2)],
-	["close_neon", Vector3(0.8, 2.2, 1.5), Vector3(0.0, 2.36, 0.0)],
-	["corridor_far", Vector3(-9.0, 1.7, 3.2), Vector3(0.0, 1.4, -0.6)],
+	["front", Vector3(0.0, 1.7, 4.3), Vector3(0.0, 1.45, -0.6)],
+	["three_quarter", Vector3(3.2, 1.8, 3.4), Vector3(0.0, 1.35, -0.6)],
+	["side", Vector3(4.0, 1.7, 0.2), Vector3(0.0, 1.3, -0.8)],
+	["close_counter", Vector3(0.6, 1.55, 1.3), Vector3(-0.2, 1.05, -0.3)],
+	["close_ofrenda", Vector3(-0.55, 1.5, 0.85), Vector3(-1.13, 1.25, -0.3)],
+	["close_awning", Vector3(0.6, 1.85, 1.0), Vector3(0.0, 2.25, -0.2)],
+	["close_neon", Vector3(0.8, 2.35, 1.5), Vector3(0.0, 2.65, 0.0)],
+	["aisle", Vector3(1.15, 1.65, -1.0), Vector3(-1.0, 1.15, -1.5)],
+	["corridor_far", Vector3(-9.0, 1.8, 3.2), Vector3(0.0, 1.5, -0.8)],
 ]
 
 var out := "/tmp/underground-lab/"

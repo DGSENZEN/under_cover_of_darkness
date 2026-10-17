@@ -127,7 +127,7 @@ class Atlas(unittest.TestCase):
         np.savez(self.source / "piece_texels.npz", **texels)
         Image.fromarray((_ao() * 255).astype(np.uint8), "L").save(self.source / "piece_ao.png")
         (self.source / "piece_regions.json").write_text(json.dumps(
-            {"slots": ["wood", "glass_or_not"], "atlas_px": PX, "px_per_m": 50}))
+            {"slots": ["wood", "mystery"], "atlas_px": PX, "px_per_m": 50}))
         (self.recipes / "wood.json").write_text(json.dumps(_recipe(light=0.5)))
         grey = (np.random.default_rng(1).random((64, 64)) * 255).astype(np.uint8)
         Image.fromarray(np.dstack([grey, np.full_like(grey, 255)]), "LA").save(self.brushes / "brush_02.png")
@@ -140,10 +140,10 @@ class Atlas(unittest.TestCase):
                                  "--recipes=%s" % self.recipes, "--out=%s" % self.out, "--brushes=%s" % self.brushes],
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("no recipe for slot glass_or_not", result.stderr)
+        self.assertIn("no recipe for slot mystery", result.stderr)
 
     def test_writes_base(self):
-        (self.recipes / "glass_or_not.json").write_text(json.dumps(_recipe(colour="#304050")))
+        (self.recipes / "mystery.json").write_text(json.dumps(_recipe(colour="#304050")))
         path = layered_atlas.paint("piece", self.source, self.out, self.recipes, self.brushes)
         self.assertEqual(path, self.out / "piece_base.png")
         with Image.open(path) as image:
@@ -157,7 +157,7 @@ class Atlas(unittest.TestCase):
 
     def test_missing_brush_sheet_names_the_fix(self):
         (self.brushes / "brush_02.png").unlink()
-        (self.recipes / "glass_or_not.json").write_text(json.dumps(_recipe()))
+        (self.recipes / "mystery.json").write_text(json.dumps(_recipe()))
         with self.assertRaises(FileNotFoundError) as caught:
             layered_atlas.paint("piece", self.source, self.out, self.recipes, self.brushes)
         self.assertIn("brushes.py", str(caught.exception))

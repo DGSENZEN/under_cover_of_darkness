@@ -5,6 +5,7 @@ extends Node3D
 ## grime decals (F3); the player can walk round its front.
 
 const LAB := preload("res://maps/underground_lab.tscn")
+const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
 const PARTS := ["stall_frame", "stall_counter", "stall_awning", "stall_shelves", "stall_clutter", "stall_ofrenda",
 	"stall_neon", "stall_bulb"]
 
@@ -158,6 +159,67 @@ func _run() -> void:
 		hum != null and hum.stream != null and hum.stream.resource_path == "res://audio/ambience/neon_hum.wav"
 		and hum.max_distance <= 8.0 and hum.playing and follows,
 		"hum %s" % [hum])
+
+	# U14 she can work it: the player walks in past the counter's end and along behind it
+	var way_in := await _walk(Vector3(0.95, 1.05, 1.4), 0.0, func(p): return p.z < -1.1, 600)
+	var along := await _walk(lab.player.global_position, PI / 2, func(p): return p.x < -0.1, 600)
+	_check("U14 the player walks in past the counter's end and stands along behind it",
+		way_in["ok"] and along["ok"] and absf(along["end"].z + 1.1) < 0.3,
+		"in %s along %s" % [way_in, along])
+
+	# U15 her ofrenda's candles burn: a flame on each recorded wick, their light flickering
+	var flames: Array = lab.flames.find_children("candles", "MultiMeshInstance3D", true, false) if lab.flames != null else []
+	var glow: OmniLight3D = lab.flames.find_children("*", "OmniLight3D", true, false)[0] if lab.flames != null else null
+	var energies := {}
+
+	if glow != null:
+		for i in 60:
+			await get_tree().physics_frame
+			energies[snappedf(glow.light_energy, 0.001)] = true
+	_check("U15 her ofrenda's three candles burn on their wicks, their light flickering",
+		flames.size() == 1 and flames[0].visible and flames[0].multimesh.instance_count == 3 and energies.size() >= 3,
+		"flames %s levels %d" % [flames.size(), energies.size()])
+
+	# U16 the copal hangs under the canvas: a pool of haze over the censer
+	var pool: Array = lab.censer.find_children("*", "FogVolume", true, false)
+	_check("U16 the copal smoke pools in a haze under the canvas over the censer",
+		pool.size() == 1 and (pool[0] as Node3D).global_position.y > 1.9 and (pool[0] as Node3D).global_position.y < 2.3,
+		"%s" % [pool])
+
+	# U17 the neon washes its sign's face; the bodged tap at the junction sparks now and then
+	var wash: Decal = lab.neon_wash
+	var before: int = FireParticles.emitted(&"spark")
+	lab.spark()
+	var sparked: int = FireParticles.emitted(&"spark") - before
+	_check("U17 the neon washes the sign's face with its glow, and the junction's bodged tap throws sparks",
+		wash != null and wash.texture_emission != null and wash.emission_energy > 0.0 and sparked > 0
+		and lab.next_spark > 0.0, "wash %s sparks %d next %.1f" % [wash, sparked, lab.next_spark])
+
+	# U18 the work lights' beams show in the air: a cone of haze under each
+	var cones: Array = lab.shafts.filter(func(f): return f is FogVolume and f.shape == RenderingServer.FOG_VOLUME_SHAPE_CONE)
+	_check("U18 each work light throws a visible shaft (a cone of haze under it)", cones.size() == 2,
+		"%d shafts" % cones.size())
+
+	# U19 water drips off the conduit into a puddle, and is heard
+	var drip_ok: bool = lab.drip != null and lab.drip.emitting and lab.puddle != null and lab.drip_sound != null \
+		and lab.drip_sound.stream != null and absf(lab.drip.global_position.y - (lab.CONDUIT.y - 0.1)) < 0.15
+	_check("U19 water drips off the conduit into a puddle on the floor, its drip heard",
+		drip_ok, "drip %s puddle %s sound %s" % [lab.drip, lab.puddle, lab.drip_sound])
+
+	# U20 moths, drawn by the bulb, circle it
+	var moths: Array = lab.moths.get_children() if lab.moths != null else []
+	var at_start: Array = moths.map(func(m): return m.global_position)
+	await _frames(30)
+	var moved := 0
+	var near := 0
+
+	for i in moths.size():
+		if moths[i].global_position.distance_to(at_start[i]) > 0.02:
+			moved += 1
+		if moths[i].global_position.distance_to(lab.bulb.global_position) < 0.6:
+			near += 1
+	_check("U20 three moths circle the bulb, drawn by its light", moths.size() == 3 and moved == 3 and near == 3,
+		"%d moths, %d moving, %d near" % [moths.size(), moved, near])
 
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")

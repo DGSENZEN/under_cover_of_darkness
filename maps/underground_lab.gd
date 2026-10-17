@@ -13,30 +13,42 @@ extends Node3D
 
 const PLAYER := preload("res://Player.tscn")
 const Vfx := preload("res://scripts/Level/Vfx.gd")
+const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 
 ## The corridor (m): its run along X, the wall the stall backs onto, the far wall, the vault.
 const RUN := 12.0
-const BACK_WALL := -1.45
+const BACK_WALL := -2.35
 const FAR_WALL := 4.5
 const HEIGHT := 4.0
 const WALL := 0.3
 ## Godot positions of what the stall's script built (Blender x, z, -y).
-const BULB := Vector3(0.0, 1.70, -0.62)
+const BULB := Vector3(0.1, 2.15, -1.1)
 ## Where the bulb's cord meets the canvas: the pivot it swings from.
-const BULB_PIVOT := Vector3(0.0, 2.14, -0.62)
+const BULB_PIVOT := Vector3(0.1, 2.47, -1.1)
 ## The top of the copal on the censer.
-const CENSER := Vector3(0.62, 1.2, -0.22)
+const CENSER := Vector3(0.0, 1.2, -0.22)
 ## The corridor's draught, the one wind the smoke and the bulb answer to (m/s).
 const DRAUGHT := Vector3(0.35, 0.0, 0.0)
 const HUM := "res://audio/ambience/neon_hum.wav"
 ## The hum at full, and how near silence it falls when the tube goes dark (dB).
 const HUM_DB := -8.0
 const HUM_DARK := 0.05
-const SIGN := Vector3(0.0, 2.36, 0.6)
-const JUNCTION_TOP := Vector3(1.12, 2.54, -1.26)
-const CONDUIT := Vector3(0.0, 3.05, -1.26)
+## Where the stall's lit candles stand (tools/eclipse/stall.py's wicks).
+const WICKS := "res://assets/eclipse/source/stall_wicks.json"
+## The neon's glow on its sign's face (Blender's recessed face, y 0.05).
+const SIGN_FACE := Vector3(0.0, 2.65, -0.02)
+const SIGN_SIZE := Vector2(1.9, 0.44)
+const WASH_ENERGY := 0.5
+## The bodged tap at the junction box throws a few sparks every so often (s).
+const SPARKS_EVERY := Vector2(5.0, 13.0)
+## Water off the conduit, beside the stall.
+const DRIP_AT := Vector3(-2.3, 3.15, -2.17)
+const DRIP_SOUND := "res://audio/weather/drip.wav"
+const SIGN := Vector3(0.0, 2.65, 0.6)
+const JUNCTION_TOP := Vector3(1.5, 2.85, -2.17)
+const CONDUIT := Vector3(0.0, 3.25, -2.17)
 const SODIUM := Color(1.0, 0.76, 0.5)
 const BULB_COLOUR := Color(1.0, 0.76, 0.48)
 ## The sign's colour until the user gives the sign its words and colour.
@@ -57,6 +69,15 @@ var bulb_pivot: Sway
 var censer: Node3D
 var dust: Array[Node3D] = []
 var hum: AudioStreamPlayer3D
+var flames: Node3D
+var neon_wash: Decal
+var next_spark := 0.0
+var shafts: Array[FogVolume] = []
+var drip: GPUParticles3D
+var puddle: Decal
+var drip_sound: AudioStreamPlayer3D
+var moths: Moths
+var _sparks := RandomNumberGenerator.new()
 var work_lights: Array[Light3D] = []
 var form_light: DirectionalLight3D
 var form_material: StandardMaterial3D
@@ -296,7 +317,7 @@ func _environment() -> void:
 
 
 func _lights() -> void:
-	for x in [-2.6, 2.6]:
+	for x in [-2.8, 2.8]:
 		var light := OmniLight3D.new()
 		light.name = "work_%d" % int(x)
 		light.light_color = SODIUM
@@ -358,6 +379,18 @@ func _effects() -> void:
 		Vfx.emit(motes, true)
 		dust.append(motes)
 
+	_candle_flames()
+	_neon_wash()
+	_sparks.seed = 23
+	next_spark = _sparks.randf_range(SPARKS_EVERY.x, SPARKS_EVERY.y)
+	_shafts()
+	_drip()
+	moths = Moths.new()
+	moths.name = "moths"
+	moths.seed = 5
+	moths.around = bulb
+	add_child(moths)
+
 	if neon != null:
 		hum = AudioStreamPlayer3D.new()
 		hum.name = "hum"
@@ -374,18 +407,143 @@ func hum_volume(level: float) -> float:
 	return HUM_DB + linear_to_db(lerpf(HUM_DARK, 1.0, clampf(level, 0.0, 1.0)))
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if hum != null and neon != null:
 		hum.volume_db = hum_volume(neon.level())
+
+	if neon_wash != null and neon != null:
+		neon_wash.emission_energy = WASH_ENERGY * neon.level()
+
+	next_spark -= delta
+
+	if next_spark <= 0.0:
+		spark()
+
+
+## The junction's bodged tap throws a few sparks, and the next is reckoned.
+func spark() -> void:
+	FireParticles.emit(self, &"spark", JUNCTION_TOP + Vector3(-0.05, -0.08, 0.06), _sparks.randi_range(5, 9), DRAUGHT,
+		Color(1.0, 0.85, 0.55))
+	next_spark = _sparks.randf_range(SPARKS_EVERY.x, SPARKS_EVERY.y)
+
+
+## A flame on each of the stall's lit wicks, their light flickering over them.
+func _candle_flames() -> void:
+	if not FileAccess.file_exists(WICKS):
+		return
+
+	var wicks: Array = []
+
+	for list in (JSON.parse_string(FileAccess.get_file_as_string(WICKS)) as Dictionary).values():
+		wicks += list
+
+	if wicks.is_empty():
+		return
+
+	var middle := Vector3.ZERO
+
+	for w in wicks:
+		middle += Vector3(w[0], w[1], w[2]) / wicks.size()
+
+	flames = Vfx.system("candles")
+	add_child(flames)
+	Vfx.place(flames, middle, {"wicks": wicks})
+	Vfx.emit(flames, true)
+
+
+## The neon's own glow washed over its sign's face: an emissive decal,
+## pulsing with the tube.
+func _neon_wash() -> void:
+	var glow := GradientTexture2D.new()
+	glow.fill = GradientTexture2D.FILL_RADIAL
+	glow.fill_from = Vector2(0.5, 0.5)
+	glow.fill_to = Vector2(0.5, 0.0)
+	var fade := Gradient.new()
+	fade.set_color(0, Color(1, 1, 1, 1))
+	fade.set_color(1, Color(1, 1, 1, 0))
+	glow.gradient = fade
+	neon_wash = Decal.new()
+	neon_wash.name = "neon_wash"
+	neon_wash.size = Vector3(SIGN_SIZE.x, 0.2, SIGN_SIZE.y * 2.0)
+	neon_wash.texture_emission = glow
+	neon_wash.modulate = NEON_COLOUR
+	neon_wash.emission_energy = WASH_ENERGY
+	neon_wash.albedo_mix = 0.0
+	add_child(neon_wash)
+	neon_wash.position = SIGN_FACE + Vector3(0, 0, 0.08)
+	neon_wash.rotation_degrees = Vector3(90, 0, 0)
+
+
+## The work lights' beams in the air: a cone of haze under each, its point at the lamp.
+func _shafts() -> void:
+	for light in work_lights:
+		var cone := FogVolume.new()
+		cone.name = "shaft"
+		cone.shape = RenderingServer.FOG_VOLUME_SHAPE_CONE
+		cone.size = Vector3(2.2, 3.4, 2.2)
+		var haze := FogMaterial.new()
+		haze.density = 1.2
+		haze.albedo = Color(1.0, 0.86, 0.66)
+		haze.edge_fade = 0.6
+		cone.material = haze
+		add_child(cone)
+		cone.position = light.position - Vector3(0, 1.7, 0)
+		shafts.append(cone)
+
+
+## Water off the conduit: a drop every so often, falling to a puddle, heard.
+func _drip() -> void:
+	drip = GPUParticles3D.new()
+	drip.name = "drip"
+	drip.amount = 3
+	drip.lifetime = 0.85
+	drip.fixed_fps = 60
+	drip.local_coords = false
+	var fall := ParticleProcessMaterial.new()
+	fall.gravity = Vector3(0, -9.8, 0)
+	fall.direction = Vector3.DOWN
+	fall.initial_velocity_min = 0.0
+	fall.initial_velocity_max = 0.05
+	drip.process_material = fall
+	var drop := QuadMesh.new()
+	drop.size = Vector2(0.012, 0.045)
+	var water := StandardMaterial3D.new()
+	water.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	water.albedo_color = Color(0.75, 0.85, 0.95, 0.7)
+	water.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	drop.material = water
+	drip.draw_pass_1 = drop
+	drip.visibility_aabb = AABB(Vector3(-0.5, -3.5, -0.5), Vector3(1, 4, 1))
+	add_child(drip)
+	drip.position = DRIP_AT
+	drip.emitting = true
+
+	puddle = Decal.new()
+	puddle.name = "puddle"
+	puddle.size = Vector3(0.7, 0.3, 0.5)
+	puddle.texture_albedo = _painted(["decal_grime.png"], true)
+	puddle.modulate = Color(0.32, 0.38, 0.45)
+	add_child(puddle)
+	puddle.position = Vector3(DRIP_AT.x, 0.0, DRIP_AT.z + 0.1)
+
+	drip_sound = AudioStreamPlayer3D.new()
+	drip_sound.name = "drip_sound"
+	drip_sound.stream = load(DRIP_SOUND)
+	drip_sound.max_distance = 10.0
+	drip_sound.unit_size = 1.5
+	drip_sound.autoplay = true
+	add_child(drip_sound)
+	drip_sound.position = puddle.position
 
 
 # The grime, each with its cause
 
 func _decals() -> void:
 	# Water off the conduit runs down the wall beside the stall.
-	_decal("drip", Vector3(-2.0, 2.3, BACK_WALL + 0.1), Vector3(0.9, 0.4, 1.6), Vector3(90, 0, 0))
+	_decal("drip", Vector3(-2.3, 2.3, BACK_WALL + 0.1), Vector3(0.9, 0.4, 1.6), Vector3(90, 0, 0))
 	# The censer's copal smoke has browned the canvas over it.
-	_decal("soot", Vector3(0.62, 2.1, -0.22), Vector3(0.9, 0.5, 0.9), Vector3(180, 0, 0))
+	_decal("soot", Vector3(0.0, 2.3, -0.22), Vector3(0.9, 0.5, 0.9), Vector3(180, 0, 0))
 	# Feet and spills have worn the floor in front of the counter.
 	_decal("grime", Vector3(0.0, 0.0, 0.7), Vector3(2.8, 0.4, 1.4), Vector3.ZERO)
 
