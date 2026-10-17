@@ -1,45 +1,15 @@
 extends Node3D
 ## Ánimas from a drain (docs/superpowers/refs/underground/supernatural_refs.md): the souls of the
-## old city's drowned, come up the drain from its cistern, drawn by the living's candles. Small
-## flames (anima.gdshader), each in a soft glow (its halo) trailing wisps of itself, its light
-## pooling on the floor under it. Some wander in the sump under the grate, its bars black against
+## old city's drowned, come up the drain from its cistern, drawn by the living's candles. Each is
+## drawn the Deadlock way (vfx_method.md: meshes, not cards): a 3D flame, its bright core inside a
+## larger shell the noise eats away as it climbs, a ribbon of itself trailing where it has been,
+## its light pooling on the floor under it. Some wander in the sump under the grate, its bars black against
 ## their glow; most of the time a few are out: each rises through a gap between the bars, drifts
 ## round the drain up to chest height, leaning toward the candles (`toward`), and in a while sinks
 ## home. From anyone near (`flee_from`) they keep their distance and dim, but stay; from what they
 ## fear passing (`hush`, the dark train) they all sink and go dark. Placed at the drain's middle
 ## at the floor, its axes the grate's (the gaps between its bars at `lanes` along Z).
 
-const SHADER := preload("res://scripts/Visual/anima.gdshader")
-const HALO_CODE := """
-shader_type spatial;
-render_mode unshaded, cull_disabled, depth_draw_never, blend_add, shadows_disabled;
-uniform vec4 colour : source_color;
-uniform float presence = 1.0;
-void vertex() {
-	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
-}
-void fragment() {
-	vec2 p = UV * 2.0 - 1.0;
-	float r = length(p);
-	float soft = pow(clamp(1.0 - r, 0.0, 1.0), 2.2);
-	ALBEDO = colour.rgb * soft * presence * 1.3;
-}
-"""
-const WISP_CODE := """
-shader_type spatial;
-render_mode unshaded, cull_disabled, depth_draw_never, blend_add, shadows_disabled;
-uniform vec4 colour : source_color;
-void vertex() {
-	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
-	MODELVIEW_MATRIX = MODELVIEW_MATRIX * mat4(vec4(length(MODEL_MATRIX[0].xyz), 0, 0, 0), vec4(0, length(MODEL_MATRIX[1].xyz), 0, 0),
-		vec4(0, 0, length(MODEL_MATRIX[2].xyz), 0), vec4(0, 0, 0, 1));
-}
-void fragment() {
-	vec2 p = UV * 2.0 - 1.0;
-	float soft = clamp(1.0 - length(p), 0.0, 1.0);
-	ALBEDO = colour.rgb * soft * soft * COLOR.a;
-}
-"""
 ## Where they wander under the grate (local m): the sump's middle and how far either way.
 const HOME := Vector3(0.0, -0.12, 0.0)
 const REACH := Vector3(0.2, 0.05, 0.2)
@@ -57,8 +27,16 @@ const RISE_GAP := Vector2(1.5, 4.0)
 const SHY := 1.6
 const KEEP := 1.15
 const SHY_DIM := 0.55
-const FLAME_SIZE := Vector2(0.13, 0.2)
-const HALO_SIZE := 0.9
+## A soul's flame: its core's height and width, its shell's, its trail's length (points) and width.
+const CORE := Vector2(0.26, 0.075)
+const SHELL := Vector2(0.46, 0.16)
+const TRAIL_POINTS := 22
+const TRAIL_EVERY := 0.035
+const TRAIL_WIDTH := 0.16
+## Its bands: a near-white core, the seeped green body, a deep cold edge.
+const CORE_COLOUR := Color("eafff0")
+const BODY_COLOUR := Color("8fe39a")
+const EDGE_COLOUR := Color("1d5446")
 ## The light each casts at full, and how far.
 const LAMP_ENERGY := 0.55
 const LAMP_RANGE := 1.8
@@ -88,10 +66,10 @@ void fragment() {
 ## The gaps between the grate's bars, along local Z.
 @export var lanes := PackedFloat32Array()
 
-## Each ánima's flame (it carries its halo, its wisps and its light).
-var lights: Array[Node3D] = []
-var halos: Array[MeshInstance3D] = []
-var trails: Array[GPUParticles3D] = []
+## Each ánima's flame (its core; it carries its shell and its light), and its trail.
+var lights: Array[MeshInstance3D] = []
+var shells: Array[MeshInstance3D] = []
+var ribbons: Array[MeshInstance3D] = []
 var lamps: Array[OmniLight3D] = []
 var glow: OmniLight3D
 ## 1 when they are here; 0 when they have hidden from what passes.
@@ -103,48 +81,63 @@ var _time := 0.0
 var _rng := RandomNumberGenerator.new()
 var _souls := []
 var _next_rise := 0.0
-var _flames: Array[ShaderMaterial] = []
-var _halo_looks: Array[ShaderMaterial] = []
+var _cores: Array[ShaderMaterial] = []
+var _shell_looks: Array[ShaderMaterial] = []
+var _trail_looks: Array[ShaderMaterial] = []
+var _paths := []
+var _trail_clock := 0.0
 var _sheet: ShaderMaterial
 
 
 func _ready() -> void:
 	_rng.seed = seed
 
+	var core_mesh := MeshVfx.flame(CORE.x, CORE.y)
+	var shell_mesh := MeshVfx.flame(SHELL.x, SHELL.y, 14, 16)
+
 	for i in count:
 		var flame := MeshInstance3D.new()
 		flame.name = "anima_%d" % i
-		var quad := QuadMesh.new()
-		quad.size = FLAME_SIZE
-		var look := ShaderMaterial.new()
-		look.shader = SHADER
-		look.set_shader_parameter(&"colour", Color(colour.r * 1.6, colour.g * 1.6, colour.b * 1.6))
-		look.set_shader_parameter(&"seed", float(i) * 1.37 + seed)
-		quad.material = look
-		flame.mesh = quad
+		flame.mesh = core_mesh
+		var core := MeshVfx.look(CORE_COLOUR, BODY_COLOUR, EDGE_COLOUR, 3.2, 0.02, 0.9, float(i) * 3.1)
+		core.set_shader_parameter(&"tail_eat", 0.5)
+		core.set_shader_parameter(&"churn", 0.004)
+		flame.set_surface_override_material(0, core)
 		flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(flame)
 		lights.append(flame)
-		_flames.append(look)
+		_cores.append(core)
 
-		var halo := MeshInstance3D.new()
-		halo.name = "halo"
-		var disc := QuadMesh.new()
-		disc.size = Vector2.ONE * HALO_SIZE
-		var soft := ShaderMaterial.new()
-		soft.shader = Shader.new()
-		soft.shader.code = HALO_CODE
-		soft.set_shader_parameter(&"colour", colour)
-		disc.material = soft
-		halo.mesh = disc
-		halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		flame.add_child(halo)
-		halos.append(halo)
-		_halo_looks.append(soft)
+		# Its shell, larger, rooted a little below the core, eaten away in tongues as it climbs.
+		var shell := MeshInstance3D.new()
+		shell.name = "shell"
+		shell.mesh = shell_mesh
+		var outer := MeshVfx.look(BODY_COLOUR, BODY_COLOUR.darkened(0.25), EDGE_COLOUR, 2.0, 0.28, 1.4, float(i) * 1.7 + 9.0)
+		outer.set_shader_parameter(&"tail_eat", 0.75)
+		outer.set_shader_parameter(&"churn", 0.012)
+		outer.set_shader_parameter(&"tiling", Vector2(1.2, 0.8))
+		outer.set_shader_parameter(&"opacity", 0.7)
+		shell.set_surface_override_material(0, outer)
+		shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		flame.add_child(shell)
+		shell.position = Vector3(0.0, -0.04, 0.0)
+		shells.append(shell)
+		_shell_looks.append(outer)
 
-		var wisps := _wisps()
-		flame.add_child(wisps)
-		trails.append(wisps)
+		# Its trail: a ribbon of itself left where it has been (drawn in the world, not carried).
+		var ribbon := MeshInstance3D.new()
+		ribbon.name = "ribbon_%d" % i
+		ribbon.top_level = true
+		var trail := MeshVfx.look(BODY_COLOUR, BODY_COLOUR.darkened(0.2), EDGE_COLOUR, 2.0, 0.15, 1.8, float(i) * 2.3 + 4.0)
+		trail.set_shader_parameter(&"tail_eat", 0.85)
+		trail.set_shader_parameter(&"tiling", Vector2(1.0, 3.0))
+		trail.set_shader_parameter(&"churn", 0.0)
+		ribbon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(ribbon)
+		ribbon.global_transform = Transform3D.IDENTITY
+		ribbons.append(ribbon)
+		_trail_looks.append(trail)
+		_paths.append(PackedVector3Array())
 
 		var lamp := OmniLight3D.new()
 		lamp.name = "lamp"
@@ -194,6 +187,8 @@ func _process(delta: float) -> void:
 
 	for i in count:
 		_move(i, delta, hidden)
+
+	_trail(delta)
 
 	_sheet.set_shader_parameter(&"presence", presence)
 	glow.light_energy = GLOW_ENERGY * presence
@@ -268,12 +263,12 @@ func _move(i: int, delta: float, hidden: bool) -> void:
 	var near := _near_living(at)
 	soul["fade"] = lerpf(soul["fade"], SHY_DIM if near else 1.0, 1.0 - exp(-4.0 * delta))
 	var shown: float = soul["fade"] * presence
-	_flames[i].set_shader_parameter(&"presence", shown)
-	_halo_looks[i].set_shader_parameter(&"presence", shown * (1.0 if at.y > 0.0 else 0.4))
+	# Fading is eating: a soul going dim is eaten away, never made see-through.
+	_cores[i].set_shader_parameter(&"erosion", lerpf(0.75, 0.02, shown))
+	_shell_looks[i].set_shader_parameter(&"erosion", lerpf(0.9, 0.28, shown))
+	_trail_looks[i].set_shader_parameter(&"erosion", lerpf(0.95, 0.15, shown))
 	var risen := clampf(at.y / 0.4, 0.0, 1.0)
 	lamps[i].light_energy = LAMP_ENERGY * risen * shown
-	trails[i].emitting = shown > 0.05
-	trails[i].amount_ratio = 0.35 + 0.65 * risen
 
 
 ## Pushed away from the living, so they keep their distance.
@@ -320,46 +315,37 @@ func _nearest_lane(z: float) -> float:
 	return best
 
 
-## Wisps trailing off a flame: small soft specks of its light left behind it as it moves, rising
-## a little and fading.
-func _wisps() -> GPUParticles3D:
-	var wisps := GPUParticles3D.new()
-	wisps.name = "wisps"
-	wisps.amount = 28
-	wisps.lifetime = 1.4
-	wisps.local_coords = false
-	var process := ParticleProcessMaterial.new()
-	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	process.emission_sphere_radius = 0.03
-	process.gravity = Vector3(0.0, 0.08, 0.0)
-	process.initial_velocity_min = 0.01
-	process.initial_velocity_max = 0.05
-	process.spread = 180.0
-	process.scale_min = 0.5
-	process.scale_max = 1.0
-	var shrink := Curve.new()
-	shrink.add_point(Vector2(0.0, 1.0))
-	shrink.add_point(Vector2(1.0, 0.0))
-	var curve := CurveTexture.new()
-	curve.curve = shrink
-	process.scale_curve = curve
-	var fade := Gradient.new()
-	fade.set_color(0, Color(1, 1, 1, 0.8))
-	fade.set_color(1, Color(1, 1, 1, 0.0))
-	var ramp := GradientTexture1D.new()
-	ramp.gradient = fade
-	process.color_ramp = ramp
-	wisps.process_material = process
-	var speck := QuadMesh.new()
-	speck.size = Vector2(0.06, 0.06)
-	var look := ShaderMaterial.new()
-	look.shader = Shader.new()
-	look.shader.code = WISP_CODE
-	look.set_shader_parameter(&"colour", colour)
-	speck.material = look
-	wisps.draw_pass_1 = speck
-	wisps.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	return wisps
+## Each soul's trail: where it has been, a point every TRAIL_EVERY s, drawn as a ribbon turned to
+## the eye; none while it is home under the grate.
+func _trail(delta: float) -> void:
+	_trail_clock += delta
+	var step := _trail_clock >= TRAIL_EVERY
+	if step:
+		_trail_clock = 0.0
+	var camera := get_viewport().get_camera_3d()
+	var eye := camera.global_position if camera != null else global_position + Vector3(0, 1.6, 3)
+
+	for i in count:
+		var path: PackedVector3Array = _paths[i]
+		var head := lights[i].global_position + Vector3(0.0, CORE.x * 0.35, 0.0)
+
+		if _souls[i]["state"] == "home":
+			path.clear()
+		elif step:
+			path.insert(0, head)
+			if path.size() > TRAIL_POINTS:
+				path.resize(TRAIL_POINTS)
+		elif path.size() > 0:
+			path[0] = head
+
+		_paths[i] = path
+		if path.size() >= 2:
+			# (Its look on the mesh itself: a mesh made anew each frame drops a node's override.)
+			var strip := MeshVfx.ribbon(path, TRAIL_WIDTH, eye)
+			strip.surface_set_material(0, _trail_looks[i])
+			ribbons[i].mesh = strip
+		else:
+			ribbons[i].mesh = null
 
 
 func _build_glow() -> void:

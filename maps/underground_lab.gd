@@ -109,8 +109,6 @@ const NAHUAL_AT := Vector3(-5.0, 0.0, 4.35)
 ## Enormous, as the tellings have it: the kit's dog made half again as big (about 1.7 m long lying).
 const NAHUAL_SCALE := 1.35
 const SPECTRE := preload("res://scripts/Visual/spectre.gdshader")
-## Where its wisps rise from: along its back (its own axes, before its scale).
-const WISPS_AT := Vector3(0.45, 0.45, 0.0)
 const HAT_AT := Vector3(-3.9, 0.45, 4.25)
 const EMBER := Color("ff5a1e")
 ## The gaps between the drain's grate bars, along the grate (m from its middle): the floor kit's
@@ -1180,19 +1178,6 @@ func _nahual() -> void:
 	# Turned so it lies along the far wall's foot with its head toward the corridor's middle.
 	nahual.rotation.y = PI / 2.0
 	nahual.scale = Vector3.ONE * NAHUAL_SCALE
-	# Dark wisps rising off its back, drawn and gone with it (they are its own).
-	var wisps := Vfx.system("spectre_wisps")
-	wisps.name = "wisps"
-	nahual.add_child(wisps)
-	wisps.position = WISPS_AT
-	Vfx.emit(wisps, true)
-	# Its smoke, thrown up when it is walked into.
-	var burst := Vfx.system("spectre_scatter")
-	burst.name = "scatter"
-	nahual.add_child(burst)
-	burst.position = WISPS_AT
-	nahual.scatter = burst.find_children("*", "GPUParticles3D", false, false)[0]
-	nahual.scatter.emitting = false
 	old_hat = _place(meshes["old_hat"], look, "old_hat", HAT_AT, 0.7, false)
 
 

@@ -669,8 +669,7 @@ func _run() -> void:
 				haunted = haunted and drawn is StandardMaterial3D
 			else:
 				haunted = haunted and drawn is ShaderMaterial and (drawn as ShaderMaterial).shader.resource_path.ends_with("spectre.gdshader")
-	var wisps: Array = spectre.find_children("wisps", "Node3D", true, false)
-	var rising: bool = wisps.size() == 1 and wisps[0].find_children("*", "GPUParticles3D", false, false).any(func(p): return p.emitting)
+	var rising: bool = spectre.tendrils.size() >= 4 and spectre.tendrils.all(func(t): return t.is_visible_in_tree())
 	_check("U51 the nahual is a spectre: black fraying into rising smoke, ember eyes solid, dark wisps off its back",
 		haunted and rising, "spectre shader %s wisps %s" % [haunted, rising])
 
@@ -696,8 +695,13 @@ func _run() -> void:
 			an_farthest = maxf(an_farthest, Vector2(l.global_position.x - an_drain.x, l.global_position.z - an_drain.z).length())
 		out_frames += 1 if out >= 2 else 0
 		lit_floor = lit_floor or an.lamps.any(func(m): return m.light_energy > 0.2 and m.global_position.y > 0.3)
-	var spirited: bool = an.halos.size() == an.lights.size() and an.trails.size() == an.lights.size() \
-		and an.trails.all(func(t): return t.emitting)
+	# 3D, the Deadlock way (docs/superpowers/refs/underground/vfx_method.md): each a lathed flame mesh in an
+	# eroding shell, a ribbon trailing it; no sprite cards, no particle specks.
+	var no_cards: bool = an.find_children("*", "GPUParticles3D", true, false).is_empty() \
+		and an.lights.all(func(l): return not (l.mesh is QuadMesh) and l.mesh.get_faces().size() >= 3 * 60)
+	var ribboned: bool = an.ribbons.size() == an.lights.size() \
+		and an.ribbons.any(func(r): return r.mesh != null and r.mesh.get_surface_count() > 0 and r.mesh.surface_get_array_len(0) >= 16)
+	var spirited: bool = an.shells.size() == an.lights.size() and no_cards and ribboned and _all_mesh_vfx(an.lights)
 	var an_near: Vector3 = an_drain + Vector3(-0.9, 1.05, 0.9)
 	lab.player.global_position = an_near
 	await _frames(240)
@@ -713,8 +717,8 @@ func _run() -> void:
 	_check("U52 the ánimas: two or more out most of the time, up to chest height, haloed and trailing, lighting the floor; shy but staying",
 		an.lights.size() >= 6 and out_frames > 1800 * 0.6 and an_highest > 1.0 and an_highest < 1.8 and an_farthest < 4.5
 		and spirited and lit_floor and kept_off and still_out >= 1,
-		"count %d out-2 %.2f highest %.2f farthest %.2f spirited %s lit %s kept off %s still out %d" % [an.lights.size(),
-		out_frames / 1800.0, an_highest, an_farthest, spirited, lit_floor, kept_off, still_out])
+		"count %d out-2 %.2f highest %.2f farthest %.2f spirited %s (no cards %s ribbons %s) lit %s kept off %s still out %d" % [
+		an.lights.size(), out_frames / 1800.0, an_highest, an_farthest, spirited, no_cards, ribboned, lit_floor, kept_off, still_out])
 
 	# U53 the nahual's eyes glow: bright past white (the bloom takes them), a halo round each, a faint red light
 	var nd: Node3D = lab.nahual
@@ -742,12 +746,20 @@ func _run() -> void:
 	var whole: bool = nd.presence > 0.95 and nd.solid.collision_layer != 0
 	lab.player.global_position = nd.middle() + Vector3(0.0, 1.05, -0.9)
 	await _frames(90)
-	var scattered: bool = nd.presence < 0.1 and nd.solid.collision_layer == 0 and nd.scatter.emitting
+	var scattered: bool = nd.presence < 0.1 and nd.solid.collision_layer == 0 and nd.scattering > 0.5
 	lab.player.global_position = Vector3(8.0, 1.05, 3.0)
 	await _frames(300)
 	var reformed: bool = nd.presence > 0.95 and nd.solid.collision_layer != 0 and nd.visible
 	nd.watcher = null
 	away_eye.queue_free()
+	# U55 the nahual's smoke is mesh, the Deadlock way: tendrils rising off its back and a scatter of them,
+	#     drawn by the shared mesh effect; no sprite cards
+	var smoke_meshes: Array = nd.tendrils + nd.scatter_tendrils
+	var meshed: bool = nd.find_children("*", "GPUParticles3D", true, false).is_empty() and nd.tendrils.size() >= 4 \
+		and nd.scatter_tendrils.size() >= 6 and _all_mesh_vfx(smoke_meshes)
+	_check("U55 the nahual's smoke is mesh tendrils (rising, and a scatter of them), no sprite cards", meshed,
+		"tendrils %d scatter %d" % [nd.tendrils.size(), nd.scatter_tendrils.size()])
+
 	_check("U54 walked into, the nahual scatters into smoke and is not solid; it re-forms once they step away",
 		whole and scattered and reformed, "whole %s scattered %s reformed %s (presence %.2f)" % [whole, scattered, reformed, nd.presence])
 
@@ -852,3 +864,12 @@ func _furniture(lab: Node3D, kind: String) -> MeshInstance3D:
 
 func _solid(piece: Node3D) -> bool:
 	return piece.find_children("*", "StaticBody3D", true, false).size() > 0
+
+
+## Whether every one is drawn by the shared mesh effect (vfx_mesh.gdshader).
+func _all_mesh_vfx(meshes: Array) -> bool:
+	for mesh: MeshInstance3D in meshes:
+		var look := mesh.get_surface_override_material(0) as ShaderMaterial
+		if look == null or not look.shader.resource_path.ends_with("vfx_mesh.gdshader"):
+			return false
+	return true

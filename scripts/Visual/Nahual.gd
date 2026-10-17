@@ -57,8 +57,13 @@ var head: MeshInstance3D
 var solid: StaticBody3D
 var eye_halos: Array[MeshInstance3D] = []
 var eye_light: OmniLight3D
-## Its smoke thrown up when it scatters (a Vfx effect the bay gives it).
-var scatter: GPUParticles3D
+## Its smoke, the Deadlock way (vfx_method.md): tendrils rising off its back always, and a scatter
+## of them thrown up and out when it is walked into; `scattering` how far that throw has gone.
+var tendrils: Array[MeshInstance3D] = []
+var scatter_tendrils: Array[MeshInstance3D] = []
+var scattering := 0.0
+var _smoke_looks: Array[ShaderMaterial] = []
+var _scatter_looks: Array[ShaderMaterial] = []
 ## How much of it is here: 1 whole, 0 scattered.
 var presence := 1.0
 var _spectre: ShaderMaterial
@@ -115,6 +120,7 @@ func build(body_mesh: Mesh, head_mesh: Mesh, look: Material, ember: Material) ->
 	eye_light.shadow_enabled = false
 	head.add_child(eye_light)
 	eye_light.position = EYES + Vector3(0.12, 0.0, 0.0)
+	_smoke()
 
 
 ## Here, unwatched, as it is when the night begins (tests begin from it).
@@ -209,8 +215,16 @@ func _scatter(delta: float) -> void:
 	elif near > REFORM_FAR:
 		presence = minf(1.0, presence + REFORM_RATE * delta)
 
-	if scatter != null:
-		scatter.emitting = presence < 0.95 and near < REFORM_FAR
+	# The scatter thrown as it goes, settling as it re-forms.
+	scattering = clampf(1.0 - presence, 0.0, 1.0)
+
+	for i in scatter_tendrils.size():
+		var t := scatter_tendrils[i]
+		t.scale = Vector3.ONE * (0.4 + 0.9 * scattering)
+		_scatter_looks[i].set_shader_parameter(&"erosion", lerpf(1.0, 0.25, sin(scattering * PI * 0.5)))
+
+	for look in _smoke_looks:
+		look.set_shader_parameter(&"erosion", lerpf(0.3, 0.95, scattering))
 
 	_spectre.set_shader_parameter(&"presence", presence)
 	solid.collision_layer = 1 if presence > 0.5 else 0
@@ -227,6 +241,55 @@ func _set_eyes(on: bool) -> void:
 		var slot: Material = head.mesh.surface_get_material(i)
 		if slot != null and slot.resource_name == "ember":
 			head.set_surface_override_material(i, _ember if on else _spectre)
+
+
+## Its smoke: tendrils curling up off its back; and, hidden till it scatters, a ring of them thrown
+## up and out from its body.
+func _smoke() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed + 101
+	# (Mignola's black: its smoke black too, only its last edge a cold grey.)
+	var dark := [Color(0.05, 0.05, 0.06), Color(0.04, 0.04, 0.05), Color(0.2, 0.23, 0.26)]
+
+	for i in 5:
+		var root := Vector3(lerpf(0.05, 0.7, float(i) / 4.0), 0.4 + 0.05 * sin(i * 1.3), rng.randf_range(-0.05, 0.05))
+		var path := PackedVector3Array()
+		var lean := rng.randf_range(-0.6, 0.6)
+		for k in 10:
+			var t := k / 9.0
+			path.append(root + Vector3(-0.12 * t + 0.04 * sin(t * 5.0 + i), 0.55 * t, lean * 0.15 * t + 0.03 * cos(t * 6.0 + i)))
+		var smoke := _smoke_mesh(path, rng.randf_range(0.09, 0.13), dark, 0.22, 0.35, float(i) * 2.7)
+		smoke.name = "tendril_%d" % i
+		tendrils.append(smoke)
+		_smoke_looks.append(smoke.get_surface_override_material(0))
+
+	for i in 9:
+		var a := TAU * i / 9.0
+		var root := MIDDLE + Vector3(cos(a) * 0.25, 0.05, sin(a) * 0.12)
+		var path := PackedVector3Array()
+		for k in 10:
+			var t := k / 9.0
+			path.append(root + Vector3(cos(a) * 0.6 * t, 0.7 * t - 0.25 * t * t, sin(a) * 0.45 * t))
+		var burst := _smoke_mesh(path, 0.11, dark, 1.0, 1.4, float(i) * 1.9 + 20.0)
+		burst.name = "scatter_%d" % i
+		scatter_tendrils.append(burst)
+		_scatter_looks.append(burst.get_surface_override_material(0))
+
+
+func _smoke_mesh(path: PackedVector3Array, radius: float, bands: Array, erosion: float, scroll: float,
+		phase: float) -> MeshInstance3D:
+	var smoke := MeshInstance3D.new()
+	smoke.mesh = MeshVfx.tendril(path, radius)
+	var look := MeshVfx.look(bands[0], bands[1], bands[2], 1.0, erosion, scroll, phase)
+	look.set_shader_parameter(&"tail_eat", 0.7)
+	look.set_shader_parameter(&"churn", 0.015)
+	look.set_shader_parameter(&"tiling", Vector2(0.8, 0.6))
+	look.set_shader_parameter(&"hardness", 0.03)
+	look.set_shader_parameter(&"rim", 6.0)
+	smoke.set_surface_override_material(0, look)
+	smoke.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(smoke)
+	return smoke
 
 
 func _go() -> void:
