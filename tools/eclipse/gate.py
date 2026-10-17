@@ -61,7 +61,12 @@ def layered(faces, gap=LAYER_GAP):
             if overlap._dot(normals[i], normals[j]) < overlap.SAME_WAY:
                 continue
 
-            apart = abs(distances[i] - distances[j])
+            # Measured from i's plane to j's middle: two planes' distances from the
+            # origin, each along its own normal, part by centimetres a metre out
+            # when one is tilted a degree or two.
+            points = faces[j]["points"]
+            middle = tuple(sum(p[k] for p in points) / len(points) for k in range(3))
+            apart = abs(overlap._dot(normals[i], middle) - distances[i])
 
             if apart > gap or (apart <= overlap.TOLERANCE and faces[i]["owner"] != faces[j]["owner"]):
                 continue   # far enough apart; or one plane across two objects, which fights() reports

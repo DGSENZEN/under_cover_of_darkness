@@ -14,7 +14,7 @@ BLENDER=${BLENDER:-/Applications/Blender.app/Contents/MacOS/Blender}
 GODOT=${GODOT:-/Users/tinkertailorr/Desktop/Godot.app/Contents/MacOS/Godot}
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-PIECES="kiosk arcade_bay"
+PIECES="kiosk arcade_bay stall"
 # The Zócalo's kits (one atlas each, exported to assets/eclipse/kit/).
 KITS="street_kit canal_kit bridge_stone bridge_steel furniture_kit trade_kit uncanny_kit bound_god figures_kit trees_kit scene_kit drift_kit"
 

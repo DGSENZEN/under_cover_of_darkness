@@ -15,6 +15,7 @@ import bpy
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import arcade_bay  # noqa: E402
+import stall  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -849,6 +850,62 @@ class Bevel(unittest.TestCase):
         common.bevel(o, 0.03)
         faces, tris, _ = common.dump_faces([o])
         self.assertEqual(gate.check(faces, tris, []), [])
+
+
+class Stall(unittest.TestCase):
+    """The Underground's hero piece, the curandera's corridor stall
+    (docs/superpowers/refs/underground/cards/stall.md): its parts, closed,
+    standing on the floor, inside its footprint and budget, its frame and
+    counter bevelled (no long hard edge left)."""
+
+    PARTS = ["stall_frame", "stall_counter", "stall_awning", "stall_shelves", "stall_clutter", "stall_ofrenda",
+             "stall_neon"]
+
+    @classmethod
+    def setUpClass(cls):
+        stall.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_part_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.PARTS))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_no_degenerate_triangles(self):
+        self.assertEqual({n: _smallest_triangle(o) for n, o in self.objects.items() if _smallest_triangle(o) < 1e-7}, {})
+
+    def test_stands_on_the_floor(self):
+        lowest = min(min(v.z for v in _world(o)) for o in self.objects.values())
+        self.assertAlmostEqual(lowest, 0.0, places=4)
+
+    def test_budget(self):
+        self.assertLessEqual(sum(_tris(o) for o in self.objects.values()), 20000)
+
+    def test_footprint(self):
+        points = [p for o in self.objects.values() for p in _world(o)]
+        size = [max(p[k] for p in points) - min(p[k] for p in points) for k in range(3)]
+        self.assertTrue(2.2 <= size[0] <= 2.6, size)
+        self.assertTrue(1.2 <= size[1] <= 1.6, size)
+        self.assertTrue(2.4 <= size[2] <= 2.8, size)
+
+    def test_bevelled(self):
+        """No edge longer than 10 cm between faces meeting harder than 60
+        degrees on the frame or the counter: every big edge is softened."""
+        hard = {}
+
+        for name in ("stall_frame", "stall_counter"):
+            bm = bmesh.new()
+            bm.from_mesh(self.objects[name].data)
+            hard[name] = sum(1 for e in bm.edges if len(e.link_faces) == 2 and e.calc_length() > 0.1
+                             and math.degrees(e.calc_face_angle()) > 60)
+            bm.free()
+
+        self.assertEqual({n: k for n, k in hard.items() if k}, {})
+
+    def test_passes_the_gate(self):
+        faces, tris, _ = common.dump_faces(list(self.objects.values()))
+        self.assertEqual(gate.check(faces, tris, [], budget=20000), [])
 
 
 if __name__ == "__main__":

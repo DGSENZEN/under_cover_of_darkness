@@ -3,6 +3,7 @@
     python3 tools/eclipse/test_gate.py
 """
 
+import math
 import os
 import sys
 import unittest
@@ -98,6 +99,32 @@ class Layered(unittest.TestCase):
 
     def test_side_by_side_in_one_plane_passes(self):
         self.assertEqual(gate.check([quad(0, 0, 0, 1, 1), quad(0, 1, 0, 2, 1)], 4, UV), [])
+
+    def test_tilted_faces_far_from_the_origin_measured_between_them(self):
+        """Two faces 4.5 cm apart a metre from the origin, one tilted 2
+        degrees (a jittered jar's contents behind its glass): how far apart
+        they are is measured between them, not from the origin along each
+        one's own normal, which a small tilt there throws off by centimetres."""
+        tilt = math.radians(2.0)
+        near = {"owner": 0, "normal": (0.0, -1.0, 0.0),
+                "points": [(1.0, 1.0, 0.0), (1.2, 1.0, 0.0), (1.2, 1.0, 0.2), (1.0, 1.0, 0.2)]}
+        n = (math.sin(tilt), -math.cos(tilt), 0.0)
+        behind = {"owner": 1, "normal": n,
+                  "points": [(1.05, 1.045, 0.05), (1.15, 1.045 + 0.1 * math.tan(tilt), 0.05),
+                             (1.15, 1.045 + 0.1 * math.tan(tilt), 0.15), (1.05, 1.045, 0.15)]}
+        self.assertEqual(gate.check([near, behind], 4, UV), [])
+
+    def test_tilted_faces_close_together_still_fail(self):
+        tilt = math.radians(2.0)
+        near = {"owner": 0, "normal": (0.0, -1.0, 0.0),
+                "points": [(1.0, 1.0, 0.0), (1.2, 1.0, 0.0), (1.2, 1.0, 0.2), (1.0, 1.0, 0.2)]}
+        n = (math.sin(tilt), -math.cos(tilt), 0.0)
+        behind = {"owner": 1, "normal": n,
+                  "points": [(1.05, 1.01, 0.05), (1.15, 1.01 + 0.1 * math.tan(tilt), 0.05),
+                             (1.15, 1.01 + 0.1 * math.tan(tilt), 0.15), (1.05, 1.01, 0.15)]}
+        problems = gate.check([near, behind], 4, UV)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("layered", problems[0])
 
 
 if __name__ == "__main__":
