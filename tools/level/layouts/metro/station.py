@@ -82,7 +82,8 @@ def lay(P):
         if corner == "sw":
             extra = [{"to": "lane_sw", "at": (x + 3, 62.5)}]
         elif corner == "se":
-            extra = [{"to": "light_gallery", "at": (x - 3, 17)}, {"to": "lane_se", "at": (x - 3, 72.5)}]
+            # (The gallery's door no taller than the gallery under it; service.GALLERY_DOOR.)
+            extra = [{"to": "light_gallery", "at": (x - 3, 17), "height": 2.5}, {"to": "lane_se", "at": (x - 3, 72.5)}]
 
         P.space(corridor, rect(x - 3, sz * 6, x + 3, sz * 80), floor=HALL, height=CORRIDOR_HEIGHT, layer=1,
                 openings=[{"to": cross, "at": (x, sz * 6)}, {"to": stairs, "at": (x, sz * 80)}] + extra)

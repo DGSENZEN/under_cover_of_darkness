@@ -37,6 +37,6 @@ def lay(P):
 
     # East along the track, the temple in the tunnel.
     P.space("temple_tunnel", rect(75, -15, 135, 15), floor=TEMPLE, height=-8.5 - TEMPLE, layer=3,
-            openings=[{"to": "track", "at": (75, 0)}, {"to": "light_gallery", "at": (76, 15)},
+            openings=[{"to": "track", "at": (75, 0)}, {"to": "light_gallery", "at": (77, 15)},
                       {"to": "niche", "at": (110, -15)}])
     P.route("temple_tunnel_way", "tunnel", [(50, TRACK, 0), (75, TEMPLE, 0)], between=("track", "temple_tunnel"))

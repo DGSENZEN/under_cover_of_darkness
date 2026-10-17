@@ -14,13 +14,17 @@ from metro.station import HALL
 # The gallery under the corridors: its door into the temple tunnel a full
 # height under the tunnel's ceiling (-8.5).
 GALLERY = -12.0
+# The gallery's door into the corridor: from the corridor's floor up to the
+# gallery's ceiling (-5.5), so no gap opens above the gallery's roof.
+GALLERY_DOOR = 2.5
 
 
 def lay(P):
     # Up the pipe run from the temple tunnel to the gallery, and on to the
     # south-east corridor.
     P.space("light_gallery", rect(66, 15, 87, 19), floor=GALLERY, height=HALL + 2.5 - GALLERY, layer=2,
-            openings=[{"to": "temple_tunnel", "at": (76, 15)}, {"to": "corridor_se", "at": (87, 17)}])
+            openings=[{"to": "temple_tunnel", "at": (77, 15)},
+                      {"to": "corridor_se", "at": (87, 17), "height": GALLERY_DOOR}])
     P.route("pipe_run_gallery", "climb", [(76, TEMPLE, 14.7), (76, GALLERY, 15.3)])
     P.route("light_gallery_flight", "stair", [(87, HALL, 17), (77, GALLERY, 17)])
 
