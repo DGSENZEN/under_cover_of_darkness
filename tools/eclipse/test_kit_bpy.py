@@ -22,6 +22,7 @@ import underground_furniture  # noqa: E402
 import underground_floor  # noqa: E402
 import underground_walls  # noqa: E402
 import underground_vault  # noqa: E402
+import underground_uncanny  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -1394,6 +1395,78 @@ class UndergroundVault(unittest.TestCase):
         self.assertAlmostEqual(ext[1][0], 0.0, delta=0.001)
         self.assertAlmostEqual(ext[1][1], underground_vault.DEPTH, delta=0.001)
         self.assertAlmostEqual(ext[2][0], 0.0, delta=0.001)
+
+
+class UndergroundUncanny(unittest.TestCase):
+    """The Underground's uncanny (tools/eclipse/underground_uncanny.py): the nahual, an enormous
+    black dog lying with its head up (its head its own object, turned about the neck), and the
+    old man's hat it leaves on the bench; closed, in budget, through the gate."""
+
+    BUDGET = {"nahual_body": 6000, "nahual_head": 3000, "old_hat": 600}
+
+    @classmethod
+    def setUpClass(cls):
+        underground_uncanny.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def _slots(self, name):
+        o = self.objects[name]
+        return {o.material_slots[p.material_index].material.name for p in o.data.polygons}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_each_passes_the_gate(self):
+        problems = {}
+
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            found = gate.check(faces, tris, [], budget=self.BUDGET[n])
+            if found:
+                problems[n] = found[:3]
+
+        self.assertEqual(problems, {})
+
+    def test_an_enormous_dog_lying_on_the_floor(self):
+        # Lying, it is 1.2-1.6 m from its tail to its forepaws, its body on the floor.
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("nahual_body")
+        self.assertAlmostEqual(z0, 0.0, delta=1e-4)
+        self.assertTrue(1.2 <= x1 - x0 <= 1.6, x1 - x0)
+        self.assertTrue(0.4 <= y1 - y0 <= 0.8, y1 - y0)
+
+    def test_the_head_held_up_from_the_neck(self):
+        # The head's own axes are the neck's: it reaches forward of them along +X, held up so
+        # its eyes are 0.6-0.9 m over the floor when set on the body's NECK.
+        (x0, x1), _, (z0, z1) = self._extent("nahual_head")
+        self.assertGreater(x1, 0.3)
+        self.assertGreater(x1, -x0 * 2)
+        neck = underground_uncanny.NECK
+        eyes = [v for v in _world(self.objects["nahual_head"]) if v.x > 0.08]
+        self.assertTrue(0.6 <= neck[2] + max(v.z for v in eyes) - 0.1 <= 0.95)
+
+    def test_all_black_but_its_eyes(self):
+        self.assertEqual(self._slots("nahual_body"), {"nahual_black"})
+        self.assertEqual(self._slots("nahual_head"), {"nahual_black", "ember"})
+        ember = [p for p in self.objects["nahual_head"].data.polygons
+                 if self.objects["nahual_head"].material_slots[p.material_index].material.name == "ember"]
+        ys = [self.objects["nahual_head"].data.vertices[p.vertices[0]].co.y for p in ember]
+        self.assertTrue(min(ys) < -0.03 and max(ys) > 0.03, "two eyes, one each side")
+
+    def test_the_old_mans_hat(self):
+        (x0, x1), _, (z0, z1) = self._extent("old_hat")
+        self.assertAlmostEqual(z0, 0.0, delta=1e-4)
+        self.assertTrue(0.45 <= x1 - x0 <= 0.6)
+        self.assertTrue(0.1 <= z1 - z0 <= 0.2)
 
 
 if __name__ == "__main__":

@@ -620,6 +620,51 @@ func _run() -> void:
 		"lights %d wandered %s home %s rose to %.2f leaned %s sank %s fled %s returned %s" % [animas.lights.size(), wandered,
 		home, highest, leaned, sank, fled, returned])
 
+	# U49 the nahual: an enormous black dog lying by the bench where the old man's hat is left, its eyes
+	#     glowing; it watches whoever looks at it, and once seen is gone when they look away, back only unwatched
+	var n_dog: Node3D = lab.nahual
+	var its_bench := _furniture(lab, "bench")
+	var n_hat: Node3D = lab.old_hat
+	var n_eyes_glow := false
+
+	for i in n_dog.head.mesh.get_surface_count():
+		var n_slot: Material = n_dog.head.mesh.surface_get_material(i)
+		var n_drawn: Material = n_dog.head.get_surface_override_material(i)
+		if n_slot != null and n_slot.resource_name == "ember":
+			n_eyes_glow = n_drawn is StandardMaterial3D and n_drawn.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED
+	var n_by_bench: bool = its_bench != null and n_dog.global_position.distance_to(its_bench.global_position) < 3.0 \
+		and absf(n_dog.global_position.z - lab.FAR_WALL) < 0.6
+	var n_hat_on: bool = n_hat != null and absf(n_hat.global_position.y - lab.BENCH_SEAT) < 0.02 \
+		and n_hat.global_position.x < its_bench.global_position.x and n_hat.global_position.x > its_bench.global_position.x - 1.8
+	var n_eye := Camera3D.new()
+	add_child(n_eye)
+	var n_eyes_at: Vector3 = n_dog.eyes()
+	n_eye.global_position = n_eyes_at + Vector3(-2.0, 0.9, -2.6)
+	n_eye.look_at(n_eyes_at, Vector3.UP)
+	n_dog.watcher = n_eye
+	n_dog.away_for = Vector2(1.0, 1.0)
+	n_dog.appear()
+	await _frames(90)
+	var n_gaze: Vector3 = (n_dog.head.global_transform.basis.x * Vector3(1, 0, 1)).normalized()
+	var n_to_eye: Vector3 = ((n_eye.global_position - n_dog.head.global_position) * Vector3(1, 0, 1)).normalized()
+	var n_watching: bool = n_gaze.dot(n_to_eye) > cos(deg_to_rad(25.0)) and n_dog.visible
+	n_eye.look_at(n_eyes_at + Vector3(0.0, 0.0, -8.0), Vector3.UP)
+	n_eye.rotate_y(PI)
+	await _frames(60)
+	var n_gone: bool = not n_dog.visible
+	n_eye.look_at(n_eyes_at, Vector3.UP)
+	await _frames(150)
+	var n_stayed_gone: bool = not n_dog.visible
+	n_eye.rotate_y(PI)
+	await _frames(90)
+	var n_back_unwatched: bool = n_dog.visible
+	n_dog.watcher = null
+	n_eye.queue_free()
+	_check("U49 the nahual lies by the bench (the old man's hat on it), eyes glowing; watches, is gone once looked away from, back only unwatched",
+		n_by_bench and n_hat_on and n_eyes_glow and n_watching and n_gone and n_stayed_gone and n_back_unwatched,
+		"by bench %s hat %s eyes %s watching %s gone %s stayed gone %s back %s" % [n_by_bench, n_hat_on, n_eyes_glow, n_watching, n_gone,
+		n_stayed_gone, n_back_unwatched])
+
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")
 	_check("U8 the pixel grid is off", retro != null and retro.virtual_height == 0, "%s" % [retro.virtual_height if retro else null])

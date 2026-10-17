@@ -44,6 +44,8 @@ const VIEWS := [
 	["wall_tablet", Vector3(-9.0, 1.7, 1.2), Vector3(-9.0, 1.8, -2.35)],
 	["uncanny_drain", Vector3(-2.3, 0.9, -0.9), Vector3(-1.8, 0.0, -1.75)],
 	["uncanny_rise", Vector3(-3.0, 1.0, 0.2), Vector3(-1.7, 0.25, -1.6)],
+	["uncanny_nahual", Vector3(-3.6, 1.6, 1.6), Vector3(-4.8, 0.5, 4.0)],
+	["uncanny_nahual_far", Vector3(0.5, 1.6, 0.8), Vector3(-4.8, 0.6, 4.0)],
 ]
 
 var out := "/tmp/underground-lab/"
@@ -115,6 +117,9 @@ func _ready() -> void:
 				continue
 
 			eye.global_transform = Transform3D(Basis(), view[1]).looking_at(view[2], Vector3.UP)
+			# (The nahual goes once looked at and looked away from: every still begins with it there.)
+			if lab.nahual != null:
+				lab.nahual.appear()
 			await _frames(12)
 			var file := "%s%s_%s.png" % [out, view[0], "plain" if plain else ("train" if passing else ("form" if form else "lit"))]
 			get_viewport().get_texture().get_image().save_png(file)

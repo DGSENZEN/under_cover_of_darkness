@@ -18,6 +18,7 @@ const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const AnimasScript := preload("res://scripts/Visual/Animas.gd")
+const NahualScript := preload("res://scripts/Visual/Nahual.gd")
 
 ## The corridor (m): its run along X, the wall the stall backs onto, the far wall, the vault.
 const RUN := 12.0
@@ -92,6 +93,14 @@ const MODULE := 1.2
 const EDGE_DEPTH := 0.9
 const TILE_DEPTH := 0.12
 const DRAIN_LOCAL := Vector3(0.6, 0.0, -0.6)
+## The uncanny kit (tools/eclipse/underground_uncanny.py): the nahual lying by the bench's west end,
+## its head toward the corridor; the old man's hat on the bench by his paper.
+const UNCANNY_KIT := "res://assets/eclipse/kit/underground_uncanny.glb"
+const NAHUAL_AT := Vector3(-5.0, 0.0, 4.35)
+## Enormous, as the tellings have it: the kit's dog made half again as big (about 1.7 m long lying).
+const NAHUAL_SCALE := 1.35
+const HAT_AT := Vector3(-3.9, 0.45, 4.25)
+const EMBER := Color("ff5a1e")
 ## The gaps between the drain's grate bars, along the grate (m from its middle): the floor kit's
 ## bars (tools/eclipse/underground_floor.py _drain) leave 12 of them, 4 cm apart.
 const GRATE_LANES := [-0.22, -0.18, -0.14, -0.1, -0.06, -0.02, 0.02, 0.06, 0.1, 0.14, 0.18, 0.22]
@@ -158,6 +167,8 @@ var _service_material: ShaderMaterial
 var furniture: Array[MeshInstance3D] = []
 var floor_tiles: Array[MeshInstance3D] = []
 var animas: Node3D
+var nahual: Node3D
+var old_hat: MeshInstance3D
 var wall_panels: Array[MeshInstance3D] = []
 var vault_spans: Array[MeshInstance3D] = []
 var cart_steam: Node3D
@@ -204,8 +215,9 @@ func _ready() -> void:
 	player.debug_traversal = false
 	add_child(player)
 	player.global_position = Vector3(0.0, 1.05, 4.0)
-	# (After the player: the uncanny shy from it.)
+	# (After the player: the uncanny shy from it, and watch it.)
 	_animas()
+	_nahual()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -1078,6 +1090,35 @@ func _animas() -> void:
 		add_child(animas)
 		animas.global_position = module.global_transform * DRAIN_LOCAL
 		animas.rotation.y = module.rotation.y
+
+
+## The nahual: the old man who sits on the bench, become an enormous black dog lying beside it;
+## his hat left on the bench. It watches whoever is watching (the drawing camera: the player's).
+func _nahual() -> void:
+	if not ResourceLoader.exists(UNCANNY_KIT):
+		missing.append(UNCANNY_KIT)
+		return
+
+	var meshes := _kit(UNCANNY_KIT)
+	var look := Painterly.material(_painted(["underground_uncanny.png", "underground_uncanny_base.png"]), &"bespoke")
+	# The dog is Mignola's black: one matte shape, no rim, no sheen, only the faintest form.
+	var black := StandardMaterial3D.new()
+	black.albedo_color = Color("0b0a0c")
+	black.roughness = 1.0
+	black.metallic_specular = 0.0
+	black.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
+	var ember := StandardMaterial3D.new()
+	ember.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ember.albedo_color = EMBER
+	nahual = NahualScript.new()
+	nahual.name = "nahual"
+	add_child(nahual)
+	nahual.build(meshes["nahual_body"], meshes["nahual_head"], black, ember)
+	nahual.position = NAHUAL_AT
+	# Turned so it lies along the far wall's foot with its head toward the corridor's middle.
+	nahual.rotation.y = PI / 2.0
+	nahual.scale = Vector3.ONE * NAHUAL_SCALE
+	old_hat = _place(meshes["old_hat"], look, "old_hat", HAT_AT, 0.7, false)
 
 
 # The floor, tiled
