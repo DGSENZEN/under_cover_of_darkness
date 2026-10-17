@@ -86,7 +86,9 @@ func _run() -> void:
 	lab.set_form(true)
 	await _frames(2)
 	var grey: bool = meshes.values().all(func(m): return m.material_override == lab.form_material)
-	var form_on: bool = grey and lab.form_light.visible and lab.work_lights.all(func(l): return not l.visible)
+	# The form light reaches the stall (no shadow from the vault), and nothing coloured lights it.
+	var form_on: bool = grey and lab.form_light.visible and not lab.form_light.shadow_enabled \
+		and lab.work_lights.all(func(l): return not l.visible) and not lab.bulb.visible and not lab.neon.light.visible
 	lab.set_form(false)
 	await _frames(2)
 	var back: bool = meshes.values().all(func(m): return m.material_override == null or m == lab.neon.tube) \
@@ -99,9 +101,12 @@ func _run() -> void:
 	lab.set_decals(false)
 	var hidden: bool = decals.all(func(d): return not d.visible)
 	lab.set_decals(true)
-	_check("U7 three grime decals (drip, soot, grime), F3 turns them off and on",
-		decals.size() == 3 and hidden and decals.all(func(d): return d.visible and d.texture_albedo != null),
-		"%d decals, hidden %s" % [decals.size(), hidden])
+	# Each keeps its transparency: without it a decal draws as a dark box.
+	var clear: bool = decals.all(func(d): return d.texture_albedo != null \
+		and d.texture_albedo.get_image().detect_alpha() != Image.ALPHA_NONE)
+	_check("U7 three grime decals (drip, soot, grime), see-through at their edges, F3 turns them off and on",
+		decals.size() == 3 and hidden and clear and decals.all(func(d): return d.visible),
+		"%d decals, hidden %s, see-through %s" % [decals.size(), hidden, clear])
 
 	# U10 the bulb sways in the corridor's draught, a few degrees at most, its light with it
 	var swing := 0.0

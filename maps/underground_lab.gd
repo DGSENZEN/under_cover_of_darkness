@@ -120,6 +120,12 @@ func set_form(on: bool) -> void:
 			mesh.material_override = null
 
 	form_light.visible = on
+	# Nothing coloured lights the grey: the bulb and the neon's glow go dark too.
+	bulb.visible = not on
+
+	if neon != null:
+		neon.light.visible = not on
+
 	set_work_lights(not on)
 
 
@@ -186,13 +192,15 @@ func _stall() -> void:
 	stall.add_child(neon)
 
 
-func _painted(names: Array) -> Texture2D:
+## A painted file as a texture; `alpha` keeps its transparency (a decal's,
+## without which it draws as a dark box).
+func _painted(names: Array, alpha := false) -> Texture2D:
 	for file in names:
 		var path: String = atlas_dir + file
 
 		if FileAccess.file_exists(path):
 			var image := Image.load_from_file(path)
-			image.convert(Image.FORMAT_RGB8)
+			image.convert(Image.FORMAT_RGBA8 if alpha else Image.FORMAT_RGB8)
 			image.generate_mipmaps()
 			return ImageTexture.create_from_image(image)
 
@@ -324,7 +332,8 @@ func _lights() -> void:
 	form_light = DirectionalLight3D.new()
 	form_light.name = "form_light"
 	form_light.light_energy = 1.2
-	form_light.shadow_enabled = true
+	# No shadow: the corridor's vault would put the whole bay in it.
+	form_light.shadow_enabled = false
 	form_light.visible = false
 	add_child(form_light)
 	form_light.rotation = Vector3(deg_to_rad(-40), deg_to_rad(30), 0)
@@ -385,7 +394,7 @@ func _decal(kind: String, at: Vector3, size: Vector3, turn: Vector3) -> void:
 	var d := Decal.new()
 	d.name = "decal_" + kind
 	d.size = size
-	d.texture_albedo = _painted(["decal_%s.png" % kind])
+	d.texture_albedo = _painted(["decal_%s.png" % kind], true)
 	d.upper_fade = 0.2
 	d.lower_fade = 0.2
 	add_child(d)
