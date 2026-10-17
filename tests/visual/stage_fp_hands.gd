@@ -86,6 +86,12 @@ func _ready() -> void:
 	player.neck.rotation.x = -0.4
 	await _frames(10)
 	await _shot("sword_look_down")
+	# Looking right down at yourself: the coat's chest and the arms.
+	player.inventory.select_by_id(&"")
+	await _frames(40)
+	player.neck.rotation.x = -1.3
+	await _frames(10)
+	await _shot("look_down")
 	get_tree().quit()
 
 
