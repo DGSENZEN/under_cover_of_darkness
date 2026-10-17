@@ -270,6 +270,49 @@ class Mesh:
         return obj
 
 
+# A bevel's thinnest face is the patch where three bevelled edges meet a
+# corner: its thickness (gate.py: area over longest edge) is this fraction of
+# the bevel's width, measured on a bevelled cube for each count of segments.
+# Odd counts leave a thin triangle at the corner's heart.
+BEVEL_CORNER = {1: 0.61, 2: 0.60, 3: 0.158, 4: 0.23}
+
+
+def bevel(obj, width, segments=2, angle=35.0):
+    """Soft bevels on `obj`'s edges sharper than `angle` degrees (the new
+    standard's chunky forms), applied to its mesh: clamped where bevels
+    would overlap, normals hardened, shaded smooth with the sharp edges
+    kept. Refuses a bevel whose corner patches would be thinner than the
+    gate's sliver (BEVEL_CORNER)."""
+    if segments not in BEVEL_CORNER:
+        raise ValueError("bevel segments must be one of %s" % sorted(BEVEL_CORNER))
+
+    thinnest = width * BEVEL_CORNER[segments]
+
+    if thinnest < gate.SLIVER * 1.1:
+        raise ValueError("bevel %.3f m in %d segments leaves %.1f cm corners, under the %.1f cm sliver gate"
+                         % (width, segments, thinnest * 100, gate.SLIVER * 100))
+
+    mod = obj.modifiers.new("bevel", "BEVEL")
+    mod.width = width
+    mod.segments = segments
+    mod.limit_method = "ANGLE"
+    mod.angle_limit = math.radians(angle)
+    mod.use_clamp_overlap = True
+    mod.harden_normals = True
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    mesh = bpy.data.meshes.new_from_object(obj.evaluated_get(depsgraph))
+    obj.modifiers.remove(mod)
+    old = obj.data
+    obj.data = mesh
+    bpy.data.meshes.remove(old)
+    mesh.name = obj.name
+
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+
+    mesh.set_sharp_from_angle(angle=math.radians(angle))
+
+
 def mirror_faces(obj, select, about=0.0):
     """Copies of the faces `select` picks, mirrored across x = `about` and
     turned to face the other way, their UVs kept (a wall and its mirror share
@@ -882,7 +925,7 @@ def _round_card_normals(objects, cards):
 
 
 def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, weather=None, out=None,
-                 sets_each=False, cards=()):
+                 sets_each=False, cards=(), budget=None):
     """The piece's atlas made (unwrap, any repeats, pack), its AO and region
     maps, glTF and .blend written; then the gate. `merge` is a function run
     between unwrap and pack (repeat_faces for identical parts). `weather`
@@ -976,7 +1019,7 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
 
     for names in gate_sets or [[o.name for o in objects]]:
         faces, set_tris, uvs = dump_faces([o for o in objects if o.name in names], skip=cards)
-        problems += [p for p in gate.check(faces, set_tris, uvs) if p not in problems]
+        problems += [p for p in gate.check(faces, set_tris, uvs, budget=budget or gate.BUDGET) if p not in problems]
         tris = max(tris, set_tris)
 
     for p in problems:

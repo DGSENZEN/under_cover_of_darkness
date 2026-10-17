@@ -47,6 +47,12 @@ class Gate(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn("over budget", problems[0])
 
+    def test_budget_parameter(self):
+        """A kit may carry its own budget (the new standard, Oct 16 2026)."""
+        faces = box(0, 0, 0, 0, 1, 1, 1)
+        self.assertEqual(gate.check(faces, 6000, UV, budget=8000), [])
+        self.assertEqual(len(gate.check(faces, 6000, UV)), 1)
+
     def test_budget_is_5000(self):
         """Densified for vertex paint (Oct 9 2026): 5000 triangles a piece."""
         self.assertEqual(gate.check(box(0, 0, 0, 0, 1, 1, 1), 5000, UV), [])

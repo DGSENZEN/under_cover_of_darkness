@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import arcade_bay  # noqa: E402
 import common  # noqa: E402
+import gate  # noqa: E402
 
 
 class ArcadeBay(unittest.TestCase):
@@ -814,6 +815,40 @@ class DriftKit(unittest.TestCase):
                 thin[n] = found[:2]
 
         self.assertEqual(thin, {})
+
+
+class Bevel(unittest.TestCase):
+    """Soft bevels for the new standard (Oct 16 2026): a bevelled solid
+    stays closed and passes the gate; a bevel too narrow for the sliver
+    gate is refused."""
+
+    def _box(self):
+        common.reset()
+        m = common.Mesh("bevel_box", outward=True)
+        m.box((0, 0, 0), (1, 1, 1), "wood")
+        return m.make()
+
+    def test_bevelled_box_stays_closed(self):
+        o = self._box()
+        common.bevel(o, 0.03)
+        self.assertEqual(_closed(o), 0)
+
+    def test_bevel_adds_faces(self):
+        o = self._box()
+        before = len(o.data.polygons)
+        common.bevel(o, 0.03)
+        self.assertGreater(len(o.data.polygons), before)
+
+    def test_narrow_bevel_refused(self):
+        o = self._box()
+        with self.assertRaises(ValueError):
+            common.bevel(o, 0.005)
+
+    def test_bevelled_box_passes_gate(self):
+        o = self._box()
+        common.bevel(o, 0.03)
+        faces, tris, _ = common.dump_faces([o])
+        self.assertEqual(gate.check(faces, tris, []), [])
 
 
 if __name__ == "__main__":

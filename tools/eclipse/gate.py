@@ -82,7 +82,7 @@ def layered(faces, gap=LAYER_GAP):
     return found
 
 
-def check(faces, tris, uvs):
+def check(faces, tris, uvs, budget=BUDGET):
     problems = []
 
     for i, j, apart, area in layered(faces):
@@ -104,7 +104,7 @@ def check(faces, tris, uvs):
     if outside:
         problems.append("uv outside: %d UVs outside the atlas, e.g. %s" % (len(outside), outside[0]))
 
-    if tris > BUDGET:
-        problems.append("over budget: %d triangles, at most %d" % (tris, BUDGET))
+    if tris > budget:
+        problems.append("over budget: %d triangles, at most %d" % (tris, budget))
 
     return problems
