@@ -3,7 +3,7 @@ extends RefCounted
 ## Each grip plants on geometry, then travels in a short arc to its next hold;
 ## weights ease contact changes. HandSlot reads hand(), weight(), and curl().
 
-enum State { FREE, HANG, MANTLE, VAULT, LADDER, ROPE, CARRY, READ }
+enum State { FREE, HANG, MANTLE, VAULT, LADDER, ROPE, CARRY, READ, POLE }
 
 const LEFT := 0
 const RIGHT := 1
@@ -138,6 +138,8 @@ func update(delta: float) -> void:
 			_keep_ladder()
 		State.ROPE:
 			_keep_rope()
+		State.POLE:
+			_keep_pole()
 		State.CARRY:
 			_keep_carry()
 		State.READ:
@@ -163,6 +165,10 @@ func _state_now() -> int:
 			return State.HANG
 		player.MoveState.CLIMBING:
 			var volume: Area3D = player.current_climb
+
+			if player.get("climb_hold") != null:
+				return State.POLE
+
 			return State.ROPE if volume != null and volume.has_method("rope_point") else State.LADDER
 		player.MoveState.MOVING:
 			var move = player.current_move
@@ -224,6 +230,8 @@ func _enter(next: int) -> void:
 			_plant_rungs()
 		State.ROPE:
 			_plant_rope()
+		State.POLE:
+			_plant_pole()
 		State.CARRY:
 			_keep_carry()
 		State.READ:
@@ -431,6 +439,49 @@ func _keep_rope() -> void:
 		_plant(1 - high_side, _rope_hold(here - 1.05))
 	elif eye_point.y < high - 0.8:
 		_plant(high_side, _rope_hold(here - 0.3))
+
+
+# A pole (a drainpipe): both hands round it, one at the eyes and one a reach
+# above, the lower going over the higher as the body climbs.
+
+func _pole_hold(y: float) -> Transform3D:
+	var hold: Node3D = player.climb_hold
+	var at: Vector3 = hold.grip_near(Vector3(player.global_position.x, y, player.global_position.z))
+	return Transform3D(_palm_basis(hold.outward()), at)
+
+
+func _pole_eye() -> float:
+	return player.global_position.y + 0.8
+
+
+func _plant_pole() -> void:
+	_plant(LEFT, _pole_hold(_pole_eye() - 0.1))
+	_plant(RIGHT, _pole_hold(_pole_eye() + 0.25))
+
+
+func _keep_pole() -> void:
+	var left := grips[LEFT] as Grip
+	var right := grips[RIGHT] as Grip
+
+	for grip in grips:
+		(grip as Grip).wanted = true
+
+	if left.travel < 1.0 or right.travel < 1.0:
+		return
+
+	var eye := _pole_eye()
+	var high_side := LEFT if left.at.origin.y >= right.at.origin.y else RIGHT
+	var high: float = (grips[high_side] as Grip).at.origin.y
+	var low: float = (grips[1 - high_side] as Grip).at.origin.y
+
+	if absf(high - eye) > 1.2 or absf(low - eye) > 1.2:
+		_plant_pole()
+		return
+
+	if eye > low + 0.45:
+		_plant(1 - high_side, _pole_hold(eye + 0.3))
+	elif eye < high - 0.8:
+		_plant(high_side, _pole_hold(eye - 0.3))
 
 
 # Carrying: both hands on what you hold (it moves with you: not planted)

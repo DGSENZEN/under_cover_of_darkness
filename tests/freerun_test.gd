@@ -40,6 +40,7 @@ func _physics_process(_delta: float) -> void:
 func _run() -> void:
 	await _finder_checks()
 	await _placed_hang_checks()
+	await _pole_checks()
 
 
 # Task 1: the hold finder.
@@ -115,6 +116,57 @@ func _placed_hang_checks() -> void:
 	_check("FR9 shimmy stops at a placed ledge's end", caught and player.movement_state == 2 and player.global_position.x <= 71.05 and player.global_position.x > 70.6,
 		"caught %s state %d position %s reject %s" % [caught, player.movement_state, player.global_position, player._last_reject])
 	_release_all()
+
+
+# Task 3: drainpipes.
+func _pole_checks() -> void:
+	_box(Vector3(90, 3, -4.5), Vector3(4, 6, 3))
+	_hold(HANDHOLD.Kind.POLE, Vector3(90, 0, -2.9), 0.0, 6.0)
+	await _frames(2)
+	await _place(Vector3(90, 1.03, -1.6))
+	Input.action_press("move_forward")
+	var climbed := false
+	var hands_off := INF
+	var contacts = player.hand._contacts
+	for i in 500:
+		await _frames(1)
+		if player.movement_state == 3:
+			climbed = true
+			if i % 20 == 0 and contacts.weight(0) > 0.95 and contacts.weight(1) > 0.95:
+				var worst := 0.0
+				for side in [0, 1]:
+					var at: Vector3 = contacts.hand(side).origin
+					worst = maxf(worst, Vector2(at.x - 90, at.z + 2.9).length())
+				hands_off = worst if hands_off == INF else maxf(hands_off, worst)
+		if climbed and player.movement_state == 0 and player._on_floor_now():
+			break
+	_release_all()
+	var feet: float = player.global_position.y - 1.0
+	_check("FR10 climb a drainpipe to its top", climbed and feet >= 5.9,
+		"climbed %s feet %.2f state %d" % [climbed, feet, player.movement_state])
+	_check("FR12 hands hold the pipe", hands_off < 0.08, "worst %.3f m off the pipe" % hands_off)
+
+	_box(Vector3(100, 3, -4.5), Vector3(4, 6, 3))
+	_hold(HANDHOLD.Kind.POLE, Vector3(100, 0, -2.9), 0.0, 6.0)
+	var beside := _hold(HANDHOLD.Kind.LEDGE, Vector3(100.6, 3.0, -3), 0.0, 0.6)
+	await _frames(2)
+	await _place(Vector3(100, 1.03, -1.6))
+	Input.action_press("move_forward")
+	await _until(func(): return player.movement_state == 3 and player.global_position.y > 2.0, 300)
+	Input.action_release("move_forward")
+	Input.action_press("move_right")
+	await _until(func(): return player.movement_state == 2, 120)
+	_release_all()
+	_check("FR11 step off a pipe onto a ledge beside it", player.movement_state == 2 and player.hang_hold == beside,
+		"state %d hold %s position %s reject %s" % [player.movement_state, player.hang_hold, player.global_position, player._last_reject])
+	await _frames(10)
+
+
+func _until(condition: Callable, max_frames: int) -> void:
+	for i in max_frames:
+		if condition.call():
+			return
+		await _frames(1)
 
 
 ## Walk at the wall ahead holding jump, until hanging or 120 frames pass.

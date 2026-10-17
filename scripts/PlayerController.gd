@@ -380,6 +380,8 @@ var hang_normal := Vector3.ZERO
 var hang_lip_y := 0.0
 ## The placed Handhold held, if any (a bracket, a sill too thin to scan).
 var hang_hold: Node3D = null
+## The placed pole (a drainpipe) climbed, if any.
+var climb_hold: Node3D = null
 var is_peeking := false
 var _shimmy_velocity := 0.0
 ## A fresh press during a catch/corner is spent once the hands settle.
@@ -3201,6 +3203,7 @@ func _try_enter_climb(wish_direction: Vector3) -> bool:
 	movement_state = MoveState.CLIMBING
 	current_climb = volume
 	climb_side = side
+	climb_hold = volume.get_meta(&"handhold", null)
 	rope_param = -1.0
 	_floor_valid = false
 	_clear_ground_state()
@@ -3324,6 +3327,13 @@ func _update_climb(_delta: float) -> void:
 	var lateral := normal.cross(Vector3.UP).normalized()
 	var sideways := wish_direction.dot(lateral)
 
+	# On a pole, strafing steps off it onto a hold beside it.
+	if climb_hold != null and absf(sideways) > 0.5 and _climb_scan_timer <= 0.0:
+		_climb_scan_timer = RESCAN_TIME
+
+		if _step_off_pole(normal, lateral * signf(sideways)):
+			return
+
 	var max_vertical: float = current_climb.max_vel_vert
 	var max_horizontal: float = current_climb.max_vel_horiz
 
@@ -3381,6 +3391,27 @@ func _update_climb(_delta: float) -> void:
 	)
 
 	LanternBody.slide_character(self)
+
+
+## From a pole to the hold beside it that way, if there is one in reach.
+func _step_off_pole(normal: Vector3, direction: Vector3) -> bool:
+	var lip_y := global_position.y + planner.hang_eye_drop + planner.eye_height
+	var target := holds.next_hold(global_position, normal, lip_y, direction, reach_side + 0.6)
+
+	if target.is_empty():
+		_last_reject = "pole: nothing to step off onto"
+		return false
+
+	var move := planner.leap(global_position, target, normal)
+
+	if move == null:
+		_last_reject = "pole: " + planner.last_reject
+		return false
+
+	move.end_hold = target["hold"]
+	_leave_climb(Vector3.ZERO)
+	_start_move(move)
+	return true
 
 
 ## A simulated rope: the hands hold a point that moves. The body is pulled to
@@ -3527,6 +3558,7 @@ func _leave_climb(exit_velocity: Vector3) -> void:
 	movement_state = MoveState.LOCOMOTION
 	current_climb = null
 	climb_side = 1.0
+	climb_hold = null
 	rope_param = -1.0
 	velocity = exit_velocity
 	_climb_reattach_timer = climb_reattach_delay

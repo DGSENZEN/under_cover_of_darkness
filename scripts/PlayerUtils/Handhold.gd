@@ -10,14 +10,42 @@ extends Node3D
 enum Kind { LEDGE, POLE, POINT }
 
 const GROUP := &"handholds"
+const CLIMB := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
 
 @export var kind := Kind.LEDGE
 ## A ledge's or a pole's length (m). A point ignores it.
 @export var length := 1.0
 
 
+var _climb: Area3D = null
+
+
 func _ready() -> void:
 	add_to_group(GROUP)
+
+	if kind == Kind.POLE:
+		_build_climb()
+
+
+## A pole is climbed as a narrow ladder (null for other kinds).
+func climb_volume() -> Area3D:
+	return _climb
+
+
+## Its climb, the body taken hold of it on the hold's +Z side, no sideways
+## sliding (strafing steps off it instead: PlayerController._update_climb).
+func _build_climb() -> void:
+	_climb = CLIMB.new()
+	_climb.name = "Climb"
+	_climb.max_vel_horiz = 0.0
+	_climb.set_meta(&"handhold", self)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(0.3, length, 0.5)
+	shape.shape = box
+	shape.position = Vector3(0.0, length * 0.5, 0.25)
+	_climb.add_child(shape)
+	add_child(_climb)
 
 
 ## The side the climber hangs on: the hold's +Z, flat.
