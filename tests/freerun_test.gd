@@ -60,6 +60,7 @@ func _run() -> void:
 	await _roll_checks()
 	await _presentation_checks()
 	_marker_checks()
+	await _review_checks()
 
 
 # Task 1: the hold finder.
@@ -536,6 +537,90 @@ func _marker_checks() -> void:
 	holder.queue_free()
 
 
+# Final review findings, each pinned.
+func _review_checks() -> void:
+	# C1: S on a wall while free-running steers down; it never lets go.
+	var column: Array = await _sill_column(340)
+	await _hang_on(column[3])
+	Input.action_press("sprint")
+	await _frames(3)
+	# A real key press, through the input queue: just pressed on the next tick.
+	var back := InputEventAction.new()
+	back.action = &"move_back"
+	back.pressed = true
+	Input.parse_input_event(back)
+	var let_go := false
+	for i in 90:
+		await _frames(1)
+		if player.movement_state == 0:
+			let_go = true
+		if player.movement_state == 2 and player.hang_hold == column[2]:
+			break
+	_release_all()
+	_check("FR30 back while free-running on a wall climbs down, never lets go", not let_go and player.hang_hold == column[2],
+		"let go %s state %d lip %.2f" % [let_go, player.movement_state, player.hang_lip_y])
+	await _frames(10)
+
+	# C2: dropped down 2 m to a bracket, it is still held once the keys go.
+	_box(Vector3(350, 4.5, -4.5), Vector3(4, 9, 3))
+	var upper := _hold(HANDHOLD.Kind.POINT, Vector3(350, 6.4, -3), 0.0, 1.0)
+	var lower := _hold(HANDHOLD.Kind.POINT, Vector3(350, 4.4, -3), 0.0, 1.0)
+	await _frames(2)
+	await _hang_on(upper)
+	Input.action_press("sprint")
+	Input.action_press("crouch")
+	await _until(func(): return player.movement_state == 2 and player.hang_hold == lower, 200)
+	_release_all()
+	await _frames(60)
+	_check("FR31 a bracket dropped down to stays held", player.movement_state == 2 and player.hang_hold == lower,
+		"state %d hold %s lip %.2f" % [player.movement_state, player.hang_hold, player.hang_lip_y])
+
+	# I1: a 40 cm seam between two roofs is run across, not braked at.
+	_box(Vector3(360, 3, 0), Vector3(4, 6, 10))
+	_box(Vector3(360, 3, -10.4), Vector3(4, 6, 10))
+	await _frames(2)
+	await _run_at(Vector3(360, 7.03, 4), true, 160, -8.0)
+	_check("FR32 a narrow roof seam is run across", player.global_position.z < -7.0 and player.global_position.y - 1.0 > 5.9,
+		"position %s" % player.global_position)
+
+	# I2: sprinting up a 4 m staircase of solid boxes reaches its top.
+	for i in 16:
+		var h := 0.25 * (i + 1)
+		_box(Vector3(370, h * 0.5, 2.0 - 0.3 * i), Vector3(3, h, 0.3))
+	_box(Vector3(370, 2.0, -5.0), Vector3(3, 4.0, 4.0))
+	await _frames(2)
+	await _run_at(Vector3(370, 1.03, 4.5), true, 300, -4.0)
+	_check("FR33 sprinting up a tall box staircase reaches the top", player.global_position.y - 1.0 > 3.9,
+		"position %s reject %s" % [player.global_position, player._last_reject])
+
+	# I3: a hold floating in air, and one buried 10 cm in its wall, are refused.
+	var floating := _hold(HANDHOLD.Kind.POINT, Vector3(380, 3.0, 5.0), 0.0, 1.0)
+	_box(Vector3(390, 4.5, -4.5), Vector3(4, 9, 3))
+	var buried := _hold(HANDHOLD.Kind.LEDGE, Vector3(390, 3.0, -3.1), 0.0, 1.0)
+	await _frames(2)
+	var in_air: Dictionary = player.holds.hold_target(floating, floating.global_position)
+	var in_wall: Dictionary = player.holds.hold_target(buried, buried.global_position)
+	_check("FR34 a hold with nothing behind it, or sunk in its wall, is never offered", in_air.is_empty() and in_wall.is_empty(),
+		"air %s wall %s" % [in_air, in_wall])
+
+	# I4: with the guard up, sprint is no free-run: the crate is not taken.
+	PROPS.give_weapons(player)
+	player.inventory.select_by_id(&"sword")
+	_box(Vector3(400, 0.6, -5), Vector3(4, 1.2, 4))
+	await _frames(40)
+	await _place(Vector3(400, 1.03, 2))
+	Input.action_press("block")
+	await _frames(10)
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	await _frames(150)
+	_release_all()
+	Input.action_release("block")
+	_check("FR35 guarding, sprint does not free-run", labels.is_empty(), "labels %s" % [labels])
+	player.inventory.select_by_id(&"")
+	await _frames(20)
+
+
 func _until(condition: Callable, max_frames: int) -> void:
 	for i in max_frames:
 		if condition.call():
@@ -596,7 +681,7 @@ func _hang(at: Vector3, lip: float, normal := Vector3.BACK) -> void:
 
 
 func _release_all() -> void:
-	for action in ["move_forward", "move_back", "move_left", "move_right", "jump", "crouch", "sprint"]:
+	for action in ["move_forward", "move_back", "move_left", "move_right", "jump", "crouch", "sprint", "block", "throw"]:
 		Input.action_release(action)
 
 

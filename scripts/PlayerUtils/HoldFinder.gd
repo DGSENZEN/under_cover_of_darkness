@@ -69,7 +69,7 @@ func hold_target(hold: Node3D, near: Vector3) -> Dictionary:
 	var normal: Vector3 = hold.outward()
 	var anchor: Vector3 = planner.hang_anchor(grip, normal, grip.y)
 
-	if not scanner.fits(anchor, false):
+	if not scanner.fits(anchor, false) or not _grip_is_real(grip, normal, anchor):
 		return {}
 
 	return {
@@ -80,6 +80,20 @@ func hold_target(hold: Node3D, near: Vector3) -> Dictionary:
 		"hold": hold,
 		"reach": false,
 	}
+
+
+## A hold's marker can drift from its stone (moved in the workshop, the
+## geometry gone): the hands must reach the grip through open air, and there
+## must be something just behind it to hold.
+func _grip_is_real(grip: Vector3, normal: Vector3, anchor: Vector3) -> bool:
+	var hands := Vector3(anchor.x, grip.y - 0.02, anchor.z)
+	var short_of := grip + normal * 0.02 - Vector3.UP * 0.02
+
+	if not scanner.ray(hands, short_of).is_empty():
+		return false
+
+	var front := grip + normal * 0.05 - Vector3.UP * 0.03
+	return not scanner.ray(front, front - normal * 0.3).is_empty()
 
 
 ## Placed holds within radius of point.

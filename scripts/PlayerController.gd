@@ -2267,7 +2267,8 @@ func _update_hang(delta: float) -> void:
 	var drop_requested := Input.is_action_just_pressed("crouch") or _hang_buffered_action == &"drop"
 	_hang_buffered_action = &""
 	# Drop has priority over a queued pull-up.
-	var pulling_away := Input.is_action_just_pressed("move_back") and _facing_direction().dot(-hang_normal) > 0.0
+	# (Free-running, back steers down the wall instead: _freerun_climb.)
+	var pulling_away := Input.is_action_just_pressed("move_back") and _facing_direction().dot(-hang_normal) > 0.0 and not free_running()
 	if Input.is_action_pressed("sprint") and Input.is_action_pressed("crouch") and not _is_carrying():
 		_freerun_down()
 		return
@@ -2553,6 +2554,7 @@ func _update_drop_catch() -> bool:
 	move.ends_in_hang = true
 	move.hang_normal = drop_target["normal"]
 	move.hang_lip_y = drop_target["lip_y"]
+	move.end_hold = drop_target.get("hold")
 
 	drop_target = {}
 	_assist_active = false
@@ -3537,7 +3539,13 @@ func _update_stowed() -> void:
 
 ## Sprint held, not crouched, hands free: the city is taken as it comes.
 func free_running() -> bool:
-	return Input.is_action_pressed("sprint") and not is_crouched and not _is_carrying()
+	# Guarding, charging, drawing: sprint is no run (combat.speed_scale()).
+	return (
+		Input.is_action_pressed("sprint")
+		and not is_crouched
+		and not _is_carrying()
+		and (combat == null or combat.speed_scale() >= 1.0)
+	)
 
 
 ## Free-running on a hang: the move keys steer up, down and across the wall
@@ -3596,6 +3604,14 @@ func _freerun_edge() -> void:
 	var ahead := feet + direction * 0.3
 
 	if not scanner.ray(ahead + Vector3.UP * 0.1, ahead - Vector3.UP * freerun_max_auto_drop).is_empty():
+		return
+
+	# A seam the body spans (a crack between roofs, a gutter): ground beyond
+	# it within half a metre, near the feet' height, is no edge.
+	var across := feet + direction * 0.8
+	var beyond := scanner.ray(across + Vector3.UP * (scanner.step_height + 0.1), across - Vector3.UP * scanner.step_height)
+
+	if not beyond.is_empty():
 		return
 
 	var target := scanner.find_jump_target(
