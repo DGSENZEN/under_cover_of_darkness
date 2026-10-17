@@ -44,6 +44,7 @@ func _run() -> void:
 	await _pose_checks()
 	await _held_checks()
 	await _grip_pose_checks()
+	await _shoulder_checks()
 	await _kick_checks()
 	await _switch_checks()
 	await _sword_checks()
@@ -237,6 +238,60 @@ func _grip_pose_checks() -> void:
 	_check("FA16 pulling up, the hands press flat on the top", since >= 0 and pushed > 0.9,
 		"pull up from frame %d, Push %.2f" % [since, pushed])
 	await _place(Vector3(70, 0.1, 0))
+	await _frames(30)
+
+
+func _shoulder_checks() -> void:
+	# Free (the viewmodel): his shoulders where the old body's were, standing
+	# easy (its Idle).
+	await _place(Vector3(80, 0.1, 0))
+	await _frames(20)
+	var arms = player.hand._arms
+	var old = arms.get("_leg_body")
+	# (Their middle: the old stood easy, one shoulder a little forward.)
+	var worst := INF
+	if old != null:
+		var middles := []
+		for body in [arms.man, old]:
+			var sk: Skeleton3D = body.skeleton
+			var sum := Vector3.ZERO
+			for bone in [&"upperarm_l", &"upperarm_r"]:
+				var index := sk.find_bone(bone)
+				var at: Transform3D = sk.get_bone_global_rest(index) if body == arms.man else sk.get_bone_global_pose(index)
+				sum += sk.global_transform * at.origin
+			middles.append(sum * 0.5)
+		worst = middles[0].distance_to(middles[1])
+	_check("FA19 the new shoulders sit where the old body's did", old != null and worst <= 0.03, "worst %.3f m apart" % worst)
+
+	# Pulling up onto a top, looking down at the hands: the coat's shoulders
+	# (their caps, 7 cm round) stay below the view.
+	_box(Vector3(90, 1.2, -4.5), Vector3(4, 2.4, 3))
+	var lip: Node3D = HANDHOLD.new()
+	lip.kind = HANDHOLD.Kind.LEDGE
+	lip.length = 1.0
+	add_child(lip)
+	lip.global_position = Vector3(90, 2.4, -3)
+	await _frames(2)
+	await _hang_on(lip)
+	await _frames(20)
+	Input.action_press("jump")
+	var cam: Camera3D = player.camera
+	var bottom: float = get_viewport().get_visible_rect().size.y
+	var highest := INF
+	for i in 50:
+		await _frames(1)
+		if arms.held() < 0.5:
+			continue
+		var sk: Skeleton3D = arms.man.skeleton
+		for bone in [&"upperarm_l", &"upperarm_r"]:
+			var cap: Vector3 = sk.global_transform * sk.get_bone_global_pose(sk.find_bone(bone)).origin
+			var top: Vector3 = cap + cam.global_transform.basis.y * 0.07
+			if not cam.is_position_behind(top):
+				highest = minf(highest, cam.unproject_position(top).y)
+	_release_all()
+	_check("FA20 pulling up, the coat's shoulders stay below the view", highest > bottom,
+		"highest cap top at %.0f px, the view ends at %.0f px" % [highest, bottom])
+	await _place(Vector3(100, 0.1, 0))
 	await _frames(30)
 
 

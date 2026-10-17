@@ -39,6 +39,8 @@ var _materials: Array[BaseMaterial3D] = []
 var _depth := Z_CLIP
 var _held := 0.0
 var _shoulders := Vector3.INF
+## The new arms' own shoulders' middle (their rest, in their space).
+var _match_old := Vector3.INF
 ## Held, his shoulders come this far toward the wall (m, the view's forward),
 ## and this far down: a hanging body's chest is at the wall, under the hands.
 const CLIMB_FORWARD := 0.3
@@ -73,6 +75,7 @@ func use_new_arms(on: bool) -> void:
 	_leg_reach = null
 	_materials.clear()
 	_shoulders = Vector3.INF
+	_match_old = Vector3.INF
 	_build()
 
 
@@ -244,15 +247,19 @@ func set_held(amount: float, chest := Vector3.INF) -> void:
 		if chest != Vector3.INF:
 			placed = chest - _shoulders_middle()
 
-		man.position = (-EYE).lerp(placed, _held)
+		man.position = (-EYE).lerp(placed, _held) + _as_old()
 
 	set_depth_scale(1.0 if _held >= 0.5 else Z_CLIP)
 
 
-## The middle of his shoulders at rest, in his own space (full size).
+## The middle of his shoulders at rest, in his skeleton's space (full size):
+## what the placement was tuned against. (The old body's skeleton is not his
+## own space: his real shoulders sit back and down of these. _as_old.)
 func _shoulders_middle() -> Vector3:
-	if _shoulders == Vector3.INF and man != null and man.get("skeleton") != null:
-		var skeleton: Skeleton3D = man.skeleton
+	var body: Node3D = _leg_body if _leg_body != null else man
+
+	if _shoulders == Vector3.INF and body != null and body.get("skeleton") != null:
+		var skeleton: Skeleton3D = body.skeleton
 		var left := skeleton.find_bone(&"upperarm_l")
 		var right := skeleton.find_bone(&"upperarm_r")
 
@@ -260,6 +267,33 @@ func _shoulders_middle() -> Vector3:
 			_shoulders = (skeleton.get_bone_global_rest(left).origin + skeleton.get_bone_global_rest(right).origin) * 0.5
 
 	return _shoulders if _shoulders != Vector3.INF else Vector3(0.0, 1.45, 0.0)
+
+
+## For the new arms: how far to move them so their shoulders sit where the
+## old body's really did (the placement, the chest under the view and every
+## look of the arms in frame were tuned on those). Zero for the old arms.
+func _as_old() -> Vector3:
+	if _leg_body == null or man == null or not is_inside_tree():
+		return Vector3.ZERO
+
+	if _match_old == Vector3.INF:
+		_match_old = _real_shoulders(man, false)
+
+	# The old body stood easy (Idle): its shoulders dropped and settled from
+	# rest, and breathed. The kept body still plays it.
+	return _real_shoulders(_leg_body, true) - _match_old
+
+
+## The middle of a body's shoulders in its own space (its skeleton may sit
+## turned or moved inside it), as posed or at rest.
+static func _real_shoulders(body: Node3D, posed: bool) -> Vector3:
+	var skeleton: Skeleton3D = body.skeleton
+	var into := body.global_transform.affine_inverse() * skeleton.global_transform
+	var left := skeleton.find_bone(&"upperarm_l")
+	var right := skeleton.find_bone(&"upperarm_r")
+	var middle := (skeleton.get_bone_global_pose(left).origin + skeleton.get_bone_global_pose(right).origin) * 0.5 if posed \
+		else (skeleton.get_bone_global_rest(left).origin + skeleton.get_bone_global_rest(right).origin) * 0.5
+	return into * middle
 
 
 ## How far the rig is into its held, true-size form (0..1).
