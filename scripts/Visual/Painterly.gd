@@ -28,6 +28,11 @@ const PRESETS := {
 	# warm ramp, painted ambient and rim (the lamps' painted pools are the map's).
 	&"shader_led": {"paint_mix": 0.45, "stroke_strength": 0.36, "painted_light": 1.0, "ramp_amount": 1.0,
 		"ambient_amount": 0.15, "rim_amount": 0.25, "macro_amount": 1.0},
+	# The new standard (the Metro Underground, Oct 16 2026): the layered painter's
+	# atlas carries the colour whole, so no palette pull; the shader adds the
+	# painted light, a little rim and macro. Starting values, tuned at look-dev.
+	&"bespoke": {"paint_mix": 0.0, "stroke_strength": 0.08, "painted_light": 1.0, "ramp_amount": 0.6,
+		"ambient_amount": 0.12, "rim_amount": 0.2, "macro_amount": 0.25},
 }
 
 

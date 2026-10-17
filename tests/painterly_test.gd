@@ -41,7 +41,7 @@ func _run() -> void:
 			wrong.append("%s textures" % preset)
 
 	_check("P2 every preset's values reach its material, with the Zócalo palette and the brush",
-		wrong.is_empty() and Painterly.PRESETS.size() == 3, "wrong %s" % [wrong])
+		wrong.is_empty() and Painterly.PRESETS.size() == 4, "wrong %s" % [wrong])
 
 	# P3 the Retro sweep leaves a painterly material alone
 	var box := MeshInstance3D.new()
