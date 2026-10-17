@@ -8,6 +8,7 @@ const PLAYER := preload("res://Player.tscn")
 const HANDHOLD := preload("res://scripts/PlayerUtils/Handhold.gd")
 const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 const PROPS := preload("res://scripts/Interaction/Props.gd")
+const HumanoidScript := preload("res://scripts/Visual/Humanoid.gd")
 
 const BONES := [&"root", &"clavicle", &"upperarm", &"lowerarm", &"hand"]
 const FINGERS := [&"index", &"middle", &"ring", &"pinky", &"thumb"]
@@ -87,6 +88,24 @@ func _rig_checks() -> void:
 	_check("FA4 the solver's fist is the new arms' own", fingers.size() >= 30 and closed > 25.0,
 		"%d finger joints learned, index_02 closes %.0f deg" % [fingers.size(), closed])
 	_check("FA6 the new arms are not stretched", is_zero_approx(arms.reach.arm_length), "arm_length %.2f" % arms.reach.arm_length)
+
+	# Every hold and held item turns a hand by its bone's axes, set for the old
+	# hands: the new ones must have the palm on the same axis.
+	var old = HumanoidScript.new()
+	old.build(&"player")
+	add_child(old)
+	var worst := 1.0
+	var axes := []
+	for bone in [&"hand_l", &"hand_r", &"lowerarm_l", &"lowerarm_r"]:
+		var palms := []
+		for rig in [old, man]:
+			var rest: Transform3D = rig.skeleton.get_bone_global_rest(rig.skeleton.find_bone(bone))
+			var basis: Basis = (rig.global_transform.affine_inverse() * rig.skeleton.global_transform * rest).basis.orthonormalized()
+			palms.append((basis.inverse() * Vector3.DOWN).normalized())
+		worst = minf(worst, palms[0].dot(palms[1]))
+		axes.append("%s %s/%s" % [bone, palms[0].snapped(Vector3.ONE * 0.1), palms[1].snapped(Vector3.ONE * 0.1)])
+	old.queue_free()
+	_check("FA11 the new hands' bones turn as the old ones do (the palm on the same axis)", worst > 0.9, "; ".join(axes))
 
 
 func _held_checks() -> void:

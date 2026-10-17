@@ -52,6 +52,9 @@ var elbow_hints: Array[Vector3] = [ELBOW_HINT[0], ELBOW_HINT[1]]
 ## restored after drawing, so this is the only record of it.
 var wrist_bend: Array[float] = [0.0, 0.0]
 var solved_hands: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+## Where each shoulder and elbow were put (world space), at the last solve.
+var solved_shoulders: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var solved_elbows: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 ## Where the foot was put (world space), at the last solve of a kick.
 var solved_foot := Vector3.ZERO
 ## Shoulder to wrist (m, his space): the elbow and wrist joints are pushed
@@ -175,6 +178,8 @@ func _reach(skeleton: Skeleton3D, side: int, into: Transform3D) -> void:
 	var hand_pose := skeleton.get_bone_global_pose(_bone(skeleton, bones[3]))
 	wrist_bend[side] = rad_to_deg(forearm.angle_to(hand_pose.basis.y.normalized()))
 	solved_hands[side] = skeleton.global_transform * hand_pose.origin
+	solved_shoulders[side] = skeleton.global_transform * skeleton.get_bone_global_pose(_bone(skeleton, bones[1])).origin
+	solved_elbows[side] = skeleton.global_transform * skeleton.get_bone_global_pose(_bone(skeleton, bones[2])).origin
 
 
 ## Two-bone IK: `root` and `mid` bend so the end of `mid` (the `tip` bone's

@@ -46,6 +46,8 @@ SPEC = {
         "Fist": ((85.0, 95.0, 70.0), ((30.0, -30.0, 0.0), (30.0, 0.0, 0.0), (40.0, 0.0, 0.0))),
         "Hook": ((50.0, 70.0, 40.0), ((10.0, 0.0, 0.0), (20.0, 0.0, 0.0), (15.0, 0.0, 0.0))),
     },
+    # The coat's chest under the shoulders: (centre, radii), Blender axes.
+    "yoke": ((0.0, -0.01, 1.26), (0.21, 0.12, 0.21)),
     "sleeve_short_of_wrist": 0.04,
     "cuff_length": 0.025,
     "rings": (("middle", "l"), ("ring", "l")),
@@ -260,9 +262,12 @@ def build(root_dir):
     for side, sign in SIDES:
         j = joints(sign)
         bone("clavicle_" + side, (sign * 0.03, 0.0, SPEC["shoulder_height"]), j["shoulder"], "root")
-        bone("upperarm_" + side, j["shoulder"], j["elbow"], "clavicle_" + side, True)
-        bone("lowerarm_" + side, j["elbow"], j["wrist"], "upperarm_" + side, True)
-        bone("hand_" + side, j["wrist"], j["knuckles"], "lowerarm_" + side, True)
+        # The arm's bones turn as the old body's do (the game's holds and held
+        # items are set for them): the palm on local -X for the right hand,
+        # +X for the left.
+        bone("upperarm_" + side, j["shoulder"], j["elbow"], "clavicle_" + side, True).align_roll(Vector((-sign, 0.0, 0.0)))
+        bone("lowerarm_" + side, j["elbow"], j["wrist"], "upperarm_" + side, True).align_roll(Vector((-sign, 0.0, 0.0)))
+        bone("hand_" + side, j["wrist"], j["knuckles"], "lowerarm_" + side, True).align_roll(Vector((-sign, 0.0, 0.0)))
 
         for finger in FINGERS:
             points = j["fingers"][finger]
@@ -361,6 +366,43 @@ def build(root_dir):
                                           matrix=Matrix.Translation(Vector(centre)))
         _tag(result["verts"], bone_name, mat)
 
+    def sleeve(a, b, r0, r1, rings, weights, mat, segments=16):
+        """An open tube from a to b in rings, each ring weighted by
+        weights(t) -> {bone: weight}, t 0 at a and 1 at b."""
+        a = Vector(a)
+        b = Vector(b)
+        rot = (b - a).to_track_quat("Z", "Y").to_matrix()
+        loops = []
+
+        for k in range(rings + 1):
+            t = k / rings
+            centre = a.lerp(b, t)
+            radius = r0 + (r1 - r0) * t
+            ring_verts = []
+
+            for i in range(segments):
+                u = i / segments * math.tau
+                v = bm.verts.new(centre + rot @ Vector((math.cos(u) * radius, math.sin(u) * radius, 0.0)))
+
+                for name, w in weights(t).items():
+                    v[deform][groups.index(name)] = w
+
+                ring_verts.append(v)
+
+            loops.append(ring_verts)
+
+        for k in range(rings):
+            for i in range(segments):
+                j = (i + 1) % segments
+                f = bm.faces.new((loops[k][i], loops[k][j], loops[k + 1][j], loops[k + 1][i]))
+                f.material_index = mat_order.index(mat)
+                f.select = True
+
+    def egg(centre, radii, bone_name, mat):
+        result = bmesh.ops.create_uvsphere(bm, u_segments=24, v_segments=14, radius=1.0,
+                                          matrix=Matrix.Translation(Vector(centre)) @ Matrix.Diagonal((*radii, 1.0)))
+        _tag(result["verts"], bone_name, mat)
+
     def box(centre, size, along, bone_name, mat):
         rot = Vector(along).to_track_quat("Y", "Z").to_matrix().to_4x4()
         result = bmesh.ops.create_cube(bm, size=1.0, matrix=Matrix.Translation(Vector(centre)) @ rot @ Matrix.Diagonal((*size, 1.0)))
@@ -409,21 +451,36 @@ def build(root_dir):
         for v in verts:
             v.tag = False
 
+    # The coat's yoke and chest: the arms run into a body, wherever the view
+    # finds the shoulders (looking up at a hold above), as the old body's did.
+    # Its top stays under the eye (ViewArms.EYE, 0.17 m above the shoulders).
+    egg(*SPEC["yoke"], "root", "coat")
+
     for side, sign in SIDES:
         j = joints(sign)
         sh, el, wr = Vector(j["shoulder"]), Vector(j["elbow"]), Vector(j["wrist"])
         fore_dir = (wr - el).normalized()
         sleeve_end = wr - fore_dir * SPEC["sleeve_short_of_wrist"]
         # The trench sleeve: wide at the shoulder, a closed cap over it.
-        ball(sh, 0.085, "upperarm_" + side, "coat")
-        tube(sh, el, 0.080, 0.064, "upperarm_" + side, "coat")
-        ball(el, 0.064, "lowerarm_" + side, "coat")
-        tube(el, sleeve_end - fore_dir * 0.05, 0.063, 0.058, "lowerarm_" + side, "coat")
+        # The shoulder stays on the chest; the sleeve's top stretches from it
+        # to the arm, as cloth over a shoulder does when the arm reaches out
+        # (ArmReach slides a shoulder up to SHOULDER_GIVE toward a far hold).
+        ball(sh, 0.070, "clavicle_" + side, "coat")
+        upper, clavicle = "upperarm_" + side, "clavicle_" + side
+
+        def onto_arm(t, upper=upper, clavicle=clavicle):
+            w = min(max((t - 0.05) / 0.35, 0.0), 1.0)
+            w = w * w * (3.0 - 2.0 * w)
+            return {upper: w, clavicle: 1.0 - w} if w < 1.0 else {upper: 1.0}
+
+        sleeve(sh, el, 0.066, 0.054, 8, onto_arm, "coat")
+        ball(el, 0.054, "lowerarm_" + side, "coat")
+        tube(el, sleeve_end - fore_dir * 0.05, 0.053, 0.047, "lowerarm_" + side, "coat")
         # The turned-back cuff of the coat: a little wider band.
-        tube(sleeve_end - fore_dir * 0.05, sleeve_end, 0.064, 0.064, "lowerarm_" + side, "coat")
+        tube(sleeve_end - fore_dir * 0.05, sleeve_end, 0.052, 0.052, "lowerarm_" + side, "coat")
         # The shirt cuff showing past it. The hand (added below) runs on under
         # both into the sleeve.
-        tube(sleeve_end, sleeve_end + fore_dir * SPEC["cuff_length"], 0.047, 0.046, "lowerarm_" + side, "cuff")
+        tube(sleeve_end, sleeve_end + fore_dir * SPEC["cuff_length"], 0.040, 0.039, "lowerarm_" + side, "cuff")
 
         for finger, ring_side in SPEC["rings"]:
             if ring_side == side:
