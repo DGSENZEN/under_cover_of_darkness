@@ -923,6 +923,10 @@ func _update_locomotion(delta: float) -> void:
 	_update_jump_assist(wish_direction, grounded)
 	_try_buffered_jump()
 	_apply_horizontal_movement(wish_direction, delta)
+
+	if free_running() and grounded:
+		_freerun_edge()
+
 	_apply_vertical_movement(delta)
 
 	var fall_speed := -velocity.y
@@ -3456,6 +3460,48 @@ func _freerun_climb(delta: float) -> bool:
 			return true
 
 	return false
+
+
+## Free-running at the edge of a drop deeper than freerun_max_auto_drop: jump
+## it if a landing is in reach at this speed (the jump simulated with the real
+## gravity), otherwise stop at the lip. Free-run never runs you off a drop.
+func _freerun_edge() -> void:
+	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
+	var speed := horizontal.length()
+
+	if speed < 0.5:
+		return
+
+	var direction := horizontal / speed
+	var feet := get_feet_position()
+	var ahead := feet + direction * 0.3
+
+	if not scanner.ray(ahead + Vector3.UP * 0.1, ahead - Vector3.UP * freerun_max_auto_drop).is_empty():
+		return
+
+	var target := scanner.find_jump_target(
+		direction,
+		jump_assist_min_distance,
+		jump_assist_max_distance,
+		jump_assist_max_rise,
+		jump_assist_max_drop
+	)
+
+	if not target.is_empty():
+		var landing: Vector3 = target["point"]
+		var airtime := _jump_airtime(landing.y - feet.y)
+
+		if airtime > 0.0 and speed * airtime >= float(target["distance"]) + 0.3:
+			velocity.y = jump_speed
+			_jump_cut_allowed = false
+			coyote_timer = 0.0
+			jump_buffer_timer = 0.0
+			Sfx.play_flat(self, _jump_sound(_surface_name()), Sfx.loudness(footstep_db_walk + _surface_offset()))
+			body_motion.on_jump()
+			return
+
+	velocity -= direction * maxf(velocity.dot(direction), 0.0)
+	_last_reject = "free-run: no landing over that edge"
 
 
 ## Free-running at a wall with a hold (placed, or a lip in the stone) between

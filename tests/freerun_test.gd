@@ -43,6 +43,7 @@ func _run() -> void:
 	await _pole_checks()
 	await _climb_checks()
 	await _ground_checks()
+	await _edge_checks()
 
 
 # Task 1: the hold finder.
@@ -298,6 +299,38 @@ func _ground_checks() -> void:
 	await _run_at(Vector3(190, 1.03, 3), true, 160)
 	_check("FR18b a smooth wall with nothing to hold is not climbed", labels.is_empty() and player.movement_state == 0,
 		"labels %s state %d" % [labels, player.movement_state])
+
+
+# Task 6: gaps and edges.
+func _edge_checks() -> void:
+	_box(Vector3(200, 3, 0), Vector3(4, 6, 10))
+	_box(Vector3(200, 3, -13.5), Vector3(4, 6, 12))
+	_box(Vector3(210, 3, 0), Vector3(4, 6, 10))
+	_box(Vector3(220, 0.5, 0), Vector3(4, 1, 10))
+	await _frames(2)
+
+	player.invulnerable = false
+	var health: float = player.health
+	await _run_at(Vector3(200, 7.03, 4), true, 200, -9.0)
+	_check("FR19 a roof gap with a landing is jumped", player.global_position.z < -7.6 and player.global_position.y - 1.0 > 5.9 and player.health >= health,
+		"position %s health %.1f -> %.1f" % [player.global_position, health, player.health])
+
+	await _place(Vector3(210, 7.03, 4))
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var fastest := 0.0
+	for i in 120:
+		await _frames(1)
+		fastest = maxf(fastest, Vector2(player.velocity.x, player.velocity.z).length())
+	_release_all()
+	await _frames(20)
+	_check("FR19b a roof edge with no landing stops you at the lip", player.global_position.y - 1.0 > 5.9 and player.global_position.z <= -4.3 and player.global_position.z >= -5.0 and fastest > 8.0,
+		"position %s fastest %.1f" % [player.global_position, fastest])
+	player.invulnerable = true
+
+	await _run_at(Vector3(220, 2.03, 4), true, 100, -7.0)
+	_check("FR19c a 1 m step down is simply run off", player.global_position.y - 1.0 < 0.2 and player.global_position.z < -5.0,
+		"position %s" % player.global_position)
 
 
 func _until(condition: Callable, max_frames: int) -> void:
