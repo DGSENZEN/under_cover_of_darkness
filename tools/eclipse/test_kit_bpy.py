@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import arcade_bay  # noqa: E402
 import stall  # noqa: E402
 import underground_ground  # noqa: E402
+import underground_services  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -987,6 +988,106 @@ class UndergroundGround(unittest.TestCase):
                 problems[n] = found[:3]
 
         self.assertEqual(problems, {})
+
+
+def _segments_apart(a, b):
+    """The least distance between two polylines (lists of 3-tuples), sampled finely."""
+    def dense(points):
+        out = []
+        for p, q in zip(points, points[1:]):
+            for k in range(6):
+                t = k / 6
+                out.append(tuple(p[i] + (q[i] - p[i]) * t for i in range(3)))
+        return out + [points[-1]]
+
+    return min(math.dist(p, q) for p in dense(a) for q in dense(b))
+
+
+class UndergroundServices(unittest.TestCase):
+    """The services along the Underground's walls (tools/eclipse/underground_services.py):
+    each piece its own object built in the wall's frame (the wall is y = 0, the
+    piece out into -y), closed, in its budget, through the gate; the mains in
+    their colours; cables never through each other."""
+
+    BUDGET = {"pipe_green_4": 1400, "pipe_green_2": 900, "pipe_ochre_4": 1200, "pipe_red_4": 1400,
+              "pipe_red_valve": 2600, "pipe_red_drop": 2600, "pipe_blue_4": 1100, "cable_tray_4": 3200,
+              "cable_tray_4_spill": 3600, "cable_swag": 1000, "cable_hook": 200, "conduit_drop": 700}
+    COLOURS = {"pipe_green_4": "pipe_green", "pipe_green_2": "pipe_green", "pipe_ochre_4": "pipe_ochre",
+               "pipe_red_4": "pipe_red", "pipe_red_valve": "pipe_red", "pipe_red_drop": "pipe_red",
+               "pipe_blue_4": "pipe_blue", "cable_tray_4": "metro_orange", "cable_tray_4_spill": "metro_orange",
+               "conduit_drop": "metro_orange"}
+
+    @classmethod
+    def setUpClass(cls):
+        underground_services.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_each_passes_the_gate(self):
+        problems = {}
+
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            found = gate.check(faces, tris, [], budget=self.BUDGET[n])
+            if found:
+                problems[n] = found[:3]
+
+        self.assertEqual(problems, {})
+
+    def test_wall_pieces_meet_the_wall_and_stop_there(self):
+        # Every wall piece's brackets reach the wall face (y = 0) and nothing goes behind it;
+        # the conduit stands off its stall's box, not the wall.
+        reach = {n: max(v.y for v in _world(o)) for n, o in self.objects.items() if n != "conduit_drop"}
+        self.assertEqual({n: y for n, y in reach.items() if not -0.001 <= y <= 0.0005}, {})
+
+    def test_each_main_in_its_colour(self):
+        slots = {n: {o.material_slots[p.material_index].material.name for p in o.data.polygons}
+                 for n, o in self.objects.items()}
+        self.assertEqual({n: c for n, c in self.COLOURS.items() if c not in slots[n]}, {})
+
+    def test_lengths_tile_along_the_wall(self):
+        for n, length in (("pipe_green_4", 4.0), ("pipe_green_2", 2.0), ("pipe_ochre_4", 4.0), ("pipe_red_4", 4.0),
+                          ("pipe_red_valve", 4.0), ("pipe_blue_4", 4.0), ("cable_tray_4", 4.0)):
+            xs = [v.x for v in _world(self.objects[n])]
+            self.assertAlmostEqual(min(xs), 0.0, delta=0.025, msg=n)
+            self.assertAlmostEqual(max(xs), length, delta=0.025, msg=n)
+
+    def test_the_trays_bundle_never_touches_itself(self):
+        cables = underground_services.bundle(4.0)
+        clash = [(i, j) for i in range(len(cables)) for j in range(i + 1, len(cables))
+                 if _segments_apart(cables[i][2], cables[j][2]) < cables[i][0] + cables[j][0] + 0.002]
+        self.assertEqual(clash, [])
+        self.assertGreaterEqual(len(cables), 7)
+
+    def test_the_swags_cables_never_touch(self):
+        spans = [[(3.0 * i / 14, -out, r - sag * math.sin(math.pi * i / 14)) for i in range(15)]
+                 for r, out, sag, _ in underground_services.SWAG]
+        radii = [r for r, *_ in underground_services.SWAG]
+        clash = [(i, j) for i in range(3) for j in range(i + 1, 3)
+                 if _segments_apart(spans[i], spans[j]) < radii[i] + radii[j] + 0.002]
+        self.assertEqual(clash, [])
+
+    def test_the_spill_hangs_out_of_the_tray(self):
+        # The loose cable's loop hangs a good way below the tray, in front of its front rail.
+        vs = _world(self.objects["cable_tray_4_spill"])
+        self.assertLess(min(v.z for v in vs), -0.4)
+        self.assertLess(min(v.y for v in vs), -underground_services.TRAY_FRONT - 0.05)
+
+    def test_the_conduit_rises_clear_of_the_mains_into_the_tray(self):
+        # From the junction box's top (2.85 m) it has swung out in front of the water main (on the
+        # box's line, its front 0.09 m before it) by the time it reaches the main's underside (3.16 m).
+        path = underground_services.conduit_path()
+        before_main = [p for p in path if p[2] >= 3.16 - 2.85 - underground_services.CONDUIT_R - 0.01]
+        self.assertTrue(all(p[1] <= -0.18 for p in before_main))
+        self.assertAlmostEqual(path[-1][2], underground_services.CONDUIT_RISE, delta=1e-6)
 
 
 if __name__ == "__main__":

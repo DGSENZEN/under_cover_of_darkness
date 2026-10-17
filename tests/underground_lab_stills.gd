@@ -25,6 +25,11 @@ const VIEWS := [
 	["floor_cable", Vector3(3.2, 1.7, 0.2), Vector3(2.6, 0.7, -2.2)],
 	["floor_coil", Vector3(6.3, 1.4, -0.9), Vector3(7.4, 0.0, -2.1)],
 	["floor_papers", Vector3(-2.6, 1.4, 2.8), Vector3(-3.6, 0.0, 1.7)],
+	["services_back", Vector3(3.5, 1.7, 2.5), Vector3(0.0, 3.2, -2.3)],
+	["services_far", Vector3(2.0, 1.7, 1.0), Vector3(6.5, 3.0, 4.5)],
+	["close_spill", Vector3(2.5, 2.4, 0.2), Vector3(0.95, 3.3, -1.9)],
+	["close_valve", Vector3(7.2, 2.6, 2.8), Vector3(7.0, 3.5, 4.35)],
+	["close_hydrant", Vector3(-9.6, 1.6, 2.6), Vector3(-11.3, 1.4, 4.3)],
 ]
 
 var out := "/tmp/underground-lab/"

@@ -61,6 +61,15 @@ const TRAIL_PATCHES := 9
 ## Where the cable run stands (tools/eclipse/underground_ground.py CABLE_AT): its riser up into the junction box.
 const CABLE_AT := Vector3(1.55, 0.0, -2.2)
 const STOCK := ["sack_slumped", "sack_lying", "crate", "crate_corn"]
+## The services along the walls (tools/eclipse/underground_services.py), each hung at its height:
+## on the back wall the water main (CONDUIT), the gas line, the Company's tray; on the far wall
+## the fire main, the air line, heavy cables on hooks high under the vault.
+const SERVICES_KIT := "res://assets/eclipse/kit/underground_services.glb"
+const GAS_Y := 3.0
+const TRAY_Y := 3.6
+const FIRE_Y := 3.1
+const AIR_Y := 2.75
+const HOOK_Y := 3.88
 const RUMBLE_DB := -4.0
 const RATTLES := ["res://audio/sfx/jars_rattle_1.wav", "res://audio/sfx/jars_rattle_2.wav"]
 const SHELVES_AT := Vector3(0.0, 1.4, -1.9)
@@ -102,6 +111,9 @@ var train: TrainPass
 var crowd: Crowd
 var junction_hum: AudioStreamPlayer3D
 var clutter: Array[MeshInstance3D] = []
+var services: Array[MeshInstance3D] = []
+var _service_meshes := {}
+var _service_material: ShaderMaterial
 var _kit_meshes := {}
 var _kit_material: ShaderMaterial
 var rumble: AudioStreamPlayer
@@ -130,6 +142,7 @@ func _ready() -> void:
 	_lights()
 	_decals()
 	_clutter()
+	_services()
 	_effects()
 	_keys()
 	player = PLAYER.instantiate()
@@ -296,12 +309,6 @@ func _corridor() -> void:
 	_box(Vector3(-RUN, 1.3, BACK_WALL), Vector3(RUN, 1.5, BACK_WALL + 0.02), _flat(LINE_2), "band_back")
 	_box(Vector3(-RUN, 1.3, FAR_WALL - 0.02), Vector3(RUN, 1.5, FAR_WALL), _flat(LINE_2), "band_far")
 
-	# The Company's conduit along the wall, and the drop from the stall's junction box up to it.
-	var steel := _flat(Color(0.18, 0.25, 0.22))
-	_tube(Vector3(-RUN, CONDUIT.y, CONDUIT.z), Vector3(RUN, CONDUIT.y, CONDUIT.z), 0.09, steel, "conduit")
-	_tube(Vector3(-RUN, CONDUIT.y - 0.24, CONDUIT.z), Vector3(RUN, CONDUIT.y - 0.24, CONDUIT.z), 0.05,
-		_flat(Color(0.55, 0.42, 0.18)), "conduit_brass")
-	_tube(JUNCTION_TOP - Vector3(0, 0.02, 0), Vector3(JUNCTION_TOP.x, CONDUIT.y, CONDUIT.z), 0.022, steel, "drop")
 
 
 func _flat(colour: Color) -> StandardMaterial3D:
@@ -328,22 +335,6 @@ func _box(lo: Vector3, hi: Vector3, material: Material, node_name: String) -> vo
 	shape.shape = solid
 	body.add_child(shape)
 	mesh.add_child(body)
-
-
-func _tube(a: Vector3, b: Vector3, radius: float, material: Material, node_name: String) -> void:
-	var mesh := MeshInstance3D.new()
-	mesh.name = node_name
-	var tube := CylinderMesh.new()
-	tube.top_radius = radius
-	tube.bottom_radius = radius
-	tube.height = a.distance_to(b)
-	tube.material = material
-	mesh.mesh = tube
-	add_child(mesh)
-	mesh.position = (a + b) / 2
-	var along := (b - a).normalized()
-	var side := along.cross(Vector3.FORWARD if absf(along.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT).normalized()
-	mesh.basis = Basis(side, along, side.cross(along))
 
 
 # The light
@@ -693,12 +684,7 @@ func _clutter() -> void:
 		missing.append(GROUND_KIT)
 		return
 
-	var kit: Node3D = (load(GROUND_KIT) as PackedScene).instantiate()
-
-	for mesh: MeshInstance3D in kit.find_children("*", "MeshInstance3D", true, false):
-		_kit_meshes[String(mesh.name)] = mesh.mesh
-
-	kit.free()
+	_kit_meshes = _kit(GROUND_KIT)
 	_kit_material = Painterly.material(_painted(["underground_ground.png", "underground_ground_base.png"]), &"bespoke")
 
 	# Her customers drop their emptied cones and cups by the counter.
@@ -755,26 +741,95 @@ func _trail_tangent(t: float) -> Vector3:
 ## One of the floor kit's pieces laid at `at`, turned `yaw` about the vertical;
 ## stock solid to walk against, litter not.
 func _lay(kind: String, at: Vector3, yaw: float) -> MeshInstance3D:
+	var piece := _place(_kit_meshes[kind], _kit_material, kind, at, yaw, kind in STOCK)
+	clutter.append(piece)
+	return piece
+
+
+## The meshes of an exported kit by piece name.
+func _kit(path: String) -> Dictionary:
+	var meshes := {}
+	var kit: Node3D = (load(path) as PackedScene).instantiate()
+
+	for mesh: MeshInstance3D in kit.find_children("*", "MeshInstance3D", true, false):
+		meshes[String(mesh.name)] = mesh.mesh
+
+	kit.free()
+	return meshes
+
+
+## A kit piece set at `at`, turned `yaw` about the vertical, solid if asked.
+func _place(mesh: Mesh, material: Material, kind: String, at: Vector3, yaw: float, solid: bool) -> MeshInstance3D:
 	var piece := MeshInstance3D.new()
 	piece.name = kind
-	piece.mesh = _kit_meshes[kind]
+	piece.mesh = mesh
 	piece.set_meta("kind", kind)
 
 	for i in piece.mesh.get_surface_count():
-		piece.set_surface_override_material(i, _kit_material)
+		piece.set_surface_override_material(i, material)
 
-	add_child(piece)
+	add_child(piece, true)
 	piece.position = at
 	piece.rotation.y = yaw
 
-	if kind in STOCK:
+	if solid:
 		var body := StaticBody3D.new()
 		var shape := CollisionShape3D.new()
 		shape.shape = piece.mesh.create_convex_shape()
 		body.add_child(shape)
 		piece.add_child(body)
 
-	clutter.append(piece)
+	return piece
+
+
+# The services along the walls, in the Company's colours
+
+func _services() -> void:
+	if not ResourceLoader.exists(SERVICES_KIT):
+		missing.append(SERVICES_KIT)
+		return
+
+	_service_meshes = _kit(SERVICES_KIT)
+	_service_material = Painterly.material(_painted(["underground_services.png", "underground_services_base.png"]), &"bespoke")
+
+	# The back wall. The water main, its lengths jointed so one joint weeps over the wall
+	# beside her stall (the drip, DRIP_AT); it runs on into the end walls.
+	for run in [[-12.3, "pipe_green_2"], [-10.3, "pipe_green_4"], [-6.3, "pipe_green_4"], [-2.3, "pipe_green_4"],
+			[1.7, "pipe_green_4"], [5.7, "pipe_green_4"], [9.7, "pipe_green_2"], [11.7, "pipe_green_2"]]:
+		_hang(run[1], Vector3(run[0], CONDUIT.y, BACK_WALL), false)
+
+	# The gas line below it, its joints falling elsewhere.
+	for i in 7:
+		_hang("pipe_ochre_4", Vector3(-13.3 + 4.0 * i, GAS_Y, BACK_WALL), false)
+
+	# The Company's tray above, its bundle of power; over her stall, where her power was tapped,
+	# a cable has come loose and hangs out in a loop.
+	for i in 7:
+		_hang("cable_tray_4_spill" if i == 3 else "cable_tray_4", Vector3(-13.0 + 4.0 * i, TRAY_Y, BACK_WALL), false)
+
+	# Her power, up from the junction box on her stall's post into the tray.
+	_hang("conduit_drop", JUNCTION_TOP, false)
+
+	# The far wall, its pieces turned to face back across the corridor (they run toward -x).
+	# The fire main, a gate valve in it, ending in a hydrant low on the wall by the end wall.
+	for run in [[13.0, "pipe_red_4"], [9.0, "pipe_red_valve"], [5.0, "pipe_red_4"], [1.0, "pipe_red_4"],
+			[-3.0, "pipe_red_4"], [-7.0, "pipe_red_4"], [-11.0, "pipe_red_drop"]]:
+		_hang(run[1], Vector3(run[0], FIRE_Y, FAR_WALL), true, run[1] == "pipe_red_drop")
+
+	# The air line below it.
+	for i in 7:
+		_hang("pipe_blue_4", Vector3(14.5 - 4.0 * i, AIR_Y, FAR_WALL), true)
+
+	# Heavy cables swagged on hooks high under the vault, out of the end walls and back into them.
+	for i in 9:
+		_hang("cable_swag", Vector3(13.0 - 3.0 * i, HOOK_Y, FAR_WALL), true)
+
+
+## A services piece hung on a wall at `at` (its wall face, its height), turned to face back across
+## the corridor if it hangs on the far wall.
+func _hang(kind: String, at: Vector3, far: bool, solid := false) -> MeshInstance3D:
+	var piece := _place(_service_meshes[kind], _service_material, kind, at, PI if far else 0.0, solid)
+	services.append(piece)
 	return piece
 
 

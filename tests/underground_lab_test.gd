@@ -376,6 +376,52 @@ func _run() -> void:
 	_check("U33 loose marigold petals are strewn along the trail between its heads", petals.size() >= 6 and strewn,
 		"%d petal patches, along %s" % [petals.size(), strewn])
 
+	# U34 the back wall's services: the water main and the gas line run its length, the Company's tray above them
+	var green := _services_on(lab, "pipe_green", lab.BACK_WALL, lab.CONDUIT.y)
+	var ochre := _services_on(lab, "pipe_ochre", lab.BACK_WALL, lab.GAS_Y)
+	var tray := _services_on(lab, "cable_tray", lab.BACK_WALL, lab.TRAY_Y)
+	_check("U34 along the back wall the water main, the gas line and the Company's tray each run the corridor's length",
+		_covers(lab, green) and _covers(lab, ochre) and _covers(lab, tray)
+		and tray.any(func(p): return p.get_meta("kind") == "cable_tray_4_spill"),
+		"green %d ochre %d tray %d" % [green.size(), ochre.size(), tray.size()])
+
+	# U35 the drip has its cause: it falls from a weeping joint of the water main
+	var joints: Array = green.map(func(p): return p.global_position.x)
+	_check("U35 the water drips from a joint of the water main", joints.any(func(x): return absf(x - lab.DRIP_AT.x) < 0.1),
+		"joints %s" % [joints])
+
+	# U36 the far wall: the fire main with a valve and a hydrant low on the wall, the air line, heavy cables swagged
+	var red := _services_on(lab, "pipe_red", lab.FAR_WALL, lab.FIRE_Y)
+	var blue := _services_on(lab, "pipe_blue", lab.FAR_WALL, lab.AIR_Y)
+	var swag := _services_on(lab, "cable_swag", lab.FAR_WALL, lab.HOOK_Y)
+	var hydrant: Array = red.filter(func(p): return p.get_meta("kind") == "pipe_red_drop")
+	_check("U36 on the far wall the red fire main (a valve, a hydrant low on the wall, solid), the blue air line, heavy cables on hooks",
+		_covers(lab, red.filter(func(p): return p.get_meta("kind") != "pipe_red_drop"), 1.0)
+		and red.any(func(p): return p.get_meta("kind") == "pipe_red_valve") and hydrant.size() == 1
+		and hydrant[0].find_children("*", "StaticBody3D", true, false).size() > 0
+		and _covers(lab, blue) and _covers(lab, swag),
+		"red %d hydrant %d blue %d swag %d" % [red.size(), hydrant.size(), blue.size(), swag.size()])
+
+	# U38 on the far wall the valve's wheel stays clear below the cables swagged over it
+	var wheel_top := -INF
+	var cables_low := INF
+
+	for piece: MeshInstance3D in lab.services:
+		var box := piece.global_transform * piece.get_aabb()
+		if piece.get_meta("kind") == "pipe_red_valve":
+			wheel_top = maxf(wheel_top, box.end.y)
+		elif piece.get_meta("kind") == "cable_swag":
+			cables_low = minf(cables_low, box.position.y)
+	_check("U38 the fire main's valve wheel stays at least 3 cm below the swagged cables",
+		cables_low - wheel_top >= 0.03, "wheel top %.3f, cables' lowest %.3f" % [wheel_top, cables_low])
+
+	# U37 the stall's power rises in the Company's orange from its junction box into the tray; the flat stand-ins are gone
+	var rise: Array = lab.services.filter(func(p): return p.get_meta("kind") == "conduit_drop")
+	var gone: bool = ["conduit", "conduit_brass", "drop"].all(func(n): return lab.get_node_or_null(n) == null)
+	_check("U37 the stall's power rises in orange conduit from its junction box into the tray; no flat stand-in tubes left",
+		rise.size() == 1 and rise[0].global_position.distance_to(lab.JUNCTION_TOP) < 0.01
+		and absf(lab.JUNCTION_TOP.y + 0.75 - lab.TRAY_Y) < 0.01 and gone, "rise %d gone %s" % [rise.size(), gone])
+
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")
 	_check("U8 the pixel grid is off", retro != null and retro.virtual_height == 0, "%s" % [retro.virtual_height if retro else null])
@@ -421,3 +467,47 @@ func _frames(n: int) -> void:
 
 func _check(test_name: String, ok: bool, detail: String) -> void:
 	results.append("%s  %s   [%s]" % ["PASS" if ok else "FAIL", test_name, detail])
+
+
+## The bay's services of a kind hung on the wall at `wall_z`, at height `y`.
+func _services_on(lab: Node3D, prefix: String, wall_z: float, y: float) -> Array:
+	return lab.services.filter(func(p): return String(p.get_meta("kind")).begins_with(prefix) \
+		and absf(p.global_position.z - wall_z) < 0.01 and absf(p.global_position.y - y) < 0.01)
+
+
+## A wall piece's run along the wall (m): the kit's lengths.
+func _run_of(kind: String) -> float:
+	if kind.ends_with("_2"):
+		return 2.0
+	if kind == "cable_swag":
+		return 3.0
+	if kind in ["cable_hook", "pipe_red_drop", "conduit_drop"]:
+		return 0.0
+	return 4.0
+
+
+## Whether pieces laid end to end cover the corridor's run, wall to wall, with no gap
+## (but `short` metres left at the ends, where something else takes over).
+func _covers(lab: Node3D, pieces: Array, short := 0.0) -> bool:
+	var spans := []
+
+	for piece in pieces:
+		var x: float = piece.global_position.x
+		var dx: float = _run_of(String(piece.get_meta("kind"))) * (1.0 if absf(piece.rotation.y) < 0.1 else -1.0)
+		spans.append(Vector2(minf(x, x + dx), maxf(x, x + dx)))
+
+	if spans.is_empty():
+		return false
+
+	spans.sort_custom(func(a, b): return a.x < b.x)
+	var to: float = spans[0].y
+
+	if spans[0].x > -lab.RUN + short:
+		return false
+
+	for span in spans:
+		if span.x > to + 0.01:
+			return false
+		to = maxf(to, span.y)
+
+	return to >= lab.RUN - short

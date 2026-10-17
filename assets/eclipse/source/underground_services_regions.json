@@ -1,0 +1,15 @@
+{
+ "slots": [
+  "pipe_green",
+  "pipe_red",
+  "pipe_ochre",
+  "pipe_blue",
+  "metro_orange",
+  "paint_band",
+  "steel",
+  "rubber",
+  "cloth_black"
+ ],
+ "atlas_px": 2048,
+ "px_per_m": 130.69
+}
