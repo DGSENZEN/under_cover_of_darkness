@@ -579,47 +579,6 @@ func _run() -> void:
 		and vault_box != null and vault_box.position.y - 0.1 >= lab.HEIGHT + 0.039,
 		"spans %d area %.2f of %.2f" % [soffit.size(), soffit_area, wide])
 
-	# U48 ánimas in the drain: cold lights wandering in its sump, under its grate, lighting the bars from below;
-	#     one rises through the grate and sinks again; they flee to the bottom from someone near, and come back
-	var animas: Node3D = lab.animas
-	var sump_at: Vector3 = Vector3.INF
-
-	for module: MeshInstance3D in lab.floor_tiles:
-		if module.get_meta("kind") == "floor_border_drain":
-			sump_at = module.global_transform * lab.DRAIN_LOCAL
-	var in_sump := func() -> bool:
-		return animas.lights.all(func(l): return Vector2(l.global_position.x - sump_at.x, l.global_position.z - sump_at.z).length() < 0.3 \
-			and l.global_position.y < -0.03 and l.global_position.y > -0.25)
-	var started: Array = animas.lights.map(func(l): return l.global_position)
-	lab.player.global_position = Vector3(6.0, 1.05, 3.0)
-	await _frames(120)
-	var wandered: bool = range(animas.lights.size()).any(func(i): return animas.lights[i].global_position.distance_to(started[i]) > 0.02)
-	var home: bool = in_sump.call() and animas.glow.global_position.y < 0.0 and animas.glow.light_energy > 0.05
-	# The one that rises leans toward the living's candles: her stall's flames.
-	var candles := Vector2(lab.flames.global_position.x, lab.flames.global_position.z)
-	var riser: Node3D = animas.rise_now()
-	var from_candles := Vector2(riser.global_position.x, riser.global_position.z).distance_to(candles)
-	var nearest := from_candles
-	var highest := -INF
-
-	for i in 360:
-		await get_tree().process_frame
-		for l in animas.lights:
-			highest = maxf(highest, l.global_position.y)
-		nearest = minf(nearest, Vector2(riser.global_position.x, riser.global_position.z).distance_to(candles))
-	var leaned: bool = from_candles - nearest > 0.05
-	var sank: bool = in_sump.call()
-	lab.player.global_position = sump_at + Vector3(-0.9, 1.05, 0.9)   # (on clear floor beside her stock)
-	await _frames(90)
-	var fled: bool = animas.lights.all(func(l): return l.global_position.y < -0.15) and animas.glow.light_energy < 0.05
-	lab.player.global_position = Vector3(6.0, 1.05, 3.0)
-	await _frames(240)
-	var returned: bool = animas.glow.light_energy > 0.05 and animas.lights.any(func(l): return l.global_position.y > -0.15)
-	_check("U48 ánimas wander in the drain's sump lighting its grate, one rises through and sinks, they flee from the near and return",
-		animas.lights.size() >= 3 and wandered and home and highest > 0.15 and highest < 0.6 and sank and leaned and fled and returned,
-		"lights %d wandered %s home %s rose to %.2f leaned %s sank %s fled %s returned %s" % [animas.lights.size(), wandered,
-		home, highest, leaned, sank, fled, returned])
-
 	# U49 the nahual: an enormous black dog lying by the bench where the old man's hat is left, its eyes
 	#     glowing; it watches whoever looks at it, and once seen is gone when they look away, back only unwatched
 	var n_dog: Node3D = lab.nahual
@@ -714,6 +673,83 @@ func _run() -> void:
 	var rising: bool = wisps.size() == 1 and wisps[0].find_children("*", "GPUParticles3D", false, false).any(func(p): return p.emitting)
 	_check("U51 the nahual is a spectre: black fraying into rising smoke, ember eyes solid, dark wisps off its back",
 		haunted and rising, "spectre shader %s wisps %s" % [haunted, rising])
+
+	# U52 the ánimas present, spirits: several out of the drain at once most of the time, drifting up to
+	#     chest height round it and toward her candles; each a bright flame in a soft glow trailing wisps,
+	#     the risen lighting the floor; from someone near they keep their distance but stay
+	var an: Node3D = lab.animas
+	var an_drain: Vector3 = an.global_position
+	lab.player.global_position = Vector3(8.0, 1.05, 3.0)
+	await _frames(240)
+	var out_frames := 0
+	var an_highest := -INF
+	var an_farthest := 0.0
+	var lit_floor := false
+
+	for i in 1800:
+		await get_tree().process_frame
+		var out := 0
+		for l in an.lights:
+			if l.global_position.y > 0.1:
+				out += 1
+			an_highest = maxf(an_highest, l.global_position.y)
+			an_farthest = maxf(an_farthest, Vector2(l.global_position.x - an_drain.x, l.global_position.z - an_drain.z).length())
+		out_frames += 1 if out >= 2 else 0
+		lit_floor = lit_floor or an.lamps.any(func(m): return m.light_energy > 0.2 and m.global_position.y > 0.3)
+	var spirited: bool = an.halos.size() == an.lights.size() and an.trails.size() == an.lights.size() \
+		and an.trails.all(func(t): return t.emitting)
+	var an_near: Vector3 = an_drain + Vector3(-0.9, 1.05, 0.9)
+	lab.player.global_position = an_near
+	await _frames(240)
+	var kept_off := true
+	var still_out := 0
+
+	for l in an.lights:
+		if l.global_position.y > 0.1:
+			still_out += 1
+			kept_off = kept_off and Vector2(l.global_position.x - lab.player.global_position.x,
+				l.global_position.z - lab.player.global_position.z).length() > 0.9
+	lab.player.global_position = Vector3(8.0, 1.05, 3.0)
+	_check("U52 the ánimas: two or more out most of the time, up to chest height, haloed and trailing, lighting the floor; shy but staying",
+		an.lights.size() >= 6 and out_frames > 1800 * 0.6 and an_highest > 1.0 and an_highest < 1.8 and an_farthest < 4.5
+		and spirited and lit_floor and kept_off and still_out >= 1,
+		"count %d out-2 %.2f highest %.2f farthest %.2f spirited %s lit %s kept off %s still out %d" % [an.lights.size(),
+		out_frames / 1800.0, an_highest, an_farthest, spirited, lit_floor, kept_off, still_out])
+
+	# U53 the nahual's eyes glow: bright past white (the bloom takes them), a halo round each, a faint red light
+	var nd: Node3D = lab.nahual
+	var glowing := false
+
+	for i in nd.head.mesh.get_surface_count():
+		var slot: Material = nd.head.mesh.surface_get_material(i)
+		var drawn: Material = nd.head.get_surface_override_material(i)
+		if slot != null and slot.resource_name == "ember":
+			glowing = drawn is StandardMaterial3D and drawn.emission_enabled and drawn.emission_energy_multiplier >= 3.0
+	_check("U53 the nahual's eyes glow: emissive past white, a halo each, a faint red light",
+		glowing and nd.eye_halos.size() == 2 and nd.eye_halos.all(func(h): return h.is_visible_in_tree())
+		and nd.eye_light != null and nd.eye_light.light_energy > 0.05 and nd.eye_light.light_color.r > nd.eye_light.light_color.g * 2.0,
+		"glowing %s halos %d light %s" % [glowing, nd.eye_halos.size(), nd.eye_light])
+
+	# U54 walked into, the nahual scatters into smoke (a burst of it, its body eaten away, no longer solid),
+	#     and re-forms once they have stepped away
+	var away_eye := Camera3D.new()
+	add_child(away_eye)
+	away_eye.global_position = Vector3(10.0, 3.0, 0.0)
+	away_eye.look_at(Vector3(12.0, 3.0, 0.0), Vector3.UP)
+	nd.watcher = away_eye
+	nd.appear()
+	await _frames(30)
+	var whole: bool = nd.presence > 0.95 and nd.solid.collision_layer != 0
+	lab.player.global_position = nd.middle() + Vector3(0.0, 1.05, -0.9)
+	await _frames(90)
+	var scattered: bool = nd.presence < 0.1 and nd.solid.collision_layer == 0 and nd.scatter.emitting
+	lab.player.global_position = Vector3(8.0, 1.05, 3.0)
+	await _frames(300)
+	var reformed: bool = nd.presence > 0.95 and nd.solid.collision_layer != 0 and nd.visible
+	nd.watcher = null
+	away_eye.queue_free()
+	_check("U54 walked into, the nahual scatters into smoke and is not solid; it re-forms once they step away",
+		whole and scattered and reformed, "whole %s scattered %s reformed %s (presence %.2f)" % [whole, scattered, reformed, nd.presence])
 
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")

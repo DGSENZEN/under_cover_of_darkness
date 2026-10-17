@@ -1402,7 +1402,9 @@ class UndergroundUncanny(unittest.TestCase):
     black dog lying with its head up (its head its own object, turned about the neck), and the
     old man's hat it leaves on the bench; closed, in budget, through the gate."""
 
-    BUDGET = {"nahual_body": 6000, "nahual_head": 3000, "old_hat": 600}
+    BUDGET = {"nahual_body": 20000, "nahual_head": 8000, "old_hat": 600}
+    # (A creature's tight curves: gated at gate.CREATURE_SLIVER, docs/superpowers/refs/underground/nahual_refs.md.)
+    CREATURE = ("nahual_body", "nahual_head")
 
     @classmethod
     def setUpClass(cls):
@@ -1431,11 +1433,30 @@ class UndergroundUncanny(unittest.TestCase):
 
         for n, o in self.objects.items():
             faces, tris, _ = common.dump_faces([o])
-            found = gate.check(faces, tris, [], budget=self.BUDGET[n])
+            found = gate.check(faces, tris, [], budget=self.BUDGET[n],
+                               sliver=gate.CREATURE_SLIVER if n in self.CREATURE else gate.SLIVER)
             if found:
                 problems[n] = found[:3]
 
         self.assertEqual(problems, {})
+
+    def test_one_fused_surface(self):
+        # Its parts fused into one closed surface (the Colima dogs' one smooth volume, no joins):
+        # every face reachable from every other.
+        for n in self.CREATURE:
+            bm = bmesh.new()
+            bm.from_mesh(self.objects[n].data)
+            black = [f for f in bm.faces if self.objects[n].material_slots[f.material_index].material.name == "nahual_black"]
+            seen, todo = {black[0]}, [black[0]]
+            while todo:
+                f = todo.pop()
+                for e in f.edges:
+                    for g in e.link_faces:
+                        if g not in seen:
+                            seen.add(g)
+                            todo.append(g)
+            self.assertEqual(len(seen), len(black), n)
+            bm.free()
 
     def test_an_enormous_dog_lying_on_the_floor(self):
         # Lying, it is 1.2-1.6 m from its tail to its forepaws, its body on the floor.
@@ -1461,6 +1482,34 @@ class UndergroundUncanny(unittest.TestCase):
                  if self.objects["nahual_head"].material_slots[p.material_index].material.name == "ember"]
         ys = [self.objects["nahual_head"].data.vertices[p.vertices[0]].co.y for p in ember]
         self.assertTrue(min(ys) < -0.03 and max(ys) > 0.03, "two eyes, one each side")
+
+    def _width_at(self, x, above=0.12):
+        ys = [v.y for v in _world(self.objects["nahual_body"]) if abs(v.x - x) < 0.03 and v.z > above]
+        return max(ys) - min(ys)
+
+    def _depth_at(self, x):
+        zs = [v.z for v in _world(self.objects["nahual_body"]) if abs(v.x - x) < 0.03 and abs(v.y) < 0.06]
+        return max(zs) - min(zs)
+
+    def test_modelled_not_primitive(self):
+        # One smooth skin, not tubes: many faces, and nearly all of them smooth-shaded quads' halves.
+        body, head = self.objects["nahual_body"], self.objects["nahual_head"]
+        self.assertGreater(len(body.data.polygons), 1500)
+        self.assertGreater(len(head.data.polygons), 450)
+
+    def test_a_xolos_build(self):
+        # The xoloitzcuintle: a deep chest, a waist tucked up narrow behind it, the haunches broader again.
+        chest, waist = self._depth_at(underground_uncanny.CHEST_X), self._depth_at(underground_uncanny.WAIST_X)
+        self.assertLess(waist, 0.8 * chest)
+        # (Measured above the folded thighs: the torso's own width.)
+        self.assertLess(self._width_at(underground_uncanny.WAIST_X, 0.28), self._width_at(underground_uncanny.CHEST_X, 0.28))
+
+    def test_tall_ears_and_a_long_muzzle(self):
+        vs = _world(self.objects["nahual_head"])
+        top = max(v.z for v in vs)
+        nose = max(v.x for v in vs)
+        self.assertGreater(top, 0.28)
+        self.assertGreater(nose, 0.34)
 
     def test_the_old_mans_hat(self):
         (x0, x1), _, (z0, z1) = self._extent("old_hat")

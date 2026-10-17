@@ -925,7 +925,7 @@ def _round_card_normals(objects, cards):
 
 
 def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, weather=None, out=None,
-                 sets_each=False, cards=(), budget=None):
+                 sets_each=False, cards=(), budget=None, sliver=None):
     """The piece's atlas made (unwrap, any repeats, pack), its AO and region
     maps, glTF and .blend written; then the gate. `merge` is a function run
     between unwrap and pack (repeat_faces for identical parts). `weather`
@@ -1019,7 +1019,8 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
 
     for names in gate_sets or [[o.name for o in objects]]:
         faces, set_tris, uvs = dump_faces([o for o in objects if o.name in names], skip=cards)
-        problems += [p for p in gate.check(faces, set_tris, uvs, budget=budget or gate.BUDGET) if p not in problems]
+        problems += [p for p in gate.check(faces, set_tris, uvs, budget=budget or gate.BUDGET, sliver=sliver or gate.SLIVER)
+                     if p not in problems]
         tris = max(tris, set_tris)
 
     for p in problems:

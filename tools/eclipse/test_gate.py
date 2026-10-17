@@ -54,6 +54,15 @@ class Gate(unittest.TestCase):
         self.assertEqual(gate.check(faces, 6000, UV, budget=8000), [])
         self.assertEqual(len(gate.check(faces, 6000, UV)), 1)
 
+    def test_creature_sliver(self):
+        """A shader-drawn creature's fused skin is full of thin faces where it curves: only a
+        face with no thickness at all fails it (architecture keeps SLIVER, 1 cm)."""
+        thin = [{"owner": 0, "normal": (0, 0, 1), "points": [(0, 0, 0), (0.2, 0, 0), (0.2, 0.002, 0), (0, 0.002, 0)]}]
+        hair = [{"owner": 0, "normal": (0, 0, 1), "points": [(0, 0, 0), (0.2, 0, 0), (0.2, 0.0001, 0), (0, 0.0001, 0)]}]
+        self.assertEqual(len(gate.check(thin, 2, UV)), 1)
+        self.assertEqual(gate.check(thin, 2, UV, sliver=gate.CREATURE_SLIVER), [])
+        self.assertEqual(len(gate.check(hair, 2, UV, sliver=gate.CREATURE_SLIVER)), 1)
+
     def test_budget_is_5000(self):
         """Densified for vertex paint (Oct 9 2026): 5000 triangles a piece."""
         self.assertEqual(gate.check(box(0, 0, 0, 0, 1, 1, 1), 5000, UV), [])

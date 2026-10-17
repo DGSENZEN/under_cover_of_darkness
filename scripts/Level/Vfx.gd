@@ -108,6 +108,11 @@ const PRESETS := {
 		"opacity": 0.35, "amount": 22, "lifetime": 2.6, "size": [0.18, 0.6], "velocity": [0.08, 0.16], "spread": 12.0,
 		"gravity": Vector3(0, 0.18, 0), "box": Vector3(0.4, 0.05, 0.12), "fps": 15, "erosion": 0.6, "blown": 0.4,
 		"anim": 1.0}],
+	# A spectre scattered (the nahual walked into): a burst of its smoke thrown up and out.
+	"spectre_scatter": [{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.16, 0.17, 0.19),
+		"opacity": 0.5, "amount": 40, "lifetime": 1.6, "size": [0.3, 1.0], "velocity": [0.4, 0.9], "spread": 70.0,
+		"gravity": Vector3(0, 0.3, 0), "box": Vector3(0.55, 0.2, 0.22), "fps": 20, "erosion": 0.55, "blown": 0.4,
+		"anim": 1.0}],
 	"embers": [{"draw": "specks", "tint": Color("FFA040"), "amount": 30, "lifetime": 1.4, "size": [0.035, 0.015],
 		"velocity": [0.8, 1.6], "spread": 25.0, "gravity": Vector3(0, 0.6, 0), "box": Vector3(0.2, 0.05, 0.2), "fps": 30,
 		"blown": 0.2}],

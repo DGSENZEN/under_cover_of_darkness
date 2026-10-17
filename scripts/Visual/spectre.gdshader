@@ -16,6 +16,8 @@ uniform float rise = 0.18;
 // How much it billows (m), and how much of what is behind it shows through its body.
 uniform float billow = 0.018;
 uniform float sheer = 0.22;
+// How much of it is here (1 whole; 0 scattered to smoke, walked into).
+uniform float presence = 1.0;
 
 varying vec3 world;
 
@@ -36,6 +38,8 @@ void fragment() {
 	// (The smoke eats in from the silhouette; the body facing the eye stays whole: big shapes.)
 	float edge = 1.0 - smoothstep(0.35, 0.85, facing);
 	float solid = smoothstep(0.0, fray, facing) + (n - 0.5) * 1.6 * edge - lift * edge;
+	// Scattering: the smoke eats it all, edges first, then its body.
+	solid -= (1.0 - presence) * (1.4 + (n - 0.5) * 0.8);
 	// Cut hard where the smoke has eaten it: Mignola's crisp shapes, not a soft fade.
 	if (solid < 0.3) {
 		discard;

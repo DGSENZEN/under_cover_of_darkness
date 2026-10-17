@@ -1167,8 +1167,13 @@ func _nahual() -> void:
 	var ember := StandardMaterial3D.new()
 	ember.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	ember.albedo_color = EMBER
+	# Its eyes glow: emissive past white, so the night's bloom takes them.
+	ember.emission_enabled = true
+	ember.emission = EMBER
+	ember.emission_energy_multiplier = 4.0
 	nahual = NahualScript.new()
 	nahual.name = "nahual"
+	nahual.intruder = player
 	add_child(nahual)
 	nahual.build(meshes["nahual_body"], meshes["nahual_head"], black, ember)
 	nahual.position = NAHUAL_AT
@@ -1181,6 +1186,13 @@ func _nahual() -> void:
 	nahual.add_child(wisps)
 	wisps.position = WISPS_AT
 	Vfx.emit(wisps, true)
+	# Its smoke, thrown up when it is walked into.
+	var burst := Vfx.system("spectre_scatter")
+	burst.name = "scatter"
+	nahual.add_child(burst)
+	burst.position = WISPS_AT
+	nahual.scatter = burst.find_children("*", "GPUParticles3D", false, false)[0]
+	nahual.scatter.emitting = false
 	old_hat = _place(meshes["old_hat"], look, "old_hat", HAT_AT, 0.7, false)
 
 
