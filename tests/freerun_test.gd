@@ -47,6 +47,7 @@ func _run() -> void:
 	await _edge_checks()
 	await _eject_checks()
 	await _down_checks()
+	await _roll_checks()
 
 
 # Task 1: the hold finder.
@@ -397,6 +398,26 @@ func _down_checks() -> void:
 		"crouched %s state %d" % [player.is_crouched, player.movement_state])
 	_release_all()
 	await _frames(20)
+
+
+# Task 9: a sprinting landing rolls.
+func _roll_checks() -> void:
+	player.invulnerable = false
+	var damage := {}
+	for sprint in [true, false]:
+		await _place(Vector3(290, 10.03, 0))
+		player.health = player.max_health
+		if sprint:
+			Input.action_press("sprint")
+		await _until(func(): return player._on_floor_now(), 120)
+		await _frames(2)
+		damage[sprint] = player.max_health - player.health
+		_release_all()
+		player.health = player.max_health
+	player.invulnerable = true
+	var relief: float = player.roll_relief_speed * player.fall_damage_per_speed
+	_check("FR25 a sprinting landing from 9 m hurts less than a walking one", damage[false] - damage[true] >= relief * 0.9 and damage[true] > 0.0,
+		"sprint %.1f walk %.1f" % [damage[true], damage[false]])
 
 
 func _until(condition: Callable, max_frames: int) -> void:

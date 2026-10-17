@@ -1014,8 +1014,17 @@ func _update_locomotion(delta: float) -> void:
 		if fall_speed > 5.5:
 			Fx.dust(self, get_feet_position() + Vector3.UP * 0.05, Vector3.UP, clampf((fall_speed - 4.0) / 6.0, 0.3, 1.2), surface if surface != "" else "stone")
 
-		if fall_speed > fall_damage_speed:
-			take_damage((fall_speed - fall_damage_speed) * fall_damage_per_speed, null)
+		# Free-running, a hard landing is rolled out of: it takes more before it
+		# hurts.
+		var hurts_from := fall_damage_speed
+		var rolling := free_running() and fall_speed > roll_min_speed
+
+		if rolling:
+			hurts_from += roll_relief_speed
+			juice.on_roll()
+
+		if fall_speed > hurts_from:
+			take_damage((fall_speed - hurts_from) * fall_damage_per_speed, null)
 
 	_update_footsteps()
 

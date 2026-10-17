@@ -265,6 +265,12 @@ func on_kick_land(strength := 1.0) -> void:
 	_dip_velocity -= 0.3 * strength
 
 
+## Rolling out of a hard landing: the view tumbles forward and comes up.
+func on_roll() -> void:
+	_dip_velocity -= 0.6
+	_pitch_velocity -= 0.9
+
+
 func on_catch() -> void:
 	# Hands take the weight: a short sharp drop.
 	_dip_velocity -= 1.1
