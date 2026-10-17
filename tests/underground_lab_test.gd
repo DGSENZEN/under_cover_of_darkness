@@ -221,6 +221,17 @@ func _run() -> void:
 	_check("U20 three moths circle the bulb, drawn by its light", moths.size() == 3 and moved == 3 and near == 3,
 		"%d moths, %d moving, %d near" % [moths.size(), moved, near])
 
+	# U21 its painted files come through Godot's import (they would be missing from an exported game otherwise)
+	var loose: Array = []
+	var atlas_mat: ShaderMaterial = (meshes["stall_frame"] as MeshInstance3D).get_surface_override_material(0)
+	var used: Array = [atlas_mat.get_shader_parameter("atlas")] + lab.decals.map(func(d): return d.texture_albedo) + [lab.puddle.texture_albedo]
+
+	for t in used:
+		if t == null or not (t as Resource).resource_path.begins_with("res://textures/painted/underground/"):
+			loose.append(t)
+	_check("U21 the atlas and decals are the imported textures, as an exported game needs", loose.is_empty(),
+		"loose %s" % [loose])
+
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")
 	_check("U8 the pixel grid is off", retro != null and retro.virtual_height == 0, "%s" % [retro.virtual_height if retro else null])

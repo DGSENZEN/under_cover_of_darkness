@@ -219,6 +219,11 @@ func _painted(names: Array, alpha := false) -> Texture2D:
 	for file in names:
 		var path: String = atlas_dir + file
 
+		# The imported texture, as an exported game has it; a file Godot has
+		# not imported yet (just painted) read straight from disk meanwhile.
+		if ResourceLoader.exists(path):
+			return load(path) as Texture2D
+
 		if FileAccess.file_exists(path):
 			var image := Image.load_from_file(path)
 			image.convert(Image.FORMAT_RGBA8 if alpha else Image.FORMAT_RGB8)
