@@ -34,7 +34,7 @@ var hang_gap := 0.02
 ## How loud a reach to the next hold is (dB).
 var reach_noise_db := 35.0
 ## How fast a reach pulls the body to the next hold (m/s).
-var reach_speed := 3.3
+var reach_speed := 4.0
 ## How far the body sags on the arms before a reach pulls it up (m).
 var reach_sag := 0.12
 ## How loud running up a wall is (dB).

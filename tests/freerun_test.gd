@@ -65,6 +65,7 @@ func _run() -> void:
 	await _flow_checks()
 	await _arms_checks()
 	await _weight_checks()
+	await _hanging_body_checks()
 
 
 # Task 1: the hold finder.
@@ -678,7 +679,8 @@ func _flow_checks() -> void:
 			if after_pull.size() >= 8:
 				break
 	_release_all()
-	_check("FR36 a climb up a column of sills never stops between holds", started >= 0 and hang_frames == 0 and slowest > 0.8,
+	# (A hand landing holds the pull a moment, the hit: slow, not stopped.)
+	_check("FR36 a climb up a column of sills never stops between holds", started >= 0 and hang_frames == 0 and slowest > 0.5,
 		"hang frames %d slowest %.2f m/s" % [hang_frames, slowest])
 	_check("FR36b nine metres of sills climbed in three seconds", climbed_at > 0 and (climbed_at - started) / 60.0 <= 3.0,
 		"%.2f s" % ((climbed_at - started) / 60.0))
@@ -989,6 +991,116 @@ func _weight_checks() -> void:
 	_check("FR53 the body sags on the arms before each pull lifts it", sags.size() >= 3 and sagged == sags.size(),
 		"sags %s" % [sags])
 	await _frames(30)
+
+
+# The body hangs from the hands (playtest Oct 16: "no weight to the climbing,
+# neither when shifting"): a sprung weight under whatever holds it.
+func _hanging_body_checks() -> void:
+	var column: Array = await _sill_column(560)
+	await _hang_on(column[0])
+	var contacts = player.hand._contacts
+	var cam: Camera3D = player.camera
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var one_handed := 0
+	var toward := 0
+	var biggest := 0.0
+	var jolt := 0.0
+	var lagged := false
+	var overshot := false
+	var landed_at := -100
+	var travels := [1.0, 1.0]
+	for i in 400:
+		await _frames(1)
+		if player.movement_state == 0:
+			break
+		var off: Vector3 = player.juice.climb_offset
+		biggest = maxf(biggest, Vector2(off.x, off.y).length())
+		# Exactly one hand holding: the body swings under it.
+		var holding := []
+		for side in [0, 1]:
+			var g = contacts.grips[side]
+			if g.wanted and g.travel >= 1.0:
+				holding.append(side)
+			if travels[side] < 1.0 and g.travel >= 1.0:
+				landed_at = i
+			travels[side] = g.travel
+		if holding.size() == 1 and absf(off.x) > 0.005:
+			one_handed += 1
+			var side_x: float = (cam.global_transform.affine_inverse() * contacts.hand(holding[0]).origin).x
+			if signf(off.x) == signf(side_x):
+				toward += 1
+		if i - landed_at >= 0 and i - landed_at <= 8:
+			jolt = minf(jolt, off.y)
+		var m = player.current_move
+		if m != null and m.label == &"reach":
+			if player.move_progress < 0.3 and off.y < -0.01:
+				lagged = true
+			if player.move_progress > 0.5 and off.y > 0.004:
+				overshot = true
+	_release_all()
+	# (A pendulum lags as the holding hand changes side: most, not all.)
+	_check("FR57 with one hand holding, the body swings under it", one_handed >= 5 and toward >= one_handed * 0.55 and biggest >= 0.02,
+		"%d of %d one-handed frames toward the hold, biggest sway %.3f m" % [toward, one_handed, biggest])
+	_check("FR58 a hand landing jolts the body down", jolt <= -0.015, "jolt %.3f m" % jolt)
+	_check("FR59 the body lags the pull and carries past it", lagged and overshot, "lag %s overshoot %s" % [lagged, overshot])
+	await _frames(10)
+
+	# Drawn where they hold: each drawn hand on screen where its grip is.
+	column = await _sill_column(570)
+	await _hang_on(column[0])
+	var arms = player.hand._arms
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var looked := 0
+	var close := 0
+	var worst_px := 0.0
+	for i in 300:
+		await _frames(1)
+		if player.movement_state == 0:
+			break
+		if player.current_move != null and player.current_move.label == &"pull up":
+			continue
+		for side in [0, 1]:
+			var g = contacts.grips[side]
+			if not g.wanted or g.travel < 1.0 or g.weight < 0.9:
+				continue
+			looked += 1
+			# (The wrist for that grip: the palm is on the hold, a hand's length on.)
+			var wrist: Vector3 = arms.man.global_transform * arms.reach.targets[side].origin
+			var gap: float = cam.unproject_position(wrist).distance_to(cam.unproject_position(arms.hand_position(side)))
+			worst_px = maxf(worst_px, gap)
+			if gap <= size.x * 0.06:
+				close += 1
+	_release_all()
+	_check("FR61 each hand is drawn on screen where it holds", looked > 40 and close >= looked * 0.85,
+		"%d of %d held hand-frames within %.0f px (worst %.0f px)" % [close, looked, size.x * 0.06, worst_px])
+	await _frames(30)
+
+	# Shifting along a ledge goes in steps with the hands, not a glide.
+	_box(Vector3(580, 4.5, -4.5), Vector3(12, 9, 3))
+	var ledge := _hold(HANDHOLD.Kind.LEDGE, Vector3(580, 3.0, -3), 0.0, 10.0)
+	await _frames(2)
+	await _hang_on(ledge)
+	var grips_before: int = player.juice.grip_count
+	Input.action_press("move_right")
+	var speeds := []
+	var was: float = player.global_position.x
+	for i in 150:
+		await _frames(1)
+		var v: float = absf(player.global_position.x - was) * 60.0
+		was = player.global_position.x
+		if i > 20:
+			speeds.append(v)
+	_release_all()
+	var moving: Array = speeds.filter(func(v): return v > 0.02)
+	var slow: float = moving.min() if not moving.is_empty() else 0.0
+	var fast: float = moving.max() if not moving.is_empty() else 0.0
+	_check("FR60 shifting along a ledge goes hand by hand", fast >= 2.0 * maxf(slow, 0.01) and player.juice.grip_count - grips_before >= 3,
+		"speed %.2f to %.2f m/s, %d hand landings" % [slow, fast, player.juice.grip_count - grips_before])
+	player._drop_from_hang()
+	await _frames(60)
 
 
 func _until(condition: Callable, max_frames: int) -> void:

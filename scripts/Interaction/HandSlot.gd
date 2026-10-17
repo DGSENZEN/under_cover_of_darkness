@@ -1342,6 +1342,13 @@ func _place_arms() -> void:
 			weights[side] = maxf(weights[side], smoothstep(0.0, 0.4, tuck))
 			curls[side] = lerpf(curls[side], 0.45, tuck)
 
+	# Where the eye really is, in his space: held hands are drawn along the
+	# line from it (ArmReach.pull_to_eye).
+	var camera: Camera3D = player.get("camera") if player != null else null
+
+	if _arms.reach != null and camera != null and _arms.man != null:
+		_arms.reach.eye = _arms.man.global_transform.affine_inverse() * camera.global_position
+
 	for side in range(2):
 		_arms.set_hand(side, targets[side], weights[side], curls[side])
 

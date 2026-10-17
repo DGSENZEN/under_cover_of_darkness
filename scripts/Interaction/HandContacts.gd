@@ -224,8 +224,8 @@ func update(delta: float) -> void:
 		g.travel = minf(g.travel + delta / TRAVEL_TIME, 1.0)
 
 		# A hand landing on a hold on a climb: its weight is felt.
-		if was < 1.0 and g.travel >= 1.0 and g.wanted and (state == State.HANG or state == State.POLE) and player.get("juice") != null:
-			player.juice.on_hand_hold(-1.0 if side == LEFT else 1.0)
+		if was < 1.0 and g.travel >= 1.0 and g.wanted and (state == State.HANG or state == State.POLE) and player.has_method("on_hand_landed"):
+			player.on_hand_landed(-1.0 if side == LEFT else 1.0)
 
 	for grip in grips:
 		var g := grip as Grip

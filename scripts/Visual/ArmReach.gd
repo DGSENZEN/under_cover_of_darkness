@@ -56,6 +56,8 @@ var solved_hands: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var pull_to_eye: Array[bool] = [false, false]
 ## The eye, in his space (ViewArms.EYE).
 var eye := Vector3(0.0, 1.62, 0.1)
+## The eye in the skeleton's space, this solve (it and the goals must share one).
+var _eye_in_skeleton := Vector3.ZERO
 ## How bent a held arm stays: this share of its full length.
 const HELD_REACH := 0.93
 
@@ -127,6 +129,7 @@ func _process_modification() -> void:
 
 	# His space to the skeleton's.
 	var into := skeleton.global_transform.affine_inverse() * man.global_transform
+	_eye_in_skeleton = into * eye
 
 	for side in range(2):
 		if weights[side] > 0.001:
@@ -238,18 +241,24 @@ func _toward_eye(shoulder: Vector3, goal: Vector3, length: float) -> Vector3:
 	if shoulder.distance_to(goal) <= length:
 		return goal
 
-	var d := goal - eye
-	var o := eye - shoulder
+	var from := _eye_in_skeleton
+	var d := goal - from
+	var o := from - shoulder
 	var qa := d.dot(d)
 	var qb := 2.0 * d.dot(o)
 	var qc := o.dot(o) - length * length
 	var disc := qb * qb - 4.0 * qa * qc
 
-	if qa < 0.000001 or disc < 0.0:
+	if qa < 0.000001:
 		return goal
 
+	# The eye line never comes within reach: its point nearest the shoulder,
+	# still drawn where the hold is, the arm as near it as it gets.
+	if disc < 0.0:
+		return from + d * clampf(-qb / (2.0 * qa), 0.0, 1.0)
+
 	var t := (-qb + sqrt(disc)) / (2.0 * qa)
-	return eye + d * clampf(t, 0.0, 1.0) if t > 0.0 else goal
+	return from + d * clampf(t, 0.0, 1.0) if t > 0.0 else goal
 
 
 ## Turns `bone` so the direction `from` (skeleton space) becomes `to`.

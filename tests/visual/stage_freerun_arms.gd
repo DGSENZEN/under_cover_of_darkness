@@ -6,12 +6,16 @@ extends Node3D
 
 const GYM := preload("res://maps/traversal_gym.tscn")
 var _out := "/tmp/arms/"
+## Every how many ticks a frame is kept (1: a clip).
+var _every := 3
 
 
 func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
 			_out = arg.trim_prefix("--out=").trim_suffix("/") + "/"
+		if arg.begins_with("--every="):
+			_every = maxi(int(arg.trim_prefix("--every=")), 1)
 	DirAccess.make_dir_recursive_absolute(_out)
 	var gym = GYM.instantiate()
 	add_child(gym)
@@ -29,7 +33,7 @@ func _ready() -> void:
 	for i in 700:
 		await _frames(1)
 		var label: String = String(p.current_move.label) if p.current_move != null else ""
-		if label != "" and label != "vault" and i % 3 == 0:
+		if label != "" and label != "vault" and i % _every == 0:
 			await _shot("route_%03d_%s" % [shot, label.replace(" ", "_")])
 			shot += 1
 		if p.movement_state == 0 and p.get_feet_position().y > 8.9 and p.global_position.z - gym.stations[16].root.position.z < -10.0:
@@ -47,7 +51,7 @@ func _ready() -> void:
 		await _frames(1)
 		if landed < 0 and p._on_floor_now():
 			landed = i
-		if landed >= 0 and i - landed <= 45 and (i - landed) % 3 == 0:
+		if landed >= 0 and i - landed <= 45 and (i - landed) % _every == 0:
 			await _shot("roll_%02d" % (i - landed))
 	get_tree().quit()
 

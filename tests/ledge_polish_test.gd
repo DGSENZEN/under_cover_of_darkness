@@ -94,7 +94,8 @@ func _run() -> void:
 	var initial := player.global_position
 	await _frames(1)
 	var first_step := player.global_position.x - initial.x
-	await _frames(29)
+	# (Hand by hand since Oct 16: a little slower than a glide.)
+	await _frames(39)
 	var travel := player.global_position.x - initial.x
 	Input.action_release("move_right")
 	var released := player.global_position.x
@@ -167,7 +168,7 @@ func _run() -> void:
 
 	await _hang(Vector3(80.5, 2.55, -2.48), 3.6)
 	Input.action_press("move_right")
-	await _frames(100)
+	await _frames(140)
 	_check("LP11 inside corner continues onto its adjoining wall", player.movement_state == 2 and player.hang_normal.x < -0.9 and player.global_position.z > -2.0 and player.scanner.fits(player.global_position, false),
 		"position %s normal %s state %d reject %s" % [player.global_position, player.hang_normal, player.movement_state, player._last_reject])
 

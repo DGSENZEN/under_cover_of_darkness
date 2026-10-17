@@ -59,7 +59,7 @@ var leap_fov_add := 3.0
 ## hand (reach_side: -1 left, 1 right); a wall run looks up the wall and
 ## widens the view; a landing roll tumbles the view forward and back up.
 var reach_pitch_degrees := 3.0
-var reach_roll_degrees := 2.2
+var reach_roll_degrees := 1.8
 var reach_dip := 0.05
 var reach_side := 1.0
 var wall_run_pitch_degrees := 14.0
@@ -69,6 +69,10 @@ var roll_tumble_time := 0.6
 var _tumble := 0.0
 ## Hands that have landed on a hold (on_hand_hold), for tests and tuning.
 var grip_count := 0
+## The body hanging from the hands on a climb (ClimbSway): an offset of the
+## view, in its own space, and a roll.
+var climb_offset := Vector3.ZERO
+var climb_roll := 0.0
 
 # Springs
 var spring_stiffness := 140.0
@@ -303,7 +307,7 @@ func on_hand_hold(side: float) -> void:
 	grip_count += 1
 	_dip_velocity -= 0.45
 	_pitch_velocity -= 0.12
-	_roll_kick += deg_to_rad(1.2) * side
+	_roll_kick += deg_to_rad(0.5) * side
 
 
 ## Coming down hard, not hard enough to roll (strength 0..1): the knees give,
@@ -477,10 +481,11 @@ func update(
 		tumble_pitch = -deg_to_rad(roll_tumble_degrees) * sin(p * PI) * (1.0 - p * 0.3)
 		view_position.y -= 0.35 * sin(p * PI) * k
 
+	view_position += climb_offset * k
 	view_rotation = Vector3(
 		(_pitch + _move_pitch + shake_pitch + tumble_pitch) * k,
 		(_yaw + shake_yaw) * k,
-		(_roll + _move_roll + _roll_kick + shake_roll) * k + lean_roll
+		(_roll + _move_roll + _roll_kick + shake_roll + climb_roll) * k + lean_roll
 	)
 	camera.fov = base_fov + (_fov_add + _fov_kick) * k
 

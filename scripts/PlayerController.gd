@@ -12,6 +12,7 @@ const TraversalScanner := preload("res://scripts/PlayerUtils/TraversalScanner.gd
 const TraversalPlanner := preload("res://scripts/PlayerUtils/TraversalPlanner.gd")
 const HoldFinder := preload("res://scripts/PlayerUtils/HoldFinder.gd")
 const Handhold := preload("res://scripts/PlayerUtils/Handhold.gd")
+const ClimbSway := preload("res://scripts/PlayerUtils/ClimbSway.gd")
 const CameraJuice := preload("res://scripts/PlayerUtils/CameraJuice.gd")
 const BodyPose := preload("res://scripts/PlayerUtils/BodyPose.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
@@ -188,6 +189,9 @@ enum MoveState {
 ## pressing crouch lowers you into a hang instead of crouching.
 @export var lower_look_down_degrees := 35.0
 @export var shimmy_speed := 1.3
+## Shimmying, the body's speed while a hand reaches and while both pull.
+@export var shimmy_reach_scale := 0.3
+@export var shimmy_pull_scale := 1.3
 ## Time to reach full shimmy speed; release settles more quickly.
 @export var shimmy_start_time := 0.12
 @export var shimmy_stop_time := 0.08
@@ -280,6 +284,8 @@ enum MoveState {
 @export var freerun_leap_reach := 2.5
 ## How far through a reach, leap or wall run the next hold is reached for.
 @export var climb_chain_start := 0.6
+## A hand landing on a hold holds the pull this long (s): the hit.
+@export var hand_hit_hold := 0.035
 ## A free-run mantle or pull-up is this much quicker, and leaves at this
 ## share of sprint speed.
 @export var freerun_mantle_time_scale := 0.65
@@ -425,6 +431,8 @@ var rope_param := -1.0
 var scanner := TraversalScanner.new()
 var planner := TraversalPlanner.new()
 var holds := HoldFinder.new()
+## The body hanging from the hands on a climb.
+var sway := ClimbSway.new()
 var juice := CameraJuice.new()
 
 ## The body under the camera: the view and the hands ride it (BodyMotion.gd).
@@ -778,6 +786,7 @@ func _physics_process(delta: float) -> void:
 			_update_locomotion(delta)
 
 	_update_stowed()
+	_update_sway(delta)
 	_climb_sounds()
 
 	if debug_traversal:
@@ -2383,6 +2392,18 @@ func _update_hang(delta: float) -> void:
 	var lateral := hang_normal.cross(Vector3.UP).normalized()
 	var sideways := wish_direction.dot(lateral)
 	var wanted := sideways * shimmy_speed if absf(sideways) > 0.3 else 0.0
+
+	# Hand by hand: the body barely moves while a hand is off the stone, and
+	# goes on its arms once both are on.
+	var hands_contacts = hand.get("_contacts") if hand != null else null
+
+	if wanted != 0.0 and hands_contacts != null:
+		var reaching := false
+
+		for grip in hands_contacts.grips:
+			reaching = reaching or (grip.wanted and grip.travel < 1.0)
+
+		wanted *= shimmy_reach_scale if reaching else shimmy_pull_scale
 	var response := shimmy_start_time if wanted != 0.0 else shimmy_stop_time
 	_shimmy_velocity = move_toward(_shimmy_velocity, wanted, shimmy_speed * delta / maxf(response, 0.001))
 
@@ -3578,6 +3599,47 @@ func _freerun_down() -> void:
 		_drop_from_hang()
 
 
+## The body hanging from the hands: which hands hold, and the climb's motion,
+## into the sway the view shows (ClimbSway, CameraJuice.climb_offset).
+func _update_sway(delta: float) -> void:
+	var climbing := movement_state == MoveState.HANGING or movement_state == MoveState.CLIMBING
+
+	if movement_state == MoveState.MOVING and current_move != null:
+		climbing = current_move.ends_in_hang or current_move.kind == TraversalPlanner.KIND_PULL_UP
+
+	var holding := []
+	var contacts = hand.get("_contacts") if hand != null else null
+
+	if climbing and contacts != null:
+		for grip in contacts.grips:
+			if grip.wanted and grip.travel >= 1.0 and grip.weight > 0.5:
+				holding.append(grip.at.origin)
+
+	sway.step(delta, climbing, global_position, _sway_lateral(), holding, global_position)
+	juice.climb_offset = neck.global_basis.orthonormalized().inverse() * sway.offset
+	juice.climb_roll = sway.roll
+
+
+func _sway_lateral() -> Vector3:
+	var out := climb_normal() if movement_state == MoveState.CLIMBING and current_climb != null else hang_normal
+
+	if out.length() < 0.1:
+		out = -_facing_direction()
+
+	return (-out).cross(Vector3.UP).normalized()
+
+
+## A hand landing on a hold on a climb (HandContacts): its weight is felt in
+## the view, the body drops onto it, it slaps, and the pull holds a moment.
+func on_hand_landed(side: float) -> void:
+	juice.on_hand_hold(side)
+	sway.hand_landed(side, _sway_lateral())
+	Sfx.play_flat(self, &"grab", -10.0, randf_range(0.95, 1.1))
+
+	if movement_state == MoveState.MOVING and current_move != null and current_move.kind == TraversalPlanner.KIND_REACH and move_elapsed > 0.06:
+		move_elapsed -= hand_hit_hold
+
+
 ## On a hold, a pipe, or moving between holds: the weapon is away.
 func _update_stowed() -> void:
 	var climbing := movement_state == MoveState.HANGING or movement_state == MoveState.CLIMBING
@@ -3951,6 +4013,7 @@ func teleport(xform: Transform3D) -> void:
 	is_peeking = false
 	_shimmy_velocity = 0.0
 	_hang_buffered_action = &""
+	sway.reset()
 	hang_hold = null
 	hang_target = {}
 	hang_aiming_elsewhere = false
