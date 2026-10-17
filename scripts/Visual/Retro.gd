@@ -8,9 +8,10 @@ const SCREEN_SHADER := preload("res://scripts/Visual/retro_screen.gdshader")
 const CrispTextScript := preload("res://scripts/Visual/CrispText.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 
-## Lines on screen. 240 is a PS1, 480 a PS2; 0 turns the grid off. 480 by
-## default (the user, Oct 9 2026: 360 was too low for the mixed look).
-@export var virtual_height := 480:
+## Lines on screen. 240 is a PS1, 480 a PS2; 0 turns the grid off. Off by
+## default (the user, Oct 16 2026: past the PS2 limits for the new standard);
+## F6 still tries 480, 360 and 240.
+@export var virtual_height := 0:
 	set(value):
 		virtual_height = value
 		_fit()
@@ -64,7 +65,7 @@ var _crisp: Control
 ## Converted materials, by instance id: the material and its own filter.
 var _seen := {}
 var _scene: Node = null
-var _grids := [480, 360, 240, 0]
+var _grids := [0, 480, 360, 240]
 var _levels := [24.0, 32.0, 0.0]
 
 
