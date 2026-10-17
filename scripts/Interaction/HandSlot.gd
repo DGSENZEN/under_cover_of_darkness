@@ -203,10 +203,9 @@ const ARM_REACH := 0.57
 const CHEST_VIEW_MARGIN_DEGREES := 8.0
 ## Where the hands go in a landing roll, in camera space (full size): low in
 ## front, forearms crossing, palms in.
-## Where the Prosecutor's empty hands rest (camera space, full size): the left
-## low left and near (Dishonored's resting hand), the right by his side, out
-## of sight. (The old arms let both hang out of sight.)
-const REST_LEFT := Vector3(-0.20, -0.22, -0.41)
+## Where the Prosecutor's empty hands rest (camera space, full size): down by
+## his sides, out of sight, until a resting pose is authored (Oct 17).
+const REST_LEFT := Vector3(-0.30, -0.65, -0.12)
 const REST_RIGHT := Vector3(0.30, -0.65, -0.12)
 ## With the Prosecutor's arms, what the right hand holds sits this much nearer
 ## the middle of the view (camera space, full size), as Dishonored frames its
@@ -234,7 +233,14 @@ var _grip_poses: Array[StringName] = [&"Fist", &"Fist"]
 ## that can wrap it: held thumb up, the palm in across it, not down on it.
 var _grip_upright: Array[bool] = [false, false]
 ## How far out from the hold's middle a hand round an upright sits (m).
-const UPRIGHT_SIDE := 0.05
+## How much a hand round a pipe follows the forearm's way in (the rest
+## points on into the wall).
+const UPRIGHT_FOLLOW := 0.25
+## A pipe's radius when its hold does not say (Handhold.radius).
+const PIPE_RADIUS := 0.045
+## Most a resting or holding wrist bends off its forearm (degrees): the hand,
+## and what it holds, turn to follow the forearm.
+const MAX_WRIST_BEND := 22.0
 ## Your arms.
 var _arms: Node3D
 ## The page held up to read (HeldPage), made the first time; wanted up or
@@ -1399,9 +1405,8 @@ func _suppressed_for_grips() -> bool:
 ## carry (a bow: its string, the bow itself in the left), the left the purse
 ## or whatever it is being handed, both the world when you hold on to it.
 ## An empty hand at rest (camera space, full size; the hand bone's frame:
-## fingers +Y, palm on -X right, +X left). The left: low left and near, the
-## fingers rising in toward the middle, the palm turned in and down. The
-## right: down by the side, out of sight.
+## fingers +Y, palm on -X right, +X left): down by the side, palm in, out of
+## sight.
 static func _resting(side: int) -> Transform3D:
 	var fingers: Vector3
 	var palm: Vector3
@@ -1409,8 +1414,8 @@ static func _resting(side: int) -> Transform3D:
 
 	if side == 0:
 		at = REST_LEFT
-		fingers = Vector3(0.45, 0.50, -0.74).normalized()
-		palm = Vector3(0.8, -0.45, 0.2)
+		fingers = Vector3(-0.05, -1.0, -0.2).normalized()
+		palm = Vector3(1.0, 0.0, 0.0)
 	else:
 		at = REST_RIGHT
 		fingers = Vector3(0.05, -1.0, -0.2).normalized()
@@ -1437,6 +1442,48 @@ func _for_view_fov(point: Vector3) -> Vector3:
 
 	var k := tan(deg_to_rad(view) * 0.5) / tan(deg_to_rad(camera.fov) * 0.5)
 	return Vector3(point.x * k, point.y * k, point.z)
+
+
+## A hand closed round an upright (the view's space, full size), from its
+## palm frame on the pipe's front face (HandContacts: +Y up the pipe, +Z out
+## toward you): the fingers go on the way the forearm comes in (level), the
+## palm against the pipe, thumb up.
+func _round_upright(palm: Transform3D, side: int) -> Transform3D:
+	var hold = player.get("climb_hold") if player != null else null
+	var radius: float = hold.radius if hold != null and hold.get("radius") != null else PIPE_RADIUS
+	var along := palm.basis.y.normalized()
+	var centre := palm.origin - palm.basis.z.normalized() * radius
+	var forearm: Vector3 = _arms.forearm_to(side, _arms.to_rig(Transform3D(Basis.IDENTITY, centre)).origin)
+	var level := forearm - along * forearm.dot(along)
+	# Elbows in, as a climber holds a pipe: the fingers point mostly on into
+	# the wall round the pipe's side, a little the way the forearm comes.
+	var into := -palm.basis.z.normalized()
+	var fingers := (into * (1.0 - UPRIGHT_FOLLOW) + (level.normalized() if level.length() > 0.2 else into) * UPRIGHT_FOLLOW).normalized()
+	# The palm faces the pipe from the side the thumb comes up on.
+	var to_pipe := along.cross(fingers) if side == 1 else fingers.cross(along)
+	to_pipe = to_pipe.normalized()
+	var wrist := centre - to_pipe * (radius + 0.015) - fingers * 0.075
+	var x := -to_pipe if side == 1 else to_pipe
+	return Transform3D(Basis(x, fingers, x.cross(fingers)), wrist)
+
+
+## The turn (about the wrist) that brings a hand to within MAX_WRIST_BEND of
+## its forearm (target in the parent's space, as set_hand takes it).
+func _toward_forearm(side: int, target: Transform3D) -> Basis:
+	var forearm: Vector3 = _arms.forearm_to(side, target.origin)
+	var fingers := target.basis.y.normalized()
+	var off := fingers.angle_to(forearm)
+	var most := deg_to_rad(MAX_WRIST_BEND)
+
+	if off <= most or forearm.length() < 0.01:
+		return Basis.IDENTITY
+
+	var axis := fingers.cross(forearm)
+
+	if axis.length() < 0.0001:
+		return Basis.IDENTITY
+
+	return Basis(axis.normalized(), off - most)
 
 
 ## A hand hooked over an edge from below (the view's space, full size): from
@@ -1539,13 +1586,13 @@ func _place_arms() -> void:
 		if grip > 0.0:
 			var palm := _grip_palms[side]
 
-			# Round an upright: the hand turned a quarter about its fingers,
-			# palm in across it and thumb up, on its own side of it.
-			if _grip_upright[side]:
-				var out := 1.0 if side == 1 else -1.0
-				palm = Transform3D(palm.basis * Basis(Vector3.BACK, -out * PI * 0.5), palm.origin + palm.basis.x * UPRIGHT_SIDE * out)
-
 			var hand := Transform3D(palm.basis * (_LEDGE_RIGHT if side == 1 else _LEDGE_LEFT), palm * Vector3(0.0, 0.02, 0.07))
+
+			# Round an upright (a drainpipe, a rope): a hammer grip that goes
+			# on from the forearm, thumb up, round the pipe's near side and
+			# the fingers round its far side, as a hand holds a pole.
+			if _grip_upright[side]:
+				hand = _round_upright(palm, side)
 
 			# Hanging from an edge, the Prosecutor's hand hangs on its face as
 			# a climber's does (references: Dying Light): fingers up and hooked
@@ -1582,9 +1629,9 @@ func _place_arms() -> void:
 			if tuck > 0.5:
 				poses[side] = &"Fist"
 
-	# An empty hand of the Prosecutor's own arms rests as Dishonored rests its
-	# hands (reference, Oct 17): the left, his ring hand, near and low left,
-	# relaxed; the right down out of sight. Blending into whatever takes it.
+	# An empty hand of the Prosecutor's own arms rests down by his side, out
+	# of sight (blending into whatever takes it), not left floating out at
+	# arm's length.
 	if ViewArmsScript.new_arms and not dead:
 		for side in range(2):
 			if weights[side] < 1.0:
@@ -1618,11 +1665,26 @@ func _place_arms() -> void:
 	_held_amount = move_toward(_held_amount, 1.0 if holding else 0.0, get_process_delta_time() / HELD_BLEND)
 	_arms.set_held(_held_amount, _chest_under_hands())
 
+	# The Prosecutor's resting hand follows its forearm (a wrist bends
+	# little). (A hand on a held thing or a hold keeps to it: their poses are
+	# set for a straight wrist.)
+	if ViewArmsScript.new_arms and not dead:
+		for side in range(2):
+			if weights[side] < 0.5 or _grip_weights[side] > 0.5 or poses[side] != &"Relaxed":
+				continue
+
+			var turn := _toward_forearm(side, targets[side])
+
+			if turn == Basis.IDENTITY:
+				continue
+
+			targets[side] = Transform3D(turn * targets[side].basis, targets[side].origin)
+
 	for side in range(2):
 		_arms.set_hand(side, targets[side], weights[side], curls[side], poses[side])
 
 		if _arms.reach != null:
-			var hanging := _grip_weights[side] > 0.5 and _grip_poses[side] == &"Hook"
+			var hanging := _grip_weights[side] > 0.5 and (_grip_poses[side] == &"Hook" or _grip_upright[side])
 			var resting := ViewArmsScript.new_arms and poses[side] == &"Relaxed"
 			# (Hanging or resting, the elbow drops: the forearm rises from below.)
 			_arms.reach.elbow_hints[side] = HANG_ELBOW[side] if hanging or resting else ArmReachScript.ELBOW_HINT[side]

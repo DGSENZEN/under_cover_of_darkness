@@ -53,9 +53,9 @@ func _ready() -> void:
 
 	# Round a drainpipe.
 	_box(Vector3(20, 3, -4.5), Vector3(4, 6, 3), Color(0.55, 0.3, 0.25))
-	# As the gym's: a 12 cm pipe, held on its front face.
+	# As the gym's: a round 9 cm drainpipe, held on its front face.
 	_hold(HANDHOLD.Kind.POLE, Vector3(20, 0, -2.9), 6.0)
-	_pipe(Vector3(20, 3, -2.96), 6.0)
+	_pipe(Vector3(20, 3, -2.945), 6.0)
 	await _frames(2)
 	await _place(Vector3(20, 1.03, -1.6))
 	Input.action_press("move_forward")
@@ -118,8 +118,8 @@ func _light() -> void:
 func _pipe(center: Vector3, height: float) -> void:
 	var mesh := MeshInstance3D.new()
 	var tube := CylinderMesh.new()
-	tube.top_radius = 0.06
-	tube.bottom_radius = 0.06
+	tube.top_radius = 0.045
+	tube.bottom_radius = 0.045
 	tube.height = height
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(0.25, 0.27, 0.3)

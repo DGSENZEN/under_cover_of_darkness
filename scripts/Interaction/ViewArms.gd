@@ -111,6 +111,8 @@ func _build() -> void:
 		# Their own length and their own fist.
 		reach.set("fist_from", [[&"Fist", 0.0], [&"Fist", 0.0]])
 		reach.set("learns_poses", true)
+		# A real forearm takes a hand's whole roll; the wrist does not twist.
+		reach.set("forearm_roll", 1.0)
 		man.skeleton.add_child(reach)
 		_leg_body = HumanoidScript.new()
 		_leg_body.name = "Leg"

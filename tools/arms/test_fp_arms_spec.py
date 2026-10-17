@@ -68,9 +68,10 @@ class Spec(unittest.TestCase):
 
     def test_wrap_closes_less_than_fist(self):
         wrap, fist = SPEC["poses"]["Wrap"][0], SPEC["poses"]["Fist"][0]
+        # (Round a 9 cm drainpipe: a looser hand than a fist's.)
         for k in (0, 1):
             self.assertLess(wrap[k], fist[k])
-            self.assertGreater(wrap[k], 40.0)
+            self.assertGreater(wrap[k], 35.0)
 
     def test_sword_grip_index_looser(self):
         own = SPEC["pose_fingers"]["SwordGrip"]

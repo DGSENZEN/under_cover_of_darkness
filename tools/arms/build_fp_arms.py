@@ -49,9 +49,9 @@ SPEC = {
         "Open": ((0.0, 0.0, 0.0), ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))),
         "Fist": ((85.0, 95.0, 70.0), ((15.0, -40.0, 0.0), (15.0, 0.0, 0.0), (25.0, 0.0, 0.0))),
         "Hook": ((50.0, 70.0, 40.0), ((10.0, 0.0, 0.0), (20.0, 0.0, 0.0), (15.0, 0.0, 0.0))),
-        # Round a 4 cm pipe, rung or rope: the thumb comes over to meet the
-        # fingers.
-        "Wrap": ((55.0, 80.0, 50.0), ((15.0, -55.0, 0.0), (25.0, 0.0, 0.0), (10.0, 0.0, 0.0))),
+        # Round a 9 cm drainpipe (a rung or rope closes it further, by the
+        # curl): the thumb comes over to meet the fingers.
+        "Wrap": ((40.0, 60.0, 40.0), ((10.0, -45.0, 0.0), (20.0, 0.0, 0.0), (10.0, 0.0, 0.0))),
         # Pressing down on a top to climb on: palm flat, fingers spread a
         # little back, the thumb out to the side.
         "Push": ((-8.0, 5.0, 5.0), ((-10.0, 15.0, 0.0), (0.0, 0.0, 0.0), (5.0, 0.0, 0.0))),

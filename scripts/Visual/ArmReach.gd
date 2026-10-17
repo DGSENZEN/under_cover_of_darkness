@@ -24,6 +24,8 @@ const REACH := 0.88
 ## How much of a hand's roll the forearm takes (a forearm turns; a wrist
 ## hardly does): the rest stays in the wrist.
 const FOREARM_ROLL := 0.7
+## This rig's share (the Prosecutor's arms: all of it, ViewArms).
+var forearm_roll := FOREARM_ROLL
 
 ## The person this belongs to.
 var man: Node3D
@@ -65,6 +67,9 @@ var elbow_hints: Array[Vector3] = [ELBOW_HINT[0], ELBOW_HINT[1]]
 ## was put (world space), at the last solve. The skeleton's own pose is
 ## restored after drawing, so this is the only record of it.
 var wrist_bend: Array[float] = [0.0, 0.0]
+## How far each wrist is twisted off its rest about the forearm, degrees, at
+## the last solve (what the forearm's roll did not take).
+var wrist_twist: Array[float] = [0.0, 0.0]
 var solved_hands: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 ## Per hand, its wrist and fingertips (world space), at the last solve: how
 ## big it is drawn (tests measure it on screen).
@@ -240,6 +245,10 @@ func _reach(skeleton: Skeleton3D, side: int, into: Transform3D) -> void:
 	var forearm := skeleton.get_bone_global_pose(_bone(skeleton, bones[2])).basis.y.normalized()
 	var hand_pose := skeleton.get_bone_global_pose(_bone(skeleton, bones[3]))
 	wrist_bend[side] = rad_to_deg(forearm.angle_to(hand_pose.basis.y.normalized()))
+	var forearm_basis := skeleton.get_bone_global_pose(_bone(skeleton, bones[2])).basis.orthonormalized()
+	var relative := (forearm_basis.inverse() * hand_pose.basis.orthonormalized()).get_rotation_quaternion()
+	var off_rest := skeleton.get_bone_rest(_bone(skeleton, bones[3])).basis.get_rotation_quaternion().inverse() * relative
+	wrist_twist[side] = absf(rad_to_deg(wrapf(2.0 * atan2(off_rest.y, off_rest.w), -PI, PI)))
 	solved_hands[side] = skeleton.global_transform * hand_pose.origin
 	solved_shoulders[side] = skeleton.global_transform * skeleton.get_bone_global_pose(_bone(skeleton, bones[1])).origin
 	solved_elbows[side] = skeleton.global_transform * skeleton.get_bone_global_pose(_bone(skeleton, bones[2])).origin
@@ -325,7 +334,7 @@ func _solve(skeleton: Skeleton3D, root_name: StringName, mid_name: StringName, t
 		var rest := skeleton.get_bone_rest(tip).basis.get_rotation_quaternion()
 		var delta := rest.inverse() * local
 		var roll := wrapf(2.0 * atan2(delta.y, delta.w), -PI, PI)
-		_set_global_rotation(skeleton, mid, forearm * Basis(Vector3.UP, roll * FOREARM_ROLL))
+		_set_global_rotation(skeleton, mid, forearm * Basis(Vector3.UP, roll * forearm_roll))
 
 	_set_global_rotation(skeleton, tip, turn)
 

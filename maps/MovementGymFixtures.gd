@@ -131,10 +131,43 @@ static func _bracket(gym: Node3D, at: Vector3) -> void:
 	_hold(gym, Handhold.Kind.POINT, Vector3(at.x, at.y, at.z + 0.2), 1.0)
 
 
-## A drainpipe standing just off a face pointing +Z, from at up length.
+## A drainpipe standing just off a face pointing +Z, from at up length: a
+## round cast-iron downpipe 9 cm across, held to the wall by brackets.
 static func _pipe(gym: Node3D, at: Vector3, length: float) -> void:
-	gym._box(Vector3(at.x, at.y + length * 0.5, at.z), Vector3(0.12, length, 0.12), "steel")
-	_hold(gym, Handhold.Kind.POLE, at + Vector3(0, 0, 0.06), length)
+	var radius := 0.045
+	var body := StaticBody3D.new()
+	body.position = Vector3(at.x, at.y + length * 0.5, at.z)
+	body.set_meta(&"surface", "metal")
+	var collision := CollisionShape3D.new()
+	var shape := CylinderShape3D.new()
+	shape.radius = radius
+	shape.height = length
+	collision.shape = shape
+	body.add_child(collision)
+	var visual := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = length
+	mesh.radial_segments = 20
+	visual.mesh = mesh
+	visual.material_override = gym._material("steel")
+	body.add_child(visual)
+	gym._fixture_root.add_child(body)
+
+	# Brackets back to the wall every metre and a half.
+	var y := 0.6
+
+	while y < length - 0.2:
+		gym._box(Vector3(at.x, at.y + y, at.z - radius - 0.01), Vector3(0.11, 0.025, 0.03), "steel")
+		y += 1.5
+
+	var hold := Handhold.new()
+	hold.kind = Handhold.Kind.POLE
+	hold.length = length
+	hold.radius = radius
+	hold.position = at + Vector3(0, 0, radius)
+	gym._fixture_root.add_child(hold)
 
 
 static func _hold(gym: Node3D, kind: int, at: Vector3, length: float) -> void:
