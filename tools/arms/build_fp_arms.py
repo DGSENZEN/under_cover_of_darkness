@@ -21,6 +21,9 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import sleeve_form  # noqa: E402
 SOURCE = os.path.join(HERE, "..", "..", "assets", "characters", "fp_arms", "source")
 BASE_HAND = os.path.join(SOURCE, "base_hand.blend")
 with open(os.path.join(SOURCE, "base_hand_joints.json")) as _f:
@@ -387,37 +390,22 @@ def build(root_dir):
                                           matrix=Matrix.Translation(Vector(centre)))
         _tag(result["verts"], bone_name, mat)
 
-    def sleeve(a, b, r0, r1, rings, weights, mat, segments=16):
-        """An open tube from a to b in rings, each ring weighted by
-        weights(t) -> {bone: weight}, t 0 at a and 1 at b."""
-        a = Vector(a)
-        b = Vector(b)
-        rot = (b - a).to_track_quat("Z", "Y").to_matrix()
-        loops = []
+    def add_part(part):
+        """A piece of the coat (sleeve_form.Part) into the mesh."""
+        verts = []
 
-        for k in range(rings + 1):
-            t = k / rings
-            centre = a.lerp(b, t)
-            radius = r0 + (r1 - r0) * t
-            ring_verts = []
+        for co, weights in zip(part.verts, part.weights):
+            v = bm.verts.new(Vector(co))
 
-            for i in range(segments):
-                u = i / segments * math.tau
-                v = bm.verts.new(centre + rot @ Vector((math.cos(u) * radius, math.sin(u) * radius, 0.0)))
+            for name, w in weights.items():
+                v[deform][groups.index(name)] = w
 
-                for name, w in weights(t).items():
-                    v[deform][groups.index(name)] = w
+            verts.append(v)
 
-                ring_verts.append(v)
-
-            loops.append(ring_verts)
-
-        for k in range(rings):
-            for i in range(segments):
-                j = (i + 1) % segments
-                f = bm.faces.new((loops[k][i], loops[k][j], loops[k + 1][j], loops[k + 1][i]))
-                f.material_index = mat_order.index(mat)
-                f.select = True
+        for face, mat in zip(part.faces, part.face_mats):
+            f = bm.faces.new([verts[i] for i in face])
+            f.material_index = mat_order.index(mat)
+            f.select = True
 
     def egg(centre, radii, bone_name, mat):
         result = bmesh.ops.create_uvsphere(bm, u_segments=24, v_segments=14, radius=1.0,
@@ -483,22 +471,10 @@ def build(root_dir):
         fore_dir = (wr - el).normalized()
         sleeve_end = wr - fore_dir * SPEC["sleeve_short_of_wrist"]
         # The trench sleeve: wide at the shoulder, a closed cap over it.
-        # The shoulder stays on the chest; the sleeve's top stretches from it
-        # to the arm, as cloth over a shoulder does when the arm reaches out
-        # (ArmReach slides a shoulder up to SHOULDER_GIVE toward a far hold).
+        # The shoulder stays on the chest. The sleeve, shoulder to cuff, its top
+        # stretching from it (a shoulder the solver slides toward a far hold).
         ball(sh, 0.070, "clavicle_" + side, "coat")
-        upper, clavicle = "upperarm_" + side, "clavicle_" + side
-
-        def onto_arm(t, upper=upper, clavicle=clavicle):
-            w = min(max((t - 0.05) / 0.35, 0.0), 1.0)
-            w = w * w * (3.0 - 2.0 * w)
-            return {upper: w, clavicle: 1.0 - w} if w < 1.0 else {upper: 1.0}
-
-        sleeve(sh, el, 0.066, 0.054, 8, onto_arm, "coat")
-        ball(el, 0.054, "lowerarm_" + side, "coat")
-        tube(el, sleeve_end - fore_dir * 0.05, 0.053, 0.047, "lowerarm_" + side, "coat")
-        # The turned-back cuff of the coat: a little wider band.
-        tube(sleeve_end - fore_dir * 0.05, sleeve_end, 0.052, 0.052, "lowerarm_" + side, "coat")
+        add_part(sleeve_form.sleeve(j["shoulder"], j["elbow"], j["wrist"], side))
         # The shirt cuff showing past it. The hand (added below) runs on under
         # both into the sleeve.
         tube(sleeve_end, sleeve_end + fore_dir * SPEC["cuff_length"], 0.040, 0.039, "lowerarm_" + side, "cuff")

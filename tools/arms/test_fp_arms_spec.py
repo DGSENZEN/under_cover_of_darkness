@@ -150,6 +150,65 @@ class Aging(unittest.TestCase):
         self.assertGreater(at_joint, between + 0.0004)
 
 
+def _edges(part):
+    count = {}
+    for face in part.faces:
+        for k in range(len(face)):
+            e = tuple(sorted((face[k], face[(k + 1) % len(face)])))
+            count[e] = count.get(e, 0) + 1
+    return count
+
+
+def _right_sleeve():
+    import sleeve_form
+    j = build_fp_arms.joints(1)
+    return sleeve_form.sleeve(j["shoulder"], j["elbow"], j["wrist"], "r")
+
+
+class Sleeve(unittest.TestCase):
+    """The trench sleeve, shoulder to cuff (tools/arms/sleeve_form.py)."""
+
+    def test_closed_except_the_cuff(self):
+        part = _right_sleeve()
+        open_edges = [e for e, n in _edges(part).items() if n != 2]
+        end = set(part.rings[-1])
+        self.assertEqual(len(open_edges), len(part.rings[-1]))
+        self.assertTrue(all(a in end and b in end for a, b in open_edges))
+
+    def test_profile_tapers(self):
+        import sleeve_form
+        part = _right_sleeve()
+
+        def mean_radius(k):
+            c = part.centres[k]
+            ring = part.rings[k]
+            return sum(math.dist(part.verts[i], c) for i in ring) / len(ring)
+
+        elbow = min(range(len(part.rings)), key=lambda k: abs(part.ring_s[k] - part.elbow_s))
+        self.assertGreater(mean_radius(0), mean_radius(elbow))
+        self.assertGreater(mean_radius(elbow), mean_radius(len(part.rings) - 1))
+
+    def test_weights_sum_to_one(self):
+        for w in _right_sleeve().weights:
+            self.assertAlmostEqual(sum(w.values()), 1.0, places=5)
+
+    def test_elbow_point_blends_wider_than_crook(self):
+        import sleeve_form
+        point = sleeve_form.lower_share(0.02, -1.0)
+        crook = sleeve_form.lower_share(0.02, 1.0)
+        self.assertLess(point, crook - 0.15)
+
+    def test_top_on_the_clavicle(self):
+        part = _right_sleeve()
+        for i in part.rings[0]:
+            self.assertGreaterEqual(part.weights[i].get("clavicle_r", 0.0), 0.95)
+
+    def test_triangle_budget(self):
+        part = _right_sleeve()
+        tris = sum(len(f) - 2 for f in part.faces)
+        self.assertLessEqual(tris * 2, 6000)
+
+
 FINGERS = build_fp_arms.FINGERS
 
 
