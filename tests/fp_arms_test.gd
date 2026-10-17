@@ -197,6 +197,10 @@ func _grip_pose_checks() -> void:
 	var wrapped := 1.0
 	var looked := 0
 	var on_pole := 0
+	# Upright: each held hand's palm faces in across the pipe (thumb up), not
+	# down as on a ledge.
+	var flat_palm := 0.0
+	var wrong_way := 0
 	for i in 200:
 		await _frames(1)
 		on_pole = on_pole + 1 if player.movement_state == 3 else 0
@@ -206,11 +210,20 @@ func _grip_pose_checks() -> void:
 				if arms.reach.weights[side] > 0.9 and player.hand._contacts.weight(side) > 0.95:
 					wrapped = minf(wrapped, shares[side].get(&"Wrap", 0.0))
 					looked += 1
+					# The palm: the hand bone's -X (right hand), +X (left).
+					var basis: Basis = arms.man.global_basis * arms.reach.targets[side].basis
+					var palm: Vector3 = (basis.x * (-1.0 if side == 1 else 1.0)).normalized()
+					var inward: float = palm.dot(player.camera.global_basis.x) * (-1.0 if side == 1 else 1.0)
+					flat_palm = maxf(flat_palm, absf(palm.y))
+					if inward < 0.6:
+						wrong_way += 1
 		if looked > 20:
 			break
 	_release_all()
 	_check("FA15 a sill is hooked, a drainpipe wrapped", hooked > 0.95 and looked > 10 and wrapped > 0.95,
 		"Hook %.2f; Wrap %.2f over %d held hand-frames" % [hooked, wrapped, looked])
+	_check("FA21 on a drainpipe the palms face in across it, thumbs up", looked > 10 and flat_palm < 0.4 and wrong_way == 0,
+		"palm up/down at most %.2f, %d of %d hand-frames not facing in" % [flat_palm, wrong_way, looked])
 	await _place(Vector3(50, 0.1, 0))
 	await _frames(30)
 

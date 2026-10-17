@@ -210,6 +210,11 @@ var _grip_curls: Array[float] = [0.5, 0.5]
 ## The pose each holding hand takes (HandContacts.grip_pose), for arms that
 ## have it.
 var _grip_poses: Array[StringName] = [&"Fist", &"Fist"]
+## Each holding hand on something upright (a drainpipe, a rope), for arms
+## that can wrap it: held thumb up, the palm in across it, not down on it.
+var _grip_upright: Array[bool] = [false, false]
+## How far out from the hold's middle a hand round an upright sits (m).
+const UPRIGHT_SIDE := 0.05
 ## Your arms.
 var _arms: Node3D
 ## The page held up to read (HeldPage), made the first time; wanted up or
@@ -1255,6 +1260,8 @@ func _place_grips() -> void:
 				_grip_curls[side] = gripping[1]
 			else:
 				_grip_poses[side] = &"Fist"
+
+			_grip_upright[side] = _grip_poses[side] == &"Wrap" and _contacts.state in [HandContactsScript.State.POLE, HandContactsScript.State.ROPE]
 			strongest = maxf(strongest, weight)
 
 	_gripping = strongest
@@ -1433,6 +1440,13 @@ func _place_arms() -> void:
 
 		if grip > 0.0:
 			var palm := _grip_palms[side]
+
+			# Round an upright: the hand turned a quarter about its fingers,
+			# palm in across it and thumb up, on its own side of it.
+			if _grip_upright[side]:
+				var out := 1.0 if side == 1 else -1.0
+				palm = Transform3D(palm.basis * Basis(Vector3.BACK, -out * PI * 0.5), palm.origin + palm.basis.x * UPRIGHT_SIDE * out)
+
 			var hand := Transform3D(palm.basis * (_LEDGE_RIGHT if side == 1 else _LEDGE_LEFT), palm * Vector3(0.0, 0.02, 0.07))
 			_held_wrists[side] = hand.origin
 			var shown: Transform3D = _arms.to_rig(hand)
