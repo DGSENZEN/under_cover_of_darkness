@@ -19,6 +19,7 @@ import stall  # noqa: E402
 import underground_ground  # noqa: E402
 import underground_services  # noqa: E402
 import underground_furniture  # noqa: E402
+import underground_floor  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -1193,6 +1194,90 @@ class UndergroundFurniture(unittest.TestCase):
 
     def test_the_vent_is_flush(self):
         self.assertGreaterEqual(self._extent("vent_grille")[1][0], -0.08)
+
+
+class UndergroundFloor(unittest.TestCase):
+    """The Underground's tiled floor in modules (tools/eclipse/underground_floor.py): each
+    module 1.2 m along x, its tiles' tops at z = 0, laid edge to edge from y = 0; the
+    wall's row of dark border tiles along +y; a drain set flush."""
+
+    BUDGET = {"floor_field": 3200, "floor_field_worn": 3600, "floor_border": 3200, "floor_border_drain": 4200,
+              "floor_edge": 2600}
+    DEPTH = {"floor_field": 1.2, "floor_field_worn": 1.2, "floor_border": 1.2, "floor_border_drain": 1.2,
+             "floor_edge": 0.9}
+
+    @classmethod
+    def setUpClass(cls):
+        underground_floor.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _faces_of(self, name, slot):
+        o = self.objects[name]
+        return [[o.matrix_world @ o.data.vertices[i].co for i in p.vertices] for p in o.data.polygons
+                if o.material_slots[p.material_index].material.name == slot]
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_each_passes_the_gate(self):
+        problems = {}
+
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            found = gate.check(faces, tris, [], budget=self.BUDGET[n])
+            if found:
+                problems[n] = found[:3]
+
+        self.assertEqual(problems, {})
+
+    def test_modules_lay_edge_to_edge(self):
+        # Exactly their footprint, so they tile with no gap and no overlap.
+        for n, o in self.objects.items():
+            vs = _world(o)
+            box = [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(2)]
+            self.assertAlmostEqual(box[0][0], 0.0, delta=0.001, msg=n)
+            self.assertAlmostEqual(box[0][1], 1.2, delta=0.001, msg=n)
+            self.assertAlmostEqual(box[1][0], 0.0, delta=0.001, msg=n)
+            self.assertAlmostEqual(box[1][1], self.DEPTH[n], delta=0.001, msg=n)
+
+    def test_walked_on_at_floor_height(self):
+        # Nothing stands proud of the floor; the tiles' tops are at it, give or take their settling.
+        for n, o in self.objects.items():
+            top = max(v.z for v in _world(o))
+            self.assertLessEqual(top, 0.0005, n)
+            self.assertGreaterEqual(top, -0.003, n)
+
+    def test_the_border_row_runs_along_the_wall(self):
+        for n in ("floor_border", "floor_border_drain", "floor_edge"):
+            dark = self._faces_of(n, "tile_dark")
+            self.assertTrue(dark, n)
+            self.assertTrue(all(v.y >= self.DEPTH[n] - underground_floor.TILE - 0.001 for f in dark for v in f), n)
+
+    def test_the_drain_is_flush_and_open(self):
+        # Its grate's top at the floor; no tile in its hole; dark below it.
+        grate = self._faces_of("floor_border_drain", "steel")
+        self.assertAlmostEqual(max(v.z for f in grate for v in f), 0.0, delta=0.001)
+        (x0, x1), (y0, y1) = underground_floor.DRAIN
+        tiles = [f for slot in ("tile_cream", "tile_terra", "tile_dark")
+                 for f in self._faces_of("floor_border_drain", slot)
+                 if all(x0 + 0.01 < v.x < x1 - 0.01 and y0 + 0.01 < v.y < y1 - 0.01 for v in f)]
+        self.assertEqual(tiles, [])
+        sump = self._faces_of("floor_border_drain", "soot_black")
+        self.assertLess(min(v.z for f in sump for v in f), -0.15)
+
+    def test_the_worn_module_is_worn(self):
+        # A sunk tile, a cracked one in two, a cement patch.
+        o = self.objects["floor_field_worn"]
+        self.assertTrue(self._faces_of("floor_field_worn", "cement"))
+        self.assertLess(min(v.z for f in self._faces_of("floor_field_worn", "tile_terra") + self._faces_of(
+            "floor_field_worn", "tile_cream") for v in f if v.z > -0.02), -0.004)
+        self.assertGreater(len(o.data.polygons), len(self.objects["floor_field"].data.polygons))
 
 
 if __name__ == "__main__":

@@ -477,6 +477,40 @@ func _run() -> void:
 		and streak != null and absf(streak.global_position.x - vent.global_position.x) < 0.2
 		and streak.global_position.y > 0.55, "vent %s streak %s" % [vent, streak])
 
+	# U44 the floor laid in tile modules wall to wall, edge to edge: dark border rows along both walls,
+	#     worn modules among the plain, a drain set flush where the wall's water runs
+	var rects := []
+	var area := 0.0
+
+	for module: MeshInstance3D in lab.floor_tiles:
+		var box := module.global_transform * module.get_aabb()
+		rects.append(Rect2(box.position.x, box.position.z, box.size.x, box.size.z))
+		area += box.size.x * box.size.z
+	var overlaps := 0
+
+	for i in rects.size():
+		for j in range(i + 1, rects.size()):
+			var shared: Rect2 = rects[i].intersection(rects[j])
+			overlaps += 1 if shared.get_area() > 0.0005 else 0
+	var hull := Rect2()
+
+	for i in rects.size():
+		hull = rects[i] if i == 0 else hull.merge(rects[i])
+	var back_row: Array = lab.floor_tiles.filter(func(m): return absf((m.global_transform * m.get_aabb()).position.z - lab.BACK_WALL) < 0.01)
+	var far_row: Array = lab.floor_tiles.filter(func(m): return absf((m.global_transform * m.get_aabb()).end.z - lab.FAR_WALL) < 0.01)
+	var drains: Array = lab.floor_tiles.filter(func(m): return m.get_meta("kind") == "floor_border_drain")
+	var drain_at: Vector3 = drains[0].global_transform * lab.DRAIN_LOCAL if drains.size() == 1 else Vector3.INF
+	var corridor: float = (lab.FAR_WALL - lab.BACK_WALL) * 2.0 * lab.RUN
+	_check("U44 the floor laid in tile modules wall to wall (borders at both walls, worn ones among them), a flush drain under the drip",
+		overlaps == 0 and absf(area - corridor) < 0.01 and absf(hull.position.x + lab.RUN) < 0.01 and absf(hull.end.x - lab.RUN) < 0.01
+		and absf(hull.position.y - lab.BACK_WALL) < 0.01 and absf(hull.end.y - lab.FAR_WALL) < 0.01
+		and back_row.all(func(m): return String(m.get_meta("kind")).begins_with("floor_border"))
+		and far_row.all(func(m): return m.get_meta("kind") == "floor_edge") and far_row.size() == 20
+		and lab.floor_tiles.filter(func(m): return m.get_meta("kind") == "floor_field_worn").size() >= 4
+		and Vector2(drain_at.x - lab.DRIP_AT.x, drain_at.z - lab.DRIP_AT.z).length() < 0.7,
+		"modules %d overlaps %d area %.2f of %.2f hull %s back %d far %d drain %s" % [lab.floor_tiles.size(), overlaps,
+		area, corridor, hull, back_row.size(), far_row.size(), drain_at])
+
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")
 	_check("U8 the pixel grid is off", retro != null and retro.virtual_height == 0, "%s" % [retro.virtual_height if retro else null])

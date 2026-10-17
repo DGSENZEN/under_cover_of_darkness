@@ -21,7 +21,7 @@ const RetroScript := preload("res://scripts/Visual/Retro.gd")
 ## The corridor (m): its run along X, the wall the stall backs onto, the far wall, the vault.
 const RUN := 12.0
 const BACK_WALL := -2.35
-const FAR_WALL := 4.5
+const FAR_WALL := 4.55
 const HEIGHT := 4.0
 const WALL := 0.3
 ## Godot positions of what the stall's script built (Blender x, z, -y).
@@ -83,6 +83,17 @@ const STEAM_HISS := "res://audio/ambience/steam_hiss.wav"
 ## Where the vent breathes, along the back wall past her stall, in the work light's reach.
 const VENT_X := 3.6
 const VENT_HUM := "res://audio/ambience/vent_hum.wav"
+## The tiled floor (tools/eclipse/underground_floor.py): its modules' size, how deep its tiles and
+## their bed go under the floor, the drain's middle in its module's own axes; the corridor is
+## 20 modules long and 5 deep with a narrow edge row (0.9 m) against the far wall.
+const FLOOR_KIT := "res://assets/eclipse/kit/underground_floor.glb"
+const MODULE := 1.2
+const EDGE_DEPTH := 0.9
+const TILE_DEPTH := 0.12
+const DRAIN_LOCAL := Vector3(0.6, 0.0, -0.6)
+## The drain's column, beside her stall where the conduit's water pools; the worn modules' cells.
+const DRAIN_COLUMN := 8
+const WORN := [Vector2i(2, 1), Vector2i(5, 3), Vector2i(11, 4), Vector2i(13, 2), Vector2i(16, 1), Vector2i(18, 3)]
 const RUMBLE_DB := -4.0
 const RATTLES := ["res://audio/sfx/jars_rattle_1.wav", "res://audio/sfx/jars_rattle_2.wav"]
 const SHELVES_AT := Vector3(0.0, 1.4, -1.9)
@@ -128,6 +139,7 @@ var services: Array[MeshInstance3D] = []
 var _service_meshes := {}
 var _service_material: ShaderMaterial
 var furniture: Array[MeshInstance3D] = []
+var floor_tiles: Array[MeshInstance3D] = []
 var cart_steam: Node3D
 var cart_hiss: AudioStreamPlayer3D
 var niche_flames: Node3D
@@ -160,6 +172,7 @@ func _ready() -> void:
 	_corridor()
 	_stall()
 	_lights()
+	_tiles()
 	_decals()
 	_clutter()
 	_services()
@@ -318,7 +331,17 @@ func _glass() -> StandardMaterial3D:
 
 func _corridor() -> void:
 	var tile := _flat(TILE)
-	_box(Vector3(-RUN, -0.2, BACK_WALL - WALL), Vector3(RUN, 0.0, FAR_WALL + WALL), _flat(FLOOR), "floor")
+	# The floor under the tiles (_tiles lays them); walked on at the tiles' tops.
+	_box(Vector3(-RUN, -0.2 - TILE_DEPTH, BACK_WALL - WALL), Vector3(RUN, -TILE_DEPTH, FAR_WALL + WALL), _flat(FLOOR), "floor")
+	var walked := StaticBody3D.new()
+	walked.name = "floor_walked"
+	var top := CollisionShape3D.new()
+	var slab := BoxShape3D.new()
+	slab.size = Vector3(2.0 * RUN, TILE_DEPTH, FAR_WALL - BACK_WALL + 2.0 * WALL)
+	top.shape = slab
+	walked.add_child(top)
+	add_child(walked)
+	walked.position = Vector3(0.0, -TILE_DEPTH / 2.0, (BACK_WALL + FAR_WALL) / 2.0)
 	_box(Vector3(-RUN, 0.0, BACK_WALL - WALL), Vector3(RUN, HEIGHT, BACK_WALL), tile, "back_wall")
 	_box(Vector3(-RUN, 0.0, FAR_WALL), Vector3(RUN, HEIGHT, FAR_WALL + WALL), tile, "far_wall")
 	_box(Vector3(-RUN, HEIGHT, BACK_WALL - WALL), Vector3(RUN, HEIGHT + 0.2, FAR_WALL + WALL), tile, "vault")
@@ -940,6 +963,36 @@ func _hang(kind: String, at: Vector3, far: bool, solid := false) -> MeshInstance
 	return piece
 
 
+# The floor, tiled
+
+func _tiles() -> void:
+	if not ResourceLoader.exists(FLOOR_KIT):
+		missing.append(FLOOR_KIT)
+		return
+
+	var meshes := _kit(FLOOR_KIT)
+	var look := Painterly.material(_painted(["underground_floor.png", "underground_floor_base.png"]), &"bespoke")
+	var columns := int(round(2.0 * RUN / MODULE))
+
+	for c in columns:
+		var x := -RUN + MODULE * c
+		# Along the back wall: the border row (its dark row at the wall), with the drain.
+		var kind := "floor_border_drain" if c == DRAIN_COLUMN else "floor_border"
+		floor_tiles.append(_place(meshes[kind], look, kind, Vector3(x, 0.0, BACK_WALL + MODULE), 0.0, false))
+
+		# The open floor, each module turned one way or the other so their painting does not repeat.
+		for r in range(1, 5):
+			var worn := Vector2i(c, r) in WORN
+			kind = "floor_field_worn" if worn else "floor_field"
+			var turned := fposmod(sin(c * 12.9898 + r * 78.233) * 43758.5453, 1.0) > 0.5
+			var low := BACK_WALL + MODULE * r
+			var at := Vector3(x + MODULE, 0.0, low) if turned else Vector3(x, 0.0, low + MODULE)
+			floor_tiles.append(_place(meshes[kind], look, kind, at, PI if turned else 0.0, false))
+
+		# Against the far wall: the narrow edge row, turned so its dark row is at the wall.
+		floor_tiles.append(_place(meshes["floor_edge"], look, "floor_edge", Vector3(x + MODULE, 0.0, FAR_WALL - EDGE_DEPTH), PI, false))
+
+
 # The grime, each with its cause
 
 func _decals() -> void:
@@ -949,10 +1002,14 @@ func _decals() -> void:
 	_decal("soot", Vector3(0.0, 2.3, -0.22), Vector3(0.9, 0.5, 0.9), Vector3(180, 0, 0))
 	# Feet and spills have worn the floor in front of the counter.
 	_decal("grime", Vector3(0.0, 0.0, 0.7), Vector3(2.8, 0.4, 1.4), Vector3.ZERO)
+	# The commuters' path down the corridor's middle, trodden dark; the dirt of feet by the bench.
+	for walk in [[-9.0, 1.2, 8.0], [-4.6, 0.9, -6.0], [4.8, 1.0, 5.0], [9.4, 1.3, -4.0]]:
+		_decal("grime", Vector3(walk[0], 0.0, walk[1]), Vector3(3.8, 0.4, 1.7), Vector3(0, walk[2], 0)).name = "decal_tread"
+	_decal("grime", Vector3(-3.3, 0.0, 3.85), Vector3(2.2, 0.4, 0.9), Vector3.ZERO).name = "decal_tread_bench"
 	# A tamale cart's axle grease, where it stands of a night.
 	_decal("oil", Vector3(4.2, 0.0, 2.6), Vector3(1.3, 0.4, 1.0), Vector3(0, 25, 0))
-	# The water off the conduit pools wet at the wall's foot, shining.
-	var wet := _decal("wet", Vector3(-2.3, 0.0, -1.95), Vector3(1.2, 0.4, 0.9), Vector3(0, -10, 0))
+	# The water off the conduit pools wet at the wall's foot and runs to the drain, shining.
+	var wet := _decal("wet", Vector3(-2.05, 0.0, -1.85), Vector3(1.3, 0.4, 0.95), Vector3(0, -20, 0))
 	var shine := Image.create(4, 4, false, Image.FORMAT_RGB8)
 	shine.fill(Color(1.0, 0.12, 0.0))
 	wet.texture_orm = ImageTexture.create_from_image(shine)
