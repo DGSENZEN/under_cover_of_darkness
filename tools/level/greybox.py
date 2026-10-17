@@ -2,8 +2,10 @@
 Zócalo spec, section 5, step 2): the street as one ground cut round its
 sunken places, each sunken place a floor and walls, each plot a block with
 its roof, each underground space a room with gaps at its openings, each
-route a stair, slab, plank, climbing board or tunnel. Overlap-gated here;
-Godot only loads it (scripts/Level/GreyboxLoader.gd).
+route a stair, slab, plank, climbing board or tunnel. A plan with no brink
+(the Metro Underground) has no street ground and no cliff. Overlap-gated
+here, and no two spaces may share any volume (stacked rooms keep a slab
+between); Godot only loads it (scripts/Level/GreyboxLoader.gd).
 
     python3 tools/level/greybox.py <plan.json> <greybox.json>   (exits 1 if the gate fails)
 """
@@ -21,6 +23,7 @@ sys.path.insert(0, os.path.join(HERE, "layouts"))
 
 import overlap  # noqa: E402
 import plan  # noqa: E402
+import plan_check  # noqa: E402
 
 # How far the brink's cliff falls into the void (m).
 CLIFF = 20.0
@@ -236,7 +239,7 @@ def _gaps(a, b, openings, y_of):
 
         if off <= ON_WALL and -1e-6 <= t <= length + 1e-6:
             y0 = y_of(o)
-            out.append((t - o["width"] / 2, t + o["width"] / 2, y0, y0 + GAP_HEIGHT))
+            out.append((t - o["width"] / 2, t + o["width"] / 2, y0, y0 + o.get("height", GAP_HEIGHT)))
 
     return out
 
@@ -389,13 +392,18 @@ def build(data):
     raised = [dict(g, box=_bounds(g["polygon"])) for g in data["ground"]
               if g["kind"] in plan.RAISED_KINDS and g["level"] > 1e-6]
     openings = [dict(o, floor=s["floor"]) for s in data["spaces"] for o in s["openings"]]
-    meshes = [{"name": "ground", "kind": "ground", "faces": _ground(data, sunken + raised)},
-              {"name": "brink", "kind": "brink", "faces": _brink(data)}]
+    meshes = []
+
+    if len(data["brink"]) >= 3:
+        meshes += [{"name": "ground", "kind": "ground", "faces": _ground(data, sunken + raised)},
+                   {"name": "brink", "kind": "brink", "faces": _brink(data)}]
+
     meshes += [{"name": g["name"], "kind": "raised", "faces": _raised(g, sunken)} for g in raised]
     meshes += [{"name": g["name"], "kind": "sunken", "faces": _sunken(g, sunken, data["plots"], openings, raised)}
                for g in sunken]
     meshes += [{"name": p["name"], "kind": "plot", "family": p["family"], "faces": _plot(p)} for p in data["plots"]]
-    meshes += [{"name": s["name"], "kind": "space", "faces": _space(s, data)} for s in data["spaces"]]
+    meshes += [{"name": s["name"], "kind": "space", "polygon": s["polygon"], "floor": s["floor"], "height": s["height"],
+                "faces": _space(s, data)} for s in data["spaces"]]
     meshes += [{"name": r["name"], "kind": "route", "route": r["kind"], "points": r["points"], "faces": _route(r)}
                for r in data["routes"]]
     return {"name": data["name"], "meshes": meshes}
@@ -448,14 +456,44 @@ def _layered(all_faces, gap=LAYER_GAP):
     return found
 
 
+def _sharing(box):
+    """Pairs of spaces sharing volume: their outlines overlapping (more than
+    a shared edge) and their heights overlapping."""
+    spaces = [m for m in box["meshes"] if m["kind"] == "space" and "polygon" in m]
+    out = []
+
+    for i, a in enumerate(spaces):
+        for b in spaces[i + 1:]:
+            low = max(a["floor"], b["floor"])
+            high = min(a["floor"] + a["height"], b["floor"] + b["height"])
+
+            if high - low <= 1e-6:
+                continue
+
+            ax0, az0, ax1, az1 = _bounds(a["polygon"])
+            bx0, bz0, bx1, bz1 = _bounds(b["polygon"])
+
+            if min(ax1, bx1) - max(ax0, bx0) <= 1e-6 or min(az1, bz1) - max(az0, bz0) <= 1e-6:
+                continue
+
+            area = plan_check.overlap_area(a["polygon"], b["polygon"])
+
+            if area > 0.01:
+                out.append((a["name"], b["name"], area, high - low))
+
+    return out
+
+
 def gate(box):
-    """One line a problem: faces of two objects fighting in one plane, or
-    same-facing faces within LAYER_GAP of each other."""
+    """One line a problem: faces of two objects fighting in one plane,
+    same-facing faces within LAYER_GAP of each other, or two spaces sharing
+    volume."""
     all_faces = faces(box)
     out = ["fight: %s and %s share %.3f m2" % (all_faces[i]["owner"], all_faces[j]["owner"], area)
            for i, j, area in overlap.fights(all_faces)]
     out += ["layered: %s and %s %.1f cm apart, %.3f m2" % (all_faces[i]["owner"], all_faces[j]["owner"], apart * 100, area)
             for i, j, apart, area in _layered(all_faces)]
+    out += ["volume: %s and %s share %.1f m2 over %.1f m" % v for v in _sharing(box)]
     return out
 
 
