@@ -1863,6 +1863,22 @@ func _update_jump_assist(wish_direction: Vector3, grounded: bool) -> void:
 func _update_crouch() -> bool:
 	var wants_crouch := Input.is_action_pressed("crouch")
 
+	# Parkour down: sprint and crouch held at an edge climb down over it. On
+	# open ground it is only a crouch.
+	if (
+		wants_crouch
+		and Input.is_action_pressed("sprint")
+		and not is_crouched
+		and not _is_carrying()
+		and _on_floor_now()
+		and _freerun_timer <= 0.0
+	):
+		_freerun_timer = freerun_scan_interval
+		var facing := _facing_direction()
+
+		if not scanner.edge_below(facing, freerun_max_auto_drop * 0.5).is_empty() and _try_lower(facing):
+			return true
+
 	# Standing at an edge, looking down over it: crouch means climb down.
 	if (
 		_crouch_just_pressed
@@ -2242,6 +2258,10 @@ func _update_hang(delta: float) -> void:
 	_hang_buffered_action = &""
 	# Drop has priority over a queued pull-up.
 	var pulling_away := Input.is_action_just_pressed("move_back") and _facing_direction().dot(-hang_normal) > 0.0
+	if Input.is_action_pressed("sprint") and Input.is_action_pressed("crouch") and not _is_carrying():
+		_freerun_down()
+		return
+
 	if drop_requested or pulling_away:
 		_drop_from_hang()
 		return
@@ -3461,6 +3481,37 @@ func _update_climb(_delta: float) -> void:
 	)
 
 	LanternBody.slide_character(self)
+
+
+## Parkour down from a hang: the next hold below, hand under hand or dropped
+## to; with none, let go if the floor is near enough to land on; else stay.
+func _freerun_down() -> void:
+	if _freerun_timer > 0.0:
+		return
+
+	_freerun_timer = freerun_scan_interval
+	var target := holds.next_hold(global_position, hang_normal, hang_lip_y, Vector3.DOWN, freerun_leap_reach)
+
+	if not target.is_empty():
+		var move: TraversalMove = null
+
+		if target["reach"]:
+			move = planner.reach(global_position, target, hang_normal)
+		elif hang_lip_y - float(target["lip_y"]) > leap_arc_max_drop:
+			_start_drop_catch(target)
+			return
+		else:
+			move = planner.leap(global_position, target, hang_normal)
+
+		if move != null:
+			move.end_hold = target.get("hold")
+			_start_move(move)
+			return
+
+	var feet := get_feet_position()
+
+	if not scanner.ray(feet, feet - Vector3.UP * freerun_max_auto_drop).is_empty():
+		_drop_from_hang()
 
 
 ## Sprint held, not crouched, hands free: the city is taken as it comes.

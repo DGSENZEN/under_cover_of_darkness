@@ -13,6 +13,7 @@ var labels: Array[String] = []
 
 func _ready() -> void:
 	_box(Vector3(100, -0.5, 0), Vector3(260, 1, 40))
+	_box(Vector3(330, -0.5, 0), Vector3(200, 1, 40))
 	player = PLAYER.instantiate()
 	add_child(player)
 	player.debug_traversal = false
@@ -45,6 +46,7 @@ func _run() -> void:
 	await _ground_checks()
 	await _edge_checks()
 	await _eject_checks()
+	await _down_checks()
 
 
 # Task 1: the hold finder.
@@ -358,6 +360,43 @@ func _eject_checks() -> void:
 			"state %d normal %s labels %s hold %s reject %s" % [player.movement_state, player.hang_normal, labels, player.hang_hold, player._last_reject])
 		player._drop_from_hang()
 		await _frames(90)
+
+
+# Task 8: parkour down, sprint + crouch held.
+func _down_checks() -> void:
+	_box(Vector3(260, 3, 0), Vector3(4, 6, 10))
+	await _frames(2)
+	await _place(Vector3(260, 7.03, -4.3))
+	Input.action_press("sprint")
+	Input.action_press("crouch")
+	await _until(func(): return player.movement_state == 2, 90)
+	_check("FR22 sprint+crouch at a roof edge lowers into a hang", player.movement_state == 2 and not player.is_crouched,
+		"state %d crouched %s reject %s" % [player.movement_state, player.is_crouched, player._last_reject])
+	_release_all()
+	player._drop_from_hang()
+	await _frames(90)
+
+	var column: Array = await _sill_column(250)
+	await _hang_on(column[-1])
+	player.invulnerable = false
+	var health: float = player.health
+	Input.action_press("sprint")
+	Input.action_press("crouch")
+	await _until(func(): return player.movement_state == 0 and player._on_floor_now(), 600)
+	_release_all()
+	_check("FR23 sprint+crouch on a facade climbs down hold to hold to the street", player.global_position.y - 1.0 < 0.2 and player.health >= health and labels.has("reach"),
+		"feet %.2f health %.1f -> %.1f labels %s" % [player.global_position.y - 1.0, health, player.health, labels])
+	player.invulnerable = true
+	await _frames(20)
+
+	await _place(Vector3(270, 1.03, 0))
+	Input.action_press("sprint")
+	Input.action_press("crouch")
+	await _frames(20)
+	_check("FR24 sprint+crouch on open ground just crouches", player.is_crouched and player.movement_state == 0,
+		"crouched %s state %d" % [player.is_crouched, player.movement_state])
+	_release_all()
+	await _frames(20)
 
 
 func _until(condition: Callable, max_frames: int) -> void:
