@@ -422,6 +422,61 @@ func _run() -> void:
 		rise.size() == 1 and rise[0].global_position.distance_to(lab.JUNCTION_TOP) < 0.01
 		and absf(lab.JUNCTION_TOP.y + 0.75 - lab.TRAY_Y) < 0.01 and gone, "rise %d gone %s" % [rise.size(), gone])
 
+	# U39 the tamale cart stands where its axle grease stained the floor; its steamer steams from under the lid, hissing
+	var cart := _furniture(lab, "tamale_cart")
+	var stool := _furniture(lab, "stool")
+	var oil: Decal = lab.get_node_or_null("decal_oil")
+	var pot: Vector3 = cart.global_transform * lab.POT_LOCAL if cart else Vector3.INF
+	_check("U39 the tamale cart stands on its oil stain, steam rising off its steamer's lid, its hiss heard; cart and stool solid",
+		cart != null and stool != null and oil != null
+		and Vector2(cart.global_position.x - oil.global_position.x, cart.global_position.z - oil.global_position.z).length() < 0.4
+		and lab.cart_steam != null and lab.cart_steam.global_position.distance_to(pot) < 0.06
+		and lab.cart_hiss != null and lab.cart_hiss.playing and lab.cart_hiss.global_position.distance_to(pot) < 0.3
+		and _solid(cart) and _solid(stool), "cart %s pot %s" % [cart, pot])
+
+	# U40 a bench against the far wall, solid, a newspaper left on its seat
+	var bench := _furniture(lab, "bench")
+	var left: Array = lab.clutter.filter(func(p): return p.get_meta("kind") == "news_folded" and bench != null \
+		and absf(p.global_position.y - 0.45) < 0.02 and p.global_position.x < bench.global_position.x \
+		and p.global_position.x > bench.global_position.x - 1.8)
+	_check("U40 a bench against the far wall, solid, a newspaper left on its seat",
+		bench != null and absf(bench.global_position.z - lab.FAR_WALL) < 0.01 and absf(bench.rotation.y) > 3.0
+		and _solid(bench) and left.size() == 1, "bench %s papers on it %d" % [bench, left.size()])
+
+	# U41 a bin in the Company's orange beside the bench, solid, litter dropped short of it
+	var bin := _furniture(lab, "trash_bin")
+	var missed: Array = lab.clutter.filter(func(p): return bin != null and p.get_meta("kind") in ["cone_crushed", "jarrito"] \
+		and p.global_position.distance_to(bin.global_position) < 0.7)
+	_check("U41 a bin beside the bench, solid, litter dropped short of it",
+		bin != null and bench != null and bin.global_position.distance_to(bench.global_position) < 2.6 and _solid(bin)
+		and missed.size() >= 1, "bin %s litter by it %d" % [bin, missed.size()])
+
+	# U42 the Virgin's niche on the far wall: a flame on each of its wicks, its candles' soot over it
+	var niche := _furniture(lab, "niche")
+	var wicks: Array = JSON.parse_string(FileAccess.get_file_as_string(lab.FURNITURE_WICKS)).get("niche", []) \
+		if FileAccess.file_exists(lab.FURNITURE_WICKS) else []
+	var aflame := 0
+
+	for w in wicks:
+		var at: Vector3 = niche.global_transform * Vector3(w[0], w[1], w[2])
+		aflame += 1 if lab.niche_wicks.any(func(f): return f.distance_to(at) < 0.01) else 0
+	var soot: Decal = lab.get_node_or_null("decal_soot_niche")
+	_check("U42 the niche on the far wall, a flame on each of its 7 wicks, its candles' soot above it",
+		niche != null and absf(niche.global_position.z - lab.FAR_WALL) < 0.01 and wicks.size() == 7 and aflame == 7
+		and lab.niche_flames != null and lab.niche_flames.is_inside_tree() and soot != null
+		and absf(soot.global_position.x - niche.global_position.x) < 0.3 and soot.global_position.y > lab.NICHE_SILL + 0.6,
+		"wicks %d lit %d soot %s" % [wicks.size(), aflame, soot])
+
+	# U43 the vent breathes warm air out of the back wall, humming; its breath has stained the wall above it
+	var vent := _furniture(lab, "vent_grille")
+	var mouth: Vector3 = vent.global_position + Vector3(0.0, 0.35, 0.0) if vent else Vector3.INF
+	var streak: Decal = lab.get_node_or_null("decal_soot_vent")
+	_check("U43 the vent breathes warm air from the back wall, humming, the wall above it stained",
+		vent != null and absf(vent.global_position.z - lab.BACK_WALL) < 0.01 and lab.vent_breath != null
+		and lab.vent_breath.global_position.distance_to(mouth) < 0.15 and lab.vent_hum != null and lab.vent_hum.playing
+		and streak != null and absf(streak.global_position.x - vent.global_position.x) < 0.2
+		and streak.global_position.y > 0.55, "vent %s streak %s" % [vent, streak])
+
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")
 	_check("U8 the pixel grid is off", retro != null and retro.virtual_height == 0, "%s" % [retro.virtual_height if retro else null])
@@ -511,3 +566,15 @@ func _covers(lab: Node3D, pieces: Array, short := 0.0) -> bool:
 		to = maxf(to, span.y)
 
 	return to >= lab.RUN - short
+
+
+## The bay's piece of furniture of a kind (the first), or null.
+func _furniture(lab: Node3D, kind: String) -> MeshInstance3D:
+	for piece in lab.furniture:
+		if piece.get_meta("kind") == kind:
+			return piece
+	return null
+
+
+func _solid(piece: Node3D) -> bool:
+	return piece.find_children("*", "StaticBody3D", true, false).size() > 0

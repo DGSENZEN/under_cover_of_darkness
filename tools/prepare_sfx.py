@@ -463,6 +463,9 @@ NOX_TILE = os.path.expanduser("~/Downloads/Essentials_Series_NOX_SOUND/Footsteps
 UNDERGROUND_LOOPS = [
     ("neon_hum", NOX_ELECTRIC + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_01.wav", None, 1.0, 8.0),
     ("electric_box", NOX_ELECTRIC + "Electromagnetic_Electric_Box_Loop_Mono_Elektrousi_02.wav", None, 1.0, 8.0),
+    # The warm air breathing out of a wall vent; a tamale steamer's soft hiss under its lid.
+    ("vent_hum", FILMCOW + "ventilation hum.wav", 2400, 1.0, 10.0),
+    ("steam_hiss", FILMCOW + "gas leak.wav", 2200, 0.85, 7.0),
 ]
 # The crowd heard down the Underground's corridors: the game's own murmurs,
 # hums, sighs, laughs, throat-clearings and coughs (cut from the NOX voices),

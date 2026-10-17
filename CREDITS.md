@@ -64,6 +64,8 @@ Every sound in the game is a recording, cut and levelled from the packs below by
 - **A train passing, jars rattling (the Underground)**: "Nature Essentials" wind by **NOX SOUND**
   (CC0) under "big distant thump" from "FilmCow Designed SFX"; "glass full of beads" and "glass
   sliding" from "FilmCow Recorded SFX", by **FilmCow**, used with the user's approval of the packs.
+- **A wall vent's warm air, a tamale steamer's hiss (the Underground)**: "ventilation hum" and
+  "gas leak" from "FilmCow Recorded SFX" by **FilmCow**, used with the user's approval of the packs.
 - **Thunder**: "100 CC0 SFX #2" by **rubberduck**
   ([OpenGameArt](https://opengameart.org/content/100-cc0-sfx-2)), CC0.
 - **Lighting a torch, snuffing a flame, dousing one**: the "400 Sounds Pack" (fire

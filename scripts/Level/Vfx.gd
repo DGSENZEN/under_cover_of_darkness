@@ -84,6 +84,21 @@ const PRESETS := {
 		"blown": 0.2, "anim": 1.0},
 		{"draw": "stem", "size": Vector2(0.08, 0.85)},
 		{"draw": "pool", "size": Vector3(1.6, 0.4, 1.6), "at": Vector3(0, 0.9, 0), "density": 1.4}],
+	# A tamale steamer's steam, escaping round its lid: soft, pale, quick to thin; glowing a little
+	# so it reads pale from its shadowed side too (lit only, it went brown under the warm lamps).
+	"pot_steam": [{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.5, 0.5, 0.52),
+		"glows": true, "opacity": 0.2, "amount": 24, "lifetime": 1.3, "size": [0.15, 0.6], "velocity": [0.18, 0.3], "spread": 14.0,
+		"gravity": Vector3(0, 0.25, 0), "box": Vector3(0.14, 0.02, 0.14), "fps": 30, "erosion": 0.55, "blown": 0.25,
+		"anim": 1.0}],
+	# Warm air breathed out of a wall vent (its node turned so up is out of the wall):
+	# faint warm wisps rising as they leave it, dust carried on them.
+	"vent_breath": [{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.8, 0.74, 0.66),
+		"opacity": 0.18, "amount": 12, "lifetime": 2.2, "size": [0.25, 0.9], "velocity": [0.3, 0.5], "spread": 20.0,
+		"gravity": Vector3(0, 0.3, 0), "box": Vector3(0.26, 0.01, 0.15), "fps": 30, "erosion": 0.6, "blown": 0.3,
+		"anim": 1.0},
+		{"draw": "motes", "tint": Color(1.0, 0.9, 0.7, 0.6), "amount": 16, "lifetime": 3.0, "size": [0.015, 0.015],
+		"velocity": [0.2, 0.4], "spread": 25.0, "gravity": Vector3(0, 0.12, 0), "box": Vector3(0.26, 0.01, 0.15),
+		"fps": 15}],
 	"smoke": [{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.42, 0.4, 0.38),
 		"opacity": 0.6, "amount": 24, "lifetime": 3.2, "size": [0.4, 1.4], "velocity": [0.4, 0.7], "spread": 15.0,
 		"gravity": Vector3(0, 0.15, 0), "box": Vector3(0.15, 0.05, 0.15), "offset": 0.6, "fps": 30, "erosion": 0.4,

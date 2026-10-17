@@ -4,7 +4,7 @@ extends Node3D
 ## under the neutral form light.
 ##   Godot --path . --resolution 1920x1080 res://tests/underground_lab_stills.tscn -- --out=/tmp/underground-lab
 ##   (-- --only=front,close_counter  some views; -- --plain  the atlas drawn unshaded, to check its mapping;
-##    -- --train  shot as a train runs by)
+##    -- --train  shot as a train runs by; -- --settle=4  effects given 4 s to fill out first)
 
 const LAB := preload("res://maps/underground_lab.tscn")
 
@@ -30,6 +30,12 @@ const VIEWS := [
 	["close_spill", Vector3(2.5, 2.4, 0.2), Vector3(0.95, 3.3, -1.9)],
 	["close_valve", Vector3(7.2, 2.6, 2.8), Vector3(7.0, 3.5, 4.35)],
 	["close_hydrant", Vector3(-9.6, 1.6, 2.6), Vector3(-11.3, 1.4, 4.3)],
+	["furn_cart", Vector3(2.4, 1.6, 4.0), Vector3(4.2, 1.0, 2.6)],
+	["furn_bench", Vector3(-3.0, 1.6, 1.6), Vector3(-2.8, 0.6, 4.4)],
+	["furn_niche", Vector3(1.2, 1.6, 2.7), Vector3(1.2, 1.6, 4.5)],
+	["furn_vent", Vector3(3.1, 1.1, -0.7), Vector3(3.6, 0.6, -2.35)],
+	["furn_bin", Vector3(-1.2, 1.3, 3.0), Vector3(-1.75, 0.5, 4.15)],
+	["furn_niche_far", Vector3(1.2, 1.7, 1.2), Vector3(1.2, 1.9, 4.5)],
 ]
 
 var out := "/tmp/underground-lab/"
@@ -39,6 +45,7 @@ func _ready() -> void:
 	var only := []
 	var plain := false
 	var passing := false
+	var settle := 0.0
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
@@ -49,13 +56,16 @@ func _ready() -> void:
 			plain = true
 		elif arg == "--train":
 			passing = true
+		elif arg.begins_with("--settle="):
+			settle = float(arg.trim_prefix("--settle="))
 
 	DirAccess.make_dir_recursive_absolute(out)
 	AudioServer.set_bus_mute(0, true)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	var lab: Node3D = LAB.instantiate()
 	add_child(lab)
-	await _frames(4)
+	# (Effects given --settle seconds to fill out before the first still.)
+	await _frames(4 + int(settle * 60.0))
 	lab.player.queue_free()
 	lab.keys_label.visible = false
 	var eye := Camera3D.new()

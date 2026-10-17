@@ -18,6 +18,7 @@ import arcade_bay  # noqa: E402
 import stall  # noqa: E402
 import underground_ground  # noqa: E402
 import underground_services  # noqa: E402
+import underground_furniture  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -1088,6 +1089,110 @@ class UndergroundServices(unittest.TestCase):
         before_main = [p for p in path if p[2] >= 3.16 - 2.85 - underground_services.CONDUIT_R - 0.01]
         self.assertTrue(all(p[1] <= -0.18 for p in before_main))
         self.assertAlmostEqual(path[-1][2], underground_services.CONDUIT_RISE, delta=1e-6)
+
+
+class UndergroundFurniture(unittest.TestCase):
+    """The corridor's furniture (tools/eclipse/underground_furniture.py): free pieces
+    on the floor at their origin, wall pieces in the wall's frame (the wall y = 0,
+    out into -y, the floor z = 0); closed, in budget, through the gate."""
+
+    BUDGET = {"bench": 3000, "tamale_cart": 9000, "stool": 800, "trash_bin": 1800, "niche": 6000,
+              "vent_grille": 1400}
+    FREE = ("tamale_cart", "stool", "trash_bin")
+    WALL = ("bench", "niche", "vent_grille")
+
+    @classmethod
+    def setUpClass(cls):
+        underground_furniture.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_each_passes_the_gate(self):
+        problems = {}
+
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            found = gate.check(faces, tris, [], budget=self.BUDGET[n])
+            if found:
+                problems[n] = found[:3]
+
+        self.assertEqual(problems, {})
+
+    def test_free_pieces_stand_on_the_floor(self):
+        low = {n: self._extent(n)[2][0] for n in self.FREE + ("bench",)}
+        self.assertEqual({n: z for n, z in low.items() if abs(z) > 1e-4}, {})
+
+    def test_wall_pieces_meet_the_wall_and_stop_there(self):
+        reach = {n: self._extent(n)[1][1] for n in self.WALL}
+        self.assertEqual({n: y for n, y in reach.items() if not -0.001 <= y <= 0.0005}, {})
+
+    def test_the_bench_is_sat_on_at_seat_height(self):
+        # A Metro bench: 1.6-2 m long, its seat at knee height, its back against the wall.
+        (x0, x1), (y0, _), (_, z1) = self._extent("bench")
+        self.assertTrue(1.6 <= x1 - x0 <= 2.0)
+        self.assertTrue(0.4 <= -y0 <= 0.62)
+        self.assertTrue(0.75 <= z1 <= 0.95)
+        seat = [v for v in _world(self.objects["bench"]) if abs(v.z - underground_furniture.BENCH_SEAT) < 0.004]
+        self.assertGreaterEqual(len(seat), 8)
+
+    def test_the_steamers_lid_is_where_the_steam_rises(self):
+        top = max(_world(self.objects["tamale_cart"]), key=lambda v: v.z)
+        want = underground_furniture.POT_TOP
+        self.assertLess(math.dist((top.x, top.y), want[:2]), 0.05)
+        self.assertAlmostEqual(top.z, want[2], delta=0.01)
+
+    def test_the_niche_holds_lit_candles_on_its_shelf(self):
+        wicks = common.WICKS.get("niche", [])
+        (x0, x1), _, _ = self._extent("niche")
+        self.assertGreaterEqual(len(wicks), 5)
+        self.assertTrue(all(x0 < w[0] < x1 for w in wicks))
+        self.assertTrue(all(underground_furniture.NICHE_SILL < w[2] < underground_furniture.NICHE_SILL + 0.35
+                            for w in wicks))
+
+    def test_the_niche_is_glazed_and_keeps_a_place_for_her_image(self):
+        names = {s.material.name for s in self.objects["niche"].material_slots}
+        self.assertIn("glass", names)
+        self.assertIn("print_saint", names)
+
+    def test_the_niches_gable_rises_to_a_peak(self):
+        # Its boards' outer ends sit low over the cabinet's top; the peak is in the middle.
+        top = underground_furniture.NICHE_SILL + 0.75 + 0.04
+        ends = [v.z for v in _world(self.objects["niche"]) if 0.28 <= abs(v.x) <= 0.42 and v.z > top]
+        self.assertTrue(ends)
+        self.assertLessEqual(max(ends), top + 0.11)
+
+    def test_the_bins_lid_stays_out_of_the_drum(self):
+        o = self.objects["trash_bin"]
+        inside = []
+
+        for p in o.data.polygons:
+            if o.material_slots[p.material_index].material.name != "metro_orange":
+                continue
+            for i in p.vertices:
+                v = o.matrix_world @ o.data.vertices[i].co
+                if math.hypot(v.x, v.y) < 0.19 and 0.05 < v.z < 0.695:
+                    inside.append(tuple(round(c, 3) for c in v))
+
+        self.assertEqual(inside, [])
+
+    def test_every_paint_used_is_declared(self):
+        used = {s.material.name for o in self.objects.values() for s in o.material_slots}
+        self.assertEqual(used - set(underground_furniture.SLOTS), set())
+
+    def test_the_vent_is_flush(self):
+        self.assertGreaterEqual(self._extent("vent_grille")[1][0], -0.08)
 
 
 if __name__ == "__main__":

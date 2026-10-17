@@ -70,6 +70,19 @@ const TRAY_Y := 3.6
 const FIRE_Y := 3.1
 const AIR_Y := 2.75
 const HOOK_Y := 3.88
+## The corridor's furniture (tools/eclipse/underground_furniture.py) and its candles' wicks.
+const FURNITURE_KIT := "res://assets/eclipse/kit/underground_furniture.glb"
+const FURNITURE_WICKS := "res://assets/eclipse/source/underground_furniture_wicks.json"
+## The steamer's lid knob on the cart, in the cart's own axes (the kit's POT_TOP, Godot's way round).
+const POT_LOCAL := Vector3(0.15, 1.51, 0.0)
+## The niche's shelf on the wall (the kit's NICHE_SILL).
+const NICHE_SILL := 1.05
+## The bench's seat (the kit's BENCH_SEAT).
+const BENCH_SEAT := 0.45
+const STEAM_HISS := "res://audio/ambience/steam_hiss.wav"
+## Where the vent breathes, along the back wall past her stall, in the work light's reach.
+const VENT_X := 3.6
+const VENT_HUM := "res://audio/ambience/vent_hum.wav"
 const RUMBLE_DB := -4.0
 const RATTLES := ["res://audio/sfx/jars_rattle_1.wav", "res://audio/sfx/jars_rattle_2.wav"]
 const SHELVES_AT := Vector3(0.0, 1.4, -1.9)
@@ -114,6 +127,13 @@ var clutter: Array[MeshInstance3D] = []
 var services: Array[MeshInstance3D] = []
 var _service_meshes := {}
 var _service_material: ShaderMaterial
+var furniture: Array[MeshInstance3D] = []
+var cart_steam: Node3D
+var cart_hiss: AudioStreamPlayer3D
+var niche_flames: Node3D
+var niche_wicks: Array[Vector3] = []
+var vent_breath: Node3D
+var vent_hum: AudioStreamPlayer3D
 var _kit_meshes := {}
 var _kit_material: ShaderMaterial
 var rumble: AudioStreamPlayer
@@ -143,6 +163,7 @@ func _ready() -> void:
 	_decals()
 	_clutter()
 	_services()
+	_furnish()
 	_effects()
 	_keys()
 	player = PLAYER.instantiate()
@@ -766,7 +787,9 @@ func _place(mesh: Mesh, material: Material, kind: String, at: Vector3, yaw: floa
 	piece.set_meta("kind", kind)
 
 	for i in piece.mesh.get_surface_count():
-		piece.set_surface_override_material(i, material)
+		var slot: Material = piece.mesh.surface_get_material(i)
+		var glazed := slot != null and slot.resource_name.begins_with("glass")
+		piece.set_surface_override_material(i, _glass() if glazed else material)
 
 	add_child(piece, true)
 	piece.position = at
@@ -823,6 +846,90 @@ func _services() -> void:
 	# Heavy cables swagged on hooks high under the vault, out of the end walls and back into them.
 	for i in 9:
 		_hang("cable_swag", Vector3(13.0 - 3.0 * i, HOOK_Y, FAR_WALL), true)
+
+
+# The corridor's furniture, each piece with its cause
+
+func _furnish() -> void:
+	if not ResourceLoader.exists(FURNITURE_KIT):
+		missing.append(FURNITURE_KIT)
+		return
+
+	var meshes := _kit(FURNITURE_KIT)
+	var look := Painterly.material(_painted(["underground_furniture.png", "underground_furniture_base.png"]), &"bespoke")
+	var set_down := func(kind: String, at: Vector3, yaw: float) -> MeshInstance3D:
+		var piece := _place(meshes[kind], look, kind, at, yaw, kind != "vent_grille")
+		furniture.append(piece)
+		return piece
+
+	# The tamale seller's pitch, where her cart stands of a night (its grease on the floor, decal_oil),
+	# her stool beside it; her steamer steams and hisses under its lid.
+	var cart: MeshInstance3D = set_down.call("tamale_cart", Vector3(4.2, 0.0, 2.6), deg_to_rad(25.0))
+	set_down.call("stool", Vector3(4.95, 0.0, 2.05), 0.4)
+	var pot := cart.global_transform * POT_LOCAL
+	cart_steam = Vfx.system("pot_steam")
+	cart_steam.name = "cart_steam"
+	add_child(cart_steam)
+	Vfx.place(cart_steam, pot)
+	Vfx.emit(cart_steam, true)
+	cart_hiss = _loop("cart_hiss", STEAM_HISS, pot, -14.0, 4.0)
+
+	# A bench against the far wall, someone's newspaper left on it; the bin beside it, missed.
+	set_down.call("bench", Vector3(-2.4, 0.0, FAR_WALL), PI)
+	_lay("news_folded", Vector3(-3.35, BENCH_SEAT, 4.15), 0.5)
+	set_down.call("trash_bin", Vector3(-1.75, 0.0, 4.15), 0.6)
+	_lay("cone_crushed", Vector3(-1.35, 0.0, 3.85), 1.9)
+
+	# The Virgin's niche, built out from the far wall facing her stall; its candles lit, their soot above.
+	var niche: MeshInstance3D = set_down.call("niche", Vector3(1.2, 0.0, FAR_WALL), PI)
+
+	if FileAccess.file_exists(FURNITURE_WICKS):
+		var wicks := []
+
+		for w in (JSON.parse_string(FileAccess.get_file_as_string(FURNITURE_WICKS)) as Dictionary).get("niche", []):
+			var at: Vector3 = niche.global_transform * Vector3(w[0], w[1], w[2])
+			niche_wicks.append(at)
+			wicks.append([at.x, at.y, at.z])
+
+		var middle := Vector3.ZERO
+
+		for at in niche_wicks:
+			middle += at / niche_wicks.size()
+
+		niche_flames = Vfx.system("candles")
+		niche_flames.name = "niche_flames"
+		add_child(niche_flames)
+		Vfx.place(niche_flames, middle, {"wicks": wicks})
+		Vfx.emit(niche_flames, true)
+
+	# (Turned to project into the far wall with the image's top kept up.)
+	_decal("soot", Vector3(1.2, NICHE_SILL + 1.15, FAR_WALL - 0.1), Vector3(0.8, 0.4, 0.9), Vector3(90, 180, 0)).name = "decal_soot_niche"
+
+	# A vent low in the back wall breathing the warm air of the works behind it; its breath has
+	# stained the wall above it.
+	var vent: MeshInstance3D = set_down.call("vent_grille", Vector3(VENT_X, 0.0, BACK_WALL), 0.0)
+	vent_breath = Vfx.system("vent_breath")
+	vent_breath.name = "vent_breath"
+	add_child(vent_breath)
+	Vfx.place(vent_breath, vent.global_position + Vector3(0.0, 0.35, 0.06))
+	vent_breath.rotation_degrees.x = 90.0
+	Vfx.emit(vent_breath, true)
+	vent_hum = _loop("vent_hum", VENT_HUM, vent.global_position + Vector3(0.0, 0.35, 0.1), -10.0, 6.0)
+	_decal("soot", Vector3(VENT_X, 1.0, BACK_WALL + 0.1), Vector3(0.8, 0.4, 1.0), Vector3(90, 0, 0)).name = "decal_soot_vent"
+
+
+## A looping sound at `at`, heard to `reach` m.
+func _loop(node_name: String, path: String, at: Vector3, db: float, reach: float) -> AudioStreamPlayer3D:
+	var sound := AudioStreamPlayer3D.new()
+	sound.name = node_name
+	sound.stream = load(path)
+	sound.max_distance = reach
+	sound.unit_size = 1.0
+	sound.volume_db = db
+	sound.autoplay = true
+	add_child(sound)
+	sound.position = at
+	return sound
 
 
 ## A services piece hung on a wall at `at` (its wall face, its height), turned to face back across

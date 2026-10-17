@@ -1,0 +1,26 @@
+{
+ "slots": [
+  "wood",
+  "steel",
+  "tin",
+  "clay",
+  "wax",
+  "glass",
+  "marigold",
+  "paint_red",
+  "paint_blue",
+  "paint_band",
+  "metro_orange",
+  "paper_kraft",
+  "rubber",
+  "sign",
+  "print_saint",
+  "paint_cart",
+  "paint_trim",
+  "soot_black",
+  "herb",
+  "newsprint"
+ ],
+ "atlas_px": 2048,
+ "px_per_m": 260.21
+}
