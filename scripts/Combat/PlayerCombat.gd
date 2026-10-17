@@ -218,6 +218,8 @@ var player: CharacterBody3D
 var weapon: Resource = null
 var phase := Phase.IDLE
 var blocking := false
+## Put away for climbing: no blows, blocks or draws until back on foot.
+var stowed := false
 var draw := 0.0
 var adrenaline := 0.0
 var stamina := 100.0
@@ -317,6 +319,15 @@ func _ready() -> void:
 
 ## Resolves the selected inventory ID to a shared weapon Resource; null for missing
 ## inventory, empty hands, or an ID absent from Weapon.find().
+## Climbing puts the weapon away (PlayerController): hidden in the hands and
+## refused until stowed is false again.
+func set_stowed(p_stowed: bool) -> void:
+	stowed = p_stowed
+
+	if player != null and player.get("hand") != null and player.hand.has_method("set_stowed"):
+		player.hand.set_stowed(p_stowed)
+
+
 func current_weapon() -> Resource:
 	if player.inventory == null:
 		return null
@@ -370,6 +381,7 @@ func _physics_process(delta: float) -> void:
 	var able: bool = (
 		not player.is_dead
 		and player.movement_state == player.MoveState.LOCOMOTION
+		and not stowed
 		and not player._is_carrying()
 		and not get_tree().paused
 	)

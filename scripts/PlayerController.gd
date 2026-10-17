@@ -767,6 +767,7 @@ func _physics_process(delta: float) -> void:
 		_:
 			_update_locomotion(delta)
 
+	_update_stowed()
 	_climb_sounds()
 
 	if debug_traversal:
@@ -3521,6 +3522,17 @@ func _freerun_down() -> void:
 
 	if not scanner.ray(feet, feet - Vector3.UP * freerun_max_auto_drop).is_empty():
 		_drop_from_hang()
+
+
+## On a hold, a pipe, or moving between holds: the weapon is away.
+func _update_stowed() -> void:
+	var climbing := movement_state == MoveState.HANGING or movement_state == MoveState.CLIMBING
+
+	if movement_state == MoveState.MOVING and current_move != null:
+		climbing = current_move.ends_in_hang or current_move.kind == TraversalPlanner.KIND_PULL_UP
+
+	if combat != null and combat.stowed != climbing:
+		combat.set_stowed(climbing)
 
 
 ## Sprint held, not crouched, hands free: the city is taken as it comes.

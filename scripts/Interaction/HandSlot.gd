@@ -88,6 +88,8 @@ var _pending_item: Mesh = null
 var _switching := false
 var _main_lower := 1.0
 var _suppressed := false
+## Climbing: what was in hand is away, both hands free for holds.
+var _stowed := false
 var _swing := 0.0
 ## Throwing what is in the hand: it goes partway through the swing.
 var _throwing := false
@@ -371,6 +373,12 @@ func play_throw() -> void:
 	_throwing = true
 
 
+## Climbing (a hang, a pipe, a leap between holds): the item goes away and
+## both hands are free for holds, until back on your feet.
+func set_stowed(stowed: bool) -> void:
+	_stowed = stowed
+
+
 ## Both hands are busy (a crate, a body): the item goes out of sight.
 func set_suppressed(suppressed: bool) -> void:
 	_suppressed = suppressed
@@ -433,7 +441,7 @@ func sway() -> Vector2:
 ## The blade leaves a smear while `on`. A power blow leaves a brighter one,
 ## a blow that spends your adrenaline a hot one.
 func set_trail(on: bool, power := false, hot := false) -> void:
-	_trail_on = on and _has_blade and not _suppressed
+	_trail_on = on and _has_blade and not _suppressed and not _stowed
 	_trail.color = TRAIL_HOT if hot else TRAIL_COLOR
 	_trail.color.a *= 1.5 if power else 1.0
 
@@ -535,7 +543,7 @@ func _update_main(delta: float) -> void:
 
 	# Lower first, swap at the bottom, then come back up.
 	# Both hands on a ledge or a ladder: what you held goes out of sight.
-	var want_up := _main_item != null and not _suppressed and not _switching and not _right_wanted
+	var want_up := _main_item != null and not _suppressed and not _stowed and not _switching and not _right_wanted
 
 	# Down out of sight quickly when the hand is wanted on a ledge or a rung.
 	if _right_wanted:
@@ -1181,7 +1189,7 @@ func _place_grips() -> void:
 	_right_wanted = false
 
 	if _contacts != null and not _suppressed_for_grips():
-		_contacts.right_busy = _main_item != null and not _switching
+		_contacts.right_busy = _main_item != null and not _switching and not _stowed
 		_contacts.update(get_process_delta_time())
 		_right_wanted = _contacts.wants(1)
 

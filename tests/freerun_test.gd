@@ -4,6 +4,7 @@ extends Node3D
 
 const PLAYER := preload("res://Player.tscn")
 const HANDHOLD := preload("res://scripts/PlayerUtils/Handhold.gd")
+const PROPS := preload("res://scripts/Interaction/Props.gd")
 
 var player: CharacterBody3D
 var results: Array[String] = []
@@ -48,6 +49,7 @@ func _run() -> void:
 	await _eject_checks()
 	await _down_checks()
 	await _roll_checks()
+	await _presentation_checks()
 
 
 # Task 1: the hold finder.
@@ -418,6 +420,90 @@ func _roll_checks() -> void:
 	var relief: float = player.roll_relief_speed * player.fall_damage_per_speed
 	_check("FR25 a sprinting landing from 9 m hurts less than a walking one", damage[false] - damage[true] >= relief * 0.9 and damage[true] > 0.0,
 		"sprint %.1f walk %.1f" % [damage[true], damage[false]])
+
+
+# Task 10: hands on the reached hold, the camera's roll, the stowed sword.
+func _presentation_checks() -> void:
+	var column: Array = await _sill_column(310)
+	await _hang_on(column[0])
+	var contacts = player.hand._contacts
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var worst_roll := 0.0
+	var hands_checked := false
+	var hands_off := INF
+	var reached := false
+	for i in 600:
+		await _frames(1)
+		worst_roll = maxf(worst_roll, absf(rad_to_deg(player.camera.global_basis.get_euler().z)))
+		if player.current_move != null and player.current_move.label == &"reach":
+			reached = true
+		elif reached and not hands_checked and player.movement_state == 2 and contacts.weight(0) > 0.9 and contacts.weight(1) > 0.9:
+			hands_checked = true
+			var worst := 0.0
+			for side in [0, 1]:
+				var at: Vector3 = contacts.hand(side).origin
+				worst = maxf(worst, Vector2(at.y - player.hang_lip_y, at.z + 3.0).length())
+			hands_off = worst
+		if player.movement_state == 0 and player.global_position.y - 1.0 > 8.9:
+			break
+	_release_all()
+	_check("FR26 hands plant on the reached hold", hands_checked and hands_off < 0.1, "checked %s worst %.3f m" % [hands_checked, hands_off])
+	_check("FR28 camera roll stays under the cap through a climb", worst_roll <= player.freerun_max_roll_degrees,
+		"worst roll %.2f deg (cap %.1f)" % [worst_roll, player.freerun_max_roll_degrees])
+
+	# Running up a wall the hands stay free until the catch is near.
+	_box(Vector3(330, 3, -4.5), Vector3(4, 6, 3))
+	_hold(HANDHOLD.Kind.LEDGE, Vector3(330, 3.4, -3), 0.0, 1.0)
+	await _frames(2)
+	await _place(Vector3(330, 1.03, 3))
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var early_free := true
+	var ran := false
+	for i in 160:
+		await _frames(1)
+		if player.current_move != null and player.current_move.label == &"wall run":
+			ran = true
+			if player.move_progress < 0.6 and contacts.state != 0:
+				early_free = false
+		if player.movement_state == 2:
+			break
+	_release_all()
+	_check("FR26b hands stay free running up a wall until the catch", ran and early_free, "ran %s free %s" % [ran, early_free])
+	player._drop_from_hang()
+	await _frames(60)
+
+	# The sword: away on a hold, back in hand once off it.
+	PROPS.give_weapons(player)
+	player.inventory.select_by_id(&"sword")
+	_box(Vector3(320, 1.2, -4.5), Vector3(4, 2.4, 3))
+	await _frames(40)
+	var shown_before: bool = player.hand.is_item_visible()
+	await _place(Vector3(320, 1.03, -2.48))
+	Input.action_press("move_forward")
+	await _frames(2)
+	Input.action_press("jump")
+	await _frames(2)
+	Input.action_release("jump")
+	await _until(func(): return player.movement_state == 2, 90)
+	Input.action_release("move_forward")
+	await _frames(30)
+	var hidden: bool = not player.hand.is_item_visible() and player.combat.stowed
+	Input.action_press("throw")
+	await _frames(3)
+	Input.action_release("throw")
+	var still: bool = player.combat.phase == 0
+	Input.action_press("jump")
+	await _frames(2)
+	Input.action_release("jump")
+	await _until(func(): return player.movement_state == 0, 120)
+	await _frames(60)
+	var back: bool = player.hand.is_item_visible() and not player.combat.stowed
+	_check("FR27 the sword is stowed on a hold and back on landing", shown_before and hidden and still and back,
+		"shown %s hidden %s idle %s back %s state %d" % [shown_before, hidden, still, back, player.movement_state])
+	player.inventory.select_by_id(&"")
+	await _frames(20)
 
 
 func _until(condition: Callable, max_frames: int) -> void:

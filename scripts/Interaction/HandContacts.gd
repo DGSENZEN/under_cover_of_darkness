@@ -181,6 +181,10 @@ func _state_now() -> int:
 					return State.VAULT
 				1:
 					return State.MANTLE
+				106:
+					# Running up a wall: the hands come up for the catch late.
+					if float(player.get("move_progress")) < 0.7:
+						return State.FREE
 
 			# Reaching for a hang, a pull-up, a leap to another ledge: the hands
 			# are on (or going to) an edge, as when hanging.
