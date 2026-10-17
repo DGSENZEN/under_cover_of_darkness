@@ -183,7 +183,7 @@ var _right_wanted := false
 var _grip_palms: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
 var _grip_weights: Array[float] = [0.0, 0.0]
 ## How far inside the frame's edge a held hand is kept (degrees).
-const FRAME_MARGIN_DEGREES := 7.0
+const FRAME_MARGIN_DEGREES := 5.0
 ## Where each held hand's wrist really goes (this node's space, full size),
 ## and the depth the arms are drawn at while holding.
 var _held_wrists: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
@@ -202,6 +202,10 @@ const ARM_REACH := 0.57
 const CHEST_VIEW_MARGIN_DEGREES := 8.0
 ## Where the hands go in a landing roll, in camera space (full size): low in
 ## front, forearms crossing, palms in.
+## The Prosecutor's own arms carry an empty hand here (camera space, full
+## size): low in the corner of the view and near, loose, palm down and in.
+## (The old arms let theirs hang out of sight.)
+const IDLE_CARRY: Array[Vector3] = [Vector3(-0.16, -0.18, -0.30), Vector3(0.16, -0.18, -0.30)]
 const ROLL_TUCK: Array[Transform3D] = [
 	Transform3D(Basis(Vector3.FORWARD, -0.35) * Basis(Vector3.RIGHT, 0.25), Vector3(-0.13, -0.2, -0.55)),
 	Transform3D(Basis(Vector3.FORWARD, 0.35) * Basis(Vector3.RIGHT, 0.25), Vector3(0.13, -0.19, -0.55)),
@@ -1311,6 +1315,12 @@ func _chest_under_hands() -> Vector3:
 	var toward_wall := Vector3(ahead.x, 0.0, ahead.z).normalized() if Vector2(ahead.x, ahead.z).length() > 0.05 else Vector3.ZERO
 	var chest: Vector3 = to_local * (Vector3.DOWN * CHEST_BELOW_EYE + toward_wall * CHEST_TOWARD_WALL)
 
+	# (The head leans in to the wall; the chest stays where it hangs.)
+	var leaning = player.get("wall_lean") if player != null else null
+
+	if leaning is Vector3:
+		chest -= to_local * leaning
+
 	# Hauled up toward the hands as far as they need it to be in reach, but
 	# never up into the view: under its bottom edge.
 	var farthest := 0.0
@@ -1364,6 +1374,18 @@ func _suppressed_for_grips() -> bool:
 ## Your arms, reaching for what each hand has: the right the grip of what you
 ## carry (a bow: its string, the bow itself in the left), the left the purse
 ## or whatever it is being handed, both the world when you hold on to it.
+## An empty hand's carry (camera space, full size): IDLE_CARRY, the fingers
+## forward and a little in and down, the palm facing down and in (the hand
+## bone's palm axis: -X right, +X left).
+static func _idle_carry(side: int) -> Transform3D:
+	var out := 1.0 if side == 1 else -1.0
+	var fingers := Vector3(-0.15 * out, -0.35, -1.0).normalized()
+	var palm := Vector3(-0.5 * out, -0.85, 0.0)
+	var x := -palm * out
+	x = (x - fingers * x.dot(fingers)).normalized()
+	return Transform3D(Basis(x, fingers, x.cross(fingers)), IDLE_CARRY[side])
+
+
 ## `pose` if these arms have it, else a fist (the old arms).
 func _pose_if_had(pose: StringName) -> StringName:
 	return pose if _arms != null and _arms.has_pose(pose) else &"Fist"
@@ -1474,6 +1496,15 @@ func _place_arms() -> void:
 
 			if tuck > 0.5:
 				poses[side] = &"Fist"
+
+	# An empty hand of the Prosecutor's own arms: carried near, not left out
+	# at arm's length (blending into whatever takes it).
+	if ViewArmsScript.new_arms and not dead:
+		for side in range(2):
+			if weights[side] < 1.0:
+				var carry: Transform3D = ViewArmsScript.shrink(_idle_carry(side))
+				targets[side] = carry.interpolate_with(targets[side], weights[side]) if weights[side] > 0.0 else carry
+				weights[side] = 1.0
 
 	# Where the eye really is, in his space: held hands are drawn along the
 	# line from it (ArmReach.pull_to_eye).

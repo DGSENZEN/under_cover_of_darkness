@@ -31,6 +31,11 @@ func _ready() -> void:
 		hud.visible = false
 	await _frames(10)
 
+	# Empty-handed, standing easy.
+	await _place(Vector3(-10, 0.1, 0))
+	await _frames(40)
+	await _shot("empty")
+
 	# Hooked on a sill, looking at the hands and a little up at them.
 	_box(Vector3(0, 4.5, -4.5), Vector3(4, 9, 3), Color(0.55, 0.3, 0.25))
 	# A stone sill standing 20 cm out of the wall, held at its front edge.

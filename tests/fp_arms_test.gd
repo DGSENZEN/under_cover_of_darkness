@@ -45,6 +45,7 @@ func _run() -> void:
 	await _held_checks()
 	await _grip_pose_checks()
 	await _shoulder_checks()
+	await _near_checks()
 	await _kick_checks()
 	await _switch_checks()
 	await _sword_checks()
@@ -312,6 +313,44 @@ func _shoulder_checks() -> void:
 		"highest cap top at %.0f px, the view ends at %.0f px" % [highest, bottom])
 	await _place(Vector3(100, 0.1, 0))
 	await _frames(30)
+
+
+# The playtest (Oct 17): "the hands are a bit too far away from the camera,
+# they should feel closer", both everyday and climbing.
+func _near_checks() -> void:
+	var arms = player.hand._arms
+	var cam: Camera3D = player.camera
+	var size: Vector2 = get_viewport().get_visible_rect().size
+
+	# Empty-handed: carried near, in the bottom of the view.
+	await _place(Vector3(110, 0.1, 0))
+	await _frames(40)
+	var far := 0.0
+	var off := 0
+	for side in [0, 1]:
+		var at: Vector3 = arms.hand_position(side)
+		far = maxf(far, cam.global_position.distance_to(at))
+		var seen: Vector2 = cam.unproject_position(at)
+		if cam.is_position_behind(at) or seen.y > size.y or seen.x < 0.0 or seen.x > size.x:
+			off += 1
+	var standing_lean: float = player.wall_lean.length()
+	_check("FA22 empty-handed, the hands are carried near and in view", far <= 0.42 and off == 0 and standing_lean < 0.001,
+		"farthest %.2f m, %d out of view, lean %.3f" % [far, off, standing_lean])
+
+	# Hanging: the view leans in to the wall, the hands near the eye.
+	var column := _sill_column(120.0)
+	await _frames(2)
+	await _hang_on(column[0])
+	await _frames(40)
+	var eye_to_wall: float = cam.global_position.z - (-3.0)
+	var reach := 0.0
+	for side in [0, 1]:
+		reach = maxf(reach, cam.global_position.distance_to(arms.hand_position(side)))
+	_check("FA23 hanging, the view leans in to the wall and the hands are near", eye_to_wall <= 0.36 and eye_to_wall >= 0.2 and reach <= 0.47,
+		"eye %.2f m from the wall, hands at most %.2f m from the eye" % [eye_to_wall, reach])
+	player._drop_from_hang()
+	await _frames(60)
+	_check("FA23b off the wall, the lean is gone", player.wall_lean.length() < 0.01, "lean %.3f" % player.wall_lean.length())
 
 
 func _kick_checks() -> void:
