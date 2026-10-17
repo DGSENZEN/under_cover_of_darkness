@@ -1345,6 +1345,9 @@ func _place_arms() -> void:
 	for side in range(2):
 		_arms.set_hand(side, targets[side], weights[side], curls[side])
 
+		if _arms.reach != null:
+			_arms.reach.pull_to_eye[side] = _grip_weights[side] > 0.05
+
 	# The kick: his own right foot where the boot goes.
 	if _kick > 0.0 and not dead:
 		var ankle := _leg.transform * Transform3D(_KICK_FOOT, Vector3(0.0, 0.05, 0.07))

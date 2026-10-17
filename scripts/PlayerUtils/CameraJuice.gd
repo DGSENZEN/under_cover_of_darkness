@@ -67,6 +67,8 @@ var wall_run_fov_add := 7.0
 var roll_tumble_degrees := 70.0
 var roll_tumble_time := 0.6
 var _tumble := 0.0
+## Hands that have landed on a hold (on_hand_hold), for tests and tuning.
+var grip_count := 0
 
 # Springs
 var spring_stiffness := 140.0
@@ -293,6 +295,23 @@ func tumble_amount() -> float:
 func on_grip() -> void:
 	_dip_velocity -= 0.35
 	_pitch_velocity -= 0.08
+
+
+## One hand slapping onto a hold (side -1 left, 1 right): the body's weight
+## comes onto it, the view drops and leans to it a little.
+func on_hand_hold(side: float) -> void:
+	grip_count += 1
+	_dip_velocity -= 0.45
+	_pitch_velocity -= 0.12
+	_roll_kick += deg_to_rad(1.2) * side
+
+
+## Coming down hard, not hard enough to roll (strength 0..1): the knees give,
+## the view slams down and shakes.
+func on_hard_land(strength: float) -> void:
+	_dip_velocity -= lerpf(1.6, 2.8, strength)
+	_pitch_velocity -= lerpf(2.6, 4.0, strength)
+	add_trauma(lerpf(0.25, 0.45, strength))
 
 
 ## Rolling out of a hard landing: the view tumbles forward and comes up.

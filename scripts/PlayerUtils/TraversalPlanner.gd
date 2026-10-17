@@ -34,7 +34,9 @@ var hang_gap := 0.02
 ## How loud a reach to the next hold is (dB).
 var reach_noise_db := 35.0
 ## How fast a reach pulls the body to the next hold (m/s).
-var reach_speed := 2.6
+var reach_speed := 3.3
+## How far the body sags on the arms before a reach pulls it up (m).
+var reach_sag := 0.12
 ## How loud running up a wall is (dB).
 var wall_run_noise_db := 52.0
 ## How far the eyes sit below the lip while hanging.
@@ -677,8 +679,14 @@ func reach(start: Vector3, target: Dictionary, from_normal: Vector3) -> Traversa
 	last_reject = ""
 
 	var finish: Vector3 = target["anchor"]
+	# The weight drops onto the arm that still holds as the other lets go,
+	# then the pull lifts the body: a sag first.
+	var sag := start - Vector3.UP * reach_sag + from_normal * 0.02
 	var middle := (start + finish) * 0.5 + from_normal * 0.08
-	var path := _best_clear_path(PackedVector3Array([start, middle, finish]), false)
+	var path := _best_clear_path(PackedVector3Array([start, sag, middle, finish]), false)
+
+	if path.is_empty():
+		path = _best_clear_path(PackedVector3Array([start, middle, finish]), false)
 
 	if path.is_empty():
 		last_reject = "reach: no clear path to that hold"

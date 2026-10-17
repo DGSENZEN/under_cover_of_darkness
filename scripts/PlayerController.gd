@@ -269,7 +269,9 @@ enum MoveState {
 ## A sprinting landing takes this much fall speed (m/s) before it hurts.
 @export var roll_relief_speed := 5.0
 ## Fall speed (m/s) a sprinting landing rolls out of.
-@export var roll_min_speed := 9.0
+@export var roll_min_speed := 14.0
+## Fall speed (m/s) from which a landing is felt as a hard one (no roll).
+@export var hard_land_speed := 11.0
 @export var freerun_scan_interval := 0.05
 @export var freerun_max_roll_degrees := 4.0
 @export var reach_noise_db := 35.0
@@ -1035,6 +1037,8 @@ func _update_locomotion(delta: float) -> void:
 		if rolling:
 			hurts_from += roll_relief_speed
 			juice.on_roll()
+		elif fall_speed > hard_land_speed:
+			juice.on_hard_land(clampf((fall_speed - hard_land_speed) / (roll_min_speed - hard_land_speed), 0.0, 1.0))
 
 		if fall_speed > hurts_from:
 			take_damage((fall_speed - hurts_from) * fall_damage_per_speed, null)
@@ -3768,6 +3772,12 @@ func _chain_climb(s: float) -> bool:
 	var axis := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 
 	if axis.length() < 0.2:
+		return false
+
+	# Hand, hand, pull: the next goes once both hands have their holds.
+	var contacts = hand.get("_contacts") if hand != null else null
+
+	if contacts != null and not contacts.settled() and s < 0.95:
 		return false
 
 	_freerun_timer = freerun_scan_interval

@@ -14,8 +14,15 @@ const PUSH_SPREAD := 0.17
 ## How far a planted hand may fall behind the body before it moves on.
 const SLACK := 0.2
 ## A hand moving to a new hold: how long, and how high it lifts.
-const TRAVEL_TIME := 0.16
+const TRAVEL_TIME := 0.13
 const LIFT := 0.06
+## A hand thrown at a hold: the share of its move spent gathering, how far it
+## draws back to gather (m), and how far past the hold it carries (share).
+const GATHER := 0.18
+const GATHER_BACK := 0.04
+const THROW_OVERSHOOT := 0.9
+## Shorter than this (m), a hand's move is not a throw.
+const THROW_MIN := 0.25
 ## Taking hold and letting go.
 const GRIP_TIME := 0.1
 ## Ladder rungs, from the ground up.
@@ -43,8 +50,25 @@ class Grip:
 		if travel >= 1.0:
 			return at
 
-		var t := travel * travel * (3.0 - 2.0 * travel)
-		var shown := from.interpolate_with(at, t)
+		# Thrown: a little pull back toward the body to gather, then out fast
+		# and a touch past the hold, settling back onto it.
+		var heading := at.origin - from.origin
+
+		# A short shift (a hand turning from hooked to pressing, a shuffle) is
+		# only moved, not thrown.
+		if heading.length() < THROW_MIN:
+			var e := travel * travel * (3.0 - 2.0 * travel)
+			var moved := from.interpolate_with(at, e)
+			moved.origin += Vector3.UP * LIFT * 0.5 * sin(PI * travel)
+			return moved
+
+		var gather := 1.0 - smoothstep(0.0, GATHER, travel) if travel < GATHER else 0.0
+		var p := clampf((travel - GATHER) / (1.0 - GATHER), 0.0, 1.0)
+		var x := p - 1.0
+		var t := 1.0 + (THROW_OVERSHOOT + 1.0) * x * x * x + THROW_OVERSHOOT * x * x
+		var shown := from.interpolate_with(at, clampf(t, 0.0, 1.0))
+		shown.origin = from.origin.lerp(at.origin, t)
+		shown.origin -= heading.normalized() * GATHER_BACK * sin(PI * (travel / GATHER)) if travel < GATHER and heading.length() > 0.001 else Vector3.ZERO
 		shown.origin += Vector3.UP * LIFT * sin(PI * travel)
 		return shown
 
@@ -63,7 +87,11 @@ var _entered_on := Vector3.INF
 ## Hand over hand: the hand still to follow the leading one (-1: none), and
 ## how far through the move it goes.
 var _trail_side := -1
-const TRAIL_AFTER := 0.45
+## The hand still to lead to the next hold (-1: none), once the body is this
+## far through the pull.
+var _lead_side := -1
+const LEAD_AFTER := 0.3
+const TRAIL_AFTER := 0.6
 
 
 func _init(p_player: CharacterBody3D) -> void:
@@ -130,6 +158,21 @@ func below(view: Transform3D) -> float:
 	return maxf(atan2(-to.dot(basis.y), -to.dot(basis.z)), 0.0)
 
 
+## Both hands on their holds, none still on its way (the next pull of a
+## climb waits for this).
+func settled() -> bool:
+	if _trail_side >= 0 or _lead_side >= 0:
+		return false
+
+	for grip in grips:
+		var g := grip as Grip
+
+		if g.wanted and g.travel < 1.0:
+			return false
+
+	return true
+
+
 ## How far above the middle of `view` (radians) the holds the hands are on
 ## or going to are: on a climb the view looks up to them (CameraJuice). 0 when
 ## nothing is held, or it is below.
@@ -175,9 +218,17 @@ func update(delta: float) -> void:
 		State.READ:
 			_keep_read()
 
+	for side in [LEFT, RIGHT]:
+		var g := grips[side] as Grip
+		var was := g.travel
+		g.travel = minf(g.travel + delta / TRAVEL_TIME, 1.0)
+
+		# A hand landing on a hold on a climb: its weight is felt.
+		if was < 1.0 and g.travel >= 1.0 and g.wanted and (state == State.HANG or state == State.POLE) and player.get("juice") != null:
+			player.juice.on_hand_hold(-1.0 if side == LEFT else 1.0)
+
 	for grip in grips:
 		var g := grip as Grip
-		g.travel = minf(g.travel + delta / TRAVEL_TIME, 1.0)
 		g.weight = move_toward(g.weight, 1.0 if g.wanted else 0.0, delta / GRIP_TIME)
 
 		if g.weight <= 0.0 and not g.wanted:
@@ -236,6 +287,7 @@ func _state_now() -> int:
 func _enter(next: int) -> void:
 	state = next
 	_trail_side = -1
+	_lead_side = -1
 	_one_handed = right_busy
 
 	for grip in grips:
@@ -336,10 +388,18 @@ func _keep_hang() -> void:
 	var lateral := _lateral(edge[1])
 	var centre := _nearest_on_edge(edge[0], lateral)
 
-	# Hand over hand up a wall: the trailing hand follows once the leading one
-	# has the hold and the body is on its way.
-	if _trail_side >= 0:
-		if player.movement_state != player.MoveState.MOVING or float(player.move_progress) >= TRAIL_AFTER:
+	# Hand over hand up a wall: both hands pull on the hold they have until
+	# the body is up near the next, then the leading hand goes to it, then the
+	# other follows. (A real arm cannot reach the next hold from a hang.)
+	if _lead_side >= 0 or _trail_side >= 0:
+		var moving: bool = player.movement_state == player.MoveState.MOVING
+		var s := float(player.move_progress) if moving else 1.0
+
+		if _lead_side >= 0 and s >= LEAD_AFTER:
+			_plant(_lead_side, _edge_hold(_lead_side, edge, lateral, centre, false))
+			_lead_side = -1
+
+		if _lead_side < 0 and _trail_side >= 0 and s >= TRAIL_AFTER:
 			_plant(_trail_side, _edge_hold(_trail_side, edge, lateral, centre, false))
 			_trail_side = -1
 			_entered_on = centre
@@ -357,9 +417,8 @@ func _keep_hang() -> void:
 		# hand leads, the one on the side it goes, else the other one's turn.
 		if player.movement_state == player.MoveState.MOVING and move != null and int(move.kind) in [103, 105, 106] and grips[LEFT].planted and grips[RIGHT].planted:
 			var lead := RIGHT if float(player.juice.reach_side) > 0.0 else LEFT
-			_plant(lead, _edge_hold(lead, edge, lateral, centre, false))
+			_lead_side = lead
 			_trail_side = 1 - lead
-			_entered_on = centre
 
 			for grip in grips:
 				(grip as Grip).wanted = true

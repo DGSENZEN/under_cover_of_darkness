@@ -64,6 +64,7 @@ func _run() -> void:
 	await _review_checks()
 	await _flow_checks()
 	await _arms_checks()
+	await _weight_checks()
 
 
 # Task 1: the hold finder.
@@ -446,20 +447,27 @@ func _presentation_checks() -> void:
 	var worst_roll := 0.0
 	var hands_checked := false
 	var hands_off := INF
+	var landed_before := [1.0, 1.0]
 	var reached := false
 	for i in 600:
 		await _frames(1)
 		worst_roll = maxf(worst_roll, absf(rad_to_deg(player.camera.global_basis.get_euler().z)))
-		# At the end of a reach both hands are on the hold it reached.
-		if player.current_move != null and player.current_move.label == &"reach" and player.move_progress > 0.97 and not hands_checked:
-			if contacts.weight(0) > 0.9 and contacts.weight(1) > 0.9:
-				hands_checked = true
-				var lip: float = player.current_move.hang_lip_y
-				var worst := 0.0
-				for side in [0, 1]:
+		# Each hand, as it lands on a hold during a reach, is on that hold.
+		if player.current_move != null and player.current_move.label == &"reach":
+			for side in [0, 1]:
+				var g = contacts.grips[side]
+				if g.travel >= 1.0 and landed_before[side] < 1.0 and g.wanted:
 					var at: Vector3 = contacts.hand(side).origin
-					worst = maxf(worst, Vector2(at.y - lip, at.z + 3.0).length())
-				hands_off = worst
+					var off := absf(at.z + 3.0)
+					var lip := 9.0
+					for k in 8:
+						if absf(at.y - (2.4 + 0.9 * k)) < absf(at.y - lip):
+							lip = 2.4 + 0.9 * k
+					off = maxf(off, absf(at.y - lip))
+					hands_off = off if not hands_checked else maxf(hands_off, off)
+					hands_checked = true
+		for side in [0, 1]:
+			landed_before[side] = contacts.grips[side].travel
 		if player.movement_state == 0 and player.global_position.y - 1.0 > 8.9:
 			break
 	_release_all()
@@ -813,6 +821,7 @@ func _arms_checks() -> void:
 	Input.action_press("move_forward")
 	var apart := 0.0
 	var hooked := INF
+	var land_seen := [1.0, 1.0]
 	var pull_seen := 0
 	var pull_planted := 0
 	var pull_framed := 0
@@ -823,8 +832,12 @@ func _arms_checks() -> void:
 		var label := String(player.current_move.label) if player.current_move != null else ""
 		if label == "reach":
 			apart = maxf(apart, absf(contacts.hand(0).origin.y - contacts.hand(1).origin.y))
-			if player.move_progress > 0.97:
-				hooked = minf(hooked, minf(contacts.curl(0), contacts.curl(1)))
+			for side in [0, 1]:
+				var g = contacts.grips[side]
+				if g.travel >= 1.0 and land_seen[side] < 1.0 and g.wanted:
+					hooked = minf(hooked, contacts.curl(side))
+		for side in [0, 1]:
+			land_seen[side] = contacts.grips[side].travel
 		if label == "pull up" and player.move_progress < 0.6:
 			pull_seen += 1
 			var lip: float = player.current_move.contact_point.y
@@ -886,6 +899,96 @@ func _arms_checks() -> void:
 	_check("FR49 the sword is away through the roll, and both hands show", put_away and apart_px > size.x * 0.12 and player.hand.is_item_visible(),
 		"stowed %s hands %.0f px apart, back after %s" % [put_away, apart_px, player.hand.is_item_visible()])
 	player.inventory.select_by_id(&"")
+
+
+# Weight (playtest Oct 16: "the arms feel like noodles, every landing rolls").
+func _weight_checks() -> void:
+	# Landings: a running jump is nothing, 2.2 m is a hard landing, 4 m a roll.
+	for case in [["jump", 1.03, true], ["hard", 3.23, false], ["roll", 5.03, false]]:
+		var x: float = 500.0 + 10.0 * ["jump", "hard", "roll"].find(case[0])
+		await _place(Vector3(x, case[1], 2))
+		player.velocity = Vector3(0, 0, -6.0)
+		Input.action_press("sprint")
+		Input.action_press("move_forward")
+		if case[2]:
+			await _frames(10)
+			Input.action_press("jump")
+			await _frames(2)
+			Input.action_release("jump")
+		var tumble := 0.0
+		var pitch := 0.0
+		var shook := 0.0
+		for i in 120:
+			await _frames(1)
+			tumble = maxf(tumble, player.juice.tumble_amount())
+			pitch = minf(pitch, rad_to_deg(player.juice.view_rotation.x))
+			shook = maxf(shook, player.juice._trauma)
+		_release_all()
+		await _frames(20)
+		match case[0]:
+			"jump":
+				_check("FR54 a running jump on flat ground neither rolls nor lands hard", tumble == 0.0 and shook < 0.1,
+					"tumble %.2f shake %.2f" % [tumble, shook])
+			"hard":
+				_check("FR55 a 2.2 m drop on the run lands hard, without a roll", tumble == 0.0 and pitch <= -4.0 and shook >= 0.2,
+					"tumble %.2f pitch %.1f shake %.2f" % [tumble, pitch, shook])
+			"roll":
+				_check("FR56 a 4 m drop on the run rolls", tumble > 0.5, "tumble %.2f" % tumble)
+
+	# The climb: arms that bend under the body instead of stretching to the
+	# holds; hands thrown at a hold and landing on it; the body sagging on the
+	# arms before each pull lifts it.
+	var column: Array = await _sill_column(540)
+	await _hang_on(column[0])
+	var reach = player.hand._arms.reach
+	var contacts = player.hand._contacts
+	var grips_before: int = player.juice.grip_count
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var frames := 0
+	var slide_sum := 0.0
+	var slide_max := 0.0
+	var overshot := false
+	var sags := []
+	var move_ref = null
+	var start_y := 0.0
+	var low_y := 0.0
+	var reaches := 0
+	for i in 400:
+		await _frames(1)
+		if player.movement_state == 0:
+			break
+		frames += 1
+		for side in [0, 1]:
+			slide_sum += reach.shoulder_slides[side]
+			slide_max = maxf(slide_max, reach.shoulder_slides[side])
+			var g = contacts.grips[side]
+			if g.travel > 0.6 and g.travel < 1.0:
+				var heading: Vector3 = g.at.origin - g.from.origin
+				if heading.length() > 0.2 and (g.current().origin - g.at.origin).dot(heading.normalized()) > 0.005:
+					overshot = true
+		var m = player.current_move
+		if m != null and m.label == &"reach":
+			if m != move_ref:
+				if move_ref != null:
+					sags.append(start_y - low_y)
+				move_ref = m
+				reaches += 1
+				start_y = m.points[0].y
+				low_y = start_y
+			if player.move_progress < 0.35:
+				low_y = minf(low_y, player.global_position.y)
+	_release_all()
+	var mean := slide_sum / maxf(frames * 2.0, 1.0)
+	_check("FR50 climbing, the arms bend to the holds instead of stretching", mean <= 0.04 and slide_max <= 0.12,
+		"shoulder slide mean %.3f max %.3f m" % [mean, slide_max])
+	_check("FR51 a hand is thrown at its hold and lands a little past it", overshot, "overshot %s" % overshot)
+	_check("FR52 every hand landing on a hold is felt", player.juice.grip_count - grips_before >= reaches * 2 - 1,
+		"%d grips for %d reaches" % [player.juice.grip_count - grips_before, reaches])
+	var sagged := sags.filter(func(d): return d >= 0.03).size()
+	_check("FR53 the body sags on the arms before each pull lifts it", sags.size() >= 3 and sagged == sags.size(),
+		"sags %s" % [sags])
+	await _frames(30)
 
 
 func _until(condition: Callable, max_frames: int) -> void:

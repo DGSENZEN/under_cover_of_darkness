@@ -49,6 +49,20 @@ var elbow_hints: Array[Vector3] = [ELBOW_HINT[0], ELBOW_HINT[1]]
 ## restored after drawing, so this is the only record of it.
 var wrist_bend: Array[float] = [0.0, 0.0]
 var solved_hands: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+## Per hand: held on the world (a climb), its target is brought in along the
+## line from the eye until the arm reaches it bent: drawn about the eye, it
+## shows in the same place, and the arm takes the body's weight instead of
+## stretching to the hold (HandSlot sets this).
+var pull_to_eye: Array[bool] = [false, false]
+## The eye, in his space (ViewArms.EYE).
+var eye := Vector3(0.0, 1.62, 0.1)
+## How bent a held arm stays: this share of its full length.
+const HELD_REACH := 0.93
+
+## Per hand, from the last solve: how far its shoulder came forward to reach
+## (metres, his space), and whether the arm ran out of length (straight).
+var shoulder_slides: Array[float] = [0.0, 0.0]
+var straight: Array[bool] = [false, false]
 
 var _index := {}
 ## Finger bone -> [open rotation (rest), closed rotation].
@@ -157,6 +171,13 @@ func _solve(skeleton: Skeleton3D, root_name: StringName, mid_name: StringName, t
 
 	# A shoulder comes forward for a long reach.
 	var base := _bone(skeleton, base_name) if base_name != &"" else -1
+	var arm := 0 if root_name == ARMS[0][1] else (1 if root_name == ARMS[1][1] else -1)
+
+	if arm >= 0:
+		shoulder_slides[arm] = 0.0
+
+	if arm >= 0 and pull_to_eye[arm]:
+		goal = _toward_eye(skeleton.get_bone_global_pose(root).origin, goal, (a + b) * HELD_REACH)
 
 	if base >= 0 and give > 0.0:
 		var shoulder := skeleton.get_bone_global_pose(root).origin
@@ -164,6 +185,8 @@ func _solve(skeleton: Skeleton3D, root_name: StringName, mid_name: StringName, t
 
 		if short > 0.0:
 			var slide := (goal - shoulder).normalized() * minf(short, give) * weight
+			if arm >= 0:
+				shoulder_slides[arm] = minf(short, give) * weight
 			var parent_basis := skeleton.get_bone_global_pose(base).basis
 			skeleton.set_bone_pose_position(root, skeleton.get_bone_pose_position(root) + parent_basis.inverse() * slide)
 
@@ -172,6 +195,9 @@ func _solve(skeleton: Skeleton3D, root_name: StringName, mid_name: StringName, t
 	var w := skeleton.get_bone_global_pose(tip).origin
 	var to := goal - s
 	var d := clampf(to.length(), absf(a - b) + 0.01, (a + b) * 0.999)
+
+	if arm >= 0:
+		straight[arm] = to.length() >= (a + b) * 0.999
 	var along := to.normalized() if to.length() > 0.0001 else (w - s).normalized()
 
 	# The elbow's plane: the reach and the hint.
@@ -204,6 +230,26 @@ func _solve(skeleton: Skeleton3D, root_name: StringName, mid_name: StringName, t
 		_set_global_rotation(skeleton, mid, forearm * Basis(Vector3.UP, roll * FOREARM_ROLL))
 
 	_set_global_rotation(skeleton, tip, turn)
+
+
+## The point on the line from the eye to `goal`, as far out as it goes, no
+## further than `length` from `shoulder`: `goal` itself if already in reach.
+func _toward_eye(shoulder: Vector3, goal: Vector3, length: float) -> Vector3:
+	if shoulder.distance_to(goal) <= length:
+		return goal
+
+	var d := goal - eye
+	var o := eye - shoulder
+	var qa := d.dot(d)
+	var qb := 2.0 * d.dot(o)
+	var qc := o.dot(o) - length * length
+	var disc := qb * qb - 4.0 * qa * qc
+
+	if qa < 0.000001 or disc < 0.0:
+		return goal
+
+	var t := (-qb + sqrt(disc)) / (2.0 * qa)
+	return eye + d * clampf(t, 0.0, 1.0) if t > 0.0 else goal
 
 
 ## Turns `bone` so the direction `from` (skeleton space) becomes `to`.
