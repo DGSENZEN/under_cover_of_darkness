@@ -3,6 +3,7 @@ extends RefCounted
 ## volumes as the game. Coordinates are local to the current station.
 
 const Water := preload("res://scripts/Interaction/WaterVolume.gd")
+const Handhold := preload("res://scripts/PlayerUtils/Handhold.gd")
 
 ## gym is the active traversal gym; index is the zero-based advanced station (8..15).
 ## Adds collision/visual fixtures under gym._fixture_root and updates that station's gates.
@@ -83,6 +84,28 @@ static func build(gym: Node3D, index: int) -> void:
 			gym._rope(Vector3(0, 8.85, -21), 7.5, 0)
 			gym._box(Vector3(0, 3.25, -24), Vector3(4, 6.5, 3), "stone")
 			gym.stations[index].gates = [Vector3(0, 1.5, 5), Vector3(0, 7.5, -16), Vector3(0, 7.5, -24)]
+		16:
+			gym._sign(0, "FREE-RUN\nHold sprint: vault, wall run, climb, leap.\nSprint+crouch: climb down. Look behind + jump: back eject.\nThe dead-end roof stops you at its lip.")
+			# The street: a fence to vault, a cart to mantle and run off.
+			gym._box(Vector3(0, 0.45, 4), Vector3(4, 0.9, 0.2), "wood")
+			gym._box(Vector3(0, 0.6, -1), Vector3(2.4, 1.2, 1.5), "wood")
+			# The façade, 9 m, face at z = -7: sills straight up it from a
+			# 3.4 m one (run up to) with one 2 m gap to leap, a column of
+			# brackets to its right, a drainpipe to its left with a ledge
+			# beside it.
+			gym._box(Vector3(0, 4.5, -12), Vector3(8, 9, 10), "brick")
+			for y in [3.4, 4.3, 5.2, 7.2, 8.1]:
+				_sill(gym, Vector3(0, y, -7), 1.6)
+			for i in 7:
+				_bracket(gym, Vector3(2.6, 2.6 + 0.85 * i, -7))
+			_pipe(gym, Vector3(-2.6, 0, -6.94), 9.0)
+			_sill(gym, Vector3(-1.9, 4.6, -7), 0.6)
+			# An alley 3 m wide along the façade's right side, to back eject
+			# across: a wall facing it with a ledge at 6 m.
+			gym._box(Vector3(8.5, 3, -12), Vector3(3, 6, 10), "stone")
+			# The second roof across a 2.5 m gap; past it, nothing.
+			gym._box(Vector3(0, 4.5, -24.25), Vector3(8, 9, 9.5), "brick")
+			gym.stations[index].gates = [Vector3(0, 1.5, 6), Vector3(0, 10.4, -9), Vector3(0, 10.4, -25)]
 		15:
 			gym._sign(0, "COMBAT / STEALTH RELAY\nVault → cover → crouched mantle → guard.\nF6 toggles the sentry. Break sight behind cover.\nMetal is loud; carpet is quiet. Attack, dodge,\nclimb and disengage. R restores both actors.")
 			gym._box(Vector3(0, 0.45, -4), Vector3(3, 0.9, 0.2), "wood")
@@ -94,3 +117,29 @@ static func build(gym: Node3D, index: int) -> void:
 			carpet.set_meta(&"surface", "carpet")
 			gym._box(Vector3(4, 0.01, -17), Vector3(3, 0.02, 16), "steel")
 			gym.stations[index].gates[1] = Vector3(0, 1.5, -16)
+
+
+## A stone sill on a face pointing +Z: its top at y, a hold along its front.
+static func _sill(gym: Node3D, at: Vector3, width: float) -> void:
+	gym._box(Vector3(at.x, at.y - 0.05, at.z + 0.075), Vector3(width, 0.1, 0.15), "stone")
+	_hold(gym, Handhold.Kind.LEDGE, Vector3(at.x, at.y, at.z + 0.15), width)
+
+
+## An iron bracket sticking out of a face pointing +Z, held by its top.
+static func _bracket(gym: Node3D, at: Vector3) -> void:
+	gym._box(Vector3(at.x, at.y - 0.06, at.z + 0.1), Vector3(0.12, 0.12, 0.2), "steel")
+	_hold(gym, Handhold.Kind.POINT, Vector3(at.x, at.y, at.z + 0.2), 1.0)
+
+
+## A drainpipe standing just off a face pointing +Z, from at up length.
+static func _pipe(gym: Node3D, at: Vector3, length: float) -> void:
+	gym._box(Vector3(at.x, at.y + length * 0.5, at.z), Vector3(0.12, length, 0.12), "steel")
+	_hold(gym, Handhold.Kind.POLE, at + Vector3(0, 0, 0.06), length)
+
+
+static func _hold(gym: Node3D, kind: int, at: Vector3, length: float) -> void:
+	var hold: Node3D = Handhold.new()
+	hold.kind = kind
+	hold.length = length
+	hold.position = at
+	gym._fixture_root.add_child(hold)

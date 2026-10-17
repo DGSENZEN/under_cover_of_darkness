@@ -6,12 +6,12 @@ Open `res://maps/traversal_gym.tscn` and run the current scene (F6 in the Godot 
 Godot --path . res://maps/traversal_gym.tscn
 ```
 
-The 16 stations have separate geometry, three ordered colored gates and quick restarts. Walk through green START, amber CHECK and blue FINISH in order. The HUD records game-time elapsed, best time for the current physics/slow-motion preset, attempts, hard landings, speed, height, current traversal and the last planner rejection. Records last for the current session. Routes are practice guides: they do not enforce how an obstacle is crossed.
+The 17 stations have separate geometry, three ordered colored gates and quick restarts. Walk through green START, amber CHECK and blue FINISH in order. The HUD records game-time elapsed, best time for the current physics/slow-motion preset, attempts, hard landings, speed, height, current traversal and the last planner rejection. Records last for the current session. Routes are practice guides: they do not enforce how an obstacle is crossed.
 
 | Control | Action |
 | --- | --- |
 | 1–9 | Select stations 1–9 |
-| [ / ] | Previous / next station, including 10–16 |
+| [ / ] | Previous / next station, including 10–17 |
 | R or 0 | Restart the selected station |
 | F4 | Cycle 30 / 60 / 120 physics ticks per second; restart |
 | F5 | Toggle traversal probe display |
@@ -41,6 +41,7 @@ Movement/combat controls stay the same: WASD, sprint, jump, crouch, mouse look, 
 | 14 Water & landings | Deep-water entry, swimming, bank mantles, wet quay steps on the left, a boat rail/floor on the right, and 3/6/9 m drops |
 | 15 Vertical relay | Ladder, thin shelf, higher roof and rope sequence |
 | 16 Combat / stealth relay | Vaulting under pressure, cover, noisy metal, quiet carpet and an optional guard |
+| 17 Free-run | Hold sprint down the street: fence vault, cart mantle, wall run to a 3.4 m sill, hand over hand up a 9 m façade (one 2 m gap leapt), over the top, a roof gap jumped, the dead-end far roof stops you at its lip. Brackets, a drainpipe with a ledge beside it, and an alley for back ejects on the sides. Sprint+crouch climbs back down |
 
 Restart restores health/stamina, clears combat opportunities and unfinished traversal, releases held props, resets moving blockers to the same phase and replaces the relay encounter, including corpses and dropped gear. Death automatically restarts. Physics/time settings restore when leaving the gym. The guard uses a navigation bake restricted to its station.
 

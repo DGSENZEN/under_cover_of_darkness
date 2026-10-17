@@ -23,7 +23,7 @@ func _ready() -> void:
 	await _frames(5)
 	await _shot("overview")
 	gym.player.camera.current = true
-	for index in [0, 3, 8, 9, 10, 11, 13, 14, 15]:
+	for index in [0, 3, 8, 9, 10, 11, 13, 14, 15, 16]:
 		gym.select_station(index)
 		await _frames(10)
 		await _shot("station_%02d" % (index + 1))
@@ -34,6 +34,22 @@ func _ready() -> void:
 			above.current = true
 			await _frames(5)
 			await _shot("station_14_water_geometry")
+			gym.player.camera.current = true
+		if index == 16:
+			# Free-run: the façade's holds close up, and the roofs from above.
+			var near := Camera3D.new()
+			add_child(near)
+			var root: Vector3 = gym.stations[index].root.global_position
+			near.global_position = root + Vector3(4.5, 4.2, -2.5)
+			near.look_at(root + Vector3(0, 5.2, -7), Vector3.UP)
+			near.current = true
+			await _frames(5)
+			await _shot("station_17_holds")
+			near.global_position = root + Vector3(9, 14, -14)
+			near.look_at(root + Vector3(0, 9, -19), Vector3.UP)
+			await _frames(5)
+			await _shot("station_17_roofs")
+			near.queue_free()
 			gym.player.camera.current = true
 	gym._guard_enabled = true
 	gym._enable_guard()

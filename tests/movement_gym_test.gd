@@ -35,7 +35,7 @@ func _ready() -> void:
 	get_tree().quit(1 if failed else 0)
 
 func _exercise(gym, p) -> void:
-	_check("MG2 sixteen separated stations", gym.stations.size() == 16 and gym.stations[0].root.position.distance_to(gym.stations[1].root.position) >= 30.0)
+	_check("MG2 seventeen separated stations", gym.stations.size() == 17 and gym.stations[0].root.position.distance_to(gym.stations[1].root.position) >= 30.0)
 	gym.select_station(8)
 	await _frames(4)
 	_check("MG3 station spawn fits real player capsule", p.global_position.distance_to(gym.stations[8].spawn) < 0.1 and p.scanner.fits(p.global_position, false))
@@ -129,6 +129,7 @@ func _exercise(gym, p) -> void:
 	Input.action_release("jump")
 	await _frames(40)
 	_check("MG21 water station supports a boat rail clamber", was_swimming and p.movement_state == 0 and absf(p.get_feet_position().y - 1.88) < 0.04 and absf(p.global_position.z - wet_origin.z + 9) < 0.2)
+	await _free_run_route(gym, p)
 	var clock_before := TimeFx.real_time()
 	Engine.physics_ticks_per_second = 120
 	var clock_after := TimeFx.real_time()
@@ -139,6 +140,42 @@ func _exercise(gym, p) -> void:
 	Engine.physics_ticks_per_second = 30
 	_check("MG19 lowering physics rate cannot jump feedback deadlines forward", TimeFx.real_time() - clock_later < 0.05)
 	Engine.time_scale = 0.5
+
+## Station 17: hold sprint and forward from the spawn, straight down the
+## route, to the far roof: fence, cart, wall run, the façade's sills (one gap
+## leapt), over the top, the roof gap. Never a fall, never hurt.
+func _free_run_route(gym, p) -> void:
+	if gym.stations.size() < 17:
+		_check("MG-FR station 17 free-run route", false)
+		return
+
+	gym.select_station(16)
+	var origin: Vector3 = gym.stations[16].root.position
+	await _frames(4)
+	p.invulnerable = false
+	var health: float = p.health
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var fell := false
+	var reached := false
+
+	for i in 1500:
+		await _frames(1)
+		var feet: float = p.get_feet_position().y
+		var local_z: float = p.global_position.z - origin.z
+
+		if p.movement_state == 0 and p._on_floor_now() and local_z < -7.5 and feet < 8.5:
+			fell = true
+
+		if p.movement_state == 0 and local_z < -24.0 and feet > 8.9:
+			reached = true
+			break
+
+	Input.action_release("sprint")
+	Input.action_release("move_forward")
+	p.invulnerable = true
+	_check("MG-FR station 17 free-run route", reached and not fell and p.health >= health)
+
 
 func _frames(count: int) -> void:
 	for i in count:

@@ -49,7 +49,7 @@ func _ready() -> void:
 	_environment()
 	_fixture_root = self
 	_floor()
-	var names := ["Steps & stairs", "Mantles", "Vault flow", "Hang & leap", "Kick & upward leap", "Progressive gaps", "Ladder, rope & chain", "Facade", "Thin lips & seams", "Corners & angled faces", "Crouched clearance", "Moving obstruction", "Slopes & momentum", "Water & landings", "Vertical relay", "Combat / stealth relay"]
+	var names := ["Steps & stairs", "Mantles", "Vault flow", "Hang & leap", "Kick & upward leap", "Progressive gaps", "Ladder, rope & chain", "Facade", "Thin lips & seams", "Corners & angled faces", "Crouched clearance", "Moving obstruction", "Slopes & momentum", "Water & landings", "Vertical relay", "Combat / stealth relay", "Free-run"]
 	var legacy := [_lane_stairs, _lane_mantles, _lane_vaults, _lane_hang_course, _lane_kick_and_upward, _lane_gaps, _lane_ladder_and_rope, _lane_facade]
 	for i in names.size():
 		var root := Node3D.new()
