@@ -49,6 +49,10 @@ var elbow_hints: Array[Vector3] = [ELBOW_HINT[0], ELBOW_HINT[1]]
 ## restored after drawing, so this is the only record of it.
 var wrist_bend: Array[float] = [0.0, 0.0]
 var solved_hands: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+## Shoulder to wrist (m, his space): the elbow and wrist joints are pushed
+## out along the bones to make the arms this long. 0 keeps the model's own.
+## (The first-person arms are given a real arm's length: ViewArms.)
+var arm_length := 0.0
 ## Per hand: held on the world (a climb), its target is brought in along the
 ## line from the eye until the arm reaches it bent: drawn about the eye, it
 ## shows in the same place, and the arm takes the body's weight instead of
@@ -58,6 +62,10 @@ var pull_to_eye: Array[bool] = [false, false]
 var eye := Vector3(0.0, 1.62, 0.1)
 ## The eye in the skeleton's space, this solve (it and the goals must share one).
 var _eye_in_skeleton := Vector3.ZERO
+## Both held hands are brought in by the same share of their eye lines, so a
+## single depth (the arms share their materials) puts both back where they
+## hold: -1 when not both are held.
+var _shared_t := -1.0
 ## How bent a held arm stays: this share of its full length.
 const HELD_REACH := 0.93
 
@@ -65,6 +73,8 @@ const HELD_REACH := 0.93
 ## (metres, his space), and whether the arm ran out of length (straight).
 var shoulder_slides: Array[float] = [0.0, 0.0]
 var straight: Array[bool] = [false, false]
+## Per hand, the arm's length (shoulder to wrist) the last solve used.
+var solved_lengths: Array[float] = [0.0, 0.0]
 
 var _index := {}
 ## Finger bone -> [open rotation (rest), closed rotation].
@@ -127,9 +137,13 @@ func _process_modification() -> void:
 		if index >= 0:
 			skeleton.set_bone_pose_scale(index, Vector3.ONE * 0.001)
 
+	if arm_length > 0.0:
+		_lengthen_arms(skeleton)
+
 	# His space to the skeleton's.
 	var into := skeleton.global_transform.affine_inverse() * man.global_transform
 	_eye_in_skeleton = into * eye
+	_shared_t = _shared_trim(skeleton, into)
 
 	for side in range(2):
 		if weights[side] > 0.001:
@@ -180,7 +194,10 @@ func _solve(skeleton: Skeleton3D, root_name: StringName, mid_name: StringName, t
 		shoulder_slides[arm] = 0.0
 
 	if arm >= 0 and pull_to_eye[arm]:
-		goal = _toward_eye(skeleton.get_bone_global_pose(root).origin, goal, (a + b) * HELD_REACH)
+		if _shared_t > 0.0:
+			goal = _eye_in_skeleton + (goal - _eye_in_skeleton) * _shared_t
+		else:
+			goal = _toward_eye(skeleton.get_bone_global_pose(root).origin, goal, (a + b) * HELD_REACH)
 
 	if base >= 0 and give > 0.0:
 		var shoulder := skeleton.get_bone_global_pose(root).origin
@@ -201,6 +218,7 @@ func _solve(skeleton: Skeleton3D, root_name: StringName, mid_name: StringName, t
 
 	if arm >= 0:
 		straight[arm] = to.length() >= (a + b) * 0.999
+		solved_lengths[arm] = a + b
 	var along := to.normalized() if to.length() > 0.0001 else (w - s).normalized()
 
 	# The elbow's plane: the reach and the hint.
@@ -235,6 +253,36 @@ func _solve(skeleton: Skeleton3D, root_name: StringName, mid_name: StringName, t
 	_set_global_rotation(skeleton, tip, turn)
 
 
+## With both hands held: the share of the eye line (0..1) that brings both
+## within reach, the smaller of the two. -1 otherwise.
+func _shared_trim(skeleton: Skeleton3D, into: Transform3D) -> float:
+	if not (pull_to_eye[0] and pull_to_eye[1] and weights[0] > 0.001 and weights[1] > 0.001):
+		return -1.0
+
+	var shared := 1.0
+
+	for side in range(2):
+		var bones: Array = ARMS[side]
+		var root := _bone(skeleton, bones[1])
+		var mid := _bone(skeleton, bones[2])
+		var tip := _bone(skeleton, bones[3])
+
+		if root < 0 or mid < 0 or tip < 0:
+			return -1.0
+
+		var shoulder := skeleton.get_bone_global_pose(root).origin
+		var a := shoulder.distance_to(skeleton.get_bone_global_pose(mid).origin)
+		var b := skeleton.get_bone_global_pose(mid).origin.distance_to(skeleton.get_bone_global_pose(tip).origin)
+		var goal: Vector3 = skeleton.get_bone_global_pose(tip).origin.lerp((into * targets[side]).origin, weights[side])
+		var trimmed := _toward_eye(shoulder, goal, (a + b) * HELD_REACH)
+		var line := goal - _eye_in_skeleton
+
+		if line.length() > 0.0001:
+			shared = minf(shared, (trimmed - _eye_in_skeleton).length() / line.length())
+
+	return shared
+
+
 ## The point on the line from the eye to `goal`, as far out as it goes, no
 ## further than `length` from `shoulder`: `goal` itself if already in reach.
 func _toward_eye(shoulder: Vector3, goal: Vector3, length: float) -> Vector3:
@@ -259,6 +307,28 @@ func _toward_eye(shoulder: Vector3, goal: Vector3, length: float) -> Vector3:
 
 	var t := (-qb + sqrt(disc)) / (2.0 * qa)
 	return from + d * clampf(t, 0.0, 1.0) if t > 0.0 else goal
+
+
+## The elbow and wrist joints moved out along their bones (their rest offsets,
+## scaled) so shoulder to wrist is arm_length: longer, not thicker.
+func _lengthen_arms(skeleton: Skeleton3D) -> void:
+	for side in range(2):
+		var mid := _bone(skeleton, ARMS[side][2])
+		var tip := _bone(skeleton, ARMS[side][3])
+
+		if mid < 0 or tip < 0:
+			continue
+
+		var upper := skeleton.get_bone_rest(mid).origin
+		var fore := skeleton.get_bone_rest(tip).origin
+		var own := upper.length() + fore.length()
+
+		if own < 0.0001:
+			continue
+
+		var stretch := arm_length / own
+		skeleton.set_bone_pose_position(mid, upper * stretch)
+		skeleton.set_bone_pose_position(tip, fore * stretch)
 
 
 ## Turns `bone` so the direction `from` (skeleton space) becomes `to`.

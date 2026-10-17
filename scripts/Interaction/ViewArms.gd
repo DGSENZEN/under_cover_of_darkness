@@ -9,6 +9,9 @@ const ArmReachScript := preload("res://scripts/Visual/ArmReach.gd")
 
 ## How small the view's world is drawn: the scale the sword is held at.
 const SCALE := 0.62
+## Shoulder to wrist (m, full size): a real arm's length. The model's own
+## are short (0.5 m), too short to reach a hold from a hang.
+const ARM_LENGTH := 0.65
 ## The point of him that sits at your eye, in his own space (full size). A
 ## little lower than his real eyes and behind them, over his shoulders: they
 ## come up just behind and below your view, where arms that hold a blade out
@@ -21,6 +24,15 @@ enum Side { LEFT, RIGHT }
 
 var man: Node3D
 var reach: SkeletonModifier3D
+## The arms' own materials (not what they hold), for their depth.
+var _materials: Array[BaseMaterial3D] = []
+var _depth := Z_CLIP
+var _held := 0.0
+var _shoulders := Vector3.INF
+## Held, his shoulders come this far toward the wall (m, the view's forward),
+## and this far down: a hanging body's chest is at the wall, under the hands.
+const CLIMB_FORWARD := 0.3
+const CLIMB_DOWN := 0.05
 
 
 ## Builds/configures the arm rig and applies the supplied visual layer mask.
@@ -37,6 +49,7 @@ func setup(layer: int) -> void:
 	reach = ArmReachScript.new()
 	reach.name = "Reach"
 	reach.set("man", man)
+	reach.set("arm_length", ARM_LENGTH)
 	reach.set("folded", [&"neck_01"] as Array[StringName])
 	man.skeleton.add_child(reach)
 
@@ -117,6 +130,7 @@ func _to_man(target: Transform3D) -> Transform3D:
 func _viewmodel(instance: MeshInstance3D) -> void:
 	if instance.material_override is BaseMaterial3D:
 		instance.material_override = _squeezed(instance.material_override)
+		_materials.append(instance.material_override)
 		return
 
 	if instance.mesh == null:
@@ -129,7 +143,80 @@ func _viewmodel(instance: MeshInstance3D) -> void:
 			source = instance.mesh.surface_get_material(i)
 
 		if source is BaseMaterial3D:
-			instance.set_surface_override_material(i, _squeezed(source))
+			var squeezed := _squeezed(source)
+			instance.set_surface_override_material(i, squeezed)
+			_materials.append(squeezed)
+
+
+## Holding on to the world (amount 0..1): the rig grows to true size and the
+## shoulders come forward to the wall, as a hanging chest is, and the arms are
+## drawn at true depth, so real forearms rise in front of the stone and the
+## fingers that curl over its lip are hidden by it. 0: the viewmodel, small and
+## in front of everything.
+func set_held(amount: float, chest := Vector3.INF) -> void:
+	_held = clampf(amount, 0.0, 1.0)
+	scale = Vector3.ONE * lerpf(SCALE, 1.0, _held)
+
+	if man != null:
+		var placed := -EYE + Vector3(0.0, -CLIMB_DOWN, -CLIMB_FORWARD)
+
+		# The chest under the hands that hold: his shoulders' middle there.
+		if chest != Vector3.INF:
+			placed = chest - _shoulders_middle()
+
+		man.position = (-EYE).lerp(placed, _held)
+
+	set_depth_scale(1.0 if _held >= 0.5 else Z_CLIP)
+
+
+## The middle of his shoulders at rest, in his own space (full size).
+func _shoulders_middle() -> Vector3:
+	if _shoulders == Vector3.INF and man != null and man.get("skeleton") != null:
+		var skeleton: Skeleton3D = man.skeleton
+		var left := skeleton.find_bone(&"upperarm_l")
+		var right := skeleton.find_bone(&"upperarm_r")
+
+		if left >= 0 and right >= 0:
+			_shoulders = (skeleton.get_bone_global_rest(left).origin + skeleton.get_bone_global_rest(right).origin) * 0.5
+
+	return _shoulders if _shoulders != Vector3.INF else Vector3(0.0, 1.45, 0.0)
+
+
+## How far the rig is into its held, true-size form (0..1).
+func held() -> float:
+	return _held
+
+
+## A camera-space transform (full size) into the rig's parent space at its
+## present size: what shrink() is for the small viewmodel.
+func to_rig(camera_space: Transform3D) -> Transform3D:
+	return Transform3D(camera_space.basis, camera_space.origin * scale.x)
+
+
+## Holding on to the world, the arms are drawn at their true depth (the rig is
+## SCALE small about the eye; 1 / SCALE undoes it without moving them on
+## screen), so the stone hides what curls over it: fingers over a lip. Free,
+## squeezed in front of everything again, so they never sink into a wall.
+func set_true_depth(on: bool) -> void:
+	set_depth_scale(1.0 / SCALE if on else Z_CLIP)
+
+
+## The arms drawn this much further than they are (about the eye): Z_CLIP in
+## front of everything, more than 1 pushed back to where a held hand's grip
+## really is (HandSlot), so the stone in front of the grip hides the fingers.
+func set_depth_scale(wanted: float) -> void:
+	if is_equal_approx(wanted, _depth):
+		return
+
+	_depth = wanted
+
+	for material in _materials:
+		material.z_clip_scale = wanted
+
+
+## The arms' depth scale now (Z_CLIP squeezed in front, 1 / SCALE true).
+func depth_scale() -> float:
+	return _depth
 
 
 static func _squeezed(source: Material) -> BaseMaterial3D:

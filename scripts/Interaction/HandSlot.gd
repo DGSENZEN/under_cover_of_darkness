@@ -184,6 +184,22 @@ var _grip_palms: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTIT
 var _grip_weights: Array[float] = [0.0, 0.0]
 ## How far inside the frame's edge a held hand is kept (degrees).
 const FRAME_MARGIN_DEGREES := 7.0
+## Where each held hand's wrist really goes (this node's space, full size),
+## and the depth the arms are drawn at while holding.
+var _held_wrists: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+## How far into the held, true-size rig the arms are, and how quickly they go.
+var _held_amount := 0.0
+## Per hand, whether its grip is outside the view and drawn at the frame's edge.
+var _grip_clamped: Array[bool] = [false, false]
+const HELD_BLEND := 0.12
+## Holding on, the chest hangs this far below the eye (m) and this far
+## toward the wall: a hanging body's, under its face.
+const CHEST_BELOW_EYE := 0.3
+const CHEST_TOWARD_WALL := 0.25
+## How far his shoulders' middle reaches to a hand (m, a bent arm), and how
+## far under the bottom of the view the chest is kept (degrees).
+const ARM_REACH := 0.57
+const CHEST_VIEW_MARGIN_DEGREES := 8.0
 ## Where the hands go in a landing roll, in camera space (full size): low in
 ## front, forearms crossing, palms in.
 const ROLL_TUCK: Array[Transform3D] = [
@@ -1210,7 +1226,9 @@ func _place_grips() -> void:
 
 			_grip_weights[side] = weight if weight >= 0.03 else 0.0
 			# In this node's space, which rides the camera: full size.
-			_grip_palms[side] = _in_frame(global_transform.affine_inverse() * _contacts.hand(side))
+			var true_palm: Transform3D = global_transform.affine_inverse() * _contacts.hand(side)
+			_grip_palms[side] = _in_frame(true_palm)
+			_grip_clamped[side] = not _grip_palms[side].origin.is_equal_approx(true_palm.origin)
 			_grip_curls[side] = _contacts.curl(side)
 			strongest = maxf(strongest, weight)
 
@@ -1247,6 +1265,60 @@ func _in_frame(palm: Transform3D) -> Transform3D:
 
 	var turn := Basis(Vector3.RIGHT, fixed_up - up).rotated(Vector3.UP, -(fixed_across - across))
 	return Transform3D(turn * palm.basis, turn * at)
+
+
+## Where the chest hangs while the hands hold the world (this node's space,
+## full size): under the face, toward the wall, as a hanging body's is: below
+## the view that looks up at the hands. INF when nothing is held.
+func _chest_under_hands() -> Vector3:
+	if _contacts == null or maxf(_grip_weights[0], _grip_weights[1]) <= 0.05:
+		return Vector3.INF
+
+	var to_local := global_basis.orthonormalized().inverse()
+	var ahead := -global_basis.z
+	var toward_wall := Vector3(ahead.x, 0.0, ahead.z).normalized() if Vector2(ahead.x, ahead.z).length() > 0.05 else Vector3.ZERO
+	var chest: Vector3 = to_local * (Vector3.DOWN * CHEST_BELOW_EYE + toward_wall * CHEST_TOWARD_WALL)
+
+	# Hauled up toward the hands as far as they need it to be in reach, but
+	# never up into the view: under its bottom edge.
+	var farthest := 0.0
+	var toward := Vector3.ZERO
+
+	for side in range(2):
+		if _grip_weights[side] > 0.05:
+			var hand: Vector3 = global_transform.affine_inverse() * _contacts.hand(side).origin
+			var over := chest.distance_to(hand) - ARM_REACH
+
+			if over > farthest:
+				farthest = over
+				toward = (hand - chest).normalized()
+
+	if farthest > 0.0:
+		chest = _below_view(chest + toward * farthest)
+
+	return chest
+
+
+## A point (this node's space) kept below the bottom edge of the view, with a
+## margin: moved straight down until it is, if it is not.
+func _below_view(point: Vector3) -> Vector3:
+	var camera: Camera3D = player.get("camera") if player != null else null
+
+	if camera == null:
+		return point
+
+	var limit := tan(deg_to_rad(camera.fov * 0.5 + CHEST_VIEW_MARGIN_DEGREES))
+	var depth := -point.z
+
+	if depth <= 0.05:
+		return point
+
+	var highest := -limit * depth
+
+	if point.y > highest:
+		point.y = highest
+
+	return point
 
 
 ## Both hands busy with nothing we draw (a body over the shoulder, dead).
@@ -1322,7 +1394,8 @@ func _place_arms() -> void:
 		if grip > 0.0:
 			var palm := _grip_palms[side]
 			var hand := Transform3D(palm.basis * (_LEDGE_RIGHT if side == 1 else _LEDGE_LEFT), palm * Vector3(0.0, 0.02, 0.07))
-			var shown: Transform3D = ViewArmsScript.shrink(hand)
+			_held_wrists[side] = hand.origin
+			var shown: Transform3D = _arms.to_rig(hand)
 
 			if weights[side] > 0.0:
 				shown = targets[side].interpolate_with(shown, grip)
@@ -1349,11 +1422,25 @@ func _place_arms() -> void:
 	if _arms.reach != null and camera != null and _arms.man != null:
 		_arms.reach.eye = _arms.man.global_transform.affine_inverse() * camera.global_position
 
+	# Holding the world: the arms become true size at true depth (ViewArms.
+	# set_held), so the stone in front of a grip hides the fingers over it.
+	var holding := maxf(_grip_weights[0], _grip_weights[1]) > 0.5 and tuck < 0.01
+
+	# A hold still out of view (reaching up for it on a wall run, a leap) is
+	# not held yet as far as the arms go: they stay the viewmodel, reaching.
+	for side in range(2):
+		if _grip_weights[side] > 0.05 and _grip_clamped[side]:
+			holding = false
+	_held_amount = move_toward(_held_amount, 1.0 if holding else 0.0, get_process_delta_time() / HELD_BLEND)
+	_arms.set_held(_held_amount, _chest_under_hands())
+
 	for side in range(2):
 		_arms.set_hand(side, targets[side], weights[side], curls[side])
 
 		if _arms.reach != null:
-			_arms.reach.pull_to_eye[side] = _grip_weights[side] > 0.05
+			# Held hands in view are the true-size rig's; nothing is brought in
+			# toward the eye any more (that drew hands huge in the blend).
+			_arms.reach.pull_to_eye[side] = false
 
 	# The kick: his own right foot where the boot goes.
 	if _kick > 0.0 and not dead:
