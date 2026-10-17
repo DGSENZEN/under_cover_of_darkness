@@ -384,6 +384,33 @@ class Yoke(unittest.TestCase):
             self.assertEqual(w, {"root": 1.0})
 
 
+class Proportions(unittest.TestCase):
+    """The sleeve no wider than the hand reads (references: the sleeve at the
+    wrist about 1.2 hand widths), the fingers sturdy, not a mannequin's."""
+
+    def test_sleeve_at_the_wrist_against_the_hand(self):
+        import sleeve_form
+        palm = abs(build_fp_arms.HAND_JOINTS["fingers"]["index"][0][0] - build_fp_arms.HAND_JOINTS["fingers"]["pinky"][0][0]) + 0.02
+        sleeve = 2.0 * sleeve_form.radius_at(2.0)
+        self.assertLessEqual(sleeve / palm, 1.2)
+
+    def test_fingers_thickened(self):
+        j = build_fp_arms.HAND_JOINTS["fingers"]["middle"]
+        mid = [(j[1][i] + j[2][i]) * 0.5 for i in range(3)]
+        # A point 8 mm off the finger's axis goes out to about 9 mm.
+        d = [j[2][i] - j[1][i] for i in range(3)]
+        n = math.sqrt(sum(x * x for x in d))
+        side = (0.0, 0.0, 0.008)
+        out = build_fp_arms.sturdy_offset(tuple(mid[i] + side[i] for i in range(3)), 2)
+        moved = [mid[i] + side[i] + out[i] for i in range(3)]
+        along = sum((moved[i] - mid[i]) * d[i] / n for i in range(3))
+        radial = math.sqrt(max(sum((moved[i] - mid[i]) ** 2 for i in range(3)) - along * along, 0.0))
+        self.assertAlmostEqual(radial, 0.008 * build_fp_arms.FINGER_GIRTH, delta=0.0005)
+
+    def test_palm_skin_and_stump_unchanged_by_girth(self):
+        self.assertEqual(build_fp_arms.sturdy_offset((0.0, -0.03, 0.0), 0), (0.0, 0.0, 0.0))
+
+
 FINGERS = build_fp_arms.FINGERS
 
 

@@ -47,7 +47,7 @@ SPEC = {
     # tools/arms/check_fp_arms_bends.py: resting on the index, never in it.
     "poses": {
         "Open": ((0.0, 0.0, 0.0), ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))),
-        "Fist": ((85.0, 95.0, 70.0), ((15.0, -40.0, 0.0), (15.0, 0.0, 0.0), (25.0, 0.0, 0.0))),
+        "Fist": ((85.0, 95.0, 70.0), ((15.0, -40.0, 0.0), (8.0, 0.0, 0.0), (18.0, 0.0, 0.0))),
         "Hook": ((50.0, 70.0, 40.0), ((10.0, 0.0, 0.0), (20.0, 0.0, 0.0), (15.0, 0.0, 0.0))),
         # Round a 9 cm drainpipe (a rung or rope closes it further, by the
         # curl): the thumb comes over to meet the fingers.
@@ -71,7 +71,7 @@ SPEC = {
         "SwordGrip": {"index": (65.0, 75.0, 50.0)},
         # (The index a little less closed at its knuckle: its tip rests on
         # the thumb's root instead of sinking into it.)
-        "Fist": {"index": (75.0, 95.0, 70.0)},
+        "Fist": {"index": (68.0, 95.0, 70.0)},
         "Relaxed": {"index": (20.0, 30.0, 15.0), "ring": (38.0, 45.0, 25.0), "pinky": (45.0, 50.0, 28.0)},
     },
     "sleeve_short_of_wrist": 0.04,
@@ -178,7 +178,7 @@ def _smooth(edge0, edge1, x):
 # knuckle, the finger joints.
 WRIST_BLEND = 0.015
 KNUCKLE_BLEND = 0.010
-JOINT_BLEND = 0.006
+JOINT_BLEND = 0.0065
 
 
 def hand_weights(co, finger, normal=None):
@@ -266,6 +266,34 @@ def _along(co, a, b):
 KNUCKLE_RISE, KNUCKLE_WIDTH = 0.0022, 0.008
 TENDON_RISE, TENDON_WIDTH = 0.0012, 0.0035
 KNOB_RISE, KNOB_WIDTH = (0.0009, 0.0006), 0.004
+
+
+# A working man's fingers, not a mannequin's: each finger's flesh this much
+# further from its bones (references, Oct 17: sturdier hands).
+FINGER_GIRTH = 1.12
+
+
+def sturdy_offset(co, finger):
+    """How far a base-hand vertex of a finger (1-5) moves out from its
+    finger's bones to thicken it (right hand, local space); nothing for the
+    palm and wrist (finger 0)."""
+    if not finger:
+        return (0.0, 0.0, 0.0)
+
+    points = HAND_JOINTS["fingers"][FINGERS[finger - 1]]
+    best = None
+
+    for a, b in zip(points, points[1:]):
+        ab = _sub(b, a)
+        t = min(max(_dot(_sub(co, a), ab) / _dot(ab, ab), 0.0), 1.0)
+        near = _add(a, ab, t)
+        gap = _sub(co, near)
+        size = _dot(gap, gap)
+
+        if best is None or size < best[0]:
+            best = (size, gap)
+
+    return tuple(x * (FINGER_GIRTH - 1.0) for x in best[1])
 
 
 def age_offset(co, normal, finger=None):
@@ -390,6 +418,10 @@ def build(root_dir):
 
     for v, offset in zip(base_hand.vertices, aged):
         v.co += Vector(offset)
+
+    # Sturdier fingers.
+    for v, f in zip(base_hand.vertices, base_finger):
+        v.co += Vector(sturdy_offset(tuple(v.co), f))
 
     # The bundle marks its faces flat: the skin is smooth.
     if "sharp_face" in base_hand.attributes:
