@@ -42,6 +42,7 @@ func _run() -> void:
 	await _placed_hang_checks()
 	await _pole_checks()
 	await _climb_checks()
+	await _ground_checks()
 
 
 # Task 1: the hold finder.
@@ -245,6 +246,58 @@ func _climb_checks() -> void:
 	_release_all()
 	_check("FR13b diagonal reaches the up-right hold", player.hang_hold == up_right,
 		"hold %s at %s" % [player.hang_hold, player.global_position])
+
+
+## Sprint (or walk) straight ahead from at for up to frames, stopping early
+## once the body is hanging or past z_done. No presses of jump.
+func _run_at(at: Vector3, sprint: bool, frames: int, z_done := -INF) -> void:
+	await _place(at)
+	if sprint:
+		Input.action_press("sprint")
+	Input.action_press("move_forward")
+	for i in frames:
+		await _frames(1)
+		if player.movement_state == 2 or (player.movement_state == 0 and player.global_position.z < z_done):
+			break
+	_release_all()
+	await _frames(30)
+
+
+# Task 5: free-run on the ground.
+func _ground_checks() -> void:
+	_box(Vector3(160, 0.45, -4), Vector3(4, 0.9, 0.2))
+	await _frames(2)
+	for hz in [60, 30]:
+		Engine.physics_ticks_per_second = hz
+		await _run_at(Vector3(160, 1.03, 2), true, 160, -5.0)
+		Engine.physics_ticks_per_second = 60
+		_check("FR16 sprinting at a fence vaults it with no press (%d Hz)" % hz, labels.has("vault") and player.global_position.z < -4.4,
+			"labels %s z %.2f" % [labels, player.global_position.z])
+
+	await _run_at(Vector3(160, 1.03, 2), false, 160, -5.0)
+	_check("FR18c walking at the fence does nothing without a press", labels.is_empty() and player.global_position.z > -4.0,
+		"labels %s z %.2f" % [labels, player.global_position.z])
+
+	_box(Vector3(170, 0.6, -5), Vector3(4, 1.2, 4))
+	await _frames(2)
+	await _run_at(Vector3(170, 1.03, 2), true, 160, -4.0)
+	_check("FR17 sprinting at a 1.2 m wall mantles it with no press", labels.size() > 0 and labels[0].contains("mantle") and player.global_position.y > 2.1,
+		"labels %s position %s" % [labels, player.global_position])
+
+	_box(Vector3(180, 3, -4.5), Vector3(4, 6, 3))
+	var sill := _hold(HANDHOLD.Kind.LEDGE, Vector3(180, 3.4, -3), 0.0, 1.0)
+	await _frames(2)
+	await _run_at(Vector3(180, 1.03, 3), true, 160)
+	_check("FR18 sprinting at a 3.4 m sill wall-runs up to it", labels.has("wall run") and player.movement_state == 2 and player.hang_hold == sill and absf(player.hang_lip_y - 3.4) < 0.05,
+		"labels %s state %d lip %.2f reject %s" % [labels, player.movement_state, player.hang_lip_y, player._last_reject])
+	player._drop_from_hang()
+	await _frames(60)
+
+	_box(Vector3(190, 3, -4.5), Vector3(4, 6, 3))
+	await _frames(2)
+	await _run_at(Vector3(190, 1.03, 3), true, 160)
+	_check("FR18b a smooth wall with nothing to hold is not climbed", labels.is_empty() and player.movement_state == 0,
+		"labels %s state %d" % [labels, player.movement_state])
 
 
 func _until(condition: Callable, max_frames: int) -> void:

@@ -16,6 +16,8 @@ const KIND_LEAP := 103
 const KIND_DROP_RELEASE := 104
 ## Hand over hand to a hold within arm's reach (free-run).
 const KIND_REACH := 105
+## Running a few steps up a wall to a hold (free-run).
+const KIND_WALL_RUN := 106
 ## A top thinner than this with a floor close beyond is a fence or a rail:
 ## crossed (vaulted, climbed over), never stood on. Garden walls stay walkable.
 const FENCE_THICKNESS := 0.3
@@ -31,6 +33,8 @@ var vault_clearance := 0.08
 var hang_gap := 0.02
 ## How loud a reach to the next hold is (dB).
 var reach_noise_db := 35.0
+## How loud running up a wall is (dB).
+var wall_run_noise_db := 52.0
 ## How far the eyes sit below the lip while hanging.
 var hang_eye_drop := 0.25
 ## Height of the eyes above the body origin when standing.
@@ -686,6 +690,36 @@ func reach(start: Vector3, target: Dictionary, from_normal: Vector3) -> Traversa
 	move.smoothing = 1.0
 	move.bake()
 	move.duration = clampf(move.total_length / 1.6, 0.25, 0.55)
+	move.ends_in_hang = true
+	move.hang_normal = target["normal"]
+	move.hang_lip_y = target["lip_y"]
+	move.end_hold = target.get("hold")
+	_set_contact_from_target(move, target)
+	return move
+
+
+## Running up the wall at face_point (normal out of it) to a hold above:
+## to the foot of the face, a few steps up it, the catch. Null when blocked.
+func wall_run(start: Vector3, face_point: Vector3, normal: Vector3, target: Dictionary) -> TraversalMove:
+	last_reject = ""
+
+	var finish: Vector3 = target["anchor"]
+	var foot := Vector3(finish.x, start.y + 0.2, finish.z)
+	var up := Vector3(finish.x, (foot.y + finish.y) * 0.5 + 0.1, finish.z)
+	var path := _best_clear_path(PackedVector3Array([start, foot, up, finish]), false)
+
+	if path.is_empty():
+		last_reject = "wall run: no clear way up"
+		return null
+
+	var move := TraversalMove.new()
+	move.label = &"wall run"
+	move.noise_db = wall_run_noise_db
+	move.kind = KIND_WALL_RUN
+	move.points = path
+	move.smoothing = 0.6
+	move.bake()
+	move.duration = clampf(move.total_length / 4.5, 0.45, 0.9)
 	move.ends_in_hang = true
 	move.hang_normal = target["normal"]
 	move.hang_lip_y = target["lip_y"]

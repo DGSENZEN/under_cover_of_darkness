@@ -585,6 +585,7 @@ func _ready() -> void:
 	planner.scanner = scanner
 	planner.eye_height = _neck_stand_y
 	planner.reach_noise_db = reach_noise_db
+	planner.wall_run_noise_db = wall_run_noise_db
 	holds.setup(scanner, planner, self)
 	holds.reach_up = reach_up
 	holds.reach_side = reach_side
@@ -833,7 +834,14 @@ func _update_locomotion(delta: float) -> void:
 	# it, or when the debug overlay is showing it.
 	cached_profile = null
 
-	if forward_intent and (jump_pressed or (air_hold and _air_scan_timer <= 0.0) or debug_traversal):
+	# Free-running: whatever is ahead is taken without a press, looked for
+	# every freerun_scan_interval.
+	var freerun_scan := free_running() and grounded and forward_intent and _freerun_timer <= 0.0
+
+	if freerun_scan:
+		_freerun_timer = freerun_scan_interval
+
+	if forward_intent and (jump_pressed or (air_hold and _air_scan_timer <= 0.0) or debug_traversal or freerun_scan):
 		cached_profile = scanner.scan(facing_direction, velocity, not grounded)
 
 		# Held in the air with nothing there: look again in a moment, not
@@ -862,7 +870,7 @@ func _update_locomotion(delta: float) -> void:
 	)
 	var stairs_jump := jump_pressed and on_staircase
 
-	if forward_intent and can_grab and (jump_pressed or air_hold):
+	if forward_intent and can_grab and (jump_pressed or air_hold or freerun_scan):
 		# Crouched at a rail with a drop beyond it (a ship's side, a balcony):
 		# over it into a hang, not a vault into the drop.
 		if jump_pressed and grounded and is_crouched and _try_lower_over(facing_direction):
@@ -872,6 +880,9 @@ func _update_locomotion(delta: float) -> void:
 			return
 
 		if not grounded and cached_profile == null and _try_catch_hold(facing_direction):
+			return
+
+		if freerun_scan and _try_wall_run(facing_direction):
 			return
 
 		# Out of a standing climb's height but inside a catch's: the jump
@@ -1055,6 +1066,7 @@ func _update_timers(delta: float) -> void:
 	_climb_reattach_timer = maxf(_climb_reattach_timer - delta, 0.0)
 	_failed_plan_cooldown = maxf(_failed_plan_cooldown - delta, 0.0)
 	_air_scan_timer = maxf(_air_scan_timer - delta, 0.0)
+	_freerun_timer = maxf(_freerun_timer - delta, 0.0)
 	_climb_scan_timer = maxf(_climb_scan_timer - delta, 0.0)
 	_chain_scan_timer = maxf(_chain_scan_timer - delta, 0.0)
 
@@ -3414,8 +3426,6 @@ func _freerun_climb(delta: float) -> bool:
 	if axis.length() < 0.2:
 		return false
 
-	_freerun_timer -= delta
-
 	if _freerun_timer > 0.0:
 		return false
 
@@ -3446,6 +3456,71 @@ func _freerun_climb(delta: float) -> bool:
 			return true
 
 	return false
+
+
+## Free-running at a wall with a hold (placed, or a lip in the stone) between
+## wall_run_min_height and wall_run_max_height over the feet: run up to it.
+func _try_wall_run(facing_direction: Vector3) -> bool:
+	if Vector3(velocity.x, 0.0, velocity.z).length() < wall_run_min_speed:
+		return false
+
+	var wall := scanner.ray(global_position, global_position + facing_direction * (_radius + 0.8))
+
+	if wall.is_empty():
+		return false
+
+	var raw: Vector3 = wall["normal"]
+
+	if absf(raw.y) > scanner.max_wall_normal_y:
+		return false
+
+	var normal := Vector3(raw.x, 0.0, raw.z).normalized()
+
+	if facing_direction.dot(-normal) < 0.7:
+		return false
+
+	var face: Vector3 = wall["position"]
+	var feet_y := get_feet_position().y
+	var best := {}
+
+	for hold in holds.holds_within(Vector3(face.x, feet_y + (wall_run_min_height + wall_run_max_height) * 0.5, face.z), 1.4):
+		if hold.kind == Handhold.Kind.POLE or hold.outward().dot(normal) < 0.7:
+			continue
+
+		var target := holds.hold_target(hold, Vector3(face.x, feet_y + wall_run_min_height, face.z))
+
+		if not target.is_empty() and _in_wall_run_band(target, feet_y) and (best.is_empty() or target["lip_y"] < best["lip_y"]):
+			best = target
+
+	if best.is_empty():
+		var out: Vector3 = face + normal * (_radius + planner.hang_gap)
+		var height := wall_run_min_height
+
+		while height <= wall_run_max_height and best.is_empty():
+			var found := planner.probe_hang(Vector3(out.x, feet_y + height, out.z), normal, feet_y + height, 0.12)
+
+			if not found.is_empty() and _in_wall_run_band(found, feet_y):
+				found["hold"] = null
+				best = found
+
+			height += 0.2
+
+	if best.is_empty():
+		return false
+
+	var move := planner.wall_run(global_position, face, normal, best)
+
+	if move == null:
+		_last_reject = planner.last_reject
+		return false
+
+	_start_move(move)
+	return true
+
+
+func _in_wall_run_band(target: Dictionary, feet_y: float) -> bool:
+	var height: float = float(target["lip_y"]) - feet_y
+	return height >= wall_run_min_height - 0.01 and height <= wall_run_max_height + 0.01
 
 
 ## From a pole to the hold beside it that way, if there is one in reach.
