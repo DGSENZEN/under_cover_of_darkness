@@ -26,8 +26,11 @@ import shapes  # noqa: E402
 
 NAME = "stall"
 ATLAS = 2048
-SLOTS = ["steel", "wood", "cloth", "brass", "tin", "paper", "wax", "herb", "herb_dry", "marigold", "clay", "glass", "neon"]
-BUDGET = 20000
+# The card's slots, and what years at the pitch added: canvas patches, a salvaged Metro-blue
+# board, an enamel sign and its blank face, basalt, dried chiles.
+SLOTS = ["steel", "wood", "cloth", "brass", "tin", "paper", "wax", "herb", "herb_dry", "marigold", "clay", "glass", "neon",
+         "cloth_patch", "paint_blue", "enamel", "sign", "stone", "chile"]
+BUDGET = 30000
 
 # The Company's frame: square posts, round conduit rails, the back higher so
 # the canvas sheds the drips from the pipes above (m).
@@ -39,6 +42,8 @@ RAIL_R = 0.032
 # The side rails tie the posts this far under the canvas, which rides the front and back rails.
 SIDE_RAIL_DROP = 0.09
 FITTING = 0.14
+# The shoe that went missing: a wooden block stands in for it.
+LOST_SHOE = (1.12, 0.08)
 SHOE = (0.17, 0.08)                  # the cast feet: across, tall
 # The counter.
 COUNTER_X = 1.02
@@ -123,9 +128,10 @@ def pipe(m, points, r, sides, slot, closed=False):
         shapes.loft(m, rings, slot, caps=True)
 
 
-def slab(m, grid, offset, slot):
+def slab(m, grid, offset, slot, slot_of=None):
     """A sheet given its thickness: `grid` rows of points for one face, the
-    other `offset` away, the borders closed."""
+    other `offset` away, the borders closed; `slot_of(i, j)` (if given) the
+    slot of each cell's two faces (a patch sewn in)."""
     m.shell()
     rows, cols = len(grid), len(grid[0])
     a = [[tuple(p) for p in row] for row in grid]
@@ -133,8 +139,9 @@ def slab(m, grid, offset, slot):
 
     for i in range(rows - 1):
         for j in range(cols - 1):
-            m.face([a[i][j], a[i][j + 1], a[i + 1][j + 1], a[i + 1][j]], slot)
-            m.face([b[i][j], b[i + 1][j], b[i + 1][j + 1], b[i][j + 1]], slot)
+            cell = slot_of(i, j) if slot_of else slot
+            m.face([a[i][j], a[i][j + 1], a[i + 1][j + 1], a[i + 1][j]], cell)
+            m.face([b[i][j], b[i + 1][j], b[i + 1][j + 1], b[i][j + 1]], cell)
 
     ring = ([(0, j) for j in range(cols - 1)] + [(i, cols - 1) for i in range(rows - 1)]
             + [(rows - 1, j) for j in range(cols - 1, 0, -1)] + [(i, 0) for i in range(rows - 1, 0, -1)])
@@ -187,6 +194,12 @@ def bolt(m, x, y, z, r=0.026):
     shapes.lathe(m, [(r, 0.0), (r, 0.014), (0.0, 0.026)], 6, "steel", at=(x, y, z))
 
 
+def stud(m, at, lean, towards, slot="steel", r=0.026):
+    """A domed stud (nail head, rivet) on a face, tipped from +Z by `lean`
+    towards the heading `towards` (radians)."""
+    turned(m, [(r, 0.0), (r, 0.012), (r * 0.6, 0.024)], 6, slot, at=at, lean=lean, towards=towards)
+
+
 def join(target, others):
     """Others' faces made part of `target` (its name and its materials kept)."""
     with bpy.context.temp_override(active_object=target, object=target,
@@ -224,9 +237,13 @@ def frame_main(m):
 
     for x in (-POST_X, POST_X):
         for y, top in ((FRONT_Y, FRONT_H), (BACK_Y, BACK_H)):
-            # The cast shoe, the post standing in it from half its height.
+            # The cast shoe, the post standing in it from half its height; one
+            # was lost long ago and a block of wood stands in for it.
             s = SHOE[0] / 2
-            box(m, (x - s, y - s, 0.0), (x + s, y + s, SHOE[1]), "steel")
+            if (x, y) == LOST_SHOE:
+                box(m, (x - s, y - s, 0.0), (x + s, y + s, SHOE[1] + 0.04), "wood", r=0.025)
+            else:
+                box(m, (x - s, y - s, 0.0), (x + s, y + s, SHOE[1]), "steel")
             box(m, (x - h, y - h, SHOE[1] / 2), (x + h, y + h, top), "steel")
             f = FITTING / 2
             box(m, (x - f, y - f, top - f), (x + f, y + f, top + f), "steel")
@@ -265,12 +282,36 @@ def frame_detail(m):
     # Bolts on the shoes.
     for x in (-POST_X, POST_X):
         for y in (FRONT_Y, BACK_Y):
+            if (x, y) == LOST_SHOE:
+                continue
+
             for dx, dy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
                 bolt(m, x + dx * 0.058, y + dy * 0.058, SHOE[1])
 
     # Brass collars where the Company joined offcuts, slightly crooked.
     for x, y, z, tilt in ((-POST_X, FRONT_Y, 1.32, 0.04), (POST_X, FRONT_Y, 0.66, -0.05), (-POST_X, BACK_Y, 1.05, 0.03)):
         box(m, (x - 0.085, y - 0.085, z - 0.05), (x + 0.085, y + 0.085, z + 0.05), "brass", r=0.025, turn=(0.0, tilt, 0.0))
+
+    # The canvas lashed to the front posts under their fittings: two turns of rope.
+    for x in (-POST_X, POST_X):
+        for k in range(2):
+            z = FRONT_H - FITTING / 2 - 0.03 - k * 0.028
+            ring = [(x + 0.058 * math.cos(a), FRONT_Y + 0.058 * math.sin(a), z)
+                    for a in (2 * math.pi * n / 8 for n in range(8))]
+            pipe(m, ring, 0.012, 6, "paper", closed=True)
+
+    # The Company's tin tag on a wire from the front right collar (its stamp is the user's to paint).
+    pipe(m, [(POST_X, FRONT_Y - 0.075, 0.6), (POST_X, FRONT_Y - 0.075, 0.5)], 0.015, 8, "steel")
+    box(m, (POST_X - 0.04, FRONT_Y - 0.087, 0.41), (POST_X + 0.04, FRONT_Y - 0.063, 0.505), "tin", r=0.0)
+
+    # A ristra of dried chiles on the back left post, outside the shelving.
+    rx, ry = -POST_X - 0.075, BACK_Y
+    pipe(m, [(rx, ry, 2.05), (rx, ry, 1.35)], 0.015, 8, "paper")
+    for k in range(16):
+        a = k * 2.4
+        z = 1.95 - k * 0.04
+        turned(m, [(0.013, 0.0), (0.026, 0.02), (0.02, 0.07), (0.012, 0.1)], 5, "chile",
+               at=(rx + 0.01 * math.cos(a), ry + 0.01 * math.sin(a), z), lean=2.3, towards=a, twist=a)
 
     # The cable from the sign's back to the junction box (the corridor's power).
     m.shell()
@@ -294,10 +335,11 @@ def counter_main(m):
     scale = (2 * COUNTER_X - gap * (len(widths) - 1)) / sum(widths)
     x = -COUNTER_X
 
-    for w in widths:
+    for k, w in enumerate(widths):
         w *= scale
         lift = rng.uniform(-0.02, 0.02)
-        box(m, (x, 0.0, 0.07 + lift), (x + w, PLANK_T, 0.895 + lift), "wood", r=0.02)
+        # The fifth board split once; she nailed in a board off a Metro hoarding.
+        box(m, (x, 0.0, 0.07 + lift), (x + w, PLANK_T, 0.895 + lift), "paint_blue" if k == 4 else "wood", r=0.02)
         x += w + gap
 
     # Two battens nailed across the boards' faces.
@@ -329,10 +371,17 @@ def shelves_main(m):
     for z in SHELVES:
         box(m, (-SHELF_X, y0, z), (SHELF_X, y1 - 0.02, z + SHELF_T), "wood")
 
+    # The middle shelf sagged: a block under its middle holds it up.
+    box(m, (-0.06, y0 + 0.05, SHELVES[1] - 0.12), (0.06, y1 - 0.06, SHELVES[1]), "wood", r=0.02)
+
     boards = 5
     for k in range(boards):
         z = 0.02 + k * 0.4
-        box(m, (-SHELF_X, y1, z), (SHELF_X, y1 + PLANK_T, z + 0.385), "wood")
+        if k == 2:
+            # A back board gone; a shorter one, salvaged blue, in its place: the wall shows past it.
+            box(m, (-SHELF_X, y1, z), (0.35, y1 + PLANK_T, z + 0.385), "paint_blue")
+        else:
+            box(m, (-SHELF_X, y1, z), (SHELF_X, y1 + PLANK_T, z + 0.385), "wood")
 
 
 def shelves():
@@ -366,7 +415,9 @@ def awning_main(m):
         grid.append([(-AWNING_X + 2 * AWNING_X * j / (cols - 1), y,
                       _canvas_under(-AWNING_X + 2 * AWNING_X * j / (cols - 1), y)) for j in range(cols)])
 
-    slab(m, grid, (0.0, 0.0, AWNING_T), "cloth")
+    patches = [(range(3, 7), range(2, 5)), (range(15, 18), range(5, 8)), (range(20, 23), range(1, 3))]
+    patched = lambda i, j: "cloth_patch" if any(j in cs and i in rs for cs, rs in patches) else "cloth"
+    slab(m, grid, (0.0, 0.0, AWNING_T), "cloth", slot_of=patched)
 
     # The front rod the canvas wraps, and the scalloped flap hanging from it.
     rod_z = _canvas_under(0.0, AWNING_FRONT) + AWNING_T / 2
@@ -423,9 +474,10 @@ def pot(m, x, y, z, r=0.09, h=0.13):
            at=(x, y, z), jitter=0.2, twist=rng.uniform(0, 1))
 
 
-def bundle(m, x, length, width, slot):
+def bundle(m, x, length, width, slot, seed):
     """A bundle of herbs hung head down from the pole by its twine: sprigs
-    splayed from where the twine binds their stems."""
+    splayed from where the twine binds their stems (its own `seed`)."""
+    rng = random.Random(seed)
     top = POLE_Z - POLE_R - 0.05
     pipe(m, [(x, FRONT_Y, POLE_Z + 0.005), (x, FRONT_Y, top - 0.03)], 0.011, 6, "paper")
     sprigs = rng.randint(4, 6)
@@ -500,10 +552,61 @@ def clutter_main(m):
         shapes.obox(m, (-0.3 + k * 0.03, 0.3, top + 0.0175 + k * 0.036), (0.16, 0.11, 0.035),
                     (0.0, 0.0, rng.uniform(-0.3, 0.3)), "paper")
 
+    # A molcajete and its pestle, basalt, on three stubby legs.
+    mx, my = -0.52, 0.36
+    for k in range(3):
+        a = k * 2 * math.pi / 3 + 0.3
+        turned(m, [(0.022, 0.0), (0.024, 0.04)], 6, "stone", at=(mx + 0.06 * math.cos(a), my + 0.06 * math.sin(a), top))
+    turned(m, [(0.06, 0.035), (0.115, 0.06), (0.125, 0.1), (0.105, 0.115)], 10, "stone", at=(mx, my, top), jitter=0.06)
+    turned(m, [(0.026, 0.09), (0.036, 0.14), (0.03, 0.19)], 7, "stone", at=(mx, my, top), lean=0.45, towards=0.8)
+
+    # Her hand bell, brass, at the counter's end; her tin cash box at the back.
+    bx, by = 0.9, 0.3
+    turned(m, [(0.06, 0.0), (0.062, 0.012), (0.05, 0.04), (0.04, 0.075), (0.022, 0.095)], 12, "brass", at=(bx, by, top))
+    turned(m, [(0.014, 0.09), (0.014, 0.13), (0.026, 0.145), (0.022, 0.17)], 8, "wood", at=(bx, by, top))
+    box(m, (0.18, 0.4, top), (0.4, 0.53, top + 0.085), "tin", r=0.02)
+
+    # A salvaged enamel sign bolted across the boards between the battens, its face blank (the user's words).
+    m.shell()
+    shapes.panel(m, (-0.62, -0.045, 0.32), (-0.08, 0.0, 0.68), 0.04, "enamel", "sign")
+    for sx in (-0.6, -0.1):
+        for sz in (0.34, 0.66):
+            stud(m, (sx, -0.045, sz), math.pi / 2, 0.0, "steel", r=0.02)
+
+    # Nail heads along the battens.
+    for z in (0.2375, 0.7575):
+        for k in range(7):
+            stud(m, (-0.9 + k * 0.3 + rng.uniform(-0.02, 0.02), -0.05, z), math.pi / 2, 0.0, "steel", r=0.02)
+
+    # Price cards on twine from the top shelf's lip, hanging in front of the jars.
+    for k, cx in enumerate((-0.62, -0.18, 0.28, 0.66)):
+        drop = 0.04 + 0.025 * (k % 2)
+        pipe(m, [(cx, 0.9, SHELVES[2] + 0.01), (cx, 0.9, SHELVES[2] - drop)], 0.011, 6, "paper")
+        box(m, (cx - 0.045, 0.862, SHELVES[2] - drop - 0.06), (cx + 0.045, 0.886, SHELVES[2] - drop), "paper", r=0.0)
+
+    # A bundle of tapers tied with twine on the top shelf's end.
+    tx, ty, tz = 0.75, 1.1, SHELVES[2] + SHELF_T
+    for k in range(5):
+        a = k * 2 * math.pi / 5
+        turned(m, [(0.016, 0.0), (0.016, 0.26)], 6, "wax", at=(tx + 0.03 * math.cos(a), ty + 0.03 * math.sin(a), tz))
+    ring = [(tx + 0.058 * math.cos(a), ty + 0.058 * math.sin(a), tz + 0.12) for a in (2 * math.pi * n / 8 for n in range(8))]
+    pipe(m, ring, 0.012, 6, "paper", closed=True)
+
+    # Behind the counter: her stool, and a crate of bottles.
+    box(m, (0.25, 0.68, 0.58), (0.6, 0.86, 0.64), "wood", r=0.02)
+    for lx in (0.29, 0.56):
+        for ly in (0.71, 0.83):
+            box(m, (lx - 0.025, ly - 0.025, 0.0), (lx + 0.025, ly + 0.025, 0.58), "wood", r=0.0)
+    box(m, (-0.85, 0.62, 0.0), (-0.45, 0.88, 0.28), "wood", r=0.025)
+    for k in range(3):
+        turned(m, [(0.04, 0.0), (0.04, 0.16), (0.017, 0.22), (0.017, 0.27)], 8, "glass", at=(-0.75 + k * 0.12, 0.75, 0.28))
+
     # Herbs hung from the pole, clear of the ofrenda.
+    herbs = random.Random(9)
+
     for k in range(9):
-        bundle(m, -0.55 + k * 0.19 + rng.uniform(-0.03, 0.03), rng.uniform(0.3, 0.46), rng.uniform(0.06, 0.09),
-               rng.choice(["herb", "herb", "herb_dry"]))
+        bundle(m, -0.55 + k * 0.19 + herbs.uniform(-0.03, 0.03), herbs.uniform(0.3, 0.46), herbs.uniform(0.06, 0.09),
+               herbs.choice(["herb", "herb", "herb_dry"]), seed=100 + k)
 
 def clutter():
     return _object("stall_clutter", clutter_main)
@@ -579,6 +682,12 @@ def ofrenda_main(m):
                at=(fx, fy, fz), jitter=0.08, twist=rng.uniform(0, 1))
 
     candle(m, -0.8, 0.22, z0 + t, r=0.04, h=0.12)
+
+    m.shell()
+    shapes.panel(m, (-0.88, 0.29, z0 + t), (-0.76, 0.33, z0 + t + 0.15), 0.025, "brass", "paper")
+    box(m, (-1.0, 0.13, z0 + t), (-0.93, 0.2, z0 + t + 0.065), "wax", r=0.02)
+    for ex in (-0.982, -0.948):
+        stud(m, (ex, 0.13, z0 + t + 0.042), math.pi / 2, 0.0, "marigold", r=0.017)
 
     for fx, fy in ((-0.86, 0.33), (-0.8, 0.36)):
         turned(m, [(0.018, 0.0), (0.042, 0.014), (0.038, 0.026), (0.046, 0.038), (0.041, 0.05), (0.04, 0.062), (0.02, 0.078)], 8, "marigold",

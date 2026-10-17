@@ -880,7 +880,7 @@ class Stall(unittest.TestCase):
         self.assertAlmostEqual(lowest, 0.0, places=4)
 
     def test_budget(self):
-        self.assertLessEqual(sum(_tris(o) for o in self.objects.values()), 20000)
+        self.assertLessEqual(sum(_tris(o) for o in self.objects.values()), 30000)
 
     def test_footprint(self):
         points = [p for o in self.objects.values() for p in _world(o)]
@@ -905,7 +905,7 @@ class Stall(unittest.TestCase):
 
     def test_passes_the_gate(self):
         faces, tris, _ = common.dump_faces(list(self.objects.values()))
-        self.assertEqual(gate.check(faces, tris, [], budget=20000), [])
+        self.assertEqual(gate.check(faces, tris, [], budget=30000), [])
 
 
 if __name__ == "__main__":

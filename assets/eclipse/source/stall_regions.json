@@ -12,8 +12,14 @@
   "marigold",
   "clay",
   "glass",
-  "neon"
+  "neon",
+  "cloth_patch",
+  "paint_blue",
+  "enamel",
+  "sign",
+  "stone",
+  "chile"
  ],
  "atlas_px": 2048,
- "px_per_m": 129.97
+ "px_per_m": 115.1
 }
