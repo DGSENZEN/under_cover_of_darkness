@@ -35,9 +35,24 @@ class Spec(unittest.TestCase):
                     self.assertIn("%s_%s_%s" % (finger, joint, side), names)
         self.assertIn("root", names)
 
-    def test_blockout_poses(self):
-        for pose in ("Open", "Fist", "Hook"):
+    def test_full_pose_library(self):
+        for pose in ("Open", "Fist", "Hook", "Wrap", "Push", "SwordGrip"):
             self.assertIn(pose, SPEC["poses"])
+
+    def test_push_is_flat(self):
+        for curl in SPEC["poses"]["Push"][0]:
+            self.assertLessEqual(curl, 10.0)
+
+    def test_wrap_closes_less_than_fist(self):
+        wrap, fist = SPEC["poses"]["Wrap"][0], SPEC["poses"]["Fist"][0]
+        for k in (0, 1):
+            self.assertLess(wrap[k], fist[k])
+            self.assertGreater(wrap[k], 40.0)
+
+    def test_sword_grip_index_looser(self):
+        own = SPEC["pose_fingers"]["SwordGrip"]
+        middle = own.get("middle", SPEC["poses"]["SwordGrip"][0])
+        self.assertLess(own["index"][1], middle[1])
 
 
 class HandWeights(unittest.TestCase):

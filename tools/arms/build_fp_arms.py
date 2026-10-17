@@ -45,6 +45,18 @@ SPEC = {
         "Open": ((0.0, 0.0, 0.0), ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))),
         "Fist": ((85.0, 95.0, 70.0), ((30.0, -30.0, 0.0), (30.0, 0.0, 0.0), (40.0, 0.0, 0.0))),
         "Hook": ((50.0, 70.0, 40.0), ((10.0, 0.0, 0.0), (20.0, 0.0, 0.0), (15.0, 0.0, 0.0))),
+        # Round a 4 cm pipe, rung or rope: the thumb comes over to meet the
+        # fingers.
+        "Wrap": ((55.0, 80.0, 50.0), ((25.0, -35.0, 0.0), (25.0, 0.0, 0.0), (30.0, 0.0, 0.0))),
+        # Pressing down on a top to climb on: palm flat, fingers spread a
+        # little back, the thumb out to the side.
+        "Push": ((-8.0, 5.0, 5.0), ((-10.0, 15.0, 0.0), (0.0, 0.0, 0.0), (5.0, 0.0, 0.0))),
+        # Round a sword's grip: a fist, the index a little looser along it.
+        "SwordGrip": ((80.0, 90.0, 60.0), ((30.0, -30.0, 0.0), (30.0, 0.0, 0.0), (35.0, 0.0, 0.0))),
+    },
+    # Fingers a pose sets apart from the rest (degrees, 01/02/03).
+    "pose_fingers": {
+        "SwordGrip": {"index": (65.0, 75.0, 50.0)},
     },
     # The coat's chest under the shoulders: (centre, radii), Blender axes.
     "yoke": ((0.0, -0.01, 1.26), (0.21, 0.12, 0.21)),
@@ -563,7 +575,8 @@ def build(root_dir):
         for side, sign in SIDES:
             for finger in FINGERS:
                 for k in range(3):
-                    curl, twist, swing = thumb[k] if finger == "thumb" else (curls[k], 0.0, 0.0)
+                    own = SPEC["pose_fingers"].get(pose_name, {}).get(finger, curls)
+                    curl, twist, swing = thumb[k] if finger == "thumb" else (own[k], 0.0, 0.0)
                     pb = rig.pose.bones["%s_0%d_%s" % (finger, k + 1, side)]
                     # Toward the pad: the bones run along their own +Y with Z
                     # out of the nail, so a curl is negative about local X.
