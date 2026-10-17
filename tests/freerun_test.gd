@@ -24,6 +24,7 @@ var labels: Array[String] = []
 func _ready() -> void:
 	_box(Vector3(100, -0.5, 0), Vector3(260, 1, 40))
 	_box(Vector3(330, -0.5, 0), Vector3(200, 1, 40))
+	_box(Vector3(530, -0.5, 0), Vector3(200, 1, 40))
 	player = PLAYER.instantiate()
 	add_child(player)
 	player.debug_traversal = false
@@ -61,6 +62,7 @@ func _run() -> void:
 	await _presentation_checks()
 	_marker_checks()
 	await _review_checks()
+	await _flow_checks()
 
 
 # Task 1: the hold finder.
@@ -447,15 +449,16 @@ func _presentation_checks() -> void:
 	for i in 600:
 		await _frames(1)
 		worst_roll = maxf(worst_roll, absf(rad_to_deg(player.camera.global_basis.get_euler().z)))
-		if player.current_move != null and player.current_move.label == &"reach":
-			reached = true
-		elif reached and not hands_checked and player.movement_state == 2 and contacts.weight(0) > 0.9 and contacts.weight(1) > 0.9:
-			hands_checked = true
-			var worst := 0.0
-			for side in [0, 1]:
-				var at: Vector3 = contacts.hand(side).origin
-				worst = maxf(worst, Vector2(at.y - player.hang_lip_y, at.z + 3.0).length())
-			hands_off = worst
+		# At the end of a reach both hands are on the hold it reached.
+		if player.current_move != null and player.current_move.label == &"reach" and player.move_progress > 0.97 and not hands_checked:
+			if contacts.weight(0) > 0.9 and contacts.weight(1) > 0.9:
+				hands_checked = true
+				var lip: float = player.current_move.hang_lip_y
+				var worst := 0.0
+				for side in [0, 1]:
+					var at: Vector3 = contacts.hand(side).origin
+					worst = maxf(worst, Vector2(at.y - lip, at.z + 3.0).length())
+				hands_off = worst
 		if player.movement_state == 0 and player.global_position.y - 1.0 > 8.9:
 			break
 	_release_all()
@@ -554,10 +557,11 @@ func _review_checks() -> void:
 		await _frames(1)
 		if player.movement_state == 0:
 			let_go = true
-		if player.movement_state == 2 and player.hang_hold == column[2]:
+		if player.hang_lip_y < 4.3:
 			break
 	_release_all()
-	_check("FR30 back while free-running on a wall climbs down, never lets go", not let_go and player.hang_hold == column[2],
+	await _frames(40)
+	_check("FR30 back while free-running on a wall climbs down, never lets go", not let_go and player.movement_state == 2 and player.hang_lip_y < 4.3,
 		"let go %s state %d lip %.2f" % [let_go, player.movement_state, player.hang_lip_y])
 	await _frames(10)
 
@@ -619,6 +623,134 @@ func _review_checks() -> void:
 	_check("FR35 guarding, sprint does not free-run", labels.is_empty(), "labels %s" % [labels])
 	player.inventory.select_by_id(&"")
 	await _frames(20)
+
+
+# Flow (playtest Oct 16: "janky, no smooth feeling"): moves carry into each
+# other, and the camera takes part.
+func _flow_checks() -> void:
+	var column: Array = await _sill_column(420)
+	await _hang_on(column[0])
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var started := -1
+	var hang_frames := 0
+	var slowest := INF
+	var last: Vector3 = player.global_position
+	var climbed_at := -1
+	var after_pull := []
+	var worst_roll := 0.0
+	var reach_roll := 0.0
+	var pulling := false
+	for i in 600:
+		await _frames(1)
+		var pos: Vector3 = player.global_position
+		var speed: float = pos.distance_to(last) * 60.0
+		last = pos
+		var label := String(player.current_move.label) if player.current_move != null else ""
+		if started < 0 and label == "reach":
+			started = i
+		if label == "pull up":
+			pulling = true
+		if started >= 0 and not pulling:
+			if player.movement_state == 2:
+				hang_frames += 1
+			slowest = minf(slowest, speed)
+			var roll: float = absf(rad_to_deg(player.juice.view_rotation.z))
+			worst_roll = maxf(worst_roll, roll)
+			if label == "reach":
+				reach_roll = maxf(reach_roll, roll)
+		if pulling and player.movement_state == 0:
+			if climbed_at < 0:
+				climbed_at = i
+			after_pull.append(Vector2(player.velocity.x, player.velocity.z).length())
+			if after_pull.size() >= 8:
+				break
+	_release_all()
+	_check("FR36 a climb up a column of sills never stops between holds", started >= 0 and hang_frames == 0 and slowest > 0.8,
+		"hang frames %d slowest %.2f m/s" % [hang_frames, slowest])
+	_check("FR36b nine metres of sills climbed in three seconds", climbed_at > 0 and (climbed_at - started) / 60.0 <= 3.0,
+		"%.2f s" % ((climbed_at - started) / 60.0))
+	_check("FR39 a free-run pull-up runs on over the top", after_pull.size() >= 5 and after_pull[4] >= 4.0,
+		"speeds %s" % [after_pull])
+	_check("FR40 a reach leans the view toward the hand, under the cap", reach_roll >= 0.5 and worst_roll <= player.freerun_max_roll_degrees,
+		"reach roll %.2f worst %.2f deg" % [reach_roll, worst_roll])
+	await _frames(20)
+
+	# A wall run carries straight on up the sills over it.
+	_box(Vector3(430, 4.5, -4.5), Vector3(4, 9, 3))
+	for y in [3.4, 4.3, 5.2]:
+		_hold(HANDHOLD.Kind.LEDGE, Vector3(430, y, -3), 0.0, 1.0)
+	await _frames(2)
+	await _place(Vector3(430, 1.03, 3))
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var ran := false
+	var stops := 0
+	var widest := 0.0
+	var looked_up := 0.0
+	for i in 300:
+		await _frames(1)
+		var label := String(player.current_move.label) if player.current_move != null else ""
+		if label == "wall run":
+			ran = true
+			widest = maxf(widest, player.camera.fov - player.juice.base_fov)
+			looked_up = maxf(looked_up, rad_to_deg(player.juice.view_rotation.x))
+		if ran and player.hang_lip_y > 5.1 and player.movement_state != 1:
+			break
+		if ran and player.movement_state == 2:
+			stops += 1
+	_release_all()
+	_check("FR37 a wall run flows into the climb above it", ran and stops == 0 and player.hang_lip_y > 5.1,
+		"ran %s hang frames %d lip %.2f" % [ran, stops, player.hang_lip_y])
+	_check("FR41 a wall run looks up and widens the view", widest >= 3.0 and looked_up >= 5.0,
+		"fov +%.1f pitch %.1f deg" % [widest, looked_up])
+	player._drop_from_hang()
+	await _frames(90)
+
+	# Sprinting over a waist-high wall keeps most of the sprint.
+	_box(Vector3(440, 0.6, -5), Vector3(4, 1.2, 4))
+	await _frames(2)
+	await _place(Vector3(440, 1.03, 3))
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	var mantled := false
+	var kept := 0.0
+	var speeds := []
+	var was: Vector3 = player.global_position
+	var after := -1
+	for i in 200:
+		await _frames(1)
+		var step: float = player.global_position.distance_to(was) * 60.0
+		was = player.global_position
+		if i > 25:
+			speeds.append(step)
+		if player.current_move != null and String(player.current_move.label).contains("mantle"):
+			mantled = true
+		elif mantled and player.movement_state == 0:
+			after += 1
+			if after == 3:
+				kept = Vector2(player.velocity.x, player.velocity.z).length()
+			if after >= 8:
+				break
+	_release_all()
+	var slowest_step: float = speeds.min() if not speeds.is_empty() else 0.0
+	_check("FR38b no frozen frame going into or out of a sprinting mantle", slowest_step >= 0.4 * player.sprint_speed,
+		"slowest %.2f m/s of %s" % [slowest_step, speeds.slice(0, 60)])
+	_check("FR38 a sprinting mantle keeps most of the sprint", mantled and kept >= 0.7 * player.sprint_speed,
+		"mantled %s speed after %.2f" % [mantled, kept])
+	await _frames(30)
+
+	# The landing roll tumbles the view forward and back up.
+	await _place(Vector3(450, 10.03, 0))
+	Input.action_press("sprint")
+	var dipped := 0.0
+	for i in 150:
+		await _frames(1)
+		dipped = minf(dipped, rad_to_deg(player.juice.view_rotation.x))
+		if player._on_floor_now() and i > 60:
+			pass
+	_release_all()
+	_check("FR42 a landing roll tumbles the view forward", dipped <= -40.0, "lowest pitch %.1f deg" % dipped)
 
 
 func _until(condition: Callable, max_frames: int) -> void:

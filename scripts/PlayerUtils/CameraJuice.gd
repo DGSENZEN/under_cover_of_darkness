@@ -49,6 +49,18 @@ var lower_pitch_degrees := 12.0
 var leap_pitch_degrees := 7.0
 var leap_windup_pitch_degrees := 5.0
 var leap_fov_add := 3.0
+## Free-run: a reach nods up into the hold and leans toward the reaching
+## hand (reach_side: -1 left, 1 right); a wall run looks up the wall and
+## widens the view; a landing roll tumbles the view forward and back up.
+var reach_pitch_degrees := 3.0
+var reach_roll_degrees := 2.2
+var reach_dip := 0.05
+var reach_side := 1.0
+var wall_run_pitch_degrees := 14.0
+var wall_run_fov_add := 7.0
+var roll_tumble_degrees := 70.0
+var roll_tumble_time := 0.6
+var _tumble := 0.0
 
 # Springs
 var spring_stiffness := 140.0
@@ -265,10 +277,16 @@ func on_kick_land(strength := 1.0) -> void:
 	_dip_velocity -= 0.3 * strength
 
 
+## A hand taking the next hold on a climb: a small sharp weight.
+func on_grip() -> void:
+	_dip_velocity -= 0.35
+	_pitch_velocity -= 0.08
+
+
 ## Rolling out of a hard landing: the view tumbles forward and comes up.
 func on_roll() -> void:
+	_tumble = 1.0
 	_dip_velocity -= 0.6
-	_pitch_velocity -= 0.9
 
 
 func on_catch() -> void:
@@ -387,6 +405,16 @@ func update(
 			move_pitch = -deg_to_rad(leap_windup_pitch_degrees) * sin(windup * PI)
 			move_pitch += deg_to_rad(leap_pitch_degrees) * cos(clampf(move_s, 0.0, 1.0) * PI) * (1.0 - windup)
 			target_fov += leap_fov_add * arc
+		5:
+			# Hand over hand: a nod up into the hold, a lean to the hand.
+			move_dip = -reach_dip * arc
+			move_pitch = deg_to_rad(reach_pitch_degrees) * arc
+			move_roll = deg_to_rad(reach_roll_degrees) * arc * reach_side
+		6:
+			# Up the wall: eyes on the hold above, down to the hands at the catch.
+			var up := 1.0 - smoothstep(0.55, 1.0, move_s)
+			move_pitch = deg_to_rad(wall_run_pitch_degrees) * up * smoothstep(0.0, 0.2, move_s)
+			target_fov += wall_run_fov_add * up
 
 	_roll = lerpf(_roll, target_roll, 1.0 - exp(-10.0 * delta))
 	_fov_add = lerpf(_fov_add, target_fov - _zoom, 1.0 - exp(-7.0 * delta))
@@ -404,8 +432,17 @@ func update(
 	var k := intensity
 	var shake_move := Vector3(shake_yaw, shake_pitch, 0.0) * (shake_offset / deg_to_rad(shake_degrees))
 	view_position = (Vector3(bob_x + _side, bob_y + _dip + _move_dip, _push) + shake_move) * k + Vector3(lean_offset, 0.0, 0.0)
+	# A landing roll: over forward and back up (the body's own roll).
+	var tumble_pitch := 0.0
+
+	if _tumble > 0.0:
+		_tumble = maxf(_tumble - delta / roll_tumble_time, 0.0)
+		var p := 1.0 - _tumble
+		tumble_pitch = -deg_to_rad(roll_tumble_degrees) * sin(p * PI) * (1.0 - p * 0.3)
+		view_position.y -= 0.35 * sin(p * PI) * k
+
 	view_rotation = Vector3(
-		(_pitch + _move_pitch + shake_pitch) * k,
+		(_pitch + _move_pitch + shake_pitch + tumble_pitch) * k,
 		(_yaw + shake_yaw) * k,
 		(_roll + _move_roll + _roll_kick + shake_roll) * k + lean_roll
 	)

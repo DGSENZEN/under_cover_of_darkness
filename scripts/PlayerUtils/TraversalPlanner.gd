@@ -33,6 +33,8 @@ var vault_clearance := 0.08
 var hang_gap := 0.02
 ## How loud a reach to the next hold is (dB).
 var reach_noise_db := 35.0
+## How fast a reach pulls the body to the next hold (m/s).
+var reach_speed := 2.6
 ## How loud running up a wall is (dB).
 var wall_run_noise_db := 52.0
 ## How far the eyes sit below the lip while hanging.
@@ -687,9 +689,10 @@ func reach(start: Vector3, target: Dictionary, from_normal: Vector3) -> Traversa
 	move.noise_db = reach_noise_db
 	move.kind = KIND_REACH
 	move.points = path
-	move.smoothing = 1.0
+	# Mostly an even pull: chained reaches meet at speed, not at a stop.
+	move.smoothing = 0.35
 	move.bake()
-	move.duration = clampf(move.total_length / 1.6, 0.25, 0.55)
+	move.duration = clampf(move.total_length / reach_speed, 0.2, 0.4)
 	move.ends_in_hang = true
 	move.hang_normal = target["normal"]
 	move.hang_lip_y = target["lip_y"]

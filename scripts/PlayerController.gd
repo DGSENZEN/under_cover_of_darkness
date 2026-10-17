@@ -276,6 +276,12 @@ enum MoveState {
 @export var wall_run_noise_db := 52.0
 ## How far a free-run leap from a hang reaches for the next hold (m).
 @export var freerun_leap_reach := 2.5
+## How far through a reach, leap or wall run the next hold is reached for.
+@export var climb_chain_start := 0.6
+## A free-run mantle or pull-up is this much quicker, and leaves at this
+## share of sprint speed.
+@export var freerun_mantle_time_scale := 0.65
+@export var freerun_mantle_exit := 0.8
 @export_group("")
 @export var invulnerable := false
 ## When you die the level restarts after a moment. Off for tests.
@@ -508,6 +514,8 @@ var _target_ground_velocity := Vector3.ZERO
 var _assist_time := 0.0
 var _hang_scan_timer := 0.0
 var _freerun_timer := 0.0
+## Inside _update_move: a move started there is already being advanced.
+var _in_move_update := false
 ## Measured climb rate of the current staircase, for the eye follower.
 var _stair_rate := 0.0
 var _last_step_time := -10.0
@@ -1959,6 +1967,11 @@ func _try_traversal(profile: ObstacleProfile, chained := false, over_only := fal
 		var move := planner.generate(profile, variant, global_position)
 
 		if move != null:
+			# Free-running over something to stand on: quick, and on at speed.
+			# (A top too narrow to run on, a rail over a pit: no run-on.)
+			if free_running() and move.kind == MoveVariantRes.Kind.MANTLE and not move.ends_in_hang and profile.thickness >= 1.0:
+				_speed_up_for_freerun(move, -profile.face_normal)
+
 			_start_move(move, chained)
 			return true
 
@@ -2033,6 +2046,11 @@ func _start_move(move: TraversalMove, chained := false) -> void:
 
 	current_move = move
 	move_elapsed = 0.0
+
+	# Hand over hand: each reach is the other hand's, the way it goes if sideways.
+	if move.kind == TraversalPlanner.KIND_REACH and juice != null:
+		var across := (move.points[move.points.size() - 1] - move.points[0]).dot((-move.hang_normal).cross(Vector3.UP).normalized())
+		juice.reach_side = signf(across) if absf(across) > 0.2 else -juice.reach_side
 	move_progress = 0.0
 	move_windup = 0.0
 	_floor_valid = false
@@ -2059,6 +2077,11 @@ func _start_move(move: TraversalMove, chained := false) -> void:
 
 	_move_sound(move)
 
+	# The move starts this tick, not the next: no frame frozen in place when
+	# a run turns into a vault or a reach into the next.
+	if not _in_move_update and is_inside_tree() and free_running():
+		_update_move(get_physics_process_delta_time())
+
 
 ## The sound of a move, as loud as the noise it makes: hands and boots on
 ## stone for a mantle, a rush of air over a vault, cloth for the quiet ones.
@@ -2084,6 +2107,12 @@ func _move_sound(move: TraversalMove) -> void:
 
 
 func _update_move(delta: float) -> void:
+	_in_move_update = true
+	_advance_move(delta)
+	_in_move_update = false
+
+
+func _advance_move(delta: float) -> void:
 	move_elapsed += delta
 	# The press that started the move is already consumed. A new press is a
 	# deliberate next action, even if the hands have not finished catching.
@@ -2129,6 +2158,10 @@ func _update_move(delta: float) -> void:
 
 	move_progress = s
 
+	# Free-running up a wall: the next hold is taken before this one settles.
+	if free_running() and current_move.ends_in_hang and s >= climb_chain_start and _freerun_timer <= 0.0 and _chain_climb(s):
+		return
+
 	# Flow: a jump pressed during the move is remembered, and once the move is
 	# far enough along, the next obstacle may take over from mid-air.
 	if Input.is_action_just_pressed("jump"):
@@ -2141,7 +2174,18 @@ func _update_move(delta: float) -> void:
 		_chain_scan_timer = RESCAN_TIME
 
 	if t >= 1.0:
+		# The tick ran past the move's end: the rest of it is spent running
+		# on, so leaving a move at speed has no short step.
+		var leftover := elapsed - current_move.duration
 		_finish_move()
+
+		if free_running() and movement_state == MoveState.LOCOMOTION and leftover > 0.0 and velocity.length() > 0.5:
+			var on := global_position + Vector3(velocity.x, 0.0, velocity.z) * leftover
+			var feet_on := on - Vector3.UP * (_standing_height * 0.5 - 0.1)
+			var ground := scanner.ray(feet_on, feet_on - Vector3.UP * 0.6)
+
+			if not ground.is_empty() and scanner.motion_is_clear(global_position, on, is_crouched):
+				global_position = on
 
 
 func _cancel_blocked_move() -> void:
@@ -3583,6 +3627,7 @@ func _freerun_climb(delta: float) -> bool:
 		var pull := planner.pull_up(hang_normal, global_position, hang_lip_y)
 
 		if pull != null:
+			_speed_up_for_freerun(pull, -hang_normal)
 			_start_move(pull)
 			return true
 
@@ -3702,6 +3747,69 @@ func _try_wall_run(facing_direction: Vector3) -> bool:
 func _in_wall_run_band(target: Dictionary, feet_y: float) -> bool:
 	var height: float = float(target["lip_y"]) - feet_y
 	return height >= wall_run_min_height - 0.01 and height <= wall_run_max_height + 0.01
+
+
+## While a climbing move plays (a reach, a leap, a wall run), steering finds
+## the hold after the one it is going to and goes on to it from mid-move, or
+## near its end pulls up over the top. True when a new move started.
+func _chain_climb(s: float) -> bool:
+	var kind := current_move.kind
+
+	if kind != TraversalPlanner.KIND_REACH and kind != TraversalPlanner.KIND_LEAP and kind != TraversalPlanner.KIND_WALL_RUN:
+		return false
+
+	var axis := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+
+	if axis.length() < 0.2:
+		return false
+
+	_freerun_timer = freerun_scan_interval
+	var end: Vector3 = current_move.points[current_move.points.size() - 1]
+	var normal: Vector3 = current_move.hang_normal
+	var lip: float = current_move.hang_lip_y
+	var going_to: Node3D = current_move.end_hold
+	var right := (-normal).cross(Vector3.UP).normalized()
+	var direction := Vector3.UP * -axis.y + right * axis.x
+	var target := holds.next_hold(end, normal, lip, direction, freerun_leap_reach)
+
+	if not target.is_empty() and target.get("hold") == going_to and going_to != null:
+		target = {}
+
+	var move: TraversalMove = null
+
+	if not target.is_empty():
+		move = planner.reach(global_position, target, normal) if target["reach"] else planner.leap(global_position, target, normal)
+
+		if move != null:
+			move.end_hold = target.get("hold")
+			move.windup_time = 0.0
+	elif -axis.y > 0.5 and s >= 0.85:
+		move = planner.pull_up(normal, global_position, lip)
+
+		if move != null:
+			_speed_up_for_freerun(move, -normal)
+
+	if move == null:
+		return false
+
+	hang_normal = normal
+	hang_lip_y = lip
+	juice.on_grip()
+	_start_move(move)
+	return true
+
+
+## A free-run mantle or pull-up: quicker, and running on at most of a sprint.
+func _speed_up_for_freerun(move: TraversalMove, forward: Vector3) -> void:
+	move.duration *= freerun_mantle_time_scale
+	# An even pace: in at the run's speed, out at it, no ease from a stand.
+	move.smoothing = 0.0
+	move.ease_out = 0.0
+	var flat := Vector3(forward.x, 0.0, forward.z).normalized()
+	var keep := sprint_speed * freerun_mantle_exit
+
+	if Vector3(move.exit_velocity.x, 0.0, move.exit_velocity.z).length() < keep:
+		move.exit_velocity = flat * keep
 
 
 ## From a pole to the hold beside it that way, if there is one in reach.
@@ -3943,6 +4051,10 @@ func _update_view(delta: float) -> void:
 				move_kind = 3
 			TraversalPlanner.KIND_LEAP:
 				move_kind = 4
+			TraversalPlanner.KIND_REACH:
+				move_kind = 5
+			TraversalPlanner.KIND_WALL_RUN:
+				move_kind = 6
 			MoveVariantRes.Kind.MANTLE, TraversalPlanner.KIND_PULL_UP:
 				move_kind = 1
 			_:
