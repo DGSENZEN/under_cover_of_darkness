@@ -41,6 +41,60 @@ def _long_axis(polygon):
     return max(max(xs) - min(xs), max(zs) - min(zs))
 
 
+def _solid_distance(p, space):
+    """How far the point (x, z) is from the space's solid wall: its outline
+    less its openings' spans."""
+    best = math.inf
+    poly = space["polygon"]
+
+    for a, b in zip(poly, poly[1:] + poly[:1]):
+        length = math.dist(a, b)
+        ux, uz = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+        cuts = []
+
+        for o in space["openings"]:
+            if plan_check._segment_distance(o["at"], a, b) <= 0.05:
+                t = (o["at"][0] - a[0]) * ux + (o["at"][1] - a[1]) * uz
+                cuts.append((t - o["width"] / 2, t + o["width"] / 2))
+
+        stops = sorted({0.0, length} | {max(0.0, min(length, v)) for c in cuts for v in c})
+
+        for t0, t1 in zip(stops, stops[1:]):
+            if any(c0 <= (t0 + t1) / 2 <= c1 for c0, c1 in cuts):
+                continue
+
+            best = min(best, plan_check._segment_distance(p, (a[0] + ux * t0, a[1] + uz * t0),
+                                                          (a[0] + ux * t1, a[1] + uz * t1)))
+
+    return best
+
+
+def _crosses_flight(p, q, r, margin=0.5, ends=0.3):
+    """Whether the leg p-q (x, y, z) passes through the stair r's flight: its
+    footprint widened by a capsule's margin, short of its two ends, at a
+    height the flight is at."""
+    a, b = r["points"][0], r["points"][-1]
+
+    # (A leg on the floor the flight climbs to passes over it.)
+    if min(p[1], q[1]) >= max(a[1], b[1]) - 0.05:
+        return False
+
+    length = math.hypot(b[0] - a[0], b[2] - a[2])
+    ux, uz = (b[0] - a[0]) / length, (b[2] - a[2]) / length
+    half = greybox.STAIR_WIDTH / 2 + margin
+
+    for k in range(101):
+        t = k / 100
+        x, z = p[0] + (q[0] - p[0]) * t, p[2] + (q[2] - p[2]) * t
+        along = (x - a[0]) * ux + (z - a[2]) * uz
+        across = abs(-(x - a[0]) * uz + (z - a[2]) * ux)
+
+        if ends < along < length - ends and across < half:
+            return True
+
+    return False
+
+
 class MetroPlan(unittest.TestCase):
     def test_plan_check_clean(self):
         self.assertEqual(plan_check.check(DATA, plan_check.UNDERGROUND_RULES), [])
@@ -75,6 +129,38 @@ class MetroPlan(unittest.TestCase):
             self.assertGreaterEqual(len(points), 3, name)
             self.assertLess(math.dist(points[0], arrival), 0.01, name)
             self.assertTrue(any(math.dist(points[-1], g) < 0.01 for g in goals), name)
+
+    def test_walk_legs_clear_of_flights(self):
+        # No leg of a walk runs into a flight's side: only along it, from
+        # its run-up to its step-off.
+        flights = [r for r in DATA["routes"] if r["kind"] == "stair"]
+
+        for name, points in DATA["walks"].items():
+            for p, q in zip(points, points[1:]):
+                for r in flights:
+                    a, b = r["points"][0], r["points"][-1]
+                    ends = [tuple(a), tuple(b)]
+
+                    if tuple(p) in ends and tuple(q) in ends:
+                        continue
+
+                    self.assertFalse(_crosses_flight(p, q, r), (name, p, q, r["name"]))
+
+    def test_walk_points_off_the_walls(self):
+        # Every point a walker is sent to stands clear of solid wall (a
+        # capsule's radius and more); doorways are not wall.
+        for name, points in DATA["walks"].items():
+            for p in points:
+                room = [s for s in DATA["spaces"] if plan_check.near((p[0], p[2]), s["polygon"], 0.05)
+                        and abs(p[1] - s["floor"]) < 0.01]
+
+                if room:
+                    self.assertGreaterEqual(min(_solid_distance((p[0], p[2]), s) for s in room), 0.8, (name, p))
+
+    def test_walks_never_double_back(self):
+        for name, points in DATA["walks"].items():
+            for k in range(2, len(points)):
+                self.assertGreater(math.dist(points[k], points[k - 2]), 0.01, (name, k, points[k]))
 
     def test_exits_under_kiosks(self):
         exits = _landmarks("exit_zocalo")

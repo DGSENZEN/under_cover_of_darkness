@@ -3,8 +3,9 @@ graph of the places one walks between, its doors (openings between floors a
 step apart) and its routes' ends, joined within each space in straight lines
 and along each route; the shortest walk between two landmarks.
 
-The path's waypoints carry a run-up before each stair or climb and a step
-off after it (APPROACH along the route), so a walker meets a flight head on."""
+The path's waypoints carry a run-up before each stair and a step off after
+it (APPROACH along the flight), so a walker meets a flight head on, never
+across its side."""
 
 import heapq
 import math
@@ -16,6 +17,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 import plan_check  # noqa: E402
 
 APPROACH = 1.5
+# A run-up stands this clear of the walls (m: a capsule's radius and more),
+# and no nearer its flight's end than NEAREST.
+CLEAR = 0.8
+NEAREST = 0.3
+# Past this far across a flight's line (m: its half width and a capsule),
+# the way to its run-up would cut across it.
+FLIGHT_HALF = 1.2 + 0.6
 # A landmark stands in a space whose floor is this near its height (m).
 STANDS = 1.5
 
@@ -126,22 +134,56 @@ def shortest(data, start, goals, climbs=False):
 
 def waypoints(data, walk):
     """The walk's points with a run-up before and a step off after each
-    route it takes (APPROACH along the route, level with its end)."""
+    stair it takes (APPROACH along the stair, level with its end, kept
+    CLEAR of the walls), and, when the way to the run-up would cut across
+    the flight, a turn level with the run-up first."""
     routes = {r["name"]: r for r in data["routes"]}
     out = [list(walk["nodes"][0])]
 
     for k, via in enumerate(walk["via"]):
         a, b = walk["nodes"][k], walk["nodes"][k + 1]
 
-        if via in routes and routes[via]["kind"] in ("stair", "climb"):
+        if via in routes and routes[via]["kind"] == "stair":
             dx, dz = b[0] - a[0], b[2] - a[2]
             n = math.hypot(dx, dz) or 1.0
-            out.append([a[0] - dx / n * APPROACH, a[1], a[2] - dz / n * APPROACH])
-            out.append(list(a))
-            out.append(list(b))
-            out.append([b[0] + dx / n * APPROACH, b[1], b[2] + dz / n * APPROACH])
+            ux, uz = dx / n, dz / n
+            run_up = _clear(data, a, (-ux, -uz))
+            step_off = _clear(data, b, (ux, uz))
+
+            if math.dist(out[-1], a) < 1e-6:
+                out.pop()
+
+            # Level with the run-up, as far across as the last point.
+            last = out[-1]
+            across = -(last[0] - a[0]) * uz + (last[2] - a[2]) * ux
+            behind = (last[0] - a[0]) * ux + (last[2] - a[2]) * uz
+
+            if abs(across) > FLIGHT_HALF and behind > -APPROACH:
+                out.append([run_up[0] - uz * across, a[1], run_up[2] + ux * across])
+
+            out += [run_up, list(a), list(b), step_off]
         else:
             out.append(list(b))
 
     # (Consecutive repeats dropped.)
     return [p for i, p in enumerate(out) if i == 0 or math.dist(p, out[i - 1]) > 1e-6]
+
+
+def _clear(data, end, direction):
+    """The point APPROACH from a flight's end along `direction`, at its
+    height, drawn back until it stands CLEAR of the walls of the space it
+    is in (never nearer the end than NEAREST)."""
+    rooms = [s for s in data["spaces"] if abs(end[1] - s["floor"]) < 0.01
+             and plan_check.near((end[0], end[2]), s["polygon"], 0.05)]
+    reach = APPROACH
+
+    while reach > NEAREST:
+        x, z = end[0] + direction[0] * reach, end[2] + direction[1] * reach
+
+        if not rooms or any(plan_check.inside((x, z), s["polygon"])
+                            and plan_check.boundary_distance((x, z), s["polygon"]) >= CLEAR for s in rooms):
+            break
+
+        reach -= 0.05
+
+    return [end[0] + direction[0] * reach, end[1], end[2] + direction[1] * reach]
