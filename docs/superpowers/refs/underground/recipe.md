@@ -79,7 +79,7 @@ They are RGBA and see-through at their edges. Each one is placed where its cause
 | Copal smoke | `Vfx` preset `censer` | Lift (gravity 0.4) above the particles' 0.2-0.4 damping or it stalls; its life ends under any cloth over it; haze pool at density 1.4 |
 | Neon | `NeonSign` (seeded pattern on game time), emissive wash decal at 0.5, hum `audio/ambience/neon_hum.wav` following the flicker | Sign light at 0.35 or less |
 | Sparks | `FireParticles` "spark" at a bodged electrical tap, every 5-13 s (seeded) | Only where there is a cause |
-| Light shafts | A cone `FogVolume` under each lamp, density 1.2 | |
+| Light shafts | A cone `FogVolume` under each lamp, density 0.6 | Thicker reads as fog in the camera's face |
 | Drips | Particles off a pipe, a puddle decal, `audio/weather/drip.wav` | |
 | Hanging things | `Sway` pivot in the corridor's one draught, 2.5° | Seeded |
 | Creatures | `Moths` round a bulb | Each has a cause: drawn to the light |

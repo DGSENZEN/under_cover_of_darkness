@@ -528,6 +528,30 @@ LAYERED = [
     for i, n in enumerate((2, 4, 6, 8))
 ]
 # Layered takes no longer than this (s); a bail rattle no longer than 0.25 s.
+# The Metro Underground (Oct 17 2026): a train passing in the tunnel beyond the
+# wall, a low wind under its wheels' pairs of beats on the rail joints (one
+# rumble; the game swells and fades it with the pass), and the jars on a
+# stall's shelves rattling as it goes by.
+FILMCOW_DESIGNED = os.path.expanduser("~/Downloads/FilmCow Designed SFX/")
+LAYERED += [
+    ("train_rumble_1", [(NOX + "Ambiance_Wind_Calm_Loop_Stereo.wav", 0.0, 14.0, 0.0, 0.0, 350, 0.6),
+                     (FILMCOW_DESIGNED + "big distant thump 1.wav", None, None, -8.0, 3.00, 250, 0.8),
+                     (FILMCOW_DESIGNED + "big distant thump 2.wav", None, None, -10.0, 3.25, 250, 0.9),
+                     (FILMCOW_DESIGNED + "big distant thump 2.wav", None, None, -7.0, 4.60, 250, 0.8),
+                     (FILMCOW_DESIGNED + "big distant thump 3.wav", None, None, -9.0, 4.85, 250, 0.9),
+                     (FILMCOW_DESIGNED + "big distant thump 3.wav", None, None, -6.0, 6.00, 250, 0.8),
+                     (FILMCOW_DESIGNED + "big distant thump 4.wav", None, None, -8.0, 6.25, 250, 0.9),
+                     (FILMCOW_DESIGNED + "big distant thump 4.wav", None, None, -8.0, 7.30, 250, 0.8),
+                     (FILMCOW_DESIGNED + "big distant thump 5.wav", None, None, -10.0, 7.55, 250, 0.9),
+                     (FILMCOW_DESIGNED + "big distant thump 5.wav", None, None, -7.0, 8.60, 250, 0.8),
+                     (FILMCOW_DESIGNED + "big distant thump 6.wav", None, None, -9.0, 8.85, 250, 0.9),
+                     (FILMCOW_DESIGNED + "big distant thump 6.wav", None, None, -6.0, 10.00, 250, 0.8),
+                     (FILMCOW_DESIGNED + "big distant thump 1.wav", None, None, -8.0, 10.25, 250, 0.9)], 3.0),
+    ("jars_rattle_1", [(FILMCOW + "glass full of beads 6.wav", None, None, 0.0, 0.0, None, 1.0),
+                       (FILMCOW + "glass sliding 6.wav", None, None, -6.0, 0.05, None, 1.0)], 0.3),
+    ("jars_rattle_2", [(FILMCOW + "glass full of beads 7.wav", None, None, 0.0, 0.0, None, 0.95),
+                       (FILMCOW + "glass sliding 7.wav", None, None, -6.0, 0.03, None, 1.05)], 0.3),
+]
 LAYERED_LONGEST = {"bail_rattle": 0.25, "paper": 0.7, "pencil": 0.9}
 
 

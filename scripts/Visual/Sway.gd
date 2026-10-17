@@ -16,6 +16,8 @@ extends Node3D
 		seed = value
 		_seeded()
 
+## A gust over the draught (a passing train's): the swing grows by this much.
+var gust := 0.0
 var _time := 0.0
 var _phase := 0.0
 
@@ -37,7 +39,7 @@ func _process(delta: float) -> void:
 ## The swing (degrees) at `t` seconds: a slow sway with a slower gust over it,
 ## never past `amplitude`.
 func angle_at(t: float) -> float:
-	return amplitude * (0.8 * sin(TAU * t / period + _phase) + 0.2 * sin(TAU * t / (period * 2.7) + _phase * 1.7))
+	return amplitude * (1.0 + gust) * (0.8 * sin(TAU * t / period + _phase) + 0.2 * sin(TAU * t / (period * 2.7) + _phase * 1.7))
 
 
 func _seeded() -> void:

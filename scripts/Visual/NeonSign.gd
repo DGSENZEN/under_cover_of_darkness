@@ -26,6 +26,8 @@ extends Node3D
 		steps_per_second = value
 		_seeded()
 
+## How much of its power reaches it (a brownout when a train passes: 1 full).
+var dim := 1.0
 var tube: MeshInstance3D
 var light: OmniLight3D
 var _time := 0.0
@@ -93,7 +95,7 @@ func _seeded() -> void:
 
 
 func _apply() -> void:
-	var now := energy_at(_time)
+	var now := energy_at(_time) * dim
 
 	if light != null:
 		light.light_energy = light_energy * now

@@ -232,6 +232,56 @@ func _run() -> void:
 	_check("U21 the atlas and decals are the imported textures, as an exported game needs", loose.is_empty(),
 		"loose %s" % [loose])
 
+	# U22 the metro breathes: a train passes now and then, its pass building, holding and fading
+	var train: TrainPass = lab.train
+	var waits := train != null and train.next >= TrainPass.EVERY.x and train.next <= TrainPass.EVERY.y
+	var swing_before := 0.0
+
+	for i in 120:
+		await get_tree().physics_frame
+		swing_before = maxf(swing_before, rad_to_deg((-lab.bulb_pivot.global_basis.y).angle_to(Vector3.DOWN)))
+
+	var light_full: float = lab.work_lights[0].light_energy
+	train.start_pass()
+	var peak := 0.0
+	var swing_peak := 0.0
+	var dimmest := INF
+	var rumble_loudest := -80.0
+	var sifting := false
+	var blown_most := 0.0
+
+	for i in int((TrainPass.BUILD + TrainPass.HOLD) * 60.0):
+		await get_tree().physics_frame
+		peak = maxf(peak, train.strength())
+		swing_peak = maxf(swing_peak, rad_to_deg((-lab.bulb_pivot.global_basis.y).angle_to(Vector3.DOWN)))
+		dimmest = minf(dimmest, lab.work_lights[0].light_energy)
+		rumble_loudest = maxf(rumble_loudest, lab.rumble.volume_db)
+		sifting = sifting or (lab.dust_sift.emitting and lab.dust_sift.amount_ratio > 0.4)
+		var copal: GPUParticles3D = lab.censer.find_children("*", "GPUParticles3D", true, false)[0]
+		blown_most = maxf(blown_most, absf((copal.process_material as ParticleProcessMaterial).gravity.x))
+
+	_check("U22 a train passes now and then: its strength builds to full and holds",
+		waits and peak > 0.95 and train.passing(), "next %.0f s peak %.2f" % [train.next, peak])
+
+	# U23 the gust: the bulb swings harder (never wild), the copal bends, dust sifts from the vault
+	_check("U23 its gust swings the bulb harder (under 10 degrees), bends the copal and sifts dust from the vault",
+		swing_peak > swing_before * 1.8 and swing_peak < 10.0 and blown_most > 0.2 and sifting,
+		"swing %.1f -> %.1f deg, smoke pushed %.2f, sifting %s" % [swing_before, swing_peak, blown_most, sifting])
+
+	# U24 the lights brown out and the rumble is heard; the jars rattle
+	_check("U24 the lights brown out under it, its rumble swells, the jars on the shelves rattle",
+		dimmest < light_full * 0.8 and rumble_loudest > -12.0 and lab.rattles >= 1,
+		"lights %.2f -> %.2f rumble %.1f dB rattles %d" % [light_full, dimmest, rumble_loudest, lab.rattles])
+
+	# U25 and it passes: everything settles back, the next train reckoned
+	for i in int((TrainPass.FADE + 1.0) * 60.0):
+		await get_tree().physics_frame
+
+	_check("U25 the train passes on: strength back to nothing, the lights full again, the next one reckoned",
+		not train.passing() and train.strength() == 0.0 and is_equal_approx(lab.work_lights[0].light_energy, light_full)
+		and train.next >= TrainPass.EVERY.x, "strength %.2f lights %.2f next %.0f" % [train.strength(),
+		lab.work_lights[0].light_energy, train.next])
+
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")
 	_check("U8 the pixel grid is off", retro != null and retro.virtual_height == 0, "%s" % [retro.virtual_height if retro else null])

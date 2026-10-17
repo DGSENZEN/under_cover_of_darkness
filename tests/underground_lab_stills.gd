@@ -3,7 +3,8 @@ extends Node3D
 ## the hero stall from seven views, each under the work lights and again
 ## under the neutral form light.
 ##   Godot --path . --resolution 1920x1080 res://tests/underground_lab_stills.tscn -- --out=/tmp/underground-lab
-##   (-- --only=front,close_counter  some views; -- --plain  the atlas drawn unshaded, to check its mapping)
+##   (-- --only=front,close_counter  some views; -- --plain  the atlas drawn unshaded, to check its mapping;
+##    -- --train  shot as a train runs by)
 
 const LAB := preload("res://maps/underground_lab.tscn")
 
@@ -26,6 +27,7 @@ var out := "/tmp/underground-lab/"
 func _ready() -> void:
 	var only := []
 	var plain := false
+	var passing := false
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
@@ -34,6 +36,8 @@ func _ready() -> void:
 			only = arg.trim_prefix("--only=").split(",")
 		elif arg == "--plain":
 			plain = true
+		elif arg == "--train":
+			passing = true
 
 	DirAccess.make_dir_recursive_absolute(out)
 	AudioServer.set_bus_mute(0, true)
@@ -57,7 +61,13 @@ func _ready() -> void:
 			if mesh.name != "stall_neon":
 				mesh.material_override = flat
 
-	for form in ([false] if plain else [false, true]):
+	if passing:
+		lab.train.start_pass()
+
+		for i in int((TrainPass.BUILD + 1.0) * 60.0):
+			await get_tree().process_frame
+
+	for form in ([false] if plain or passing else [false, true]):
 		if not plain:
 			lab.set_form(form)
 
@@ -67,7 +77,7 @@ func _ready() -> void:
 
 			eye.global_transform = Transform3D(Basis(), view[1]).looking_at(view[2], Vector3.UP)
 			await _frames(12)
-			var file := "%s%s_%s.png" % [out, view[0], "plain" if plain else ("form" if form else "lit")]
+			var file := "%s%s_%s.png" % [out, view[0], "plain" if plain else ("train" if passing else ("form" if form else "lit"))]
 			get_viewport().get_texture().get_image().save_png(file)
 			print("still: ", file)
 

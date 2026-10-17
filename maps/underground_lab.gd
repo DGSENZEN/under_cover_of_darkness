@@ -6,6 +6,7 @@ extends Node3D
 ##   F1  work lights on / off
 ##   F2  form light: everything neutral grey under one white light, to judge shape
 ##   F3  grime decals on / off
+##   F4  a train now (they pass every 90-150 s on their own)
 ##
 ## The stall's atlas is the committed painted file (the user's overpaint
 ## stall.png before the painter's stall_base.png); the bay never reads the
@@ -46,6 +47,14 @@ const SPARKS_EVERY := Vector2(5.0, 13.0)
 ## Water off the conduit, beside the stall.
 const DRIP_AT := Vector3(-2.3, 3.15, -2.17)
 const DRIP_SOUND := "res://audio/weather/drip.wav"
+## A passing train: its rumble at full (dB), the jars' rattle, where the shelves stand.
+const RUMBLE := "res://audio/sfx/train_rumble_1.wav"
+const RUMBLE_DB := -4.0
+const RATTLES := ["res://audio/sfx/jars_rattle_1.wav", "res://audio/sfx/jars_rattle_2.wav"]
+const SHELVES_AT := Vector3(0.0, 1.4, -1.9)
+## How far the lights sag when it runs by (a share of their power), how hard its gust swings the bulb.
+const BROWNOUT := Vector2(0.25, 0.3)
+const GUST_SWING := 2.0
 const SIGN := Vector3(0.0, 2.65, 0.6)
 const JUNCTION_TOP := Vector3(1.5, 2.85, -2.17)
 const CONDUIT := Vector3(0.0, 3.25, -2.17)
@@ -77,6 +86,13 @@ var drip: GPUParticles3D
 var puddle: Decal
 var drip_sound: AudioStreamPlayer3D
 var moths: Moths
+var train: TrainPass
+var rumble: AudioStreamPlayer
+var dust_sift: GPUParticles3D
+var rattles := 0
+var _full := {}
+var _rattle: AudioStreamPlayer3D
+var _clock := 0.0
 var _sparks := RandomNumberGenerator.new()
 var work_lights: Array[Light3D] = []
 var form_light: DirectionalLight3D
@@ -115,6 +131,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			set_form(not _form)
 		KEY_F3:
 			set_decals(not decals[0].visible)
+		KEY_F4:
+			train.start_pass()
 
 
 func set_work_lights(on: bool) -> void:
@@ -390,6 +408,7 @@ func _effects() -> void:
 	next_spark = _sparks.randf_range(SPARKS_EVERY.x, SPARKS_EVERY.y)
 	_shafts()
 	_drip()
+	_train()
 	moths = Moths.new()
 	moths.name = "moths"
 	moths.seed = 5
@@ -423,6 +442,97 @@ func _process(delta: float) -> void:
 
 	if next_spark <= 0.0:
 		spark()
+
+	_breathe(delta)
+
+
+## The metro breathing: everything answers the passing train's strength.
+func _breathe(delta: float) -> void:
+	if train == null:
+		return
+
+	_clock += delta
+	var s := train.strength()
+	# The lights sag unevenly as the train draws on the Company's line.
+	var dip := clampf(0.5 + 0.5 * sin(_clock * 23.0) * sin(_clock * 7.3 + 1.1), 0.0, 1.0)
+	var sag := 1.0 - s * (BROWNOUT.x + BROWNOUT.y * dip)
+
+	for light: Light3D in _full:
+		light.light_energy = _full[light] * sag
+
+	if neon != null:
+		neon.dim = sag
+
+	bulb_pivot.gust = GUST_SWING * s
+	Vfx.blow(censer, DRAUGHT * (1.0 + 4.0 * s))
+
+	for motes in dust:
+		Vfx.blow(motes, DRAUGHT * (1.0 + 4.0 * s))
+
+	dust_sift.amount_ratio = clampf((s - 0.3) / 0.7, 0.0, 1.0)
+	rumble.volume_db = RUMBLE_DB + linear_to_db(maxf(s, 0.001))
+
+
+## The train, its rumble, the dust its shaking sifts from the vault, the jars' rattle.
+func _train() -> void:
+	train = TrainPass.new()
+	train.name = "train"
+	train.seed = 31
+	add_child(train)
+
+	for light in work_lights + [bulb]:
+		_full[light] = light.light_energy
+
+	rumble = AudioStreamPlayer.new()
+	rumble.name = "rumble"
+	rumble.stream = load(RUMBLE)
+	rumble.volume_db = -80.0
+	add_child(rumble)
+	train.began.connect(rumble.play)
+
+	_rattle = AudioStreamPlayer3D.new()
+	_rattle.name = "rattle"
+	_rattle.max_distance = 10.0
+	add_child(_rattle)
+	_rattle.position = SHELVES_AT
+	train.peaked.connect(func():
+		_rattle.stream = load(RATTLES[rattles % RATTLES.size()])
+		_rattle.play()
+		rattles += 1)
+
+	dust_sift = GPUParticles3D.new()
+	dust_sift.name = "dust_sift"
+	dust_sift.amount = 240
+	dust_sift.lifetime = 7.0
+	dust_sift.amount_ratio = 0.0
+	dust_sift.local_coords = false
+	var fall := ParticleProcessMaterial.new()
+	fall.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	fall.emission_box_extents = Vector3(RUN * 0.5, 0.02, (FAR_WALL - BACK_WALL) * 0.5)
+	fall.gravity = Vector3(0, -0.6, 0)
+	fall.damping_min = 0.3
+	fall.damping_max = 0.6
+	# (What lands on the canvas stays on it: none falls through the cloth.)
+	fall.collision_mode = ParticleProcessMaterial.COLLISION_HIDE_ON_CONTACT
+	dust_sift.process_material = fall
+	var speck := QuadMesh.new()
+	speck.size = Vector2(0.02, 0.02)
+	var grit := StandardMaterial3D.new()
+	grit.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	grit.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	grit.albedo_color = Color(0.55, 0.5, 0.42, 0.6)
+	grit.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	speck.material = grit
+	dust_sift.draw_pass_1 = speck
+	dust_sift.visibility_aabb = AABB(Vector3(-RUN * 0.5, -HEIGHT, -3.5), Vector3(RUN, HEIGHT + 0.5, 7.0))
+	add_child(dust_sift)
+	dust_sift.position = Vector3(0.0, HEIGHT - 0.05, (FAR_WALL + BACK_WALL) * 0.5)
+	dust_sift.emitting = true
+	var canvas := GPUParticlesCollisionBox3D.new()
+	canvas.name = "canvas_catch"
+	canvas.size = Vector3(3.3, 0.12, 2.5)
+	add_child(canvas)
+	canvas.position = Vector3(0.0, 2.45, -1.0)
 
 
 ## The junction's bodged tap throws a few sparks, and the next is reckoned.
@@ -487,7 +597,7 @@ func _shafts() -> void:
 		cone.shape = RenderingServer.FOG_VOLUME_SHAPE_CONE
 		cone.size = Vector3(2.2, 3.4, 2.2)
 		var haze := FogMaterial.new()
-		haze.density = 1.2
+		haze.density = 0.6
 		haze.albedo = Color(1.0, 0.86, 0.66)
 		haze.edge_fade = 0.6
 		cone.material = haze
