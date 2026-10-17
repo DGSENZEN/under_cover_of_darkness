@@ -57,13 +57,22 @@ SPEC = {
         "Push": ((-8.0, 5.0, 5.0), ((-10.0, 15.0, 0.0), (0.0, 0.0, 0.0), (5.0, 0.0, 0.0))),
         # Round a sword's grip: a fist, the index a little looser along it.
         "SwordGrip": ((80.0, 90.0, 60.0), ((15.0, -40.0, 0.0), (15.0, 0.0, 0.0), (25.0, 0.0, 0.0))),
+        # At rest, as Dishonored's resting hand (reference, Oct 17): fingers
+        # together and softly curled, more toward the little finger, the
+        # thumb easy beside the index.
+        "Relaxed": ((30.0, 40.0, 20.0), ((8.0, -20.0, 0.0), (15.0, 0.0, 0.0), (15.0, 0.0, 0.0))),
     },
+    # How much of each finger's fan off the middle finger (the base hand's
+    # rest spreads them) a pose closes: a hand that holds or rests keeps its
+    # fingers together; an open or pressing hand spreads them.
+    "pose_together": {"Relaxed": 0.8, "Hook": 0.7, "Wrap": 0.7, "SwordGrip": 0.7},
     # Fingers a pose sets apart from the rest (degrees, 01/02/03).
     "pose_fingers": {
         "SwordGrip": {"index": (65.0, 75.0, 50.0)},
         # (The index a little less closed at its knuckle: its tip rests on
         # the thumb's root instead of sinking into it.)
         "Fist": {"index": (75.0, 95.0, 70.0)},
+        "Relaxed": {"index": (20.0, 30.0, 15.0), "ring": (38.0, 45.0, 25.0), "pinky": (45.0, 50.0, 28.0)},
     },
     "sleeve_short_of_wrist": 0.04,
     "cuff_length": 0.025,
@@ -108,6 +117,48 @@ def joints(sign):
 
     fingers = {finger: [at(p) for p in points] for finger, points in HAND_JOINTS["fingers"].items()}
     return {"shoulder": shoulder, "elbow": elbow, "wrist": wrist, "knuckles": at(HAND_JOINTS["knuckles"]), "fingers": fingers}
+
+
+def _finger_line(finger):
+    points = HAND_JOINTS["fingers"][finger]
+    return _norm(tuple(points[1][i] - points[0][i] for i in range(3)))
+
+
+def _flat(v, n):
+    """v with its part along n taken out, unit length."""
+    along = sum(v[i] * n[i] for i in range(3))
+    return _norm(tuple(v[i] - n[i] * along for i in range(3)))
+
+
+def together_swing(finger):
+    """The swing (degrees, about the finger's nail normal, right hand) that
+    lays a finger along the middle finger's line: how far the base hand's
+    rest fans it out. 0 for the middle finger and the thumb."""
+    if finger in ("middle", "thumb"):
+        return 0.0
+
+    n = HAND_JOINTS["nails"][finger]
+    d = _flat(_finger_line(finger), n)
+    m = _flat(_finger_line("middle"), n)
+    angle = math.degrees(math.acos(max(-1.0, min(1.0, sum(d[i] * m[i] for i in range(3))))))
+    toward = (n[1] * d[2] - n[2] * d[1], n[2] * d[0] - n[0] * d[2], n[0] * d[1] - n[1] * d[0])
+    return angle if sum(toward[i] * m[i] for i in range(3)) > 0.0 else -angle
+
+
+def together_check(finger, share=0.7):
+    """A finger's angle off the middle finger's line before and after its
+    together swing (degrees, right hand): for the spec test."""
+    n = HAND_JOINTS["nails"][finger]
+    d = _flat(_finger_line(finger), n)
+    m = _flat(_finger_line("middle"), n)
+    a = math.radians(together_swing(finger) * share)
+    nd = (n[1] * d[2] - n[2] * d[1], n[2] * d[0] - n[0] * d[2], n[0] * d[1] - n[1] * d[0])
+    turned = tuple(d[i] * math.cos(a) + nd[i] * math.sin(a) for i in range(3))
+
+    def off(v):
+        return math.degrees(math.acos(max(-1.0, min(1.0, sum(v[i] * m[i] for i in range(3))))))
+
+    return off(d), off(turned)
 
 
 def _sub(a, b):
@@ -529,7 +580,8 @@ def build(root_dir):
             for finger in FINGERS:
                 for k in range(3):
                     own = SPEC["pose_fingers"].get(pose_name, {}).get(finger, curls)
-                    curl, twist, swing = thumb[k] if finger == "thumb" else (own[k], 0.0, 0.0)
+                    together = SPEC["pose_together"].get(pose_name, 0.0) * together_swing(finger) if k == 0 else 0.0
+                    curl, twist, swing = thumb[k] if finger == "thumb" else (own[k], 0.0, together)
                     pb = rig.pose.bones["%s_0%d_%s" % (finger, k + 1, side)]
                     # Toward the pad: the bones run along their own +Y with Z
                     # out of the nail, so a curl is negative about local X.

@@ -32,7 +32,7 @@ var man: Node3D
 var fist_from: Array = FIST_FROM
 ## The hand poses arms made for holding carry (FPArms): a hand closes toward
 ## the one it is asked for, by its curl.
-const POSES := [&"Open", &"Fist", &"Hook", &"Wrap", &"Push", &"SwordGrip"]
+const POSES := [&"Open", &"Fist", &"Hook", &"Wrap", &"Push", &"SwordGrip", &"Relaxed"]
 ## Seconds a hand takes to go over from one pose to another.
 const POSE_FADE := 0.12
 ## Whether the man's library has poses of its own to learn (the Prosecutor's

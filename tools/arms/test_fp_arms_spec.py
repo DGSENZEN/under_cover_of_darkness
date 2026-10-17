@@ -39,6 +39,29 @@ class Spec(unittest.TestCase):
         for pose in ("Open", "Fist", "Hook", "Wrap", "Push", "SwordGrip"):
             self.assertIn(pose, SPEC["poses"])
 
+    def test_relaxed_curls_more_toward_the_pinky(self):
+        relaxed = SPEC["poses"]["Relaxed"][0]
+        own = SPEC["pose_fingers"]["Relaxed"]
+        firsts = [own.get(f, relaxed)[0] for f in ("index", "middle", "ring", "pinky")]
+        self.assertEqual(firsts, sorted(firsts))
+        self.assertGreater(firsts[0], 5.0)
+        self.assertLess(firsts[-1], 50.0)
+
+    def test_fingers_drawn_together_except_open_and_push(self):
+        # (Not the fist: its fingers pack together as they curl, and closing
+        # them further drives the index into the thumb resting on it.)
+        for pose in ("Relaxed", "Hook", "Wrap", "SwordGrip"):
+            self.assertGreater(SPEC["pose_together"][pose], 0.5, pose)
+        for pose in ("Open", "Push"):
+            self.assertEqual(SPEC["pose_together"].get(pose, 0.0), 0.0, pose)
+
+    def test_together_turns_each_finger_toward_the_middle(self):
+        # Swinging a finger by its together angle brings it nearer the middle
+        # finger's line (right hand; the left is mirrored).
+        for finger in ("index", "ring", "pinky"):
+            before, after = build_fp_arms.together_check(finger)
+            self.assertLess(after, before, finger)
+
     def test_push_is_flat(self):
         for curl in SPEC["poses"]["Push"][0]:
             self.assertLessEqual(curl, 10.0)

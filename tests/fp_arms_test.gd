@@ -47,6 +47,7 @@ func _run() -> void:
 	await _shoulder_checks()
 	await _near_checks()
 	await _framing_checks()
+	await _grip_look_checks()
 	await _kick_checks()
 	await _switch_checks()
 	await _sword_checks()
@@ -323,20 +324,22 @@ func _near_checks() -> void:
 	var cam: Camera3D = player.camera
 	var size: Vector2 = get_viewport().get_visible_rect().size
 
-	# Empty-handed: carried near, in the bottom of the view.
+	# Empty-handed (as Dishonored rests its hands, reference Oct 17): the left
+	# hand rests near and in view; an empty right hand is out of sight.
 	await _place(Vector3(110, 0.1, 0))
 	await _frames(40)
-	var far := 0.0
-	var off := 0
-	for side in [0, 1]:
-		var at: Vector3 = arms.hand_position(side)
-		far = maxf(far, cam.global_position.distance_to(at))
-		var seen: Vector2 = cam.unproject_position(at)
-		if cam.is_position_behind(at) or seen.y > size.y or seen.x < 0.0 or seen.x > size.x:
-			off += 1
+	var left_at: Vector3 = arms.hand_position(0)
+	var far: float = cam.global_position.distance_to(left_at)
+	var seen: Vector2 = _on_screen_point(left_at)
+	var left_in: bool = not cam.is_position_behind(left_at) and seen.x >= 0.0 and seen.x <= size.x and seen.y >= 0.0 and seen.y <= size.y
+	var right_out := true
+	for p in arms.reach.solved_hand_points[1]:
+		var q: Vector2 = _on_screen_point(p)
+		if not cam.is_position_behind(p) and q.x >= 0.0 and q.x <= size.x and q.y >= 0.0 and q.y <= size.y:
+			right_out = false
 	var standing_lean: float = player.wall_lean.length()
-	_check("FA22 empty-handed, the hands are carried near and in view", far <= 0.42 and off == 0 and standing_lean < 0.001,
-		"farthest %.2f m, %d out of view, lean %.3f" % [far, off, standing_lean])
+	_check("FA22 empty-handed, the left hand rests near and in view, the right out of sight", far <= 0.42 and left_in and right_out and standing_lean < 0.001,
+		"left %.2f m, in view %s; right out of view %s; lean %.3f" % [far, left_in, right_out, standing_lean])
 
 	# Hanging: the view leans in to the wall, the hands near the eye.
 	var column := _sill_column(120.0)
@@ -390,14 +393,21 @@ func _within(at: Vector2, x0: float, x1: float, y0: float, y1: float) -> bool:
 # (each hand a fifth to a quarter of the frame, gripping in the upper middle,
 # a quarter in from each side).
 func _framing_checks() -> void:
+	var arms = player.hand._arms
+	var cam: Camera3D = player.camera
 	await _place(Vector3(130, 0.1, 0))
 	player.inventory.select_by_id(&"")
 	await _frames(60)
 	var left: Array = _on_screen(0)
-	var right: Array = _on_screen(1)
-	_check("FA24 standing, the empty hands are framed as Dishonored's", left[0] >= 0.15 and left[0] <= 0.26 and right[0] >= 0.15 and right[0] <= 0.26
-		and _within(left[1], 0.15, 0.40, 0.55, 0.85) and _within(right[1], 0.60, 0.85, 0.55, 0.85),
-		"left %.0f%% at %s, right %.0f%% at %s" % [left[0] * 100.0, left[1], right[0] * 100.0, right[1]])
+	var right: Array = []
+	var view: Basis = cam.global_basis.orthonormalized()
+	var basis: Basis = (arms.man.global_basis * arms.reach.targets[0].basis).orthonormalized()
+	var palm_in: float = basis.x.dot(view.x)
+	var fingers: Vector3 = basis.y
+	var relaxed: float = arms.reach.pose_weights[0].get(&"Relaxed", 0.0)
+	_check("FA24 the resting left hand is Dishonored's: a fifth of the frame, low left, relaxed, palm in, fingers rising inward",
+		left[0] >= 0.15 and left[0] <= 0.32 and _within(left[1], 0.15, 0.40, 0.50, 0.85) and relaxed > 0.95 and palm_in > 0.3 and fingers.dot(view.y) > 0.15 and fingers.dot(view.x) > 0.15,
+		"%.0f%% at %s, Relaxed %.2f, palm in %.2f, fingers up %.2f in %.2f" % [left[0] * 100.0, left[1], relaxed, palm_in, fingers.dot(view.y), fingers.dot(view.x)])
 
 	PROPS.give_weapons(player)
 	player.inventory.select_by_id(&"sword")
@@ -416,7 +426,6 @@ func _framing_checks() -> void:
 	right = _on_screen(1)
 	var size: Vector2 = get_viewport().get_visible_rect().size
 	var off := 0.0
-	var cam: Camera3D = player.camera
 	var k: float = tan(deg_to_rad(player.hand._arms.view_fov(cam.fov)) * 0.5) / tan(deg_to_rad(cam.fov) * 0.5)
 	for side in [0, 1]:
 		# Where the world puts the wrist for this grip (before it was aimed
@@ -430,6 +439,35 @@ func _framing_checks() -> void:
 	_check("FA26 hanging, the hands are framed as Dying Light's", left[0] >= 0.19 and right[0] >= 0.19
 		and _within(left[1], 0.18, 0.40, 0.30, 0.58) and _within(right[1], 0.60, 0.82, 0.30, 0.58),
 		"left %.0f%% at %s, right %.0f%% at %s" % [left[0] * 100.0, left[1], right[0] * 100.0, right[1]])
+	player._drop_from_hang()
+	await _frames(60)
+
+
+# Held as the games hold (references, Oct 17: Dying Light hanging from an
+# edge): the hand hangs on the face, fingers up and hooked over the lip, the
+# back of the hand toward you, the wrist straight, the forearm rising from
+# below.
+func _grip_look_checks() -> void:
+	var arms = player.hand._arms
+	var cam: Camera3D = player.camera
+	var column := _sill_column(150.0)
+	await _frames(2)
+	await _hang_on(column[0])
+	await _frames(40)
+	var view := cam.global_basis.orthonormalized()
+	var notes := []
+	var ok := true
+	for side in [0, 1]:
+		var basis: Basis = (arms.man.global_basis * arms.reach.targets[side].basis).orthonormalized()
+		var fingers: float = basis.y.dot(view.y)
+		var palm: Vector3 = basis.x * (-1.0 if side == 1 else 1.0)
+		var to_hand: Vector3 = (arms.hand_position(side) - cam.global_position).normalized()
+		var back_to_you: float = palm.dot(to_hand)
+		var bend: float = arms.reach.wrist_bend[side]
+		var below: float = (cam.global_transform.affine_inverse() * arms.reach.solved_hands[side]).y - (cam.global_transform.affine_inverse() * arms.reach.solved_elbows[side]).y
+		ok = ok and fingers > 0.75 and back_to_you > 0.4 and bend < 25.0 and below > 0.12
+		notes.append("%s fingers up %.2f, back to you %.2f, wrist %.0f deg, elbow %.2f m below" % ["L" if side == 0 else "R", fingers, back_to_you, bend, below])
+	_check("FA28 hanging, each hand hangs on the face hooked over the lip, as Dying Light's", ok, "; ".join(notes))
 	player._drop_from_hang()
 	await _frames(60)
 

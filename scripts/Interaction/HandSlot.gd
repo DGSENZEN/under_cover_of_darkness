@@ -11,6 +11,7 @@ const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const SwingTrailScript := preload("res://scripts/Visual/SwingTrail.gd")
 const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
+const ArmReachScript := preload("res://scripts/Visual/ArmReach.gd")
 const ViewPosesScript := preload("res://scripts/Combat/ViewPoses.gd")
 const HandContactsScript := preload("res://scripts/Interaction/HandContacts.gd")
 const HeldPageScript := preload("res://scripts/Interaction/HeldPage.gd")
@@ -202,14 +203,25 @@ const ARM_REACH := 0.57
 const CHEST_VIEW_MARGIN_DEGREES := 8.0
 ## Where the hands go in a landing roll, in camera space (full size): low in
 ## front, forearms crossing, palms in.
-## The Prosecutor's own arms carry an empty hand here (camera space, full
-## size): low in the corner of the view and near, loose, palm down and in.
-## (The old arms let theirs hang out of sight.)
-const IDLE_CARRY: Array[Vector3] = [Vector3(-0.20, -0.10, -0.42), Vector3(0.20, -0.10, -0.42)]
+## Where the Prosecutor's empty hands rest (camera space, full size): the left
+## low left and near (Dishonored's resting hand), the right by his side, out
+## of sight. (The old arms let both hang out of sight.)
+const REST_LEFT := Vector3(-0.20, -0.22, -0.41)
+const REST_RIGHT := Vector3(0.30, -0.65, -0.12)
 ## With the Prosecutor's arms, what the right hand holds sits this much nearer
 ## the middle of the view (camera space, full size), as Dishonored frames its
 ## sword hand: low right, not at the edge.
 const VIEW_SHIFT_MAIN := Vector3(-0.10, 0.04, 0.0)
+## A hand hooked over an edge: how far in from the edge HandContacts puts the
+## palm, how far out from the face the wrist sits, how far under the lip
+## (the knuckles at it), and how far the fingers lean in toward the middle.
+const HOOK_INSET := 0.03
+const HOOK_OFF_FACE := 0.035
+const HOOK_BELOW_LIP := 0.095
+const HOOK_LEAN_IN := 0.2
+## Hanging, the elbows point down (his space), so the forearms rise from below
+## as a hanging climber's do.
+const HANG_ELBOW: Array[Vector3] = [Vector3(-0.35, -1.0, 0.1), Vector3(0.35, -1.0, 0.1)]
 const ROLL_TUCK: Array[Transform3D] = [
 	Transform3D(Basis(Vector3.FORWARD, -0.35) * Basis(Vector3.RIGHT, 0.25), Vector3(-0.13, -0.2, -0.55)),
 	Transform3D(Basis(Vector3.FORWARD, 0.35) * Basis(Vector3.RIGHT, 0.25), Vector3(0.13, -0.19, -0.55)),
@@ -1386,16 +1398,27 @@ func _suppressed_for_grips() -> bool:
 ## Your arms, reaching for what each hand has: the right the grip of what you
 ## carry (a bow: its string, the bow itself in the left), the left the purse
 ## or whatever it is being handed, both the world when you hold on to it.
-## An empty hand's carry (camera space, full size): IDLE_CARRY, the fingers
-## forward and a little in and down, the palm facing down and in (the hand
-## bone's palm axis: -X right, +X left).
-static func _idle_carry(side: int) -> Transform3D:
-	var out := 1.0 if side == 1 else -1.0
-	var fingers := Vector3(-0.15 * out, -0.35, -1.0).normalized()
-	var palm := Vector3(-0.5 * out, -0.85, 0.0)
-	var x := -palm * out
+## An empty hand at rest (camera space, full size; the hand bone's frame:
+## fingers +Y, palm on -X right, +X left). The left: low left and near, the
+## fingers rising in toward the middle, the palm turned in and down. The
+## right: down by the side, out of sight.
+static func _resting(side: int) -> Transform3D:
+	var fingers: Vector3
+	var palm: Vector3
+	var at: Vector3
+
+	if side == 0:
+		at = REST_LEFT
+		fingers = Vector3(0.45, 0.50, -0.74).normalized()
+		palm = Vector3(0.8, -0.45, 0.2)
+	else:
+		at = REST_RIGHT
+		fingers = Vector3(0.05, -1.0, -0.2).normalized()
+		palm = Vector3(-1.0, 0.0, 0.0)
+
+	var x := palm if side == 0 else -palm
 	x = (x - fingers * x.dot(fingers)).normalized()
-	return Transform3D(Basis(x, fingers, x.cross(fingers)), IDLE_CARRY[side])
+	return Transform3D(Basis(x, fingers, x.cross(fingers)), at)
 
 
 ## A point in the view's space (full size) moved toward the view's axis so
@@ -1414,6 +1437,24 @@ func _for_view_fov(point: Vector3) -> Vector3:
 
 	var k := tan(deg_to_rad(view) * 0.5) / tan(deg_to_rad(camera.fov) * 0.5)
 	return Vector3(point.x * k, point.y * k, point.z)
+
+
+## A hand hooked over an edge from below (the view's space, full size): from
+## its palm frame on the top (HandContacts: fingers -Z into the edge, +Y up,
+## +Z out toward you, HOOK_INSET in from the edge), the wrist on the face just
+## under the lip, the fingers up and a little in, the palm to the wall.
+func _hooked_on_face(palm: Transform3D, side: int) -> Transform3D:
+	var out := 1.0 if side == 1 else -1.0
+	var up := palm.basis.y.normalized()
+	var toward := palm.basis.z.normalized()
+	var across := palm.basis.x.normalized()
+	var lip := palm.origin + toward * HOOK_INSET
+	var wrist := lip + toward * HOOK_OFF_FACE - up * HOOK_BELOW_LIP
+	var fingers := (up - across * out * HOOK_LEAN_IN).normalized()
+	# The hand bone's palm axis is -X (right hand) or +X (left): to the wall.
+	var x := toward * out
+	x = (x - fingers * x.dot(fingers)).normalized()
+	return Transform3D(Basis(x, fingers, x.cross(fingers)), wrist)
 
 
 ## How much of the viewmodel's own layout applies (the Prosecutor's arms).
@@ -1505,6 +1546,12 @@ func _place_arms() -> void:
 				palm = Transform3D(palm.basis * Basis(Vector3.BACK, -out * PI * 0.5), palm.origin + palm.basis.x * UPRIGHT_SIDE * out)
 
 			var hand := Transform3D(palm.basis * (_LEDGE_RIGHT if side == 1 else _LEDGE_LEFT), palm * Vector3(0.0, 0.02, 0.07))
+
+			# Hanging from an edge, the Prosecutor's hand hangs on its face as
+			# a climber's does (references: Dying Light): fingers up and hooked
+			# over the lip, the back of the hand toward you, the wrist straight.
+			if _grip_poses[side] == &"Hook":
+				hand = _hooked_on_face(palm, side)
 			# Drawn at the viewmodel's field of view: aimed so it lands on its
 			# grip on screen, at the grip's own depth.
 			hand.origin = _for_view_fov(hand.origin)
@@ -1535,15 +1582,21 @@ func _place_arms() -> void:
 			if tuck > 0.5:
 				poses[side] = &"Fist"
 
-	# An empty hand of the Prosecutor's own arms: carried near, not left out
-	# at arm's length (blending into whatever takes it).
+	# An empty hand of the Prosecutor's own arms rests as Dishonored rests its
+	# hands (reference, Oct 17): the left, his ring hand, near and low left,
+	# relaxed; the right down out of sight. Blending into whatever takes it.
 	if ViewArmsScript.new_arms and not dead:
 		for side in range(2):
 			if weights[side] < 1.0:
-				var carry: Transform3D = _idle_carry(side)
-				carry.origin = _for_view_fov(carry.origin)
-				carry = ViewArmsScript.shrink(carry)
-				targets[side] = carry.interpolate_with(targets[side], weights[side]) if weights[side] > 0.0 else carry
+				var rest: Transform3D = _resting(side)
+				rest.origin = _for_view_fov(rest.origin)
+				rest = ViewArmsScript.shrink(rest)
+
+				if weights[side] <= 0.0:
+					poses[side] = _pose_if_had(&"Relaxed")
+					curls[side] = 1.0
+
+				targets[side] = rest.interpolate_with(targets[side], weights[side]) if weights[side] > 0.0 else rest
 				weights[side] = 1.0
 
 	# Where the eye really is, in his space: held hands are drawn along the
@@ -1567,6 +1620,12 @@ func _place_arms() -> void:
 
 	for side in range(2):
 		_arms.set_hand(side, targets[side], weights[side], curls[side], poses[side])
+
+		if _arms.reach != null:
+			var hanging := _grip_weights[side] > 0.5 and _grip_poses[side] == &"Hook"
+			var resting := ViewArmsScript.new_arms and poses[side] == &"Relaxed"
+			# (Hanging or resting, the elbow drops: the forearm rises from below.)
+			_arms.reach.elbow_hints[side] = HANG_ELBOW[side] if hanging or resting else ArmReachScript.ELBOW_HINT[side]
 
 		if _arms.reach != null:
 			# Held hands in view are the true-size rig's; nothing is brought in
