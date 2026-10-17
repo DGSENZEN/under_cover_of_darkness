@@ -15,6 +15,9 @@ uniform float wet : hint_range(0.0, 1.0) = 1.0;
 uniform float seed = 0.0;
 // The viewmodel's depth squeeze (BaseMaterial3D.z_clip_scale): 1 in the world.
 uniform float z_clip = 1.0;
+// The viewmodel's own field of view (vertical degrees; 0: the camera's), as
+// BaseMaterial3D.fov_override draws the arms and what they hold.
+uniform float fov_override = 0.0;
 
 varying vec3 model_position;
 
@@ -39,6 +42,13 @@ void vertex() {
 	// A hair proud of the steel, so it never fights with it for the pixel.
 	VERTEX += NORMAL * 0.0006;
 	Z_CLIP_SCALE = z_clip;
+
+	if (fov_override > 0.0) {
+		float f = 1.0 / tan(radians(fov_override) * 0.5);
+		float aspect = abs(PROJECTION_MATRIX[1][1] / PROJECTION_MATRIX[0][0]);
+		PROJECTION_MATRIX[1][1] = f * sign(PROJECTION_MATRIX[1][1]);
+		PROJECTION_MATRIX[0][0] = f / aspect * sign(PROJECTION_MATRIX[0][0]);
+	}
 }
 
 void fragment() {

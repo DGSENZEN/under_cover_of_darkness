@@ -331,8 +331,14 @@ enum MoveState {
 ## toward it, as a climber's does: this far at most (m), never nearer the
 ## surface than the clearance. The body (a 0.5 m capsule) stays put; the
 ## hands on their holds come near the eye.
-@export var hold_lean := 0.18
+@export var hold_lean := 0.24
 @export var hold_lean_clearance := 0.22
+## Hanging from an edge the head also comes up toward it (m, the view only):
+## the hands grip in the upper middle of the view, not its top corners.
+@export var hang_rise := 0.10
+## On a pipe, rope or ladder the hands hold on the view's middle line, near
+## already: the head leans in only this far (m).
+@export var climb_lean := 0.06
 
 
 @export_category("HUD")
@@ -4232,7 +4238,11 @@ func _update_wall_lean(delta: float) -> void:
 
 		if not hit.is_empty():
 			var room: float = from.distance_to(hit["position"]) - hold_lean_clearance
-			wanted = ahead * clampf(room, 0.0, hold_lean)
+			var most := hold_lean if movement_state == MoveState.HANGING else climb_lean
+			wanted = ahead * clampf(room, 0.0, most)
+
+		if movement_state == MoveState.HANGING:
+			wanted += Vector3.UP * hang_rise
 
 	wall_lean = wall_lean.lerp(wanted, 1.0 - exp(-8.0 * delta))
 

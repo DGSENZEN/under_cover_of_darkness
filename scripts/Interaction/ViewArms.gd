@@ -24,6 +24,15 @@ const ARM_LENGTH := 0.65
 const EYE := Vector3(0.0, 1.62, 0.1)
 ## The viewmodel's depth squeeze (BaseMaterial3D.z_clip_scale).
 const Z_CLIP := 0.05
+## The Prosecutor's arms and what they hold are drawn with their own field of
+## view (vertical degrees), narrower than the world's, as games draw theirs
+## (Bungie, Unreal's first-person rendering, Dishonored, Dying Light): they
+## read near and full-sized instead of small and far at the world's wide
+## angle. A hand held on the world is aimed so it still lands on its grip
+## (HandSlot). The old arms keep the world's.
+const VIEW_FOV := 58.0
+## Every material drawn as the viewmodel, to set its field of view on F12.
+static var _view_materials: Array[WeakRef] = []
 
 enum Side { LEFT, RIGHT }
 
@@ -77,6 +86,7 @@ func use_new_arms(on: bool) -> void:
 	_shoulders = Vector3.INF
 	_match_old = Vector3.INF
 	_build()
+	apply_view_fov()
 
 
 func _build() -> void:
@@ -341,4 +351,36 @@ static func _squeezed(source: Material) -> BaseMaterial3D:
 	material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
 	material.use_z_clip_scale = true
 	material.z_clip_scale = Z_CLIP
+	dress(material)
 	return material
+
+
+## The viewmodel's field of view for a world drawn at `world_fov`.
+static func view_fov_for(world_fov: float) -> float:
+	return VIEW_FOV if new_arms else world_fov
+
+
+func view_fov(world_fov: float) -> float:
+	return view_fov_for(world_fov)
+
+
+## Draws a viewmodel material with the viewmodel's field of view (and keeps
+## it, to change on F12).
+static func dress(material: BaseMaterial3D) -> void:
+	material.use_fov_override = new_arms
+	material.fov_override = VIEW_FOV
+	_view_materials.append(weakref(material))
+
+
+## Every viewmodel material to the field of view of the arms now in use.
+static func apply_view_fov() -> void:
+	var alive: Array[WeakRef] = []
+
+	for ref in _view_materials:
+		var material := ref.get_ref() as BaseMaterial3D
+
+		if material != null:
+			material.use_fov_override = new_arms
+			alive.append(ref)
+
+	_view_materials = alive

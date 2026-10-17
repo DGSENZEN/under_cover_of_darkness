@@ -7,8 +7,10 @@ enum State { FREE, HANG, MANTLE, VAULT, LADDER, ROPE, CARRY, READ, POLE }
 
 const LEFT := 0
 const RIGHT := 1
-## Hands this far either side of the body on an edge.
-const SPREAD := 0.24
+## Hands this far either side of the body on an edge: a little inside the
+## shoulders, as a hang is held (and framed: Dying Light's hands grip a
+## quarter in from each side of the view).
+const SPREAD := 0.16
 ## Pressing down to climb on: closer in, under the shoulders.
 const PUSH_SPREAD := 0.17
 ## How far a planted hand may fall behind the body before it moves on.

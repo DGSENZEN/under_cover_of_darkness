@@ -66,6 +66,9 @@ var elbow_hints: Array[Vector3] = [ELBOW_HINT[0], ELBOW_HINT[1]]
 ## restored after drawing, so this is the only record of it.
 var wrist_bend: Array[float] = [0.0, 0.0]
 var solved_hands: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+## Per hand, its wrist and fingertips (world space), at the last solve: how
+## big it is drawn (tests measure it on screen).
+var solved_hand_points: Array = [PackedVector3Array(), PackedVector3Array()]
 ## Where each shoulder and elbow were put (world space), at the last solve.
 var solved_shoulders: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var solved_elbows: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
@@ -217,6 +220,8 @@ func _process_modification() -> void:
 
 		if weights[side] > 0.001 or not curl_only_reaching:
 			_curl(skeleton, side)
+
+		_record_hand(skeleton, side)
 
 	if foot_weight > 0.001:
 		var knee := into.basis * KNEE_HINT
@@ -478,6 +483,32 @@ func _curl(skeleton: Skeleton3D, side: int) -> void:
 			var index := _bone(skeleton, bone)
 			var rest: Quaternion = _fingers[bone][0]
 			skeleton.set_bone_pose_rotation(index, rest.slerp(_closed(side, bone), amount))
+
+
+## The hand as drawn this solve: its wrist and each fingertip (the last
+## joint carried on by most of the joint before it).
+func _record_hand(skeleton: Skeleton3D, side: int) -> void:
+	var suffix := "l" if side == 0 else "r"
+	var points := PackedVector3Array()
+	var wrist := _bone(skeleton, StringName("hand_" + suffix))
+
+	if wrist < 0:
+		return
+
+	points.append(skeleton.global_transform * skeleton.get_bone_global_pose(wrist).origin)
+
+	for finger in FINGERS:
+		var two := _bone(skeleton, StringName("%s_02_%s" % [finger, suffix]))
+		var three := _bone(skeleton, StringName("%s_03_%s" % [finger, suffix]))
+
+		if two < 0 or three < 0:
+			continue
+
+		var last := skeleton.get_bone_global_pose(three)
+		var length := skeleton.get_bone_global_pose(two).origin.distance_to(last.origin) * 0.85
+		points.append(skeleton.global_transform * (last.origin + last.basis.y.normalized() * length))
+
+	solved_hand_points[side] = points
 
 
 func _bone(skeleton: Skeleton3D, bone: StringName) -> int:

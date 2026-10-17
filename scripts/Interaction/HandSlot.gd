@@ -205,7 +205,11 @@ const CHEST_VIEW_MARGIN_DEGREES := 8.0
 ## The Prosecutor's own arms carry an empty hand here (camera space, full
 ## size): low in the corner of the view and near, loose, palm down and in.
 ## (The old arms let theirs hang out of sight.)
-const IDLE_CARRY: Array[Vector3] = [Vector3(-0.16, -0.18, -0.30), Vector3(0.16, -0.18, -0.30)]
+const IDLE_CARRY: Array[Vector3] = [Vector3(-0.20, -0.10, -0.42), Vector3(0.20, -0.10, -0.42)]
+## With the Prosecutor's arms, what the right hand holds sits this much nearer
+## the middle of the view (camera space, full size), as Dishonored frames its
+## sword hand: low right, not at the edge.
+const VIEW_SHIFT_MAIN := Vector3(-0.10, 0.04, 0.0)
 const ROLL_TUCK: Array[Transform3D] = [
 	Transform3D(Basis(Vector3.FORWARD, -0.35) * Basis(Vector3.RIGHT, 0.25), Vector3(-0.13, -0.2, -0.55)),
 	Transform3D(Basis(Vector3.FORWARD, 0.35) * Basis(Vector3.RIGHT, 0.25), Vector3(0.13, -0.19, -0.55)),
@@ -336,6 +340,7 @@ func _ready() -> void:
 	_blood_overlay.shader = BLADE_BLOOD
 	_blood_overlay.render_priority = 11 # After the held steel (10).
 	_blood_overlay.set_shader_parameter("z_clip", ViewArmsScript.Z_CLIP)
+	_blood_overlay.set_shader_parameter("fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
 
 	# The smear a blade leaves, drawn over the world like the hands.
 	_trail = SwingTrailScript.new()
@@ -394,6 +399,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		# Compare the Prosecutor's own arms with the old (until they are
 		# signed off and replace them).
 		_arms.use_new_arms(not ViewArmsScript.new_arms)
+		_blood_overlay.set_shader_parameter("fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
+		if _trail != null and _trail.has_method("set_view_fov"):
+			_trail.set_view_fov(ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
 		get_viewport().set_input_as_handled()
 
 
@@ -1159,7 +1169,9 @@ func _place_hands() -> void:
 	if _view_id != &"" and _view_id != &"bow":
 		frame = _natural(frame)
 
-	_main.transform = Transform3D(frame.basis, frame.origin * ViewArmsScript.SCALE)
+	# (Drawn at the viewmodel's field of view: aimed where the world's camera
+	# would show it, so it keeps its place on screen and is drawn larger.)
+	_main.transform = Transform3D(frame.basis, _for_view_fov(frame.origin + VIEW_SHIFT_MAIN * _view_shift()) * ViewArmsScript.SCALE)
 
 	# The edge's smear, recorded in this node's space so it rides the view.
 	if _trail_on and _main.visible and _has_blade:
@@ -1328,7 +1340,7 @@ func _chest_under_hands() -> Vector3:
 
 	for side in range(2):
 		if _grip_weights[side] > 0.05:
-			var hand: Vector3 = global_transform.affine_inverse() * _contacts.hand(side).origin
+			var hand: Vector3 = _for_view_fov(global_transform.affine_inverse() * _contacts.hand(side).origin)
 			var over := chest.distance_to(hand) - ARM_REACH
 
 			if over > farthest:
@@ -1384,6 +1396,29 @@ static func _idle_carry(side: int) -> Transform3D:
 	var x := -palm * out
 	x = (x - fingers * x.dot(fingers)).normalized()
 	return Transform3D(Basis(x, fingers, x.cross(fingers)), IDLE_CARRY[side])
+
+
+## A point in the view's space (full size) moved toward the view's axis so
+## that, drawn at the viewmodel's field of view (ViewArms.VIEW_FOV), it lands
+## on screen where the world's camera shows it, at the same depth.
+func _for_view_fov(point: Vector3) -> Vector3:
+	var camera: Camera3D = player.get("camera") if player != null else null
+
+	if camera == null:
+		return point
+
+	var view: float = ViewArmsScript.view_fov_for(camera.fov)
+
+	if is_equal_approx(view, camera.fov):
+		return point
+
+	var k := tan(deg_to_rad(view) * 0.5) / tan(deg_to_rad(camera.fov) * 0.5)
+	return Vector3(point.x * k, point.y * k, point.z)
+
+
+## How much of the viewmodel's own layout applies (the Prosecutor's arms).
+func _view_shift() -> float:
+	return 1.0 if ViewArmsScript.new_arms else 0.0
 
 
 ## `pose` if these arms have it, else a fist (the old arms).
@@ -1470,6 +1505,9 @@ func _place_arms() -> void:
 				palm = Transform3D(palm.basis * Basis(Vector3.BACK, -out * PI * 0.5), palm.origin + palm.basis.x * UPRIGHT_SIDE * out)
 
 			var hand := Transform3D(palm.basis * (_LEDGE_RIGHT if side == 1 else _LEDGE_LEFT), palm * Vector3(0.0, 0.02, 0.07))
+			# Drawn at the viewmodel's field of view: aimed so it lands on its
+			# grip on screen, at the grip's own depth.
+			hand.origin = _for_view_fov(hand.origin)
 			_held_wrists[side] = hand.origin
 			var shown: Transform3D = _arms.to_rig(hand)
 
@@ -1502,7 +1540,9 @@ func _place_arms() -> void:
 	if ViewArmsScript.new_arms and not dead:
 		for side in range(2):
 			if weights[side] < 1.0:
-				var carry: Transform3D = ViewArmsScript.shrink(_idle_carry(side))
+				var carry: Transform3D = _idle_carry(side)
+				carry.origin = _for_view_fov(carry.origin)
+				carry = ViewArmsScript.shrink(carry)
 				targets[side] = carry.interpolate_with(targets[side], weights[side]) if weights[side] > 0.0 else carry
 				weights[side] = 1.0
 
@@ -1765,6 +1805,7 @@ static func _squeeze(material: BaseMaterial3D) -> void:
 	material.use_z_clip_scale = true
 	material.z_clip_scale = ViewArmsScript.Z_CLIP
 	material.render_priority = 10
+	ViewArmsScript.dress(material)
 
 
 ## Every surface drawn over the world, each with its own look.

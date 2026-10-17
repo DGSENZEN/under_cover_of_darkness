@@ -14,9 +14,19 @@ uniform float strength = 0.5;
 // The viewmodel's depth squeeze (BaseMaterial3D.z_clip_scale): 1 in the
 // world, small for the trail of your own blade.
 uniform float z_clip = 1.0;
+// The viewmodel's own field of view (vertical degrees; 0: the camera's), as
+// BaseMaterial3D.fov_override draws the arms and what they hold.
+uniform float fov_override = 0.0;
 
 void vertex() {
 	Z_CLIP_SCALE = z_clip;
+
+	if (fov_override > 0.0) {
+		float f = 1.0 / tan(radians(fov_override) * 0.5);
+		float aspect = abs(PROJECTION_MATRIX[1][1] / PROJECTION_MATRIX[0][0]);
+		PROJECTION_MATRIX[1][1] = f * sign(PROJECTION_MATRIX[1][1]);
+		PROJECTION_MATRIX[0][0] = f / aspect * sign(PROJECTION_MATRIX[0][0]);
+	}
 }
 
 void fragment() {

@@ -46,6 +46,7 @@ func _run() -> void:
 	await _grip_pose_checks()
 	await _shoulder_checks()
 	await _near_checks()
+	await _framing_checks()
 	await _kick_checks()
 	await _switch_checks()
 	await _sword_checks()
@@ -351,6 +352,86 @@ func _near_checks() -> void:
 	player._drop_from_hang()
 	await _frames(60)
 	_check("FA23b off the wall, the lean is gone", player.wall_lean.length() < 0.01, "lean %.3f" % player.wall_lean.length())
+
+
+## A hand as drawn on screen, as shares of the frame: [width, middle]. The
+## arms are drawn with their own field of view (ViewArms.view_fov), so a
+## point lands further from the middle than the world camera puts it.
+func _on_screen(side: int) -> Array:
+	var arms = player.hand._arms
+	var cam: Camera3D = player.camera
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	var pts: PackedVector3Array = arms.reach.solved_hand_points[side]
+	var grow: float = tan(deg_to_rad(cam.fov) * 0.5) / tan(deg_to_rad(arms.view_fov(cam.fov)) * 0.5)
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for p in pts:
+		var s: Vector2 = size * 0.5 + (cam.unproject_position(p) - size * 0.5) * grow
+		lo = lo.min(s)
+		hi = hi.max(s)
+	return [(hi.x - lo.x) / size.x, (lo + hi) * 0.5 / size]
+
+
+## A world point as the viewmodel draws it (pixels).
+func _on_screen_point(p: Vector3) -> Vector2:
+	var cam: Camera3D = player.camera
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	var grow: float = tan(deg_to_rad(cam.fov) * 0.5) / tan(deg_to_rad(player.hand._arms.view_fov(cam.fov)) * 0.5)
+	return size * 0.5 + (cam.unproject_position(p) - size * 0.5) * grow
+
+
+func _within(at: Vector2, x0: float, x1: float, y0: float, y1: float) -> bool:
+	return at.x >= x0 and at.x <= x1 and at.y >= y0 and at.y <= y1
+
+
+# Framed as the games frame them (references, Oct 17): Dishonored 2 standing
+# (each hand about a fifth of the frame, the open left hand's middle a third
+# in and two thirds down, the sword hand low right), Dying Light hanging
+# (each hand a fifth to a quarter of the frame, gripping in the upper middle,
+# a quarter in from each side).
+func _framing_checks() -> void:
+	await _place(Vector3(130, 0.1, 0))
+	player.inventory.select_by_id(&"")
+	await _frames(60)
+	var left: Array = _on_screen(0)
+	var right: Array = _on_screen(1)
+	_check("FA24 standing, the empty hands are framed as Dishonored's", left[0] >= 0.15 and left[0] <= 0.26 and right[0] >= 0.15 and right[0] <= 0.26
+		and _within(left[1], 0.15, 0.40, 0.55, 0.85) and _within(right[1], 0.60, 0.85, 0.55, 0.85),
+		"left %.0f%% at %s, right %.0f%% at %s" % [left[0] * 100.0, left[1], right[0] * 100.0, right[1]])
+
+	PROPS.give_weapons(player)
+	player.inventory.select_by_id(&"sword")
+	await _frames(90)
+	var sword: Array = _on_screen(1)
+	_check("FA25 the sword hand low right, a fifth of the frame", sword[0] >= 0.13 and sword[0] <= 0.26 and _within(sword[1], 0.55, 0.85, 0.6, 0.92),
+		"%.0f%% at %s" % [sword[0] * 100.0, sword[1]])
+	player.inventory.select_by_id(&"")
+	await _frames(60)
+
+	var column := _sill_column(140.0)
+	await _frames(2)
+	await _hang_on(column[0])
+	await _frames(40)
+	left = _on_screen(0)
+	right = _on_screen(1)
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	var off := 0.0
+	var cam: Camera3D = player.camera
+	var k: float = tan(deg_to_rad(player.hand._arms.view_fov(cam.fov)) * 0.5) / tan(deg_to_rad(cam.fov) * 0.5)
+	for side in [0, 1]:
+		# Where the world puts the wrist for this grip (before it was aimed
+		# for the viewmodel's field of view), against where it is drawn.
+		var aimed: Vector3 = player.hand._held_wrists[side]
+		var real: Vector3 = player.hand.global_transform * Vector3(aimed.x / k, aimed.y / k, aimed.z)
+		var grip: Vector2 = cam.unproject_position(real) / size
+		var wrist: Vector2 = _on_screen_point(player.hand._arms.hand_position(side)) / size
+		off = maxf(off, grip.distance_to(wrist))
+	_check("FA27 a held hand is drawn over its grip, at the viewmodel's field of view", off <= 0.02, "worst %.3f of the frame from its grip" % off)
+	_check("FA26 hanging, the hands are framed as Dying Light's", left[0] >= 0.19 and right[0] >= 0.19
+		and _within(left[1], 0.18, 0.40, 0.30, 0.58) and _within(right[1], 0.60, 0.82, 0.30, 0.58),
+		"left %.0f%% at %s, right %.0f%% at %s" % [left[0] * 100.0, left[1], right[0] * 100.0, right[1]])
+	player._drop_from_hang()
+	await _frames(60)
 
 
 func _kick_checks() -> void:

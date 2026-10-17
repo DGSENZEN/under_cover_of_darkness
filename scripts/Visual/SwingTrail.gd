@@ -9,6 +9,7 @@ const Layers := preload("res://scripts/Visual/Layers.gd")
 const SHADER := preload("res://scripts/Visual/trail.gdshader")
 ## The viewmodel's depth squeeze, as its materials have it (ViewArms.Z_CLIP).
 const ON_TOP_Z_CLIP := 0.05
+const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 
 ## Seconds a sample lives before it has faded out.
 @export var lifetime := 0.13
@@ -27,6 +28,13 @@ var _mesh := ImmediateMesh.new()
 var _material: ShaderMaterial
 
 
+## The viewmodel's field of view (0: the camera's), for a trail drawn on top
+## (ViewArms.VIEW_FOV, F12).
+func set_view_fov(fov: float) -> void:
+	if _material != null:
+		_material.set_shader_parameter("fov_override", fov)
+
+
 ## `on_top`: drawn over the world like the hands (for the viewmodel).
 func setup(render_layers: int, on_top := false) -> void:
 	layers = render_layers
@@ -41,6 +49,7 @@ func setup(render_layers: int, on_top := false) -> void:
 	# the smear behind it.
 	if on_top:
 		_material.set_shader_parameter("z_clip", ON_TOP_Z_CLIP)
+		_material.set_shader_parameter("fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
 		_material.render_priority = 11
 
 	material_override = _material
