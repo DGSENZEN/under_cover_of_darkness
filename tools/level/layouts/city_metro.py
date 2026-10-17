@@ -4,7 +4,11 @@ design.md): its own map under the Zócalo, its plan at the Zócalo's x and z
 brink: plan_check's UNDERGROUND_RULES, reach from the arrival. Its sheets
 are drawn one per depth band (BANDS), since its spaces stack; it carries
 the waypoints of the walks maps/metro's suite takes (metro/walk.py). Each part in
-layouts/metro/."""
+layouts/metro/.
+
+The layout as it stands was approved by the user on 2026-10-16 (the Metro
+Underground part 1 plan, Task 16): the sheets and the greybox walk. Its
+models come in sets (Part 3), in the order it dictates."""
 
 import json
 import os
