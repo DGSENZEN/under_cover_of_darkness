@@ -858,7 +858,7 @@ class Stall(unittest.TestCase):
     standing on the floor, inside its footprint and budget, its frame and
     counter bevelled (no long hard edge left)."""
 
-    PARTS = ["stall_frame", "stall_counter", "stall_awning", "stall_shelves", "stall_clutter", "stall_ofrenda",
+    PARTS = ["stall_frame", "stall_counter", "stall_awning", "stall_shelves", "stall_clutter", "stall_ofrenda", "stall_bulb",
              "stall_neon"]
 
     @classmethod

@@ -6,7 +6,7 @@ extends Node3D
 
 const LAB := preload("res://maps/underground_lab.tscn")
 const PARTS := ["stall_frame", "stall_counter", "stall_awning", "stall_shelves", "stall_clutter", "stall_ofrenda",
-	"stall_neon"]
+	"stall_neon", "stall_bulb"]
 
 var results: Array[String] = []
 var lab: Node3D
@@ -30,12 +30,12 @@ func _run() -> void:
 	# U1 the stall, all its parts
 	var meshes := {}
 
-	if lab.stall != null:
-		for mesh: MeshInstance3D in lab.stall.find_children("*", "MeshInstance3D", true, false):
-			meshes[String(mesh.name)] = mesh
+	# (The bulb hangs from its pivot, beside the stall's own node.)
+	for mesh: MeshInstance3D in lab.find_children("stall_*", "MeshInstance3D", true, false):
+		meshes[String(mesh.name)] = mesh
 
 	var have := PARTS.filter(func(p): return meshes.has(p))
-	_check("U1 the stall stands in the bay with all seven of its parts", have.size() == PARTS.size() and lab.missing.is_empty(),
+	_check("U1 the stall stands in the bay with all eight of its parts", have.size() == PARTS.size() and lab.missing.is_empty(),
 		"parts %s missing %s" % [have, lab.missing])
 
 	# U2 its painted parts in the bespoke blend (the atlas's colour whole)
@@ -102,6 +102,57 @@ func _run() -> void:
 	_check("U7 three grime decals (drip, soot, grime), F3 turns them off and on",
 		decals.size() == 3 and hidden and decals.all(func(d): return d.visible and d.texture_albedo != null),
 		"%d decals, hidden %s" % [decals.size(), hidden])
+
+	# U10 the bulb sways in the corridor's draught, a few degrees at most, its light with it
+	var swing := 0.0
+	var lights := {}
+
+	for i in 180:
+		await get_tree().physics_frame
+		var down: Vector3 = -lab.bulb_pivot.global_basis.y
+		swing = maxf(swing, rad_to_deg(down.angle_to(Vector3.DOWN)))
+		lights[lab.bulb.global_position.snapped(Vector3.ONE * 0.001)] = true
+
+	_check("U10 the hanging bulb sways in the draught (under 4 degrees) and its light swings with it",
+		swing > 0.3 and swing < 4.0 and lights.size() > 5 and lab.bulb_pivot.is_ancestor_of(lab.bulb),
+		"swing %.2f deg, light at %d places" % [swing, lights.size()])
+
+	# U11 a thread of copal rises from the censer: our own smoke sheet, blown by the one draught
+	var censer: Node3D = lab.censer
+	var smoke: Array = censer.find_children("*", "GPUParticles3D", true, false) if censer != null else []
+	var sheet := ""
+
+	for p: GPUParticles3D in smoke:
+		var m: Material = p.draw_pass_1.surface_get_material(0) if p.draw_pass_1 != null else p.material_override
+		if m is ShaderMaterial and m.get_shader_parameter("sheet") is Texture2D:
+			sheet = (m.get_shader_parameter("sheet") as Texture2D).resource_path
+	_check("U11 a thread of copal smoke rises from the censer, drawn from our own plume sheet",
+		censer != null and censer.global_position.distance_to(lab.CENSER) < 0.05 and smoke.any(func(p): return p.emitting)
+		and sheet.begins_with("res://assets/vfx/"), "censer %s sheet %s" % [censer, sheet])
+
+	# U12 dust hangs in each work light's cone
+	var in_cones := 0
+
+	for light: Light3D in lab.work_lights:
+		for d: Node3D in lab.dust:
+			var below := light.global_position - d.global_position
+			if below.y > 1.0 and below.y < 3.5 and Vector2(below.x, below.z).length() < 1.0:
+				in_cones += 1
+	_check("U12 dust motes drift in each work light's cone", lab.dust.size() == 2 and in_cones == 2,
+		"%d dust systems, %d under a light" % [lab.dust.size(), in_cones])
+
+	# U13 the neon hums on its sign, gone within 8 m, louder as it burns brighter
+	var hum: AudioStreamPlayer3D = lab.neon.get_node_or_null("hum") if lab.neon != null else null
+	var follows := false
+
+	if hum != null:
+		var loud: float = lab.hum_volume(1.0)
+		var quiet: float = lab.hum_volume(0.0)
+		follows = loud > quiet + 12.0
+	_check("U13 the neon hums from its sign, silent past 8 m, its loudness following the flicker",
+		hum != null and hum.stream != null and hum.stream.resource_path == "res://audio/ambience/neon_hum.wav"
+		and hum.max_distance <= 8.0 and hum.playing and follows,
+		"hum %s" % [hum])
 
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")

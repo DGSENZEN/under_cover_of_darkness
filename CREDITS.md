@@ -57,6 +57,8 @@ Every sound in the game is a recording, cut and levelled from the packs below by
 - **Rain (calm and strong) and the wind in the weather**: "Nature Essentials" from the
   "Essentials Series" by **NOX SOUND**, CC0; **dripping under the eaves**: "FilmCow
   Recorded SFX" by **FilmCow**, used with the user's approval (Sept 27 2026).
+- **A neon sign's hum (the Metro Underground)**: "ventilation hum" from "FilmCow
+  Recorded SFX" by **FilmCow**, a little higher, used with the user's approval of the pack.
 - **Thunder**: "100 CC0 SFX #2" by **rubberduck**
   ([OpenGameArt](https://opengameart.org/content/100-cc0-sfx-2)), CC0.
 - **Lighting a torch, snuffing a flame, dousing one**: the "400 Sounds Pack" (fire

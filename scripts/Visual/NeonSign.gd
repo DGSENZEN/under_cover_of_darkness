@@ -71,6 +71,11 @@ func tube_material() -> ShaderMaterial:
 	return _tube_material
 
 
+## The sign's level (0-1) now.
+func level() -> float:
+	return energy_at(_time)
+
+
 ## The sign's level (0-1) at `t` seconds of game time.
 func energy_at(t: float) -> float:
 	if pattern.is_empty():

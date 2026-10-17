@@ -505,16 +505,25 @@ def clutter_main(m):
         bundle(m, -0.55 + k * 0.19 + rng.uniform(-0.03, 0.03), rng.uniform(0.3, 0.46), rng.uniform(0.06, 0.09),
                rng.choice(["herb", "herb", "herb_dry"]))
 
-    # The bulb under the canvas.
-    under = _canvas_under(0.0, 0.62)
-    pipe(m, [(0.0, 0.62, under + 0.012), (0.0, 0.62, 1.86)], 0.011, 6, "steel")
-    turned(m, [(0.024, -0.03), (0.024, 0.01), (0.018, 0.02)], 8, "brass", at=(0.0, 0.62, 1.84))
-    turned(m, [(0.02, -0.03), (0.045, -0.07), (0.05, -0.11), (0.03, -0.15), (0.015, -0.16)], 10, "glass",
-           at=(0.0, 0.62, 1.84))
-
-
 def clutter():
     return _object("stall_clutter", clutter_main)
+
+
+# --- the bulb (its own object: it sways in the corridor's draught) --------------------------------
+
+BULB_AT = (0.0, 0.62, 1.84)
+
+
+def bulb_main(m):
+    """The bulb on its cord under the canvas, the cord's top just inside the cloth."""
+    x, y, z = BULB_AT
+    pipe(m, [(x, y, _canvas_under(x, y) + 0.012), (x, y, z + 0.02)], 0.011, 6, "steel")
+    turned(m, [(0.024, -0.03), (0.024, 0.01), (0.018, 0.02)], 8, "brass", at=BULB_AT)
+    turned(m, [(0.02, -0.03), (0.045, -0.07), (0.05, -0.11), (0.03, -0.15), (0.015, -0.16)], 10, "glass", at=BULB_AT)
+
+
+def bulb():
+    return _object("stall_bulb", bulb_main)
 
 
 # --- her ofrenda --------------------------------------------------------------------------------
@@ -631,6 +640,7 @@ def build():
     shelves()
     awning()
     clutter()
+    bulb()
     ofrenda()
     neon()
 

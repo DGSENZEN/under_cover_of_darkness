@@ -12,6 +12,7 @@ extends Node3D
 ## user's local brush sheets.
 
 const PLAYER := preload("res://Player.tscn")
+const Vfx := preload("res://scripts/Level/Vfx.gd")
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 
@@ -23,6 +24,16 @@ const HEIGHT := 4.0
 const WALL := 0.3
 ## Godot positions of what the stall's script built (Blender x, z, -y).
 const BULB := Vector3(0.0, 1.70, -0.62)
+## Where the bulb's cord meets the canvas: the pivot it swings from.
+const BULB_PIVOT := Vector3(0.0, 2.14, -0.62)
+## The top of the copal on the censer.
+const CENSER := Vector3(0.62, 1.2, -0.22)
+## The corridor's draught, the one wind the smoke and the bulb answer to (m/s).
+const DRAUGHT := Vector3(0.35, 0.0, 0.0)
+const HUM := "res://audio/ambience/neon_hum.wav"
+## The hum at full, and how near silence it falls when the tube goes dark (dB).
+const HUM_DB := -8.0
+const HUM_DARK := 0.05
 const SIGN := Vector3(0.0, 2.36, 0.6)
 const JUNCTION_TOP := Vector3(1.12, 2.54, -1.26)
 const CONDUIT := Vector3(0.0, 3.05, -1.26)
@@ -42,6 +53,10 @@ var missing := PackedStringArray()
 var stall: Node3D
 var neon: NeonSign
 var bulb: OmniLight3D
+var bulb_pivot: Sway
+var censer: Node3D
+var dust: Array[Node3D] = []
+var hum: AudioStreamPlayer3D
 var work_lights: Array[Light3D] = []
 var form_light: DirectionalLight3D
 var form_material: StandardMaterial3D
@@ -60,6 +75,7 @@ func _ready() -> void:
 	_stall()
 	_lights()
 	_decals()
+	_effects()
 	_keys()
 	player = PLAYER.instantiate()
 	player.debug_traversal = false
@@ -143,7 +159,7 @@ func _stall() -> void:
 
 		if mesh.name == "stall_neon":
 			tube = mesh
-		else:
+		elif mesh.name != "stall_bulb":
 			var body := StaticBody3D.new()
 			var shape := CollisionShape3D.new()
 			shape.shape = mesh.mesh.create_trimesh_shape()
@@ -285,14 +301,25 @@ func _lights() -> void:
 		_box(light.position + Vector3(-0.25, 0.25, -0.12), light.position + Vector3(0.25, 0.4, 0.12),
 			_flat(Color(0.1, 0.1, 0.1)), "fixture_%d" % int(x))
 
+	bulb_pivot = Sway.new()
+	bulb_pivot.name = "bulb_pivot"
+	bulb_pivot.draught = DRAUGHT
+	bulb_pivot.seed = 7
+	add_child(bulb_pivot)
+	bulb_pivot.position = BULB_PIVOT
+	var hanging: Node3D = stall.find_child("stall_bulb", true, false) if stall != null else null
+
+	if hanging != null:
+		hanging.reparent(bulb_pivot, true)
+
 	bulb = OmniLight3D.new()
 	bulb.name = "bulb"
 	bulb.light_color = BULB_COLOUR
 	bulb.light_energy = 0.9
 	bulb.omni_range = 3.5
 	bulb.shadow_enabled = true
-	add_child(bulb)
-	bulb.position = BULB
+	bulb_pivot.add_child(bulb)
+	bulb.position = BULB - BULB_PIVOT
 
 	form_light = DirectionalLight3D.new()
 	form_light.name = "form_light"
@@ -304,6 +331,43 @@ func _lights() -> void:
 	form_material = StandardMaterial3D.new()
 	form_material.albedo_color = Color(0.6, 0.6, 0.6)
 	form_material.roughness = 1.0
+
+
+# The effects: copal off the censer, dust in the work lights, the neon's hum
+
+func _effects() -> void:
+	censer = Vfx.system("censer")
+	add_child(censer)
+	censer.position = CENSER
+	Vfx.blow(censer, DRAUGHT)
+	Vfx.emit(censer, true)
+
+	for light in work_lights:
+		var motes: Node3D = Vfx.system("dust")
+		add_child(motes)
+		motes.position = light.global_position - Vector3(0.0, 2.0, 0.0)
+		Vfx.emit(motes, true)
+		dust.append(motes)
+
+	if neon != null:
+		hum = AudioStreamPlayer3D.new()
+		hum.name = "hum"
+		hum.stream = load(HUM)
+		hum.max_distance = 8.0
+		hum.unit_size = 2.0
+		hum.autoplay = true
+		neon.add_child(hum)
+		hum.position = SIGN
+
+
+## The hum's loudness (dB) for the tube's level (0 dark, 1 full).
+func hum_volume(level: float) -> float:
+	return HUM_DB + linear_to_db(lerpf(HUM_DARK, 1.0, clampf(level, 0.0, 1.0)))
+
+
+func _process(_delta: float) -> void:
+	if hum != null and neon != null:
+		hum.volume_db = hum_volume(neon.level())
 
 
 # The grime, each with its cause

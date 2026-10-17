@@ -454,6 +454,12 @@ WEATHER_LOOPS = [
     ("drip", FILMCOW + "ambience - dripping water 1.wav", None, 1.0, 12.0),
 ]
 WEATHER_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audio", "weather")
+# The Metro Underground's loops, to audio/ambience/ as the fire beds are: a
+# neon sign's hum, FilmCow's recorded ventilation hum a little higher (the
+# tube's buzz over the transformer), for the user's ear (Oct 16 2026).
+UNDERGROUND_LOOPS = [
+    ("neon_hum", FILMCOW + "ventilation hum.wav", None, 1.25, 8.0),
+]
 # Thunder (NightSound, after each flash), from rubberduck's "100 CC0 SFX #2"
 # (CC0, approved Sept 27 2026): its one clap as it is, lower and duller (far
 # off), and higher and sharper (near): (name, source, low-pass, pitch).
@@ -939,6 +945,9 @@ def main():
             only = set(a.split("=", 1)[1].split(","))
         elif a == "--fire":
             prepare_fire_loops()
+            return
+        elif a == "--underground":
+            prepare_fire_loops(UNDERGROUND_LOOPS, AMBIENCE_OUT, "ambience", "underground loop")
             return
         elif a == "--weather":
             prepare_fire_loops(WEATHER_LOOPS, WEATHER_OUT, "weather", "weather loop")
