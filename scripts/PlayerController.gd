@@ -1026,7 +1026,11 @@ func _update_locomotion(delta: float) -> void:
 		# Free-running, a hard landing is rolled out of: it takes more before it
 		# hurts.
 		var hurts_from := fall_damage_speed
-		var rolling := free_running() and fall_speed > roll_min_speed
+		# (Or still running forward when the feet touch, sprint or not: a roll
+		# is what a body does landing on the move.)
+		var forward_speed := Vector3(velocity.x, 0.0, velocity.z).dot(_facing_direction())
+		var on_the_move := free_running() or (forward_speed > walk_speed * 0.8 and _wish_direction().dot(_facing_direction()) > 0.5)
+		var rolling := on_the_move and fall_speed > roll_min_speed
 
 		if rolling:
 			hurts_from += roll_relief_speed

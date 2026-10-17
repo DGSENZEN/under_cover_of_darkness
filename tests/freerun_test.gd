@@ -752,6 +752,17 @@ func _flow_checks() -> void:
 	_release_all()
 	_check("FR42 a landing roll tumbles the view forward", dipped <= -40.0, "lowest pitch %.1f deg" % dipped)
 
+	# Sprint let go in the air, still running forward on landing: a roll too.
+	await _place(Vector3(455, 10.03, 0))
+	player.velocity = Vector3(0, 0, -6.0)
+	Input.action_press("move_forward")
+	dipped = 0.0
+	for i in 150:
+		await _frames(1)
+		dipped = minf(dipped, rad_to_deg(player.juice.view_rotation.x))
+	_release_all()
+	_check("FR43 a hard landing running forward rolls without sprint held", dipped <= -40.0, "lowest pitch %.1f deg" % dipped)
+
 
 func _until(condition: Callable, max_frames: int) -> void:
 	for i in max_frames:
