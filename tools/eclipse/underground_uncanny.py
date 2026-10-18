@@ -251,6 +251,162 @@ def nahual_head():
     return head
 
 
+# --- the procession: the dead in white, candles in their hands (supernatural_refs.md) ------------
+# Real human bodies: Quaternius's Universal Base Characters (CC0, assets/characters/base), posed here
+# (arms forward, hands together holding a candle, head a little bowed), dressed (a rebozo and long
+# skirt, a sarape and sombrero, a child's dress) and fused into one pale silhouette each.
+
+BASE = common.ROOT / "assets" / "characters" / "base"
+# Where the hands meet, in the body's own frame before it is turned and scaled (it faces -y): before
+# the chest, a little below it.
+HANDS_AT = (0.0, -0.27, 1.12)
+# Each figure: its base body, its scale, the hands' meeting point once turned to face +x and scaled.
+FIGURES = {"dead_woman": ("Superhero_Female_FullBody.gltf", 0.9), "dead_man": ("Superhero_Male_FullBody.gltf", 0.93),
+           "dead_child": ("Superhero_Female_FullBody.gltf", 0.62)}
+CANDLE_HELD = {n: (-HANDS_AT[1] * k, HANDS_AT[0] * k, HANDS_AT[2] * k) for n, (_, k) in FIGURES.items()}
+# The voxels each is fused on, at its own size (m): a child's thin forearms and hands need finer ones.
+FIGURE_VOXEL = {"dead_woman": 0.024, "dead_man": 0.024, "dead_child": 0.014}
+
+
+def _aim(rig, bone, target):
+    """A pose bone turned so it points from its head at `target` (the rig's own space)."""
+    bpy.context.view_layer.update()
+    pb = rig.pose.bones[bone]
+    head, tail = pb.head.copy(), pb.tail.copy()
+    turn = (tail - head).normalized().rotation_difference((Vector(target) - head).normalized())
+    matrix = pb.matrix.copy()
+    at = matrix.translation.copy()
+    turned_matrix = turn.to_matrix().to_4x4() @ matrix
+    turned_matrix.translation = at
+    pb.matrix = turned_matrix
+    bpy.context.view_layer.update()
+
+
+def _posed_body(file):
+    """A base body imported, posed holding its candle, its pose baked into its mesh; returns the mesh
+    object, everything else of the import removed."""
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=str(BASE / file))
+    new = [o for o in bpy.data.objects if o not in before]
+    rig = next(o for o in new if o.type == "ARMATURE")
+    body = max((o for o in new if o.type == "MESH"), key=lambda o: len(o.data.vertices))
+    to_rig = rig.matrix_world.inverted()
+    hands = to_rig @ Vector(HANDS_AT)
+
+    for sx in ("l", "r"):
+        side = 1.0 if sx == "l" else -1.0
+        elbow = to_rig @ Vector((side * 0.19, -0.1, 1.17))
+        hand = hands + to_rig.to_3x3() @ Vector((side * 0.035, 0.0, 0.0))
+        _aim(rig, "upperarm_" + sx, elbow)
+        _aim(rig, "lowerarm_" + sx, hand)
+        _aim(rig, "hand_" + sx, hands + to_rig.to_3x3() @ Vector((side * 0.01, -0.12, 0.02)))
+
+    head = rig.pose.bones["Head"]
+    head.rotation_mode = "XYZ"
+    head.rotation_euler.rotate_axis("X", math.radians(14.0))
+    bpy.context.view_layer.update()
+
+    with bpy.context.temp_override(active_object=body, object=body, selected_objects=[body],
+                                   selected_editable_objects=[body]):
+        for mod in list(body.modifiers):
+            if mod.type == "ARMATURE":
+                bpy.ops.object.modifier_apply(modifier=mod.name)
+
+    world = body.matrix_world.copy()
+    body.parent = None
+    body.matrix_world = world
+
+    for o in new:
+        if o is not body:
+            bpy.data.objects.remove(o, do_unlink=True)
+
+    with bpy.context.temp_override(active_object=body, object=body, selected_objects=[body],
+                                   selected_editable_objects=[body]):
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+    return body
+
+
+def _dress(body, garments, name, scale, extras=()):
+    """The posed body and its garments fused into one surface, turned to face +x, scaled, set on the
+    floor; `extras` (a hat) joined on after."""
+    underground_shapes.join(body, garments)
+    fused(body, FIGURE_VOXEL[name] / scale)
+
+    for v in body.data.vertices:
+        x, y, z = v.co
+        v.co = Vector((-y, x, z)) * scale
+
+    low = min(v.co.z for v in body.data.vertices)
+
+    for v in body.data.vertices:
+        v.co.z -= low
+
+    if extras:
+        for e in extras:
+            for v in e.data.vertices:
+                x, y, z = v.co
+                v.co = Vector((-y, x, z - low / scale)) * scale
+        underground_shapes.join(body, list(extras))
+
+    body.name = name
+    body.data.name = name
+    return body
+
+
+def _skirt(waist, hem, top=0.98, bottom=0.03):
+    """A long skirt (the body's frame, facing -y): a cone from the waist to a hem on the floor."""
+    m = common.Mesh("skirt", outward=True)
+    turned(m, [(hem, bottom), (hem * 0.93, bottom + 0.25), (waist * 1.25, top - 0.35), (waist, top)], 18, "nahual_black",
+           at=(0.0, 0.03, 0.0))
+    return m.make()
+
+
+def _bodice():
+    """A loose blouse over the chest and shoulders to the waist (the body's frame)."""
+    return chain("bodice", [((0.0, 0.01, 0.93), (0.16, 0.13)), ((0.0, 0.0, 1.18), (0.19, 0.15)),
+                            ((0.0, 0.01, 1.38), (0.18, 0.12)), ((0.0, 0.03, 1.47), (0.09, 0.08))], smooth=1)
+
+
+def dead_woman():
+    """A woman in her rebozo, drawn over her head and down her back, her long skirt to the floor,
+    her head a little bowed, her hands together at her chest holding her candle."""
+    body = _posed_body(FIGURES["dead_woman"][0])
+    hood = chain("rebozo", [((0.0, -0.05, 1.68), (0.13, 0.13)), ((0.0, 0.03, 1.6), (0.16, 0.14)),
+                            ((0.0, 0.1, 1.42), (0.24, 0.1)), ((0.0, 0.13, 1.15), (0.25, 0.08))], smooth=1)
+    ends = [chain("rebozo_end_%d" % sx, [((sx * 0.15, -0.02, 1.45), (0.07, 0.04)), ((sx * 0.18, -0.1, 1.15), (0.07, 0.04)),
+                                         ((sx * 0.17, -0.12, 0.88), (0.06, 0.035))], smooth=1) for sx in (-1, 1)]
+    # The rebozo crossed over her chest, from her left shoulder to her right hip.
+    cross = chain("rebozo_cross", [((0.16, -0.03, 1.46), (0.07, 0.035)), ((0.02, -0.15, 1.24), (0.11, 0.04)),
+                                   ((-0.15, -0.11, 0.98), (0.09, 0.035))], smooth=1)
+    return _dress(body, [_skirt(0.15, 0.36), _bodice(), hood, cross] + ends, "dead_woman", FIGURES["dead_woman"][1])
+
+
+def dead_man():
+    """A man in white manta, his sarape over his shoulder, his sombrero on, his hands holding his
+    candle before his chest."""
+    body = _posed_body(FIGURES["dead_man"][0])
+    # His manta: a loose shirt to his thighs, loose trousers to his ankles.
+    shirt = chain("shirt", [((0.0, 0.02, 0.78), (0.21, 0.17)), ((0.0, 0.01, 1.02), (0.2, 0.16)),
+                            ((0.0, 0.0, 1.27), (0.22, 0.16)), ((0.0, 0.02, 1.45), (0.19, 0.13)), ((0.0, 0.04, 1.55), (0.09, 0.08))], smooth=1)
+    trousers = [chain("trouser_%d" % sx, [((sx * 0.1, 0.03, 0.92), (0.12, 0.12)), ((sx * 0.12, 0.03, 0.5), (0.105, 0.105)),
+                                          ((sx * 0.12, 0.04, 0.14), (0.1, 0.1))], smooth=1) for sx in (-1, 1)]
+    # The sarape over his left shoulder, falling before him and behind.
+    sarape = chain("sarape", [((0.12, -0.17, 0.95), (0.13, 0.04)), ((0.17, -0.05, 1.5), (0.12, 0.06)),
+                              ((0.15, 0.17, 1.02), (0.13, 0.04))], smooth=1)
+    m = common.Mesh("sombrero", outward=True)
+    # (Seated on his head: its crown wide enough to take it, its brim at his brow.)
+    turned(m, [(0.12, 0.0), (0.36, 0.012), (0.38, 0.035), (0.135, 0.05), (0.13, 0.15), (0.1, 0.21), (0.04, 0.225)], 22,
+           "nahual_black", at=(0.0, 0.02, 1.6))
+    return _dress(body, [shirt, sarape] + trousers, "dead_man", FIGURES["dead_man"][1], [m.make()])
+
+
+def dead_child():
+    """A child in a white dress, holding their candle before them."""
+    body = _posed_body(FIGURES["dead_child"][0])
+    return _dress(body, [_skirt(0.15, 0.3), _bodice()], "dead_child", FIGURES["dead_child"][1])
+
+
 def old_hat(m):
     """The old man's palm hat, its brim gone soft, left on the bench."""
     turned(m, [(0.11, 0.0), (0.26, 0.006), (0.265, 0.022), (0.12, 0.03), (0.115, 0.1), (0.09, 0.14), (0.04, 0.155)],
@@ -264,6 +420,9 @@ def build():
     nahual_body()
     nahual_head()
     smooth_object("old_hat", old_hat)
+    dead_woman()
+    dead_man()
+    dead_child()
 
 
 def main():

@@ -76,6 +76,8 @@ var glow: OmniLight3D
 var presence := 1.0
 ## Something passing they fear (the dark train, 0-1): they all sink and go dark.
 var hush := 0.0
+## Something they gather to (the procession walking): those out drift round it instead.
+var gather: Node3D
 
 var _time := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -203,8 +205,14 @@ func _rise(i: int) -> void:
 	soul["goal"] = _goal()
 
 
-## Somewhere round the drain to drift to, a little toward the candles, at a spirit's height.
+## Somewhere round the drain to drift to, a little toward the candles, at a spirit's height; or,
+## while something passes they gather to, somewhere round it.
 func _goal() -> Vector3:
+	if gather != null and is_instance_valid(gather) and gather.is_visible_in_tree():
+		var round_it := to_local(gather.global_position)
+		var a := _rng.randf_range(0.0, TAU)
+		return Vector3(round_it.x + cos(a) * 0.8, _rng.randf_range(0.6, 1.6), round_it.z + sin(a) * 0.8)
+
 	var a := _rng.randf_range(0.0, TAU)
 	var r := _rng.randf_range(0.3, ROAM)
 	var at := Vector3(cos(a) * r, _rng.randf_range(HEIGHT.x, HEIGHT.y), sin(a) * r)
@@ -238,13 +246,16 @@ func _move(i: int, delta: float, hidden: bool) -> void:
 				soul["state"] = "out"
 		"out":
 			var goal: Vector3 = soul["goal"]
-			if at.distance_to(goal) < 0.15:
+			# (Gathering, they keep up with what they gather to.)
+			var gathering := gather != null and is_instance_valid(gather) and gather.is_visible_in_tree()
+			if at.distance_to(goal) < 0.15 or (gathering and Vector2(goal.x, goal.z).distance_to(
+					Vector2(to_local(gather.global_position).x, to_local(gather.global_position).z)) > 1.2):
 				soul["goal"] = _goal()
 			var phase: Vector3 = soul["phase"]
 			var bob := Vector3(sin(_time * 1.3 + phase.x), sin(_time * 0.9 + phase.y) * 0.6, sin(_time * 1.1 + phase.z)) * 0.08
-			at = at.move_toward(goal + bob, SPEED * delta)
+			at = at.move_toward(goal + bob, SPEED * (2.0 if gathering else 1.0) * delta)
 			at = _keep_off(at, delta)
-			if soul["t"] > soul["until"]:
+			if soul["t"] > soul["until"] and not gathering:
 				soul["state"] = "sinking"
 		"sinking":
 			# Back over a gap, then down through it home.

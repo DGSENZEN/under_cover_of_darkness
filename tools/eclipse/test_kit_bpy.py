@@ -1402,9 +1402,10 @@ class UndergroundUncanny(unittest.TestCase):
     black dog lying with its head up (its head its own object, turned about the neck), and the
     old man's hat it leaves on the bench; closed, in budget, through the gate."""
 
-    BUDGET = {"nahual_body": 20000, "nahual_head": 8000, "old_hat": 600}
+    BUDGET = {"nahual_body": 20000, "nahual_head": 8000, "old_hat": 600, "dead_woman": 13000, "dead_man": 13000,
+              "dead_child": 14000}
     # (A creature's tight curves: gated at gate.CREATURE_SLIVER, docs/superpowers/refs/underground/nahual_refs.md.)
-    CREATURE = ("nahual_body", "nahual_head")
+    CREATURE = ("nahual_body", "nahual_head", "dead_woman", "dead_man", "dead_child")
 
     @classmethod
     def setUpClass(cls):
@@ -1443,7 +1444,7 @@ class UndergroundUncanny(unittest.TestCase):
     def test_one_fused_surface(self):
         # Its parts fused into one closed surface (the Colima dogs' one smooth volume, no joins):
         # every face reachable from every other.
-        for n in self.CREATURE:
+        for n in ("nahual_body", "nahual_head"):
             bm = bmesh.new()
             bm.from_mesh(self.objects[n].data)
             black = [f for f in bm.faces if self.objects[n].material_slots[f.material_index].material.name == "nahual_black"]
@@ -1510,6 +1511,28 @@ class UndergroundUncanny(unittest.TestCase):
         nose = max(v.x for v in vs)
         self.assertGreater(top, 0.28)
         self.assertGreater(nose, 0.34)
+
+    def test_the_dead_in_white_stand_their_heights(self):
+        # The procession (supernatural_refs.md: the dead in white, candles in their hands): a woman in her
+        # rebozo, a man in his sombrero, a child; standing on the floor, facing +x, each fused to one surface.
+        for n, (lo, hi) in (("dead_woman", (1.5, 1.7)), ("dead_man", (1.68, 1.9)), ("dead_child", (1.0, 1.25))):
+            vs = _world(self.objects[n])
+            self.assertAlmostEqual(min(v.z for v in vs), 0.0, delta=0.002, msg=n)
+            self.assertTrue(lo <= max(v.z for v in vs) <= hi, "%s %.2f" % (n, max(v.z for v in vs)))
+
+    def test_the_sombrero_is_wide(self):
+        all_vs = _world(self.objects["dead_man"])
+        vs = [v for v in all_vs if v.z > 0.88 * max(v.z for v in all_vs)]
+        self.assertGreater(max(v.y for v in vs) - min(v.y for v in vs), 0.5)
+
+    def test_each_holds_their_candle_before_them(self):
+        # Their hands meet at the candle's foot, at chest height (or the child's), before them along +x.
+        for n in ("dead_woman", "dead_man", "dead_child"):
+            hand = underground_uncanny.CANDLE_HELD[n]
+            vs = _world(self.objects[n])
+            near = [v for v in vs if math.dist((v.x, v.y, v.z), hand) < 0.06 * underground_uncanny.FIGURES[n][1] / 0.62]
+            self.assertTrue(near, n)
+            self.assertGreater(hand[0], 0.1, n)
 
     def test_the_old_mans_hat(self):
         (x0, x1), _, (z0, z1) = self._extent("old_hat")

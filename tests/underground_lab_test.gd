@@ -763,6 +763,74 @@ func _run() -> void:
 	_check("U54 walked into, the nahual scatters into smoke and is not solid; it re-forms once they step away",
 		whole and scattered and reformed, "whole %s scattered %s reformed %s (presence %.2f)" % [whole, scattered, reformed, nd.presence])
 
+	# U56 the procession: the dead in white, each with a lit candle, walk the marigold trail from her ofrenda
+	#     into the old stone, p_facing their way, the ánimas gathering round them; then they are p_gone
+	var p_pr: Node3D = lab.procession
+	lab.player.global_position = Vector3(8.0, 1.05, 3.0)
+	p_pr.start()
+	await _frames(30)
+	var p_walkers: Array = p_pr.figures
+	var p_pale := true
+	var p_candles_lit := true
+
+	for f: MeshInstance3D in p_walkers:
+		var p_ghost := f.get_surface_override_material(0) as ShaderMaterial
+		p_pale = p_pale and p_ghost != null and p_ghost.shader.resource_path.ends_with("spectre.gdshader") \
+			and (p_ghost.get_shader_parameter("ink") as Color).r > 0.6
+		p_candles_lit = p_candles_lit and f.find_children("*", "OmniLight3D", true, false).any(func(l): return l.light_energy > 0.1)
+	var p_lead: MeshInstance3D = p_walkers[0]
+	var p_lead_from: float = p_lead.global_position.distance_to(lab.TRAIL_END)
+	var p_lead_was: Vector3 = p_lead.global_position
+	await _frames(180)
+	var p_travel: Vector3 = (p_lead.global_position - p_lead_was) * Vector3(1, 0, 1)
+	var p_facing: bool = p_travel.length() > 0.2 and p_lead.global_transform.basis.x.normalized().dot(p_travel.normalized()) > 0.7
+	var p_nearer: bool = p_lead.global_position.distance_to(lab.TRAIL_END) < p_lead_from - 0.3
+	var p_gathered := 0
+
+	for i in 600:
+		await get_tree().process_frame
+		var p_round_them := 0
+		for l in lab.animas.lights:
+			if l.global_position.y > 0.1 and p_walkers.any(func(f): return Vector2(f.global_position.x - l.global_position.x,
+					f.global_position.z - l.global_position.z).length() < 1.5):
+				p_round_them += 1
+		p_gathered = maxi(p_gathered, p_round_them)
+	for i in 3600:
+		await get_tree().process_frame
+		if not p_pr.walking:
+			break
+	var p_gone: bool = not p_pr.walking and p_walkers.all(func(f): return not f.visible)
+	_check("U56 the procession: 5 pale dead with lit candles walk the trail into the old stone, facing their way, ánimas round them; then gone",
+		p_walkers.size() == 5 and p_pale and p_candles_lit and p_facing and p_nearer and p_gathered >= 2 and p_gone,
+		"walkers %d pale %s candles %s facing %s nearer %s gathered %d gone %s" % [p_walkers.size(), p_pale, p_candles_lit, p_facing,
+		p_nearer, p_gathered, p_gone])
+
+	# U57 a shadow with no owner: a tall figure's shadow crosses the tiled wall, seen only from the corner of the
+	#     eye; looked at, it is gone
+	var p_sh: Node3D = lab.ownerless
+	var p_watcher := Camera3D.new()
+	add_child(p_watcher)
+	p_sh.watcher = p_watcher
+	# The p_watcher in the corridor a few metres off the wall, looking 55 degrees aside of the shadow's way.
+	var p_spot: Vector3 = p_sh.crossing_middle()
+	p_watcher.global_position = Vector3(p_spot.x, 1.6, p_spot.z - 3.0 if p_spot.z > 0.0 else p_spot.z + 3.0)
+	var p_to_spot: Vector3 = (p_spot - p_watcher.global_position).normalized()
+	p_watcher.look_at(p_watcher.global_position + p_to_spot.rotated(Vector3.UP, deg_to_rad(55.0)), Vector3.UP)
+	p_sh.cross_now()
+	await _frames(20)
+	var p_shown: bool = p_sh.decal.visible and p_sh.decal.modulate.a > 0.5
+	var p_shadow_from: Vector3 = p_sh.decal.global_position
+	await _frames(40)
+	var p_crossing: bool = p_sh.decal.global_position.distance_to(p_shadow_from) > 0.2
+	p_watcher.look_at(p_sh.decal.global_position, Vector3.UP)
+	await _frames(20)
+	var p_vanished: bool = not p_sh.decal.visible or p_sh.decal.modulate.a < 0.05
+	p_sh.watcher = null
+	p_watcher.queue_free()
+	_check("U57 a shadow with no owner crosses the wall at the corner of the eye; looked at, it is gone",
+		p_shown and p_crossing and p_vanished and p_sh.decal.texture_albedo != null,
+		"shown %s crossing %s vanished %s" % [p_shown, p_crossing, p_vanished])
+
 	# U8 no pixel grid
 	var retro: Node = get_node_or_null("/root/Retro")
 	_check("U8 the pixel grid is off", retro != null and retro.virtual_height == 0, "%s" % [retro.virtual_height if retro else null])

@@ -8,6 +8,7 @@ extends Node3D
 ##   F3  grime decals on / off
 ##   F4  a train now (they pass every 90-150 s on their own)
 ##   F5  the dark train now (it runs every 10-20 min on its own)
+##   F9  the procession now (her dead walk on their own every 4-8 min)
 ##
 ## The stall's atlas is the committed painted file (the user's overpaint
 ## stall.png before the painter's stall_base.png); the bay never reads the
@@ -20,6 +21,13 @@ const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const AnimasScript := preload("res://scripts/Visual/Animas.gd")
 const NahualScript := preload("res://scripts/Visual/Nahual.gd")
+const ProcessionScript := preload("res://scripts/Visual/Procession.gd")
+const ShadowScript := preload("res://scripts/Visual/OwnerlessShadow.gd")
+## The procession's file: who walks, in order (the uncanny kit's dead, and where each holds their candle:
+## tools/eclipse/underground_uncanny.py CANDLE_HELD, Godot's way round).
+const PROCESSION := [["dead_woman", Vector3(0.243, 1.008, 0.0)], ["dead_man", Vector3(0.251, 1.042, 0.0)],
+	["dead_child", Vector3(0.167, 0.694, 0.0)], ["dead_woman", Vector3(0.243, 1.008, 0.0)],
+	["dead_man", Vector3(0.251, 1.042, 0.0)]]
 ## The dark train (supernatural_refs.md): Ehécatl's wind running the line dug through his temple, rarely;
 ## how rare (s), how far every light sinks, how hard the draught, and the wind heard (a stand-in until
 ## the user's tunnel-wind recording, sound_list.md #10).
@@ -177,6 +185,8 @@ var _service_material: ShaderMaterial
 var furniture: Array[MeshInstance3D] = []
 var floor_tiles: Array[MeshInstance3D] = []
 var animas: Node3D
+var procession: Node3D
+var ownerless: Node3D
 var dark_train: TrainPass
 var dark_wind: AudioStreamPlayer
 var nahual: Node3D
@@ -230,6 +240,8 @@ func _ready() -> void:
 	# (After the player: the uncanny shy from it, and watch it.)
 	_dark_train()
 	_animas()
+	_procession()
+	_ownerless()
 	_nahual()
 
 
@@ -249,6 +261,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_F5:
 			if dark_train != null:
 				dark_train.start_pass()
+		KEY_F9:
+			if procession != null and not procession.walking:
+				procession.start()
 
 
 func set_work_lights(on: bool) -> void:
@@ -1149,6 +1164,49 @@ func _animas() -> void:
 		animas.rotation.y = module.rotation.y
 
 
+## The procession: her dead in white with their candles, walking her marigold trail into the old stone.
+func _procession() -> void:
+	if not ResourceLoader.exists(UNCANNY_KIT):
+		return
+
+	var meshes := _kit(UNCANNY_KIT)
+	var cast := []
+
+	for walker in PROCESSION:
+		cast.append([meshes[walker[0]], walker[1]])
+
+	procession = ProcessionScript.new()
+	procession.name = "procession"
+	procession.trail = _trail
+	procession.length = _trail_length()
+	procession.animas = animas
+	add_child(procession)
+	procession.build(cast)
+
+
+func _trail_length() -> float:
+	var total := 0.0
+	var was := _trail(0.0)
+
+	for i in range(1, 41):
+		var at := _trail(i / 40.0)
+		total += was.distance_to(at)
+		was = at
+
+	return total
+
+
+## A shadow with no owner, crossing the far wall's tiles.
+func _ownerless() -> void:
+	ownerless = ShadowScript.new()
+	ownerless.name = "ownerless"
+	ownerless.wall_z = FAR_WALL
+	ownerless.far = true
+	ownerless.from_x = -7.0
+	ownerless.to_x = 7.0
+	add_child(ownerless)
+
+
 ## The nahual: the old man who sits on the bench, become an enormous black dog lying beside it;
 ## his hat left on the bench. It watches whoever is watching (the drawing camera: the player's).
 func _nahual() -> void:
@@ -1261,5 +1319,5 @@ func _name_keys() -> void:
 	if keys_label == null or work_lights.is_empty() or decals.is_empty():
 		return
 
-	keys_label.text = "F1 work lights %s  ·  F2 form light %s  ·  F3 decals %s  ·  F4 a train  ·  F5 the dark train" % [
+	keys_label.text = "F1 work lights %s  ·  F2 form light %s  ·  F3 decals %s  ·  F4 a train  ·  F5 the dark train  ·  F9 the procession" % [
 		"ON" if work_lights[0].visible else "off", "ON" if _form else "off", "ON" if decals[0].visible else "off"]

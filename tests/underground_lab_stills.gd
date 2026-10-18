@@ -6,7 +6,8 @@ extends Node3D
 ##   (-- --only=front,close_counter  some views; -- --plain  the atlas drawn unshaded, to check its mapping;
 ##    -- --train  shot as a train runs by; -- --settle=4  effects given 4 s to fill out first;
 ##    -- --rise  an ánima sent up from the drain first; -- --dark  shot as the dark train runs by;
-##    -- --unlit  the work lights off, the corridor by its own lights)
+##    -- --unlit  the work lights off, the corridor by its own lights; -- --procession  her dead walking;
+##    -- --shadow  the ownerless shadow crossing the far wall)
 
 const LAB := preload("res://maps/underground_lab.tscn")
 
@@ -46,6 +47,8 @@ const VIEWS := [
 	["uncanny_drain", Vector3(-2.3, 0.9, -0.9), Vector3(-1.8, 0.0, -1.75)],
 	["uncanny_rise", Vector3(-3.0, 1.0, 0.2), Vector3(-1.7, 0.25, -1.6)],
 	["uncanny_nahual", Vector3(-3.6, 1.6, 1.6), Vector3(-4.8, 0.5, 4.0)],
+	["uncanny_procession", Vector3(-0.5, 1.7, 2.6), Vector3(-3.4, 0.9, -0.4)],
+	["uncanny_shadow", Vector3(0.0, 1.7, 0.2), Vector3(0.0, 1.5, 4.5)],
 	["uncanny_nahual_far", Vector3(0.5, 1.6, 0.8), Vector3(-4.8, 0.6, 4.0)],
 ]
 
@@ -60,6 +63,8 @@ func _ready() -> void:
 	var rising := false
 	var dark := false
 	var unlit := false
+	var walking := false
+	var shadowed := false
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
@@ -70,6 +75,10 @@ func _ready() -> void:
 			plain = true
 		elif arg == "--train":
 			passing = true
+		elif arg == "--procession":
+			walking = true
+		elif arg == "--shadow":
+			shadowed = true
 		elif arg == "--unlit":
 			unlit = true
 		elif arg == "--dark":
@@ -108,6 +117,29 @@ func _ready() -> void:
 
 		for i in 150:
 			await get_tree().process_frame
+
+	if walking:
+		# Her dead set out, shot as the file has come out on to the floor.
+		lab.procession.start()
+
+		for i in 900:
+			await get_tree().process_frame
+
+	if shadowed:
+		# A second eye looking away from the wall, so the shadow keeps crossing while the still looks at it.
+		var aside := Camera3D.new()
+		add_child(aside)
+		aside.global_position = Vector3(0.0, 1.6, 1.0)
+		aside.look_at(Vector3(0.0, 1.6, -5.0), Vector3.UP)
+		lab.ownerless.watcher = aside
+		lab.ownerless.cross_now()
+
+		# (Shot once it is well on to the wall, by its own distance, whatever the frame rate.)
+		var started: float = lab.ownerless.decal.global_position.x
+		while absf(lab.ownerless.decal.global_position.x - started) < 4.5 and lab.ownerless.decal.visible:
+			await get_tree().process_frame
+
+		print("shadow at ", lab.ownerless.decal.global_position, " visible ", lab.ownerless.decal.visible, " a ", lab.ownerless.decal.modulate.a)
 
 	if dark:
 		lab.dark_train.start_pass()
