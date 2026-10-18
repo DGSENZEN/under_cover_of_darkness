@@ -704,7 +704,15 @@ func _run() -> void:
 		and an.lights.all(func(l): return not (l.mesh is QuadMesh) and l.mesh.get_faces().size() >= 3 * 60)
 	var ribboned: bool = an.ribbons.size() == an.lights.size() \
 		and an.ribbons.any(func(r): return r.mesh != null and r.mesh.get_surface_count() > 0 and r.mesh.surface_get_array_len(0) >= 16)
-	var spirited: bool = an.shells.size() == an.lights.size() and no_cards and ribboned and _all_mesh_vfx(an.lights)
+	# Graves' Deadheads (vfx_method.md): each a black hand silhouette with a glowing rim, out of a tongue of spirit-fire.
+	var handed := true
+
+	for l: MeshInstance3D in an.lights:
+		var look := l.get_surface_override_material(0) as ShaderMaterial
+		handed = handed and l.mesh in an.hand_meshes and look != null \
+			and look.shader.resource_path.ends_with("anima_silhouette.gdshader")
+	var spirited: bool = an.shells.size() == an.lights.size() and no_cards and ribboned and handed and an.hand_meshes.size() == 2 \
+		and _all_mesh_vfx(an.shells)
 	var an_near: Vector3 = an_drain + Vector3(-0.9, 1.05, 0.9)
 	lab.player.global_position = an_near
 	await _frames(240)

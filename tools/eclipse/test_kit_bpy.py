@@ -1404,9 +1404,11 @@ class UndergroundUncanny(unittest.TestCase):
     old man's hat it leaves on the bench; closed, in budget, through the gate."""
 
     BUDGET = {"nahual_body": 20000, "nahual_head": 8000, "old_hat": 600, "shade_capirote": 12000, "shade_veiled": 12000,
-              "shade_child": 12000, "shade_sombrero": 12000}
+              "shade_child": 12000, "shade_sombrero": 12000,
+              "anima_hand_reach": 4000, "anima_hand_claw": 4000}
     # (A creature's tight curves: gated at gate.CREATURE_SLIVER, docs/superpowers/refs/underground/nahual_refs.md.)
-    CREATURE = ("nahual_body", "nahual_head", "shade_capirote", "shade_veiled", "shade_child", "shade_sombrero")
+    CREATURE = ("nahual_body", "nahual_head", "shade_capirote", "shade_veiled", "shade_child", "shade_sombrero", "anima_hand_reach",
+                "anima_hand_claw")
 
     @classmethod
     def setUpClass(cls):
@@ -1553,6 +1555,22 @@ class UndergroundUncanny(unittest.TestCase):
         all_vs = _world(self.objects["shade_sombrero"])
         vs = [v for v in all_vs if v.z > 0.88 * max(v.z for v in all_vs)]
         self.assertGreater(max(v.y for v in vs) - min(v.y for v in vs), 0.5)
+
+    def test_the_animas_hands_reach_up(self):
+        # The ánimas (the retablos' souls in purgatory: hands reaching up out of the flames): real hands from the
+        # CC0 base body, cut at the forearm, standing upright from it (z 0) with the fingers up, 20-32 cm tall,
+        # one open and reaching, one clawing.
+        for n in ("anima_hand_reach", "anima_hand_claw"):
+            o = self.objects[n]
+            vs = _world(o)
+            low, top = min(v.z for v in vs), max(v.z for v in vs)
+            self.assertAlmostEqual(low, 0.0, delta=0.003, msg=n)
+            self.assertTrue(0.2 <= top <= 0.32, "%s %.2f" % (n, top))
+            self.assertGreater(len(o.data.vertices), 600, n)
+            # Five fingers: the top fifth splits into several separate tips across its width.
+            tips = [v for v in vs if v.z > top - 0.035]
+            xs = sorted(round(v.x, 2) for v in tips)
+            self.assertGreater(max(xs) - min(xs), 0.045, n)
 
     def test_the_old_mans_hat(self):
         (x0, x1), _, (z0, z1) = self._extent("old_hat")

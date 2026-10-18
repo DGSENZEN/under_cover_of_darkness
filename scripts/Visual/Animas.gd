@@ -29,14 +29,20 @@ const KEEP := 1.15
 const SHY_DIM := 0.55
 ## A soul's flame: its core's height and width, its shell's, its trail's length (points) and width.
 const CORE := Vector2(0.26, 0.075)
-const SHELL := Vector2(0.46, 0.16)
+## The tongue of spirit-fire round each hand's wrist (tall, wide), sunk this far below it.
+const SHELL := Vector2(0.24, 0.085)
+const SHELL_SINK := 0.07
+const SILHOUETTE := preload("res://scripts/Visual/anima_silhouette.gdshader")
+const AURA := preload("res://scripts/Visual/anima_aura.gdshader")
 const TRAIL_POINTS := 22
 const TRAIL_EVERY := 0.035
 const TRAIL_WIDTH := 0.16
 ## Its bands: a near-white core, the seeped green body, a deep cold edge.
-const CORE_COLOUR := Color("eafff0")
-const BODY_COLOUR := Color("8fe39a")
-const EDGE_COLOUR := Color("1d5446")
+## Graves' chartreuse spirit-fire (vfx_method.md): a near-white core, the acid green, a deep olive edge.
+const CORE_COLOUR := Color("f4ffd6")
+const BODY_COLOUR := Color("c6f55a")
+const EDGE_COLOUR := Color("34500f")
+const RIM := Color("c8ff52")
 ## The light each casts at full, and how far.
 const LAMP_ENERGY := 0.55
 const LAMP_RANGE := 1.8
@@ -66,6 +72,8 @@ void fragment() {
 @export var toward: Node3D
 ## The gaps between the grate's bars, along local Z.
 @export var lanes := PackedFloat32Array()
+## The hands they are (from the uncanny kit: one reaching, one clawing); without them, flames.
+@export var hand_meshes: Array[Mesh] = []
 
 ## Each ánima's flame (its core; it carries its shell and its light), and its trail.
 var lights: Array[MeshInstance3D] = []
@@ -85,6 +93,7 @@ var _rng := RandomNumberGenerator.new()
 var _souls := []
 var _next_rise := 0.0
 var _cores: Array[ShaderMaterial] = []
+var _auras: Array[ShaderMaterial] = []
 var _shell_looks: Array[ShaderMaterial] = []
 var _trail_looks: Array[ShaderMaterial] = []
 var _paths := []
@@ -101,10 +110,33 @@ func _ready() -> void:
 	for i in count:
 		var flame := MeshInstance3D.new()
 		flame.name = "anima_%d" % i
-		flame.mesh = core_mesh
-		var core := MeshVfx.look(CORE_COLOUR, BODY_COLOUR, EDGE_COLOUR, 3.2, 0.02, 0.9, float(i) * 3.1)
-		core.set_shader_parameter(&"tail_eat", 0.5)
-		core.set_shader_parameter(&"churn", 0.004)
+		# A hand reaching up out of its fire, as Graves' Deadheads are drawn: black, its rim aglow.
+		var core: ShaderMaterial
+
+		if hand_meshes.is_empty():
+			flame.mesh = core_mesh
+			core = MeshVfx.look(CORE_COLOUR, BODY_COLOUR, EDGE_COLOUR, 3.2, 0.02, 0.9, float(i) * 3.1)
+		else:
+			flame.mesh = hand_meshes[i % hand_meshes.size()]
+			core = ShaderMaterial.new()
+			core.shader = SILHOUETTE
+			core.set_shader_parameter(&"glow", RIM)
+			core.set_shader_parameter(&"noise", MeshVfx.noise())
+			core.set_shader_parameter(&"seed", float(i) * 2.9)
+			# Its aura: the hand's shape pushed out a little and lit from behind, outlining it in fire.
+			var aura := MeshInstance3D.new()
+			aura.name = "aura"
+			aura.mesh = flame.mesh
+			var burn := ShaderMaterial.new()
+			burn.shader = AURA
+			burn.set_shader_parameter(&"glow", RIM)
+			burn.set_shader_parameter(&"noise", MeshVfx.noise())
+			burn.set_shader_parameter(&"seed", float(i) * 2.9)
+			aura.set_surface_override_material(0, burn)
+			aura.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			flame.add_child(aura)
+			_auras.append(burn)
+
 		flame.set_surface_override_material(0, core)
 		flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(flame)
@@ -123,7 +155,7 @@ func _ready() -> void:
 		shell.set_surface_override_material(0, outer)
 		shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		flame.add_child(shell)
-		shell.position = Vector3(0.0, -0.04, 0.0)
+		shell.position = Vector3(0.0, -SHELL_SINK, 0.0)
 		shells.append(shell)
 		_shell_looks.append(outer)
 
@@ -276,7 +308,11 @@ func _move(i: int, delta: float, hidden: bool) -> void:
 	soul["fade"] = lerpf(soul["fade"], SHY_DIM if near else 1.0, 1.0 - exp(-4.0 * delta))
 	var shown: float = soul["fade"] * presence
 	# Fading is eating: a soul going dim is eaten away, never made see-through.
-	_cores[i].set_shader_parameter(&"erosion", lerpf(0.75, 0.02, shown))
+	if hand_meshes.is_empty():
+		_cores[i].set_shader_parameter(&"erosion", lerpf(0.75, 0.02, shown))
+	else:
+		_cores[i].set_shader_parameter(&"presence", shown)
+		_auras[i].set_shader_parameter(&"presence", shown)
 	_shell_looks[i].set_shader_parameter(&"erosion", lerpf(0.9, 0.28, shown))
 	_trail_looks[i].set_shader_parameter(&"erosion", lerpf(0.95, 0.15, shown))
 	var risen := clampf(at.y / 0.4, 0.0, 1.0)

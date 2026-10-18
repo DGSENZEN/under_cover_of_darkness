@@ -33,3 +33,19 @@ it plainly uses.
   rising tendrils).
 - **The ánimas** (Animas.gd), **the nahual's smoke** (Nahual.gd), **the procession** and
   **the ownerless shadow**.
+
+## Graves (Deadlock, "Old Gods, New Blood"): the spirit look to copy (Oct 17 2026)
+The user: "Look at how deadlock does it and try to copy that ... same with Graves spirits". Graves the
+necromancer ([deadlock.wiki/Graves](https://deadlock.wiki/Graves)); her abilities as shown in-game
+([Deadlock Abilities Showcase: Graves](https://www.youtube.com/watch?v=S2IdFYIK0es), Jar of Dead 0:51,
+Grasping Hands 1:15, full cast 2:29):
+- **Deadheads** (Jar of Dead): solid black skull silhouettes, each wrapped in a glowing acid-green
+  (chartreuse) aura, green streaks trailing them as they dart. Black shape, luminous rim: Mignola's black lit
+  from behind by spirit-fire.
+- **Grasping Hands**: a line of chartreuse spirit-fire tongues erupting from a crack in the floor, pale
+  spectral hands reaching up out of it.
+- **Her spirits**: a bright core whipping a long ribbon trail.
+
+The ánimas take this directly: each a black hand silhouette (real hands from the CC0 base body) with a
+glowing chartreuse rim (fresnel, past white for the bloom), rising out of a tongue of chartreuse spirit-fire
+at its wrist, a ribbon trail behind it.

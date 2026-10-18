@@ -436,6 +436,119 @@ def shade(name, body, hood, hem, shoulder, seed, hat):
     return obj
 
 
+# --- the ánimas' hands (supernatural_refs.md: the retablos' souls in purgatory reaching up out of the
+# flames). Real hands from Quaternius's CC0 base body (assets/characters/base), posed, cut free at the
+# forearm and stood upright, fingers up; the game draws them in spirit-fire (vfx_mesh.gdshader).
+
+BASE = common.ROOT / "assets" / "characters" / "base"
+HAND_BONES = ("hand_l", "index", "middle", "ring", "pinky", "thumb")
+# How far up the forearm the cut is (m from the wrist), and how big the hands are drawn.
+FOREARM = 0.09
+HAND_SCALE = 1.15
+# Each pose: how far each finger's joints bend (degrees; negative curls), the thumb's, the fingers' spread.
+HAND_POSES = {"anima_hand_reach": dict(curl=6.0, thumb=0.0, spread=22.0),
+              "anima_hand_claw": dict(curl=38.0, thumb=-8.0, spread=18.0)}
+
+
+def _left_side(o, name):
+    return name.endswith("_l")
+
+
+def anima_hand(name, curl, thumb, spread):
+    """One hand from the base body: its left hand posed, cut at the forearm, stood up, fingers up."""
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=str(BASE / "Superhero_Female_FullBody.gltf"))
+    new = [o for o in bpy.data.objects if o not in before]
+    rig = next(o for o in new if o.type == "ARMATURE")
+    body = max((o for o in new if o.type == "MESH"), key=lambda o: len(o.data.vertices))
+
+    for pb in rig.pose.bones:
+        pb.rotation_mode = "XYZ"
+        n = pb.name
+        if not n.endswith("_l"):
+            continue
+        for finger, k in (("index", -1.0), ("middle", -0.3), ("ring", 0.4), ("pinky", 1.0)):
+            if n.startswith(finger + "_0"):
+                joint = int(n[len(finger) + 2])
+                # Curl each joint; the first joint spreads the finger out from its neighbours.
+                pb.rotation_euler.rotate_axis("Z", math.radians(curl * (1.1 if joint > 1 else 0.8)))
+                if joint == 1:
+                    pb.rotation_euler.rotate_axis("X", math.radians(spread * k))
+        if n.startswith("thumb_0"):
+            pb.rotation_euler.rotate_axis("Z", math.radians(thumb))
+
+    bpy.context.view_layer.update()
+
+    with bpy.context.temp_override(active_object=body, object=body, selected_objects=[body], selected_editable_objects=[body]):
+        for mod in list(body.modifiers):
+            if mod.type == "ARMATURE":
+                bpy.ops.object.modifier_apply(modifier=mod.name)
+
+    # Keep the hand: the vertices the hand and finger bones move most, and the forearm up to FOREARM from the wrist.
+    groups = {g.index: g.name for g in body.vertex_groups}
+    wrist = rig.matrix_world @ rig.data.bones["hand_l"].head_local
+    along = (rig.matrix_world @ rig.data.bones["hand_l"].tail_local - wrist).normalized()
+    world = body.matrix_world
+    keep = set()
+
+    for v in body.data.vertices:
+        hand = sum(g.weight for g in v.groups if any(groups[g.group].startswith(b) and groups[g.group].endswith("_l")
+                                                      for b in HAND_BONES))
+        p = world @ v.co
+        if hand > 0.3 or (p.x > 0.0 and -FOREARM < (p - wrist).dot(along) < 0.02 and (p - wrist).length < FOREARM + 0.05):
+            keep.add(v.index)
+
+    bm = bmesh.new()
+    bm.from_mesh(body.data)
+    bm.verts.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.index not in keep], context="VERTS")
+    for v in bm.verts:
+        v.co = world @ v.co
+    # Its seams welded (the base mesh splits them for its UVs), the cut forearm closed by a cap drawn in to
+    # a middle point (the spirit-fire eats it there anyway), anything degenerate dissolved.
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+    loops = [e for e in bm.edges if e.is_boundary]
+    if loops:
+        filled = bmesh.ops.holes_fill(bm, edges=loops, sides=0)
+        bmesh.ops.poke(bm, faces=filled["faces"])
+    bmesh.ops.dissolve_degenerate(bm, dist=1e-4, edges=bm.edges)
+    # Faces the curled pose pinched to nothing: their shortest edge collapsed.
+    for _ in range(4):
+        pinched = [f for f in bm.faces if f.calc_area() / max(max(e.calc_length() for e in f.edges), 1e-9) < 0.0003]
+        if not pinched:
+            break
+        edges = {min(f.edges, key=lambda e: e.calc_length()) for f in pinched}
+        bmesh.ops.collapse(bm, edges=[e for e in edges if e.is_valid])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    hand = bpy.data.meshes.new(name)
+    bm.to_mesh(hand)
+    bm.free()
+    obj = bpy.data.objects.new(name, hand)
+    bpy.context.scene.collection.objects.link(obj)
+
+    for o in new:
+        bpy.data.objects.remove(o, do_unlink=True)
+
+    # Stood up: the forearm's line turned to point up, the palm to face +x (toward the viewer it reaches to),
+    # the cut at z 0.
+    turn = along.rotation_difference(Vector((0.0, 0.0, 1.0)))
+    for v in obj.data.vertices:
+        v.co = (turn @ (v.co - wrist)) * HAND_SCALE
+    low = min(v.co.z for v in obj.data.vertices)
+    cx = sum(v.co.x for v in obj.data.vertices) / len(obj.data.vertices)
+    cy = sum(v.co.y for v in obj.data.vertices) / len(obj.data.vertices)
+    for v in obj.data.vertices:
+        v.co.x -= cx
+        v.co.y -= cy
+        v.co.z -= low
+
+    obj.data.materials.append(common.slot("shade"))
+    for poly in obj.data.polygons:
+        poly.material_index = 0
+        poly.use_smooth = True
+    return obj
+
+
 def old_hat(m):
     """The old man's palm hat, its brim gone soft, left on the bench."""
     turned(m, [(0.11, 0.0), (0.26, 0.006), (0.265, 0.022), (0.12, 0.03), (0.115, 0.1), (0.09, 0.14), (0.04, 0.155)],
@@ -451,6 +564,9 @@ def build():
     smooth_object("old_hat", old_hat)
     for name, d in SHADES.items():
         shade(name, **d)
+
+    for name, pose in HAND_POSES.items():
+        anima_hand(name, **pose)
 
 
 def main():

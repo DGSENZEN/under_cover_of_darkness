@@ -1158,6 +1158,12 @@ func _animas() -> void:
 
 		animas = AnimasScript.new()
 		animas.name = "animas"
+		# Hands reaching up out of their fire (the uncanny kit's, cut from the CC0 base body), in Graves'
+		# chartreuse (vfx_method.md).
+		if ResourceLoader.exists(UNCANNY_KIT):
+			var hands := _kit(UNCANNY_KIT)
+			animas.hand_meshes = [hands["anima_hand_reach"], hands["anima_hand_claw"]] as Array[Mesh]
+		animas.colour = Color("b8f04a")
 		animas.seed = 23
 		animas.flee_from = player
 		animas.toward = flames
