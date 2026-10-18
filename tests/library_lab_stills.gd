@@ -4,6 +4,7 @@ extends Node3D
 ##   Godot --path . --resolution 1600x900 res://tests/library_lab_stills.tscn -- --out=DIR [--only=a,b] [--settle=S]
 ##     [--clip=S [--dolly=M]]   a clip instead of a still: S seconds of frames (30 a second), the eye walking M
 ##                              metres toward what it looks at, at its own height
+##     [--strain]               the chained book strains as the clip begins, and every 2.2 s
 
 const LAB := preload("res://maps/library_lab.tscn")
 
@@ -43,6 +44,10 @@ const VIEWS := [
 	["close_crossbow", Vector3(-0.25, 2.05, -4.95), Vector3(-0.15, 2.12, -5.92)],
 	["close_lower", Vector3(-0.45, 1.55, -4.85), Vector3(-0.35, 1.45, -5.92)],
 	["close_gun", Vector3(0.75, 1.6, -4.95), Vector3(0.6, 1.4, -5.92)],
+	["corner_chained", Vector3(-1.75, 1.55, -3.6), Vector3(-1.06, 1.1, -4.4)],
+	["close_chained", Vector3(-1.3, 1.4, -3.95), Vector3(-0.95, 1.1, -4.4)],
+	["corner_cage", Vector3(-0.95, 1.5, -4.3), Vector3(-1.85, 0.9, -5.8)],
+	["corner_ward", Vector3(0.0, 3.4, -1.7), Vector3(0.0, 0.0, -4.4)],
 ]
 
 
@@ -52,6 +57,7 @@ func _ready() -> void:
 	var settle := 0.0
 	var clip := 0.0
 	var dolly := 0.0
+	var straining := false
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
@@ -64,6 +70,8 @@ func _ready() -> void:
 			clip = float(arg.trim_prefix("--clip="))
 		elif arg.begins_with("--dolly="):
 			dolly = float(arg.trim_prefix("--dolly="))
+		elif arg == "--strain":
+			straining = true
 
 	DirAccess.make_dir_recursive_absolute(out)
 	AudioServer.set_bus_mute(0, true)
@@ -94,6 +102,8 @@ func _ready() -> void:
 				var ahead: Vector3 = ((view[2] - view[1]) * Vector3(1, 0, 1)).normalized() * dolly
 				var count := int(clip * 30.0)
 				for k in count:
+					if straining and k % 66 == 0 and lab.chained != null:
+						lab.chained.strain_now()
 					var t := smoothstep(0.0, 1.0, float(k) / maxf(count - 1, 1))
 					eye.global_transform = Transform3D(Basis(), start + ahead * t).looking_at(view[2], Vector3.UP)
 					RenderingServer.force_draw(false)

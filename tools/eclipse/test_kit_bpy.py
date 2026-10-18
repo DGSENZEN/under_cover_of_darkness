@@ -1690,7 +1690,10 @@ class LibraryCorner(unittest.TestCase):
               "rituale": 2500, "stole": 2500, "crucifix": 2500, "aspergillum": 2500, "salt_tin": 2500,
               "oil_phial": 2500, "reliquary": 4000, "benedict_medal": 2500,
               "hunt_rack": 5000, "stakes": 3500, "sword_cane": 3500, "revolver": 3500, "rounds": 3500, "crossbow": 3500,
-              "bandolier": 3500, "chains": 3500, "trap_jaws": 3500}
+              "bandolier": 3500, "chains": 3500, "trap_jaws": 3500,
+              "chained_book_rest": 2500, "chained_book_cover": 1500, "chained_book_block": 1500, "chained_book_chain": 3500,
+              "quarantine_cage": 9000}
+    BUDGET.update({"quarantine_book_%d" % k: 600 for k in range(7)})
     # His hunting things, each hung on the rack (the rounds stand on its shelf).
     HUNT = ["stakes", "sword_cane", "revolver", "rounds", "crossbow", "bandolier", "chains", "trap_jaws"]
     # What lies on the desk top (the lamp stands on its foot; its shade hangs over the ledger on purpose).
@@ -1839,6 +1842,39 @@ class LibraryCorner(unittest.TestCase):
         # Clear of the chair and the coat stand: all of it within reach of the wall.
         front = min(self._extent(n)[1][0] for n in self.HUNT + ["hunt_rack"])
         self.assertGreater(front, max(self._extent("desk_chair")[1][1], self._extent("coat_hook")[1][1]))
+
+    def test_the_book_is_chained_to_the_desk(self):
+        chain = self._extent("chained_book_chain")
+        self.assertTrue(self._touch(chain, self._extent("chained_book_cover")))
+        self.assertTrue(self._touch(chain, self._extent("desk")))
+
+    def test_the_chained_book_lies_on_its_rest(self):
+        rest, block, cover = (self._extent(n) for n in ("chained_book_rest", "chained_book_block", "chained_book_cover"))
+        self.assertAlmostEqual(block[2][0], library_corner.DESK_TOP + library_corner.LIFT, delta=0.001)
+        self.assertTrue(rest[0][0] <= block[0][0] and block[0][1] <= rest[0][1] and rest[1][0] <= block[1][0]
+                        and block[1][1] <= rest[1][1])
+        # Its cover shut on its pages, its hinge along the spine (its -x edge) at the cover's underside.
+        self.assertAlmostEqual(cover[2][0], block[2][1], delta=0.003)
+        hinge = [Vector(p) for p in common.WICKS["chained_book_cover"]]
+        self.assertEqual(len(hinge), 2)
+        for p in hinge:
+            self.assertAlmostEqual(p.x, cover[0][0], delta=0.01)
+            self.assertAlmostEqual(p.z, cover[2][0], delta=0.003)
+        self.assertGreater(abs(hinge[1].y - hinge[0].y), 0.2)
+
+    def test_the_cage_holds_its_books(self):
+        cage = self._extent("quarantine_cage")
+        bars = library_corner.CAGE_BARS
+        wrong = []
+
+        for k in range(7):
+            book = self._extent("quarantine_book_%d" % k)
+            inside = all(cage[i][0] <= book[i][0] and book[i][1] <= cage[i][1] for i in range(3))
+            if not inside or any(self._touch(book, bar, 0.0) for bar in bars):
+                wrong.append(k)
+
+        self.assertEqual(wrong, [])
+        self.assertGreaterEqual(len(bars), 8)
 
     def test_the_chair_is_left_behind_the_desk(self):
         (x0, x1), (y0, y1), (z0, z1) = self._extent("desk_chair")

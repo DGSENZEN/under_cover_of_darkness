@@ -20,7 +20,10 @@ import brushes as brush_sheets
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "textures" / "painted" / "underground"
 GRIME = ("drip", "soot", "grime", "oil", "wet")
-KINDS = GRIME + ("petals", "poster")
+# The librarian's ward round his desk (docs/superpowers/specs/2026-10-17-librarian-shop-design.md): his chalk
+# circle, its glyph band left blank for Part 2's script, and the line of blessed salt that closes its open side.
+WARD = ("ward_circle", "salt_line")
+KINDS = GRIME + ("petals", "poster") + WARD
 # Loose marigold petals strewn along a trail: how many, their size in px, their colours
 # (fresh orange to yellow, a few gone brown underfoot).
 PETALS = 1400
@@ -111,8 +114,55 @@ def _poster(brushes_dir):
     return Image.fromarray(out, "RGBA")
 
 
+def _ward_circle(brushes_dir):
+    """His chalk ward: two rings drawn by hand round the desk, broken where the chalk skipped on the boards, the
+    band between them blank (its glyphs come with Part 2's script); the middle clear."""
+    n = SIZE
+    y, x = np.mgrid[0:n, 0:n]
+    r = np.hypot(x - n / 2, y - n / 2) / (n / 2)
+    a = np.arctan2(y - n / 2, x - n / 2)
+    chips = _sheet("brush_04", brushes_dir)
+    # Drawn by hand: each ring's radius wanders a little round it.
+    wander = 0.008 * np.sin(a * 3.0 + 1.0) + 0.005 * np.sin(a * 7.0)
+    rings = np.zeros((n, n))
+    for radius, width in ((0.7, 0.03), (0.91, 0.028)):
+        rings = np.maximum(rings, np.clip(1.0 - np.abs(r - radius - wander) / width, 0.0, 1.0) ** 0.6)
+    # Left open toward the customers (the image's foot, the shopfront's side in game): the salt line closes it.
+    opening = np.abs(np.angle(np.exp(1j * (a - np.pi / 2)))) < np.radians(24.0)
+    alpha = rings * np.where(chips > 0.22, 0.95, 0.35) * ~opening
+    alpha[:BORDER] = alpha[-BORDER:] = 0.0
+    alpha[:, :BORDER] = alpha[:, -BORDER:] = 0.0
+    rgb = np.broadcast_to(np.array([232.0, 228.0, 216.0]), (n, n, 3))
+    return Image.fromarray(np.dstack([rgb, alpha * 255]).round().astype(np.uint8), "RGBA")
+
+
+def _salt_line(brushes_dir):
+    """A line of blessed salt poured across the floor: white grains thick along its middle, scattering out."""
+    rng = np.random.default_rng(23)
+    canvas = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+
+    for _ in range(4200):
+        x = rng.uniform(BORDER + 4, SIZE - BORDER - 4)
+        y = rng.normal(SIZE / 2, 13.0) if rng.random() < 0.85 else rng.normal(SIZE / 2, 30.0)
+        if not BORDER + 4 < y < SIZE - BORDER - 4 or abs(y - SIZE / 2) > 70:
+            continue
+        g = rng.uniform(0.8, 1.9)
+        shade = int(rng.uniform(228, 252))
+        draw.ellipse((x - g, y - g, x + g, y + g), fill=(shade, shade, shade - 6, 235))
+
+    out = np.asarray(canvas).copy()
+    out[:BORDER, :, 3] = out[-BORDER:, :, 3] = 0
+    out[:, :BORDER, 3] = out[:, -BORDER:, 3] = 0
+    return Image.fromarray(out, "RGBA")
+
+
 def make(kind, brushes_dir=brush_sheets.BRUSHES):
     """A decal of `kind` as an RGBA image."""
+    if kind == "ward_circle":
+        return _ward_circle(brushes_dir)
+    if kind == "salt_line":
+        return _salt_line(brushes_dir)
     if kind == "petals":
         return _petals(brushes_dir)
     if kind == "poster":

@@ -4,6 +4,7 @@ extends Node3D
 ## corridor, painted in the bespoke blend. The player starts in the corridor, looking in through the arch.
 ##   F1  work lights on / off
 ##   F2  form light: everything neutral grey under one white light, to judge shape
+##   F3  decals (his chalk ward and its salt) on / off
 
 const PLAYER := preload("res://Player.tscn")
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
@@ -36,7 +37,11 @@ const CORNER_KIT := "res://assets/eclipse/kit/library_corner.glb"
 const CORNER_WICKS := "res://assets/eclipse/source/library_corner_wicks.json"
 const CORNER_AT := Vector3(0.0, 0.0, -4.4)
 ## What of his corner is solid to the player.
-const CORNER_SOLID := ["desk", "desk_chair", "coat_hook"]
+const CORNER_SOLID := ["desk", "desk_chair", "coat_hook", "chained_book_rest", "quarantine_cage", "hunt_rack"]
+## His chalk ward round the desk (its outer ring's radius, as the decal draws it at 0.91 of its half-width) and the
+## salt across its open side toward the customers.
+const WARD_RADIUS := 1.18
+const SALT_SIZE := Vector3(1.3, 0.2, 0.9)
 ## His lamp: warm, low, under its green shade (where it stands when the corner's kit is missing).
 const LAMP_AT := Vector3(-0.32, 1.39, -4.44)
 const LAMP_COLOUR := Color(1.0, 0.78, 0.5)
@@ -50,6 +55,10 @@ var world: WorldEnvironment
 ## The room's pieces by name, and his corner's.
 var room := {}
 var corner := {}
+## The book he is working on, chained and straining; the books in the cage, stirring.
+var chained: ChainedBook
+var quarantine: Quarantine
+var decals: Array[Decal] = []
 var corridor: Array[MeshInstance3D] = []
 var lamp_light: OmniLight3D
 var work_lights: Array[Light3D] = []
@@ -82,6 +91,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			set_work_lights(not work_lights[0].visible)
 		KEY_F2:
 			set_form(not _form)
+		KEY_F3:
+			set_decals(decals.is_empty() or not decals[0].visible)
 
 
 func set_work_lights(on: bool) -> void:
@@ -142,6 +153,67 @@ func _corner() -> void:
 
 	for part: String in meshes:
 		corner[part] = _place(meshes[part], look, part, CORNER_AT, 0.0, part in CORNER_SOLID)
+
+	# The chained book: its cover lifts on the hinge along its spine (the kit's wicks).
+	if corner.has("chained_book_cover"):
+		chained = ChainedBook.new()
+		chained.name = "chained_book"
+		chained.cover = corner["chained_book_cover"]
+		chained.block = corner.get("chained_book_block")
+		var hinge := _wicks("chained_book_cover")
+		if hinge.size() == 2:
+			chained.hinge_a = hinge[0]
+			chained.hinge_b = hinge[1]
+		var ends := _wicks("chained_book_chain")
+		if ends.size() == 2 and corner.has("chained_book_chain"):
+			chained.chain = corner["chained_book_chain"]
+			chained.chain_anchor = ends[0]
+			chained.staple = ends[1]
+		add_child(chained)
+
+	quarantine = Quarantine.new()
+	quarantine.name = "quarantine"
+	for part: String in corner:
+		if part.begins_with("quarantine_book_"):
+			quarantine.books.append(corner[part])
+	add_child(quarantine)
+
+	# His ward: the chalk circle round the desk, open toward the customers, and the salt across its opening.
+	var desk_at := CORNER_AT
+	var ring := _decal("ward_circle", desk_at + Vector3(0.0, 0.05, 0.0), Vector3(2.0 * WARD_RADIUS / 0.91, 0.2, 2.0 * WARD_RADIUS / 0.91))
+	ring.normal_fade = 0.5
+	var salt := _decal("salt_line", desk_at + Vector3(0.0, 0.05, WARD_RADIUS), SALT_SIZE)
+	salt.normal_fade = 0.5
+
+
+## The points a kit's piece marks as wicks (world): a candle's, a lamp's bulb, a hinge's ends.
+func _wicks(part: String) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	if FileAccess.file_exists(CORNER_WICKS):
+		var wicks: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(CORNER_WICKS))
+		for w in wicks.get(part, []):
+			out.append(CORNER_AT + Vector3(w[0], w[1], w[2]))
+	return out
+
+
+func set_decals(on: bool) -> void:
+	for d in decals:
+		d.visible = on
+
+	_name_keys()
+
+
+func _decal(kind: String, at: Vector3, size: Vector3) -> Decal:
+	var d := Decal.new()
+	d.name = "decal_" + kind
+	d.size = size
+	d.texture_albedo = _painted(["decal_%s.png" % kind], true)
+	d.upper_fade = 0.2
+	d.lower_fade = 0.2
+	add_child(d)
+	d.position = at
+	decals.append(d)
+	return d
 
 
 ## Where his lamp's bulb is (world).
@@ -266,7 +338,8 @@ func _name_keys() -> void:
 	if keys_label == null or work_lights.is_empty():
 		return
 
-	keys_label.text = "F1 work lights %s  ·  F2 form light %s" % ["on" if work_lights[0].visible else "off", "on" if _form else "off"]
+	keys_label.text = "F1 work lights %s  ·  F2 form light %s  ·  F3 decals %s" % ["on" if work_lights[0].visible else "off",
+		"on" if _form else "off", "on" if decals.is_empty() or decals[0].visible else "off"]
 
 
 # Kits, painting, placing

@@ -632,9 +632,191 @@ def trap_jaws(m):
         box(m, (px + side * r - 0.025, y - 0.02, zc - 0.025), (px + side * r + 0.025, y + 0.02, zc + 0.025), "steel", r=0.0)
 
 
+# --- the work in progress ----------------------------------------------------------------------------------
+
+# The book he is working on, chained and nailed shut on a rest bolted to the desk's left end: its middle, its
+# width (spine to fore-edge, along x), length (along y), the height of its pages and of its cover.
+CHAINED_AT = (-1.06, 0.0)
+CHAINED = (0.24, 0.32, 0.045, 0.014)
+REST = (-1.32, -0.8, -0.22, 0.22)
+# The staple the chain is locked to: on the cover's top by its fore-edge (x from the book's middle, its middle's
+# height over the cover).
+STAPLE = (CHAINED[0] / 2 - 0.04, 0.036)
+# Where the chain is bolted to the desk's top (its front-left rim, clear of the Rituale): a good run of chain
+# from the book to it.
+DESK_RING = (-0.76, -0.31)
+# The quarantine cage against the back wall left of the rack: x from, to; its depth and height; its shelves' tops.
+CAGE = (-2.35, -1.35, 0.45, 1.85)
+CAGE_SHELVES = (0.1, 0.655, 1.215)
+CAGE_BAR_Y = WALL_Y - CAGE[2] + 0.015
+CAGE_BAR_Z = (0.18, 1.72)
+CAGE_BARS = [((x - 0.015, x + 0.015), (CAGE_BAR_Y - 0.015, CAGE_BAR_Y + 0.015), CAGE_BAR_Z)
+             for x in [CAGE[0] + 0.08 + 0.093 * k for k in range(10)]]
+# The books in quarantine: (shelf, x, thickness, width, height, lean in degrees), each its own object.
+QUARANTINE = [(0, -2.22, 0.07, 0.24, 0.33, 0.0), (0, -2.1, 0.06, 0.22, 0.3, 6.0), (0, -1.72, 0.08, 0.26, 0.34, -4.0),
+              (1, -2.15, 0.065, 0.23, 0.29, 0.0), (1, -1.6, 0.07, 0.25, 0.32, 8.0), (2, -2.0, 0.06, 0.21, 0.27, -6.0),
+              (2, -1.75, 0.075, 0.24, 0.3, 0.0)]
+
+
+def _book_section(w, h, lip):
+    """A book's section across its spine (u from the spine to the fore-edge, v up its thickness), its boards
+    overhanging the pages' fore-edge by `lip`, its spine rounded; and each edge's part (cover or pages)."""
+    outline = [(0.012, 0.0), (w, 0.0), (w, lip), (w - lip, lip), (w - lip, h - lip), (w, h - lip), (w, h), (0.012, h),
+               (0.004, h * 0.8), (0.0, h * 0.5), (0.004, h * 0.2)]
+    parts = ["cover", "cover", "cover", "pages", "cover", "cover", "cover", "cover", "cover", "cover", "cover"]
+    return outline, parts
+
+
+def chained_book_rest(m):
+    """A stout rest bolted to the desk's left end, iron brackets under it, where the chained book lies."""
+    x0, x1, y0, y1 = REST
+    box(m, (x0, y0, 0.98 + 0.035), (x1, y1, DESK_TOP), "wood", r=0.015)
+    for y in (y0 + 0.06, y1 - 0.06):
+        box(m, (x0 + 0.14, y - 0.02, 0.8), (-DESK_W + 0.04, y + 0.02, 0.98 + 0.035), "steel", r=0.0)
+
+
+def chained_book_block(m):
+    """The chained book's pages on its lower board: its section lofted along it, its spine to -x."""
+    cx, cy = CHAINED_AT
+    w, length, h, _ = CHAINED
+    outline = [(0.012, 0.0), (w, 0.0), (w, 0.011), (w - 0.011, 0.011), (w - 0.011, h), (0.012, h), (0.004, h * 0.75),
+               (0.0, h * 0.45), (0.004, h * 0.15)]
+    slots = ["leather_old", "leather_old", "leather_old", "paper", "paper", "leather_old", "leather_old", "leather_old",
+             "leather_old"]
+    z = DESK_TOP + LIFT
+    rings = [[(cx - w / 2 + u, cy + y, z + v) for u, v in outline] for y in (-length / 2, length / 2)]
+    m.shell()
+    shapes.loft(m, rings, slots, cap_slot="paper")
+
+
+def chained_book_cover(m):
+    """Its upper board, shut on it and nailed through with iron, a staple at its fore-edge for the chain; it lifts
+    on its hinge along the spine (the hinge's ends are its wicks, for the bay)."""
+    cx, cy = CHAINED_AT
+    w, length, h, t = CHAINED
+    z = DESK_TOP + LIFT + h
+    box(m, (cx - w / 2, cy - length / 2, z), (cx + w / 2, cy + length / 2, z + t), "leather_old", r=0.0)
+    for dx, dy in ((-0.08, -0.12), (0.08, -0.12), (-0.08, 0.12), (0.08, 0.12), (0.0, 0.0)):
+        underground_shapes.stud(m, (cx + dx, cy + dy, z + t), 0.0, 0.0, "steel", r=0.022)
+    sx, sz = STAPLE
+    _link(m, (cx + sx, cy, z + t + sz), (1, 0, 0), (0, 0, 1), 0.035, 0.013, "steel")
+    m.wick((cx - w / 2, cy - length / 2, z))
+    m.wick((cx - w / 2, cy + length / 2, z))
+
+
+def _link(m, centre, e1, e2, radius, tube, slot, steps=8, sides=6):
+    """A ring of tube (a chain's link) about `centre` in the plane of `e1`, `e2`: a torus built straight from its
+    axes, so no seam twists its faces thin however it is turned."""
+    c, e1, e2 = Vector(centre), Vector(e1).normalized(), Vector(e2).normalized()
+    n = e1.cross(e2).normalized()
+
+    def at(i, j):
+        t, f = 2 * math.pi * i / steps, 2 * math.pi * j / sides
+        out = e1 * math.cos(t) + e2 * math.sin(t)
+        return tuple(c + out * (radius + tube * math.cos(f)) + n * tube * math.sin(f))
+
+    m.shell()
+    for i in range(steps):
+        for j in range(sides):
+            m.face([at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)], slot)
+
+
+def _chain(m, points, radius, tube, pitch, slot):
+    """Links along the polyline `points`, `pitch` apart, each turned a quarter from the last."""
+    pts = [Vector(q) for q in points]
+    places = []
+    for a, b in zip(pts, pts[1:]):
+        n = max(1, round((b - a).length / pitch))
+        places += [(a + (b - a) * (k / n), (b - a).normalized()) for k in range(n)]
+    places.append((pts[-1], (pts[-1] - pts[-2]).normalized()))
+
+    for k, (c, d) in enumerate(places):
+        side = d.cross(Vector((0, 0, 1)))
+        side = side.normalized() if side.length > 1e-4 else Vector((1, 0, 0))
+        across = side if k % 2 == 0 else d.cross(side).normalized()
+        _link(m, c, d, across, radius, tube, slot)
+
+
+def chained_book_chain(m):
+    """The chain from the book's staple across to a ring bolted on the desk's top, sagging between; a padlock on it
+    by the book."""
+    cx, cy = CHAINED_AT
+    w, length, h, t = CHAINED
+    staple = Vector((cx + STAPLE[0], cy, DESK_TOP + LIFT + h + t + STAPLE[1]))
+    rx, ry = DESK_RING
+    box(m, (rx - 0.035, ry - 0.035, DESK_TOP), (rx + 0.035, ry + 0.035, DESK_TOP + 0.012), "steel", r=0.0)
+    ring = Vector((rx, ry, DESK_TOP + 0.012 + 0.035))
+    _link(m, ring, (1, 0, 0), (0, 0, 1), 0.035, 0.013, "steel")
+    start = staple + Vector((0.035, 0, 0))
+    end = ring + Vector((-0.035, 0, 0))
+    sag = (start + end) / 2 + Vector((0, 0, -0.03))
+    _chain(m, [start, sag, end], 0.035, 0.013, 0.05, "steel")
+    # (Its two ends, the desk's ring and the book's staple, are its wicks: the bay swings it after the staple.)
+    m.wick(tuple(ring))
+    m.wick(tuple(staple))
+    # The padlock hung from a link at the sag.
+    lock = sag + Vector((0.0, 0.0, -0.065))
+    box(m, (lock.x - 0.022, lock.y - 0.013, lock.z - 0.03), (lock.x + 0.022, lock.y + 0.013, lock.z + 0.02), "brass", r=0.0)
+
+
+def quarantine_cage(m):
+    """The quarantine cage behind him: a heavy cabinet against the back wall, its front barred in iron and padlocked;
+    inside, on its shelves, the books still waiting to be exorcised."""
+    x0, x1, depth, height = CAGE
+    back = WALL_Y
+    front = WALL_Y - depth
+    # (Every panel and rail over 3 cm through: thinner, their faces would lie too near each other.)
+    t = 0.035
+    box(m, (x0, back - t, 0.0), (x1, back, height), "wood", r=0.0)
+    for sx0, sx1 in ((x0, x0 + 0.04), (x1 - 0.04, x1)):
+        box(m, (sx0, front, 0.0), (sx1, back - t, height), "wood", r=0.0)
+    box(m, (x0 + 0.04, front, 0.0), (x1 - 0.04, back - t, CAGE_SHELVES[0]), "wood", r=0.0)
+    box(m, (x0 + 0.04, front, height - 0.05), (x1 - 0.04, back - t, height), "wood", r=0.0)
+    for top in CAGE_SHELVES[1:]:
+        box(m, (x0 + 0.04, front + 0.04, top - 0.035), (x1 - 0.04, back - t, top), "wood", r=0.0)
+    # The barred front: its iron rails and the bars between them.
+    box(m, (x0 + 0.04, front, CAGE_BAR_Z[1]), (x1 - 0.04, front + t, height - 0.05), "steel", r=0.0)
+    box(m, (x0 + 0.04, front, CAGE_SHELVES[0]), (x1 - 0.04, front + t, CAGE_BAR_Z[0]), "steel", r=0.0)
+    for (bx0, bx1), _, (bz0, bz1) in CAGE_BARS:
+        bx = (bx0 + bx1) / 2
+        pipe(m, [(bx, CAGE_BAR_Y, bz0), (bx, CAGE_BAR_Y, bz1)], 0.015, 8, "steel")
+    # The hasp and its padlock.
+    box(m, (x1 - 0.08, front - 0.012, 0.95), (x1 - 0.04, front, 1.05), "steel", r=0.0)
+    box(m, (x1 - 0.085, front - 0.04, 0.88), (x1 - 0.035, front - 0.012, 0.95), "brass", r=0.0)
+
+
+def _quarantine_book(k):
+    """One of the books in quarantine standing on its shelf, its spine to the bars: its section lofted up its
+    height, leaning as it was left."""
+    shelf, x, thick, width, height, lean = QUARANTINE[k]
+
+    def book(m):
+        outline, parts = _book_section(width, thick, 0.011)
+        slots = ["leather_old" if part == "cover" else "paper" for part in parts]
+        front = WALL_Y - CAGE[2] + 0.05
+        z0 = CAGE_SHELVES[shelf] + LIFT
+        tip = math.radians(lean)
+        pivot = (x + (thick / 2 if lean > 0 else -thick / 2), z0)
+
+        def place(u, v, h):
+            # The section's u back from the spine (toward the wall), v across its thickness; h up it; then leant.
+            px, pz = x - thick / 2 + v, z0 + h
+            dx, dz = px - pivot[0], pz - pivot[1]
+            return (pivot[0] + dx * math.cos(tip) + dz * math.sin(tip), front + u, pivot[1] - dx * math.sin(tip) + dz * math.cos(tip))
+
+        rings = [[place(u, v, h) for u, v in outline] for h in (0.0, height)]
+        m.shell()
+        shapes.loft(m, rings, slots, cap_slot="paper")
+
+    book.__name__ = "quarantine_book_%d" % k
+    return book
+
+
 DEALER = [desk, desk_chair, lamp, ledger, magnifier, gloves, repair_kit, coat_hook]
 RITE = [rituale, stole, crucifix, aspergillum, salt_tin, oil_phial, reliquary, benedict_medal]
 HUNT = [hunt_rack, crossbow, sword_cane, stakes, bandolier, chains, revolver, rounds, trap_jaws]
+WORK = [chained_book_rest, chained_book_block, chained_book_cover, chained_book_chain, quarantine_cage] \
+    + [_quarantine_book(k) for k in range(len(QUARANTINE))]
 
 
 def build():
@@ -642,7 +824,7 @@ def build():
     underground_shapes.rng = rng
     rng.seed(1897)
 
-    for f in DEALER + RITE + HUNT:
+    for f in DEALER + RITE + HUNT + WORK:
         smooth_object(f.__name__, f)
 
 

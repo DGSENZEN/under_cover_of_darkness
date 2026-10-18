@@ -87,6 +87,39 @@ class Decals(unittest.TestCase):
         lefts = [r[0] for r in rows if r.size]
         self.assertGreater(np.std(lefts), 2.0)
 
+    @staticmethod
+    def _radial(a):
+        """Mean alpha by distance from the middle (as a share of the half-width), in 40 bands."""
+        n = a.shape[0]
+        y, x = np.mgrid[0:n, 0:n]
+        r = np.hypot(x - n / 2, y - n / 2) / (n / 2)
+        return np.array([a[(r >= k / 40) & (r < (k + 1) / 40)].mean() for k in range(40)])
+
+    def test_ward_circle_is_a_chalk_ring_round_a_blank_band(self):
+        # His chalk ward: two rings drawn round the desk, the band between them left blank for its glyphs (Part 2's
+        # script), the middle clear; chalk white.
+        image = decals.make("ward_circle", self.brushes)
+        a = np.asarray(image)[..., 3].astype(float) / 255.0
+        rgb = np.asarray(image)[..., :3].astype(float)
+        profile = self._radial(a)
+        self.assertLess(profile[:20].max(), 0.05)
+        inner, band, outer = profile[26:30].max(), profile[31:34].max(), profile[35:38].max()
+        self.assertGreater(inner, 0.4)
+        self.assertGreater(outer, 0.4)
+        self.assertLess(band, 0.15)
+        self.assertGreater(rgb[a > 0.5].mean(), 180.0)
+
+    def test_salt_line_is_a_band_of_white_grains(self):
+        image = decals.make("salt_line", self.brushes)
+        a = np.asarray(image)[..., 3].astype(float) / 255.0
+        rgb = np.asarray(image)[..., :3].astype(float)
+        rows = a.mean(axis=1)
+        self.assertGreater(rows[240:272].mean(), 0.35)
+        self.assertLess(np.concatenate([rows[:180], rows[-180:]]).max(), 0.05)
+        # Grains, not a smear: the band's alpha broken up.
+        self.assertGreater(a[240:272, 40:-40].std(), 0.2)
+        self.assertGreater(rgb[a > 0.5].mean(), 200.0)
+
     def test_colour_is_dark_grime(self):
         for kind in decals.GRIME:
             rgb = np.asarray(decals.make(kind, self.brushes))[..., :3].astype(float)

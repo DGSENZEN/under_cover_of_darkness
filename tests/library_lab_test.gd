@@ -168,6 +168,60 @@ func _run() -> void:
 	_check("L9 the hunt: his rack and tools hang on the back wall behind the desk, painted, the phials glazed",
 		h_wrong.is_empty(), "wrong %s" % [h_wrong])
 
+	# L10 the chained book strains: its nailed cover lifts against the chain in jerks, then drops shut
+	var w_book: Node3D = lab.chained
+	var w_peak := 0.0
+	var w_shut_by := -1
+	var w_gap := 0.0
+	w_book.strain_now()
+
+	for i in 180:
+		await get_tree().process_frame
+		# The chain held to the staple as the cover pulls at it: they never come apart.
+		w_gap = maxf(w_gap, w_book.staple_gap())
+		if i < 60:
+			w_peak = maxf(w_peak, w_book.angle)
+		elif w_shut_by < 0 and w_book.angle < 0.5:
+			w_shut_by = i
+	var w_lifted: bool = w_book.cover.global_transform.origin.distance_to(w_book.cover_rest.origin) < 0.001 and w_shut_by >= 0
+	_check("L10 the chained book strains: its cover lifts over 6 degrees within a second against its chain, shut again within three",
+		w_peak > 6.0 and w_lifted and w_gap < 0.01, "peak %.1f shut by frame %d chain gap %.3f m" % [w_peak, w_shut_by, w_gap])
+
+	# L11 the quarantine stirs: over 40 s every book in the cage twitches at least once, never in step
+	var w_q: Node3D = lab.quarantine
+	var w_before: Array = w_q.jolts.duplicate()
+
+	for i in 2400:
+		await get_tree().process_frame
+	var w_each := true
+
+	for k in w_q.books.size():
+		w_each = w_each and w_q.jolts[k] > w_before[k]
+	_check("L11 the quarantine stirs: every caged book twitches within 40 s, never two in step more than twice",
+		w_q.books.size() == 7 and w_each and w_q.together <= 2, "books %d jolts %s together %d" % [w_q.books.size(), w_q.jolts,
+		w_q.together])
+
+	# L12 his ward: the chalk circle round the desk on the floor, its open side to the customers closed by salt; F3
+	#     hides them with the other decals
+	var w_desk: AABB = lab.corner["desk"].global_transform * lab.corner["desk"].get_aabb()
+	var w_circle: Decal = lab.find_child("decal_ward_circle", true, false)
+	var w_salt: Decal = lab.find_child("decal_salt_line", true, false)
+	var w_round := false
+	var w_closes := false
+
+	if w_circle != null and w_salt != null:
+		var half: Vector3 = w_circle.size / 2.0
+		var c: Vector3 = w_circle.global_position
+		w_round = c.x - half.x < w_desk.position.x and w_desk.end.x < c.x + half.x and c.z - half.z < w_desk.position.z \
+			and w_desk.end.z < c.z + half.z and absf(c.y) < 0.3
+		# The salt across the circle's front (toward the shopfront), where its ring is left open.
+		w_closes = w_salt.global_position.z > w_desk.end.z and absf(w_salt.global_position.x - c.x) < 0.1
+	lab.set_decals(false)
+	var w_hidden: bool = w_circle != null and not w_circle.visible and not w_salt.visible
+	lab.set_decals(true)
+	_check("L12 his ward: a chalk circle round his desk, closed by salt toward the customers; F3 hides it",
+		w_round and w_closes and w_hidden, "round %s closes %s hidden %s" % [w_round, w_closes, w_hidden])
+
 
 func _check(test_name: String, ok: bool, detail: String) -> void:
 	results.append("%s  %s   [%s]" % ["PASS" if ok else "FAIL", test_name, detail])
