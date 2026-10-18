@@ -38,6 +38,11 @@ const VIEWS := [
 	["close_stole", Vector3(-1.05, 1.6, -3.95), Vector3(-0.48, 1.35, -4.52)],
 	["close_crucifix", Vector3(-0.55, 1.45, -3.95), Vector3(-0.25, 1.2, -4.69)],
 	["close_medal", Vector3(0.3, 1.12, -3.45), Vector3(0.0, 1.015, -4.0)],
+	["corner_hunt", Vector3(0.0, 1.95, -3.85), Vector3(0.0, 2.0, -6.0)],
+	["close_trap", Vector3(0.35, 2.45, -4.95), Vector3(0.0, 2.5, -5.92)],
+	["close_crossbow", Vector3(-0.25, 2.05, -4.95), Vector3(-0.15, 2.12, -5.92)],
+	["close_lower", Vector3(-0.45, 1.55, -4.85), Vector3(-0.35, 1.45, -5.92)],
+	["close_gun", Vector3(0.75, 1.6, -4.95), Vector3(0.6, 1.4, -5.92)],
 ]
 
 
@@ -91,12 +96,15 @@ func _ready() -> void:
 				for k in count:
 					var t := smoothstep(0.0, 1.0, float(k) / maxf(count - 1, 1))
 					eye.global_transform = Transform3D(Basis(), start + ahead * t).looking_at(view[2], Vector3.UP)
+					RenderingServer.force_draw(false)
 					get_viewport().get_texture().get_image().save_png("%s%s_%03d.png" % [out, view[0], k])
 					await _frames(2)
 				print("clip: ", view[0])
 				continue
 
 			var file := "%s%s_%s.png" % [out, view[0], "form" if form else "lit"]
+			# (Drawn now, whether or not the window is on screen: hidden, it would hand back its last frame.)
+			RenderingServer.force_draw(false)
 			get_viewport().get_texture().get_image().save_png(file)
 			print("still: ", file)
 

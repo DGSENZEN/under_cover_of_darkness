@@ -418,8 +418,223 @@ def benedict_medal(m):
            lean=math.pi / 2, towards=0.0)
 
 
+# --- the hunt --------------------------------------------------------------------------------------------
+
+# The back wall's face in the corner's frame; the rack's board, out from it, and the plane its things hang in.
+WALL_Y = library_room.DEPTH + CORNER_AT[1]
+BOARD = (-0.95, 0.95, 1.15, 2.85)
+HANG_Y = WALL_Y - 0.09
+# The pegs each thing hangs from (x, z), out of the board's face; the shelf the rounds stand on (x from, to, its top).
+PEGS = {"trap_jaws": [(0.0, 2.77)], "crossbow": [(-0.45, 2.1), (0.15, 2.1)], "sword_cane": [(-0.55, 1.85), (0.35, 1.85)],
+        "stakes": [(-0.75, 1.6)], "bandolier": [(-0.35, 1.6)], "chains": [(0.15, 1.6)], "revolver": [(0.55, 1.6)]}
+SHELF = (0.6, 0.95, 1.19)
+PEG_R = 0.018
+
+
+def _peg_top(x, z):
+    return z + PEG_R
+
+
+def _wall_ring(m, centre, radius, tube, plane, slot, steps=8):
+    """A closed ring of tube (a chain's link, a ring), about `centre`, in the wall's plane ("xz") or across it
+    ("yz")."""
+    cx, cy, cz = centre
+    points = []
+    for k in range(steps):
+        a = 2 * math.pi * k / steps
+        u, v = radius * math.cos(a), radius * math.sin(a)
+        points.append((cx + u, cy, cz + v) if plane == "xz" else (cx, cy + u, cz + v))
+    pipe(m, points, tube, 6, slot, closed=True)
+
+
+def _spike(m, centre, radius, sides, length, twist, slot):
+    """A point whittled or cast: a pyramid of `sides` from its base ring (radius, about the vertical through
+    `centre`, at centre's height) down to its tip `length` below."""
+    cx, cy, cz = centre
+    ring = [(cx + radius * math.cos(twist + 2 * math.pi * k / sides), cy + radius * math.sin(twist + 2 * math.pi * k / sides), cz)
+            for k in range(sides)]
+    tip = (cx, cy, cz - length)
+    m.shell()
+    m.face(ring, slot)
+    for k in range(sides):
+        m.face([ring[(k + 1) % sides], ring[k], tip], slot)
+
+
+def _wall_loop(m, points, width, thick, y, slot):
+    """A closed flat band lying in the wall's plane at `y` (a belt hung in a loop), its broad face toward the room:
+    `points` its middle line (x, z), `width` across it in the plane, `thick` along y."""
+    n = len(points)
+    rings = []
+    for i, (x, z) in enumerate(points):
+        (ax, az), (bx, bz) = points[i - 1], points[(i + 1) % n]
+        tx, tz = bx - ax, bz - az
+        k = math.hypot(tx, tz)
+        nx, nz = -tz / k, tx / k
+        rings.append([(x + sw * nx * width / 2, y + sy * thick / 2, z + sw * nz * width / 2)
+                      for sw, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))])
+    m.shell()
+    shapes.loft(m, rings + [rings[0]], slot, caps=False)
+
+
+def common_quads(lo, hi, front="felt_green"):
+    """A box's six faces as (quad, slot): its -y face `front`, the rest left to the caller (None)."""
+    x0, y0, z0 = lo
+    x1, y1, z1 = hi
+    return [([(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)], front),
+            ([(x0, y1, z0), (x0, y1, z1), (x1, y1, z1), (x1, y1, z0)], None),
+            ([(x0, y0, z0), (x0, y0, z1), (x0, y1, z1), (x0, y1, z0)], None),
+            ([(x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)], None),
+            ([(x0, y0, z0), (x0, y1, z0), (x1, y1, z0), (x1, y0, z0)], None),
+            ([(x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)], None)]
+
+
+def hunt_rack(m):
+    """His rack on the back wall behind the desk: a framed board with turned pegs for his working tools, a shelf at
+    its foot, a cross carved on its crest."""
+    x0, x1, z0, z1 = BOARD
+    # The board, its face a dark green baize as a gunsmith lays out his tools (the frame stands over its edges).
+    m.shell()
+    lo, hi = (x0, WALL_Y - 0.04, z0), (x1, WALL_Y, z1)
+    for quad, slot in common_quads(lo, hi):
+        m.face(quad, slot if slot else "wood")
+    # The frame round its face (standing 3.5 cm off it), the crest over it, the cross on the crest.
+    f = 0.05
+    for lo, hi in (((x0, z0), (x1, z0 + f)), ((x0, z1 - f), (x1, z1)), ((x0, z0 + f), (x0 + f, z1 - f)), ((x1 - f, z0 + f), (x1, z1 - f))):
+        box(m, (lo[0], WALL_Y - 0.075, lo[1]), (hi[0], WALL_Y - 0.04, hi[1]), "wood", r=0.0)
+    box(m, (x0 - 0.03, WALL_Y - 0.08, z1), (x1 + 0.03, WALL_Y, z1 + 0.12), "wood", r=0.02)
+    box(m, (-0.016, WALL_Y - 0.115, z1 + 0.005), (0.016, WALL_Y - 0.08, z1 + 0.115), "wood", r=0.0)
+    box(m, (-0.05, WALL_Y - 0.115, z1 + 0.06), (-0.016, WALL_Y - 0.08, z1 + 0.09), "wood", r=0.0)
+    box(m, (0.016, WALL_Y - 0.115, z1 + 0.06), (0.05, WALL_Y - 0.08, z1 + 0.09), "wood", r=0.0)
+    # The shelf at its foot on its brackets.
+    sx0, sx1, top = SHELF
+    box(m, (sx0, WALL_Y - 0.2, top - 0.04), (sx1, WALL_Y - 0.075, top), "wood", r=0.0)
+    for bx in (sx0 + 0.04, sx1 - 0.04):
+        box(m, (bx - 0.015, WALL_Y - 0.17, top - 0.16), (bx + 0.015, WALL_Y - 0.075, top - 0.04), "wood", r=0.0)
+    # The pegs, turned, each knobbed at its end.
+    for pegs in PEGS.values():
+        for px, pz in pegs:
+            turned(m, [(PEG_R, 0.0), (PEG_R, 0.08), (0.026, 0.092), (0.026, 0.11)], 8, "wood", at=(px, WALL_Y - 0.04, pz),
+                   lean=math.pi / 2, towards=0.0)
+
+
+def crossbow(m):
+    """A crossbow laid across two pegs: its stock and butt, its steel prod, the string drawn back to the nut, the
+    stirrup at its head, the trigger lever under it."""
+    (ax, az), (bx, bz) = PEGS["crossbow"]
+    low = _peg_top(ax, az)
+    y = HANG_Y
+    box(m, (-0.6, y - 0.025, low), (0.3, y + 0.025, low + 0.06), "wood", r=0.012)
+    box(m, (-0.7, y - 0.03, low - 0.02), (-0.6, y + 0.03, low + 0.09), "wood", r=0.015)
+    z0 = low + 0.03
+    pipe(m, [(0.27, y, z0 - 0.2), (0.315, y, z0 - 0.1), (0.33, y, z0), (0.315, y, z0 + 0.1), (0.27, y, z0 + 0.2)], 0.017, 8,
+         "steel")
+    pipe(m, [(0.27, y - 0.032, z0 - 0.19), (-0.05, y - 0.032, z0), (0.27, y - 0.032, z0 + 0.19)], 0.013, 6, "paper_kraft")
+    _wall_ring(m, (0.39, y, z0), 0.045, 0.012, "xz", "steel")
+    box(m, (-0.25, y - 0.012, low - 0.07), (-0.21, y + 0.012, low), "steel", r=0.0)
+
+
+def sword_cane(m):
+    """His sword cane across two pegs, its silver knob, a hand's breadth of its blade drawn from the shaft."""
+    (ax, az), _ = PEGS["sword_cane"]
+    zc = _peg_top(ax, az) + 0.016
+    y = HANG_Y
+    turned(m, [(0.022, 0.0), (0.03, 0.03), (0.03, 0.07), (0.022, 0.1)], 12, "silver", at=(-0.82, y, zc), lean=math.pi / 2,
+           towards=math.pi / 2)
+    box(m, (-0.72, y - 0.006, zc - 0.01), (-0.62, y + 0.006, zc + 0.01), "steel", r=0.0)
+    turned(m, [(0.018, 0.0), (0.016, 0.03), (0.016, 1.01), (0.018, 1.04)], 8, "wood", at=(-0.62, y, zc), lean=math.pi / 2,
+           towards=math.pi / 2)
+    turned(m, [(0.018, 0.0), (0.018, 0.05)], 8, "brass", at=(0.42, y, zc), lean=math.pi / 2, towards=math.pi / 2)
+
+
+def stakes(m):
+    """Three stakes whittled six-sided from ash, their points shod in silver, bound with a strap looped over a peg."""
+    px, pz = PEGS["stakes"][0]
+    y = HANG_Y
+    # (Turned so no side of a stake lies square to the strap's: they would lie too near each other.)
+    twist = math.radians(-15.0)
+    for dx in (-0.06, 0.0, 0.06):
+        turned(m, [(0.025, 1.3), (0.025, 1.52)], 6, "wood", at=(px + dx, y, 0.0), twist=twist)
+        _spike(m, (px + dx, y, 1.3), 0.025, 6, 0.06, twist, "silver")
+    box(m, (px - 0.1, y - 0.035, 1.44), (px + 0.1, y + 0.035, 1.47), "leather_old", r=0.0)
+    top = _peg_top(px, pz) + 0.007
+    _band(m, [(px - 0.05, y, 1.47), (px - 0.035, y, top - 0.04), (px, y, top), (px + 0.035, y, top - 0.04), (px + 0.05, y, 1.47)],
+          0.03, 0.016, (0.0, 1.0, 0.0), "leather_old")
+
+
+def bandolier(m):
+    """A bandolier of holy-water phials hung in a loop on its peg, a phial in each loop down both its sides."""
+    px, pz = PEGS["bandolier"][0]
+    top = _peg_top(px, pz) + 0.02
+    y = HANG_Y
+    loop = [(px, top), (px + 0.05, top - 0.03), (px + 0.08, top - 0.12), (px + 0.09, top - 0.27), (px + 0.07, top - 0.36),
+            (px, top - 0.39), (px - 0.07, top - 0.36), (px - 0.09, top - 0.27), (px - 0.08, top - 0.12), (px - 0.05, top - 0.03)]
+    _wall_loop(m, loop, 0.045, 0.014, y, "leather_old")
+    front = y - 0.007 - 0.019
+    for x, z in ((px + 0.085, top - 0.2), (px + 0.088, top - 0.31), (px - 0.085, top - 0.2), (px - 0.088, top - 0.31)):
+        turned(m, [(0.019, 0.0), (0.019, 0.06)], 8, "glass", at=(x, front, z - 0.03))
+        turned(m, [(0.017, 0.0), (0.017, 0.02)], 8, "paper_kraft", at=(x, front, z + 0.03))
+
+
+def chains(m):
+    """A length of chain hung from its peg, its links alternately in the wall's plane and across it."""
+    px, pz = PEGS["chains"][0]
+    y = HANG_Y
+    r, t = 0.035, 0.013
+    centre = _peg_top(px, pz) - (r - t)
+    for k in range(6):
+        _wall_ring(m, (px, y, centre - 0.05 * k), r, t, "xz" if k % 2 == 0 else "yz", "steel")
+
+
+def revolver(m):
+    """A heavy revolver hung by its trigger guard: its frame, cylinder and barrel hanging down, its grip up and back."""
+    px, pz = PEGS["revolver"][0]
+    y = HANG_Y
+    guard = _peg_top(px, pz) - (0.032 - 0.013)
+    _wall_ring(m, (px, y, guard), 0.032, 0.013, "xz", "steel")
+    box(m, (px - 0.035, y - 0.016, guard - 0.13), (px + 0.045, y + 0.016, guard - 0.035), "steel", r=0.0)
+    # (Twelve-sided and untwisted, so no side of it lies square to the frame's; its ends over 3 cm from the
+    # frame's.)
+    turned(m, [(0.034, 0.0), (0.034, 0.065)], 12, "steel", at=(px + 0.005, y, guard - 0.165))
+    pipe(m, [(px + 0.005, y, guard - 0.165), (px + 0.005, y, guard - 0.33)], 0.016, 8, "steel")
+    # The grip beside the frame, up and back (beside it, not over it: their faces would lie too near).
+    box(m, (px + 0.045, y - 0.015, guard - 0.09), (px + 0.082, y + 0.015, guard + 0.03), "wood", r=0.0)
+
+
+def rounds(m):
+    """A box of his engraved rounds on the rack's shelf (its label the user's), three stood out in front of it."""
+    x0, x1, top = SHELF
+    box(m, (0.7, WALL_Y - 0.155, top), (0.84, WALL_Y - 0.085, top + 0.055), "paper_kraft", r=0.0)
+    for x in (0.7, 0.76, 0.82):
+        turned(m, [(0.017, 0.0), (0.017, 0.035), (0.016, 0.05)], 8, "brass", at=(x, WALL_Y - 0.18, top + 0.017),
+               lean=math.pi / 2, towards=math.pi / 2)
+
+
+def trap_jaws(m):
+    """The jaws of a great trap hung as a trophy over his rack: open, toothed all round, the trigger plate between
+    them, hung by a ring and a short chain."""
+    px, pz = PEGS["trap_jaws"][0]
+    y = HANG_Y
+    ring = _peg_top(px, pz) - (0.035 - 0.013)
+    _wall_ring(m, (px, y, ring), 0.035, 0.013, "xz", "steel")
+    _wall_ring(m, (px, y, ring - 0.05), 0.035, 0.013, "yz", "steel")
+    r = 0.15
+    zc = ring - 0.075 - r
+    for start in (0.0, math.pi):
+        arc = [(px + r * math.cos(start + math.pi * k / 10), y, zc + r * math.sin(start + math.pi * k / 10)) for k in range(11)]
+        pipe(m, arc, 0.017, 8, "steel")
+    for k in range(16):
+        a = 2 * math.pi * (k + 0.5) / 16
+        c = (px + 0.12 * math.cos(a), y, zc + 0.12 * math.sin(a))
+        box(m, (c[0] - 0.017, c[1] - 0.012, c[2] - 0.01), (c[0] + 0.017, c[1] + 0.012, c[2] + 0.01), "steel", r=0.0,
+            turn=(0.0, -a, 0.0))
+    turned(m, [(0.06, 0.0), (0.06, 0.014)], 14, "steel", at=(px, y + 0.007, zc), lean=math.pi / 2, towards=0.0)
+    for side in (-1, 1):
+        box(m, (px + side * r - 0.025, y - 0.02, zc - 0.025), (px + side * r + 0.025, y + 0.02, zc + 0.025), "steel", r=0.0)
+
+
 DEALER = [desk, desk_chair, lamp, ledger, magnifier, gloves, repair_kit, coat_hook]
 RITE = [rituale, stole, crucifix, aspergillum, salt_tin, oil_phial, reliquary, benedict_medal]
+HUNT = [hunt_rack, crossbow, sword_cane, stakes, bandolier, chains, revolver, rounds, trap_jaws]
 
 
 def build():
@@ -427,7 +642,7 @@ def build():
     underground_shapes.rng = rng
     rng.seed(1897)
 
-    for f in DEALER + RITE:
+    for f in DEALER + RITE + HUNT:
         smooth_object(f.__name__, f)
 
 

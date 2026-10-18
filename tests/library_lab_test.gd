@@ -8,6 +8,7 @@ const LAB := preload("res://maps/library_lab.tscn")
 const ROOM := ["room_vault", "room_back", "room_front", "room_floor", "room_rug"]
 const DEALER := ["desk", "desk_chair", "lamp", "ledger", "magnifier", "gloves", "repair_kit", "coat_hook"]
 const RITE := ["rituale", "stole", "crucifix", "aspergillum", "salt_tin", "oil_phial", "reliquary", "benedict_medal"]
+const HUNT := ["hunt_rack", "stakes", "sword_cane", "revolver", "rounds", "crossbow", "bandolier", "chains", "trap_jaws"]
 
 var results: Array[String] = []
 var lab: Node3D
@@ -142,6 +143,30 @@ func _run() -> void:
 		func(i): return lab.corner[n].mesh.surface_get_material(i) != null and lab.corner[n].mesh.surface_get_material(i).resource_name == "glass"))
 	_check("L8 the rite on his desk: the Rituale, stole, crucifix, aspergillum, salt, oil, reliquary and medal, painted; glass glazed",
 		r_wrong.is_empty() and r_glass, "wrong %s glass %s" % [r_wrong, r_glass])
+
+	# L9 the hunt: his rack and his working tools on the back wall behind the desk, painted (the phials glazed)
+	var h_wrong := []
+	var h_desk: AABB = lab.corner["desk"].global_transform * lab.corner["desk"].get_aabb()
+
+	for part in HUNT:
+		var mesh: MeshInstance3D = lab.corner.get(part)
+		if mesh == null:
+			h_wrong.append(part)
+			continue
+		var h_box: AABB = mesh.global_transform * mesh.get_aabb()
+		# Behind the desk, against the wall: between the desk's back and the back wall.
+		if h_box.position.z < -lab.DEPTH - 0.001 or h_box.end.z > h_desk.position.z:
+			h_wrong.append("%s at %s" % [part, h_box])
+		for i in mesh.mesh.get_surface_count():
+			var m: Material = mesh.get_surface_override_material(i)
+			var slot: Material = mesh.mesh.surface_get_material(i)
+			var want_glass: bool = slot != null and slot.resource_name == "glass"
+			var h_glazed: bool = m is StandardMaterial3D and (m as StandardMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED
+			var h_painted: bool = m is ShaderMaterial and m.get_shader_parameter("atlas") != null
+			if (want_glass and not h_glazed) or (not want_glass and not h_painted):
+				h_wrong.append("%s/%d" % [part, i])
+	_check("L9 the hunt: his rack and tools hang on the back wall behind the desk, painted, the phials glazed",
+		h_wrong.is_empty(), "wrong %s" % [h_wrong])
 
 
 func _check(test_name: String, ok: bool, detail: String) -> void:

@@ -1688,7 +1688,11 @@ class LibraryCorner(unittest.TestCase):
     BUDGET = {"desk": 6000, "desk_chair": 2500, "lamp": 2000, "ledger": 1500, "magnifier": 800, "gloves": 1200,
               "repair_kit": 1500, "coat_hook": 5000,
               "rituale": 2500, "stole": 2500, "crucifix": 2500, "aspergillum": 2500, "salt_tin": 2500,
-              "oil_phial": 2500, "reliquary": 4000, "benedict_medal": 2500}
+              "oil_phial": 2500, "reliquary": 4000, "benedict_medal": 2500,
+              "hunt_rack": 5000, "stakes": 3500, "sword_cane": 3500, "revolver": 3500, "rounds": 3500, "crossbow": 3500,
+              "bandolier": 3500, "chains": 3500, "trap_jaws": 3500}
+    # His hunting things, each hung on the rack (the rounds stand on its shelf).
+    HUNT = ["stakes", "sword_cane", "revolver", "rounds", "crossbow", "bandolier", "chains", "trap_jaws"]
     # What lies on the desk top (the lamp stands on its foot; its shade hangs over the ledger on purpose).
     ON_DESK = ["ledger", "magnifier", "gloves", "repair_kit", "rituale", "crucifix", "salt_tin", "oil_phial", "reliquary",
                "aspergillum"]
@@ -1799,6 +1803,42 @@ class LibraryCorner(unittest.TestCase):
         # Its back against the desk's front edge, the customers' side; the edge of the desk's top board.
         self.assertAlmostEqual(my[1], front.y, delta=0.002)
         self.assertTrue(0.98 <= mz[0] and mz[1] <= library_corner.DESK_TOP, mz)
+
+    def test_the_rack_meets_the_wall(self):
+        # The back wall's face in the corner's frame: the room's depth less the corner's place in it.
+        self.assertAlmostEqual(self._extent("hunt_rack")[1][1], library_corner.WALL_Y, delta=0.001)
+
+    @staticmethod
+    def _touch(a, b, slack=0.003):
+        return all(a[i][0] - slack <= b[i][1] and b[i][0] - slack <= a[i][1] for i in range(3))
+
+    def test_each_weapon_hangs_on_the_rack(self):
+        loose = []
+
+        for n in self.HUNT:
+            box = self._extent(n)
+            if n == "rounds":
+                x0, x1, top = library_corner.SHELF
+                rests = abs(box[2][0] - top) < 0.003 and x0 <= box[0][0] and box[0][1] <= x1
+                if not rests:
+                    loose.append(n)
+                continue
+            pegs = [((x - 0.022, x + 0.022), (library_corner.WALL_Y - 0.15, library_corner.WALL_Y - 0.04),
+                     (z - 0.022, z + 0.022)) for x, z in library_corner.PEGS[n]]
+            if not any(self._touch(box, peg) for peg in pegs):
+                loose.append(n)
+
+        self.assertEqual(loose, [])
+
+    def test_no_weapon_lies_on_another(self):
+        boxes = {n: self._extent(n) for n in self.HUNT}
+        clashes = [(a, b) for i, a in enumerate(self.HUNT) for b in self.HUNT[i + 1:] if self._touch(boxes[a], boxes[b], 0.0)]
+        self.assertEqual(clashes, [])
+
+    def test_the_hunt_hangs_behind_his_chair(self):
+        # Clear of the chair and the coat stand: all of it within reach of the wall.
+        front = min(self._extent(n)[1][0] for n in self.HUNT + ["hunt_rack"])
+        self.assertGreater(front, max(self._extent("desk_chair")[1][1], self._extent("coat_hook")[1][1]))
 
     def test_the_chair_is_left_behind_the_desk(self):
         (x0, x1), (y0, y1), (z0, z1) = self._extent("desk_chair")
