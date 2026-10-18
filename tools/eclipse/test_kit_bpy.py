@@ -27,6 +27,7 @@ import underground_vault  # noqa: E402
 import underground_uncanny  # noqa: E402
 import library_room  # noqa: E402
 import library_corner  # noqa: E402
+import library_shelves  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -1880,6 +1881,98 @@ class LibraryCorner(unittest.TestCase):
         (x0, x1), (y0, y1), (z0, z1) = self._extent("desk_chair")
         self.assertAlmostEqual(z0, 0.0, delta=1e-4)
         self.assertGreater(y0, self._extent("desk")[1][1])
+
+
+class LibraryShelves(unittest.TestCase):
+    """The librarian's shelves (tools/eclipse/library_shelves.py): a tall case per section, each built in its own
+    frame (its front's middle at the origin on the floor, its front toward -y, its back against the wall at +y), each
+    shaped and ornamented its own way; the low double-sided case; the rolling ladder and its rail."""
+
+    CASES = ["shelf_" + n for n in ("chronology", "necromancy", "alchemy", "metaphysics", "hunting")]
+    BUDGET = dict({n: 12000 for n in CASES}, shelf_middle=9000, ladder=2500, ladder_rail=2500)
+
+    @classmethod
+    def setUpClass(cls):
+        library_shelves.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_each_passes_the_gate(self):
+        problems = {}
+
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            found = gate.check(faces, tris, [], budget=self.BUDGET[n])
+            if found:
+                problems[n] = found[:3]
+
+        self.assertEqual(problems, {})
+
+    def _profile(self, name):
+        vs = _world(self.objects[name])
+        return [max([v.z for v in vs if abs(v.x - x) < 0.025] or [0.0]) for x in [-0.9 + 0.05 * k for k in range(37)]]
+
+    def test_each_section_differs_in_shape(self):
+        # Not one case recoloured five times: every two differ in their outline by 3 cm somewhere.
+        profiles = {n: self._profile(n) for n in self.CASES}
+        alike = [(a, b) for i, a in enumerate(self.CASES) for b in self.CASES[i + 1:]
+                 if max(abs(p - q) for p, q in zip(profiles[a], profiles[b])) < 0.03]
+        self.assertEqual(alike, [])
+
+    def test_the_cases_stand_tall_against_the_wall(self):
+        for n in self.CASES:
+            vs = _world(self.objects[n])
+            self.assertAlmostEqual(min(v.z for v in vs), 0.0, delta=1e-4, msg=n)
+            self.assertGreaterEqual(max(v.z for v in vs), library_shelves.HEIGHT - 0.001, n)
+            self.assertAlmostEqual(max(v.y for v in vs), library_shelves.DEPTH, delta=0.001, msg=n)
+            self.assertLessEqual(max(abs(v.x) for v in vs), library_shelves.WIDTH / 2 + 0.06, n)
+
+    def test_boards(self):
+        # Every board the filler will lay books on is where BOARD_SPOTS says, its top met from above.
+        wrong = []
+
+        for name, boards in library_shelves.BOARD_SPOTS.items():
+            for x0, x1, top, y0, y1 in boards:
+                hit = _hit(self.objects[name], ((x0 + x1) / 2, (y0 + y1) / 2, top + 0.1), (0.0, 0.0, -1.0), 0.3)
+                if hit is None or abs(hit.z - top) > 0.005:
+                    wrong.append((name, top, None if hit is None else round(hit.z, 3)))
+
+        self.assertEqual(wrong, [])
+        self.assertEqual(sorted(library_shelves.BOARD_SPOTS), sorted(self.CASES + ["shelf_middle"]))
+
+    def test_every_case_stands_under_the_vault(self):
+        # The vault comes down toward the side walls (3.0 m at their faces, 3.36 m a case's depth out): a case stood
+        # against a side wall, its crest and ornaments and all, stays under it.
+        r, zc, half = library_room._arc(library_room.WIDTH, library_room.SPRING, library_room.CROWN)
+        through = []
+
+        for n in self.CASES:
+            for v in _world(self.objects[n]):
+                # The case's y out from its back (the wall) is the room's x in from the side wall.
+                x = library_room.WIDTH / 2 - (library_shelves.DEPTH - v.y) - 0.035
+                if abs(x) < library_room.WIDTH / 2 and v.z > zc + math.sqrt(max(0.0, r * r - x * x)) - 0.02:
+                    through.append((n, round(v.z, 2)))
+                    break
+
+        self.assertEqual(through, [])
+
+    def test_middle_case_is_low(self):
+        self.assertLessEqual(max(v.z for v in _world(self.objects["shelf_middle"])), 1.45)
+
+    def test_the_ladder_hangs_on_its_rail(self):
+        # Its hooks at its top on the rail, its foot on the floor out from the case.
+        ladder, rail = _world(self.objects["ladder"]), _world(self.objects["ladder_rail"])
+        self.assertAlmostEqual(min(v.z for v in ladder), 0.0, delta=0.003)
+        self.assertGreater(max(v.z for v in ladder), min(v.z for v in rail))
+        self.assertLess(min(v.y for v in ladder), -0.4)
 
 
 if __name__ == "__main__":

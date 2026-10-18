@@ -45,6 +45,23 @@ const SALT_SIZE := Vector3(1.3, 0.2, 0.9)
 ## His lamp: warm, low, under its green shade (where it stands when the corner's kit is missing).
 const LAMP_AT := Vector3(-0.32, 1.39, -4.44)
 const LAMP_COLOUR := Color(1.0, 0.78, 0.5)
+## His shelves (tools/eclipse/library_shelves.py): each case's frame its front's middle on the floor, its front
+## toward +z, its back DEPTH behind; where each stands (its origin, turned how far), the room's skirting allowed for.
+const SHELF_KIT := "res://assets/eclipse/kit/library_shelves.glb"
+const SHELF_BOARDS := "res://assets/eclipse/source/library_shelves_boards.json"
+const SHELF_DEPTH := 0.42
+const SKIRT_PROUD := 0.035
+const WALL_IN := 4.0 - SKIRT_PROUD - SHELF_DEPTH
+const BACK_IN := -6.0 + SKIRT_PROUD + SHELF_DEPTH
+const SHELVES := {
+	"chronology": [Vector3(-WALL_IN, 0.0, -1.7), 90.0], "necromancy": [Vector3(-WALL_IN, 0.0, -4.8), 90.0],
+	"alchemy": [Vector3(WALL_IN, 0.0, -1.7), -90.0], "metaphysics": [Vector3(WALL_IN, 0.0, -4.3), -90.0],
+	"hunting": [Vector3(2.65, 0.0, BACK_IN), 0.0]}
+## The low cases either side of the runner, along the room.
+const LOW_CASES := [Vector3(-1.15, 0.0, -1.9), Vector3(1.15, 0.0, -1.9)]
+## The side aisles' middles (x), between the low cases and the wall cases.
+const AISLE_X := 2.45
+
 ## The lamp's shade: emerald glass, lit through from inside.
 const SHADE_GREEN := Color(0.12, 0.42, 0.22, 0.8)
 
@@ -59,6 +76,9 @@ var corner := {}
 var chained: ChainedBook
 var quarantine: Quarantine
 var decals: Array[Decal] = []
+## His sections' cases by name; every piece of shelving.
+var sections := {}
+var shelves: Array[MeshInstance3D] = []
 var corridor: Array[MeshInstance3D] = []
 var lamp_light: OmniLight3D
 var work_lights: Array[Light3D] = []
@@ -73,6 +93,7 @@ func _ready() -> void:
 	_environment()
 	_room()
 	_corner()
+	_shelves()
 	_corridor()
 	_lights()
 	_keys()
@@ -225,6 +246,32 @@ func lamp_bulb() -> Vector3:
 			return CORNER_AT + Vector3(w[0], w[1], w[2])
 
 	return LAMP_AT
+
+
+# His shelves
+
+## His five sections' cases along the walls, the low cases either side of the runner, the ladder on its rail
+## along the chronology case.
+func _shelves() -> void:
+	if not ResourceLoader.exists(SHELF_KIT):
+		missing.append(SHELF_KIT)
+		return
+
+	var meshes := _kit(SHELF_KIT)
+	var look := Painterly.material(_painted(["library_shelves.png", "library_shelves_base.png"]), &"bespoke")
+
+	for section: String in SHELVES:
+		var place: Array = SHELVES[section]
+		var case: MeshInstance3D = _place(meshes["shelf_" + section], look, "shelf_" + section, place[0], deg_to_rad(place[1]), true, true)
+		sections[section] = case
+		shelves.append(case)
+
+	for at: Vector3 in LOW_CASES:
+		shelves.append(_place(meshes["shelf_middle"], look, "shelf_middle", at, PI / 2.0, true, true))
+
+	var chrono: Array = SHELVES["chronology"]
+	for part in ["ladder_rail", "ladder"]:
+		shelves.append(_place(meshes[part], look, part, chrono[0], deg_to_rad(chrono[1]), part == "ladder"))
 
 
 # The corridor outside: the Metro's tiled floor and walls either side of his front

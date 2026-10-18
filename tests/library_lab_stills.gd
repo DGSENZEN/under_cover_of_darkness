@@ -23,7 +23,7 @@ const VIEWS := [
 	["close_vault_end", Vector3(3.2, 2.6, -5.2), Vector3(4.0, 3.3, -6.0)],
 	["close_vault_front", Vector3(-3.0, 2.4, -0.9), Vector3(-4.0, 3.2, 0.0)],
 	["close_threshold", Vector3(0.6, 1.0, 1.2), Vector3(0.0, 0.0, -0.2)],
-	["close_patch", Vector3(1.6, 1.6, -4.4), Vector3(2.3, 1.5, -6.0)],
+	["close_patch", Vector3(-2.4, 1.6, -4.5), Vector3(-3.0, 1.5, -6.0)],
 	["close_skirting", Vector3(-3.2, 0.7, -2.0), Vector3(-4.0, 0.1, -3.0)],
 	["corner_desk", Vector3(0.0, 1.75, -2.6), Vector3(0.0, 1.0, -4.4)],
 	["corner_top", Vector3(0.1, 1.85, -3.55), Vector3(0.05, 1.05, -4.4)],
@@ -48,6 +48,14 @@ const VIEWS := [
 	["close_chained", Vector3(-1.3, 1.4, -3.95), Vector3(-0.95, 1.1, -4.4)],
 	["corner_cage", Vector3(-0.95, 1.5, -4.3), Vector3(-1.85, 0.9, -5.8)],
 	["corner_ward", Vector3(0.0, 3.4, -1.7), Vector3(0.0, 0.0, -4.4)],
+	["shelf_chronology", Vector3(-1.9, 1.8, 0.0), Vector3(-3.5, 2.0, -1.8)],
+	["shelf_necromancy", Vector3(-1.9, 1.8, -3.0), Vector3(-3.5, 2.1, -4.8)],
+	["shelf_alchemy", Vector3(1.9, 1.8, 0.0), Vector3(3.5, 2.0, -1.8)],
+	["shelf_metaphysics", Vector3(1.9, 1.8, -2.5), Vector3(3.5, 2.1, -4.3)],
+	["shelf_hunting", Vector3(2.4, 1.8, -2.6), Vector3(2.65, 2.2, -5.6)],
+	["shelf_middle", Vector3(0.0, 1.6, -0.2), Vector3(-1.15, 0.8, -1.9)],
+	["shelf_ladder", Vector3(-2.2, 1.6, -0.6), Vector3(-3.0, 1.6, -1.6)],
+	["shelf_crests", Vector3(-0.5, 2.0, -0.4), Vector3(-3.5, 3.4, -3.2)],
 ]
 
 

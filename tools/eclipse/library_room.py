@@ -4,7 +4,7 @@ the brick of an older building when the line was dug past it.
 
 - room_vault: a segmental barrel vault of bare brick in courses, laid in running bond on its mortar,
   springing from limewashed side walls with a dark wooden skirting.
-- room_back: the back wall, limewashed, a patch fallen where the brick shows (behind his rack).
+- room_back: the back wall, limewashed, a patch fallen where the brick shows (by the cage).
 - room_front: the shopfront wall, an arch of old dressed stone through it; on the corridor's side a
   bookseller's front of painted wood, pilasters and a fascia board (its face blank: the sign is the
   user's), limewash inside.
@@ -163,8 +163,9 @@ def room_back(m, width, depth, crown):
     # The skirting along its foot.
     box(m, (-width / 2, face - SKIRT[1], 0.0), (width / 2, face + SKIN, SKIRT[0]), "wood", r=0.0)
 
-    # The limewash, in courses so its fallen edge follows the brick's: in the patch's rows a gap, ragged.
-    patch = (1.55, 3.05, 1.05, 2.05)
+    # The limewash, in courses so its fallen edge follows the brick's: in the patch's rows a gap, ragged (left of
+    # the quarantine cage, where no case stands in front of it).
+    patch = (-3.45, -2.6, 1.05, 2.05)
     z = SKIRT[0]
     row = 0
 

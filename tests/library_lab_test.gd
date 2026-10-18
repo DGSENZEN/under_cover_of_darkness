@@ -222,6 +222,74 @@ func _run() -> void:
 	_check("L12 his ward: a chalk circle round his desk, closed by salt toward the customers; F3 hides it",
 		w_round and w_closes and w_hidden, "round %s closes %s hidden %s" % [w_round, w_closes, w_hidden])
 
+	# L13 the five sections: a case each, painted, the low cases either side of the runner, the ladder on its rail;
+	#     hunting flanking his corner, necromancy beside the cage
+	var s_wrong := []
+
+	for part in ["chronology", "necromancy", "alchemy", "metaphysics", "hunting"]:
+		if not lab.sections.has(part):
+			s_wrong.append(part)
+	for mesh: MeshInstance3D in lab.shelves:
+		for i in mesh.mesh.get_surface_count():
+			var m: Material = mesh.get_surface_override_material(i)
+			var slot: Material = mesh.mesh.surface_get_material(i)
+			var s_glass: bool = slot != null and slot.resource_name == "glass"
+			var s_glazed: bool = m is StandardMaterial3D and (m as StandardMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED
+			var s_painted: bool = m is ShaderMaterial and m.get_shader_parameter("atlas") != null
+			if (s_glass and not s_glazed) or (not s_glass and not s_painted):
+				s_wrong.append("%s/%d" % [mesh.name, i])
+	var s_kinds: Array = lab.shelves.map(func(n): return String(n.get_meta("kind")))
+	var s_near_desk := INF
+	var s_near_cage := INF
+
+	if s_wrong.is_empty():
+		s_near_desk = _apart(lab.sections["hunting"], lab.corner["desk"])
+		s_near_cage = _apart(lab.sections["necromancy"], lab.corner["quarantine_cage"])
+	_check("L13 the five sections stand, painted, with the low cases and the ladder; hunting by his desk, necromancy by the cage",
+		s_wrong.is_empty() and s_kinds.count("shelf_middle") == 2 and "ladder" in s_kinds and "ladder_rail" in s_kinds
+		and s_near_desk < 2.5 and s_near_cage < 2.0,
+		"wrong %s kinds %s hunting %.2f m from the desk, necromancy %.2f m from the cage" % [s_wrong, s_kinds, s_near_desk, s_near_cage])
+
+	# L14 the aisles: down either side of the low cases the player walks to the back of the shop, and a body's width
+	#     swept along each line meets nothing
+	var s_walks := []
+	var s_clear := []
+	var s_space := lab.get_world_3d().direct_space_state
+
+	for x in [-lab.AISLE_X, lab.AISLE_X]:
+		var s_walk: Dictionary = await _walk(Vector3(x, 1.05, -0.5), 0.0, func(q): return q.z < -4.5, 600)
+		s_walks.append(s_walk["ok"] and s_walk["stall"] < 20)
+		var s_box := BoxShape3D.new()
+		s_box.size = Vector3(1.0, 1.9, 0.1)
+		var s_q := PhysicsShapeQueryParameters3D.new()
+		s_q.shape = s_box
+		s_q.transform = Transform3D(Basis(), Vector3(x, 1.06, -0.5))
+		s_q.motion = Vector3(0.0, 0.0, -4.0)
+		s_q.exclude = [lab.player.get_rid()]
+		s_clear.append(s_space.cast_motion(s_q)[0] >= 1.0)
+	_check("L14 the aisles: the player walks either side of the low cases to the back; a body's width down each meets nothing",
+		s_walks == [true, true] and s_clear == [true, true], "walks %s clear %s" % [s_walks, s_clear])
+
+	# L15 the corner still shows: from the corridor, nothing stands between the eye and his lamp
+	lab.player.global_position = lab.SPAWN
+	lab.player.rotation.y = 0.0
+	await _frames(10)
+	var s_eye: Camera3D = get_viewport().get_camera_3d()
+	var s_ray := PhysicsRayQueryParameters3D.create(s_eye.global_position, lab.lamp_bulb())
+	s_ray.exclude = [lab.player.get_rid()]
+	var s_hit := s_space.intersect_ray(s_ray)
+	_check("L15 from the corridor his lamp shows over the low cases, nothing between", s_hit.is_empty(),
+		"hit %s" % [s_hit.get("collider")])
+
+
+## How far apart two pieces stand on the floor (m, between their boxes; 0 if they overlap).
+func _apart(a: MeshInstance3D, b: MeshInstance3D) -> float:
+	var p: AABB = a.global_transform * a.get_aabb()
+	var q: AABB = b.global_transform * b.get_aabb()
+	var dx := maxf(0.0, maxf(p.position.x - q.end.x, q.position.x - p.end.x))
+	var dz := maxf(0.0, maxf(p.position.z - q.end.z, q.position.z - p.end.z))
+	return Vector2(dx, dz).length()
+
 
 func _check(test_name: String, ok: bool, detail: String) -> void:
 	results.append("%s  %s   [%s]" % ["PASS" if ok else "FAIL", test_name, detail])
