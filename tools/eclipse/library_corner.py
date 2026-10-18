@@ -29,13 +29,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common  # noqa: E402
 import library_room  # noqa: E402
 import shapes  # noqa: E402
+from mathutils import Vector  # noqa: E402
 import underground_shapes  # noqa: E402
 from underground_shapes import box, pipe, smooth_object, turned  # noqa: E402
 
 NAME = "library_corner"
 ATLAS = 2048
 SLOTS = ["wood", "brass", "felt_green", "leather_old", "paper", "glass", "glass_green", "cotton_white", "bone",
-         "steel", "paper_kraft", "coat_black", "cloth_patch", "hat_felt"]
+         "steel", "paper_kraft", "coat_black", "cloth_patch", "hat_felt", "velvet_purple", "silver", "wax_white"]
 
 rng = random.Random(1897)
 
@@ -47,6 +48,11 @@ DESK_W = 0.8
 DESK_D = 0.36
 # What lies on the desk sits this far above its top.
 LIFT = 0.003
+# His lamp's arm: its weighted foot on the desk, its knuckle, the arm's bend, the shade's head.
+LAMP_FOOT = (-0.6, 0.2, DESK_TOP + LIFT)
+LAMP_JOINT = (LAMP_FOOT[0], LAMP_FOOT[1], LAMP_FOOT[2] + 0.4)
+LAMP_HEAD = (-0.32, 0.04, DESK_TOP + 0.46)
+LAMP_MID = ((LAMP_JOINT[0] + LAMP_HEAD[0]) / 2, (LAMP_JOINT[1] + LAMP_HEAD[1]) / 2, LAMP_JOINT[2] + 0.07)
 
 
 def _rot(p, yaw, about=(0.0, 0.0)):
@@ -98,8 +104,9 @@ def desk(m):
     # His drawers, behind, their knobs.
     for k, (x0, x1) in enumerate(((-w + 0.08, -0.27), (-0.23, 0.23), (0.27, w - 0.08))):
         box(m, (x0, d - 0.06, 0.74), (x1, d - 0.02, 0.93), "wood", r=0.02)
+        # (Tipped toward heading pi: out of the drawer, +y. A heading a points the axis along (sin a, -cos a).)
         turned(m, [(0.022, 0.0), (0.022, 0.02), (0.017, 0.035)], 8, "brass", at=((x0 + x1) / 2, d - 0.02, 0.835),
-               lean=math.pi / 2, towards=math.pi / 2)
+               lean=math.pi / 2, towards=math.pi)
 
 
 def desk_chair(m):
@@ -138,13 +145,13 @@ def desk_chair(m):
 def lamp(m):
     """A green-shaded lamp on a jointed brass arm, its weighted foot at the desk's back corner, its shade over
     the ledger; its bulb in the shade's hollow is a wick (the bay's light stands there)."""
-    foot = (-0.6, 0.2, DESK_TOP + LIFT)
+    foot = LAMP_FOOT
     turned(m, [(0.085, 0.0), (0.085, 0.022), (0.05, 0.035)], 14, "brass", at=foot)
-    joint = (foot[0], foot[1], foot[2] + 0.4)
+    joint = LAMP_JOINT
     pipe(m, [(foot[0], foot[1], foot[2] + 0.035), joint], 0.016, 8, "brass")
     turned(m, [(0.017, -0.022), (0.03, -0.012), (0.03, 0.012), (0.017, 0.022)], 10, "brass", at=joint)
-    head = (-0.32, 0.04, DESK_TOP + 0.46)
-    pipe(m, [joint, ((joint[0] + head[0]) / 2, (joint[1] + head[1]) / 2, joint[2] + 0.07), head], 0.015, 8, "brass")
+    head = LAMP_HEAD
+    pipe(m, [joint, LAMP_MID, head], 0.015, 8, "brass")
     # The shade: a thick emerald bowl, open below, hung from the arm's end.
     shade = (head[0], head[1], head[2] - 0.11)
     turned(m, [(0.025, 0.1), (0.07, 0.07), (0.115, 0.0), (0.1, 0.0), (0.06, 0.045), (0.018, 0.06)], 16,
@@ -255,7 +262,164 @@ def coat_hook(m):
            16, "hat_felt", at=top)
 
 
+# --- the rite --------------------------------------------------------------------------------------------
+
+def _book(m, centre, size, yaw, cover, pages, spine=-1, lip=0.011):
+    """A closed book lying flat, `size` (across, along, thick), `centre` its bottom's middle, turned `yaw`: its
+    boards overhanging the pages' fore-edge by `lip` (the pages `pages` between them, the boards and the rounded
+    spine `cover`); the spine on its -x side (`spine` -1) or +x (1). Lofted along the book's length."""
+    cx, cy, cz = centre
+    w, length, h = size
+    # Its section, from the spine round to the fore-edge and back (x across from the spine, z up).
+    outline = [(0.012, 0.0), (w, 0.0), (w, lip), (w - lip, lip), (w - lip, h - lip), (w, h - lip), (w, h), (0.012, h),
+               (0.004, h * 0.8), (0.0, h * 0.5), (0.004, h * 0.2)]
+    edge_slots = [cover, cover, cover, pages, cover, cover, cover, cover, cover, cover, cover]
+    rings = []
+
+    for y in (-length / 2, length / 2):
+        ring = []
+        for x, z in outline:
+            px = (x - w / 2) * (-spine)
+            ring.append(_rot((cx + px, cy + y, cz + z), yaw, (cx, cy)))
+        rings.append(ring)
+
+    m.shell()
+    shapes.loft(m, rings, edge_slots)
+
+
+def _band(m, path, width, thick, across, slot):
+    """A flat band along `path` (a stole, a ribbon): `width` along `across` (kept square to the path), `thick`
+    the other way; closed at both ends."""
+    rings = []
+    for i, p in enumerate(path):
+        p = Vector(p)
+        ahead = (Vector(path[min(i + 1, len(path) - 1)]) - Vector(path[max(i - 1, 0)])).normalized()
+        w = Vector(across)
+        n = ahead.cross(w).normalized()
+        w = n.cross(ahead).normalized()
+        rings.append([tuple(p + w * sw * width / 2 + n * sn * thick / 2) for sw, sn in ((-1, -1), (1, -1), (1, 1), (-1, 1))])
+    m.shell()
+    shapes.loft(m, rings, slot)
+
+
+def _bands(m, at, stations, sides):
+    """A closed solid turned about the vertical through `at` from [(r, z, slot)], each slot painting from its
+    station to the next (a tin's label)."""
+    m.shell()
+    ax, ay, az = at
+    rings = [[(ax + r * math.cos(2 * math.pi * k / sides), ay + r * math.sin(2 * math.pi * k / sides), az + z)
+              for k in range(sides)] for r, z, _ in stations]
+    m.face(list(reversed(rings[0])), stations[0][2])
+
+    for i in range(len(rings) - 1):
+        a, b = rings[i], rings[i + 1]
+        for k in range(sides):
+            m.face([a[k], a[(k + 1) % sides], b[(k + 1) % sides], b[k]], stations[i][2])
+
+    m.face(rings[-1], stations[-1][2])
+
+
+# His Rituale on the desk's front corner: its middle, and how it is turned (its fore-edge, local +x, toward the
+# customers, a little askew).
+RITUALE_AT = (-0.6, -0.16, DESK_TOP + LIFT)
+RITUALE_YAW = math.radians(-75.0)
+
+
+def rituale(m):
+    """His Rituale Romanum, the rite of exorcism: worn leather, closed on the desk's front corner, its pages toward
+    the customers and its ribbon markers spilling out of them onto the felt."""
+    yaw = RITUALE_YAW
+    at = RITUALE_AT
+    _book(m, at, (0.17, 0.24, 0.05), yaw, "leather_old", "paper", spine=-1)
+    # The markers: out of the fore-edge (the book's +x), each drooping from mid-page to the desk.
+    edge = 0.085
+    for k, (dy, slot) in enumerate(((-0.06, "velvet_purple"), (0.0, "silver"), (0.07, "velvet_purple"))):
+        root = _rot((at[0] + edge, at[1] + dy, at[2] + 0.025), yaw, at[:2])
+        mid = _rot((at[0] + edge + 0.03, at[1] + dy + 0.005 * k, at[2] + 0.012), yaw, at[:2])
+        tip = _rot((at[0] + edge + 0.065, at[1] + dy + 0.01 * k, at[2] + 0.0055), yaw, at[:2])
+        # (Lying flat: its width across the book, square to the way it runs.)
+        _band(m, [root, mid, tip], 0.014, 0.011, _rot((0.0, 1.0, 0.0), yaw), slot)
+
+
+def stole(m):
+    """His purple stole, the exorcist's, hung over the lamp's arm where he took it off: a long band falling either
+    side of the arm, one end longer."""
+    a, b = Vector(LAMP_JOINT), Vector(LAMP_MID)
+    arm = (b - a).normalized()
+    top = a + (b - a) * 0.45
+    side = Vector((arm.y, -arm.x, 0.0)).normalized()
+    over = 0.015 + 0.008
+    path = [top + side * 0.065 + Vector((0, 0, -0.3)), top + side * 0.062 + Vector((0, 0, -0.12)),
+            top + side * 0.04 + Vector((0, 0, -0.02)), top + Vector((0, 0, over)), top - side * 0.04 + Vector((0, 0, -0.02)),
+            top - side * 0.062 + Vector((0, 0, -0.1)), top - side * 0.066 + Vector((0, 0, -0.2))]
+    _band(m, [tuple(p) for p in path], 0.1, 0.014, tuple(arm), "velvet_purple")
+
+
+def crucifix(m):
+    """A plain standing cross of dark wood on a heavy foot, its arms capped in silver."""
+    x, y, z = -0.25, 0.29, DESK_TOP + LIFT
+    # (Its foot one block: steps less than 3 cm apart would lay their faces too near each other.)
+    box(m, (x - 0.05, y - 0.035, z), (x + 0.05, y + 0.035, z + 0.04), "wood", r=0.012)
+    box(m, (x - 0.0125, y - 0.0125, z + 0.04), (x + 0.0125, y + 0.0125, z + 0.27), "wood", r=0.0)
+    box(m, (x - 0.065, y - 0.0125, z + 0.18), (x - 0.0125, y + 0.0125, z + 0.205), "wood", r=0.0)
+    box(m, (x + 0.0125, y - 0.0125, z + 0.18), (x + 0.065, y + 0.0125, z + 0.205), "wood", r=0.0)
+    for cx, cz in ((x - 0.065, z + 0.1925), (x + 0.065, z + 0.1925)):
+        box(m, (cx - (0.012 if cx < x else 0.0), y - 0.015, cz - 0.015), (cx + (0.0 if cx < x else 0.012), y + 0.015, cz + 0.015),
+            "silver", r=0.0)
+    box(m, (x - 0.015, y - 0.015, z + 0.27), (x + 0.015, y + 0.015, z + 0.282), "silver", r=0.0)
+
+
+def aspergillum(m):
+    """His holy-water sprinkler lying along the desk's front: a turned wooden handle, a pierced silver ball."""
+    z = DESK_TOP + LIFT
+    pipe(m, [(0.03, -0.27, z + 0.013), (0.26, -0.27, z + 0.013)], 0.013, 6, "wood")
+    turned(m, [(0.017, -0.032), (0.03, -0.018), (0.032, 0.0), (0.03, 0.018), (0.017, 0.032)], 12, "silver",
+           at=(0.3, -0.27, z + 0.032), lean=math.pi / 2, towards=0.0)
+
+
+def salt_tin(m):
+    """A tin of blessed salt, its paper label (blank: what it says is the user's), its lid."""
+    _bands(m, (0.06, 0.29, DESK_TOP + LIFT), [(0.042, 0.0, "steel"), (0.042, 0.015, "paper"), (0.042, 0.052, "steel"),
+                                              (0.044, 0.066, "steel"), (0.044, 0.082, "steel")], 14)
+
+
+def oil_phial(m):
+    """A phial of holy oil, the glass, its neck stopped and sealed in white wax."""
+    x, y, z = 0.15, -0.195, DESK_TOP + LIFT
+    turned(m, [(0.026, 0.0), (0.026, 0.055), (0.02, 0.068), (0.02, 0.085)], 12, "glass", at=(x, y, z))
+    turned(m, [(0.022, 0.0), (0.022, 0.02), (0.018, 0.035)], 10, "wax_white", at=(x, y, z + 0.085))
+
+
+def reliquary(m):
+    """A small reliquary, a monstrance's shape: a turned brass foot, a glass cylinder with a saint's bone standing in it
+    (held on a pin unseen), a crowned brass cap and a cross on it."""
+    x, y, z = -0.15, -0.23, DESK_TOP + LIFT
+    turned(m, [(0.06, 0.0), (0.06, 0.015), (0.045, 0.025), (0.045, 0.04)], 16, "brass", at=(x, y, z))
+    base = z + 0.04
+    # (The bone 3.5 cm clear of the glass's ends and sides, so no face of it lies near one of the glass's.)
+    tall = 0.13
+    turned(m, [(0.052, 0.0), (0.052, tall)], 16, "glass", at=(x, y, base))
+    turned(m, [(0.02, 0.0), (0.017, 0.015), (0.017, 0.045), (0.02, 0.06)], 8, "bone", at=(x, y, base + 0.035))
+    cap = base + tall
+    turned(m, [(0.056, 0.0), (0.056, 0.02), (0.035, 0.04)], 16, "brass", at=(x, y, cap))
+    top = cap + 0.04
+    box(m, (x - 0.0125, y - 0.0125, top), (x + 0.0125, y + 0.0125, top + 0.06), "brass", r=0.0)
+    box(m, (x - 0.035, y - 0.0125, top + 0.025), (x - 0.0125, y + 0.0125, top + 0.05), "brass", r=0.0)
+    box(m, (x + 0.0125, y - 0.0125, top + 0.025), (x + 0.035, y + 0.0125, top + 0.05), "brass", r=0.0)
+
+
+def benedict_medal(m):
+    """A St Benedict medal nailed to the desk's front edge, facing whoever comes in (its face, the cross and the
+    letters, is the user's)."""
+    edge = -DESK_D - 0.02
+    zc = (0.98 + DESK_TOP) / 2
+    turned(m, [(0.03, 0.0), (0.03, 0.012)], 16, "silver", at=(0.0, edge, zc), lean=math.pi / 2, towards=0.0)
+    turned(m, [(0.017, 0.0), (0.017, 0.02)], 8, "steel", at=(0.0, edge - 0.012, zc + 0.012),
+           lean=math.pi / 2, towards=0.0)
+
+
 DEALER = [desk, desk_chair, lamp, ledger, magnifier, gloves, repair_kit, coat_hook]
+RITE = [rituale, stole, crucifix, aspergillum, salt_tin, oil_phial, reliquary, benedict_medal]
 
 
 def build():
@@ -263,7 +427,7 @@ def build():
     underground_shapes.rng = rng
     rng.seed(1897)
 
-    for f in DEALER:
+    for f in DEALER + RITE:
         smooth_object(f.__name__, f)
 
 

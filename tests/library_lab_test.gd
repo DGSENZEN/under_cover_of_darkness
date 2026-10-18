@@ -7,6 +7,7 @@ extends Node3D
 const LAB := preload("res://maps/library_lab.tscn")
 const ROOM := ["room_vault", "room_back", "room_front", "room_floor", "room_rug"]
 const DEALER := ["desk", "desk_chair", "lamp", "ledger", "magnifier", "gloves", "repair_kit", "coat_hook"]
+const RITE := ["rituale", "stole", "crucifix", "aspergillum", "salt_tin", "oil_phial", "reliquary", "benedict_medal"]
 
 var results: Array[String] = []
 var lab: Node3D
@@ -119,6 +120,28 @@ func _run() -> void:
 	var c_end: Vector3 = c_walk["end"]
 	_check("L7 the player walks up to his desk's front without snagging, and never into it",
 		c_walk["ok"] and c_walk["stall"] < 20 and not c_box.has_point(c_end), str(c_walk))
+
+	# L8 the rite on his desk: the eight things of his office placed and painted; the reliquary's panes and the
+	#     phial glazed
+	var r_wrong := []
+
+	for part in RITE:
+		var mesh: MeshInstance3D = lab.corner.get(part)
+		if mesh == null:
+			r_wrong.append(part)
+			continue
+		for i in mesh.mesh.get_surface_count():
+			var m: Material = mesh.get_surface_override_material(i)
+			var slot: Material = mesh.mesh.surface_get_material(i)
+			var want_glass: bool = slot != null and slot.resource_name == "glass"
+			var r_glazed: bool = m is StandardMaterial3D and (m as StandardMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED
+			var r_painted: bool = m is ShaderMaterial and m.get_shader_parameter("atlas") != null
+			if (want_glass and not r_glazed) or (not want_glass and not r_painted):
+				r_wrong.append("%s/%d" % [part, i])
+	var r_glass := ["reliquary", "oil_phial"].all(func(n): return lab.corner.has(n) and range(lab.corner[n].mesh.get_surface_count()).any(
+		func(i): return lab.corner[n].mesh.surface_get_material(i) != null and lab.corner[n].mesh.surface_get_material(i).resource_name == "glass"))
+	_check("L8 the rite on his desk: the Rituale, stole, crucifix, aspergillum, salt, oil, reliquary and medal, painted; glass glazed",
+		r_wrong.is_empty() and r_glass, "wrong %s glass %s" % [r_wrong, r_glass])
 
 
 func _check(test_name: String, ok: bool, detail: String) -> void:

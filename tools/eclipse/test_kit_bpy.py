@@ -1686,7 +1686,12 @@ class LibraryCorner(unittest.TestCase):
     budget, through the gate; what lies on the desk lies on it."""
 
     BUDGET = {"desk": 6000, "desk_chair": 2500, "lamp": 2000, "ledger": 1500, "magnifier": 800, "gloves": 1200,
-              "repair_kit": 1500, "coat_hook": 5000}
+              "repair_kit": 1500, "coat_hook": 5000,
+              "rituale": 2500, "stole": 2500, "crucifix": 2500, "aspergillum": 2500, "salt_tin": 2500,
+              "oil_phial": 2500, "reliquary": 4000, "benedict_medal": 2500}
+    # What lies on the desk top (the lamp stands on its foot; its shade hangs over the ledger on purpose).
+    ON_DESK = ["ledger", "magnifier", "gloves", "repair_kit", "rituale", "crucifix", "salt_tin", "oil_phial", "reliquary",
+               "aspergillum"]
 
     @classmethod
     def setUpClass(cls):
@@ -1741,15 +1746,18 @@ class LibraryCorner(unittest.TestCase):
         self.assertTrue(library_corner.DESK_TOP + 0.002 <= low <= library_corner.DESK_TOP + 0.005, low)
 
     def test_the_small_things_lie_on_the_desk(self):
-        for n in ("magnifier", "gloves", "repair_kit", "lamp"):
+        for n in [n for n in self.ON_DESK if n != "ledger"] + ["lamp"]:
             low = self._extent(n)[2][0]
             self.assertTrue(library_corner.DESK_TOP + 0.002 <= low <= library_corner.DESK_TOP + 0.005, "%s %.4f" % (n, low))
 
     def test_nothing_on_the_desk_overlaps(self):
-        # In plan, nothing laid on the desk lies on anything else there. (The lamp's shade hangs over the ledger
-        # on purpose: it stands only on its foot, at the back corner.)
-        laid = ["ledger", "magnifier", "gloves", "repair_kit"]
+        # In plan, nothing laid on the desk lies on anything else there, and all of it within the desk's top.
+        laid = self.ON_DESK
         boxes = {n: self._extent(n) for n in laid}
+        (dx, dy, _) = self._extent("desk")
+        outside = [n for n in laid if not (dx[0] <= boxes[n][0][0] and boxes[n][0][1] <= dx[1]
+                                           and dy[0] <= boxes[n][1][0] and boxes[n][1][1] <= dy[1])]
+        self.assertEqual(outside, [])
         clashes = []
 
         for i, a in enumerate(laid):
@@ -1759,6 +1767,38 @@ class LibraryCorner(unittest.TestCase):
                     clashes.append((a, b))
 
         self.assertEqual(clashes, [])
+
+    def test_the_stole_hangs_from_the_lamp(self):
+        # Its highest point rests on the lamp's arm (within the arm's radius and the stole's thickness of it).
+        top = max(_world(self.objects["stole"]), key=lambda v: v.z)
+        a, b = Vector(library_corner.LAMP_JOINT), Vector(library_corner.LAMP_MID)
+        t = max(0.0, min(1.0, (top - a).dot(b - a) / (b - a).length_squared))
+        self.assertLess((top - (a + (b - a) * t)).length, 0.035)
+        # Both its ends hang below the arm, clear of the desk.
+        low = min(v.z for v in _world(self.objects["stole"]))
+        self.assertTrue(library_corner.DESK_TOP + 0.05 < low < top.z - 0.2, low)
+
+    def test_the_rituale_bristles_with_its_markers(self):
+        # Its ribbon markers stand out past its pages by at least 3.5 cm (chunky enough to read), its fore-edge and
+        # markers toward the customers (-y).
+        o = self.objects["rituale"]
+        yaw = library_corner.RITUALE_YAW
+        out = Vector((math.cos(yaw), math.sin(yaw), 0.0))
+        middle = Vector(library_corner.RITUALE_AT[:2] + (0.0,))
+        ribbons = [s for s, m in enumerate(o.data.materials) if m.name in ("velvet_purple", "silver")]
+        reach = max((o.matrix_world @ o.data.vertices[v].co - middle).dot(out)
+                    for p in o.data.polygons if p.material_index in ribbons for v in p.vertices)
+        self.assertGreater(reach, 0.17 / 2 + 0.035)
+        self.assertLess(out.y, -0.9)
+
+    def test_the_medal_is_nailed_to_the_desks_front(self):
+        (mx, my, mz) = self._extent("benedict_medal")
+        # (Aimed just above the seam between the top's board and its rim, which a ray could slip through.)
+        front = _hit(self.objects["desk"], ((mx[0] + mx[1]) / 2, -2.0, (mz[0] + mz[1]) / 2 + 0.012), (0.0, 1.0, 0.0))
+        self.assertIsNotNone(front)
+        # Its back against the desk's front edge, the customers' side; the edge of the desk's top board.
+        self.assertAlmostEqual(my[1], front.y, delta=0.002)
+        self.assertTrue(0.98 <= mz[0] and mz[1] <= library_corner.DESK_TOP, mz)
 
     def test_the_chair_is_left_behind_the_desk(self):
         (x0, x1), (y0, y1), (z0, z1) = self._extent("desk_chair")

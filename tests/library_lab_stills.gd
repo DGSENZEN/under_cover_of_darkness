@@ -32,6 +32,12 @@ const VIEWS := [
 	["close_lamp", Vector3(-0.95, 1.6, -3.75), Vector3(-0.4, 1.3, -4.5)],
 	["close_things", Vector3(0.95, 1.5, -3.75), Vector3(0.5, 1.05, -4.55)],
 	["close_hat", Vector3(0.6, 2.0, -3.9), Vector3(1.18, 1.85, -4.82)],
+	["corner_rite", Vector3(-0.3, 1.75, -3.35), Vector3(-0.3, 1.1, -4.45)],
+	["close_rituale", Vector3(-0.95, 1.45, -3.75), Vector3(-0.6, 1.07, -4.24)],
+	["close_reliquary", Vector3(-0.05, 1.32, -3.68), Vector3(-0.15, 1.12, -4.17)],
+	["close_stole", Vector3(-1.05, 1.6, -3.95), Vector3(-0.48, 1.35, -4.52)],
+	["close_crucifix", Vector3(-0.55, 1.45, -3.95), Vector3(-0.25, 1.2, -4.69)],
+	["close_medal", Vector3(0.3, 1.12, -3.45), Vector3(0.0, 1.015, -4.0)],
 ]
 
 
