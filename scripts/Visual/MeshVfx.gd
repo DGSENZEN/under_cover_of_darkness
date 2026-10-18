@@ -146,6 +146,39 @@ static func tendril(path: PackedVector3Array, radius: float, sides := 8) -> Arra
 	return st.commit()
 
 
+## A plume: a tube along `path` (local points, its root first) widening from `root` to `crown` across
+## (radii, m) as smoke spreads, `sides` round it, open at both ends; v runs up it, u round it.
+static func plume(path: PackedVector3Array, root: float, crown: float, sides := 10) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := path.size()
+	var rings := []
+
+	for i in n:
+		var ahead := (path[mini(i + 1, n - 1)] - path[maxi(i - 1, 0)]).normalized()
+		var side := ahead.cross(Vector3.FORWARD if absf(ahead.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT).normalized()
+		var up := side.cross(ahead).normalized()
+		var t := float(i) / (n - 1)
+		# (Spreading fast off the vent, then slower: smoke widens as it slows.)
+		var r := lerpf(root, crown, sqrt(t))
+		var ring := []
+		for k in sides + 1:
+			var a := TAU * k / sides
+			ring.append(path[i] + (side * cos(a) + up * sin(a)) * r)
+		rings.append(ring)
+
+	for i in n - 1:
+		for k in sides:
+			_quad(st, [rings[i][k], rings[i + 1][k], rings[i + 1][k + 1], rings[i][k + 1]],
+				[Vector2(float(k) / sides, float(i) / (n - 1)), Vector2(float(k) / sides, float(i + 1) / (n - 1)),
+				Vector2(float(k + 1) / sides, float(i + 1) / (n - 1)), Vector2(float(k + 1) / sides, float(i) / (n - 1))])
+
+	# (Corners welded so the normals round off: smooth, never faceted.)
+	st.index()
+	st.generate_normals()
+	return st.commit()
+
+
 ## A ribbon drawn along `points` (world, the newest first), `width` across at its head narrowing
 ## to nothing at its tail, turned to face `eye`; v runs from its head (0) to its tail (1).
 static func ribbon(points: PackedVector3Array, width: float, eye: Vector3) -> ArrayMesh:

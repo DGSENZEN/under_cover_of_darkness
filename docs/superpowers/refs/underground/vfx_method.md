@@ -49,3 +49,27 @@ Grasping Hands 1:15, full cast 2:29):
 The ánimas take this directly: each a black hand silhouette (real hands from the CC0 base body) with a
 glowing chartreuse rim (fresnel, past white for the bloom), rising out of a tongue of chartreuse spirit-fire
 at its wrist, a ribbon trail behind it.
+
+## What Deadlock's own effect files show (Oct 17 2026)
+Read from the game's decompiled particle definitions (text only: the community's deadlock-open-assets
+repo, SteamDB's file list, the Source 2 particle field reference). No texture or mesh of theirs was taken.
+- **Fire is shape × noise through a stepped ramp.** A soft mask multiplied by a tiling noise climbing it,
+  a slow warp noise bending both, and the result looked up in a colour ramp with near-vertical steps:
+  wine red, orange, amber, a cream core (never white, never black). Pushed bright so the bloom takes the core.
+- **Their candle** is a ribbon of particles that hang on the wick about 0.6 s and then drift free (so it
+  trails and leans), its width a teardrop over its life; with it, embers, a light and a curling smoke ribbon.
+- **Smoke** is alpha-blended and lit with a little light of its own, eaten by an erosion mask whose
+  distortion grows with age; thin wisps are unlit grey ribbons pushed by curl noise.
+- **Edges are cut, not faded**: the alpha threshold rises over a particle's life.
+
+## How ours take it (Oct 17 2026)
+- **Candles** (Vfx.gd `candles`, vfx_candle.gdshader): a real lathed teardrop per wick, banded inside out
+  (cream seed, amber, orange, wine rim) with a blue root over the wick, each band its own brightness so only
+  the core blooms; its tip licked away by warped climbing noise; it breathes with its light's flicker, swims
+  on its own phase, leans on the draught, gutters for the dark train. With it a glow (vfx_halo.gdshader, two
+  painted rings, faded where it meets the wall) and now and then a curling thread of smoke (vfx_wisp.gdshader).
+- **Vent breath** (Fumes.gd, vfx_fume.gdshader): plume tubes (MeshVfx.plume) leaving the grille and climbing
+  the wall, and lumpy puffs carried by particles that swell and eat themselves away; lit in three hard bands,
+  pale and cool against the warm-lit tiles, a little light of their own, warm at the foot.
+- Effect shaders go on the mesh's own material slot, not material_override: the lab's form light clears
+  overrides and only passes over effect shaders in the slot.

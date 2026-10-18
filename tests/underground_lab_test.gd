@@ -477,6 +477,18 @@ func _run() -> void:
 		and streak != null and absf(streak.global_position.x - vent.global_position.x) < 0.2
 		and streak.global_position.y > 0.55, "vent %s streak %s" % [vent, streak])
 
+	# U43b the vent's breath drawn on meshes, the Deadlock way: plume tubes climbing out of it and lumpy puffs
+	#     breathed between them (never flat cards), all leaning on the corridor's draught
+	var fumes: Fumes = lab.vent_breath.get_node_or_null("fumes") if lab.vent_breath != null else null
+	var tubes: Array = fumes.find_children("plume_*", "MeshInstance3D", false, false) if fumes != null else []
+	var tubed: bool = tubes.size() >= 3 and tubes.all(func(t): return t.mesh is ArrayMesh and t.mesh.get_faces().size() > 300)
+	var puffed: bool = fumes != null and fumes.puffer != null and fumes.puffer.emitting and fumes.puffer.draw_pass_1 is SphereMesh
+	var climbs: bool = tubed and tubes.all(func(t): return t.mesh.get_aabb().end.y > 0.9)
+	var leaning: bool = fumes != null and fumes.draught.length() > 0.1 and fumes.looks.any(
+		func(m): return (m.get_shader_parameter(&"sway") as Vector3).length() > 0.05)
+	_check("U43b the vent breathes on meshes: plume tubes climbing a metre, lumpy puffs, all leaning on the draught",
+		tubed and puffed and climbs and leaning, "tubes %d tubed %s puffed %s climbs %s leaning %s" % [tubes.size(), tubed, puffed, climbs, leaning])
+
 	# U44 the floor laid in tile modules wall to wall, edge to edge: dark border rows along both walls,
 	#     worn modules among the plain, a drain set flush where the wall's water runs
 	var rects := []

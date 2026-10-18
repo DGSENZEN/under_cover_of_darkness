@@ -613,12 +613,16 @@ func _breathe(delta: float) -> void:
 	var draught := DRAUGHT * (1.0 + 4.0 * s) + DARK_DRAUGHT * d
 	Vfx.blow(censer, draught)
 
+	if vent_breath != null:
+		Vfx.blow(vent_breath, draught)
+
 	for motes in dust:
 		Vfx.blow(motes, draught)
 
 	for candles in [flames, niche_flames]:
 		if candles != null:
 			_gutter(candles, d)
+			Vfx.blow(candles, draught)
 
 	if animas != null:
 		animas.hush = d
@@ -637,7 +641,7 @@ func _breathe(delta: float) -> void:
 func _gutter(candles: Node3D, amount: float) -> void:
 	for draw: MultiMeshInstance3D in candles.find_children("*", "MultiMeshInstance3D", false, false):
 		draw.set_meta("gutter", amount)
-		((draw.multimesh.mesh as QuadMesh).material as ShaderMaterial).set_shader_parameter(&"gutter", amount)
+		(draw.multimesh.mesh.surface_get_material(0) as ShaderMaterial).set_shader_parameter(&"gutter", amount)
 
 	# (Their light is their flicker's, VfxFlicker.energy.)
 	if "energy" in candles:

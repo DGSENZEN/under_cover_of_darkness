@@ -10,6 +10,8 @@ const SPRITE := preload("res://scripts/Visual/vfx_sprite.gdshader")
 const FLAME := preload("res://scripts/Visual/vfx_flame.gdshader")
 const HAZE := preload("res://scripts/Visual/vfx_haze.gdshader")
 const CANDLE := preload("res://scripts/Visual/vfx_candle.gdshader")
+const HALO := preload("res://scripts/Visual/vfx_halo.gdshader")
+const WISP := preload("res://scripts/Visual/vfx_wisp.gdshader")
 const STEM := preload("res://scripts/Visual/vfx_stem.gdshader")
 const MIST := preload("res://scripts/Visual/vfx_mist.gdshader")
 const FOG := preload("res://scripts/Visual/vfx_fog.gdshader")
@@ -50,6 +52,9 @@ const FADE_OVER := 10.0
 const DRIFT_ACROSS := 1.2
 const WALL_REACH := 20.0
 const CANDLE_COLOUR := Color("#ffc070")
+## A candle's flame at a size of 1: its widest across and its height (m), a little bigger than a
+## real one's, so it reads.
+const CANDLE_FLAME := Vector2(0.065, 0.085)
 ## Fire's heat to colour, in hard bands: below the first band nothing is
 ## drawn; then deep red-orange, orange, pale gold (warm, never white).
 const FIRE_RAMP := [Color("#2a0a00"), Color("#c8400c"), Color("#ff8a1e"), Color("#ffd27a")]
@@ -92,10 +97,11 @@ const PRESETS := {
 		"anim": 1.0}],
 	# Warm air breathed out of a wall vent (its node turned so up is out of the wall):
 	# faint warm wisps rising as they leave it, dust carried on them.
-	"vent_breath": [{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.8, 0.74, 0.66),
-		"opacity": 0.18, "amount": 12, "lifetime": 2.2, "size": [0.25, 0.9], "velocity": [0.3, 0.5], "spread": 20.0,
-		"gravity": Vector3(0, 0.3, 0), "box": Vector3(0.26, 0.01, 0.15), "fps": 30, "erosion": 0.6, "blown": 0.3,
-		"anim": 1.0},
+	# (Drawn on meshes, the Deadlock way: plumes climbing out of it and puffs breathed between them, Fumes.gd;
+	# pale and cool, the works' warm breath clouding in the corridor's cold, so it reads on the warm-lit tiles.)
+	"vent_breath": [{"draw": "fumes", "width": 0.5, "rise": 1.2, "plumes": 3, "puffs": 5.0, "life": 2.6,
+		"lit": Color(0.94, 0.93, 0.9), "shade": Color(0.5, 0.56, 0.68), "warm": Color(0.95, 0.52, 0.24),
+		"opacity": 0.6},
 		{"draw": "motes", "tint": Color(1.0, 0.9, 0.7, 0.6), "amount": 16, "lifetime": 3.0, "size": [0.015, 0.015],
 		"velocity": [0.2, 0.4], "spread": 25.0, "gravity": Vector3(0, 0.12, 0), "box": Vector3(0.26, 0.01, 0.15),
 		"fps": 15}],
@@ -164,6 +170,9 @@ static func system(effect: String) -> Node3D:
 		for flames in root.find_children("flames*", "MeshInstance3D", true, false):
 			root.flames.append(flames.get_surface_override_material(0))
 
+		for candles: MultiMeshInstance3D in root.find_children("candle*", "MultiMeshInstance3D", true, false):
+			root.flames.append(candles.multimesh.mesh.surface_get_material(0))
+
 	# (A sub-emitter is its emitter's sibling.)
 	for child in root.get_children():
 		if child is GPUParticles3D and child.has_meta("spark_with"):
@@ -209,7 +218,7 @@ static func fade(node: Node3D, share: float) -> void:
 static func _part(p: Dictionary) -> Array:
 	match p["draw"]:
 		"candles":
-			return [_candles()]
+			return _candles()
 		"flames":
 			return [_flames()]
 		"haze":
@@ -226,6 +235,8 @@ static func _part(p: Dictionary) -> Array:
 			return [_drift(p)]
 		"pool":
 			return [_pool(p)]
+		"fumes":
+			return [_fumes(p)]
 
 	if p.has("ground"):
 		return [_particles(p), _ground(p["ground"])]
@@ -365,38 +376,81 @@ static func _particles(p: Dictionary) -> GPUParticles3D:
 	return particles
 
 
-## A cluster of five to nine candle flames round a spot: one MultiMesh, each
-## flame its own phase.
-static func _candles() -> MultiMeshInstance3D:
-	var multi := MultiMesh.new()
-	multi.transform_format = MultiMesh.TRANSFORM_3D
-	multi.use_custom_data = true
-	var quad := QuadMesh.new()
-	quad.size = Vector2(0.05, 0.1)
-	quad.center_offset = Vector3(0, 0.05, 0)
+## A cluster of five to nine candle flames round a spot: one MultiMesh of
+## real teardrop flames (MeshVfx.flame, the Deadlock way), each its own size
+## and phase; on the same transforms, the glows they throw round them and the
+## threads of smoke they now and then send up.
+static func _candles() -> Array:
+	var flame := MeshVfx.flame(1.0, 0.3, 16, 12)
 	var look := ShaderMaterial.new()
 	look.shader = CANDLE
-	look.set_shader_parameter(&"sheet", load("res://assets/vfx/flame_candle.png"))
-	look.set_shader_parameter(&"ramp", load("res://assets/vfx/ramps/candle.png"))
-	quad.material = look
-	multi.mesh = quad
+	look.set_shader_parameter(&"noise", MeshVfx.noise())
+	flame.surface_set_material(0, look)
+	var quad := QuadMesh.new()
+	var glow := ShaderMaterial.new()
+	glow.shader = HALO
+	glow.set_shader_parameter(&"colour", CANDLE_COLOUR)
+	quad.material = glow
+	# (Its thread of smoke cut along its height, so it can curl.)
+	var thread := QuadMesh.new()
+	thread.subdivide_depth = 20
+	var smoke := ShaderMaterial.new()
+	smoke.shader = WISP
+	smoke.set_shader_parameter(&"noise", MeshVfx.noise())
+	thread.material = smoke
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
-	multi.instance_count = rng.randi_range(5, 9)
+	var count := rng.randi_range(5, 9)
+	var draws := []
 
-	for i in multi.instance_count:
+	for drawn in [["candles", flame], ["candle_halos", quad], ["candle_wisps", thread]]:
+		var multi := MultiMesh.new()
+		multi.transform_format = MultiMesh.TRANSFORM_3D
+		multi.use_custom_data = true
+		multi.mesh = drawn[1]
+		multi.instance_count = count
+		var draw := MultiMeshInstance3D.new()
+		draw.name = drawn[0]
+		draw.multimesh = multi
+		draw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		draw.visible = false
+		draws.append(draw)
+
+	for i in count:
 		var a := rng.randf() * TAU
 		var r := rng.randf_range(0.05, 0.6)
-		multi.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3.ONE * rng.randf_range(0.8, 1.3)),
-			Vector3(cos(a) * r, rng.randf_range(0.08, 0.3), sin(a) * r)))
-		multi.set_instance_custom_data(i, Color(rng.randf(), 0, 0, 0))
+		_set_flame(draws, i, Vector3(cos(a) * r, rng.randf_range(0.08, 0.3), sin(a) * r), rng.randf_range(0.8, 1.3),
+			rng.randf())
 
-	var draw := MultiMeshInstance3D.new()
-	draw.name = "candles"
-	draw.multimesh = multi
-	draw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	draw.visible = false
-	return draw
+	return draws
+
+
+## A candle's flame `i` stood at `at` (local), `size` times a flame's own, on its `phase`: the
+## flame and its glow alike.
+static func _set_flame(draws: Array, i: int, at: Vector3, size: float, phase: float) -> void:
+	var shape := Basis.from_scale(Vector3(CANDLE_FLAME.x, CANDLE_FLAME.y, CANDLE_FLAME.x) * size)
+
+	for draw: MultiMeshInstance3D in draws:
+		draw.multimesh.set_instance_transform(i, Transform3D(shape, at))
+		draw.multimesh.set_instance_custom_data(i, Color(phase, 0, 0, 0))
+
+
+## Breath out of a mouth drawn on meshes (Fumes.gd): plumes and puffs, built once its node is turned.
+static func _fumes(p: Dictionary) -> Fumes:
+	var fumes := Fumes.new()
+	fumes.name = "fumes"
+	fumes.width = p["width"]
+	fumes.rise = p["rise"]
+	fumes.plumes = p["plumes"]
+	fumes.puffs = p["puffs"]
+	fumes.puff_life = p["life"]
+	fumes.lit = p["lit"]
+	fumes.shade = p["shade"]
+	fumes.warm = p["warm"]
+	fumes.opacity = p["opacity"]
+	fumes.seed = randi()
+	fumes.visible = false
+	return fumes
 
 
 ## Three flame tongues crossed over the coals.
@@ -784,26 +838,31 @@ static func place(node: Node3D, at: Vector3, emitter := {}) -> void:
 ## Candles' flames stood each on its wick (world), their light over them
 ## all; where they stand kept on the draw ("flames", local).
 static func _on_wicks(node: Node3D, at: Vector3, wicks: Array) -> void:
-	for draw in node.find_children("candles", "MultiMeshInstance3D", false, false):
-		var multi: MultiMesh = draw.multimesh
-		multi.instance_count = wicks.size()
-		var places := PackedVector3Array()
-		var middle := Vector3.ZERO
+	var draws := node.find_children("candle*", "MultiMeshInstance3D", false, false)
 
-		for i in wicks.size():
-			var w := Vector3(wicks[i][0], wicks[i][1], wicks[i][2]) - at
-			places.append(w)
-			middle += w
-			# (Each flame its own size and phase, from where it stands.)
-			var seed := absf(sin(w.x * 12.9898 + w.z * 78.233) * 43758.5453)
-			multi.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3.ONE * (0.8 + 0.4 * fposmod(seed, 1.0))), w))
-			multi.set_instance_custom_data(i, Color(fposmod(seed * 7.0, 1.0), 0, 0, 0))
+	if draws.is_empty():
+		return
 
+	var places := PackedVector3Array()
+	var middle := Vector3.ZERO
+
+	for draw: MultiMeshInstance3D in draws:
+		draw.multimesh.instance_count = wicks.size()
+
+	for i in wicks.size():
+		var w := Vector3(wicks[i][0], wicks[i][1], wicks[i][2]) - at
+		places.append(w)
+		middle += w
+		# (Each flame its own size and phase, from where it stands.)
+		var seed := absf(sin(w.x * 12.9898 + w.z * 78.233) * 43758.5453)
+		_set_flame(draws, i, w, 0.85 + 0.3 * fposmod(seed, 1.0), fposmod(seed * 7.0, 1.0))
+
+	for draw in draws:
 		draw.set_meta("flames", places)
 
-		if wicks.size() > 0:
-			for light in node.find_children("*", "OmniLight3D", false, false):
-				light.position = middle / wicks.size() + Vector3(0, 0.3, 0)
+	if wicks.size() > 0:
+		for light in node.find_children("*", "OmniLight3D", false, false):
+			light.position = middle / wicks.size() + Vector3(0, 0.3, 0)
 
 
 ## A climbing noise texture of our own (seamless), shared.
@@ -855,7 +914,9 @@ static func emit(node: Node3D, on: bool) -> void:
 	node.set_process(on)
 
 	for child in node.get_children():
-		if child is GPUParticles3D:
+		if child is Fumes:
+			child.emit(on)
+		elif child is GPUParticles3D:
 			if not child.has_meta("sub"):
 				child.emitting = on
 		elif child is VisualInstance3D or child is Light3D:
@@ -872,6 +933,11 @@ static func thin(node: Node3D, ratio: float) -> void:
 ## Carries what an effect gives off on the wind.
 static func blow(node: Node3D, wind: Vector3) -> void:
 	for child in node.get_children():
+		if child is Fumes:
+			child.draught = wind
+		# (Candle flames lean on it.)
+		if child is MultiMeshInstance3D and String(child.name) in ["candles", "candle_wisps"]:
+			child.multimesh.mesh.surface_get_material(0).set_shader_parameter(&"draught", wind)
 		# (A sub-emitter, sparks, has no wind of its own.)
 		if child is GPUParticles3D and child.process_material.has_meta("blown"):
 			var process := child.process_material as ParticleProcessMaterial

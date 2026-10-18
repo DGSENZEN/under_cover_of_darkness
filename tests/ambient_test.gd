@@ -289,13 +289,26 @@ func _run() -> void:
 		"flicker %.3f, flame %.3f, light %.3f" % [f, flame_uniform, (light[0] as OmniLight3D).light_energy])
 	brazier.free()
 
-	# A13 candles: one MultiMesh of flames, one light
+	# A13 candles: one MultiMesh of real teardrop flames (a mesh, never a card), one of their glows on
+	# the same spots, one light; the flames and their glows breathe with the light
 	var candles: Node3D = Vfx.system("candles")
 	add_child(candles)
-	var multis: Array = candles.find_children("*", "MultiMeshInstance3D", true, false)
-	var count: int = (multis[0] as MultiMeshInstance3D).multimesh.instance_count if multis.size() == 1 else 0
-	_check("A13 candles: one MultiMesh of five to nine flames, one light", multis.size() == 1 and count >= 5 and count <= 9
-		and candles.find_children("*", "OmniLight3D", true, false).size() == 1, "%d multimeshes, %d flames" % [multis.size(), count])
+	var flame_draws: Array = candles.find_children("candles", "MultiMeshInstance3D", true, false)
+	var halo_draws: Array = candles.find_children("candle_halos", "MultiMeshInstance3D", true, false)
+	var count: int = (flame_draws[0] as MultiMeshInstance3D).multimesh.instance_count if flame_draws.size() == 1 else 0
+	var shaped: bool = flame_draws.size() == 1 and flame_draws[0].multimesh.mesh is ArrayMesh \
+		and flame_draws[0].multimesh.mesh.get_faces().size() > 300
+	var paired: bool = halo_draws.size() == 1 and halo_draws[0].multimesh.instance_count == count
+	candles.set_process(true)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var candle_flicker: float = candles.flicker
+	var breathing: bool = shaped and paired \
+		and is_equal_approx(float(flame_draws[0].multimesh.mesh.surface_get_material(0).get_shader_parameter(&"flicker")), candle_flicker) \
+		and is_equal_approx(float(halo_draws[0].multimesh.mesh.surface_get_material(0).get_shader_parameter(&"flicker")), candle_flicker)
+	_check("A13 candles: five to nine teardrop flames, their glows paired, one light, all breathing together",
+		count >= 5 and count <= 9 and breathing and candles.find_children("*", "OmniLight3D", true, false).size() == 1,
+		"%d flames shaped %s paired %s breathing %s" % [count, shaped, paired, breathing])
 	candles.free()
 
 	# A13w candles stand a flame on each of their candles' wicks (they floated
@@ -305,7 +318,7 @@ func _run() -> void:
 	var tops := [Vector3(1.0, 0.28, 2.0), Vector3(1.2, 0.36, 2.1), Vector3(0.8, 0.31, 1.9)]
 	Vfx.place(wicked, Vector3(1.0, 0.5, 2.0), {"wicks": tops.map(func(w): return [w.x, w.y, w.z])})
 	var flames_at: Array = []
-	var candle_draw: MultiMeshInstance3D = wicked.find_children("*", "MultiMeshInstance3D", true, false)[0]
+	var candle_draw: MultiMeshInstance3D = wicked.find_children("candles", "MultiMeshInstance3D", true, false)[0]
 
 	# (Where its flames stand, kept on it: headless draws keep no instances.)
 	for flame in candle_draw.get_meta("flames", PackedVector3Array()):
