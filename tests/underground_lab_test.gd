@@ -775,8 +775,8 @@ func _run() -> void:
 
 	for f: MeshInstance3D in p_walkers:
 		var p_ghost := f.get_surface_override_material(0) as ShaderMaterial
-		p_pale = p_pale and p_ghost != null and p_ghost.shader.resource_path.ends_with("spectre.gdshader") \
-			and (p_ghost.get_shader_parameter("ink") as Color).r > 0.6
+		p_pale = p_pale and p_ghost != null and p_ghost.shader.resource_path.ends_with("shade.gdshader") \
+			and (p_ghost.get_shader_parameter("pale") as Color).r > 0.6
 		p_candles_lit = p_candles_lit and f.find_children("*", "OmniLight3D", true, false).any(func(l): return l.light_energy > 0.1)
 	var p_lead: MeshInstance3D = p_walkers[0]
 	var p_lead_from: float = p_lead.global_position.distance_to(lab.TRAIL_END)

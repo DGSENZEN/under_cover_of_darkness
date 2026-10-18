@@ -30,7 +30,7 @@ from underground_shapes import pipe, smooth_object, turned  # noqa: E402
 
 NAME = "underground_uncanny"
 ATLAS = 1024
-SLOTS = ["nahual_black", "ember", "palm"]
+SLOTS = ["nahual_black", "ember", "palm", "shade", "hollow"]
 
 rng = random.Random(1521)
 
@@ -251,160 +251,185 @@ def nahual_head():
     return head
 
 
-# --- the procession: the dead in white, candles in their hands (supernatural_refs.md) ------------
-# Real human bodies: Quaternius's Universal Base Characters (CC0, assets/characters/base), posed here
-# (arms forward, hands together holding a candle, head a little bowed), dressed (a rebozo and long
-# skirt, a sarape and sombrero, a child's dress) and fused into one pale silhouette each.
+# --- the procession's shades (docs/superpowers/refs/underground/shade_refs.md) ---------------------
+# A shade is a shroud with no body in it (the Santa Compaña's, the Procesión del Silencio's): one tall
+# draped form from its hood to a ragged hem lifted off the floor, vertical folds deepening toward the
+# hem, a cape's edge across the chest, its face a hollow recessed in the hood, its sleeves meeting
+# before it where it holds its candle. Built ring by ring; faces x+, the floor z 0.
 
-BASE = common.ROOT / "assets" / "characters" / "base"
-# Where the hands meet, in the body's own frame before it is turned and scaled (it faces -y): before
-# the chest, a little below it.
-HANDS_AT = (0.0, -0.27, 1.12)
-# Each figure: its base body, its scale, the hands' meeting point once turned to face +x and scaled.
-FIGURES = {"dead_woman": ("Superhero_Female_FullBody.gltf", 0.9), "dead_man": ("Superhero_Male_FullBody.gltf", 0.93),
-           "dead_child": ("Superhero_Female_FullBody.gltf", 0.62)}
-CANDLE_HELD = {n: (-HANDS_AT[1] * k, HANDS_AT[0] * k, HANDS_AT[2] * k) for n, (_, k) in FIGURES.items()}
-# The voxels each is fused on, at its own size (m): a child's thin forearms and hands need finer ones.
-FIGURE_VOXEL = {"dead_woman": 0.024, "dead_man": 0.024, "dead_child": 0.014}
-
-
-def _aim(rig, bone, target):
-    """A pose bone turned so it points from its head at `target` (the rig's own space)."""
-    bpy.context.view_layer.update()
-    pb = rig.pose.bones[bone]
-    head, tail = pb.head.copy(), pb.tail.copy()
-    turn = (tail - head).normalized().rotation_difference((Vector(target) - head).normalized())
-    matrix = pb.matrix.copy()
-    at = matrix.translation.copy()
-    turned_matrix = turn.to_matrix().to_4x4() @ matrix
-    turned_matrix.translation = at
-    pb.matrix = turned_matrix
-    bpy.context.view_layer.update()
+HOVER = 0.1
+SEGMENTS = 56
+RINGS = 96
+# Each shade: its height to its hood's base (the shoulders' top), its hood ("capirote" a tall point,
+# "veil" a rounded rebozo), its hem's half-width, its shoulders', a seed, a sombrero over it.
+SHADES = {
+    "shade_capirote": dict(body=1.45, hood="capirote", hem=0.33, shoulder=0.22, seed=11, hat=False),
+    "shade_veiled": dict(body=1.24, hood="veil", hem=0.36, shoulder=0.2, seed=23, hat=False),
+    "shade_child": dict(body=0.8, hood="veil", hem=0.24, shoulder=0.14, seed=37, hat=False),
+    "shade_sombrero": dict(body=1.42, hood="veil", hem=0.32, shoulder=0.22, seed=51, hat=True),
+}
+# Where each holds its candle (its sleeves' cuffs meet there): before its chest, below the cape.
+CANDLE_HELD = {n: (0.25 * d["shoulder"] / 0.22 + 0.02, 0.0, HOVER + d["body"] * 0.66) for n, d in SHADES.items()}
 
 
-def _posed_body(file):
-    """A base body imported, posed holding its candle, its pose baked into its mesh; returns the mesh
-    object, everything else of the import removed."""
-    before = set(bpy.data.objects)
-    bpy.ops.import_scene.gltf(filepath=str(BASE / file))
-    new = [o for o in bpy.data.objects if o not in before]
-    rig = next(o for o in new if o.type == "ARMATURE")
-    body = max((o for o in new if o.type == "MESH"), key=lambda o: len(o.data.vertices))
-    to_rig = rig.matrix_world.inverted()
-    hands = to_rig @ Vector(HANDS_AT)
-
-    for sx in ("l", "r"):
-        side = 1.0 if sx == "l" else -1.0
-        elbow = to_rig @ Vector((side * 0.19, -0.1, 1.17))
-        hand = hands + to_rig.to_3x3() @ Vector((side * 0.035, 0.0, 0.0))
-        _aim(rig, "upperarm_" + sx, elbow)
-        _aim(rig, "lowerarm_" + sx, hand)
-        _aim(rig, "hand_" + sx, hands + to_rig.to_3x3() @ Vector((side * 0.01, -0.12, 0.02)))
-
-    head = rig.pose.bones["Head"]
-    head.rotation_mode = "XYZ"
-    head.rotation_euler.rotate_axis("X", math.radians(14.0))
-    bpy.context.view_layer.update()
-
-    with bpy.context.temp_override(active_object=body, object=body, selected_objects=[body],
-                                   selected_editable_objects=[body]):
-        for mod in list(body.modifiers):
-            if mod.type == "ARMATURE":
-                bpy.ops.object.modifier_apply(modifier=mod.name)
-
-    world = body.matrix_world.copy()
-    body.parent = None
-    body.matrix_world = world
-
-    for o in new:
-        if o is not body:
-            bpy.data.objects.remove(o, do_unlink=True)
-
-    with bpy.context.temp_override(active_object=body, object=body, selected_objects=[body],
-                                   selected_editable_objects=[body]):
-        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-
-    return body
+def _profile(body, hood, hem, shoulder):
+    """(height above the hem, radius) up the shade: the flared hem, the falling robe, the cape over the
+    shoulders, the neck, then its hood."""
+    b = body
+    rows = [(0.0, hem), (0.12 * b, hem * 0.9), (0.3 * b, hem * 0.76), (0.5 * b, shoulder * 0.98),
+            (0.66 * b, shoulder * 0.94), (0.8 * b, shoulder * 1.04), (0.92 * b, shoulder * 1.02),
+            (0.98 * b, shoulder * 0.8), (1.0 * b, 0.13)]
+    if hood == "capirote":
+        h = shoulder / 0.22
+        rows += [(b + 0.05 * h, 0.15 * h), (b + 0.15 * h, 0.14 * h), (b + 0.3 * h, 0.105 * h), (b + 0.5 * h, 0.055 * h),
+                 (b + 0.7 * h, 0.012)]
+    else:
+        h = shoulder / 0.2
+        rows += [(b + 0.05 * h, 0.16 * h), (b + 0.15 * h, 0.165 * h), (b + 0.24 * h, 0.15 * h), (b + 0.3 * h, 0.11 * h),
+                 (b + 0.335 * h, 0.04 * h)]
+    return rows
 
 
-def _dress(body, garments, name, scale, extras=()):
-    """The posed body and its garments fused into one surface, turned to face +x, scaled, set on the
-    floor; `extras` (a hat) joined on after."""
-    underground_shapes.join(body, garments)
-    fused(body, FIGURE_VOXEL[name] / scale)
-
-    for v in body.data.vertices:
-        x, y, z = v.co
-        v.co = Vector((-y, x, z)) * scale
-
-    low = min(v.co.z for v in body.data.vertices)
-
-    for v in body.data.vertices:
-        v.co.z -= low
-
-    if extras:
-        for e in extras:
-            for v in e.data.vertices:
-                x, y, z = v.co
-                v.co = Vector((-y, x, z - low / scale)) * scale
-        underground_shapes.join(body, list(extras))
-
-    body.name = name
-    body.data.name = name
-    return body
+def _radius_at(rows, z):
+    for (z0, r0), (z1, r1) in zip(rows, rows[1:]):
+        if z <= z1:
+            t = (z - z0) / max(z1 - z0, 1e-6)
+            t = t * t * (3 - 2 * t)
+            return r0 + (r1 - r0) * t
+    return rows[-1][1]
 
 
-def _skirt(waist, hem, top=0.98, bottom=0.03):
-    """A long skirt (the body's frame, facing -y): a cone from the waist to a hem on the floor."""
-    m = common.Mesh("skirt", outward=True)
-    turned(m, [(hem, bottom), (hem * 0.93, bottom + 0.25), (waist * 1.25, top - 0.35), (waist, top)], 18, "nahual_black",
-           at=(0.0, 0.03, 0.0))
-    return m.make()
+def _bell(name, path, radii, sides=14):
+    """A sleeve along `path`, its radius growing by `radii`, closed at both ends."""
+    bm = bmesh.new()
+    rings = []
+    n = len(path)
+    for i, p in enumerate(path):
+        ahead = (path[min(i + 1, n - 1)] - path[max(i - 1, 0)]).normalized()
+        side = ahead.cross(Vector((0.0, 0.0, 1.0)))
+        side = side.normalized() if side.length > 1e-5 else Vector((1.0, 0.0, 0.0))
+        up = side.cross(ahead).normalized()
+        rings.append([bm.verts.new(p + (side * math.cos(math.tau * j / sides) + up * math.sin(math.tau * j / sides)) * radii[i])
+                      for j in range(sides)])
+    for r0, r1 in zip(rings, rings[1:]):
+        for j in range(sides):
+            bm.faces.new([r0[j], r0[(j + 1) % sides], r1[(j + 1) % sides], r1[j]])
+    bm.faces.new(list(reversed(rings[0])))
+    bm.faces.new(rings[-1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    mesh.materials.append(common.slot("shade"))
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
 
 
-def _bodice():
-    """A loose blouse over the chest and shoulders to the waist (the body's frame)."""
-    return chain("bodice", [((0.0, 0.01, 0.93), (0.16, 0.13)), ((0.0, 0.0, 1.18), (0.19, 0.15)),
-                            ((0.0, 0.01, 1.38), (0.18, 0.12)), ((0.0, 0.03, 1.47), (0.09, 0.08))], smooth=1)
+def _face_reach(a, z, face):
+    """How far out of its face's oval a point of the hood is (below 1 inside): angle `a` round it, height z."""
+    a = (a + math.pi) % math.tau - math.pi
+    middle, half = (face[0] + face[1]) / 2.0, (face[1] - face[0]) / 2.0
+    return (a / 0.62) ** 2 + ((z - middle) / half) ** 2
 
 
-def dead_woman():
-    """A woman in her rebozo, drawn over her head and down her back, her long skirt to the floor,
-    her head a little bowed, her hands together at her chest holding her candle."""
-    body = _posed_body(FIGURES["dead_woman"][0])
-    hood = chain("rebozo", [((0.0, -0.05, 1.68), (0.13, 0.13)), ((0.0, 0.03, 1.6), (0.16, 0.14)),
-                            ((0.0, 0.1, 1.42), (0.24, 0.1)), ((0.0, 0.13, 1.15), (0.25, 0.08))], smooth=1)
-    ends = [chain("rebozo_end_%d" % sx, [((sx * 0.15, -0.02, 1.45), (0.07, 0.04)), ((sx * 0.18, -0.1, 1.15), (0.07, 0.04)),
-                                         ((sx * 0.17, -0.12, 0.88), (0.06, 0.035))], smooth=1) for sx in (-1, 1)]
-    # The rebozo crossed over her chest, from her left shoulder to her right hip.
-    cross = chain("rebozo_cross", [((0.16, -0.03, 1.46), (0.07, 0.035)), ((0.02, -0.15, 1.24), (0.11, 0.04)),
-                                   ((-0.15, -0.11, 0.98), (0.09, 0.035))], smooth=1)
-    return _dress(body, [_skirt(0.15, 0.36), _bodice(), hood, cross] + ends, "dead_woman", FIGURES["dead_woman"][1])
+def shade(name, body, hood, hem, shoulder, seed, hat):
+    """One shade, ring by ring (shade_refs.md)."""
+    rng = random.Random(seed)
+    rows = _profile(body, hood, hem, shoulder)
+    top = rows[-1][0]
+    face = (body * 1.03, body + (0.26 if hood == "capirote" else 0.24) * shoulder / 0.21)
+    phase = rng.uniform(0.0, math.tau)
+    rag = [rng.uniform(0.0, 1.0) for _ in range(SEGMENTS)]
+    bm = bmesh.new()
+    rings = []
 
+    for i in range(RINGS + 1):
+        z = top * i / RINGS
+        r = _radius_at(rows, z)
+        ring = []
+        for k in range(SEGMENTS):
+            a = math.tau * k / SEGMENTS
+            # Folds falling straight down the robe, deepening toward the hem, gone at the shoulders.
+            fold_depth = 0.09 * max(0.0, 1.0 - z / (0.75 * body))
+            rr = r * (1.0 + fold_depth * math.sin(6 * a + phase) + 0.4 * fold_depth * math.sin(11 * a + 2 * phase))
+            x, y = math.cos(a) * rr * 0.82, math.sin(a) * rr
+            front = max(0.0, math.cos(a))
+            # The cape's edge across the chest, a ridge before it.
+            ridge = math.exp(-((z - 0.6 * body) / 0.025) ** 2) * 0.03 * front
+            x += ridge
+            # The face: an oval hollow pushed back into the hood, its brow jutting over it.
+            d = _face_reach(a, z, face)
+            if d < 1.0:
+                x -= 0.11 * shoulder / 0.22 * math.sqrt(1.0 - d) * math.cos(a)
+            brow = math.exp(-((z - face[1]) / 0.03) ** 2) * math.exp(-(a / 0.6) ** 2)
+            x += 0.035 * shoulder / 0.22 * brow
+            zz = z
+            if i == 0:
+                # The hem ragged: torn tongues hanging lower here and there.
+                zz -= 0.07 * max(0.0, math.sin(5 * a + phase)) + 0.04 * rag[k]
+            elif i == 1:
+                zz -= 0.03 * max(0.0, math.sin(5 * a + phase))
+            ring.append(bm.verts.new((x, y, zz + HOVER + 0.11)))
+        rings.append(ring)
 
-def dead_man():
-    """A man in white manta, his sarape over his shoulder, his sombrero on, his hands holding his
-    candle before his chest."""
-    body = _posed_body(FIGURES["dead_man"][0])
-    # His manta: a loose shirt to his thighs, loose trousers to his ankles.
-    shirt = chain("shirt", [((0.0, 0.02, 0.78), (0.21, 0.17)), ((0.0, 0.01, 1.02), (0.2, 0.16)),
-                            ((0.0, 0.0, 1.27), (0.22, 0.16)), ((0.0, 0.02, 1.45), (0.19, 0.13)), ((0.0, 0.04, 1.55), (0.09, 0.08))], smooth=1)
-    trousers = [chain("trouser_%d" % sx, [((sx * 0.1, 0.03, 0.92), (0.12, 0.12)), ((sx * 0.12, 0.03, 0.5), (0.105, 0.105)),
-                                          ((sx * 0.12, 0.04, 0.14), (0.1, 0.1))], smooth=1) for sx in (-1, 1)]
-    # The sarape over his left shoulder, falling before him and behind.
-    sarape = chain("sarape", [((0.12, -0.17, 0.95), (0.13, 0.04)), ((0.17, -0.05, 1.5), (0.12, 0.06)),
-                              ((0.15, 0.17, 1.02), (0.13, 0.04))], smooth=1)
-    m = common.Mesh("sombrero", outward=True)
-    # (Seated on his head: its crown wide enough to take it, its brim at his brow.)
-    turned(m, [(0.12, 0.0), (0.36, 0.012), (0.38, 0.035), (0.135, 0.05), (0.13, 0.15), (0.1, 0.21), (0.04, 0.225)], 22,
-           "nahual_black", at=(0.0, 0.02, 1.6))
-    return _dress(body, [shirt, sarape] + trousers, "dead_man", FIGURES["dead_man"][1], [m.make()])
+    shade_slot, hollow_slot = 0, 1
 
+    for i in range(RINGS):
+        for k in range(SEGMENTS):
+            f = bm.faces.new([rings[i][k], rings[i][(k + 1) % SEGMENTS], rings[i + 1][(k + 1) % SEGMENTS], rings[i + 1][k]])
+            # (Its face by where its corners came from on the ring, so the hollow's edge follows the oval.)
+            a = math.tau * (k + 0.5) / SEGMENTS
+            z_mid = top * (i + 0.5) / RINGS
+            f.material_index = hollow_slot if _face_reach(a, z_mid, face) < 0.82 else shade_slot
 
-def dead_child():
-    """A child in a white dress, holding their candle before them."""
-    body = _posed_body(FIGURES["dead_child"][0])
-    return _dress(body, [_skirt(0.15, 0.3), _bodice()], "dead_child", FIGURES["dead_child"][1])
+    # Its hem's underside closed a little up inside it, its hood's top to its point.
+    under = bm.verts.new((0.0, 0.0, HOVER + 0.11 + 0.25))
+    for k in range(SEGMENTS):
+        bm.faces.new([rings[0][(k + 1) % SEGMENTS], rings[0][k], under]).material_index = shade_slot
+    apex = bm.verts.new((0.0, 0.0, top + HOVER + 0.11 + 0.005))
+    for k in range(SEGMENTS):
+        bm.faces.new([rings[-1][k], rings[-1][(k + 1) % SEGMENTS], apex]).material_index = shade_slot
+
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    mesh = bpy.data.meshes.new(name)
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    mesh.materials.append(common.slot("shade"))
+    mesh.materials.append(common.slot("hollow"))
+
+    # Its sleeves, from its shoulders down and forward, meeting before its chest at its candle.
+    held = Vector(CANDLE_HELD[name])
+    parts = []
+    for sy in (-1, 1):
+        # A bell sleeve: narrow at the shoulder, widening to its cuff, its mouth hanging open.
+        shoulder_at = Vector((0.0, sy * shoulder * 0.86, HOVER + 0.11 + body * 0.9))
+        elbow = Vector((0.07, sy * shoulder * 1.02, HOVER + 0.11 + body * 0.7))
+        cuff = held + Vector((-0.03, sy * 0.075, -0.02))
+        path = [shoulder_at.lerp(elbow, t / 5.0) for t in range(5)] + [elbow.lerp(cuff, t / 5.0) for t in range(6)]
+        k = shoulder / 0.22
+        parts.append(_bell(name + "_sleeve_%d" % sy, path, [0.055 * k + 0.05 * k * (j / (len(path) - 1)) ** 1.6
+                                                             for j in range(len(path))]))
+    if hat:
+        m = common.Mesh("sombrero", outward=True)
+        crown_at = HOVER + 0.11 + body + 0.12
+        turned(m, [(0.2, 0.0), (0.4, 0.012), (0.42, 0.04), (0.2, 0.06), (0.19, 0.16), (0.15, 0.22), (0.06, 0.235)], 24,
+               "shade", at=(0.0, 0.0, crown_at))
+        parts.append(m.make())
+    underground_shapes.join(obj, parts)
+
+    for poly in obj.data.polygons:
+        poly.use_smooth = True
+
+    # (Its lowest point at the hover: its ragged hem's longest tongue.)
+    low = min(v.co.z for v in obj.data.vertices)
+    for v in obj.data.vertices:
+        v.co.z += HOVER - low
+    # Where its candle stands, written with the kit (its _wicks.json) for the bay.
+    common.WICKS.setdefault(name, []).append((held.x, held.y, held.z + HOVER - low))
+    return obj
 
 
 def old_hat(m):
@@ -420,9 +445,8 @@ def build():
     nahual_body()
     nahual_head()
     smooth_object("old_hat", old_hat)
-    dead_woman()
-    dead_man()
-    dead_child()
+    for name, d in SHADES.items():
+        shade(name, **d)
 
 
 def main():

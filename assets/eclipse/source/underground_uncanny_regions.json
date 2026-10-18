@@ -2,8 +2,10 @@
  "slots": [
   "nahual_black",
   "ember",
-  "palm"
+  "palm",
+  "shade",
+  "hollow"
  ],
  "atlas_px": 1024,
- "px_per_m": 234.28
+ "px_per_m": 152.65
 }

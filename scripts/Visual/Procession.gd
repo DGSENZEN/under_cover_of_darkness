@@ -6,7 +6,7 @@ extends Node3D
 ## in file at a walking pace, facing their way; at the old stone each is eaten away into it. The ánimas
 ## gather to them as they pass (`animas`).
 
-const SPECTRE := preload("res://scripts/Visual/spectre.gdshader")
+const SHADE := preload("res://scripts/Visual/shade.gdshader")
 ## How far apart they walk (along the trail, m), how fast (m/s), how high their candles' flames
 ## stand over their hands, how bright the candles.
 const SPACING := 1.1
@@ -19,8 +19,8 @@ const INTO_STONE := 0.9
 const GONE_RATE := 1.2
 ## How often they walk on their own (s).
 const EVERY := Vector2(240.0, 480.0)
-const INK := Color(0.82, 0.88, 0.9)
-const FRAY := Color(0.42, 0.58, 0.68)
+## Their shrouds' pale (shade.gdshader).
+const PALE := Color(0.8, 0.86, 0.9)
 
 ## The trail they walk: a function of t (0 at its start, 1 at its end) to a point on the floor.
 var trail: Callable
@@ -39,7 +39,7 @@ var _next := 0.0
 var _rng := RandomNumberGenerator.new()
 
 
-## The walkers from the uncanny kit's meshes: `cast` [(mesh, where its hands hold its candle)].
+## The walkers from the uncanny kit's meshes: `cast` [(mesh, where its sleeves hold its candle)].
 func build(cast: Array) -> void:
 	_rng.seed = seed
 	_next = _rng.randf_range(EVERY.x, EVERY.y)
@@ -49,14 +49,23 @@ func build(cast: Array) -> void:
 		var figure := MeshInstance3D.new()
 		figure.name = "dead_%d" % i
 		figure.mesh = cast[i][0]
+		# Its shroud and its face's hollow, each surface by its slot; the hollow's oval measured from it.
 		var look := ShaderMaterial.new()
-		look.shader = SPECTRE
-		look.set_shader_parameter(&"ink", INK)
-		look.set_shader_parameter(&"fray_colour", FRAY)
+		look.shader = SHADE
 		look.set_shader_parameter(&"noise", Vfx.noise_3d())
-		look.set_shader_parameter(&"sheer", 0.35)
-		look.set_shader_parameter(&"fray", 0.7)
-		figure.set_surface_override_material(0, look)
+		look.set_shader_parameter(&"pale", PALE)
+		var face := _hollow_oval(figure.mesh)
+		look.set_shader_parameter(&"face_middle", face.position + face.size / 2.0)
+		look.set_shader_parameter(&"face_half", Vector2(face.size.z / 2.0, face.size.y / 2.0) * 1.15)
+
+		for k in figure.mesh.get_surface_count():
+			var slot: Material = figure.mesh.surface_get_material(k)
+			if slot != null and slot.resource_name == "hollow":
+				var dark := look.duplicate() as ShaderMaterial
+				dark.set_shader_parameter(&"hollow", 1.0)
+				figure.set_surface_override_material(k, dark)
+			else:
+				figure.set_surface_override_material(k, look)
 		figure.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		figure.visible = false
 		add_child(figure)
@@ -84,6 +93,26 @@ func build(cast: Array) -> void:
 		light.position = Vector3(0.0, 0.08, 0.0)
 
 
+## Its face's hollow, its bounds in the shade's own axes.
+func _hollow_oval(mesh: Mesh) -> AABB:
+	for k in mesh.get_surface_count():
+		var slot: Material = mesh.surface_get_material(k)
+		if slot != null and slot.resource_name == "hollow":
+			var points: PackedVector3Array = mesh.surface_get_arrays(k)[Mesh.ARRAY_VERTEX]
+			var box := AABB(points[0], Vector3.ZERO)
+			for p in points:
+				box = box.expand(p)
+			return box
+	return AABB(Vector3(0.1, 1.4, -0.1), Vector3(0.05, 0.25, 0.2))
+
+
+func _set_all(i: int, param: StringName, value: Variant) -> void:
+	for k in figures[i].mesh.get_surface_count():
+		var look := figures[i].get_surface_override_material(k) as ShaderMaterial
+		if look != null:
+			look.set_shader_parameter(param, value)
+
+
 ## They set out now (they do on their own, rarely).
 func start() -> void:
 	walking = true
@@ -93,7 +122,7 @@ func start() -> void:
 	for i in figures.size():
 		_gone.append(false)
 		figures[i].visible = false
-		_looks[i].set_shader_parameter(&"presence", 1.0)
+		_set_all(i, &"presence", 1.0)
 
 
 func _process(delta: float) -> void:
@@ -124,18 +153,22 @@ func _process(delta: float) -> void:
 		var t := clampf(behind / length, 0.0, 1.0)
 		var at: Vector3 = trail.call(t)
 		var ahead: Vector3 = trail.call(minf(t + 0.02, 1.0)) - trail.call(maxf(t - 0.02, 0.0))
-		# A glide, not a step: the dead do not walk as the living.
-		at.y = 0.02 * sin(_along * 4.0 + i)
+		# A glide, not a step: the dead do not walk as the living; they float, swaying a little.
+		at.y = 0.03 * sin(_along * 2.2 + i * 1.3)
 		figure.position = at
 
 		if ahead.length() > 0.001:
 			figure.rotation.y = atan2(-ahead.z, ahead.x)
 
+		# Its candle's warmth on its shroud, its hem's mist where it floats.
+		_set_all(i, &"candle_at", figure.global_transform * (_held[i] + Vector3(0.0, 0.06, 0.0)))
+		_set_all(i, &"hem", figure.global_position.y + 0.1)
+
 		# At the old stone, eaten away into it.
 		if (1.0 - t) * length < INTO_STONE:
 			var presence: float = _looks[i].get_shader_parameter(&"presence")
 			presence = maxf(0.0, presence - GONE_RATE * delta)
-			_looks[i].set_shader_parameter(&"presence", presence)
+			_set_all(i, &"presence", presence)
 			if presence <= 0.0:
 				_gone[i] = true
 				figure.visible = false

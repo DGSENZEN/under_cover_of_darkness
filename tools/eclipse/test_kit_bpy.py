@@ -11,6 +11,7 @@ import unittest
 
 import bmesh
 import bpy
+from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -1402,10 +1403,10 @@ class UndergroundUncanny(unittest.TestCase):
     black dog lying with its head up (its head its own object, turned about the neck), and the
     old man's hat it leaves on the bench; closed, in budget, through the gate."""
 
-    BUDGET = {"nahual_body": 20000, "nahual_head": 8000, "old_hat": 600, "dead_woman": 13000, "dead_man": 13000,
-              "dead_child": 14000}
+    BUDGET = {"nahual_body": 20000, "nahual_head": 8000, "old_hat": 600, "shade_capirote": 12000, "shade_veiled": 12000,
+              "shade_child": 12000, "shade_sombrero": 12000}
     # (A creature's tight curves: gated at gate.CREATURE_SLIVER, docs/superpowers/refs/underground/nahual_refs.md.)
-    CREATURE = ("nahual_body", "nahual_head", "dead_woman", "dead_man", "dead_child")
+    CREATURE = ("nahual_body", "nahual_head", "shade_capirote", "shade_veiled", "shade_child", "shade_sombrero")
 
     @classmethod
     def setUpClass(cls):
@@ -1512,27 +1513,46 @@ class UndergroundUncanny(unittest.TestCase):
         self.assertGreater(top, 0.28)
         self.assertGreater(nose, 0.34)
 
-    def test_the_dead_in_white_stand_their_heights(self):
-        # The procession (supernatural_refs.md: the dead in white, candles in their hands): a woman in her
-        # rebozo, a man in his sombrero, a child; standing on the floor, facing +x, each fused to one surface.
-        for n, (lo, hi) in (("dead_woman", (1.5, 1.7)), ("dead_man", (1.68, 1.9)), ("dead_child", (1.0, 1.25))):
+    SHADES = ("shade_capirote", "shade_veiled", "shade_child", "shade_sombrero")
+
+    def _slots_of(self, name):
+        o = self.objects[name]
+        return {o.material_slots[p.material_index].material.name for p in o.data.polygons}
+
+    def test_the_shades_are_shrouds_their_heights(self):
+        # The procession (shade_refs.md): a shroud each, no body in it; floating, their hems off the floor.
+        for n, (lo, hi) in (("shade_capirote", (1.95, 2.45)), ("shade_veiled", (1.55, 1.8)), ("shade_child", (1.0, 1.3)),
+                            ("shade_sombrero", (1.8, 2.05))):
             vs = _world(self.objects[n])
-            self.assertAlmostEqual(min(v.z for v in vs), 0.0, delta=0.002, msg=n)
+            self.assertTrue(0.04 <= min(v.z for v in vs) <= 0.16, "%s floats %.2f" % (n, min(v.z for v in vs)))
             self.assertTrue(lo <= max(v.z for v in vs) <= hi, "%s %.2f" % (n, max(v.z for v in vs)))
 
+    def test_their_faces_are_hollows_in_their_hoods(self):
+        # The face a black recess facing +x, high in the hood.
+        for n in self.SHADES:
+            o = self.objects[n]
+            hollow = [p for p in o.data.polygons if o.material_slots[p.material_index].material.name == "hollow"]
+            self.assertTrue(hollow, n)
+            top = max(v.z for v in _world(o))
+            middle = sum((o.matrix_world @ p.center for p in hollow), Vector()) / len(hollow)
+            self.assertGreater(middle.x, 0.02, n)
+            self.assertGreater(middle.z, 0.6 * top, n)
+
+    def test_their_hems_are_ragged(self):
+        for n in self.SHADES:
+            low = sorted(v.z for v in _world(self.objects[n]))[:60]
+            self.assertGreater(low[-1] - low[0], 0.04, n)
+
+    def test_their_sleeves_meet_at_the_candle(self):
+        for n in self.SHADES:
+            hand = underground_uncanny.CANDLE_HELD[n]
+            near = [v for v in _world(self.objects[n]) if math.dist((v.x, v.y, v.z), hand) < 0.09]
+            self.assertTrue(near, n)
+
     def test_the_sombrero_is_wide(self):
-        all_vs = _world(self.objects["dead_man"])
+        all_vs = _world(self.objects["shade_sombrero"])
         vs = [v for v in all_vs if v.z > 0.88 * max(v.z for v in all_vs)]
         self.assertGreater(max(v.y for v in vs) - min(v.y for v in vs), 0.5)
-
-    def test_each_holds_their_candle_before_them(self):
-        # Their hands meet at the candle's foot, at chest height (or the child's), before them along +x.
-        for n in ("dead_woman", "dead_man", "dead_child"):
-            hand = underground_uncanny.CANDLE_HELD[n]
-            vs = _world(self.objects[n])
-            near = [v for v in vs if math.dist((v.x, v.y, v.z), hand) < 0.06 * underground_uncanny.FIGURES[n][1] / 0.62]
-            self.assertTrue(near, n)
-            self.assertGreater(hand[0], 0.1, n)
 
     def test_the_old_mans_hat(self):
         (x0, x1), _, (z0, z1) = self._extent("old_hat")

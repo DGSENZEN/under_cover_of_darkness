@@ -23,11 +23,10 @@ const AnimasScript := preload("res://scripts/Visual/Animas.gd")
 const NahualScript := preload("res://scripts/Visual/Nahual.gd")
 const ProcessionScript := preload("res://scripts/Visual/Procession.gd")
 const ShadowScript := preload("res://scripts/Visual/OwnerlessShadow.gd")
-## The procession's file: who walks, in order (the uncanny kit's dead, and where each holds their candle:
-## tools/eclipse/underground_uncanny.py CANDLE_HELD, Godot's way round).
-const PROCESSION := [["dead_woman", Vector3(0.243, 1.008, 0.0)], ["dead_man", Vector3(0.251, 1.042, 0.0)],
-	["dead_child", Vector3(0.167, 0.694, 0.0)], ["dead_woman", Vector3(0.243, 1.008, 0.0)],
-	["dead_man", Vector3(0.251, 1.042, 0.0)]]
+## The procession's file: its shades in order (the uncanny kit's, shade_refs.md); each holds its candle
+## where the kit's wicks file says.
+const PROCESSION := ["shade_capirote", "shade_veiled", "shade_child", "shade_sombrero", "shade_capirote"]
+const UNCANNY_WICKS := "res://assets/eclipse/source/underground_uncanny_wicks.json"
 ## The dark train (supernatural_refs.md): Ehécatl's wind running the line dug through his temple, rarely;
 ## how rare (s), how far every light sinks, how hard the draught, and the wind heard (a stand-in until
 ## the user's tunnel-wind recording, sound_list.md #10).
@@ -1170,10 +1169,16 @@ func _procession() -> void:
 		return
 
 	var meshes := _kit(UNCANNY_KIT)
+	var held := {}
+
+	if FileAccess.file_exists(UNCANNY_WICKS):
+		held = JSON.parse_string(FileAccess.get_file_as_string(UNCANNY_WICKS))
+
 	var cast := []
 
 	for walker in PROCESSION:
-		cast.append([meshes[walker[0]], walker[1]])
+		var w: Array = held.get(walker, [[0.25, 1.0, 0.0]])[0]
+		cast.append([meshes[walker], Vector3(w[0], w[1], w[2])])
 
 	procession = ProcessionScript.new()
 	procession.name = "procession"
