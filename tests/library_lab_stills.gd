@@ -24,6 +24,14 @@ const VIEWS := [
 	["close_threshold", Vector3(0.6, 1.0, 1.2), Vector3(0.0, 0.0, -0.2)],
 	["close_patch", Vector3(1.6, 1.6, -4.4), Vector3(2.3, 1.5, -6.0)],
 	["close_skirting", Vector3(-3.2, 0.7, -2.0), Vector3(-4.0, 0.1, -3.0)],
+	["corner_desk", Vector3(0.0, 1.75, -2.6), Vector3(0.0, 1.0, -4.4)],
+	["corner_top", Vector3(0.1, 1.85, -3.55), Vector3(0.05, 1.05, -4.4)],
+	["corner_chair", Vector3(-1.5, 1.5, -3.3), Vector3(0.12, 0.6, -5.2)],
+	["corner_hook", Vector3(0.0, 1.6, -3.0), Vector3(1.18, 1.3, -4.82)],
+	["corner_behind", Vector3(1.6, 1.6, -5.7), Vector3(0.0, 0.9, -4.3)],
+	["close_lamp", Vector3(-0.95, 1.6, -3.75), Vector3(-0.4, 1.3, -4.5)],
+	["close_things", Vector3(0.95, 1.5, -3.75), Vector3(0.5, 1.05, -4.55)],
+	["close_hat", Vector3(0.6, 2.0, -3.9), Vector3(1.18, 1.85, -4.82)],
 ]
 
 

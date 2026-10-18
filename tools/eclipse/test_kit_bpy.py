@@ -26,6 +26,7 @@ import underground_walls  # noqa: E402
 import underground_vault  # noqa: E402
 import underground_uncanny  # noqa: E402
 import library_room  # noqa: E402
+import library_corner  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -1677,6 +1678,92 @@ class LibraryRoom(unittest.TestCase):
             # (Put back as the other tests found it.)
             library_room.build()
             type(self).objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+
+class LibraryCorner(unittest.TestCase):
+    """The librarian's corner (tools/eclipse/library_corner.py), built in its own frame: the desk's middle at the
+    origin on the floor, its front (the customers' side) toward -y (Godot's +z, the shopfront); closed, in
+    budget, through the gate; what lies on the desk lies on it."""
+
+    BUDGET = {"desk": 6000, "desk_chair": 2500, "lamp": 2000, "ledger": 1500, "magnifier": 800, "gloves": 1200,
+              "repair_kit": 1500, "coat_hook": 5000}
+
+    @classmethod
+    def setUpClass(cls):
+        library_corner.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_each_passes_the_gate(self):
+        problems = {}
+
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            found = gate.check(faces, tris, [], budget=self.BUDGET[n])
+            if found:
+                problems[n] = found[:3]
+
+        self.assertEqual(problems, {})
+
+    def test_desk_height(self):
+        # The writing top, met by a ray down onto the desk's middle (the ledger and the rest left out).
+        top = _hit(self.objects["desk"], (0.0, 0.05, 3.0), (0.0, 0.0, -1.0))
+        self.assertIsNotNone(top)
+        self.assertAlmostEqual(top.z, library_corner.DESK_TOP, delta=0.01)
+
+    def test_desk_faces_the_customers(self):
+        # Its scuffed front panel is the desk's -y face: a ray from the customers' side meets it low down.
+        front = _hit(self.objects["desk"], (0.0, -2.0, 0.5), (0.0, 1.0, 0.0))
+        self.assertIsNotNone(front)
+        self.assertLess(front.y, -0.3)
+
+    def test_lamp_bulb(self):
+        bulb = Vector(common.WICKS["lamp"][0])
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("lamp")
+        self.assertTrue(x0 < bulb.x < x1 and y0 < bulb.y < y1 and z0 < bulb.z < z1, str(bulb))
+        # Under the shade: a ray up from the bulb meets the lamp.
+        self.assertIsNotNone(_hit(self.objects["lamp"], tuple(bulb), (0.0, 0.0, 1.0), 0.3))
+
+    def test_ledger_lies_open_on_the_desk(self):
+        low = self._extent("ledger")[2][0]
+        self.assertTrue(library_corner.DESK_TOP + 0.002 <= low <= library_corner.DESK_TOP + 0.005, low)
+
+    def test_the_small_things_lie_on_the_desk(self):
+        for n in ("magnifier", "gloves", "repair_kit", "lamp"):
+            low = self._extent(n)[2][0]
+            self.assertTrue(library_corner.DESK_TOP + 0.002 <= low <= library_corner.DESK_TOP + 0.005, "%s %.4f" % (n, low))
+
+    def test_nothing_on_the_desk_overlaps(self):
+        # In plan, nothing laid on the desk lies on anything else there. (The lamp's shade hangs over the ledger
+        # on purpose: it stands only on its foot, at the back corner.)
+        laid = ["ledger", "magnifier", "gloves", "repair_kit"]
+        boxes = {n: self._extent(n) for n in laid}
+        clashes = []
+
+        for i, a in enumerate(laid):
+            for b in laid[i + 1:]:
+                (ax, ay, _), (bx, by, _) = boxes[a], boxes[b]
+                if ax[0] < bx[1] and bx[0] < ax[1] and ay[0] < by[1] and by[0] < ay[1]:
+                    clashes.append((a, b))
+
+        self.assertEqual(clashes, [])
+
+    def test_the_chair_is_left_behind_the_desk(self):
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("desk_chair")
+        self.assertAlmostEqual(z0, 0.0, delta=1e-4)
+        self.assertGreater(y0, self._extent("desk")[1][1])
 
 
 if __name__ == "__main__":

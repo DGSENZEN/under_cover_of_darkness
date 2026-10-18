@@ -30,16 +30,26 @@ const WALL_FACE := 0.067
 ## Where the player starts: in the corridor before the arch, facing in.
 const SPAWN := Vector3(0.0, 1.05, 2.2)
 const SODIUM := Color(1.0, 0.76, 0.5)
-## His lamp until his desk stands (Task 2): warm, low, at the back.
-const LAMP_AT := Vector3(0.0, 1.45, -4.3)
+## His corner (tools/eclipse/library_corner.py), its frame's origin at the desk's middle on the floor, its
+## front toward the shopfront; and where its lamp's bulb is (the kit's wicks, in the corner's frame).
+const CORNER_KIT := "res://assets/eclipse/kit/library_corner.glb"
+const CORNER_WICKS := "res://assets/eclipse/source/library_corner_wicks.json"
+const CORNER_AT := Vector3(0.0, 0.0, -4.4)
+## What of his corner is solid to the player.
+const CORNER_SOLID := ["desk", "desk_chair", "coat_hook"]
+## His lamp: warm, low, under its green shade (where it stands when the corner's kit is missing).
+const LAMP_AT := Vector3(-0.32, 1.39, -4.44)
 const LAMP_COLOUR := Color(1.0, 0.78, 0.5)
+## The lamp's shade: emerald glass, lit through from inside.
+const SHADE_GREEN := Color(0.12, 0.42, 0.22, 0.8)
 
 var atlas_dir := "res://textures/painted/underground/"
 var missing := PackedStringArray()
 var player: Node3D
 var world: WorldEnvironment
-## The room's pieces by name.
+## The room's pieces by name, and his corner's.
 var room := {}
+var corner := {}
 var corridor: Array[MeshInstance3D] = []
 var lamp_light: OmniLight3D
 var work_lights: Array[Light3D] = []
@@ -53,6 +63,7 @@ func _ready() -> void:
 	reset_physics_interpolation.call_deferred()
 	_environment()
 	_room()
+	_corner()
 	_corridor()
 	_lights()
 	_keys()
@@ -116,6 +127,32 @@ func _room() -> void:
 			continue
 		# (The room's walls are walked against and its floor walked on: solid to the shape, not its hull.)
 		room[part] = _place(meshes[part], look, part, Vector3.ZERO, 0.0, part != "room_rug", true)
+
+
+# His corner
+
+## His corner: the dealer's desk and its things (the rite, the hunt and the work in progress join it).
+func _corner() -> void:
+	if not ResourceLoader.exists(CORNER_KIT):
+		missing.append(CORNER_KIT)
+		return
+
+	var meshes := _kit(CORNER_KIT)
+	var look := Painterly.material(_painted(["library_corner.png", "library_corner_base.png"]), &"bespoke")
+
+	for part: String in meshes:
+		corner[part] = _place(meshes[part], look, part, CORNER_AT, 0.0, part in CORNER_SOLID)
+
+
+## Where his lamp's bulb is (world).
+func lamp_bulb() -> Vector3:
+	if FileAccess.file_exists(CORNER_WICKS):
+		var wicks: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(CORNER_WICKS))
+		if wicks.has("lamp"):
+			var w: Array = wicks["lamp"][0]
+			return CORNER_AT + Vector3(w[0], w[1], w[2])
+
+	return LAMP_AT
 
 
 # The corridor outside: the Metro's tiled floor and walls either side of his front
@@ -201,7 +238,7 @@ func _lights() -> void:
 	lamp_light.omni_range = 4.0
 	lamp_light.shadow_enabled = true
 	add_child(lamp_light)
-	lamp_light.position = LAMP_AT
+	lamp_light.position = lamp_bulb()
 
 	form_light = DirectionalLight3D.new()
 	form_light.name = "form_light"
@@ -264,13 +301,20 @@ func _painted(names: Array, alpha := false) -> Texture2D:
 	return null
 
 
-func _glass() -> StandardMaterial3D:
+## Glass: clear, or of a tint (`tint`'s alpha 0 for clear), the tinted lit a little from within (a lamp's shade).
+func _glass(tint := Color(0, 0, 0, 0)) -> StandardMaterial3D:
 	var glass := StandardMaterial3D.new()
 	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	glass.cull_mode = BaseMaterial3D.CULL_DISABLED
-	glass.albedo_color = Color(0.66, 0.78, 0.74, 0.32)
+	glass.albedo_color = Color(0.66, 0.78, 0.74, 0.32) if tint.a == 0.0 else tint
 	glass.roughness = 0.1
 	glass.metallic_specular = 0.8
+
+	if tint.a > 0.0:
+		glass.emission_enabled = true
+		glass.emission = Color(tint.r, tint.g, tint.b)
+		glass.emission_energy_multiplier = 0.6
+
 	return glass
 
 
@@ -285,7 +329,8 @@ func _place(mesh: Mesh, material: Material, kind: String, at: Vector3, yaw: floa
 	for i in piece.mesh.get_surface_count():
 		var slot: Material = piece.mesh.surface_get_material(i)
 		var glazed := slot != null and slot.resource_name.begins_with("glass")
-		piece.set_surface_override_material(i, _glass() if glazed else material)
+		var tint := SHADE_GREEN if slot != null and slot.resource_name == "glass_green" else Color(0, 0, 0, 0)
+		piece.set_surface_override_material(i, _glass(tint) if glazed else material)
 
 	add_child(piece, true)
 	piece.position = at

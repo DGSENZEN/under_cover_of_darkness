@@ -1,0 +1,20 @@
+{
+ "slots": [
+  "wood",
+  "brass",
+  "felt_green",
+  "leather_old",
+  "paper",
+  "glass",
+  "glass_green",
+  "cotton_white",
+  "bone",
+  "steel",
+  "paper_kraft",
+  "coat_black",
+  "cloth_patch",
+  "hat_felt"
+ ],
+ "atlas_px": 2048,
+ "px_per_m": 291.46
+}

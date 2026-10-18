@@ -1,0 +1,13 @@
+{
+ "colour": "#141418",
+ "light": 0.6,
+ "height_light": 0.0,
+ "wear": 0.5,
+ "wear_colour": "#34343c",
+ "grime": 0.4,
+ "grime_colour": "#060608",
+ "brush": "brush_00",
+ "brush_scale_m": 0.2,
+ "brush_amount": 0.06,
+ "black": 0.45
+}
