@@ -13,7 +13,7 @@ const EYES := Vector3(0.15, 0.075, 0.0)
 const EYE := Vector3(0.165, 0.075, 0.052)
 const MIDDLE := Vector3(0.5, 0.3, 0.0)
 ## Its eyes' glow: the halo's size (m) and its light's energy and reach.
-const HALO := 0.13
+const HALO := 0.075
 const EYE_LIGHT := 0.22
 const EYE_REACH := 1.4
 ## Walked into: how near (from its middle, m) scatters it, how far they must go before it re-forms,
@@ -22,18 +22,17 @@ const SCATTER_NEAR := 1.3
 const REFORM_FAR := 2.6
 const SCATTER_RATE := 3.0
 const REFORM_RATE := 0.5
+## (A small sphere round each eye, not a card: brightest where it faces you, fading to nothing at its
+## rim, so no edge shows however the light falls or where it meets the skull.)
 const HALO_CODE := """
 shader_type spatial;
-render_mode unshaded, cull_disabled, depth_draw_never, blend_add, shadows_disabled;
+render_mode unshaded, cull_back, depth_draw_never, blend_add, shadows_disabled;
 uniform vec4 colour : source_color;
 uniform float presence = 1.0;
-void vertex() {
-	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
-}
 void fragment() {
-	vec2 p = UV * 2.0 - 1.0;
-	float soft = pow(clamp(1.0 - length(p), 0.0, 1.0), 2.5);
-	ALBEDO = colour.rgb * soft * presence * (0.85 + 0.15 * sin(TIME * 2.3));
+	float facing = clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0);
+	float soft = pow(facing, 3.0);
+	ALBEDO = colour.rgb * soft * presence * 0.6 * (0.85 + 0.15 * sin(TIME * 2.3));
 }
 """
 ## How far its head turns either way and up or down (degrees), and how fast it follows (per s).
@@ -43,7 +42,9 @@ const FOLLOW := 4.0
 ## How long it must be looked at before it will go, how long looked away before it does (s),
 ## and how far off it notices being looked at (m).
 const SEEN_FOR := 1.0
-const AWAY_FOR := 0.4
+const AWAY_FOR := 1.5
+## Once it goes, how fast it dissolves into its smoke (per s): about a second and a half.
+const VANISH_RATE := 0.65
 const REACH := 14.0
 
 @export var watcher: Camera3D
@@ -69,6 +70,7 @@ var presence := 1.0
 var _spectre: ShaderMaterial
 var _ember: Material
 var _halo_looks: Array[ShaderMaterial] = []
+var _vanishing := false
 
 var _rng := RandomNumberGenerator.new()
 var _seen_time := 0.0
@@ -98,8 +100,11 @@ func build(body_mesh: Mesh, head_mesh: Mesh, look: Material, ember: Material) ->
 	for sz in [-1.0, 1.0]:
 		var halo := MeshInstance3D.new()
 		halo.name = "eye_halo"
-		var disc := QuadMesh.new()
-		disc.size = Vector2.ONE * HALO
+		var disc := SphereMesh.new()
+		disc.radius = HALO / 2.0
+		disc.height = HALO
+		disc.radial_segments = 24
+		disc.rings = 12
 		var soft := ShaderMaterial.new()
 		soft.shader = Shader.new()
 		soft.shader.code = HALO_CODE
@@ -125,6 +130,7 @@ func build(body_mesh: Mesh, head_mesh: Mesh, look: Material, ember: Material) ->
 
 ## Here, unwatched, as it is when the night begins (tests begin from it).
 func appear() -> void:
+	_vanishing = false
 	_come_back()
 	presence = 1.0
 	_watched = false
@@ -162,9 +168,18 @@ func _process(delta: float) -> void:
 	if eye == null or head == null:
 		return
 
+	if _vanishing:
+		# Dissolving into its smoke, its eyes the last of it.
+		presence = maxf(0.0, presence - VANISH_RATE * delta)
+		_show()
+		if presence <= 0.0:
+			_vanishing = false
+			_go()
+		return
+
 	_scatter(delta)
 
-	if presence < 1.0:
+	if visible and presence < 1.0:
 		# (Scattered or re-forming: no watching it away meanwhile.)
 		_seen_time = 0.0
 		_unseen_time = 0.0
@@ -183,7 +198,7 @@ func _process(delta: float) -> void:
 			_unseen_time += delta
 
 			if _unseen_time >= AWAY_FOR:
-				_go()
+				_vanishing = true
 	else:
 		_back_in -= delta
 
@@ -215,7 +230,11 @@ func _scatter(delta: float) -> void:
 	elif near > REFORM_FAR:
 		presence = minf(1.0, presence + REFORM_RATE * delta)
 
-	# The scatter thrown as it goes, settling as it re-forms.
+	_show()
+
+
+## Its look at its presence: its smoke thrown as it goes, settling as it re-forms.
+func _show() -> void:
 	scattering = clampf(1.0 - presence, 0.0, 1.0)
 
 	for i in scatter_tendrils.size():
@@ -304,5 +323,7 @@ func _go() -> void:
 
 func _come_back() -> void:
 	visible = true
+	presence = 1.0
+	_show()
 	solid.process_mode = Node.PROCESS_MODE_INHERIT
 	solid.collision_layer = 1

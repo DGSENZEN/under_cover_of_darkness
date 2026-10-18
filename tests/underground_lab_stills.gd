@@ -49,6 +49,7 @@ const VIEWS := [
 	["uncanny_nahual", Vector3(-3.6, 1.6, 1.6), Vector3(-4.8, 0.5, 4.0)],
 	["uncanny_procession", Vector3(-0.5, 1.7, 2.6), Vector3(-3.4, 0.9, -0.4)],
 	["uncanny_shadow", Vector3(0.0, 1.7, 0.2), Vector3(0.0, 1.5, 4.5)],
+	["uncanny_eyes", Vector3(-4.3, 1.05, 1.7), Vector3(-5.0, 0.95, 3.0)],
 	["uncanny_nahual_far", Vector3(0.5, 1.6, 0.8), Vector3(-4.8, 0.6, 4.0)],
 ]
 

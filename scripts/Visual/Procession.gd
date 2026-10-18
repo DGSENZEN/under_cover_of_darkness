@@ -1,7 +1,9 @@
 extends Node3D
 ## The procession (docs/superpowers/refs/underground/supernatural_refs.md: the dead in white, men,
 ## women and children, each carrying a lit candle): now and then her dead walk the marigold trail she
-## lays them, from her ofrenda across the floor and into the old city's stone behind the wall. Pale
+## lays them, from her ofrenda across the floor and into the old city's stone behind the wall. They
+## are never seen: only their candles, floating along at hand height, and their shadows on the floor
+## and walls, cast by shrouds no one can see. Pale
 ## shapes (spectre.gdshader, its ink near white), each with its own candle's flame and light, gliding
 ## in file at a walking pace, facing their way; at the old stone each is eaten away into it. The ánimas
 ## gather to them as they pass (`animas`).
@@ -66,7 +68,9 @@ func build(cast: Array) -> void:
 				figure.set_surface_override_material(k, dark)
 			else:
 				figure.set_surface_override_material(k, look)
-		figure.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# Never seen: only its shadow falls (the user, Oct 17: no modelled figures, the dead are their
+		# candles and their shadows). The shroud is the shape that shadow is cast by.
+		figure.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
 		figure.visible = false
 		add_child(figure)
 		figures.append(figure)

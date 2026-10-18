@@ -241,9 +241,13 @@ def nahual_head():
                           cup=0.014))
         # An eye, round, sunk half into the skull beside the brow, looking forward and out.
         m = common.Mesh("eye_%d" % sy, outward=True)
-        turned(m, [(0.012, 0.0), (0.022, 0.012), (0.022, 0.026), (0.012, 0.036)], 8, "ember",
+        # (Round: 20 sides and smooth shading, so its glow blooms as a disc, never a polygon.)
+        turned(m, [(0.012, 0.0), (0.019, 0.006), (0.022, 0.013), (0.022, 0.024), (0.018, 0.031), (0.01, 0.036)], 20, "ember",
                at=(0.15, sy * 0.05, 0.075), lean=math.pi / 2, towards=(math.pi - 0.5) if sy > 0 else 0.5)
-        eyes.append(m.make())
+        eye = m.make()
+        for poly in eye.data.polygons:
+            poly.use_smooth = True
+        eyes.append(eye)
 
     underground_shapes.join(head, flesh)
     fused(head, HEAD_VOXEL)

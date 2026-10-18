@@ -281,6 +281,11 @@ func set_form(on: bool) -> void:
 		if is_instance_valid(player) and player.is_ancestor_of(mesh):
 			continue
 
+		# (Effects are drawn by their own shaders and cast no shadow: the form light greys props only.)
+		if mesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF and mesh.mesh != null \
+				and (mesh.get_surface_override_material(0) is ShaderMaterial or mesh.mesh.surface_get_material(0) is ShaderMaterial):
+			continue
+
 		if on:
 			mesh.material_override = form_material
 		elif neon != null and mesh == neon.tube:

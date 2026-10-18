@@ -609,7 +609,10 @@ func _run() -> void:
 	var n_watching: bool = n_gaze.dot(n_to_eye) > cos(deg_to_rad(25.0)) and n_dog.visible
 	n_eye.look_at(n_eyes_at + Vector3(0.0, 0.0, -8.0), Vector3.UP)
 	n_eye.rotate_y(PI)
+	# (It waits a while unwatched, then dissolves into its smoke over about a second and a half.)
 	await _frames(60)
+	var n_lingers: bool = n_dog.visible and n_dog.presence > 0.9
+	await _frames(180)
 	var n_gone: bool = not n_dog.visible
 	n_eye.look_at(n_eyes_at, Vector3.UP)
 	await _frames(150)
@@ -620,7 +623,7 @@ func _run() -> void:
 	n_dog.watcher = null
 	n_eye.queue_free()
 	_check("U49 the nahual lies by the bench (the old man's hat on it), eyes glowing; watches, is gone once looked away from, back only unwatched",
-		n_by_bench and n_hat_on and n_eyes_glow and n_watching and n_gone and n_stayed_gone and n_back_unwatched,
+		n_by_bench and n_hat_on and n_eyes_glow and n_watching and n_lingers and n_gone and n_stayed_gone and n_back_unwatched,
 		"by bench %s hat %s eyes %s watching %s gone %s stayed gone %s back %s" % [n_by_bench, n_hat_on, n_eyes_glow, n_watching, n_gone,
 		n_stayed_gone, n_back_unwatched])
 
@@ -723,6 +726,7 @@ func _run() -> void:
 	# U53 the nahual's eyes glow: bright past white (the bloom takes them), a halo round each, a faint red light
 	var nd: Node3D = lab.nahual
 	var glowing := false
+	nd.appear()
 
 	for i in nd.head.mesh.get_surface_count():
 		var slot: Material = nd.head.mesh.surface_get_material(i)
@@ -731,6 +735,7 @@ func _run() -> void:
 			glowing = drawn is StandardMaterial3D and drawn.emission_enabled and drawn.emission_energy_multiplier >= 3.0
 	_check("U53 the nahual's eyes glow: emissive past white, a halo each, a faint red light",
 		glowing and nd.eye_halos.size() == 2 and nd.eye_halos.all(func(h): return h.is_visible_in_tree())
+		and nd.eye_halos.all(func(h): return h.mesh is SphereMesh) and _form_spares(nd.eye_halos)
 		and nd.eye_light != null and nd.eye_light.light_energy > 0.05 and nd.eye_light.light_color.r > nd.eye_light.light_color.g * 2.0,
 		"glowing %s halos %d light %s" % [glowing, nd.eye_halos.size(), nd.eye_light])
 
@@ -774,9 +779,8 @@ func _run() -> void:
 	var p_candles_lit := true
 
 	for f: MeshInstance3D in p_walkers:
-		var p_ghost := f.get_surface_override_material(0) as ShaderMaterial
-		p_pale = p_pale and p_ghost != null and p_ghost.shader.resource_path.ends_with("shade.gdshader") \
-			and (p_ghost.get_shader_parameter("pale") as Color).r > 0.6
+		# The user (Oct 17): no modelled figures; the dead are only their candles and their shadows.
+		p_pale = p_pale and f.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
 		p_candles_lit = p_candles_lit and f.find_children("*", "OmniLight3D", true, false).any(func(l): return l.light_energy > 0.1)
 	var p_lead: MeshInstance3D = p_walkers[0]
 	var p_lead_from: float = p_lead.global_position.distance_to(lab.TRAIL_END)
@@ -800,9 +804,9 @@ func _run() -> void:
 		if not p_pr.walking:
 			break
 	var p_gone: bool = not p_pr.walking and p_walkers.all(func(f): return not f.visible)
-	_check("U56 the procession: 5 pale dead with lit candles walk the trail into the old stone, facing their way, ánimas round them; then gone",
+	_check("U56 the procession: 5 dead, only their candles and their shadows, walk the trail into the old stone, facing their way, ánimas round them; then gone",
 		p_walkers.size() == 5 and p_pale and p_candles_lit and p_facing and p_nearer and p_gathered >= 2 and p_gone,
-		"walkers %d pale %s candles %s facing %s nearer %s gathered %d gone %s" % [p_walkers.size(), p_pale, p_candles_lit, p_facing,
+		"walkers %d shadows only %s candles %s facing %s nearer %s gathered %d gone %s" % [p_walkers.size(), p_pale, p_candles_lit, p_facing,
 		p_nearer, p_gathered, p_gone])
 
 	# U57 a shadow with no owner: a tall figure's shadow crosses the tiled wall, seen only from the corner of the
@@ -941,3 +945,13 @@ func _all_mesh_vfx(meshes: Array) -> bool:
 		if look == null or not look.shader.resource_path.ends_with("vfx_mesh.gdshader"):
 			return false
 	return true
+
+
+## Whether the form light (F2) leaves these effects drawn as themselves (it greys every prop, never an effect).
+func _form_spares(effects: Array) -> bool:
+	lab.set_form(true)
+	var spared := true
+	for e: MeshInstance3D in effects:
+		spared = spared and e.material_override == null
+	lab.set_form(false)
+	return spared

@@ -52,7 +52,8 @@ uniform vec4 colour : source_color;
 uniform float presence = 1.0;
 void fragment() {
 	vec2 p = UV * 2.0 - 1.0;
-	float fall = clamp(1.0 - dot(p, p) * 0.7, 0.0, 1.0);
+	// (Round, and gone well before the sheet's edges: no square shows.)
+	float fall = 1.0 - smoothstep(0.2, 0.95, length(p));
 	float stir = 0.85 + 0.15 * sin(TIME * 1.7 + p.x * 4.0) * sin(TIME * 1.1 + p.y * 3.0);
 	ALBEDO = colour.rgb * fall * stir * presence * 1.2;
 }
