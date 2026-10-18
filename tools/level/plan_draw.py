@@ -3,10 +3,18 @@ section 2): street, roofs, underground, canal, events, and all of them. North
 up, a 10 m grid (every 100 m darker), a scale bar, developer labels (element
 names only).
 
-    python3 tools/level/plan_draw.py <plan.json> <out dir>
+A map whose spaces stack (the Metro Underground) is also drawn one sheet per
+depth band, plan_underground_<label>.png: only the spaces whose floor lies in
+the band, and the routes and landmarks with an end or a foot in it, each
+space named with its floor; the other bands' spaces faint behind. The bands
+come from draw(bands=) or the plan's own "bands". A plan with no brink is
+drawn over the bounds of what it holds.
+
+    python3 tools/level/plan_draw.py <plan.json> <out dir> [px per m, 2]
 """
 
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -46,21 +54,44 @@ LABELS = {"street": ("ground", "plots"), "roofs": ("plots",), "underground": ("s
           "events": (), "all": ("ground", "plots")}
 # The event sheet samples the fields every this many metres.
 EVENT_STEP = 4.0
+# A space's colour on the band sheets by its layer (Line 2's blue for the
+# station, ochre for the market, temple red for the old passages).
+LAYER_COLOURS = {1: (60, 110, 200), 2: (205, 150, 60), 3: (170, 70, 70), None: (120, 120, 120)}
+LANDMARK_COLOURS = {"arrival": (20, 170, 60), "exit_zocalo": (20, 170, 60), "exit_cathedral": (20, 170, 60),
+                    "sign": (40, 70, 200), "character_place": (200, 40, 160), "scene": (230, 110, 20),
+                    "puesto": (150, 110, 40)}
+# Without a brink, the sheet reaches this far past what the plan holds (m),
+# its edges on the 10 m grid.
+PAD = 20.0
+
+
+def extent(data):
+    """(x0, z0, x1, z1): the brink's bounds, or with no brink the bounds of
+    everything in the plan, PAD out and on the 10 m grid."""
+    if len(data["brink"]) >= 3:
+        xs = [p[0] for p in data["brink"]]
+        zs = [p[1] for p in data["brink"]]
+        return min(xs), min(zs), max(xs), max(zs)
+
+    points = [p for key in ("ground", "plots", "spaces") for e in data[key] for p in e["polygon"]]
+    points += [(p[0], p[2]) for r in data["routes"] for p in r["points"]]
+    points += [(m["at"][0], m["at"][-1]) for m in data["landmarks"]]
+    xs = [p[0] for p in points] or [0.0]
+    zs = [p[1] for p in points] or [0.0]
+    down = lambda v: math.floor((v - PAD) / 10.0) * 10.0
+    up = lambda v: math.ceil((v + PAD) / 10.0) * 10.0
+    return down(min(xs)), down(min(zs)), up(max(xs)), up(max(zs))
 
 
 def projection(data, px_per_m):
     """(x, z) to pixels, north up: x grows right, z (south) grows down."""
-    xs = [p[0] for p in data["brink"]]
-    zs = [p[1] for p in data["brink"]]
-    x0, z0 = min(xs), min(zs)
+    x0, z0, _, _ = extent(data)
     return lambda x, z: (MARGIN + (x - x0) * px_per_m, MARGIN + (z - z0) * px_per_m)
 
 
 def _size(data, px_per_m):
-    xs = [p[0] for p in data["brink"]]
-    zs = [p[1] for p in data["brink"]]
-    return (int(round((max(xs) - min(xs)) * px_per_m)) + 2 * MARGIN,
-            int(round((max(zs) - min(zs)) * px_per_m)) + 2 * MARGIN)
+    x0, z0, x1, z1 = extent(data)
+    return (int(round((x1 - x0) * px_per_m)) + 2 * MARGIN, int(round((z1 - z0) * px_per_m)) + 2 * MARGIN)
 
 
 def _fade(colour, k, toward=PAPER):
@@ -74,9 +105,7 @@ def _poly(draw, to_px, polygon, fill=None, outline=None, width=1):
 def _grid(draw, data, to_px, colour, hundred=None):
     """Lines every 10 m in `colour`, every 100 m in `hundred` (ink)."""
     HUNDRED = hundred or _fade(INK, 0.55)
-    xs = [p[0] for p in data["brink"]]
-    zs = [p[1] for p in data["brink"]]
-    x0, x1, z0, z1 = min(xs), max(xs), min(zs), max(zs)
+    x0, z0, x1, z1 = extent(data)
     k = 0
 
     while x0 + k * 10 <= x1 + 1e-6:
@@ -193,16 +222,15 @@ def _sheet(data, sheet, px_per_m):
 
 
 def _event_fields(image, data, to_px, px_per_m):
-    xs = [p[0] for p in data["brink"]]
-    zs = [p[1] for p in data["brink"]]
+    bx0, bz0, bx1, bz1 = extent(data)
     draw = ImageDraw.Draw(image)
     step = EVENT_STEP
-    x = min(xs)
+    x = bx0
 
-    while x < max(xs):
-        z = min(zs)
+    while x < bx1:
+        z = bz0
 
-        while z < max(zs):
+        while z < bz1:
             cx, cz = x + step / 2, z + step / 2
             colour = [NIGHT[i] for i in range(3)]
 
@@ -218,19 +246,91 @@ def _event_fields(image, data, to_px, px_per_m):
         x += step
 
 
-def draw(data, out_dir, px_per_m=2.0):
-    """Every sheet written to out_dir as plan_<sheet>.png; their paths."""
+def _in_band(y, band):
+    return band[0] < y <= band[1]
+
+
+def _band_sheet(data, band, px_per_m):
+    """The spaces whose floor lies in the band, coloured by layer and named
+    with their floor; the routes with an end in it; its landmarks; every
+    other space faint behind."""
+    to_px = projection(data, px_per_m)
+    image = Image.new("RGB", _size(data, px_per_m), PAPER)
+    draw = ImageDraw.Draw(image)
+    _grid(draw, data, to_px, _fade(INK, 0.85))
+    mine = [s for s in data["spaces"] if _in_band(s["floor"], band)]
+
+    for s in data["spaces"]:
+        if s not in mine:
+            _poly(draw, to_px, s["polygon"], outline=_fade(INK, 0.75))
+
+    for s in mine:
+        colour = LAYER_COLOURS.get(s.get("layer"), LAYER_COLOURS[None])
+        _poly(draw, to_px, s["polygon"], fill=_fade(colour, 0.45), outline=colour, width=2)
+
+    for r in data["routes"]:
+        if any(_in_band(p[1], band) for p in (r["points"][0], r["points"][-1])):
+            draw.line([to_px(p[0], p[2]) for p in r["points"]], fill=ROUTE_COLOURS[r["kind"]], width=3)
+
+    for m in data["landmarks"]:
+        if len(m["at"]) == 3 and _in_band(m["at"][1], band):
+            px, py = to_px(m["at"][0], m["at"][2])
+            colour = LANDMARK_COLOURS.get(m["kind"], INK)
+            r = 4 if m["kind"] in ("arrival", "exit_zocalo", "exit_cathedral") else 2
+            draw.ellipse([px - r, py - r, px + r, py + r], fill=colour)
+
+    for s in mine:
+        cx, cz = plan.centroid(s["polygon"])
+        px, py = to_px(cx, cz)
+        draw.text((px + 3, py + 3), "%s %g" % (s["name"], s["floor"]), fill=INK)
+
+    draw.text((MARGIN, 8), "%s: floors %g to %g m" % (band[2], band[0], band[1]), fill=INK)
+    _legend(draw, data, px_per_m)
+    _furniture(draw, data, to_px, px_per_m, INK)
+    return image
+
+
+def _legend(draw, data, px_per_m):
+    """What the band sheets' colours mean, along the head of the sheet."""
+    keys = [("station", LAYER_COLOURS[1], 6), ("market", LAYER_COLOURS[2], 6), ("old", LAYER_COLOURS[3], 6)]
+    keys += [(kind.replace("_", " "), LANDMARK_COLOURS[kind], 3) for kind in
+             ("arrival", "sign", "character_place", "scene", "puesto")]
+    keys += [(kind, ROUTE_COLOURS[kind], 0) for kind in ("stair", "climb", "tunnel")]
+    x = MARGIN + 180
+    y = 14
+
+    for label, colour, r in keys:
+        if r:
+            draw.ellipse([x, y - r, x + 2 * r, y + r], fill=colour)
+        else:
+            draw.line([(x, y), (x + 12, y)], fill=colour, width=3)
+
+        draw.text((x + 16, y - 6), label, fill=INK)
+        x += 16 + 6 * len(label) + 12
+
+
+def draw(data, out_dir, px_per_m=2.0, bands=None):
+    """Every sheet written to out_dir as plan_<sheet>.png, and one
+    plan_underground_<label>.png per depth band (lowest, highest, label) in
+    `bands` or the plan's "bands"; their paths."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = []
 
-    for sheet in SHEETS:
+    # (With no brink there is no street, roof, canal or event to draw.)
+    for sheet in SHEETS if len(data["brink"]) >= 3 else ("underground", "all"):
         path = out_dir / ("plan_%s.png" % sheet)
         _sheet(data, sheet, px_per_m).save(path)
+        paths.append(path)
+
+    for band in bands if bands is not None else data.get("bands", []):
+        path = out_dir / ("plan_underground_%s.png" % band[2])
+        _band_sheet(data, band, px_per_m).save(path)
         paths.append(path)
 
     return paths
 
 
 if __name__ == "__main__":
-    print("\n".join(str(p) for p in draw(json.loads(Path(sys.argv[1]).read_text()), sys.argv[2])))
+    print("\n".join(str(p) for p in draw(json.loads(Path(sys.argv[1]).read_text()), sys.argv[2],
+                                         float(sys.argv[3]) if len(sys.argv) > 3 else 2.0)))

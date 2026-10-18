@@ -10,6 +10,10 @@ each naming the elements involved; none means the plan is clean.
                    from the street, over joined surfaces and routes
     size           the brink 500-700 m a side, everything inside it
     events         every kind of event field present, inside the brink
+
+A map with no street (the Metro Underground) checks by UNDERGROUND_RULES:
+reach starts from the spaces holding its arrival, and neither the brink's
+size nor the event fields are asked for.
 """
 
 import math
@@ -35,6 +39,15 @@ EDGE_SLACK = 0.3
 # Surfaces at one height closer than this (m) are joined.
 JOIN = 0.01
 SIZE = (500.0, 700.0)
+
+# What a map is held to. size: the brink's sides (m), or None for any brink
+# (still everything inside one, if drawn); events: every event kind present;
+# reach_from: "street", or a tuple of landmark kinds whose surfaces reach
+# starts from.
+ZOCALO_RULES = {"size": SIZE, "events": True, "reach_from": "street"}
+UNDERGROUND_RULES = {"size": None, "events": False, "reach_from": ("arrival",)}
+# A landmark given with its height stands on a surface this near it (m).
+STANDS_ON = 1.5
 
 
 def _edges(polygon):
@@ -292,10 +305,30 @@ def _openings_on_walls(data):
     return problems
 
 
-def reach(data):
-    """The names of every surface reachable from the street."""
+def _starts(data, surfaces, reach_from):
+    """The surfaces reach starts from: the street's, or those under the
+    landmarks of the given kinds (at its height, when the landmark has one)."""
+    if reach_from == "street":
+        return {s["name"] for s in surfaces if s["street"]}
+
+    out = set()
+
+    for m in data["landmarks"]:
+        if m["kind"] not in reach_from:
+            continue
+
+        for s in surfaces:
+            if inside((m["at"][0], m["at"][-1]), s["polygon"]) and (len(m["at"]) < 3 or abs(m["at"][1] - s["y"]) <= STANDS_ON):
+                out.add(s["name"])
+
+    return out
+
+
+def reach(data, reach_from="street"):
+    """The names of every surface reachable from the street (or from the
+    landmarks of the kinds reach_from names)."""
     surfaces, links, _ = _graph(data)
-    seen = {s["name"] for s in surfaces if s["street"]}
+    seen = _starts(data, surfaces, reach_from)
     queue = deque(seen)
 
     while queue:
@@ -359,8 +392,9 @@ def _through_solid(data):
     return problems
 
 
-def check(data):
+def check(data, rules=ZOCALO_RULES):
     problems = []
+    origin = "the street" if rules["reach_from"] == "street" else "the " + "/".join(rules["reach_from"])
     plots = data["plots"]
     grounds = data["ground"]
     frontage = [g for g in grounds if g["kind"] in plan.FRONTAGE_KINDS]
@@ -411,27 +445,32 @@ def check(data):
     problems += dangling
     problems += _openings_on_walls(data)
     problems += _through_solid(data)
-    reached = reach(data)
+    reached = reach(data, rules["reach_from"])
+
+    if rules["reach_from"] != "street" and not _starts(data, walkable(data), rules["reach_from"]):
+        problems.append("%s has no %s to reach from" % (data["name"], " or ".join(rules["reach_from"])))
 
     for p in plots:
         if p["roof"] and p["name"] not in reached:
-            problems.append("roof of %s cannot be reached from the street" % p["name"])
+            problems.append("roof of %s cannot be reached from %s" % (p["name"], origin))
 
     for s in data["spaces"]:
         if s["name"] not in reached:
-            problems.append("space %s cannot be reached from the street" % s["name"])
+            problems.append("space %s cannot be reached from %s" % (s["name"], origin))
 
     # Size.
     brink = data["brink"]
+    size = rules["size"]
 
     if len(brink) < 3:
-        problems.append("%s has no brink" % data["name"])
+        if size is not None:
+            problems.append("%s has no brink" % data["name"])
     else:
         x0, z0, x1, z1 = _bounds(brink)
 
-        if not (SIZE[0] <= x1 - x0 <= SIZE[1] and SIZE[0] <= z1 - z0 <= SIZE[1]):
+        if size is not None and not (size[0] <= x1 - x0 <= size[1] and size[0] <= z1 - z0 <= size[1]):
             problems.append("%s: the brink is %.0f x %.0f m, not %d-%d m a side" % (data["name"], x1 - x0, z1 - z0,
-                                                                                   *SIZE))
+                                                                                   *size))
 
         def out(points):
             return any(not near(p, brink, 0.01) for p in points)
@@ -453,7 +492,7 @@ def check(data):
                 problems.append("a %s event lies outside the brink" % e["kind"])
 
     # Events.
-    for kind in plan.EVENT_KINDS:
+    for kind in plan.EVENT_KINDS if rules["events"] else ():
         if not any(e["kind"] == kind for e in data["events"]):
             problems.append("no %s event field" % kind)
 
