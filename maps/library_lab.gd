@@ -62,6 +62,33 @@ const LOW_CASES := [Vector3(-1.15, 0.0, -1.9), Vector3(1.15, 0.0, -1.9)]
 ## The side aisles' middles (x), between the low cases and the wall cases.
 const AISLE_X := 2.45
 
+## His books (tools/eclipse/library_books.py): how far each case's boards are apart (a board's thickness, the
+## underside of a case's top, of a low case's); the live book's hinge (the kit's, Blender axes) and how high it lies
+## above what it lies on.
+const BOOK_KIT := "res://assets/eclipse/kit/library_books.glb"
+const BOOK_KINDS := 12
+const BOOK_STACKS := 3
+const BOARD_T := 0.035
+const CASE_LID := 2.62
+const LOW_LID := 1.33
+const LIVE_HINGE := Vector3(-0.012, 0.0, 0.03)
+const LIVE_LIFT := 0.002
+## The live books. The studies lie open-able on a board of their section's case (which board, the hinge's x along
+## it), a run either side kept clear of books for them to open into; the novels on the table by his door (scaled
+## down: cheap octavos beside his folios) and one on the right low case; the spellbooks on lecterns either side of
+## the runner, just short of his salt line.
+const STUDIES := [["chronology", 2, -0.45], ["necromancy", 3, -0.57], ["necromancy", 2, 0.3], ["alchemy", 3, 0.2],
+	["alchemy", 2, -0.45], ["metaphysics", 2, -0.2], ["hunting", 3, 0.35]]
+const STUDY_KEEP := 0.285
+const FRONT_TABLE_AT := Vector3(1.175, 0.0, -0.6)
+const TABLE_TOP := 0.85
+const NOVEL_SCALE := 0.8
+const NOVELS := [Vector3(0.955, TABLE_TOP, -0.6), Vector3(1.395, TABLE_TOP, -0.6), Vector3(1.15, 1.4, -1.25)]
+const LECTERNS := [Vector3(-1.15, 0.0, -3.3), Vector3(1.15, 0.0, -3.3)]
+## The lectern's desk: its top's middle (Godot, the lectern's frame) and its slope toward the reader (+z).
+const LECTERN_DESK := Vector3(0.0, 1.0791, 0.0051)
+const LECTERN_SLOPE := 20.0
+
 ## The lamp's shade: emerald glass, lit through from inside.
 const SHADE_GREEN := Color(0.12, 0.42, 0.22, 0.8)
 
@@ -80,6 +107,13 @@ var decals: Array[Decal] = []
 var sections := {}
 var shelves: Array[MeshInstance3D] = []
 var corridor: Array[MeshInstance3D] = []
+## Every board's spot the books fill (BookFiller's), the books placed, their draws; the live books; the front table
+## and lecterns.
+var book_spots: Array = []
+var book_layout: Array = []
+var book_draws: Array[MultiMeshInstance3D] = []
+var live_books: Array[LiveBook] = []
+var book_stands: Array[MeshInstance3D] = []
 var lamp_light: OmniLight3D
 var work_lights: Array[Light3D] = []
 var form_light: DirectionalLight3D
@@ -94,6 +128,7 @@ func _ready() -> void:
 	_room()
 	_corner()
 	_shelves()
+	_books()
 	_corridor()
 	_lights()
 	_keys()
@@ -138,6 +173,10 @@ func set_form(on: bool) -> void:
 
 		mesh.material_override = form_material if on else null
 
+	# (The shelves' books keep their look on their draw.)
+	for draw: MultiMeshInstance3D in book_draws:
+		draw.material_override = form_material if on else draw.get_meta("look")
+
 	form_light.visible = on
 	lamp_light.visible = not on
 	set_work_lights(not on)
@@ -157,8 +196,22 @@ func _room() -> void:
 		if not meshes.has(part):
 			missing.append("%s in %s" % [part, ROOM_KIT])
 			continue
-		# (The room's walls are walked against and its floor walked on: solid to the shape, not its hull.)
-		room[part] = _place(meshes[part], look, part, Vector3.ZERO, 0.0, part != "room_rug", true)
+		# (The room's walls are walked against: solid to the shape, not its hull. Its floor is walked on flat at its
+		# boards' tops, one box: hundreds of boards hairline apart cost the player's every step.)
+		room[part] = _place(meshes[part], look, part, Vector3.ZERO, 0.0, part not in ["room_rug", "room_floor"], true)
+
+	if room.has("room_floor"):
+		var floor_body := StaticBody3D.new()
+		floor_body.name = "floor_solid"
+		for span: AABB in [AABB(Vector3(-WIDTH / 2.0, -0.2, -DEPTH), Vector3(WIDTH, 0.2, DEPTH)),
+				AABB(Vector3(-FRONT_W / 2.0, -0.2, 0.0), Vector3(FRONT_W, 0.2, FRONT_T))]:
+			var shape := CollisionShape3D.new()
+			var solid := BoxShape3D.new()
+			solid.size = span.size
+			shape.shape = solid
+			shape.position = span.get_center()
+			floor_body.add_child(shape)
+		room["room_floor"].add_child(floor_body)
 
 
 # His corner
@@ -272,6 +325,95 @@ func _shelves() -> void:
 	var chrono: Array = SHELVES["chronology"]
 	for part in ["ladder_rail", "ladder"]:
 		shelves.append(_place(meshes[part], look, part, chrono[0], deg_to_rad(chrono[1]), part == "ladder"))
+
+
+# His books
+
+## Every board filled with books, the live books among them and on the front table and the lecterns.
+func _books() -> void:
+	if not ResourceLoader.exists(BOOK_KIT) or sections.is_empty():
+		missing.append(BOOK_KIT)
+		return
+
+	var meshes := _kit(BOOK_KIT)
+	var look := Painterly.material(_painted(["library_books.png", "library_books_base.png"]), &"bespoke")
+	var boards: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(SHELF_BOARDS))
+
+	# The spots: each case's boards, each taking books as tall as the board above (or the case's top) allows.
+	var cases: Array = []
+	for section: String in sections:
+		cases.append([sections[section], boards["shelf_" + section], CASE_LID, section])
+	for case: MeshInstance3D in shelves:
+		if case.get_meta("kind") == "shelf_middle":
+			cases.append([case, boards["shelf_middle"], LOW_LID, ""])
+
+	for c in cases:
+		var spots: Array = c[1]
+		var tops: Array = spots.map(func(b): return b[2])
+		for i in spots.size():
+			var b: Array = spots[i]
+			var above: Array = tops.filter(func(t): return t > b[2] + 0.001)
+			var head: float = (above.min() - BOARD_T if not above.is_empty() else c[2]) - b[2]
+			var keep: Array = []
+			for study in STUDIES:
+				if study[0] == c[3] and _board_index(spots, i) == study[1]:
+					keep.append(Vector2(study[2] - STUDY_KEEP, study[2] + STUDY_KEEP))
+			book_spots.append({"case": c[0], "xform": (c[0] as Node3D).global_transform, "x0": b[0], "x1": b[1], "top": b[2],
+				"z0": b[3], "z1": b[4], "facing": -1 if c[3] == "" and b[4] <= 0.0 else 1, "head": head, "keep": keep,
+				"section": c[3]})
+
+	var kinds: Array = []
+	for k in BOOK_KINDS:
+		kinds.append(meshes["book_%d" % k])
+	for k in BOOK_STACKS:
+		kinds.append(meshes["book_stack_%d" % k])
+	var filler := BookFiller.new()
+	book_draws = filler.fill(book_spots, kinds, look, 1888)
+	book_layout = filler.layout
+	for draw in book_draws:
+		draw.set_meta("look", look)
+		add_child(draw)
+
+	# The studies on their boards, their spines along the board's depth.
+	for study in STUDIES:
+		var case: MeshInstance3D = sections[study[0]]
+		var b: Array = boards["shelf_" + study[0]][study[1]]
+		var at := Transform3D(Basis(), Vector3(study[2], b[2] + LIVE_HINGE.z + LIVE_LIFT, (b[3] + b[4]) / 2.0))
+		_live_book(meshes, look, LiveBook.Kind.STUDY, StringName(study[0]), case.global_transform * at)
+
+	# The table of novels by his door; the lecterns either side of the runner with a spellbook open-able on each.
+	book_stands.append(_place(meshes["front_table"], look, "front_table", FRONT_TABLE_AT, 0.0, true))
+	for at: Vector3 in NOVELS:
+		var place := Transform3D(Basis().scaled(Vector3.ONE * NOVEL_SCALE), at + Vector3(0.0, (LIVE_HINGE.z + LIVE_LIFT) * NOVEL_SCALE, 0.0))
+		_live_book(meshes, look, LiveBook.Kind.NOVEL, &"", place)
+
+	var slope := Basis(Vector3.RIGHT, deg_to_rad(LECTERN_SLOPE))
+	for at: Vector3 in LECTERNS:
+		book_stands.append(_place(meshes["lectern"], look, "lectern", at, 0.0, true))
+		var on := at + LECTERN_DESK + slope * Vector3(0.0, LIVE_HINGE.z + LIVE_LIFT, 0.0)
+		_live_book(meshes, look, LiveBook.Kind.SPELL, &"", Transform3D(slope, on))
+
+
+## Which of its case's boards (counted from the floor) a spot is on.
+func _board_index(spots: Array, i: int) -> int:
+	var tops := {}
+	for b in spots:
+		tops[b[2]] = true
+	var sorted: Array = tops.keys()
+	sorted.sort()
+	return sorted.find(spots[i][2])
+
+
+func _live_book(meshes: Dictionary, look: Material, kind: LiveBook.Kind, section: StringName, place: Transform3D) -> LiveBook:
+	var book := LiveBook.new()
+	book.name = "live_%d" % live_books.size()
+	book.kind = kind
+	book.section = section
+	add_child(book)
+	book.global_transform = place
+	book.build(meshes, look, LIVE_HINGE)
+	live_books.append(book)
+	return book
 
 
 # The corridor outside: the Metro's tiled floor and walls either side of his front

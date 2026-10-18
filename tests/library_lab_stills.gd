@@ -9,6 +9,8 @@ extends Node3D
 const LAB := preload("res://maps/library_lab.tscn")
 
 ## Each view: its name, where the eye stands, what it looks at.
+## Each view: its name, the eye, what it looks at, and (for the live books) how long to hold it first (s, at the
+## 60 frames a second the stills run at: --fixed-fps 60).
 const VIEWS := [
 	["shop_front", Vector3(0.0, 1.65, 3.3), Vector3(0.0, 1.9, -2.0)],
 	["shop_inside", Vector3(0.0, 1.7, -0.3), Vector3(0.0, 1.6, -6.0)],
@@ -56,6 +58,17 @@ const VIEWS := [
 	["shelf_middle", Vector3(0.0, 1.6, -0.2), Vector3(-1.15, 0.8, -1.9)],
 	["shelf_ladder", Vector3(-2.2, 1.6, -0.6), Vector3(-3.0, 1.6, -1.6)],
 	["shelf_crests", Vector3(-0.5, 2.0, -0.4), Vector3(-3.5, 3.4, -3.2)],
+	["books_wall", Vector3(-1.3, 1.6, -2.2), Vector3(-3.6, 1.3, -3.6)],
+	["books_close", Vector3(-2.75, 1.55, -1.45), Vector3(-3.65, 1.4, -1.95)],
+	["books_low", Vector3(0.0, 1.1, -1.4), Vector3(0.8, 0.55, -2.2)],
+	["books_hunting", Vector3(2.0, 1.6, -4.2), Vector3(2.7, 1.2, -5.7)],
+	["table_shut", Vector3(0.0, 1.65, 1.8), Vector3(1.17, 0.9, -0.6), 1.5],
+	["table_open", Vector3(0.05, 1.6, -0.25), Vector3(1.17, 0.88, -0.65), 1.5],
+	["lectern_shut", Vector3(0.0, 1.65, 0.2), Vector3(-1.15, 1.1, -3.3), 1.5],
+	["lectern_open", Vector3(-0.35, 1.65, -2.35), Vector3(-1.15, 1.1, -3.3), 1.5],
+	["study_necromancy", Vector3(-2.6, 1.65, -4.0), Vector3(-3.7, 1.5, -4.25), 1.5],
+	["study_chronology", Vector3(-2.5, 1.55, -1.1), Vector3(-3.7, 1.05, -1.3), 1.5],
+	["clip_table", Vector3(0.1, 1.6, 1.6), Vector3(1.17, 0.9, -0.6)],
 ]
 
 
@@ -102,7 +115,8 @@ func _ready() -> void:
 				continue
 
 			eye.global_transform = Transform3D(Basis(), view[1]).looking_at(view[2], Vector3.UP)
-			await _frames(12)
+			# (A view of the live books held long enough for them to open, or shut, before it is taken.)
+			await _frames(12 + (int(view[3] * 60.0) if view.size() > 3 else 0))
 
 			if clip > 0.0:
 				var start: Vector3 = view[1]

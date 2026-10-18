@@ -28,6 +28,7 @@ import underground_uncanny  # noqa: E402
 import library_room  # noqa: E402
 import library_corner  # noqa: E402
 import library_shelves  # noqa: E402
+import library_books  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -1973,6 +1974,87 @@ class LibraryShelves(unittest.TestCase):
         self.assertAlmostEqual(min(v.z for v in ladder), 0.0, delta=0.003)
         self.assertGreater(max(v.z for v in ladder), min(v.z for v in rail))
         self.assertLess(min(v.y for v in ladder), -0.4)
+
+
+class LibraryBooks(unittest.TestCase):
+    """The librarian's books (tools/eclipse/library_books.py): the books that fill his shelves, standing (spine to
+    -y, on the floor of their frame), the stacks, and the live book in its parts, shut, its hinge along its spine;
+    the lectern and the front table."""
+
+    LIVE = ["live_cover_back", "live_block_right", "live_block_left", "live_cover_front", "live_leaf", "live_spine_back",
+            "live_spine_front"]
+
+    @classmethod
+    def setUpClass(cls):
+        library_books.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+        cls.books = ["book_%d" % k for k in range(12)]
+        cls.stacks = ["book_stack_%d" % k for k in range(3)]
+        cls.BUDGET = dict({n: 600 for n in cls.books}, **{n: 1500 for n in cls.stacks}, **{n: 800 for n in cls.LIVE},
+                          lectern=2500, front_table=4000)
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_each_passes_the_gate(self):
+        problems = {}
+
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            found = gate.check(faces, tris, [], budget=self.BUDGET[n])
+            if found:
+                problems[n] = found[:3]
+
+        self.assertEqual(problems, {})
+
+    def test_the_books_stand_on_their_feet_and_differ(self):
+        sizes = set()
+
+        for n in self.books:
+            (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
+            self.assertAlmostEqual(z0, 0.0, delta=1e-4, msg=n)
+            self.assertAlmostEqual(y0, 0.0, delta=0.002, msg=n)
+            # Tall enough to read, short enough for the shelves (the lowest gap between boards is 0.26 m at the top).
+            self.assertTrue(0.2 <= z1 <= library_books.TALLEST, (n, z1))
+            sizes.add((round(x1 - x0, 3), round(y1 - y0, 3), round(z1, 3)))
+
+        self.assertGreaterEqual(len(sizes), 8)
+
+    def test_live_parts_share_a_hinge(self):
+        # The hinge runs along the spine's outer face: the spine's halves from it to the boards, which begin where
+        # the spine ends; its lower half the back half's height, its upper the front's.
+        hx, hy, hz = library_books.LIVE_HINGE
+        for n in ("live_spine_back", "live_spine_front"):
+            self.assertAlmostEqual(self._extent(n)[0][0], hx, delta=0.001, msg=n)
+            self.assertAlmostEqual(self._extent(n)[0][1], 0.0, delta=0.001, msg=n)
+        for n in ("live_cover_back", "live_cover_front"):
+            self.assertAlmostEqual(self._extent(n)[0][0], 0.0, delta=0.001, msg=n)
+        self.assertAlmostEqual(self._extent("live_spine_back")[2][1], hz, delta=0.001)
+        self.assertAlmostEqual(self._extent("live_spine_front")[2][0], hz, delta=0.001)
+        self.assertAlmostEqual(self._extent("live_spine_front")[2][1], library_books.LIVE_SIZE[2], delta=0.001)
+
+    def test_live_book_closes_flat(self):
+        # Shut, its parts stacked: back board, right pages, left pages, front board, each on the one below.
+        parts = ["live_cover_back", "live_block_right", "live_block_left", "live_cover_front"]
+        boxes = [self._extent(n) for n in parts]
+        for below, above in zip(boxes, boxes[1:]):
+            self.assertLess(below[2][1] - above[2][0], 0.001)
+        self.assertAlmostEqual(boxes[-1][2][1], library_books.LIVE_SIZE[2], delta=0.001)
+        # Opened about the hinge, the left half lands on the table level with the right: front board on the
+        # table, left pages as high as the right.
+        hz = library_books.LIVE_HINGE[2]
+        self.assertAlmostEqual(2 * hz - boxes[3][2][1], 0.0, delta=0.001)
+        self.assertAlmostEqual(2 * hz - boxes[2][2][0], boxes[1][2][1], delta=0.001)
 
 
 if __name__ == "__main__":

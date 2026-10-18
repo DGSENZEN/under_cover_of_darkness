@@ -281,6 +281,147 @@ func _run() -> void:
 	_check("L15 from the corridor his lamp shows over the low cases, nothing between", s_hit.is_empty(),
 		"hit %s" % [s_hit.get("collider")])
 
+	# L16 the shelves full and varied: hundreds of books in a handful of draws, every board holding some, none in an
+	#     upright or a neighbour, each just above its board, never three alike in a row
+	var b_layout: Array = lab.book_layout
+	var b_held := {}
+	var b_wrong := []
+	var b_by_spot := {}
+
+	for b in b_layout:
+		b_held[b["spot"]] = true
+		var spot: Dictionary = lab.book_spots[b["spot"]]
+		var box: AABB = b["box"]
+		if box.position.x < spot["x0"] - 0.0001 or box.end.x > spot["x1"] + 0.0001:
+			b_wrong.append("upright %s" % b["spot"])
+		for run: Vector2 in spot["keep"]:
+			if box.end.x > run.x and box.position.x < run.y:
+				b_wrong.append("in a study's run %s" % b["spot"])
+		var lift: float = box.position.y - spot["top"]
+		if lift < 0.001 or lift > 0.004:
+			b_wrong.append("lift %.4f" % lift)
+		b_by_spot.get_or_add(b["spot"], []).append(b)
+	for spot_books: Array in b_by_spot.values():
+		spot_books.sort_custom(func(p, q): return p["box"].position.x < q["box"].position.x)
+		for i in spot_books.size():
+			if i > 0 and spot_books[i]["box"].position.x < spot_books[i - 1]["box"].end.x - 0.0001:
+				b_wrong.append("overlap")
+			if i > 1 and spot_books[i]["look"] == spot_books[i - 1]["look"] and spot_books[i]["look"] == spot_books[i - 2]["look"]:
+				b_wrong.append("three alike")
+	_check("L16 the shelves full and varied: 400+ books in 20 draws or fewer, every board stocked, none touching or in a study's room, each set on its board",
+		b_layout.size() >= 400 and lab.book_draws.size() <= 20 and b_held.size() == lab.book_spots.size() and b_wrong.is_empty(),
+		"books %d draws %d boards %d/%d wrong %s" % [b_layout.size(), lab.book_draws.size(), b_held.size(), lab.book_spots.size(),
+		b_wrong.slice(0, 5)])
+
+	# L17 a live book opens as the player comes near and looks at it, and shuts as they go
+	var b_novel: Node3D = lab.live_books.filter(func(x): return x.kind == LiveBook.Kind.NOVEL)[0]
+	var b_at: Vector3 = b_novel.global_position
+	var b_opens := [0, 0]
+	b_novel.opened.connect(func(_b): b_opens[0] += 1)
+	b_novel.closed.connect(func(_b): b_opens[1] += 1)
+	var b_near := Vector3(b_at.x - 1.0, 1.05, b_at.z)
+	var b_open_by := -1
+
+	for i in 90:
+		lab.player.global_position = b_near
+		lab.player.rotation.y = -PI / 2.0
+		await get_tree().process_frame
+		if b_open_by < 0 and b_novel.open >= 0.95:
+			b_open_by = i
+	var b_far := Vector3(b_at.x - 3.0, 1.05, b_at.z)
+	var b_shut_by := -1
+
+	for i in 120:
+		lab.player.global_position = b_far
+		await get_tree().process_frame
+		if b_shut_by < 0 and b_novel.open <= 0.05:
+			b_shut_by = i
+	_check("L17 a live book opens within 1.2 s as the player comes near it, and shuts within 1.5 s as they go",
+		b_open_by >= 0 and b_open_by <= 72 and b_shut_by >= 0 and b_shut_by <= 90 and b_opens == [1, 1],
+		"open by frame %d shut by frame %d signals %s" % [b_open_by, b_shut_by, b_opens])
+
+	# L18 not through shelves: near a book on a shelf but on the far side of its case's side, it stays shut
+	var b_study: Node3D = lab.live_books.filter(func(x): return x.kind == LiveBook.Kind.STUDY and x.section == &"necromancy")[0]
+	# (Standing on the floor, its eye near the book's height, so near enough that only the case's side keeps it shut.)
+	var b_side: Vector3 = b_study.global_position + Vector3(0.05, 0.0, 1.15)
+	b_side.y = 1.05
+	var b_eye := 0.0
+
+	for i in 120:
+		lab.player.global_position = b_side
+		lab.player.rotation.y = 0.0
+		await get_tree().process_frame
+		b_eye = get_viewport().get_camera_3d().global_position.distance_to(b_study.global_position)
+	# (And the same book, from in front of its case as near, does open.)
+	var b_front: Vector3 = b_study.global_position + Vector3(1.15, 0.0, -0.05)
+	b_front.y = 1.05
+	var b_shut_side: float = b_study.open
+
+	for i in 90:
+		lab.player.global_position = b_front
+		await get_tree().process_frame
+	_check("L18 a live book behind its case's side stays shut for someone near (%.2f m) but unable to see it; seen from in front it opens" % b_eye,
+		b_shut_side < 0.01 and b_eye < LiveBook.OPEN_NEAR and b_study.open > 0.95,
+		"open behind the side %.2f (eye %.2f m), in front %.2f" % [b_shut_side, b_eye, b_study.open])
+	lab.player.global_position = lab.SPAWN
+
+	# L19 the kinds: novels, spellbooks, and a study in every section
+	var b_novels: int = lab.live_books.filter(func(x): return x.kind == LiveBook.Kind.NOVEL).size()
+	var b_spells: int = lab.live_books.filter(func(x): return x.kind == LiveBook.Kind.SPELL).size()
+	var b_studied := {}
+	var b_hidden := []
+	var b_space: PhysicsDirectSpaceState3D = lab.get_world_3d().direct_space_state
+	for x in lab.live_books:
+		if x.kind == LiveBook.Kind.STUDY:
+			b_studied[x.section] = true
+			# (Each in sight of someone standing before its case: nothing, the ladder neither, in the way.)
+			var case: Node3D = lab.sections[String(x.section)]
+			var front: Vector3 = x._middle() + case.global_basis.z * 1.2 + Vector3.UP * 0.2
+			if not b_space.intersect_ray(PhysicsRayQueryParameters3D.create(front, x._middle())).is_empty():
+				b_hidden.append(x.section)
+	_check("L19 the live books: three novels or more, two spellbooks or more, a study in each of the five sections, each in sight from before its case",
+		b_novels >= 3 and b_spells >= 2 and b_studied.size() == 5 and b_hidden.is_empty(),
+		"novels %d spells %d studied %s hidden %s" % [b_novels, b_spells, b_studied.keys(), b_hidden])
+
+	# L21 the form light spares them: F2 on and off leaves the live books, the lamp and the chained book as they were,
+	#     the lamp lit again
+	var b_watched: Array = [lab.corner["lamp"], lab.corner["chained_book_cover"]]
+	for x in lab.live_books:
+		b_watched += x.parts
+	var b_before := b_watched.map(func(m): return [m.material_override] + range(m.mesh.get_surface_count()).map(func(i): return m.get_surface_override_material(i)))
+	lab.set_form(true)
+	lab.set_form(false)
+	var b_after := b_watched.map(func(m): return [m.material_override] + range(m.mesh.get_surface_count()).map(func(i): return m.get_surface_override_material(i)))
+	_check("L21 F2 on and off leaves the live books, the lamp and the chained book as they were, the lamp lit",
+		b_before == b_after and lab.lamp_light.visible, "same %s lamp lit %s" % [b_before == b_after, lab.lamp_light.visible])
+
+	# L20 the frame time: the shop no slower than the underground bay, measured the same way in this run
+	lab.player.global_position = Vector3(0.0, 1.05, -3.0)
+	var b_ours: float = await _median_frame(300)
+	lab.queue_free()
+	await _frames(10)
+	var b_under: Node3D = (load("res://maps/underground_lab.tscn") as PackedScene).instantiate()
+	add_child(b_under)
+	await _frames(60)
+	var b_theirs: float = await _median_frame(300)
+	b_under.queue_free()
+	_check("L20 the shop's frames take no longer than 1.1 times the underground bay's", b_ours <= 1.1 * b_theirs,
+		"shop %.2f ms, underground bay %.2f ms" % [b_ours / 1000.0, b_theirs / 1000.0])
+
+
+## The median time between process frames over `n` frames (microseconds).
+func _median_frame(n: int) -> float:
+	var times := []
+	var was := Time.get_ticks_usec()
+
+	for i in n:
+		await get_tree().process_frame
+		var now := Time.get_ticks_usec()
+		times.append(now - was)
+		was = now
+	times.sort()
+	return float(times[n / 2])
+
 
 ## How far apart two pieces stand on the floor (m, between their boxes; 0 if they overlap).
 func _apart(a: MeshInstance3D, b: MeshInstance3D) -> float:
