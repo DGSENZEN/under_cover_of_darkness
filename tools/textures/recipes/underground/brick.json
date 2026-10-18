@@ -1,0 +1,18 @@
+{
+ "colour": "#7a3e2a",
+ "light": 0.6,
+ "height_light": 0.2,
+ "wear": 0.6,
+ "wear_colour": "#a8644a",
+ "grime": 0.85,
+ "grime_colour": "#24140e",
+ "brush": "brush_03",
+ "brush_scale_m": 0.45,
+ "brush_amount": 0.14,
+ "black": 0.35,
+ "stroke_brush": "brush_04",
+ "stroke_colour": "#5e2e20",
+ "stroke_scale_m": 0.7,
+ "stroke_amount": 0.3,
+ "stroke_edge": 0.55
+}

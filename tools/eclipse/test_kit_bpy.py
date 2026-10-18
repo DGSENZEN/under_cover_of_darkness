@@ -12,6 +12,7 @@ import unittest
 import bmesh
 import bpy
 from mathutils import Vector
+from mathutils.bvhtree import BVHTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -24,6 +25,7 @@ import underground_floor  # noqa: E402
 import underground_walls  # noqa: E402
 import underground_vault  # noqa: E402
 import underground_uncanny  # noqa: E402
+import library_room  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -98,6 +100,14 @@ def _tris(o):
 
 def _world(o):
     return [o.matrix_world @ v.co for v in o.data.vertices]
+
+
+def _hit(o, start, direction, reach=20.0):
+    """Where a ray from `start` along `direction` first meets `o` (world), or None."""
+    tree = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get())
+    inv = o.matrix_world.inverted()
+    found = tree.ray_cast(inv @ Vector(start), (inv.to_3x3() @ Vector(direction)).normalized(), reach)
+    return None if found[0] is None else o.matrix_world @ found[0]
 
 
 class StreetKit(unittest.TestCase):
@@ -1579,6 +1589,98 @@ class UndergroundUncanny(unittest.TestCase):
         self.assertTrue(0.1 <= z1 - z0 <= 0.2)
 
 
+class LibraryRoom(unittest.TestCase):
+    """The librarian's shop, its room (tools/eclipse/library_room.py): the shopfront's outer face at
+    y = -FRONT_T, the room from y = 0 to DEPTH (Godot's -z), x across, the floor at z = 0; closed, in budget,
+    through the gate; a way in the player fits; the vault where the design puts it; built to any size."""
+
+    BUDGET = {"room_vault": 24000, "room_back": 4000, "room_front": 9000, "room_floor": 6000, "room_rug": 800}
+
+    @classmethod
+    def setUpClass(cls):
+        library_room.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_every_piece_is_an_object(self):
+        self.assertEqual(sorted(self.objects), sorted(self.BUDGET))
+
+    def test_every_object_is_closed(self):
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+
+    def test_budgets(self):
+        self.assertEqual({n: _tris(o) for n, o in self.objects.items() if _tris(o) > self.BUDGET[n]}, {})
+
+    def test_each_passes_the_gate(self):
+        problems = {}
+
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            found = gate.check(faces, tris, [], budget=self.BUDGET[n])
+            if found:
+                problems[n] = found[:3]
+
+        self.assertEqual(problems, {})
+
+    def test_the_way_in(self):
+        # Through the arch: nothing in the way across the player's width up to 2.1 m, from the corridor in.
+        front = self.objects["room_front"]
+        blocked = []
+
+        for i in range(12):
+            x = -0.55 + 0.1 * i
+            for k in range(15):
+                z = 0.05 + 0.147 * k
+                if _hit(front, (x, -2.0, z), (0.0, 1.0, 0.0), 3.0) is not None:
+                    blocked.append((round(x, 2), round(z, 2)))
+
+        self.assertEqual(blocked, [])
+
+    @staticmethod
+    def _soffit(vault, x, y):
+        """The vault's underside over (x, y): the lowest of a few rays up round it (one may go up a joint)."""
+        hits = [_hit(vault, (x + dx, y + dy, 2.0), (0.0, 0.0, 1.0)) for dx in (-0.03, 0.0, 0.03) for dy in (-0.11, 0.0, 0.11)]
+        return min(h.z for h in hits if h is not None)
+
+    def test_the_vault(self):
+        vault = self.objects["room_vault"]
+        self.assertAlmostEqual(self._soffit(vault, 0.0, library_room.DEPTH / 2), library_room.CROWN, delta=0.02)
+        # At the side walls' inner faces the soffit comes down to the springing.
+        edge = _hit(vault, (-library_room.WIDTH / 2 + 0.03, library_room.DEPTH / 2, 1.0), (0.0, 0.0, 1.0))
+        self.assertIsNotNone(edge)
+        self.assertAlmostEqual(edge.z, library_room.SPRING, delta=0.06)
+        # The side walls stand from the floor to it: nothing between them across the room below the springing.
+        self.assertIsNone(_hit(vault, (-library_room.WIDTH / 2 + 0.01, library_room.DEPTH / 2, 1.5), (1.0, 0.0, 0.0),
+                               library_room.WIDTH - 0.02))
+
+    def test_its_atlas_holds_its_bricks(self):
+        # Thousands of bricks are thousands of islands: packed with a fixed small margin (a fraction of the atlas
+        # each swamps them), the room keeps a density to paint at (the stall's is 92 px/m at 2048).
+        try:
+            objects = list(self.objects.values())
+            common.unwrap(objects)
+            common.to_metres(objects)
+            common.pack(objects, margin=library_room.PACK_MARGIN)
+            self.assertGreater(common.density(objects, library_room.ATLAS), 90.0)
+        finally:
+            library_room.build()
+            type(self).objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_built_to_any_size(self):
+        try:
+            library_room.build(width=6.0, depth=5.0, crown=4.0)
+            objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+            boards = [v for v in _world(objects["room_floor"]) if v.y > 0.05]
+            self.assertAlmostEqual(max(v.x for v in boards) - min(v.x for v in boards), 6.0, delta=0.05)
+            self.assertAlmostEqual(max(v.y for v in boards), 5.0, delta=0.05)
+            self.assertAlmostEqual(self._soffit(objects["room_vault"], 0.0, 2.5), 4.0, delta=0.02)
+        finally:
+            # (Put back as the other tests found it.)
+            library_room.build()
+            type(self).objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+
 if __name__ == "__main__":
-    result = unittest.main(argv=["test_kit_bpy"], exit=False).result
+    # (`-- Class` or `-- Class.test_name` after Blender's own arguments runs just those.)
+    chosen = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    result = unittest.main(argv=["test_kit_bpy"] + chosen, exit=False).result
     sys.exit(not result.wasSuccessful())

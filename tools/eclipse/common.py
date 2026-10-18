@@ -429,13 +429,20 @@ def to_metres(objects):
                 loop.uv = (loop.uv[0] * k + apart, loop.uv[1] * k)
 
 
-def pack(objects):
+def pack(objects, margin=None):
     """All islands packed into one atlas, the same texel density everywhere,
-    identical islands (a stair's steps) merged into one."""
+    identical islands (a stair's steps) merged into one. `margin` (a fraction
+    of the atlas round each island's box) for a piece of thousands of islands,
+    which MARGIN round each would swamp (a brick vault). (Blender's "add"
+    margin is laid before the islands are scaled to fit, so it shrinks away.)"""
     _edit_all(objects)
     bpy.ops.uv.select_all(action="SELECT")
-    bpy.ops.uv.pack_islands(rotate=True, scale=True, merge_overlap=True, margin_method="FRACTION",
-                            margin=MARGIN, shape_method="CONCAVE")
+    if margin is None:
+        bpy.ops.uv.pack_islands(rotate=True, scale=True, merge_overlap=True, margin_method="FRACTION",
+                                margin=MARGIN, shape_method="CONCAVE")
+    else:
+        bpy.ops.uv.pack_islands(rotate=True, scale=True, merge_overlap=True, margin_method="FRACTION",
+                                margin=margin, shape_method="AABB")
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
@@ -925,7 +932,7 @@ def _round_card_normals(objects, cards):
 
 
 def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, weather=None, out=None,
-                 sets_each=False, cards=(), budget=None, sliver=None):
+                 sets_each=False, cards=(), budget=None, sliver=None, pack_margin=None):
     """The piece's atlas made (unwrap, any repeats, pack), its AO and region
     maps, glTF and .blend written; then the gate. `merge` is a function run
     between unwrap and pack (repeat_faces for identical parts). `weather`
@@ -956,7 +963,7 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
         merge()
         objects = meshes()
 
-    pack(objects)
+    pack(objects, margin=pack_margin)
     px_per_m = density(objects, atlas_px, skip=cards)
 
     ao = bake_ao(objects, name, atlas_px, sets=list(gate_sets) if gate_sets is not None else None)
