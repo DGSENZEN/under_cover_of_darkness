@@ -46,6 +46,9 @@ const VIEWS := [
 	["wall_tablet", Vector3(-9.0, 1.7, 1.2), Vector3(-9.0, 1.8, -2.35)],
 	["uncanny_drain", Vector3(-2.3, 0.9, -0.9), Vector3(-1.8, 0.0, -1.75)],
 	["uncanny_rise", Vector3(-3.0, 1.0, 0.2), Vector3(-1.7, 0.25, -1.6)],
+	["uncanny_warm", Vector3(-2.3, 1.55, -1.7), Vector3(-1.15, 1.25, -0.4)],
+	["uncanny_warm_b", Vector3(-1.1, 1.7, 1.2), Vector3(-1.15, 1.25, -0.4)],
+	["uncanny_beg", Vector3(-2.2, 1.65, 0.1), Vector3(-1.0, 1.3, -0.6)],
 	["uncanny_nahual", Vector3(-3.6, 1.6, 1.6), Vector3(-4.8, 0.5, 4.0)],
 	["uncanny_procession", Vector3(-0.5, 1.7, 2.6), Vector3(-3.4, 0.9, -0.4)],
 	["uncanny_shadow", Vector3(0.0, 1.7, 0.2), Vector3(0.0, 1.5, 4.5)],
@@ -66,6 +69,7 @@ func _ready() -> void:
 	var unlit := false
 	var walking := false
 	var shadowed := false
+	var begging := false
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
@@ -80,6 +84,8 @@ func _ready() -> void:
 			walking = true
 		elif arg == "--shadow":
 			shadowed = true
+		elif arg == "--beg":
+			begging = true
 		elif arg == "--unlit":
 			unlit = true
 		elif arg == "--dark":
@@ -117,6 +123,16 @@ func _ready() -> void:
 		lab.animas.rise_now()
 
 		for i in 150:
+			await get_tree().process_frame
+
+	if begging:
+		# The eye stands still by the drain, the living the ánimas beg of; shot once one has come to it.
+		for view in VIEWS:
+			if view[0] == "uncanny_beg":
+				eye.global_transform = Transform3D(Basis(), view[1]).looking_at(view[2], Vector3.UP)
+		lab.animas.flee_from = eye
+
+		for i in 720:
 			await get_tree().process_frame
 
 	if walking:

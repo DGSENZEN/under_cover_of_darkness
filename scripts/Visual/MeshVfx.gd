@@ -70,6 +70,49 @@ static func flame(height: float, radius: float, rings := 12, sides := 14) -> Arr
 			_quad(st, [p00, p10, p11, p01], [Vector2(float(k) / sides, v0), Vector2(float(k) / sides, v1),
 				Vector2(float(k + 1) / sides, v1), Vector2(float(k + 1) / sides, v0)])
 
+	# (Corners welded so the normals round off: smooth, never faceted like crumpled paper.)
+	st.index()
+	st.generate_normals()
+	return st.commit()
+
+
+## A crown of `count` flame tongues standing round a ring `spread` across (one mesh, one draw): each a slim
+## flame (`radius` at its widest) of its own height (`height` the tallest, down to `shortest` of it), leaning
+## out a little and twisted; u splits among them so the noise eats each differently. Their roots at y 0.
+static func tongues(count: int, height: float, radius: float, spread: float, shortest := 0.55, seed := 0,
+		rings := 10, sides := 8) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+
+	for t in count:
+		var a := TAU * t / count + rng.randf_range(-0.3, 0.3)
+		var root := Vector3(cos(a), 0.0, sin(a)) * spread * 0.5
+		var tall := height * rng.randf_range(shortest, 1.0)
+		# (The tallest in the middle of the ring: the last stands at its centre.)
+		if t == count - 1:
+			root = Vector3.ZERO
+			tall = height
+		var lean := Vector3(cos(a), 0.0, sin(a)) * tall * rng.randf_range(0.08, 0.22)
+		var twist := rng.randf_range(-0.6, 0.6)
+		var wide := radius * rng.randf_range(0.75, 1.0)
+
+		for i in rings:
+			for k in sides:
+				var corners := []
+				var uvs := []
+				for c in [[i, k], [i + 1, k], [i + 1, k + 1], [i, k + 1]]:
+					var v := float(c[0]) / rings
+					var r := wide * sin(PI * pow(v, 0.62)) * (1.0 - 0.15 * v)
+					var turn: float = TAU * float(c[1]) / sides + twist * v
+					# Leaning out as it climbs, the lean growing toward the tip.
+					corners.append(root + Vector3(cos(turn) * maxf(r, 0.0005), v * tall, sin(turn) * maxf(r, 0.0005)) + lean * v * v)
+					uvs.append(Vector2((t + float(c[1]) / sides) / count, v))
+				_quad(st, corners, uvs)
+
+	# (Corners welded so the normals round off: smooth, never faceted like crumpled paper.)
+	st.index()
 	st.generate_normals()
 	return st.commit()
 

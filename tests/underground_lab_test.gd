@@ -676,9 +676,8 @@ func _run() -> void:
 	_check("U51 the nahual is a spectre: black fraying into rising smoke, ember eyes solid, dark wisps off its back",
 		haunted and rising, "spectre shader %s wisps %s" % [haunted, rising])
 
-	# U52 the ánimas present, spirits: several out of the drain at once most of the time, drifting up to
-	#     chest height round it and toward her candles; each a bright flame in a soft glow trailing wisps,
-	#     the risen lighting the floor; from someone near they keep their distance but stay
+	# U52 the ánimas present, spirits: several out of the drain at once most of the time, up to chest height;
+	#     each a black hand in its spirit-fire trailing a ribbon, the risen lighting the floor
 	var an: Node3D = lab.animas
 	var an_drain: Vector3 = an.global_position
 	lab.player.global_position = Vector3(8.0, 1.05, 3.0)
@@ -687,16 +686,59 @@ func _run() -> void:
 	var an_highest := -INF
 	var an_farthest := 0.0
 	var lit_floor := false
+	# U58-U60, U62 watched over the same run: who warms at which candle, how they move, how their fire leans.
+	var an_was: Array = an.lights.map(func(l): return l.global_position)
+	var an_warmers := {}
+	var an_warm_frames := 0
+	var an_dragged_fastest := 0.0
+	var an_seek_slowest := INF
+	var an_seek_fastest := 0.0
+	var an_streaming := 0
+	var an_through := 0
+	var an_through_say := ""
+	var an_space: PhysicsDirectSpaceState3D = an.get_world_3d().direct_space_state
 
 	for i in 1800:
 		await get_tree().process_frame
-		var out := 0
-		for l in an.lights:
-			if l.global_position.y > 0.1:
-				out += 1
-			an_highest = maxf(an_highest, l.global_position.y)
-			an_farthest = maxf(an_farthest, Vector2(l.global_position.x - an_drain.x, l.global_position.z - an_drain.z).length())
-		out_frames += 1 if out >= 2 else 0
+		var an_out := 0
+		for an_k in an.lights.size():
+			var an_l: MeshInstance3D = an.lights[an_k]
+			var an_at: Vector3 = an_l.global_position
+			var an_speed: float = an_at.distance_to(an_was[an_k]) * 60.0
+			var an_moved: Vector3 = an_at - an_was[an_k]
+			# (Its wrist's and its palm's way this frame, above the grate: never through anything solid.)
+			if an_at.y > 0.15 and an_was[an_k].y > 0.15 and an_moved.length() > 0.0005:
+				var an_mid: Vector3 = an_l.global_transform.basis.y.normalized() * 0.12
+				for an_from: Vector3 in [an_was[an_k], an_was[an_k] + an_mid]:
+					var an_ray := PhysicsRayQueryParameters3D.create(an_from, an_from + an_moved)
+					an_ray.exclude = [lab.player.get_rid()]
+					var an_hit := an_space.intersect_ray(an_ray)
+					if not an_hit.is_empty():
+						an_through += 1
+						an_through_say = "%s at %s" % [an_hit.collider.get_parent().name, an_from]
+			an_was[an_k] = an_at
+			if an_at.y > 0.1:
+				an_out += 1
+			an_highest = maxf(an_highest, an_at.y)
+			an_farthest = maxf(an_farthest, Vector2(an_at.x - an_drain.x, an_at.z - an_drain.z).length())
+			var an_state: String = an.state_of(an_k)
+			var an_up: Vector3 = an_l.global_transform.basis.y.normalized()
+			if an_state == "warming":
+				for an_c: Vector3 in an.candles:
+					if an_at.distance_to(an_c) < 0.6 and an_up.dot((an_c - an_at).normalized()) > 0.2:
+						an_warmers[an_k] = true
+						an_warm_frames += 1
+						break
+			elif an_state == "dragged":
+				an_dragged_fastest = maxf(an_dragged_fastest, an_speed)
+			elif an_state == "seeking":
+				an_seek_slowest = minf(an_seek_slowest, an_speed)
+				an_seek_fastest = maxf(an_seek_fastest, an_speed)
+			if an_speed > 0.4:
+				var an_sway: Vector3 = (an.shells[an_k].get_surface_override_material(0) as ShaderMaterial).get_shader_parameter(&"sway")
+				if an_sway.length() > 0.02 and an_sway.dot(an_moved) < 0.0:
+					an_streaming += 1
+		out_frames += 1 if an_out >= 2 else 0
 		lit_floor = lit_floor or an.lamps.any(func(m): return m.light_energy > 0.2 and m.global_position.y > 0.3)
 	# 3D, the Deadlock way (docs/superpowers/refs/underground/vfx_method.md): each a lathed flame mesh in an
 	# eroding shell, a ribbon trailing it; no sprite cards, no particle specks.
@@ -713,23 +755,98 @@ func _run() -> void:
 			and look.shader.resource_path.ends_with("anima_silhouette.gdshader")
 	var spirited: bool = an.shells.size() == an.lights.size() and no_cards and ribboned and handed and an.hand_meshes.size() == 2 \
 		and _all_mesh_vfx(an.shells)
+	_check("U52 the ánimas: two or more out most of the time, up to chest height, black hands in spirit-fire trailing ribbons, lighting the floor",
+		an.lights.size() >= 6 and out_frames > 1800 * 0.6 and an_highest > 1.0 and an_highest < 1.8
+		and spirited and lit_floor,
+		"count %d out-2 %.2f highest %.2f spirited %s (no cards %s ribbons %s) lit %s" % [
+		an.lights.size(), out_frames / 1800.0, an_highest, spirited, no_cards, ribboned, lit_floor])
+
+	# U63 spirits, but not drawn through things: out of the drain, no hand passes through the stall, its shrine or
+	#     anything else solid; they go round
+	_check("U63 the ánimas go round what stands, never through it",
+		an_through == 0, "crossings %d (last %s)" % [an_through, an_through_say])
+
+	# U58 the ánimas go to the candles: souls in purgatory are drawn to the lights the living keep; out of the drain,
+	#     they make for a candle and warm at it, close, their hands turned to its flame
+	_check("U58 the ánimas go to the candles and warm at them, hands turned to the flame",
+		an.candles.size() >= 3 and an_warmers.size() >= 2 and an_warm_frames > 240,
+		"candles %d warmers %d frames %d" % [an.candles.size(), an_warmers.size(), an_warm_frames])
+
+	# U59 bound to the drain: none goes farther from it than its tether; going home, a soul is dragged down, fast,
+	#     not floated; making for something, it moves in halting surges, not a glide
+	_check("U59 the ánimas are bound to the drain, dragged back to it, and go in surges",
+		an_farthest <= an.TETHER + 0.05 and an_dragged_fastest > 1.2 and an_seek_slowest < 0.1 and an_seek_fastest > 0.35,
+		"farthest %.2f (tether %.2f) dragged %.2f m/s seeking %.2f-%.2f m/s" % [an_farthest, an.TETHER, an_dragged_fastest,
+		an_seek_slowest, an_seek_fastest])
+
+	# U60 they beg: someone standing still near the drain is come to; a soul hangs at arm's length before them at
+	#     chest height, its hand lifted to them, palm toward them; none closer than a flinch
 	var an_near: Vector3 = an_drain + Vector3(-0.9, 1.05, 0.9)
 	lab.player.global_position = an_near
-	await _frames(240)
-	var kept_off := true
-	var still_out := 0
+	var an_beggar := -1
+	var an_too_close := false
 
-	for l in an.lights:
-		if l.global_position.y > 0.1:
-			still_out += 1
-			kept_off = kept_off and Vector2(l.global_position.x - lab.player.global_position.x,
-				l.global_position.z - lab.player.global_position.z).length() > 0.9
+	for i in 720:
+		await get_tree().process_frame
+		lab.player.global_position = an_near
+		for an_k in an.lights.size():
+			var an_at: Vector3 = an.lights[an_k].global_position
+			var an_flat: float = Vector2(an_at.x - an_near.x, an_at.z - an_near.z).length()
+			if an_at.y > 0.1 and an_flat < 0.42:
+				an_too_close = true
+			if i > 240 and an.state_of(an_k) == "pleading":
+				an_beggar = an_k
+	var an_begging := false
+	var an_begging_say := "none"
+
+	if an_beggar >= 0:
+		var an_b: MeshInstance3D = an.lights[an_beggar]
+		var an_at: Vector3 = an_b.global_position
+		var an_head: Vector3 = an_near + Vector3(0.0, 0.6, 0.0)
+		var an_flat: float = Vector2(an_at.x - an_near.x, an_at.z - an_near.z).length()
+		var an_lifted: float = an_b.global_transform.basis.y.normalized().dot((an_head - an_at).normalized())
+		var an_palm: float = an_b.global_transform.basis.x.normalized().dot(((an_head - an_at) * Vector3(1, 0, 1)).normalized())
+		an_begging = an_flat > 0.5 and an_flat < 1.15 and an_at.y > 0.85 and an_at.y < 1.7 and an_lifted > 0.3 and an_palm > 0.3
+		an_begging_say = "at %.2f m, %.2f up, lifted %.2f palm %.2f" % [an_flat, an_at.y, an_lifted, an_palm]
 	lab.player.global_position = Vector3(8.0, 1.05, 3.0)
-	_check("U52 the ánimas: two or more out most of the time, up to chest height, haloed and trailing, lighting the floor; shy but staying",
-		an.lights.size() >= 6 and out_frames > 1800 * 0.6 and an_highest > 1.0 and an_highest < 1.8 and an_farthest < 4.5
-		and spirited and lit_floor and kept_off and still_out >= 1,
-		"count %d out-2 %.2f highest %.2f farthest %.2f spirited %s (no cards %s ribbons %s) lit %s kept off %s still out %d" % [
-		an.lights.size(), out_frames / 1800.0, an_highest, an_farthest, spirited, no_cards, ribboned, lit_floor, kept_off, still_out])
+	_check("U60 the ánimas beg: one hangs at arm's length before someone standing near, hand lifted to them, palm toward them",
+		an_begging and not an_too_close, "%s too close %s" % [an_begging_say, an_too_close])
+
+	# U61 climbing out: a soul comes up through a gap to its wrist and holds there trembling, as if feeling for a hold,
+	#     before it tears itself free and up
+	await _frames(600)
+	var an_climber: MeshInstance3D = an.rise_now()
+	var an_held := 0
+	var an_freed := false
+
+	for i in 240:
+		await get_tree().process_frame
+		var an_y: float = an_climber.global_position.y - an_drain.y
+		if an_y > -0.05 and an_y < 0.08:
+			an_held += 1
+		if an_held >= 30 and an_y > 0.25:
+			an_freed = true
+	_check("U61 an ánima climbs out: holds at the grate to its wrist, trembling, then tears free",
+		an_held >= 30 and an_freed, "held %d frames freed %s" % [an_held, an_freed])
+
+	# U62 their fire: a crown of tongues round each wrist (several separate tips), standing up in the world whichever
+	#     way the hand reaches, streaming behind when it moves, its pale core held to the roots
+	var an_tips := {}
+	var an_arrays: Array = an.shells[0].mesh.surface_get_arrays(0)
+	var an_verts: PackedVector3Array = an_arrays[Mesh.ARRAY_VERTEX]
+	var an_uvs: PackedVector2Array = an_arrays[Mesh.ARRAY_TEX_UV]
+
+	for i in an_verts.size():
+		if an_uvs[i].y > 0.999:
+			an_tips[Vector3i((an_verts[i] * 100.0).round())] = true
+	var an_upright := true
+
+	for an_sh: MeshInstance3D in an.shells:
+		an_upright = an_upright and an_sh.global_transform.basis.y.normalized().dot(Vector3.UP) > 0.95
+	var an_core: float = (an.shells[0].get_surface_override_material(0) as ShaderMaterial).get_shader_parameter(&"core_reach")
+	_check("U62 the ánimas' fire: a crown of tongues, upright whatever the hand does, streaming behind them, pale only at the roots",
+		an_tips.size() >= 4 and an_upright and an_streaming >= 10 and an_core < 0.6,
+		"tips %d upright %s streaming %d core reach %.2f" % [an_tips.size(), an_upright, an_streaming, an_core])
 
 	# U53 the nahual's eyes glow: bright past white (the bloom takes them), a halo round each, a faint red light
 	var nd: Node3D = lab.nahual

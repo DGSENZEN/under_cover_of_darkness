@@ -50,6 +50,15 @@ explained on screen.
 - **Deadlock:** souls as small bright shapes that slip away from the near; spirits in things.
   When one rises, it goes where the living light candles: it leans toward her stall's flames.
 - **Colour:** the seeped green of our colour rule (Vfx.SEEPED), paler at the core.
+- **What they do (Oct 17 2026, the user: "they just float around and don't act like actual ánimas"):** they
+  behave as the ánimas of the retablos, burning in purgatory and begging the living for candles and prayers.
+  Pressed up under the grate, fingers through its slots; one climbs to its wrist and holds there trembling,
+  then tears free; it makes for a candle in halting surges and warms its hand at the flame (her shrine's,
+  reached from in front of it); some strain at the end of their tether toward the Virgin's niche they cannot
+  reach; to anyone standing still near the drain one or two come and hang at arm's length, reaching out; at
+  the end of their time each is dragged back down, still reaching back toward what it leaves. Bound to the
+  drain, never through what stands (they go round her stall). Their fire is a crown of smooth tongues at the
+  wrist that stands up in the world and streams behind them as they go.
 
 **The nahual on the bench.**
 - **Cause:** the old man who sits on the bench every night (his newspaper is left there, his hat

@@ -24,6 +24,10 @@ uniform float energy = 1.6;
 uniform float opacity = 1.0;
 // How far its vertices churn (m).
 uniform float churn = 0.01;
+// Where its far end is blown (m, in its own space): a flame streams behind what carries it.
+uniform vec3 sway = vec3(0.0);
+// How far along v its pale core reaches (1 all the way; a fire's white only at its roots).
+uniform float core_reach = 1.0;
 
 varying float n_at;
 
@@ -35,6 +39,7 @@ float sample_noise(vec2 uv) {
 void vertex() {
 	n_at = sample_noise(UV);
 	VERTEX += NORMAL * churn * (n_at - 0.5) * 2.0;
+	VERTEX += sway * UV.y * UV.y;
 }
 
 void fragment() {
@@ -51,7 +56,7 @@ void fragment() {
 	float depth = n - eat;
 	vec3 colour = edge.rgb;
 	colour = mix(colour, body.rgb, step(0.04, depth));
-	colour = mix(colour, core.rgb, step(0.18, depth) * step(0.35, facing));
+	colour = mix(colour, core.rgb, step(0.18, depth) * step(0.35, facing) * step(UV.y, core_reach));
 	colour += body.rgb * rim_at * 0.8;
 	ALBEDO = colour * energy;
 	ALPHA = keep * opacity;

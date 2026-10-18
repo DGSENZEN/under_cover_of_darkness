@@ -120,6 +120,13 @@ const HAT_AT := Vector3(-3.9, 0.45, 4.25)
 const EMBER := Color("ff5a1e")
 ## The gaps between the drain's grate bars, along the grate (m from its middle): the floor kit's
 ## bars (tools/eclipse/underground_floor.py _drain) leave 12 of them, 4 cm apart.
+## Which way the niche's candles are open, and how far off their flames a hand keeps (m).
+const NICHE_OPEN := Vector3(0.0, 0.0, -0.2)
+## Her shrine's candles reached from this far in front of it (m), the wrist this far above the flame's height;
+## how far round her stall's corner they go.
+const SHRINE_CLEAR := 0.16
+const SHRINE_LIFT := 0.06
+const STALL_ROUND := 0.35
 const GRATE_LANES := [-0.22, -0.18, -0.14, -0.1, -0.06, -0.02, 0.02, 0.06, 0.1, 0.14, 0.18, 0.22]
 ## The drain's column, beside her stall where the conduit's water pools; the worn modules' cells.
 const DRAIN_COLUMN := 8
@@ -1150,7 +1157,7 @@ func _wall_decal(kind: String, at: Vector3, size: Vector2, far: bool, roll: floa
 # The uncanny
 
 ## Ánimas in the drain (docs/superpowers/refs/underground/supernatural_refs.md): the old city's
-## drowned, come up the drain from its cistern, drawn by her candles.
+## drowned, come up the drain from its cistern, drawn by the candles and begging of the living.
 func _animas() -> void:
 	for module: MeshInstance3D in floor_tiles:
 		if module.get_meta("kind") != "floor_border_drain":
@@ -1166,7 +1173,30 @@ func _animas() -> void:
 		animas.colour = Color("b8f04a")
 		animas.seed = 23
 		animas.flee_from = player
-		animas.toward = flames
+		# What they make for: her ofrenda's candles, and the Virgin's in the niche across the way (out of their reach).
+		# Each reached from its open side: the niche's from the corridor, the shrine's from in front of it.
+		var lit := PackedVector3Array(niche_wicks)
+		var open := PackedVector3Array()
+		open.resize(lit.size())
+		open.fill(NICHE_OPEN)
+
+		var shrine := stall.find_child("stall_ofrenda", true, false) as MeshInstance3D
+		var stall_box := (stall.find_child("stall_frame", true, false) as MeshInstance3D)
+		var front := (shrine.global_transform * shrine.get_aabb()).end.z if shrine != null else 0.0
+
+		if FileAccess.file_exists(WICKS):
+			for list in (JSON.parse_string(FileAccess.get_file_as_string(WICKS)) as Dictionary).values():
+				for w in list:
+					lit.append(Vector3(w[0], w[1], w[2]))
+					# (Reached from just in front of her shrine, into it.)
+					open.append(Vector3(0.0, SHRINE_LIFT, front + SHRINE_CLEAR - w[2]))
+		animas.candles = lit
+		animas.sides = open
+		# The way round her stall, from the drain behind it out to its front: past its corner.
+		if stall_box != null:
+			var box := stall_box.global_transform * stall_box.get_aabb()
+			animas.ways = PackedVector3Array([Vector3(box.position.x - STALL_ROUND, 1.0, box.end.z + STALL_ROUND),
+				Vector3(box.position.x - STALL_ROUND, 0.6, box.position.z + 0.6)])
 		# The grate's bars run along the module's X; its gaps sit along its Z (Godot's -Y of the kit).
 		animas.lanes = PackedFloat32Array(GRATE_LANES)
 		add_child(animas)
