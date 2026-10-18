@@ -22,6 +22,8 @@ const SCATTER_NEAR := 1.3
 const REFORM_FAR := 2.6
 const SCATTER_RATE := 3.0
 const REFORM_RATE := 0.5
+## Its scatter a puff (s): the smoke thrown out, then eaten away, while they still stand there.
+const BURST_FOR := 1.2
 ## (A small sphere round each eye, not a card: brightest where it faces you, fading to nothing at its
 ## rim, so no edge shows however the light falls or where it meets the skull.)
 const HALO_CODE := """
@@ -63,6 +65,8 @@ var eye_light: OmniLight3D
 var tendrils: Array[MeshInstance3D] = []
 var scatter_tendrils: Array[MeshInstance3D] = []
 var scattering := 0.0
+## How far its puff has gone (0 thrown, 1 eaten away); below 0, none.
+var _burst := -1.0
 var _smoke_looks: Array[ShaderMaterial] = []
 var _scatter_looks: Array[ShaderMaterial] = []
 ## How much of it is here: 1 whole, 0 scattered.
@@ -226,21 +230,31 @@ func _scatter(delta: float) -> void:
 	var near := Vector2(off.x, off.z).length()
 
 	if near < SCATTER_NEAR:
+		if presence >= 0.99:
+			_burst = 0.0
 		presence = maxf(0.0, presence - SCATTER_RATE * delta)
 	elif near > REFORM_FAR:
 		presence = minf(1.0, presence + REFORM_RATE * delta)
 
+	if _burst >= 0.0:
+		_burst = minf(1.0, _burst + delta / BURST_FOR)
+	if presence >= 1.0:
+		_burst = -1.0
+
 	_show()
 
 
-## Its look at its presence: its smoke thrown as it goes, settling as it re-forms.
+## Its look at its presence: its smoke thrown out in a puff as it goes, which eats itself away.
 func _show() -> void:
 	scattering = clampf(1.0 - presence, 0.0, 1.0)
+	# The puff: whole for a moment as it is thrown, then eaten from its tips till nothing is left.
+	var thrown := clampf(_burst, 0.0, 1.0)
+	var eaten := 1.0 if _burst < 0.0 else lerpf(1.0, 0.3, smoothstep(0.0, 0.12, thrown)) + 0.7 * smoothstep(0.2, 1.0, thrown)
 
 	for i in scatter_tendrils.size():
 		var t := scatter_tendrils[i]
-		t.scale = Vector3.ONE * (0.4 + 0.9 * scattering)
-		_scatter_looks[i].set_shader_parameter(&"erosion", lerpf(1.0, 0.25, sin(scattering * PI * 0.5)))
+		t.scale = Vector3.ONE * (0.5 + 1.0 * (1.0 - pow(1.0 - thrown, 3.0)))
+		_scatter_looks[i].set_shader_parameter(&"erosion", minf(eaten, 1.0))
 
 	for look in _smoke_looks:
 		look.set_shader_parameter(&"erosion", lerpf(0.3, 0.95, scattering))
@@ -289,7 +303,7 @@ func _smoke() -> void:
 		for k in 10:
 			var t := k / 9.0
 			path.append(root + Vector3(cos(a) * 0.6 * t, 0.7 * t - 0.25 * t * t, sin(a) * 0.45 * t))
-		var burst := _smoke_mesh(path, 0.11, dark, 1.0, 1.4, float(i) * 1.9 + 20.0)
+		var burst := _smoke_mesh(path, 0.075, dark, 1.0, 1.4, float(i) * 1.9 + 20.0)
 		burst.name = "scatter_%d" % i
 		scatter_tendrils.append(burst)
 		_scatter_looks.append(burst.get_surface_override_material(0))

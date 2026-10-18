@@ -70,6 +70,12 @@ func _ready() -> void:
 	var walking := false
 	var shadowed := false
 	var begging := false
+	# A clip instead of a still: this many seconds of frames, every other frame (30 a second).
+	var clip := 0.0
+	# Over a clip the eye walks this far toward what it looks at (m); with --intrude the nahual takes it for the
+	# living (watched by it, walked into).
+	var dolly := 0.0
+	var intrude := false
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
@@ -86,6 +92,12 @@ func _ready() -> void:
 			shadowed = true
 		elif arg == "--beg":
 			begging = true
+		elif arg.begins_with("--clip="):
+			clip = float(arg.trim_prefix("--clip="))
+		elif arg.begins_with("--dolly="):
+			dolly = float(arg.trim_prefix("--dolly="))
+		elif arg == "--intrude":
+			intrude = true
 		elif arg == "--unlit":
 			unlit = true
 		elif arg == "--dark":
@@ -170,7 +182,7 @@ func _ready() -> void:
 		for i in int((TrainPass.BUILD + 1.0) * 60.0):
 			await get_tree().process_frame
 
-	for form in ([false] if plain or passing or dark or unlit else [false, true]):
+	for form in ([false] if plain or passing or dark or unlit or clip > 0.0 else [false, true]):
 		if not plain:
 			lab.set_form(form)
 
@@ -186,6 +198,21 @@ func _ready() -> void:
 			if lab.nahual != null:
 				lab.nahual.appear()
 			await _frames(12)
+			if clip > 0.0:
+				if intrude and lab.nahual != null:
+					lab.nahual.watcher = eye
+					lab.nahual.intruder = eye
+				var start: Vector3 = view[1]
+				# (Walked at the eye's own height, as someone would.)
+				var ahead: Vector3 = ((view[2] - view[1]) * Vector3(1, 0, 1)).normalized() * dolly
+				var count := int(clip * 30.0)
+				for k in count:
+					var t := smoothstep(0.0, 1.0, float(k) / maxf(count - 1, 1))
+					eye.global_transform = Transform3D(Basis(), start + ahead * t).looking_at(view[2], Vector3.UP)
+					get_viewport().get_texture().get_image().save_png("%s%s_%03d.png" % [out, view[0], k])
+					await _frames(2)
+				print("clip: ", view[0])
+				continue
 			var file := "%s%s_%s.png" % [out, view[0], "plain" if plain else ("train" if passing else ("dark" if dark else ("form" if form else ("unlit" if unlit else "lit"))))]
 			get_viewport().get_texture().get_image().save_png(file)
 			print("still: ", file)

@@ -875,8 +875,17 @@ func _run() -> void:
 	await _frames(30)
 	var whole: bool = nd.presence > 0.95 and nd.solid.collision_layer != 0
 	lab.player.global_position = nd.middle() + Vector3(0.0, 1.05, -0.9)
-	await _frames(90)
+	# Its scatter a puff: thrown out (some smoke whole for a moment), then eaten away while they still stand there,
+	# never left standing round them as black tubes.
+	var n_puffed := false
+
+	for i in 90:
+		await get_tree().process_frame
+		for n_look: ShaderMaterial in nd.scatter_tendrils.map(func(t): return t.get_surface_override_material(0)):
+			n_puffed = n_puffed or n_look.get_shader_parameter(&"erosion") < 0.6
 	var scattered: bool = nd.presence < 0.1 and nd.solid.collision_layer == 0 and nd.scattering > 0.5
+	await _frames(30)
+	var n_cleared: bool = nd.scatter_tendrils.all(func(t): return (t.get_surface_override_material(0) as ShaderMaterial).get_shader_parameter(&"erosion") >= 0.95)
 	lab.player.global_position = Vector3(8.0, 1.05, 3.0)
 	await _frames(300)
 	var reformed: bool = nd.presence > 0.95 and nd.solid.collision_layer != 0 and nd.visible
@@ -890,8 +899,9 @@ func _run() -> void:
 	_check("U55 the nahual's smoke is mesh tendrils (rising, and a scatter of them), no sprite cards", meshed,
 		"tendrils %d scatter %d" % [nd.tendrils.size(), nd.scatter_tendrils.size()])
 
-	_check("U54 walked into, the nahual scatters into smoke and is not solid; it re-forms once they step away",
-		whole and scattered and reformed, "whole %s scattered %s reformed %s (presence %.2f)" % [whole, scattered, reformed, nd.presence])
+	_check("U54 walked into, the nahual scatters in a puff of smoke that eats itself away, is not solid; it re-forms once they step away",
+		whole and scattered and reformed and n_puffed and n_cleared, "whole %s scattered %s puffed %s cleared %s reformed %s (presence %.2f)" % [
+		whole, scattered, n_puffed, n_cleared, reformed, nd.presence])
 
 	# U56 the procession: the dead in white, each with a lit candle, walk the marigold trail from her ofrenda
 	#     into the old stone, p_facing their way, the ánimas gathering round them; then they are p_gone
