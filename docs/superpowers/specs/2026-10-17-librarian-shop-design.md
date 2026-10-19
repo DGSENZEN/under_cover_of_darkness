@@ -87,6 +87,20 @@ things (weapons, creatures, ghosts), and shapes and sigils work too.
 drawn without a body: a Mignola-black silhouette with a coloured rim, or their emblem (a mask, a
 hat, a sword, a rose). Real figures replace them once one passes the user's review.
 
+**The shop turns strange** (the user, Oct 18 2026, after Part 1: "book store needs to feel a bit
+more supernatural and strange"). On top of the spectres, word-chains and floating books, three
+things the room itself does:
+- **The books light the room.** The shop has no work lights. His lamp is its only warm light; the
+  rest is the books' own cold light: the quarantine cage glowing through its bars, each section's
+  books giving off its colour, open live books lighting what is near them. The corridor's sodium
+  spills in through the arch.
+- **The shelves stir while unwatched.** A book slides back into its row, a gap closes, a stack is
+  restacked, but only while no one can see that shelf. Come back and it is not as you left it.
+  Nothing ever moves in sight.
+- **Ownerless shadows, and a ward that pulls.** A shadow with no one casting it passes along the
+  shelves, seen only from the corner of the eye (like the corridor's shadow with no owner). Candles
+  set round his chalk ward lean away from the chained book whenever it strains.
+
 **Words.** The user writes all words: titles, ledger lines, labels, section names. Meanwhile a
 **random script that looks like writing** fills the text chains, the pages and the spines. The
 user's words can replace it later.
@@ -183,12 +197,34 @@ user's words can replace it later.
   meshes: kit-built objects (hourglass, astrolabe, flask, ouroboros, sigil rings, weapons) and, for
   creatures and ghosts, reference-built models reviewed one by one. No spectre is a human figure
   until one has been approved as well made.
+- **The strange shop** (Oct 18):
+  - *Light.* The two sodium work lights in the shop go; F1 brings them back for judging shape. The
+    lamp stays warm and shadowed. The cage glows the necromancy chartreuse through its bars (the
+    caged books are unexorcised; their light leaks at their seams). Each section's case gives a low,
+    slow-breathing light of its colour from its boards; open live books light their surroundings in
+    their kind's colour while open. The shop stays dark between these pools, which is the stealth
+    game's friend: the lightgem reads it as cover.
+  - *Stirring.* A board changes only while it is outside the view or hidden behind something, and
+    never within a few seconds of being seen, so the change is never caught. Something changes
+    somewhere about every 20 to 40 s: a pulled-out book pushed home, a gap closed by its
+    neighbours, a stack restacked, a book that leant now standing. Chronology's books reorder
+    themselves by height, as if keeping their own dates. The books stay within their boards and
+    never overlap (the same rules as the filler).
+  - *Shadows.* Whose shadow it is: the librarian's, a tall man in the wide-brimmed hat and long
+    coat that hang on his stand in the corner. It is how he is shown before his model exists. It
+    crosses the back shelves and the side cases' fronts, only from the corner of the eye, gone
+    the moment it is looked at, every minute or two. Drawn as a painted silhouette decal (the
+    `OwnerlessShadow` way), shown to the user before it goes in.
+  - *The ward.* Five candle stubs on the chalk circle. Their flames lean away from the chained
+    book, harder the more it strains, and settle when it rests. The flames use the current candle
+    effect (the Deadlock VFX overhaul's, once that lands).
 - **The order of work** (each reviewed by the user before the next):
   1. the room shell and the shopfront;
   2. the corner (desk, chair, lamp, rite things, the hunt rack, the chained book, the cage);
   3. the shelf kit per section;
   4. the books kit (spines, stacks, live books with hinged covers);
-  5. the effects: book opening, the section effects, word-chains, floating books, auras;
+  5. the effects: book opening, the section effects, word-chains, floating books, auras, and the
+     strange shop (its light, the stirring shelves, the shadow, the ward's candles);
   6. the dressing pass.
 - **The bay:** `maps/library_lab.tscn`, with the player, F-keys like the underground bay, and its
   own test suite and stills tool (or the same stills tool generalised).
