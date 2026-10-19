@@ -43,6 +43,8 @@ var _was_open := false
 func build(meshes: Dictionary, material: Material, hinge: Vector3) -> void:
 	# (glTF: Blender's x, y, z are Godot's x, z, -y.)
 	var offset := -Vector3(hinge.x, hinge.z, -hinge.y)
+	# (Its halves and leaves move every frame: drawn where they are, not interpolated between physics ticks.)
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_front = Node3D.new()
 	_front.name = "front"
 	add_child(_front)

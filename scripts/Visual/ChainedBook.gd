@@ -39,6 +39,10 @@ func _ready() -> void:
 	_next = _rng.randf_range(STRAIN_EVERY.x, STRAIN_EVERY.y)
 	if cover == null:
 		return
+	# (Moved every frame: drawn where they are, not interpolated between physics ticks.)
+	for part: Node3D in [cover, chain]:
+		if part != null:
+			part.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 
 	cover_rest = cover.global_transform
 	if chain != null:

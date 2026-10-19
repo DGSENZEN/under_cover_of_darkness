@@ -57,8 +57,9 @@ const SHELVES := {
 	"chronology": [Vector3(-WALL_IN, 0.0, -1.7), 90.0], "necromancy": [Vector3(-WALL_IN, 0.0, -4.8), 90.0],
 	"alchemy": [Vector3(WALL_IN, 0.0, -1.7), -90.0], "metaphysics": [Vector3(WALL_IN, 0.0, -4.3), -90.0],
 	"hunting": [Vector3(2.65, 0.0, BACK_IN), 0.0]}
-## The low cases either side of the runner, along the room.
-const LOW_CASES := [Vector3(-1.15, 0.0, -1.9), Vector3(1.15, 0.0, -1.9)]
+## The low cases either side of the runner, along the room: 1.4 m long, set back from the front wall and short of
+## his desk so a body (the player's is a metre wide) crosses in front of them and behind them into the aisles.
+const LOW_CASES := [Vector3(-1.15, 0.0, -2.0), Vector3(1.15, 0.0, -2.0)]
 ## The side aisles' middles (x), between the low cases and the wall cases.
 const AISLE_X := 2.45
 
@@ -75,16 +76,18 @@ const LIVE_HINGE := Vector3(-0.012, 0.0, 0.03)
 const LIVE_LIFT := 0.002
 ## The live books. The studies lie open-able on a board of their section's case (which board, the hinge's x along
 ## it), a run either side kept clear of books for them to open into; the novels on the table by his door (scaled
-## down: cheap octavos beside his folios) and one on the right low case; the spellbooks on lecterns either side of
-## the runner, just short of his salt line.
+## down: cheap octavos beside his folios) and one on the right low case; the spellbooks on lecterns, one in the
+## front corner left of the arch, one in the right wall's gap between alchemy and metaphysics, each facing the floor.
+## (All of them clear of the ways across the shop's front and into the aisles.)
 const STUDIES := [["chronology", 2, -0.45], ["necromancy", 3, -0.57], ["necromancy", 2, 0.3], ["alchemy", 3, 0.2],
 	["alchemy", 2, -0.45], ["metaphysics", 2, -0.2], ["hunting", 3, 0.35]]
 const STUDY_KEEP := 0.285
-const FRONT_TABLE_AT := Vector3(1.175, 0.0, -0.6)
+const FRONT_TABLE_AT := Vector3(2.9, 0.0, -0.3)
 const TABLE_TOP := 0.85
 const NOVEL_SCALE := 0.8
-const NOVELS := [Vector3(0.955, TABLE_TOP, -0.6), Vector3(1.395, TABLE_TOP, -0.6), Vector3(1.15, 1.4, -1.25)]
-const LECTERNS := [Vector3(-1.15, 0.0, -3.3), Vector3(1.15, 0.0, -3.3)]
+const NOVELS := [Vector3(2.68, TABLE_TOP, -0.3), Vector3(3.12, TABLE_TOP, -0.3), Vector3(1.15, 1.4, -1.6)]
+## Each lectern: where it stands, turned how far (degrees; its desk faces its own +z).
+const LECTERNS := [[Vector3(-2.8, 0.0, -0.35), 180.0], [Vector3(3.7, 0.0, -3.0), -90.0]]
 ## The lectern's desk: its top's middle (Godot, the lectern's frame) and its slope toward the reader (+z).
 const LECTERN_DESK := Vector3(0.0, 1.0791, 0.0051)
 const LECTERN_SLOPE := 20.0
@@ -388,10 +391,11 @@ func _books() -> void:
 		_live_book(meshes, look, LiveBook.Kind.NOVEL, &"", place)
 
 	var slope := Basis(Vector3.RIGHT, deg_to_rad(LECTERN_SLOPE))
-	for at: Vector3 in LECTERNS:
-		book_stands.append(_place(meshes["lectern"], look, "lectern", at, 0.0, true))
-		var on := at + LECTERN_DESK + slope * Vector3(0.0, LIVE_HINGE.z + LIVE_LIFT, 0.0)
-		_live_book(meshes, look, LiveBook.Kind.SPELL, &"", Transform3D(slope, on))
+	for stand: Array in LECTERNS:
+		var yaw := deg_to_rad(stand[1])
+		book_stands.append(_place(meshes["lectern"], look, "lectern", stand[0], yaw, true))
+		var on := LECTERN_DESK + slope * Vector3(0.0, LIVE_HINGE.z + LIVE_LIFT, 0.0)
+		_live_book(meshes, look, LiveBook.Kind.SPELL, &"", Transform3D(Basis(Vector3.UP, yaw), stand[0]) * Transform3D(slope, on))
 
 
 ## Which of its case's boards (counted from the floor) a spot is on.

@@ -28,6 +28,8 @@ func _ready() -> void:
 	_rng.seed = seed
 
 	for book in books:
+		# (Moved every frame: drawn where it is, not interpolated between physics ticks.)
+		book.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		_rest.append(book.global_transform)
 		var box: AABB = book.global_transform * book.get_aabb()
 		# (About the foot of its spine, as a book rocks on its shelf.)

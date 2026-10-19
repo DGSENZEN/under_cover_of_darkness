@@ -51,7 +51,7 @@ BACK = 0.035
 BOARD_T = 0.035
 BOARDS = (0.12, 0.55, 1.0, 1.45, 1.9, 2.35)
 # The low case: across, deep (both faces), tall; its boards.
-LOW = (1.8, 0.7, 1.4)
+LOW = (1.4, 0.7, 1.4)
 LOW_BOARDS = (0.12, 0.55, 1.0)
 # The ladder's rail along the chronology case: how far out and how high; where the ladder stands on it.
 RAIL = (-0.07, 2.47)

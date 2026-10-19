@@ -250,25 +250,55 @@ func _run() -> void:
 		and s_near_desk < 2.5 and s_near_cage < 2.0,
 		"wrong %s kinds %s hunting %.2f m from the desk, necromancy %.2f m from the cage" % [s_wrong, s_kinds, s_near_desk, s_near_cage])
 
-	# L14 the aisles: down either side of the low cases the player walks to the back of the shop, and a body's width
-	#     swept along each line meets nothing
+	# L14 the aisles: from the corridor the player walks in through the arch, across the front of the shop past the
+	#     low case's end, and down the aisle to the back, on either side; a body's width down each aisle meets nothing
 	var s_walks := []
 	var s_clear := []
 	var s_space := lab.get_world_3d().direct_space_state
 
-	for x in [-lab.AISLE_X, lab.AISLE_X]:
-		var s_walk: Dictionary = await _walk(Vector3(x, 1.05, -0.5), 0.0, func(q): return q.z < -4.5, 600)
-		s_walks.append(s_walk["ok"] and s_walk["stall"] < 20)
+	for side in [-1.0, 1.0]:
+		var s_way: Array[Vector3] = [Vector3(0.0, 0.0, -0.63), Vector3(side * 1.9, 0.0, -0.63), Vector3(side * lab.AISLE_X, 0.0, -1.6),
+			Vector3(side * lab.AISLE_X, 0.0, -4.6)]
+		var s_walk: Dictionary = await _walk_path(lab.SPAWN, s_way, 900)
+		s_walks.append(s_walk)
 		var s_box := BoxShape3D.new()
 		s_box.size = Vector3(1.0, 1.9, 0.1)
 		var s_q := PhysicsShapeQueryParameters3D.new()
 		s_q.shape = s_box
-		s_q.transform = Transform3D(Basis(), Vector3(x, 1.06, -0.5))
-		s_q.motion = Vector3(0.0, 0.0, -4.0)
+		s_q.transform = Transform3D(Basis(), Vector3(side * lab.AISLE_X, 1.06, -1.6))
+		s_q.motion = Vector3(0.0, 0.0, -2.9)
 		s_q.exclude = [lab.player.get_rid()]
 		s_clear.append(s_space.cast_motion(s_q)[0] >= 1.0)
-	_check("L14 the aisles: the player walks either side of the low cases to the back; a body's width down each meets nothing",
-		s_walks == [true, true] and s_clear == [true, true], "walks %s clear %s" % [s_walks, s_clear])
+	_check("L14 the aisles: from the corridor the player walks across the front and down either aisle to the back; a body's width down each meets nothing",
+		s_walks.all(func(w): return w["ok"]) and s_clear == [true, true], "walks %s clear %s" % [s_walks, s_clear])
+
+	# L22 the whole shop reachable on foot: the player's own body, flooded over the floor from the corridor, reaches
+	#     every aisle, and a standing place within a live book's reach and sight for every live book
+	var r_reach: Dictionary = _reachable(lab.SPAWN)
+	var r_cam := get_viewport().get_camera_3d()
+	var r_eye: float = r_cam.global_position.y - lab.player.global_position.y
+	var r_aisles := []
+	for at in [Vector3(-2.45, 0, -1.6), Vector3(-2.45, 0, -3.0), Vector3(-2.45, 0, -4.5), Vector3(2.45, 0, -1.6), Vector3(2.45, 0, -3.0),
+			Vector3(2.45, 0, -4.5)]:
+		if not r_reach.has(_cell(at)):
+			r_aisles.append(at)
+	var r_books := []
+	for x in lab.live_books:
+		var mid: Vector3 = x._middle()
+		var seen := false
+		for c: Vector2i in r_reach:
+			var r_at := Vector3(c.x * CELL, lab.SPAWN.y + r_eye, c.y * CELL)
+			if r_at.distance_to(mid) < LiveBook.OPEN_NEAR - 0.05:
+				var ray := PhysicsRayQueryParameters3D.create(r_at, mid)
+				ray.exclude = [lab.player.get_rid()]
+				if s_space.intersect_ray(ray).is_empty():
+					seen = true
+					break
+		if not seen:
+			r_books.append(x.name)
+	_check("L22 the shop on foot: from the corridor the player's body reaches every aisle and a place to see every live book open",
+		r_aisles.is_empty() and r_books.is_empty(), "cells %d, aisle points out of reach %s, live books out of reach %s" % [r_reach.size(),
+		r_aisles, r_books])
 
 	# L15 the corner still shows: from the corridor, nothing stands between the eye and his lamp
 	lab.player.global_position = lab.SPAWN
@@ -308,18 +338,25 @@ func _run() -> void:
 				b_wrong.append("overlap")
 			if i > 1 and spot_books[i]["look"] == spot_books[i - 1]["look"] and spot_books[i]["look"] == spot_books[i - 2]["look"]:
 				b_wrong.append("three alike")
-	_check("L16 the shelves full and varied: 400+ books in 20 draws or fewer, every board stocked, none touching or in a study's room, each set on its board",
-		b_layout.size() >= 400 and lab.book_draws.size() <= 20 and b_held.size() == lab.book_spots.size() and b_wrong.is_empty(),
-		"books %d draws %d boards %d/%d wrong %s" % [b_layout.size(), lab.book_draws.size(), b_held.size(), lab.book_spots.size(),
-		b_wrong.slice(0, 5)])
+	var b_leaning := b_layout.filter(func(x): return x.get("pose", "") == "lean").size()
+	var b_fallen := b_layout.filter(func(x): return x.get("pose", "") == "lie").size()
+	_check("L16 the shelves full and varied: 400+ books in 20 draws or fewer, every board stocked, some leaning and some fallen, none touching or in a study's room, each set on its board",
+		b_layout.size() >= 400 and lab.book_draws.size() <= 20 and b_held.size() == lab.book_spots.size() and b_wrong.is_empty()
+		and b_leaning >= 20 and b_fallen >= 10,
+		"books %d draws %d boards %d/%d leaning %d fallen %d wrong %s" % [b_layout.size(), lab.book_draws.size(), b_held.size(),
+		lab.book_spots.size(), b_leaning, b_fallen, b_wrong.slice(0, 5)])
 
 	# L17 a live book opens as the player comes near and looks at it, and shuts as they go
 	var b_novel: Node3D = lab.live_books.filter(func(x): return x.kind == LiveBook.Kind.NOVEL)[0]
 	var b_at: Vector3 = b_novel.global_position
+	# (Shut first: the walks before may have left the player beside it.)
+	for i in 120:
+		lab.player.global_position = Vector3(b_at.x - 3.0, 1.05, b_at.z - 1.0)
+		await get_tree().process_frame
 	var b_opens := [0, 0]
 	b_novel.opened.connect(func(_b): b_opens[0] += 1)
 	b_novel.closed.connect(func(_b): b_opens[1] += 1)
-	var b_near := Vector3(b_at.x - 1.0, 1.05, b_at.z)
+	var b_near := Vector3(b_at.x - 0.58, 1.05, b_at.z - 0.8)
 	var b_open_by := -1
 
 	for i in 90:
@@ -328,7 +365,7 @@ func _run() -> void:
 		await get_tree().process_frame
 		if b_open_by < 0 and b_novel.open >= 0.95:
 			b_open_by = i
-	var b_far := Vector3(b_at.x - 3.0, 1.05, b_at.z)
+	var b_far := Vector3(b_at.x - 3.0, 1.05, b_at.z - 1.0)
 	var b_shut_by := -1
 
 	for i in 120:
@@ -340,11 +377,11 @@ func _run() -> void:
 		b_open_by >= 0 and b_open_by <= 72 and b_shut_by >= 0 and b_shut_by <= 90 and b_opens == [1, 1],
 		"open by frame %d shut by frame %d signals %s" % [b_open_by, b_shut_by, b_opens])
 
-	# L18 not through shelves: near a book on a shelf but on the far side of its case's side, it stays shut
+	# L18 not through shelves: near a book on a shelf but on the far side of its case's side (standing in the wall's
+	#     gap beside the case, where a body fits), it stays shut
 	var b_study: Node3D = lab.live_books.filter(func(x): return x.kind == LiveBook.Kind.STUDY and x.section == &"necromancy")[0]
 	# (Standing on the floor, its eye near the book's height, so near enough that only the case's side keeps it shut.)
-	var b_side: Vector3 = b_study.global_position + Vector3(0.05, 0.0, 1.15)
-	b_side.y = 1.05
+	var b_side := Vector3(-3.46, 1.05, -3.12)
 	var b_eye := 0.0
 
 	for i in 120:
@@ -394,6 +431,16 @@ func _run() -> void:
 	var b_after := b_watched.map(func(m): return [m.material_override] + range(m.mesh.get_surface_count()).map(func(i): return m.get_surface_override_material(i)))
 	_check("L21 F2 on and off leaves the live books, the lamp and the chained book as they were, the lamp lit",
 		b_before == b_after and lab.lamp_light.visible, "same %s lamp lit %s" % [b_before == b_after, lab.lamp_light.visible])
+
+	# L23 what the shop moves every frame (the live books, the chained book's cover and chain, the caged books) is
+	#     drawn where it is, not interpolated between physics ticks (that stutters on a fast screen)
+	var i_moving: Array[Node3D] = [lab.chained.cover, lab.chained.chain]
+	i_moving.append_array(lab.quarantine.books)
+	for x in lab.live_books:
+		i_moving.append_array(x.parts)
+	var i_wrong := i_moving.filter(func(n): return n.is_physics_interpolated()).map(func(n): return n.name)
+	_check("L23 the moving books are drawn where they are, not interpolated between physics ticks", i_wrong.is_empty(),
+		"interpolated %s" % [i_wrong.slice(0, 6)])
 
 	# L20 the frame time: the shop no slower than the underground bay, measured the same way in this run
 	lab.player.global_position = Vector3(0.0, 1.05, -3.0)
@@ -461,6 +508,75 @@ func _walk(start: Vector3, yaw: float, done: Callable, frames: int) -> Dictionar
 	Input.action_release("move_forward")
 	await _frames(10)
 	return {"ok": arrived, "end": player.global_position, "stall": stall}
+
+
+## Walks the player from `start` along `way` (floor points), turning toward each in turn; arrived at each within
+## 0.3 m, else stalled (0.5 s without moving) or out of frames.
+func _walk_path(start: Vector3, way: Array[Vector3], frames: int) -> Dictionary:
+	var player: CharacterBody3D = lab.player
+	player.global_position = start
+	player.velocity = Vector3.ZERO
+	await _frames(10)
+	var reached := 0
+	var still := 0
+	var last := player.global_position
+	Input.action_press("move_forward")
+
+	for i in frames:
+		var to: Vector3 = way[reached] - player.global_position
+		to.y = 0.0
+		if to.length() < 0.3:
+			reached += 1
+			if reached == way.size():
+				break
+			continue
+		player.rotation.y = atan2(-to.x, -to.z)
+		await get_tree().physics_frame
+		still = still + 1 if player.global_position.distance_to(last) < 0.003 else 0
+		last = player.global_position
+		if still > 30:
+			break
+
+	Input.action_release("move_forward")
+	await _frames(10)
+	return {"ok": reached == way.size(), "reached": reached, "end": player.global_position}
+
+
+## The floor's cells (CELL m apart, x and z) the player's own body can reach standing from `start`, flooded
+## four ways; a cell is open where the body's shape there touches nothing.
+const CELL := 0.1
+
+
+func _cell(at: Vector3) -> Vector2i:
+	return Vector2i(roundi(at.x / CELL), roundi(at.z / CELL))
+
+
+func _reachable(start: Vector3) -> Dictionary:
+	var player: CharacterBody3D = lab.player
+	var body: CollisionShape3D = player.get_node("CollisionShape3D")
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = body.shape
+	q.exclude = [player.get_rid()]
+	q.collision_mask = player.collision_mask
+	var space := lab.get_world_3d().direct_space_state
+	var seen := {}
+	var open := {}
+	var todo: Array[Vector2i] = [_cell(start)]
+	seen[todo[0]] = true
+
+	while not todo.is_empty():
+		var c: Vector2i = todo.pop_back()
+		q.transform = Transform3D(Basis(), Vector3(c.x * CELL, start.y + body.position.y, c.y * CELL))
+		if not space.intersect_shape(q, 1).is_empty():
+			continue
+		open[c] = true
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = c + d
+			if not seen.has(n) and absi(n.x) <= 45 and n.y <= 30 and n.y >= -65:
+				seen[n] = true
+				todo.append(n)
+
+	return open
 
 
 func _frames(n: int) -> void:
