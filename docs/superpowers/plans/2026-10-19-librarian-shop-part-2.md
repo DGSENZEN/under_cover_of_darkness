@@ -240,6 +240,24 @@ Calls made:
 - **Dim glowing lines.** The sigils' lines are kept dim (energy 1.25, violet core). Brighter, with the page's light, they bloomed into a white ball.
 - **The eye stands in front of all the sigils**, its white a dim pearl. Further back and brighter, it was lost in the bloom.
 
+## Task 3, monster hunting (Oct 23, awaiting review)
+
+Metaphysics was approved by the user on Oct 23.
+
+`scripts/Visual/Library/Hunting.gd`, over hunting studies:
+- the approved nahual model (`underground_uncanny`), small, black with an iron-red burning rim and ember eyes, prowling round a binding ring of iron-red fire on the pages;
+- the librarian's own rack weapons above it (crossbow, sword cane, stakes, from `library_corner`), drawn black and rimmed, circling and aimed at it;
+- every 3.6 s the crossbow looses a bolt of fire, and the beast flinches, frays pale and gathers itself again.
+
+Checks E51–E54. E35 no longer asserts that other sections lack a family, since every section now has one. Review media: `docs/superpowers/refs/underground/library_stills/part2-hunting/`.
+
+Calls made:
+- **The nahual is drawn black with a rim, not in the bench's fraying spectre shader.** At this size the spectre shader frayed through and washed pale against the lit pages.
+- **The lechuza and the chupacabra wait** for their own reviewed models, as the plan says.
+- **The family's kit meshes are cached on the family, not in a static variable.** A static cache left a null-material engine error at the headless renderer's exit.
+
+With this, each section has its family: Task 3 is complete pending this review.
+
 ## Plan self-review
 
 The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.

@@ -35,6 +35,7 @@ func _run() -> void:
 	await _necromancy(effects)
 	await _alchemy(effects)
 	await _metaphysics(effects)
+	await _hunting(effects)
 
 	# Drive a real novel through partial openings, without a full-open signal.
 	var book: LiveBook = lab.live_books[7]
@@ -155,8 +156,8 @@ func _chronology(effects: Node3D) -> void:
 	var family: Node3D = projection.get("family")
 	var parts_ok: bool = family != null and family.get("kind") == &"chronology" and family.rings.size() == 3 \
 		and family.hands.size() == 2 and family.grains is MultiMeshInstance3D and family.page is MeshInstance3D
-	_check("E35 a chronology book carries chronology's projection (three rings, two hands, sand, a ghost page); other sections none yet",
-		parts_ok and projections[other_at].get("family") == null, "family %s" % [family.get("kind") if family != null else null])
+	_check("E35 a chronology book carries chronology's projection (three rings, two hands, sand, a ghost page)",
+		parts_ok, "family %s" % [family.get("kind") if family != null else null])
 	if not parts_ok:
 		return
 
@@ -406,6 +407,61 @@ func _metaphysics(effects: Node3D) -> void:
 	watcher.global_position = book.global_position + case.global_basis.z * 4.0
 	await _frames(120)
 	_check("E50 shut again, metaphysics' projection is gone", not family.visible and projection.presence == 0.0,
+		"visible %s presence %.2f" % [family.visible, projection.presence])
+	book.watcher = null
+	watcher.queue_free()
+
+
+## Monster hunting's projection (Task 3's fifth family): over an opened hunting study, the nahual (the approved model)
+## as a small spectre prowling round a hunter's binding ring on the right-hand page, and the rack's own weapons (the
+## crossbow, the sword cane, the stakes) as black ghosts rimmed in iron-red fire circling above it, each aimed at it;
+## now and then the crossbow looses a bolt and the beast flinches, frays and gathers itself again.
+func _hunting(effects: Node3D) -> void:
+	var projections: Array = effects.get("projections")
+	var studies: Array = lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.STUDY and b.section == &"hunting")
+	var book: LiveBook = studies[0]
+	var projection: Node3D = projections[lab.live_books.find(book)]
+	var family: Node3D = projection.get("family")
+	var parts_ok: bool = family != null and family.get("kind") == &"hunting" and family.beast is Node3D \
+		and family.weapons.size() == 3 and family.ring is MeshInstance3D
+	_check("E51 a hunting book carries its projection (the nahual, three weapons from the rack, a binding ring)",
+		parts_ok, "family %s" % [family.get("kind") if family != null else null])
+	if not parts_ok:
+		return
+
+	var watcher := Node3D.new()
+	add_child(watcher)
+	var case: Node3D = lab.sections["hunting"]
+	watcher.global_position = book.global_position + case.global_basis.z * 0.9 + Vector3.UP * 0.35
+	book.watcher = watcher
+	await _frames(90)
+	var strays := []
+	var aims := []
+	var prowl := []
+	var whole := []
+	var shots := 0
+	var was_shots: int = family.shots
+	for i in 900:
+		await get_tree().process_frame
+		if i % 20 == 0:
+			strays.append_array(_strays(family, family.parts(), projection, book, case))
+			for w: Node3D in family.weapons:
+				aims.append(family.aim_of(w))
+			prowl.append(family.beast.position)
+			whole.append(family.beast_whole)
+	shots = family.shots - was_shots
+	var moved := 0.0
+	for k in prowl.size() - 1:
+		moved += prowl[k].distance_to(prowl[k + 1])
+	_check("E52 opened, hunting's pieces stay over the pages, under the board above, clear of the shelf books either side",
+		family.visible and strays.is_empty(), "clear %.2f strays %s" % [projection.clear_height, strays.slice(0, 4)])
+	_check("E53 every weapon aims at the beast as it prowls; the crossbow looses and the beast frays and gathers itself again",
+		aims.min() > 0.9 and moved > 0.1 and shots >= 2 and whole.min() < 0.6 and whole.max() > 0.95,
+		"aim %.2f prowled %.2f shots %d whole %.2f..%.2f" % [aims.min(), moved, shots, whole.min(), whole.max()])
+
+	watcher.global_position = book.global_position + case.global_basis.z * 4.0
+	await _frames(120)
+	_check("E54 shut again, hunting's projection is gone", not family.visible and projection.presence == 0.0,
 		"visible %s presence %.2f" % [family.visible, projection.presence])
 	book.watcher = null
 	watcher.queue_free()

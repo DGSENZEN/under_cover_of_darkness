@@ -8,7 +8,8 @@ const BookRadiance := preload("res://scripts/Visual/Library/BookRadiance.gd")
 const FAMILIES := {&"chronology": preload("res://scripts/Visual/Library/Chronology.gd"),
 	&"necromancy": preload("res://scripts/Visual/Library/Necromancy.gd"),
 	&"alchemy": preload("res://scripts/Visual/Library/Alchemy.gd"),
-	&"metaphysics": preload("res://scripts/Visual/Library/Metaphysics.gd")}
+	&"metaphysics": preload("res://scripts/Visual/Library/Metaphysics.gd"),
+	&"hunting": preload("res://scripts/Visual/Library/Hunting.gd")}
 
 var book: LiveBook
 var presence := 0.0
