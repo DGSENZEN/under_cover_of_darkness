@@ -57,6 +57,8 @@ func _ready() -> void:
 		["novel_sword", lib.to_global(Vector3(3.15, 1.35, -0.95)), lib.to_global(Vector3(3.12, 1.02, -0.3))],
 		["novel_rose", lib.to_global(Vector3(0.55, 1.85, -1.15)), lib.to_global(Vector3(1.15, 1.55, -1.6))],
 		["spell_close", lib.to_global(Vector3(-2.55, 1.6, -1.05)), lib.to_global(Vector3(-2.8, 1.22, -0.4))],
+		["words_wave", lib.to_global(Vector3(0.2, 1.7, -3.4)), lib.to_global(Vector3(0.0, 2.3, -1.0))],
+		["words_stream", lib.to_global(Vector3(-2.2, 1.55, -1.4)), lib.to_global(Vector3(-2.8, 1.5, -0.4))],
 	]
 	if not clip.is_empty():
 		for view in views:

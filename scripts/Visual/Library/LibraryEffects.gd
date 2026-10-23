@@ -4,13 +4,15 @@ extends Node3D
 const BookProjection := preload("res://scripts/Visual/Library/BookProjection.gd")
 const LibraryLight := preload("res://scripts/Visual/Library/LibraryLight.gd")
 const SectionAura := preload("res://scripts/Visual/Library/SectionAura.gd")
+const LibraryWords := preload("res://scripts/Visual/Library/LibraryWords.gd")
 
 var projections: Array[Node3D] = []
 var enabled := true
 var inspecting := false
 var lighting: Node3D
-## Each section's aura, by section.
+## Each section's aura, by section; the living words.
 var auras := {}
+var words: Node3D
 
 
 func build(lab: Node3D) -> void:
@@ -34,6 +36,9 @@ func build(lab: Node3D) -> void:
 		aura.build(lab, section, lab.sections[section], LibraryLight.COLOURS[section], 70.0 + k)
 		auras[section] = aura
 		k += 1
+	words = LibraryWords.new()
+	add_child(words)
+	words.build(lab, projections)
 
 
 func set_enabled(on: bool) -> void:
@@ -55,3 +60,5 @@ func set_inspection(on: bool) -> void:
 func _show_auras() -> void:
 	for aura: Node3D in auras.values():
 		aura.visible = enabled and not inspecting
+	if is_instance_valid(words):
+		words.visible = enabled and not inspecting

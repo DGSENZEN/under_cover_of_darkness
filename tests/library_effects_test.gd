@@ -37,6 +37,7 @@ func _run() -> void:
 	await _metaphysics(effects)
 	await _hunting(effects)
 	await _novels_spells_auras(effects)
+	await _words(effects)
 
 	# Drive a real novel through partial openings, without a full-open signal.
 	var book: LiveBook = lab.live_books[7]
@@ -564,6 +565,134 @@ func _novels_spells_auras(effects: Node3D) -> void:
 	spell.watcher = null
 	near_novel.queue_free()
 	near_spell.queue_free()
+
+
+## Task 5: the living words. Our invented script, drawn from a distance-field atlas; any font's atlas in its place
+## (the user's Spanish and Latin, accents and all); chains of words laid along paths and flowing, from open novels and
+## spellbooks and in slow waves between the stands.
+func _words(effects: Node3D) -> void:
+	var Glyphs := load("res://scripts/Visual/Library/LibraryGlyphs.gd")
+	var Chain := load("res://scripts/Visual/Library/WordChain.gd")
+	if Glyphs == null or Chain == null:
+		_check("E60 the invented script: the same seed the same words, another seed others, words of two to seven glyphs",
+			false, "no LibraryGlyphs or WordChain")
+		return
+
+	var script_atlas: Dictionary = Glyphs.atlas("script")
+	var latin: Dictionary = Glyphs.atlas("latin")
+	var a: String = Glyphs.script(7, 60)
+	var b: String = Glyphs.script(8, 60)
+	var said: Array = Array(a.split(" ", false))
+	var known := true
+	for ch in a.replace(" ", ""):
+		known = known and script_atlas["chars"].has(ch)
+	_check("E60 the invented script: the same seed the same words, another seed others, words of two to seven glyphs",
+		a == Glyphs.script(7, 60) and a != b and a.replace(" ", "").length() == 60 and known
+		and said.all(func(w): return w.length() >= 2 and w.length() <= 7), "words %d known %s" % [said.size(), known])
+
+	var accents := true
+	for ch in "áéíóúñüÁÉÍÓÚÑÜ¿¡":
+		accents = accents and latin["chars"].has(ch)
+	_check("E61 the script's atlas has its forty glyphs; a font's atlas has Spanish and Latin with their accents; any other character falls back",
+		script_atlas["chars"].size() >= 40 and accents and Glyphs.cell_of(latin, "\u4e2d") == latin["fallback"]
+		and Glyphs.cell_of(latin, "ñ") != latin["fallback"], "script %d accents %s" % [script_atlas["chars"].size(), accents])
+
+	# Chains on their own: edge cases, and that they follow their path and flow along it.
+	var arc := PackedVector3Array()
+	for i in 21:
+		var t := float(i) / 20.0
+		arc.append(Vector3(cos(t * PI) * 0.5, 1.5 + sin(t * PI) * 0.3, -2.0))
+	var empty: Node3D = Chain.new()
+	add_child(empty)
+	empty.build(arc, "", latin, Color.WHITE)
+	var flat: Node3D = Chain.new()
+	add_child(flat)
+	flat.build(PackedVector3Array([Vector3(0, 1, -2), Vector3(0, 1, -2)]), "abc", latin, Color.WHITE)
+	var spaced: Node3D = Chain.new()
+	add_child(spaced)
+	spaced.build(arc, "ab cd", latin, Color.WHITE)
+	var children := spaced.get_child_count()
+	var counts_ok := true
+	for i in 20:
+		var text: String = "año " + "x".repeat(i % 7) if i % 2 == 0 else Glyphs.script(i, 30)
+		spaced.set_text(text, latin if i % 2 == 0 else script_atlas)
+		counts_ok = counts_ok and spaced.glyphs.multimesh.instance_count == text.replace(" ", "").length()
+	_check("E62 no words, no path, spaces and twenty new texts: nothing drawn, nothing drawn, gaps, and no node or glyph left over",
+		empty.count == 0 and flat.glyphs.multimesh.visible_instance_count == 0 and counts_ok
+		and spaced.get_child_count() == children, "empty %d flat %d counts %s children %d -> %d" % [empty.count,
+		flat.glyphs.multimesh.visible_instance_count, counts_ok, children, spaced.get_child_count()])
+	empty.queue_free()
+	flat.queue_free()
+
+	spaced.set_text(Glyphs.script(3, 24), script_atlas)
+	spaced.loop = true
+	spaced.set_presence(1.0)
+	await _frames(2)
+	var off := 0.0
+	var placed: Array = spaced.placed.duplicate()
+	for at: Vector3 in placed:
+		var nearest := INF
+		for i in arc.size() - 1:
+			nearest = minf(nearest, Geometry3D.get_closest_point_to_segment(at, arc[i], arc[i + 1]).distance_to(at))
+		off = maxf(off, nearest)
+	var along: Array = []
+	for i in 40:
+		await get_tree().process_frame
+		along.append(spaced.arc_of(0))
+	var backward := 0
+	for i in along.size() - 1:
+		var step: float = along[i + 1] - along[i]
+		if step < 0.0 and step > -spaced.length * 0.5:
+			backward += 1
+	_check("E63 a chain's glyphs lie on its path and flow along it, round its loop without stepping back",
+		off < 0.002 and placed.size() == 24 and backward == 0 and absf(along[-1] - along[0]) > 0.005,
+		"off %.4f glyphs %d backward %d moved %.3f" % [off, placed.size(), backward, absf(along[-1] - along[0])])
+	spaced.queue_free()
+
+	# In the shop: a stream from each novel and spellbook, flowing only while it is open; two waves between the stands.
+	var words: Node3D = effects.get("words")
+	var streams: Dictionary = words.streams if words != null else {}
+	var waves: Array = words.waves if words != null else []
+	var shut_quiet := true
+	var loud := []
+	for book: LiveBook in streams:
+		var quiet: bool = streams[book].presence == 0.0 and not streams[book].visible
+		shut_quiet = shut_quiet and quiet
+		if not quiet:
+			loud.append("%s open %.2f presence %.2f" % [book.name, book.open, streams[book].presence])
+	var stands: Array = [lab.FRONT_TABLE_AT] + lab.LECTERNS.map(func(l): return l[0])
+	var ends_ok := waves.size() == 2
+	for w: Node3D in waves:
+		var ends: Array = [w.path[0], w.path[w.path.size() - 1]]
+		for e: Vector3 in ends:
+			var near := stands.any(func(at): return Vector2(lab.to_local(e).x - at.x, lab.to_local(e).z - at.z).length() < 0.45)
+			ends_ok = ends_ok and near
+		ends_ok = ends_ok and w.visible and w.count > 20
+	var kinds: Array = lab.live_books.filter(func(x): return x.kind != LiveBook.Kind.STUDY)
+	_check("E64 every novel and spellbook has its stream, quiet while shut; two waves of words run between the stands",
+		streams.size() == kinds.size() and shut_quiet and ends_ok, "streams %d of %d loud %s waves %d ends %s" % [streams.size(),
+		kinds.size(), loud, waves.size(), ends_ok])
+
+	var spell: LiveBook = lab.live_books.filter(func(x): return x.kind == LiveBook.Kind.SPELL)[0]
+	var near := Node3D.new()
+	add_child(near)
+	near.global_position = spell.global_position + Vector3(0.0, 0.6, 0.0)
+	spell.watcher = near
+	await _frames(90)
+	var open_stream: Node3D = streams.get(spell)
+	var flowing: bool = open_stream != null and open_stream.visible and open_stream.presence > 0.95
+	lab.set_form(true)
+	await _frames(2)
+	var hidden: bool = waves.all(func(w): return not w.is_visible_in_tree()) and not open_stream.is_visible_in_tree()
+	lab.set_form(false)
+	await _frames(2)
+	var back: bool = waves.all(func(w): return w.is_visible_in_tree()) and open_stream.is_visible_in_tree()
+	_check("E65 an open spellbook's words flow; the form light hides every word and gives them back",
+		flowing and hidden and back, "flowing %s hidden %s back %s" % [flowing, hidden, back])
+	near.global_position = spell.global_position + Vector3(0.0, 0.0, 5.0)
+	await _frames(120)
+	spell.watcher = null
+	near.queue_free()
 
 
 func _radiance(effects: Node3D) -> void:

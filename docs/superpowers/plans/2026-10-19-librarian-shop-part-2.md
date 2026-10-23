@@ -274,6 +274,25 @@ Calls made:
 - **Mostly-eaten shell.** The spell's shell is mostly eaten away (erosion 0.64, opacity 0.22); whole, it read as crumpled glass.
 - **Roomy aura roots.** The auras root where the books have the most room. Rooted on tall books with little room, they read as candle flames on the books' heads.
 
+## Task 5, the living words (Oct 23, awaiting review)
+
+Task 4 was approved by the user on Oct 23.
+
+- **The invented script** (`tools/textures/library_glyphs.py`): our own 40 glyphs in one hand, on U+E000 on, baked into a signed-distance atlas. The same tool bakes any font; Roboto-Bold, already in the repo under Apache 2.0, gives the `latin` atlas with Spanish and Latin accents for your words. Python tests 6/6. scipy was installed with Homebrew, at the user's say.
+- **`LibraryGlyphs.gd`**: the deterministic script, atlas loading, and fallback for missing characters.
+- **`WordChain.gd` and `library_glyph.gdshader`**: one MultiMesh of glyph quads per chain, so one draw call each. Each glyph is read from its atlas cell with a bright core, a dark rim and a faint halo. The first character leads, so the words read the way they go. Open chains fade at both ends; loops have no seam. `set_text` swaps any text and atlas without leaving nodes behind.
+- **`LibraryWords.gd`** (`LibraryEffects.words`):
+  - a stream curling up from every novel and spellbook while it is open, in its colour;
+  - two slow gold waves arching over the shop above head height, from the table of novels to the front-corner lectern and from the right wall's lectern to the same corner, already running when the player walks in;
+  - all hidden under F2.
+
+Checks E60–E65. Review media: `docs/superpowers/refs/underground/library_stills/part2-words/`.
+
+Calls made:
+- **An SDF atlas from our own strokes**, not a font file. No font tools are installed, and the strokes are ours outright. A font atlas from the same tool replaces the script.
+- **The plan's `mesh(text, font, size)` became `atlas(name)`.** A chain takes a text and an atlas; there are no meshes per string.
+- **Chains lay out their glyphs only while on screen**, and from frames precomputed every 5 mm along the path. Laid out every frame, the waves took the shop's headless frame to 1.2 times the underground bay's. Now it is 1.04 times, and the windowed render check passes at 1.006.
+
 ## Plan self-review
 
 The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.
