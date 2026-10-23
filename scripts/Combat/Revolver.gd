@@ -106,7 +106,6 @@ var _turn_shown := 0.0
 
 func _ready() -> void:
 	player = get_parent() as CharacterBody3D
-	_ensure_action(&"grip", KEY_G)
 	_ensure_action(&"barrel", KEY_X)
 	_ensure_action(&"reload", KEY_R)
 
@@ -125,10 +124,6 @@ func _physics_process(delta: float) -> void:
 	if gun == null or not player.combat.is_able():
 		_stop_loading()
 		return
-
-	if Input.is_action_just_pressed("grip"):
-		_stop_loading()
-		set_braced(not braced)
 
 	if Input.is_action_just_pressed("barrel"):
 		_stop_loading()
@@ -216,12 +211,13 @@ func aim() -> Transform3D:
 	return player.combat.aim()
 
 
-## Both hands on the gun, or one let go: either takes grip_change seconds,
-## with no shot meanwhile.
+## Both hands on the gun, or one let go (G, through the Caster's loadout):
+## either takes grip_change seconds, with no shot or reload meanwhile.
 func set_braced(on: bool) -> void:
 	if on == braced:
 		return
 
+	_stop_loading()
 	braced = on
 	var gun: Resource = WeaponScript.find(&"revolver")
 	_grip_until = _game_time + gun.grip_change

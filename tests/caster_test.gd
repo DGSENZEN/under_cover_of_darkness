@@ -87,6 +87,115 @@ func _run() -> void:
 	_check("S3 the pool never goes under 0 or over 100", not paid and _near(kept, 10.0, 0.001) and power.power <= power.MAX,
 		"paid %s kept %.1f later %.1f" % [paid, kept, power.power])
 
+	var caster: Node = player.caster
+	var done := []
+	var broken := []
+	caster.cast_done.connect(func(id): done.append(id))
+	caster.cast_broken.connect(func(id): broken.append(id))
+
+	# S4 a hand spell takes the circle's 0.4 s, then is paid for
+	_wield(&"revolver")
+	_put_player(Vector3(0, 1.05, 0))
+	await _frames(30)
+	power.power = power.MAX
+	caster.select(&"shard")
+	done.clear()
+	Input.action_press("block")
+	await _frames(22)
+	var early := done.size()
+	await _frames(4)
+	Input.action_release("block")
+	_check("S4 a hand spell is cast in 0.4 s and costs 15", early == 0 and done == [&"shard"] and _near(power.power, 85.0, 0.01),
+		"at 22 %d then %s power %.1f" % [early, done, power.power])
+	await _frames(10)
+
+	# S5 a tome spell takes the pages' 1.2 s
+	power.power = power.MAX
+	caster.select(&"empower")
+	await _frames(30)
+	done.clear()
+	Input.action_press("block")
+	await _frames(70)
+	var at_seventy := done.size()
+	await _frames(4)
+	Input.action_release("block")
+	_check("S5 a tome spell is cast in 1.2 s and costs 50", at_seventy == 0 and done == [&"empower"] and _near(power.power, 50.0, 0.01),
+		"at 70 %d then %s power %.1f" % [at_seventy, done, power.power])
+	await _frames(10)
+
+	# S6 a hard hit breaks a tome spell, for nothing
+	power.power = power.MAX
+	done.clear()
+	broken.clear()
+	Input.action_press("block")
+	await _frames(30)
+	player.take_damage(30.0, null)
+	await _frames(2)
+	var after_hit: StringName = caster.casting()
+	await _frames(60)
+	Input.action_release("block")
+	_check("S6 a hard hit breaks a tome spell, and nothing is spent",
+		broken == [&"empower"] and done.is_empty() and after_hit == &"" and _near(power.power, 100.0, 0.01),
+		"broken %s done %s casting %s power %.1f" % [broken, done, after_hit, power.power])
+	await _frames(10)
+
+	# S7 let go early, or put the gun away: no spell, nothing spent
+	power.power = power.MAX
+	caster.select(&"shard")
+	done.clear()
+	Input.action_press("block")
+	await _frames(10)
+	Input.action_release("block")
+	await _frames(30)
+	var let_go := done.size()
+	Input.action_press("block")
+	await _frames(10)
+	_wield(&"sword")
+	await _frames(30)
+	Input.action_release("block")
+	_check("S7 letting go early or putting the gun away casts nothing and costs nothing",
+		let_go == 0 and done.is_empty() and caster.casting() == &"" and _near(power.power, 100.0, 0.01),
+		"let go %d done %s casting %s power %.1f" % [let_go, done, caster.casting(), power.power])
+
+	# S8 what each grip allows
+	await _frames(30)
+	var sword_shard: bool = caster.can_cast(&"shard")
+	var sword_blink: bool = caster.can_cast(&"blink")
+	_wield(&"revolver")
+	await _frames(30)
+	caster.select(&"shard")
+	caster.toggle_braced()
+	await _frames(30)
+	var braced_shard: bool = caster.can_cast(&"shard")
+	caster.select(&"shard")
+	Props.block(self, Vector3(20, 1.5, -5.0), Vector3(4, 3, 1))
+	await _frames(2)
+	var anchor: Vector3 = player.planner.hang_anchor(Vector3(20, 3.0, -4.5), Vector3.BACK, 3.0)
+	player.teleport(Transform3D(Basis.IDENTITY, anchor))
+	player._enter_hang(Vector3.BACK, 3.0, false)
+	await _frames(10)
+	var hung_shard: bool = caster.can_cast(&"shard")
+	var hung_blink: bool = caster.can_cast(&"blink")
+	player._drop_from_hang()
+	await _frames(60)
+	_check("S8 the sword or both hands on the gun allow only cantrips; hanging, only Blink",
+		not sword_shard and sword_blink and not braced_shard and not hung_shard and hung_blink,
+		"sword shard %s blink %s, braced shard %s, hanging shard %s blink %s" % [sword_shard, sword_blink, braced_shard, hung_shard, hung_blink])
+
+	# S9 the tome in the left hand gives way to a pickup, and comes back
+	_put_player(Vector3(0, 1.05, 0))
+	caster.select(&"empower")
+	await _frames(30)
+	var holding: StringName = player.hand.left_mode()
+	player.hand.receive("key", Props.belt_mesh(&"lockpick"), player.global_transform.translated(Vector3(0, 1, -1)))
+	await _frames(5)
+	var during: StringName = player.hand.left_mode()
+	await _frames(60)
+	_check("S9 the tome is in the left hand; a pickup takes it, then it is back",
+		holding == &"tome" and during == &"" and player.hand.left_mode() == &"tome",
+		"before %s during %s after %s" % [holding, during, player.hand.left_mode()])
+	caster.select(&"shard")
+
 
 # Helpers
 

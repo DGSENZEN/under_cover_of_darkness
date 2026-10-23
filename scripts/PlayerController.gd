@@ -20,6 +20,7 @@ const StealthHUD := preload("res://scripts/UI/StealthHUD.gd")
 const PlayerCombat := preload("res://scripts/Combat/PlayerCombat.gd")
 const RevolverScript := preload("res://scripts/Combat/Revolver.gd")
 const PowerPoolScript := preload("res://scripts/Magic/PowerPool.gd")
+const CasterScript := preload("res://scripts/Magic/Caster.gd")
 const GemEnvironment := preload("res://scripts/Visual/GemEnvironment.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -399,6 +400,8 @@ var combat: Node = null
 var revolver: Node = null
 ## The power every spell draws on (PowerPool.gd).
 var power: Node = null
+## The left hand's magic (Caster.gd).
+var caster: Node = null
 var _hazard_cooldown := 0.0
 
 var coyote_timer := 0.0
@@ -583,6 +586,9 @@ func _ready() -> void:
 	power = PowerPoolScript.new()
 	power.name = "Power"
 	add_child(power)
+	caster = CasterScript.new()
+	caster.name = "Caster"
+	add_child(caster)
 
 	# Make the level's placeholder sounds now, in the background, not on the
 	# first footstep.
@@ -1510,6 +1516,12 @@ func take_damage(amount: float, from: Node) -> void:
 	# A raised guard takes most of a blow, or, just in time, all of it.
 	if combat != null:
 		amount = combat.filter_incoming(amount, from)
+
+	# What gets through breaks a tome spell being cast (even through
+	# invulnerability: a test's or a cheat's, not the spell's).
+	if caster != null and amount > 0.0:
+		var info: Dictionary = from.attack_info() if from != null and from.has_method("attack_info") else {}
+		caster.on_hit(amount, StringName(info.get("kind", &"")))
 
 	if invulnerable or amount <= 0.0:
 		return

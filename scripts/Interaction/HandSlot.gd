@@ -15,6 +15,7 @@ const ArmReachScript := preload("res://scripts/Visual/ArmReach.gd")
 const ViewPosesScript := preload("res://scripts/Combat/ViewPoses.gd")
 const HandContactsScript := preload("res://scripts/Interaction/HandContacts.gd")
 const HeldPageScript := preload("res://scripts/Interaction/HeldPage.gd")
+const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 
 ## Visual layer 19. The lightgem cameras' cull masks leave it out.
 const VIEWMODEL_LAYER := 1 << 18
@@ -50,6 +51,9 @@ const HAND_GRIP := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-20.0)) * Basis(V
 ## wrist straight the gun points down the forearm. The grip's slant is the
 ## handle's own rake.
 const GUN_GRIP := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-10.0)) * Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0)), Vector3(-0.03, 0.08, 0.0))
+## The Caster's tome in the left hand, held from under its spine: the palm
+## on its back, the fingers up along the spine, the pages toward you.
+const TOME_GRIP := Transform3D(Basis(Vector3(0, 0, -1), Vector3(0, 1, 0), Vector3(1, 0, 0)), Vector3(0.05, 0.12, 0.0))
 ## A bow in the left fist: upright, the string toward you.
 const BOW_GRIP := Transform3D(Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0)), Vector3(0.03, 0.08, 0.0))
 ## The purse sitting in the left palm, facing up.
@@ -119,6 +123,12 @@ var _job: Dictionary = {}
 var _checking := false
 ## Both hands on the revolver, 0..1 (set_gun_support).
 var _gun_support := 0.0
+## What the left hand holds for the Caster ("", "cast", "tome"), where
+## (full-size camera space), and how far it is up, 0..1.
+var _left_mode: StringName = &""
+var _left_frame := Transform3D.IDENTITY
+var _left_up := 0.0
+var _tome: MeshInstance3D
 ## The revolver's moving parts, children of the main mesh: cylinder, hammer, gate.
 var _gun_parts := {}
 var _time := 0.0
@@ -274,6 +284,14 @@ func _ready() -> void:
 	add_child(_main)
 	_main_mesh = _viewmodel_instance()
 	_main.add_child(_main_mesh)
+
+	# The Caster's tome, in the left hand.
+	_tome = _viewmodel_instance()
+	_tome.name = "Tome"
+	_tome.mesh = WeaponScript.tome_mesh()
+	_apply_materials(_tome, _tome.mesh)
+	_tome.visible = false
+	add_child(_tome)
 
 	_off = Node3D.new()
 	_off.name = "OffHand"
@@ -522,6 +540,23 @@ func set_revolver_parts(cylinder_turn: float, hammer: float, gate: float) -> voi
 ## Tab: the left hand checking (the purse; the revolver's chambers).
 func is_checking() -> bool:
 	return _checking
+
+
+## The Caster's left hand: "cast" the bare hand up and open (`frame` where the
+## hand is), "tome" the tome held open (`frame` where its spine is), "" none.
+## Anything the left hand is asked to do (a pickup, a key) comes first.
+func set_left_hold(mode: StringName, frame: Transform3D) -> void:
+	_left_mode = mode
+	_left_frame = frame
+
+
+## What the left hand is showing for the Caster now: "" while it is busy
+## with something else (a pickup, a key, the purse).
+func left_mode() -> StringName:
+	if is_busy() or _checking:
+		return &""
+
+	return _left_mode
 
 
 ## Returns the last displayed weapon transform in full-size camera space.
@@ -1649,7 +1684,29 @@ func _place_arms() -> void:
 					poses[0] = &"Push"
 					curls[0] = 1.0
 
-	if _off.visible and not dead and not (bow and _main.visible) and braced < 0.5:
+	# The Caster's left hand: up and open for a circle, or holding the tome.
+	_left_up = move_toward(_left_up, 1.0 if left_mode() != &"" and not dead else 0.0, get_process_delta_time() / 0.15)
+	_tome.visible = _left_mode == &"tome" and _left_up > 0.05
+
+	if _left_up > 0.0 and _left_mode != &"":
+		var size := ViewArmsScript.SCALE
+		var low := Vector3(0.0, -lowered_drop / size, 0.08) * (1.0 - _left_up)
+		var at := Transform3D(_left_frame.basis, _for_view_fov(_left_frame.origin + low) * size)
+
+		if _left_mode == &"tome":
+			_tome.transform = Transform3D(at.basis.scaled(Vector3.ONE * size), at.origin)
+			targets[0] = _held_by(at, TOME_GRIP)
+			# Flat under the boards: fingers curled would come through the pages.
+			curls[0] = 0.0
+			poses[0] = _pose_if_had(&"Open")
+		else:
+			targets[0] = _held_by(at, Transform3D.IDENTITY)
+			curls[0] = 0.0
+			poses[0] = _pose_if_had(&"Open")
+
+		weights[0] = smoothstep(0.0, 1.0, _left_up)
+
+	if _off.visible and not dead and not (bow and _main.visible) and braced < 0.5 and _left_up <= 0.0:
 		if _off_item.visible:
 			targets[0] = _held_by(_off.transform * _off_item.transform, PINCH_GRIP)
 			curls[0] = 0.8

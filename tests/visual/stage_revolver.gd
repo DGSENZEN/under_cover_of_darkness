@@ -1,7 +1,8 @@
 extends Node3D
 ## Windowed visual QA: the revolver in hand, a frame each: at rest, at the top
 ## of a shot's kick, both hands on it, rolled to the gate mid-reload, the
-## thumb at the hammer's nose, and the chambers checked (Tab). Run with the
+## thumb at the hammer's nose, the chambers checked (Tab), the tome in the
+## left hand, and the bare left hand casting. Run with the
 ## new arms:
 ## FP_ARMS=new Godot --fixed-fps 60 --resolution 960x540 --path . res://tests/visual/stage_revolver.tscn -- --out=/tmp/revolver
 
@@ -69,6 +70,18 @@ func _ready() -> void:
 	await _frames(30)
 	await _shot("check")
 	player.hand.set_checking(false)
+	await _frames(10)
+
+	# The left hand: the tome out, then the bare hand mid-cast.
+	player.caster.select(&"empower")
+	await _frames(40)
+	await _shot("tome")
+	player.caster.select(&"shard")
+	await _frames(20)
+	Input.action_press("block")
+	await _frames(15)
+	await _shot("cast")
+	Input.action_release("block")
 	await _frames(10)
 	get_tree().quit()
 
