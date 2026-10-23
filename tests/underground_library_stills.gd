@@ -54,6 +54,9 @@ func _ready() -> void:
 		["meta_close", lib.to_global(Vector3(3.05, 1.3, -4.35)), lib.to_global(Vector3(3.74, 1.13, -4.55))],
 		["hunt_open", lib.to_global(Vector3(2.9, 1.75, -4.4)), lib.to_global(Vector3(3.05, 1.55, -5.72))],
 		["hunt_close", lib.to_global(Vector3(3.0, 1.66, -5.0)), lib.to_global(Vector3(3.05, 1.58, -5.72))],
+		["novel_sword", lib.to_global(Vector3(3.15, 1.35, -0.95)), lib.to_global(Vector3(3.12, 1.02, -0.3))],
+		["novel_rose", lib.to_global(Vector3(0.55, 1.85, -1.15)), lib.to_global(Vector3(1.15, 1.55, -1.6))],
+		["spell_close", lib.to_global(Vector3(-2.55, 1.6, -1.05)), lib.to_global(Vector3(-2.8, 1.22, -0.4))],
 	]
 	if not clip.is_empty():
 		for view in views:

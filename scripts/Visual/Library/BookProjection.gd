@@ -10,6 +10,10 @@ const FAMILIES := {&"chronology": preload("res://scripts/Visual/Library/Chronolo
 	&"alchemy": preload("res://scripts/Visual/Library/Alchemy.gd"),
 	&"metaphysics": preload("res://scripts/Visual/Library/Metaphysics.gd"),
 	&"hunting": preload("res://scripts/Visual/Library/Hunting.gd")}
+## The novels' characters and the spellbooks' workings (Task 4).
+const NovelScript := preload("res://scripts/Visual/Library/Novel.gd")
+const SpellScript := preload("res://scripts/Visual/Library/Spell.gd")
+const LibraryLight := preload("res://scripts/Visual/Library/LibraryLight.gd")
 
 var book: LiveBook
 var presence := 0.0
@@ -41,6 +45,18 @@ func build(source: LiveBook, index: int) -> void:
 		family = FAMILIES[book.section].new()
 		add_child(family)
 		family.build(float(index) * 1.618)
+	elif book.kind == LiveBook.Kind.NOVEL:
+		# (Its character by its place among the novels: the same colour its light takes.)
+		var lab := book.get_parent()
+		var novels: Array = lab.get("live_books").filter(func(b): return b.kind == LiveBook.Kind.NOVEL) if lab != null else [book]
+		var which := novels.find(book)
+		family = NovelScript.new()
+		add_child(family)
+		family.build(float(index) * 1.618, which, LibraryLight.NOVEL_COLOURS[which % LibraryLight.NOVEL_COLOURS.size()])
+	elif book.kind == LiveBook.Kind.SPELL:
+		family = SpellScript.new()
+		add_child(family)
+		family.build(float(index) * 1.618, LibraryLight.COLOURS.get(book.section, LibraryLight.COLOURS[&"metaphysics"]))
 	_sync()
 
 

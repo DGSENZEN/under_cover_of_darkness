@@ -36,6 +36,7 @@ func _run() -> void:
 	await _alchemy(effects)
 	await _metaphysics(effects)
 	await _hunting(effects)
+	await _novels_spells_auras(effects)
 
 	# Drive a real novel through partial openings, without a full-open signal.
 	var book: LiveBook = lab.live_books[7]
@@ -465,6 +466,104 @@ func _hunting(effects: Node3D) -> void:
 		"visible %s presence %.2f" % [family.visible, projection.presence])
 	book.watcher = null
 	watcher.queue_free()
+
+
+## Task 4: the novels show their characters as emblems (a hat, a sword, a rose), each its own colour, black with a
+## coloured rim; the spellbooks throw interlocking wards and a thin shell of aura in their section's colour; and from
+## each of the five sections sparse tendrils of its colour rise from real books on its boards, whether or not anyone
+## is near. One book shutting leaves another's open.
+func _novels_spells_auras(effects: Node3D) -> void:
+	var projections: Array = effects.get("projections")
+	var palette: Dictionary = preload("res://scripts/Visual/Library/LibraryLight.gd").COLOURS
+	var novels: Array = lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.NOVEL)
+	var spells: Array = lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.SPELL)
+	var novel_families: Array = novels.map(func(b): return projections[lab.live_books.find(b)].get("family"))
+	var spell_families: Array = spells.map(func(b): return projections[lab.live_books.find(b)].get("family"))
+	var emblems := {}
+	var tints := {}
+	for f in novel_families:
+		if f != null and f.get("kind") == &"novel":
+			emblems[f.emblem] = true
+			tints[f.colour.to_html()] = true
+	_check("E55 the three novels show three different characters' emblems (a hat, a sword, a rose), each its own colour",
+		emblems.keys().size() == 3 and emblems.has(&"hat") and emblems.has(&"sword") and emblems.has(&"rose") and tints.size() == 3,
+		"emblems %s colours %d" % [emblems.keys(), tints.size()])
+	var spells_ok := spell_families.size() == 2
+	for k in spell_families.size():
+		var f: Node3D = spell_families[k]
+		spells_ok = spells_ok and f != null and f.get("kind") == &"spell" and f.wards.size() >= 2 and f.shell is MeshInstance3D \
+			and f.colour.is_equal_approx(palette[spells[k].section])
+	_check("E56 the two spellbooks throw interlocking wards and an aura shell in their section's colour, not characters",
+		spells_ok, "families %s" % [spell_families.map(func(f): return f.get("kind") if f != null else null)])
+	if not (emblems.size() == 3 and spells_ok):
+		return
+
+	# The section auras, with every book shut: five, each rising from books on its own case, under the board above.
+	var auras: Dictionary = effects.get("auras") if effects.get("auras") != null else {}
+	var wrong := []
+	for section: StringName in palette:
+		var root: Node3D = auras.get(section)
+		if root == null or not root.visible or root.tendrils.size() < 3:
+			wrong.append("%s missing" % section)
+			continue
+		var case: MeshInstance3D = lab.sections[section]
+		var case_box: AABB = (case.global_transform * case.get_aabb()).grow(0.02)
+		for t: MeshInstance3D in root.tendrils:
+			var foot: Vector3 = t.global_position
+			var top: AABB = t.global_transform * t.get_aabb()
+			if not case_box.has_point(foot) or top.end.y > root.ceiling_of(t) + 0.001:
+				wrong.append("%s %s foot %s top %.3f ceiling %.3f" % [section, t.name, foot, top.end.y, root.ceiling_of(t)])
+	_check("E57 five section auras rise from books on their own cases, under the board above, with every book shut",
+		auras.size() == 5 and wrong.is_empty(), str(wrong.slice(0, 4)))
+
+	# Open a novel and a spellbook; the novel's emblem turns, the spell's wards turn, the auras sway.
+	var novel: LiveBook = novels[0]
+	var spell: LiveBook = spells[0]
+	var novel_family: Node3D = novel_families[0]
+	var spell_family: Node3D = spell_families[0]
+	var near_novel := Node3D.new()
+	var near_spell := Node3D.new()
+	add_child(near_novel)
+	add_child(near_spell)
+	near_novel.global_position = novel.global_position + Vector3(0.0, 0.6, 0.0)
+	near_spell.global_position = spell.global_position + Vector3(0.0, 0.6, 0.0)
+	novel.watcher = near_novel
+	spell.watcher = near_spell
+	await _frames(90)
+	var aura: Node3D = auras[&"alchemy"]
+	var before := [novel_family.emblem_node.rotation.y, spell_family.wards[0].quaternion, aura.tendrils[0].get_surface_override_material(0).get_shader_parameter("sway")]
+	var strays := []
+	for i in 120:
+		await get_tree().process_frame
+		if i % 30 == 0:
+			for pair in [[novel_family, novel], [spell_family, spell]]:
+				var projection: Node3D = projections[lab.live_books.find(pair[1])]
+				var origin: Vector3 = projection.origin_world()
+				for part: GeometryInstance3D in pair[0].parts():
+					if not part.is_visible_in_tree():
+						continue
+					var box: AABB = part.global_transform * part.get_aabb()
+					if box.end.y > origin.y + projection.clear_height + 0.001 or \
+							Vector2(box.get_center().x - origin.x, box.get_center().z - origin.z).length() > 0.3:
+						strays.append("%s/%s" % [pair[0].name, part.name])
+	var after := [novel_family.emblem_node.rotation.y, spell_family.wards[0].quaternion, aura.tendrils[0].get_surface_override_material(0).get_shader_parameter("sway")]
+	_check("E58 open, the novel's emblem turns, the spell's wards turn, the auras sway; all within their room above the book",
+		novel_family.visible and spell_family.visible and absf(after[0] - before[0]) > 0.05 and not after[1].is_equal_approx(before[1])
+		and after[2] != before[2] and strays.is_empty(), "strays %s" % [strays.slice(0, 4)])
+
+	# The novel's reader walks off: it shuts, the spellbook stays open.
+	near_novel.global_position = novel.global_position + Vector3(0.0, 0.0, 5.0)
+	await _frames(120)
+	var spell_projection: Node3D = projections[lab.live_books.find(spell)]
+	_check("E59 one book shutting leaves another open: the novel's emblem gone, the spell's wards still there",
+		not novel_family.visible and spell_family.visible and spell_projection.presence > 0.95,
+		"novel %s spell %s presence %.2f" % [novel_family.visible, spell_family.visible, spell_projection.presence])
+	near_spell.global_position = spell.global_position + Vector3(0.0, 0.0, 5.0)
+	await _frames(120)
+	novel.watcher = null
+	spell.watcher = null
+	near_novel.queue_free()
+	near_spell.queue_free()
 
 
 func _radiance(effects: Node3D) -> void:

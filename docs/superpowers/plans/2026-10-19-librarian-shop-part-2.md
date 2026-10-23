@@ -258,6 +258,22 @@ Calls made:
 
 With this, each section has its family: Task 3 is complete pending this review.
 
+## Task 4, novels, spells and section auras (Oct 23, awaiting review)
+
+Hunting was approved by the user on Oct 23, which completes Task 3.
+
+- **Novels** (`Novel.gd`): each novel's character as an emblem, picked by the novel's place among the novels. The hat is a top hat; the sword is a rapier with a cup hilt; the rose has its stem, leaves and a three-ring bloom. Each is black with a rim in the novel's own colour, rising and turning over the pages, with a thread of that colour.
+- **Spells** (`Spell.gd`): three ward rings interlocked like an armillary, each ticked, turning against each other over the gutter, inside a broken shell of aura round the whole book, in the spell's section colour. The left spell is chronology's, the right alchemy's.
+- **Section auras** (`SectionAura.gd`, owned by `LibraryEffects.auras`): up to four tendrils per section in its colour, rising from the books with the most room above them (at most two to a board, apart). They never pass the board above, and they show whether or not anyone is near. F2 inspection hides them.
+
+Checks E55–E59. Review media: `docs/superpowers/refs/underground/library_stills/part2-novels-spells-auras/`.
+
+Calls made:
+- **Thick blade.** The rapier's blade is thick through its middle; flat, it turned edge-on and vanished.
+- **Tight rims.** The emblems' rims are tight; wide, they washed the smooth turned shapes pale.
+- **Mostly-eaten shell.** The spell's shell is mostly eaten away (erosion 0.64, opacity 0.22); whole, it read as crumpled glass.
+- **Roomy aura roots.** The auras root where the books have the most room. Rooted on tall books with little room, they read as candle flames on the books' heads.
+
 ## Plan self-review
 
 The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.
