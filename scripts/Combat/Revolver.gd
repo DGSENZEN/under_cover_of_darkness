@@ -8,6 +8,7 @@ extends Node
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const RagdollScript := preload("res://scripts/Visual/Ragdoll.gd")
 const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
+const WardScript := preload("res://scripts/Magic/Ward.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -470,6 +471,14 @@ func _trace(from: Vector3, direction: Vector3) -> Dictionary:
 	var record := {"target": null, "point": from + direction * RANGE, "damage": 0.0, "headshot": false, "collider": null, "normal": -direction}
 
 	if hit.is_empty():
+		return record
+
+	# A ward in the way (another's: yours lets your shots out) takes it.
+	var warded := WardScript.stops(from, hit["position"], player)
+
+	if warded != Vector3.INF:
+		record["point"] = warded
+		WardScript.turned_aside(player, warded, direction)
 		return record
 
 	var collider: Object = hit.get("collider")

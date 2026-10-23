@@ -11,6 +11,7 @@ const Spells := preload("res://scripts/Magic/Spells.gd")
 const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
 const Blink := preload("res://scripts/Magic/Blink.gd")
 const ShardScript := preload("res://scripts/Magic/Shard.gd")
+const WardScript := preload("res://scripts/Magic/Ward.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -218,6 +219,8 @@ func _effect(id: StringName) -> void:
 	match id:
 		&"shard":
 			_loose_shard()
+		&"ward":
+			WardScript.cast_on(player)
 
 
 ## A splinter from the circle, out along your aim: from just ahead of the

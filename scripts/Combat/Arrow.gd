@@ -8,6 +8,7 @@ const RagdollScript := preload("res://scripts/Visual/Ragdoll.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const WardScript := preload("res://scripts/Magic/Ward.gd")
 
 signal struck(target: Object, damage: float, headshot: bool)
 
@@ -88,6 +89,15 @@ func _physics_process(delta: float) -> void:
 
 	if shooter is CollisionObject3D:
 		exclude.append((shooter as CollisionObject3D).get_rid())
+
+	# A ward in the way (not its owner's own): turned aside into its smoke.
+	var warded := WardScript.stops(from, to, shooter)
+
+	if warded != Vector3.INF:
+		global_position = warded
+		WardScript.turned_aside(self, warded, travel.normalized())
+		queue_free()
+		return
 
 	# Bodies too: a man lying on the floor.
 	var query := PhysicsRayQueryParameters3D.create(from, to, 1 | 2 | 4, exclude)

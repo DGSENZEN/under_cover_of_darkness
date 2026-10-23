@@ -13,6 +13,8 @@ const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 const Spells := preload("res://scripts/Magic/Spells.gd")
+const WardScript := preload("res://scripts/Magic/Ward.gd")
+const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
 
 
 class Ear:
@@ -370,8 +372,85 @@ func _run() -> void:
 	_check("S16 a killing shard in the thigh takes the leg off", not is_instance_valid(g16) and _severed_parts() > parts_before,
 		"alive %s parts %d -> %d" % [is_instance_valid(g16), parts_before, _severed_parts()])
 
+	# S18 the ward stops an arrow a metre out
+	player.invulnerable = false
+	player.health = player.max_health
+	_wield(&"revolver")
+	_put_player(Vector3(-10, 1.05, 0))
+	await _frames(20)
+	await _cast_ward()
+	var archer := _caller(Vector3(-10, 0, -10))
+	archer.set_physics_process(false)
+	var stopped_at := [Vector3.INF]
+	var arrow := _arrow_at_player(archer)
+	arrow.tree_exiting.connect(func(): stopped_at[0] = arrow.global_position)
+	await _frames(30)
+	var gap: float = stopped_at[0].distance_to(player.global_position + Vector3.UP * WardScript.HEIGHT) if stopped_at[0] != Vector3.INF else -1.0
+	_check("S18 a ward stops an arrow a metre out", _near(player.health, player.max_health, 0.01) and _near(gap, 1.0, 0.15),
+		"health %.1f stopped %.2f from the middle" % [player.health, gap])
+
+	# S20 your own shot goes out through it
+	var g20 := _caller(Vector3(-10, 0, -6))
+	g20.set_physics_process(false)
+	await _frames(2)
+	_aim(g20.global_position + Vector3(0, 1.25, 0))
+	player.revolver.reset_for_practice()
+	await _tap("throw")
+	await _frames(4)
+	_check("S20 your own shot goes out through your ward", _near(g20.health, 45.0, 0.1), "health %.1f" % g20.health)
+	g20.queue_free()
+
+	# S19 a blade is not stopped by it
+	player.health = player.max_health
+	var g19 := _caller(Vector3(-10, 0, -1.6))
+	g19._fighter.attacks = {&"overhead": 1.0}
+	g19.attack_cooldown = 5.0
+	await _cast_ward()
+	g19._attack_timer = 0.0
+	await _until(func(): return player.health < player.max_health, 240)
+	_check("S19 a blade comes through a ward", player.health < player.max_health and not WardScript.active.is_empty(),
+		"health %.1f wards %d" % [player.health, WardScript.active.size()])
+	g19.queue_free()
+
+	# S21 after its four seconds it is gone, and arrows land again
+	await _frames(int(WardScript.LIFE * 60.0) + 5)
+	var gone := WardScript.active.is_empty()
+	player.health = player.max_health
+	var late := _arrow_at_player(archer)
+	await _frames(30)
+	_check("S21 a ward lasts four seconds; then arrows land again", gone and player.health < player.max_health,
+		"wards %d health %.1f" % [WardScript.active.size(), player.health])
+	archer.queue_free()
+	player.invulnerable = true
+	player.health = player.max_health
+
 
 # Helpers
+
+## The Ward, cast: the copal circle closed.
+func _cast_ward() -> void:
+	player.caster.select(&"ward")
+	player.power.power = player.power.MAX
+	var cast := [false]
+	var on_done := func(id): cast[0] = cast[0] or id == &"ward"
+	player.caster.cast_done.connect(on_done)
+	Input.action_press("block")
+	await _until(func(): return cast[0], 60)
+	Input.action_release("block")
+	player.caster.cast_done.disconnect(on_done)
+	await _frames(2)
+
+
+## An arrow loosed at the player's chest by `archer`, at 40 m/s.
+func _arrow_at_player(archer: Node3D) -> Node3D:
+	var arrow: StaticBody3D = ArrowScript.new()
+	add_child(arrow)
+	var from: Vector3 = archer.global_position + Vector3.UP * 1.5
+	var chest: Vector3 = player.global_position + Vector3.UP * 0.4
+	arrow.launch(from, (chest - from).normalized() * 40.0, 20.0, archer, 2.5)
+	arrow.gravity = 0.0
+	return arrow
+
 
 ## Q held past a tap: aiming; let go, and the blink goes to the mark.
 func _hold_blink(frames: int) -> void:
