@@ -1,11 +1,12 @@
 extends Resource
-## Weapon Resource with melee, bow, noise, and mesh tuning.
+## Weapon Resource with melee, bow, gun, noise, and mesh tuning.
 ## Times are seconds, reach is metres, arc_degrees is degrees, noise is dB.
-## find() shares cached sword/dagger/bow resources; builders create new ones.
+## find() shares cached sword/dagger/bow/revolver resources; builders create new ones.
 
 enum Kind {
 	MELEE,
 	BOW,
+	GUN,
 }
 
 @export var id: StringName = &"sword"
@@ -39,6 +40,32 @@ enum Kind {
 @export var arrow_damage_max := 70.0
 @export var headshot_multiplier := 2.5
 
+@export_group("Gun")
+## The cylinder's chambers and the shot barrel's shells (a LeMat: one).
+@export var rounds := 6
+@export var shells := 1
+@export var bullet_damage := 55.0
+## The shot barrel: pellets in a cone `spread_degrees` wide, each falling
+## off from full at `falloff_start` to nothing at `falloff_end` (metres).
+@export var pellets := 9
+@export var pellet_damage := 18.0
+@export var spread_degrees := 8.0
+@export var falloff_start := 3.0
+@export var falloff_end := 12.0
+## Most of a shell into one man this close: a blast, not pellets.
+@export var blast_range := 2.0
+## Seconds from a shot until the next is ready: in one hand, in both.
+@export var ready_one_hand := 0.6
+@export var ready_braced := 0.35
+## Seconds per round through the gate, for the shell, to open or shut the gate.
+@export var round_load := 0.45
+@export var shell_load := 1.1
+@export var gate_time := 0.25
+@export var shot_db := 70.0
+@export var shell_db := 74.0
+## Seconds to take the gun in both hands, or let one go.
+@export var grip_change := 0.4
+
 @export_group("Noise")
 @export var swing_db := 38.0
 @export var hit_db := 52.0
@@ -54,7 +81,7 @@ static var _armoury := {}
 ## Returns the shared cached sword/dagger/bow Resource, or null for an unknown ID.
 static func find(weapon_id: StringName) -> Resource:
 	if _armoury.is_empty():
-		for weapon in [sword(), dagger(), bow()]:
+		for weapon in [sword(), dagger(), bow(), revolver()]:
 			_armoury[weapon.id] = weapon
 
 	return _armoury.get(weapon_id)
@@ -100,6 +127,20 @@ static func bow() -> Resource:
 	w.can_block = false
 	w.swing_db = 30.0
 	w.mesh = bow_mesh()
+	return w
+
+
+## The Prosecutor's revolver: a LeMat built up to a heavy man's gun, six
+## big rounds round a shot barrel of one shell.
+static func revolver() -> Resource:
+	var w := _new()
+	w.id = &"revolver"
+	w.display_name = "revolver"
+	w.kind = Kind.GUN
+	w.can_block = false
+	w.headshot_multiplier = 2.5
+	w.swing_db = 30.0
+	w.mesh = revolver_mesh()
 	return w
 
 
@@ -197,6 +238,71 @@ static func sword_mesh() -> Mesh:
 	# Where the edge runs, for trails and glints: just above the guard to the tip.
 	mesh.set_meta(&"blade_base", Vector3(0, 0.1, 0))
 	mesh.set_meta(&"blade_tip", Vector3(0, 0.84, 0))
+	return mesh
+
+
+## The revolver: the grip at the origin, its handle along Y, the barrels
+## forward along -Z above the hand, the shot barrel under the cylinder's.
+## The cylinder, hammer and loading gate are their own meshes (metas), so the
+## hand can turn and move them. A stand-in of blocks until the model is made.
+static func revolver_mesh() -> Mesh:
+	var mesh := model(&"revolver")
+	var iron := _material(Color(0.2, 0.2, 0.22), 0.75, 0.4)
+	var worn := _material(Color(0.42, 0.4, 0.38), 0.7, 0.3)
+	var walnut := _material(Color(0.3, 0.17, 0.09))
+
+	if mesh == null:
+		mesh = _assemble([
+			# The handle, raked back, under the frame.
+			[_box(Vector3(0.034, 0.12, 0.042)), Transform3D(Basis(Vector3.RIGHT, 0.25), Vector3(0, -0.005, 0.012)), walnut],
+			# The frame over the hand, the trigger guard under it.
+			[_box(Vector3(0.036, 0.045, 0.11)), Transform3D(Basis.IDENTITY, Vector3(0, 0.075, -0.035)), iron],
+			[_box(Vector3(0.012, 0.03, 0.05)), Transform3D(Basis.IDENTITY, Vector3(0, 0.04, -0.04)), iron],
+			# The long barrel, and the fat shot barrel under it.
+			[_box(Vector3(0.026, 0.026, 0.24)), Transform3D(Basis.IDENTITY, Vector3(0, 0.1, -0.2)), iron],
+			[_box(Vector3(0.03, 0.03, 0.17)), Transform3D(Basis.IDENTITY, Vector3(0, 0.072, -0.165)), worn],
+		])
+
+	mesh.set_meta(&"hold_scale", 0.62)
+	mesh.set_meta(&"hold_rotation", Vector3(0.0, 0.0, 0.0))
+	mesh.set_meta(&"view_poses", &"revolver")
+	mesh.set_meta(&"muzzle", Vector3(0, 0.1, -0.32))
+	mesh.set_meta(&"shot_muzzle", Vector3(0, 0.072, -0.25))
+
+	if not mesh.has_meta(&"cylinder_mesh"):
+		var cylinder := CylinderMesh.new()
+		cylinder.top_radius = 0.026
+		cylinder.bottom_radius = 0.026
+		cylinder.height = 0.05
+		cylinder.radial_segments = 6
+		cylinder.rings = 1
+		cylinder.material = worn
+		mesh.set_meta(&"cylinder_mesh", cylinder)
+		# Its axis along the barrel: the mesh's Y turned onto Z.
+		mesh.set_meta(&"cylinder_at", Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0.088, -0.065)))
+		mesh.set_meta(&"hammer_mesh", _assemble([[_box(Vector3(0.01, 0.03, 0.014)), Transform3D.IDENTITY, iron]]))
+		mesh.set_meta(&"hammer_at", Transform3D(Basis.IDENTITY, Vector3(0, 0.11, 0.012)))
+		mesh.set_meta(&"gate_mesh", _assemble([[_box(Vector3(0.006, 0.022, 0.016)), Transform3D.IDENTITY, iron]]))
+		mesh.set_meta(&"gate_at", Transform3D(Basis.IDENTITY, Vector3(0.021, 0.088, -0.045)))
+
+	return mesh
+
+
+## The tome, open: its spine at the origin along Y, the boards out to either
+## side, pages toward you (+Z). A stand-in of blocks until the model is made.
+static func tome_mesh() -> Mesh:
+	var mesh := model(&"tome")
+
+	if mesh == null:
+		var board := _material(Color(0.24, 0.1, 0.08))
+		var paper := _material(Color(0.82, 0.76, 0.62))
+		mesh = _assemble([
+			[_box(Vector3(0.13, 0.2, 0.012)), Transform3D(Basis(Vector3.UP, 0.18), Vector3(-0.065, 0, -0.01)), board],
+			[_box(Vector3(0.13, 0.2, 0.012)), Transform3D(Basis(Vector3.UP, -0.18), Vector3(0.065, 0, -0.01)), board],
+			[_box(Vector3(0.12, 0.19, 0.02)), Transform3D(Basis(Vector3.UP, 0.18), Vector3(-0.062, 0, 0.004)), paper],
+			[_box(Vector3(0.12, 0.19, 0.02)), Transform3D(Basis(Vector3.UP, -0.18), Vector3(0.062, 0, 0.004)), paper],
+		])
+
 	return mesh
 
 

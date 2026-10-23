@@ -307,7 +307,7 @@ static func belt_mesh(id: StringName, is_key := false) -> Mesh:
 			return tool_mesh("rod", Color(0.6, 0.6, 0.65))
 		&"arrows":
 			return WeaponScript.arrow_mesh()
-		&"sword", &"dagger", &"bow":
+		&"sword", &"dagger", &"bow", &"revolver":
 			return WeaponScript.find(id).mesh
 
 	return null
@@ -321,6 +321,36 @@ static func give_weapons(player: Node, arrows := 12) -> void:
 
 	if arrows > 0:
 		player.inventory.add_belt_item(&"arrows", "arrows", WeaponScript.arrow_mesh(), arrows)
+
+
+## The revolver on the belt, and its stocks of rounds and shells.
+static func give_revolver(player: Node, rounds := 24, shells := 4) -> void:
+	var weapon: Resource = WeaponScript.find(&"revolver")
+	player.inventory.add_belt_item(weapon.id, weapon.display_name, weapon.mesh)
+	player.inventory.add_ammo(&"rounds", rounds)
+	player.inventory.add_ammo(&"shells", shells)
+
+
+## A box of the revolver's rounds (or shells) lying about, to be taken.
+static func ammo(parent: Node, position: Vector3, id: StringName, count: int) -> RigidBody3D:
+	var body := RigidBody3D.new()
+	body.set_script(ToolScript)
+	body.tool_id = id
+	body.tool_name = "shells" if id == &"shells" else "rounds"
+	body.count = count
+	body.mass = 0.3
+	var size := Vector3(0.1, 0.05, 0.07)
+	body.add_child(shape_box(size))
+	var visual := MeshInstance3D.new()
+	visual.name = "MeshInstance3D"
+	var made := mesh_box(size, Color(0.5, 0.36, 0.2) if id == &"shells" else Color(0.55, 0.48, 0.3))
+	visual.mesh = made.mesh
+	made.free()
+	body.add_child(visual)
+	parent.add_child(body)
+	body.global_position = position
+	body.reset_physics_interpolation()
+	return body
 
 
 ## A weapon lying in the world, to be picked up.

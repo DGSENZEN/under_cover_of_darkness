@@ -16,6 +16,9 @@ var keys: Array[StringName] = []
 ## Each entry: { "id": StringName, "name": String, "mesh": Mesh, "count": int }
 var belt: Array[Dictionary] = []
 var belt_index := -1
+## The revolver's stocks: loose rounds for the cylinder, shells for the shot
+## barrel. Carried, not on the belt.
+var ammo := {&"rounds": 0, &"shells": 0}
 
 
 ## Adds value without clamping; emits loot_taken(value, purse), then changed.
@@ -33,6 +36,23 @@ func add_key(key_id: StringName, key_name: String, mesh: Mesh = null) -> void:
 
 	key_taken.emit(key_id)
 	add_belt_item(key_id, key_name, mesh)
+
+
+## Adds count to a stock (rounds or shells); emits changed.
+func add_ammo(id: StringName, count: int) -> void:
+	ammo[id] = int(ammo.get(id, 0)) + count
+	changed.emit()
+
+
+## Takes up to count from a stock: returns how many there were to take.
+func take_ammo(id: StringName, count: int) -> int:
+	var taken := mini(count, int(ammo.get(id, 0)))
+
+	if taken > 0:
+		ammo[id] = int(ammo[id]) - taken
+		changed.emit()
+
+	return maxi(taken, 0)
 
 
 func has_key(key_id: StringName) -> bool:
@@ -143,7 +163,7 @@ func save_state() -> Dictionary:
 	for entry in belt:
 		items.append({"id": entry["id"], "name": entry["name"], "count": int(entry["count"])})
 
-	return {"purse": purse, "keys": keys.duplicate(), "belt": items, "belt_index": belt_index}
+	return {"purse": purse, "keys": keys.duplicate(), "belt": items, "belt_index": belt_index, "ammo": {"rounds": int(ammo[&"rounds"]), "shells": int(ammo[&"shells"])}}
 
 
 ## Carries what was saved (save_state): the belt rebuilt with each item's
@@ -155,6 +175,8 @@ func load_state(state: Dictionary) -> void:
 	for key in state.get("keys", []):
 		keys.append(StringName(key))
 
+	var stocks: Dictionary = state.get("ammo", {})
+	ammo = {&"rounds": int(stocks.get("rounds", 0)), &"shells": int(stocks.get("shells", 0))}
 	belt.clear()
 
 	for item in state.get("belt", []):

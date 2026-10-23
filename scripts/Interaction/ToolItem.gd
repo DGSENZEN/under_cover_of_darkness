@@ -36,7 +36,12 @@ func frob(player: Node) -> void:
 	if visual != null:
 		mesh = visual.mesh
 
-	player.inventory.add_belt_item(tool_id, tool_name, mesh, count)
+	# The revolver's rounds and shells go to their stocks, not the belt.
+	if tool_id == &"rounds" or tool_id == &"shells":
+		player.inventory.add_ammo(tool_id, count)
+	else:
+		player.inventory.add_belt_item(tool_id, tool_name, mesh, count)
+
 	queue_free()
 
 

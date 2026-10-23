@@ -328,6 +328,12 @@ func set_stowed(p_stowed: bool) -> void:
 		player.hand.set_stowed(p_stowed)
 
 
+## The revolver (any gun) is the weapon in hand.
+func gun_drawn() -> bool:
+	var drawn: Resource = current_weapon()
+	return drawn != null and drawn.kind == WeaponScript.Kind.GUN
+
+
 func current_weapon() -> Resource:
 	if player.inventory == null:
 		return null
@@ -400,6 +406,15 @@ func _physics_process(delta: float) -> void:
 	var attack_pressed := Input.is_action_just_pressed("throw") and not spent and phase != Phase.STAGGER
 	var attack_held := Input.is_action_pressed("throw") and not spent
 
+	# The revolver drawn: its own hand (Revolver.gd) fires it and the left
+	# casts (Caster.gd). Here there is only the kick.
+	var gun := gun_drawn()
+
+	if gun:
+		attack_pressed = false
+		attack_held = false
+		block_pressed = false
+
 	if spent:
 		_clear_buffered_inputs()
 
@@ -431,7 +446,7 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("kick") and kick_ok:
 		_start_kick()
 
-	if Input.is_action_just_pressed("dodge") and phase != Phase.STAGGER and phase != Phase.KICK and phase != Phase.DODGE and player.is_on_floor() and stamina >= 1.0:
+	if not gun and Input.is_action_just_pressed("dodge") and phase != Phase.STAGGER and phase != Phase.KICK and phase != Phase.DODGE and player.is_on_floor() and stamina >= 1.0:
 		_dodge_pressed_at = _game_time
 
 	_try_buffered_dodge()
