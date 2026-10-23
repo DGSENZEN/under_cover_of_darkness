@@ -48,6 +48,13 @@ const FLIP_TIME := 0.15
 const BLAST_PELLETS := 6
 ## Seconds for the gate to snap shut when you fire mid-reload.
 const GATE_SNAP := 0.1
+## The pistol-whip: a man this near (metres), this far off your aim
+## (degrees); the blow lands this far in, and it is over by WHIP_TIME.
+const WHIP_REACH := 1.3
+const WHIP_CONE := 35.0
+const WHIP_LANDS := 0.15
+const WHIP_TIME := 0.35
+const WHIP_DAMAGE := 20.0
 
 ## A reload under way: the gate opening (or shutting), rounds going in, or
 ## the shell.
@@ -89,6 +96,10 @@ var _gate_shown := 0.0
 var _flip_shown := 0.0
 var _sprint_shown := 0.0
 var _boot_shown := 0.0
+var _whip_shown := 0.0
+## Seconds into a pistol-whip; -1 when none.
+var _whip_t := -1.0
+var _whip_target: Node3D = null
 ## The cylinder's turn as drawn (radians), catching up with the shots.
 var _turn_shown := 0.0
 
@@ -104,6 +115,7 @@ func _physics_process(delta: float) -> void:
 	_game_time += delta
 	_kick = move_toward(_kick, 0.0, delta / maxf(_settle, 0.01))
 	var gun: Resource = weapon()
+	_update_whip(delta)
 
 	if gun != null:
 		_send_pose(delta)
@@ -152,7 +164,7 @@ func weapon() -> Resource:
 
 
 func ready_to_fire() -> bool:
-	return loading == Load.NONE and _game_time >= _ready_at and _game_time >= _grip_until and _game_time >= _flip_until
+	return loading == Load.NONE and _whip_t < 0.0 and _game_time >= _ready_at and _game_time >= _grip_until and _game_time >= _flip_until
 
 
 func is_reloading() -> bool:
@@ -225,7 +237,70 @@ func reset_for_practice() -> void:
 	_flip_until = 0.0
 	_kick = 0.0
 	_owed_shot = false
+	_whip_t = -1.0
+	_whip_target = null
 	_stop_loading()
+
+
+# The pistol-whip
+
+## F with a man in arm's reach and in front of you: the gun's butt, not the
+## boot (PlayerCombat asks first). False with nobody there.
+func try_whip() -> bool:
+	if weapon() == null or _whip_t >= 0.0:
+		return false
+
+	var at := aim()
+	var ahead := -at.basis.z
+	ahead.y = 0.0
+	var best: Node3D = null
+	var nearest := WHIP_REACH
+
+	for guard in get_tree().get_nodes_in_group(&"guards"):
+		if not (guard is Node3D) or not guard.has_method("take_hit") or float(guard.get("health")) <= 0.0:
+			continue
+
+		var to: Vector3 = (guard as Node3D).global_position - player.global_position
+		to.y = 0.0
+		var reach := to.length()
+
+		if reach > nearest or reach < 0.01:
+			continue
+
+		if rad_to_deg(ahead.normalized().angle_to(to / reach)) > WHIP_CONE:
+			continue
+
+		best = guard
+		nearest = reach
+
+	if best == null:
+		return false
+
+	_stop_loading()
+	_whip_t = 0.0
+	_whip_target = best
+	Sfx.play_flat(player, &"whoosh_light", -6.0, 1.2)
+	return true
+
+
+func _update_whip(delta: float) -> void:
+	if _whip_t < 0.0:
+		return
+
+	var before := _whip_t
+	_whip_t += delta
+
+	if before < WHIP_LANDS and _whip_t >= WHIP_LANDS and is_instance_valid(_whip_target):
+		var at: Vector3 = _whip_target.eye_position() if _whip_target.has_method("eye_position") else _whip_target.global_position + Vector3.UP * 1.6
+		var blow: Vector3 = (at - aim().origin).normalized()
+		_whip_target.take_hit(WHIP_DAMAGE, player, &"power", at, blow)
+		player.juice.add_trauma(0.25)
+		player.juice.punch(0.3, 0.0)
+		Sfx.play(player, &"thud", at, 0.0, 0.9)
+
+	if _whip_t >= WHIP_TIME:
+		_whip_t = -1.0
+		_whip_target = null
 
 
 # The reload
@@ -511,6 +586,7 @@ func _send_pose(delta: float) -> void:
 	_gate_shown = move_toward(_gate_shown, 1.0 if loading != Load.NONE or checking else 0.0, delta / 0.2)
 	_flip_shown = move_toward(_flip_shown, 1.0 if _game_time < _flip_until else 0.0, delta / 0.07)
 	_boot_shown = move_toward(_boot_shown, 1.0 if booting else 0.0, delta / 0.1)
+	_whip_shown = move_toward(_whip_shown, 1.0 if _whip_t >= 0.0 and _whip_t < WHIP_LANDS + 0.05 else 0.0, delta / 0.08)
 
 	var frame := ViewPoses.revolver_frame(poses["rest"])
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["sprint"]), _ease(_sprint_shown))
@@ -520,6 +596,7 @@ func _send_pose(delta: float) -> void:
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["flip"]), _ease(_flip_shown))
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["gate"]), _ease(_gate_shown))
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["kick"]), _ease(_boot_shown))
+	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["whip"]), _ease(_whip_shown))
 
 	var turned := float(_shots) * TAU / 6.0
 	_turn_shown = move_toward(_turn_shown, turned, delta * TAU / 6.0 / 0.12)

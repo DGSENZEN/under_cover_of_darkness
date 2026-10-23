@@ -374,6 +374,29 @@ func _run() -> void:
 
 	_check("R15b the cylinder turns 60 degrees for a shot", _near(absf(turned), 60.0, 1.0), "turned %.1f" % turned)
 
+	# R16 in arm's reach, F is a pistol-whip, not a kick
+	revolver.reset_for_practice()
+	var g16 := _fighter(Vector3(38, 0, -1.0))
+	g16.set_physics_process(false)
+	_put_player(Vector3(38, 1.05, 0))
+	await _frames(20)
+	kicks.clear()
+	await _tap("kick")
+	await _frames(30)
+	_check("R16 in arm's reach, F whips him with the gun", _near(g16.health, 80.0, 0.1) and kicks.is_empty(),
+		"health %.1f kicked %d" % [g16.health, kicks.size()])
+	g16.queue_free()
+
+	# R16b further off, F is the kick
+	var g16b := _fighter(Vector3(42, 0, -1.8))
+	_put_player(Vector3(42, 1.05, 0))
+	await _frames(20)
+	kicks.clear()
+	await _tap("kick")
+	await _frames(40)
+	_check("R16b out of arm's reach, F kicks", kicks.size() == 1, "kicked %d" % kicks.size())
+	g16b.queue_free()
+
 
 # Helpers
 

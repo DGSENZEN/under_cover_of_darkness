@@ -449,7 +449,8 @@ func _physics_process(delta: float) -> void:
 	if phase == Phase.RECOVER:
 		kick_ok = kick_ok and (_outcome == &"hit" or _outcome == &"miss") and _t >= _recovery * 0.5
 
-	if Input.is_action_just_pressed("kick") and kick_ok:
+	# The revolver drawn and a man in arm's reach: its butt, not the boot.
+	if Input.is_action_just_pressed("kick") and kick_ok and not (gun and player.revolver != null and player.revolver.try_whip()):
 		_start_kick()
 
 	if not gun and Input.is_action_just_pressed("dodge") and phase != Phase.STAGGER and phase != Phase.KICK and phase != Phase.DODGE and player.is_on_floor() and stamina >= 1.0:
