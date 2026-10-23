@@ -1688,7 +1688,7 @@ func is_behind(attacker: Node3D) -> bool:
 ## A weapon struck him. Returns "blocked", "parried", "hit", "killed" or
 ## "none". `point` is where it struck, `direction` the way the blow was
 ## travelling. `kind`: "quick", "power", "backstab", "drop", "arrow",
-## "bullet", "thrown", "blast", "fire" or "crush".
+## "bullet", "shot" (one pellet), "thrown", "blast", "fire" or "crush".
 func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3, direction: Vector3) -> StringName:
 	if _knocked_out:
 		return &"none"
@@ -1782,6 +1782,9 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 
 	if kind == &"bullet":
 		strength = clampf(damage / 50.0, 0.6, 1.2)
+
+	if kind == &"shot":
+		strength = clampf(damage / 30.0, 0.4, 1.0)
 
 	if kind == &"thrown":
 		strength = clampf(damage / 25.0, 0.4, 0.9)
@@ -2050,6 +2053,8 @@ func _hit_sound(kind: StringName, at: Vector3, strength: float) -> void:
 			Sfx.play(self, &"burning", at, -2.0)
 		&"bullet":
 			Sfx.play(self, &"arrow_flesh", at, 0.0, 0.85)
+		&"shot":
+			Sfx.play(self, &"arrow_flesh", at, -6.0, 0.9)
 		_:
 			pass
 
@@ -4367,6 +4372,9 @@ func _open_wound(at: Vector3, kind: StringName, strength: float, deep: bool) -> 
 
 	if kind == &"arrow" or kind == &"bullet":
 		more = 0.8
+
+	if kind == &"shot":
+		more = 0.3
 
 	if deep:
 		more += 0.9

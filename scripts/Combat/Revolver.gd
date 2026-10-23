@@ -37,6 +37,12 @@ const ROSETTE := [Vector2(0.0, 1.0), Vector2(0.87, -0.5), Vector2(-0.87, -0.5), 
 ## The camera's kick for a shot from the cylinder, in one hand.
 const KICK_TRAUMA := 0.3
 const KICK_PUNCH := 0.9
+## The shell kicks harder than a ball.
+const SHELL_KICK := 1.4
+## Seconds the thumb takes on the hammer's nose.
+const FLIP_TIME := 0.15
+## Pellets of one shell into one man, inside blast_range: a blast.
+const BLAST_PELLETS := 6
 
 var player: CharacterBody3D
 var loaded := {&"cylinder": 6, &"shot": 1}
@@ -49,6 +55,8 @@ var _game_time := 0.0
 var _ready_at := 0.0
 ## Taking the gun in both hands, or letting one go, until then.
 var _grip_until := 0.0
+## The thumb at the hammer's nose, until then.
+var _flip_until := 0.0
 var _kick := 0.0
 ## Seconds the last kick takes to settle.
 var _settle := 0.6
@@ -58,6 +66,7 @@ var _shots := 0
 func _ready() -> void:
 	player = get_parent() as CharacterBody3D
 	_ensure_action(&"grip", KEY_G)
+	_ensure_action(&"barrel", KEY_X)
 
 
 func _physics_process(delta: float) -> void:
@@ -70,6 +79,9 @@ func _physics_process(delta: float) -> void:
 
 	if Input.is_action_just_pressed("grip"):
 		set_braced(not braced)
+
+	if Input.is_action_just_pressed("barrel"):
+		flip_barrel()
 
 	var spent: bool = player.is_mouse_input_swallowed() or player.is_attack_press_spent()
 
@@ -86,7 +98,29 @@ func weapon() -> Resource:
 
 
 func ready_to_fire() -> bool:
-	return _game_time >= _ready_at and _game_time >= _grip_until
+	return _game_time >= _ready_at and _game_time >= _grip_until and _game_time >= _flip_until
+
+
+## The thumb flicks the hammer's nose: the other barrel fires next.
+func flip_barrel() -> void:
+	barrel = &"shot" if barrel == &"cylinder" else &"cylinder"
+	_flip_until = _game_time + FLIP_TIME
+	_sound(&"hammer")
+
+
+## The nine pellets of a shell about the aim: one down the middle, eight on
+## a fixed ring half the cone's width out.
+func pellet_dirs(aim_basis: Basis) -> Array[Vector3]:
+	var gun: Resource = WeaponScript.find(&"revolver")
+	var dirs: Array[Vector3] = [-aim_basis.z]
+	var ring: float = tan(deg_to_rad(gun.spread_degrees * 0.5))
+	var others: int = int(gun.pellets) - 1
+
+	for i in others:
+		var turn := TAU * float(i) / float(others)
+		dirs.append((aim_basis * Vector3(cos(turn) * ring, sin(turn) * ring, -1.0)).normalized())
+
+	return dirs
 
 
 ## The kick, 1 the moment of the shot, easing to 0 as the gun settles.
@@ -134,13 +168,71 @@ func _pull(gun: Resource) -> void:
 	loaded[barrel] = int(loaded[barrel]) - 1
 	_shots += 1
 	var at := aim()
-	var hits: Array = [_ball(at, _stray(at.basis), gun.bullet_damage, gun)]
+
+	if barrel == &"shot":
+		_shell(at, gun)
+		return
+
+	var direction := _stray(at.basis)
+	var record := _trace(at.origin, direction)
+	_apply(record, direction, gun.bullet_damage, &"bullet", gun)
 	var muzzle := _muzzle(at, &"muzzle")
 	_kicked(1.0, gun)
 	SoundBus.emit_sound(muzzle, gun.shot_db, player, &"gunshot")
 	_sound(&"gunshot")
 	Fx.flash(player, muzzle, Color(1.0, 0.72, 0.42), 3.0, 6.0, 0.06)
-	fired.emit(&"cylinder", hits)
+	fired.emit(&"cylinder", [record])
+
+
+## The shell: its pellets traced first, then dealt. Most of them into one man
+## close by are one blast, not pellets.
+func _shell(at: Transform3D, gun: Resource) -> void:
+	var records: Array = []
+	var dirs := pellet_dirs(at.basis)
+	var into := {}
+
+	for direction in dirs:
+		var record := _trace(at.origin, direction)
+		record["direction"] = direction
+		var reach: float = at.origin.distance_to(record["point"])
+		var falloff: float = 1.0 - clampf((reach - gun.falloff_start) / maxf(gun.falloff_end - gun.falloff_start, 0.01), 0.0, 1.0)
+		record["damage"] = gun.pellet_damage * falloff
+		records.append(record)
+
+		if record["target"] != null:
+			into[record["target"]] = into.get(record["target"], []) + [record]
+
+	for target in into.keys():
+		var group: Array = into[target]
+		var close: bool = at.origin.distance_to(group[0]["point"]) <= gun.blast_range
+
+		if close and group.size() >= BLAST_PELLETS and is_instance_valid(target):
+			var total := 0.0
+
+			for record in group:
+				total += float(record["damage"])
+
+			var middle: Dictionary = group[0]
+			target.take_hit(total, player, &"blast", middle["point"], -at.basis.z)
+			continue
+
+		for record in group:
+			if is_instance_valid(target) and float(record["damage"]) > 0.0:
+				_deal(target, record, record["direction"], record["damage"], &"shot", gun)
+
+	for record in records:
+		if record["target"] == null:
+			_strike_world(record, record["direction"])
+
+	if not into.is_empty():
+		TimeFx.hitstop(get_tree(), 0.05)
+
+	var muzzle := _muzzle(at, &"shot_muzzle")
+	_kicked(SHELL_KICK, gun)
+	SoundBus.emit_sound(muzzle, gun.shell_db, player, &"gunshot")
+	_sound(&"shellshot")
+	Fx.flash(player, muzzle, Color(1.0, 0.68, 0.38), 4.0, 7.0, 0.07)
+	fired.emit(&"shot", records)
 
 
 ## Where the shot goes: one-handed and still kicking, off along the rosette.
@@ -154,67 +246,92 @@ func _stray(aim_basis: Basis) -> Vector3:
 	return (aim_basis * Vector3(offset.x, offset.y, -1.0)).normalized()
 
 
-## One ball (or pellet) along `direction`: what it struck, as a hit record.
-func _ball(at: Transform3D, direction: Vector3, damage: float, gun: Resource) -> Dictionary:
-	var from := at.origin
+## What a ball (or pellet) along `direction` from `from` strikes, as a hit
+## record: {target (a man, or null), point, damage, headshot, collider,
+## normal}. Nothing is dealt yet.
+func _trace(from: Vector3, direction: Vector3) -> Dictionary:
 	var query := PhysicsRayQueryParameters3D.create(from, from + direction * RANGE, 1 | 2 | 4, [player.get_rid()])
 	query.hit_from_inside = true
 	var hit := player.get_world_3d().direct_space_state.intersect_ray(query)
-	var record := {"target": null, "point": from + direction * RANGE, "damage": 0.0, "headshot": false}
+	var record := {"target": null, "point": from + direction * RANGE, "damage": 0.0, "headshot": false, "collider": null, "normal": -direction}
 
 	if hit.is_empty():
 		return record
 
 	var collider: Object = hit.get("collider")
-	var point: Vector3 = hit["position"]
-	record["point"] = point
+	record["point"] = hit["position"]
+	record["normal"] = hit.get("normal", -direction)
 
 	# A limb: its man's, if he is down but alive.
 	if collider is PhysicalBone3D:
-		var limb := collider as PhysicalBone3D
-		var owner_now := RagdollScript.owner_of(limb)
+		var owner_now := RagdollScript.owner_of(collider)
 
 		if owner_now != null and owner_now.has_method("take_hit"):
 			collider = owner_now
-		else:
-			limb.apply_central_impulse(direction * 4.0)
-			Fx.blood(player, point, direction, 0.4)
-			return record
+
+	record["collider"] = collider
 
 	if collider != null and collider.has_method("take_hit"):
-		var target := collider as Node3D
-		var eye: float = target.get("eye_height") if target.get("eye_height") != null else 1.65
-		var headshot := point.y - target.global_position.y >= eye - 0.25
-		var dealt: float = damage * (gun.headshot_multiplier if headshot else 1.0)
-		record["target"] = target
-		record["damage"] = dealt
-		record["headshot"] = headshot
-		collider.take_hit(dealt, player, &"bullet", point, direction)
+		record["target"] = collider
+
+	return record
+
+
+## A ball's record dealt: to the man it found, or into the world.
+func _apply(record: Dictionary, direction: Vector3, damage: float, kind: StringName, gun: Resource) -> void:
+	if record["target"] != null:
+		_deal(record["target"], record, direction, damage, kind, gun)
 		TimeFx.hitstop(get_tree(), 0.04)
-		return record
+	else:
+		_strike_world(record, direction)
+
+
+## Into a man: a ball in the head takes the headshot's multiple (not a
+## pellet: a shell's harm is in how many find him).
+func _deal(target: Node3D, record: Dictionary, direction: Vector3, damage: float, kind: StringName, gun: Resource) -> void:
+	var point: Vector3 = record["point"]
+	var eye: float = target.get("eye_height") if target.get("eye_height") != null else 1.65
+	var headshot := kind != &"shot" and point.y - target.global_position.y >= eye - 0.25
+	var dealt: float = damage * (gun.headshot_multiplier if headshot else 1.0)
+	record["damage"] = dealt
+	record["headshot"] = headshot
+	target.take_hit(dealt, player, kind, point, direction)
+
+
+## Into the world: a limb of the dead knocked, a crate shoved, a powder
+## barrel struck, dust or chips where it lands.
+func _strike_world(record: Dictionary, direction: Vector3) -> void:
+	var collider: Object = record["collider"]
+	var point: Vector3 = record["point"]
+
+	if collider == null or not is_instance_valid(collider):
+		return
+
+	if collider is PhysicalBone3D:
+		(collider as PhysicalBone3D).apply_central_impulse(direction * 4.0)
+		Fx.blood(player, point, direction, 0.4)
+		return
 
 	if collider is RigidBody3D:
 		var body := collider as RigidBody3D
 		body.apply_impulse(direction * 6.0, point - body.global_position)
 
 	# A powder barrel, a rope.
-	if collider != null and collider.has_method("strike"):
+	if collider.has_method("strike"):
 		collider.strike(&"bullet", point, direction)
 
-	var normal: Vector3 = hit.get("normal", -direction)
+	var normal: Vector3 = record["normal"]
 	var surface := "stone"
 
 	if collider is Node and (collider as Node).has_meta(&"surface"):
 		surface = String((collider as Node).get_meta(&"surface"))
-	elif collider is RigidBody3D or (collider != null and collider.has_method("frob")):
+	elif collider is RigidBody3D or collider.has_method("frob"):
 		surface = "wood"
 
 	if surface == "wood":
 		Fx.chips(player, point, normal, 0.6)
 	else:
 		Fx.dust(player, point, normal, 0.6, surface)
-
-	return record
 
 
 ## The muzzle, in the world: out along the aim from the eye, where the

@@ -178,8 +178,95 @@ func _run() -> void:
 	_check("R8 the muzzle flash lights up, then goes", lit_during > lit_before and Fx.lights_lit() == lit_before,
 		"lit %d -> %d -> %d" % [lit_before, lit_during, Fx.lights_lit()])
 
+	# R10 the shot barrel at 5 m: its own shell, pellets fallen off with range
+	revolver.reset_for_practice()
+	var g10 := _fighter(Vector3(10, 0, -5))
+	g10.max_health = 9999.0
+	g10.health = 9999.0
+	# He stands where he is put: the range is the check.
+	g10.set_physics_process(false)
+	_put_player(Vector3(10, 1.05, 0))
+	await _frames(20)
+	_aim(g10.global_position + Vector3(0, 1.2, 0))
+	revolver.flip_barrel()
+	await _frames(12)
+	var spread := []
+	revolver.fired.connect(func(b, h): spread.append([b, h]), CONNECT_ONE_SHOT)
+	await _tap("throw")
+	await _frames(4)
+	var lost: float = 9999.0 - g10.health
+	var struck := 0
+	var expected := 0.0
+	var eye10: Vector3 = player.combat.aim().origin
+
+	if not spread.is_empty():
+		for h in spread[0][1]:
+			if h["target"] == g10:
+				struck += 1
+				# Full to 3 m, nothing by 12 m: from where each pellet went in.
+				expected += 18.0 * (1.0 - clampf((eye10.distance_to(h["point"]) - 3.0) / 9.0, 0.0, 1.0))
+
+	_check("R10 a shell: its own barrel, pellets fallen off with range",
+		revolver.loaded[&"shot"] == 0 and revolver.loaded[&"cylinder"] == 6 and lost >= 50.0 and lost <= 162.0
+			and struck >= 5 and _near(lost, expected, 1.0) and lost < struck * 18.0 - 10.0,
+		"loaded %s lost %.1f expected %.1f pellets in him %d" % [revolver.loaded, lost, expected, struck])
+	g10.queue_free()
+
+	# R11 at 14 m a shell does nothing
+	revolver.reset_for_practice()
+	var g11 := _fighter(Vector3(14, 0, -14))
+	g11.set_physics_process(false)
+	_put_player(Vector3(14, 1.05, 0))
+	await _frames(20)
+	_aim(g11.global_position + Vector3(0, 1.2, 0))
+	revolver.flip_barrel()
+	await _frames(12)
+	await _tap("throw")
+	await _frames(4)
+	_check("R11 a shell at 14 m does no harm", g11.health == g11.max_health, "health %.1f" % g11.health)
+	g11.queue_free()
+
+	# R12 point-blank: a blast, and it tears him apart
+	revolver.reset_for_practice()
+	var parts_before := _severed_parts()
+	var g12 := _fighter(Vector3(18, 0, -1.5))
+	_put_player(Vector3(18, 1.05, 0))
+	await _frames(20)
+	_aim(g12.global_position + Vector3(0, 1.2, 0))
+	revolver.flip_barrel()
+	await _frames(12)
+	await _tap("throw")
+	await _frames(30)
+	_check("R12 a shell point-blank is one blast, and tears a limb off",
+		not is_instance_valid(g12) and _severed_parts() > parts_before,
+		"alive %s parts %d -> %d" % [is_instance_valid(g12), parts_before, _severed_parts()])
+
+	# R12b the spent shot barrel only clicks
+	var clicks := []
+	revolver.clicked_empty.connect(func(): clicks.append(1), CONNECT_ONE_SHOT)
+	var g12b := _fighter(Vector3(22, 0, -3))
+	_put_player(Vector3(22, 1.05, 0))
+	await _frames(40)
+	_aim(g12b.global_position + Vector3(0, 1.2, 0))
+	await _tap("throw")
+	await _frames(4)
+	_check("R12b the spent shot barrel only clicks", clicks.size() == 1 and g12b.health == g12b.max_health and revolver.barrel == &"shot",
+		"clicks %d health %.1f barrel %s" % [clicks.size(), g12b.health, revolver.barrel])
+	g12b.queue_free()
+
 
 # Helpers
+
+## Limbs and heads cut off anyone, lying about (SeveredPart.gd).
+func _severed_parts() -> int:
+	var count := 0
+
+	for b in get_tree().get_nodes_in_group(&"bodies"):
+		if b.get("part") != null:
+			count += 1
+
+	return count
+
 
 func _wield(weapon_id: StringName) -> void:
 	player.inventory.select_by_id(weapon_id)
