@@ -9,6 +9,10 @@ extends Node
 
 const Spells := preload("res://scripts/Magic/Spells.gd")
 const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
+const Blink := preload("res://scripts/Magic/Blink.gd")
+const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
+const Fx := preload("res://scripts/Visual/Fx.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 signal cast_started(id: StringName)
 signal cast_done(id: StringName)
@@ -26,6 +30,9 @@ const BREAKS_AT := 25.0
 const BREAKING_KINDS := [&"power", &"blast", &"crush"]
 ## Spell keys, in order.
 const KEYED := [&"shard", &"ward", &"empower"]
+## Q let go within this long is a tap (a step, or the dodge); held longer,
+## it aims.
+const TAP_TIME := 0.18
 
 ## Where the left hand is while it works, in camera space at full size: the
 ## bare hand palm-forward as its circle closes; the tome open toward you.
@@ -38,6 +45,12 @@ var selected: StringName = &"shard"
 
 var _casting: StringName = &""
 var _cast_t := 0.0
+## Seconds Q has been held; -1 while it is up.
+var _blink_held := -1.0
+var _aiming := false
+## Where an aimed blink would land (the body's position).
+var _aim_at := Vector3.ZERO
+var _ticks := 0
 
 
 func _ready() -> void:
@@ -46,6 +59,7 @@ func _ready() -> void:
 	_ensure_action(&"spell_2", KEY_2)
 	_ensure_action(&"spell_3", KEY_3)
 	_ensure_action(&"grip", KEY_G)
+	_ensure_action(&"blink", KEY_Q)
 
 
 func _physics_process(delta: float) -> void:
@@ -65,8 +79,9 @@ func _physics_process(delta: float) -> void:
 		_cancel()
 
 	var swallowed: bool = player.is_mouse_input_swallowed()
+	_update_blink(delta)
 
-	if gun and _casting == &"" and Input.is_action_just_pressed("block") and not swallowed:
+	if gun and _casting == &"" and not _aiming and Input.is_action_just_pressed("block") and not swallowed:
 		_begin(selected)
 
 	if _casting != &"":
@@ -195,10 +210,93 @@ func _cancel() -> void:
 	_cast_t = 0.0
 
 
-## What each spell does, once cast and paid for (Blink, Shard, Ward, Empower
-## fill these in).
+## What each spell does, once cast and paid for.
 func _effect(_id: StringName) -> void:
 	pass
+
+
+# Blink
+
+## Q: a tap steps (the way you are moving, or ahead); held, it aims, and let
+## go it goes to the mark (the right mouse lets the aim go, for nothing).
+## With a blade or bow drawn on the ground, a tap is the dodge (PlayerCombat)
+## and only a hold blinks.
+func _update_blink(delta: float) -> void:
+	_ticks += 1
+
+	if Input.is_action_just_pressed("blink"):
+		_blink_held = 0.0
+	elif _blink_held >= 0.0 and Input.is_action_pressed("blink"):
+		_blink_held += delta
+
+	if _blink_held >= TAP_TIME and not _aiming and can_cast(&"blink"):
+		_aiming = true
+
+	if _aiming:
+		var at: Transform3D = player.combat.aim()
+		_aim_at = Blink.arrival(player, at.origin, -at.basis.z, Blink.RANGE)
+
+		if _ticks % 3 == 0:
+			Fx.glint(player, _aim_at + (at.origin - player.global_position), 0.08, null, Color(0.75, 0.8, 0.95))
+
+		if Input.is_action_just_pressed("block"):
+			_aiming = false
+			_blink_held = -1.0
+			return
+
+	if _blink_held >= 0.0 and not Input.is_action_pressed("blink"):
+		if _aiming:
+			_blink_to(_aim_at)
+		elif not _dodges_instead():
+			var at: Transform3D = player.combat.aim()
+			_blink_to(Blink.arrival(player, at.origin, _step_direction(), Blink.STEP))
+
+		_blink_held = -1.0
+		_aiming = false
+
+
+## A blade or a bow in hand on the ground: Q tapped is the old dodge.
+func _dodges_instead() -> bool:
+	var weapon: Resource = player.combat.current_weapon()
+	return weapon != null and weapon.kind != WeaponScript.Kind.GUN and player.is_on_floor()
+
+
+## The way you are moving, level; straight ahead if you are not.
+func _step_direction() -> Vector3:
+	var axis := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+
+	if axis.length() < 0.2:
+		axis = Vector2(0.0, -1.0)
+
+	var direction: Vector3 = player.global_basis * Vector3(axis.x, 0.0, axis.y)
+	direction.y = 0.0
+	return direction.normalized()
+
+
+## Through the glass to `at`, paid for on arrival; nowhere to go is no blink
+## and nothing spent. Falling, you go on falling. A guard's blow it takes you
+## out of counts as dodged (GuardFighter asks combat.dodged_within).
+func _blink_to(at: Vector3) -> void:
+	if not can_cast(&"blink") or at.distance_to(player.global_position) < 0.3:
+		return
+
+	if not player.power.pay(float(Spells.info(&"blink")["cost"])):
+		player.power.refused()
+		return
+
+	var from: Vector3 = player.global_position
+	var falling: Vector3 = player.velocity
+	var airborne: bool = not player.is_on_floor()
+	player.teleport(Transform3D(player.global_basis, at))
+
+	if airborne:
+		player.velocity = falling
+
+	player.combat._dodged_at = player.combat._game_time
+	Fx.glint(player, from + Vector3.UP, 0.3, null, Color(0.75, 0.8, 0.95))
+	Fx.glint(player, at + Vector3.UP, 0.3, null, Color(0.75, 0.8, 0.95))
+	Sfx.play_flat(player, &"whoosh_light", -4.0, 0.7)
+	cast_done.emit(&"blink")
 
 
 func _set_braced(on: bool) -> void:

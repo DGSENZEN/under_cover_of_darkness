@@ -453,7 +453,10 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("kick") and kick_ok and not (gun and player.revolver != null and player.revolver.try_whip()):
 		_start_kick()
 
-	if not gun and Input.is_action_just_pressed("dodge") and phase != Phase.STAGGER and phase != Phase.KICK and phase != Phase.DODGE and player.is_on_floor() and stamina >= 1.0:
+	# Q dodges with a blade or bow in hand; otherwise it is Blink (Caster.gd).
+	var q_pressed := Input.is_action_just_pressed("dodge") or (InputMap.has_action("blink") and Input.is_action_just_pressed("blink"))
+
+	if not gun and weapon != null and q_pressed and phase != Phase.STAGGER and phase != Phase.KICK and phase != Phase.DODGE and player.is_on_floor() and stamina >= 1.0:
 		_dodge_pressed_at = _game_time
 
 	_try_buffered_dodge()

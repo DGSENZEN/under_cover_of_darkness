@@ -196,8 +196,154 @@ func _run() -> void:
 		"before %s during %s after %s" % [holding, during, player.hand.left_mode()])
 	caster.select(&"shard")
 
+	# S10 a tap of Q with the gun drawn: a 4 m step, paid for on arrival
+	_wield(&"revolver")
+	_put_player(Vector3(40, 1.05, 30))
+	await _frames(30)
+	power.power = power.MAX
+	var from10: Vector3 = player.global_position
+	await _tap("blink")
+	await _frames(4)
+	var moved10: Vector3 = player.global_position - from10
+	_check("S10 a tap blinks 4 m ahead and costs 20", _near(-moved10.z, 4.0, 0.3) and absf(moved10.x) < 0.1 and _near(power.power, 80.0, 0.01),
+		"moved %s power %.1f" % [moved10, power.power])
+
+	# S11 never into anything: short of a wall, above a floor, before a man
+	Props.block(self, Vector3(50, 1.5, 27.0), Vector3(6, 3, 0.4))           # a wall, its face at z = 27.2
+	_put_player(Vector3(50, 1.05, 30.2))
+	await _frames(20)
+	power.power = power.MAX
+	await _hold_blink(20)
+	var wall_gap: float = player.global_position.z - 27.2
+	var wall_clear: bool = not player.test_move(player.global_transform, Vector3.ZERO)
+	_put_player(Vector3(56, 1.05, 30))
+	player.get_node("Neck").rotation.x = -0.6
+	await _frames(20)
+	power.power = power.MAX
+	await _hold_blink(20)
+	var floor_y: float = player.global_position.y
+	var floor_clear: bool = not player.test_move(player.global_transform, Vector3.ZERO)
+	player.get_node("Neck").rotation.x = 0.0
+	var g11 := _new_guard(Vector3(62, 0, 26), PI)
+	g11.set_physics_process(false)
+	_put_player(Vector3(62, 1.05, 30))
+	await _frames(20)
+	power.power = power.MAX
+	await _hold_blink(20)
+	var guard_gap: float = player.global_position.z - 26.0
+	var guard_clear: bool = not player.test_move(player.global_transform, Vector3.ZERO)
+	g11.queue_free()
+	_check("S11 a blink stops short of a wall, above the floor, in front of a man",
+		wall_gap >= 0.5 and wall_clear and floor_y >= 1.0 and floor_clear and guard_gap >= 0.8 and guard_clear,
+		"wall gap %.2f clear %s, floor y %.2f clear %s, man gap %.2f clear %s" % [wall_gap, wall_clear, floor_y, floor_clear, guard_gap, guard_clear])
+
+	# S12 from anywhere: hanging, falling, empty-handed; with a sword, a tap dodges
+	Props.block(self, Vector3(70, 1.5, 25.0), Vector3(4, 3, 1))
+	await _frames(2)
+	_put_player(Vector3(70, 1.05, 30))
+	await _frames(5)
+	var hang_at: Vector3 = player.planner.hang_anchor(Vector3(70, 3.0, 25.5), Vector3.BACK, 3.0)
+	player.teleport(Transform3D(Basis.IDENTITY, hang_at))
+	player._enter_hang(Vector3.BACK, 3.0, false)
+	await _frames(10)
+	power.power = power.MAX
+	player.rotation.y = PI
+	var hung_from: Vector3 = player.global_position
+	await _tap("blink")
+	await _frames(4)
+	var off_hang: bool = player.movement_state == player.MoveState.LOCOMOTION and player.global_position.distance_to(hung_from) > 2.0
+	_put_player(Vector3(76, 6.0, 30))
+	await _frames(20)
+	var falling: float = player.velocity.y
+	power.power = power.MAX
+	await _tap("blink")
+	await _frames(1)
+	var kept_fall: bool = player.velocity.y < -2.0
+	await _frames(120)
+	player.inventory.holster()
+	_put_player(Vector3(-50, 1.05, 30))
+	await _frames(20)
+	power.power = power.MAX
+	var bare_from: Vector3 = player.global_position
+	await _tap("blink")
+	await _frames(4)
+	var bare: bool = player.global_position.distance_to(bare_from) > 3.5
+	_wield(&"sword")
+	_put_player(Vector3(-60, 1.05, 30))
+	await _frames(40)
+	var dodges := []
+	player.combat.dodged.connect(func(d): dodges.append(d), CONNECT_ONE_SHOT)
+	power.power = power.MAX
+	await _tap("blink")
+	await _frames(30)
+	var tapped_dodge: bool = dodges.size() == 1 and _near(power.power, 100.0, 0.01)
+	_put_player(Vector3(-60, 1.05, 30))
+	await _frames(40)
+	var sword_from: Vector3 = player.global_position
+	await _hold_blink(20)
+	var held_blink: bool = player.global_position.distance_to(sword_from) > 3.0 and power.power < 100.0
+	_check("S12 Blink from a hang, mid-fall, empty-handed; with a sword a tap is the dodge and a hold the blink",
+		off_hang and kept_fall and bare and tapped_dodge and held_blink,
+		"off hang %s kept fall %s (%.1f) bare %s sword tap dodged %s sword hold blinked %s" % [off_hang, kept_fall, falling, bare, tapped_dodge, held_blink])
+
+	# S13 a blink out of an unblockable blow answers it, as a dodge does
+	_wield(&"revolver")
+	var answers := []
+	player.combat.answered.connect(func(how): answers.append(how))
+	# A wall at his back: the blink out of the blow stays near him (one far
+	# away is a plain miss, not an answer; GuardFighter's own rule).
+	Props.block(self, Vector3(-40, 1.5, 31.8), Vector3(4, 3, 0.4))
+	var g13 := _caller(Vector3(-40, 0, 28.2))
+	g13._fighter.attacks = {&"heavy": 1.0}
+	g13.attack_cooldown = 5.0
+	_put_player(Vector3(-40, 1.05, 30))
+	await _frames(20)
+	power.power = power.MAX
+	g13._attack_timer = 0.0
+	await _until(func(): return g13._phase == &"windup" and g13._phase_timer < 0.3, 240)
+	Input.action_press("move_back")
+	var before13: Vector3 = player.global_position
+	await _tap("blink")
+	await _frames(2)
+	Input.action_release("move_back")
+	await _until(func(): return g13._phase != &"windup", 60)
+	await _frames(2)
+	_check("S13 a blink out of an unblockable blow answers it", answers.has(&"dodged"), "answers %s" % [answers])
+	g13.queue_free()
+
 
 # Helpers
+
+## Q held past a tap: aiming; let go, and the blink goes to the mark.
+func _hold_blink(frames: int) -> void:
+	Input.action_press("blink")
+	await _frames(frames)
+	Input.action_release("blink")
+	await _frames(4)
+
+
+## A guard who strikes when told, and does nothing else.
+func _caller(at: Vector3) -> CharacterBody3D:
+	GarrisonScript.clear_all()
+	var g: CharacterBody3D = GUARD.instantiate()
+	g.archetype = &""
+	g.debug_ai = false
+	g.position = at
+	g.rotation.y = PI
+	add_child(g)
+	g.block_chance = 0.0
+	g._fighter.parry_chance = 0.0
+	g._fighter.feint_chance = 0.0
+	g._fighter.dodge_chance = 0.0
+	g._fighter.counter_chance = 0.0
+	g._fighter.kick_chance = 0.0
+	g._fighter.backstep_chance = 0.0
+	g._fighter.lunge_chance = 0.0
+	g._fighter.leap_chance = 0.0
+	g._fighter.charge_chance = 0.0
+	g._fighter.timing_variance = 0.0
+	g._engage(player)
+	return g
 
 ## A world point as the viewmodel draws it (pixels): the arms and what they
 ## hold are drawn with their own field of view (ViewArms.view_fov).
