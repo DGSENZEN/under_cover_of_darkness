@@ -84,6 +84,8 @@ Incoming defence metadata is a Dictionary from the source's `attack_info()`. Opt
 
 Arrow returns `{type: &"arrow", ranged: true, guard_damage: 6.0, from_direction: -heading}`. Thrown returns `{type: &"thrown", ranged: true, blunt: true, guard_damage: 7.0, from_direction: -heading}`. Barrel returns `{type: &"blast", unblockable: true}`; Fire returns `{type: &"fire", hazard: true}`.
 
+Kinds a guard's `take_hit` knows: quick, power, backstab, drop, arrow, bullet (a revolver ball), shot (one pellet of a shell), shard (Obsidian's glass), thrown, blast, fire, crush. A guard's `sever_hint` (limbs to take off if the blow kills him) and `gib_hint` (burst him if it kills him: Gore.gd) are set by the attacker just before the call and cleared after.
+
 Melee/projectiles use receiver methods when supported: `take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3, direction: Vector3) -> StringName`, or player `take_damage(amount: float, from: Node)`. World points/directions accompany hits. Other duck-typed responses include `strike(kind, point, direction)`, `kick(push, attacker)`, `parried(player, posture_multiplier)`, `blocked_by(player)`, `ignite(seconds)`, `light(seconds)`, and ragdoll owner resolution. Results include hit/killed/blocked/parried/none in guard receivers; TrainingDummy returns only hit/blocked. These result strings influence damage reporting and recovery, so a new receiver should follow the existing receiver contract.
 
 ## Signals
@@ -139,3 +141,26 @@ A table's `sweeps` maps direction StringNames to Dictionary `{pivot: Vector3, pa
 | `TrainingDummy.kick(push: Vector3, _attacker: Node3D) -> void`, `is_unaware() -> bool`, `is_behind(attacker: Node3D) -> bool` | Kick rocks/breaks guard and reports zero-damage hit; unaware always true; behind requires a valid positioned attacker. Dummy remains alive. |
 
 Projectile callbacks, blast loops, and carried throws use method checks but still assume receiver-specific fields where required. Arrow/tool travel uses continuous segment rays rather than ordinary moving-body collision. Collision masks use world=1, guards=2, loose bodies=4; torch flame reach areas have their own layer/mask handling. These are physics values, distinct from visual render layers.
+
+## The revolver and the left hand's magic
+
+Spec: `docs/superpowers/specs/2026-10-23-revolver-and-magic-design.md`. Two hand systems sit beside `PlayerCombat`, which stands down while the gun is drawn (`gun_drawn()`), but for the kick.
+
+| Input | With the revolver drawn |
+| --- | --- |
+| LMB (`throw`) | Fire the selected barrel (`Revolver.gd`) |
+| RMB (`block`) | Cast the left hand's spell, held while it forms; let go early: nothing cast or spent (`Caster.gd`) |
+| Q (`blink`) | Blink: a tap steps 4 m, a hold aims up to 10 m (onto a lip: hanging). From anywhere. With a blade or bow drawn on the ground a tap is the dodge |
+| X (`barrel`) | Flip the hammer's nose: cylinder (6 balls) or shot barrel (1 shell) |
+| R (`reload`) | Reload the selected barrel, round by round through the gate (fire to stop) |
+| 1 / 2 / 3 (`spell_1..3`) | Shard, Ward (bare hand), Empower (the tome) |
+| G (`grip`) | Both hands on the gun: steadier, quicker, innate spells only |
+| F (`kick`) | Pistol-whip a man in arm's reach and in front; else the kick |
+
+- `Revolver.gd` (the player's "Revolver"): `loaded`, `barrel`, `braced`, `loading`, `fired(barrel, hits)`, `clicked_empty`, `ready_to_fire()`, `is_reloading()`, `flip_barrel()`, `set_braced(on)`, `try_whip()`, `reset_for_practice()`. Hitscan balls (55, head x2.5), a shell's 9 pellets (18, falling off 3-12 m; six into one man within 2 m are one blast), near misses (`Guard.near_miss`), gunshot 70/74 dB on the SoundBus. Stocks: `Inventory.ammo` rounds/shells (`Props.ammo` pickups).
+- `Caster.gd` ("Caster"): loadouts HAND / TOME / BRACED, `select(id)`, `can_cast(id)`, `cast_started/done/broken`, `on_hit(damage, kind)` (a hard or heavy hit breaks a tome cast), Empower's `empowered()` / `spend_empower(use)`.
+- `Spells.gd`: the spells as data (school, tier, cost, cast time, movement); `PowerPool.gd` ("Power"): 100, +5/s after 2 s.
+- `Blink.gd`, `Shard.gd`, `Ward.gd` (stops others' shots and spells at 1 m round you for 4 s, not blades: `Ward.stops(from, to, shooter)` is asked by arrows, shards and balls), `Gore.gd` (bursts: at most 60 pieces, gone after 20 s).
+- Guards read the gun from shots at them (`Squad.read["gun"]`, `on_shot_at`), take cover at range (`GuardFighter.cover_point`), and rush you at your reload.
+- Suites: `revolver_test`, `caster_test`, `gunfight_test`, `combat_gym_test`; stills: `tests/visual/stage_revolver.tscn` (FP_ARMS=new).
+

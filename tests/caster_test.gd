@@ -17,6 +17,14 @@ const WardScript := preload("res://scripts/Magic/Ward.gd")
 const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
 
 
+## A source that says what it is, as Barrel and Arrow do (attack_info).
+class Blaster:
+	extends Node
+
+	func attack_info() -> Dictionary:
+		return {"type": &"blast", "unblockable": true}
+
+
 class Ear:
 	var events: Array = []
 
@@ -139,6 +147,20 @@ func _run() -> void:
 	_check("S6 a hard hit breaks a tome spell, and nothing is spent",
 		broken == [&"empower"] and done.is_empty() and after_hit == &"" and _near(power.power, 100.0, 0.01),
 		"broken %s done %s casting %s power %.1f" % [broken, done, after_hit, power.power])
+	await _frames(10)
+
+	# S6b a light blast still breaks it: the kind of blow, not only its weight
+	power.power = power.MAX
+	broken.clear()
+	var blaster := Blaster.new()
+	add_child(blaster)
+	Input.action_press("block")
+	await _frames(30)
+	player.take_damage(10.0, blaster)
+	await _frames(2)
+	Input.action_release("block")
+	blaster.queue_free()
+	_check("S6b a blast breaks a tome spell however light", broken == [&"empower"], "broken %s" % [broken])
 	await _frames(10)
 
 	# S7 let go early, or put the gun away: no spell, nothing spent

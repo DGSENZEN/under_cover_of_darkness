@@ -1526,8 +1526,11 @@ func take_damage(amount: float, from: Node) -> void:
 	# What gets through breaks a tome spell being cast (even through
 	# invulnerability: a test's or a cheat's, not the spell's).
 	if caster != null and amount > 0.0:
+		# What it was (attack_info's "type": a blast, an arrow; a guard's heavy
+		# blow counts as a power blow).
 		var info: Dictionary = from.attack_info() if from != null and from.has_method("attack_info") else {}
-		caster.on_hit(amount, StringName(info.get("kind", &"")))
+		var kind := StringName(info.get("type", &"power" if info.get("heavy", false) else &""))
+		caster.on_hit(amount, kind)
 
 	if invulnerable or amount <= 0.0:
 		return
