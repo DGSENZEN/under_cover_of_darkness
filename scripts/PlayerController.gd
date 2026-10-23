@@ -406,6 +406,10 @@ var _hazard_cooldown := 0.0
 
 var coyote_timer := 0.0
 var jump_buffer_timer := 0.0
+## When the last jump left the ground (game time) and from what height:
+## Empower's jump goes on from them (Caster.gd).
+var last_jump_at := -100.0
+var last_jump_from_y := 0.0
 
 ## The latest obstacle measured in front of the player, or null.
 var cached_profile: ObstacleProfile = null
@@ -1163,6 +1167,8 @@ func _try_buffered_jump() -> void:
 
 	velocity.y = jump_speed
 	_jump_cut_allowed = true
+	last_jump_at = _game_time
+	last_jump_from_y = global_position.y
 
 	jump_buffer_timer = 0.0
 	coyote_timer = 0.0

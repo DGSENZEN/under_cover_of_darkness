@@ -35,6 +35,13 @@ const KEYED := [&"shard", &"ward", &"empower"]
 ## Q let go within this long is a tap (a step, or the dodge); held longer,
 ## it aims.
 const TAP_TIME := 0.18
+## Empower: how long the beast strength waits for its one use, and how much
+## more it gives a blow, a blink's reach, a jump's height.
+const EMPOWER_TIME := 8.0
+const EMPOWER_BLOW := 3.0
+const EMPOWER_REACH := 2.0
+## A jump spends it only if the key is still held this long after takeoff.
+const EMPOWER_JUMP_HOLD := 0.2
 
 ## Where the left hand is while it works, in camera space at full size: the
 ## bare hand palm-forward as its circle closes; the tome open toward you.
@@ -55,6 +62,9 @@ var _aiming := false
 var _aim_at := Vector3.ZERO
 var _aim_ledge := {}
 var _ticks := 0
+var _game_time := 0.0
+## Empower's charge waits until then (game time); -1 when there is none.
+var empowered_until := -1.0
 
 
 func _ready() -> void:
@@ -67,7 +77,13 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_game_time += delta
 	var gun: bool = player.combat != null and player.combat.gun_drawn()
+
+	if empowered_until >= 0.0 and _game_time >= empowered_until:
+		empowered_until = -1.0
+
+	_empowered_jump()
 
 	if gun:
 		for i in KEYED.size():
@@ -221,6 +237,10 @@ func _effect(id: StringName) -> void:
 			_loose_shard()
 		&"ward":
 			WardScript.cast_on(player)
+		&"empower":
+			empowered_until = _game_time + EMPOWER_TIME
+			Sfx.play_flat(player, &"heartbeat", -2.0, 0.85)
+			player.juice.add_trauma(0.2)
 
 
 ## A splinter from the circle, out along your aim: from just ahead of the
@@ -237,6 +257,46 @@ func _loose_shard() -> void:
 	var shard: StaticBody3D = ShardScript.new()
 	player.get_parent().add_child(shard)
 	shard.launch(spawn, forward * ShardScript.SPEED, ShardScript.DAMAGE, player)
+
+
+# Empower
+
+## A charge of beast strength waiting for its one use.
+func empowered() -> bool:
+	return empowered_until >= 0.0
+
+
+## Spends the charge on `use` ("blow", "shot", "jump", "blink"): true once,
+## and then it is gone; false with none.
+func spend_empower(use: StringName) -> bool:
+	if not empowered():
+		return false
+
+	empowered_until = -1.0
+	Sfx.play_flat(player, &"roar", -10.0, 0.7)
+	player.juice.add_trauma(0.25)
+	return use != &""
+
+
+## The jump: still held a moment after takeoff, it spends the charge and goes
+## on to twice the height (a hop let go at once leaves it be).
+func _empowered_jump() -> void:
+	if not empowered() or player.is_on_floor() or not Input.is_action_pressed("jump") or player.velocity.y <= 0.0:
+		return
+
+	var since: float = player._game_time - float(player.last_jump_at)
+
+	if since < EMPOWER_JUMP_HOLD or since > EMPOWER_JUMP_HOLD + 0.1:
+		return
+
+	if not spend_empower(&"jump"):
+		return
+
+	var gravity: float = player.gravity
+	var normal_top: float = player.jump_speed * player.jump_speed / (2.0 * gravity)
+	var risen: float = player.global_position.y - float(player.last_jump_from_y)
+	var still := maxf(normal_top * 2.0 - risen, 0.0)
+	player.velocity.y = sqrt(2.0 * gravity * still)
 
 
 # Blink
@@ -258,8 +318,8 @@ func _update_blink(delta: float) -> void:
 
 	if _aiming:
 		var at: Transform3D = player.combat.aim()
-		_aim_ledge = Blink.ledge_at(player, at.origin, -at.basis.z, Blink.RANGE)
-		_aim_at = _aim_ledge["anchor"] if not _aim_ledge.is_empty() else Blink.arrival(player, at.origin, -at.basis.z, Blink.RANGE)
+		_aim_ledge = Blink.ledge_at(player, at.origin, -at.basis.z, Blink.RANGE * _reach_scale())
+		_aim_at = _aim_ledge["anchor"] if not _aim_ledge.is_empty() else Blink.arrival(player, at.origin, -at.basis.z, Blink.RANGE * _reach_scale())
 
 		if _ticks % 3 == 0:
 			Fx.glint(player, _aim_at + (at.origin - player.global_position), 0.08, null, Color(0.75, 0.8, 0.95))
@@ -274,10 +334,15 @@ func _update_blink(delta: float) -> void:
 			_blink_to(_aim_at, _aim_ledge)
 		elif not _dodges_instead():
 			var at: Transform3D = player.combat.aim()
-			_blink_to(Blink.arrival(player, at.origin, _step_direction(), Blink.STEP))
+			_blink_to(Blink.arrival(player, at.origin, _step_direction(), Blink.STEP * _reach_scale()))
 
 		_blink_held = -1.0
 		_aiming = false
+
+
+## Empowered, a blink reaches twice as far.
+func _reach_scale() -> float:
+	return EMPOWER_REACH if empowered() else 1.0
 
 
 ## A blade or a bow in hand on the ground: Q tapped is the old dodge.
@@ -310,6 +375,8 @@ func _blink_to(at: Vector3, ledge := {}) -> void:
 		player.power.refused()
 		return
 
+	# Empowered, the charge went into this one's reach.
+	spend_empower(&"blink")
 	var from: Vector3 = player.global_position
 	var falling: Vector3 = player.velocity
 	var airborne: bool = not player.is_on_floor()

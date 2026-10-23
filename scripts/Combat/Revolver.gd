@@ -47,6 +47,8 @@ const SHELL_KICK := 1.4
 const FLIP_TIME := 0.15
 ## Pellets of one shell into one man, inside blast_range: a blast.
 const BLAST_PELLETS := 6
+## Empowered, a shell is one blast into a man this near (metres).
+const EMPOWERED_SHELL_RANGE := 6.0
 ## Seconds for the gate to snap shut when you fire mid-reload.
 const GATE_SNAP := 0.1
 ## The pistol-whip: a man this near (metres), this far off your aim
@@ -290,7 +292,12 @@ func _update_whip(delta: float) -> void:
 	if before < WHIP_LANDS and _whip_t >= WHIP_LANDS and is_instance_valid(_whip_target):
 		var at: Vector3 = _whip_target.eye_position() if _whip_target.has_method("eye_position") else _whip_target.global_position + Vector3.UP * 1.6
 		var blow: Vector3 = (at - aim().origin).normalized()
-		_whip_target.take_hit(WHIP_DAMAGE, player, &"power", at, blow)
+
+		# Empowered (Caster.gd): three times the blow, and it throws him.
+		if player.caster != null and player.caster.spend_empower(&"blow"):
+			_whip_target.take_hit(WHIP_DAMAGE * player.caster.EMPOWER_BLOW, player, &"blast", at, blow)
+		else:
+			_whip_target.take_hit(WHIP_DAMAGE, player, &"power", at, blow)
 		player.juice.add_trauma(0.25)
 		player.juice.punch(0.3, 0.0)
 		Sfx.play(player, &"thud", at, 0.0, 0.9)
@@ -384,13 +391,16 @@ func _pull(gun: Resource) -> void:
 	_shots += 1
 	var at := aim()
 
+	# Empowered (Caster.gd): this shot carries the beast strength.
+	var empowered: bool = player.caster != null and player.caster.spend_empower(&"shot")
+
 	if barrel == &"shot":
-		_shell(at, gun)
+		_shell(at, gun, empowered)
 		return
 
 	var direction := _stray(at.basis)
 	var record := _trace(at.origin, direction)
-	_apply(record, direction, gun.bullet_damage, &"bullet", gun)
+	_apply(record, direction, gun.bullet_damage, &"blast" if empowered else &"bullet", gun)
 	var muzzle := _muzzle(at, &"muzzle")
 	_kicked(1.0, gun)
 	SoundBus.emit_sound(muzzle, gun.shot_db, player, &"gunshot")
@@ -401,7 +411,7 @@ func _pull(gun: Resource) -> void:
 
 ## The shell: its pellets traced first, then dealt. Most of them into one man
 ## close by are one blast, not pellets.
-func _shell(at: Transform3D, gun: Resource) -> void:
+func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 	var records: Array = []
 	var dirs := pellet_dirs(at.basis)
 	var into := {}
@@ -420,8 +430,10 @@ func _shell(at: Transform3D, gun: Resource) -> void:
 	for target in into.keys():
 		var group: Array = into[target]
 		var close: bool = at.origin.distance_to(group[0]["point"]) <= gun.blast_range
+		# Empowered, every pellet into a man within EMPOWERED_SHELL_RANGE is one blast.
+		var beast: bool = empowered and at.origin.distance_to(group[0]["point"]) <= EMPOWERED_SHELL_RANGE
 
-		if close and group.size() >= BLAST_PELLETS and is_instance_valid(target):
+		if ((close and group.size() >= BLAST_PELLETS) or beast) and is_instance_valid(target):
 			var total := 0.0
 
 			for record in group:

@@ -424,8 +424,100 @@ func _run() -> void:
 	player.invulnerable = true
 	player.health = player.max_health
 
+	# S22 empowered, a kick is three times the blow, and throws him
+	_wield(&"revolver")
+	_put_player(Vector3(0, 1.05, -20))
+	await _frames(20)
+	await _cast(&"empower")
+	var g22 := _caller(Vector3(0, 0, -21.6))
+	g22.set_physics_process(false)
+	await _frames(2)
+	await _tap("kick")
+	await _frames(30)
+	# (60 as a blast, and the boot's own 6 if it throws him off his feet.)
+	_check("S22 empowered, a kick lands three times a whip's blow, once", g22.health >= 33.9 and g22.health <= 40.1 and not caster.empowered(),
+		"health %.1f still empowered %s" % [g22.health, caster.empowered()])
+	g22.queue_free()
+
+	# S23 a tapped jump keeps it; a held jump spends it, and goes twice as high
+	_put_player(Vector3(6, 1.05, -20))
+	await _frames(20)
+	var plain := await _jump_apex(40)
+	await _cast(&"empower")
+	var tapped := await _jump_apex(6)
+	var kept23: bool = caster.empowered()
+	var held := await _jump_apex(40)
+	_check("S23 empowered: a tapped jump keeps the charge, a held one spends it on twice the height",
+		kept23 and not caster.empowered() and absf(held / plain - 2.0) <= 0.2 and tapped < plain,
+		"plain %.2f tapped %.2f held %.2f (x%.2f) kept %s" % [plain, tapped, held, held / plain, kept23])
+
+	# S24 empowered, a blink goes twice as far
+	_put_player(Vector3(12, 1.05, -10))
+	await _frames(20)
+	await _cast(&"empower")
+	var from24: Vector3 = player.global_position
+	await _tap("blink")
+	await _frames(4)
+	_check("S24 empowered, a tapped blink goes 8 m", _near(from24.z - player.global_position.z, 8.0, 0.3),
+		"moved %.2f" % (from24.z - player.global_position.z))
+
+	# S25 unused, it fades after eight seconds
+	await _cast(&"empower")
+	await _frames(8 * 60 + 5)
+	_check("S25 an unused charge fades after 8 s", not caster.empowered(), "empowered %s" % caster.empowered())
+
+	# S26 empowered, a ball from the cylinder throws a man as a blast does
+	_put_player(Vector3(18, 1.05, -10))
+	await _frames(20)
+	await _cast(&"empower")
+	var g26 := _caller(Vector3(18, 0, -16))
+	g26.set_physics_process(false)
+	g26.health = 50.0
+	var thrown := [0.0]
+	g26.tree_exiting.connect(func(): thrown[0] = g26._last_push.length())
+	_aim(g26.global_position + Vector3(0, 1.25, 0))
+	player.revolver.reset_for_practice()
+	await _frames(2)
+	await _tap("throw")
+	await _frames(10)
+	_check("S26 empowered, a ball throws the man it kills, as a blast", not is_instance_valid(g26) and thrown[0] > 5.0,
+		"alive %s thrown %.1f" % [is_instance_valid(g26), thrown[0]])
+
 
 # Helpers
+
+## A spell cast with the gun drawn: chosen, the right mouse held until done.
+func _cast(id: StringName) -> void:
+	player.caster.select(id)
+	player.power.power = player.power.MAX
+	await _frames(20)
+	var cast := [false]
+	var on_done := func(done_id): cast[0] = cast[0] or done_id == id
+	player.caster.cast_done.connect(on_done)
+	Input.action_press("block")
+	await _until(func(): return cast[0], 120)
+	Input.action_release("block")
+	player.caster.cast_done.disconnect(on_done)
+	await _frames(2)
+
+
+## A jump with the key held `held` frames: how high it rose (metres).
+func _jump_apex(held: int) -> float:
+	var start: float = player.global_position.y
+	var top := start
+	Input.action_press("jump")
+
+	for i in 90:
+		if i == held:
+			Input.action_release("jump")
+
+		await get_tree().physics_frame
+		top = maxf(top, player.global_position.y)
+
+	Input.action_release("jump")
+	await _frames(30)
+	return top - start
+
 
 ## The Ward, cast: the copal circle closed.
 func _cast_ward() -> void:

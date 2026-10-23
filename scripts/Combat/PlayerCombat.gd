@@ -340,6 +340,10 @@ func is_able() -> bool:
 	)
 
 
+## An empowered kick's blow: the pistol-whip's three times over.
+const EMPOWERED_KICK := 60.0
+
+
 ## The revolver (any gun) is the weapon in hand.
 func gun_drawn() -> bool:
 	var drawn: Resource = current_weapon()
@@ -2111,7 +2115,20 @@ func _kick_contact() -> void:
 		if collider.has_method("kick"):
 			var body := collider as Node3D
 			contact = body.global_position + Vector3.UP * 1.1 - forward * 0.3
-			collider.kick(forward * kick_speed, player)
+
+			# Empowered (Caster.gd): beast strength, a blast of a blow that
+			# throws him bodily.
+			if player.caster != null and player.caster.spend_empower(&"blow") and collider.has_method("take_hit"):
+				collider.take_hit(EMPOWERED_KICK, player, &"blast", contact, forward)
+
+				if not is_instance_valid(collider):
+					kicked.emit(collider)
+					struck = true
+					continue
+
+				collider.kick(forward * kick_speed * player.caster.EMPOWER_BLOW, player)
+			else:
+				collider.kick(forward * kick_speed, player)
 			adrenaline = minf(adrenaline + 8.0, adrenaline_max)
 			Sfx.play(player, &"kick", contact)
 			Fx.dust(player, contact, -forward, 0.4, "carpet")
