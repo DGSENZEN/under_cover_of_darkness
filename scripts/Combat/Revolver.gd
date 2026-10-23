@@ -297,7 +297,9 @@ func _update_whip(delta: float) -> void:
 
 		# Empowered (Caster.gd): three times the blow, and it throws him.
 		if player.caster != null and player.caster.spend_empower(&"blow"):
+			_hint_gib(_whip_target, true)
 			_whip_target.take_hit(WHIP_DAMAGE * player.caster.EMPOWER_BLOW, player, &"blast", at, blow)
+			_hint_gib(_whip_target, false)
 		else:
 			_whip_target.take_hit(WHIP_DAMAGE, player, &"power", at, blow)
 		player.juice.add_trauma(0.25)
@@ -443,7 +445,10 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 				total += float(record["damage"])
 
 			var middle: Dictionary = group[0]
+			# Point-blank, or empowered: it bursts him if it kills him.
+			_hint_gib(target, true)
 			target.take_hit(total, player, &"blast", middle["point"], -at.basis.z)
+			_hint_gib(target, false)
 			continue
 
 		for record in group:
@@ -525,6 +530,12 @@ func _apply(record: Dictionary, direction: Vector3, damage: float, kind: StringN
 		TimeFx.hitstop(get_tree(), 0.04)
 	else:
 		_strike_world(record, direction)
+
+
+## A man to burst if this blow kills him (Guard.gib_hint), or not.
+static func _hint_gib(target: Object, on: bool) -> void:
+	if is_instance_valid(target) and target.get("gib_hint") != null:
+		target.set("gib_hint", on)
 
 
 ## Every man the ball went close by and missed (within NEAR_MISS of his

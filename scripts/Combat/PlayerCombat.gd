@@ -2119,7 +2119,14 @@ func _kick_contact() -> void:
 			# Empowered (Caster.gd): beast strength, a blast of a blow that
 			# throws him bodily.
 			if player.caster != null and player.caster.spend_empower(&"blow") and collider.has_method("take_hit"):
+				# A killing blow of beast strength bursts him (Guard.gib_hint).
+				if collider.get("gib_hint") != null:
+					collider.set("gib_hint", true)
+
 				collider.take_hit(EMPOWERED_KICK, player, &"blast", contact, forward)
+
+				if is_instance_valid(collider) and collider.get("gib_hint") != null:
+					collider.set("gib_hint", false)
 
 				if not is_instance_valid(collider):
 					kicked.emit(collider)

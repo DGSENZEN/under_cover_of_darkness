@@ -19,6 +19,7 @@ const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
 const LanternBody := preload("res://scripts/Visual/Lights/LanternBody.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
+const GoreScript := preload("res://scripts/Visual/Gore.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Comms := preload("res://scripts/AISystem/Comms.gd")
 const Dangers := preload("res://scripts/AISystem/Dangers.gd")
@@ -226,6 +227,11 @@ var grief_fades := true
 
 @export_category("Vision")
 @export var eye_height := 1.65
+## Burst: what comes off him, how many pieces fly, and how much more it
+## shakes those who see it than a cut does.
+const GIB_PARTS: Array[StringName] = [&"upperarm_l", &"upperarm_r", &"thigh_l", &"thigh_r", &"neck_01"]
+const GIB_PIECES := 10
+const GIB_HORROR := 2.0
 ## How hard a shot past him close makes him start (near_miss), as a hit's
 ## strength.
 const NEAR_MISS_START := 0.3
@@ -459,7 +465,12 @@ var _last_at := Vector3.INF
 ## What the blow now landing would cut off him, should it kill him (the
 ## attacker says: PlayerCombat), and what the one that killed him did.
 var sever_hint: Array[StringName] = []
+## Set just before a blow that would burst him (a point-blank shell, an
+## empowered blow; read as sever_hint is): if it kills him, it does (_gib).
+var gib_hint := false
 var _sever: Array[StringName] = []
+## Burst by what killed him (gib_hint): the pieces fly when he falls.
+var _gibbed := false
 ## Open wounds: health lost a second, and the trail of drops he leaves. Deep
 ## cuts open more; they close slowly on their own, or at once when he has a
 ## moment to bind them (he has lost you). Bleeding alone never takes him
@@ -1866,8 +1877,12 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 
 		_sever = sever_hint.duplicate()
 
+		# Burst: every limb and the head.
+		if gib_hint:
+			_gibbed = true
+			_sever = GIB_PARTS.duplicate()
 		# A blast tears men apart.
-		if kind == &"blast" and _sever.is_empty():
+		elif kind == &"blast" and _sever.is_empty():
 			_sever = _torn_by_blast(damage)
 
 		_last_at = at
@@ -2263,7 +2278,9 @@ func die(_attacker: Node3D) -> void:
 	if not _sever.is_empty() and _rig.has_method("sever"):
 		_rig.sever(_sever, _last_push)
 
-		if not puppet:
+		if _gibbed:
+			_gib(_last_at if _last_at != Vector3.ZERO else _rig.chest(), _last_push)
+		elif not puppet:
 			_horrify(_sever.has(&"neck_01"))
 
 	# His last cry: none from a man whose head is gone.
@@ -4463,9 +4480,19 @@ func _torn_by_blast(damage: float) -> Array[StringName]:
 	return torn
 
 
+## Burst (a point-blank shell, an empowered blow): pieces of him flung out
+## and his blood all about (Gore.gd); his body stays. Whoever sees it
+## is shaken twice over. (The torso split, later, goes here.)
+func _gib(at: Vector3, push: Vector3) -> void:
+	GoreScript.burst(self, at, push, GIB_PIECES)
+
+	if not puppet:
+		_horrify(true, GIB_HORROR)
+
+
 ## Cut apart in front of his friends: whoever sees it is shaken, the squad's
-## heart sinks, and they say so.
-func _horrify(beheaded: bool) -> void:
+## heart sinks, and they say so; `weight` times over (a body burst).
+func _horrify(beheaded: bool, weight := 1.0) -> void:
 	var here: Vector3 = _rig.chest()
 	var shaken_squad := false
 
@@ -4478,24 +4505,24 @@ func _horrify(beheaded: bool) -> void:
 		if d > GORE_SEEN_RANGE or not other._line_of_sight(other.eye_position(), here, self):
 			continue
 
-		other.witness_gore(beheaded, not shaken_squad)
+		other.witness_gore(beheaded, not shaken_squad, weight)
 		shaken_squad = true
 
 
-## He saw a man cut apart.
-func witness_gore(beheaded: bool, for_the_squad: bool) -> void:
+## He saw a man cut apart (`weight` times over: burst).
+func witness_gore(beheaded: bool, for_the_squad: bool, weight := 1.0) -> void:
 	if _knocked_out:
 		return
 
 	if state == Alert.COMBAT:
 		# The less nerve he has, the harder it hits him.
 		var nerve: float = float(_fighter.temper.nerve) if _fighter.temper != null else 0.5
-		_fighter.add_posture((28.0 if beheaded else 18.0) * (1.4 - nerve))
+		_fighter.add_posture((28.0 if beheaded else 18.0) * (1.4 - nerve) * weight)
 
 	var squad: RefCounted = _fighter.squad
 
 	if for_the_squad and squad != null:
-		squad.morale = maxf(float(squad.morale) - (0.15 if beheaded else 0.08), 0.0)
+		squad.morale = maxf(float(squad.morale) - (0.15 if beheaded else 0.08) * weight, 0.0)
 
 	# And the whole garrison hears of it.
 	if for_the_squad and _target != null and is_instance_valid(_target):

@@ -12,6 +12,8 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
+const Gore := preload("res://scripts/Visual/Gore.gd")
+const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 
 
 class Ear:
@@ -397,8 +399,93 @@ func _run() -> void:
 	_check("R16b out of arm's reach, F kicks", kicks.size() == 1, "kicked %d" % kicks.size())
 	g16b.queue_free()
 
+	# R17 a shell point-blank bursts him: arms, legs, head, and gore about
+	revolver.reset_for_practice()
+	var parts17 := _severed_parts()
+	# (The stains are a ring of decals the checks before have filled.)
+	Fx.clear()
+	var stains17: int = Fx.stains_in_use()
+	var g17 := _fighter(Vector3(50, 0, -1.2))
+	g17.set_physics_process(false)
+	_put_player(Vector3(50, 1.05, 0))
+	await _frames(20)
+	_aim(g17.global_position + Vector3(0, 1.2, 0))
+	revolver.flip_barrel()
+	await _frames(12)
+	await _tap("throw")
+	await _frames(20)
+	var chunks17: int = Gore.live_count()
+	_check("R17 a shell point-blank bursts a man: limbs and head off, gore and blood about",
+		not is_instance_valid(g17) and _severed_parts() - parts17 == 5 and chunks17 >= 8 and Fx.stains_in_use() - stains17 >= 3,
+		"parts +%d chunks %d stains +%d" % [_severed_parts() - parts17, chunks17, Fx.stains_in_use() - stains17])
+
+	# R18 a killing shell at 5 m only kills
+	await _frames(1300)
+	revolver.reset_for_practice()
+	var parts18 := _severed_parts()
+	var g18 := _fighter(Vector3(54, 0, -5))
+	g18.set_physics_process(false)
+	g18.health = 20.0
+	_put_player(Vector3(54, 1.05, 0))
+	await _frames(20)
+	_aim(g18.global_position + Vector3(0, 1.2, 0))
+	revolver.flip_barrel()
+	await _frames(12)
+	await _tap("throw")
+	await _frames(20)
+	_check("R18 a killing shell at 5 m is no gib", not is_instance_valid(g18) and _severed_parts() - parts18 <= 3 and Gore.live_count() == 0,
+		"parts +%d chunks %d" % [_severed_parts() - parts18, Gore.live_count()])
+
+	# R19 gore has a ceiling, and clears
+	var most := 0
+	for i in 10:
+		Gore.burst(self, Vector3(58 + i * 0.5, 1.2, -3), Vector3(0, 2, -4), 10)
+		most = maxi(most, Gore.live_count())
+		await _frames(2)
+	await _frames(1300)
+	_check("R19 gore never passes 60 pieces, and is gone in time", most <= Gore.MAX_LIVE and Gore.live_count() == 0,
+		"most %d after %d" % [most, Gore.live_count()])
+
+	# R20 a man burst before his friends shakes them more than a man shot down
+	var plain_drop: float = await _morale_drop(false)
+	var gib_drop: float = await _morale_drop(true)
+	_check("R20 a gib in front of his friends shakes them more than a plain kill", gib_drop > plain_drop + 0.05,
+		"plain %.2f gib %.2f" % [plain_drop, gib_drop])
+
 
 # Helpers
+
+## How far a squad's heart sinks when one of two men is shot down in front
+## of the other: by a ball to the head, or burst by a shell point-blank.
+func _morale_drop(gib: bool) -> float:
+	SquadScript.clear_all()
+	GarrisonScript.clear_all()
+	revolver_reset()
+	var victim := _fighter(Vector3(-40, 0, -1.4))
+	var witness := _fighter(Vector3(-37, 0, -3))
+	victim._fighter.stays_put = true
+	witness.block_chance = 0.0
+	_put_player(Vector3(-40, 1.05, 0))
+	await _frames(60)
+	var squad: RefCounted = SquadScript.of(player)
+	var before: float = squad.morale
+	_aim(victim.global_position + (Vector3(0, 1.2, 0) if gib else Vector3(0, 1.62, 0)))
+
+	if gib:
+		player.revolver.flip_barrel()
+		await _frames(12)
+
+	await _tap("throw")
+	await _frames(40)
+	var drop: float = before - float(squad.morale)
+	witness.queue_free()
+	await _frames(10)
+	return drop
+
+
+func revolver_reset() -> void:
+	player.revolver.reset_for_practice()
+
 
 ## A world point as the viewmodel draws it (pixels): the arms and what they
 ## hold are drawn with their own field of view (ViewArms.view_fov).
