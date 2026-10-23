@@ -327,6 +327,49 @@ func _run() -> void:
 	player._drop_from_hang()
 	await _frames(60)
 
+	# S15 a shard from the bare hand's circle: 40 into a man 8 m off
+	_wield(&"revolver")
+	caster.select(&"shard")
+	var g15 := _caller(Vector3(-20, 0, 22))
+	g15.set_physics_process(false)
+	_put_player(Vector3(-20, 1.05, 30))
+	await _frames(20)
+	_aim(g15.global_position + Vector3(0, 1.25, 0))
+	power.power = power.MAX
+	var ear := Ear.new()
+	SoundBus.add_listener(ear)
+	done.clear()
+	Input.action_press("block")
+	await _until(func(): return not done.is_empty(), 60)
+	Input.action_release("block")
+	await _frames(20)
+	SoundBus.remove_listener(ear)
+	_check("S15 a shard does 40 to a man 8 m off", _near(g15.health, 60.0, 0.1), "health %.1f" % g15.health)
+	g15.queue_free()
+
+	# S17 it is quiet beside the gun: a hiss, no gunshot
+	var hiss: Array = ear.events.filter(func(e): return e["kind"] == &"shard")
+	var bang: Array = ear.events.filter(func(e): return e["kind"] == &"gunshot")
+	_check("S17 a shard is heard at 36 dB, and is no gunshot", not hiss.is_empty() and _near(hiss[0]["db"], 36.0, 0.01) and bang.is_empty(),
+		"shard %s gunshot %d" % [hiss.map(func(e): return e["db"]), bang.size()])
+
+	# S16 into the thigh of a man near done for: the leg comes off
+	var parts_before := _severed_parts()
+	var g16 := _caller(Vector3(-14, 0, 22))
+	g16.set_physics_process(false)
+	g16.health = 30.0
+	_put_player(Vector3(-14, 1.05, 30))
+	await _frames(20)
+	_aim(g16.global_position + Vector3(0.12, 0.7, 0))
+	power.power = power.MAX
+	done.clear()
+	Input.action_press("block")
+	await _until(func(): return not done.is_empty(), 60)
+	Input.action_release("block")
+	await _frames(30)
+	_check("S16 a killing shard in the thigh takes the leg off", not is_instance_valid(g16) and _severed_parts() > parts_before,
+		"alive %s parts %d -> %d" % [is_instance_valid(g16), parts_before, _severed_parts()])
+
 
 # Helpers
 

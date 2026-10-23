@@ -1688,7 +1688,7 @@ func is_behind(attacker: Node3D) -> bool:
 ## A weapon struck him. Returns "blocked", "parried", "hit", "killed" or
 ## "none". `point` is where it struck, `direction` the way the blow was
 ## travelling. `kind`: "quick", "power", "backstab", "drop", "arrow",
-## "bullet", "shot" (one pellet), "thrown", "blast", "fire" or "crush".
+## "bullet", "shot" (one pellet), "shard", "thrown", "blast", "fire" or "crush".
 func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3, direction: Vector3) -> StringName:
 	if _knocked_out:
 		return &"none"
@@ -1766,7 +1766,7 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 	var riposte: bool = punished or _fighter.riposted_by(attacker)
 
 	if not opened:
-		_fighter.add_posture(26.0 if riposte else (22.0 if kind in [&"power", &"drop", &"crush", &"blast"] else (18.0 if kind == &"bullet" else 10.0)))
+		_fighter.add_posture(26.0 if riposte else (22.0 if kind in [&"power", &"drop", &"crush", &"blast"] else (18.0 if kind == &"bullet" else (12.0 if kind == &"shard" else 10.0))))
 
 	# How hard it rocks him: a quick cut, a heavy blow, an arrow by its force.
 	var strength := 0.6
@@ -1785,6 +1785,9 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 
 	if kind == &"shot":
 		strength = clampf(damage / 30.0, 0.4, 1.0)
+
+	if kind == &"shard":
+		strength = 0.7
 
 	if kind == &"thrown":
 		strength = clampf(damage / 25.0, 0.4, 0.9)

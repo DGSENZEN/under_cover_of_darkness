@@ -51,6 +51,43 @@ const HAND_GRIP := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-20.0)) * Basis(V
 ## wrist straight the gun points down the forearm. The grip's slant is the
 ## handle's own rake.
 const GUN_GRIP := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-10.0)) * Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0)), Vector3(-0.03, 0.08, 0.0))
+## A hand spell's circle: how many pieces, and what each school's are made
+## of [mesh, material] (stand-ins, made in house, until the effects lab's).
+const CIRCLE_PIECES := 12
+static var CIRCLE_LOOKS := {
+	&"obsidian": [_circle_box(Vector3(0.008, 0.03, 0.004)), _circle_material(Color(0.04, 0.04, 0.05), 0.8, 0.15, 1.0)],
+	&"copal": [_circle_puff(0.014), _circle_material(Color(0.72, 0.78, 0.7), 0.0, 1.0, 0.45)],
+}
+
+
+static func _circle_box(size: Vector3) -> Mesh:
+	var box := BoxMesh.new()
+	box.size = size
+	return box
+
+
+static func _circle_puff(radius: float) -> Mesh:
+	var puff := SphereMesh.new()
+	puff.radius = radius
+	puff.height = radius * 2.0
+	puff.radial_segments = 8
+	puff.rings = 4
+	return puff
+
+
+static func _circle_material(color: Color, metal: float, rough: float, alpha: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(color.r, color.g, color.b, alpha)
+	m.metallic = metal
+	m.roughness = rough
+
+	if alpha < 1.0:
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+	return m
+
+
 ## The Caster's tome in the left hand, held from under its spine: the palm
 ## on its back, the fingers up along the spine, the pages toward you.
 const TOME_GRIP := Transform3D(Basis(Vector3(0, 0, -1), Vector3(0, 1, 0), Vector3(1, 0, 0)), Vector3(0.05, 0.12, 0.0))
@@ -129,6 +166,12 @@ var _left_mode: StringName = &""
 var _left_frame := Transform3D.IDENTITY
 var _left_up := 0.0
 var _tome: MeshInstance3D
+## A hand spell's circle before the casting palm: whose school, how far
+## closed (0..1), and its pieces.
+var _circle_school: StringName = &""
+var _circle_progress := 0.0
+var _circle: Node3D
+var _circle_pieces: Array[MeshInstance3D] = []
 ## The revolver's moving parts, children of the main mesh: cylinder, hammer, gate.
 var _gun_parts := {}
 var _time := 0.0
@@ -550,6 +593,14 @@ func set_left_hold(mode: StringName, frame: Transform3D) -> void:
 	_left_frame = frame
 
 
+## A hand spell's circle closing before the casting palm: `school` says
+## what it is made of (obsidian: black glass splinters; copal: smoke),
+## `progress` how far it has closed (0 just begun, 1 cast). "" for none.
+func set_circle(school: StringName, progress: float) -> void:
+	_circle_school = school
+	_circle_progress = clampf(progress, 0.0, 1.0)
+
+
 ## What the left hand is showing for the Caster now: "" while it is busy
 ## with something else (a pickup, a key, the purse).
 func left_mode() -> StringName:
@@ -784,6 +835,48 @@ func _set_main_item(mesh: Mesh) -> void:
 		_blood_overlay.set_shader_parameter("seed", float(mesh.get_instance_id() % 97) * 0.37)
 		_main_mesh.material_overlay = _blood_overlay
 		_tint_blade()
+
+
+## The circle before the casting palm (set_circle): twelve pieces on a ring
+## square to the palm, turning, drawing in from 18 to 9 cm across as it
+## closes. Obsidian: splinters of black glass. Copal: puffs of smoke. Shown
+## in your view only; what it makes is what others see.
+func _update_circle() -> void:
+	if _circle == null:
+		_circle = Node3D.new()
+		_circle.name = "Circle"
+		add_child(_circle)
+
+		for i in CIRCLE_PIECES:
+			var piece := _viewmodel_instance()
+			_circle.add_child(piece)
+			_circle_pieces.append(piece)
+
+	var showing := _circle_school != &"" and _left_mode == &"cast" and _left_up > 0.5
+	_circle.visible = showing
+
+	if not showing:
+		return
+
+	var look: Array = CIRCLE_LOOKS.get(_circle_school, CIRCLE_LOOKS[&"obsidian"])
+
+	if _circle.get_meta(&"school", &"") != _circle_school:
+		_circle.set_meta(&"school", _circle_school)
+
+		for piece in _circle_pieces:
+			piece.mesh = look[0]
+			piece.material_override = look[1]
+
+	var size := ViewArmsScript.SCALE
+	var palm: Vector3 = _left_frame.basis.x.normalized()
+	var middle := _left_frame.origin + palm * 0.07
+	var across := lerpf(0.09, 0.045, _circle_progress)
+	_circle.transform = Transform3D(Basis.looking_at(-palm, _left_frame.basis.y.normalized()) * Basis(Vector3.BACK, _time * TAU * 2.0), _for_view_fov(middle) * size)
+
+	for i in _circle_pieces.size():
+		var turn := TAU * float(i) / float(_circle_pieces.size())
+		var piece := _circle_pieces[i]
+		piece.transform = Transform3D(Basis(Vector3.BACK, turn), Vector3(cos(turn), sin(turn), 0.0) * across * size).scaled_local(Vector3.ONE * size)
 
 
 ## A revolver's cylinder, hammer and gate, as their own meshes under the
@@ -1158,6 +1251,7 @@ func _process(delta: float) -> void:
 	_update_weight(delta, real_delta)
 	_update_motion(delta)
 	_place_hands()
+	_update_circle()
 
 
 func _update_motion(delta: float) -> void:

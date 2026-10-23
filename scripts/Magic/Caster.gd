@@ -10,6 +10,7 @@ extends Node
 const Spells := preload("res://scripts/Magic/Spells.gd")
 const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
 const Blink := preload("res://scripts/Magic/Blink.gd")
+const ShardScript := preload("res://scripts/Magic/Shard.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -213,8 +214,26 @@ func _cancel() -> void:
 
 
 ## What each spell does, once cast and paid for.
-func _effect(_id: StringName) -> void:
-	pass
+func _effect(id: StringName) -> void:
+	match id:
+		&"shard":
+			_loose_shard()
+
+
+## A splinter from the circle, out along your aim: from just ahead of the
+## eye, unless something is nearer than that (then from the eye).
+func _loose_shard() -> void:
+	var at: Transform3D = player.combat.aim()
+	var forward := -at.basis.z
+	var spawn := at.origin + forward * 0.5
+	var clear := PhysicsRayQueryParameters3D.create(at.origin, spawn, 1 | 2, [player.get_rid()])
+
+	if not player.get_world_3d().direct_space_state.intersect_ray(clear).is_empty():
+		spawn = at.origin
+
+	var shard: StaticBody3D = ShardScript.new()
+	player.get_parent().add_child(shard)
+	shard.launch(spawn, forward * ShardScript.SPEED, ShardScript.DAMAGE, player)
 
 
 # Blink
@@ -329,6 +348,10 @@ func _show_left() -> void:
 		hand.set_left_hold(&"cast", CAST_HAND)
 	else:
 		hand.set_left_hold(&"", Transform3D.IDENTITY)
+
+	if hand.has_method("set_circle"):
+		var hand_spell: bool = _casting != &"" and Spells.info(_casting).get("tier") == Spells.Tier.HAND
+		hand.set_circle(Spells.info(_casting).get("school", &"") if hand_spell else &"", cast_progress())
 
 
 func _ensure_action(action: StringName, key: Key) -> void:
