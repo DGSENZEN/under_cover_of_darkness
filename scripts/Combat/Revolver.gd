@@ -7,6 +7,7 @@ extends Node
 
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const RagdollScript := preload("res://scripts/Visual/Ragdoll.gd")
+const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -82,6 +83,15 @@ var _kick := 0.0
 var _settle := 0.6
 var _shots := 0
 
+# How it is shown: each eased toward what is wanted, 0..1.
+var _braced_shown := 0.0
+var _gate_shown := 0.0
+var _flip_shown := 0.0
+var _sprint_shown := 0.0
+var _boot_shown := 0.0
+## The cylinder's turn as drawn (radians), catching up with the shots.
+var _turn_shown := 0.0
+
 
 func _ready() -> void:
 	player = get_parent() as CharacterBody3D
@@ -94,6 +104,9 @@ func _physics_process(delta: float) -> void:
 	_game_time += delta
 	_kick = move_toward(_kick, 0.0, delta / maxf(_settle, 0.01))
 	var gun: Resource = weapon()
+
+	if gun != null:
+		_send_pose(delta)
 
 	# Put away, up on a hold, carrying: a reload under way is over. Only the
 	# rounds already in are spent.
@@ -481,6 +494,51 @@ func _kicked(strength: float, gun: Resource) -> void:
 	_kick = 1.0
 	player.juice.add_trauma(KICK_TRAUMA * strength * held)
 	player.juice.punch(KICK_PUNCH * strength * held, 0.0)
+
+
+# How the hand looks
+
+## Poses the gun in your view (ViewPoses.REVOLVER) and moves its parts: at
+## rest (lower at a run), both hands on it, kicked up by a shot and settling,
+## rolled to the gate while loading or checking (Tab), the thumb at the nose.
+func _send_pose(delta: float) -> void:
+	var poses: Dictionary = ViewPoses.REVOLVER
+	var sprinting: bool = player.has_method("_is_sprinting") and player._is_sprinting() and Vector2(player.velocity.x, player.velocity.z).length() > float(player.get("walk_speed")) + 0.3
+	var checking: bool = player.hand != null and player.hand.has_method("is_checking") and player.hand.is_checking()
+	var booting: bool = player.combat.phase == player.combat.Phase.KICK
+	_sprint_shown = move_toward(_sprint_shown, 1.0 if sprinting and _kick <= 0.0 and loading == Load.NONE else 0.0, delta * 4.0)
+	_braced_shown = move_toward(_braced_shown, 1.0 if braced else 0.0, delta / 0.25)
+	_gate_shown = move_toward(_gate_shown, 1.0 if loading != Load.NONE or checking else 0.0, delta / 0.2)
+	_flip_shown = move_toward(_flip_shown, 1.0 if _game_time < _flip_until else 0.0, delta / 0.07)
+	_boot_shown = move_toward(_boot_shown, 1.0 if booting else 0.0, delta / 0.1)
+
+	var frame := ViewPoses.revolver_frame(poses["rest"])
+	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["sprint"]), _ease(_sprint_shown))
+	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["braced"]), _ease(_braced_shown))
+	# The kick snaps up and settles slowly: half as far in both hands.
+	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["recoil"]), _kick * _kick * (0.5 if braced else 1.0))
+	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["flip"]), _ease(_flip_shown))
+	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["gate"]), _ease(_gate_shown))
+	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["kick"]), _ease(_boot_shown))
+
+	var turned := float(_shots) * TAU / 6.0
+	_turn_shown = move_toward(_turn_shown, turned, delta * TAU / 6.0 / 0.12)
+	var gate := maxf(gate_open(), _gate_shown if checking else 0.0)
+	var hand: Node = player.hand
+
+	if hand != null:
+		hand.set_weapon_frame(frame)
+
+		if hand.has_method("set_revolver_parts"):
+			hand.set_revolver_parts(_turn_shown, _kick, gate)
+
+		if hand.has_method("set_gun_support"):
+			hand.set_gun_support(_braced_shown * (1.0 - _gate_shown))
+
+
+static func _ease(t: float) -> float:
+	var c := clampf(t, 0.0, 1.0)
+	return c * c * (3.0 - 2.0 * c)
 
 
 func _sound(name: StringName) -> void:

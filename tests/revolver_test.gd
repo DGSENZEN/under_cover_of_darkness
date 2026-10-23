@@ -11,6 +11,7 @@ const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const TemperamentScript := preload("res://scripts/AISystem/Temperament.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
+const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 
 
 class Ear:
@@ -30,7 +31,10 @@ func _ready() -> void:
 	TemperamentScript.rolling = false
 	# Exact damage is checked here: wounds do not go on bleeding.
 	GUARD_SCRIPT.bleeding_on = false
+	# The Prosecutor's own arms (F12, FP_ARMS=new), before the player is made.
+	ViewArmsScript.new_arms = true
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(140, 1, 90))              # floor
+	Props.block(self, Vector3(30, 1.5, -5.0), Vector3(4, 3, 1))              # R9 wall, top at 3, face at z = -4.5
 
 	baker = NavigationRegion3D.new()
 	baker.set_script(NavBakerScript)
@@ -320,8 +324,67 @@ func _run() -> void:
 		"cancelled %s stock %d -> %d loaded %d ready %s" % [cancelled, stock_before, stock_after, revolver.loaded[&"cylinder"], revolver.ready_to_fire()])
 	player.get_node("Neck").rotation.x = 0.0
 
+	# R9 hanging from a ledge, the gun is away: no shot
+	revolver.reset_for_practice()
+	_put_player(Vector3(30, 1.05, 0))
+	await _frames(10)
+	var anchor: Vector3 = player.planner.hang_anchor(Vector3(30, 3.0, -4.5), Vector3.BACK, 3.0)
+	player.teleport(Transform3D(Basis.IDENTITY, anchor))
+	player._enter_hang(Vector3.BACK, 3.0, false)
+	await _frames(20)
+	shots.clear()
+	await _tap("throw")
+	await _frames(6)
+	var hung_shots := shots.size()
+	var hung_visible: bool = player.hand.is_item_visible()
+	player._drop_from_hang()
+	await _frames(60)
+	_check("R9 hanging, the gun is away and fires nothing; standing, it comes back",
+		hung_shots == 0 and not hung_visible and player.hand.is_item_visible(),
+		"shots %d visible hanging %s standing %s" % [hung_shots, hung_visible, player.hand.is_item_visible()])
+
+	# R15 held in view: the muzzle low right; braced, the left hand under the grip
+	revolver.reset_for_practice()
+	_put_player(Vector3(34, 1.05, 0))
+	await _frames(60)
+	var gun_mesh: MeshInstance3D = player.hand._main_mesh
+	var tip: Vector3 = gun_mesh.mesh.get_meta(&"muzzle")
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	var muzzle: Vector2 = _on_screen_point(gun_mesh.global_transform * tip) / size
+	revolver.set_braced(true)
+	await _frames(40)
+	var support: float = player.hand._arms.hand_position(0).distance_to(gun_mesh.global_transform.origin)
+	revolver.set_braced(false)
+	await _frames(30)
+	_check("R15 the muzzle shows low right; braced, the left hand is on the grip",
+		muzzle.x > 0.5 and muzzle.x < 1.0 and muzzle.y > 0.5 and muzzle.y < 1.0 and support <= 0.08 * ViewArmsScript.SCALE,
+		"muzzle at %s support %.3f" % [muzzle, support])
+
+	# R15b the cylinder turns a chamber for each shot
+	revolver.reset_for_practice()
+	await _frames(10)
+	await _tap("throw")
+	await _frames(30)
+	var cylinder: Node3D = gun_mesh.get_node_or_null("Cylinder")
+	var turned := -1.0
+
+	if cylinder != null:
+		var rest: Transform3D = gun_mesh.mesh.get_meta(&"cylinder_at")
+		turned = rad_to_deg((rest.affine_inverse() * cylinder.transform).basis.get_euler().y)
+
+	_check("R15b the cylinder turns 60 degrees for a shot", _near(absf(turned), 60.0, 1.0), "turned %.1f" % turned)
+
 
 # Helpers
+
+## A world point as the viewmodel draws it (pixels): the arms and what they
+## hold are drawn with their own field of view (ViewArms.view_fov).
+func _on_screen_point(p: Vector3) -> Vector2:
+	var cam: Camera3D = player.camera
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	var grow: float = tan(deg_to_rad(cam.fov) * 0.5) / tan(deg_to_rad(player.hand._arms.view_fov(cam.fov)) * 0.5)
+	return size * 0.5 + (cam.unproject_position(p) - size * 0.5) * grow
+
 
 ## Limbs and heads cut off anyone, lying about (SeveredPart.gd).
 func _severed_parts() -> int:

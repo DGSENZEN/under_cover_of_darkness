@@ -122,6 +122,21 @@ const BOW := {
 	"sprint": [Vector3(-0.06, -0.42, -0.36), Vector3(0.85, 0.35, 0.4), Vector3(-0.35, 0.1, -1.0)],
 }
 
+## The revolver, as [grip, up the handle, along the barrel] (revolver_frame).
+## Stand-ins until the poses are made with the user in Blender. "recoil" is
+## the top of a shot's kick; "kick" drawn back for the boot, as the others.
+const REVOLVER := {
+	"rest": [Vector3(0.32, -0.3, -0.44), Vector3(0.05, 1.0, 0.12), Vector3(-0.08, 0.05, -1.0)],
+	"sprint": [Vector3(0.24, -0.34, -0.34), Vector3(-0.3, 0.8, 0.5), Vector3(-0.3, -0.6, -0.7)],
+	"recoil": [Vector3(0.21, -0.2, -0.37), Vector3(0.05, 0.75, 0.66), Vector3(-0.06, 0.66, -0.75)],
+	"braced": [Vector3(0.27, -0.27, -0.44), Vector3(0.0, 1.0, 0.1), Vector3(-0.04, 0.04, -1.0)],
+	# Rolled a third over to the left, muzzle up, the gate toward you.
+	"gate": [Vector3(0.1, -0.27, -0.44), Vector3(-0.87, 0.383, 0.321), Vector3(0.0, 0.64, -0.77)],
+	"flip": [Vector3(0.19, -0.23, -0.41), Vector3(-0.15, 1.0, 0.1), Vector3(-0.08, 0.05, -1.0)],
+	"whip": [Vector3(0.16, -0.12, -0.36), Vector3(0.05, 0.25, -1.0), Vector3(0.0, 1.0, 0.25)],
+	"kick": [Vector3(0.26, -0.22, -0.3), Vector3(0.1, 0.95, 0.25), Vector3(0.1, 0.2, -1.0)],
+}
+
 ## Anything else in hand (a key, a tool): held up in front of you.
 const ITEM := {
 	"rest": [Vector3(0.18, -0.26, -0.36), Vector3(-0.2, 0.9, -0.35), Vector3(-0.1, 0.35, -1.0)],
@@ -139,6 +154,8 @@ static func set_of(id: StringName) -> Dictionary:
 			return BLACKJACK
 		&"bow":
 			return BOW
+		&"revolver":
+			return REVOLVER
 
 	return ITEM
 
@@ -159,6 +176,12 @@ static func bow_frame(pose: Array) -> Transform3D:
 	ahead = (ahead - up * ahead.dot(up)).normalized()
 	var back := -ahead
 	return Transform3D(Basis(up.cross(back), up, back), pose[0])
+
+
+## Converts [grip, up the handle, along the barrel] to a camera-space
+## revolver transform: the bow's convention (the mesh's Y up, its -Z ahead).
+static func revolver_frame(pose: Array) -> Transform3D:
+	return bow_frame(pose)
 
 
 ## Where a sweep has the weapon, `u` from 0 (drawn back) through 0.5 (the

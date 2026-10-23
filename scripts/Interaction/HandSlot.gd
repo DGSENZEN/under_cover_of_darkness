@@ -45,6 +45,11 @@ const MAX_REACH := 0.45
 ## The grip lies across the palm on a slant, as it does in a real fist, so
 ## a blade can point along the arm for a thrust without a broken wrist.
 const HAND_GRIP := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-20.0)) * Basis(Vector3(0, 1, 0), Vector3(0, 0, 1), Vector3(1, 0, 0)), Vector3(-0.03, 0.08, 0.0))
+## A pistol's grip in the right fist: the handle across the palm, its top
+## at the thumb, the barrel running on along the fingers' bones, so with the
+## wrist straight the gun points down the forearm. The grip's slant is the
+## handle's own rake.
+const GUN_GRIP := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-10.0)) * Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0)), Vector3(-0.03, 0.08, 0.0))
 ## A bow in the left fist: upright, the string toward you.
 const BOW_GRIP := Transform3D(Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0)), Vector3(0.03, 0.08, 0.0))
 ## The purse sitting in the left palm, facing up.
@@ -69,6 +74,11 @@ const QUIVER := Vector3(0.34, -0.62, 0.1)
 ## blade +Y, the true edge +X, the flat toward you +Z): palm on the flat,
 ## fingers up the edge, thumb toward the hilt.
 const BRACE := Transform3D(Basis(Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, -1, 0)), Vector3(-0.08, 0.42, 0.05))
+## The left hand under the revolver's grip, both hands on the gun (the hand
+## bone's frame in the gun's: palm toward the right fist, the hand running on
+## from the left forearm forward and across, thumb up). A stand-in until
+## posed with the user.
+const GUN_SUPPORT := Transform3D(Basis(Vector3(0.8566, 0, 0.516), Vector3(0.4997, -0.2498, -0.8294), Vector3(0.1289, 0.9683, -0.214)), Vector3(-0.06, -0.03, 0.04))
 const ARROW_TAIL := 0.356
 
 @export var main_rest := Vector3(0.19, -0.19, -0.34)
@@ -107,6 +117,10 @@ var _purse_bulge := 0.0
 var _jobs: Array[Dictionary] = []
 var _job: Dictionary = {}
 var _checking := false
+## Both hands on the revolver, 0..1 (set_gun_support).
+var _gun_support := 0.0
+## The revolver's moving parts, children of the main mesh: cylinder, hammer, gate.
+var _gun_parts := {}
 var _time := 0.0
 
 ## Full-size camera-space weapon frames sent by combat and interpolated between ticks.
@@ -480,6 +494,36 @@ func set_brace(amount: float) -> void:
 	_brace = clampf(amount, 0.0, 1.0)
 
 
+## Both hands on the revolver: the left under the grip, 0..1.
+func set_gun_support(amount: float) -> void:
+	_gun_support = clampf(amount, 0.0, 1.0)
+
+
+## The revolver's moving parts: the cylinder turned (radians), the hammer
+## back 0 (cocked) to 1 (fallen), the loading gate 0 shut to 1 open.
+func set_revolver_parts(cylinder_turn: float, hammer: float, gate: float) -> void:
+	if _gun_parts.is_empty() or _main_item == null:
+		return
+
+	var cylinder: MeshInstance3D = _gun_parts.get(&"cylinder")
+	var hammer_part: MeshInstance3D = _gun_parts.get(&"hammer")
+	var gate_part: MeshInstance3D = _gun_parts.get(&"gate")
+
+	if cylinder != null:
+		cylinder.transform = (_main_item.get_meta(&"cylinder_at") as Transform3D) * Transform3D(Basis(Vector3.UP, cylinder_turn), Vector3.ZERO)
+
+	if hammer_part != null:
+		hammer_part.transform = (_main_item.get_meta(&"hammer_at") as Transform3D) * Transform3D(Basis(Vector3.RIGHT, -0.6 * (1.0 - hammer)), Vector3.ZERO)
+
+	if gate_part != null:
+		gate_part.transform = (_main_item.get_meta(&"gate_at") as Transform3D) * Transform3D(Basis(Vector3.UP, 1.4 * gate), Vector3.ZERO)
+
+
+## Tab: the left hand checking (the purse; the revolver's chambers).
+func is_checking() -> bool:
+	return _checking
+
+
 ## Returns the last displayed weapon transform in full-size camera space.
 func weapon_frame() -> Transform3D:
 	return _frame_now
@@ -664,6 +708,8 @@ func _set_main_item(mesh: Mesh) -> void:
 		_main_mesh.scale = Vector3.ONE * _fit_scale(mesh)
 		_main_mesh.rotation = mesh.get_meta(&"hold_rotation", Vector3(-0.35, 0.25, 0.3)) if mesh != null else Vector3.ZERO
 
+	_make_gun_parts(mesh)
+
 	# Taken up at its rest: nothing to glide from.
 	_frame_now = _rest_frame()
 	_frame_before = _frame_now
@@ -703,6 +749,30 @@ func _set_main_item(mesh: Mesh) -> void:
 		_blood_overlay.set_shader_parameter("seed", float(mesh.get_instance_id() % 97) * 0.37)
 		_main_mesh.material_overlay = _blood_overlay
 		_tint_blade()
+
+
+## A revolver's cylinder, hammer and gate, as their own meshes under the
+## gun's, so they can move; gone with any other item.
+func _make_gun_parts(mesh: Mesh) -> void:
+	for part in _gun_parts.values():
+		if is_instance_valid(part):
+			# Out of the tree now, so new parts take their names.
+			part.get_parent().remove_child(part)
+			part.queue_free()
+
+	_gun_parts.clear()
+
+	if mesh == null or not mesh.has_meta(&"cylinder_mesh"):
+		return
+
+	for which in [&"cylinder", &"hammer", &"gate"]:
+		var part := _viewmodel_instance()
+		part.name = String(which).capitalize()
+		part.mesh = mesh.get_meta(StringName(String(which) + "_mesh"))
+		part.transform = mesh.get_meta(StringName(String(which) + "_at"))
+		_apply_materials(part, part.mesh)
+		_main_mesh.add_child(part)
+		_gun_parts[which] = part
 
 
 ## The blood on the blade in hand, drawn (blade_blood.gdshader).
@@ -1184,7 +1254,9 @@ func _place_hands() -> void:
 	# The fist turns the way the forearm runs: the wrist stays straight and
 	# only tips the blade. The pose says where the grip is and where the blade
 	# points; the arm says the rest.
-	if _view_id != &"" and _view_id != &"bow":
+	if _view_id == &"revolver":
+		frame = _natural_gun(frame)
+	elif _view_id != &"" and _view_id != &"bow":
 		frame = _natural(frame)
 
 	# (Drawn at the viewmodel's field of view: aimed where the world's camera
@@ -1548,11 +1620,19 @@ func _place_arms() -> void:
 				targets[1] = _fetching(targets[1])
 				curls[1] = 0.9
 		else:
-			targets[1] = _held_by(held, HAND_GRIP)
+			targets[1] = _held_by(held, GUN_GRIP if _view_id == &"revolver" else HAND_GRIP)
 			weights[1] = 1.0
 			curls[1] = 1.0
 			# Round the handle: a sword's grip (the thumb along it).
 			poses[1] = _pose_if_had(&"SwordGrip")
+
+			# Both hands on the revolver: the left round the front of the grip.
+			if _view_id == &"revolver" and _gun_support > 0.01:
+				var size := ViewArmsScript.SCALE
+				targets[0] = Transform3D(held.basis * GUN_SUPPORT.basis, held.origin + held.basis * (GUN_SUPPORT.origin * size))
+				weights[0] = smoothstep(0.0, 1.0, _gun_support)
+				curls[0] = 1.0
+				poses[0] = _pose_if_had(&"Wrap")
 
 			# A braced block: the left palm on the flat.
 			_brace_shown = move_toward(_brace_shown, _brace if _view_id == &"sword" else 0.0, get_process_delta_time() / 0.08)
@@ -1724,6 +1804,37 @@ func _natural(frame: Transform3D) -> Transform3D:
 	return frame.interpolate_with(natural, sure) if sure < 1.0 else natural
 
 
+## A gun's `frame` turned about its handle so the barrel is never more than
+## MAX_WRIST_BEND off the line of the forearm (the wrist nearly straight, as
+## with a blade: the pose places the grip and points it, the arm keeps it
+## honest), easing in the same way.
+func _natural_gun(frame: Transform3D) -> Transform3D:
+	if _arms == null:
+		return frame
+
+	var handle := frame.basis.y.normalized()
+	var wrist := (frame.origin + frame.basis.z.normalized() * 0.08) * ViewArmsScript.SCALE
+	var forearm: Vector3 = _arms.forearm_to(1, wrist)
+	var along := forearm - handle * forearm.dot(handle)
+	var sure := smoothstep(0.12, 0.4, along.length())
+
+	if sure <= 0.0:
+		return frame
+
+	along = along.normalized()
+	var aimed := -frame.basis.z.normalized()
+	var bend := along.signed_angle_to(aimed, handle)
+	var limit := deg_to_rad(MAX_WRIST_BEND)
+
+	if absf(bend) <= limit:
+		return frame
+
+	var ahead := along.rotated(handle, clampf(bend, -limit, limit))
+	var back := -ahead
+	var natural := Transform3D(Basis(handle.cross(back), handle, back), frame.origin)
+	return frame.interpolate_with(natural, sure) if sure < 1.0 else natural
+
+
 ## A left fist round a bow's stave (`hand`, its thumb up the stave), turned
 ## about the stave so its fingers run along the forearm.
 func _around_stave(hand: Transform3D, stave: Vector3) -> Transform3D:
@@ -1746,6 +1857,9 @@ func _rest_frame() -> Transform3D:
 
 	if _view_id == &"bow":
 		return ViewPosesScript.bow_frame(poses["rest"])
+
+	if _view_id == &"revolver":
+		return ViewPosesScript.revolver_frame(poses["rest"])
 
 	return ViewPosesScript.frame(poses["rest"])
 

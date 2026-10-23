@@ -2251,6 +2251,12 @@ func _send_pose(delta: float) -> void:
 	if weapon == null:
 		return
 
+	# The revolver's own hand poses it (Revolver.gd).
+	if weapon.kind == WeaponScript.Kind.GUN:
+		_hand(&"set_brace", [0.0])
+		_hand(&"set_bow_draw", [0.0, null])
+		return
+
 	var poses: Dictionary = ViewPoses.set_of(weapon.id)
 	var bow: bool = weapon.kind == WeaponScript.Kind.BOW
 	var sweeps: Dictionary = poses.get("sweeps", {})
