@@ -36,6 +36,8 @@ var parts: Array[MeshInstance3D] = []
 var _front: Node3D
 var _leaves: Array[MeshInstance3D] = []
 var _was_open := false
+@export var seed := 17
+var _clock := 0.0
 
 
 ## Builds the book from the kit's live parts (by name), all in `material`; `hinge` is the kit's hinge point
@@ -50,7 +52,9 @@ func build(meshes: Dictionary, material: Material, hinge: Vector3) -> void:
 	add_child(_front)
 
 	for part in ["live_cover_back", "live_block_right", "live_spine_back"]:
-		_part(meshes.get(part), material, self, offset)
+		var piece := _part(meshes.get(part), material, self, offset)
+		if piece != null:
+			piece.set_meta("book_part", part)
 	for part in ["live_cover_front", "live_block_left", "live_spine_front"]:
 		_part(meshes.get(part), material, _front, offset)
 
@@ -81,7 +85,8 @@ func _part(mesh: Mesh, material: Material, parent: Node3D, offset: Vector3) -> M
 
 
 func _process(delta: float) -> void:
-	var eye := watcher if watcher != null else get_viewport().get_camera_3d()
+	_clock += delta
+	var eye := watcher if is_instance_valid(watcher) else get_viewport().get_camera_3d()
 	if eye != null:
 		var far := eye.global_position.distance_to(_middle())
 		if far > CLOSE_FAR:
@@ -89,10 +94,8 @@ func _process(delta: float) -> void:
 		elif far < OPEN_NEAR and _in_sight(eye):
 			wanted = true
 
-	var was := open
 	open = move_toward(open, 1.0 if wanted else 0.0, delta / (OPEN_TIME if wanted else CLOSE_TIME))
-	if open != was:
-		_pose()
+	_pose()
 
 	if open >= 1.0 and not _was_open:
 		_was_open = true
@@ -123,11 +126,15 @@ func _in_sight(eye: Node3D) -> bool:
 func _pose() -> void:
 	var turn := smoothstep(0.0, 1.0, open)
 	if _front != null:
-		_front.rotation.z = PI * turn
+		var breath := 0.5 + 0.5 * sin(_clock * 2.7 + seed)
+		var lift := 0.007 * breath * (1.0 - turn) - 0.035 * breath * turn
+		_front.rotation.z = PI * turn + lift
 
 	for i in _leaves.size():
 		var lag := LEAF_LAG * (i + 1)
 		var t := smoothstep(0.0, 1.0, clampf((open - lag) / (1.0 - lag), 0.0, 1.0)) if open < 1.0 else 1.0
+		if open > 0.95:
+			t = lerpf(t, 0.88 + 0.065 * sin(_clock * 3.4 + seed + i * 1.4), (open - 0.95) / 0.05)
 		var pivot := _leaves[i].get_parent() as Node3D
 		pivot.rotation.z = PI * t
 		_leaves[i].visible = t > 0.02 and t < 0.98

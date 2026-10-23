@@ -17,6 +17,7 @@ extends Node3D
 const PLAYER := preload("res://Player.tscn")
 const Vfx := preload("res://scripts/Level/Vfx.gd")
 const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const AnimasScript := preload("res://scripts/Visual/Animas.gd")
@@ -215,6 +216,8 @@ var _rattle: AudioStreamPlayer3D
 var _clock := 0.0
 var _sparks := RandomNumberGenerator.new()
 var work_lights: Array[Light3D] = []
+## Each work lamp's light coming back up off the tiles onto the ceiling (a child of its lamp, so F1 and F2 take it).
+var bounce_lights: Array[OmniLight3D] = []
 var form_light: DirectionalLight3D
 var form_material: StandardMaterial3D
 var decals: Array[Decal] = []
@@ -223,6 +226,9 @@ var world: WorldEnvironment
 var keys_label: Label
 
 var _form := false
+## Embedded rooms manage their own material overrides during inspection.
+var inspection_sections: Array[Node3D] = []
+var _work_on := true
 
 
 func _ready() -> void:
@@ -257,7 +263,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	match event.keycode:
 		KEY_F1:
-			set_work_lights(not work_lights[0].visible)
+			set_work_lights(not _work_on)
 		KEY_F2:
 			set_form(not _form)
 		KEY_F3:
@@ -273,8 +279,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func set_work_lights(on: bool) -> void:
+	_work_on = on
 	for light in work_lights:
-		light.visible = on
+		light.visible = on and not _form
 
 	_name_keys()
 
@@ -282,9 +289,13 @@ func set_work_lights(on: bool) -> void:
 ## The form light: every mesh of the bay a neutral grey under one white
 ## light, the work lights off; or everything as it was.
 func set_form(on: bool) -> void:
+	if on == _form:
+		return
 	_form = on
 
 	for mesh: MeshInstance3D in find_children("*", "MeshInstance3D", true, false):
+		if inspection_sections.any(func(section): return section.is_ancestor_of(mesh)):
+			continue
 		if is_instance_valid(player) and player.is_ancestor_of(mesh):
 			continue
 
@@ -307,7 +318,9 @@ func set_form(on: bool) -> void:
 	if neon != null:
 		neon.light.visible = not on
 
-	set_work_lights(not on)
+	for light in work_lights:
+		light.visible = _work_on and not on
+	_name_keys()
 
 
 func set_decals(on: bool) -> void:
@@ -478,9 +491,12 @@ func _lights() -> void:
 		light.light_energy = 2.6
 		light.omni_range = 9.0
 		light.shadow_enabled = true
+		# (A shaded lamp: its light falls below its shade, never on the vault over it.)
+		light.light_cull_mask &= ~Layers.SHADED_ABOVE
 		add_child(light)
 		light.position = Vector3(x, HEIGHT - 0.4, 2.2)
 		work_lights.append(light)
+		_bounce(light)
 		_box(light.position + Vector3(-0.25, 0.25, -0.12), light.position + Vector3(0.25, 0.4, 0.12),
 			_flat(Color(0.1, 0.1, 0.1)), "fixture_%d" % int(x))
 
@@ -515,6 +531,22 @@ func _lights() -> void:
 	form_material = StandardMaterial3D.new()
 	form_material.albedo_color = Color(0.6, 0.6, 0.6)
 	form_material.roughness = 1.0
+
+
+## A shaded lamp's light coming back up off the lit tiles: soft, unshadowed, low over the floor, lighting only the
+## ceiling (its shade keeps the lamp's own light off it), so the ceiling reads as one, warm and dim, not a night sky.
+func _bounce(lamp: OmniLight3D) -> void:
+	var up := OmniLight3D.new()
+	up.name = "bounce"
+	up.light_color = SODIUM.darkened(0.25)
+	up.light_energy = 0.9
+	up.omni_range = 6.0
+	up.omni_attenuation = 0.7
+	up.shadow_enabled = false
+	up.light_cull_mask = Layers.SHADED_ABOVE
+	lamp.add_child(up)
+	up.global_position = Vector3(lamp.global_position.x, 0.6, lamp.global_position.z)
+	bounce_lights.append(up)
 
 
 # The effects: copal off the censer, dust in the work lights, the neon's hum
@@ -672,7 +704,7 @@ func _train() -> void:
 	train.seed = 31
 	add_child(train)
 
-	for light in work_lights + [bulb]:
+	for light in work_lights + bounce_lights + [bulb]:
 		_full[light] = light.light_energy
 
 	rumble = AudioStreamPlayer.new()
@@ -1117,12 +1149,22 @@ func _walls() -> void:
 	if ResourceLoader.exists(VAULT_KIT):
 		var soffit: Mesh = _kit(VAULT_KIT)["vault_span"]
 		var plaster := Painterly.material(_painted(["underground_vault.png", "underground_vault_base.png"]), &"bespoke")
+		# (A warm bounce off the lit tiles below, its shadows not tinted cool: the shaded lamps never light it, and in
+		# the painted light's cool shadow and sky it read as a night sky.)
+		plaster.set_shader_parameter("ambient_ground", Color(0.52, 0.38, 0.26))
+		plaster.set_shader_parameter("ambient_sky", Color(0.46, 0.36, 0.27))
+		plaster.set_shader_parameter("ambient_amount", 0.26)
+		plaster.set_shader_parameter("shadow_cool", Vector3(0.95, 0.9, 0.92))
+		plaster.set_shader_parameter("rim_colour", Color(0.5, 0.38, 0.27))
 
 		for i in int(round(2.0 * RUN / VAULT_SPAN)):
 			var x := -RUN + VAULT_SPAN * i
 			var turned := i % 2 == 1
 			var at := Vector3(x + VAULT_SPAN, HEIGHT, BACK_WALL - WALL_FACE) if turned else Vector3(x, HEIGHT, FAR_WALL + WALL_FACE)
-			vault_spans.append(_place(soffit, plaster, "vault_span", at, PI if turned else 0.0, false))
+			var span := _place(soffit, plaster, "vault_span", at, PI if turned else 0.0, false)
+			# (Above the work lamps' shades: they never light it.)
+			span.layers = Layers.SHADED_ABOVE
+			vault_spans.append(span)
 	else:
 		missing.append(VAULT_KIT)
 

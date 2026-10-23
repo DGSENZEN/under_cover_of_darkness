@@ -1,14 +1,18 @@
 extends Node3D
 ## The rare-book librarian's shop's look-dev bay (docs/superpowers/specs/2026-10-17-librarian-shop-design.md;
-## docs/superpowers/plans/2026-10-17-librarian-shop-part-1.md): his vaulted room off a strip of the Metro
+## docs/superpowers/plans/2026-10-19-librarian-shop-part-2.md): his vaulted room off a strip of the Metro
 ## corridor, painted in the bespoke blend. The player starts in the corridor, looking in through the arch.
-##   F1  work lights on / off
+##   F1  shop work lights on / off (off initially; the corridor stays lit)
 ##   F2  form light: everything neutral grey under one white light, to judge shape
 ##   F3  decals (his chalk ward and its salt) on / off
 
 const PLAYER := preload("res://Player.tscn")
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
+const LibraryEffects := preload("res://scripts/Visual/Library/LibraryEffects.gd")
+
+## False when the room belongs to the shared Underground map.
+@export var standalone := true
 
 ## The room's kit (tools/eclipse/library_room.py), set at the origin: the shopfront's corridor face at
 ## z = FRONT_T, the room from z = 0 back to -DEPTH.
@@ -92,6 +96,17 @@ const LECTERNS := [[Vector3(-2.8, 0.0, -0.35), 180.0], [Vector3(3.7, 0.0, -3.0),
 const LECTERN_DESK := Vector3(0.0, 1.0791, 0.0051)
 const LECTERN_SLOPE := 20.0
 
+## The shop's own air, whatever map it stands in: its fog thinned (the corridor's haze washed the room from the arch).
+const HAZE_THIN := -0.012
+## Its painted materials: a warm bounce and a dim warm rim (their own ambient and rim light, laid on as emission; the
+## night's cool sky and blue rim turned the unlit shop blue, its floors bluest at a grazing look), and soft shading
+## (the painted light's broken terminator and coarse macro made blotches, camo, on the boards, tables and walls; its
+## hard band edges drew rings round every pool of book light).
+const SHOP_SHADING := {"terminator_break": 0.3, "macro_amount": 0.08, "shadow_cool": Vector3(0.95, 0.9, 0.92),
+	"band_softness": 0.32,
+	"ambient_sky": Color(0.46, 0.36, 0.27), "ambient_ground": Color(0.34, 0.23, 0.17), "ambient_amount": 0.16,
+	"rim_colour": Color(0.5, 0.38, 0.27), "rim_amount": 0.04}
+
 ## The lamp's shade: emerald glass, lit through from inside.
 const SHADE_GREEN := Color(0.12, 0.42, 0.22, 0.8)
 
@@ -117,37 +132,54 @@ var book_layout: Array = []
 var book_draws: Array[MultiMeshInstance3D] = []
 var live_books: Array[LiveBook] = []
 var book_stands: Array[MeshInstance3D] = []
+## The shop's haze; its painted materials.
+var shop_haze: FogVolume
+var shop_looks: Array[ShaderMaterial] = []
 var lamp_light: OmniLight3D
 var work_lights: Array[Light3D] = []
+var corridor_light: OmniLight3D
 var form_light: DirectionalLight3D
 var form_material: StandardMaterial3D
 var keys_label: Label
 var _form := false
+var effects: Node3D
+var _work_on := false
+var _inspection_overrides := {}
 
 
 func _ready() -> void:
 	reset_physics_interpolation.call_deferred()
-	_environment()
+	if standalone:
+		_environment()
 	_room()
+	_air()
 	_corner()
 	_shelves()
 	_books()
-	_corridor()
+	if standalone:
+		_corridor()
 	_lights()
-	_keys()
-	player = PLAYER.instantiate()
-	player.debug_traversal = false
-	add_child(player)
-	player.global_position = SPAWN
+	effects = LibraryEffects.new()
+	effects.name = "LibraryEffects"
+	add_child(effects)
+	effects.build(self)
+	if standalone:
+		_keys()
+		player = PLAYER.instantiate()
+		player.debug_traversal = false
+		add_child(player)
+		player.global_position = SPAWN
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if not standalone:
+		return
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 
 	match event.keycode:
 		KEY_F1:
-			set_work_lights(not work_lights[0].visible)
+			set_work_lights(not _work_on)
 		KEY_F2:
 			set_form(not _form)
 		KEY_F3:
@@ -155,8 +187,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func set_work_lights(on: bool) -> void:
+	_work_on = on
 	for light in work_lights:
-		light.visible = on
+		light.visible = on and not _form
 
 	_name_keys()
 
@@ -164,7 +197,11 @@ func set_work_lights(on: bool) -> void:
 ## The form light: every mesh of the bay a neutral grey under one white light, the work lights and his lamp
 ## off; or everything as it was. (Effects keep their own look: they cast no shadow and draw with a shader.)
 func set_form(on: bool) -> void:
+	if on == _form:
+		return
 	_form = on
+	if is_instance_valid(effects):
+		effects.set_inspection(on)
 
 	for mesh: MeshInstance3D in find_children("*", "MeshInstance3D", true, false):
 		if is_instance_valid(player) and player.is_ancestor_of(mesh):
@@ -174,7 +211,11 @@ func set_form(on: bool) -> void:
 				and (mesh.get_surface_override_material(0) is ShaderMaterial or mesh.mesh.surface_get_material(0) is ShaderMaterial):
 			continue
 
-		mesh.material_override = form_material if on else null
+		if on:
+			_inspection_overrides[mesh.get_instance_id()] = mesh.material_override
+			mesh.material_override = form_material
+		else:
+			mesh.material_override = _inspection_overrides.get(mesh.get_instance_id())
 
 	# (The shelves' books keep their look on their draw.)
 	for draw: MultiMeshInstance3D in book_draws:
@@ -182,7 +223,11 @@ func set_form(on: bool) -> void:
 
 	form_light.visible = on
 	lamp_light.visible = not on
-	set_work_lights(not on)
+	for light in work_lights:
+		light.visible = _work_on and not on
+	if not on:
+		_inspection_overrides.clear()
+	_name_keys()
 
 
 # The room
@@ -193,7 +238,7 @@ func _room() -> void:
 		return
 
 	var meshes := _kit(ROOM_KIT)
-	var look := Painterly.material(_painted(["library_room.png", "library_room_base.png"]), &"bespoke")
+	var look := _shop_look(Painterly.material(_painted(["library_room.png", "library_room_base.png"]), &"bespoke"), "room")
 
 	for part in ["room_vault", "room_back", "room_front", "room_floor", "room_rug"]:
 		if not meshes.has(part):
@@ -217,6 +262,30 @@ func _room() -> void:
 		room["room_floor"].add_child(floor_body)
 
 
+## The shop's air: a fog volume thinning the haze inside the room.
+func _air() -> void:
+	var middle := Vector3(0.0, 2.4, -DEPTH / 2.0)
+	var size := Vector3(WIDTH + 0.4, 5.0, DEPTH + 0.4)
+	shop_haze = FogVolume.new()
+	shop_haze.name = "shop_haze"
+	shop_haze.shape = RenderingServer.FOG_VOLUME_SHAPE_BOX
+	shop_haze.size = size
+	var thin := FogMaterial.new()
+	thin.density = HAZE_THIN
+	shop_haze.material = thin
+	add_child(shop_haze)
+	shop_haze.position = middle
+
+
+## One of the shop's painted materials, shading softly (SHOP_SHADING), kept in `shop_looks`.
+func _shop_look(look: ShaderMaterial, kit: String) -> ShaderMaterial:
+	look.resource_name = "library_" + kit
+	for key: String in SHOP_SHADING:
+		look.set_shader_parameter(key, SHOP_SHADING[key])
+	shop_looks.append(look)
+	return look
+
+
 # His corner
 
 ## His corner: the dealer's desk and its things (the rite, the hunt and the work in progress join it).
@@ -226,7 +295,7 @@ func _corner() -> void:
 		return
 
 	var meshes := _kit(CORNER_KIT)
-	var look := Painterly.material(_painted(["library_corner.png", "library_corner_base.png"]), &"bespoke")
+	var look := _shop_look(Painterly.material(_painted(["library_corner.png", "library_corner_base.png"]), &"bespoke"), "corner")
 
 	for part: String in meshes:
 		corner[part] = _place(meshes[part], look, part, CORNER_AT, 0.0, part in CORNER_SOLID)
@@ -269,7 +338,7 @@ func _wicks(part: String) -> Array[Vector3]:
 	if FileAccess.file_exists(CORNER_WICKS):
 		var wicks: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(CORNER_WICKS))
 		for w in wicks.get(part, []):
-			out.append(CORNER_AT + Vector3(w[0], w[1], w[2]))
+			out.append(to_global(CORNER_AT + Vector3(w[0], w[1], w[2])))
 	return out
 
 
@@ -299,9 +368,9 @@ func lamp_bulb() -> Vector3:
 		var wicks: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(CORNER_WICKS))
 		if wicks.has("lamp"):
 			var w: Array = wicks["lamp"][0]
-			return CORNER_AT + Vector3(w[0], w[1], w[2])
+			return to_global(CORNER_AT + Vector3(w[0], w[1], w[2]))
 
-	return LAMP_AT
+	return to_global(LAMP_AT)
 
 
 # His shelves
@@ -314,7 +383,7 @@ func _shelves() -> void:
 		return
 
 	var meshes := _kit(SHELF_KIT)
-	var look := Painterly.material(_painted(["library_shelves.png", "library_shelves_base.png"]), &"bespoke")
+	var look := _shop_look(Painterly.material(_painted(["library_shelves.png", "library_shelves_base.png"]), &"bespoke"), "shelves")
 
 	for section: String in SHELVES:
 		var place: Array = SHELVES[section]
@@ -339,7 +408,7 @@ func _books() -> void:
 		return
 
 	var meshes := _kit(BOOK_KIT)
-	var look := Painterly.material(_painted(["library_books.png", "library_books_base.png"]), &"bespoke")
+	var look := _shop_look(Painterly.material(_painted(["library_books.png", "library_books_base.png"]), &"bespoke"), "books")
 	var boards: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(SHELF_BOARDS))
 
 	# The spots: each case's boards, each taking books as tall as the board above (or the case's top) allows.
@@ -371,7 +440,11 @@ func _books() -> void:
 	for k in BOOK_STACKS:
 		kinds.append(meshes["book_stack_%d" % k])
 	var filler := BookFiller.new()
-	book_draws = filler.fill(book_spots, kinds, look, 1888)
+	# Batches live in this room's frame; public board records remain in world space.
+	var local_spots: Array = book_spots.duplicate(true)
+	for spot: Dictionary in local_spots:
+		spot["xform"] = global_transform.affine_inverse() * spot["xform"]
+	book_draws = filler.fill(local_spots, kinds, look, 1888)
 	book_layout = filler.layout
 	for draw in book_draws:
 		draw.set_meta("look", look)
@@ -382,7 +455,7 @@ func _books() -> void:
 		var case: MeshInstance3D = sections[study[0]]
 		var b: Array = boards["shelf_" + study[0]][study[1]]
 		var at := Transform3D(Basis(), Vector3(study[2], b[2] + LIVE_HINGE.z + LIVE_LIFT, (b[3] + b[4]) / 2.0))
-		_live_book(meshes, look, LiveBook.Kind.STUDY, StringName(study[0]), case.global_transform * at)
+		_live_book(meshes, look, LiveBook.Kind.STUDY, StringName(study[0]), case.transform * at)
 
 	# The table of novels by his door; the lecterns either side of the runner with a spellbook open-able on each.
 	book_stands.append(_place(meshes["front_table"], look, "front_table", FRONT_TABLE_AT, 0.0, true))
@@ -395,7 +468,8 @@ func _books() -> void:
 		var yaw := deg_to_rad(stand[1])
 		book_stands.append(_place(meshes["lectern"], look, "lectern", stand[0], yaw, true))
 		var on := LECTERN_DESK + slope * Vector3(0.0, LIVE_HINGE.z + LIVE_LIFT, 0.0)
-		_live_book(meshes, look, LiveBook.Kind.SPELL, &"", Transform3D(Basis(Vector3.UP, yaw), stand[0]) * Transform3D(slope, on))
+		var section: StringName = &"chronology" if stand[0].x < 0.0 else &"alchemy"
+		_live_book(meshes, look, LiveBook.Kind.SPELL, section, Transform3D(Basis(Vector3.UP, yaw), stand[0]) * Transform3D(slope, on))
 
 
 ## Which of its case's boards (counted from the floor) a spot is on.
@@ -413,8 +487,9 @@ func _live_book(meshes: Dictionary, look: Material, kind: LiveBook.Kind, section
 	book.name = "live_%d" % live_books.size()
 	book.kind = kind
 	book.section = section
+	book.seed = 17 + live_books.size() * 13
 	add_child(book)
-	book.global_transform = place
+	book.transform = place
 	book.build(meshes, look, LIVE_HINGE)
 	live_books.append(book)
 	return book
@@ -486,6 +561,8 @@ func _environment() -> void:
 func _lights() -> void:
 	# Two sodium work lights under the vault, one in the corridor.
 	for at in [Vector3(-2.2, 3.6, -2.6), Vector3(2.2, 3.6, -2.6), Vector3(0.0, 3.6, 2.0)]:
+		if not standalone and at.z > 0.0:
+			continue
 		var light := OmniLight3D.new()
 		light.name = "work_%d" % work_lights.size()
 		light.light_color = SODIUM
@@ -494,7 +571,12 @@ func _lights() -> void:
 		light.shadow_enabled = true
 		add_child(light)
 		light.position = at
-		work_lights.append(light)
+		if work_lights.size() < 2:
+			work_lights.append(light)
+			light.visible = false
+		else:
+			light.name = "corridor_sodium"
+			corridor_light = light
 
 	lamp_light = OmniLight3D.new()
 	lamp_light.name = "lamp_light"
@@ -503,7 +585,7 @@ func _lights() -> void:
 	lamp_light.omni_range = 4.0
 	lamp_light.shadow_enabled = true
 	add_child(lamp_light)
-	lamp_light.position = lamp_bulb()
+	lamp_light.global_position = lamp_bulb()
 
 	form_light = DirectionalLight3D.new()
 	form_light.name = "form_light"

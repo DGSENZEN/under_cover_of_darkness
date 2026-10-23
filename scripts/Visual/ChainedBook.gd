@@ -6,9 +6,9 @@ extends Node3D
 ## come with Part 2.)
 
 ## How often it strains (s), for how long, how far its cover lifts at most (degrees).
-const STRAIN_EVERY := Vector2(14.0, 30.0)
-const STRAIN_FOR := 1.6
-const LIFT_DEG := 12.0
+const STRAIN_EVERY := Vector2(10.0, 20.0)
+const STRAIN_FOR := 2.0
+const LIFT_DEG := 20.0
 
 ## Its cover, and the ends of the hinge along its spine (world) the cover lifts about.
 @export var cover: MeshInstance3D

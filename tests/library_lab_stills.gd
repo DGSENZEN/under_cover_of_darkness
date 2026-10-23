@@ -5,10 +5,12 @@ extends Node3D
 ##     [--clip=S [--dolly=M]]   a clip instead of a still: S seconds of frames (30 a second), the eye walking M
 ##                              metres toward what it looks at, at its own height
 ##     [--strain]               the chained book strains as the clip begins, and every 2.2 s
+##     [--lit-only]             skip the form-light versions
+##     [--work-lights]          restore the shop work lights for comparison
+##     [--effects-off]          disable Part 2 for comparison in this same scene
 
 const LAB := preload("res://maps/library_lab.tscn")
 
-## Each view: its name, where the eye stands, what it looks at.
 ## Each view: its name, the eye, what it looks at, and (for the live books) how long to hold it first (s, at the
 ## 60 frames a second the stills run at: --fixed-fps 60).
 const VIEWS := [
@@ -69,7 +71,8 @@ const VIEWS := [
 	["lectern_gap", Vector3(2.55, 1.75, -3.0), Vector3(3.7, 1.1, -3.0), 1.5],
 	["study_necromancy", Vector3(-2.6, 1.65, -4.0), Vector3(-3.7, 1.5, -4.25), 1.5],
 	["study_chronology", Vector3(-2.5, 1.55, -1.1), Vector3(-3.7, 1.05, -1.3), 1.5],
-	["clip_table", Vector3(0.4, 1.7, 1.6), Vector3(2.9, 0.9, -0.3)],
+	# Approach along the front passage inside the arch (--dolly=0.65).
+	["clip_table", Vector3(1.3, 1.7, -0.65), Vector3(2.9, 0.9, -0.3)],
 	["shop_plan", Vector3(0.0, 4.15, -0.35), Vector3(0.0, 0.0, -3.1)],
 ]
 
@@ -81,6 +84,9 @@ func _ready() -> void:
 	var clip := 0.0
 	var dolly := 0.0
 	var straining := false
+	var lit_only := false
+	var work_lights := false
+	var effects_off := false
 
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
@@ -95,12 +101,20 @@ func _ready() -> void:
 			dolly = float(arg.trim_prefix("--dolly="))
 		elif arg == "--strain":
 			straining = true
+		elif arg == "--lit-only":
+			lit_only = true
+		elif arg == "--work-lights":
+			work_lights = true
+		elif arg == "--effects-off":
+			effects_off = true
 
 	DirAccess.make_dir_recursive_absolute(out)
 	AudioServer.set_bus_mute(0, true)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	var lab: Node3D = LAB.instantiate()
 	add_child(lab)
+	lab.set_work_lights(work_lights)
+	lab.effects.set_enabled(not effects_off)
 	await _frames(4 + int(settle * 60.0))
 	lab.player.queue_free()
 	lab.keys_label.visible = false
@@ -109,7 +123,7 @@ func _ready() -> void:
 	add_child(eye)
 	eye.make_current()
 
-	for form in ([false] if clip > 0.0 else [false, true]):
+	for form in ([false] if clip > 0.0 or lit_only else [false, true]):
 		lab.set_form(form)
 
 		for view in VIEWS:
