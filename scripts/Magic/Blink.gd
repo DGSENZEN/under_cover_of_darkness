@@ -16,6 +16,8 @@ const BACK_OFF := 0.25
 const LIFT := 0.08
 ## Arrivals stand this far up, and the body drops the rest.
 const SETTLE := 0.05
+## Aimed no further than this under a lip, a blink ends hanging from it.
+const LEDGE_BELOW := 1.2
 
 
 ## Where the player's body arrives, blinking from `eye` toward `toward`, up
@@ -83,6 +85,51 @@ static func _swept(player: CharacterBody3D, start: Vector3, motion: Vector3) -> 
 	shape_query.exclude = [player.get_rid()]
 	var fractions := player.get_world_3d().direct_space_state.cast_motion(shape_query)
 	return fractions[0] if not fractions.is_empty() else 1.0
+
+
+## Aimed at a wall's face just under its top (within LEDGE_BELOW of a lip
+## the climbing accepts): {anchor, normal, lip_y, face_point} to arrive
+## hanging from it (TraversalPlanner.probe_hang); {} otherwise.
+static func ledge_at(player: CharacterBody3D, eye: Vector3, toward: Vector3, reach: float) -> Dictionary:
+	var space := player.get_world_3d().direct_space_state
+	var direction := toward.normalized()
+	var query := PhysicsRayQueryParameters3D.create(eye, eye + direction * reach, 1, [player.get_rid()])
+	var hit := space.intersect_ray(query)
+
+	if hit.is_empty() or player.get("planner") == null:
+		return {}
+
+	var normal: Vector3 = hit.get("normal", Vector3.UP)
+
+	if absf(normal.y) > 0.3:
+		return {}
+
+	var face := Vector3(normal.x, 0.0, normal.z).normalized()
+	var point: Vector3 = hit["position"]
+	# The top above where it struck: down onto it from over the face.
+	var over := point - face * 0.15
+	var top_query := PhysicsRayQueryParameters3D.create(over + Vector3.UP * (LEDGE_BELOW + 0.1), over, 1, [player.get_rid()])
+	var top := space.intersect_ray(top_query)
+
+	if top.is_empty() or (top.get("normal", Vector3.ZERO) as Vector3).y < 0.7:
+		return {}
+
+	var lip_y: float = (top["position"] as Vector3).y
+	# (Probed from where the body would hang, off the face: from on it, the
+	# probe's ray would start inside the wall.)
+	var held: Dictionary = player.planner.probe_hang(point + face * 0.5, face, lip_y, 0.1)
+
+	if held.is_empty() or not fits(player, held["anchor"]):
+		return {}
+
+	# The body must get there: swept from where it stands.
+	var start := player.global_position + Vector3.UP * LIFT
+	var motion: Vector3 = held["anchor"] - player.global_position
+
+	if _swept(player, start, motion) < 0.98:
+		return {}
+
+	return held
 
 
 ## Whether the player's capsule, standing at `at`, touches nothing.

@@ -48,8 +48,10 @@ var _cast_t := 0.0
 ## Seconds Q has been held; -1 while it is up.
 var _blink_held := -1.0
 var _aiming := false
-## Where an aimed blink would land (the body's position).
+## Where an aimed blink would land (the body's position), and the lip it
+## would hang from ({} for none: Blink.ledge_at).
 var _aim_at := Vector3.ZERO
+var _aim_ledge := {}
 var _ticks := 0
 
 
@@ -234,7 +236,8 @@ func _update_blink(delta: float) -> void:
 
 	if _aiming:
 		var at: Transform3D = player.combat.aim()
-		_aim_at = Blink.arrival(player, at.origin, -at.basis.z, Blink.RANGE)
+		_aim_ledge = Blink.ledge_at(player, at.origin, -at.basis.z, Blink.RANGE)
+		_aim_at = _aim_ledge["anchor"] if not _aim_ledge.is_empty() else Blink.arrival(player, at.origin, -at.basis.z, Blink.RANGE)
 
 		if _ticks % 3 == 0:
 			Fx.glint(player, _aim_at + (at.origin - player.global_position), 0.08, null, Color(0.75, 0.8, 0.95))
@@ -246,7 +249,7 @@ func _update_blink(delta: float) -> void:
 
 	if _blink_held >= 0.0 and not Input.is_action_pressed("blink"):
 		if _aiming:
-			_blink_to(_aim_at)
+			_blink_to(_aim_at, _aim_ledge)
 		elif not _dodges_instead():
 			var at: Transform3D = player.combat.aim()
 			_blink_to(Blink.arrival(player, at.origin, _step_direction(), Blink.STEP))
@@ -274,9 +277,10 @@ func _step_direction() -> Vector3:
 
 
 ## Through the glass to `at`, paid for on arrival; nowhere to go is no blink
-## and nothing spent. Falling, you go on falling. A guard's blow it takes you
+## and nothing spent. Falling, you go on falling; onto a lip (`ledge`,
+## Blink.ledge_at), you hang from it. A guard's blow it takes you
 ## out of counts as dodged (GuardFighter asks combat.dodged_within).
-func _blink_to(at: Vector3) -> void:
+func _blink_to(at: Vector3, ledge := {}) -> void:
 	if not can_cast(&"blink") or at.distance_to(player.global_position) < 0.3:
 		return
 
@@ -289,7 +293,10 @@ func _blink_to(at: Vector3) -> void:
 	var airborne: bool = not player.is_on_floor()
 	player.teleport(Transform3D(player.global_basis, at))
 
-	if airborne:
+	# Onto a lip: hanging from it, as a catch would leave you.
+	if not ledge.is_empty():
+		player._enter_hang(ledge["normal"], ledge["lip_y"])
+	elif airborne:
 		player.velocity = falling
 
 	player.combat._dodged_at = player.combat._game_time

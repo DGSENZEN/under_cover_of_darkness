@@ -311,6 +311,22 @@ func _run() -> void:
 	_check("S13 a blink out of an unblockable blow answers it", answers.has(&"dodged"), "answers %s" % [answers])
 	g13.queue_free()
 
+	# S14 aimed at a wall just under its top: the blink ends hanging from it
+	# (tall enough to hang from with the feet off the ground)
+	Props.block(self, Vector3(-30, 2.25, 10.0), Vector3(4, 4.5, 1))        # top at 4.5, face at z = 10.5
+	_put_player(Vector3(-30, 1.05, 16.5))
+	await _frames(20)
+	_aim(Vector3(-30, 3.9, 10.5))
+	power.power = power.MAX
+	await _hold_blink(20)
+	await _frames(1)
+	var hanging: bool = player.movement_state == player.MoveState.HANGING
+	_check("S14 a blink aimed just under a wall's top ends hanging from it",
+		hanging and _near(player.hang_lip_y, 4.5, 0.05) and not player.test_move(player.global_transform, Vector3.ZERO),
+		"state %d lip %.2f at %s" % [player.movement_state, player.hang_lip_y, player.global_position])
+	player._drop_from_hang()
+	await _frames(60)
+
 
 # Helpers
 
