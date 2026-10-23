@@ -187,12 +187,16 @@ def paint(piece, source_dir=SOURCE, out_dir=OUT, recipes_dir=RECIPES / "undergro
         texels = {k: data[k] for k in data.files}
 
     recipes = {}
+    overlay = _overlay(piece, recipes_dir)
 
     for name in slots:
         if name in ATLAS_FREE or name.startswith("glass"):
             continue
 
         path = recipes_dir / (name + ".json")
+
+        if overlay is not None and (overlay / (name + ".json")).exists():
+            path = overlay / (name + ".json")
 
         if not path.exists():
             sys.exit("no recipe for slot %s (%s)" % (name, path))
@@ -218,6 +222,22 @@ def paint(piece, source_dir=SOURCE, out_dir=OUT, recipes_dir=RECIPES / "undergro
     path = out_dir / (piece + "_base.png")
     Image.fromarray((canvas * 255).round().astype(np.uint8), "RGB").save(path)
     return path
+
+
+def _overlay(piece, recipes_dir):
+    """The folder a family of pieces paints its own variants of shared slots from, if any: overlays.json in the
+    recipes maps a piece-name prefix to a subfolder (the librarian's shop softens the shared wood without touching
+    the stall's or the Zocalo's). Slots it has no recipe for fall back to the shared ones."""
+    index = Path(recipes_dir) / "overlays.json"
+
+    if not index.exists():
+        return None
+
+    for prefix, folder in json.loads(index.read_text()).items():
+        if piece.startswith(prefix):
+            return Path(recipes_dir) / folder
+
+    return None
 
 
 def _option(args, name, default):

@@ -211,6 +211,33 @@ class Atlas(unittest.TestCase):
         path = layered_atlas.paint("piece", self.source, self.out, self.recipes, self.brushes)
         self.assertTrue(path.exists())
 
+    def _as(self, name):
+        """The piece's source files again under another name."""
+        for suffix in ("_texels.npz", "_ao.png", "_regions.json"):
+            (self.source / (name + suffix)).write_bytes((self.source / ("piece" + suffix)).read_bytes())
+
+    def test_overlay_recipe_wins_for_its_pieces_only(self):
+        # A family of pieces (named by prefix in overlays.json) paints a slot from its own folder first.
+        (self.recipes / "mystery.json").write_text(json.dumps(_recipe(colour="#304050")))
+        (self.recipes / "overlays.json").write_text(json.dumps({"shop_": "shop"}))
+        (self.recipes / "shop").mkdir()
+        (self.recipes / "shop" / "wood.json").write_text(json.dumps(_recipe(colour="#c03020", light=0.5)))
+        self._as("shop_piece")
+        mine = np.asarray(Image.open(layered_atlas.paint("shop_piece", self.source, self.out, self.recipes, self.brushes)))
+        theirs = np.asarray(Image.open(layered_atlas.paint("piece", self.source, self.out, self.recipes, self.brushes)))
+        # (Wood is the left half; its overlay red, the shared recipe brown.)
+        self.assertGreater(int(mine[PX // 2, 4, 0]) - int(mine[PX // 2, 4, 2]), 100)
+        self.assertLess(int(theirs[PX // 2, 4, 0]) - int(theirs[PX // 2, 4, 2]), 100)
+
+    def test_overlay_falls_back_to_the_shared_recipe(self):
+        (self.recipes / "mystery.json").write_text(json.dumps(_recipe(colour="#304050")))
+        (self.recipes / "overlays.json").write_text(json.dumps({"shop_": "shop"}))
+        (self.recipes / "shop").mkdir()
+        self._as("shop_piece")
+        mine = np.asarray(Image.open(layered_atlas.paint("shop_piece", self.source, self.out, self.recipes, self.brushes)))
+        theirs = np.asarray(Image.open(layered_atlas.paint("piece", self.source, self.out, self.recipes, self.brushes)))
+        self.assertTrue(np.array_equal(mine, theirs))
+
     def test_missing_brush_sheet_names_the_fix(self):
         (self.brushes / "brush_02.png").unlink()
         (self.recipes / "mystery.json").write_text(json.dumps(_recipe()))
