@@ -118,10 +118,13 @@ func _sync() -> void:
 	var phase := 0
 	for section in section_radiance:
 		var aura: Node3D = section_radiance[section]
-		var at := aura.global_position
-		var ray := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.005, at + Vector3.UP * 0.38)
-		var hit := get_world_3d().direct_space_state.intersect_ray(ray)
-		var headroom: float = maxf(0.0, hit.position.y - at.y - 0.02) if not hit.is_empty() else 0.38
+		# (Its headroom measured once: the shelves never move.)
+		if not aura.has_meta("headroom"):
+			var at := aura.global_position
+			var ray := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.005, at + Vector3.UP * 0.38)
+			var hit := get_world_3d().direct_space_state.intersect_ray(ray)
+			aura.set_meta("headroom", maxf(0.0, hit.position.y - at.y - 0.02) if not hit.is_empty() else 0.38)
+		var headroom: float = aura.get_meta("headroom")
 		aura.set_state(0.58 + 0.15 * _breath(phase) if lit else 0.0, headroom, _clock)
 		phase += 1
 

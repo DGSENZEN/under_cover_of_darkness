@@ -5,7 +5,8 @@ extends Node3D
 const BookRadiance := preload("res://scripts/Visual/Library/BookRadiance.gd")
 ## Each section's projection over its studies, as each family passes its review (the spellbooks' wards and the
 ## novels' characters are their own, Task 4).
-const FAMILIES := {&"chronology": preload("res://scripts/Visual/Library/Chronology.gd")}
+const FAMILIES := {&"chronology": preload("res://scripts/Visual/Library/Chronology.gd"),
+	&"necromancy": preload("res://scripts/Visual/Library/Necromancy.gd")}
 
 var book: LiveBook
 var presence := 0.0
@@ -16,6 +17,7 @@ var radiance: Node3D
 ## This book's section projection, if its family is built yet.
 var family: Node3D
 var _clock := 0.0
+var _measured := false
 
 
 func build(source: LiveBook, index: int) -> void:
@@ -57,9 +59,13 @@ func _sync() -> void:
 	# Ray in world-up: the book can be on a turned shelf or a pitched lectern.
 	# Keep a margin below the board for shader displacement and the effect's rim.
 	var anchor := origin_world()
-	var ray := PhysicsRayQueryParameters3D.create(anchor + Vector3.UP * 0.005, anchor + Vector3.UP * 0.65)
-	var hit := get_world_3d().direct_space_state.intersect_ray(ray)
-	clear_height = maxf(0.0, hit.position.y - anchor.y - 0.025) if not hit.is_empty() else 0.65
+	# (Only while it is open: shut, nothing of it is drawn, and a ray a frame for every book in the shop cost more
+	# than all its effects.)
+	if visible or not _measured:
+		var ray := PhysicsRayQueryParameters3D.create(anchor + Vector3.UP * 0.005, anchor + Vector3.UP * 0.65)
+		var hit := get_world_3d().direct_space_state.intersect_ray(ray)
+		clear_height = maxf(0.0, hit.position.y - anchor.y - 0.025) if not hit.is_empty() else 0.65
+		_measured = true
 	radiance.set_state(presence, clear_height, _clock)
 	if family != null:
 		# (Upright in the room, turned to face as the book does, whatever the pages' pitch.)

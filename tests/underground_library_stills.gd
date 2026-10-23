@@ -46,6 +46,8 @@ func _ready() -> void:
 		["shelf_alchemy", lib.to_global(Vector3(2.3, 1.65, -1.8)), lib.to_global(Vector3(3.6, 1.4, -1.7))],
 		["chrono_open", lib.to_global(Vector3(-2.45, 1.6, -0.9)), lib.to_global(Vector3(-3.7, 1.15, -1.3))],
 		["chrono_close", lib.to_global(Vector3(-3.0, 1.32, -1.0)), lib.to_global(Vector3(-3.72, 1.2, -1.28))],
+		["necro_open", lib.to_global(Vector3(-2.5, 1.75, -3.9)), lib.to_global(Vector3(-3.72, 1.55, -4.35))],
+		["necro_close", lib.to_global(Vector3(-3.05, 1.68, -4.05)), lib.to_global(Vector3(-3.74, 1.6, -4.33))],
 	]
 	if not clip.is_empty():
 		for view in views:

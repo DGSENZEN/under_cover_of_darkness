@@ -29,6 +29,7 @@ import library_room  # noqa: E402
 import library_corner  # noqa: E402
 import library_shelves  # noqa: E402
 import library_books  # noqa: E402
+import library_spectres  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -2055,6 +2056,75 @@ class LibraryBooks(unittest.TestCase):
         hz = library_books.LIVE_HINGE[2]
         self.assertAlmostEqual(2 * hz - boxes[3][2][1], 0.0, delta=0.001)
         self.assertAlmostEqual(2 * hz - boxes[2][2][0], boxes[1][2][1], delta=0.001)
+
+
+class LibrarySpectres(unittest.TestCase):
+    """The librarian's spectres (tools/eclipse/library_spectres.py): CDmir's CC0 skull cut into the skull (cranium
+    and upper teeth) and its jaw (mandible and lower teeth, its origin at its hinge), scaled to a spectre's size, its
+    face toward -y; and lighter copies for the dead's faces in the smoke."""
+
+    @classmethod
+    def setUpClass(cls):
+        library_spectres.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_pieces(self):
+        self.assertEqual(sorted(self.objects), ["necro_jaw", "necro_jaw_lite", "necro_skull", "necro_skull_lite"])
+
+    def test_sized_as_a_spectre(self):
+        skull, jaw = self._extent("necro_skull"), self._extent("necro_jaw")
+        height = max(skull[2][1], jaw[2][1]) - min(skull[2][0], jaw[2][0])
+        self.assertAlmostEqual(height, library_spectres.HEIGHT, delta=0.002)
+
+    def test_jaw_below_the_skull_hinged_at_its_top_back(self):
+        skull, jaw = self._extent("necro_skull"), self._extent("necro_jaw")
+        self.assertLess(jaw[2][1], (skull[2][0] + skull[2][1]) / 2.0)
+        hinge = self.objects["necro_jaw"].location
+        # Its origin is its hinge: at the top of the jaw's rami, toward the back.
+        self.assertAlmostEqual(hinge.z, jaw[2][1], delta=0.006)
+        self.assertGreater(hinge.y, (jaw[1][0] + jaw[1][1]) / 2.0)
+
+    def test_facing_minus_y(self):
+        # The teeth and the face stand forward (-y) of the cranium's middle.
+        skull = self._extent("necro_skull")
+        jaw = self._extent("necro_jaw")
+        self.assertLess(jaw[1][0], (skull[1][0] + skull[1][1]) / 2.0 - 0.01)
+
+    def test_every_piece_of_the_source_kept(self):
+        # The cranium, the mandible and every tooth: 35 loose parts between the skull and its jaw.
+        self.assertEqual(_loose_parts(self.objects["necro_skull"]) + _loose_parts(self.objects["necro_jaw"]), 35)
+        self.assertGreater(_loose_parts(self.objects["necro_jaw"]), 10)
+
+    def test_budgets(self):
+        self.assertLessEqual(_tris(self.objects["necro_skull"]) + _tris(self.objects["necro_jaw"]), 4600)
+        self.assertLessEqual(_tris(self.objects["necro_skull_lite"]) + _tris(self.objects["necro_jaw_lite"]), 1600)
+
+
+def _loose_parts(o):
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    seen = set()
+    parts = 0
+    for v in bm.verts:
+        if v.index in seen:
+            continue
+        parts += 1
+        stack = [v]
+        seen.add(v.index)
+        while stack:
+            cur = stack.pop()
+            for e in cur.link_edges:
+                w = e.other_vert(cur)
+                if w.index not in seen:
+                    seen.add(w.index)
+                    stack.append(w)
+    bm.free()
+    return parts
 
 
 if __name__ == "__main__":

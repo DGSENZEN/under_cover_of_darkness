@@ -32,6 +32,7 @@ func _run() -> void:
 	await _lighting(effects)
 	await _radiance(effects)
 	await _chronology(effects)
+	await _necromancy(effects)
 
 	# Drive a real novel through partial openings, without a full-open signal.
 	var book: LiveBook = lab.live_books[7]
@@ -147,7 +148,7 @@ func _frames(count: int) -> void:
 func _chronology(effects: Node3D) -> void:
 	var projections: Array = effects.get("projections")
 	var study_at: int = lab.live_books.find(lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.STUDY and b.section == &"chronology")[0])
-	var other_at: int = lab.live_books.find(lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.STUDY and b.section == &"necromancy")[0])
+	var other_at: int = lab.live_books.find(lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.STUDY and b.section == &"metaphysics")[0])
 	var projection: Node3D = projections[study_at]
 	var family: Node3D = projection.get("family")
 	var parts_ok: bool = family != null and family.get("kind") == &"chronology" and family.rings.size() == 3 \
@@ -212,6 +213,85 @@ func _chronology(effects: Node3D) -> void:
 	watcher.global_position = book.global_position + case.global_basis.z * 4.0
 	await _frames(120)
 	_check("E38 shut again, chronology's projection is gone", not family.visible and projection.presence == 0.0,
+		"visible %s presence %.2f" % [family.visible, projection.presence])
+	book.watcher = null
+	watcher.queue_free()
+
+
+## Where a family's pieces stray: above the board over the book, below the pages, or along the board out of the run
+## kept clear for the book (into the shelf books either side).
+func _strays(family: Node3D, parts: Array, projection: Node3D, book: LiveBook, case: Node3D) -> Array:
+	var out := []
+	var origin: Vector3 = projection.origin_world()
+	var clear: float = projection.clear_height
+	var hinge_x: float = case.to_local(book.global_position).x
+	for part: GeometryInstance3D in parts:
+		if not part.is_visible_in_tree():
+			continue
+		var box: AABB = part.global_transform * part.get_aabb()
+		if box.end.y > origin.y + clear + 0.001 or box.position.y < origin.y - 0.01:
+			out.append("%s height %.3f..%.3f" % [part.name, box.position.y - origin.y, box.end.y - origin.y])
+		for corner in 8:
+			var along: float = case.to_local(box.get_endpoint(corner)).x - hinge_x
+			if absf(along) > lab.STUDY_KEEP:
+				out.append("%s along %.3f" % [part.name, along])
+				break
+	return out
+
+
+## Necromancy's projection (Task 3's second family): over an opened necromancy study, a skull rising out of
+## chartreuse spirit-fire at the gutter, its jaw working; a skeletal hand reaching up out of the right-hand page,
+## its fingers curling and opening; the dead's faces carried up out of the left-hand page on smoke; all within the
+## room above the pages and the run kept clear for the book.
+func _necromancy(effects: Node3D) -> void:
+	var projections: Array = effects.get("projections")
+	var studies: Array = lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.STUDY and b.section == &"necromancy")
+	var families: Array = studies.map(func(b): return projections[lab.live_books.find(b)].get("family"))
+	var book: LiveBook = studies[0]
+	var projection: Node3D = projections[lab.live_books.find(book)]
+	var family: Node3D = families[0]
+	var parts_ok: bool = family != null and family.get("kind") == &"necromancy" and families.all(func(f): return f != null) \
+		and family.skull is Node3D and family.jaw is MeshInstance3D and family.fire is MeshInstance3D \
+		and family.bones.size() >= 15 and family.faces.size() >= 3
+	_check("E39 a necromancy book carries necromancy's projection (spirit-fire, a skull with its jaw, a skeletal hand, faces in smoke)",
+		parts_ok, "family %s bones %s faces %s" % [family.get("kind") if family != null else null,
+		family.bones.size() if family != null else 0, family.faces.size() if family != null else 0])
+	if not parts_ok:
+		return
+
+	var watcher := Node3D.new()
+	add_child(watcher)
+	var case: Node3D = lab.sections["necromancy"]
+	watcher.global_position = book.global_position + case.global_basis.z * 0.9 + Vector3.UP * 0.35
+	book.watcher = watcher
+	await _frames(90)
+	var strays := []
+	var jaw := []
+	var curls := []
+	var face_heights := []
+	var resets := 0
+	var was_heights: Array = family.face_heights.duplicate()
+	for i in 600:
+		await get_tree().process_frame
+		if i % 20 == 0:
+			strays.append_array(_strays(family, family.parts(), projection, book, case))
+			jaw.append(family.jaw.rotation.x)
+			curls.append(family.curl)
+			face_heights.append_array(family.face_heights)
+			for k in family.face_heights.size():
+				if family.face_heights[k] < was_heights[k] - 0.05:
+					resets += 1
+			was_heights = family.face_heights.duplicate()
+	_check("E40 opened, necromancy's pieces stay over the pages, under the board above, clear of the shelf books either side",
+		family.visible and strays.is_empty(), "clear %.2f strays %s" % [projection.clear_height, strays.slice(0, 4)])
+	_check("E41 the jaw works, the fingers curl and open, the faces climb and are carried off and come again",
+		jaw.max() - jaw.min() > 0.15 and curls.max() - curls.min() > 0.6 and face_heights.max() - face_heights.min() > 0.12 and resets >= 2,
+		"jaw %.2f..%.2f curl %.2f..%.2f faces %.2f..%.2f resets %d" % [jaw.min(), jaw.max(), curls.min(), curls.max(),
+		face_heights.min(), face_heights.max(), resets])
+
+	watcher.global_position = book.global_position + case.global_basis.z * 4.0
+	await _frames(120)
+	_check("E42 shut again, necromancy's projection is gone", not family.visible and projection.presence == 0.0,
 		"visible %s presence %.2f" % [family.visible, projection.presence])
 	book.watcher = null
 	watcher.queue_free()

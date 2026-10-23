@@ -191,6 +191,24 @@ Calls made:
 - **Studies only.** The section families sit over studies alone; the chronology spellbook gets its wards in Task 4.
 - **Upright and fitted.** The family stands upright in the room whatever the pages' pitch, scaled to the headroom above (built for 0.33 m).
 
+## Task 3, necromancy (Oct 23, awaiting review)
+
+Chronology was approved by the user on Oct 23.
+
+`scripts/Visual/Library/Necromancy.gd`, over necromancy studies, in the ánimas' Graves look (`anima_silhouette`, `anima_aura`):
+- a skull hanging in a crown of chartreuse spirit-fire at the gutter, its jaw chattering in bursts, its eyes two points of fire;
+- a skeletal hand reaching up out of the right-hand page, burning out of the paper at its forearm, its fingers curling and opening;
+- three of the dead's faces (small skulls) carried up from the left-hand page on smoke columns, eaten away near the top and rising again.
+
+Checks E39–E42; kit tests in `LibrarySpectres`. Review media: `docs/superpowers/refs/underground/library_stills/part2-necromancy/`.
+
+Calls made:
+- **The skull is CDmir's CC0 "human skull"** (OpenGameArt), picked by the user from two CC0 candidates. It is cut into skull and jaw by `tools/eclipse/library_spectres.py`, which writes the jaw's hinge and the eye sockets to `library_spectres.json`. It is credited in `CREDITS.md`, and its folder has a `.gdignore`, since only Blender reads the OBJ. A skull built from spheres in code first read as a black ball.
+- **No CC0 hand skeleton exists**, so the hand's bones are built in code. Their lengths and joints come from the CC0 Quaternius base body's hand armature, drawn at 0.8 of life.
+- **The ánima shaders gained `floor_y`** (default 0, which keeps the ánimas as they were), so a skull or a finger bone doesn't burn away at its own foot.
+- **Per-frame cost trimmed.** Book projections cast their headroom ray only while their book is open, and the section auras measure theirs once. The Oct 19 effects had cost the shop's headless frame about 0.1 ms; L20 is back to 0.93×.
+- **Known weakness:** the spirit-fire under the skull is faint, chartreuse against the chartreuse-lit pages.
+
 ## Plan self-review
 
 The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.

@@ -102,3 +102,11 @@ and painted over by `tools/textures/eclipse_atlas.py`:
 - [terrazzo_tiles](https://polyhaven.com/a/terrazzo_tiles) by **Amal Kumar**
 - [volcanic_rock_tiles](https://polyhaven.com/a/volcanic_rock_tiles) by **Charlotte Baglioni**
 - [white_rough_plaster](https://polyhaven.com/a/white_rough_plaster) by **Rob Tuytel**
+
+## Models
+
+### Free to use (CC0, credited with thanks)
+
+- **The spectral skull** of the librarian's necromancy books and the dead's faces in their smoke
+  (`assets/characters/skull/skull-Low4K.obj`): "human skull" by **CDmir**
+  ([OpenGameArt](https://opengameart.org/content/human-skull-0)), CC0. Its own textures are not used.
