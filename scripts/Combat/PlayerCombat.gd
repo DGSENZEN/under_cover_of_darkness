@@ -328,6 +328,18 @@ func set_stowed(p_stowed: bool) -> void:
 		player.hand.set_stowed(p_stowed)
 
 
+## On your feet with your hands free for a weapon: not dead, climbing,
+## stowed (on holds), carrying, or paused.
+func is_able() -> bool:
+	return (
+		not player.is_dead
+		and player.movement_state == player.MoveState.LOCOMOTION
+		and not stowed
+		and not player._is_carrying()
+		and not get_tree().paused
+	)
+
+
 ## The revolver (any gun) is the weapon in hand.
 func gun_drawn() -> bool:
 	var drawn: Resource = current_weapon()
@@ -384,13 +396,7 @@ func _physics_process(delta: float) -> void:
 
 	_block_held = block_held
 
-	var able: bool = (
-		not player.is_dead
-		and player.movement_state == player.MoveState.LOCOMOTION
-		and not stowed
-		and not player._is_carrying()
-		and not get_tree().paused
-	)
+	var able := is_able()
 
 	if not able:
 		_reset()

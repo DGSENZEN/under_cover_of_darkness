@@ -18,6 +18,7 @@ const BodyPose := preload("res://scripts/PlayerUtils/BodyPose.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const StealthHUD := preload("res://scripts/UI/StealthHUD.gd")
 const PlayerCombat := preload("res://scripts/Combat/PlayerCombat.gd")
+const RevolverScript := preload("res://scripts/Combat/Revolver.gd")
 const GemEnvironment := preload("res://scripts/Visual/GemEnvironment.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -393,6 +394,8 @@ var _climb_last_y := 0.0
 ## Dead: how far through falling to the floor the view is, 0..1.
 var _death_fall := 0.0
 var combat: Node = null
+## The revolver's hand (Revolver.gd).
+var revolver: Node = null
 var _hazard_cooldown := 0.0
 
 var coyote_timer := 0.0
@@ -571,6 +574,9 @@ func _ready() -> void:
 	combat = PlayerCombat.new()
 	combat.name = "Combat"
 	add_child(combat)
+	revolver = RevolverScript.new()
+	revolver.name = "Revolver"
+	add_child(revolver)
 
 	# Make the level's placeholder sounds now, in the background, not on the
 	# first footstep.

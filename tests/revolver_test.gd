@@ -95,6 +95,89 @@ func _run() -> void:
 		player.inventory.ammo[&"rounds"] == 30 and player.inventory.belt.size() == belt_before,
 		"rounds %d belt %d -> %d" % [player.inventory.ammo[&"rounds"], belt_before, player.inventory.belt.size()])
 
+	var revolver: Node = player.revolver
+
+	# R4 a shot to the body: a bullet's damage, one round gone
+	revolver.reset_for_practice()
+	var g4 := _fighter(Vector3(0, 0, -6))
+	_put_player(Vector3(0, 1.05, 0))
+	await _frames(20)
+	_aim(g4.global_position + Vector3(0, 1.25, 0))
+	var shots := []
+	revolver.fired.connect(func(b, h): shots.append(b))
+	await _tap("throw")
+	await _frames(5)
+	_check("R4 a shot to the body does a bullet's damage and spends a round",
+		_near(g4.health, 45.0, 0.1) and revolver.loaded[&"cylinder"] == 5 and shots == [&"cylinder"],
+		"health %.1f loaded %s fired %s" % [g4.health, revolver.loaded, shots])
+	g4.queue_free()
+
+	# R5 to the head: one shot kills
+	var g5 := _fighter(Vector3(2, 0, -6))
+	_put_player(Vector3(2, 1.05, 0))
+	await _frames(40)
+	_aim(g5.eye_position())
+	await _tap("throw")
+	await _frames(5)
+	_check("R5 a headshot kills", not is_instance_valid(g5) or g5.health <= 0.0,
+		"health %.1f" % (g5.health if is_instance_valid(g5) else -1.0))
+
+	# R6 the next shot is ready only once the gun has settled: slower in one hand
+	revolver.reset_for_practice()
+	var g6 := _fighter(Vector3(4, 0, -8))
+	g6.max_health = 9999.0
+	g6.health = 9999.0
+	_put_player(Vector3(4, 1.05, 0))
+	await _frames(20)
+	_aim(g6.global_position + Vector3(0, 1.25, 0))
+	shots.clear()
+	await _tap("throw")
+	await _frames(28)
+	await _tap("throw")
+	var early := shots.size()
+	await _frames(10)
+	await _tap("throw")
+	var one_hand := shots.size()
+	revolver.set_braced(true)
+	await _frames(40)
+	shots.clear()
+	await _tap("throw")
+	# 0.4 s on: ready braced (0.35 s), not in one hand (0.6 s).
+	await _frames(22)
+	await _tap("throw")
+	await _frames(2)
+	var braced := shots.size()
+	revolver.set_braced(false)
+	await _frames(40)
+	_check("R6 one-handed the next shot is ready after 0.6 s, braced after 0.35 s",
+		early == 1 and one_hand == 2 and braced == 2, "early %d one-hand %d braced %d" % [early, one_hand, braced])
+	g6.queue_free()
+
+	# R7 a gunshot is heard: loud, and known for what it is
+	revolver.reset_for_practice()
+	var ear := Ear.new()
+	SoundBus.add_listener(ear)
+	_put_player(Vector3(6, 1.05, 0))
+	await _frames(20)
+	await _tap("throw")
+	await _frames(3)
+	SoundBus.remove_listener(ear)
+	var heard: Array = ear.events.filter(func(e): return e["kind"] == &"gunshot")
+	_check("R7 a gunshot goes out at 70 dB", heard.size() == 1 and _near(heard[0]["db"], 70.0, 0.01),
+		"heard %s" % [heard.map(func(e): return e["db"])])
+
+	# R8 the muzzle flash lights the place for a moment
+	revolver.reset_for_practice()
+	await _frames(40)
+	var lit_before := Fx.lights_lit()
+	Input.action_press("throw")
+	await _frames(2)
+	var lit_during := Fx.lights_lit()
+	Input.action_release("throw")
+	await _frames(12)
+	_check("R8 the muzzle flash lights up, then goes", lit_during > lit_before and Fx.lights_lit() == lit_before,
+		"lit %d -> %d -> %d" % [lit_before, lit_during, Fx.lights_lit()])
+
 
 # Helpers
 

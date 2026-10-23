@@ -82,7 +82,7 @@ func _ready() -> void:
 
 ## Hit by something that is not a person: a blade, an arrow, a boot.
 func strike(kind: StringName, _point: Vector3, _direction := Vector3.ZERO) -> void:
-	if kind in [&"power", &"arrow", &"blast", &"fire"]:
+	if kind in [&"power", &"arrow", &"bullet", &"shot", &"blast", &"fire"]:
 		light()
 
 
