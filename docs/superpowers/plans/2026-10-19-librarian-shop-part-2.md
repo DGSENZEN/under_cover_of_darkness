@@ -176,6 +176,21 @@ New checks: E31–E34 and J14–J16. E21 was restated, because it had pinned the
 
 One part stays open: the painted textures' own brush mottle on the baize and the low cases' tops. That needs a recipe pass. Projection families (Task 3 onward) are still pending.
 
+## Task 3, chronology (Oct 23, awaiting review)
+
+`scripts/Visual/Library/Chronology.gd`, built by `BookProjection` over chronology studies. Over the opened pages:
+- an astrolabe of three rings, each turning on its own axis, the outer one ticked inward with the hours;
+- two clock hands on a hub;
+- 36 sand grains climbing from the pages through a waist into the rings;
+- a ghost leaf caught mid-turn at the gutter, ageing and growing young on a 7 s cycle while the hands run backward.
+
+Review media: `docs/superpowers/refs/underground/library_stills/part2-chronology/`. Checks E35–E38: the family exists; it stays over the pages, under the board above and within the study's clear run; it moves; it clears on shutting.
+
+Calls made:
+- **Built in code, not a Blender kit.** The pieces are built like the ánimas' and the nahual's effects (`MeshVfx` style, v along each shape) instead of `tools/eclipse/library_effects.py`. The shared effect shader erodes and bands along each mesh's own UVs, which an exported kit's packed atlas UVs would scramble. Cost if wrong: the shapes move into a kit with authored UVs.
+- **Studies only.** The section families sit over studies alone; the chronology spellbook gets its wards in Task 4.
+- **Upright and fitted.** The family stands upright in the room whatever the pages' pitch, scaled to the headroom above (built for 0.33 m).
+
 ## Plan self-review
 
 The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.

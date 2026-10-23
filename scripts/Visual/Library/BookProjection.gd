@@ -3,6 +3,9 @@ extends Node3D
 ## Shape families are added here as they pass their visual review.
 
 const BookRadiance := preload("res://scripts/Visual/Library/BookRadiance.gd")
+## Each section's projection over its studies, as each family passes its review (the spellbooks' wards and the
+## novels' characters are their own, Task 4).
+const FAMILIES := {&"chronology": preload("res://scripts/Visual/Library/Chronology.gd")}
 
 var book: LiveBook
 var presence := 0.0
@@ -10,6 +13,8 @@ var clear_height := 0.65
 var enabled := true
 var _page: MeshInstance3D
 var radiance: Node3D
+## This book's section projection, if its family is built yet.
+var family: Node3D
 var _clock := 0.0
 
 
@@ -27,6 +32,10 @@ func build(source: LiveBook, index: int) -> void:
 	radiance = BookRadiance.new()
 	radiance.name = "BookRadiance"
 	add_child(radiance)
+	if book.kind == LiveBook.Kind.STUDY and FAMILIES.has(book.section):
+		family = FAMILIES[book.section].new()
+		add_child(family)
+		family.build(float(index) * 1.618)
 	_sync()
 
 
@@ -52,6 +61,10 @@ func _sync() -> void:
 	var hit := get_world_3d().direct_space_state.intersect_ray(ray)
 	clear_height = maxf(0.0, hit.position.y - anchor.y - 0.025) if not hit.is_empty() else 0.65
 	radiance.set_state(presence, clear_height, _clock)
+	if family != null:
+		# (Upright in the room, turned to face as the book does, whatever the pages' pitch.)
+		var across := page_basis.x
+		family.set_state(presence, clear_height, _clock, anchor, atan2(-across.z, across.x))
 
 
 func origin_world() -> Vector3:

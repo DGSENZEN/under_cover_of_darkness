@@ -31,6 +31,7 @@ func _run() -> void:
 		and projections.size() == 12 and projections.all(func(p): return effects.is_ancestor_of(p)), str(projections.size()))
 	await _lighting(effects)
 	await _radiance(effects)
+	await _chronology(effects)
 
 	# Drive a real novel through partial openings, without a full-open signal.
 	var book: LiveBook = lab.live_books[7]
@@ -138,6 +139,82 @@ func _run() -> void:
 func _frames(count: int) -> void:
 	for i in count:
 		await get_tree().process_frame
+
+
+## Chronology's projection (Task 3's first family): over an opened chronology book, an astrolabe's three rings
+## turning each on its own axis, two clock hands sweeping at their own rates, sand falling upward from the pages
+## into the rings, a ghost page that ages and un-ages; all within the room above the pages.
+func _chronology(effects: Node3D) -> void:
+	var projections: Array = effects.get("projections")
+	var study_at: int = lab.live_books.find(lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.STUDY and b.section == &"chronology")[0])
+	var other_at: int = lab.live_books.find(lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.STUDY and b.section == &"necromancy")[0])
+	var projection: Node3D = projections[study_at]
+	var family: Node3D = projection.get("family")
+	var parts_ok: bool = family != null and family.get("kind") == &"chronology" and family.rings.size() == 3 \
+		and family.hands.size() == 2 and family.grains is MultiMeshInstance3D and family.page is MeshInstance3D
+	_check("E35 a chronology book carries chronology's projection (three rings, two hands, sand, a ghost page); other sections none yet",
+		parts_ok and projections[other_at].get("family") == null, "family %s" % [family.get("kind") if family != null else null])
+	if not parts_ok:
+		return
+
+	# Opened by someone standing before its case.
+	var book: LiveBook = lab.live_books[study_at]
+	var watcher := Node3D.new()
+	add_child(watcher)
+	var case: Node3D = lab.sections["chronology"]
+	watcher.global_position = book.global_position + case.global_basis.z * 0.9 + Vector3.UP * 0.35
+	book.watcher = watcher
+	await _frames(90)
+	var origin: Vector3 = projection.origin_world()
+	var clear: float = projection.clear_height
+	var outside := []
+	# (Along its board, within the run kept clear for it: never into the shelf books either side.)
+	var hinge_x: float = case.to_local(book.global_position).x
+	var keep: float = lab.STUDY_KEEP
+	var angles := []
+	var tips := []
+	var grain_moves := 0
+	var grain_was: Transform3D = family.sand[0] if not family.sand.is_empty() else Transform3D()
+	var ages := []
+	for i in 600:
+		await get_tree().process_frame
+		if i % 30 == 0:
+			for part: GeometryInstance3D in family.rings + family.hands + [family.grains, family.page]:
+				var box: AABB = part.global_transform * part.get_aabb()
+				if box.end.y > origin.y + clear + 0.001 or box.position.y < origin.y - 0.01 \
+						or Vector2(box.get_center().x - origin.x, box.get_center().z - origin.z).length() > 0.25:
+					outside.append("%s at %d" % [part.name, i])
+				for corner in 8:
+					var along: float = case.to_local(box.get_endpoint(corner)).x - hinge_x
+					if absf(along) > keep:
+						outside.append("%s into the shelf books at %d (%.3f)" % [part.name, i, along])
+						break
+			angles.append(family.rings.map(func(r): return r.quaternion))
+			tips.append(family.hands.map(func(h): return h.rotation.z))
+			ages.append(family.age)
+			var grain: Transform3D = family.sand[0]
+			if not grain.origin.is_equal_approx(grain_was.origin):
+				grain_moves += 1
+			grain_was = grain
+	_check("E36 opened, chronology's pieces stay over the pages, under the board above, clear of the shelf books either side",
+		family.visible and outside.is_empty(),
+		"clear %.2f outside %s" % [clear, outside.slice(0, 4)])
+
+	var turned := [false, false, false]
+	for k in 3:
+		turned[k] = not angles[0][k].is_equal_approx(angles[1][k])
+	var hour_run := absf(angle_difference(tips[0][0], tips[1][0]))
+	var minute_run := absf(angle_difference(tips[0][1], tips[1][1]))
+	_check("E37 the rings turn, the hands sweep at their own rates, the sand climbs and recycles, the page ages and un-ages",
+		turned == [true, true, true] and minute_run > hour_run * 2.0 and grain_moves >= 15 and ages.max() - ages.min() > 0.6,
+		"rings %s hands %.3f/%.3f grains moved %d ages %.2f..%.2f" % [turned, hour_run, minute_run, grain_moves, ages.min(), ages.max()])
+
+	watcher.global_position = book.global_position + case.global_basis.z * 4.0
+	await _frames(120)
+	_check("E38 shut again, chronology's projection is gone", not family.visible and projection.presence == 0.0,
+		"visible %s presence %.2f" % [family.visible, projection.presence])
+	book.watcher = null
+	watcher.queue_free()
 
 
 func _radiance(effects: Node3D) -> void:

@@ -1,17 +1,21 @@
 extends Node3D
-## Windowed --fixed-fps 60 --resolution 1280x720, then -- --out=DIR [--clips] [--only=a,b].
+## Windowed --fixed-fps 60 --resolution 1280x720, then -- --out=DIR [--clips] [--clip=view] [--only=a,b].
+## --clip=view records that one view for six seconds from the moment the eye arrives (its books opening).
 const MAP := preload("res://maps/underground_library_lab.tscn")
 var out := "/tmp/underground_library_stills/"
 var eye: Camera3D
 
 func _ready() -> void:
 	var clips := false
+	var clip := ""
 	var only := PackedStringArray()
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
 			out = arg.trim_prefix("--out=").trim_suffix("/") + "/"
 		elif arg.begins_with("--only="):
 			only = arg.trim_prefix("--only=").split(",")
+		elif arg.begins_with("--clip="):
+			clip = arg.trim_prefix("--clip=")
 		clips = clips or arg == "--clips"
 	DirAccess.make_dir_recursive_absolute(out)
 	AudioServer.set_bus_mute(0, true)
@@ -40,7 +44,19 @@ func _ready() -> void:
 		["aisle_right", lib.to_global(Vector3(2.45, 1.7, -1.3)), lib.to_global(Vector3(2.45, 1.4, -6.0))],
 		["shelf_necromancy", lib.to_global(Vector3(-2.3, 1.65, -4.6)), lib.to_global(Vector3(-3.6, 1.4, -4.8))],
 		["shelf_alchemy", lib.to_global(Vector3(2.3, 1.65, -1.8)), lib.to_global(Vector3(3.6, 1.4, -1.7))],
+		["chrono_open", lib.to_global(Vector3(-2.45, 1.6, -0.9)), lib.to_global(Vector3(-3.7, 1.15, -1.3))],
+		["chrono_close", lib.to_global(Vector3(-3.0, 1.32, -1.0)), lib.to_global(Vector3(-3.72, 1.2, -1.28))],
 	]
+	if not clip.is_empty():
+		for view in views:
+			if view[0] == clip:
+				await _frames(90)
+				_place(view[1], view[2])
+				for i in 180:
+					_capture("%s_%03d.png" % [view[0], i])
+					await _frames(2)
+		get_tree().quit()
+		return
 	for view in views:
 		if not only.is_empty() and view[0] not in only:
 			continue
