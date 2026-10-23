@@ -9,6 +9,15 @@ extends RefCounted
 ## kept before another is chosen.
 const THINK := 0.3
 const KEEP := 3.0
+## The gun read: what a shot past one of them adds, and one that hits.
+const GUN_NEAR := 0.25
+const GUN_HIT := 0.35
+## Under fire, further off than this they make for cover; nearer, or at your
+## reload, they rush you.
+const GUN_RUSH_RANGE := 8.0
+## Under fire from a read of GUN_UNDER_FIRE; until it fades under GUN_CLEAR.
+const GUN_UNDER_FIRE := 0.5
+const GUN_CLEAR := 0.2
 ## Rank to lead (highest leads).
 const RANK := {&"duelist": 4, &"brute": 3, &"swordsman": 2, &"": 1, &"archer": 0}
 ## What they shout when the plan changes.
@@ -17,6 +26,7 @@ const CALLS := {
 	&"press": ["He's done for! Finish him!", "He's bleeding - press him!"],
 	&"break": ["He's hiding behind his blade - break it!", "Smash through his guard!"],
 	&"rush": ["Close in! Don't let him shoot!", "Rush him!"],
+	&"cover": ["[gun callout]"],
 	&"fall_back": ["Fall back! To me!", "Regroup! Together!"],
 	&"rout": ["Run! Get help!", "Get out! Get help!"],
 }
@@ -136,7 +146,9 @@ var tactic: StringName = &"envelop"
 ## What they have seen you do, each 0..1 and fading: turtle (a raised guard),
 ## spam (blows on each other's heels), kite (keeping away), bow (shooting),
 ## parry (their blows turned aside), dodge (their blows stepped out of).
-var read := {&"turtle": 0.0, &"spam": 0.0, &"kite": 0.0, &"bow": 0.0, &"parry": 0.0, &"dodge": 0.0}
+var read := {&"turtle": 0.0, &"spam": 0.0, &"kite": 0.0, &"bow": 0.0, &"parry": 0.0, &"dodge": 0.0, &"gun": 0.0}
+## Shot at, and not yet over it (read "gun", with GUN_UNDER_FIRE/GUN_CLEAR).
+var under_fire := false
 ## Their heart, 0..1.
 var morale := 1.0
 ## The most of them there have been in this fight.
@@ -269,6 +281,12 @@ static func clear_all() -> void:
 
 func target() -> Node3D:
 	return target_ref.get_ref() as Node3D if target_ref != null else null
+
+
+## A shot at one of them (Revolver.gd): a near miss, or a hit (`hit`). They
+## read the gun from what it does to them, not from its being drawn.
+func on_shot_at(_member: Node3D, hit := false) -> void:
+	read[&"gun"] = minf(float(read.get(&"gun", 0.0)) + (GUN_HIT if hit else GUN_NEAR), 1.0)
 
 
 ## Every blow of theirs you turn aside, every one you step out of: they see
@@ -721,6 +739,43 @@ func _read_you(step: float, alive: Array, now: float) -> void:
 		morale = minf(morale + step * 0.02, 1.0)
 
 
+## Shot at: from a read of GUN_UNDER_FIRE, until it fades under GUN_CLEAR.
+func _under_fire_now() -> bool:
+	var gun := float(read.get(&"gun", 0.0))
+
+	if gun >= GUN_UNDER_FIRE:
+		under_fire = true
+	elif gun < GUN_CLEAR:
+		under_fire = false
+
+	return under_fire
+
+
+## Your gun can't answer them just now: reloading, or the shot barrel up
+## and spent.
+func _gun_open(enemy: Node3D) -> bool:
+	var gun: Variant = enemy.get("revolver") if enemy != null else null
+
+	if not (gun is Object) or not enemy.get("combat").gun_drawn():
+		return false
+
+	return gun.is_reloading() or (gun.barrel == &"shot" and int(gun.loaded[&"shot"]) <= 0)
+
+
+## The nearest of them who fights hand to hand, from you (metres).
+func _nearest_melee(alive: Array, enemy: Node3D) -> float:
+	var nearest := INF
+
+	if enemy == null:
+		return nearest
+
+	for member in alive:
+		if member.get("_fighter") != null and not member._fighter.ranged:
+			nearest = minf(nearest, member.global_position.distance_to(enemy.global_position))
+
+	return nearest
+
+
 ## The best of them leads: a captain who comes into the fight takes it over.
 func _choose_leader(pool: Array) -> void:
 	var lead := leader()
@@ -766,10 +821,18 @@ func _choose_tactic(alive: Array, now: float) -> void:
 		want = &"press"
 	elif float(read[&"turtle"]) > 0.55:
 		want = &"break"
+	elif _under_fire_now():
+		# Under fire: into cover at range; at you when you are near, or
+		# reloading, or your shot barrel is spent.
+		want = &"rush" if _gun_open(enemy) or _nearest_melee(alive, enemy) <= GUN_RUSH_RANGE else &"cover"
 	elif float(read[&"kite"]) > 0.5 or float(read[&"bow"]) > 0.5:
 		want = &"rush"
 
-	if want == tactic or (now - _tactic_since < KEEP and want != &"rout" and want != &"fall_back"):
+	# Gunfire will not wait on the plan: your reload is the moment to go, and
+	# shots at range send them to cover now (not out of a rush already on).
+	var urgent: bool = (want == &"rush" and _gun_open(enemy)) or (want == &"cover" and tactic != &"rush")
+
+	if want == tactic or (now - _tactic_since < KEEP and want != &"rout" and want != &"fall_back" and not urgent):
 		return
 
 	tactic = want
@@ -890,6 +953,12 @@ func _give_places(alive: Array, now: float) -> void:
 			# Whoever has not broken holds you off while the others go.
 			for man in melee:
 				_roles[man.get_instance_id()] = &"hold"
+
+			return
+		&"cover":
+			# Under fire at range: each behind something, until your reload.
+			for man in melee:
+				_roles[man.get_instance_id()] = &"cover"
 
 			return
 		&"fall_back":

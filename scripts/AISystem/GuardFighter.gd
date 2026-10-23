@@ -9,6 +9,7 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
+const SightRay := preload("res://scripts/StimuliSystem/SightRay.gd")
 const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const Comms := preload("res://scripts/AISystem/Comms.gd")
 const Dangers := preload("res://scripts/AISystem/Dangers.gd")
@@ -388,6 +389,15 @@ var _punish_until := -1.0
 ## has not seen you.
 var _help_call := 0.0
 var _last_place: StringName = &""
+## His cover from your gun (cover_point): where it is, and where you stood
+## when he chose it.
+var _cover_at := Vector3.INF
+var _cover_from := Vector3.INF
+const COVER_SAMPLES := 24
+const COVER_RINGS := [3.0, 5.5, 8.0, 10.0]
+## Half a man's width: cover must hide this far either side of his chest.
+const COVER_WIDTH := 0.45
+const COVER_REFRESH := 3.0
 var _fled_unseen := 0.0
 ## Where he is running to, running from you, and until when he keeps to it.
 var _flee_goal := Vector3.ZERO
@@ -1441,6 +1451,9 @@ func _footwork(delta: float, target: Node3D, sees: bool, to: Vector3, dist: floa
 		&"intercept":
 			if _intercept(delta, target, sees, dist):
 				return
+		&"cover":
+			if _take_cover(delta, target, sees, to):
+				return
 
 	if ranged:
 		_footwork_ranged(delta, target, sees, to, dist, level)
@@ -2199,6 +2212,93 @@ func _can_walk_to(point: Vector3) -> bool:
 ## Out of his reach: far enough back to see up onto where you stand (a little
 ## more than its height), facing you. True while he is about it; lost from
 ## sight, he gives it up to the chase (and so goes round to find a way).
+## Shot at from range (the squad's "cover"): to the nearest place your eye
+## can't reach, and there he waits, facing you, for your reload.
+func _take_cover(delta: float, target: Node3D, sees: bool, to: Vector3) -> bool:
+	if target == null or not is_instance_valid(target):
+		return false
+
+	var cover := cover_point(target)
+
+	# Nowhere to hide near him: he fights on.
+	if cover == Vector3.INF:
+		return false
+
+	guard._go_to(cover)
+
+	if guard._walk(guard.chase_speed, delta):
+		guard._stop(delta)
+
+		if sees:
+			guard._face(to, delta)
+
+	return true
+
+
+## Somewhere near him on the navmesh your eye can't see his chest from: the
+## nearest of COVER_SAMPLES points on rings 3 to 10 m round him, kept until
+## you have moved COVER_REFRESH metres. Vector3.INF if there is none.
+func cover_point(target: Node3D) -> Vector3:
+	var from: Vector3 = target.global_position
+
+	if _cover_from != Vector3.INF and _cover_from.distance_to(from) < COVER_REFRESH:
+		return _cover_at
+
+	_cover_from = from
+	_cover_at = Vector3.INF
+	var eye: Vector3 = target.aim_transform().origin if target.has_method("aim_transform") else from + Vector3.UP * 0.8
+	var space: PhysicsDirectSpaceState3D = guard.get_world_3d().direct_space_state
+	var map: RID = guard.get_world_3d().navigation_map
+	var best := INF
+
+	for i in COVER_SAMPLES:
+		var turn := TAU * float(i) / float(COVER_SAMPLES)
+		var reach: float = COVER_RINGS[i % COVER_RINGS.size()]
+		var spot := NavigationServer3D.map_get_closest_point(map, guard.global_position + Vector3(cos(turn), 0.0, sin(turn)) * reach)
+
+		if not _hidden_from(space, eye, spot, target):
+			continue
+
+		var away := guard.global_position.distance_to(spot)
+
+		if away < best:
+			best = away
+			_cover_at = spot
+
+	return _cover_at
+
+
+## Whether a man standing at `spot` is out of sight of `eye`: his chest, and
+## COVER_WIDTH to either side of it, all behind something solid.
+func _hidden_from(space: PhysicsDirectSpaceState3D, eye: Vector3, spot: Vector3, target: Node3D) -> bool:
+	var chest := spot + Vector3.UP * 1.2
+	var across := (chest - eye).cross(Vector3.UP)
+	across = across.normalized() * COVER_WIDTH if across.length() > 0.01 else Vector3.ZERO
+	var exclude: Array[RID] = [guard.get_rid()]
+
+	if target is CollisionObject3D:
+		exclude.append((target as CollisionObject3D).get_rid())
+
+	for side in [Vector3.ZERO, across, -across]:
+		var query := PhysicsRayQueryParameters3D.create(eye, chest + side, 1, exclude)
+
+		if SightRay.first_solid(space, query).is_empty():
+			return false
+
+	return true
+
+
+## A shot at him (Revolver.gd): his squad reads the gun from it.
+func on_shot_at(by: Node3D, hit: bool) -> void:
+	if by == null or not is_instance_valid(by):
+		return
+
+	var reading: RefCounted = SquadScript.of(by)
+
+	if reading != null:
+		reading.on_shot_at(guard, hit)
+
+
 func _hold_off(delta: float, target: Node3D, sees: bool, to: Vector3, dist: float) -> bool:
 	if not sees or target == null or not is_instance_valid(target):
 		return false

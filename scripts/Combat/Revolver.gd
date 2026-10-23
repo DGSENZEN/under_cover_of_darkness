@@ -49,6 +49,8 @@ const FLIP_TIME := 0.15
 const BLAST_PELLETS := 6
 ## Empowered, a shell is one blast into a man this near (metres).
 const EMPOWERED_SHELL_RANGE := 6.0
+## A ball this close by a man's chest is a near miss to him (metres).
+const NEAR_MISS := 1.5
 ## Seconds for the gate to snap shut when you fire mid-reload.
 const GATE_SNAP := 0.1
 ## The pistol-whip: a man this near (metres), this far off your aim
@@ -401,6 +403,7 @@ func _pull(gun: Resource) -> void:
 	var direction := _stray(at.basis)
 	var record := _trace(at.origin, direction)
 	_apply(record, direction, gun.bullet_damage, &"blast" if empowered else &"bullet", gun)
+	_near_misses(at.origin, record)
 	var muzzle := _muzzle(at, &"muzzle")
 	_kicked(1.0, gun)
 	SoundBus.emit_sound(muzzle, gun.shot_db, player, &"gunshot")
@@ -450,6 +453,9 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 	for record in records:
 		if record["target"] == null:
 			_strike_world(record, record["direction"])
+
+	# The shell's middle pellet: who it went close by.
+	_near_misses(at.origin, records[0])
 
 	if not into.is_empty():
 		TimeFx.hitstop(get_tree(), 0.05)
@@ -519,6 +525,22 @@ func _apply(record: Dictionary, direction: Vector3, damage: float, kind: StringN
 		TimeFx.hitstop(get_tree(), 0.04)
 	else:
 		_strike_world(record, direction)
+
+
+## Every man the ball went close by and missed (within NEAR_MISS of his
+## chest): he starts, and his squad reads the gun (Guard.near_miss).
+func _near_misses(from: Vector3, record: Dictionary) -> void:
+	var to: Vector3 = record["point"]
+
+	for guard in get_tree().get_nodes_in_group(&"guards"):
+		if guard == record["target"] or not (guard is Node3D) or not guard.has_method("near_miss"):
+			continue
+
+		var chest: Vector3 = (guard as Node3D).global_position + Vector3.UP * 1.2
+		var nearest := Geometry3D.get_closest_point_to_segment(chest, from, to)
+
+		if nearest.distance_to(chest) <= NEAR_MISS:
+			guard.near_miss(player, nearest)
 
 
 ## Into a man: a ball in the head takes the headshot's multiple (not a

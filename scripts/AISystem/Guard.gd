@@ -226,6 +226,9 @@ var grief_fades := true
 
 @export_category("Vision")
 @export var eye_height := 1.65
+## How hard a shot past him close makes him start (near_miss), as a hit's
+## strength.
+const NEAR_MISS_START := 0.3
 ## Full view cone, in degrees.
 @export var fov_horizontal := 140.0
 @export var fov_vertical := 90.0
@@ -1701,6 +1704,10 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 	var at: Vector3 = point if point != Vector3.ZERO else _rig.chest()
 	_last_blow = blow
 
+	# Shot: his squad reads the gun from it.
+	if (kind == &"bullet" or kind == &"shot") and attacker != null:
+		_fighter.on_shot_at(attacker, true)
+
 	if kind == &"backstab" or (kind == &"drop" and damage >= health):
 		_mercy.died()
 		_rig.react_hit(blow, 1.4)
@@ -1879,6 +1886,19 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 		bark("Argh!")
 
 	return &"hit"
+
+
+## A shot went past him close (Revolver.gd): he starts, turns on whoever
+## fired it, and his squad reads the gun from it.
+func near_miss(by: Node3D, at: Vector3) -> void:
+	if _knocked_out or health <= 0.0:
+		return
+
+	var past := global_position + Vector3.UP * 1.2 - at
+	_last_blow = past.normalized() if past.length() > 0.01 else -global_basis.z
+	_rig.react_hit(_last_blow, NEAR_MISS_START)
+	_engage(by)
+	_fighter.on_shot_at(by, false)
 
 
 ## Set alight: he burns for `seconds`, running about with no fight in him,
