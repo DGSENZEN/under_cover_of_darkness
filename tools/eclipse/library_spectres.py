@@ -4,7 +4,9 @@ from CDmir's CC0 "human skull" (assets/characters/skull, credited in CREDITS.md)
 - necro_skull: the cranium and the upper teeth, its origin the middle of the whole skull;
 - necro_jaw: the mandible and the lower teeth, its origin its hinge (the top of its rami, toward the back), so the
   game opens it by turning it about x;
-- necro_skull_lite, necro_jaw_lite: the same, lighter, for the dead's small faces carried up in the smoke.
+- necro_skull_lite, necro_jaw_lite: the same, lighter, for the dead's small faces carried up in the smoke;
+- alch_homunculus: alchemy's little man in his flask, Quaternius's CC0 male base body (assets/characters/base)
+  curled up as an unborn child (head bowed onto his knees, arms round them), lightened, HOMUNCULUS across.
 
 Scaled to a spectre's size (HEIGHT from the crown to the chin), its face toward -y (Godot's +z). They carry no
 atlas: the game draws them black with a burning rim (anima_silhouette, anima_aura), from their own shape. Beside the
@@ -32,6 +34,15 @@ POINTS = common.ROOT / "assets" / "eclipse" / "source" / "library_spectres.json"
 HEIGHT = 0.08
 ## How much of its triangles the dead's faces keep.
 LITE = 0.3
+## The homunculus: across his longest side (m), how many triangles he keeps, his pose (each bone's turns, degrees,
+## about its own axes; found by rendering: X bends the spine and the elbows forward, -X lifts a thigh).
+HOMUNCULUS = 0.055
+HOMUNCULUS_TRIS = 2400
+CURLED = {"spine_01": [("X", 30)], "spine_02": [("X", 30)], "spine_03": [("X", 22)], "neck_01": [("X", 25)],
+          "Head": [("X", 25)], "thigh_l": [("X", -128)], "thigh_r": [("X", -128)], "calf_l": [("X", 145)],
+          "calf_r": [("X", 145)], "upperarm_l": [("Z", 80), ("X", 50)], "upperarm_r": [("Z", -80), ("X", 50)],
+          "lowerarm_l": [("X", 125)], "lowerarm_r": [("X", 125)]}
+BODY = common.ROOT / "assets" / "characters" / "base" / "Superhero_Male_FullBody.gltf"
 
 HINGE = Vector()
 EYES = []
@@ -109,6 +120,57 @@ def _eyes(skull):
     return eyes
 
 
+def homunculus():
+    """The base body curled up, its armature's pose baked in, welded, lightened, sized and centred."""
+    import bmesh
+    import math
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=str(BODY))
+    new = [o for o in bpy.data.objects if o not in before]
+    rig = next(o for o in new if o.type == "ARMATURE")
+    body = max((o for o in new if o.type == "MESH"), key=lambda o: len(o.data.vertices))
+    for pb in rig.pose.bones:
+        pb.rotation_mode = "XYZ"
+        for axis, deg in CURLED.get(pb.name, []):
+            pb.rotation_euler.rotate_axis(axis, math.radians(deg))
+    bpy.context.view_layer.update()
+    with bpy.context.temp_override(active_object=body, object=body, selected_objects=[body], selected_editable_objects=[body]):
+        for mod in list(body.modifiers):
+            if mod.type == "ARMATURE":
+                bpy.ops.object.modifier_apply(modifier=mod.name)
+
+    bm = bmesh.new()
+    bm.from_mesh(body.data)
+    bm.transform(body.matrix_world)
+    # (Its seams welded: the base mesh splits them for its UVs.)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+    mesh = bpy.data.meshes.new("alch_homunculus")
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new("alch_homunculus", mesh)
+    bpy.context.scene.collection.objects.link(obj)
+    for o in new:
+        bpy.data.objects.remove(o, do_unlink=True)
+    mesh.materials.clear()
+
+    cut = obj.modifiers.new("lite", "DECIMATE")
+    cut.ratio = min(1.0, HOMUNCULUS_TRIS / max(1, sum(len(p.vertices) - 2 for p in mesh.polygons)))
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.modifier_apply(modifier="lite")
+
+    vs = [v.co for v in obj.data.vertices]
+    lo = Vector((min(v.x for v in vs), min(v.y for v in vs), min(v.z for v in vs)))
+    hi = Vector((max(v.x for v in vs), max(v.y for v in vs), max(v.z for v in vs)))
+    scale = HOMUNCULUS / max(hi - lo)
+    middle = (lo + hi) / 2.0
+    for v in obj.data.vertices:
+        v.co = (v.co - middle) * scale
+    obj.data.update()
+    return obj
+
+
 def build():
     global HINGE, EYES
     common.reset()
@@ -167,6 +229,7 @@ def build():
     _lite(skull, "necro_skull_lite")
     lite_jaw = _lite(jaw, "necro_jaw_lite")
     lite_jaw.location = HINGE
+    homunculus()
 
 
 def main():

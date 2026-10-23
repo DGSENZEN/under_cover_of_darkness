@@ -209,6 +209,22 @@ Calls made:
 - **Per-frame cost trimmed.** Book projections cast their headroom ray only while their book is open, and the section auras measure theirs once. The Oct 19 effects had cost the shop's headless frame about 0.1 ms; L20 is back to 0.93×.
 - **Known weakness:** the spirit-fire under the skull is faint, chartreuse against the chartreuse-lit pages.
 
+## Task 3, alchemy (Oct 23, awaiting review)
+
+Necromancy was approved by the user on Oct 23.
+
+`scripts/Visual/Library/Alchemy.gd`, over alchemy studies:
+- a black ouroboros outlined in copper fire, coiled a full turn, its head biting its tail, turning as it swallows itself;
+- a round flask of glass hovering over the left-hand page, glowing amber water in its bulb, the homunculus curled inside, drifting, turning and breathing;
+- the six old signs (sun, moon, mercury, sulphur, salt, fire) circling the serpent as they rise, flaring gold and burning out near the top.
+
+Checks E43–E46; the homunculus's kit check is in `LibrarySpectres`. Review media: `docs/superpowers/refs/underground/library_stills/part2-alchemy/`.
+
+Calls made:
+- **The homunculus is a figure, built from Quaternius's CC0 male base body.** It is posed curled like an unborn child (`library_spectres.CURLED`, found by rendering), baked, cut to about 2,400 triangles and 5.5 cm. The female body read as an adult woman. It is drawn black with a copper rim, like the dead. It is the piece to judge hardest.
+- **The serpent is black with a copper rim.** A glowing coil against the lit pages bloomed into a ring with no head.
+- **The flask's glass draws both faces**, after its contents.
+
 ## Plan self-review
 
 The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.

@@ -33,6 +33,7 @@ func _run() -> void:
 	await _radiance(effects)
 	await _chronology(effects)
 	await _necromancy(effects)
+	await _alchemy(effects)
 
 	# Drive a real novel through partial openings, without a full-open signal.
 	var book: LiveBook = lab.live_books[7]
@@ -292,6 +293,65 @@ func _necromancy(effects: Node3D) -> void:
 	watcher.global_position = book.global_position + case.global_basis.z * 4.0
 	await _frames(120)
 	_check("E42 shut again, necromancy's projection is gone", not family.visible and projection.presence == 0.0,
+		"visible %s presence %.2f" % [family.visible, projection.presence])
+	book.watcher = null
+	watcher.queue_free()
+
+
+## Alchemy's projection (Task 3's third family): over an opened alchemy study, an ouroboros turning as it swallows
+## itself; a homunculus curled in a round flask of glass over the left-hand page, drifting in its glowing water;
+## alchemical symbols rising round the serpent, flaring gold and burning out, then rising again.
+func _alchemy(effects: Node3D) -> void:
+	var projections: Array = effects.get("projections")
+	var studies: Array = lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.STUDY and b.section == &"alchemy")
+	var book: LiveBook = studies[0]
+	var projection: Node3D = projections[lab.live_books.find(book)]
+	var family: Node3D = projection.get("family")
+	var parts_ok: bool = family != null and family.get("kind") == &"alchemy" \
+		and studies.all(func(b): return projections[lab.live_books.find(b)].get("family") != null) \
+		and family.ouroboros is MeshInstance3D and family.flask is MeshInstance3D and family.homunculus is MeshInstance3D \
+		and family.symbols.size() >= 5
+	_check("E43 an alchemy book carries alchemy's projection (an ouroboros, a homunculus in a flask, burning symbols)",
+		parts_ok, "family %s" % [family.get("kind") if family != null else null])
+	if not parts_ok:
+		return
+
+	var watcher := Node3D.new()
+	add_child(watcher)
+	var case: Node3D = lab.sections["alchemy"]
+	watcher.global_position = book.global_position + case.global_basis.z * 0.9 + Vector3.UP * 0.35
+	book.watcher = watcher
+	await _frames(90)
+	var strays := []
+	var serpent := []
+	var little := []
+	var heights := []
+	var burns := []
+	var resets := 0
+	var was: Array = family.symbol_heights.duplicate()
+	for i in 600:
+		await get_tree().process_frame
+		if i % 20 == 0:
+			strays.append_array(_strays(family, family.parts(), projection, book, case))
+			serpent.append(family.ouroboros.quaternion)
+			little.append(family.homunculus.position.y)
+			heights.append_array(family.symbol_heights)
+			burns.append_array(family.symbol_burns)
+			for k in family.symbol_heights.size():
+				if family.symbol_heights[k] < was[k] - 0.04:
+					resets += 1
+			was = family.symbol_heights.duplicate()
+	_check("E44 opened, alchemy's pieces stay over the pages, under the board above, clear of the shelf books either side",
+		family.visible and strays.is_empty(), "clear %.2f strays %s" % [projection.clear_height, strays.slice(0, 4)])
+	_check("E45 the serpent turns, the little man drifts, the symbols rise, flare, burn out and come again",
+		not serpent[0].is_equal_approx(serpent[1]) and little.max() - little.min() > 0.004
+		and heights.max() - heights.min() > 0.1 and burns.max() - burns.min() > 0.5 and resets >= 3,
+		"drift %.3f symbols %.2f..%.2f burn %.2f..%.2f resets %d" % [little.max() - little.min(), heights.min(), heights.max(),
+		burns.min(), burns.max(), resets])
+
+	watcher.global_position = book.global_position + case.global_basis.z * 4.0
+	await _frames(120)
+	_check("E46 shut again, alchemy's projection is gone", not family.visible and projection.presence == 0.0,
 		"visible %s presence %.2f" % [family.visible, projection.presence])
 	book.watcher = null
 	watcher.queue_free()

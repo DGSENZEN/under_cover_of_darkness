@@ -6,7 +6,8 @@ const BookRadiance := preload("res://scripts/Visual/Library/BookRadiance.gd")
 ## Each section's projection over its studies, as each family passes its review (the spellbooks' wards and the
 ## novels' characters are their own, Task 4).
 const FAMILIES := {&"chronology": preload("res://scripts/Visual/Library/Chronology.gd"),
-	&"necromancy": preload("res://scripts/Visual/Library/Necromancy.gd")}
+	&"necromancy": preload("res://scripts/Visual/Library/Necromancy.gd"),
+	&"alchemy": preload("res://scripts/Visual/Library/Alchemy.gd")}
 
 var book: LiveBook
 var presence := 0.0

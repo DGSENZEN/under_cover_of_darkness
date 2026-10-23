@@ -2073,7 +2073,19 @@ class LibrarySpectres(unittest.TestCase):
         return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
 
     def test_pieces(self):
-        self.assertEqual(sorted(self.objects), ["necro_jaw", "necro_jaw_lite", "necro_skull", "necro_skull_lite"])
+        self.assertEqual(sorted(self.objects), ["alch_homunculus", "necro_jaw", "necro_jaw_lite", "necro_skull",
+                                                "necro_skull_lite"])
+
+    def test_homunculus_small_curled_and_light(self):
+        # The base body curled up: at most HOMUNCULUS across its longest side, compact (no limb flung out), whole,
+        # light enough for an effect.
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("alch_homunculus")
+        sides = sorted([x1 - x0, y1 - y0, z1 - z0])
+        self.assertAlmostEqual(sides[2], library_spectres.HOMUNCULUS, delta=0.001)
+        self.assertLess(sides[2] / sides[0], 2.2)
+        self.assertAlmostEqual((x0 + x1) / 2.0, 0.0, delta=0.002)
+        self.assertLessEqual(_tris(self.objects["alch_homunculus"]), 3000)
+        self.assertGreater(_tris(self.objects["alch_homunculus"]), 1200)
 
     def test_sized_as_a_spectre(self):
         skull, jaw = self._extent("necro_skull"), self._extent("necro_jaw")
