@@ -293,6 +293,21 @@ Calls made:
 - **The plan's `mesh(text, font, size)` became `atlas(name)`.** A chain takes a text and an atlas; there are no meshes per string.
 - **Chains lay out their glyphs only while on screen**, and from frames precomputed every 5 mm along the path. Laid out every frame, the waves took the shop's headless frame to 1.2 times the underground bay's. Now it is 1.04 times, and the windowed render check passes at 1.006.
 
+## Task 6, floating books (Oct 23, awaiting review)
+
+Task 5 was approved by the user on Oct 23.
+
+`scripts/Visual/Library/FloatingBooks.gd` (`lab.floating`):
+- Eight books made from the live book's own parts, with their proximity turned off. Each hangs like a tent from its spine, pages down toward the reader, fanning on its own beat.
+- They fly on four nested rings round the shop (two books per ring, opposite each other) at 2.75–3.4 m, wandering, bobbing and banking. Nested rings and opposite places mean they never meet: nearest 0.49 m over 40 s.
+- Two (the outer ring's) now and then come down to a place kept empty for them, on the chronology case's and the metaphysics case's 1.9 m board. Each shuts on the way down, slides onto the board, lies there 10–22 s and rises back to where its ring has gone. It comes down and goes up only when its ring brings it near its place, and never jumps. The book on the shelf is the flying book itself, so there is never a duplicate and nothing teleports.
+
+Checks E66–E68. Review media: `docs/superpowers/refs/underground/library_stills/part2-floating/`.
+
+Calls made:
+- **The kept places** are on high boards (1.9 m), away from the ladder (chronology at -0.5 along the case) and from the studies' runs. `BookFiller` keeps them clear through the same keep runs as the studies.
+- **Rings rather than free wandering.** Separation holds by construction, and the variety comes from wander, bob, bank, fanning and the transfers.
+
 ## Plan self-review
 
 The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.

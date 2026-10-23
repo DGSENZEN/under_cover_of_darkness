@@ -38,6 +38,7 @@ func _run() -> void:
 	await _hunting(effects)
 	await _novels_spells_auras(effects)
 	await _words(effects)
+	await _floating()
 
 	# Drive a real novel through partial openings, without a full-open signal.
 	var book: LiveBook = lab.live_books[7]
@@ -693,6 +694,84 @@ func _words(effects: Node3D) -> void:
 	await _frames(120)
 	spell.watcher = null
 	near.queue_free()
+
+
+## The vault's underside over `x` (the lab's frame): a segmental arc springing at 3.0 m at the side walls, 4.5 m at its
+## crown.
+func _vault_at(x: float) -> float:
+	var s := 4.0
+	var h := 1.5
+	var r := (h * h + s * s) / (2.0 * h)
+	return 4.5 - r + sqrt(maxf(r * r - x * x, 0.0))
+
+
+## Task 6: books floating under the vault, slowly, pages fanning; now and then one comes down to its own empty place
+## on a shelf, lies there a while, and rises again.
+func _floating() -> void:
+	var floating: Node3D = lab.get("floating")
+	var books: Array = floating.books if floating != null else []
+	_check("E66 six to ten books float under the vault, none of them the shop's live books",
+		books.size() >= 6 and books.size() <= 10 and books.all(func(b): return b not in lab.live_books),
+		"floating %d" % books.size())
+	if books.is_empty():
+		return
+
+	# Forty seconds: aloft they stay above head height and under the vault, never near each other, never in a case.
+	var low := []
+	var near := INF
+	var into := []
+	var fans := {}
+	var cases: Array = lab.shelves.map(func(c): return c.transform * c.get_aabb())
+	for i in 2400:
+		await get_tree().process_frame
+		if i % 10 != 0:
+			continue
+		for k in books.size():
+			var book: Node3D = books[k]
+			var at: Vector3 = book.position
+			var aloft: bool = floating.state_of(k) == &"aloft"
+			if aloft and (at.y < 2.1 or at.y > _vault_at(at.x) - 0.15):
+				low.append("%d at %s" % [k, at])
+			if aloft:
+				for box: AABB in cases:
+					if box.grow(0.1).has_point(at):
+						into.append("%d in a case at %s" % [k, at])
+			fans[k] = fans.get(k, []) + [book.open]
+			for j in range(k + 1, books.size()):
+				near = minf(near, at.distance_to(books[j].position))
+	var fanning := fans.values().all(func(o): return o.max() - o.min() > 0.15 and o.max() < 0.9)
+	_check("E67 aloft, every book stays above 2.1 m and under the vault, out of the cases, apart from the others, its pages fanning",
+		low.is_empty() and into.is_empty() and near > 0.35 and fanning, "low %s into %s nearest %.2f fanning %s" % [low.slice(0, 3),
+		into.slice(0, 3), near, fanning])
+
+	# One comes down to its place on a shelf, lies there, and rises again; its place was kept empty for it; it never jumps.
+	var k: int = floating.transfers()[0]
+	var book: Node3D = books[k]
+	var slot: Dictionary = floating.slot_of(k)
+	var kept: bool = lab.book_layout.all(func(e):
+		var spot: Dictionary = lab.book_spots[e["spot"]]
+		return spot["case"] != slot["case"] or absf(spot["top"] - slot["top"]) > 0.001 \
+			or e["box"].end.x < slot["x"] - 0.14 or e["box"].position.x > slot["x"] + 0.14)
+	floating.come_home(k)
+	var states := []
+	var rested_at := Vector3.INF
+	var jump := 0.0
+	var was: Vector3 = book.position
+	for i in 3600:
+		await get_tree().process_frame
+		var st: StringName = floating.state_of(k)
+		if states.is_empty() or states[-1] != st:
+			states.append(st)
+		if st == &"resting":
+			rested_at = book.position
+		jump = maxf(jump, book.position.distance_to(was))
+		was = book.position
+		if states.size() > 3 and st == &"aloft":
+			break
+	var home: Vector3 = floating.rest_of(k).origin
+	_check("E68 a book comes down to its kept place on a shelf, rests there, and rises again, never jumping",
+		kept and states.has(&"resting") and states[-1] == &"aloft" and rested_at.distance_to(home) < 0.003 and jump < 0.05,
+		"kept %s states %s rest off %.4f jump %.3f" % [kept, states, rested_at.distance_to(home), jump])
 
 
 func _radiance(effects: Node3D) -> void:

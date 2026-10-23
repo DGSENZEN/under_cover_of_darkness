@@ -86,6 +86,9 @@ const LIVE_LIFT := 0.002
 const STUDIES := [["chronology", 2, -0.45], ["necromancy", 3, -0.57], ["necromancy", 2, 0.3], ["alchemy", 3, 0.2],
 	["alchemy", 2, -0.45], ["metaphysics", 2, -0.2], ["hunting", 3, 0.35]]
 const STUDY_KEEP := 0.285
+## The floating books, and the run of board kept empty either side of where one comes down.
+const FloatingBooksScript := preload("res://scripts/Visual/Library/FloatingBooks.gd")
+const FLOAT_KEEP := 0.18
 const FRONT_TABLE_AT := Vector3(2.9, 0.0, -0.3)
 const TABLE_TOP := 0.85
 const NOVEL_SCALE := 0.8
@@ -132,6 +135,8 @@ var book_layout: Array = []
 var book_draws: Array[MultiMeshInstance3D] = []
 var live_books: Array[LiveBook] = []
 var book_stands: Array[MeshInstance3D] = []
+## The books floating under the vault (scripts/Visual/Library/FloatingBooks.gd).
+var floating: Node3D
 ## The shop's haze; its painted materials.
 var shop_haze: FogVolume
 var shop_looks: Array[ShaderMaterial] = []
@@ -430,6 +435,10 @@ func _books() -> void:
 			for study in STUDIES:
 				if study[0] == c[3] and _board_index(spots, i) == study[1]:
 					keep.append(Vector2(study[2] - STUDY_KEEP, study[2] + STUDY_KEEP))
+			# (And the places the floating books come down to, kept empty for them.)
+			for run: Array in FloatingBooksScript.kept_runs():
+				if run[0] == c[3] and _board_index(spots, i) == run[1]:
+					keep.append(Vector2(run[2] - FLOAT_KEEP, run[2] + FLOAT_KEEP))
 			book_spots.append({"case": c[0], "xform": (c[0] as Node3D).global_transform, "x0": b[0], "x1": b[1], "top": b[2],
 				"z0": b[3], "z1": b[4], "facing": -1 if c[3] == "" and b[4] <= 0.0 else 1, "head": head, "keep": keep,
 				"section": c[3]})
@@ -470,6 +479,10 @@ func _books() -> void:
 		var on := LECTERN_DESK + slope * Vector3(0.0, LIVE_HINGE.z + LIVE_LIFT, 0.0)
 		var section: StringName = &"chronology" if stand[0].x < 0.0 else &"alchemy"
 		_live_book(meshes, look, LiveBook.Kind.SPELL, section, Transform3D(Basis(Vector3.UP, yaw), stand[0]) * Transform3D(slope, on))
+
+	floating = FloatingBooksScript.new()
+	add_child(floating)
+	floating.build(self, meshes, look)
 
 
 ## Which of its case's boards (counted from the floor) a spot is on.

@@ -59,12 +59,17 @@ func _ready() -> void:
 		["spell_close", lib.to_global(Vector3(-2.55, 1.6, -1.05)), lib.to_global(Vector3(-2.8, 1.22, -0.4))],
 		["words_wave", lib.to_global(Vector3(0.2, 1.7, -3.4)), lib.to_global(Vector3(0.0, 2.3, -1.0))],
 		["words_stream", lib.to_global(Vector3(-2.2, 1.55, -1.4)), lib.to_global(Vector3(-2.8, 1.5, -0.4))],
+		["floating_vault", lib.to_global(Vector3(0.0, 1.7, -0.6)), lib.to_global(Vector3(0.0, 3.1, -3.4))],
+		["floating_home", lib.to_global(Vector3(-1.5, 1.8, -1.0)), lib.to_global(Vector3(-3.4, 1.95, -1.2))],
 	]
 	if not clip.is_empty():
 		for view in views:
 			if view[0] == clip:
 				await _frames(90)
 				_place(view[1], view[2])
+				# (A floating book sent home to the chronology case for the clip.)
+				if clip == "floating_home":
+					lib.floating.come_home(6)
 				for i in 180:
 					_capture("%s_%03d.png" % [view[0], i])
 					await _frames(2)
