@@ -254,6 +254,72 @@ func _run() -> void:
 		"clicks %d health %.1f barrel %s" % [clicks.size(), g12b.health, revolver.barrel])
 	g12b.queue_free()
 
+	# R13 the reload takes what there is, no more; with nothing, nothing
+	revolver.reset_for_practice()
+	_put_player(Vector3(26, 1.05, 0))
+	player.get_node("Neck").rotation.x = -0.6
+	player.inventory.ammo[&"rounds"] = 2
+	for i in 4:
+		await _tap("throw")
+		await _frames(40)
+	await _tap("reload")
+	await _frames(200)
+	var after_two: int = revolver.loaded[&"cylinder"]
+	var stock: int = player.inventory.ammo[&"rounds"]
+	await _tap("reload")
+	await _frames(3)
+	_check("R13 a reload takes what rounds there are; with none it does nothing",
+		after_two == 4 and stock == 0 and revolver.loading == revolver.Load.NONE,
+		"loaded %d stock %d loading %d" % [after_two, stock, revolver.loading])
+
+	# R13b firing mid-reload: the gate snaps shut and the shot goes
+	revolver.reset_for_practice()
+	player.inventory.ammo[&"rounds"] = 24
+	for i in 3:
+		await _tap("throw")
+		await _frames(40)
+	shots.clear()
+	await _tap("reload")
+	await _frames(int(ceil((0.25 + 0.45) * 60.0)) + 2)
+	var one_in: int = revolver.loaded[&"cylinder"]
+	await _tap("throw")
+	await _frames(8)
+	_check("R13b a shot mid-reload: the round in stays, the gate shuts, it fires",
+		one_in == 4 and shots.size() == 1 and revolver.loaded[&"cylinder"] == 3 and revolver.loading == revolver.Load.NONE,
+		"one in %d shots %d loaded %d loading %d" % [one_in, shots.size(), revolver.loaded[&"cylinder"], revolver.loading])
+
+	# R13c the shell loads on its own, slowly
+	revolver.reset_for_practice()
+	revolver.flip_barrel()
+	await _frames(12)
+	await _tap("throw")
+	await _frames(40)
+	await _tap("reload")
+	await _frames(58)
+	var at_sixty: int = revolver.loaded[&"shot"]
+	await _frames(8)
+	_check("R13c a shell takes 1.1 s to load", at_sixty == 0 and revolver.loaded[&"shot"] == 1,
+		"at 60 %d at 68 %d" % [at_sixty, revolver.loaded[&"shot"]])
+
+	# R14 put away mid-reload: nothing half done, nothing lost
+	revolver.reset_for_practice()
+	for i in 3:
+		await _tap("throw")
+		await _frames(40)
+	var stock_before: int = player.inventory.ammo[&"rounds"]
+	await _tap("reload")
+	await _frames(50)
+	player.inventory.select_next()
+	await _frames(3)
+	var cancelled: bool = revolver.loading == revolver.Load.NONE
+	var stock_after: int = player.inventory.ammo[&"rounds"]
+	_wield(&"revolver")
+	await _frames(60)
+	_check("R14 put away mid-reload: the reload is over, only the rounds put in are spent",
+		cancelled and stock_after == stock_before - 1 and revolver.loaded[&"cylinder"] == 4 and revolver.ready_to_fire(),
+		"cancelled %s stock %d -> %d loaded %d ready %s" % [cancelled, stock_before, stock_after, revolver.loaded[&"cylinder"], revolver.ready_to_fire()])
+	player.get_node("Neck").rotation.x = 0.0
+
 
 # Helpers
 

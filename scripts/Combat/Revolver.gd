@@ -26,6 +26,8 @@ const SOUNDS := {
 	&"shellshot": [&"explosion", -4.0, 1.45],
 	&"click_empty": [&"gear", -9.0, 1.7],
 	&"hammer": [&"gear", -14.0, 1.3],
+	&"gate": [&"unlock", -10.0, 1.5],
+	&"round_in": [&"coins", -12.0, 1.6],
 }
 
 ## How far a ball carries, in metres.
@@ -43,9 +45,21 @@ const SHELL_KICK := 1.4
 const FLIP_TIME := 0.15
 ## Pellets of one shell into one man, inside blast_range: a blast.
 const BLAST_PELLETS := 6
+## Seconds for the gate to snap shut when you fire mid-reload.
+const GATE_SNAP := 0.1
+
+## A reload under way: the gate opening (or shutting), rounds going in, or
+## the shell.
+enum Load {
+	NONE,
+	GATE,
+	ROUNDS,
+	SHELL,
+}
 
 var player: CharacterBody3D
 var loaded := {&"cylinder": 6, &"shot": 1}
+var loading := Load.NONE
 var barrel: StringName = &"cylinder"
 ## Both hands on the gun.
 var braced := false
@@ -57,6 +71,12 @@ var _ready_at := 0.0
 var _grip_until := 0.0
 ## The thumb at the hammer's nose, until then.
 var _flip_until := 0.0
+## Seconds into the step of the reload under way.
+var _load_t := 0.0
+## The gate shutting (GATE), not opening.
+var _gate_shutting := false
+## A shot asked for mid-reload: it goes once the gate is shut.
+var _owed_shot := false
 var _kick := 0.0
 ## Seconds the last kick takes to settle.
 var _settle := 0.6
@@ -67,6 +87,7 @@ func _ready() -> void:
 	player = get_parent() as CharacterBody3D
 	_ensure_action(&"grip", KEY_G)
 	_ensure_action(&"barrel", KEY_X)
+	_ensure_action(&"reload", KEY_R)
 
 
 func _physics_process(delta: float) -> void:
@@ -74,18 +95,38 @@ func _physics_process(delta: float) -> void:
 	_kick = move_toward(_kick, 0.0, delta / maxf(_settle, 0.01))
 	var gun: Resource = weapon()
 
+	# Put away, up on a hold, carrying: a reload under way is over. Only the
+	# rounds already in are spent.
 	if gun == null or not player.combat.is_able():
+		_stop_loading()
 		return
 
 	if Input.is_action_just_pressed("grip"):
+		_stop_loading()
 		set_braced(not braced)
 
 	if Input.is_action_just_pressed("barrel"):
+		_stop_loading()
 		flip_barrel()
+
+	if Input.is_action_just_pressed("reload") and loading == Load.NONE:
+		_start_loading(gun)
 
 	var spent: bool = player.is_mouse_input_swallowed() or player.is_attack_press_spent()
 
 	if Input.is_action_just_pressed("throw") and not spent:
+		if loading == Load.NONE:
+			_pull(gun)
+		else:
+			# Mid-reload: the gate snaps shut and the shot goes.
+			_stop_loading()
+			_owed_shot = true
+			_ready_at = maxf(_ready_at, _game_time + GATE_SNAP)
+
+	if loading != Load.NONE:
+		_update_loading(delta, gun)
+	elif _owed_shot and ready_to_fire():
+		_owed_shot = false
 		_pull(gun)
 
 
@@ -98,7 +139,25 @@ func weapon() -> Resource:
 
 
 func ready_to_fire() -> bool:
-	return _game_time >= _ready_at and _game_time >= _grip_until and _game_time >= _flip_until
+	return loading == Load.NONE and _game_time >= _ready_at and _game_time >= _grip_until and _game_time >= _flip_until
+
+
+func is_reloading() -> bool:
+	return loading != Load.NONE
+
+
+## How far open the loading gate is, 0 shut to 1 open.
+func gate_open() -> float:
+	var gun: Resource = WeaponScript.find(&"revolver")
+	var t := clampf(_load_t / maxf(gun.gate_time, 0.01), 0.0, 1.0)
+
+	match loading:
+		Load.GATE:
+			return 1.0 - t if _gate_shutting else t
+		Load.ROUNDS:
+			return 1.0
+
+	return 0.0
 
 
 ## The thumb flicks the hammer's nose: the other barrel fires next.
@@ -150,7 +209,78 @@ func reset_for_practice() -> void:
 	braced = false
 	_ready_at = 0.0
 	_grip_until = 0.0
+	_flip_until = 0.0
 	_kick = 0.0
+	_owed_shot = false
+	_stop_loading()
+
+
+# The reload
+
+## R: the selected barrel. The cylinder through the gate, round by round
+## while there are rounds and room; the shot barrel's one shell.
+func _start_loading(gun: Resource) -> void:
+	if barrel == &"cylinder":
+		if int(loaded[&"cylinder"]) >= int(gun.rounds) or int(player.inventory.ammo.get(&"rounds", 0)) <= 0:
+			return
+
+		loading = Load.GATE
+		_gate_shutting = false
+	else:
+		if int(loaded[&"shot"]) >= int(gun.shells) or int(player.inventory.ammo.get(&"shells", 0)) <= 0:
+			return
+
+		loading = Load.SHELL
+
+	_load_t = 0.0
+	_owed_shot = false
+	_sound(&"gate")
+
+
+func _update_loading(delta: float, gun: Resource) -> void:
+	_load_t += delta
+
+	match loading:
+		Load.GATE:
+			if _load_t < gun.gate_time:
+				return
+
+			if _gate_shutting:
+				loading = Load.NONE
+				_sound(&"gate")
+			else:
+				loading = Load.ROUNDS
+				_load_t = 0.0
+		Load.ROUNDS:
+			if _load_t < gun.round_load:
+				return
+
+			# Each round is taken from the stock as it goes in, not before.
+			_load_t = 0.0
+
+			if player.inventory.take_ammo(&"rounds", 1) == 1:
+				loaded[&"cylinder"] = int(loaded[&"cylinder"]) + 1
+				_sound(&"round_in")
+
+			if int(loaded[&"cylinder"]) >= int(gun.rounds) or int(player.inventory.ammo.get(&"rounds", 0)) <= 0:
+				loading = Load.GATE
+				_gate_shutting = true
+		Load.SHELL:
+			if _load_t < gun.shell_load:
+				return
+
+			if player.inventory.take_ammo(&"shells", 1) == 1:
+				loaded[&"shot"] = int(loaded[&"shot"]) + 1
+				_sound(&"round_in")
+
+			loading = Load.NONE
+
+
+## Whatever reload was under way is over, nothing taken for a round not yet in.
+func _stop_loading() -> void:
+	loading = Load.NONE
+	_load_t = 0.0
+	_gate_shutting = false
 
 
 # The shot
