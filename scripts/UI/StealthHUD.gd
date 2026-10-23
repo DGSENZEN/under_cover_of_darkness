@@ -158,6 +158,11 @@ class Crosshair:
 	## to hold a blow.
 	var stamina := 1.0
 	var stamina_alpha := 0.0
+	## The spells' power, 0..1, how visible its arc is, and a flash when a
+	## spell could not be paid for.
+	var power := 1.0
+	var power_alpha := 0.0
+	var power_short_flash := 0.0
 	var short := false
 	var contact_kind: StringName = &""
 	var contact_amount := 0.0
@@ -178,6 +183,18 @@ class Crosshair:
 
 			if stamina > 0.001:
 				draw_arc(c, 17.0, to - (to - from) * stamina, to, 24, Color(colour.r, colour.g, colour.b, 0.8 * stamina_alpha), 2.0, true)
+
+		# Power: an arc over the crosshair, draining from the right; red for
+		# a moment when a spell asked for more than there was.
+		if power_alpha > 0.01 or power_short_flash > 0.01:
+			var seen := maxf(power_alpha, power_short_flash)
+			var start := PI * 1.18
+			var end := PI * 1.82
+			draw_arc(c, 17.0, start, end, 24, Color(0, 0, 0, 0.4 * seen), 3.0, true)
+			var ink := Color(0.62, 0.78, 0.9).lerp(Color(0.95, 0.3, 0.2), power_short_flash)
+
+			if power > 0.001:
+				draw_arc(c, 17.0, start, start + (end - start) * power, 24, Color(ink.r, ink.g, ink.b, 0.8 * seen), 2.0, true)
 
 		if draw_amount > 0.0:
 			var ring := lerpf(22.0, 4.0, draw_amount)
@@ -953,6 +970,18 @@ func _process(delta: float) -> void:
 		_crosshair.stamina = s
 		_crosshair.short = combat.stamina < combat.block_cost_near()
 		_crosshair.stamina_alpha = move_toward(_crosshair.stamina_alpha, 1.0 if s < 0.995 else 0.0, delta * 3.0)
+
+	# Power, only while it is not full; gone a second after it is.
+	var pool: Node = player.get("power")
+
+	if pool != null:
+		var p: float = pool.power / pool.MAX
+		_crosshair.power = p
+		_crosshair.power_alpha = move_toward(_crosshair.power_alpha, 1.0 if p < 0.995 else 0.0, delta * (3.0 if p < 0.995 else 1.0))
+		_crosshair.power_short_flash = move_toward(_crosshair.power_short_flash, 0.0, delta / 0.5)
+
+		if not pool.refused_cast.is_connected(_on_power_refused):
+			pool.refused_cast.connect(_on_power_refused)
 
 	# Hurt, and caught. These run on real time: slow motion must not stretch
 	# them.
@@ -1776,3 +1805,7 @@ func resume() -> void:
 
 	if player != null and player.has_method("_recapture_mouse"):
 		player._recapture_mouse()
+
+
+func _on_power_refused() -> void:
+	_crosshair.power_short_flash = 1.0
