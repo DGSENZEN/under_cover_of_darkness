@@ -34,6 +34,7 @@ func _run() -> void:
 	await _chronology(effects)
 	await _necromancy(effects)
 	await _alchemy(effects)
+	await _metaphysics(effects)
 
 	# Drive a real novel through partial openings, without a full-open signal.
 	var book: LiveBook = lab.live_books[7]
@@ -149,7 +150,7 @@ func _frames(count: int) -> void:
 func _chronology(effects: Node3D) -> void:
 	var projections: Array = effects.get("projections")
 	var study_at: int = lab.live_books.find(lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.STUDY and b.section == &"chronology")[0])
-	var other_at: int = lab.live_books.find(lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.STUDY and b.section == &"metaphysics")[0])
+	var other_at: int = lab.live_books.find(lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.STUDY and b.section == &"hunting")[0])
 	var projection: Node3D = projections[study_at]
 	var family: Node3D = projection.get("family")
 	var parts_ok: bool = family != null and family.get("kind") == &"chronology" and family.rings.size() == 3 \
@@ -352,6 +353,59 @@ func _alchemy(effects: Node3D) -> void:
 	watcher.global_position = book.global_position + case.global_basis.z * 4.0
 	await _frames(120)
 	_check("E46 shut again, alchemy's projection is gone", not family.visible and projection.presence == 0.0,
+		"visible %s presence %.2f" % [family.visible, projection.presence])
+	book.watcher = null
+	watcher.queue_free()
+
+
+## Occult metaphysics' projection (Task 3's fourth family): over an opened metaphysics study, nested sigils at their
+## own depths turning against each other, an eye at their heart opening, looking about and closing; over the left-hand
+## page five planes folding up from a flat cross into an open box and back, each with its front and its back.
+func _metaphysics(effects: Node3D) -> void:
+	var projections: Array = effects.get("projections")
+	var studies: Array = lab.live_books.filter(func(b): return b.kind == LiveBook.Kind.STUDY and b.section == &"metaphysics")
+	var book: LiveBook = studies[0]
+	var projection: Node3D = projections[lab.live_books.find(book)]
+	var family: Node3D = projection.get("family")
+	var parts_ok: bool = family != null and family.get("kind") == &"metaphysics" and family.sigils.size() >= 3 \
+		and family.eye is Node3D and family.folds.size() >= 4
+	var depths := {}
+	if parts_ok:
+		for sigil: Node3D in family.sigils:
+			depths[snappedf(sigil.position.z, 0.001)] = true
+	_check("E47 a metaphysics book carries its projection (nested sigils at their own depths, an eye, folding planes)",
+		parts_ok and depths.size() == family.sigils.size(), "family %s depths %s" % [family.get("kind") if family != null else null,
+		depths.keys()])
+	if not parts_ok:
+		return
+
+	var watcher := Node3D.new()
+	add_child(watcher)
+	var case: Node3D = lab.sections["metaphysics"]
+	watcher.global_position = book.global_position + case.global_basis.z * 0.9 + Vector3.UP * 0.35
+	book.watcher = watcher
+	await _frames(90)
+	var strays := []
+	var turns := []
+	var opens := []
+	var folds := []
+	for i in 600:
+		await get_tree().process_frame
+		if i % 20 == 0:
+			strays.append_array(_strays(family, family.parts(), projection, book, case))
+			turns.append(family.sigils.map(func(g): return g.rotation.z))
+			opens.append(family.eye_open)
+			folds.append(family.fold)
+	var against: bool = signf(angle_difference(turns[0][0], turns[1][0])) != signf(angle_difference(turns[0][1], turns[1][1]))
+	_check("E48 opened, metaphysics' pieces stay over the pages, under the board above, clear of the shelf books either side",
+		family.visible and strays.is_empty(), "clear %.2f strays %s" % [projection.clear_height, strays.slice(0, 4)])
+	_check("E49 the sigils turn against each other, the eye opens and shuts, the planes fold up and lie flat again",
+		against and opens.max() - opens.min() > 0.8 and folds.max() - folds.min() > 0.8,
+		"against %s eye %.2f..%.2f fold %.2f..%.2f" % [against, opens.min(), opens.max(), folds.min(), folds.max()])
+
+	watcher.global_position = book.global_position + case.global_basis.z * 4.0
+	await _frames(120)
+	_check("E50 shut again, metaphysics' projection is gone", not family.visible and projection.presence == 0.0,
 		"visible %s presence %.2f" % [family.visible, projection.presence])
 	book.watcher = null
 	watcher.queue_free()

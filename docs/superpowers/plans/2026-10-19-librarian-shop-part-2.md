@@ -225,6 +225,21 @@ Calls made:
 - **The serpent is black with a copper rim.** A glowing coil against the lit pages bloomed into a ring with no head.
 - **The flask's glass draws both faces**, after its contents.
 
+## Task 3, occult metaphysics (Oct 23, awaiting review)
+
+Alchemy was approved by the user on Oct 23.
+
+`scripts/Visual/Library/Metaphysics.gd`, over metaphysics studies, in violet:
+- three nested sigils (a hexagram in its circle, a square in its circle, a triangle) at their own depths, turning against each other;
+- an eye in front of them, its almond black with a violet rim, that opens slowly, looks about with its slit pupil and shuts;
+- five black planes edged in violet fire over the left-hand page, folding up from a flat cross into an open box and lying flat again. Each plane has a grid of light on its front, 3 mm from the plane, and a bare back.
+
+Checks E47–E50. Review media: `docs/superpowers/refs/underground/library_stills/part2-metaphysics/`.
+
+Calls made:
+- **Dim glowing lines.** The sigils' lines are kept dim (energy 1.25, violet core). Brighter, with the page's light, they bloomed into a white ball.
+- **The eye stands in front of all the sigils**, its white a dim pearl. Further back and brighter, it was lost in the bloom.
+
 ## Plan self-review
 
 The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.

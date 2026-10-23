@@ -50,6 +50,8 @@ func _ready() -> void:
 		["necro_close", lib.to_global(Vector3(-3.05, 1.68, -4.05)), lib.to_global(Vector3(-3.74, 1.6, -4.33))],
 		["alch_open", lib.to_global(Vector3(2.5, 1.75, -1.25)), lib.to_global(Vector3(3.72, 1.55, -1.5))],
 		["alch_close", lib.to_global(Vector3(3.05, 1.68, -1.38)), lib.to_global(Vector3(3.74, 1.58, -1.55))],
+		["meta_open", lib.to_global(Vector3(2.5, 1.5, -4.2)), lib.to_global(Vector3(3.72, 1.1, -4.55))],
+		["meta_close", lib.to_global(Vector3(3.05, 1.3, -4.35)), lib.to_global(Vector3(3.74, 1.13, -4.55))],
 	]
 	if not clip.is_empty():
 		for view in views:

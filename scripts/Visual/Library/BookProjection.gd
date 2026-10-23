@@ -7,7 +7,8 @@ const BookRadiance := preload("res://scripts/Visual/Library/BookRadiance.gd")
 ## novels' characters are their own, Task 4).
 const FAMILIES := {&"chronology": preload("res://scripts/Visual/Library/Chronology.gd"),
 	&"necromancy": preload("res://scripts/Visual/Library/Necromancy.gd"),
-	&"alchemy": preload("res://scripts/Visual/Library/Alchemy.gd")}
+	&"alchemy": preload("res://scripts/Visual/Library/Alchemy.gd"),
+	&"metaphysics": preload("res://scripts/Visual/Library/Metaphysics.gd")}
 
 var book: LiveBook
 var presence := 0.0
