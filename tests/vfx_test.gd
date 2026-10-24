@@ -1,7 +1,7 @@
 extends Node3D
 ## The effects as drawn (the effects plan, Ruling 2: GPU particles are
 ## judged by what they draw), at night, in a window:
-##   Godot --path . --resolution 960x540 res://tests/vfx_test.tscn
+##   Godot --path . --fixed-fps 60 --resolution 960x540 res://tests/vfx_test.tscn
 
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
@@ -42,13 +42,25 @@ func _brazier() -> void:
 	fire.position = Vector3(0, 0.9, 0)
 	Vfx.emit(fire, true)
 	await _seconds(1.5)
-	var a := get_viewport().get_texture().get_image()
-	await _seconds(0.3)
-	var b := get_viewport().get_texture().get_image()
-	var top := _changed(a, b, Vector3(-0.4, 1.8, 0), Vector3(0.4, 0.95, 0))
-	var aside := _changed(a, b, Vector3(1.4, 0.4, 0), Vector3(2.0, 0.05, 0))
+	# (The median of five pairs of frames 0.3 s apart: one pair swung either side of the bar run to run.)
+	var tops := []
+	var asides := []
+
+	for k in 5:
+		var a := get_viewport().get_texture().get_image()
+		await _seconds(0.3)
+		var b := get_viewport().get_texture().get_image()
+		tops.append(_changed(a, b, Vector3(-0.4, 1.8, 0), Vector3(0.4, 0.95, 0)))
+		asides.append(_changed(a, b, Vector3(1.4, 0.4, 0), Vector3(2.0, 0.05, 0)))
+		if k == 4:
+			b.save_png(OS.get_cache_dir() + "/vfx_test_brazier.png")
+
+	tops.sort()
+	asides.sort()
+	var top: float = tops[2]
+	var aside: float = asides[2]
 	_check("V1 a brazier's fire moves round its top, the ground aside still", top > 0.05 and aside < 0.01,
-		"top %.3f, aside %.3f" % [top, aside])
+		"top %.3f (of %s), aside %.3f" % [top, ", ".join(tops.map(func(t): return "%.3f" % t)), aside])
 
 	# V1b its flames narrow to their tips (the sheet's bed fills its frame:
 	# drawn edge to edge the flames stood in a box)
@@ -398,10 +410,10 @@ func _luminance(image: Image, top_left: Vector3, bottom_right: Vector3) -> float
 	return sum / maxi(total, 1)
 
 
+## `s` seconds of the game's time (60 frames a second: run it with --fixed-fps 60; by the clock, a window left in
+## the background drew no time between two shots).
 func _seconds(s: float) -> void:
-	var start := Time.get_ticks_msec()
-
-	while Time.get_ticks_msec() - start < s * 1000.0:
+	for i in maxi(int(s * 60.0), 1):
 		await get_tree().process_frame
 
 	RenderingServer.force_draw()
