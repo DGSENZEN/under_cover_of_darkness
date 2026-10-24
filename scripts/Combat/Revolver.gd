@@ -63,6 +63,8 @@ const FLIP_TIME := 0.15
 const BLAST_PELLETS := 6
 ## Empowered, a shell is one blast into a man this near (metres).
 const EMPOWERED_SHELL_RANGE := 6.0
+## Out of a sprint, the gun comes back up this long before it will fire.
+const RUN_RECOVER := 0.15
 ## The hold on a hit, and on a kill (real seconds).
 const HIT_HITSTOP := 0.04
 const KILL_HITSTOP := 0.07
@@ -111,6 +113,8 @@ var _aim_dropped := false
 var _zoomed := false
 ## The thumb at the hammer's nose, until then.
 var _flip_until := 0.0
+## When you were last running with it (game time).
+var _ran_at := -100.0
 ## Seconds into the step of the reload under way.
 var _load_t := 0.0
 ## The gate shutting (GATE), not opening.
@@ -199,7 +203,17 @@ func weapon() -> Resource:
 
 
 func ready_to_fire() -> bool:
-	return loading == Load.NONE and _whip_t < 0.0 and _game_time >= _ready_at and _game_time >= _flip_until
+	return loading == Load.NONE and _whip_t < 0.0 and _game_time >= _ready_at and _game_time >= _flip_until and _up_in_hand() and _game_time - _ran_at >= RUN_RECOVER
+
+
+## Drawn all the way up (not still coming from the holster).
+func _up_in_hand() -> bool:
+	var hand: Node = player.hand if player != null else null
+
+	if hand == null or not hand.has_method("item_lowered"):
+		return true
+
+	return hand.is_item_visible() and hand.item_lowered() <= 0.0
 
 
 func is_reloading() -> bool:
@@ -296,6 +310,7 @@ func reset_for_practice() -> void:
 	_aim = 0.0
 	aimed = false
 	_aim_dropped = false
+	_ran_at = -100.0
 	_flip_until = 0.0
 	_kick = 0.0
 	_owed_shot = false
@@ -725,6 +740,9 @@ func _kicked(strength: float, gun: Resource) -> void:
 func _send_pose(delta: float) -> void:
 	var poses: Dictionary = ViewPoses.REVOLVER
 	var sprinting: bool = player.has_method("_is_sprinting") and player._is_sprinting() and Vector2(player.velocity.x, player.velocity.z).length() > float(player.get("walk_speed")) + 0.3
+
+	if sprinting:
+		_ran_at = _game_time
 	var checking: bool = player.hand != null and player.hand.has_method("is_checking") and player.hand.is_checking()
 	var booting: bool = player.combat.phase == player.combat.Phase.KICK
 	_sprint_shown = move_toward(_sprint_shown, 1.0 if sprinting and _kick <= 0.0 and loading == Load.NONE else 0.0, delta * 4.0)

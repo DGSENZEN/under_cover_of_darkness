@@ -266,6 +266,12 @@ static func revolver_mesh() -> Mesh:
 	mesh.set_meta(&"hold_scale", 0.62)
 	mesh.set_meta(&"hold_rotation", Vector3(0.0, 0.0, 0.0))
 	mesh.set_meta(&"view_poses", &"revolver")
+	# Heavy: slow to draw and to put away, lagging further behind a turn (to
+	# at most 4 degrees: the hand's sway turns the gun 0.6 of itself).
+	mesh.set_meta(&"draw_time", 0.45)
+	mesh.set_meta(&"stow_time", 0.35)
+	mesh.set_meta(&"sway_lag", 2.2)
+	mesh.set_meta(&"sway_most", deg_to_rad(4.0) / 0.6)
 	mesh.set_meta(&"muzzle", Vector3(0, 0.1, -0.32))
 	mesh.set_meta(&"shot_muzzle", Vector3(0, 0.072, -0.25))
 

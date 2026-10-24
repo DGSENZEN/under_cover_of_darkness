@@ -370,14 +370,14 @@ func _run() -> void:
 	# R15b the cylinder turns a chamber for each shot
 	revolver.reset_for_practice()
 	await _frames(10)
-	await _tap("throw")
-	await _frames(30)
 	var cylinder: Node3D = gun_mesh.get_node_or_null("Cylinder")
 	var turned := -1.0
 
 	if cylinder != null:
-		var rest: Transform3D = gun_mesh.mesh.get_meta(&"cylinder_at")
-		turned = rad_to_deg((rest.affine_inverse() * cylinder.transform).basis.get_euler().y)
+		var before_shot: Basis = cylinder.transform.basis
+		await _tap("throw")
+		await _frames(30)
+		turned = rad_to_deg((before_shot.inverse() * cylinder.transform.basis).get_euler().y)
 
 	_check("R15b the cylinder turns 60 degrees for a shot", _near(absf(turned), 60.0, 1.0), "turned %.1f" % turned)
 
@@ -584,6 +584,57 @@ func _run() -> void:
 	_check("H5 no hole is left in a crate or a man", Fx.holes_in_use() == 0, "holes %d" % Fx.holes_in_use())
 	g_h5.queue_free()
 
+	# W1 the revolver is slow to draw: no shot until it is up
+	revolver.reset_for_practice()
+	_put_player(Vector3(36, 1.05, 0))
+	player.inventory.holster()
+	await _frames(40)
+	shots.clear()
+	_wield(&"revolver")
+	await _frames(18)
+	await _tap("throw")
+	var too_soon := shots.size()
+	await _frames(10)
+	await _tap("throw")
+	_check("W1 the revolver takes 0.45 s to draw: no shot before it is up", too_soon == 0 and shots.size() == 1,
+		"at 20 frames %d, at 32 frames %d" % [too_soon, shots.size()])
+	await _frames(40)
+
+	# W2 it lags behind a quick turn, a little, and comes back
+	var gun_w2: MeshInstance3D = player.hand._main_mesh
+	var steady: float = _yaw_in_view(gun_w2)
+	player.rotation.y += deg_to_rad(30.0)
+	await _frames(2)
+	var lagging: float = absf(_yaw_in_view(gun_w2) - steady)
+	await _frames(30)
+	var settled: float = absf(_yaw_in_view(gun_w2) - steady)
+	_check("W2 the revolver lags 2 to 4 degrees behind a quick turn, and comes back",
+		lagging >= 2.0 and lagging <= 4.0 and settled <= 1.0, "lag %.2f, after %.2f" % [lagging, settled])
+
+	# W3 out of a sprint it takes a moment to come back up
+	shots.clear()
+	revolver.reset_for_practice()
+	_put_player(Vector3(40, 1.05, 20))
+	await _frames(10)
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _frames(40)
+	Input.action_release("sprint")
+	Input.action_release("move_forward")
+	await _frames(3)
+	await _tap("throw")
+	var out_of_run := shots.size()
+	Input.action_press("move_forward")
+	Input.action_press("sprint")
+	await _frames(40)
+	Input.action_release("sprint")
+	Input.action_release("move_forward")
+	await _frames(10)
+	await _tap("throw")
+	_check("W3 out of a sprint, no shot for 0.15 s", out_of_run == 0 and shots.size() == 1,
+		"at 5 frames %d, at 12 frames %d" % [out_of_run, shots.size()])
+	await _frames(40)
+
 	# R16 in arm's reach, F is a pistol-whip, not a kick
 	revolver.reset_for_practice()
 	var g16 := _fighter(Vector3(38, 0, -1.0))
@@ -662,6 +713,12 @@ func _run() -> void:
 
 
 # Helpers
+
+## Which way a gun's barrel points across the view (degrees, + to the left).
+func _yaw_in_view(gun: Node3D) -> float:
+	var bore: Vector3 = player.camera.global_basis.inverse() * -gun.global_basis.z
+	return rad_to_deg(atan2(-bore.x, -bore.z))
+
 
 ## How far a squad's heart sinks when one of two men is shot down in front
 ## of the other: by a ball to the head, or burst by a shell point-blank.

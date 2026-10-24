@@ -747,6 +747,11 @@ func trail_samples() -> int:
 	return _trail.sample_count()
 
 
+## How far down out of sight what is in hand is: 0 up, 1 gone.
+func item_lowered() -> float:
+	return _main_lower
+
+
 func is_item_visible() -> bool:
 	return _main_item != null and _main_lower < 0.05
 
@@ -765,6 +770,12 @@ func _update_main(delta: float) -> void:
 	# Down out of sight quickly when the hand is wanted on a ledge or a rung.
 	if _right_wanted:
 		step = delta / 0.1
+
+	# A heavy thing (the revolver) is slower to put away and to bring up.
+	if not _right_wanted and _main_item != null:
+		var going_down := _switching or not want_up
+		var seconds: float = float(_main_item.get_meta(&"stow_time" if going_down else &"draw_time", switch_time))
+		step = delta / maxf(seconds, 0.01)
 
 	if _switching:
 		_main_lower = move_toward(_main_lower, 1.0, step)
@@ -1274,14 +1285,17 @@ func _update_motion(delta: float) -> void:
 
 		if _look_known:
 			var turn := (_last_look.inverse() * look).get_euler()
-			_sway -= Vector2(turn.y, turn.x) * sway_lag
+			# A heavy thing lags further, up to a point; held up at the eye,
+			# less.
+			var lag: float = sway_lag * float(_main_item.get_meta(&"sway_lag", 1.0)) if _main_item != null else sway_lag
+			_sway -= Vector2(turn.y, turn.x) * lag * (1.0 - 0.6 * _gun_aim)
 
 		_last_look = look
 		_look_known = true
 
 	_sway_v += (-_sway * 150.0 - _sway_v * 18.0) * dt
 	_sway += _sway_v * dt
-	_sway = _sway.limit_length(0.3)
+	_sway = _sway.limit_length(float(_main_item.get_meta(&"sway_most", 0.3)) if _main_item != null else 0.3)
 	_hop_v += (-_hop * 170.0 - _hop_v * 13.0) * dt
 	_hop += _hop_v * dt
 
