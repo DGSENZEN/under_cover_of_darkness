@@ -179,5 +179,38 @@ class Greybox(unittest.TestCase):
         self.assertTrue(greybox.gate(greybox.build(P.data())))
 
 
+def _rooms(width=3.0, at=(10, 5), b_height=4.0, b_rect=(10, 2, 20, 8)):
+    """Two rooms side by side at one floor, an opening between."""
+    P = plan.Plan("rooms")
+    P.space("a", plan.rect(0, 0, 10, 10), floor=0.0, height=6.0, openings=[{"to": "b", "at": at, "width": width}])
+    P.space("b", plan.rect(*b_rect), floor=0.0, height=b_height, openings=[{"to": "a", "at": at, "width": width}])
+    return P.data()
+
+
+class Openings(unittest.TestCase):
+    """A gap in a wall opens onto the room beside, never onto nothing."""
+
+    def test_clean_opening_passes(self):
+        self.assertEqual(greybox.gate(greybox.build(_rooms())), [])
+
+    def test_gap_past_the_rooms_end_caught(self):
+        # The gap runs z 1.5-4.5; room b starts at z 2.
+        problems = greybox.gate(greybox.build(_rooms(at=(10, 3))))
+        self.assertTrue(any(p.startswith("gap: a to b") for p in problems), problems)
+
+    def test_gap_above_the_rooms_ceiling_caught(self):
+        # The gap is 3 m tall; room b only 2.5.
+        problems = greybox.gate(greybox.build(_rooms(b_height=2.5)))
+        self.assertTrue(any(p.startswith("gap: a to b") for p in problems), problems)
+
+    def test_volume_found_whatever_the_order(self):
+        # A box inside the arm of an L, the box declared first.
+        P = plan.Plan("ell")
+        P.space("box", plan.rect(2, 12, 6, 16), floor=0.0, height=3.0)
+        P.space("ell", [(0, 0), (20, 0), (20, 10), (10, 10), (10, 20), (0, 20)], floor=0.0, height=3.0)
+        problems = greybox.gate(greybox.build(P.data()))
+        self.assertTrue(any(p.startswith("volume: box and ell") for p in problems), problems)
+
+
 if __name__ == "__main__":
     unittest.main()

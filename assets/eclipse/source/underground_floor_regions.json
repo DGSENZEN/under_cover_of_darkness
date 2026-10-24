@@ -1,0 +1,13 @@
+{
+ "slots": [
+  "tile_cream",
+  "tile_terra",
+  "tile_dark",
+  "grout",
+  "cement",
+  "steel",
+  "soot_black"
+ ],
+ "atlas_px": 2048,
+ "px_per_m": 228.71
+}

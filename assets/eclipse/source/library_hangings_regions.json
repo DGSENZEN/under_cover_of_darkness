@@ -1,0 +1,16 @@
+{
+ "slots": [
+  "wood",
+  "brass",
+  "steel",
+  "paper",
+  "cloth",
+  "herb",
+  "herb_dry",
+  "marigold",
+  "leather_red",
+  "tin"
+ ],
+ "atlas_px": 1024,
+ "px_per_m": 400.99
+}

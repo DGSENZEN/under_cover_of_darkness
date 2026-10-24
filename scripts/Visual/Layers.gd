@@ -30,6 +30,9 @@ const GROUND := 1 << 2
 ## moves only these). Effects all the same: the lightgem's cameras leave
 ## it out (Player.tscn).
 const BREATHED := 1 << 3
+## What a shaded lamp's shade keeps its light off (layer 5): the Metro corridor's vault above its work lamps, which
+## leave this layer out of their cull mask (lit by them, the vault showed a bright disc, a moon in a night sky).
+const SHADED_ABOVE := 1 << 4
 ## A fixture's glowing parts (a pitch head, coals, horn panes): they shine by
 ## their own glow, and a burner's light (a hand's breadth away) would blow
 ## them out, so burners leave this layer unlit.

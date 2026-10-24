@@ -68,10 +68,13 @@ func _run() -> void:
 	var off_ok: bool = screen != null and not screen.visible and get_tree().root.scaling_3d_scale == 1.0
 
 	if retro != null:
-		retro.virtual_height = height_before
+		retro.virtual_height = 480
 
 	_check("R2 with the grid off the screen hides and the 3D renders full size", off_ok and screen.visible,
 		"hidden when off %s, back on %s" % [off_ok, screen.visible if screen else false])
+
+	if retro != null:
+		retro.virtual_height = height_before
 
 	# R3 materials, as they enter the tree, sample their texels nearest
 	var linear := StandardMaterial3D.new()
@@ -302,12 +305,31 @@ func _psx_checks(retro: CanvasLayer) -> void:
 	#    no colour cut either: without the dither its bands would show
 	_check("R13 no dither, and the colour left whole: the screen keeps only its grid",
 		retro.dither == 0.0 and retro.color_levels == 0.0, "levels %.0f dither %.2f" % [retro.color_levels, retro.dither])
-	# R15 the grid is the PS2's 480 lines (the user, Oct 9 2026: 360 was too
-	#     low for the mixed look); F6 still steps down through 360 and 240
+	# R15 the grid is off by default (the user, Oct 16 2026: past the PS2
+	#     limits for the new standard); F6 still tries 480, 360 and 240
 	var fresh: CanvasLayer = load("res://scripts/Visual/Retro.gd").new()
-	_check("R15 the screen grid is 480 lines by default, F6 stepping 480 / 360 / 240 / off",
-		fresh.virtual_height == 480 and fresh._grids == [480, 360, 240, 0], "default %d, steps %s" % [fresh.virtual_height, fresh._grids])
+	_check("R15 the screen grid is off by default, F6 stepping off / 480 / 360 / 240",
+		fresh.virtual_height == 0 and fresh._grids == [0, 480, 360, 240], "default %d, steps %s" % [fresh.virtual_height, fresh._grids])
 	fresh.free()
+
+	# R16 with the grid off, the HUD's words still draw on screen
+	var hud := CanvasLayer.new()
+	hud.layer = 5
+	var label := Label.new()
+	label.text = "Salida"
+	hud.add_child(label)
+	add_child(hud)
+	var off_before: int = retro.virtual_height
+	retro.virtual_height = 0
+	await _frames(3)
+	var view := Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	var shows: bool = label.is_visible_in_tree() and label.text != "" and view.encloses(label.get_global_rect()) \
+		and label.get_global_rect().size.x > 0.0
+	_check("R16 with the grid off (the default) the screen hides, the 3D renders full size and HUD words still draw",
+		shows and not retro.get_node("RetroScreen").visible and get_tree().root.scaling_3d_scale == 1.0,
+		"label shown %s rect %s screen %s scale %.2f" % [shows, label.get_global_rect(), retro.get_node("RetroScreen").visible, get_tree().root.scaling_3d_scale])
+	retro.virtual_height = off_before
+	hud.queue_free()
 
 	# R14 the frame can be pulled toward a district's palette (the Eclipse
 	#     city's painterly look), off unless a map asks for it
@@ -335,6 +357,10 @@ func _crisp_checks(retro: CanvasLayer, player: CharacterBody3D) -> void:
 	var crisp: Node = retro.get_node_or_null("CrispText") if retro != null else null
 	var eye: Camera3D = player.camera
 	var ahead := -eye.global_basis.z
+	# These checks are about the grid: put it on (it is off by default).
+	var grid_before: int = retro.virtual_height
+	retro.virtual_height = 480
+	await _frames(2)
 	var words := Label3D.new()
 	words.text = "Who goes there?"
 	words.font_size = 36
@@ -373,6 +399,7 @@ func _crisp_checks(retro: CanvasLayer, player: CharacterBody3D) -> void:
 	await _frames(3)
 	var held_again: bool = words.layers == 0 and (ours.call() as Array).size() == 1
 	words.queue_free()
+	retro.virtual_height = grid_before
 
 	# A guard's words.
 	var guard: Node3D = load("res://Guard.tscn").instantiate()

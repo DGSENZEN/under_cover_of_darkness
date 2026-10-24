@@ -1,0 +1,15 @@
+{
+ "slots": [
+  "wood",
+  "lacquer_black",
+  "bone",
+  "brass",
+  "sign",
+  "copper",
+  "glass",
+  "sigil_wood",
+  "iron"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 170.2
+}

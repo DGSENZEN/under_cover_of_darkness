@@ -1,0 +1,21 @@
+{
+ "slots": [
+  "stone_old",
+  "stone",
+  "wax_white",
+  "wax",
+  "wax_red",
+  "wood",
+  "cloth",
+  "tin",
+  "brass",
+  "steel",
+  "burlap",
+  "enamel",
+  "tile_line",
+  "sign",
+  "cement"
+ ],
+ "atlas_px": 2048,
+ "px_per_m": 119.36
+}

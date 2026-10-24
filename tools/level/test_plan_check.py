@@ -192,5 +192,41 @@ class Surfaces(unittest.TestCase):
         self.assertEqual(roofs["hall"], -8.0)
 
 
+def _burrow(third=False):
+    """Two rooms under nothing, joined by an opening; the arrival in the first.
+    No street, no events; a brink only to draw by."""
+    P = plan.Plan("burrow")
+    P.brink(rect(-100, -100, 100, 100))
+    P.space("platform", rect(0, 0, 40, 10), floor=-14.0, height=6.0, openings=[{"to": "hall", "at": (40, 5)}])
+    P.space("hall", rect(40, 0, 60, 20), floor=-14.0, height=6.0)
+
+    if third:
+        P.space("cellar", rect(-30, 0, -10, 10), floor=-14.0, height=4.0)
+
+    P.landmark("doors", "arrival", (20, -14, 5))
+    return P
+
+
+class Underground(unittest.TestCase):
+    def test_underground_reach_from_arrival(self):
+        self.assertEqual(plan_check.check(_burrow().data(), plan_check.UNDERGROUND_RULES), [])
+
+    def test_unreached_space_reported(self):
+        problems = plan_check.check(_burrow(third=True).data(), plan_check.UNDERGROUND_RULES)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("cellar", problems[0])
+        self.assertIn("reached", problems[0])
+
+    def test_zocalo_rules_unchanged(self):
+        # The default is still the Zócalo's: no street, no events, no size.
+        self.assertIs(plan_check.check.__defaults__[0], plan_check.ZOCALO_RULES)
+        problems = plan_check.check(_burrow().data())
+        self.assertTrue(any("street" in p for p in problems), problems)
+        self.assertTrue(any("event field" in p for p in problems), problems)
+        self.assertTrue(any("brink is" in p for p in problems), problems)
+        # (test_zocalo_plan.py, run beside this by level.sh test, holds the
+        # Zócalo's own plan clean under them.)
+
+
 if __name__ == "__main__":
     unittest.main()

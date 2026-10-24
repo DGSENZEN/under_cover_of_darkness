@@ -29,5 +29,6 @@ GODOT=godot bash tools/run_suites.sh
 | [Lights gallery](maps/lights_gallery.tscn) | Fixture states and lighting inspection. | [Rendering](docs/systems/rendering.md) |
 | [Garrison](maps/garrison.tscn), [NPC showcase](maps/npc_showcase.tscn) | Scripted night, cast and cinematic presentation. | [Cinematics](docs/systems/cinematics.md) |
 | [Retro showcase](maps/retro_showcase.tscn) | Rendering-style controls. | [Rendering](docs/systems/rendering.md) |
+| [Underground and library](maps/underground_library_lab.tscn) | Continuous Metro corridor and haunted bookshop. Walk east through the arch. | F1 work lights, F2 form inspection, F3 decals; approach books to open them. |
 
 [Credits and asset licenses](CREDITS.md) remain the source for attribution. Existing design records and bug investigations under `docs/` provide historical context; use the systems guides and source for current contracts.

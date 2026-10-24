@@ -1,0 +1,18 @@
+{
+ "slots": [
+  "leather_red",
+  "leather_brown",
+  "leather_green",
+  "leather_black",
+  "cloth_blue",
+  "vellum",
+  "gilt",
+  "page_edge",
+  "paper",
+  "label",
+  "wood",
+  "brass"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 1010.95
+}

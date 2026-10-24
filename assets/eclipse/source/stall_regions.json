@@ -1,0 +1,31 @@
+{
+ "slots": [
+  "steel",
+  "wood",
+  "cloth",
+  "brass",
+  "tin",
+  "paper",
+  "wax",
+  "herb",
+  "herb_dry",
+  "marigold",
+  "clay",
+  "glass",
+  "neon",
+  "cloth_patch",
+  "paint_blue",
+  "enamel",
+  "sign",
+  "stone",
+  "chile",
+  "glass_amber",
+  "glass_green",
+  "seal",
+  "bread",
+  "picado",
+  "picado_b"
+ ],
+ "atlas_px": 2048,
+ "px_per_m": 92.17
+}

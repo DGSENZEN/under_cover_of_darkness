@@ -57,6 +57,15 @@ Every sound in the game is a recording, cut and levelled from the packs below by
 - **Rain (calm and strong) and the wind in the weather**: "Nature Essentials" from the
   "Essentials Series" by **NOX SOUND**, CC0; **dripping under the eaves**: "FilmCow
   Recorded SFX" by **FilmCow**, used with the user's approval (Sept 27 2026).
+- **The Metro Underground's hums (a neon sign, an electrical box) and tile footsteps**:
+  "Electromagnetic" and "Footsteps Essentials" from the "Essentials Series" by **NOX SOUND**, CC0.
+- **The Underground's crowd**: a bed laid from the game's own murmurs, hums, sighs, laughs,
+  throat-clearings and coughs, all cut from the NOX voices (CC0).
+- **A train passing, jars rattling (the Underground)**: "Nature Essentials" wind by **NOX SOUND**
+  (CC0) under "big distant thump" from "FilmCow Designed SFX"; "glass full of beads" and "glass
+  sliding" from "FilmCow Recorded SFX", by **FilmCow**, used with the user's approval of the packs.
+- **A wall vent's warm air, a tamale steamer's hiss (the Underground)**: "ventilation hum" and
+  "gas leak" from "FilmCow Recorded SFX" by **FilmCow**, used with the user's approval of the packs.
 - **Thunder**: "100 CC0 SFX #2" by **rubberduck**
   ([OpenGameArt](https://opengameart.org/content/100-cc0-sfx-2)), CC0.
 - **Lighting a torch, snuffing a flame, dousing one**: the "400 Sounds Pack" (fire
@@ -101,3 +110,18 @@ and painted over by `tools/textures/eclipse_atlas.py`:
   ([blender.org](https://www.blender.org/download/demo-files/)). Turned, scaled,
   rigged, aged and painted for the game by `tools/arms/extract_base_hand.py` and
   `tools/arms/build_fp_arms.py`.
+
+### Free to use (CC0, credited with thanks)
+
+- **The spectral skull** of the librarian's necromancy books and the dead's faces in their smoke
+  (`assets/characters/skull/skull-Low4K.obj`): "human skull" by **CDmir**
+  ([OpenGameArt](https://opengameart.org/content/human-skull-0)), CC0. Its own textures are not used.
+- **The base body** behind the alchemists' homunculus and the librarian's shadow
+  (`assets/characters/base`): "Universal Base Characters" by **Quaternius**
+  ([quaternius.com](https://quaternius.com)), CC0.
+- **The librarian's shadow's walk** (`assets/characters/animations/UAL1_Standard.glb`, `Walk_Formal_Loop`):
+  "Universal Animation Library" by **Quaternius** ([quaternius.com](https://quaternius.com)), CC0.
+
+- **The living words' Latin atlas** (`textures/painted/library/glyphs_latin.png`, baked by
+  `tools/textures/library_glyphs.py`): Roboto Bold by **Christian Robertson** (Google), Apache License 2.0,
+  already in `examples_dd3d/`.

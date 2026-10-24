@@ -20,6 +20,10 @@ __pycache__/
 textures/source/
 textures/ps2/
 
+# The user's own brush sheets (tools/textures/brushes.py), kept local by their choice;
+# the textures painted with them are committed.
+textures/brushes/
+
 # Props build backups (tools/props)
 assets/props/source/backup/
 

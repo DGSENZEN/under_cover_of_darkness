@@ -1,0 +1,396 @@
+# The Librarian's Shop, Part 2: the Living Books — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execution approach remains for the user to select; no agents are dispatched by this document.
+
+**Goal:** Finish the library's supernatural presentation: distinct effects from opening books, living words, floating books, section auras, and a room lit and disturbed by its contents.
+
+**Architecture:** Keep the approved room and book geometry. A level-owned `LibraryEffects` node composes small controllers for book projections, word paths, floating books, lighting, shelf changes and the ward. Reuse the existing mesh-effect shaders and candle appearance; do not couple the library to the corridor's uncommitted vent work.
+
+**Tech Stack:** Godot 4.5, GDScript, existing `MeshVfx`, `LiveBook`, `BookFiller`, Blender kit tools and Forward+ rendering. No new runtime dependencies.
+
+**Spec:** `docs/superpowers/specs/2026-10-17-librarian-shop-design.md`, particularly §§2–5; Part 1 corrections in `docs/superpowers/plans/2026-10-17-librarian-shop-part-1-rulings.md`; appearance rules in `docs/superpowers/refs/underground/vfx_method.md`.
+
+**Status:** Approved by the user Oct 19, 2026 for native execution in this chat. Tasks 1–2 are implemented and tested; Task 2's lighting family awaits visual review before Task 3. Tasks 3–10 remain pending. Changes remain uncommitted until that review. Current library: `.claude/worktrees/metro-standard/maps/library_lab.tscn`, on branch `metro-standard`.
+
+**First family:** `docs/superpowers/refs/underground/library_stills/part2-lighting/README.md` contains the review media, verification results and implementation choices. This is the lighting and opening-state foundation, not completion of Part 2's projection/particle families.
+
+**Revision after feedback:** The user requested more pizzazz. `docs/superpowers/refs/underground/library_stills/part2-radiance/README.md` is the current review: animated paper tracery, shaped wisps, fixed-pool mesh sparks, cage leaks and the section auras pulled forward from Task 4. Distinct section projections and the remaining Task 4 families still await implementation.
+
+## Global Constraints
+
+- Preserve the walkable Part 1 layout, including the front table at `(2.9, 0, -0.3)`, the two short low cases and the corrected lectern positions. Ways in at least 1.1 m, clear to 2.1 m; verify with the actual player's metre-wide capsule.
+- Effects are our own meshes: hard alpha erosion, banded colour, fresnel rims, restrained quantities. No soft smoke-card clouds or downloaded VFX assets.
+- Sections: chronology amber-gold; necromancy chartreuse; alchemy copper-orange/gold; metaphysics violet; hunting iron red. Novels have distinct character colours.
+- The user writes all words and paints signature art. Existing title/sign/ledger slots remain available; invented script is temporary, replaceable content.
+- Each new visual family is shown close up and in place, including motion, and reviewed by the user before the next family. Do not claim visual approval from automated tests.
+- New human figures, lechuza and chupacabra models need separate reference/model reviews. First hunting delivery uses weapons/sigils and the approved nahual; novels use approved emblem stand-ins rather than crude bodies.
+- Six to ten floating books; about twelve live books (currently twelve: seven studies, three novels, two spells). Books retain their existing proximity distances and timing.
+- No librarian character, sound, commerce, dialogue, quests or placement in `maps/metro` in this project.
+- Nothing merged or pushed without the user's OK. Preserve unrelated changes in `Vfx.gd`, `Fumes.gd`, `ambient_test.gd` and `underground_lab_test.gd`.
+
+## Review Focus
+
+1. A player leaves halfway through opening or reverses repeatedly: effects and lights track the actual opening amount and never remain orphaned. Task 1 tests this.
+2. A lab is freed, recreated or viewed with a replacement camera: no retained nodes, materials or watcher references leak across scenes. Tasks 1 and 10 test this.
+3. A book on a rotated shelf or sloped lectern opens: its projection starts on its pages and grows upward in the room, without intersecting the case above it. Tasks 1 and 3 test this.
+4. A shelf is partly visible or visible through the arch: no rearrangement happens in sight or within a few seconds after being seen. Task 7 tests this conservatively.
+5. F1/F2/F3 and cosmetic lighting interact with stealth: debug inspection restores the previous state, cosmetic glow does not illuminate the lightgem probe, and intentional book illumination is accounted for separately. Tasks 2 and 10 test this.
+
+## Delivery order and files
+
+Work in the existing `metro-standard` worktree. Its library is newer than the root checkout; do not copy the old root scene over it. Use native execution unless the user selects delegation.
+
+Create runtime scripts under `scripts/Visual/Library/`: `LibraryEffects.gd` (composition), `BookProjection.gd` (one book's effect), `LibraryLight.gd` (light state), `LibraryGlyphs.gd` (replaceable script/font data), `WordChain.gd` (flow along a path), `FloatingBooks.gd` (overhead movement), `ShelfStir.gd` (unwatched edits), `LibraryWard.gd` (the chained book's reaction), and `LibraryShadow.gd` (the reviewed silhouette's routes). Only add another file where it has a distinct responsibility.
+
+Create `tests/library_effects_test.gd` and its `.tscn`; keep Part 1 regressions in `tests/library_lab_test.gd`. Extend the existing library stills tool with named effects views and deterministic staging flags. Create `tools/eclipse/library_effects.py` and add a `LibraryEffects` kit-test class for new projection/candle geometry. Extend `tools/eclipse/lab.sh` only to register that kit.
+
+The existing `.tscn` simply loads `library_lab.gd`; no scene-file change is required unless composition moves into the editor later.
+
+### Task 1: Book effects that follow opening and closing
+
+**Files:** Create `LibraryEffects.gd`, `BookProjection.gd`, the effects test scene/script; modify `maps/library_lab.gd` and the stills tool.
+
+**Interfaces:** `LibraryEffects.build(lab: Node3D) -> void` called after the lab has built books and lights; `set_enabled(on: bool) -> void`; `set_inspection(on: bool) -> void`. `BookProjection.build(book: LiveBook, index: int) -> void`, `presence: float`, `origin_world() -> Vector3`. Controller nodes and resources belong to the lab. Keep `LiveBook.opened/closed` semantics intact.
+
+- [ ] Add failures: every live book has exactly one controller; halfway-open reversal returns presence to zero when shut; twenty reversals do not increase node count. A replacement camera works after the old camera is freed. No camera leaves the controllers inert without errors.
+- [ ] Run `bash tools/run_suites.sh tests/library_effects_test.tscn` and record the intended failures.
+- [ ] Implement presence from `smoothstep(0, 1, book.open)`, with full erosion/hidden meshes at zero. Use the page-block bounds to anchor effects. Put effects on `Layers.FX`, disable shadow casting and physics interpolation for frame-driven motion; store ShaderMaterials in mesh surface slots so F2 spares them. Do not draw placeholder volumes as final effects.
+- [ ] Add rotated-book and sloped-lectern assertions: anchor remains on the pages; generated effect envelope clears the board overhead. Bound study projections to the available gap, projecting outward into the aisle only above the book's reserved opening space.
+- [ ] Re-run the effects and Part 1 suites. Check the baseline before blaming new code for pre-existing failures. Commit only this task's files.
+
+### Task 2: The books light the shop
+
+**Files:** Create `LibraryLight.gd`; modify the coordinator and lab's `_lights`, F1/F2 handling and regression tests.
+
+**Interfaces:** `LibraryLight.build(lab: Node3D) -> void`, `set_inspection(on: bool) -> void`. Expose `section_lights: Dictionary`, `book_lights: Array[OmniLight3D]`, `cage_light: OmniLight3D` for diagnostics. Keep the corridor sodium separate from the shop's work lights.
+
+- [ ] Add failures: two shop work lights off initially; corridor sodium and warm lamp remain on. Each of five cases and the cage has its own colour; live-book light energy is zero shut and follows presence when open. Both spellbooks receive explicit section assignments in the lab rather than an accidental empty-section fallback.
+- [ ] Test F2 round trips with F1 both on and off: previous work-light state and lamp material are restored. Cosmetic projection lights exclude `Layers.GEM_PROBE`; designated shelf/book illumination remains a deliberate part of the exposure calculation and is measured at standing positions.
+- [ ] Implement low, independently phased section light and cage seam glow. Start with short ranges, no new shadowed projection lights, and avoid washing out the painted shelf details. Use material copies for emission; do not mutate the shared book atlas material.
+- [ ] Run both suites; capture `shop_front`, `shop_inside`, all five shelf views and `corner_cage` with F1 off. Inspect exposure, colour separation and the dark paths between pools. Present stills to the user; wait for the family review before Task 3. Commit the reviewed family.
+
+### Task 3: Five sections, five recognizable projections
+
+**Files:** Create `tools/eclipse/library_effects.py`; register it in `lab.sh`; extend `test_kit_bpy.py`; extend `BookProjection.gd`, the stills tool and effects suite.
+
+**Interfaces:** Export `assets/eclipse/kit/library_effects.glb` with named parts: `chrono_hand`, `chrono_ring`, `chrono_page`, `necro_hand`, `necro_skull`, `alchemy_ouroboros`, `alchemy_flask`, `alchemy_homunculus`, `meta_ring`, `meta_eye`, `meta_plane`, `hunt_stake`, `hunt_crossbow`. `BookProjection` selects a composition by `book.section`, not by room position. Reuse approved meshes where suitable; new anatomical parts require review.
+
+- [ ] Kit tests fail first for missing pieces, open geometry where a closed solid is required, degenerate faces and dimensions exceeding each book's projection envelope. Build the smallest visually complete family first; run the class with Blender's `--python-exit-code 1` before importing.
+- [ ] Implement and review chronology: turning hands/rings, upward sand as small mesh grains, an aging/unaging page. Test grains stay bounded and recycle, and the effect shuts down on closing.
+- [ ] Implement and review necromancy: articulated skeletal hand and skull, chartreuse mesh spirit-fire, faces carried in shaped eroding tendrils. Use approved anatomy or review new models; no blobs substituted for faces.
+- [ ] Implement and review alchemy: rotating ouroboros, modelled flask/homunculus and gold symbols. Inspect transparent surfaces from both aisles for sorting faults.
+- [ ] Implement and review metaphysics: nested sigils, an opening eye and folding planes. Folding planes have deliberate front/back treatment and depth separation.
+- [ ] Implement and review hunting: the section's weapons with its sigils; include the existing approved nahual mesh as a spectre. Explicitly leave lechuza/chupacabra for their own reviewed model families.
+- [ ] For each family, run the effects suite, capture a close view and an aisle view with a six-second opening/closing clip, inspect from both sides and obtain the user's verdict before starting the next family. Record which compositions are implemented; do not equate one generic ring with all five effects. Commit each reviewed family separately.
+
+### Task 4: Novels, spells and section auras
+
+**Files:** Extend the kit builder, `BookProjection.gd`, coordinator, effects tests and stills views.
+
+**Interfaces:** Novel emblems chosen by stable book index, with separate colours; spells use their explicit section colour. `LibraryEffects` owns five persistent section aura roots independently of proximity-book presence.
+
+- [ ] Add failures: the three novels show distinct emblems/colours; two spells show wards/sigils instead of novel emblems; five section auras remain attached to their cases; closing one book does not suppress another's effect.
+- [ ] Implement novel stand-ins as carefully shaped hat/sword/rose emblems with dark bodies and coloured rims. Spells grow interlocking wards and thin shaped aura shells. Section auras rise in sparse tendrils from actual books rather than filling the whole room.
+- [ ] Run both suites. Capture all kinds with the books open and closed, inspect F2 preservation and review novels, spells and auras as separate visual families. Commit after each review.
+
+### Task 5: Living words, from book to bookstand
+
+**Files:** Create `LibraryGlyphs.gd`, `WordChain.gd`, `library_glyph.gdshader`; extend coordinator, stills and effects tests.
+
+**Interfaces:** `LibraryGlyphs.script(seed: int, count: int) -> String`, `mesh(text: String, font: Font, size: float) -> Mesh`; `WordChain.build(points: PackedVector3Array, text: String, font: Font) -> void`, `set_presence(value: float) -> void`, `set_text(text: String, font: Font) -> void`. The font/text are inputs, so readable Spanish/Latin can replace the invented script.
+
+- [ ] Add failures: deterministic invented script, accented replacement text, spaces and missing-glyph fallback, empty text, zero-length path. Repeated text replacement keeps draw/node counts bounded and returns old resources.
+- [ ] Make about forty original glyphs as font/vector outlines with SDF rendering for sharp edges; draw glyphs along arc-length-sampled curves in batches. Glyph surfaces may be planar, as the spec allows; do not use generic billboard smoke sprites. Font acquisition or generation must preserve the repository's licensing rules.
+- [ ] Author book-origin streams and two inter-stand wave routes using the current table/lectern locations. Maintain readable spacing, stable path orientation, and a continuous loop without a jump at the seam. Shut books stop contributing their streams.
+- [ ] Run the suite. Capture side/front/close views plus a clip following a wave to its destination. Review the glyph family and then the moving chains before committing.
+
+### Task 6: Floating books beneath the vault
+
+**Files:** Create `FloatingBooks.gd`; extend coordinator, stills tool and effects tests; reuse the existing live-book kit.
+
+**Interfaces:** `FloatingBooks.build(meshes: Dictionary, look: Material, spots: Array) -> void`, `books: Array[Node3D]`, `set_enabled(on: bool) -> void`. Use a local seeded RNG and fixed-size book pool; do not add these books to proximity logic.
+
+- [ ] Add failures: between six and ten books; all overhead travel bounds stay inside the vault and above 2.1 m; no book sweeps through another or through a shelf. At least one return/departure cycle completes with no duplicate visible shelf book at a transfer slot.
+- [ ] Implement eight books on irregular, slow, separated routes with modest yaw/pitch and fanning pages. Reserve genuinely empty transfer slots instead of overlapping the filler. Returning books are hidden only after reaching their assigned shelf slot, never teleported in open view.
+- [ ] Run suites and capture `shop_vault`, `shop_inside`, and an extended transfer clip. Inspect under the lowest vault sides and review the family before committing.
+
+### Task 7: Shelves rearrange while unwatched
+
+**Files:** Create `ShelfStir.gd`; extend `BookFiller.gd`, coordinator and tests.
+
+**Interfaces:** Add stable `draw_index`, `instance_index` and local `transform` to each filler layout entry. `ShelfStir.build(spots: Array, layout: Array, draws: Array) -> void`, `try_stir() -> bool`, `changes: int`. Update layout bounds and the corresponding MultiMesh transform together.
+
+- [ ] Add failures: a fully or partly visible board never changes; a board seen less than five seconds ago never changes; with no camera nothing changes. Test frustum intersection of the whole board, not only its centre. Treat uncertain visibility as visible.
+- [ ] Implement scene-local 20–40 s scheduling and conservative board visibility. For occluded boards, require geometry rays for multiple points; do not treat a single blocked centre ray as enough. Make an atomic new arrangement only after validating board/upright bounds, reserved study/transfer slots, and neighbour separation.
+- [ ] Chronology reorders by height; elsewhere slide a pulled book home, close a gap or straighten a lean. No invalid transformation is published. Reuse Part 1's placement assertions after every change.
+- [ ] Test a visible board stays identical over 120 simulated seconds; looking away allows a change, looking back shows a valid arrangement; seeded scheduling stays within 20–40 s. Review a look-away/look-back clip and commit.
+
+### Task 8: The chained book pushes against the ward
+
+**Files:** Create `LibraryWard.gd`; extend kit builder for five candle stubs and coordinator, shader/tests/stills as needed. Reuse candle materials without rewriting the in-progress corridor VFX implementation.
+
+**Interfaces:** `LibraryWard.build(chained: ChainedBook, centre: Vector3, radius: float) -> void`; `candles: Array[Node3D]`, `strength: float`. Read `ChainedBook.strain` and `staple_now()`; retain its existing animation/chain attachment.
+
+- [ ] Add failures: exactly five stubs sit on the ward arc clear of its salt opening, desk legs and walking paths. At rest flame tilt is small; during `strain_now()` every flame leans away from the chained book; settled strain restores rest. Chain-to-staple separation remains below Part 1's 1 cm bound.
+- [ ] Bind shaped flame tilt and ward flare to strain. Words crawl from the cover toward the circle, then recoil at its boundary; they never pass through the salt. Use Task 5's glyph/path implementation rather than a second text system.
+- [ ] Run both suites. Capture `corner_chained`, `corner_ward`, and a repeated-strain clip with each candle and the salt opening visible. Review candles and the containment reaction before committing.
+
+### Task 9: The librarian's ownerless shadow
+
+**Files:** Create `LibraryShadow.gd`; add the reviewed silhouette under `textures/painted/underground/`; extend coordinator, tests and stills staging. Reuse the corridor shadow's timing/angle conventions without changing its existing routes.
+
+**Interfaces:** `LibraryShadow.build(routes: Array[Transform3D], texture: Texture2D) -> void`, `watcher: Camera3D`, `cross_now() -> void`. Each route supplies a local wall frame and a shelf-front run. Track the current camera safely.
+
+- [ ] Present a silhouette of the tall, wide-brimmed-hat/long-coat librarian for user review before installing it. Existing corridor artwork is a reference, not automatic approval for this character.
+- [ ] Add failures: only appears in peripheral vision, disappears on direct gaze, does not project across the arch or unrelated surfaces, and survives camera replacement. Natural crossings occur every 60–120 s as the library design requests.
+- [ ] Implement routes on actual shelf fronts/back-wall spans with shallow projection depth and correct orientation. F3 hides this decal with the others while preserving state on restore. Do not alter the corridor shadow's 40–90 s interval.
+- [ ] Run tests; inspect a peripheral-to-direct-gaze clip. Obtain review and commit.
+
+### Task 10: Integrated dressing, performance and handoff
+
+**Files:** Complete coordinator wiring and regression coverage; extend `tests/library_render_check.gd`, stills and lab key help; update the design's implementation-status notes.
+
+- [ ] Add failures for F2 material/state preservation across all new draws, F3 shadow/ward-decal state, effects disabled/re-enabled, partial initialization with missing kit assets, and repeated lab teardown/reload. Missing visuals report the resource path rather than crashing.
+- [ ] Walk from SPAWN to both aisles, every live book and the desk with all effects running. Re-run Part 1 reachability and overlap tests. Check the player's view, not just detached inspection cameras.
+- [ ] Run `bash tools/run_suites.sh tests/library_lab_test.tscn tests/library_effects_test.tscn`; then the relevant `ambient`, `vfx` and `underground_lab` suites after recording their existing dirty-worktree baseline. Run the Blender library-kit classes; run the full suite once for final integration and report known failures separately.
+- [ ] Run the windowed `tests/library_render_check.tscn` on the same renderer/resolution as baseline. Add a comparison of effects enabled/disabled in the same library and retain the existing shop-versus-underground comparison (1.1×). Headless timing is not GPU evidence. Profile failures; agree any necessary budget change explicitly.
+- [ ] Capture opening, closing, inter-stand words, overhead travel, all five sections, the cage and the ward in motion. Inspect close geometry, clipping, bloom, transparent sorting, frame-driven jitter and shader compilation errors. Keep review media in a dedicated Part 2 output directory.
+- [ ] Record accepted families, deferred creature/character models, exact test results and unresolved defects. Only call Part 2 complete when each in-scope family has passed the user's review; do not merge or push.
+
+## Oct 19 user revision: books and one continuous map
+
+User direction after the radiance preview: effects must be part of the books; haunted books must move more as if alive; combine the Underground and library labs into one map. This explicitly replaces the earlier separate-lab scope. Execute in this chat under the existing authorization.
+
+- Attach light tracery to actual paper materials. Align the small page filaments/glints to the physical page plane, with centimetre-scale surface bounds. Cage emission belongs to the animated paper seams, without separate floating leaks.
+- Keep open leaves fluttering, covers breathing, quarantined books rocking between larger struggles, and the chained cover straining more strongly while preserving its chain attachment.
+- Add `maps/underground_library_lab.tscn`: replace the Underground's eastern end wall with the library arch. Reuse the library as a translated/rotated room with one player, environment, HUD and F-key controller. Correct local/world anchors for book batches, live books, lamp and chains.
+- Verify actual player traversal through the arch, not just sampled clearance; preserve both standalone scenes and their regressions. Render the continuous approach, reverse view and close motion clips.
+
+This revision refines the current visual family. Distinct projection families and the other pending Part 2 tasks still need their own implementation and visual reviews.
+
+## Oct 23 look polish
+
+The user picked four faults in the Oct 19 stills: the front wall and shopfront, book light printing discs, the cage's flat glow and the camo, and the grade. All four are fixed in one pass; see `docs/superpowers/refs/underground/library_stills/polish-oct23/README.md`.
+
+New checks: E31–E34 and J14–J16. E21 was restated, because it had pinned the flood this pass removes.
+
+One part stays open: the painted textures' own brush mottle on the baize and the low cases' tops. That needs a recipe pass. Projection families (Task 3 onward) are still pending.
+
+## Task 3, chronology (Oct 23, awaiting review)
+
+`scripts/Visual/Library/Chronology.gd`, built by `BookProjection` over chronology studies. Over the opened pages:
+- an astrolabe of three rings, each turning on its own axis, the outer one ticked inward with the hours;
+- two clock hands on a hub;
+- 36 sand grains climbing from the pages through a waist into the rings;
+- a ghost leaf caught mid-turn at the gutter, ageing and growing young on a 7 s cycle while the hands run backward.
+
+Review media: `docs/superpowers/refs/underground/library_stills/part2-chronology/`. Checks E35–E38: the family exists; it stays over the pages, under the board above and within the study's clear run; it moves; it clears on shutting.
+
+Calls made:
+- **Built in code, not a Blender kit.** The pieces are built like the ánimas' and the nahual's effects (`MeshVfx` style, v along each shape) instead of `tools/eclipse/library_effects.py`. The shared effect shader erodes and bands along each mesh's own UVs, which an exported kit's packed atlas UVs would scramble. Cost if wrong: the shapes move into a kit with authored UVs.
+- **Studies only.** The section families sit over studies alone; the chronology spellbook gets its wards in Task 4.
+- **Upright and fitted.** The family stands upright in the room whatever the pages' pitch, scaled to the headroom above (built for 0.33 m).
+
+## Task 3, necromancy (Oct 23, awaiting review)
+
+Chronology was approved by the user on Oct 23.
+
+`scripts/Visual/Library/Necromancy.gd`, over necromancy studies, in the ánimas' Graves look (`anima_silhouette`, `anima_aura`):
+- a skull hanging in a crown of chartreuse spirit-fire at the gutter, its jaw chattering in bursts, its eyes two points of fire;
+- a skeletal hand reaching up out of the right-hand page, burning out of the paper at its forearm, its fingers curling and opening;
+- three of the dead's faces (small skulls) carried up from the left-hand page on smoke columns, eaten away near the top and rising again.
+
+Checks E39–E42; kit tests in `LibrarySpectres`. Review media: `docs/superpowers/refs/underground/library_stills/part2-necromancy/`.
+
+Calls made:
+- **The skull is CDmir's CC0 "human skull"** (OpenGameArt), picked by the user from two CC0 candidates. It is cut into skull and jaw by `tools/eclipse/library_spectres.py`, which writes the jaw's hinge and the eye sockets to `library_spectres.json`. It is credited in `CREDITS.md`, and its folder has a `.gdignore`, since only Blender reads the OBJ. A skull built from spheres in code first read as a black ball.
+- **No CC0 hand skeleton exists**, so the hand's bones are built in code. Their lengths and joints come from the CC0 Quaternius base body's hand armature, drawn at 0.8 of life.
+- **The ánima shaders gained `floor_y`** (default 0, which keeps the ánimas as they were), so a skull or a finger bone doesn't burn away at its own foot.
+- **Per-frame cost trimmed.** Book projections cast their headroom ray only while their book is open, and the section auras measure theirs once. The Oct 19 effects had cost the shop's headless frame about 0.1 ms; L20 is back to 0.93×.
+- **Known weakness:** the spirit-fire under the skull is faint, chartreuse against the chartreuse-lit pages.
+
+## Task 3, alchemy (Oct 23, awaiting review)
+
+Necromancy was approved by the user on Oct 23.
+
+`scripts/Visual/Library/Alchemy.gd`, over alchemy studies:
+- a black ouroboros outlined in copper fire, coiled a full turn, its head biting its tail, turning as it swallows itself;
+- a round flask of glass hovering over the left-hand page, glowing amber water in its bulb, the homunculus curled inside, drifting, turning and breathing;
+- the six old signs (sun, moon, mercury, sulphur, salt, fire) circling the serpent as they rise, flaring gold and burning out near the top.
+
+Checks E43–E46; the homunculus's kit check is in `LibrarySpectres`. Review media: `docs/superpowers/refs/underground/library_stills/part2-alchemy/`.
+
+Calls made:
+- **The homunculus is a figure, built from Quaternius's CC0 male base body.** It is posed curled like an unborn child (`library_spectres.CURLED`, found by rendering), baked, cut to about 2,400 triangles and 5.5 cm. The female body read as an adult woman. It is drawn black with a copper rim, like the dead. It is the piece to judge hardest.
+- **The serpent is black with a copper rim.** A glowing coil against the lit pages bloomed into a ring with no head.
+- **The flask's glass draws both faces**, after its contents.
+
+## Task 3, occult metaphysics (Oct 23, awaiting review)
+
+Alchemy was approved by the user on Oct 23.
+
+`scripts/Visual/Library/Metaphysics.gd`, over metaphysics studies, in violet:
+- three nested sigils (a hexagram in its circle, a square in its circle, a triangle) at their own depths, turning against each other;
+- an eye in front of them, its almond black with a violet rim, that opens slowly, looks about with its slit pupil and shuts;
+- five black planes edged in violet fire over the left-hand page, folding up from a flat cross into an open box and lying flat again. Each plane has a grid of light on its front, 3 mm from the plane, and a bare back.
+
+Checks E47–E50. Review media: `docs/superpowers/refs/underground/library_stills/part2-metaphysics/`.
+
+Calls made:
+- **Dim glowing lines.** The sigils' lines are kept dim (energy 1.25, violet core). Brighter, with the page's light, they bloomed into a white ball.
+- **The eye stands in front of all the sigils**, its white a dim pearl. Further back and brighter, it was lost in the bloom.
+
+## Task 3, monster hunting (Oct 23, awaiting review)
+
+Metaphysics was approved by the user on Oct 23.
+
+`scripts/Visual/Library/Hunting.gd`, over hunting studies:
+- the approved nahual model (`underground_uncanny`), small, black with an iron-red burning rim and ember eyes, prowling round a binding ring of iron-red fire on the pages;
+- the librarian's own rack weapons above it (crossbow, sword cane, stakes, from `library_corner`), drawn black and rimmed, circling and aimed at it;
+- every 3.6 s the crossbow looses a bolt of fire, and the beast flinches, frays pale and gathers itself again.
+
+Checks E51–E54. E35 no longer asserts that other sections lack a family, since every section now has one. Review media: `docs/superpowers/refs/underground/library_stills/part2-hunting/`.
+
+Calls made:
+- **The nahual is drawn black with a rim, not in the bench's fraying spectre shader.** At this size the spectre shader frayed through and washed pale against the lit pages.
+- **The lechuza and the chupacabra wait** for their own reviewed models, as the plan says.
+- **The family's kit meshes are cached on the family, not in a static variable.** A static cache left a null-material engine error at the headless renderer's exit.
+
+With this, each section has its family: Task 3 is complete pending this review.
+
+## Task 4, novels, spells and section auras (Oct 23, awaiting review)
+
+Hunting was approved by the user on Oct 23, which completes Task 3.
+
+- **Novels** (`Novel.gd`): each novel's character as an emblem, picked by the novel's place among the novels. The hat is a top hat; the sword is a rapier with a cup hilt; the rose has its stem, leaves and a three-ring bloom. Each is black with a rim in the novel's own colour, rising and turning over the pages, with a thread of that colour.
+- **Spells** (`Spell.gd`): three ward rings interlocked like an armillary, each ticked, turning against each other over the gutter, inside a broken shell of aura round the whole book, in the spell's section colour. The left spell is chronology's, the right alchemy's.
+- **Section auras** (`SectionAura.gd`, owned by `LibraryEffects.auras`): up to four tendrils per section in its colour, rising from the books with the most room above them (at most two to a board, apart). They never pass the board above, and they show whether or not anyone is near. F2 inspection hides them.
+
+Checks E55–E59. Review media: `docs/superpowers/refs/underground/library_stills/part2-novels-spells-auras/`.
+
+Calls made:
+- **Thick blade.** The rapier's blade is thick through its middle; flat, it turned edge-on and vanished.
+- **Tight rims.** The emblems' rims are tight; wide, they washed the smooth turned shapes pale.
+- **Mostly-eaten shell.** The spell's shell is mostly eaten away (erosion 0.64, opacity 0.22); whole, it read as crumpled glass.
+- **Roomy aura roots.** The auras root where the books have the most room. Rooted on tall books with little room, they read as candle flames on the books' heads.
+
+## Task 5, the living words (Oct 23, awaiting review)
+
+Task 4 was approved by the user on Oct 23.
+
+- **The invented script** (`tools/textures/library_glyphs.py`): our own 40 glyphs in one hand, on U+E000 on, baked into a signed-distance atlas. The same tool bakes any font; Roboto-Bold, already in the repo under Apache 2.0, gives the `latin` atlas with Spanish and Latin accents for your words. Python tests 6/6. scipy was installed with Homebrew, at the user's say.
+- **`LibraryGlyphs.gd`**: the deterministic script, atlas loading, and fallback for missing characters.
+- **`WordChain.gd` and `library_glyph.gdshader`**: one MultiMesh of glyph quads per chain, so one draw call each. Each glyph is read from its atlas cell with a bright core, a dark rim and a faint halo. The first character leads, so the words read the way they go. Open chains fade at both ends; loops have no seam. `set_text` swaps any text and atlas without leaving nodes behind.
+- **`LibraryWords.gd`** (`LibraryEffects.words`):
+  - a stream curling up from every novel and spellbook while it is open, in its colour;
+  - two slow gold waves arching over the shop above head height, from the table of novels to the front-corner lectern and from the right wall's lectern to the same corner, already running when the player walks in;
+  - all hidden under F2.
+
+Checks E60–E65. Review media: `docs/superpowers/refs/underground/library_stills/part2-words/`.
+
+Calls made:
+- **An SDF atlas from our own strokes**, not a font file. No font tools are installed, and the strokes are ours outright. A font atlas from the same tool replaces the script.
+- **The plan's `mesh(text, font, size)` became `atlas(name)`.** A chain takes a text and an atlas; there are no meshes per string.
+- **Chains lay out their glyphs only while on screen**, and from frames precomputed every 5 mm along the path. Laid out every frame, the waves took the shop's headless frame to 1.2 times the underground bay's. Now it is 1.04 times, and the windowed render check passes at 1.006.
+
+## Task 6, floating books (Oct 23, awaiting review)
+
+Task 5 was approved by the user on Oct 23.
+
+`scripts/Visual/Library/FloatingBooks.gd` (`lab.floating`):
+- Eight books made from the live book's own parts, with their proximity turned off. Each hangs like a tent from its spine, pages down toward the reader, fanning on its own beat.
+- They fly on four nested rings round the shop (two books per ring, opposite each other) at 2.75–3.4 m, wandering, bobbing and banking. Nested rings and opposite places mean they never meet: nearest 0.49 m over 40 s.
+- Two (the outer ring's) now and then come down to a place kept empty for them, on the chronology case's and the metaphysics case's 1.9 m board. Each shuts on the way down, slides onto the board, lies there 10–22 s and rises back to where its ring has gone. It comes down and goes up only when its ring brings it near its place, and never jumps. The book on the shelf is the flying book itself, so there is never a duplicate and nothing teleports.
+
+Checks E66–E68. Review media: `docs/superpowers/refs/underground/library_stills/part2-floating/`.
+
+Calls made:
+- **The kept places** are on high boards (1.9 m), away from the ladder (chronology at -0.5 along the case) and from the studies' runs. `BookFiller` keeps them clear through the same keep runs as the studies.
+- **Rings rather than free wandering.** Separation holds by construction, and the variety comes from wander, bob, bank, fanning and the transfers.
+
+## Task 7, shelves rearranging while unwatched (Oct 23, awaiting review)
+
+Task 6 was approved by the user on Oct 23.
+
+`scripts/Visual/Library/ShelfStir.gd` (`lab.stir`):
+- Every 20–40 s (seeded), one board that nobody is looking at changes.
+- What counts as unseen:
+  - the whole board lies outside the camera's frustum; or
+  - all six rays from the eye to its open face are blocked.
+- A board seen within the last five seconds never changes. With no camera, every board counts as seen.
+- Chronology's standing books re-lay themselves tallest first, working around what lies, leans or is kept clear.
+- Elsewhere, one of these, picked at random:
+  - a pulled-out book is pushed home;
+  - the widest gap is closed;
+  - a leaning book stands up;
+  - a stack is squared differently.
+- Each change is checked whole before it is shown: within the uprights, lift 1–4 mm, no touching, kept runs clear. The MultiMesh instance moves with its layout entry.
+- `BookFiller` records each book's local transform, draw and instance. It also stands about one book in thirty a few centimetres proud, so there are books to push home.
+
+Checks E69–E74. Review media: `docs/superpowers/refs/underground/library_stills/part2-stir/` (the clip forces all six chronology boards at once; in play only one board changes per stir).
+
+Calls made:
+- **`build(lab)` and `try_board(i)`** instead of `build(spots, layout, draws)` and `try_stir()`. The test has to ask about one particular board; the scheduled stir tries the boards in a shuffled order.
+- **The visible-board test asks twenty times over ten seconds** instead of waiting 120 simulated seconds. A board in sight is refused before any change is computed, so a longer wait would add no coverage. The two-minute run is E74, unwatched.
+- **No animation.** A book is simply somewhere else the next time you look. Since the change only ever happens out of sight, a move would never be seen anyway.
+
+## Task 8, the chained book against its ward (Oct 23, awaiting review)
+
+Task 7 was approved by the user on Oct 23.
+
+- **Candles.** `tools/eclipse/library_ward.py` makes five stubs, `library_ward.glb` (`ward_candles`, 1,092 tris, painted from the shared `wax_white` recipe). They are burnt to different heights, with their wax pooled and run, and stand on the outer chalk ring at 50°, 84°, 140°, 218° and 305°. Those places keep clear of the salt's opening, the coat stand, his chair and the chained book's rest. Each wick carries the corridor's candle flame (Vfx `candles`, one flame per candle, its light's reach 1.4 m).
+- **`scripts/Visual/Library/LibraryWard.gd`** (`effects.ward`) follows the book's strain. Its `strength` rises with the strain and holds while the words are at the chalk, then lets go over about a second. With it:
+  - every flame leans straight away from the book (draught up to 1.8 m/s) and burns taller and brighter;
+  - the chalk rings glow, warmed toward a pale gold (a new `decal_ward_glow.png` from `decals.py`: the chalk's lines over black, because a decal's emission ignores its alpha);
+  - the ward's own script burns up flat in the band between the rings, in two arcs that miss his chair's foot.
+- **Words.** As a strain begins, three chartreuse word chains (the unexorcised's colour, the cage's) seep from under the cover's fore-edge. They cross the desk between the rituale, the reliquary and the oil phial, pour down its front, crawl over the boards toward the salt, and rear back short of the inner ring.
+- **Facing.** `WordChain.face` turns glyphs toward a direction as far as their way allows. The book's words face the customers on the desk front and lie face up on the boards; the band uses it to lie flat.
+
+Checks:
+- E75–E79 in `tests/library_effects_test.gd`;
+- `LibraryWard` in `tools/eclipse/test_kit_bpy.py`;
+- `test_ward_glow_is_its_chalk_lit_and_nothing_else` in `tools/textures/test_decals.py`.
+
+Review media: `docs/superpowers/refs/underground/library_stills/part2-ward/`. `strains.mp4` swings across the ward's front as the book strains every 5.3 s, so each candle and the salt's opening come into sight in turn.
+
+Calls made:
+- **`build(chained, frame, radius, wicks, chalk)`** instead of `build(chained, centre, radius)`. The words' ways are laid in the corner's frame, which is turned with the lab in the joined map, and the candles and the chalk are the lab's.
+- **The candles are their own kit**, not part of `library_corner`. Rebuilding the approved corner would have re-packed its atlas.
+- **The kit's sliver bound is 4 mm.** A candle's lip and its wax's runs are thinner than the gate's 1 cm, and the wax is one colour, so a thin face costs its painter nothing.
+- **The words are held to the inner ring only on the boards.** The book itself lies between the rings, at r 0.93–1.18, so its words start out there.
+- **The ward's script fills the blank band only while the ward flares.** At rest the band stays blank, the user's slot.
+- **A strain while the words are still out sends no new words.** In play the book strains every 10–20 s and the words take at most 3.3 s.
+
+Revision (Oct 23, from the user's note on the approved ward: more slithery, and the circle's sigils glowing slowly as the words come near its limits):
+- **Slither.** `WordChain.wriggle` runs a wave along a chain: each glyph swings off its way (1.8 cm for the book's words, 22 cm waves at 1.6 a second) and turns with the wave about its face, and `surge` makes the crawl surge (±45 %). The ward's sigils writhe where they lie (1 cm, slow).
+- **Slow glow by nearness.** Each sigil lights only from the words near it (fully within 12 cm, not at all past 70 cm), weighted by how close those words have come to the ward's limit (from r 0.35 m to the turn at about 0.82 m). It rises at 0.9 a second and dies down at 0.4. The chalk glows with the brightest sigil, so the flare no longer follows the strain; the candles still do. Lit 15 times a second from every fourth word glyph.
+- **Cost.** A chain that is not drawn stops processing. The ward's candles stop flickering while the ward is out of sight (an on-screen notifier); their lights hold.
+- **Checks.** E80 (slither) and E81 (slow, local glow); E77's flare reads the brightest sigil.
+- **Frame cost.** The four suites pass together; L20 passes alone at 1.04× and 1.08×. The windowed render check's bay figure was erratic on Oct 23: the bay jumped from 8.38 to 3.04 ms between identical runs. The shop drew at 8.76 ms without the ward and 8.71 ms with it.
+
+## Task 9, the librarian's ownerless shadow (Oct 23, awaiting review)
+
+Task 8's revision and the silhouette were approved by the user on Oct 23. The user then offered the rig and a walk, so
+the shadow walks.
+
+- **His picture.** `tools/textures/librarian_shadow.py` poses Quaternius's CC0 base body and dresses it in shapes built round its bones: a greatcoat whose skirt falls from what holds it out, sleeves, a turned-up collar, boots, a wide-brimmed hat. It renders him black from the side.
+  - The still (`librarian_shadow.png`) is the one approved.
+  - `--walk` makes 16 frames of the Universal Animation Library's `Walk_Formal_Loop`, dressed the same way, through one fixed eye, into `librarian_shadow_walk.png` (4×4 cells of 256×512). Beside it, `librarian_shadow_walk.json` records the frames and one cycle's travel: 0.697 of his height, about 1.44 m at his 2.06 m.
+- **`scripts/Visual/Library/LibraryShadow.gd`** (`effects.shadow`) has one way along each of the five wall cases' fronts.
+  - **Ends.** Each way runs from beyond one end of the case to beyond the other, each end only as far out as he stays clear of every other case and the corner. Metaphysics's back end is drawn in, where it meets the hunting case. He fades in and out over the last 35 cm.
+  - **Rules.** It keeps the corridor shadow's angles, fades and pace (OwnerlessShadow.gd, untouched, still 40–90 s). It crosses every 60–120 s, only where the watcher sees the way's middle from the corner of the eye (22°–85°), on the way nearest the middle of that band. Looked at, he is gone.
+  - **Walking.** His frames go round with the distance he has walked, so his feet hold at any pace.
+  - **Switches.** F3, the form light and the effects switch hide him without losing his place in a crossing.
+- **Drawn in a volume, not a decal.** The shop's painted materials carry their light in emission, which a decal's albedo cannot darken: a black decal barely showed. `shadow_volume.gdshader` is a box over the case front that reads the depth buffer and lays the picture's black over whatever is drawn there: books, boards, uprights and the ladder. Surfaces turned away from it (floors, board tops) fade, and anything in front of the box keeps it off.
+
+Checks: E82–E88 in `tests/library_effects_test.gd`. Review media: `docs/superpowers/refs/underground/library_stills/part2-shadow/` (`corner-of-the-eye.mp4`, looking down the room: he crosses the necromancy case at the corner of the eye; the eye turns to him and he is gone).
+
+Calls made:
+- **`build(ways, texture)` with each way `[front frame, run, case]`** instead of `Array[Transform3D]`. A way needs its run, and the tests need its case.
+- **A depth-read volume instead of a decal** (above).
+- **His walk is distance-driven**, so his feet never slide. That makes his cadence about 28% quicker than the clip's own at the corridor's 1.1 m/s.
+- **Frame cost.** The four suites pass together, L20 included. The windowed render check's figures were erratic on Oct 23: on identical code the bay measured 2.5–8.4 ms and the shelf-shadow view 0.23–8.5 ms. It failed its last two runs on the bay's low figure. Settling it needs GPU timings this Mac's renderer does not report.
+
+## Plan self-review
+
+The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.

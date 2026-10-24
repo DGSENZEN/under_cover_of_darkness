@@ -1,0 +1,18 @@
+{
+ "slots": [
+  "brick",
+  "mortar",
+  "limewash",
+  "stone_old",
+  "boards",
+  "wood",
+  "shopfront",
+  "sign",
+  "tile_cream",
+  "tile_dark",
+  "grout",
+  "rug"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 93.08
+}

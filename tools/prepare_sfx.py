@@ -454,6 +454,28 @@ WEATHER_LOOPS = [
     ("drip", FILMCOW + "ambience - dripping water 1.wav", None, 1.0, 12.0),
 ]
 WEATHER_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "audio", "weather")
+# The Metro Underground's loops, to audio/ambience/ as the fire beds are: a
+# neon sign's hum and an electrical box's (NOX's Electromagnetic, CC0; Oct 17
+# 2026, in place of FilmCow's ventilation hum pitched up).
+NOX_ELECTRIC = os.path.expanduser("~/Downloads/Essentials_Series_NOX_SOUND/Electromagnetic_NOX_SOUND/")
+NOX_TILE = os.path.expanduser("~/Downloads/Essentials_Series_NOX_SOUND/Footsteps_Essentials_NOX_SOUND/"
+                              "Footsteps_Tile/Footsteps_Tile_Walk/")
+UNDERGROUND_LOOPS = [
+    ("neon_hum", NOX_ELECTRIC + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_01.wav", None, 1.0, 8.0),
+    ("electric_box", NOX_ELECTRIC + "Electromagnetic_Electric_Box_Loop_Mono_Elektrousi_02.wav", None, 1.0, 8.0),
+    # The warm air breathing out of a wall vent; a tamale steamer's soft hiss under its lid.
+    ("vent_hum", FILMCOW + "ventilation hum.wav", 2400, 1.0, 10.0),
+    ("steam_hiss", FILMCOW + "gas leak.wav", 2200, 0.85, 7.0),
+]
+# The crowd heard down the Underground's corridors: the game's own murmurs,
+# hums, sighs, laughs, throat-clearings and coughs (cut from the NOX voices),
+# laid at random over a stretch, dulled and given the corridor's reflections:
+# people everywhere, no one word (Oct 17 2026).
+CROWD_GROUPS = {"murmur": -6.0, "murmur_b": -6.0, "murmur_f": -6.0, "hm": -8.0, "hm_b": -8.0, "hm_f": -8.0,
+                "sigh": -12.0, "sigh_f": -12.0, "laugh": -14.0, "laugh_b": -14.0, "laugh_f": -14.0,
+                "throat": -14.0, "throat_b": -14.0, "cough": -16.0, "cough_f": -16.0}
+CROWD_SECONDS = 24.0
+CROWD_EVENTS = 150
 # Thunder (NightSound, after each flash), from rubberduck's "100 CC0 SFX #2"
 # (CC0, approved Sept 27 2026): its one clap as it is, lower and duller (far
 # off), and higher and sharper (near): (name, source, low-pass, pitch).
@@ -522,6 +544,30 @@ LAYERED = [
     for i, n in enumerate((2, 4, 6, 8))
 ]
 # Layered takes no longer than this (s); a bail rattle no longer than 0.25 s.
+# The Metro Underground (Oct 17 2026): a train passing in the tunnel beyond the
+# wall, a low wind under its wheels' pairs of beats on the rail joints (one
+# rumble; the game swells and fades it with the pass), and the jars on a
+# stall's shelves rattling as it goes by.
+FILMCOW_DESIGNED = os.path.expanduser("~/Downloads/FilmCow Designed SFX/")
+LAYERED += [
+    ("train_rumble_1", [(NOX + "Ambiance_Wind_Calm_Loop_Stereo.wav", 0.0, 14.0, 0.0, 0.0, 350, 0.6),
+                     (FILMCOW_DESIGNED + "big distant thump 1.wav", None, None, -8.0, 3.00, 250, 0.8),
+                     (FILMCOW_DESIGNED + "big distant thump 2.wav", None, None, -10.0, 3.25, 250, 0.9),
+                     (FILMCOW_DESIGNED + "big distant thump 2.wav", None, None, -7.0, 4.60, 250, 0.8),
+                     (FILMCOW_DESIGNED + "big distant thump 3.wav", None, None, -9.0, 4.85, 250, 0.9),
+                     (FILMCOW_DESIGNED + "big distant thump 3.wav", None, None, -6.0, 6.00, 250, 0.8),
+                     (FILMCOW_DESIGNED + "big distant thump 4.wav", None, None, -8.0, 6.25, 250, 0.9),
+                     (FILMCOW_DESIGNED + "big distant thump 4.wav", None, None, -8.0, 7.30, 250, 0.8),
+                     (FILMCOW_DESIGNED + "big distant thump 5.wav", None, None, -10.0, 7.55, 250, 0.9),
+                     (FILMCOW_DESIGNED + "big distant thump 5.wav", None, None, -7.0, 8.60, 250, 0.8),
+                     (FILMCOW_DESIGNED + "big distant thump 6.wav", None, None, -9.0, 8.85, 250, 0.9),
+                     (FILMCOW_DESIGNED + "big distant thump 6.wav", None, None, -6.0, 10.00, 250, 0.8),
+                     (FILMCOW_DESIGNED + "big distant thump 1.wav", None, None, -8.0, 10.25, 250, 0.9)], 3.0),
+    ("jars_rattle_1", [(FILMCOW + "glass full of beads 6.wav", None, None, 0.0, 0.0, None, 1.0),
+                       (FILMCOW + "glass sliding 6.wav", None, None, -6.0, 0.05, None, 1.0)], 0.3),
+    ("jars_rattle_2", [(FILMCOW + "glass full of beads 7.wav", None, None, 0.0, 0.0, None, 0.95),
+                       (FILMCOW + "glass sliding 7.wav", None, None, -6.0, 0.03, None, 1.05)], 0.3),
+]
 LAYERED_LONGEST = {"bail_rattle": 0.25, "paper": 0.7, "pencil": 0.9}
 
 
@@ -893,6 +939,89 @@ def fade_stereo(x, fade_in, fade_out):
     return np.stack([fade(x[:, c], fade_in, fade_out) for c in range(2)], axis=1)
 
 
+def _read_wav(path):
+    """A WAV the game already has, as mono float at RATE."""
+    import wave
+
+    with wave.open(path) as w:
+        frames = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float64) / 32768.0
+        if w.getnchannels() > 1:
+            frames = frames.reshape(-1, w.getnchannels()).mean(axis=1)
+        rate = w.getframerate()
+
+    if rate != RATE:
+        frames = np.interp(np.arange(0, len(frames), rate / RATE), np.arange(len(frames)), frames)
+
+    return frames
+
+
+def _dull(x, hz):
+    """A gentle one-pole low-pass, twice: a crowd heard through a corridor."""
+    a = np.exp(-2.0 * np.pi * hz / RATE)
+
+    for _ in range(2):
+        y = np.empty_like(x)
+        level = 0.0
+        for i, v in enumerate(x):
+            level = (1 - a) * v + a * level
+            y[i] = level
+        x = y
+
+    return x
+
+
+def prepare_underground():
+    """The Underground's crowd bed (a loop) and its tile footsteps."""
+    import glob
+    import random
+
+    rng = random.Random(1969)
+    clips = []
+
+    for group, gain in CROWD_GROUPS.items():
+        for path in sorted(glob.glob(os.path.join(OUT, group + "_[0-9]*.wav"))):
+            clips.append((_read_wav(path), gain))
+
+    length = int(CROWD_SECONDS * RATE)
+    tail = int(1.5 * RATE)
+    bed = np.zeros(length + tail)
+
+    for _ in range(CROWD_EVENTS):
+        clip, gain = rng.choice(clips)
+        pitch = rng.uniform(0.88, 1.12)
+        clip = np.interp(np.arange(0, len(clip), pitch), np.arange(len(clip)), clip)
+        at = rng.randrange(0, length + tail - len(clip))
+        bed[at:at + len(clip)] += clip * 10 ** ((gain + rng.uniform(-5.0, 2.0)) / 20)
+
+    # The corridor's reflections, then dulled as if from down the corridor.
+    room = bed.copy()
+    for delay_ms, db in ((37, -7.0), (53, -9.0), (71, -11.0), (113, -14.0), (167, -17.0)):
+        d = int(delay_ms * RATE / 1000)
+        room[d:] += bed[:-d] * 10 ** (db / 20)
+    room = _dull(room, 1800.0)
+
+    # Its end laid over its start, equal power: a seamless loop.
+    t = np.linspace(0.0, np.pi * 0.5, tail)
+    room[:tail] = room[-tail:] * np.cos(t) + room[:tail] * np.sin(t)
+    room = peak_normalise(room[:length], -3.0)
+    write_wav(os.path.join(AMBIENCE_OUT, "crowd_murmur.wav"), room)
+    importer = os.path.join(AMBIENCE_OUT, "crowd_murmur.wav.import")
+
+    if not os.path.exists(importer):
+        with open(importer, "w") as out:
+            out.write(FIRE_IMPORT.format(name="crowd_murmur"))
+
+    print("%-12s crowd bed, %.1f s, %d events, %.1f LUFS" % ("crowd_murmur", CROWD_SECONDS, CROWD_EVENTS, loudness(room)))
+
+    # Tile footsteps: each a step, as the game's other steps are.
+    for k, path in enumerate(sorted(glob.glob(NOX_TILE + "Footsteps_Tile_Walk_*.wav")), start=1):
+        x = fade(decode(path, None, None), 0.003, 0.05)
+        x = peak_normalise(x, PEAK_LIMIT_DB)
+        write_wav(os.path.join(OUT, "step_tile_%d.wav" % k), x)
+
+    print("step_tile    %d file(s)" % k)
+
+
 def prepare_score(only=None):
     """The score's stings (only those groups when `only` is given) and, with
     no `only`, its loops."""
@@ -939,6 +1068,10 @@ def main():
             only = set(a.split("=", 1)[1].split(","))
         elif a == "--fire":
             prepare_fire_loops()
+            return
+        elif a == "--underground":
+            prepare_fire_loops(UNDERGROUND_LOOPS, AMBIENCE_OUT, "ambience", "underground loop")
+            prepare_underground()
             return
         elif a == "--weather":
             prepare_fire_loops(WEATHER_LOOPS, WEATHER_OUT, "weather", "weather loop")

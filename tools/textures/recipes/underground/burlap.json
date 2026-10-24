@@ -1,0 +1,15 @@
+{
+ "colour": "#8a7048",
+ "light": 0.7,
+ "height_light": 0.1,
+ "wear": 0.5,
+ "wear_colour": "#b89a68",
+ "grime": 0.7,
+ "grime_colour": "#2e2416",
+ "brush": "brush_02",
+ "brush_scale_m": 0.3,
+ "brush_amount": 0.09,
+ "black": 0.25,
+ "weave": 0.05,
+ "weave_m": 0.018
+}

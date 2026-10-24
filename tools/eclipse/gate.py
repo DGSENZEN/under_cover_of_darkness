@@ -25,6 +25,11 @@ LEAST_AREA = 1e-6
 # column's flange is 1.5 cm by design; weather.densify keeps its own cuts
 # 2 cm from any edge.
 SLIVER = 0.01
+# A creature drawn by its own shader, never painted from an atlas (the Underground's nahual,
+# spectre.gdshader, Oct 17 2026): a sliver only costs an atlas painter its texels, and a fused
+# smooth skin is full of thin faces where it curves tightly, so only a face with no thickness at
+# all fails it (degenerate faces still fail every piece).
+CREATURE_SLIVER = 0.0002
 # UVs this far outside [0, 1] still count as inside (float noise).
 UV_SLACK = 1e-4
 
@@ -61,7 +66,12 @@ def layered(faces, gap=LAYER_GAP):
             if overlap._dot(normals[i], normals[j]) < overlap.SAME_WAY:
                 continue
 
-            apart = abs(distances[i] - distances[j])
+            # Measured from i's plane to j's middle: two planes' distances from the
+            # origin, each along its own normal, part by centimetres a metre out
+            # when one is tilted a degree or two.
+            points = faces[j]["points"]
+            middle = tuple(sum(p[k] for p in points) / len(points) for k in range(3))
+            apart = abs(overlap._dot(normals[i], middle) - distances[i])
 
             if apart > gap or (apart <= overlap.TOLERANCE and faces[i]["owner"] != faces[j]["owner"]):
                 continue   # far enough apart; or one plane across two objects, which fights() reports
@@ -82,7 +92,7 @@ def layered(faces, gap=LAYER_GAP):
     return found
 
 
-def check(faces, tris, uvs):
+def check(faces, tris, uvs, budget=BUDGET, sliver=SLIVER):
     problems = []
 
     for i, j, apart, area in layered(faces):
@@ -96,7 +106,7 @@ def check(faces, tris, uvs):
     for face in faces:
         if _area(face) < LEAST_AREA:
             problems.append("degenerate: a face of %s has %.2e m2" % (face["owner"], _area(face)))
-        elif _thickness(face) < SLIVER:
+        elif _thickness(face) < sliver:
             problems.append("sliver: a face of %s is %.1f cm thin" % (face["owner"], _thickness(face) * 100))
 
     outside = [uv for uv in uvs if not (-UV_SLACK <= uv[0] <= 1 + UV_SLACK and -UV_SLACK <= uv[1] <= 1 + UV_SLACK)]
@@ -104,7 +114,7 @@ def check(faces, tris, uvs):
     if outside:
         problems.append("uv outside: %d UVs outside the atlas, e.g. %s" % (len(outside), outside[0]))
 
-    if tris > BUDGET:
-        problems.append("over budget: %d triangles, at most %d" % (tris, BUDGET))
+    if tris > budget:
+        problems.append("over budget: %d triangles, at most %d" % (tris, budget))
 
     return problems

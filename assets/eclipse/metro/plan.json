@@ -1,0 +1,3668 @@
+{
+ "name": "metro",
+ "ground": [],
+ "plots": [],
+ "routes": [
+  {
+   "name": "track_steps_n",
+   "kind": "stair",
+   "points": [
+    [
+     46.0,
+     -14.0,
+     -7.3
+    ],
+    [
+     46.0,
+     -15.2,
+     -4.6
+    ]
+   ]
+  },
+  {
+   "name": "track_steps_s",
+   "kind": "stair",
+   "points": [
+    [
+     -46.0,
+     -14.0,
+     7.3
+    ],
+    [
+     -46.0,
+     -15.2,
+     4.6
+    ]
+   ]
+  },
+  {
+   "name": "siding_tunnel",
+   "kind": "tunnel",
+   "points": [
+    [
+     -50.0,
+     -15.2,
+     0.0
+    ],
+    [
+     -70.0,
+     -15.2,
+     0.0
+    ]
+   ],
+   "between": [
+    "track",
+    "siding"
+   ]
+  },
+  {
+   "name": "stairs_n_flight",
+   "kind": "stair",
+   "points": [
+    [
+     -6.0,
+     -14.0,
+     -28.5
+    ],
+    [
+     -6.0,
+     -8.0,
+     -14.0
+    ]
+   ]
+  },
+  {
+   "name": "stairs_s_flight",
+   "kind": "stair",
+   "points": [
+    [
+     6.0,
+     -14.0,
+     28.5
+    ],
+    [
+     6.0,
+     -8.0,
+     14.0
+    ]
+   ]
+  },
+  {
+   "name": "exit_stairs_nw_flight",
+   "kind": "stair",
+   "points": [
+    [
+     -90.0,
+     -8.0,
+     -81.5
+    ],
+    [
+     -90.0,
+     -3.0,
+     -95.0
+    ]
+   ]
+  },
+  {
+   "name": "exit_stairs_ne_flight",
+   "kind": "stair",
+   "points": [
+    [
+     90.0,
+     -8.0,
+     -81.5
+    ],
+    [
+     90.0,
+     -3.0,
+     -95.0
+    ]
+   ]
+  },
+  {
+   "name": "exit_stairs_sw_flight",
+   "kind": "stair",
+   "points": [
+    [
+     -90.0,
+     -8.0,
+     81.5
+    ],
+    [
+     -90.0,
+     -3.0,
+     95.0
+    ]
+   ]
+  },
+  {
+   "name": "exit_stairs_se_flight",
+   "kind": "stair",
+   "points": [
+    [
+     90.0,
+     -8.0,
+     81.5
+    ],
+    [
+     90.0,
+     -3.0,
+     95.0
+    ]
+   ]
+  },
+  {
+   "name": "market_stairs_flight",
+   "kind": "stair",
+   "points": [
+    [
+     -10.0,
+     -8.0,
+     14.0
+    ],
+    [
+     -10.0,
+     -11.0,
+     23.0
+    ]
+   ]
+  },
+  {
+   "name": "lane_sw_flight",
+   "kind": "stair",
+   "points": [
+    [
+     -87.0,
+     -8.0,
+     62.5
+    ],
+    [
+     -79.0,
+     -11.0,
+     62.5
+    ]
+   ]
+  },
+  {
+   "name": "lane_se_flight",
+   "kind": "stair",
+   "points": [
+    [
+     87.0,
+     -8.0,
+     72.5
+    ],
+    [
+     79.0,
+     -11.0,
+     72.5
+    ]
+   ]
+  },
+  {
+   "name": "pipe_run_gallery",
+   "kind": "climb",
+   "points": [
+    [
+     76.0,
+     -22.0,
+     14.7
+    ],
+    [
+     76.0,
+     -12.0,
+     15.3
+    ]
+   ]
+  },
+  {
+   "name": "light_gallery_flight",
+   "kind": "stair",
+   "points": [
+    [
+     87.0,
+     -8.0,
+     17.0
+    ],
+    [
+     77.0,
+     -12.0,
+     17.0
+    ]
+   ]
+  },
+  {
+   "name": "vent_shaft_rungs",
+   "kind": "climb",
+   "points": [
+    [
+     9.7,
+     -21.0,
+     -97.0
+    ],
+    [
+     10.3,
+     -9.0,
+     -97.0
+    ]
+   ]
+  },
+  {
+   "name": "loft_ladder",
+   "kind": "climb",
+   "points": [
+    [
+     -60.0,
+     -11.0,
+     155.7
+    ],
+    [
+     -60.0,
+     -7.0,
+     156.3
+    ]
+   ]
+  },
+  {
+   "name": "niche_pipes",
+   "kind": "climb",
+   "points": [
+    [
+     110.0,
+     -22.0,
+     -14.7
+    ],
+    [
+     110.0,
+     -17.0,
+     -15.3
+    ]
+   ]
+  },
+  {
+   "name": "cistern_flight",
+   "kind": "stair",
+   "points": [
+    [
+     -42.0,
+     -21.0,
+     43.0
+    ],
+    [
+     -20.0,
+     -11.0,
+     43.0
+    ]
+   ]
+  },
+  {
+   "name": "tunnel_crypt_shells",
+   "kind": "tunnel",
+   "points": [
+    [
+     10.0,
+     -21.0,
+     -200.0
+    ],
+    [
+     70.0,
+     -26.0,
+     -200.0
+    ]
+   ],
+   "between": [
+    "crypt",
+    "templo_shells"
+   ]
+  },
+  {
+   "name": "tunnel_crypt_vault",
+   "kind": "tunnel",
+   "points": [
+    [
+     -50.0,
+     -21.0,
+     -180.0
+    ],
+    [
+     -95.0,
+     -21.0,
+     -180.0
+    ]
+   ],
+   "between": [
+    "crypt",
+    "pawn_vault"
+   ]
+  },
+  {
+   "name": "temple_tunnel_way",
+   "kind": "tunnel",
+   "points": [
+    [
+     50.0,
+     -15.2,
+     0.0
+    ],
+    [
+     75.0,
+     -22.0,
+     0.0
+    ]
+   ],
+   "between": [
+    "track",
+    "temple_tunnel"
+   ]
+  }
+ ],
+ "spaces": [
+  {
+   "name": "platform_n",
+   "polygon": [
+    [
+     -50.0,
+     -14.0
+    ],
+    [
+     50.0,
+     -14.0
+    ],
+    [
+     50.0,
+     -7.0
+    ],
+    [
+     -50.0,
+     -7.0
+    ]
+   ],
+   "floor": -14.0,
+   "height": 5.5,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "track",
+     "at": [
+      0.0,
+      -7.0
+     ],
+     "width": 100.0,
+     "height": 5.5
+    },
+    {
+     "to": "stairs_n",
+     "at": [
+      -2.0,
+      -14.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "track",
+   "polygon": [
+    [
+     -50.0,
+     -7.0
+    ],
+    [
+     50.0,
+     -7.0
+    ],
+    [
+     50.0,
+     7.0
+    ],
+    [
+     -50.0,
+     7.0
+    ]
+   ],
+   "floor": -15.2,
+   "height": 6.699999999999999,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "platform_n",
+     "at": [
+      0.0,
+      -7.0
+     ],
+     "width": 100.0,
+     "height": 5.5
+    },
+    {
+     "to": "platform_s",
+     "at": [
+      0.0,
+      7.0
+     ],
+     "width": 100.0,
+     "height": 5.5
+    },
+    {
+     "to": "siding",
+     "at": [
+      -50.0,
+      0.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "temple_tunnel",
+     "at": [
+      50.0,
+      0.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "platform_s",
+   "polygon": [
+    [
+     -50.0,
+     7.0
+    ],
+    [
+     50.0,
+     7.0
+    ],
+    [
+     50.0,
+     14.0
+    ],
+    [
+     -50.0,
+     14.0
+    ]
+   ],
+   "floor": -14.0,
+   "height": 5.5,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "track",
+     "at": [
+      0.0,
+      7.0
+     ],
+     "width": 100.0,
+     "height": 5.5
+    },
+    {
+     "to": "stairs_s",
+     "at": [
+      2.0,
+      14.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "siding",
+   "polygon": [
+    [
+     -130.0,
+     -8.0
+    ],
+    [
+     -70.0,
+     -8.0
+    ],
+    [
+     -70.0,
+     8.0
+    ],
+    [
+     -130.0,
+     8.0
+    ]
+   ],
+   "floor": -15.2,
+   "height": 6.699999999999999,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "track",
+     "at": [
+      -70.0,
+      0.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "stairs_n",
+   "polygon": [
+    [
+     -8.0,
+     -30.0
+    ],
+    [
+     0.0,
+     -30.0
+    ],
+    [
+     0.0,
+     -14.0
+    ],
+    [
+     -8.0,
+     -14.0
+    ]
+   ],
+   "floor": -14.0,
+   "height": 11.0,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "platform_n",
+     "at": [
+      -2.0,
+      -14.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "hall",
+     "at": [
+      -6.0,
+      -14.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "stairs_s",
+   "polygon": [
+    [
+     0.0,
+     14.0
+    ],
+    [
+     8.0,
+     14.0
+    ],
+    [
+     8.0,
+     30.0
+    ],
+    [
+     0.0,
+     30.0
+    ]
+   ],
+   "floor": -14.0,
+   "height": 11.0,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "platform_s",
+     "at": [
+      2.0,
+      14.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "hall",
+     "at": [
+      6.0,
+      14.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "hall",
+   "polygon": [
+    [
+     -30.0,
+     -14.0
+    ],
+    [
+     30.0,
+     -14.0
+    ],
+    [
+     30.0,
+     14.0
+    ],
+    [
+     -30.0,
+     14.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 5.0,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "stairs_n",
+     "at": [
+      -6.0,
+      -14.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "stairs_s",
+     "at": [
+      6.0,
+      14.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_w",
+     "at": [
+      -30.0,
+      0.0
+     ],
+     "width": 4.0
+    },
+    {
+     "to": "corridor_e",
+     "at": [
+      30.0,
+      0.0
+     ],
+     "width": 4.0
+    },
+    {
+     "to": "market_stairs",
+     "at": [
+      -10.0,
+      14.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_w",
+   "polygon": [
+    [
+     -85.0,
+     -3.0
+    ],
+    [
+     -30.0,
+     -3.0
+    ],
+    [
+     -30.0,
+     3.0
+    ],
+    [
+     -85.0,
+     3.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "hall",
+     "at": [
+      -30.0,
+      0.0
+     ],
+     "width": 4.0
+    },
+    {
+     "to": "cross_w",
+     "at": [
+      -85.0,
+      0.0
+     ],
+     "width": 4.0
+    }
+   ]
+  },
+  {
+   "name": "cross_w",
+   "polygon": [
+    [
+     -95.0,
+     -6.0
+    ],
+    [
+     -85.0,
+     -6.0
+    ],
+    [
+     -85.0,
+     6.0
+    ],
+    [
+     -95.0,
+     6.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 4.0,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "corridor_w",
+     "at": [
+      -85.0,
+      0.0
+     ],
+     "width": 4.0
+    },
+    {
+     "to": "corridor_nw",
+     "at": [
+      -90.0,
+      -6.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_sw",
+     "at": [
+      -90.0,
+      6.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_e",
+   "polygon": [
+    [
+     30.0,
+     -3.0
+    ],
+    [
+     85.0,
+     -3.0
+    ],
+    [
+     85.0,
+     3.0
+    ],
+    [
+     30.0,
+     3.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "hall",
+     "at": [
+      30.0,
+      0.0
+     ],
+     "width": 4.0
+    },
+    {
+     "to": "cross_e",
+     "at": [
+      85.0,
+      0.0
+     ],
+     "width": 4.0
+    }
+   ]
+  },
+  {
+   "name": "cross_e",
+   "polygon": [
+    [
+     85.0,
+     -6.0
+    ],
+    [
+     95.0,
+     -6.0
+    ],
+    [
+     95.0,
+     6.0
+    ],
+    [
+     85.0,
+     6.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 4.0,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "corridor_e",
+     "at": [
+      85.0,
+      0.0
+     ],
+     "width": 4.0
+    },
+    {
+     "to": "corridor_ne",
+     "at": [
+      90.0,
+      -6.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_se",
+     "at": [
+      90.0,
+      6.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_nw",
+   "polygon": [
+    [
+     -93.0,
+     -80.0
+    ],
+    [
+     -87.0,
+     -80.0
+    ],
+    [
+     -87.0,
+     -6.0
+    ],
+    [
+     -93.0,
+     -6.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "cross_w",
+     "at": [
+      -90.0,
+      -6.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "exit_stairs_nw",
+     "at": [
+      -90.0,
+      -80.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "exit_stairs_nw",
+   "polygon": [
+    [
+     -93.0,
+     -95.0
+    ],
+    [
+     -87.0,
+     -95.0
+    ],
+    [
+     -87.0,
+     -80.0
+    ],
+    [
+     -93.0,
+     -80.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 7.8,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "corridor_nw",
+     "at": [
+      -90.0,
+      -80.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "kiosk_landing_nw",
+     "at": [
+      -90.0,
+      -95.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "kiosk_landing_nw",
+   "polygon": [
+    [
+     -94.0,
+     -102.0
+    ],
+    [
+     -86.0,
+     -102.0
+    ],
+    [
+     -86.0,
+     -95.0
+    ],
+    [
+     -94.0,
+     -95.0
+    ]
+   ],
+   "floor": -3.0,
+   "height": 2.8,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "exit_stairs_nw",
+     "at": [
+      -90.0,
+      -95.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_ne",
+   "polygon": [
+    [
+     87.0,
+     -80.0
+    ],
+    [
+     93.0,
+     -80.0
+    ],
+    [
+     93.0,
+     -6.0
+    ],
+    [
+     87.0,
+     -6.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "cross_e",
+     "at": [
+      90.0,
+      -6.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "exit_stairs_ne",
+     "at": [
+      90.0,
+      -80.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "exit_stairs_ne",
+   "polygon": [
+    [
+     87.0,
+     -95.0
+    ],
+    [
+     93.0,
+     -95.0
+    ],
+    [
+     93.0,
+     -80.0
+    ],
+    [
+     87.0,
+     -80.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 7.8,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "corridor_ne",
+     "at": [
+      90.0,
+      -80.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "kiosk_landing_ne",
+     "at": [
+      90.0,
+      -95.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "kiosk_landing_ne",
+   "polygon": [
+    [
+     86.0,
+     -102.0
+    ],
+    [
+     94.0,
+     -102.0
+    ],
+    [
+     94.0,
+     -95.0
+    ],
+    [
+     86.0,
+     -95.0
+    ]
+   ],
+   "floor": -3.0,
+   "height": 2.8,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "exit_stairs_ne",
+     "at": [
+      90.0,
+      -95.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_sw",
+   "polygon": [
+    [
+     -93.0,
+     6.0
+    ],
+    [
+     -87.0,
+     6.0
+    ],
+    [
+     -87.0,
+     80.0
+    ],
+    [
+     -93.0,
+     80.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "cross_w",
+     "at": [
+      -90.0,
+      6.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "exit_stairs_sw",
+     "at": [
+      -90.0,
+      80.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "lane_sw",
+     "at": [
+      -87.0,
+      62.5
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "exit_stairs_sw",
+   "polygon": [
+    [
+     -93.0,
+     80.0
+    ],
+    [
+     -87.0,
+     80.0
+    ],
+    [
+     -87.0,
+     95.0
+    ],
+    [
+     -93.0,
+     95.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 7.8,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "corridor_sw",
+     "at": [
+      -90.0,
+      80.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "kiosk_landing_sw",
+     "at": [
+      -90.0,
+      95.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "kiosk_landing_sw",
+   "polygon": [
+    [
+     -94.0,
+     95.0
+    ],
+    [
+     -86.0,
+     95.0
+    ],
+    [
+     -86.0,
+     102.0
+    ],
+    [
+     -94.0,
+     102.0
+    ]
+   ],
+   "floor": -3.0,
+   "height": 2.8,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "exit_stairs_sw",
+     "at": [
+      -90.0,
+      95.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "corridor_se",
+   "polygon": [
+    [
+     87.0,
+     6.0
+    ],
+    [
+     93.0,
+     6.0
+    ],
+    [
+     93.0,
+     80.0
+    ],
+    [
+     87.0,
+     80.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 3.5,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "cross_e",
+     "at": [
+      90.0,
+      6.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "exit_stairs_se",
+     "at": [
+      90.0,
+      80.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "light_gallery",
+     "at": [
+      87.0,
+      17.0
+     ],
+     "width": 3.0,
+     "height": 2.5
+    },
+    {
+     "to": "lane_se",
+     "at": [
+      87.0,
+      72.5
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "exit_stairs_se",
+   "polygon": [
+    [
+     87.0,
+     80.0
+    ],
+    [
+     93.0,
+     80.0
+    ],
+    [
+     93.0,
+     95.0
+    ],
+    [
+     87.0,
+     95.0
+    ]
+   ],
+   "floor": -8.0,
+   "height": 7.8,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "corridor_se",
+     "at": [
+      90.0,
+      80.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "kiosk_landing_se",
+     "at": [
+      90.0,
+      95.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "kiosk_landing_se",
+   "polygon": [
+    [
+     86.0,
+     95.0
+    ],
+    [
+     94.0,
+     95.0
+    ],
+    [
+     94.0,
+     102.0
+    ],
+    [
+     86.0,
+     102.0
+    ]
+   ],
+   "floor": -3.0,
+   "height": 2.8,
+   "interior": false,
+   "layer": 1,
+   "openings": [
+    {
+     "to": "exit_stairs_se",
+     "at": [
+      90.0,
+      95.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "market_stairs",
+   "polygon": [
+    [
+     -14.0,
+     14.0
+    ],
+    [
+     -6.0,
+     14.0
+    ],
+    [
+     -6.0,
+     34.0
+    ],
+    [
+     -14.0,
+     34.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 8.0,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "hall",
+     "at": [
+      -10.0,
+      14.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "pasaje",
+     "at": [
+      -10.0,
+      34.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "pasaje",
+   "polygon": [
+    [
+     -14.0,
+     34.0
+    ],
+    [
+     -4.0,
+     34.0
+    ],
+    [
+     -4.0,
+     150.0
+    ],
+    [
+     -14.0,
+     150.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 4.5,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "market_stairs",
+     "at": [
+      -10.0,
+      34.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "cistern_lane",
+     "at": [
+      -14.0,
+      43.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "herb_market",
+     "at": [
+      -14.0,
+      74.0
+     ],
+     "width": 4.0
+    },
+    {
+     "to": "candle_lane",
+     "at": [
+      -4.0,
+      75.45
+     ],
+     "width": 6.9
+    },
+    {
+     "to": "tianguis_lane",
+     "at": [
+      -4.0,
+      122.5
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "rag_lane",
+     "at": [
+      -14.0,
+      140.5
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "square_s",
+     "at": [
+      -9.0,
+      150.0
+     ],
+     "width": 6.0
+    }
+   ]
+  },
+  {
+   "name": "cistern_lane",
+   "polygon": [
+    [
+     -20.0,
+     40.0
+    ],
+    [
+     -14.0,
+     40.0
+    ],
+    [
+     -14.0,
+     46.0
+    ],
+    [
+     -20.0,
+     46.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 4.0,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "pasaje",
+     "at": [
+      -14.0,
+      43.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "cistern",
+     "at": [
+      -20.0,
+      43.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "herb_market",
+   "polygon": [
+    [
+     -44.0,
+     58.0
+    ],
+    [
+     -14.0,
+     58.0
+    ],
+    [
+     -14.0,
+     90.0
+    ],
+    [
+     -44.0,
+     90.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 6.0,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "pasaje",
+     "at": [
+      -14.0,
+      74.0
+     ],
+     "width": 4.0
+    },
+    {
+     "to": "lane_sw",
+     "at": [
+      -44.0,
+      62.5
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "lane_sw",
+   "polygon": [
+    [
+     -87.0,
+     60.0
+    ],
+    [
+     -44.0,
+     60.0
+    ],
+    [
+     -44.0,
+     65.0
+    ],
+    [
+     -87.0,
+     65.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 6.0,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "herb_market",
+     "at": [
+      -44.0,
+      62.5
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_sw",
+     "at": [
+      -87.0,
+      62.5
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "candle_lane",
+   "polygon": [
+    [
+     -4.0,
+     72.0
+    ],
+    [
+     29.6,
+     72.0
+    ],
+    [
+     29.6,
+     78.9
+    ],
+    [
+     -4.0,
+     78.9
+    ]
+   ],
+   "floor": -11.0,
+   "height": 4.0,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "pasaje",
+     "at": [
+      -4.0,
+      75.45
+     ],
+     "width": 6.9
+    },
+    {
+     "to": "chapel",
+     "at": [
+      29.6,
+      74.5
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "librarian_shop",
+     "at": [
+      19.0,
+      78.9
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "librarian_shop",
+   "polygon": [
+    [
+     15.0,
+     78.9
+    ],
+    [
+     23.0,
+     78.9
+    ],
+    [
+     23.0,
+     85.65
+    ],
+    [
+     15.0,
+     85.65
+    ]
+   ],
+   "floor": -11.0,
+   "height": 4.5,
+   "interior": true,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "candle_lane",
+     "at": [
+      19.0,
+      78.9
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "chapel",
+   "polygon": [
+    [
+     29.6,
+     62.0
+    ],
+    [
+     45.6,
+     62.0
+    ],
+    [
+     45.6,
+     86.0
+    ],
+    [
+     29.6,
+     86.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 5.0,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "candle_lane",
+     "at": [
+      29.6,
+      74.5
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "lane_se",
+     "at": [
+      45.6,
+      72.5
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "lane_se",
+   "polygon": [
+    [
+     45.6,
+     70.0
+    ],
+    [
+     87.0,
+     70.0
+    ],
+    [
+     87.0,
+     75.0
+    ],
+    [
+     45.6,
+     75.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 6.0,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "chapel",
+     "at": [
+      45.6,
+      72.5
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_se",
+     "at": [
+      87.0,
+      72.5
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "tianguis_lane",
+   "polygon": [
+    [
+     -4.0,
+     120.0
+    ],
+    [
+     36.0,
+     120.0
+    ],
+    [
+     36.0,
+     125.0
+    ],
+    [
+     -4.0,
+     125.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 3.5,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "pasaje",
+     "at": [
+      -4.0,
+      122.5
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "fondas",
+     "at": [
+      36.0,
+      122.5
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "fondas",
+   "polygon": [
+    [
+     36.0,
+     108.0
+    ],
+    [
+     62.0,
+     108.0
+    ],
+    [
+     62.0,
+     140.0
+    ],
+    [
+     36.0,
+     140.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 5.0,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "tianguis_lane",
+     "at": [
+      36.0,
+      122.5
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "rag_lane",
+   "polygon": [
+    [
+     -48.0,
+     138.0
+    ],
+    [
+     -14.0,
+     138.0
+    ],
+    [
+     -14.0,
+     143.0
+    ],
+    [
+     -48.0,
+     143.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 3.5,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "pasaje",
+     "at": [
+      -14.0,
+      140.5
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "storeroom",
+     "at": [
+      -48.0,
+      140.5
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "storeroom",
+   "polygon": [
+    [
+     -66.0,
+     128.0
+    ],
+    [
+     -48.0,
+     128.0
+    ],
+    [
+     -48.0,
+     156.0
+    ],
+    [
+     -66.0,
+     156.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 7.0,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "rag_lane",
+     "at": [
+      -48.0,
+      140.5
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "loft",
+     "at": [
+      -60.0,
+      156.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "square_s",
+   "polygon": [
+    [
+     -24.0,
+     150.0
+    ],
+    [
+     6.0,
+     150.0
+    ],
+    [
+     6.0,
+     174.0
+    ],
+    [
+     -24.0,
+     174.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 6.0,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "pasaje",
+     "at": [
+      -9.0,
+      150.0
+     ],
+     "width": 6.0
+    }
+   ]
+  },
+  {
+   "name": "light_gallery",
+   "polygon": [
+    [
+     66.0,
+     15.0
+    ],
+    [
+     87.0,
+     15.0
+    ],
+    [
+     87.0,
+     19.0
+    ],
+    [
+     66.0,
+     19.0
+    ]
+   ],
+   "floor": -12.0,
+   "height": 6.5,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "temple_tunnel",
+     "at": [
+      77.0,
+      15.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "corridor_se",
+     "at": [
+      87.0,
+      17.0
+     ],
+     "width": 3.0,
+     "height": 2.5
+    }
+   ]
+  },
+  {
+   "name": "vent_shaft",
+   "polygon": [
+    [
+     4.0,
+     -100.0
+    ],
+    [
+     10.0,
+     -100.0
+    ],
+    [
+     10.0,
+     -94.0
+    ],
+    [
+     4.0,
+     -94.0
+    ]
+   ],
+   "floor": -21.0,
+   "height": 20.0,
+   "interior": false,
+   "layer": 3,
+   "openings": [
+    {
+     "to": "drain_n",
+     "at": [
+      4.0,
+      -97.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "grate_room",
+     "at": [
+      10.0,
+      -97.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "grate_room",
+   "polygon": [
+    [
+     10.0,
+     -100.0
+    ],
+    [
+     16.0,
+     -100.0
+    ],
+    [
+     16.0,
+     -94.0
+    ],
+    [
+     10.0,
+     -94.0
+    ]
+   ],
+   "floor": -9.0,
+   "height": 8.0,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "vent_shaft",
+     "at": [
+      10.0,
+      -97.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "loft",
+   "polygon": [
+    [
+     -66.0,
+     156.0
+    ],
+    [
+     -54.0,
+     156.0
+    ],
+    [
+     -54.0,
+     162.0
+    ],
+    [
+     -66.0,
+     162.0
+    ]
+   ],
+   "floor": -7.0,
+   "height": 3.0,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "storeroom",
+     "at": [
+      -60.0,
+      156.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "niche",
+   "polygon": [
+    [
+     105.0,
+     -21.0
+    ],
+    [
+     115.0,
+     -21.0
+    ],
+    [
+     115.0,
+     -15.0
+    ],
+    [
+     105.0,
+     -15.0
+    ]
+   ],
+   "floor": -17.0,
+   "height": 4.0,
+   "interior": false,
+   "layer": 3,
+   "openings": [
+    {
+     "to": "temple_tunnel",
+     "at": [
+      110.0,
+      -15.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "vaults",
+   "polygon": [
+    [
+     -40.0,
+     -24.0
+    ],
+    [
+     40.0,
+     -24.0
+    ],
+    [
+     40.0,
+     24.0
+    ],
+    [
+     -40.0,
+     24.0
+    ]
+   ],
+   "floor": -21.0,
+   "height": 3.5,
+   "interior": false,
+   "layer": 3,
+   "openings": [
+    {
+     "to": "cistern",
+     "at": [
+      -30.0,
+      24.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "drain_n",
+     "at": [
+      0.0,
+      -24.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "cistern",
+   "polygon": [
+    [
+     -44.0,
+     24.0
+    ],
+    [
+     -20.0,
+     24.0
+    ],
+    [
+     -20.0,
+     52.0
+    ],
+    [
+     -44.0,
+     52.0
+    ]
+   ],
+   "floor": -21.0,
+   "height": 16.0,
+   "interior": false,
+   "layer": 3,
+   "openings": [
+    {
+     "to": "vaults",
+     "at": [
+      -30.0,
+      24.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "cistern_lane",
+     "at": [
+      -20.0,
+      43.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "drain_n",
+   "polygon": [
+    [
+     -4.0,
+     -160.0
+    ],
+    [
+     4.0,
+     -160.0
+    ],
+    [
+     4.0,
+     -24.0
+    ],
+    [
+     -4.0,
+     -24.0
+    ]
+   ],
+   "floor": -21.0,
+   "height": 4.0,
+   "interior": false,
+   "layer": 3,
+   "openings": [
+    {
+     "to": "vaults",
+     "at": [
+      0.0,
+      -24.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "vent_shaft",
+     "at": [
+      4.0,
+      -97.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "crypt",
+     "at": [
+      0.0,
+      -160.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "crypt",
+   "polygon": [
+    [
+     -50.0,
+     -250.0
+    ],
+    [
+     10.0,
+     -250.0
+    ],
+    [
+     10.0,
+     -160.0
+    ],
+    [
+     -50.0,
+     -160.0
+    ]
+   ],
+   "floor": -21.0,
+   "height": 5.0,
+   "interior": false,
+   "layer": 3,
+   "openings": [
+    {
+     "to": "drain_n",
+     "at": [
+      0.0,
+      -160.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "templo_shells",
+     "at": [
+      10.0,
+      -200.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "pawn_vault",
+     "at": [
+      -50.0,
+      -180.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "templo_shells",
+   "polygon": [
+    [
+     70.0,
+     -215.0
+    ],
+    [
+     140.0,
+     -215.0
+    ],
+    [
+     140.0,
+     -155.0
+    ],
+    [
+     70.0,
+     -155.0
+    ]
+   ],
+   "floor": -26.0,
+   "height": 12.0,
+   "interior": false,
+   "layer": 3,
+   "openings": [
+    {
+     "to": "crypt",
+     "at": [
+      70.0,
+      -200.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "pawn_vault",
+   "polygon": [
+    [
+     -115.0,
+     -205.0
+    ],
+    [
+     -95.0,
+     -205.0
+    ],
+    [
+     -95.0,
+     -155.0
+    ],
+    [
+     -115.0,
+     -155.0
+    ]
+   ],
+   "floor": -21.0,
+   "height": 4.0,
+   "interior": true,
+   "layer": 3,
+   "openings": [
+    {
+     "to": "crypt",
+     "at": [
+      -95.0,
+      -180.0
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "temple_tunnel",
+   "polygon": [
+    [
+     75.0,
+     -15.0
+    ],
+    [
+     135.0,
+     -15.0
+    ],
+    [
+     135.0,
+     15.0
+    ],
+    [
+     75.0,
+     15.0
+    ]
+   ],
+   "floor": -22.0,
+   "height": 13.5,
+   "interior": false,
+   "layer": 3,
+   "openings": [
+    {
+     "to": "track",
+     "at": [
+      75.0,
+      0.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "light_gallery",
+     "at": [
+      77.0,
+      15.0
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "niche",
+     "at": [
+      110.0,
+      -15.0
+     ],
+     "width": 3.0
+    }
+   ]
+  }
+ ],
+ "landmarks": [
+  {
+   "name": "arrival",
+   "kind": "arrival",
+   "at": [
+    0.0,
+    -14.0,
+    -9.0
+   ],
+   "props": {
+    "track": "north"
+   }
+  },
+  {
+   "name": "exit_nw",
+   "kind": "exit_zocalo",
+   "at": [
+    -90.0,
+    -3.0,
+    -98.0
+   ],
+   "props": {
+    "kiosk": "nw"
+   }
+  },
+  {
+   "name": "exit_ne",
+   "kind": "exit_zocalo",
+   "at": [
+    90.0,
+    -3.0,
+    -98.0
+   ],
+   "props": {
+    "kiosk": "ne"
+   }
+  },
+  {
+   "name": "exit_sw",
+   "kind": "exit_zocalo",
+   "at": [
+    -90.0,
+    -3.0,
+    98.0
+   ],
+   "props": {
+    "kiosk": "sw"
+   }
+  },
+  {
+   "name": "exit_se",
+   "kind": "exit_zocalo",
+   "at": [
+    90.0,
+    -3.0,
+    98.0
+   ],
+   "props": {
+    "kiosk": "se"
+   }
+  },
+  {
+   "name": "cathedral_stair",
+   "kind": "exit_cathedral",
+   "at": [
+    -20.0,
+    -21.0,
+    -247.0
+   ],
+   "props": {
+    "to": "cathedral"
+   }
+  },
+  {
+   "name": "sign_00",
+   "kind": "sign",
+   "at": [
+    -2.0,
+    -14.0,
+    -12.5
+   ],
+   "props": {
+    "says": "Salida"
+   }
+  },
+  {
+   "name": "sign_01",
+   "kind": "sign",
+   "at": [
+    2.0,
+    -14.0,
+    12.5
+   ],
+   "props": {
+    "says": "Salida"
+   }
+  },
+  {
+   "name": "sign_02",
+   "kind": "sign",
+   "at": [
+    -6.0,
+    -8.0,
+    -11.5
+   ],
+   "props": {
+    "says": "And\u00e9n"
+   }
+  },
+  {
+   "name": "sign_03",
+   "kind": "sign",
+   "at": [
+    6.0,
+    -8.0,
+    11.5
+   ],
+   "props": {
+    "says": "And\u00e9n"
+   }
+  },
+  {
+   "name": "sign_04",
+   "kind": "sign",
+   "at": [
+    -26.0,
+    -8.0,
+    0.0
+   ],
+   "props": {
+    "says": "Salida"
+   }
+  },
+  {
+   "name": "sign_05",
+   "kind": "sign",
+   "at": [
+    26.0,
+    -8.0,
+    0.0
+   ],
+   "props": {
+    "says": "Salida"
+   }
+  },
+  {
+   "name": "sign_06",
+   "kind": "sign",
+   "at": [
+    -10.0,
+    -8.0,
+    11.5
+   ],
+   "props": {
+    "says": "Correspondencia"
+   }
+  },
+  {
+   "name": "sign_07",
+   "kind": "sign",
+   "at": [
+    -90.0,
+    -8.0,
+    0.0
+   ],
+   "props": {
+    "says": "Salida"
+   }
+  },
+  {
+   "name": "sign_08",
+   "kind": "sign",
+   "at": [
+    90.0,
+    -8.0,
+    0.0
+   ],
+   "props": {
+    "says": "Salida"
+   }
+  },
+  {
+   "name": "sign_09",
+   "kind": "sign",
+   "at": [
+    -90.0,
+    -8.0,
+    56.0
+   ],
+   "props": {
+    "says": "Salida"
+   }
+  },
+  {
+   "name": "sign_10",
+   "kind": "sign",
+   "at": [
+    90.0,
+    -8.0,
+    66.0
+   ],
+   "props": {
+    "says": "Salida"
+   }
+  },
+  {
+   "name": "sign_11",
+   "kind": "sign",
+   "at": [
+    -9.0,
+    -11.0,
+    144.0
+   ],
+   "props": {
+    "says": "Correspondencia"
+   }
+  },
+  {
+   "name": "ticket_booth",
+   "kind": "character_place",
+   "at": [
+    14.0,
+    -8.0,
+    -10.0
+   ],
+   "props": {
+    "who": "ticket_seller"
+   }
+  },
+  {
+   "name": "news_stand",
+   "kind": "character_place",
+   "at": [
+    -60.0,
+    -8.0,
+    -2.0
+   ],
+   "props": {
+    "who": "newspaper_seller"
+   }
+  },
+  {
+   "name": "stranded_car_cab",
+   "kind": "character_place",
+   "at": [
+    -112.0,
+    -15.2,
+    3.0
+   ],
+   "props": {
+    "who": "motorman"
+   }
+  },
+  {
+   "name": "herb_counter",
+   "kind": "character_place",
+   "at": [
+    -36.0,
+    -11.0,
+    84.0
+   ],
+   "props": {
+    "who": "stall_keeper"
+   }
+  },
+  {
+   "name": "chapel_corner",
+   "kind": "character_place",
+   "at": [
+    40.0,
+    -11.0,
+    80.0
+   ],
+   "props": {
+    "who": "shrine_keeper"
+   }
+  },
+  {
+   "name": "fonda_stove",
+   "kind": "character_place",
+   "at": [
+    56.0,
+    -11.0,
+    114.0
+   ],
+   "props": {
+    "who": "cook"
+   }
+  },
+  {
+   "name": "loft_bed",
+   "kind": "character_place",
+   "at": [
+    -62.0,
+    -7.0,
+    159.0
+   ],
+   "props": {
+    "who": "squatter"
+   }
+  },
+  {
+   "name": "gallery_valves",
+   "kind": "character_place",
+   "at": [
+    70.0,
+    -12.0,
+    17.0
+   ],
+   "props": {
+    "who": "lineman"
+   }
+  },
+  {
+   "name": "busker_step",
+   "kind": "character_place",
+   "at": [
+    -5.0,
+    -11.0,
+    38.0
+   ],
+   "props": {
+    "who": "busker"
+   }
+  },
+  {
+   "name": "crypt_lantern",
+   "kind": "character_place",
+   "at": [
+    -40.0,
+    -21.0,
+    -240.0
+   ],
+   "props": {
+    "who": "sacristan"
+   }
+  },
+  {
+   "name": "vault_desk",
+   "kind": "character_place",
+   "at": [
+    -105.0,
+    -21.0,
+    -160.0
+   ],
+   "props": {
+    "who": "pawn_clerk"
+   }
+  },
+  {
+   "name": "dig_camp",
+   "kind": "character_place",
+   "at": [
+    128.0,
+    -22.0,
+    10.0
+   ],
+   "props": {
+    "who": "digger"
+   }
+  },
+  {
+   "name": "jammed_turnstiles",
+   "kind": "scene",
+   "at": [
+    0.0,
+    -8.0,
+    -4.0
+   ],
+   "props": {
+    "scene": "jammed_turnstiles",
+    "cause": "the Light Company's surge on the Eclipse's first night fused the turnstiles open; nobody has paid since"
+   }
+  },
+  {
+   "name": "layered_posters",
+   "kind": "scene",
+   "at": [
+    -90.0,
+    -8.0,
+    -40.0
+   ],
+   "props": {
+    "scene": "layered_posters",
+    "cause": "seventy years of bills pasted over each other along the exit; the Eclipse's notices are the newest layer"
+   }
+  },
+  {
+   "name": "stalls_swallow_exit",
+   "kind": "scene",
+   "at": [
+    -90.0,
+    -8.0,
+    84.0
+   ],
+   "props": {
+    "scene": "stalls_swallow_exit",
+    "cause": "the puesteros crept up from the Pasaje until the south-west exit stair became half market"
+   }
+  },
+  {
+   "name": "motorman_ofrenda",
+   "kind": "scene",
+   "at": [
+    44.0,
+    -14.0,
+    -12.0
+   ],
+   "props": {
+    "scene": "motorman_ofrenda",
+    "cause": "an ofrenda for the motorman lost the night the lines stopped"
+   }
+  },
+  {
+   "name": "seeping_track",
+   "kind": "scene",
+   "at": [
+    -40.0,
+    -15.2,
+    0.0
+   ],
+   "props": {
+    "scene": "seeping_track",
+    "cause": "the colonial drain under the track overflows when it rains; the rails stand in water"
+   }
+  },
+  {
+   "name": "steam_main",
+   "kind": "scene",
+   "at": [
+    60.0,
+    -8.0,
+    0.0
+   ],
+   "props": {
+    "scene": "steam_main",
+    "cause": "the Light Company's heating main breathes through a cracked joint"
+   }
+  },
+  {
+   "name": "stranded_car",
+   "kind": "scene",
+   "at": [
+    -100.0,
+    -15.2,
+    -2.0
+   ],
+   "props": {
+    "scene": "stranded_car",
+    "cause": "a car left on the siding the night the lines stopped; the motorman never left it"
+   }
+  },
+  {
+   "name": "opossum_nest",
+   "kind": "scene",
+   "at": [
+    68.0,
+    -12.0,
+    18.0
+   ],
+   "props": {
+    "scene": "opossum_nest",
+    "cause": "opossums nest on the Light Company's warm heating pipes"
+   }
+  },
+  {
+   "name": "copal_saints",
+   "kind": "scene",
+   "at": [
+    36.0,
+    -11.0,
+    66.0
+   ],
+   "props": {
+    "scene": "copal_saints",
+    "cause": "the shrine keeper burns copal for the saints painted beside the station's signage"
+   }
+  },
+  {
+   "name": "cistern_harvest",
+   "kind": "scene",
+   "at": [
+    -24.0,
+    -11.0,
+    64.0
+   ],
+   "props": {
+    "scene": "cistern_harvest",
+    "cause": "the curanderas sell what the seepage grows in the old cistern below: fungus, roots, pale herbs"
+   }
+  },
+  {
+   "name": "bricked_correspondencia",
+   "kind": "scene",
+   "at": [
+    -9.0,
+    -11.0,
+    172.0
+   ],
+   "props": {
+    "scene": "bricked_correspondencia",
+    "cause": "the way to Pino Su\u00e1rez was bricked up when the Eclipse tore the city; its Correspondencia sign still points in"
+   }
+  },
+  {
+   "name": "causeway_wall",
+   "kind": "scene",
+   "at": [
+    2.0,
+    -11.0,
+    154.0
+   ],
+   "props": {
+    "scene": "causeway_wall",
+    "cause": "digging the Pasaje cut through the old causeway's wall; its stones stand in the square's side"
+   }
+  },
+  {
+   "name": "drowned_saints",
+   "kind": "scene",
+   "at": [
+    0.0,
+    -21.0,
+    -60.0
+   ],
+   "props": {
+    "scene": "drowned_saints",
+    "cause": "saints thrown into the drain in the Reform, washed down with the seepage"
+   }
+  },
+  {
+   "name": "grate_light",
+   "kind": "scene",
+   "at": [
+    13.0,
+    -9.0,
+    -97.0
+   ],
+   "props": {
+    "scene": "grate_light",
+    "cause": "the plaza's vent grate: the Eclipse's light and pigeon feathers fall through it"
+   }
+  },
+  {
+   "name": "fungus_shelves",
+   "kind": "scene",
+   "at": [
+    -34.0,
+    -21.0,
+    30.0
+   ],
+   "props": {
+    "scene": "fungus_shelves",
+    "cause": "the cistern is warm from the Light Company's pipes and damp from seepage: fungus grows in shelves"
+   }
+  },
+  {
+   "name": "bone_wall",
+   "kind": "scene",
+   "at": [
+    -20.0,
+    -21.0,
+    -200.0
+   ],
+   "props": {
+    "scene": "bone_wall",
+    "cause": "the crypt's ossuary rebuilt when the cathedral sank; skulls set in the walls by parish"
+   }
+  },
+  {
+   "name": "nested_temples",
+   "kind": "scene",
+   "at": [
+    105.0,
+    -26.0,
+    -185.0
+   ],
+   "props": {
+    "scene": "nested_temples",
+    "cause": "each temple built over the last; the shells stand one inside another"
+   }
+  },
+  {
+   "name": "sealed_pledges",
+   "kind": "scene",
+   "at": [
+    -105.0,
+    -21.0,
+    -190.0
+   ],
+   "props": {
+    "scene": "sealed_pledges",
+    "cause": "the pawnshop's flood vault, sealed with the pledges inside"
+   }
+  },
+  {
+   "name": "temple_in_tunnel",
+   "kind": "scene",
+   "at": [
+    105.0,
+    -22.0,
+    0.0
+   ],
+   "props": {
+    "scene": "temple_in_tunnel",
+    "cause": "the tunnel boring struck the wind god's round platform, so the engineers took the tunnel round it"
+   }
+  },
+  {
+   "name": "vaults_underfoot",
+   "kind": "scene",
+   "at": [
+    0.0,
+    -21.0,
+    0.0
+   ],
+   "props": {
+    "scene": "vaults_underfoot",
+    "cause": "the colonial vaults the station was poured over; the track's drains drip into them"
+   }
+  },
+  {
+   "name": "puesto_00",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    39.0
+   ],
+   "props": {
+    "sells": "tortas"
+   }
+  },
+  {
+   "name": "puesto_01",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    41.5
+   ],
+   "props": {
+    "sells": "aguas frescas"
+   }
+  },
+  {
+   "name": "puesto_02",
+   "kind": "puesto",
+   "at": [
+    -12.5,
+    -11.0,
+    52.0
+   ],
+   "props": {
+    "sells": "candles"
+   }
+  },
+  {
+   "name": "puesto_03",
+   "kind": "puesto",
+   "at": [
+    -12.5,
+    -11.0,
+    54.5
+   ],
+   "props": {
+    "sells": "saints"
+   }
+  },
+  {
+   "name": "puesto_04",
+   "kind": "puesto",
+   "at": [
+    -12.5,
+    -11.0,
+    57.0
+   ],
+   "props": {
+    "sells": "charms"
+   }
+  },
+  {
+   "name": "puesto_05",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    64.0
+   ],
+   "props": {
+    "sells": "records"
+   }
+  },
+  {
+   "name": "puesto_06",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    67.0
+   ],
+   "props": {
+    "sells": "gloves"
+   }
+  },
+  {
+   "name": "puesto_07",
+   "kind": "puesto",
+   "at": [
+    -12.5,
+    -11.0,
+    86.0
+   ],
+   "props": {
+    "sells": "herbs"
+   }
+  },
+  {
+   "name": "puesto_08",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    96.0
+   ],
+   "props": {
+    "sells": "toys"
+   }
+  },
+  {
+   "name": "puesto_09",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    98.5
+   ],
+   "props": {
+    "sells": "sweets"
+   }
+  },
+  {
+   "name": "puesto_10",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    101.0
+   ],
+   "props": {
+    "sells": "perfume"
+   }
+  },
+  {
+   "name": "puesto_11",
+   "kind": "puesto",
+   "at": [
+    -12.5,
+    -11.0,
+    108.0
+   ],
+   "props": {
+    "sells": "shoes"
+   }
+  },
+  {
+   "name": "puesto_12",
+   "kind": "puesto",
+   "at": [
+    -12.5,
+    -11.0,
+    111.0
+   ],
+   "props": {
+    "sells": "mending"
+   }
+  },
+  {
+   "name": "puesto_13",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    130.0
+   ],
+   "props": {
+    "sells": "tamales"
+   }
+  },
+  {
+   "name": "puesto_14",
+   "kind": "puesto",
+   "at": [
+    -12.5,
+    -11.0,
+    133.0
+   ],
+   "props": {
+    "sells": "keys"
+   }
+  },
+  {
+   "name": "puesto_15",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    145.0
+   ],
+   "props": {
+    "sells": "lottery"
+   }
+  },
+  {
+   "name": "puesto_16",
+   "kind": "puesto",
+   "at": [
+    -40.0,
+    -11.0,
+    70.0
+   ],
+   "props": {
+    "sells": "herbs"
+   }
+  },
+  {
+   "name": "puesto_17",
+   "kind": "puesto",
+   "at": [
+    -40.0,
+    -11.0,
+    73.0
+   ],
+   "props": {
+    "sells": "herbs"
+   }
+  },
+  {
+   "name": "puesto_18",
+   "kind": "puesto",
+   "at": [
+    -30.0,
+    -11.0,
+    88.0
+   ],
+   "props": {
+    "sells": "eggs and limpias"
+   }
+  },
+  {
+   "name": "puesto_19",
+   "kind": "puesto",
+   "at": [
+    -18.0,
+    -11.0,
+    80.0
+   ],
+   "props": {
+    "sells": "copal"
+   }
+  },
+  {
+   "name": "puesto_20",
+   "kind": "puesto",
+   "at": [
+    40.0,
+    -11.0,
+    112.0
+   ],
+   "props": {
+    "sells": "pozole"
+   }
+  },
+  {
+   "name": "puesto_21",
+   "kind": "puesto",
+   "at": [
+    40.0,
+    -11.0,
+    116.0
+   ],
+   "props": {
+    "sells": "tacos"
+   }
+  },
+  {
+   "name": "puesto_22",
+   "kind": "puesto",
+   "at": [
+    58.0,
+    -11.0,
+    132.0
+   ],
+   "props": {
+    "sells": "caf\u00e9 de olla"
+   }
+  },
+  {
+   "name": "puesto_23",
+   "kind": "puesto",
+   "at": [
+    -88.5,
+    -8.0,
+    88.0
+   ],
+   "props": {
+    "sells": "umbrellas"
+   }
+  },
+  {
+   "name": "puesto_24",
+   "kind": "puesto",
+   "at": [
+    -91.5,
+    -8.0,
+    90.0
+   ],
+   "props": {
+    "sells": "batteries for lamps"
+   }
+  }
+ ],
+ "tram": [],
+ "causeway": [],
+ "events": [],
+ "brink": [],
+ "bands": [
+  [
+   -10.5,
+   0.0,
+   "hall"
+  ],
+  [
+   -13.0,
+   -10.5,
+   "market"
+  ],
+  [
+   -16.0,
+   -13.0,
+   "platforms"
+  ],
+  [
+   -40.0,
+   -16.0,
+   "old"
+  ]
+ ],
+ "walks": {
+  "spine": [
+   [
+    0.0,
+    -14.0,
+    -9.0
+   ],
+   [
+    -2.0,
+    -14.0,
+    -14.0
+   ],
+   [
+    -2.0,
+    -14.0,
+    -29.2
+   ],
+   [
+    -6.0,
+    -14.0,
+    -29.2
+   ],
+   [
+    -6.0,
+    -14.0,
+    -28.5
+   ],
+   [
+    -6.0,
+    -8.0,
+    -14.0
+   ],
+   [
+    -6.0,
+    -8.0,
+    -12.5
+   ],
+   [
+    -30.0,
+    -8.0,
+    0.0
+   ],
+   [
+    -85.0,
+    -8.0,
+    0.0
+   ],
+   [
+    -90.0,
+    -8.0,
+    -6.0
+   ],
+   [
+    -90.0,
+    -8.0,
+    -80.0
+   ],
+   [
+    -90.0,
+    -8.0,
+    -80.85
+   ],
+   [
+    -90.0,
+    -8.0,
+    -81.5
+   ],
+   [
+    -90.0,
+    -3.0,
+    -95.0
+   ],
+   [
+    -90.0,
+    -3.0,
+    -96.5
+   ],
+   [
+    -90.0,
+    -3.0,
+    -98.0
+   ]
+  ],
+  "market": [
+   [
+    0.0,
+    -14.0,
+    -9.0
+   ],
+   [
+    -2.0,
+    -14.0,
+    -14.0
+   ],
+   [
+    -2.0,
+    -14.0,
+    -29.2
+   ],
+   [
+    -6.0,
+    -14.0,
+    -29.2
+   ],
+   [
+    -6.0,
+    -14.0,
+    -28.5
+   ],
+   [
+    -6.0,
+    -8.0,
+    -14.0
+   ],
+   [
+    -6.0,
+    -8.0,
+    -12.5
+   ],
+   [
+    -10.0,
+    -8.0,
+    12.5
+   ],
+   [
+    -10.0,
+    -8.0,
+    14.0
+   ],
+   [
+    -10.0,
+    -11.0,
+    23.0
+   ],
+   [
+    -10.0,
+    -11.0,
+    24.5
+   ],
+   [
+    -10.0,
+    -11.0,
+    34.0
+   ],
+   [
+    -14.0,
+    -11.0,
+    74.0
+   ],
+   [
+    -36.0,
+    -11.0,
+    84.0
+   ]
+  ],
+  "old": [
+   [
+    0.0,
+    -14.0,
+    -9.0
+   ],
+   [
+    46.0,
+    -14.0,
+    -8.8
+   ],
+   [
+    46.0,
+    -14.0,
+    -7.3
+   ],
+   [
+    46.0,
+    -15.2,
+    -4.6
+   ],
+   [
+    46.0,
+    -15.2,
+    -3.0999999999999996
+   ],
+   [
+    50.0,
+    -15.2,
+    0.0
+   ],
+   [
+    75.0,
+    -22.0,
+    0.0
+   ],
+   [
+    105.0,
+    -22.0,
+    0.0
+   ]
+  ]
+ }
+}
