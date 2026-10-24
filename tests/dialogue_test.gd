@@ -1,10 +1,13 @@
 extends Node3D
 ## The character dialogue files (the talk and quests spec, section 1): the
-## .dialogue parser (D1-D4, D16-D17, D22 the schools), the words conditions
-## and effects share (D5), the library with its types and link checks
-## (D6-D15, D18-D21), what people remember (P1-P8), the conversation runner
-## (C1-C12, C12 the options' schools), the shade
-## who speaks it (S1-S8) and the talk box the player reads it in (B1-B7,
+## .dialogue parser (D1-D4, D16-D17, D22 the schools, D25 the parts in
+## order), the words conditions and effects share (D5), the library with its
+## types and link checks (D6-D15, D18-D21, D23-D24 a goto and the type's
+## options), what people remember (P1-P11: P9 a done goal stays off, P10 the
+## belt from the player's ready, P11 talk's notes and goals heard), the
+## conversation runner (C1-C12, C12 the options' schools), the shade
+## who speaks it (S1-S9, S9 its depth pass only where it is dense) and the
+## talk box the player reads it in (B1-B7,
 ## B9-B10 its draft-28 layout, B13-B15 the HUD and the letter around it,
 ## B16 its paint going on and off).
 ##   Godot --headless --fixed-fps 60 --path . res://tests/dialogue_test.tscn
