@@ -5,7 +5,7 @@
 name: Fx Librarian
 body: arms_master
 voice: male_b
-colour: ink
+colour: #e63833
 
 == beat open_after_lie
 when: said(lied)

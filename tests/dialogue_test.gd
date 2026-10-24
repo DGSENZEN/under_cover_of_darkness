@@ -3,7 +3,7 @@ extends Node3D
 ## .dialogue parser (D1-D4, D16-D17), the words conditions and effects share
 ## (D5), the library with its types and link checks (D6-D15, D18-D19), what
 ## people remember (P1-P8), the conversation runner (C1-C11) and the shade
-## who speaks it (S1-S4).
+## who speaks it (S1-S5).
 ##   Godot --headless --fixed-fps 60 --path . res://tests/dialogue_test.tscn
 ##
 ## The words still to write (every text in <<...>>) are printed as WORDS:
@@ -179,7 +179,7 @@ func _library() -> void:
 		and (lib["errors"] as Array).is_empty() and (lib["warnings"] as Array).is_empty()
 		and characters["fx_curandera"].get("name") == "Fx Curandera" and characters["fx_curandera"].get("body") == &"duelist"
 		and characters["fx_curandera"].get("voice") == &"female" and characters["fx_curandera"].get("type") == "fx_trade"
-		and characters["fx_librarian"].get("colour") == DialogueBook.colour_of("ink")
+		and characters["fx_librarian"].get("colour") == DialogueBook.colour_of("#e63833")
 		and lib["items"]["fx_book"].get("look") == &"book",
 		"characters %s, errors %s, warnings %s" % [keys, lib.get("errors"), lib.get("warnings")])
 
@@ -859,6 +859,35 @@ func _shade() -> void:
 		"target %s, prompt '%s'" % [player.frob.target, prompt])
 	player.queue_free()
 	shade.queue_free()
+	await _frames(2)
+
+	# The librarian: another body, his own colour, and no sword at his hip.
+	var librarian: StaticBody3D = Shade.new()
+	librarian.character = "fx_librarian"
+	add_child(librarian)
+	await _frames(2)
+	var his: Array = librarian.man.worn() if librarian.man != null else []
+	var armed := []
+
+	for mesh in his:
+		var pelvis := -1
+
+		for bind in mesh.skin.get_bind_count():
+			if String(mesh.skin.get_bind_name(bind)) == "pelvis":
+				pelvis = bind
+
+		for surface in mesh.mesh.get_surface_count():
+			var arrays: Array = mesh.mesh.surface_get_arrays(surface)
+
+			if pelvis >= 0 and Shade._without_carried(arrays, pelvis).size() != (arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).size():
+				armed.append(String(mesh.name))
+
+	var red := DialogueBook.colour_of("#e63833")
+	_check("S5 the librarian dresses arms_master in his own colour, every worn mesh on the shade with its depth pass, no sword",
+		librarian.dialogue.get("body") == &"arms_master" and not his.is_empty() and his.all(prepassed)
+		and his.all(func(m): return m.material_override.get_shader_parameter(&"shade_colour") == red) and armed.is_empty(),
+		"%d worn, prepassed %s, armed %s" % [his.size(), his.map(func(m): return prepassed.call(m)), armed])
+	librarian.queue_free()
 	await _frames(2)
 	DialogueBook.reload()
 

@@ -114,7 +114,8 @@ float dissolve() {
 	// climbing through her tears the line and keeps it moving.
 	float up = v_body.y / max(fray_height, 0.01);
 	float eaten = fbm(v_body * vec3(8.0, 4.0, 8.0) - vec3(0.0, drift * 4.0, 0.0) + seed);
-	return smoothstep(0.15, 0.6, up * 1.3 - 0.15 + (eaten - 0.5) * 1.4);
+	// (And nothing of her left at the soles: no islands at the toes.)
+	return smoothstep(0.15, 0.6, up * 1.3 - 0.15 + (eaten - 0.5) * 1.4) * smoothstep(0.12, 0.4, up);
 }
 
 void fragment() {
@@ -194,6 +195,10 @@ void fragment() {
 		colour += hue * fray * (1.0 - fray) * 0.6 * g;
 
 		float alpha = opacity * (0.03 + 0.95 * smoke) * mix(1.0, 0.65, v_hood) + rim * 0.9 * min(rim_gain, 1.0);
+		// The hood is a haze all through, never a hole: where its smoke
+		// thins, a faint glow of it still fills the face.
+		alpha = max(alpha, opacity * 0.4 * v_hood);
+		colour = max(colour, hue * 0.12 * g * v_hood);
 		// Her inside, seen through a slit or the neck's opening, is as full
 		// of smoke as she is, never a hole to the night.
 		bool inside = !FRONT_FACING && thin < 0.5;

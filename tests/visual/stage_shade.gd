@@ -3,7 +3,9 @@ extends Node3D
 ## one lamp, calm, flare, dim and gutter, from the front and three-quarters at
 ## 2 m, and close on the fraying feet. With --more, the angles that catch a
 ## see-through body's faults too: behind, the side, above, the head close up,
-## a turn, and against a bright wall.
+## a turn, and against a bright wall. With --who=librarian, the librarian's
+## (arms_master, ink) instead, his stills named librarian_*, with his head
+## close up.
 ## Godot --fixed-fps 60 --resolution 1280x720 --path . res://tests/visual/stage_shade.tscn -- --out=/tmp/shade
 
 const SHADE := preload("res://scripts/Interaction/Shade.gd")
@@ -12,6 +14,9 @@ const RetroScript := preload("res://scripts/Visual/Retro.gd")
 
 var _out := "/tmp/shade/"
 var _more := false
+## Whose shade: the fixture character, and the prefix of its stills.
+var _who := "fx_curandera"
+var _prefix := ""
 var shade: StaticBody3D
 var camera: Camera3D
 
@@ -22,6 +27,9 @@ func _ready() -> void:
 			_out = arg.trim_prefix("--out=").trim_suffix("/") + "/"
 		elif arg == "--more":
 			_more = true
+		elif arg == "--who=librarian":
+			_who = "fx_librarian"
+			_prefix = "librarian_"
 
 	DirAccess.make_dir_recursive_absolute(_out)
 	AudioServer.set_bus_mute(0, true)
@@ -33,7 +41,7 @@ func _ready() -> void:
 	camera.current = true
 
 	shade = SHADE.new()
-	shade.character = "fx_curandera"
+	shade.character = _who
 	add_child(shade)
 	# Facing +Z, toward the cameras.
 	shade.rotation.y = PI
@@ -53,6 +61,9 @@ func _ready() -> void:
 	await _frames(100)
 	_look(Vector3(0.25, 0.42, 0.85), Vector3(0.0, 0.18, 0.0))
 	await _shot("feet_fray")
+	var head: Vector3 = shade.head_point() - Vector3(0.0, 0.06, 0.0)
+	_look(head + Vector3(0.15, 0.04, 0.6), head)
+	await _shot("head_close")
 
 	if _more:
 		await _inspect()
@@ -199,7 +210,7 @@ func _box(center: Vector3, size: Vector3, colour: Color) -> void:
 func _shot(label: String) -> void:
 	await RenderingServer.frame_post_draw
 	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png(_out + label + ".png")
+	get_viewport().get_texture().get_image().save_png(_out + _prefix + label + ".png")
 
 
 func _frames(count: int) -> void:
