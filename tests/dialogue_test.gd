@@ -3,7 +3,7 @@ extends Node3D
 ## .dialogue parser (D1-D4, D16-D17), the words conditions and effects share
 ## (D5), the library with its types and link checks (D6-D15, D18-D19), what
 ## people remember (P1-P8), the conversation runner (C1-C11), the shade
-## who speaks it (S1-S5) and the talk box the player reads it in (B1-B7,
+## who speaks it (S1-S8) and the talk box the player reads it in (B1-B7,
 ## B9-B10 its draft-28 layout, B13-B15 the HUD and the letter around it,
 ## B16 its paint going on and off).
 ##   Godot --headless --fixed-fps 60 --path . res://tests/dialogue_test.tscn
@@ -21,6 +21,7 @@ const Conversation := preload("res://scripts/Interaction/Conversation.gd")
 const LetterText := preload("res://scripts/UI/LetterText.gd")
 const Shade := preload("res://scripts/Interaction/Shade.gd")
 const SHADE_SHADER := preload("res://scripts/Visual/shade.gdshader")
+const HumanoidScript := preload("res://scripts/Visual/Humanoid.gd")
 const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const TalkBox := preload("res://scripts/UI/TalkBox.gd")
@@ -871,29 +872,138 @@ func _shade() -> void:
 	add_child(librarian)
 	await _frames(2)
 	var his: Array = librarian.man.worn() if librarian.man != null else []
-	var armed := []
-
-	for mesh in his:
-		var pelvis := -1
-
-		for bind in mesh.skin.get_bind_count():
-			if String(mesh.skin.get_bind_name(bind)) == "pelvis":
-				pelvis = bind
-
-		for surface in mesh.mesh.get_surface_count():
-			var arrays: Array = mesh.mesh.surface_get_arrays(surface)
-
-			if pelvis >= 0 and Shade._without_carried(arrays, pelvis).size() != (arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).size():
-				armed.append(String(mesh.name))
-
 	var red := DialogueBook.colour_of("#e63833")
-	_check("S5 the librarian dresses arms_master in his own colour, every worn mesh on the shade with its depth pass, no sword",
+	_check("S5 the librarian dresses arms_master in his own colour, every worn mesh on the shade with its depth pass",
 		librarian.dialogue.get("body") == &"arms_master" and not his.is_empty() and his.all(prepassed)
-		and his.all(func(m): return m.material_override.get_shader_parameter(&"shade_colour") == red) and armed.is_empty(),
-		"%d worn, prepassed %s, armed %s" % [his.size(), his.map(func(m): return prepassed.call(m)), armed])
+		and his.all(func(m): return m.material_override.get_shader_parameter(&"shade_colour") == red),
+		"%d worn, prepassed %s" % [his.size(), his.map(func(m): return prepassed.call(m))])
 	librarian.queue_free()
 	await _frames(2)
 	DialogueBook.reload()
+	await _carried()
+
+
+## S6-S8: what a shade leaves off its wardrobe body (Shade.rebuild): the
+## sword at the hip, and never clothing.
+func _carried() -> void:
+	# The sword's triangles on each kind's outfit, found by
+	# .superpowers/diag/diag_carried.gd and seen gone in the stills: the
+	# duelist's blade (28) and its two grip pieces (12 + 12), the others' one
+	# 28-triangle sword. The archer and the brute carry none: their
+	# pelvis-only islands are pouches, buckles and tassels.
+	var swords := {&"archer": 0, &"arms_master": 28, &"brute": 0, &"duelist": 52, &"swordsman": 28, &"watchman": 28}
+	var cut := {}
+
+	for kind in swords:
+		var man: Node3D = HumanoidScript.new()
+		add_child(man)
+		man.dress(kind, 7, &"Idle")
+		var outfit: MeshInstance3D = man.body
+		var pelvis_bound := range(outfit.skin.get_bind_count()).any(func(b): return String(outfit.skin.get_bind_name(b)) == "pelvis")
+		var before := _triangles(outfit)
+		var strips: MeshInstance3D = Shade.rebuild(outfit, man.skeleton)
+		var after := _triangles(outfit) + (_triangles(strips) if strips != null and strips != outfit else 0)
+		cut[kind] = [before - after, pelvis_bound]
+		man.queue_free()
+
+	await _frames(1)
+	_check("S6 a shade leaves off exactly each body's sword, nothing else of its outfit",
+		swords.keys().all(func(k): return cut[k][0] == swords[k] and cut[k][1]), "cut (triangles, pelvis bound) %s" % [cut])
+
+	# Pelvis-only islands of every shape a costume might hang there: only the
+	# long, thin one (and the guard touching it) is a weapon.
+	var made := _hip_islands()
+	var kept: PackedInt32Array = Shade._without_carried(made["arrays"], 0)
+	var left := {}
+
+	for t in range(0, kept.size(), 3):
+		var name: String = made["owner"][kept[t]]
+		left[name] = int(left.get(name, 0)) + 1
+
+	_check("S7 a belt, a loincloth and a pouch rigged only to the pelvis stay; a blade and its guard go",
+		left.get("body", 0) == made["tris"]["body"] and left.get("belt", 0) == made["tris"]["belt"]
+		and left.get("loincloth", 0) == made["tris"]["loincloth"] and left.get("pouch", 0) == made["tris"]["pouch"]
+		and not left.has("blade") and not left.has("guard"), "left %s of %s" % [left, made["tris"]])
+
+	# A surface that is nothing but a weapon goes, and every other surface
+	# keeps its own material.
+	var two := ArrayMesh.new()
+	var body_only := _hip_islands(["body"])
+	var blade_only := _hip_islands(["blade", "guard"])
+	two.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, body_only["arrays"])
+	two.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, blade_only["arrays"])
+	var cloth := StandardMaterial3D.new()
+	cloth.resource_name = "WR_closed_body"
+	var steel := StandardMaterial3D.new()
+	steel.resource_name = "WR_closed_steel"
+	two.surface_set_material(0, cloth)
+	two.surface_set_material(1, steel)
+	var worn := MeshInstance3D.new()
+	worn.mesh = two
+	worn.skin = Skin.new()
+	worn.skin.add_named_bind("pelvis", Transform3D.IDENTITY)
+	worn.skin.add_named_bind("spine_01", Transform3D.IDENTITY)
+	add_child(worn)
+	Shade.rebuild(worn, null)
+	_check("S8 a surface that is only a weapon is dropped and the rest keep their own materials",
+		worn.mesh.get_surface_count() == 1 and worn.mesh.surface_get_material(0) == cloth,
+		"%d surfaces, first %s" % [worn.mesh.get_surface_count(),
+		worn.mesh.surface_get_material(0).resource_name if worn.mesh.get_surface_count() > 0 else "none"])
+	worn.queue_free()
+
+
+## Triangles a mesh draws.
+func _triangles(mesh: MeshInstance3D) -> int:
+	var count := 0
+
+	for surface in mesh.mesh.get_surface_count():
+		count += (mesh.mesh.surface_get_arrays(surface)[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+
+	return count
+
+
+## A surface of boxes and a ring, skinned to bind 0 (pelvis) or 1 (spine):
+## a body, a belt ring round the hips, a loincloth, a pouch, a blade at the
+## hip and a crossguard touching it. {arrays, owner (per vertex), tris}.
+func _hip_islands(only: Array = []) -> Dictionary:
+	var verts := PackedVector3Array()
+	var index := PackedInt32Array()
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	var owner := []
+	var tris := {}
+	var box := func(name: String, centre: Vector3, size: Vector3, basis: Basis, bind: int) -> void:
+		if not only.is_empty() and not only.has(name):
+			return
+		var first := verts.size()
+		for corner in 8:
+			var unit := Vector3(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1) - Vector3.ONE * 0.5
+			verts.append(centre + basis * (unit * size))
+			bones.append_array([bind, 0, 0, 0])
+			weights.append_array([1.0, 0.0, 0.0, 0.0])
+			owner.append(name)
+		for face in [[0, 1, 3, 2], [4, 6, 7, 5], [0, 4, 5, 1], [2, 3, 7, 6], [0, 2, 6, 4], [1, 5, 7, 3]]:
+			index.append_array([first + face[0], first + face[1], first + face[2], first + face[0], first + face[2], first + face[3]])
+		tris[name] = int(tris.get(name, 0)) + 12
+	box.call("body", Vector3(0.0, 1.2, 0.0), Vector3(0.3, 0.6, 0.2), Basis.IDENTITY, 1)
+	# The belt: a ring of 12 short boxes round the hips, touching.
+	for i in 12:
+		var angle := TAU * i / 12.0
+		box.call("belt", Vector3(sin(angle), 0.0, cos(angle)) * 0.18 + Vector3(0.0, 1.0, 0.0), Vector3(0.1, 0.05, 0.02),
+			Basis(Vector3.UP, angle), 0)
+	box.call("loincloth", Vector3(0.0, 0.75, 0.2), Vector3(0.28, 0.45, 0.01), Basis.IDENTITY, 0)
+	box.call("pouch", Vector3(-0.2, 0.9, 0.05), Vector3(0.1, 0.12, 0.06), Basis.IDENTITY, 0)
+	# The blade hangs at the hip, slanting back; the guard sits across its top.
+	var slant := Basis(Vector3.RIGHT, 0.6)
+	box.call("blade", Vector3(0.25, 0.6, -0.25), Vector3(0.04, 0.9, 0.01), slant, 0)
+	box.call("guard", Vector3(0.25, 0.6, -0.25) + slant * Vector3(0.0, 0.46, 0.0), Vector3(0.16, 0.02, 0.03), slant, 0)
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_INDEX] = index
+	arrays[Mesh.ARRAY_BONES] = bones
+	arrays[Mesh.ARRAY_WEIGHTS] = weights
+	return {"arrays": arrays, "owner": owner, "tris": tris}
 
 
 # ---------------------------------------------------------------------------

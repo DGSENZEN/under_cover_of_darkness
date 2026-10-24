@@ -44,9 +44,17 @@ const HEAD_MIDDLE := Vector3(0.0, 0.09, 0.011)
 const DEPTH_PRIORITY := -1
 ## How far the head is drawn in toward that hood (0 none, 1 a ball).
 const HOOD_PULL := 0.4
-## What a shade does not carry: a mesh island rigged wholly to this bone is
-## a thing hung at the hip (the duelist's sword), not the body.
+## What a shade does not carry: a blade-shaped thing rigged wholly to this
+## bone is a weapon hung at the hip (the duelist's sword), not the body
+## (_without_carried).
 const CARRIED_BONE := &"pelvis"
+## A weapon is longer than this (m) and more than this many times as long as
+## it is wide; its parts lie this near it (m).
+const WEAPON_LENGTH := 0.4
+const WEAPON_SLENDER := 4.0
+const WEAPON_TOUCH := 0.03
+## A weapon's guard, grip or pommel is smaller than this across (m).
+const WEAPON_PART := 0.25
 ## The gestures a line's cue may play once, as clips.
 const GESTURES := {&"shake": &"Idle_No"}
 ## A nod: two dips of the head over this long (s), the first this deep (rad).
@@ -290,7 +298,7 @@ func _dress_in_smoke() -> void:
 		var original := mesh.get_surface_override_material(0) as ShaderMaterial
 		var albedo: Texture2D = original.get_shader_parameter(&"albedo") if original != null else null
 		var part := String(mesh.name).get_slice("_", 0)
-		var strips := _rebuild(mesh)
+		var strips := rebuild(mesh, man.skeleton)
 
 		if strips != mesh:
 			_smoke_on(mesh, albedo, part, false)
@@ -343,12 +351,12 @@ func _smoke_on(mesh: MeshInstance3D, albedo: Texture2D, part: String, strips: bo
 	mesh.set_meta(&"no_highlight", true)
 
 
-## Rebuilds a worn mesh for a shade: the islands rigged wholly to
-## CARRIED_BONE are left out, and its strip surfaces (Wardrobe's WR_strips:
+## Rebuilds a worn mesh for a shade: the weapon hung at its hip is left
+## out (_without_carried), and its strip surfaces (Wardrobe's WR_strips:
 ## fringes, flaps, capes, lashes) go into a mesh of their own on the same
 ## skin. Returns the strips' mesh, null if it has none, or the mesh itself if
 ## it is all strips.
-func _rebuild(worn: MeshInstance3D) -> MeshInstance3D:
+static func rebuild(worn: MeshInstance3D, skeleton: Skeleton3D) -> MeshInstance3D:
 	var source := worn.mesh
 	var carried := -1
 
@@ -356,7 +364,7 @@ func _rebuild(worn: MeshInstance3D) -> MeshInstance3D:
 		var bone := worn.skin.get_bind_bone(bind)
 		var bind_name := String(worn.skin.get_bind_name(bind))
 
-		if bind_name == String(CARRIED_BONE) or bone >= 0 and man.skeleton.get_bone_name(bone) == String(CARRIED_BONE):
+		if bind_name == String(CARRIED_BONE) or bone >= 0 and skeleton != null and skeleton.get_bone_name(bone) == String(CARRIED_BONE):
 			carried = bind
 
 	var closed := ArrayMesh.new()
@@ -370,6 +378,12 @@ func _rebuild(worn: MeshInstance3D) -> MeshInstance3D:
 
 		if carried >= 0:
 			arrays[Mesh.ARRAY_INDEX] = _without_carried(arrays, carried)
+
+			# The weapon was all of this surface: it goes, and nothing is
+			# added (an empty surface is refused, and the material would then
+			# land on the surface before it).
+			if (arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).is_empty():
+				continue
 
 		var flags: int = source.surface_get_format(surface) & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
 		into.add_surface_from_arrays(source.surface_get_primitive_type(surface), arrays, [], {}, flags)
@@ -393,13 +407,21 @@ func _rebuild(worn: MeshInstance3D) -> MeshInstance3D:
 	return strips
 
 
-## A surface's triangles less every island (joined by shared vertices or
-## shared positions) whose vertices all hang mostly from the bind `carried`.
+## A surface's triangles less the weapon hung at the hip. Of the islands
+## (joined by shared vertices or positions) whose every vertex hangs wholly
+## from the bind `carried`, a weapon is one that is blade-shaped (longer
+## than WEAPON_LENGTH along its own axis and more than WEAPON_SLENDER times
+## as long as it is wide) and the small parts (under WEAPON_PART across)
+## touching it. A belt, a tasset, a loincloth or a pouch rigged only to the
+## hips is not, and stays.
+## (Shape, not a list in the wardrobe files: those are written by the
+## wardrobe's Blender build, tools/wardrobe, and every kind is covered by
+## dialogue_test S6.)
 static func _without_carried(arrays: Array, carried: int) -> PackedInt32Array:
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
-	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES] if arrays[Mesh.ARRAY_BONES] != null else PackedInt32Array()
+	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS] if arrays[Mesh.ARRAY_WEIGHTS] != null else PackedFloat32Array()
 
 	if index.is_empty() or bones.is_empty() or verts.is_empty():
 		return index
@@ -430,30 +452,140 @@ static func _without_carried(arrays: Array, carried: int) -> PackedInt32Array:
 		parent[root.call(index[t + 1])] = root.call(index[t])
 		parent[root.call(index[t + 2])] = root.call(index[t])
 
-	# An island is carried while every one of its vertices hangs mostly from it.
-	var carried_island := {}
+	# Islands wholly on the carried bind: their vertices and bounds.
+	var pure := {}
 
 	for v in verts.size():
-		var best := 0
-		var most := -1.0
+		var on := 0.0
 
 		for k in per:
-			if weights[v * per + k] > most:
-				most = weights[v * per + k]
-				best = bones[v * per + k]
+			if bones[v * per + k] == carried:
+				on += weights[v * per + k]
 
 		var island: int = root.call(v)
-		carried_island[island] = bool(carried_island.get(island, true)) and best == carried
+		pure[island] = bool(pure.get(island, true)) and on >= 0.99
+
+	var points := {}
+	var bounds := {}
+
+	for v in verts.size():
+		var island: int = root.call(v)
+
+		if not pure[island]:
+			continue
+
+		if not points.has(island):
+			points[island] = PackedVector3Array()
+			bounds[island] = AABB(verts[v], Vector3.ZERO)
+
+		points[island].append(verts[v])
+		bounds[island] = (bounds[island] as AABB).expand(verts[v])
+
+	# A blade-shaped island is a weapon; so is a small one touching it (its
+	# guard, grip or pommel). Anything larger touching it (the belt it hangs
+	# from) is clothing.
+	var blades := {}
+
+	for island in points:
+		var line := _blade_line(points[island])
+
+		if not line.is_empty():
+			blades[island] = line
+
+	var weapon := {}
+
+	for island in points:
+		weapon[island] = blades.has(island) or (bounds[island] as AABB).size.length() < WEAPON_PART \
+			and blades.keys().any(func(blade): return _touches(points[island], bounds[island], blades[blade], points[blade]))
 
 	var kept := PackedInt32Array()
 
 	for t in range(0, index.size(), 3):
-		if not carried_island[root.call(index[t])]:
+		var island: int = root.call(index[t])
+
+		if not (bool(pure[island]) and bool(weapon.get(island, false))):
 			kept.append(index[t])
 			kept.append(index[t + 1])
 			kept.append(index[t + 2])
 
 	return kept
+
+
+## The line of a blade, if `points` are long and thin like one: their
+## length along their own longest axis (the covariance's first eigenvector,
+## by power iteration) and their width, twice the farthest any lies off that
+## axis. {from, to, radius} in the mesh's space, or {} if not a blade.
+static func _blade_line(points: PackedVector3Array) -> Dictionary:
+	var mean := Vector3.ZERO
+
+	for p in points:
+		mean += p
+
+	mean /= maxf(points.size(), 1.0)
+	var xx := 0.0
+	var xy := 0.0
+	var xz := 0.0
+	var yy := 0.0
+	var yz := 0.0
+	var zz := 0.0
+
+	for p in points:
+		var d := p - mean
+		xx += d.x * d.x
+		xy += d.x * d.y
+		xz += d.x * d.z
+		yy += d.y * d.y
+		yz += d.y * d.z
+		zz += d.z * d.z
+
+	var axis := Vector3(1.0, 1.0, 1.0).normalized()
+
+	for i in 32:
+		var next := Vector3(xx * axis.x + xy * axis.y + xz * axis.z, xy * axis.x + yy * axis.y + yz * axis.z,
+			xz * axis.x + yz * axis.y + zz * axis.z)
+
+		if next.length() < 1e-9:
+			return {}
+
+		axis = next.normalized()
+
+	var low := INF
+	var high := -INF
+	var off := 0.0
+
+	for p in points:
+		var d := p - mean
+		var along := d.dot(axis)
+		low = minf(low, along)
+		high = maxf(high, along)
+		off = maxf(off, (d - axis * along).length())
+
+	var length := high - low
+
+	if length <= WEAPON_LENGTH or length <= WEAPON_SLENDER * maxf(off * 2.0, 0.001):
+		return {}
+
+	return {"from": mean + axis * low, "to": mean + axis * high, "radius": off}
+
+
+## Whether a part (its `points` and `box`) touches a blade: one of its
+## points lies within WEAPON_TOUCH of the blade's `line`, or one of the
+## blade's points (`edge`) within WEAPON_TOUCH of its box (a crossguard has
+## points only at its ends, far from the blade's line).
+static func _touches(points: PackedVector3Array, box: AABB, line: Dictionary, edge: PackedVector3Array) -> bool:
+	var reach: float = line["radius"] + WEAPON_TOUCH
+
+	for p in points:
+		if Geometry3D.get_closest_point_to_segment(p, line["from"], line["to"]).distance_to(p) <= reach:
+			return true
+
+	var near := box.grow(WEAPON_TOUCH)
+
+	for p in edge:
+		if near.has_point(p):
+			return true
+
+	return false
 
 
 ## Wisps of its colour off its feet and shoulders: soft puffs of the
