@@ -236,8 +236,12 @@ class MetroPlan(unittest.TestCase):
         lane = _space("candle_lane")
         xs = [p[0] for p in lane["polygon"]]
         zs = [p[1] for p in lane["polygon"]]
-        self.assertEqual((min(xs), max(xs), min(zs), max(zs)), (-4.0, 28.0, 72.0, 78.9))
+        # (33.6 m: the bay's 1.2 m tile modules and 4.8 m vault spans fill it exactly, 28 and 7 of them.)
+        self.assertEqual((min(xs), max(xs), min(zs), max(zs)), (-4.0, 29.6, 72.0, 78.9))
         self.assertEqual((lane["floor"], lane["height"]), (-11.0, 4.0))
+        chapel = _space("chapel")
+        self.assertEqual(min(p[0] for p in chapel["polygon"]), 29.6)
+        self.assertIn(("candle_lane", (29.6, 74.5)), [(o["to"], tuple(o["at"])) for o in chapel["openings"]])
 
     def test_the_librarian_shop_opens_off_the_lane(self):
         shop = _space("librarian_shop")

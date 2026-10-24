@@ -37,15 +37,16 @@ def lay(P):
     # East: the candle lane to the chapel, on up to the south-east corridor; widened to the corridor bay's section
     # (docs/superpowers/specs/2026-10-23-candle-lane-design.md), open its whole width on the Pasaje, the librarian's
     # shop off its south side.
-    P.space("candle_lane", rect(-4, 72, 28, 78.9), floor=MARKET, height=4.0, layer=2,
-            openings=[{"to": "pasaje", "at": (-4, 75.45), "width": 6.9}, {"to": "chapel", "at": (28, 74.5)},
+    # (33.6 m long: the bay's 1.2 m tile modules and 4.8 m vault spans fill it exactly.)
+    P.space("candle_lane", rect(-4, 72, 29.6, 78.9), floor=MARKET, height=4.0, layer=2,
+            openings=[{"to": "pasaje", "at": (-4, 75.45), "width": 6.9}, {"to": "chapel", "at": (29.6, 74.5)},
                       {"to": "librarian_shop", "at": (19, 78.9)}])
     P.space("librarian_shop", rect(15, 78.9, 23, 85.65), floor=MARKET, height=4.5, interior=True, layer=2,
             openings=[{"to": "candle_lane", "at": (19, 78.9)}])
-    P.space("chapel", rect(28, 62, 44, 86), floor=MARKET, height=5.0, layer=2,
-            openings=[{"to": "candle_lane", "at": (28, 74.5)}, {"to": "lane_se", "at": (44, 72.5)}])
-    P.space("lane_se", rect(44, 70, 87, 75), floor=MARKET, height=6.0, layer=2,
-            openings=[{"to": "chapel", "at": (44, 72.5)}, {"to": "corridor_se", "at": (87, 72.5)}])
+    P.space("chapel", rect(29.6, 62, 45.6, 86), floor=MARKET, height=5.0, layer=2,
+            openings=[{"to": "candle_lane", "at": (29.6, 74.5)}, {"to": "lane_se", "at": (45.6, 72.5)}])
+    P.space("lane_se", rect(45.6, 70, 87, 75), floor=MARKET, height=6.0, layer=2,
+            openings=[{"to": "chapel", "at": (45.6, 72.5)}, {"to": "corridor_se", "at": (87, 72.5)}])
     P.route("lane_se_flight", "stair", [(87, HALL, 72.5), (79, MARKET, 72.5)])
 
     # Further south: the fondas east, the storeroom west, the square.
