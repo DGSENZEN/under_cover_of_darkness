@@ -1,0 +1,22 @@
+{
+	"about": "The librarian's talk-box skin (talk and quests spec, section 4, 'The librarian's skin'; librarian2). Pixel boxes [x0, y0, x1, y1] are in the original backdrop (size); the crop is the frame's (30, 40)-(1966, 1076) centre-cropped to the curandera's 1802:1050. breathe and eyes are [x, y, w, h] in fractions of the cropped panel (the face in the window and the Virgin breathe, the face's shut eyes glow; the saint at the far left sits under the portrait, so has neither). His cursor is the curandera's, tinted red. Paintings: assets/ui/talk/librarian/ (gitignored; see README.md).",
+	"size": [2000, 1120],
+	"crop": [109, 40, 1887, 1076],
+	"pool": [0.06, -0.25, 0.94, 0.92],
+	"pool_strength": 0.7843,
+	"dark_region": [60, 720, 400, 960],
+	"warm_region": [1700, 420, 1930, 820],
+	"cursor_from": "curandera",
+	"cursor_tip": 0.685,
+	"cursor_saturation": 0.6,
+	"cursor_tint": [255, 70, 60],
+	"cursor_tint_amount": 0.75,
+	"breathe": [
+		[0.5574, 0.1255, 0.1406, 0.3571],
+		[0.7992, 0.0965, 0.0478, 0.1303]
+	],
+	"eyes": [
+		[0.5799, 0.2394, 0.0247, 0.0425],
+		[0.6339, 0.2375, 0.027, 0.0463]
+	]
+}

@@ -12,9 +12,10 @@ extends CanvasLayer
 ##     in cochineal), then the options, each in its own painted brush swipe
 ##     (talk_swipe.gdshader); the chosen one warm gold with dark ink and the
 ##     marker at its end; picked with 1-4, the mouse, or the wheel and E.
-##   - The look comes from a TalkSkin: the plain one (a backdrop painted from
-##     noise, the live render of the shade's head, a painted spike) until a
-##     character's own paintings come (Task 6b).
+##   - The look comes from a TalkSkin: the character's own paintings where
+##     the user painted them (assets/ui/talk/<character>), else the plain one
+##     (a backdrop painted from noise, the live render of the shade's head, a
+##     painted spike). A painted skin lives: TalkSkin.animate each frame.
 ## E or a click tells the line out at once, the next press goes on. Holding
 ## back (WALK_AWAY) walks away, and they remember it (walked_off). A blow, a
 ## death or leaving the district breaks it off (interrupt): gone at once,
@@ -188,6 +189,9 @@ func open(p_shade: Node, p_player: Node) -> void:
 	_opened_frame = Engine.get_physics_frames()
 	_seed = randf() * 100.0
 	player.talk_hold = true
+	# Their own paintings if they have them (a dialogue may name another's
+	# skin), else the plain box.
+	skin = TalkSkin.for_character(String(shade.dialogue.get("skin", shade.dialogue.get("id", ""))))
 
 	_build()
 	_place_portrait_camera()
@@ -450,6 +454,10 @@ func _process(delta: float) -> void:
 		return
 
 	_paint_in(delta)
+	# The living painting follows the shade, and a little the mouse.
+	var screen := _screen()
+	var mouse := (get_viewport().get_mouse_position() / screen - Vector2(0.5, 0.5)) * 2.0 if screen.x > 0.0 else Vector2.ZERO
+	skin.animate(delta, shade.shade_state() if shade.has_method("shade_state") else &"calm", mouse)
 
 	# The line is told once its part of the panel is down.
 	if _revealing() and _panel_reveal >= WORDS_FROM:
@@ -712,6 +720,7 @@ func _build_panel() -> void:
 	var pool: Rect2 = skin.pool
 	material.set_shader_parameter(&"pool", Vector4(pool.position.x, pool.position.y, pool.end.x, pool.end.y))
 	material.set_shader_parameter(&"pool_strength", skin.pool_strength)
+	skin.dress_panel(material, shade.dialogue.get("colour", Color(1.0, 0.62, 0.22)) if is_instance_valid(shade) else Color(1.0, 0.62, 0.22))
 	_root.add_child(_panel)
 
 
@@ -737,6 +746,7 @@ func _build_portrait() -> void:
 	var picture := Vector2(PORTRAIT_TALL * skin.face_aspect(), PORTRAIT_TALL)
 	_portrait = _painted(texture, picture, PORTRAIT_PAD, 4.0)
 	_portrait.name = "Portrait"
+	skin.dress_portrait(_portrait.material)
 	_root.add_child(_portrait)
 
 
@@ -785,6 +795,7 @@ func _build_options(list: Array) -> void:
 			material.set_shader_parameter(&"cursor", skin.cursor)
 			material.set_shader_parameter(&"cursor_tip", skin.cursor_tip)
 			material.set_shader_parameter(&"cursor_aspect", float(skin.cursor.get_width()) / float(skin.cursor.get_height()))
+			skin.dress_swipe(material)
 
 		swipe.material = material
 		_root.add_child(swipe)

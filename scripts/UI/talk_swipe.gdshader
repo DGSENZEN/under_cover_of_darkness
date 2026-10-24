@@ -32,6 +32,11 @@ uniform bool use_cursor = false;
 uniform sampler2D cursor : filter_linear_mipmap, repeat_disable;
 uniform float cursor_tip = 0.685;
 uniform float cursor_aspect = 1.0;
+// The cursor's colour, as draft 28 has it: its saturation, then its grey
+// times cursor_tint mixed in by cursor_tint_amount (the librarian's red).
+uniform float cursor_saturation = 1.0;
+uniform vec3 cursor_tint = vec3(1.0);
+uniform float cursor_tint_amount = 0.0;
 uniform float reveal = 1.0;
 
 float hash(vec2 p) {
@@ -48,27 +53,68 @@ float vnoise(vec2 p) {
 }
 
 // One bristle (a row about 1.4 px high): how much paint it lays at x.
-float bristle(float row, float x) {
-	float w = swipe_size.x;
-	float x0 = hash(vec2(row, 1.0)) * 0.10 * w;
-	float x1 = (0.84 + 0.16 * hash(vec2(row, 2.0))) * w;
-	float v = mix(150.0, 255.0, hash(vec2(row, 3.0))) / 255.0;
-	float on = smoothstep(x0, x0 + 3.0, x) * (1.0 - smoothstep(x1 - 3.0, x1, x));
-	// Here and there a thin one: the paint runs out between them.
-	float thin = hash(vec2(row, 4.0)) < 0.16 ? 0.5 : 1.0;
-	return v * on * thin;
-}
+// The brush's bristle lines, as draft 28's swipe_mask draws them: h * 2.2
+// lines laid across the middle 76% of its height, each from a start in the
+// first 10% to an end in the last 16%, a little off level (up to 2 px over
+// its length), 1, 2 or 3 px wide, of its own strength (150..255); where they
+// cross, the one laid last shows. Here each line is one of a stack spread
+// evenly down the band (jittered), and "laid last" is a random rank.
+const float LINES_PER_PX = 2.2;
+const float BAND_TOP = 0.12;
+const float BAND_BOTTOM = 0.88;
 
 float mask(vec2 p) {
-	float h = swipe_size.y;
-	float y = p.y / 1.4;
-	float row = floor(y);
-	float m = mix(bristle(row, p.x), bristle(row + 1.0, p.x), smoothstep(0.2, 0.8, fract(y)));
-	m *= smoothstep(0.10 * h, 0.15 * h, p.y) * (1.0 - smoothstep(0.85 * h, 0.90 * h, p.y));
-	// The dry ends: small holes in the outer 4% and 5%.
 	float w = swipe_size.x;
-	float ends = max(1.0 - smoothstep(0.0, 0.04 * w, p.x), smoothstep(0.95 * w, w, p.x));
-	float holes = smoothstep(0.5, 0.62, vnoise(p / vec2(1.6, 0.8) + 13.0));
+	float h = swipe_size.y;
+	float spacing = (BAND_BOTTOM - BAND_TOP) / LINES_PER_PX;
+	float first = floor((p.y - 3.5 - BAND_TOP * h) / spacing) - 2.0;
+	float cover = 0.0;
+	float value = 0.0;
+	float rank = -1.0;
+
+	for (int i = 0; i < 28; i++) {
+		float k = first + float(i);
+
+		if (k < 0.0) {
+			continue;
+		}
+
+		if (k >= floor(h * LINES_PER_PX)) {
+			break;
+		}
+
+		float x0 = hash(vec2(k, 1.0)) * 0.10 * w;
+		float x1 = (0.84 + 0.16 * hash(vec2(k, 2.0))) * w;
+		float t = clamp((p.x - x0) / max(x1 - x0, 1.0), 0.0, 1.0);
+		float y = BAND_TOP * h + (k + (hash(vec2(k, 3.0)) - 0.5) * 2.4) * spacing + (hash(vec2(k, 4.0)) - 0.5) * 4.0 * t;
+		float pick = hash(vec2(k, 5.0));
+		float thick = pick < 0.25 ? 1.0 : (pick < 0.75 ? 2.0 : 3.0);
+		// Soft by about the reference's 0.8 px blur.
+		float across = 1.0 - smoothstep(thick * 0.5 - 0.6, thick * 0.5 + 0.6, abs(p.y - y));
+		float along = smoothstep(x0 - 0.6, x0 + 0.6, p.x) * (1.0 - smoothstep(x1 - 0.6, x1 + 0.6, p.x));
+		float c = across * along;
+
+		if (c <= 0.0) {
+			continue;
+		}
+
+		float order = hash(vec2(k, 6.0));
+		float v = mix(150.0, 255.0, hash(vec2(k, 7.0))) / 255.0;
+
+		// The last laid shows; a softer edge under it lets the one below through.
+		if (order > rank) {
+			value = mix(value, v, c);
+			rank = c > 0.5 ? order : rank;
+		}
+
+		cover = max(cover, c);
+	}
+
+	float m = value * smoothstep(0.0, 1.0, cover * 1.6);
+	// The dry ends: a few small holes (the reference's w * 0.12 ellipses,
+	// 0.6-1.6 px across) in the outer 4% and 5%.
+	float ends = max(1.0 - step(0.04 * w, p.x), step(0.95 * w, p.x));
+	float holes = smoothstep(0.80, 0.88, vnoise(p / vec2(1.4, 0.7) + 13.0));
 	return m * (1.0 - ends * holes);
 }
 
@@ -97,6 +143,33 @@ vec4 spike(vec2 p) {
 	return vec4(colour, max(blade, head));
 }
 
+// The skin's paint for the swipe at `uv`: its region of the painting
+// squeezed into the swipe, far more down than across (as the reference's
+// resize): taps along the squeezed way, from the level the other way needs.
+vec3 paint_at(vec2 uv) {
+	vec2 at = region.xy + uv * region.zw;
+	vec2 size = vec2(textureSize(paint, 0));
+	vec2 ex = dFdx(at);
+	vec2 ey = dFdy(at);
+	float lx = length(ex * size);
+	float ly = length(ey * size);
+	vec2 major = lx > ly ? ex : ey;
+	float minor = min(lx, ly);
+	float lod = max(0.0, log2(max(minor, 0.0001)));
+	int taps = clamp(int(ceil(max(lx, ly) / max(minor, 1.0))), 1, 8);
+	vec3 sum = vec3(0.0);
+
+	for (int i = 0; i < 8; i++) {
+		if (i >= taps) {
+			break;
+		}
+
+		sum += textureLod(paint, at + major * ((float(i) + 0.5) / float(taps) - 0.5), lod).rgb;
+	}
+
+	return sum / float(taps);
+}
+
 vec4 cursor_cut(vec2 p) {
 	float t = (p.x - marker_x) / marker_width;
 
@@ -107,6 +180,10 @@ vec4 cursor_cut(vec2 p) {
 	float tall = marker_width / max(cursor_aspect, 0.01);
 	float v = cursor_tip + (p.y - swipe_size.y * 0.5) / tall;
 	vec4 c = texture(cursor, vec2(t, v));
+	float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+	c.rgb = mix(vec3(l), c.rgb, cursor_saturation);
+	l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+	c.rgb = mix(c.rgb, vec3(l) * cursor_tint, cursor_tint_amount);
 	// Its rim softened, as the reference's blurred box.
 	c.a *= smoothstep(0.0, 0.03, t) * smoothstep(0.0, 2.0, p.y) * smoothstep(0.0, 2.0, swipe_size.y - p.y);
 	c.rgb = mix(c.rgb, wash, 0.08);
@@ -119,7 +196,7 @@ void fragment() {
 	vec3 colour;
 
 	if (use_paint) {
-		colour = texture(paint, region.xy + UV * region.zw).rgb;
+		colour = paint_at(UV);
 	} else {
 		colour = (warm ? paint_warm : paint_dark) * (0.82 + 0.36 * vnoise(p / vec2(38.0, 2.0)));
 	}
@@ -134,7 +211,7 @@ void fragment() {
 
 	if (marker_x >= 0.0) {
 		vec4 mark = use_cursor ? cursor_cut(p) : spike(p);
-		mark.a *= min(1.0, m * 1.4);
+		mark.a *= min(1.0, m * alpha_scale * 1.4);
 		colour = mix(colour, mark.rgb, mark.a);
 		alpha = max(alpha, mark.a);
 	}

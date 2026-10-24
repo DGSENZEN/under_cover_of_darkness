@@ -1,0 +1,20 @@
+{
+	"about": "The curandera's talk-box skin (talk and quests spec, section 4, 'Character skins'; draft 28). Pixel boxes [x0, y0, x1, y1] are in the original backdrop (size); breathe and eyes are [x, y, w, h] in fractions of the cropped panel (the two spectral faces at the top, their three eyes); pool is the reading pool's ellipse box [x0, y0, x1, y1] in fractions of the panel. Paintings: assets/ui/talk/curandera/ (gitignored; see README.md).",
+	"size": [2000, 1120],
+	"crop": [98, 22, 1900, 1072],
+	"pool": [0.06, -0.25, 0.94, 0.92],
+	"pool_strength": 0.7843,
+	"dark_region": [100, 620, 260, 900],
+	"warm_region": [130, 965, 700, 1075],
+	"cursor_tip": 0.685,
+	"cursor_saturation": 0.6,
+	"breathe": [
+		[0.434, 0.0838, 0.1332, 0.3429],
+		[0.6115, 0.0648, 0.1887, 0.2952]
+	],
+	"eyes": [
+		[0.4739, 0.1524, 0.0377, 0.0648],
+		[0.6554, 0.1619, 0.0333, 0.0571],
+		[0.7347, 0.1724, 0.0333, 0.0571]
+	]
+}

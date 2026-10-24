@@ -29,8 +29,38 @@ uniform vec4 pool = vec4(0.06, -0.25, 0.94, 0.92);
 uniform float pool_strength = 0.0;
 uniform float reveal = 1.0;
 uniform float reveal_seed = 0.0;
+// The part of TEXTURE shown (x, y, w, h in its UV): a skin's backdrop is the
+// whole painting, its frame cropped away here.
+uniform vec4 crop = vec4(0.0, 0.0, 1.0, 1.0);
+
+// The living painting (a painted skin's; TalkSkin.animate drives it), all
+// off by default:
+//   - breathe: the spectral faces (rects in fractions of the picture) swell
+//     and settle, very slightly, through a soft masked warp;
+//   - eyes: their eyes glow in the shade's colour (eye_glow, eye_colour), and
+//     gutter with it (eye_flicker);
+//   - dust: faint motes drift up across it;
+//   - shift: the painting slides a few px inside its frame (the mouse);
+//   - warmth, grey, flicker: the portrait warms on flare, greys on dim,
+//     flickers on gutter.
+uniform bool living = false;
+uniform vec4 breathe[4];
+uniform int breathe_count = 0;
+uniform vec4 eyes[6];
+uniform int eye_count = 0;
+uniform vec3 eye_colour = vec3(1.0, 0.62, 0.22);
+uniform float eye_glow = 0.0;
+uniform float eye_flicker = 0.0;
+uniform float dust = 0.0;
+uniform vec2 shift = vec2(0.0);
+uniform float warmth = 0.0;
+uniform float grey = 0.0;
+uniform float flicker = 0.0;
 
 const vec3 POOL_INK = vec3(4.0, 4.0, 6.0) / 255.0;
+// The reading pool's softness: draft 28 blurs it with a Gaussian of this
+// sigma (px of the 1000 px panel).
+const float POOL_SIGMA = 70.0;
 
 float hash(vec2 p) {
 	p = fract(p * vec2(123.34, 456.21) + seed * 0.137);
@@ -135,7 +165,90 @@ float pool_mask(vec2 q) {
 	vec2 centre = (a + b) * 0.5;
 	vec2 radii = max((b - a) * 0.5, vec2(1.0));
 	float out_px = (length((q - centre) / radii) - 1.0) * min(radii.x, radii.y);
-	return 1.0 - smoothstep(-70.0, 70.0, out_px);
+	// A Gaussian-blurred edge (the normal CDF, by its logistic likeness).
+	return 1.0 / (1.0 + exp(1.702 * out_px / POOL_SIGMA));
+}
+
+// Where in TEXTURE the picture's `q` (px of the picture) is: its crop's part.
+// (TEXTURE itself can be read only in fragment(), so the sampling is there:
+// four bilinear taps spread over the pixel's footprint, from the mip level
+// half that footprint, a 2x2 supersample sharper than a mipmap's own blur and
+// never aliasing; a pixel no bigger than a texel takes one.)
+vec2 picture_uv(vec2 q) {
+	return crop.xy + (q + 0.5) / picture_size * crop.zw;
+}
+
+// The mip level for the strokes past the edge: the picture's colour well
+// blurred, about an eighth of its size (as the reference's dry strokes take
+// theirs). `texels`: TEXTURE's width.
+float blurred_lod(float texels) {
+	return log2(max(texels * crop.z / picture_size.x, 1.0) * 8.0);
+}
+
+// Where to take the paint from: shifted with the mouse, and each spectral
+// face breathing (a slow swell about its middle, eased out at its edge).
+vec2 living_at(vec2 q) {
+	q -= shift;
+
+	for (int i = 0; i < 4; i++) {
+		if (i >= breathe_count) {
+			break;
+		}
+
+		vec4 face = breathe[i];
+		vec2 middle = (face.xy + face.zw * 0.5) * picture_size;
+		vec2 half_size = max(face.zw * 0.5 * picture_size, vec2(1.0));
+		float inside = 1.0 - smoothstep(0.45, 1.0, length((q - middle) / half_size));
+		float swell = 0.011 * sin(TIME * 6.2832 / 5.5 + float(i) * 1.9) + 0.004 * sin(TIME * 6.2832 / 2.3 + float(i));
+		q = middle + (q - middle) / (1.0 + swell * inside);
+	}
+
+	return q;
+}
+
+// How much the eyes glow here (0..), their light gathered soft about each.
+float eye_light(vec2 q) {
+	float light = 0.0;
+
+	for (int i = 0; i < 6; i++) {
+		if (i >= eye_count) {
+			break;
+		}
+
+		vec4 eye = eyes[i];
+		vec2 middle = (eye.xy + eye.zw * 0.5) * picture_size;
+		vec2 radius = max(eye.zw * 0.5 * picture_size, vec2(1.0));
+		vec2 d = (q - middle) / radius;
+		// A bright core in the eye, a wide faint halo round it.
+		light += exp(-dot(d, d) * 2.2) + 0.25 * exp(-dot(d, d) * 0.35);
+	}
+
+	// A candle's gutter: it sinks and catches, unevenly.
+	float gutter = vnoise(vec2(TIME * 7.0, 3.7)) * 0.7 + vnoise(vec2(TIME * 17.0, 9.1)) * 0.3;
+	return light * eye_glow * (1.0 - eye_flicker * 0.75 * smoothstep(0.35, 0.8, gutter));
+}
+
+// Faint dust drifting up through the panel: a few soft motes, twinkling.
+float motes(vec2 q) {
+	float m = 0.0;
+
+	for (int layer = 0; layer < 2; layer++) {
+		float l = float(layer);
+		vec2 cell = vec2(70.0 + 40.0 * l);
+		vec2 at = q + vec2(sin(TIME * 0.13 + l * 2.0) * 24.0, TIME * (7.0 + 5.0 * l));
+		vec2 id = floor(at / cell);
+		vec2 f = fract(at / cell);
+		float h = hash(id + l * 13.0);
+
+		if (h < 0.4) {
+			vec2 c = vec2(hash(id + 1.7), hash(id + 2.9)) * 0.8 + 0.1;
+			float r = length((f - c) * cell);
+			float twinkle = 0.55 + 0.45 * sin(TIME * (0.9 + h * 2.0) + h * 40.0);
+			m += (1.0 - smoothstep(0.3, 1.4 + l * 0.6, r)) * twinkle;
+		}
+	}
+
+	return m;
 }
 
 // How much of the picture's paint is left here (0 eaten, 1 whole).
@@ -208,9 +321,42 @@ void fragment() {
 	vec2 full = picture_size + 2.0 * pad;
 	vec2 p = UV * full - pad;
 	vec2 q = clamp(p, vec2(0.0), picture_size - 1.0);
-	vec2 at = (q + 0.5) / picture_size;
-	vec3 colour = procedural ? backdrop(q) : textureLod(TEXTURE, at, 0.0).rgb;
+	vec3 colour;
+	vec3 edge_paint = vec3(0.0);
+
+	if (procedural) {
+		colour = backdrop(q);
+	} else {
+		vec2 uv = picture_uv(living ? living_at(q) : q);
+		vec2 size = vec2(textureSize(TEXTURE, 0));
+		vec2 ex = dFdx(uv);
+		vec2 ey = dFdy(uv);
+		float foot = max(length(ex * size), length(ey * size));
+		float lod = max(0.0, log2(max(foot, 1.0)) - 1.0);
+		float spread = foot > 1.01 ? 1.0 : 0.0;
+		colour = textureLod(TEXTURE, uv + (-ex * 0.125 - ey * 0.375) * spread, lod).rgb;
+		colour += textureLod(TEXTURE, uv + (ex * 0.375 - ey * 0.125) * spread, lod).rgb;
+		colour += textureLod(TEXTURE, uv + (ex * 0.125 + ey * 0.375) * spread, lod).rgb;
+		colour += textureLod(TEXTURE, uv + (-ex * 0.375 + ey * 0.125) * spread, lod).rgb;
+		colour *= 0.25;
+		edge_paint = textureLod(TEXTURE, picture_uv(q), blurred_lod(size.x)).rgb;
+	}
+
 	colour = mix(colour, POOL_INK, pool_mask(q) * pool_strength);
+
+	if (living) {
+		// The eyes' light over the pool (it glimmers through the dark),
+		// screened in; the dust; the portrait's mood.
+		vec3 light = eye_colour * eye_light(q);
+		colour = 1.0 - (1.0 - colour) * (1.0 - clamp(light, 0.0, 1.0));
+		colour += vec3(0.86, 0.80, 0.68) * motes(q) * dust * 0.06;
+		colour = mix(colour, colour * vec3(1.10, 0.97, 0.80) + vec3(0.025, 0.012, 0.0), warmth * 0.6);
+		float l = dot(colour, vec3(0.299, 0.587, 0.114));
+		colour = mix(colour, vec3(l) * 0.85, grey * 0.55);
+		float sink = vnoise(vec2(TIME * 9.0, 1.3)) * 0.65 + vnoise(vec2(TIME * 23.0, 5.2)) * 0.35;
+		colour *= 1.0 - flicker * 0.3 * smoothstep(0.3, 0.85, sink);
+	}
+
 	float a = fray(p);
 	// Pigment pools where the brush lifts.
 	float rim = exp(-pow(a - 0.55, 2.0) / 0.03) * 0.28;
@@ -229,7 +375,7 @@ void fragment() {
 		s = max(s, strokes_along(p.y, p.x - (picture_size.x - 1.0), 3.0));
 	}
 
-	vec3 edge_colour = mix(procedural ? colour : textureLod(TEXTURE, at, 3.0).rgb, POOL_INK, pool_mask(q) * pool_strength);
+	vec3 edge_colour = mix(procedural ? colour : edge_paint, POOL_INK, pool_mask(q) * pool_strength);
 	float alpha = a + s * (1.0 - a);
 	vec3 rgb = alpha > 0.0 ? (colour * a + edge_colour * s * (1.0 - a)) / alpha : colour;
 
