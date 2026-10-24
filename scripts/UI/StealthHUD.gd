@@ -167,11 +167,16 @@ class Crosshair:
 	var power_short_flash := 0.0
 	var short := false
 	var contact_kind: StringName = &""
+	## Real seconds a mark is held full before it fades (a kill's).
+	var contact_hold := 0.0
+	const KILL_HOLD := 0.35
 	var contact_amount := 0.0
 
 	func contact(kind: StringName) -> void:
 		contact_kind = kind
 		contact_amount = 1.0
+		# A kill's mark is held a moment before it fades.
+		contact_hold = KILL_HOLD if kind == &"kill" else 0.0
 
 	func _draw() -> void:
 		var c := size * 0.5
@@ -211,7 +216,17 @@ class Crosshair:
 		if contact_amount > 0.01:
 			var ink := Color(0.92, 0.86, 0.76, contact_amount * 0.85)
 			var r := lerpf(12.0, 8.0, contact_amount)
-			if contact_kind in [&"punish", &"deathblow", &"perfect"]:
+			if contact_kind in [&"shot", &"headshot", &"kill"]:
+				# A shot that found him: four ticks out at the corners; longer
+				# and paler gold for the head; a kill a heavier X, held.
+				var long := 9.0 if contact_kind == &"headshot" else 7.0
+				var width := 2.5 if contact_kind == &"kill" else 1.5
+				ink = Color(1.0, 0.86, 0.55, minf(contact_amount * 1.4, 1.0)) if contact_kind == &"headshot" else (Color(0.95, 0.32, 0.22, minf(contact_amount * 1.4, 1.0)) if contact_kind == &"kill" else ink)
+
+				for side in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+					var from: Vector2 = c + side.normalized() * (3.0 if contact_kind == &"kill" else 5.0)
+					draw_line(from, from + side.normalized() * long, ink, width, true)
+			elif contact_kind in [&"punish", &"deathblow", &"perfect"]:
 				ink = Color(1.0, 0.75, 0.36, contact_amount) if contact_kind != &"deathblow" else Color(1.0, 0.24, 0.13, contact_amount)
 				var points := PackedVector2Array([c + Vector2(0, -r), c + Vector2(r, 0), c + Vector2(0, r), c + Vector2(-r, 0), c + Vector2(0, -r)])
 				draw_polyline(points, ink, 1.5, true)
@@ -996,11 +1011,20 @@ func _process(delta: float) -> void:
 		if not pool.refused_cast.is_connected(_on_power_refused):
 			pool.refused_cast.connect(_on_power_refused)
 
+	# The revolver's hits, marked on the crosshair.
+	var gun: Node = player.get("revolver")
+
+	if gun != null and not gun.hit_confirmed.is_connected(_crosshair.contact):
+		gun.hit_confirmed.connect(_crosshair.contact)
+
 	# Hurt, and caught. These run on real time: slow motion must not stretch
 	# them.
 	var real_delta := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
 	_last_real = TimeFx.real_time()
-	_crosshair.contact_amount = maxf(0.0, _crosshair.contact_amount - real_delta / 0.24)
+	if _crosshair.contact_hold > 0.0:
+		_crosshair.contact_hold -= real_delta
+	else:
+		_crosshair.contact_amount = maxf(0.0, _crosshair.contact_amount - real_delta / 0.24)
 	_vignette.modulate.a = move_toward(_vignette.modulate.a, 0.0, delta * 1.2)
 
 	for m in _hurt_marks.marks:

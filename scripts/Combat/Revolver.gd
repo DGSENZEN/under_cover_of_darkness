@@ -19,6 +19,8 @@ const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 signal fired(barrel: StringName, hits: Array)
 ## The hammer fell on a spent chamber.
 signal clicked_empty
+## A shot found a man: "shot" (the body), "headshot", or "kill".
+signal hit_confirmed(kind: StringName)
 
 ## Stand-ins until the user's recordings (docs/superpowers/refs/
 ## revolver_sounds.md): each of the revolver's own sounds as [an existing
@@ -30,6 +32,8 @@ const SOUNDS := {
 	&"hammer": [&"gear", -14.0, 1.3],
 	&"gate": [&"unlock", -10.0, 1.5],
 	&"round_in": [&"coins", -12.0, 1.6],
+	&"hit_tick": [&"ting", -10.0, 1.8],
+	&"kill_tick": [&"thud", -6.0, 0.7],
 }
 
 ## How far a ball carries, in metres.
@@ -59,6 +63,9 @@ const FLIP_TIME := 0.15
 const BLAST_PELLETS := 6
 ## Empowered, a shell is one blast into a man this near (metres).
 const EMPOWERED_SHELL_RANGE := 6.0
+## The hold on a hit, and on a kill (real seconds).
+const HIT_HITSTOP := 0.04
+const KILL_HITSTOP := 0.07
 ## A ball this close by a man's chest is a near miss to him (metres).
 const NEAR_MISS := 1.5
 ## Aiming down the sights: seconds up and down, the view narrowed by this
@@ -503,13 +510,19 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 			var middle: Dictionary = group[0]
 			# Point-blank, or empowered: it bursts him if it kills him.
 			_hint_gib(target, true)
-			target.take_hit(total, player, &"blast", middle["point"], -at.basis.z)
+			_confirm(target.take_hit(total, player, &"blast", middle["point"], -at.basis.z), false)
 			_hint_gib(target, false)
 			continue
+
+		var felt := false
 
 		for record in group:
 			if is_instance_valid(target) and float(record["damage"]) > 0.0:
 				_deal(target, record, record["direction"], record["damage"], &"shot", gun)
+				felt = true
+
+		if felt:
+			_confirm(&"hit" if is_instance_valid(target) and float(target.get("health")) > 0.0 else &"killed", false)
 
 	for record in records:
 		if record["target"] == null:
@@ -518,8 +531,6 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 	# The shell's middle pellet: who it went close by.
 	_near_misses(at.origin, records[0])
 
-	if not into.is_empty():
-		TimeFx.hitstop(get_tree(), 0.05)
 
 	var muzzle := _muzzle(at, &"shot_muzzle")
 	_kicked(SHELL_KICK, gun)
@@ -583,7 +594,6 @@ func _trace(from: Vector3, direction: Vector3) -> Dictionary:
 func _apply(record: Dictionary, direction: Vector3, damage: float, kind: StringName, gun: Resource) -> void:
 	if record["target"] != null:
 		_deal(record["target"], record, direction, damage, kind, gun)
-		TimeFx.hitstop(get_tree(), 0.04)
 	else:
 		_strike_world(record, direction)
 
@@ -619,7 +629,26 @@ func _deal(target: Node3D, record: Dictionary, direction: Vector3, damage: float
 	var dealt: float = damage * (gun.headshot_multiplier if headshot else 1.0)
 	record["damage"] = dealt
 	record["headshot"] = headshot
-	target.take_hit(dealt, player, kind, point, direction)
+	var result: StringName = target.take_hit(dealt, player, kind, point, direction)
+
+	# A pellet's mark is the shell's, once (_shell).
+	if kind != &"shot":
+		_confirm(result, headshot)
+
+
+## A hit felt: the crosshair's mark, a tick, a hold (a kill's the longer).
+func _confirm(result: StringName, headshot: bool) -> void:
+	if result == &"none" or result == &"blocked" or result == &"parried":
+		return
+
+	var killed := result == &"killed"
+	TimeFx.hitstop(get_tree(), KILL_HITSTOP if killed else HIT_HITSTOP)
+	_sound(&"hit_tick")
+
+	if killed:
+		_sound(&"kill_tick")
+
+	hit_confirmed.emit(&"kill" if killed else (&"headshot" if headshot else &"shot"))
 
 
 ## Into the world: a limb of the dead knocked, a crate shoved, a powder
@@ -652,10 +681,19 @@ func _strike_world(record: Dictionary, direction: Vector3) -> void:
 	elif collider is RigidBody3D or collider.has_method("frob"):
 		surface = "wood"
 
-	if surface == "wood":
+	var iron := surface in ["metal", "iron"]
+
+	if iron:
+		Fx.sparks(player, point, normal, 0.8)
+	elif surface == "wood":
 		Fx.chips(player, point, normal, 0.6)
 	else:
 		Fx.dust(player, point, normal, 0.6, surface)
+
+	# A hole, in what stays put: the world's stone and timber, not a crate
+	# that would carry it off.
+	if collider is StaticBody3D or collider is CSGShape3D:
+		Fx.hole(player, point, normal, "metal" if iron else surface)
 
 
 ## The muzzle, in the world: out along the aim from the eye, where the

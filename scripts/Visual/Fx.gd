@@ -34,6 +34,10 @@ const DECAL_POOL := 160
 const LIGHT_POOL := 4
 
 static var enabled := true
+## A ball's hole (Fx.hole): how wide, and when it fades and is gone (s).
+const HOLE_SIZE := 0.09
+const HOLE_FADE := 25.0
+const HOLE_LIFE := 30.0
 static var gore := 1.0
 
 static var _world: Node = null
@@ -46,6 +50,8 @@ var _lights: Array[OmniLight3D] = []
 var _light_cursor := 0
 var _flashes := {}
 var _growing := {}
+## Holes and how long each has been shown (seconds): Fx.hole.
+var _holes := {}
 ## Wounds still pumping: [node followed, offset and direction in its space,
 ## seconds left, seconds in all, to the next beat, how hard].
 var _spurts: Array = []
@@ -120,6 +126,35 @@ static func drip(context: Node, at: Vector3, size := 0.14) -> void:
 
 	if world != null and gore > 0.0:
 		world._drip(context, at, size)
+
+
+## A ball's hole in the world: a dark pock with a broken rim, by what it
+## struck ("stone", "wood", "metal"). It fades out between HOLE_FADE and
+## HOLE_LIFE seconds. (Not gore: shown whatever Fx.gore is.)
+static func hole(context: Node, at: Vector3, normal: Vector3, surface := "stone") -> Decal:
+	var world := _world_for(context)
+
+	if world == null:
+		return null
+
+	var look := surface if surface in ["wood", "metal"] else "stone"
+	var decal: Decal = world._stain(at + normal * 0.005, normal, HOLE_SIZE, "hole_" + look)
+	world._holes[decal] = 0.0
+	return decal
+
+
+## Holes shown now (Fx.hole).
+static func holes_in_use() -> int:
+	if _world == null or not is_instance_valid(_world):
+		return 0
+
+	var shown := 0
+
+	for decal in _world._holes.keys():
+		if is_instance_valid(decal) and decal.visible:
+			shown += 1
+
+	return shown
 
 
 ## A splat on a surface. `kind` is "blood", "scratch" or "pool".
@@ -224,6 +259,7 @@ static func clear() -> void:
 
 	_world._flashes.clear()
 	_world._growing.clear()
+	_world._holes.clear()
 	_world._spurts.clear()
 
 
@@ -696,6 +732,7 @@ func _process(delta: float) -> void:
 	_update_flashes(delta)
 	_update_growing(delta)
 	_update_spurts(delta)
+	_update_holes(delta)
 
 
 ## A drop of blood hit something: most leave a small stain where they land.
@@ -769,6 +806,22 @@ func _pulse(at: Vector3, direction: Vector3, strength: float) -> void:
 		)
 
 	_pools[Kind.MIST].add(at, direction * 0.45, 0.22, 0.045, Color(0.36, 0.02, 0.016, 0.7), 0, 0.28)
+
+
+## Holes fade out between HOLE_FADE and HOLE_LIFE seconds, then are gone.
+func _update_holes(delta: float) -> void:
+	for decal in _holes.keys():
+		if not is_instance_valid(decal) or not decal.visible:
+			_holes.erase(decal)
+			continue
+
+		var age: float = float(_holes[decal]) + delta
+		_holes[decal] = age
+		decal.modulate.a = 0.95 * (1.0 - smoothstep(HOLE_FADE, HOLE_LIFE, age))
+
+		if age >= HOLE_LIFE:
+			decal.visible = false
+			_holes.erase(decal)
 
 
 func _update_growing(delta: float) -> void:
@@ -992,6 +1045,7 @@ func _stain(at: Vector3, normal: Vector3, size: float, kind: String) -> Decal:
 	var decal := _decals[_decal_cursor]
 	_decal_cursor = (_decal_cursor + 1) % _decals.size()
 	_growing.erase(decal)
+	_holes.erase(decal)
 
 	match kind:
 		"scratch":
@@ -1003,6 +1057,15 @@ func _stain(at: Vector3, normal: Vector3, size: float, kind: String) -> Decal:
 		"pool":
 			decal.texture_albedo = texture(&"pool")
 			decal.modulate = Color(0.22, 0.012, 0.01, 0.96)
+		"hole_stone":
+			decal.texture_albedo = texture(&"hole")
+			decal.modulate = Color(0.78, 0.74, 0.68, 0.95)
+		"hole_wood":
+			decal.texture_albedo = texture(&"hole")
+			decal.modulate = Color(0.55, 0.38, 0.22, 0.95)
+		"hole_metal":
+			decal.texture_albedo = texture(&"hole")
+			decal.modulate = Color(0.9, 0.9, 0.95, 0.9)
 		"drop":
 			decal.texture_albedo = texture(StringName("drops_%d" % (randi() % 2)))
 			decal.modulate = Color(0.3, 0.018, 0.015, 0.95)
@@ -1094,6 +1157,7 @@ static func _build_textures() -> void:
 	_textures[&"star"] = _tex(_draw_star())
 	_textures[&"flame"] = _tex(_draw_flame(rng))
 	_textures[&"scratch"] = _tex(_draw_scratch(rng))
+	_textures[&"hole"] = _tex(_draw_hole(rng))
 	_textures[&"pool"] = _tex(_draw_splat(rng, 64, 5, 6, 0.3, 0.08, 0))
 	_textures[&"wound"] = _tex(_draw_splat(rng, 32, 3, 4, 0.2, 0.12, 3))
 
@@ -1214,6 +1278,39 @@ static func _draw_flame(rng: RandomNumberGenerator) -> Image:
 
 
 ## Scratches: a few bright gouges.
+## A ball's hole: a black pock, a jagged pale rim of broken surface round
+## it, and a few cracks running out (the decal's colour tints the rim).
+static func _draw_hole(rng: RandomNumberGenerator) -> Image:
+	var image := _blank(32, 32)
+	var middle := Vector2(15.5, 15.5)
+
+	for y in range(32):
+		for x in range(32):
+			var at := Vector2(x, y) - middle
+			var d := at.length()
+			var wobble := 1.2 * sin(at.angle() * 5.0 + 0.7) + 0.8 * sin(at.angle() * 9.0)
+
+			if d < 4.0 + wobble * 0.4:
+				image.set_pixel(x, y, Color(0.02, 0.02, 0.02, 1.0))
+			elif d < 7.5 + wobble:
+				var pale := 0.55 + 0.4 * smoothstep(7.5 + wobble, 4.0, d)
+				image.set_pixel(x, y, Color(pale, pale, pale, 0.9))
+
+	for crack in range(5):
+		var dir := Vector2.from_angle(rng.randf() * TAU)
+		var p := middle + dir * 6.0
+
+		for step in range(int(rng.randf_range(4.0, 9.0))):
+			p += dir.rotated(rng.randf_range(-0.5, 0.5))
+			var x := int(p.x)
+			var y := int(p.y)
+
+			if x >= 0 and x < 32 and y >= 0 and y < 32:
+				image.set_pixel(x, y, Color(0.1, 0.1, 0.1, 0.8))
+
+	return image
+
+
 static func _draw_scratch(rng: RandomNumberGenerator) -> Image:
 	var image := _blank(32, 32)
 	var angle := rng.randf() * PI

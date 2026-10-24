@@ -14,6 +14,7 @@ const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 const Gore := preload("res://scripts/Visual/Gore.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
 
 class Ear:
@@ -37,6 +38,7 @@ func _ready() -> void:
 	ViewArmsScript.new_arms = true
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(140, 1, 90))              # floor
 	Props.block(self, Vector3(30, 1.5, -5.0), Vector3(4, 3, 1))              # R9 wall, top at 3, face at z = -4.5
+	Props.block(self, Vector3(-20, 1.5, -8.0), Vector3(6, 3, 0.4))           # H4 a stone wall, its face at z = -7.8
 
 	baker = NavigationRegion3D.new()
 	baker.set_script(NavBakerScript)
@@ -480,6 +482,107 @@ func _run() -> void:
 		"pitch %.2f limit %.2f" % [rad_to_deg(neck.rotation.x), player.max_pitch_degrees])
 	neck.rotation.x = 0.0
 	await _frames(40)
+
+	# H1 a ball knocks a man back
+	revolver.reset_for_practice()
+	var g_h1 := _fighter(Vector3(-30, 0, -5))
+	_put_player(Vector3(-30, 1.05, 0))
+	await _frames(20)
+	_aim(g_h1.global_position + Vector3(0, 1.25, 0))
+	await _tap("throw")
+	var away: float = g_h1.velocity.dot(Vector3(0, 0, -1))
+	_check("H1 a ball knocks a man back", away >= 2.0, "back %.2f m/s" % away)
+	g_h1.queue_free()
+	await _frames(10)
+
+	# H2 the crosshair says what it was: a hit, a head, a kill
+	var marks := []
+	revolver.hit_confirmed.connect(func(kind): marks.append(kind))
+	var crosshair: Control = player.hud._crosshair
+	var seen := []
+	revolver.reset_for_practice()
+	var g_h2 := _fighter(Vector3(-34, 0, -6))
+	g_h2.set_physics_process(false)
+	g_h2.max_health = 9999.0
+	g_h2.health = 9999.0
+	_put_player(Vector3(-34, 1.05, 0))
+	await _frames(20)
+	_aim(g_h2.global_position + Vector3(0, 1.2, 0))
+	await _tap("throw")
+	await _frames(1)
+	seen.append(crosshair.contact_kind)
+	await _frames(40)
+	_aim(g_h2.eye_position())
+	await _tap("throw")
+	await _frames(1)
+	seen.append(crosshair.contact_kind)
+	await _frames(40)
+	g_h2.health = 10.0
+	_aim(g_h2.global_position + Vector3(0, 1.2, 0))
+	await _tap("throw")
+	await _frames(1)
+	seen.append(crosshair.contact_kind)
+	_check("H2 a body hit, a headshot and a kill each mark the crosshair as such",
+		marks == [&"shot", &"headshot", &"kill"] and seen == [&"shot", &"headshot", &"kill"], "marks %s crosshair %s" % [marks, seen])
+	await _frames(40)
+
+	# H3 a kill holds a beat longer than a hit
+	var hold_hit := 0
+	var hold_kill := 0
+	var g_h3 := _fighter(Vector3(-38, 0, -6))
+	g_h3.set_physics_process(false)
+	_put_player(Vector3(-38, 1.05, 0))
+	await _frames(20)
+	_aim(g_h3.global_position + Vector3(0, 1.2, 0))
+	revolver.reset_for_practice()
+	await _tap("throw")
+	while TimeFx.is_active(&"hitstop") and hold_hit < 30:
+		hold_hit += 1
+		await get_tree().process_frame
+	await _frames(40)
+	g_h3.health = 10.0
+	await _tap("throw")
+	while TimeFx.is_active(&"hitstop") and hold_kill < 30:
+		hold_kill += 1
+		await get_tree().process_frame
+	_check("H3 a kill's hit-stop holds longer than a hit's", hold_kill > hold_hit and hold_hit >= 1,
+		"hit %d frames kill %d frames" % [hold_hit, hold_kill])
+	await _frames(40)
+
+	# H4 a ball leaves a hole in stone, gone in half a minute
+	Fx.clear()
+	revolver.reset_for_practice()
+	_put_player(Vector3(-20, 1.05, -2))
+	await _frames(20)
+	_aim(Vector3(-20, 1.4, -7.8))
+	var holes_before: int = Fx.holes_in_use()
+	await _tap("throw")
+	await _frames(3)
+	var holed: int = Fx.holes_in_use() - holes_before
+	await _frames(1860)
+	_check("H4 a ball leaves a hole in stone, and it is gone in half a minute", holed == 1 and Fx.holes_in_use() == holes_before,
+		"holes +%d, after 31 s %d" % [holed, Fx.holes_in_use()])
+
+	# H5 no hole on a crate or a man
+	Fx.clear()
+	var crate := Props.crate(self, Vector3(-24, 0.3, -6), 0.5, 5.0)
+	var g_h5 := _fighter(Vector3(-27, 0, -6))
+	g_h5.set_physics_process(false)
+	g_h5.max_health = 9999.0
+	g_h5.health = 9999.0
+	_put_player(Vector3(-24, 1.05, 0))
+	await _frames(20)
+	revolver.reset_for_practice()
+	_aim(crate.global_position)
+	await _tap("throw")
+	await _frames(40)
+	_put_player(Vector3(-27, 1.05, 0))
+	await _frames(5)
+	_aim(g_h5.global_position + Vector3(0, 1.2, 0))
+	await _tap("throw")
+	await _frames(3)
+	_check("H5 no hole is left in a crate or a man", Fx.holes_in_use() == 0, "holes %d" % Fx.holes_in_use())
+	g_h5.queue_free()
 
 	# R16 in arm's reach, F is a pistol-whip, not a kick
 	revolver.reset_for_practice()

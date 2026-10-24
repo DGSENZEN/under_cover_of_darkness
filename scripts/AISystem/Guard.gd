@@ -235,6 +235,14 @@ const GIB_HORROR := 2.0
 ## How hard a shot past him close makes him start (near_miss), as a hit's
 ## strength.
 const NEAR_MISS_START := 0.3
+## A revolver ball: how hard it knocks him back (m/s; a pellet, less), how
+## much longer it rocks him than an arrow, how hard a head shot snaps his
+## head, and how much harder it throws the man it kills.
+const BALL_SHOVE := 2.5
+const PELLET_SHOVE := 0.4
+const BALL_STAGGER := 1.5
+const HEADSHOT_SNAP := 1.6
+const BALL_KILL_PUSH := 1.4
 ## Full view cone, in degrees.
 @export var fov_horizontal := 140.0
 @export var fov_vertical := 90.0
@@ -1840,6 +1848,10 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 		_fighter.on_hit(true)
 		var rocked: float = _fighter.stagger_for(kind, stagger_time, riposte)
 
+		# A ball rocks a man longer than an arrow does.
+		if kind == &"bullet":
+			rocked *= BALL_STAGGER
+
 		# A riposte takes the opening his parried blow made: it rocks him hard
 		# but briefly, and he is back in the fight, not left reeling out the
 		# rest of the parry.
@@ -1850,6 +1862,22 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 			_stagger = maxf(_stagger, rocked)
 
 		_attack_timer = maxf(_attack_timer, _stagger + float(_fighter.wary_after_hit))
+
+	# A ball (a pellet, less) knocks him back; one in the head snaps it back.
+	if (kind == &"bullet" or kind == &"shot") and not _downed and health > 0.0:
+		var knock := Vector3(blow.x, 0.0, blow.z).normalized() * (BALL_SHOVE if kind == &"bullet" else PELLET_SHOVE)
+
+		# A ball stops him where he was going and throws him back; pellets
+		# only add to it.
+		if kind == &"bullet":
+			velocity.x = knock.x
+			velocity.z = knock.z
+		else:
+			velocity.x += knock.x
+			velocity.z += knock.z
+
+		if kind == &"bullet" and at.y - global_position.y >= eye_height - 0.25:
+			_rig.react_hit(blow, HEADSHOT_SNAP)
 
 	# A heavy blow shoves him back a step.
 	if (kind == &"power" or kind == &"drop" or kind == &"crush") and not _downed:
@@ -1870,6 +1898,10 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 				thrown = (away.normalized() * 0.8 + thrown * 0.5).normalized()
 
 		_last_push = thrown * lerpf(1.4, 3.4, clampf((strength - 0.6) / 0.8, 0.0, 1.0))
+
+		# A ball throws the man it kills harder than a blade's cut.
+		if kind == &"bullet":
+			_last_push *= BALL_KILL_PUSH
 
 		# A blast or a falling weight throws a man bodily.
 		if kind == &"blast" or kind == &"crush":
