@@ -710,6 +710,10 @@ func reset_for_practice() -> void:
 ## Movement is slower with a raised guard, a charged blow, a drawn bow, a
 ## blow under way (not one thrown at a run), or while knocked off balance.
 func speed_scale() -> float:
+	# Aiming down the revolver's sights.
+	if gun_drawn() and player.get("revolver") != null and player.revolver.aim_amount() > 0.0:
+		return player.revolver.AIM_SPEED
+
 	if blocking:
 		return block_speed_scale
 

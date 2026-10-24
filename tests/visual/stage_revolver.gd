@@ -47,10 +47,10 @@ func _ready() -> void:
 	await _shot("recoil_settling")
 	await _frames(40)
 
-	player.revolver.set_braced(true)
+	Input.action_press("aim")
 	await _frames(40)
-	await _shot("braced")
-	player.revolver.set_braced(false)
+	await _shot("aimed")
+	Input.action_release("aim")
 	await _frames(40)
 
 	# Mid-reload: the gate open, rounds going in.

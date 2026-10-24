@@ -225,7 +225,7 @@ func _aim(target: Vector3) -> void:
 
 
 func _release_all() -> void:
-	for a in ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "crouch", "frob", "throw", "block", "kick", "reload", "barrel", "grip", "blink"]:
+	for a in ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "crouch", "frob", "throw", "block", "kick", "reload", "barrel", "aim", "blink", "spell_1", "spell_2", "spell_3"]:
 		if InputMap.has_action(a):
 			Input.action_release(a)
 

@@ -160,6 +160,9 @@ var _job: Dictionary = {}
 var _checking := false
 ## Both hands on the revolver, 0..1 (set_gun_support).
 var _gun_support := 0.0
+## Up at the eye, 0..1 (set_gun_aim): the pose is held as it is, the wrist
+## let bend to put the bore on the line of sight.
+var _gun_aim := 0.0
 ## What the left hand holds for the Caster ("", "cast", "tome"), where
 ## (full-size camera space), and how far it is up, 0..1.
 var _left_mode: StringName = &""
@@ -558,6 +561,11 @@ func set_brace(amount: float) -> void:
 ## Both hands on the revolver: the left under the grip, 0..1.
 func set_gun_support(amount: float) -> void:
 	_gun_support = clampf(amount, 0.0, 1.0)
+
+
+## The revolver up at the eye, 0..1.
+func set_gun_aim(amount: float) -> void:
+	_gun_aim = clampf(amount, 0.0, 1.0)
 
 
 ## The revolver's moving parts: the cylinder turned (radians), the hammer
@@ -1384,7 +1392,7 @@ func _place_hands() -> void:
 	# only tips the blade. The pose says where the grip is and where the blade
 	# points; the arm says the rest.
 	if _view_id == &"revolver":
-		frame = _natural_gun(frame)
+		frame = frame.interpolate_with(_natural_gun(frame), 1.0 - _gun_aim)
 	elif _view_id != &"" and _view_id != &"bow":
 		frame = _natural(frame)
 

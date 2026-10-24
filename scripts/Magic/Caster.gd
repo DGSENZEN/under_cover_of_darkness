@@ -1,6 +1,6 @@
 extends Node
 ## The left hand's magic: which way it is held with the revolver drawn (a
-## bare casting hand, the tome, or both hands on the gun), and the cast
+## bare casting hand or the tome; aiming, both hands are on the gun), and the cast
 ## itself. The more powerful a spell, the longer it takes (Spells.gd): hold
 ## the right mouse while the circle closes or the pages turn; let go early
 ## and nothing is cast or spent. Innate spells (cantrips) need no hand; the
@@ -24,7 +24,6 @@ signal cast_broken(id: StringName)
 enum Loadout {
 	HAND,
 	TOME,
-	BRACED,
 }
 
 ## A blow this heavy, or of these kinds, breaks a tome spell being cast.
@@ -72,7 +71,6 @@ func _ready() -> void:
 	_ensure_action(&"spell_1", KEY_1)
 	_ensure_action(&"spell_2", KEY_2)
 	_ensure_action(&"spell_3", KEY_3)
-	_ensure_action(&"grip", KEY_G)
 	_ensure_action(&"blink", KEY_Q)
 
 
@@ -89,9 +87,6 @@ func _physics_process(delta: float) -> void:
 		for i in KEYED.size():
 			if Input.is_action_just_pressed("spell_%d" % (i + 1)):
 				select(KEYED[i])
-
-		if Input.is_action_just_pressed("grip"):
-			toggle_braced()
 
 	# Whatever stopped it being castable (the gun put away, up on a hold)
 	# ends it, for nothing.
@@ -129,18 +124,6 @@ func select(id: StringName) -> void:
 
 	selected = id
 	loadout = Loadout.TOME if info["tier"] == Spells.Tier.TOME else Loadout.HAND
-	_set_braced(false)
-
-
-## G: both hands on the gun, or the left back to its spell.
-func toggle_braced() -> void:
-	if loadout == Loadout.BRACED:
-		select(selected)
-		return
-
-	_cancel()
-	loadout = Loadout.BRACED
-	_set_braced(true)
 
 
 func casting() -> StringName:
@@ -173,11 +156,16 @@ func can_cast(id: StringName) -> bool:
 
 			return gun or player.combat.current_weapon() == null
 		Spells.Tier.HAND:
-			return gun and loadout == Loadout.HAND and player.combat.is_able()
+			return gun and loadout == Loadout.HAND and player.combat.is_able() and not _aiming_gun()
 		Spells.Tier.TOME:
-			return gun and loadout == Loadout.TOME and player.combat.is_able()
+			return gun and loadout == Loadout.TOME and player.combat.is_able() and not _aiming_gun()
 
 	return false
+
+
+## Up at the eye with both hands on the gun: the left hand is not free.
+func _aiming_gun() -> bool:
+	return player.revolver != null and player.revolver.aim_amount() > 0.0
 
 
 ## Hurt (PlayerController.take_damage): a hard enough hit breaks a tome
@@ -393,11 +381,6 @@ func _blink_to(at: Vector3, ledge := {}) -> void:
 	Fx.glint(player, at + Vector3.UP, 0.3, null, Color(0.75, 0.8, 0.95))
 	Sfx.play_flat(player, &"whoosh_light", -4.0, 0.7)
 	cast_done.emit(&"blink")
-
-
-func _set_braced(on: bool) -> void:
-	if player.revolver != null:
-		player.revolver.set_braced(on)
 
 
 # How the left hand looks

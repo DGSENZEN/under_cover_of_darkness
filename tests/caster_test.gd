@@ -188,10 +188,11 @@ func _run() -> void:
 	_wield(&"revolver")
 	await _frames(30)
 	caster.select(&"shard")
-	caster.toggle_braced()
+	Input.action_press("aim")
 	await _frames(30)
 	var braced_shard: bool = caster.can_cast(&"shard")
-	caster.select(&"shard")
+	Input.action_release("aim")
+	await _frames(15)
 	Props.block(self, Vector3(20, 1.5, -5.0), Vector3(4, 3, 1))
 	await _frames(2)
 	var anchor: Vector3 = player.planner.hang_anchor(Vector3(20, 3.0, -4.5), Vector3.BACK, 3.0)
@@ -664,7 +665,7 @@ func _aim(target: Vector3) -> void:
 
 
 func _release_all() -> void:
-	for a in ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "crouch", "frob", "throw", "block", "kick", "reload", "barrel", "grip", "blink"]:
+	for a in ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "crouch", "frob", "throw", "block", "kick", "reload", "barrel", "aim", "blink", "spell_1", "spell_2", "spell_3"]:
 		if InputMap.has_action(a):
 			Input.action_release(a)
 

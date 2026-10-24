@@ -129,7 +129,9 @@ const REVOLVER := {
 	"rest": [Vector3(0.32, -0.3, -0.44), Vector3(0.05, 1.0, 0.12), Vector3(-0.08, 0.05, -1.0)],
 	"sprint": [Vector3(0.24, -0.34, -0.34), Vector3(-0.3, 0.8, 0.5), Vector3(-0.3, -0.6, -0.7)],
 	"recoil": [Vector3(0.24, -0.19, -0.34), Vector3(0.05, 0.62, 0.785), Vector3(-0.06, 0.785, -0.62)],
-	"braced": [Vector3(0.27, -0.27, -0.44), Vector3(0.0, 1.0, 0.1), Vector3(-0.04, 0.04, -1.0)],
+	# Up at the eye, both hands on it: the sights on the reticle, the bore down
+	# the line of sight.
+	"aim": [Vector3(0.1, -0.178, -0.42), Vector3(0.0, 1.0, 0.0), Vector3(0.0, 0.0, -1.0)],
 	# Rolled a third over to the left, muzzle up, the gate toward you.
 	"gate": [Vector3(0.1, -0.27, -0.44), Vector3(-0.87, 0.383, 0.321), Vector3(0.0, 0.64, -0.77)],
 	"flip": [Vector3(0.19, -0.23, -0.41), Vector3(-0.15, 1.0, 0.1), Vector3(-0.08, 0.05, -1.0)],

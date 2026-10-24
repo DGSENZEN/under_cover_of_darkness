@@ -51,6 +51,12 @@ const BLAST_PELLETS := 6
 const EMPOWERED_SHELL_RANGE := 6.0
 ## A ball this close by a man's chest is a near miss to him (metres).
 const NEAR_MISS := 1.5
+## Aiming down the sights: seconds up and down, the view narrowed by this
+## many degrees (75 to 62), and walking at this much of your pace.
+const AIM_RAISE := 0.18
+const AIM_LOWER := 0.15
+const AIM_FOV_CUT := 13.0
+const AIM_SPEED := 0.7
 ## Seconds for the gate to snap shut when you fire mid-reload.
 const GATE_SNAP := 0.1
 ## The pistol-whip: a man this near (metres), this far off your aim
@@ -74,14 +80,18 @@ var player: CharacterBody3D
 var loaded := {&"cylinder": 6, &"shot": 1}
 var loading := Load.NONE
 var barrel: StringName = &"cylinder"
-## Both hands on the gun.
-var braced := false
+## Up at the eye, both hands on the gun (right mouse held, fully raised).
+var aimed := false
 
 var _game_time := 0.0
 ## When the next shot may go (game time).
 var _ready_at := 0.0
-## Taking the gun in both hands, or letting one go, until then.
-var _grip_until := 0.0
+## How far up to the eye the gun is, 0 at the hip to 1 aimed.
+var _aim := 0.0
+## Dropped (a reload, a spell key) until right mouse is let go.
+var _aim_dropped := false
+## The view is narrowed for the aim (set_zoom), to be given back.
+var _zoomed := false
 ## The thumb at the hammer's nose, until then.
 var _flip_until := 0.0
 ## Seconds into the step of the reload under way.
@@ -96,7 +106,6 @@ var _settle := 0.6
 var _shots := 0
 
 # How it is shown: each eased toward what is wanted, 0..1.
-var _braced_shown := 0.0
 var _gate_shown := 0.0
 var _flip_shown := 0.0
 var _sprint_shown := 0.0
@@ -113,6 +122,7 @@ func _ready() -> void:
 	player = get_parent() as CharacterBody3D
 	_ensure_action(&"barrel", KEY_X)
 	_ensure_action(&"reload", KEY_R)
+	_ensure_action(&"aim", KEY_NONE, MOUSE_BUTTON_RIGHT)
 
 
 func _physics_process(delta: float) -> void:
@@ -121,12 +131,15 @@ func _physics_process(delta: float) -> void:
 	var gun: Resource = weapon()
 	_update_whip(delta)
 
+	var able: bool = gun != null and player.combat.is_able()
+	_update_aim(delta, able)
+
 	if gun != null:
 		_send_pose(delta)
 
 	# Put away, up on a hold, carrying: a reload under way is over. Only the
 	# rounds already in are spent.
-	if gun == null or not player.combat.is_able():
+	if not able:
 		_stop_loading()
 		return
 
@@ -164,7 +177,7 @@ func weapon() -> Resource:
 
 
 func ready_to_fire() -> bool:
-	return loading == Load.NONE and _whip_t < 0.0 and _game_time >= _ready_at and _game_time >= _grip_until and _game_time >= _flip_until
+	return loading == Load.NONE and _whip_t < 0.0 and _game_time >= _ready_at and _game_time >= _flip_until
 
 
 func is_reloading() -> bool:
@@ -216,25 +229,51 @@ func aim() -> Transform3D:
 	return player.combat.aim()
 
 
-## Both hands on the gun, or one let go (G, through the Caster's loadout):
-## either takes grip_change seconds, with no shot or reload meanwhile.
-func set_braced(on: bool) -> void:
-	if on == braced:
-		return
+## How far up to the eye the gun is: 0 at the hip, 1 aimed.
+func aim_amount() -> float:
+	return _aim
 
-	_stop_loading()
-	braced = on
-	var gun: Resource = WeaponScript.find(&"revolver")
-	_grip_until = _game_time + gun.grip_change
+
+## The aim let go of until right mouse is pressed again (a reload, a spell
+## key: the left hand is wanted elsewhere).
+func drop_aim() -> void:
+	if _aim > 0.0 or Input.is_action_pressed("aim"):
+		_aim_dropped = true
+
+
+## Right mouse: up to the eye over AIM_RAISE, down over AIM_LOWER; the view
+## narrowed by AIM_FOV_CUT as it comes up. Gone at once when the gun is.
+func _update_aim(delta: float, able: bool) -> void:
+	var held := Input.is_action_pressed("aim")
+
+	if not held:
+		_aim_dropped = false
+
+	if not able:
+		_aim = 0.0
+	else:
+		# Raising the sights stops a reload, as a shot does.
+		if Input.is_action_just_pressed("aim") and loading != Load.NONE:
+			_stop_loading()
+
+		var wanted := held and not _aim_dropped and loading == Load.NONE
+		_aim = move_toward(_aim, 1.0 if wanted else 0.0, delta / (AIM_RAISE if wanted else AIM_LOWER))
+
+	aimed = _aim >= 1.0
+
+	if _aim > 0.0 or _zoomed:
+		player.juice.set_zoom(AIM_FOV_CUT * _aim)
+		_zoomed = _aim > 0.0
 
 
 ## Full, settled and in one hand, as a practice bay (and a test) starts.
 func reset_for_practice() -> void:
 	loaded = {&"cylinder": 6, &"shot": 1}
 	barrel = &"cylinder"
-	braced = false
 	_ready_at = 0.0
-	_grip_until = 0.0
+	_aim = 0.0
+	aimed = false
+	_aim_dropped = false
 	_flip_until = 0.0
 	_kick = 0.0
 	_owed_shot = false
@@ -322,11 +361,13 @@ func _start_loading(gun: Resource) -> void:
 
 		loading = Load.GATE
 		_gate_shutting = false
+		drop_aim()
 	else:
 		if int(loaded[&"shot"]) >= int(gun.shells) or int(player.inventory.ammo.get(&"shells", 0)) <= 0:
 			return
 
 		loading = Load.SHELL
+		drop_aim()
 
 	_load_t = 0.0
 	_owed_shot = false
@@ -477,7 +518,7 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 func _stray(aim_basis: Basis) -> Vector3:
 	var forward := -aim_basis.z
 
-	if braced or _kick <= 0.001:
+	if aimed or _kick <= 0.001:
 		return forward
 
 	var offset: Vector2 = ROSETTE[_shots % ROSETTE.size()] * deg_to_rad(SPREAD_ONE_HAND) * _kick
@@ -613,8 +654,8 @@ func _muzzle(at: Transform3D, which: StringName) -> Vector3:
 ## The kick: the camera jolts, and the gun settles over the ready time.
 ## `strength` 1 for a ball, more for the shell.
 func _kicked(strength: float, gun: Resource) -> void:
-	var held := 0.5 if braced else 1.0
-	_settle = gun.ready_braced if braced else gun.ready_one_hand
+	var held := 0.5 if aimed else 1.0
+	_settle = gun.ready_braced if aimed else gun.ready_one_hand
 	_ready_at = _game_time + _settle
 	_kick = 1.0
 	player.juice.add_trauma(KICK_TRAUMA * strength * held)
@@ -633,7 +674,6 @@ func _send_pose(delta: float) -> void:
 	var checking: bool = player.hand != null and player.hand.has_method("is_checking") and player.hand.is_checking()
 	var booting: bool = player.combat.phase == player.combat.Phase.KICK
 	_sprint_shown = move_toward(_sprint_shown, 1.0 if sprinting and _kick <= 0.0 and loading == Load.NONE else 0.0, delta * 4.0)
-	_braced_shown = move_toward(_braced_shown, 1.0 if braced else 0.0, delta / 0.25)
 	_gate_shown = move_toward(_gate_shown, 1.0 if loading != Load.NONE or checking else 0.0, delta / 0.2)
 	_flip_shown = move_toward(_flip_shown, 1.0 if _game_time < _flip_until else 0.0, delta / 0.07)
 	_boot_shown = move_toward(_boot_shown, 1.0 if booting else 0.0, delta / 0.1)
@@ -641,9 +681,9 @@ func _send_pose(delta: float) -> void:
 
 	var frame := ViewPoses.revolver_frame(poses["rest"])
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["sprint"]), _ease(_sprint_shown))
-	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["braced"]), _ease(_braced_shown))
+	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["aim"]), _ease(_aim))
 	# The kick snaps up and settles slowly: half as far in both hands.
-	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["recoil"]), pow(_kick, 1.35) * (0.55 if braced else 1.0))
+	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["recoil"]), pow(_kick, 1.35) * (0.55 if aimed else 1.0))
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["flip"]), _ease(_flip_shown))
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["gate"]), _ease(_gate_shown))
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["kick"]), _ease(_boot_shown))
@@ -661,7 +701,10 @@ func _send_pose(delta: float) -> void:
 			hand.set_revolver_parts(_turn_shown, _kick, gate)
 
 		if hand.has_method("set_gun_support"):
-			hand.set_gun_support(_braced_shown * (1.0 - _gate_shown))
+			hand.set_gun_support(_aim * (1.0 - _gate_shown))
+
+		if hand.has_method("set_gun_aim"):
+			hand.set_gun_aim(_aim)
 
 
 static func _ease(t: float) -> float:
@@ -674,11 +717,18 @@ func _sound(name: StringName) -> void:
 	Sfx.play_flat(player, take[0], take[1], take[2])
 
 
-func _ensure_action(action: StringName, key: Key) -> void:
+func _ensure_action(action: StringName, key: Key, mouse_button := -1) -> void:
 	if InputMap.has_action(action):
 		return
 
 	InputMap.add_action(action)
-	var key_event := InputEventKey.new()
-	key_event.physical_keycode = key
-	InputMap.action_add_event(action, key_event)
+
+	if key != KEY_NONE:
+		var key_event := InputEventKey.new()
+		key_event.physical_keycode = key
+		InputMap.action_add_event(action, key_event)
+
+	if mouse_button != -1:
+		var mouse_event := InputEventMouseButton.new()
+		mouse_event.button_index = mouse_button
+		InputMap.action_add_event(action, mouse_event)

@@ -144,19 +144,19 @@ func _run() -> void:
 	await _frames(10)
 	await _tap("throw")
 	var one_hand := shots.size()
-	revolver.set_braced(true)
+	Input.action_press("aim")
 	await _frames(40)
 	shots.clear()
 	await _tap("throw")
-	# 0.4 s on: ready braced (0.35 s), not in one hand (0.6 s).
+	# 0.4 s on: ready aimed (0.35 s), not from the hip (0.6 s).
 	await _frames(22)
 	await _tap("throw")
 	await _frames(2)
 	var braced := shots.size()
-	revolver.set_braced(false)
+	Input.action_release("aim")
 	await _frames(40)
-	_check("R6 one-handed the next shot is ready after 0.6 s, braced after 0.35 s",
-		early == 1 and one_hand == 2 and braced == 2, "early %d one-hand %d braced %d" % [early, one_hand, braced])
+	_check("R6 from the hip the next shot is ready after 0.6 s, aimed after 0.35 s",
+		early == 1 and one_hand == 2 and braced == 2, "early %d hip %d aimed %d" % [early, one_hand, braced])
 	g6.queue_free()
 
 	# R7 a gunshot is heard: loud, and known for what it is
@@ -353,14 +353,17 @@ func _run() -> void:
 	var tip: Vector3 = gun_mesh.mesh.get_meta(&"muzzle")
 	var size: Vector2 = get_viewport().get_visible_rect().size
 	var muzzle: Vector2 = _on_screen_point(gun_mesh.global_transform * tip) / size
-	revolver.set_braced(true)
+	Input.action_press("aim")
 	await _frames(40)
 	var support: float = player.hand._arms.hand_position(0).distance_to(gun_mesh.global_transform.origin)
-	revolver.set_braced(false)
+	var bore: Vector3 = player.camera.global_basis.inverse() * -gun_mesh.global_basis.z.normalized()
+	var off_axis: float = rad_to_deg(bore.angle_to(Vector3.FORWARD))
+	Input.action_release("aim")
 	await _frames(30)
-	_check("R15 the muzzle shows low right; braced, the left hand is on the grip",
+	_check("R15 the muzzle shows low right at the hip; aimed, the left hand is on the grip",
 		muzzle.x > 0.5 and muzzle.x < 1.0 and muzzle.y > 0.5 and muzzle.y < 1.0 and support <= 0.08 * ViewArmsScript.SCALE,
 		"muzzle at %s support %.3f" % [muzzle, support])
+	_check("A5 aimed, the barrel runs down the line of sight", off_axis <= 1.0, "off the view's axis %.2f deg" % off_axis)
 
 	# R15b the cylinder turns a chamber for each shot
 	revolver.reset_for_practice()
@@ -375,6 +378,61 @@ func _run() -> void:
 		turned = rad_to_deg((rest.affine_inverse() * cylinder.transform).basis.get_euler().y)
 
 	_check("R15b the cylinder turns 60 degrees for a shot", _near(absf(turned), 60.0, 1.0), "turned %.1f" % turned)
+
+	# A1 right mouse raises the sights: 0.18 s up, the view narrowed to 62
+	revolver.reset_for_practice()
+	_put_player(Vector3(36, 1.05, 0))
+	await _frames(30)
+	Input.action_press("aim")
+	await _frames(5)
+	var rising: float = revolver.aim_amount()
+	await _frames(7)
+	var up: bool = revolver.aimed
+	await _frames(28)
+	var narrowed: float = player.camera.fov
+	_check("A1 right mouse raises the sights in 0.18 s, the view narrowed to 62",
+		rising >= 0.3 and rising <= 0.8 and up and _near(narrowed, 62.0, 0.5),
+		"at 5 frames %.2f, up %s, fov %.1f" % [rising, up, narrowed])
+
+	# A4 aimed, the left hand is on the gun: only cantrips
+	var aimed_shard: bool = player.caster.can_cast(&"shard")
+	var aimed_blink: bool = player.caster.can_cast(&"blink")
+	_check("A4 aimed, no hand spell, but Blink", not aimed_shard and aimed_blink, "shard %s blink %s" % [aimed_shard, aimed_blink])
+
+	# A3 aimed you walk slower, and let go it all comes back
+	var slowed: float = player.combat.speed_scale()
+	Input.action_release("aim")
+	await _frames(15)
+	var freed: float = player.combat.speed_scale()
+	await _frames(30)
+	_check("A3 aimed you walk at 0.7, and let go the speed and the view come back",
+		_near(slowed, 0.7, 0.001) and _near(freed, 1.0, 0.001) and _near(player.camera.fov, 75.0, 0.5),
+		"aimed %.2f after %.2f fov %.1f" % [slowed, freed, player.camera.fov])
+
+	# A6 aimed, then up on a ledge, or the sword taken: the aim drops clean
+	Input.action_press("aim")
+	await _frames(20)
+	var anchor6: Vector3 = player.planner.hang_anchor(Vector3(30, 3.0, -4.5), Vector3.BACK, 3.0)
+	player.teleport(Transform3D(Basis.IDENTITY, anchor6))
+	player._enter_hang(Vector3.BACK, 3.0, false)
+	await _frames(45)
+	var hung_fov: float = player.camera.fov
+	var hung_aim: float = revolver.aim_amount()
+	player._drop_from_hang()
+	await _frames(60)
+	_put_player(Vector3(36, 1.05, 0))
+	Input.action_press("aim")
+	await _frames(20)
+	player.inventory.holster()
+	await _frames(45)
+	var sword_fov: float = player.camera.fov
+	var sword_aim: float = revolver.aim_amount()
+	Input.action_release("aim")
+	_wield(&"revolver")
+	await _frames(40)
+	_check("A6 the aim drops clean onto a ledge or with the gun put away",
+		_near(hung_fov, 75.0, 0.5) and hung_aim == 0.0 and _near(sword_fov, 75.0, 0.5) and sword_aim == 0.0,
+		"hanging fov %.1f aim %.2f, put away fov %.1f aim %.2f" % [hung_fov, hung_aim, sword_fov, sword_aim])
 
 	# R16 in arm's reach, F is a pistol-whip, not a kick
 	revolver.reset_for_practice()
@@ -554,7 +612,7 @@ func _aim(target: Vector3) -> void:
 
 
 func _release_all() -> void:
-	for a in ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "crouch", "frob", "throw", "block", "kick", "reload", "barrel", "grip", "blink"]:
+	for a in ["move_forward", "move_back", "move_left", "move_right", "jump", "sprint", "crouch", "frob", "throw", "block", "kick", "reload", "barrel", "aim", "blink", "spell_1", "spell_2", "spell_3"]:
 		if InputMap.has_action(a):
 			Input.action_release(a)
 
