@@ -26,6 +26,8 @@ const BUS_FAR := &"WorldFar"
 const BUS_BODY := &"Body"
 const BUS_MUSIC := &"Music"
 const BUS_AMBIENCE := &"Ambience"
+## The ánimas' voices (Animas.gd): a long dark tail of their own, then the room's (sent to World).
+const BUS_SOULS := &"Souls"
 ## Played on the Music bus rather than your Body's.
 const MUSICAL := [&"sting_suspicious", &"sting_combat", &"sting_escalate", &"sting_goal"]
 ## The room: [room size, damping, wet, spread, hi-pass] for each "acoustics".
@@ -225,6 +227,10 @@ const GAIN := {
 	&"sting_goal": -13.3,
 	&"paper": -8.7,
 	&"pencil": -14.1,
+	# The ánimas (Animas.gd): their voices far under the living's (target -30;
+	# pulled down, -28).
+	&"anima_voice": -15.1,
+	&"anima_moan": -12.3,
 }
 
 
@@ -514,14 +520,14 @@ static func _ensure_limiter() -> void:
 ## close), Music and Ambience (each pressed down a little while the World is
 ## loud: the fight comes first).
 static func _ensure_buses() -> void:
-	for bus in [BUS_WORLD, BUS_FAR, BUS_BODY, BUS_MUSIC, BUS_AMBIENCE]:
+	for bus in [BUS_WORLD, BUS_FAR, BUS_BODY, BUS_MUSIC, BUS_AMBIENCE, BUS_SOULS]:
 		if AudioServer.get_bus_index(bus) >= 0:
 			continue
 
 		AudioServer.add_bus()
 		var index := AudioServer.bus_count - 1
 		AudioServer.set_bus_name(index, bus)
-		AudioServer.set_bus_send(index, &"Master")
+		AudioServer.set_bus_send(index, BUS_WORLD if bus == BUS_SOULS else &"Master")
 
 		match bus:
 			BUS_WORLD:
@@ -553,6 +559,18 @@ static func _ensure_buses() -> void:
 				# does not.
 				if bus == BUS_AMBIENCE:
 					AudioServer.add_bus_effect(index, _hurt_filter())
+			BUS_SOULS:
+				# Not the room's: a long, dark tail, late to come, that the room then takes up.
+				var beyond := AudioEffectReverb.new()
+				beyond.room_size = 0.82
+				beyond.damping = 0.6
+				beyond.spread = 1.0
+				beyond.hipass = 0.25
+				beyond.predelay_msec = 70.0
+				beyond.predelay_feedback = 0.35
+				beyond.dry = 0.8
+				beyond.wet = 0.42
+				AudioServer.add_bus_effect(index, beyond)
 
 	set_acoustics("stone")
 

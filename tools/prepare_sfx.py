@@ -51,6 +51,10 @@ other file as it is;
 
 makes only the fire beds (FIRE_LOOPS);
 
+    python3 tools/prepare_sfx.py --souls
+
+only the ánimas' voices (SOULS);
+
     python3 tools/prepare_sfx.py --weather
 
 only the weather's loops (WEATHER_LOOPS: the NOX Essentials' rain and wind,
@@ -476,6 +480,30 @@ CROWD_GROUPS = {"murmur": -6.0, "murmur_b": -6.0, "murmur_f": -6.0, "hm": -8.0, 
                 "throat": -14.0, "throat_b": -14.0, "cough": -16.0, "cough_f": -16.0}
 CROWD_SECONDS = 24.0
 CROWD_EVENTS = 150
+# The ánimas' voices (Animas.gd): rubberduck's "80 CC0 creature SFX" monster_04
+# (CC0; the user's pick, Oct 24 2026), a single growled utterance taken far down
+# (asetrate, so it slows as it drops, a tape's way), whole or by its halves (its
+# rise, its fall), each with a slight flanger of its own sweep: something that is
+# not a throat trying to speak. Their reverb is the game's (Sfx's Souls bus), so
+# it sits in the room they are in. (name, start, end, pitch, flanger delay ms,
+# its sweep Hz, its mix %, low-pass Hz)
+CREATURES = os.path.expanduser("~/Downloads/80-CC0-creature-SFX/")
+SOUL_VOICE = CREATURES + "monster_04.ogg"
+SOULS = [
+    ("anima_voice_1", 0.06, 1.12, 0.50, 2.5, 0.18, 45, 3200),
+    ("anima_voice_2", 0.06, 1.12, 0.56, 3.0, 0.27, 40, 3600),
+    ("anima_voice_3", 0.06, 1.12, 0.63, 2.0, 0.33, 45, 3800),
+    ("anima_voice_4", 0.06, 1.12, 0.71, 3.5, 0.22, 35, 4200),
+    ("anima_voice_5", 0.06, 0.62, 0.58, 2.5, 0.40, 40, 3600),
+    ("anima_voice_6", 0.06, 0.62, 0.66, 3.0, 0.15, 45, 4000),
+    ("anima_voice_7", 0.50, 1.12, 0.54, 2.0, 0.30, 40, 3400),
+    ("anima_voice_8", 0.50, 1.12, 0.62, 3.5, 0.20, 35, 3800),
+    # Pulled back down: the lowest, its fall the longest.
+    ("anima_moan_1", 0.06, 1.12, 0.42, 3.0, 0.12, 50, 2600),
+    ("anima_moan_2", 0.30, 1.12, 0.45, 2.5, 0.16, 45, 2800),
+]
+# Each breathes in rather than starting on its growl (s), and dies out (s).
+SOUL_FADE = (0.08, 0.35)
 # Thunder (NightSound, after each flash), from rubberduck's "100 CC0 SFX #2"
 # (CC0, approved Sept 27 2026): its one clap as it is, lower and duller (far
 # off), and higher and sharper (near): (name, source, low-pass, pitch).
@@ -1022,6 +1050,33 @@ def prepare_underground():
     print("step_tile    %d file(s)" % k)
 
 
+def prepare_souls():
+    """The ánimas' voices (SOULS): each take pitched down, flanged, matched in loudness."""
+    groups = {}
+
+    for name, start, end, pitch, delay, speed, mix, lowpass in SOULS:
+        flanger = "flanger=delay=%.1f:depth=%.1f:regen=-4:width=%d:speed=%.2f:shape=sinusoidal:interp=quadratic" % (
+            delay, delay * 0.8, mix, speed)
+        # The slice, then the drop (the slice's times are the recording's own).
+        # (Resampled first: asetrate takes the rate it is given as the recording's, and this one is 48 kHz.)
+        x = decode_filtered(SOUL_VOICE, None, None, ["aresample=%d" % RATE, "atrim=%.3f:%.3f" % (start, end),
+                                                     "asetpts=PTS-STARTPTS"]
+                            + _filters(lowpass, pitch, 70) + [flanger])
+        x = fade(x, SOUL_FADE[0], SOUL_FADE[1])
+        x *= 10 ** (PEAK_LIMIT_DB / 20) / max(np.abs(x).max(), 1e-9)
+        group = re.sub(r"_\d+$", "", name)
+        groups.setdefault(group, []).append([name, x, loudness(x)])
+
+    for group, members in groups.items():
+        level = min(m[2] for m in members)
+
+        for name, x, own in members:
+            write_wav(os.path.join(OUT, name + ".wav"), x * 10 ** ((level - own) / 20))
+
+        print("%-12s %d file(s), %.1f LUFS, %.2f-%.2f s" % (group, len(members), level,
+              min(len(m[1]) for m in members) / RATE, max(len(m[1]) for m in members) / RATE))
+
+
 def prepare_score(only=None):
     """The score's stings (only those groups when `only` is given) and, with
     no `only`, its loops."""
@@ -1072,6 +1127,9 @@ def main():
         elif a == "--underground":
             prepare_fire_loops(UNDERGROUND_LOOPS, AMBIENCE_OUT, "ambience", "underground loop")
             prepare_underground()
+            return
+        elif a == "--souls":
+            prepare_souls()
             return
         elif a == "--weather":
             prepare_fire_loops(WEATHER_LOOPS, WEATHER_OUT, "weather", "weather loop")

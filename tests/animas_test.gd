@@ -22,6 +22,7 @@ func _ready() -> void:
 	await _wall()
 	await _lurker()
 	await _shy()
+	await _voices()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -163,6 +164,47 @@ func _shy() -> void:
 		out_of_sight = (-eye.global_basis.z).dot(d.normalized()) < cos(deg_to_rad(16.0))
 	_check("A5 a shy one, looked at, darts out of the gaze", warm >= 0 and fled and out_of_sight,
 		"warming %d fled %s out of sight %s" % [warm, fled, out_of_sight])
+	animas.queue_free()
+	await get_tree().process_frame
+
+
+## A6-A7: their voices: those begging speak to whoever stands before them, never more than two at once, the small
+## higher than the big; pulled down by what they fear, they cry out, and hidden they say nothing more.
+func _voices() -> void:
+	var animas := _souls({"beggar": 1.0}, "grate", 6, Vector2(0.6, 1.4))
+	living.global_position = Vector3(1.6, 0.0, 0.0)
+	_look(living.global_position + Vector3(0, 1.6, 0), Vector3(0, 1.0, 0))
+	var most := 0
+	var begged := -1
+	var spoke_begging := -1
+	for f in 1800:
+		await get_tree().process_frame
+		most = maxi(most, AnimasScript._voices_until.filter(func(u): return u > AnimasScript._voice_clock).size())
+		if begged < 0 and range(animas.count).any(func(i): return animas.state_of(i) == "pleading"):
+			begged = f
+			animas.spoken = 0
+		if begged >= 0 and spoke_begging < 0 and animas.spoken > 0:
+			spoke_begging = f
+	var talked: int = animas.spoken
+	var by_size := range(animas.count).map(func(i): return [animas._souls[i]["size"], animas._souls[i]["voice"]])
+	by_size.sort_custom(func(a, b): return a[0] < b[0])
+	var small_higher: bool = by_size[0][1] > by_size[-1][1]
+	_check("A6 those begging speak to you soon after they come (two at most at once), the small higher than the big",
+		begged >= 0 and spoke_begging >= 0 and spoke_begging - begged < 150 and talked >= 3 and most <= 2 and small_higher,
+		"begged at %d, spoke at %d, %d times since, at most %d at once, voices by size %s" % [begged, spoke_begging,
+		talked, most, by_size])
+	var out_before := _out(animas).size()
+	animas.spoken = 0
+	animas.hush = 1.0
+	for f in 30:
+		await get_tree().process_frame
+	var cried: int = animas.spoken
+	for f in 600:
+		await get_tree().process_frame
+	var after: int = animas.spoken - cried
+	_check("A7 pulled down by what they fear they cry out (no more than two at once), then hidden say nothing",
+		out_before > 0 and cried >= 1 and cried <= 2 and after == 0,
+		"%d out, %d cried, %d more while hidden" % [out_before, cried, after])
 	animas.queue_free()
 	await get_tree().process_frame
 

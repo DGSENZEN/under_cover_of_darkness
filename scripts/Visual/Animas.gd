@@ -121,8 +121,24 @@ const RIM := Color("c8ff52")
 const CORE_REACH := 0.25
 ## How bright its fire burns (past 1 the bloom takes it; much past, it whites out).
 const FIRE_ENERGY := 1.5
+## Their voices (Sfx's anima_voice, anima_moan; on its Souls bus, a long dark tail of their own): how often each
+## speaks while it does each thing (s; the one begging of you most), how loud (dB), how many speak at once in all
+## the places they come up, how far off they are heard (m); a small one's voice and a big one's (pitch, by size,
+## each a little its own); how much quieter for a corner or a wall between (dB).
+const VOICE_EVERY := {"pleading": Vector2(3.5, 7.0), "straining": Vector2(6.0, 11.0), "warming": Vector2(10.0, 20.0),
+	"seeking": Vector2(14.0, 28.0), "escorting": Vector2(10.0, 20.0), "lurking": Vector2(12.0, 24.0)}
+const VOICE_DB := {"pleading": 0.0, "straining": -2.0, "warming": -6.0, "seeking": -7.0, "escorting": -6.0,
+	"lurking": -9.0, "dragged": 1.0}
+const VOICES_AT_ONCE := 2
+const VOICE_REACH := 14.0
+const VOICE_PITCH := Vector2(1.12, 0.86)
+const VOICE_OWN := 0.06
+const VOICE_HIDDEN_DB := Vector2(-4.0, -9.0)
+## Pulled back down, how often it cries out.
+const MOAN_CHANCE := 0.7
 const SILHOUETTE := preload("res://scripts/Visual/anima_silhouette.gdshader")
 const AURA := preload("res://scripts/Visual/anima_aura.gdshader")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 ## Without hands: a flame of its own (its height and width).
 const CORE := Vector2(0.26, 0.075)
 ## Its trail: how many points, how often one is laid (s), how wide at its head.
@@ -182,6 +198,9 @@ var shells: Array[MeshInstance3D] = []
 var ribbons: Array[MeshInstance3D] = []
 var lamps: Array[OmniLight3D] = []
 var glow: OmniLight3D
+## Each one's voice (built only with sound on), and how many times they have spoken (with sound off too).
+var voices: Array[AudioStreamPlayer3D] = []
+var spoken := 0
 ## 1 when they are here; 0 when they have hidden from what passes.
 var presence := 1.0
 ## Something passing they fear (the dark train, 0-1): they are all dragged down and go dark.
@@ -205,12 +224,20 @@ var _sheet: ShaderMaterial
 var _living_was := Vector3.INF
 var _still_for := 0.0
 var _traits := RandomNumberGenerator.new()
+## (Their voices' draws are their own, so the rest of their lives go as they did without them.)
+var _voice_rng := RandomNumberGenerator.new()
+## When each voice speaking now, here or at another mouth, falls quiet, on a clock all the mouths share (s; kept
+## by whichever of them is first each frame).
+static var _voices_until: Array[float] = []
+static var _voice_clock := 0.0
+static var _voice_frame := -1
 
 
 func _ready() -> void:
 	_rng.seed = seed
 	# (Their sizes and tempers from a draw of their own, so the rest of their lives go as they did without them.)
 	_traits.seed = seed * 7919 + 13
+	_voice_rng.seed = seed * 104729 + 5
 	var core_mesh := MeshVfx.flame(CORE.x, CORE.y)
 
 	for i in count:
@@ -300,6 +327,10 @@ func _ready() -> void:
 			"route_to": Vector3.INF, "route_at": 0.0, "size": _traits.randf_range(sizes.x, sizes.y),
 			"temper": _pick_temper(), "slot": -1, "hid": 0.0})
 		hand.scale = Vector3.ONE * float(_souls[i]["size"])
+		var small := 0.5 if is_equal_approx(sizes.x, sizes.y) else inverse_lerp(sizes.x, sizes.y, _souls[i]["size"])
+		_souls[i]["voice"] = lerpf(VOICE_PITCH.x, VOICE_PITCH.y, small) * (1.0 + _voice_rng.randf_range(-VOICE_OWN, VOICE_OWN))
+		_souls[i]["speak"] = INF
+		_voice(hand)
 		_souls[i]["at"] = _below(i)
 		hand.position = _souls[i]["at"]
 
@@ -341,9 +372,90 @@ func _process(delta: float) -> void:
 	for i in count:
 		_move(i, delta, hidden)
 
+	_voices(delta, hidden)
 	_trail(delta)
 	_sheet.set_shader_parameter(&"presence", presence)
 	glow.light_energy = GLOW_ENERGY * presence
+
+
+## A voice of its own, carried in its hand (so it moves as it does), on the Souls bus.
+func _voice(hand: Node3D) -> void:
+	if not Sfx.enabled:
+		return
+
+	var voice := AudioStreamPlayer3D.new()
+	voice.name = "voice"
+	voice.bus = Sfx.BUS_SOULS
+	voice.unit_size = 1.2
+	voice.max_distance = VOICE_REACH
+	voice.attenuation_filter_cutoff_hz = Sfx.AIR_CUTOFF
+	voice.attenuation_filter_db = Sfx.AIR_DB
+	voice.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
+	hand.add_child(voice)
+	voices.append(voice)
+
+
+## Each speaks again when its time comes round, while it does something it speaks in.
+func _voices(delta: float, hidden: bool) -> void:
+	if _voice_frame != Engine.get_process_frames():
+		_voice_frame = Engine.get_process_frames()
+		_voice_clock += delta
+
+	for i in count:
+		var soul: Dictionary = _souls[i]
+
+		if not VOICE_EVERY.has(soul["state"]):
+			continue
+
+		# (Come to it without being told: making for a candle again after warming at one, say.)
+		if soul["speak"] == INF:
+			soul["speak"] = _voice_rng.randf_range(0.3, 1.0) * VOICE_EVERY[soul["state"]].y
+
+		soul["speak"] -= delta
+
+		if soul["speak"] > 0.0:
+			continue
+
+		var every: Vector2 = VOICE_EVERY[soul["state"]]
+		soul["speak"] = _voice_rng.randf_range(every.x, every.y)
+
+		if not hidden:
+			_speak(i, &"anima_voice")
+
+
+## One speaks (`sound`, a take of it): not if two speak already, nor out of hearing.
+func _speak(i: int, sound: StringName) -> void:
+	_voices_until = _voices_until.filter(func(until: float) -> bool: return until > _voice_clock)
+
+	if _voices_until.size() >= VOICES_AT_ONCE or presence < 0.5:
+		return
+
+	var soul: Dictionary = _souls[i]
+	var camera := get_viewport().get_camera_3d()
+	var at := lights[i].global_position
+
+	if camera != null and camera.global_position.distance_to(at) > VOICE_REACH:
+		return
+
+	var pitch: float = soul["voice"] * (1.0 + _voice_rng.randf_range(-0.04, 0.04))
+	var db: float = float(Sfx.GAIN.get(sound, 0.0)) + float(VOICE_DB.get(soul["state"], -6.0)) \
+		+ _voice_rng.randf_range(-1.5, 1.0)
+	var take: AudioStream = Sfx.stream(sound) if not voices.is_empty() else null
+	var length := (take.get_length() if take != null else 2.0) / pitch
+	_voices_until.append(_voice_clock + length)
+	spoken += 1
+
+	if take == null:
+		return
+
+	# Round a corner a little quieter and duller; through a wall, more.
+	var hidden := Sfx.occlusion_at(self, at)
+	var voice := voices[i]
+	voice.stream = take
+	voice.pitch_scale = pitch
+	voice.volume_db = db + (VOICE_HIDDEN_DB.y if hidden >= 1.0 else (VOICE_HIDDEN_DB.x if hidden > 0.0 else 0.0))
+	voice.attenuation_filter_cutoff_hz = Sfx.OCCLUDED_CUTOFF if hidden >= 1.0 else (Sfx.AROUND_CUTOFF if hidden > 0.0 else Sfx.AIR_CUTOFF)
+	voice.play()
 
 
 func _count_out() -> int:
@@ -397,6 +509,18 @@ func _become(i: int, state: String) -> void:
 			soul["held"] = _traits.randf_range(LURK_FOR.x, LURK_FOR.y)
 		"hiding":
 			soul["hid"] = 0.0
+
+	# Its voice: begging, it speaks soon after it comes before you; pulled back down, it cries out as it goes.
+	if state == "pleading":
+		soul["speak"] = _voice_rng.randf_range(0.6, 1.5)
+	elif state == "dragged":
+		soul["speak"] = INF
+		if _voice_rng.randf() < MOAN_CHANCE:
+			_speak(i, &"anima_moan")
+	elif VOICE_EVERY.has(state):
+		soul["speak"] = _voice_rng.randf_range(0.3, 1.0) * VOICE_EVERY[state].y
+	else:
+		soul["speak"] = INF
 
 
 ## Where a soul goes next once free: home if its time is up; to someone standing still near, if few beg them yet;
