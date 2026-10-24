@@ -73,6 +73,12 @@ const SUBTITLE_SIZE := 21
 const SUBTITLE_WIDTH := 0.72
 const SUBTITLE_MOST := 860.0
 const SUBTITLE_BOTTOM := 130.0
+## Talking (TalkBox), the subtitles and the caption go up here instead, this
+## far down the screen, clear of the talk box at the bottom.
+const TALK_TOP := 0.08
+## Talking, the crosshair, the lightgem, the awareness marks and the rings
+## fade out at this rate (per second), and back in after.
+const TALK_FADE := 5.0
 const INK := Color(0.93, 0.88, 0.78)
 const DIM := Color(0.62, 0.58, 0.5)
 const AMBER := Color(1.0, 0.78, 0.36)
@@ -89,6 +95,8 @@ var _crosshair: Crosshair
 var _prompts: HBoxContainer
 var _prompt_signature := ""
 var _prompt_alpha := 0.0
+## How far the HUD has given way to a talk (0 not at all, 1 gone).
+var _talk_away := 0.0
 var _gem: Gem
 var _caption: Label
 var _caption_timer := 0.0
@@ -926,6 +934,15 @@ func _process(delta: float) -> void:
 	# A page held up to read: nothing is aimed at, and the prompts go above
 	# it (READING_PROMPTS of the height down) rather than over its words.
 	var reading: bool = player.hand != null and player.hand.has_method("is_page_up") and player.hand.is_page_up()
+	# Talking: nothing is aimed at either, and the box has the screen's
+	# foot. What is yours to watch while you play (the crosshair and its
+	# stamina arc, the lightgem, the marks over men, the shields) gives way.
+	var talking: bool = player.get("talk_hold") == true
+	_talk_away = move_toward(_talk_away, 1.0 if talking else 0.0, delta * TALK_FADE)
+
+	for piece in [_crosshair, _gem, _awareness, _shields]:
+		(piece as CanvasItem).self_modulate.a = 1.0 - _talk_away
+
 	_crosshair.visible = not reading
 	_crosshair.queue_redraw()
 	# Centred under it however many there are, and kept on the screen.
@@ -946,7 +963,7 @@ func _process(delta: float) -> void:
 	# What just came into your hand, briefly.
 	_caption_timer = maxf(_caption_timer - delta, 0.0)
 	_caption.modulate.a = clampf(_caption_timer / 0.4, 0.0, 1.0)
-	_place(_caption, Vector2(EDGE, view.y - 118), Vector2(view.x - EDGE * 2.0, 24))
+	_place(_caption, Vector2(EDGE, view.y * TALK_TOP if talking else view.y - 118), Vector2(view.x - EDGE * 2.0, 24))
 
 	_legacy_tag.visible = bool(player.get("legacy_feel"))
 	_place(_legacy_tag, Vector2(view.x - 330, view.y - 34), Vector2(300, 20))
@@ -958,7 +975,8 @@ func _process(delta: float) -> void:
 	_subtitle.custom_minimum_size.x = minf(_subtitle_width, minf(view.x * SUBTITLE_WIDTH, SUBTITLE_MOST))
 	var sub_size := _subtitle_panel.get_combined_minimum_size()
 	_subtitle_panel.size = sub_size
-	_subtitle_panel.position = Vector2(centre.x - sub_size.x * 0.5, view.y - SUBTITLE_BOTTOM - sub_size.y)
+	_subtitle_panel.position = Vector2(centre.x - sub_size.x * 0.5,
+		view.y * TALK_TOP + 30.0 if talking else view.y - SUBTITLE_BOTTOM - sub_size.y)
 
 	# Health: shields, only while hurt or just after a hit.
 	var fraction := clampf(float(player.health) / maxf(float(player.max_health), 1.0), 0.0, 1.0)
@@ -1618,6 +1636,17 @@ static func speaker_of(guard: Node) -> String:
 ## The awareness marks shown now (tests).
 func awareness_marks() -> Array:
 	return _awareness.marks if _awareness != null else []
+
+
+## How much of a piece shows now, 0..1 (tests): "crosshair", "gem",
+## "marks" (over men) or "shields".
+func shown(piece: String) -> float:
+	var node: CanvasItem = {"crosshair": _crosshair, "gem": _gem, "marks": _awareness, "shields": _shields}.get(piece)
+
+	if node == null or not node.is_visible_in_tree():
+		return 0.0
+
+	return node.modulate.a * node.self_modulate.a
 
 
 ## Where each piece of the HUD is on the screen now, by name, while it shows:

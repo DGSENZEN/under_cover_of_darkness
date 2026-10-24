@@ -3,16 +3,18 @@ extends RefCounted
 ## front the commission and the goals in ink (a done one struck through, the
 ## side goals under a rule); then the thief's pencil notes, newest last
 ## (HeldPage turns them over onto more sheets as they need). BBCode for the
-## held page's RichTextLabel.
+## held page's RichTextLabel. The goals people gave him and the notes he took
+## in talk (the job's `people`, if it has any) come after the job's own.
 
 const JobBook := preload("res://scripts/Level/JobBook.gd")
+const DialogueBook := preload("res://scripts/Level/DialogueBook.gd")
 
 ## Pencil, against the ink.
 const PENCIL := Color(0.3, 0.3, 0.33)
 const RULE := "[center]―――――[/center]"
 
 
-## [front, notes..., notes...] for `job` (a JobState).
+## [front, notes..., notes...] for `job` (a JobState, and its people).
 static func sides(job: RefCounted) -> PackedStringArray:
 	var out := PackedStringArray()
 	var book: Dictionary = job.book
@@ -20,7 +22,13 @@ static func sides(job: RefCounted) -> PackedStringArray:
 	var mains := []
 	var others := []
 
-	for goal in job.goals_listed():
+	var goals: Array = job.goals_listed()
+	var talk: RefCounted = job.people
+
+	if talk != null:
+		goals = goals + talk.goals_listed()
+
+	for goal in goals:
 		var line := escape(String(goal["text"]))
 		line = "[s]%s[/s]" % line if bool(goal["done"]) else line
 		(mains if StringName(goal["kind"]) == &"main" else others).append(line)
@@ -36,6 +44,13 @@ static func sides(job: RefCounted) -> PackedStringArray:
 	for id in job.notes:
 		var text := String((book.get("notes", {}) as Dictionary).get(id, {}).get("text", JobBook.OPEN + String(id) + JobBook.CLOSE))
 		lines.append("[color=#%s][i]— %s[/i][/color]" % [PENCIL.to_html(false), escape(text)])
+
+	if talk != null:
+		var spoken: Dictionary = DialogueBook.library()["notes"]
+
+		for id in talk.notes:
+			var text := String(spoken.get(id, {}).get("text", DialogueBook.OPEN + String(id) + DialogueBook.CLOSE))
+			lines.append("[color=#%s][i]— %s[/i][/color]" % [PENCIL.to_html(false), escape(text)])
 
 	# (The held page lays them out over as many sheets as they need.)
 	if not lines.is_empty():

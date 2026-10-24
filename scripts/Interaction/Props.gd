@@ -13,6 +13,7 @@ const ToolScript := preload("res://scripts/Interaction/ToolItem.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const HazardScript := preload("res://scripts/Combat/Hazard.gd")
 const ReadableScript := preload("res://scripts/Interaction/Readable.gd")
+const DialogueBookScript := preload("res://scripts/Level/DialogueBook.gd")
 ## Aged paper, and the nail a notice hangs on.
 const PAPER := Color(0.78, 0.72, 0.58)
 const NAIL := Color(0.22, 0.2, 0.18)
@@ -288,7 +289,7 @@ static func blackjack_mesh() -> Mesh:
 ## The mesh an item on the belt is drawn with (as its kit or its pickup gives
 ## it), for a belt rebuilt from what was saved (Inventory.load_state): a key
 ## (`is_key`) its brass bar, the tools theirs, the weapons their models.
-## Null for an id nothing gives.
+## A dialogue item (data/dialogue) its `look:`'s (look_mesh). Null for an id nothing gives.
 static func belt_mesh(id: StringName, is_key := false) -> Mesh:
 	if is_key:
 		var bar := mesh_box(Vector3(0.12, 0.03, 0.05), Color(0.8, 0.7, 0.35))
@@ -310,7 +311,31 @@ static func belt_mesh(id: StringName, is_key := false) -> Mesh:
 		&"sword", &"dagger", &"bow", &"revolver":
 			return WeaponScript.find(id).mesh
 
+	# An item a character gives or takes (data/dialogue): its own look.
+	var given: Dictionary = DialogueBookScript.item(String(id))
+
+	if not given.is_empty():
+		return look_mesh(StringName(given.get("look", &"")))
+
 	return null
+
+
+## The mesh an item of a character's file looks like (its `look:`): a book, a
+## bundle of herbs, anything else a small plain box.
+static func look_mesh(look: StringName) -> Mesh:
+	var shape: MeshInstance3D
+
+	match look:
+		&"book":
+			shape = mesh_box(Vector3(0.16, 0.04, 0.22), Color(0.35, 0.2, 0.12))
+		&"bundle":
+			shape = mesh_box(Vector3(0.1, 0.1, 0.18), Color(0.4, 0.45, 0.25))
+		_:
+			shape = mesh_box(Vector3(0.08, 0.08, 0.08), Color(0.5, 0.45, 0.4))
+
+	var mesh: Mesh = shape.mesh
+	shape.free()
+	return mesh
 
 
 ## Sword, dagger, bow and a quiver, straight onto a player's belt.

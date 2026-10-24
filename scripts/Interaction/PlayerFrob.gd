@@ -12,6 +12,8 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const ThrownToolScript := preload("res://scripts/Combat/ThrownTool.gd")
 const LetterText := preload("res://scripts/UI/LetterText.gd")
+const TalkBoxScript := preload("res://scripts/UI/TalkBox.gd")
+const MusicScript := preload("res://scripts/Audio/Music.gd")
 
 ## The tools thrown from your hand (ThrownTool.kind).
 const THROWN_TOOLS := [&"flashbomb", &"waterflask"]
@@ -110,6 +112,8 @@ var _held_parent: Node = null
 ## The readable whose page is up (Readable), null for the letter.
 var _reading: Node = null
 var _read_from := Vector3.ZERO
+## The talk box up (TalkBox), or null.
+var _talk: Node = null
 
 
 func _ready() -> void:
@@ -132,12 +136,53 @@ func _ready() -> void:
 	CityState.job.noted.connect(_on_job_changed)
 	CityState.job.goal_shown.connect(_on_job_changed)
 	CityState.job.goal_done.connect(_on_job_changed)
+	# What talk teaches him and the goals people give him are heard as the
+	# job's are (DistrictMap hears the job's through hear_noted and
+	# hear_goal_done): here, so it is the same with no district around him
+	# (the candle lane stands alone).
+	CityState.people.noted.connect(_on_people_noted)
+	CityState.people.goal_shown.connect(_on_job_changed)
+	CityState.people.goal_finished.connect(_on_people_goal_finished)
 
 
 func _exit_tree() -> void:
-	for sig in [CityState.job.noted, CityState.job.goal_shown, CityState.job.goal_done]:
+	for sig in [CityState.job.noted, CityState.job.goal_shown, CityState.job.goal_done, CityState.people.goal_shown]:
 		if (sig as Signal).is_connected(_on_job_changed):
 			(sig as Signal).disconnect(_on_job_changed)
+
+	if CityState.people.noted.is_connected(_on_people_noted):
+		CityState.people.noted.disconnect(_on_people_noted)
+
+	if CityState.people.goal_finished.is_connected(_on_people_goal_finished):
+		CityState.people.goal_finished.disconnect(_on_people_goal_finished)
+
+
+## Something learnt (a pencil note, the job's or talk's): "Noted" under the
+## view, and the pencil.
+func hear_noted() -> void:
+	if player.get("hud") != null:
+		player.hud.show_caption("Noted", 1.6)
+
+	Sfx.play_flat(player, &"pencil")
+
+
+## A goal done (the job's or talk's): a main one the score's goal sting (not
+## over another's: Music's gap), a side one only the pencil.
+func hear_goal_done(kind: StringName) -> void:
+	if kind == &"main" and TimeFx.real_time() - Sfx.sting_at >= MusicScript.STING_GAP:
+		Sfx.play_flat(player, &"sting_goal")
+	elif kind != &"main":
+		Sfx.play_flat(player, &"pencil")
+
+
+func _on_people_noted(_id: String) -> void:
+	_on_job_changed()
+	hear_noted()
+
+
+func _on_people_goal_finished(id: String) -> void:
+	_on_job_changed()
+	hear_goal_done(CityState.people.goal_kind(id))
 
 
 ## Something is in your hands (tracked apart from `held`, which reads as
@@ -163,6 +208,15 @@ func _physics_process(delta: float) -> void:
 
 		if _page_up():
 			put_page_away()
+
+		return
+
+	# Talking: the box has E, the wheel and the click (TalkBox).
+	if talking() != null:
+		_set_target(null)
+
+		if player.hand != null and player.hand.has_method("set_checking"):
+			player.hand.set_checking(false)
 
 		return
 
@@ -261,7 +315,8 @@ func _physics_process(delta: float) -> void:
 func open_letter() -> void:
 	var hands: Node = player.hand
 
-	if hands == null or not hands.has_method("hold_page"):
+	# Talking: the letter stays put away.
+	if hands == null or not hands.has_method("hold_page") or talking() != null:
 		return
 
 	_reading = null
@@ -310,7 +365,7 @@ func reading() -> Node:
 func can_raise_page() -> bool:
 	var hands: Node = player.hand
 	return hands != null and held == null and shouldered == null and not _unlocking and _picking == null and _hands_free() \
-		and _combat_idle() and not hands.is_busy() and not player.is_dead
+		and _combat_idle() and not hands.is_busy() and not player.is_dead and talking() == null
 
 
 ## What puts a page away: the hands wanted (a carry, a climb, a hang, a
@@ -342,6 +397,55 @@ func page_must_lower() -> bool:
 func _page_up() -> bool:
 	var hands: Node = player.hand
 	return hands != null and hands.has_method("is_page_up") and hands.is_page_up()
+
+
+# Talking
+
+## Opens a talk with `shade` (Shade.frob calls this), if your hands are free
+## for it: nothing held, shouldered or read, on your feet, no blow under way.
+func talk(shade: Node) -> void:
+	if not can_talk() or shade == null or (shade.get("dialogue") as Dictionary).is_empty():
+		return
+
+	var box: CanvasLayer = TalkBoxScript.new()
+	box.name = "TalkBox"
+	player.add_child(box)
+
+	# On the HUD's layer but before it, so the pause screen covers it.
+	if player.hud != null and player.hud.get_parent() == player:
+		player.move_child(box, player.hud.get_index())
+
+	_talk = box
+	box.open(shade, player)
+
+
+## The talk box up, or null.
+func talking() -> Node:
+	if _talk != null and is_instance_valid(_talk) and _talk.is_open():
+		return _talk
+
+	return null
+
+
+## Free to talk: nothing held, shouldered or up to read, no key turning or
+## lock being picked, no blow or throw under way, on your feet, alive, and no
+## talk box about at all (up, or still lifting off: E pressed again as it
+## closes opens nothing).
+func can_talk() -> bool:
+	var hands: Node = player.hand
+	return held == null and shouldered == null and not _unlocking and _picking == null and not _page_up() and _hands_free() \
+		and _combat_idle() and _swing_windup < 0.0 and _tool_windup < 0.0 and not player.is_dead and not _box_about() \
+		and (hands == null or not hands.has_method("is_busy") or not hands.is_busy())
+
+
+## A talk box still in the tree: up, or lifting off.
+func _box_about() -> bool:
+	return _talk != null and is_instance_valid(_talk) and not _talk.is_queued_for_deletion()
+
+
+## Something one talks to (a Shade).
+static func _talks(node: Node) -> bool:
+	return node != null and node.has_method("speaking") and node.get("dialogue") is Dictionary
 
 
 func _on_job_changed(_a: Variant = null, _b: Variant = null) -> void:
@@ -455,6 +559,10 @@ func current_prompt() -> String:
 ## Returns Array of [action: StringName, label: String] HUD rows.
 ## An empty action denotes status text; an empty array means no available rows.
 func current_actions() -> Array:
+	# Talking: no rows at all (the user's call: the box speaks for itself).
+	if talking() != null:
+		return []
+
 	if _unlocking:
 		return []
 
@@ -486,6 +594,14 @@ func current_actions() -> Array:
 
 	if prompt == "Too heavy" or prompt == "Locked":
 		return [[&"", prompt]]
+
+	# Someone to talk to, with your hands full (a ledge, a blow): not now.
+	# (The box just closed and still lifting off: nothing yet.)
+	if _talks(target) and _box_about():
+		return []
+
+	if _talks(target) and not can_talk():
+		return [[&"", "Hands busy"]]
 
 	return [[&"frob", prompt]]
 

@@ -10,6 +10,7 @@ const DistrictStateScript := preload("res://scripts/Level/DistrictState.gd")
 
 const LevelGameplayScript := preload("res://scripts/Level/LevelGameplay.gd")
 const JobStateScript := preload("res://scripts/Level/JobState.gd")
+const PeopleStateScript := preload("res://scripts/Level/PeopleState.gd")
 
 ## A man chasing the player within this of a gate (flat, m) when he goes
 ## through it follows him; he comes through this far behind the player's
@@ -31,14 +32,37 @@ var followers: Array = []
 ## What he has done of the job (JobState: goals, notes, readables, the
 ## districts' facts and tallies).
 var job: RefCounted = JobStateScript.new()
+## What people remember of him (PeopleState: flags, moods, who he has met,
+## the talk goals and notes): kept for good, a new mission does not reset it.
+var people: RefCounted = PeopleStateScript.new()
 
 
-## A new mission: nothing remembered, nothing carried.
+func _init() -> void:
+	_link()
+
+
+## (They hold each other, which would keep both alive past the game.)
+func _exit_tree() -> void:
+	job.people = null
+	people.job = null
+
+
+## A new mission: nothing remembered of the districts, nothing carried; the
+## job begins again, but what people remember stays (only the goals it has
+## done come off the letter).
 func begin() -> void:
 	districts.clear()
 	carried.clear()
 	followers.clear()
+	people.begin_mission()
 	job.reset()
+	_link()
+
+
+## The job and the people ask each other.
+func _link() -> void:
+	job.people = people
+	people.job = job
 
 
 ## The player leaves `map` (a DistrictMap: district, made, guards, visitors,
@@ -47,6 +71,12 @@ func begin() -> void:
 ## FOLLOW_RANGE of the gate) follows him through: away from this district,
 ## arriving on the far side as long after him as his run takes.
 func leave(map: Node, exit: Area3D) -> void:
+	# A talk is broken off by going (TalkBox.interrupt): gone at once.
+	var you: Node = map.player if map.get("player") != null and is_instance_valid(map.player) else null
+
+	if you != null and you.get("frob") != null and you.frob.has_method("talking") and you.frob.talking() != null:
+		you.frob.talking().interrupt()
+
 	var state := DistrictStateScript.capture(map, map.made, map.guards, map.visitors)
 	var gate := exit.global_position
 

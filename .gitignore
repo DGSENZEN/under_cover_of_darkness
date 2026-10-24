@@ -29,3 +29,6 @@ assets/props/source/backup/
 
 # CC0 photo scans, fetched by tools/textures/fetch_scans.py (only baked atlases are committed)
 textures/scans/
+
+# Talk-box paintings per character (licence unrecorded; see assets/ui/talk/README.md)
+assets/ui/talk/*/

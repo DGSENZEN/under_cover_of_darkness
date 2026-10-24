@@ -381,6 +381,9 @@ var is_crouched := false
 
 var health := 100.0
 var is_dead := false
+## In a conversation (TalkBox): you stand still, your look and your feet
+## held, while the world goes on.
+var talk_hold := false
 
 ## -1 leaning fully left, +1 fully right.
 var lean := 0.0
@@ -578,6 +581,13 @@ func _ready() -> void:
 	collision_mask |= 2
 
 	health = max_health
+	# What people remember asks his belt (has(x), purse>=n) from now on,
+	# talking or not.
+	var city := get_node_or_null(^"/root/CityState")
+
+	if city != null:
+		city.people.inventory = inventory
+
 	_ensure_action(&"lean_left", KEY_Z)
 	_ensure_action(&"lean_right", KEY_C)
 
@@ -674,11 +684,20 @@ func _ready() -> void:
 		frob.released.connect(func(_body, _thrown): hand.set_suppressed(is_dead))
 
 
+## Gone: people no longer ask his belt (a freed belt would answer nothing).
+func _exit_tree() -> void:
+	var city := get_node_or_null(^"/root/CityState")
+
+	if city != null and city.people.inventory == inventory:
+		city.people.inventory = null
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if (
 		event is InputEventMouseMotion
 		and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 		and not is_dead
+		and not talk_hold
 	):
 		var mouse_event := event as InputEventMouseMotion
 		# In screen pixels: the same turn for the same hand movement whatever
@@ -722,6 +741,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		and event.pressed
 		and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE
 		and DisplayServer.window_is_focused()
+		and not talk_hold
 	):
 		# Esc let the mouse go; a click in the window takes it back.
 		_recapture_mouse()
@@ -874,14 +894,14 @@ func _update_locomotion(delta: float) -> void:
 	# The player must be pushing toward what they are looking at.
 	var forward_intent := wish_direction.dot(facing_direction) > min_forward_input
 
-	var jump_pressed := Input.is_action_just_pressed("jump")
+	var jump_pressed := _tapped(&"jump")
 
 	if grounded and not jump_pressed:
 		_air_grab_armed = false
 
 	var air_hold := (
 		not grounded
-		and (Input.is_action_pressed("jump") or _air_grab_armed)
+		and (_held(&"jump") or _air_grab_armed)
 		and not _jump_hold_consumed
 		and velocity.y < air_grab_max_rise
 	)
@@ -1094,12 +1114,7 @@ func _update_locomotion(delta: float) -> void:
 
 
 func _wish_direction() -> Vector3:
-	var input_axis := Input.get_vector(
-		"move_left",
-		"move_right",
-		"move_forward",
-		"move_back"
-	)
+	var input_axis := _move_axis()
 
 	var wish_direction := (
 		global_transform.basis
@@ -1110,6 +1125,34 @@ func _wish_direction() -> Vector3:
 	return wish_direction.normalized()
 
 
+## The way the keys push you (Input.get_vector of the four moves), or none
+## while you talk.
+func _move_axis() -> Vector2:
+	if talk_hold:
+		return Vector2.ZERO
+
+	return Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+
+
+## A key of the body (jump, crouch, sprint) held down, or not while you talk.
+func _held(action: StringName) -> bool:
+	return not talk_hold and Input.is_action_pressed(action)
+
+
+## Pressed this frame, or not while you talk.
+func _tapped(action: StringName) -> bool:
+	return not talk_hold and Input.is_action_just_pressed(action)
+
+
+## A blow or death breaks off a conversation (TalkBox.interrupt): nothing is
+## remembered of it.
+func _break_off_talk() -> void:
+	var box: Node = frob.talking() if frob != null and frob.has_method("talking") else null
+
+	if box != null:
+		box.interrupt()
+
+
 func _facing_direction() -> Vector3:
 	var facing_direction := -global_transform.basis.z
 	facing_direction.y = 0.0
@@ -1117,7 +1160,7 @@ func _facing_direction() -> Vector3:
 
 
 func _is_sprinting() -> bool:
-	return Input.is_action_pressed("sprint") and not is_crouched
+	return _held(&"sprint") and not is_crouched
 
 
 func _on_floor_now() -> bool:
@@ -1125,7 +1168,7 @@ func _on_floor_now() -> bool:
 
 
 func _update_jump_windows(delta: float) -> void:
-	if Input.is_action_just_pressed("jump"):
+	if _tapped(&"jump"):
 		jump_buffer_timer = jump_buffer_time
 	else:
 		jump_buffer_timer = max(jump_buffer_timer - delta, 0.0)
@@ -1197,7 +1240,7 @@ func _apply_horizontal_movement(
 
 	if is_crouched:
 		target_speed = crouch_speed
-	elif Input.is_action_pressed("sprint") and not shouldering and fighting_scale >= 1.0:
+	elif _held(&"sprint") and not shouldering and fighting_scale >= 1.0:
 		target_speed = sprint_speed
 
 	if shouldering:
@@ -1537,6 +1580,7 @@ func take_damage(amount: float, from: Node) -> void:
 
 	health = maxf(health - amount, 0.0)
 	_hurt_at = _game_time
+	_break_off_talk()
 	# A heavy one deadens your hearing for a moment.
 	Sfx.body_hit(amount)
 
@@ -1601,6 +1645,7 @@ func _stop_on_death(delta: float) -> void:
 
 func _die() -> void:
 	is_dead = true
+	_break_off_talk()
 
 	if hand != null and hand.has_method("set_suppressed"):
 		hand.set_suppressed(true)
@@ -1943,13 +1988,17 @@ func _update_jump_assist(wish_direction: Vector3, grounded: bool) -> void:
 ## True when a crouch press started climbing down instead: the rest of the
 ## frame's locomotion must then not run.
 func _update_crouch() -> bool:
+	# Talking: as you were, crouched or standing.
+	if talk_hold:
+		return false
+
 	var wants_crouch := Input.is_action_pressed("crouch")
 
 	# Parkour down: sprint and crouch held at an edge climb down over it. On
 	# open ground it is only a crouch.
 	if (
 		wants_crouch
-		and Input.is_action_pressed("sprint")
+		and _held(&"sprint")
 		and not is_crouched
 		and not _is_carrying()
 		and _on_floor_now()
@@ -2198,9 +2247,9 @@ func _advance_move(delta: float) -> void:
 	# The press that started the move is already consumed. A new press is a
 	# deliberate next action, even if the hands have not finished catching.
 	if current_move.ends_in_hang:
-		if Input.is_action_just_pressed("jump"):
+		if _tapped(&"jump"):
 			_hang_buffered_action = &"jump"
-		if Input.is_action_just_pressed("crouch"):
+		if _tapped(&"crouch"):
 			_hang_buffered_action = &"drop"
 
 	# Windup: hold position with a small dip before launching.
@@ -2245,7 +2294,7 @@ func _advance_move(delta: float) -> void:
 
 	# Flow: a jump pressed during the move is remembered, and once the move is
 	# far enough along, the next obstacle may take over from mid-air.
-	if Input.is_action_just_pressed("jump"):
+	if _tapped(&"jump"):
 		_chain_buffered = true
 
 	if _chain_buffered and s >= chain_window_start and _chain_scan_timer <= 0.0 and _can_chain():
@@ -2388,13 +2437,13 @@ func _update_hang(delta: float) -> void:
 	velocity = Vector3.ZERO
 
 	var wish_direction := _wish_direction()
-	var jump_requested := Input.is_action_just_pressed("jump") or _hang_buffered_action == &"jump"
-	var drop_requested := Input.is_action_just_pressed("crouch") or _hang_buffered_action == &"drop"
+	var jump_requested := _tapped(&"jump") or _hang_buffered_action == &"jump"
+	var drop_requested := _tapped(&"crouch") or _hang_buffered_action == &"drop"
 	_hang_buffered_action = &""
 	# Drop has priority over a queued pull-up.
 	# (Free-running, back steers down the wall instead: _freerun_climb.)
 	var pulling_away := Input.is_action_just_pressed("move_back") and _facing_direction().dot(-hang_normal) > 0.0 and not free_running()
-	if Input.is_action_pressed("sprint") and Input.is_action_pressed("crouch") and not _is_carrying():
+	if _held(&"sprint") and _held(&"crouch") and not _is_carrying():
 		_freerun_down()
 		return
 
@@ -2659,7 +2708,7 @@ func _update_drop_catch() -> bool:
 	var abandoned := (
 		_on_floor_now()
 		or velocity.y < -maximum_grab_fall_speed
-		or Input.is_action_just_pressed("crouch")
+		or _tapped(&"crouch")
 	)
 
 
@@ -3280,18 +3329,18 @@ func _update_swim(delta: float) -> void:
 		_set_crouched(false)
 
 	var afloat_y: float = water.surface_y() + float_eye - _neck_stand_y
-	var axis := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var axis := _move_axis()
 	var wish := _wish_direction()
 	var facing := _facing_direction()
-	var speed := swim_sprint_speed if Input.is_action_pressed("sprint") else swim_speed
+	var speed := swim_sprint_speed if _held(&"sprint") else swim_speed
 	var at_top := global_position.y > afloat_y - 0.3
 
 	# Holding jump to surface also asks to climb out. A short ground jump
 	# buffer cannot cover the ascent from deeper water. Rescan while held,
 	# but consume the hold once a real, collision-checked exit starts.
-	var exit_intent := not Input.is_action_pressed("crouch") and (jump_buffer_timer > 0.0 or Input.is_action_pressed("jump"))
+	var exit_intent := not _held(&"crouch") and (jump_buffer_timer > 0.0 or _held(&"jump"))
 	if at_top and exit_intent and not _jump_hold_consumed and wish.dot(facing) > min_forward_input and not _is_carrying():
-		if _air_scan_timer <= 0.0 or Input.is_action_just_pressed("jump"):
+		if _air_scan_timer <= 0.0 or _tapped(&"jump"):
 			_air_scan_timer = RESCAN_TIME
 			cached_profile = scanner.scan(facing, velocity, false)
 			if cached_profile != null:
@@ -3321,9 +3370,9 @@ func _update_swim(delta: float) -> void:
 		target = course * speed
 		want = target.y
 
-	if Input.is_action_pressed("crouch"):
+	if _held(&"crouch"):
 		want = -dive_speed
-	elif Input.is_action_pressed("jump") and surface_error > 0.0:
+	elif _held(&"jump") and surface_error > 0.0:
 		want = dive_speed
 
 	# Begin braking before the eyes reach their surface height. No position
@@ -3333,7 +3382,7 @@ func _update_swim(delta: float) -> void:
 	target.y = want
 	target = target.limit_length(speed)
 	var acceleration := swim_acceleration if not axis.is_zero_approx() else swim_braking
-	if Input.is_action_pressed("crouch") or Input.is_action_pressed("jump"):
+	if _held(&"crouch") or _held(&"jump"):
 		acceleration = maxf(acceleration, 9.0)
 	# One vector keeps turns inside the speed limit. Easing its axes at
 	# different rates can briefly add speed when a diagonal dive turns steep.
@@ -3342,7 +3391,7 @@ func _update_swim(delta: float) -> void:
 	_stepped_up_this_frame = false
 	# At the surface, small flooded risers are steps, just as on land.
 	# Explicit diving keeps full swim control and releases any tread hold.
-	var diving := Input.is_action_pressed("crouch") or (directed_vertical and course.y < 0.0 and not Input.is_action_pressed("jump"))
+	var diving := _held(&"crouch") or (directed_vertical and course.y < 0.0 and not _held(&"jump"))
 	if diving:
 		_step_lock_timer = 0.0
 		step_locked = false
@@ -3500,7 +3549,7 @@ func _update_climb(_delta: float) -> void:
 	var normal: Vector3 = climb_normal()
 	var wish_direction := _wish_direction()
 
-	if Input.is_action_just_pressed("jump"):
+	if _tapped(&"jump"):
 		# Off a rope, jump the way you look; off a ladder, away from it.
 		var push := normal
 
@@ -3510,7 +3559,7 @@ func _update_climb(_delta: float) -> void:
 		_leave_climb(push * climb_jump_push + Vector3.UP * jump_speed * 0.6)
 		return
 
-	if Input.is_action_just_pressed("crouch"):
+	if _tapped(&"crouch"):
 		_leave_climb(normal * 0.5)
 		return
 
@@ -3554,12 +3603,7 @@ func _update_climb(_delta: float) -> void:
 		spring = spring.limit_length(climb_round_speed)
 
 	# Forward climbs the way you look: up normally, down when looking down.
-	var input_axis := Input.get_vector(
-		"move_left",
-		"move_right",
-		"move_forward",
-		"move_back"
-	)
+	var input_axis := _move_axis()
 	var look_sign := 1.0 if neck.rotation.x > -0.3 else -1.0
 	var vertical := -input_axis.y * look_sign
 
@@ -3732,7 +3776,7 @@ func _update_stowed() -> void:
 func free_running() -> bool:
 	# Guarding, charging, drawing: sprint is no run (combat.speed_scale()).
 	return (
-		Input.is_action_pressed("sprint")
+		_held(&"sprint")
 		and not is_crouched
 		and not _is_carrying()
 		and (combat == null or combat.speed_scale() >= 1.0)
@@ -3743,7 +3787,7 @@ func free_running() -> bool:
 ## (camera-relative), and the next hold that way is taken, hand over hand or
 ## with a leap. Up with nothing above pulls up. True when a move started.
 func _freerun_climb(delta: float) -> bool:
-	var axis := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var axis := _move_axis()
 
 	if axis.length() < 0.2:
 		return false
@@ -3905,7 +3949,7 @@ func _chain_climb(s: float) -> bool:
 	if kind != TraversalPlanner.KIND_REACH and kind != TraversalPlanner.KIND_LEAP and kind != TraversalPlanner.KIND_WALL_RUN:
 		return false
 
-	var axis := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var axis := _move_axis()
 
 	if axis.length() < 0.2:
 		return false
@@ -3996,7 +4040,7 @@ func _update_rope_climb(delta: float) -> void:
 		rope_param = rope.closest_param(global_position)
 
 	var wish_direction := _wish_direction()
-	var input_axis := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var input_axis := _move_axis()
 	var look_sign := 1.0 if neck.rotation.x > -0.3 else -1.0
 	var vertical := -input_axis.y * look_sign
 	var max_vertical: float = rope.max_vel_vert
@@ -4012,12 +4056,12 @@ func _update_rope_climb(delta: float) -> void:
 	var grip_velocity: Vector3 = rope.rope_velocity(rope_param, delta)
 	var normal: Vector3 = rope.get_rope_normal(global_position)
 
-	if Input.is_action_just_pressed("jump"):
+	if _tapped(&"jump"):
 		rope.release()
 		_leave_climb(grip_velocity + _facing_direction() * climb_jump_push + Vector3.UP * jump_speed * 0.6)
 		return
 
-	if Input.is_action_just_pressed("crouch"):
+	if _tapped(&"crouch"):
 		rope.release()
 		_leave_climb(grip_velocity)
 		return
@@ -4262,7 +4306,7 @@ func _place_camera() -> void:
 func _update_lean(delta: float) -> void:
 	var wanted := 0.0
 
-	if movement_state == MoveState.LOCOMOTION and not is_dead:
+	if movement_state == MoveState.LOCOMOTION and not is_dead and not talk_hold:
 		wanted = Input.get_action_strength("lean_right") - Input.get_action_strength("lean_left")
 
 	# No leaning through a wall.

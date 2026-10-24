@@ -26,7 +26,7 @@
   - Only NOX voices: the Sfx sounds `murmur`, `nod`, `hm` with suffixes `""` (voice `male`), `_b` (`male_b`) and `_f` (`female`).
   - Existing animation clips only: `Idle`, `Idle_Talking`, `Yes`, `Idle_No`.
 - **Bodies:** the curandera uses `duelist`, the librarian uses `arms_master`.
-- **Colours:** copal amber `Color(1.0, 0.62, 0.22)`, ink violet `Color(0.55, 0.38, 1.0)`, marigold `Color(0.95, 0.69, 0.2)`, cochineal `Color(0.76, 0.16, 0.16)`, box black `Color(0.043, 0.043, 0.043)`.
+- **Colours:** copal amber `Color(1.0, 0.62, 0.22)`, ink violet `Color(0.55, 0.38, 1.0)` (bookseller type default), librarian red `Color(0.9, 0.22, 0.2)`, marigold `Color(0.95, 0.69, 0.2)`, cochineal `Color(0.76, 0.16, 0.16)`, box black `Color(0.043, 0.043, 0.043)`.
 - **Never call a visual defect harmless.** Fix it, or name it as unfinished.
 
 ## Review Focus
@@ -274,9 +274,11 @@
 - [ ] **Step 5: Stage stills.** `tests/visual/stage_shade.gd` follows `tests/visual/stage_fp_hands.gd`'s windowed pattern. It shows the curandera's shade (duelist, copal) under one lamp at night, calm, flare, dim and gutter, from the front and three-quarter view at 2 m, plus a close-up of the feet's fray. Run it windowed. Expected: 9 PNGs in the scratchpad.
 - [ ] **Step 6: Inspect** every still up close for seams, see-through artefacts inside the body, sorting faults and wisps clipping. Fix them, or list them as unfinished.
 - [ ] **Step 7: Commit** with `feat(dialogue): the shade`.
-- [ ] **Step 8: STOP for the user's review** of the curandera's shade, per the standing rule that models go one at a time. Send the stills. Only after the user's yes, dress the librarian (`arms_master`, ink violet), stage his stills, and get his yes too.
+- [ ] **Step 8: STOP for the user's review** of the curandera's shade, per the standing rule that models go one at a time. Send the stills. Only after the user's yes, dress the librarian (`arms_master`, red `Color(0.9, 0.22, 0.2)`), stage his stills, and get his yes too.
 
 ### Task 6: The talk box and the player
+
+> **Amended 2026-10-23 (the user):** the box uses the draft-28 painted UI for every character, not mockup A. Task 6 builds the layout, the swipe and edge shaders, and the default skin (generated panel, live portrait). Task 6b only loads a character's paintings and adds the living-painting effects. The tests are B1–B7, plus B9 and B10 (layout numbers) moved here from 6b.
 
 **Files:**
 - Create: `scripts/UI/TalkBox.gd`
@@ -317,8 +319,72 @@
 - [ ] **Step 2: Run** dialogue_test. Expected: B1–B7 FAIL.
 - [ ] **Step 3: Implement** TalkBox and the two modifications.
 - [ ] **Step 4: Run** dialogue_test plus the movement and interaction suites (`ls tests | grep -iE "movement|traversal|interaction|polish"`). Expected: 0 fail. `_move_axis` must not change any movement result while not talking.
-- [ ] **Step 5: Stage** windowed stills of the box mid-line and with options (normal and special), with the portrait live. Inspect them against mockup A and fix faults.
+- [ ] **Step 5: Stage** windowed stills of the plain box mid-line and with options (normal and special), with the live portrait. Inspect them against mockup A and fix faults.
 - [ ] **Step 6: Commit** with `feat(dialogue): the talk box`.
+
+### Task 6b: Character skins (the curandera's painted box)
+
+The spec's "Character skins" section was settled with the user over 28 drafts. **Its reference is `.superpowers/talkbox/draft28.jpg` and the script `.superpowers/talkbox/draft28_reference.py`.** Every measure here comes from that script, and the result must match draft 28 by eye.
+
+**Files:**
+- Create:
+  - `scripts/UI/TalkSkin.gd`: loads a skin folder, builds its layout and owns the living-painting effects.
+  - `scripts/UI/talk_paint.gdshader`: the frayed edge, pigment rim and reveal, applied to the panel and the portrait.
+  - `scripts/UI/talk_swipe.gdshader`: the option swipes; for the chosen swipe, the cursor inside it.
+  - `tools/prepare_talk_art.py`: converts `originals/*` to PNG, keys the cursor's black from the border, and caps at 2048 px.
+  - `assets/ui/talk/README.md`: where the paintings come from, and that they are gitignored.
+  - `assets/ui/talk/curandera.json`: the crop, the reading pool, the two swipe paint regions, and the `breathe` and `eyes` rects.
+- Modify: `scripts/UI/TalkBox.gd` (when a skin exists, TalkBox hands its layout to TalkSkin), `.gitignore` (already done: `assets/ui/talk/*/`)
+- Test: `tests/dialogue_test.gd`
+
+**Interfaces:**
+- Consumes: TalkBox (Task 6), and `Shade` cues (flare, dim, gutter) through TalkBox.
+- Produces:
+  - `TalkSkin.exists(character_id: String) -> bool`
+  - `TalkSkin.new(character_id)`
+  - `layout(viewport: Vector2) -> Dictionary`: rects for `panel`, `portrait`, `name`, `line`, `options` at the given size. They are scaled from the 1920×1080 numbers in the spec: panel 1000 px wide; portrait 470 px tall with a 70 px overlap; the pair centred; panel top `H - panel_h + 40`; name 146 px, line 182 px and options 318 px below the panel top; 50 px option step.
+  - `set_choice(index)`, `cue(what: StringName)`, `reveal(on: bool)`.
+- The paintings are sampled with mipmaps and linear filtering, and are only ever scaled down. They must not go through the Retro autoload's nearest/pixel-grid look; the box is UI on its own CanvasLayer, above the retro pass.
+
+- [ ] **Step 0: The librarian too.** His paintings are in `assets/ui/talk/librarian/originals/` (backdrop and portrait). His cursor is the curandera's, tinted red, and his crop and swipe regions are given in the spec's "The librarian's skin". Everything below applies to both characters: write `assets/ui/talk/librarian.json` beside `curandera.json`, and stage his still beside `.superpowers/talkbox/librarian2.jpg`.
+- [ ] **Step 1: Prepare the curandera's art.** Run `python3 -I tools/prepare_talk_art.py curandera`. Expected: `backdrop.png`, `portrait.png` and `cursor.png` in `assets/ui/talk/curandera/`, with the cursor's corners having alpha 0.
+- [ ] **Step 2: Write the failing tests.**
+  - `B8 a skinned character opens the painted box, an unskinned one the plain box`: the curandera fixture with a skin folder, and the librarian without one.
+  - `B9 the layout at 1920×1080 matches the reference`: the panel rect, portrait rect, and name, line and options y within 2 px of the spec's numbers.
+  - `B10 at 1280×720 the layout scales`: every rect is 2/3 of the 1080p rect, within 2 px.
+  - `B11 a missing skin folder (a fresh checkout) falls back without errors`.
+  - `B12 the chosen swipe follows the choice`: after `set_choice(2)`, the chosen swipe's rect is on option 2, and it is wider than the others by the marker's width.
+- [ ] **Step 3: Run** dialogue_test. Expected: B8–B12 FAIL.
+- [ ] **Step 4: Implement** TalkSkin, both shaders and curandera.json, with the edge, swipe and pool maths ported from `draft28_reference.py`: `painted_edge`, `swipe_mask`, `painted_swipe` and the chosen-swipe marker block. The living-painting effects (reveal, breathing faces, eye glow following cues, dust, mouse shift, portrait warming, greying and flickering) are as in the spec.
+- [ ] **Step 5: Run** dialogue_test. Expected: B1–B12 PASS.
+- [ ] **Step 6: Stage** a windowed still at 1920×1080 of the curandera's box in the talk gym, with the same line and four options as draft 28, the first option chosen. Put it **side by side with `draft28.jpg`** and inspect close-ups of the portrait edge, the panel's right edge and the chosen swipe. Fix every difference, or name it as unfinished.
+- [ ] **Step 7: Commit** with `feat(dialogue): the curandera's painted talk box`. Don't commit the paintings; they are gitignored. Do commit the README, curandera.json, the tool and the scripts.
+
+### Task 6c: Magic options (school shaders)
+
+The spec's "Magic options get their school's shader" applies here.
+
+**Files:**
+- Modify:
+  - `scripts/Level/DialogueBook.gd`: the option grammar accepts `!<school>` after the `>`, and option dicts gain a `school` field (`""` for a bare `!`). The sense lines' `school` is already parsed.
+  - `scripts/Level/Terms.gd`, if a school list is needed.
+  - `scripts/Interaction/Conversation.gd`: the `options` signal items carry `school`.
+  - `scripts/UI/talk_swipe.gdshader`, plus a new `scripts/UI/talk_school.gdshaderinc`, or one shader per school if that is cleaner.
+  - `scripts/UI/TalkBox.gd`.
+- Test: `tests/dialogue_test.gd`
+
+**The schools:** obsidian, copal, seance, nahual, lumen, relic. An unknown school is a load error with file:line.
+
+- [ ] **Step 1: Failing tests.**
+  - D22: `> !obsidian <<x>> -> end` parses as `special=true` with `school="obsidian"`. `> !lava` is an error.
+  - C12: the options signal carries the school.
+  - B17: an obsidian option's swipe uses the obsidian treatment, both chosen and unchosen, and a bare `!` keeps the plain special look.
+- [ ] **Step 2:** Implement the grammar, then the runner field, then the shader.
+  - **Obsidian:** a black volcanic-glass fill, a cold glint (a narrow bright band sliding across every ~2.5 s, faster while chosen), and fine fracture lines from Voronoi edges. The text gets a faint offset doubling, like a reflection.
+  - **The other five:** a simple first look each, in that school's colour and motion: copal smoke drift, séance pale ghost-light pulse, nahual three claw strokes, Lumen arc flicker, relic gilt leaf.
+  - `Sense` lines take the school's text tint and doubling.
+- [ ] **Step 3:** Stage stills of an obsidian option unchosen and chosen, on both skins and on the default skin. Inspect them up close.
+- [ ] **Step 4:** Commit `feat(dialogue): magic options wear their school`.
 
 ### Task 7: The test quest, the gym and the writer's guide
 
@@ -339,7 +405,7 @@
     - Beats: `asks` (`do: set(asked_book), goal(bring_book)`), `limpia` (overrides the type's), `gives_bundle` (`take(the_book)`, `give(copal_bundle)`, `note(curandera_bundle)`), `lie_no_book` (cue `gutter`, `mood(-1)`).
     - A sense line `Sense obsidian [if said(asked_book)]`.
     - Blocks: `goal bring_book` (`kind: side`, `shows: said(asked_book)`, `done: gave(the_book)`), `item copal_bundle` (`look: bundle`), `note curandera_bundle`.
-  - **`librarian`** (`body: arms_master`, `colour: ink`, `voice: male_b`, `type: bookseller`):
+  - **`librarian`** (`body: arms_master`, `colour: #e63833` (red, the user's call), `voice: male_b`, `type: bookseller`):
     - Openers: `open_first`, `open_after_lie` (`when: said(lied)`), `open_sent` (`when: said(curandera.asked_book), not(gave(curandera.the_book)), not(has(the_book))`), `open`.
     - Beats: `truth` (`give(the_book)`, `mood(+1)`), `pay` (`[if purse>=5]`, `charge(5)`, `give(the_book)`), `special` (`!`, `[if said(curandera.asked_book)]`), `lie` (cue `dim`, `set(lied)`, `mood(-1)`, `shade(dim)`), `amends` (`clear(lied)`, `shade(calm)`).
     - Block: `item the_book` (`look: book`).

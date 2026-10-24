@@ -1,0 +1,14 @@
+# Test fixture: a trade's type. Every text is a placeholder.
+
+== character fx_trade
+colour: copal
+voice: female
+
+== beat open
+Fx Trade: <<I am {name}.>>
+>> <<Ask for a cleansing.>> -> limpia
+> <<Leave.>> -> end
+
+== beat limpia
+Fx Trade: <<The type's cleansing.>>
+-> end

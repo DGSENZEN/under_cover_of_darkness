@@ -337,6 +337,8 @@ func is_able() -> bool:
 		and not stowed
 		and not player._is_carrying()
 		and not get_tree().paused
+		# Talking (TalkBox): a click picks or reads on, it is not a blow, a shot or a spell.
+		and player.get("talk_hold") != true
 	)
 
 

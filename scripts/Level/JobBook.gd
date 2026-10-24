@@ -15,6 +15,7 @@ extends RefCounted
 ## the writer's guide.
 
 const Districts := preload("res://scripts/Level/Districts.gd")
+const Terms := preload("res://scripts/Level/Terms.gd")
 
 const FOLDER := "res://data/jobs"
 const KINDS := [&"letter", &"goal", &"note", &"readable", &"gate", &"shout"]
@@ -29,7 +30,8 @@ const KEYS := {
 }
 const GOAL_KINDS := ["main", "side"]
 ## What a condition's terms may ask: took(<loot>), arrived(<district>),
-## done(<goal>), loot>=<value>, not(<term>).
+## done(<goal>), loot>=<value>, not(<term>), and (Terms.gd) said(c.x),
+## has(x), gave(c.x), mood(c)>=n, purse>=n.
 const TERMS := ["took", "arrived", "done"]
 ## A placeholder's marks.
 const OPEN := "<<"
@@ -360,7 +362,7 @@ static func _term_error(term: String) -> String:
 	if called != null and TERMS.has(called.get_string(1)):
 		return ""
 
-	return "'%s' is not a condition (took(x), arrived(x), done(x), loot>=n, not(...))" % term
+	return Terms.term_error(term, false)
 
 
 static func _exits_error(value: String) -> String:

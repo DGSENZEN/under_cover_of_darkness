@@ -1,0 +1,90 @@
+# The curandera of the candle lane (the talk and quests spec, section 6;
+# docs/systems/dialogue.md): she stands behind the counter of her own stall of
+# herbs, candles and copal on the lane's north wall, across the lane from the
+# librarian's shop and west of it. She reads the stranger, and asks him for a book
+# only the librarian next door has; given it, she pays in copal. A curandera by
+# trade (types/curandera.dialogue): she offers its limpia and copal too, and
+# her limpia is her own.
+# "Curandera" before a line's colon is the name shown in the box, a working
+# name: change it here and in name: together.
+# Every text is the user's to write; each beat's intent: says what it must do.
+
+== character curandera
+name: Curandera
+type: curandera
+body: duelist
+colour: copal
+voice: female
+intent: the curandera of the candle lane: she keeps the stall of herbs, candles and copal, its censer smoking on her counter, and sees more than she says; she wants a book back from the librarian
+
+== beat open_first
+when: not(met)
+intent: the first meeting: she reads him before he speaks, something true about him he has not said; then waits for him to ask
+Curandera [flare]: <<She reads the stranger before he has said a word.>>
+Sense obsidian: <<The obsidian knows she is looking at it.>>
+> <<Ask what she wants of you.>> -> asks
+> <<Leave.>> -> end
+
+== beat open_has_book
+when: has(the_book), not(gave(the_book))
+intent: he comes back carrying the book: she knows it is on him before he shows it
+Curandera [flare]: <<She knows the book is on him before he shows it.>>
+> [if has(the_book)] <<Hand her the book.>> -> gives_bundle
+> [if has(the_book)] <<Tell her you do not have it.>> -> lie_no_book
+> <<Leave.>> -> end
+
+== beat open_after
+when: gave(the_book)
+intent: after the quest: she meets him as someone who kept his word; easier with him now, not warm
+Curandera [calm]: <<She greets him as someone who kept his word.>>
+> <<Leave.>> -> end
+
+== beat open
+intent: a revisit before the book is brought: she looks up from her candles; if she has asked, she waits to hear of it
+Curandera: <<She looks up from her candles.>>
+Sense obsidian [if said(asked_book)]: <<The candle flames lean toward the shop next door.>>
+> [if not(said(asked_book))] <<Ask what she wants of you.>> -> asks
+> [if said(asked_book)] <<Ask her again about the book.>> -> asks
+> <<Leave.>> -> end
+
+== beat asks
+do: set(asked_book), goal(bring_book)
+intent: she asks him to bring her a book the librarian next door keeps; she says which book, not why she wants it
+Curandera: <<She asks him to bring her a book the librarian keeps, and says which.>>
+> <<Say you will bring it.>> -> end
+
+== beat limpia
+intent: her own limpia, unlike any other curandera's: what she does that no other does, and what she finds in him that frightens her a little
+Curandera [flare]: <<Her own cleansing, unlike any other curandera's.>>
+[pause 1.5]
+Curandera [gutter]: <<What she found in him, and that it frightens her a little.>>
+-> end
+
+== beat gives_bundle
+do: take(the_book), give(copal_bundle), note(curandera_bundle)
+intent: he hands her the book; she takes it like something stolen back, and presses a bundle of her own copal into his hand: what it is for
+Curandera [nod]: <<She takes the book and presses a bundle of her copal into his hand.>>
+-> end
+
+== beat lie_no_book
+do: mood(-1)
+intent: he says he does not have it, and she can see it on him; her flame gutters; hurt more than angry
+Curandera [gutter]: <<She knows he is lying, and lets him see that she knows.>>
+> [if has(the_book)] <<Give it to her after all.>> -> gives_bundle
+> <<Leave.>> -> end
+
+== goal bring_book
+kind: side
+shows: said(asked_book)
+done: gave(the_book)
+intent: the side goal on the letter: bring the curandera the book from the librarian's shop
+text: <<Bring the curandera the book from the librarian's shop.>>
+
+== item copal_bundle
+name: <<a bundle of the curandera's copal>>
+look: bundle
+intent: copal resin wrapped in a leaf and tied with thread: hers, given for the book, or any curandera's, bought
+
+== note curandera_bundle
+intent: his pencil note after she gave him the copal: what it is for, as he would jot it down
+text: <<The curandera's copal, and what it is for.>>
