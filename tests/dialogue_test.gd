@@ -40,6 +40,7 @@ func _ready() -> void:
 	_links()
 	_edges()
 	_typos()
+	_order()
 	_people()
 	_conversation()
 	await _shade()
@@ -333,9 +334,12 @@ func _links() -> void:
 	var rescued := _alone(["== character a", "== beat open", "A: <<x>>", "> [if met] <<one>> -> end", "> <<two>> -> end"])
 	var walked := _alone(["== character a", "== beat open", "A: <<x>>", "> [if met] <<one>> -> end", "-> end"])
 	var gone: Array = (filtered["warnings"] as Array).filter(func(w): return String(w).begins_with("a.dialogue:2: "))
-	_check("D15 a beat whose options can all be filtered warns",
+	# (A goto after the options is never taken, so it is no way out: D24.)
+	var walked_lines: Array = (walked["warnings"] as Array).map(func(w): return String(w).get_slice(" ", 0))
+	walked_lines.sort()
+	_check("D15 a beat whose options can all be filtered warns (a goto after them is no way out)",
 		(filtered["errors"] as Array).is_empty() and gone.size() == 1 and (filtered["warnings"] as Array).size() == 1
-		and (rescued["warnings"] as Array).is_empty() and (walked["warnings"] as Array).is_empty(),
+		and (rescued["warnings"] as Array).is_empty() and walked_lines == ["a.dialogue:2:", "a.dialogue:5:"],
 		"filtered %s, rescued %s, walked %s" % [filtered["warnings"], rescued["warnings"], walked["warnings"]])
 
 	var flags := _alone(["== character a", "type: t", "== beat open", "do: set(x)", "A: <<x>>",
@@ -418,6 +422,69 @@ func _typos() -> void:
 
 	_check("D17 a Sense line that does not match the grammar is an error, not speech", wrong.is_empty(),
 		"; ".join(wrong) if not wrong.is_empty() else "four broken Sense lines, one error each")
+
+
+# ---------------------------------------------------------------------------
+# D23-D25: a way on and the type's options; the parts of a line in order
+# ---------------------------------------------------------------------------
+
+func _order() -> void:
+	# D23: an opener with no options of its own whose way on is a goto keeps
+	# it: the type's >> options join the beat it leads to (once, however many
+	# openers lead there), and none join an opener whose way on is the end.
+	var lib: Dictionary = DialogueBook.check_alone({
+		"a.dialogue": "\n".join(["== character a", "type: t", "== beat open", "A: <<hi>>", "-> menu", "== beat open_again", "when: met",
+			"A: <<again>>", "-> menu", "== beat open_out", "when: said(gone)", "A: <<out>>", "-> end", "== beat menu", "A: <<what>>",
+			"> <<Bye.>> -> end", "== beat set_gone", "A: <<x>>", "> <<y>> -> end {do: set(gone)}"]),
+		"types/t.dialogue": "== beat open\n>> <<Ask.>> -> ask\n== beat ask\nT: <<a>>",
+	})
+	var beats: Dictionary = lib["characters"].get("a", {}).get("beats", {})
+	var kinds := func(id: String) -> Array: return (beats.get(id, {}).get("body", []) as Array).map(func(l): return String(l["type"]))
+	var menu: Array = _options(beats.get("menu", {})).map(func(l): return String(l["text"]))
+	DialogueBook.use(lib)
+	var visit := _visit("a", PeopleState.new(), null)
+	var heard: Dictionary = visit[1]
+	var lines: Array = (heard["lines"] as Array).map(func(l): return String(l[1]))
+	_check("D23 a type's >> options join the beat an opener's goto leads to (once), not before the goto; an opener going to the end gets none",
+		(lib["errors"] as Array).is_empty() and kinds.call("open") == ["say", "goto"] and kinds.call("open_again") == ["say", "goto"]
+		and kinds.call("open_out") == ["say", "goto"] and menu == ["<<Ask.>>", "<<Bye.>>"]
+		and lines == ["<<hi>>", "<<what>>"] and _heard_options(heard) == ["<<Ask.>>", "<<Bye.>>"],
+		"open %s, open_again %s, open_out %s, menu %s, heard %s then %s, errors %s" % [kinds.call("open"), kinds.call("open_again"),
+			kinds.call("open_out"), menu, lines, _heard_options(heard), lib["errors"]])
+	DialogueBook.reload()
+
+	# D24: a beat with options and a goto: the goto after them is never taken,
+	# a goto before them leaves them never offered. A warning at the goto.
+	var after: Array = DialogueBook.parse("== beat open\nA: <<x>>\n> <<Bye.>> -> end\n-> open", "t.dialogue")["warnings"]
+	var before: Array = DialogueBook.parse("== beat open\nA: <<x>>\n-> b\n> <<Bye.>> -> end", "t.dialogue")["warnings"]
+	var clean: Array = DialogueBook.parse("== beat open\nA: <<x>>\n-> b\n== beat b\nA: <<y>>\n> <<Bye.>> -> end", "t.dialogue")["warnings"]
+	_check("D24 a beat with options and a goto warns at the goto's file:line (after them it is never taken, before them they never show)",
+		after.size() == 1 and String(after[0]).begins_with("t.dialogue:4: ") and String(after[0]).contains("never taken")
+		and before.size() == 1 and String(before[0]).begins_with("t.dialogue:3: ") and String(before[0]).contains("never offered")
+		and clean.is_empty(),
+		"after %s, before %s, clean %s" % [after, before, clean])
+
+	# D25: the parts of an option or a Sense line out of order would be read
+	# as its words, the [if] or the {do:} lost: an error spelling the order.
+	var misordered := {
+		"! before [if]": ["== beat open\nA: <<x>>\n> ! [if purse>=5] <<Pay.>> -> end", 3, "> [if <condition>] ! <<text>> -> beat {do: effects}"],
+		"!school before [if]": ["== beat open\n> !obsidian [if has(x)] <<y>> -> end", 2, "> [if <condition>] ! <<text>> -> beat {do: effects}"],
+		"{do:} before ->": ["== beat open\nA: <<x>>\n> <<x>> {do: give(a)} -> end", 3, "> [if <condition>] ! <<text>> -> beat {do: effects}"],
+		"two ways on": ["== beat open\nA: <<x>>\n> <<x>> -> open -> end", 3, "> [if <condition>] ! <<text>> -> beat {do: effects}"],
+		"[if] after the colon": ["== beat open\nA: <<x>>\nSense obsidian: [if has(x)] <<y>>", 3, "Sense <school> [if <condition>]: <<text>>"],
+	}
+	var wrong: Array[String] = []
+
+	for what in misordered:
+		var parsed: Dictionary = DialogueBook.parse(String(misordered[what][0]), "t.dialogue")
+		var errors: Array = parsed["errors"]
+
+		if errors.size() != 1 or not String(errors[0]).begins_with("t.dialogue:%d: " % int(misordered[what][1])) \
+				or not String(errors[0]).contains(String(misordered[what][2])):
+			wrong.append("%s: %s" % [what, errors])
+
+	_check("D25 an option or Sense line whose [if], {do:} or -> sits in its words is an error at file:line spelling the order",
+		wrong.is_empty(), "; ".join(wrong) if not wrong.is_empty() else "five misordered lines, one error each")
 
 
 # ---------------------------------------------------------------------------

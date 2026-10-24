@@ -15,7 +15,7 @@ extends RefCounted
 ##   > !obsidian <<Read the glass.>> -> end
 ##                                        a special option of a school (SCHOOLS),
 ##                                        drawn in that school's look
-##   >><<Ask for copal.>> -> copal       a type's option, added to every opener
+##   >> <<Ask for copal.>> -> copal      a type's option, added to every opener
 ##   -> next                              the beat that follows, no options
 ##
 ## A line outside a beat's keys is a body line. A text still in <<...>> is a
@@ -25,8 +25,9 @@ extends RefCounted
 ## The library: data/dialogue/<character>.dialogue, one per character, and
 ## data/dialogue/types/<type>.dialogue, one per kind of NPC. A character with
 ## `type: t` gets every beat of t it doesn't write itself, and t's `>>` options
-## join each of its openers (before the ones that end). load_dir() reads them
-## all and checks every link; library() holds the result.
+## join each of its openers (before the ones that end; an opener with no
+## options that goes on by a goto, the beat it leads to). load_dir() reads
+## them all and checks every link; library() holds the result.
 
 const Terms := preload("res://scripts/Level/Terms.gd")
 
@@ -59,6 +60,11 @@ const _SENSE := "^Sense (?<school>[a-z]+)\\s*(\\[if (?<if>[^\\]]+)\\])?\\s*:\\s*
 const _PAUSE := "^\\[pause (?<s>[0-9.]+)\\]$"
 const _OPTION := "^(?<m>>>?)\\s*(\\[if (?<if>[^\\]]+)\\])?\\s*(?<sp>!(?<school>[A-Za-z]+)?)?\\s*(?<text>.+?)\\s*->\\s*(?<to>[A-Za-z0-9_]+)\\s*(\\{do:\\s*(?<do>.*)\\})?$"
 const _GOTO := "^->\\s*(?<to>[A-Za-z0-9_]+)$"
+## How an option's and a Sense line's parts go, for the error when they are
+## out of order (an [if], a {do:} or a -> inside the words would be read as
+## the words, and their meaning lost).
+const OPTION_ORDER := "> [if <condition>] ! <<text>> -> beat {do: effects}"
+const SENSE_ORDER := "Sense <school> [if <condition>]: <<text>>"
 
 static var _patterns := {}
 
@@ -399,6 +405,9 @@ static func _body_line(line: String, at: String, body: Array, warnings: Array) -
 		found = _pattern(_SENSE).search(line)
 
 		if found != null:
+			if _misordered(found.get_string("text")):
+				return "'%s': its parts are out of order, the [if] would be read as its words (%s)" % [line, SENSE_ORDER]
+
 			var cond := found.get_string("if")
 			var problem := Terms.condition_error(cond, true) if cond != "" else ""
 
@@ -453,6 +462,9 @@ static func _option(line: String, at: String, body: Array) -> String:
 	if found == null:
 		return "'%s' is not an option (> <<text>> -> beat, with [if ...], ! and {do: ...} if needed)" % line
 
+	if _misordered(found.get_string("text")):
+		return "'%s': its parts are out of order, an [if], {do:} or -> would be read as its words (%s)" % [line, OPTION_ORDER]
+
 	var cond := found.get_string("if")
 	var problem := Terms.condition_error(cond, true) if cond != "" else ""
 
@@ -479,9 +491,47 @@ static func _option(line: String, at: String, body: Array) -> String:
 	return ""
 
 
+## Whether an option's or a Sense line's words hold a part of the line that
+## belongs outside them: an [if] (before the words), a {do:} or a -> (after).
+static func _misordered(words: String) -> bool:
+	var t := words.strip_edges()
+	return t.begins_with("[") or t.contains("{do:") or t.contains("->")
+
+
+## A beat with options and a goto: the conversation waits on the options, so
+## a goto after them is never taken; one before them goes on at once, so they
+## are never offered. A warning at the goto.
+static func _way_on_warnings(block: Dictionary, warnings: Array) -> void:
+	var body: Array = block["body"]
+	var options := []
+
+	for i in body.size():
+		if body[i]["type"] == "option":
+			options.append(i)
+
+	if options.is_empty():
+		return
+
+	for i in body.size():
+		var line: Dictionary = body[i]
+
+		if line["type"] != "goto":
+			continue
+
+		if i > int(options[0]):
+			warnings.append("%s: '-> %s' is never taken: a beat with options waits on them (give it to an option, or drop it)"
+				% [line["source"], line["to"]])
+		else:
+			warnings.append("%s: the options after '-> %s' are never offered: a goto goes on at once (put it last, as its own beat's way on)"
+				% [line["source"], line["to"]])
+
+
 static func _finish(block: Dictionary, text_lines: Array[String], in_text: bool, out: Dictionary) -> void:
 	if block.is_empty():
 		return
+
+	if block["kind"] == &"beat":
+		_way_on_warnings(block, out["warnings"])
 
 	if in_text:
 		while not text_lines.is_empty() and text_lines[0] == "":
@@ -557,10 +607,9 @@ static func _gather(parsed: Array) -> Dictionary:
 		for entry in result["entries"]:
 			match entry["kind"]:
 				&"beat":
+					# (A second beat of one id never comes this far: parse() reports it.)
 					if entry["id"] == END:
 						lib["errors"].append("%s: a beat cannot be called '%s', that ends the conversation" % [entry["source"], END])
-					elif beats.has(entry["id"]):
-						lib["errors"].append("%s: a second beat '%s' (the first at %s)" % [entry["source"], entry["id"], beats[entry["id"]]["source"]])
 					else:
 						beats[entry["id"]] = _beat(entry)
 				&"item":
@@ -658,22 +707,59 @@ static func _compose(raw: Dictionary, types: Dictionary) -> Dictionary:
 			beats[id] = theirs.duplicate(true)
 			beats[id]["own"] = false
 
+	var joined := {}
+
 	for id in beats:
 		if String(id).begins_with(OPENER):
 			out["openers"].append(String(id))
 
 			if beats[id]["own"] and not joining.is_empty():
-				_join(beats[id]["body"], joining)
+				var into := _join_into(beats, String(id))
+
+				if into != "" and not joined.has(into):
+					joined[into] = true
+					_join(beats[into]["body"], joining)
 
 	return out
 
 
+## The beat an opener's type options join: the opener itself, unless it has
+## no options and goes on by a goto; then the beat it leads to (on through
+## beats with no options), since options put before the goto would be offered
+## and the goto never taken. "" if the way leads to the end (or round).
+static func _join_into(beats: Dictionary, opener: String) -> String:
+	var at := opener
+	var seen := {}
+
+	while not seen.has(at):
+		seen[at] = true
+		var body: Array = beats[at]["body"]
+		var way_on := ""
+
+		for line in body:
+			if line["type"] == "option":
+				return at
+
+			if line["type"] == "goto" and way_on == "":
+				way_on = String(line["to"])
+
+		if way_on == "":
+			return at
+
+		if way_on == END or not beats.has(way_on):
+			return ""
+
+		at = way_on
+
+	return ""
+
+
 ## Puts a copy of the type's options `joining` into a beat's `body`: before
-## the first option that ends the conversation, else after the last option.
+## the first option that ends the conversation, else after the last option
+## (else at its end: a beat with no options and no way on).
 static func _join(body: Array, joining: Array) -> void:
 	var at := -1
 	var last := -1
-	var way_on := -1
 
 	for i in body.size():
 		var line: Dictionary = body[i]
@@ -683,11 +769,9 @@ static func _join(body: Array, joining: Array) -> void:
 
 			if at < 0 and line["to"] == END and not line["type_only"]:
 				at = i
-		elif line["type"] == "goto" and way_on < 0:
-			way_on = i
 
 	if at < 0:
-		at = last + 1 if last >= 0 else (way_on if way_on >= 0 else body.size())
+		at = last + 1 if last >= 0 else body.size()
 
 	for line in joining:
 		var copy: Dictionary = (line as Dictionary).duplicate(true)
@@ -878,7 +962,10 @@ static func _link_beats(ctx: Dictionary, kind: StringName, who: Dictionary) -> v
 						_check_condition(ctx, kind, owner, line["if"], line["source"])
 				"goto":
 					_check_target(lib, beats, line["to"], line["source"])
-					open_ways += 1
+
+					# (A goto after the options is never taken: no way out.)
+					if options == 0:
+						open_ways += 1
 				"option":
 					options += 1
 
