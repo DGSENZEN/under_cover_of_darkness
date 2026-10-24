@@ -1,0 +1,82 @@
+# The librarian (the talk and quests spec, section 6; docs/systems/dialogue.md):
+# he stands at his high desk inside his shop off the candle lane, in his ward.
+# He keeps the book the curandera wants. The truth, his price or a special way
+# gets it; a lie dims him and he refuses, opens on it the next time, and lets
+# the stranger make amends (and remembers it after). A bookseller by trade
+# (types/bookseller.dialogue): he can be asked for a title and sells books.
+# "Librarian" before a line's colon is the name shown in the box, a working
+# name: change it here and in name: together.
+# Every text is the user's to write; each beat's intent: says what it must do.
+
+== character librarian
+name: Librarian
+type: bookseller
+body: arms_master
+colour: #e63833
+voice: male_b
+intent: the rare-book librarian of the candle lane: exact, courteous, hard to fool; he knows the curandera and what she wants
+
+== beat open_first
+when: not(met), not(said(curandera.asked_book))
+intent: a stranger in his shop with no errand he knows of: he greets a customer and measures him
+Librarian: <<He greets a customer and measures him.>>
+> <<Leave.>> -> end
+
+== beat open_after_lie
+when: said(lied)
+intent: the stranger who lied to him comes back: cold, dim, he says so; the door to amends is open, barely
+Librarian [dim]: <<He remembers the lie, and says so.>>
+> <<Make amends.>> -> amends
+> <<Leave.>> -> end
+
+== beat open_sent
+when: said(curandera.asked_book), not(gave(curandera.the_book)), not(has(the_book))
+intent: he knows of her: he knows the curandera sent this stranger for the book before he says it
+Librarian: <<He knows the curandera sent you, and for what.>>
+> <<Tell him the truth: she sent you for the book.>> -> truth
+> [if purse>=5] <<Offer to pay him for the book.>> -> pay
+> [if said(curandera.asked_book)] ! <<Something only a man of the obsidian could say to him.>> -> special
+> <<Lie about why you want the book.>> -> lie
+> <<Leave.>> -> end
+
+== beat open
+intent: a revisit with no errand left: he is civil; if he forgave a lie, he has not forgotten it
+Librarian: <<He nods to a customer he knows.>>
+Sense obsidian [if said(forgiven)]: <<He has not forgotten the lie, forgiven or not.>>
+> <<Leave.>> -> end
+
+== beat truth
+do: give(the_book), mood(+1)
+intent: the truth is enough for him: he gives the book freely and says one thing about her, or about it
+Librarian [nod]: <<The truth is enough: he gives the book and says one thing about her.>>
+-> end
+
+== beat pay
+do: charge(5), give(the_book)
+intent: he takes the coin (5) and hands over the book, a sale, nothing more
+Librarian: <<He takes the coin and hands over the book: a sale, nothing more.>>
+-> end
+
+== beat special
+do: give(the_book)
+intent: the special option struck home: he flares, startled, and gives the book at once
+Librarian [flare]: <<Startled, he gives the book at once.>>
+-> end
+
+== beat lie
+do: set(lied), mood(-1), shade(dim)
+intent: he sees through the lie: his light dims, and he refuses the book
+Librarian [dim]: <<He sees through the lie, and refuses.>>
+-> end
+
+== beat amends
+do: clear(lied), set(forgiven), shade(calm)
+intent: the stranger makes amends: he accepts it, coolly, and his light steadies; the truth may be told now
+Librarian [calm]: <<He accepts the amends, coolly.>>
+> [if said(curandera.asked_book), not(gave(curandera.the_book)), not(has(the_book))] <<Tell him the truth now.>> -> truth
+> <<Leave.>> -> end
+
+== item the_book
+name: <<the curandera's book>>
+look: book
+intent: the book the curandera wants back from the librarian: what it is, and what it looks like

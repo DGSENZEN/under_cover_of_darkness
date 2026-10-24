@@ -12,6 +12,7 @@ These guides document the current first-party implementation. Each covers source
 | [Rendering](rendering.md) | Retro rendering, shaders, water, wetness, lighting, cloth, trails and effects. | `Visual`, night sky |
 | [World](world.md) | Level manifests, marker spawning, nav baking, time, weather and environment setup. | `Level`, `Night` |
 | [Audio](audio.md) | Positional effects, voice, ambience and music state. | `Audio` |
+| [Talk](dialogue.md) | The writer's guide to character dialogue: `.dialogue` files, beats, cues, conditions, effects, types, memory, the shades and the talk box. Its sibling is the job's letter, [jobs.md](jobs.md). | `DialogueBook`, `Conversation`, `PeopleState`, `Shade`, `TalkBox` |
 | [Cinematics and UI](cinematics.md) | Shot selection, camera operation, story events, subtitles and HUD. | `Cinema`, `Showcase`, `UI` |
 | [Development](development.md) | Maps, gyms, Blender pipelines, Python tools, suites and diagnostics. | `maps`, `tools`, `tests` |
 

@@ -6,6 +6,7 @@ extends RefCounted
 ##   == beat open_first                   a block: its kind and id
 ##   when: not(met)                       key: value (a beat's when, do, intent)
 ##   Amparo [dim]: <<Stand still.>>       a spoken line, its cues in brackets
+##   {name}: <<Copal?>>                   in a type file: spoken by whoever is of it
 ##   Sense obsidian [if has(x)]: <<..>>   an inner voice, red, maybe conditional
 ##   [pause 1.2]                          a held silence
 ##   > [if has(x)] ! <<Take it.>> -> end {do: give(x), mood(+1)}
@@ -44,7 +45,9 @@ const CUES := [&"flare", &"dim", &"gutter", &"calm", &"nod", &"shake"]
 ## The block that ends a conversation, as an option's or a goto's target.
 const END := "end"
 
-const _SAY := "^(?<speaker>[\\p{L}' .-]+?)\\s*(?<cues>(\\[[a-z]+\\]\\s*)*):\\s*(?<text>.+)$"
+## (A type's lines are spoken by whoever is of the type: {name}, ruling R13.)
+const NAME := "{name}"
+const _SAY := "^(?<speaker>\\{name\\}|[\\p{L}' .-]+?)\\s*(?<cues>(\\[[a-z]+\\]\\s*)*):\\s*(?<text>.+)$"
 const _SENSE := "^Sense (?<school>[a-z]+)\\s*(\\[if (?<if>[^\\]]+)\\])?\\s*:\\s*(?<text>.+)$"
 const _PAUSE := "^\\[pause (?<s>[0-9.]+)\\]$"
 const _OPTION := "^(?<m>>>?)\\s*(\\[if (?<if>[^\\]]+)\\])?\\s*(?<sp>!)?\\s*(?<text>.+?)\\s*->\\s*(?<to>[A-Za-z0-9_]+)\\s*(\\{do:\\s*(?<do>.*)\\})?$"
@@ -419,7 +422,7 @@ static func _body_line(line: String, at: String, body: Array, warnings: Array) -
 	var speaker := found.get_string("speaker")
 	var words := found.get_string("text")
 
-	if cues.is_empty() and speaker == speaker.to_lower() and not is_placeholder(words):
+	if cues.is_empty() and speaker != NAME and speaker == speaker.to_lower() and not is_placeholder(words):
 		warnings.append("%s: '%s:' is read as a speaker, but may be a mistyped key (%s)" % [at, speaker, ", ".join(KEYS[&"beat"])])
 
 	body.append({"type": "say", "speaker": speaker, "cues": cues, "text": words, "source": at})

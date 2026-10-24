@@ -51,6 +51,20 @@ const CHAPEL_WIDTH := 6.0
 const BACKDROP_GLOW := Vector2(0.035, 0.03)
 ## How much of the stubs' lights the fog takes up.
 const STUB_HAZE := 0.15
+## The shades one talks to (the talk and quests spec, section 6; data/dialogue/*.dialogue). The librarian at his high
+## desk, in the shop's own frame: behind the desk's corner by the chained book, on his chalk ward's rim (inside it,
+## behind the desk, is his stool between two of its candles), clear of the stool, the candles and the cage; turned
+## toward the arch's middle. (His shadow, LibraryShadow, keeps to the wall cases' fronts, 2 m and more from him.)
+const ShadeScript := preload("res://scripts/Interaction/Shade.gd")
+const LIBRARIAN_AT := Vector3(-1.1, 0.0, -5.07)
+const LIBRARIAN_LOOKS := Vector3(0.0, 0.0, 0.4)
+## The curandera before the far wall's votive ledges east of the shop, between two runs of their flames; a nameless
+## curandera of the type alone (her name the user's to write) a little along the same ledges; both clear of the walk
+## down the lane's middle, turned toward a point on it, toward the mouth.
+const CURANDERA_AT := Vector3(12.0, 0.0, 3.65)
+const MARKET_CURANDERA_AT := Vector3(14.7, 0.0, 3.65)
+const CURANDERAS_LOOK := Vector3(10.0, 0.0, 0.5)
+const MARKET_CURANDERA := "<<a market curandera>>"
 
 ## Judged on its own (the stubs at its ends), or set into maps/metro (no stubs: the map's spaces meet it).
 @export var standalone := true
@@ -67,6 +81,8 @@ var arrows: Array[MeshInstance3D] = []
 ## The flames on the ledges (Vfx "candles", a run of wicks each, each its light) and every wick they stand on.
 var candles: Array[Node3D] = []
 var candle_wicks: Array[Vector3] = []
+## The shades one talks to: "librarian", "curandera", "market_curandera".
+var shades := {}
 
 
 func _ready() -> void:
@@ -92,6 +108,31 @@ func _ready() -> void:
 	shop.transform = Transform3D(Basis(Vector3.UP, PI), SHOP_AT)
 	add_child(shop)
 	inspection_sections.append(shop)
+	_shades()
+
+
+## The shades one talks to (Shade.gd), where LIBRARIAN_AT and the curanderas' places say. Each is an inspection
+## section of its own: the form light (F2) leaves its smoke as it is.
+func _shades() -> void:
+	shades["librarian"] = _shade("librarian", "", "", shop.transform * LIBRARIAN_AT, shop.transform * LIBRARIAN_LOOKS)
+	shades["curandera"] = _shade("curandera", "", "", CURANDERA_AT, CURANDERAS_LOOK)
+	shades["market_curandera"] = _shade("", "curandera", MARKET_CURANDERA, MARKET_CURANDERA_AT, CURANDERAS_LOOK)
+
+
+## A shade of `character` (or of the type `type_id` alone, called `display_name`), standing at `at` turned toward
+## `looks` (both in the lane's frame).
+func _shade(character: String, type_id: String, display_name: String, at: Vector3, looks: Vector3) -> Node3D:
+	var shade: StaticBody3D = ShadeScript.new()
+	shade.character = character
+	shade.type_id = type_id
+	shade.display_name = display_name
+	shade.name = "shade_%s" % (character if character != "" else type_id + "_type")
+	add_child(shade)
+	shade.position = at
+	var to := looks - at
+	shade.rotation.y = atan2(-to.x, -to.z)
+	inspection_sections.append(shade)
+	return shade
 
 
 ## A point in the lane's frame, in the plan's (x, floor height, y).

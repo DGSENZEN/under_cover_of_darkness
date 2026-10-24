@@ -1,0 +1,32 @@
+# The bookseller's trade (docs/systems/dialogue.md, "Types"): what any dealer
+# in books offers, whoever he is: asked for a title, and selling a book. The
+# librarian of the candle lane is one. {name} is whoever speaks.
+# Every text is the user's to write; each beat's intent: says what it must do.
+
+== character bookseller
+colour: ink
+voice: male
+intent: a dealer in old and rare books: knows his stock to the shelf, haggles, and never hurries
+
+== beat open
+intent: a nameless bookseller looks up from his ledger at a customer: civil, measuring what the customer can pay
+{name}: <<A bookseller looks up from his ledger.>>
+>> <<Ask him for a title.>> -> ask_title
+>> [if purse>=3] <<Buy a book from him.>> -> buy_book
+> <<Leave.>> -> end
+
+== beat ask_title
+intent: the trade's answer to "have you got...": what he keeps, what he will not sell, and how long a search would take
+{name}: <<He says what he keeps, what he will not sell, and how long a search would take.>>
+-> end
+
+== beat buy_book
+do: charge(3), give(bought_book)
+intent: he sells an ordinary volume off his shelves (3 coins), wrapped in brown paper; one remark about it as he hands it over
+{name} [nod]: <<He wraps a book in brown paper and takes his coin.>>
+-> end
+
+== item bought_book
+name: <<a book bought off the shelves>>
+look: book
+intent: an ordinary book any bookseller sells: not the curandera's book; what is it?

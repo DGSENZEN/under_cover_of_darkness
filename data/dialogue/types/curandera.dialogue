@@ -1,0 +1,30 @@
+# The curandera's trade (docs/systems/dialogue.md, "Types"): what any curandera
+# in the city offers, whoever she is. A curandera's own file may write any of
+# these beats itself (the candle lane's curandera writes her own limpia); a
+# nameless one in a market speaks these alone. {name} is whoever speaks.
+# Every text is the user's to write; each beat's intent: says what it must do.
+
+== character curandera
+colour: copal
+voice: female
+intent: the healer of the Metro's lanes and markets: copal smoke, an egg, herbs and a prayer; she reads a stranger before he speaks
+
+== beat open
+intent: a nameless curandera at her candles meets a stranger: short and wary, already reading him; she offers what any curandera offers
+{name}: <<A curandera at her candles looks the stranger over.>>
+>> <<Ask her for a limpia.>> -> limpia
+>> [if purse>=2] <<Buy a bundle of copal from her.>> -> copal
+> <<Leave her to her candles.>> -> end
+
+== beat limpia
+intent: the trade's cleansing, any curandera's: the copal smoke passed over him head to feet, a prayer under the breath, the egg cracked into water and read; she ends by telling him plainly what she saw in it
+{name} [flare]: <<She passes the smoking copal over him, head to feet, and prays under her breath.>>
+[pause 1.2]
+{name} [calm]: <<What she saw in the egg, said plainly.>>
+-> end
+
+== beat copal
+do: charge(2), give(copal_bundle)
+intent: she sells him a bundle of copal resin wrapped in a leaf (2 coins): how to burn it, and what it keeps off
+{name} [nod]: <<She wraps the copal in a leaf, takes his coin and tells him how to burn it.>>
+-> end
