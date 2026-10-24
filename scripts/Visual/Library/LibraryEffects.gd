@@ -48,6 +48,12 @@ func build(lab: Node3D) -> void:
 		add_child(ward)
 		ward.build(lab.chained, lab.global_transform * Transform3D(Basis.IDENTITY, lab.CORNER_AT), lab.WARD_RADIUS,
 			lab.ward_wicks, lab.ward_ring)
+	# (A picture missing is reported with the lab's missing kits, and that family goes without it.)
+	for path: String in [LibraryShadow.IMAGE, LibraryWard.GLOW_TEXTURE]:
+		if not ResourceLoader.exists(path):
+			lab.missing.append(path)
+	if not FileAccess.file_exists(LibraryShadow.WALK):
+		lab.missing.append(LibraryShadow.WALK)
 	if ResourceLoader.exists(LibraryShadow.IMAGE) and not lab.sections.is_empty():
 		shadow = LibraryShadow.new()
 		add_child(shadow)

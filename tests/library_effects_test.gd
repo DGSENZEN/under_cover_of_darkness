@@ -42,6 +42,7 @@ func _run() -> void:
 	await _stirring()
 	await _ward(effects)
 	await _shadow(effects)
+	await _together(effects)
 
 	# Drive a real novel through partial openings, without a full-open signal.
 	var book: LiveBook = lab.live_books[7]
@@ -1052,6 +1053,115 @@ func _shadow(effects: Node3D) -> void:
 	if is_instance_valid(current):
 		current.make_current()
 	await _frames(2)
+
+
+## Every material the strange shop's own draws are drawn with (what F2 must give back).
+func _looks(effects: Node3D) -> Array:
+	var draws: Array = effects.find_children("*", "GeometryInstance3D", true, false)
+	for extra in [lab.get("ward_candles"), lab.get("floating"), lab.get("stir")]:
+		if extra is GeometryInstance3D:
+			draws.append(extra)
+		elif extra is Node:
+			draws.append_array((extra as Node).find_children("*", "GeometryInstance3D", true, false))
+	var looks := []
+	for d: GeometryInstance3D in draws:
+		var mesh: Mesh = d.get("mesh") if d is MeshInstance3D else null
+		var own := [d.material_override]
+		if mesh != null:
+			for i in mesh.get_surface_count():
+				own.append((d as MeshInstance3D).get_surface_override_material(i))
+				own.append(mesh.surface_get_material(i))
+		looks.append([d, own])
+	return looks
+
+
+## Task 10: the strange shop together: the inspection keys and switches give every family back as it was; a ward or
+## a shadow short of its parts still runs; the lab torn down and rebuilt leaves nothing behind.
+func _together(effects: Node3D) -> void:
+	var ward: Node3D = effects.get("ward")
+	var shadow: Node3D = effects.get("shadow")
+	var words: Node3D = effects.get("words")
+
+	# F2: the form light hides the effects' own draws and gives every material back.
+	var before := _looks(effects)
+	lab.set_form(true)
+	await _frames(2)
+	var during: bool = not words.visible and not ward.shown and not shadow.shown
+	lab.set_form(false)
+	await _frames(2)
+	var after := _looks(effects)
+	var changed := []
+	for i in mini(before.size(), after.size()):
+		if before[i][1] != after[i][1]:
+			changed.append(String(before[i][0].name))
+	_check("E89 F2 on hides the words, the ward's script and his shadow; off gives back every material of the shop's draws",
+		during and changed.is_empty() and before.size() == after.size() and words.visible and ward.shown and shadow.shown,
+		"hidden %s changed %s of %d draws" % [during, changed.slice(0, 3), before.size()])
+
+	# F3: the ward's chalk and salt hide with the other decals, his shadow too; on again, as they were.
+	var ring: Decal = ward.get("ring")
+	var glow_was: float = ring.emission_energy
+	lab.set_decals(false)
+	await _frames(2)
+	var hid: bool = not ring.visible and lab.decals.all(func(d): return not d.visible) and not shadow.decals_on
+	lab.set_decals(true)
+	await _frames(2)
+	_check("E90 F3 hides the ward's chalk and salt and his shadow; on again they are as they were",
+		hid and ring.visible and shadow.decals_on and is_equal_approx(ring.emission_energy, glow_was),
+		"hidden %s back %s" % [hid, ring.visible and shadow.decals_on])
+
+	# The effects switch: off hides the words, the auras, the ward's script and words, his shadow; on, back.
+	effects.set_enabled(false)
+	await _frames(2)
+	var off: bool = not words.visible and not ward.shown and not shadow.shown \
+		and effects.auras.values().all(func(a): return not a.visible)
+	effects.set_enabled(true)
+	await _frames(2)
+	_check("E91 the effects switched off hide the words, auras, the ward's script and his shadow; on brings them back",
+		off and words.visible and ward.shown and shadow.shown and effects.auras.values().all(func(a): return a.visible),
+		"off %s on %s" % [off, words.visible and ward.shown and shadow.shown])
+
+	# Short of its parts (no candles, no chalk; no ways): built and run, they do what they can and never fail.
+	var bare_ward: Node3D = (load("res://scripts/Visual/Library/LibraryWard.gd") as GDScript).new()
+	add_child(bare_ward)
+	var no_wicks: Array[Vector3] = []
+	bare_ward.build(lab.chained, Transform3D.IDENTITY, 1.18, no_wicks, null)
+	var bare_shadow: Node3D = (load("res://scripts/Visual/Library/LibraryShadow.gd") as GDScript).new()
+	add_child(bare_shadow)
+	bare_shadow.build([], load(bare_shadow.IMAGE))
+	var schedule: float = lab.chained._next
+	lab.chained._next = 1e6
+	lab.chained.strain_now()
+	bare_shadow.wait = 0.01
+	var strongest := 0.0
+	for i in 60:
+		await get_tree().process_frame
+		strongest = maxf(strongest, bare_ward.strength)
+	bare_shadow.cross_now()
+	_check("E92 a ward with no candles or chalk still answers its book; a shadow with no ways never crosses",
+		bare_ward.candles.is_empty() and strongest > 0.5 and not bare_shadow.crossing(),
+		"candles %d strongest %.2f crossing %s" % [bare_ward.candles.size(), strongest, bare_shadow.crossing()])
+	bare_ward.queue_free()
+	bare_shadow.queue_free()
+	lab.chained._next = schedule
+	await _frames(240)
+
+	# Torn down and rebuilt three times: every family of the strange shop goes with its lab, no node left orphaned.
+	var orphans_before := Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
+	var kept := []
+	for round in 3:
+		var other: Node3D = LAB.instantiate()
+		add_child(other)
+		await _frames(5)
+		var parts: Array = [other.effects, other.effects.ward, other.effects.shadow, other.effects.words, other.floating,
+			other.stir, other.ward_candles]
+		kept.append_array(parts.filter(func(n): return n != null).map(func(n): return weakref(n)))
+		other.queue_free()
+		await _frames(3)
+	var alive := kept.filter(func(w): return w.get_ref() != null).size()
+	var orphans := Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT) - orphans_before
+	_check("E93 a lab torn down and rebuilt three times takes every family of the strange shop with it, no node orphaned",
+		kept.size() == 21 and alive == 0 and orphans <= 0, "parts %d still alive %d orphans %+d" % [kept.size(), alive, orphans])
 
 
 ## The brightest of the ward's sigils (each glyph's share of its band's glow).

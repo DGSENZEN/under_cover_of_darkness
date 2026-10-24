@@ -3,7 +3,9 @@ extends Node
 ## measures scripts and physics only). From three eyes in each bay, looking four ways, the median frame time
 ## (windowed, vsync off, so each frame waits on the GPU's drawing; this Mac's renderer reports no GPU timings) and
 ## the CPU render time; the shop passes at no more than 1.1 times the underground bay's frame time.
-## Then the shop again with its shelf books casting shadows (as they did before Part 1's review), to show the cost.
+## Then the shop again with its shelf books casting shadows (as they did before Part 1's review), to show the cost; and
+## Part 2's effects on against off in the same shop, measured in turn at each eye and way (so a change in how the
+## display paces frames during the run falls on both alike).
 ##   Godot --path . --resolution 1600x900 res://tests/library_render_check.tscn
 
 const SHOP := preload("res://maps/library_lab.tscn")
@@ -18,6 +20,8 @@ func _ready() -> void:
 	var shop: Node3D = SHOP.instantiate()
 	add_child(shop)
 	var ours: Vector2 = await _measure(shop, [Vector3(0.0, 1.7, -0.3), Vector3(0.0, 1.7, -2.6), Vector3(2.45, 1.7, -1.6)])
+	var both: Array = await _measure_both(shop, [Vector3(0.0, 1.7, -0.3), Vector3(0.0, 1.7, -2.6), Vector3(2.45, 1.7, -1.6)],
+		func(on: bool): shop.effects.set_enabled(on))
 	for draw: MultiMeshInstance3D in shop.book_draws:
 		draw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	var unshadowed: Vector2 = await _measure(shop, [Vector3(0.0, 1.7, -0.3), Vector3(0.0, 1.7, -2.6), Vector3(2.45, 1.7, -1.6)])
@@ -32,6 +36,8 @@ func _ready() -> void:
 
 	print("render: shop frame %.2f ms CPU %.2f ms; shelf books casting shadows frame %.2f ms CPU %.2f ms; underground bay frame %.2f ms CPU %.2f ms"
 		% [ours.x, ours.y, unshadowed.x, unshadowed.y, theirs.x, theirs.y])
+	print("render: the shop's effects on frame %.2f ms CPU %.2f ms; off frame %.2f ms CPU %.2f ms"
+		% [both[0].x, both[0].y, both[1].x, both[1].y])
 	print("%s  the shop's frames take no more than 1.1 times the underground bay's, drawn   [%.2f vs %.2f ms]"
 		% ["PASS" if ours.x > 0.0 and theirs.x > 0.0 and ours.x <= 1.1 * theirs.x else "FAIL", ours.x, theirs.x])
 	get_tree().quit()
@@ -66,6 +72,43 @@ func _measure(bay: Node3D, eyes: Array) -> Vector2:
 	gpu.sort()
 	cpu.sort()
 	return Vector2(gpu[gpu.size() / 2], cpu[cpu.size() / 2])
+
+
+## Median (frame, CPU render) time (ms) [with `set_on(true)`, with `set_on(false)`], each eye and way measured both
+## ways in turn.
+func _measure_both(bay: Node3D, eyes: Array, set_on: Callable) -> Array:
+	if is_instance_valid(bay.get("player")):
+		bay.player.queue_free()
+	var eye := Camera3D.new()
+	eye.fov = 75.0
+	bay.add_child(eye)
+	eye.make_current()
+	await _frames(30)
+	var times := [[[], []], [[], []]]
+	var vp := get_viewport().get_viewport_rid()
+
+	for at: Vector3 in eyes:
+		for k in 4:
+			eye.global_transform = Transform3D(Basis(Vector3.UP, k * PI / 2.0), at)
+			for side in 2:
+				set_on.call(side == 0)
+				await _frames(20)
+				var was := Time.get_ticks_usec()
+				for i in 30:
+					await get_tree().process_frame
+					var now := Time.get_ticks_usec()
+					times[side][0].append((now - was) / 1000.0)
+					was = now
+					times[side][1].append(RenderingServer.viewport_get_measured_render_time_cpu(vp))
+
+	set_on.call(true)
+	eye.queue_free()
+	var out := []
+	for side in 2:
+		times[side][0].sort()
+		times[side][1].sort()
+		out.append(Vector2(times[side][0][times[side][0].size() / 2], times[side][1][times[side][1].size() / 2]))
+	return out
 
 
 func _frames(n: int) -> void:
