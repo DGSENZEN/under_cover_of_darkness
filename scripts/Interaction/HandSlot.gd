@@ -16,6 +16,7 @@ const ViewPosesScript := preload("res://scripts/Combat/ViewPoses.gd")
 const HandContactsScript := preload("res://scripts/Interaction/HandContacts.gd")
 const HeldPageScript := preload("res://scripts/Interaction/HeldPage.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
+const MagicFxScript := preload("res://scripts/Visual/MagicFx.gd")
 
 ## Visual layer 19. The lightgem cameras' cull masks leave it out.
 const VIEWMODEL_LAYER := 1 << 18
@@ -52,39 +53,34 @@ const HAND_GRIP := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-20.0)) * Basis(V
 ## handle's own rake.
 const GUN_GRIP := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-10.0)) * Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0)), Vector3(-0.03, 0.08, 0.0))
 ## A hand spell's circle: how many pieces, and what each school's are made
-## of [mesh, material] (stand-ins, made in house, until the effects lab's).
+## of [mesh, material, how each piece is turned on the ring]: Obsidian's
+## splinters of black glass pointing out, Copal's tendrils of ward smoke
+## drawn round it (in the shot's approved look: MeshVfx).
 const CIRCLE_PIECES := 12
+const WARD_CORE := Color("#F2FAFC")
+const WARD_BODY := Color("#CFE8F0")
+const WARD_EDGE := Color("#7FA6B4")
 static var CIRCLE_LOOKS := {
-	&"obsidian": [_circle_box(Vector3(0.008, 0.03, 0.004)), _circle_material(Color(0.04, 0.04, 0.05), 0.8, 0.15, 1.0)],
-	&"copal": [_circle_puff(0.014), _circle_material(Color(0.72, 0.78, 0.7), 0.0, 1.0, 0.45)],
+	&"obsidian": [MagicFxScript.splinter_mesh(0.008, 0.048, 0.004), _circle_glass(), -PI * 0.5],
+	&"copal": [MeshVfx.tendril(PackedVector3Array([Vector3.ZERO, Vector3(0.004, 0.018, 0.0), Vector3(0.0, 0.036, 0.004), Vector3(-0.004, 0.05, 0.0)]), 0.006, 6), _circle_smoke(), 0.0],
 }
 
 
-static func _circle_box(size: Vector3) -> Mesh:
-	var box := BoxMesh.new()
-	box.size = size
-	return box
+## Black glass in your view: the world's glass, drawn at the arms' field of
+## view.
+static func _circle_glass() -> StandardMaterial3D:
+	var m: StandardMaterial3D = MagicFxScript.glass_look().duplicate()
+	ViewArmsScript.dress(m)
+	return m
 
 
-static func _circle_puff(radius: float) -> Mesh:
-	var puff := SphereMesh.new()
-	puff.radius = radius
-	puff.height = radius * 2.0
-	puff.radial_segments = 8
-	puff.rings = 4
-	return puff
-
-
-static func _circle_material(color: Color, metal: float, rough: float, alpha: float) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
-	m.albedo_color = Color(color.r, color.g, color.b, alpha)
-	m.metallic = metal
-	m.roughness = rough
-
-	if alpha < 1.0:
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
+## Ward smoke in your view: ghostly (unshaded, low), drawn as the flash is.
+static func _circle_smoke() -> ShaderMaterial:
+	var m := MeshVfx.look(WARD_CORE, WARD_BODY, WARD_EDGE, 1.1, 0.25, 0.8, 1.3)
+	m.shader = preload("res://scripts/Visual/vfx_gunflash.gdshader")
+	m.set_shader_parameter(&"opacity", 0.8)
+	m.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+	m.render_priority = 12
 	return m
 
 
@@ -914,6 +910,10 @@ func _update_circle() -> void:
 			piece.mesh = look[0]
 			piece.material_override = look[1]
 
+		# A shader circle takes the arms' field of view as they are now (F12).
+		if look[1] is ShaderMaterial:
+			(look[1] as ShaderMaterial).set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
 	var size := ViewArmsScript.SCALE
 	var palm: Vector3 = _left_frame.basis.x.normalized()
 	var middle := _left_frame.origin + palm * 0.07
@@ -923,7 +923,7 @@ func _update_circle() -> void:
 	for i in _circle_pieces.size():
 		var turn := TAU * float(i) / float(_circle_pieces.size())
 		var piece := _circle_pieces[i]
-		piece.transform = Transform3D(Basis(Vector3.BACK, turn), Vector3(cos(turn), sin(turn), 0.0) * across * size).scaled_local(Vector3.ONE * size)
+		piece.transform = Transform3D(Basis(Vector3.BACK, turn + float(look[2])), Vector3(cos(turn), sin(turn), 0.0) * across * size).scaled_local(Vector3.ONE * size)
 
 
 ## A revolver's cylinder, hammer and gate, as their own meshes under the

@@ -72,16 +72,21 @@ func _ready() -> void:
 	player.hand.set_checking(false)
 	await _frames(10)
 
-	# The left hand: the tome out, then the bare hand mid-cast.
+	# The left hand: the tome out, then the bare hand mid-cast (Shard's black
+	# glass, then Ward's smoke).
 	player.caster.select(&"empower")
 	await _frames(40)
 	await _shot("tome")
-	player.caster.select(&"shard")
-	await _frames(20)
-	Input.action_press("block")
+	Input.action_press("spell_1")
 	await _frames(15)
 	await _shot("cast")
-	Input.action_release("block")
+	Input.action_release("spell_1")
+	await _frames(40)
+	player.power.power = player.power.MAX
+	Input.action_press("spell_2")
+	await _frames(15)
+	await _shot("cast_ward")
+	Input.action_release("spell_2")
 	await _frames(10)
 	get_tree().quit()
 

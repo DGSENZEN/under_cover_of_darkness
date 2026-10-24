@@ -15,6 +15,7 @@ const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 const Spells := preload("res://scripts/Magic/Spells.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
+const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
 
 
 ## A source that says what it is, as Barrel and Arrow do (attack_info).
@@ -549,6 +550,58 @@ func _run() -> void:
 	_check("S29 a spell put away mid-cast, or tapped as the gun comes up, casts nothing and costs nothing",
 		switched == 0 and done.is_empty() and _near(power.power, 100.0, 0.01),
 		"after the switch %d, tapped %s power %.1f" % [switched, done, power.power])
+
+	# M1 Shard's circle: twelve black-glass splinters, not boxes
+	_wield(&"revolver")
+	_put_player(Vector3(-50, 1.05, -20))
+	await _frames(40)
+	power.power = power.MAX
+	Input.action_press("spell_1")
+	await _frames(12)
+	var pieces1: Array = player.hand._circle_pieces.filter(func(p): return p.visible and player.hand._circle.visible)
+	var glassy: bool = pieces1.size() == 12 and pieces1.all(func(p): return not (p.mesh is BoxMesh) and p.material_override is BaseMaterial3D and (p.material_override as BaseMaterial3D).metallic >= 0.8)
+	Input.action_release("spell_1")
+	await _frames(30)
+	_check("M1 Shard's circle is twelve splinters of black glass", glassy, "visible %d" % pieces1.size())
+
+	# M2 Ward's circle: tendrils of ward smoke, not balls
+	power.power = power.MAX
+	Input.action_press("spell_2")
+	await _frames(12)
+	var pieces2: Array = player.hand._circle_pieces
+	var smoky: bool = player.hand._circle.visible and pieces2.all(func(p): return not (p.mesh is SphereMesh) and p.material_override is ShaderMaterial and (p.material_override as ShaderMaterial).get_shader_parameter(&"core").is_equal_approx(Color("#F2FAFC")))
+	Input.action_release("spell_2")
+	await _frames(30)
+	_check("M2 Ward's circle is tendrils of ward smoke", smoky, "pieces %d" % pieces2.size())
+
+	# M3 let go half way: the circle goes at once
+	power.power = power.MAX
+	Input.action_press("spell_1")
+	await _frames(10)
+	Input.action_release("spell_1")
+	await _frames(2)
+	_check("M3 a cast let go of half way takes its circle with it", not player.hand._circle.visible, "visible %s" % player.hand._circle.visible)
+	await _frames(20)
+
+	# M4 with the world's effects off, the spells still cast and leave none
+	Fx.enabled = false
+	power.power = power.MAX
+	await _tap("blink")
+	await _frames(10)
+	power.power = power.MAX
+	Input.action_press("spell_1")
+	await _frames(30)
+	Input.action_release("spell_1")
+	await _frames(30)
+	power.power = power.MAX
+	Input.action_press("spell_2")
+	await _frames(30)
+	Input.action_release("spell_2")
+	await _frames(5)
+	var left_over: int = MagicFx.live_count()
+	Fx.enabled = true
+	await _frames(WardScript.LIFE * 60.0)
+	_check("M4 with effects off, spells cast and leave no effects", left_over == 0, "magic effects %d" % left_over)
 
 	# S30 aiming a blink, a fresh right mouse lets it go, and raises no sights
 	_wield(&"revolver")
