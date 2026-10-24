@@ -22,6 +22,8 @@ shader_type canvas_item;
 
 uniform vec2 picture_size = vec2(1000.0, 583.0);
 uniform float pad = 40.0;
+// The frayed edge's soft rim (px at 1080p): the paint is whole inside it.
+uniform float fray_soft = 5.0;
 uniform float seed = 11.0;
 uniform bool procedural = false;
 // The pool's ellipse, as its box in fractions of the picture (x0, y0, x1, y1).
@@ -251,12 +253,13 @@ float motes(vec2 q) {
 	return m;
 }
 
-// How much of the picture's paint is left here (0 eaten, 1 whole).
-float fray(vec2 p) {
+// How far inside the frayed line this is (px; below 0 the brush has eaten
+// it): the line itself is ragged, bitten deeper here and there.
+float fray_depth(vec2 p) {
 	vec2 size = picture_size;
 
 	if (p.x < 0.0 || p.y < 0.0 || p.x > size.x - 1.0 || p.y > size.y - 1.0) {
-		return 0.0;
+		return -1000.0;
 	}
 
 	float dx = min(p.x, size.x - 1.0 - p.x);
@@ -271,7 +274,7 @@ float fray(vec2 p) {
 	float bites = vnoise(p / 160.0 + 91.0);
 	float streak = dx < dy ? along_y : along_x;
 	float reach = pad * (0.3 + 0.9 * streak + 0.9 * bites * bites);
-	return pow(clamp((dist - reach * 0.55) / (reach * 0.45 + 1.0), 0.0, 1.0), 1.25);
+	return dist - reach * 0.55;
 }
 
 // The dry strokes along one edge: `along` runs the edge, `beyond` is how far
@@ -357,9 +360,12 @@ void fragment() {
 		colour *= 1.0 - flicker * 0.3 * smoothstep(0.3, 0.85, sink);
 	}
 
-	float a = fray(p);
+	// Whole paint inside the ragged line, soft only over fray_soft px: no
+	// see-through band (the reference faded over up to a third of the reach).
+	float depth = fray_depth(p);
+	float a = pow(clamp(depth / fray_soft, 0.0, 1.0), 1.25);
 	// Pigment pools where the brush lifts.
-	float rim = exp(-pow(a - 0.55, 2.0) / 0.03) * 0.28;
+	float rim = exp(-pow((depth - fray_soft * 1.4) / (fray_soft * 1.1), 2.0)) * 0.28 * step(0.0, depth);
 	colour *= 1.0 - rim;
 
 	// The dry strokes, under the body: their colour is the edge's own.

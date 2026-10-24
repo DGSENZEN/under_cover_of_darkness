@@ -34,6 +34,7 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const TalkSkin := preload("res://scripts/UI/TalkSkin.gd")
 const PAINT := preload("res://scripts/UI/talk_paint.gdshader")
 const SWIPE := preload("res://scripts/UI/talk_swipe.gdshader")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 
 ## The box has closed (the talk is over, or broken off).
 signal closed
@@ -105,6 +106,14 @@ const PORTRAIT_DISTANCE := 1.25
 const PORTRAIT_DROP := 0.12
 const PORTRAIT_FOV := 30.0
 const PORTRAIT_MOST := 1024
+## How far it sees (m): the speaker and the room behind, not the city.
+const PORTRAIT_FAR := 25.0
+## The speaker's head stands this far above the panel's top on the screen
+## (px at 1080p): the view eases down to put it there, not behind the panel.
+const HEAD_ABOVE_PANEL := 90.0
+## The frayed edge's soft rim, at most this wide (px at 1080p): the paint is
+## whole inside it, with no see-through band.
+const FRAY_SOFT := 5.0
 
 ## A voice's NOX takes (Sfx: murmur, murmur_b, murmur_f, and hm the same).
 const VOICE_SUFFIX := {&"male": "", &"male_b": "_b", &"female": "_f"}
@@ -129,7 +138,12 @@ var _choice := 0
 var _options_age := 0.0
 var _pause_left := 0.0
 var _back_held := 0.0
+## Back has been up since the talk opened (only then does holding it count).
+var _back_armed := false
 var _opened_frame := -1
+var _rng := RandomNumberGenerator.new()
+## The screen size the type was last sized for (_layout).
+var _typed_for := Vector2.ZERO
 var _voice := ""
 
 ## The paint: how far the panel and the portrait are down (0..1), and each
@@ -187,11 +201,15 @@ func open(p_shade: Node, p_player: Node) -> void:
 	_voice = String(VOICE_SUFFIX.get(StringName(shade.dialogue.get("voice", &"male")), ""))
 	_open = true
 	_opened_frame = Engine.get_physics_frames()
-	_seed = randf() * 100.0
+	# Its own dice, so the paint's seed draws nothing from the game's.
+	_rng.randomize()
+	_seed = _rng.randf() * 100.0
+	# Back held from before the talk is not walking away: a fresh press is.
+	_back_armed = not Input.is_action_pressed("move_back")
 	player.talk_hold = true
-	# Their own paintings if they have them (a dialogue may name another's
-	# skin), else the plain box.
-	skin = TalkSkin.for_character(String(shade.dialogue.get("skin", shade.dialogue.get("id", ""))))
+	# Their own paintings if they have them (assets/ui/talk/<id>), else the
+	# plain box.
+	skin = TalkSkin.for_character(String(shade.dialogue.get("id", "")))
 
 	_build()
 	_place_portrait_camera()
@@ -267,6 +285,19 @@ func _gone() -> void:
 		queue_free()
 
 
+## Paused (Esc): the box's words and options hide under the pause screen,
+## so its text never crosses the pause screen's; they come back with play.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PAUSED or what == NOTIFICATION_UNPAUSED:
+		_show_words(what == NOTIFICATION_UNPAUSED)
+
+
+func _show_words(on: bool) -> void:
+	for node in [_name, _words] + _swipes + _option_labels:
+		if node != null and is_instance_valid(node):
+			(node as CanvasItem).visible = on
+
+
 func _exit_tree() -> void:
 	# Taken away with its player or its level: broken off, not left holding.
 	if _open:
@@ -294,21 +325,6 @@ func shown_options() -> Array[String]:
 ## How far the box is painted in (0 gone, 1 whole): its panel and portrait.
 func reveal() -> float:
 	return maxf(_panel_reveal, _portrait_reveal)
-
-
-## The HUD's prompt rows while it is up (PlayerFrob.current_actions).
-func prompt_rows() -> Array:
-	var rows := []
-
-	match _kind:
-		&"options":
-			rows.append([&"frob", "Choose"])
-			rows.append([&"", "1–%d" % mini(_options.size(), 4)])
-		&"line", &"sense":
-			rows.append([&"frob", "Continue"])
-
-	rows.append([&"move_back", "Hold to walk away"])
-	return rows
 
 
 ## Where each part is now (in the screen's px): the panel and the portrait
@@ -362,8 +378,9 @@ func select(index: int) -> void:
 
 
 ## Moves the choice (the wheel, the mouse): the new one paints in afresh.
+## Only while options are up (after a choice their swipes are gone).
 func choose_by_pointing(index: int) -> void:
-	if index == _choice or index < 0 or index >= _options.size():
+	if _kind != &"options" or index == _choice or index < 0 or index >= _options.size() or index >= _swipes.size():
 		return
 
 	_choice = index
@@ -382,10 +399,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	var key := event as InputEventKey
 
-	if key != null and key.pressed and not key.echo and key.keycode >= KEY_1 and key.keycode <= KEY_4:
-		select(key.keycode - KEY_1)
-		get_viewport().set_input_as_handled()
-		return
+	# 1-9 on the number row or the numpad, by where the key sits (any layout).
+	if key != null and key.pressed and not key.echo:
+		var number := _number_of(key)
+
+		if number > 0:
+			select(number - 1)
+			get_viewport().set_input_as_handled()
+			return
 
 	var button := event as InputEventMouseButton
 
@@ -407,6 +428,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 
+## The number 1-9 a key is, by its physical key (the number row or the
+## numpad), or 0.
+static func _number_of(key: InputEventKey) -> int:
+	var physical := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
+
+	if physical >= KEY_1 and physical <= KEY_9:
+		return physical - KEY_1 + 1
+
+	if physical >= KEY_KP_1 and physical <= KEY_KP_9:
+		return physical - KEY_KP_1 + 1
+
+	return 0
+
+
 # Every frame
 
 func _physics_process(delta: float) -> void:
@@ -420,8 +455,11 @@ func _physics_process(delta: float) -> void:
 	if _kind == &"options":
 		_options_age += delta
 
-	# Turning away: back, held.
-	if Input.is_action_pressed("move_back"):
+	# Turning away: back, held (a press begun since the talk opened).
+	if not Input.is_action_pressed("move_back"):
+		_back_armed = true
+
+	if _back_armed and Input.is_action_pressed("move_back"):
 		_back_held += delta
 
 		if _back_held >= WALK_AWAY:
@@ -529,7 +567,9 @@ func _send_reveals() -> void:
 		_option_labels[i].modulate.a = _option_ink[i]
 
 
-## The view eases round to the speaker's eyes; the speaker to yours.
+## The view eases round to the speaker, looking a little under the head so
+## the head stands HEAD_ABOVE_PANEL over the panel's top on the screen (not
+## behind the panel); the speaker turns to your eyes.
 func _face_speaker(delta: float) -> void:
 	var neck: Node3D = player.get_node("Neck")
 	var to: Vector3 = shade.head_point() - neck.global_position
@@ -540,9 +580,31 @@ func _face_speaker(delta: float) -> void:
 
 	var k := 1.0 - exp(-TURN_EASE * delta)
 	var limit := deg_to_rad(float(player.get("max_pitch_degrees")))
+	var pitch := atan2(to.y, flat) - _below_head()
 	player.rotation.y = lerp_angle(player.rotation.y, atan2(-to.x, -to.z), k)
-	neck.rotation.x = lerpf(neck.rotation.x, clampf(atan2(to.y, flat), -limit, limit), k)
+	neck.rotation.x = lerpf(neck.rotation.x, clampf(pitch, -limit, limit), k)
 	shade.face(_eye())
+
+
+## How far under the speaker's head the view looks (rad) to put the head
+## HEAD_ABOVE_PANEL above the panel's top: the head's height above the
+## screen's middle, through the lens.
+func _below_head() -> float:
+	var camera := get_viewport().get_camera_3d() if get_viewport() != null else null
+
+	if camera == null or _plan.is_empty():
+		return 0.0
+
+	var screen := _screen()
+	var half := screen.y * 0.5
+	var wanted: float = (_plan["panel"] as Rect2).position.y - HEAD_ABOVE_PANEL * float(_plan["scale"])
+	var half_fov := deg_to_rad(camera.fov) * 0.5
+
+	# A lens that keeps its width: its height's half angle from the width's.
+	if camera.keep_aspect == Camera3D.KEEP_WIDTH and screen.x > 0.0:
+		half_fov = atan(tan(half_fov) * screen.y / screen.x)
+
+	return atan((half - wanted) / half * tan(half_fov))
 
 
 func _eye() -> Vector3:
@@ -669,6 +731,7 @@ func _painted(texture: Texture2D, picture: Vector2, pad: float, seed_value: floa
 	material.shader = PAINT
 	material.set_shader_parameter(&"picture_size", picture)
 	material.set_shader_parameter(&"pad", pad)
+	material.set_shader_parameter(&"fray_soft", FRAY_SOFT)
 	material.set_shader_parameter(&"seed", seed_value)
 	material.set_shader_parameter(&"reveal_seed", _seed + seed_value)
 	rect.material = material
@@ -738,6 +801,10 @@ func _build_portrait() -> void:
 		_camera = Camera3D.new()
 		_camera.fov = PORTRAIT_FOV
 		_camera.near = 0.05
+		# The world, the speaker and its wisps; never the player's hands
+		# (they would cross the speaker's face) or the lightgem's probe.
+		_camera.cull_mask = Layers.WORLD_ALL | Layers.ACTORS | Layers.FX
+		_camera.far = PORTRAIT_FAR
 		_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		_viewport.add_child(_camera)
 		_camera.current = true
@@ -806,6 +873,7 @@ func _build_options(list: Array) -> void:
 		label.name = "Option%d" % (i + 1)
 		label.text = String(list[i]["text"])
 		label.add_theme_font_override("font", _italic)
+		label.add_theme_font_size_override("font_size", roundi(OPTION_SIZE * _scale()))
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		label.modulate.a = 0.0
 		_root.add_child(label)
@@ -949,11 +1017,18 @@ func _layout(screen: Vector2) -> void:
 	_place(_portrait, (p["portrait"] as Rect2).grow(PORTRAIT_PAD * k))
 	_fit_portrait_render(p["portrait"])
 
-	_name.add_theme_font_size_override("font_size", roundi(NAME_SIZE * k))
+	# The type is sized only when the screen's size changes (a theme change
+	# every frame would re-shape every label every frame).
+	var retype := screen != _typed_for
+	_typed_for = screen
+
+	if retype:
+		_name.add_theme_font_size_override("font_size", roundi(NAME_SIZE * k))
+		var line_size := roundi(LINE_SIZE * k)
+		_words.add_theme_font_size_override("font_size", line_size)
+		_words.add_theme_constant_override("line_spacing", roundi(LINE_STEP * k - _font.get_height(line_size)))
+
 	_place(_name, p["name"])
-	var line_size := roundi(LINE_SIZE * k)
-	_words.add_theme_font_size_override("font_size", line_size)
-	_words.add_theme_constant_override("line_spacing", roundi(LINE_STEP * k - _font.get_height(line_size)))
 	_place(_words, p["line"])
 
 	var words: Array = p["options"]
@@ -961,7 +1036,10 @@ func _layout(screen: Vector2) -> void:
 
 	for i in _option_labels.size():
 		var label := _option_labels[i]
-		label.add_theme_font_size_override("font_size", roundi(OPTION_SIZE * k))
+
+		if retype:
+			label.add_theme_font_size_override("font_size", roundi(OPTION_SIZE * k))
+
 		_place(label, words[i])
 		var swipe := _swipes[i]
 		var rect: Rect2 = swipes[i]

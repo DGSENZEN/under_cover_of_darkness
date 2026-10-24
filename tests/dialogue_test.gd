@@ -1028,7 +1028,8 @@ func _box() -> void:
 	_aim(player, shade.global_position + Vector3(0, 1.2, 0))
 	await _frames(20)
 	var hud: Node = player.hud
-	var hud_before := [hud.shown("crosshair"), hud.shown("gem")] if hud != null else [0.0, 0.0]
+	var hud_pieces := ["crosshair", "gem", "marks", "shields"]
+	var hud_before := hud_pieces.map(func(p): return _hud_piece(hud, p)) if hud != null else [0.0, 0.0, 0.0, 0.0]
 
 	# B1: E on her opens the box, and her opener's first line is told out.
 	# (B16: its paint goes on within 0.7 s.)
@@ -1036,10 +1037,15 @@ func _box() -> void:
 	var box: Node = _talking(player)
 	var painting := [box.reveal() if box != null else -1.0]
 	var paint_frames := 2
+	# B16: the panel leads, the portrait follows (never ahead of it).
+	var portrait_lags := false
+	var portrait_ahead := false
 
 	while box != null and box.reveal() < 1.0 and paint_frames < 120:
 		await _frames(1)
 		paint_frames += 1
+		portrait_lags = portrait_lags or box._panel_reveal > box._portrait_reveal + 0.05
+		portrait_ahead = portrait_ahead or box._portrait_reveal > box._panel_reveal + 0.001
 
 	var painted_in := paint_frames / 60.0
 	await _reveal()
@@ -1062,7 +1068,7 @@ func _box() -> void:
 
 	# B13: the HUD gives way (the crosshair, the gem); B14: its rows are the
 	# talk's; B15: the letter stays put away.
-	var hud_during := [hud.shown("crosshair"), hud.shown("gem")] if hud != null else [1.0, 1.0]
+	var hud_during := hud_pieces.map(func(p): return _hud_piece(hud, p)) if hud != null else [1.0, 1.0, 1.0, 1.0]
 	var line_rows: Array = player.frob.current_actions()
 	var row_texts: PackedStringArray = hud.prompt_texts() if hud != null else PackedStringArray()
 	player.frob.open_letter()
@@ -1099,10 +1105,8 @@ func _box() -> void:
 		and not CityState.people.holds("said(asked)", "fx_curandera"),
 		"sense '%s', options %s, still waiting %s" % [sensed, offered, box.conversation.is_waiting_for_choice()])
 
-	var walk := [&"move_back", "Hold to walk away"]
-	_check("B14 while talking the HUD's rows are the talk's",
-		line_rows == [[&"frob", "Continue"], walk] and option_rows == [[&"frob", "Choose"], [&"", "1–%d" % offered.size()], walk]
-		and Array(row_texts).any(func(t): return String(t).contains("Hold to walk away") and String(t).begins_with("[")),
+	_check("B14 while talking the HUD shows no rows (no Choose, no 1-4, no Hold to walk away)",
+		line_rows.is_empty() and option_rows.is_empty() and row_texts.is_empty(),
 		"line %s, options %s, HUD %s" % [line_rows, option_rows, row_texts])
 
 	# B9: draft 28's layout at 1920 x 1080 (its numbers, by hand: the panel
@@ -1129,6 +1133,31 @@ func _box() -> void:
 
 		if absf(got_y - (top + float(pair[1]))) > 2.0:
 			off.append("%s y %.1f not %.1f" % [pair[0], got_y, top + float(pair[1])])
+
+	# Across: the name across the panel, the line's 560 px in its middle;
+	# the options' words 30 px into one shared column (the longest + 70),
+	# centred; every swipe from the column's left, the unchosen ones the
+	# column wide, the chosen one longer by the marker (150 - 20 overlap),
+	# its top 8 px above its words (the others 6).
+	var column: float = box._plan.get("column", 0.0)
+	var words_x := 585.0 + (1000.0 - column) * 0.5 + 30.0
+	var across := {"name x": [(big.get("name", Rect2()) as Rect2).position.x, 585.0],
+		"name w": [(big.get("name", Rect2()) as Rect2).size.x, 1000.0], "line x": [(big.get("line", Rect2()) as Rect2).position.x, 585.0 + 220.0]}
+
+	for i in offered.size():
+		var swipe: Rect2 = big.get("swipe %d" % i, Rect2())
+		var chosen: bool = i == box._choice
+		across["option %d x" % i] = [(big.get("option %d" % i, Rect2()) as Rect2).position.x, words_x]
+		across["swipe %d x" % i] = [swipe.position.x, words_x - 30.0]
+		across["swipe %d w" % i] = [swipe.size.x, column + (130.0 if chosen else 0.0)]
+		across["swipe %d y" % i] = [swipe.position.y, top + 318.0 + 50.0 * i - (8.0 if chosen else 6.0)]
+
+	for key in across:
+		if absf(float(across[key][0]) - float(across[key][1])) > 2.0:
+			off.append("%s %.1f not %.1f" % [key, across[key][0], across[key][1]])
+
+	if column < 70.0:
+		off.append("column %.1f" % column)
 
 	_check("B9 at 1920x1080 the panel, the portrait and the words sit where draft 28 has them",
 		off.is_empty() and big.size() >= 4 + 2 * offered.size(),
@@ -1165,18 +1194,23 @@ func _box() -> void:
 	await _frames(int(ceil(TalkBox.OPTION_GUARD * 60.0)) + 2)
 	box.select(box.shown_options().find("<<Leave.>>"))
 	var lift_frames := 0
+	# B16: closing, the words are gone before the paint is.
+	var words_gone_first := false
 
 	while is_instance_valid(box) and box.reveal() > 0.0 and lift_frames < 120:
 		await _frames(1)
 		lift_frames += 1
+
+		if is_instance_valid(box) and box._words_ink <= 0.0 and box.reveal() > 0.0:
+			words_gone_first = true
 
 	var lifted := lift_frames / 60.0
 	_check("B2 the player is held while talking and freed on close",
 		held and moved < 0.01 and _talking(player) == null and player.get("talk_hold") == false,
 		"held %s, moved %.3f m, box after %s, hold after %s" % [held, moved, _talking(player), player.get("talk_hold")])
 	await _frames(20)
-	var hud_after := [hud.shown("crosshair"), hud.shown("gem")] if hud != null else [0.0, 0.0]
-	_check("B13 while talking the HUD's crosshair and gem fade out, and come back after",
+	var hud_after := hud_pieces.map(func(p): return _hud_piece(hud, p)) if hud != null else [0.0, 0.0, 0.0, 0.0]
+	_check("B13 while talking the HUD's crosshair, gem, awareness marks and shields fade out, and come back after",
 		hud != null and hud_before.all(func(a): return a > 0.9) and hud_during.all(func(a): return a < 0.01)
 		and hud_after.all(func(a): return a > 0.9),
 		"before %s, talking %s, after %s" % [hud_before, hud_during, hud_after])
@@ -1230,10 +1264,11 @@ func _box() -> void:
 		reopened == "<<Back again.>>" and shut and how[0] == &"interrupted" and player.get("talk_hold") == false
 		and not CityState.people.holds("said(walked_off)", "fx_curandera"),
 		"reopened '%s', closed at once %s, ended %s, hold %s" % [reopened, shut, how[0], player.get("talk_hold")])
-	_check("B16 the paint goes on within 0.7 s of open, off within 0.45 s of close, and at once on interrupt",
-		painting[0] >= 0.0 and painting[0] < 0.2 and painted_in <= 0.7 and lifted <= 0.45 and lifted > 0.1 and gone_at_once == 0.0,
-		"at open %.2f, whole after %.2f s, gone %.2f s after close, %.2f the frame it was broken off" % [painting[0], painted_in,
-		lifted, gone_at_once])
+	_check("B16 the paint goes on within 0.7 s of open (the portrait after the panel), off within 0.45 s of close (the words first), and at once on interrupt",
+		painting[0] >= 0.0 and painting[0] < 0.2 and painted_in <= 0.7 and lifted <= 0.45 and lifted > 0.1 and gone_at_once == 0.0
+		and portrait_lags and not portrait_ahead and words_gone_first,
+		"at open %.2f, whole after %.2f s, gone %.2f s after close, %.2f the frame it was broken off; portrait lags %s, ahead %s; words first %s" % [
+		painting[0], painted_in, lifted, gone_at_once, portrait_lags, portrait_ahead, words_gone_first])
 
 	# B7: a tap of back is not walking away; holding it 0.5 s is.
 	await _frames(30)
@@ -1264,6 +1299,15 @@ func _box() -> void:
 
 
 ## The box the player has open, or null.
+## How much of a HUD piece shows (B13). The shields show only in a fight, so
+## theirs is how far they have given way to the talk (their own fade).
+func _hud_piece(hud: Node, piece: String) -> float:
+	if piece == "shields":
+		return (hud._shields as CanvasItem).self_modulate.a
+
+	return hud.shown(piece)
+
+
 func _talking(player: Node) -> Node:
 	return player.frob.talking() if player.frob.has_method("talking") else null
 

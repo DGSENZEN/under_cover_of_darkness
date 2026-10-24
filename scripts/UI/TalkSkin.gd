@@ -29,6 +29,11 @@ extends RefCounted
 ## Where the skins are: <root><character>.json and <root><character>/.
 ## (Tests point it elsewhere.)
 static var root := "res://assets/ui/talk/"
+## Paintings decoded so far (tests: a second open decodes none), and the
+## decoded ones by path, kept so a second talk with the same character takes
+## no new decode on the main thread (two characters: about 40 MB each).
+static var decodes := 0
+static var _cache := {}
 
 ## The panel's painting (the whole of it: `crop` is the part shown), or null:
 ## painted from noise.
@@ -73,12 +78,13 @@ var pool_strength := 200.0 / 255.0
 var breathe: Array[Rect2] = []
 var eyes: Array[Rect2] = []
 
-## The living painting, how it answers the shade: per state, the eyes' glow,
-## the portrait's warmth, grey and flicker. Eased toward at Shade's own pace.
+## The living painting, how it answers the shade: per state, the eyes' glow
+## (none at rest or dim, as draft 28 has them: they glow only on a cue), the
+## portrait's warmth, grey and flicker. Eased toward at Shade's own pace.
 const LIVING := {
-	&"calm": {&"eye_glow": 0.1, &"warmth": 0.0, &"grey": 0.0, &"flicker": 0.0},
+	&"calm": {&"eye_glow": 0.0, &"warmth": 0.0, &"grey": 0.0, &"flicker": 0.0},
 	&"flare": {&"eye_glow": 0.75, &"warmth": 1.0, &"grey": 0.0, &"flicker": 0.0},
-	&"dim": {&"eye_glow": 0.04, &"warmth": 0.0, &"grey": 1.0, &"flicker": 0.0},
+	&"dim": {&"eye_glow": 0.0, &"warmth": 0.0, &"grey": 1.0, &"flicker": 0.0},
 	&"gutter": {&"eye_glow": 0.4, &"warmth": 0.0, &"grey": 0.0, &"flicker": 1.0},
 }
 const LIVING_EASE := 4.0
@@ -90,7 +96,7 @@ const SHIFT_EASE := 3.0
 const MOST_FACES := 4
 const MOST_EYES := 6
 
-var _now := {&"eye_glow": 0.1, &"warmth": 0.0, &"grey": 0.0, &"flicker": 0.0}
+var _now := {&"eye_glow": 0.0, &"warmth": 0.0, &"grey": 0.0, &"flicker": 0.0}
 var _state: StringName = &"calm"
 var _shift := Vector2.ZERO
 var _panel_material: ShaderMaterial
@@ -116,12 +122,64 @@ static func for_character(character_id: String):
 ## Whether `character_id` has a painted skin here: its .json, and its backdrop
 ## and portrait made (tools/prepare_talk_art.py). Quiet when it has none.
 static func exists(character_id: String) -> bool:
-	if character_id == "":
+	if character_id == "" or not FileAccess.file_exists(root + character_id + ".json"):
 		return false
 
 	var folder := root + character_id + "/"
-	return FileAccess.file_exists(root + character_id + ".json") and FileAccess.file_exists(folder + "backdrop.png") \
-		and FileAccess.file_exists(folder + "portrait.png")
+	return _available(folder + "backdrop.png") and _available(folder + "portrait.png")
+
+
+## A skin's numbers from its .json alone, no paintings needed (a fresh
+## checkout has the .json and not the art): the crop and the swipe regions in
+## the backdrop's UV, the panel's shape, the pool, the cursor's tip, colour and
+## owner, the faces and eyes. {} if it has no .json.
+static func _read(character_id: String) -> Dictionary:
+	var path := root + character_id + ".json"
+
+	if character_id == "" or not FileAccess.file_exists(path):
+		return {}
+
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+
+	if not data is Dictionary:
+		push_warning("TalkSkin: %s is not a skin; the plain box instead" % path)
+		return {}
+
+	# The original's size, which every pixel box in the .json is measured in
+	# (draft 28's 2000 x 1120 when a .json leaves it out).
+	var size := _vector(data.get("size", []), Vector2(2000, 1120))
+	var crop_uv := _box(data.get("crop", []), size, Rect2(0, 0, 1, 1))
+	var out := {
+		"cursor_from": String(data.get("cursor_from", character_id)),
+		"size": size,
+		"crop": crop_uv,
+		"dark_region": _box(data.get("dark_region", []), size, Rect2()),
+		"warm_region": _box(data.get("warm_region", []), size, Rect2()),
+		"aspect": (crop_uv.size.x * size.x) / maxf(crop_uv.size.y * size.y, 1.0),
+	}
+	var pool_box: Array = data.get("pool", [])
+
+	if pool_box.size() == 4:
+		out["pool"] = Rect2(pool_box[0], pool_box[1], float(pool_box[2]) - float(pool_box[0]), float(pool_box[3]) - float(pool_box[1]))
+
+	for key in ["pool_strength", "cursor_tip", "cursor_saturation", "cursor_tint_amount"]:
+		if data.has(key):
+			out[key] = float(data[key])
+
+	var tint: Array = data.get("cursor_tint", [])
+
+	if tint.size() == 3:
+		out["cursor_tint"] = Color8(int(tint[0]), int(tint[1]), int(tint[2]))
+
+	for key in ["breathe", "eyes"]:
+		var rects: Array[Rect2] = []
+
+		for r in data.get(key, []):
+			rects.append(Rect2(r[0], r[1], r[2], r[3]))
+
+		out[key] = rects
+
+	return out
 
 
 ## The panel's width over its height (the crop's).
@@ -140,10 +198,9 @@ func face_aspect() -> float:
 # Loading
 
 func _load(character_id: String) -> void:
-	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(root + character_id + ".json"))
+	var data := _read(character_id)
 
-	if not data is Dictionary:
-		push_warning("TalkSkin: %s%s.json is not a skin; the plain box instead" % [root, character_id])
+	if data.is_empty():
 		return
 
 	var folder := root + character_id + "/"
@@ -155,41 +212,37 @@ func _load(character_id: String) -> void:
 		portrait = null
 		return
 
-	var cursor_folder := root + String(data.get("cursor_from", character_id)) + "/"
+	var cursor_path := root + String(data["cursor_from"]) + "/cursor.png"
 
-	if FileAccess.file_exists(cursor_folder + "cursor.png"):
-		cursor = _painting(cursor_folder + "cursor.png")
+	if _available(cursor_path):
+		cursor = _painting(cursor_path)
 
-	# The original's size, which every pixel box in the .json is measured in.
-	var size := _vector(data.get("size", []), Vector2(backdrop.get_width(), backdrop.get_height()))
-	crop = _box(data.get("crop", []), size, Rect2(0, 0, 1, 1))
-	dark_region = _box(data.get("dark_region", []), size, Rect2())
-	warm_region = _box(data.get("warm_region", []), size, Rect2())
-	var pool_box: Array = data.get("pool", [])
-
-	if pool_box.size() == 4:
-		pool = Rect2(pool_box[0], pool_box[1], float(pool_box[2]) - float(pool_box[0]), float(pool_box[3]) - float(pool_box[1]))
-
-	pool_strength = float(data.get("pool_strength", pool_strength))
-	cursor_tip = float(data.get("cursor_tip", cursor_tip))
-	cursor_saturation = float(data.get("cursor_saturation", cursor_saturation))
-	var tint: Array = data.get("cursor_tint", [])
-
-	if tint.size() == 3:
-		cursor_tint = Color8(int(tint[0]), int(tint[1]), int(tint[2]))
-
-	cursor_tint_amount = float(data.get("cursor_tint_amount", 0.0))
-
-	for r in data.get("breathe", []):
-		breathe.append(Rect2(r[0], r[1], r[2], r[3]))
-
-	for r in data.get("eyes", []):
-		eyes.append(Rect2(r[0], r[1], r[2], r[3]))
+	crop = data["crop"]
+	dark_region = data["dark_region"]
+	warm_region = data["warm_region"]
+	pool = data.get("pool", pool)
+	pool_strength = data.get("pool_strength", pool_strength)
+	cursor_tip = data.get("cursor_tip", cursor_tip)
+	cursor_saturation = data.get("cursor_saturation", cursor_saturation)
+	cursor_tint = data.get("cursor_tint", cursor_tint)
+	cursor_tint_amount = data.get("cursor_tint_amount", cursor_tint_amount)
+	breathe = data["breathe"]
+	eyes = data["eyes"]
 
 
-## A painting at full size with its mipmaps: the imported texture's image if
-## the editor has imported it, else the PNG read straight off the disk.
+## Whether a painting can be had: imported (the editor's import, and what an
+## exported game carries), or, in the editor and its test runs only, the PNG
+## on the disk as tools/prepare_talk_art.py left it.
+static func _available(path: String) -> bool:
+	return ResourceLoader.exists(path, "Texture2D") or (OS.has_feature("editor") and FileAccess.file_exists(path))
+
+
+## A painting at full size with its mipmaps, decoded once and kept: the
+## imported texture's image, else (the editor only) the PNG off the disk.
 static func _painting(path: String) -> Texture2D:
+	if _cache.has(path):
+		return _cache[path]
+
 	var image: Image = null
 
 	if ResourceLoader.exists(path, "Texture2D"):
@@ -198,7 +251,7 @@ static func _painting(path: String) -> Texture2D:
 		if imported != null:
 			image = imported.get_image()
 
-	if image == null:
+	if image == null and OS.has_feature("editor") and FileAccess.file_exists(path):
 		image = Image.load_from_file(ProjectSettings.globalize_path(path))
 
 	if image == null or image.is_empty():
@@ -210,7 +263,10 @@ static func _painting(path: String) -> Texture2D:
 	if not image.has_mipmaps():
 		image.generate_mipmaps()
 
-	return ImageTexture.create_from_image(image)
+	decodes += 1
+	var texture := ImageTexture.create_from_image(image)
+	_cache[path] = texture
+	return texture
 
 
 static func _vector(list: Array, fallback: Vector2) -> Vector2:

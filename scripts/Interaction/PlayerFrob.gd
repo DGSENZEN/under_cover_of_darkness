@@ -387,12 +387,18 @@ func talking() -> Node:
 
 ## Free to talk: nothing held, shouldered or up to read, no key turning or
 ## lock being picked, no blow or throw under way, on your feet, alive, and no
-## talk up already.
+## talk box about at all (up, or still lifting off: E pressed again as it
+## closes opens nothing).
 func can_talk() -> bool:
 	var hands: Node = player.hand
 	return held == null and shouldered == null and not _unlocking and _picking == null and not _page_up() and _hands_free() \
-		and _combat_idle() and _swing_windup < 0.0 and _tool_windup < 0.0 and not player.is_dead and talking() == null \
+		and _combat_idle() and _swing_windup < 0.0 and _tool_windup < 0.0 and not player.is_dead and not _box_about() \
 		and (hands == null or not hands.has_method("is_busy") or not hands.is_busy())
+
+
+## A talk box still in the tree: up, or lifting off.
+func _box_about() -> bool:
+	return _talk != null and is_instance_valid(_talk) and not _talk.is_queued_for_deletion()
 
 
 ## Something one talks to (a Shade).
@@ -511,11 +517,9 @@ func current_prompt() -> String:
 ## Returns Array of [action: StringName, label: String] HUD rows.
 ## An empty action denotes status text; an empty array means no available rows.
 func current_actions() -> Array:
-	# Talking: the box's rows (Continue or Choose, and walking away).
-	var box := talking()
-
-	if box != null:
-		return box.prompt_rows()
+	# Talking: no rows at all (the user's call: the box speaks for itself).
+	if talking() != null:
+		return []
 
 	if _unlocking:
 		return []
@@ -550,6 +554,10 @@ func current_actions() -> Array:
 		return [[&"", prompt]]
 
 	# Someone to talk to, with your hands full (a ledge, a blow): not now.
+	# (The box just closed and still lifting off: nothing yet.)
+	if _talks(target) and _box_about():
+		return []
+
 	if _talks(target) and not can_talk():
 		return [[&"", "Hands busy"]]
 
