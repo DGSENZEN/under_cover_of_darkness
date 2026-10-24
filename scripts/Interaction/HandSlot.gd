@@ -588,16 +588,31 @@ func set_revolver_parts(cylinder_turn: float, hammer: float, gate: float) -> voi
 		gate_part.transform = (_main_item.get_meta(&"gate_at") as Transform3D) * Transform3D(Basis(Vector3.UP, 1.4 * gate), Vector3.ZERO)
 
 
-## Where the revolver's loading gate is in the world (the viewmodel is a
-## miniature in front of the camera: its place grown back to full size).
+## Where the revolver's loading gate is in the world.
 func gate_world_position() -> Vector3:
 	var gate: Node3D = _gun_parts.get(&"gate")
+	return _to_world(gate.global_position) if gate != null else global_position
+
+
+## A point of the gun in hand (in the gun's own space) as it is in the
+## world: the viewmodel is a miniature in front of the camera, so its place
+## is grown back to full size.
+func gun_point_world(local: Vector3) -> Vector3:
+	return _to_world(_main_mesh.global_transform * local)
+
+
+## The gun's mesh in your view (for what hangs off it: the muzzle flash).
+func gun_mesh() -> MeshInstance3D:
+	return _main_mesh
+
+
+func _to_world(in_miniature: Vector3) -> Vector3:
 	var camera := get_parent_node_3d()
 
-	if gate == null or camera == null:
-		return global_position
+	if camera == null:
+		return in_miniature
 
-	var in_view := camera.global_transform.affine_inverse() * gate.global_position
+	var in_view := camera.global_transform.affine_inverse() * in_miniature
 	return camera.global_transform * (in_view / ViewArmsScript.SCALE)
 
 

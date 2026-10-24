@@ -17,6 +17,7 @@ const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const Casings := preload("res://scripts/Visual/Casings.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const GunFx := preload("res://scripts/Visual/GunFx.gd")
 
 
 class Ear:
@@ -694,6 +695,95 @@ func _run() -> void:
 	var louder: float = float(room_tail[1][1]) - float(open_tail[1][1]) if room_tail.size() == 2 and open_tail.size() == 2 else -99.0
 	_check("T2 in a closed room the tail is at least 5 dB louder", louder >= 5.0, "louder by %.1f dB" % louder)
 	await _frames(40)
+
+	# V1 a shot's flash: at the muzzle in your view, two frames, gone
+	revolver.reset_for_practice()
+	_put_player(Vector3(44, 1.05, 36))
+	await _frames(40)
+	Input.action_press("throw")
+	var flashes := []
+	var flash_layer := 0
+
+	for i in 6:
+		await get_tree().physics_frame
+		var now: Array = player.hand.find_children("GunFlash*", "", true, false)
+		flashes.append(now.size())
+
+		if not now.is_empty():
+			flash_layer = (now[0].get_child(0) as VisualInstance3D).layers
+
+		if i == 1:
+			Input.action_release("throw")
+
+	_check("V1 the flash shows at the muzzle in your view for two frames, then is gone",
+		flashes.max() == 1 and flashes.count(1) <= 3 and flashes[-1] == 0 and flash_layer == player.hand.VIEWMODEL_LAYER,
+		"by frame %s layer %d" % [flashes, flash_layer])
+
+	# V2 its smoke hangs, then is gone
+	var smoke_now: int = get_tree().get_nodes_in_group(&"gunfx_smoke").size()
+	await _frames(int(GunFx.SMOKE_LIFE * 60.0) + 5)
+	_check("V2 a shot's smoke is three curls, gone after 1.2 s",
+		smoke_now == 3 and get_tree().get_nodes_in_group(&"gunfx_smoke").is_empty(),
+		"smoke %d, after %d" % [smoke_now, get_tree().get_nodes_in_group(&"gunfx_smoke").size()])
+
+	# V3 a tracer, there and gone
+	await _frames(40)
+	Input.action_press("throw")
+	var traced := 0
+
+	for i in 3:
+		await get_tree().physics_frame
+		traced = maxi(traced, get_tree().get_nodes_in_group(&"gunfx_tracer").size())
+
+	Input.action_release("throw")
+	await _frames(6)
+	_check("V3 a tracer shows, and is gone in a few frames", traced == 1 and get_tree().get_nodes_in_group(&"gunfx_tracer").is_empty(),
+		"traced %d after %d" % [traced, get_tree().get_nodes_in_group(&"gunfx_tracer").size()])
+	await _frames(80)
+
+	# V4 the shell: a wider flash, more smoke, sparks
+	revolver.reset_for_practice()
+	revolver.flip_barrel()
+	await _frames(12)
+	var sparks_before: int = Fx.live(Fx.Kind.SPARK)
+	Input.action_press("throw")
+	var petals := 0
+	var sparked := 0
+
+	for i in 3:
+		await get_tree().physics_frame
+		for f in player.hand.find_children("GunFlash*", "", true, false):
+			petals = maxi(petals, int(f.get_meta(&"petals", 0)))
+		sparked = maxi(sparked, Fx.live(Fx.Kind.SPARK) - sparks_before)
+
+	Input.action_release("throw")
+	var shell_smoke: int = get_tree().get_nodes_in_group(&"gunfx_smoke").size()
+	revolver.flip_barrel()
+	_check("V4 a shell: six petals, five curls of smoke, sparks", petals == 6 and shell_smoke == 5 and sparked > 0,
+		"petals %d smoke %d sparks +%d" % [petals, shell_smoke, sparked])
+	await _frames(150)
+
+	# V5 sixty shots: the effects never pile up, and are all gone after
+	var most_fx := 0
+	Input.action_press("aim")
+	await _frames(20)
+
+	for i in 60:
+		if i % 6 == 0:
+			revolver.reset_for_practice()
+			Input.action_press("aim")
+			await _frames(14)
+
+		await _tap("throw")
+
+		for k in 22:
+			await get_tree().physics_frame
+			most_fx = maxi(most_fx, GunFx.live_count())
+
+	Input.action_release("aim")
+	await _frames(180)
+	_check("V5 sixty shots: never more than 30 effects at once, none left after",
+		most_fx <= 30 and GunFx.live_count() == 0, "most %d after %d" % [most_fx, GunFx.live_count()])
 
 	# R16 in arm's reach, F is a pistol-whip, not a kick
 	revolver.reset_for_practice()

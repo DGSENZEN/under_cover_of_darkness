@@ -10,6 +10,7 @@ const RagdollScript := preload("res://scripts/Visual/Ragdoll.gd")
 const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const Casings := preload("res://scripts/Visual/Casings.gd")
+const GunFx := preload("res://scripts/Visual/GunFx.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -499,6 +500,7 @@ func _pull(gun: Resource) -> void:
 	_apply(record, direction, gun.bullet_damage, &"blast" if empowered else &"bullet", gun)
 	_near_misses(at.origin, record)
 	var muzzle := _muzzle(at, &"muzzle")
+	_show_shot(at, &"muzzle", false, record["point"])
 	_kicked(1.0, gun)
 	SoundBus.emit_sound(muzzle, gun.shot_db, player, &"gunshot")
 	_sound(&"gunshot")
@@ -563,6 +565,8 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 
 
 	var muzzle := _muzzle(at, &"shot_muzzle")
+	_show_shot(at, &"shot_muzzle", true, records[0]["point"])
+	Fx.sparks(player, muzzle, -at.basis.z, 1.6)
 	_kicked(SHELL_KICK, gun)
 	SoundBus.emit_sound(muzzle, gun.shell_db, player, &"gunshot")
 	_sound(&"shellshot")
@@ -627,6 +631,24 @@ func _apply(record: Dictionary, direction: Vector3, damage: float, kind: StringN
 		_deal(record["target"], record, direction, damage, kind, gun)
 	else:
 		_strike_world(record, direction)
+
+
+## The shot seen: the flash at the gun's muzzle in your view, the powder
+## smoke where that muzzle is in the world, a ball's tracer to `struck`.
+func _show_shot(at: Transform3D, which: StringName, shell: bool, struck: Vector3) -> void:
+	var hand: Node = player.hand
+	var gun_mesh: MeshInstance3D = hand.gun_mesh() if hand != null and hand.has_method("gun_mesh") else null
+	var tip: Vector3 = WeaponScript.find(&"revolver").mesh.get_meta(which, Vector3(0, 0.1, -0.32))
+	var muzzle := _muzzle(at, which)
+
+	if gun_mesh != null:
+		GunFx.flash(gun_mesh, tip, shell, _shots)
+		muzzle = hand.gun_point_world(tip)
+
+	GunFx.smoke(player, muzzle, -at.basis.z, shell)
+
+	if not shell:
+		GunFx.tracer(player, muzzle, struck, at.origin)
 
 
 ## A man to burst if this blow kills him (Guard.gib_hint), or not.
