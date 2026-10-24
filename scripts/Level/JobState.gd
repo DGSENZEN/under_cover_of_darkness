@@ -40,6 +40,11 @@ var tally := {}
 var letter_opened := false
 ## The words (JobBook's library).
 var book := {}
+## What people remember (CityState's PeopleState; null where there is none):
+## the job's conditions about talk (said, gave, mood, met, has, purse) are
+## asked of it, and a talk goal done counts as done(x). Not part of the job's
+## own state, so reset() leaves it be.
+var people: RefCounted = null
 
 
 func _init() -> void:
@@ -295,8 +300,8 @@ func _term(term: String) -> bool:
 		return loot >= int(term.substr(term.find(">=") + 2).strip_edges())
 
 	var open := term.find("(")
-	var word := term.substr(0, open)
-	var arg := term.substr(open + 1, term.length() - open - 2)
+	var word := term.substr(0, open) if open >= 0 else ""
+	var arg := term.substr(open + 1, term.length() - open - 2) if open >= 0 else ""
 
 	match word:
 		"took":
@@ -304,6 +309,7 @@ func _term(term: String) -> bool:
 		"arrived":
 			return arrived.has(arg)
 		"done":
-			return done.has(arg)
+			return done.has(arg) or (people != null and people.goal_done(arg))
 
-	return false
+	# The rest is about talk and the player: a job has no character of its own.
+	return people != null and people.term(term, "")

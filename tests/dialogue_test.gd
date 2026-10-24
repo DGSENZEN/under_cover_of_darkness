@@ -10,6 +10,10 @@ extends Node3D
 const DialogueBook := preload("res://scripts/Level/DialogueBook.gd")
 const JobBook := preload("res://scripts/Level/JobBook.gd")
 const Terms := preload("res://scripts/Level/Terms.gd")
+const PeopleState := preload("res://scripts/Level/PeopleState.gd")
+const JobState := preload("res://scripts/Level/JobState.gd")
+const Inventory := preload("res://scripts/Interaction/Inventory.gd")
+const LetterText := preload("res://scripts/UI/LetterText.gd")
 
 ## Two characters and one type, used only by tests (and the suites after).
 const FIXTURES := "res://tests/fixtures/dialogue"
@@ -24,6 +28,7 @@ func _ready() -> void:
 	_links()
 	_edges()
 	_typos()
+	_people()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -377,6 +382,160 @@ func _typos() -> void:
 
 	_check("D17 a Sense line that does not match the grammar is an error, not speech", wrong.is_empty(),
 		"; ".join(wrong) if not wrong.is_empty() else "four broken Sense lines, one error each")
+
+
+# ---------------------------------------------------------------------------
+# P1-P8: what people remember (PeopleState), kept for good
+# ---------------------------------------------------------------------------
+
+func _people() -> void:
+	DialogueBook.use(DialogueBook.load_dir(FIXTURES))
+
+	var people: RefCounted = PeopleState.new()
+	people.set_flag("a", "x")
+	people.add_mood("a", 2)
+	people.meet("a")
+	_check("P1 flags, moods and met are per character",
+		people.holds("said(x)", "a") and not people.holds("said(x)", "b") and people.holds("said(a.x)", "b")
+		and people.holds("mood>=2, mood(a)>=2, not(mood(a)>=3)", "a") and not people.holds("mood>=1", "b")
+		and people.holds("mood(a)>=1", "b") and people.holds("met", "a") and not people.holds("met", "b")
+		and people.mood_of("a") == 2 and people.mood_of("b") == 0
+		and not people.holds("said(x)", "") and people.holds("said(a.x)", ""),
+		"a said x %s, b %s, from b %s" % [people.holds("said(x)", "a"), people.holds("said(x)", "b"), people.holds("said(a.x)", "b")])
+	people.clear_flag("a", "x")
+	people.record_gave("a", "fx_book")
+	_check("P1b clear_flag forgets, record_gave remembers",
+		not people.holds("said(x)", "a") and people.holds("gave(fx_book)", "a") and people.holds("gave(a.fx_book)", "b")
+		and not people.holds("gave(fx_book)", "b"), "gave %s" % [people.gave])
+
+	var inventory: Node = Inventory.new()
+	inventory.add_belt_item(&"fx_book", "book")
+	inventory.add_loot(5)
+	var kit: RefCounted = PeopleState.new()
+	kit.inventory = inventory
+	var with_it: bool = kit.holds("has(fx_book), purse>=5", "a")
+	var short: bool = not kit.holds("purse>=6", "a") and not kit.holds("has(nothing)", "a")
+	kit.inventory = null
+	_check("P2 has and purse read the inventory",
+		with_it and short and not kit.holds("has(fx_book)", "a") and not kit.holds("purse>=5", "a") and not kit.holds("purse>=0", "a"),
+		"with %s, short %s" % [with_it, short])
+	inventory.free()
+
+	var talk: RefCounted = PeopleState.new()
+	var heard := {"shown": [], "done": [], "noted": []}
+	talk.goal_shown.connect(func(id): heard["shown"].append(id))
+	talk.goal_finished.connect(func(id): heard["done"].append(id))
+	talk.noted.connect(func(id): heard["noted"].append(id))
+	talk.refresh()
+	var quiet: bool = talk.goals_listed().is_empty()
+	talk.set_flag("fx_curandera", "asked")
+	talk.refresh()
+	var shown: Array = talk.goals_listed()
+	var first_ok: bool = shown.size() == 1 and shown[0]["id"] == "fx_bring_book" and shown[0]["kind"] == &"side" and not shown[0]["done"]
+	talk.record_gave("fx_curandera", "fx_book")
+	talk.refresh()
+	var by_condition: bool = talk.goal_done("fx_bring_book") and talk.goals_listed()[0]["done"]
+	var other: RefCounted = PeopleState.new()
+	other.show_goal("fx_bring_book")
+	other.finish_goal("fx_bring_book")
+	other.finish_goal("fx_bring_book")
+	_check("P3 a talk goal shows on said() and is done by its done: or by finish_goal()",
+		quiet and first_ok and by_condition and heard["shown"] == ["fx_bring_book"] and heard["done"] == ["fx_bring_book"]
+		and heard["noted"] == ["fx_book_note"] and talk.notes == ["fx_book_note"]
+		and other.goal_done("fx_bring_book") and other.goals_listed()[0]["done"] and not talk.goal_done("nope"),
+		"quiet %s, listed %s, by_condition %s, heard %s" % [quiet, shown, by_condition, heard])
+
+	var dep := JobBook.check_alone("== goal g\nkind: side\nshows: said(fx_curandera.asked)\ndone: took(y)\ntext: Hear her out.\n", "mission.job")
+	var job: RefCounted = JobState.new()
+	var link: RefCounted = PeopleState.new()
+	job.reset(dep)
+	job.people = link
+	job.refresh()
+	var before: bool = job.shown.is_empty()
+	link.set_flag("fx_curandera", "asked")
+	job.refresh()
+	var then: bool = job.shown.has("g")
+	_check("P4 a .job goal can depend on talk",
+		(dep["errors"] as Array).is_empty() and before and then and job.holds("said(fx_curandera.asked), not(mood(fx_curandera)>=1)") and not job.holds("said(fx_curandera.nope)"),
+		"before %s, then %s" % [before, then])
+
+	var lettered: RefCounted = JobState.new()
+	lettered.reset()
+	var plain := LetterText.sides(lettered)
+	lettered.people = talk
+	var sides := LetterText.sides(lettered)
+	var empty_ok: bool = LetterText.sides(_linked(JobState.new(), PeopleState.new())) == plain
+	_check("P5 the letter lists talk goals and talk notes",
+		sides[0].contains("Bring the curandera her book.") and sides[0].contains("[s]<<Bring the curandera her book.>>[/s]")
+		and plain.size() == 1 and sides.size() == 2 and sides[sides.size() - 1].contains("The curandera wants her book back")
+		and empty_ok and plain[0] != sides[0],
+		"front '%s', sides %d (plain %d)" % [sides[0].right(80), sides.size(), plain.size()])
+
+	_memory_survives()
+	_saved()
+	_belt_look()
+	DialogueBook.reload()
+
+
+func _linked(job: RefCounted, people: RefCounted) -> RefCounted:
+	job.reset()
+	job.people = people
+	return job
+
+
+func _memory_survives() -> void:
+	var people: RefCounted = CityState.people
+	people.set_flag("fx_librarian", "lied")
+	people.add_mood("fx_librarian", -1)
+	people.show_goal("fx_bring_book")
+	people.finish_goal("fx_bring_book")
+	CityState.begin()
+	var kept: bool = CityState.people.holds("said(fx_librarian.lied), mood(fx_librarian)<=-1", "")
+	var gone: bool = CityState.people.goals_listed().is_empty() and CityState.people.goal_done("fx_bring_book")
+	people.refresh()
+	people.set_flag("fx_curandera", "asked")
+	people.refresh()
+	var quiet: bool = CityState.people.goals_listed().is_empty()
+	_check("P6 memory survives CityState.begin(): flags and moods stay, a done goal leaves the letter and stays done",
+		kept and gone and quiet and CityState.job.people == CityState.people and CityState.people.job == CityState.job,
+		"kept %s, gone %s, quiet %s" % [kept, gone, quiet])
+	CityState.people = PeopleState.new()
+	CityState.begin()
+
+
+func _saved() -> void:
+	var people: RefCounted = PeopleState.new()
+	people.set_flag("fx_curandera", "asked")
+	people.record_gave("fx_curandera", "fx_book")
+	people.add_mood("fx_librarian", -2)
+	people.meet("fx_librarian")
+	people.show_goal("fx_bring_book")
+	people.learn("fx_book_note")
+	var copy: RefCounted = PeopleState.new()
+	copy.load_state(people.save_state())
+	var alike: bool = copy.said == people.said and copy.gave == people.gave and copy.moods == people.moods and copy.met == people.met \
+		and copy.goals_shown == people.goals_shown and copy.goals_done == people.goals_done and copy.notes == people.notes
+	people.finish_goal("fx_bring_book")
+	var apart: bool = copy.goals_done.is_empty() and copy.said["fx_curandera"] == ["asked"]
+	copy.load_state(people.save_state())
+	_check("P7 save_state/load_state round-trips every field into a fresh PeopleState",
+		alike and apart and copy.goals_done == ["fx_bring_book"] and copy.holds("mood(fx_librarian)<=-2, met, gave(fx_curandera.fx_book)", "fx_librarian"),
+		"state %s" % [copy.save_state()])
+
+
+func _belt_look() -> void:
+	var held: Node = Inventory.new()
+	held.add_belt_item(&"fx_book", "The Fx Book")
+	held.add_belt_item(&"lockpick", "lockpick")
+	var state: Dictionary = held.save_state()
+	var back: Node = Inventory.new()
+	back.load_state(state)
+	var book: Mesh = back.belt[0]["mesh"]
+	var pick: Mesh = back.belt[1]["mesh"]
+	_check("P8 a dialogue item keeps its mesh across a gate (and a tool its own)",
+		book != null and book is BoxMesh and pick != null and not pick is BoxMesh, "book %s, pick %s" % [book, pick])
+	held.free()
+	back.free()
 
 
 func _entry(parsed: Dictionary, kind: String, id: String) -> Dictionary:

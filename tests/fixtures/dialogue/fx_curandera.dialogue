@@ -50,4 +50,9 @@ intent: the book the curandera wants
 kind: side
 shows: said(fx_curandera.asked)
 done: gave(fx_curandera.fx_book)
+note: fx_book_note
 text: <<Bring the curandera her book.>>
+
+== note fx_book_note
+intent: what the player jots down when the curandera asks for her book
+text: The curandera wants her book back from the librarian.
