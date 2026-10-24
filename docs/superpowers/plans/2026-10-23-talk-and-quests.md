@@ -278,6 +278,8 @@
 
 ### Task 6: The talk box and the player
 
+> **Amended 2026-10-23 (the user):** the box uses the draft-28 painted UI for every character, not mockup A. Task 6 builds the layout, the swipe and edge shaders, and the default skin (generated panel, live portrait). Task 6b only loads a character's paintings and adds the living-painting effects. The tests are B1–B7, plus B9 and B10 (layout numbers) moved here from 6b.
+
 **Files:**
 - Create: `scripts/UI/TalkBox.gd`
 - Modify:
@@ -344,6 +346,7 @@ The spec's "Character skins" section was settled with the user over 28 drafts. *
   - `set_choice(index)`, `cue(what: StringName)`, `reveal(on: bool)`.
 - The paintings are sampled with mipmaps and linear filtering, and are only ever scaled down. They must not go through the Retro autoload's nearest/pixel-grid look; the box is UI on its own CanvasLayer, above the retro pass.
 
+- [ ] **Step 0: The librarian too.** His paintings are in `assets/ui/talk/librarian/originals/` (backdrop and portrait). His cursor is the curandera's, tinted red, and his crop and swipe regions are given in the spec's "The librarian's skin". Everything below applies to both characters: write `assets/ui/talk/librarian.json` beside `curandera.json`, and stage his still beside `.superpowers/talkbox/librarian2.jpg`.
 - [ ] **Step 1: Prepare the curandera's art.** Run `python3 -I tools/prepare_talk_art.py curandera`. Expected: `backdrop.png`, `portrait.png` and `cursor.png` in `assets/ui/talk/curandera/`, with the cursor's corners having alpha 0.
 - [ ] **Step 2: Write the failing tests.**
   - `B8 a skinned character opens the painted box, an unskinned one the plain box`: the curandera fixture with a skin folder, and the librarian without one.
@@ -356,6 +359,32 @@ The spec's "Character skins" section was settled with the user over 28 drafts. *
 - [ ] **Step 5: Run** dialogue_test. Expected: B1–B12 PASS.
 - [ ] **Step 6: Stage** a windowed still at 1920×1080 of the curandera's box in the talk gym, with the same line and four options as draft 28, the first option chosen. Put it **side by side with `draft28.jpg`** and inspect close-ups of the portrait edge, the panel's right edge and the chosen swipe. Fix every difference, or name it as unfinished.
 - [ ] **Step 7: Commit** with `feat(dialogue): the curandera's painted talk box`. Don't commit the paintings; they are gitignored. Do commit the README, curandera.json, the tool and the scripts.
+
+### Task 6c: Magic options (school shaders)
+
+The spec's "Magic options get their school's shader" applies here.
+
+**Files:**
+- Modify:
+  - `scripts/Level/DialogueBook.gd`: the option grammar accepts `!<school>` after the `>`, and option dicts gain a `school` field (`""` for a bare `!`). The sense lines' `school` is already parsed.
+  - `scripts/Level/Terms.gd`, if a school list is needed.
+  - `scripts/Interaction/Conversation.gd`: the `options` signal items carry `school`.
+  - `scripts/UI/talk_swipe.gdshader`, plus a new `scripts/UI/talk_school.gdshaderinc`, or one shader per school if that is cleaner.
+  - `scripts/UI/TalkBox.gd`.
+- Test: `tests/dialogue_test.gd`
+
+**The schools:** obsidian, copal, seance, nahual, lumen, relic. An unknown school is a load error with file:line.
+
+- [ ] **Step 1: Failing tests.**
+  - D22: `> !obsidian <<x>> -> end` parses as `special=true` with `school="obsidian"`. `> !lava` is an error.
+  - C12: the options signal carries the school.
+  - B17: an obsidian option's swipe uses the obsidian treatment, both chosen and unchosen, and a bare `!` keeps the plain special look.
+- [ ] **Step 2:** Implement the grammar, then the runner field, then the shader.
+  - **Obsidian:** a black volcanic-glass fill, a cold glint (a narrow bright band sliding across every ~2.5 s, faster while chosen), and fine fracture lines from Voronoi edges. The text gets a faint offset doubling, like a reflection.
+  - **The other five:** a simple first look each, in that school's colour and motion: copal smoke drift, séance pale ghost-light pulse, nahual three claw strokes, Lumen arc flicker, relic gilt leaf.
+  - `Sense` lines take the school's text tint and doubling.
+- [ ] **Step 3:** Stage stills of an obsidian option unchosen and chosen, on both skins and on the default skin. Inspect them up close.
+- [ ] **Step 4:** Commit `feat(dialogue): magic options wear their school`.
 
 ### Task 7: The test quest, the gym and the writer's guide
 
