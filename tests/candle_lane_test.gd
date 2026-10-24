@@ -23,6 +23,8 @@ func _ready() -> void:
 	await _nahual_ways()
 	await _wisps()
 	await _people()
+	await _pockets()
+	await _crowd_of_shades()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -395,10 +397,10 @@ func _people() -> void:
 		if at.distance_to(lane.places["niche"]) < 2.0:
 			pockets["niche"].append(pose)
 	pockets["stall"].sort()
-	_check("C12 people stand in their pockets: two at the stall (bargaining, waiting), two kneeling at the ledges, three walking at the mouth; none at his arch or the niche",
-		pockets["stall"] == ["bargaining", "waiting"] and pockets["ledges"].size() == 2
-		and pockets["ledges"].all(func(s): return s.begins_with("kneeling")) and pockets["mouth"].size() == 3
-		and pockets["mouth"].all(func(s): return s.begins_with("walking")) and pockets["arch"].is_empty() and pockets["niche"].is_empty(),
+	_check("C12 people stand in their pockets: two at the stall (bargaining, waiting, moving), two kneeling at the ledges; none standing at his arch, the niche or the mouth (the mouth's people walk)",
+		pockets["stall"] == ["idle_waiting", "talk_bargaining"] and pockets["ledges"].size() == 2
+		and pockets["ledges"].all(func(s): return s.begins_with("kneeling")) and pockets["mouth"].is_empty()
+		and pockets["arch"].is_empty() and pockets["niche"].is_empty(),
 		"%s" % [pockets])
 
 	# Side-on to the way (its face toward the walking line down the lane's middle), on the floor, clear of the way.
@@ -417,7 +419,7 @@ func _people() -> void:
 		if not (faces and floored and clear):
 			wrong.append("%s faces %s floored %s clear %s" % [p.get_meta("pose", ""), faces, floored, clear])
 	_check("C13 every silhouette faces within 60° of the nearest point of the lane's walking line, stands on the floor (foot within 1 cm), and leaves the 1.1 m way clear",
-		people.size() == 7 and wrong.is_empty(), "people %d wrong %s" % [people.size(), wrong])
+		people.size() == 4 and wrong.is_empty(), "people %d wrong %s" % [people.size(), wrong])
 
 	# Seen down the lane they are never edge-on: each turns toward the eye, never more than TURN from where it stands.
 	var eye := Camera3D.new()
@@ -446,7 +448,143 @@ func _people() -> void:
 		return look != null and look.shader.resource_path.ends_with("shade_cutout.gdshader") \
 			and look.get_shader_parameter(&"noise") != null and is_equal_approx(float(look.get_shader_parameter(&"presence")), 1.0))
 	_check("C15 the people are shades: Mignola's ink fraying into climbing smoke, their feet lost in mist",
-		people.size() == 7 and shaded.size() == 7, "shaded %d of %d" % [shaded.size(), people.size()])
+		people.size() == 4 and shaded.size() == 4, "shaded %d of %d" % [shaded.size(), people.size()])
+
+	# The standing pair at her stall move: their frames change by the clock.
+	var stirred := 0
+	var was := people.map(func(p): return p.frame)
+	await _frames(90)
+	for i in people.size():
+		if not people[i].loop.is_empty() and people[i].frame != was[i]:
+			stirred += 1
+	_check("C19 the pair at her stall move: her hands as she bargains, his weight as he waits, their frames turning with the clock",
+		stirred == 2, "moving %d of 2" % stirred)
+
+
+## Task 8: the walk's pockets of loud and quiet, made with light and (marked, silent) sound.
+func _pockets() -> void:
+	var pockets: Array = lane.get("pockets") if lane.get("pockets") != null else []
+	# (Chapel to mouth: from the highest plan x down.)
+	var order := pockets.duplicate()
+	order.sort_custom(func(a, b): return a["x"].y > b["x"].y)
+	var walk := order.map(func(p): return "%s %s" % [p["name"], "loud" if p["loud"] else "quiet"])
+	_check("C16 the pockets alternate along the lane, chapel to mouth: quiet, quiet (arch), loud (stall), quiet (niche), loud (mouth)",
+		walk == ["chapel quiet", "arch quiet", "stall loud", "niche quiet", "mouth loud"], "%s" % [walk])
+
+	# Each pocket's light at eye height in the lane's middle: what lights it most (its colour), and how much in all.
+	var middle: float = (lane.BACK_WALL + lane.FAR_WALL) / 2.0
+	var seen := {}
+	for p: Dictionary in order:
+		var at := lane.to_global(Vector3((p["x"].x + p["x"].y) / 2.0 - lane.PLAN_ORIGIN.x, 1.6, middle))
+		var most := 0.0
+		var colour := Color.BLACK
+		var total := 0.0
+		for light: OmniLight3D in lane.find_children("*", "OmniLight3D", true, false):
+			if not light.is_visible_in_tree() or light.light_energy <= 0.0:
+				continue
+			var d := light.global_position.distance_to(at)
+			var e := light.light_energy * pow(maxf(0.0, 1.0 - d / light.omni_range), 2.0)
+			total += e
+			if e > most:
+				most = e
+				colour = light.light_color
+		seen[p["name"]] = [colour, total]
+	var apart := []
+	for i in order.size():
+		if not order[i]["loud"]:
+			continue
+		for j in [i - 1, i + 1]:
+			if j < 0 or j >= order.size() or order[j]["loud"]:
+				continue
+			var a: Array = seen[order[i]["name"]]
+			var b: Array = seen[order[j]["name"]]
+			var hue := absf(a[0].h - b[0].h) * 360.0
+			hue = minf(hue, 360.0 - hue)
+			var bright := absf(a[1] - b[1]) / maxf(maxf(a[1], b[1]), 0.001)
+			if hue < 30.0 or bright < 0.25:
+				apart.append("%s/%s hue %.0f° brightness %.2f" % [order[i]["name"], order[j]["name"], hue, bright])
+	_check("C17 a loud pocket is lit by a different light from its quiet neighbours: neon or bulb against candle (hues ≥ 30° apart) and its brightness at 1.6 m differs",
+		pockets.size() == 5 and apart.is_empty(), "too alike %s; %s" % [apart, seen])
+
+	# Marked sound: every pocket's emitters named for what will sound there, all silent; nothing of the bay's rejected
+	# sounds playing in the lane (the shop's own are its).
+	var empty := pockets.filter(func(p): return p["emitters"].is_empty()).map(func(p): return p["name"])
+	var sounding := []
+	for player: Node in lane.find_children("*", "AudioStreamPlayer*", true, false):
+		if lane.shop != null and lane.shop.is_ancestor_of(player):
+			continue
+		if player.get("stream") != null:
+			sounding.append(String(player.name))
+	_check("C18 every pocket has its emitters, all silent (no stream), and none of the bay's sounds plays in the lane",
+		pockets.size() == 5 and empty.is_empty() and sounding.is_empty(), "without emitters %s sounding %s" % [empty, sounding.slice(0, 6)])
+
+
+## The crowd coming and going: shades forming, walking their routes with their feet stepping, coming apart; busy at the
+## mouth, rare at the chapel's end; a surge after the dark train; apart when walked into.
+func _crowd_of_shades() -> void:
+	var crowd: Node3D = lane.get("crowd_of_shades")
+	var player: Node3D = lane.get("player")
+	player.global_position = lane.to_global(Vector3(10.0, 1.05, -1.5))
+	var formed := false
+	var stepped := false
+	var gone := 0
+	var at_mouth := 0.0
+	var at_chapel := 0.0
+	var most := 0
+	var off_way := []
+	var started := 0
+	if crowd != null:
+		var seen := {}
+		for f in 3600:
+			await get_tree().process_frame
+			most = maxi(most, crowd.walkers.size())
+			for w: Dictionary in crowd.walkers:
+				var shade: MeshInstance3D = w["shade"]
+				var id := shade.get_instance_id()
+				if not seen.has(id):
+					seen[id] = {"presence": shade.presence, "frame": shade.frame, "rose": false}
+				var s: Dictionary = seen[id]
+				if shade.presence >= 0.999 and s["presence"] < 0.05:
+					s["rose"] = true
+				formed = formed or s["rose"]
+				stepped = stepped or shade.frame != s["frame"]
+				var x: float = lane.plan_point(shade.position).x
+				if x < 0.8:
+					at_mouth += 1.0 / 60.0
+				elif x > 23.0:
+					at_chapel += 1.0 / 60.0
+				# (In the lane, the way down its middle: clear of its walls' pieces and its standing people.)
+				if absf(shade.position.x) < lane.LANE_HALF and (shade.position.z < -0.8 or shade.position.z > 2.8):
+					off_way.append("%s %.1f,%.1f" % [w["route"]["name"], shade.position.x, shade.position.z])
+			for id in seen.keys():
+				if not crowd.walkers.any(func(w): return w["shade"].get_instance_id() == id) and seen[id]["presence"] >= 0.0:
+					gone += 1
+					seen[id]["presence"] = -1.0
+		for n in crowd.started.values():
+			started += n
+	_check("C20 the crowd comes and goes: shades form out of their mist, walk their routes with their feet stepping, come apart; a dozen at most at once",
+		crowd != null and formed and stepped and gone >= 5 and most >= 3 and most <= crowd.POOL + crowd.SURGE.x and off_way.is_empty(),
+		"formed %s stepped %s gone %d most at once %d started %d off the way %s" % [formed, stepped, gone, most, started, off_way.slice(0, 3)])
+	_check("C21 thick at the mouth, rare at the chapel's end (shade-seconds over a minute)",
+		at_mouth > 4.0 * maxf(at_chapel, 1.0), "mouth %.0f s chapel %.0f s" % [at_mouth, at_chapel])
+
+	# A surge after the dark train; a shade walked into comes apart.
+	var surged := 0
+	var scattered := 0
+	if crowd != null and lane.train != null:
+		var before: int = crowd.started["into_lane"]
+		lane.train.began.emit()
+		await _frames(300)
+		surged = crowd.started["into_lane"] - before
+		var walker: Dictionary = crowd.start("into_lane", true)
+		if not walker.is_empty():
+			await _frames(30)
+			var was: int = crowd.scattered
+			player.global_position = walker["shade"].global_position + Vector3(0.0, 1.05, 0.0)
+			await _frames(45)
+			scattered = crowd.scattered - was
+	_check("C22 after the dark train a surge pours in from the mouth; walked into, a shade comes apart",
+		surged >= 4 and scattered >= 1, "surged %d scattered %d" % [surged, scattered])
 
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:

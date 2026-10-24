@@ -9,6 +9,7 @@ const LIBRARY := preload("res://maps/library_lab.tscn")
 const WatchingEyes := preload("res://scripts/Visual/WatchingEyes.gd")
 const WispsScript := preload("res://scripts/Visual/Wisps.gd")
 const Silhouette := preload("res://scripts/Visual/Silhouette.gd")
+const ShadeCrowd := preload("res://scripts/Visual/ShadeCrowd.gd")
 ## Where the lane's middle is in the plan; how far the corridor runs each way from it (m: 28 tile modules, 7 vault spans).
 const PLAN_ORIGIN := Vector3(12.8, -11.0, 74.35)
 const LANE_HALF := 16.8
@@ -86,19 +87,48 @@ const HAUNTS := [Vector4(-6.6, 0.0, 4.35, PI / 2.0), Vector4(-4.1, 0.0, 4.3, PI 
 ## Where its eyes look out of the culvert while it is away: in the dark a hand behind the bars (tools/eclipse/
 ## candle_lane.py CULVERT, CULVERT_DARK).
 const CULVERT_EYES := Vector3(-5.0, 0.34, FAR_WALL - 0.29)
-## The lane's people (scripts/Visual/Silhouette.gd), each side-on to the way, facing along the lane: [pose, where
-## (bay frame, at the foot), its face toward the lane's middle (+1 from the north side, -1 from the south), mirrored
-## (to face the other way)]. At the end of her counter, a woman bargaining and a man waiting his turn; before the
-## chapel, a woman and a man kneeling toward its doorway; at the mouth, the crowd coming in and going out.
+## The lane's standing people (scripts/Visual/Silhouette.gd), each side-on to the way, facing along the lane: [pose
+## or loop, where (bay frame, at the foot), its face toward the lane's middle (+1 from the north side, -1 from the
+## south), mirrored (to face the other way), a loop (moving) or a still]. At the end of her counter, a woman
+## bargaining with her hands and a man shifting his weight, waiting his turn; before the chapel, a woman and a man
+## kneeling toward its doorway, still. (The crowd at the mouth walks: ROUTES.)
 const PEOPLE := [
-	["bargaining", Vector3(0.65, 0.0, 0.1), 1.0, false],
-	["waiting", Vector3(1.85, 0.0, 0.15), 1.0, false],
-	["kneeling_a", Vector3(14.3, 0.0, -0.75), 1.0, true],
-	["kneeling_b", Vector3(13.5, 0.0, 2.95), -1.0, false],
-	["walking_a", Vector3(-15.0, 0.0, -0.5), 1.0, false],
-	["walking_b", Vector3(-14.3, 0.0, 2.8), -1.0, false],
-	["walking_c", Vector3(-15.7, 0.0, 0.1), 1.0, false],
+	["talk_bargaining", Vector3(0.65, 0.0, 0.1), 1.0, false, true],
+	["idle_waiting", Vector3(1.85, 0.0, 0.15), 1.0, false, true],
+	["kneeling_a", Vector3(14.3, 0.0, -0.75), 1.0, true, false],
+	["kneeling_b", Vector3(13.5, 0.0, 2.95), -1.0, false, false],
 ]
+## The crowd's routes (scripts/Visual/ShadeCrowd.gd; bay frame, on the floor): [name, points, every (s, least and most
+## between one setting out and the next), keep (how much of it one walks before it may come apart), along (the
+## chance one forms partway along)]. Thick across the Pasaje beyond the mouth, both ways; now and then into the lane
+## and on through the chapel's doorway; now and then back out, some formed along the way.
+const ROUTES := [
+	["pasaje_south", [Vector3(-18.4, 0.0, 9.5), Vector3(-18.4, 0.0, -7.5)], Vector2(2.0, 4.0), Vector2(0.5, 1.0), 0.3],
+	["pasaje_north", [Vector3(-19.7, 0.0, -7.5), Vector3(-19.7, 0.0, 9.5)], Vector2(2.0, 4.0), Vector2(0.5, 1.0), 0.3],
+	["into_lane", [Vector3(-18.0, 0.0, 2.6), Vector3(-15.5, 0.0, 1.7), Vector3(-6.0, 0.0, 1.6), Vector3(4.0, 0.0, 1.4),
+		Vector3(12.0, 0.0, 1.0), Vector3(16.4, 0.0, 0.2), Vector3(19.4, 0.0, 0.2)], Vector2(5.0, 11.0), Vector2(0.2, 1.0), 0.0],
+	["out_of_lane", [Vector3(19.4, 0.0, 0.4), Vector3(16.4, 0.0, 0.4), Vector3(12.0, 0.0, 1.2), Vector3(4.0, 0.0, 1.0),
+		Vector3(-6.0, 0.0, 1.0), Vector3(-15.5, 0.0, 0.8), Vector3(-18.0, 0.0, -0.6)], Vector2(6.0, 12.0), Vector2(0.3, 1.0), 0.5],
+]
+## The walk's pockets of loud and quiet (the spec's walk, chapel to mouth): [name, loud, plan x from, to, and where
+## each of its sounds will be (bay frame), named for what will sound there]. Sound is marked, silent, until the
+## user's recordings come.
+const POCKETS := [
+	["chapel", false, 23.0, 29.6, {"murmured_prayer": Vector3(14.0, 1.1, 1.1), "votives_crackle": Vector3(12.5, 1.1, -2.0)}],
+	["arch", false, 15.0, 23.0, {"shop_hush": Vector3(6.2, 1.5, 4.2)}],
+	["stall", true, 8.3, 15.0, {"bargaining": Vector3(0.9, 1.5, 0.2), "cart_call": Vector3(-3.0, 1.4, 2.6),
+		"her_radio": Vector3(-0.5, 1.7, -1.6)}],
+	["niche", false, 0.8, 8.3, {"niche_stillness": Vector3(-10.0, 1.4, -2.0)}],
+	["mouth", true, -4.0, 0.8, {"pasaje_crowd": Vector3(-16.0, 1.6, 1.1), "vendors_calling": Vector3(-17.5, 1.6, -3.5),
+		"train_floor": Vector3(-14.5, 0.1, 1.1)}],
+]
+## The pockets' light: the bay's sodium work lamps dimmed and drawn in to her stall (energy, reach; their bounce's
+## energy), her neon's glow (colour, energy, reach), the Pasaje's neon spilling into the mouth (where, colour, energy,
+## reach), the shop's book-light spilling out of his arch (where, colour, energy, reach).
+const WORK_DIM := Vector3(1.1, 6.0, 0.4)
+const STALL_NEON := [Color(1.0, 0.3, 0.6), 1.6, 4.5]
+const MOUTH_NEON := [Vector3(-17.3, 2.4, 1.1), Color(0.25, 0.85, 0.9), 2.3, 5.5]
+const ARCH_SPILL := [Vector3(6.2, 1.9, FAR_WALL - 0.3), Color(1.0, 0.68, 0.38), 0.7, 4.5]
 ## How brightly the backdrops glow (the Pasaje's, the chapel's): dim as the lane's own light, never a lit screen.
 const BACKDROP_GLOW := Vector2(0.035, 0.03)
 ## How much of the stubs' lights the fog takes up.
@@ -127,8 +157,11 @@ var vent_souls: Array[Node3D] = []
 var culvert_eyes: Node3D
 ## The ánimas' warmth slipping out of their ways up into the candles' flames (scripts/Visual/Wisps.gd).
 var wisps: Node3D
-## Its people, black cut-outs (PEOPLE).
+## Its people, shades standing (PEOPLE), and its crowd coming and going (ROUTES).
 var people: Array[MeshInstance3D] = []
+var crowd_of_shades: Node3D
+## The walk's pockets (POCKETS): {name, loud, x (plan x range), emitters (silent, named for their sound), lights}.
+var pockets: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -149,6 +182,8 @@ func _ready() -> void:
 	_vent_souls()
 	_nahual_ways()
 	_people()
+	_hush()
+	_pockets()
 	_stubs()
 	shop = LIBRARY.instantiate()
 	shop.name = "Library"
@@ -232,14 +267,93 @@ func _nahual_ways() -> void:
 ## The people stood in their places (PEOPLE), their faces to the lane's middle.
 func _people() -> void:
 	for spec: Array in PEOPLE:
-		var person: MeshInstance3D = Silhouette.make(spec[0], spec[3])
+		var person: MeshInstance3D = Silhouette.make_loop(spec[0], spec[3]) if spec[4] else Silhouette.make(spec[0], spec[3])
 		if person == null:
-			missing.append(Silhouette.SHEET)
+			missing.append(Silhouette.LOOPS_SHEET if spec[4] else Silhouette.SHEET)
 			return
 		add_child(person)
 		person.position = spec[1]
 		person.rotation.y = 0.0 if spec[2] > 0.0 else PI
 		people.append(person)
+	# The crowd coming and going, and its surge when the dark train has passed.
+	crowd_of_shades = ShadeCrowd.new()
+	crowd_of_shades.name = "shade_crowd"
+	for route: Array in ROUTES:
+		crowd_of_shades.routes.append({"name": route[0], "points": PackedVector3Array(route[1]), "every": route[2],
+			"keep": route[3], "along": route[4]})
+	crowd_of_shades.walked_into_by = player
+	add_child(crowd_of_shades)
+	if train != null:
+		train.began.connect(crowd_of_shades.surge)
+
+
+## The bay's sounds silenced here (all judged bad, Oct 17; the lane's are marked and wait for the user's recordings):
+## its players emptied, its sound-only crowd stilled. (Before the shop comes in: its sounds are its own.)
+func _hush() -> void:
+	if crowd != null:
+		crowd.process_mode = Node.PROCESS_MODE_DISABLED
+	for player: Node in find_children("*", "AudioStreamPlayer*", true, false):
+		player.call("stop")
+		player.set("autoplay", false)
+		player.set("stream", null)
+
+
+## The walk's pockets (POCKETS): each with its emitters, silent, where its sounds will be.
+func _pockets() -> void:
+	for spec: Array in POCKETS:
+		var emitters: Array[AudioStreamPlayer3D] = []
+		for sound: String in spec[4]:
+			var emitter := AudioStreamPlayer3D.new()
+			emitter.name = "sound_%s" % sound
+			emitter.set_meta("pocket", spec[0])
+			add_child(emitter)
+			emitter.position = spec[4][sound]
+			emitters.append(emitter)
+		pockets.append({"name": spec[0], "loud": spec[1], "x": Vector2(spec[2], spec[3]), "emitters": emitters,
+			"lights": []})
+	_pocket_lights()
+
+
+## The pockets made with light: the bay's even sodium drawn in to her stall, her neon glowing, the Pasaje's neon
+## at the mouth, his book-light at the arch; the chapel and the niche left to their candles.
+func _pocket_lights() -> void:
+	var by_name := {}
+	for p in pockets:
+		by_name[p["name"]] = p
+	for lamp in work_lights:
+		lamp.light_energy = WORK_DIM.x
+		lamp.omni_range = WORK_DIM.y
+		by_name["stall"]["lights"].append(lamp)
+	for up in bounce_lights:
+		up.light_energy = WORK_DIM.z
+	# (The train's brownout dims each from its full: their full is this now.)
+	for light in work_lights + bounce_lights:
+		if _full.has(light):
+			_full[light] = light.light_energy
+	# (Her neon sets its own light each frame from its flicker: its strength and reach set on the sign.)
+	if neon != null and neon.light != null:
+		neon.light.light_color = STALL_NEON[0]
+		neon.light_energy = STALL_NEON[1]
+		neon.light_range = STALL_NEON[2]
+		neon.light.omni_range = STALL_NEON[2]
+		by_name["stall"]["lights"].append(neon.light)
+	for spill in [["pasaje_neon", MOUTH_NEON, "mouth"], ["arch_spill", ARCH_SPILL, "arch"]]:
+		var light := OmniLight3D.new()
+		light.name = spill[0]
+		light.light_color = spill[1][1]
+		light.light_energy = spill[1][2]
+		light.omni_range = spill[1][3]
+		light.shadow_enabled = false
+		add_child(light)
+		light.position = spill[1][0]
+		by_name[spill[2]]["lights"].append(light)
+	for flames in candles:
+		var x := plan_point(flames.position).x
+		for p in pockets:
+			if x >= p["x"].x and x < p["x"].y:
+				p["lights"].append(flames)
+	if niche_flames != null:
+		by_name["niche"]["lights"].append(niche_flames)
 
 
 ## A point in the lane's frame, in the plan's (x, floor height, y).

@@ -55,7 +55,11 @@ void fragment() {
 	float solid = inner + (n - 0.5) * fray_amount * (1.0 - inner) * by_it - (1.0 - by_it);
 	float low = smoothstep(1.0 - hem, 1.0, uv.y);
 	solid -= low * (0.4 + n * 0.9);
-	solid -= (1.0 - presence) * (1.4 + (n - 0.5) * 0.8);
+	// Forming out of its mist from the feet up (and going back to it the same way): above a ragged line rising with
+	// its presence, nothing of it yet; its whole outline thin while it forms.
+	float up = 1.0 - uv.y;
+	solid -= smoothstep(-0.04, 0.04, up - presence * 1.15 + (n - 0.5) * 0.18) * 2.0;
+	solid -= (1.0 - presence) * 0.35 * (1.0 - inner);
 	// Cut hard where the smoke has eaten it: crisp shapes, not a soft fade.
 	if (solid < 0.3) {
 		discard;

@@ -63,10 +63,22 @@ POSES = [
     ["walking_c", "man", "UAL2_Standard.glb", "Walk_Carry_Loop", 0.3, {},
      ["jacket", "trousers", "sleeves", "boots", "sombrero", "crate"]],
 ]
+# The moving shades (--loops): [name, body, library, action, dress], each a row of LOOP_FRAMES cells through its
+# action: four walkers for the crowd, the bargaining woman's talk and the waiting man's shifting weight.
+LOOPS_OUT = common.ROOT / "textures" / "painted" / "underground" / "shade_loops.png"
+LOOP_FRAMES = 12
+LOOPS = [
+    ["walk_coat", "man", "UAL1_Standard.glb", "Walk_Loop", ["coat", "sleeves", "boots", "fedora"]],
+    ["walk_rebozo", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", ["skirt", "rebozo"]],
+    ["walk_carry", "man", "UAL2_Standard.glb", "Walk_Carry_Loop", ["jacket", "trousers", "sleeves", "boots", "sombrero", "crate"]],
+    ["walk_jacket", "man", "UAL1_Standard.glb", "Walk_Formal_Loop", ["jacket", "trousers", "sleeves", "boots", "fedora"]],
+    ["talk_bargaining", "woman", "UAL1_Standard.glb", "Idle_Talking_Loop", ["skirt", "rebozo", "basket"]],
+    ["idle_waiting", "man", "UAL2_Standard.glb", "Idle_FoldArms_Loop", ["jacket", "trousers", "sleeves", "boots", "fedora"]],
+]
 
 
-def _pose(body, library, action_name, through, turns):
-    """The body in its pose at `through` of the action, standing on the floor: its rig and its bones (world)."""
+def _rigged(body, library, action_name):
+    """A fresh scene with the body on its rig, the action on the rig: (rig, action)."""
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=str(BODIES[body]))
     rig = next(o for o in bpy.data.objects if o.type == "ARMATURE")
@@ -83,6 +95,12 @@ def _pose(body, library, action_name, through, turns):
     rig.animation_data.action = action
     if len(getattr(action, "slots", [])):
         rig.animation_data.action_slot = action.slots[0]
+    return rig, action
+
+
+def _pose(body, library, action_name, through, turns):
+    """The body in its pose at `through` of the action, standing on the floor: its rig and its bones (world)."""
+    rig, action = _rigged(body, library, action_name)
     first, last = action.frame_range
     f = first + (last - first) * through
     scene = bpy.context.scene
@@ -130,10 +148,12 @@ def _dress(bones, dress):
             getattr(dressing, piece)(bones)
 
 
-def _render(px_file):
-    """The figure from its side, black on clear, its feet on the image's foot, the cell's scale; returns the cell's
-    pixels (rows from the top) and which way it faces."""
-    points = _points()
+def _render(px_file, middle=None):
+    """The figure from its side, black on clear, its feet on the image's foot, the cell's scale, its middle (along
+    y; by default its own) the cell's; returns the cell's pixels (rows from the top)."""
+    if middle is None:
+        points = _points()
+        middle = (min(p.y for p in points) + max(p.y for p in points)) / 2.0
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_WORKBENCH"
     scene.display.shading.light = "FLAT"
@@ -142,11 +162,12 @@ def _render(px_file):
     scene.render.film_transparent = True
     scene.render.resolution_x, scene.render.resolution_y = CELL[0] * 2, CELL[1] * 2
     scene.render.image_settings.color_mode = "RGBA"
-    camera = bpy.data.objects.new("side", bpy.data.cameras.new("side"))
-    scene.collection.objects.link(camera)
+    camera = bpy.data.objects.get("side")
+    if camera is None:
+        camera = bpy.data.objects.new("side", bpy.data.cameras.new("side"))
+        scene.collection.objects.link(camera)
     camera.data.type = "ORTHO"
     camera.data.ortho_scale = CELL_M
-    middle = (min(p.y for p in points) + max(p.y for p in points)) / 2.0
     camera.location = (5.0, middle, CELL_M / 2.0)
     camera.rotation_euler = (math.radians(90.0), 0.0, math.radians(90.0))
     scene.camera = camera
@@ -171,6 +192,76 @@ def _facing(bones):
     return "right" if ahead > bones["Head"][0].y else "left"
 
 
+def loops(out):
+    """The moving shades' loops, a row of LOOP_FRAMES cells each, the same scale and look as the still poses; and for
+    each, how long a cycle takes and (walking) how far one carries it."""
+    rows = len(LOOPS)
+    sheet = np.zeros((rows * CELL[1], LOOP_FRAMES * CELL[0], 4), np.float32)
+    meta = {"cell_m": CELL_M, "frames": LOOP_FRAMES, "loops": []}
+    for row, (name, body, library, action_name, dress) in enumerate(LOOPS):
+        rig, action = _rigged(body, library, action_name)
+        scene = bpy.context.scene
+        first, last = action.frame_range
+
+        def at(f):
+            scene.frame_set(int(f), subframe=f - int(f))
+            return {pb.name: (rig.matrix_world @ pb.head, rig.matrix_world @ pb.tail) for pb in rig.pose.bones}
+
+        steps = [first + (last - first) * k / LOOP_FRAMES for k in range(LOOP_FRAMES)]
+        # (One floor and one middle for every frame, so the figure neither bobs off the floor nor slides in its cell.)
+        lows, middles = [], []
+        for f in steps:
+            at(f)
+            points = _points()
+            lows.append(min(p.z for p in points))
+            middles.append((min(p.y for p in points) + max(p.y for p in points)) / 2.0)
+        rig.location.z -= min(lows)
+        middle = sum(middles) / len(middles)
+        # How far a cycle carries it: its planted foot's slide back, frame to frame (walking in place).
+        stride = 0.0
+        if action_name.startswith("Walk"):
+            slides = []
+            for f in range(int(first), int(last)):
+                a, b = at(f)["ball_l"][0], at(f + 1)["ball_l"][0]
+                if a.z < 0.05 and b.z < 0.05 and abs(b.y - a.y) > 1e-4:
+                    slides.append(abs(b.y - a.y))
+            slides.sort()
+            stride = slides[len(slides) // 2] * (last - first) if slides else 0.0
+        height = 0.0
+        facing, head, shoulders = "left", [0.0, 0.0], [0.0, 0.0]
+        for k, f in enumerate(steps):
+            bones = at(f)
+            dressed = set(bpy.data.objects)
+            _dress(bones, dress)
+            height = max(height, max(p.z for p in _points()))
+            if k == 0:
+                facing = _facing(bones)
+                head = [round(bones["Head"][1].y - middle, 3), round(bones["Head"][1].z, 3)]
+                shoulders = [round(bones["spine_03"][1].y - middle, 3), round(bones["spine_03"][1].z, 3)]
+            cell = _render(str(out) + ".cell.png", middle)
+            sheet[row * CELL[1]:(row + 1) * CELL[1], k * CELL[0]:(k + 1) * CELL[0]] = cell
+            # (The frame's clothes undressed again; the eye stays.)
+            for o in [o for o in bpy.data.objects if o not in dressed and o.type == "MESH"]:
+                mesh = o.data
+                bpy.data.objects.remove(o, do_unlink=True)
+                if mesh.users == 0:
+                    bpy.data.meshes.remove(mesh)
+        fps = scene.render.fps / scene.render.fps_base
+        meta["loops"].append({"name": name, "row": row, "height_m": round(height, 3), "facing": facing,
+                              "seconds": round((last - first) / fps, 3), "stride_m": round(stride, 3), "head": head,
+                              "shoulders": shoulders})
+        print("loop %s: %.2f m, %.2f s, stride %.2f m" % (name, height, (last - first) / fps, stride))
+    sheet[..., :3] = 0.0
+    image = bpy.data.images.new("shade_loops", sheet.shape[1], sheet.shape[0], alpha=True)
+    image.pixels = sheet[::-1].ravel()
+    image.filepath_raw = str(out)
+    image.file_format = "PNG"
+    image.save()
+    with open(os.path.splitext(str(out))[0] + ".json", "w") as f:
+        json.dump(meta, f, indent=1)
+    print("wrote", out)
+
+
 def main():
     out = OUT
     only = None
@@ -180,6 +271,9 @@ def main():
             out = arg[len("--out="):]
         elif arg.startswith("--only="):
             only = arg[len("--only="):].split(",")
+    if "--loops" in args:
+        loops(out if out != OUT else LOOPS_OUT)
+        return
     rows = (len(POSES) + COLS - 1) // COLS
     sheet = np.zeros((rows * CELL[1], COLS * CELL[0], 4), np.float32)
     meta = {"cell_m": CELL_M, "poses": []}
