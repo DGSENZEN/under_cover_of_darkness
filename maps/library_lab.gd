@@ -103,6 +103,15 @@ const LECTERNS := [[Vector3(-2.8, 0.0, -0.35), 180.0], [Vector3(3.7, 0.0, -3.0),
 const LECTERN_DESK := Vector3(0.0, 1.0791, 0.0051)
 const LECTERN_SLOPE := 20.0
 
+## His rugs (tools/textures/rugs.py), each come with the estates he buys his books from, or his own: its kind, its
+## middle on the boards, its size (across, along: m, across the room's x), how thick. A Teotitlan rug down the left
+## aisle, a Persian runner down the right, a petate under the front table where his customers stand, a sarape folded
+## into his kneeler before the cage.
+const RUGS := [["zapotec", Vector3(-2.4, 0.0, -2.2), Vector2(1.05, 1.9), 0.012],
+	["persian", Vector3(2.4, 0.0, -2.35), Vector2(0.8, 2.6), 0.012],
+	["petate", Vector3(2.7, 0.0, -0.47), Vector2(1.4, 0.85), 0.008],
+	["sarape", Vector3(-1.85, 0.0, -5.05), Vector2(0.55, 0.4), 0.035]]
+
 ## The shop's own air, whatever map it stands in: its fog thinned (the corridor's haze washed the room from the arch).
 const HAZE_THIN := -0.012
 ## Its painted materials: a warm bounce and a dim warm rim (their own ambient and rim light, laid on as emission; the
@@ -143,6 +152,8 @@ var book_layout: Array = []
 var book_draws: Array[MultiMeshInstance3D] = []
 var live_books: Array[LiveBook] = []
 var book_stands: Array[MeshInstance3D] = []
+## His rugs, by kind.
+var rugs := {}
 ## The books floating under the vault (scripts/Visual/Library/FloatingBooks.gd); the shelves rearranging while
 ## unwatched (ShelfStir.gd).
 var floating: Node3D
@@ -169,6 +180,7 @@ func _ready() -> void:
 	_room()
 	_air()
 	_corner()
+	_rugs()
 	_shelves()
 	_books()
 	if standalone:
@@ -361,6 +373,50 @@ func _ward_candles() -> void:
 	if meshes.has("ward_candles"):
 		ward_candles = _place(meshes["ward_candles"], look, "ward_candles", CORNER_AT, 0.0, false)
 	ward_wicks = _wicks("ward_candles", WARD_WICKS)
+
+
+## His rugs laid on the boards, each its own pattern.
+func _rugs() -> void:
+	for spec: Array in RUGS:
+		var kind: String = spec[0]
+		var picture := _painted(["rug_%s.png" % kind])
+		if picture == null:
+			continue
+		var rug := MeshInstance3D.new()
+		rug.name = "rug_" + kind
+		rug.mesh = _rug(spec[2], spec[3])
+		rug.set_surface_override_material(0, _shop_look(Painterly.material(picture, &"bespoke"), "rug_" + kind))
+		add_child(rug)
+		rug.position = spec[1]
+		rugs[kind] = rug
+
+
+## A rug's slab: its top the whole pattern (across it the picture's width, along it its height), its edges the
+## pattern's own outermost knots carried down to the boards.
+func _rug(size: Vector2, thick: float) -> ArrayMesh:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hx := size.x * 0.5
+	var hz := size.y * 0.5
+	# (Corners of the top from the near left round; its uv: across, then along from the far end.)
+	var top := [Vector3(-hx, thick, hz), Vector3(hx, thick, hz), Vector3(hx, thick, -hz), Vector3(-hx, thick, -hz)]
+	var uv := [Vector2(0.0, 1.0), Vector2(1.0, 1.0), Vector2(1.0, 0.0), Vector2(0.0, 0.0)]
+	_quad(surface, top, uv, Vector3.UP)
+	for k in 4:
+		var a: Vector3 = top[k]
+		var b: Vector3 = top[(k + 1) % 4]
+		var out := (a + b).normalized() * Vector3(1, 0, 1)
+		out = out.normalized()
+		_quad(surface, [Vector3(a.x, 0.0, a.z), Vector3(b.x, 0.0, b.z), b, a], [uv[k], uv[(k + 1) % 4], uv[(k + 1) % 4], uv[k]], out)
+	return surface.commit()
+
+
+func _quad(surface: SurfaceTool, corners: Array, uvs: Array, normal: Vector3) -> void:
+	# (Clockwise seen from outside: Godot's front.)
+	for i in [0, 2, 1, 0, 3, 2]:
+		surface.set_normal(normal)
+		surface.set_uv(uvs[i])
+		surface.add_vertex(corners[i])
 
 
 ## The points a kit's piece marks as wicks (world): a candle's, a lamp's bulb, a hinge's ends.
