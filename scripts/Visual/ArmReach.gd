@@ -24,9 +24,28 @@ const REACH := 0.88
 ## How much of a hand's roll the forearm takes (a forearm turns; a wrist
 ## hardly does): the rest stays in the wrist.
 const FOREARM_ROLL := 0.7
+## This rig's share (the Prosecutor's arms: all of it, ViewArms).
+var forearm_roll := FOREARM_ROLL
 
 ## The person this belongs to.
 var man: Node3D
+## Where each hand's closed pose comes from, as FIST_FROM (the Prosecutor's
+## own arms have their own Fist: ViewArms).
+var fist_from: Array = FIST_FROM
+## The hand poses arms made for holding carry (FPArms): a hand closes toward
+## the one it is asked for, by its curl.
+const POSES := [&"Open", &"Fist", &"Hook", &"Wrap", &"Push", &"SwordGrip", &"Relaxed"]
+## Seconds a hand takes to go over from one pose to another.
+const POSE_FADE := 0.12
+## Whether the man's library has poses of its own to learn (the Prosecutor's
+## arms; a body's animations are not hand poses, whatever their names).
+var learns_poses := false
+## Per hand, the pose asked of it, and what it shows: pose -> share (sums
+## to 1), crossing over to the asked one in POSE_FADE.
+var poses: Array[StringName] = [&"Fist", &"Fist"]
+var pose_weights: Array[Dictionary] = [{}, {}]
+## Pose -> finger bone -> closed rotation.
+var _poses := {}
 ## Per hand, left then right: where it goes (his space), how much it goes
 ## there (0 leaves the animation's), and how closed the fingers are.
 var targets: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
@@ -48,7 +67,22 @@ var elbow_hints: Array[Vector3] = [ELBOW_HINT[0], ELBOW_HINT[1]]
 ## was put (world space), at the last solve. The skeleton's own pose is
 ## restored after drawing, so this is the only record of it.
 var wrist_bend: Array[float] = [0.0, 0.0]
+## How far each wrist is twisted off its rest about the forearm, degrees, at
+## the last solve (what the forearm's roll did not take).
+var wrist_twist: Array[float] = [0.0, 0.0]
 var solved_hands: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+## Per hand, its wrist and fingertips (world space), at the last solve: how
+## big it is drawn (tests measure it on screen).
+var solved_hand_points: Array = [PackedVector3Array(), PackedVector3Array()]
+## Where each shoulder and elbow were put (world space), at the last solve.
+var solved_shoulders: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var solved_elbows: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+## Where the foot was put (world space), at the last solve of a kick.
+var solved_foot := Vector3.ZERO
+## Shoulder to wrist (m, his space): the elbow and wrist joints are pushed
+## out along the bones to make the arms this long. 0 keeps the model's own.
+## (The first-person arms are given a real arm's length: ViewArms.)
+var arm_length := 0.0
 ## Per hand: held on the world (a climb), its target is brought in along the
 ## line from the eye until the arm reaches it bent: drawn about the eye, it
 ## shows in the same place, and the arm takes the body's weight instead of
@@ -58,6 +92,10 @@ var pull_to_eye: Array[bool] = [false, false]
 var eye := Vector3(0.0, 1.62, 0.1)
 ## The eye in the skeleton's space, this solve (it and the goals must share one).
 var _eye_in_skeleton := Vector3.ZERO
+## Both held hands are brought in by the same share of their eye lines, so a
+## single depth (the arms share their materials) puts both back where they
+## hold: -1 when not both are held.
+var _shared_t := -1.0
 ## How bent a held arm stays: this share of its full length.
 const HELD_REACH := 0.93
 
@@ -65,6 +103,8 @@ const HELD_REACH := 0.93
 ## (metres, his space), and whether the arm ran out of length (straight).
 var shoulder_slides: Array[float] = [0.0, 0.0]
 var straight: Array[bool] = [false, false]
+## Per hand, the arm's length (shoulder to wrist) the last solve used.
+var solved_lengths: Array[float] = [0.0, 0.0]
 
 var _index := {}
 ## Finger bone -> [open rotation (rest), closed rotation].
@@ -85,7 +125,7 @@ func _learn_fist() -> void:
 	var library: AnimationLibrary = man.library()
 
 	for side in range(2):
-		var source: Array = FIST_FROM[side]
+		var source: Array = fist_from[side]
 
 		if not library.has_animation(source[0]):
 			continue
@@ -111,6 +151,50 @@ func _learn_fist() -> void:
 				var closed: Quaternion = clip.rotation_track_interpolate(tracks[bone], source[1])
 				_fingers[bone] = [skeleton.get_bone_rest(index).basis.get_rotation_quaternion(), closed]
 
+	_poses.clear()
+
+	if learns_poses:
+		for pose in POSES:
+			if library.has_animation(pose):
+				_poses[pose] = _pose_rotations(skeleton, library.get_animation(pose))
+
+	if not _poses.has(&"Fist"):
+		var fist := {}
+
+		for bone in _fingers:
+			fist[bone] = _fingers[bone][1]
+
+		_poses[&"Fist"] = fist
+
+
+## Each finger bone's rotation in a one-frame pose clip.
+func _pose_rotations(skeleton: Skeleton3D, clip: Animation) -> Dictionary:
+	var out := {}
+
+	for i in range(clip.get_track_count()):
+		if clip.track_get_type(i) != Animation.TYPE_ROTATION_3D:
+			continue
+
+		var path := clip.track_get_path(i)
+
+		if path.get_subname_count() == 0:
+			continue
+
+		var bone := StringName(path.get_subname(0))
+
+		if skeleton.find_bone(bone) >= 0 and String(bone).split("_")[0] in ["index", "middle", "ring", "pinky", "thumb"]:
+			out[bone] = clip.rotation_track_interpolate(i, 0.0)
+
+	return out
+
+
+## Whether a hand can take this pose (else it closes as a fist).
+func has_pose(pose: StringName) -> bool:
+	if _fingers.is_empty():
+		_learn_fist()
+
+	return _poses.has(pose)
+
 
 func _process_modification() -> void:
 	var skeleton := get_skeleton()
@@ -127,9 +211,13 @@ func _process_modification() -> void:
 		if index >= 0:
 			skeleton.set_bone_pose_scale(index, Vector3.ONE * 0.001)
 
+	if arm_length > 0.0:
+		_lengthen_arms(skeleton)
+
 	# His space to the skeleton's.
 	var into := skeleton.global_transform.affine_inverse() * man.global_transform
 	_eye_in_skeleton = into * eye
+	_shared_t = _shared_trim(skeleton, into)
 
 	for side in range(2):
 		if weights[side] > 0.001:
@@ -138,9 +226,15 @@ func _process_modification() -> void:
 		if weights[side] > 0.001 or not curl_only_reaching:
 			_curl(skeleton, side)
 
+		_record_hand(skeleton, side)
+
 	if foot_weight > 0.001:
 		var knee := into.basis * KNEE_HINT
 		_solve(skeleton, LEG[0], LEG[1], LEG[2], into * foot_target, foot_weight, knee, 0.0)
+		var foot := _bone(skeleton, LEG[2])
+
+		if foot >= 0:
+			solved_foot = skeleton.global_transform * skeleton.get_bone_global_pose(foot).origin
 
 
 func _reach(skeleton: Skeleton3D, side: int, into: Transform3D) -> void:
@@ -151,7 +245,13 @@ func _reach(skeleton: Skeleton3D, side: int, into: Transform3D) -> void:
 	var forearm := skeleton.get_bone_global_pose(_bone(skeleton, bones[2])).basis.y.normalized()
 	var hand_pose := skeleton.get_bone_global_pose(_bone(skeleton, bones[3]))
 	wrist_bend[side] = rad_to_deg(forearm.angle_to(hand_pose.basis.y.normalized()))
+	var forearm_basis := skeleton.get_bone_global_pose(_bone(skeleton, bones[2])).basis.orthonormalized()
+	var relative := (forearm_basis.inverse() * hand_pose.basis.orthonormalized()).get_rotation_quaternion()
+	var off_rest := skeleton.get_bone_rest(_bone(skeleton, bones[3])).basis.get_rotation_quaternion().inverse() * relative
+	wrist_twist[side] = absf(rad_to_deg(wrapf(2.0 * atan2(off_rest.y, off_rest.w), -PI, PI)))
 	solved_hands[side] = skeleton.global_transform * hand_pose.origin
+	solved_shoulders[side] = skeleton.global_transform * skeleton.get_bone_global_pose(_bone(skeleton, bones[1])).origin
+	solved_elbows[side] = skeleton.global_transform * skeleton.get_bone_global_pose(_bone(skeleton, bones[2])).origin
 
 
 ## Two-bone IK: `root` and `mid` bend so the end of `mid` (the `tip` bone's
@@ -180,7 +280,10 @@ func _solve(skeleton: Skeleton3D, root_name: StringName, mid_name: StringName, t
 		shoulder_slides[arm] = 0.0
 
 	if arm >= 0 and pull_to_eye[arm]:
-		goal = _toward_eye(skeleton.get_bone_global_pose(root).origin, goal, (a + b) * HELD_REACH)
+		if _shared_t > 0.0:
+			goal = _eye_in_skeleton + (goal - _eye_in_skeleton) * _shared_t
+		else:
+			goal = _toward_eye(skeleton.get_bone_global_pose(root).origin, goal, (a + b) * HELD_REACH)
 
 	if base >= 0 and give > 0.0:
 		var shoulder := skeleton.get_bone_global_pose(root).origin
@@ -201,6 +304,7 @@ func _solve(skeleton: Skeleton3D, root_name: StringName, mid_name: StringName, t
 
 	if arm >= 0:
 		straight[arm] = to.length() >= (a + b) * 0.999
+		solved_lengths[arm] = a + b
 	var along := to.normalized() if to.length() > 0.0001 else (w - s).normalized()
 
 	# The elbow's plane: the reach and the hint.
@@ -230,9 +334,39 @@ func _solve(skeleton: Skeleton3D, root_name: StringName, mid_name: StringName, t
 		var rest := skeleton.get_bone_rest(tip).basis.get_rotation_quaternion()
 		var delta := rest.inverse() * local
 		var roll := wrapf(2.0 * atan2(delta.y, delta.w), -PI, PI)
-		_set_global_rotation(skeleton, mid, forearm * Basis(Vector3.UP, roll * FOREARM_ROLL))
+		_set_global_rotation(skeleton, mid, forearm * Basis(Vector3.UP, roll * forearm_roll))
 
 	_set_global_rotation(skeleton, tip, turn)
+
+
+## With both hands held: the share of the eye line (0..1) that brings both
+## within reach, the smaller of the two. -1 otherwise.
+func _shared_trim(skeleton: Skeleton3D, into: Transform3D) -> float:
+	if not (pull_to_eye[0] and pull_to_eye[1] and weights[0] > 0.001 and weights[1] > 0.001):
+		return -1.0
+
+	var shared := 1.0
+
+	for side in range(2):
+		var bones: Array = ARMS[side]
+		var root := _bone(skeleton, bones[1])
+		var mid := _bone(skeleton, bones[2])
+		var tip := _bone(skeleton, bones[3])
+
+		if root < 0 or mid < 0 or tip < 0:
+			return -1.0
+
+		var shoulder := skeleton.get_bone_global_pose(root).origin
+		var a := shoulder.distance_to(skeleton.get_bone_global_pose(mid).origin)
+		var b := skeleton.get_bone_global_pose(mid).origin.distance_to(skeleton.get_bone_global_pose(tip).origin)
+		var goal: Vector3 = skeleton.get_bone_global_pose(tip).origin.lerp((into * targets[side]).origin, weights[side])
+		var trimmed := _toward_eye(shoulder, goal, (a + b) * HELD_REACH)
+		var line := goal - _eye_in_skeleton
+
+		if line.length() > 0.0001:
+			shared = minf(shared, (trimmed - _eye_in_skeleton).length() / line.length())
+
+	return shared
 
 
 ## The point on the line from the eye to `goal`, as far out as it goes, no
@@ -261,6 +395,28 @@ func _toward_eye(shoulder: Vector3, goal: Vector3, length: float) -> Vector3:
 	return from + d * clampf(t, 0.0, 1.0) if t > 0.0 else goal
 
 
+## The elbow and wrist joints moved out along their bones (their rest offsets,
+## scaled) so shoulder to wrist is arm_length: longer, not thicker.
+func _lengthen_arms(skeleton: Skeleton3D) -> void:
+	for side in range(2):
+		var mid := _bone(skeleton, ARMS[side][2])
+		var tip := _bone(skeleton, ARMS[side][3])
+
+		if mid < 0 or tip < 0:
+			continue
+
+		var upper := skeleton.get_bone_rest(mid).origin
+		var fore := skeleton.get_bone_rest(tip).origin
+		var own := upper.length() + fore.length()
+
+		if own < 0.0001:
+			continue
+
+		var stretch := arm_length / own
+		skeleton.set_bone_pose_position(mid, upper * stretch)
+		skeleton.set_bone_pose_position(tip, fore * stretch)
+
+
 ## Turns `bone` so the direction `from` (skeleton space) becomes `to`.
 func _aim(skeleton: Skeleton3D, bone: int, from: Vector3, to: Vector3) -> void:
 	if from.length() < 0.00001 or to.length() < 0.00001:
@@ -277,9 +433,54 @@ func _set_global_rotation(skeleton: Skeleton3D, bone: int, basis: Basis) -> void
 	skeleton.set_bone_pose_rotation(bone, (parent_basis.inverse() * basis.orthonormalized()).get_rotation_quaternion())
 
 
+## The shown pose's shares move toward the asked one.
+func _fade_pose(side: int) -> void:
+	var want: StringName = poses[side] if _poses.has(poses[side]) else &"Fist"
+	var shares: Dictionary = pose_weights[side]
+
+	# A hand new to holding starts at its pose, not faded in from nothing.
+	if shares.is_empty():
+		shares[want] = 1.0
+		return
+
+	var delta := get_process_delta_time()
+	var step := (delta if delta > 0.0 else 1.0 / 60.0) / POSE_FADE
+
+	if not shares.has(want):
+		shares[want] = 0.0
+
+	var total := 0.0
+
+	for pose in shares.keys():
+		shares[pose] = move_toward(shares[pose], 1.0 if pose == want else 0.0, step)
+
+		if shares[pose] <= 0.0:
+			shares.erase(pose)
+		else:
+			total += shares[pose]
+
+	for pose in shares.keys():
+		shares[pose] /= total
+
+
+## A finger bone's closed rotation: the shown poses, by their shares.
+func _closed(side: int, bone: StringName) -> Quaternion:
+	var out := Quaternion.IDENTITY
+	var so_far := 0.0
+
+	for pose in pose_weights[side]:
+		var share: float = pose_weights[side][pose]
+		var rotation: Quaternion = _poses[pose].get(bone, _fingers[bone][1])
+		so_far += share
+		out = rotation if so_far <= share else out.slerp(rotation, share / so_far)
+
+	return out
+
+
 func _curl(skeleton: Skeleton3D, side: int) -> void:
 	var suffix := "l" if side == 0 else "r"
 	var amount := clampf(curls[side], 0.0, 1.0)
+	_fade_pose(side)
 
 	for finger in FINGERS:
 		for joint in ["01", "02", "03"]:
@@ -289,8 +490,34 @@ func _curl(skeleton: Skeleton3D, side: int) -> void:
 				continue
 
 			var index := _bone(skeleton, bone)
-			var poses: Array = _fingers[bone]
-			skeleton.set_bone_pose_rotation(index, (poses[0] as Quaternion).slerp(poses[1], amount))
+			var rest: Quaternion = _fingers[bone][0]
+			skeleton.set_bone_pose_rotation(index, rest.slerp(_closed(side, bone), amount))
+
+
+## The hand as drawn this solve: its wrist and each fingertip (the last
+## joint carried on by most of the joint before it).
+func _record_hand(skeleton: Skeleton3D, side: int) -> void:
+	var suffix := "l" if side == 0 else "r"
+	var points := PackedVector3Array()
+	var wrist := _bone(skeleton, StringName("hand_" + suffix))
+
+	if wrist < 0:
+		return
+
+	points.append(skeleton.global_transform * skeleton.get_bone_global_pose(wrist).origin)
+
+	for finger in FINGERS:
+		var two := _bone(skeleton, StringName("%s_02_%s" % [finger, suffix]))
+		var three := _bone(skeleton, StringName("%s_03_%s" % [finger, suffix]))
+
+		if two < 0 or three < 0:
+			continue
+
+		var last := skeleton.get_bone_global_pose(three)
+		var length := skeleton.get_bone_global_pose(two).origin.distance_to(last.origin) * 0.85
+		points.append(skeleton.global_transform * (last.origin + last.basis.y.normalized() * length))
+
+	solved_hand_points[side] = points
 
 
 func _bone(skeleton: Skeleton3D, bone: StringName) -> int:

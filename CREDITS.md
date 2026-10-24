@@ -120,6 +120,11 @@ and painted over by `tools/textures/eclipse_atlas.py`:
   (`assets/characters/animations/UAL1_Standard.glb`, `UAL2_Standard.glb`: their walks, idles, talking and folded
   arms): "Universal Animation Library" and "Universal Animation Library 2" by **Quaternius**
   ([quaternius.com](https://quaternius.com)), CC0.
+- **The Prosecutor's hands** (`assets/characters/fp_arms/`) start from "Hand -
+  Realistic" in **Blender Studio's Human Base Meshes** (v1.4.1), CC0
+  ([blender.org](https://www.blender.org/download/demo-files/)). Turned, scaled,
+  rigged, aged and painted for the game by `tools/arms/extract_base_hand.py` and
+  `tools/arms/build_fp_arms.py`.
 
 - **The living words' Latin atlas** (`textures/painted/library/glyphs_latin.png`, baked by
   `tools/textures/library_glyphs.py`): Roboto Bold by **Christian Robertson** (Google), Apache License 2.0,

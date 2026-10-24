@@ -11,6 +11,7 @@ const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const SwingTrailScript := preload("res://scripts/Visual/SwingTrail.gd")
 const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
+const ArmReachScript := preload("res://scripts/Visual/ArmReach.gd")
 const ViewPosesScript := preload("res://scripts/Combat/ViewPoses.gd")
 const HandContactsScript := preload("res://scripts/Interaction/HandContacts.gd")
 const HeldPageScript := preload("res://scripts/Interaction/HeldPage.gd")
@@ -183,14 +184,63 @@ var _right_wanted := false
 var _grip_palms: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
 var _grip_weights: Array[float] = [0.0, 0.0]
 ## How far inside the frame's edge a held hand is kept (degrees).
-const FRAME_MARGIN_DEGREES := 7.0
+const FRAME_MARGIN_DEGREES := 5.0
+## Where each held hand's wrist really goes (this node's space, full size),
+## and the depth the arms are drawn at while holding.
+var _held_wrists: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+## How far into the held, true-size rig the arms are, and how quickly they go.
+var _held_amount := 0.0
+## Per hand, whether its grip is outside the view and drawn at the frame's edge.
+var _grip_clamped: Array[bool] = [false, false]
+const HELD_BLEND := 0.12
+## Holding on, the chest hangs this far below the eye (m) and this far
+## toward the wall: a hanging body's, under its face.
+const CHEST_BELOW_EYE := 0.3
+const CHEST_TOWARD_WALL := 0.25
+## How far his shoulders' middle reaches to a hand (m, a bent arm), and how
+## far under the bottom of the view the chest is kept (degrees).
+const ARM_REACH := 0.57
+const CHEST_VIEW_MARGIN_DEGREES := 8.0
 ## Where the hands go in a landing roll, in camera space (full size): low in
 ## front, forearms crossing, palms in.
+## Where the Prosecutor's empty hands rest (camera space, full size): down by
+## his sides, out of sight, until a resting pose is authored (Oct 17).
+const REST_LEFT := Vector3(-0.30, -0.65, -0.12)
+const REST_RIGHT := Vector3(0.30, -0.65, -0.12)
+## With the Prosecutor's arms, what the right hand holds sits this much nearer
+## the middle of the view (camera space, full size), as Dishonored frames its
+## sword hand: low right, not at the edge.
+const VIEW_SHIFT_MAIN := Vector3(-0.10, 0.04, 0.0)
+## A hand hooked over an edge: how far in from the edge HandContacts puts the
+## palm, how far out from the face the wrist sits, how far under the lip
+## (the knuckles at it), and how far the fingers lean in toward the middle.
+const HOOK_INSET := 0.03
+const HOOK_OFF_FACE := 0.035
+const HOOK_BELOW_LIP := 0.095
+const HOOK_LEAN_IN := 0.2
+## Hanging, the elbows point down (his space), so the forearms rise from below
+## as a hanging climber's do.
+const HANG_ELBOW: Array[Vector3] = [Vector3(-0.35, -1.0, 0.1), Vector3(0.35, -1.0, 0.1)]
 const ROLL_TUCK: Array[Transform3D] = [
 	Transform3D(Basis(Vector3.FORWARD, -0.35) * Basis(Vector3.RIGHT, 0.25), Vector3(-0.13, -0.2, -0.55)),
 	Transform3D(Basis(Vector3.FORWARD, 0.35) * Basis(Vector3.RIGHT, 0.25), Vector3(0.13, -0.19, -0.55)),
 ]
 var _grip_curls: Array[float] = [0.5, 0.5]
+## The pose each holding hand takes (HandContacts.grip_pose), for arms that
+## have it.
+var _grip_poses: Array[StringName] = [&"Fist", &"Fist"]
+## Each holding hand on something upright (a drainpipe, a rope), for arms
+## that can wrap it: held thumb up, the palm in across it, not down on it.
+var _grip_upright: Array[bool] = [false, false]
+## How far out from the hold's middle a hand round an upright sits (m).
+## How much a hand round a pipe follows the forearm's way in (the rest
+## points on into the wall).
+const UPRIGHT_FOLLOW := 0.25
+## A pipe's radius when its hold does not say (Handhold.radius).
+const PIPE_RADIUS := 0.045
+## Most a resting or holding wrist bends off its forearm (degrees): the hand,
+## and what it holds, turn to follow the forearm.
+const MAX_WRIST_BEND := 22.0
 ## Your arms.
 var _arms: Node3D
 ## The page held up to read (HeldPage), made the first time; wanted up or
@@ -308,6 +358,7 @@ func _ready() -> void:
 	_blood_overlay.shader = BLADE_BLOOD
 	_blood_overlay.render_priority = 11 # After the held steel (10).
 	_blood_overlay.set_shader_parameter("z_clip", ViewArmsScript.Z_CLIP)
+	_blood_overlay.set_shader_parameter("fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
 
 	# The smear a blade leaves, drawn over the world like the hands.
 	_trail = SwingTrailScript.new()
@@ -354,6 +405,26 @@ func _find_player() -> CharacterBody3D:
 
 ## Queues lowering/switching to item.mesh; {} or absent/null mesh selects empty hands.
 ## May play the previous item’s stow sound immediately.
+func _unhandled_input(event: InputEvent) -> void:
+	if (
+		event is InputEventKey
+		and (event as InputEventKey).pressed
+		and not (event as InputEventKey).echo
+		and (event as InputEventKey).keycode == KEY_F12
+		and OS.is_debug_build()
+		and _arms != null
+	):
+		# Compare the Prosecutor's own arms with the old (until they are
+		# signed off and replace them).
+		_arms.use_new_arms(not ViewArmsScript.new_arms)
+		_blood_overlay.set_shader_parameter("fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
+		if _trail != null and _trail.has_method("set_view_fov"):
+			_trail.set_view_fov(ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
+		get_viewport().set_input_as_handled()
+
+
 func show_item(item: Dictionary) -> void:
 	# What goes away is heard going: a blade into its sheath, a bow onto the
 	# back. A small blade rings higher.
@@ -1116,7 +1187,9 @@ func _place_hands() -> void:
 	if _view_id != &"" and _view_id != &"bow":
 		frame = _natural(frame)
 
-	_main.transform = Transform3D(frame.basis, frame.origin * ViewArmsScript.SCALE)
+	# (Drawn at the viewmodel's field of view: aimed where the world's camera
+	# would show it, so it keeps its place on screen and is drawn larger.)
+	_main.transform = Transform3D(frame.basis, _for_view_fov(frame.origin + VIEW_SHIFT_MAIN * _view_shift()) * ViewArmsScript.SCALE)
 
 	# The edge's smear, recorded in this node's space so it rides the view.
 	if _trail_on and _main.visible and _has_blade:
@@ -1210,8 +1283,19 @@ func _place_grips() -> void:
 
 			_grip_weights[side] = weight if weight >= 0.03 else 0.0
 			# In this node's space, which rides the camera: full size.
-			_grip_palms[side] = _in_frame(global_transform.affine_inverse() * _contacts.hand(side))
+			var true_palm: Transform3D = global_transform.affine_inverse() * _contacts.hand(side)
+			_grip_palms[side] = _in_frame(true_palm)
+			_grip_clamped[side] = not _grip_palms[side].origin.is_equal_approx(true_palm.origin)
 			_grip_curls[side] = _contacts.curl(side)
+			var gripping: Array = _contacts.grip_pose(side)
+
+			if _arms != null and _arms.has_pose(gripping[0]):
+				_grip_poses[side] = gripping[0]
+				_grip_curls[side] = gripping[1]
+			else:
+				_grip_poses[side] = &"Fist"
+
+			_grip_upright[side] = _grip_poses[side] == &"Wrap" and _contacts.state in [HandContactsScript.State.POLE, HandContactsScript.State.ROPE]
 			strongest = maxf(strongest, weight)
 
 	_gripping = strongest
@@ -1249,6 +1333,66 @@ func _in_frame(palm: Transform3D) -> Transform3D:
 	return Transform3D(turn * palm.basis, turn * at)
 
 
+## Where the chest hangs while the hands hold the world (this node's space,
+## full size): under the face, toward the wall, as a hanging body's is: below
+## the view that looks up at the hands. INF when nothing is held.
+func _chest_under_hands() -> Vector3:
+	if _contacts == null or maxf(_grip_weights[0], _grip_weights[1]) <= 0.05:
+		return Vector3.INF
+
+	var to_local := global_basis.orthonormalized().inverse()
+	var ahead := -global_basis.z
+	var toward_wall := Vector3(ahead.x, 0.0, ahead.z).normalized() if Vector2(ahead.x, ahead.z).length() > 0.05 else Vector3.ZERO
+	var chest: Vector3 = to_local * (Vector3.DOWN * CHEST_BELOW_EYE + toward_wall * CHEST_TOWARD_WALL)
+
+	# (The head leans in to the wall; the chest stays where it hangs.)
+	var leaning = player.get("wall_lean") if player != null else null
+
+	if leaning is Vector3:
+		chest -= to_local * leaning
+
+	# Hauled up toward the hands as far as they need it to be in reach, but
+	# never up into the view: under its bottom edge.
+	var farthest := 0.0
+	var toward := Vector3.ZERO
+
+	for side in range(2):
+		if _grip_weights[side] > 0.05:
+			var hand: Vector3 = _for_view_fov(global_transform.affine_inverse() * _contacts.hand(side).origin)
+			var over := chest.distance_to(hand) - ARM_REACH
+
+			if over > farthest:
+				farthest = over
+				toward = (hand - chest).normalized()
+
+	if farthest > 0.0:
+		chest = _below_view(chest + toward * farthest)
+
+	return chest
+
+
+## A point (this node's space) kept below the bottom edge of the view, with a
+## margin: moved straight down until it is, if it is not.
+func _below_view(point: Vector3) -> Vector3:
+	var camera: Camera3D = player.get("camera") if player != null else null
+
+	if camera == null:
+		return point
+
+	var limit := tan(deg_to_rad(camera.fov * 0.5 + CHEST_VIEW_MARGIN_DEGREES))
+	var depth := -point.z
+
+	if depth <= 0.05:
+		return point
+
+	var highest := -limit * depth
+
+	if point.y > highest:
+		point.y = highest
+
+	return point
+
+
 ## Both hands busy with nothing we draw (a body over the shoulder, dead).
 func _suppressed_for_grips() -> bool:
 	if player == null or player.get("is_dead") == true:
@@ -1260,6 +1404,116 @@ func _suppressed_for_grips() -> bool:
 ## Your arms, reaching for what each hand has: the right the grip of what you
 ## carry (a bow: its string, the bow itself in the left), the left the purse
 ## or whatever it is being handed, both the world when you hold on to it.
+## An empty hand at rest (camera space, full size; the hand bone's frame:
+## fingers +Y, palm on -X right, +X left): down by the side, palm in, out of
+## sight.
+static func _resting(side: int) -> Transform3D:
+	var fingers: Vector3
+	var palm: Vector3
+	var at: Vector3
+
+	if side == 0:
+		at = REST_LEFT
+		fingers = Vector3(-0.05, -1.0, -0.2).normalized()
+		palm = Vector3(1.0, 0.0, 0.0)
+	else:
+		at = REST_RIGHT
+		fingers = Vector3(0.05, -1.0, -0.2).normalized()
+		palm = Vector3(-1.0, 0.0, 0.0)
+
+	var x := palm if side == 0 else -palm
+	x = (x - fingers * x.dot(fingers)).normalized()
+	return Transform3D(Basis(x, fingers, x.cross(fingers)), at)
+
+
+## A point in the view's space (full size) moved toward the view's axis so
+## that, drawn at the viewmodel's field of view (ViewArms.VIEW_FOV), it lands
+## on screen where the world's camera shows it, at the same depth.
+func _for_view_fov(point: Vector3) -> Vector3:
+	var camera: Camera3D = player.get("camera") if player != null else null
+
+	if camera == null:
+		return point
+
+	var view: float = ViewArmsScript.view_fov_for(camera.fov)
+
+	if is_equal_approx(view, camera.fov):
+		return point
+
+	var k := tan(deg_to_rad(view) * 0.5) / tan(deg_to_rad(camera.fov) * 0.5)
+	return Vector3(point.x * k, point.y * k, point.z)
+
+
+## A hand closed round an upright (the view's space, full size), from its
+## palm frame on the pipe's front face (HandContacts: +Y up the pipe, +Z out
+## toward you): the fingers go on the way the forearm comes in (level), the
+## palm against the pipe, thumb up.
+func _round_upright(palm: Transform3D, side: int) -> Transform3D:
+	var hold = player.get("climb_hold") if player != null else null
+	var radius: float = hold.radius if hold != null and hold.get("radius") != null else PIPE_RADIUS
+	var along := palm.basis.y.normalized()
+	var centre := palm.origin - palm.basis.z.normalized() * radius
+	var forearm: Vector3 = _arms.forearm_to(side, _arms.to_rig(Transform3D(Basis.IDENTITY, centre)).origin)
+	var level := forearm - along * forearm.dot(along)
+	# Elbows in, as a climber holds a pipe: the fingers point mostly on into
+	# the wall round the pipe's side, a little the way the forearm comes.
+	var into := -palm.basis.z.normalized()
+	var fingers := (into * (1.0 - UPRIGHT_FOLLOW) + (level.normalized() if level.length() > 0.2 else into) * UPRIGHT_FOLLOW).normalized()
+	# The palm faces the pipe from the side the thumb comes up on.
+	var to_pipe := along.cross(fingers) if side == 1 else fingers.cross(along)
+	to_pipe = to_pipe.normalized()
+	var wrist := centre - to_pipe * (radius + 0.015) - fingers * 0.075
+	var x := -to_pipe if side == 1 else to_pipe
+	return Transform3D(Basis(x, fingers, x.cross(fingers)), wrist)
+
+
+## The turn (about the wrist) that brings a hand to within MAX_WRIST_BEND of
+## its forearm (target in the parent's space, as set_hand takes it).
+func _toward_forearm(side: int, target: Transform3D) -> Basis:
+	var forearm: Vector3 = _arms.forearm_to(side, target.origin)
+	var fingers := target.basis.y.normalized()
+	var off := fingers.angle_to(forearm)
+	var most := deg_to_rad(MAX_WRIST_BEND)
+
+	if off <= most or forearm.length() < 0.01:
+		return Basis.IDENTITY
+
+	var axis := fingers.cross(forearm)
+
+	if axis.length() < 0.0001:
+		return Basis.IDENTITY
+
+	return Basis(axis.normalized(), off - most)
+
+
+## A hand hooked over an edge from below (the view's space, full size): from
+## its palm frame on the top (HandContacts: fingers -Z into the edge, +Y up,
+## +Z out toward you, HOOK_INSET in from the edge), the wrist on the face just
+## under the lip, the fingers up and a little in, the palm to the wall.
+func _hooked_on_face(palm: Transform3D, side: int) -> Transform3D:
+	var out := 1.0 if side == 1 else -1.0
+	var up := palm.basis.y.normalized()
+	var toward := palm.basis.z.normalized()
+	var across := palm.basis.x.normalized()
+	var lip := palm.origin + toward * HOOK_INSET
+	var wrist := lip + toward * HOOK_OFF_FACE - up * HOOK_BELOW_LIP
+	var fingers := (up - across * out * HOOK_LEAN_IN).normalized()
+	# The hand bone's palm axis is -X (right hand) or +X (left): to the wall.
+	var x := toward * out
+	x = (x - fingers * x.dot(fingers)).normalized()
+	return Transform3D(Basis(x, fingers, x.cross(fingers)), wrist)
+
+
+## How much of the viewmodel's own layout applies (the Prosecutor's arms).
+func _view_shift() -> float:
+	return 1.0 if ViewArmsScript.new_arms else 0.0
+
+
+## `pose` if these arms have it, else a fist (the old arms).
+func _pose_if_had(pose: StringName) -> StringName:
+	return pose if _arms != null and _arms.has_pose(pose) else &"Fist"
+
+
 func _place_arms() -> void:
 	if _arms == null:
 		return
@@ -1268,6 +1522,8 @@ func _place_arms() -> void:
 	var targets: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
 	var weights: Array[float] = [0.0, 0.0]
 	var curls: Array[float] = [0.35, 0.35]
+	# What each hand closes toward (a fist, for arms with no other poses).
+	var poses: Array[StringName] = [&"Fist", &"Fist"]
 	var bow := _main_item != null and _main_item.has_meta(&"draw_sound")
 
 	var braced := 0.0
@@ -1282,6 +1538,7 @@ func _place_arms() -> void:
 			targets[0] = _around_stave(_held_by(held, BOW_GRIP), held.basis.y)
 			weights[0] = 1.0
 			curls[0] = 1.0
+			poses[0] = _pose_if_had(&"Wrap")
 			var drawn := _main.transform * _main_mesh.transform * Transform3D(Basis.IDENTITY, _nock_point())
 			targets[1] = _held_by(Transform3D(held.basis, drawn.origin), STRING_GRIP)
 			weights[1] = 1.0
@@ -1294,6 +1551,8 @@ func _place_arms() -> void:
 			targets[1] = _held_by(held, HAND_GRIP)
 			weights[1] = 1.0
 			curls[1] = 1.0
+			# Round the handle: a sword's grip (the thumb along it).
+			poses[1] = _pose_if_had(&"SwordGrip")
 
 			# A braced block: the left palm on the flat.
 			_brace_shown = move_toward(_brace_shown, _brace if _view_id == &"sword" else 0.0, get_process_delta_time() / 0.08)
@@ -1304,6 +1563,11 @@ func _place_arms() -> void:
 				targets[0] = Transform3D(held.basis * BRACE.basis, held.origin + held.basis * (BRACE.origin * at))
 				weights[0] = smoothstep(0.0, 1.0, braced)
 				curls[0] = 0.2
+
+				# The palm flat on the blade.
+				if _arms.has_pose(&"Push"):
+					poses[0] = &"Push"
+					curls[0] = 1.0
 
 	if _off.visible and not dead and not (bow and _main.visible) and braced < 0.5:
 		if _off_item.visible:
@@ -1321,8 +1585,25 @@ func _place_arms() -> void:
 
 		if grip > 0.0:
 			var palm := _grip_palms[side]
+
 			var hand := Transform3D(palm.basis * (_LEDGE_RIGHT if side == 1 else _LEDGE_LEFT), palm * Vector3(0.0, 0.02, 0.07))
-			var shown: Transform3D = ViewArmsScript.shrink(hand)
+
+			# Round an upright (a drainpipe, a rope): a hammer grip that goes
+			# on from the forearm, thumb up, round the pipe's near side and
+			# the fingers round its far side, as a hand holds a pole.
+			if _grip_upright[side]:
+				hand = _round_upright(palm, side)
+
+			# Hanging from an edge, the Prosecutor's hand hangs on its face as
+			# a climber's does (references: Dying Light): fingers up and hooked
+			# over the lip, the back of the hand toward you, the wrist straight.
+			if _grip_poses[side] == &"Hook":
+				hand = _hooked_on_face(palm, side)
+			# Drawn at the viewmodel's field of view: aimed so it lands on its
+			# grip on screen, at the grip's own depth.
+			hand.origin = _for_view_fov(hand.origin)
+			_held_wrists[side] = hand.origin
+			var shown: Transform3D = _arms.to_rig(hand)
 
 			if weights[side] > 0.0:
 				shown = targets[side].interpolate_with(shown, grip)
@@ -1330,6 +1611,9 @@ func _place_arms() -> void:
 			targets[side] = shown
 			weights[side] = maxf(weights[side], smoothstep(0.0, 0.5, grip))
 			curls[side] = lerpf(curls[side], _grip_curls[side], grip)
+
+			if grip > 0.5:
+				poses[side] = _grip_poses[side]
 
 	# Rolling out of a landing: forearms in, crossed low in front, hands loose.
 	var juice = player.get("juice") if player != null else null
@@ -1342,6 +1626,26 @@ func _place_arms() -> void:
 			weights[side] = maxf(weights[side], smoothstep(0.0, 0.4, tuck))
 			curls[side] = lerpf(curls[side], 0.45, tuck)
 
+			if tuck > 0.5:
+				poses[side] = &"Fist"
+
+	# An empty hand of the Prosecutor's own arms rests down by his side, out
+	# of sight (blending into whatever takes it), not left floating out at
+	# arm's length.
+	if ViewArmsScript.new_arms and not dead:
+		for side in range(2):
+			if weights[side] < 1.0:
+				var rest: Transform3D = _resting(side)
+				rest.origin = _for_view_fov(rest.origin)
+				rest = ViewArmsScript.shrink(rest)
+
+				if weights[side] <= 0.0:
+					poses[side] = _pose_if_had(&"Relaxed")
+					curls[side] = 1.0
+
+				targets[side] = rest.interpolate_with(targets[side], weights[side]) if weights[side] > 0.0 else rest
+				weights[side] = 1.0
+
 	# Where the eye really is, in his space: held hands are drawn along the
 	# line from it (ArmReach.pull_to_eye).
 	var camera: Camera3D = player.get("camera") if player != null else null
@@ -1349,11 +1653,46 @@ func _place_arms() -> void:
 	if _arms.reach != null and camera != null and _arms.man != null:
 		_arms.reach.eye = _arms.man.global_transform.affine_inverse() * camera.global_position
 
+	# Holding the world: the arms become true size at true depth (ViewArms.
+	# set_held), so the stone in front of a grip hides the fingers over it.
+	var holding := maxf(_grip_weights[0], _grip_weights[1]) > 0.5 and tuck < 0.01
+
+	# A hold still out of view (reaching up for it on a wall run, a leap) is
+	# not held yet as far as the arms go: they stay the viewmodel, reaching.
 	for side in range(2):
-		_arms.set_hand(side, targets[side], weights[side], curls[side])
+		if _grip_weights[side] > 0.05 and _grip_clamped[side]:
+			holding = false
+	_held_amount = move_toward(_held_amount, 1.0 if holding else 0.0, get_process_delta_time() / HELD_BLEND)
+	_arms.set_held(_held_amount, _chest_under_hands())
+
+	# The Prosecutor's resting hand follows its forearm (a wrist bends
+	# little). (A hand on a held thing or a hold keeps to it: their poses are
+	# set for a straight wrist.)
+	if ViewArmsScript.new_arms and not dead:
+		for side in range(2):
+			if weights[side] < 0.5 or _grip_weights[side] > 0.5 or poses[side] != &"Relaxed":
+				continue
+
+			var turn := _toward_forearm(side, targets[side])
+
+			if turn == Basis.IDENTITY:
+				continue
+
+			targets[side] = Transform3D(turn * targets[side].basis, targets[side].origin)
+
+	for side in range(2):
+		_arms.set_hand(side, targets[side], weights[side], curls[side], poses[side])
 
 		if _arms.reach != null:
-			_arms.reach.pull_to_eye[side] = _grip_weights[side] > 0.05
+			var hanging := _grip_weights[side] > 0.5 and (_grip_poses[side] == &"Hook" or _grip_upright[side])
+			var resting := ViewArmsScript.new_arms and poses[side] == &"Relaxed"
+			# (Hanging or resting, the elbow drops: the forearm rises from below.)
+			_arms.reach.elbow_hints[side] = HANG_ELBOW[side] if hanging or resting else ArmReachScript.ELBOW_HINT[side]
+
+		if _arms.reach != null:
+			# Held hands in view are the true-size rig's; nothing is brought in
+			# toward the eye any more (that drew hands huge in the blend).
+			_arms.reach.pull_to_eye[side] = false
 
 	# The kick: his own right foot where the boot goes.
 	if _kick > 0.0 and not dead:
@@ -1587,6 +1926,7 @@ static func _squeeze(material: BaseMaterial3D) -> void:
 	material.use_z_clip_scale = true
 	material.z_clip_scale = ViewArmsScript.Z_CLIP
 	material.render_priority = 10
+	ViewArmsScript.dress(material)
 
 
 ## Every surface drawn over the world, each with its own look.

@@ -327,6 +327,18 @@ enum MoveState {
 @export var lean_distance := 0.45
 @export var lean_roll_degrees := 11.0
 @export var lean_speed := 9.0
+## Holding on to the world (hanging, on a pipe or ladder) the head leans in
+## toward it, as a climber's does: this far at most (m), never nearer the
+## surface than the clearance. The body (a 0.5 m capsule) stays put; the
+## hands on their holds come near the eye.
+@export var hold_lean := 0.24
+@export var hold_lean_clearance := 0.22
+## Hanging from an edge the head also comes up toward it (m, the view only):
+## the hands grip in the upper middle of the view, not its top corners.
+@export var hang_rise := 0.10
+## On a pipe, rope or ladder the hands hold on the view's middle line, near
+## already: the head leans in only this far (m).
+@export var climb_lean := 0.06
 
 
 @export_category("HUD")
@@ -369,6 +381,8 @@ var is_dead := false
 
 ## -1 leaning fully left, +1 fully right.
 var lean := 0.0
+## How far the head leans in to what you hold (world space): the view only.
+var wall_lean := Vector3.ZERO
 var hud: CanvasLayer = null
 ## How far a stair step moved the body during the last physics tick. The eye
 ## height cancels it at once; the drawn body only gets there over the tick.
@@ -4135,6 +4149,7 @@ func _update_view(delta: float) -> void:
 	neck.position.y = _neck_base_y + _step_view_offset
 
 	_update_lean(delta)
+	_update_wall_lean(delta)
 
 	# Killed: down you go, and your head meets the floor.
 	if is_dead and _death_fall < 1.0:
@@ -4205,7 +4220,7 @@ func _place_camera() -> void:
 	# but the body is only drawn part of the way up it yet: put back what the
 	# drawing has not caught up with, or every step would dip the view.
 	var unfinished := (1.0 - fraction) * _step_change_tick
-	var eye := drawn + global_basis * (neck.position + Vector3.UP * unfinished)
+	var eye := drawn + global_basis * (neck.position + Vector3.UP * unfinished) + wall_lean
 	camera.global_transform = Transform3D(neck.global_basis.orthonormalized(), eye) * juice.view_transform()
 
 
@@ -4235,6 +4250,31 @@ func _update_lean(delta: float) -> void:
 
 	juice.lean_offset = lean * lean_distance
 	juice.lean_roll = -lean * deg_to_rad(lean_roll_degrees)
+
+
+## Holding on, the head leans in to the wall or pipe ahead (the view only,
+## checked against what is there); back again on letting go.
+func _update_wall_lean(delta: float) -> void:
+	var wanted := Vector3.ZERO
+
+	if (movement_state == MoveState.HANGING or movement_state == MoveState.CLIMBING) and not is_dead:
+		var ahead := -global_basis.z
+		ahead = Vector3(ahead.x, 0.0, ahead.z).normalized() if Vector2(ahead.x, ahead.z).length() > 0.01 else Vector3.ZERO
+		var from := neck.global_position
+		var hit := scanner.ray(from, from + ahead * (hold_lean + hold_lean_clearance + _radius))
+
+		if not hit.is_empty():
+			var room: float = from.distance_to(hit["position"]) - hold_lean_clearance
+			var most := hold_lean if movement_state == MoveState.HANGING else climb_lean
+			wanted = ahead * clampf(room, 0.0, most)
+
+		if movement_state == MoveState.HANGING:
+			wanted += Vector3.UP * hang_rise
+
+	wall_lean = wall_lean.lerp(wanted, 1.0 - exp(-8.0 * delta))
+
+	if wall_lean.length() < 0.0005:
+		wall_lean = Vector3.ZERO
 
 
 # Debug

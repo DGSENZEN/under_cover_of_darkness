@@ -15,6 +15,9 @@ const CLIMB := preload("res://scripts/PlayerUtils/ClimbVolume.gd")
 @export var kind := Kind.LEDGE
 ## A ledge's or a pole's length (m). A point ignores it.
 @export var length := 1.0
+## A POLE's own radius (m): a drainpipe of about 9 cm. The hold is its front
+## face; the hands close round it (HandSlot).
+@export var radius := 0.045
 
 
 var _climb: Area3D = null
