@@ -588,6 +588,19 @@ func set_revolver_parts(cylinder_turn: float, hammer: float, gate: float) -> voi
 		gate_part.transform = (_main_item.get_meta(&"gate_at") as Transform3D) * Transform3D(Basis(Vector3.UP, 1.4 * gate), Vector3.ZERO)
 
 
+## Where the revolver's loading gate is in the world (the viewmodel is a
+## miniature in front of the camera: its place grown back to full size).
+func gate_world_position() -> Vector3:
+	var gate: Node3D = _gun_parts.get(&"gate")
+	var camera := get_parent_node_3d()
+
+	if gate == null or camera == null:
+		return global_position
+
+	var in_view := camera.global_transform.affine_inverse() * gate.global_position
+	return camera.global_transform * (in_view / ViewArmsScript.SCALE)
+
+
 ## Tab: the left hand checking (the purse; the revolver's chambers).
 func is_checking() -> bool:
 	return _checking

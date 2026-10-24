@@ -15,6 +15,7 @@ const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 const Gore := preload("res://scripts/Visual/Gore.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
+const Casings := preload("res://scripts/Visual/Casings.gd")
 
 
 class Ear:
@@ -634,6 +635,40 @@ func _run() -> void:
 	_check("W3 out of a sprint, no shot for 0.15 s", out_of_run == 0 and shots.size() == 1,
 		"at 5 frames %d, at 12 frames %d" % [out_of_run, shots.size()])
 	await _frames(40)
+
+	# C1 the reload drops a casing for each spent chamber
+	revolver.reset_for_practice()
+	_put_player(Vector3(44, 1.05, 20))
+	player.get_node("Neck").rotation.x = -0.5
+	await _frames(40)
+	for i in 3:
+		await _tap("throw")
+		await _frames(40)
+	var before_c1: int = Casings.live_count()
+	await _tap("reload")
+	await _frames(20)
+	var dropped: int = Casings.live_count() - before_c1
+	_check("C1 three spent, three casings drop at the reload", dropped == 3, "dropped %d" % dropped)
+	await _frames(200)
+
+	# C2 a full cylinder: no reload, no casings
+	revolver.reset_for_practice()
+	var before_c2: int = Casings.live_count()
+	await _tap("reload")
+	await _frames(20)
+	_check("C2 nothing spent, nothing drops", Casings.live_count() == before_c2 and revolver.loading == revolver.Load.NONE,
+		"casings %d -> %d" % [before_c2, Casings.live_count()])
+	player.get_node("Neck").rotation.x = 0.0
+
+	# C3 casings never pile past 24, and are gone in time
+	var most_c := 0
+	for i in 10:
+		Casings.drop(self, Vector3(46, 1.2, 20), Vector3(1, 0.5, 0), 6)
+		await _frames(30)
+		most_c = maxi(most_c, Casings.live_count())
+	await _frames(660)
+	_check("C3 casings never pass 24, and are gone after 10 s", most_c <= Casings.MAX_LIVE and Casings.live_count() == 0,
+		"most %d after %d" % [most_c, Casings.live_count()])
 
 	# R16 in arm's reach, F is a pistol-whip, not a kick
 	revolver.reset_for_practice()

@@ -9,6 +9,7 @@ const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const RagdollScript := preload("res://scripts/Visual/Ragdoll.gd")
 const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
+const Casings := preload("res://scripts/Visual/Casings.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -399,6 +400,13 @@ func _start_loading(gun: Resource) -> void:
 		loading = Load.GATE
 		_gate_shutting = false
 		drop_aim()
+
+		# The spent brass falls out of the gate as it opens.
+		var spent: int = int(gun.rounds) - int(loaded[&"cylinder"])
+		var hand: Node = player.hand
+
+		if hand != null and hand.has_method("gate_world_position"):
+			Casings.drop(player, hand.gate_world_position(), player.global_basis.x, spent)
 	else:
 		if int(loaded[&"shot"]) >= int(gun.shells) or int(player.inventory.ammo.get(&"shells", 0)) <= 0:
 			return
