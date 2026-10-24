@@ -19,6 +19,8 @@ const DAMAGE := 40.0
 const LIFETIME := 3.0
 ## Its hiss as it goes, and the crack where it lands.
 const HISS_DB := 36.0
+## Seconds before it draws its faint line.
+const STREAK_AFTER := 0.06
 ## How fast it spins about its length (radians a second).
 const SPIN := 14.0
 ## Struck this close to a limb's bone, a killing shard takes that limb.
@@ -101,7 +103,10 @@ func _physics_process(delta: float) -> void:
 	_face_travel()
 	spin = wrapf(spin + SPIN * delta, -1000.0, 1000.0)
 	_turn()
-	Fx.streak(self, global_position - velocity * delta, velocity, 0.06)
+	# Its faint line, once it is clear of the eye (from beside the camera the
+	# line runs down the screen).
+	if _life > STREAK_AFTER:
+		Fx.streak(self, global_position - velocity * delta, velocity, 0.06)
 
 
 func _hit(hit: Dictionary, direction: Vector3) -> void:

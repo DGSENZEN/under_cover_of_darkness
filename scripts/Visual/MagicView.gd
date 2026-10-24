@@ -5,8 +5,9 @@ extends CanvasLayer
 
 const SHADER := preload("res://scripts/Visual/magic_view.gdshader")
 
-## Blink's cold flash, and Empower's umber pulse (70 a minute).
-const COLD := Color("#DDE6F2")
+## Blink's cold flash (#DDE6F2, half see-through), and Empower's umber pulse
+## (70 a minute).
+const COLD := Color(0.867, 0.902, 0.949, 0.55)
 const BEAST := Color("#4A3423")
 const BEAST_BPM := 70.0
 const BEAST_MOST := 0.55

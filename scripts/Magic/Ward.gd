@@ -148,9 +148,11 @@ static func _plume_path(turn: float, tall: float) -> PackedVector3Array:
 ## see-through, big soft shapes (the shot's approved look).
 static func _smoke_look(seed: float) -> ShaderMaterial:
 	var look := MeshVfx.look(CORE, BODY, EDGE, 0.75, 1.0, 0.35, seed)
-	look.set_shader_parameter(&"opacity", 0.6)
-	look.set_shader_parameter(&"tiling", Vector2(0.6, 1.0))
-	look.set_shader_parameter(&"hardness", 0.08)
+	# Feathered and see-through: against the night its bitten shapes read as
+	# blotches if they are hard and thick.
+	look.set_shader_parameter(&"opacity", 0.45)
+	look.set_shader_parameter(&"tiling", Vector2(0.4, 0.6))
+	look.set_shader_parameter(&"hardness", 0.16)
 	look.set_shader_parameter(&"tail_eat", 0.45)
 	look.set_shader_parameter(&"rim", 2.4)
 	look.set_shader_parameter(&"core_reach", 0.5)
