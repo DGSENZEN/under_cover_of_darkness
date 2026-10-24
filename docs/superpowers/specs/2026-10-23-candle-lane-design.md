@@ -137,3 +137,49 @@ The pockets are made with light (candle pools against neon), the crowd's density
 - How the bay's builders are shared by the bay and the set: shared components rather than copies, keeping the bay's suite passing.
 - Exact positions within the order above, light energies, crowd counts, the stub lengths.
 - The test list beyond the constraints, and the stills and clips for each piece's review.
+
+## Implementation status (Oct 24 2026, branch metro-standard, not pushed)
+
+Built by `docs/superpowers/plans/2026-10-23-candle-lane.md`, Tasks 1–10, with the user's revisions along the way.
+
+- **The set** (`maps/candle_lane.tscn`): the bay at 33.6 m (plan x −4 to 29.6), the shop in its south wall at plan x 19, its own pieces (`tools/eclipse/candle_lane.py`):
+  - the chapel's doorway frame;
+  - votive ledges and floor masses of candles;
+  - the milagros board, marigolds, papel picado;
+  - the pipes' works (gas meter, gauge, the air line's hoods);
+  - the culvert;
+  - the mouth's portal;
+  - the station's sign and the arrows, their faces blank.
+- **What lives in it:**
+  - the ánimas from the drain and three vents, each its own kind and size, never crowding into one;
+  - the nahual travelling between four haunts, its eyes in the culvert while it is away;
+  - wisps of the ánimas' warmth drawn into the flames.
+- **Its people are gentle black shades** (`tools/textures/silhouettes.py`, `Silhouette.gd`, `ShadeCrowd.gd`):
+  - the pair at her stall moving;
+  - two kneeling toward the chapel;
+  - a crowd that forms out of its mist and comes apart, thick across the Pasaje beyond the mouth and rare at the chapel, with a surge after the dark train.
+- **The pockets** are made with light: candles at the chapel and the niche, his book-light at the arch, her magenta neon, the Pasaje's teal at the mouth. Every pocket's sound is marked by silent emitters, and the bay's rejected sounds are hushed in the lane.
+- **In the Metro:** `maps/metro.gd` sets it in at its plan origin (registry `SETS`; the greybox skips `candle_lane` and `librarian_shop`). Walked from the Pasaje to the shop's desk and through the chapel into `lane_se`; the floors are level across both seams.
+- **Numbers.** Windowed at 1600×900, the set draws in 8.42 ms against the bay's 8.32 (1.01×), and the shop's 1.1× check passes.
+- **Suites:**
+  - the candle lane C1–C22 with L1–L3, N1–N2 and W1 (28);
+  - the Metro M1–M9;
+  - ánimas A1–A5;
+  - the kit's CandleLane tests;
+  - silhouettes (5);
+  - bay layout B1–B2;
+  - library 23 / 91 / 15;
+  - Underground 63.
+- **Approved by the user:**
+  - the kit and ends;
+  - the crowded, haunted revision;
+  - the seven poses;
+  - the gentler shades;
+  - the walk with its crowd.
+- **Waiting on the user:**
+  - the words and glyphs for the station's sign, the arrows, the puestos' boards and the gauges' dials (all blank `sign` faces);
+  - the Metro recordings for every pocket's emitters (named by sound: `sound_murmured_prayer`, `sound_bargaining`, `sound_pasaje_crowd`, …);
+  - the chapel itself (greybox beyond the doorway).
+- **Open:**
+  - another session's ánimas voices (uncommitted in this checkout) would be silenced in the lane by its hush;
+  - the hush should let them through once they are in.

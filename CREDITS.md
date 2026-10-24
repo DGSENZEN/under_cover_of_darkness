@@ -68,6 +68,9 @@ Every sound in the game is a recording, cut and levelled from the packs below by
   "gas leak" from "FilmCow Recorded SFX" by **FilmCow**, used with the user's approval of the packs.
 - **Thunder**: "100 CC0 SFX #2" by **rubberduck**
   ([OpenGameArt](https://opengameart.org/content/100-cc0-sfx-2)), CC0.
+- **The ánimas' voices** (`anima_voice`, `anima_moan`): "monster_04" from "80 CC0 creature
+  SFX" by **rubberduck** ([OpenGameArt](https://opengameart.org/content/80-cc0-creature-sfx)),
+  CC0; pitched down and flanged; the user's pick (Oct 24 2026).
 - **Lighting a torch, snuffing a flame, dousing one**: the "400 Sounds Pack" (fire
   lighting, an air burst, a splash), with FilmCow's gas leak; used with the user's
   approval (Sept 27 2026).
@@ -110,11 +113,13 @@ and painted over by `tools/textures/eclipse_atlas.py`:
 - **The spectral skull** of the librarian's necromancy books and the dead's faces in their smoke
   (`assets/characters/skull/skull-Low4K.obj`): "human skull" by **CDmir**
   ([OpenGameArt](https://opengameart.org/content/human-skull-0)), CC0. Its own textures are not used.
-- **The base body** behind the alchemists' homunculus and the librarian's shadow
-  (`assets/characters/base`): "Universal Base Characters" by **Quaternius**
+- **The base bodies** behind the alchemists' homunculus, the librarian's shadow and the candle lane's shades
+  (`assets/characters/base`, the male and the female): "Universal Base Characters" by **Quaternius**
   ([quaternius.com](https://quaternius.com)), CC0.
-- **The librarian's shadow's walk** (`assets/characters/animations/UAL1_Standard.glb`, `Walk_Formal_Loop`):
-  "Universal Animation Library" by **Quaternius** ([quaternius.com](https://quaternius.com)), CC0.
+- **The librarian's shadow's walk and the candle lane's shades' poses and loops**
+  (`assets/characters/animations/UAL1_Standard.glb`, `UAL2_Standard.glb`: their walks, idles, talking and folded
+  arms): "Universal Animation Library" and "Universal Animation Library 2" by **Quaternius**
+  ([quaternius.com](https://quaternius.com)), CC0.
 
 - **The living words' Latin atlas** (`textures/painted/library/glyphs_latin.png`, baked by
   `tools/textures/library_glyphs.py`): Roboto Bold by **Christian Robertson** (Google), Apache License 2.0,
