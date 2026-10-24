@@ -2,7 +2,8 @@ extends Node3D
 ## The character dialogue files (the talk and quests spec, section 1): the
 ## .dialogue parser (D1-D4, D16-D17), the words conditions and effects share
 ## (D5), the library with its types and link checks (D6-D15, D18-D19), what
-## people remember (P1-P8) and the conversation runner (C1-C11).
+## people remember (P1-P8), the conversation runner (C1-C11) and the shade
+## who speaks it (S1-S4).
 ##   Godot --headless --fixed-fps 60 --path . res://tests/dialogue_test.tscn
 ##
 ## The words still to write (every text in <<...>>) are printed as WORDS:
@@ -16,6 +17,10 @@ const JobState := preload("res://scripts/Level/JobState.gd")
 const Inventory := preload("res://scripts/Interaction/Inventory.gd")
 const Conversation := preload("res://scripts/Interaction/Conversation.gd")
 const LetterText := preload("res://scripts/UI/LetterText.gd")
+const Shade := preload("res://scripts/Interaction/Shade.gd")
+const SHADE_SHADER := preload("res://scripts/Visual/shade.gdshader")
+const PLAYER := preload("res://Player.tscn")
+const Props := preload("res://scripts/Interaction/Props.gd")
 
 ## Two characters and one type, used only by tests (and the suites after).
 const FIXTURES := "res://tests/fixtures/dialogue"
@@ -32,6 +37,7 @@ func _ready() -> void:
 	_typos()
 	_people()
 	_conversation()
+	await _shade()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -772,6 +778,82 @@ func _conversation() -> void:
 	inventory.free()
 	DialogueBook.reload()
 
+
+
+# ---------------------------------------------------------------------------
+# S1-S4: the shade
+# ---------------------------------------------------------------------------
+
+func _shade() -> void:
+	DialogueBook.use(DialogueBook.load_dir(FIXTURES))
+	var world := WorldEnvironment.new()
+	world.environment = Environment.new()
+	add_child(world)
+	Props.block(self, Vector3(0, -0.5, 0), Vector3(20, 1, 20))
+	var shade: StaticBody3D = Shade.new()
+	shade.character = "fx_curandera"
+	add_child(shade)
+	shade.global_position = Vector3(0, 0, -1.5)
+	await _frames(2)
+	var worn: Array = shade.man.worn() if shade.man != null else []
+	_check("S1 a shade dresses its body and every worn mesh wears the shade material",
+		not worn.is_empty() and shade.dialogue.get("id") == "fx_curandera"
+		and worn.all(func(m): return m.material_override is ShaderMaterial and m.material_override.shader == SHADE_SHADER),
+		"%d worn, shaders %s" % [worn.size(), worn.map(func(m): return m.material_override.shader.resource_path if m.material_override is ShaderMaterial else "none")])
+
+	shade.cue(&"flare")
+	await _frames(60)
+	var flared: float = shade.glow_now()
+	shade.cue(&"dim")
+	await _frames(60)
+	var dimmed: float = shade.glow_now()
+	shade.end_line()
+	await _frames(60)
+	var calmed: float = shade.glow_now()
+	_check("S2 flare raises and dim lowers the glow", flared > 2.0 and dimmed < 0.5 and absf(calmed - 1.0) < 0.05,
+		"flare %.2f, dim %.2f, calm %.2f" % [flared, dimmed, calmed])
+
+	shade.cue(&"flare")
+	await _frames(30)
+	var during: StringName = shade.shade_state()
+	shade.end_line()
+	await _frames(60)
+	var after_line: float = shade.glow_now()
+	var line_state: StringName = shade.shade_state()
+	shade.set_resting(&"dim")
+	shade.cue(&"flare")
+	shade.end_line()
+	await _frames(60)
+	var rested: float = shade.glow_now()
+	var rest_state: StringName = shade.shade_state()
+	_check("S3 a line's cue passes; a resting state stays",
+		during == &"flare" and line_state == &"calm" and absf(after_line - 1.0) < 0.05 and rest_state == &"dim" and rested < 0.5,
+		"during %s, after the line %s %.2f, resting %s %.2f" % [during, line_state, after_line, rest_state, rested])
+	shade.set_resting(&"calm")
+
+	var player: CharacterBody3D = PLAYER.instantiate()
+	player.set("show_hud", false)
+	add_child(player)
+	player.reload_on_death = false
+	player.global_position = Vector3(0, 1.05, 0)
+	await _frames(10)
+	var eye: Vector3 = player.get_node("Neck/Camera3D").global_position
+	var to := shade.global_position + Vector3(0, 1.2, 0) - eye
+	player.rotation.y = atan2(-to.x, -to.z)
+	player.get_node("Neck").rotation.x = atan2(to.y, Vector2(to.x, to.z).length())
+	await _frames(10)
+	var prompt: String = player.frob.current_prompt()
+	_check("S4 the frob ray finds it and its prompt is Talk", player.frob.target == shade and prompt == "Talk",
+		"target %s, prompt '%s'" % [player.frob.target, prompt])
+	player.queue_free()
+	shade.queue_free()
+	await _frames(2)
+	DialogueBook.reload()
+
+
+func _frames(n: int) -> void:
+	for i in n:
+		await get_tree().physics_frame
 
 
 func _entry(parsed: Dictionary, kind: String, id: String) -> Dictionary:
