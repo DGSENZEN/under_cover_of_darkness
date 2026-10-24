@@ -526,26 +526,22 @@ func _on_frobbed(target: Node) -> void:
 	job.took_loot(String(target.name), int(target.value))
 
 
+## A job's note: "Noted" and the pencil (the player's frob hears talk's the
+## same way).
 func _on_noted(_id: String) -> void:
-	if player == null or not is_instance_valid(player):
+	if player == null or not is_instance_valid(player) or player.get("frob") == null:
 		return
 
-	if player.get("hud") != null:
-		player.hud.show_caption("Noted", 1.6)
-
-	SfxScript.play_flat(player, &"pencil")
+	player.frob.hear_noted()
 
 
 ## A main goal done: the score's goal sting (not over another's: Music's
 ## gap); a side goal only the pencil.
 func _on_goal_done(_id: String, kind: StringName) -> void:
-	if player == null or not is_instance_valid(player):
+	if player == null or not is_instance_valid(player) or player.get("frob") == null:
 		return
 
-	if kind == &"main" and TimeFx.real_time() - SfxScript.sting_at >= MusicScript.STING_GAP:
-		SfxScript.play_flat(player, &"sting_goal")
-	elif kind != &"main":
-		SfxScript.play_flat(player, &"pencil")
+	player.frob.hear_goal_done(kind)
 
 
 # The player

@@ -34,7 +34,8 @@ var goals_done: Array[String] = []
 var notes: Array[String] = []
 
 ## The job (took, arrived, loot, done) and the player's inventory (has,
-## purse); either may be null, and then what it answers is false.
+## purse: the player sets it at his ready and clears it as he goes); either
+## may be null, and then what it answers is false.
 var job: RefCounted = null
 var inventory: Node = null
 
@@ -140,7 +141,9 @@ func show_goal(id: String) -> void:
 		push_error("people: no goal '%s'" % id)
 		return
 
-	if goals_shown.has(id):
+	# (A goal done stays done: never back on the letter, not even after a new
+	# mission took it off.)
+	if goals_shown.has(id) or goals_done.has(id):
 		return
 
 	goals_shown.append(id)
@@ -166,6 +169,11 @@ func finish_goal(id: String) -> void:
 
 func goal_done(id: String) -> bool:
 	return goals_done.has(id)
+
+
+## The talk goal's kind (&"main" or &"side"; &"main" for one the words lack).
+func goal_kind(id: String) -> StringName:
+	return StringName(_goal(id).get("kind", &"main"))
 
 
 ## A pencil note, once; one the words do not have is a mistake in them.
@@ -256,7 +264,7 @@ func _goal(id: String) -> Dictionary:
 
 
 func _has(item: String) -> bool:
-	if inventory == null:
+	if not is_instance_valid(inventory):
 		return false
 
 	for entry in inventory.belt:
@@ -278,7 +286,7 @@ func _compare(matched: RegExMatch, character: String) -> bool:
 
 		value = int(job.loot)
 	elif word == "purse":
-		if inventory == null:
+		if not is_instance_valid(inventory):
 			return false
 
 		value = int(inventory.purse)

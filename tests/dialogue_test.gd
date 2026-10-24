@@ -26,6 +26,7 @@ const HumanoidScript := preload("res://scripts/Visual/Humanoid.gd")
 const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const TalkBox := preload("res://scripts/UI/TalkBox.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 ## Two characters and one type, used only by tests (and the suites after).
 const FIXTURES := "res://tests/fixtures/dialogue"
@@ -45,6 +46,7 @@ func _ready() -> void:
 	_conversation()
 	await _shade()
 	await _box()
+	await _belt_and_feedback()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -577,6 +579,7 @@ func _people() -> void:
 	_memory_survives()
 	_saved()
 	_belt_look()
+	_shown_once()
 	DialogueBook.reload()
 
 
@@ -643,6 +646,73 @@ func _belt_look() -> void:
 		book != null and book is BoxMesh and pick != null and not pick is BoxMesh, "book %s, pick %s" % [book, pick])
 	held.free()
 	back.free()
+
+
+## P9: a talk goal finished is not shown again, not even after a new
+## mission took it off the letter (a goal(g) effect on a later visit).
+func _shown_once() -> void:
+	var people: RefCounted = PeopleState.new()
+	var shown := []
+	people.goal_shown.connect(func(id): shown.append(id))
+	people.show_goal("fx_bring_book")
+	people.finish_goal("fx_bring_book")
+	people.show_goal("fx_bring_book")
+	var after_done: Array = people.goals_shown.duplicate()
+	people.begin_mission()
+	people.show_goal("fx_bring_book")
+	_check("P9 show_goal never puts back a goal already done (nor after a new mission took it off the letter)",
+		after_done == ["fx_bring_book"] and people.goals_shown.is_empty() and people.goals_listed().is_empty() and shown == ["fx_bring_book"],
+		"after done %s, after the new mission %s, heard shown %s" % [after_done, people.goals_shown, shown])
+
+
+## P10: the people's inventory is the player's from his ready on (not only
+## once a talk opens), and is let go with him. P11: a talk's note, side goal
+## and main goal are heard as the job's are: "Noted" and the pencil, the
+## pencil, the goal's sting.
+func _belt_and_feedback() -> void:
+	CityState.begin()
+	CityState.people.load_state({})
+	CityState.people.inventory = null
+	var player: CharacterBody3D = PLAYER.instantiate()
+	add_child(player)
+	player.reload_on_death = false
+	player.global_position = Vector3(40, 1.05, 0)
+	await _frames(6)
+	var wired: bool = CityState.people.inventory == player.inventory and player.inventory != null
+	player.inventory.add_loot(4)
+	var reads: bool = CityState.people.holds("purse>=4", "")
+
+	var lib := _alone(["== character a", "== note n1", "text: <<n>>", "== goal gs", "kind: side", "done: said(z)", "text: <<s>>",
+		"== goal gm", "kind: main", "done: said(z)", "text: <<m>>", "== beat open", "A: <<x>>",
+		"> <<Learn.>> -> open {do: note(n1)}", "> <<Side.>> -> open {do: goal(gs), done(gs)}", "> <<Main.>> -> open {do: goal(gm), done(gm)}",
+		"> <<Bye.>> -> end {do: set(z)}"])
+	DialogueBook.use(lib)
+	var talk: RefCounted = Conversation.new(DialogueBook.character("a"), CityState.people, player.inventory)
+	var heard := {}
+	talk.start()
+
+	for pick in [[0, "note"], [1, "side"], [2, "main"]]:
+		_play(talk)
+		Sfx.recording = true
+		Sfx.recorded.clear()
+		Sfx.sting_at = -100.0
+		player.hud.show_caption("", 0.1)
+		talk.choose(int(pick[0]))
+		await _frames(2)
+		heard[pick[1]] = [Sfx.recorded.map(func(r): return String(r[0])), String(player.hud._caption.text)]
+		Sfx.recording = false
+
+	talk.interrupt()
+	player.queue_free()
+	await _frames(3)
+	var let_go: bool = CityState.people.inventory == null and not CityState.people.holds("purse>=0", "")
+	DialogueBook.reload()
+	_check("P10 the people read the player's belt from his ready on, and let it go with him",
+		wired and reads and let_go, "wired %s, purse read %s, let go %s" % [wired, reads, let_go])
+	_check("P11 a talk's note() is 'Noted' and the pencil, a side goal done the pencil, a main goal done the goal's sting (as the job's)",
+		heard.get("note", [[], ""]) == [["pencil"], "Noted"] and (heard.get("side", [[]])[0] as Array) == ["pencil"]
+		and (heard.get("main", [[]])[0] as Array) == ["sting_goal"],
+		"heard %s" % [heard])
 
 
 # ---------------------------------------------------------------------------

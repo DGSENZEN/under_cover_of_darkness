@@ -13,6 +13,7 @@ const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const ThrownToolScript := preload("res://scripts/Combat/ThrownTool.gd")
 const LetterText := preload("res://scripts/UI/LetterText.gd")
 const TalkBoxScript := preload("res://scripts/UI/TalkBox.gd")
+const MusicScript := preload("res://scripts/Audio/Music.gd")
 
 ## The tools thrown from your hand (ThrownTool.kind).
 const THROWN_TOOLS := [&"flashbomb", &"waterflask"]
@@ -135,12 +136,53 @@ func _ready() -> void:
 	CityState.job.noted.connect(_on_job_changed)
 	CityState.job.goal_shown.connect(_on_job_changed)
 	CityState.job.goal_done.connect(_on_job_changed)
+	# What talk teaches him and the goals people give him are heard as the
+	# job's are (DistrictMap hears the job's through hear_noted and
+	# hear_goal_done): here, so it is the same with no district around him
+	# (the candle lane stands alone).
+	CityState.people.noted.connect(_on_people_noted)
+	CityState.people.goal_shown.connect(_on_job_changed)
+	CityState.people.goal_finished.connect(_on_people_goal_finished)
 
 
 func _exit_tree() -> void:
-	for sig in [CityState.job.noted, CityState.job.goal_shown, CityState.job.goal_done]:
+	for sig in [CityState.job.noted, CityState.job.goal_shown, CityState.job.goal_done, CityState.people.goal_shown]:
 		if (sig as Signal).is_connected(_on_job_changed):
 			(sig as Signal).disconnect(_on_job_changed)
+
+	if CityState.people.noted.is_connected(_on_people_noted):
+		CityState.people.noted.disconnect(_on_people_noted)
+
+	if CityState.people.goal_finished.is_connected(_on_people_goal_finished):
+		CityState.people.goal_finished.disconnect(_on_people_goal_finished)
+
+
+## Something learnt (a pencil note, the job's or talk's): "Noted" under the
+## view, and the pencil.
+func hear_noted() -> void:
+	if player.get("hud") != null:
+		player.hud.show_caption("Noted", 1.6)
+
+	Sfx.play_flat(player, &"pencil")
+
+
+## A goal done (the job's or talk's): a main one the score's goal sting (not
+## over another's: Music's gap), a side one only the pencil.
+func hear_goal_done(kind: StringName) -> void:
+	if kind == &"main" and TimeFx.real_time() - Sfx.sting_at >= MusicScript.STING_GAP:
+		Sfx.play_flat(player, &"sting_goal")
+	elif kind != &"main":
+		Sfx.play_flat(player, &"pencil")
+
+
+func _on_people_noted(_id: String) -> void:
+	_on_job_changed()
+	hear_noted()
+
+
+func _on_people_goal_finished(id: String) -> void:
+	_on_job_changed()
+	hear_goal_done(CityState.people.goal_kind(id))
 
 
 ## Something is in your hands (tracked apart from `held`, which reads as

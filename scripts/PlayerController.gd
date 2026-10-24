@@ -568,6 +568,13 @@ func _ready() -> void:
 	collision_mask |= 2
 
 	health = max_health
+	# What people remember asks his belt (has(x), purse>=n) from now on,
+	# talking or not.
+	var city := get_node_or_null(^"/root/CityState")
+
+	if city != null:
+		city.people.inventory = inventory
+
 	_ensure_action(&"lean_left", KEY_Z)
 	_ensure_action(&"lean_right", KEY_C)
 
@@ -653,6 +660,14 @@ func _ready() -> void:
 		frob.picked_up.connect(func(_body): hand.set_suppressed(true))
 		# Let go of what you carried: the hands come back, unless you are dead.
 		frob.released.connect(func(_body, _thrown): hand.set_suppressed(is_dead))
+
+
+## Gone: people no longer ask his belt (a freed belt would answer nothing).
+func _exit_tree() -> void:
+	var city := get_node_or_null(^"/root/CityState")
+
+	if city != null and city.people.inventory == inventory:
+		city.people.inventory = null
 
 
 func _unhandled_input(event: InputEvent) -> void:
