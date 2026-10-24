@@ -5,6 +5,7 @@ extends Node3D
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
+const PipeSoundsScript := preload("res://scripts/Audio/PipeSounds.gd")
 
 var results: Array[String] = []
 var failures := 0
@@ -19,9 +20,12 @@ func _ready() -> void:
 	eye.make_current()
 	await _focus()
 	await _neon()
+	await _pipes()
 	# (Let the audio thread let go of what played before quitting.)
 	Focus.reset()
 	Sfx._bank.clear()
+	if Sfx._node != null and is_instance_valid(Sfx._node):
+		Sfx._node.queue_free()
 	await _frames(3)
 	OS.delay_msec(300)
 	await _frames(3)
@@ -147,6 +151,54 @@ func _neon() -> void:
 	_check("N3 a brownout sags the hum with the light", hum != null and fell and steepest <= 1.5,
 		"fell %s, steepest %.2f dB a frame" % [fell, steepest])
 	sign.queue_free()
+	await _frames(2)
+
+
+## P1-P4: the pipes.
+func _pipes() -> void:
+	Focus.reset()
+	var pipes: Node3D = PipeSoundsScript.new()
+	add_child(pipes)
+	pipes.run(&"pipe_trickle", Vector3(-12.0, 3.25, -2.2), Vector3(12.0, 3.25, -2.2))
+	var along := []
+	for x in [-5.0, 0.0, 7.0]:
+		eye.global_position = Vector3(x, 1.6, 0.0)
+		await _frames(2)
+		along.append(pipes.emitter_of(0).global_position.x if pipes.emitter_of(0) != null else INF)
+	_check("P1 the main is heard where you are along it", along.size() == 3 and absf(along[0] + 5.0) < 0.05
+		and absf(along[1]) < 0.05 and absf(along[2] - 7.0) < 0.05, "%s" % [along])
+	eye.global_position = Vector3(20.0, 1.6, 0.0)
+	await _frames(2)
+	var end: float = pipes.emitter_of(0).global_position.x if pipes.emitter_of(0) != null else INF
+	_check("P2 past a run's end the sound stays at its end", absf(end - 12.0) < 0.05, "%.2f" % end)
+
+	eye.global_position = Vector3(0.0, 1.6, 0.0)
+	pipes.knocks(Vector3(-12.0, 3.1, 2.2), Vector3(12.0, 3.1, 2.2), Vector2(1.0, 1.0))
+	await _frames(180)
+	var strikes: Array = pipes.heard.filter(func(h): return h[1] == &"pipe_knock")
+	var travels := strikes.size() >= 3
+	if travels:
+		var step1: float = strikes[1][2].x - strikes[0][2].x
+		var step2: float = strikes[2][2].x - strikes[1][2].x
+		travels = signf(step1) == signf(step2) and absf(step1) >= 2.49 and absf(step1) <= 4.01 \
+			and absf(step2) >= 2.49 and absf(step2) <= 4.01 and strikes[1][0] > strikes[0][0] and strikes[2][0] > strikes[1][0]
+	_check("P3 a knock travels: three strikes, each further along", travels,
+		"%s" % [strikes.slice(0, 3).map(func(h): return [snappedf(h[0], 0.01), snappedf(h[2].x, 0.01)])])
+	pipes.queue_free()
+	await _frames(2)
+
+	Focus.reset()
+	var joint: Node3D = PipeSoundsScript.new()
+	add_child(joint)
+	joint.events(&"pipe_drip", Vector3(-2.3, 0.05, -2.17), Vector2(1.4, 3.4))
+	await _frames(1200)
+	var drops: Array = joint.heard.map(func(h): return h[0])
+	var closest := INF
+	for k in range(1, drops.size()):
+		closest = minf(closest, drops[k] - drops[k - 1])
+	_check("P4 the weeping joint drips, never two drops at once", drops.size() >= 5 and drops.size() <= 15
+		and closest >= 1.39, "%d drops, closest %.2f s" % [drops.size(), closest])
+	joint.queue_free()
 	await _frames(2)
 
 
