@@ -796,10 +796,17 @@ func _shade() -> void:
 	shade.global_position = Vector3(0, 0, -1.5)
 	await _frames(2)
 	var worn: Array = shade.man.worn() if shade.man != null else []
-	_check("S1 a shade dresses its body and every worn mesh wears the shade material",
-		not worn.is_empty() and shade.dialogue.get("id") == "fx_curandera"
-		and worn.all(func(m): return m.material_override is ShaderMaterial and m.material_override.shader == SHADE_SHADER),
-		"%d worn, shaders %s" % [worn.size(), worn.map(func(m): return m.material_override.shader.resource_path if m.material_override is ShaderMaterial else "none")])
+	# Each wears it twice: its depth first (priority -1, before anything
+	# see-through), then its colour (0, sorted by distance with the rest).
+	var prepassed := func(m: MeshInstance3D) -> bool:
+		var colour := m.material_override as ShaderMaterial
+		var depth := colour.next_pass as ShaderMaterial if colour != null else null
+		return colour != null and colour.shader == SHADE_SHADER and depth != null and depth.shader == SHADE_SHADER \
+			and depth.get_shader_parameter(&"depth_only") == true and colour.get_shader_parameter(&"depth_only") != true \
+			and depth.render_priority == -1 and colour.render_priority == 0
+	_check("S1 a shade dresses its body and every worn mesh wears the shade material, depth pass first",
+		not worn.is_empty() and shade.dialogue.get("id") == "fx_curandera" and worn.all(prepassed),
+		"%d worn, prepassed %s" % [worn.size(), worn.map(func(m): return "%s %s" % [m.name, prepassed.call(m)])])
 
 	shade.cue(&"flare")
 	await _frames(60)
@@ -821,14 +828,19 @@ func _shade() -> void:
 	var after_line: float = shade.glow_now()
 	var line_state: StringName = shade.shade_state()
 	shade.set_resting(&"dim")
+	await _frames(60)
 	shade.cue(&"flare")
+	await _frames(30)
+	var dim_flared: float = shade.glow_now()
 	shade.end_line()
 	await _frames(60)
 	var rested: float = shade.glow_now()
 	var rest_state: StringName = shade.shade_state()
 	_check("S3 a line's cue passes; a resting state stays",
-		during == &"flare" and line_state == &"calm" and absf(after_line - 1.0) < 0.05 and rest_state == &"dim" and rested < 0.5,
-		"during %s, after the line %s %.2f, resting %s %.2f" % [during, line_state, after_line, rest_state, rested])
+		during == &"flare" and line_state == &"calm" and absf(after_line - 1.0) < 0.05 and dim_flared > 1.5
+		and rest_state == &"dim" and rested < 0.5,
+		"during %s, after the line %s %.2f, flared from dim %.2f, resting %s %.2f" % [during, line_state, after_line, dim_flared,
+		rest_state, rested])
 	shade.set_resting(&"calm")
 
 	var player: CharacterBody3D = PLAYER.instantiate()

@@ -1,10 +1,10 @@
-// A wisp off a shade (Shade.gd): one thin ribbon of its smoke, standing
-// upright and turned to the camera, curling as it rises and thinning to
-// threads before it is gone. Its soft ends are a puff of the project's own
-// smoke sheet (assets/vfx/smoke.png, four puffs); the rest is noise. It
-// burns, cools and gutters with the body (shade.gdshader's uniforms).
+// A puff of a shade's smoke (Shade.gd): one puff of the project's own smoke
+// sheet (assets/vfx/smoke.png, four puffs), turned to face the camera and
+// turning slowly about itself as it rises, its edge worn soft by noise. It
+// fades in and out with the particle (its COLOR), and burns, cools and
+// gutters with the body (shade.gdshader's uniforms).
 shader_type spatial;
-render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 
 uniform sampler2D puffs : source_color, filter_linear, repeat_disable;
 uniform vec4 wisp_colour : source_color = vec4(1.0, 0.62, 0.22, 1.0);
@@ -34,31 +34,27 @@ float vnoise(vec3 p) {
 }
 
 void vertex() {
-	// Upright, turned about the vertical toward the camera: smoke rises.
-	vec3 right = INV_VIEW_MATRIX[0].xyz;
-	right = normalize(vec3(right.x, 0.0, right.z) + vec3(1e-4, 0.0, 0.0));
-	vec3 up = vec3(0.0, 1.0, 0.0);
-	vec3 back = cross(right, up);
+	// Facing the camera, turned about the view by the particle's angle.
+	mat4 world = mat4(normalize(INV_VIEW_MATRIX[0]), normalize(INV_VIEW_MATRIX[1]), normalize(INV_VIEW_MATRIX[2]), MODEL_MATRIX[3]);
+	float turn = INSTANCE_CUSTOM.x;
+	world = world * mat4(vec4(cos(turn), -sin(turn), 0.0, 0.0), vec4(sin(turn), cos(turn), 0.0, 0.0), vec4(0.0, 0.0, 1.0, 0.0),
+		vec4(0.0, 0.0, 0.0, 1.0));
 	float size = length(MODEL_MATRIX[0].xyz);
-	mat4 world = mat4(vec4(right * size, 0.0), vec4(up * size, 0.0), vec4(back * size, 0.0), MODEL_MATRIX[3]);
-	MODELVIEW_MATRIX = VIEW_MATRIX * world;
+	MODELVIEW_MATRIX = VIEW_MATRIX * world * mat4(vec4(size, 0.0, 0.0, 0.0), vec4(0.0, size, 0.0, 0.0), vec4(0.0, 0.0, size, 0.0),
+		vec4(0.0, 0.0, 0.0, 1.0));
 	MODELVIEW_NORMAL_MATRIX = mat3(MODELVIEW_MATRIX);
 	v_age = INSTANCE_CUSTOM.y;
 	v_seed = INSTANCE_CUSTOM.z * 17.0 + float(INSTANCE_ID) * 0.37;
 }
 
 void fragment() {
-	// A thin ribbon down the middle, swaying side to side as it climbs.
-	float sway = (vnoise(vec3(UV.y * 2.5 - TIME * 0.6, v_seed, 0.0)) - 0.5) * 0.55;
-	float across = abs(UV.x - 0.5 - sway * (1.0 - UV.y));
-	float width = mix(0.3, 0.12, v_age) * (0.6 + 0.8 * vnoise(vec3(UV.y * 4.0, v_seed + 5.0, 0.0)));
-	float ribbon = smoothstep(width, 0.0, across);
-	// Torn into threads as it ages.
-	float threads = vnoise(vec3(UV.x * 18.0, UV.y * 3.0 - TIME * 0.8 + v_seed, 0.0));
-	ribbon *= smoothstep(v_age * 0.5, v_age * 0.5 + 0.5, threads);
-	// One of the sheet's puffs keeps its ends soft.
+	// One of the sheet's four puffs.
 	float puff = floor(fract(v_seed) * 3.999);
-	float soft = texture(puffs, vec2((puff + clamp(UV.x * 0.6 + 0.2, 0.01, 0.99)) * 0.25, UV.y)).a;
+	vec2 uv = clamp(UV, 0.02, 0.98);
+	float body = texture(puffs, vec2((puff + uv.x) * 0.25, uv.y)).a;
+	// Worn by a slow noise that thins it as it ages: wisps, not a ball.
+	float wear = vnoise(vec3(UV * 3.5 + vec2(0.0, TIME * 0.15), v_seed));
+	body *= smoothstep(0.1 + 0.3 * v_age, 0.9, wear * 0.7 + body * 0.6);
 
 	// The body's own gutter (shade.gdshader), so they flicker as one.
 	float t = TIME;
@@ -71,10 +67,7 @@ void fragment() {
 	float lum = dot(hue, vec3(0.3, 0.59, 0.11));
 	hue = mix(hue, mix(vec3(lum), vec3(0.42, 0.52, 0.72) * lum * 1.4, 0.6), cool * 0.75);
 
-	// Smoke, not flame: paler than the body, and faint where it leaves her.
-	hue = mix(hue, vec3(dot(hue, vec3(0.3, 0.59, 0.11))) * 1.2, 0.35);
-	float rise = smoothstep(1.0, 0.65, UV.y);
-	float a = ribbon * soft * rise * COLOR.a * clamp(opacity * 1.4, 0.2, 1.0);
-	ALBEDO = hue * glow * gutter * a * 0.7;
-	ALPHA = 1.0;
+	// Dark smoke in her colour, lit faintly from within.
+	ALBEDO = hue * (0.08 + 0.12 * glow) * gutter;
+	ALPHA = clamp(body * COLOR.a * clamp(opacity * 1.3, 0.25, 0.9), 0.0, 1.0);
 }

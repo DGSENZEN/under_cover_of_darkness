@@ -62,6 +62,10 @@ func _ready() -> void:
 
 ## The angles where a see-through body shows its faults.
 func _inspect() -> void:
+	# The back of the head and the nape, close.
+	_look(Vector3(0.0, 1.6, -0.7), Vector3(0.0, 1.45, 0.0))
+	await _shot("x_nape_close")
+
 	# The three-quarter view through a long lens: its legs and its waist.
 	camera.fov = 14.0
 	_look(Vector3(2.0 * sin(deg_to_rad(40.0)), 1.35, 2.0 * cos(deg_to_rad(40.0))), Vector3(0.0, 0.45, 0.0))
@@ -107,6 +111,26 @@ func _inspect() -> void:
 	await _frames(90)
 	_look(Vector3(0.6, 1.3, 0.2), Vector3(0.0, 1.0, -2.2))
 	await _shot("x_against_wall")
+	# A pane of see-through glazing between the camera and her (the sorting
+	# risk: her colour, drawn after, may paint over it).
+	shade.global_position = Vector3.ZERO
+	shade.face(Vector3(0.0, 1.6, 2.0))
+	var pane := MeshInstance3D.new()
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.5, 0.8)
+	var glass := StandardMaterial3D.new()
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glass.albedo_color = Color(0.3, 0.55, 0.9, 0.45)
+	quad.material = glass
+	pane.mesh = quad
+	add_child(pane)
+	pane.global_position = Vector3(-0.15, 1.2, 0.7)
+	await _frames(90)
+	_look(Vector3(0.0, 1.3, 2.0), Vector3(0.0, 1.15, 0.0))
+	await _shot("x_sort_glass")
+	pane.queue_free()
+
 	# Gutter, a few moments apart.
 	shade.global_position = Vector3.ZERO
 	shade.set_resting(&"gutter")
