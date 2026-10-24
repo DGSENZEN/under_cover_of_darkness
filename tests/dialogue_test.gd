@@ -489,16 +489,20 @@ func _memory_survives() -> void:
 	people.add_mood("fx_librarian", -1)
 	people.show_goal("fx_bring_book")
 	people.finish_goal("fx_bring_book")
+	people.show_goal("fx_trust_librarian")
 	CityState.begin()
 	var kept: bool = CityState.people.holds("said(fx_librarian.lied), mood(fx_librarian)<=-1", "")
-	var gone: bool = CityState.people.goals_listed().is_empty() and CityState.people.goal_done("fx_bring_book")
+	var ids := func() -> Array: return CityState.people.goals_listed().map(func(g): return g["id"])
+	var gone: bool = ids.call() == ["fx_trust_librarian"] and CityState.people.goals_shown == ["fx_trust_librarian"] \
+		and CityState.people.goal_done("fx_bring_book")
+	var open: bool = not CityState.people.goals_listed()[0]["done"] if gone else false
 	people.refresh()
 	people.set_flag("fx_curandera", "asked")
 	people.refresh()
-	var quiet: bool = CityState.people.goals_listed().is_empty()
-	_check("P6 memory survives CityState.begin(): flags and moods stay, a done goal leaves the letter and stays done",
-		kept and gone and quiet and CityState.job.people == CityState.people and CityState.people.job == CityState.job,
-		"kept %s, gone %s, quiet %s" % [kept, gone, quiet])
+	var quiet: bool = ids.call() == ["fx_trust_librarian"]
+	_check("P6 memory survives CityState.begin(): flags and moods stay, an open goal stays on the letter, a done goal leaves it and stays done",
+		kept and gone and open and quiet and CityState.job.people == CityState.people and CityState.people.job == CityState.job,
+		"kept %s, gone %s, open %s, quiet %s, shown %s" % [kept, gone, open, quiet, CityState.people.goals_shown])
 	CityState.people = PeopleState.new()
 	CityState.begin()
 

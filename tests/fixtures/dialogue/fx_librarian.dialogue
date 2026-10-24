@@ -27,3 +27,9 @@ Fx Librarian [gutter]: <<I do not believe you.>>
 do: clear(lied)
 Fx Librarian [calm]: <<Very well.>>
 -> end
+
+== goal fx_trust_librarian
+kind: side
+shows: said(lied)
+done: took(fx_nowhere)
+text: <<Win the librarian's trust back.>>
