@@ -70,7 +70,7 @@ Librarian [dim]: <<He sees through the lie, and refuses.>>
 -> end
 
 == beat amends
-do: clear(lied), set(forgiven), shade(calm)
+do: clear(lied), set(forgiven), mood(+1), shade(calm)
 intent: the stranger makes amends: he accepts it, coolly, and his light steadies; the truth may be told now
 Librarian [calm]: <<He accepts the amends, coolly.>>
 > [if said(curandera.asked_book), not(gave(curandera.the_book)), not(has(the_book))] <<Tell him the truth now.>> -> truth

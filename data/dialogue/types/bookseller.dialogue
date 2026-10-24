@@ -1,5 +1,6 @@
 # The bookseller's trade (docs/systems/dialogue.md, "Types"): what any dealer
-# in books offers, whoever he is: asked for a title, and selling a book. The
+# in books offers, whoever he is: asked for a title, and selling a book (never
+# while he is angry with you, mood below 0, until you make amends). The
 # librarian of the candle lane is one. {name} is whoever speaks.
 # Every text is the user's to write; each beat's intent: says what it must do.
 
@@ -11,8 +12,8 @@ intent: a dealer in old and rare books: knows his stock to the shelf, haggles, a
 == beat open
 intent: a nameless bookseller looks up from his ledger at a customer: civil, measuring what the customer can pay
 {name}: <<A bookseller looks up from his ledger.>>
->> <<Ask him for a title.>> -> ask_title
->> [if purse>=3] <<Buy a book from him.>> -> buy_book
+>> [if mood>=0] <<Ask him for a title.>> -> ask_title
+>> [if mood>=0, purse>=3] <<Buy a book from him.>> -> buy_book
 > <<Leave.>> -> end
 
 == beat ask_title

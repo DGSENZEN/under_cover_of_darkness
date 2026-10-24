@@ -4,7 +4,9 @@ extends Node3D
 ## they load clean, every word a placeholder; Q2-Q6 the quest driven through
 ## Conversation headless (the truth route, the lie, the revisits, the types, a
 ## new mission); Q7 the shades stand in the candle lane (maps/candle_lane.tscn)
-## and the player walks from the spawn to each and talks.
+## and the player walks from the spawn to each and talks; Q8 his open_sent's
+## 5-7 options all reachable and whole on screen in the box; Q9 no title or
+## sale from him while he is angry, until amends.
 ##   Godot --headless --fixed-fps 60 --path . res://tests/talk_quest_test.tscn
 ##
 ## The words still to write are printed as WORDS: lines; their number never
@@ -18,6 +20,7 @@ const LetterText := preload("res://scripts/UI/LetterText.gd")
 const Shade := preload("res://scripts/Interaction/Shade.gd")
 const TalkSkin := preload("res://scripts/UI/TalkSkin.gd")
 const LANE := preload("res://maps/candle_lane.tscn")
+const PLAYER := preload("res://Player.tscn")
 
 ## The nameless curandera of the type alone, as the lane names her.
 const MARKET := "<<a market curandera>>"
@@ -40,6 +43,8 @@ func _ready() -> void:
 	_types()
 	_new_mission()
 	await _in_the_lane()
+	await _many_options()
+	_no_trade_while_angry()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -339,6 +344,132 @@ func _in_the_lane() -> void:
 		"shades %s, spawn %s, %s" % [shades.keys(), spawn, reached])
 	lane.queue_free()
 	await _frames(2)
+
+
+# ---------------------------------------------------------------------------
+# Q8: his whole list of answers, in the box
+# ---------------------------------------------------------------------------
+
+## The librarian's open_sent in the talk box, with an empty purse (truth, the
+## special, the lie, a title, leave: 5) and with 10 coins (his price and a
+## book off the shelves too: 7): the choice moved through every option, each
+## stands whole on the screen when chosen, and every option in view does.
+func _many_options() -> void:
+	DialogueBook.reload()
+	var him: Dictionary = DialogueBook.character("librarian")
+	var leave := _option_text(him, "open_sent", "end")
+	var lost: Array[String] = []
+	var counts := []
+
+	for coins in [0, 10]:
+		CityState.people = PeopleState.new()
+		CityState.begin()
+		CityState.people.set_flag("curandera", "asked_book")
+		var player: CharacterBody3D = PLAYER.instantiate()
+		add_child(player)
+		player.reload_on_death = false
+		player.invulnerable = true
+		player.global_position = Vector3(0, 1.05, 0)
+
+		if coins > 0:
+			player.inventory.add_loot(coins)
+
+		var shade: StaticBody3D = Shade.new()
+		shade.character = "librarian"
+		add_child(shade)
+		shade.global_position = Vector3(0, 0, -1.5)
+		await _frames(10)
+		_aim(player, shade.global_position + Vector3(0, 1.2, 0))
+		await _frames(5)
+		player.frob.talk(shade)
+		var box: Node = player.frob.talking()
+		await _frames(70)
+		var tries := 0
+
+		while box != null and box.shown_options().is_empty() and tries < 30:
+			box.press_advance()
+			await _frames(12)
+			tries += 1
+
+		await _frames(40)
+		var offered: Array = box.shown_options() if box != null else []
+		counts.append(offered.size())
+
+		if offered.size() != (5 if coins == 0 else 7) or offered.is_empty() or offered.back() != leave:
+			lost.append("%d coins: offered %s" % [coins, offered])
+
+		for i in offered.size():
+			box.choose_by_pointing(i)
+			await _frames(2)
+
+			for screen in [Vector2(1920, 1080), Vector2(1280, 720)]:
+				box._layout(screen)
+				var rects: Dictionary = box.layout_rects()
+				var whole := Rect2(Vector2.ZERO, screen)
+				var in_view: Array = box.options_in_view()
+
+				if box._choice != i or not in_view.has(i):
+					lost.append("%d coins, %s: chose %d, choice %d, in view %s" % [coins, screen, i, box._choice, in_view])
+
+				for j in in_view:
+					if not (whole.encloses(rects["option %d" % j]) and whole.encloses(rects["swipe %d" % j]) and box._option_labels[j].visible):
+						lost.append("%d coins, %s, at %d: row %d %s" % [coins, screen, i, j, rects["option %d" % j]])
+
+		if box != null:
+			box.interrupt()
+
+		shade.queue_free()
+		player.queue_free()
+		await _frames(3)
+
+	CityState.people = PeopleState.new()
+	CityState.begin()
+	_check("Q8 his open_sent in the box, 5 options with an empty purse and 7 with 10 coins: each chosen in turn stands whole on the screen, Leave too",
+		lost.is_empty(), "; ".join(lost.slice(0, 6)) if not lost.is_empty() else "options %s, every one reached in view" % [counts])
+
+
+# ---------------------------------------------------------------------------
+# Q9: no trade with a man you lied to, until you make amends
+# ---------------------------------------------------------------------------
+
+## The bookseller's ask_title and buy_book are offered while his mood is 0 or
+## more: lied to (mood -1) his open_after_lie offers neither; amends (mood +1)
+## bring ask_title back, and buy_book when the purse holds 3.
+func _no_trade_while_angry() -> void:
+	DialogueBook.reload()
+	var her: Dictionary = DialogueBook.character("curandera")
+	var him: Dictionary = DialogueBook.character("librarian")
+	var seen := {}
+	var ok := true
+
+	for coins in [10, 0]:
+		var people: RefCounted = PeopleState.new()
+		var belt: Node = Inventory.new()
+
+		if coins > 0:
+			belt.add_loot(coins)
+
+		_pick(_visit("curandera", people, belt), her, "open_first", "asks")
+		var before := _visit("librarian", people, belt)
+		var before_to := _offered_to(before)
+		var lied: bool = _pick(before, him, "open_sent", "lie")
+		var angry := _visit("librarian", people, belt)
+		var angry_to := _offered_to(angry)
+		var cross: bool = _opened(angry, him, "open_after_lie") and people.mood_of("librarian") == -1
+		var mended: bool = _pick(angry, him, "open_after_lie", "amends") and people.mood_of("librarian") == 0
+		var after := _visit("librarian", people, belt)
+		var after_to := _offered_to(after)
+		var selling: bool = int(coins) >= 3
+		ok = ok and lied and cross and mended and _opened(after, him, "open_sent") \
+			and before_to.has("ask_title") and before_to.has("buy_book") == selling \
+			and not angry_to.has("ask_title") and not angry_to.has("buy_book") \
+			and after_to.has("ask_title") and after_to.has("buy_book") == selling
+		seen[coins] = "before %s | lied %s, after the lie %s (mood -1 %s) | amends %s, then %s" % [before_to, lied, angry_to, cross, mended,
+			after_to]
+		belt.free()
+
+	_check("Q9 lied to, he offers no title and no sale (open_after_lie); amends bring his mood to 0 and ask_title back, buy_book too when the purse holds 3",
+		ok, "10 coins: %s; empty purse: %s" % [seen.get(10), seen.get(0)])
 
 
 ## Whether `shade` stands on the shop's floor, inside its room.
