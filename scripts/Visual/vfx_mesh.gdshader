@@ -28,6 +28,8 @@ uniform float churn = 0.01;
 uniform vec3 sway = vec3(0.0);
 // How far along v its pale core reaches (1 all the way; a fire's white only at its roots).
 uniform float core_reach = 1.0;
+// Thinner close to the eye (m: 0 off): smoke round you that you can see out of.
+uniform float near_fade = 0.0;
 
 varying float n_at;
 
@@ -59,5 +61,6 @@ void fragment() {
 	colour = mix(colour, core.rgb, step(0.18, depth) * step(0.35, facing) * step(UV.y, core_reach));
 	colour += body.rgb * rim_at * 0.8;
 	ALBEDO = colour * energy;
-	ALPHA = keep * opacity;
+	float near = near_fade > 0.0 ? mix(0.25, 1.0, smoothstep(0.4, near_fade, length(VERTEX))) : 1.0;
+	ALPHA = keep * opacity * near;
 }

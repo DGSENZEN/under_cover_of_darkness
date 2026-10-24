@@ -12,9 +12,27 @@ const RADIUS := 1.0
 const LIFE := 4.0
 ## Its middle, above its owner's origin (the waist).
 const HEIGHT := 0.0
-## How many puffs make the ring, and how fast it turns (radians a second).
-const PUFFS := 16
+## The ring: how many plumes of smoke rise round it, how fast it turns
+## (radians a second), and its colours (the ward colour, a ghostly core, a
+## cool edge).
+const PLUMES := 12
 const TURN := 0.6
+const CORE := Color("#F2FAFC")
+const BODY := Color("#CFE8F0")
+## (Close to the body: wide apart, the noise reads as camouflage.)
+const EDGE := Color("#A9C9D4")
+## Seconds it takes to rise, and to sink away at the end.
+const RISE := 0.25
+const SINK := 0.5
+## Eaten this far while it stands (1 is gone).
+const STANDING := 0.4
+## A stopped shot's bulge: its plumes, how long it lasts, how many at once,
+## and how much the plumes beside it thin, for how long.
+const BULGE_PLUMES := 3
+const BULGE_LIFE := 0.45
+const MOST_BULGES := 6
+const THIN := 0.3
+const THIN_FOR := 0.4
 
 ## Every ward standing, as weak references.
 static var active: Array = []
@@ -22,7 +40,11 @@ static var active: Array = []
 var owner_body: Node3D = null
 
 var _life := 0.0
-var _puffs: Array[MeshInstance3D] = []
+var _plumes: Array[MeshInstance3D] = []
+## Each plume's thinning left (seconds), from a bulge beside it.
+var _thinning: Array[float] = []
+## The bulges standing (weak references to their roots).
+var _bulges: Array = []
 
 
 ## A ward round `player`, going with them for LIFE seconds.
@@ -37,10 +59,10 @@ static func cast_on(player: Node3D) -> Node3D:
 
 
 ## Where the segment `from` -> `to` first comes into a ward from outside it,
-## for a shot or spell by `shooter` (not the ward's own owner); Vector3.INF
-## if it meets none.
-static func stops(from: Vector3, to: Vector3, shooter: Object) -> Vector3:
-	var nearest := Vector3.INF
+## for a shot or spell by `shooter` (not the ward's own owner), and which
+## ward: {at, ward}; {} if it meets none.
+static func stopped_by(from: Vector3, to: Vector3, shooter: Object) -> Dictionary:
+	var found := {}
 	var best := INF
 
 	for ref in active.duplicate():
@@ -68,38 +90,120 @@ static func stops(from: Vector3, to: Vector3, shooter: Object) -> Vector3:
 
 			if along < best:
 				best = along
-				nearest = at
+				found = {"at": at, "ward": ward}
 
-	return nearest
+	return found
 
 
-## Something stopped at `at` by a ward: a puff of its smoke, a soft sound.
-static func turned_aside(context: Node, at: Vector3, direction: Vector3) -> void:
+## Where a shot first comes into a ward (stopped_by); Vector3.INF if none.
+static func stops(from: Vector3, to: Vector3, shooter: Object) -> Vector3:
+	var found := stopped_by(from, to, shooter)
+	return found["at"] if not found.is_empty() else Vector3.INF
+
+
+## Something stopped at `at` by a ward: a puff of its smoke, a soft sound,
+## and the ward's smoke bulging there.
+static func turned_aside(context: Node, at: Vector3, direction: Vector3, ward: Node3D = null) -> void:
 	Fx.dust(context, at, -direction, 0.6, "stone")
 	Sfx.play(context, &"whoosh_light", at, -6.0, 0.6)
 
+	if ward != null and is_instance_valid(ward) and ward.has_method("bulge"):
+		ward.bulge(at)
+
 
 func _ready() -> void:
-	var smoke := SphereMesh.new()
-	smoke.radius = 0.18
-	smoke.height = 0.3
-	smoke.radial_segments = 8
-	smoke.rings = 4
-	var look := StandardMaterial3D.new()
-	look.albedo_color = Color(0.74, 0.8, 0.72, 0.35)
-	look.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	look.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	look.cull_mode = BaseMaterial3D.CULL_DISABLED
-	smoke.material = look
-
-	for i in PUFFS:
-		var puff := MeshInstance3D.new()
-		puff.mesh = smoke
-		puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(puff)
-		_puffs.append(puff)
+	for i in PLUMES:
+		var turn := TAU * float(i) / float(PLUMES)
+		var plume := MeshInstance3D.new()
+		plume.name = "WardPlume"
+		# Tall enough to stand round your head as well as your feet, wide
+		# enough that each runs into the next: one ring, not blades.
+		plume.mesh = MeshVfx.plume(_plume_path(turn, 1.35 + 0.35 * float(i % 3) / 2.0), 0.12, 0.34, 12)
+		plume.material_override = _smoke_look(float(i) * 1.7)
+		plume.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		plume.add_to_group(&"ward_plume")
+		add_child(plume)
+		_plumes.append(plume)
+		_thinning.append(0.0)
 
 	Sfx.play(self, &"whoosh", global_position, -8.0, 0.55)
+
+
+## A plume rising from about the feet at `turn` round the ring, curling on
+## round it as it climbs `tall` metres. In the ward's own space.
+static func _plume_path(turn: float, tall: float) -> PackedVector3Array:
+	var path := PackedVector3Array()
+
+	for k in 5:
+		var t := float(k) / 4.0
+		# Curling on round the ring, leaning in and out as it climbs.
+		var round_by := turn + 0.7 * t
+		var reach := RADIUS * (1.0 + 0.08 * sin(t * PI * 2.0 + turn * 3.0))
+		path.append(Vector3(cos(round_by) * reach, -0.9 + tall * t, sin(round_by) * reach))
+
+	return path
+
+
+## Ghostly copal smoke: the ward colours, unshaded and low, a little
+## see-through, big soft shapes (the shot's approved look).
+static func _smoke_look(seed: float) -> ShaderMaterial:
+	var look := MeshVfx.look(CORE, BODY, EDGE, 0.75, 1.0, 0.35, seed)
+	look.set_shader_parameter(&"opacity", 0.6)
+	look.set_shader_parameter(&"tiling", Vector2(0.6, 1.0))
+	look.set_shader_parameter(&"hardness", 0.08)
+	look.set_shader_parameter(&"tail_eat", 0.45)
+	look.set_shader_parameter(&"rim", 2.4)
+	look.set_shader_parameter(&"core_reach", 0.5)
+	# You see out through it from inside.
+	look.set_shader_parameter(&"near_fade", 1.6)
+	return look
+
+
+## A shot stopped at `at`: the smoke there pushed out in short plumes that
+## settle, the plumes beside it thinning for a moment.
+func bulge(at: Vector3) -> void:
+	_bulges = _bulges.filter(func(ref): return ref.get_ref() != null and is_instance_valid(ref.get_ref()))
+
+	while _bulges.size() >= MOST_BULGES:
+		var oldest: Node = _bulges.pop_front().get_ref()
+
+		if oldest != null and is_instance_valid(oldest):
+			oldest.queue_free()
+
+	var local := to_local(at)
+	var out := Vector3(local.x, 0.0, local.z).normalized() if Vector2(local.x, local.z).length() > 0.01 else Vector3.FORWARD
+	var root := Node3D.new()
+	root.name = "WardBulge"
+	add_child(root)
+	root.position = local
+
+	for k in BULGE_PLUMES:
+		var spread := (float(k) - 1.0) * 0.12
+		var path := PackedVector3Array([Vector3.ZERO, out * 0.12 + Vector3(0, spread, 0), out * 0.24 + Vector3(0, spread * 1.6 + 0.04, 0)])
+		var puff := MeshInstance3D.new()
+		puff.mesh = MeshVfx.plume(path, 0.05, 0.12, 8)
+		var look := _smoke_look(5.3 + float(k))
+		puff.material_override = look
+		puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		puff.add_to_group(&"ward_bulge")
+		root.add_child(puff)
+		var fade := puff.create_tween()
+		fade.tween_method(func(e: float): look.set_shader_parameter(&"erosion", e), STANDING, 1.0, BULGE_LIFE)
+
+	root.get_tree().create_timer(BULGE_LIFE, false, true).timeout.connect(root.queue_free)
+	_bulges.append(weakref(root))
+
+	# The two plumes nearest it thin.
+	var nearest := _plumes.duplicate()
+	nearest.sort_custom(func(a, b): return a.global_position.distance_to(at) < b.global_position.distance_to(at))
+
+	for plume in nearest.slice(0, 2):
+		_thinning[_plumes.find(plume)] = THIN_FOR
+
+
+func bulge_count() -> int:
+	_bulges = _bulges.filter(func(ref): return ref.get_ref() != null and is_instance_valid(ref.get_ref()) and not (ref.get_ref() as Node).is_queued_for_deletion())
+	return _bulges.size()
 
 
 func _physics_process(delta: float) -> void:
@@ -112,15 +216,18 @@ func _physics_process(delta: float) -> void:
 	global_position = owner_body.global_position + Vector3.UP * HEIGHT
 
 
-func _process(_delta: float) -> void:
-	# Risen in a quarter second, sinking away in the last half.
-	var rise := clampf(_life / 0.25, 0.0, 1.0) * clampf((LIFE - _life) / 0.5, 0.0, 1.0)
+func _process(delta: float) -> void:
+	# Rising out of nothing, standing, then eaten away as it sinks.
+	var rise := clampf(_life / RISE, 0.0, 1.0)
+	var sink := clampf((LIFE - _life) / SINK, 0.0, 1.0)
+	var eaten := lerpf(1.0, STANDING, rise * sink)
 
-	for i in _puffs.size():
-		var turn := TAU * float(i) / float(_puffs.size()) + _life * TURN
-		var bob := sin(_life * 2.3 + float(i) * 1.7) * 0.06
-		_puffs[i].position = Vector3(cos(turn) * RADIUS, bob - 0.3 * (1.0 - rise), sin(turn) * RADIUS)
-		_puffs[i].scale = Vector3.ONE * (0.6 + 0.4 * rise) * (1.0 + 0.15 * sin(_life * 1.3 + float(i)))
+	for i in _plumes.size():
+		_thinning[i] = maxf(_thinning[i] - delta, 0.0)
+		var thin := THIN if _thinning[i] > 0.0 else 0.0
+		(_plumes[i].material_override as ShaderMaterial).set_shader_parameter(&"erosion", minf(eaten + thin, 1.0))
+
+	rotation.y += TURN * delta
 
 
 func _end() -> void:

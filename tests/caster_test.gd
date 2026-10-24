@@ -676,6 +676,48 @@ func _run() -> void:
 	_check("B4 ten blinks: never more than 40 effects, none left after a second",
 		most_magic <= 40 and MagicFx.live_count() == 0, "most %d after %d" % [most_magic, MagicFx.live_count()])
 
+	# W1 the ward rises as twelve plumes of ward smoke
+	_wield(&"revolver")
+	_put_player(Vector3(-30, 1.05, 40))
+	await _frames(40)
+	await _cast_ward()
+	var ward: Node3D = WardScript.active[0].get_ref() if not WardScript.active.is_empty() else null
+	var plumes: Array = ward.get_children().filter(func(c): return c.is_in_group(&"ward_plume")) if ward != null else []
+	var coloured: bool = not plumes.is_empty() and plumes.all(func(p): return (p.material_override as ShaderMaterial).get_shader_parameter(&"core").is_equal_approx(Color("#F2FAFC")))
+	var rising: float = (plumes[0].material_override as ShaderMaterial).get_shader_parameter(&"erosion") if not plumes.is_empty() else -1.0
+	await _frames(25)
+	var risen: float = (plumes[0].material_override as ShaderMaterial).get_shader_parameter(&"erosion") if not plumes.is_empty() and is_instance_valid(plumes[0]) else -1.0
+	_check("W1 the ward rises as twelve plumes of ward smoke", plumes.size() == 12 and coloured and rising > 0.5 and _near(risen, WardScript.STANDING, 0.05),
+		"plumes %d coloured %s erosion %.2f then %.2f" % [plumes.size(), coloured, rising, risen])
+
+	# W2 a stopped arrow bulges the smoke where it struck
+	var archer2 := _caller(Vector3(-30, 0, 30))
+	archer2.set_physics_process(false)
+	var bulges_before: int = ward.bulge_count() if is_instance_valid(ward) else -1
+	_arrow_at_player(archer2)
+	await _frames(20)
+	var bulged: int = (ward.bulge_count() if is_instance_valid(ward) else -1) - bulges_before
+	var puffs: int = get_tree().get_nodes_in_group(&"ward_bulge").size()
+	await _frames(int(0.45 * 60.0) + 5)
+	_check("W2 a stopped arrow bulges the smoke there, and it settles", bulged == 1 and puffs == 3 and get_tree().get_nodes_in_group(&"ward_bulge").is_empty(),
+		"bulges +%d puffs %d after %d" % [bulged, puffs, get_tree().get_nodes_in_group(&"ward_bulge").size()])
+
+	# W4 a volley of eight: at most six bulges, all gone with the ward
+	var most_bulges := 0
+	for i in 8:
+		_arrow_at_player(archer2)
+	for i in 30:
+		await get_tree().physics_frame
+		most_bulges = maxi(most_bulges, ward.bulge_count() if is_instance_valid(ward) else 0)
+
+	# W3 when its time is up nothing of it is left
+	await _frames(int(WardScript.LIFE * 60.0))
+	_check("W4 a volley bulges the ward at most six times", most_bulges <= 6 and most_bulges >= 1, "most %d" % most_bulges)
+	_check("W3 when the ward ends, none of its smoke is left",
+		get_tree().get_nodes_in_group(&"ward_plume").is_empty() and get_tree().get_nodes_in_group(&"ward_bulge").is_empty(),
+		"plumes %d bulges %d" % [get_tree().get_nodes_in_group(&"ward_plume").size(), get_tree().get_nodes_in_group(&"ward_bulge").size()])
+	archer2.queue_free()
+
 	# S30 aiming a blink, a fresh right mouse lets it go, and raises no sights
 	_wield(&"revolver")
 	_put_player(Vector3(30, 1.05, -10))

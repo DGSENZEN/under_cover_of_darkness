@@ -91,11 +91,11 @@ func _physics_process(delta: float) -> void:
 		exclude.append((shooter as CollisionObject3D).get_rid())
 
 	# A ward in the way (not its owner's own): turned aside into its smoke.
-	var warded := WardScript.stops(from, to, shooter)
+	var warded := WardScript.stopped_by(from, to, shooter)
 
-	if warded != Vector3.INF:
-		global_position = warded
-		WardScript.turned_aside(self, warded, travel.normalized())
+	if not warded.is_empty():
+		global_position = warded["at"]
+		WardScript.turned_aside(self, warded["at"], travel.normalized(), warded["ward"])
 		queue_free()
 		return
 

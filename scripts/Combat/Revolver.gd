@@ -599,11 +599,11 @@ func _trace(from: Vector3, direction: Vector3) -> Dictionary:
 		return record
 
 	# A ward in the way (another's: yours lets your shots out) takes it.
-	var warded := WardScript.stops(from, hit["position"], player)
+	var warded := WardScript.stopped_by(from, hit["position"], player)
 
-	if warded != Vector3.INF:
-		record["point"] = warded
-		WardScript.turned_aside(player, warded, direction)
+	if not warded.is_empty():
+		record["point"] = warded["at"]
+		WardScript.turned_aside(player, warded["at"], direction, warded["ward"])
 		return record
 
 	var collider: Object = hit.get("collider")
