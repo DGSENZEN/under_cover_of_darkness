@@ -28,7 +28,7 @@ SCHEMA = {
     "light": {"required": ["kind"], "optional": {"lit": True, "energy": 0.0, "range": 0.0, "color": "", "cookie": "",
                                                  "douse": True, "chain": 0.0, "dark_only": False}, "box": False},
     "bell": {"required": [], "optional": {"db": 90.0}, "box": False},
-    "ladder": {"required": [], "optional": {"rope": False, "open": False}, "box": True},
+    "ladder": {"required": [], "optional": {"rope": False, "open": False, "plane_back": 0.0}, "box": True},
     # A placed handhold (free-run climbing, scripts/PlayerUtils/Handhold.gd):
     # a ledge along its local x, a pole up its local y, or a point; the
     # climber hangs on its local +z side.
@@ -130,7 +130,7 @@ GRADES = ["outside", "indoors", "chapel", "cellar", "hearth"]
 DECAL_KINDS = ["leak_1", "leak_2", "moss", "grime", "soot", "dirt", "straw", "leaves", "salt"]
 TOOL_KINDS = ["flask", "flash_bomb", "lockpick", "arrows"]
 PROP_KINDS = ["crate", "crate_small"]
-MOVES = ["walk", "stairs", "mantle", "hang", "jump", "sprint_jump", "assist_jump", "drop", "climb", "rope", "swim", "balance"]
+MOVES = ["walk", "stairs", "mantle", "hang", "grab", "shimmy", "jump", "sprint_jump", "assist_jump", "drop", "climb", "rope", "swim", "balance"]
 PROBE_EXPECT = ["moon", "shadow", "lamp"]
 # What a route is (its first route_check's `way`) and how a way into a
 # household goes in (its `kind`).

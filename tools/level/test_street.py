@@ -159,6 +159,29 @@ class Street(unittest.TestCase):
         for name in names:
             self.assertEqual(drawn_over(name, skip=("glass_dark", "water")), [], name)
 
+    def test_the_lookouts_bench_is_stone_with_a_tiled_back(self):
+        # (The miradouro's azulejo bench: a stone seat at a sitter's height,
+        # its back tiled blue, solid where drawn and nowhere else.)
+        recipe = PIECES["bench_azulejo"]
+        tiled = [s for s in recipe["shapes"] if s.get("slot") == "azulejo_blue"]
+        self.assertTrue(tiled)
+        self.assertTrue(any(abs(s["centre"][1] + s["size"][1] / 2.0 - 0.45) < 0.03 for s in recipe["shapes"] if s["kind"] == "box"))
+        self.assertEqual(drawn_over("bench_azulejo"), [])
+        self.assertEqual(solid_over("bench_azulejo")[:5], [])
+        self.assertLessEqual(tris(recipe), 300)
+
+    def test_the_pergola_is_walked_under(self):
+        # (Stone piers along its two sides, timber beams across them and
+        # joists along over a man's head: under it a man walks.)
+        import geo
+        recipe = PIECES["pergola"]
+        self.assertEqual(drawn_over("pergola"), [])
+        self.assertEqual(solid_over("pergola")[:5], [])
+        boxes = geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY)
+        self.assertFalse(any(b.contains([0.0, y, 0.0], 0.45) for b in boxes for y in (0.3, 1.0, 1.9)))
+        self.assertTrue(any(s.get("slot") == "timber" for s in recipe["shapes"]))
+        self.assertGreaterEqual(recipe["size"][1], 2.6)
+
     def test_a_panel_is_4_by_6_tiles(self):
         for name, slot in (("panel_comet", "azulejo_comet"), ("panel_king", "azulejo_king")):
             face = cards(name, slot)

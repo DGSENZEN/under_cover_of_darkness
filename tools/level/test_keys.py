@@ -161,6 +161,22 @@ class WatchHouse(Keys):
 
         self.assertEqual(blocked("watch_house"), [])
 
+    def test_a_man_goes_down_the_roof_hatch(self):
+        # (Held on its ladder as the controller holds a climber, CLIMB_HOLD
+        # off the plank it is fixed to, his body a metre across clears the
+        # hole in the roof all the way through it.)
+        import geo
+        import kit_terrace
+        recipe = PIECES["watch_house"]
+        boxes = geo.piece_boxes(recipe, [0.0, 0.0, 0.0], geo.IDENTITY)
+        x, z = kit_watch.HATCH
+        held = z - 0.45 + 0.03 + kit_terrace.CLIMB_HOLD
+        r = 0.5
+
+        for y in (kit_watch.EAVES - 0.4, kit_watch.EAVES - 0.1, kit_watch.EAVES + 0.2):
+            for dx, dz in ((r, 0.0), (-r, 0.0), (0.0, r), (0.0, -r), (0.0, 0.0)):
+                self.assertFalse(any(b.contains([x + dx, y, held + dz]) for b in boxes), (y, dx, dz))
+
     def test_the_barracks_sleeps_four(self):
         recipe = PIECES["watch_house"]
         beds = recipe["beds"]

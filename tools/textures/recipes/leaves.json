@@ -1,1 +1,1 @@
-{"source": "TCom_Ivy0024_1_seamless_S.jpg", "size": [128, 128], "colours": 16, "alpha": "luma", "threshold": 46, "brightness": 0.8, "tint": [0.8, 0.95, 0.75]}
+{"source": "TCom_Ivy0024_1_seamless_S.jpg", "size": [128, 128], "colours": 16, "alpha": "luma", "threshold": 46, "mask": "painted/ivy_clump.png", "brightness": 0.8, "tint": [0.8, 0.95, 0.75]}

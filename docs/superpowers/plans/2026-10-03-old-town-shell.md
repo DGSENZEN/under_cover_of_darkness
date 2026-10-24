@@ -577,6 +577,21 @@ These rules hold in every quarter, and the rules check what they can:
 
 `shunned` (Task 17) is a box marker added to `markers.py` in that task, with `label`. Its rule (no guard's station or waypoint inside) comes in B1b.
 
+### Task 16b: The old town walked by the real player, and its ways to climb (inserted Oct 6 2026, the user's playtest)
+
+The user's playtest: connectivity broken, tower stairs not working, no ledge climbing. Walked with the real controller (tests/diag/diag_town_moves), 42 of 88 routes failed: tower doors swing across their landings; corbels 0.8 m deep (the scanner lands a mantle at radius + margin, 0.55 m, in: a ledge stood on needs 1.1 m) and zig-zagging sideways (the controller climbs what is ahead); stairs narrower than the capsule (1.0 m across): houses' 0.9-1.0, chain stairs 1.2 less a rail; a 2.5 m window sill. The rules checked geometry, not the controller. The user chose all four climbing options. Done before Task 17; Task 21's Walker is brought forward here.
+
+**Files:** `tests/old_town_walk_test.gd/.tscn` (create), `tools/level/rules.py`, `kit_terrace.py` (`ledges` replaces `corbels`; `drainpipe`, `ivy`), `kit_town.py` / `kit_porto.py` / `kit_pombal.py` / `kit_patio.py` / `kit_tavern.py` / `kit_watch.py` (stairs, sills, string courses, hang ledges), `kit_street.py` (crates and barrels against walls), the three laid quarters' plans and layouts, `tools/textures/recipes/ivy.json`, `Materials.gd`.
+
+- **Walk (the gate):** `old_town_walk_test` walks every `route_check` route through the real controller (doors frobbed open; jump where stuck; ladders faced, looked down to climb down): W1 every route arrives. Long suite (`suite.sh old_town_walk_test 3000000`).
+- **Rules the controller's:** `move_problems` gains the capsule: a walk or stairs segment clear for 1.0 m across at knee and chest; a mantle's or hang's top 1.1 m deep where it is stood on, a capsule fitting there.
+- **Bugs:** tower doorways open arches (no leaf); every stair at least 1.3 m walkable; the tavern's window sill at most 2.2 m; scaffolds and ladders down as the walk finds them.
+- **Stepped stone ledges** (`kit_terrace.ledges(height)`): blocks 1.6 along the face, 1.2 out, each at most 2.2 over the last, marching sideways; the last a hang or mantle over the parapet. On every terrace step's thief connector and the cliffs to the Baixa and the Carmo.
+- **Drainpipes and ivy** (`drainpipe(height)`, `ivy(width, height)`: climb volumes): pipes on house corners by each roof chain and a few a quarter; ivy (the user's bought Ivy0024, cut out) on retaining and garden walls, a few a terrace.
+- **Reachable low ledges:** garden walls 2.2 m; window grilles and first-floor balconies hang ledges; crates and barrels against walls as steps.
+- **Ledges shimmied along:** a string course at the first-floor line on Porto and Pombaline fronts, hung from and shimmied along to balconies, corners and pipes.
+- Each piece its kit test; each new way a route the walk proves; close-up stills of each.
+
 ### Task 19: The massing makes room, and the harbour sees the old town
 
 **Files:**

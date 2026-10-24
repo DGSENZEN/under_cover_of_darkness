@@ -128,29 +128,20 @@ def _tavern(L):
 
 def _tower(L):
     """The stair towers' doors (each foot's on the street below, each top's
-    on its terrace) and their ways up; the corbels' ways up beside them."""
+    on its terrace) and their ways up; the ivy's ways up beside them."""
     for n, (tower, (_plate, _z, _ground, quarter)) in enumerate(zip(plan.WALLS["towers"], plan.TOWERS)):
         name = getattr(kit_terrace, tower["kind"])(*tower["args"])
         at, yaw = tower["at"], tower["yaw"]
 
-        for i, d in enumerate(kit.PIECES[name]["doors"]):
-            where = world(at, yaw, d)
-            L.mark("stairs_tower_%d_door_%d" % (n + 1, i + 1), "door", where, yaw + d[3], _sector(where[0], where[2]))
-
         checks(L, "stairs_tower_%d" % (n + 1), placed(at, yaw, kit.PIECES[name]["tour"]), way="public", step="stairs_step_%s" % quarter)
 
-    for n, (corbel, (plate, _z, _ground, quarter)) in enumerate(zip(plan.WALLS["corbels"], plan.CORBEL_CLIMBS)):
-        name = getattr(kit_terrace, corbel["kind"])(*corbel["args"])
-        at, yaw = corbel["at"], corbel["yaw"]
-        tops = placed(at, yaw, [t + ["mantle"] for t in kit.PIECES[name]["tops"]])
-        first = tops[0]
-        y = plan.level([p for p in plan.PLATES if p[0] == plate][0])
-        street = [first[0] + 1.0, at[1], first[2], "walk"]
-        # (Over the parapet on the cliff's top: hung from, stood on, dropped
-        # from onto the terrace.)
-        rail = [plan.EAST - kit_terrace.PARAPET[1] / 2.0, y + kit_terrace.PARAPET[0] + 0.08, tops[-1][2], "hang"]
-        inside = [plan.EAST - 1.5, y, tops[-1][2], "drop"]
-        checks(L, "stairs_corbels_%d" % (n + 1), [street] + tops + [rail, inside], way="thief", step="stairs_step_%s" % quarter)
+    for n, (ivy, (_plate, _z, _ground, quarter)) in enumerate(zip(plan.WALLS["ivy"], plan.IVY_CLIMBS)):
+        name = getattr(kit_terrace, ivy["kind"])(*ivy["args"])
+        rise = ivy["args"][1]
+        tour = placed(ivy["at"], ivy["yaw"], kit.PIECES[name]["tour"])[:-1]
+        # (Over the parapet at its top, down onto the terrace.)
+        tour += placed(ivy["at"], ivy["yaw"], [[0.0, rise, -kit_terrace.PARAPET[1] / 2.0, "mantle"], [0.0, rise - plan.IVY_OVER, -1.6, "drop"]])
+        checks(L, "stairs_ivy_%d" % (n + 1), tour, way="thief", step="stairs_step_%s" % quarter)
 
 
 def _square(L):
@@ -222,8 +213,8 @@ def _ways(L):
         [[x1, y3, cross, "walk"], [plan.MIRADOURO[0] - 2.0, y3, cross, "walk"]],
         [[sum(plan.SOUTH_LANES[0]) / 2.0, y3, z1, "walk"], [sum(plan.SOUTH_LANES[0]) / 2.0, y3, south, "walk"]],
         [[sum(plan.SOUTH_LANES[1]) / 2.0, y3, z1, "walk"], [sum(plan.SOUTH_LANES[1]) / 2.0, y3, south, "walk"]],
-        [[plan.GAPS[2][0], y3, z0, "walk"]] + _stair_tour(2, plan.GAPS[2][0])[1:],
-        [[plan.GAPS[2][1], y3, z0, "walk"]] + _stair_tour(2, plan.GAPS[2][1])[1:],
+        [[plan.GAPS[2][0], y3, z0 + 1.5, "walk"], [plan.GAPS[2][0], y3, z0, "walk"]] + _stair_tour(2, plan.GAPS[2][0])[1:],
+        [[plan.GAPS[2][1], y3, z0 + 1.5, "walk"], [plan.GAPS[2][1], y3, z0, "walk"]] + _stair_tour(2, plan.GAPS[2][1])[1:],
         [[passage, y3, z0, "walk"], [passage, y3, alley + 1.0, "walk"], [passage - 2.0, y3, alley, "walk"],
          [plan.TANNERY[2] + 1.0, y3, alley, "walk"]],
     ]
@@ -243,7 +234,7 @@ def _ways(L):
         back = recipe["out_back"][-1]
         out = [back[0], back[1], -each.depth - 1.5, "walk"]
         k = [n for n, st in enumerate(plan.STEPS) if abs(st["z"] - (each.z - each.depth)) < 0.05][0]
-        checks(L, "stairs_through_%s" % each.name, placed(at, each.yaw, recipe["tour"] + recipe["out_back"] + [out]), way="thief",
+        checks(L, "stairs_through_%s" % each.name, placed(at, each.yaw, recipe["through"] + [out]), way="thief",
                step="stairs_step_%d" % (k + 1))
 
     # The west wall's stair from the first lane to the walk.
@@ -259,7 +250,7 @@ def _ways(L):
     hx, hz = plan.HATCH
     ledge = plan.STREAM_X + plan.STREAM_SIZE[0] / 2.0 - plan.STREAM_LEDGE / 2.0
     ladder = plan.STREAM_X + plan.STREAM_SIZE[0] / 2.0 - 0.4
-    points = [[hx, y3, hz + 1.0, "walk"], [ladder, y3 - plan.STREAM_DEPTH, hz - 0.6, "climb"], [ledge, y3 - plan.STREAM_DEPTH, hz + 1.2, "walk"]]
+    points = [[hx - 1.2, y3, hz, "walk"], [hx + 0.2, y3 - 0.2, hz, "climb"], [ladder, y3 - plan.STREAM_DEPTH, hz - 0.6, "climb"], [ledge, y3 - plan.STREAM_DEPTH, hz + 1.2, "walk"]]
     tavern_z = plan.TAVERN[1]
 
     for kind, args, z, y in plan.STREAM[::-1]:
@@ -267,7 +258,8 @@ def _ways(L):
             name = getattr(kit_terrace, kind)(*args)
             points += [p for p in placed((plan.STREAM_X, y, z), 0.0, kit.PIECES[name]["tour"])[::-1]]
 
-    points = _downstream(points)
+    # (Down the hatch's ladder as laid; on from its foot, downstream.)
+    points = points[:3] + _downstream(points[2:])[1:]
     points.append([ledge, plan.level(plan.PLATES[1]) - plan.STREAM_DEPTH, tavern_z - 1.0, "walk"])
     checks(L, "stairs_below_stream", points, way="below")
     points = [[ledge, plan.level(plan.PLATES[1]) - plan.STREAM_DEPTH, tavern_z + 1.0, "walk"]]
@@ -297,7 +289,7 @@ def _downstream(points):
 def _steps(L):
     """Each terrace step's box and its public ways up (its two stair-lanes;
     its thief's, the two-level house through it, laid with the ways); the
-    boundary steps down to the Baixa and the Carmo (their towers and corbels,
+    boundary steps down to the Baixa and the Carmo (their towers and ivy,
     laid with them)."""
     middle = (plan.WEST + plan.EAST) / 2.0
 
@@ -329,7 +321,7 @@ def _vantages(L):
     for plate in plan.PLATES:
         out.append([plan.EAST - 1.0, plan.level(plate), plan.south(plate) - plan.LANE / 2.0])
 
-    out.append([plan.EAST - 1.5, plan.level(plan.PLATES[2]), plan.CORBEL_CLIMBS[0][1]])
+    out.append([plan.EAST - 1.5, plan.level(plan.PLATES[2]), plan.IVY_CLIMBS[0][1]])
 
     for i, at in enumerate(out):
         L.mark("stairs_vantage_%d" % (i + 1), "vantage", at, 0.0, _sector(at[0], at[2]))

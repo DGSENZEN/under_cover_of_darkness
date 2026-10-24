@@ -24,6 +24,8 @@ STEP = 0.25
 # where its line leaves the roof by more than SLACK.
 SLOPE = 0.2
 SLACK = 0.15
+# A step up or down a man walks, not mantles or drops.
+WALK_UP = 0.3
 
 
 def _sector(x, z):
@@ -69,7 +71,8 @@ def _sewer(L):
         # (Down from its collar to the chamber's floor against its ladder,
         # then along the sewer to its far end.)
         ladder_x = x + plan.SEWER_SIZE[0] / 2.0 - 0.4
-        checks(L, "below_baixa_%d" % (i + 1), [[hx, G + kit_terrace.COLLAR_PROUD, hz + 1.0, "walk"], [ladder_x, floor, hz - 0.3, "climb"],
+        checks(L, "below_baixa_%d" % (i + 1), [[hx - 1.2, G + kit_terrace.COLLAR_PROUD, hz, "walk"], [hx + 0.2, G - 0.2, hz, "climb"],
+                                               [ladder_x, floor, hz - 0.3, "climb"],
                                                [x, floor, hz - 1.5 if i == 0 else hz + 1.5, "walk"], [x, floor, ends[i], "walk"]],
                "below", _sector(hx, hz))
 
@@ -103,12 +106,18 @@ def _top(boxes, x, z):
     return 80.0 - min(hits) if hits else None
 
 
-def _walk(samples, ys, a, b):
+def _walk(samples, ys, a, b, corners=()):
     """A walk's points from sample a to b along a roof: one wherever the
-    straight line from the last would leave the roof by SLACK."""
+    straight line from the last would leave the roof by SLACK, and at each
+    of its path's corners (`corners`, samples' indices)."""
     out, last = [], a
 
     for j in range(a + 2, b + 1):
+        if j - 1 in corners and j - 1 > last:
+            out.append(j - 1)
+            last = j - 1
+            continue
+
         for k in range(last + 1, j):
             t = (k - last) / float(j - last)
 
@@ -127,13 +136,15 @@ def roof_route(boxes, path):
     """A way over roofs along `path` [(x, z)], its first point mantled onto:
     the roofs' tops sampled every STEP; walked where they slope, mantled
     (or hung) up a step, dropped down one. [[x, y, z, move]]."""
-    samples = []
+    samples, corners = [], set()
 
     for (ax, az), (bx, bz) in zip(path, path[1:]):
         n = max(1, int(math.hypot(bx - ax, bz - az) / STEP))
+        corners.add(len(samples))
         samples += [(ax + (bx - ax) * i / n, az + (bz - az) * i / n) for i in range(n)]
 
     samples.append(path[-1])
+    corners.discard(0)
     ys = [_top(boxes, x, z) for x, z in samples]
 
     if any(y is None for y in ys):
@@ -149,7 +160,7 @@ def roof_route(boxes, path):
             i += 1
             continue
 
-        out += _walk(samples, ys, run, i)
+        out += _walk(samples, ys, run, i, corners)
         # (Onto a step's top a little past its edge, or down off it.)
         land = i + 2 if i + 2 < len(samples) and abs(ys[i + 2] - ys[i + 1]) <= SLOPE else i + 1
         rise = ys[land] - ys[i]
@@ -157,10 +168,11 @@ def roof_route(boxes, path):
         if rise > rules.HANG:
             raise ValueError("a roof route meets a step of %.2f m at %s" % (rise, samples[i]))
 
-        out.append([samples[land][0], ys[land], samples[land][1], "drop" if rise < 0.0 else "mantle" if rise <= rules.MANTLE else "hang"])
+        move = "walk" if abs(rise) <= WALK_UP else "drop" if rise < 0.0 else "mantle" if rise <= rules.MANTLE else "hang"
+        out.append([samples[land][0], ys[land], samples[land][1], move])
         i = run = land
 
-    out += _walk(samples, ys, run, len(samples) - 1)
+    out += _walk(samples, ys, run, len(samples) - 1, corners)
     return out
 
 
@@ -172,11 +184,12 @@ def roof_route(boxes, path):
 # scaffold, the path after it.)
 def _chain_plans():
     w, e, f = plan.BLOCKS["baixa_w"], plan.BLOCKS["baixa_e"], plan.BLOCKS["baixa_f"]
-    d, off = plan.DEPTH, 0.3
+    # (Off the valley onto the rows' gentle slopes: a mansard's steep lower
+    # slope comes down to it, on the blocks that keep theirs.)
+    d, off = plan.DEPTH, 1.5
     return [("baixa_w", (w[0] + d / 2.0, w[3], 0.0), [(w[0] + d / 2.0, w[3] - 0.6), (w[0] + d - off, w[3] - 0.6), (w[0] + d - off, w[1] + 0.6)]),
             ("baixa_e", (e[2] - d / 2.0, e[1], 180.0), [(e[2] - d / 2.0, e[1] + 0.6), (e[2] - d + off, e[1] + 0.6), (e[2] - d + off, e[3] - 0.6)]),
-            # (Down the east row's side: a mansard on the west row leans its
-            # steep slope into the valley.)
+            # (Down the east row's side.)
             ("baixa_f", (f[0] + d / 2.0, f[3], 0.0), [(f[0] + d / 2.0, f[3] - 0.6), (f[0] + d + off, f[3] - 0.6), (f[0] + d + off, f[3] - 46.0)])]
 
 

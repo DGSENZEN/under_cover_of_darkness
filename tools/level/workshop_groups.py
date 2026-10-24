@@ -286,7 +286,11 @@ def old_town():
     def cistern():
         return next(p for p in placed if p["piece"].startswith("cistern_") or p["piece"].startswith("grate_hatch_3_c25x25"))["position"]
 
-    for name, centre, radius in (("Street: the Baixa", first("scaffold_142_40"), 30.0), ("Street: the stairs", first("tavern"), 30.0),
+    def named(name):
+        return next(p for p in placed if p["name"] == name)["position"]
+
+    # (The Baixa's by its first scaffold as laid: its size is its eaves'.)
+    for name, centre, radius in (("Street: the Baixa", named("baixa_scaffold_1"), 30.0), ("Street: the stairs", first("tavern"), 30.0),
                                  ("Street: the Judiaria", cistern(), 25.0)):
         groups.append(_group(name, _near(placed, centre, radius), homes, "Cut from the level round its middle: every piece as placed."))
 

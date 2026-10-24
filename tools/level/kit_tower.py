@@ -29,7 +29,9 @@ WALL = 1.0
 STOREY = 3.3
 RISER = 0.24
 TREAD = 0.25
-STAIR_WIDTH = 0.9
+STAIR_WIDTH = 1.3
+# (A flight's foot off the wall behind it: a man stands there.)
+FOOT = 1.1
 DOOR = (1.2, 2.2)
 LANCET = (0.5, 1.4, 1.2)
 MERLON = (0.8, 0.9)
@@ -41,7 +43,7 @@ HATCH = (0.7, 1.2)
 DOVECOTE = (1.5, 1.2)
 # A balcony on corbels, its door (balcony=).
 BALCONY = (1.8, 1.0)
-BALCONY_DOOR = (1.0, 2.1)
+BALCONY_DOOR = (1.2, 2.1)
 KINDS = ("cut", "full")
 QUIRKS = ("", "chute", "dovecote")
 # Triangles a storey walked in (its floor and flight) over its budget.
@@ -142,9 +144,9 @@ def _inside(out, shapes, cols, side, storeys, levels, eaves):
 
     for s in range(storeys):
         if s % 2 == 0:
-            stairs.append((-inner / 2.0 + STAIR_WIDTH / 2.0, -side + WALL + 0.1, 0.0, levels[s]))
+            stairs.append((-inner / 2.0 + STAIR_WIDTH / 2.0, -side + WALL + FOOT, 0.0, levels[s]))
         else:
-            stairs.append((inner / 2.0 - STAIR_WIDTH / 2.0, -WALL - 0.1, 180.0, levels[s]))
+            stairs.append((inner / 2.0 - STAIR_WIDTH / 2.0, -WALL - FOOT, 180.0, levels[s]))
 
     reach = town.stair_reach("straight", STAIR_WIDTH, STOREY, RISER, TREAD)
     run = reach["run"]
@@ -180,7 +182,11 @@ def _inside(out, shapes, cols, side, storeys, levels, eaves):
     tour = [[0.0, 0.0, 1.0, "walk"], [0.0, 0.0, -WALL - 0.6, "walk"], out["rooms_at"][0] + ["walk"]]
 
     for s, (x, z, yaw, y) in enumerate(stairs):
-        tour += town.stair_tour("straight", STAIR_WIDTH, STOREY, (x, y, z), yaw, RISER, TREAD)
+        # (Up to its last tread, off it sideways into the floor's middle: its
+        # head is too near the wall to step off ahead.)
+        flight = town.stair_tour("straight", STAIR_WIDTH, STOREY, (x, y, z), yaw, RISER, TREAD)[:-1]
+        last = flight[-1]
+        tour += flight + [[x - (STAIR_WIDTH / 2.0 + 0.6) * (1.0 if x > 0.0 else -1.0), last[1], last[2], "walk"]]
         tour.append(out["rooms_at"][s + 1] + ["walk"] if s + 1 < storeys else [0.0, eaves, -side / 2.0, "walk"])
 
     out["tour"] = tour

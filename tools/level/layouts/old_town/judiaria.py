@@ -4,7 +4,7 @@ with the rest); here its terraces' retaining walls and the stair-lanes up
 them, its parapets, its cliffs over the Baixa, the Carmo and the harbour's
 shipyard, the palace's garden wall and its sealed gate; the Baixa's stair
 towers into the quarter's two gated courts, the Carmo's stairs, the
-corbels; the adarves' gates, the gardens, the cisterns, the chains of
+ledges; the adarves' gates, the gardens, the cisterns, the chains of
 linked roofs; its lamps, shrines, vantages, zones and ways."""
 
 import math
@@ -98,15 +98,11 @@ def _court_way(plate, door_z, gate_z, lane_z):
 
 
 def _towers(L):
-    """The Baixa's stair towers: their doors, and their ways up from the
+    """The Baixa's stair towers (open arches, no leaf): their ways up from the
     Rossio through each court's gate onto its lane (public)."""
     for n, (w, (name, z)) in enumerate(zip(plan.WALLS["towers"], plan.TOWERS)):
         recipe = kit.PIECES[piece(w)]
         at, yaw = w["at"], w["yaw"]
-
-        for i, d in enumerate(recipe["doors"]):
-            where = world(at, yaw, d)
-            L.mark("judiaria_tower_%d_door_%d" % (n + 1, i + 1), "door", where, yaw + d[3], _sector(where[0], where[2]))
 
         plate = plan.plate_named(name)
         door = plan.tower_at(name, z)[2]
@@ -118,22 +114,15 @@ def _towers(L):
 
 
 def _climbs(L):
-    """The corbels up the cliffs (a thief's: up them, hung from the parapet
-    on the top, over it), the Carmo's stairs along its cliff (public), the
-    corbels at each plazuela's back."""
-    t, h = kit_terrace.PARAPET[1], kit_terrace.PARAPET[0]
-
-    for w in [w for w in plan.WALLS["corbels"] if "plate" in w]:
-        plate = plan.plate_named(w["plate"])
-        y = plan.level(plate)
-        at = w["at"]
-        tops = placed(at, w["yaw"], [p + ["mantle"] for p in kit.PIECES[piece(w)]["tops"]])
-        z = at[2]
-        street = [plan.WEST - 1.4, at[1], z, "walk"]
-        rail = [plan.WEST + t / 2.0, y + h + 0.08, tops[-1][2], "hang"]
-        inside = [plan.WEST + 1.25, y, z, "drop"]
+    """The ledges up the cliffs (a thief's: up them a mantle at a time, onto
+    the top through the parapet's gap), the Carmo's stairs along its cliff
+    (public), the ledges at each plazuela's back."""
+    for w in [w for w in plan.WALLS["ledges"] if "plate" in w]:
+        tour = placed(w["at"], w["yaw"], kit.PIECES[piece(w)]["tour"])
+        last = tour[-1]
+        inside = [plan.WEST + 1.5, last[1], last[2], "walk"]
         step = "judiaria_step_baixa" if w["plate"] == plan.BAIXA_CORBELS[0] else "judiaria_step_carmo"
-        checks(L, "judiaria_corbels_%s" % step.split("_")[-1], [street] + tops + [rail, inside], way="thief", step=step)
+        checks(L, "judiaria_ledges_%s" % step.split("_")[-1], tour + [inside], way="thief", step=step)
 
     for n, w in enumerate(plan.WALLS["carmo"]):
         plate = plan.plate_named(w["plate"])
@@ -144,17 +133,12 @@ def _climbs(L):
                [plan.WEST + plan.COURT / 2.0, last[1], (zn + zs) / 2.0, "walk"]]
         checks(L, "judiaria_carmo_%d" % (n + 1), tour + out, way="public", step="judiaria_step_carmo")
 
-    for w in [w for w in plan.WALLS["corbels"] if "step" in w]:
+    for w in [w for w in plan.WALLS["ledges"] if "step" in w]:
         k = w["step"]
-        step = plan.STEPS[k]
-        y = step["y"] + step["rise"]
-        at = w["at"]
-        tops = placed(at, w["yaw"], [p + ["mantle"] for p in kit.PIECES[piece(w)]["tops"]])
-        # (Hung from the parapet square over the last corbel.)
-        street = [at[0], step["y"], step["z"] + 1.4, "walk"]
-        rail = [tops[-1][0], y + h + 0.08, step["z"] - t / 2.0, "hang"]
-        inside = [tops[-1][0], y, step["z"] - 1.25, "drop"]
-        checks(L, "judiaria_step_%d_corbels" % (k + 1), [street] + tops + [rail, inside], way="thief", step="judiaria_step_%d" % (k + 1))
+        tour = placed(w["at"], w["yaw"], kit.PIECES[piece(w)]["tour"])
+        last = tour[-1]
+        inside = [last[0], last[1], plan.STEPS[k]["z"] - 1.5, "walk"]
+        checks(L, "judiaria_step_%d_ledges" % (k + 1), tour + [inside], way="thief", step="judiaria_step_%d" % (k + 1))
 
 
 def _corral(L):
@@ -186,7 +170,7 @@ def _cisterns(L):
         ledge = x + w / 2.0 - plan.CISTERN_LEDGE / 2.0
         ladder = x + w / 2.0 - 0.4
         top = plan.level(plan.PLATES[k])
-        points = [[hx, top, hz + 1.0, "walk"], [ladder, y, hz - 0.6, "climb"], [ledge, y, hz - 1.2, "walk"], [ledge, y, back + 0.6, "walk"]]
+        points = [[hx - 1.2, top, hz, "walk"], [hx + 0.2, top - 0.2, hz, "climb"], [ladder, y, hz - 0.6, "climb"], [ledge, y, hz - 1.2, "walk"], [ledge, y, back + 0.6, "walk"]]
         checks(L, "judiaria_cistern_%d" % (n + 1), points, way="below")
         L.mark("payoff_judiaria_cistern_%d" % (n + 1), "mark", (ledge, y, back + 0.5), 0.0, _sector(ledge, back))
 
@@ -274,7 +258,7 @@ def _steps(L):
 
 def _vantages(L):
     """Unlit spots to scout from: at each stair's head, at each lane's west
-    end over the cliff, at each corbels' top; their places."""
+    end over the cliff, at each ledges' top; their places."""
     out = []
 
     for w in plan.WALLS["stair"]:
@@ -286,8 +270,9 @@ def _vantages(L):
         zn, zs = plan.lane(plate, plan.WEST + 1.0)
         out.append([plan.WEST + 1.0, plan.level(plate), (zn + zs) / 2.0])
 
-    for w in [w for w in plan.WALLS["corbels"] if "plate" in w]:
-        out.append([plan.WEST + 1.25, plan.level(plan.plate_named(w["plate"])), w["at"][2]])
+    for w in [w for w in plan.WALLS["ledges"] if "plate" in w]:
+        arrival = placed(w["at"], w["yaw"], kit.PIECES[piece(w)]["tour"])[-1]
+        out.append([plan.WEST + 1.25, arrival[1], arrival[2]])
 
     for i, at in enumerate(out):
         L.mark("judiaria_vantage_%d" % (i + 1), "vantage", at, 0.0, _sector(at[0], at[2]))

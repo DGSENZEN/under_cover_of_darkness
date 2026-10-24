@@ -10,7 +10,7 @@ row of two-storey patio houses facing south, their backs on the next
 step's retaining wall. The lane dog-legs: its rows' depths swap segment by
 segment, so it jogs its own width and no view runs down it. Each step is
 climbed by two stair-lanes cut between the houses (one under a cobertizo,
-a house bridging it, where there is room), and by a thief up the corbels
+a house bridging it, where there is room), and by a thief up the ledges
 at the back of a plazuela; gated adarves run back from the lanes to dead
 ends; the azoteas are linked house to house in chains, each up a stair on
 a plazuela's side; cisterns lie under two plazuelas. The Baixa climbs to it
@@ -54,6 +54,11 @@ PLAZUELA = 9.0
 COURT = 6.0
 EDGE_COURT = 2.5
 CORBEL_HEAD = 2.0
+# The thief's stone ledges (kit_terrace.ledges: each LEDGE_ALONG along the
+# face, at most LEDGE_RISE over the last, marching along the face from
+# the run's start; a man arrives on the top over the last one).
+LEDGE_ALONG = 1.6
+LEDGE_RISE = 2.0
 COBERTIZO = 3.0
 SETBACK = 4.5
 CELL = 2.5
@@ -120,7 +125,7 @@ def depths(plate):
 
 # Each step (between PLATES[k] and PLATES[k + 1]): its two stairs (x of
 # their middle, width: a cobertizo over a 3 m one, where there is room), its
-# plazuela's west x (the thief's corbels at its back). The top step's
+# plazuela's west x (the thief's ledges at its back). The top step's
 # stairs (the seventh terrace is 15 m deep, one row) climb along its face.
 STAIRS = [[(40.0, 3.0), (112.0, 2.5)], [(55.0, 2.5), (128.0, 3.0)], [(33.0, 3.0), (98.0, 2.5)], [(62.0, 2.5), (140.0, 3.0)],
           [(45.0, 3.0), (118.0, 2.5)], [(90.0, 2.5), (135.0, 2.5)], [(50.0, 1.6), (110.0, 1.6)]]
@@ -133,13 +138,17 @@ CHAIN_HOUSES = 5
 # spec's 25-60 m).
 CHAIN_LENGTH = 42.0
 MERCHANT = 10.0
+# A chain's wall stair's width (a man's inside its rail).
+CHAIN_STAIR = 1.6
 # The cisterns: under the plazuelas of these steps.
 CISTERNS = (2, 5)
 CISTERN_SIZE = (3.0, 2.4)
 CISTERN_LEDGE = 1.2
 CISTERN_DEPTH = 3.0
 CISTERN_CHAMBER = 2.0
-SHAFT_OFF = 0.9
+# (The hatch's shaft against the cistern's +x wall: its half width less
+# kit_terrace's SHAFT's half.)
+SHAFT_OFF = 0.7
 # Each terrace's adarve (x of its west side, width): a gated dead end.
 ADARVES = {"judiaria_1": (95.0, 1.5), "judiaria_2": (30.0, 1.2), "judiaria_3": (60.0, 1.5), "judiaria_4": (122.0, 1.5),
            "judiaria_5": (95.0, 1.5), "judiaria_6": (110.0, 1.5), "judiaria_8": (75.0, 1.5)}
@@ -148,9 +157,9 @@ CORRAL = ("judiaria_2", 106.0, 16.0)
 # The stair towers from the Rossio's east end (kit_terrace.stair_tower,
 # their backs on the cliff, yaw 180): (terrace, the tower's middle z), the
 # Rossio's mouth onto the 2.6 m lane under the cliff kept clear; the
-# thief's corbels from that lane (terrace, ground, z); the Carmo's stairs
+# thief's ledges from that lane (terrace, ground, the z they arrive at); the Carmo's stairs
 # along its cliff (terrace, the ground at their foot, their foot's z); the
-# Carmo's corbels (terrace, ground, z).
+# Carmo's ledges (terrace, ground, the z they arrive at).
 TOWERS = [("judiaria_3", -154.8), ("judiaria_4", -165.9)]
 BAIXA_CORBELS = ("judiaria_2", BAIXA_G, -115.0)
 CARMO_STAIRS = [("judiaria_4", 26.0, -183.0), ("judiaria_5", 28.0, -217.0)]
@@ -208,6 +217,29 @@ def carmo_head(foot_z, rise):
     return foot_z + wall_run(rise) - WALL_LANDING / 2.0
 
 
+def ledge_reach(height):
+    """How far along the face from a run of ledges' start (`height` up a
+    cliff) a man arrives on its top."""
+    count = int(math.ceil(height / LEDGE_RISE - 1e-9)) - 1
+    return (count - 0.5) * LEDGE_ALONG
+
+
+def ledge_run(k):
+    """Step k's ledges up the back of its plazuela: (the run's start x, the x
+    it arrives at on the top), its arrival at the plazuela's middle but on a
+    chain's step, where the run starts clear of the chain's wall stair up
+    the plazuela's west side."""
+    step = STEPS[k]
+    p = step["plazuela"]
+    reach = ledge_reach(step["rise"])
+    start = p + PLAZUELA / 2.0 - reach
+
+    if k in CHAINS:
+        start = max(start, p + CHAIN_STAIR + 0.5)
+
+    return start, start + reach
+
+
 def _west_places():
     """What stands at the quarter's west edge: (plate, z it opens at, kind,
     width kept east of the edge)."""
@@ -240,7 +272,8 @@ def _spans():
         for c, w in step["stairs"]:
             if step["along"]:
                 run = wall_run(step["rise"])
-                keep(low[0], "north", c - run / 2.0 - 0.5, c + run / 2.0 + 0.5, "stair_court")
+                # (Room before its foot for a man to step on.)
+                keep(low[0], "north", c - run / 2.0 - 1.3, c + run / 2.0 + 0.5, "stair_court")
                 keep(high[0], "south", c + run / 2.0 - 1.6, c + run / 2.0 + 0.4, "stair_head")
             else:
                 keep(low[0], "north", c - w / 2.0, c + w / 2.0, "stair")
@@ -248,7 +281,8 @@ def _spans():
 
         p = step["plazuela"]
         keep(low[0], "north", p, p + PLAZUELA, "plazuela")
-        keep(high[0], "south", p + PLAZUELA / 2.0 - CORBEL_HEAD / 2.0, p + PLAZUELA / 2.0 + CORBEL_HEAD / 2.0, "corbel_head")
+        arrival = ledge_run(k)[1]
+        keep(high[0], "south", arrival - CORBEL_HEAD / 2.0, arrival + CORBEL_HEAD / 2.0, "corbel_head")
 
     for name, (x0, w) in ADARVES.items():
         keep(name, "north", x0, x0 + w, "adarve")
@@ -623,7 +657,7 @@ def chain_stair(k):
     plate = PLATES[k]
     eaves = 7.6 if chain_lots(k)[0].storeys == 2 else 4.0
     run = round(wall_run(eaves), 3)
-    width = 1.2
+    width = CHAIN_STAIR
     link = north(plate) + 2.5
     return (eaves, run, width), (STEPS[k]["plazuela"] + width / 2.0, level(plate), link + run - WALL_LANDING / 2.0)
 
@@ -635,7 +669,7 @@ def palace_gate():
 
 
 def _walls():
-    out = {k: [] for k in ("retaining", "stair", "parapet", "west", "south", "boundary", "gate", "corbels", "towers", "carmo", "adarve",
+    out = {k: [] for k in ("retaining", "stair", "parapet", "west", "south", "boundary", "gate", "ledges", "towers", "carmo", "adarve",
                            "garden", "chain", "cistern")}
 
     for k, step in enumerate(STEPS):
@@ -666,15 +700,17 @@ def _walls():
 
         # (A parapet on the step's top where nothing stands on its edge
         # but a stair's head.)
-        guarded = [(i["x0"], i["x1"]) for i in ROWS[(high[0], "south")] if i["kind"] in ("house", "stair_head")]
+        guarded = [(i["x0"], i["x1"]) for i in ROWS[(high[0], "south")] if i["kind"] in ("house", "stair_head", "corbel_head")]
 
         for a, b in _intervals(WEST, EAST, guarded):
             if b - a > 0.3:
                 out["parapet"].append({"kind": "parapet", "args": (round(b - a, 3),), "at": ((a + b) / 2.0, level(high), step["z"]), "yaw": 0.0})
 
-        # (The thief's corbels up the back of the plazuela.)
+        # (The thief's ledges up the back of the plazuela, arriving at the
+        # gap kept on the top at its middle.)
         p = step["plazuela"]
-        out["corbels"].append({"kind": "corbels", "args": (step["rise"],), "at": (p + PLAZUELA / 2.0, step["y"], step["z"]), "yaw": 0.0, "step": k})
+        out["ledges"].append({"kind": "ledges", "args": (step["rise"],), "at": (ledge_run(k)[0], step["y"], step["z"]),
+                              "yaw": 0.0, "step": k})
 
     for plate in PLATES:
         y = level(plate)
@@ -697,7 +733,8 @@ def _walls():
                 out["west"].append({"kind": "retaining", "args": args, "at": (WEST, below, (a + b) / 2.0), "yaw": -90.0})
 
         # (Its parapet along the west edge where no house stands on it: but
-        # where a tower's top door or a Carmo stair's landing opens.)
+        # where a tower's top door, a Carmo stair's landing or the ledges'
+        # arrival opens.)
         covered = [(lot_rect(each)[1], lot_rect(each)[3]) for each in LOTS if abs(each.y - y) < 0.01 and lot_rect(each)[0] <= WEST + 0.01]
 
         for name, z in TOWERS:
@@ -708,6 +745,10 @@ def _walls():
             if name == plate[0]:
                 head = carmo_head(foot, y - ground)
                 covered.append((head - WALL_LANDING / 2.0, head + WALL_LANDING / 2.0))
+
+        for name, _ground, z in (BAIXA_CORBELS, CARMO_CORBELS):
+            if name == plate[0]:
+                covered.append((z - CORBEL_HEAD / 2.0, z + CORBEL_HEAD / 2.0))
 
         if plate is PLATES[0]:
             covered.append((CITY_WALL[1], z1))
@@ -746,14 +787,14 @@ def _walls():
         if b - a > 0.3:
             out["parapet"].append({"kind": "parapet", "args": (round(b - a, 3),), "at": ((a + b) / 2.0, y1, south(first)), "yaw": 0.0})
 
-    # The towers, the corbels up the cliffs, the Carmo's stairs.
+    # The towers, the ledges up the cliffs, the Carmo's stairs.
     for name, z in TOWERS:
         (x, zm), height, _door = tower_at(name, z)
         out["towers"].append({"kind": "stair_tower", "args": (height,), "at": (x, BAIXA_G, zm), "yaw": 180.0, "plate": name})
 
     for name, ground, z in (BAIXA_CORBELS, CARMO_CORBELS):
         height = round(level(plate_named(name)) - ground, 3)
-        out["corbels"].append({"kind": "corbels", "args": (height,), "at": (WEST, ground, z), "yaw": -90.0, "plate": name})
+        out["ledges"].append({"kind": "ledges", "args": (height,), "at": (WEST, ground, z - ledge_reach(height)), "yaw": -90.0, "plate": name})
 
     for name, ground, foot in CARMO_STAIRS:
         rise = round(level(plate_named(name)) - ground, 3)

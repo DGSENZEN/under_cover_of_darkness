@@ -78,7 +78,8 @@
    "required": [],
    "optional": {
     "rope": false,
-    "open": false
+    "open": false,
+    "plane_back": 0.0
    },
    "box": true
   },
@@ -504,6 +505,8 @@
   "stairs",
   "mantle",
   "hang",
+  "grab",
+  "shimmy",
   "jump",
   "sprint_jump",
   "assist_jump",

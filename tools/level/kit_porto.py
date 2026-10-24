@@ -51,7 +51,9 @@ SLOT_WIDTH = 1.5
 # A corner house's side windows: their width, the triangles each costs.
 SIDE_WINDOW = 1.0
 SIDE_BUDGET = 70
-STAIR_WIDTH = 0.9
+STAIR_WIDTH = 1.3
+# (A straight stair's foot off the wall behind it: a man stands there.)
+FOOT = 1.2
 # A house this deep turns its first stair about a half-landing.
 TWO_FLIGHT_DEPTH = 15.0
 # Up the front past the first floor, a balcony this often.
@@ -85,7 +87,8 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
     """A Porto house: see the module's doc. Returns a kit_town design with
     `openings` ([storey, face, x, y, w, h, kind]), `balconies` ([x, top,
     width, depth]), `eaves`, `doors`, `entries`, `rooms_at`, `tour` and (a
-    two_level house) `out_back`, `places`. Its ground storey `shop` high (a
+    two_level house) `out_back`, `through` (in at the front, up to the back
+    door's storey and out), `places`. Its ground storey `shop` high (a
     two_level house's as tall as the terrace step it straddles, its back
     door on `back_storey`). A corner house's open sides (`corner`: "w",
     "e" or both) are clad as its front, a window on every storey (their
@@ -137,12 +140,23 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
 
             if balcony:
                 upper.append(town.Opening(x, y, leaf, BALCONY_DOOR, kind))
-                out["balconies"].append([x, shop + (s - 1) * UPPER, leaf + 0.4, BALCONY[0]])
+
+                # (The first floor's one balcony runs the front: laid below.)
+                if s > 1 or quirk == "slot":
+                    out["balconies"].append([x, shop + (s - 1) * UPPER, leaf + 0.4, BALCONY[0]])
             else:
                 upper.append(town.Opening(x, y + SILL, leaf, HEAD - SILL, kind))
 
             if live:
                 out["entries"].append("window")
+
+    # (A Ribeira house's first floor: one iron balcony, a varanda, across
+    # its front between its party walls, over every balcony door: its lip
+    # hung from the street and shimmied along.)
+    if storeys > 1 and quirk != "slot":
+        # (Its ends 0.7 m short of the party lines: room for a man up a
+        # downpipe there.)
+        out["balconies"].insert(0, [0.0, shop, width - 1.4, BALCONY[0]])
 
     for o in ground:
         out["openings"].append([0, "front", o.x, o.y, o.width, o.height, o.kind])
@@ -229,6 +243,7 @@ def design(width, depth, storeys, quirk="", enterable=False, rooms=0, front="ren
         shapes += b
         cols += bc
 
+
     if enterable:
         inside = _inside(out, width, depth, storeys, rooms, party, door_x, back_x, eaves, quirk, shop, back_storey)
         shapes += inside[0]
@@ -263,14 +278,15 @@ def _stairs(depth, rooms, party, width, shop=SHOP):
     out = []
 
     if rooms >= 2:
-        # (Two flights take two stairs' width and leave a way past them.)
-        if depth >= TWO_FLIGHT_DEPTH and inner >= 2.0 * STAIR_WIDTH + 1.0:
+        # (Two flights take two stairs' width and leave a man's way past
+        # them.)
+        if depth >= TWO_FLIGHT_DEPTH and inner >= 2.0 * STAIR_WIDTH + 1.2:
             out.append(("two_flight", -inner / 2.0 + STAIR_WIDTH, -depth + BACK_WALL + 1.2, 0.0, shop, 0.0))
         else:
-            out.append(("straight", -inner / 2.0 + STAIR_WIDTH / 2.0, -depth + BACK_WALL + 0.3, 0.0, shop, 0.0))
+            out.append(("straight", -inner / 2.0 + STAIR_WIDTH / 2.0, -depth + BACK_WALL + FOOT, 0.0, shop, 0.0))
 
     if rooms >= 3:
-        out.append(("straight", inner / 2.0 - STAIR_WIDTH / 2.0, -FRONT_WALL - 0.4, 180.0, UPPER, shop))
+        out.append(("straight", inner / 2.0 - STAIR_WIDTH / 2.0, -FRONT_WALL - FOOT, 180.0, UPPER, shop))
 
     return out
 
@@ -322,21 +338,47 @@ def _inside(out, width, depth, storeys, rooms, party, door_x, back_x, eaves, qui
     front = [o for o in out["openings"] if o[0] == 0 and o[1] == "front" and o[6] == "door"][0]
     out["doors"].insert(0, [door_x, 0.0, -FRONT_WALL / 2.0, 0.0, front[4], front[5]])
     out["entries"].insert(0, "door")
-    # (Each room's place: on the side away from the first stair.)
+    # (Each room's place: on the side away from the first stair; over the
+    # ground, behind the head of a stair up from the front.)
     out["rooms_at"] = [[inner / 4.0, levels[r], -depth / 2.0] for r in range(rooms)]
+
+    if len(stairs) > 1:
+        head = stairs[1][2] - town.stair_reach("straight", STAIR_WIDTH, UPPER)["run"] - 0.4
+        out["rooms_at"][1:] = [[inner / 4.0, levels[r], (head - depth + BACK_WALL) / 2.0] for r in range(1, rooms)]
+
     tour = [[door_x, 0.0, 1.0, "walk"], [door_x, 0.0, -FRONT_WALL - 0.8, "walk"], out["rooms_at"][0] + ["walk"]]
+    reached = [len(tour)]
 
     for (kind, x, z, yaw, rise, y), r in zip(stairs, range(1, rooms)):
+        here = out["rooms_at"][r - 1][2]
+
+        if kind == "two_flight":
+            # (Round its second flight's side and behind it to its foot.)
+            past = (x + STAIR_WIDTH + inner / 2.0) / 2.0
+            behind = -depth + BACK_WALL + 0.6
+            tour += [[past, y, here, "walk"], [past, y, behind, "walk"], [x - STAIR_WIDTH / 2.0, y, behind, "walk"]]
+        else:
+            # (Beside it, on the room's side, to before its foot.)
+            side = 1.0 if yaw == 0.0 else -1.0
+            beside = x + side * (STAIR_WIDTH / 2.0 + 0.7)
+            tour += [[beside, y, here, "walk"], [beside, y, z - side * FOOT / 2.0, "walk"]]
+
         tour += town.stair_tour(kind, STAIR_WIDTH, rise, (x, y, z), yaw)
-        tour.append(out["rooms_at"][r] + ["walk"])
+        # (Off its head to the floor's middle, clear of the hole it came up.)
+        tour += [[0.0, y + rise, tour[-1][2], "walk"], [0.0, y + rise, out["rooms_at"][r][2], "walk"], out["rooms_at"][r] + ["walk"]]
+        reached.append(len(tour))
 
     out["tour"] = tour
 
     if quirk == "two_level":
         # (Out to the back door's threshold: the terrace behind is the
-        # layout's.)
+        # layout's; through the house from the front, up no further than
+        # the back door's storey.)
         up = shop + (back_storey - 1) * UPPER
         out["out_back"] = [[-door_x, up, -depth + BACK_WALL + 0.8, "walk"], [-door_x, up, -depth + BACK_WALL / 2.0, "walk"]]
+
+        if back_storey < len(reached):
+            out["through"] = tour[:reached[back_storey]] + out["out_back"]
 
     return shapes, cols
 

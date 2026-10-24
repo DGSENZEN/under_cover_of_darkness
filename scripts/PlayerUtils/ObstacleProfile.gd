@@ -32,6 +32,8 @@ var far_edge := Vector3.ZERO
 
 var has_far_floor := false
 var far_floor := Vector3.ZERO
+## The far floor's normal (a roof beyond a wall slopes).
+var far_normal := Vector3.UP
 
 ## Surface point where a mantle would place the feet.
 var landing := Vector3.ZERO

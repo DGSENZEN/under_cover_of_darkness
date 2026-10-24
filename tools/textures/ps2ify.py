@@ -174,7 +174,14 @@ def convert(image, recipe):
     if recipe.get("_mask") is not None:
         cut = int(recipe["threshold"])
         mask = _eight_bit(recipe["_mask"]).convert("L").resize(size, Image.Resampling.BOX)
-        out.putalpha(mask.point(lambda v: 255 if v >= cut else 0))
+        kept = np.asarray(mask) >= cut
+
+        # (With "luma" too: the photo's own dark gaps cut as well, inside
+        # the mask's outline.)
+        if recipe["alpha"] == "luma":
+            kept &= np.asarray(rgb.convert("L")) >= cut
+
+        out.putalpha(Image.fromarray(np.where(kept, 255, 0).astype(np.uint8), "L"))
     elif recipe["alpha"] == "threshold":
         cut = int(recipe["threshold"])
         alpha = alpha.point(lambda a: 255 if a >= cut else 0)

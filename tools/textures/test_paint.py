@@ -83,6 +83,23 @@ class Harbour(unittest.TestCase):
         self.assertEqual(mask[0, 0], 0)
         self.assertEqual(mask[h - 1, w - 1], 0)
 
+    def test_the_ivy_clump_mask_is_ragged_white_on_black_clear_of_its_edges(self):
+        # (Each ivy card cut to a clump: lobed, its outline eaten ragged,
+        # never reaching the card's edges, so no straight side shows.)
+        mask = np.asarray(paint.PAINTINGS["ivy_clump"]().convert("L"))
+        h, w = mask.shape
+        self.assertTrue(set(np.unique(mask)) <= {0, 255})
+        self.assertEqual(mask[h // 2, w // 2], 255)
+        border = np.concatenate([mask[:2].ravel(), mask[-2:].ravel(), mask[:, :2].ravel(), mask[:, -2:].ravel()])
+        self.assertTrue((border == 0).all(), "it reaches the card's edge")
+        solid = float((mask == 255).mean())
+        self.assertGreater(solid, 0.35)
+        self.assertLess(solid, 0.8)
+        rows = [np.flatnonzero(mask[y] == 255) for y in range(h // 4, 3 * h // 4)]
+        lefts = np.array([r[0] for r in rows if len(r)])
+        steps = np.abs(np.diff(lefts))
+        self.assertGreater(int((steps >= 2).sum()), h // 16, "its outline is a smooth curve, not ragged")
+
     def test_salt_is_a_pale_bloom_fading_to_nothing(self):
         image = np.asarray(paint.PAINTINGS["decal_salt"]())
         alpha = image[:, :, 3]

@@ -219,7 +219,9 @@ def terrace_pieces():
     for q in (baixa, stairs, judiaria, carmo, upper):
         out += list(getattr(q, "TERRACE", []))
 
-    return out
+    # (The ways up the walls: over the houses, once their designs are.)
+    from town import climbs
+    return out + climbs.terrace()
 
 
 def _rect(lot):

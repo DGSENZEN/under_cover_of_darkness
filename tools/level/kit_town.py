@@ -46,7 +46,7 @@ GROUND_LIFT = 0.03
 RISER = 0.18
 TREAD = 0.25
 PARTITION = 0.1
-ROOM_DOOR = (0.9, 2.1)
+ROOM_DOOR = (1.2, 2.2)
 # A flat roof's (an azotea's) parapet and its thickness; a mansard's two
 # pitches and the height of its steep lower slope.
 PARAPET = 1.0
@@ -268,21 +268,33 @@ def band(length, base, top, thickness, openings, slot, place=(0.0, 0.0, 0.0), in
     return placed(s, c, y=base)
 
 
+# A balcony's rail set in from its slab's lip.
+RAIL_BACK = 0.2
+
+
 def balcony(x, y, width, depth, wall_z=0.0, slot="granite"):
     """A balcony on the storey whose floor is y, `width` across, `depth`
-    out from a wall's face at wall_z (facing +z): its slab on two corbels,
-    iron rails (cards) round it under a handrail; its colliders, the slab
-    and the rails (kit_iberian's)."""
+    out from a wall's face at wall_z (facing +z): its slab on corbels, iron
+    rails (cards) round it under a handrail, set RAIL_BACK in from the
+    slab's lip (a hanging man's hands slide along it); its colliders, the
+    slab and the rails (kit_iberian's)."""
     t = 0.15
+    rail = depth - RAIL_BACK
     shapes = [ks.box(x, y - t / 2.0, wall_z + depth / 2.0, width, t, depth, slot),
-              ks.card(x, y + ib.RAIL / 2.0, wall_z + depth - 0.03, width - 0.04, ib.RAIL - 0.05, "iron_rail"),
-              ks.box(x, y + ib.RAIL, wall_z + depth - 0.03, width, 0.05, 0.05, "iron")]
+              ks.card(x, y + ib.RAIL / 2.0, wall_z + rail - 0.03, width - 0.04, ib.RAIL - 0.05, "iron_rail"),
+              ks.box(x, y + ib.RAIL, wall_z + rail - 0.03, width, 0.05, 0.05, "iron")]
 
     for s in (-1.0, 1.0):
-        shapes += [ks.box(x + s * (width / 2.0 - 0.2), y - t - 0.15, wall_z + depth * 0.4, 0.15, 0.3, depth * 0.7, slot),
-                   ks.card(x + s * (width / 2.0 - 0.02), y + ib.RAIL / 2.0, wall_z + depth / 2.0, depth - 0.04, ib.RAIL - 0.05, "iron_rail", 90.0)]
+        shapes.append(ks.card(x + s * (width / 2.0 - 0.02), y + ib.RAIL / 2.0, wall_z + rail / 2.0, rail - 0.04, ib.RAIL - 0.05, "iron_rail", 90.0))
 
-    cols = [col(x, y - t / 2.0, wall_z + depth / 2.0, width, t, depth)] + ib._rail_cols(x, y, width, wall_z, depth)
+    # (Its corbels: one under each end, a long one's about every 1.2 m.)
+    n = max(2, int(round((width - 0.4) / 1.2)) + 1)
+
+    for i in range(n):
+        cx = x - (width / 2.0 - 0.2) + (width - 0.4) * i / (n - 1)
+        shapes.append(ks.box(cx, y - t - 0.15, wall_z + depth * 0.4, 0.15, 0.3, depth * 0.7, slot))
+
+    cols = [col(x, y - t / 2.0, wall_z + depth / 2.0, width, t, depth)] + ib._rail_cols(x, y, width, wall_z, rail)
     return shapes, cols
 
 
@@ -320,7 +332,9 @@ def stair_reach(kind, width, rise, riser=RISER, tread=TREAD):
         return {"run": n * tread, "landing": rise, "steps": n, "riser": r, "footprint": (-width / 2.0, 0.0, width / 2.0, n * tread)}
 
     if kind == "two_flight":
-        n1 = n // 2
+        # (The first flight the longer half: the second never juts out
+        # behind the foot, where a man comes round to it.)
+        n1 = n - n // 2
         run = n1 * tread
         return {"run": run, "landing": n1 * r, "steps": n, "riser": r,
                 "footprint": (-width, min(0.0, run - (n - n1) * tread), width, run + width)}
@@ -345,7 +359,8 @@ def stair(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0, slot="flagstone", surf
     z), facing +z turned by `yaw`:
         straight    one flight up +z
         two_flight  up +z on the left (x < 0) to a half-landing a width
-                    deep, then back down -z on the right to the top
+                    deep, then back down -z on the right to the top (no
+                    further back than the foot)
         spiral      round a post, sixteen steps a turn, starting toward +z
     Its steps stepped boxes from the floor, as stair_straight's; not
     `solid`, slabs (stairs stacked in a stairwell, a storey apart, each
@@ -356,7 +371,7 @@ def stair(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0, slot="flagstone", surf
     if kind == "straight":
         boxes = [_tread(0.0, (i + 1) * r, i * tread + tread / 2.0, width, solid, tread) for i in range(n)]
     elif kind == "two_flight":
-        n1 = n // 2
+        n1 = n - n // 2
         run = n1 * tread
         boxes = [_tread(-width / 2.0, (i + 1) * r, i * tread + tread / 2.0, width, solid, tread) for i in range(n1)]
         boxes.append((0.0, n1 * r / 2.0, run + width / 2.0, 2.0 * width, n1 * r, width, 0.0) if solid else
@@ -399,7 +414,7 @@ def stair_tour(kind, width, rise, at=(0.0, 0.0, 0.0), yaw=0.0, riser=RISER, trea
         local = [[0.0, 0.0, -0.25, "walk"], [0.0, r, half, "stairs"], [0.0, rise, run - half, "stairs"], [0.0, rise, run + 0.4, "walk"]]
     elif kind == "two_flight":
         head = reach["footprint"][1]
-        n2 = reach["steps"] - reach["steps"] // 2
+        n2 = reach["steps"] // 2
         # (Up the first flight to the landing's middle, across it, down the
         # second from its far end to a step past its head, round the hole.)
         local = [[-width / 2.0, 0.0, -0.4, "walk"], [-width / 2.0, r, half, "stairs"], [-width / 2.0, landing, run - half, "stairs"],
@@ -517,9 +532,10 @@ def _slope_col(length, span, rise, y, along_z=False, side=1.0, surface="stone", 
 COPING = (0.3, 0.18)
 
 
-def _copings(width, depth, rise, eaves_y, slot, surface):
-    """A stone coping down each slope of each verge of a gable roof, from
-    its ridge out to the tiles' overhang, lying on the roof; solid."""
+def _copings(width, depth, rise, eaves_y, slot, surface, verges=(True, True)):
+    """A stone coping down each slope of each verge of a gable roof (its -x
+    and +x, as `verges` asks), from its ridge out to the tiles' overhang,
+    lying on the roof; solid."""
     half = depth / 2.0
     a = math.atan2(rise, half)
     lift = k.ROOF_THICK / math.cos(a)
@@ -528,7 +544,7 @@ def _copings(width, depth, rise, eaves_y, slot, surface):
     d = (half - OVERHANG) / 2.0
     shapes, cols = [], []
 
-    for side in (-1.0, 1.0):
+    for side in [s for s, wanted in zip((-1.0, 1.0), verges) if wanted]:
         for s in (-1.0, 1.0):
             x = side * (width / 2.0 - w / 2.0)
             y = eaves_y + d * math.tan(a) + lift + t / 2.0 * math.cos(a)
@@ -580,7 +596,7 @@ def _hip_cols(ex, ez, eaves_y, pitch, surface):
     return out
 
 
-def roof(kind, width, depth, eaves_y, pitch, slot, surface="stone", tiles="roof_spanish"):
+def roof(kind, width, depth, eaves_y, pitch, slot, surface="stone", tiles="roof_spanish", verges=(True, True)):
     """A roof over walls width (x) by depth (z) whose top is at eaves_y:
         gable    ridge along x, slopes to the front and back, the ends
                  walled up in `slot` (the party walls' gables)
@@ -631,7 +647,7 @@ def roof(kind, width, depth, eaves_y, pitch, slot, surface="stone", tiles="roof_
         for s in (-1.0, 1.0):
             shapes.append(ks.gable(s * (width / 2.0 - 0.1), eaves_y, 0.0, depth, rise, 0.2, slot, 90.0))
 
-        s2, c2 = _copings(width, depth, rise, eaves_y, slot, surface)
+        s2, c2 = _copings(width, depth, rise, eaves_y, slot, surface, verges)
         return shapes + s2, cols + c2
 
     if kind in ("hipped", "four"):

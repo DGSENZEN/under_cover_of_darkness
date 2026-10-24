@@ -33,10 +33,15 @@ FRONT = 0.6
 BACK = 0.4
 YARD = 6.0
 YARD_WALL = (2.5, 0.3)
+# (A crate on the lane at the yard's right wall: the thief's step up onto
+# the shed's roof over it.)
+CRATE = (1.2, 0.9)
 SHED = (2.0, 3.0)
 DOOR = (1.2, 2.2)
 WINDOW = (1.25, 1.5, 0.9)
-STAIR = 0.9
+STAIR = 1.3
+# (A stair's foot off the wall behind it: a man stands there.)
+FOOT = 1.2
 TABLE = (1.0, 0.75, 1.0)
 BUDGET = 7000
 
@@ -97,7 +102,7 @@ def design():
     room_z = (-DEPTH + BACK - FRONT) / 2.0
     room_d = DEPTH - FRONT - BACK
     cellar_stair = (-INNER / 2.0 + STAIR / 2.0, -12.0, 0.0)
-    room_stair = (INNER / 2.0 - STAIR / 2.0, -FRONT - 0.4, 180.0)
+    room_stair = (INNER / 2.0 - STAIR / 2.0, -FRONT - FOOT, 180.0)
     holes = {0.0: _hole(cellar_stair, CELLAR), SHOP: _hole(room_stair, SHOP)}
 
     for y, slot in ((-CELLAR, "flagstone"), (0.0, "boards"), (SHOP, "boards"), (SHOP + UPPER, "boards")):
@@ -114,8 +119,10 @@ def design():
         shapes, cols = shapes + s, cols + c
 
     # The bar, three tables, their twelve seats.
-    shapes.append(ks.box(0.6, 0.525, -5.0, 3.2, 1.05, 0.6, "timber"))
-    cols.append(town.col(0.6, 0.525, -5.0, 3.2, 1.05, 0.6))
+    # (The bar from the room's middle to the stair's side, flush against it.)
+    bar_x0, bar_x1 = -1.0, room_stair[0] - STAIR / 2.0
+    shapes.append(ks.box((bar_x0 + bar_x1) / 2.0, 0.525, -5.0, bar_x1 - bar_x0, 1.05, 0.6, "timber"))
+    cols.append(town.col((bar_x0 + bar_x1) / 2.0, 0.525, -5.0, bar_x1 - bar_x0, 1.05, 0.6))
     places["bar"] = [0.6, 0.0, -5.5]
     seats = []
 
@@ -135,19 +142,29 @@ def design():
     shapes, cols = shapes + s, cols + c
     doors.append([0.0, 0.0, YARD_END + wall_t / 2.0, 180.0])
 
+    shed_w, shed_y = SHED
+
     for sx in (-1.0, 1.0):
+        # (The right one raised under the shed's roof, which rests on it.)
         x = sx * (WIDTH / 2.0 - wall_t / 2.0)
-        shapes.append(ks.box(x, wall_h / 2.0, yard_z, wall_t, wall_h, YARD - wall_t, "whitewash"))
-        cols.append(town.col(x, wall_h / 2.0, yard_z, wall_t, wall_h, YARD - wall_t))
+        h = shed_y - 0.2 if sx > 0.0 else wall_h
+        shapes.append(ks.box(x, h / 2.0, yard_z, wall_t, h, YARD - wall_t, "whitewash"))
+        cols.append(town.col(x, h / 2.0, yard_z, wall_t, h, YARD - wall_t))
 
     s, c = town.floors(WIDTH - 2.0 * wall_t, YARD - wall_t, [0.0], None, "calcada", "stone")
     s, c = town.placed(s, c, z=yard_z + wall_t / 2.0)
     shapes, cols = shapes + s, cols + c
-    shed_w, shed_y = SHED
     shed_x = WIDTH / 2.0 - wall_t - shed_w / 2.0
     shed_d = YARD - wall_t
-    shapes.append(ks.box(shed_x, shed_y - 0.1, yard_z + wall_t / 2.0, shed_w, 0.2, shed_d, "roof_clay"))
-    cols.append(town.col(shed_x, shed_y - 0.1, yard_z + wall_t / 2.0, shed_w, 0.2, shed_d))
+    # (Its roof out over the wall to the lane.)
+    roof_x = shed_x + wall_t / 2.0
+    shapes.append(ks.box(roof_x, shed_y - 0.1, yard_z + wall_t / 2.0, shed_w + wall_t, 0.2, shed_d, "roof_clay"))
+    cols.append(town.col(roof_x, shed_y - 0.1, yard_z + wall_t / 2.0, shed_w + wall_t, 0.2, shed_d))
+    # (Its crate long enough out from the wall that a man stands on it clear
+    # of the wall and the roof's edge over it.)
+    deep, tall = CRATE
+    shapes.append(ks.box(WIDTH / 2.0 + deep / 2.0, tall / 2.0, -17.0, deep, tall, 0.9, "boards"))
+    cols.append(town.col(WIDTH / 2.0 + deep / 2.0, tall / 2.0, -17.0, deep, tall, 0.9))
 
     for pz in (-DEPTH - 0.6, YARD_END + wall_t + 0.3):
         shapes.append(ks.box(shed_x - shed_w / 2.0 + 0.1, (shed_y - 0.2) / 2.0, pz, 0.15, shed_y - 0.2, 0.15, "timber"))
@@ -169,11 +186,14 @@ def design():
         {"kind": "door", "points": [[DOOR_X, 0.0, 1.0, "walk"], [DOOR_X, 0.0, -1.5, "walk"], room + ["walk"]]},
         {"kind": "yard", "points": [[0.0, 0.0, YARD_END - 1.0, "walk"], [0.0, 0.0, YARD_END + 2.0, "walk"], [DOOR_X, 0.0, -DEPTH - 1.0, "walk"],
                                     [DOOR_X, 0.0, -DEPTH + 1.2, "walk"], room + ["walk"]]},
-        {"kind": "window", "points": [[WIDTH / 2.0 + 1.0, 0.0, -17.0, "walk"], [WIDTH / 2.0 - wall_t / 2.0, wall_h, -17.0, "hang"],
+        # (Along the alley beside the yard (2 m: the crate fills most of it),
+        # onto the crate's end, then up onto the shed's roof from its top.)
+        {"kind": "window", "points": [[WIDTH / 2.0 + 1.0, 0.0, -15.2, "walk"], [WIDTH / 2.0 + CRATE[0] / 2.0, CRATE[1], -17.0, "mantle"],
                                       [shed_x, shed_y, -17.0, "mantle"], [WINDOW_X, shed_y, -DEPTH - 0.6, "walk"],
                                       [WINDOW_X, SHOP + WINDOW[2], -DEPTH + BACK / 2.0, "mantle"], [WINDOW_X, SHOP, -DEPTH + 1.5, "drop"],
                                       lodging + ["walk"]]},
-        {"kind": "below", "points": [[0.0, -CELLAR, -DEPTH - 1.5, "walk"], [0.0, -CELLAR, -DEPTH + 1.5, "walk"]]
+        # (From the stream's ledge under its back, through its door.)
+        {"kind": "below", "points": [[0.0, -CELLAR, -DEPTH - 0.8, "walk"], [0.0, -CELLAR, -DEPTH + 1.5, "walk"]]
          + town.stair_tour("straight", STAIR, CELLAR, (cx, -CELLAR, cz), 0.0) + [room + ["walk"]]},
     ]
     places["stream_door"] = [0.0, -CELLAR, -DEPTH]

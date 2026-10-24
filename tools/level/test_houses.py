@@ -119,6 +119,39 @@ class Porto(unittest.TestCase):
         self.assertTrue(clear(design["cols"], [back[0][0], 4.8, -14.0], [back[0][0], 4.8, -10.0]))
         self.assertEqual(toured(design, design["tour"] + design["out_back"]), [])
 
+    def test_a_two_level_houses_stairs_take_a_man(self):
+        # (In at the front, round its stair to its foot, up both flights and
+        # out at the back: a man's width all the way, the controller's
+        # capsule a metre across; the stairs quarter's houses.)
+        for depth, storeys, rooms in ((19.6, 3, 2), (22.0, 4, 2), (17.5, 4, 2), (22.0, 5, 3)):
+            design = kit_porto.design(6.0, depth, storeys, "two_level", enterable=True, rooms=rooms)
+            self.assertEqual(toured(design, design["tour"]), [], (depth, storeys, rooms))
+            kit_recipes.PIECES.pop(TEST, None)
+            self.assertEqual(toured(design, design["through"]), [], (depth, storeys, rooms))
+            kit_recipes.PIECES.pop(TEST, None)
+
+    def test_a_balconys_slab_stands_proud_of_its_rail(self):
+        # (The granite slab's lip free for a hanging man's hands, the iron
+        # set back from it: his hands slide along it under nothing.)
+        design = kit_porto.design(6.0, 12.0, 4)
+        x, top, wide, deep = design["balconies"][0]
+
+        for a in (x - wide / 2.0 + 0.3, x, x + wide / 2.0 - 0.3):
+            self.assertAlmostEqual(first_hit(design["cols"], [a, top + 1.5, deep - 0.06], [0.0, -1.0, 0.0]) or 99.0, 1.5, places=2, msg=a)
+
+    def test_a_varanda_runs_the_first_floor(self):
+        # (A Ribeira house's first floor: one iron balcony across its front,
+        # over every balcony door; grabbed from the
+        # street and shimmied along, party wall to party wall.)
+        design = kit_porto.design(6.0, 12.0, 4)
+        firsts = [b for b in design["balconies"] if abs(b[1] - kit_porto.SHOP) < 0.01]
+        self.assertEqual(len(firsts), 1)
+        # (Its ends 0.7 m short of the party lines: a man up a pipe there.)
+        self.assertAlmostEqual(firsts[0][2], 6.0 - 1.4)
+        a, b = -6.0 / 2.0 + 0.9, 6.0 / 2.0 - 0.9
+        route = [[a, 0.0, 1.5, "walk"], [a, kit_porto.SHOP, kit_porto.BALCONY[0] - 0.08, "grab"], [b, kit_porto.SHOP, kit_porto.BALCONY[0] - 0.08, "shimmy"]]
+        self.assertEqual(toured(design, route), [])
+
     def test_its_cornices_and_chimney_cap_are_solid(self):
         # (The granite cornice along its eaves, front and back, and the cap
         # over its stack: solid as drawn.)
@@ -224,6 +257,16 @@ class Pombaline(unittest.TestCase):
         for name in (TEST, "test_street"):
             kit_recipes.PIECES.pop(name, None)
 
+    def test_its_sacadas_are_grabbed_from_the_street(self):
+        # (Its first floor within a jump's grab of the street: each sacada's
+        # slab hung from, shimmied along.)
+        design = kit_pombal.design(4, 12.0)
+        self.assertTrue(all(top <= rules.HANG for _x, top, _w, _d in design["balconies"]))
+        x, top, wide, deep = design["balconies"][0]
+        a, b = x - wide / 2.0 + 0.5, x + wide / 2.0 - 0.5
+        route = [[a, 0.0, 1.5, "walk"], [a, top, deep - 0.08, "grab"], [b, top, deep - 0.08, "shimmy"]]
+        self.assertEqual(toured(design, route), [])
+
     def test_its_openings_are_framed_in_lioz_and_its_back_plastered(self):
         # (Lisbon's cream limestone round its windows and doors, not the
         # north's grey granite; its back and party walls rendered.)
@@ -239,6 +282,28 @@ class Pombaline(unittest.TestCase):
         # (Each opening 1.35 wide, 2.70 apart.)
         xs = sorted(o[2] for o in openings(kit_pombal.design(4, 12.0), 2))
         self.assertEqual([round(b - a, 3) for a, b in zip(xs, xs[1:])], [2.7, 2.7, 2.7])
+
+    def test_a_verge_under_a_neighbours_fire_wall_is_bare(self):
+        # (Where the neighbour's fire wall stands on the party line, the
+        # verge's coping is not laid: the wall covers the tiles' ends, and a
+        # thief going over it lands on the roof, not on a kerb.)
+        design = kit_pombal.design(4, 12.0, bare=(True, False))
+        half = design["size"][0] / 2.0
+        roof = kit_pombal.roof_at(design, -3.0)
+        left = 40.0 - first_hit(design["cols"], [-half + 0.15, 40.0, -3.0], [0.0, -1.0, 0.0])
+        right = 40.0 - first_hit(design["cols"], [half - 0.15, 40.0, -3.0], [0.0, -1.0, 0.0])
+        self.assertLess(left, right - 0.1)
+        self.assertAlmostEqual(right - roof, kit_town.COPING[1], delta=0.15)
+
+    def test_a_fire_wall_is_climbed_over(self):
+        # (Over the roof a thief goes over it a leg at a time: the
+        # controller's climb over takes a top no thicker than 0.45 m.)
+        design = kit_pombal.design(4, 12.0, fire_walls=(True, False))
+        x = -design["size"][0] / 2.0 + 0.25
+        y = kit_pombal.roof_at(design, -6.0) + 0.4
+        near = first_hit(design["cols"], [x - 1.0, y, -6.0], [1.0, 0.0, 0.0])
+        far = first_hit(design["cols"], [x + 1.0, y, -6.0], [-1.0, 0.0, 0.0])
+        self.assertLessEqual(2.0 - near - far, 0.45)
 
     def test_a_fire_wall_stands_0_6_over_the_roof(self):
         design = kit_pombal.design(4, 12.0, fire_walls=(True, False))
@@ -257,7 +322,7 @@ class Pombaline(unittest.TestCase):
         design = kit_pombal.design(4, 12.0)
         self.assertTrue(all(abs(o[5] - 2.9) < 1e-6 for o in openings(design, 1)))
         self.assertEqual(len(design["balconies"]), 4)
-        self.assertTrue(all(abs(b[1] - 4.0) < 1e-6 for b in design["balconies"]))
+        self.assertTrue(all(abs(b[1] - kit_pombal.STOREYS[0]) < 1e-6 for b in design["balconies"]))
         self.assertTrue(all(o[5] <= 2.2 + 1e-6 for s in (2, 3) for o in openings(design, s)))
 
     def test_a_corner_building_has_four_pitches_and_two_fronts(self):
@@ -344,6 +409,17 @@ def area(box):
 
 
 class Patio(unittest.TestCase):
+    def test_an_honest_house_is_solid_from_its_faces(self):
+        # (Shut, its front and back walls stop a man at their faces, up to
+        # its parapets' tops: he does not walk into the whitewash.)
+        for kind, (width, depth) in kit_patio.LOTS.items():
+            design = kit_patio.design(width, depth, kind, enterable=False)
+            top = design["eaves"] + 0.5
+
+            for y in (1.0, top):
+                self.assertAlmostEqual(first_hit(design["cols"], [0.0, y, 2.0], [0.0, 0.0, -1.0]) or 99.0, 2.0, places=2, msg=(kind, y))
+                self.assertAlmostEqual(first_hit(design["cols"], [0.0, y, -depth - 2.0], [0.0, 0.0, 1.0]) or 99.0, 2.0, places=2, msg=(kind, y))
+
     def test_its_doors_markers_fill_their_openings(self):
         # (Its street door and its cancela onto the patio, each hung its own
         # opening's size.)

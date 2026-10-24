@@ -18,7 +18,7 @@ past it. Laid by layouts/old_town/stairs.py (plan B1a, Task 15).
     LOTS        its houses
     SQUARE      the fountain square where seven lanes meet (third terrace)
     STREAM      the vaulted stream's pieces, its outfall to its head
-    TAVERN, TOWER, CORBELS, TANNERY, ALLEY, BASTION   the places laid by
+    TAVERN, TOWER, LEDGES, TANNERY, ALLEY, BASTION   the places laid by
                 hand
     WALLS       its walls and the pieces laid with them, (piece args, at,
                 yaw)
@@ -463,7 +463,7 @@ LOTS, ROWS = _plan()
 # terraces, STREAM_DEPTH under each, stepping up each terrace in a cascade
 # just behind its retaining wall; past the tavern's cellar door; up a
 # hatch into the Guindais lane at its head.
-STREAM_X = -152.15
+STREAM_X = -151.95
 STREAM_SIZE = (3.0, 2.4)
 STREAM_LEDGE = 1.2
 STREAM_DEPTH = 3.0
@@ -545,14 +545,17 @@ HATCH_DEPTH = round(level(PLATES[2]) - (level(PLATES[2]) - STREAM_DEPTH + STREAM
 # below, its top door on the terrace): two to the Baixa (from the miradouro
 # at the third terrace's east lane, from the fifth's lane's end), two to the
 # Carmo's square (from the seventh's and the ninth's ends). Each (its
-# terrace, its top door's z, the ground under it, its quarter). The corbels
-# up the cliff beside one of each, the thief's way where the towers' doors
-# are watched: (its terrace, z, the ground under it, its quarter).
+# terrace, its top door's z, the ground under it, its quarter). Ivy up
+# the cliff beside one of each, the thief's way where the towers are
+# watched (the face beside them too short for a run of ledges): (its
+# terrace, its middle's z, the ground under it, its quarter), IVY_WIDTH
+# wide, up the cliff and its parapet (IVY_OVER), climbed over.
 BAIXA_G = 2.5
 CARMO_G = 28.0
 TOWERS = [("stairs_3", (CROSS[0] + CROSS[1]) / 2.0, BAIXA_G, "baixa"), ("stairs_5", -136.5, BAIXA_G, "baixa"),
           ("stairs_7", -195.0, CARMO_G, "carmo"), ("stairs_9", -236.5, CARMO_G, "carmo")]
-CORBEL_CLIMBS = [("stairs_3", -94.6, BAIXA_G, "baixa"), ("stairs_7", -199.5, CARMO_G, "carmo")]
+IVY_CLIMBS = [("stairs_3", -96.0, BAIXA_G, "baixa"), ("stairs_7", -199.5, CARMO_G, "carmo")]
+IVY_WIDTH, IVY_OVER = 2.4, 1.0
 # (kit_terrace's tower: its flights' most steps and their riser; its length
 # and breadth outside; its doors 2.1 from its middle at its -z end, the top
 # door at its +z end after an odd count of flights.)
@@ -715,11 +718,11 @@ def _places():
         x, z, height = tower_at(name, top_z, ground)
         out["towers"].append({"kind": "stair_tower", "args": (height,), "at": (x, ground, z), "yaw": 0.0})
 
-    out["corbels"] = []
+    out["ivy"] = []
 
-    for name, z, ground, _quarter in CORBEL_CLIMBS:
-        height = round(level([p for p in PLATES if p[0] == name][0]) - ground, 3)
-        out["corbels"].append({"kind": "corbels", "args": (height,), "at": (EAST, ground, z), "yaw": 90.0})
+    for name, z, ground, _quarter in IVY_CLIMBS:
+        height = round(level([p for p in PLATES if p[0] == name][0]) - ground + IVY_OVER, 3)
+        out["ivy"].append({"kind": "ivy", "args": (IVY_WIDTH, height), "at": (EAST, ground, z), "yaw": 90.0})
 
     for kind, args, z, y in STREAM:
         out["stream"].append({"kind": kind, "args": args, "at": (STREAM_X, y, z), "yaw": 0.0})
@@ -729,7 +732,7 @@ def _places():
                       {"kind": "vault_end", "args": (w, h, True), "at": (STREAM_X, y3 - STREAM_DEPTH, STREAM_HEAD - 0.15), "yaw": 0.0},
                       ]
     # (Turned so its grate leans aside along the lane's north edge.)
-    out["hatch"] = [{"kind": "grate_hatch", "args": (HATCH_DEPTH, 2.5), "at": (HATCH[0], y3, HATCH[1]), "yaw": 90.0}]
+    out["hatch"] = [{"kind": "grate_hatch", "args": (HATCH_DEPTH, 2.5), "at": (HATCH[0], y3, HATCH[1]), "yaw": 0.0}]
     out["bridges"] = [{"kind": "bridge", "args": (GAP, BRIDGE_DEPTH), "at": (c, y, z), "yaw": 0.0} for _k, c, z, y in BRIDGES]
     out["scaffolds"] = [{"kind": "scaffold", "args": (eaves, SCAFFOLD_WIDTH), "at": (x, y, z), "yaw": 90.0, "corner": corner}
                         for x, y, z, eaves, corner in _chain_scaffolds()]
