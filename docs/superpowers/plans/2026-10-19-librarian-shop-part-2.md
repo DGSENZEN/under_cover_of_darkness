@@ -308,6 +308,32 @@ Calls made:
 - **The kept places** are on high boards (1.9 m), away from the ladder (chronology at -0.5 along the case) and from the studies' runs. `BookFiller` keeps them clear through the same keep runs as the studies.
 - **Rings rather than free wandering.** Separation holds by construction, and the variety comes from wander, bob, bank, fanning and the transfers.
 
+## Task 7, shelves rearranging while unwatched (Oct 23, awaiting review)
+
+Task 6 was approved by the user on Oct 23.
+
+`scripts/Visual/Library/ShelfStir.gd` (`lab.stir`):
+- Every 20–40 s (seeded), one board that nobody is looking at changes.
+- What counts as unseen:
+  - the whole board lies outside the camera's frustum; or
+  - all six rays from the eye to its open face are blocked.
+- A board seen within the last five seconds never changes. With no camera, every board counts as seen.
+- Chronology's standing books re-lay themselves tallest first, working around what lies, leans or is kept clear.
+- Elsewhere, one of these, picked at random:
+  - a pulled-out book is pushed home;
+  - the widest gap is closed;
+  - a leaning book stands up;
+  - a stack is squared differently.
+- Each change is checked whole before it is shown: within the uprights, lift 1–4 mm, no touching, kept runs clear. The MultiMesh instance moves with its layout entry.
+- `BookFiller` records each book's local transform, draw and instance. It also stands about one book in thirty a few centimetres proud, so there are books to push home.
+
+Checks E69–E74. Review media: `docs/superpowers/refs/underground/library_stills/part2-stir/` (the clip forces all six chronology boards at once; in play only one board changes per stir).
+
+Calls made:
+- **`build(lab)` and `try_board(i)`** instead of `build(spots, layout, draws)` and `try_stir()`. The test has to ask about one particular board; the scheduled stir tries the boards in a shuffled order.
+- **The visible-board test asks twenty times over ten seconds** instead of waiting 120 simulated seconds. A board in sight is refused before any change is computed, so a longer wait would add no coverage. The two-minute run is E74, unwatched.
+- **No animation.** A book is simply somewhere else the next time you look. Since the change only ever happens out of sight, a move would never be seen anyway.
+
 ## Plan self-review
 
 The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.

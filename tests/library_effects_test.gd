@@ -39,6 +39,7 @@ func _run() -> void:
 	await _novels_spells_auras(effects)
 	await _words(effects)
 	await _floating()
+	await _stirring()
 
 	# Drive a real novel through partial openings, without a full-open signal.
 	var book: LiveBook = lab.live_books[7]
@@ -772,6 +773,111 @@ func _floating() -> void:
 	_check("E68 a book comes down to its kept place on a shelf, rests there, and rises again, never jumping",
 		kept and states.has(&"resting") and states[-1] == &"aloft" and rested_at.distance_to(home) < 0.003 and jump < 0.05,
 		"kept %s states %s rest off %.4f jump %.3f" % [kept, states, rested_at.distance_to(home), jump])
+
+
+## A board's books as they stand: each entry's box and pose, in order along it.
+func _board_state(s: int) -> Array:
+	return lab.book_layout.filter(func(e): return e["spot"] == s).map(func(e): return [e["box"], e["pose"]])
+
+
+## Every board laid out as Part 1 lays them: within its uprights, each just above it, none overlapping, its kept runs
+## clear; each entry's box its local frame's.
+func _boards_valid() -> Array:
+	var wrong := []
+	var by_spot := {}
+	for e: Dictionary in lab.book_layout:
+		by_spot.get_or_add(e["spot"], []).append(e)
+		var spot: Dictionary = lab.book_spots[e["spot"]]
+		var box: AABB = e["box"]
+		if box.position.x < spot["x0"] - 0.0001 or box.end.x > spot["x1"] + 0.0001:
+			wrong.append("upright %d" % e["spot"])
+		var lift: float = box.position.y - spot["top"]
+		if lift < 0.001 or lift > 0.004:
+			wrong.append("lift %.4f on %d" % [lift, e["spot"]])
+		for run: Vector2 in spot["keep"]:
+			if box.end.x > run.x and box.position.x < run.y:
+				wrong.append("in a kept run %d" % e["spot"])
+	for books: Array in by_spot.values():
+		books.sort_custom(func(p, q): return p["box"].position.x < q["box"].position.x)
+		for i in range(1, books.size()):
+			if books[i]["box"].position.x < books[i - 1]["box"].end.x - 0.0001:
+				wrong.append("overlap on %d" % books[i]["spot"])
+	return wrong
+
+
+## Task 7: the shelves rearrange themselves, but only where no one is looking or has looked for a while.
+func _stirring() -> void:
+	var stir: Node3D = lab.get("stir")
+	var entries_ok: bool = stir != null and lab.book_layout.all(func(e): return e.has("draw") and e.has("instance") and e.has("local"))
+	var pulled: int = lab.book_layout.filter(func(e): return e["pose"] == &"pulled" or e["pose"] == "pulled").size()
+	_check("E69 every shelf book knows its draw and place in it; some stand pulled out, waiting to be pushed home",
+		entries_ok and pulled >= 5, "stir %s records %s pulled %d" % [stir != null, entries_ok, pulled])
+	if not entries_ok:
+		return
+
+	# Not knowing who is looking is the same as being looked at.
+	_check("E70 with no eye to judge by, every board counts as seen", range(lab.book_spots.size()).all(func(i): return not stir.hidden(i, null)),
+		"boards %d" % lab.book_spots.size())
+
+	# A camera of the test's own, looking straight at the chronology case's middle board.
+	var eye := Camera3D.new()
+	eye.fov = 70.0
+	add_child(eye)
+	var case: Node3D = lab.sections["chronology"]
+	var watched := -1
+	for i in lab.book_spots.size():
+		if lab.book_spots[i]["case"] == case and is_equal_approx(lab.book_spots[i]["top"], 1.0):
+			watched = i
+	eye.global_position = case.to_global(Vector3(0.0, 1.25, 1.6))
+	eye.look_at(case.to_global(Vector3(0.0, 1.15, -0.2)), Vector3.UP)
+	eye.make_current()
+	stir.watcher = eye
+	await _frames(10)
+	var before := _board_state(watched)
+	var refused := 0
+	for i in 600:
+		await get_tree().process_frame
+		if i % 30 == 0 and not stir.try_board(watched):
+			refused += 1
+	_check("E71 a board in sight never changes, though asked to twenty times over ten seconds",
+		_board_state(watched) == before and refused == 20 and not stir.hidden(watched, eye), "refused %d" % refused)
+
+	# Looking away: two seconds is too soon, six is long enough; the board changes and is still laid out right.
+	eye.global_position = case.to_global(Vector3(0.0, 1.25, 1.6))
+	eye.look_at(case.to_global(Vector3(0.0, 1.25, 3.5)), Vector3.UP)
+	await _frames(120)
+	var too_soon: bool = stir.try_board(watched)
+	await _frames(250)
+	var changes_before: int = stir.changes
+	var now_ok: bool = stir.try_board(watched)
+	var after := _board_state(watched)
+	var wrong := _boards_valid()
+	_check("E72 looked away from, a board waits five seconds unseen before it changes, and is laid out right after",
+		not too_soon and now_ok and stir.changes == changes_before + 1 and after != before and wrong.is_empty(),
+		"too soon %s then %s wrong %s" % [too_soon, now_ok, wrong.slice(0, 3)])
+
+	# Chronology's books keep their own order: by height, tallest first.
+	var standing: Array = lab.book_layout.filter(func(e): return e["spot"] == watched and (e["pose"] == "stand" or e["pose"] == "pulled"))
+	standing.sort_custom(func(p, q): return p["box"].position.x < q["box"].position.x)
+	var sorted := true
+	for i in range(1, standing.size()):
+		sorted = sorted and standing[i]["box"].size.y <= standing[i - 1]["box"].size.y + 0.0001
+	var gaps := []
+	for i in 20:
+		gaps.append(stir.next_gap())
+	_check("E73 chronology's books stand by height after their stir; the stirs come every twenty to forty seconds",
+		sorted and standing.size() > 5 and gaps.all(func(g): return g >= 20.0 and g <= 40.0), "sorted %s of %d gaps %.1f..%.1f" % [
+		sorted, standing.size(), gaps.min(), gaps.max()])
+
+	# Unwatched for two minutes, the shop stirs by itself: changes on several boards, all laid out right.
+	var started: int = stir.changes
+	for i in 7200:
+		await get_tree().process_frame
+	_check("E74 left alone two minutes, the shop rearranges itself a few times, every board still laid out right",
+		stir.changes - started >= 3 and _boards_valid().is_empty(), "changes %d" % [stir.changes - started])
+	stir.watcher = null
+	eye.queue_free()
+	await _frames(2)
 
 
 func _radiance(effects: Node3D) -> void:

@@ -62,6 +62,50 @@ func _ready() -> void:
 		["floating_vault", lib.to_global(Vector3(0.0, 1.7, -0.6)), lib.to_global(Vector3(0.0, 3.1, -3.4))],
 		["floating_home", lib.to_global(Vector3(-1.5, 1.8, -1.0)), lib.to_global(Vector3(-3.4, 1.95, -1.2))],
 	]
+	if clip == "stir":
+		# Looking at the chronology case, turning away to the vault until it has gone unseen long enough, its boards
+		# stirring, turning back. The before and after also saved as stills.
+		var at: Vector3 = lib.to_global(Vector3(-2.3, 1.6, -0.9))
+		var case_look: Vector3 = lib.to_global(Vector3(-3.7, 1.25, -1.2))
+		var away_look: Vector3 = lib.to_global(Vector3(1.5, 1.9, -1.6))
+		var case: Node3D = lib.sections["chronology"]
+		await _frames(90)
+		_place(at, case_look)
+		await _frames(30)
+		_capture("stir_before.png")
+		var frame := 0
+		for i in 60:
+			_capture("stir_%03d.png" % frame)
+			frame += 1
+			await _frames(2)
+		for i in 45:
+			_place(at, case_look.lerp(away_look, smoothstep(0.0, 1.0, i / 44.0)))
+			_capture("stir_%03d.png" % frame)
+			frame += 1
+			await _frames(2)
+		for i in 200:
+			if i == 190:
+				var stirred := 0
+				for b in lib.book_spots.size():
+					if lib.book_spots[b]["case"] == case and lib.stir.try_board(b):
+						stirred += 1
+				print("stirred boards: ", stirred)
+			if i % 3 == 0:
+				_capture("stir_%03d.png" % frame)
+				frame += 1
+			await _frames(2)
+		for i in 45:
+			_place(at, away_look.lerp(case_look, smoothstep(0.0, 1.0, i / 44.0)))
+			_capture("stir_%03d.png" % frame)
+			frame += 1
+			await _frames(2)
+		for i in 90:
+			_capture("stir_%03d.png" % frame)
+			frame += 1
+			await _frames(2)
+		_capture("stir_after.png")
+		get_tree().quit()
+		return
 	if not clip.is_empty():
 		for view in views:
 			if view[0] == clip:

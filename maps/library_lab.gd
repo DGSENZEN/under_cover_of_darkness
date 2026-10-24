@@ -88,6 +88,7 @@ const STUDIES := [["chronology", 2, -0.45], ["necromancy", 3, -0.57], ["necroman
 const STUDY_KEEP := 0.285
 ## The floating books, and the run of board kept empty either side of where one comes down.
 const FloatingBooksScript := preload("res://scripts/Visual/Library/FloatingBooks.gd")
+const ShelfStirScript := preload("res://scripts/Visual/Library/ShelfStir.gd")
 const FLOAT_KEEP := 0.18
 const FRONT_TABLE_AT := Vector3(2.9, 0.0, -0.3)
 const TABLE_TOP := 0.85
@@ -135,8 +136,10 @@ var book_layout: Array = []
 var book_draws: Array[MultiMeshInstance3D] = []
 var live_books: Array[LiveBook] = []
 var book_stands: Array[MeshInstance3D] = []
-## The books floating under the vault (scripts/Visual/Library/FloatingBooks.gd).
+## The books floating under the vault (scripts/Visual/Library/FloatingBooks.gd); the shelves rearranging while
+## unwatched (ShelfStir.gd).
 var floating: Node3D
+var stir: Node3D
 ## The shop's haze; its painted materials.
 var shop_haze: FogVolume
 var shop_looks: Array[ShaderMaterial] = []
@@ -483,6 +486,9 @@ func _books() -> void:
 	floating = FloatingBooksScript.new()
 	add_child(floating)
 	floating.build(self, meshes, look)
+	stir = ShelfStirScript.new()
+	add_child(stir)
+	stir.build(self)
 
 
 ## Which of its case's boards (counted from the floor) a spot is on.

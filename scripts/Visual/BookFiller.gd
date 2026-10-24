@@ -20,8 +20,11 @@ const PAIR := 0.3
 const OUT := 0.07
 const OUT_GAP := Vector2(0.03, 0.12)
 const STACK := 0.05
-## How likely one fallen on its side (spine still out); a board's first or last leaning on its upright, and how far.
+## How likely one fallen on its side (spine still out); one pulled half out (proud of the board's edge, for someone
+## to push home); a board's first or last leaning on its upright, and how far.
 const FALLEN := 0.03
+const PULLED := 0.035
+const PROUD := 0.03
 const LEAN_END := 0.55
 const LEAN_DEG := Vector2(5.0, 12.0)
 ## How much of the board left when its last is chosen to lean (m).
@@ -30,7 +33,8 @@ const LEAN_ROOM := 0.22
 const HEADROOM := 0.008
 
 ## Every book placed: {"spot": its spot's index, "box": its AABB in its case's frame, "look": its kind's index,
-## "pose": "stand", "lean", "lie" (fallen) or "stack"}.
+## "pose": "stand", "pulled", "lean", "lie" (fallen) or "stack", "local": its transform in its case's frame, "draw": the
+## index of its draw among those `fill` returns, "instance": its index in that draw's MultiMesh}.
 var layout: Array = []
 
 
@@ -46,9 +50,11 @@ func fill(spots: Array, meshes: Array, material: Material, seed: int) -> Array[M
 		_board(s, spots[s], meshes, rng, placed)
 
 	var draws: Array[MultiMeshInstance3D] = []
+	var draw_of := {}
 	for k in meshes.size():
 		if placed[k].is_empty():
 			continue
+		draw_of[k] = draws.size()
 		var multi := MultiMesh.new()
 		multi.transform_format = MultiMesh.TRANSFORM_3D
 		multi.mesh = meshes[k]
@@ -64,6 +70,8 @@ func fill(spots: Array, meshes: Array, material: Material, seed: int) -> Array[M
 		draw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		draws.append(draw)
 
+	for entry: Dictionary in layout:
+		entry["draw"] = draw_of[entry["look"]]
 	return draws
 
 
@@ -104,7 +112,7 @@ func _board(s: int, spot: Dictionary, meshes: Array, rng: RandomNumberGenerator,
 		if k < 0:
 			return
 		var mesh_box: AABB = (meshes[k] as Mesh).get_aabb()
-		var pose := "stack" if mesh_box.size.y < mesh_box.size.x else ("lie" if rng.randf() < FALLEN else "stand")
+		var pose := "stack" if mesh_box.size.y < mesh_box.size.x else ("lie" if rng.randf() < FALLEN else ("pulled" if rng.randf() < PULLED else "stand"))
 		var local := _posed(meshes[k], spot, pose, 0.0, rng)
 		local = _at_x(local, meshes[k], x)
 		var box: AABB = local * mesh_box
@@ -160,6 +168,8 @@ func _posed(mesh: Mesh, spot: Dictionary, pose: String, lean_deg: float, rng: Ra
 			local = Transform3D(Basis(), Vector3(0.0, 0.0, (spot["z0"] + spot["z1"]) / 2.0))
 		"lie":
 			local = Transform3D(Basis(Vector3.BACK, -PI / 2.0) * face, Vector3(0.0, 0.0, front - facing * rng.randf_range(SET_BACK.x, SET_BACK.y)))
+		"pulled":
+			local = Transform3D(face, Vector3(0.0, 0.0, front + facing * PROUD))
 		"lean":
 			local = Transform3D(Basis(Vector3.BACK, -deg_to_rad(lean_deg)) * face, Vector3(0.0, 0.0, front - facing * rng.randf_range(SET_BACK.x, SET_BACK.y)))
 		_:
@@ -187,5 +197,5 @@ func _fits(box: AABB, spot: Dictionary, keep: Array) -> bool:
 
 
 func _put(s: int, k: int, local: Transform3D, box: AABB, pose: String, spot: Dictionary, placed: Array) -> void:
+	layout.append({"spot": s, "box": box, "look": k, "pose": pose, "local": local, "instance": placed[k].size()})
 	placed[k].append(spot["xform"] * local)
-	layout.append({"spot": s, "box": box, "look": k, "pose": pose})
