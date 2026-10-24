@@ -33,6 +33,8 @@ const BREAKS_AT := 25.0
 const BREAKING_KINDS := [&"power", &"blast", &"crush"]
 ## Spell keys, in order.
 const KEYED := [&"shard", &"ward", &"empower"]
+## Seconds the casting hand stays up after a hand spell is let go.
+const FOLLOW_THROUGH := 0.18
 ## Q let go within this long is a tap (a step, or the dodge); held longer,
 ## it aims.
 const TAP_TIME := 0.18
@@ -68,6 +70,9 @@ var _aim_at := Vector3.ZERO
 var _aim_ledge := {}
 var _ticks := 0
 var _game_time := 0.0
+## When a hand spell was last let go (game time): the hand stays up a moment
+## after, pushing out (FOLLOW_THROUGH).
+var _loosed_at := -INF
 ## Empower's charge waits until then (game time); -1 when there is none.
 var empowered_until := -1.0
 
@@ -236,6 +241,12 @@ func _complete() -> void:
 		player.power.refused()
 		return
 
+	if Spells.info(id).get("tier") == Spells.Tier.HAND:
+		_loosed_at = _game_time
+
+		if player.hand != null and player.hand.has_method("release_cast"):
+			player.hand.release_cast(Spells.info(id).get("school", &""))
+
 	_effect(id)
 	cast_done.emit(id)
 
@@ -250,6 +261,8 @@ func _effect(id: StringName) -> void:
 	match id:
 		&"shard":
 			_loose_shard()
+			# Thrown from the hand: a small kick to the view.
+			player.juice.punch(0.8, 0.15)
 		&"ward":
 			WardScript.cast_on(player)
 		&"empower":
@@ -271,7 +284,9 @@ func _loose_shard() -> void:
 
 	var shard: StaticBody3D = ShardScript.new()
 	player.get_parent().add_child(shard)
-	shard.launch(spawn, forward * ShardScript.SPEED, ShardScript.DAMAGE, player)
+	# Seen leaving the circle at your hand.
+	var seen: Vector3 = player.hand.circle_world_position() if player.hand != null and player.hand.has_method("circle_world_position") else Vector3.INF
+	shard.launch(spawn, forward * ShardScript.SPEED, ShardScript.DAMAGE, player, seen)
 
 
 # Empower
@@ -441,7 +456,7 @@ func _show_left() -> void:
 		hand.set_left_hold(&"", Transform3D.IDENTITY)
 	elif loadout == Loadout.TOME:
 		hand.set_left_hold(&"tome", ViewPoses.revolver_frame(TOME_HELD))
-	elif loadout == Loadout.HAND and _casting != &"":
+	elif loadout == Loadout.HAND and (_casting != &"" or _game_time - _loosed_at < FOLLOW_THROUGH):
 		hand.set_left_hold(&"cast", CAST_HAND)
 	else:
 		hand.set_left_hold(&"", Transform3D.IDENTITY)

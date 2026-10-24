@@ -47,9 +47,44 @@ func _ready() -> void:
 	var tag := "_dark" if _dark else ""
 
 	if _wants("shard"):
+		# Close: the wall 6 m off. Every frame through the release and the
+		# hit, then the spikes standing and crumbling.
+		var every := range(0, 41)
+		every.append_array([60, 100, 150, 200, 215, 230])
 		player.power.power = player.power.MAX
-		await _hold_clip("shard" + tag, "spell_1", [0, 6, 12, 18, 24, 26, 28, 30, 34, 40, 50, 70])
-		await _frames(60)
+		await _hold_clip("shard" + tag, "spell_1", every)
+		await _frames(120)
+		# The spikes up close, from beside them.
+		player.power.power = player.power.MAX
+		await _hold_clip("shard_spikes" + tag, "spell_1", [40], 30)
+		var beside := Camera3D.new()
+		add_child(beside)
+		beside.global_transform = Transform3D(Basis.looking_at(Vector3(-1.2, -0.25, -1.0).normalized(), Vector3.UP), Vector3(1.4, 1.9, -4.7))
+		beside.make_current()
+		await _frames(2)
+		await _shot("shard_spikes_beside%s" % tag)
+		beside.queue_free()
+		await _frames(240)
+		# Far: the wall 24 m off.
+		await _place(Vector3(0, 0.1, 18))
+		await _frames(20)
+		player.power.power = player.power.MAX
+		await _hold_clip("shard_far" + tag, "spell_1", range(22, 46, 2))
+		await _frames(240)
+		# Into a man 5 m off.
+		var man: CharacterBody3D = GUARD.instantiate()
+		man.debug_ai = false
+		man.position = Vector3(0.0, 0, 13)
+		man.rotation.y = PI
+		add_child(man)
+		await _frames(10)
+		man.set_physics_process(false)
+		player.power.power = player.power.MAX
+		await _hold_clip("shard_man" + tag, "spell_1", [24, 26, 28, 30, 40, 60])
+		await _frames(30)
+		man.queue_free()
+		await _place(Vector3(0, 0.1, 0))
+		await _frames(30)
 
 	if _wants("blink"):
 		player.power.power = player.power.MAX

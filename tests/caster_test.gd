@@ -632,6 +632,9 @@ func _run() -> void:
 		shards_out == 8 and get_tree().get_nodes_in_group(&"shatter").is_empty(),
 		"splinters %d after %d" % [shards_out, get_tree().get_nodes_in_group(&"shatter").size()])
 
+	# The shard's spikes stand some 3 s: let them go before counting blinks'.
+	await _until(func(): return MagicFx.live_count() == 0, 300)
+
 	# B1 B2 B3 a blink: a mirror-crack where you stood, a ripple where you
 	# land, a cold flash at the edges of the view
 	_put_player(Vector3(-40, 1.05, 20))

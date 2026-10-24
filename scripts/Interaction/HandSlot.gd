@@ -57,6 +57,19 @@ const GUN_GRIP := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-10.0)) * Basis(Ve
 ## splinters of black glass pointing out, Copal's tendrils of ward smoke
 ## drawn round it (in the shot's approved look: MeshVfx).
 const CIRCLE_PIECES := 12
+## The Shard's wind-up: the spearhead's length at full (m, full size) and
+## how small it starts; how far the hand draws back and how much it shakes
+## at the end; how far and how fast it pushes out at the release.
+const SPEARHEAD_LENGTH := 0.14
+## Where Obsidian's circle floats off the casting hand (view space, full
+## size): up beside the fingers toward the crosshair, where the hand does not
+## hide it, square to the aim.
+const OBSIDIAN_CIRCLE_AT := Vector3(0.15, 0.1, -0.08)
+const SPEARHEAD_FROM := 0.12
+const CAST_DRAW_BACK := 0.015
+const CAST_TREMBLE := 0.0015
+const RELEASE_PUSH := 0.05
+const RELEASE_PUSH_TIME := 0.15
 const WARD_CORE := Color("#F2FAFC")
 const WARD_BODY := Color("#CFE8F0")
 const WARD_EDGE := Color("#7FA6B4")
@@ -178,6 +191,9 @@ var _circle_school: StringName = &""
 var _circle_progress := 0.0
 var _circle: Node3D
 var _circle_pieces: Array[MeshInstance3D] = []
+var _spearhead: MeshInstance3D
+## Seconds since a hand spell was let go (release_cast).
+var _release_t := INF
 ## The revolver's moving parts, children of the main mesh: cylinder, hammer, gate.
 var _gun_parts := {}
 var _time := 0.0
@@ -719,6 +735,74 @@ func set_circle(school: StringName, progress: float) -> void:
 	_circle_progress = clampf(progress, 0.0, 1.0)
 
 
+## The spearhead growing in the circle (the Shard's wind-up), or null.
+func spearhead() -> MeshInstance3D:
+	return _spearhead
+
+
+## How far across the circle is now (m, full size): Obsidian's splinters
+## draw in from 9 to 2.5 cm about the spearhead; Copal's smoke to 4.5 cm.
+func circle_across() -> float:
+	if _circle_school == &"obsidian":
+		return lerpf(0.09, 0.025, smoothstep(0.0, 1.0, _circle_progress))
+
+	return lerpf(0.09, 0.045, _circle_progress)
+
+
+## How far the casting hand is shaken off its place now (m, full size): a
+## tremble growing to CAST_TREMBLE as an Obsidian cast closes.
+func tremble() -> Vector3:
+	if _circle_school != &"obsidian":
+		return Vector3.ZERO
+
+	var shake := CAST_TREMBLE * smoothstep(0.5, 1.0, _circle_progress)
+	return Vector3(sin(_time * 71.0), sin(_time * 83.0 + 1.3), 0.0) * shake
+
+
+## A hand spell let go: the casting hand pushes out and comes back; a
+## Shard's spearhead leaves the circle in a burst of black flakes and a ring
+## the world bends through, with a cold light at the palm.
+func release_cast(school: StringName) -> void:
+	_release_t = 0.0
+
+	if school != &"obsidian" or _circle == null:
+		return
+
+	var size := ViewArmsScript.SCALE
+	var at := _circle.position
+	var ahead := (_aim_point() - at).normalized()
+	MagicFxScript.release_burst(self, at, ahead, size, ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+	# Soft: the gun beside it is polished iron.
+	MagicFxScript.glint_light(self, circle_world_position() + Vector3.UP * 0.3, 0.7, 2.0)
+
+
+## Where the circle's middle is in the world (what a Shard is seen to leave
+## from).
+func circle_world_position() -> Vector3:
+	if _circle == null:
+		return global_position
+
+	return _to_world(_circle.global_position)
+
+
+## Where the crosshair's point is in the view's (miniature) space, some way
+## off: what the spearhead points at.
+func _aim_point() -> Vector3:
+	return Vector3(0.0, 0.0, -10.0) * ViewArmsScript.SCALE
+
+
+## How far the casting hand is off its place (full size): drawn back as the
+## cast builds, shaking, then pushed out at the release.
+func _cast_offset() -> Vector3:
+	var back := Vector3(0.0, 0.0, CAST_DRAW_BACK * _circle_progress) if _circle_school != &"" else Vector3.ZERO
+	var push := Vector3.ZERO
+
+	if _release_t < RELEASE_PUSH_TIME:
+		push = Vector3(0.0, 0.0, -RELEASE_PUSH * sin(PI * _release_t / RELEASE_PUSH_TIME))
+
+	return back + tremble() + push
+
+
 ## What the left hand is showing for the Caster now: "" while it is busy
 ## with something else (a pickup, a key, the purse).
 func left_mode() -> StringName:
@@ -981,8 +1065,15 @@ func _update_circle() -> void:
 			_circle.add_child(piece)
 			_circle_pieces.append(piece)
 
+	if _spearhead == null:
+		_spearhead = _viewmodel_instance()
+		_spearhead.name = "Spearhead"
+		_spearhead.mesh = MagicFxScript.spearhead_mesh(0.045, SPEARHEAD_LENGTH, 0.02)
+		add_child(_spearhead)
+
 	var showing := _circle_school != &"" and _left_mode == &"cast" and _left_up > 0.5
 	_circle.visible = showing
+	_spearhead.visible = showing and _circle_school == &"obsidian"
 
 	if not showing:
 		return
@@ -1002,14 +1093,39 @@ func _update_circle() -> void:
 
 	var size := ViewArmsScript.SCALE
 	var palm: Vector3 = _left_frame.basis.x.normalized()
-	var middle := _left_frame.origin + palm * 0.07
-	var across := lerpf(0.09, 0.045, _circle_progress)
-	_circle.transform = Transform3D(Basis.looking_at(-palm, _left_frame.basis.y.normalized()) * Basis(Vector3.BACK, _time * TAU * 2.0), _for_view_fov(middle) * size)
+	var middle := _left_frame.origin + palm * 0.07 + _cast_offset()
+	var square := Basis.looking_at(-palm, _left_frame.basis.y.normalized())
+
+	if _circle_school == &"obsidian":
+		middle = _left_frame.origin + OBSIDIAN_CIRCLE_AT + _cast_offset()
+		# Square to the aim: its -Z back toward you, as the palm's is.
+		square = Basis.looking_at(middle - _aim_point() / size, Vector3.UP)
+
+	var across := circle_across()
+	_circle.transform = Transform3D(square * Basis(Vector3.BACK, _time * TAU * 2.0), _for_view_fov(middle) * size)
+	# Obsidian's splinters turn from pointing out to pointing at the middle.
+	var inward := PI * smoothstep(0.25, 0.85, _circle_progress) if _circle_school == &"obsidian" else 0.0
 
 	for i in _circle_pieces.size():
 		var turn := TAU * float(i) / float(_circle_pieces.size())
 		var piece := _circle_pieces[i]
-		piece.transform = Transform3D(Basis(Vector3.BACK, turn + float(look[2])), Vector3(cos(turn), sin(turn), 0.0) * across * size).scaled_local(Vector3.ONE * size)
+		piece.transform = Transform3D(Basis(Vector3.BACK, turn + float(look[2]) + inward), Vector3(cos(turn), sin(turn), 0.0) * across * size).scaled_local(Vector3.ONE * size)
+
+	# The spearhead in the middle, leaning toward the crosshair, growing and
+	# turning slowly about its length.
+	if _spearhead.visible:
+		if _spearhead.material_override == null or _spearhead.material_override.get_meta(&"fov", -1.0) != (ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0):
+			var view_fov := ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0
+			_spearhead.material_override = MagicFxScript.obsidian_look(true, view_fov)
+			_spearhead.material_override.set_meta(&"fov", view_fov)
+
+		var grow := lerpf(SPEARHEAD_FROM, 1.0, _circle_progress * _circle_progress)
+		var at := _circle.position
+		# Leaning up and out from the aim, so its length shows (pointed
+		# straight at the crosshair it would be seen end on).
+		var way := (_aim_point() - at).normalized().lerp(Vector3(0.6, 0.8, 0.0), 0.55).normalized()
+		var facing := Basis.looking_at(way, Vector3.BACK)
+		_spearhead.transform = Transform3D((facing * Basis(Vector3.RIGHT, -PI * 0.5) * Basis(Vector3.UP, _time * 3.0)).scaled(Vector3.ONE * size * grow), at)
 
 
 ## A revolver's cylinder, hammer and gate, as their own meshes under the
@@ -1374,6 +1490,7 @@ func _rebuild_keyring(count: int) -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	_release_t += delta
 	var real_delta := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
 	_last_real = TimeFx.real_time()
 	_real_time += real_delta
@@ -1930,6 +2047,7 @@ func _place_arms() -> void:
 			curls[0] = 0.0
 			poses[0] = _pose_if_had(&"Open")
 		else:
+			at.origin += _cast_offset() * size
 			targets[0] = _held_by(at, Transform3D.IDENTITY)
 			curls[0] = 0.0
 			poses[0] = _pose_if_had(&"Open")

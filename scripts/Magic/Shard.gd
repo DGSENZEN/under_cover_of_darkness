@@ -1,9 +1,12 @@
 extends StaticBody3D
 ## Shard (Obsidian, a hand spell): a splinter of black glass loosed from the
 ## circle, flying straight and very fast. Swept by a ray each tick, as an
-## arrow is (Arrow.gd), with no drop. Into a man it cuts (a "shard"): it
-## bleeds, and if it kills, it can take off the limb it struck. On the world
-## it bursts into glass dust and is gone. Quiet beside the gun.
+## arrow is (Arrow.gd), with no drop. Seen, it flies from your casting hand
+## onto its true line within a few metres, a spearhead of black glass with a
+## trail behind it (ShardTrail). Into a man it cuts (a "shard"): it bleeds,
+## stays stuck in him, and if it kills, it can take off the limb it struck.
+## On the world it bursts into a star of glass spikes that crumble. Quiet
+## beside the gun.
 
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const RagdollScript := preload("res://scripts/Visual/Ragdoll.gd")
@@ -11,6 +14,7 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
+const ShardTrail := preload("res://scripts/Visual/ShardTrail.gd")
 
 signal struck(target: Object, damage: float)
 
@@ -19,8 +23,13 @@ const DAMAGE := 40.0
 const LIFETIME := 3.0
 ## Its hiss as it goes, and the crack where it lands.
 const HISS_DB := 36.0
-## Seconds before it draws its faint line.
-const STREAK_AFTER := 0.06
+## Seconds it takes to go from where you saw it let go (the hand) onto
+## its true line (from the eye).
+const CONVERGE := 0.06
+## Its size: a spearhead this long, this wide and deep at the waist (m).
+const LENGTH := 0.32
+const WIDTH := 0.05
+const DEPTH := 0.022
 ## How fast it spins about its length (radians a second).
 const SPIN := 14.0
 ## Struck this close to a limb's bone, a killing shard takes that limb.
@@ -34,6 +43,8 @@ var _life := 0.0
 ## How far it has turned about its length (radians).
 var spin := 0.0
 var _visual: MeshInstance3D
+## Where it was seen let go, off its true line (world), closing over CONVERGE.
+var _offset := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -43,8 +54,8 @@ func _ready() -> void:
 	# A long splinter of black glass, its point along the flight (-Z).
 	_visual = MeshInstance3D.new()
 	_visual.name = "MeshInstance3D"
-	_visual.mesh = MagicFx.splinter_mesh(0.03, 0.2, 0.012)
-	_visual.material_override = MagicFx.glass_look()
+	_visual.mesh = MagicFx.spearhead_mesh(WIDTH, LENGTH, DEPTH)
+	_visual.material_override = MagicFx.obsidian_look()
 	_visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_visual)
 	_turn()
@@ -54,14 +65,27 @@ func _ready() -> void:
 func _turn() -> void:
 	_visual.transform = Transform3D(Basis(Vector3.FORWARD, spin) * Basis(Vector3.RIGHT, -PI * 0.5), Vector3.ZERO)
 
+	if _offset != Vector3.ZERO:
+		_visual.global_position = visual_position()
 
-func launch(from: Vector3, launch_velocity: Vector3, hit_damage: float, by: Node3D) -> void:
+
+## Where it is seen: on its line, or still closing on it from the hand.
+func visual_position() -> Vector3:
+	return global_position + _offset * maxf(1.0 - _life / CONVERGE, 0.0)
+
+
+## Let go at `from` (on the eye's line) going `launch_velocity`; `seen_from`
+## where you saw it leave (the casting hand), if not there.
+func launch(from: Vector3, launch_velocity: Vector3, hit_damage: float, by: Node3D, seen_from := Vector3.INF) -> void:
 	global_position = from
 	velocity = launch_velocity
 	damage = hit_damage
 	shooter = by
+	_offset = seen_from - from if seen_from != Vector3.INF else Vector3.ZERO
 	_face_travel()
+	_turn()
 	reset_physics_interpolation()
+	ShardTrail.follow(self, visual_position())
 	SoundBus.emit_sound(from, HISS_DB, by, &"shard")
 	Sfx.play(self, &"whoosh_light", from, -6.0, 1.6)
 
@@ -103,10 +127,6 @@ func _physics_process(delta: float) -> void:
 	_face_travel()
 	spin = wrapf(spin + SPIN * delta, -1000.0, 1000.0)
 	_turn()
-	# Its faint line, once it is clear of the eye (from beside the camera the
-	# line runs down the screen).
-	if _life > STREAK_AFTER:
-		Fx.streak(self, global_position - velocity * delta, velocity, 0.06)
 
 
 func _hit(hit: Dictionary, direction: Vector3) -> void:
@@ -137,6 +157,8 @@ func _hit(hit: Dictionary, direction: Vector3) -> void:
 				target.set("sever_hint", [limb] as Array[StringName])
 
 		Sfx.play(self, &"arrow_flesh", point, -2.0, 1.3)
+		# It stays in him, on the bone it went in by.
+		MagicFx.stuck_in(target, point, direction)
 		collider.take_hit(damage, shooter, &"shard", point, direction)
 
 		if is_instance_valid(target) and target.get("sever_hint") != null:
@@ -154,6 +176,7 @@ func _hit(hit: Dictionary, direction: Vector3) -> void:
 	var normal: Vector3 = hit.get("normal", -direction)
 	Fx.dust(self, point, normal, 0.5, "stone")
 	MagicFx.shatter(self, point, normal)
+	MagicFx.spike_star(self, point, normal)
 	SoundBus.emit_sound(point, HISS_DB, shooter, &"shard")
 	struck.emit(collider, 0.0)
 	queue_free()
