@@ -110,11 +110,11 @@ func _run() -> void:
 	power.power = power.MAX
 	caster.select(&"shard")
 	done.clear()
-	Input.action_press("block")
+	Input.action_press("spell_1")
 	await _frames(22)
 	var early := done.size()
 	await _frames(4)
-	Input.action_release("block")
+	Input.action_release("spell_1")
 	_check("S4 a hand spell is cast in 0.4 s and costs 15", early == 0 and done == [&"shard"] and _near(power.power, 85.0, 0.01),
 		"at 22 %d then %s power %.1f" % [early, done, power.power])
 	await _frames(10)
@@ -124,11 +124,11 @@ func _run() -> void:
 	caster.select(&"empower")
 	await _frames(30)
 	done.clear()
-	Input.action_press("block")
+	Input.action_press("spell_3")
 	await _frames(70)
 	var at_seventy := done.size()
 	await _frames(4)
-	Input.action_release("block")
+	Input.action_release("spell_3")
 	_check("S5 a tome spell is cast in 1.2 s and costs 50", at_seventy == 0 and done == [&"empower"] and _near(power.power, 50.0, 0.01),
 		"at 70 %d then %s power %.1f" % [at_seventy, done, power.power])
 	await _frames(10)
@@ -137,13 +137,13 @@ func _run() -> void:
 	power.power = power.MAX
 	done.clear()
 	broken.clear()
-	Input.action_press("block")
+	Input.action_press("spell_3")
 	await _frames(30)
 	player.take_damage(30.0, null)
 	await _frames(2)
 	var after_hit: StringName = caster.casting()
 	await _frames(60)
-	Input.action_release("block")
+	Input.action_release("spell_3")
 	_check("S6 a hard hit breaks a tome spell, and nothing is spent",
 		broken == [&"empower"] and done.is_empty() and after_hit == &"" and _near(power.power, 100.0, 0.01),
 		"broken %s done %s casting %s power %.1f" % [broken, done, after_hit, power.power])
@@ -154,11 +154,11 @@ func _run() -> void:
 	broken.clear()
 	var blaster := Blaster.new()
 	add_child(blaster)
-	Input.action_press("block")
+	Input.action_press("spell_3")
 	await _frames(30)
 	player.take_damage(10.0, blaster)
 	await _frames(2)
-	Input.action_release("block")
+	Input.action_release("spell_3")
 	blaster.queue_free()
 	_check("S6b a blast breaks a tome spell however light", broken == [&"empower"], "broken %s" % [broken])
 	await _frames(10)
@@ -167,16 +167,16 @@ func _run() -> void:
 	power.power = power.MAX
 	caster.select(&"shard")
 	done.clear()
-	Input.action_press("block")
+	Input.action_press("spell_1")
 	await _frames(10)
-	Input.action_release("block")
+	Input.action_release("spell_1")
 	await _frames(30)
 	var let_go := done.size()
-	Input.action_press("block")
+	Input.action_press("spell_1")
 	await _frames(10)
 	_wield(&"sword")
 	await _frames(30)
-	Input.action_release("block")
+	Input.action_release("spell_1")
 	_check("S7 letting go early or putting the gun away casts nothing and costs nothing",
 		let_go == 0 and done.is_empty() and caster.casting() == &"" and _near(power.power, 100.0, 0.01),
 		"let go %d done %s casting %s power %.1f" % [let_go, done, caster.casting(), power.power])
@@ -364,9 +364,9 @@ func _run() -> void:
 	var ear := Ear.new()
 	SoundBus.add_listener(ear)
 	done.clear()
-	Input.action_press("block")
+	Input.action_press("spell_1")
 	await _until(func(): return not done.is_empty(), 60)
-	Input.action_release("block")
+	Input.action_release("spell_1")
 	await _frames(20)
 	SoundBus.remove_listener(ear)
 	_check("S15 a shard does 40 to a man 8 m off", _near(g15.health, 60.0, 0.1), "health %.1f" % g15.health)
@@ -388,9 +388,9 @@ func _run() -> void:
 	_aim(g16.global_position + Vector3(0.12, 0.7, 0))
 	power.power = power.MAX
 	done.clear()
-	Input.action_press("block")
+	Input.action_press("spell_1")
 	await _until(func(): return not done.is_empty(), 60)
-	Input.action_release("block")
+	Input.action_release("spell_1")
 	await _frames(30)
 	_check("S16 a killing shard in the thigh takes the leg off", not is_instance_valid(g16) and _severed_parts() > parts_before,
 		"alive %s parts %d -> %d" % [is_instance_valid(g16), parts_before, _severed_parts()])
@@ -506,10 +506,77 @@ func _run() -> void:
 	_check("S26 empowered, a ball throws the man it kills, as a blast", not is_instance_valid(g26) and thrown[0] > 5.0,
 		"alive %s thrown %.1f" % [is_instance_valid(g26), thrown[0]])
 
+	# S27 a spell key with the sword drawn: the revolver comes, then the spell
+	_wield(&"sword")
+	_put_player(Vector3(24, 1.05, -10))
+	await _frames(30)
+	power.power = power.MAX
+	done.clear()
+	Input.action_press("spell_1")
+	await _until(func(): return not done.is_empty(), 60)
+	Input.action_release("spell_1")
+	_check("S27 holding 1 with the sword drawn draws the revolver and casts Shard",
+		done == [&"shard"] and player.combat.gun_drawn(), "done %s gun %s" % [done, player.combat.gun_drawn()])
+	await _frames(20)
+
+	# S28 aimed, a spell key lowers the sights and casts
+	Input.action_press("aim")
+	await _frames(20)
+	power.power = power.MAX
+	done.clear()
+	Input.action_press("spell_2")
+	await _frames(15)
+	var lowered: float = player.revolver.aim_amount()
+	await _until(func(): return not done.is_empty(), 60)
+	Input.action_release("spell_2")
+	Input.action_release("aim")
+	_check("S28 aimed, holding 2 lowers the sights and casts Ward", lowered == 0.0 and done == [&"ward"],
+		"aim at 15 frames %.2f done %s" % [lowered, done])
+	await _frames(WardScript.LIFE * 60.0 + 10)
+
+	# S29 put away mid-cast, or a key tapped as the gun comes up: nothing
+	power.power = power.MAX
+	done.clear()
+	Input.action_press("spell_1")
+	await _frames(10)
+	_wield(&"sword")
+	await _frames(40)
+	Input.action_release("spell_1")
+	await _frames(20)
+	var switched := done.size()
+	await _tap("spell_1")
+	await _frames(60)
+	_check("S29 a spell put away mid-cast, or tapped as the gun comes up, casts nothing and costs nothing",
+		switched == 0 and done.is_empty() and _near(power.power, 100.0, 0.01),
+		"after the switch %d, tapped %s power %.1f" % [switched, done, power.power])
+
+	# S30 aiming a blink, a fresh right mouse lets it go, and raises no sights
+	_wield(&"revolver")
+	_put_player(Vector3(30, 1.05, -10))
+	await _frames(30)
+	power.power = power.MAX
+	var from30: Vector3 = player.global_position
+	Input.action_press("blink")
+	await _frames(20)
+	Input.action_press("aim")
+	await _frames(10)
+	var sights: float = player.revolver.aim_amount()
+	Input.action_release("blink")
+	await _frames(6)
+	Input.action_release("aim")
+	_check("S30 right mouse lets an aimed blink go without raising the sights",
+		player.global_position.distance_to(from30) < 0.3 and sights == 0.0 and _near(power.power, 100.0, 0.01),
+		"moved %.2f sights %.2f power %.1f" % [player.global_position.distance_to(from30), sights, power.power])
+
 
 # Helpers
 
-## A spell cast with the gun drawn: chosen, the right mouse held until done.
+## The key a spell is cast from (1 Shard, 2 Ward, 3 Empower).
+func _key_of(id: StringName) -> String:
+	return "spell_%d" % ([&"shard", &"ward", &"empower"].find(id) + 1)
+
+
+## A spell cast with the gun drawn: its key held until it is done.
 func _cast(id: StringName) -> void:
 	player.caster.select(id)
 	player.power.power = player.power.MAX
@@ -517,9 +584,9 @@ func _cast(id: StringName) -> void:
 	var cast := [false]
 	var on_done := func(done_id): cast[0] = cast[0] or done_id == id
 	player.caster.cast_done.connect(on_done)
-	Input.action_press("block")
+	Input.action_press(_key_of(id))
 	await _until(func(): return cast[0], 120)
-	Input.action_release("block")
+	Input.action_release(_key_of(id))
 	player.caster.cast_done.disconnect(on_done)
 	await _frames(2)
 
@@ -549,9 +616,9 @@ func _cast_ward() -> void:
 	var cast := [false]
 	var on_done := func(id): cast[0] = cast[0] or id == &"ward"
 	player.caster.cast_done.connect(on_done)
-	Input.action_press("block")
+	Input.action_press("spell_2")
 	await _until(func(): return cast[0], 60)
-	Input.action_release("block")
+	Input.action_release("spell_2")
 	player.caster.cast_done.disconnect(on_done)
 	await _frames(2)
 

@@ -2,8 +2,8 @@ extends Node
 ## The left hand's magic: which way it is held with the revolver drawn (a
 ## bare casting hand or the tome; aiming, both hands are on the gun), and the cast
 ## itself. The more powerful a spell, the longer it takes (Spells.gd): hold
-## the right mouse while the circle closes or the pages turn; let go early
-## and nothing is cast or spent. Innate spells (cantrips) need no hand; the
+## its key (1 Shard, 2 Ward, 3 Empower) while the circle closes or the
+## pages turn; let go early and nothing is cast or spent. Innate spells (cantrips) need no hand; the
 ## movement ones work from anywhere. Runs as the player's "Caster" child and
 ## draws on its "Power" (PowerPool.gd).
 
@@ -53,6 +53,10 @@ var selected: StringName = &"shard"
 
 var _casting: StringName = &""
 var _cast_t := 0.0
+## The spell whose key is held (&"" for none), and whether this press has
+## begun its cast (one cast for one press).
+var _held_key: StringName = &""
+var _begun_this_press := false
 ## Seconds Q has been held; -1 while it is up.
 var _blink_held := -1.0
 var _aiming := false
@@ -83,30 +87,32 @@ func _physics_process(delta: float) -> void:
 
 	_empowered_jump()
 
-	if gun:
-		for i in KEYED.size():
-			if Input.is_action_just_pressed("spell_%d" % (i + 1)):
-				select(KEYED[i])
+	# A spell key: that spell, its hand raised (the revolver drawn for it if
+	# something else is in hand, the sights let go of).
+	for i in KEYED.size():
+		if Input.is_action_just_pressed("spell_%d" % (i + 1)):
+			_press_key(KEYED[i])
 
-	# Whatever stopped it being castable (the gun put away, up on a hold)
-	# ends it, for nothing.
-	if _casting != &"" and not can_cast(_casting):
+	if _held_key != &"" and not Input.is_action_pressed(_key_action(_held_key)):
+		_held_key = &""
+
+	# Whatever stopped it being castable (the gun put away, up on a hold),
+	# or the key let go of, ends it, for nothing.
+	if _casting != &"" and (not can_cast(_casting) or _held_key != _casting):
 		_cancel()
 
-	var swallowed: bool = player.is_mouse_input_swallowed()
 	_update_blink(delta)
 
-	if gun and _casting == &"" and not _aiming and Input.is_action_just_pressed("block") and not swallowed:
-		_begin(selected)
+	# Held, and ready: the circle begins to close, or the pages to turn.
+	if _held_key != &"" and _casting == &"" and not _aiming and not _begun_this_press and player.combat.gun_drawn() and can_cast(_held_key):
+		_begun_this_press = true
+		_begin(_held_key)
 
 	if _casting != &"":
-		if not Input.is_action_pressed("block"):
-			_cancel()
-		else:
-			_cast_t += delta
+		_cast_t += delta
 
-			if _cast_t >= float(Spells.info(_casting).get("cast_time", 0.0)):
-				_complete()
+		if _cast_t >= float(Spells.info(_casting).get("cast_time", 0.0)):
+			_complete()
 
 	_show_left()
 
@@ -124,6 +130,24 @@ func select(id: StringName) -> void:
 
 	selected = id
 	loadout = Loadout.TOME if info["tier"] == Spells.Tier.TOME else Loadout.HAND
+
+
+## A spell key pressed: that spell, the hand set for it; the revolver
+## drawn if something else is in hand; the sights let go of.
+func _press_key(id: StringName) -> void:
+	select(id)
+	_held_key = id
+	_begun_this_press = false
+
+	if not player.combat.gun_drawn() and player.inventory.count_of(&"revolver") > 0:
+		player.inventory.select_by_id(&"revolver")
+
+	if player.revolver != null:
+		player.revolver.drop_aim()
+
+
+func _key_action(id: StringName) -> String:
+	return "spell_%d" % (KEYED.find(id) + 1)
 
 
 func casting() -> StringName:
@@ -290,7 +314,7 @@ func _empowered_jump() -> void:
 # Blink
 
 ## Q: a tap steps (the way you are moving, or ahead); held, it aims, and let
-## go it goes to the mark (the right mouse lets the aim go, for nothing).
+## go it goes to the mark (a fresh right mouse lets the aim go, for nothing).
 ## With a blade or bow drawn on the ground, a tap is the dodge (PlayerCombat)
 ## and only a hold blinks.
 func _update_blink(delta: float) -> void:
@@ -312,7 +336,11 @@ func _update_blink(delta: float) -> void:
 		if _ticks % 3 == 0:
 			Fx.glint(player, _aim_at + (at.origin - player.global_position), 0.08, null, Color(0.75, 0.8, 0.95))
 
-		if Input.is_action_just_pressed("block"):
+		# A fresh right mouse lets it go (and raises no sights).
+		if Input.is_action_just_pressed("aim"):
+			if player.revolver != null:
+				player.revolver.drop_aim()
+
 			_aiming = false
 			_blink_held = -1.0
 			return
