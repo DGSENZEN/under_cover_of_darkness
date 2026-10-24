@@ -184,7 +184,7 @@ An NPC node is a `StaticBody3D` with `frob()`/`get_prompt()` ("Talk") and an exp
   - A bright fresnel rim outlines it.
   - Slow smoke drifts inside, as 3D noise in object space.
   - The body thins and frays into wisps toward the feet, by height.
-  - Each character has one colour: **copal amber** for the curandera and **ink violet** for the librarian.
+  - Each character has one colour: **copal amber** for the curandera and **cochineal red** `Color(0.9, 0.22, 0.2)` for the librarian (the user, 2026-10-23: "lets make the librarian redder").
   - Our own wisp particles rise off the shoulders and feet, built from the project's own smoke sheets or noise and never downloaded.
   - A depth prepass keeps the inside of the body from showing through itself.
 - **States** are a few uniforms eased over time: **calm** (resting), **flare** (rim and glow up, smoke quickens), **dim** (fades, thins and cools), and **gutter** (a candle-like flicker). A line's cue acts for that line. `shade()` changes the resting state.

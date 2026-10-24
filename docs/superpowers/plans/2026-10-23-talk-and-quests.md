@@ -26,7 +26,7 @@
   - Only NOX voices: the Sfx sounds `murmur`, `nod`, `hm` with suffixes `""` (voice `male`), `_b` (`male_b`) and `_f` (`female`).
   - Existing animation clips only: `Idle`, `Idle_Talking`, `Yes`, `Idle_No`.
 - **Bodies:** the curandera uses `duelist`, the librarian uses `arms_master`.
-- **Colours:** copal amber `Color(1.0, 0.62, 0.22)`, ink violet `Color(0.55, 0.38, 1.0)`, marigold `Color(0.95, 0.69, 0.2)`, cochineal `Color(0.76, 0.16, 0.16)`, box black `Color(0.043, 0.043, 0.043)`.
+- **Colours:** copal amber `Color(1.0, 0.62, 0.22)`, ink violet `Color(0.55, 0.38, 1.0)` (bookseller type default), librarian red `Color(0.9, 0.22, 0.2)`, marigold `Color(0.95, 0.69, 0.2)`, cochineal `Color(0.76, 0.16, 0.16)`, box black `Color(0.043, 0.043, 0.043)`.
 - **Never call a visual defect harmless.** Fix it, or name it as unfinished.
 
 ## Review Focus
@@ -274,7 +274,7 @@
 - [ ] **Step 5: Stage stills.** `tests/visual/stage_shade.gd` follows `tests/visual/stage_fp_hands.gd`'s windowed pattern. It shows the curandera's shade (duelist, copal) under one lamp at night, calm, flare, dim and gutter, from the front and three-quarter view at 2 m, plus a close-up of the feet's fray. Run it windowed. Expected: 9 PNGs in the scratchpad.
 - [ ] **Step 6: Inspect** every still up close for seams, see-through artefacts inside the body, sorting faults and wisps clipping. Fix them, or list them as unfinished.
 - [ ] **Step 7: Commit** with `feat(dialogue): the shade`.
-- [ ] **Step 8: STOP for the user's review** of the curandera's shade, per the standing rule that models go one at a time. Send the stills. Only after the user's yes, dress the librarian (`arms_master`, ink violet), stage his stills, and get his yes too.
+- [ ] **Step 8: STOP for the user's review** of the curandera's shade, per the standing rule that models go one at a time. Send the stills. Only after the user's yes, dress the librarian (`arms_master`, red `Color(0.9, 0.22, 0.2)`), stage his stills, and get his yes too.
 
 ### Task 6: The talk box and the player
 
@@ -376,7 +376,7 @@ The spec's "Character skins" section was settled with the user over 28 drafts. *
     - Beats: `asks` (`do: set(asked_book), goal(bring_book)`), `limpia` (overrides the type's), `gives_bundle` (`take(the_book)`, `give(copal_bundle)`, `note(curandera_bundle)`), `lie_no_book` (cue `gutter`, `mood(-1)`).
     - A sense line `Sense obsidian [if said(asked_book)]`.
     - Blocks: `goal bring_book` (`kind: side`, `shows: said(asked_book)`, `done: gave(the_book)`), `item copal_bundle` (`look: bundle`), `note curandera_bundle`.
-  - **`librarian`** (`body: arms_master`, `colour: ink`, `voice: male_b`, `type: bookseller`):
+  - **`librarian`** (`body: arms_master`, `colour: #e63833` (red, the user's call), `voice: male_b`, `type: bookseller`):
     - Openers: `open_first`, `open_after_lie` (`when: said(lied)`), `open_sent` (`when: said(curandera.asked_book), not(gave(curandera.the_book)), not(has(the_book))`), `open`.
     - Beats: `truth` (`give(the_book)`, `mood(+1)`), `pay` (`[if purse>=5]`, `charge(5)`, `give(the_book)`), `special` (`!`, `[if said(curandera.asked_book)]`), `lie` (cue `dim`, `set(lied)`, `mood(-1)`, `shade(dim)`), `amends` (`clear(lied)`, `shade(calm)`).
     - Block: `item the_book` (`look: book`).
