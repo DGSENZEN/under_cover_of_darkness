@@ -15,7 +15,6 @@ const WardScript := preload("res://scripts/Magic/Ward.gd")
 const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
 const MagicView := preload("res://scripts/Visual/MagicView.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
-const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 signal cast_started(id: StringName)
@@ -35,6 +34,13 @@ const BREAKING_KINDS := [&"power", &"blast", &"crush"]
 const KEYED := [&"shard", &"ward", &"empower"]
 ## Seconds the casting hand stays up after a hand spell is let go.
 const FOLLOW_THROUGH := 0.18
+## Blink aimed: the left hand reaching out toward the mark, and how fast
+## the mark turns (radians a second). Blink's rush: how hard the view is
+## thrown wide (degrees a second into its spring).
+## (A stand-in pose, to be posed by hand in Blender with the arms' others.)
+const REACH_HAND := Transform3D(Basis(Vector3(0, -0.94, -0.34), Vector3(0, 0.34, -0.94), Vector3(1, 0, 0)), Vector3(-0.12, -0.17, -0.5))
+const MARK_TURN := 1.5
+const RUSH_FOV := 190.0
 ## Q let go within this long is a tap (a step, or the dodge); held longer,
 ## it aims.
 const TAP_TIME := 0.18
@@ -63,12 +69,13 @@ var _held_key: StringName = &""
 var _begun_this_press := false
 ## Seconds Q has been held; -1 while it is up.
 var _blink_held := -1.0
+## The landing mark while a blink is aimed (MagicFx.blink_mark).
+var _mark: Node3D
 var _aiming := false
 ## Where an aimed blink would land (the body's position), and the lip it
 ## would hang from ({} for none: Blink.ledge_at).
 var _aim_at := Vector3.ZERO
 var _aim_ledge := {}
-var _ticks := 0
 var _game_time := 0.0
 ## When a hand spell was last let go (game time): the hand stays up a moment
 ## after, pushing out (FOLLOW_THROUGH).
@@ -360,8 +367,6 @@ func _empowered_jump() -> void:
 ## With a blade or bow drawn on the ground, a tap is the dodge (PlayerCombat)
 ## and only a hold blinks.
 func _update_blink(delta: float) -> void:
-	_ticks += 1
-
 	if Input.is_action_just_pressed("blink"):
 		_blink_held = 0.0
 	elif _blink_held >= 0.0 and Input.is_action_pressed("blink"):
@@ -375,9 +380,6 @@ func _update_blink(delta: float) -> void:
 		_aim_ledge = Blink.ledge_at(player, at.origin, -at.basis.z, Blink.RANGE * _reach_scale())
 		_aim_at = _aim_ledge["anchor"] if not _aim_ledge.is_empty() else Blink.arrival(player, at.origin, -at.basis.z, Blink.RANGE * _reach_scale())
 
-		if _ticks % 3 == 0:
-			Fx.glint(player, _aim_at + (at.origin - player.global_position), 0.08, null, Color(0.75, 0.8, 0.95))
-
 		# A fresh right mouse lets it go (and raises no sights).
 		if Input.is_action_just_pressed("aim"):
 			if player.revolver != null:
@@ -385,7 +387,10 @@ func _update_blink(delta: float) -> void:
 
 			_aiming = false
 			_blink_held = -1.0
+			_show_mark(false, delta)
 			return
+
+	_show_mark(_aiming and not player.is_dead, delta)
 
 	if _blink_held >= 0.0 and not Input.is_action_pressed("blink"):
 		if _aiming:
@@ -396,6 +401,30 @@ func _update_blink(delta: float) -> void:
 
 		_blink_held = -1.0
 		_aiming = false
+		_show_mark(false, delta)
+
+
+## The landing mark shown while a blink is aimed, or null.
+func blink_mark() -> Node3D:
+	return _mark if is_instance_valid(_mark) else null
+
+
+## The landing mark where an aimed blink would land, turning; made when the
+## aim begins, gone when it ends (`showing` false).
+func _show_mark(showing: bool, delta: float) -> void:
+	if not showing:
+		if is_instance_valid(_mark):
+			_mark.queue_free()
+
+		_mark = null
+		return
+
+	if not is_instance_valid(_mark):
+		_mark = MagicFx.blink_mark(player, Blink._origin_above_feet(player))
+
+	if _mark != null:
+		_mark.global_position = _aim_at
+		_mark.rotation.y += MARK_TURN * delta
 
 
 ## Empowered, a blink reaches twice as far.
@@ -447,11 +476,21 @@ func _blink_to(at: Vector3, ledge := {}) -> void:
 		player.velocity = falling
 
 	player.combat._dodged_at = player.combat._game_time
-	# A mirror-crack where you stood, the cold of the glass as you pass, a
-	# ripple where you land.
-	MagicFx.mirror_crack(player, from)
+	# A cracked pane where you stood; the rush as you pass through the glass
+	# (the view thrown wide and smeared, flakes whipping past, its cold); a
+	# ripple where you land, and the floor's dust kicked out.
+	MagicFx.blink_crack(player, from, player.global_position - from)
 	MagicView.cold(get_tree())
+	MagicView.rush(get_tree())
+	player.juice.fov_kick(-RUSH_FOV)
+	var eye: Transform3D = player.combat.aim()
+	MagicFx.blink_streak(player, eye.origin, -eye.basis.z)
 	MagicFx.ripple(player, player.global_position)
+	var feet: Vector3 = player.global_position - Vector3.UP * Blink._origin_above_feet(player)
+	var floor_hit := player.get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(feet + Vector3.UP * 0.2, feet - Vector3.UP * 0.4, 1, [player.get_rid()]))
+
+	if not floor_hit.is_empty():
+		MagicFx.blink_dust(player, floor_hit["position"], floor_hit.get("normal", Vector3.UP))
 
 	if beast:
 		MagicFx.shockwave(player, player.global_position - Vector3.UP * Blink._origin_above_feet(player))
@@ -475,6 +514,8 @@ func _show_left() -> void:
 		hand.set_left_hold(&"tome", ViewPoses.revolver_frame(TOME_HELD))
 	elif loadout == Loadout.HAND and (_casting != &"" or _game_time - _loosed_at < FOLLOW_THROUGH):
 		hand.set_left_hold(&"cast", CAST_HAND)
+	elif loadout == Loadout.HAND and _aiming and _left_hand_free():
+		hand.set_left_hold(&"cast", REACH_HAND)
 	else:
 		hand.set_left_hold(&"", Transform3D.IDENTITY)
 

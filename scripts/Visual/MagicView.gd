@@ -1,13 +1,14 @@
 extends CanvasLayer
 ## The edge of the view coloured by magic: Blink's cold flash as you pass
-## through the glass, and Empower's slow beast pulse while its charge waits.
-## One per tree, made on first use (of()).
+## through the glass and its rush (the picture smeared in to the middle), and
+## Empower's slow beast pulse while its charge waits. Under the pixel grid and
+## the HUD; hidden when nothing shows. One per tree, made on first use (of()).
 
 const SHADER := preload("res://scripts/Visual/magic_view.gdshader")
 
-## Blink's cold flash (#DDE6F2, half see-through), and Empower's umber pulse
-## (70 a minute).
-const COLD := Color(0.867, 0.902, 0.949, 0.55)
+## Blink's cold flash (#DDE6F2, mostly see-through: with the rush's smear
+## it fogged the night), and Empower's umber pulse (70 a minute).
+const COLD := Color(0.867, 0.902, 0.949, 0.25)
 const BEAST := Color("#4A3423")
 const BEAST_BPM := 70.0
 const BEAST_MOST := 0.55
@@ -18,6 +19,9 @@ var _cold_t := -1.0
 var _cold_for := 0.1
 var _cold := 0.0
 var _beast := 0.0
+var _rush_t := -1.0
+var _rush_for := 0.15
+var _rush := 0.0
 var _clock := 0.0
 
 
@@ -48,7 +52,8 @@ static func cold(tree: SceneTree, seconds := 0.1) -> void:
 
 
 func _init() -> void:
-	layer = 9
+	# Under Retro's pixel grid (4) and the HUD (5), as AdrenalineView.
+	layer = 3
 	_rect = ColorRect.new()
 	_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -56,6 +61,20 @@ func _init() -> void:
 	_material.shader = SHADER
 	_rect.material = _material
 	add_child(_rect)
+
+
+## Blink's rush: how far the picture is smeared in to the middle now.
+func rush_amount() -> float:
+	return _rush
+
+
+## Blink's rush: the picture smeared in to the middle at once, clearing over
+## `seconds`.
+static func rush(tree: SceneTree, seconds := 0.15) -> void:
+	var view := of(tree)
+	view._rush_t = 0.0
+	view._rush_for = maxf(seconds, 0.01)
+	view._rush = 1.0
 
 
 func cold_amount() -> float:
@@ -82,6 +101,16 @@ func _physics_process(delta: float) -> void:
 			_cold_t = -1.0
 			_cold = 0.0
 
+	if _rush_t >= 0.0:
+		_rush_t += delta
+		var left := 1.0 - clampf(_rush_t / _rush_for, 0.0, 1.0)
+		_rush = left * left
+
+		if _rush_t >= _rush_for:
+			_rush_t = -1.0
+			_rush = 0.0
+
+	_material.set_shader_parameter(&"rush", _rush)
 	var pulse := _beast * BEAST_MOST * (0.6 + 0.4 * sin(_clock * TAU * BEAST_BPM / 60.0))
 
 	if _cold > pulse:
@@ -90,3 +119,6 @@ func _physics_process(delta: float) -> void:
 	else:
 		_material.set_shader_parameter(&"tint", BEAST)
 		_material.set_shader_parameter(&"amount", pulse)
+
+	# Nothing to show: not drawn at all (a full-screen pass for nothing).
+	_rect.visible = _cold > 0.0 or pulse > 0.0 or _rush > 0.0

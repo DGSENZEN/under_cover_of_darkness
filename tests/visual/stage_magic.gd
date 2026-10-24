@@ -11,6 +11,7 @@ const GUARD := preload("res://Guard.tscn")
 const HANDHOLD := preload("res://scripts/PlayerUtils/Handhold.gd")
 const PROPS := preload("res://scripts/Interaction/Props.gd")
 const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
+const MagicView := preload("res://scripts/Visual/MagicView.gd")
 
 var _out := "/tmp/magic/"
 var _only := ""
@@ -87,10 +88,47 @@ func _ready() -> void:
 		await _frames(30)
 
 	if _wants("blink"):
-		player.power.power = player.power.MAX
-		await _hold_clip("blink" + tag, "blink", [0, 2, 3, 4, 6, 9, 14, 20, 30, 40], 2)
+		# Aimed from your own eyes: the mark and the reaching hand, then let
+		# go: every frame of the rush and the landing.
+		var through := [5, 15, 30, 40]
+		through.append_array(range(41, 53))
+		through.append_array([56, 62, 70])
+		# Facing the open floor, away from the wall (whose top it would catch).
 		await _place(Vector3(0, 0.1, 0))
+		player.rotation.y = PI
+		await _frames(20)
+		player.power.power = player.power.MAX
+		await _hold_clip("blink" + tag, "blink", through, 41)
+		await _frames(60)
+		# The same from the side, ahead of where you stood and looking back:
+		# the cracked pane hanging there and falling apart, the dust where you
+		# land.
+		await _place(Vector3(0, 0.1, 0))
+		player.rotation.y = PI
 		await _frames(30)
+		var side := Camera3D.new()
+		add_child(side)
+		side.global_transform = Transform3D(Basis.looking_at(Vector3(0, 1.0, 4.5) - Vector3(6.5, 1.9, 6.5), Vector3.UP), Vector3(6.5, 1.9, 6.5))
+		side.make_current()
+		var view: CanvasLayer = MagicView.of(get_tree())
+		view.visible = false
+		player.power.power = player.power.MAX
+		await _hold_clip("blink_side" + tag, "blink", [20, 41, 42, 43, 44, 46, 48, 52, 56, 60, 66, 72, 80, 88], 41)
+		side.queue_free()
+		await _place(Vector3(0, 0.1, 0))
+		player.rotation.y = PI
+		await _frames(60)
+		# Close, looking back at the pane face on.
+		var back := Camera3D.new()
+		add_child(back)
+		back.global_transform = Transform3D(Basis.looking_at(Vector3(-0.3, -0.2, -2.4), Vector3.UP), Vector3(0.3, 1.5, 2.4))
+		back.make_current()
+		player.power.power = player.power.MAX
+		await _hold_clip("blink_back" + tag, "blink", [42, 44, 48, 56, 60, 64, 68], 41)
+		back.queue_free()
+		view.visible = true
+		await _place(Vector3(0, 0.1, 0))
+		await _frames(60)
 
 	if _wants("ward"):
 		player.power.power = player.power.MAX

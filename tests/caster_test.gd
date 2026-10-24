@@ -694,7 +694,7 @@ func _run() -> void:
 
 	for i in 3:
 		await get_tree().physics_frame
-		mirrors = maxi(mirrors, get_tree().get_nodes_in_group(&"mirror").size())
+		mirrors = maxi(mirrors, get_tree().get_nodes_in_group(&"blink_crack").size())
 		cold = maxf(cold, MagicView.of(get_tree()).cold_amount())
 
 		for r in get_tree().get_nodes_in_group(&"ripple"):
@@ -702,9 +702,9 @@ func _run() -> void:
 
 	await _frames(10)
 	var cold_after: float = MagicView.of(get_tree()).cold_amount()
-	await _frames(int(MagicFx.MIRROR_LIFE * 60.0))
-	_check("B1 a blink leaves ten mirror shards where you stood, gone in 0.6 s",
-		mirrors == 10 and get_tree().get_nodes_in_group(&"mirror").is_empty(), "shards %d after %d" % [mirrors, get_tree().get_nodes_in_group(&"mirror").size()])
+	await _frames(int((MagicFx.CRACK_HANG + MagicFx.CRACK_FALL) * 60.0))
+	_check("B1 a blink leaves a pane of 27 cracked facets where you stood, gone in 0.75 s",
+		mirrors == MagicFx.SPOKES.size() * 3 and get_tree().get_nodes_in_group(&"blink_crack").is_empty(), "facets %d after %d" % [mirrors, get_tree().get_nodes_in_group(&"blink_crack").size()])
 	_check("B2 you arrive in a ripple, gone in 0.3 s", rippled and get_tree().get_nodes_in_group(&"ripple").is_empty(),
 		"rippled %s after %d" % [rippled, get_tree().get_nodes_in_group(&"ripple").size()])
 	_check("B3 a cold flash at the edges of the view, gone in 0.1 s", cold > 0.0 and cold_after == 0.0, "flash %.2f after %.2f" % [cold, cold_after])

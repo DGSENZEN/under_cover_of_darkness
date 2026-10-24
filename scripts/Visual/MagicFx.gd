@@ -1,7 +1,8 @@
 extends RefCounted
 ## The spells' effects in the world, in the shot's approved look (GunFx,
-## MeshVfx): Obsidian's black glass (the splinter, its shatter, Blink's
-## mirror-crack and ripple), and Empower's shockwave. Every piece is
+## MeshVfx): Obsidian's black glass (the Shard: its spearhead, release,
+## spikes and shatter; Blink: its mark, rush, cracked pane, ripple and
+## dust), and Empower's shockwave. Every piece is
 ## short-lived and counted (live_count); with Fx.enabled off (tests,
 ## captures) none is made.
 
@@ -17,10 +18,7 @@ const GLINT := Color("#E6EEF5")
 ## A shard's shatter: how many splinters, and how long they lie.
 const SHATTER_PIECES := 8
 const SHATTER_LIFE := 1.5
-## Blink: the mirror-crack left where you stood (how many shards, how long),
-## and the ripple you arrive in (how long, how high on the body).
-const MIRROR_SHARDS := 10
-const MIRROR_LIFE := 0.6
+## Blink: the ripple you arrive in (how long, how high on the body).
 const RIPPLE_LIFE := 0.3
 const RIPPLE_HEIGHT := 0.3
 const RIPPLE_SHADER := preload("res://scripts/Visual/vfx_ripple.gdshader")
@@ -55,10 +53,34 @@ const DUST := Color("#3A3A40")
 const DUST_BODY := Color("#1C1C21")
 ## Stuck in a man: how long it stays.
 const STUCK_LIFE := 6.0
+## Blink, round two: the landing mark's flakes (how many, how far round);
+## the flakes that whip past you as you go (how many, how fast, how long);
+## the cracked pane left where you stood (how long it hangs, how long it
+## falls, how many at once); the dust you land in.
+const FACET_SHADER := preload("res://scripts/Visual/vfx_glass_facet.gdshader")
+const MARK_FLAKES := 8
+const MARK_RADIUS := 0.5
+const STREAKS := 10
+const STREAK_SPEED := 28.0
+const STREAK_LIFE := 0.15
+const CRACK_HANG := 0.25
+const CRACK_FALL := 0.5
+const MOST_CRACKS := 2
+## The pane: half its width and height (m); its spokes out from where it
+## broke, each [turn, inner ring, middle ring, how far the jagged edge comes
+## in], fixed so tests and clips repeat.
+const PANE_HALF := Vector2(0.45, 0.85)
+const PANE_BREAK := Vector2(0.05, 0.25)
+const SPOKES := [[0.0, 0.2, 0.5, 0.95], [0.66, 0.26, 0.58, 0.86], [1.42, 0.18, 0.47, 1.0], [2.1, 0.24, 0.55, 0.9],
+	[2.83, 0.21, 0.6, 0.97], [3.5, 0.27, 0.52, 0.84], [4.25, 0.19, 0.5, 0.99], [4.95, 0.23, 0.57, 0.88], [5.6, 0.2, 0.49, 0.93]]
+const FLOOR_DUST := Color("#8A8070")
+const FLOOR_DUST_BODY := Color("#6B6255")
+const FLOOR_DUST_EDGE := Color("#4A443C")
 
 static var _live: Array = []
 static var _glass_look: StandardMaterial3D
 static var _obsidian: ShaderMaterial
+static var _panes: Array = []
 
 
 ## A thin pointed splinter of glass: a long four-sided bipyramid, `width` by
@@ -141,43 +163,184 @@ static func shatter(context: Node, at: Vector3, normal: Vector3) -> void:
 	Sfx.play(context, &"ting", at, -3.0, 2.4)
 
 
-## Where you blinked from: a ring of flat mirror shards at your body,
-## bursting out a little and fading, a shatter of reflections.
-static func mirror_crack(context: Node, at: Vector3) -> void:
+## Where a blink will land, while it is aimed: MARK_FLAKES flakes of black
+## glass hovering in a ring, points up, and a thin cold ring on the ground
+## `feet_below` under it, for the Caster to move and turn. Null with effects
+## off.
+static func blink_mark(context: Node, feet_below := 1.0) -> Node3D:
+	if not allowed(context):
+		return null
+
+	var mark := Node3D.new()
+	mark.name = "BlinkMark"
+	mark.add_to_group(&"blink_mark")
+	var flake := spearhead_mesh(0.07, 0.3, 0.02)
+
+	for i in MARK_FLAKES:
+		var turn := TAU * float(i) / float(MARK_FLAKES)
+		var piece := MeshInstance3D.new()
+		piece.mesh = flake
+		piece.material_override = obsidian_look()
+		piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		piece.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		mark.add_child(piece)
+		# Leaning out a little, every other one higher.
+		piece.transform = Transform3D(Basis(Vector3(-sin(turn), 0.0, cos(turn)), 0.25), Vector3(cos(turn), 0.12 * float(i % 2), sin(turn)) * MARK_RADIUS)
+
+	# On the ground: what reads from across a room.
+	var ring := MeshInstance3D.new()
+	ring.name = "MarkRing"
+	ring.mesh = _ring_mesh(MARK_RADIUS * 1.1, 0.035, 48)
+	var look := MeshVfx.look(Color.WHITE, GLINT, GLINT.darkened(0.4), 1.3, 0.0, 0.3, 7.7)
+	look.set_shader_parameter(&"tail_eat", 0.0)
+	look.set_shader_parameter(&"tiling", Vector2(6.0, 0.5))
+	ring.material_override = look
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ring.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	mark.add_child(ring)
+	ring.position = Vector3(0.0, -feet_below + 0.03, 0.0)
+
+	_world_of(context).add_child(mark)
+	mark.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	return mark
+
+
+## The rush as you go: STREAKS flakes of glass, drawn out along the way you
+## look, whipping past you from ahead (`eye`, looking `ahead`), gone in
+## STREAK_LIFE.
+static func blink_streak(context: Node, eye: Vector3, ahead: Vector3) -> void:
 	if not allowed(context):
 		return
 
 	var world := _world_of(context)
-	var middle := at + Vector3.UP * 0.2
+	var forward := ahead.normalized()
+	var side := forward.cross(Vector3.UP).normalized() if absf(forward.y) < 0.99 else Vector3.RIGHT
+	var up := side.cross(forward).normalized()
+	var flake := spearhead_mesh(0.025, 0.26, 0.008)
 
-	for i in MIRROR_SHARDS:
-		var turn := TAU * float(i) / float(MIRROR_SHARDS) + 0.31 * float(i % 3)
-		var out := Vector3(cos(turn), 0.25 * float(i % 3 - 1), sin(turn)).normalized()
-		var shard := MeshInstance3D.new()
-		shard.name = "Mirror"
-		var quad := QuadMesh.new()
-		var side := 0.06 + 0.03 * float(i % 3)
-		quad.size = Vector2(side, side * 1.4)
-		shard.mesh = quad
-		var mirror := StandardMaterial3D.new()
-		mirror.albedo_color = Color(0.82, 0.86, 0.9, 0.95)
-		mirror.metallic = 1.0
-		mirror.roughness = 0.04
-		mirror.rim_enabled = true
-		mirror.rim = 0.8
-		mirror.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mirror.cull_mode = BaseMaterial3D.CULL_DISABLED
-		shard.material_override = mirror
-		shard.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		shard.add_to_group(&"mirror")
-		world.add_child(shard)
-		shard.global_position = middle + out * 0.5
-		shard.global_basis = Basis.looking_at(out, Vector3.UP).rotated(out, 0.9 * float(i))
-		shard.reset_physics_interpolation()
-		var fade := shard.create_tween().set_parallel(true)
-		fade.tween_property(shard, "global_position", middle + out * 0.8, MIRROR_LIFE).set_ease(Tween.EASE_OUT)
-		fade.tween_property(mirror, "albedo_color:a", 0.0, MIRROR_LIFE).set_ease(Tween.EASE_IN)
-		_keep(shard, MIRROR_LIFE)
+	for i in STREAKS:
+		var turn := TAU * float(i) / float(STREAKS) + 0.3 * float(i % 2)
+		var off := (side * cos(turn) + up * sin(turn) * 0.7) * (0.45 + 0.25 * float(i % 3))
+		var start := eye + forward * (2.2 + 0.5 * float(i % 4)) + off
+		var piece := MeshInstance3D.new()
+		piece.name = "BlinkStreak"
+		piece.mesh = flake
+		piece.material_override = obsidian_look()
+		piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		piece.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		piece.add_to_group(&"blink_streak")
+		world.add_child(piece)
+		piece.global_transform = Transform3D(Basis.looking_at(-forward, up) * Basis(Vector3.RIGHT, -PI * 0.5), start)
+		piece.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS).tween_property(piece, "global_position", start - forward * STREAK_SPEED * STREAK_LIFE, STREAK_LIFE)
+		_keep(piece, STREAK_LIFE)
+
+
+## Where you blinked from: a pane of cracked glass the height of a man,
+## standing at `at` (the body's middle) turned toward `toward`; its jagged
+## facets bend the world each their own way, a cold line on every crack. It
+## hangs CRACK_HANG, then falls apart over CRACK_FALL. MOST_CRACKS at once:
+## a new one takes the oldest's place.
+static func blink_crack(context: Node, at: Vector3, toward: Vector3) -> void:
+	if not allowed(context):
+		return
+
+	_panes = _panes.filter(func(ref): return ref.get_ref() != null and is_instance_valid(ref.get_ref()) and not (ref.get_ref() as Node).is_queued_for_deletion())
+
+	while _panes.size() >= MOST_CRACKS:
+		(_panes.pop_front().get_ref() as Node).queue_free()
+
+	var flat := Vector3(toward.x, 0.0, toward.z)
+	var facing := flat.normalized() if flat.length() > 0.01 else Vector3.FORWARD
+	var pane := Node3D.new()
+	pane.name = "BlinkCrack"
+	pane.add_to_group(&"blink_crack_pane")
+	_world_of(context).add_child(pane)
+	pane.global_transform = Transform3D(Basis.looking_at(-facing, Vector3.UP), at)
+	pane.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	_panes.append(weakref(pane))
+
+	# The rings: where it broke, round it, half way out, the jagged edge.
+	var inner := []
+	var middle := []
+	var outer := []
+
+	for spoke in SPOKES:
+		var turn: float = spoke[0]
+		var way := Vector2(cos(turn), sin(turn))
+		var edge := Vector2(way.x * PANE_HALF.x, way.y * PANE_HALF.y) * float(spoke[3])
+		inner.append(PANE_BREAK + way * float(spoke[1]))
+		middle.append(PANE_BREAK + (edge - PANE_BREAK) * float(spoke[2]))
+		outer.append(edge)
+
+	var n := SPOKES.size()
+
+	for i in n:
+		var j := (i + 1) % n
+		_facet(pane, [PANE_BREAK, inner[i], inner[j]], i * 3)
+		_facet(pane, [inner[i], middle[i], middle[j], inner[j]], i * 3 + 1)
+		_facet(pane, [middle[i], outer[i], outer[j], middle[j]], i * 3 + 2)
+
+	_keep(pane, CRACK_HANG + CRACK_FALL)
+
+
+## One facet of the pane: a triangle or a quad of its corners (pane space,
+## m), its own node about its middle, so it can fall on its own.
+static func _facet(pane: Node3D, corners: Array, index: int) -> void:
+	var middle := Vector2.ZERO
+
+	for c in corners:
+		middle += c
+
+	middle /= float(corners.size())
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Barycentric corners; a quad's diagonal (a to c) is no crack.
+	var tris := [[0, 1, 2, Color(1, 0, 0), Color(0, 1, 0), Color(0, 0, 1)]]
+
+	if corners.size() == 4:
+		tris = [[0, 1, 2, Color(1, 1, 0), Color(0, 1, 0), Color(0, 1, 1)], [0, 2, 3, Color(1, 0, 1), Color(0, 1, 1), Color(0, 0, 1)]]
+
+	for t in tris:
+		for k in 3:
+			var c: Vector2 = corners[t[k]] - middle
+			st.set_color(t[3 + k])
+			st.set_normal(Vector3.BACK)
+			st.add_vertex(Vector3(c.x, c.y, 0.0))
+
+	var facet := MeshInstance3D.new()
+	facet.name = "Facet"
+	facet.mesh = st.commit()
+	var look := ShaderMaterial.new()
+	look.shader = FACET_SHADER
+	look.set_shader_parameter(&"glint", GLINT)
+	# Each its own way: a fixed scatter of shifts and sheens.
+	var turn := 2.4 * float(index)
+	look.set_shader_parameter(&"shift", Vector2(cos(turn), sin(turn)) * (0.012 + 0.008 * float(index % 3)))
+	look.set_shader_parameter(&"sheen", 0.16 + 0.08 * float(index % 4))
+	facet.material_override = look
+	facet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	facet.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	facet.add_to_group(&"blink_crack")
+	pane.add_child(facet)
+	facet.position = Vector3(middle.x, middle.y, 0.0)
+	# It hangs, edging out a little; then drops, turning away, and fades.
+	var start := facet.position
+	var out := Vector3(middle.x * 0.25, 0.0, 0.06 + 0.02 * float(index % 3))
+	var life := facet.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	life.tween_property(facet, "position", start + Vector3(0.0, 0.0, 0.02), CRACK_HANG)
+	life.set_parallel(true)
+	life.chain().tween_property(facet, "position", start + out + Vector3(0.0, -0.8 - 0.2 * float(index % 2), 0.0), CRACK_FALL).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	life.tween_property(facet, "rotation", Vector3(1.2 + 0.4 * float(index % 3), 0.8 * float(index % 2) - 0.4, 0.6), CRACK_FALL).set_ease(Tween.EASE_IN)
+	life.tween_method(func(f: float): look.set_shader_parameter(&"fade", f), 1.0, 0.0, CRACK_FALL).set_ease(Tween.EASE_IN)
+
+
+## Where you land: a ring of the floor's dust kicked out across it at `feet`.
+static func blink_dust(context: Node, feet: Vector3, up := Vector3.UP) -> void:
+	if not allowed(context):
+		return
+
+	_dust_ring(context, feet + up * 0.02, up, &"blink_dust", [FLOOR_DUST, FLOOR_DUST_BODY, FLOOR_DUST_EDGE], 1.1)
+	Fx.dust(context, feet, up, 0.6, "stone")
 
 
 ## Where you arrive: a shell of glass the world bends through, swelling and
@@ -423,7 +586,7 @@ static func spike_star(context: Node, at: Vector3, normal: Vector3) -> void:
 		life.tween_method(func(g: float): spike.global_basis = basis.scaled_local(Vector3(g, g, g)), 1.0, 0.0, SPIKE_CRUMBLE).set_ease(Tween.EASE_IN)
 		_keep(spike, SPIKE_STAY + SPIKE_CRUMBLE)
 
-	_dust_ring(context, at + out * 0.01, out)
+	_dust_ring(context, at + out * 0.01, out, &"shard_ring", [DUST, DUST_BODY, GLASS], DUST_RING_TO)
 	glint_light(context, at + out * 0.3, 1.0, 2.5)
 
 
@@ -510,25 +673,26 @@ static func _crumble(spike: Node3D, along: Vector3, length: float) -> void:
 		_keep(piece, CRUMBLE_LIFE)
 
 
-## A ring of black glass dust spreading flat on the face (square to `out`).
-static func _dust_ring(context: Node, at: Vector3, out: Vector3) -> void:
+## A ring of dust spreading flat on a face (square to `out`): `colours` its
+## core, body and edge, `wide` how far it grows; in `group`.
+static func _dust_ring(context: Node, at: Vector3, out: Vector3, group: StringName, colours: Array, wide: float) -> void:
 	var ring := MeshInstance3D.new()
 	ring.name = "DustRing"
 	ring.mesh = _ring_mesh(0.5, 0.22, 32)
-	var look := MeshVfx.look(DUST, DUST_BODY, GLASS, 1.0, 0.2, 0.4, 4.1)
+	var look := MeshVfx.look(colours[0], colours[1], colours[2], 1.0, 0.2, 0.4, 4.1)
 	look.set_shader_parameter(&"tail_eat", 0.0)
 	look.set_shader_parameter(&"tiling", Vector2(4.0, 0.8))
 	look.set_shader_parameter(&"rim", 6.0)
 	ring.material_override = look
 	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	ring.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	ring.add_to_group(&"shard_ring")
+	ring.add_to_group(group)
 	_world_of(context).add_child(ring)
 	var across := out.cross(Vector3.RIGHT if absf(out.x) < 0.9 else Vector3.FORWARD).normalized()
 	ring.global_transform = Transform3D(Basis(across, out, across.cross(out)), at)
 	ring.scale = Vector3.ONE * 0.15
 	var grow := ring.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS).set_parallel(true)
-	grow.tween_property(ring, "scale", Vector3.ONE * DUST_RING_TO, DUST_RING_LIFE).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	grow.tween_property(ring, "scale", Vector3.ONE * wide, DUST_RING_LIFE).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	grow.tween_method(func(e: float): look.set_shader_parameter(&"erosion", e), 0.2, 1.0, DUST_RING_LIFE).set_ease(Tween.EASE_IN)
 	_keep(ring, DUST_RING_LIFE)
 
