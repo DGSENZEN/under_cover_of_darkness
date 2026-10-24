@@ -1,7 +1,8 @@
 extends Node3D
 ## The character dialogue files (the talk and quests spec, section 1): the
 ## .dialogue parser (D1-D4, D16-D17), the words conditions and effects share
-## (D5) and the library with its types and link checks (D6-D15, D18-D19).
+## (D5), the library with its types and link checks (D6-D15, D18-D19), what
+## people remember (P1-P8) and the conversation runner (C1-C11).
 ##   Godot --headless --fixed-fps 60 --path . res://tests/dialogue_test.tscn
 ##
 ## The words still to write (every text in <<...>>) are printed as WORDS:
@@ -13,6 +14,7 @@ const Terms := preload("res://scripts/Level/Terms.gd")
 const PeopleState := preload("res://scripts/Level/PeopleState.gd")
 const JobState := preload("res://scripts/Level/JobState.gd")
 const Inventory := preload("res://scripts/Interaction/Inventory.gd")
+const Conversation := preload("res://scripts/Interaction/Conversation.gd")
 const LetterText := preload("res://scripts/UI/LetterText.gd")
 
 ## Two characters and one type, used only by tests (and the suites after).
@@ -29,6 +31,7 @@ func _ready() -> void:
 	_edges()
 	_typos()
 	_people()
+	_conversation()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -540,6 +543,235 @@ func _belt_look() -> void:
 		book != null and book is BoxMesh and pick != null and not pick is BoxMesh, "book %s, pick %s" % [book, pick])
 	held.free()
 	back.free()
+
+
+# ---------------------------------------------------------------------------
+# C1-C11: the conversation runner (Conversation.gd)
+# ---------------------------------------------------------------------------
+
+## Every signal of `talk`, collected, and the order the kinds came in.
+func _listen(talk: RefCounted) -> Dictionary:
+	var heard := {"lines": [], "senses": [], "pauses": [], "options": [], "cues": [], "resting": [], "gave": [], "took": [], "ended": [],
+		"order": []}
+	talk.line.connect(func(speaker, text, cues):
+		heard["lines"].append([speaker, text, cues])
+		heard["order"].append("line"))
+	talk.sense.connect(func(school, text):
+		heard["senses"].append([school, text])
+		heard["order"].append("sense"))
+	talk.paused.connect(func(seconds):
+		heard["pauses"].append(seconds)
+		heard["order"].append("pause"))
+	talk.options.connect(func(list):
+		heard["options"].append(list)
+		heard["order"].append("options"))
+	talk.cue.connect(func(what): heard["cues"].append(what))
+	talk.resting.connect(func(state): heard["resting"].append(state))
+	talk.gave_item.connect(func(id):
+		heard["gave"].append(id)
+		heard["order"].append("gave"))
+	talk.took_item.connect(func(id): heard["took"].append(id))
+	talk.ended.connect(func(how):
+		heard["ended"].append(how)
+		heard["order"].append("ended"))
+	return heard
+
+
+## Advances until the conversation wants a choice or is over.
+func _play(talk: RefCounted) -> void:
+	var guard := 0
+
+	while not talk.is_over() and not talk.is_waiting_for_choice() and guard < 200:
+		talk.advance()
+		guard += 1
+
+
+## The texts of the last options list heard.
+func _heard_options(heard: Dictionary) -> Array:
+	var all: Array = heard["options"]
+	return [] if all.is_empty() else (all[all.size() - 1] as Array).map(func(o): return String(o["text"]))
+
+
+## A fresh talk with `id`, started and played to its first choice: [talk, heard].
+func _visit(id: String, people: RefCounted, inventory: Node) -> Array:
+	var talk: RefCounted = Conversation.new(DialogueBook.character(id), people, inventory)
+	var heard := _listen(talk)
+	talk.start()
+	_play(talk)
+	return [talk, heard]
+
+
+## A one-file library `lines` (character a), made the library.
+func _only(lines: Array) -> void:
+	DialogueBook.use(_alone(lines))
+
+
+func _conversation() -> void:
+	DialogueBook.use(DialogueBook.load_dir(FIXTURES))
+	var inventory: Node = Inventory.new()
+	var people: RefCounted = PeopleState.new()
+	var job: RefCounted = JobState.new()
+	job.reset(JobBook.check_alone("== goal g\nkind: side\nshows: said(fx_curandera.asked)\ndone: took(y)\ntext: Hear her out.\n", "mission.job"))
+	job.people = people
+	people.job = job
+	people.inventory = inventory
+
+	var first := _visit("fx_curandera", people, inventory)
+	var first_heard: Dictionary = first[1]
+	var met_after: bool = people.met.has("fx_curandera")
+	var second := _visit("fx_curandera", people, inventory)
+	var second_heard: Dictionary = second[1]
+	_check("C1 the first opener whose when: holds plays, and met is true only after it was picked",
+		first_heard["lines"][0][1] == "<<She reads you.>>" and met_after and second_heard["lines"][0][1] == "<<Back again.>>"
+		and first[0].is_waiting_for_choice() and not first[0].is_over(),
+		"first '%s', second '%s', met %s" % [first_heard["lines"], second_heard["lines"], met_after])
+
+	_check("C2 lines arrive in order with their cues, then the options",
+		first_heard["lines"] == [["Fx Curandera", "<<She reads you.>>", [&"flare"]]] and first_heard["cues"] == [&"flare"]
+		and first_heard["senses"] == [["obsidian", "<<The copal bends toward your shoulder.>>"]]
+		and first_heard["order"] == ["line", "sense", "options"]
+		and _heard_options(first_heard) == ["<<Ask about the book.>>", "<<Ask for a cleansing.>>", "<<Leave.>>"]
+		and (first_heard["options"][0] as Array).all(func(o): return o["special"] == false),
+		"order %s, options %s" % [first_heard["order"], _heard_options(first_heard)])
+
+	_only(["== character a", "== beat open", "A [dim]: <<one>>", "Sense obsidian [if has(bk)]: <<smells of paper>>", "[pause 0.5]",
+		"A: <<two>>", "-> next", "== beat next", "A [nod]: <<three>>", "> <<Go.>> -> end"])
+	var walk := _visit("a", PeopleState.new(), inventory)
+	var walked: Dictionary = walk[1]
+	_check("C2b a false [if] sense is skipped, a pause is told, a goto flows on into the next beat",
+		(walked["lines"] as Array).map(func(l): return l[1]) == ["<<one>>", "<<two>>", "<<three>>"] and walked["senses"].is_empty()
+		and walked["pauses"] == [0.5] and walked["order"] == ["line", "pause", "line", "line", "options"] and walked["cues"] == [&"dim", &"nod"],
+		"order %s, lines %s" % [walked["order"], walked["lines"]])
+
+	DialogueBook.use(DialogueBook.load_dir(FIXTURES))
+	var hidden := _visit("fx_curandera", people, inventory)
+	var without: Array = _heard_options(hidden[1])
+	people.set_flag("fx_curandera", "asked")
+	var shown := _visit("fx_curandera", people, inventory)
+	var with_it: Array = _heard_options(shown[1])
+	people.clear_flag("fx_curandera", "asked")
+	_check("C3 an [if] option is hidden when false and shown when true",
+		without == ["<<Ask for a cleansing.>>", "<<Never mind.>>"]
+		and with_it == ["<<Ask about the book again.>>", "<<Ask for a cleansing.>>", "<<Never mind.>>"],
+		"without %s, with %s" % [without, with_it])
+
+	var opening := PeopleState.new()
+	opening.job = job
+	opening.inventory = inventory
+	job.people = opening
+	var begin := _visit("fx_curandera", opening, inventory)
+	var talk: RefCounted = begin[0]
+	var heard: Dictionary = begin[1]
+	var before: bool = opening.holds("said(asked)", "fx_curandera") or not opening.goals_shown.is_empty()
+	talk.choose(0)
+	var after_choose: bool = opening.holds("said(asked)", "fx_curandera") and opening.goals_shown == ["fx_bring_book"]
+	var no_line_yet: bool = heard["lines"].size() == 1
+	_play(talk)
+	_check("C4 choose runs the option's effects then enters its beat, and the job hears of it",
+		not before and after_choose and no_line_yet and heard["lines"][1][1] == "<<Bring me the book from the librarian.>>"
+		and _heard_options(heard) == ["<<Ask for the book as a gift.>>", "<<Leave.>>"]
+		and opening.notes == ["fx_book_note"] and job.shown.has("g"),
+		"lines %s, shown %s, job %s" % [heard["lines"], opening.goals_shown, job.shown])
+
+	talk.choose(0)
+	_play(talk)
+	talk.choose(0)
+	var gift_order: Array = heard["order"].slice(heard["order"].size() - 2)
+	_check("C5 give puts the item on the belt with a mesh",
+		inventory.count_of(&"fx_book") == 1 and inventory.belt[0]["name"] == "The Fx Book" and inventory.belt[0]["mesh"] is BoxMesh
+		and heard["gave"] == ["fx_book"] and gift_order == ["gave", "ended"] and heard["ended"] == [&"end"] and talk.is_over(),
+		"belt %s, gave %s, order %s" % [inventory.belt, heard["gave"], gift_order])
+
+	var handing := _visit("fx_curandera", opening, inventory)
+	var hand: RefCounted = handing[0]
+	var hand_heard: Dictionary = handing[1]
+	hand.choose(_heard_options(hand_heard).find("<<Hand over the book.>>"))
+	_play(hand)
+	var was_there: bool = inventory.count_of(&"fx_book") == 1
+	hand.choose(0)
+	_check("C6 take removes it, records gave, and finishes the goal",
+		was_there and inventory.count_of(&"fx_book") == 0 and inventory.belt.is_empty() and opening.holds("gave(fx_book)", "fx_curandera")
+		and opening.goal_done("fx_bring_book") and hand_heard["took"] == ["fx_book"] and hand_heard["ended"] == [&"end"],
+		"took %s, gave %s, goals done %s" % [hand_heard["took"], opening.gave, opening.goals_done])
+
+	var liar := PeopleState.new()
+	var lie := _visit("fx_librarian", liar, inventory)
+	var lie_heard: Dictionary = lie[1]
+	lie[0].choose(0)
+	_play(lie[0])
+	var lied: bool = liar.holds("said(lied), mood>=-1, mood<=-1", "fx_librarian")
+	var next := _visit("fx_librarian", liar, inventory)
+	var next_heard: Dictionary = next[1]
+	next[0].choose(0)
+	_play(next[0])
+	var forgiven: bool = not liar.holds("said(lied)", "fx_librarian")
+	var then := _visit("fx_librarian", liar, inventory)
+	_check("C7 mood moves with a lie and gates the next opener",
+		lie_heard["lines"][0][1] == "<<Yes?>>" and lied and lie_heard["cues"] == [&"gutter"] and lie_heard["ended"] == [&"end"]
+		and next_heard["lines"][0][1] == "<<You lied to me.>>" and forgiven and then[1]["lines"][0][1] == "<<Yes?>>"
+		and liar.mood_of("fx_librarian") == -1,
+		"mood %d, lied %s, then '%s'" % [liar.mood_of("fx_librarian"), lied, then[1]["lines"]])
+
+	var leaver := PeopleState.new()
+	var leave := _visit("fx_librarian", leaver, inventory)
+	leave[0].walk_off()
+	var quiet := PeopleState.new()
+	var cut := _visit("fx_librarian", quiet, inventory)
+	cut[0].interrupt()
+	_check("C8 walk_off sets walked_off; interrupt sets nothing",
+		leaver.holds("said(walked_off)", "fx_librarian") and leave[1]["ended"] == [&"walked_off"] and leave[0].is_over()
+		and quiet.said.is_empty() and cut[1]["ended"] == [&"interrupted"] and cut[0].is_over() and not cut[0].is_waiting_for_choice(),
+		"left %s, cut %s, said %s" % [leave[1]["ended"], cut[1]["ended"], quiet.said])
+
+	_only(["== character a", "== beat open", "A: <<x>>", "> [if mood>=2] <<one>> -> end", "> [if mood>=1] <<two>> -> end"])
+	var none := _visit("a", PeopleState.new(), inventory)
+	var only_one: Array = none[1]["options"][0]
+	none[0].choose(0)
+	_check("C9 all options filtered: a single ending option appears",
+		only_one == [{"text": "<<…>>", "special": false}] and none[1]["ended"] == [&"end"] and none[0].is_over(),
+		"options %s, ended %s" % [only_one, none[1]["ended"]])
+
+	_only(["== character a", "== item bk", "name: Bk", "== beat open", "A: <<x>>", "> <<take it>> -> end {do: take(bk), charge(5)}"])
+	var holder: Node = Inventory.new()
+	holder.add_belt_item(&"other", "other")
+	var empty_handed := PeopleState.new()
+	var bare := _visit("a", empty_handed, holder)
+	bare[0].choose(0)
+	_check("C10 take without the item changes nothing; charge without the coin neither",
+		empty_handed.gave.is_empty() and holder.belt.size() == 1 and holder.purse == 0 and bare[1]["took"].is_empty()
+		and bare[1]["ended"] == [&"end"],
+		"gave %s, belt %d, purse %d" % [empty_handed.gave, holder.belt.size(), holder.purse])
+
+	_only(["== character a", "== goal g", "kind: side", "text: <<t>>", "note: n", "== note n", "text: t", "== beat open", "A: <<x>>",
+		"> <<go>> -> end {do: pay(7), charge(3), mood(+2), mood(-1), shade(dim), set(f), note(n), goal(g), done(g)}"])
+	var purse := PeopleState.new()
+	var spend := _visit("a", purse, holder)
+	spend[0].choose(0)
+	_check("C10b pay, charge, mood, shade, set, note, goal and done each do their one thing",
+		holder.purse == 4 and purse.mood_of("a") == 1 and spend[1]["resting"] == [&"dim"] and purse.holds("said(f)", "a")
+		and purse.notes == ["n"] and purse.goals_shown == ["g"] and purse.goal_done("g"),
+		"purse %d, mood %d, resting %s, notes %s, goals %s/%s" % [holder.purse, purse.mood_of("a"), spend[1]["resting"], purse.notes,
+		purse.goals_shown, purse.goals_done])
+	holder.free()
+
+	DialogueBook.use(DialogueBook.load_dir(FIXTURES))
+	var stand: Dictionary = DialogueBook.type_character("fx_trade", "Stand-in")
+	var stranger := PeopleState.new()
+	var type_talk: RefCounted = Conversation.new(stand, stranger, inventory)
+	var type_heard := _listen(type_talk)
+	type_talk.start()
+	_play(type_talk)
+	_check("C11 {name} becomes the speaker's name on a type-only character, whose memory is under its own id",
+		type_heard["lines"][0][1] == "<<I am Stand-in.>>" and stranger.met == [String(stand["id"])]
+		and _heard_options(type_heard) == ["<<Ask for a cleansing.>>", "<<Leave.>>"],
+		"line '%s', met %s" % [type_heard["lines"], stranger.met])
+	# The job and the people hold each other: let go, or neither is ever freed.
+	job.people = null
+	opening.job = null
+	people.job = null
+	inventory.free()
+	DialogueBook.reload()
+
 
 
 func _entry(parsed: Dictionary, kind: String, id: String) -> Dictionary:
