@@ -40,8 +40,12 @@ const FRAY_HEIGHT := 0.5
 ## space (m; up and a little forward): the shader draws the head in toward a
 ## hood around it.
 const HEAD_MIDDLE := Vector3(0.0, 0.09, 0.011)
-## Her depth pass draws before everything see-through (render priority).
+## Her depth pass draws before everything see-through (render priority), so
+## it writes only where her colour pass is at least this solid (dense smoke):
+## thinner, a votive flame, a halo, glass or another shade behind her shows
+## through (talk_shade.gdshader's depth_alpha, shade_paint).
 const DEPTH_PRIORITY := -1
+const DEPTH_ALPHA := 0.35
 ## How far the head is drawn in toward that hood (0 none, 1 a ball).
 const HOOD_PULL := 0.4
 ## What a shade does not carry: a blade-shaped thing rigged wholly to this
@@ -337,6 +341,7 @@ func _smoke_on(mesh: MeshInstance3D, albedo: Texture2D, part: String, strips: bo
 	colour.set_shader_parameter(&"shade_colour", _colour)
 	var depth := colour.duplicate() as ShaderMaterial
 	depth.set_shader_parameter(&"depth_only", true)
+	depth.set_shader_parameter(&"depth_alpha", DEPTH_ALPHA)
 	depth.render_priority = DEPTH_PRIORITY
 	colour.render_priority = 0
 	colour.next_pass = depth

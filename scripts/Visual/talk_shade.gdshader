@@ -4,10 +4,14 @@
 // carries the silhouette; the head is a hood of haze (no face); from the
 // knees down it is eaten away by rising smoke.
 //
-// Drawn twice (Shade.gd): first with depth_only, which writes only the
-// nearest surface's depth and no colour, then for colour, which draws only
-// that nearest surface. So the body never shows its own inside, its back,
-// or one arm through the other. Thin strips (a mantle, a fringe, a flap)
+// Drawn twice (Shade.gd): first with depth_only, which writes the nearest
+// surface's depth and no colour, then for colour, which draws only that
+// nearest surface. So the body never shows its own inside, its back, or one
+// arm through the other where she is dense. The depth pass runs before
+// everything see-through, so it writes only where the colour pass's own
+// alpha (shade_paint, which both passes call) reaches depth_alpha: thin
+// smoke hides nothing behind it (a votive flame, a halo, glass, another
+// shade), only dense smoke does. Thin strips (a mantle, a fringe, a flap)
 // are drawn from both sides, with no rim, fading when seen edge-on.
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_always, cull_disabled, shadows_disabled, fog_disabled;
@@ -29,8 +33,10 @@ uniform float smoke_speed = 0.15;
 uniform float fray_height = 0.5;
 // Each shade's own smoke.
 uniform float seed = 0.0;
-// The first pass: depth only, no colour.
+// The first pass: depth only, no colour; it writes only where the colour
+// pass is at least this solid (Shade.DEPTH_ALPHA).
 uniform bool depth_only = false;
+uniform float depth_alpha = 0.35;
 // The clothes' painted texture, and how much of its light and dark shows
 // faintly in the smoke (broad panels and trims only).
 uniform sampler2D albedo : source_color, hint_default_white, filter_linear_mipmap, repeat_enable;
@@ -118,6 +124,77 @@ float dissolve() {
 	return smoothstep(0.15, 0.6, up * 1.3 - 0.15 + (eaten - 0.5) * 1.4) * smoothstep(0.12, 0.4, up);
 }
 
+// What the colour pass draws at this point: its colour, and how much of
+// it there is (alpha), the dissolve (`fray`) and all. The depth pass asks
+// the same, so the two never drift apart.
+vec4 shade_paint(bool front, vec3 normal, vec3 view, vec2 uv, mat4 inv_view, float time, float fray, float thin) {
+	// (Godot already turns NORMAL to the camera on a back face.)
+	vec3 n = normalize(mix(normal, v_hood_normal, v_hood));
+	float facing = clamp(dot(n, view), 0.0, 1.0);
+
+	// Slow billows climbing through her, curled by a slower smoke: thick
+	// and thin, so she is see-through where it thins.
+	vec3 p = v_body * vec3(3.2, 2.0, 3.2) + vec3(seed * 1.37, seed * 0.71 - drift * 1.5, seed * 2.11);
+	vec3 curl = vec3(fbm(p * 0.45 + vec3(0.0, drift * 0.3, 0.0)), fbm(p * 0.45 + vec3(5.2, 1.3, -2.8)), 0.5) - 0.5;
+	float billow = fbm(p + curl * (1.6 + smoke_speed * 4.0));
+	float wisp = fbm(p * 2.3 + curl * 3.0 + vec3(0.0, -drift * 2.0, 7.0));
+	float smoke = smoothstep(0.42, 0.66, billow * 0.6 + wisp * 0.4);
+	// Over the head a quicker veil of smoke drifts across.
+	float veil = smoothstep(0.3, 0.7, fbm(v_body * vec3(6.0, 4.0, 6.0) + vec3(drift * 2.0, -drift * 4.0, seed)));
+	smoke = mix(smoke, veil, v_hood);
+
+	// A candle guttering: an uneven waver with now and then a near-out.
+	float t = time;
+	float waver = vnoise(vec3(t * 7.0, seed, 0.0)) * 0.45 + vnoise(vec3(t * 19.0, seed + 3.0, 0.0)) * 0.25;
+	float gasp = smoothstep(0.62, 0.8, vnoise(vec3(t * 2.3, seed + 7.0, 0.0))) * 0.5;
+	float gutter = clamp(1.0 - flicker * (waver + gasp), 0.12, 1.0);
+	float g = glow * gutter;
+
+	// Dim cools her: the colour drains toward a cold grey-blue.
+	float cool = clamp((1.0 - glow) / 0.65, 0.0, 1.0);
+	vec3 hue = shade_colour.rgb;
+	float lum = dot(hue, vec3(0.3, 0.59, 0.11));
+	hue = mix(hue, mix(vec3(lum), vec3(0.42, 0.52, 0.72) * lum * 1.4, 0.6), cool * 0.75);
+	vec3 hot = mix(hue, vec3(1.0, 0.94, 0.85), 0.25);
+
+	// The rim carries her shape: hotter on a flare, all but gone when
+	// dim, a little broken by the smoke so it is never a drawn line.
+	float edge = 1.0 - facing;
+	float rim = (pow(edge, 3.0) * 0.8 + pow(edge, 6.0) * 0.7) * (1.0 - thin);
+	float rim_gain = mix(0.1, 1.0, smoothstep(0.35, 1.0, glow)) * (0.9 + 1.0 * glow) * gutter;
+	// Over the hood the veil frays it, so the head is no clean shape.
+	rim *= mix(0.55 + 0.45 * smoke, 0.35 + 0.75 * veil, v_hood);
+
+	// Inside, dark smoke: a soft light from above for form, the
+	// clothes' broad panels faintly (neither on the hood).
+	vec3 world_n = normalize((inv_view * vec4(n, 0.0)).xyz);
+	float form = mix(0.7 + 0.3 * clamp(world_n.y * 0.6 + 0.45, 0.0, 1.0), 1.0, v_hood);
+	float paint = dot(texture(albedo, uv, 2.5).rgb, vec3(0.3, 0.59, 0.11));
+	float cloth = mix(1.0, 0.5 + paint * 1.1, detail * (1.0 - v_hood));
+	// Dark smoke, its billows a little lit where they are thickest.
+	vec3 inner = hue * (0.02 + 0.55 * smoke * smoke) * form * cloth * g;
+	// The hood darker still: a shadow of smoke where a face would be.
+	inner *= 1.0 - 0.55 * v_hood;
+	vec3 colour = inner + hot * rim * rim_gain;
+	// The torn edge where she dissolves glows faintly.
+	colour += hue * fray * (1.0 - fray) * 0.6 * g;
+
+	float alpha = opacity * (0.03 + 0.95 * smoke) * mix(1.0, 0.65, v_hood) + rim * 0.9 * min(rim_gain, 1.0);
+	// The hood is a haze all through, never a hole: where its smoke
+	// thins, a faint glow of it still fills the face.
+	alpha = max(alpha, opacity * 0.4 * v_hood);
+	colour = max(colour, hue * 0.12 * g * v_hood);
+	// Her inside, seen through a slit or the neck's opening, is as full
+	// of smoke as she is, never a hole to the night.
+	bool inside = !front && thin < 0.5;
+	alpha = inside ? max(alpha, opacity * 0.6) : alpha;
+	colour = inside ? max(colour, hue * 0.22 * g) : colour;
+	// A strip seen edge-on fades out, so a flap has no hard line.
+	alpha *= mix(1.0, smoothstep(0.08, 0.5, facing), thin);
+	alpha *= mix(1.0, gutter, 0.6);
+	return vec4(colour, clamp(alpha, 0.0, 1.0) * fray);
+}
+
 void fragment() {
 	// A face shows only its outside: it is open at the back (for the hair
 	// to cover). Its neck shows both sides: seen through the gap above the
@@ -129,85 +206,22 @@ void fragment() {
 	float fray = dissolve();
 	// How much this point is a thin card, seen from both sides.
 	float thin = max(strips, cards * (1.0 - v_hood));
+	vec4 paint = shade_paint(FRONT_FACING, NORMAL, VIEW, UV, INV_VIEW_MATRIX, TIME, fray, thin);
 
 	if (depth_only) {
-		// Wherever any of her near side still shows, it hides her far side.
-		// Nor does a strip seen edge-on, which the colour pass fades out
-		// (else it would cut a hole in her the shape of the strip).
-		float edge_on = thin * (1.0 - smoothstep(0.08, 0.5, clamp(dot(NORMAL, VIEW), 0.0, 1.0)));
-
-		if (fray < 0.02 || edge_on > 0.5) {
+		// Only where she is dense smoke does her near side hide what lies
+		// behind it: her own far side, and anything see-through drawn after
+		// this pass (a flame, a halo, glass, another shade). Where she is
+		// thin it shows through her; a strip seen edge-on (faded out by the
+		// colour pass) cuts no hole in her.
+		if (paint.a < depth_alpha) {
 			discard;
 		}
 
 		ALBEDO = vec3(0.0);
 		ALPHA = 0.0;
 	} else {
-		// (Godot already turns NORMAL to the camera on a back face.)
-		vec3 n = normalize(mix(NORMAL, v_hood_normal, v_hood));
-		float facing = clamp(dot(n, VIEW), 0.0, 1.0);
-
-		// Slow billows climbing through her, curled by a slower smoke: thick
-		// and thin, so she is see-through where it thins.
-		vec3 p = v_body * vec3(3.2, 2.0, 3.2) + vec3(seed * 1.37, seed * 0.71 - drift * 1.5, seed * 2.11);
-		vec3 curl = vec3(fbm(p * 0.45 + vec3(0.0, drift * 0.3, 0.0)), fbm(p * 0.45 + vec3(5.2, 1.3, -2.8)), 0.5) - 0.5;
-		float billow = fbm(p + curl * (1.6 + smoke_speed * 4.0));
-		float wisp = fbm(p * 2.3 + curl * 3.0 + vec3(0.0, -drift * 2.0, 7.0));
-		float smoke = smoothstep(0.42, 0.66, billow * 0.6 + wisp * 0.4);
-		// Over the head a quicker veil of smoke drifts across.
-		float veil = smoothstep(0.3, 0.7, fbm(v_body * vec3(6.0, 4.0, 6.0) + vec3(drift * 2.0, -drift * 4.0, seed)));
-		smoke = mix(smoke, veil, v_hood);
-
-		// A candle guttering: an uneven waver with now and then a near-out.
-		float t = TIME;
-		float waver = vnoise(vec3(t * 7.0, seed, 0.0)) * 0.45 + vnoise(vec3(t * 19.0, seed + 3.0, 0.0)) * 0.25;
-		float gasp = smoothstep(0.62, 0.8, vnoise(vec3(t * 2.3, seed + 7.0, 0.0))) * 0.5;
-		float gutter = clamp(1.0 - flicker * (waver + gasp), 0.12, 1.0);
-		float g = glow * gutter;
-
-		// Dim cools her: the colour drains toward a cold grey-blue.
-		float cool = clamp((1.0 - glow) / 0.65, 0.0, 1.0);
-		vec3 hue = shade_colour.rgb;
-		float lum = dot(hue, vec3(0.3, 0.59, 0.11));
-		hue = mix(hue, mix(vec3(lum), vec3(0.42, 0.52, 0.72) * lum * 1.4, 0.6), cool * 0.75);
-		vec3 hot = mix(hue, vec3(1.0, 0.94, 0.85), 0.25);
-
-		// The rim carries her shape: hotter on a flare, all but gone when
-		// dim, a little broken by the smoke so it is never a drawn line.
-		float edge = 1.0 - facing;
-		float rim = (pow(edge, 3.0) * 0.8 + pow(edge, 6.0) * 0.7) * (1.0 - thin);
-		float rim_gain = mix(0.1, 1.0, smoothstep(0.35, 1.0, glow)) * (0.9 + 1.0 * glow) * gutter;
-		// Over the hood the veil frays it, so the head is no clean shape.
-		rim *= mix(0.55 + 0.45 * smoke, 0.35 + 0.75 * veil, v_hood);
-
-		// Inside, dark smoke: a soft light from above for form, the
-		// clothes' broad panels faintly (neither on the hood).
-		vec3 world_n = normalize((INV_VIEW_MATRIX * vec4(n, 0.0)).xyz);
-		float form = mix(0.7 + 0.3 * clamp(world_n.y * 0.6 + 0.45, 0.0, 1.0), 1.0, v_hood);
-		float paint = dot(texture(albedo, UV, 2.5).rgb, vec3(0.3, 0.59, 0.11));
-		float cloth = mix(1.0, 0.5 + paint * 1.1, detail * (1.0 - v_hood));
-		// Dark smoke, its billows a little lit where they are thickest.
-		vec3 inner = hue * (0.02 + 0.55 * smoke * smoke) * form * cloth * g;
-		// The hood darker still: a shadow of smoke where a face would be.
-		inner *= 1.0 - 0.55 * v_hood;
-		vec3 colour = inner + hot * rim * rim_gain;
-		// The torn edge where she dissolves glows faintly.
-		colour += hue * fray * (1.0 - fray) * 0.6 * g;
-
-		float alpha = opacity * (0.03 + 0.95 * smoke) * mix(1.0, 0.65, v_hood) + rim * 0.9 * min(rim_gain, 1.0);
-		// The hood is a haze all through, never a hole: where its smoke
-		// thins, a faint glow of it still fills the face.
-		alpha = max(alpha, opacity * 0.4 * v_hood);
-		colour = max(colour, hue * 0.12 * g * v_hood);
-		// Her inside, seen through a slit or the neck's opening, is as full
-		// of smoke as she is, never a hole to the night.
-		bool inside = !FRONT_FACING && thin < 0.5;
-		alpha = inside ? max(alpha, opacity * 0.6) : alpha;
-		colour = inside ? max(colour, hue * 0.22 * g) : colour;
-		// A strip seen edge-on fades out, so a flap has no hard line.
-		alpha *= mix(1.0, smoothstep(0.08, 0.5, facing), thin);
-		alpha *= mix(1.0, gutter, 0.6);
-		ALBEDO = colour;
-		ALPHA = clamp(alpha, 0.0, 1.0) * fray;
+		ALBEDO = paint.rgb;
+		ALPHA = paint.a;
 	}
 }

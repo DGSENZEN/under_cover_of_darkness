@@ -983,6 +983,27 @@ func _shade() -> void:
 		not worn.is_empty() and shade.dialogue.get("id") == "fx_curandera" and worn.all(prepassed),
 		"%d worn, prepassed %s" % [worn.size(), worn.map(func(m): return "%s %s" % [m.name, prepassed.call(m)])])
 
+	# S9: her depth pass hides what is behind her (a votive flame, glass,
+	# another shade) only where her colour pass is dense smoke: it discards
+	# below depth_alpha of the very alpha the colour pass draws, from one
+	# function both passes call. (The look itself is unverified by eye.)
+	var thresholds := worn.map(func(m: MeshInstance3D):
+		var colour := m.material_override as ShaderMaterial
+		var depth := colour.next_pass as ShaderMaterial if colour != null else null
+		return depth.get_shader_parameter(&"depth_alpha") if depth != null else null)
+	var code := SHADE_SHADER.code
+	var depth_branch := code.get_slice("if (depth_only) {", 1).get_slice("} else {", 0)
+	var colour_branch := code.get_slice("if (depth_only) {", 1).get_slice("} else {", 1)
+	var before_branch := code.get_slice("void fragment() {", 1).get_slice("if (depth_only) {", 0)
+	var wired := (code.contains("uniform float depth_alpha") and before_branch.contains("vec4 paint = shade_paint(")
+		and RegEx.create_from_string("if \\(paint\\.a\\s*<\\s*depth_alpha\\)\\s*\\{\\s*discard;").search(depth_branch) != null
+		and colour_branch.contains("ALPHA = paint.a;") and code.count("shade_paint(") == 2 and not depth_branch.contains("fray < 0.02"))
+	var constant := float((Shade as Script).get_script_constant_map().get("DEPTH_ALPHA", -1.0))
+	_check("S9 the depth pass discards where the colour pass's own alpha is under depth_alpha (0.35), one function for both passes",
+		not worn.is_empty() and thresholds.all(func(t): return t != null and is_equal_approx(float(t), 0.35)) and wired
+		and is_equal_approx(constant, 0.35),
+		"thresholds %s, wired %s" % [thresholds, wired])
+
 	shade.cue(&"flare")
 	await _frames(60)
 	var flared: float = shade.glow_now()
