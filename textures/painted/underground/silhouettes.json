@@ -8,7 +8,15 @@
     0
    ],
    "height_m": 1.755,
-   "facing": "left"
+   "facing": "left",
+   "head": [
+    -0.12,
+    1.587
+   ],
+   "shoulders": [
+    -0.062,
+    1.403
+   ]
   },
   {
    "name": "waiting",
@@ -17,7 +25,15 @@
     0
    ],
    "height_m": 1.824,
-   "facing": "left"
+   "facing": "left",
+   "head": [
+    -0.066,
+    1.658
+   ],
+   "shoulders": [
+    -0.018,
+    1.474
+   ]
   },
   {
    "name": "kneeling_a",
@@ -26,7 +42,15 @@
     0
    ],
    "height_m": 1.257,
-   "facing": "left"
+   "facing": "left",
+   "head": [
+    -0.218,
+    1.097
+   ],
+   "shoulders": [
+    -0.118,
+    0.94
+   ]
   },
   {
    "name": "kneeling_b",
@@ -35,7 +59,15 @@
     0
    ],
    "height_m": 1.232,
-   "facing": "left"
+   "facing": "left",
+   "head": [
+    -0.288,
+    1.116
+   ],
+   "shoulders": [
+    -0.159,
+    0.982
+   ]
   },
   {
    "name": "walking_a",
@@ -44,7 +76,15 @@
     1
    ],
    "height_m": 1.842,
-   "facing": "left"
+   "facing": "left",
+   "head": [
+    -0.145,
+    1.677
+   ],
+   "shoulders": [
+    -0.081,
+    1.498
+   ]
   },
   {
    "name": "walking_b",
@@ -53,7 +93,15 @@
     1
    ],
    "height_m": 1.755,
-   "facing": "left"
+   "facing": "left",
+   "head": [
+    -0.243,
+    1.587
+   ],
+   "shoulders": [
+    -0.186,
+    1.404
+   ]
   },
   {
    "name": "walking_c",
@@ -62,7 +110,15 @@
     1
    ],
    "height_m": 1.894,
-   "facing": "left"
+   "facing": "left",
+   "head": [
+    0.087,
+    1.667
+   ],
+   "shoulders": [
+    0.069,
+    1.479
+   ]
   }
  ]
 }

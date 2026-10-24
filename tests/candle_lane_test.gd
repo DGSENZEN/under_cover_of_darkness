@@ -440,6 +440,14 @@ func _people() -> void:
 	_check("C14 seen down the lane, no silhouette shows edge-on: each turns toward the eye, never more than 55° from where it stands",
 		thinnest > 0.5 and most_turned <= 55.5, "thinnest %.2f most turned %.1f°" % [thinnest, most_turned])
 
+	# Shades, not paper: each drawn in the shade's ink, fraying into its smoke, here in full.
+	var shaded := people.filter(func(p):
+		var look := (p as MeshInstance3D).mesh.surface_get_material(0) as ShaderMaterial
+		return look != null and look.shader.resource_path.ends_with("shade_cutout.gdshader") \
+			and look.get_shader_parameter(&"noise") != null and is_equal_approx(float(look.get_shader_parameter(&"presence")), 1.0))
+	_check("C15 the people are shades: Mignola's ink fraying into climbing smoke, their feet lost in mist",
+		people.size() == 7 and shaded.size() == 7, "shaded %d of %d" % [shaded.size(), people.size()])
+
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:
 	var space := lane.get_world_3d().direct_space_state

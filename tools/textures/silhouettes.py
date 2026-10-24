@@ -190,9 +190,16 @@ def main():
         rig, bones = _pose(body, library, action, through, turns)
         _dress(bones, dress)
         height = max(p.z for p in _points())
+        points = _points()
+        middle = (min(p.y for p in points) + max(p.y for p in points)) / 2.0
         cell = _render(str(out) + ".cell.png")
         sheet[row * CELL[1]:(row + 1) * CELL[1], col * CELL[0]:(col + 1) * CELL[0]] = cell
-        meta["poses"].append({"name": name, "cell": [col, row], "height_m": round(height, 3), "facing": _facing(bones)})
+        # (Where its head's crown and its shoulders are in its cell, m: across from its middle (the image's right
+        # +), up from its foot; its smoke rises from them.)
+        crown, shoulders = bones["Head"][1], bones["spine_03"][1]
+        meta["poses"].append({"name": name, "cell": [col, row], "height_m": round(height, 3), "facing": _facing(bones),
+                              "head": [round(crown.y - middle, 3), round(crown.z, 3)],
+                              "shoulders": [round(shoulders.y - middle, 3), round(shoulders.z, 3)]})
         print("pose %s: %.2f m, facing %s" % (name, height, meta["poses"][-1]["facing"]))
     sheet[..., :3] = 0.0
     image = bpy.data.images.new("silhouettes", sheet.shape[1], sheet.shape[0], alpha=True)
