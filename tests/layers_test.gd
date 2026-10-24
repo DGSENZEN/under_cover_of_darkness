@@ -23,6 +23,7 @@ func _ready() -> void:
 	await _neon()
 	await _pipes()
 	await _book_cues()
+	await _books_heard()
 	# (Let the audio thread let go of what played before quitting.)
 	Focus.reset()
 	Sfx.silence()
@@ -276,6 +277,52 @@ func _book_cues() -> void:
 	lab.queue_free()
 	away.queue_free()
 	watcher.queue_free()
+	await _frames(3)
+
+
+## B4-B6: the books heard.
+func _books_heard() -> void:
+	Focus.reset()
+	var lab: Node3D = LIBRARY.instantiate()
+	add_child(lab)
+	eye.make_current()
+	eye.global_position = lab.to_global(Vector3(0.0, 1.6, -2.9))
+	await _frames(120)
+	var sounds: Node = lab.get("book_sounds")
+	var flutters: Array = sounds.get("flutters") if sounds != null else []
+	var full := flutters.filter(func(p): return Focus.duck_of(p) > -0.5).size()
+	_check("B4 eight floating books flutter, only the nearest three at full", flutters.size() == 8 and full == 3,
+		"%d flutters, %d at full" % [flutters.size(), full])
+	if sounds == null:
+		lab.queue_free()
+		await _frames(3)
+		return
+
+	var stir: Node3D = lab.get("stir")
+	var at: Vector3 = lab.to_global(Vector3(0.0, 1.2, -1.0))
+	for kind in [&"by_height", &"push_home", &"close_gap", &"stand_up", &"square_stack"]:
+		stir.stirred.emit(0, kind, at)
+		await _frames(130)
+	var played: Dictionary = sounds.get("played")
+	var log: Array = sounds.get("heard")
+	var slide: int = log.find_custom(func(h): return h[1] == &"shelf_slide")
+	var tock: int = log.find_custom(func(h): return h[1] == &"shelf_tock")
+	_check("B5 each change of a shelf is heard by its kind",
+		played.get(&"shelf_shuffle", 0) == 2 and played.get(&"shelf_slide", 0) == 2 and played.get(&"shelf_tock", 0) == 2
+		and slide >= 0 and tock > slide, "%s" % [played])
+
+	var floating: Node3D = lab.get("floating")
+	var k: int = floating.transfers()[0]
+	floating.come_home(k)
+	for f in 400:
+		await get_tree().process_frame
+		if floating.state_of(k) == &"resting":
+			break
+	await _frames(5)
+	var resting_db := Focus.base_of(flutters[k])
+	_check("B6 a resting book's pages fall silent", floating.state_of(k) == &"resting" and resting_db <= -59.0,
+		"%s at %.1f dB" % [floating.state_of(k), resting_db])
+	lab.queue_free()
 	await _frames(3)
 
 

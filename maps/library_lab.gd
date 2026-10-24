@@ -92,6 +92,7 @@ const STUDY_KEEP := 0.285
 ## The floating books, and the run of board kept empty either side of where one comes down.
 const FloatingBooksScript := preload("res://scripts/Visual/Library/FloatingBooks.gd")
 const ShelfStirScript := preload("res://scripts/Visual/Library/ShelfStir.gd")
+const BookSoundsScript := preload("res://scripts/Audio/BookSounds.gd")
 const FLOAT_KEEP := 0.18
 const FRONT_TABLE_AT := Vector3(2.9, 0.0, -0.3)
 const TABLE_TOP := 0.85
@@ -167,6 +168,8 @@ var armillary: Node3D
 ## unwatched (ShelfStir.gd).
 var floating: Node3D
 var stir: Node3D
+## The books heard (scripts/Audio/BookSounds.gd): the shelves, the floating books, the live ones.
+var book_sounds: Node
 ## The shop's haze; its painted materials.
 var shop_haze: FogVolume
 var shop_looks: Array[ShaderMaterial] = []
@@ -612,6 +615,9 @@ func _books() -> void:
 	stir = ShelfStirScript.new()
 	add_child(stir)
 	stir.build(self)
+	book_sounds = BookSoundsScript.new()
+	add_child(book_sounds)
+	book_sounds.listen(stir, floating, live_books)
 
 
 ## Which of its case's boards (counted from the floor) a spot is on.

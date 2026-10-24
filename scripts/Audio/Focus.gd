@@ -18,6 +18,9 @@ const EVERY := 0.2
 const DIP := -3.0
 const DIP_NEAR := 8.0
 const DIP_RATE := 20.0
+## How much louder a source must arrive than one playing at full to take its place (so near-equals passing each other,
+## a corridor of drifting books, do not swap back and forth and pump).
+const HOLD := 1.4
 
 ## Each held source: {player, tier, base, priority, duck, full}.
 static var _held: Array = []
@@ -159,13 +162,15 @@ func _process(delta: float) -> void:
 		entry["player"].volume_db = entry["base"] + entry["duck"] + dip
 
 
-## Each tier's first few (by how loud they arrive: priority, their own level now, distance) at full; the rest sink.
+## Each tier's first few (by how loud they arrive: priority, their own level now, distance; those at full already
+## holding on by HOLD) at full; the rest sink.
 func _rank(ear: Vector3) -> void:
 	for tier: StringName in TIERS:
 		var of_tier := _held.filter(func(e: Dictionary) -> bool: return e["tier"] == tier)
 		var entries := of_tier.map(func(e: Dictionary) -> Dictionary:
 			var player: AudioStreamPlayer3D = e["player"]
-			return {"at": player.global_position, "priority": float(e["priority"]) * db_to_linear(e["base"]),
+			var holding := HOLD if e["full"] else 1.0
+			return {"at": player.global_position, "priority": float(e["priority"]) * db_to_linear(e["base"]) * holding,
 				"reach": player.max_distance})
 		var order := rank(entries, ear)
 
