@@ -26,6 +26,9 @@ var _runs: Array = []
 var _knocks: Array = []
 var _events: Array = []
 var _strikes: Array = []
+## Each knock laid out so far, and whether Focus let it through (its first strike asks; the rest ride on that).
+var _trains := 0
+var _let := {}
 var _clock := 0.0
 var _look_in := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -84,7 +87,15 @@ func _process(delta: float) -> void:
 
 	while not _strikes.is_empty() and _strikes[0][0] <= _clock:
 		var strike: Array = _strikes.pop_front()
-		_play(&"pipe_knock", strike[1], strike[2], 1.0)
+		var train: int = strike[3]
+
+		if not _let.has(train):
+			_let[train] = _play(&"pipe_knock", strike[1], strike[2], 1.0)
+		elif _let[train]:
+			_play(&"pipe_knock", strike[1], strike[2], 1.0, false)
+
+		if strike[4]:
+			_let.erase(train)
 
 
 func _exit_tree() -> void:
@@ -140,22 +151,31 @@ func _knock(k: Dictionary) -> void:
 	# (Toward the longer side of the run from there, so it has room to travel.)
 	var forward := 1.0 if along < length * 0.5 else -1.0
 	var when := _clock
+	var laid: Array = []
+	_trains += 1
 
 	for n in STRIKES:
 		if along < 0.0 or along > length:
 			break
 
-		_strikes.append([when, to_global(a + way * along), STRIKE_FAINTER * n])
+		laid.append([when, to_global(a + way * along), STRIKE_FAINTER * n, _trains, false])
 		along += forward * _rng.randf_range(STRIKE_ON.x, STRIKE_ON.y)
 		when += _rng.randf_range(STRIKE_AFTER.x, STRIKE_AFTER.y)
+
+	# (Its last strike lets go of whether it was let through.)
+	if not laid.is_empty():
+		laid[-1][4] = true
+
+	_strikes.append_array(laid)
 
 	_strikes.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
 
 
-func _play(sound: StringName, at: Vector3, db: float, pitch: float) -> void:
-	if not Focus.allow(self, &"detail", at):
+## Plays `sound` if Focus lets it (unless `ask` is false: a knock's later strikes); whether it played.
+func _play(sound: StringName, at: Vector3, db: float, pitch: float, ask := true) -> bool:
+	if ask and not Focus.allow(self, &"detail", at):
 		played[&"refused"] = int(played.get(&"refused", 0)) + 1
-		return
+		return false
 
 	Sfx.play(self, sound, at, db, pitch)
 	played[sound] = int(played.get(sound, 0)) + 1
@@ -163,3 +183,5 @@ func _play(sound: StringName, at: Vector3, db: float, pitch: float) -> void:
 
 	if heard.size() > 32:
 		heard.pop_front()
+
+	return true

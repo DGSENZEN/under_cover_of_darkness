@@ -29,6 +29,9 @@ var flutters: Array[AudioStreamPlayer3D] = []
 
 var _floating: Node3D
 var _pending: Array = []
+## Each happening's sounds are one to Focus: its first asks, the rest ride on that (by happening, while some wait).
+var _happenings := 0
+var _let := {}
 var _clock := 0.0
 var _rng := RandomNumberGenerator.new()
 
@@ -59,7 +62,15 @@ func _process(delta: float) -> void:
 
 	while not _pending.is_empty() and _pending[0][0] <= _clock:
 		var due: Array = _pending.pop_front()
-		_play(due[1], due[2], due[3])
+		var happening: int = due[4]
+
+		if not _let.has(happening):
+			_let[happening] = _play(due[1], due[2], due[3])
+		elif _let[happening]:
+			_play(due[1], due[2], due[3], false)
+
+		if not _pending.any(func(p: Array) -> bool: return p[4] == happening):
+			_let.erase(happening)
 
 
 func _exit_tree() -> void:
@@ -90,11 +101,15 @@ func _flutter() -> void:
 
 
 func _on_stirred(_board: int, kind: StringName, at: Vector3) -> void:
+	_happenings += 1
+
 	for sound: Array in STIRS.get(kind, []):
 		_later(sound[1], sound[0], at, sound[2])
 
 
 func _on_moved(_k: int, what: StringName, at: Vector3) -> void:
+	_happenings += 1
+
 	if what == &"resting":
 		_later(0.0, &"book_land", at, 0.0)
 	elif what == &"rising":
@@ -102,23 +117,27 @@ func _on_moved(_k: int, what: StringName, at: Vector3) -> void:
 
 
 func _on_opening(book: LiveBook) -> void:
+	_happenings += 1
 	_later(0.0, &"book_open", book._middle(), 0.0)
 	_later(RIFFLE_AFTER, &"book_riffle", book._middle(), 0.0)
 
 
 func _on_closed(book: LiveBook) -> void:
+	_happenings += 1
 	_later(0.0, &"book_shut", book._middle(), 0.0)
 
 
+## `sound` `after` s from now, as part of the happening last begun.
 func _later(after: float, sound: StringName, at: Vector3, db: float) -> void:
-	_pending.append([_clock + after, sound, at, db])
+	_pending.append([_clock + after, sound, at, db, _happenings])
 	_pending.sort_custom(func(p: Array, q: Array) -> bool: return p[0] < q[0])
 
 
-func _play(sound: StringName, at: Vector3, db: float) -> void:
-	if not Focus.allow(self, &"detail", at):
+## Plays `sound` if Focus lets it (unless `ask` is false: the rest of a happening); whether it played.
+func _play(sound: StringName, at: Vector3, db: float, ask := true) -> bool:
+	if ask and not Focus.allow(self, &"detail", at):
 		played[&"refused"] = int(played.get(&"refused", 0)) + 1
-		return
+		return false
 
 	Sfx.play(self, sound, at, db)
 	played[sound] = int(played.get(sound, 0)) + 1
@@ -126,3 +145,5 @@ func _play(sound: StringName, at: Vector3, db: float) -> void:
 
 	if heard.size() > 32:
 		heard.pop_front()
+
+	return true

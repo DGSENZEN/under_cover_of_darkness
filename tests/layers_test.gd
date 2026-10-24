@@ -194,6 +194,22 @@ func _pipes() -> void:
 	pipes.queue_free()
 	await _frames(2)
 
+	# A knock is one sound to Focus: its later strikes ride on its first, however busy the place.
+	Focus.reset()
+	var busy: Node3D = PipeSoundsScript.new()
+	add_child(busy)
+	busy.knocks(Vector3(-12.0, 3.1, 2.2), Vector3(12.0, 3.1, 2.2), Vector2(1.0, 1.0))
+	await _frames(55)
+	Focus.allow(self, &"detail", Vector3.ZERO)
+	await _frames(15)
+	Focus.allow(self, &"detail", Vector3.ZERO)
+	await _frames(60)
+	var train: int = busy.played.get(&"pipe_knock", 0)
+	_check("P5 a knock's strikes all sound once its first is let through", train == 3,
+		"%d strikes, %d refused" % [train, busy.played.get(&"refused", 0)])
+	busy.queue_free()
+	await _frames(2)
+
 	Focus.reset()
 	var joint: Node3D = PipeSoundsScript.new()
 	add_child(joint)
@@ -313,6 +329,16 @@ func _books_heard() -> void:
 	_check("B5 each change of a shelf is heard by its kind",
 		played.get(&"shelf_shuffle", 0) == 2 and played.get(&"shelf_slide", 0) == 2 and played.get(&"shelf_tock", 0) == 2
 		and slide >= 0 and tock > slide, "%s" % [played])
+
+	# A shelf pushed home is one sound to Focus: its tock follows its slide however busy the shop.
+	var before: int = played.get(&"shelf_tock", 0)
+	stir.stirred.emit(0, &"push_home", at)
+	await _frames(5)
+	Focus.allow(self, &"detail", at)
+	Focus.allow(self, &"detail", at)
+	await _frames(40)
+	_check("B7 a book pushed home: its tock follows its slide however busy the shop",
+		played.get(&"shelf_tock", 0) == before + 1, "%s" % [played])
 
 	var floating: Node3D = lab.get("floating")
 	var k: int = floating.transfers()[0]

@@ -3,11 +3,15 @@ extends Node3D
 ## the game would play it, to docs/superpowers/refs/underground/sound/<layer>.wav, for the user to judge before it
 ## is wired in: its loops and takes from Sfx, through the World bus and a room's reverb, at their tiers' levels
 ## (all raised by LISTEN dB so they can be heard clearly), you walking past.
-##   Godot --headless --path . tests/diag_layer_sounds.tscn -- --layer=neon|pipes|books
+##   Godot --headless --path . tests/diag_layer_sounds.tscn -- --layer=neon|pipes|books|all
+## (all: the candle lane with the shop in its wall, maps/candle_lane.tscn, everything wired in and under Focus and the
+## bay's judged-bad sounds hushed as the lane hushes them, walked from the Pasaje's mouth by the drain's ánimas, past
+## her sign under the mains, in through the librarian's arch and under his vault.)
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const LISTEN := 12.0
 const OUT := "res://docs/superpowers/refs/underground/sound/%s.wav"
+const LANE := "res://maps/candle_lane.tscn"
 
 var layer := "neon"
 var ear: Camera3D
@@ -26,6 +30,9 @@ func _ready() -> void:
 		if arg.begins_with("--layer="):
 			layer = arg.split("=")[1]
 	_rng.seed = 24
+	if layer == "all":
+		await _all()
+		return
 	Sfx._ensure_buses()
 	Sfx.set_acoustics("wood" if layer == "books" else "stone")
 	Sfx.shape_room(Vector2(0.3, 1.0) if layer == "books" else Vector2(0.45, 1.0))
@@ -49,6 +56,51 @@ func _ready() -> void:
 	var wav := record.get_recording()
 	wav.save_to_wav(ProjectSettings.globalize_path(OUT % layer))
 	print("saved %s, %.1f s" % [OUT % layer, wav.get_length()])
+	get_tree().quit()
+
+
+## The bay and the shop as they play: walked through on a path of its own, at the game's levels raised by LISTEN.
+func _all() -> void:
+	Sfx.enabled = true
+	var map: Node3D = (load(LANE) as PackedScene).instantiate()
+	add_child(map)
+	ear = Camera3D.new()
+	add_child(ear)
+	await get_tree().process_frame
+	ear.make_current()
+	var drain: Vector3 = map.animas.global_position if map.get("animas") != null else Vector3.ZERO
+	var arch: Vector3 = map.SHOP_AT
+	# Up the lane (standing by the drain a while, past her sign under the mains), in at the arch, under the vault.
+	var path := [[0.0, Vector3(-14.0, 1.6, 0.9), -PI / 2.0], [8.0, Vector3(drain.x - 0.5, 1.6, 0.9), -PI / 2.0],
+		[16.0, Vector3(drain.x, 1.6, 0.9), -PI / 2.0], [24.0, Vector3(0.5, 1.6, 0.6), -PI / 2.0],
+		[31.0, Vector3(arch.x, 1.6, arch.z - 1.4), PI], [36.0, Vector3(arch.x, 1.6, arch.z + 1.2), PI],
+		[45.0, Vector3(arch.x, 1.6, arch.z + 2.9), PI + 0.5]]
+	# (Raised a little less than the layers' files: all of it at once peaks higher.)
+	AudioServer.set_bus_volume_db(0, LISTEN - 2.0)
+	var record := AudioEffectRecord.new()
+	AudioServer.add_bus_effect(0, record)
+	record.set_recording_active(true)
+	var start := Time.get_ticks_msec()
+	clock = 0.0
+	while clock < 45.0:
+		await get_tree().process_frame
+		clock = (Time.get_ticks_msec() - start) / 1000.0
+		var k := 0
+		while k < path.size() - 2 and clock > path[k + 1][0]:
+			k += 1
+		var u := clampf((clock - path[k][0]) / (path[k + 1][0] - path[k][0]), 0.0, 1.0)
+		ear.global_position = (path[k][1] as Vector3).lerp(path[k + 1][1], u)
+		ear.rotation.y = lerpf(path[k][2], path[k + 1][2], u)
+	record.set_recording_active(false)
+	var wav := record.get_recording()
+	wav.save_to_wav(ProjectSettings.globalize_path(OUT % layer))
+	var pipes: Node = map.get("pipe_sounds")
+	var books: Node = map.shop.get("book_sounds") if map.get("shop") != null else null
+	print("pipes played %s" % [pipes.played if pipes != null else {}])
+	print("books played %s" % [books.played if books != null else {}])
+	print("ánimas spoke %d" % [map.animas.spoken if map.get("animas") != null else -1])
+	print("saved %s, %.1f s" % [OUT % layer, wav.get_length()])
+	Sfx.silence()
 	get_tree().quit()
 
 
