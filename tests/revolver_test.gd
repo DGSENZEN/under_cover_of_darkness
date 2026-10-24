@@ -785,6 +785,22 @@ func _run() -> void:
 	_check("V5 sixty shots: never more than 30 effects at once, none left after",
 		most_fx <= 30 and GunFx.live_count() == 0, "most %d after %d" % [most_fx, GunFx.live_count()])
 
+	# G1 gore pieces are lumpy and wet, from the list
+	var made: Array = Gore.burst(self, Vector3(60, 1.2, 30), Vector3(0, 1, -2), 6)
+	var looks: Array = made.map(func(p): return (p as Node).find_children("*", "MeshInstance3D", true, false)[0])
+	var lumpy: bool = not looks.is_empty() and looks.all(func(v): return v.mesh in Gore.piece_meshes and not (v.mesh is BoxMesh) and not (v.mesh is SphereMesh))
+	var wet: bool = not looks.is_empty() and looks.all(func(v): return v.material_override is BaseMaterial3D and (v.material_override as BaseMaterial3D).roughness <= 0.2)
+	_check("G1 gore pieces are lumpy and wet, from the list", lumpy and wet, "pieces %d lumpy %s wet %s" % [looks.size(), lumpy, wet])
+
+	# G2 the list's own pieces (the modelled ones, later) are used as given
+	var custom := BoxMesh.new()
+	Gore.piece_meshes = [custom] as Array[Mesh]
+	var made2: Array = Gore.burst(self, Vector3(62, 1.2, 30), Vector3(0, 1, -2), 4)
+	var used: bool = made2.all(func(p): return (p as Node).find_children("*", "MeshInstance3D", true, false)[0].mesh == custom)
+	Gore.piece_meshes = [] as Array[Mesh]
+	_check("G2 gore uses the pieces it is given", used and made2.size() == 4, "used %s" % used)
+	await _frames(1300)
+
 	# R16 in arm's reach, F is a pistol-whip, not a kick
 	revolver.reset_for_practice()
 	var g16 := _fighter(Vector3(38, 0, -1.0))

@@ -29,6 +29,13 @@ const STAIN_WAYS := [
 ]
 
 static var _live: Array = []
+## The pieces a burst throws (meshes), and their look. Empty, they are made
+## (stand-ins: lumps of flesh, wet); the user's modelled pieces replace them
+## by setting this list, with no other change.
+static var piece_meshes: Array[Mesh] = []
+static var piece_material: Material = null
+## How many stand-in lumps there are.
+const LUMPS := 5
 
 
 ## Bursts `pieces` pieces from `at`, flung along `push` and the spread, with
@@ -75,38 +82,75 @@ static func clear() -> void:
 
 
 static func _piece(i: int) -> RigidBody3D:
+	if piece_meshes.is_empty():
+		piece_meshes = _lumps()
+
+	if piece_material == null:
+		piece_material = _wet()
+
+	var mesh: Mesh = piece_meshes[i % piece_meshes.size()]
 	var piece := RigidBody3D.new()
 	piece.name = "Gore"
 	piece.collision_layer = 0
 	piece.collision_mask = 1
 	piece.mass = 0.4 + 0.1 * float(i % 12)
 	piece.can_sleep = true
-	var size := Vector3(0.12, 0.08, 0.1) * (0.7 + 0.08 * float(i % 5))
 	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = size
-	shape.shape = box
+	var ball := SphereShape3D.new()
+	ball.radius = maxf(mesh.get_aabb().size.length() * 0.3, 0.02)
+	shape.shape = ball
 	piece.add_child(shape)
 	var visual := MeshInstance3D.new()
-
-	if i % 3 == 0:
-		var round := SphereMesh.new()
-		round.radius = size.x * 0.5
-		round.height = size.x
-		round.radial_segments = 8
-		round.rings = 4
-		visual.mesh = round
-	else:
-		var block := BoxMesh.new()
-		block.size = size
-		visual.mesh = block
-
-	var flesh := StandardMaterial3D.new()
-	flesh.albedo_color = Color(0.32, 0.04, 0.04) if i % 2 == 0 else Color(0.45, 0.12, 0.1)
-	flesh.roughness = 0.45
-	visual.material_override = flesh
+	visual.mesh = mesh
+	visual.material_override = piece_material
 	piece.add_child(visual)
 	return piece
+
+
+## The stand-in pieces: LUMPS lumps of flesh, each a ball pushed out by a
+## fixed noise and squashed its own way, 6 to 12 cm.
+static func _lumps() -> Array[Mesh]:
+	var made: Array[Mesh] = []
+	var noise := FastNoiseLite.new()
+	noise.seed = 23
+	noise.frequency = 9.0
+
+	for k in LUMPS:
+		var ball := SphereMesh.new()
+		ball.radius = 0.5
+		ball.height = 1.0
+		ball.radial_segments = 12
+		ball.rings = 8
+		var arrays := ball.get_mesh_arrays()
+		var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var size := 0.06 + 0.015 * float(k)
+		var squash := Vector3(1.0 + 0.3 * float(k % 2), 0.7 + 0.15 * float(k % 3), 1.0 - 0.1 * float(k % 2))
+
+		for v in points.size():
+			var p := points[v]
+			var push := 1.0 + 0.35 * noise.get_noise_3d(p.x + float(k), p.y, p.z)
+			points[v] = p * push * squash * size
+
+		arrays[Mesh.ARRAY_VERTEX] = points
+		arrays[Mesh.ARRAY_NORMAL] = null
+		arrays[Mesh.ARRAY_TANGENT] = null
+		var st := SurfaceTool.new()
+		st.create_from_arrays(arrays)
+		st.generate_normals()
+		made.append(st.commit())
+
+	return made
+
+
+## Wet: dark red, glossy, a rim where it turns away.
+static func _wet() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color("#4A0A08")
+	m.roughness = 0.18
+	m.metallic_specular = 0.7
+	m.rim_enabled = true
+	m.rim = 0.4
+	return m
 
 
 ## Counted, the oldest let go past MAX_LIVE, and gone after LIFE (its own
