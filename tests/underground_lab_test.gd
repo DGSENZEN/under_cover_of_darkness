@@ -149,18 +149,13 @@ func _run() -> void:
 	_check("U12 dust motes drift in each work light's cone", lab.dust.size() == 2 and in_cones == 2,
 		"%d dust systems, %d under a light" % [lab.dust.size(), in_cones])
 
-	# U13 the neon hums on its sign, gone within 8 m, louder as it burns brighter
-	var hum: AudioStreamPlayer3D = lab.neon.get_node_or_null("hum") if lab.neon != null else null
-	var follows := false
-
-	if hum != null:
-		var loud: float = lab.hum_volume(1.0)
-		var quiet: float = lab.hum_volume(0.0)
-		follows = loud > quiet + 12.0
-	_check("U13 the neon hums from its sign, silent past 8 m, its loudness following the flicker",
-		hum != null and hum.stream != null and hum.stream.resource_path == "res://audio/ambience/neon_hum.wav"
-		and hum.max_distance <= 8.0 and hum.playing and follows,
-		"hum %s" % [hum])
+	# U13 the neon hums on its sign, gone within 4.5 m, louder as it burns brighter (NeonSign; its player is built
+	#     only with sound on: tests/layers_test.gd hears it)
+	var gain: float = preload("res://scripts/Audio/Sfx.gd").LOOP_GAIN[&"neon_buzz_1"]
+	var follows: bool = NeonSign.hum_db(gain, 1.0) > NeonSign.hum_db(gain, 0.0) + 12.0
+	_check("U13 the neon hums from its sign, silent past 4.5 m, its loudness following the flicker",
+		lab.neon != null and lab.neon.buzz == &"neon_buzz_1" and NeonSign.HUM_REACH <= 4.5 and follows,
+		"buzz %s" % [lab.neon.buzz if lab.neon != null else &""])
 
 	# U14 she can work it: the player walks in past the counter's end and along behind it
 	var way_in := await _walk(Vector3(0.95, 1.05, 1.4), 0.0, func(p): return p.z < -1.1, 600)
@@ -202,11 +197,15 @@ func _run() -> void:
 	_check("U18 each work light throws a visible shaft (a cone of haze under it)", cones.size() == 2,
 		"%d shafts" % cones.size())
 
-	# U19 water drips off the conduit into a puddle, and is heard
-	var drip_ok: bool = lab.drip != null and lab.drip.emitting and lab.puddle != null and lab.drip_sound != null \
-		and lab.drip_sound.stream != null and absf(lab.drip.global_position.y - (lab.CONDUIT.y - 0.1)) < 0.15
-	_check("U19 water drips off the conduit into a puddle on the floor, its drip heard",
-		drip_ok, "drip %s puddle %s sound %s" % [lab.drip, lab.puddle, lab.drip_sound])
+	# U19 water drips off the conduit into a puddle, and its drops are heard there (scripts/Audio/PipeSounds.gd)
+	var heard_there := false
+	for e: Dictionary in lab.pipe_sounds._events if lab.pipe_sounds != null else []:
+		var off := Vector2(e["at"].x - lab.puddle.position.x, e["at"].z - lab.puddle.position.z)
+		heard_there = heard_there or (e["sound"] == &"pipe_drip" and off.length() < 0.3)
+	var drip_ok: bool = lab.drip != null and lab.drip.emitting and lab.puddle != null and heard_there \
+		and absf(lab.drip.global_position.y - (lab.CONDUIT.y - 0.1)) < 0.15
+	_check("U19 water drips off the conduit into a puddle on the floor, its drops heard",
+		drip_ok, "drip %s puddle %s heard %s" % [lab.drip, lab.puddle, heard_there])
 
 	# U20 moths, drawn by the bulb, circle it
 	var moths: Array = lab.moths.get_children() if lab.moths != null else []
@@ -316,11 +315,7 @@ func _run() -> void:
 		crowd.voices_played == voices_before + 1 and crowd.next_voice >= Crowd.VOICE_EVERY.x
 		and crowd.next_voice <= Crowd.VOICE_EVERY.y, "next %.1f" % crowd.next_voice)
 
-	# U29 the junction box hums where the stall's cable is tapped
-	var box_hum: AudioStreamPlayer3D = lab.junction_hum
-	_check("U29 the junction box hums where the stall's cable is tapped",
-		box_hum != null and box_hum.playing and box_hum.global_position.distance_to(lab.JUNCTION_TOP) < 0.3
-		and box_hum.max_distance <= 6.0, "%s" % [box_hum])
+	# (U29, the junction box's hum, was retired on Oct 24 2026 with the bay's other judged-bad hums.)
 
 	# U30 the floor's clutter staged as scenes: customers' litter by the counter, her stock against the wall,
 	#     newspapers, a cable run to the next stall, a child's top in her aisle, a marigold trail

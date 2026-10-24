@@ -24,6 +24,7 @@ const AnimasScript := preload("res://scripts/Visual/Animas.gd")
 const NahualScript := preload("res://scripts/Visual/Nahual.gd")
 const ProcessionScript := preload("res://scripts/Visual/Procession.gd")
 const ShadowScript := preload("res://scripts/Visual/OwnerlessShadow.gd")
+const PipeSoundsScript := preload("res://scripts/Audio/PipeSounds.gd")
 ## The procession's file: its shades in order (the uncanny kit's, shade_refs.md); each holds its candle
 ## where the kit's wicks file says.
 const PROCESSION := ["shade_capirote", "shade_veiled", "shade_child", "shade_sombrero", "shade_capirote"]
@@ -51,10 +52,6 @@ const BULB_PIVOT := Vector3(0.1, 2.47, -1.1)
 const CENSER := Vector3(0.0, 1.2, -0.22)
 ## The corridor's draught, the one wind the smoke and the bulb answer to (m/s).
 const DRAUGHT := Vector3(0.35, 0.0, 0.0)
-const HUM := "res://audio/ambience/neon_hum.wav"
-## The hum at full, and how near silence it falls when the tube goes dark (dB).
-const HUM_DB := -8.0
-const HUM_DARK := 0.05
 ## Where the stall's lit candles stand (tools/eclipse/stall.py's wicks).
 const WICKS := "res://assets/eclipse/source/stall_wicks.json"
 ## The neon's glow on its sign's face (Blender's recessed face, y 0.05).
@@ -65,10 +62,8 @@ const WASH_ENERGY := 0.5
 const SPARKS_EVERY := Vector2(5.0, 13.0)
 ## Water off the conduit, beside the stall.
 const DRIP_AT := Vector3(-2.3, 3.15, -2.17)
-const DRIP_SOUND := "res://audio/weather/drip.wav"
 ## A passing train: its rumble at full (dB), the jars' rattle, where the shelves stand.
 const RUMBLE := "res://audio/sfx/train_rumble_1.wav"
-const BOX_HUM := "res://audio/ambience/electric_box.wav"
 ## What lies on the floor (tools/eclipse/underground_ground.py), and the marigold trail's ends:
 ## from her ofrenda, curving across the floor to the wall where it leads.
 const GROUND_KIT := "res://assets/eclipse/kit/underground_ground.glb"
@@ -181,18 +176,18 @@ var bulb: OmniLight3D
 var bulb_pivot: Sway
 var censer: Node3D
 var dust: Array[Node3D] = []
-var hum: AudioStreamPlayer3D
 var flames: Node3D
 var neon_wash: Decal
 var next_spark := 0.0
 var shafts: Array[FogVolume] = []
 var drip: GPUParticles3D
 var puddle: Decal
-var drip_sound: AudioStreamPlayer3D
 var moths: Moths
 var train: TrainPass
 var crowd: Crowd
-var junction_hum: AudioStreamPlayer3D
+## The mains heard (scripts/Audio/PipeSounds.gd): the water's trickle and its gulps, the fire main's knocks and its
+## valve, the air line, the gas line's tick, the weeping joint's drops.
+var pipe_sounds: Node3D
 var clutter: Array[MeshInstance3D] = []
 var services: Array[MeshInstance3D] = []
 var _service_meshes := {}
@@ -393,6 +388,7 @@ func _stall() -> void:
 	neon.seed = 11
 	neon.light_energy = 0.35
 	neon.light_range = 2.0
+	neon.buzz = &"neon_buzz_1"
 
 	if tube != null:
 		tube.get_parent().remove_child(tube)
@@ -600,41 +596,15 @@ func _effects() -> void:
 	crowd.name = "crowd"
 	crowd.seed = 41
 	add_child(crowd)
-	junction_hum = AudioStreamPlayer3D.new()
-	junction_hum.name = "junction_hum"
-	junction_hum.stream = load(BOX_HUM)
-	junction_hum.max_distance = 5.0
-	junction_hum.unit_size = 1.0
-	junction_hum.volume_db = -6.0
-	junction_hum.autoplay = true
-	add_child(junction_hum)
-	junction_hum.position = JUNCTION_TOP
 	moths = Moths.new()
 	moths.name = "moths"
 	moths.seed = 5
 	moths.around = bulb
 	add_child(moths)
 
-	if neon != null:
-		hum = AudioStreamPlayer3D.new()
-		hum.name = "hum"
-		hum.stream = load(HUM)
-		hum.max_distance = 8.0
-		hum.unit_size = 2.0
-		hum.autoplay = true
-		neon.add_child(hum)
-		hum.position = SIGN
-
-
-## The hum's loudness (dB) for the tube's level (0 dark, 1 full).
-func hum_volume(level: float) -> float:
-	return HUM_DB + linear_to_db(lerpf(HUM_DARK, 1.0, clampf(level, 0.0, 1.0)))
 
 
 func _process(delta: float) -> void:
-	if hum != null and neon != null:
-		hum.volume_db = hum_volume(neon.level())
-
 	if neon_wash != null and neon != null:
 		neon_wash.emission_energy = WASH_ENERGY * neon.level()
 
@@ -895,14 +865,6 @@ func _drip() -> void:
 	add_child(puddle)
 	puddle.position = Vector3(DRIP_AT.x, 0.0, DRIP_AT.z + 0.1)
 
-	drip_sound = AudioStreamPlayer3D.new()
-	drip_sound.name = "drip_sound"
-	drip_sound.stream = load(DRIP_SOUND)
-	drip_sound.max_distance = 10.0
-	drip_sound.unit_size = 1.5
-	drip_sound.autoplay = true
-	add_child(drip_sound)
-	drip_sound.position = puddle.position
 
 
 # What lies on the floor, staged as scenes, each with its cause
@@ -1056,6 +1018,31 @@ func _services() -> void:
 
 	if half_run > RUN + 0.01:
 		_run_on()
+
+	_pipe_sounds()
+
+
+## The mains heard along the corridor's length: the water main trickling over the back wall, a gulp in it now and then
+## and its weeping joint dripping into the puddle; knocks travelling down the fire main across the way and its gate
+## valve breathing; the air line's faint breath; now and then a tick at a joint of the gas line.
+func _pipe_sounds() -> void:
+	pipe_sounds = PipeSoundsScript.new()
+	pipe_sounds.name = "pipe_sounds"
+	pipe_sounds.seed = 9
+	add_child(pipe_sounds)
+	var back := CONDUIT.z
+	var far := FAR_WALL - 0.18
+	pipe_sounds.run(&"pipe_trickle", Vector3(-half_run, CONDUIT.y, back), Vector3(half_run, CONDUIT.y, back))
+	pipe_sounds.run(&"pipe_air", Vector3(-half_run, AIR_Y, far), Vector3(half_run, AIR_Y, far), 6.0)
+	# (A gulp somewhere along the main every 14-30 s: one place a stretch, each the rarer the more there are.)
+	var stretches := ceili(2.0 * half_run / 6.0)
+	for k in stretches:
+		var x := -half_run + 3.0 + 6.0 * k
+		pipe_sounds.events(&"pipe_gurgle", Vector3(x, CONDUIT.y, back), Vector2(14.0, 30.0) * float(stretches))
+	pipe_sounds.knocks(Vector3(-half_run, FIRE_Y, far), Vector3(half_run, FIRE_Y, far), Vector2(18.0, 40.0))
+	pipe_sounds.events(&"pipe_hiss", Vector3(9.0, FIRE_Y, far), Vector2(20.0, 45.0))
+	pipe_sounds.events(&"pipe_knock", Vector3(-1.3, GAS_Y, BACK_WALL + 0.18), Vector2(40.0, 90.0), -10.0, 1.6)
+	pipe_sounds.events(&"pipe_drip", Vector3(DRIP_AT.x, 0.05, DRIP_AT.z), Vector2(1.4, 3.4))
 
 
 ## A corridor longer than the bay: each line of services run on past the bay's own lengths to its ends, in its plain

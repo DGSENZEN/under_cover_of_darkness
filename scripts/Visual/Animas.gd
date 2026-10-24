@@ -140,6 +140,7 @@ const MOAN_CHANCE := 0.7
 const SILHOUETTE := preload("res://scripts/Visual/anima_silhouette.gdshader")
 const AURA := preload("res://scripts/Visual/anima_aura.gdshader")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const Focus := preload("res://scripts/Audio/Focus.gd")
 ## Without hands: a flame of its own (its height and width).
 const CORE := Vector2(0.26, 0.075)
 ## Its trail: how many points, how often one is laid (s), how wide at its head.
@@ -457,6 +458,10 @@ func _speak(i: int, sound: StringName) -> void:
 	voice.volume_db = db + (VOICE_HIDDEN_DB.y if hidden >= 1.0 else (VOICE_HIDDEN_DB.x if hidden > 0.0 else 0.0))
 	voice.attenuation_filter_cutoff_hz = Sfx.OCCLUDED_CUTOFF if hidden >= 1.0 else (Sfx.AROUND_CUTOFF if hidden > 0.0 else Sfx.AIR_CUTOFF)
 	voice.play()
+
+	# A cry pulled down under the grate is the moment: the place dips under it.
+	if sound == &"anima_moan":
+		Focus.featured(self, at, length)
 
 
 func _count_out() -> int:

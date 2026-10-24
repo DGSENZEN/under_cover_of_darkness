@@ -7,6 +7,8 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
 const PipeSoundsScript := preload("res://scripts/Audio/PipeSounds.gd")
 const LIBRARY := preload("res://maps/library_lab.tscn")
+const BAY := preload("res://maps/underground_lab.tscn")
+const LANE := preload("res://maps/candle_lane.tscn")
 
 var results: Array[String] = []
 var failures := 0
@@ -24,6 +26,7 @@ func _ready() -> void:
 	await _pipes()
 	await _book_cues()
 	await _books_heard()
+	await _in_place()
 	# (Let the audio thread let go of what played before quitting.)
 	Focus.reset()
 	Sfx.silence()
@@ -324,6 +327,57 @@ func _books_heard() -> void:
 		"%s at %.1f dB" % [floating.state_of(k), resting_db])
 	lab.queue_free()
 	await _frames(3)
+
+
+## Y1-Y4: the layers in the bay, the lane, and under the ánimas.
+func _in_place() -> void:
+	Focus.reset()
+	var lab: Node3D = BAY.instantiate()
+	add_child(lab)
+	eye.make_current()
+	await _frames(60)
+	var pipes: Node3D = lab.get("pipe_sounds")
+	var runs := 0
+	for i in 2:
+		if pipes != null and pipes.emitter_of(i) != null and pipes.emitter_of(i).playing:
+			runs += 1
+	var hum: AudioStreamPlayer3D = lab.neon.get("hum") if lab.neon != null else null
+	_check("Y1 the bay's sign hums and its mains are heard", hum != null and hum.playing and runs == 2,
+		"hum %s, runs playing %d" % [hum, runs])
+	# (Her sign's own hum, under the NeonSign, is the new one.)
+	var old := []
+	for n in ["junction_hum", "hum", "drip_sound"]:
+		for found: Node in lab.find_children(n, "", true, false):
+			if not found.get_parent() is NeonSign:
+				old.append(n)
+	_check("Y2 the old hums are gone", old.is_empty(), "%s" % [old])
+
+	var souls: Node3D = lab.get("animas")
+	eye.global_position = souls.global_position + Vector3(1.5, 1.6, 0.0)
+	await _frames(30)
+	var trickle: AudioStreamPlayer3D = pipes.emitter_of(0) if pipes != null else null
+	var before := trickle.volume_db - (Focus.base_of(trickle) + Focus.duck_of(trickle)) if trickle != null else INF
+	souls._speak(0, &"anima_moan")
+	await _frames(40)
+	var under := trickle.volume_db - (Focus.base_of(trickle) + Focus.duck_of(trickle)) if trickle != null else INF
+	_check("Y4 an ánima's cry dips the bay under it", absf(before) < 0.3 and absf(under + 3.0) < 0.3,
+		"before %.2f, under the cry %.2f" % [before, under])
+	lab.queue_free()
+	await _frames(5)
+
+	Focus.reset()
+	var lane: Node3D = LANE.instantiate()
+	add_child(lane)
+	eye.make_current()
+	eye.global_position = lane.to_global(Vector3(12.8, 1.6, 0.0))
+	await _frames(60)
+	var lane_hum: AudioStreamPlayer3D = lane.neon.get("hum") if lane.neon != null else null
+	var lane_pipes: Node3D = lane.get("pipe_sounds")
+	var lane_trickle: AudioStreamPlayer3D = lane_pipes.emitter_of(0) if lane_pipes != null else null
+	_check("Y3 the candle lane's hush spares the new sounds", lane_hum != null and lane_hum.playing
+		and lane_trickle != null and lane_trickle.playing, "hum %s trickle %s" % [lane_hum, lane_trickle])
+	lane.queue_free()
+	await _frames(5)
 
 
 func _check(label: String, ok: bool, detail: String) -> void:
