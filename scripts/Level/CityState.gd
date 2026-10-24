@@ -71,6 +71,12 @@ func _link() -> void:
 ## FOLLOW_RANGE of the gate) follows him through: away from this district,
 ## arriving on the far side as long after him as his run takes.
 func leave(map: Node, exit: Area3D) -> void:
+	# A talk is broken off by going (TalkBox.interrupt): gone at once.
+	var you: Node = map.player if map.get("player") != null and is_instance_valid(map.player) else null
+
+	if you != null and you.get("frob") != null and you.frob.has_method("talking") and you.frob.talking() != null:
+		you.frob.talking().interrupt()
+
 	var state := DistrictStateScript.capture(map, map.made, map.guards, map.visitors)
 	var gate := exit.global_position
 

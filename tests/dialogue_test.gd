@@ -2,8 +2,10 @@ extends Node3D
 ## The character dialogue files (the talk and quests spec, section 1): the
 ## .dialogue parser (D1-D4, D16-D17), the words conditions and effects share
 ## (D5), the library with its types and link checks (D6-D15, D18-D19), what
-## people remember (P1-P8), the conversation runner (C1-C11) and the shade
-## who speaks it (S1-S5).
+## people remember (P1-P8), the conversation runner (C1-C11), the shade
+## who speaks it (S1-S5) and the talk box the player reads it in (B1-B7,
+## B9-B10 its draft-28 layout, B13-B15 the HUD and the letter around it,
+## B16 its paint going on and off).
 ##   Godot --headless --fixed-fps 60 --path . res://tests/dialogue_test.tscn
 ##
 ## The words still to write (every text in <<...>>) are printed as WORDS:
@@ -21,6 +23,7 @@ const Shade := preload("res://scripts/Interaction/Shade.gd")
 const SHADE_SHADER := preload("res://scripts/Visual/shade.gdshader")
 const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
+const TalkBox := preload("res://scripts/UI/TalkBox.gd")
 
 ## Two characters and one type, used only by tests (and the suites after).
 const FIXTURES := "res://tests/fixtures/dialogue"
@@ -38,6 +41,7 @@ func _ready() -> void:
 	_people()
 	_conversation()
 	await _shade()
+	await _box()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -890,6 +894,289 @@ func _shade() -> void:
 	librarian.queue_free()
 	await _frames(2)
 	DialogueBook.reload()
+
+
+# ---------------------------------------------------------------------------
+# B1-B7: the talk box, and the player held while he talks
+# ---------------------------------------------------------------------------
+
+func _box() -> void:
+	DialogueBook.use(DialogueBook.load_dir(FIXTURES))
+	CityState.begin()
+	# A clean memory: she has never met him.
+	CityState.people.load_state({})
+	var shade: StaticBody3D = Shade.new()
+	shade.character = "fx_curandera"
+	add_child(shade)
+	shade.global_position = Vector3(0, 0, -1.5)
+	# (With its HUD: B13-B14 look at it.)
+	var player: CharacterBody3D = PLAYER.instantiate()
+	add_child(player)
+	player.reload_on_death = false
+	player.global_position = Vector3(0, 1.05, 0)
+	await _frames(10)
+	_aim(player, shade.global_position + Vector3(0, 1.2, 0))
+	await _frames(20)
+	var hud: Node = player.hud
+	var hud_before := [hud.shown("crosshair"), hud.shown("gem")] if hud != null else [0.0, 0.0]
+
+	# B1: E on her opens the box, and her opener's first line is told out.
+	# (B16: its paint goes on within 0.7 s.)
+	await _press("frob")
+	var box: Node = _talking(player)
+	var painting := [box.reveal() if box != null else -1.0]
+	var paint_frames := 2
+
+	while box != null and box.reveal() < 1.0 and paint_frames < 120:
+		await _frames(1)
+		paint_frames += 1
+
+	var painted_in := paint_frames / 60.0
+	await _reveal()
+	var first: String = box.shown_text() if box != null else ""
+	_check("B1 frob on a shade opens the box with the opener's first line",
+		box != null and box is TalkBox and first == "<<She reads you.>>",
+		"box %s, shown '%s'" % [box, first])
+
+	if box == null:
+		for missed in ["B2 the player is held while talking and freed on close", "B3 choosing an option advances the conversation and applies effects",
+				"B4 hands busy: no box", "B5 hurt mid-talk closes the box without walked_off", "B6 a press inside OPTION_GUARD picks nothing",
+				"B7 holding back 0.5 s walks away and sets walked_off"]:
+			_check(missed, false, "no box opened")
+
+		player.queue_free()
+		shade.queue_free()
+		await _frames(2)
+		DialogueBook.reload()
+		return
+
+	# B13: the HUD gives way (the crosshair, the gem); B14: its rows are the
+	# talk's; B15: the letter stays put away.
+	var hud_during := [hud.shown("crosshair"), hud.shown("gem")] if hud != null else [1.0, 1.0]
+	var line_rows: Array = player.frob.current_actions()
+	var row_texts: PackedStringArray = hud.prompt_texts() if hud != null else PackedStringArray()
+	player.frob.open_letter()
+	Input.action_press("letter")
+	await _frames(1)
+	Input.action_release("letter")
+	await _frames(5)
+	var letter_up: bool = player.hand.is_page_up()
+	_check("B15 the letter is refused while talking", not letter_up and _talking(player) == box, "page up %s" % letter_up)
+
+	# B2 (held): pushing forward goes nowhere while the box is up.
+	var held: bool = player.get("talk_hold") == true
+	var before: Vector3 = player.global_position
+	Input.action_press("move_forward")
+	await _frames(30)
+	Input.action_release("move_forward")
+	var moved: float = player.global_position.distance_to(before)
+
+	# B6: on to her sense line, then the options; a press at once, inside
+	# OPTION_GUARD, picks nothing.
+	box.press_advance()
+	await _reveal()
+	var sensed: String = box.shown_text()
+	box.press_advance()
+	await _frames(1)
+	var offered: Array = box.shown_options()
+	var option_rows: Array = player.frob.current_actions()
+	box.press_advance()
+	box.select(0)
+	await _frames(1)
+	_check("B6 a press inside OPTION_GUARD picks nothing",
+		sensed == "<<The copal bends toward your shoulder.>>" and offered.size() >= 2 and offered[0] == "<<Ask about the book.>>"
+		and box.conversation.is_waiting_for_choice() and box.shown_options() == offered
+		and not CityState.people.holds("said(asked)", "fx_curandera"),
+		"sense '%s', options %s, still waiting %s" % [sensed, offered, box.conversation.is_waiting_for_choice()])
+
+	var walk := [&"move_back", "Hold to walk away"]
+	_check("B14 while talking the HUD's rows are the talk's",
+		line_rows == [[&"frob", "Continue"], walk] and option_rows == [[&"frob", "Choose"], [&"", "1–%d" % offered.size()], walk]
+		and Array(row_texts).any(func(t): return String(t).contains("Hold to walk away") and String(t).begins_with("[")),
+		"line %s, options %s, HUD %s" % [line_rows, option_rows, row_texts])
+
+	# B9: draft 28's layout at 1920 x 1080 (its numbers, by hand: the panel
+	# 1000 wide, 1000 / (1802 / 1050) tall, its top 40 px below H - that; the
+	# portrait 320 x 470 overlapping it 70 px, 70 px above; the pair centred;
+	# the name 146, the line 182, the options 318 + 50 i below the panel's top).
+	await _frames(30)
+	box._layout(Vector2(1920, 1080))
+	var big: Dictionary = box.layout_rects()
+	var tall := 1000.0 / (1802.0 / 1050.0)
+	var top := 1080.0 - tall + 40.0
+	var want := {"panel": Rect2(585, top, 1000, tall), "portrait": Rect2(335, top - 70, 320, 470)}
+	var off: Array[String] = []
+
+	for key in want:
+		var got: Rect2 = big.get(key, Rect2())
+		var w: Rect2 = want[key]
+
+		if got.position.distance_to(w.position) > 2.0 or got.size.distance_to(w.size) > 2.0:
+			off.append("%s %s not %s" % [key, got, w])
+
+	for pair in [["name", 146.0], ["line", 182.0]] + range(offered.size()).map(func(i): return ["option %d" % i, 318.0 + 50.0 * i]):
+		var got_y: float = (big.get(pair[0], Rect2()) as Rect2).position.y
+
+		if absf(got_y - (top + float(pair[1]))) > 2.0:
+			off.append("%s y %.1f not %.1f" % [pair[0], got_y, top + float(pair[1])])
+
+	_check("B9 at 1920x1080 the panel, the portrait and the words sit where draft 28 has them",
+		off.is_empty() and big.size() >= 4 + 2 * offered.size(),
+		"; ".join(off) if not off.is_empty() else "panel %s portrait %s" % [big.get("panel"), big.get("portrait")])
+
+	# B10: at 1280 x 720 every rect is two thirds of the 1080p one.
+	box._layout(Vector2(1280, 720))
+	var small: Dictionary = box.layout_rects()
+	var unlike: Array[String] = []
+
+	for key in big:
+		var a: Rect2 = big[key]
+		var b: Rect2 = small.get(key, Rect2())
+
+		if b.position.distance_to(a.position * 2.0 / 3.0) > 2.0 or b.size.distance_to(a.size * 2.0 / 3.0) > 2.0:
+			unlike.append("%s %s not %s" % [key, b, Rect2(a.position * 2.0 / 3.0, a.size * 2.0 / 3.0)])
+
+	_check("B10 at 1280x720 every rect is 2/3 of the 1080p one", unlike.is_empty() and small.size() == big.size(),
+		"; ".join(unlike) if not unlike.is_empty() else "%d rects" % small.size())
+
+	# B3: past the guard, choosing asks about the book: its beat sets the flag
+	# and her next line comes.
+	await _frames(int(ceil(TalkBox.OPTION_GUARD * 60.0)) + 2)
+	box.select(0)
+	await _reveal()
+	var asked: bool = CityState.people.holds("said(asked)", "fx_curandera")
+	var told: String = box.shown_text()
+	_check("B3 choosing an option advances the conversation and applies effects",
+		asked and told == "<<Bring me the book from the librarian.>>" and CityState.people.goals_shown.has("fx_bring_book"),
+		"asked %s, shown '%s', goals %s" % [asked, told, CityState.people.goals_shown])
+
+	# B2 (freed): leaving by the option closes the box and lets him go.
+	box.press_advance()
+	await _frames(int(ceil(TalkBox.OPTION_GUARD * 60.0)) + 2)
+	box.select(box.shown_options().find("<<Leave.>>"))
+	var lift_frames := 0
+
+	while is_instance_valid(box) and box.reveal() > 0.0 and lift_frames < 120:
+		await _frames(1)
+		lift_frames += 1
+
+	var lifted := lift_frames / 60.0
+	_check("B2 the player is held while talking and freed on close",
+		held and moved < 0.01 and _talking(player) == null and player.get("talk_hold") == false,
+		"held %s, moved %.3f m, box after %s, hold after %s" % [held, moved, _talking(player), player.get("talk_hold")])
+	await _frames(20)
+	var hud_after := [hud.shown("crosshair"), hud.shown("gem")] if hud != null else [0.0, 0.0]
+	_check("B13 while talking the HUD's crosshair and gem fade out, and come back after",
+		hud != null and hud_before.all(func(a): return a > 0.9) and hud_during.all(func(a): return a < 0.01)
+		and hud_after.all(func(a): return a > 0.9),
+		"before %s, talking %s, after %s" % [hud_before, hud_during, hud_after])
+
+	# B4: hands busy (a crate held, the letter up, hanging): no box, and the
+	# prompt is a blocked status row.
+	var crate := Props.crate(self, Vector3(0.6, 0.3, -0.6))
+	await _frames(5)
+	player.frob._pick_up(crate)
+	await _frames(5)
+	shade.frob(player)
+	var carrying_box: Node = _talking(player)
+	player.frob._release(false)
+	crate.queue_free()
+	await _frames(5)
+	player.frob.open_letter()
+	await _frames(5)
+	shade.frob(player)
+	var reading_box: Node = _talking(player)
+	player.frob.put_page_away()
+	await _frames(30)
+	_aim(player, shade.global_position + Vector3(0, 1.2, 0))
+	await _frames(5)
+	var free_rows: Array = player.frob.current_actions()
+	player.movement_state = player.MoveState.HANGING
+	var hanging_rows: Array = player.frob.current_actions()
+	shade.frob(player)
+	var hanging_box: Node = _talking(player)
+	player.movement_state = player.MoveState.LOCOMOTION
+	_check("B4 hands busy: no box",
+		carrying_box == null and reading_box == null and hanging_box == null and free_rows == [[&"frob", "Talk"]]
+		and hanging_rows.size() == 1 and (hanging_rows[0] as Array)[0] == &"" and player.get("talk_hold") == false,
+		"carrying %s, reading %s, hanging %s, rows free %s hanging %s" % [carrying_box, reading_box, hanging_box, free_rows,
+		hanging_rows])
+
+	# B5: a blow mid-talk breaks it off: closed at once, nothing remembered.
+	await _press("frob")
+	box = _talking(player)
+	await _reveal()
+	var reopened: String = box.shown_text() if box != null else ""
+	var how := [&""]
+
+	if box != null:
+		box.conversation.ended.connect(func(h): how[0] = h)
+
+	player.take_damage(10.0, null)
+	var shut: bool = _talking(player) == null
+	var gone_at_once: float = box.reveal() if is_instance_valid(box) else 0.0
+	await _frames(2)
+	_check("B5 hurt mid-talk closes the box without walked_off",
+		reopened == "<<Back again.>>" and shut and how[0] == &"interrupted" and player.get("talk_hold") == false
+		and not CityState.people.holds("said(walked_off)", "fx_curandera"),
+		"reopened '%s', closed at once %s, ended %s, hold %s" % [reopened, shut, how[0], player.get("talk_hold")])
+	_check("B16 the paint goes on within 0.7 s of open, off within 0.45 s of close, and at once on interrupt",
+		painting[0] >= 0.0 and painting[0] < 0.2 and painted_in <= 0.7 and lifted <= 0.45 and lifted > 0.1 and gone_at_once == 0.0,
+		"at open %.2f, whole after %.2f s, gone %.2f s after close, %.2f the frame it was broken off" % [painting[0], painted_in,
+		lifted, gone_at_once])
+
+	# B7: a tap of back is not walking away; holding it 0.5 s is.
+	await _frames(30)
+	await _press("frob")
+	var opened := _talking(player) != null
+	await _reveal()
+	Input.action_press("move_back")
+	await _frames(15)
+	Input.action_release("move_back")
+	await _frames(5)
+	var after_tap: bool = _talking(player) != null
+	Input.action_press("move_back")
+	await _frames(int(ceil(TalkBox.WALK_AWAY * 60.0)) + 3)
+	var gone: bool = _talking(player) == null
+	var hold_after: bool = player.get("talk_hold") == true
+	Input.action_release("move_back")
+	await _frames(2)
+	_check("B7 holding back 0.5 s walks away and sets walked_off",
+		opened and after_tap and gone and not hold_after and CityState.people.holds("said(walked_off)", "fx_curandera"),
+		"opened %s, open after a tap %s, gone %s, hold %s, walked_off %s" % [opened, after_tap, gone, hold_after,
+		CityState.people.holds("said(walked_off)", "fx_curandera")])
+
+	player.queue_free()
+	shade.queue_free()
+	await _frames(2)
+	CityState.people.load_state({})
+	DialogueBook.reload()
+
+
+## The box the player has open, or null.
+func _talking(player: Node) -> Node:
+	return player.frob.talking() if player.frob.has_method("talking") else null
+
+
+## Turns the player's view on `point`.
+func _aim(player: CharacterBody3D, point: Vector3) -> void:
+	var eye: Vector3 = player.get_node("Neck/Camera3D").global_position
+	var to := point - eye
+	player.rotation.y = atan2(-to.x, -to.z)
+	player.get_node("Neck").rotation.x = atan2(to.y, Vector2(to.x, to.z).length())
+
+
+## One press of an action, a frame long.
+func _press(action: StringName) -> void:
+	Input.action_press(action)
+	await _frames(1)
+	Input.action_release(action)
+	await _frames(1)
+
+
+## Long enough for any fixture line to be told out.
+func _reveal() -> void:
+	await _frames(int(ceil(48.0 / TalkBox.REVEAL_CPS * 60.0)) + 4)
 
 
 func _frames(n: int) -> void:

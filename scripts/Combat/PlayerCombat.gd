@@ -384,6 +384,8 @@ func _physics_process(delta: float) -> void:
 		and not stowed
 		and not player._is_carrying()
 		and not get_tree().paused
+		# Talking (TalkBox): a click picks or reads on, it is not a blow.
+		and player.get("talk_hold") != true
 	)
 
 	if not able:

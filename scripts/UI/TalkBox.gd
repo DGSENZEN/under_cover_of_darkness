@@ -1,0 +1,978 @@
+extends CanvasLayer
+## The talk box (the talk and quests spec, section 4, as the user settled it
+## over 28 drafts: .superpowers/talkbox/draft28.jpg and draft28_reference.py):
+## a talk with a shade, told on screen while the world goes on.
+##   - A painted panel at the bottom middle, its foot running off the screen,
+##     and the speaker's portrait overlapping its left edge, the pair centred
+##     together over a soft shadow. Both fray out from their own paint
+##     (talk_paint.gdshader) and paint themselves in, in splotches and
+##     bristle strokes, as it opens, and lift off as it closes.
+##   - Inside the panel, centred: the speaker's name in marigold, the line in
+##     cream told out a few letters at a time (an inner voice, Sense obsidian,
+##     in cochineal), then the options, each in its own painted brush swipe
+##     (talk_swipe.gdshader); the chosen one warm gold with dark ink and the
+##     marker at its end; picked with 1-4, the mouse, or the wheel and E.
+##   - The look comes from a TalkSkin: the plain one (a backdrop painted from
+##     noise, the live render of the shade's head, a painted spike) until a
+##     character's own paintings come (Task 6b).
+## E or a click tells the line out at once, the next press goes on. Holding
+## back (WALK_AWAY) walks away, and they remember it (walked_off). A blow, a
+## death or leaving the district breaks it off (interrupt): gone at once,
+## nothing remembered. Escape pauses the game; the box freezes under the
+## pause screen (it sits just under the HUD's layer).
+##
+## The player stands still meanwhile (PlayerController.talk_hold): no feet,
+## no look, no blows; the view eases round to the speaker. The HUD gives way.
+##
+## Built in two halves so a skin can take over the look later: _build_* makes
+## the parts, plan() and _layout place them. The talk, the keys and the sounds
+## are the same for every look.
+
+const Conversation := preload("res://scripts/Interaction/Conversation.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const TalkSkin := preload("res://scripts/UI/TalkSkin.gd")
+const PAINT := preload("res://scripts/UI/talk_paint.gdshader")
+const SWIPE := preload("res://scripts/UI/talk_swipe.gdshader")
+
+## The box has closed (the talk is over, or broken off).
+signal closed
+
+## Letters told out a second.
+const REVEAL_CPS := 45.0
+## For this long after the options come up a press picks nothing, so the
+## press that told the last line out does not also choose (s).
+const OPTION_GUARD := 0.25
+## Holding back this long walks away (s).
+const WALK_AWAY := 0.5
+
+## Draft 28's paints.
+const MARIGOLD := Color8(242, 177, 52)
+const COCHINEAL := Color8(214, 64, 56)
+const CREAM := Color8(236, 228, 210)
+## The words on the chosen gold swipe.
+const DARK_INK := Color8(20, 14, 20)
+const SHADOW := Color8(2, 3, 8)
+
+## Draft 28's layout, in px at 1920 x 1080 (everything scales with the
+## screen's height): the panel's width, how far its top stands below
+## H - its height (its foot runs off the screen by as much), the portrait's
+## height, how far it overlaps the panel and stands above it.
+const PANEL_WIDE := 1000.0
+const PANEL_DROP := 40.0
+const PORTRAIT_TALL := 470.0
+const PORTRAIT_OVERLAP := 70.0
+const PORTRAIT_RISE := 70.0
+## Inside the panel: the name's top, the line's top and its line step, the
+## options' top and step, from the panel's top; the line wraps this wide.
+const NAME_AT := 146.0
+const LINE_AT := 182.0
+const LINE_STEP := 38.0
+const LINE_WIDE := 560.0
+const OPTIONS_AT := 318.0
+const OPTION_STEP := 50.0
+## The options' column: the longest option plus this; the words stand this
+## far into their swipe; the marker's width.
+const COLUMN_MORE := 70.0
+const OPTION_INDENT := 30.0
+const MARKER_WIDE := 150.0
+## The frayed pad round the panel and the portrait (the strokes' room).
+const PANEL_PAD := 40.0
+const PORTRAIT_PAD := 30.0
+## Type sizes (Georgia first; no serif ships with the game).
+const FONT_NAMES := ["Georgia", "Times New Roman", "Times", "Liberation Serif", "DejaVu Serif", "Noto Serif", "serif"]
+const NAME_SIZE := 24
+const LINE_SIZE := 29
+const OPTION_SIZE := 26
+
+## Painting in: the panel over this long (s), the portrait as long but this
+## much later; the words once the panel is this far down; each swipe over
+## SWIPE_TIME, the next this much later; a newly chosen one over CHOSEN_TIME;
+## lifting off over CLOSE_TIME.
+const PANEL_TIME := 0.5
+const PORTRAIT_LAG := 0.1
+const WORDS_FROM := 0.8
+const SWIPE_TIME := 0.22
+const SWIPE_STAGGER := 0.05
+const CHOSEN_TIME := 0.15
+const CLOSE_TIME := 0.35
+## A word or option's letters fade up over this long once its paint is down.
+const INK_TIME := 0.12
+
+## The live portrait: how far before the face (m), how far below the eyes
+## it looks (m), its lens (degrees); never sharper than this (px).
+const PORTRAIT_DISTANCE := 1.25
+const PORTRAIT_DROP := 0.12
+const PORTRAIT_FOV := 30.0
+const PORTRAIT_MOST := 1024
+
+## A voice's NOX takes (Sfx: murmur, murmur_b, murmur_f, and hm the same).
+const VOICE_SUFFIX := {&"male": "", &"male_b": "_b", &"female": "_f"}
+## How fast the view comes round to the speaker (per second, exponential).
+const TURN_EASE := 5.0
+
+var conversation: Conversation
+var shade: Node
+var player: Node
+var skin: TalkSkin = TalkSkin.plain()
+
+var _open := false
+## What the box shows now: &"line", &"sense", &"pause", &"options" or &"".
+var _kind: StringName = &""
+var _text := ""
+## Letters told out of _text so far.
+var _shown := 0.0
+## The options up: [{text, special}], and the one the wheel or mouse is on.
+var _options: Array = []
+var _choice := 0
+## How long the options have been up (s).
+var _options_age := 0.0
+var _pause_left := 0.0
+var _back_held := 0.0
+var _opened_frame := -1
+var _voice := ""
+
+## The paint: how far the panel and the portrait are down (0..1), and each
+## swipe's; opening (time since), or closing.
+var _panel_reveal := 0.0
+var _portrait_reveal := 0.0
+var _swipe_reveal: Array[float] = []
+var _since := 0.0
+var _closing := false
+var _seed := 0.0
+## Each option's ink (0..1), and the name's and the line's.
+var _option_ink: Array[float] = []
+var _words_ink := 0.0
+
+var _font: SystemFont
+var _bold: SystemFont
+var _italic: SystemFont
+var _root: Control
+var _shadow: ColorRect
+var _panel: TextureRect
+var _portrait: TextureRect
+var _viewport: SubViewport
+var _camera: Camera3D
+var _name: Label
+var _words: Label
+var _swipes: Array[TextureRect] = []
+var _option_labels: Array[Label] = []
+## The layout last placed (plan()).
+var _plan := {}
+
+
+# Opening and closing
+
+## Opens a talk with `p_shade` (Shade: its dialogue, cue, face, head_point)
+## for `p_player`, and tells its first line.
+func open(p_shade: Node, p_player: Node) -> void:
+	shade = p_shade
+	player = p_player
+	# Over the pixel grid (Retro, 4); with the HUD (5) but under it, so the
+	# pause screen covers it (the player's frob puts it before the HUD).
+	layer = 5
+	# Laid out every frame: never interpolated.
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	var people: RefCounted = CityState.people
+	# The conditions has(x) and purse>=n read the belt the talk gives to.
+	people.inventory = player.inventory
+	conversation = Conversation.new(shade.dialogue, people, player.inventory)
+	conversation.line.connect(_on_line)
+	conversation.sense.connect(_on_sense)
+	conversation.paused.connect(_on_paused)
+	conversation.options.connect(_on_options)
+	conversation.cue.connect(_on_cue)
+	conversation.resting.connect(_on_resting)
+	conversation.ended.connect(_on_ended)
+	_voice = String(VOICE_SUFFIX.get(StringName(shade.dialogue.get("voice", &"male")), ""))
+	_open = true
+	_opened_frame = Engine.get_physics_frames()
+	_seed = randf() * 100.0
+	player.talk_hold = true
+
+	_build()
+	_place_portrait_camera()
+	shade.face(_eye())
+	_layout(_screen())
+	conversation.start()
+
+	if _open and not conversation.is_over():
+		conversation.advance()
+
+
+## The talk is over: the player is his own again at once, the mouse taken
+## back; the paint lifts off (CLOSE_TIME) and the box goes.
+func close() -> void:
+	if not _open:
+		return
+
+	_release()
+	_closing = true
+	_since = 0.0
+
+
+## Broken off (a blow, death, leaving): ended with nothing remembered, and
+## gone this frame.
+func interrupt() -> void:
+	if conversation != null and not conversation.is_over():
+		conversation.interrupt()
+
+	if _open:
+		_release()
+
+	_gone()
+
+
+func is_open() -> bool:
+	return _open
+
+
+## Hands everything back (once).
+func _release() -> void:
+	_open = false
+	_kind = &""
+
+	if is_instance_valid(player):
+		player.talk_hold = false
+
+		# Taken back as a click would: the press that closed it is no blow.
+		if player.has_method("_recapture_mouse"):
+			player._recapture_mouse()
+		else:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+		if player.has_method("spend_attack_press"):
+			player.spend_attack_press()
+	else:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+	if is_instance_valid(shade):
+		shade.end_line()
+		shade.speaking(false)
+
+	closed.emit()
+
+
+## Off the screen now and away.
+func _gone() -> void:
+	_closing = false
+	_panel_reveal = 0.0
+	_portrait_reveal = 0.0
+	visible = false
+
+	if is_inside_tree():
+		queue_free()
+
+
+func _exit_tree() -> void:
+	# Taken away with its player or its level: broken off, not left holding.
+	if _open:
+		interrupt()
+
+
+# What it shows (for tests, too)
+
+## The words told out so far.
+func shown_text() -> String:
+	return _text.substr(0, int(_shown))
+
+
+## The options' words, in order.
+func shown_options() -> Array[String]:
+	var words: Array[String] = []
+
+	if _kind == &"options":
+		for option in _options:
+			words.append(String(option["text"]))
+
+	return words
+
+
+## How far the box is painted in (0 gone, 1 whole): its panel and portrait.
+func reveal() -> float:
+	return maxf(_panel_reveal, _portrait_reveal)
+
+
+## The HUD's prompt rows while it is up (PlayerFrob.current_actions).
+func prompt_rows() -> Array:
+	var rows := []
+
+	match _kind:
+		&"options":
+			rows.append([&"frob", "Choose"])
+			rows.append([&"", "1–%d" % mini(_options.size(), 4)])
+		&"line", &"sense":
+			rows.append([&"frob", "Continue"])
+
+	rows.append([&"move_back", "Hold to walk away"])
+	return rows
+
+
+## Where each part is now (in the screen's px): the panel and the portrait
+## (their pictures, not the frayed pad), the name, the line and each
+## option's words, and each swipe.
+func layout_rects() -> Dictionary:
+	var rects := {
+		"panel": _panel.get_rect().grow(-PANEL_PAD * _scale()),
+		"portrait": _portrait.get_rect().grow(-PORTRAIT_PAD * _scale()),
+		"name": _name.get_rect(),
+		"line": _words.get_rect(),
+	}
+
+	for i in _option_labels.size():
+		rects["option %d" % i] = _option_labels[i].get_rect()
+		rects["swipe %d" % i] = _swipes[i].get_rect()
+
+	return rects
+
+
+# The keys
+
+## E or a click: tells the line out, or goes on; on the options, picks the
+## one the wheel is on.
+func press_advance() -> void:
+	if not _open:
+		return
+
+	match _kind:
+		&"line", &"sense":
+			if _revealing():
+				_finish_reveal()
+			else:
+				_go_on()
+		&"options":
+			select(_choice)
+
+
+## Picks option `index` (1-4, a click): its effects, then on.
+func select(index: int) -> void:
+	if not _open or _kind != &"options" or _options_age < OPTION_GUARD or index < 0 or index >= _options.size():
+		return
+
+	_clear_options()
+	_kind = &""
+	shade.end_line()
+	conversation.choose(index)
+
+	if _open and not conversation.is_over():
+		conversation.advance()
+
+
+## Moves the choice (the wheel, the mouse): the new one paints in afresh.
+func choose_by_pointing(index: int) -> void:
+	if index == _choice or index < 0 or index >= _options.size():
+		return
+
+	_choice = index
+	_swipe_reveal[index] = 0.0
+	_style_options()
+
+
+func _go_on() -> void:
+	shade.end_line()
+	conversation.advance()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not _open:
+		return
+
+	var key := event as InputEventKey
+
+	if key != null and key.pressed and not key.echo and key.keycode >= KEY_1 and key.keycode <= KEY_4:
+		select(key.keycode - KEY_1)
+		get_viewport().set_input_as_handled()
+		return
+
+	var button := event as InputEventMouseButton
+
+	if button == null or not button.pressed:
+		return
+
+	match button.button_index:
+		MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
+			if _kind == &"options" and not _options.is_empty():
+				var step := -1 if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1
+				choose_by_pointing(posmod(_choice + step, _options.size()))
+
+			get_viewport().set_input_as_handled()
+		MOUSE_BUTTON_LEFT:
+			# On the options a click picks the one under it (its own input).
+			if _kind != &"options":
+				press_advance()
+
+			get_viewport().set_input_as_handled()
+
+
+# Every frame
+
+func _physics_process(delta: float) -> void:
+	if not _open:
+		return
+
+	if not is_instance_valid(player) or not is_instance_valid(shade) or player.is_dead:
+		interrupt()
+		return
+
+	if _kind == &"options":
+		_options_age += delta
+
+	# Turning away: back, held.
+	if Input.is_action_pressed("move_back"):
+		_back_held += delta
+
+		if _back_held >= WALK_AWAY:
+			conversation.walk_off()
+			close()
+			return
+	else:
+		_back_held = 0.0
+
+	# (Not the press that opened it.)
+	if Input.is_action_just_pressed("frob") and Engine.get_physics_frames() > _opened_frame:
+		press_advance()
+
+	if _kind == &"pause":
+		_pause_left -= delta
+
+		if _pause_left <= 0.0:
+			_kind = &""
+			conversation.advance()
+
+
+func _process(delta: float) -> void:
+	_since += delta
+
+	if _closing:
+		_lift(delta)
+		return
+
+	if not _open or not is_instance_valid(player) or not is_instance_valid(shade):
+		return
+
+	_paint_in(delta)
+
+	# The line is told once its part of the panel is down.
+	if _revealing() and _panel_reveal >= WORDS_FROM:
+		_shown = minf(_shown + REVEAL_CPS * delta, float(_text.length()))
+
+		if not _revealing():
+			shade.speaking(false)
+
+	_words.visible_characters = int(_shown)
+	_face_speaker(delta)
+	_place_portrait_camera()
+	_layout(_screen())
+
+	# The mouse is yours while there are options to point at.
+	var wanted := Input.MOUSE_MODE_VISIBLE if _kind == &"options" else Input.MOUSE_MODE_CAPTURED
+
+	if Input.mouse_mode != wanted:
+		Input.mouse_mode = wanted
+
+
+## Opening: the panel, the portrait a little after, the words once the panel
+## is down, each swipe in turn, each option's words once its swipe is.
+func _paint_in(delta: float) -> void:
+	_panel_reveal = clampf(_since / PANEL_TIME, 0.0, 1.0)
+	_portrait_reveal = clampf((_since - PORTRAIT_LAG) / PANEL_TIME, 0.0, 1.0)
+	_words_ink = move_toward(_words_ink, 1.0 if _panel_reveal >= WORDS_FROM else 0.0, delta / INK_TIME)
+
+	for i in _swipes.size():
+		var rate := 1.0 / (CHOSEN_TIME if i == _choice and _options_age > SWIPE_TIME + SWIPE_STAGGER * i else SWIPE_TIME)
+		var wait := SWIPE_STAGGER * i if _options_age < SWIPE_TIME + SWIPE_STAGGER * i else 0.0
+
+		if _panel_reveal >= WORDS_FROM and _options_age >= wait:
+			_swipe_reveal[i] = minf(_swipe_reveal[i] + rate * delta, 1.0)
+
+		_option_ink[i] = move_toward(_option_ink[i], 1.0 if _swipe_reveal[i] >= 0.7 else 0.0, delta / INK_TIME)
+
+	_send_reveals()
+
+
+## Closing: the same paint lifting off, faster; then gone.
+func _lift(delta: float) -> void:
+	var rate := delta / CLOSE_TIME
+	_panel_reveal = maxf(_panel_reveal - rate, 0.0)
+	_portrait_reveal = maxf(_portrait_reveal - rate, 0.0)
+	_words_ink = move_toward(_words_ink, 0.0, delta / INK_TIME)
+
+	for i in _swipes.size():
+		_swipe_reveal[i] = maxf(_swipe_reveal[i] - rate * 1.4, 0.0)
+		_option_ink[i] = move_toward(_option_ink[i], 0.0, delta / INK_TIME)
+
+	_send_reveals()
+
+	if _panel_reveal <= 0.0 and _portrait_reveal <= 0.0:
+		_gone()
+
+
+func _send_reveals() -> void:
+	if _panel == null:
+		return
+
+	(_panel.material as ShaderMaterial).set_shader_parameter(&"reveal", _panel_reveal)
+	(_portrait.material as ShaderMaterial).set_shader_parameter(&"reveal", _portrait_reveal)
+	_shadow.modulate.a = maxf(_panel_reveal, _portrait_reveal)
+	_name.modulate.a = _words_ink
+	_words.modulate.a = _words_ink
+
+	for i in _swipes.size():
+		(_swipes[i].material as ShaderMaterial).set_shader_parameter(&"reveal", _swipe_reveal[i])
+		_option_labels[i].modulate.a = _option_ink[i]
+
+
+## The view eases round to the speaker's eyes; the speaker to yours.
+func _face_speaker(delta: float) -> void:
+	var neck: Node3D = player.get_node("Neck")
+	var to: Vector3 = shade.head_point() - neck.global_position
+	var flat := Vector2(to.x, to.z).length()
+
+	if flat < 0.05:
+		return
+
+	var k := 1.0 - exp(-TURN_EASE * delta)
+	var limit := deg_to_rad(float(player.get("max_pitch_degrees")))
+	player.rotation.y = lerp_angle(player.rotation.y, atan2(-to.x, -to.z), k)
+	neck.rotation.x = lerpf(neck.rotation.x, clampf(atan2(to.y, flat), -limit, limit), k)
+	shade.face(_eye())
+
+
+func _eye() -> Vector3:
+	return (player.get_node("Neck") as Node3D).global_position
+
+
+## The portrait's camera: before the face, toward whoever it talks to.
+func _place_portrait_camera() -> void:
+	if _camera == null:
+		return
+
+	var head: Vector3 = shade.head_point()
+	var toward := _eye() - head
+	toward.y = 0.0
+
+	if toward.length() < 0.05:
+		toward = Vector3.BACK
+
+	var at := head + toward.normalized() * PORTRAIT_DISTANCE
+	var look := head - Vector3.UP * PORTRAIT_DROP
+	_camera.global_transform = Transform3D(Basis.looking_at(look - at, Vector3.UP), at)
+
+
+# What the conversation says
+
+func _on_line(speaker: String, text: String, _cues: Array) -> void:
+	_show(&"line", speaker, text)
+	shade.speaking(true)
+	Sfx.play(shade, StringName("murmur" + _voice), shade.head_point())
+
+
+func _on_sense(school: String, text: String) -> void:
+	_show(&"sense", school, text)
+	Sfx.play(shade, StringName("hm" + _voice), shade.head_point())
+
+
+func _on_paused(seconds: float) -> void:
+	_kind = &"pause"
+	_pause_left = seconds
+	_text = ""
+	_shown = 0.0
+	_words.text = ""
+	shade.speaking(false)
+
+
+func _on_options(list: Array) -> void:
+	_options = list
+	_choice = 0
+	_options_age = 0.0
+	_kind = &"options"
+	_build_options(list)
+
+
+func _on_cue(what: StringName) -> void:
+	shade.cue(what)
+
+
+func _on_resting(state: StringName) -> void:
+	shade.set_resting(state)
+
+
+func _on_ended(_how: StringName) -> void:
+	close()
+
+
+func _show(kind: StringName, speaker: String, text: String) -> void:
+	_kind = kind
+	_text = text
+	_shown = 0.0
+	_words.text = text
+	_words.visible_characters = 0
+	var inner := kind == &"sense"
+	_words.add_theme_color_override("font_color", COCHINEAL if inner else CREAM)
+	_name.text = speaker.to_upper()
+	_name.add_theme_color_override("font_color", COCHINEAL if inner else MARIGOLD)
+
+
+func _revealing() -> bool:
+	return (_kind == &"line" or _kind == &"sense") and _shown < float(_text.length())
+
+
+func _finish_reveal() -> void:
+	_shown = float(_text.length())
+	shade.speaking(false)
+
+
+# Building (a skin replaces these and plan())
+
+func _build() -> void:
+	_font = _serif(400, false)
+	_bold = _serif(700, false)
+	_italic = _serif(400, true)
+
+	_root = Control.new()
+	_root.name = "Talk"
+	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_root)
+	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_build_shadow()
+	_build_panel()
+	_build_portrait()
+	_build_words()
+	_send_reveals()
+
+
+static func _serif(weight: int, italic: bool) -> SystemFont:
+	var serif := SystemFont.new()
+	serif.font_names = PackedStringArray(FONT_NAMES)
+	serif.font_weight = weight
+	serif.font_italic = italic
+	return serif
+
+
+## A painted picture: talk_paint over a TextureRect, sampled at full
+## resolution, filtered, only ever scaled down.
+func _painted(texture: Texture2D, picture: Vector2, pad: float, seed_value: float) -> TextureRect:
+	var rect := TextureRect.new()
+	rect.texture = texture
+	rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	rect.stretch_mode = TextureRect.STRETCH_SCALE
+	rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var material := ShaderMaterial.new()
+	material.shader = PAINT
+	material.set_shader_parameter(&"picture_size", picture)
+	material.set_shader_parameter(&"pad", pad)
+	material.set_shader_parameter(&"seed", seed_value)
+	material.set_shader_parameter(&"reveal_seed", _seed + seed_value)
+	rect.material = material
+	return rect
+
+
+## A blank to draw a shader over (a TextureRect draws nothing without one):
+## white and whole, so it lends the shader no colour and takes no alpha.
+static func _blank() -> Texture2D:
+	var image := Image.create(4, 4, false, Image.FORMAT_RGBA8)
+	image.fill(Color.WHITE)
+	return ImageTexture.create_from_image(image)
+
+
+func _build_shadow() -> void:
+	_shadow = ColorRect.new()
+	_shadow.name = "Shadow"
+	_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var material := ShaderMaterial.new()
+	material.shader = Shader.new()
+	# A rounded box, softened about `blur` px: the pair seated in the world.
+	material.shader.code = """shader_type canvas_item;
+uniform vec2 size = vec2(100.0);
+uniform vec4 box = vec4(0.0);
+uniform float radius = 40.0;
+uniform float blur = 40.0;
+uniform vec3 tint = vec3(0.0);
+uniform float strength = 0.59;
+void fragment() {
+	vec2 p = UV * size;
+	vec2 centre = (box.xy + box.zw) * 0.5;
+	vec2 half_size = (box.zw - box.xy) * 0.5;
+	vec2 q = abs(p - centre) - half_size + radius;
+	float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+	COLOR = vec4(tint, (1.0 - smoothstep(-blur, blur, d)) * strength * COLOR.a);
+}
+"""
+	material.set_shader_parameter(&"tint", Vector3(SHADOW.r, SHADOW.g, SHADOW.b))
+	_shadow.material = material
+	_root.add_child(_shadow)
+
+
+func _build_panel() -> void:
+	var picture := Vector2(PANEL_WIDE, PANEL_WIDE / skin.panel_aspect())
+	_panel = _painted(skin.backdrop if skin.backdrop != null else _blank(), picture, PANEL_PAD, 11.0)
+	_panel.name = "Panel"
+	var material := _panel.material as ShaderMaterial
+	material.set_shader_parameter(&"procedural", skin.backdrop == null)
+	var pool: Rect2 = skin.pool
+	material.set_shader_parameter(&"pool", Vector4(pool.position.x, pool.position.y, pool.end.x, pool.end.y))
+	material.set_shader_parameter(&"pool_strength", skin.pool_strength)
+	_root.add_child(_panel)
+
+
+func _build_portrait() -> void:
+	var texture: Texture2D = skin.portrait
+
+	# The plain skin: the shade's own head, live, rendered at the size it
+	# shows (never scaled up).
+	if texture == null:
+		_viewport = SubViewport.new()
+		_viewport.name = "Portrait"
+		_viewport.size = Vector2i(320, 470)
+		_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		add_child(_viewport)
+		_camera = Camera3D.new()
+		_camera.fov = PORTRAIT_FOV
+		_camera.near = 0.05
+		_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		_viewport.add_child(_camera)
+		_camera.current = true
+		texture = _viewport.get_texture()
+
+	var picture := Vector2(PORTRAIT_TALL * skin.face_aspect(), PORTRAIT_TALL)
+	_portrait = _painted(texture, picture, PORTRAIT_PAD, 4.0)
+	_portrait.name = "Portrait"
+	_root.add_child(_portrait)
+
+
+func _build_words() -> void:
+	_name = Label.new()
+	_name.name = "Name"
+	_name.add_theme_font_override("font", _bold)
+	_name.add_theme_color_override("font_color", MARIGOLD)
+	_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_name)
+
+	_words = Label.new()
+	_words.name = "Line"
+	_words.add_theme_font_override("font", _font)
+	_words.add_theme_color_override("font_color", CREAM)
+	_words.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_words.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_words.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	_words.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_words)
+
+
+func _build_options(list: Array) -> void:
+	_clear_options()
+
+	for i in list.size():
+		var swipe := TextureRect.new()
+		swipe.name = "Swipe%d" % (i + 1)
+		swipe.texture = _blank()
+		swipe.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		swipe.stretch_mode = TextureRect.STRETCH_SCALE
+		swipe.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		swipe.mouse_filter = Control.MOUSE_FILTER_STOP
+		swipe.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		swipe.gui_input.connect(_on_option_input.bind(i))
+		swipe.mouse_entered.connect(choose_by_pointing.bind(i))
+		var material := ShaderMaterial.new()
+		material.shader = SWIPE
+		material.set_shader_parameter(&"seed", 20.0 + i + _seed)
+		material.set_shader_parameter(&"paint_dark", Vector3(skin.paint_dark.r, skin.paint_dark.g, skin.paint_dark.b))
+		material.set_shader_parameter(&"paint_warm", Vector3(skin.paint_warm.r, skin.paint_warm.g, skin.paint_warm.b))
+
+		if skin.cursor != null:
+			material.set_shader_parameter(&"use_cursor", true)
+			material.set_shader_parameter(&"cursor", skin.cursor)
+			material.set_shader_parameter(&"cursor_tip", skin.cursor_tip)
+			material.set_shader_parameter(&"cursor_aspect", float(skin.cursor.get_width()) / float(skin.cursor.get_height()))
+
+		swipe.material = material
+		_root.add_child(swipe)
+		_swipes.append(swipe)
+		_swipe_reveal.append(0.0)
+
+		var label := Label.new()
+		label.name = "Option%d" % (i + 1)
+		label.text = String(list[i]["text"])
+		label.add_theme_font_override("font", _italic)
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.modulate.a = 0.0
+		_root.add_child(label)
+		_option_labels.append(label)
+		_option_ink.append(0.0)
+
+	_style_options()
+
+
+## Each option's swipe and ink: the chosen one warm with the marker and dark
+## ink; the rest dim, marigold or (special) cochineal.
+func _style_options() -> void:
+	for i in _swipes.size():
+		var chosen := i == _choice
+		var material := _swipes[i].material as ShaderMaterial
+		material.set_shader_parameter(&"warm", chosen)
+		material.set_shader_parameter(&"light", 1.1 if chosen else 0.5)
+		material.set_shader_parameter(&"alpha_scale", 0.95 if chosen else 0.9)
+		var region: Rect2 = skin.warm_region if chosen else skin.dark_region
+		var painted: bool = skin.backdrop != null and region.has_area()
+		material.set_shader_parameter(&"use_paint", painted)
+
+		if painted:
+			material.set_shader_parameter(&"paint", skin.backdrop)
+			material.set_shader_parameter(&"region", Vector4(region.position.x, region.position.y, region.size.x, region.size.y))
+
+		var special := bool(_options[i].get("special", false)) if i < _options.size() else false
+		_option_labels[i].add_theme_color_override("font_color", DARK_INK if chosen else (COCHINEAL if special else MARIGOLD))
+
+
+func _clear_options() -> void:
+	for node in _swipes:
+		node.queue_free()
+
+	for node in _option_labels:
+		node.queue_free()
+
+	_swipes.clear()
+	_option_labels.clear()
+	_swipe_reveal.clear()
+	_option_ink.clear()
+
+
+func _on_option_input(event: InputEvent, index: int) -> void:
+	var button := event as InputEventMouseButton
+
+	if button != null and button.pressed and button.button_index == MOUSE_BUTTON_LEFT:
+		select(index)
+		get_viewport().set_input_as_handled()
+
+
+# Placing (draft 28)
+
+func _screen() -> Vector2:
+	return get_viewport().get_visible_rect().size if get_viewport() != null else Vector2(1152, 648)
+
+
+## How much the 1080p numbers are scaled on this screen.
+func _scale() -> float:
+	return _screen_height / 1080.0
+
+
+var _screen_height := 1080.0
+
+
+## Draft 28 on a screen this size (px or canvas units: everything scales by
+## its height over 1080): the panel and the portrait, the name, the line and
+## the options' words, each option's swipe, and the chosen swipe's marker.
+func plan(screen: Vector2) -> Dictionary:
+	var k := screen.y / 1080.0
+	var wide := PANEL_WIDE * k
+	var tall := wide / skin.panel_aspect()
+	var face_tall := PORTRAIT_TALL * k
+	var face_wide := face_tall * skin.face_aspect()
+	var overlap := PORTRAIT_OVERLAP * k
+	var pair := face_wide - overlap + wide
+	var left := (screen.x - pair) * 0.5 + face_wide - overlap
+	var top := screen.y - tall + PANEL_DROP * k
+	var panel := Rect2(left, top, wide, tall)
+	var portrait := Rect2(left - face_wide + overlap, top - PORTRAIT_RISE * k, face_wide, face_tall)
+
+	# The line: as many lines as it wraps to; more than three push the
+	# options down by as many steps.
+	var lines := 1
+
+	if _font != null and _text != "":
+		var high := _font.get_multiline_string_size(_text, HORIZONTAL_ALIGNMENT_CENTER, LINE_WIDE, LINE_SIZE).y
+		lines = maxi(1, int(round(high / _font.get_height(LINE_SIZE))))
+
+	var line := Rect2(left + (PANEL_WIDE - LINE_WIDE) * 0.5 * k, top + LINE_AT * k, LINE_WIDE * k, LINE_STEP * k * lines)
+	var name_rect := Rect2(left, top + NAME_AT * k, wide, 34.0 * k)
+
+	# The options' column: the longest option's words (at 1080p, so it
+	# scales exactly) plus COLUMN_MORE.
+	var longest := 0.0
+
+	for option in _options:
+		if _italic != null:
+			longest = maxf(longest, _italic.get_string_size(String(option["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, OPTION_SIZE).x)
+
+	var column := ceilf(longest) + COLUMN_MORE
+	var x := left + ((PANEL_WIDE - column) * 0.5 + OPTION_INDENT) * k
+	var y := top + (OPTIONS_AT + LINE_STEP * maxi(0, lines - 3)) * k
+	var words := []
+	var swipes := []
+
+	for i in _options.size():
+		var at := y + OPTION_STEP * k * i
+		words.append(Rect2(x, at, column * k, 36.0 * k))
+
+		if i == _choice:
+			swipes.append(Rect2(x - OPTION_INDENT * k, at - 8.0 * k, (column + MARKER_WIDE - 20.0) * k, 46.0 * k))
+		else:
+			swipes.append(Rect2(x - OPTION_INDENT * k, at - 6.0 * k, column * k, 42.0 * k))
+
+	var shadow_box := Rect2(Vector2(portrait.position.x - 10.0 * k, top - 90.0 * k), Vector2.ZERO)
+	shadow_box.end = Vector2(left + wide + 20.0 * k, screen.y + 40.0 * k)
+	return {"scale": k, "panel": panel, "portrait": portrait, "name": name_rect, "line": line, "options": words, "swipes": swipes,
+		"column": column, "shadow": shadow_box}
+
+
+## Places every part by plan() for a screen this size.
+func _layout(screen: Vector2) -> void:
+	_screen_height = screen.y
+	var p := plan(screen)
+	_plan = p
+	var k: float = p["scale"]
+
+	# The shadow, softened 40 px round a box with 40 px corners.
+	var shadow: Rect2 = p["shadow"]
+	var room := 80.0 * k
+	_shadow.position = shadow.position - Vector2(room, room)
+	_shadow.size = shadow.size + Vector2(room, room) * 2.0
+	var shade_material := _shadow.material as ShaderMaterial
+	shade_material.set_shader_parameter(&"size", _shadow.size)
+	shade_material.set_shader_parameter(&"box", Vector4(room, room, room + shadow.size.x, room + shadow.size.y))
+	shade_material.set_shader_parameter(&"radius", 40.0 * k)
+	shade_material.set_shader_parameter(&"blur", 40.0 * k)
+
+	_place(_panel, (p["panel"] as Rect2).grow(PANEL_PAD * k))
+	_place(_portrait, (p["portrait"] as Rect2).grow(PORTRAIT_PAD * k))
+	_fit_portrait_render(p["portrait"])
+
+	_name.add_theme_font_size_override("font_size", roundi(NAME_SIZE * k))
+	_place(_name, p["name"])
+	var line_size := roundi(LINE_SIZE * k)
+	_words.add_theme_font_size_override("font_size", line_size)
+	_words.add_theme_constant_override("line_spacing", roundi(LINE_STEP * k - _font.get_height(line_size)))
+	_place(_words, p["line"])
+
+	var words: Array = p["options"]
+	var swipes: Array = p["swipes"]
+
+	for i in _option_labels.size():
+		var label := _option_labels[i]
+		label.add_theme_font_size_override("font_size", roundi(OPTION_SIZE * k))
+		_place(label, words[i])
+		var swipe := _swipes[i]
+		var rect: Rect2 = swipes[i]
+		_place(swipe, rect)
+		var material := swipe.material as ShaderMaterial
+		material.set_shader_parameter(&"swipe_size", rect.size / k)
+		material.set_shader_parameter(&"marker_x", float(p["column"]) - 26.0 if i == _choice else -1.0)
+		material.set_shader_parameter(&"marker_width", MARKER_WIDE)
+
+
+func _place(control: Control, rect: Rect2) -> void:
+	control.position = rect.position
+	control.size = rect.size
+
+
+## The live portrait renders at the size it shows on the window.
+func _fit_portrait_render(rect: Rect2) -> void:
+	if _viewport == null or not is_inside_tree():
+		return
+
+	var to_window := get_viewport().get_final_transform().get_scale()
+	var wanted := Vector2i((rect.size * to_window).ceil()).clamp(Vector2i(16, 16), Vector2i(PORTRAIT_MOST, PORTRAIT_MOST))
+
+	if (wanted - _viewport.size).abs().x > 1 or (wanted - _viewport.size).abs().y > 1:
+		_viewport.size = wanted
