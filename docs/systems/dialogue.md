@@ -18,7 +18,7 @@ Some people in the city can be talked to: shades, figures of smoke and light in 
 name: Curandera                        the name; the speaker of her lines
 type: curandera                        her trade (types/curandera.dialogue)
 body: duelist                          the wardrobe body her shade wears
-colour: copal                          her shade's colour: a swatch or hex (#e63833)
+colour: copal                          her shade's colour: copal, ink, marigold, cochineal, teal, or hex (#e63833)
 voice: female                          male, male_b or female
 
 == beat open_first                     a beat: one moment of a conversation
@@ -38,7 +38,7 @@ Curandera: <<Bring me the book.>>
 
 | Kind | Keys | What it is |
 | --- | --- | --- |
-| `character` | `name`, `type`, `colour`, `body`, `voice`, `intent` | Who the file is (one per file). A type file holds its defaults (`colour`, `voice`, `body`) as `== character <type>`. |
+| `character` | `name`, `type`, `colour`, `body`, `voice`, `intent` | Who the file is (one per file). `colour` is a swatch, `copal`, `ink`, `marigold`, `cochineal` or `teal`, or hex like `#c8a040`. A type file holds its defaults (`colour`, `voice`, `body`) as `== character <type>`. |
 | `beat` | `when`, `do`, `intent`, then its body | One moment of a conversation. A beat whose id starts with `open` is an **opener**: on `E` the first opener, in file order, whose `when:` holds is played. Every character needs one opener with no `when:` (played when no other holds). |
 | `item` | `name`, `look`, `intent` | A thing given or taken: `name` is shown on the belt, `look` its mesh (`book`, `bundle`). |
 | `goal` | `kind` (main or side), `shows`, `done` (required), `note`, `intent`, `text` | A line on the letter, exactly as the job's: shown when `shows:` holds (or by the `goal()` effect), struck through when `done:` holds (or by `done()`). |
@@ -55,9 +55,11 @@ Curandera: <<Bring me the book.>>
 | `> ! <<words>> -> beat` | A **special** option, drawn red: the player's own uncanny way through. |
 | `> !obsidian <<words>> -> beat` | A special option of a **school**: its swipe and words wear that school's look instead of the red (see Schools). |
 | `>> <<words>> -> beat` | In a type file's opener: an option every character of the type is offered (see Types). |
-| `-> beat` | Alone on a line, after the lines: the beat that follows when there are no options. A beat with neither ends the talk. |
+| `-> beat` | Alone on a line, after the lines: the beat that follows when there are no options. A beat with neither ends the talk. A beat has options **or** a goto, not both: a goto after its options is never taken (the talk waits on the options), and options after a goto are never offered (it goes on at once). Either is a warning at the goto's line. |
 
 All together: `> [if has(the_book)] ! <<Take it.>> -> end {do: give(the_book), mood(+1)}`.
+
+**The parts go in that order**: `>`, then `[if ...]`, then `!` (or `!obsidian`), then the words, then `-> beat`, then `{do: ...}`. A Sense line is `Sense <school> [if ...]: <<words>>`, its `[if]` before the colon. Out of order, an `[if]`, `{do:` or `->` would land in the words and be shown, its meaning lost (`> ! [if purse>=5] <<Pay.>> -> pay` would always be offered), so the game refuses it: a load error at its file:line, spelling the right order.
 
 ### Schools
 
@@ -74,7 +76,7 @@ A special option may name the school of work it is, right after the `!` with no 
 
 Obsidian is the finished look; the other five are first looks.
 
-The box shows any number of options. Up to about four sit at the full step. More close up a little, and more than fit scroll with the choice, with a painted fade at the edge that has more beyond it. The number keys still pick by the option's place in the list (2 is always the second).
+The box shows any number of options. Up to about four sit at the full step. More close up a little, and more than fit scroll with the choice, with a painted fade at the edge that has more beyond it. The wheel stops at the first and the last option. The number keys still pick by the option's place in the list (2 is always the second).
 
 **The words are shown exactly as written.** No quotation marks are added round a spoken line: write “ ” into the text where you want them.
 
@@ -127,7 +129,7 @@ A line's cues act for that line, then the shade goes back to its resting state.
 A type is a trade, written by hand for that trade: a curandera can always do a limpia or sell copal; a bookseller can always be asked for a title or sell a book. A character with `type: curandera` gets:
 
 - every beat of the type file that their own file does not write. **Their own words win**: a beat of the same id in the character's file replaces the type's (the candle lane's curandera writes her own `limpia`; a nameless market curandera gets the type's);
-- the type's `>>` options added to each of their own openers, before the options that `-> end`, when their `[if]` holds;
+- the type's `>>` options added to each of their own openers, before the options that `-> end`, when their `[if]` holds. An opener of their own with no options that goes on by a goto (`-> menu`) keeps its goto: the type's options join the beat it leads to instead (once, however many openers lead there; none if it leads to `end`);
 - the type's `colour`, `voice` and `body` where their file gives none.
 
 **In a type file the speaker is `{name}`**: `{name} [flare]: <<...>>`. It is spoken by whoever is of the type, the character's `name` shown in its place (`{name}` in the words is replaced too). A literal name in a type file would show that name for every one of them.
@@ -159,14 +161,14 @@ Godot --headless --fixed-fps 60 --path . res://tests/talk_quest_test.tscn | grep
 
 The `name:` and the speaker before each line's colon are working names (`Curandera`, `Librarian`): change both together. The market curandera's name is `MARKET_CURANDERA` in `maps/candle_lane.gd`.
 
-A mistake in a file is reported with its file and line when the game starts (`dialogue: ...` errors and warnings) and by `talk_quest_test` (Q1): an unknown key, kind, cue, effect or term; a `-> beat` that does not exist; an item, goal, note, flag or character named that does not exist; a character with no opener without a `when:`; a `type:` with no type file. Warnings: a beat no opener reaches, a `take()` offered without `[if has()]`, a beat whose every option has an `[if]`.
+A mistake in a file is reported with its file and line when the game starts (`dialogue: ...` errors and warnings) and by `talk_quest_test` (Q1): an unknown key, kind, cue, effect or term; a `-> beat` that does not exist; an item, goal, note, flag or character named that does not exist; a character with no opener without a `when:`; a `type:` with no type file. An option or Sense line with its parts out of order (see the format). Warnings: a beat no opener reaches, a `take()` offered without `[if has()]`, a beat whose every option has an `[if]`, a beat with both options and a goto, and a lowercase speaker with plain words, which is probably a mistyped key (`wehn: not(met)` is read as a speaker called `wehn`; a speaker's line with a cue or still in `<<...>>` is not warned of).
 
 ## How the game uses them
 
 | Piece | What it does |
 | --- | --- |
 | The shade | [Shade](../../scripts/Interaction/Shade.gd), a `StaticBody3D` (prompt `Talk`): `character` names its file, or `type_id` and `display_name` a nameless one. Its body is the file's `body` in smoke of its `colour` ([talk_shade.gdshader](../../scripts/Visual/talk_shade.gdshader)); it turns to face the player, and its cues and resting state show in its light. |
-| The box | `E` on a shade opens [TalkBox](../../scripts/UI/TalkBox.gd) (`PlayerFrob.talk`, only with the hands free). `E` or a click tells a line out at once, the next goes on; options are picked with 1-4, the mouse, or the wheel and `E`; holding back walks away (`walked_off`). A blow, a death or leaving the district breaks it off, nothing remembered. The player stands still meanwhile and the HUD gives way. |
+| The box | `E` on a shade opens [TalkBox](../../scripts/UI/TalkBox.gd) (`PlayerFrob.talk`, only with the hands free). `E` or a click tells a line out at once, the next goes on; options are picked with 1-9 (the number row or the numpad), the mouse (point and click), or the wheel and `E`; holding back walks away (`walked_off`). A blow, a death or leaving the district breaks it off, nothing remembered. The player stands still meanwhile and the HUD gives way. |
 | The paintings | A character with paintings (`assets/ui/talk/<id>.json` committed, its pictures in `assets/ui/talk/<id>/` kept out of git) gets their own painted box ([TalkSkin](../../scripts/UI/TalkSkin.gd)): the curandera and the librarian. Anyone else, or a checkout without the pictures, gets the plain one. |
 | The belt | `give()` puts the item on the belt with its `name` and its `look`'s mesh; `take()` takes one off. |
 | The letter | Talk goals are listed after the job's, side goals under the rule; talk notes on the back after the job's ([LetterText](../../scripts/UI/LetterText.gd)). |
