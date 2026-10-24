@@ -12,9 +12,12 @@ const SHADE := preload("res://scripts/Visual/shade_cutout.gdshader")
 ## How many cells across the sheet is; how far a figure turns toward the eye (rad).
 const COLS := 4
 const TURN := deg_to_rad(55.0)
-## Its smoke's bands (Mignola's black, only its last edge a cold grey: the nahual's), and how high it climbs (m).
-const SMOKE := [Color(0.05, 0.05, 0.06), Color(0.04, 0.04, 0.05), Color(0.2, 0.23, 0.26)]
-const PLUME_RISE := 0.5
+## Its smoke's bands (a charcoal a little lighter than the nahual's black, its last edge a cold grey), how high it
+## climbs (m), how thick at its root, how eaten (more than the nahual's: gentle wisps, not plumes).
+const SMOKE := [Color(0.09, 0.09, 0.1), Color(0.07, 0.07, 0.08), Color(0.24, 0.26, 0.29)]
+const PLUME_RISE := 0.34
+const PLUME_WIDTH := 0.04
+const PLUME_EATEN := 0.42
 
 static var _meta: Dictionary = {}
 static var _sheet: Texture2D
@@ -64,33 +67,33 @@ static func make(pose: String, mirror := false) -> MeshInstance3D:
 	return person
 
 
-## Its smoke rising off its head and shoulders, the nahual's black tendrils (MeshVfx), trailing back from the way it
-## faces.
+## Its smoke rising gently off its head and a shoulder, thin wisps (MeshVfx tendrils, as the nahual's, but softer),
+## trailing back from the way it faces.
 static func _smoke(person: MeshInstance3D, entry: Dictionary, mirror: bool) -> void:
 	var side := -1.0 if mirror else 1.0
 	var height: float = entry["height_m"]
 	var head: Array = entry.get("head", [0.0, height - 0.15])
 	var shoulders: Array = entry.get("shoulders", [0.0, height - 0.35])
-	var roots := [Vector2(float(head[0]) * side, float(head[1]) + 0.08),
-		Vector2((float(shoulders[0]) + 0.1) * side, float(shoulders[1]) + 0.02),
-		Vector2((float(shoulders[0]) - 0.06) * side, float(shoulders[1]) - 0.02)]
+	var roots := [Vector2(float(head[0]) * side, float(head[1]) + 0.06),
+		Vector2((float(shoulders[0]) + 0.1) * side, float(shoulders[1]) + 0.02)]
 	for k in roots.size():
 		var root: Vector2 = roots[k]
 		var path := PackedVector3Array()
 		for i in 10:
 			var t := i / 9.0
-			# (Its figure faces -x as drawn: its smoke trails back, +x, and climbs.)
-			path.append(Vector3(root.x + side * (0.14 * t + 0.03 * sin(t * 5.0 + k)), root.y + PLUME_RISE * t,
-				0.025 * cos(t * 6.0 + k * 1.7)))
+			# (Its figure faces -x as drawn: its smoke drifts back, +x, and climbs, curling.)
+			# (Bending back as it rises, so it reads as smoke left behind, never a horn standing up.)
+			path.append(Vector3(root.x + side * (0.26 * t * t + 0.06 * t + 0.035 * sin(t * 4.0 + k)),
+				root.y + PLUME_RISE * (t - 0.3 * t * t), 0.04 * cos(t * 5.0 + k * 1.7)))
 		var smoke := MeshInstance3D.new()
 		smoke.name = "smoke_%d" % k
-		smoke.mesh = MeshVfx.tendril(path, 0.07 if k == 0 else 0.05)
-		var look := MeshVfx.look(SMOKE[0], SMOKE[1], SMOKE[2], 1.0, 0.22, 0.35, float(k) * 2.7 + float(head[1]) * 9.0)
+		smoke.mesh = MeshVfx.tendril(path, PLUME_WIDTH * (1.2 if k == 0 else 1.0))
+		var look := MeshVfx.look(SMOKE[0], SMOKE[1], SMOKE[2], 1.0, PLUME_EATEN, 0.3, float(k) * 2.7 + float(head[1]) * 9.0)
 		look.set_shader_parameter(&"tail_eat", 0.7)
 		look.set_shader_parameter(&"churn", 0.015)
 		look.set_shader_parameter(&"tiling", Vector2(0.8, 0.6))
 		look.set_shader_parameter(&"hardness", 0.03)
-		look.set_shader_parameter(&"rim", 6.0)
+		look.set_shader_parameter(&"rim", 3.0)
 		smoke.set_surface_override_material(0, look)
 		smoke.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		person.add_child(smoke)

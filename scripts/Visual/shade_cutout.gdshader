@@ -1,7 +1,8 @@
 // The candle lane's people as shades (scripts/Visual/Silhouette.gd): one flat figure of the sheet in Mignola's
 // ink, nothing drawn inside it, drawn as the nahual's spectre is (spectre.gdshader) but on a card. Its body is
 // solid ink; its outline frays into smoke that climbs it, cut hard, the last of each tongue a cold grey; its feet
-// are lost in a mist eating up from the floor. (Its smoke rising off it is Silhouette.gd's, the nahual's tendrils.)
+// are lost in a mist eating up from the floor. All of it gentler than the nahual: a deep charcoal, a softer fray.
+// (Its smoke rising off it is Silhouette.gd's wisps.)
 shader_type spatial;
 render_mode unshaded, cull_disabled, shadows_disabled;
 
@@ -9,16 +10,18 @@ render_mode unshaded, cull_disabled, shadows_disabled;
 uniform sampler2D sheet : filter_linear, repeat_disable;
 uniform vec2 cell_scale = vec2(0.25, 0.5);
 uniform vec2 cell_offset = vec2(0.0, 0.0);
-uniform vec4 ink : source_color = vec4(0.043, 0.039, 0.047, 1.0);
+uniform vec4 ink : source_color = vec4(0.07, 0.068, 0.078, 1.0);
 // The fraying's last edge, just before it is gone.
 uniform vec4 fray_colour : source_color = vec4(0.26, 0.3, 0.32, 1.0);
 uniform sampler3D noise : filter_linear, repeat_enable;
 // How far in from its outline it frays (of the cell's width), how fine its fraying is, how fast its smoke climbs.
-uniform float fray = 0.025;
+uniform float fray = 0.018;
+// How hard the smoke eats its outline (gentler than the nahual's).
+uniform float fray_amount = 1.1;
 uniform float grain = 3.0;
 uniform float rise = 0.25;
 // How much of its foot the mist takes (of the cell's height).
-uniform float hem = 0.08;
+uniform float hem = 0.055;
 // How much of it is here (1 whole; 0 gone to smoke).
 uniform float presence = 1.0;
 
@@ -49,7 +52,7 @@ void fragment() {
 	// Its body whole, only its outline eaten by the smoke (nothing of it where none of it is near); its foot eaten by
 	// the mist.
 	float by_it = smoothstep(0.05, 0.4, max(around, shape(uv)));
-	float solid = inner + (n - 0.5) * 1.6 * (1.0 - inner) * by_it - (1.0 - by_it);
+	float solid = inner + (n - 0.5) * fray_amount * (1.0 - inner) * by_it - (1.0 - by_it);
 	float low = smoothstep(1.0 - hem, 1.0, uv.y);
 	solid -= low * (0.4 + n * 0.9);
 	solid -= (1.0 - presence) * (1.4 + (n - 0.5) * 0.8);
