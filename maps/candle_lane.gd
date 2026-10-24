@@ -166,6 +166,8 @@ var pockets: Array[Dictionary] = []
 
 func _ready() -> void:
 	half_run = LANE_HALF
+	# (Set into the Metro: the map's player and light, none of the bay's own.)
+	embedded = not standalone
 	# The walk's order (plan x: the stall at 12.8 where the bay has it; her cart beside it toward the market; the niche
 	# near the mouth on the north wall, across from the bench, the nahual lying by the bench; the fire main's hydrant on
 	# the far wall clear of them all).
@@ -365,7 +367,7 @@ func plan_point(bay: Vector3) -> Vector3:
 ## half behind it), its backing wall cut across the front (the shopfront is solid itself).
 func _shop_front() -> void:
 	for panel: MeshInstance3D in wall_panels.duplicate():
-		var box := panel.global_transform * panel.get_aabb()
+		var box := panel.transform * panel.get_aabb()
 		if box.position.z > FAR_WALL - 0.05 and box.position.x >= SHOP_FRONT.x - 0.01 and box.end.x <= SHOP_FRONT.y + 0.01:
 			wall_panels.erase(panel)
 			panel.free()
@@ -388,7 +390,7 @@ func _east_end() -> void:
 	var lo := DOOR_Z - DOOR.x / 2.0
 	var hi := DOOR_Z + DOOR.x / 2.0
 	for panel: MeshInstance3D in wall_panels.duplicate():
-		var box := panel.global_transform * panel.get_aabb()
+		var box := panel.transform * panel.get_aabb()
 		if box.position.x > half_run - 0.05 and box.end.z > lo + 0.01 and box.position.z < hi - 0.01:
 			wall_panels.erase(panel)
 			panel.free()
@@ -409,7 +411,7 @@ func _east_end() -> void:
 ## The west end: open its whole width and height on the Pasaje.
 func _west_end() -> void:
 	for panel: MeshInstance3D in wall_panels.duplicate():
-		if (panel.global_transform * panel.get_aabb()).end.x < -half_run + 0.05:
+		if (panel.transform * panel.get_aabb()).end.x < -half_run + 0.05:
 			wall_panels.erase(panel)
 			panel.free()
 	var end := get_node_or_null("end_%d" % (-half_run - WALL_FACE - WALL))

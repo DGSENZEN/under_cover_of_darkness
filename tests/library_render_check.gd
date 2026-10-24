@@ -10,12 +10,17 @@ extends Node
 
 const SHOP := preload("res://maps/library_lab.tscn")
 const UNDER := preload("res://maps/underground_lab.tscn")
+const LANE := preload("res://maps/candle_lane.tscn")
 
 
 func _ready() -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	AudioServer.set_bus_mute(0, true)
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
+	if "--set" in OS.get_cmdline_user_args():
+		await _candle_lane()
+		get_tree().quit()
+		return
 
 	var shop: Node3D = SHOP.instantiate()
 	add_child(shop)
@@ -41,6 +46,24 @@ func _ready() -> void:
 	print("%s  the shop's frames take no more than 1.1 times the underground bay's, drawn   [%.2f vs %.2f ms]"
 		% ["PASS" if ours.x > 0.0 and theirs.x > 0.0 and ours.x <= 1.1 * theirs.x else "FAIL", ours.x, theirs.x])
 	get_tree().quit()
+
+
+## (-- --set) The candle lane set (maps/candle_lane.tscn, standalone: its crowd, pockets, shop and all) from three
+## eyes along it, against the underground bay from its three; reported, for the plan's Task 9.
+func _candle_lane() -> void:
+	var lane: Node3D = LANE.instantiate()
+	add_child(lane)
+	await _frames(60)
+	var ours: Vector2 = await _measure(lane, [Vector3(-12.0, 1.7, 1.1), Vector3(0.0, 1.7, 1.1), Vector3(12.0, 1.7, 1.1)])
+	lane.queue_free()
+	await _frames(10)
+	var under: Node3D = UNDER.instantiate()
+	add_child(under)
+	await _frames(5)
+	var at: Vector3 = under.player.global_position + Vector3.UP * 0.65
+	var theirs: Vector2 = await _measure(under, [at, at + Vector3(0.0, 0.0, -2.0), at + Vector3(2.0, 0.0, 0.0)])
+	print("render: candle lane frame %.2f ms CPU %.2f ms; underground bay frame %.2f ms CPU %.2f ms (%.2f times)"
+		% [ours.x, ours.y, theirs.x, theirs.y, ours.x / maxf(theirs.x, 0.001)])
 
 
 ## Median (frame, CPU render) time (ms) with an eye at each of `eyes`, looking four ways from each.

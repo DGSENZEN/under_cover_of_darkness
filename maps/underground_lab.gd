@@ -237,11 +237,16 @@ var _form := false
 ## Embedded rooms manage their own material overrides during inspection.
 var inspection_sections: Array[Node3D] = []
 var _work_on := true
+## Set into a larger map (maps/metro: the candle lane): its player is the map's (`host_player`), and the bay keeps
+## none of its own environment or key help (the map has its own). Set before _ready.
+var embedded := false
+var host_player: Node3D
 
 
 func _ready() -> void:
 	reset_physics_interpolation.call_deferred()
-	_environment()
+	if not embedded:
+		_environment()
 	_corridor()
 	_stall()
 	_lights()
@@ -252,11 +257,15 @@ func _ready() -> void:
 	_services()
 	_furnish()
 	_effects()
-	_keys()
-	player = PLAYER.instantiate()
-	player.debug_traversal = false
-	add_child(player)
-	player.global_position = Vector3(0.0, 1.05, 4.0)
+	if not embedded:
+		_keys()
+	if host_player != null:
+		player = host_player
+	else:
+		player = PLAYER.instantiate()
+		player.debug_traversal = false
+		add_child(player)
+		player.global_position = Vector3(0.0, 1.05, 4.0)
 	# (After the player: the uncanny shy from it, and watch it.)
 	_dark_train()
 	_animas()
@@ -558,7 +567,7 @@ func _bounce(lamp: OmniLight3D) -> void:
 	up.shadow_enabled = false
 	up.light_cull_mask = Layers.SHADED_ABOVE
 	lamp.add_child(up)
-	up.global_position = Vector3(lamp.global_position.x, 0.6, lamp.global_position.z)
+	up.position = Vector3(0.0, 0.6 - lamp.position.y, 0.0)
 	bounce_lights.append(up)
 
 
@@ -574,7 +583,7 @@ func _effects() -> void:
 	for light in work_lights:
 		var motes: Node3D = Vfx.system("dust")
 		add_child(motes)
-		motes.position = light.global_position - Vector3(0.0, 2.0, 0.0)
+		motes.position = light.position - Vector3(0.0, 2.0, 0.0)
 		Vfx.emit(motes, true)
 		dust.append(motes)
 
@@ -1051,7 +1060,7 @@ func _run_on() -> void:
 		var reach := Vector2(INF, -INF)
 		var plain: Array[MeshInstance3D] = []
 		for piece: MeshInstance3D in services:
-			var box := piece.global_transform * piece.get_aabb()
+			var box := piece.transform * piece.get_aabb()
 			if absf(piece.position.y - line[1]) < 0.01 and absf(piece.position.z - wall) < 0.01:
 				reach = Vector2(minf(reach.x, box.position.x), maxf(reach.y, box.end.x))
 				if String(piece.get_meta("kind", "")) == line[0]:
@@ -1069,8 +1078,8 @@ func _run_on() -> void:
 			if gap < size / 2.0:
 				var last: MeshInstance3D = null
 				for piece in plain:
-					var at := (piece.global_transform * piece.get_aabb()).get_center().x
-					if last == null or at * way > (last.global_transform * last.get_aabb()).get_center().x * way:
+					var at := (piece.transform * piece.get_aabb()).get_center().x
+					if last == null or at * way > (last.transform * last.get_aabb()).get_center().x * way:
 						last = piece
 				if last != null:
 					_stretch(last, gap, way)
@@ -1079,17 +1088,17 @@ func _run_on() -> void:
 			for k in count:
 				var piece := _hang(line[0], Vector3(from, line[1], wall), line[2])
 				piece.scale.x = gap / (count * size)
-				var box := piece.global_transform * piece.get_aabb()
+				var box := piece.transform * piece.get_aabb()
 				piece.position.x += from - (box.position.x if way > 0.0 else box.end.x)
 				from += way * box.size.x
 
 
 ## A run's last module drawn out `by` toward `way` (+1 or -1 along x), its inner end kept where it was.
 func _stretch(piece: MeshInstance3D, by: float, way: float) -> void:
-	var box := piece.global_transform * piece.get_aabb()
+	var box := piece.transform * piece.get_aabb()
 	var inner := box.position.x if way > 0.0 else box.end.x
 	piece.scale.x *= (box.size.x + by) / box.size.x
-	box = piece.global_transform * piece.get_aabb()
+	box = piece.transform * piece.get_aabb()
 	piece.position.x += inner - (box.position.x if way > 0.0 else box.end.x)
 
 
@@ -1309,9 +1318,11 @@ func _animas() -> void:
 		if FileAccess.file_exists(WICKS):
 			for list in (JSON.parse_string(FileAccess.get_file_as_string(WICKS)) as Dictionary).values():
 				for w in list:
-					lit.append(Vector3(w[0], w[1], w[2]))
+					# (Her stall's wicks are in the bay's frame: the souls go by the world's, wherever the bay stands.)
+					var wick := to_global(Vector3(w[0], w[1], w[2]))
+					lit.append(wick)
 					# (Reached from just in front of her shrine, into it.)
-					open.append(Vector3(0.0, SHRINE_LIFT, front + SHRINE_CLEAR - w[2]))
+					open.append(Vector3(0.0, SHRINE_LIFT, front + SHRINE_CLEAR - wick.z))
 		animas.candles = lit
 		animas.sides = open
 		# The way round her stall, from the drain behind it out to its front: past its corner.

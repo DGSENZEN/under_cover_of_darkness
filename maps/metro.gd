@@ -19,6 +19,9 @@ const LAMP_RANGE := 14.0
 const LAMP_HEIGHT := 2.6
 ## Labels are seen within this (m).
 const LABEL_RANGE := 30.0
+## The built sets standing in for their spaces' greybox: {set: [its scene, the spaces whose greybox it takes over]}.
+## Each is set in with standalone off (no stubs of its own; the map's player) at its PLAN_ORIGIN.
+const SETS := {"candle_lane": ["res://maps/candle_lane.tscn", ["candle_lane", "librarian_shop"]]}
 
 var plan: Dictionary
 var greybox: GreyboxLoader
@@ -31,7 +34,10 @@ var lamps: Array[OmniLight3D] = []
 func _ready() -> void:
 	reset_physics_interpolation.call_deferred()
 	plan = JSON.parse_string(FileAccess.get_file_as_string(PLAN))
-	greybox = GreyboxLoader.build(JSON.parse_string(FileAccess.get_file_as_string(GREYBOX)))
+	var taken := []
+	for set_name in SETS:
+		taken += SETS[set_name][1]
+	greybox = GreyboxLoader.build(JSON.parse_string(FileAccess.get_file_as_string(GREYBOX)), taken)
 	add_child(greybox)
 	_lights()
 	player = PLAYER.instantiate()
@@ -40,6 +46,18 @@ func _ready() -> void:
 	player.global_position = spawn_point() + Vector3(0, 1.05, 0)
 	# Facing the stairwell's door along the platform (west).
 	player.rotation.y = PI / 2
+	_sets()
+
+
+## The built sets in their places, the map's player theirs.
+func _sets() -> void:
+	for set_name in SETS:
+		var built: Node3D = (load(SETS[set_name][0]) as PackedScene).instantiate()
+		built.name = set_name
+		built.standalone = false
+		built.host_player = player
+		built.position = built.PLAN_ORIGIN
+		add_child(built)
 
 
 func _unhandled_input(event: InputEvent) -> void:

@@ -88,9 +88,65 @@ func _run() -> void:
 	# M5 the pixel grid is off (Track A's default)
 	_check("M5 the pixel grid is off", Retro.virtual_height == 0, "virtual_height %d" % Retro.virtual_height)
 
+	await _sets()
+
 	# M6 nothing reported an error
 	await _frames(2)
 	_check("M6 no engine errors", errors.lines.is_empty(), "%s" % [errors.lines.slice(0, 4)])
+
+
+## The candle lane set into the map (docs/superpowers/plans/2026-10-23-candle-lane.md, Task 9): in its place, the
+## greybox gone from its spaces only, no stub of its own, and walked through from the Pasaje to the shop's desk and on
+## through the chapel to lane_se, the floors level across both seams.
+func _sets() -> void:
+	var lane: Node3D = map.get_node_or_null("candle_lane")
+	var names: Array = map.greybox.get_children().map(func(n): return String(n.name))
+	var placed: bool = lane != null and lane.position.is_equal_approx(lane.PLAN_ORIGIN)
+	var replaced: bool = not names.any(func(n): return n.begins_with("candle_lane") or n.begins_with("librarian_shop")) \
+		and names.any(func(n): return n.begins_with("pasaje")) and names.any(func(n): return n.begins_with("chapel"))
+	_check("M7 the candle lane stands in its place, the greybox gone from its spaces and nowhere else",
+		placed and replaced, "placed %s at %s; greybox %s" % [placed, lane.position if lane else null,
+			names.filter(func(n): return n.contains("lane") or n.contains("shop") or n.contains("pasaje") or n.contains("chapel"))])
+
+	# No stub: its own Pasaje and chapel glimpse hidden; none of its building standing out into the map's Pasaje or
+	# chapel (its people and its smoke may walk there).
+	var stub: Node3D = lane.get("stub") if lane else null
+	var out_into := []
+	if lane != null:
+		for mesh: MeshInstance3D in lane.find_children("*", "MeshInstance3D", true, false):
+			if not mesh.is_visible_in_tree() or mesh.mesh == null:
+				continue
+			var moving: bool = lane.crowd_of_shades != null and lane.crowd_of_shades.is_ancestor_of(mesh)
+			var box: AABB = mesh.global_transform * mesh.get_aabb()
+			if moving or box.size.length() < 0.6:
+				continue
+			if box.position.x < -4.0 - 0.5 or box.end.x > 29.6 + 0.5:
+				out_into.append("%s %.1f..%.1f" % [mesh.name, box.position.x, box.end.x])
+	_check("M8 no stub inside the Metro: the set's own Pasaje and chapel hidden, none of its building out in the map's spaces",
+		stub != null and not stub.visible and out_into.is_empty(), "stub hidden %s; out %s" % [stub != null and not stub.visible, out_into.slice(0, 4)])
+
+	# Walked: the Pasaje into the lane, to his desk; back out and on through the chapel into lane_se.
+	var to_desk := await _tour([[-8.0, -11.0, 75.45], [-2.2, -11.0, 75.45], [17.8, -11.0, 74.85], [19.0, -11.0, 75.35],
+		[19.0, -11.0, 78.35], [19.0, -11.0, 81.35], [19.0, -11.0, 82.75]], true)
+	var through := await _tour([[19.0, -11.0, 82.75], [19.0, -11.0, 78.35], [19.0, -11.0, 75.35], [28.4, -11.0, 74.55],
+		[31.0, -11.0, 74.55], [44.0, -11.0, 72.5], [47.0, -11.0, 72.5]])
+	var in_se: bool = _rect("lane_se").has_point(Vector2(through["end"].x, through["end"].z))
+	# The floors either side of each seam (the mouth's, the chapel doorway's) level.
+	var seams := []
+	for seam in [[Vector3(-4.4, -10.0, 75.45), Vector3(-3.6, -10.0, 75.45)], [Vector3(29.4, -10.0, 74.55), Vector3(30.3, -10.0, 74.55)]]:
+		var a := _floor_below(seam[0])
+		var b := _floor_below(seam[1])
+		seams.append(absf(a - b))
+	_check("M9 the player walks from the Pasaje into the lane, to the shop's desk, and through the chapel into lane_se",
+		to_desk["ok"] and through["ok"] and in_se and seams.all(func(d): return d <= 0.01),
+		"desk %s through %s in lane_se %s seams %s" % [to_desk, through, in_se, seams])
+
+
+func _floor_below(at: Vector3) -> float:
+	var ray := PhysicsRayQueryParameters3D.create(at, at - Vector3(0.0, 3.0, 0.0))
+	ray.exclude = [map.player.get_rid()]
+	var hit := map.get_world_3d().direct_space_state.intersect_ray(ray)
+	return hit["position"].y if not hit.is_empty() else INF
 
 
 ## The player walked along waypoints from the first (put there once, at the
