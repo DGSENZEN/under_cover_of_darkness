@@ -18,7 +18,8 @@ signal line(speaker: String, text: String, cues: Array)
 signal sense(school: String, text: String)
 ## The talk holds its breath for this long.
 signal paused(seconds: float)
-## The player may choose: [{text, special}], in the order choose(i) counts.
+## The player may choose: [{text, special, school}], in the order choose(i)
+## counts (school: "" unless a special option names one, `> !obsidian`).
 signal options(list: Array)
 ## flare, dim, gutter, calm, nod or shake.
 signal cue(what: StringName)
@@ -225,7 +226,8 @@ func _offer() -> void:
 
 	_at = _body.size()
 	_waiting = true
-	options.emit(_offered.map(func(o): return {"text": _said(String(o["text"])), "special": bool(o["special"])}))
+	options.emit(_offered.map(func(o): return {"text": _said(String(o["text"])), "special": bool(o["special"]),
+		"school": String(o.get("school", ""))}))
 
 
 func _end(how: StringName) -> void:

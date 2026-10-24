@@ -34,6 +34,13 @@ extends Node3D
 ##        (no translucent band at the top)
 ##   B34  the view eases so the speaker's head stands just above the panel
 ##   B35  the box does not re-set its type sizes every frame
+##   B36  an obsidian option's swipe wears its school chosen and unchosen; a
+##        bare ! keeps the plain special look
+##   B37  a Sense obsidian line takes the school's ink and doubling
+##   B38  seven options: every one in view lies whole on the screen
+##   B39  the wheel to the seventh keeps the chosen in view; number keys pick
+##        by absolute place
+##   B40  four options keep draft 28's rows (318 + 50 i)
 ## The painted fixture skin is drawn by this suite into user://, so it runs
 ## the same with or without the user's paintings.
 ##   Godot --headless --fixed-fps 60 --path . res://tests/talk_skin_test.tscn
@@ -83,6 +90,8 @@ func _ready() -> void:
 	_data()
 	await _boxes()
 	await _functional()
+	await _schools()
+	await _many()
 	_real()
 	TalkSkin.root = _real_root
 	everything.listening = false
@@ -658,6 +667,243 @@ func _close(box: Node) -> void:
 		shade.queue_free()
 
 	await _frames(3)
+
+
+# ---------------------------------------------------------------------------
+# B36-B37: magic options and Sense lines wear their school
+# ---------------------------------------------------------------------------
+
+## A character `id` whose opener has a Sense obsidian line, a spoken line,
+## then an obsidian option, a bare ! one and a plain one.
+func _schooled(id: String) -> String:
+	return "\n".join(["== character %s" % id, "name: Fx", "body: duelist", "voice: female", "colour: copal",
+		"== beat open", "Fx: <<Look.>>", "Sense obsidian: <<The glass is cold.>>", "Fx: <<Choose.>>",
+		"> !obsidian <<Read the glass.>> -> end", "> ! <<Bleed for it.>> -> end", "> <<Leave.>> -> end"])
+
+
+## Each option's look now: [school uniform, warm, its ink, its doubling's alpha].
+func _option_looks(box: Node) -> Array:
+	var looks := []
+
+	for i in box._swipes.size():
+		var material: Material = box._swipes[i].material
+		var label: Label = box._option_labels[i]
+		looks.append([int(_num(material, &"school")), _flag(material, &"warm"), label.get_theme_color(&"font_color"),
+			label.get_theme_color(&"font_shadow_color").a])
+
+	return looks
+
+
+## The words' and the name's look now: [ink, doubling alpha, doubling offset, name ink].
+func _words_look(box: Node) -> Array:
+	var words: Label = box._words
+	return [words.get_theme_color(&"font_color"), words.get_theme_color(&"font_shadow_color").a,
+		Vector2(words.get_theme_constant(&"shadow_offset_x"), words.get_theme_constant(&"shadow_offset_y")),
+		(box._name as Label).get_theme_color(&"font_color")]
+
+
+func _schools() -> void:
+	DialogueBook.use(DialogueBook.check_alone({"fx_curandera.dialogue": _schooled("fx_curandera"),
+		"fx_plain.dialogue": _schooled("fx_plain")}))
+	CityState.begin()
+	CityState.people.load_state({})
+	TalkSkin.root = PAINTED
+	var player: CharacterBody3D = PLAYER.instantiate()
+	add_child(player)
+	player.reload_on_death = false
+	player.invulnerable = true
+	player.global_position = Vector3(0, 1.05, 0)
+	await _frames(10)
+	var obsidian: int = DialogueBook.SCHOOLS.find("obsidian") + 1
+	var look: Dictionary = TalkBox.SCHOOL_LOOK.get("obsidian", {})
+	var b36: Array[String] = []
+	var b37: Array[String] = []
+
+	for id in ["fx_curandera", "fx_plain"]:
+		var box: Node = await _open(player, id)
+
+		if box == null:
+			b36.append("%s: no box" % id)
+			b37.append("%s: no box" % id)
+			continue
+
+		var painted: bool = box.skin.backdrop != null
+		var tries := 0
+
+		while box._kind != &"sense" and tries < 10:
+			box.press_advance()
+			await _frames(12)
+			tries += 1
+
+		var sense := _words_look(box)
+
+		while box._kind != &"line" and tries < 20:
+			box.press_advance()
+			await _frames(12)
+			tries += 1
+
+		var spoken := _words_look(box)
+		await _to_options(box)
+		var first := _option_looks(box)
+		box.choose_by_pointing(1)
+		await _frames(3)
+		var second := _option_looks(box)
+		var where := "%s (%s)" % [id, "painted" if painted else "plain"]
+
+		# Unchosen: dim, its own ink; chosen: its own chosen treatment (not the
+		# gold wash's dark ink) and still clearly the chosen one (warm set).
+		var ok_36: bool = (first.size() == 3 and second.size() == 3 and painted == (id == "fx_curandera")
+			and first[0][0] == obsidian and first[0][1] == true and first[0][2] == look.get("chosen") and first[0][3] > 0.0
+			and second[0][0] == obsidian and second[0][1] == false and second[0][2] == look.get("ink") and second[0][3] > 0.0
+			and first[1][0] == 0 and first[1][2] == TalkBox.COCHINEAL and first[1][3] == 0.0
+			and second[1][0] == 0 and second[1][1] == true and second[1][2] == TalkBox.DARK_INK and second[1][3] == 0.0
+			and first[2][0] == 0 and first[2][2] == TalkBox.MARIGOLD and first[2][3] == 0.0)
+
+		if not ok_36:
+			b36.append("%s: chosen first %s, then the bare ! %s" % [where, first, second])
+
+		var ok_37: bool = (sense[0] == look.get("ink") and sense[1] > 0.0 and sense[2] != Vector2.ZERO and sense[3] == look.get("ink")
+			and spoken[0] == TalkBox.CREAM and spoken[1] == 0.0 and spoken[3] == TalkBox.MARIGOLD)
+
+		if not ok_37:
+			b37.append("%s: sense %s, the spoken line after %s" % [where, sense, spoken])
+
+		await _close(box)
+
+	_check("B36 an obsidian option's swipe wears its school chosen and unchosen, on the painted and the plain box; a bare ! keeps the plain special look",
+		b36.is_empty(), "; ".join(b36) if not b36.is_empty() else "obsidian swipes school %d both ways, cold ink doubled; bare ! cochineal, gold when chosen" % obsidian)
+	_check("B37 a Sense obsidian line takes the school's ink and doubling; the next spoken line is plain again",
+		b37.is_empty(), "; ".join(b37) if not b37.is_empty() else "both boxes")
+	player.queue_free()
+	await _frames(2)
+	TalkSkin.root = _real_root
+	DialogueBook.reload()
+
+
+# ---------------------------------------------------------------------------
+# B38-B40: any number of options
+# ---------------------------------------------------------------------------
+
+## A character `id` whose opener offers `count` options, each setting its own
+## flag (o1, o2, ...) and ending.
+func _offering(id: String, count: int) -> String:
+	var lines := ["== character %s" % id, "name: Fx", "body: duelist", "voice: female", "colour: copal", "== beat open", "Fx: <<Choose.>>"]
+
+	for i in count:
+		lines.append("> <<Option number %d.>> -> end {do: set(o%d)}" % [i + 1, i + 1])
+
+	return "\n".join(lines)
+
+
+## Whether every option in view lies whole on `screen` (its words and its
+## swipe), and every other one is hidden; what is wrong, else "".
+func _rows_off(box: Node, screen: Vector2) -> String:
+	box._layout(screen)
+	var rects: Dictionary = box.layout_rects()
+	var in_view: Array = box.options_in_view()
+	var whole := Rect2(Vector2.ZERO, screen)
+	var off: Array[String] = []
+
+	for i in box._swipes.size():
+		var shown: bool = box._swipes[i].visible and box._option_labels[i].visible
+
+		if shown != in_view.has(i):
+			off.append("row %d shown %s, in view %s" % [i, shown, in_view.has(i)])
+
+		if in_view.has(i) and not (whole.encloses(rects["option %d" % i]) and whole.encloses(rects["swipe %d" % i])):
+			off.append("row %d at %s / %s" % [i, rects["option %d" % i], rects["swipe %d" % i]])
+
+	return "; ".join(off)
+
+
+func _many() -> void:
+	DialogueBook.use(DialogueBook.check_alone({"fx_curandera.dialogue": _offering("fx_curandera", 7),
+		"fx_plain.dialogue": _offering("fx_plain", 7), "fx_four.dialogue": _offering("fx_four", 4)}))
+	CityState.begin()
+	CityState.people.load_state({})
+	TalkSkin.root = PAINTED
+	var player: CharacterBody3D = PLAYER.instantiate()
+	add_child(player)
+	player.reload_on_death = false
+	player.invulnerable = true
+	player.global_position = Vector3(0, 1.05, 0)
+	await _frames(10)
+	var big := Vector2(1920, 1080)
+	var b38: Array[String] = []
+	var b39: Array[String] = []
+
+	for id in ["fx_curandera", "fx_plain"]:
+		var box: Node = await _open(player, id)
+
+		if box == null:
+			b38.append("%s: no box" % id)
+			continue
+
+		await _to_options(box)
+		var where := "%s (%s)" % [id, "painted" if box.skin.backdrop != null else "plain"]
+		var off := _rows_off(box, big)
+		var seen: Array = box.options_in_view()
+
+		if box.shown_options().size() != 7 or off != "" or seen.size() >= 7 or seen.is_empty() or not box._fade_bottom.visible \
+				or box._fade_top.visible or _rows_off(box, Vector2(1280, 720)) != "":
+			b38.append("%s: %d options, in view %s, %s, fades %s/%s" % [where, box.shown_options().size(), seen, off,
+				box._fade_top.visible, box._fade_bottom.visible])
+
+		# The wheel down to the last: the chosen one always whole in view.
+		var lost: Array[String] = []
+
+		for i in range(1, 7):
+			var wheel := InputEventMouseButton.new()
+			wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+			wheel.pressed = true
+			Input.parse_input_event(wheel)
+			Input.flush_buffered_events()
+			await _frames(2)
+			var row_off := _rows_off(box, big)
+
+			if box._choice != i or not box.options_in_view().has(i) or row_off != "":
+				lost.append("at %d: choice %d, in view %s %s" % [i, box._choice, box.options_in_view(), row_off])
+
+		var top_fade: bool = box._fade_top.visible and not box._fade_bottom.visible
+		# Scrolled to the end, a number key still picks by its own place: 2 is the second.
+		await _key(KEY_2)
+		await _frames(3)
+		var picked: bool = CityState.people.holds("said(o2)", id) and not CityState.people.holds("said(o7)", id)
+
+		if not lost.is_empty() or not top_fade or not picked:
+			b39.append("%s: %s, fades top only %s, key 2 picked o2 %s" % [where, "; ".join(lost), top_fade, picked])
+
+		await _close(box)
+
+	# Four options sit as draft 28 has them: 318 + 50 i under the panel's top.
+	var four: Node = await _open(player, "fx_four")
+	var b40 := "no box"
+	var b40_ok := false
+
+	if four != null:
+		await _to_options(four)
+		four._layout(big)
+		var rects: Dictionary = four.layout_rects()
+		var top: float = (rects["panel"] as Rect2).position.y
+		var ys := []
+
+		for i in 4:
+			ys.append(snappedf((rects["option %d" % i] as Rect2).position.y - top, 0.1))
+
+		b40_ok = ys == [318.0, 368.0, 418.0, 468.0] and four.options_in_view() == [0, 1, 2, 3] and not four._fade_top.visible \
+			and not four._fade_bottom.visible and is_equal_approx((rects["swipe 1"] as Rect2).size.y, 42.0)
+		b40 = "rows at %s, in view %s, swipe 1 %s" % [ys, four.options_in_view(), rects["swipe 1"]]
+		await _close(four)
+
+	_check("B38 seven options at 1080p (and 720p): every option in view lies whole on the screen, the rest hidden, a fade under the list",
+		b38.is_empty(), "; ".join(b38) if not b38.is_empty() else "painted and plain")
+	_check("B39 the wheel to the seventh keeps the chosen option whole in view (the list scrolls, the fade moves over it); a number key still picks by its own place",
+		b39.is_empty(), "; ".join(b39) if not b39.is_empty() else "painted and plain")
+	_check("B40 four options keep draft 28's rows, 318 + 50 i, no fades", b40_ok, b40)
+	player.queue_free()
+	await _frames(2)
+	TalkSkin.root = _real_root
+	DialogueBook.reload()
 
 
 # ---------------------------------------------------------------------------

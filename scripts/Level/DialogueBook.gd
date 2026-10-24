@@ -12,7 +12,10 @@ extends RefCounted
 ##   > [if has(x)] ! <<Take it.>> -> end {do: give(x), mood(+1)}
 ##                                        an option: [if] shown only when it
 ##                                        holds, ! drawn red, {do:} its effects
-##   >> <<Ask for copal.>> -> copal       a type's option, added to every opener
+##   > !obsidian <<Read the glass.>> -> end
+##                                        a special option of a school (SCHOOLS),
+##                                        drawn in that school's look
+##   >><<Ask for copal.>> -> copal       a type's option, added to every opener
 ##   -> next                              the beat that follows, no options
 ##
 ## A line outside a beat's keys is a body line. A text still in <<...>> is a
@@ -42,6 +45,10 @@ const GOAL_KINDS := ["main", "side"]
 const VOICES := ["male", "male_b", "female"]
 ## The cues a spoken line may carry: the shade's states, then the head.
 const CUES := [&"flare", &"dim", &"gutter", &"calm", &"nod", &"shake"]
+## The schools of the work a special option or a Sense line may belong to
+## (the spec's "Magic options get their school's shader"): `> !obsidian`,
+## `Sense copal:`. The box draws each in its own look (TalkBox.SCHOOL_LOOK).
+const SCHOOLS := ["obsidian", "copal", "seance", "nahual", "lumen", "relic"]
 ## The block that ends a conversation, as an option's or a goto's target.
 const END := "end"
 
@@ -50,7 +57,7 @@ const NAME := "{name}"
 const _SAY := "^(?<speaker>\\{name\\}|[\\p{L}' .-]+?)\\s*(?<cues>(\\[[a-z]+\\]\\s*)*):\\s*(?<text>.+)$"
 const _SENSE := "^Sense (?<school>[a-z]+)\\s*(\\[if (?<if>[^\\]]+)\\])?\\s*:\\s*(?<text>.+)$"
 const _PAUSE := "^\\[pause (?<s>[0-9.]+)\\]$"
-const _OPTION := "^(?<m>>>?)\\s*(\\[if (?<if>[^\\]]+)\\])?\\s*(?<sp>!)?\\s*(?<text>.+?)\\s*->\\s*(?<to>[A-Za-z0-9_]+)\\s*(\\{do:\\s*(?<do>.*)\\})?$"
+const _OPTION := "^(?<m>>>?)\\s*(\\[if (?<if>[^\\]]+)\\])?\\s*(?<sp>!(?<school>[A-Za-z]+)?)?\\s*(?<text>.+?)\\s*->\\s*(?<to>[A-Za-z0-9_]+)\\s*(\\{do:\\s*(?<do>.*)\\})?$"
 const _GOTO := "^->\\s*(?<to>[A-Za-z0-9_]+)$"
 
 static var _patterns := {}
@@ -395,6 +402,9 @@ static func _body_line(line: String, at: String, body: Array, warnings: Array) -
 			var cond := found.get_string("if")
 			var problem := Terms.condition_error(cond, true) if cond != "" else ""
 
+			if problem == "":
+				problem = school_error(found.get_string("school"))
+
 			if problem != "":
 				return problem
 
@@ -429,6 +439,14 @@ static func _body_line(line: String, at: String, body: Array, warnings: Array) -
 	return ""
 
 
+## "" if `school` is one of SCHOOLS (or "": a bare !), else what is wrong.
+static func school_error(school: String) -> String:
+	if school == "" or SCHOOLS.has(school):
+		return ""
+
+	return "no such school '%s' (%s; a bare ! is plain red)" % [school, ", ".join(SCHOOLS)]
+
+
 static func _option(line: String, at: String, body: Array) -> String:
 	var found := _pattern(_OPTION).search(line)
 
@@ -437,6 +455,9 @@ static func _option(line: String, at: String, body: Array) -> String:
 
 	var cond := found.get_string("if")
 	var problem := Terms.condition_error(cond, true) if cond != "" else ""
+
+	if problem == "":
+		problem = school_error(found.get_string("school"))
 
 	if problem != "":
 		return problem
@@ -453,8 +474,8 @@ static func _option(line: String, at: String, body: Array) -> String:
 		for effect in Terms.split_top(done):
 			effects.append(String(effect))
 
-	body.append({"type": "option", "type_only": found.get_string("m") == ">>", "if": cond, "special": found.get_string("sp") == "!",
-		"text": found.get_string("text"), "to": found.get_string("to"), "do": effects, "source": at})
+	body.append({"type": "option", "type_only": found.get_string("m") == ">>", "if": cond, "special": found.get_start("sp") >= 0,
+		"school": found.get_string("school"), "text": found.get_string("text"), "to": found.get_string("to"), "do": effects, "source": at})
 	return ""
 
 

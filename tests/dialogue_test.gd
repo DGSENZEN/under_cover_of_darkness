@@ -1,8 +1,9 @@
 extends Node3D
 ## The character dialogue files (the talk and quests spec, section 1): the
-## .dialogue parser (D1-D4, D16-D17), the words conditions and effects share
-## (D5), the library with its types and link checks (D6-D15, D18-D19), what
-## people remember (P1-P8), the conversation runner (C1-C11), the shade
+## .dialogue parser (D1-D4, D16-D17, D22 the schools), the words conditions
+## and effects share (D5), the library with its types and link checks
+## (D6-D15, D18-D21), what people remember (P1-P8), the conversation runner
+## (C1-C12, C12 the options' schools), the shade
 ## who speaks it (S1-S8) and the talk box the player reads it in (B1-B7,
 ## B9-B10 its draft-28 layout, B13-B15 the HUD and the letter around it,
 ## B16 its paint going on and off).
@@ -364,6 +365,27 @@ func _edges() -> void:
 		twice.size() == 1 and String(twice[0]).begins_with("a.dialogue:4: ") and String(twice[0]).contains("the beat 'open' is there twice")
 		and String(twice[0]).contains("a.dialogue:2") and other.size() == 1 and String(other[0]).begins_with("types/t.dialogue:3: "),
 		"errors %s, in a type %s" % [twice, other])
+
+	# D22: a special option may name its school (!obsidian), a bare ! names
+	# none; a school not in the list is an error at its line, on an option or
+	# a Sense line.
+	var schooled: Dictionary = DialogueBook.parse("\n".join(["== beat open", "A: <<x>>", "> !obsidian <<x>> -> end",
+		"> [if has(bk)] !copal <<y>> -> end {do: mood(+1)}", "> ! <<z>> -> end", "> <<w>> -> end"]), "t.dialogue")
+	var opts: Array = (_entry(schooled, "beat", "open").get("body", []) as Array).filter(func(l): return l["type"] == "option")
+	var schools: Array = opts.map(func(o): return [o.get("special"), o.get("school"), o.get("text")])
+	var lava: Array = DialogueBook.parse("== beat open\nA: <<x>>\n> !lava <<x>> -> end", "t.dialogue")["errors"]
+	var capital: Array = DialogueBook.parse("== beat open\n> !Obsidian <<x>> -> end", "t.dialogue")["errors"]
+	var sense_lava: Array = DialogueBook.parse("== beat open\nA: <<x>>\nA: <<y>>\nSense lava: <<x>>", "t.dialogue")["errors"]
+	var every: Array = DialogueBook.SCHOOLS.filter(func(s):
+		return (DialogueBook.parse("== beat open\nSense %s: <<x>>\n> !%s <<x>> -> end" % [s, s], "t.dialogue")["errors"] as Array).is_empty())
+	_check("D22 > !obsidian is special with school obsidian, a bare ! has none; an unknown school is an error at file:line",
+		(schooled["errors"] as Array).is_empty()
+		and schools == [[true, "obsidian", "<<x>>"], [true, "copal", "<<y>>"], [true, "", "<<z>>"], [false, "", "<<w>>"]]
+		and lava.size() == 1 and String(lava[0]).begins_with("t.dialogue:3: ") and String(lava[0]).contains("lava")
+		and capital.size() == 1 and String(capital[0]).begins_with("t.dialogue:2: ")
+		and sense_lava.size() == 1 and String(sense_lava[0]).begins_with("t.dialogue:4: ") and String(sense_lava[0]).contains("lava")
+		and every == ["obsidian", "copal", "seance", "nahual", "lumen", "relic"],
+		"schools %s, errors %s, lava %s, capital %s, sense %s, every %s" % [schools, schooled["errors"], lava, capital, sense_lava, every])
 
 
 # ---------------------------------------------------------------------------
@@ -739,7 +761,7 @@ func _conversation() -> void:
 	var only_one: Array = none[1]["options"][0]
 	none[0].choose(0)
 	_check("C9 all options filtered: a single ending option appears",
-		only_one == [{"text": "<<…>>", "special": false}] and none[1]["ended"] == [&"end"] and none[0].is_over(),
+		only_one == [{"text": "<<…>>", "special": false, "school": ""}] and none[1]["ended"] == [&"end"] and none[0].is_over(),
 		"options %s, ended %s" % [only_one, none[1]["ended"]])
 
 	_only(["== character a", "== item bk", "name: Bk", "== beat open", "A: <<x>>", "> <<take it>> -> end {do: take(bk), charge(5)}"])
@@ -776,6 +798,17 @@ func _conversation() -> void:
 		type_heard["lines"][0][1] == "<<I am Stand-in.>>" and stranger.met == [String(stand["id"])]
 		and _heard_options(type_heard) == ["<<Ask for a cleansing.>>", "<<Leave.>>"],
 		"line '%s', met %s" % [type_heard["lines"], stranger.met])
+
+	_only(["== character a", "== beat open", "A: <<x>>", "Sense nahual: <<a scent>>", "> !obsidian <<Cut.>> -> end",
+		"> ! <<Red.>> -> end", "> <<Plain.>> -> end"])
+	var schooled := _visit("a", PeopleState.new(), inventory)
+	var schooled_heard: Dictionary = schooled[1]
+	var offered: Array = schooled_heard["options"][0] if not (schooled_heard["options"] as Array).is_empty() else []
+	var carried: Array = offered.map(func(o): return [o.get("text"), o.get("special"), o.get("school")])
+	_check("C12 the options signal carries each option's school (\"\" for a bare ! and a plain one), the sense its own",
+		carried == [["<<Cut.>>", true, "obsidian"], ["<<Red.>>", true, ""], ["<<Plain.>>", false, ""]]
+		and schooled_heard["senses"] == [["nahual", "<<a scent>>"]],
+		"options %s, senses %s" % [carried, schooled_heard["senses"]])
 	# The job and the people hold each other: let go, or neither is ever freed.
 	job.people = null
 	opening.job = null

@@ -25,7 +25,7 @@ voice: female                          male, male_b or female
 when: not(met)                         (openers only) played when this holds
 intent: she reads him before he speaks for the writer; never shown in the game
 Curandera [flare]: <<She reads you.>>  a spoken line: the speaker, its cues, the words
-Sense obsidian: <<The obsidian...>>    an inner voice, drawn red
+Sense obsidian: <<The obsidian...>>    an inner voice, in its school's look
 [pause 1.2]                            a held silence (s)
 > <<Ask what she wants.>> -> asks      an option, and the beat it leads to
 > <<Leave.>> -> end                    -> end closes the conversation
@@ -49,14 +49,32 @@ Curandera: <<Bring me the book.>>
 | Line | What it is |
 | --- | --- |
 | `Name [cue] [cue]: <<words>>` | A spoken line. The name before the colon is shown over it; the cues are optional. |
-| `Sense obsidian [if <condition>]: <<words>>` | An inner voice, drawn cochineal red in the box; with an `[if]`, heard only when it holds. |
+| `Sense obsidian [if <condition>]: <<words>>` | An inner voice, drawn in its school's ink with that school's faint doubling (see Schools); with an `[if]`, heard only when it holds. |
 | `[pause 1.2]` | A held silence, in seconds. |
 | `> <<words>> -> beat` | An option. `-> end` closes the conversation. `[if <condition>]` after the `>`: offered only when it holds (left out, never greyed). `{do: <effects>}` at its end: run when picked. |
-| `> ! <<words>> -> beat` | A **special** option, drawn red: the player's own uncanny way through. (A bare `!` for now; a school, `!obsidian`, comes with its shader.) |
+| `> ! <<words>> -> beat` | A **special** option, drawn red: the player's own uncanny way through. |
+| `> !obsidian <<words>> -> beat` | A special option of a **school**: its swipe and words wear that school's look instead of the red (see Schools). |
 | `>> <<words>> -> beat` | In a type file's opener: an option every character of the type is offered (see Types). |
 | `-> beat` | Alone on a line, after the lines: the beat that follows when there are no options. A beat with neither ends the talk. |
 
 All together: `> [if has(the_book)] ! <<Take it.>> -> end {do: give(the_book), mood(+1)}`.
+
+### Schools
+
+A special option may name the school of work it is, right after the `!` with no space: `> !obsidian <<Read the glass.>> -> end`. A `Sense <school>:` line names one too. The box then draws it in that school's look, chosen or not, in place of the plain red. A bare `!` stays the plain red. A school not in this list is a load error at its file:line.
+
+| School | Its look in the box |
+| --- | --- |
+| `obsidian` | A black volcanic-glass swipe with fine fracture lines and a cold glint sliding across it. The words are cold, with a faint second print beside them, like a reflection in the glass. Chosen, the glint comes quicker and a thin cold rim lights the stroke. |
+| `copal` | Amber-grey resin smoke drifting through the swipe. |
+| `seance` | A pale ghost-light pulsing from the middle. |
+| `nahual` | Three claw strokes raked through it. |
+| `lumen` | A blue-white arc flickering along it. |
+| `relic` | Gilt leaf laid in flakes, a slow sheen over them. |
+
+Obsidian is the finished look; the other five are first looks.
+
+The box shows any number of options. Up to about four sit at the full step. More close up a little, and more than fit scroll with the choice, with a painted fade at the edge that has more beyond it. The number keys still pick by the option's place in the list (2 is always the second).
 
 **The words are shown exactly as written.** No quotation marks are added round a spoken line: write “ ” into the text where you want them.
 

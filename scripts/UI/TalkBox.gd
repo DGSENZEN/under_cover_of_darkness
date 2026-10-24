@@ -11,7 +11,10 @@ extends CanvasLayer
 ##     cream told out a few letters at a time (an inner voice, Sense obsidian,
 ##     in cochineal), then the options, each in its own painted brush swipe
 ##     (talk_swipe.gdshader); the chosen one warm gold with dark ink and the
-##     marker at its end; picked with 1-4, the mouse, or the wheel and E.
+##     marker at its end; picked with 1-9, the mouse, or the wheel and E.
+##     A special option of a school (`> !obsidian`) and a Sense line wear the
+##     school's look (SCHOOL_LOOK). More options than fit close up, then
+##     scroll with the choice, a painted fade at each edge with more beyond.
 ##   - The look comes from a TalkSkin: the character's own paintings where
 ##     the user painted them (assets/ui/talk/<character>), else the plain one
 ##     (a backdrop painted from noise, the live render of the shade's head, a
@@ -30,10 +33,12 @@ extends CanvasLayer
 ## are the same for every look.
 
 const Conversation := preload("res://scripts/Interaction/Conversation.gd")
+const DialogueBook := preload("res://scripts/Level/DialogueBook.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const TalkSkin := preload("res://scripts/UI/TalkSkin.gd")
 const PAINT := preload("res://scripts/UI/talk_paint.gdshader")
 const SWIPE := preload("res://scripts/UI/talk_swipe.gdshader")
+const FADE := preload("res://scripts/UI/talk_fade.gdshader")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 
 ## The box has closed (the talk is over, or broken off).
@@ -54,6 +59,27 @@ const CREAM := Color8(236, 228, 210)
 ## The words on the chosen gold swipe.
 const DARK_INK := Color8(20, 14, 20)
 const SHADOW := Color8(2, 3, 8)
+## A special option of a school (`> !obsidian`) and a `Sense <school>:` line
+## wear its look (the spec's "Magic options get their school's shader"): the
+## swipe paints itself in the school's work (talk_swipe.gdshader's `school`,
+## talk_school.gdshaderinc), and the words take its ink (`chosen` on its
+## chosen swipe, never the gold wash's dark ink) and a faint doubling, a
+## second print of the words `offset` px away (at 1080p) in `double`, as a
+## reflection in black glass, smoke rising, a ghost beside them.
+const SCHOOL_LOOK := {
+	"obsidian": {"ink": Color(0.71, 0.77, 0.86), "chosen": Color(0.9, 0.95, 1.0), "double": Color(0.62, 0.76, 1.0, 0.26),
+		"offset": Vector2(2.0, 2.0)},
+	"copal": {"ink": Color(0.93, 0.74, 0.5), "chosen": Color(1.0, 0.86, 0.62), "double": Color(0.8, 0.62, 0.42, 0.22),
+		"offset": Vector2(1.0, -2.0)},
+	"seance": {"ink": Color(0.8, 0.88, 0.84), "chosen": Color(0.92, 1.0, 0.96), "double": Color(0.78, 0.92, 0.88, 0.22),
+		"offset": Vector2(3.0, 0.0)},
+	"nahual": {"ink": Color(0.86, 0.63, 0.47), "chosen": Color(0.98, 0.78, 0.6), "double": Color(0.6, 0.18, 0.12, 0.35),
+		"offset": Vector2(2.0, 1.0)},
+	"lumen": {"ink": Color(0.76, 0.86, 1.0), "chosen": Color(0.9, 0.96, 1.0), "double": Color(0.5, 0.7, 1.0, 0.3),
+		"offset": Vector2(1.0, -1.0)},
+	"relic": {"ink": Color(0.95, 0.81, 0.5), "chosen": Color(1.0, 0.9, 0.62), "double": Color(0.12, 0.08, 0.03, 0.5),
+		"offset": Vector2(1.0, 2.0)},
+}
 
 ## Draft 28's layout, in px at 1920 x 1080 (everything scales with the
 ## screen's height): the panel's width, how far its top stands below
@@ -72,6 +98,14 @@ const LINE_STEP := 38.0
 const LINE_WIDE := 560.0
 const OPTIONS_AT := 318.0
 const OPTION_STEP := 50.0
+## More options than fit at OPTION_STEP above the screen's foot (less
+## OPTIONS_MARGIN) close up, down to OPTION_STEP_LEAST, their swipes as much
+## thinner (the words keep their size); more still than fit at that scroll,
+## the chosen one always in view, a painted fade at each edge with more
+## beyond it (FADE_TALL).
+const OPTION_STEP_LEAST := 38.0
+const OPTIONS_MARGIN := 24.0
+const FADE_TALL := 20.0
 ## The options' column: the longest option plus this; the words stand this
 ## far into their swipe; the marker's width.
 const COLUMN_MORE := 70.0
@@ -171,6 +205,19 @@ var _name: Label
 var _words: Label
 var _swipes: Array[TextureRect] = []
 var _option_labels: Array[Label] = []
+## The first option in view and how many are (all of them unless they
+## scroll); the mouse where it was when the list last scrolled (a row
+## scrolled under a still mouse is not pointed at).
+var _scroll := 0
+var _in_view := 0
+var _scroll_mouse := Vector2(-1e9, -1e9)
+## The painted fades over the options' clipped edges (more above, more below).
+var _fade_top: TextureRect
+var _fade_bottom: TextureRect
+## The school the line's words wear ("" a spoken line).
+var _words_school := ""
+## Paused: the words and the options are hidden under the pause screen.
+var _paused_words := false
 ## The layout last placed (plan()).
 var _plan := {}
 
@@ -293,9 +340,32 @@ func _notification(what: int) -> void:
 
 
 func _show_words(on: bool) -> void:
-	for node in [_name, _words] + _swipes + _option_labels:
+	_paused_words = not on
+
+	for node in [_name, _words]:
 		if node != null and is_instance_valid(node):
 			(node as CanvasItem).visible = on
+
+	_show_rows()
+
+
+## Each option's swipe and words shown while it is in view (and not paused),
+## each fade while there is more beyond its edge.
+func _show_rows() -> void:
+	for i in _swipes.size():
+		var shown := not _paused_words and i >= _scroll and i < _scroll + _in_view
+
+		if is_instance_valid(_swipes[i]):
+			_swipes[i].visible = shown
+
+		if i < _option_labels.size() and is_instance_valid(_option_labels[i]):
+			_option_labels[i].visible = shown
+
+	if is_instance_valid(_fade_top):
+		_fade_top.visible = not _paused_words and _scroll > 0
+
+	if is_instance_valid(_fade_bottom):
+		_fade_bottom.visible = not _paused_words and _scroll + _in_view < _swipes.size()
 
 
 func _exit_tree() -> void:
@@ -386,6 +456,27 @@ func choose_by_pointing(index: int) -> void:
 	_choice = index
 	_swipe_reveal[index] = 0.0
 	_style_options()
+	# The list scrolls at once to keep it in view (not a frame later).
+	_layout(_screen())
+
+
+## The mouse came over option `index`'s swipe: chosen, unless the list just
+## scrolled it under a mouse that has not moved since.
+func _on_hover(index: int) -> void:
+	if get_viewport() != null and get_viewport().get_mouse_position() == _scroll_mouse:
+		return
+
+	choose_by_pointing(index)
+
+
+## The options in view now, by their index (all of them unless they scroll).
+func options_in_view() -> Array[int]:
+	var out: Array[int] = []
+
+	for i in range(_scroll, mini(_scroll + _in_view, _options.size())):
+		out.append(i)
+
+	return out
 
 
 func _go_on() -> void:
@@ -415,10 +506,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	match button.button_index:
 		MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
-			if _kind == &"options" and not _options.is_empty():
-				var step := -1 if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1
-				choose_by_pointing(posmod(_choice + step, _options.size()))
-
+			_wheel(button)
 			get_viewport().set_input_as_handled()
 		MOUSE_BUTTON_LEFT:
 			# On the options a click picks the one under it (its own input).
@@ -426,6 +514,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				press_advance()
 
 			get_viewport().set_input_as_handled()
+
+
+## The wheel moves the choice a row (round at the ends); the list scrolls with it.
+func _wheel(button: InputEventMouseButton) -> void:
+	if _kind == &"options" and not _options.is_empty():
+		var step := -1 if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1
+		choose_by_pointing(posmod(_choice + step, _options.size()))
 
 
 ## The number 1-9 a key is, by its physical key (the number row or the
@@ -653,9 +748,12 @@ func _on_paused(seconds: float) -> void:
 func _on_options(list: Array) -> void:
 	_options = list
 	_choice = 0
+	_scroll = 0
+	_scroll_mouse = Vector2(-1e9, -1e9)
 	_options_age = 0.0
 	_kind = &"options"
 	_build_options(list)
+	_layout(_screen())
 
 
 func _on_cue(what: StringName) -> void:
@@ -676,10 +774,17 @@ func _show(kind: StringName, speaker: String, text: String) -> void:
 	_shown = 0.0
 	_words.text = text
 	_words.visible_characters = 0
+	# An inner voice wears its school's ink and doubling (cochineal if it
+	# names none the box knows).
 	var inner := kind == &"sense"
-	_words.add_theme_color_override("font_color", COCHINEAL if inner else CREAM)
+	_words_school = speaker if inner and SCHOOL_LOOK.has(speaker) else ""
+	var look: Dictionary = SCHOOL_LOOK.get(_words_school, {})
+	var ink: Color = look.get("ink", COCHINEAL) if inner else CREAM
+	_words.add_theme_color_override("font_color", ink)
+	_double(_words, _words_school)
 	_name.text = speaker.to_upper()
-	_name.add_theme_color_override("font_color", COCHINEAL if inner else MARIGOLD)
+	_name.add_theme_color_override("font_color", ink if inner else MARIGOLD)
+	_double(_name, _words_school)
 
 
 func _revealing() -> bool:
@@ -850,7 +955,7 @@ func _build_options(list: Array) -> void:
 		swipe.mouse_filter = Control.MOUSE_FILTER_STOP
 		swipe.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		swipe.gui_input.connect(_on_option_input.bind(i))
-		swipe.mouse_entered.connect(choose_by_pointing.bind(i))
+		swipe.mouse_entered.connect(_on_hover.bind(i))
 		var material := ShaderMaterial.new()
 		material.shader = SWIPE
 		material.set_shader_parameter(&"seed", 20.0 + i + _seed)
@@ -880,15 +985,43 @@ func _build_options(list: Array) -> void:
 		_option_labels.append(label)
 		_option_ink.append(0.0)
 
+	_fade_top = _build_fade("FadeTop", false)
+	_fade_bottom = _build_fade("FadeBottom", true)
 	_style_options()
 
 
+## A painted fade over the options' edge where more are hidden beyond it: the
+## panel's dark paint deepening outward in dry bristle streaks, three small
+## marigold dabs at its middle. `down`: under the list (else over it).
+func _build_fade(fade_name: String, down: bool) -> TextureRect:
+	var fade := TextureRect.new()
+	fade.name = fade_name
+	fade.texture = _blank()
+	fade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fade.stretch_mode = TextureRect.STRETCH_SCALE
+	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fade.visible = false
+	var material := ShaderMaterial.new()
+	material.shader = FADE
+	material.set_shader_parameter(&"down", down)
+	material.set_shader_parameter(&"seed", _seed + (7.0 if down else 3.0))
+	material.set_shader_parameter(&"paint", Vector3(skin.paint_dark.r, skin.paint_dark.g, skin.paint_dark.b) * 0.22)
+	material.set_shader_parameter(&"dab", Vector3(MARIGOLD.r, MARIGOLD.g, MARIGOLD.b))
+	fade.material = material
+	_root.add_child(fade)
+	return fade
+
+
 ## Each option's swipe and ink: the chosen one warm with the marker and dark
-## ink; the rest dim, marigold or (special) cochineal.
+## ink; the rest dim, marigold or (special) cochineal. A special option of a
+## school wears that school's swipe and ink, chosen or not.
 func _style_options() -> void:
 	for i in _swipes.size():
 		var chosen := i == _choice
 		var material := _swipes[i].material as ShaderMaterial
+		var school := String(_options[i].get("school", "")) if i < _options.size() else ""
+		school = school if SCHOOL_LOOK.has(school) else ""
+		material.set_shader_parameter(&"school", DialogueBook.SCHOOLS.find(school) + 1 if school != "" else 0)
 		material.set_shader_parameter(&"warm", chosen)
 		material.set_shader_parameter(&"light", 1.1 if chosen else 0.5)
 		material.set_shader_parameter(&"alpha_scale", 0.95 if chosen else 0.9)
@@ -901,7 +1034,23 @@ func _style_options() -> void:
 			material.set_shader_parameter(&"region", Vector4(region.position.x, region.position.y, region.size.x, region.size.y))
 
 		var special := bool(_options[i].get("special", false)) if i < _options.size() else false
-		_option_labels[i].add_theme_color_override("font_color", DARK_INK if chosen else (COCHINEAL if special else MARIGOLD))
+		var ink := DARK_INK if chosen else (COCHINEAL if special else MARIGOLD)
+
+		if school != "":
+			ink = SCHOOL_LOOK[school]["chosen"] if chosen else SCHOOL_LOOK[school]["ink"]
+
+		_option_labels[i].add_theme_color_override("font_color", ink)
+		_double(_option_labels[i], school)
+
+
+## The school's doubling on `label` (none: "" or a school the box lacks).
+func _double(label: Label, school: String) -> void:
+	var look: Dictionary = SCHOOL_LOOK.get(school, {})
+	var offset: Vector2 = look.get("offset", Vector2.ZERO) * _scale()
+	label.add_theme_color_override("font_shadow_color", look.get("double", Color(0, 0, 0, 0)))
+	label.add_theme_constant_override("shadow_offset_x", int(signf(offset.x) * maxf(1.0, roundf(absf(offset.x)))) if offset.x != 0.0 else 0)
+	label.add_theme_constant_override("shadow_offset_y", int(signf(offset.y) * maxf(1.0, roundf(absf(offset.y)))) if offset.y != 0.0 else 0)
+	label.add_theme_constant_override("shadow_outline_size", 0)
 
 
 func _clear_options() -> void:
@@ -910,6 +1059,14 @@ func _clear_options() -> void:
 
 	for node in _option_labels:
 		node.queue_free()
+
+	for node in [_fade_top, _fade_bottom]:
+		if is_instance_valid(node):
+			node.queue_free()
+
+	_fade_top = null
+	_fade_bottom = null
+	_in_view = 0
 
 	_swipes.clear()
 	_option_labels.clear()
@@ -922,6 +1079,10 @@ func _on_option_input(event: InputEvent, index: int) -> void:
 
 	if button != null and button.pressed and button.button_index == MOUSE_BUTTON_LEFT:
 		select(index)
+		get_viewport().set_input_as_handled()
+	# The wheel over a swipe (which stops the mouse's events) turns the list too.
+	elif button != null and button.pressed and (button.button_index == MOUSE_BUTTON_WHEEL_UP or button.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+		_wheel(button)
 		get_viewport().set_input_as_handled()
 
 
@@ -977,22 +1138,61 @@ func plan(screen: Vector2) -> Dictionary:
 	var column := ceilf(longest) + COLUMN_MORE
 	var x := left + ((PANEL_WIDE - column) * 0.5 + OPTION_INDENT) * k
 	var y := top + (OPTIONS_AT + LINE_STEP * maxi(0, lines - 3)) * k
+	var fit := _fit((screen.y - y) / k - OPTIONS_MARGIN, _options.size())
+	var step: float = fit["step"]
+	var thin := step / OPTION_STEP
+	var in_view: int = fit["in_view"]
+	# The window of rows in view: where it was, moved just enough to hold the
+	# chosen one.
+	var first := clampi(_scroll, 0, maxi(0, _options.size() - in_view))
+
+	if _choice < first:
+		first = _choice
+	elif _choice >= first + in_view:
+		first = _choice - in_view + 1
+
 	var words := []
 	var swipes := []
 
 	for i in _options.size():
-		var at := y + OPTION_STEP * k * i
+		var at := y + step * k * (i - first)
 		words.append(Rect2(x, at, column * k, 36.0 * k))
 
 		if i == _choice:
-			swipes.append(Rect2(x - OPTION_INDENT * k, at - 8.0 * k, (column + MARKER_WIDE - 20.0) * k, 46.0 * k))
+			swipes.append(Rect2(x - OPTION_INDENT * k, at - 8.0 * thin * k, (column + MARKER_WIDE - 20.0) * k, 46.0 * thin * k))
 		else:
-			swipes.append(Rect2(x - OPTION_INDENT * k, at - 6.0 * k, column * k, 42.0 * k))
+			swipes.append(Rect2(x - OPTION_INDENT * k, at - 6.0 * thin * k, column * k, 42.0 * thin * k))
+
+	# The fades: just over the first row in view, just under the last.
+	var fade_wide := (column + MARKER_WIDE - 20.0) * k
+	var fade_top := Rect2(x - OPTION_INDENT * k, y - (8.0 * thin + FADE_TALL) * k, fade_wide, FADE_TALL * k)
+	var fade_bottom := Rect2(x - OPTION_INDENT * k, y + (step * (in_view - 1) + 38.0 * thin) * k, fade_wide, FADE_TALL * k)
 
 	var shadow_box := Rect2(Vector2(portrait.position.x - 10.0 * k, top - 90.0 * k), Vector2.ZERO)
 	shadow_box.end = Vector2(left + wide + 20.0 * k, screen.y + 40.0 * k)
 	return {"scale": k, "panel": panel, "portrait": portrait, "name": name_rect, "line": line, "options": words, "swipes": swipes,
-		"column": column, "shadow": shadow_box}
+		"column": column, "shadow": shadow_box, "step": step, "first": first, "in_view": in_view, "fade_top": fade_top,
+		"fade_bottom": fade_bottom}
+
+
+## How `count` options sit in `room` (px at 1080p, from the first row's top to
+## the lowest a row's swipe may reach): at OPTION_STEP if they all fit, closer
+## (down to OPTION_STEP_LEAST, the swipes thinner with it) if that fits them,
+## else at the least step with as many in view as fit. A row reaches 38 px
+## under its top at OPTION_STEP (the chosen swipe's foot), less as it thins.
+static func _fit(room: float, count: int) -> Dictionary:
+	var foot := 38.0 / OPTION_STEP
+
+	if count <= 1:
+		return {"step": OPTION_STEP, "in_view": count}
+
+	var step := clampf(room / (float(count - 1) + foot), OPTION_STEP_LEAST, OPTION_STEP)
+
+	if step * (float(count - 1) + foot) <= room + 0.01:
+		return {"step": step, "in_view": count}
+
+	var in_view := clampi(int(floor(room / OPTION_STEP_LEAST - foot)) + 1, 1, count)
+	return {"step": OPTION_STEP_LEAST, "in_view": in_view}
 
 
 ## Places every part by plan() for a screen this size.
@@ -1027,6 +1227,28 @@ func _layout(screen: Vector2) -> void:
 		var line_size := roundi(LINE_SIZE * k)
 		_words.add_theme_font_size_override("font_size", line_size)
 		_words.add_theme_constant_override("line_spacing", roundi(LINE_STEP * k - _font.get_height(line_size)))
+		_double(_words, _words_school)
+		_double(_name, _words_school)
+
+		for i in _option_labels.size():
+			_double(_option_labels[i], String(_options[i].get("school", "")) if i < _options.size() else "")
+
+	# The options' window: scrolled (the mouse noted, so a row scrolled under
+	# it is not taken as pointed at), its rows and fades shown to match.
+	var first: int = p["first"]
+	var in_view: int = p["in_view"]
+
+	if first != _scroll or in_view != _in_view:
+		if first != _scroll and get_viewport() != null:
+			_scroll_mouse = get_viewport().get_mouse_position()
+
+		_scroll = first
+		_in_view = in_view
+		_show_rows()
+
+	if is_instance_valid(_fade_top):
+		_place(_fade_top, p["fade_top"])
+		_place(_fade_bottom, p["fade_bottom"])
 
 	_place(_name, p["name"])
 	_place(_words, p["line"])

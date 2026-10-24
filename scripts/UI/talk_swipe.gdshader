@@ -10,6 +10,9 @@ shader_type canvas_item;
 //     from its left, marker_width wide): the skin's cursor painting cut to
 //     the swipe's height about its tip (cursor_tip of its height), or a
 //     painted spike pointing back at the words. It frays with the bristles.
+//   - A special option of a school (`school`, 1 + its index in
+//     DialogueBook.SCHOOLS) paints itself in that school's look instead
+//     (talk_school.gdshaderinc), chosen (`warm`) or not; 0 is the plain paint.
 // Everything is in the swipe's pixels at 1080p (swipe_size).
 // `reveal` (0..1) paints it in from the left, each bristle at its own pace,
 // a darker wet line at each front.
@@ -38,6 +41,7 @@ uniform float cursor_saturation = 1.0;
 uniform vec3 cursor_tint = vec3(1.0);
 uniform float cursor_tint_amount = 0.0;
 uniform float reveal = 1.0;
+uniform int school = 0;
 
 float hash(vec2 p) {
 	p = fract(p * vec2(123.34, 456.21) + seed * 0.173);
@@ -118,6 +122,8 @@ float mask(vec2 p) {
 	return m * (1.0 - ends * holes);
 }
 
+#include "res://scripts/UI/talk_school.gdshaderinc"
+
 // The plain skin's marker: a dark spike, its tip at the left pointing back at
 // the words, widening to a pale head at its right end.
 vec4 spike(vec2 p) {
@@ -195,16 +201,20 @@ void fragment() {
 	float m = mask(p);
 	vec3 colour;
 
-	if (use_paint) {
-		colour = paint_at(UV);
+	if (school > 0) {
+		colour = school_paint(school, p, UV);
 	} else {
-		colour = (warm ? paint_warm : paint_dark) * (0.82 + 0.36 * vnoise(p / vec2(38.0, 2.0)));
-	}
+		if (use_paint) {
+			colour = paint_at(UV);
+		} else {
+			colour = (warm ? paint_warm : paint_dark) * (0.82 + 0.36 * vnoise(p / vec2(38.0, 2.0)));
+		}
 
-	colour *= light;
+		colour *= light;
 
-	if (light > 1.0) {
-		colour = mix(colour, wash, wash_amount);
+		if (light > 1.0) {
+			colour = mix(colour, wash, wash_amount);
+		}
 	}
 
 	float alpha = m * alpha_scale;
