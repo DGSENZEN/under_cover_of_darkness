@@ -31,6 +31,9 @@ func _ready() -> void:
 		["lane_from_chapel", Vector3(15.8, 1.7, 0.6), Vector3(-15.0, 1.6, 1.1)],
 		["lane_shop_front", Vector3(6.2, 1.7, -1.6), Vector3(6.2, 1.5, 6.0)],
 		["lane_shop_angle", Vector3(-3.5, 1.7, 1.6), Vector3(8.0, 1.4, 4.55)],
+		["lane_stall", Vector3(-7.0, 1.7, 2.6), Vector3(-0.5, 1.2, -1.6)],
+		["lane_niche", Vector3(-5.5, 1.7, 2.8), Vector3(-10.5, 1.1, 0.0)],
+		["lane_services", Vector3(-16.0, 2.2, 1.1), Vector3(16.0, 3.2, 1.1)],
 	]
 	for view in views:
 		if not only.is_empty() and view[0] not in only:

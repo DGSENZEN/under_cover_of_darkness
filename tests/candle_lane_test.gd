@@ -14,6 +14,7 @@ func _ready() -> void:
 	add_child(lane)
 	await _frames(5)
 	await _shell()
+	await _order()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -78,6 +79,64 @@ func _shell() -> void:
 	shop.set_decals(true)
 	_check("C5 the shop's keys still work embedded: F2 gives back every material, F3 hides and restores its decals",
 		before == after and hidden and shop.decals.all(func(d): return d.visible), "materials same %s decals %s" % [before == after, hidden])
+
+
+## Task 4: the bay's pieces along the lane in the walk's order, a body passing them all, the services and vault its
+## whole length.
+func _order() -> void:
+	var at := func(node_name: String) -> float:
+		var n: Node3D = lane.get_node_or_null(node_name)
+		return lane.plan_point(n.position).x if n != null else INF
+	var stall_x: float = lane.plan_point((lane.stall as Node3D).position).x if lane.stall != null else INF
+	var cart_x: float = at.call("tamale_cart")
+	var niche_x: float = at.call("niche")
+	var bench_x: float = at.call("bench")
+	var nahual: Node3D = lane.get("nahual")
+	var bench: Node3D = lane.get_node_or_null("bench")
+	var near_bench: bool = nahual != null and bench != null and nahual.position.distance_to(bench.position) < 3.0
+	var drain: Node3D = lane.floor_tiles.filter(func(t): return String(t.get_meta("kind", "")) == "floor_border_drain").front() \
+		if not lane.floor_tiles.is_empty() else null
+	var drain_ok: bool = drain != null and absf(lane.plan_point(drain.position).x + 0.6 - stall_x) < 2.0
+	_check("C6 the pieces stand in the walk's order: the stall and cart at plan x 7-13, the niche and bench at 1-4, the nahual by the bench, the drain by the stall",
+		stall_x >= 7.0 and stall_x <= 13.0 and cart_x >= 7.0 and cart_x <= 13.0 and niche_x >= 1.0 and niche_x <= 4.0
+		and bench_x >= 1.0 and bench_x <= 4.0 and near_bench and drain_ok,
+		"stall %.1f cart %.1f niche %.1f bench %.1f nahual by bench %s drain %s" % [stall_x, cart_x, niche_x, bench_x, near_bench, drain_ok])
+
+	var spawn := Vector3(-15.0, 1.05, 1.1)
+	var along: Array[Vector3] = [Vector3(-4.0, 1.05, 1.1), Vector3(4.0, 1.05, 0.8), Vector3(15.5, 1.05, 0.15), Vector3(17.6, 1.05, 0.15)]
+	var walk := await _walk_path(spawn, along, 3600)
+	_check("C7 a body walks the lane from its mouth to the chapel's doorway past every piece", walk["ok"], "%s" % [walk])
+
+	# Each line of services along each wall, and the vault's spans: their spans along x joined end to end.
+	var lines := {}
+	for piece: MeshInstance3D in lane.services:
+		var box: AABB = piece.global_transform * piece.get_aabb()
+		var key := "%s@%.1f" % ["far" if box.get_center().z > 1.0 else "back", snappedf(box.get_center().y, 0.5)]
+		lines.get_or_add(key, []).append(Vector2(box.position.x, box.end.x))
+	var short := []
+	for key: String in lines:
+		var spans: Array = lines[key]
+		# (A line is a run of modules along the wall: a single drop or riser is no line.)
+		if spans.size() < 3:
+			continue
+		spans.sort_custom(func(p, q): return p.x < q.x)
+		var reach: float = spans[0].x
+		var gap: bool = reach > -lane.LANE_HALF + 0.1
+		var to: float = spans[0].y
+		for span: Vector2 in spans:
+			if span.x > to + 0.1:
+				gap = true
+			to = maxf(to, span.y)
+		if gap or to < lane.LANE_HALF - 0.1:
+			short.append("%s %.1f..%.1f" % [key, reach, to])
+	var vault: Array = lane.find_children("vault_span*", "MeshInstance3D", false, false)
+	var vault_x := Vector2(INF, -INF)
+	for span: MeshInstance3D in vault:
+		var box: AABB = span.global_transform * span.get_aabb()
+		vault_x = Vector2(minf(vault_x.x, box.position.x), maxf(vault_x.y, box.end.x))
+	_check("C8 the services and the vault run the lane's whole length",
+		short.is_empty() and lines.size() >= 4 and vault_x.x < -lane.LANE_HALF + 0.1 and vault_x.y > lane.LANE_HALF - 0.1,
+		"short %s lines %d vault %.1f..%.1f" % [short.slice(0, 4), lines.size(), vault_x.x, vault_x.y])
 
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:

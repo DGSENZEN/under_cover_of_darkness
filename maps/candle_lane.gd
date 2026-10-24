@@ -31,6 +31,14 @@ var stub: Node3D
 
 func _ready() -> void:
 	half_run = LANE_HALF
+	# The walk's order (plan x: the stall at 12.8 where the bay has it; her cart beside it toward the market; the niche
+	# near the mouth on the north wall, across from the bench, the nahual lying by the bench; the fire main's hydrant on
+	# the far wall clear of them all).
+	places["cart"] = Vector3(-3.0, 0.0, 2.6)
+	places["niche"] = Vector3(-10.0, 0.0, BACK_WALL)
+	places["niche_yaw"] = 0.0
+	places["bench"] = Vector3(-8.9, 0.0, FAR_WALL)
+	places["nahual"] = Vector3(-6.6, 0.0, 4.35)
 	super._ready()
 	_shop_front()
 	_east_end()

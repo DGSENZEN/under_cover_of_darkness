@@ -164,9 +164,11 @@ const FLOOR := Color(0.2, 0.19, 0.18)
 
 ## How far the corridor runs each way from its middle (m: the bay's RUN; a map built on it, the candle lane, runs it
 ## longer), and where the pieces that move with it stand: the tamale cart (her stool beside it), the bench (the news on
-## it, the bin and cone by it, the nahual and the old hat at its foot), the Virgin's niche. Set before _ready.
+## it, the bin and cone by it, the old hat at its end), the Virgin's niche (and which way it faces: π on the far wall,
+## 0 on the back), the nahual at the far wall's foot. Set before _ready.
 var half_run := RUN
-var places := {"cart": Vector3(4.2, 0.0, 2.6), "bench": Vector3(-2.4, 0.0, FAR_WALL), "niche": Vector3(1.2, 0.0, FAR_WALL)}
+var places := {"cart": Vector3(4.2, 0.0, 2.6), "bench": Vector3(-2.4, 0.0, FAR_WALL), "niche": Vector3(1.2, 0.0, FAR_WALL),
+	"niche_yaw": PI, "nahual": NAHUAL_AT}
 
 ## Where the piece and its painted files are.
 var lab_dir := "res://assets/eclipse/lab/"
@@ -1036,6 +1038,34 @@ func _services() -> void:
 	for i in 9:
 		_hang("cable_swag", Vector3(13.0 - 3.0 * i, HOOK_Y, FAR_WALL), true)
 
+	if half_run > RUN + 0.01:
+		_run_on()
+
+
+## A corridor longer than the bay: each line of services run on past the bay's own lengths to its ends, in its plain
+## module, joint to joint (the fire main past its hydrant's drop, which becomes a branch off it).
+func _run_on() -> void:
+	for line in [["pipe_green_4", CONDUIT.y, false], ["pipe_ochre_4", GAS_Y, false], ["cable_tray_4", TRAY_Y, false],
+			["pipe_red_4", FIRE_Y, true], ["pipe_blue_4", AIR_Y, true], ["cable_swag", HOOK_Y, true]]:
+		var wall: float = FAR_WALL if line[2] else BACK_WALL
+		var reach := Vector2(INF, -INF)
+		for piece: MeshInstance3D in services:
+			var box := piece.global_transform * piece.get_aabb()
+			if absf(piece.position.y - line[1]) < 0.01 and absf(piece.position.z - wall) < 0.01:
+				reach = Vector2(minf(reach.x, box.position.x), maxf(reach.y, box.end.x))
+		if reach.x == INF:
+			continue
+		while reach.y < half_run - 0.05:
+			var piece := _hang(line[0], Vector3(reach.y, line[1], wall), line[2])
+			var box := piece.global_transform * piece.get_aabb()
+			piece.position.x += reach.y - box.position.x
+			reach.y += box.size.x
+		while reach.x > -half_run + 0.05:
+			var piece := _hang(line[0], Vector3(reach.x, line[1], wall), line[2])
+			var box := piece.global_transform * piece.get_aabb()
+			piece.position.x += reach.x - box.end.x
+			reach.x -= box.size.x
+
 
 # The corridor's furniture, each piece with its cause
 
@@ -1072,7 +1102,7 @@ func _furnish() -> void:
 	_lay("cone_crushed", bench + Vector3(1.05, 0.0, -0.7), 1.9)
 
 	# The Virgin's niche, built out from the far wall facing her stall; its candles lit, their soot above.
-	var niche: MeshInstance3D = set_down.call("niche", places["niche"], PI)
+	var niche: MeshInstance3D = set_down.call("niche", places["niche"], places["niche_yaw"])
 
 	if FileAccess.file_exists(FURNITURE_WICKS):
 		var wicks := []
@@ -1240,7 +1270,8 @@ func _animas() -> void:
 		var lit := PackedVector3Array(niche_wicks)
 		var open := PackedVector3Array()
 		open.resize(lit.size())
-		open.fill(NICHE_OPEN)
+		# (Its open side out of whichever wall it stands on: NICHE_OPEN on the far wall.)
+		open.fill(Basis(Vector3.UP, float(places["niche_yaw"]) - PI) * NICHE_OPEN)
 
 		var shrine := stall.find_child("stall_ofrenda", true, false) as MeshInstance3D
 		var stall_box := (stall.find_child("stall_frame", true, false) as MeshInstance3D)
@@ -1340,7 +1371,7 @@ func _nahual() -> void:
 	nahual.intruder = player
 	add_child(nahual)
 	nahual.build(meshes["nahual_body"], meshes["nahual_head"], black, ember)
-	nahual.position = (places["bench"] as Vector3) + (NAHUAL_AT - Vector3(-2.4, 0.0, FAR_WALL))
+	nahual.position = places["nahual"]
 	# Turned so it lies along the far wall's foot with its head toward the corridor's middle.
 	nahual.rotation.y = PI / 2.0
 	nahual.scale = Vector3.ONE * NAHUAL_SCALE
