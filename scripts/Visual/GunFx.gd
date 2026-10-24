@@ -7,6 +7,7 @@ extends RefCounted
 
 const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 const FLASH_SHADER := preload("res://scripts/Visual/vfx_gunflash.gdshader")
+const SMOKE_SHADER := preload("res://scripts/Visual/vfx_smoke.gdshader")
 
 ## The flash: a cream core, amber, burnt orange at the edge (never white,
 ## never black), bright enough for the bloom to take its core.
@@ -105,6 +106,8 @@ static func smoke(context: Node, at: Vector3, ahead: Vector3, shell: bool) -> Ar
 		curl.name = "GunSmoke"
 		curl.mesh = MeshVfx.plume(path, 0.018 * grow, 0.07 * grow, 10)
 		var look := MeshVfx.look(SMOKE_CORE, SMOKE_BODY, SMOKE_EDGE, 1.0, 0.2, 0.25, 3.1 * float(i) + 0.7)
+		# Lit by the scene, not glowing.
+		look.shader = SMOKE_SHADER
 		look.set_shader_parameter(&"tail_eat", 0.35)
 		look.set_shader_parameter(&"churn", 0.008)
 		# Big soft shapes: the noise stretched wide, a softer bitten edge, a

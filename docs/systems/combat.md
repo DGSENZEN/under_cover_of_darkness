@@ -148,13 +148,12 @@ Spec: `docs/superpowers/specs/2026-10-23-revolver-and-magic-design.md`. Two hand
 
 | Input | With the revolver drawn |
 | --- | --- |
-| LMB (`throw`) | Fire the selected barrel (`Revolver.gd`) |
-| RMB (`block`) | Cast the left hand's spell, held while it forms; let go early: nothing cast or spent (`Caster.gd`) |
-| Q (`blink`) | Blink: a tap steps 4 m, a hold aims up to 10 m (onto a lip: hanging). From anywhere. With a blade or bow drawn on the ground a tap is the dodge |
+| LMB (`throw`) | Fire the selected barrel (`Revolver.gd`). Each shot throws the aim up (3.5 deg from the hip, half aimed, x1.4 for a shell) and 60 % comes back by itself |
+| RMB (`aim`) | Aim down the sights: up in 0.18 s, the view narrowed 75 to 62, walking at 0.7, both hands on the gun (innate spells only) |
+| 1 / 2 / 3 (`spell_1..3`) | Hold to cast Shard, Ward (bare hand), Empower (the tome) while it forms; let go early, nothing is spent. Draws the revolver from anything else; drops the aim (`Caster.gd`) |
+| Q (`blink`) | Blink: a tap steps 4 m, a hold aims up to 10 m (onto a lip: hanging); a fresh RMB lets the aim go. From anywhere. With a blade or bow drawn on the ground a tap is the dodge |
 | X (`barrel`) | Flip the hammer's nose: cylinder (6 balls) or shot barrel (1 shell) |
-| R (`reload`) | Reload the selected barrel, round by round through the gate (fire to stop) |
-| 1 / 2 / 3 (`spell_1..3`) | Shard, Ward (bare hand), Empower (the tome) |
-| G (`grip`) | Both hands on the gun: steadier, quicker, innate spells only |
+| R (`reload`) | Reload the selected barrel, round by round through the gate (fire to stop); spent casings fall |
 | F (`kick`) | Pistol-whip a man in arm's reach and in front; else the kick |
 
 - `Revolver.gd` (the player's "Revolver"): `loaded`, `barrel`, `braced`, `loading`, `fired(barrel, hits)`, `clicked_empty`, `ready_to_fire()`, `is_reloading()`, `flip_barrel()`, `set_braced(on)`, `try_whip()`, `reset_for_practice()`. Hitscan balls (55, head x2.5), a shell's 9 pellets (18, falling off 3-12 m; six into one man within 2 m are one blast), near misses (`Guard.near_miss`), gunshot 70/74 dB on the SoundBus. Stocks: `Inventory.ammo` rounds/shells (`Props.ammo` pickups).
@@ -162,5 +161,7 @@ Spec: `docs/superpowers/specs/2026-10-23-revolver-and-magic-design.md`. Two hand
 - `Spells.gd`: the spells as data (school, tier, cost, cast time, movement); `PowerPool.gd` ("Power"): 100, +5/s after 2 s.
 - `Blink.gd`, `Shard.gd`, `Ward.gd` (stops others' shots and spells at 1 m round you for 4 s, not blades: `Ward.stops(from, to, shooter)` is asked by arrows, shards and balls), `Gore.gd` (bursts: at most 60 pieces, gone after 20 s).
 - Guards read the gun from shots at them (`Squad.read["gun"]`, `on_shot_at`), take cover at range (`GuardFighter.cover_point`), and rush you at your reload.
-- Suites: `revolver_test`, `caster_test`, `gunfight_test`, `combat_gym_test`; stills: `tests/visual/stage_revolver.tscn` (FP_ARMS=new).
+- Hits: a ball knocks a man back (2.5 m/s), a headshot snaps his head, the crosshair marks a hit, a head, a kill (`hit_confirmed`), a kill holds 0.07 s; `Fx.hole` leaves holes in static stone, wood, iron (sparks on iron), fading by 30 s.
+- The shot's effects (`GunFx.gd`, on the Metro lab's `MeshVfx` + `vfx_mesh.gdshader`): the flash in the viewmodel (`vfx_gunflash.gdshader`), lit powder smoke (`vfx_smoke.gdshader`), a tracer; `Casings.gd` brass at the reload; the shot's tail (`Revolver._tail`, louder in a room).
+- Suites: `revolver_test`, `caster_test`, `gunfight_test`, `combat_gym_test`, `ammo_ui_test`; stills: `tests/visual/stage_revolver.tscn`, clips: `tests/visual/stage_gunfx.tscn` (FP_ARMS=new).
 

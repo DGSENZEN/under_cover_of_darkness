@@ -121,7 +121,7 @@ func _range_bay() -> void:
 	tome.global_position = Vector3(36.4, 0.95, -11)
 	tome.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
 
-	_sign(Vector3(40, 2.6, -9.5), "THE RANGE\nMouse wheel to the revolver. LMB fires. R reloads, round by round (fire to stop).\nX flips to the shot barrel (one shell): point-blank it bursts a man.\nG: both hands on the gun, steadier and quicker. F: pistol-whip up close, else the kick.\nRMB casts the left hand's spell, held while it forms: 1 Shard, 2 Ward, 3 Empower (the tome).\nQ: Blink (tap a step, hold to aim; onto a ledge's lip to hang). Ward stops shots and spells, not blades.")
+	_sign(Vector3(40, 2.6, -9.5), "THE RANGE\nMouse wheel to the revolver. LMB fires. RMB aims down the sights. R reloads, round by round (fire to stop).\nX flips to the shot barrel (one shell): point-blank it bursts a man. F: pistol-whip up close, else the kick.\nHold 1 Shard, 2 Ward, 3 Empower (the tome) while each forms; let go early and nothing is spent.\nQ: Blink (tap a step, hold to aim; onto a ledge's lip to hang). Ward stops shots and spells, not blades.")
 
 
 func _guard(at: Vector3, yaw: float, speaker: String, archetype: StringName = &"") -> CharacterBody3D:
