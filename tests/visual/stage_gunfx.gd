@@ -3,7 +3,7 @@ extends Node3D
 ## hip shot and an aimed shot at a stone wall, a shell at a crate and a man
 ## close by, a reload, and the shot seen from the side; lit and dark. Run
 ## with the new arms:
-## FP_ARMS=new Godot --fixed-fps 60 --resolution 960x540 --path . res://tests/visual/stage_gunfx.tscn -- --out=/tmp/gunfx [--only=hip] [--dark]
+## FP_ARMS=new Godot --fixed-fps 60 --resolution 960x540 --path . res://tests/visual/stage_gunfx.tscn -- --out=/tmp/gunfx [--only=hip|aimed|shell|reload|side|wisp|freeze] [--dark]
 
 const PLAYER := preload("res://Player.tscn")
 const GUARD := preload("res://Guard.tscn")
@@ -80,6 +80,54 @@ func _ready() -> void:
 
 		if is_instance_valid(man):
 			man.queue_free()
+
+	if _wants("wisp"):
+		# Three shots, then the trail of smoke out of the barrel as the gun
+		# settles; turning a little partway, so the trail bends behind it.
+		player.revolver.reset_for_practice()
+		for k in 3:
+			_tap("throw")
+			await _frames(int(player.revolver._settle * 60.0) + 2)
+		for f in 150:
+			if f >= 60 and f < 100:
+				player.rotation.y += 0.004
+			if f in [10, 20, 30, 45, 60, 80, 100, 125, 149]:
+				await _shot("wisp%s_%03d" % [tag, f])
+			await get_tree().physics_frame
+		await _frames(60)
+
+	if _only == "freeze":
+		# The flash held on its first frame, each piece alone, from the eye
+		# and from the side.
+		player.revolver.reset_for_practice()
+		Input.action_press("throw")
+		var flash: Node3D = null
+
+		while flash == null:
+			await get_tree().physics_frame
+			var found: Array = player.hand.find_children("GunFlash*", "", true, false)
+			flash = found[0] if not found.is_empty() else null
+		Input.action_release("throw")
+		Engine.time_scale = 0.0
+		var pieces := ["Core", "Spikes", "Tongue"]
+
+		for view in ["eye", "side"]:
+			var side: Camera3D = null
+			if view == "side":
+				side = Camera3D.new()
+				add_child(side)
+				var at: Vector3 = flash.global_position
+				side.global_transform = Transform3D(Basis.looking_at(Vector3(-1, 0, 0), Vector3.UP), at + Vector3(0.45, 0.0, 0.0))
+				side.fov = 40.0
+				side.cull_mask = 0xFFFFF
+				side.make_current()
+			for only in pieces + ["all"]:
+				for piece in pieces:
+					flash.get_node(piece).visible = only == "all" or only == piece
+				await _shot("freeze_%s_%s%s" % [view, only.to_lower(), tag])
+			if side != null:
+				side.queue_free()
+		Engine.time_scale = 1.0
 
 	if _wants("reload"):
 		player.revolver.reset_for_practice()

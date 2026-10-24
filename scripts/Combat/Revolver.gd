@@ -11,6 +11,7 @@ const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const Casings := preload("res://scripts/Visual/Casings.gd")
 const GunFx := preload("res://scripts/Visual/GunFx.gd")
+const GunWisp := preload("res://scripts/Visual/GunWisp.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -92,6 +93,15 @@ const OWED_LAPSE := GATE_SNAP + 2.0 / 60.0
 ## Seconds the one-handed stray takes to fade after a shot: longer than the
 ## ready time, so a hip shot fired as soon as it can still strays.
 const HEAT_TIME := 1.2
+## The trail of smoke out of the barrel: it rises once the gun has not fired
+## for WISP_AFTER (s), breathes for WISP_EMIT (s) and WISP_PER_SHOT more for
+## each shot after the first while the barrel is hot (a shell counts two, up
+## to WISP_MOST_SHOTS); the barrel cools a shot every WISP_COOL (s).
+const WISP_AFTER := 0.45
+const WISP_EMIT := 0.9
+const WISP_PER_SHOT := 0.45
+const WISP_MOST_SHOTS := 6.0
+const WISP_COOL := 2.5
 ## The pistol-whip: a man this near (metres), this far off your aim
 ## (degrees); the blow lands this far in, and it is over by WHIP_TIME.
 const WHIP_REACH := 1.3
@@ -148,6 +158,14 @@ var _climb_t := -1.0
 ## Seconds the last kick takes to settle.
 var _settle := 0.6
 var _shots := 0
+## The trail of smoke out of the barrel once it stops firing: how hot the
+## barrel is (shots, cooling over WISP_COOL), when it last fired, from which
+## muzzle, and the trail itself.
+var _smoke_heat := 0.0
+var _last_shot_at := -1.0
+var _last_which := &"muzzle"
+var _wisp_due := false
+var _wisp: Node3D = null
 
 # How it is shown: each eased toward what is wanted, 0..1.
 var _gate_shown := 0.0
@@ -173,6 +191,8 @@ func _physics_process(delta: float) -> void:
 	_game_time += delta
 	_kick = move_toward(_kick, 0.0, delta / maxf(_settle, 0.01))
 	_heat = move_toward(_heat, 0.0, delta / HEAT_TIME)
+	_smoke_heat = move_toward(_smoke_heat, 0.0, delta / WISP_COOL)
+	_update_wisp()
 	_recover_climb(delta)
 	var gun: Resource = weapon()
 	_update_whip(delta)
@@ -340,6 +360,8 @@ func reset_for_practice() -> void:
 	loaded = {&"cylinder": 6, &"shot": 1}
 	barrel = &"cylinder"
 	_ready_at = 0.0
+	_smoke_heat = 0.0
+	_wisp_due = false
 	_aim = 0.0
 	aimed = false
 	_aim_dropped = false
@@ -673,10 +695,36 @@ func _show_shot(at: Transform3D, which: StringName, shell: bool, struck: Vector3
 		GunFx.flash(gun_mesh, tip, shell, _shots)
 		muzzle = hand.gun_point_world(tip)
 
+	# The barrel's trail of smoke cut off, and due again once it stops.
+	if is_instance_valid(_wisp):
+		_wisp.stop()
+	_smoke_heat = minf(_smoke_heat + (2.0 if shell else 1.0), WISP_MOST_SHOTS)
+	_last_shot_at = _game_time
+	_last_which = which
+	_wisp_due = true
+
 	GunFx.smoke(player, muzzle, -at.basis.z, shell)
+	GunFx.sparks(player, muzzle, -at.basis.z, shell, _shots)
+	GunFx.smoke_ring(player, muzzle, -at.basis.z, shell)
 
 	if not shell:
 		GunFx.tracer(player, muzzle, struck, at.origin)
+
+
+## Once the gun has not fired for WISP_AFTER, a trail of smoke rises from
+## the muzzle that fired last: longer the hotter the barrel.
+func _update_wisp() -> void:
+	if not _wisp_due or _game_time - _last_shot_at < WISP_AFTER:
+		return
+
+	_wisp_due = false
+	var hand: Node = player.hand
+	if hand == null or not hand.has_method("gun_mesh") or weapon() == null:
+		return
+
+	var tip: Vector3 = WeaponScript.find(&"revolver").mesh.get_meta(_last_which, Vector3(0, 0.1, -0.32))
+	var seconds := WISP_EMIT + WISP_PER_SHOT * maxf(_smoke_heat - 1.0, 0.0)
+	_wisp = GunWisp.rise(player, func(): return hand.gun_point_world(tip) if weapon() != null and hand.gun_mesh() != null else null, seconds, _shots)
 
 
 ## A man to burst if this blow kills him (Guard.gib_hint), or not.

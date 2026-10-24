@@ -77,3 +77,24 @@ Two side-view silhouettes were drawn from those measurements. The user picked D:
 - **Still open:** the hand holds the hard-raked grip with the old handle's pose, so the wood runs straight down through the fist. Re-posing the grip in Blender with the user is still to come.
 
 **A fix found on the way:** the viewmodel now sets each surface's look on a copy of the mesh, not as per-surface overrides. With overrides, the headless renderer reported a null material for every surface of an imported multi-surface model (the sword did it too).
+
+## What was built: the flash, and the trail of smoke
+
+The user approved the gun ("The revolver works") and asked: "Now restyle the muzzle flash, much prettier and more stylized." Partway through they added: "can you also make it that once the gun stops shooting a line of smoke (done in the same way deadlock does it) appears?"
+
+**The flash** (`GunFx.flash`), two frames in your view:
+- **Frame one:** a white-hot round core, eight uneven sharp spikes (twelve for the shell) leaning forward about the bore, and a slim tongue along it. Cream only at the spikes' roots and the tongue's base, orange out to burnt tips *(Claude's call: all-cream read washed out)*.
+- **Frame two:** shrunk to 0.68, eaten away, dimmer, the cream drawn back so it turns orange.
+- It is hidden after its two frames and freed a frame later. (A tween takes its first step on the frame it is made, a frame ahead of the timer.)
+- **Sparks** (`GunFx.sparks`): six streaks forward in a narrow cone (twelve for the shell), gone in 0.12 s.
+- **Smoke ring** (`GunFx.smoke_ring`): a lit torus along the shot that grows about three times its size and drifts 0.45 m over 0.7 s (bigger and slower for the shell).
+- **The shot's curls** *(Claude's call)*: held back for the flash's two frames, then grown from a fifth of their size. Born full size, they stood over the flash as a pale bush and hid it.
+
+**The trail of smoke** (`GunWisp.gd`):
+- Once the gun hasn't fired for 0.45 s, a thin pale ribbon rises from the muzzle that fired last. It is lit by the scene, curls aside as it climbs, and widens from about 1 cm to 5 cm.
+- Its root follows the muzzle, so it bends behind the barrel as you turn.
+- It is breathed out for 0.9 s, plus 0.45 s for each shot after the first while the barrel is hot (a shell counts two, up to six; cooling a shot every 2.5 s). Its first breath swells in, so the tip comes to a point, and its last thins out.
+- The next shot, or putting the gun away, cuts it off; what is already out rises on and fades over 1.4 s.
+- Nothing is made with effects off. The practice reset cools the barrel.
+
+**Checks:** revolver_test F1–F5 (flash parts, second frame, sparks, ring, effects off) and W1–W5 (no trail while firing, then one from the muzzle; it rises and widens; it's gone after a while; a burst smokes longer and the next shot cuts it; none with effects off). V1 is now exactly two drawn frames. Stills: `stage_gunfx --only=wisp` (the trail) and `--only=freeze` (the flash held on its first frame, piece by piece).

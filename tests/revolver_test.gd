@@ -18,6 +18,7 @@ const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const Casings := preload("res://scripts/Visual/Casings.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const GunFx := preload("res://scripts/Visual/GunFx.gd")
+const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 
 
 class Ear:
@@ -707,7 +708,7 @@ func _run() -> void:
 	for i in 6:
 		await get_tree().physics_frame
 		var now: Array = player.hand.find_children("GunFlash*", "", true, false)
-		flashes.append(now.size())
+		flashes.append(now.filter(func(f): return f.is_visible_in_tree()).size())
 
 		if not now.is_empty():
 			flash_layer = (now[0].get_child(0) as VisualInstance3D).layers
@@ -716,7 +717,7 @@ func _run() -> void:
 			Input.action_release("throw")
 
 	_check("V1 the flash shows at the muzzle in your view for two frames, then is gone",
-		flashes.max() == 1 and flashes.count(1) <= 3 and flashes[-1] == 0 and flash_layer == player.hand.VIEWMODEL_LAYER,
+		flashes.max() == 1 and flashes.count(1) == 2 and flashes[-1] == 0 and flash_layer == player.hand.VIEWMODEL_LAYER,
 		"by frame %s layer %d" % [flashes, flash_layer])
 
 	# V2 its smoke hangs, then is gone
@@ -759,8 +760,8 @@ func _run() -> void:
 	Input.action_release("throw")
 	var shell_smoke: int = get_tree().get_nodes_in_group(&"gunfx_smoke").size()
 	revolver.flip_barrel()
-	_check("V4 a shell: six petals, five curls of smoke, sparks", petals == 6 and shell_smoke == 5 and sparked > 0,
-		"petals %d smoke %d sparks +%d" % [petals, shell_smoke, sparked])
+	_check("V4 a shell: a wider burst of twelve spikes, five curls of smoke, sparks", petals == 12 and shell_smoke == 5 and sparked > 0,
+		"spikes %d smoke %d sparks +%d" % [petals, shell_smoke, sparked])
 	await _frames(150)
 
 	# V5 sixty shots: the effects never pile up, and are all gone after
@@ -784,6 +785,158 @@ func _run() -> void:
 	await _frames(180)
 	_check("V5 sixty shots: never more than 30 effects at once, none left after",
 		most_fx <= 30 and GunFx.live_count() == 0, "most %d after %d" % [most_fx, GunFx.live_count()])
+
+	# F1 F2 the flash drawn: a hot core, a burst of uneven spikes, a tongue
+	# along the bore; its second frame smaller and eaten
+	revolver.reset_for_practice()
+	_put_player(Vector3(44, 1.05, 36))
+	await _frames(40)
+	Input.action_press("throw")
+	var flash: Node3D = null
+	var first_scale := -1.0
+	var second_scale := -1.0
+	var first_eaten := -1.0
+	var second_eaten := -1.0
+	var parts_ok := false
+	var lengths: Array = []
+
+	for i in 4:
+		await get_tree().physics_frame
+		var now: Array = player.hand.find_children("GunFlash*", "", true, false)
+		if flash == null and not now.is_empty():
+			flash = now[0]
+			first_scale = flash.scale.x
+			first_eaten = float(flash.get_meta(&"look").get_shader_parameter(&"erosion"))
+			parts_ok = flash.get_node_or_null("Core") != null and flash.get_node_or_null("Spikes") != null and flash.get_node_or_null("Tongue") != null
+			lengths = flash.get_meta(&"spike_lengths", [])
+		elif flash != null and is_instance_valid(flash) and second_scale < 0.0:
+			await get_tree().physics_frame
+			if is_instance_valid(flash):
+				second_scale = flash.scale.x
+				second_eaten = float(flash.get_meta(&"look").get_shader_parameter(&"erosion"))
+		if i == 1:
+			Input.action_release("throw")
+
+	var spikes := lengths.size()
+	var uneven: float = lengths.max() / maxf(lengths.min(), 0.001) if not lengths.is_empty() else 0.0
+	_check("F1 a shot's flash: a hot core, eight uneven spikes and a tongue along the bore", parts_ok and spikes == 8 and uneven > 1.6,
+		"parts %s spikes %d longest/shortest %.2f" % [parts_ok, spikes, uneven])
+	_check("F2 its second frame is smaller and more eaten away", second_scale > 0.0 and second_scale < first_scale * 0.9 and second_eaten > first_eaten,
+		"scale %.2f -> %.2f, eaten %.2f -> %.2f" % [first_scale, second_scale, first_eaten, second_eaten])
+
+	# F3 F4 sparks streak forward out of the muzzle; a ring of smoke puffs out
+	# and drifts on as it grows and fades
+	await _frames(60)
+	revolver.reset_for_practice()
+	var ahead: Vector3 = -player.camera.global_basis.z
+	var muzzle_at: Vector3 = player.hand.gun_point_world(WeaponScript.find(&"revolver").mesh.get_meta(&"muzzle"))
+	Input.action_press("throw")
+	var sparks := 0
+	var forward_ok := true
+	var spark_seen := {}
+	var ring: Node3D = null
+	var ring_from := Vector3.ZERO
+	var ring_scale := 0.0
+
+	for i in 8:
+		await get_tree().physics_frame
+		if i == 1:
+			Input.action_release("throw")
+		var now := get_tree().get_nodes_in_group(&"gunfx_spark")
+		sparks = maxi(sparks, now.size())
+		for sp in now:
+			var id := (sp as Node).get_instance_id()
+			if spark_seen.has(id):
+				forward_ok = forward_ok and ((sp as Node3D).global_position - spark_seen[id]).dot(ahead) > 0.0
+			spark_seen[id] = (sp as Node3D).global_position
+		if ring == null and not get_tree().get_nodes_in_group(&"gunfx_ring").is_empty():
+			ring = get_tree().get_nodes_in_group(&"gunfx_ring")[0]
+			ring_from = ring.global_position
+			ring_scale = ring.scale.x
+
+	await _frames(6)
+	var sparks_left := get_tree().get_nodes_in_group(&"gunfx_spark").size()
+	await _frames(14)
+	var ring_moved := (ring.global_position - ring_from).dot(ahead) if ring != null and is_instance_valid(ring) else -1.0
+	var ring_grew := ring.scale.x > ring_scale * 1.5 if ring != null and is_instance_valid(ring) else false
+	var ring_near := ring_from.distance_to(muzzle_at) < 0.35 if ring != null else false
+	_check("F3 a shot throws a few sparks streaking forward, gone in a moment", sparks >= 5 and forward_ok and sparks_left == 0,
+		"sparks %d forward %s left %d" % [sparks, forward_ok, sparks_left])
+	_check("F4 a ring of smoke puffs out of the muzzle and drifts on, growing", ring_near and ring_moved > 0.1 and ring_grew,
+		"from the muzzle %s moved %.2f grew %s" % [ring_near, ring_moved, ring_grew])
+	await _frames(int(GunFx.RING_LIFE * 60.0) + 10)
+	_check("F4b the smoke ring is gone after its life", get_tree().get_nodes_in_group(&"gunfx_ring").is_empty(), "rings %d" % get_tree().get_nodes_in_group(&"gunfx_ring").size())
+
+	# F5 with effects off: no sparks, no ring
+	revolver.reset_for_practice()
+	Fx.enabled = false
+	var off_any := 0
+	await _tap("throw")
+	for i in 10:
+		off_any = maxi(off_any, get_tree().get_nodes_in_group(&"gunfx_spark").size() + get_tree().get_nodes_in_group(&"gunfx_ring").size())
+		await get_tree().physics_frame
+	_check("F5 with effects off, a shot leaves no sparks or smoke ring", off_any == 0, "effects %d" % off_any)
+	await _frames(60)
+	_check("W5 with effects off, no trail of smoke after the shots", get_tree().get_nodes_in_group(&"gunfx_wisp").filter(func(w): return w.is_emitting()).is_empty(),
+		"trails %d" % get_tree().get_nodes_in_group(&"gunfx_wisp").filter(func(w): return w.is_emitting()).size())
+	Fx.enabled = true
+	await _frames(240)
+
+	# W1-W4 when the gun stops firing, a thin trail of smoke rises from the
+	# muzzle and curls up; never while it is firing; a longer burst smokes
+	# longer; the next shot cuts it off
+	revolver.reset_for_practice()
+	var wisp_tip: Vector3 = WeaponScript.find(&"revolver").mesh.get_meta(&"muzzle")
+	var during := 0
+	await _tap("throw")
+	for i in 10:
+		during = maxi(during, get_tree().get_nodes_in_group(&"gunfx_wisp").size())
+		await get_tree().physics_frame
+	var wisp: Node3D = null
+	for i in 60:
+		await get_tree().physics_frame
+		var found: Array = get_tree().get_nodes_in_group(&"gunfx_wisp")
+		if not found.is_empty():
+			wisp = found[0]
+			break
+	var at_muzzle := 9.0
+	await _frames(3)
+	if wisp != null and is_instance_valid(wisp):
+		at_muzzle = (wisp.span()[1] as Vector3).distance_to(player.hand.gun_point_world(wisp_tip))
+	_check("W1 no trail while firing; when it stops, a trail of smoke from the muzzle", during == 0 and wisp != null and at_muzzle < 0.08,
+		"while firing %d trail %s from the muzzle %.3f" % [during, wisp != null, at_muzzle])
+	await _frames(45)
+	var rose := -9.0
+	var wide := Vector2.ZERO
+	if wisp != null and is_instance_valid(wisp):
+		rose = (wisp.span()[0] as Vector3).y - (wisp.span()[1] as Vector3).y
+		wide = wisp.widths()
+	_check("W2 it rises from the muzzle, thin at the barrel and wider as it climbs", rose > 0.1 and wide.y > wide.x * 2.0,
+		"rose %.2f width at the muzzle %.3f at the top %.3f" % [rose, wide.x, wide.y])
+	var one_shot: float = wisp.emit_time if wisp != null and is_instance_valid(wisp) else 0.0
+	await _frames(400)
+	_check("W3 it thins out and is gone after a while", get_tree().get_nodes_in_group(&"gunfx_wisp").is_empty(),
+		"trails %d" % get_tree().get_nodes_in_group(&"gunfx_wisp").size())
+
+	revolver.reset_for_practice()
+	for k in 3:
+		await _tap("throw")
+		await _frames(int(revolver._settle * 60.0) + 2)
+	var burst: Node3D = null
+	for i in 60:
+		await get_tree().physics_frame
+		var found: Array = get_tree().get_nodes_in_group(&"gunfx_wisp").filter(func(w): return w.is_emitting())
+		if not found.is_empty():
+			burst = found[0]
+			break
+	var three_shots: float = burst.emit_time if burst != null else 0.0
+	await _frames(20)
+	await _tap("throw")
+	await _frames(2)
+	var cut: bool = burst != null and (not is_instance_valid(burst) or not burst.is_emitting())
+	_check("W4 three shots smoke longer than one; the next shot cuts the trail off", three_shots > one_shot * 1.3 and cut,
+		"one shot %.2f s three %.2f s cut %s" % [one_shot, three_shots, cut])
+	await _frames(400)
 
 	# G1 gore pieces are lumpy and wet, from the list
 	var made: Array = Gore.burst(self, Vector3(60, 1.2, 30), Vector3(0, 1, -2), 6)
