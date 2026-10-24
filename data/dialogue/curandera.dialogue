@@ -1,6 +1,7 @@
 # The curandera of the candle lane (the talk and quests spec, section 6;
-# docs/systems/dialogue.md): she stands at the votive ledges on the far wall,
-# east of the librarian's shop. She reads the stranger, and asks him for a book
+# docs/systems/dialogue.md): she stands behind the counter of her own stall of
+# herbs, candles and copal on the lane's north wall, across the lane from the
+# librarian's shop and west of it. She reads the stranger, and asks him for a book
 # only the librarian next door has; given it, she pays in copal. A curandera by
 # trade (types/curandera.dialogue): she offers its limpia and copal too, and
 # her limpia is her own.
@@ -14,7 +15,7 @@ type: curandera
 body: duelist
 colour: copal
 voice: female
-intent: the curandera of the candle lane: she keeps the votives by the chapel and sees more than she says; she wants a book back from the librarian
+intent: the curandera of the candle lane: she keeps the stall of herbs, candles and copal, its censer smoking on her counter, and sees more than she says; she wants a book back from the librarian
 
 == beat open_first
 when: not(met)

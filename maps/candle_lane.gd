@@ -58,12 +58,17 @@ const STUB_HAZE := 0.15
 const ShadeScript := preload("res://scripts/Interaction/Shade.gd")
 const LIBRARIAN_AT := Vector3(-1.1, 0.0, -5.07)
 const LIBRARIAN_LOOKS := Vector3(0.0, 0.0, 0.4)
-## The curandera before the far wall's votive ledges east of the shop, between two runs of their flames; a nameless
-## curandera of the type alone (her name the user's to write) a little along the same ledges; both clear of the walk
-## down the lane's middle, turned toward a point on it, toward the mouth.
-const CURANDERA_AT := Vector3(12.0, 0.0, 3.65)
+## The curandera in her own stall (the bay's hero stall on the north wall, tools/eclipse/stall.py), behind its
+## counter as a stallkeeper stands: in her aisle between the counter's back and the shelves, under the bulb, the
+## censer on the counter before her; clear of the counter, the shelves, her stool by the far end of it and her
+## grandchild's top on the floor (her capsule 0.35 m round, 0.2 m off the counter and as much off the shelves' price
+## cards); turned out across the lane. A nameless curandera of the type alone (her name the user's to write) before
+## the far wall's votive ledges east of the shop, between runs of their flames, clear of the walk down the lane's
+## middle, turned toward a point on it, toward the mouth.
+const CURANDERA_AT := Vector3(0.0, 0.0, -1.15)
+const CURANDERA_LOOKS := Vector3(0.0, 0.0, 2.5)
 const MARKET_CURANDERA_AT := Vector3(14.7, 0.0, 3.65)
-const CURANDERAS_LOOK := Vector3(10.0, 0.0, 0.5)
+const MARKET_CURANDERA_LOOKS := Vector3(10.0, 0.0, 0.5)
 const MARKET_CURANDERA := "<<a market curandera>>"
 
 ## Judged on its own (the stubs at its ends), or set into maps/metro (no stubs: the map's spaces meet it).
@@ -87,9 +92,9 @@ var shades := {}
 
 func _ready() -> void:
 	half_run = LANE_HALF
-	# The walk's order (plan x: the stall at 12.8 where the bay has it; her cart beside it toward the market; the niche
-	# near the mouth on the north wall, across from the bench, the nahual lying by the bench; the fire main's hydrant on
-	# the far wall clear of them all).
+	# The walk's order (plan x: the stall at 12.8 where the bay has it, the curandera behind its counter; her cart
+	# beside it toward the market; the niche near the mouth on the north wall, across from the bench, the nahual lying
+	# by the bench; the fire main's hydrant on the far wall clear of them all).
 	places["cart"] = Vector3(-3.0, 0.0, 2.6)
 	places["niche"] = Vector3(-10.0, 0.0, BACK_WALL)
 	places["niche_yaw"] = 0.0
@@ -115,8 +120,8 @@ func _ready() -> void:
 ## section of its own: the form light (F2) leaves its smoke as it is.
 func _shades() -> void:
 	shades["librarian"] = _shade("librarian", "", "", shop.transform * LIBRARIAN_AT, shop.transform * LIBRARIAN_LOOKS)
-	shades["curandera"] = _shade("curandera", "", "", CURANDERA_AT, CURANDERAS_LOOK)
-	shades["market_curandera"] = _shade("", "curandera", MARKET_CURANDERA, MARKET_CURANDERA_AT, CURANDERAS_LOOK)
+	shades["curandera"] = _shade("curandera", "", "", CURANDERA_AT, CURANDERA_LOOKS)
+	shades["market_curandera"] = _shade("", "curandera", MARKET_CURANDERA, MARKET_CURANDERA_AT, MARKET_CURANDERA_LOOKS)
 
 
 ## A shade of `character` (or of the type `type_id` alone, called `display_name`), standing at `at` turned toward

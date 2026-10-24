@@ -3,8 +3,9 @@ extends Node3D
 ## data/dialogue/curandera.dialogue, librarian.dialogue and their types. Q1
 ## they load clean, every word a placeholder; Q2-Q6 the quest driven through
 ## Conversation headless (the truth route, the lie, the revisits, the types, a
-## new mission); Q7 the shades stand in the candle lane (maps/candle_lane.tscn)
-## and the player walks from the spawn to each and talks; Q8 his open_sent's
+## new mission); Q7 the shades stand in the candle lane (maps/candle_lane.tscn),
+## the curandera behind her stall's counter, and the player walks from the
+## spawn to each and talks (to her across the counter); Q8 his open_sent's
 ## 5-7 options all reachable and whole on screen in the box; Q9 no title or
 ## sale from him while he is angry, until amends.
 ##   Godot --headless --fixed-fps 60 --path . res://tests/talk_quest_test.tscn
@@ -325,23 +326,27 @@ func _in_the_lane() -> void:
 			shades[key] = node
 
 	var market_key := "type:curandera:%s" % MARKET
+	var in_stall := _in_stall(lane, shades.get("curandera"))
 	var standing: bool = shades.has("curandera") and shades.has("librarian") and shades.has(market_key) \
-		and _inside_shop(lane, shades.get("librarian"))
+		and _inside_shop(lane, shades.get("librarian")) and in_stall["ok"]
 	var spawn: Vector3 = player.global_position if player != null else Vector3.INF
 	var reached := {}
 
 	if standing and player != null:
-		# From the spawn, on foot: into the shop to his desk's front, back out and along the lane to the ledges.
+		# From the spawn, on foot: into the shop to his desk's front, back out and across the lane to the front of her
+		# stall's counter, then along the lane to the ledges.
 		reached["librarian"] = await _talk_to(player, shades["librarian"],
 			[Vector3(1.0, 0, 3.0), Vector3(6.2, 0, 3.2), Vector3(6.2, 0, 7.0), Vector3(6.2, 0, 8.1), Vector3(7.1, 0, 8.3)], lane)
 		reached["curandera"] = await _talk_to(player, shades["curandera"],
-			[Vector3(6.2, 0, 8.1), Vector3(6.2, 0, 3.2), Vector3(11.0, 0, 2.2), Vector3(11.6, 0, 2.0)], lane)
-		reached[market_key] = await _talk_to(player, shades[market_key], [Vector3(14.4, 0, 2.0)], lane)
+			[Vector3(6.2, 0, 8.1), Vector3(6.2, 0, 3.2), Vector3(0.0, 0, 1.6), Vector3(0.0, 0, 0.6)], lane)
+		reached[market_key] = await _talk_to(player, shades[market_key], [Vector3(6.0, 0, 2.0), Vector3(14.4, 0, 2.0)], lane)
 
 	var all_ok: bool = reached.size() == 3 and reached.values().all(func(r): return r["ok"])
-	_check("Q7 the candle lane holds both shades (him in his shop) and the type-only curandera; from the spawn the player walks to each, the frob finds it within 2.2 m as Talk, and E opens its painted box",
-		standing and all_ok and spawn.distance_to(Vector3(0.0, 1.0, 4.0)) < 0.2,
-		"shades %s, spawn %s, %s" % [shades.keys(), spawn, reached])
+	# Her talk from before the counter: the player across it from her, not in her aisle.
+	var across: bool = all_ok and in_stall.has("front") and float(reached["curandera"]["at"].z) > float(in_stall["front"])
+	_check("Q7 the candle lane holds both shades (him in his shop, her behind her stall's counter) and the type-only curandera; from the spawn the player walks to each (to her across the counter), the frob finds it within 2.2 m as Talk, and E opens its painted box",
+		standing and all_ok and across and spawn.distance_to(Vector3(0.0, 1.0, 4.0)) < 0.2,
+		"shades %s, spawn %s, stall %s, %s" % [shades.keys(), spawn, in_stall, reached])
 	lane.queue_free()
 	await _frames(2)
 
@@ -479,6 +484,53 @@ func _inside_shop(lane: Node3D, shade: Node3D) -> bool:
 
 	var local: Vector3 = (lane.shop as Node3D).to_local(shade.global_position)
 	return absf(local.x) < 4.0 and local.z < 0.0 and local.z > -6.0
+
+
+## Whether the curandera stands in her stall, as the stall's own pieces have it: within the frame's footprint, her
+## capsule wholly behind the counter (past its back, not only its front) and along its length, touching none of the
+## stall's solid pieces (the counter, the shelves, the goods and candles, the censer) nor anything else, the bulb over
+## her head. Also the counter's front (the lane's z), where the player talks to her from.
+func _in_stall(lane: Node3D, shade: Node3D) -> Dictionary:
+	var stall: Node3D = lane.get("stall")
+
+	if shade == null or stall == null:
+		return {"ok": false, "why": "no shade or no stall"}
+
+	var frame := stall.find_child("stall_frame", true, false) as MeshInstance3D
+	var counter := stall.find_child("stall_counter", true, false) as MeshInstance3D
+	# (The bulb hangs from its own swaying pivot, taken off the stall.)
+	var pivot: Node = lane.get("bulb_pivot")
+	var bulb := (pivot.find_child("stall_bulb", true, false) if pivot != null else null) as MeshInstance3D
+	var shape := shade.get_node_or_null("Shape") as CollisionShape3D
+
+	if frame == null or counter == null or bulb == null or shape == null:
+		return {"ok": false, "why": "frame %s counter %s bulb %s shape %s" % [frame, counter, bulb, shape]}
+
+	var to_lane := lane.global_transform.affine_inverse()
+	var footprint := to_lane * (frame.global_transform * frame.get_aabb())
+	var bench := to_lane * (counter.global_transform * counter.get_aabb())
+	var lamp := to_lane * (bulb.global_transform * bulb.get_aabb())
+	var capsule := shape.shape as CapsuleShape3D
+	var at := lane.to_local(shade.global_position)
+	var inside: bool = at.x - capsule.radius > footprint.position.x and at.x + capsule.radius < footprint.end.x \
+		and at.z - capsule.radius > footprint.position.z and at.z + capsule.radius < footprint.end.z
+	var behind: bool = at.z + capsule.radius < bench.position.z and at.x > bench.position.x and at.x < bench.end.x
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = capsule
+	# (Lifted off the floor she stands on, 2 cm.)
+	query.transform = shape.global_transform.translated(Vector3.UP * 0.02)
+	query.exclude = [(shade as CollisionObject3D).get_rid()]
+	var touching := []
+
+	for hit in lane.get_world_3d().direct_space_state.intersect_shape(query, 8):
+		var node: Node = hit["collider"]
+		touching.append(String(node.get_parent().name if node.get_parent() != null else node.name))
+
+	var head := at.y + shape.position.y + capsule.height * 0.5
+	var under_lamp: bool = lamp.position.y > head + 0.2
+	return {"ok": inside and behind and touching.is_empty() and under_lamp, "at": at.snapped(Vector3.ONE * 0.01),
+		"inside": inside, "behind": behind, "touching": touching, "head room": snappedf(lamp.position.y - head, 0.01),
+		"front": snappedf(bench.end.z, 0.01)}
 
 
 ## Walks the player along `way` (the lane's frame, on its floor) from where he
