@@ -56,6 +56,8 @@ const HURT_AT := 0.35
 const HURT_CUTOFF := 1800.0
 const RING_CUTOFF := 1100.0
 const OPEN_CUTOFF := 20000.0
+## Inside a Ward: the world heard as through its smoke (Hz).
+const WARD_CUTOFF := 2500.0
 ## Air: how dull a sound grows toward the edge of hearing.
 const AIR_CUTOFF := 7500.0
 const AIR_DB := -10.0
@@ -308,6 +310,8 @@ static func loudness(noise_db: float) -> float:
 ## sound still playing at exit is reported as a leak.
 static var enabled := DisplayServer.get_name() != "headless"
 static var volume_db := 0.0
+## Inside a Ward (Ward.gd sets it, 0..1, eased): the world's sounds dull.
+static var ward_muffle := 0.0
 
 static var _bank := {}
 ## The take each sound last played, so the next is another.
@@ -611,11 +615,12 @@ static func _hurt_filter() -> AudioEffectLowPassFilter:
 	return filter
 
 
-## How dull the world sounds (a low-pass cutoff, Hz) with `health` (0..1) and
-## the ringing of a heavy blow (0..1).
-static func world_cutoff_for(health: float, ringing: float) -> float:
+## How dull the world sounds (a low-pass cutoff, Hz) with `health` (0..1),
+## the ringing of a heavy blow (0..1), and standing in a Ward (0..1).
+static func world_cutoff_for(health: float, ringing: float, warded := 0.0) -> float:
 	var hurt := clampf(health / HURT_AT, 0.0, 1.0)
 	var cutoff := exp(lerpf(log(HURT_CUTOFF), log(OPEN_CUTOFF), hurt))
+	cutoff = minf(cutoff, exp(lerpf(log(OPEN_CUTOFF), log(WARD_CUTOFF), clampf(warded, 0.0, 1.0))))
 	return minf(cutoff, exp(lerpf(log(OPEN_CUTOFF), log(RING_CUTOFF), clampf(ringing, 0.0, 1.0))))
 
 
@@ -894,7 +899,7 @@ func _process(_delta: float) -> void:
 	var health := health_of(get_tree().get_first_node_in_group(&"player"))
 
 	_ringing = maxf(_ringing - real / 0.8, 0.0)
-	var cutoff := world_cutoff_for(health, _ringing)
+	var cutoff := world_cutoff_for(health, _ringing, ward_muffle)
 
 	for bus in [BUS_WORLD, BUS_FAR, BUS_AMBIENCE]:
 		var index := AudioServer.get_bus_index(bus)

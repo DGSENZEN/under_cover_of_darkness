@@ -18,6 +18,9 @@ const BodyPose := preload("res://scripts/PlayerUtils/BodyPose.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const StealthHUD := preload("res://scripts/UI/StealthHUD.gd")
 const PlayerCombat := preload("res://scripts/Combat/PlayerCombat.gd")
+const RevolverScript := preload("res://scripts/Combat/Revolver.gd")
+const PowerPoolScript := preload("res://scripts/Magic/PowerPool.gd")
+const CasterScript := preload("res://scripts/Magic/Caster.gd")
 const GemEnvironment := preload("res://scripts/Visual/GemEnvironment.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -393,10 +396,20 @@ var _climb_last_y := 0.0
 ## Dead: how far through falling to the floor the view is, 0..1.
 var _death_fall := 0.0
 var combat: Node = null
+## The revolver's hand (Revolver.gd).
+var revolver: Node = null
+## The power every spell draws on (PowerPool.gd).
+var power: Node = null
+## The left hand's magic (Caster.gd).
+var caster: Node = null
 var _hazard_cooldown := 0.0
 
 var coyote_timer := 0.0
 var jump_buffer_timer := 0.0
+## When the last jump left the ground (game time) and from what height:
+## Empower's jump goes on from them (Caster.gd).
+var last_jump_at := -100.0
+var last_jump_from_y := 0.0
 
 ## The latest obstacle measured in front of the player, or null.
 var cached_profile: ObstacleProfile = null
@@ -571,6 +584,15 @@ func _ready() -> void:
 	combat = PlayerCombat.new()
 	combat.name = "Combat"
 	add_child(combat)
+	revolver = RevolverScript.new()
+	revolver.name = "Revolver"
+	add_child(revolver)
+	power = PowerPoolScript.new()
+	power.name = "Power"
+	add_child(power)
+	caster = CasterScript.new()
+	caster.name = "Caster"
+	add_child(caster)
 
 	# Make the level's placeholder sounds now, in the background, not on the
 	# first footstep.
@@ -1145,6 +1167,8 @@ func _try_buffered_jump() -> void:
 
 	velocity.y = jump_speed
 	_jump_cut_allowed = true
+	last_jump_at = _game_time
+	last_jump_from_y = global_position.y
 
 	jump_buffer_timer = 0.0
 	coyote_timer = 0.0
@@ -1498,6 +1522,15 @@ func take_damage(amount: float, from: Node) -> void:
 	# A raised guard takes most of a blow, or, just in time, all of it.
 	if combat != null:
 		amount = combat.filter_incoming(amount, from)
+
+	# What gets through breaks a tome spell being cast (even through
+	# invulnerability: a test's or a cheat's, not the spell's).
+	if caster != null and amount > 0.0:
+		# What it was (attack_info's "type": a blast, an arrow; a guard's heavy
+		# blow counts as a power blow).
+		var info: Dictionary = from.attack_info() if from != null and from.has_method("attack_info") else {}
+		var kind := StringName(info.get("type", &"power" if info.get("heavy", false) else &""))
+		caster.on_hit(amount, kind)
 
 	if invulnerable or amount <= 0.0:
 		return

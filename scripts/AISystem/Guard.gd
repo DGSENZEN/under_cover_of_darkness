@@ -19,6 +19,7 @@ const GarrisonScript := preload("res://scripts/AISystem/Garrison.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
 const LanternBody := preload("res://scripts/Visual/Lights/LanternBody.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
+const GoreScript := preload("res://scripts/Visual/Gore.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Comms := preload("res://scripts/AISystem/Comms.gd")
 const Dangers := preload("res://scripts/AISystem/Dangers.gd")
@@ -226,6 +227,22 @@ var grief_fades := true
 
 @export_category("Vision")
 @export var eye_height := 1.65
+## Burst: what comes off him, how many pieces fly, and how much more it
+## shakes those who see it than a cut does.
+const GIB_PARTS: Array[StringName] = [&"upperarm_l", &"upperarm_r", &"thigh_l", &"thigh_r", &"neck_01"]
+const GIB_PIECES := 10
+const GIB_HORROR := 2.0
+## How hard a shot past him close makes him start (near_miss), as a hit's
+## strength.
+const NEAR_MISS_START := 0.3
+## A revolver ball: how hard it knocks him back (m/s; a pellet, less), how
+## much longer it rocks him than an arrow, how hard a head shot snaps his
+## head, and how much harder it throws the man it kills.
+const BALL_SHOVE := 2.5
+const PELLET_SHOVE := 0.4
+const BALL_STAGGER := 1.5
+const HEADSHOT_SNAP := 1.6
+const BALL_KILL_PUSH := 1.4
 ## Full view cone, in degrees.
 @export var fov_horizontal := 140.0
 @export var fov_vertical := 90.0
@@ -456,7 +473,12 @@ var _last_at := Vector3.INF
 ## What the blow now landing would cut off him, should it kill him (the
 ## attacker says: PlayerCombat), and what the one that killed him did.
 var sever_hint: Array[StringName] = []
+## Set just before a blow that would burst him (a point-blank shell, an
+## empowered blow; read as sever_hint is): if it kills him, it does (_gib).
+var gib_hint := false
 var _sever: Array[StringName] = []
+## Burst by what killed him (gib_hint): the pieces fly when he falls.
+var _gibbed := false
 ## Open wounds: health lost a second, and the trail of drops he leaves. Deep
 ## cuts open more; they close slowly on their own, or at once when he has a
 ## moment to bind them (he has lost you). Bleeding alone never takes him
@@ -1688,7 +1710,7 @@ func is_behind(attacker: Node3D) -> bool:
 ## A weapon struck him. Returns "blocked", "parried", "hit", "killed" or
 ## "none". `point` is where it struck, `direction` the way the blow was
 ## travelling. `kind`: "quick", "power", "backstab", "drop", "arrow",
-## "thrown", "blast", "fire" or "crush".
+## "bullet", "shot" (one pellet), "shard", "thrown", "blast", "fire" or "crush".
 func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3, direction: Vector3) -> StringName:
 	if _knocked_out:
 		return &"none"
@@ -1700,6 +1722,10 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 	var blow := _blow_direction(attacker, direction)
 	var at: Vector3 = point if point != Vector3.ZERO else _rig.chest()
 	_last_blow = blow
+
+	# Shot: his squad reads the gun from it.
+	if (kind == &"bullet" or kind == &"shot") and attacker != null:
+		_fighter.on_shot_at(attacker, true)
 
 	if kind == &"backstab" or (kind == &"drop" and damage >= health):
 		_mercy.died()
@@ -1766,7 +1792,7 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 	var riposte: bool = punished or _fighter.riposted_by(attacker)
 
 	if not opened:
-		_fighter.add_posture(26.0 if riposte else (22.0 if kind in [&"power", &"drop", &"crush", &"blast"] else 10.0))
+		_fighter.add_posture(26.0 if riposte else (22.0 if kind in [&"power", &"drop", &"crush", &"blast"] else (18.0 if kind == &"bullet" else (12.0 if kind == &"shard" else 10.0))))
 
 	# How hard it rocks him: a quick cut, a heavy blow, an arrow by its force.
 	var strength := 0.6
@@ -1779,6 +1805,15 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 
 	if kind == &"arrow":
 		strength = clampf(damage / 60.0, 0.4, 1.2)
+
+	if kind == &"bullet":
+		strength = clampf(damage / 50.0, 0.6, 1.2)
+
+	if kind == &"shot":
+		strength = clampf(damage / 30.0, 0.4, 1.0)
+
+	if kind == &"shard":
+		strength = 0.7
 
 	if kind == &"thrown":
 		strength = clampf(damage / 25.0, 0.4, 0.9)
@@ -1813,6 +1848,10 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 		_fighter.on_hit(true)
 		var rocked: float = _fighter.stagger_for(kind, stagger_time, riposte)
 
+		# A ball rocks a man longer than an arrow does.
+		if kind == &"bullet":
+			rocked *= BALL_STAGGER
+
 		# A riposte takes the opening his parried blow made: it rocks him hard
 		# but briefly, and he is back in the fight, not left reeling out the
 		# rest of the parry.
@@ -1823,6 +1862,22 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 			_stagger = maxf(_stagger, rocked)
 
 		_attack_timer = maxf(_attack_timer, _stagger + float(_fighter.wary_after_hit))
+
+	# A ball (a pellet, less) knocks him back; one in the head snaps it back.
+	if (kind == &"bullet" or kind == &"shot") and not _downed and health > 0.0:
+		var knock := Vector3(blow.x, 0.0, blow.z).normalized() * (BALL_SHOVE if kind == &"bullet" else PELLET_SHOVE)
+
+		# A ball stops him where he was going and throws him back; pellets
+		# only add to it.
+		if kind == &"bullet":
+			velocity.x = knock.x
+			velocity.z = knock.z
+		else:
+			velocity.x += knock.x
+			velocity.z += knock.z
+
+		if kind == &"bullet" and at.y - global_position.y >= eye_height - 0.25:
+			_rig.react_hit(blow, HEADSHOT_SNAP)
 
 	# A heavy blow shoves him back a step.
 	if (kind == &"power" or kind == &"drop" or kind == &"crush") and not _downed:
@@ -1844,14 +1899,22 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 
 		_last_push = thrown * lerpf(1.4, 3.4, clampf((strength - 0.6) / 0.8, 0.0, 1.0))
 
+		# A ball throws the man it kills harder than a blade's cut.
+		if kind == &"bullet":
+			_last_push *= BALL_KILL_PUSH
+
 		# A blast or a falling weight throws a man bodily.
 		if kind == &"blast" or kind == &"crush":
 			_last_push = thrown * 5.5 + Vector3.UP * 3.0
 
 		_sever = sever_hint.duplicate()
 
+		# Burst: every limb and the head.
+		if gib_hint:
+			_gibbed = true
+			_sever = GIB_PARTS.duplicate()
 		# A blast tears men apart.
-		if kind == &"blast" and _sever.is_empty():
+		elif kind == &"blast" and _sever.is_empty():
 			_sever = _torn_by_blast(damage)
 
 		_last_at = at
@@ -1870,6 +1933,19 @@ func take_hit(damage: float, attacker: Node3D, kind: StringName, point: Vector3,
 		bark("Argh!")
 
 	return &"hit"
+
+
+## A shot went past him close (Revolver.gd): he starts, turns on whoever
+## fired it, and his squad reads the gun from it.
+func near_miss(by: Node3D, at: Vector3) -> void:
+	if _knocked_out or health <= 0.0:
+		return
+
+	var past := global_position + Vector3.UP * 1.2 - at
+	_last_blow = past.normalized() if past.length() > 0.01 else -global_basis.z
+	_rig.react_hit(_last_blow, NEAR_MISS_START)
+	_engage(by)
+	_fighter.on_shot_at(by, false)
 
 
 ## Set alight: he burns for `seconds`, running about with no fight in him,
@@ -2045,6 +2121,10 @@ func _hit_sound(kind: StringName, at: Vector3, strength: float) -> void:
 			Sfx.play(self, &"flesh_heavy", at)
 		&"fire":
 			Sfx.play(self, &"burning", at, -2.0)
+		&"bullet":
+			Sfx.play(self, &"arrow_flesh", at, 0.0, 0.85)
+		&"shot":
+			Sfx.play(self, &"arrow_flesh", at, -6.0, 0.9)
 		_:
 			pass
 
@@ -2230,7 +2310,9 @@ func die(_attacker: Node3D) -> void:
 	if not _sever.is_empty() and _rig.has_method("sever"):
 		_rig.sever(_sever, _last_push)
 
-		if not puppet:
+		if _gibbed:
+			_gib(_last_at if _last_at != Vector3.ZERO else _rig.chest(), _last_push)
+		elif not puppet:
 			_horrify(_sever.has(&"neck_01"))
 
 	# His last cry: none from a man whose head is gone.
@@ -4360,8 +4442,11 @@ func _open_wound(at: Vector3, kind: StringName, strength: float, deep: bool) -> 
 
 	var more := lerpf(0.35, 1.7, clampf((strength - 0.5) / 0.6, 0.0, 1.0))
 
-	if kind == &"arrow":
+	if kind == &"arrow" or kind == &"bullet":
 		more = 0.8
+
+	if kind == &"shot":
+		more = 0.3
 
 	if deep:
 		more += 0.9
@@ -4427,9 +4512,19 @@ func _torn_by_blast(damage: float) -> Array[StringName]:
 	return torn
 
 
+## Burst (a point-blank shell, an empowered blow): pieces of him flung out
+## and his blood all about (Gore.gd); his body stays. Whoever sees it
+## is shaken twice over. (The torso split, later, goes here.)
+func _gib(at: Vector3, push: Vector3) -> void:
+	GoreScript.burst(self, at, push, GIB_PIECES)
+
+	if not puppet:
+		_horrify(true, GIB_HORROR)
+
+
 ## Cut apart in front of his friends: whoever sees it is shaken, the squad's
-## heart sinks, and they say so.
-func _horrify(beheaded: bool) -> void:
+## heart sinks, and they say so; `weight` times over (a body burst).
+func _horrify(beheaded: bool, weight := 1.0) -> void:
 	var here: Vector3 = _rig.chest()
 	var shaken_squad := false
 
@@ -4442,24 +4537,24 @@ func _horrify(beheaded: bool) -> void:
 		if d > GORE_SEEN_RANGE or not other._line_of_sight(other.eye_position(), here, self):
 			continue
 
-		other.witness_gore(beheaded, not shaken_squad)
+		other.witness_gore(beheaded, not shaken_squad, weight)
 		shaken_squad = true
 
 
-## He saw a man cut apart.
-func witness_gore(beheaded: bool, for_the_squad: bool) -> void:
+## He saw a man cut apart (`weight` times over: burst).
+func witness_gore(beheaded: bool, for_the_squad: bool, weight := 1.0) -> void:
 	if _knocked_out:
 		return
 
 	if state == Alert.COMBAT:
 		# The less nerve he has, the harder it hits him.
 		var nerve: float = float(_fighter.temper.nerve) if _fighter.temper != null else 0.5
-		_fighter.add_posture((28.0 if beheaded else 18.0) * (1.4 - nerve))
+		_fighter.add_posture((28.0 if beheaded else 18.0) * (1.4 - nerve) * weight)
 
 	var squad: RefCounted = _fighter.squad
 
 	if for_the_squad and squad != null:
-		squad.morale = maxf(float(squad.morale) - (0.15 if beheaded else 0.08), 0.0)
+		squad.morale = maxf(float(squad.morale) - (0.15 if beheaded else 0.08) * weight, 0.0)
 
 	# And the whole garrison hears of it.
 	if for_the_squad and _target != null and is_instance_valid(_target):

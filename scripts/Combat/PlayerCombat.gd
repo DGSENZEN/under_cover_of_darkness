@@ -328,6 +328,28 @@ func set_stowed(p_stowed: bool) -> void:
 		player.hand.set_stowed(p_stowed)
 
 
+## On your feet with your hands free for a weapon: not dead, climbing,
+## stowed (on holds), carrying, or paused.
+func is_able() -> bool:
+	return (
+		not player.is_dead
+		and player.movement_state == player.MoveState.LOCOMOTION
+		and not stowed
+		and not player._is_carrying()
+		and not get_tree().paused
+	)
+
+
+## An empowered kick's blow: the pistol-whip's three times over.
+const EMPOWERED_KICK := 60.0
+
+
+## The revolver (any gun) is the weapon in hand.
+func gun_drawn() -> bool:
+	var drawn: Resource = current_weapon()
+	return drawn != null and drawn.kind == WeaponScript.Kind.GUN
+
+
 func current_weapon() -> Resource:
 	if player.inventory == null:
 		return null
@@ -378,13 +400,7 @@ func _physics_process(delta: float) -> void:
 
 	_block_held = block_held
 
-	var able: bool = (
-		not player.is_dead
-		and player.movement_state == player.MoveState.LOCOMOTION
-		and not stowed
-		and not player._is_carrying()
-		and not get_tree().paused
-	)
+	var able := is_able()
 
 	if not able:
 		_reset()
@@ -399,6 +415,15 @@ func _physics_process(delta: float) -> void:
 	var spent: bool = player.is_mouse_input_swallowed() or player.is_attack_press_spent()
 	var attack_pressed := Input.is_action_just_pressed("throw") and not spent and phase != Phase.STAGGER
 	var attack_held := Input.is_action_pressed("throw") and not spent
+
+	# The revolver drawn: its own hand (Revolver.gd) fires it and the left
+	# casts (Caster.gd). Here there is only the kick.
+	var gun := gun_drawn()
+
+	if gun:
+		attack_pressed = false
+		attack_held = false
+		block_pressed = false
 
 	if spent:
 		_clear_buffered_inputs()
@@ -428,10 +453,14 @@ func _physics_process(delta: float) -> void:
 	if phase == Phase.RECOVER:
 		kick_ok = kick_ok and (_outcome == &"hit" or _outcome == &"miss") and _t >= _recovery * 0.5
 
-	if Input.is_action_just_pressed("kick") and kick_ok:
+	# The revolver drawn and a man in arm's reach: its butt, not the boot.
+	if Input.is_action_just_pressed("kick") and kick_ok and not (gun and player.revolver != null and player.revolver.try_whip()):
 		_start_kick()
 
-	if Input.is_action_just_pressed("dodge") and phase != Phase.STAGGER and phase != Phase.KICK and phase != Phase.DODGE and player.is_on_floor() and stamina >= 1.0:
+	# Q dodges with a blade or bow in hand; otherwise it is Blink (Caster.gd).
+	var q_pressed := Input.is_action_just_pressed("dodge") or (InputMap.has_action("blink") and Input.is_action_just_pressed("blink"))
+
+	if not gun and weapon != null and q_pressed and phase != Phase.STAGGER and phase != Phase.KICK and phase != Phase.DODGE and player.is_on_floor() and stamina >= 1.0:
 		_dodge_pressed_at = _game_time
 
 	_try_buffered_dodge()
@@ -681,6 +710,10 @@ func reset_for_practice() -> void:
 ## Movement is slower with a raised guard, a charged blow, a drawn bow, a
 ## blow under way (not one thrown at a run), or while knocked off balance.
 func speed_scale() -> float:
+	# Aiming down the revolver's sights.
+	if gun_drawn() and player.get("revolver") != null and player.revolver.aim_amount() > 0.0:
+		return player.revolver.AIM_SPEED
+
 	if blocking:
 		return block_speed_scale
 
@@ -2086,7 +2119,27 @@ func _kick_contact() -> void:
 		if collider.has_method("kick"):
 			var body := collider as Node3D
 			contact = body.global_position + Vector3.UP * 1.1 - forward * 0.3
-			collider.kick(forward * kick_speed, player)
+
+			# Empowered (Caster.gd): beast strength, a blast of a blow that
+			# throws him bodily.
+			if player.caster != null and player.caster.spend_empower(&"blow", contact, forward) and collider.has_method("take_hit"):
+				# A killing blow of beast strength bursts him (Guard.gib_hint).
+				if collider.get("gib_hint") != null:
+					collider.set("gib_hint", true)
+
+				collider.take_hit(EMPOWERED_KICK, player, &"blast", contact, forward)
+
+				if is_instance_valid(collider) and collider.get("gib_hint") != null:
+					collider.set("gib_hint", false)
+
+				if not is_instance_valid(collider):
+					kicked.emit(collider)
+					struck = true
+					continue
+
+				collider.kick(forward * kick_speed * player.caster.EMPOWER_BLOW, player)
+			else:
+				collider.kick(forward * kick_speed, player)
 			adrenaline = minf(adrenaline + 8.0, adrenaline_max)
 			Sfx.play(player, &"kick", contact)
 			Fx.dust(player, contact, -forward, 0.4, "carpet")
@@ -2228,6 +2281,12 @@ func _consume_arrow() -> void:
 ## glides.
 func _send_pose(delta: float) -> void:
 	if weapon == null:
+		return
+
+	# The revolver's own hand poses it (Revolver.gd).
+	if weapon.kind == WeaponScript.Kind.GUN:
+		_hand(&"set_brace", [0.0])
+		_hand(&"set_bow_draw", [0.0, null])
 		return
 
 	var poses: Dictionary = ViewPoses.set_of(weapon.id)

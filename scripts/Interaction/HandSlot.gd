@@ -15,6 +15,9 @@ const ArmReachScript := preload("res://scripts/Visual/ArmReach.gd")
 const ViewPosesScript := preload("res://scripts/Combat/ViewPoses.gd")
 const HandContactsScript := preload("res://scripts/Interaction/HandContacts.gd")
 const HeldPageScript := preload("res://scripts/Interaction/HeldPage.gd")
+const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
+const MagicFxScript := preload("res://scripts/Visual/MagicFx.gd")
+const LibraryGlyphsScript := preload("res://scripts/Visual/Library/LibraryGlyphs.gd")
 
 ## Visual layer 19. The lightgem cameras' cull masks leave it out.
 const VIEWMODEL_LAYER := 1 << 18
@@ -45,6 +48,94 @@ const MAX_REACH := 0.45
 ## The grip lies across the palm on a slant, as it does in a real fist, so
 ## a blade can point along the arm for a thrust without a broken wrist.
 const HAND_GRIP := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-20.0)) * Basis(Vector3(0, 1, 0), Vector3(0, 0, 1), Vector3(1, 0, 0)), Vector3(-0.03, 0.08, 0.0))
+## A pistol's grip in the right fist: the handle across the palm, its top
+## at the thumb, the barrel running on along the fingers' bones, so with the
+## wrist straight the gun points down the forearm. The grip's slant is the
+## handle's own rake.
+const GUN_GRIP := Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-10.0)) * Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0)), Vector3(-0.03, 0.08, 0.0))
+## A hand spell's circle: how many pieces, and what each school's are made
+## of [mesh, material, how each piece is turned on the ring]: Obsidian's
+## splinters of black glass pointing out, Copal's tendrils of ward smoke
+## drawn round it (in the shot's approved look: MeshVfx).
+const CIRCLE_PIECES := 12
+## The Shard's wind-up: the spearhead's length at full (m, full size) and
+## how small it starts; how far the hand draws back and how much it shakes
+## at the end; how far and how fast it pushes out at the release.
+const SPEARHEAD_LENGTH := 0.14
+## Where a circle floats off the casting hand (view space, full size): up
+## beside the fingers toward the crosshair, where the hand does not hide it,
+## square to the aim.
+const CIRCLE_AT := Vector3(0.15, 0.1, -0.08)
+## The Ward's wind-up: ward smoke curling up from the palm (how tall at full,
+## m, full size), and the embers of copal in it (how many; ember red-orange,
+## not marigold; how bright from the start of the cast to its end).
+const PALM_SMOKE_TALL := 0.07
+const PALM_EMBERS := 4
+const EMBER := Color("#D9541E")
+const PALM_GLOW_FROM := 0.3
+const PALM_GLOW_TO := 3.0
+## Round the Ward's circle in your hand: a ring of the invented script (as
+## the written circle on the floor: Ward.gd), how many, how big (m, full
+## size), how far out from the circle's pieces.
+const HAND_GLYPHS := 12
+const HAND_GLYPH_SIZE := 0.024
+const HAND_GLYPH_OUT := 1.55
+## Empower, round two: the tome's written pages (lines of the invented
+## script on each, glyphs on a line, how big; ink and bone; how long a lit
+## line waits before its words lift off, how long they fly to the gun hand);
+## the charge in the gun hand (fur shells on the Skin surface, how long the
+## hand takes to come back when it is spent; the heartbeat it pulses with,
+## how far the hand twitches on it).
+const TOME_LINES := 2
+const TOME_LINE_GLYPHS := 4
+const TOME_GLYPH_SIZE := 0.02
+## How far the leaves lie off the spine: over the stand-in tome's open paper
+## (Weapon.tome_mesh, whose blocks open up to ~3.5 cm), so the top leaf is the
+## page you read. A real tome model will want this again.
+const LEAF_OVER := 0.04
+const INK := Color("#3A2618")
+const BONE := Color("#D8C7A3")
+const WORD_DELAY := 0.1
+const WORD_FLIGHT := 0.35
+const FUR_SHELLS := 3
+const BRISTLE_TIME := 0.25
+const BEAT_BPM := 70.0
+const BEAT_KICK := 0.006
+const SPEARHEAD_FROM := 0.12
+const CAST_DRAW_BACK := 0.015
+const CAST_TREMBLE := 0.0015
+const RELEASE_PUSH := 0.05
+const RELEASE_PUSH_TIME := 0.15
+const WARD_CORE := Color("#F2FAFC")
+const WARD_BODY := Color("#CFE8F0")
+const WARD_EDGE := Color("#7FA6B4")
+static var CIRCLE_LOOKS := {
+	&"obsidian": [MagicFxScript.splinter_mesh(0.008, 0.048, 0.004), _circle_glass(), -PI * 0.5],
+	&"copal": [MeshVfx.tendril(PackedVector3Array([Vector3.ZERO, Vector3(0.004, 0.018, 0.0), Vector3(0.0, 0.036, 0.004), Vector3(-0.004, 0.05, 0.0)]), 0.006, 6), _circle_smoke(), 0.0],
+}
+
+
+## Black glass in your view: the world's glass, drawn at the arms' field of
+## view.
+static func _circle_glass() -> StandardMaterial3D:
+	var m: StandardMaterial3D = MagicFxScript.glass_look().duplicate()
+	ViewArmsScript.dress(m)
+	return m
+
+
+## Ward smoke in your view: ghostly (unshaded, low), drawn as the flash is.
+static func _circle_smoke() -> ShaderMaterial:
+	var m := MeshVfx.look(WARD_CORE, WARD_BODY, WARD_EDGE, 1.1, 0.25, 0.8, 1.3)
+	m.shader = preload("res://scripts/Visual/vfx_gunflash.gdshader")
+	m.set_shader_parameter(&"opacity", 0.8)
+	m.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+	m.render_priority = 12
+	return m
+
+
+## The Caster's tome in the left hand, held from under its spine: the palm
+## on its back, the fingers up along the spine, the pages toward you.
+const TOME_GRIP := Transform3D(Basis(Vector3(0, 0, -1), Vector3(0, 1, 0), Vector3(1, 0, 0)), Vector3(0.05, 0.12, 0.0))
 ## A bow in the left fist: upright, the string toward you.
 const BOW_GRIP := Transform3D(Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0)), Vector3(0.03, 0.08, 0.0))
 ## The purse sitting in the left palm, facing up.
@@ -69,6 +160,11 @@ const QUIVER := Vector3(0.34, -0.62, 0.1)
 ## blade +Y, the true edge +X, the flat toward you +Z): palm on the flat,
 ## fingers up the edge, thumb toward the hilt.
 const BRACE := Transform3D(Basis(Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, -1, 0)), Vector3(-0.08, 0.42, 0.05))
+## The left hand under the revolver's grip, both hands on the gun (the hand
+## bone's frame in the gun's: palm toward the right fist, the hand running on
+## from the left forearm forward and across, thumb up). A stand-in until
+## posed with the user.
+const GUN_SUPPORT := Transform3D(Basis(Vector3(0.8566, 0, 0.516), Vector3(0.4997, -0.2498, -0.8294), Vector3(0.1289, 0.9683, -0.214)), Vector3(-0.06, -0.03, 0.04))
 const ARROW_TAIL := 0.356
 
 @export var main_rest := Vector3(0.19, -0.19, -0.34)
@@ -107,6 +203,59 @@ var _purse_bulge := 0.0
 var _jobs: Array[Dictionary] = []
 var _job: Dictionary = {}
 var _checking := false
+## Both hands on the revolver, 0..1 (set_gun_support).
+var _gun_support := 0.0
+## Up at the eye, 0..1 (set_gun_aim): the pose is held as it is, the wrist
+## let bend to put the bore on the line of sight.
+var _gun_aim := 0.0
+## What the left hand holds for the Caster ("", "cast", "tome"), where
+## (full-size camera space), and how far it is up, 0..1.
+var _left_mode: StringName = &""
+var _left_frame := Transform3D.IDENTITY
+var _left_up := 0.0
+var _tome: MeshInstance3D
+## The tome's pages turned as Empower is read (set_tome_flutter): their
+## pivots on the spine, and how far through the reading it is.
+var _pages: Array[Node3D] = []
+var _flutter := 0.0
+## Empower's charge on the gun hand (set_pelt), 0..1.
+var _pelt := 0.0
+## A hand spell's circle before the casting palm: whose school, how far
+## closed (0..1), and its pieces.
+var _circle_school: StringName = &""
+var _circle_progress := 0.0
+var _circle: Node3D
+var _circle_pieces: Array[MeshInstance3D] = []
+var _spearhead: MeshInstance3D
+## The Ward's wind-up in the palm: the smoke (its curls and embers), and the
+## embers' glow material.
+var _palm_smoke: Node3D
+var _palm_glow: StandardMaterial3D
+var _hand_glyphs: Array[MeshInstance3D] = []
+## The tome's lines of script: their glyphs, each line's state (0 ink, 1 lit,
+## 2 its words gone to the hand) and when it lit; the two looks.
+var _tome_lines: Array = []
+## The leaves the lines are written on (written the first time the tome
+## shows: made with the hand, they never drew).
+var _leaves: Array[MeshInstance3D] = []
+var _line_state: Array[int] = []
+var _line_lit_at: Array[float] = []
+var _ink_look: ShaderMaterial
+var _bone_look: ShaderMaterial
+## Empower's charge on the gun hand: the arms' mesh and its Skin surface, the
+## look it had there, the look with the fur passes chained on, the passes;
+## whether they are on; the spend's bristle left (seconds).
+var _fur_mesh: MeshInstance3D
+var _fur_index := -1
+var _fur_before: Material
+var _fur_skin: Material
+var _fur_looks: Array[ShaderMaterial] = []
+var _fur_on := false
+var _bristle := 0.0
+## Seconds since a hand spell was let go (release_cast).
+var _release_t := INF
+## The revolver's moving parts, children of the main mesh: cylinder, hammer, gate.
+var _gun_parts := {}
 var _time := 0.0
 
 ## Full-size camera-space weapon frames sent by combat and interpolated between ticks.
@@ -260,6 +409,15 @@ func _ready() -> void:
 	add_child(_main)
 	_main_mesh = _viewmodel_instance()
 	_main.add_child(_main_mesh)
+
+	# The Caster's tome, in the left hand.
+	_tome = _viewmodel_instance()
+	_tome.name = "Tome"
+	_tome.mesh = WeaponScript.tome_mesh()
+	_apply_materials(_tome, _tome.mesh)
+	_tome.visible = false
+	add_child(_tome)
+	_make_pages()
 
 	_off = Node3D.new()
 	_off.name = "OffHand"
@@ -480,6 +638,510 @@ func set_brace(amount: float) -> void:
 	_brace = clampf(amount, 0.0, 1.0)
 
 
+## Both hands on the revolver: the left under the grip, 0..1.
+func set_gun_support(amount: float) -> void:
+	_gun_support = clampf(amount, 0.0, 1.0)
+
+
+## The revolver up at the eye, 0..1.
+func set_gun_aim(amount: float) -> void:
+	_gun_aim = clampf(amount, 0.0, 1.0)
+
+
+## The revolver's moving parts: the cylinder turned (radians), the hammer
+## back 0 (cocked) to 1 (fallen), the loading gate 0 shut to 1 open.
+func set_revolver_parts(cylinder_turn: float, hammer: float, gate: float) -> void:
+	if _gun_parts.is_empty() or _main_item == null:
+		return
+
+	var cylinder: MeshInstance3D = _gun_parts.get(&"cylinder")
+	var hammer_part: MeshInstance3D = _gun_parts.get(&"hammer")
+	var gate_part: MeshInstance3D = _gun_parts.get(&"gate")
+
+	if cylinder != null:
+		cylinder.transform = (_main_item.get_meta(&"cylinder_at") as Transform3D) * Transform3D(Basis(Vector3.UP, cylinder_turn), Vector3.ZERO)
+
+	if hammer_part != null:
+		hammer_part.transform = (_main_item.get_meta(&"hammer_at") as Transform3D) * Transform3D(Basis(Vector3.RIGHT, -0.6 * (1.0 - hammer)), Vector3.ZERO)
+
+	if gate_part != null:
+		gate_part.transform = (_main_item.get_meta(&"gate_at") as Transform3D) * Transform3D(Basis(Vector3.UP, 1.4 * gate), Vector3.ZERO)
+
+
+## Where the revolver's loading gate is in the world.
+func gate_world_position() -> Vector3:
+	var gate: Node3D = _gun_parts.get(&"gate")
+	return _to_world(gate.global_position) if gate != null else global_position
+
+
+## A point of the gun in hand (in the gun's own space) as it is in the
+## world: the viewmodel is a miniature in front of the camera, so its place
+## is grown back to full size.
+func gun_point_world(local: Vector3) -> Vector3:
+	return _to_world(_main_mesh.global_transform * local)
+
+
+## The gun's mesh in your view (for what hangs off it: the muzzle flash).
+func gun_mesh() -> MeshInstance3D:
+	return _main_mesh
+
+
+func _to_world(in_miniature: Vector3) -> Vector3:
+	var camera := get_parent_node_3d()
+
+	if camera == null:
+		return in_miniature
+
+	var in_view := camera.global_transform.affine_inverse() * in_miniature
+	return camera.global_transform * (in_view / ViewArmsScript.SCALE)
+
+
+## Tab: the left hand checking (the purse; the revolver's chambers).
+func is_checking() -> bool:
+	return _checking
+
+
+## The Caster's left hand: "cast" the bare hand up and open (`frame` where the
+## hand is), "tome" the tome held open (`frame` where its spine is), "" none.
+## Anything the left hand is asked to do (a pickup, a key) comes first.
+func set_left_hold(mode: StringName, frame: Transform3D) -> void:
+	_left_mode = mode
+	_left_frame = frame
+
+
+## Empower being read: 0..1 through it, the tome's three pages turning one
+## after another (0: they lie still).
+func set_tome_flutter(amount: float) -> void:
+	_flutter = clampf(amount, 0.0, 1.0)
+
+	# (Made before the arms were chosen: they take the arms' field of view as
+	# it is now, as the circle does.)
+	for look in [_ink_look, _bone_look]:
+		if look != null:
+			look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
+	_read_lines(_flutter)
+
+	for i in _pages.size():
+		var own := clampf(_flutter * float(_pages.size()) - float(i), 0.0, 1.0)
+		# Over toward you (a turn the other way passes through the boards).
+		_pages[i].rotation.y = -PI * smoothstep(0.0, 1.0, own) if _flutter > 0.0 else 0.0
+
+
+func tome_flutter() -> float:
+	return _flutter
+
+
+## Empower's charge waiting, 0..1: the gun hand's skin dusky, fur standing
+## out of it, veins pulsing with the heartbeat (beast_fur passes chained on
+## its Skin surface, nothing on the sleeve). Let go of (spent, run out), the
+## fur bristles out and the hand comes back over BRISTLE_TIME.
+func set_pelt(amount: float) -> void:
+	var was := _pelt
+	_pelt = clampf(amount, 0.0, 1.0)
+	_bristle = maxf(_bristle - get_physics_process_delta_time(), 0.0)
+
+	if was > 0.0 and _pelt == 0.0:
+		_bristle = BRISTLE_TIME
+
+	_find_fur()
+
+	if _fur_mesh == null:
+		return
+
+	var spending := _bristle > 0.0
+	var shown := _bristle / BRISTLE_TIME if spending else _pelt
+
+	# On or off only when it changes.
+	if (shown > 0.0) != _fur_on:
+		_fur_on = shown > 0.0
+		_fur_mesh.set_surface_override_material(_fur_index, _fur_skin if _fur_on else _fur_before)
+
+	if not _fur_on:
+		return
+
+	# Which side of the arms' space the gun hand is on.
+	var gun_hand: Vector3 = _arms.man.bone_global(&"hand_r").origin if _arms.get("man") != null else Vector3.RIGHT
+	var skeleton_space: Node3D = _arms.man as Node3D if _arms.get("man") != null else null
+	var side := signf((skeleton_space.global_transform.affine_inverse() * gun_hand).x) if skeleton_space != null else 1.0
+
+	for look in _fur_looks:
+		look.set_shader_parameter(&"amount", shown)
+		look.set_shader_parameter(&"veins", 1.0 if spending else vein_glow())
+		look.set_shader_parameter(&"bristle", 1.0 - _bristle / BRISTLE_TIME if spending else 0.0)
+		look.set_shader_parameter(&"side_sign", side if side != 0.0 else 1.0)
+		look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
+
+## The arms' Skin surface and its fur passes, found once per arms.
+func _find_fur() -> void:
+	if _fur_mesh != null and is_instance_valid(_fur_mesh) and _fur_mesh.is_inside_tree():
+		return
+
+	_fur_mesh = null
+	_fur_on = false
+
+	if _arms == null:
+		return
+
+	for mesh in _arms.find_children("*", "MeshInstance3D", true, false):
+		var arm := mesh as MeshInstance3D
+
+		if arm.skin == null and arm.skeleton == NodePath():
+			continue
+
+		for i in arm.mesh.get_surface_count():
+			if arm.mesh.surface_get_name(i) == "Skin":
+				_fur_mesh = arm
+				_fur_index = i
+
+	if _fur_mesh == null:
+		return
+
+	_fur_before = _fur_mesh.get_surface_override_material(_fur_index)
+	var base := _fur_mesh.get_active_material(_fur_index)
+	_fur_skin = base.duplicate() if base != null else StandardMaterial3D.new()
+	_fur_looks.clear()
+	var last: Material = _fur_skin
+
+	for shell in FUR_SHELLS + 1:
+		var look := ShaderMaterial.new()
+		look.shader = preload("res://scripts/Visual/beast_fur.gdshader")
+		look.set_shader_parameter(&"noise", MeshVfx.noise())
+		look.set_shader_parameter(&"shell", float(shell))
+		look.set_shader_parameter(&"shells", float(FUR_SHELLS))
+		look.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+		look.render_priority = shell + 1
+		last.next_pass = look
+		last = look
+		_fur_looks.append(look)
+
+
+func pelt_amount() -> float:
+	return _pelt
+
+
+## The tome's written pages' glyphs (Empower), and how many have been read
+## (lit, or their words gone to the hand) this reading.
+func tome_glyphs() -> Array:
+	var all := []
+
+	for line in _tome_lines:
+		all.append_array(line)
+
+	return all
+
+
+func tome_lit() -> int:
+	var read := 0
+
+	for i in _line_state.size():
+		if _line_state[i] > 0:
+			read += (_tome_lines[i] as Array).size()
+
+	return read
+
+
+## Where the gun hand is in the view (global, in the viewmodel's miniature).
+func gun_hand_view_position() -> Vector3:
+	if _arms != null and _arms.get("man") != null:
+		return _arms.man.bone_global(&"hand_r").origin
+
+	return _main.global_position
+
+
+## Empower's charge in the gun hand: how many fur passes are on its skin now;
+## how bright its veins are now (pulsing with the heartbeat); how far the
+## hand is twitched off its place on the beat (m, full size).
+func fur_passes() -> int:
+	return _fur_looks.size() if _fur_on else 0
+
+
+func vein_glow() -> float:
+	return _pelt * (0.2 + 0.8 * _beat())
+
+
+func beat_kick() -> float:
+	return _pelt * BEAT_KICK * _beat()
+
+
+## The heartbeat's swell, 0..1: sharp on the beat, slack between.
+func _beat() -> float:
+	return pow(0.5 + 0.5 * sin(_time * TAU * BEAT_BPM / 60.0), 6.0)
+
+
+## The tome's pages: three leaves pivoting on the spine, lying on the right
+## board, turned over to the left as it is read.
+func _make_pages() -> void:
+	var paper := StandardMaterial3D.new()
+	paper.albedo_color = Color(0.86, 0.8, 0.66)
+	paper.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ViewArmsScript.dress(paper)
+
+	for i in 3:
+		var pivot := Node3D.new()
+		pivot.name = "Page%d" % i
+		_tome.add_child(pivot)
+		# On the spine, over the open paper: the first to turn on top.
+		pivot.position = Vector3(0.0, 0.0, LEAF_OVER + 0.002 * float(2 - i))
+		var leaf := _viewmodel_instance()
+		var quad := QuadMesh.new()
+		quad.size = Vector2(0.115, 0.18)
+		leaf.mesh = quad
+		leaf.material_override = paper
+		# Out from the spine over the right board.
+		leaf.position = Vector3(0.06, 0.0, 0.0)
+		pivot.add_child(leaf)
+		_pages.append(pivot)
+		_leaves.append(leaf)
+
+
+## Lines of the invented script on a leaf (TOME_LINES of TOME_LINE_GLYPHS
+## glyphs), in ink until they are read. None if the atlas is missing.
+func _write_page(leaf: MeshInstance3D, page: int) -> void:
+	var atlas := LibraryGlyphsScript.atlas("script")
+
+	if atlas.is_empty():
+		return
+
+	if _ink_look == null:
+		_ink_look = _glyph_look(atlas, INK, 0.7)
+		_bone_look = _glyph_look(atlas, BONE, 1.8)
+
+	var quad := QuadMesh.new()
+	quad.size = Vector2(TOME_GLYPH_SIZE, TOME_GLYPH_SIZE)
+	var text := LibraryGlyphsScript.script(11 + page, TOME_LINES * TOME_LINE_GLYPHS).replace(" ", "")
+
+	for j in TOME_LINES:
+		var line := []
+
+		for k in TOME_LINE_GLYPHS:
+			var glyph := _viewmodel_instance()
+			glyph.name = "PageGlyph"
+			glyph.mesh = quad
+			glyph.material_override = _ink_look
+			var cell: Vector2i = LibraryGlyphsScript.cell_of(atlas, text[(j * TOME_LINE_GLYPHS + k) % text.length()])
+			glyph.set_instance_shader_parameter(&"glyph", Vector4(cell.x, cell.y, 1.0, float(page * 8 + j * 4 + k) * 0.29))
+			# Placed on its leaf each frame (_place_page_glyphs), but kept in
+			# this node: under the tome they never drew. (Well off the leaf:
+			# the arms' depth squeeze leaves a millimetre nothing.)
+			glyph.set_meta(&"leaf", leaf)
+			glyph.set_meta(&"on_leaf", Transform3D(Basis.IDENTITY, Vector3(-0.036 + 0.024 * float(k), 0.04 - 0.05 * float(j), 0.004)))
+			glyph.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+			glyph.visible = false
+			add_child(glyph)
+			line.append(glyph)
+
+		_tome_lines.append(line)
+		_line_state.append(0)
+		_line_lit_at.append(0.0)
+
+
+## A look for glyphs of the invented script in your view, in `colour`.
+func _glyph_look(atlas: Dictionary, colour: Color, energy: float) -> ShaderMaterial:
+	var look := ShaderMaterial.new()
+	look.shader = preload("res://scripts/Visual/vfx_ward_glyph.gdshader")
+	look.set_shader_parameter(&"atlas", atlas["texture"])
+	look.set_shader_parameter(&"grid", Vector2(float(atlas["cols"]), float(atlas["rows"])))
+	look.set_shader_parameter(&"core", colour)
+	look.set_shader_parameter(&"energy", energy)
+	look.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+	look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+	# Over the tome (drawn after anything lower, whatever its depth).
+	look.render_priority = 12
+	return look
+
+
+## The tome being read (`amount` of the way): each page's lines light in bone
+## as its turn nears, and a moment later their words lift off and fly into
+## the gun hand, leaving the line faint. Not read: all in ink again.
+func _read_lines(amount: float) -> void:
+	for line_index in _tome_lines.size():
+		var glyphs: Array = _tome_lines[line_index]
+		# Each leaf's lines read just before it turns (the first at once).
+		var page := line_index / TOME_LINES
+		var due := (float(page) - 0.55 + 0.3 * float(line_index % TOME_LINES)) / float(_pages.size())
+
+		if amount <= 0.0:
+			if _line_state[line_index] != 0:
+				_line_state[line_index] = 0
+				_mark_line(glyphs, _ink_look, 1.0)
+			continue
+
+		if _line_state[line_index] == 0 and amount >= due:
+			_line_state[line_index] = 1
+			_line_lit_at[line_index] = _time
+			_mark_line(glyphs, _bone_look, 1.0)
+		elif _line_state[line_index] == 1 and _time - _line_lit_at[line_index] >= WORD_DELAY:
+			_line_state[line_index] = 2
+			_fly_words(glyphs)
+			# The words gone off the page: it is blank where they were.
+			_mark_line(glyphs, _ink_look, 0.0)
+
+
+## The pages' glyphs on their leaves, where the leaves are now (shown with
+## the tome).
+func _place_page_glyphs() -> void:
+	if _tome.visible and _tome_lines.is_empty():
+		for i in _leaves.size():
+			_write_page(_leaves[i], i)
+
+	# Only the top leaf not yet turned shows its lines (the leaves lie too
+	# close for depth to keep those under it hidden).
+	var top := _pages.size()
+
+	for i in _pages.size():
+		if absf(_pages[i].rotation.y) < PI * 0.5:
+			top = i
+			break
+
+	for line_index in _tome_lines.size():
+		for glyph in _tome_lines[line_index]:
+			var leaf: Node3D = glyph.get_meta(&"leaf")
+			glyph.visible = _tome.visible and line_index / TOME_LINES == top
+			glyph.global_transform = leaf.global_transform * (glyph.get_meta(&"on_leaf") as Transform3D)
+
+
+func _mark_line(glyphs: Array, look: Material, presence: float) -> void:
+	for glyph in glyphs:
+		(glyph as MeshInstance3D).material_override = look
+		var held: Vector4 = (glyph as MeshInstance3D).get_instance_shader_parameter(&"glyph")
+		(glyph as MeshInstance3D).set_instance_shader_parameter(&"glyph", Vector4(held.x, held.y, presence, held.w))
+
+
+## A line's words lifting off the page and flying into the gun hand along a
+## curve, shrinking into it, gone in WORD_FLIGHT.
+func _fly_words(glyphs: Array) -> void:
+	if not MagicFxScript.allowed(self):
+		return
+
+	for i in glyphs.size():
+		var from: MeshInstance3D = glyphs[i]
+		var word := _viewmodel_instance()
+		word.name = "Word"
+		word.mesh = from.mesh
+		word.material_override = _bone_look
+		word.set_instance_shader_parameter(&"glyph", from.get_instance_shader_parameter(&"glyph"))
+		word.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		word.add_to_group(&"empower_word")
+		add_child(word)
+		word.global_transform = from.global_transform
+		var start := word.position
+		var rise := Vector3(0.0, 0.05 + 0.01 * float(i), -0.02) * ViewArmsScript.SCALE
+		var start_scale := word.scale
+		# Up off the page, then curving into the hand (where it is now).
+		var along := func(t: float) -> void:
+			if not is_instance_valid(word):
+				return
+			var to := to_local(gun_hand_view_position())
+			var a := start.lerp(start + rise, t)
+			var b := (start + rise).lerp(to, t)
+			word.position = a.lerp(b, t)
+			word.scale = start_scale * lerpf(1.0, 0.3, t)
+		var fly := word.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+		fly.tween_method(along, 0.0, 1.0, WORD_FLIGHT).set_ease(Tween.EASE_IN).set_delay(0.03 * float(i))
+		fly.tween_callback(word.queue_free)
+		MagicFxScript._keep(word, WORD_FLIGHT + 0.03 * float(glyphs.size()) + 0.05)
+
+
+## A hand spell's circle closing before the casting palm: `school` says
+## what it is made of (obsidian: black glass splinters; copal: smoke),
+## `progress` how far it has closed (0 just begun, 1 cast). "" for none.
+func set_circle(school: StringName, progress: float) -> void:
+	_circle_school = school
+	_circle_progress = clampf(progress, 0.0, 1.0)
+
+
+## The spearhead growing in the circle (the Shard's wind-up), or null.
+func spearhead() -> MeshInstance3D:
+	return _spearhead
+
+
+## How far across the circle is now (m, full size): Obsidian's splinters
+## draw in from 9 to 2.5 cm about the spearhead; Copal's smoke to 4.5 cm.
+func circle_across() -> float:
+	if _circle_school == &"obsidian":
+		return lerpf(0.09, 0.025, smoothstep(0.0, 1.0, _circle_progress))
+
+	return lerpf(0.09, 0.045, _circle_progress)
+
+
+## How far the casting hand is shaken off its place now (m, full size): a
+## tremble growing to CAST_TREMBLE as an Obsidian cast closes.
+func tremble() -> Vector3:
+	if _circle_school != &"obsidian":
+		return Vector3.ZERO
+
+	var shake := CAST_TREMBLE * smoothstep(0.5, 1.0, _circle_progress)
+	return Vector3(sin(_time * 71.0), sin(_time * 83.0 + 1.3), 0.0) * shake
+
+
+## A hand spell let go: the casting hand pushes out and comes back; a
+## Shard's spearhead leaves the circle in a burst of black flakes and a ring
+## the world bends through, with a cold light at the palm.
+func release_cast(school: StringName) -> void:
+	_release_t = 0.0
+
+	if school != &"obsidian" or _circle == null:
+		return
+
+	var size := ViewArmsScript.SCALE
+	var at := _circle.position
+	var ahead := (_aim_point() - at).normalized()
+	MagicFxScript.release_burst(self, at, ahead, size, ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+	# Soft: the gun beside it is polished iron.
+	MagicFxScript.glint_light(self, circle_world_position() + Vector3.UP * 0.3, 0.7, 2.0)
+
+
+## The ward smoke curling up from the palm as a Copal cast builds, or null.
+func palm_smoke() -> Node3D:
+	return _palm_smoke
+
+
+## How bright the copal embers in the palm are now (0 none).
+func palm_glow() -> float:
+	if _palm_smoke == null or not _palm_smoke.is_visible_in_tree():
+		return 0.0
+
+	return _palm_glow.emission_energy_multiplier
+
+
+## Where the circle's middle is in the world (what a Shard is seen to leave
+## from).
+func circle_world_position() -> Vector3:
+	if _circle == null:
+		return global_position
+
+	return _to_world(_circle.global_position)
+
+
+## Where the crosshair's point is in the view's (miniature) space, some way
+## off: what the spearhead points at.
+func _aim_point() -> Vector3:
+	return Vector3(0.0, 0.0, -10.0) * ViewArmsScript.SCALE
+
+
+## How far the casting hand is off its place (full size): drawn back as the
+## cast builds, shaking, then pushed out at the release.
+func _cast_offset() -> Vector3:
+	var back := Vector3(0.0, 0.0, CAST_DRAW_BACK * _circle_progress) if _circle_school != &"" else Vector3.ZERO
+	var push := Vector3.ZERO
+
+	if _release_t < RELEASE_PUSH_TIME:
+		push = Vector3(0.0, 0.0, -RELEASE_PUSH * sin(PI * _release_t / RELEASE_PUSH_TIME))
+
+	return back + tremble() + push
+
+
+## What the left hand is showing for the Caster now: "" while it is busy
+## with something else (a pickup, a key, the purse).
+func left_mode() -> StringName:
+	if is_busy() or _checking:
+		return &""
+
+	return _left_mode
+
+
 ## Returns the last displayed weapon transform in full-size camera space.
 func weapon_frame() -> Transform3D:
 	return _frame_now
@@ -493,7 +1155,7 @@ func set_bow_draw(draw: float, arrow: Mesh) -> void:
 	# fetching it.
 	_nocked.visible = _has_arrow and _nock_t >= 0.4
 
-	if arrow != null and _nocked.mesh != arrow:
+	if arrow != null and _nocked.get_meta(&"source_mesh", _nocked.mesh) != arrow:
 		_nocked.mesh = arrow
 		_apply_materials(_nocked, arrow)
 
@@ -609,6 +1271,16 @@ func trail_samples() -> int:
 	return _trail.sample_count()
 
 
+## How far down out of sight what is in hand is: 0 up, 1 gone.
+func item_lowered() -> float:
+	return _main_lower
+
+
+## Swapping what is in hand (the old thing going down, the new to come).
+func is_switching() -> bool:
+	return _switching
+
+
 func is_item_visible() -> bool:
 	return _main_item != null and _main_lower < 0.05
 
@@ -627,6 +1299,12 @@ func _update_main(delta: float) -> void:
 	# Down out of sight quickly when the hand is wanted on a ledge or a rung.
 	if _right_wanted:
 		step = delta / 0.1
+
+	# A heavy thing (the revolver) is slower to put away and to bring up.
+	if not _right_wanted and _main_item != null:
+		var going_down := _switching or not want_up
+		var seconds: float = float(_main_item.get_meta(&"stow_time" if going_down else &"draw_time", switch_time))
+		step = delta / maxf(seconds, 0.01)
 
 	if _switching:
 		_main_lower = move_toward(_main_lower, 1.0, step)
@@ -663,6 +1341,8 @@ func _set_main_item(mesh: Mesh) -> void:
 	else:
 		_main_mesh.scale = Vector3.ONE * _fit_scale(mesh)
 		_main_mesh.rotation = mesh.get_meta(&"hold_rotation", Vector3(-0.35, 0.25, 0.3)) if mesh != null else Vector3.ZERO
+
+	_make_gun_parts(mesh)
 
 	# Taken up at its rest: nothing to glide from.
 	_frame_now = _rest_frame()
@@ -703,6 +1383,210 @@ func _set_main_item(mesh: Mesh) -> void:
 		_blood_overlay.set_shader_parameter("seed", float(mesh.get_instance_id() % 97) * 0.37)
 		_main_mesh.material_overlay = _blood_overlay
 		_tint_blade()
+
+
+## The circle before the casting palm (set_circle): twelve pieces on a ring
+## square to the palm, turning, drawing in from 18 to 9 cm across as it
+## closes. Obsidian: splinters of black glass. Copal: puffs of smoke. Shown
+## in your view only; what it makes is what others see.
+func _update_circle() -> void:
+	if _circle == null:
+		_circle = Node3D.new()
+		_circle.name = "Circle"
+		add_child(_circle)
+
+		for i in CIRCLE_PIECES:
+			var piece := _viewmodel_instance()
+			_circle.add_child(piece)
+			_circle_pieces.append(piece)
+
+	if _spearhead == null:
+		_spearhead = _viewmodel_instance()
+		_spearhead.name = "Spearhead"
+		_spearhead.mesh = MagicFxScript.spearhead_mesh(0.045, SPEARHEAD_LENGTH, 0.02)
+		add_child(_spearhead)
+
+	if _palm_smoke == null:
+		_make_palm_smoke()
+		_make_hand_glyphs()
+
+	var showing := _circle_school != &"" and _left_mode == &"cast" and _left_up > 0.5
+	_circle.visible = showing
+	_spearhead.visible = showing and _circle_school == &"obsidian"
+	_palm_smoke.visible = showing and _circle_school == &"copal"
+
+	for glyph in _hand_glyphs:
+		glyph.visible = showing and _circle_school == &"copal"
+
+	if not showing:
+		return
+
+	var look: Array = CIRCLE_LOOKS.get(_circle_school, CIRCLE_LOOKS[&"obsidian"])
+
+	if _circle.get_meta(&"school", &"") != _circle_school:
+		_circle.set_meta(&"school", _circle_school)
+
+		for piece in _circle_pieces:
+			piece.mesh = look[0]
+			piece.material_override = look[1]
+
+		# A shader circle takes the arms' field of view as they are now (F12).
+		if look[1] is ShaderMaterial:
+			(look[1] as ShaderMaterial).set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
+	var size := ViewArmsScript.SCALE
+	var palm: Vector3 = _left_frame.basis.x.normalized()
+	var middle := _left_frame.origin + CIRCLE_AT + _cast_offset()
+	# Square to the aim: its -Z back toward you.
+	var square := Basis.looking_at(middle - _aim_point() / size, Vector3.UP)
+
+	var across := circle_across()
+	_circle.transform = Transform3D(square * Basis(Vector3.BACK, _time * TAU * 2.0), _for_view_fov(middle) * size)
+	# Obsidian's splinters turn from pointing out to pointing at the middle.
+	var inward := PI * smoothstep(0.25, 0.85, _circle_progress) if _circle_school == &"obsidian" else 0.0
+
+	for i in _circle_pieces.size():
+		var turn := TAU * float(i) / float(_circle_pieces.size())
+		var piece := _circle_pieces[i]
+		piece.transform = Transform3D(Basis(Vector3.BACK, turn + float(look[2]) + inward), Vector3(cos(turn), sin(turn), 0.0) * across * size).scaled_local(Vector3.ONE * size)
+
+	# The Ward's ring of script round it, turning with it, tops out, written
+	# in as the cast builds (at the arms' field of view as it is now).
+	if not _hand_glyphs.is_empty():
+		(_hand_glyphs[0].material_override as ShaderMaterial).set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
+	for i in _hand_glyphs.size():
+		var turn := TAU * float(i) / float(_hand_glyphs.size())
+		var out := Vector3(cos(turn), sin(turn), 0.0)
+		var glyph := _hand_glyphs[i]
+		glyph.transform = Transform3D(Basis(out.cross(Vector3.BACK), out, Vector3.BACK).scaled(Vector3.ONE * size), out * across * HAND_GLYPH_OUT * size)
+		var held: Vector4 = glyph.get_instance_shader_parameter(&"glyph")
+		glyph.set_instance_shader_parameter(&"glyph", Vector4(held.x, held.y, clampf(_circle_progress * 1.6 - float(i) / float(_hand_glyphs.size()) * 0.6, 0.0, 1.0), held.w))
+
+	# The spearhead in the middle, leaning toward the crosshair, growing and
+	# turning slowly about its length.
+	if _spearhead.visible:
+		if _spearhead.material_override == null or _spearhead.material_override.get_meta(&"fov", -1.0) != (ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0):
+			var view_fov := ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0
+			_spearhead.material_override = MagicFxScript.obsidian_look(true, view_fov)
+			_spearhead.material_override.set_meta(&"fov", view_fov)
+
+		var grow := lerpf(SPEARHEAD_FROM, 1.0, _circle_progress * _circle_progress)
+		var at := _circle.position
+		# Leaning up and out from the aim, so its length shows (pointed
+		# straight at the crosshair it would be seen end on).
+		var way := (_aim_point() - at).normalized().lerp(Vector3(0.6, 0.8, 0.0), 0.55).normalized()
+		var facing := Basis.looking_at(way, Vector3.BACK)
+		_spearhead.transform = Transform3D((facing * Basis(Vector3.RIGHT, -PI * 0.5) * Basis(Vector3.UP, _time * 3.0)).scaled(Vector3.ONE * size * grow), at)
+
+	# The Ward's: smoke curling up out of the middle, taller as it builds,
+	# the embers in it glowing up (flickering).
+	if _palm_smoke.visible:
+		var tall := lerpf(0.25, 1.0, _circle_progress)
+		_palm_smoke.transform = Transform3D(Basis.IDENTITY.scaled(Vector3(size, size * tall, size)), _circle.position)
+		_palm_glow.emission_energy_multiplier = lerpf(PALM_GLOW_FROM, PALM_GLOW_TO, _circle_progress * _circle_progress) * (0.9 + 0.1 * sin(_time * 23.0))
+
+
+## Round the Ward's circle in your hand: HAND_GLYPHS glyphs of the invented
+## script (LibraryGlyphs), drawn as the floor's written circle is, at the
+## arms' field of view. None if the atlas is missing.
+func _make_hand_glyphs() -> void:
+	var atlas := LibraryGlyphsScript.atlas("script")
+
+	if atlas.is_empty():
+		return
+
+	var look := ShaderMaterial.new()
+	look.shader = preload("res://scripts/Visual/vfx_ward_glyph.gdshader")
+	look.set_shader_parameter(&"atlas", atlas["texture"])
+	look.set_shader_parameter(&"grid", Vector2(float(atlas["cols"]), float(atlas["rows"])))
+	look.set_shader_parameter(&"core", WARD_BODY)
+	look.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+	look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+	look.render_priority = 12
+	var quad := QuadMesh.new()
+	quad.size = Vector2(HAND_GLYPH_SIZE, HAND_GLYPH_SIZE)
+	var text := LibraryGlyphsScript.script(3, HAND_GLYPHS).replace(" ", "")
+
+	for i in HAND_GLYPHS:
+		var glyph := _viewmodel_instance()
+		glyph.name = "HandGlyph"
+		glyph.mesh = quad
+		glyph.material_override = look
+		var cell: Vector2i = LibraryGlyphsScript.cell_of(atlas, text[i % text.length()])
+		glyph.set_instance_shader_parameter(&"glyph", Vector4(cell.x, cell.y, 0.0, float(i) * 0.41))
+		glyph.add_to_group(&"ward_hand_glyph")
+		_circle.add_child(glyph)
+		_hand_glyphs.append(glyph)
+
+
+## The Ward's wind-up in the palm (hidden until a Copal cast): two curls of
+## ward smoke rising from the circle's middle and a few embers of burning
+## copal at their foot.
+func _make_palm_smoke() -> void:
+	_palm_smoke = Node3D.new()
+	_palm_smoke.name = "PalmSmoke"
+	add_child(_palm_smoke)
+	var smoke: ShaderMaterial = CIRCLE_LOOKS[&"copal"][1]
+
+	for k in 2:
+		var lean := 1.0 if k == 0 else -1.0
+		var curl := _viewmodel_instance()
+		curl.name = "Curl"
+		curl.mesh = MeshVfx.tendril(PackedVector3Array([
+			Vector3(0.004 * lean, 0.0, 0.0),
+			Vector3(0.012 * lean, PALM_SMOKE_TALL * 0.3, 0.004),
+			Vector3(-0.004 * lean, PALM_SMOKE_TALL * 0.65, -0.004),
+			Vector3(0.01 * lean, PALM_SMOKE_TALL, 0.0),
+		]), 0.008, 6)
+		curl.material_override = smoke
+		_palm_smoke.add_child(curl)
+
+	_palm_glow = StandardMaterial3D.new()
+	_palm_glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_palm_glow.albedo_color = EMBER
+	_palm_glow.emission_enabled = true
+	_palm_glow.emission = EMBER
+	_palm_glow.emission_energy_multiplier = PALM_GLOW_FROM
+	ViewArmsScript.dress(_palm_glow)
+	var mote := SphereMesh.new()
+	mote.radius = 0.0035
+	mote.height = 0.007
+	mote.radial_segments = 6
+	mote.rings = 3
+
+	for i in PALM_EMBERS:
+		var turn := TAU * float(i) / float(PALM_EMBERS)
+		var ember := _viewmodel_instance()
+		ember.name = "Ember"
+		ember.mesh = mote
+		ember.material_override = _palm_glow
+		_palm_smoke.add_child(ember)
+		ember.position = Vector3(cos(turn) * 0.008, 0.002 * float(i % 2), sin(turn) * 0.008)
+
+
+## A revolver's cylinder, hammer and gate, as their own meshes under the
+## gun's, so they can move; gone with any other item.
+func _make_gun_parts(mesh: Mesh) -> void:
+	for part in _gun_parts.values():
+		if is_instance_valid(part):
+			# Out of the tree now, so new parts take their names.
+			part.get_parent().remove_child(part)
+			part.queue_free()
+
+	_gun_parts.clear()
+
+	if mesh == null or not mesh.has_meta(&"cylinder_mesh"):
+		return
+
+	for which in [&"cylinder", &"hammer", &"gate"]:
+		var part := _viewmodel_instance()
+		part.name = String(which).capitalize()
+		part.mesh = mesh.get_meta(StringName(String(which) + "_mesh"))
+		part.transform = mesh.get_meta(StringName(String(which) + "_at"))
+		_apply_materials(part, part.mesh)
+		_main_mesh.add_child(part)
+		_gun_parts[which] = part
 
 
 ## The blood on the blade in hand, drawn (blade_blood.gdshader).
@@ -1043,6 +1927,7 @@ func _rebuild_keyring(count: int) -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	_release_t += delta
 	var real_delta := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
 	_last_real = TimeFx.real_time()
 	_real_time += real_delta
@@ -1053,6 +1938,7 @@ func _process(delta: float) -> void:
 	_update_weight(delta, real_delta)
 	_update_motion(delta)
 	_place_hands()
+	_update_circle()
 
 
 func _update_motion(delta: float) -> void:
@@ -1067,14 +1953,17 @@ func _update_motion(delta: float) -> void:
 
 		if _look_known:
 			var turn := (_last_look.inverse() * look).get_euler()
-			_sway -= Vector2(turn.y, turn.x) * sway_lag
+			# A heavy thing lags further, up to a point; held up at the eye,
+			# less.
+			var lag: float = sway_lag * float(_main_item.get_meta(&"sway_lag", 1.0)) if _main_item != null else sway_lag
+			_sway -= Vector2(turn.y, turn.x) * lag * (1.0 - 0.6 * _gun_aim)
 
 		_last_look = look
 		_look_known = true
 
 	_sway_v += (-_sway * 150.0 - _sway_v * 18.0) * dt
 	_sway += _sway_v * dt
-	_sway = _sway.limit_length(0.3)
+	_sway = _sway.limit_length(float(_main_item.get_meta(&"sway_most", 0.3)) if _main_item != null else 0.3)
 	_hop_v += (-_hop * 170.0 - _hop_v * 13.0) * dt
 	_hop += _hop_v * dt
 
@@ -1180,11 +2069,15 @@ func _place_hands() -> void:
 	var turned := motion_rotation + _recoil_rot + buzz * 0.035 * shake
 	frame.basis = Basis.from_euler(turned) * frame.basis
 	frame.origin += (sway + motion_position + _recoil + buzz * 0.005 * shake) / ViewArmsScript.SCALE
+	# Empower's charge: the hand twitches up on each beat.
+	frame.origin.y += beat_kick()
 
 	# The fist turns the way the forearm runs: the wrist stays straight and
 	# only tips the blade. The pose says where the grip is and where the blade
 	# points; the arm says the rest.
-	if _view_id != &"" and _view_id != &"bow":
+	if _view_id == &"revolver":
+		frame = frame.interpolate_with(_natural_gun(frame), 1.0 - _gun_aim)
+	elif _view_id != &"" and _view_id != &"bow":
 		frame = _natural(frame)
 
 	# (Drawn at the viewmodel's field of view: aimed where the world's camera
@@ -1548,11 +2441,19 @@ func _place_arms() -> void:
 				targets[1] = _fetching(targets[1])
 				curls[1] = 0.9
 		else:
-			targets[1] = _held_by(held, HAND_GRIP)
+			targets[1] = _held_by(held, GUN_GRIP if _view_id == &"revolver" else HAND_GRIP)
 			weights[1] = 1.0
 			curls[1] = 1.0
 			# Round the handle: a sword's grip (the thumb along it).
 			poses[1] = _pose_if_had(&"SwordGrip")
+
+			# Both hands on the revolver: the left round the front of the grip.
+			if _view_id == &"revolver" and _gun_support > 0.01:
+				var size := ViewArmsScript.SCALE
+				targets[0] = Transform3D(held.basis * GUN_SUPPORT.basis, held.origin + held.basis * (GUN_SUPPORT.origin * size))
+				weights[0] = smoothstep(0.0, 1.0, _gun_support)
+				curls[0] = 1.0
+				poses[0] = _pose_if_had(&"Wrap")
 
 			# A braced block: the left palm on the flat.
 			_brace_shown = move_toward(_brace_shown, _brace if _view_id == &"sword" else 0.0, get_process_delta_time() / 0.08)
@@ -1569,7 +2470,32 @@ func _place_arms() -> void:
 					poses[0] = &"Push"
 					curls[0] = 1.0
 
-	if _off.visible and not dead and not (bow and _main.visible) and braced < 0.5:
+	# The Caster's left hand: up and open for a circle, or holding the tome.
+	_left_up = move_toward(_left_up, 1.0 if left_mode() != &"" and not dead else 0.0, get_process_delta_time() / 0.15)
+	_tome.visible = _left_mode == &"tome" and _left_up > 0.05
+	_place_page_glyphs()
+
+	if _left_up > 0.0 and _left_mode != &"":
+		var size := ViewArmsScript.SCALE
+		var low := Vector3(0.0, -lowered_drop / size, 0.08) * (1.0 - _left_up)
+		var at := Transform3D(_left_frame.basis, _for_view_fov(_left_frame.origin + low) * size)
+
+		if _left_mode == &"tome":
+			_tome.transform = Transform3D(at.basis.scaled(Vector3.ONE * size), at.origin)
+			_place_page_glyphs()
+			targets[0] = _held_by(at, TOME_GRIP)
+			# Flat under the boards: fingers curled would come through the pages.
+			curls[0] = 0.0
+			poses[0] = _pose_if_had(&"Open")
+		else:
+			at.origin += _cast_offset() * size
+			targets[0] = _held_by(at, Transform3D.IDENTITY)
+			curls[0] = 0.0
+			poses[0] = _pose_if_had(&"Open")
+
+		weights[0] = smoothstep(0.0, 1.0, _left_up)
+
+	if _off.visible and not dead and not (bow and _main.visible) and braced < 0.5 and _left_up <= 0.0:
 		if _off_item.visible:
 			targets[0] = _held_by(_off.transform * _off_item.transform, PINCH_GRIP)
 			curls[0] = 0.8
@@ -1724,6 +2650,37 @@ func _natural(frame: Transform3D) -> Transform3D:
 	return frame.interpolate_with(natural, sure) if sure < 1.0 else natural
 
 
+## A gun's `frame` turned about its handle so the barrel is never more than
+## MAX_WRIST_BEND off the line of the forearm (the wrist nearly straight, as
+## with a blade: the pose places the grip and points it, the arm keeps it
+## honest), easing in the same way.
+func _natural_gun(frame: Transform3D) -> Transform3D:
+	if _arms == null:
+		return frame
+
+	var handle := frame.basis.y.normalized()
+	var wrist := (frame.origin + frame.basis.z.normalized() * 0.08) * ViewArmsScript.SCALE
+	var forearm: Vector3 = _arms.forearm_to(1, wrist)
+	var along := forearm - handle * forearm.dot(handle)
+	var sure := smoothstep(0.12, 0.4, along.length())
+
+	if sure <= 0.0:
+		return frame
+
+	along = along.normalized()
+	var aimed := -frame.basis.z.normalized()
+	var bend := along.signed_angle_to(aimed, handle)
+	var limit := deg_to_rad(MAX_WRIST_BEND)
+
+	if absf(bend) <= limit:
+		return frame
+
+	var ahead := along.rotated(handle, clampf(bend, -limit, limit))
+	var back := -ahead
+	var natural := Transform3D(Basis(handle.cross(back), handle, back), frame.origin)
+	return frame.interpolate_with(natural, sure) if sure < 1.0 else natural
+
+
 ## A left fist round a bow's stave (`hand`, its thumb up the stave), turned
 ## about the stave so its fingers run along the forearm.
 func _around_stave(hand: Transform3D, stave: Vector3) -> Transform3D:
@@ -1746,6 +2703,9 @@ func _rest_frame() -> Transform3D:
 
 	if _view_id == &"bow":
 		return ViewPosesScript.bow_frame(poses["rest"])
+
+	if _view_id == &"revolver":
+		return ViewPosesScript.revolver_frame(poses["rest"])
 
 	return ViewPosesScript.frame(poses["rest"])
 
@@ -1940,11 +2900,19 @@ func _apply_materials(instance: MeshInstance3D, mesh: Mesh) -> void:
 		instance.material_override = _viewmodel_material(mesh)
 		return
 
+	# Each surface its own look, set on a copy of the mesh (per-surface
+	# overrides on an imported model's mesh made the headless renderer report
+	# a null material for every surface); what it was made from remembered.
+	var copy := mesh.duplicate() as Mesh
+
 	for i in range(mesh.get_surface_count()):
 		var source := mesh.surface_get_material(i)
 		var material: StandardMaterial3D = (source as StandardMaterial3D).duplicate() if source is StandardMaterial3D else StandardMaterial3D.new()
 		_squeeze(material)
-		instance.set_surface_override_material(i, material)
+		copy.surface_set_material(i, material)
+
+	instance.mesh = copy
+	instance.set_meta(&"source_mesh", mesh)
 
 
 func _fit_scale(mesh: Mesh) -> float:

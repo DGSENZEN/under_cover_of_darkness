@@ -37,7 +37,7 @@ const LIGHTS_WORK := 2
 static var _garrisons := {}
 
 var target_ref: WeakRef
-var habits := {&"turtle": 0.0, &"spam": 0.0, &"kite": 0.0, &"bow": 0.0, &"parry": 0.0, &"dodge": 0.0}
+var habits := {&"turtle": 0.0, &"spam": 0.0, &"kite": 0.0, &"bow": 0.0, &"parry": 0.0, &"dodge": 0.0, &"gun": 0.0}
 var dread := 0.0
 ## Their dead, and their captains among them; the names they knew them by.
 var dead := 0

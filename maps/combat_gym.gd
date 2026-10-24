@@ -9,6 +9,8 @@ const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
+const DummyScript := preload("res://scripts/Combat/TrainingDummy.gd")
+const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 
 const STONE := Color(0.4, 0.38, 0.36)
 const DARK := Color(0.22, 0.21, 0.23)
@@ -59,6 +61,8 @@ func _ready() -> void:
 	Props.door(self, Vector3(6.0, 0, 6))
 	_sign(Vector3(3, 2.2, 9.5), "KICK THINGS\nCrates fly. Unlocked doors burst open.\nAdrenaline (the amber bar) fills as you fight.\nWhen it glows, your next power blow is a finisher.")
 
+	_range_bay()
+
 	var baker := NavigationRegion3D.new()
 	baker.set_script(NavBakerScript)
 	add_child(baker)
@@ -68,7 +72,56 @@ func _ready() -> void:
 	add_child(player)
 	player.global_position = Vector3(0, 1.05, 12)
 	Props.give_weapons(player)
+	Props.give_revolver(player)
 	player.inventory.select_by_id(&"sword")
+	# Opt-in launch for repeated gun/magic feel tests; the normal gym is unchanged.
+	if "--range" in OS.get_cmdline_user_args():
+		player.teleport(Transform3D(Basis.IDENTITY, Vector3(40, 1.05, -12)))
+		player.inventory.select_by_id(&"revolver")
+		player.inventory.add_ammo(&"rounds", 96)
+		player.inventory.add_ammo(&"shells", 20)
+		player.invulnerable = true
+
+
+## The range: the revolver and the spells. Dummies at 5, 15 and 30 m, a wall
+## to read the shell's spread on, three men among pillars to fight, and
+## rounds, shells and the tome on a table.
+func _range_bay() -> void:
+	Props.block(self, Vector3(45, -0.5, -28), Vector3(30, 1, 40), DARK)
+	_torch(Vector3(38, 3.0, -12))
+	_torch(Vector3(52, 3.0, -30))
+	_torch(Vector3(42, 3.0, -44))
+
+	for reach in [5.0, 15.0, 30.0]:
+		var dummy: StaticBody3D = DummyScript.new()
+		add_child(dummy)
+		dummy.global_position = Vector3(40, 0, -12.0 - reach)
+		dummy.rotation.y = PI
+
+	# Shoot the wall with the shell: its pellets show where they went.
+	Props.block(self, Vector3(46, 1.5, -20), Vector3(3, 3, 0.3), STONE)
+	_sign(Vector3(46, 3.4, -19.8), "THE SPREAD")
+
+	# Three men among pillars: shoot past them and they take cover; reload
+	# and they come for you.
+	for at in [Vector3(51, 1.5, -34), Vector3(56, 1.5, -34), Vector3(53.5, 1.5, -40)]:
+		Props.block(self, at, Vector3(1.2, 3, 1.2), STONE)
+
+	_guard(Vector3(51, 0, -37), 0.0, "Sentry")
+	_guard(Vector3(54, 0, -37), 0.0, "Watchman")
+	_guard(Vector3(56, 0, -42), 0.0, "Gatekeeper")
+
+	# A table: rounds, shells, the tome.
+	Props.block(self, Vector3(36, 0.45, -11), Vector3(1.6, 0.9, 0.8), STONE)
+	Props.ammo(self, Vector3(35.6, 1.0, -11), &"rounds", 24)
+	Props.ammo(self, Vector3(36.0, 1.0, -11), &"shells", 6)
+	var tome := MeshInstance3D.new()
+	tome.mesh = WeaponScript.tome_mesh()
+	add_child(tome)
+	tome.global_position = Vector3(36.4, 0.95, -11)
+	tome.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
+
+	_sign(Vector3(40, 2.6, -9.5), "THE RANGE\nMouse wheel to the revolver. LMB fires. RMB aims down the sights. R reloads, round by round (fire to stop).\nX flips to the shot barrel (one shell): point-blank it bursts a man. F: pistol-whip up close, else the kick.\nHold 1 Shard, 2 Ward, 3 Empower (the tome) while each forms; let go early and nothing is spent.\nQ: Blink (tap a step, hold to aim; onto a ledge's lip to hang). Ward stops shots and spells, not blades.")
 
 
 func _guard(at: Vector3, yaw: float, speaker: String, archetype: StringName = &"") -> CharacterBody3D:
@@ -119,3 +172,8 @@ func _environment() -> void:
 	var world := WorldEnvironment.new()
 	world.environment = environment
 	add_child(world)
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if "--range" in OS.get_cmdline_user_args() and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F5:
+		get_tree().reload_current_scene()

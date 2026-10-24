@@ -3,6 +3,7 @@ extends CanvasLayer
 ## setup() binds the player and its component signals. Small Control subclasses draw individual indicators.
 ## Awareness/layout query methods expose current presentation for tests and callers.
 
+const AmmoReadoutScript := preload("res://scripts/UI/AmmoReadout.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const AdrenalineViewScript := preload("res://scripts/Visual/AdrenalineView.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -83,6 +84,7 @@ var _root: Control
 ## Everything but the pause screen (hidden while it is up).
 var _play: Control
 var _font: SystemFont
+var _ammo: AmmoReadoutScript
 var _crosshair: Crosshair
 var _prompts: HBoxContainer
 var _prompt_signature := ""
@@ -158,13 +160,23 @@ class Crosshair:
 	## to hold a blow.
 	var stamina := 1.0
 	var stamina_alpha := 0.0
+	## The spells' power, 0..1, how visible its arc is, and a flash when a
+	## spell could not be paid for.
+	var power := 1.0
+	var power_alpha := 0.0
+	var power_short_flash := 0.0
 	var short := false
 	var contact_kind: StringName = &""
+	## Real seconds a mark is held full before it fades (a kill's).
+	var contact_hold := 0.0
+	const KILL_HOLD := 0.35
 	var contact_amount := 0.0
 
 	func contact(kind: StringName) -> void:
 		contact_kind = kind
 		contact_amount = 1.0
+		# A kill's mark is held a moment before it fades.
+		contact_hold = KILL_HOLD if kind == &"kill" else 0.0
 
 	func _draw() -> void:
 		var c := size * 0.5
@@ -179,6 +191,18 @@ class Crosshair:
 			if stamina > 0.001:
 				draw_arc(c, 17.0, to - (to - from) * stamina, to, 24, Color(colour.r, colour.g, colour.b, 0.8 * stamina_alpha), 2.0, true)
 
+		# Power: an arc over the crosshair, draining from the right; red for
+		# a moment when a spell asked for more than there was.
+		if power_alpha > 0.01 or power_short_flash > 0.01:
+			var seen := maxf(power_alpha, power_short_flash)
+			var start := PI * 1.18
+			var end := PI * 1.82
+			draw_arc(c, 17.0, start, end, 24, Color(0, 0, 0, 0.4 * seen), 3.0, true)
+			var ink := Color(0.62, 0.78, 0.9).lerp(Color(0.95, 0.3, 0.2), power_short_flash)
+
+			if power > 0.001:
+				draw_arc(c, 17.0, start, start + (end - start) * power, 24, Color(ink.r, ink.g, ink.b, 0.8 * seen), 2.0, true)
+
 		if draw_amount > 0.0:
 			var ring := lerpf(22.0, 4.0, draw_amount)
 			draw_arc(c, ring, 0.0, TAU, 32, Color(1.0, 0.85, 0.55, 0.35 + 0.5 * draw_amount), 1.4, true)
@@ -192,7 +216,17 @@ class Crosshair:
 		if contact_amount > 0.01:
 			var ink := Color(0.92, 0.86, 0.76, contact_amount * 0.85)
 			var r := lerpf(12.0, 8.0, contact_amount)
-			if contact_kind in [&"punish", &"deathblow", &"perfect"]:
+			if contact_kind in [&"shot", &"headshot", &"kill"]:
+				# A shot that found him: four ticks out at the corners; longer
+				# and paler gold for the head; a kill a heavier X, held.
+				var long := 9.0 if contact_kind == &"headshot" else 7.0
+				var width := 2.5 if contact_kind == &"kill" else 1.5
+				ink = Color(1.0, 0.86, 0.55, minf(contact_amount * 1.4, 1.0)) if contact_kind == &"headshot" else (Color(0.95, 0.32, 0.22, minf(contact_amount * 1.4, 1.0)) if contact_kind == &"kill" else ink)
+
+				for side in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
+					var from: Vector2 = c + side.normalized() * (3.0 if contact_kind == &"kill" else 5.0)
+					draw_line(from, from + side.normalized() * long, ink, width, true)
+			elif contact_kind in [&"punish", &"deathblow", &"perfect"]:
 				ink = Color(1.0, 0.75, 0.36, contact_amount) if contact_kind != &"deathblow" else Color(1.0, 0.24, 0.13, contact_amount)
 				var points := PackedVector2Array([c + Vector2(0, -r), c + Vector2(r, 0), c + Vector2(0, r), c + Vector2(-r, 0), c + Vector2(0, -r)])
 				draw_polyline(points, ink, 1.5, true)
@@ -650,6 +684,13 @@ func setup(p_player: CharacterBody3D) -> void:
 	_white.visible = false
 	_play.add_child(_white)
 
+	_ammo = AmmoReadoutScript.new()
+	_ammo.name = "Ammo"
+	_ammo.player = player
+	_ammo.font = _font
+	_ammo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_play.add_child(_ammo)
+
 	_crosshair = Crosshair.new()
 	_crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_play.add_child(_crosshair)
@@ -861,6 +902,10 @@ func _process(delta: float) -> void:
 
 	var view := _root.size
 	var centre := view * 0.5
+	_ammo.position = Vector2(maxf(28.0, view.x - 136.0), maxf(0.0, view.y - 98.0))
+	_ammo.size = Vector2(108, 58)
+	_ammo.visible = not _ammo.snapshot().is_empty()
+	_ammo.queue_redraw()
 
 	# Prompts under the crosshair.
 	var actions: Array = []
@@ -954,11 +999,32 @@ func _process(delta: float) -> void:
 		_crosshair.short = combat.stamina < combat.block_cost_near()
 		_crosshair.stamina_alpha = move_toward(_crosshair.stamina_alpha, 1.0 if s < 0.995 else 0.0, delta * 3.0)
 
+	# Power, only while it is not full; gone a second after it is.
+	var pool: Node = player.get("power")
+
+	if pool != null:
+		var p: float = pool.power / pool.MAX
+		_crosshair.power = p
+		_crosshair.power_alpha = move_toward(_crosshair.power_alpha, 1.0 if p < 0.995 else 0.0, delta * (3.0 if p < 0.995 else 1.0))
+		_crosshair.power_short_flash = move_toward(_crosshair.power_short_flash, 0.0, delta / 0.5)
+
+		if not pool.refused_cast.is_connected(_on_power_refused):
+			pool.refused_cast.connect(_on_power_refused)
+
+	# The revolver's hits, marked on the crosshair.
+	var gun: Node = player.get("revolver")
+
+	if gun != null and not gun.hit_confirmed.is_connected(_crosshair.contact):
+		gun.hit_confirmed.connect(_crosshair.contact)
+
 	# Hurt, and caught. These run on real time: slow motion must not stretch
 	# them.
 	var real_delta := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
 	_last_real = TimeFx.real_time()
-	_crosshair.contact_amount = maxf(0.0, _crosshair.contact_amount - real_delta / 0.24)
+	if _crosshair.contact_hold > 0.0:
+		_crosshair.contact_hold -= real_delta
+	else:
+		_crosshair.contact_amount = maxf(0.0, _crosshair.contact_amount - real_delta / 0.24)
 	_vignette.modulate.a = move_toward(_vignette.modulate.a, 0.0, delta * 1.2)
 
 	for m in _hurt_marks.marks:
@@ -1776,3 +1842,7 @@ func resume() -> void:
 
 	if player != null and player.has_method("_recapture_mouse"):
 		player._recapture_mouse()
+
+
+func _on_power_refused() -> void:
+	_crosshair.power_short_flash = 1.0
