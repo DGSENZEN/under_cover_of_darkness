@@ -1487,9 +1487,9 @@
      "to": "candle_lane",
      "at": [
       -4.0,
-      74.5
+      75.45
      ],
-     "width": 3.0
+     "width": 6.9
     },
     {
      "to": "tianguis_lane",
@@ -1659,15 +1659,15 @@
     ],
     [
      28.0,
-     77.0
+     78.9
     ],
     [
      -4.0,
-     77.0
+     78.9
     ]
    ],
    "floor": -11.0,
-   "height": 3.5,
+   "height": 4.0,
    "interior": false,
    "layer": 2,
    "openings": [
@@ -1675,15 +1675,58 @@
      "to": "pasaje",
      "at": [
       -4.0,
-      74.5
+      75.45
      ],
-     "width": 3.0
+     "width": 6.9
     },
     {
      "to": "chapel",
      "at": [
       28.0,
       74.5
+     ],
+     "width": 3.0
+    },
+    {
+     "to": "librarian_shop",
+     "at": [
+      19.0,
+      78.9
+     ],
+     "width": 3.0
+    }
+   ]
+  },
+  {
+   "name": "librarian_shop",
+   "polygon": [
+    [
+     15.0,
+     78.9
+    ],
+    [
+     23.0,
+     78.9
+    ],
+    [
+     23.0,
+     85.65
+    ],
+    [
+     15.0,
+     85.65
+    ]
+   ],
+   "floor": -11.0,
+   "height": 4.5,
+   "interior": true,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "candle_lane",
+     "at": [
+      19.0,
+      78.9
      ],
      "width": 3.0
     }

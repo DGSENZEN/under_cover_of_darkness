@@ -231,6 +231,30 @@ class MetroPlan(unittest.TestCase):
         self.assertEqual(greybox.gate(box), [])
         self.assertFalse(any(m["kind"] in ("ground", "brink") for m in box["meshes"]))
 
+    def test_the_candle_lane_is_the_bays_section(self):
+        # (The candle lane design: widened to the corridor bay's 6.9 x 4.0 m section.)
+        lane = _space("candle_lane")
+        xs = [p[0] for p in lane["polygon"]]
+        zs = [p[1] for p in lane["polygon"]]
+        self.assertEqual((min(xs), max(xs), min(zs), max(zs)), (-4.0, 28.0, 72.0, 78.9))
+        self.assertEqual((lane["floor"], lane["height"]), (-11.0, 4.0))
+
+    def test_the_librarian_shop_opens_off_the_lane(self):
+        shop = _space("librarian_shop")
+        xs = [p[0] for p in shop["polygon"]]
+        zs = [p[1] for p in shop["polygon"]]
+        self.assertEqual((min(xs), max(xs), min(zs), max(zs)), (15.0, 23.0, 78.9, 85.65))
+        self.assertTrue(shop["interior"])
+        self.assertEqual([(o["to"], tuple(o["at"]), o["width"]) for o in shop["openings"]],
+                         [("candle_lane", (19.0, 78.9), 3.0)])
+        self.assertIn(("librarian_shop", (19.0, 78.9)),
+                      [(o["to"], tuple(o["at"])) for o in _space("candle_lane")["openings"]])
+
+    def test_the_lane_opens_wide_on_the_pasaje(self):
+        for name, other in (("candle_lane", "pasaje"), ("pasaje", "candle_lane")):
+            o = next(o for o in _space(name)["openings"] if o["to"] == other)
+            self.assertEqual((tuple(o["at"]), o["width"]), ((-4.0, 75.45), 6.9), name)
+
     def test_overlapping_spaces_fail(self):
         # The herb market moved up into the hall's volume.
         moved = copy.deepcopy(DATA)

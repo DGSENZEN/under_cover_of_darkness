@@ -19,7 +19,8 @@ def lay(P):
     P.route("market_stairs_flight", "stair", [(-10, HALL, 14.0), (-10, MARKET, 23.0)])
     P.space("pasaje", rect(-14, 34, -4, 150), floor=MARKET, height=4.5, layer=2,
             openings=[{"to": "market_stairs", "at": (-10, 34)}, {"to": "cistern_lane", "at": (-14, 43)},
-                      {"to": "herb_market", "at": (-14, 74), "width": 4.0}, {"to": "candle_lane", "at": (-4, 74.5)},
+                      {"to": "herb_market", "at": (-14, 74), "width": 4.0},
+                      {"to": "candle_lane", "at": (-4, 75.45), "width": 6.9},
                       {"to": "tianguis_lane", "at": (-4, 122.5)}, {"to": "rag_lane", "at": (-14, 140.5)},
                       {"to": "square_s", "at": (-9, 150), "width": 6.0}])
 
@@ -33,9 +34,14 @@ def lay(P):
             openings=[{"to": "herb_market", "at": (-44, 62.5)}, {"to": "corridor_sw", "at": (-87, 62.5)}])
     P.route("lane_sw_flight", "stair", [(-87, HALL, 62.5), (-79, MARKET, 62.5)])
 
-    # East: the candle lane to the chapel, on up to the south-east corridor.
-    P.space("candle_lane", rect(-4, 72, 28, 77), floor=MARKET, height=3.5, layer=2,
-            openings=[{"to": "pasaje", "at": (-4, 74.5)}, {"to": "chapel", "at": (28, 74.5)}])
+    # East: the candle lane to the chapel, on up to the south-east corridor; widened to the corridor bay's section
+    # (docs/superpowers/specs/2026-10-23-candle-lane-design.md), open its whole width on the Pasaje, the librarian's
+    # shop off its south side.
+    P.space("candle_lane", rect(-4, 72, 28, 78.9), floor=MARKET, height=4.0, layer=2,
+            openings=[{"to": "pasaje", "at": (-4, 75.45), "width": 6.9}, {"to": "chapel", "at": (28, 74.5)},
+                      {"to": "librarian_shop", "at": (19, 78.9)}])
+    P.space("librarian_shop", rect(15, 78.9, 23, 85.65), floor=MARKET, height=4.5, interior=True, layer=2,
+            openings=[{"to": "candle_lane", "at": (19, 78.9)}])
     P.space("chapel", rect(28, 62, 44, 86), floor=MARKET, height=5.0, layer=2,
             openings=[{"to": "candle_lane", "at": (28, 74.5)}, {"to": "lane_se", "at": (44, 72.5)}])
     P.space("lane_se", rect(44, 70, 87, 75), floor=MARKET, height=6.0, layer=2,
