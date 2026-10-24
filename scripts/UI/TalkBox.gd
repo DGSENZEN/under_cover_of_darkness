@@ -19,7 +19,13 @@ extends CanvasLayer
 ##     the user painted them (assets/ui/talk/<character>), else the plain one
 ##     (a backdrop painted from noise, the live render of the shade's head, a
 ##     painted spike). A painted skin lives: TalkSkin.animate each frame.
-## E or a click tells the line out at once, the next press goes on. Holding
+## A line taller than its area (from LINE_AT down to the options' first row)
+## is told in pages that fit it, broken where the type really wraps, at a
+## sentence's end where one falls on the page: a pulsing … at the area's
+## bottom right while more pages remain; the options and the next line come
+## after the last page. The wheel over the line (or anywhere while there are
+## no options), PageUp and PageDown turn back and on through the pages read.
+## E, Enter or a click tells the line out at once, the next press goes on. Holding
 ## back (WALK_AWAY) walks away, and they remember it (walked_off). A blow, a
 ## death or leaving the district breaks it off (interrupt): gone at once,
 ## nothing remembered. Escape pauses the game; the box freezes under the
@@ -98,6 +104,14 @@ const LINE_STEP := 38.0
 const LINE_WIDE := 560.0
 const OPTIONS_AT := 318.0
 const OPTION_STEP := 50.0
+## The more-marker of a line in pages: how far right of the line's width it
+## stands, how wide it is (px at 1080p), its words, how often it pulses (Hz)
+## and how low it dims between.
+const MORE_GAP := 6.0
+const MORE_WIDE := 40.0
+const MORE_TEXT := "…"
+const MORE_PULSE := 0.8
+const MORE_LEAST := 0.45
 ## More options than fit at OPTION_STEP above the screen's foot (less
 ## OPTIONS_MARGIN) close up, down to OPTION_STEP_LEAST, their swipes as much
 ## thinner but never below SWIPE_THIN_LEAST (the words keep their size); more
@@ -178,7 +192,18 @@ var skin: TalkSkin = TalkSkin.plain()
 var _open := false
 ## What the box shows now: &"line", &"sense", &"pause", &"options" or &"".
 var _kind: StringName = &""
+## The page of the line shown now (the whole line when it fits one).
 var _text := ""
+## The whole line said, and its pages on this screen: each page's words,
+## where it starts in the line, how many lines it wraps to; the page shown,
+## the furthest one reached; the screen height they were broken for.
+var _said := ""
+var _pages: Array[String] = []
+var _page_starts: Array[int] = []
+var _page_lines: Array[int] = []
+var _page := 0
+var _read := 0
+var _paged_for := 0.0
 ## Letters told out of _text so far.
 var _shown := 0.0
 ## The options up: [{text, special}], and the one the wheel or mouse is on.
@@ -219,6 +244,8 @@ var _viewport: SubViewport
 var _camera: Camera3D
 var _name: Label
 var _words: Label
+## The more-marker: more pages of this line to come.
+var _more: Label
 var _swipes: Array[TextureRect] = []
 var _option_labels: Array[Label] = []
 ## The first option in view and how many are (all of them unless they
@@ -370,6 +397,7 @@ func _show_words(on: bool) -> void:
 		if node != null and is_instance_valid(node):
 			(node as CanvasItem).visible = on
 
+	_show_more()
 	_show_rows()
 
 
@@ -400,9 +428,23 @@ func _exit_tree() -> void:
 
 # What it shows (for tests, too)
 
-## The words told out so far.
+## The words told out so far (of the page shown).
 func shown_text() -> String:
 	return _text.substr(0, int(_shown))
+
+
+## The line's pages on this screen (one when it fits), and the one shown.
+func pages() -> Array[String]:
+	return _pages.duplicate()
+
+
+func page() -> int:
+	return _page
+
+
+## Whether the more-marker shows (more pages of the line to come).
+func more_shown() -> bool:
+	return _more != null and _more.visible
 
 
 ## The options' words, in order.
@@ -430,6 +472,8 @@ func layout_rects() -> Dictionary:
 		"portrait": _portrait.get_rect().grow(-PORTRAIT_PAD * _scale()),
 		"name": _name.get_rect(),
 		"line": _words.get_rect(),
+		"line area": _plan.get("line_area", Rect2()),
+		"more": _more.get_rect(),
 	}
 
 	for i in _option_labels.size():
@@ -441,8 +485,8 @@ func layout_rects() -> Dictionary:
 
 # The keys
 
-## E or a click: tells the line out, or goes on; on the options, picks the
-## one the wheel is on.
+## E, Enter or a click: tells the page out, or turns to the next page, or
+## goes on after the last; on the options, picks the one the wheel is on.
 func press_advance() -> void:
 	if not _open:
 		return
@@ -451,10 +495,47 @@ func press_advance() -> void:
 		&"line", &"sense":
 			if _revealing():
 				_finish_reveal()
+			elif _page < _pages.size() - 1:
+				_turn_to(_page + 1)
 			else:
 				_go_on()
 		&"options":
 			select(_choice)
+
+
+## Back (-1) or on (1) a page through the pages of the line already read (the
+## wheel over the line, PageUp, PageDown), even while the options are up.
+func page_by(step: int) -> void:
+	if not _open or _pages.size() < 2 or not (_kind == &"line" or _kind == &"sense" or _kind == &"options"):
+		return
+
+	var to := clampi(_page + step, 0, _read)
+
+	if to == _page:
+		return
+
+	# (A page left half told counts as read.)
+	if _revealing():
+		_finish_reveal()
+
+	_turn_to(to)
+
+
+## Shows page `index`: whole if it was read before, else told out afresh.
+func _turn_to(index: int) -> void:
+	var fresh := index > _read
+	_page = index
+	_read = maxi(_read, index)
+	_text = _pages[index]
+	_words.text = _text
+	_shown = 0.0 if fresh else float(_text.length())
+	_words.visible_characters = int(_shown)
+
+	if fresh and _kind == &"line":
+		shade.speaking(true)
+
+	_show_more()
+	_layout(_screen())
 
 
 ## Picks option `index` (1-4, a click): its effects, then on.
@@ -464,6 +545,7 @@ func select(index: int) -> void:
 
 	_clear_options()
 	_kind = &""
+	_show_more()
 	shade.end_line()
 	conversation.choose(index)
 
@@ -523,6 +605,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 
+		# PageUp and PageDown turn the line's pages; Enter is E.
+		var which := key.keycode if key.keycode != KEY_NONE else key.physical_keycode
+
+		if which == KEY_PAGEUP or which == KEY_PAGEDOWN:
+			page_by(-1 if which == KEY_PAGEUP else 1)
+			get_viewport().set_input_as_handled()
+			return
+
+		if which == KEY_ENTER or which == KEY_KP_ENTER:
+			press_advance()
+			get_viewport().set_input_as_handled()
+			return
+
 	var button := event as InputEventMouseButton
 
 	if button == null or not button.pressed:
@@ -530,7 +625,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	match button.button_index:
 		MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
-			_wheel(button)
+			# Over the line (or anywhere while no options are up), a line in
+			# pages turns them; else the wheel moves the choice.
+			if _pages.size() > 1 and (_kind != &"options" or _over_line(button.position)):
+				page_by(-1 if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1)
+			else:
+				_wheel(button)
+
 			get_viewport().set_input_as_handled()
 		MOUSE_BUTTON_LEFT:
 			# On the options a click picks the one under it (its own input).
@@ -547,6 +648,11 @@ func _wheel(button: InputEventMouseButton) -> void:
 	if _kind == &"options" and not _options.is_empty():
 		var step := -1 if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1
 		choose_by_pointing(clampi(_choice + step, 0, _options.size() - 1))
+
+
+## Whether `point` (the box's canvas units) lies over the line's area.
+func _over_line(point: Vector2) -> bool:
+	return (_plan.get("line_area", Rect2()) as Rect2).has_point(point)
 
 
 ## The number 1-9 a key is, by its physical key (the number row or the
@@ -683,6 +789,9 @@ func _send_reveals() -> void:
 	_shadow.modulate.a = maxf(_panel_reveal, _portrait_reveal)
 	_name.modulate.a = _words_ink
 	_words.modulate.a = _words_ink
+	# The more-marker paints in with the words, and breathes gently.
+	var breath := 0.5 + 0.5 * sin(_since * TAU * MORE_PULSE)
+	_more.modulate.a = _words_ink * lerpf(MORE_LEAST, 1.0, breath)
 
 	for i in _swipes.size():
 		(_swipes[i].material as ShaderMaterial).set_shader_parameter(&"reveal", _swipe_reveal[i])
@@ -810,8 +919,13 @@ func _on_paused(seconds: float) -> void:
 	_kind = &"pause"
 	_pause_left = seconds
 	_text = ""
+	_said = ""
+	_set_pages(_paginate("", _screen().y))
+	_page = 0
+	_read = 0
 	_shown = 0.0
 	_words.text = ""
+	_show_more()
 	shade.speaking(false)
 
 
@@ -822,6 +936,7 @@ func _on_options(list: Array) -> void:
 	_scroll_mouse = Vector2(-1e9, -1e9)
 	_options_age = 0.0
 	_kind = &"options"
+	_show_more()
 	_build_options(list)
 	_layout(_screen())
 
@@ -840,9 +955,15 @@ func _on_ended(_how: StringName) -> void:
 
 func _show(kind: StringName, speaker: String, text: String) -> void:
 	_kind = kind
-	_text = text
+	# In pages that fit the line's area on this screen, the first told out.
+	_said = text
+	_paged_for = _screen().y
+	_set_pages(_paginate(text, _paged_for))
+	_page = 0
+	_read = 0
+	_text = _pages[0]
 	_shown = 0.0
-	_words.text = text
+	_words.text = _text
 	_words.visible_characters = 0
 	# An inner voice wears its school's ink and doubling (cochineal if it
 	# names none the box knows).
@@ -855,6 +976,17 @@ func _show(kind: StringName, speaker: String, text: String) -> void:
 	_name.text = speaker.to_upper()
 	_name.add_theme_color_override("font_color", ink if inner else MARIGOLD)
 	_double(_name, _words_school)
+	_more.add_theme_color_override("font_color", ink)
+	_show_more()
+
+
+## The more-marker shows while more pages of the line remain (not paused).
+func _show_more() -> void:
+	if _more == null or not is_instance_valid(_more):
+		return
+
+	var talking := _kind == &"line" or _kind == &"sense" or _kind == &"options"
+	_more.visible = not _paused_words and talking and _page < _pages.size() - 1
 
 
 func _revealing() -> bool:
@@ -1014,6 +1146,17 @@ func _build_words() -> void:
 	_words.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	_words.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_words)
+
+	_more = Label.new()
+	_more.name = "More"
+	_more.text = MORE_TEXT
+	_more.add_theme_font_override("font", _font)
+	_more.add_theme_color_override("font_color", CREAM)
+	_more.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_more.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	_more.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_more.visible = false
+	_root.add_child(_more)
 
 
 func _build_options(list: Array) -> void:
@@ -1190,9 +1333,17 @@ func plan(screen: Vector2) -> Dictionary:
 	var panel := Rect2(left, top, wide, tall)
 	var portrait := Rect2(left - face_wide + overlap, top - PORTRAIT_RISE * k, face_wide, face_tall)
 
-	# The line: as many lines as it wraps to; more than three push the
-	# options down by as many steps.
+	# The line (its page shown): as many lines as it wraps to; more than three
+	# push the options down by as many steps. A line in pages (each fitting
+	# the area) keeps the options where its fullest page would have them, so
+	# turning its pages back and on never moves them.
 	var lines := _line_count(_text)
+	var held := lines
+
+	if _pages.size() > 1 and _page_lines.size() == _pages.size():
+		lines = _page_lines[_page]
+		held = _page_lines.max()
+
 	var line := Rect2(left + (PANEL_WIDE - LINE_WIDE) * 0.5 * k, top + LINE_AT * k, LINE_WIDE * k, LINE_STEP * k * lines)
 	var name_rect := Rect2(left, top + NAME_AT * k, wide, 34.0 * k)
 
@@ -1205,7 +1356,7 @@ func plan(screen: Vector2) -> Dictionary:
 
 	var column := ceilf(longest) + COLUMN_MORE
 	var x := left + ((PANEL_WIDE - column) * 0.5 + OPTION_INDENT) * k
-	var y := top + (OPTIONS_AT + LINE_STEP * maxi(0, lines - 3)) * k
+	var y := top + (OPTIONS_AT + LINE_STEP * maxi(0, held - 3)) * k
 	# The middle of a row's words under its top (their ascent to descent):
 	# every swipe is centred on it.
 	var middle := _row_middle()
@@ -1215,7 +1366,7 @@ func plan(screen: Vector2) -> Dictionary:
 	# as far as it must for the fade to clear the spoken line.
 	if int(fit["in_view"]) < _options.size():
 		var fade_from := (y - top) / k + middle - CHOSEN_TALL * 0.5 * _thin(OPTION_STEP_LEAST) - FADE_TALL
-		var under := LINE_AT + LINE_STEP * lines + 2.0 - fade_from
+		var under := LINE_AT + LINE_STEP * held + 2.0 - fade_from
 
 		if under > 0.0:
 			y += under * k
@@ -1254,11 +1405,27 @@ func plan(screen: Vector2) -> Dictionary:
 	var fade_top := Rect2(x - OPTION_INDENT * k, y + (middle - reach - FADE_TALL) * k, fade_wide, FADE_TALL * k)
 	var fade_bottom := Rect2(x - OPTION_INDENT * k, y + (step * (in_view - 1) + middle + reach) * k, fade_wide, FADE_TALL * k)
 
+	# The line's area, the wheel's for its pages: the line's width (and its
+	# marker's) from LINE_AT down to the options' first row, never over the
+	# top row's swipe or fade.
+	var area_foot := top + OPTIONS_AT * k
+
+	if not swipes.is_empty():
+		area_foot = minf(area_foot, (swipes[first] as Rect2).position.y)
+
+	if in_view < _options.size():
+		area_foot = minf(area_foot, fade_top.position.y)
+
+	var line_area := Rect2(line.position, Vector2((LINE_WIDE + MORE_GAP + MORE_WIDE) * k, area_foot - line.position.y))
+	# The more-marker: right of the line's width, on the fullest page's last
+	# line (inside the area, above the options and their fade).
+	var more := Rect2(line.end.x + MORE_GAP * k, top + (LINE_AT + LINE_STEP * (held - 1)) * k, MORE_WIDE * k, LINE_STEP * k)
+
 	var shadow_box := Rect2(Vector2(portrait.position.x - 10.0 * k, top - 90.0 * k), Vector2.ZERO)
 	shadow_box.end = Vector2(left + wide + 20.0 * k, screen.y + 40.0 * k)
 	return {"scale": k, "panel": panel, "portrait": portrait, "name": name_rect, "line": line, "options": words, "swipes": swipes,
 		"column": column, "shadow": shadow_box, "step": step, "first": first, "in_view": in_view, "fade_top": fade_top,
-		"fade_bottom": fade_bottom}
+		"fade_bottom": fade_bottom, "line_area": line_area, "more": more}
 
 
 ## How `count` options sit in `room` (px at 1080p, from the first row's top to
@@ -1310,6 +1477,160 @@ func _line_count(text: String) -> int:
 	return _measured[key]
 
 
+## The spoken line's spacing between its lines at type size `size` on a
+## screen scaled `k`: its lines LINE_STEP apart.
+func _line_spacing(size: int, k: float) -> int:
+	return roundi(LINE_STEP * k - _font.get_height(size))
+
+
+## `text` broken into pages that each fit the line's area (LINE_AT down to
+## OPTIONS_AT) as the line's label draws it on a screen `height` tall: its
+## type at that size, wrapped as it wraps (word bounds, a word too long for
+## the width broken), its lines LINE_STEP apart. A page ends where its last
+## line ends, or at the last sentence's end on that last line.
+## {pages, starts (where each begins in `text`), lines (each one's)};
+## measured once a text and screen.
+func _paginate(text: String, height: float) -> Dictionary:
+	var key := "pages %d %s" % [int(height), text]
+
+	if _measured.has(key):
+		return _measured[key]
+
+	var pages: Array[String] = []
+	var starts: Array[int] = []
+	var lines: Array[int] = []
+
+	if _font == null or text.strip_edges() == "":
+		pages.append(text)
+		starts.append(0)
+		lines.append(1)
+		return {"pages": pages, "starts": starts, "lines": lines}
+
+	_measures += 1
+	var k := height / 1080.0
+	var size := roundi(LINE_SIZE * k)
+	var spacing := float(_line_spacing(size, k))
+	var room := (OPTIONS_AT - LINE_AT) * k
+	var at := 0
+
+	while at < text.length():
+		# (A page begins at a word, never at the space before it.)
+		while at < text.length() and " \t\n".contains(text[at]):
+			at += 1
+
+		if at >= text.length():
+			break
+
+		var rest := text.substr(at)
+		var paragraph := TextParagraph.new()
+		paragraph.width = LINE_WIDE * k
+		paragraph.break_flags = TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE
+		paragraph.add_string(rest, _font, size)
+		var count := paragraph.get_line_count()
+		var fit := 0
+		var high := 0.0
+
+		while fit < count:
+			var more := paragraph.get_line_size(fit).y + (spacing if fit > 0 else 0.0)
+
+			if fit > 0 and high + more > room + 0.01:
+				break
+
+			high += more
+			fit += 1
+
+		var cut := rest.length()
+
+		if fit < count:
+			cut = paragraph.get_line_range(fit - 1).y
+			# (A sentence ending on its last line, so a page is never left
+			# half empty for one.)
+			var stop := _sentence_end(rest, paragraph.get_line_range(fit - 1).x, cut) if fit > 1 else -1
+
+			if stop > 0:
+				cut = stop
+
+		var wraps := 0
+
+		for i in count:
+			if paragraph.get_line_range(i).x < cut:
+				wraps += 1
+
+		var words := rest.substr(0, cut).strip_edges()
+
+		if words != "":
+			pages.append(words)
+			starts.append(at)
+			lines.append(maxi(1, wraps))
+
+		at += maxi(cut, 1)
+
+	# A line that fits one page is shown as it was written.
+	if pages.size() <= 1:
+		pages.assign([text])
+		starts.assign([0])
+		lines.assign([lines[0] if not lines.is_empty() else 1])
+
+	_measured[key] = {"pages": pages, "starts": starts, "lines": lines}
+	return _measured[key]
+
+
+## Just past the last sentence's end in `text` between `from` and `to` (its
+## stop, then any closing marks, then a space or the end), or -1.
+static func _sentence_end(text: String, from: int, to: int) -> int:
+	for i in range(mini(to, text.length()) - 1, maxi(from, 1) - 1, -1):
+		if not ".!?…".contains(text[i]):
+			continue
+
+		var j := i + 1
+
+		while j < text.length() and "\"'”’»)]>".contains(text[j]):
+			j += 1
+
+		if j <= to and (j >= text.length() or " \t\n".contains(text[j])):
+			return j
+
+	return -1
+
+
+func _set_pages(paged: Dictionary) -> void:
+	_pages = paged["pages"]
+	_page_starts = paged["starts"]
+	_page_lines = paged["lines"]
+
+
+## The line broken again for a screen `height` tall: the page shown and the
+## furthest read kept by where they began in the line.
+func _repage(height: float) -> void:
+	_paged_for = height
+
+	if _pages.is_empty():
+		return
+
+	var was := _page_starts[mini(_page, _page_starts.size() - 1)]
+	var furthest := _page_starts[mini(_read, _page_starts.size() - 1)]
+	var told := _shown >= float(_text.length())
+	_set_pages(_paginate(_said, height))
+	_page = _page_at(was)
+	_read = maxi(_page_at(furthest), _page)
+	_text = _pages[_page]
+	_words.text = _text
+	_shown = float(_text.length()) if told or _page < _read else minf(_shown, float(_text.length()))
+	_words.visible_characters = int(_shown)
+	_show_more()
+
+
+## The page that holds the line's letter `offset`.
+func _page_at(offset: int) -> int:
+	var index := 0
+
+	for i in _page_starts.size():
+		if _page_starts[i] <= offset:
+			index = i
+
+	return index
+
+
 ## How wide `text` is as an option at 1080p (px; measured once a text).
 func _option_wide(text: String) -> float:
 	if _italic == null:
@@ -1340,6 +1661,12 @@ func _row_middle() -> float:
 ## Places every part by plan() for a screen this size.
 func _layout(screen: Vector2) -> void:
 	_screen_height = screen.y
+
+	# The type's size changes with the screen's height: the line broken again
+	# where it now wraps.
+	if _said != "" and screen.y != _paged_for:
+		_repage(screen.y)
+
 	var p := plan(screen)
 	_plan = p
 	var k: float = p["scale"]
@@ -1368,7 +1695,8 @@ func _layout(screen: Vector2) -> void:
 		_name.add_theme_font_size_override("font_size", roundi(NAME_SIZE * k))
 		var line_size := roundi(LINE_SIZE * k)
 		_words.add_theme_font_size_override("font_size", line_size)
-		_words.add_theme_constant_override("line_spacing", roundi(LINE_STEP * k - _font.get_height(line_size)))
+		_words.add_theme_constant_override("line_spacing", _line_spacing(line_size, k))
+		_more.add_theme_font_size_override("font_size", line_size)
 		_double(_words, _words_school)
 		_double(_name, _words_school)
 
@@ -1394,6 +1722,7 @@ func _layout(screen: Vector2) -> void:
 
 	_place(_name, p["name"])
 	_place(_words, p["line"])
+	_place(_more, p["more"])
 
 	var words: Array = p["options"]
 	var swipes: Array = p["swipes"]

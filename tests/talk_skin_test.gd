@@ -51,6 +51,17 @@ extends Node3D
 ##        own (no volumetric fog, SSAO, SSR or SSIL; glow modest; the world's
 ##        own untouched), rendered about 30 times a second
 ##   B45  plan() measures each text once, not every frame
+##   B47  a 600-letter spoken line (and Sense line) at 1080p and 720p breaks
+##        into 2 pages or more, none losing a word, each page's height as
+##        its label draws it inside the line's area (182 to 318)
+##   B48  E (and Enter) walks the pages (each told out afresh, the
+##        more-marker on all but the last), the Sense line's after, then the
+##        options
+##   B49  options up, the wheel over the line pages back and on through the
+##        pages read, over the options it still chooses; PageUp and
+##        PageDown page; the marker and the line's area clear of the options
+##        and their fade
+##   B50  a short line is one page, as written, with no marker
 ## The painted fixture skin is drawn by this suite into user://, so it runs
 ## the same with or without the user's paintings.
 ##   Godot --headless --fixed-fps 60 --path . res://tests/talk_skin_test.tscn
@@ -103,6 +114,7 @@ func _ready() -> void:
 	await _schools()
 	await _many()
 	await _rows_in_paint()
+	await _paging()
 	await _portrait_cost()
 	_real()
 	TalkSkin.root = _real_root
@@ -1068,6 +1080,236 @@ func _rows_in_paint() -> void:
 	_check("B42 a 3- or 4-line spoken line over a scrolling list: the top fade never overlaps it, every row in view whole on screen (1080p, 720p)",
 		b42.is_empty(), "; ".join(b42) if not b42.is_empty() else "3 and 4 lines")
 	_check("B43 the wheel stops at the first and the last option, never wrapping round", b43.begins_with("ok "), b43)
+	player.queue_free()
+	await _frames(2)
+	TalkSkin.root = _real_root
+	DialogueBook.reload()
+
+
+# ---------------------------------------------------------------------------
+# B47-B50: a long line in pages
+# ---------------------------------------------------------------------------
+
+## A placeholder line of sentences at least `letters` long (`seed` turns
+## which sentence it starts on).
+func _long_line(letters: int, seed_value: int) -> String:
+	var sentences := ["She turns the egg over the smoke and does not look up.", "The copal has gone dark at its edges, as it does when the dead come close.",
+		"Her hands know the work better than she does; they have done it longer.", "Somewhere down the lane a train goes by under the stone.",
+		"She says the book was never his to keep, and the saint on her shelf says nothing.", "Ask her again and she will tell you less."]
+	var text := ""
+	var i := seed_value
+
+	while text.length() < letters:
+		text += ("" if text == "" else " ") + String(sentences[i % sentences.size()])
+		i += 1
+
+	return "<<%s>>" % text
+
+
+## Squeezed to single spaces, to compare words with words.
+static func _words_of(text: String) -> String:
+	return " ".join(text.split(" ", false))
+
+
+## Each page of `box`'s line whose height, as a label like the box's draws it
+## on `screen`, is more than the line's area; "" if none.
+func _pages_off(box: Node, screen: Vector2) -> String:
+	box._layout(screen)
+	var k := screen.y / 1080.0
+	var room := (TalkBox.OPTIONS_AT - TalkBox.LINE_AT) * k
+	var source: Label = box._words
+	var probe := Label.new()
+	probe.add_theme_font_override("font", source.get_theme_font(&"font"))
+	probe.add_theme_font_size_override("font_size", source.get_theme_font_size(&"font_size"))
+	probe.add_theme_constant_override("line_spacing", source.get_theme_constant(&"line_spacing"))
+	probe.autowrap_mode = source.autowrap_mode
+	probe.horizontal_alignment = source.horizontal_alignment
+	probe.vertical_alignment = source.vertical_alignment
+	probe.modulate.a = 0.0
+	add_child(probe)
+	probe.size = Vector2(source.size.x, 1.0)
+	var off: Array[String] = []
+	var pages: Array[String] = box.pages()
+
+	for i in pages.size():
+		probe.text = pages[i]
+		await get_tree().process_frame
+		var high := probe.get_minimum_size().y
+
+		if high > room + 0.01:
+			off.append("%s page %d %.1f px over %.1f (%d lines)" % [screen, i, high, room, probe.get_line_count()])
+
+	probe.queue_free()
+	return "; ".join(off)
+
+
+## A wheel turn at `at` (the box's canvas units).
+func _wheel_at(at: Vector2, down: bool) -> void:
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN if down else MOUSE_BUTTON_WHEEL_UP
+	wheel.pressed = true
+	wheel.position = get_viewport().get_final_transform() * at
+	wheel.global_position = wheel.position
+	Input.parse_input_event(wheel)
+	Input.flush_buffered_events()
+	await _frames(2)
+
+
+func _paging() -> void:
+	var said := _long_line(600, 0)
+	var sensed := _long_line(600, 3)
+	# (_saying puts the speaker before it.)
+	var lines := "%s\nSense obsidian: %s" % [said, sensed]
+	DialogueBook.use(DialogueBook.check_alone({"fx_curandera.dialogue": _saying("fx_curandera", lines, 3),
+		"fx_four.dialogue": _offering("fx_four", 3)}))
+	CityState.begin()
+	CityState.people.load_state({})
+	TalkSkin.root = PAINTED
+	var player: CharacterBody3D = PLAYER.instantiate()
+	add_child(player)
+	player.reload_on_death = false
+	player.invulnerable = true
+	player.global_position = Vector3(0, 1.05, 0)
+	await _frames(10)
+	var screens := [Vector2(1920, 1080), Vector2(1280, 720)]
+	var b47: Array[String] = []
+	var b47_seen: Array[String] = []
+	var b48: Array[String] = []
+	var b49: Array[String] = []
+	var box: Node = await _open(player, "fx_curandera")
+
+	if box == null:
+		b47.append("no box")
+	else:
+		# B47 and B48: each line's pages at both sizes, then E through them.
+		for kind in [&"line", &"sense"]:
+			var whole: String = said if kind == &"line" else sensed
+
+			if box._kind != kind:
+				b48.append("%s: the box shows %s" % [kind, box._kind])
+				break
+
+			for screen in screens:
+				var off: String = await _pages_off(box, screen)
+				var pages: Array[String] = box.pages()
+				b47_seen.append("%s %dp: %d pages of %s lines" % [kind, int(screen.y), pages.size(), box._page_lines])
+
+				if pages.size() < 2 or off != "" or _words_of(" ".join(pages)) != _words_of(whole) or box.page() != 0:
+					b47.append("%s at %s: %d pages (on %d) %s%s" % [kind, screen, pages.size(), box.page(), off,
+						"" if _words_of(" ".join(pages)) == _words_of(whole) else ", words lost: %s" % [pages]])
+
+			box._layout(box._screen())
+			var count: int = box.pages().size()
+			var walked := []
+
+			for i in count:
+				var fresh: bool = box.shown_text().length() < String(box.pages()[i]).length()
+				walked.append([box.page(), fresh, box.more_shown(), box.shown_options().size()])
+
+				if box.page() != i or not fresh or box.more_shown() != (i < count - 1) or not box.shown_options().is_empty():
+					b48.append("%s page %d: on %d, told out afresh %s, marker %s, options %d" % [kind, i, box.page(), fresh, box.more_shown(),
+						box.shown_options().size()])
+
+				# The first press tells it out, the next turns the page (or goes on).
+				box.press_advance()
+				await _frames(2)
+
+				if box.shown_text() != String(box.pages()[i]) or box.page() != i:
+					b48.append("%s page %d not told out whole by E" % [kind, i])
+
+				# (The Sense line's pages turned with Enter, the spoken line's with E.)
+				if kind == &"sense":
+					await _key(KEY_ENTER)
+				else:
+					box.press_advance()
+					await _frames(2)
+
+		var options: bool = box._kind == &"options" and box.shown_options().size() == 3
+
+		if not options:
+			b48.append("after the last page: %s, %d options" % [box._kind, box.shown_options().size()])
+		else:
+			# B49: options up on the Sense line's last page.
+			await _frames(int(ceil(TalkBox.OPTION_GUARD * 60.0)) + 5)
+			var last: int = box.pages().size() - 1
+			var area: Rect2 = box.layout_rects()["line area"]
+			var choice: int = box._choice
+			await _wheel_at(area.get_center(), false)
+			var back: Array = [box.page(), box.shown_text() == String(box.pages()[box.page()]), box.more_shown(), box._choice]
+			await _wheel_at(area.get_center(), true)
+			var on: Array = [box.page(), box.more_shown(), box._choice]
+
+			if back != [last - 1, true, true, choice] or on != [last, false, choice]:
+				b49.append("wheel over the line: back %s, on %s (last page %d, choice %d)" % [back, on, last, choice])
+
+			# The options still choose under the wheel (off the line), the page stays.
+			var row: Rect2 = box.layout_rects()["swipe 0"]
+			await _point(row.get_center())
+			var pointed: int = box._choice
+			await _wheel_at(row.get_center(), true)
+
+			if box._choice != pointed + 1 or box.page() != last:
+				b49.append("wheel over the options: choice %d (was %d), page %d" % [box._choice, pointed, box.page()])
+
+			await _key(KEY_PAGEUP)
+			var up: int = box.page()
+			await _key(KEY_PAGEDOWN)
+
+			if up != last - 1 or box.page() != last or box.shown_options().size() != 3:
+				b49.append("PageUp to %d, PageDown to %d (last %d), options %d" % [up, box.page(), last, box.shown_options().size()])
+
+			# Turned back, the marker and the line's area stay clear of every row in view and of the fade.
+			box.page_by(-1)
+
+			for screen in screens:
+				box._layout(screen)
+				var rects: Dictionary = box.layout_rects()
+				var clear := [rects["more"], rects["line area"], rects["line"]]
+
+				for i in box.options_in_view():
+					for part: Rect2 in clear:
+						if part.intersects(rects["swipe %d" % i]) or part.intersects(rects["option %d" % i]):
+							b49.append("%s: %s over row %d %s" % [screen, part, i, rects["swipe %d" % i]])
+
+				if box._fade_top.visible:
+					for part: Rect2 in clear:
+						if part.intersects(box._fade_top.get_rect()):
+							b49.append("%s: %s over the fade" % [screen, part])
+
+				if not (rects["panel"] as Rect2).encloses(rects["more"]) or not box.more_shown():
+					b49.append("%s: the marker %s (shown %s) not inside the panel %s" % [screen, rects["more"], box.more_shown(), rects["panel"]])
+
+			box._layout(box._screen())
+
+		await _close(box)
+
+	# B50: a short line, one page as written.
+	var b50 := "no box"
+	var b50_ok := false
+	var short: Node = await _open(player, "fx_four")
+
+	if short != null:
+		var pages: Array[String] = short.pages()
+		var marker: bool = short.more_shown()
+		var k: float = short._plan["scale"]
+		var rect: Rect2 = short.layout_rects()["line"]
+		var top: float = (short.layout_rects()["panel"] as Rect2).position.y
+		await _to_options(short)
+		var row: float = ((short.layout_rects()["option 0"] as Rect2).position.y - top) / k
+		b50_ok = pages == ["<<Choose.>>"] and not marker and short.shown_options().size() == 3 and not short.more_shown() \
+			and absf((rect.position.y - top) / k - TalkBox.LINE_AT) < 0.1 and absf(rect.size.y / k - TalkBox.LINE_STEP) < 0.1 \
+			and absf(row - TalkBox.OPTIONS_AT) < 0.1
+		b50 = "pages %s, marker %s, line at %.1f %.1f tall, first option at %.1f (1080p px), options %d" % [pages, marker,
+			(rect.position.y - top) / k, rect.size.y / k, row, short.shown_options().size()]
+		await _close(short)
+
+	_check("B47 a 600-letter spoken line and Sense line at 1080p and 720p break into 2 pages or more, no word lost, each page's drawn height inside the line's area",
+		b47.is_empty(), "; ".join(b47) if not b47.is_empty() else "; ".join(b47_seen))
+	_check("B48 E (and Enter) walks the pages, each told out afresh with the marker on all but the last, the Sense line's after, then the options",
+		b48.is_empty(), "; ".join(b48) if not b48.is_empty() else "both lines")
+	_check("B49 options up, the wheel over the line pages back and on through the pages read, over the options it still chooses; PageUp and PageDown page; the marker and the line's area clear of the options and the fade",
+		b49.is_empty(), "; ".join(b49.slice(0, 6)) if not b49.is_empty() else "1080p and 720p")
+	_check("B50 a short line is one page, as written, no marker, laid out as before", b50_ok, b50)
 	player.queue_free()
 	await _frames(2)
 	TalkSkin.root = _real_root
