@@ -1155,7 +1155,7 @@ func set_bow_draw(draw: float, arrow: Mesh) -> void:
 	# fetching it.
 	_nocked.visible = _has_arrow and _nock_t >= 0.4
 
-	if arrow != null and _nocked.mesh != arrow:
+	if arrow != null and _nocked.get_meta(&"source_mesh", _nocked.mesh) != arrow:
 		_nocked.mesh = arrow
 		_apply_materials(_nocked, arrow)
 
@@ -2900,11 +2900,19 @@ func _apply_materials(instance: MeshInstance3D, mesh: Mesh) -> void:
 		instance.material_override = _viewmodel_material(mesh)
 		return
 
+	# Each surface its own look, set on a copy of the mesh (per-surface
+	# overrides on an imported model's mesh made the headless renderer report
+	# a null material for every surface); what it was made from remembered.
+	var copy := mesh.duplicate() as Mesh
+
 	for i in range(mesh.get_surface_count()):
 		var source := mesh.surface_get_material(i)
 		var material: StandardMaterial3D = (source as StandardMaterial3D).duplicate() if source is StandardMaterial3D else StandardMaterial3D.new()
 		_squeeze(material)
-		instance.set_surface_override_material(i, material)
+		copy.surface_set_material(i, material)
+
+	instance.mesh = copy
+	instance.set_meta(&"source_mesh", mesh)
 
 
 func _fit_scale(mesh: Mesh) -> float:

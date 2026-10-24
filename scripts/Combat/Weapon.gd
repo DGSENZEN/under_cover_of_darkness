@@ -174,6 +174,30 @@ static func model(file: StringName) -> Mesh:
 	return mesh
 
 
+## The mesh of the node called `part` in a model file, or null (cached as
+## model() is): for models whose moving parts are their own nodes.
+static func model_part(file: StringName, part: String) -> Mesh:
+	var key := StringName("%s/%s" % [file, part])
+
+	if _models.has(key):
+		return _models[key]
+
+	var mesh: Mesh = null
+	var path := MODELS % file
+
+	if ResourceLoader.exists(path):
+		var scene := (load(path) as PackedScene).instantiate()
+		var found := scene.find_child(part, true, false)
+
+		if found is MeshInstance3D:
+			mesh = (found as MeshInstance3D).mesh
+
+		scene.free()
+
+	_models[key] = mesh
+	return mesh
+
+
 ## Clears imported-model and arrow caches; does not clear the weapon armoury.
 static func forget_models() -> void:
 	_models.clear()
@@ -245,8 +269,16 @@ static func sword_mesh() -> Mesh:
 ## forward along -Z above the hand, the shot barrel under the cylinder's.
 ## The cylinder, hammer and loading gate are their own meshes (metas), so the
 ## hand can turn and move them. A stand-in of blocks until the model is made.
+## How much the revolver model is grown about the fist (build_revolver.py).
+const MODEL_SCALE := 1.3
+
+
 static func revolver_mesh() -> Mesh:
-	var mesh := model(&"revolver")
+	# The modelled gun (tools/weapons/build_revolver.py: silhouette D, after
+	# Abrams' Case Closed in Deadlock), its cylinder, hammer and gate their
+	# own nodes.
+	var mesh := model_part(&"revolver", "Revolver")
+	var modelled := mesh != null
 	var iron := _material(Color(0.2, 0.2, 0.22), 0.75, 0.4)
 	var worn := _material(Color(0.42, 0.4, 0.38), 0.7, 0.3)
 	var walnut := _material(Color(0.3, 0.17, 0.09))
@@ -272,8 +304,20 @@ static func revolver_mesh() -> Mesh:
 	mesh.set_meta(&"stow_time", 0.35)
 	mesh.set_meta(&"sway_lag", 2.2)
 	mesh.set_meta(&"sway_most", deg_to_rad(4.0) / 0.6)
-	mesh.set_meta(&"muzzle", Vector3(0, 0.1, -0.32))
-	mesh.set_meta(&"shot_muzzle", Vector3(0, 0.072, -0.25))
+	# (The model is grown 1.3 about the fist: build_revolver.py's SCALE.)
+	mesh.set_meta(&"muzzle", Vector3(0, 0.0695, -0.227) * MODEL_SCALE if modelled else Vector3(0, 0.1, -0.32))
+	mesh.set_meta(&"shot_muzzle", Vector3(0, 0.038, -0.223) * MODEL_SCALE if modelled else Vector3(0, 0.072, -0.25))
+
+	# Its parts, each made about its own pivot: the cylinder about its Y
+	# (turned onto the barrel's line), the hammer about its X, the gate about
+	# its Y.
+	if modelled and not mesh.has_meta(&"cylinder_mesh"):
+		mesh.set_meta(&"cylinder_mesh", model_part(&"revolver", "Cylinder"))
+		mesh.set_meta(&"cylinder_at", Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0.046, -0.1055) * MODEL_SCALE))
+		mesh.set_meta(&"hammer_mesh", model_part(&"revolver", "Hammer"))
+		mesh.set_meta(&"hammer_at", Transform3D(Basis.IDENTITY, Vector3(0, 0.072, -0.04) * MODEL_SCALE))
+		mesh.set_meta(&"gate_mesh", model_part(&"revolver", "Gate"))
+		mesh.set_meta(&"gate_at", Transform3D(Basis.IDENTITY, Vector3(0.0125, 0.046, -0.06) * MODEL_SCALE))
 
 	if not mesh.has_meta(&"cylinder_mesh"):
 		var cylinder := CylinderMesh.new()
