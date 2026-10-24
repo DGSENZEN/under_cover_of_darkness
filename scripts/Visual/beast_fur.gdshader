@@ -3,15 +3,17 @@
 // Shell 0 darkens the skin to a dusky umber with bone-white veins in it,
 // glowing with the heartbeat (`veins`); shells 1.. stand out along the
 // skin's normals as fur, sparser the further out, darker at the root and
-// pale at the tips. `bristle` throws them further out as the charge is
-// spent. Drawn as the arms are: at their own field of view and depth squeeze.
+// pale at the tips, lit by the scene (unlit, it glowed tan at night); the
+// veins glow of themselves. `bristle` throws the fur further out as the
+// charge is spent. Drawn as the arms are: at their own field of view and
+// depth squeeze.
 shader_type spatial;
-render_mode unshaded, cull_back, depth_draw_never, shadows_disabled;
+render_mode cull_back, depth_draw_never, shadows_disabled;
 
 uniform sampler2D noise : filter_linear_mipmap, repeat_enable;
-uniform vec4 dusk : source_color = vec4(0.23, 0.15, 0.09, 1.0);
-uniform vec4 root : source_color = vec4(0.12, 0.08, 0.05, 1.0);
-uniform vec4 tip : source_color = vec4(0.52, 0.4, 0.28, 1.0);
+uniform vec4 dusk : source_color = vec4(0.16, 0.1, 0.06, 1.0);
+uniform vec4 root : source_color = vec4(0.06, 0.04, 0.025, 1.0);
+uniform vec4 tip : source_color = vec4(0.3, 0.22, 0.15, 1.0);
 uniform vec4 vein : source_color = vec4(0.85, 0.78, 0.64, 1.0);
 uniform float amount : hint_range(0.0, 1.0) = 0.0;
 uniform float shell = 0.0;
@@ -48,16 +50,19 @@ void fragment() {
 		// The skin gone dusky, and its veins: thin lines where the noise
 		// crosses its middle, running along the arm.
 		float n = texture(noise, vec2(model_at.x * 3.0 + model_at.z * 3.0, model_at.y * 1.2)).r;
-		float line = 1.0 - smoothstep(0.012, 0.03, abs(n - 0.5));
-		ALBEDO = mix(dusk.rgb, vein.rgb * (1.0 + veins * 2.0), line * veins);
-		ALPHA = amount * on_side * max(0.55, line * veins);
+		float line = 1.0 - smoothstep(0.005, 0.014, abs(n - 0.5));
+		ALBEDO = dusk.rgb;
+		ROUGHNESS = 0.8;
+		EMISSION = vein.rgb * line * veins * 2.5;
+		ALPHA = amount * on_side * max(0.6, line * veins);
 	} else {
-		// Strands: fine noise, fewer of them the further out.
-		float n = texture(noise, vec2(model_at.x * 40.0 + model_at.z * 40.0, model_at.y * 14.0)).r;
+		// Strands: fine noise drawn out along the arm, fewer the further out.
+		float n = texture(noise, vec2(model_at.x * 110.0 + model_at.z * 110.0, model_at.y * 30.0)).r;
 		float out_by = shell / shells;
-		float keep = step(0.42 + out_by * 0.16, n);
+		float keep = step(0.46 + out_by * 0.14, n);
 		ALBEDO = mix(root.rgb, tip.rgb, out_by);
-		ALPHA = keep * amount * on_side * (1.0 - out_by * 0.35);
+		ROUGHNESS = 1.0;
+		ALPHA = keep * amount * on_side * (1.0 - out_by * 0.3);
 	}
 
 	if (ALPHA < 0.01) {

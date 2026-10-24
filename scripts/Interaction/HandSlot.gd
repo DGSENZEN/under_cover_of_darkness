@@ -235,6 +235,9 @@ var _hand_glyphs: Array[MeshInstance3D] = []
 ## The tome's lines of script: their glyphs, each line's state (0 ink, 1 lit,
 ## 2 its words gone to the hand) and when it lit; the two looks.
 var _tome_lines: Array = []
+## The leaves the lines are written on (written the first time the tome
+## shows: made with the hand, they never drew).
+var _leaves: Array[MeshInstance3D] = []
 var _line_state: Array[int] = []
 var _line_lit_at: Array[float] = []
 var _ink_look: ShaderMaterial
@@ -890,7 +893,7 @@ func _make_pages() -> void:
 		leaf.position = Vector3(0.06, 0.0, 0.0)
 		pivot.add_child(leaf)
 		_pages.append(pivot)
-		_write_page(leaf, i)
+		_leaves.append(leaf)
 
 
 ## Lines of the invented script on a leaf (TOME_LINES of TOME_LINE_GLYPHS
@@ -944,7 +947,8 @@ func _glyph_look(atlas: Dictionary, colour: Color, energy: float) -> ShaderMater
 	look.set_shader_parameter(&"energy", energy)
 	look.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
 	look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
-	look.render_priority = 1
+	# Over the tome (drawn after anything lower, whatever its depth).
+	look.render_priority = 12
 	return look
 
 
@@ -978,10 +982,23 @@ func _read_lines(amount: float) -> void:
 ## The pages' glyphs on their leaves, where the leaves are now (shown with
 ## the tome).
 func _place_page_glyphs() -> void:
-	for line in _tome_lines:
-		for glyph in line:
+	if _tome.visible and _tome_lines.is_empty():
+		for i in _leaves.size():
+			_write_page(_leaves[i], i)
+
+	# Only the top leaf not yet turned shows its lines (the leaves lie too
+	# close for depth to keep those under it hidden).
+	var top := _pages.size()
+
+	for i in _pages.size():
+		if absf(_pages[i].rotation.y) < PI * 0.5:
+			top = i
+			break
+
+	for line_index in _tome_lines.size():
+		for glyph in _tome_lines[line_index]:
 			var leaf: Node3D = glyph.get_meta(&"leaf")
-			glyph.visible = _tome.visible
+			glyph.visible = _tome.visible and line_index / TOME_LINES == top
 			glyph.global_transform = leaf.global_transform * (glyph.get_meta(&"on_leaf") as Transform3D)
 
 

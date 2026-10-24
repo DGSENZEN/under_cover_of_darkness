@@ -14,13 +14,16 @@ Empower is a tome spell of the nahual, the shapeshifter's beast strength. It fol
 - **The words on the pages:** the tome's pages carry lines of the invented script (the Ward's written circle, `LibraryGlyphs`). They catch light in bone and umber, line by line, as the pages turn.
 - **The words leave the page:** as each line lights, its glyphs lift off and fly to your gun hand, shrinking into it. The words go into the arm; that is the charge's cause, seen.
 - **A low growl** rises under the reading *(Claude's call: the "roar" sound, low and slow)*.
+- **The tome comes up to be read** *(Claude's call after the first stills)*: raised and turned toward you while it is read, then lowered. Held low, only the top of its pages was on screen.
+- **Where the lines are** *(Claude's call)*: on the turning leaves, which lie over the stand-in's open paper as the page you read. Only the top unturned leaf shows its lines. A line's words leave it blank, and then the leaf turns. Back in ink for the next reading.
+- **Drawn over the tome:** the script is drawn after the tome. Every viewmodel surface draws in the transparent pass at render priority 10, and the script, first drawn at 1, was painted over and never seen.
 
 ## The charge in the arm
 
 All on the gun hand, the arm always in view.
 
 - **The skin darkens:** the hand's skin goes dusky umber.
-- **Fur:** dark fur stands out of it, in a few shells of strands, on the skin only, coming out of the cuff. It replaces the faint pelt-shadow overlay, which was invisible on the arm and lay over the sleeve too.
+- **Fur:** dark fur stands out of it, in a few shells of fine strands, on the skin only, coming out of the cuff. It is lit by the scene: unlit, it glowed tan at night *(Claude's call after the first stills)*. It replaces the faint pelt-shadow overlay, which was invisible on the arm and lay over the sleeve too.
 - **Veins:** bone-white veins glow in the darkened skin and pulse with the heartbeat (the beast pulse's 70 a minute).
 - **The hand twitches** with each beat, a small kick of strength.
 - **The beast pulse** at the edges of the view stays.

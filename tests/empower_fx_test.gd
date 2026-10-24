@@ -103,6 +103,11 @@ func _run() -> void:
 			break
 
 	Input.action_release("spell_3")
+	# (Every viewmodel surface draws in the transparent pass at render priority
+	# 10: anything on the tome drawn lower is painted over by it.)
+	var tome_priority: int = hand._tome.get_active_material(0).render_priority
+	var over: bool = hand.tome_glyphs().all(func(g): return (g as MeshInstance3D).material_override.render_priority > tome_priority)
+	_check("R5 the pages' script draws over the tome, not under it", not hand.tome_glyphs().is_empty() and over, "tome %d, glyphs over %s" % [tome_priority, over])
 	_check("R1 the tome's pages carry lines of script that light as it is read", on_page >= 12 and lit_early >= 1 and lit_late > lit_early,
 		"glyphs %d lit %d then %d" % [on_page, lit_early, lit_late])
 	_check("R2 the words fly off the page into the gun hand, in your view", words_most >= 4 and word_view and word_from > 0.0 and word_to >= 0.0 and word_to < word_from * 0.6,
