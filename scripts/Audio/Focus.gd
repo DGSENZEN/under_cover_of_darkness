@@ -21,6 +21,8 @@ const DIP_RATE := 20.0
 ## How much louder a source must arrive than one playing at full to take its place (so near-equals passing each other,
 ## a corridor of drifting books, do not swap back and forth and pump).
 const HOLD := 1.4
+## A one-shot further than this from you (m) is out of hearing: it never uses up a near one's turn.
+const HEAR := 14.0
 
 ## Each held source: {player, tier, base, priority, duck, full}.
 static var _held: Array = []
@@ -49,11 +51,16 @@ static func base(player: AudioStreamPlayer3D, db: float) -> void:
 			return
 
 
-## Whether a one-shot of `tier` at `at` may play now (tiers not in SHOTS always may).
-static func allow(context: Node, tier: StringName, _at: Vector3) -> bool:
-	_node_for(context)
+## Whether a one-shot of `tier` at `at` may play now (tiers not in SHOTS always may; out of hearing, it may, uncounted).
+static func allow(context: Node, tier: StringName, at: Vector3) -> bool:
+	var node := _node_for(context)
 
 	if not SHOTS.has(tier):
+		return true
+
+	var camera := node.get_viewport().get_camera_3d() if node != null and node.is_inside_tree() else null
+
+	if camera != null and camera.global_position.distance_to(at) > HEAR:
 		return true
 
 	var recent: Array = _shots.get(tier, []).filter(func(t: float) -> bool: return _clock - t < WINDOW)

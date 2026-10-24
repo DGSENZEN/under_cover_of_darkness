@@ -21,6 +21,8 @@ const RIFFLE_AFTER := 0.45
 ## A floating book's pages: heard this far (m); while it rests on its board (dB).
 const FLUTTER_REACH := 6.0
 const RESTING_DB := -60.0
+## How fast its pages fade as it settles on the board, and come back as it lifts (dB/s).
+const FADE_DB := 90.0
 
 ## What has played, by sound (and "refused"); the last of them, [time, sound, where]. Each floating book's pages.
 var played := {}
@@ -28,6 +30,7 @@ var heard: Array = []
 var flutters: Array[AudioStreamPlayer3D] = []
 
 var _floating: Node3D
+var _levels := PackedFloat32Array()
 var _pending: Array = []
 ## Each happening's sounds are one to Focus: its first asks, the rest ride on that (by happening, while some wait).
 var _happenings := 0
@@ -58,7 +61,9 @@ func _process(delta: float) -> void:
 
 	for k in flutters.size():
 		var resting: bool = _floating.state_of(k) == &"resting"
-		Focus.base(flutters[k], RESTING_DB if resting else float(Sfx.LOOP_GAIN[&"book_flutter"]))
+		var target := RESTING_DB if resting else float(Sfx.LOOP_GAIN[&"book_flutter"])
+		_levels[k] = move_toward(_levels[k], target, FADE_DB * delta)
+		Focus.base(flutters[k], _levels[k])
 
 	while not _pending.is_empty() and _pending[0][0] <= _clock:
 		var due: Array = _pending.pop_front()
@@ -98,6 +103,7 @@ func _flutter() -> void:
 		Focus.hold(self, flutter, &"loop", float(Sfx.LOOP_GAIN[&"book_flutter"]))
 		flutter.play(_rng.randf_range(0.0, stream.get_length()))
 		flutters.append(flutter)
+		_levels.append(float(Sfx.LOOP_GAIN[&"book_flutter"]))
 
 
 func _on_stirred(_board: int, kind: StringName, at: Vector3) -> void:

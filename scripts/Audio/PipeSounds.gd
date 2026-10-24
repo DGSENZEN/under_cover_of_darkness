@@ -15,6 +15,8 @@ const STRIKE_AFTER := Vector2(0.16, 0.38)
 const STRIKE_FAINTER := -4.0
 ## How often a run's loop looks again for a wall between it and you (s).
 const LOOK_EVERY := 0.5
+## How fast a run's loop comes down or back up when a wall comes between or goes (dB/s; its dulling with it).
+const EASE_DB := 20.0
 
 @export var seed := 9
 
@@ -44,7 +46,9 @@ func _ready() -> void:
 
 ## A main's `loop` heard along `from`-`to`, out to `reach` m.
 func run(loop: StringName, from: Vector3, to: Vector3, reach := 8.0) -> void:
-	_runs.append({"loop": loop, "from": from, "to": to, "reach": reach, "player": null, "hidden": 0.0})
+	_runs.append({"loop": loop, "from": from, "to": to, "reach": reach, "player": null, "hidden": 0.0,
+		"level": float(Sfx.LOOP_GAIN[loop]), "target": float(Sfx.LOOP_GAIN[loop]), "cutoff": Sfx.AIR_CUTOFF,
+		"cutoff_to": Sfx.AIR_CUTOFF})
 
 
 ## A knock travelling along `from`-`to` every `every` s (from a place on it, one way or the other).
@@ -73,7 +77,7 @@ func _process(delta: float) -> void:
 		_look_in = LOOK_EVERY
 
 	for r: Dictionary in _runs:
-		_slide(r, camera, look)
+		_slide(r, camera, look, delta)
 
 	for k: Dictionary in _knocks:
 		if _clock >= k["next"]:
@@ -107,7 +111,7 @@ func _exit_tree() -> void:
 
 ## Run `r`'s loop (built on its first frame: a level that hushes its players as it is set up must not reach it), slid
 ## to the point on the run nearest you, quieter for a wall between.
-func _slide(r: Dictionary, camera: Camera3D, look: bool) -> void:
+func _slide(r: Dictionary, camera: Camera3D, look: bool, delta: float) -> void:
 	if not Sfx.enabled:
 		return
 
@@ -136,8 +140,15 @@ func _slide(r: Dictionary, camera: Camera3D, look: bool) -> void:
 
 	if look:
 		var hidden := Sfx.occlusion_at(self, player.global_position)
-		Focus.base(player, float(Sfx.LOOP_GAIN[r["loop"]]) + (Sfx.OCCLUDED_DB if hidden >= 1.0 else (Sfx.AROUND_DB if hidden > 0.0 else 0.0)))
-		player.attenuation_filter_cutoff_hz = Sfx.OCCLUDED_CUTOFF if hidden >= 1.0 else (Sfx.AROUND_CUTOFF if hidden > 0.0 else Sfx.AIR_CUTOFF)
+		r["target"] = float(Sfx.LOOP_GAIN[r["loop"]]) + (Sfx.OCCLUDED_DB if hidden >= 1.0 else (Sfx.AROUND_DB if hidden > 0.0 else 0.0))
+		r["cutoff_to"] = Sfx.OCCLUDED_CUTOFF if hidden >= 1.0 else (Sfx.AROUND_CUTOFF if hidden > 0.0 else Sfx.AIR_CUTOFF)
+
+	# (Eased, never in a step: the level by EASE_DB, the dulling along with it, log-wise.)
+	r["level"] = move_toward(r["level"], r["target"], EASE_DB * delta)
+	var gap := absf(r["target"] - r["level"]) / maxf(absf(Sfx.OCCLUDED_DB), 1.0)
+	r["cutoff"] = exp(lerpf(log(r["cutoff_to"]), log(r["cutoff"]), clampf(gap, 0.0, 1.0)))
+	Focus.base(player, r["level"])
+	player.attenuation_filter_cutoff_hz = r["cutoff"]
 
 
 ## A knock's strikes laid out along its run from a place on it, toward its farther end, each further and fainter,

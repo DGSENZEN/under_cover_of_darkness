@@ -101,6 +101,17 @@ func _focus() -> void:
 	loops[4].queue_free()
 	await _frames(20)
 	_check("F5 a freed player is let go without error", Focus.held_count() == count - 1, "%d -> %d" % [count, Focus.held_count()])
+
+	Focus.reset()
+	eye.global_position = Vector3.ZERO
+	var far_let := 0
+	for k in 5:
+		far_let += 1 if Focus.allow(self, &"detail", Vector3(30.0, 0.0, 0.0)) else 0
+	var near_let := 0
+	for k in 3:
+		near_let += 1 if Focus.allow(self, &"detail", Vector3(1.0, 0.0, 0.0)) else 0
+	_check("F6 sounds out of hearing never use up the near ones' turn", far_let == 5 and near_let == 3,
+		"far %d of 5, near %d of 3" % [far_let, near_let])
 	for p in loops:
 		if is_instance_valid(p):
 			p.stop()
@@ -157,6 +168,13 @@ func _neon() -> void:
 		last = now
 	_check("N3 a brownout sags the hum with the light", hum != null and fell and steepest <= 1.5,
 		"fell %s, steepest %.2f dB a frame" % [fell, steepest])
+	# A brownout's flutter and the dark train's sinking dim the tube; neither is it stuttering off.
+	var steady := sign.ticks
+	for f in 600:
+		sign.dim = 0.55 + 0.45 * sin(float(f) * 0.4) if f < 400 else lerpf(1.0, 0.0, float(f - 400) / 200.0)
+		await get_tree().process_frame
+	_check("N4 a brownout or the dark train dims the hum but never ticks the tube off", sign.ticks == steady,
+		"%d ticks" % [sign.ticks - steady])
 	sign.queue_free()
 	await _frames(2)
 
@@ -178,6 +196,30 @@ func _pipes() -> void:
 	await _frames(2)
 	var end: float = pipes.emitter_of(0).global_position.x if pipes.emitter_of(0) != null else INF
 	_check("P2 past a run's end the sound stays at its end", absf(end - 12.0) < 0.05, "%.2f" % end)
+
+	# A wall comes between: the main dulls and quietens, eased, never in a step.
+	eye.global_position = Vector3(0.0, 1.6, 0.0)
+	await _frames(40)
+	var wall := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	shape.shape = BoxShape3D.new()
+	(shape.shape as BoxShape3D).size = Vector3(30.0, 6.0, 0.3)
+	wall.add_child(shape)
+	add_child(wall)
+	wall.position = Vector3(0.0, 2.0, -1.2)
+	var trickle: AudioStreamPlayer3D = pipes.emitter_of(0)
+	var was := Focus.base_of(trickle)
+	var jump := 0.0
+	for f in 90:
+		await get_tree().process_frame
+		var now := Focus.base_of(trickle)
+		jump = maxf(jump, absf(now - was))
+		was = now
+	var open: float = Sfx.LOOP_GAIN[&"pipe_trickle"]
+	_check("P6 a wall coming between eases the main down, never in a step", jump <= 1.0 and was < open - 3.0,
+		"steepest %.2f dB a frame, now %.1f (open %.1f)" % [jump, was, open])
+	wall.queue_free()
+	await _frames(2)
 
 	eye.global_position = Vector3(0.0, 1.6, 0.0)
 	pipes.knocks(Vector3(-12.0, 3.1, 2.2), Vector3(12.0, 3.1, 2.2), Vector2(1.0, 1.0))
@@ -343,14 +385,22 @@ func _books_heard() -> void:
 	var floating: Node3D = lab.get("floating")
 	var k: int = floating.transfers()[0]
 	floating.come_home(k)
+	var last := Focus.base_of(flutters[k])
+	var steepest := 0.0
 	for f in 400:
 		await get_tree().process_frame
+		steepest = maxf(steepest, absf(Focus.base_of(flutters[k]) - last))
+		last = Focus.base_of(flutters[k])
 		if floating.state_of(k) == &"resting":
 			break
-	await _frames(5)
+	for f in 60:
+		await get_tree().process_frame
+		steepest = maxf(steepest, absf(Focus.base_of(flutters[k]) - last))
+		last = Focus.base_of(flutters[k])
 	var resting_db := Focus.base_of(flutters[k])
 	_check("B6 a resting book's pages fall silent", floating.state_of(k) == &"resting" and resting_db <= -59.0,
 		"%s at %.1f dB" % [floating.state_of(k), resting_db])
+	_check("B8 they fade as it settles, never cut", steepest <= 3.0, "steepest %.1f dB a frame" % steepest)
 	lab.queue_free()
 	await _frames(3)
 

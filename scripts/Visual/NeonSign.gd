@@ -118,8 +118,9 @@ func _sound() -> void:
 		Focus.hold(self, hum, &"loop", -80.0)
 		hum.play(_sound_rng.randf_range(0.0, hum.stream.get_length()))
 
-	var lit := energy_at(_time) * dim
-	Focus.base(hum, hum_db(float(Sfx.LOOP_GAIN[buzz]), lit))
+	# (The hum sags with a brownout; only the tube's own stutters tick, never its power sinking.)
+	var lit := energy_at(_time)
+	Focus.base(hum, hum_db(float(Sfx.LOOP_GAIN[buzz]), lit * dim))
 
 	if _was_lit and lit < 0.5:
 		if _sound_rng.randf() < TICK_CHANCE and _time - _last_tick >= TICK_APART \
