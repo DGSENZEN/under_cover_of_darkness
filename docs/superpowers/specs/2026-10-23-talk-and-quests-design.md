@@ -134,6 +134,47 @@ A code-built `CanvasLayer`, in the manner of the existing HUD, styled as mockup 
 - While talking, the player stands still: movement and look are held, and the camera eases to face the speaker. The world keeps running, so guards walk and sounds play. **Walking away** has its own key, because Escape already pauses the game; the plan picks which key. *(Claude's call)* Walking away sets the flag `walked_off` so the writer can react to it on the next visit.
 - *(Claude's call)* Each spoken line plays a short NOX "hm" or murmur in the character's voice. Only NOX voices are used; they're the project rule.
 
+#### Character skins (added 2026-10-23, from the user's paintings)
+
+Every **important character** gets a talk box painted for them. The user supplied the curandera's three paintings and said "we will do this for each important character". They asked that the box, the dialogue and everything in it **fit the art style of the paintings**, and that the box be **a panel, not a full screen** ("panel! this is UI").
+
+The layout was settled over 28 drafts with the user on 2026-10-23. **The agreed picture is draft 28**, `.superpowers/talkbox/draft28.jpg`, with close-ups `draft28_left.jpg` and `draft28_right.jpg`. The script that drew it, `.superpowers/talkbox/draft28_reference.py`, is the reference for every measure below. All positions are given at 1920×1080 and scale with the screen.
+
+- **A skin is three paintings**, kept in `assets/ui/talk/<character>/`:
+  - `backdrop`: the panel's painting. For the curandera this is the cabinet of bottles, skulls and spectral faces. Its own black frame is cropped away, at (98, 22)–(1900, 1072) of the 2000×1120 original.
+  - `portrait`: the speaker, painted.
+  - `cursor`: a painted spike with a face at its right end. Its black background is keyed out by flood-filling from the image border.
+
+  A character without a skin folder uses the plain mockup-A box above, with the live-render portrait. That covers the librarian until the user supplies his paintings, and every type-only NPC.
+- **The paintings are only ever scaled down from the user's high-resolution originals**, with mipmapped, filtered sampling, so their quality isn't harmed (the user's words: "so manipulation doesnt fuck up their quality"). They are never upscaled.
+- **Layout** (bottom middle, New Vegas order in our own paint):
+  - **The panel** is the backdrop, 1000 px wide with its proportions kept. The portrait and the panel are **centred together** horizontally, with the portrait overlapping the panel's left edge by 70 px.
+  - **The panel sits low:** its top is at `H - panel_height + 40`, so its foot runs about 40 px off the bottom of the screen. The portrait is 470 px tall, and its top is 70 px above the panel's.
+  - A **soft dark shadow**, Gaussian with about a 40 px radius, seats the pair in the world. The world stays visible around the panel.
+  - **A dark reading pool** is painted into the upper middle of the backdrop (an ellipse; see the reference script), so the text reads over the painting.
+  - **Inside the panel, centred:** the speaker's name in marigold, then the spoken line in cream, wrapped, then the options beneath. The name's baseline sits 146 px below the panel's top, the line starts at 182 px with 38 px line spacing, and the options start at 318 px with 50 px steps. The user set these by eye ("15 px higher", "10 px higher"), so keep them exact.
+- **Options** (the user: "have it be inside of the container of selection itself, make it be part of it"):
+  - Each option sits in its own **painted brush swipe**, one shared width (the longest option plus 70 px), made of bristle lines with lightly frayed tips. The swipes erode only at their outer 4–5%; the user said a heavier erosion "deletes too much of it".
+  - An unchosen swipe is painted with colour lifted from the backdrop's purple flank (region (100, 620)–(260, 900) of the original), at 0.5 brightness.
+  - **The chosen option's swipe** is warm: the backdrop's gold table paint (region (130, 965)–(700, 1075)), under a 0.78 wash of `(222, 186, 118)`, with dark ink text. It is longer by the marker's width.
+  - **The cursor is part of the chosen swipe:** its spike and face are cut to the swipe's height and set at the swipe's right end, so the tip points at the end of the option's text. Its alpha is multiplied by the swipe's own bristles so it frays with them, and its rim is softened. It is low-key, about 150 px wide in the original's proportions.
+  - Text colours are marigold for normal options, cochineal for special ones, and dark ink on the chosen swipe.
+- **Borders** (the user: "more integrated, use the colors to your advantage", "more painterly and blended to the image"):
+  - Each painting **frays out from its own paint**. Its border is eaten inward by streaky noise that runs along each edge, like a dry brush, with slower noise giving deeper and shallower bites, and with soft rounded corners.
+  - A thin, darker **pigment rim** pools just inside the fray.
+  - A few thin, tapered **dry strokes** drag the edge's own colours a short way past it.
+  - There is **no stretched or blurred copy** behind the edge; the user rejected that look, which read as a glitch. There are no square tabs at the corners and no cross-hatched grain. Draft 28's `painted_edge` is the reference.
+- **The living painting** *(Claude's call, proposed to the user with draft 2 and not objected to)*:
+  - **Opening:** the panel and the portrait **brush in** stroke by stroke, through a noise-masked reveal, in about 0.6 s. Closing reverses it.
+  - **The backdrop's spectral faces breathe**, through a slow masked warp. **Their eyes glow in the shade's colour** and follow the conversation's flare, dim and gutter. Faint dust drifts, and the panel shifts slightly with the mouse.
+  - **The chosen swipe** paints in from left to right when the choice moves.
+  - **The portrait reacts:** it warms on flare, greys on dim, and flickers on gutter.
+  - Where on each backdrop the faces and eyes are is per-skin data. `assets/ui/talk/<character>.json` (beside the gitignored folder, so it is committed) lists normalised rects for `breathe` and `eyes`, plus the crop, the reading-pool ellipse, and the two swipe paint regions, all hand-authored for each skin. Claude writes the curandera's from the reference script.
+- **In Godot**, the swipes, the frayed edges and the reading pool are **shaders on TextureRects** over the user's paintings. They are not baked images, so they keep full resolution and can animate. The masks may be generated once at load from seeded noise, matching the reference script's look.
+- **Art files:** the user's originals for the curandera are in `assets/ui/talk/curandera/originals/` (`backdrop.webp`, `portrait.webp`, `cursor.webp`). A script, `tools/prepare_talk_art.py <character>`, converts them to PNG, keys the cursor, and caps their size at 2048 px for import.
+- **Rights** *(Claude's call)*: the repository is public and the paintings' licence isn't recorded, so `assets/ui/talk/*/` is **gitignored**, as `textures/ps2` is. A checkout without the paintings falls back to the plain box. `assets/ui/talk/README.md` says where the paintings come from. The user can flip this once the rights are settled.
+- **Font:** the drafts use Georgia (regular, bold, italic) as a stand-in, but it isn't in the project. Until the user picks a typeface, the box uses a system serif where one is found and Godot's default font otherwise. **The typeface is the user's to choose.** Sizes at 1080p: name 24 bold, line 29, options 26 italic.
+
 ### 5. The shade (Shade.gd and shade.gdshader)
 
 An NPC node is a `StaticBody3D` with `frob()`/`get_prompt()` ("Talk") and an exported `character` id. It holds a `Humanoid` dressed from the wardrobe. The curandera uses the **`duelist`** (female swordmaster). The librarian uses *(Claude's call, to confirm)* **`arms_master`**, or `swordsman` if the user prefers. Every mesh gets the shade material instead of the wardrobe shader.

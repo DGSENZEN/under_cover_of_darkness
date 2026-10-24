@@ -317,8 +317,45 @@
 - [ ] **Step 2: Run** dialogue_test. Expected: B1–B7 FAIL.
 - [ ] **Step 3: Implement** TalkBox and the two modifications.
 - [ ] **Step 4: Run** dialogue_test plus the movement and interaction suites (`ls tests | grep -iE "movement|traversal|interaction|polish"`). Expected: 0 fail. `_move_axis` must not change any movement result while not talking.
-- [ ] **Step 5: Stage** windowed stills of the box mid-line and with options (normal and special), with the portrait live. Inspect them against mockup A and fix faults.
+- [ ] **Step 5: Stage** windowed stills of the plain box mid-line and with options (normal and special), with the live portrait. Inspect them against mockup A and fix faults.
 - [ ] **Step 6: Commit** with `feat(dialogue): the talk box`.
+
+### Task 6b: Character skins (the curandera's painted box)
+
+The spec's "Character skins" section was settled with the user over 28 drafts. **Its reference is `.superpowers/talkbox/draft28.jpg` and the script `.superpowers/talkbox/draft28_reference.py`.** Every measure here comes from that script, and the result must match draft 28 by eye.
+
+**Files:**
+- Create:
+  - `scripts/UI/TalkSkin.gd`: loads a skin folder, builds its layout and owns the living-painting effects.
+  - `scripts/UI/talk_paint.gdshader`: the frayed edge, pigment rim and reveal, applied to the panel and the portrait.
+  - `scripts/UI/talk_swipe.gdshader`: the option swipes; for the chosen swipe, the cursor inside it.
+  - `tools/prepare_talk_art.py`: converts `originals/*` to PNG, keys the cursor's black from the border, and caps at 2048 px.
+  - `assets/ui/talk/README.md`: where the paintings come from, and that they are gitignored.
+  - `assets/ui/talk/curandera.json`: the crop, the reading pool, the two swipe paint regions, and the `breathe` and `eyes` rects.
+- Modify: `scripts/UI/TalkBox.gd` (when a skin exists, TalkBox hands its layout to TalkSkin), `.gitignore` (already done: `assets/ui/talk/*/`)
+- Test: `tests/dialogue_test.gd`
+
+**Interfaces:**
+- Consumes: TalkBox (Task 6), and `Shade` cues (flare, dim, gutter) through TalkBox.
+- Produces:
+  - `TalkSkin.exists(character_id: String) -> bool`
+  - `TalkSkin.new(character_id)`
+  - `layout(viewport: Vector2) -> Dictionary`: rects for `panel`, `portrait`, `name`, `line`, `options` at the given size. They are scaled from the 1920×1080 numbers in the spec: panel 1000 px wide; portrait 470 px tall with a 70 px overlap; the pair centred; panel top `H - panel_h + 40`; name 146 px, line 182 px and options 318 px below the panel top; 50 px option step.
+  - `set_choice(index)`, `cue(what: StringName)`, `reveal(on: bool)`.
+- The paintings are sampled with mipmaps and linear filtering, and are only ever scaled down. They must not go through the Retro autoload's nearest/pixel-grid look; the box is UI on its own CanvasLayer, above the retro pass.
+
+- [ ] **Step 1: Prepare the curandera's art.** Run `python3 -I tools/prepare_talk_art.py curandera`. Expected: `backdrop.png`, `portrait.png` and `cursor.png` in `assets/ui/talk/curandera/`, with the cursor's corners having alpha 0.
+- [ ] **Step 2: Write the failing tests.**
+  - `B8 a skinned character opens the painted box, an unskinned one the plain box`: the curandera fixture with a skin folder, and the librarian without one.
+  - `B9 the layout at 1920×1080 matches the reference`: the panel rect, portrait rect, and name, line and options y within 2 px of the spec's numbers.
+  - `B10 at 1280×720 the layout scales`: every rect is 2/3 of the 1080p rect, within 2 px.
+  - `B11 a missing skin folder (a fresh checkout) falls back without errors`.
+  - `B12 the chosen swipe follows the choice`: after `set_choice(2)`, the chosen swipe's rect is on option 2, and it is wider than the others by the marker's width.
+- [ ] **Step 3: Run** dialogue_test. Expected: B8–B12 FAIL.
+- [ ] **Step 4: Implement** TalkSkin, both shaders and curandera.json, with the edge, swipe and pool maths ported from `draft28_reference.py`: `painted_edge`, `swipe_mask`, `painted_swipe` and the chosen-swipe marker block. The living-painting effects (reveal, breathing faces, eye glow following cues, dust, mouse shift, portrait warming, greying and flickering) are as in the spec.
+- [ ] **Step 5: Run** dialogue_test. Expected: B1–B12 PASS.
+- [ ] **Step 6: Stage** a windowed still at 1920×1080 of the curandera's box in the talk gym, with the same line and four options as draft 28, the first option chosen. Put it **side by side with `draft28.jpg`** and inspect close-ups of the portrait edge, the panel's right edge and the chosen swipe. Fix every difference, or name it as unfinished.
+- [ ] **Step 7: Commit** with `feat(dialogue): the curandera's painted talk box`. Don't commit the paintings; they are gitignored. Do commit the README, curandera.json, the tool and the scripts.
 
 ### Task 7: The test quest, the gym and the writer's guide
 
