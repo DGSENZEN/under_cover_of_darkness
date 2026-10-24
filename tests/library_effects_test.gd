@@ -892,6 +892,52 @@ func _draught(candle: Node3D) -> Vector3:
 	return draw.multimesh.mesh.surface_get_material(0).get_shader_parameter("draught") if draw != null else Vector3.ZERO
 
 
+## The brightest of the ward's sigils (each glyph's share of its band's glow).
+func _brightest(ward: Node3D) -> float:
+	var most := 0.0
+	for script: Node3D in ward.bands:
+		for w: float in script.weights:
+			most = maxf(most, w)
+	return most
+
+
+## How far a chain's glyphs lie off its way (m), sorted: the least first.
+func _off_path(chain: Node3D) -> PackedFloat32Array:
+	var offs := PackedFloat32Array()
+	var path: PackedVector3Array = chain.path
+	for g: Vector3 in chain.placed:
+		var nearest := INF
+		for k in path.size() - 1:
+			nearest = minf(nearest, Geometry3D.get_closest_point_to_segment(g, path[k], path[k + 1]).distance_to(g))
+		if nearest < 0.2:
+			offs.append(nearest)
+	offs.sort()
+	return offs
+
+
+## The glow of the sigil nearest where the words come closest to the ring, and of the one farthest from it.
+func _near_and_far(ward: Node3D, to_corner: Transform3D) -> Vector2:
+	var closest := Vector3.ZERO
+	var reach := 0.0
+	for w: Node3D in ward.words:
+		for g: Vector3 in w.placed:
+			var at := to_corner * g
+			if at.y < 0.3 and Vector2(at.x, at.z).length() > reach:
+				reach = Vector2(at.x, at.z).length()
+				closest = at
+	var near := Vector2(INF, 0.0)
+	var far := Vector2(-INF, 0.0)
+	for script: Node3D in ward.bands:
+		for k in script.placed.size():
+			var at := to_corner * (script.placed[k] as Vector3)
+			var d := Vector2(at.x - closest.x, at.z - closest.z).length()
+			if d < near.x:
+				near = Vector2(d, script.weights[k])
+			if d > far.x:
+				far = Vector2(d, script.weights[k])
+	return Vector2(near.y, far.y)
+
+
 ## Task 8: the chained book against its ward. Five candles on the chalk lean away from it as it strains, its words
 ## crawl toward the salt and are thrown back, the chalk flares; and all of it settles when the book is still.
 func _ward(effects: Node3D) -> void:
@@ -961,9 +1007,27 @@ func _ward(effects: Node3D) -> void:
 	for w: Node3D in crawl:
 		var start: Vector3 = to_corner * (w.path[0] as Vector3)
 		starts_ok = starts_ok and start.distance_to(to_corner * book) < 0.2
+	var glow := PackedFloat32Array()
+	var wriggles := []
+	var still_sigils := true
+	var sigils_before: Array = []
+	var near_far := Vector2(-1.0, -1.0)
+	var glow_peak := 0.0
 	for i in 360:
 		await get_tree().process_frame
 		gap = maxf(gap, chained.staple_gap())
+		glow.append(_brightest(ward))
+		# (Headless the band is never on screen: laid out here too.)
+		band._lay()
+		# (While they glow: a sigil not yet lit is not drawn.)
+		if i == 100:
+			sigils_before = band.placed.duplicate()
+		if i == 130:
+			for k in band.placed.size():
+				still_sigils = still_sigils and (band.placed[k] as Vector3).distance_to(sigils_before[k]) < 0.004
+		if glow[i] >= glow_peak and glow[i] > 0.3:
+			near_far = _near_and_far(ward, to_corner)
+		glow_peak = maxf(glow_peak, glow[i])
 		var least := INF
 		for candle: Node3D in candles:
 			var push := _draught(candle)
@@ -976,12 +1040,14 @@ func _ward(effects: Node3D) -> void:
 			early = least
 		peak = maxf(peak, least)
 		flare = maxf(flare, ring.emission_energy)
-		band_peak = maxf(band_peak, band.presence if band.visible else 0.0)
+		band_peak = maxf(band_peak, _brightest(ward) if band.visible else 0.0)
 		for w: Node3D in crawl:
 			if not w.visible:
 				continue
 			# (Headless nothing is ever on screen, so the chain is laid out here, where it now is.)
 			w._lay()
+			if i % 10 == 0 and w.placed.size() > 8:
+				wriggles.append(_off_path(w))
 			for g: Vector3 in w.placed:
 				var at := to_corner * g
 				var r := Vector2(at.x, at.z).length()
@@ -1014,6 +1080,30 @@ func _ward(effects: Node3D) -> void:
 		starts_ok and reach > 0.72 and beyond.is_empty() and through.is_empty() and recoils,
 		"from cover %s reach %.2f beyond %s through desk %d recoil %s" % [starts_ok, reach, beyond.slice(0, 2),
 		through.size(), recoils])
+
+	# They slither: each line of words swings from side to side off its way as it goes, a wave running through it;
+	# the ward's sigils writhe where they lie.
+	var swing := 0.0
+	var on_way := 0
+	for offs: PackedFloat32Array in wriggles:
+		swing = maxf(swing, offs[offs.size() - 1] if not offs.is_empty() else 0.0)
+		# (A wave, not a line set off its way: some glyphs well off it, some near it.)
+		on_way += 1 if not offs.is_empty() and offs[0] < 0.4 * offs[offs.size() - 1] else 0
+	_check("E80 the book's words slither off their way and back as they crawl, and the ward's sigils writhe",
+		swing > 0.012 and swing < 0.04 and on_way >= wriggles.size() / 2 and not still_sigils,
+		"swing %.3f samples %d with glyphs on the way %d sigils still %s" % [swing, wriggles.size(), on_way, still_sigils])
+
+	# The ward's sigils glow slowly as the words come near its limit, those nearest them first and most.
+	var first := glow.size()
+	var bright := glow.size()
+	for i in glow.size():
+		if first == glow.size() and glow[i] > 0.1:
+			first = i
+		if bright == glow.size() and glow[i] > 0.8:
+			bright = i
+	_check("E81 the ward's sigils glow slowly as the words near its limit, brightest nearest them, dark across the circle",
+		first > 40 and bright < glow.size() and bright - first >= 36 and near_far.x > 0.6 and near_far.y < 0.15,
+		"from frame %d to bright at %d, nearest %.2f across %.2f" % [first, bright, near_far.x, near_far.y])
 
 	# Settled: the flames stand straight again, the chalk is chalk, the words are gone back into the book.
 	await _frames(240)

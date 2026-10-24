@@ -2,12 +2,13 @@ extends Node3D
 ## The chained book against its ward (docs/superpowers/specs/2026-10-17-librarian-shop-design.md: "Now and then it
 ## strains against its chain and its words try to crawl out, and a ward flares to push them back ... Five candle stubs
 ## on the chalk circle. Their flames lean away from the chained book, harder the more it strains, and settle when it
-## rests"). As the book strains, its words seep out from under its cover's fore-edge, cross the desk, pour down its
-## front and crawl over the boards toward the salt; short of the inner ring they rear and are thrown back, gone. The
-## ward pushes as hard as the book strains, and holds while the words are at its chalk: each candle's flame (the
-## corridor's, Vfx "candles") leans straight away from the book and burns taller, the chalk's rings glow, and the
-## ward's own script burns up in the band between them (the invented script until the user's words are set), all of
-## it gone again when the book is still.
+## rests"). As the book strains, its words seep out from under its cover's fore-edge, slithering, cross the desk, pour
+## down its front and crawl over the boards toward the salt; short of the inner ring they rear and are thrown back,
+## gone. The ward pushes as hard as the book strains, and holds while the words are at its chalk: each candle's flame
+## (the corridor's, Vfx "candles") leans straight away from the book and burns taller. Its own sigils, writhing in the
+## band between its rings (the invented script until the user's words are set), light slowly as the words come near
+## its limit, those nearest them first and brightest, and the chalk glows with them; all of it dies down slowly
+## when the words are thrown back.
 
 const Glyphs := preload("res://scripts/Visual/Library/LibraryGlyphs.gd")
 const WordChain := preload("res://scripts/Visual/Library/WordChain.gd")
@@ -37,6 +38,22 @@ const BAND_ARCS := [Vector2(30.0, 163.0), Vector2(179.0, 330.0)]
 ## The chalk's glow at full strength (its emission: decals.py's ward_glow, the chalk's lines over black), warmed toward
 ## the ward's colour as it flares.
 const GLOW := 1.15
+## How the words slither (WordChain's wriggle: swing, wave length, waves a second; their pace's surge), and how the
+## sigils writhe where they lie.
+const WORD_WRIGGLE := Vector3(0.018, 0.22, 1.6)
+const WORD_SURGE := 0.45
+const SIGIL_WRIGGLE := Vector3(0.01, 0.45, 0.25)
+## Which words light a sigil: from how far off (m, fully within the first, none past the second), and how near the
+## ward's limit they must have come (their radius, m: none within the first, fully at the second); how fast a sigil
+## lights and dies down (of its full glow, per s); how bright the sigils burn at full glow (the glyph's energy, from
+## its resting 2.2).
+const SIGIL_REACH := Vector2(0.12, 0.7)
+const SIGIL_LIMIT := Vector2(0.35, 0.84)
+const SIGIL_RISE := 0.9
+const SIGIL_FALL := 0.4
+const SIGIL_ENERGY := Vector2(1.6, 3.6)
+## How often the sigils are lit again (s): they change slowly, and the words near them are many.
+const SIGIL_EVERY := 1.0 / 15.0
 const GLOW_TEXTURE := "res://textures/painted/underground/decal_ward_glow.png"
 ## The inner ring's radius (m; decals.py draws the rings at 0.7 and 0.91 of the decal's half-width, the outer one at
 ## the ward's radius).
@@ -68,6 +85,8 @@ var words: Array[Node3D] = []
 var bands: Array[Node3D] = []
 var band: Node3D
 var ring: Decal
+## How brightly the sigils burn now (the brightest of them, 0-1): the chalk glows with it.
+var glow := 0.0
 ## Whether its words and script are drawn (the effects off, or the form light on, hide them).
 var shown := true
 
@@ -89,6 +108,11 @@ var _energy := PackedFloat32Array()
 var _away: Array[Vector3] = []
 var _drawn := -1.0
 var _drawn_shown := true
+## Each band's sigils where they lie (the corner's frame, x and z), for the words to light.
+var _sigils: Array[PackedVector2Array] = []
+var _sigil_time := 0.0
+## Whether any camera sees the ward: unseen, its candles stop flickering (their lights hold where they were).
+var _seen: VisibleOnScreenNotifier3D
 
 
 func build(chained: ChainedBook, frame: Transform3D, radius: float, wicks: Array[Vector3], chalk: Decal) -> void:
@@ -121,12 +145,25 @@ func build(chained: ChainedBook, frame: Transform3D, radius: float, wicks: Array
 		_away.append(out.normalized() if out.length() > 0.01 else Vector3.ZERO)
 		candles.append(candle)
 
+	_seen = VisibleOnScreenNotifier3D.new()
+	_seen.name = "seen"
+	add_child(_seen)
+	_seen.global_transform = _frame
+	_seen.aabb = AABB(Vector3(-radius - 0.2, 0.0, -radius - 0.2), Vector3(2.0 * radius + 0.4, 2.0, 2.0 * radius + 0.4))
+	_seen.screen_entered.connect(_flicker.bind(true))
+	_seen.screen_exited.connect(_flicker.bind(false))
+	_flicker(false)
+
 	var atlas := Glyphs.atlas("script")
 	for k in WAYS.size():
 		var chain := WordChain.new()
 		chain.name = "words_%d" % k
 		chain.size = WORD_SIZE
 		chain.speed = WORD_SPEED
+		chain.wriggle = WORD_WRIGGLE.x
+		chain.wriggle_length = WORD_WRIGGLE.y
+		chain.wriggle_rate = WORD_WRIGGLE.z
+		chain.surge = WORD_SURGE
 		add_child(chain)
 		# (Facing up and toward the customers as far as the way lets them: flat on the desk and the boards, out from
 		# the desk's front as they pour down it, never edge on to whoever stands before it.)
@@ -162,12 +199,21 @@ func build(chained: ChainedBook, frame: Transform3D, radius: float, wicks: Array
 		script.size = BAND_SIZE
 		script.speed = 0.0
 		script.face = Vector3.UP
+		script.wriggle = SIGIL_WRIGGLE.x
+		script.wriggle_length = SIGIL_WRIGGLE.y
+		script.wriggle_rate = SIGIL_WRIGGLE.z
 		add_child(script)
 		script.build(points, Glyphs.script(600 + k, 4), atlas, WARD_COLOUR)
 		_fill(script, 600 + k, atlas)
 		script.set_presence(0.0)
 		bands.append(script)
 	band = bands[0]
+
+
+## Its candles flicker only while the ward is in sight.
+func _flicker(on: bool) -> void:
+	for candle: Node3D in candles:
+		candle.set_process(on)
 
 
 ## The user's words for the book's chains and the ward's script, in `atlas`.
@@ -217,15 +263,15 @@ func _process(delta: float) -> void:
 		var on := shown and _crawl >= 0.0
 		if chain.visible != on:
 			chain.set_presence(1.0 if on else 0.0)
+	if _crawl >= 0.0 or glow > 0.0:
+		_sigil_time += delta
+		if _sigil_time >= SIGIL_EVERY:
+			_light_sigils(_sigil_time)
+			_sigil_time = 0.0
 	if strength == _drawn and shown == _drawn_shown:
 		return
 	_drawn = strength
 	_drawn_shown = shown
-	for script: Node3D in bands:
-		script.set_presence(strength if shown else 0.0)
-	if ring != null:
-		ring.emission_energy = GLOW * strength
-		ring.modulate = Color.WHITE.lerp(WARD_COLOUR, strength)
 
 	for i in candles.size():
 		var candle := candles[i]
@@ -234,6 +280,57 @@ func _process(delta: float) -> void:
 			draw.scale = Vector3(1.0 + WIDER * strength, 1.0 + TALLER * strength, 1.0 + WIDER * strength)
 		if "energy" in candle:
 			candle.set("energy", _energy[i] * (1.0 + BRIGHTER * strength))
+
+
+## The sigils lit by the words near them, the nearer the words have come to the ward's limit the brighter, slowly;
+## the chalk glowing with the brightest.
+func _light_sigils(delta: float) -> void:
+	if _sigils.is_empty():
+		for script: Node3D in bands:
+			var at := PackedVector2Array()
+			for i in script.count:
+				var p: Variant = script.glyph_at(i)
+				var here := _frame.affine_inverse() * (p as Vector3) if p != null else Vector3(INF, 0.0, INF)
+				at.append(Vector2(here.x, here.z))
+			_sigils.append(at)
+			script.weights.resize(script.count)
+			script.weights.fill(0.0)
+
+	# The words on their way down and over the boards (every fourth glyph), and how near the limit each has come.
+	var near := PackedVector3Array()
+	if _crawl >= 0.0:
+		var to_corner := _frame.affine_inverse()
+		for chain: Node3D in words:
+			for i in range(0, chain.count, 4):
+				var p: Variant = chain.glyph_at(i)
+				if p == null:
+					continue
+				var at := to_corner * (p as Vector3)
+				if at.y > 0.6:
+					continue
+				var limit := smoothstep(SIGIL_LIMIT.x, SIGIL_LIMIT.y, Vector2(at.x, at.z).length())
+				if limit > 0.0:
+					near.append(Vector3(at.x, at.z, limit))
+
+	var brightest := 0.0
+	for k in bands.size():
+		var script := bands[k]
+		var sigils := _sigils[k]
+		for i in sigils.size():
+			var wanted := 0.0
+			for w in near:
+				var d := sigils[i].distance_to(Vector2(w.x, w.y))
+				wanted = maxf(wanted, (1.0 - smoothstep(SIGIL_REACH.x, SIGIL_REACH.y, d)) * w.z)
+			var was: float = script.weights[i]
+			script.weights[i] = move_toward(was, wanted, (SIGIL_RISE if wanted > was else SIGIL_FALL) * delta)
+			brightest = maxf(brightest, script.weights[i])
+	glow = brightest
+	for script: Node3D in bands:
+		script.set_presence(1.0 if shown and glow > 0.0 else 0.0)
+		script.set_energy(lerpf(SIGIL_ENERGY.x, SIGIL_ENERGY.y, glow))
+	if ring != null:
+		ring.emission_energy = GLOW * glow
+		ring.modulate = Color.WHITE.lerp(WARD_COLOUR, glow)
 
 
 ## Where the book is (world): its cover's middle shut.

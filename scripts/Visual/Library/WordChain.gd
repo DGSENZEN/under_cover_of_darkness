@@ -19,6 +19,14 @@ const SHADER := preload("res://scripts/Visual/Library/library_glyph.gdshader")
 ## Where its glyphs turn their faces, as far as the way they go lets them (world; Vector3.UP lays them flat on the
 ## floor): none stands each upright on the path's line.
 @export var face := Vector3.ZERO
+## Slithering: how far its glyphs swing from side to side off the path (m), the length of the wave along it (m), how
+## many waves run along it a second; how much its pace surges as it crawls (of its speed, under 1).
+@export var wriggle := 0.0
+@export var wriggle_length := 0.3
+@export var wriggle_rate := 1.0
+@export var surge := 0.0
+## Each glyph's share of its presence (none: all whole), e.g. a ward's sigils lit one by one.
+var weights := PackedFloat32Array()
 var loop := false
 
 var path := PackedVector3Array()
@@ -42,6 +50,7 @@ var _table: Array[Transform3D] = []
 var _fades := PackedFloat32Array()
 ## Whether any camera sees it: off screen its words keep their place along the path but are not laid out again.
 var _seen: VisibleOnScreenNotifier3D
+var _clock := 0.0
 
 
 func build(points: PackedVector3Array, text: String, atlas: Dictionary, colour: Color, loops := false) -> void:
@@ -115,6 +124,11 @@ func set_text(text: String, atlas: Dictionary) -> void:
 	_lay()
 
 
+## How bright its glyphs burn (the glyph shader's energy).
+func set_energy(value: float) -> void:
+	_look.set_shader_parameter("energy", value)
+
+
 ## How long its text is laid along the path (m).
 func text_length() -> float:
 	return _span
@@ -123,6 +137,8 @@ func text_length() -> float:
 func set_presence(value: float) -> void:
 	presence = value
 	visible = value > 0.001
+	# (Not drawn, it does nothing a frame: its words wait where they are.)
+	set_process(visible)
 	_look.set_shader_parameter("presence", value)
 
 
@@ -136,7 +152,8 @@ func arc_of(i: int) -> float:
 func _process(delta: float) -> void:
 	if not visible or count == 0 or length <= 0.01:
 		return
-	_flow += speed * delta
+	_clock += delta
+	_flow += speed * delta * (1.0 + surge * sin(_clock * TAU * 0.9))
 	if _seen.is_on_screen():
 		_lay()
 
@@ -159,6 +176,14 @@ func _lay() -> void:
 			s -= _span
 			here = smoothstep(0.0, fade, s) * (1.0 - smoothstep(length - fade, length, s))
 		var frame: Transform3D = _table[clampi(int(clampf(s, 0.0, length) / STEP), 0, _table.size() - 1)]
+		if i < weights.size():
+			here *= weights[i]
+		if wriggle > 0.0 and here > 0.0:
+			# (Swung off the path along its glyph's up, and turned with the wave about its face, as a snake goes.)
+			var phase := TAU * (s / wriggle_length - wriggle_rate * _clock)
+			var turn := atan(wriggle * TAU / wriggle_length * cos(phase))
+			frame = Transform3D(Basis(frame.basis.z.normalized(), turn) * frame.basis,
+				frame.origin + frame.basis.y.normalized() * wriggle * sin(phase))
 		if here <= 0.0:
 			frame = Transform3D(frame.basis * 0.0001, frame.origin)
 		multi.set_instance_transform(i, frame)
@@ -186,6 +211,14 @@ func _tabulate() -> void:
 			facing = toward.normalized()
 			up = facing.cross(ahead).normalized()
 		_table.append(Transform3D(Basis(ahead, up, facing).scaled(Vector3.ONE * size), _point(s)))
+
+
+## Where glyph `i` lies on the path now (world; off its ends, the end), or none when it is not out on it.
+func glyph_at(i: int) -> Variant:
+	var s := arc_of(i) - (0.0 if loop else _span)
+	if s < 0.0 or s > length:
+		return null
+	return _point(s)
 
 
 ## The point `s` along the path.

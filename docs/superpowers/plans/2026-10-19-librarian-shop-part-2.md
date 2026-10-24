@@ -361,6 +361,13 @@ Calls made:
 - **The ward's script fills the blank band only while the ward flares.** At rest the band stays blank, the user's slot.
 - **A strain while the words are still out sends no new words.** In play the book strains every 10–20 s and the words take at most 3.3 s.
 
+Revision (Oct 23, from the user's note on the approved ward: more slithery, and the circle's sigils glowing slowly as the words come near its limits):
+- **Slither.** `WordChain.wriggle` runs a wave along a chain: each glyph swings off its way (1.8 cm for the book's words, 22 cm waves at 1.6 a second) and turns with the wave about its face, and `surge` makes the crawl surge (±45 %). The ward's sigils writhe where they lie (1 cm, slow).
+- **Slow glow by nearness.** Each sigil lights only from the words near it (fully within 12 cm, not at all past 70 cm), weighted by how close those words have come to the ward's limit (from r 0.35 m to the turn at about 0.82 m). It rises at 0.9 a second and dies down at 0.4. The chalk glows with the brightest sigil, so the flare no longer follows the strain; the candles still do. Lit 15 times a second from every fourth word glyph.
+- **Cost.** A chain that is not drawn stops processing. The ward's candles stop flickering while the ward is out of sight (an on-screen notifier); their lights hold.
+- **Checks.** E80 (slither) and E81 (slow, local glow); E77's flare reads the brightest sigil.
+- **Frame cost.** The four suites pass together; L20 passes alone at 1.04× and 1.08×. The windowed render check's bay figure was erratic on Oct 23: the bay jumped from 8.38 to 3.04 ms between identical runs. The shop drew at 8.76 ms without the ward and 8.71 ms with it.
+
 ## Plan self-review
 
 The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.
