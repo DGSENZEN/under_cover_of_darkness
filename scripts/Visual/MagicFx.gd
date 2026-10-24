@@ -14,6 +14,13 @@ const GLINT := Color("#E6EEF5")
 ## A shard's shatter: how many splinters, and how long they lie.
 const SHATTER_PIECES := 8
 const SHATTER_LIFE := 1.5
+## Blink: the mirror-crack left where you stood (how many shards, how long),
+## and the ripple you arrive in (how long, how high on the body).
+const MIRROR_SHARDS := 10
+const MIRROR_LIFE := 0.6
+const RIPPLE_LIFE := 0.3
+const RIPPLE_HEIGHT := 0.3
+const RIPPLE_SHADER := preload("res://scripts/Visual/vfx_ripple.gdshader")
 
 static var _live: Array = []
 static var _glass_look: StandardMaterial3D
@@ -97,6 +104,75 @@ static func shatter(context: Node, at: Vector3, normal: Vector3) -> void:
 
 	Fx.glint(context, at, 0.18, null, GLINT)
 	Sfx.play(context, &"ting", at, -3.0, 2.4)
+
+
+## Where you blinked from: a ring of flat mirror shards at your body,
+## bursting out a little and fading, a shatter of reflections.
+static func mirror_crack(context: Node, at: Vector3) -> void:
+	if not allowed(context):
+		return
+
+	var world := _world_of(context)
+	var middle := at + Vector3.UP * 0.2
+
+	for i in MIRROR_SHARDS:
+		var turn := TAU * float(i) / float(MIRROR_SHARDS) + 0.31 * float(i % 3)
+		var out := Vector3(cos(turn), 0.25 * float(i % 3 - 1), sin(turn)).normalized()
+		var shard := MeshInstance3D.new()
+		shard.name = "Mirror"
+		var quad := QuadMesh.new()
+		var side := 0.06 + 0.03 * float(i % 3)
+		quad.size = Vector2(side, side * 1.4)
+		shard.mesh = quad
+		var mirror := StandardMaterial3D.new()
+		mirror.albedo_color = Color(0.82, 0.86, 0.9, 0.95)
+		mirror.metallic = 1.0
+		mirror.roughness = 0.04
+		mirror.rim_enabled = true
+		mirror.rim = 0.8
+		mirror.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mirror.cull_mode = BaseMaterial3D.CULL_DISABLED
+		shard.material_override = mirror
+		shard.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		shard.add_to_group(&"mirror")
+		world.add_child(shard)
+		shard.global_position = middle + out * 0.5
+		shard.global_basis = Basis.looking_at(out, Vector3.UP).rotated(out, 0.9 * float(i))
+		shard.reset_physics_interpolation()
+		var fade := shard.create_tween().set_parallel(true)
+		fade.tween_property(shard, "global_position", middle + out * 0.8, MIRROR_LIFE).set_ease(Tween.EASE_OUT)
+		fade.tween_property(mirror, "albedo_color:a", 0.0, MIRROR_LIFE).set_ease(Tween.EASE_IN)
+		_keep(shard, MIRROR_LIFE)
+
+
+## Where you arrive: a shell of glass the world bends through, swelling and
+## fading.
+static func ripple(context: Node, at: Vector3) -> void:
+	if not allowed(context):
+		return
+
+	var shell := MeshInstance3D.new()
+	shell.name = "Ripple"
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.5
+	sphere.height = 1.0
+	sphere.radial_segments = 24
+	sphere.rings = 12
+	shell.mesh = sphere
+	var look := ShaderMaterial.new()
+	look.shader = RIPPLE_SHADER
+	look.set_shader_parameter(&"rim_tint", GLINT)
+	shell.material_override = look
+	shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	shell.add_to_group(&"ripple")
+	_world_of(context).add_child(shell)
+	shell.global_position = at + Vector3.UP * RIPPLE_HEIGHT
+	shell.scale = Vector3.ONE * 0.4
+	shell.reset_physics_interpolation()
+	var swell := shell.create_tween().set_parallel(true)
+	swell.tween_property(shell, "scale", Vector3.ONE * 2.8, RIPPLE_LIFE).set_ease(Tween.EASE_OUT)
+	swell.tween_method(func(f: float): look.set_shader_parameter(&"fade", f), 1.0, 0.0, RIPPLE_LIFE)
+	_keep(shell, RIPPLE_LIFE)
 
 
 ## Every magic effect still showing.

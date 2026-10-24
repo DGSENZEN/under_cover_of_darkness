@@ -16,6 +16,7 @@ const Spells := preload("res://scripts/Magic/Spells.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
 const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
+const MagicView := preload("res://scripts/Visual/MagicView.gd")
 
 
 ## A source that says what it is, as Barrel and Arrow do (attack_info).
@@ -630,6 +631,50 @@ func _run() -> void:
 	_check("M6 a shard shatters on stone into eight splinters, gone after 1.5 s",
 		shards_out == 8 and get_tree().get_nodes_in_group(&"shatter").is_empty(),
 		"splinters %d after %d" % [shards_out, get_tree().get_nodes_in_group(&"shatter").size()])
+
+	# B1 B2 B3 a blink: a mirror-crack where you stood, a ripple where you
+	# land, a cold flash at the edges of the view
+	_put_player(Vector3(-40, 1.05, 20))
+	await _frames(40)
+	power.power = power.MAX
+	Input.action_press("blink")
+	await _frames(2)
+	Input.action_release("blink")
+	var mirrors := 0
+	var rippled := false
+	var cold := 0.0
+
+	for i in 3:
+		await get_tree().physics_frame
+		mirrors = maxi(mirrors, get_tree().get_nodes_in_group(&"mirror").size())
+		cold = maxf(cold, MagicView.of(get_tree()).cold_amount())
+
+		for r in get_tree().get_nodes_in_group(&"ripple"):
+			rippled = rippled or (r as Node3D).global_position.distance_to(player.global_position + Vector3.UP * MagicFx.RIPPLE_HEIGHT) <= 0.5
+
+	await _frames(10)
+	var cold_after: float = MagicView.of(get_tree()).cold_amount()
+	await _frames(int(MagicFx.MIRROR_LIFE * 60.0))
+	_check("B1 a blink leaves ten mirror shards where you stood, gone in 0.6 s",
+		mirrors == 10 and get_tree().get_nodes_in_group(&"mirror").is_empty(), "shards %d after %d" % [mirrors, get_tree().get_nodes_in_group(&"mirror").size()])
+	_check("B2 you arrive in a ripple, gone in 0.3 s", rippled and get_tree().get_nodes_in_group(&"ripple").is_empty(),
+		"rippled %s after %d" % [rippled, get_tree().get_nodes_in_group(&"ripple").size()])
+	_check("B3 a cold flash at the edges of the view, gone in 0.1 s", cold > 0.0 and cold_after == 0.0, "flash %.2f after %.2f" % [cold, cold_after])
+
+	# B4 ten blinks in a row: the effects stay bounded and clear
+	var most_magic := 0
+
+	for i in 10:
+		power.power = power.MAX
+		await _tap("blink")
+
+		for k in 12:
+			await get_tree().physics_frame
+			most_magic = maxi(most_magic, MagicFx.live_count())
+
+	await _frames(60)
+	_check("B4 ten blinks: never more than 40 effects, none left after a second",
+		most_magic <= 40 and MagicFx.live_count() == 0, "most %d after %d" % [most_magic, MagicFx.live_count()])
 
 	# S30 aiming a blink, a fresh right mouse lets it go, and raises no sights
 	_wield(&"revolver")

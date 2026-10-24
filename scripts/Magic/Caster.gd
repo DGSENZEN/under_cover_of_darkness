@@ -12,6 +12,8 @@ const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
 const Blink := preload("res://scripts/Magic/Blink.gd")
 const ShardScript := preload("res://scripts/Magic/Shard.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
+const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
+const MagicView := preload("res://scripts/Visual/MagicView.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -405,8 +407,11 @@ func _blink_to(at: Vector3, ledge := {}) -> void:
 		player.velocity = falling
 
 	player.combat._dodged_at = player.combat._game_time
-	Fx.glint(player, from + Vector3.UP, 0.3, null, Color(0.75, 0.8, 0.95))
-	Fx.glint(player, at + Vector3.UP, 0.3, null, Color(0.75, 0.8, 0.95))
+	# A mirror-crack where you stood, the cold of the glass as you pass, a
+	# ripple where you land.
+	MagicFx.mirror_crack(player, from)
+	MagicView.cold(get_tree())
+	MagicFx.ripple(player, player.global_position)
 	Sfx.play_flat(player, &"whoosh_light", -4.0, 0.7)
 	cast_done.emit(&"blink")
 
