@@ -22,6 +22,7 @@ func _ready() -> void:
 	_terms()
 	_library()
 	_links()
+	_edges()
 	_typos()
 	print("\n==== RESULTS ====")
 
@@ -326,6 +327,24 @@ func _links() -> void:
 	_check("D19 a flag exists when the character's file or its type's sets or clears it",
 		(flags["errors"] as Array).is_empty() and (cross["errors"] as Array).is_empty(),
 		"flags %s, cross %s" % [flags["errors"], cross["errors"]])
+
+
+func _edges() -> void:
+	var goal := ["== goal g", "kind: side", "shows: said(x)", "done: took(y)", "text: <<t>>"]
+	var errors: Array = _alone(goal)["errors"]
+	var dotted: Array = _alone(["== goal g", "kind: side", "shows: gave(b.bk)", "done: took(y)", "text: <<t>>"],
+		{"b.dialogue": "== character b\n== item bk\nname: Bk\n== beat open\nB: <<x>>"})["errors"]
+	_check("D20 a bare said() in a goal of a file with no character is a load error, not a crash",
+		errors.size() == 1 and String(errors[0]).begins_with("a.dialogue:3: ") and String(errors[0]).contains("needs a character")
+		and dotted.is_empty(),
+		"errors %s, dotted %s" % [errors, dotted])
+
+	var twice: Array = _alone(["== character a", "== beat open", "A: <<x>>", "== beat open", "A: <<y>>"])["errors"]
+	var other: Array = _alone(["== character a", "== beat open", "A: <<x>>"], {"types/t.dialogue": "== beat open\nT: <<x>>\n== beat open\nT: <<y>>"})["errors"]
+	_check("D21 a second beat of one id is an error naming both places",
+		twice.size() == 1 and String(twice[0]).begins_with("a.dialogue:4: ") and String(twice[0]).contains("the beat 'open' is there twice")
+		and String(twice[0]).contains("a.dialogue:2") and other.size() == 1 and String(other[0]).begins_with("types/t.dialogue:3: "),
+		"errors %s, in a type %s" % [twice, other])
 
 
 # ---------------------------------------------------------------------------

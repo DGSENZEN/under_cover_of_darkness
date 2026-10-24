@@ -535,6 +535,8 @@ static func _gather(parsed: Array) -> Dictionary:
 				&"beat":
 					if entry["id"] == END:
 						lib["errors"].append("%s: a beat cannot be called '%s', that ends the conversation" % [entry["source"], END])
+					elif beats.has(entry["id"]):
+						lib["errors"].append("%s: a second beat '%s' (the first at %s)" % [entry["source"], entry["id"], beats[entry["id"]]["source"]])
 					else:
 						beats[entry["id"]] = _beat(entry)
 				&"item":
@@ -747,8 +749,31 @@ static func _link(lib: Dictionary) -> void:
 
 	for goal in lib["goals"]:
 		for key in ["shows", "done"]:
-			if String(goal[key]) != "":
-				_check_condition(ctx, goal["owner_kind"], goal["owner"], String(goal[key]), goal["sources"].get(key, goal["source"]))
+			if String(goal[key]) == "":
+				continue
+
+			var at: String = goal["sources"].get(key, goal["source"])
+
+			if goal["owner_kind"] == &"character" and String(goal["owner"]) == "" and _bare_term(String(goal[key])) != "":
+				lib["errors"].append("%s: a bare %s in a goal needs a character in its file (or name one: said(<character>.<name>))" % [
+					at, _bare_term(String(goal[key]))])
+			else:
+				_check_condition(ctx, goal["owner_kind"], goal["owner"], String(goal[key]), at)
+
+
+## The first term of `cond` that is about the character whose file it is
+## (said(x), gave(x), mood>=n, mood<=n, met), or "".
+static func _bare_term(cond: String) -> String:
+	for piece in Terms.split_top(cond):
+		var term := String(piece)
+
+		while term.begins_with("not(") and term.ends_with(")"):
+			term = term.substr(4, term.length() - 5).strip_edges()
+
+		if Terms.term_error(term, false) != "" and Terms.term_error(term, true) == "":
+			return term
+
+	return ""
 
 
 ## The flags a set of beats sets or clears (its own words only).
@@ -788,7 +813,7 @@ static func _flags_of(ctx: Dictionary, kind: StringName, id: String) -> Dictiona
 
 	if kind == &"character":
 		out.merge(ctx["char_flags"].get(id, {}))
-		out.merge(ctx["type_flags"].get(lib["characters"][id]["type"], {}))
+		out.merge(ctx["type_flags"].get((lib["characters"].get(id, {}) as Dictionary).get("type", ""), {}))
 	else:
 		out.merge(ctx["type_flags"].get(id, {}))
 
