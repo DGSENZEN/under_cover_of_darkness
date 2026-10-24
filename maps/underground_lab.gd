@@ -162,6 +162,12 @@ const TILE := Color(0.42, 0.45, 0.46)
 const LINE_2 := Color(0.16, 0.3, 0.55)
 const FLOOR := Color(0.2, 0.19, 0.18)
 
+## How far the corridor runs each way from its middle (m: the bay's RUN; a map built on it, the candle lane, runs it
+## longer), and where the pieces that move with it stand: the tamale cart (her stool beside it), the bench (the news on
+## it, the bin and cone by it, the nahual and the old hat at its foot), the Virgin's niche. Set before _ready.
+var half_run := RUN
+var places := {"cart": Vector3(4.2, 0.0, 2.6), "bench": Vector3(-2.4, 0.0, FAR_WALL), "niche": Vector3(1.2, 0.0, FAR_WALL)}
+
 ## Where the piece and its painted files are.
 var lab_dir := "res://assets/eclipse/lab/"
 var atlas_dir := "res://textures/painted/underground/"
@@ -419,28 +425,33 @@ func _glass() -> StandardMaterial3D:
 
 # The corridor, greybox until its own kit
 
+## How many tile modules a longer corridor adds at each end: column indices counted from the bay's own west end.
+func _shift() -> int:
+	return int(round((half_run - RUN) / MODULE))
+
+
 func _corridor() -> void:
 	var tile := _flat(TILE)
 	# The floor under the tiles (_tiles lays them); walked on at the tiles' tops.
-	_box(Vector3(-RUN, -0.2 - TILE_DEPTH, BACK_WALL - WALL), Vector3(RUN, -TILE_DEPTH, FAR_WALL + WALL), _flat(FLOOR), "floor")
+	_box(Vector3(-half_run, -0.2 - TILE_DEPTH, BACK_WALL - WALL), Vector3(half_run, -TILE_DEPTH, FAR_WALL + WALL), _flat(FLOOR), "floor")
 	var walked := StaticBody3D.new()
 	walked.name = "floor_walked"
 	var top := CollisionShape3D.new()
 	var slab := BoxShape3D.new()
-	slab.size = Vector3(2.0 * RUN, TILE_DEPTH, FAR_WALL - BACK_WALL + 2.0 * WALL)
+	slab.size = Vector3(2.0 * half_run, TILE_DEPTH, FAR_WALL - BACK_WALL + 2.0 * WALL)
 	top.shape = slab
 	walked.add_child(top)
 	add_child(walked)
 	walked.position = Vector3(0.0, -TILE_DEPTH / 2.0, (BACK_WALL + FAR_WALL) / 2.0)
 	# The walls themselves, set back behind their tiles (_walls hangs them).
-	_box(Vector3(-RUN, 0.0, BACK_WALL - WALL_FACE - WALL), Vector3(RUN, HEIGHT, BACK_WALL - WALL_FACE), tile, "back_wall")
-	_box(Vector3(-RUN, 0.0, FAR_WALL + WALL_FACE), Vector3(RUN, HEIGHT, FAR_WALL + WALL_FACE + WALL), tile, "far_wall")
+	_box(Vector3(-half_run, 0.0, BACK_WALL - WALL_FACE - WALL), Vector3(half_run, HEIGHT, BACK_WALL - WALL_FACE), tile, "back_wall")
+	_box(Vector3(-half_run, 0.0, FAR_WALL + WALL_FACE), Vector3(half_run, HEIGHT, FAR_WALL + WALL_FACE + WALL), tile, "far_wall")
 	# The vault itself, over its plaster (_walls lays the plaster).
-	_box(Vector3(-RUN - WALL_FACE - WALL, HEIGHT + VAULT_PLASTER, BACK_WALL - WALL),
-		Vector3(RUN + WALL_FACE + WALL, HEIGHT + VAULT_PLASTER + 0.2, FAR_WALL + WALL), tile, "vault")
+	_box(Vector3(-half_run - WALL_FACE - WALL, HEIGHT + VAULT_PLASTER, BACK_WALL - WALL),
+		Vector3(half_run + WALL_FACE + WALL, HEIGHT + VAULT_PLASTER + 0.2, FAR_WALL + WALL), tile, "vault")
 
 	# The end walls, set back behind their tiles too.
-	for x in [-RUN - WALL_FACE - WALL, RUN + WALL_FACE]:
+	for x in [-half_run - WALL_FACE - WALL, half_run + WALL_FACE]:
 		_box(Vector3(x, 0.0, BACK_WALL - WALL), Vector3(x + WALL, HEIGHT, FAR_WALL + WALL), tile, "end_%d" % x)
 
 
@@ -1042,8 +1053,9 @@ func _furnish() -> void:
 
 	# The tamale seller's pitch, where her cart stands of a night (its grease on the floor, decal_oil),
 	# her stool beside it; her steamer steams and hisses under its lid.
-	var cart: MeshInstance3D = set_down.call("tamale_cart", Vector3(4.2, 0.0, 2.6), deg_to_rad(25.0))
-	set_down.call("stool", Vector3(4.95, 0.0, 2.05), 0.4)
+	var cart_at: Vector3 = places["cart"]
+	var cart: MeshInstance3D = set_down.call("tamale_cart", cart_at, deg_to_rad(25.0))
+	set_down.call("stool", cart_at + Vector3(0.75, 0.0, -0.55), 0.4)
 	var pot := cart.global_transform * POT_LOCAL
 	cart_steam = Vfx.system("pot_steam")
 	cart_steam.name = "cart_steam"
@@ -1053,13 +1065,14 @@ func _furnish() -> void:
 	cart_hiss = _loop("cart_hiss", STEAM_HISS, pot, -14.0, 4.0)
 
 	# A bench against the far wall, someone's newspaper left on it; the bin beside it, missed.
-	set_down.call("bench", Vector3(-2.4, 0.0, FAR_WALL), PI)
-	_lay("news_folded", Vector3(-3.35, BENCH_SEAT, 4.15), 0.5)
-	set_down.call("trash_bin", Vector3(-1.75, 0.0, 4.15), 0.6)
-	_lay("cone_crushed", Vector3(-1.35, 0.0, 3.85), 1.9)
+	var bench: Vector3 = places["bench"]
+	set_down.call("bench", bench, PI)
+	_lay("news_folded", bench + Vector3(-0.95, BENCH_SEAT, -0.4), 0.5)
+	set_down.call("trash_bin", bench + Vector3(0.65, 0.0, -0.4), 0.6)
+	_lay("cone_crushed", bench + Vector3(1.05, 0.0, -0.7), 1.9)
 
 	# The Virgin's niche, built out from the far wall facing her stall; its candles lit, their soot above.
-	var niche: MeshInstance3D = set_down.call("niche", Vector3(1.2, 0.0, FAR_WALL), PI)
+	var niche: MeshInstance3D = set_down.call("niche", places["niche"], PI)
 
 	if FileAccess.file_exists(FURNITURE_WICKS):
 		var wicks := []
@@ -1127,23 +1140,25 @@ func _walls() -> void:
 
 	var meshes := _kit(WALL_KIT)
 	var look := Painterly.material(_painted(["underground_walls.png", "underground_walls_base.png"]), &"bespoke")
-	var columns := int(round(2.0 * RUN / MODULE))
+	var columns := int(round(2.0 * half_run / MODULE))
 
 	for c in columns:
-		var x := -RUN + MODULE * c
+		var x := -half_run + MODULE * c
+		# (Its column counted from the bay's own west end, so a longer corridor keeps the bay's panels where they were.)
+		var cc := c - _shift()
 		# The back wall, where the marigold trail ends at the crack showing the older city's stone.
-		var kind := "wall_crack" if c == CRACK_COLUMN else ("wall_tiled_worn" if c in WORN_BACK else "wall_tiled")
+		var kind := "wall_crack" if cc == CRACK_COLUMN else ("wall_tiled_worn" if cc in WORN_BACK else "wall_tiled")
 		wall_panels.append(_place(meshes[kind], look, kind, Vector3(x, 0.0, BACK_WALL - WALL_FACE), 0.0, true))
 		# The far wall, its panels turned to face back across the corridor.
-		kind = "wall_tiled_worn" if c in WORN_FAR else "wall_tiled"
+		kind = "wall_tiled_worn" if cc in WORN_FAR else "wall_tiled"
 		wall_panels.append(_place(meshes[kind], look, kind, Vector3(x + MODULE, 0.0, FAR_WALL + WALL_FACE), PI, true))
 
 	# The corridor's ends: six panels across each, a little past its walls into their corners.
 	for k in 6:
 		var kind := "wall_tiled_worn" if k == 2 else "wall_tiled"
-		wall_panels.append(_place(meshes[kind], look, kind, Vector3(RUN + WALL_FACE, 0.0, BACK_WALL - 0.15 + MODULE * k), -PI / 2.0, true))
+		wall_panels.append(_place(meshes[kind], look, kind, Vector3(half_run + WALL_FACE, 0.0, BACK_WALL - 0.15 + MODULE * k), -PI / 2.0, true))
 		kind = "wall_tiled_worn" if k == 4 else "wall_tiled"
-		wall_panels.append(_place(meshes[kind], look, kind, Vector3(-RUN - WALL_FACE, 0.0, FAR_WALL + 0.15 - MODULE * k), PI / 2.0, true))
+		wall_panels.append(_place(meshes[kind], look, kind, Vector3(-half_run - WALL_FACE, 0.0, FAR_WALL + 0.15 - MODULE * k), PI / 2.0, true))
 
 	# The vault's plaster in spans, each turned one way or the other against repetition.
 	if ResourceLoader.exists(VAULT_KIT):
@@ -1157,9 +1172,10 @@ func _walls() -> void:
 		plaster.set_shader_parameter("shadow_cool", Vector3(0.95, 0.9, 0.92))
 		plaster.set_shader_parameter("rim_colour", Color(0.5, 0.38, 0.27))
 
-		for i in int(round(2.0 * RUN / VAULT_SPAN)):
-			var x := -RUN + VAULT_SPAN * i
-			var turned := i % 2 == 1
+		for i in int(round(2.0 * half_run / VAULT_SPAN)):
+			var x := -half_run + VAULT_SPAN * i
+			# (Turned by its span counted from the bay's own west end.)
+			var turned := posmod(i - int(round((half_run - RUN) / VAULT_SPAN)), 2) == 1
 			var at := Vector3(x + VAULT_SPAN, HEIGHT, BACK_WALL - WALL_FACE) if turned else Vector3(x, HEIGHT, FAR_WALL + WALL_FACE)
 			var span := _place(soffit, plaster, "vault_span", at, PI if turned else 0.0, false)
 			# (Above the work lamps' shades: they never light it.)
@@ -1324,11 +1340,11 @@ func _nahual() -> void:
 	nahual.intruder = player
 	add_child(nahual)
 	nahual.build(meshes["nahual_body"], meshes["nahual_head"], black, ember)
-	nahual.position = NAHUAL_AT
+	nahual.position = (places["bench"] as Vector3) + (NAHUAL_AT - Vector3(-2.4, 0.0, FAR_WALL))
 	# Turned so it lies along the far wall's foot with its head toward the corridor's middle.
 	nahual.rotation.y = PI / 2.0
 	nahual.scale = Vector3.ONE * NAHUAL_SCALE
-	old_hat = _place(meshes["old_hat"], look, "old_hat", HAT_AT, 0.7, false)
+	old_hat = _place(meshes["old_hat"], look, "old_hat", (places["bench"] as Vector3) + (HAT_AT - Vector3(-2.4, 0.0, FAR_WALL)), 0.7, false)
 
 
 # The floor, tiled
@@ -1340,19 +1356,20 @@ func _tiles() -> void:
 
 	var meshes := _kit(FLOOR_KIT)
 	var look := Painterly.material(_painted(["underground_floor.png", "underground_floor_base.png"]), &"bespoke")
-	var columns := int(round(2.0 * RUN / MODULE))
+	var columns := int(round(2.0 * half_run / MODULE))
 
 	for c in columns:
-		var x := -RUN + MODULE * c
+		var x := -half_run + MODULE * c
+		var cc := c - _shift()
 		# Along the back wall: the border row (its dark row at the wall), with the drain.
-		var kind := "floor_border_drain" if c == DRAIN_COLUMN else "floor_border"
+		var kind := "floor_border_drain" if cc == DRAIN_COLUMN else "floor_border"
 		floor_tiles.append(_place(meshes[kind], look, kind, Vector3(x, 0.0, BACK_WALL + MODULE), 0.0, false))
 
 		# The open floor, each module turned one way or the other so their painting does not repeat.
 		for r in range(1, 5):
-			var worn := Vector2i(c, r) in WORN
+			var worn := Vector2i(cc, r) in WORN
 			kind = "floor_field_worn" if worn else "floor_field"
-			var turned := fposmod(sin(c * 12.9898 + r * 78.233) * 43758.5453, 1.0) > 0.5
+			var turned := fposmod(sin(cc * 12.9898 + r * 78.233) * 43758.5453, 1.0) > 0.5
 			var low := BACK_WALL + MODULE * r
 			var at := Vector3(x + MODULE, 0.0, low) if turned else Vector3(x, 0.0, low + MODULE)
 			floor_tiles.append(_place(meshes[kind], look, kind, at, PI if turned else 0.0, false))
