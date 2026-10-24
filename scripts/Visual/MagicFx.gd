@@ -21,6 +21,14 @@ const MIRROR_LIFE := 0.6
 const RIPPLE_LIFE := 0.3
 const RIPPLE_HEIGHT := 0.3
 const RIPPLE_SHADER := preload("res://scripts/Visual/vfx_ripple.gdshader")
+## Empower spent: a flat ring of beast strength thrown out (how long, how
+## wide it grows), umber with a bone core.
+const SHOCKWAVE_LIFE := 0.3
+const SHOCKWAVE_FROM := 0.2
+const SHOCKWAVE_TO := 1.8
+const UMBER := Color("#4A3423")
+const BONE := Color("#D8C7A3")
+const UMBER_EDGE := Color("#22170F")
 
 static var _live: Array = []
 static var _glass_look: StandardMaterial3D
@@ -173,6 +181,60 @@ static func ripple(context: Node, at: Vector3) -> void:
 	swell.tween_property(shell, "scale", Vector3.ONE * 2.8, RIPPLE_LIFE).set_ease(Tween.EASE_OUT)
 	swell.tween_method(func(f: float): look.set_shader_parameter(&"fade", f), 1.0, 0.0, RIPPLE_LIFE)
 	_keep(shell, RIPPLE_LIFE)
+
+
+## Empower's charge spent at `at`: a flat ring thrown out square to `up`,
+## eaten away as it grows; a heavier crack.
+static func shockwave(context: Node, at: Vector3, up := Vector3.UP) -> void:
+	if not allowed(context):
+		return
+
+	var ring := MeshInstance3D.new()
+	ring.name = "Shockwave"
+	ring.mesh = _ring_mesh(0.5, 0.15, 32)
+	var look := MeshVfx.look(BONE, UMBER, UMBER_EDGE, 1.6, 0.15, 0.9, 2.3)
+	look.set_shader_parameter(&"tail_eat", 0.0)
+	look.set_shader_parameter(&"tiling", Vector2(3.0, 0.6))
+	ring.material_override = look
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ring.add_to_group(&"shockwave")
+	_world_of(context).add_child(ring)
+	var normal := up.normalized() if up.length() > 0.01 else Vector3.UP
+	var across := normal.cross(Vector3.RIGHT if absf(normal.x) < 0.9 else Vector3.FORWARD).normalized()
+	ring.global_transform = Transform3D(Basis(across, normal, across.cross(normal)), at)
+	ring.scale = Vector3.ONE * SHOCKWAVE_FROM
+	ring.reset_physics_interpolation()
+	var grow := ring.create_tween().set_parallel(true)
+	grow.tween_property(ring, "scale", Vector3.ONE * SHOCKWAVE_TO, SHOCKWAVE_LIFE).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	grow.tween_method(func(e: float): look.set_shader_parameter(&"erosion", e), 0.15, 1.0, SHOCKWAVE_LIFE).set_ease(Tween.EASE_IN)
+	_keep(ring, SHOCKWAVE_LIFE)
+	Sfx.play(context, &"bone_crack", at, 0.0, 0.7)
+	Sfx.play(context, &"thud", at, 0.0, 0.7)
+
+
+## A flat ring in its own XZ plane: `radius` to its middle, `width` across,
+## v running across it (0 inside, 1 outside), u round it.
+static func _ring_mesh(radius: float, width: float, sides: int) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+
+	for i in sides:
+		var a := TAU * float(i) / float(sides)
+		var b := TAU * float(i + 1) / float(sides)
+		var corners := []
+
+		for turn in [a, b]:
+			for r in [radius - width * 0.5, radius + width * 0.5]:
+				corners.append(Vector3(cos(turn) * r, 0.0, sin(turn) * r))
+
+		var uvs := [Vector2(float(i) / sides, 0.0), Vector2(float(i) / sides, 1.0), Vector2(float(i + 1) / sides, 0.0), Vector2(float(i + 1) / sides, 1.0)]
+
+		for k in [0, 1, 2, 2, 1, 3]:
+			st.set_normal(Vector3.UP)
+			st.set_uv(uvs[k])
+			st.add_vertex(corners[k])
+
+	return st.commit()
 
 
 ## Every magic effect still showing.

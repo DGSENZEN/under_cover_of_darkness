@@ -380,7 +380,7 @@ func _update_whip(delta: float) -> void:
 		var blow: Vector3 = (at - aim().origin).normalized()
 
 		# Empowered (Caster.gd): three times the blow, and it throws him.
-		if player.caster != null and player.caster.spend_empower(&"blow"):
+		if player.caster != null and player.caster.spend_empower(&"blow", at, blow):
 			_hint_gib(_whip_target, true)
 			_whip_target.take_hit(WHIP_DAMAGE * player.caster.EMPOWER_BLOW, player, &"blast", at, blow)
 			_hint_gib(_whip_target, false)
@@ -489,7 +489,7 @@ func _pull(gun: Resource) -> void:
 	var at := aim()
 
 	# Empowered (Caster.gd): this shot carries the beast strength.
-	var empowered: bool = player.caster != null and player.caster.spend_empower(&"shot")
+	var empowered: bool = player.caster != null and player.caster.spend_empower(&"shot", _muzzle(at, &"shot_muzzle" if barrel == &"shot" else &"muzzle"), -at.basis.z)
 
 	if barrel == &"shot":
 		_shell(at, gun, empowered)

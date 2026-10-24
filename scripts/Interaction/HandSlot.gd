@@ -165,6 +165,13 @@ var _left_mode: StringName = &""
 var _left_frame := Transform3D.IDENTITY
 var _left_up := 0.0
 var _tome: MeshInstance3D
+## The tome's pages turned as Empower is read (set_tome_flutter): their
+## pivots on the spine, and how far through the reading it is.
+var _pages: Array[Node3D] = []
+var _flutter := 0.0
+## Empower's pelt-shadow on the gun arm (set_pelt), 0..1.
+var _pelt := 0.0
+var _pelt_look: ShaderMaterial
 ## A hand spell's circle before the casting palm: whose school, how far
 ## closed (0..1), and its pieces.
 var _circle_school: StringName = &""
@@ -334,6 +341,7 @@ func _ready() -> void:
 	_apply_materials(_tome, _tome.mesh)
 	_tome.visible = false
 	add_child(_tome)
+	_make_pages()
 
 	_off = Node3D.new()
 	_off.name = "OffHand"
@@ -623,6 +631,78 @@ func is_checking() -> bool:
 func set_left_hold(mode: StringName, frame: Transform3D) -> void:
 	_left_mode = mode
 	_left_frame = frame
+
+
+## Empower being read: 0..1 through it, the tome's three pages turning one
+## after another (0: they lie still).
+func set_tome_flutter(amount: float) -> void:
+	_flutter = clampf(amount, 0.0, 1.0)
+
+	for i in _pages.size():
+		var own := clampf(_flutter * float(_pages.size()) - float(i), 0.0, 1.0)
+		# Over toward you (a turn the other way passes through the boards).
+		_pages[i].rotation.y = -PI * smoothstep(0.0, 1.0, own) if _flutter > 0.0 else 0.0
+
+
+func tome_flutter() -> float:
+	return _flutter
+
+
+## Empower's charge waiting: the pelt-shadow on the gun arm and hand, 0..1.
+func set_pelt(amount: float) -> void:
+	_pelt = clampf(amount, 0.0, 1.0)
+
+	if _pelt_look == null:
+		_pelt_look = ShaderMaterial.new()
+		_pelt_look.shader = preload("res://scripts/Visual/pelt.gdshader")
+		_pelt_look.set_shader_parameter(&"noise", MeshVfx.noise())
+		_pelt_look.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+
+	_pelt_look.set_shader_parameter(&"amount", _pelt)
+	_pelt_look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
+	if _arms == null:
+		return
+
+	# Which side of the arms' space the gun hand is on (the arm always in
+	# view: the left is up only to cast, or behind the tome).
+	var gun_hand: Vector3 = _arms.man.bone_global(&"hand_r").origin if _arms.get("man") != null else Vector3.RIGHT
+	var skeleton_space: Node3D = _arms.man as Node3D if _arms.get("man") != null else null
+	var side := signf((skeleton_space.global_transform.affine_inverse() * gun_hand).x) if skeleton_space != null else 1.0
+	_pelt_look.set_shader_parameter(&"side_sign", side if side != 0.0 else 1.0)
+
+	for mesh in _arms.find_children("*", "MeshInstance3D", true, false):
+		if (mesh as MeshInstance3D).skin != null or (mesh as MeshInstance3D).skeleton != NodePath():
+			(mesh as MeshInstance3D).material_overlay = _pelt_look if _pelt > 0.0 else null
+
+
+func pelt_amount() -> float:
+	return _pelt
+
+
+## The tome's pages: three leaves pivoting on the spine, lying on the right
+## board, turned over to the left as it is read.
+func _make_pages() -> void:
+	var paper := StandardMaterial3D.new()
+	paper.albedo_color = Color(0.86, 0.8, 0.66)
+	paper.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ViewArmsScript.dress(paper)
+
+	for i in 3:
+		var pivot := Node3D.new()
+		pivot.name = "Page%d" % i
+		_tome.add_child(pivot)
+		# On the spine, at the face of the pages.
+		pivot.position = Vector3(0.0, 0.0, 0.016 + 0.002 * float(i))
+		var leaf := _viewmodel_instance()
+		var quad := QuadMesh.new()
+		quad.size = Vector2(0.115, 0.18)
+		leaf.mesh = quad
+		leaf.material_override = paper
+		# Out from the spine over the right board.
+		leaf.position = Vector3(0.06, 0.0, 0.0)
+		pivot.add_child(leaf)
+		_pages.append(pivot)
 
 
 ## A hand spell's circle closing before the casting palm: `school` says

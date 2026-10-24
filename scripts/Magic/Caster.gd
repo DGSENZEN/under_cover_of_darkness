@@ -117,6 +117,7 @@ func _physics_process(delta: float) -> void:
 			_complete()
 
 	_show_left()
+	_show_empower(delta)
 
 
 ## The spell keyed for the left hand, and the hand set for it: a hand spell
@@ -281,12 +282,19 @@ func empowered() -> bool:
 
 
 ## Spends the charge on `use` ("blow", "shot", "jump", "blink"): true once,
-## and then it is gone; false with none.
-func spend_empower(use: StringName) -> bool:
+## and then it is gone; false with none. Where it lands (`at`, square to
+## `facing`), its shockwave.
+func spend_empower(use: StringName, at := Vector3.INF, facing := Vector3.UP) -> bool:
 	if not empowered():
 		return false
 
 	empowered_until = -1.0
+	_show_beast(0.0)
+
+	# The ring square to `facing`: the way a blow or a shot went, so you see
+	# it whole; flat on the ground at your feet for a jump or a blink.
+	if at != Vector3.INF:
+		MagicFx.shockwave(player, at, facing)
 	Sfx.play_flat(player, &"roar", -10.0, 0.7)
 	player.juice.add_trauma(0.25)
 	return use != &""
@@ -303,7 +311,7 @@ func _empowered_jump() -> void:
 	if since < EMPOWER_JUMP_HOLD or since > EMPOWER_JUMP_HOLD + 0.1:
 		return
 
-	if not spend_empower(&"jump"):
+	if not spend_empower(&"jump", player.global_position - Vector3.UP * Blink._origin_above_feet(player)):
 		return
 
 	var gravity: float = player.gravity
@@ -393,8 +401,8 @@ func _blink_to(at: Vector3, ledge := {}) -> void:
 		player.power.refused()
 		return
 
-	# Empowered, the charge went into this one's reach.
-	spend_empower(&"blink")
+	# Empowered, the charge went into this one's reach (its wave where you land).
+	var beast := spend_empower(&"blink")
 	var from: Vector3 = player.global_position
 	var falling: Vector3 = player.velocity
 	var airborne: bool = not player.is_on_floor()
@@ -412,6 +420,9 @@ func _blink_to(at: Vector3, ledge := {}) -> void:
 	MagicFx.mirror_crack(player, from)
 	MagicView.cold(get_tree())
 	MagicFx.ripple(player, player.global_position)
+
+	if beast:
+		MagicFx.shockwave(player, player.global_position - Vector3.UP * Blink._origin_above_feet(player))
 	Sfx.play_flat(player, &"whoosh_light", -4.0, 0.7)
 	cast_done.emit(&"blink")
 
@@ -438,6 +449,29 @@ func _show_left() -> void:
 	if hand.has_method("set_circle"):
 		var hand_spell: bool = _casting != &"" and Spells.info(_casting).get("tier") == Spells.Tier.HAND
 		hand.set_circle(Spells.info(_casting).get("school", &"") if hand_spell else &"", cast_progress())
+
+
+## Empower in your hands: the pages turning while it is read; while its
+## charge waits, the pelt-shadow on the arm (eased in) and the pulse at the
+## edges of the view.
+func _show_empower(delta: float) -> void:
+	var hand: Node = player.hand
+
+	if hand == null or not hand.has_method("set_tome_flutter"):
+		return
+
+	hand.set_tome_flutter(cast_progress() if _casting == &"empower" else 0.0)
+	var pelt: float = minf(float(hand.pelt_amount()) + delta / 0.3, 1.0) if empowered() else 0.0
+	_show_beast(pelt)
+
+
+func _show_beast(amount: float) -> void:
+	var hand: Node = player.hand
+
+	if hand != null and hand.has_method("set_pelt"):
+		hand.set_pelt(amount)
+
+	MagicView.of(get_tree()).set_beast(amount)
 
 
 func _ensure_action(action: StringName, key: Key) -> void:

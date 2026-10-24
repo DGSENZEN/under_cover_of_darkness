@@ -86,6 +86,28 @@ func _ready() -> void:
 		outside.queue_free()
 		await _frames(90)
 
+	if _wants("empower"):
+		await _place(Vector3(0, 0.1, 0))
+		player.power.power = player.power.MAX
+		await _hold_clip("empower" + tag, "spell_3", [0, 18, 36, 54, 72, 76])
+		await _frames(30)
+		await _shot("empower_charged%s" % tag)
+		var man: CharacterBody3D = GUARD.instantiate()
+		man.debug_ai = false
+		man.position = Vector3(0.0, 0, -1.6)
+		man.rotation.y = PI
+		add_child(man)
+		man.set_physics_process(false)
+		await _frames(10)
+		Input.action_press("kick")
+		for f in 40:
+			if f == 2:
+				Input.action_release("kick")
+			if f in [6, 9, 12, 16, 22, 30]:
+				await _shot("empower_kick_%02d%s" % [f, tag])
+			await get_tree().physics_frame
+		await _frames(60)
+
 	get_tree().quit()
 
 

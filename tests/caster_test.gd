@@ -718,6 +718,84 @@ func _run() -> void:
 		"plumes %d bulges %d" % [get_tree().get_nodes_in_group(&"ward_plume").size(), get_tree().get_nodes_in_group(&"ward_bulge").size()])
 	archer2.queue_free()
 
+	# E1 the pages turn as the tome is read
+	_wield(&"revolver")
+	_put_player(Vector3(-20, 1.05, 40))
+	await _frames(40)
+	power.power = power.MAX
+	Input.action_press("spell_3")
+	await _frames(37)
+	var turning: float = absf(player.hand._pages[1].rotation.y) if player.hand.get("_pages") != null and player.hand._pages.size() == 3 else -1.0
+	await _until(func(): return caster.empowered(), 60)
+	Input.action_release("spell_3")
+	_check("E1 the tome's pages turn as Empower is read", turning > 0.5, "page 2 turned %.2f rad" % turning)
+
+	# E2 charged: the pelt on the arm, the pulse at the edge of the view
+	await _frames(30)
+	var pelted: float = player.hand.pelt_amount()
+	var pulse: float = MagicView.of(get_tree()).beast_amount()
+	_check("E2 charged, a pelt-shadow on the arm and a pulse at the edges", pelted > 0.9 and pulse > 0.0, "pelt %.2f pulse %.2f" % [pelted, pulse])
+
+	# E3 spent on a kick: a shockwave, and the pelt and pulse are gone
+	var g_e3 := _caller(Vector3(-20, 0, 38.4))
+	g_e3.set_physics_process(false)
+	await _frames(2)
+	var fired_e3 := []
+	player.revolver.fired.connect(func(b, h): fired_e3.append(b))
+	await _tap("kick")
+	var waves := 0
+	for i in 20:
+		await get_tree().physics_frame
+		waves = maxi(waves, get_tree().get_nodes_in_group(&"shockwave").size())
+		if not caster.empowered():
+			break
+	await _frames(2)
+	var pelt_after: float = player.hand.pelt_amount()
+	var pulse_after: float = MagicView.of(get_tree()).beast_amount()
+	await _frames(int(MagicFx.SHOCKWAVE_LIFE * 60.0) + 5)
+	_check("E3 spent on a kick: a shockwave, the pelt and the pulse gone",
+		waves >= 1 and pelt_after == 0.0 and pulse_after == 0.0 and get_tree().get_nodes_in_group(&"shockwave").is_empty() and fired_e3.is_empty(),
+		"waves %d pelt %.2f pulse %.2f after %d" % [waves, pelt_after, pulse_after, get_tree().get_nodes_in_group(&"shockwave").size()])
+	if is_instance_valid(g_e3):
+		g_e3.queue_free()
+
+	# E4 spent on a jump the wave is at the feet; on a blink, at the arrival
+	_put_player(Vector3(-14, 1.05, 40))
+	await _frames(20)
+	await _cast(&"empower")
+	var feet_e4: Vector3 = player.global_position
+	Input.action_press("jump")
+	var jump_wave := Vector3.INF
+	for i in 40:
+		await get_tree().physics_frame
+		if jump_wave == Vector3.INF and not get_tree().get_nodes_in_group(&"shockwave").is_empty():
+			jump_wave = (get_tree().get_nodes_in_group(&"shockwave")[0] as Node3D).global_position
+			feet_e4 = player.global_position
+	Input.action_release("jump")
+	await _frames(60)
+	await _cast(&"empower")
+	await _tap("blink")
+	await _frames(3)
+	var blink_wave: Vector3 = (get_tree().get_nodes_in_group(&"shockwave")[0] as Node3D).global_position if not get_tree().get_nodes_in_group(&"shockwave").is_empty() else Vector3.INF
+	var landed: Vector3 = player.global_position
+	_check("E4 the wave is at the feet for a jump, at the arrival for a blink",
+		jump_wave.distance_to(feet_e4 - Vector3.UP * 1.0) <= 0.6 and blink_wave.distance_to(landed - Vector3.UP * 1.0) <= 0.6,
+		"jump wave %s feet %s, blink wave %s arrival %s" % [jump_wave, feet_e4, blink_wave, landed])
+	await _frames(40)
+
+	# E5 broken half way: the pages stop at once, and no pelt
+	power.power = power.MAX
+	Input.action_press("spell_3")
+	await _frames(30)
+	player.take_damage(30.0, null)
+	await _frames(2)
+	var flutter_after: float = player.hand.tome_flutter()
+	Input.action_release("spell_3")
+	await _frames(20)
+	_check("E5 a broken Empower stops its pages and leaves no pelt", flutter_after == 0.0 and player.hand.pelt_amount() == 0.0,
+		"flutter %.2f pelt %.2f" % [flutter_after, player.hand.pelt_amount()])
+	caster.select(&"shard")
+
 	# S30 aiming a blink, a fresh right mouse lets it go, and raises no sights
 	_wield(&"revolver")
 	_put_player(Vector3(30, 1.05, -10))
