@@ -141,6 +141,120 @@ func _sets() -> void:
 		to_desk["ok"] and through["ok"] and in_se and seams.all(func(d): return d <= 0.01),
 		"desk %s through %s in lane_se %s seams %s" % [to_desk, through, in_se, seams])
 
+	await _set_in_place(lane)
+
+
+## The set at home in the map: its own keys asleep (the map's are the player's), everything it lights, sounds and
+## shows standing in its own spaces (its crowd excepted: they walk on into the map's), none of its building in the
+## map's other spaces, no face of it in the plane of a greybox wall's, and the greybox's openings onto it its own size.
+func _set_in_place(lane: Node3D) -> void:
+	var work_was: bool = lane.get("_work_on")
+	var form_was: bool = lane.get("_form")
+	for key in [KEY_F1, KEY_F2]:
+		var press := InputEventKey.new()
+		press.keycode = key
+		press.pressed = true
+		lane._unhandled_input(press)
+	var asleep: bool = lane.get("_work_on") == work_was and lane.get("_form") == form_was
+	lane.set_work_lights(work_was)
+	lane.set_form(form_was)
+	_check("M10 the set's own inspection keys are asleep in the map", asleep,
+		"work lights %s -> %s, form %s -> %s" % [work_was, lane.get("_work_on"), form_was, lane.get("_form")])
+
+	# Everything placed: its shadow crossing, its flames lit, its sounds, lights, smoke and decals.
+	if lane.get("ownerless") != null:
+		lane.ownerless.cross_now()
+	await _frames(2)
+	var own := [_rect("candle_lane").grow(0.5), _rect("librarian_shop").grow(0.5)]
+	var strays := []
+	for node: Node in lane.find_children("*", "VisualInstance3D", true, false) + lane.find_children("*", "AudioStreamPlayer3D", true, false):
+		var moving: bool = lane.crowd_of_shades != null and lane.crowd_of_shades.is_ancestor_of(node)
+		var stub: Node3D = lane.get("stub")
+		if moving or (stub != null and stub.is_ancestor_of(node)) or not (node as Node3D).is_visible_in_tree():
+			continue
+		# (Ribbons, word chains and the like drawn in the world's frame stand at its origin, and what they carry.)
+		var drawn_in_world := false
+		var up: Node = node
+		while up != lane and up != null:
+			drawn_in_world = drawn_in_world or (up is Node3D and up.top_level and up.global_transform.origin == Vector3.ZERO)
+			up = up.get_parent()
+		if drawn_in_world:
+			continue
+		var at: Vector3 = (node as Node3D).global_position
+		var flat := Vector2(at.x, at.z)
+		# (A pocket's sounds may come from the map's Pasaje or chapel beyond its ends.)
+		var spaces: Array = own + ([_rect("pasaje"), _rect("chapel")] if node.has_meta("pocket") else [])
+		if not spaces.any(func(r): return r.has_point(flat)) or at.y < -11.5 or at.y > -11.0 + 5.0:
+			strays.append("%s %s" % [node.name, at])
+	_check("M11 everything the set lights, sounds and shows stands in its own spaces at the map's offset", strays.is_empty(),
+		"%d out: %s" % [strays.size(), strays])
+
+	# None of its building in the map's other spaces (deeper than 6 cm).
+	var into := []
+	var meshes: Array = lane.find_children("*", "MeshInstance3D", true, false).filter(func(m):
+		return m.is_visible_in_tree() and m.mesh != null \
+			and not (lane.crowd_of_shades != null and lane.crowd_of_shades.is_ancestor_of(m)))
+	for s in map.plan["spaces"]:
+		if s["name"] in ["candle_lane", "librarian_shop"]:
+			continue
+		var r := _rect(s["name"])
+		var room := AABB(Vector3(r.position.x, s["floor"], r.position.y), Vector3(r.size.x, s["height"], r.size.y))
+		for mesh: MeshInstance3D in meshes:
+			var box: AABB = mesh.global_transform * mesh.get_aabb()
+			var cut := box.intersection(room)
+			if cut.has_volume() and minf(cut.size.x, minf(cut.size.y, cut.size.z)) > 0.06:
+				into.append("%s into %s %s" % [mesh.name, s["name"], cut.size])
+	_check("M12 none of the set's building stands in the map's other spaces", into.is_empty(),
+		"%d: %s" % [into.size(), into])
+
+	# No face of its walls, vault or tiles in a greybox wall's plane; the openings onto it as big as its own.
+	var faces: Array = []
+	var gaps := {}
+	var grey: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(map.GREYBOX))
+	for g in grey["meshes"]:
+		# (Not the set's own spaces: the map builds none of their greybox.)
+		if String(g["name"]) in map.SETS["candle_lane"][1]:
+			continue
+		for f in g.get("faces", []):
+			faces.append(f)
+		for gap in g.get("gaps", []):
+			if gap["to"] == "candle_lane":
+				gaps[g["name"]] = gap
+	var flush := []
+	var built: Array = meshes.filter(func(m): return m.mesh is BoxMesh or m in lane.wall_panels)
+	for mesh: MeshInstance3D in built:
+		var box: AABB = mesh.global_transform * mesh.get_aabb()
+		for f in faces:
+			var n: Vector3 = _v(f["normal"]).abs()
+			var axis := 0 if n.x > 0.9 else (2 if n.z > 0.9 else (1 if n.y > 0.9 else -1))
+			if axis < 0:
+				continue
+			var lo := Vector3.INF
+			var hi := -Vector3.INF
+			for p in f["points"]:
+				lo = lo.min(_v(p))
+				hi = hi.max(_v(p))
+			var plane: float = lo[axis]
+			if absf(box.position[axis] - plane) > 0.005 and absf(box.end[axis] - plane) > 0.005:
+				continue
+			var shared := 1.0
+			for other in 3:
+				if other != axis:
+					shared *= maxf(0.0, minf(box.end[other], hi[other]) - maxf(box.position[other], lo[other]))
+			if shared > 0.0001:
+				flush.append("%s %s=%.3f" % [mesh.name, "xyz"[axis], plane])
+	var mouth: Dictionary = gaps.get("pasaje", {})
+	var door: Dictionary = gaps.get("chapel", {})
+	var door_wide := 0.0
+	if not door.is_empty():
+		door_wide = Vector2(door["a"][0], door["a"][1]).distance_to(Vector2(door["b"][0], door["b"][1]))
+	var lane_door := Vector2(lane.DOOR.x + 2.0 * lane.DOOR_INSET, lane.DOOR.y + lane.DOOR_INSET)
+	var sized: bool = not mouth.is_empty() and mouth["y1"] - mouth["y0"] >= lane.HEIGHT - 0.01 and not door.is_empty() \
+		and absf(door_wide - lane_door.x) < 0.02 and absf(door["y1"] - door["y0"] - lane_door.y) < 0.02
+	_check("M13 no face of the set flush with a greybox wall's, and the greybox's openings onto it its own size",
+		flush.is_empty() and sized, "%d flush: %s; mouth %s door %s (%.2f wide) against %s" % [flush.size(),
+			flush, mouth, door, door_wide, lane_door])
+
 
 func _floor_below(at: Vector3) -> float:
 	var ray := PhysicsRayQueryParameters3D.create(at, at - Vector3(0.0, 3.0, 0.0))

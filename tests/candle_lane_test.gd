@@ -79,16 +79,19 @@ func _shell() -> void:
 		desk["ok"] and chapel["ok"], "desk %s chapel %s" % [desk, chapel])
 
 	# The shop's keys, embedded: F2 on and off gives back its materials; F3 hides and shows its decals.
+	# (Through the lane's own keys, as F2 and F3 are pressed in it: they reach the shop.)
 	var meshes: Array = shop.find_children("*", "MeshInstance3D", true, false)
 	var before := meshes.map(func(m): return [m.material_override, m.get_surface_override_material(0)])
-	shop.set_form(true)
-	shop.set_form(false)
+	lane.set_form(true)
+	var formed: bool = shop.get("_form") == true
+	lane.set_form(false)
 	var after := meshes.map(func(m): return [m.material_override, m.get_surface_override_material(0)])
-	shop.set_decals(false)
+	lane.set_decals(false)
 	var hidden: bool = shop.decals.all(func(d): return not d.visible)
-	shop.set_decals(true)
-	_check("C5 the shop's keys still work embedded: F2 gives back every material, F3 hides and restores its decals",
-		before == after and hidden and shop.decals.all(func(d): return d.visible), "materials same %s decals %s" % [before == after, hidden])
+	lane.set_decals(true)
+	_check("C5 the shop's keys work through the lane: F2 forms it and gives back every material, F3 hides and restores its decals",
+		formed and before == after and hidden and shop.decals.all(func(d): return d.visible),
+		"formed %s materials same %s decals %s" % [formed, before == after, hidden])
 
 
 ## Task 4: the bay's pieces along the lane in the walk's order, a body passing them all, the services and vault its
@@ -311,6 +314,37 @@ func _vents() -> void:
 	_check("L3 the ánimas come up by the vents too, three more ways, each its own kind and size",
 		sources.size() == 3 and at_vents and apart, "sources %d at vents %s sizes %s kinds %s" % [sources.size(), at_vents, means, kinds])
 
+	# Out of a wall's grille they stay in front of the wall: wandering with no candle about (any way round it), or
+	# flinching from someone stood against the wall.
+	var souls: Node3D = (load("res://scripts/Visual/Animas.gd") as GDScript).new()
+	souls.mouth = "wall"
+	souls.lanes = PackedFloat32Array([0.25, 0.45])
+	souls.count = 4
+	souls.want_out = 4
+	souls.seed = 5
+	souls.candles = PackedVector3Array()
+	var someone := Node3D.new()
+	add_child(someone)
+	someone.global_position = Vector3(60.0, 0.0, 60.0)
+	souls.flee_from = someone
+	add_child(souls)
+	souls.global_position = Vector3(40.0, 0.0, 40.0)
+	var behind := []
+	for k in 120:
+		souls.rise_now()
+		await _frames(10)
+		for i in souls.count:
+			var state: String = souls.state_of(i)
+			var at: Vector3 = souls._souls[i]["at"]
+			if state in ["seeking", "warming", "straining", "pleading", "escorting", "hiding"] and at.z < 0.0:
+				behind.append("%s %.2f" % [state, at.z])
+	someone.global_position = souls.to_global(Vector3(0.0, 0.0, 0.4))
+	var flinched: Vector3 = souls._flinch(Vector3(0.0, 0.8, 0.1))
+	souls.queue_free()
+	someone.queue_free()
+	_check("L4 a wall's ánimas stay in front of their wall, wandering or flinching",
+		behind.is_empty() and flinched.z >= 0.0, "behind %d %s; flinched to %s" % [behind.size(), behind.slice(0, 4), flinched])
+
 
 ## The nahual travels the works: gone from one haunt, back at another out of sight; while it is away its eyes look
 ## out of the culvert, and close when someone comes near, or when it is back.
@@ -509,14 +543,35 @@ func _pockets() -> void:
 	# Marked sound: every pocket's emitters named for what will sound there, all silent; nothing of the bay's rejected
 	# sounds playing in the lane (the shop's own are its).
 	var empty := pockets.filter(func(p): return p["emitters"].is_empty()).map(func(p): return p["name"])
-	var sounding := []
-	for player: Node in lane.find_children("*", "AudioStreamPlayer*", true, false):
-		if lane.shop != null and lane.shop.is_ancestor_of(player):
-			continue
-		if player.get("stream") != null:
-			sounding.append(String(player.name))
-	_check("C18 every pocket has its emitters, all silent (no stream), and none of the bay's sounds plays in the lane",
-		pockets.size() == 5 and empty.is_empty() and sounding.is_empty(), "without emitters %s sounding %s" % [empty, sounding.slice(0, 6)])
+	# (Found first: a check that finds no players proves nothing. Then again after both trains have passed by, which
+	# load the bay's sounds of their own.)
+	var players := _players()
+	var sounding := _sounding(players)
+	if lane.train != null:
+		lane.train.began.emit()
+		lane.train.peaked.emit()
+	if lane.dark_train != null:
+		lane.dark_train.began.emit()
+		lane.dark_train.peaked.emit()
+	await _frames(5)
+	sounding += _sounding(_players())
+	_check("C18 every pocket has its emitters, all silent (no stream), and none of the bay's sounds plays in the lane, even after the trains",
+		pockets.size() == 5 and empty.is_empty() and players.size() >= 6 and sounding.is_empty(),
+		"without emitters %s; players %d; sounding %s" % [empty, players.size(), sounding.slice(0, 6)])
+
+
+## Every sound player in the lane but the shop's (its sounds are its own).
+## The lane's sound players, but the shop's (its own) and the ánimas' voices (the user's pick, Oct 24).
+func _players() -> Array:
+	var found := lane.find_children("*", "AudioStreamPlayer", true, false) + lane.find_children("*", "AudioStreamPlayer3D", true, false)
+	var voices := []
+	for souls in lane.find_children("*", "Node3D", true, false).filter(func(n): return n.get_script() == lane.AnimasScript):
+		voices.append_array(souls.voices)
+	return found.filter(func(p): return (lane.shop == null or not lane.shop.is_ancestor_of(p)) and not p in voices)
+
+
+func _sounding(players: Array) -> Array:
+	return players.filter(func(p): return p.get("stream") != null or p.call("is_playing")).map(func(p): return String(p.name))
 
 
 ## The crowd coming and going: shades forming, walking their routes with their feet stepping, coming apart; busy at the
@@ -571,9 +626,17 @@ func _crowd_of_shades() -> void:
 	# A surge after the dark train; a shade walked into comes apart.
 	var surged := 0
 	var scattered := 0
-	if crowd != null and lane.train != null:
-		var before: int = crowd.started["into_lane"]
+	var after_company := 0
+	if crowd != null and lane.dark_train != null:
+		# (The Company's own trains bring no surge: only the dark train, passing.)
+		await _frames(300)
+		var was_quiet: int = crowd.started["into_lane"]
 		lane.train.began.emit()
+		lane.train.peaked.emit()
+		await _frames(60)
+		after_company = crowd.started["into_lane"] - was_quiet
+		var before: int = crowd.started["into_lane"]
+		lane.dark_train.peaked.emit()
 		await _frames(300)
 		surged = crowd.started["into_lane"] - before
 		var walker: Dictionary = crowd.start("into_lane", true)
@@ -583,8 +646,9 @@ func _crowd_of_shades() -> void:
 			player.global_position = walker["shade"].global_position + Vector3(0.0, 1.05, 0.0)
 			await _frames(45)
 			scattered = crowd.scattered - was
-	_check("C22 after the dark train a surge pours in from the mouth; walked into, a shade comes apart",
-		surged >= 4 and scattered >= 1, "surged %d scattered %d" % [surged, scattered])
+	_check("C22 after the dark train a surge pours in from the mouth (none after the Company's); walked into, a shade comes apart",
+		surged >= 4 and after_company <= 1 and scattered >= 1,
+		"surged %d after the Company's train %d scattered %d" % [surged, after_company, scattered])
 
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:

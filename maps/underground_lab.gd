@@ -238,9 +238,11 @@ var _form := false
 var inspection_sections: Array[Node3D] = []
 var _work_on := true
 ## Set into a larger map (maps/metro: the candle lane): its player is the map's (`host_player`), and the bay keeps
-## none of its own environment or key help (the map has its own). Set before _ready.
+## none of its own environment, keys or key help (the map has its own). Set before _ready.
 var embedded := false
 var host_player: Node3D
+## Its sounds silenced (the candle lane's, until the user's recordings): nothing arms one again.
+var hushed := false
 
 
 func _ready() -> void:
@@ -275,7 +277,7 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not (event is InputEventKey and event.pressed and not event.echo):
+	if embedded or not (event is InputEventKey and event.pressed and not event.echo):
 		return
 
 	match event.keycode:
@@ -742,6 +744,8 @@ func _train() -> void:
 	add_child(_rattle)
 	_rattle.position = SHELVES_AT
 	train.peaked.connect(func():
+		if hushed:
+			return
 		_rattle.stream = load(RATTLES[rattles % RATTLES.size()])
 		_rattle.play()
 		rattles += 1)
@@ -795,8 +799,11 @@ func _candle_flames() -> void:
 
 	var wicks: Array = []
 
+	# (The wicks in the bay's frame, the flames placed in the world's: wherever the bay is set.)
 	for list in (JSON.parse_string(FileAccess.get_file_as_string(WICKS)) as Dictionary).values():
-		wicks += list
+		for w in list:
+			var at := to_global(Vector3(w[0], w[1], w[2]))
+			wicks.append([at.x, at.y, at.z])
 
 	if wicks.is_empty():
 		return
@@ -1177,7 +1184,7 @@ func _furnish() -> void:
 	_decal("soot", Vector3(VENT_X, 1.0, BACK_WALL + 0.1), Vector3(0.8, 0.4, 1.0), Vector3(90, 0, 0)).name = "decal_soot_vent"
 
 
-## A looping sound at `at`, heard to `reach` m.
+## A looping sound at `at` (world), heard to `reach` m.
 func _loop(node_name: String, path: String, at: Vector3, db: float, reach: float) -> AudioStreamPlayer3D:
 	var sound := AudioStreamPlayer3D.new()
 	sound.name = node_name
@@ -1187,7 +1194,7 @@ func _loop(node_name: String, path: String, at: Vector3, db: float, reach: float
 	sound.volume_db = db
 	sound.autoplay = true
 	add_child(sound)
-	sound.position = at
+	sound.global_position = at
 	return sound
 
 

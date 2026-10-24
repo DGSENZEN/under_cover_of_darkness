@@ -3,7 +3,8 @@ extends Node3D
 ## tall shadow of a man in a sombrero crosses the tiled wall where no one stands (the procession's
 ## dead man, Mignola's black shape: textures/painted/underground/shadow_figure.png). It only crosses
 ## where the watcher sees it from the corner of their eye; the moment they look at it, it is gone.
-## Its wall runs along X at `wall_z`; it crosses between `from_x` and `to_x`.
+## Its wall runs along X at `wall_z`; it crosses between `from_x` and `to_x` (all in its parent's frame: it stands at
+## its parent's origin, wherever that is set).
 
 const IMAGE := "res://textures/painted/underground/shadow_figure.png"
 ## Its size on the wall (m: wide, tall, and how far the decal reaches into the wall), how fast it
@@ -51,7 +52,7 @@ func _ready() -> void:
 	decal.rotation_degrees = Vector3(90.0, 180.0, 0.0) if far else Vector3(-90.0, 0.0, 180.0)
 
 
-## Where it crosses (the middle of its way, at its height on the wall).
+## Where it crosses (the middle of its way, at its height on the wall; its own frame).
 func crossing_middle() -> Vector3:
 	return Vector3((from_x + to_x) / 2.0, SIZE.z / 2.0, wall_z)
 
@@ -59,12 +60,12 @@ func crossing_middle() -> Vector3:
 ## It crosses now, from whichever end is farther from where the eye looks.
 func cross_now() -> void:
 	var height := SIZE.z / 2.0
-	var from_left := _angle_to(Vector3(from_x, height, wall_z)) > _angle_to(Vector3(to_x, height, wall_z))
+	var from_left := _angle_to(to_global(Vector3(from_x, height, wall_z))) > _angle_to(to_global(Vector3(to_x, height, wall_z)))
 	_going = 1 if from_left else -1
 	_x = from_x if from_left else to_x
 	_seen = false
 	decal.visible = true
-	decal.global_position = Vector3(_x, SIZE.z / 2.0, wall_z + (-0.15 if far else 0.15))
+	decal.position = Vector3(_x, SIZE.z / 2.0, wall_z + (-0.15 if far else 0.15))
 
 
 func _process(delta: float) -> void:
@@ -72,12 +73,12 @@ func _process(delta: float) -> void:
 		_next -= delta
 		if _next <= 0.0:
 			_next = _rng.randf_range(EVERY.x, EVERY.y)
-			if _corner_of_eye(crossing_middle()):
+			if _corner_of_eye(to_global(crossing_middle())):
 				cross_now()
 		return
 
 	_x += _going * PACE * delta
-	decal.global_position.x = _x
+	decal.position.x = _x
 	var looked := _looked_at(decal.global_position)
 	_seen = _seen or looked
 	var alpha := decal.modulate.a

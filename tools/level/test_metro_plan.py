@@ -236,12 +236,16 @@ class MetroPlan(unittest.TestCase):
         lane = _space("candle_lane")
         xs = [p[0] for p in lane["polygon"]]
         zs = [p[1] for p in lane["polygon"]]
-        # (33.6 m: the bay's 1.2 m tile modules and 4.8 m vault spans fill it exactly, 28 and 7 of them.)
-        self.assertEqual((min(xs), max(xs), min(zs), max(zs)), (-4.0, 29.6, 72.0, 78.9))
+        # (33.6 m inside: the bay's 1.2 m tile modules and 4.8 m vault spans fill it exactly, 28 and 7 of them;
+        # its east end wall, tiles and backing, 0.367 m more, the chapel beginning behind it.)
+        self.assertEqual((min(xs), max(xs), min(zs), max(zs)), (-4.0, 29.967, 72.0, 78.9))
         self.assertEqual((lane["floor"], lane["height"]), (-11.0, 4.0))
         chapel = _space("chapel")
-        self.assertEqual(min(p[0] for p in chapel["polygon"]), 29.6)
-        self.assertIn(("candle_lane", (29.6, 74.5)), [(o["to"], tuple(o["at"])) for o in chapel["openings"]])
+        self.assertEqual(min(p[0] for p in chapel["polygon"]), 29.967)
+        # (The chapel's doorway the lane's own: 3.1 x 2.85 m, its middle at 74.55.)
+        for name, other in (("candle_lane", "chapel"), ("chapel", "candle_lane")):
+            o = next(o for o in _space(name)["openings"] if o["to"] == other)
+            self.assertEqual((tuple(o["at"]), o["width"], o["height"]), ((29.967, 74.55), 3.1, 2.85), name)
 
     def test_the_librarian_shop_opens_off_the_lane(self):
         shop = _space("librarian_shop")
@@ -257,7 +261,8 @@ class MetroPlan(unittest.TestCase):
     def test_the_lane_opens_wide_on_the_pasaje(self):
         for name, other in (("candle_lane", "pasaje"), ("pasaje", "candle_lane")):
             o = next(o for o in _space(name)["openings"] if o["to"] == other)
-            self.assertEqual((tuple(o["at"]), o["width"]), ((-4.0, 75.45), 6.9), name)
+            # (Its whole height too: the lane's 4 m, no lintel across its vault.)
+            self.assertEqual((tuple(o["at"]), o["width"], o["height"]), ((-4.0, 75.45), 6.9, 4.0), name)
 
     def test_overlapping_spaces_fail(self):
         # The herb market moved up into the hall's volume.

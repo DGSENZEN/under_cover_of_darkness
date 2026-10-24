@@ -133,6 +133,9 @@ const ARCH_SPILL := [Vector3(6.2, 1.9, FAR_WALL - 0.3), Color(1.0, 0.68, 0.38), 
 const BACKDROP_GLOW := Vector2(0.035, 0.03)
 ## How much of the stubs' lights the fog takes up.
 const STUB_HAZE := 0.15
+## Set into the Metro, how far its walls' and vault's ends stand in behind the map's walls (m): the map's are faces on
+## the plan's lines, the Pasaje's at the mouth, the chapel's behind the east end wall.
+const SEAM := 0.01
 
 ## Judged on its own (the stubs at its ends), or set into maps/metro (no stubs: the map's spaces meet it).
 @export var standalone := true
@@ -187,6 +190,8 @@ func _ready() -> void:
 	_hush()
 	_pockets()
 	_stubs()
+	if embedded:
+		_fit_into_plan()
 	shop = LIBRARY.instantiate()
 	shop.name = "Library"
 	shop.standalone = false
@@ -194,6 +199,26 @@ func _ready() -> void:
 	shop.transform = Transform3D(Basis(Vector3.UP, PI), SHOP_AT)
 	add_child(shop)
 	inspection_sections.append(shop)
+
+
+## The inspection keys reach the shop through the lane (its white form light kept off: the lane's lights the set).
+func set_work_lights(on: bool) -> void:
+	super.set_work_lights(on)
+	if is_instance_valid(shop):
+		shop.set_work_lights(on)
+
+
+func set_form(on: bool) -> void:
+	super.set_form(on)
+	if is_instance_valid(shop):
+		shop.set_form(on)
+		shop.form_light.visible = false
+
+
+func set_decals(on: bool) -> void:
+	super.set_decals(on)
+	if is_instance_valid(shop):
+		shop.set_decals(on)
 
 
 ## The vents' ánimas fear what the drain's fear and gather where they gather (the dark train, the procession).
@@ -285,19 +310,26 @@ func _people() -> void:
 			"keep": route[3], "along": route[4]})
 	crowd_of_shades.walked_into_by = player
 	add_child(crowd_of_shades)
-	if train != null:
-		train.began.connect(crowd_of_shades.surge)
+	if dark_train != null:
+		dark_train.peaked.connect(crowd_of_shades.surge)
 
 
 ## The bay's sounds silenced here (all judged bad, Oct 17; the lane's are marked and wait for the user's recordings):
-## its players emptied, its sound-only crowd stilled. (Before the shop comes in: its sounds are its own.)
+## its players emptied, its sound-only crowd stilled, nothing arming one again. (Before the shop comes in: its sounds
+## are its own. The ánimas' voices are kept: the user's pick, Oct 24.)
 func _hush() -> void:
+	hushed = true
 	if crowd != null:
 		crowd.process_mode = Node.PROCESS_MODE_DISABLED
-	for player: Node in find_children("*", "AudioStreamPlayer*", true, false):
-		player.call("stop")
-		player.set("autoplay", false)
-		player.set("stream", null)
+	var voices := []
+	for souls: Node3D in find_children("*", "Node3D", true, false).filter(func(n): return n.get_script() == AnimasScript):
+		voices.append_array(souls.voices)
+	for sound: Node in find_children("*", "AudioStreamPlayer", true, false) + find_children("*", "AudioStreamPlayer3D", true, false):
+		if sound in voices:
+			continue
+		sound.call("stop")
+		sound.set("autoplay", false)
+		sound.set("stream", null)
 
 
 ## The walk's pockets (POCKETS): each with its emitters, silent, where its sounds will be.
@@ -383,6 +415,34 @@ func _shop_front() -> void:
 			if n is Decal:
 				decals.erase(n)
 			n.free()
+
+
+## Set into the Metro: the walls, tiles and vault that run to the mouth, and the east end wall and vault where the
+## chapel begins behind them, ended SEAM short, so no face of theirs meets a face of the map's walls.
+func _fit_into_plan() -> void:
+	var west := -half_run
+	var east := half_run + WALL_FACE + WALL
+	for mesh: MeshInstance3D in get_children().filter(func(n): return n is MeshInstance3D):
+		if not (mesh.mesh is BoxMesh or mesh in wall_panels):
+			continue
+		var box := mesh.transform * mesh.get_aabb()
+		var lo := box.position.x
+		var hi := box.end.x
+		var to_lo := west + SEAM if lo < west + 0.001 else lo
+		var to_hi := east - SEAM if hi > east - 0.001 else hi
+		if to_lo == lo and to_hi == hi:
+			continue
+		if mesh.mesh is BoxMesh:
+			(mesh.mesh as BoxMesh).size.x = to_hi - to_lo
+			mesh.position.x = (to_lo + to_hi) / 2.0
+			for shape: CollisionShape3D in mesh.find_children("*", "CollisionShape3D", true, false):
+				(shape.shape as BoxShape3D).size.x = to_hi - to_lo
+		else:
+			# (A tile panel drawn in a hair, from its other end.)
+			var keep := hi if to_lo != lo else lo
+			var by := (to_hi - to_lo) / (hi - lo)
+			mesh.transform = Transform3D(Basis.from_scale(Vector3(by, 1.0, 1.0)), Vector3(keep * (1.0 - by), 0.0, 0.0)) \
+				* mesh.transform
 
 
 ## The east end: its tiles over the doorway gone, its wall rebuilt round the chapel's doorway.

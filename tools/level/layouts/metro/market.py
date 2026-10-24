@@ -20,7 +20,7 @@ def lay(P):
     P.space("pasaje", rect(-14, 34, -4, 150), floor=MARKET, height=4.5, layer=2,
             openings=[{"to": "market_stairs", "at": (-10, 34)}, {"to": "cistern_lane", "at": (-14, 43)},
                       {"to": "herb_market", "at": (-14, 74), "width": 4.0},
-                      {"to": "candle_lane", "at": (-4, 75.45), "width": 6.9},
+                      {"to": "candle_lane", "at": (-4, 75.45), "width": 6.9, "height": 4.0},
                       {"to": "tianguis_lane", "at": (-4, 122.5)}, {"to": "rag_lane", "at": (-14, 140.5)},
                       {"to": "square_s", "at": (-9, 150), "width": 6.0}])
 
@@ -37,14 +37,18 @@ def lay(P):
     # East: the candle lane to the chapel, on up to the south-east corridor; widened to the corridor bay's section
     # (docs/superpowers/specs/2026-10-23-candle-lane-design.md), open its whole width on the Pasaje, the librarian's
     # shop off its south side.
-    # (33.6 m long: the bay's 1.2 m tile modules and 4.8 m vault spans fill it exactly.)
-    P.space("candle_lane", rect(-4, 72, 29.6, 78.9), floor=MARKET, height=4.0, layer=2,
-            openings=[{"to": "pasaje", "at": (-4, 75.45), "width": 6.9}, {"to": "chapel", "at": (29.6, 74.5)},
+    # (33.6 m long inside: the bay's 1.2 m tile modules and 4.8 m vault spans fill it exactly; its east end wall,
+    # tiles and backing, 0.367 m more, the chapel beginning behind it. Its openings its own size: the mouth its whole
+    # height, the chapel's doorway the set's.)
+    P.space("candle_lane", rect(-4, 72, 29.967, 78.9), floor=MARKET, height=4.0, layer=2,
+            openings=[{"to": "pasaje", "at": (-4, 75.45), "width": 6.9, "height": 4.0},
+                      {"to": "chapel", "at": (29.967, 74.55), "width": 3.1, "height": 2.85},
                       {"to": "librarian_shop", "at": (19, 78.9)}])
     P.space("librarian_shop", rect(15, 78.9, 23, 85.65), floor=MARKET, height=4.5, interior=True, layer=2,
             openings=[{"to": "candle_lane", "at": (19, 78.9)}])
-    P.space("chapel", rect(29.6, 62, 45.6, 86), floor=MARKET, height=5.0, layer=2,
-            openings=[{"to": "candle_lane", "at": (29.6, 74.5)}, {"to": "lane_se", "at": (45.6, 72.5)}])
+    P.space("chapel", rect(29.967, 62, 45.6, 86), floor=MARKET, height=5.0, layer=2,
+            openings=[{"to": "candle_lane", "at": (29.967, 74.55), "width": 3.1, "height": 2.85},
+                      {"to": "lane_se", "at": (45.6, 72.5)}])
     P.space("lane_se", rect(45.6, 70, 87, 75), floor=MARKET, height=6.0, layer=2,
             openings=[{"to": "chapel", "at": (45.6, 72.5)}, {"to": "corridor_se", "at": (87, 72.5)}])
     P.route("lane_se_flight", "stair", [(87, HALL, 72.5), (79, MARKET, 72.5)])

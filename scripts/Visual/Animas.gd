@@ -75,10 +75,11 @@ const SEPARATE_RATE := 6.0
 const PLEAD_APART := 0.42
 const SHARE_TURN := 1.3
 ## A wall grille: how far behind its face they wait, how far out a climbing hand holds (its fingers through), where
-## one torn free lurches to (out, up from its slot).
+## one torn free lurches to (out, up from its slot); how far out of the wall one out of its slot keeps.
 const BEHIND := -0.24
 const GRIP_OUT := 0.05
 const FREED_OUT := Vector2(0.45, 0.35)
+const WALL_ROOM := 0.2
 ## A lurker: how far out of its slot it hooks, how long it stays, how near someone may come before it draws back.
 const LURK_OUT := 0.1
 const LURK_FOR := Vector2(6.0, 14.0)
@@ -572,10 +573,11 @@ func _choose(i: int) -> void:
 		soul["goal"] = _warm_spot(soul["candle"], i)
 		soul["from"] = to_local(candles[soul["candle"]])
 	else:
-		# (No candles here: about the drain.)
+		# (No candles here: about the drain; about the grille, in front of its wall.)
 		var a := _rng.randf_range(0.0, TAU)
 		var r := _rng.randf_range(0.4, tether * 0.7)
-		soul["goal"] = Vector3(cos(a) * r, _rng.randf_range(HEIGHT.x, HEIGHT.y), sin(a) * r)
+		var out := maxf(absf(sin(a)) * r, WALL_ROOM) if mouth == "wall" else sin(a) * r
+		soul["goal"] = Vector3(cos(a) * r, _rng.randf_range(HEIGHT.x, HEIGHT.y), out)
 		soul["from"] = soul["goal"]
 
 	soul["state"] = "seeking"
@@ -605,11 +607,13 @@ func _warm_spot(c: int, i := -1) -> Vector3:
 	return flame + out + Vector3(0.0, -WARM_DROP, 0.0)
 
 
-## A point held within the tether, at a height.
+## A point held within the tether, at a height (from a wall, in front of it).
 func _tethered(at: Vector3, y: float) -> Vector3:
 	var flat := _flat(at)
 	if flat.length() > tether - 0.05:
 		flat = flat.normalized() * (tether - 0.05)
+	if mouth == "wall":
+		flat.z = maxf(flat.z, WALL_ROOM)
 	return Vector3(flat.x, y, flat.z)
 
 
@@ -834,6 +838,9 @@ func _move(i: int, delta: float, hidden: bool) -> void:
 		# (Pushed only where nothing solid stands in the way.)
 		if push.length() > 0.0005 and _clear(at, at + push):
 			at += push
+		# (Out of a wall's grille, kept in front of the wall.)
+		if mouth == "wall":
+			at.z = maxf(at.z, minf(was.z, WALL_ROOM))
 
 	if state in ["seeking", "warming", "straining", "pleading", "escorting", "dragged", "hiding"]:
 		at = _flinch(at)
@@ -949,7 +956,8 @@ func _flinch(at: Vector3) -> Vector3:
 		var away := off.normalized() if off.length() > 0.01 else Vector3.RIGHT
 		var to := them + away * FLINCH
 		at.x = to.x
-		at.z = to.z
+		# (From a wall, never further into it than it was.)
+		at.z = maxf(to.z, minf(at.z, WALL_ROOM)) if mouth == "wall" else to.z
 
 	return at
 
