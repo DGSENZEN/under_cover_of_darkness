@@ -7,6 +7,7 @@ extends Node3D
 ## its pages to +x, up y. What each kind does once open (the novels' words, the studies' spectres, the spells'
 ## chains) is the effects' (Part 2); here they share one look.
 
+signal opening(book: LiveBook)
 signal opened(book: LiveBook)
 signal closed(book: LiveBook)
 
@@ -94,8 +95,12 @@ func _process(delta: float) -> void:
 		elif far < OPEN_NEAR and _in_sight(eye):
 			wanted = true
 
+	var was := open
 	open = move_toward(open, 1.0 if wanted else 0.0, delta / (OPEN_TIME if wanted else CLOSE_TIME))
 	_pose()
+
+	if was <= 0.0 and open > 0.0:
+		opening.emit(self)
 
 	if open >= 1.0 and not _was_open:
 		_was_open = true

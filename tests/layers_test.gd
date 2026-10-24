@@ -6,6 +6,7 @@ extends Node3D
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
 const PipeSoundsScript := preload("res://scripts/Audio/PipeSounds.gd")
+const LIBRARY := preload("res://maps/library_lab.tscn")
 
 var results: Array[String] = []
 var failures := 0
@@ -21,8 +22,10 @@ func _ready() -> void:
 	await _focus()
 	await _neon()
 	await _pipes()
+	await _book_cues()
 	# (Let the audio thread let go of what played before quitting.)
 	Focus.reset()
+	Sfx.silence()
 	Sfx._bank.clear()
 	if Sfx._node != null and is_instance_valid(Sfx._node):
 		Sfx._node.queue_free()
@@ -200,6 +203,80 @@ func _pipes() -> void:
 		and closest >= 1.39, "%d drops, closest %.2f s" % [drops.size(), closest])
 	joint.queue_free()
 	await _frames(2)
+
+
+## B1-B3: the books say when they move.
+func _book_cues() -> void:
+	Focus.reset()
+	var lab: Node3D = LIBRARY.instantiate()
+	add_child(lab)
+	await _frames(5)
+	var stir: Node3D = lab.get("stir")
+	var floating: Node3D = lab.get("floating")
+	eye.make_current()
+
+	# A shelf changed while no one looks (the eye far off, looking away).
+	var away := Camera3D.new()
+	add_child(away)
+	away.global_transform = Transform3D(Basis.IDENTITY, lab.to_global(Vector3(0.0, 1.6, 30.0))).looking_at(
+		lab.to_global(Vector3(0.0, 1.6, 60.0)), Vector3.UP)
+	stir.set("watcher", away)
+	var said := []
+	if stir.has_signal("stirred"):
+		stir.connect("stirred", func(board: int, kind: StringName, at: Vector3) -> void: said.append([board, kind, at]))
+	var changed := -1
+	for i in lab.book_spots.size():
+		stir._seen[i] = -100.0
+		if stir.try_board(i):
+			changed = i
+			break
+	var middle: Vector3 = (lab.book_spots[changed]["xform"] as Transform3D).origin if changed >= 0 else Vector3.INF
+	_check("B1 a shelf that changes unseen says how it changed", changed >= 0 and said.size() == 1
+		and said[0][1] in [&"by_height", &"push_home", &"close_gap", &"stand_up", &"square_stack"]
+		and (said[0][2] as Vector3).distance_to(middle) < 1.0, "board %d said %s" % [changed, said])
+
+	# A floating book brought home, and on up again.
+	var moves := []
+	if floating.has_signal("moved"):
+		floating.connect("moved", func(k: int, what: StringName, at: Vector3) -> void: moves.append([k, what]))
+	var k: int = floating.transfers()[0]
+	floating.come_home(k)
+	for f in 4800:
+		await get_tree().process_frame
+		if moves.any(func(m): return m[0] == k and m[1] == &"rising"):
+			break
+	var order: Array = moves.filter(func(m): return m[0] == k).map(func(m): return m[1])
+	_check("B2 a floating book tells when it comes down, lands, lifts and rises",
+		order.slice(0, 3) == [&"descending", &"resting", &"rising"], "%s" % [order])
+
+	# A live book starting to open before someone near.
+	var book: LiveBook = lab.live_books[7]
+	var watcher := Node3D.new()
+	add_child(watcher)
+	book.watcher = watcher
+	# (Shut first: no one near it.)
+	watcher.global_position = book._middle() + Vector3.UP * 50.0
+	for f in 120:
+		await get_tree().process_frame
+		if book.open <= 0.0:
+			break
+	watcher.global_position = book._middle() + Vector3.UP * 0.15
+	# (Lambdas take locals by value: the frames are kept in an array.)
+	var at := [0, -1, -1]
+	if book.has_signal("opening"):
+		book.connect("opening", func(_b) -> void: at[1] = at[0])
+	book.opened.connect(func(_b) -> void: at[2] = at[0])
+	for f in 120:
+		await get_tree().process_frame
+		at[0] += 1
+	var began: int = at[1]
+	var done: int = at[2]
+	_check("B3 a live book tells when it starts to open", began >= 0 and done > began
+		and (done - began) >= int(LiveBook.OPEN_TIME * 0.8 * 60.0), "began %d, open %d" % [began, done])
+	lab.queue_free()
+	away.queue_free()
+	watcher.queue_free()
+	await _frames(3)
 
 
 func _check(label: String, ok: bool, detail: String) -> void:

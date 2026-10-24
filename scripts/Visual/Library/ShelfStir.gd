@@ -18,10 +18,14 @@ const RETRY := 2.0
 const LIFT := 0.002
 const GAP := 0.003
 
+## A board changed: which, how (by_height, push_home, close_gap, stand_up, square_stack), its middle (world).
+signal stirred(board: int, kind: StringName, at: Vector3)
+
 ## Who is looking (a Camera3D); else the drawing camera.
 var watcher: Node3D
-## How many changes it has made.
+## How many changes it has made; how the last was made.
 var changes := 0
+var last_kind := &""
 
 var _lab: Node3D
 var _seen := PackedFloat32Array()
@@ -92,6 +96,9 @@ func try_board(i: int) -> bool:
 		var draw: MultiMeshInstance3D = _lab.book_draws[entry["draw"]]
 		draw.multimesh.set_instance_transform(entry["instance"], _frames[i] * (move[1] as Transform3D))
 	changes += 1
+	var spot: Dictionary = _lab.book_spots[i]
+	var middle := Vector3((spot["x0"] + spot["x1"]) * 0.5, spot["top"] + spot["head"] * 0.5, (spot["z0"] + spot["z1"]) * 0.5)
+	stirred.emit(i, last_kind, (spot["xform"] as Transform3D) * middle)
 	return true
 
 
@@ -153,6 +160,7 @@ func _change(i: int) -> Array:
 	for attempt: Callable in tries:
 		var moves: Array = attempt.call(spot, entries)
 		if not moves.is_empty() and _valid(spot, entries, moves):
+			last_kind = StringName(attempt.get_method().trim_prefix("_"))
 			return moves
 	return []
 

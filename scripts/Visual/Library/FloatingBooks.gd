@@ -7,6 +7,9 @@ extends Node3D
 ## and then, come down to a place kept empty for them on a shelf (the chronology case's, the metaphysics case's), lie
 ## there shut a while, and rise to their ring again. Positions in the shop's frame.
 
+## A book coming down changed what it does: k, what (descending, resting, rising, aloft), where it is (world).
+signal moved(k: int, what: StringName, at: Vector3)
+
 const LIVE_HINGE := Vector3(-0.012, 0.0, 0.03)
 ## The rings: across, along (the shop's x, z), how high, how fast round (rad/s); two books on each, opposite.
 const MIDDLE := Vector3(0.0, 0.0, -2.9)
@@ -94,6 +97,7 @@ func come_home(k: int) -> void:
 	t["clock"] = 0.0
 	t["from"] = books[k].transform
 	t["rest_for"] = 3.0
+	moved.emit(k, &"descending", books[k].global_position)
 
 
 func _process(delta: float) -> void:
@@ -122,6 +126,7 @@ func _place(delta: float) -> void:
 				var gap := Vector2(aloft.origin.x - t["front"].origin.x, aloft.origin.z - t["front"].origin.z).length()
 				if t["wait"] <= 0.0 and gap < NEAR:
 					t["state"] = &"descending"
+					moved.emit(k, &"descending", book.global_position)
 					t["clock"] = 0.0
 					t["from"] = aloft
 					t["rest_for"] = _rng.randf_range(REST.x, REST.y)
@@ -137,6 +142,7 @@ func _place(delta: float) -> void:
 					book.open = 0.0
 					if v >= 1.0:
 						t["state"] = &"resting"
+						moved.emit(k, &"resting", book.global_position)
 						t["clock"] = 0.0
 			&"resting":
 				book.transform = t["rest"]
@@ -145,6 +151,7 @@ func _place(delta: float) -> void:
 				var gap := Vector2(aloft.origin.x - t["front"].origin.x, aloft.origin.z - t["front"].origin.z).length()
 				if t["clock"] >= t["rest_for"] and gap < NEAR:
 					t["state"] = &"rising"
+					moved.emit(k, &"rising", book.global_position)
 					t["clock"] = 0.0
 			&"rising":
 				# Off the board, then up to its ring where it is now (the ring goes on turning meanwhile).
@@ -157,6 +164,7 @@ func _place(delta: float) -> void:
 					book.open = lerpf(0.0, _fan(k), smoothstep(0.2, 1.0, u))
 					if u >= 1.0:
 						t["state"] = &"aloft"
+						moved.emit(k, &"aloft", book.global_position)
 						t["clock"] = 0.0
 						t["wait"] = _rng.randf_range(ALOFT.x, ALOFT.y)
 		book._pose()
