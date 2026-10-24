@@ -14,8 +14,10 @@ const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
-const GROUPS := [&"ward_pour", &"ward_skirt", &"ward_ember", &"ward_puncture", &"ward_ripple", &"ward_drop", &"ward_drain"]
+const GROUPS := [&"ward_pour", &"ward_skirt", &"ward_ember", &"ward_puncture", &"ward_drop", &"ward_drain",
+	&"ward_shell", &"ward_sigil", &"ward_streak", &"ward_ash", &"ward_glyph"]
 
 var player: CharacterBody3D
 var baker: NavigationRegion3D
@@ -69,6 +71,7 @@ func _run() -> void:
 	var early_glow := -1.0
 	var late_glow := -1.0
 	var on_view := false
+	var hand_glyphs := 0
 
 	for f in 23:
 		await get_tree().physics_frame
@@ -81,11 +84,13 @@ func _run() -> void:
 			late_tall = smoke.scale.y if smoke != null and smoke.is_visible_in_tree() else -1.0
 			late_glow = hand.palm_glow()
 			on_view = smoke != null and smoke.get_children().all(func(c): return not (c is VisualInstance3D) or (c as VisualInstance3D).layers == 1 << 18)
+			hand_glyphs = get_tree().get_nodes_in_group(&"ward_hand_glyph").filter(func(g): return (g as Node3D).is_visible_in_tree() and (g as VisualInstance3D).layers == 1 << 18).size()
 
 	_check("H1 casting the Ward, smoke curls up from the palm, growing, drawn in your view",
 		early_tall > 0.0 and late_tall > early_tall * 1.5 and on_view, "height %.2f -> %.2f, view %s" % [early_tall, late_tall, on_view])
 	_check("H2 embers of copal glow brighter in the palm as it builds", early_glow > 0.0 and late_glow > early_glow * 1.5,
 		"glow %.2f -> %.2f" % [early_glow, late_glow])
+	_check("H3 a ring of the invented script turns round the circle in your hand", hand_glyphs >= 8, "glyphs %d" % hand_glyphs)
 
 	# P1 P2 P3 the pour: a stream from the hand to the floor; the plumes rise
 	# front first; a skirt of smoke at the foot of the wall
@@ -104,6 +109,8 @@ func _run() -> void:
 			pour_ok = (span[0] as Vector3).y > 0.8 and absf((span[1] as Vector3).y) < 0.15
 
 	await _frames(4)
+	var fill_early: float = ward.shell_fill() if ward != null else -1.0
+	var written_early: Array = ward.glyph_presence() if ward != null else []
 	var front_eaten := -1.0
 	var back_eaten := -1.0
 
@@ -126,6 +133,62 @@ func _run() -> void:
 	var skirt := get_tree().get_nodes_in_group(&"ward_skirt")
 	_check("P3 by 0.75 s the whole wall stands on a skirt of smoke at its foot", risen and not skirt.is_empty() and ward != null and ward.is_ancestor_of(skirt[0]),
 		"risen %s skirts %d" % [risen, skirt.size()])
+
+	var tallest_before: float = ward._plumes[0].scale.y
+
+	# D1 D2 a shell of smoke the size of what it stops, filling up from the
+	# floor as the pour runs round
+	var shells := get_tree().get_nodes_in_group(&"ward_shell")
+	var shell_size: float = (shells[0] as MeshInstance3D).mesh.get_aabb().size.x * 0.5 if not shells.is_empty() else -1.0
+	_check("D1 a shell of smoke round you exactly the size of what the ward stops", shells.size() == 1 and ward.is_ancestor_of(shells[0]) and absf(shell_size - WardScript.RADIUS) < 0.03,
+		"shells %d radius %.2f" % [shells.size(), shell_size])
+	_check("D2 the shell fills up from the floor with the pour", fill_early >= 0.0 and fill_early < 0.5 and absf(ward.shell_fill() - 1.0) < 0.01,
+		"fill %.2f then %.2f" % [fill_early, ward.shell_fill()])
+
+	# D3 a burning line of copal on the floor at the wall's foot
+	var sigil := get_tree().get_nodes_in_group(&"ward_sigil")
+	var sigil_ok: bool = not sigil.is_empty()
+	for arc in sigil:
+		sigil_ok = sigil_ok and absf((arc as Node3D).global_position.y) < 0.06
+	_check("D3 a burning line of copal runs round the floor at the wall's foot", sigil_ok, "arcs %d" % sigil.size())
+
+	# D4 bands of brighter smoke circling the shell
+	var streaks := get_tree().get_nodes_in_group(&"ward_streak")
+	var turned_by := -1.0
+	if not streaks.is_empty():
+		var s0 := (streaks[0] as Node3D).global_position - ward.global_position
+		await _frames(10)
+		var s1 := (streaks[0] as Node3D).global_position - ward.global_position
+		turned_by = absf(angle_difference(atan2(s0.z, s0.x), atan2(s1.z, s1.x)))
+	_check("D4 three bands of brighter smoke circle the shell", streaks.size() == 3 and turned_by > 0.15, "bands %d turned %.2f rad in 10 frames" % [streaks.size(), turned_by])
+
+	# G1 G2 a circle written in the invented script on the floor inside the
+	# copal ring, written in round from the front
+	var glyphs := get_tree().get_nodes_in_group(&"ward_glyph")
+	var placed := not glyphs.is_empty()
+	var scripted := not glyphs.is_empty()
+	for g in glyphs:
+		var p := (g as Node3D).global_position - ward.global_position
+		var round_r := Vector2(p.x, p.z).length()
+		placed = placed and absf((g as Node3D).global_position.y) < 0.06 and round_r > 0.6 and round_r < 0.9
+		var code := String(g.get_meta(&"char", " ")).unicode_at(0)
+		scripted = scripted and code >= 0xE000 and code < 0xE000 + 40
+	_check("G1 a circle of the invented script lies on the floor inside the copal ring (most of its 26 places)", glyphs.size() >= 18 and glyphs.size() < WardScript.GLYPH_SLOTS and placed and scripted,
+		"glyphs %d placed %s scripted %s" % [glyphs.size(), placed, scripted])
+	var front_g: int = ward.glyph_nearest(ward.front_angle())
+	var back_g: int = ward.glyph_nearest(ward.front_angle() + PI)
+	_check("G2 it is written in round from the front with the pour", written_early.size() > maxi(front_g, back_g) and float(written_early[front_g]) > 0.3 and float(written_early[back_g]) < 0.05 \
+		and ward.glyph_presence().all(func(v): return float(v) > 0.95), "front %.2f back %.2f early" % [float(written_early[front_g]) if written_early.size() > front_g else -1.0, float(written_early[back_g]) if written_early.size() > back_g else -1.0])
+
+	# I1 from inside, the shell and the bands are faint
+	var inside_v: Variant = ward._shell.material_override.get_shader_parameter(&"inside")
+	var inside_at: float = float(inside_v) if inside_v != null else -1.0
+	_check("I1 seen from inside, the shell is faint and the bands are hidden", inside_at > 0.99 and streaks.all(func(b): return not (b as Node3D).is_visible_in_tree()),
+		"inside %.2f" % inside_at)
+
+	# D5 inside it, the world's sounds go dull
+	_check("D5 inside the ward the world is muffled (about 2.5 kHz)", Sfx.ward_muffle > 0.95 and absf(Sfx.world_cutoff_for(1.0, 0.0, 1.0) - Sfx.WARD_CUTOFF) < 1.0 and Sfx.WARD_CUTOFF <= 3000.0,
+		"muffle %.2f, cutoff %.0f Hz" % [Sfx.ward_muffle, Sfx.world_cutoff_for(1.0, 0.0, Sfx.ward_muffle)])
 
 	# S1 embers of copal drift up inside the smoke
 	var embers := get_tree().get_nodes_in_group(&"ward_ember")
@@ -154,15 +217,20 @@ func _run() -> void:
 	await get_tree().physics_frame
 	var punctures := get_tree().get_nodes_in_group(&"ward_puncture")
 	var punctured: bool = not punctures.is_empty() and (punctures[0] as Node3D).global_position.distance_to(at) < 0.15
-	var ripples := get_tree().get_nodes_in_group(&"ward_ripple")
-	var ripple_from := (ripples[0] as Node3D).scale.x if not ripples.is_empty() else -1.0
+	var hits: Array = ward.shell_hits()
+	var hit_where: bool = hits.size() == 1 and (hits[0][0] as Vector3).angle_to(ward.to_local(at).normalized()) < 0.1
+	var flare_at_hit: float = ward.shell_flare()
+	var glyph_glow: float = ward.glyph_glow()
 	await _frames(8)
-	var ripple_to := (ripples[0] as Node3D).scale.x if not ripples.is_empty() and is_instance_valid(ripples[0]) else -1.0
+	var spread_to: float = ward.shell_hits()[0][1] if ward.shell_hits().size() == 1 else -1.0
 	var puncture_left := get_tree().get_nodes_in_group(&"ward_puncture").size()
 	_check("B1 a stopped ball flashes a puncture where it struck, gone in a moment", punctured and puncture_left == 0,
 		"punctured %s, left after 0.15 s %d" % [punctured, puncture_left])
-	_check("B2 a ripple runs out through the wall from it", ripple_from > 0.0 and ripple_to > ripple_from * 2.0, "ripple %.2f -> %.2f" % [ripple_from, ripple_to])
-	await _frames(60)
+	_check("B2 the shell flares where it struck and a ripple runs out over it", hit_where and flare_at_hit > 0.5 and spread_to > 0.1,
+		"hit there %s, flare %.2f, ripple %.2f s on" % [hit_where, flare_at_hit, spread_to])
+	await _frames(32)
+	_check("B5 the ripple is gone from the shell in 0.6 s", ward.shell_hits().is_empty(), "hits %d" % ward.shell_hits().size())
+	_check("G3 the written circle brightens when a shot is stopped", glyph_glow > ward.glyph_glow() * 1.3, "glow %.2f then %.2f" % [glyph_glow, ward.glyph_glow()])
 	var drops := get_tree().get_nodes_in_group(&"ward_drop")
 	var ball_down: bool = drops.size() == 1 and (drops[0] as Node3D).global_position.y < 0.1 and String(drops[0].get_meta(&"kind", "")) == "ball"
 	_check("B3 the ball falls flattened to the floor", ball_down, "drops %d" % drops.size())
@@ -179,7 +247,7 @@ func _run() -> void:
 	arrow.gravity = 0.0
 	await _until(func(): return get_tree().get_nodes_in_group(&"ward_drop").any(func(d): return String(d.get_meta(&"kind", "")) == "arrow"), 40)
 	var arrow_drop: Array = get_tree().get_nodes_in_group(&"ward_drop").filter(func(d): return String(d.get_meta(&"kind", "")) == "arrow")
-	await _frames(60)
+	await _until(func(): return not arrow_drop.is_empty() and is_instance_valid(arrow_drop[0]) and (arrow_drop[0] as Node3D).global_position.y < 0.2, 60)
 	var arrow_down: bool = not arrow_drop.is_empty() and is_instance_valid(arrow_drop[0]) and (arrow_drop[0] as Node3D).global_position.y < 0.2
 	_check("B4 an arrow the ward stops falls dead to the floor", arrow_down, "dropped %d" % arrow_drop.size())
 	archer.queue_free()
@@ -187,7 +255,6 @@ func _run() -> void:
 	# E1 E2 the end: the plumes sink, the smoke drains off across the floor in
 	# a widening ring left where you stood, and it all goes
 	var stood: Vector3 = player.global_position
-	var tallest_before: float = ward._plumes[0].scale.y if is_instance_valid(ward) else -1.0
 	var held := [ward]
 	await _until(func(): return is_instance_valid(held[0]) and held[0]._life >= WardScript.LIFE - 0.2, 300)
 	var sinking: float = ward._plumes[0].scale.y if is_instance_valid(ward) else -1.0
@@ -204,7 +271,12 @@ func _run() -> void:
 		"drains %d on the floor %s, %.2f -> %.2f" % [drains.size(), drain_ok, drain_from, drain_to])
 	await _frames(90)
 	var left := _count_all() - get_tree().get_nodes_in_group(&"ward_drop").size()
-	_check("E3 nothing of the ward is left a second and a half after (what it stopped still lies there)", left == 0 and get_tree().get_nodes_in_group(&"ward_plume").is_empty(),
+	var ash := get_tree().get_nodes_in_group(&"ward_ash")
+	var ash_down: bool = not ash.is_empty() and absf((ash[0] as Node3D).global_position.y) < 0.06
+	left -= ash.size()
+	_check("E4 the copal ring is left as dim ash on the floor, and the muffle eases off", ash_down and Sfx.ward_muffle < 0.01,
+		"ash %d on the floor %s, muffle %.2f" % [ash.size(), ash_down, Sfx.ward_muffle])
+	_check("E3 nothing of the ward is left a second and a half after (what it stopped and the ash still lie there)", left == 0 and get_tree().get_nodes_in_group(&"ward_plume").is_empty(),
 		"effects %d plumes %d" % [left, get_tree().get_nodes_in_group(&"ward_plume").size()])
 	await _frames(int(4.5 * 60.0))
 

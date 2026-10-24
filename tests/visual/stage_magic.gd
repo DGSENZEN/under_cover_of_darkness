@@ -172,6 +172,15 @@ func _ready() -> void:
 				_loose_at_player(archer)
 			if since in [0, 2, 4, 8, 12, 16, 20, 26, 34, 50, 71, 73, 76, 82, 108, 112, 120, 200, 215, 225, 235, 240, 245, 250, 260, 275, 290]:
 				await _shot("ward_outside_%03d%s" % [since, tag])
+			# From above, the written circle on the floor.
+			if since in [10, 20, 150]:
+				var above := Camera3D.new()
+				add_child(above)
+				above.global_transform = Transform3D(Basis.looking_at(Vector3(-0.6, -2.4, -1.2), Vector3.UP), player.global_position + Vector3(0.6, 2.2, 1.2))
+				above.make_current()
+				await _shot("ward_above_%03d%s" % [since, tag])
+				above.queue_free()
+				outside.make_current()
 			await get_tree().physics_frame
 		outside.queue_free()
 		archer.queue_free()

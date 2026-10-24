@@ -14,6 +14,9 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
 const GunFx := preload("res://scripts/Visual/GunFx.gd")
+const SHELL_SHADER := preload("res://scripts/Visual/vfx_ward_shell.gdshader")
+const GLYPH_SHADER := preload("res://scripts/Visual/vfx_ward_glyph.gdshader")
+const LibraryGlyphs := preload("res://scripts/Visual/Library/LibraryGlyphs.gd")
 
 const RADIUS := 1.0
 const LIFE := 4.0
@@ -55,6 +58,32 @@ const DROP_LIFE := 4.0
 ## wide it spreads).
 const DRAIN_LIFE := 0.8
 const DRAIN_TO := 2.2
+## Read as protection: the shell (how many ripples at once, how long one
+## runs, how long the whole flares), the burning copal ring on the floor and
+## the ash it leaves (how long), the bands of smoke circling the shell
+## ([height, how fast round, radians a second]), how fast the muffle eases.
+const MOST_HITS := 4
+const HIT_LIFE := 0.6
+const FLARE_LIFE := 0.25
+const ASH_LIFE := 3.0
+const SIGIL_RADIUS := 0.95
+const EMBER_CORE := Color("#F08A4B")
+const EMBER_EDGE := Color("#5A1E0E")
+const STREAKS := [[-0.45, 1.7], [0.05, -1.3], [0.5, 2.1]]
+const MUFFLE_EASE := 0.25
+## The written circle in the invented script (LibraryGlyphs): how many
+## places round it (a gap where its words part), how far out, how big a
+## glyph is (m), the text's seed, how far behind the pour each is written
+## in (radians), how bright, how much a stopped shot adds; the thin ring
+## inside it that closes it.
+const GLYPH_SLOTS := 26
+const GLYPH_RADIUS := 0.78
+const GLYPH_SIZE := 0.17
+const GLYPH_SEED := 7
+const GLYPH_WRITE := 0.4
+const GLYPH_ENERGY := 2.2
+const GLYPH_FLARE := 2.0
+const INNER_RING := 0.66
 ## Eaten this far while it stands (1 is gone).
 const STANDING := 0.4
 ## A stopped shot's bulge: its plumes, how long it lasts, how many at once,
@@ -80,7 +109,23 @@ var _bulges: Array = []
 var _front := 0.0
 var _skirts: Array[MeshInstance3D] = []
 var _embers: Array[MeshInstance3D] = []
-
+var _shell: MeshInstance3D
+## The shell's ripples: [direction (its own space), seconds since].
+var _hits: Array = []
+var _flare := 0.0
+var _sigil: Array[MeshInstance3D] = []
+var _streaks: Array[Node3D] = []
+## Whether its owner is the player (it muffles the world for them).
+var _for_player := false
+## The written circle: its glyphs, each one's angle round it as written (its
+## own space) and how far written in it is; the ring they turn on; the
+## material they share; the thin ring inside.
+var _glyphs: Array[MeshInstance3D] = []
+var _glyph_angles: Array[float] = []
+var _glyph_written: Array = []
+var _glyph_ring: Node3D
+var _glyph_look: ShaderMaterial
+var _inner: Array[MeshInstance3D] = []
 
 ## A ward round `player`, going with them for LIFE seconds.
 static func cast_on(player: Node3D) -> Node3D:
@@ -172,10 +217,16 @@ func _begin() -> void:
 		var ahead := -owner_body.global_basis.z
 		_front = atan2(ahead.z, ahead.x) - rotation.y
 
+	_for_player = owner_body != null and owner_body.is_in_group(&"player")
+
 	if MagicFx.allowed(self):
 		_pour()
 		_make_skirts()
 		_make_embers()
+		_make_shell()
+		_make_sigil()
+		_make_streaks()
+		_make_glyphs()
 
 	Sfx.play(self, &"whoosh", global_position, -8.0, 0.55)
 
@@ -245,6 +296,196 @@ func _make_skirts() -> void:
 		_skirts.append(skirt)
 
 
+## The shell: a sphere of copal smoke exactly the size of what it stops
+## (vfx_ward_shell), filling up from the floor.
+func _make_shell() -> void:
+	_shell = MeshInstance3D.new()
+	_shell.name = "WardShell"
+	var sphere := SphereMesh.new()
+	sphere.radius = RADIUS
+	sphere.height = RADIUS * 2.0
+	sphere.radial_segments = 48
+	sphere.rings = 24
+	_shell.mesh = sphere
+	var look := ShaderMaterial.new()
+	look.shader = SHELL_SHADER
+	look.set_shader_parameter(&"core", CORE)
+	look.set_shader_parameter(&"body", BODY)
+	look.set_shader_parameter(&"edge", EDGE.darkened(0.3))
+	look.set_shader_parameter(&"noise", MeshVfx.noise())
+	look.set_shader_parameter(&"fill", 0.0)
+	look.set_shader_parameter(&"hit_life", HIT_LIFE)
+	look.set_shader_parameter(&"hits", _hit_uniform())
+	_shell.material_override = look
+	_shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_shell.add_to_group(&"ward_shell")
+	add_child(_shell)
+
+
+## The shell's ripples as its shader takes them (four, w < 0 for none).
+func _hit_uniform() -> PackedVector4Array:
+	var out := PackedVector4Array()
+
+	for i in MOST_HITS:
+		if i < _hits.size():
+			var way: Vector3 = _hits[i][0]
+			out.append(Vector4(way.x, way.y, way.z, float(_hits[i][1])))
+		else:
+			out.append(Vector4(0.0, 1.0, 0.0, -1.0))
+
+	return out
+
+
+## The burning line of copal on the floor at the wall's foot: two halves
+## running round from the front with the skirt.
+func _make_sigil() -> void:
+	for side in [1.0, -1.0]:
+		var arc := MeshInstance3D.new()
+		arc.name = "WardSigil"
+		arc.mesh = _arc_mesh(SIGIL_RADIUS, 0.05, _front, _front + side * PI, 32)
+		var look := MeshVfx.look(EMBER_CORE, EMBER, EMBER_EDGE, 2.2, 0.15, 0.25, 4.4 + side)
+		look.set_shader_parameter(&"tail_eat", 3.0)
+		look.set_shader_parameter(&"tiling", Vector2(0.6, 8.0))
+		look.set_shader_parameter(&"rim", 0.0)
+		look.set_shader_parameter(&"churn", 0.0)
+		arc.material_override = look
+		arc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		arc.add_to_group(&"ward_sigil")
+		add_child(arc)
+		arc.position = Vector3(0.0, _floor_below() + 0.015, 0.0)
+		_sigil.append(arc)
+
+
+## How far the floor is below its middle (its own space); BASE if none.
+func _floor_below() -> float:
+	var hit := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(global_position, global_position + Vector3.DOWN * 2.0, 1))
+	return (hit["position"] as Vector3).y - global_position.y if not hit.is_empty() else BASE
+
+
+## A flat arc on the floor (its own XZ plane) `radius` round, `width`
+## across, from `from` to `to` (radians); u across it, v along it.
+static func _arc_mesh(radius: float, width: float, from: float, to: float, segments: int) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+
+	for k in segments:
+		var a := lerpf(from, to, float(k) / float(segments))
+		var b := lerpf(from, to, float(k + 1) / float(segments))
+		var corners := []
+		var uvs := []
+
+		for turn in [a, b]:
+			for r in [radius - width * 0.5, radius + width * 0.5]:
+				corners.append(Vector3(cos(turn) * r, 0.0, sin(turn) * r))
+				uvs.append(Vector2(0.0 if r < radius else 1.0, float(k + (0 if turn == a else 1)) / float(segments)))
+
+		for i in [0, 1, 2, 2, 1, 3]:
+			st.set_normal(Vector3.UP)
+			st.set_uv(uvs[i])
+			st.add_vertex(corners[i])
+
+	return st.commit()
+
+
+## The written circle on the floor inside the copal ring: words of the
+## invented script round it (the same for GLYPH_SEED), flat on the floor
+## with their tops outward, on a ring that turns against the wall; and a
+## thin ward-white ring inside them closing it. Each glyph is written in as
+## the pour runs round to it.
+func _make_glyphs() -> void:
+	var atlas := LibraryGlyphs.atlas("script")
+
+	if atlas.is_empty():
+		return
+
+	_glyph_look = ShaderMaterial.new()
+	_glyph_look.shader = GLYPH_SHADER
+	_glyph_look.set_shader_parameter(&"atlas", atlas["texture"])
+	_glyph_look.set_shader_parameter(&"grid", Vector2(float(atlas["cols"]), float(atlas["rows"])))
+	_glyph_look.set_shader_parameter(&"core", BODY)
+	_glyph_look.set_shader_parameter(&"energy", GLYPH_ENERGY)
+	var floor_at := _floor_below() + 0.02
+	_glyph_ring = Node3D.new()
+	_glyph_ring.name = "WardCircle"
+	add_child(_glyph_ring)
+	_glyph_ring.position = Vector3(0.0, floor_at, 0.0)
+	var text := LibraryGlyphs.script(GLYPH_SEED, GLYPH_SLOTS).substr(0, GLYPH_SLOTS)
+	var quad := QuadMesh.new()
+	quad.size = Vector2(GLYPH_SIZE, GLYPH_SIZE)
+
+	for i in text.length():
+		var ch := text[i]
+
+		if ch == " ":
+			continue
+
+		var turn := _front + TAU * float(i) / float(GLYPH_SLOTS)
+		var cell: Vector2i = LibraryGlyphs.cell_of(atlas, ch)
+		var glyph := MeshInstance3D.new()
+		glyph.name = "WardGlyph"
+		glyph.mesh = quad
+		glyph.material_override = _glyph_look
+		glyph.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		glyph.set_meta(&"char", ch)
+		glyph.set_instance_shader_parameter(&"glyph", Vector4(cell.x, cell.y, 0.0, float(i) * 0.37))
+		glyph.add_to_group(&"ward_glyph")
+		_glyph_ring.add_child(glyph)
+		# Flat on the floor, its top pointing out, reading round the circle.
+		var out := Vector3(cos(turn), 0.0, sin(turn))
+		glyph.transform = Transform3D(Basis(out.cross(Vector3.UP), out, Vector3.UP), out * GLYPH_RADIUS)
+		_glyphs.append(glyph)
+		_glyph_angles.append(turn)
+		_glyph_written.append(0.0)
+
+	for side in [1.0, -1.0]:
+		var arc := MeshInstance3D.new()
+		arc.name = "WardInnerRing"
+		arc.mesh = _arc_mesh(INNER_RING, 0.014, _front, _front + side * PI, 48)
+		var look := MeshVfx.look(CORE, BODY, EDGE, 1.4, 0.0, 0.2, 5.5 + side)
+		look.set_shader_parameter(&"tail_eat", 3.0)
+		look.set_shader_parameter(&"rim", 0.0)
+		look.set_shader_parameter(&"churn", 0.0)
+		arc.material_override = look
+		arc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_glyph_ring.add_child(arc)
+		_inner.append(arc)
+
+
+## Bands of brighter smoke circling the shell at their heights (STREAKS),
+## each its own way round.
+func _make_streaks() -> void:
+	for band in STREAKS:
+		var pivot := Node3D.new()
+		pivot.name = "WardStreak"
+		pivot.set_meta(&"speed", band[1])
+		add_child(pivot)
+		var height: float = band[0]
+		var reach := sqrt(maxf(RADIUS * RADIUS - height * height, 0.05)) * 1.01
+		# An arc of 1.6 radians, built about its own middle (so the band's
+		# place is where it is on the shell).
+		var middle := Vector3(cos(0.8) * reach, height, sin(0.8) * reach)
+		var path := PackedVector3Array()
+
+		for k in 9:
+			var turn := 1.6 * float(k) / 8.0
+			path.append(Vector3(cos(turn) * reach, height, sin(turn) * reach) - middle)
+
+		var band_mesh := MeshInstance3D.new()
+		band_mesh.mesh = MeshVfx.tendril(path, 0.03, 6)
+		var look := _smoke_look(8.2 + height)
+		look.set_shader_parameter(&"energy", 1.2)
+		look.set_shader_parameter(&"opacity", 0.6)
+		look.set_shader_parameter(&"tail_eat", 0.9)
+		look.set_shader_parameter(&"erosion", 0.2)
+		look.set_shader_parameter(&"scroll", 1.2)
+		band_mesh.material_override = look
+		band_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		pivot.add_child(band_mesh)
+		band_mesh.position = middle
+		band_mesh.add_to_group(&"ward_streak")
+		_streaks.append(pivot)
+
+
 ## Embers of the burning copal, inside the smoke, each rising on its own
 ## turn round the ring and coming round again.
 func _make_embers() -> void:
@@ -291,8 +532,9 @@ func _move_embers() -> void:
 
 
 ## A shot or spell stopped at `at` going `direction` (turned_aside): a
-## puncture of ward-white there, a ripple out through the wall, and what it
-## was (`kind`, `thing` the stopped node) falling to the floor.
+## puncture of ward-white there, the shell flaring with a ripple running out
+## over it and a deep thud, and what it was (`kind`, `thing` the stopped
+## node) falling to the floor.
 func struck(at: Vector3, direction: Vector3, kind: StringName, thing: Node) -> void:
 	if not MagicFx.allowed(self):
 		return
@@ -314,24 +556,14 @@ func struck(at: Vector3, direction: Vector3, kind: StringName, thing: Node) -> v
 	MagicFx._keep(star, PUNCTURE_LIFE)
 	MagicFx.glint_light(self, at + out * 0.2, 1.4, 2.5, BODY)
 
-	var ripple := MeshInstance3D.new()
-	ripple.name = "WardRipple"
-	ripple.mesh = MagicFx._ring_mesh(0.5, 0.2, 32)
-	var look := MeshVfx.look(CORE, BODY, EDGE, 1.4, 0.15, 0.6, 6.1)
-	look.set_shader_parameter(&"tail_eat", 0.0)
-	look.set_shader_parameter(&"opacity", 0.7)
-	ripple.material_override = look
-	ripple.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	ripple.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	ripple.add_to_group(&"ward_ripple")
-	world.add_child(ripple)
-	# Flat on the wall there: its plane square to `out`.
-	ripple.global_transform = Transform3D(Basis(out.cross(Vector3.UP).normalized(), out, Vector3.UP), at)
-	ripple.scale = Vector3.ONE * 0.05
-	var grow := ripple.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS).set_parallel(true)
-	grow.tween_property(ripple, "scale", Vector3.ONE * RIPPLE_TO, RIPPLE_LIFE).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	grow.tween_method(func(e: float): look.set_shader_parameter(&"erosion", e), 0.15, 1.0, RIPPLE_LIFE).set_ease(Tween.EASE_IN)
-	MagicFx._keep(ripple, RIPPLE_LIFE)
+	# The shell flares there and a ripple runs out over it.
+	_hits.append([to_local(at).normalized(), 0.0])
+
+	while _hits.size() > MOST_HITS:
+		_hits.pop_front()
+
+	_flare = 1.0
+	Sfx.play(self, &"thud", at, -6.0, 1.35)
 
 	_drop(at + out * 0.05, out, kind, thing)
 
@@ -468,6 +700,48 @@ func bulge(at: Vector3) -> void:
 		_thinning[i] = THIN_FOR
 
 
+## Each glyph of the written circle: how far it is written in (0..1).
+func glyph_presence() -> Array:
+	return _glyph_written.duplicate()
+
+
+## The glyph nearest `angle` round the circle (its own space, as written).
+func glyph_nearest(angle: float) -> int:
+	var best := 0
+
+	for i in _glyph_angles.size():
+		if absf(angle_difference(angle, _glyph_angles[i])) < absf(angle_difference(angle, _glyph_angles[best])):
+			best = i
+
+	return best
+
+
+## Where it was cast toward, round it (its own space, radians).
+func front_angle() -> float:
+	return _front
+
+
+## How bright the written circle is now.
+func glyph_glow() -> float:
+	return GLYPH_ENERGY + GLYPH_FLARE * _flare
+
+
+## How far up from the floor its shell has filled (0..1).
+func shell_fill() -> float:
+	return clampf((_life - POUR_DOWN) / (POUR_SWEEP + RISE), 0.0, 1.0)
+
+
+## The shell's ripples from stopped shots: [direction from its middle (its
+## own space), seconds since], oldest first.
+func shell_hits() -> Array:
+	return _hits
+
+
+## How bright the whole shell has flared from a stopped shot (0..1).
+func shell_flare() -> float:
+	return _flare
+
+
 ## The plume nearest where the ward was cast toward (its front).
 func front_plume() -> int:
 	return posmod(roundi(_front / TAU * float(PLUMES)), PLUMES)
@@ -486,6 +760,11 @@ func _physics_process(delta: float) -> void:
 		return
 
 	global_position = owner_body.global_position + Vector3.UP * HEIGHT
+
+	# Its owner hears the world as through its smoke, easing in and out.
+	if _for_player:
+		var want := 1.0 if _life < LIFE - SINK * 0.5 else 0.0
+		Sfx.ward_muffle = move_toward(Sfx.ward_muffle, want, delta / MUFFLE_EASE)
 
 
 func _process(delta: float) -> void:
@@ -520,6 +799,54 @@ func _process(delta: float) -> void:
 	if not _embers.is_empty():
 		_move_embers()
 
+	if _shell != null:
+		for hit in _hits:
+			hit[1] += delta
+
+		_hits = _hits.filter(func(hit): return float(hit[1]) < HIT_LIFE)
+		_flare = maxf(_flare - delta / FLARE_LIFE, 0.0)
+		var shell_look := _shell.material_override as ShaderMaterial
+		shell_look.set_shader_parameter(&"fill", shell_fill())
+		shell_look.set_shader_parameter(&"fade", sink)
+		shell_look.set_shader_parameter(&"flare", _flare)
+		shell_look.set_shader_parameter(&"hits", _hit_uniform())
+
+	for arc in _sigil:
+		var look := arc.material_override as ShaderMaterial
+		look.set_shader_parameter(&"tail_eat", lerpf(3.0, 0.0, run))
+
+	# Seen from inside (the camera within it): the shell faint, the bands
+	# hidden, so the view out stays clear.
+	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
+	var within := camera != null and camera.global_position.distance_to(global_position) < RADIUS
+
+	if _shell != null:
+		(_shell.material_override as ShaderMaterial).set_shader_parameter(&"inside", 1.0 if within else 0.0)
+
+	for pivot in _streaks:
+		pivot.rotation.y += float(pivot.get_meta(&"speed")) * delta
+		(pivot.get_child(0) as MeshInstance3D).visible = shell_fill() >= 1.0 and sink > 0.3 and not within
+
+	# The written circle: each glyph written in once the pour has run round
+	# to it, turning against the wall, bright with a stopped shot, fading as
+	# the wall sinks.
+	if _glyph_ring != null:
+		var swept := run * (PI + GLYPH_WRITE)
+
+		for i in _glyphs.size():
+			var away := absf(angle_difference(_front, _glyph_angles[i]))
+			_glyph_written[i] = clampf((swept - away) / GLYPH_WRITE, 0.0, 1.0)
+			var held: Vector4 = _glyphs[i].get_instance_shader_parameter(&"glyph")
+			_glyphs[i].set_instance_shader_parameter(&"glyph", Vector4(held.x, held.y, float(_glyph_written[i]) * sink, held.w))
+
+		_glyph_look.set_shader_parameter(&"energy", glyph_glow())
+		_glyph_ring.rotation.y -= TURN * 1.6 * delta
+
+		for arc in _inner:
+			var look := arc.material_override as ShaderMaterial
+			look.set_shader_parameter(&"tail_eat", lerpf(3.0, 0.0, run))
+			look.set_shader_parameter(&"erosion", lerpf(1.0, 0.0, sink))
+
 	rotation.y += TURN * delta
 
 
@@ -528,8 +855,35 @@ func _end() -> void:
 		if ref.get_ref() == self:
 			active.erase(ref)
 
+	if _for_player:
+		Sfx.ward_muffle = 0.0
+
 	_drain()
+	_leave_ash()
 	queue_free()
+
+
+## The burnt copal ring left on the floor as dim ash, fading over ASH_LIFE.
+func _leave_ash() -> void:
+	if _sigil.is_empty() or not MagicFx.allowed(self):
+		return
+
+	var ash := MeshInstance3D.new()
+	ash.name = "WardAsh"
+	ash.mesh = _arc_mesh(SIGIL_RADIUS, 0.06, 0.0, TAU, 48)
+	var look := MeshVfx.look(Color("#5A524A"), Color("#3A342F"), Color("#211D1A"), 0.8, 0.3, 0.05, 2.9)
+	look.set_shader_parameter(&"tail_eat", 0.0)
+	look.set_shader_parameter(&"tiling", Vector2(0.6, 8.0))
+	look.set_shader_parameter(&"rim", 0.0)
+	look.set_shader_parameter(&"churn", 0.0)
+	ash.material_override = look
+	ash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ash.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	ash.add_to_group(&"ward_ash")
+	get_parent().add_child(ash)
+	ash.global_transform = Transform3D(global_basis, _sigil[0].global_position)
+	ash.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS).tween_method(func(e: float): look.set_shader_parameter(&"erosion", e), 0.3, 1.0, ASH_LIFE).set_ease(Tween.EASE_IN)
+	MagicFx._keep(ash, ASH_LIFE)
 
 
 ## Its smoke draining off across the floor where it stood: a widening ring

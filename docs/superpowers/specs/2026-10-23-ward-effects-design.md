@@ -60,3 +60,38 @@ A new headless suite, `tests/ward_fx_test`, covers:
 - nothing with effects off, and everything gone afterwards.
 
 Stills and clips go to the user, lit and dark, from your eyes and from outside.
+
+## Polish: it reads as protection
+
+After seeing the round-two Ward the user said: "I feel like you can polish the ward to feel much cooler and protective with the effect itself, it's already a good foundation just requires a bit more polish so it reads as a protective ward."
+
+The plumes alone read as a cloud round you, not a barrier. Everything below is *(Claude's call)*.
+
+- **The shell:** a faint shell of copal smoke, exactly the sphere that stops shots (radius 1 m about the Ward's middle), so you see the protection's real shape.
+  - It is nearly clear face on and brightest where it turns away (a fresnel rim). From inside, its edge glows round the borders of your view and the middle stays clear.
+  - Its smoke flows round it.
+  - It fills up from the floor as the pour runs round, and fades as the wall sinks.
+- **The copal ring:** a burning line of copal on the floor at the wall's foot, in ember red-orange.
+  - It runs round with the skirt.
+  - At the end it is left in the world as a dim ash ring for a few seconds, then gone.
+- **Circling bands:** three bands of brighter smoke circle the shell at different heights, so the spell visibly runs.
+- **A stopped shot strikes the shell:** it flares where it hit, and a ripple runs over the dome from there. This replaces the flat ripple ring of round two.
+  - The whole shell brightens for a moment.
+  - A deep thud plays under the old whoosh.
+- **Inside it the world is muffled:** the world's sounds go dull, as if through smoke (a low-pass of about 2.5 kHz on the world buses, through the same filter the hurt muffle uses). The muffle eases in and out with the Ward. Your own sounds and the score are untouched.
+- **Effects off:** the shell, the ring, the bands and the ash are not made. The muffle is sound, so it stays.
+
+## The written circle
+
+The user, on the polished Ward: "Maybe make the ward spawn a magic circle with the new magic language alphabet we did?"
+
+That alphabet is the invented script from the Librarian's shop: forty glyphs on U+E000 on, baked into a distance-field atlas by `tools/textures/library_glyphs.py` on metro-standard. Its atlas, character map and `LibraryGlyphs.gd` are copied here byte for byte, so the two branches merge cleanly. The look below is *(Claude's call)*.
+
+- **On the floor:** a circle written in that script, inside the burning copal ring, its glyphs (17 cm, 26 places round) flat on the floor and reading round it.
+  - Words of two to seven glyphs with gaps between, always the same text for a given seed.
+  - Drawn in the ward colour with a dark edge, from the atlas's distance field, so they stay sharp.
+  - A thin ward-white ring inside them closes the circle.
+  - The glyphs are written in round from the front as the pour runs round. They turn slowly against the wall, brighten when a shot is stopped, and fade as the wall sinks.
+- **In the hand:** while the Ward is cast, a small ring of the same script turns round the copal circle in your view. The circle in your hand becomes the one on the floor.
+- **From inside:** the shell and the bands are faint, so your view stays clear. Seen from outside they keep their strength.
+- **Effects off:** no written circle on the floor. The ring in the hand is part of the casting circle, and shows as the circle always has.

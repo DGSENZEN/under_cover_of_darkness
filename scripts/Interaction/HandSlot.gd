@@ -17,6 +17,7 @@ const HandContactsScript := preload("res://scripts/Interaction/HandContacts.gd")
 const HeldPageScript := preload("res://scripts/Interaction/HeldPage.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const MagicFxScript := preload("res://scripts/Visual/MagicFx.gd")
+const LibraryGlyphsScript := preload("res://scripts/Visual/Library/LibraryGlyphs.gd")
 
 ## Visual layer 19. The lightgem cameras' cull masks leave it out.
 const VIEWMODEL_LAYER := 1 << 18
@@ -73,6 +74,12 @@ const PALM_EMBERS := 4
 const EMBER := Color("#D9541E")
 const PALM_GLOW_FROM := 0.3
 const PALM_GLOW_TO := 3.0
+## Round the Ward's circle in your hand: a ring of the invented script (as
+## the written circle on the floor: Ward.gd), how many, how big (m, full
+## size), how far out from the circle's pieces.
+const HAND_GLYPHS := 12
+const HAND_GLYPH_SIZE := 0.024
+const HAND_GLYPH_OUT := 1.55
 const SPEARHEAD_FROM := 0.12
 const CAST_DRAW_BACK := 0.015
 const CAST_TREMBLE := 0.0015
@@ -204,6 +211,7 @@ var _spearhead: MeshInstance3D
 ## embers' glow material.
 var _palm_smoke: Node3D
 var _palm_glow: StandardMaterial3D
+var _hand_glyphs: Array[MeshInstance3D] = []
 ## Seconds since a hand spell was let go (release_cast).
 var _release_t := INF
 ## The revolver's moving parts, children of the main mesh: cylinder, hammer, gate.
@@ -1103,11 +1111,15 @@ func _update_circle() -> void:
 
 	if _palm_smoke == null:
 		_make_palm_smoke()
+		_make_hand_glyphs()
 
 	var showing := _circle_school != &"" and _left_mode == &"cast" and _left_up > 0.5
 	_circle.visible = showing
 	_spearhead.visible = showing and _circle_school == &"obsidian"
 	_palm_smoke.visible = showing and _circle_school == &"copal"
+
+	for glyph in _hand_glyphs:
+		glyph.visible = showing and _circle_school == &"copal"
 
 	if not showing:
 		return
@@ -1141,6 +1153,16 @@ func _update_circle() -> void:
 		var piece := _circle_pieces[i]
 		piece.transform = Transform3D(Basis(Vector3.BACK, turn + float(look[2]) + inward), Vector3(cos(turn), sin(turn), 0.0) * across * size).scaled_local(Vector3.ONE * size)
 
+	# The Ward's ring of script round it, turning with it, tops out, written
+	# in as the cast builds.
+	for i in _hand_glyphs.size():
+		var turn := TAU * float(i) / float(_hand_glyphs.size())
+		var out := Vector3(cos(turn), sin(turn), 0.0)
+		var glyph := _hand_glyphs[i]
+		glyph.transform = Transform3D(Basis(out.cross(Vector3.BACK), out, Vector3.BACK).scaled(Vector3.ONE * size), out * across * HAND_GLYPH_OUT * size)
+		var held: Vector4 = glyph.get_instance_shader_parameter(&"glyph")
+		glyph.set_instance_shader_parameter(&"glyph", Vector4(held.x, held.y, clampf(_circle_progress * 1.6 - float(i) / float(_hand_glyphs.size()) * 0.6, 0.0, 1.0), held.w))
+
 	# The spearhead in the middle, leaning toward the crosshair, growing and
 	# turning slowly about its length.
 	if _spearhead.visible:
@@ -1163,6 +1185,39 @@ func _update_circle() -> void:
 		var tall := lerpf(0.25, 1.0, _circle_progress)
 		_palm_smoke.transform = Transform3D(Basis.IDENTITY.scaled(Vector3(size, size * tall, size)), _circle.position)
 		_palm_glow.emission_energy_multiplier = lerpf(PALM_GLOW_FROM, PALM_GLOW_TO, _circle_progress * _circle_progress) * (0.9 + 0.1 * sin(_time * 23.0))
+
+
+## Round the Ward's circle in your hand: HAND_GLYPHS glyphs of the invented
+## script (LibraryGlyphs), drawn as the floor's written circle is, at the
+## arms' field of view. None if the atlas is missing.
+func _make_hand_glyphs() -> void:
+	var atlas := LibraryGlyphsScript.atlas("script")
+
+	if atlas.is_empty():
+		return
+
+	var look := ShaderMaterial.new()
+	look.shader = preload("res://scripts/Visual/vfx_ward_glyph.gdshader")
+	look.set_shader_parameter(&"atlas", atlas["texture"])
+	look.set_shader_parameter(&"grid", Vector2(float(atlas["cols"]), float(atlas["rows"])))
+	look.set_shader_parameter(&"core", WARD_BODY)
+	look.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+	look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+	look.render_priority = 12
+	var quad := QuadMesh.new()
+	quad.size = Vector2(HAND_GLYPH_SIZE, HAND_GLYPH_SIZE)
+	var text := LibraryGlyphsScript.script(3, HAND_GLYPHS).replace(" ", "")
+
+	for i in HAND_GLYPHS:
+		var glyph := _viewmodel_instance()
+		glyph.name = "HandGlyph"
+		glyph.mesh = quad
+		glyph.material_override = look
+		var cell: Vector2i = LibraryGlyphsScript.cell_of(atlas, text[i % text.length()])
+		glyph.set_instance_shader_parameter(&"glyph", Vector4(cell.x, cell.y, 0.0, float(i) * 0.41))
+		glyph.add_to_group(&"ward_hand_glyph")
+		_circle.add_child(glyph)
+		_hand_glyphs.append(glyph)
 
 
 ## The Ward's wind-up in the palm (hidden until a Copal cast): two curls of
