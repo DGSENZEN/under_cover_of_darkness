@@ -434,6 +434,53 @@ func _run() -> void:
 		_near(hung_fov, 75.0, 0.5) and hung_aim == 0.0 and _near(sword_fov, 75.0, 0.5) and sword_aim == 0.0,
 		"hanging fov %.1f aim %.2f, put away fov %.1f aim %.2f" % [hung_fov, hung_aim, sword_fov, sword_aim])
 
+	# K1 a shot from the hip throws the aim up 3.5 degrees
+	revolver.reset_for_practice()
+	_put_player(Vector3(36, 1.05, 0))
+	await _frames(30)
+	var neck: Node3D = player.get_node("Neck")
+	var level: float = neck.rotation.x
+	await _tap("throw")
+	var thrown_up: float = rad_to_deg(neck.rotation.x - level)
+	_check("K1 a hip shot throws the aim up 3.5 degrees", _near(thrown_up, 3.5, 0.2), "up %.2f" % thrown_up)
+
+	# K2 as the gun settles, 60 % of it comes back by itself
+	await _frames(40)
+	var left_up: float = rad_to_deg(neck.rotation.x - level)
+	_check("K2 as the gun settles, 60 % of the climb comes back", _near(left_up, 1.4, 0.2), "still up %.2f" % left_up)
+
+	# K3 aimed, half the climb; the shell, more
+	neck.rotation.x = 0.0
+	Input.action_press("aim")
+	await _frames(30)
+	level = neck.rotation.x
+	await _tap("throw")
+	var aimed_up: float = rad_to_deg(neck.rotation.x - level)
+	Input.action_release("aim")
+	await _frames(40)
+	neck.rotation.x = 0.0
+	revolver.flip_barrel()
+	await _frames(12)
+	level = neck.rotation.x
+	await _tap("throw")
+	var shell_up: float = rad_to_deg(neck.rotation.x - level)
+	revolver.flip_barrel()
+	await _frames(40)
+	_check("K3 aimed, the climb is half; a shell's is 1.4 times a ball's",
+		_near(aimed_up, 1.75, 0.2) and _near(shell_up, 4.9, 0.25), "aimed %.2f shell %.2f" % [aimed_up, shell_up])
+
+	# K4 looking straight up, a shot can't throw the aim over the top
+	revolver.reset_for_practice()
+	var limit: float = deg_to_rad(player.max_pitch_degrees)
+	neck.rotation.x = limit
+	await _frames(40)
+	await _tap("throw")
+	await _frames(2)
+	_check("K4 at the top of the look, the kick stops at the limit", neck.rotation.x <= limit + 0.0001,
+		"pitch %.2f limit %.2f" % [rad_to_deg(neck.rotation.x), player.max_pitch_degrees])
+	neck.rotation.x = 0.0
+	await _frames(40)
+
 	# R16 in arm's reach, F is a pistol-whip, not a kick
 	revolver.reset_for_practice()
 	var g16 := _fighter(Vector3(38, 0, -1.0))

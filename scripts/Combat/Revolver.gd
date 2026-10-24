@@ -41,6 +41,16 @@ const ROSETTE := [Vector2(0.0, 1.0), Vector2(0.87, -0.5), Vector2(-0.87, -0.5), 
 ## The camera's kick for a shot from the cylinder, in one hand.
 const KICK_TRAUMA := 0.38
 const KICK_PUNCH := 2.1
+## The kick throws the aim itself (the neck's pitch, the body's yaw), in
+## degrees: up from the hip, up aimed, and to the side as far as this along
+## YAW_PATTERN by shot. Then RECOVER of the climb comes back by itself over
+## the settle; the rest is yours to pull down.
+const KICK_PITCH := 3.5
+const KICK_PITCH_AIMED := 1.75
+const KICK_YAW_MAX := 0.8
+const YAW_PATTERN := [0.6, -0.3, 0.8, -0.7, 0.2, -0.5]
+const SHELL_CLIMB := 1.4
+const RECOVER := 0.6
 ## The shell kicks harder than a ball.
 const SHELL_KICK := 1.4
 ## Seconds the thumb takes on the hammer's nose.
@@ -101,6 +111,10 @@ var _gate_shutting := false
 ## A shot asked for mid-reload: it goes once the gate is shut.
 var _owed_shot := false
 var _kick := 0.0
+## The last shot's climb of the aim (radians, as thrown: pitch, yaw), and
+## how far into coming back it is (seconds).
+var _climb := Vector2.ZERO
+var _climb_t := -1.0
 ## Seconds the last kick takes to settle.
 var _settle := 0.6
 var _shots := 0
@@ -128,6 +142,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_game_time += delta
 	_kick = move_toward(_kick, 0.0, delta / maxf(_settle, 0.01))
+	_recover_climb(delta)
 	var gun: Resource = weapon()
 	_update_whip(delta)
 
@@ -658,6 +673,7 @@ func _kicked(strength: float, gun: Resource) -> void:
 	_settle = gun.ready_braced if aimed else gun.ready_one_hand
 	_ready_at = _game_time + _settle
 	_kick = 1.0
+	_climb_aim(strength)
 	player.juice.add_trauma(KICK_TRAUMA * strength * held)
 	player.juice.punch(KICK_PUNCH * strength * held, 0.08 * held, 0.22 * strength * held)
 	player.juice.lunge(0.7 * strength * held)
@@ -705,6 +721,45 @@ func _send_pose(delta: float) -> void:
 
 		if hand.has_method("set_gun_aim"):
 			hand.set_gun_aim(_aim)
+
+
+## The shot throws the aim up (and a little aside, by the pattern), as far
+## as the look can go.
+func _climb_aim(strength: float) -> void:
+	var neck: Node3D = player.get("neck")
+
+	if neck == null:
+		return
+
+	var up := deg_to_rad((KICK_PITCH_AIMED if aimed else KICK_PITCH) * (SHELL_CLIMB if strength > 1.0 else 1.0))
+	var limit := deg_to_rad(float(player.get("max_pitch_degrees")))
+	var before := neck.rotation.x
+	neck.rotation.x = minf(before + up, limit)
+	var aside := deg_to_rad(KICK_YAW_MAX * float(YAW_PATTERN[_shots % YAW_PATTERN.size()])) * (0.5 if aimed else 1.0)
+	player.rotation.y += aside
+	_climb = Vector2(neck.rotation.x - before, aside)
+	_climb_t = 0.0
+
+
+## RECOVER of the last climb comes back over the settle, eased in and out,
+## as a change each tick: your own look moves on top of it.
+func _recover_climb(delta: float) -> void:
+	if _climb_t < 0.0:
+		return
+
+	var neck: Node3D = player.get("neck")
+	var before := smoothstep(0.0, 1.0, _climb_t / maxf(_settle, 0.01))
+	_climb_t += delta
+	var after := smoothstep(0.0, 1.0, _climb_t / maxf(_settle, 0.01))
+	var back := _climb * RECOVER * (after - before)
+
+	if neck != null:
+		neck.rotation.x -= back.x
+
+	player.rotation.y -= back.y
+
+	if _climb_t >= _settle:
+		_climb_t = -1.0
 
 
 static func _ease(t: float) -> float:
