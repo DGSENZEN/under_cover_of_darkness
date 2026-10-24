@@ -15,6 +15,7 @@ func _ready() -> void:
 	for i in 5:
 		await get_tree().process_frame
 	_rugs(lab)
+	await _hangings(lab)
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -60,6 +61,53 @@ func _rugs(lab: Node3D) -> void:
 	_check("D1 his rugs lie on the boards, each its own pattern, clear of each other, the runner, the ward, the cases and his corner; the front table on the petate",
 		r_rugs.size() == 4 and r_wrong.is_empty() and r_table, "rugs %d wrong %s table on petate %s" % [r_rugs.size(), r_wrong.slice(0, 4), r_table])
 
+
+
+## What hangs (tools/eclipse/library_hangings.py): the drying line, the herb rail, the milagros, the censer, the
+## armillary; clear of a head where they hang over the floor, clear of the floating books' rings; the armillary turning.
+func _hangings(lab: Node3D) -> void:
+	var pieces: Dictionary = lab.get("hangings") if lab.get("hangings") != null else {}
+	var frame := lab.global_transform.affine_inverse()
+	var wrong := []
+	for name: String in pieces:
+		var piece: MeshInstance3D = pieces[name]
+		var box: AABB = frame * (piece.global_transform * piece.get_aabb())
+		var look := piece.get_surface_override_material(0) as ShaderMaterial
+		var picture: Texture2D = look.get_shader_parameter("atlas") if look != null else null
+		if picture == null or not picture.resource_path.contains("library_hangings"):
+			wrong.append("%s unpainted" % name)
+		if name in ["drying_line", "armillary"] and box.position.y < 2.1:
+			wrong.append("%s down to %.2f m" % [name, box.position.y])
+		# (The floating books' rings: each an ellipse round the vault's middle at its height.)
+		for ring: Array in lab.floating.RINGS:
+			for k in 48:
+				var a := TAU * k / 48.0
+				var at: Vector3 = lab.floating.MIDDLE + Vector3(ring[0] * cos(a), ring[2], ring[1] * sin(a))
+				if box.grow(0.4).has_point(at):
+					wrong.append("%s in a ring" % name)
+					break
+	_check("D2 what hangs: the drying line, rue on its rail, the milagros, the censer, the armillary; over the floor above a head, clear of the floating books",
+		pieces.size() == 5 and wrong.is_empty(), "pieces %d wrong %s" % [pieces.size(), wrong.slice(0, 4)])
+
+	var sphere: Node3D = lab.get("armillary")
+	if sphere == null:
+		_check("D3 the armillary turns slowly about its own middle", false, "no armillary")
+		return
+	# (Its middle: the kit's wick, in the shop's frame; where the sphere has it, as it turns.)
+	var wick: Array = (JSON.parse_string(FileAccess.get_file_as_string(lab.HANGINGS_WICKS)) as Dictionary)["armillary"][0]
+	var middle := lab.to_global(Vector3(wick[0], wick[1], wick[2]))
+	var mesh: MeshInstance3D = lab.hangings["armillary"]
+	var local := mesh.global_transform.affine_inverse() * middle
+	var turned_from: float = sphere.rotation.y
+	var drift := 0.0
+	for i in 120:
+		await get_tree().process_frame
+		drift = maxf(drift, (mesh.global_transform * local).distance_to(middle))
+	var turned := absf(angle_difference(turned_from, sphere.rotation.y))
+	_check("D3 the armillary turns slowly about its own middle, with no draught",
+		turned > 0.1 and turned < 0.5 and drift < 0.001 and sphere.global_position.distance_to(middle) < 0.001,
+		"turned %.2f rad in 2 s, its middle moved %.3f m, pivot %.2f m off it" % [turned, drift,
+		sphere.global_position.distance_to(middle)])
 
 
 func _check(label: String, ok: bool, detail: String) -> void:

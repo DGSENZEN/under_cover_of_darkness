@@ -31,6 +31,7 @@ import library_shelves  # noqa: E402
 import library_books  # noqa: E402
 import library_spectres  # noqa: E402
 import library_ward  # noqa: E402
+import library_hangings  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -2188,6 +2189,55 @@ class LibraryWard(unittest.TestCase):
             side = [v for v in verts if h * 0.4 < v.z < h - 0.015 and math.hypot(v.x - w[0], v.y - w[1]) > r * 1.12
                     and math.hypot(v.x - w[0], v.y - w[1]) < r * 1.6]
             self.assertTrue(side, "no drip down stub %.0f" % heading)
+
+
+class LibraryHangings(unittest.TestCase):
+    """What hangs in the librarian's shop (tools/eclipse/library_hangings.py), in the shop's own frame (Blender: x
+    across, y into the shop, z up): the book-mender's drying line, the rue on its rail, the milagros on the cage, the
+    censer on the coat stand, the armillary over chronology. Closed, in budget, through the gate at its sliver."""
+
+    @classmethod
+    def setUpClass(cls):
+        library_hangings.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        self.assertEqual(sorted(self.objects), sorted(library_hangings.BUDGET))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=library_hangings.BUDGET[n],
+                                        sliver=library_hangings.SLIVER)[:3], [], n)
+
+    def test_over_the_floor_they_hang_above_a_head(self):
+        # Where a body walks under them (the line, the armillary), nothing comes below 2.1 m.
+        for n in ("drying_line", "armillary"):
+            self.assertGreaterEqual(self._extent(n)[2][0], 2.1, n)
+
+    def test_the_drying_line_carries_its_pages_blank(self):
+        names = {s.material.name for s in self.objects["drying_line"].material_slots}
+        self.assertIn("paper", names)
+        pages = [p for p in self.objects["drying_line"].data.polygons
+                 if self.objects["drying_line"].material_slots[p.material_index].material.name == "paper"]
+        self.assertGreaterEqual(len(pages), 6 * library_hangings.PAGES)
+
+    def test_the_armillary_turns_about_its_wick(self):
+        centre = Vector(common.WICKS["armillary"][0])
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("armillary")
+        self.assertAlmostEqual(centre.x, (x0 + x1) / 2, delta=0.02)
+        self.assertAlmostEqual(centre.y, (y0 + y1) / 2, delta=0.02)
+        self.assertTrue(z0 < centre.z < z1)
+
+    def test_the_censer_hangs_from_the_coat_stands_hook(self):
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("censer")
+        hook = Vector(library_hangings.CENSER_HOOK)
+        self.assertAlmostEqual(z1, hook.z, delta=0.03)
+        self.assertLess(math.hypot((x0 + x1) / 2 - hook.x, (y0 + y1) / 2 - hook.y), 0.05)
+        self.assertGreater(z1 - z0, 0.35)
 
 
 if __name__ == "__main__":

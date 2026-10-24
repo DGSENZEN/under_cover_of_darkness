@@ -71,6 +71,11 @@ func _ready() -> void:
 		["rug_persian", lib.to_global(Vector3(1.5, 1.7, -0.9)), lib.to_global(Vector3(2.4, 0.0, -2.6))],
 		["rug_petate", lib.to_global(Vector3(1.5, 1.6, -1.5)), lib.to_global(Vector3(2.7, 0.0, -0.4))],
 		["rug_sarape", lib.to_global(Vector3(-2.6, 1.5, -3.8)), lib.to_global(Vector3(-1.85, 0.0, -5.05))],
+		["hang_line", lib.to_global(Vector3(2.0, 1.7, -3.1)), lib.to_global(Vector3(2.7, 2.3, -5.25))],
+		["hang_cage", lib.to_global(Vector3(-1.2, 1.7, -3.8)), lib.to_global(Vector3(-1.85, 1.75, -5.8))],
+		["hang_milagros", lib.to_global(Vector3(-1.6, 1.5, -4.75)), lib.to_global(Vector3(-1.85, 1.38, -5.55))],
+		["hang_censer", lib.to_global(Vector3(2.3, 1.6, -4.0)), lib.to_global(Vector3(1.29, 1.55, -4.93))],
+		["hang_armillary", lib.to_global(Vector3(-1.4, 2.0, -0.2)), lib.to_global(Vector3(-2.9, 3.12, -1.0))],
 		["ward_candle", lib.to_global(Vector3(1.2, 0.4, -3.3)), lib.to_global(Vector3(0.9, 0.12, -3.64))],
 	]
 	if clip == "shadow":

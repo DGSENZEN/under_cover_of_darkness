@@ -103,6 +103,13 @@ const LECTERNS := [[Vector3(-2.8, 0.0, -0.35), 180.0], [Vector3(3.7, 0.0, -3.0),
 const LECTERN_DESK := Vector3(0.0, 1.0791, 0.0051)
 const LECTERN_SLOPE := 20.0
 
+## What hangs in his shop (tools/eclipse/library_hangings.py), in the shop's own frame: the book-mender's drying line,
+## rue on its rail over the cage, milagros on the cage, his censer on the coat stand, the armillary over chronology
+## (turning, slowly, about its middle: the kit's wick; rad/s).
+const HANGINGS_KIT := "res://assets/eclipse/kit/library_hangings.glb"
+const HANGINGS_WICKS := "res://assets/eclipse/source/library_hangings_wicks.json"
+const ARMILLARY_TURN := 0.12
+
 ## His rugs (tools/textures/rugs.py), each come with the estates he buys his books from, or his own: its kind, its
 ## middle on the boards, its size (across, along: m, across the room's x), how thick. A Teotitlan rug down the left
 ## aisle, a Persian runner down the right, a petate under the front table where his customers stand, a sarape folded
@@ -152,8 +159,10 @@ var book_layout: Array = []
 var book_draws: Array[MultiMeshInstance3D] = []
 var live_books: Array[LiveBook] = []
 var book_stands: Array[MeshInstance3D] = []
-## His rugs, by kind.
+## His rugs, by kind; what hangs, by piece; the armillary's turning (its pivot at its middle).
 var rugs := {}
+var hangings := {}
+var armillary: Node3D
 ## The books floating under the vault (scripts/Visual/Library/FloatingBooks.gd); the shelves rearranging while
 ## unwatched (ShelfStir.gd).
 var floating: Node3D
@@ -181,6 +190,7 @@ func _ready() -> void:
 	_air()
 	_corner()
 	_rugs()
+	_hangings()
 	_shelves()
 	_books()
 	if standalone:
@@ -375,6 +385,37 @@ func _ward_candles() -> void:
 	ward_wicks = _wicks("ward_candles", WARD_WICKS)
 
 
+## What hangs, each piece where the kit has it; the armillary set on a pivot at its middle, to turn.
+func _hangings() -> void:
+	if not ResourceLoader.exists(HANGINGS_KIT):
+		missing.append(HANGINGS_KIT)
+		return
+
+	var meshes := _kit(HANGINGS_KIT)
+	var look := _shop_look(Painterly.material(_painted(["library_hangings.png", "library_hangings_base.png"]), &"bespoke"),
+		"hangings")
+	for part: String in meshes:
+		hangings[part] = _place(meshes[part], look, part, Vector3.ZERO, 0.0, false)
+
+	# (The kit is laid in the shop's own frame, not the corner's.)
+	var middle := _wicks("armillary", HANGINGS_WICKS, Vector3.ZERO)
+	if hangings.has("armillary") and middle.size() == 1:
+		armillary = Node3D.new()
+		armillary.name = "armillary_pivot"
+		armillary.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		add_child(armillary)
+		armillary.global_position = middle[0]
+		var sphere: MeshInstance3D = hangings["armillary"]
+		sphere.reparent(armillary, true)
+		sphere.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+
+
+func _process(delta: float) -> void:
+	# (The armillary turns with no draught to turn it.)
+	if is_instance_valid(armillary):
+		armillary.rotate_y(ARMILLARY_TURN * delta)
+
+
 ## His rugs laid on the boards, each its own pattern.
 func _rugs() -> void:
 	for spec: Array in RUGS:
@@ -420,12 +461,12 @@ func _quad(surface: SurfaceTool, corners: Array, uvs: Array, normal: Vector3) ->
 
 
 ## The points a kit's piece marks as wicks (world): a candle's, a lamp's bulb, a hinge's ends.
-func _wicks(part: String, file := CORNER_WICKS) -> Array[Vector3]:
+func _wicks(part: String, file := CORNER_WICKS, origin := CORNER_AT) -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	if FileAccess.file_exists(file):
 		var wicks: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(file))
 		for w in wicks.get(part, []):
-			out.append(to_global(CORNER_AT + Vector3(w[0], w[1], w[2])))
+			out.append(to_global(origin + Vector3(w[0], w[1], w[2])))
 	return out
 
 
