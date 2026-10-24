@@ -1,0 +1,53 @@
+# Test fixture (tests/dialogue_test.gd, and later suites): a curandera with a
+# type, a quest and an item. Every text is a placeholder.
+
+== character fx_curandera
+name: Fx Curandera
+type: fx_trade
+body: duelist
+voice: female
+colour: copal
+intent: a healer who wants a book
+
+== beat open_first
+when: not(met)
+Fx Curandera [flare]: <<She reads you.>>
+Sense obsidian: <<The copal bends toward your shoulder.>>
+> <<Ask about the book.>> -> asked
+> <<Leave.>> -> end
+
+== beat open
+Fx Curandera: <<Back again.>>
+> [if said(asked)] <<Ask about the book again.>> -> asked
+> [if has(fx_book)] <<Hand over the book.>> -> handed
+> <<Never mind.>> -> end
+
+== beat asked
+do: set(asked), goal(fx_bring_book)
+Fx Curandera: <<Bring me the book from the librarian.>>
+> <<Ask for the book as a gift.>> -> gifted
+> <<Leave.>> -> end
+
+== beat gifted
+Fx Curandera: <<Take it, then.>>
+> <<Take the book.>> -> end {do: give(fx_book)}
+
+== beat handed
+Fx Curandera [nod]: <<At last.>>
+> [if has(fx_book)] <<Hand it over.>> -> end {do: take(fx_book)}
+> <<Change your mind.>> -> end
+
+== beat limpia
+Fx Curandera: <<Her own cleansing.>>
+-> end
+
+== item fx_book
+name: The Fx Book
+look: book
+intent: the book the curandera wants
+
+== goal fx_bring_book
+kind: side
+shows: said(fx_curandera.asked)
+done: gave(fx_curandera.fx_book)
+text: <<Bring the curandera her book.>>

@@ -1,0 +1,29 @@
+# Test fixture: a librarian with no type, who remembers a lie.
+# Every text is a placeholder.
+
+== character fx_librarian
+name: Fx Librarian
+body: arms_master
+voice: male_b
+colour: ink
+
+== beat open_after_lie
+when: said(lied)
+Fx Librarian [dim]: <<You lied to me.>>
+> <<Make amends.>> -> amends
+> <<Leave.>> -> end
+
+== beat open
+Fx Librarian: <<Yes?>>
+> <<Lie about the book.>> -> lie
+> <<Leave.>> -> end
+
+== beat lie
+do: set(lied), mood(-1)
+Fx Librarian [gutter]: <<I do not believe you.>>
+-> end
+
+== beat amends
+do: clear(lied)
+Fx Librarian [calm]: <<Very well.>>
+-> end
