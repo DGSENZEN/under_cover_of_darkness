@@ -10,6 +10,7 @@ const RagdollScript := preload("res://scripts/Visual/Ragdoll.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
+const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
 
 signal struck(target: Object, damage: float)
 
@@ -18,6 +19,8 @@ const DAMAGE := 40.0
 const LIFETIME := 3.0
 ## Its hiss as it goes, and the crack where it lands.
 const HISS_DB := 36.0
+## How fast it spins about its length (radians a second).
+const SPIN := 14.0
 ## Struck this close to a limb's bone, a killing shard takes that limb.
 const LIMB_REACH := 0.16
 
@@ -26,25 +29,28 @@ var damage := DAMAGE
 var shooter: Node3D = null
 
 var _life := 0.0
+## How far it has turned about its length (radians).
+var spin := 0.0
+var _visual: MeshInstance3D
 
 
 func _ready() -> void:
 	collision_layer = 0
 	collision_mask = 0
-	var visual := MeshInstance3D.new()
-	visual.name = "MeshInstance3D"
-	var glass := PrismMesh.new()
-	glass.size = Vector3(0.025, 0.16, 0.012)
-	var black := StandardMaterial3D.new()
-	black.albedo_color = Color(0.04, 0.04, 0.05)
-	black.metallic = 0.8
-	black.roughness = 0.15
-	glass.material = black
-	visual.mesh = glass
-	# The point along the flight.
-	visual.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
-	visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(visual)
+	add_to_group(&"shards")
+	# A long splinter of black glass, its point along the flight (-Z).
+	_visual = MeshInstance3D.new()
+	_visual.name = "MeshInstance3D"
+	_visual.mesh = MagicFx.splinter_mesh(0.03, 0.2, 0.012)
+	_visual.material_override = MagicFx.glass_look()
+	_visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_visual)
+	_turn()
+
+
+## Its length along the flight (-Z), turned `spin` about it.
+func _turn() -> void:
+	_visual.transform = Transform3D(Basis(Vector3.FORWARD, spin) * Basis(Vector3.RIGHT, -PI * 0.5), Vector3.ZERO)
 
 
 func launch(from: Vector3, launch_velocity: Vector3, hit_damage: float, by: Node3D) -> void:
@@ -93,6 +99,8 @@ func _physics_process(delta: float) -> void:
 
 	global_position = to
 	_face_travel()
+	spin = wrapf(spin + SPIN * delta, -1000.0, 1000.0)
+	_turn()
 	Fx.streak(self, global_position - velocity * delta, velocity, 0.06)
 
 
@@ -137,11 +145,10 @@ func _hit(hit: Dictionary, direction: Vector3) -> void:
 		var body := collider as RigidBody3D
 		body.apply_impulse(direction * 3.0, point - body.global_position)
 
-	# On the world: dust of black glass, the crack of it, and gone.
+	# On the world: it shatters into black glass, and is gone.
 	var normal: Vector3 = hit.get("normal", -direction)
 	Fx.dust(self, point, normal, 0.5, "stone")
-	Fx.chips(self, point, normal, 0.4, "stone")
-	Sfx.play(self, &"ting", point, -4.0, 1.7)
+	MagicFx.shatter(self, point, normal)
 	SoundBus.emit_sound(point, HISS_DB, shooter, &"shard")
 	struck.emit(collider, 0.0)
 	queue_free()

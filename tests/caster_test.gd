@@ -603,6 +603,34 @@ func _run() -> void:
 	await _frames(WardScript.LIFE * 60.0)
 	_check("M4 with effects off, spells cast and leave no effects", left_over == 0, "magic effects %d" % left_over)
 
+	# M5 the shard spins about its length as it flies
+	Props.block(self, Vector3(-60, 1.5, -44), Vector3(6, 3, 0.4))           # a stone wall, its face at z = -43.8
+	_wield(&"revolver")
+	_put_player(Vector3(-60, 1.05, -24))
+	await _frames(40)
+	power.power = power.MAX
+	Input.action_press("spell_1")
+	await _until(func(): return not get_tree().get_nodes_in_group(&"shards").is_empty(), 60)
+	Input.action_release("spell_1")
+	var shard: Node = get_tree().get_nodes_in_group(&"shards")[0] if not get_tree().get_nodes_in_group(&"shards").is_empty() else null
+	var spun := -1.0
+
+	if shard != null:
+		var spin_before: float = shard.spin
+		await get_tree().physics_frame
+		spun = shard.spin - spin_before if is_instance_valid(shard) else -1.0
+
+	_check("M5 the shard spins about its length as it flies", _near(spun, 14.0 / 60.0, 0.05), "per frame %.3f rad" % spun)
+
+	# M6 on stone it shatters into black glass, gone in a moment
+	await _until(func(): return not get_tree().get_nodes_in_group(&"shatter").is_empty(), 60)
+	await _frames(1)
+	var shards_out: int = get_tree().get_nodes_in_group(&"shatter").size()
+	await _frames(int(1.5 * 60.0) + 5)
+	_check("M6 a shard shatters on stone into eight splinters, gone after 1.5 s",
+		shards_out == 8 and get_tree().get_nodes_in_group(&"shatter").is_empty(),
+		"splinters %d after %d" % [shards_out, get_tree().get_nodes_in_group(&"shatter").size()])
+
 	# S30 aiming a blink, a fresh right mouse lets it go, and raises no sights
 	_wield(&"revolver")
 	_put_player(Vector3(30, 1.05, -10))

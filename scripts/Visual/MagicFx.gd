@@ -6,10 +6,14 @@ extends RefCounted
 ## captures) none is made.
 
 const Fx := preload("res://scripts/Visual/Fx.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 ## Obsidian: black glass, its glints cold.
 const GLASS := Color("#0A0A0D")
 const GLINT := Color("#E6EEF5")
+## A shard's shatter: how many splinters, and how long they lie.
+const SHATTER_PIECES := 8
+const SHATTER_LIFE := 1.5
 
 static var _live: Array = []
 static var _glass_look: StandardMaterial3D
@@ -52,6 +56,47 @@ static func glass_look() -> StandardMaterial3D:
 		_glass_look.rim_tint = 0.4
 
 	return _glass_look
+
+
+## A shard broken on something: SHATTER_PIECES small splinters thrown out
+## along the face it struck (a fixed spread), gone after SHATTER_LIFE; the
+## crack of glass.
+static func shatter(context: Node, at: Vector3, normal: Vector3) -> void:
+	if not allowed(context):
+		return
+
+	var world := _world_of(context)
+	var out := normal.normalized() if normal.length() > 0.01 else Vector3.UP
+	var side := out.cross(Vector3.UP if absf(out.y) < 0.9 else Vector3.RIGHT).normalized()
+	var up := side.cross(out).normalized()
+
+	for i in SHATTER_PIECES:
+		var turn := TAU * float(i) / float(SHATTER_PIECES)
+		var piece := RigidBody3D.new()
+		piece.name = "Shatter"
+		piece.collision_layer = 0
+		piece.collision_mask = 1
+		piece.mass = 0.02
+		piece.add_to_group(&"shatter")
+		var shape := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(0.012, 0.04, 0.006)
+		shape.shape = box
+		piece.add_child(shape)
+		var visual := MeshInstance3D.new()
+		visual.mesh = splinter_mesh(0.012, 0.03 + 0.012 * float(i % 3), 0.005)
+		visual.material_override = glass_look()
+		visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		piece.add_child(visual)
+		world.add_child(piece)
+		piece.global_position = at + out * 0.03
+		piece.reset_physics_interpolation()
+		piece.linear_velocity = out * 2.2 + (side * cos(turn) + up * sin(turn)) * 1.6
+		piece.angular_velocity = Vector3(9.0, 4.0 * float(i % 3), 6.0)
+		_keep(piece, SHATTER_LIFE)
+
+	Fx.glint(context, at, 0.18, null, GLINT)
+	Sfx.play(context, &"ting", at, -3.0, 2.4)
 
 
 ## Every magic effect still showing.
