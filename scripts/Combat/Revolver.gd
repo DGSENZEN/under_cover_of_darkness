@@ -39,8 +39,8 @@ const SPREAD_ONE_HAND := 2.5
 ## Where a stray shot goes, in turn: a fixed ring, so a run is repeatable.
 const ROSETTE := [Vector2(0.0, 1.0), Vector2(0.87, -0.5), Vector2(-0.87, -0.5), Vector2(0.5, 0.87), Vector2(-1.0, 0.0), Vector2(0.5, -0.87)]
 ## The camera's kick for a shot from the cylinder, in one hand.
-const KICK_TRAUMA := 0.3
-const KICK_PUNCH := 0.9
+const KICK_TRAUMA := 0.38
+const KICK_PUNCH := 2.1
 ## The shell kicks harder than a ball.
 const SHELL_KICK := 1.4
 ## Seconds the thumb takes on the hammer's nose.
@@ -618,7 +618,8 @@ func _kicked(strength: float, gun: Resource) -> void:
 	_ready_at = _game_time + _settle
 	_kick = 1.0
 	player.juice.add_trauma(KICK_TRAUMA * strength * held)
-	player.juice.punch(KICK_PUNCH * strength * held, 0.0)
+	player.juice.punch(KICK_PUNCH * strength * held, 0.08 * held, 0.22 * strength * held)
+	player.juice.lunge(0.7 * strength * held)
 
 
 # How the hand looks
@@ -642,7 +643,7 @@ func _send_pose(delta: float) -> void:
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["sprint"]), _ease(_sprint_shown))
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["braced"]), _ease(_braced_shown))
 	# The kick snaps up and settles slowly: half as far in both hands.
-	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["recoil"]), _kick * _kick * (0.5 if braced else 1.0))
+	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["recoil"]), pow(_kick, 1.35) * (0.55 if braced else 1.0))
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["flip"]), _ease(_flip_shown))
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["gate"]), _ease(_gate_shown))
 	frame = ViewPoses.blend(frame, ViewPoses.revolver_frame(poses["kick"]), _ease(_boot_shown))

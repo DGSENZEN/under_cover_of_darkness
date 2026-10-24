@@ -3,6 +3,7 @@ extends CanvasLayer
 ## setup() binds the player and its component signals. Small Control subclasses draw individual indicators.
 ## Awareness/layout query methods expose current presentation for tests and callers.
 
+const AmmoReadoutScript := preload("res://scripts/UI/AmmoReadout.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const AdrenalineViewScript := preload("res://scripts/Visual/AdrenalineView.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -83,6 +84,7 @@ var _root: Control
 ## Everything but the pause screen (hidden while it is up).
 var _play: Control
 var _font: SystemFont
+var _ammo: AmmoReadoutScript
 var _crosshair: Crosshair
 var _prompts: HBoxContainer
 var _prompt_signature := ""
@@ -667,6 +669,13 @@ func setup(p_player: CharacterBody3D) -> void:
 	_white.visible = false
 	_play.add_child(_white)
 
+	_ammo = AmmoReadoutScript.new()
+	_ammo.name = "Ammo"
+	_ammo.player = player
+	_ammo.font = _font
+	_ammo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_play.add_child(_ammo)
+
 	_crosshair = Crosshair.new()
 	_crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_play.add_child(_crosshair)
@@ -878,6 +887,10 @@ func _process(delta: float) -> void:
 
 	var view := _root.size
 	var centre := view * 0.5
+	_ammo.position = Vector2(maxf(28.0, view.x - 136.0), maxf(0.0, view.y - 98.0))
+	_ammo.size = Vector2(108, 58)
+	_ammo.visible = not _ammo.snapshot().is_empty()
+	_ammo.queue_redraw()
 
 	# Prompts under the crosshair.
 	var actions: Array = []

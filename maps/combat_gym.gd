@@ -74,6 +74,13 @@ func _ready() -> void:
 	Props.give_weapons(player)
 	Props.give_revolver(player)
 	player.inventory.select_by_id(&"sword")
+	# Opt-in launch for repeated gun/magic feel tests; the normal gym is unchanged.
+	if "--range" in OS.get_cmdline_user_args():
+		player.teleport(Transform3D(Basis.IDENTITY, Vector3(40, 1.05, -12)))
+		player.inventory.select_by_id(&"revolver")
+		player.inventory.add_ammo(&"rounds", 96)
+		player.inventory.add_ammo(&"shells", 20)
+		player.invulnerable = true
 
 
 ## The range: the revolver and the spells. Dummies at 5, 15 and 30 m, a wall
@@ -165,3 +172,8 @@ func _environment() -> void:
 	var world := WorldEnvironment.new()
 	world.environment = environment
 	add_child(world)
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if "--range" in OS.get_cmdline_user_args() and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F5:
+		get_tree().reload_current_scene()
