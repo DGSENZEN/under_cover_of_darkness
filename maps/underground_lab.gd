@@ -1049,22 +1049,48 @@ func _run_on() -> void:
 			["pipe_red_4", FIRE_Y, true], ["pipe_blue_4", AIR_Y, true], ["cable_swag", HOOK_Y, true]]:
 		var wall: float = FAR_WALL if line[2] else BACK_WALL
 		var reach := Vector2(INF, -INF)
+		var plain: Array[MeshInstance3D] = []
 		for piece: MeshInstance3D in services:
 			var box := piece.global_transform * piece.get_aabb()
 			if absf(piece.position.y - line[1]) < 0.01 and absf(piece.position.z - wall) < 0.01:
 				reach = Vector2(minf(reach.x, box.position.x), maxf(reach.y, box.end.x))
+				if String(piece.get_meta("kind", "")) == line[0]:
+					plain.append(piece)
 		if reach.x == INF:
 			continue
-		while reach.y < half_run - 0.05:
-			var piece := _hang(line[0], Vector3(reach.y, line[1], wall), line[2])
-			var box := piece.global_transform * piece.get_aabb()
-			piece.position.x += reach.y - box.position.x
-			reach.y += box.size.x
-		while reach.x > -half_run + 0.05:
-			var piece := _hang(line[0], Vector3(reach.x, line[1], wall), line[2])
-			var box := piece.global_transform * piece.get_aabb()
-			piece.position.x += reach.x - box.end.x
-			reach.x -= box.size.x
+		var size: float = (_service_meshes[line[0]] as Mesh).get_aabb().size.x
+		# Each way to the corridor's end exactly: whole modules, all drawn out (or in) alike to fill it; or, less than
+		# half a module short, the line's last module drawn out to meet it.
+		for way: float in [1.0, -1.0]:
+			var from: float = reach.y if way > 0.0 else reach.x
+			var gap := half_run - from * way
+			if gap < 0.01:
+				continue
+			if gap < size / 2.0:
+				var last: MeshInstance3D = null
+				for piece in plain:
+					var at := (piece.global_transform * piece.get_aabb()).get_center().x
+					if last == null or at * way > (last.global_transform * last.get_aabb()).get_center().x * way:
+						last = piece
+				if last != null:
+					_stretch(last, gap, way)
+				continue
+			var count := maxi(1, roundi(gap / size))
+			for k in count:
+				var piece := _hang(line[0], Vector3(from, line[1], wall), line[2])
+				piece.scale.x = gap / (count * size)
+				var box := piece.global_transform * piece.get_aabb()
+				piece.position.x += from - (box.position.x if way > 0.0 else box.end.x)
+				from += way * box.size.x
+
+
+## A run's last module drawn out `by` toward `way` (+1 or -1 along x), its inner end kept where it was.
+func _stretch(piece: MeshInstance3D, by: float, way: float) -> void:
+	var box := piece.global_transform * piece.get_aabb()
+	var inner := box.position.x if way > 0.0 else box.end.x
+	piece.scale.x *= (box.size.x + by) / box.size.x
+	box = piece.global_transform * piece.get_aabb()
+	piece.position.x += inner - (box.position.x if way > 0.0 else box.end.x)
 
 
 # The corridor's furniture, each piece with its cause

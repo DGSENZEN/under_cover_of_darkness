@@ -32,6 +32,7 @@ import library_books  # noqa: E402
 import library_spectres  # noqa: E402
 import library_ward  # noqa: E402
 import library_hangings  # noqa: E402
+import candle_lane  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -2238,6 +2239,53 @@ class LibraryHangings(unittest.TestCase):
         self.assertAlmostEqual(z1, hook.z, delta=0.03)
         self.assertLess(math.hypot((x0 + x1) / 2 - hook.x, (y0 + y1) / 2 - hook.y), 0.05)
         self.assertGreater(z1 - z0, 0.35)
+
+
+class CandleLane(unittest.TestCase):
+    """The candle lane's own pieces (tools/eclipse/candle_lane.py), in the lane's frame (Blender: x along it, y = the
+    lane's -z, z up): the chapel's doorway frame, the votive ledges and their candles, the milagros board, a Pasaje
+    puesto, the enamel sign and the arrow plates (their faces blank). Closed, in budget, through the gate."""
+
+    @classmethod
+    def setUpClass(cls):
+        candle_lane.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        self.assertEqual(sorted(self.objects), sorted(candle_lane.BUDGET))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=candle_lane.BUDGET[n], sliver=candle_lane.SLIVER[n])[:3],
+                             [], n)
+
+    def test_the_doorway_opens_three_by_two_point_eight(self):
+        # Rays through the frame's opening pass; just outside it they meet stone.
+        o = self.objects["chapel_door"]
+        x = candle_lane.DOOR_X - 0.2
+        y_mid = -candle_lane.DOOR_Z
+        for dy in (-1.45, 1.45):
+            self.assertIsNone(_hit(o, (x, y_mid + dy, 1.4), (1.0, 0.0, 0.0), 0.5))
+        self.assertIsNone(_hit(o, (x, y_mid, 2.75), (1.0, 0.0, 0.0), 0.5))
+        self.assertIsNotNone(_hit(o, (x, y_mid, 2.9), (1.0, 0.0, 0.0), 0.5))
+        self.assertIsNotNone(_hit(o, (x, y_mid + 1.6, 1.4), (1.0, 0.0, 0.0), 0.5))
+
+    def test_the_ledges_carry_their_candles(self):
+        wicks = common.WICKS.get("votive_ledges", [])
+        self.assertGreaterEqual(len(wicks), 20)
+        (x0, x1), _, (z0, z1) = self._extent("votive_ledges")
+        self.assertTrue(all(x0 < w[0] < x1 for w in wicks))
+        # (Every wick over a candle over a ledge: a ray down from just above it meets the piece.)
+        self.assertTrue(all(_hit(self.objects["votive_ledges"], (w[0], w[1], w[2] + 0.02), (0, 0, -1), 0.5) for w in wicks))
+
+    def test_sign_faces_are_blank_for_the_users_words(self):
+        for n in ("enamel_sign", "arrow_east", "arrow_west", "puesto"):
+            names = {s.material.name for s in self.objects[n].material_slots}
+            self.assertIn("sign", names, n)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ func _ready() -> void:
 	await _frames(5)
 	await _shell()
 	await _order()
+	await _ends()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -127,16 +128,113 @@ func _order() -> void:
 			if span.x > to + 0.1:
 				gap = true
 			to = maxf(to, span.y)
-		if gap or to < lane.LANE_HALF - 0.1:
+		# (Nor past them: out of the mouth into the Pasaje, or through the end wall into the chapel.)
+		if gap or to < lane.LANE_HALF - 0.1 or reach < -lane.LANE_HALF - 0.1 or to > lane.LANE_HALF + 0.1:
 			short.append("%s %.1f..%.1f" % [key, reach, to])
 	var vault: Array = lane.find_children("vault_span*", "MeshInstance3D", false, false)
 	var vault_x := Vector2(INF, -INF)
 	for span: MeshInstance3D in vault:
 		var box: AABB = span.global_transform * span.get_aabb()
 		vault_x = Vector2(minf(vault_x.x, box.position.x), maxf(vault_x.y, box.end.x))
-	_check("C8 the services and the vault run the lane's whole length",
+	_check("C8 the services and the vault run the lane's whole length, ending at its ends",
 		short.is_empty() and lines.size() >= 4 and vault_x.x < -lane.LANE_HALF + 0.1 and vault_x.y > lane.LANE_HALF - 0.1,
 		"short %s lines %d vault %.1f..%.1f" % [short.slice(0, 4), lines.size(), vault_x.x, vault_x.y])
+
+
+## Task 5: the lane's own pieces at its two ends and the way's signs; the stubs only when it stands alone.
+func _ends() -> void:
+	var half: float = lane.LANE_HALF
+	var frame: MeshInstance3D = lane.get("door_frame")
+	var frame_box: AABB = frame.global_transform * frame.get_aabb() if frame != null else AABB()
+	var framed: bool = frame != null and frame_box.position.x > half - 0.4 and frame_box.end.x < half + 0.6 \
+		and frame_box.position.z < lane.DOOR_Z - 1.8 and frame_box.end.z > lane.DOOR_Z + 1.8
+	# (The flames stand on every wick; they burn in a few systems along the ledges, each with its light.)
+	var wicks: Array = lane.get("candle_wicks") if lane.get("candle_wicks") != null else []
+	var candles: Array = lane.get("candles") if lane.get("candles") != null else []
+	var lit := candles.filter(func(c): return not (c as Node3D).find_children("*", "OmniLight3D", true, false).is_empty())
+	var on_ledges := wicks.all(func(w):
+		var x: float = lane.plan_point(w).x
+		return x >= 22.0 and x <= 28.0)
+	var board: MeshInstance3D = lane.get("milagros")
+	var board_at: Vector3 = (board.global_transform * board.get_aabb()).get_center() if board != null else Vector3.INF
+	var by_door: bool = board != null and absf(board_at.x - half) < 0.3 \
+		and absf(board_at.z - lane.DOOR_Z) > 1.9 and absf(board_at.z - lane.DOOR_Z) < 3.5
+	_check("C9 the chapel end: the doorway's frame on the east end, votive ledges with lit flames between plan x 22 and 28, the milagros board beside the doorway",
+		framed and lane.get("ledges") != null and wicks.size() >= 20 and not candles.is_empty() and lit.size() == candles.size()
+		and on_ledges and by_door,
+		"framed %s wicks %d systems %d lit %d on ledges %s board by door %s" % [framed, wicks.size(), candles.size(), lit.size(), on_ledges, by_door])
+
+	# The mouth: the tiles' band runs both walls to the mouth; the sign over it; arrows both ways; no words anywhere.
+	var at_mouth := {"back": false, "far": false}
+	for panel: MeshInstance3D in lane.wall_panels:
+		var box: AABB = panel.global_transform * panel.get_aabb()
+		if box.position.x < -half + 1.3:
+			at_mouth["far" if box.get_center().z > 1.0 else "back"] = true
+	var sign: Node3D = lane.get("mouth_sign")
+	var sign_box: AABB = (sign as MeshInstance3D).global_transform * (sign as MeshInstance3D).get_aabb() if sign != null else AABB()
+	var hung: bool = sign != null and absf(sign_box.get_center().x + half) < 2.0 and sign_box.position.y >= 2.1 \
+		and sign_box.end.y <= lane.HEIGHT + 0.05
+	var ways := {"west": 0, "east": 0}
+	var arrows: Array = lane.get("arrows") if lane.get("arrows") != null else []
+	for arrow: Node3D in arrows:
+		var way: String = arrow.get_meta("points", "")
+		var along: Vector3 = arrow.global_basis * (Vector3.RIGHT if String(arrow.get_meta("kind", "")) == "arrow_east" else Vector3.LEFT)
+		if (way == "west" and along.x < -0.9) or (way == "east" and along.x > 0.9):
+			ways[way] += 1
+	# (Nothing written on the way's signs: no text, and no decal laid over a sign's face; the bay's soot and grime are
+	# no words.)
+	var faces: Array = arrows.duplicate()
+	if sign != null:
+		faces.append(sign)
+	# (The player's own hand prompts are the player's, not the lane's.)
+	var player: Node = lane.get("player")
+	var marked := lane.find_children("*", "Label3D", true, false).filter(
+		func(l): return player == null or not player.is_ancestor_of(l)).size()
+	for decal: Decal in lane.find_children("*", "Decal", true, false):
+		for face: MeshInstance3D in faces:
+			if (face.global_transform * face.get_aabb()).grow(0.1).has_point(decal.global_position):
+				marked += 1
+	# The mouth's portal: across its top and down both walls, where the services' runs end (none of their ends in the
+	# open).
+	var portal: MeshInstance3D = lane.get("mouth_portal")
+	var portal_box: AABB = portal.global_transform * portal.get_aabb() if portal != null else AABB()
+	var framing: bool = portal != null and portal_box.position.x <= -half and portal_box.end.x > -half + 0.3 \
+		and portal_box.position.z <= lane.BACK_WALL and portal_box.end.z >= lane.FAR_WALL and portal_box.end.y >= lane.HEIGHT - 0.05
+	var loose := []
+	for piece: MeshInstance3D in lane.services:
+		var box: AABB = piece.global_transform * piece.get_aabb()
+		if box.position.x < -half + 0.3 and portal != null and box.end.x - box.position.x > 1.0:
+			# (Its west end inside the portal: the end's middle within the portal's box.)
+			var end := Vector3(box.position.x + 0.02, box.get_center().y, box.get_center().z)
+			if not portal_box.grow(0.02).has_point(end):
+				loose.append("%s %.2f,%.2f,%.2f" % [piece.name, end.x, end.y, end.z])
+	_check("C10 the mouth: the line's band along both walls, the enamel sign over the mouth, arrows toward the trains (west) and to the south-east exit (east), every face blank; a portal frames it, the services ending in it",
+		at_mouth["back"] and at_mouth["far"] and hung and ways["west"] >= 1 and ways["east"] >= 1 and marked == 0
+		and framing and loose.is_empty(),
+		"band %s sign hung %s ways %s words %d portal %s loose ends %s" % [at_mouth, hung, ways, marked, framing, loose.slice(0, 4)])
+
+	# Standalone, the stubs stand; set into the map, they do not.
+	var stub: Node3D = lane.get("stub")
+	var puestos := stub.find_children("puesto*", "", true, false) if stub != null else []
+	var backdrops := stub.find_children("backdrop*", "", true, false) if stub != null else []
+	var up_down := backdrops.filter(func(b): return absf(absf((b as Node3D).global_position.z - 1.1) - 6.0) < 1.5 \
+		and (b as Node3D).global_position.x < -half).size()
+	var glow := stub.find_children("chapel_glow", "OmniLight3D", true, false) if stub != null else []
+	var glows: bool = glow.size() == 1 and absf((glow[0] as Node3D).global_position.x - (half + 2.4)) < 0.6 \
+		and (glow[0] as OmniLight3D).light_color.r > (glow[0] as OmniLight3D).light_color.b
+	var behind := stub.find_children("chapel_backdrop", "", true, false).size() if stub != null else 0
+	var inset: Node3D = LANE.instantiate()
+	inset.standalone = false
+	add_child(inset)
+	await _frames(2)
+	var inset_stub: Node3D = inset.get("stub")
+	var bare: bool = inset_stub == null or (not inset_stub.visible and inset_stub.get_child_count() == 0)
+	bare = bare and inset.find_children("puesto*", "", true, false).is_empty() and inset.find_children("backdrop*", "", true, false).is_empty()
+	inset.queue_free()
+	await _frames(2)
+	_check("C11 standalone, the Pasaje stub (two puestos either side of the mouth, lit backdrops 6 m up and down it) and the chapel's glimpse (warm light 2 m inside the doorway, a backdrop) stand; not standalone, neither does",
+		stub != null and stub.visible and puestos.size() == 2 and up_down == 2 and glows and behind == 1 and bare,
+		"puestos %d backdrops %d/%d glow %s chapel backdrop %d inset bare %s" % [puestos.size(), up_down, backdrops.size(), glows, behind, bare])
 
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:
