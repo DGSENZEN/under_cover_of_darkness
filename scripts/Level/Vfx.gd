@@ -68,47 +68,39 @@ const FIRE_RAMP := [Color("#2a0a00"), Color("#c8400c"), Color("#ff8a1e"), Color(
 ## max] (m/s) up a spread (degrees), gravity, the box born in (half
 ## extents, `offset` up), fps. A String part is another effect's parts.
 const PRESETS := {
-	"steam": [{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.94, 0.94, 0.96),
-		"opacity": 0.55, "amount": 16, "lifetime": 1.4, "size": [0.35, 0.9], "velocity": [0.5, 0.9], "spread": 12.0,
-		"gravity": Vector3(0, 0.3, 0), "box": Vector3(0.1, 0.05, 0.1), "fps": 30, "erosion": 0.5, "blown": 0.2,
-		"anim": 1.0}],
-	"copal": [{"draw": "sprites", "sheet": PLUME, "sheet_b": PLUME_B, "grid": [8, 4], "tint": Color("ECE6DA"),
-		"opacity": 0.9, "amount": 40, "lifetime": 6.0, "size": [0.5, 2.4], "velocity": [0.4, 0.65], "spread": 8.0,
-		"gravity": Vector3(0, 0.12, 0), "box": Vector3(0.08, 0.05, 0.08), "offset": 0.8, "fps": 30, "erosion": 0.35,
-		"blown": 0.15, "anim": 1.0, "breathed": true},
-		{"draw": "stem", "size": Vector2(0.5, 1.0)},
+	# Breath and smoke drawn on meshes, the Deadlock way (Fumes.gd): plumes climbing out of the mouth
+	# and lumpy puffs breathed among them, lit in hard bands, eaten away with a hard edge.
+	"steam": [{"draw": "fumes", "width": 0.35, "rise": 1.4, "plumes": 3, "root": 0.12, "crown": 0.42,
+		"lit": Color(0.94, 0.94, 0.96), "shade": Color(0.55, 0.6, 0.7), "warmth": 0.0, "glow": 0.18, "opacity": 0.55,
+		"puffs": 6.0, "puff_life": 1.6, "puff_size": 0.42, "puff_speed": 0.6}],
+	# A copal burner's column: pale, slow, climbing high, pooling in a haze over it.
+	"copal": [{"draw": "fumes", "width": 0.25, "rise": 2.6, "plumes": 3, "root": 0.16, "crown": 1.1,
+		"lit": Color("ECE6DA"), "shade": Color(0.5, 0.5, 0.56), "warmth": 0.04, "glow": 0.1, "opacity": 0.6,
+		"puffs": 3.0, "puff_life": 4.0, "puff_size": 0.6, "puff_speed": 0.4, "offset": 0.8, "breathed": true},
 		{"draw": "pool", "size": Vector3(3.0, 1.6, 3.0), "at": Vector3(0, 2.4, 0)}],
-	# A censer's thread of copal (the Underground's curandera): a thin, cool,
-	# see-through thread off the resin, widening and fraying as it rises to
-	# the canvas (its lift outweighs the particles' damping, 0.2-0.4, or it
-	# stalls over the bowl; it fades out just under the cloth, never through
-	# it), where it gathers in a haze.
-	"censer": [{"draw": "sprites", "sheet": PLUME, "sheet_b": PLUME_B, "grid": [8, 4], "tint": Color("B4B8C2"),
-		"opacity": 0.28, "amount": 72, "lifetime": 3.2, "size": [0.11, 0.65], "velocity": [0.16, 0.24], "spread": 7.0,
-		"gravity": Vector3(0, 0.4, 0), "box": Vector3(0.02, 0.02, 0.02), "offset": 0.04, "fps": 30, "erosion": 0.5,
-		"blown": 0.2, "anim": 1.0},
-		{"draw": "stem", "size": Vector2(0.08, 0.85)},
+	# A censer's thread of copal (the Underground's curandera): two thin, cool, see-through threads off
+	# the resin, widening and fraying as they rise; gone just under the canvas, where it gathers in a haze.
+	"censer": [{"draw": "fumes", "width": 0.05, "rise": 0.82, "plumes": 2, "root": 0.25, "crown": 2.6,
+		"lit": Color("B4B8C2"), "shade": Color(0.4, 0.42, 0.5), "warmth": 0.0, "glow": 0.08, "opacity": 0.42,
+		"puffs": 1.5, "puff_life": 2.6, "puff_size": 0.9, "puff_speed": 0.14, "churn": 0.12},
 		{"draw": "pool", "size": Vector3(1.6, 0.4, 1.6), "at": Vector3(0, 0.9, 0), "density": 1.4}],
-	# A tamale steamer's steam, escaping round its lid: soft, pale, quick to thin; glowing a little
-	# so it reads pale from its shadowed side too (lit only, it went brown under the warm lamps).
-	"pot_steam": [{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.5, 0.5, 0.52),
-		"glows": true, "opacity": 0.2, "amount": 24, "lifetime": 1.3, "size": [0.15, 0.6], "velocity": [0.18, 0.3], "spread": 14.0,
-		"gravity": Vector3(0, 0.25, 0), "box": Vector3(0.14, 0.02, 0.14), "fps": 30, "erosion": 0.55, "blown": 0.25,
-		"anim": 1.0}],
-	# Warm air breathed out of a wall vent (its node turned so up is out of the wall):
-	# faint warm wisps rising as they leave it, dust carried on them.
-	# (Drawn on meshes, the Deadlock way: plumes climbing out of it and puffs breathed between them, Fumes.gd;
-	# pale and cool, the works' warm breath clouding in the corridor's cold, so it reads on the warm-lit tiles.)
-	"vent_breath": [{"draw": "fumes", "width": 0.5, "rise": 1.2, "plumes": 3, "puffs": 5.0, "life": 2.6,
+	# A tamale steamer's steam, escaping round its lid: white, quick, thinning fast; a little light of
+	# its own so it reads pale from its shadowed side too (lit only, it went brown under the warm lamps).
+	"pot_steam": [{"draw": "fumes", "width": 0.3, "rise": 0.7, "plumes": 3, "root": 0.12, "crown": 0.38,
+		"lit": Color(0.95, 0.95, 0.97), "shade": Color(0.55, 0.58, 0.66), "warmth": 0.0, "glow": 0.2, "opacity": 0.5,
+		"puffs": 7.0, "puff_life": 1.3, "puff_size": 0.3, "puff_speed": 0.25}],
+	# Warm air breathed out of a wall vent (its node turned so up is out of the wall): pale and cool,
+	# the works' warm breath clouding in the corridor's cold, so it reads on the warm-lit tiles; dust
+	# carried on it.
+	"vent_breath": [{"draw": "fumes", "width": 0.5, "rise": 1.2, "plumes": 3, "puffs": 5.0, "puff_life": 2.6,
 		"lit": Color(0.94, 0.93, 0.9), "shade": Color(0.5, 0.56, 0.68), "warm": Color(0.95, 0.52, 0.24),
 		"opacity": 0.6},
 		{"draw": "motes", "tint": Color(1.0, 0.9, 0.7, 0.6), "amount": 16, "lifetime": 3.0, "size": [0.015, 0.015],
 		"velocity": [0.2, 0.4], "spread": 25.0, "gravity": Vector3(0, 0.12, 0), "box": Vector3(0.26, 0.01, 0.15),
 		"fps": 15}],
-	"smoke": [{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.42, 0.4, 0.38),
-		"opacity": 0.6, "amount": 24, "lifetime": 3.2, "size": [0.4, 1.4], "velocity": [0.4, 0.7], "spread": 15.0,
-		"gravity": Vector3(0, 0.15, 0), "box": Vector3(0.15, 0.05, 0.15), "offset": 0.6, "fps": 30, "erosion": 0.4,
-		"blown": 0.3, "anim": 1.0}],
+	"smoke": [{"draw": "fumes", "width": 0.35, "rise": 2.2, "plumes": 3, "root": 0.14, "crown": 0.6,
+		"lit": Color(0.42, 0.4, 0.38), "shade": Color(0.2, 0.2, 0.22), "warmth": 0.0, "glow": 0.03, "opacity": 0.65,
+		"puffs": 5.0, "puff_life": 3.2, "puff_size": 0.5, "puff_speed": 0.5, "offset": 0.6}],
 	"embers": [{"draw": "specks", "tint": Color("FFA040"), "amount": 30, "lifetime": 1.4, "size": [0.035, 0.015],
 		"velocity": [0.8, 1.6], "spread": 25.0, "gravity": Vector3(0, 0.6, 0), "box": Vector3(0.2, 0.05, 0.2), "fps": 30,
 		"blown": 0.2}],
@@ -129,10 +121,9 @@ const PRESETS := {
 	"candles": [{"draw": "candles"}, {"draw": "light", "colour": CANDLE_COLOUR, "range": 4.0, "at": Vector3(0, 0.4, 0)}],
 	"brazier": [{"draw": "flames"}, {"draw": "trailed"}, {"draw": "haze"},
 		{"draw": "light", "colour": FIRE_COLOUR, "range": 9.0, "at": Vector3(0, 0.5, 0)},
-		{"draw": "sprites", "sheet": PUFF, "sheet_b": PUFF_B, "grid": [4, 4], "tint": Color(0.36, 0.34, 0.32),
-		"opacity": 0.5, "amount": 20, "lifetime": 3.0, "size": [0.4, 1.4], "velocity": [0.4, 0.7], "spread": 12.0,
-		"gravity": Vector3(0, 0.15, 0), "box": Vector3(0.12, 0.05, 0.12), "offset": 0.9, "fps": 30, "erosion": 0.4,
-		"blown": 0.3, "anim": 1.0}],
+		{"draw": "fumes", "width": 0.3, "rise": 2.0, "plumes": 2, "root": 0.2, "crown": 0.7,
+		"lit": Color(0.38, 0.36, 0.34), "shade": Color(0.18, 0.17, 0.19), "warm": Color(1.0, 0.5, 0.2), "warmth": 0.25,
+		"glow": 0.03, "opacity": 0.6, "puffs": 4.0, "puff_life": 3.0, "puff_size": 0.5, "puff_speed": 0.5, "offset": 0.9}],
 	"coals": [{"draw": "trailed"}, {"draw": "light", "colour": FIRE_COLOUR, "range": 3.0, "at": Vector3(0, 0.2, 0)}],
 }
 ## Effects whose light flickers with their flames, and its energy.
@@ -439,15 +430,12 @@ static func _set_flame(draws: Array, i: int, at: Vector3, size: float, phase: fl
 static func _fumes(p: Dictionary) -> Fumes:
 	var fumes := Fumes.new()
 	fumes.name = "fumes"
-	fumes.width = p["width"]
-	fumes.rise = p["rise"]
-	fumes.plumes = p["plumes"]
-	fumes.puffs = p["puffs"]
-	fumes.puff_life = p["life"]
-	fumes.lit = p["lit"]
-	fumes.shade = p["shade"]
-	fumes.warm = p["warm"]
-	fumes.opacity = p["opacity"]
+
+	for key in p:
+		if key in fumes:
+			fumes.set(key, p[key])
+
+	fumes.position.y = p.get("offset", 0.0)
 	fumes.seed = randi()
 	fumes.visible = false
 	return fumes
@@ -928,6 +916,8 @@ static func thin(node: Node3D, ratio: float) -> void:
 	for child in node.get_children():
 		if child is GPUParticles3D:
 			child.amount_ratio = ratio
+		elif child is Fumes and child.puffer != null:
+			child.puffer.amount_ratio = ratio
 
 
 ## Carries what an effect gives off on the wind.

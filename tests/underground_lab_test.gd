@@ -127,18 +127,16 @@ func _run() -> void:
 		swing > 0.3 and swing < 4.0 and lights.size() > 5 and lab.bulb_pivot.is_ancestor_of(lab.bulb),
 		"swing %.2f deg, light at %d places" % [swing, lights.size()])
 
-	# U11 a thread of copal rises from the censer: our own smoke sheet, blown by the one draught
+	# U11 a thread of copal rises from the censer: thin plume tubes widening up to the canvas and puffs off
+	#     the resin, drawn on meshes, blown by the one draught
 	var censer: Node3D = lab.censer
-	var smoke: Array = censer.find_children("*", "GPUParticles3D", true, false) if censer != null else []
-	var sheet := ""
-
-	for p: GPUParticles3D in smoke:
-		var m: Material = p.draw_pass_1.surface_get_material(0) if p.draw_pass_1 != null else p.material_override
-		if m is ShaderMaterial and m.get_shader_parameter("sheet") is Texture2D:
-			sheet = (m.get_shader_parameter("sheet") as Texture2D).resource_path
-	_check("U11 a thread of copal smoke rises from the censer, drawn from our own plume sheet",
-		censer != null and censer.global_position.distance_to(lab.CENSER) < 0.05 and smoke.any(func(p): return p.emitting)
-		and sheet.begins_with("res://assets/vfx/"), "censer %s sheet %s" % [censer, sheet])
+	var thread: Fumes = censer.get_node_or_null("fumes") if censer != null else null
+	var threads: bool = thread != null and thread.tubes.size() >= 1 and thread.tubes.all(
+		func(t): return t.mesh.get_aabb().size.y > 0.6 and t.mesh.get_aabb().end.y < 0.95)
+	_check("U11 a thread of copal rises from the censer on meshes, gone under the canvas",
+		censer != null and censer.global_position.distance_to(lab.CENSER) < 0.05 and threads
+		and thread.puffer != null and thread.puffer.emitting and thread.draught.length() > 0.1,
+		"censer %s threads %s" % [censer, threads])
 
 	# U12 dust hangs in each work light's cone
 	var in_cones := 0
@@ -261,7 +259,7 @@ func _run() -> void:
 		dimmest = minf(dimmest, lab.work_lights[0].light_energy)
 		rumble_loudest = maxf(rumble_loudest, lab.rumble.volume_db)
 		sifting = sifting or (lab.dust_sift.emitting and lab.dust_sift.amount_ratio > 0.4)
-		var copal: GPUParticles3D = lab.censer.find_children("*", "GPUParticles3D", true, false)[0]
+		var copal: GPUParticles3D = (lab.censer.get_node("fumes") as Fumes).puffer
 		blown_most = maxf(blown_most, absf((copal.process_material as ParticleProcessMaterial).gravity.x))
 
 	_check("U22 a train passes now and then: its strength builds to full and holds",

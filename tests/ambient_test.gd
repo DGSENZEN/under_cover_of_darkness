@@ -72,9 +72,12 @@ func _run() -> void:
 	ambient = Ambient.build([{"effect": "copal", "at": [3, 0, 0]}, {"effect": "mist", "at": [-3, 0, 0]}])
 	add_child(ambient)
 	ambient.step(0.3)
-	var copal: GPUParticles3D = _particles(ambient.system(0))
+	var copal: Fumes = ambient.system(0).get_node_or_null("fumes") if ambient.system(0) != null else null
 	var mist: GPUParticles3D = _particles(ambient.system(1))
-	var pale: bool = copal != null and Vfx.tint(copal).is_equal_approx(Color("ECE6DA")) and copal.emitting
+	if copal != null:
+		copal.build()
+	var pale: bool = copal != null and copal.lit.is_equal_approx(Color("ECE6DA")) and copal.visible \
+		and copal.puffer != null and copal.puffer.emitting
 	var low: bool = mist != null and (mist.process_material as ParticleProcessMaterial).emission_box_extents.y <= 0.3 \
 		and (mist.process_material as ParticleProcessMaterial).initial_velocity_max <= 0.4
 	_check("A4 copal smokes pale, mist keeps low", pale and low, "copal %s, mist %s" % [copal, mist])
@@ -191,6 +194,12 @@ func _run() -> void:
 	# A8 thinner with distance
 	ambient = Ambient.build([{"effect": "steam", "at": [10, 0, 0]}, {"effect": "steam", "at": [40, 0, 0]}])
 	add_child(ambient)
+	# (Steam is drawn as fumes now: made on the first pick, they build their puffs on their next frame, and the
+	# pick after thins them.)
+	ambient.step(0.3)
+	# (process_frame comes before the frame's _process: two, so theirs has run.)
+	for i in 2:
+		await get_tree().process_frame
 	ambient.step(0.3)
 	var near_ratio: float = _particles(ambient.system(0)).amount_ratio
 	var far_ratio: float = _particles(ambient.system(1)).amount_ratio
@@ -348,15 +357,16 @@ func _run() -> void:
 	_check("A13x embers bounce on the ground under their spot", is_equal_approx(floors["brazier"], -0.9)
 		and is_equal_approx(floors["coals"], -0.1), str(floors))
 
-	# A13a copal's stem is a thread of smoke, its noise in metres (in the
-	# quad's UVs on a tall quad it stretched into white drips)
+	# A13a copal's column drawn on meshes, the Deadlock way: plume tubes climbing two metres and more out of
+	# the burner, lumpy puffs among them (never flat cards), their noise tiled by their height
 	var censer: Node3D = Vfx.system("copal")
 	add_child(censer)
-	var stem: MeshInstance3D = censer.get_node("stem")
-	var extent: Vector3 = stem.mesh.get_aabb().size
-	var sized: Variant = stem.get_surface_override_material(0).get_shader_parameter(&"size")
-	_check("A13a copal's stem samples its noise in metres", sized is Vector2 and sized.is_equal_approx(Vector2(maxf(extent.x, extent.z), extent.y)),
-		"stem %s, its shader's size %s" % [extent, sized])
+	var plumes: Fumes = censer.get_node("fumes")
+	plumes.build()
+	var climbs: bool = plumes.tubes.size() >= 2 and plumes.tubes.all(func(t): return t.mesh.get_aabb().size.y > 2.0)
+	var lumps: bool = plumes.puffer != null and plumes.puffer.draw_pass_1 is SphereMesh
+	_check("A13a copal's column: plume tubes climbing over 2 m and lumpy puffs, all meshes", climbs and lumps,
+		"%d tubes climbs %s lumps %s" % [plumes.tubes.size(), climbs, lumps])
 	censer.free()
 
 	# A13b a brazier's embers streak short (a long trail drew a stick of
@@ -381,8 +391,11 @@ func _run() -> void:
 
 	for effect in ["copal", "steam", "smoke"]:
 		var puffs: Node3D = Vfx.system(effect)
-		var limit: CurveTexture = _particles(puffs).process_material.velocity_limit_curve
-		capped.append(limit != null and limit.curve.sample(0.5) <= 1.2)
+		var breath: Fumes = puffs.get_node("fumes")
+		breath.build()
+		var limit: CurveTexture = breath.puffer.process_material.velocity_limit_curve
+		# (A curve keeps 32-bit floats: its 1.2 reads 1.2000000477.)
+		capped.append(limit != null and limit.curve.sample(0.5) <= 1.2 + 1e-5)
 		puffs.free()
 
 	_check("A13d copal, steam and smoke drift no faster than 1.2 m/s on the wind", capped.all(func(c): return c), str(capped))
@@ -391,8 +404,9 @@ func _run() -> void:
 	# with no wind of their own, stopped the blowing short of the smoke)
 	var burning: Node3D = Vfx.system("brazier")
 	add_child(burning)
-	var smoke_puffs: GPUParticles3D = burning.get_children().filter(
-		func(c): return c is GPUParticles3D and c.draw_pass_1.material is ShaderMaterial)[0]
+	var smoke_fumes: Fumes = burning.get_node("fumes")
+	smoke_fumes.build()
+	var smoke_puffs: GPUParticles3D = smoke_fumes.puffer
 	var calm: Vector3 = smoke_puffs.process_material.gravity
 	Vfx.blow(burning, Vector3(4, 0, 0))
 	_check("A13f the wind carries a brazier's smoke past its sparks", smoke_puffs.process_material.gravity.x > calm.x + 0.5,
