@@ -733,7 +733,8 @@ func _run() -> void:
 	var plumes: Array = ward.get_children().filter(func(c): return c.is_in_group(&"ward_plume")) if ward != null else []
 	var coloured: bool = not plumes.is_empty() and plumes.all(func(p): return (p.material_override as ShaderMaterial).get_shader_parameter(&"core").is_equal_approx(Color("#F2FAFC")))
 	var rising: float = (plumes[0].material_override as ShaderMaterial).get_shader_parameter(&"erosion") if not plumes.is_empty() else -1.0
-	await _frames(25)
+	# (Rising round from the front: the last plume is up by 0.66 s.)
+	await _frames(45)
 	var risen: float = (plumes[0].material_override as ShaderMaterial).get_shader_parameter(&"erosion") if not plumes.is_empty() and is_instance_valid(plumes[0]) else -1.0
 	_check("W1 the ward rises as twelve plumes of ward smoke", plumes.size() == 12 and coloured and rising > 0.5 and _near(risen, WardScript.STANDING, 0.05),
 		"plumes %d coloured %s erosion %.2f then %.2f" % [plumes.size(), coloured, rising, risen])

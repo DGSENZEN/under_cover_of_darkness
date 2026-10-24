@@ -61,10 +61,18 @@ const CIRCLE_PIECES := 12
 ## how small it starts; how far the hand draws back and how much it shakes
 ## at the end; how far and how fast it pushes out at the release.
 const SPEARHEAD_LENGTH := 0.14
-## Where Obsidian's circle floats off the casting hand (view space, full
-## size): up beside the fingers toward the crosshair, where the hand does not
-## hide it, square to the aim.
-const OBSIDIAN_CIRCLE_AT := Vector3(0.15, 0.1, -0.08)
+## Where a circle floats off the casting hand (view space, full size): up
+## beside the fingers toward the crosshair, where the hand does not hide it,
+## square to the aim.
+const CIRCLE_AT := Vector3(0.15, 0.1, -0.08)
+## The Ward's wind-up: ward smoke curling up from the palm (how tall at full,
+## m, full size), and the embers of copal in it (how many; ember red-orange,
+## not marigold; how bright from the start of the cast to its end).
+const PALM_SMOKE_TALL := 0.07
+const PALM_EMBERS := 4
+const EMBER := Color("#D9541E")
+const PALM_GLOW_FROM := 0.3
+const PALM_GLOW_TO := 3.0
 const SPEARHEAD_FROM := 0.12
 const CAST_DRAW_BACK := 0.015
 const CAST_TREMBLE := 0.0015
@@ -192,6 +200,10 @@ var _circle_progress := 0.0
 var _circle: Node3D
 var _circle_pieces: Array[MeshInstance3D] = []
 var _spearhead: MeshInstance3D
+## The Ward's wind-up in the palm: the smoke (its curls and embers), and the
+## embers' glow material.
+var _palm_smoke: Node3D
+var _palm_glow: StandardMaterial3D
 ## Seconds since a hand spell was let go (release_cast).
 var _release_t := INF
 ## The revolver's moving parts, children of the main mesh: cylinder, hammer, gate.
@@ -776,6 +788,19 @@ func release_cast(school: StringName) -> void:
 	MagicFxScript.glint_light(self, circle_world_position() + Vector3.UP * 0.3, 0.7, 2.0)
 
 
+## The ward smoke curling up from the palm as a Copal cast builds, or null.
+func palm_smoke() -> Node3D:
+	return _palm_smoke
+
+
+## How bright the copal embers in the palm are now (0 none).
+func palm_glow() -> float:
+	if _palm_smoke == null or not _palm_smoke.is_visible_in_tree():
+		return 0.0
+
+	return _palm_glow.emission_energy_multiplier
+
+
 ## Where the circle's middle is in the world (what a Shard is seen to leave
 ## from).
 func circle_world_position() -> Vector3:
@@ -1076,9 +1101,13 @@ func _update_circle() -> void:
 		_spearhead.mesh = MagicFxScript.spearhead_mesh(0.045, SPEARHEAD_LENGTH, 0.02)
 		add_child(_spearhead)
 
+	if _palm_smoke == null:
+		_make_palm_smoke()
+
 	var showing := _circle_school != &"" and _left_mode == &"cast" and _left_up > 0.5
 	_circle.visible = showing
 	_spearhead.visible = showing and _circle_school == &"obsidian"
+	_palm_smoke.visible = showing and _circle_school == &"copal"
 
 	if not showing:
 		return
@@ -1098,13 +1127,9 @@ func _update_circle() -> void:
 
 	var size := ViewArmsScript.SCALE
 	var palm: Vector3 = _left_frame.basis.x.normalized()
-	var middle := _left_frame.origin + palm * 0.07 + _cast_offset()
-	var square := Basis.looking_at(-palm, _left_frame.basis.y.normalized())
-
-	if _circle_school == &"obsidian":
-		middle = _left_frame.origin + OBSIDIAN_CIRCLE_AT + _cast_offset()
-		# Square to the aim: its -Z back toward you, as the palm's is.
-		square = Basis.looking_at(middle - _aim_point() / size, Vector3.UP)
+	var middle := _left_frame.origin + CIRCLE_AT + _cast_offset()
+	# Square to the aim: its -Z back toward you.
+	var square := Basis.looking_at(middle - _aim_point() / size, Vector3.UP)
 
 	var across := circle_across()
 	_circle.transform = Transform3D(square * Basis(Vector3.BACK, _time * TAU * 2.0), _for_view_fov(middle) * size)
@@ -1131,6 +1156,58 @@ func _update_circle() -> void:
 		var way := (_aim_point() - at).normalized().lerp(Vector3(0.6, 0.8, 0.0), 0.55).normalized()
 		var facing := Basis.looking_at(way, Vector3.BACK)
 		_spearhead.transform = Transform3D((facing * Basis(Vector3.RIGHT, -PI * 0.5) * Basis(Vector3.UP, _time * 3.0)).scaled(Vector3.ONE * size * grow), at)
+
+	# The Ward's: smoke curling up out of the middle, taller as it builds,
+	# the embers in it glowing up (flickering).
+	if _palm_smoke.visible:
+		var tall := lerpf(0.25, 1.0, _circle_progress)
+		_palm_smoke.transform = Transform3D(Basis.IDENTITY.scaled(Vector3(size, size * tall, size)), _circle.position)
+		_palm_glow.emission_energy_multiplier = lerpf(PALM_GLOW_FROM, PALM_GLOW_TO, _circle_progress * _circle_progress) * (0.9 + 0.1 * sin(_time * 23.0))
+
+
+## The Ward's wind-up in the palm (hidden until a Copal cast): two curls of
+## ward smoke rising from the circle's middle and a few embers of burning
+## copal at their foot.
+func _make_palm_smoke() -> void:
+	_palm_smoke = Node3D.new()
+	_palm_smoke.name = "PalmSmoke"
+	add_child(_palm_smoke)
+	var smoke: ShaderMaterial = CIRCLE_LOOKS[&"copal"][1]
+
+	for k in 2:
+		var lean := 1.0 if k == 0 else -1.0
+		var curl := _viewmodel_instance()
+		curl.name = "Curl"
+		curl.mesh = MeshVfx.tendril(PackedVector3Array([
+			Vector3(0.004 * lean, 0.0, 0.0),
+			Vector3(0.012 * lean, PALM_SMOKE_TALL * 0.3, 0.004),
+			Vector3(-0.004 * lean, PALM_SMOKE_TALL * 0.65, -0.004),
+			Vector3(0.01 * lean, PALM_SMOKE_TALL, 0.0),
+		]), 0.008, 6)
+		curl.material_override = smoke
+		_palm_smoke.add_child(curl)
+
+	_palm_glow = StandardMaterial3D.new()
+	_palm_glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_palm_glow.albedo_color = EMBER
+	_palm_glow.emission_enabled = true
+	_palm_glow.emission = EMBER
+	_palm_glow.emission_energy_multiplier = PALM_GLOW_FROM
+	ViewArmsScript.dress(_palm_glow)
+	var mote := SphereMesh.new()
+	mote.radius = 0.0035
+	mote.height = 0.007
+	mote.radial_segments = 6
+	mote.rings = 3
+
+	for i in PALM_EMBERS:
+		var turn := TAU * float(i) / float(PALM_EMBERS)
+		var ember := _viewmodel_instance()
+		ember.name = "Ember"
+		ember.mesh = mote
+		ember.material_override = _palm_glow
+		_palm_smoke.add_child(ember)
+		ember.position = Vector3(cos(turn) * 0.008, 0.002 * float(i % 2), sin(turn) * 0.008)
 
 
 ## A revolver's cylinder, hammer and gate, as their own meshes under the

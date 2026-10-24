@@ -12,6 +12,7 @@ const HANDHOLD := preload("res://scripts/PlayerUtils/Handhold.gd")
 const PROPS := preload("res://scripts/Interaction/Props.gd")
 const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
 const MagicView := preload("res://scripts/Visual/MagicView.gd")
+const WardScript := preload("res://scripts/Magic/Ward.gd")
 
 var _out := "/tmp/magic/"
 var _only := ""
@@ -131,33 +132,50 @@ func _ready() -> void:
 		await _frames(60)
 
 	if _wants("ward"):
+		# From your eyes: the wind-up and the pour, frame by frame, then
+		# standing in it.
+		var steps := range(0, 48, 2)
+		steps.append_array([60, 80])
 		player.power.power = player.power.MAX
-		await _hold_clip("ward" + tag, "spell_2", [0, 12, 24, 26, 30, 40, 60], 30)
+		await _hold_clip("ward" + tag, "spell_2", steps, 30)
+		# An arrow stopped from the front, watched from inside.
 		var archer := Node3D.new()
 		add_child(archer)
 		archer.global_position = Vector3(1.5, 0, -8)
-		for f in 60:
+		for f in 70:
 			if f == 5:
-				var arrow: StaticBody3D = ArrowScript.new()
-				add_child(arrow)
-				var from := archer.global_position + Vector3.UP * 1.5
-				var chest := player.global_position + Vector3.UP * 0.4
-				arrow.launch(from, (chest - from).normalized() * 30.0, 10.0, archer, 2.5)
-				arrow.gravity = 0.0
-			if f in [14, 18, 24, 32, 44]:
+				_loose_at_player(archer)
+			if f in [12, 14, 16, 20, 28, 40, 60]:
 				await _shot("ward_hit_%02d%s" % [f, tag])
 			await get_tree().physics_frame
-		# From outside, 4 m off.
+		await _frames(int(WardScript.LIFE * 60.0))
+		# From outside, 4 m off: cast, the pour round the floor, standing, a
+		# ball and an arrow stopped, the sinking and the drain.
+		await _place(Vector3(0, 0.1, 0))
+		await _frames(30)
 		var outside := Camera3D.new()
 		add_child(outside)
-		outside.global_transform = Transform3D(Basis.looking_at(Vector3(-3, -0.3, -2.0).normalized(), Vector3.UP), player.global_position + Vector3(3, 1.0, 2.0))
+		outside.global_transform = Transform3D(Basis.looking_at(Vector3(-3.2, -0.7, -3.0).normalized(), Vector3.UP), player.global_position + Vector3(3.2, 1.2, 3.0))
 		outside.make_current()
-		await _frames(3)
-		await _shot("ward_outside%s" % tag)
-		await _frames(60)
-		await _shot("ward_sinking%s" % tag)
+		player.power.power = player.power.MAX
+		Input.action_press("spell_2")
+		var ward_at := -1
+		for f in 420:
+			if ward_at < 0 and not WardScript.active.is_empty():
+				ward_at = f
+				Input.action_release("spell_2")
+			var since := f - ward_at if ward_at >= 0 else -1
+			if since == 70:
+				var ward: Node3D = WardScript.active[0].get_ref()
+				WardScript.turned_aside(player, ward.global_position + Vector3(0.0, 0.3, WardScript.RADIUS).rotated(Vector3.UP, 0.8), Vector3(0, 0, -1).rotated(Vector3.UP, 0.8), ward, &"ball")
+			if since == 100:
+				_loose_at_player(archer)
+			if since in [0, 2, 4, 8, 12, 16, 20, 26, 34, 50, 71, 73, 76, 82, 108, 112, 120, 200, 215, 225, 235, 240, 245, 250, 260, 275, 290]:
+				await _shot("ward_outside_%03d%s" % [since, tag])
+			await get_tree().physics_frame
 		outside.queue_free()
-		await _frames(90)
+		archer.queue_free()
+		await _frames(60)
 
 	if _wants("empower"):
 		await _place(Vector3(0, 0.1, 0))
@@ -182,6 +200,16 @@ func _ready() -> void:
 		await _frames(60)
 
 	get_tree().quit()
+
+
+## An arrow from `archer` at the player's chest, flying straight.
+func _loose_at_player(archer: Node3D) -> void:
+	var arrow: StaticBody3D = ArrowScript.new()
+	add_child(arrow)
+	var from := archer.global_position + Vector3.UP * 1.5
+	var chest := player.global_position + Vector3.UP * 0.4
+	arrow.launch(from, (chest - from).normalized() * 30.0, 10.0, archer, 2.5)
+	arrow.gravity = 0.0
 
 
 func _wants(name: String) -> bool:

@@ -528,13 +528,13 @@ static func release_burst(parent: Node3D, at: Vector3, ahead: Vector3, size: flo
 
 ## A cold light for a moment at `at` in the world (a release, an impact),
 ## lighting what is round it, gone in LIGHT_LIFE.
-static func glint_light(context: Node, at: Vector3, energy := 2.0, reach := 3.0) -> void:
+static func glint_light(context: Node, at: Vector3, energy := 2.0, reach := 3.0, colour := GLINT) -> void:
 	if not allowed(context):
 		return
 
 	var light := OmniLight3D.new()
 	light.name = "GlintLight"
-	light.light_color = GLINT
+	light.light_color = colour
 	light.light_energy = energy
 	light.omni_range = reach
 	light.shadow_enabled = false

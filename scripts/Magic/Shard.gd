@@ -111,7 +111,7 @@ func _physics_process(delta: float) -> void:
 	var warded := WardScript.stopped_by(from, to, shooter)
 
 	if not warded.is_empty():
-		WardScript.turned_aside(self, warded["at"], velocity.normalized(), warded["ward"])
+		WardScript.turned_aside(self, warded["at"], velocity.normalized(), warded["ward"], &"shard")
 		queue_free()
 		return
 

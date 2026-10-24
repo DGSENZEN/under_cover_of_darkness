@@ -631,7 +631,7 @@ func _trace(from: Vector3, direction: Vector3) -> Dictionary:
 
 	if not warded.is_empty():
 		record["point"] = warded["at"]
-		WardScript.turned_aside(player, warded["at"], direction, warded["ward"])
+		WardScript.turned_aside(player, warded["at"], direction, warded["ward"], &"ball")
 		return record
 
 	var collider: Object = hit.get("collider")

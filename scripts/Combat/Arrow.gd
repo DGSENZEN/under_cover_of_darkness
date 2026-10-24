@@ -95,7 +95,7 @@ func _physics_process(delta: float) -> void:
 
 	if not warded.is_empty():
 		global_position = warded["at"]
-		WardScript.turned_aside(self, warded["at"], travel.normalized(), warded["ward"])
+		WardScript.turned_aside(self, warded["at"], travel.normalized(), warded["ward"], &"arrow")
 		queue_free()
 		return
 
