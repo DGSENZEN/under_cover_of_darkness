@@ -23,12 +23,13 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "eclipse"))
+sys.path.insert(0, HERE)
 
-import bmesh  # noqa: E402
 import bpy  # noqa: E402
 from mathutils import Vector  # noqa: E402
 
 import common  # noqa: E402
+from dressing import boots, coat, hat, sleeves  # noqa: E402
 
 BODY = common.ROOT / "assets" / "characters" / "base" / "Superhero_Male_FullBody.gltf"
 OUT = common.ROOT / "textures" / "painted" / "underground" / "librarian_shadow.png"
@@ -53,53 +54,6 @@ for _finger in ("index", "middle", "ring", "pinky"):
     for _joint, _deg in (("01", 28), ("02", 38), ("03", 30)):
         STRIDE["%s_%s_l" % (_finger, _joint)] = [("Z", -_deg)]
         STRIDE["%s_%s_r" % (_finger, _joint)] = [("Z", _deg)]
-# The coat: its hem's height (m, of the base body's 1.81), how far it stands off the body front and back, how much
-# its skirt flares by the hem (front, back) and how wide it hangs; its sleeves' radius at the shoulder and the cuff.
-HEM = 0.4
-COAT_OFF = (0.1, 0.12)
-FLARE = (0.04, 0.1)
-COAT_WIDE = (0.21, 0.27)
-SLEEVE = (0.075, 0.062)
-# How far the skirt may draw in from one ring to the next going down (m).
-DRAPE = 0.006
-# The hat: its brim's radius and how far it tips forward (degrees), its crown's radius and height.
-BRIM = 0.215
-BRIM_TIP = 8.0
-CROWN = (0.096, 0.105)
-
-
-def _ring(centre, rx, ry, n=32, z_axis=None):
-    """A horizontal ellipse round `centre` (x across, y along the body), or one square to `z_axis`."""
-    pts = []
-    if z_axis is None:
-        for k in range(n):
-            a = 2 * math.pi * k / n
-            pts.append(Vector((centre.x + rx * math.cos(a), centre.y + ry * math.sin(a), centre.z)))
-        return pts
-    z = z_axis.normalized()
-    u = z.cross(Vector((1, 0, 0)) if abs(z.x) < 0.9 else Vector((0, 1, 0))).normalized()
-    v = z.cross(u)
-    return [centre + u * rx * math.cos(2 * math.pi * k / n) + v * ry * math.sin(2 * math.pi * k / n) for k in range(n)]
-
-
-def _loft(name, rings):
-    """A closed solid through `rings` (each the same count), capped at both ends."""
-    bm = bmesh.new()
-    loops = [[bm.verts.new(p) for p in ring] for ring in rings]
-    n = len(rings[0])
-    for a, b in zip(loops, loops[1:]):
-        for k in range(n):
-            bm.faces.new([a[k], a[(k + 1) % n], b[(k + 1) % n], b[k]])
-    bm.faces.new(loops[0][::-1])
-    bm.faces.new(loops[-1])
-    mesh = bpy.data.meshes.new(name)
-    bm.to_mesh(mesh)
-    bm.free()
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.scene.collection.objects.link(obj)
-    return obj
-
-
 def _posed():
     """The base body in his stride, its pose baked in; and its bones' heads and tails (world)."""
     bpy.ops.import_scene.gltf(filepath=str(BODY))
@@ -125,117 +79,6 @@ def _posed():
         h, t = bones[name]
         bones[name] = (h - Vector((0, 0, low)), t - Vector((0, 0, low)))
     return bones
-
-
-def _on_leg(bones, side, z):
-    """Where his leg on `side` is at height `z` (its thigh's or calf's line), along y; below a lifted leg's lowest
-    point, that point's (so the coat keeps over both legs as a foot swings up behind)."""
-    for part in ("thigh_" + side, "calf_" + side):
-        a, b = bones[part]
-        if min(a.z, b.z) <= z <= max(a.z, b.z) and abs(a.z - b.z) > 1e-6:
-            return a.y + (b.y - a.y) * (z - a.z) / (b.z - a.z)
-    points = [p for part in ("thigh_" + side, "calf_" + side) for p in bones[part]]
-    lowest = min(points, key=lambda p: p.z)
-    return lowest.y if z < lowest.z else None
-
-
-def coat(bones):
-    """The greatcoat: its body round his spine, its skirt from the waist to the hem over both legs, opening over
-    the forward leg and trailing behind, its collar turned up."""
-    waist = bones["pelvis"][0].z + 0.02
-    rings = []
-    # The body, from the waist to the shoulders, round the spine's line.
-    spine = [bones["pelvis"][0], bones["spine_01"][1], bones["spine_02"][1], bones["spine_03"][1]]
-    for k, p in enumerate(spine):
-        t = k / (len(spine) - 1)
-        rings.append(_ring(Vector((p.x, p.y + 0.01, p.z if k else waist)), 0.2 + 0.04 * t, 0.13 + 0.01 * t))
-    # Over the shoulders, rounding in to the neck.
-    top = bones["spine_03"][1]
-    neck = bones["neck_01"][0]
-    rings.append(_ring(Vector((top.x, top.y + 0.02, top.z + 0.04)), 0.21, 0.1))
-    rings.append(_ring(Vector((neck.x, neck.y + 0.02, neck.z + 0.02)), 0.11, 0.1))
-    # (Its collar turned up round his neck, higher at the back: the coat's own top, so no ledge where they meet.)
-    rings.append(_ring(Vector((neck.x, neck.y + 0.035, neck.z + 0.09)), 0.085, 0.08))
-    rings.reverse()
-    # The skirt, down to the hem.
-    # (Cloth falls from what holds it out: going down, the skirt never draws in by more than DRAPE a ring, so a knee
-    # swung forward holds it out below the knee rather than cutting it back.)
-    steps = 10
-    was = None
-    for k in range(1, steps + 1):
-        z = waist + (HEM - waist) * k / steps
-        f = k / steps
-        ys = [y for y in (_on_leg(bones, "l", z), _on_leg(bones, "r", z)) if y is not None]
-        front = min(ys) - COAT_OFF[0] - FLARE[0] * f
-        back = max(ys) + COAT_OFF[1] + FLARE[1] * f * f
-        if was is not None:
-            front = min(front, was[0] + DRAPE)
-            back = max(back, was[1] - DRAPE)
-        was = (front, back)
-        rings.append(_ring(Vector((0.0, (front + back) / 2, z)), COAT_WIDE[0] + (COAT_WIDE[1] - COAT_WIDE[0]) * f,
-                           (back - front) / 2))
-    _loft("coat", rings)
-
-
-
-def sleeves(bones):
-    """His sleeves along each arm, wider than it, to the wrist."""
-    for side in ("l", "r"):
-        shoulder, elbow = bones["upperarm_" + side]
-        wrist = bones["lowerarm_" + side][1]
-        axis_up, axis_low = elbow - shoulder, wrist - elbow
-        _loft("sleeve_" + side, [_ring(shoulder, SLEEVE[0], SLEEVE[0], 12, axis_up),
-                                 _ring(elbow, (SLEEVE[0] + SLEEVE[1]) / 2, (SLEEVE[0] + SLEEVE[1]) / 2, 12, axis_up),
-                                 _ring(elbow, (SLEEVE[0] + SLEEVE[1]) / 2, (SLEEVE[0] + SLEEVE[1]) / 2, 12, axis_low),
-                                 _ring(wrist - axis_low.normalized() * 0.01, SLEEVE[1], SLEEVE[1], 12, axis_low)])
-
-
-def boots(bones):
-    """His boots: a shaft up the shin, the foot from heel to toe."""
-    for side in ("l", "r"):
-        ankle = bones["calf_" + side][1]
-        shin = bones["calf_" + side][0] + (ankle - bones["calf_" + side][0]) * 0.6
-        ball = bones["foot_" + side][1]
-        toe = bones["ball_" + side][1]
-        _loft("shaft_" + side, [_ring(shin, 0.047, 0.047, 24, ankle - shin), _ring(ankle, 0.045, 0.045, 24, ankle - shin)])
-        # (The foot along its own way, heel to toe, its sole on the foot's line.)
-        along = (toe - ankle).normalized()
-        heel = ankle - along * 0.04
-        _loft("foot_" + side, [_ring(heel + Vector((0, 0, -0.04)), 0.038, 0.028, 24, along),
-                               _ring(ankle + Vector((0, 0, -0.028)), 0.045, 0.044, 24, along),
-                               _ring(ball + Vector((0, 0, 0.012)), 0.043, 0.025, 24, along),
-                               _ring(toe - along * 0.02 + Vector((0, 0, 0.011)), 0.026, 0.017, 24, along)])
-
-
-def hat(bones, crown):
-    """His wide-brimmed felt hat, tipped a little forward, set on the top of his head (`crown`): the brim dipping at
-    its front and back, the crown pinched toward its top."""
-    head = bones["Head"][1]
-    at = Vector((head.x, head.y + 0.01, crown - 0.075))
-    tip = math.radians(BRIM_TIP)
-    up = Vector((0, -math.sin(tip), math.cos(tip)))
-
-    def tipped(p):
-        # (Tipped forward about the hat's band: its front down.)
-        d = p - at
-        return at + Vector((d.x, d.y * math.cos(tip) - d.z * math.sin(tip), d.y * math.sin(tip) + d.z * math.cos(tip)))
-
-    brim = []
-    for k, (r, z) in enumerate([(BRIM, -0.012), (BRIM, 0.0)]):
-        ring = []
-        for j in range(24):
-            a = 2 * math.pi * j / 24
-            # (Its brim curls down at the front and back, up at the sides.)
-            dip = -0.022 * abs(math.sin(a)) + 0.008 * abs(math.cos(a))
-            ring.append(tipped(at + Vector((r * math.cos(a), r * math.sin(a), z + dip))))
-        brim.append(ring)
-    _loft("brim", brim)
-    rx, h = CROWN
-    _loft("crown", [[tipped(p) for p in _ring(at + Vector((0, 0, -0.005)), rx, rx * 0.92, 24)],
-                    [tipped(p) for p in _ring(at + Vector((0, 0, h * 0.6)), rx * 0.97, rx * 0.86, 24)],
-                    [tipped(p) for p in _ring(at + Vector((0, 0, h * 0.92)), rx * 0.82, rx * 0.66, 24)],
-                    [tipped(p) for p in _ring(at + Vector((0, 0, h)), rx * 0.55, rx * 0.4, 24)]])
-    return up
 
 
 def _eye(scene, top, middle, px):
