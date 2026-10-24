@@ -18,6 +18,7 @@ func _ready() -> void:
 	add_child(eye)
 	eye.make_current()
 	await _focus()
+	await _neon()
 	# (Let the audio thread let go of what played before quitting.)
 	Focus.reset()
 	Sfx._bank.clear()
@@ -94,6 +95,58 @@ func _focus() -> void:
 			p.stop()
 			p.stream = null
 			p.queue_free()
+	await _frames(2)
+
+
+## N1-N3: her sign's hum and its stutters.
+func _neon() -> void:
+	Focus.reset()
+	var sign := NeonSign.new()
+	sign.pattern = "mmmmmmmmmmmmmmmammmmmmmmmzmmmmmmmmmmmmmmmmmaam"
+	sign.seed = 11
+	sign.set("buzz", &"neon_buzz_1")
+	add_child(sign)
+	sign.position = Vector3(0.0, 2.2, -1.5)
+	eye.global_position = Vector3(0.0, 1.6, 0.0)
+	await _frames(30)
+	var hum: AudioStreamPlayer3D = sign.get("hum")
+	var gain: float = Sfx.LOOP_GAIN[&"neon_buzz_1"]
+	var worst := 0.0
+	for f in 300:
+		await get_tree().process_frame
+		if hum != null:
+			worst = maxf(worst, absf(Focus.base_of(hum) - NeonSign.hum_db(gain, sign.level() * sign.dim)))
+	_check("N1 her sign hums from its tube, its loudness following the flicker",
+		hum != null and hum.playing and hum.max_distance <= 4.5 and worst < 0.1, "hum %s, worst %.2f dB" % [hum, worst])
+
+	var times: Array[float] = []
+	var was: int = sign.get("ticks") if sign.get("ticks") != null else 0
+	for f in 3600:
+		await get_tree().process_frame
+		if sign.get("ticks") != null and int(sign.get("ticks")) > was:
+			was = sign.get("ticks")
+			times.append(sign._time)
+	var apart := INF
+	for k in range(1, times.size()):
+		apart = minf(apart, times[k] - times[k - 1])
+	_check("N2 its stutters tick only now and then, never closer than five seconds",
+		times.size() >= 2 and times.size() <= 7 and apart >= 5.0, "%d ticks at %s" % [times.size(), times])
+
+	var last := INF
+	var fell := true
+	var steepest := 0.0
+	for f in 60:
+		sign.dim = lerpf(1.0, 0.3, float(f + 1) / 60.0)
+		sign.pattern = "m"
+		await get_tree().process_frame
+		var now := Focus.base_of(hum) if hum != null else 0.0
+		if last != INF:
+			fell = fell and now <= last + 0.001
+			steepest = maxf(steepest, last - now)
+		last = now
+	_check("N3 a brownout sags the hum with the light", hum != null and fell and steepest <= 1.5,
+		"fell %s, steepest %.2f dB a frame" % [fell, steepest])
+	sign.queue_free()
 	await _frames(2)
 
 

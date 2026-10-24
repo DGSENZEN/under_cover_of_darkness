@@ -70,6 +70,15 @@ static func featured(context: Node, at: Vector3, length: float) -> void:
 	_features.append([at, _clock + length])
 
 
+## A held player's own level now (dB).
+static func base_of(player: AudioStreamPlayer3D) -> float:
+	for entry: Dictionary in _held:
+		if entry["player"] == player:
+			return entry["base"]
+
+	return 0.0
+
+
 ## A held player's duck now (dB).
 static func duck_of(player: AudioStreamPlayer3D) -> float:
 	for entry: Dictionary in _held:

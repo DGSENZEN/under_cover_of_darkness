@@ -51,6 +51,10 @@ other file as it is;
 
 makes only the fire beds (FIRE_LOOPS);
 
+    python3 tools/prepare_sfx.py --layers
+
+only the Underground's layers (LAYER_LOOPS, BEDS, LAYER_SHOTS: neon, pipes, books);
+
     python3 tools/prepare_sfx.py --souls
 
 only the ánimas' voices (SOULS);
@@ -504,6 +508,68 @@ SOULS = [
 ]
 # Each breathes in rather than starting on its growl (s), and dies out (s).
 SOUL_FADE = (0.08, 0.35)
+# The Underground's layers (docs/superpowers/specs/2026-10-24-underground-sound-layers-design.md): the neon's buzz,
+# the pipes, the librarian's books; every one cut from the approved packs and the user's two Sonic book takes.
+# A loop here is layers of recordings laid together (source, gain dB, high-pass, low-pass, pitch) and closed
+# seamlessly over its last 1.5 s; a bed is many short takes laid at random over its length (BEDS); the rest are
+# one-shots, several takes a group, matched in loudness (LAYER_SHOTS).
+NOX_EM = NOX_ELECTRIC
+SONIC_SHELF = os.path.expanduser("~/Downloads/Sonic_Soundfx_household_book_shelf_take.mp3")
+SONIC_TABLE = os.path.expanduser("~/Downloads/Sonic_Soundfx_household_book_paperback_small_wooden_table_2.mp3")
+FOUR_ITEMS = os.path.expanduser("~/Downloads/400 Sounds Pack/")
+RPG80 = os.path.expanduser("~/Downloads/AUCOD Web SFX/80-CC0-RPG-SFX/")
+LAYER_LOOPS = [
+    # A tube's hum (the mains' 50 Hz and its overtones) under the gas's fizz; each sign one of three.
+    ("neon_buzz_1", [(NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_03.wav", 0.0, 45, 900, 1.0),
+                     (NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_04.wav", -9.0, 1800, 9000, 1.0)], 7.0),
+    ("neon_buzz_2", [(NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_02.wav", 0.0, 45, 1200, 1.0),
+                     (NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_05.wav", -6.0, 400, 6000, 1.0)], 7.5),
+    ("neon_buzz_3", [(NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_03.wav", 0.0, 45, 900, 1.06),
+                     (NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_05.wav", -8.0, 400, 6000, 0.94),
+                     (NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_04.wav", -12.0, 1800, 9000, 1.0)], 7.0),
+    # The air line's breath: the ventilation hum taken down and dulled, as if heard through the pipe's wall.
+    ("pipe_air", [(FILMCOW + "ventilation hum.wav", 0.0, 60, 700, 0.8)], 9.0),
+]
+# A bed: (name, takes [(source, start, end)], seconds, events, pitch range, low-pass, high-pass, gain spread dB).
+BEDS = [
+    # Water moving in the main: its gulps taken down and dulled to a trickle inside the iron.
+    ("pipe_trickle", [(FILMCOW + "water moving through %d.wav" % k, None, None) for k in (2, 3, 4, 5, 9, 11)],
+     16.0, 34, (0.55, 0.75), 1100, 90, (-9.0, 0.0)),
+    # Pages stirring as a book drifts: soft riffles, far apart, dulled.
+    ("book_flutter", [(FILMCOW + "paper handled %d.wav" % k, None, None) for k in (3, 7)]
+     + [(FOUR_ITEMS + "Items/page_turn.wav", None, None)],
+     12.0, 9, (0.85, 1.05), 3800, 300, (-10.0, -2.0)),
+]
+# One-shots: (group, takes [(source, start, end, pitch, low-pass, high-pass)], fade-out s).
+LAYER_SHOTS = [
+    # The tube stuttering off (a relay's tick) and striking back (a short zap of the razor's buzz).
+    ("neon_tick", [(NOX_EM + "Electromagnetic_Nuc_On_Mono_Elektrousi.wav", 3.82, 3.92, p, 7000, 900) for p in (1.0, 0.9, 1.1)], 0.03),
+    ("neon_zap", [(FOUR_ITEMS + "Machines/razor_buzz.wav", 0.04, 0.22, p, 5000, 300) for p in (1.0, 0.92, 1.08)], 0.06),
+    # A main knocking (a hammer on iron, far down and dulled: heard through water and plaster), a gulp in it.
+    ("pipe_knock", [(FILMCOW + "metal hit with hammer %d.wav" % k, 0.0, None, p, 1500, 60)
+                    for k, p in ((3, 0.5), (4, 0.46), (6, 0.55), (7, 0.5), (10, 0.42), (14, 0.52))], 0.4),
+    ("pipe_gurgle", [(FILMCOW + "pipe backup 1.wav", None, None, 0.75, 1800, 70), (FILMCOW + "pipe backup 2.wav", None, None, 0.7, 1800, 70),
+                     (FILMCOW + "water moving through 9.wav", None, None, 0.62, 1500, 70),
+                     (FILMCOW + "water moving through 11.wav", None, None, 0.66, 1500, 70)], 0.3),
+    # Its gate valve breathing out a little.
+    ("pipe_hiss", [(FILMCOW + "gas leak.wav", a, a + 1.6, 0.85, 3000, 500) for a in (0.5, 2.6, 4.9)], 0.6),
+    # The books: on the shelves while no one looks; floating down, up, open, shut.
+    ("shelf_slide", [(SONIC_SHELF, 0.0, None, 1.0, None, 120), (SONIC_SHELF, 0.0, None, 0.9, 6000, 120),
+                     (FOUR_ITEMS + "Materials/paper_move.wav", None, None, 0.7, 5000, 150)], 0.15),
+    ("shelf_tock", [(SONIC_TABLE, None, None, p, None, 90) for p in (1.0, 0.92, 1.08)]
+     + [(RPG80 + "book_02.ogg", 0.1, 0.5, 0.9, None, 90)], 0.08),
+    ("shelf_shuffle", [(FILMCOW + "book flopping around %d.wav" % k, None, None, 0.95, 6000, 90) for k in (6, 9, 10)]
+     + [(RPG80 + "book_01.ogg", None, None, 0.9, None, 90)], 0.2),
+    ("book_land", [(SONIC_TABLE, None, None, p, 7000, 80) for p in (0.88, 0.95)] + [(RPG80 + "book_04.ogg", None, None, 0.9, 7000, 80)], 0.1),
+    ("book_lift", [(SONIC_SHELF, 0.0, None, p, 7000, 120) for p in (1.0, 1.08)], 0.15),
+    ("book_open", [(FOUR_ITEMS + "Items/book_open.wav", None, None, p, None, 90) for p in (0.9, 1.0)]
+     + [(RPG80 + "book_03.ogg", None, None, 0.92, None, 90)], 0.15),
+    ("book_riffle", [(FILMCOW + "paper handled %d.wav" % k, None, None, 1.0, 9000, 200) for k in (3, 7)]
+     + [(FOUR_ITEMS + "Items/page_turn.wav", None, None, 0.9, 9000, 200)], 0.15),
+    ("book_shut", [(RPG80 + "book_02.ogg", 0.5, None, p, None, 80) for p in (0.9, 1.0)] + [(SONIC_TABLE, None, None, 1.1, 5000, 80)], 0.08),
+]
+# The weeping joint's drops, split out of FilmCow's dripping water.
+LAYER_DRIPS = ("pipe_drip", FILMCOW + "ambience - dripping water 1.wav", 6)
 # Thunder (NightSound, after each flash), from rubberduck's "100 CC0 SFX #2"
 # (CC0, approved Sept 27 2026): its one clap as it is, lower and duller (far
 # off), and higher and sharper (near): (name, source, low-pass, pitch).
@@ -1050,6 +1116,86 @@ def prepare_underground():
     print("step_tile    %d file(s)" % k)
 
 
+def prepare_layers():
+    """The Underground's layers: LAYER_LOOPS and BEDS to audio/ambience/, LAYER_SHOTS and the drips to audio/sfx/."""
+    import random
+
+    def write_loop(name, x, seconds):
+        n = int(1.5 * RATE)
+        x = x[:int(seconds * RATE) + n].copy()
+        t = np.linspace(0.0, np.pi * 0.5, n)
+        x[:n] = x[-n:] * np.cos(t) + x[:n] * np.sin(t)
+        x = peak_normalise(x[:-n], -3.0)
+        write_wav(os.path.join(AMBIENCE_OUT, name + ".wav"), x)
+        importer = os.path.join(AMBIENCE_OUT, name + ".wav.import")
+
+        if not os.path.exists(importer):
+            with open(importer, "w") as out:
+                out.write(FIRE_IMPORT.format(name=name))
+
+        print("%-13s loop, %.1f s, %.1f LUFS" % (name, len(x) / RATE, loudness(x)))
+
+    for name, layers, seconds in LAYER_LOOPS:
+        parts = []
+
+        for source, gain, highpass, lowpass, pitch in layers:
+            x = decode_filtered(source, 0.0, 1e9, _filters(lowpass, pitch, highpass))
+            parts.append(x / max(np.sqrt((x ** 2).mean()), 1e-9) * 10 ** (gain / 20))
+
+        length = min(len(x) for x in parts)
+        write_loop(name, sum(x[:length] for x in parts), min(seconds, length / RATE - 1.6))
+
+    rng = random.Random(2410)
+
+    for name, takes, seconds, events, pitches, lowpass, highpass, spread in BEDS:
+        clips = [fade(decode_filtered(src, a, b, _filters(lowpass, 1.0, highpass)), 0.01, 0.15) for src, a, b in takes]
+        tail = int(1.5 * RATE)
+        bed = np.zeros(int(seconds * RATE) + tail)
+
+        for _ in range(events):
+            clip = rng.choice(clips)
+            clip = clip / max(np.abs(clip).max(), 1e-9)
+            pitch = rng.uniform(*pitches)
+            clip = np.interp(np.arange(0, len(clip), pitch), np.arange(len(clip)), clip)
+            at = rng.randrange(0, len(bed) - len(clip))
+            bed[at:at + len(clip)] += clip * 10 ** (rng.uniform(*spread) / 20)
+
+        write_loop(name, bed, seconds)
+
+    groups = {}
+
+    for group, takes, fade_out in LAYER_SHOTS:
+        for source, start, end, pitch, lowpass, highpass in takes:
+            # (Resampled first, so asetrate's pitch is the pitch whatever the recording's rate.)
+            cut = ["aresample=%d" % RATE]
+
+            if start is not None or end is not None:
+                cut += ["atrim=start=%.3f%s" % (start or 0.0, (":end=%.3f" % end) if end is not None else ""), "asetpts=PTS-STARTPTS"]
+
+            x = decode_filtered(source, None, None, cut + _filters(lowpass, pitch, highpass))
+            # (Never faded over more than its last half: a short knock keeps its ring.)
+            x = fade(x, 0.003, min(fade_out, 0.5 * len(x) / RATE))
+            x *= 10 ** (PEAK_LIMIT_DB / 20) / max(np.abs(x).max(), 1e-9)
+            groups.setdefault(group, []).append([x, loudness(x)])
+
+    group, source, count = LAYER_DRIPS
+    whole = decode(source, 0.0, 1e9)
+
+    for a, b in split_events(whole, count, gap=0.25, threshold_db=-20.0, longest=0.6):
+        x = fade(whole[int(a * RATE):int(b * RATE)], 0.002, 0.08)
+        x *= 10 ** (PEAK_LIMIT_DB / 20) / max(np.abs(x).max(), 1e-9)
+        groups.setdefault(group, []).append([x, loudness(x)])
+
+    for group, members in groups.items():
+        level = min(m[1] for m in members)
+
+        for k, (x, own) in enumerate(members, start=1):
+            write_wav(os.path.join(OUT, "%s_%d.wav" % (group, k)), x * 10 ** ((level - own) / 20))
+
+        print("%-13s %d file(s), %.1f LUFS, %.2f-%.2f s" % (group, len(members), level,
+              min(len(m[0]) for m in members) / RATE, max(len(m[0]) for m in members) / RATE))
+
+
 def prepare_souls():
     """The ánimas' voices (SOULS): each take pitched down, flanged, matched in loudness."""
     groups = {}
@@ -1127,6 +1273,9 @@ def main():
         elif a == "--underground":
             prepare_fire_loops(UNDERGROUND_LOOPS, AMBIENCE_OUT, "ambience", "underground loop")
             prepare_underground()
+            return
+        elif a == "--layers":
+            prepare_layers()
             return
         elif a == "--souls":
             prepare_souls()

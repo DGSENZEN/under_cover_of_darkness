@@ -231,6 +231,34 @@ const GAIN := {
 	# pulled down, -28).
 	&"anima_voice": -15.1,
 	&"anima_moan": -12.3,
+	# The Underground's layers (docs/superpowers/specs/2026-10-24-underground-sound-layers-design.md): a tube's
+	# tick -32 and its zap back -30; a main's knock -30, its gulp -32, its valve's breath -36, the weeping joint's
+	# drop -32; the books on their shelves -30, lifted -32, landing -30, opening -30, their leaves -32, shut -30.
+	&"neon_tick": -14.4,
+	&"neon_zap": -6.3,
+	&"pipe_knock": -9.0,
+	&"pipe_gurgle": -12.0,
+	&"pipe_hiss": -23.3,
+	&"pipe_drip": -9.2,
+	&"shelf_slide": -4.7,
+	&"shelf_tock": -6.5,
+	&"shelf_shuffle": -4.9,
+	&"book_land": -7.1,
+	&"book_lift": -8.4,
+	&"book_open": -3.9,
+	&"book_riffle": -4.6,
+	&"book_shut": -6.5,
+}
+
+## The layers' loops (in audio/ambience/), how loud each plays (dB: target LUFS less measured; a neon's hum -36,
+## the trickle in a main -40, the air line's breath -42, a floating book's pages -40).
+const LOOP_GAIN := {
+	&"neon_buzz_1": -21.1,
+	&"neon_buzz_2": -17.2,
+	&"neon_buzz_3": -16.3,
+	&"pipe_trickle": -21.2,
+	&"pipe_air": -26.9,
+	&"book_flutter": -17.1,
 }
 
 
