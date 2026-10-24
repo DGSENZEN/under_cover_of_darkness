@@ -6,6 +6,10 @@ The revolver and the spells play stand-ins cut from the existing packs until the
 | --- | --- | --- |
 | `gunshot`: a heavy revolver ball | `Revolver.SOUNDS` | `explosion` at -7 dB, pitch 1.9 |
 | `shellshot`: the shot barrel's shell | `Revolver.SOUNDS` | `explosion` at -4 dB, pitch 1.45 |
+| `gunshot_tail`: the ball's echo off the street, 0.06 s after the crack (longer and louder in a room) | `Revolver.SOUNDS`, `Revolver._tail` | `explosion` at -16 dB, pitch 0.8 |
+| `shellshot_tail`: the shell's echo | `Revolver.SOUNDS`, `Revolver._tail` | `explosion` at -13 dB, pitch 0.7 |
+| `hit_tick`, `kill_tick`: a hit felt, a kill felt | `Revolver.SOUNDS`, `Revolver._confirm` | `ting` pitch 1.8; `thud` pitch 0.7 |
+| A casing landing | `Casings._tinkle` | `coins` at -14 dB, pitch 2.2 |
 | `click_empty`: the hammer on a spent chamber | `Revolver.SOUNDS` | `gear` at -9 dB, pitch 1.7 |
 | `hammer`: the hammer nose flipped | `Revolver.SOUNDS` | `gear` at -14 dB, pitch 1.3 |
 | `gate`: the loading gate open or shut | `Revolver.SOUNDS` | `unlock` at -10 dB, pitch 1.5 |

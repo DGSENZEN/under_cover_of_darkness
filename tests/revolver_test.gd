@@ -16,6 +16,7 @@ const Gore := preload("res://scripts/Visual/Gore.gd")
 const SquadScript := preload("res://scripts/AISystem/Squad.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const Casings := preload("res://scripts/Visual/Casings.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 
 class Ear:
@@ -40,6 +41,12 @@ func _ready() -> void:
 	Props.block(self, Vector3(0, -0.5, 0), Vector3(140, 1, 90))              # floor
 	Props.block(self, Vector3(30, 1.5, -5.0), Vector3(4, 3, 1))              # R9 wall, top at 3, face at z = -4.5
 	Props.block(self, Vector3(-20, 1.5, -8.0), Vector3(6, 3, 0.4))           # H4 a stone wall, its face at z = -7.8
+	# T2 a closed room, 4 m square and 3 m high, round (-50, 0, 30).
+	Props.block(self, Vector3(-50, 1.5, 28.0), Vector3(4.4, 3, 0.4))
+	Props.block(self, Vector3(-50, 1.5, 32.0), Vector3(4.4, 3, 0.4))
+	Props.block(self, Vector3(-52.0, 1.5, 30), Vector3(0.4, 3, 4.4))
+	Props.block(self, Vector3(-48.0, 1.5, 30), Vector3(0.4, 3, 4.4))
+	Props.block(self, Vector3(-50, 3.2, 30), Vector3(4.4, 0.4, 4.4))
 
 	baker = NavigationRegion3D.new()
 	baker.set_script(NavBakerScript)
@@ -670,6 +677,24 @@ func _run() -> void:
 	_check("C3 casings never pass 24, and are gone after 10 s", most_c <= Casings.MAX_LIVE and Casings.live_count() == 0,
 		"most %d after %d" % [most_c, Casings.live_count()])
 
+	# T1 the crack, then its tail a moment after
+	revolver.reset_for_practice()
+	_put_player(Vector3(44, 1.05, 30))
+	await _frames(40)
+	var open_tail: Array = await _shot_sounds()
+	_check("T1 the crack plays at once, its tail 3 to 5 frames after",
+		open_tail.size() == 2 and open_tail[1][0] - open_tail[0][0] >= 3 and open_tail[1][0] - open_tail[0][0] <= 5,
+		"sounds %s" % [open_tail])
+
+	# T2 in a closed room the tail rings louder
+	revolver.reset_for_practice()
+	_put_player(Vector3(-50, 1.05, 30))
+	await _frames(40)
+	var room_tail: Array = await _shot_sounds()
+	var louder: float = float(room_tail[1][1]) - float(open_tail[1][1]) if room_tail.size() == 2 and open_tail.size() == 2 else -99.0
+	_check("T2 in a closed room the tail is at least 5 dB louder", louder >= 5.0, "louder by %.1f dB" % louder)
+	await _frames(40)
+
 	# R16 in arm's reach, F is a pistol-whip, not a kick
 	revolver.reset_for_practice()
 	var g16 := _fighter(Vector3(38, 0, -1.0))
@@ -748,6 +773,30 @@ func _run() -> void:
 
 
 # Helpers
+
+## A shot's sounds, as [frame after the press, volume] for the crack and
+## each tail (Sfx.recording: what was asked to play).
+func _shot_sounds() -> Array:
+	Sfx.recording = true
+	Sfx.recorded.clear()
+	var heard := []
+	Input.action_press("throw")
+
+	for i in 12:
+		if i == 2:
+			Input.action_release("throw")
+
+		await get_tree().physics_frame
+
+		for entry in Sfx.recorded:
+			if String(entry[0]) == "explosion":
+				heard.append([i, entry[1]])
+
+		Sfx.recorded.clear()
+
+	Sfx.recording = false
+	return heard
+
 
 ## Which way a gun's barrel points across the view (degrees, + to the left).
 func _yaw_in_view(gun: Node3D) -> float:

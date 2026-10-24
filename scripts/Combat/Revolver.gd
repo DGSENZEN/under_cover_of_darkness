@@ -33,6 +33,8 @@ const SOUNDS := {
 	&"hammer": [&"gear", -14.0, 1.3],
 	&"gate": [&"unlock", -10.0, 1.5],
 	&"round_in": [&"coins", -12.0, 1.6],
+	&"gunshot_tail": [&"explosion", -16.0, 0.8],
+	&"shellshot_tail": [&"explosion", -13.0, 0.7],
 	&"hit_tick": [&"ting", -10.0, 1.8],
 	&"kill_tick": [&"thud", -6.0, 0.7],
 }
@@ -66,6 +68,10 @@ const BLAST_PELLETS := 6
 const EMPOWERED_SHELL_RANGE := 6.0
 ## Out of a sprint, the gun comes back up this long before it will fire.
 const RUN_RECOVER := 0.15
+## The shot's tail: how long after the crack, and how much quieter in the
+## open than in a closed room (dB).
+const TAIL_DELAY := 0.06
+const TAIL_ROOM := 8.0
 ## The hold on a hit, and on a kill (real seconds).
 const HIT_HITSTOP := 0.04
 const KILL_HITSTOP := 0.07
@@ -496,6 +502,7 @@ func _pull(gun: Resource) -> void:
 	_kicked(1.0, gun)
 	SoundBus.emit_sound(muzzle, gun.shot_db, player, &"gunshot")
 	_sound(&"gunshot")
+	_tail(&"gunshot_tail")
 	Fx.flash(player, muzzle, Color(1.0, 0.72, 0.42), 3.0, 6.0, 0.06)
 	fired.emit(&"cylinder", [record])
 
@@ -559,6 +566,7 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 	_kicked(SHELL_KICK, gun)
 	SoundBus.emit_sound(muzzle, gun.shell_db, player, &"gunshot")
 	_sound(&"shellshot")
+	_tail(&"shellshot_tail")
 	Fx.flash(player, muzzle, Color(1.0, 0.68, 0.38), 4.0, 7.0, 0.07)
 	fired.emit(&"shot", records)
 
@@ -829,6 +837,19 @@ func _recover_climb(delta: float) -> void:
 static func _ease(t: float) -> float:
 	var c := clampf(t, 0.0, 1.0)
 	return c * c * (3.0 - 2.0 * c)
+
+
+## The shot rings on after its crack: TAIL_DELAY later, off what is round
+## you; in a closed room (Sfx.probe_room's enclosure) it rings up to
+## TAIL_ROOM dB louder than in the open.
+func _tail(name: StringName) -> void:
+	var take: Array = SOUNDS[name]
+	var eye := aim().origin
+	var room := Sfx.probe_room(player.get_world_3d().direct_space_state, eye, [player.get_rid()])
+	var volume: float = float(take[1]) + lerpf(-TAIL_ROOM, 0.0, room.y)
+	get_tree().create_timer(TAIL_DELAY, false, true).timeout.connect(func():
+		if is_instance_valid(player):
+			Sfx.play_flat(player, take[0], volume, take[2]))
 
 
 func _sound(name: StringName) -> void:
