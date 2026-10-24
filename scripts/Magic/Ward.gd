@@ -195,12 +195,15 @@ func bulge(at: Vector3) -> void:
 	root.get_tree().create_timer(BULGE_LIFE, false, true).timeout.connect(root.queue_free)
 	_bulges.append(weakref(root))
 
-	# The two plumes nearest it thin.
-	var nearest := _plumes.duplicate()
-	nearest.sort_custom(func(a, b): return a.global_position.distance_to(at) < b.global_position.distance_to(at))
+	# The two plumes either side of it round the ring thin (every plume
+	# stands at the ward's middle: it is where each rises round it that
+	# counts, in the ward's own turning space).
+	var round_at := atan2(local.z, local.x)
+	var order := range(_plumes.size())
+	order.sort_custom(func(a, b): return absf(angle_difference(round_at, TAU * float(a) / float(PLUMES))) < absf(angle_difference(round_at, TAU * float(b) / float(PLUMES))))
 
-	for plume in nearest.slice(0, 2):
-		_thinning[_plumes.find(plume)] = THIN_FOR
+	for i in order.slice(0, 2):
+		_thinning[i] = THIN_FOR
 
 
 func bulge_count() -> int:

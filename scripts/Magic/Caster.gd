@@ -111,7 +111,7 @@ func _physics_process(delta: float) -> void:
 	_update_blink(delta)
 
 	# Held, and ready: the circle begins to close, or the pages to turn.
-	if _held_key != &"" and _casting == &"" and not _aiming and not _begun_this_press and player.combat.gun_drawn() and can_cast(_held_key):
+	if _held_key != &"" and _casting == &"" and not _aiming and not _begun_this_press and player.combat.gun_drawn() and _gun_up() and can_cast(_held_key):
 		_begun_this_press = true
 		_begin(_held_key)
 
@@ -188,11 +188,28 @@ func can_cast(id: StringName) -> bool:
 
 			return gun or player.combat.current_weapon() == null
 		Spells.Tier.HAND:
-			return gun and loadout == Loadout.HAND and player.combat.is_able() and not _aiming_gun()
+			return gun and loadout == Loadout.HAND and player.combat.is_able() and not _aiming_gun() and _left_hand_free()
 		Spells.Tier.TOME:
-			return gun and loadout == Loadout.TOME and player.combat.is_able() and not _aiming_gun()
+			return gun and loadout == Loadout.TOME and player.combat.is_able() and not _aiming_gun() and _left_hand_free()
 
 	return false
+
+
+## The left hand not taken for a job (a pickup, a key, the purse, the Tab
+## check): those come first, and a cast under way is cancelled for them.
+func _left_hand_free() -> bool:
+	var hand: Node = player.hand
+
+	if hand == null or not hand.has_method("is_busy"):
+		return true
+
+	return not hand.is_busy() and not hand.is_checking()
+
+
+## The revolver drawn all the way up: a spell key held as it comes begins
+## its cast only then.
+func _gun_up() -> bool:
+	return player.revolver == null or player.revolver.is_up()
 
 
 ## Up at the eye with both hands on the gun: the left hand is not free.

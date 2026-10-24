@@ -946,6 +946,11 @@ func item_lowered() -> float:
 	return _main_lower
 
 
+## Swapping what is in hand (the old thing going down, the new to come).
+func is_switching() -> bool:
+	return _switching
+
+
 func is_item_visible() -> bool:
 	return _main_item != null and _main_lower < 0.05
 

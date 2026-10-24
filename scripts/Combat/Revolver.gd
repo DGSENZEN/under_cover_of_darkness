@@ -86,6 +86,12 @@ const AIM_FOV_CUT := 13.0
 const AIM_SPEED := 0.7
 ## Seconds for the gate to snap shut when you fire mid-reload.
 const GATE_SNAP := 0.1
+## A shot asked for mid-reload lapses if it has not gone this long after
+## the gate snaps (put away, up a wall, out of a run: it never goes later).
+const OWED_LAPSE := GATE_SNAP + 2.0 / 60.0
+## Seconds the one-handed stray takes to fade after a shot: longer than the
+## ready time, so a hip shot fired as soon as it can still strays.
+const HEAT_TIME := 1.2
 ## The pistol-whip: a man this near (metres), this far off your aim
 ## (degrees); the blow lands this far in, and it is over by WHIP_TIME.
 const WHIP_REACH := 1.3
@@ -127,9 +133,14 @@ var _ran_at := -100.0
 var _load_t := 0.0
 ## The gate shutting (GATE), not opening.
 var _gate_shutting := false
-## A shot asked for mid-reload: it goes once the gate is shut.
+## A shot asked for mid-reload: it goes once the gate is shut, unless it
+## lapses (at _owed_until, game time).
 var _owed_shot := false
+var _owed_until := 0.0
 var _kick := 0.0
+## How much the last shots still throw a hip shot off (1 just fired, fading
+## over HEAT_TIME).
+var _heat := 0.0
 ## The last shot's climb of the aim (radians, as thrown: pitch, yaw), and
 ## how far into coming back it is (seconds).
 var _climb := Vector2.ZERO
@@ -161,6 +172,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_game_time += delta
 	_kick = move_toward(_kick, 0.0, delta / maxf(_settle, 0.01))
+	_heat = move_toward(_heat, 0.0, delta / HEAT_TIME)
 	_recover_climb(delta)
 	var gun: Resource = weapon()
 	_update_whip(delta)
@@ -175,6 +187,7 @@ func _physics_process(delta: float) -> void:
 	# rounds already in are spent.
 	if not able:
 		_stop_loading()
+		_owed_shot = false
 		return
 
 	if Input.is_action_just_pressed("barrel"):
@@ -193,10 +206,13 @@ func _physics_process(delta: float) -> void:
 			# Mid-reload: the gate snaps shut and the shot goes.
 			_stop_loading()
 			_owed_shot = true
+			_owed_until = _game_time + OWED_LAPSE
 			_ready_at = maxf(_ready_at, _game_time + GATE_SNAP)
 
 	if loading != Load.NONE:
 		_update_loading(delta, gun)
+	elif _owed_shot and _game_time > _owed_until:
+		_owed_shot = false
 	elif _owed_shot and ready_to_fire():
 		_owed_shot = false
 		_pull(gun)
@@ -215,11 +231,19 @@ func ready_to_fire() -> bool:
 
 
 ## Drawn all the way up (not still coming from the holster).
+func is_up() -> bool:
+	return _up_in_hand()
+
+
 func _up_in_hand() -> bool:
 	var hand: Node = player.hand if player != null else null
 
 	if hand == null or not hand.has_method("item_lowered"):
 		return true
+
+	# Not still putting the last thing away (it shows up, but it is not this).
+	if hand.has_method("is_switching") and hand.is_switching():
+		return false
 
 	return hand.is_item_visible() and hand.item_lowered() <= 0.0
 
@@ -245,6 +269,7 @@ func gate_open() -> float:
 ## The thumb flicks the hammer's nose: the other barrel fires next.
 func flip_barrel() -> void:
 	barrel = &"shot" if barrel == &"cylinder" else &"cylinder"
+	_owed_shot = false
 	_flip_until = _game_time + FLIP_TIME
 	_sound(&"hammer")
 
@@ -321,6 +346,7 @@ func reset_for_practice() -> void:
 	_ran_at = -100.0
 	_flip_until = 0.0
 	_kick = 0.0
+	_heat = 0.0
 	_owed_shot = false
 	_whip_t = -1.0
 	_whip_target = null
@@ -362,6 +388,7 @@ func try_whip() -> bool:
 		return false
 
 	_stop_loading()
+	_owed_shot = false
 	_whip_t = 0.0
 	_whip_target = best
 	Sfx.play_flat(player, &"whoosh_light", -6.0, 1.2)
@@ -575,14 +602,15 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 	fired.emit(&"shot", records)
 
 
-## Where the shot goes: one-handed and still kicking, off along the rosette.
+## Where the shot goes: one-handed and still hot from the last shots, off
+## along the rosette; aimed, true.
 func _stray(aim_basis: Basis) -> Vector3:
 	var forward := -aim_basis.z
 
-	if aimed or _kick <= 0.001:
+	if aimed or _heat <= 0.001:
 		return forward
 
-	var offset: Vector2 = ROSETTE[_shots % ROSETTE.size()] * deg_to_rad(SPREAD_ONE_HAND) * _kick
+	var offset: Vector2 = ROSETTE[_shots % ROSETTE.size()] * deg_to_rad(SPREAD_ONE_HAND) * _heat
 	return (aim_basis * Vector3(offset.x, offset.y, -1.0)).normalized()
 
 
@@ -744,8 +772,8 @@ func _strike_world(record: Dictionary, direction: Vector3) -> void:
 		Fx.dust(player, point, normal, 0.6, surface)
 
 	# A hole, in what stays put: the world's stone and timber, not a crate
-	# that would carry it off.
-	if collider is StaticBody3D or collider is CSGShape3D:
+	# or a door that would carry it off.
+	if (collider is StaticBody3D and not collider is AnimatableBody3D) or collider is CSGShape3D:
 		Fx.hole(player, point, normal, "metal" if iron else surface)
 
 
@@ -764,6 +792,7 @@ func _kicked(strength: float, gun: Resource) -> void:
 	_settle = gun.ready_braced if aimed else gun.ready_one_hand
 	_ready_at = _game_time + _settle
 	_kick = 1.0
+	_heat = 1.0
 	_climb_aim(strength)
 	player.juice.add_trauma(KICK_TRAUMA * strength * held)
 	player.juice.punch(KICK_PUNCH * strength * held, 0.08 * held, 0.22 * strength * held)
@@ -848,7 +877,8 @@ func _recover_climb(delta: float) -> void:
 	var back := _climb * RECOVER * (after - before)
 
 	if neck != null:
-		neck.rotation.x -= back.x
+		var limit := deg_to_rad(float(player.get("max_pitch_degrees")))
+		neck.rotation.x = clampf(neck.rotation.x - back.x, -limit, limit)
 
 	player.rotation.y -= back.y
 

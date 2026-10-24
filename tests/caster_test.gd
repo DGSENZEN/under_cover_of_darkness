@@ -109,6 +109,7 @@ func _run() -> void:
 	_wield(&"revolver")
 	_put_player(Vector3(0, 1.05, 0))
 	await _frames(30)
+	await _until(func(): return player.revolver.is_up(), 60)
 	power.power = power.MAX
 	caster.select(&"shard")
 	done.clear()
@@ -515,7 +516,7 @@ func _run() -> void:
 	power.power = power.MAX
 	done.clear()
 	Input.action_press("spell_1")
-	await _until(func(): return not done.is_empty(), 60)
+	await _until(func(): return not done.is_empty(), 120)
 	Input.action_release("spell_1")
 	_check("S27 holding 1 with the sword drawn draws the revolver and casts Shard",
 		done == [&"shard"] and player.combat.gun_drawn(), "done %s gun %s" % [done, player.combat.gun_drawn()])
@@ -552,10 +553,54 @@ func _run() -> void:
 		switched == 0 and done.is_empty() and _near(power.power, 100.0, 0.01),
 		"after the switch %d, tapped %s power %.1f" % [switched, done, power.power])
 
+	# S30 a spell key with the sword drawn: no cast begins until the gun is up
+	_wield(&"sword")
+	await _frames(40)
+	power.power = power.MAX
+	var begun_at := [-1]
+	var frame := [0]
+	var on_start := func(_id: StringName): begun_at[0] = frame[0]
+	player.caster.cast_started.connect(on_start)
+	Input.action_press("spell_1")
+	var up_at := -1
+
+	for f in 90:
+		await get_tree().physics_frame
+		frame[0] = f + 1
+		if up_at < 0 and player.combat.gun_drawn() and player.revolver._up_in_hand():
+			up_at = f
+
+	Input.action_release("spell_1")
+	player.caster.cast_started.disconnect(on_start)
+	_check("S30 holding a spell key while the revolver comes: the cast begins only once it is up",
+		begun_at[0] >= 0 and up_at >= 0 and begun_at[0] >= up_at, "begun at frame %d, up at %d" % [begun_at[0], up_at])
+	await _frames(20)
+
+	# S31 the left hand taken for a job (the Tab check) mid-cast: cancelled,
+	# nothing cast, nothing paid; and no cast begins while it is busy
+	power.power = power.MAX
+	done.clear()
+	Input.action_press("spell_1")
+	await _frames(10)
+	Input.action_press("inventory")
+	await _frames(40)
+	var checking: bool = player.hand.is_checking()
+	Input.action_release("spell_1")
+	var while_checking := done.size()
+	Input.action_press("spell_1")
+	await _frames(40)
+	Input.action_release("spell_1")
+	Input.action_release("inventory")
+	await _frames(20)
+	_check("S31 the left hand checking: a cast under way is cancelled, none begins, nothing paid",
+		checking and while_checking == 0 and done.is_empty() and _near(power.power, 100.0, 0.01),
+		"checking %s cast %s power %.1f" % [checking, done, power.power])
+
 	# M1 Shard's circle: twelve black-glass splinters, not boxes
 	_wield(&"revolver")
 	_put_player(Vector3(-50, 1.05, -20))
 	await _frames(40)
+	await _until(func(): return player.revolver.is_up(), 60)
 	power.power = power.MAX
 	Input.action_press("spell_1")
 	await _frames(12)
@@ -705,6 +750,31 @@ func _run() -> void:
 	_check("W2 a stopped arrow bulges the smoke there, and it settles", bulged == 1 and puffs == 3 and get_tree().get_nodes_in_group(&"ward_bulge").is_empty(),
 		"bulges +%d puffs %d after %d" % [bulged, puffs, get_tree().get_nodes_in_group(&"ward_bulge").size()])
 
+	# W5 the smoke thins where a shot was stopped: the two plumes either side
+	# of it, wherever round the ring that is
+	var thinned := []
+
+	for a in [0.4, 0.4 + PI]:
+		if not is_instance_valid(ward):
+			break
+
+		for i in ward._thinning.size():
+			ward._thinning[i] = 0.0
+
+		ward.bulge(ward.to_global(Vector3(cos(a), 0.0, sin(a)) * WardScript.RADIUS))
+		var which := []
+
+		for i in ward._thinning.size():
+			if ward._thinning[i] > 0.0:
+				which.append(i)
+
+		thinned.append(which)
+
+	# 0.4 rad lies between plumes 0 and 1 (30 degrees apart); half a turn on,
+	# between 6 and 7.
+	_check("W5 the smoke thins at the plumes beside the stopped shot", thinned == [[0, 1], [6, 7]], "thinned %s" % [thinned])
+	await _frames(int(0.45 * 60.0) + 5)
+
 	# W4 a volley of eight: at most six bulges, all gone with the ward
 	var most_bulges := 0
 	for i in 8:
@@ -725,6 +795,7 @@ func _run() -> void:
 	_wield(&"revolver")
 	_put_player(Vector3(-20, 1.05, 40))
 	await _frames(40)
+	await _until(func(): return player.revolver.is_up(), 60)
 	power.power = power.MAX
 	Input.action_press("spell_3")
 	await _frames(37)

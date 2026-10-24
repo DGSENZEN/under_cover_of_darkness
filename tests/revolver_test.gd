@@ -877,6 +877,79 @@ func _run() -> void:
 	_check("R20 a gib in front of his friends shakes them more than a plain kill", gib_drop > plain_drop + 0.05,
 		"plain %.2f gib %.2f" % [plain_drop, gib_drop])
 
+	# Q1 a shot asked for mid-reload, then the gun put away: it never goes
+	# off by itself later
+	revolver.reset_for_practice()
+	_put_player(Vector3(36, 1.05, 0))
+	await _frames(30)
+	player.inventory.ammo[&"rounds"] = 24
+	for i in 3:
+		await _tap("throw")
+		await _frames(40)
+	await _tap("reload")
+	await _frames(20)
+	shots.clear()
+	Input.action_press("throw")
+	await _frames(2)
+	var owed_then: bool = revolver._owed_shot
+	player.inventory.select_next()
+	await get_tree().physics_frame
+	Input.action_release("throw")
+	await _frames(60)
+	_wield(&"revolver")
+	await _frames(90)
+	_check("Q1 a shot asked for mid-reload, then the gun put away, never fires by itself", owed_then and shots.is_empty(),
+		"asked %s shots %d" % [owed_then, shots.size()])
+
+	# Q2 from the hip the shots stray; aimed they don't
+	revolver.reset_for_practice()
+	_put_player(Vector3(36, 1.05, 0))
+	await _frames(30)
+	await _tap("throw")
+	await _until(func(): return revolver.ready_to_fire(), 120)
+	var hip_off: float = rad_to_deg((-revolver.aim().basis.z).angle_to(revolver._stray(revolver.aim().basis)))
+	Input.action_press("aim")
+	await _frames(30)
+	await _tap("throw")
+	await _until(func(): return revolver.ready_to_fire(), 120)
+	var aimed_off: float = rad_to_deg((-revolver.aim().basis.z).angle_to(revolver._stray(revolver.aim().basis)))
+	Input.action_release("aim")
+	await _frames(20)
+	_check("Q2 when the next shot is ready, a hip shot strays and an aimed one doesn't",
+		hip_off > 0.3 and aimed_off < 0.001, "hip %.2f deg aimed %.3f deg" % [hip_off, aimed_off])
+
+	# Q3 no hole is left floating where a door was
+	revolver.reset_for_practice()
+	Fx.clear()
+	var door := Props.door(self, Vector3(50, 0, -4))
+	_put_player(Vector3(50.5, 1.05, 0))
+	await _frames(20)
+	_aim(door.global_position + Vector3(0.5, 1.2, 0))
+	await _tap("throw")
+	await _frames(3)
+	_check("Q3 no hole is left in a door", Fx.holes_in_use() == 0, "holes %d" % Fx.holes_in_use())
+	door.queue_free()
+
+	# Q4 a shot, then the look pulled to the bottom: the kick's return never
+	# carries it past the limit
+	revolver.reset_for_practice()
+	_put_player(Vector3(36, 1.05, 0))
+	await _frames(30)
+	var floor_limit: float = -deg_to_rad(player.max_pitch_degrees)
+	revolver.flip_barrel()
+	await _frames(12)
+	await _tap("throw")
+	await get_tree().physics_frame
+	player.get_node("Neck").rotation.x = floor_limit
+	var lowest := 0.0
+	for i in 50:
+		await get_tree().physics_frame
+		lowest = minf(lowest, player.get_node("Neck").rotation.x)
+	revolver.flip_barrel()
+	player.get_node("Neck").rotation.x = 0.0
+	_check("Q4 at the bottom of the look, the kick's return stops at the limit", lowest >= floor_limit - 0.0001,
+		"lowest %.2f limit %.2f" % [rad_to_deg(lowest), rad_to_deg(floor_limit)])
+
 
 # Helpers
 
