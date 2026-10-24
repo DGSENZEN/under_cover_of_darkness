@@ -376,6 +376,9 @@ func _wicks(part: String, file := CORNER_WICKS) -> Array[Vector3]:
 func set_decals(on: bool) -> void:
 	for d in decals:
 		d.visible = on
+	# (His shadow is a decal too: hidden with them, its crossing kept.)
+	if is_instance_valid(effects) and is_instance_valid(effects.shadow):
+		effects.shadow.set_decals(on)
 
 	_name_keys()
 

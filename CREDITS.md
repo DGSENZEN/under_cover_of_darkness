@@ -110,6 +110,11 @@ and painted over by `tools/textures/eclipse_atlas.py`:
 - **The spectral skull** of the librarian's necromancy books and the dead's faces in their smoke
   (`assets/characters/skull/skull-Low4K.obj`): "human skull" by **CDmir**
   ([OpenGameArt](https://opengameart.org/content/human-skull-0)), CC0. Its own textures are not used.
+- **The base body** behind the alchemists' homunculus and the librarian's shadow
+  (`assets/characters/base`): "Universal Base Characters" by **Quaternius**
+  ([quaternius.com](https://quaternius.com)), CC0.
+- **The librarian's shadow's walk** (`assets/characters/animations/UAL1_Standard.glb`, `Walk_Formal_Loop`):
+  "Universal Animation Library" by **Quaternius** ([quaternius.com](https://quaternius.com)), CC0.
 
 - **The living words' Latin atlas** (`textures/painted/library/glyphs_latin.png`, baked by
   `tools/textures/library_glyphs.py`): Roboto Bold by **Christian Robertson** (Google), Apache License 2.0,

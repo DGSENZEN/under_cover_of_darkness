@@ -69,6 +69,27 @@ func _ready() -> void:
 		["corner_words", lib.to_global(Vector3(0.9, 0.9, -2.7)), lib.to_global(Vector3(-0.3, 0.5, -4.1))],
 		["ward_candle", lib.to_global(Vector3(1.2, 0.4, -3.3)), lib.to_global(Vector3(0.9, 0.12, -3.64))],
 	]
+	if clip == "shadow":
+		# Down the room, the necromancy case in the corner of the eye: he crosses its front; then the eye turns to look
+		# at him, and he is gone.
+		var at: Vector3 = lib.to_global(Vector3(-0.4, 1.65, -0.6))
+		var ahead: Vector3 = lib.to_global(Vector3(-0.2, 1.4, -6.0))
+		var shadow: Node3D = lib.effects.shadow
+		await _frames(90)
+		_place(at, ahead)
+		await _frames(20)
+		shadow.only = 1
+		shadow.cross_now(1)
+		var turned_to := Vector3.ZERO
+		for i in 160:
+			if i == 75:
+				turned_to = shadow.shade.global_position
+			if i >= 75 and i < 95:
+				_place(at, ahead.lerp(turned_to, smoothstep(0.0, 1.0, (i - 75) / 19.0)))
+			_capture("shadow_%03d.png" % i)
+			await _frames(2)
+		get_tree().quit()
+		return
 	if clip == "ward":
 		# The ward from a swing across its front, high, the book made to strain every 5.3 s: each candle and the
 		# salt's opening in sight in turn.

@@ -368,6 +368,29 @@ Revision (Oct 23, from the user's note on the approved ward: more slithery, and 
 - **Checks.** E80 (slither) and E81 (slow, local glow); E77's flare reads the brightest sigil.
 - **Frame cost.** The four suites pass together; L20 passes alone at 1.04× and 1.08×. The windowed render check's bay figure was erratic on Oct 23: the bay jumped from 8.38 to 3.04 ms between identical runs. The shop drew at 8.76 ms without the ward and 8.71 ms with it.
 
+## Task 9, the librarian's ownerless shadow (Oct 23, awaiting review)
+
+Task 8's revision and the silhouette were approved by the user on Oct 23. The user then offered the rig and a walk, so
+the shadow walks.
+
+- **His picture.** `tools/textures/librarian_shadow.py` poses Quaternius's CC0 base body and dresses it in shapes built round its bones: a greatcoat whose skirt falls from what holds it out, sleeves, a turned-up collar, boots, a wide-brimmed hat. It renders him black from the side.
+  - The still (`librarian_shadow.png`) is the one approved.
+  - `--walk` makes 16 frames of the Universal Animation Library's `Walk_Formal_Loop`, dressed the same way, through one fixed eye, into `librarian_shadow_walk.png` (4×4 cells of 256×512). Beside it, `librarian_shadow_walk.json` records the frames and one cycle's travel: 0.697 of his height, about 1.44 m at his 2.06 m.
+- **`scripts/Visual/Library/LibraryShadow.gd`** (`effects.shadow`) has one way along each of the five wall cases' fronts.
+  - **Ends.** Each way runs from beyond one end of the case to beyond the other, each end only as far out as he stays clear of every other case and the corner. Metaphysics's back end is drawn in, where it meets the hunting case. He fades in and out over the last 35 cm.
+  - **Rules.** It keeps the corridor shadow's angles, fades and pace (OwnerlessShadow.gd, untouched, still 40–90 s). It crosses every 60–120 s, only where the watcher sees the way's middle from the corner of the eye (22°–85°), on the way nearest the middle of that band. Looked at, he is gone.
+  - **Walking.** His frames go round with the distance he has walked, so his feet hold at any pace.
+  - **Switches.** F3, the form light and the effects switch hide him without losing his place in a crossing.
+- **Drawn in a volume, not a decal.** The shop's painted materials carry their light in emission, which a decal's albedo cannot darken: a black decal barely showed. `shadow_volume.gdshader` is a box over the case front that reads the depth buffer and lays the picture's black over whatever is drawn there: books, boards, uprights and the ladder. Surfaces turned away from it (floors, board tops) fade, and anything in front of the box keeps it off.
+
+Checks: E82–E88 in `tests/library_effects_test.gd`. Review media: `docs/superpowers/refs/underground/library_stills/part2-shadow/` (`corner-of-the-eye.mp4`, looking down the room: he crosses the necromancy case at the corner of the eye; the eye turns to him and he is gone).
+
+Calls made:
+- **`build(ways, texture)` with each way `[front frame, run, case]`** instead of `Array[Transform3D]`. A way needs its run, and the tests need its case.
+- **A depth-read volume instead of a decal** (above).
+- **His walk is distance-driven**, so his feet never slide. That makes his cadence about 28% quicker than the clip's own at the corridor's 1.1 m/s.
+- **Frame cost.** The four suites pass together, L20 included. The windowed render check's figures were erratic on Oct 23: on identical code the bay measured 2.5–8.4 ms and the shelf-shadow view 0.23–8.5 ms. It failed its last two runs on the bay's low figure. Settling it needs GPU timings this Mac's renderer does not report.
+
 ## Plan self-review
 
 The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.

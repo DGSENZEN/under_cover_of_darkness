@@ -41,6 +41,7 @@ func _run() -> void:
 	await _floating()
 	await _stirring()
 	await _ward(effects)
+	await _shadow(effects)
 
 	# Drive a real novel through partial openings, without a full-open signal.
 	var book: LiveBook = lab.live_books[7]
@@ -890,6 +891,167 @@ func _corner_frame() -> Transform3D:
 func _draught(candle: Node3D) -> Vector3:
 	var draw := candle.find_child("candles", false, false) as MultiMeshInstance3D
 	return draw.multimesh.mesh.surface_get_material(0).get_shader_parameter("draught") if draw != null else Vector3.ZERO
+
+
+## A camera of the test's own at `at` looking at `target`, current and the shadow's watcher.
+func _eye_at(at: Vector3, target: Vector3) -> Camera3D:
+	var eye := Camera3D.new()
+	eye.fov = 70.0
+	add_child(eye)
+	eye.global_transform = Transform3D(Basis.IDENTITY, at).looking_at(target, Vector3.UP)
+	eye.make_current()
+	return eye
+
+
+## Task 9: the librarian's shadow crosses the cases' fronts, only from the corner of the eye.
+func _shadow(effects: Node3D) -> void:
+	var shadow: Node3D = effects.get("shadow")
+	var routes: Array = shadow.get("routes") if shadow != null else []
+	var decal: MeshInstance3D = shadow.get("shade") if shadow != null else null
+	# Its routes: one along each wall case's front, the decal shallow (from just before the front into its books,
+	# short of the wall behind), upright, its picture his.
+	var wrong := []
+	var others: Array = []
+	for mesh: Node3D in lab.shelves + lab.corner.values():
+		if mesh is MeshInstance3D:
+			others.append(mesh)
+	for route: Array in routes:
+		var frame: Transform3D = route[0]
+		var run: Vector2 = route[1]
+		var case: MeshInstance3D = route[2]
+		var box: AABB = case.get_aabb()
+		# (His middle reaches within half of him of each end of the case: all of it is crossed.)
+		var half: float = shadow.SIZE.x * 0.5
+		if run.x > box.position.x + half + 0.001 or run.y < box.end.x - half - 0.001 or run.y - run.x > box.size.x + 2.0 * half + 0.001:
+			wrong.append("run %s" % case.name)
+		for along in [run.x, (run.x + run.y) * 0.5, run.y]:
+			shadow.place(route, along)
+			var world: AABB = decal.global_transform * decal.get_aabb()
+			var inside: AABB = frame.affine_inverse() * world
+			if inside.end.z > 0.15 or inside.position.z < -0.41 or inside.position.y < -0.01:
+				wrong.append("depth %s %.2f..%.2f" % [case.name, inside.position.z, inside.end.z])
+			if decal.global_basis.z.normalized().dot(frame.basis.z.normalized()) < 0.99:
+				wrong.append("not into %s" % case.name)
+			for other: MeshInstance3D in others:
+				if other == case or String(other.name).begins_with("ladder") and case == lab.sections["chronology"]:
+					continue
+				if (other.global_transform * other.get_aabb()).intersects(world):
+					wrong.append("%s on %s" % [case.name, other.name])
+	var picture: bool = decal != null and shadow.picture != null and shadow.picture.resource_path.ends_with("librarian_shadow_walk.png")
+	_check("E82 his shadow's ways run along the five wall cases' fronts, shallow, upright, falling on nothing else",
+		routes.size() == 5 and wrong.is_empty() and picture, "routes %d wrong %s his picture %s" % [routes.size(),
+		wrong.slice(0, 3), picture])
+	if routes.size() != 5:
+		return
+
+	# Not knowing who looks, it never comes; it comes every one to two minutes; the corridor's keeps its own.
+	shadow.watcher = null
+	var current := get_viewport().get_camera_3d()
+	if current != null:
+		current.clear_current(false)
+	shadow.wait = 0.01
+	await _frames(30)
+	var gaps := []
+	for i in 20:
+		gaps.append(shadow.next_gap())
+	var corridor := (load("res://scripts/Visual/OwnerlessShadow.gd") as GDScript).get_script_constant_map()
+	_check("E83 with no eye it never crosses; crossings come every 60 to 120 s; the corridor's shadow keeps 40 to 90 s",
+		not shadow.crossing() and gaps.all(func(g): return g >= 60.0 and g <= 120.0) and corridor["EVERY"] == Vector2(40.0, 90.0),
+		"crossing %s gaps %.0f..%.0f corridor %s" % [shadow.crossing(), gaps.min(), gaps.max(), corridor["EVERY"]])
+
+	# Looked straight at, a case's front never has him cross it; from the corner of the eye, it does.
+	var route: Array = routes[0]
+	var front: Transform3D = route[0]
+	var middle: Vector3 = front * Vector3((route[1].x + route[1].y) * 0.5, 1.2, 0.0)
+	var eye := _eye_at(front * Vector3(0.0, 1.6, 2.4), middle)
+	shadow.watcher = eye
+	shadow.only = 0
+	shadow.wait = 0.01
+	await _frames(10)
+	var straight: bool = shadow.crossing()
+	# (Turned so the case is some fifty degrees off where the eye looks.)
+	eye.global_transform = Transform3D(Basis.IDENTITY, eye.global_position).looking_at(
+		eye.global_position + (middle - eye.global_position).rotated(Vector3.UP, deg_to_rad(50.0)), Vector3.UP)
+	shadow.wait = 0.01
+	await _frames(10)
+	var aside: bool = shadow.crossing()
+	var darkest := 0.0
+	for i in 40:
+		await get_tree().process_frame
+		darkest = maxf(darkest, shadow.darkness if decal.visible else 0.0)
+	_check("E84 looked straight at, no crossing; seen from the corner of the eye, he crosses, darkening",
+		not straight and aside and darkest > 0.5, "straight %s aside %s darkest %.2f" % [straight, aside, darkest])
+
+	# He walks: his frames go round with the ground he covers, a whole cycle to each stride, his feet never sliding.
+	shadow.cross_now(0)
+	var start: float = shadow.along
+	var seen_frames := {}
+	var steps := 0
+	var last: int = shadow.frame
+	for i in 30:
+		await get_tree().process_frame
+		seen_frames[shadow.frame] = true
+		if shadow.frame != last:
+			steps += posmod(shadow.frame - last, shadow.frames)
+			last = shadow.frame
+	var covered: float = absf(shadow.along - start)
+	var expected: float = covered / shadow.stride * shadow.frames
+	_check("E88 he walks: his frames step round with the ground he covers, a cycle to each stride",
+		shadow.frames >= 12 and seen_frames.size() >= 4 and absf(steps - expected) <= 1.5,
+		"frames %d seen %d stepped %d for %.2f m (%.1f expected, stride %.2f m)" % [shadow.frames, seen_frames.size(),
+		steps, covered, expected, shadow.stride])
+
+	# Looked at, he is gone at once and does not come back on that crossing.
+	eye.global_transform = Transform3D(Basis.IDENTITY, eye.global_position).looking_at(decal.global_position, Vector3.UP)
+	await _frames(12)
+	var gone: bool = not decal.visible or shadow.darkness <= 0.0
+	eye.global_transform = Transform3D(Basis.IDENTITY, eye.global_position).looking_at(
+		eye.global_position + (middle - eye.global_position).rotated(Vector3.UP, deg_to_rad(50.0)), Vector3.UP)
+	var back := 0.0
+	for i in 30:
+		await get_tree().process_frame
+		back = maxf(back, shadow.darkness if decal.visible else 0.0)
+	_check("E85 looked at, he is gone within a fifth of a second and does not come back that crossing",
+		gone and back <= 0.0, "gone %s back %.2f" % [gone, back])
+
+	# The camera replaced mid-crossing (the old one freed): he keeps to the new one.
+	shadow.cross_now(0)
+	await _frames(5)
+	eye.queue_free()
+	await _frames(2)
+	var fresh := _eye_at(front * Vector3(0.0, 1.6, 2.4), front * Vector3(0.0, 1.6, 2.4) + (middle - front * Vector3(0.0, 1.6, 2.4)).rotated(Vector3.UP, deg_to_rad(50.0)))
+	shadow.watcher = null
+	var still := true
+	for i in 20:
+		await get_tree().process_frame
+		still = still and is_instance_valid(shadow)
+	var kept: bool = shadow.crossing()
+	fresh.global_transform = Transform3D(Basis.IDENTITY, fresh.global_position).looking_at(decal.global_position, Vector3.UP)
+	await _frames(12)
+	_check("E86 with the camera replaced mid-crossing he keeps crossing, and the new eye's look sends him away",
+		still and kept and (not decal.visible or shadow.darkness <= 0.0), "kept %s gone %s" % [kept,
+		not decal.visible or shadow.darkness <= 0.0])
+
+	# F3 hides him with the ward and the salt; on again, he is where his crossing has got to.
+	fresh.global_transform = Transform3D(Basis.IDENTITY, fresh.global_position).looking_at(
+		fresh.global_position + (middle - fresh.global_position).rotated(Vector3.UP, deg_to_rad(50.0)), Vector3.UP)
+	shadow.cross_now(0)
+	await _frames(20)
+	var at_off: Vector3 = decal.global_position
+	lab.set_decals(false)
+	await _frames(20)
+	var hidden: bool = not decal.visible
+	lab.set_decals(true)
+	await _frames(2)
+	var shown: bool = decal.visible and shadow.crossing() and decal.global_position.distance_to(at_off) > 0.2
+	_check("E87 F3 hides his shadow with the other decals; on again, it shows on, further along its way",
+		hidden and shown, "hidden %s shown on %s" % [hidden, shown])
+	shadow.only = -1
+	shadow.watcher = null
+	fresh.queue_free()
+	if is_instance_valid(current):
+		current.make_current()
+	await _frames(2)
 
 
 ## The brightest of the ward's sigils (each glyph's share of its band's glow).
