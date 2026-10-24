@@ -671,9 +671,15 @@ func set_pelt(amount: float) -> void:
 	var side := signf((skeleton_space.global_transform.affine_inverse() * gun_hand).x) if skeleton_space != null else 1.0
 	_pelt_look.set_shader_parameter(&"side_sign", side if side != 0.0 else 1.0)
 
+	# On or off only when it changes (asked of a null overlay every frame,
+	# the renderer complains).
+	var want: Material = _pelt_look if _pelt > 0.0 else null
+
 	for mesh in _arms.find_children("*", "MeshInstance3D", true, false):
-		if (mesh as MeshInstance3D).skin != null or (mesh as MeshInstance3D).skeleton != NodePath():
-			(mesh as MeshInstance3D).material_overlay = _pelt_look if _pelt > 0.0 else null
+		var arm := mesh as MeshInstance3D
+
+		if (arm.skin != null or arm.skeleton != NodePath()) and arm.material_overlay != want:
+			arm.material_overlay = want
 
 
 func pelt_amount() -> float:
