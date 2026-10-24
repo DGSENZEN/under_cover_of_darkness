@@ -21,8 +21,9 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "textures" / "painted" / "underground"
 GRIME = ("drip", "soot", "grime", "oil", "wet")
 # The librarian's ward round his desk (docs/superpowers/specs/2026-10-17-librarian-shop-design.md): his chalk
-# circle, its glyph band left blank for Part 2's script, and the line of blessed salt that closes its open side.
-WARD = ("ward_circle", "salt_line")
+# circle, its glyph band left blank for Part 2's script, and the line of blessed salt that closes its open side; and
+# the chalk's glow when the ward flares (its emission: the chalk's lines lit, black elsewhere).
+WARD = ("ward_circle", "salt_line", "ward_glow")
 KINDS = GRIME + ("petals", "poster") + WARD
 # Loose marigold petals strewn along a trail: how many, their size in px, their colours
 # (fresh orange to yellow, a few gone brown underfoot).
@@ -157,10 +158,23 @@ def _salt_line(brushes_dir):
     return Image.fromarray(out, "RGBA")
 
 
+def _ward_glow(brushes_dir):
+    """The chalk's glow when the ward flares: its lines' colour by their coverage over black, opaque (a decal's
+    emission is added whatever its albedo's alpha, so the floor between the lines must give nothing)."""
+    chalk = np.asarray(_ward_circle(brushes_dir)).astype(np.float64)
+    rgb = chalk[..., :3] * (chalk[..., 3:] / 255.0)
+    alpha = np.full(rgb.shape[:2], 255.0)
+    alpha[:BORDER] = alpha[-BORDER:] = 0.0
+    alpha[:, :BORDER] = alpha[:, -BORDER:] = 0.0
+    return Image.fromarray(np.dstack([rgb, alpha]).round().astype(np.uint8), "RGBA")
+
+
 def make(kind, brushes_dir=brush_sheets.BRUSHES):
     """A decal of `kind` as an RGBA image."""
     if kind == "ward_circle":
         return _ward_circle(brushes_dir)
+    if kind == "ward_glow":
+        return _ward_glow(brushes_dir)
     if kind == "salt_line":
         return _salt_line(brushes_dir)
     if kind == "petals":

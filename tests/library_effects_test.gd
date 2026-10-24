@@ -40,6 +40,7 @@ func _run() -> void:
 	await _words(effects)
 	await _floating()
 	await _stirring()
+	await _ward(effects)
 
 	# Drive a real novel through partial openings, without a full-open signal.
 	var book: LiveBook = lab.live_books[7]
@@ -878,6 +879,152 @@ func _stirring() -> void:
 	stir.watcher = null
 	eye.queue_free()
 	await _frames(2)
+
+
+## The corner's frame (world): the desk's middle on the floor, its customers' side toward +z.
+func _corner_frame() -> Transform3D:
+	return lab.global_transform * Transform3D(Basis.IDENTITY, lab.CORNER_AT)
+
+
+## How hard candle `candle`'s flame is pushed (its draught, m/s, world).
+func _draught(candle: Node3D) -> Vector3:
+	var draw := candle.find_child("candles", false, false) as MultiMeshInstance3D
+	return draw.multimesh.mesh.surface_get_material(0).get_shader_parameter("draught") if draw != null else Vector3.ZERO
+
+
+## Task 8: the chained book against its ward. Five candles on the chalk lean away from it as it strains, its words
+## crawl toward the salt and are thrown back, the chalk flares; and all of it settles when the book is still.
+func _ward(effects: Node3D) -> void:
+	var ward: Node3D = effects.get("ward")
+	var candles: Array = ward.get("candles") if ward != null else []
+	var frame := _corner_frame()
+	var to_corner := frame.affine_inverse()
+	# Where each candle stands, and what it must keep clear of: the solid things of the corner, the customers' place
+	# before the desk and the salt across the ward's opening.
+	var clear := []
+	for part: String in lab.CORNER_SOLID:
+		var mesh: MeshInstance3D = lab.corner.get(part)
+		if mesh != null:
+			var box: AABB = to_corner * (mesh.global_transform * mesh.get_aabb())
+			clear.append([part, box.grow(0.08)])
+	var wrong := []
+	for candle: Node3D in candles:
+		var at: Vector3 = to_corner * candle.global_position
+		var r := Vector2(at.x, at.z).length()
+		if absf(r - lab.WARD_RADIUS) > 0.04 or at.y < 0.03 or at.y > 0.16:
+			wrong.append("off the chalk r %.2f y %.2f" % [r, at.y])
+		if absf(at.x) < 0.75 and at.z > 0.3:
+			wrong.append("before the desk %.2f %.2f" % [at.x, at.z])
+		for c: Array in clear:
+			var box: AABB = c[1]
+			if at.x > box.position.x and at.x < box.end.x and at.z > box.position.z and at.z < box.end.z:
+				wrong.append("in %s" % c[0])
+		var flame := candle.find_child("candles", false, false) as MultiMeshInstance3D
+		if flame == null or not flame.visible or flame.multimesh.instance_count != 1:
+			wrong.append("unlit")
+	_check("E75 five candles stand lit on the ward's chalk, clear of the desk, his chair, coat stand, rest and the salt",
+		candles.size() == 5 and wrong.is_empty(), "%d candles %s" % [candles.size(), wrong.slice(0, 3)])
+	if ward == null or candles.size() != 5:
+		return
+
+	# (The book's own strains held off while the test makes them; given back at the end.)
+	var chained: ChainedBook = lab.chained
+	var schedule: float = chained._next
+	chained._next = 1e6
+	await _frames(300)
+	var crawl: Array = ward.get("words")
+	var band: Node3D = ward.get("band")
+	var ring: Decal = ward.get("ring")
+	var rest_lean := 0.0
+	for candle: Node3D in candles:
+		rest_lean = maxf(rest_lean, _draught(candle).length())
+	var rest_words: bool = crawl.all(func(w): return not w.visible) and not band.visible
+	_check("E76 with the book still, the flames stand straight, the ward is quiet, its words are in the book",
+		rest_lean < 0.1 and ward.strength < 0.05 and rest_words and ring.emission_energy < 0.05,
+		"lean %.2f strength %.2f words %s glow %.2f" % [rest_lean, ward.strength, rest_words, ring.emission_energy])
+
+	# It strains: every flame leans away from it, harder the harder it strains; the ward flares.
+	var book: Vector3 = (chained.cover.global_transform * chained.cover.get_aabb()).get_center()
+	chained.strain_now()
+	var away := true
+	var early := -1.0
+	var peak := 0.0
+	var flare := 0.0
+	var band_peak := 0.0
+	var gap := 0.0
+	var reach := 0.0
+	var beyond := []
+	var through := []
+	var desk: MeshInstance3D = lab.corner["desk"]
+	var desk_box: AABB = (to_corner * (desk.global_transform * desk.get_aabb())).grow(-0.01)
+	var starts_ok: bool = crawl.size() >= 3
+	for w: Node3D in crawl:
+		var start: Vector3 = to_corner * (w.path[0] as Vector3)
+		starts_ok = starts_ok and start.distance_to(to_corner * book) < 0.2
+	for i in 360:
+		await get_tree().process_frame
+		gap = maxf(gap, chained.staple_gap())
+		var least := INF
+		for candle: Node3D in candles:
+			var push := _draught(candle)
+			var out := candle.global_position - book
+			out.y = 0.0
+			if push.length() > 0.2 and push.normalized().dot(out.normalized()) < 0.85:
+				away = false
+			least = minf(least, push.length())
+		if early < 0.0 and chained.strain > 0.3 and i < 30:
+			early = least
+		peak = maxf(peak, least)
+		flare = maxf(flare, ring.emission_energy)
+		band_peak = maxf(band_peak, band.presence if band.visible else 0.0)
+		for w: Node3D in crawl:
+			if not w.visible:
+				continue
+			# (Headless nothing is ever on screen, so the chain is laid out here, where it now is.)
+			w._lay()
+			for g: Vector3 in w.placed:
+				var at := to_corner * g
+				var r := Vector2(at.x, at.z).length()
+				if at.y < 0.3:
+					reach = maxf(reach, r)
+				if (r > 0.9 and at.y < 0.3) or at.y < 0.0:
+					beyond.append("%.2f at %.2f" % [r, at.y])
+				if desk_box.has_point(at):
+					through.append(at)
+	_check("E77 straining, every candle's flame leans away from the book, harder as it strains; the chalk flares",
+		away and early >= 0.0 and peak > 1.0 and peak > 1.8 * early and flare > 0.6 and band_peak > 0.6 and gap < 0.01,
+		"away %s early %.2f peak %.2f flare %.2f band %.2f gap %.4f" % [away, early, peak, flare, band_peak, gap])
+	# Its words crawl out from under the cover toward the salt and are thrown back inside the inner ring. (The book
+	# lies between the rings itself: only the words come down to the boards are held to the ring.)
+	var recoils := true
+	for w: Node3D in crawl:
+		var far := -1
+		var path: PackedVector3Array = w.path
+		var farthest := 0.0
+		for k in path.size():
+			var here := to_corner * path[k]
+			if here.y < 0.3 and Vector2(here.x, here.z).length() > farthest:
+				farthest = Vector2(here.x, here.z).length()
+				far = k
+		var turn := to_corner * path[far]
+		var end := to_corner * path[path.size() - 1]
+		recoils = recoils and far >= 0 and far < path.size() - 1 and Vector2(end.x, end.z).length() < Vector2(turn.x, turn.z).length() - 0.12 \
+			and end.y > turn.y + 0.1
+	_check("E78 its words crawl from the cover toward the salt and recoil inside the ward's inner ring, never through it",
+		starts_ok and reach > 0.72 and beyond.is_empty() and through.is_empty() and recoils,
+		"from cover %s reach %.2f beyond %s through desk %d recoil %s" % [starts_ok, reach, beyond.slice(0, 2),
+		through.size(), recoils])
+
+	# Settled: the flames stand straight again, the chalk is chalk, the words are gone back into the book.
+	await _frames(240)
+	var lean := 0.0
+	for candle: Node3D in candles:
+		lean = maxf(lean, _draught(candle).length())
+	var gone: bool = crawl.all(func(w): return not w.visible) and not band.visible
+	_check("E79 once the book is still again the flames stand straight, the chalk stops glowing, the words are gone",
+		lean < 0.1 and ward.strength < 0.05 and ring.emission_energy < 0.05 and gone,
+		"lean %.2f strength %.2f glow %.2f gone %s" % [lean, ward.strength, ring.emission_energy, gone])
+	chained._next = schedule
 
 
 func _radiance(effects: Node3D) -> void:

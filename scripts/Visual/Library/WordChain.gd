@@ -16,6 +16,9 @@ const SHADER := preload("res://scripts/Visual/Library/library_glyph.gdshader")
 @export var speed := 0.08
 @export var gap := 0.6
 @export var fade := 0.12
+## Where its glyphs turn their faces, as far as the way they go lets them (world; Vector3.UP lays them flat on the
+## floor): none stands each upright on the path's line.
+@export var face := Vector3.ZERO
 var loop := false
 
 var path := PackedVector3Array()
@@ -112,6 +115,11 @@ func set_text(text: String, atlas: Dictionary) -> void:
 	_lay()
 
 
+## How long its text is laid along the path (m).
+func text_length() -> float:
+	return _span
+
+
 func set_presence(value: float) -> void:
 	presence = value
 	visible = value > 0.001
@@ -173,6 +181,10 @@ func _tabulate() -> void:
 		var up := (Vector3.UP - ahead * ahead.dot(Vector3.UP))
 		up = up.normalized() if up.length() > 0.05 else Vector3.BACK
 		var facing := ahead.cross(up).normalized()
+		var toward := face - ahead * ahead.dot(face)
+		if toward.length() > 0.05:
+			facing = toward.normalized()
+			up = facing.cross(ahead).normalized()
 		_table.append(Transform3D(Basis(ahead, up, facing).scaled(Vector3.ONE * size), _point(s)))
 
 

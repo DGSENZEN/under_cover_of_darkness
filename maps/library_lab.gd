@@ -46,6 +46,9 @@ const CORNER_SOLID := ["desk", "desk_chair", "coat_hook", "chained_book_rest", "
 ## salt across its open side toward the customers.
 const WARD_RADIUS := 1.18
 const SALT_SIZE := Vector3(1.3, 0.2, 0.9)
+## The five candle stubs on his ward's chalk (tools/eclipse/library_ward.py), in the corner's frame; their wicks.
+const WARD_KIT := "res://assets/eclipse/kit/library_ward.glb"
+const WARD_WICKS := "res://assets/eclipse/source/library_ward_wicks.json"
 ## His lamp: warm, low, under its green shade (where it stands when the corner's kit is missing).
 const LAMP_AT := Vector3(-0.32, 1.39, -4.44)
 const LAMP_COLOUR := Color(1.0, 0.78, 0.5)
@@ -123,6 +126,10 @@ var room := {}
 var corner := {}
 ## The book he is working on, chained and straining; the books in the cage, stirring.
 var chained: ChainedBook
+## His ward's chalk circle (its decal); the candle stubs on it, and their wicks (world).
+var ward_ring: Decal
+var ward_candles: MeshInstance3D
+var ward_wicks: Array[Vector3] = []
 var quarantine: Quarantine
 var decals: Array[Decal] = []
 ## His sections' cases by name; every piece of shelving.
@@ -338,13 +345,29 @@ func _corner() -> void:
 	ring.normal_fade = 0.5
 	var salt := _decal("salt_line", desk_at + Vector3(0.0, 0.05, WARD_RADIUS), SALT_SIZE)
 	salt.normal_fade = 0.5
+	ward_ring = ring
+	_ward_candles()
+
+
+## The candle stubs on his ward's chalk, each wick where its flame stands (the flames are the ward's,
+## scripts/Visual/Library/LibraryWard.gd). Not solid: a few centimetres of wax underfoot.
+func _ward_candles() -> void:
+	if not ResourceLoader.exists(WARD_KIT):
+		missing.append(WARD_KIT)
+		return
+
+	var meshes := _kit(WARD_KIT)
+	var look := _shop_look(Painterly.material(_painted(["library_ward.png", "library_ward_base.png"]), &"bespoke"), "ward")
+	if meshes.has("ward_candles"):
+		ward_candles = _place(meshes["ward_candles"], look, "ward_candles", CORNER_AT, 0.0, false)
+	ward_wicks = _wicks("ward_candles", WARD_WICKS)
 
 
 ## The points a kit's piece marks as wicks (world): a candle's, a lamp's bulb, a hinge's ends.
-func _wicks(part: String) -> Array[Vector3]:
+func _wicks(part: String, file := CORNER_WICKS) -> Array[Vector3]:
 	var out: Array[Vector3] = []
-	if FileAccess.file_exists(CORNER_WICKS):
-		var wicks: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(CORNER_WICKS))
+	if FileAccess.file_exists(file):
+		var wicks: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(file))
 		for w in wicks.get(part, []):
 			out.append(to_global(CORNER_AT + Vector3(w[0], w[1], w[2])))
 	return out

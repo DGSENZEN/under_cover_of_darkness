@@ -30,6 +30,8 @@ func _ready() -> void:
 	add_child(eye)
 	eye.make_current()
 	var lib: Node3D = map.library
+	# (The chained book strains only when the stills ask it to, so a view never catches one of its own halfway.)
+	lib.chained._next = 1e9
 	var views := [
 		["joined_corridor", Vector3(-3, 1.75, 3.2), Vector3(13, 1.8, 0.6)],
 		["library_entrance", Vector3(9.3, 1.7, 1.1), Vector3(15.6, 1.65, 1.1)],
@@ -61,7 +63,26 @@ func _ready() -> void:
 		["words_stream", lib.to_global(Vector3(-2.2, 1.55, -1.4)), lib.to_global(Vector3(-2.8, 1.5, -0.4))],
 		["floating_vault", lib.to_global(Vector3(0.0, 1.7, -0.6)), lib.to_global(Vector3(0.0, 3.1, -3.4))],
 		["floating_home", lib.to_global(Vector3(-1.5, 1.8, -1.0)), lib.to_global(Vector3(-3.4, 1.95, -1.2))],
+		["corner_ward_rest", lib.to_global(Vector3(0.6, 2.5, -1.9)), lib.to_global(Vector3(-0.1, 0.25, -4.5))],
+		["corner_ward", lib.to_global(Vector3(0.6, 2.5, -1.9)), lib.to_global(Vector3(-0.1, 0.25, -4.5))],
+		["corner_chained", lib.to_global(Vector3(-0.15, 1.6, -3.3)), lib.to_global(Vector3(-0.85, 0.85, -4.3))],
+		["corner_words", lib.to_global(Vector3(0.9, 0.9, -2.7)), lib.to_global(Vector3(-0.3, 0.5, -4.1))],
+		["ward_candle", lib.to_global(Vector3(1.2, 0.4, -3.3)), lib.to_global(Vector3(0.9, 0.12, -3.64))],
 	]
+	if clip == "ward":
+		# The ward from a swing across its front, high, the book made to strain every 5.3 s: each candle and the
+		# salt's opening in sight in turn.
+		var middle: Vector3 = lib.to_global(Vector3(0.0, 0.35, -4.5))
+		await _frames(90)
+		for i in 480:
+			var a := deg_to_rad(lerpf(-62.0, 62.0, smoothstep(0.0, 1.0, i / 479.0)))
+			_place(lib.to_global(Vector3(2.5 * sin(a), 2.3, -4.4 + 2.5 * cos(a))), middle)
+			if i % 160 == 15:
+				lib.chained.strain_now()
+			_capture("ward_%03d.png" % i)
+			await _frames(2)
+		get_tree().quit()
+		return
 	if clip == "stir":
 		# Looking at the chronology case, turning away to the vault until it has gone unseen long enough, its boards
 		# stirring, turning back. The before and after also saved as stills.
@@ -114,6 +135,9 @@ func _ready() -> void:
 				# (A floating book sent home to the chronology case for the clip.)
 				if clip == "floating_home":
 					lib.floating.come_home(6)
+				# (The ward's views: the book strains as the clip begins.)
+				if clip.begins_with("corner_"):
+					lib.chained.strain_now()
 				for i in 180:
 					_capture("%s_%03d.png" % [view[0], i])
 					await _frames(2)
@@ -124,6 +148,12 @@ func _ready() -> void:
 			continue
 		_place(view[1], view[2])
 		await _frames(100)
+		# (The ward's views taken as the book strains, its words at the chalk; the rest view while it is still. Each
+		# waits out the last view's words first: a strain while they are still out sends none.)
+		if view[0] in ["corner_ward", "corner_chained", "corner_words"]:
+			await _frames(140)
+			lib.chained.strain_now()
+			await _frames(96 if view[0] != "corner_chained" else 36)
 		_capture(view[0] + ".png")
 	if clips:
 		# (Settled first: with no stills before it, the walk began before the map's light and fog had come up.)

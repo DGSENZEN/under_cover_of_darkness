@@ -334,6 +334,33 @@ Calls made:
 - **The visible-board test asks twenty times over ten seconds** instead of waiting 120 simulated seconds. A board in sight is refused before any change is computed, so a longer wait would add no coverage. The two-minute run is E74, unwatched.
 - **No animation.** A book is simply somewhere else the next time you look. Since the change only ever happens out of sight, a move would never be seen anyway.
 
+## Task 8, the chained book against its ward (Oct 23, awaiting review)
+
+Task 7 was approved by the user on Oct 23.
+
+- **Candles.** `tools/eclipse/library_ward.py` makes five stubs, `library_ward.glb` (`ward_candles`, 1,092 tris, painted from the shared `wax_white` recipe). They are burnt to different heights, with their wax pooled and run, and stand on the outer chalk ring at 50°, 84°, 140°, 218° and 305°. Those places keep clear of the salt's opening, the coat stand, his chair and the chained book's rest. Each wick carries the corridor's candle flame (Vfx `candles`, one flame per candle, its light's reach 1.4 m).
+- **`scripts/Visual/Library/LibraryWard.gd`** (`effects.ward`) follows the book's strain. Its `strength` rises with the strain and holds while the words are at the chalk, then lets go over about a second. With it:
+  - every flame leans straight away from the book (draught up to 1.8 m/s) and burns taller and brighter;
+  - the chalk rings glow, warmed toward a pale gold (a new `decal_ward_glow.png` from `decals.py`: the chalk's lines over black, because a decal's emission ignores its alpha);
+  - the ward's own script burns up flat in the band between the rings, in two arcs that miss his chair's foot.
+- **Words.** As a strain begins, three chartreuse word chains (the unexorcised's colour, the cage's) seep from under the cover's fore-edge. They cross the desk between the rituale, the reliquary and the oil phial, pour down its front, crawl over the boards toward the salt, and rear back short of the inner ring.
+- **Facing.** `WordChain.face` turns glyphs toward a direction as far as their way allows. The book's words face the customers on the desk front and lie face up on the boards; the band uses it to lie flat.
+
+Checks:
+- E75–E79 in `tests/library_effects_test.gd`;
+- `LibraryWard` in `tools/eclipse/test_kit_bpy.py`;
+- `test_ward_glow_is_its_chalk_lit_and_nothing_else` in `tools/textures/test_decals.py`.
+
+Review media: `docs/superpowers/refs/underground/library_stills/part2-ward/`. `strains.mp4` swings across the ward's front as the book strains every 5.3 s, so each candle and the salt's opening come into sight in turn.
+
+Calls made:
+- **`build(chained, frame, radius, wicks, chalk)`** instead of `build(chained, centre, radius)`. The words' ways are laid in the corner's frame, which is turned with the lab in the joined map, and the candles and the chalk are the lab's.
+- **The candles are their own kit**, not part of `library_corner`. Rebuilding the approved corner would have re-packed its atlas.
+- **The kit's sliver bound is 4 mm.** A candle's lip and its wax's runs are thinner than the gate's 1 cm, and the wax is one colour, so a thin face costs its painter nothing.
+- **The words are held to the inner ring only on the boards.** The book itself lies between the rings, at r 0.93–1.18, so its words start out there.
+- **The ward's script fills the blank band only while the ward flares.** At rest the band stays blank, the user's slot.
+- **A strain while the words are still out sends no new words.** In play the book strains every 10–20 s and the words take at most 3.3 s.
+
 ## Plan self-review
 
 The tasks cover each Part 2 requirement in the existing design: projections (1/3/4), light (2), script and word waves (5), floating books (6), unseen stirring (7), containment/candles (8), shadow (9), and dressing/performance (10). Creature additions are explicitly separate reviews, as the spec permits. The plan preserves Part 1 corrections and endpoint signal semantics, accounts for the current uncommitted VFX work, and distinguishes functional tests from visual approval. New palette intensity, detailed glyph shapes and model appearance remain builder choices subject to the family reviews, not claims of existing approval.

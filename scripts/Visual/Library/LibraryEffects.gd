@@ -5,14 +5,16 @@ const BookProjection := preload("res://scripts/Visual/Library/BookProjection.gd"
 const LibraryLight := preload("res://scripts/Visual/Library/LibraryLight.gd")
 const SectionAura := preload("res://scripts/Visual/Library/SectionAura.gd")
 const LibraryWords := preload("res://scripts/Visual/Library/LibraryWords.gd")
+const LibraryWard := preload("res://scripts/Visual/Library/LibraryWard.gd")
 
 var projections: Array[Node3D] = []
 var enabled := true
 var inspecting := false
 var lighting: Node3D
-## Each section's aura, by section; the living words.
+## Each section's aura, by section; the living words; the chained book's ward.
 var auras := {}
 var words: Node3D
+var ward: Node3D
 
 
 func build(lab: Node3D) -> void:
@@ -39,6 +41,11 @@ func build(lab: Node3D) -> void:
 	words = LibraryWords.new()
 	add_child(words)
 	words.build(lab, projections)
+	if lab.get("chained") != null and lab.get("ward_ring") != null:
+		ward = LibraryWard.new()
+		add_child(ward)
+		ward.build(lab.chained, lab.global_transform * Transform3D(Basis.IDENTITY, lab.CORNER_AT), lab.WARD_RADIUS,
+			lab.ward_wicks, lab.ward_ring)
 
 
 func set_enabled(on: bool) -> void:
@@ -62,3 +69,5 @@ func _show_auras() -> void:
 		aura.visible = enabled and not inspecting
 	if is_instance_valid(words):
 		words.visible = enabled and not inspecting
+	if is_instance_valid(ward):
+		ward.shown = enabled and not inspecting

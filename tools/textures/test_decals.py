@@ -109,6 +109,20 @@ class Decals(unittest.TestCase):
         self.assertLess(band, 0.15)
         self.assertGreater(rgb[a > 0.5].mean(), 180.0)
 
+    def test_ward_glow_is_its_chalk_lit_and_nothing_else(self):
+        # The ward's flare (Part 2 Task 8): a decal's emission is added whatever its albedo's alpha, so its glow is
+        # the chalk's own lines, bright where the chalk is and black wherever the floor shows through.
+        chalk = np.asarray(decals.make("ward_circle", self.brushes)).astype(float)
+        glow = np.asarray(decals.make("ward_glow", self.brushes)).astype(float)
+        self.assertEqual(glow.shape, chalk.shape)
+        clear = chalk[..., 3] < 1.0
+        self.assertLess(glow[clear][:, :3].max(), 1.0)
+        drawn = chalk[..., 3] > 200.0
+        self.assertGreater(glow[drawn][:, :3].mean(), 170.0)
+        # (Opaque inside its border: its alpha plays no part in emission, and a transparent black imports fringed.)
+        b = decals.BORDER
+        self.assertEqual(glow[b:-b, b:-b, 3].min(), 255.0)
+
     def test_salt_line_is_a_band_of_white_grains(self):
         image = decals.make("salt_line", self.brushes)
         a = np.asarray(image)[..., 3].astype(float) / 255.0

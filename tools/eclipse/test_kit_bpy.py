@@ -30,6 +30,7 @@ import library_corner  # noqa: E402
 import library_shelves  # noqa: E402
 import library_books  # noqa: E402
 import library_spectres  # noqa: E402
+import library_ward  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -2137,6 +2138,56 @@ def _loose_parts(o):
                     stack.append(w)
     bm.free()
     return parts
+
+
+class LibraryWard(unittest.TestCase):
+    """The librarian's ward candles (tools/eclipse/library_ward.py): five stubs burnt down to different heights on
+    his chalk circle's outer ring, in the corner's frame; closed, in budget, through the gate (at its candle-sized
+    sliver); each stub's wick on its top, where its flame stands."""
+
+    @classmethod
+    def setUpClass(cls):
+        library_ward.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_one_object_closed_in_budget_through_the_gate(self):
+        self.assertEqual(sorted(self.objects), ["ward_candles"])
+        o = self.objects["ward_candles"]
+        self.assertFalse(_closed(o))
+        faces, tris, _ = common.dump_faces([o])
+        self.assertEqual(gate.check(faces, tris, [], budget=library_ward.BUDGET, sliver=library_ward.SLIVER)[:3], [])
+
+    def test_five_wicks_on_the_outer_ring(self):
+        wicks = common.WICKS.get("ward_candles", [])
+        self.assertEqual(len(wicks), 5)
+        for w in wicks:
+            self.assertAlmostEqual(math.hypot(w[0], w[1]), library_ward.RADIUS, delta=0.005)
+
+    def test_each_wick_tops_its_stub_and_the_stubs_differ(self):
+        verts = _world(self.objects["ward_candles"])
+        tops = []
+        for w in common.WICKS["ward_candles"]:
+            near = [v for v in verts if math.hypot(v.x - w[0], v.y - w[1]) < 0.04]
+            top = max(v.z for v in near)
+            # (The wick stands just over the stub's melted top; nothing of the stub over it.)
+            self.assertTrue(0.0 <= w[2] - top + 0.01 <= 0.02, "%.4f over %.4f" % (w[2], top))
+            tops.append(top)
+        self.assertGreater(max(tops) - min(tops), 0.04)
+
+    def test_they_stand_on_the_floor(self):
+        low = min(v.z for v in _world(self.objects["ward_candles"]))
+        self.assertAlmostEqual(low, 0.0, delta=0.002)
+
+    def test_their_wax_has_run(self):
+        # Pooled round each foot wider than the stub, and run down its side.
+        verts = _world(self.objects["ward_candles"])
+        for (heading, r, h), w in zip(library_ward.STUBS, common.WICKS["ward_candles"]):
+            foot = [math.hypot(v.x - w[0], v.y - w[1]) for v in verts if v.z < 0.004
+                    and math.hypot(v.x - w[0], v.y - w[1]) < 0.12]
+            self.assertGreater(max(foot), r * 1.6)
+            side = [v for v in verts if h * 0.4 < v.z < h - 0.015 and math.hypot(v.x - w[0], v.y - w[1]) > r * 1.12
+                    and math.hypot(v.x - w[0], v.y - w[1]) < r * 1.6]
+            self.assertTrue(side, "no drip down stub %.0f" % heading)
 
 
 if __name__ == "__main__":
