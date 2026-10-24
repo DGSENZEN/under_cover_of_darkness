@@ -1,7 +1,7 @@
 extends StaticBody3D
 ## Someone you can talk to, made of smoke and light (the talk and quests spec,
 ## section 5): a wardrobe body (Humanoid.dress) wearing the shade material
-## (shade.gdshader) in its character's one colour, with wisps rising off its
+## (talk_shade.gdshader) in its character's one colour, with wisps rising off its
 ## shoulders and feet. It listens in Idle and speaks in Idle_Talking, turns
 ## to face whoever talks to it, and shows what it feels in its light:
 ##   calm    resting
@@ -16,8 +16,8 @@ extends StaticBody3D
 const Humanoid := preload("res://scripts/Visual/Humanoid.gd")
 const DialogueBook := preload("res://scripts/Level/DialogueBook.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
-const SHADER := preload("res://scripts/Visual/shade.gdshader")
-const WISP_SHADER := preload("res://scripts/Visual/shade_wisp.gdshader")
+const SHADER := preload("res://scripts/Visual/talk_shade.gdshader")
+const WISP_SHADER := preload("res://scripts/Visual/talk_shade_wisp.gdshader")
 const SMOKE := preload("res://assets/vfx/smoke.png")
 
 ## Each state's look: the shader's uniforms it eases toward.
@@ -78,7 +78,7 @@ var man: Humanoid
 
 var _colour := Color(1.0, 0.62, 0.22)
 var _seed := 0
-## The colour pass of each worn mesh, then its depth pass (both shade.gdshader).
+## The colour pass of each worn mesh, then its depth pass (both talk_shade.gdshader).
 var _materials: Array[ShaderMaterial] = []
 ## The meshes that wear them (their instance uniforms: drift, head_centre).
 var _meshes: Array[MeshInstance3D] = []
@@ -590,7 +590,7 @@ static func _touches(points: PackedVector3Array, box: AABB, line: Dictionary, ed
 
 ## Wisps of its colour off its feet and shoulders: soft puffs of the
 ## project's own smoke sheet (assets/vfx/smoke.png) that rise, turn and
-## spread as they go (shade_wisp.gdshader).
+## spread as they go (talk_shade_wisp.gdshader).
 func _add_wisps() -> void:
 	_wisp_material = ShaderMaterial.new()
 	_wisp_material.shader = WISP_SHADER
@@ -679,7 +679,7 @@ func _wisps(label: String, amount: int, life: float, size: float, shape: Callabl
 	var fade_texture := GradientTexture1D.new()
 	fade_texture.gradient = fade
 	process.color_ramp = fade_texture
-	# Which puff of the sheet, and each one's own curl (shade_wisp).
+	# Which puff of the sheet, and each one's own curl (talk_shade_wisp).
 	process.anim_offset_min = 0.0
 	process.anim_offset_max = 1.0
 	process.turbulence_enabled = true

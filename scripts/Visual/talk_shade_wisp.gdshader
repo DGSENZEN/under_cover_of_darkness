@@ -2,7 +2,7 @@
 // sheet (assets/vfx/smoke.png, four puffs), turned to face the camera and
 // turning slowly about itself as it rises, its edge worn soft by noise. It
 // fades in and out with the particle (its COLOR), and burns, cools and
-// gutters with the body (shade.gdshader's uniforms).
+// gutters with the body (talk_shade.gdshader's uniforms).
 shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
 
@@ -56,7 +56,7 @@ void fragment() {
 	float wear = vnoise(vec3(UV * 3.5 + vec2(0.0, TIME * 0.15), v_seed));
 	body *= smoothstep(0.1 + 0.3 * v_age, 0.9, wear * 0.7 + body * 0.6);
 
-	// The body's own gutter (shade.gdshader), so they flicker as one.
+	// The body's own gutter (talk_shade.gdshader), so they flicker as one.
 	float t = TIME;
 	float waver = vnoise(vec3(t * 7.0, seed, 0.0)) * 0.45 + vnoise(vec3(t * 19.0, seed + 3.0, 0.0)) * 0.25;
 	float gasp = smoothstep(0.62, 0.8, vnoise(vec3(t * 2.3, seed + 7.0, 0.0))) * 0.5;
