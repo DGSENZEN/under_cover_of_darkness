@@ -81,7 +81,7 @@ vec3 school_obsidian(vec2 p, vec2 uv) {
 	// (obsidian's frozen streaks) and a soft sheen on its upper curve.
 	vec3 deep = vec3(0.012, 0.012, 0.022);
 	vec3 face = vec3(0.045, 0.05, 0.068);
-	float curve = smoothstep(0.95, 0.12, uv.y);
+	float curve = 1.0 - smoothstep(0.12, 0.95, uv.y);
 	vec3 colour = mix(deep, face, curve * 0.8);
 	float flow = sin(p.y * 0.55 + school_fbm(p / vec2(90.0, 9.0) + seed) * 7.0);
 	colour += vec3(0.018, 0.02, 0.03) * smoothstep(0.6, 1.0, flow);
@@ -164,7 +164,7 @@ vec3 school_nahual(vec2 p, vec2 uv) {
 		float t = clamp((p.x - x0) / (x1 - x0), 0.0, 1.0);
 		float y = mix(h * 0.18, h * 0.84, t) + fi * 1.2;
 		float taper = sin(t * 3.14159) * step(x0, p.x) * step(p.x, x1);
-		float line = (1.0 - smoothstep(0.3, 1.2 * taper + 0.3, abs(p.y - y))) * taper;
+		float line = (1.0 - smoothstep(0.3, 1.2 * max(taper, 1e-3) + 0.3, abs(p.y - y))) * taper;
 		claws = max(claws, line);
 		float run = fract(TIME / (warm ? 1.4 : 3.0) + fi * 0.12);
 		wet = max(wet, line * exp(-pow((t - run * 1.4 + 0.2) / 0.12, 2.0)));

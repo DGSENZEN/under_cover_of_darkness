@@ -41,6 +41,16 @@ extends Node3D
 ##   B39  the wheel to the seventh keeps the chosen in view; number keys pick
 ##        by absolute place
 ##   B40  four options keep draft 28's rows (318 + 50 i)
+##   B41  4-7 options at 1080p and 720p, painted and plain, every choice: each
+##        option's words, ascent to descent, lie inside its swipe's painted
+##        bristle band (the swipe shader's BAND_TOP..BAND_BOTTOM)
+##   B42  a 3- or 4-line spoken line over a scrolling list: the top fade
+##        never overlaps it, and every row in view stays whole on screen
+##   B43  the wheel stops at the first and the last option (no wrapping)
+##   B44  the live portrait: no positional shadows, a lean environment of its
+##        own (no volumetric fog, SSAO, SSR or SSIL; glow modest; the world's
+##        own untouched), rendered about 30 times a second
+##   B45  plan() measures each text once, not every frame
 ## The painted fixture skin is drawn by this suite into user://, so it runs
 ## the same with or without the user's paintings.
 ##   Godot --headless --fixed-fps 60 --path . res://tests/talk_skin_test.tscn
@@ -92,6 +102,8 @@ func _ready() -> void:
 	await _functional()
 	await _schools()
 	await _many()
+	await _rows_in_paint()
+	await _portrait_cost()
 	_real()
 	TalkSkin.root = _real_root
 	everything.listening = false
@@ -901,6 +913,251 @@ func _many() -> void:
 		b39.is_empty(), "; ".join(b39) if not b39.is_empty() else "painted and plain")
 	_check("B40 four options keep draft 28's rows, 318 + 50 i, no fades", b40_ok, b40)
 	player.queue_free()
+	await _frames(2)
+	TalkSkin.root = _real_root
+	DialogueBook.reload()
+
+
+# ---------------------------------------------------------------------------
+# B41-B43: the rows in their paint, the fades, the wheel's ends
+# ---------------------------------------------------------------------------
+
+## The swipe shader's bristle band: the middle of its height the paint lies on.
+func _band() -> Vector2:
+	var code: String = (load("res://scripts/UI/talk_swipe.gdshader") as Shader).code
+	var top := RegEx.create_from_string("const float BAND_TOP = ([0-9.]+);").search(code)
+	var bottom := RegEx.create_from_string("const float BAND_BOTTOM = ([0-9.]+);").search(code)
+	return Vector2(top.get_string(1).to_float() if top != null else -1.0, bottom.get_string(1).to_float() if bottom != null else -1.0)
+
+
+## Each option in view whose words (ascent to descent, at the size they are
+## drawn) stand outside its swipe's painted band on `screen`; "" if none.
+func _band_off(box: Node, screen: Vector2) -> String:
+	box._layout(screen)
+	var band := _band()
+	var off: Array[String] = []
+
+	for i in box.options_in_view():
+		var label: Label = box._option_labels[i]
+		var font := label.get_theme_font(&"font")
+		var size := label.get_theme_font_size(&"font_size")
+		var words := Vector2(label.position.y, label.position.y + font.get_ascent(size) + font.get_descent(size))
+		var swipe: Rect2 = box._swipes[i].get_rect()
+		var paint := Vector2(swipe.position.y + band.x * swipe.size.y, swipe.position.y + band.y * swipe.size.y)
+
+		if words.x < paint.x - 0.01 or words.y > paint.y + 0.01:
+			off.append("%s row %d%s words %.1f-%.1f paint %.1f-%.1f" % [screen, i, " (chosen)" if i == box._choice else "", words.x,
+				words.y, paint.x, paint.y])
+
+	return "; ".join(off)
+
+
+## A character `id` whose opener says `line` and offers `count` options.
+func _saying(id: String, line: String, count: int) -> String:
+	return _offering(id, count).replace("Fx: <<Choose.>>", "Fx: %s" % line)
+
+
+## A spoken line of `lines` lines in the box (its font, its width), made of
+## words; a placeholder, so it reads as one still to write.
+func _line_of(lines: int) -> String:
+	var font: SystemFont = TalkBox._serif(400, false)
+	var text := ""
+
+	for words in range(4, 200):
+		text = "<<%s>>" % " ".join(PackedStringArray(range(words).map(func(w): return "word%d" % w)))
+		var high := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, TalkBox.LINE_WIDE, TalkBox.LINE_SIZE).y
+
+		if int(round(high / font.get_height(TalkBox.LINE_SIZE))) == lines:
+			return text
+
+	return text
+
+
+func _wheel(down: bool) -> void:
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN if down else MOUSE_BUTTON_WHEEL_UP
+	wheel.pressed = true
+	Input.parse_input_event(wheel)
+	Input.flush_buffered_events()
+	await _frames(2)
+
+
+func _rows_in_paint() -> void:
+	CityState.begin()
+	CityState.people.load_state({})
+	TalkSkin.root = PAINTED
+	var player: CharacterBody3D = PLAYER.instantiate()
+	add_child(player)
+	player.reload_on_death = false
+	player.invulnerable = true
+	player.global_position = Vector3(0, 1.05, 0)
+	await _frames(10)
+	var screens := [Vector2(1920, 1080), Vector2(1280, 720)]
+	var b41: Array[String] = []
+	var thinnest := 1.0
+
+	for id in ["fx_curandera", "fx_plain"]:
+		for count in [4, 5, 6, 7]:
+			DialogueBook.use(DialogueBook.check_alone({"%s.dialogue" % id: _offering(id, count)}))
+			var box: Node = await _open(player, id)
+
+			if box == null:
+				b41.append("%s %d: no box" % [id, count])
+				continue
+
+			await _to_options(box)
+
+			for choice in count:
+				box.choose_by_pointing(choice)
+
+				for screen in screens:
+					var off := _band_off(box, screen)
+					thinnest = minf(thinnest, float(box._plan.get("step", 50.0)) / TalkBox.OPTION_STEP)
+
+					if off != "":
+						b41.append("%s %d options, choice %d: %s" % [id, count, choice, off])
+
+			box._layout(box._screen())
+			await _close(box)
+
+	_check("B41 4-7 options (painted and plain, 1080p and 720p, every choice): each option's words lie inside its swipe's painted band",
+		b41.is_empty() and _band().x > 0.0, "; ".join(b41.slice(0, 4)) if not b41.is_empty() else "closest rows %.2f of draft 28's step" % thinnest)
+
+	# B42 and B43: a long spoken line over a list that scrolls.
+	var b42: Array[String] = []
+	var b43 := ""
+
+	for lines in [3, 4]:
+		DialogueBook.use(DialogueBook.check_alone({"fx_curandera.dialogue": _saying("fx_curandera", _line_of(lines), 7)}))
+		var box: Node = await _open(player, "fx_curandera")
+
+		if box == null:
+			b42.append("%d lines: no box" % lines)
+			continue
+
+		await _to_options(box)
+
+		if lines == 3:
+			await _wheel(false)
+			var stayed_first: bool = box._choice == 0
+
+			for i in 8:
+				await _wheel(true)
+
+			b43 = "up from the first: %d; down past the last: %d of %d" % [0 if stayed_first else -1, box._choice, box._options.size()]
+
+			if stayed_first and box._choice == box._options.size() - 1:
+				b43 = "ok " + b43
+		else:
+			for i in 6:
+				await _wheel(true)
+
+		for screen in screens:
+			box._layout(screen)
+			var fade: Rect2 = box._fade_top.get_rect()
+			var said: Rect2 = box._words.get_rect()
+			var rows := _rows_off(box, screen)
+
+			if not box._fade_top.visible or fade.intersects(said) or rows != "" or int(box._plan.get("in_view", 7)) >= 7:
+				b42.append("%d lines at %s: fade %s (shown %s) over the line %s; rows %s; in view %d" % [lines, screen, fade, box._fade_top.visible,
+					said, rows, int(box._plan.get("in_view", 7))])
+
+		box._layout(box._screen())
+		await _close(box)
+
+	_check("B42 a 3- or 4-line spoken line over a scrolling list: the top fade never overlaps it, every row in view whole on screen (1080p, 720p)",
+		b42.is_empty(), "; ".join(b42) if not b42.is_empty() else "3 and 4 lines")
+	_check("B43 the wheel stops at the first and the last option, never wrapping round", b43.begins_with("ok "), b43)
+	player.queue_free()
+	await _frames(2)
+	TalkSkin.root = _real_root
+	DialogueBook.reload()
+
+
+# ---------------------------------------------------------------------------
+# B44-B45: what the box costs
+# ---------------------------------------------------------------------------
+
+## A counter of `box` (-1 if it has none).
+func _count(box: Node, counter: StringName) -> int:
+	var value: Variant = box.get(counter)
+	return int(value) if value != null else -1
+
+
+func _portrait_cost() -> void:
+	DialogueBook.use(DialogueBook.check_alone({"fx_plain.dialogue": _offering("fx_plain", 3)}))
+	CityState.begin()
+	CityState.people.load_state({})
+	TalkSkin.root = BARE
+	# A world as heavy as the Metro's: fog, SSAO, SSR, SSIL and glow.
+	var world := WorldEnvironment.new()
+	var heavy := Environment.new()
+	heavy.volumetric_fog_enabled = true
+	heavy.ssao_enabled = true
+	heavy.ssr_enabled = true
+	heavy.ssil_enabled = true
+	heavy.glow_enabled = true
+	heavy.glow_intensity = 2.0
+	heavy.glow_bloom = 0.4
+	world.environment = heavy
+	add_child(world)
+	var player: CharacterBody3D = PLAYER.instantiate()
+	add_child(player)
+	player.reload_on_death = false
+	player.invulnerable = true
+	player.global_position = Vector3(0, 1.05, 0)
+	await _frames(10)
+	var box: Node = await _open(player, "fx_plain")
+	var b44 := "no box"
+	var b44_ok := false
+	var b45 := "no box"
+	var b45_ok := false
+
+	if box != null and box._viewport != null:
+		var viewport: SubViewport = box._viewport
+		var lean: Environment = box._camera.environment
+		var renders := _count(box, &"_portrait_renders")
+		await _frames(60)
+		renders = _count(box, &"_portrait_renders") - renders if renders >= 0 else -1
+		b44_ok = viewport.positional_shadow_atlas_size == 0 and lean != null and lean != heavy and not lean.volumetric_fog_enabled \
+			and not lean.ssao_enabled and not lean.ssr_enabled and not lean.ssil_enabled and lean.glow_intensity <= 0.8001 \
+			and lean.glow_bloom <= 0.0501 and heavy.volumetric_fog_enabled and heavy.ssao_enabled and renders >= 26 and renders <= 34 \
+			and viewport.render_target_update_mode != SubViewport.UPDATE_ALWAYS
+		b44 = "shadow atlas %d, own environment %s, fog %s ssao %s ssr %s ssil %s glow %.2f bloom %.2f, world's fog %s; %d renders in 60 frames, mode %d" % [
+			viewport.positional_shadow_atlas_size, lean != null and lean != heavy, lean.volumetric_fog_enabled if lean else null,
+			lean.ssao_enabled if lean else null, lean.ssr_enabled if lean else null, lean.ssil_enabled if lean else null,
+			lean.glow_intensity if lean else -1.0, lean.glow_bloom if lean else -1.0, heavy.volumetric_fog_enabled, renders,
+			viewport.render_target_update_mode]
+
+		await _to_options(box)
+		var measured := _count(box, &"_measures")
+		await _frames(30)
+		b45_ok = measured > 0 and _count(box, &"_measures") == measured
+		b45 = "measured %d texts by the options, %d more over 30 frames" % [measured, _count(box, &"_measures") - measured]
+		await _close(box)
+
+	_check("B44 the live portrait: no positional shadows, a lean environment of its own (no fog, SSAO, SSR, SSIL; glow modest), about 30 renders a second",
+		b44_ok, b44)
+	_check("B45 plan() measures each text once, not every frame", b45_ok, b45)
+
+	# B46: no smoothstep in the talk shaders with its edges reversed or equal
+	# (undefined in GLSL), and the nahual claws' edge kept apart where they taper to nothing.
+	var bad: Array[String] = []
+
+	for path in ["res://scripts/UI/talk_swipe.gdshader", "res://scripts/UI/talk_fade.gdshader", "res://scripts/UI/talk_paint.gdshader",
+			"res://scripts/UI/talk_school.gdshaderinc", "res://scripts/Visual/talk_shade.gdshader", "res://scripts/Visual/talk_shade_wisp.gdshader"]:
+		var lines := FileAccess.get_file_as_string(path).split("\n")
+
+		for n in lines.size():
+			for found in RegEx.create_from_string("smoothstep\\(\\s*(-?[0-9.]+)\\s*,\\s*(-?[0-9.]+)\\s*,").search_all(lines[n]):
+				if found.get_string(1).to_float() >= found.get_string(2).to_float():
+					bad.append("%s:%d" % [path.get_file(), n + 1])
+
+	var claws := FileAccess.get_file_as_string("res://scripts/UI/talk_school.gdshaderinc").contains("1.2 * max(taper, 1e-3) + 0.3")
+	_check("B46 the talk shaders have no smoothstep with reversed or equal edges (the nahual's taper guarded)", bad.is_empty() and claws,
+		"reversed %s, nahual guarded %s" % [bad, claws])
+	player.queue_free()
+	world.queue_free()
 	await _frames(2)
 	TalkSkin.root = _real_root
 	DialogueBook.reload()

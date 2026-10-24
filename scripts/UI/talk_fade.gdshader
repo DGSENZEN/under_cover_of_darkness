@@ -19,7 +19,7 @@ void fragment() {
 	float out_v = down ? UV.y : 1.0 - UV.y;
 	float row = floor(UV.y * 14.0);
 	float streak = 0.75 + 0.25 * hash(vec2(row, floor(UV.x * 40.0)));
-	float ends = smoothstep(0.0, 0.08, UV.x) * smoothstep(1.0, 0.9, UV.x);
+	float ends = smoothstep(0.0, 0.08, UV.x) * (1.0 - smoothstep(0.9, 1.0, UV.x));
 	float a = smoothstep(0.0, 1.0, out_v) * 0.85 * streak * ends;
 	// The dabs, in the fade's own pixels.
 	vec2 size = 1.0 / max(fwidth(UV), vec2(0.0001));

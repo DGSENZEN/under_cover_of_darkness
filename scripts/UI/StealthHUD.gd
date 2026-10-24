@@ -75,9 +75,6 @@ const SUBTITLE_BOTTOM := 130.0
 ## Talking (TalkBox), the subtitles and the caption go up here instead, this
 ## far down the screen, clear of the talk box at the bottom.
 const TALK_TOP := 0.08
-## Talking, the prompts sit just above the talk box's portrait (its top is
-## this far down the screen: TalkBox's 1080p layout, 467 px down).
-const TALK_PROMPTS := 0.432
 ## Talking, the crosshair, the lightgem, the awareness marks and the rings
 ## fade out at this rate (per second), and back in after.
 const TALK_FADE := 5.0
@@ -907,7 +904,7 @@ func _process(delta: float) -> void:
 	var row := _prompts.get_combined_minimum_size()
 	_prompts.size = row
 	_prompts.position = Vector2(clampf(centre.x - row.x * 0.5, EDGE, maxf(view.x - EDGE - row.x, EDGE)),
-		view.y * READING_PROMPTS if reading else (view.y * TALK_PROMPTS - row.y - 12.0 if talking else centre.y + 26))
+		view.y * READING_PROMPTS if reading else centre.y + 26)
 	_prompts.modulate.a = _prompt_alpha
 
 	# The lightgem.

@@ -100,12 +100,21 @@ const OPTIONS_AT := 318.0
 const OPTION_STEP := 50.0
 ## More options than fit at OPTION_STEP above the screen's foot (less
 ## OPTIONS_MARGIN) close up, down to OPTION_STEP_LEAST, their swipes as much
-## thinner (the words keep their size); more still than fit at that scroll,
-## the chosen one always in view, a painted fade at each edge with more
-## beyond it (FADE_TALL).
-const OPTION_STEP_LEAST := 38.0
+## thinner but never below SWIPE_THIN_LEAST (the words keep their size); more
+## still than fit at that scroll, the chosen one always in view, a painted
+## fade at each edge with more beyond it (FADE_TALL), the top one never over
+## the spoken line.
+const OPTION_STEP_LEAST := 42.0
 const OPTIONS_MARGIN := 24.0
 const FADE_TALL := 20.0
+## A row's swipe, unchosen and chosen, at draft 28's step (px at 1080p): its
+## middle always on the middle of the words (their ascent to descent), so the
+## words sit in the swipe's painted bristle band (the middle 76% of it,
+## talk_swipe.gdshader's BAND_TOP..BAND_BOTTOM). Thinned, it keeps that band
+## at least as tall as the words: never below SWIPE_THIN_LEAST of itself.
+const SWIPE_TALL := 42.0
+const CHOSEN_TALL := 46.0
+const SWIPE_THIN_LEAST := 0.96
 ## The options' column: the longest option plus this; the words stand this
 ## far into their swipe; the marker's width.
 const COLUMN_MORE := 70.0
@@ -142,6 +151,13 @@ const PORTRAIT_FOV := 30.0
 const PORTRAIT_MOST := 1024
 ## How far it sees (m): the speaker and the room behind, not the city.
 const PORTRAIT_FAR := 25.0
+## It renders this many times a second (not every frame: it is the world a
+## second time), in a lean copy of the world's environment (no volumetric
+## fog, SSAO, SSR or SSIL; glow at most this strong, bloom at most this) and
+## without positional shadows.
+const PORTRAIT_HZ := 30.0
+const PORTRAIT_GLOW := 0.8
+const PORTRAIT_BLOOM := 0.05
 ## The speaker's head stands this far above the panel's top on the screen
 ## (px at 1080p): the view eases down to put it there, not behind the panel.
 const HEAD_ABOVE_PANEL := 90.0
@@ -220,6 +236,14 @@ var _words_school := ""
 var _paused_words := false
 ## The layout last placed (plan()).
 var _plan := {}
+## What plan() measured of the words, once per text: {key: size}. Measured
+## at the 1080p type sizes (the screen only scales them), so the screen's
+## size never makes them stale. And how many measurements it has made.
+var _measured := {}
+var _measures := 0
+## Till the live portrait renders again (s), and how often it has.
+var _portrait_wait := 0.0
+var _portrait_renders := 0
 
 
 # Opening and closing
@@ -516,11 +540,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 
-## The wheel moves the choice a row (round at the ends); the list scrolls with it.
+## The wheel moves the choice a row, stopping at the first and the last
+## (ruling R22: the list scrolls, so it does not wrap round); the list
+## scrolls with it.
 func _wheel(button: InputEventMouseButton) -> void:
 	if _kind == &"options" and not _options.is_empty():
 		var step := -1 if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1
-		choose_by_pointing(posmod(_choice + step, _options.size()))
+		choose_by_pointing(clampi(_choice + step, 0, _options.size() - 1))
 
 
 ## The number 1-9 a key is, by its physical key (the number row or the
@@ -602,6 +628,7 @@ func _process(delta: float) -> void:
 	_words.visible_characters = int(_shown)
 	_face_speaker(delta)
 	_place_portrait_camera()
+	_render_portrait(delta)
 	_layout(_screen())
 
 	# The mouse is yours while there are options to point at.
@@ -721,6 +748,49 @@ func _place_portrait_camera() -> void:
 	var at := head + toward.normalized() * PORTRAIT_DISTANCE
 	var look := head - Vector3.UP * PORTRAIT_DROP
 	_camera.global_transform = Transform3D(Basis.looking_at(look - at, Vector3.UP), at)
+
+
+## The live portrait renders PORTRAIT_HZ times a second, once each time.
+func _render_portrait(delta: float) -> void:
+	if _viewport == null:
+		return
+
+	_portrait_wait -= delta
+
+	if _portrait_wait <= 0.0001:
+		_portrait_wait = maxf(_portrait_wait + 1.0 / PORTRAIT_HZ, 0.0)
+		_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+		_portrait_renders += 1
+
+
+## The world's environment for the live portrait, made lean: no volumetric
+## fog, SSAO, SSR or SSIL, its glow modest (the world's own is untouched).
+## Null if the world has none.
+func _lean_environment() -> Environment:
+	var source: Environment = null
+	var view := get_viewport()
+
+	if view != null:
+		var eye := view.get_camera_3d()
+		source = eye.environment if eye != null and eye.environment != null else null
+
+		if source == null and view.find_world_3d() != null:
+			source = view.find_world_3d().environment
+
+		if source == null and view.find_world_3d() != null:
+			source = view.find_world_3d().fallback_environment
+
+	if source == null:
+		return null
+
+	var lean := source.duplicate() as Environment
+	lean.volumetric_fog_enabled = false
+	lean.ssao_enabled = false
+	lean.ssr_enabled = false
+	lean.ssil_enabled = false
+	lean.glow_intensity = minf(lean.glow_intensity, PORTRAIT_GLOW)
+	lean.glow_bloom = minf(lean.glow_bloom, PORTRAIT_BLOOM)
+	return lean
 
 
 # What the conversation says
@@ -901,7 +971,10 @@ func _build_portrait() -> void:
 		_viewport = SubViewport.new()
 		_viewport.name = "Portrait"
 		_viewport.size = Vector2i(320, 470)
-		_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		# Rendered PORTRAIT_HZ times a second (_render_portrait), not every
+		# frame; no positional shadows (the world's lamps light it unshadowed).
+		_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+		_viewport.positional_shadow_atlas_size = 0
 		add_child(_viewport)
 		_camera = Camera3D.new()
 		_camera.fov = PORTRAIT_FOV
@@ -910,6 +983,7 @@ func _build_portrait() -> void:
 		# (they would cross the speaker's face) or the lightgem's probe.
 		_camera.cull_mask = Layers.WORLD_ALL | Layers.ACTORS | Layers.FX
 		_camera.far = PORTRAIT_FAR
+		_camera.environment = _lean_environment()
 		_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		_viewport.add_child(_camera)
 		_camera.current = true
@@ -1118,12 +1192,7 @@ func plan(screen: Vector2) -> Dictionary:
 
 	# The line: as many lines as it wraps to; more than three push the
 	# options down by as many steps.
-	var lines := 1
-
-	if _font != null and _text != "":
-		var high := _font.get_multiline_string_size(_text, HORIZONTAL_ALIGNMENT_CENTER, LINE_WIDE, LINE_SIZE).y
-		lines = maxi(1, int(round(high / _font.get_height(LINE_SIZE))))
-
+	var lines := _line_count(_text)
 	var line := Rect2(left + (PANEL_WIDE - LINE_WIDE) * 0.5 * k, top + LINE_AT * k, LINE_WIDE * k, LINE_STEP * k * lines)
 	var name_rect := Rect2(left, top + NAME_AT * k, wide, 34.0 * k)
 
@@ -1132,15 +1201,28 @@ func plan(screen: Vector2) -> Dictionary:
 	var longest := 0.0
 
 	for option in _options:
-		if _italic != null:
-			longest = maxf(longest, _italic.get_string_size(String(option["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, OPTION_SIZE).x)
+		longest = maxf(longest, _option_wide(String(option["text"])))
 
 	var column := ceilf(longest) + COLUMN_MORE
 	var x := left + ((PANEL_WIDE - column) * 0.5 + OPTION_INDENT) * k
 	var y := top + (OPTIONS_AT + LINE_STEP * maxi(0, lines - 3)) * k
-	var fit := _fit((screen.y - y) / k - OPTIONS_MARGIN, _options.size())
+	# The middle of a row's words under its top (their ascent to descent):
+	# every swipe is centred on it.
+	var middle := _row_middle()
+	var fit := _fit((screen.y - y) / k - OPTIONS_MARGIN, _options.size(), middle)
+
+	# Scrolling, the top fade stands over the first row: the list steps down
+	# as far as it must for the fade to clear the spoken line.
+	if int(fit["in_view"]) < _options.size():
+		var fade_from := (y - top) / k + middle - CHOSEN_TALL * 0.5 * _thin(OPTION_STEP_LEAST) - FADE_TALL
+		var under := LINE_AT + LINE_STEP * lines + 2.0 - fade_from
+
+		if under > 0.0:
+			y += under * k
+			fit = _fit((screen.y - y) / k - OPTIONS_MARGIN, _options.size(), middle)
+
 	var step: float = fit["step"]
-	var thin := step / OPTION_STEP
+	var thin := _thin(step)
 	var in_view: int = fit["in_view"]
 	# The window of rows in view: where it was, moved just enough to hold the
 	# chosen one.
@@ -1156,17 +1238,21 @@ func plan(screen: Vector2) -> Dictionary:
 
 	for i in _options.size():
 		var at := y + step * k * (i - first)
+		var mid := at + middle * k
 		words.append(Rect2(x, at, column * k, 36.0 * k))
 
 		if i == _choice:
-			swipes.append(Rect2(x - OPTION_INDENT * k, at - 8.0 * thin * k, (column + MARKER_WIDE - 20.0) * k, 46.0 * thin * k))
+			swipes.append(Rect2(x - OPTION_INDENT * k, mid - CHOSEN_TALL * 0.5 * thin * k, (column + MARKER_WIDE - 20.0) * k,
+				CHOSEN_TALL * thin * k))
 		else:
-			swipes.append(Rect2(x - OPTION_INDENT * k, at - 6.0 * thin * k, column * k, 42.0 * thin * k))
+			swipes.append(Rect2(x - OPTION_INDENT * k, mid - SWIPE_TALL * 0.5 * thin * k, column * k, SWIPE_TALL * thin * k))
 
-	# The fades: just over the first row in view, just under the last.
+	# The fades: just over the first row in view's (chosen) swipe, just
+	# under the last's.
 	var fade_wide := (column + MARKER_WIDE - 20.0) * k
-	var fade_top := Rect2(x - OPTION_INDENT * k, y - (8.0 * thin + FADE_TALL) * k, fade_wide, FADE_TALL * k)
-	var fade_bottom := Rect2(x - OPTION_INDENT * k, y + (step * (in_view - 1) + 38.0 * thin) * k, fade_wide, FADE_TALL * k)
+	var reach := CHOSEN_TALL * 0.5 * thin
+	var fade_top := Rect2(x - OPTION_INDENT * k, y + (middle - reach - FADE_TALL) * k, fade_wide, FADE_TALL * k)
+	var fade_bottom := Rect2(x - OPTION_INDENT * k, y + (step * (in_view - 1) + middle + reach) * k, fade_wide, FADE_TALL * k)
 
 	var shadow_box := Rect2(Vector2(portrait.position.x - 10.0 * k, top - 90.0 * k), Vector2.ZERO)
 	shadow_box.end = Vector2(left + wide + 20.0 * k, screen.y + 40.0 * k)
@@ -1178,21 +1264,77 @@ func plan(screen: Vector2) -> Dictionary:
 ## How `count` options sit in `room` (px at 1080p, from the first row's top to
 ## the lowest a row's swipe may reach): at OPTION_STEP if they all fit, closer
 ## (down to OPTION_STEP_LEAST, the swipes thinner with it) if that fits them,
-## else at the least step with as many in view as fit. A row reaches 38 px
-## under its top at OPTION_STEP (the chosen swipe's foot), less as it thins.
-static func _fit(room: float, count: int) -> Dictionary:
-	var foot := 38.0 / OPTION_STEP
-
+## else at the least step with as many in view as fit. A row reaches `middle`
+## (its words' middle) and half the chosen swipe under its top.
+static func _fit(room: float, count: int, middle := 15.0) -> Dictionary:
 	if count <= 1:
 		return {"step": OPTION_STEP, "in_view": count}
 
-	var step := clampf(room / (float(count - 1) + foot), OPTION_STEP_LEAST, OPTION_STEP)
+	var rows := float(count - 1)
+	var half := CHOSEN_TALL * 0.5
+	# The swipes thinning with the step; past SWIPE_THIN_LEAST, as thin as
+	# they get.
+	var step := (room - middle) / (rows + half / OPTION_STEP)
 
-	if step * (float(count - 1) + foot) <= room + 0.01:
+	if step < SWIPE_THIN_LEAST * OPTION_STEP:
+		step = (room - middle - half * SWIPE_THIN_LEAST) / rows
+
+	step = minf(step, OPTION_STEP)
+
+	if step >= OPTION_STEP_LEAST:
 		return {"step": step, "in_view": count}
 
-	var in_view := clampi(int(floor(room / OPTION_STEP_LEAST - foot)) + 1, 1, count)
+	var foot := middle + half * _thin(OPTION_STEP_LEAST)
+	var in_view := clampi(int(floor((room - foot) / OPTION_STEP_LEAST)) + 1, 1, count)
 	return {"step": OPTION_STEP_LEAST, "in_view": in_view}
+
+
+## How thin the swipes are at `step`: as much as the step is closed up, but
+## never below SWIPE_THIN_LEAST (their painted band still holds the words).
+static func _thin(step: float) -> float:
+	return clampf(step / OPTION_STEP, SWIPE_THIN_LEAST, 1.0)
+
+
+## How many lines `text` wraps to as the spoken line (measured once a text).
+func _line_count(text: String) -> int:
+	if _font == null or text == "":
+		return 1
+
+	var key := "line " + text
+
+	if not _measured.has(key):
+		_measures += 1
+		var high := _font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, LINE_WIDE, LINE_SIZE).y
+		_measured[key] = maxi(1, int(round(high / _font.get_height(LINE_SIZE))))
+
+	return _measured[key]
+
+
+## How wide `text` is as an option at 1080p (px; measured once a text).
+func _option_wide(text: String) -> float:
+	if _italic == null:
+		return 0.0
+
+	var key := "option " + text
+
+	if not _measured.has(key):
+		_measures += 1
+		_measured[key] = _italic.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, OPTION_SIZE).x
+
+	return _measured[key]
+
+
+## The middle of an option's words under its row's top (px at 1080p): half
+## their ascent to descent.
+func _row_middle() -> float:
+	if _italic == null:
+		return 15.0
+
+	if not _measured.has("middle"):
+		_measures += 1
+		_measured["middle"] = _italic.get_height(OPTION_SIZE) * 0.5
+
+	return _measured["middle"]
 
 
 ## Places every part by plan() for a screen this size.
