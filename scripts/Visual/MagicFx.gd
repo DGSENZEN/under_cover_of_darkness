@@ -30,6 +30,14 @@ const SHOCKWAVE_TO := 1.8
 const UMBER := Color("#4A3423")
 const BONE := Color("#D8C7A3")
 const UMBER_EDGE := Color("#22170F")
+## Empower spent on a blow or a shot: three claw rakes of the nahual behind it
+## (how long one is, how far apart, how long they show, how far they fly out
+## along a shot).
+const CLAWS := 3
+const CLAW_LENGTH := 0.55
+const CLAW_GAP := 0.09
+const CLAW_LIFE := 0.35
+const CLAW_FLY := 5.0
 ## The Shard, round two: its look, its release at the palm (flakes, a ring
 ## the world bends through, a cold light), and what it leaves on the world
 ## (a star of spikes that crumbles, a ring of glass dust) or in a man.
@@ -695,6 +703,69 @@ static func _dust_ring(context: Node, at: Vector3, out: Vector3, group: StringNa
 	grow.tween_property(ring, "scale", Vector3.ONE * wide, DUST_RING_LIFE).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	grow.tween_method(func(e: float): look.set_shader_parameter(&"erosion", e), 0.2, 1.0, DUST_RING_LIFE).set_ease(Tween.EASE_IN)
 	_keep(ring, DUST_RING_LIFE)
+
+
+## The nahual's claws behind an Empowered blow or shot: CLAWS curved rakes of
+## bone-white, thin at their ends, drawn down across `at` square to `facing`
+## (the way it went), torn in from one end and eaten away over CLAW_LIFE;
+## `fly`ing, they go out along `facing` (a shot).
+static func claw_rake(context: Node, at: Vector3, facing: Vector3, fly := false) -> void:
+	if not allowed(context):
+		return
+
+	var forward := facing.normalized() if facing.length() > 0.01 else Vector3.FORWARD
+	var up := (Vector3.UP - forward * forward.dot(Vector3.UP))
+	up = up.normalized() if up.length() > 0.01 else Vector3.BACK
+	var side := forward.cross(up).normalized()
+	# Down and across, from the upper right; the rakes side by side across it.
+	var down := (-up - side * 0.7).normalized()
+	var apart := forward.cross(down).normalized()
+	var world := _world_of(context)
+
+	for k in CLAWS:
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var steps := 12
+		var edges := []
+
+		for i in steps + 1:
+			var t := float(i) / float(steps)
+			var middle := down * (t - 0.5) * CLAW_LENGTH + apart * (float(k) - 1.0) * CLAW_GAP + apart * sin(PI * t) * 0.05
+			var half := 0.022 * sin(PI * t) + 0.002
+			edges.append([middle - apart * half, middle + apart * half, t])
+
+		for i in steps:
+			var a: Array = edges[i]
+			var b: Array = edges[i + 1]
+			var corners := [a[0], a[1], b[0], b[1]]
+			var uvs := [Vector2(0, a[2]), Vector2(1, a[2]), Vector2(0, b[2]), Vector2(1, b[2])]
+
+			for c in [0, 1, 2, 2, 1, 3]:
+				st.set_normal(-forward)
+				st.set_uv(uvs[c])
+				st.add_vertex(corners[c])
+
+		var claw := MeshInstance3D.new()
+		claw.name = "Claw"
+		claw.mesh = st.commit()
+		var look := MeshVfx.look(BONE, Color("#B09878"), UMBER_EDGE, 2.6, 0.0, 0.0, 3.7 + float(k))
+		look.set_shader_parameter(&"tail_eat", 3.0)
+		look.set_shader_parameter(&"rim", 0.0)
+		look.set_shader_parameter(&"churn", 0.0)
+		claw.material_override = look
+		claw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		claw.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		claw.add_to_group(&"empower_claw")
+		world.add_child(claw)
+		claw.global_position = at
+		var tear := claw.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+		tear.tween_method(func(e: float): look.set_shader_parameter(&"tail_eat", e), 3.0, 0.0, 0.06)
+		tear.tween_method(func(e: float): look.set_shader_parameter(&"erosion", e), 0.0, 1.0, CLAW_LIFE - 0.06).set_ease(Tween.EASE_IN)
+
+		if fly:
+			claw.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS).tween_property(claw, "global_position", at + forward * CLAW_FLY, CLAW_LIFE * 0.7).set_ease(Tween.EASE_OUT)
+
+		_keep(claw, CLAW_LIFE)
 
 
 ## A flat ring in its own XZ plane: `radius` to its middle, `width` across,

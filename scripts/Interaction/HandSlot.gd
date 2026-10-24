@@ -80,6 +80,27 @@ const PALM_GLOW_TO := 3.0
 const HAND_GLYPHS := 12
 const HAND_GLYPH_SIZE := 0.024
 const HAND_GLYPH_OUT := 1.55
+## Empower, round two: the tome's written pages (lines of the invented
+## script on each, glyphs on a line, how big; ink and bone; how long a lit
+## line waits before its words lift off, how long they fly to the gun hand);
+## the charge in the gun hand (fur shells on the Skin surface, how long the
+## hand takes to come back when it is spent; the heartbeat it pulses with,
+## how far the hand twitches on it).
+const TOME_LINES := 2
+const TOME_LINE_GLYPHS := 4
+const TOME_GLYPH_SIZE := 0.02
+## How far the leaves lie off the spine: over the stand-in tome's open paper
+## (Weapon.tome_mesh, whose blocks open up to ~3.5 cm), so the top leaf is the
+## page you read. A real tome model will want this again.
+const LEAF_OVER := 0.04
+const INK := Color("#3A2618")
+const BONE := Color("#D8C7A3")
+const WORD_DELAY := 0.1
+const WORD_FLIGHT := 0.35
+const FUR_SHELLS := 3
+const BRISTLE_TIME := 0.25
+const BEAT_BPM := 70.0
+const BEAT_KICK := 0.006
 const SPEARHEAD_FROM := 0.12
 const CAST_DRAW_BACK := 0.015
 const CAST_TREMBLE := 0.0015
@@ -197,9 +218,8 @@ var _tome: MeshInstance3D
 ## pivots on the spine, and how far through the reading it is.
 var _pages: Array[Node3D] = []
 var _flutter := 0.0
-## Empower's pelt-shadow on the gun arm (set_pelt), 0..1.
+## Empower's charge on the gun hand (set_pelt), 0..1.
 var _pelt := 0.0
-var _pelt_look: ShaderMaterial
 ## A hand spell's circle before the casting palm: whose school, how far
 ## closed (0..1), and its pieces.
 var _circle_school: StringName = &""
@@ -212,6 +232,23 @@ var _spearhead: MeshInstance3D
 var _palm_smoke: Node3D
 var _palm_glow: StandardMaterial3D
 var _hand_glyphs: Array[MeshInstance3D] = []
+## The tome's lines of script: their glyphs, each line's state (0 ink, 1 lit,
+## 2 its words gone to the hand) and when it lit; the two looks.
+var _tome_lines: Array = []
+var _line_state: Array[int] = []
+var _line_lit_at: Array[float] = []
+var _ink_look: ShaderMaterial
+var _bone_look: ShaderMaterial
+## Empower's charge on the gun hand: the arms' mesh and its Skin surface, the
+## look it had there, the look with the fur passes chained on, the passes;
+## whether they are on; the spend's bristle left (seconds).
+var _fur_mesh: MeshInstance3D
+var _fur_index := -1
+var _fur_before: Material
+var _fur_skin: Material
+var _fur_looks: Array[ShaderMaterial] = []
+var _fur_on := false
+var _bristle := 0.0
 ## Seconds since a hand spell was let go (release_cast).
 var _release_t := INF
 ## The revolver's moving parts, children of the main mesh: cylinder, hammer, gate.
@@ -674,6 +711,14 @@ func set_left_hold(mode: StringName, frame: Transform3D) -> void:
 func set_tome_flutter(amount: float) -> void:
 	_flutter = clampf(amount, 0.0, 1.0)
 
+	# (Made before the arms were chosen: they take the arms' field of view as
+	# it is now, as the circle does.)
+	for look in [_ink_look, _bone_look]:
+		if look != null:
+			look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
+	_read_lines(_flutter)
+
 	for i in _pages.size():
 		var own := clampf(_flutter * float(_pages.size()) - float(i), 0.0, 1.0)
 		# Over toward you (a turn the other way passes through the boards).
@@ -684,42 +729,142 @@ func tome_flutter() -> float:
 	return _flutter
 
 
-## Empower's charge waiting: the pelt-shadow on the gun arm and hand, 0..1.
+## Empower's charge waiting, 0..1: the gun hand's skin dusky, fur standing
+## out of it, veins pulsing with the heartbeat (beast_fur passes chained on
+## its Skin surface, nothing on the sleeve). Let go of (spent, run out), the
+## fur bristles out and the hand comes back over BRISTLE_TIME.
 func set_pelt(amount: float) -> void:
+	var was := _pelt
 	_pelt = clampf(amount, 0.0, 1.0)
+	_bristle = maxf(_bristle - get_physics_process_delta_time(), 0.0)
 
-	if _pelt_look == null:
-		_pelt_look = ShaderMaterial.new()
-		_pelt_look.shader = preload("res://scripts/Visual/pelt.gdshader")
-		_pelt_look.set_shader_parameter(&"noise", MeshVfx.noise())
-		_pelt_look.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+	if was > 0.0 and _pelt == 0.0:
+		_bristle = BRISTLE_TIME
 
-	_pelt_look.set_shader_parameter(&"amount", _pelt)
-	_pelt_look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+	_find_fur()
+
+	if _fur_mesh == null:
+		return
+
+	var spending := _bristle > 0.0
+	var shown := _bristle / BRISTLE_TIME if spending else _pelt
+
+	# On or off only when it changes.
+	if (shown > 0.0) != _fur_on:
+		_fur_on = shown > 0.0
+		_fur_mesh.set_surface_override_material(_fur_index, _fur_skin if _fur_on else _fur_before)
+
+	if not _fur_on:
+		return
+
+	# Which side of the arms' space the gun hand is on.
+	var gun_hand: Vector3 = _arms.man.bone_global(&"hand_r").origin if _arms.get("man") != null else Vector3.RIGHT
+	var skeleton_space: Node3D = _arms.man as Node3D if _arms.get("man") != null else null
+	var side := signf((skeleton_space.global_transform.affine_inverse() * gun_hand).x) if skeleton_space != null else 1.0
+
+	for look in _fur_looks:
+		look.set_shader_parameter(&"amount", shown)
+		look.set_shader_parameter(&"veins", 1.0 if spending else vein_glow())
+		look.set_shader_parameter(&"bristle", 1.0 - _bristle / BRISTLE_TIME if spending else 0.0)
+		look.set_shader_parameter(&"side_sign", side if side != 0.0 else 1.0)
+		look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
+
+## The arms' Skin surface and its fur passes, found once per arms.
+func _find_fur() -> void:
+	if _fur_mesh != null and is_instance_valid(_fur_mesh) and _fur_mesh.is_inside_tree():
+		return
+
+	_fur_mesh = null
+	_fur_on = false
 
 	if _arms == null:
 		return
 
-	# Which side of the arms' space the gun hand is on (the arm always in
-	# view: the left is up only to cast, or behind the tome).
-	var gun_hand: Vector3 = _arms.man.bone_global(&"hand_r").origin if _arms.get("man") != null else Vector3.RIGHT
-	var skeleton_space: Node3D = _arms.man as Node3D if _arms.get("man") != null else null
-	var side := signf((skeleton_space.global_transform.affine_inverse() * gun_hand).x) if skeleton_space != null else 1.0
-	_pelt_look.set_shader_parameter(&"side_sign", side if side != 0.0 else 1.0)
-
-	# On or off only when it changes (asked of a null overlay every frame,
-	# the renderer complains).
-	var want: Material = _pelt_look if _pelt > 0.0 else null
-
 	for mesh in _arms.find_children("*", "MeshInstance3D", true, false):
 		var arm := mesh as MeshInstance3D
 
-		if (arm.skin != null or arm.skeleton != NodePath()) and arm.material_overlay != want:
-			arm.material_overlay = want
+		if arm.skin == null and arm.skeleton == NodePath():
+			continue
+
+		for i in arm.mesh.get_surface_count():
+			if arm.mesh.surface_get_name(i) == "Skin":
+				_fur_mesh = arm
+				_fur_index = i
+
+	if _fur_mesh == null:
+		return
+
+	_fur_before = _fur_mesh.get_surface_override_material(_fur_index)
+	var base := _fur_mesh.get_active_material(_fur_index)
+	_fur_skin = base.duplicate() if base != null else StandardMaterial3D.new()
+	_fur_looks.clear()
+	var last: Material = _fur_skin
+
+	for shell in FUR_SHELLS + 1:
+		var look := ShaderMaterial.new()
+		look.shader = preload("res://scripts/Visual/beast_fur.gdshader")
+		look.set_shader_parameter(&"noise", MeshVfx.noise())
+		look.set_shader_parameter(&"shell", float(shell))
+		look.set_shader_parameter(&"shells", float(FUR_SHELLS))
+		look.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+		look.render_priority = shell + 1
+		last.next_pass = look
+		last = look
+		_fur_looks.append(look)
 
 
 func pelt_amount() -> float:
 	return _pelt
+
+
+## The tome's written pages' glyphs (Empower), and how many have been read
+## (lit, or their words gone to the hand) this reading.
+func tome_glyphs() -> Array:
+	var all := []
+
+	for line in _tome_lines:
+		all.append_array(line)
+
+	return all
+
+
+func tome_lit() -> int:
+	var read := 0
+
+	for i in _line_state.size():
+		if _line_state[i] > 0:
+			read += (_tome_lines[i] as Array).size()
+
+	return read
+
+
+## Where the gun hand is in the view (global, in the viewmodel's miniature).
+func gun_hand_view_position() -> Vector3:
+	if _arms != null and _arms.get("man") != null:
+		return _arms.man.bone_global(&"hand_r").origin
+
+	return _main.global_position
+
+
+## Empower's charge in the gun hand: how many fur passes are on its skin now;
+## how bright its veins are now (pulsing with the heartbeat); how far the
+## hand is twitched off its place on the beat (m, full size).
+func fur_passes() -> int:
+	return _fur_looks.size() if _fur_on else 0
+
+
+func vein_glow() -> float:
+	return _pelt * (0.2 + 0.8 * _beat())
+
+
+func beat_kick() -> float:
+	return _pelt * BEAT_KICK * _beat()
+
+
+## The heartbeat's swell, 0..1: sharp on the beat, slack between.
+func _beat() -> float:
+	return pow(0.5 + 0.5 * sin(_time * TAU * BEAT_BPM / 60.0), 6.0)
 
 
 ## The tome's pages: three leaves pivoting on the spine, lying on the right
@@ -734,8 +879,8 @@ func _make_pages() -> void:
 		var pivot := Node3D.new()
 		pivot.name = "Page%d" % i
 		_tome.add_child(pivot)
-		# On the spine, at the face of the pages.
-		pivot.position = Vector3(0.0, 0.0, 0.016 + 0.002 * float(i))
+		# On the spine, over the open paper: the first to turn on top.
+		pivot.position = Vector3(0.0, 0.0, LEAF_OVER + 0.002 * float(2 - i))
 		var leaf := _viewmodel_instance()
 		var quad := QuadMesh.new()
 		quad.size = Vector2(0.115, 0.18)
@@ -745,6 +890,141 @@ func _make_pages() -> void:
 		leaf.position = Vector3(0.06, 0.0, 0.0)
 		pivot.add_child(leaf)
 		_pages.append(pivot)
+		_write_page(leaf, i)
+
+
+## Lines of the invented script on a leaf (TOME_LINES of TOME_LINE_GLYPHS
+## glyphs), in ink until they are read. None if the atlas is missing.
+func _write_page(leaf: MeshInstance3D, page: int) -> void:
+	var atlas := LibraryGlyphsScript.atlas("script")
+
+	if atlas.is_empty():
+		return
+
+	if _ink_look == null:
+		_ink_look = _glyph_look(atlas, INK, 0.7)
+		_bone_look = _glyph_look(atlas, BONE, 1.8)
+
+	var quad := QuadMesh.new()
+	quad.size = Vector2(TOME_GLYPH_SIZE, TOME_GLYPH_SIZE)
+	var text := LibraryGlyphsScript.script(11 + page, TOME_LINES * TOME_LINE_GLYPHS).replace(" ", "")
+
+	for j in TOME_LINES:
+		var line := []
+
+		for k in TOME_LINE_GLYPHS:
+			var glyph := _viewmodel_instance()
+			glyph.name = "PageGlyph"
+			glyph.mesh = quad
+			glyph.material_override = _ink_look
+			var cell: Vector2i = LibraryGlyphsScript.cell_of(atlas, text[(j * TOME_LINE_GLYPHS + k) % text.length()])
+			glyph.set_instance_shader_parameter(&"glyph", Vector4(cell.x, cell.y, 1.0, float(page * 8 + j * 4 + k) * 0.29))
+			# Placed on its leaf each frame (_place_page_glyphs), but kept in
+			# this node: under the tome they never drew. (Well off the leaf:
+			# the arms' depth squeeze leaves a millimetre nothing.)
+			glyph.set_meta(&"leaf", leaf)
+			glyph.set_meta(&"on_leaf", Transform3D(Basis.IDENTITY, Vector3(-0.036 + 0.024 * float(k), 0.04 - 0.05 * float(j), 0.004)))
+			glyph.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+			glyph.visible = false
+			add_child(glyph)
+			line.append(glyph)
+
+		_tome_lines.append(line)
+		_line_state.append(0)
+		_line_lit_at.append(0.0)
+
+
+## A look for glyphs of the invented script in your view, in `colour`.
+func _glyph_look(atlas: Dictionary, colour: Color, energy: float) -> ShaderMaterial:
+	var look := ShaderMaterial.new()
+	look.shader = preload("res://scripts/Visual/vfx_ward_glyph.gdshader")
+	look.set_shader_parameter(&"atlas", atlas["texture"])
+	look.set_shader_parameter(&"grid", Vector2(float(atlas["cols"]), float(atlas["rows"])))
+	look.set_shader_parameter(&"core", colour)
+	look.set_shader_parameter(&"energy", energy)
+	look.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+	look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+	look.render_priority = 1
+	return look
+
+
+## The tome being read (`amount` of the way): each page's lines light in bone
+## as its turn nears, and a moment later their words lift off and fly into
+## the gun hand, leaving the line faint. Not read: all in ink again.
+func _read_lines(amount: float) -> void:
+	for line_index in _tome_lines.size():
+		var glyphs: Array = _tome_lines[line_index]
+		# Each leaf's lines read just before it turns (the first at once).
+		var page := line_index / TOME_LINES
+		var due := (float(page) - 0.55 + 0.3 * float(line_index % TOME_LINES)) / float(_pages.size())
+
+		if amount <= 0.0:
+			if _line_state[line_index] != 0:
+				_line_state[line_index] = 0
+				_mark_line(glyphs, _ink_look, 1.0)
+			continue
+
+		if _line_state[line_index] == 0 and amount >= due:
+			_line_state[line_index] = 1
+			_line_lit_at[line_index] = _time
+			_mark_line(glyphs, _bone_look, 1.0)
+		elif _line_state[line_index] == 1 and _time - _line_lit_at[line_index] >= WORD_DELAY:
+			_line_state[line_index] = 2
+			_fly_words(glyphs)
+			# The words gone off the page: it is blank where they were.
+			_mark_line(glyphs, _ink_look, 0.0)
+
+
+## The pages' glyphs on their leaves, where the leaves are now (shown with
+## the tome).
+func _place_page_glyphs() -> void:
+	for line in _tome_lines:
+		for glyph in line:
+			var leaf: Node3D = glyph.get_meta(&"leaf")
+			glyph.visible = _tome.visible
+			glyph.global_transform = leaf.global_transform * (glyph.get_meta(&"on_leaf") as Transform3D)
+
+
+func _mark_line(glyphs: Array, look: Material, presence: float) -> void:
+	for glyph in glyphs:
+		(glyph as MeshInstance3D).material_override = look
+		var held: Vector4 = (glyph as MeshInstance3D).get_instance_shader_parameter(&"glyph")
+		(glyph as MeshInstance3D).set_instance_shader_parameter(&"glyph", Vector4(held.x, held.y, presence, held.w))
+
+
+## A line's words lifting off the page and flying into the gun hand along a
+## curve, shrinking into it, gone in WORD_FLIGHT.
+func _fly_words(glyphs: Array) -> void:
+	if not MagicFxScript.allowed(self):
+		return
+
+	for i in glyphs.size():
+		var from: MeshInstance3D = glyphs[i]
+		var word := _viewmodel_instance()
+		word.name = "Word"
+		word.mesh = from.mesh
+		word.material_override = _bone_look
+		word.set_instance_shader_parameter(&"glyph", from.get_instance_shader_parameter(&"glyph"))
+		word.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		word.add_to_group(&"empower_word")
+		add_child(word)
+		word.global_transform = from.global_transform
+		var start := word.position
+		var rise := Vector3(0.0, 0.05 + 0.01 * float(i), -0.02) * ViewArmsScript.SCALE
+		var start_scale := word.scale
+		# Up off the page, then curving into the hand (where it is now).
+		var along := func(t: float) -> void:
+			if not is_instance_valid(word):
+				return
+			var to := to_local(gun_hand_view_position())
+			var a := start.lerp(start + rise, t)
+			var b := (start + rise).lerp(to, t)
+			word.position = a.lerp(b, t)
+			word.scale = start_scale * lerpf(1.0, 0.3, t)
+		var fly := word.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+		fly.tween_method(along, 0.0, 1.0, WORD_FLIGHT).set_ease(Tween.EASE_IN).set_delay(0.03 * float(i))
+		fly.tween_callback(word.queue_free)
+		MagicFxScript._keep(word, WORD_FLIGHT + 0.03 * float(glyphs.size()) + 0.05)
 
 
 ## A hand spell's circle closing before the casting palm: `school` says
@@ -1154,7 +1434,10 @@ func _update_circle() -> void:
 		piece.transform = Transform3D(Basis(Vector3.BACK, turn + float(look[2]) + inward), Vector3(cos(turn), sin(turn), 0.0) * across * size).scaled_local(Vector3.ONE * size)
 
 	# The Ward's ring of script round it, turning with it, tops out, written
-	# in as the cast builds.
+	# in as the cast builds (at the arms' field of view as it is now).
+	if not _hand_glyphs.is_empty():
+		(_hand_glyphs[0].material_override as ShaderMaterial).set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
+
 	for i in _hand_glyphs.size():
 		var turn := TAU * float(i) / float(_hand_glyphs.size())
 		var out := Vector3(cos(turn), sin(turn), 0.0)
@@ -1769,6 +2052,8 @@ func _place_hands() -> void:
 	var turned := motion_rotation + _recoil_rot + buzz * 0.035 * shake
 	frame.basis = Basis.from_euler(turned) * frame.basis
 	frame.origin += (sway + motion_position + _recoil + buzz * 0.005 * shake) / ViewArmsScript.SCALE
+	# Empower's charge: the hand twitches up on each beat.
+	frame.origin.y += beat_kick()
 
 	# The fist turns the way the forearm runs: the wrist stays straight and
 	# only tips the blade. The pose says where the grip is and where the blade
@@ -2171,6 +2456,7 @@ func _place_arms() -> void:
 	# The Caster's left hand: up and open for a circle, or holding the tome.
 	_left_up = move_toward(_left_up, 1.0 if left_mode() != &"" and not dead else 0.0, get_process_delta_time() / 0.15)
 	_tome.visible = _left_mode == &"tome" and _left_up > 0.05
+	_place_page_glyphs()
 
 	if _left_up > 0.0 and _left_mode != &"":
 		var size := ViewArmsScript.SCALE
@@ -2179,6 +2465,7 @@ func _place_arms() -> void:
 
 		if _left_mode == &"tome":
 			_tome.transform = Transform3D(at.basis.scaled(Vector3.ONE * size), at.origin)
+			_place_page_glyphs()
 			targets[0] = _held_by(at, TOME_GRIP)
 			# Flat under the boards: fingers curled would come through the pages.
 			curls[0] = 0.0

@@ -187,11 +187,17 @@ func _ready() -> void:
 		await _frames(60)
 
 	if _wants("empower"):
+		# Reading: the written pages lighting, the words flying to the gun
+		# hand, every fourth frame.
 		await _place(Vector3(0, 0.1, 0))
 		player.power.power = player.power.MAX
-		await _hold_clip("empower" + tag, "spell_3", [0, 18, 36, 54, 72, 76])
-		await _frames(30)
-		await _shot("empower_charged%s" % tag)
+		await _hold_clip("empower" + tag, "spell_3", range(0, 80, 4))
+		# Charged: the hand over a few heartbeats.
+		for f in 60:
+			if f % 6 == 0:
+				await _shot("empower_charged_%02d%s" % [f, tag])
+			await get_tree().physics_frame
+		# Spent on a kick: the claws, the wave.
 		var man: CharacterBody3D = GUARD.instantiate()
 		man.debug_ai = false
 		man.position = Vector3(0.0, 0, -1.6)
@@ -203,8 +209,22 @@ func _ready() -> void:
 		for f in 40:
 			if f == 2:
 				Input.action_release("kick")
-			if f in [6, 9, 12, 16, 22, 30]:
+			if f in [4, 6, 8, 10, 12, 16, 22, 30]:
 				await _shot("empower_kick_%02d%s" % [f, tag])
+			await get_tree().physics_frame
+		man.queue_free()
+		await _frames(60)
+		# Spent on a shot: the claws out along it.
+		player.revolver.reset_for_practice()
+		player.power.power = player.power.MAX
+		await _hold_clip("empower_again" + tag, "spell_3", [76])
+		await _frames(30)
+		Input.action_press("throw")
+		for f in 20:
+			if f == 2:
+				Input.action_release("throw")
+			if f in [1, 2, 3, 4, 6, 9, 14]:
+				await _shot("empower_shot_%02d%s" % [f, tag])
 			await get_tree().physics_frame
 		await _frames(60)
 

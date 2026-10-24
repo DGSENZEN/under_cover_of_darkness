@@ -13,6 +13,8 @@ const Blink := preload("res://scripts/Magic/Blink.gd")
 const ShardScript := preload("res://scripts/Magic/Shard.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
+const Fx := preload("res://scripts/Visual/Fx.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const MagicView := preload("res://scripts/Visual/MagicView.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -51,11 +53,18 @@ const EMPOWER_BLOW := 3.0
 const EMPOWER_REACH := 2.0
 ## A jump spends it only if the key is still held this long after takeoff.
 const EMPOWER_JUMP_HOLD := 0.2
+## An Empowered blow's hit-stop (real seconds).
+const EMPOWER_HITSTOP := 0.07
 
 ## Where the left hand is while it works, in camera space at full size: the
 ## bare hand palm-forward as its circle closes; the tome open toward you.
 const CAST_HAND := Transform3D(Basis(Vector3(0, -0.5, -0.866), Vector3(0, 0.866, -0.5), Vector3(1, 0, 0)), Vector3(-0.2, -0.2, -0.45))
 const TOME_HELD := [Vector3(-0.24, -0.32, -0.5), Vector3(0.15, 0.6, -0.78), Vector3(-0.2, -0.78, -0.6)]
+## Reading it: raised and its pages turned toward you, so its written lines
+## are seen (held low, only the top of its pages shows); how long it takes to
+## come back down after.
+const TOME_READ := [Vector3(-0.2, -0.19, -0.45), Vector3(0.1, 0.85, -0.5), Vector3(-0.15, -0.45, -0.88)]
+const TOME_LOWER := 0.25
 
 var player: CharacterBody3D
 var loadout := Loadout.HAND
@@ -80,6 +89,8 @@ var _game_time := 0.0
 ## When a hand spell was last let go (game time): the hand stays up a moment
 ## after, pushing out (FOLLOW_THROUGH).
 var _loosed_at := -INF
+## How far the tome is raised to be read (0 held, 1 read).
+var _tome_raised := 0.0
 ## Empower's charge waits until then (game time); -1 when there is none.
 var empowered_until := -1.0
 
@@ -252,6 +263,10 @@ func _begin(id: StringName) -> void:
 	_cast_t = 0.0
 	cast_started.emit(id)
 
+	# The beast stirring as its tome is read: a low growl under the pages.
+	if Spells.info(id).get("tier") == Spells.Tier.TOME:
+		Sfx.play_flat(player, &"roar", -18.0, 0.55)
+
 	if float(Spells.info(id)["cast_time"]) <= 0.0:
 		_complete()
 
@@ -331,9 +346,25 @@ func spend_empower(use: StringName, at := Vector3.INF, facing := Vector3.UP) -> 
 	_show_beast(0.0)
 
 	# The ring square to `facing`: the way a blow or a shot went, so you see
-	# it whole; flat on the ground at your feet for a jump or a blink.
+	# it whole; flat on the ground at your feet for a jump or a blink. The
+	# nahual's claws behind a blow (with a hit-stop) or out along a shot;
+	# dust thrown up at your feet.
 	if at != Vector3.INF:
-		MagicFx.shockwave(player, at, facing)
+		# (Not at the muzzle: right before your eyes the ring fills the view;
+		# a shot's claws carry it.)
+		if use != &"shot":
+			MagicFx.shockwave(player, at, facing)
+
+		match use:
+			&"blow":
+				MagicFx.claw_rake(player, at, facing)
+				TimeFx.request(get_tree(), &"empower", 0.05, EMPOWER_HITSTOP)
+			&"shot":
+				MagicFx.claw_rake(player, at, facing, true)
+			_:
+				if MagicFx.allowed(player):
+					Fx.dust(player, at, facing, 1.0, "stone")
+
 	Sfx.play_flat(player, &"roar", -10.0, 0.7)
 	player.juice.add_trauma(0.25)
 	return use != &""
@@ -511,7 +542,11 @@ func _show_left() -> void:
 	if not player.combat.gun_drawn():
 		hand.set_left_hold(&"", Transform3D.IDENTITY)
 	elif loadout == Loadout.TOME:
-		hand.set_left_hold(&"tome", ViewPoses.revolver_frame(TOME_HELD))
+		# Up to be read as Empower is read (eased in), down after.
+		var reading := smoothstep(0.0, 0.3, cast_progress()) if _casting == &"empower" else 0.0
+		_tome_raised = maxf(reading, _tome_raised - get_physics_process_delta_time() / TOME_LOWER)
+		var held := ViewPoses.revolver_frame(TOME_HELD)
+		hand.set_left_hold(&"tome", held.interpolate_with(ViewPoses.revolver_frame(TOME_READ), smoothstep(0.0, 1.0, _tome_raised)))
 	elif loadout == Loadout.HAND and (_casting != &"" or _game_time - _loosed_at < FOLLOW_THROUGH):
 		hand.set_left_hold(&"cast", CAST_HAND)
 	elif loadout == Loadout.HAND and _aiming and _left_hand_free():
