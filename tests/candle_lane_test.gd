@@ -2,6 +2,8 @@ extends Node3D
 ## The candle lane set (docs/superpowers/plans/2026-10-23-candle-lane.md): quick checks, headless with --fixed-fps 60.
 
 const LANE := preload("res://maps/candle_lane.tscn")
+## How far a person's body reaches from its feet, any way (m).
+const BODY := 0.35
 
 var results: Array[String] = []
 var failures := 0
@@ -20,6 +22,7 @@ func _ready() -> void:
 	await _vents()
 	await _nahual_ways()
 	await _wisps()
+	await _people()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -370,6 +373,72 @@ func _wisps() -> void:
 	_check("W1 wisps slip out of the vents and the drain and are drawn into the candles' flames, a few at most at once",
 		wisps != null and from_vent and into_flame and most >= 1 and most <= wisps.AT_ONCE,
 		"from a vent %s into a flame %s most at once %d" % [from_vent, into_flame, most])
+
+
+## Task 7: the people, black cut-outs in their pockets, each side-on to the way and clear of it.
+func _people() -> void:
+	var people: Array = lane.get("people") if lane.get("people") != null else []
+	var middle: float = (lane.BACK_WALL + lane.FAR_WALL) / 2.0
+	var stall_x: float = (lane.stall as Node3D).position.x if lane.stall != null else 0.0
+	var pockets := {"stall": [], "ledges": [], "mouth": [], "arch": [], "niche": []}
+	for p: Node3D in people:
+		var at := p.position
+		var pose: String = p.get_meta("pose", "")
+		if absf(at.x - stall_x) < 3.0:
+			pockets["stall"].append(pose)
+		if at.x > 9.0:
+			pockets["ledges"].append(pose)
+		if at.x < -13.0:
+			pockets["mouth"].append(pose)
+		if at.x > lane.SHOP_FRONT.x and at.x < lane.SHOP_FRONT.y and at.z > middle:
+			pockets["arch"].append(pose)
+		if at.distance_to(lane.places["niche"]) < 2.0:
+			pockets["niche"].append(pose)
+	pockets["stall"].sort()
+	_check("C12 people stand in their pockets: two at the stall (bargaining, waiting), two kneeling at the ledges, three walking at the mouth; none at his arch or the niche",
+		pockets["stall"] == ["bargaining", "waiting"] and pockets["ledges"].size() == 2
+		and pockets["ledges"].all(func(s): return s.begins_with("kneeling")) and pockets["mouth"].size() == 3
+		and pockets["mouth"].all(func(s): return s.begins_with("walking")) and pockets["arch"].is_empty() and pockets["niche"].is_empty(),
+		"%s" % [pockets])
+
+	# Side-on to the way (its face toward the walking line down the lane's middle), on the floor, clear of the way.
+	var wrong := []
+	for p: MeshInstance3D in people:
+		var box: AABB = p.global_transform * p.get_aabb()
+		var line := Vector3(clampf(p.global_position.x, -lane.LANE_HALF, lane.LANE_HALF), p.global_position.y, middle)
+		var to_line := line - p.global_position
+		to_line.y = 0.0
+		var normal := p.global_basis.z
+		normal.y = 0.0
+		var faces := to_line.length() < 0.01 or rad_to_deg(normal.angle_to(to_line)) <= 60.0
+		var floored := absf(box.position.y) <= 0.01
+		# (Its body, not the clear card round it: within BODY of its feet.)
+		var clear := absf(p.position.z - middle) - BODY >= 0.55
+		if not (faces and floored and clear):
+			wrong.append("%s faces %s floored %s clear %s" % [p.get_meta("pose", ""), faces, floored, clear])
+	_check("C13 every silhouette faces within 60° of the nearest point of the lane's walking line, stands on the floor (foot within 1 cm), and leaves the 1.1 m way clear",
+		people.size() == 7 and wrong.is_empty(), "people %d wrong %s" % [people.size(), wrong])
+
+	# Seen down the lane they are never edge-on: each turns toward the eye, never more than TURN from where it stands.
+	var eye := Camera3D.new()
+	add_child(eye)
+	eye.make_current()
+	var thinnest := INF
+	var most_turned := 0.0
+	for spot in [Vector3(-16.0, 1.6, 1.1), Vector3(16.0, 1.6, 1.1), Vector3(0.0, 1.6, 1.1)]:
+		eye.global_position = spot
+		await _frames(2)
+		for p: MeshInstance3D in people:
+			var to_eye := eye.global_position - p.global_position
+			to_eye.y = 0.0
+			var normal := p.global_basis.z
+			normal.y = 0.0
+			if to_eye.length() > 3.0:
+				thinnest = minf(thinnest, absf(normal.normalized().dot(to_eye.normalized())))
+			most_turned = maxf(most_turned, rad_to_deg(absf(wrapf(p.rotation.y - float(p.get("rest_yaw")), -PI, PI))))
+	eye.queue_free()
+	_check("C14 seen down the lane, no silhouette shows edge-on: each turns toward the eye, never more than 55° from where it stands",
+		thinnest > 0.5 and most_turned <= 55.5, "thinnest %.2f most turned %.1f°" % [thinnest, most_turned])
 
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:

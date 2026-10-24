@@ -8,6 +8,7 @@ extends "res://maps/underground_lab.gd"
 const LIBRARY := preload("res://maps/library_lab.tscn")
 const WatchingEyes := preload("res://scripts/Visual/WatchingEyes.gd")
 const WispsScript := preload("res://scripts/Visual/Wisps.gd")
+const Silhouette := preload("res://scripts/Visual/Silhouette.gd")
 ## Where the lane's middle is in the plan; how far the corridor runs each way from it (m: 28 tile modules, 7 vault spans).
 const PLAN_ORIGIN := Vector3(12.8, -11.0, 74.35)
 const LANE_HALF := 16.8
@@ -85,6 +86,19 @@ const HAUNTS := [Vector4(-6.6, 0.0, 4.35, PI / 2.0), Vector4(-4.1, 0.0, 4.3, PI 
 ## Where its eyes look out of the culvert while it is away: in the dark a hand behind the bars (tools/eclipse/
 ## candle_lane.py CULVERT, CULVERT_DARK).
 const CULVERT_EYES := Vector3(-5.0, 0.34, FAR_WALL - 0.29)
+## The lane's people (scripts/Visual/Silhouette.gd), each side-on to the way, facing along the lane: [pose, where
+## (bay frame, at the foot), its face toward the lane's middle (+1 from the north side, -1 from the south), mirrored
+## (to face the other way)]. At the end of her counter, a woman bargaining and a man waiting his turn; before the
+## chapel, a woman and a man kneeling toward its doorway; at the mouth, the crowd coming in and going out.
+const PEOPLE := [
+	["bargaining", Vector3(0.65, 0.0, 0.1), 1.0, false],
+	["waiting", Vector3(1.85, 0.0, 0.15), 1.0, false],
+	["kneeling_a", Vector3(14.3, 0.0, -0.75), 1.0, true],
+	["kneeling_b", Vector3(13.5, 0.0, 2.95), -1.0, false],
+	["walking_a", Vector3(-15.0, 0.0, -0.5), 1.0, false],
+	["walking_b", Vector3(-14.3, 0.0, 2.8), -1.0, false],
+	["walking_c", Vector3(-15.7, 0.0, 0.1), 1.0, false],
+]
 ## How brightly the backdrops glow (the Pasaje's, the chapel's): dim as the lane's own light, never a lit screen.
 const BACKDROP_GLOW := Vector2(0.035, 0.03)
 ## How much of the stubs' lights the fog takes up.
@@ -113,6 +127,8 @@ var vent_souls: Array[Node3D] = []
 var culvert_eyes: Node3D
 ## The ánimas' warmth slipping out of their ways up into the candles' flames (scripts/Visual/Wisps.gd).
 var wisps: Node3D
+## Its people, black cut-outs (PEOPLE).
+var people: Array[MeshInstance3D] = []
 
 
 func _ready() -> void:
@@ -132,6 +148,7 @@ func _ready() -> void:
 	_lane_pieces()
 	_vent_souls()
 	_nahual_ways()
+	_people()
 	_stubs()
 	shop = LIBRARY.instantiate()
 	shop.name = "Library"
@@ -210,6 +227,19 @@ func _nahual_ways() -> void:
 	culvert_eyes.watched = player
 	add_child(culvert_eyes)
 	culvert_eyes.position = CULVERT_EYES
+
+
+## The people stood in their places (PEOPLE), their faces to the lane's middle.
+func _people() -> void:
+	for spec: Array in PEOPLE:
+		var person: MeshInstance3D = Silhouette.make(spec[0], spec[3])
+		if person == null:
+			missing.append(Silhouette.SHEET)
+			return
+		add_child(person)
+		person.position = spec[1]
+		person.rotation.y = 0.0 if spec[2] > 0.0 else PI
+		people.append(person)
 
 
 ## A point in the lane's frame, in the plan's (x, floor height, y).

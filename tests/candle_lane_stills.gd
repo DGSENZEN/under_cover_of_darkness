@@ -52,6 +52,9 @@ func _ready() -> void:
 		["lane_lurkers", Vector3(3.6, 1.2, 0.6), Vector3(3.6, 0.35, -2.35)],
 		["lane_eyes", Vector3(-5.0, 0.8, 1.8), Vector3(-5.0, 0.35, 4.55)],
 		["lane_wisps", Vector3(-6.0, 1.6, 0.0), Vector3(-11.0, 0.9, 1.5)],
+		["people_stall", Vector3(4.5, 1.6, 2.6), Vector3(0.6, 1.0, -0.2)],
+		["people_kneeling", Vector3(9.5, 1.6, 1.2), Vector3(14.5, 0.8, 1.1)],
+		["people_mouth", Vector3(-9.0, 1.6, 1.4), Vector3(-15.5, 1.1, 1.1)],
 	]
 	for view in views:
 		if not only.is_empty() and view[0] not in only:
